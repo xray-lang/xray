@@ -212,14 +212,6 @@ static int32_t map_lookup(XrMap *map, XrValue key, uint32_t hash, uint8_t key_tt
     return map_lookup_slot(map, key, hash, key_tt, &eidx) == UINT32_MAX ? -1 : eidx;
 }
 
-// Insert entry index into a fresh EMPTY-or-DELETED ctrl slot (key known absent).
-static void indices_put(uint8_t *ctrl, int32_t *indices, uint32_t indices_size, uint32_t hash,
-                        int32_t eidx) {
-    uint32_t slot = xr_swiss_find_free(ctrl, indices_size, hash);
-    indices[slot] = eidx;
-    xr_swiss_ctrl_set(ctrl, indices_size, slot, xr_swiss_h2(hash));
-}
-
 /* ========== Grow / Compact ========== */
 
 // Grow (and compact away tombstones) to hold at least `min_needed` live entries.
@@ -291,15 +283,8 @@ static bool map_resize(XrMap *map, uint32_t min_needed) {
     memset(new_entries, 0, ebytes);
 
     // Compactly copy live entries (preserving insertion order), rebuild indices.
-    uint32_t w = 0;
-    for (uint32_t i = 0; i < old_nentries; i++) {
-        XrMapEntry *oe = &old_entries[i];
-        if (oe->key_tt == XR_MAP_ENTRY_NIL_KEY)
-            continue;
-        new_entries[w] = *oe;
-        indices_put(new_ctrl, new_indices, new_isize, oe->hash, (int32_t) w);
-        w++;
-    }
+    uint32_t w = xr_map_rehash_into(new_entries, new_ctrl, new_indices, new_isize, old_entries,
+                                    old_nentries);
 
     map->ctrl = new_ctrl;
     map->indices = new_indices;
@@ -471,7 +456,7 @@ void xr_map_set(XrMap *map, XrValue key, XrValue value) {
     map->nentries++;
     map->count++;
 
-    indices_put(map->ctrl, map->indices, map->indices_size, hash, (int32_t) eidx);
+    xr_swiss_indices_put(map->ctrl, map->indices, map->indices_size, hash, (int32_t) eidx);
     if (map_is_weak(map)) {
         xr_map_prepare_weak_key(map, key);
         xr_rc_release_value(gc, key);

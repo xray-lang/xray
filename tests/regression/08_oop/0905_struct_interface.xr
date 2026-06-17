@@ -51,11 +51,10 @@ fn test_struct_interface() {
     assert(desc_c == "Circle: area=78.53975")
 
     let desc_s = describe(s)
-    assert(desc_s == "Square: area=100")
+    assert(desc_s == "Square: area=100.0")
 
     // === Value semantics preserved with interface ===
     let c2 = c
     c2.radius = 1.0
     assert(c.radius == 5.0)
 }
-

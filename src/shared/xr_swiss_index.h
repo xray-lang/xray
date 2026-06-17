@@ -75,4 +75,14 @@ static inline uint32_t xr_swiss_find_free(const uint8_t *ctrl, uint32_t slots, u
     }
 }
 
+/* Insert a dense entry index into a fresh EMPTY-or-DELETED control slot for a
+ * key/value already proven absent. Shared by the VM and AOT map/set insert and
+ * rehash paths. */
+static inline void xr_swiss_indices_put(uint8_t *ctrl, int32_t *indices, uint32_t indices_size,
+                                        uint32_t hash, int32_t eidx) {
+    uint32_t slot = xr_swiss_find_free(ctrl, indices_size, hash);
+    indices[slot] = eidx;
+    xr_swiss_ctrl_set(ctrl, indices_size, slot, xr_swiss_h2(hash));
+}
+
 #endif  // XR_SWISS_INDEX_H

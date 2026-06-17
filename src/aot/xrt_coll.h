@@ -713,13 +713,6 @@ static inline int32_t xrt_map_find_entry(xrt_map_t *m, XrValue key, uint32_t has
     return xrt_map_find_entry_slot(m, key, hash, key_tt, &eidx) == UINT32_MAX ? -1 : eidx;
 }
 
-static inline void xrt_map_index_put(uint8_t *ctrl, int32_t *indices, uint32_t indices_size,
-                                     uint32_t hash, int32_t eidx) {
-    uint32_t slot = xr_swiss_find_free(ctrl, indices_size, hash);
-    indices[slot] = eidx;
-    xr_swiss_ctrl_set(ctrl, indices_size, slot, xr_swiss_h2(hash));
-}
-
 static inline void xrt_map_resize_tagged(xrt_map_t *m, uint32_t min_needed) {
     if (XR_UNLIKELY(m->flags & XR_MAP_FLAG_NODES_ON_STACK)) {
         fprintf(stderr, "xrt_map_stack_new: capacity exceeded\n");
@@ -752,15 +745,8 @@ static inline void xrt_map_resize_tagged(xrt_map_t *m, uint32_t min_needed) {
     for (uint32_t i = 0; i < indices_size; i++)
         indices[i] = XR_MAP_IX_EMPTY;
 
-    uint32_t w = 0;
-    for (uint32_t i = 0; i < old_nentries; i++) {
-        XrMapEntry *old = &old_entries[i];
-        if (old->key_tt == XR_MAP_ENTRY_NIL_KEY)
-            continue;
-        entries[w] = *old;
-        xrt_map_index_put(ctrl, indices, indices_size, old->hash, (int32_t) w);
-        w++;
-    }
+    uint32_t w =
+        xr_map_rehash_into(entries, ctrl, indices, indices_size, old_entries, old_nentries);
 
     XRT_FREE(old_ctrl);
     XRT_FREE(old_indices);
@@ -939,7 +925,7 @@ static inline void xrt_map_set(xrt_map_t *m, XrValue key, XrValue val) {
     entry->hash = hash;
     entry->key_tt = key_tt;
     m->count++;
-    xrt_map_index_put(m->ctrl, m->indices, m->indices_size, hash, eidx);
+    xr_swiss_indices_put(m->ctrl, m->indices, m->indices_size, hash, eidx);
 }
 
 /* =========================================================================
@@ -1028,13 +1014,6 @@ static inline int32_t xrt_set_find_entry(xrt_set_t *s, XrValue value, uint32_t h
     return xrt_set_find_entry_slot(s, value, hash, &eidx) == UINT32_MAX ? -1 : eidx;
 }
 
-static inline void xrt_set_index_put(uint8_t *ctrl, int32_t *indices, uint32_t indices_size,
-                                     uint32_t hash, int32_t eidx) {
-    uint32_t slot = xr_swiss_find_free(ctrl, indices_size, hash);
-    indices[slot] = eidx;
-    xr_swiss_ctrl_set(ctrl, indices_size, slot, xr_swiss_h2(hash));
-}
-
 static inline void xrt_set_resize_tagged(xrt_set_t *s, uint32_t min_needed) {
     if (XR_UNLIKELY(s->flags & XR_SET_FLAG_NODES_ON_STACK)) {
         fprintf(stderr, "xrt_set_stack_new: capacity exceeded\n");
@@ -1067,15 +1046,8 @@ static inline void xrt_set_resize_tagged(xrt_set_t *s, uint32_t min_needed) {
     for (uint32_t i = 0; i < indices_size; i++)
         indices[i] = XR_SET_IX_EMPTY;
 
-    uint32_t w = 0;
-    for (uint32_t i = 0; i < old_nentries; i++) {
-        XrSetEntry *old = &old_entries[i];
-        if (old->val_tt == XR_SET_ENTRY_NIL)
-            continue;
-        entries[w] = *old;
-        xrt_set_index_put(ctrl, indices, indices_size, old->hash, (int32_t) w);
-        w++;
-    }
+    uint32_t w =
+        xr_set_rehash_into(entries, ctrl, indices, indices_size, old_entries, old_nentries);
 
     XRT_FREE(old_ctrl);
     XRT_FREE(old_indices);
@@ -1236,7 +1208,7 @@ static inline int xrt_set_add(xrt_set_t *s, XrValue value) {
         entry->hash = hash;
         entry->val_tt = xrt_value_type_tag(value);
         s->count++;
-        xrt_set_index_put(s->ctrl, s->indices, s->indices_size, hash, eidx);
+        xr_swiss_indices_put(s->ctrl, s->indices, s->indices_size, hash, eidx);
         return 1;
     }
     if (xrt_set_find_value(s, value) >= 0)

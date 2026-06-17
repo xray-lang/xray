@@ -62,6 +62,26 @@ typedef struct XrMapCore {
 
 #define XR_MAP_MAXHBITS 30
 
+/* Compact the live entries of a Map into freshly allocated tables, preserving
+ * insertion order, dropping tombstones, and rebuilding the index table. Returns
+ * the new live-entry count. This is the GC-free algorithmic core of Map resize,
+ * shared by the VM (xmap.c) and AOT (xrt_coll.h) resize paths; allocation, free
+ * and GC accounting of the tables stay backend-specific around it. */
+static inline uint32_t xr_map_rehash_into(XrMapEntry *new_entries, uint8_t *new_ctrl,
+                                          int32_t *new_indices, uint32_t new_indices_size,
+                                          const XrMapEntry *old_entries, uint32_t old_nentries) {
+    uint32_t w = 0;
+    for (uint32_t i = 0; i < old_nentries; i++) {
+        const XrMapEntry *oe = &old_entries[i];
+        if (oe->key_tt == XR_MAP_ENTRY_NIL_KEY)
+            continue;
+        new_entries[w] = *oe;
+        xr_swiss_indices_put(new_ctrl, new_indices, new_indices_size, oe->hash, (int32_t) w);
+        w++;
+    }
+    return w;
+}
+
 /* ========== Set Entry (insertion-order dense slot) ========== */
 
 typedef struct XrSetEntry {
@@ -103,5 +123,25 @@ typedef struct XrSetCore {
 #define xr_set_isdummy(s) ((s)->flags & XR_SET_FLAG_DUMMY)
 
 #define XR_SET_MAXHBITS 30
+
+/* Compact the live entries of a Set into freshly allocated tables, preserving
+ * insertion order, dropping tombstones, and rebuilding the index table. Returns
+ * the new live-entry count. This is the GC-free algorithmic core of Set resize,
+ * shared by the VM (xset.c) and AOT (xrt_coll.h) resize paths; allocation, free
+ * and GC accounting of the tables stay backend-specific around it. */
+static inline uint32_t xr_set_rehash_into(XrSetEntry *new_entries, uint8_t *new_ctrl,
+                                          int32_t *new_indices, uint32_t new_indices_size,
+                                          const XrSetEntry *old_entries, uint32_t old_nentries) {
+    uint32_t w = 0;
+    for (uint32_t i = 0; i < old_nentries; i++) {
+        const XrSetEntry *oe = &old_entries[i];
+        if (oe->val_tt == XR_SET_ENTRY_NIL)
+            continue;
+        new_entries[w] = *oe;
+        xr_swiss_indices_put(new_ctrl, new_indices, new_indices_size, oe->hash, (int32_t) w);
+        w++;
+    }
+    return w;
+}
 
 #endif  // XR_MAP_SET_ABI_H
