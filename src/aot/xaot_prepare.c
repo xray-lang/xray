@@ -21,6 +21,74 @@ static XrRep storage_rep_for_value(XaotValueRep rep) {
     return xaot_value_storage_rep(rep);
 }
 
+static XaotValueRep ptr_value_rep_for_type(const XrType *type) {
+    XaotValueRep rep;
+    memset(&rep, 0, sizeof(rep));
+    rep.kind = XAOT_VALUE_PTR;
+    rep.rep = XAOT_REP_PTR;
+    rep.type = type;
+    rep.c_type = "void *";
+    return rep;
+}
+
+static bool value_can_use_native_class_ptr(const XaotBundle *bundle, const XiValue *value) {
+    const XrType *type = value ? value->type : NULL;
+    if (!bundle || !type || type->is_nullable ||
+        (type->kind != XR_KIND_CLASS && type->kind != XR_KIND_INSTANCE) ||
+        !type->instance.class_name || !xaot_class_native_data_for_type(bundle, type))
+        return false;
+
+    switch (value->op) {
+        case XI_CLASS_CREATE:
+        case XI_GET_SHARED:
+        case XI_IMPORT_REF:
+            return false;
+        default:
+            return true;
+    }
+}
+
+static bool native_ref_field_type(const XrType *type, uint8_t *out_native) {
+    if (!type)
+        return false;
+    switch (type->kind) {
+        case XR_KIND_STRING:
+            if (out_native)
+                *out_native = XR_NATIVE_STRING;
+            return true;
+        case XR_KIND_ARRAY:
+            if (out_native)
+                *out_native = XR_NATIVE_ARRAY_REF;
+            return true;
+        case XR_KIND_MAP:
+            if (out_native)
+                *out_native = XR_NATIVE_MAP_REF;
+            return true;
+        case XR_KIND_SET:
+            if (out_native)
+                *out_native = XR_NATIVE_SET_REF;
+            return true;
+        default:
+            return false;
+    }
+}
+
+static bool value_can_use_native_ref_field_ptr(const XaotBundle *bundle, const XiFunc *func,
+                                               const XiValue *value) {
+    uint8_t expected_native = 0;
+    if (!bundle || !func || !value || !native_ref_field_type(value->type, &expected_native))
+        return false;
+    return xaot_class_native_receiver_ref_field(bundle, func, value, expected_native, NULL, NULL);
+}
+
+static void apply_native_class_ptr_value_plan(XaotBundle *bundle, XaotValuePlan *vp) {
+    if (!vp)
+        return;
+    if (value_can_use_native_class_ptr(bundle, vp->value) ||
+        value_can_use_native_ref_field_ptr(bundle, vp->func, vp->value))
+        vp->rep = ptr_value_rep_for_type(vp->value->type);
+}
+
 static void record_value_stats(XaotPrepareStats *stats, XaotValueKind kind) {
     if (!stats)
         return;
@@ -1941,6 +2009,7 @@ static bool prepare_func_values(XaotBundle *bundle, XiFunc *func) {
                 bundle->error_msg = "failed to allocate AOT value plan";
                 return false;
             }
+            apply_native_class_ptr_value_plan(bundle, vp);
             record_value_stats(&bundle->stats, vp->rep.kind);
             if (!prepare_container_type(bundle, phi->value.type))
                 return false;
@@ -1953,6 +2022,7 @@ static bool prepare_func_values(XaotBundle *bundle, XiFunc *func) {
             }
             if (!prepare_apply_param_abi_value_plan(bundle, func, vp))
                 return false;
+            apply_native_class_ptr_value_plan(bundle, vp);
             record_value_stats(&bundle->stats, vp->rep.kind);
             if (!prepare_container_type(bundle, blk->values[vi]->type))
                 return false;

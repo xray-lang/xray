@@ -879,14 +879,19 @@ static bool emit_class_native_receiver_field_load_expr(XiCgenCtx *ctx, FILE *out
         return false;
     const XrStructFieldLayout *field = cg_struct_field(info.layout, idx);
     const char *tag_name = field ? cg_class_native_ref_field_tag_name(field->native_type) : NULL;
+    XrRep target_rep = cg_value_plan_storage_rep(ctx, v);
     if (tag_name) {
-        fprintf(out, "xr_mkptr(");
-        emit_class_native_field_ref(ctx, out, info.class_data, "p0", (uint16_t) idx);
-        fprintf(out, ", %s)", tag_name);
+        if (target_rep == XR_REP_PTR) {
+            emit_class_native_field_ref(ctx, out, info.class_data, "p0", (uint16_t) idx);
+        } else {
+            fprintf(out, "xr_mkptr(");
+            emit_class_native_field_ref(ctx, out, info.class_data, "p0", (uint16_t) idx);
+            fprintf(out, ", %s)", tag_name);
+        }
         return true;
     }
     const char *conv_suffix =
-        emit_conversion_prefix(out, v->type, cg_struct_field_rep(info.layout, idx), cg_rep(v));
+        emit_conversion_prefix(out, v->type, cg_struct_field_rep(info.layout, idx), target_rep);
     emit_class_native_field_ref(ctx, out, info.class_data, "p0", (uint16_t) idx);
     emit_conversion_suffix(out, conv_suffix);
     return true;
@@ -1311,15 +1316,15 @@ static bool emit_class_native_ctor_value_stmt(XiCgenCtx *ctx, FILE *out, const X
     return true;
 }
 
-static bool emit_class_native_constructor_boxed_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
-                                                     const char *prefix, const XiValue *v,
-                                                     const XiFunc *target,
-                                                     const char *ctor_prefix) {
+static bool emit_class_native_constructor_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                               const char *prefix, const XiValue *v,
+                                               const XiFunc *target, const char *ctor_prefix) {
     CgClassNativeFunc info = cg_class_native_func(ctx, target);
     if (!info.layout || !info.is_constructor)
         return false;
     if (!cg_class_native_module_for_data(ctx, info.class_data))
         return false;
+    bool returns_ptr = cg_value_plan_storage_rep(ctx, v) == XR_REP_PTR;
     fprintf(out, "({ ");
     emit_class_native_type_name(out, ctor_prefix ? ctor_prefix : prefix, info.class_name);
     fprintf(out, " *_inst = (");
@@ -1333,7 +1338,9 @@ static bool emit_class_native_constructor_boxed_expr(XiCgenCtx *ctx, FILE *out, 
         fprintf(out, ", ");
         emit_value_as_rep(out, v->args[a], cg_func_param_abi_rep(ctx, target, a));
     }
-    fprintf(out, "); xrt_box_obj(_inst); })");
+    fprintf(out, "); ");
+    fprintf(out, returns_ptr ? "_inst" : "xrt_box_obj(_inst)");
+    fprintf(out, "; })");
     (void) f;
     return true;
 }
@@ -1683,7 +1690,8 @@ static bool emit_class_native_method_call_expr(XiCgenCtx *ctx, FILE *out, const 
         bool emit_ctor_stmt_expr = target_info.is_constructor;
         const char *conv_suffix = emit_ctor_stmt_expr
                                       ? NULL
-                                      : emit_conversion_prefix(out, v->type, actual_rep, cg_rep(v));
+                                      : emit_conversion_prefix(out, v->type, actual_rep,
+                                                               cg_value_plan_storage_rep(ctx, v));
         if (emit_ctor_stmt_expr)
             fprintf(out, "({ (void)");
         emit_fname(ctx, out, method_prefix ? method_prefix : prefix, mfunc);
