@@ -34,11 +34,10 @@ typedef struct {
      * caches assert it via XR_ASSUME_ALIGNED. Slice views alias a sub-range of
      * another array's storage at an arbitrary element offset — no alignment
      * promise. */
-    void *data;        /* uint8_t[] / int64_t[] / XrValue[] — depends on elem_type */
-    uint8_t elem_type; /* XR_ELEM_ANY / XR_ELEM_U8 / ... */
-    uint8_t elem_size; /* cached bytes per element */
-    uint8_t is_slice;  /* view over another array; cannot grow */
-    uint8_t data_storage;
+    void *data;           /* uint8_t[] / int64_t[] / XrValue[] — depends on elem_type */
+    uint8_t elem_type;    /* XR_ELEM_ANY / XR_ELEM_U8 / ... */
+    uint8_t elem_size;    /* cached bytes per element */
+    uint8_t data_storage; /* XRT_ARRAY_DATA_*; BORROWED == slice view (cannot grow) */
     const char *adt_enum_name;
     const char *adt_member_name;
 } xrt_array_t;
@@ -67,7 +66,6 @@ static inline void xrt_array_init_header(xrt_array_t *a, int64_t cap, uint8_t et
     a->cap = cap;
     a->elem_type = etype;
     a->elem_size = elem_size;
-    a->is_slice = 0;
     a->data_storage = XRT_ARRAY_DATA_INLINE;
     a->adt_enum_name = NULL;
     a->adt_member_name = NULL;
@@ -216,7 +214,7 @@ static inline XrValue xrt_bytes_new_1(XrValue arg) {
 
 static inline void xrt_array_push(XrValue arr, XrValue val) {
     xrt_array_t *a = (xrt_array_t *) arr.ptr;
-    if (XR_UNLIKELY(a->is_slice)) {
+    if (XR_UNLIKELY(a->data_storage == XRT_ARRAY_DATA_BORROWED)) {
         fprintf(stderr, "xrt_array_push: cannot push to array slice\n");
         abort();
     }
@@ -252,7 +250,6 @@ static inline XrValue xrt_array_slice_view(XrValue arr, int64_t start, int64_t e
     slice->cap = 0;
     slice->elem_type = src->elem_type;
     slice->elem_size = src->elem_size;
-    slice->is_slice = 1;
     slice->data_storage = XRT_ARRAY_DATA_BORROWED;
     slice->adt_enum_name = NULL;
     slice->adt_member_name = NULL;
@@ -348,7 +345,6 @@ static inline XrValue xrt_slice(XrValue source, XrValue start_value, XrValue end
         _a->cap = _cap;                                                                            \
         _a->elem_type = XR_ELEM_ANY;                                                               \
         _a->elem_size = (uint8_t) sizeof(XrValue);                                                 \
-        _a->is_slice = 0;                                                                          \
         _a->data_storage = XRT_ARRAY_DATA_STACK;                                                   \
         _a->adt_enum_name = NULL;                                                                  \
         _a->adt_member_name = NULL;                                                                \

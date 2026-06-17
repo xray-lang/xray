@@ -8,7 +8,7 @@ static inline XrValue xrt_array_new_typed_exact(int64_t cap, uint8_t etype) {
 }
 
 static inline void xrt_array_reserve_raw(xrt_array_t *a, int64_t cap) {
-    if (!a || a->is_slice || cap <= a->cap)
+    if (!a || a->data_storage == XRT_ARRAY_DATA_BORROWED || cap <= a->cap)
         return;
     size_t old_bytes = (size_t) a->cap * (size_t) a->elem_size;
     xrt_array_data_grow(a, cap);

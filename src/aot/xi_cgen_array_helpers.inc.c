@@ -1272,7 +1272,8 @@ static bool emit_typed_array_index_set_expr(XiCgenCtx *ctx, FILE *out, const XiF
     emit_value_as_rep(out, v->args[1], XR_REP_I64);
     fprintf(out, "; if (_idx < 0) _idx += _a->len; ");
     fprintf(out,
-            "if (_idx >= 0) { if (XR_UNLIKELY(_idx >= _a->cap)) { if (_a->is_slice) { "
+            "if (_idx >= 0) { if (XR_UNLIKELY(_idx >= _a->cap)) { if (_a->data_storage == "
+            "XRT_ARRAY_DATA_BORROWED) { "
             "fprintf(stderr, \"xrt_array_set: cannot grow array slice\\n\"); abort(); } "
             "int64_t _ncap = _a->cap == 0 ? 4 : _a->cap; while (_idx >= _ncap) _ncap *= 2; "
             "xrt_array_data_grow(_a, _ncap); } "
@@ -1342,7 +1343,7 @@ static bool emit_typed_array_push_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *
     emit_typed_array_ptr_expr(ctx, out, f, recv, prefix);
     {
         fprintf(out,
-                "; if (_a->is_slice) { fprintf(stderr, "
+                "; if (_a->data_storage == XRT_ARRAY_DATA_BORROWED) { fprintf(stderr, "
                 "\"xrt_array_push: cannot push to array slice\\n\"); abort(); } "
                 "if (XR_UNLIKELY(_a->len >= _a->cap)) { "
                 "xrt_array_data_grow(_a, _a->cap == 0 ? 4 : _a->cap * 2); } "
