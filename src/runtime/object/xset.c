@@ -154,14 +154,6 @@ static int32_t set_lookup(XrSet *set, XrValue value, uint32_t hash) {
     return set_lookup_slot(set, value, hash, &eidx) == UINT32_MAX ? -1 : eidx;
 }
 
-// Insert entry index into a fresh EMPTY-or-DELETED ctrl slot (value known absent).
-static void indices_put(uint8_t *ctrl, int32_t *indices, uint32_t indices_size, uint32_t hash,
-                        int32_t eidx) {
-    uint32_t slot = xr_swiss_find_free(ctrl, indices_size, hash);
-    indices[slot] = eidx;
-    xr_swiss_ctrl_set(ctrl, indices_size, slot, xr_swiss_h2(hash));
-}
-
 /* ========== Grow / Compact ========== */
 
 // Grow (and compact away tombstones) to hold at least `min_needed` live entries.
@@ -233,15 +225,8 @@ static bool set_resize(XrSet *set, uint32_t min_needed) {
     memset(new_entries, 0, ebytes);
 
     // Compactly copy live entries (preserving insertion order), rebuild indices.
-    uint32_t w = 0;
-    for (uint32_t i = 0; i < old_nentries; i++) {
-        XrSetEntry *oe = &old_entries[i];
-        if (oe->val_tt == XR_SET_ENTRY_NIL)
-            continue;
-        new_entries[w] = *oe;
-        indices_put(new_ctrl, new_indices, new_isize, oe->hash, (int32_t) w);
-        w++;
-    }
+    uint32_t w = xr_set_rehash_into(new_entries, new_ctrl, new_indices, new_isize, old_entries,
+                                    old_nentries);
 
     set->ctrl = new_ctrl;
     set->indices = new_indices;
@@ -354,7 +339,7 @@ bool xr_set_add(XrSet *set, XrValue value) {
     set->nentries++;
     set->count++;
 
-    indices_put(set->ctrl, set->indices, set->indices_size, hash, (int32_t) eidx);
+    xr_swiss_indices_put(set->ctrl, set->indices, set->indices_size, hash, (int32_t) eidx);
     if (set_is_weak(set)) {
         xr_set_prepare_weak_value(set, value);
         xr_rc_release_value(gc, value);
