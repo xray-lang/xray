@@ -1,5 +1,5 @@
 // anchor: float-formatting-finite
-// Finite float formatting must be byte-identical across VM / JIT / AOT.
+// Finite float formatting must be byte-identical across VM / AOT.
 print(1.5)
 print(-1.5)
 print(0.0)

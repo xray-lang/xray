@@ -410,9 +410,6 @@ static inline int xr_coro_wake_target_id(XrCoroutine *coro) {
 
 /* ========== Backend Integration APIs ========== */
 
-XR_FUNC void xr_coro_backend_on_safepoint(XrCoroutine *coro);
-XR_FUNC void xr_coro_detach_worker_state(XrCoroutine *coro);
-XR_FUNC bool xr_coro_backend_in_try_mode(const XrCoroutine *coro);
 XR_FUNC bool xr_coro_reset_execution_state(XrCoroutine *coro, struct XrayIsolate *X);
 XR_FUNC bool xr_coro_init_shell(XrCoroutine *coro, struct XrayIsolate *X, const char *name,
                                 bool need_storage);

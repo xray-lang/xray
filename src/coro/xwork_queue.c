@@ -621,8 +621,8 @@ XrWorkQueuePopStatus xr_work_queue_pop_for_coro(XrayIsolate *isolate, XrWorkQueu
         *result = xr_null();
         return XR_WORK_QUEUE_POP_DONE;
     }
-    if (!coro || xr_coro_backend_in_try_mode(coro))
-        return coro ? XR_WORK_QUEUE_POP_WOULD_BLOCK : XR_WORK_QUEUE_POP_ERROR;
+    if (!coro)
+        return XR_WORK_QUEUE_POP_ERROR;
     XrCoroWaitState *wait = xr_coro_ensure_wait_state(coro);
     if (!wait)
         return XR_WORK_QUEUE_POP_ERROR;

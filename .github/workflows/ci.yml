@@ -122,18 +122,11 @@ jobs:
 
   # ===========================================================================
   # Unit Tests (ctest, Debug mode)
-  # Runs the full unit-test suite under tests/unit/, including
-  # test_jit_e2e which contains the §10.1-§10.7 JIT codegen hardening
-  # regressions. Debug mode is used because:
+  # Runs the full unit-test suite under tests/unit/. Debug mode is used because:
   #   - assertions are active (Release strips DCHECK)
   #   - matches the local development build mode used by the project
-  # ubuntu-latest (x86_64) is the only native-x64 path for the JIT
-  # backend tests; the dev host is Apple Silicon ARM64.
-  #
-  # Intentionally NOT gated on arch-lint: backend correctness (LSRA,
-  # codegen, JIT entry/OSR/deopt) is independent of the frontend
-  # header-size policy. Keeping these in parallel avoids losing x64
-  # signal whenever a frontend header drifts over the line cap.
+  # Both Linux x86_64 and macOS ARM64 are exercised so platform-specific
+  # issues surface; the dev host is Apple Silicon ARM64.
   # ===========================================================================
   unit-tests:
     strategy:
@@ -142,15 +135,13 @@ jobs:
         include:
           - os: ubuntu-latest
             name: Linux x86_64
-            # JIT x86_64 backend has never been validated on a native
-            # x64 host: the most basic ADD round-trips wrong values. VM
             # test_vm_exception SEGFAULTs in the Linux Debug build but
-            # passes on macOS — both predate this CI work and have
-            # their own follow-up tasks. Exclude them so the remaining
-            # 84/86 unit tests act as a real Linux x64 quality gate.
+            # passes on macOS — a pre-existing issue with its own
+            # follow-up task. Exclude it so the remaining unit tests
+            # act as a real Linux x64 quality gate.
             ctest_args: >-
               --output-on-failure --timeout 120
-              --exclude-regex '^(test_jit_e2e|test_vm_exception)$'
+              --exclude-regex '^(test_vm_exception)$'
           - os: macos-latest
             name: macOS ARM64
             ctest_args: --output-on-failure --timeout 120
@@ -258,13 +249,13 @@ jobs:
     - name: Build
       run: cmake --build build -j$(nproc)
 
-    # See unit-tests job: test_jit_e2e (x64 backend) and
-    # test_vm_exception are pre-existing failures excluded from CI.
+    # See unit-tests job: test_vm_exception is a pre-existing failure
+    # excluded from CI.
     - name: Run unit tests with ${{ matrix.sanitizer.name }}
       run: |
         cd build
         ctest --output-on-failure --timeout 120 \
-              --exclude-regex '^(test_jit_e2e|test_vm_exception)$'
+              --exclude-regex '^(test_vm_exception)$'
       env:
         # Leak detection disabled: unit tests don't fully tear down
         # isolates/GC. Real memory errors (OOB, UAF) still abort.
@@ -307,13 +298,13 @@ jobs:
     - name: Build
       run: cmake --build build -j$(nproc)
 
-    # See unit-tests job: test_jit_e2e (x64 backend) and
-    # test_vm_exception are pre-existing failures excluded from CI.
+    # See unit-tests job: test_vm_exception is a pre-existing failure
+    # excluded from CI.
     - name: Run unit tests
       run: |
         cd build
         ctest --output-on-failure \
-              --exclude-regex '^(test_jit_e2e|test_vm_exception)$'
+              --exclude-regex '^(test_vm_exception)$'
 
     - name: Run regression tests
       run: |

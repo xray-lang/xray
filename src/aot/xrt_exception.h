@@ -77,13 +77,15 @@ static XRT_COLD _Noreturn void xrt_throw_exc(XrValue exc) {
         xrt_exc_top->exception = exc;
         longjmp(xrt_exc_top->buf, 1);
     }
-    /* Uncaught exception */
+    /* Uncaught exception: report and exit with status 1, matching the VM's
+     * uncaught-exception behavior (a clean exit(1), not a SIGABRT/134 core
+     * dump) so both backends agree on the observable exit code. */
     if (exc.tag == XR_TAG_STR || exc.tag == XR_TAG_STR_ARC) {
         fprintf(stderr, "Uncaught exception: %s\n", xr_str_data(exc));
     } else {
         fprintf(stderr, "Uncaught exception (tag=%d)\n", exc.tag);
     }
-    abort();
+    exit(1);
 }
 
 #endif  // XRT_EXCEPTION_H

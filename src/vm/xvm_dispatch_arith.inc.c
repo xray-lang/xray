@@ -211,6 +211,45 @@
 #undef XVM_TEMPLATE_ARITH_ADD_CASE
 #undef XVM_ARITH_NUMERIC_FAST
 
+/* ========================================================
+** float32 arithmetic: round at single precision per operation so the
+** VM matches AOT (which narrows each operand to a native `float`).
+** Operands are statically float-typed (the emitter only selects these
+** opcodes when the result type is float32); narrow each to float, run
+** the op at single precision, widen back into the f64 storage slot.
+** ======================================================== */
+
+#define XVM_ARITH_F32_CASE(op, float_op)                                                           \
+    vmcase(op) {                                                                                   \
+        int a = GETARG_A(i), b = GETARG_B(i), c = GETARG_C(i);                                     \
+        XR_SET_FLOAT(R(a),                                                                         \
+                     (double) ((float) XR_TO_FLOAT(R(b)) float_op(float) XR_TO_FLOAT(R(c))));      \
+        vmbreak;                                                                                   \
+    }
+
+XVM_ARITH_F32_CASE(OP_ADD_F32, +)
+XVM_ARITH_F32_CASE(OP_SUB_F32, -)
+XVM_ARITH_F32_CASE(OP_MUL_F32, *)
+
+#undef XVM_ARITH_F32_CASE
+
+vmcase(OP_DIV_F32) {
+    int a = GETARG_A(i);
+    int b = GETARG_B(i);
+    int c = GETARG_C(i);
+    /* Narrow operands to float, divide in double, then narrow the quotient
+     * back to float — mirrors AOT, which routes f32 division through xrt_div
+     * on the float-narrowed operands and stores the result into a `float`
+     * temp. Divisor zero throws. */
+    double nb = (double) (float) XR_TO_FLOAT(R(b));
+    double nc = (double) (float) XR_TO_FLOAT(R(c));
+    if (nc == 0.0) {
+        VM_RUNTIME_ERROR(XR_ERR_DIV_BY_ZERO, "division by zero");
+    }
+    XR_SET_FLOAT(R(a), (double) (float) (nb / nc));
+    vmbreak;
+}
+
 vmcase(OP_ADDI) {
     int a = GETARG_A(i);
     int b = GETARG_B(i);

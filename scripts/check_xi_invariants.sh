@@ -188,33 +188,6 @@ fi
 rm -f "$GEN_LOG"
 
 # --------------------------------------------------------------------------
-# INV-3: Xi backend builtin lowering must be JIT-visible
-# --------------------------------------------------------------------------
-echo "--- INV-3: Xi backend builtin lowering sync ---"
-if [ -f src/ir/xi_backend_lower.c ] && [ -f src/jit/xi_to_xm.c ]; then
-    LOWER_FILE=$(mktemp)
-    JIT_FILE=$(mktemp)
-    grep -oE 'rewrite_to_builtin\(v, "[A-Za-z0-9_]+"\)' src/ir/xi_backend_lower.c \
-        | sed -E 's/.*"([^"]+)".*/\1/' \
-        | sort -u > "$LOWER_FILE"
-    awk '/static const char \*known\[\]/{in_list=1} in_list {print} in_list && /};/{exit}' \
-        src/jit/xi_to_xm.c \
-        | grep -oE '"[A-Za-z0-9_]+"' \
-        | tr -d '"' \
-        | sort -u > "$JIT_FILE"
-    MISSING=$(comm -23 "$LOWER_FILE" "$JIT_FILE")
-    rm -f "$LOWER_FILE" "$JIT_FILE"
-    if [ -z "$MISSING" ]; then
-        pass "Every xi_backend_lower builtin name is visible to xi_to_xm"
-    else
-        fail "xi_backend_lower emits builtin names missing from xi_to_xm known list:"
-        printf "%s\n" "$MISSING" | sed 's/^/    /'
-    fi
-else
-    warn "xi_backend_lower.c or xi_to_xm.c not found, skipping"
-fi
-
-# --------------------------------------------------------------------------
 # INV-13: No functions > 150 lines in src/ir/
 # --------------------------------------------------------------------------
 echo "--- INV-13: Function length check (src/ir/) ---"

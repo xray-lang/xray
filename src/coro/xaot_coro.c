@@ -164,9 +164,6 @@ static const XrCoroBackendVTable aot_backend_vtable = {
     .trace_roots = aot_backend_trace_roots,
     .prepare_recycle = NULL,
     .reset_reusable = NULL,
-    .on_safepoint = NULL,
-    .detach_worker_state = NULL,
-    .is_try_mode = NULL,
     .setup_yield_continuation = NULL,
     .has_continuation = NULL,
     .call_closure = NULL,
@@ -431,8 +428,6 @@ static bool aot_slot_store_i64_fast(XrSlotRef slot, int64_t value) {
             }
             break;
         }
-        case XR_SLOT_JIT_SUSPEND:
-            break;
     }
     return xr_slot_store_value(slot, XR_FROM_INT(value));
 }
@@ -461,8 +456,6 @@ static bool aot_slot_store_f64_fast(XrSlotRef slot, double value) {
             }
             break;
         }
-        case XR_SLOT_JIT_SUSPEND:
-            break;
     }
     return xr_slot_store_value(slot, XR_FROM_FLOAT(value));
 }
@@ -491,8 +484,6 @@ static bool aot_slot_store_bool_fast(XrSlotRef slot, bool value) {
             }
             break;
         }
-        case XR_SLOT_JIT_SUSPEND:
-            break;
     }
     return xr_slot_store_value(slot, XR_FROM_BOOL(value));
 }
@@ -525,8 +516,6 @@ static bool aot_slot_store_scalar_null_fast(XrSlotRef slot) {
             }
             break;
         }
-        case XR_SLOT_JIT_SUSPEND:
-            break;
     }
     return xr_slot_store_value(slot, XR_NULL_VAL);
 }

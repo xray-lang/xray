@@ -239,6 +239,37 @@ static XiValue *xi_lower_wrap_if_needed(XiLower *l, AstNode *node, XiValue *valu
     return n;
 }
 
+/* float32 precision boundaries: AOT narrows each operand to its static C type
+ * at use (f32->float, f64->double, int->int64) and computes via C's usual
+ * arithmetic conversions. The helpers below mirror that in the shared IR so the
+ * VM and AOT stay bit-identical on mixed-precision arithmetic. */
+
+/* Promote an int operand to float so a single-precision opcode sees two float
+ * operands (C computes `float * int` in float). */
+static XiValue *xi_lower_promote_int_to_float(XiLower *l, AstNode *node, XiValue *v) {
+    if (!v || !v->type || !XR_TYPE_IS_INT(v->type))
+        return v;
+    XiValue *conv = xi_value_new(l->func, l->cur_block, XI_CONVERT, l->type_float, 1);
+    if (!conv)
+        return v;
+    conv->args[0] = v;
+    conv->line = (uint32_t) node->line;
+    return conv;
+}
+
+/* Narrow a float32 operand to single precision before a wider (float64) op,
+ * mirroring AOT's `(float)operand` at use. */
+static XiValue *xi_lower_narrow_f32_operand(XiLower *l, AstNode *node, XiValue *v) {
+    if (!v || !v->type || v->type->kind != XR_KIND_FLOAT || v->type->native_width != XR_NATIVE_F32)
+        return v;
+    XiValue *n = xi_value_new(l->func, l->cur_block, XI_NARROW_F32, v->type, 1);
+    if (!n)
+        return v;
+    n->args[0] = v;
+    n->line = (uint32_t) node->line;
+    return n;
+}
+
 static bool lower_str_concat_part(XiLower *l, AstNode *node, XiLowerValueList *parts, int line) {
     if (!node)
         return true;
@@ -299,6 +330,30 @@ static XiValue *lower_binary(XiLower *l, AstNode *node) {
         result_type = xi_lower_infer_binary_type(l, node->type, lhs->type, rhs->type);
     }
     uint16_t op = xi_lower_binary_ast_to_xi_op(node->type);
+
+    // float32 precision boundaries: keep the VM and AOT bit-identical on mixed
+    // operands by mirroring AOT's per-operand narrowing in the shared IR.
+    if (op == XI_ADD || op == XI_SUB || op == XI_MUL || op == XI_DIV) {
+        if (result_type && result_type->kind == XR_KIND_FLOAT &&
+            result_type->native_width == XR_NATIVE_F32) {
+            // float32 result: promote int operands to float so the
+            // single-precision opcode operates on two float values.
+            lhs = xi_lower_promote_int_to_float(l, node, lhs);
+            rhs = xi_lower_promote_int_to_float(l, node, rhs);
+        } else if (result_type && result_type->kind == XR_KIND_FLOAT) {
+            // float64 result with a float32 operand: narrow the float32 side to
+            // single precision before the double op.
+            lhs = xi_lower_narrow_f32_operand(l, node, lhs);
+            rhs = xi_lower_narrow_f32_operand(l, node, rhs);
+        }
+    } else if (op == XI_EQ || op == XI_NE || op == XI_LT || op == XI_LE || op == XI_GT ||
+               op == XI_GE) {
+        // Comparisons: AOT narrows each f32 operand to float at use, so mirror
+        // that for bit-identical results (e.g. (float)a == 0.1 is false even
+        // though the stored double equals 0.1).
+        lhs = xi_lower_narrow_f32_operand(l, node, lhs);
+        rhs = xi_lower_narrow_f32_operand(l, node, rhs);
+    }
 
     XiValue *raw = xi_binary(l->func, l->cur_block, op, result_type, lhs, rhs);
     return xi_lower_wrap_if_needed(l, node, raw, result_type, op);

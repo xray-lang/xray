@@ -98,34 +98,9 @@ XrValue *xr_slot_value_address(XrSlotRef slot) {
             if (!slot.base)
                 return NULL;
             return (XrValue *) ((uint8_t *) slot.base + slot.offset);
-        case XR_SLOT_JIT_SUSPEND:
-            return NULL;
         default:
             return NULL;
     }
-}
-
-static bool slot_store_jit_suspend(XrSlotRef slot, XrValue value) {
-    if (!slot.base)
-        return false;
-
-    int64_t *payload = (int64_t *) ((uint8_t *) slot.base + slot.offset);
-    int64_t *tag = (int64_t *) ((uint8_t *) slot.base + slot.offset + sizeof(int64_t));
-
-    if (slot.type_id == XR_REP_I64) {
-        *payload = XR_TO_INT(value);
-        *tag = XR_TAG_I64;
-        return true;
-    }
-    if (slot.type_id == XR_REP_F64) {
-        *payload = value.i;
-        *tag = XR_TAG_F64;
-        return true;
-    }
-
-    *payload = value.i;
-    *tag = value.tag;
-    return true;
 }
 
 bool xr_slot_store_value(XrSlotRef slot, XrValue value) {
@@ -166,37 +141,9 @@ bool xr_slot_store_value(XrSlotRef slot, XrValue value) {
             *(XrValue *) addr = value;
             return true;
         }
-        case XR_SLOT_JIT_SUSPEND:
-            return slot_store_jit_suspend(slot, value);
         default:
             return false;
     }
-}
-
-static bool slot_load_jit_suspend(XrSlotRef slot, XrValue *out_value) {
-    if (!slot.base)
-        return false;
-
-    int64_t payload = *(int64_t *) ((uint8_t *) slot.base + slot.offset);
-    int64_t tag_raw = *(int64_t *) ((uint8_t *) slot.base + slot.offset + sizeof(int64_t));
-
-    if (slot.type_id == XR_REP_I64) {
-        *out_value = xr_int(payload);
-        return true;
-    }
-    if (slot.type_id == XR_REP_F64) {
-        XrValue value = {0};
-        value.tag = XR_TAG_F64;
-        value.i = payload;
-        *out_value = value;
-        return true;
-    }
-
-    XrValue value = {0};
-    value.tag = (uint8_t) tag_raw;
-    value.i = payload;
-    *out_value = value;
-    return true;
 }
 
 bool xr_slot_load_value(XrSlotRef slot, XrValue *out_value) {
@@ -239,8 +186,6 @@ bool xr_slot_load_value(XrSlotRef slot, XrValue *out_value) {
             *out_value = *(XrValue *) addr;
             return true;
         }
-        case XR_SLOT_JIT_SUSPEND:
-            return slot_load_jit_suspend(slot, out_value);
         default:
             return false;
     }

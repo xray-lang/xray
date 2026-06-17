@@ -207,8 +207,36 @@ static bool fold_int_compare(uint16_t op, int64_t a, int64_t b, bool *result) {
     }
 }
 
-/* Try to fold a binary op on two float constants. */
-static bool fold_float_binary(uint16_t op, double a, double b, double *result) {
+/* Try to fold a binary op on two float constants.
+ *
+ * When the result is float32, narrow each operand and the result to single
+ * precision so the fold matches the VM *_F32 opcodes and AOT codegen exactly;
+ * folding float32 arithmetic in double would round once instead of per-operand
+ * and diverge from the runtime. */
+static bool fold_float_binary(uint16_t op, double a, double b, bool is_f32, double *result) {
+    if (is_f32) {
+        float fa = (float) a, fb = (float) b;
+        switch (op) {
+            case XI_ADD:
+                *result = (double) (float) (fa + fb);
+                return true;
+            case XI_SUB:
+                *result = (double) (float) (fa - fb);
+                return true;
+            case XI_MUL:
+                *result = (double) (float) (fa * fb);
+                return true;
+            case XI_DIV:
+                if (fb == 0.0f)
+                    return false;
+                /* f32 division: narrowed operands, divide in double, narrow the
+                 * quotient back to float (matches OP_DIV_F32 / AOT xrt_div). */
+                *result = (double) (float) ((double) fa / (double) fb);
+                return true;
+            default:
+                return false;
+        }
+    }
     switch (op) {
         case XI_ADD:
             *result = a + b;
@@ -378,7 +406,9 @@ XR_FUNC XiPassChange xi_opt_const_fold(XiFunc *f) {
                 memcpy(&b, &rhs->aux_int, sizeof(double));
 
                 double dresult;
-                if (fold_float_binary(v->op, a, b, &dresult)) {
+                bool is_f32 = v->type && v->type->kind == XR_KIND_FLOAT &&
+                              v->type->native_width == XR_NATIVE_F32;
+                if (fold_float_binary(v->op, a, b, is_f32, &dresult)) {
                     rewrite_to_const_float(v, dresult);
                     chg.values_changed = true;
                     continue;

@@ -41,7 +41,6 @@
 #include "../base/xutf8.h"
 #include "../runtime/value/xslot_type.h"
 #include "../runtime/value/xtype.h"
-#include "../runtime/value/xtype_feedback.h"
 #include "../coro/xcoro_pool.h"
 #include "../coro/xtask.h"
 #include "../coro/xblock.h"

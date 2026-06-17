@@ -13,15 +13,6 @@ from types import SimpleNamespace
 
 
 TARGET_TEMPLATE_MACROS = {
-    "jit-xm": (
-        "src/jit/xi_to_xm_dispatch_gen.h",
-        {
-            "XI_TO_XM_TEMPLATE_BINARY_DRIVERS",
-            "XI_TO_XM_TEMPLATE_UNARY_DRIVERS",
-            "XI_TO_XM_TEMPLATE_COMPARE_DRIVERS",
-            "XI_TO_XM_TEMPLATE_WIDTH_DRIVERS",
-        },
-    ),
     "aot-c": (
         "src/aot/xi_to_c_dispatch_gen.h",
         {
@@ -38,11 +29,6 @@ TARGET_TEMPLATE_MACROS = {
 }
 
 DIRECT_DRIVER_CHECKS = {
-    "jit-xm": (
-        "src/jit/xi_to_xm.c",
-        r"\bstatic\s+XmRef\s+{driver}\s*\(",
-        set(),
-    ),
     "aot-c": (
         "src/aot/xi_cgen_dispatch_helpers.inc.c",
         r"\bstatic\s+void\s+{driver}\s*\(",
@@ -56,7 +42,6 @@ DIRECT_DRIVER_CHECKS = {
 
 CASE_SCAN_FILES = (
     "src/ir/xi_emit_arith.c",
-    "src/jit/xi_to_xm.c",
     "src/aot/xi_cgen.c",
     "src/aot/xi_cgen_dispatch_helpers.inc.c",
 )
@@ -419,7 +404,7 @@ def run_self_test() -> None:
         SimpleNamespace(
             op_name="xi.add",
             ident="ADD",
-            target_drivers={"jit-xm": "xi2xm_add", "aot-c": "xicgen_add"},
+            target_drivers={"aot-c": "xicgen_add"},
         ),
         SimpleNamespace(
             op_name="xi.neg",
@@ -427,10 +412,9 @@ def run_self_test() -> None:
             target_drivers={"aot-c": "xicgen_neg"},
         ),
     ]
-    generated = {"jit-xm": {"xi2xm_add"}, "aot-c": {"xicgen_add"}}
+    generated = {"aot-c": {"xicgen_add"}}
     texts = {
-        "src/jit/xi_to_xm.c": "static XmRef xi2xm_add(LowerCtx *ctx, XmBlock *blk, XiValue *v) {\n",
-        "src/aot/xi_cgen_dispatch_helpers.inc.c": "static void xicgen_neg(XiCgenCtx *ctx) {\n",
+        "src/aot/xi_cgen_dispatch_helpers.inc.c": "static void xicgen_add(XiCgenCtx *ctx) {\n",
         "src/ir/xi_emit_arith.c": "    case XI_ADD:\n",
     }
     direct = check_direct_driver_definitions(entries, texts)
@@ -441,9 +425,9 @@ def run_self_test() -> None:
     assert not coverage
 
     missing_generated = [
-        SimpleNamespace(op_name="xi.sub", ident="SUB", target_drivers={"jit-xm": "xi2xm_sub"})
+        SimpleNamespace(op_name="xi.sub", ident="SUB", target_drivers={"aot-c": "xicgen_sub"})
     ]
-    missing = check_generated_driver_coverage(missing_generated, {"jit-xm": set(), "aot-c": set()})
+    missing = check_generated_driver_coverage(missing_generated, {"aot-c": set()})
     assert len(missing) == 1 and "xi.sub" in missing[0].message
 
     vm_opcodes = {"OP_NARROW_I8"}

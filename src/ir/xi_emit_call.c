@@ -215,9 +215,6 @@ XR_FUNC void xi_emit_call_method(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
             return;
         OpCode invoke_op = (v->flags & XI_FLAG_TAIL) ? OP_INVOKE_TAIL : OP_INVOKE;
         emit_inst(ctx, CREATE_ABC(invoke_op, dst, sym_arg, nargs));
-        /* Record IC-relevant instruction offset for JIT */
-        if (v->id < ctx->reg_map_size)
-            ctx->value_pc[v->id] = current_pc(ctx) - 1;
     }
 }
 

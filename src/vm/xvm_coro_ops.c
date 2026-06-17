@@ -36,10 +36,8 @@
 #include "../base/xutf8.h"
 #include "../runtime/value/xslot_type.h"
 #include "../runtime/value/xtype.h"
-#include "../runtime/value/xtype_feedback.h"
 #include "../coro/xcoro_pool.h"
 #include "../coro/xdeep_copy.h"
-#include "../coro/xjit_hooks.h"
 #include "../coro/xtask.h"
 #include <stdatomic.h>
 #include <stdio.h>
@@ -58,131 +56,6 @@ static XrValue vm_coro_name_value(XrayIsolate *isolate, const XrCoroutine *coro)
         return xr_null();
     XrString *s = xr_string_intern(isolate, name, strlen(name), 0);
     return s ? xr_string_value(s) : xr_null();
-}
-
-static uint8_t vm_go_jit_slot_type_from_value(XrValue value) {
-    switch (value.tag) {
-        case XR_TAG_I64:
-            return XR_SLOT_I64;
-        case XR_TAG_BOOL:
-            return XR_SLOT_BOOL;
-        case XR_TAG_F64:
-            return XR_SLOT_F64;
-        case XR_TAG_PTR:
-        case XR_TAG_STRUCT_REF:
-            return XR_SLOT_PTR;
-        default:
-            return XR_SLOT_ANY;
-    }
-}
-
-static XrType *vm_go_jit_type_from_value(XrayIsolate *isolate, XrValue value) {
-    if (xr_value_is_channel(value))
-        return xr_type_new_channel(isolate, xr_type_new_unknown(isolate));
-    return xr_slot_type_to_type(isolate, vm_go_jit_slot_type_from_value(value));
-}
-
-static void vm_go_jit_seed_param_types(XrayIsolate *isolate, XrProto *proto, XrValue *args,
-                                       int arg_count) {
-    if (!proto || !args || arg_count <= 0 || proto->numparams != arg_count)
-        return;
-    if (!proto->param_types) {
-        proto->param_types =
-            (struct XrType **) xr_calloc((size_t) proto->numparams, sizeof(struct XrType *));
-        if (!proto->param_types)
-            return;
-        proto->param_types_count = proto->numparams;
-    }
-    for (int i = 0; i < arg_count && i < proto->param_types_count; i++) {
-        if (proto->param_types[i])
-            continue;
-        XrType *type = vm_go_jit_type_from_value(isolate, args[i]);
-        if (type)
-            proto->param_types[i] = type;
-    }
-}
-
-static bool vm_cached_env_flag(_Atomic int *cache, const char *name) {
-    int value = atomic_load_explicit(cache, memory_order_acquire);
-    if (value >= 0)
-        return value != 0;
-
-    int enabled = getenv(name) != NULL ? 1 : 0;
-    int expected = -1;
-    if (atomic_compare_exchange_strong_explicit(cache, &expected, enabled, memory_order_release,
-                                                memory_order_acquire)) {
-        return enabled != 0;
-    }
-    return atomic_load_explicit(cache, memory_order_acquire) != 0;
-}
-
-static bool vm_coro_entry_jit_enabled(void) {
-    /*
-     * Coroutine entry JIT still assumes the pre-096 await/channel result protocol.
-     * Keep ordinary function JIT enabled, but run go-spawned entry frames through
-     * the interpreter by default until the suspend/resume ABI is taught the new
-     * result types. XRAY_JIT_CORO_ENTRY=1 enables the experimental VM/JIT path.
-     */
-    static _Atomic int cached = -1;
-    return vm_cached_env_flag(&cached, "XRAY_JIT_CORO_ENTRY");
-}
-
-static bool vm_coro_entry_jit_debug_enabled(void) {
-    static _Atomic int cached = -1;
-    return vm_cached_env_flag(&cached, "XRAY_JIT_CORO_ENTRY_DEBUG");
-}
-
-static void vm_go_try_compile_entry(XrayIsolate *isolate, XrProto *proto, XrValue *args,
-                                    int arg_count) {
-    if (!vm_coro_entry_jit_enabled()) {
-        if (vm_coro_entry_jit_debug_enabled())
-            fprintf(stderr, "[JIT-CORO-ENTRY] skip disabled for coroutine entry proto=%p\n",
-                    (void *) proto);
-        return;
-    }
-
-    bool debug = vm_coro_entry_jit_debug_enabled();
-    if (!XR_JIT_AVAILABLE() || !xr_jit_hooks->try_compile || !proto || proto->jit_entry ||
-        proto->deopt_count > 3 ||
-        atomic_load_explicit(&proto->jit_static_blocked, memory_order_relaxed) != 0 ||
-        proto->numparams != arg_count) {
-        if (debug) {
-            fprintf(stderr,
-                    "[JIT-CORO-ENTRY] skip early available=%d try=%d proto=%p entry=%p "
-                    "deopt=%u static_blocked=%u params=%d args=%d\n",
-                    XR_JIT_AVAILABLE() ? 1 : 0,
-                    (XR_JIT_AVAILABLE() && xr_jit_hooks->try_compile) ? 1 : 0, (void *) proto,
-                    proto ? proto->jit_entry : NULL, proto ? proto->deopt_count : 0,
-                    proto ? (unsigned) atomic_load_explicit(&proto->jit_static_blocked,
-                                                            memory_order_relaxed)
-                          : 0,
-                    proto ? proto->numparams : -1, arg_count);
-        }
-        return;
-    }
-    if (xr_jit_hooks->proto_has_exception_control &&
-        xr_jit_hooks->proto_has_exception_control(proto)) {
-        if (debug)
-            fprintf(stderr, "[JIT-CORO-ENTRY] skip exception-control proto=%p\n", (void *) proto);
-        return;
-    }
-    uint32_t threshold = isolate->vm.jit_threshold > 0 ? (uint32_t) isolate->vm.jit_threshold : 1;
-    uint32_t calls = atomic_fetch_add_explicit(&proto->call_count, 1, memory_order_relaxed) + 1;
-    if (calls < threshold) {
-        if (debug) {
-            fprintf(stderr, "[JIT-CORO-ENTRY] wait threshold proto=%p calls=%u threshold=%u\n",
-                    (void *) proto, calls, threshold);
-        }
-        return;
-    }
-    vm_go_jit_seed_param_types(isolate, proto, args, arg_count);
-    bool ok = xr_jit_hooks->try_compile(isolate, proto);
-    if (debug) {
-        fprintf(stderr,
-                "[JIT-CORO-ENTRY] compile proto=%p ok=%d entry=%p params=%d count=%d calls=%u\n",
-                (void *) proto, ok ? 1 : 0, proto->jit_entry, proto->numparams,
-                proto->param_types_count, calls);
-    }
 }
 
 static void vm_go_detach_scope_child(XrCoroutine *coro) {
@@ -783,7 +656,6 @@ XR_FUNC XrDispatchAction vm_go(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInst
         next_inst = *pc;
     }
     XrValue *args = (c > 0) ? &base[b + 1] : NULL;
-    vm_go_try_compile_entry(isolate, proto, args, c);
 
     // Debug source metadata is populated lazily for named coroutines.
     XrCoroutine *coro = xr_coro_create_vm_closure(isolate, closure, args, c, coro_name, NULL, 0);

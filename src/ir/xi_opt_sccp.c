@@ -489,6 +489,22 @@ static SccpCell eval_value(SccpCtx *ctx, const XiValue *v) {
             return eval_compare(v->op, a, b);
         if (is_bitwise_op(v->op))
             return eval_bitwise(v->op, a, b);
+        /* float32 arithmetic folds at single precision (operands and result
+         * narrowed to float), mirroring the VM *_F32 opcodes and AOT codegen;
+         * folding in double would round once and diverge from the runtime. */
+        if (both_float(a, b) && v->type && v->type->kind == XR_KIND_FLOAT &&
+            v->type->native_width == XR_NATIVE_F32) {
+            float fa = (float) a.fval, fb = (float) b.fval;
+            if (v->op == XI_ADD)
+                return sccp_float((double) (float) (fa + fb));
+            if (v->op == XI_SUB)
+                return sccp_float((double) (float) (fa - fb));
+            if (v->op == XI_MUL)
+                return sccp_float((double) (float) (fa * fb));
+            if (v->op == XI_DIV)
+                return fb == 0.0f ? sccp_bot()
+                                  : sccp_float((double) (float) ((double) fa / (double) fb));
+        }
         return eval_arith(v->op, a, b);
     }
 

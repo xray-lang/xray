@@ -1,0 +1,12 @@
+// anchor: float-rounding-boundary
+// Classic rounding boundaries must agree between VM and AOT.
+import math
+
+print(0.1 + 0.2)
+print(0.1 + 0.2 - 0.3)
+print(0.3 - 0.1 - 0.2)
+print(math.sqrt(2.0))
+print(math.sqrt(2.0) * math.sqrt(2.0))
+print(math.pow(0.1, 2.0))
+print(1.0 / 3.0)
+print(2.0 / 3.0)

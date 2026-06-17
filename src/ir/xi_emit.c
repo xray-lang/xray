@@ -28,6 +28,8 @@
 #include "../runtime/symbol/xsymbol_table.h"
 #include "../runtime/xexec_state.h"
 
+#include <math.h>
+
 /* ========== Helpers ========== */
 
 XR_FUNC void emit_error(EmitCtx *ctx, XiEmitStatus s) {
@@ -403,7 +405,11 @@ static void emit_const(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
              * only cast once we know the value fits the LOADI immediate. */
             if (fval >= (double) LOADI_MIN && fval <= (double) LOADI_MAX) {
                 int sv = (int) fval;
-                if ((double) sv == fval) {
+                /* Reconstructing the float from an int immediate must reproduce
+                 * the exact value. `(double) sv == fval` treats -0.0 and +0.0 as
+                 * equal even though their bit patterns differ, so route -0.0
+                 * through the constant pool to preserve its sign. */
+                if ((double) sv == fval && (sv != 0 || !signbit(fval))) {
                     emit_inst(ctx, CREATE_AsBx(OP_LOADF, dst, sv));
                     break;
                 }
@@ -854,21 +860,6 @@ XR_FUNC XiEmitStatus xi_emit(XiFunc *f, struct XrayIsolate *isolate, struct XrPr
         return XI_EMIT_ERR_INTERNAL;
     }
 
-    /* Allocate per-value bytecode PC map for IC-guided JIT speculation */
-    ctx.value_pc = (int *) xr_malloc(ctx.reg_map_size * sizeof(int));
-    if (!ctx.value_pc) {
-        xi_emit_free_var_state(&ctx);
-        xr_free(ctx.cell_wrapped);
-        xr_free(ctx.last_use);
-        xr_free(ctx.block_pc);
-        xr_free(ctx.reg_map);
-        xr_vm_proto_free(ctx.proto);
-        xr_free(rpo_order);
-        return XI_EMIT_ERR_INTERNAL;
-    }
-    for (uint32_t i = 0; i < ctx.reg_map_size; i++)
-        ctx.value_pc[i] = -1;
-
     alloc_registers(&ctx);
     if (ctx.status != XI_EMIT_OK)
         goto cleanup;
@@ -958,11 +949,6 @@ XR_FUNC XiEmitStatus xi_emit(XiFunc *f, struct XrayIsolate *isolate, struct XrPr
      * If compilation succeeds, all functions are safe to call via go. */
     ctx.proto->is_coro_safe = true;
 
-    /* Build slot map for JIT (non-fatal if allocation fails) */
-    XiSlotMap *slot_map = build_slot_map(&ctx);
-    if (slot_map)
-        ctx.proto->xi_slot_map = slot_map;
-
 cleanup:;
     XiEmitStatus result = ctx.status;
     if (result == XI_EMIT_OK) {
@@ -970,7 +956,6 @@ cleanup:;
     } else {
         xr_vm_proto_free(ctx.proto);
     }
-    xr_free(ctx.value_pc);
     xi_emit_free_var_state(&ctx);
     xr_free(ctx.cell_wrapped);
     xr_free(ctx.last_use);

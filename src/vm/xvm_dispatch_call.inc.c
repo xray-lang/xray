@@ -336,66 +336,6 @@ op_call_closure:
         } else if (XR_LIKELY(nargs >= proto->min_params && nargs <= proto->numparams)) {
             // Non vararg: argument count in valid range (supports default params)
 
-            // Type feedback: collect argument types for profile-guided compilation
-            if (proto->type_feedback) {
-                XmTypeFeedback *fb = proto->type_feedback;
-                for (int fi = 0; fi < nargs && fi < XFB_MAX_PARAMS; fi++)
-                    xfb_record_arg(fb, fi, R(a + 1 + fi));
-            } else if (atomic_load_explicit(&proto->call_count, memory_order_relaxed) >=
-                           XFB_ALLOC_THRESHOLD &&
-                       !proto->param_types) {
-                proto->type_feedback = xfb_create();
-            }
-
-            /* AOT fast path: call pre-compiled native code directly.
-            ** Used by --native build mode: AOT thunks are registered
-            ** into proto->jit_entry before execution begins.
-            ** Calling convention: int64_t fn(intptr_t coro, int64_t *raw_args) */
-            if (proto->jit_entry) {
-                typedef int64_t (*AotThunkFn)(intptr_t, int64_t *);
-                XrCoroutine *_aot_coro = VM_CURRENT_CORO;
-                int64_t raw_args[16];  // 16 slots: tagged params use 2 each
-                int ai = 0;
-                for (int ri = 0; ri < nargs && ri < 8 && ai < 16; ri++) {
-                    uint8_t gc = 0;
-                    if (proto->param_types && ri < proto->param_types_count &&
-                        proto->param_types[ri])
-                        gc = xr_type_to_slot_type(proto->param_types[ri]);
-                    bool is_f = XR_SLOT_IS_FLOAT(gc);
-                    bool is_tagged = (gc == XR_SLOT_PTR || gc == XR_SLOT_ANY);
-                    if (is_f) {
-                        memcpy(&raw_args[ai], &R(a + 1 + ri).f, sizeof(double));
-                        ai++;
-                    } else if (is_tagged) {
-                        // Pack full XrValue (16 bytes = 2 slots)
-                        memcpy(&raw_args[ai], &R(a + 1 + ri), sizeof(XrValue));
-                        ai += 2;
-                    } else {
-                        raw_args[ai] = R(a + 1 + ri).i;
-                        ai++;
-                    }
-                }
-                XrJitCoroState *_aot_jit_state = xr_coro_peek_jit_state(_aot_coro);
-                if (_aot_jit_state && _aot_jit_state->scratch)
-                    _aot_jit_state->scratch->call_closure = closure;
-                int64_t ret = ((AotThunkFn) proto->jit_entry)((intptr_t) _aot_coro, raw_args);
-                uint8_t rtype = proto->return_type_info
-                                    ? xr_type_to_slot_type(proto->return_type_info)
-                                    : XR_SLOT_ANY;
-                if (XR_SLOT_IS_FLOAT(rtype)) {
-                    memcpy(&R(a).f, &ret, sizeof(double));
-                    R(a).tag = XR_TAG_F64;
-                } else if (rtype == XR_SLOT_BOOL) {
-                    R(a).i = ret ? 1 : 0;
-                    R(a).tag = XR_TAG_BOOL;
-                } else {
-                    R(a).i = ret;
-                    R(a).tag = XR_TAG_I64;
-                }
-                R(a).heap_type = 0;
-                vmbreak;
-            }
-
             if (XR_UNLIKELY(VM_FRAME_COUNT >= XR_FRAMES_MAX)) {
                 VM_RUNTIME_ERROR(XR_ERR_STACK_OVERFLOW,
                                  "stack overflow: recursion exceeds %d levels", XR_FRAMES_MAX);
@@ -933,11 +873,6 @@ vmcase(OP_RETURN1) {
     while (VM_HANDLER_COUNT > 0 &&
            VM_HANDLERS[VM_HANDLER_COUNT - 1].frame_count >= VM_FRAME_COUNT) {
         VM_DEC_HANDLER_COUNT;
-    }
-
-    // Type feedback: record return value type
-    if (ci->closure && ci->closure->proto && ci->closure->proto->type_feedback) {
-        xfb_record_return(ci->closure->proto->type_feedback, ret_val);
     }
 
     // Check if we have defer to execute

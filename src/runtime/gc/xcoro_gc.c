@@ -421,9 +421,9 @@ static inline void gc_post_region_alloc(XrCoroGC *gc, XrGCHeader *obj, uint8_t t
 
 /*
  * Update allocation statistics after object creation.
- * Shared by xr_coro_gc_newobj and xr_jit_alloc_post. Tracing's debt-driven
- * collection trigger is gone (RC owns reclamation); only the byte and object
- * counters are kept for the gc.* introspection builtins.
+ * Called by xr_coro_gc_newobj. Tracing's debt-driven collection trigger is gone
+ * (RC owns reclamation); only the byte and object counters are kept for the
+ * gc.* introspection builtins.
  */
 static inline void gc_update_alloc_stats(XrCoroGC *gc, uint32_t total) {
     gc->totalbytes += (int64_t) total;
@@ -772,40 +772,4 @@ void xr_coro_gc_print_stats(XrCoroGC *gc) {
     printf("Finalizers total: %u\n", gc->finalizer_count);
 
     printf("=====================================\n");
-}
-
-/* ========== JIT Allocation Helper ========== */
-
-// Slow path: full allocation when inline bump fails
-// CALL_C convention: (coro, packed_arg)
-// packed_arg = (uint64_t)gc_type << 32 | aligned_size
-XrGCHeader *xr_jit_alloc(struct XrCoroutine *coro, uint64_t type_and_size) {
-    uint8_t type = (uint8_t) (type_and_size >> 32);
-    uint32_t size = (uint32_t) (type_and_size & 0xFFFFFFFF);
-    if (!coro || !coro->coro_gc)
-        return NULL;
-    XR_DCHECK(type < XGC_MAX_TYPES, "jit_alloc: invalid GC type");
-    XR_DCHECK(size >= sizeof(XrGCHeader), "jit_alloc: size too small");
-    return xr_coro_gc_newobj(coro->coro_gc, type, size);
-}
-
-// Fast path post-alloc: GC bookkeeping after inline bump succeeds.
-// GC header already initialized by JIT code. This handles:
-//   1. per-block accounting (alloc_count / alloc_bytes)
-//   2. finalizer registration for objects that need teardown hooks
-//   3. stats update (totalbytes, object_count)
-// CALL_C convention: (coro, obj_ptr)
-void xr_jit_alloc_post(struct XrCoroutine *coro, void *obj_ptr) {
-    if (!coro || !coro->coro_gc || !obj_ptr)
-        return;
-    XrCoroGC *gc = coro->coro_gc;
-    XrGCHeader *obj = (XrGCHeader *) obj_ptr;
-    uint32_t total = obj->objsize;
-    XR_DCHECK(total > 0, "jit_alloc_post: zero objsize");
-    XR_DCHECK(total <= XR_LARGE_OBJECT_THRESHOLD, "jit_alloc_post: oversized for Region");
-
-    gc_post_region_alloc(gc, obj, obj->type, total);
-    XR_CHECK(gc_register_finalizer_after_inline_alloc(gc, obj),
-             "jit_alloc_post: finalizer registration failed");
-    gc_update_alloc_stats(gc, total);
 }

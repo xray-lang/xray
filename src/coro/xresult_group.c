@@ -547,8 +547,8 @@ static XrCFuncResult ym_recv(XrayIsolate *isolate, XrValue self, XrValue *args, 
         *result = xr_null();
         return XR_CFUNC_DONE;
     }
-    if (!coro || xr_coro_backend_in_try_mode(coro))
-        return coro ? XR_CFUNC_WOULD_BLOCK : XR_CFUNC_ERROR;
+    if (!coro)
+        return XR_CFUNC_ERROR;
     XrCoroWaitState *wait = xr_coro_ensure_wait_state(coro);
     if (!wait)
         return XR_CFUNC_ERROR;

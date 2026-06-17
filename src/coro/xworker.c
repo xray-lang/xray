@@ -35,7 +35,6 @@
 #include "../runtime/gc/xregion.h"
 #include "../runtime/gc/xcoro_gc.h"
 #include "../io/xio_runtime.h"  // xr_io_runtime_new / xr_io_runtime_free
-#include "xjit_hooks.h"
 #include <stdlib.h>
 #include <string.h>
 #include "../os/os_thread.h"
@@ -191,13 +190,9 @@ void xr_worker_init(XrWorker *worker, int id, XrRuntime *runtime) {
     atomic_store_explicit(&worker->p.runq_reds, 0, memory_order_relaxed);
     atomic_store_explicit(&worker->p.runq_max_len, 0, memory_order_relaxed);
 
-    // Create backend worker storage, if the active backend needs one.
+    // No backend worker storage: VM/AOT execution needs no per-worker scratch.
     worker->p.backend_worker_storage = NULL;
     worker->p.backend_worker_storage_destroy = NULL;
-    if (XR_JIT_AVAILABLE() && xr_jit_hooks->worker_state_create) {
-        worker->p.backend_worker_storage = xr_jit_hooks->worker_state_create();
-        worker->p.backend_worker_storage_destroy = xr_jit_hooks->worker_state_destroy;
-    }
 }
 
 // Destroy Worker

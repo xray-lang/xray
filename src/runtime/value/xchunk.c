@@ -13,10 +13,8 @@
  */
 
 #include "xchunk.h"
-#include "../../jit/xm_codegen.h"
 #include "../object/xstring.h"
 #include "../../base/xmalloc.h"
-#include "xtype_feedback.h"
 #include <stdatomic.h>
 #include <stdlib.h>
 #include <string.h>
@@ -25,9 +23,7 @@
 #include "../../base/xchecks.h"
 
 struct XiFunc;
-struct XiSlotMap;
 void xi_func_free(struct XiFunc *f);
-void xi_slot_map_free(struct XiSlotMap *map);
 
 /*
  * Monotonic proto-id allocator. Each XrProto gets a fresh, never-reused
@@ -135,16 +131,6 @@ void xr_vm_proto_free(XrProto *proto) {
         proto->symbols = NULL;
     }
 
-    // Free JIT/AOT metadata
-    if (proto->bb_leaders != NULL) {
-        xr_free(proto->bb_leaders);
-        proto->bb_leaders = NULL;
-    }
-    if (proto->loop_headers != NULL) {
-        xr_free(proto->loop_headers);
-        proto->loop_headers = NULL;
-    }
-
     // Free type pipeline
     if (proto->param_types != NULL) {
         xr_free(proto->param_types);
@@ -156,35 +142,14 @@ void xr_vm_proto_free(XrProto *proto) {
     }
     // return_type_info points into analyzer_pool arena, do not free
 
-    // Free Xi IR metadata (retained for JIT direct lowering)
+    // Free retained Xi SSA IR (consumed by AOT/REPL lowering)
     if (proto->xi_func != NULL) {
         xi_func_free((struct XiFunc *) proto->xi_func);
         proto->xi_func = NULL;
     }
-    if (proto->xi_slot_map != NULL) {
-        xi_slot_map_free((struct XiSlotMap *) proto->xi_slot_map);
-        proto->xi_slot_map = NULL;
-    }
-
-    // Free type feedback
-    if (proto->type_feedback != NULL) {
-        xfb_destroy(proto->type_feedback);
-        proto->type_feedback = NULL;
-    }
 
     // Inline caches are owned by XrVMContext (per-coroutine), not the
     // immutable proto. Nothing to free here for IC.
-
-    // Free struct layout cache (pointer array only; layouts are owned by XrClass)
-    if (proto->struct_layouts != NULL) {
-        xr_free(proto->struct_layouts);
-        proto->struct_layouts = NULL;
-    }
-
-    // Free JIT runtime allocations (allocated via xr_malloc in jit pipeline)
-    xm_safepoints_free((XmSafepoint *) proto->jit_safepoints, proto->nsafepoints);
-    proto->jit_safepoints = NULL;
-    proto->nsafepoints = 0;
 
     // Free XrProto itself
     xr_free(proto);

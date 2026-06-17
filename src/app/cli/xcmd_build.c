@@ -73,10 +73,13 @@ static int invoke_cc(const char *cc, const char *opt_flag, const char *output_fi
     snprintf(include_flag, sizeof(include_flag), "-I%s", xray_include);
     snprintf(lib_flag, sizeof(lib_flag), "-L%s", xray_lib);
 
-    const char *spawn_argv[28];
+    const char *spawn_argv[30];
     int ai = 0;
     spawn_argv[ai++] = cc;
     spawn_argv[ai++] = opt_flag;
+    /* Match the interpreter's per-op rounding: never fuse a*b+c into a single
+     * FMA rounding, or AOT output would diverge from the VM for the same .xr. */
+    spawn_argv[ai++] = "-ffp-contract=off";
     if (debug_symbols) {
         spawn_argv[ai++] = "-g";
         spawn_argv[ai++] = "-fno-omit-frame-pointer";
@@ -373,6 +376,7 @@ static bool xaot_cli_build_compile_command(const XrCliToolchainPlan *plan,
         }
     }
     if (!xaot_cli_link_add_arg(cmd, opt_flag, err, err_size) ||
+        !xaot_cli_link_add_arg(cmd, "-ffp-contract=off", err, err_size) ||
         !xaot_cli_link_add_arg(cmd, "-c", err, err_size) ||
         !xaot_cli_link_add_arg(cmd, c_file, err, err_size) ||
         !xaot_cli_link_add_arg(cmd, "-o", err, err_size) ||
@@ -509,6 +513,7 @@ static bool xaot_cli_build_link_command(const XrCliToolchainPlan *plan,
         }
     }
     if (!xaot_cli_link_add_arg(cmd, opt_flag, err, err_size) ||
+        !xaot_cli_link_add_arg(cmd, "-ffp-contract=off", err, err_size) ||
         !xaot_cli_link_add_arg(cmd, "-o", err, err_size) ||
         !xaot_cli_link_add_arg(cmd, output_file, err, err_size) ||
         !xaot_cli_link_add_arg(cmd, c_file, err, err_size))
