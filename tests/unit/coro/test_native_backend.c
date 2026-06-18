@@ -252,6 +252,12 @@ TEST(aot_coroutine_create_failure_releases_frame) {
     ASSERT_EQ_INT(release_count, 1);
 }
 
+TEST(aot_frame_alloc_accepts_zero_state_frames) {
+    void *frame = xr_aot_frame_alloc(0);
+    ASSERT_NOT_NULL(frame);
+    xr_aot_frame_free(frame);
+}
+
 TEST(coroutine_recycle_hooks_are_backend_abi_contract) {
     const XrCoroBackendVTable *vm_backend = xr_coro_vm_backend_vtable();
     ASSERT_NOT_NULL(vm_backend);
@@ -307,6 +313,7 @@ RUN_TEST(native_coroutine_uses_native_backend_without_vm_state);
 RUN_TEST(aot_coroutine_uses_aot_backend_without_vm_state_and_maps_done);
 RUN_TEST(aot_coroutine_maps_block_error_and_cancel_to_common_run_results);
 RUN_TEST(aot_coroutine_create_failure_releases_frame);
+RUN_TEST(aot_frame_alloc_accepts_zero_state_frames);
 RUN_TEST(coroutine_recycle_hooks_are_backend_abi_contract);
 
 TEST_MAIN_END()

@@ -174,7 +174,7 @@ static const XrCoroBackendVTable aot_backend_vtable = {
 
 void *xr_aot_frame_alloc(size_t size) {
     if (size == 0)
-        return NULL;
+        size = 1;
     return xr_malloc(size);
 }
 

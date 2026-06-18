@@ -3294,6 +3294,34 @@ TEST(cgen_coro_go_sync_scalar_wrapper_skips_param_roots) {
     xi_func_free(ir);
 }
 
+TEST(cgen_coro_go_zero_state_sync_wrapper_has_nonempty_frame) {
+    const char *src = "fn one() -> int {\n"
+                      "    return 1\n"
+                      "}\n"
+                      "let task = go one()\n"
+                      "print(await task)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    XiCgenCoroFrameStats stats = {0};
+    char *code = generate_c_with_status_and_stats(ir, "test", &had_error, &stats);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "AOT go of zero-state sync function should generate");
+    assert(contains(code, "uint8_t _empty;") &&
+           "zero-state sync-go frame must be non-empty and C-portable");
+    assert(contains(code, "xr_aot_frame_alloc(sizeof(*f))") &&
+           "zero-state sync-go wrapper must still allocate a backend frame");
+    assert(stats.coroutine_count == 2 &&
+           "frame stats should count the main coroutine and zero-state sync-go frame");
+    assert(stats.max_frame_bytes >= 1 && "zero-state sync-go frame must report non-zero size");
+
+    printf("  Generated zero-state sync-go wrapper %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_sync_functions_without_go_emit_no_aot_wrappers) {
     const char *src = "fn helper(n: int) -> int {\n"
                       "    return n + 1\n"
@@ -4258,6 +4286,7 @@ int main(void) {
     run_cgen_coro_go_clones_tagged_args();
     run_cgen_coro_go_sync_function_uses_wrapper_desc();
     run_cgen_coro_go_sync_scalar_wrapper_skips_param_roots();
+    run_cgen_coro_go_zero_state_sync_wrapper_has_nonempty_frame();
     run_cgen_sync_functions_without_go_emit_no_aot_wrappers();
     run_cgen_coro_sync_go_wrappers_only_for_go_targets();
     run_cgen_coro_channel_send_clones_value();
