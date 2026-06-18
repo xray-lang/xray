@@ -746,6 +746,36 @@ TEST(defer_stmt) {
     xi_func_free(f);
 }
 
+TEST(defer_args_lower_before_defer) {
+    XiFunc *f = lower_source("fn cleanup(msg: string, value: int) { print(msg); print(value) }\n"
+                             "defer cleanup(\"result\", 42)\n"
+                             "print(\"body\")\n");
+    assert(f != NULL);
+    XiBlock *blk = f->entry;
+    XiValue *defer = NULL;
+    uint32_t defer_index = 0;
+    for (uint32_t i = 0; i < blk->nvalues; i++) {
+        if (blk->values[i]->op == XI_DEFER) {
+            defer = blk->values[i];
+            defer_index = i;
+            break;
+        }
+    }
+    assert(defer && "should have DEFER op");
+    assert(defer->nargs == 3 && "defer should keep callee plus two args");
+    for (uint16_t a = 1; a < defer->nargs; a++) {
+        int found_before_defer = 0;
+        for (uint32_t i = 0; i < defer_index; i++) {
+            if (blk->values[i] == defer->args[a]) {
+                found_before_defer = 1;
+                break;
+            }
+        }
+        assert(found_before_defer && "defer argument must be lowered before XI_DEFER");
+    }
+    xi_func_free(f);
+}
+
 TEST(set_literal) {
     XiFunc *f = lower_source("let s = #[1, 2, 3]\n"
                              "print(s)\n");
@@ -1028,6 +1058,7 @@ int main(void) {
     run_go_await();
     run_direct_await_go_one_shot();
     run_defer_stmt();
+    run_defer_args_lower_before_defer();
     run_set_literal();
     run_is_expr();
     run_slice_expr();
