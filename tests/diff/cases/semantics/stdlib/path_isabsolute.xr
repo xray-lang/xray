@@ -1,0 +1,21 @@
+// AOT path.isAbsolute direct-call must match the VM tagged dispatch.
+import path
+
+print(path.isAbsolute("/usr/local"))
+print(path.isAbsolute("relative/dir"))
+print(path.isAbsolute("/"))
+print(path.isAbsolute(""))
+
+let p = "/etc/hosts"
+if (path.isAbsolute(p)) {
+    print("abs")
+} else {
+    print("rel")
+}
+
+let q = "./local"
+if (path.isAbsolute(q)) {
+    print("abs")
+} else {
+    print("rel")
+}

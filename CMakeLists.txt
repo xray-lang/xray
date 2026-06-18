@@ -971,6 +971,20 @@ if(BUILD_TESTS)
         TIMEOUT 120
     )
 
+    # Per-module incremental object cache: only modules whose generated C
+    # changed are recompiled; dependents hit the cache and relink (114).
+    add_test(
+        NAME aot_incremental_cache
+        COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_aot_incremental_cache.sh
+                $<TARGET_FILE:xray>
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(aot_incremental_cache PROPERTIES
+        LABELS "aot;cache;smoke"
+        SKIP_RETURN_CODE 77
+        TIMEOUT 120
+    )
+
     # Cross-backend differential net: same .xr through VM / AOT must
     # produce byte-identical observable output. Safety net for the backend
     # unification work (tasks 108-118).

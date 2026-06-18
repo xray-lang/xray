@@ -109,105 +109,160 @@ static XrValue path_join(XrayIsolate *X, XrValue *args, int argc) {
     return ret;
 }
 
+// dirname core - returns a slice of `path` (or a static literal). Shared by the
+// VM binding and the AOT shim (115 single-definition). Borrows: the returned
+// pointer aliases `path` or static storage; the caller copies it.
+static const char *path_dirname_core(const char *path, size_t len, size_t *out_len) {
+    if (!path || len == 0) {
+        *out_len = 1;
+        return ".";
+    }
+    // Skip trailing separators
+    while (len > 0 && IS_SEP(path[len - 1]))
+        len--;
+    // Find last separator
+    while (len > 0 && !IS_SEP(path[len - 1]))
+        len--;
+    // Skip separators
+    while (len > 1 && IS_SEP(path[len - 1]))
+        len--;
+    if (len == 0) {
+        *out_len = 1;
+        return IS_SEP(path[0]) ? PATH_SEP_STR : ".";
+    }
+    *out_len = len;
+    return path;
+}
+
 // dirname(path) - Get directory part
 static XrValue path_dirname(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 1)
         return xrs_string_value_c(X, ".");
-
-    const char *path = xrs_string_arg(args[0], NULL);
-    if (!path || path[0] == '\0')
+    size_t plen = 0;
+    const char *path = xrs_string_arg(args[0], &plen);
+    if (!path)
         return xrs_string_value_c(X, ".");
+    size_t rl = 0;
+    const char *r = path_dirname_core(path, plen, &rl);
+    return make_string_n(X, r, rl);
+}
 
-    size_t len = strlen(path);
+// AOT direct-call shim: returns the dirname slice (borrowed) as (data, length);
+// generated C copies it into an AOT string.
+XR_FUNC const char *xr_aot_path_dirname(const char *path, int64_t len, int64_t *out_len) {
+    size_t rl = 0;
+    const char *r = path_dirname_core(path, len < 0 ? 0 : (size_t) len, &rl);
+    *out_len = (int64_t) rl;
+    return r;
+}
 
+// basename core - returns a slice of `path`. Shared by VM binding + AOT shim.
+static const char *path_basename_core(const char *path, size_t len, size_t *out_len) {
+    *out_len = 0;
+    if (!path || len == 0)
+        return "";
     // Skip trailing separators
-    while (len > 0 && IS_SEP(path[len - 1])) {
+    while (len > 0 && IS_SEP(path[len - 1]))
         len--;
-    }
-
+    if (len == 0)
+        return "";
     // Find last separator
-    while (len > 0 && !IS_SEP(path[len - 1])) {
-        len--;
-    }
-
-    // Skip separators
-    while (len > 1 && IS_SEP(path[len - 1])) {
-        len--;
-    }
-
-    if (len == 0) {
-        // No directory part
-        return IS_SEP(path[0]) ? xrs_string_value_c(X, PATH_SEP_STR) : xrs_string_value_c(X, ".");
-    }
-
-    return make_string_n(X, path, len);
+    size_t start = len;
+    while (start > 0 && !IS_SEP(path[start - 1]))
+        start--;
+    *out_len = len - start;
+    return path + start;
 }
 
 // basename(path) - Get filename part
 static XrValue path_basename(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 1)
         return xrs_string_value_c(X, "");
-
-    const char *path = xrs_string_arg(args[0], NULL);
-    if (!path || path[0] == '\0')
+    size_t plen = 0;
+    const char *path = xrs_string_arg(args[0], &plen);
+    if (!path)
         return xrs_string_value_c(X, "");
+    size_t rl = 0;
+    const char *r = path_basename_core(path, plen, &rl);
+    return make_string_n(X, r, rl);
+}
 
-    size_t len = strlen(path);
+// AOT direct-call shim for path.basename (borrowed slice).
+XR_FUNC const char *xr_aot_path_basename(const char *path, int64_t len, int64_t *out_len) {
+    size_t rl = 0;
+    const char *r = path_basename_core(path, len < 0 ? 0 : (size_t) len, &rl);
+    *out_len = (int64_t) rl;
+    return r;
+}
 
-    // Skip trailing separators
-    while (len > 0 && IS_SEP(path[len - 1])) {
+// extname core - returns a slice of `path` from the last dot to the end, or "".
+// The slice runs to the input end (matches the historical NUL-terminated
+// return), so `plen` must be the full string length. Shared by VM + AOT.
+static const char *path_extname_core(const char *path, size_t plen, size_t *out_len) {
+    *out_len = 0;
+    if (!path || plen == 0)
+        return "";
+    // Get basename span first
+    size_t len = plen;
+    while (len > 0 && IS_SEP(path[len - 1]))
         len--;
-    }
-
-    if (len == 0)
-        return xrs_string_value_c(X, "");
-
-    // Find last separator
     size_t start = len;
-    while (start > 0 && !IS_SEP(path[start - 1])) {
+    while (start > 0 && !IS_SEP(path[start - 1]))
         start--;
+    const char *base = path + start;
+    size_t base_len = len - start;
+    // Find last dot in basename
+    const char *dot = NULL;
+    for (size_t i = base_len; i > 0; i--) {
+        if (base[i - 1] == '.') {
+            // Skip leading dot (e.g., .gitignore)
+            if (i > 1)
+                dot = base + i - 1;
+            break;
+        }
     }
-
-    return make_string_n(X, path + start, len - start);
+    if (!dot)
+        return "";
+    *out_len = (size_t) ((path + plen) - dot);
+    return dot;
 }
 
 // extname(path) - Get file extension
 static XrValue path_extname(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 1)
         return xrs_string_value_c(X, "");
-
-    const char *path = xrs_string_arg(args[0], NULL);
-    if (!path || path[0] == '\0')
+    size_t plen = 0;
+    const char *path = xrs_string_arg(args[0], &plen);
+    if (!path)
         return xrs_string_value_c(X, "");
+    size_t rl = 0;
+    const char *r = path_extname_core(path, plen, &rl);
+    return make_string_n(X, r, rl);
+}
 
-    // Get basename first
-    size_t len = strlen(path);
-    while (len > 0 && IS_SEP(path[len - 1]))
-        len--;
+// AOT direct-call shim for path.extname (borrowed slice).
+XR_FUNC const char *xr_aot_path_extname(const char *path, int64_t len, int64_t *out_len) {
+    size_t rl = 0;
+    const char *r = path_extname_core(path, len < 0 ? 0 : (size_t) len, &rl);
+    *out_len = (int64_t) rl;
+    return r;
+}
 
-    size_t start = len;
-    while (start > 0 && !IS_SEP(path[start - 1]))
-        start--;
-
-    const char *base = path + start;
-    size_t base_len = len - start;
-
-    // Find last dot in basename
-    const char *dot = NULL;
-    for (size_t i = base_len; i > 0; i--) {
-        if (base[i - 1] == '.') {
-            // Skip leading dot (e.g., .gitignore)
-            if (i > 1) {
-                dot = base + i - 1;
-            }
-            break;
-        }
-    }
-
-    if (!dot)
-        return xrs_string_value_c(X, "");
-
-    return xrs_string_value_c(X, dot);
+// Core absolute-path test, shared by the tagged stdlib binding and the AOT
+// direct-call shim so the two signatures can never drift (115 single-definition
+// principle). Pure: no isolate, no allocation.
+static bool path_is_absolute_raw(const char *path, size_t len) {
+    if (!path || len == 0)
+        return false;
+#ifdef XR_OS_WINDOWS
+    // Windows: drive letter (C:) or UNC path (\\).
+    if (len >= 2 && ((path[0] >= 'A' && path[0] <= 'Z') || (path[0] >= 'a' && path[0] <= 'z')) &&
+        path[1] == ':')
+        return true;
+    if (len >= 2 && path[0] == '\\' && path[1] == '\\')
+        return true;
+#endif
+    return path[0] == '/';
 }
 
 // isAbsolute(path) - Check if path is absolute
@@ -215,23 +270,18 @@ static XrValue path_isAbsolute(XrayIsolate *X, XrValue *args, int argc) {
     (void) X;
     if (argc < 1)
         return xr_bool(false);
+    size_t len = 0;
+    const char *path = xrs_string_arg(args[0], &len);
+    return xr_bool(path_is_absolute_raw(path, len));
+}
 
-    const char *path = xrs_string_arg(args[0], NULL);
-    if (!path || path[0] == '\0')
-        return xr_bool(false);
-
-#ifdef XR_OS_WINDOWS
-    // Windows: drive letter or UNC path
-    if ((path[0] >= 'A' && path[0] <= 'Z' && path[1] == ':') ||
-        (path[0] >= 'a' && path[0] <= 'z' && path[1] == ':')) {
-        return xr_bool(true);
-    }
-    if (path[0] == '\\' && path[1] == '\\') {
-        return xr_bool(true);
-    }
-#endif
-
-    return xr_bool(path[0] == '/');
+// AOT direct-call shim for `path.isAbsolute(s)`. Specialized signature: takes
+// the raw string data/length (no tagged XrString marshalling, ABI-neutral
+// across VM/AOT string representations) and returns a tagged bool. Generated
+// AOT C calls this symbol directly (resolved from xray_core via dead-strip)
+// instead of dispatching through the runtime module table.
+XR_FUNC XrValue xr_aot_path_isAbsolute(const char *path, int64_t len) {
+    return xr_bool(path_is_absolute_raw(path, len < 0 ? 0 : (size_t) len));
 }
 
 // normalize(path) - Normalize path (resolve . and ..)

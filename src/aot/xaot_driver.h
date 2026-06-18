@@ -81,10 +81,19 @@ typedef struct {
 
 /* ========== Build API ========== */
 
+/* One generated C translation unit.  Each becomes an independently compiled
+ * object file; `name` is a stable per-module identifier used both for cache
+ * addressing (content hash key seed) and diagnostics. */
+typedef struct {
+    char *name;     /* module name (cache key seed + diagnostics), malloc'd */
+    char *c_source; /* generated C for this TU (malloc'd) */
+} XaotModuleSource;
+
 /* Result of xaot_build().  Caller must free owned strings via xr_free(). */
 typedef struct {
-    char *c_source;  /* generated C program (malloc'd, caller frees) */
-    char *plan_dump; /* stable AOT prepare plan dump (malloc'd, caller frees) */
+    XaotModuleSource *sources; /* per-module generated C (malloc'd array) */
+    int n_sources;             /* number of generated C translation units */
+    char *plan_dump;           /* stable AOT prepare plan dump (malloc'd) */
     XaotLinkManifest link_manifest;
     int total_compiled;      /* number of functions successfully transpiled */
     int total_aot;           /* total AOT-eligible functions found */
@@ -98,11 +107,13 @@ typedef struct {
 /* Full AOT pipeline: Source → AST → Xi IR → C.
  * Supports single and multi-module bundles.
  * Returns 0 on success, non-zero on failure.
- * On success, result->c_source is a complete C program.
+ * On success, result->sources holds one generated C translation unit per
+ * module (entry module last); each is compiled independently and linked
+ * together, enabling per-module object caching.
  * When emit_plan_dump is true, result->plan_dump holds the stable AOT plan
  * text (for --dump-xaot-plan); otherwise it stays NULL and the O(N) dump is
  * skipped (it is pure diagnostics and most builds discard it).
- * Caller frees result->c_source via xr_free(). */
+ * Caller frees the result via xaot_build_result_free(). */
 XR_FUNC int xaot_build(const char *input_path, bool emit_plan_dump, XaotBuildResult *result);
 XR_FUNC void xaot_build_result_free(XaotBuildResult *result);
 

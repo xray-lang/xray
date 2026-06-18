@@ -131,6 +131,86 @@ static void features_add_stdlib_symbol(XaotFeatureSet *fs, const char *symbol) {
     fs->n_stdlib_symbols++;
 }
 
+/* Record "module.member" into the referenced stdlib-symbol closure. */
+static void features_add_stdlib_member(XaotFeatureSet *fs, const char *module, const char *member) {
+    if (!fs || !module || !module[0] || !member || !member[0])
+        return;
+    char symbol[XAOT_STDLIB_SYMBOL_NAME_MAX];
+    int n = snprintf(symbol, sizeof(symbol), "%s.%s", module, member);
+    if (n <= 0 || n >= (int) sizeof(symbol))
+        return;
+    features_add_stdlib_symbol(fs, symbol);
+}
+
+/* Unwrap value-identity ops (box/unbox/copy/move) to the underlying value,
+ * mirroring cg_unwrap_identity_value so feature inference sees the same module
+ * identity the emitter resolves at the call site. */
+static const XiValue *stdlib_unwrap_value(const XiValue *v) {
+    while (v && (v->op == XI_BOX || v->op == XI_UNBOX || v->op == XI_COPY || v->op == XI_MOVE) &&
+           v->nargs >= 1)
+        v = v->args[0];
+    return v;
+}
+
+/* Extract the import-ref carried by a value, if it is an XI_IMPORT_REF. */
+static const XiImportRef *stdlib_value_import_ref(const XiValue *v) {
+    v = stdlib_unwrap_value(v);
+    if (!v || v->op != XI_IMPORT_REF || !v->aux)
+        return NULL;
+    return (const XiImportRef *) v->aux;
+}
+
+/* Find the import-ref stored into a shared slot within f (SET_SHARED scan),
+ * mirroring cg_shared_slot_import_ref. */
+static const XiImportRef *stdlib_shared_slot_import_ref(const XiFunc *f, int slot) {
+    if (!f || slot < 0)
+        return NULL;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *blk = f->blocks[bi];
+        if (!blk)
+            continue;
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *v = blk->values[vi];
+            if (!v || v->op != XI_SET_SHARED || (int) v->aux_int != slot || v->nargs < 1)
+                continue;
+            const XiImportRef *ref = stdlib_value_import_ref(v->args[0]);
+            if (ref)
+                return ref;
+        }
+    }
+    return NULL;
+}
+
+/* Resolve the module import-ref a value refers to, following shared-slot
+ * indirection (e.g. `import time` stored into a shared slot then read back at
+ * the `time.now()` call site). Mirrors cg_value_is_module_import resolution. */
+static const XiImportRef *stdlib_module_ref_of_value(const XiFunc *f, const XiValue *v) {
+    v = stdlib_unwrap_value(v);
+    const XiImportRef *ref = stdlib_value_import_ref(v);
+    if (ref)
+        return ref;
+    if (v && v->op == XI_GET_SHARED) {
+        ref = stdlib_shared_slot_import_ref(f, (int) v->aux_int);
+        if (!ref && f && f->module && f->module->init != f)
+            ref = stdlib_shared_slot_import_ref(f->module->init, (int) v->aux_int);
+    }
+    return ref;
+}
+
+/* If v refers to a runtime-backed stdlib module (bare module identifier in the
+ * stdlib table, excluding the direct-call core math path which is tracked via
+ * XI_CALL_BUILTIN), return that module name; else NULL. Used to record the
+ * referenced-symbol closure for method-form stdlib calls. */
+static const char *stdlib_runtime_module_of_value(const XiFunc *f, const XiValue *v) {
+    const XiImportRef *ref = stdlib_module_ref_of_value(f, v);
+    if (!ref || !ref->module_path || ref->member_name)
+        return NULL;
+    XaotStdlibSet flag = stdlib_flag_for_import(ref->module_path);
+    if (flag == 0 || flag == XAOT_STDLIB_MATH)
+        return NULL;
+    return ref->module_path;
+}
+
 /* Scan a single XiFunc (non-recursive) for feature-indicating ops */
 static void scan_func_features(XiFunc *f, XaotFeatureSet *fs) {
     XR_DCHECK(f != NULL, "scan_func_features: NULL func");
@@ -186,6 +266,14 @@ static void scan_func_features(XiFunc *f, XaotFeatureSet *fs) {
                         fs->need_coro = true;
                         fs->need_timer = true;
                     }
+                    /* Module-form call (e.g. `time.now()`): the receiver is an
+                     * import-ref naming the stdlib module, the method name is in
+                     * aux. Record the precise referenced symbol. */
+                    if (v->aux && v->nargs >= 1) {
+                        const char *mod = stdlib_runtime_module_of_value(f, v->args[0]);
+                        if (mod)
+                            features_add_stdlib_member(fs, mod, (const char *) v->aux);
+                    }
                     break;
                 case XI_CALL_BUILTIN: {
                     const char *name = (const char *) v->aux;
@@ -214,6 +302,11 @@ static void scan_func_features(XiFunc *f, XaotFeatureSet *fs) {
                         /* time implies timer subsystem */
                         if (flag & XAOT_STDLIB_TIME)
                             fs->need_timer = true;
+                        /* Member-import form (e.g. `import { now } from "time"`):
+                         * the import-ref carries the member name directly. Core
+                         * math is excluded; it is tracked via XI_CALL_BUILTIN. */
+                        if (flag && flag != XAOT_STDLIB_MATH && ref->member_name)
+                            features_add_stdlib_member(fs, ref->module_path, ref->member_name);
                     }
                     break;
                 }
@@ -599,57 +692,55 @@ XR_FUNC int xaot_build(const char *input_path, bool emit_plan_dump, XaotBuildRes
     /* --- Resolve cross-module imports for C codegen --- */
     xi_cgen_resolve_module_imports(cg_ctx, modules, nmodules);
 
-    /* --- Generate combined C source --- */
-    char *buf = NULL;
-    size_t bufsz = 0;
-    FILE *mem = xr_open_memstream(&buf, &bufsz);
-    if (!mem) {
-        fprintf(stderr, "Error: xr_open_memstream failed\n");
+    /* --- Generate C: one translation unit per module --- */
+    XaotModuleSource *sources =
+        (XaotModuleSource *) xr_calloc((size_t) nmodules, sizeof(XaotModuleSource));
+    if (!sources) {
         xi_cgen_ctx_free(cg_ctx);
         goto fail_free_ir;
+    }
+    int n_sources = 0;
+    bool emit_ok = true;
+    size_t total_c_bytes = 0;
+
+    for (int m = 0; m < nmodules && emit_ok; m++) {
+        char *buf = NULL;
+        size_t bufsz = 0;
+        FILE *mem = xr_open_memstream(&buf, &bufsz);
+        if (!mem) {
+            fprintf(stderr, "Error: xr_open_memstream failed\n");
+            emit_ok = false;
+            break;
+        }
+        if (nmodules == 1) {
+            /* Single-module bundle stays a single self-contained unit (no
+             * cross-module symbols, so it keeps file-static linkage). */
+            xi_cgen_program(cg_ctx, mem, modules[m]);
+        } else {
+            /* Multi-module: emit module m as an independently compilable unit
+             * (external cross-module symbols; entry unit carries main). */
+            xi_cgen_module_tu(cg_ctx, mem, modules, nmodules, m, entry_index);
+        }
+        if (xr_close_memstream(mem, &buf, &bufsz) != 0) {
+            fprintf(stderr, "Error: xr_close_memstream failed\n");
+            xr_free(buf);
+            emit_ok = false;
+            break;
+        }
+        sources[m].name = xr_strdup(mod_names[m] ? mod_names[m] : "module");
+        sources[m].c_source = buf;
+        n_sources++;
+        total_c_bytes += bufsz;
     }
 
-    if (nmodules == 1) {
-        /* Single-module fast path */
-        xi_cgen_program(cg_ctx, mem, modules[0]);
-    } else {
-        /* Multi-module: header + literal defs + per-module sections +
-         * combined main.  Module bodies are buffered so interned string
-         * literal definitions can be emitted ahead of every use. */
-        xi_cgen_header(mem);
-        char *modbuf = NULL;
-        size_t modsz = 0;
-        FILE *modmem = xr_open_memstream(&modbuf, &modsz);
-        if (!modmem) {
-            fprintf(stderr, "Error: xr_open_memstream failed\n");
-            xr_close_memstream(mem, &buf, &bufsz);
-            xr_free(buf);
-            xi_cgen_ctx_free(cg_ctx);
-            goto fail_free_ir;
-        }
-        for (int m = 0; m < nmodules; m++)
-            xi_cgen_module(cg_ctx, modmem, modules[m]);
-        xi_cgen_main(cg_ctx, modmem, modules, nmodules, entry_index);
-        if (xr_close_memstream(modmem, &modbuf, &modsz) != 0) {
-            fprintf(stderr, "Error: xr_close_memstream failed\n");
-            xr_close_memstream(mem, &buf, &bufsz);
-            xr_free(buf);
-            xi_cgen_ctx_free(cg_ctx);
-            goto fail_free_ir;
-        }
-        xi_cgen_emit_str_literal_defs(cg_ctx, mem);
-        fwrite(modbuf, 1, modsz, mem);
-        xr_free(modbuf);
-    }
-    if (xr_close_memstream(mem, &buf, &bufsz) != 0) {
-        fprintf(stderr, "Error: xr_close_memstream failed\n");
-        xi_cgen_ctx_free(cg_ctx);
-        goto fail_free_ir;
-    }
-    if (xi_cgen_has_error(cg_ctx)) {
+    if (!emit_ok || xi_cgen_has_error(cg_ctx)) {
         fprintf(stderr, "Error: AOT C code generation failed\n");
         xi_cgen_ctx_free(cg_ctx);
-        xr_free(buf);
+        for (int m = 0; m < n_sources; m++) {
+            xr_free(sources[m].name);
+            xr_free(sources[m].c_source);
+        }
+        xr_free(sources);
         goto fail_free_ir;
     }
     XiCgenStats cgen_stats = xi_cgen_stats(cg_ctx);
@@ -677,12 +768,13 @@ XR_FUNC int xaot_build(const char *input_path, bool emit_plan_dump, XaotBuildRes
     xr_free(pres_arr);
     xr_free(ir_funcs);
 
-    printf("[xi-native] Generated %zu bytes of C (%d functions, %d modules)\n", bufsz, total_funcs,
-           nmodules);
+    printf("[xi-native] Generated %zu bytes of C (%d functions, %d modules in %d unit%s)\n",
+           total_c_bytes, total_funcs, nmodules, n_sources, n_sources == 1 ? "" : "s");
 
-    /* buf is xr_malloc-owned (xr_close_memstream guarantees this on every
-     * platform). Hand it off to the caller as-is. */
-    result->c_source = buf;
+    /* Each source buffer is xr_malloc-owned (xr_close_memstream guarantees this
+     * on every platform); ownership transfers into the result. */
+    result->sources = sources;
+    result->n_sources = n_sources;
     result->plan_dump = plan_dump;
     plan_dump = NULL;
     result->link_manifest = link_manifest;
@@ -747,7 +839,13 @@ fail_free_graph:
 XR_FUNC void xaot_build_result_free(XaotBuildResult *result) {
     if (!result)
         return;
-    xr_free(result->c_source);
+    if (result->sources) {
+        for (int i = 0; i < result->n_sources; i++) {
+            xr_free(result->sources[i].name);
+            xr_free(result->sources[i].c_source);
+        }
+        xr_free(result->sources);
+    }
     xr_free(result->plan_dump);
     xaot_link_manifest_free(&result->link_manifest);
     memset(result, 0, sizeof(*result));

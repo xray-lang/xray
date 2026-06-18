@@ -1,0 +1,8 @@
+// Multi-module AOT separate compilation: the entry imports functions from a
+// sibling module.  Exercises cross-module direct calls (int + string return)
+// and per-translation-unit string-literal pools.  VM and AOT must agree.
+import { add, triple, label } from "./_mathlib"
+
+print(add(triple(14), 1))
+print(label())
+print(add(add(1, 2), triple(3)))

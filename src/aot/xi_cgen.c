@@ -362,6 +362,21 @@ struct XiCgenCtx {
     int nmethod;
     XiModule *module; /* current module being emitted */
     bool pre_decl_all;
+    /* When true, top-level functions and their declarations are emitted with
+     * external (non-static) linkage so a multi-module bundle can be compiled as
+     * one object per module and linked together (114 separate compilation).
+     * Single-module bundles keep file-static linkage. */
+    bool extern_linkage;
+    /* While a translation unit's body is emitted (collect_xmod_refs gated),
+     * every cross-module function referenced through emit_fname is recorded
+     * here so only the imports a unit actually uses are forward-declared.  This
+     * keeps an object's bytes independent of unrelated exports added or removed
+     * in other modules (114 incremental caching). */
+    bool collect_xmod_refs;
+    const XiFunc **xmod_ref_funcs;
+    const char **xmod_ref_prefixes;
+    int n_xmod_refs;
+    int xmod_refs_cap;
     bool *cell_vars;
     const XiValue **cell_origins;
     uint32_t cell_var_count;
@@ -514,6 +529,29 @@ static int cg_intern_str_lit(XiCgenCtx *ctx, const char *s) {
     }
     ctx->strlit_list[ctx->nstrlit++] = e;
     return e->id;
+}
+
+/* Drop the interned string pool so the next translation unit starts numbering
+ * literals from zero.  Used between per-module objects (114) so each object
+ * carries only its own _xstr_* definitions (file-static, no cross-TU clash). */
+static void cg_reset_str_lits(XiCgenCtx *ctx) {
+    for (int b = 0; b < CG_STRLIT_BUCKETS; b++) {
+        CgStrLit *e = ctx->strlit_buckets[b];
+        while (e) {
+            CgStrLit *next = e->next;
+            xr_free(e->str);
+            xr_free(e);
+            e = next;
+        }
+        ctx->strlit_buckets[b] = NULL;
+    }
+    ctx->nstrlit = 0;
+}
+
+/* Storage-class prefix for emitted top-level functions: external linkage in
+ * multi-module separate-compilation mode, file-static otherwise. */
+static const char *cg_linkage(const XiCgenCtx *ctx) {
+    return ctx->extern_linkage ? "" : "static ";
 }
 
 /* Emit a string literal value expression: a pointer to the module-level
@@ -779,14 +817,135 @@ static void sanitize_c_ident_part(char *buf, size_t cap, const char *raw) {
     buf[j] = '\0';
 }
 
-/* Write the C name for a function (prefix_funcname_id).
- * Each XiFunc gets a unique numeric suffix to prevent name collisions
- * (e.g. multiple anonymous closures or same-named constructors).
- * The suffix is stored in cgen_id the first time and reused thereafter. */
+/* Write f's order-independent C name into buf when f is cross-module-visible in
+ * separate-compilation mode, returning true.  Cross-module-visible functions are
+ * a module init (`prefix_modinit`), an exported top-level function
+ * (`prefix_name_exp`), or a constructor/method of an exported class
+ * (`prefix_Class_method_m`).  These names omit the per-emission ordinal so a
+ * module's object file stays cache-valid when unrelated functions are added or
+ * removed elsewhere in the bundle (114 incremental caching).  Returns false for
+ * internal functions (closures, private helpers), which are referenced only
+ * within their own translation unit and keep a per-module ordinal suffix.
+ *
+ * Stable names always end in a letter (`_exp`/`_modinit`/`_m`) while the ordinal
+ * form ends in `_<digits>`, so the two name spaces never collide. */
+static bool cg_func_stable_cname(const XiCgenCtx *ctx, const XiFunc *f, const char *prefix,
+                                 char *buf, size_t bufsz) {
+    if (!ctx || !f || !prefix || !prefix[0] || !ctx->all_modules)
+        return false;
+    char pbuf[128];
+    sanitize_c_ident_part(pbuf, sizeof(pbuf), prefix);
+    for (int i = 0; i < ctx->all_nmodules; i++) {
+        XiModule *mod = ctx->all_modules[i];
+        if (!mod || !mod->name || strcmp(mod->name, prefix) != 0)
+            continue;
+        if (mod->init == f) {
+            snprintf(buf, bufsz, "%s_modinit", pbuf);
+            return true;
+        }
+        for (uint16_t e = 0; e < mod->nexports; e++) {
+            if (mod->exports[e].function == f && mod->exports[e].name) {
+                char nb[128];
+                sanitize_c_ident_part(nb, sizeof(nb), mod->exports[e].name);
+                snprintf(buf, bufsz, "%s_%s_exp", pbuf, nb);
+                return true;
+            }
+        }
+        /* Constructor / method of an exported class: keyed by class + method
+         * name so the symbol is independent of sibling ordering. */
+        for (uint16_t e = 0; e < mod->nexports; e++) {
+            const XiClassData *cd = mod->exports[e].class_data;
+            if (!cd || !cd->child_idx || !mod->init)
+                continue;
+            char cb[128];
+            sanitize_c_ident_part(cb, sizeof(cb), cd->class_name ? cd->class_name : "cls");
+            for (uint16_t mi = 0; mi < cd->nmethod; mi++) {
+                uint16_t ci = cd->child_idx[mi];
+                if (ci < mod->init->nchildren && mod->init->children[ci] == f) {
+                    char mb[128];
+                    sanitize_c_ident_part(mb, sizeof(mb),
+                                          cd->methods[mi].name ? cd->methods[mi].name : "m");
+                    snprintf(buf, bufsz, "%s_%s_%s_m", pbuf, cb, mb);
+                    return true;
+                }
+            }
+            if (cd->clinit_child_idx >= 0 &&
+                (uint16_t) cd->clinit_child_idx < mod->init->nchildren &&
+                mod->init->children[cd->clinit_child_idx] == f) {
+                snprintf(buf, bufsz, "%s_%s_clinit_m", pbuf, cb);
+                return true;
+            }
+        }
+        return false; /* owning module found, but f is internal */
+    }
+    return false;
+}
+
+/* Record a cross-module function reference (deduplicated by pointer) so the
+ * current translation unit forward-declares only the imported symbols it
+ * actually uses.  prefix is the owning module's name (stable storage). */
+static void cg_note_xmod_ref(XiCgenCtx *ctx, const XiFunc *f, const char *prefix) {
+    for (int i = 0; i < ctx->n_xmod_refs; i++) {
+        if (ctx->xmod_ref_funcs[i] == f)
+            return;
+    }
+    if (ctx->n_xmod_refs >= ctx->xmod_refs_cap) {
+        int nc = ctx->xmod_refs_cap > 0 ? ctx->xmod_refs_cap * 2 : 16;
+        const XiFunc **nf =
+            (const XiFunc **) xr_realloc(ctx->xmod_ref_funcs, (size_t) nc * sizeof(*nf));
+        const char **np =
+            (const char **) xr_realloc(ctx->xmod_ref_prefixes, (size_t) nc * sizeof(*np));
+        if (!nf)
+            ctx->error = true;
+        else
+            ctx->xmod_ref_funcs = nf;
+        if (!np)
+            ctx->error = true;
+        else
+            ctx->xmod_ref_prefixes = np;
+        if (ctx->error)
+            return;
+        ctx->xmod_refs_cap = nc;
+    }
+    ctx->xmod_ref_funcs[ctx->n_xmod_refs] = f;
+    ctx->xmod_ref_prefixes[ctx->n_xmod_refs] = prefix;
+    ctx->n_xmod_refs++;
+}
+
+/* Write the C name for a function.
+ *
+ * Single-module / file-static mode: prefix_funcname_id, where the numeric id is
+ * assigned on first use (cgen_id == 0 means unassigned) so anonymous closures
+ * and same-named constructors stay distinct.
+ *
+ * Separate-compilation mode (ctx->extern_linkage): cross-module-visible
+ * functions instead get an order-independent name (see cg_func_stable_cname) so
+ * adding or removing an unrelated function elsewhere never changes this object's
+ * bytes (114 incremental caching).  Internal functions keep the ordinal form. */
 static void emit_fname(XiCgenCtx *ctx, FILE *out, const char *prefix, const XiFunc *f) {
     XR_DCHECK(f != NULL, "emit_fname: NULL func");
-    const char *raw = f->name ? f->name : "anon";
 
+    bool have_prefix = prefix && prefix[0];
+    char prefix_buf[128];
+    if (have_prefix)
+        sanitize_c_ident_part(prefix_buf, sizeof(prefix_buf), prefix);
+
+    /* Record cross-module references so the unit forward-declares only the
+     * imports it uses (114): a reference is cross-module when its owning prefix
+     * differs from the module currently being emitted. */
+    if (ctx->extern_linkage && ctx->collect_xmod_refs && have_prefix && ctx->module &&
+        ctx->module->name && strcmp(prefix, ctx->module->name) != 0)
+        cg_note_xmod_ref(ctx, f, prefix);
+
+    if (ctx->extern_linkage && have_prefix) {
+        char stable[384];
+        if (cg_func_stable_cname(ctx, f, prefix, stable, sizeof(stable))) {
+            fprintf(out, "%s", stable);
+            return;
+        }
+    }
+
+    const char *raw = f->name ? f->name : "anon";
     char buf[128];
     sanitize_c_ident_part(buf, sizeof(buf), raw);
 
@@ -795,13 +954,10 @@ static void emit_fname(XiCgenCtx *ctx, FILE *out, const char *prefix, const XiFu
     if (mf->cgen_id == 0)
         mf->cgen_id = ++ctx->fname_counter;
 
-    if (prefix && prefix[0]) {
-        char prefix_buf[128];
-        sanitize_c_ident_part(prefix_buf, sizeof(prefix_buf), prefix);
+    if (have_prefix)
         fprintf(out, "%s_%s_%d", prefix_buf, buf, f->cgen_id);
-    } else {
+    else
         fprintf(out, "fn_%s_%d", buf, f->cgen_id);
-    }
 }
 
 static void emit_fname_suffix(XiCgenCtx *ctx, FILE *out, const char *prefix, const XiFunc *f,
@@ -2586,7 +2742,7 @@ static void xi_cgen_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefi
     /* Function signature.  Closure children with captures receive a hidden
      * first parameter xrt_closure_t *_cl for per-closure upvalue access. */
     bool has_cl = (f->ncaptures > 0);
-    fprintf(out, "static ");
+    fprintf(out, "%s", cg_linkage(ctx));
     emit_func_attr_qualifier(ctx, out, f);
     if (!emit_class_native_return_type(ctx, out, prefix, f))
         fprintf(out, "%s", cg_func_return_abi_c_type(ctx, f));
@@ -2632,7 +2788,7 @@ static void xi_cgen_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefi
     } else if (typed_abi && boxed_adapter) {
         ctx->stats.boxed_adapters++;
         if (!emit_class_native_typed_boxed_adapter(ctx, out, prefix, f)) {
-            fprintf(out, "static XrValue ");
+            fprintf(out, "%sXrValue ", cg_linkage(ctx));
             emit_typed_abi_fname(ctx, out, prefix, f);
             fprintf(out, "(xrt_closure_t *_cl");
             for (uint16_t i = 0; i < f->nparams; i++)
@@ -2667,15 +2823,16 @@ static void xi_cgen_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefi
 
 /* ========== Forward Declarations ========== */
 
-static void emit_forward_decls(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const char *prefix) {
-    /* Recurse children first */
-    for (uint16_t i = 0; i < f->nchildren; i++) {
-        if (f->children[i])
-            emit_forward_decls(ctx, out, f->children[i], prefix);
-    }
-
+/* Emit the forward declaration(s) for a single function (no recursion): the
+ * function prototype plus any boxed adapter / coroutine frame declarations it
+ * needs.  Used both for a unit's own functions (via emit_forward_decls) and for
+ * the imported cross-module functions a unit references (114). */
+static void emit_one_forward_decl(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const char *prefix) {
     bool needs_aot_coro = cg_func_needs_aot_coro_ctx(ctx, f);
-    fprintf(out, "static ");
+    /* Coroutine functions are emitted (definition) with file-static linkage by
+     * the coro codegen, so their forward declaration must match; only plain
+     * functions participate in cross-module external linkage. */
+    fprintf(out, "%s", needs_aot_coro ? "static " : cg_linkage(ctx));
     emit_func_attr_qualifier(ctx, out, f);
     if (needs_aot_coro) {
         fprintf(out, "XrValue");
@@ -2700,7 +2857,7 @@ static void emit_forward_decls(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
     bool native_receiver = cg_class_func_uses_native_receiver(ctx, f);
     if (!needs_aot_coro &&
         cg_func_needs_boxed_adapter(ctx, f, prefix, typed_abi, native_receiver)) {
-        fprintf(out, "static XrValue ");
+        fprintf(out, "%sXrValue ", cg_linkage(ctx));
         emit_typed_abi_fname(ctx, out, prefix, f);
         fprintf(out, "(xrt_closure_t *_cl");
         for (uint16_t i = 0; i < f->nparams; i++)
@@ -2710,19 +2867,34 @@ static void emit_forward_decls(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
 
     bool needs_sync_go = !needs_aot_coro && cg_func_needs_sync_go_wrapper_ctx(ctx, f);
     if (needs_aot_coro || needs_sync_go) {
-        fprintf(out, "static void *");
+        /* The frame factory, resume entry and descriptor carry cross-module
+         * linkage so a coroutine spawned from another module's translation unit
+         * resolves at link time (matches the definitions in xi_cgen_coro).  A
+         * const object at file scope without `extern` is a tentative definition,
+         * so the descriptor declaration must use `extern` (not bare const). */
+        fprintf(out, "%svoid *", cg_linkage(ctx));
         emit_fname_suffix(ctx, out, prefix, f, "_aot_frame_new");
         fprintf(out, "(");
         emit_aot_frame_new_params(out, f, needs_sync_go);
         fprintf(out, ");\n");
-        fprintf(out, "static XrAotResult ");
+        fprintf(out, "%sXrAotResult ", cg_linkage(ctx));
         emit_fname_suffix(ctx, out, prefix, f, "_aot_resume");
         fprintf(out, "(void *raw_frame, const XrAotContext *ctx);\n");
-        fprintf(out, "static const XrAotCoroDesc ");
+        fprintf(out, "%sconst XrAotCoroDesc ", ctx->extern_linkage ? "extern " : "static ");
         emit_fname_suffix(ctx, out, prefix, f, "_aot_desc");
         fprintf(out, ";\n");
     }
 }
 
+/* Forward-declare a function and all its nested functions (children first). */
+static void emit_forward_decls(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const char *prefix) {
+    for (uint16_t i = 0; i < f->nchildren; i++) {
+        if (f->children[i])
+            emit_forward_decls(ctx, out, f->children[i], prefix);
+    }
+    emit_one_forward_decl(ctx, out, f, prefix);
+}
+
 #include "xi_cgen_import_helpers.inc.c"
+#include "xi_cgen_stdlib_helpers.inc.c"
 #include "xi_cgen_program_entry.inc.c"

@@ -1063,7 +1063,7 @@ static void emit_sync_go_frame_type(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
 
 static void emit_sync_go_frame_factory(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                        const char *prefix) {
-    fprintf(out, "static void *");
+    fprintf(out, "%svoid *", cg_linkage(ctx));
     emit_fname_suffix(ctx, out, prefix, f, "_aot_frame_new");
     fprintf(out, "(");
     emit_aot_frame_new_params(out, f, true);
@@ -1230,7 +1230,7 @@ static void emit_sync_go_wrapper(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
     emit_sync_go_frame_type(ctx, out, f, prefix);
     emit_sync_go_frame_factory(ctx, out, f, prefix);
 
-    fprintf(out, "static XrAotResult ");
+    fprintf(out, "%sXrAotResult ", cg_linkage(ctx));
     emit_fname_suffix(ctx, out, prefix, f, "_aot_resume");
     fprintf(out, "(void *raw_frame, const XrAotContext *ctx) {\n");
     fprintf(out, "    ");
@@ -1324,7 +1324,7 @@ static void emit_sync_go_wrapper(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
     fprintf(out, "    xr_aot_frame_free(frame);\n");
     fprintf(out, "}\n\n");
 
-    fprintf(out, "static const XrAotCoroDesc ");
+    fprintf(out, "%sconst XrAotCoroDesc ", cg_linkage(ctx));
     emit_fname_suffix(ctx, out, prefix, f, "_aot_desc");
     fprintf(out, " = {\n");
     fprintf(out, "    .name = \"%s\",\n", f->name ? f->name : "aot");
@@ -1498,7 +1498,7 @@ static void emit_coro_undefs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
 
 static void emit_coro_frame_factory(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                     const char *prefix) {
-    fprintf(out, "static void *");
+    fprintf(out, "%svoid *", cg_linkage(ctx));
     emit_fname_suffix(ctx, out, prefix, f, "_aot_frame_new");
     fprintf(out, "(");
     emit_aot_frame_new_params(out, f, false);
@@ -3046,7 +3046,7 @@ static void xi_cgen_coro_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *
     emit_coro_frame_init(ctx, out, f, prefix);
     emit_coro_frame_factory(ctx, out, f, prefix);
 
-    fprintf(out, "static XrAotResult ");
+    fprintf(out, "%sXrAotResult ", cg_linkage(ctx));
     emit_fname_suffix(ctx, out, prefix, f, "_aot_resume");
     fprintf(out, "(void *raw_frame, const XrAotContext *ctx) {\n");
     fprintf(out, "    ");
@@ -3115,7 +3115,7 @@ static void xi_cgen_coro_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *
     fprintf(out, "    xr_aot_frame_free(frame);\n");
     fprintf(out, "}\n\n");
 
-    fprintf(out, "static const XrAotCoroDesc ");
+    fprintf(out, "%sconst XrAotCoroDesc ", cg_linkage(ctx));
     emit_fname_suffix(ctx, out, prefix, f, "_aot_desc");
     fprintf(out, " = {\n");
     fprintf(out, "    .name = \"%s\",\n", f->name ? f->name : "aot");

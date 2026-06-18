@@ -339,6 +339,10 @@ static bool xicgen_import_ref_is_core_math_member(const XiImportRef *ref) {
     return false;
 }
 
+/* Both defined in xi_cgen_stdlib_helpers.inc.c (included later in this TU). */
+static bool xicgen_emit_stdlib_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v);
+static bool cg_module_has_aot_direct_calls(const char *module);
+
 static void xicgen_import_ref(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                               const char *prefix) {
     (void) f;
@@ -366,7 +370,8 @@ static void xicgen_import_ref(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
     }
     if (!found) {
         if (ref && ref->module_path && !ref->member_name &&
-            (strcmp(ref->module_path, "time") == 0 || strcmp(ref->module_path, "math") == 0)) {
+            (strcmp(ref->module_path, "time") == 0 || strcmp(ref->module_path, "math") == 0 ||
+             cg_module_has_aot_direct_calls(ref->module_path))) {
             fprintf(out, "XR_NULL_VAL /* builtin module: %s */", ref->module_path);
         } else if (xicgen_import_ref_is_core_math_member(ref)) {
             fprintf(out, "XR_NULL_VAL /* builtin math.%s */", ref->member_name);
@@ -1792,6 +1797,8 @@ static void xicgen_call_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
     const char *method_prefix = NULL;
 
     if (xicgen_emit_time_method(ctx, out, f, v))
+        return;
+    if (xicgen_emit_stdlib_method(ctx, out, f, v))
         return;
     if (!is_super && method && strcmp(method, "constructor") == 0 &&
         xicgen_emit_user_constructor(ctx, out, f, v, prefix))

@@ -68,17 +68,21 @@ XR_FUNC void xi_cgen_program(XiCgenCtx *ctx, FILE *out, struct XiModule *module)
 XR_FUNC void xi_cgen_header(FILE *out);
 
 /* Resolve cross-module imports.  Populates ctx internal import table
- * from the module graph.  Must be called before xi_cgen_module(). */
+ * from the module graph.  Must be called before C generation. */
 XR_FUNC void xi_cgen_resolve_module_imports(XiCgenCtx *ctx, struct XiModule **modules,
                                             int nmodules);
-
-/* Emit one module: module-scoped shared[], forward decls, function
- * bodies.  Does NOT emit #includes or main(). */
-XR_FUNC void xi_cgen_module(XiCgenCtx *ctx, FILE *out, struct XiModule *module);
 
 /* Emit main() calling module inits in topo order. */
 XR_FUNC void xi_cgen_main(XiCgenCtx *ctx, FILE *out, struct XiModule **modules, int n,
                           int entry_index);
+
+/* Emit one self-contained translation unit for modules[mod_index] (114
+ * separate compilation): includes, external forward declarations for every
+ * module's functions and shared-slot arrays, this module's definitions, and
+ * (for the entry module) main().  Reuse a single ctx across every unit of a
+ * bundle so function ids stay globally consistent. */
+XR_FUNC void xi_cgen_module_tu(XiCgenCtx *ctx, FILE *out, struct XiModule **modules, int nmodules,
+                               int mod_index, int entry_index);
 
 /* Emit static const xrt_str_t definitions for every string literal
  * interned while emitting module bodies.  Multi-module flow: buffer
