@@ -500,6 +500,10 @@ static void xicgen_get_builtin(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
     if (v->aux_int == XR_GLOBAL_VAR_PROCESS || v->aux_int == XR_GLOBAL_VAR_FILE ||
         v->aux_int == XR_GLOBAL_VAR_DIR) {
         fprintf(out, "xrt_builtins[%d]", (int) v->aux_int);
+    } else if (emit_prelude_enum_type_expr(out, (int) v->aux_int)) {
+        /* Prelude enum type object: standalone AOT uses the same lightweight
+         * map representation as user enums, avoiding a full isolate solely for
+         * enum member lookup. */
     } else {
         ctx->error = true;
         fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT builtin global '%s'\n",

@@ -1,0 +1,39 @@
+// anchor: coro-channel-nonblocking-prelude-enums
+// Nonblocking channel APIs return prelude enums. Standalone AOT must materialize
+// SendResult/Recv builtin globals without requiring a coroutine isolate.
+fn is_sent(r: SendResult) -> bool {
+    return match (r) {
+        SendResult.Sent -> true
+        _ -> false
+    }
+}
+
+fn recv_value(r: Recv<int>) -> int {
+    return match (r) {
+        Recv.Value(v) -> v
+        _ -> -1
+    }
+}
+
+fn has_value(r: Recv<int>) -> bool {
+    return match (r) {
+        Recv.Value(_) -> true
+        _ -> false
+    }
+}
+
+shared const ch: Channel<int> = new Channel(2)
+
+let s1 = ch.trySend(7)
+let s2 = ch.trySend(9)
+let s3 = ch.trySend(11)
+print(is_sent(s1))
+print(is_sent(s2))
+print(is_sent(s3))
+
+let r1 = ch.tryRecv()
+let r2 = ch.tryRecv()
+let r3 = ch.tryRecv()
+print(recv_value(r1))
+print(recv_value(r2))
+print(has_value(r3))
