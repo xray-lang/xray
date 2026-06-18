@@ -363,6 +363,13 @@ struct XiCgenCtx {
     bool *cell_vars;
     const XiValue **cell_origins;
     uint32_t cell_var_count;
+    /* Per-function phi coalescing: value-id-indexed map from a phi's SSA id to
+     * the SSA id of the C variable it shares (identity = its own). Built by
+     * cg_build_phi_coalesce for the normal (non-coro) emission path; phi_repr_active
+     * gates lookups so the coro path and unbuilt functions keep identity naming. */
+    uint32_t *phi_repr;
+    uint32_t phi_repr_cap;
+    bool phi_repr_active;
     const char *shared_name;
     CgImportEntry *imports;
     int imports_cap;
@@ -1040,10 +1047,18 @@ static bool cg_shared_static_function_value_is_elided(XiCgenCtx *ctx, const XiFu
 
 /* Write a value reference: v<id> or phi<id> for phi nodes */
 static void emit_vref(FILE *out, const XiValue *v) {
-    if (v->op == XI_PHI)
-        fprintf(out, "phi%u", v->id);
-    else
+    if (v->op == XI_PHI) {
+        /* Resolve through the function's phi coalescing map so an operand use of
+         * a coalesced phi prints the representative's C variable (the only place
+         * its declaration exists). emit_phi_ref handles the decl/copy sites. */
+        uint32_t id = v->id;
+        const XiFunc *vf = v->block ? v->block->func : NULL;
+        if (vf && vf->phi_coalesce && id < vf->phi_coalesce_count)
+            id = vf->phi_coalesce[id];
+        fprintf(out, "phi%u", id);
+    } else {
         fprintf(out, "v%u", v->id);
+    }
 }
 
 #include "xi_cgen_class_native_meta.inc.c"
@@ -1348,9 +1363,14 @@ static XrRep cg_value_decl_storage_rep(XiCgenCtx *ctx, const XiFunc *f, const Xi
     return cg_value_plan_storage_rep(ctx, v);
 }
 
-/* Write a phi variable reference: phi<id> */
-static void emit_phi_ref(FILE *out, const XiPhi *phi) {
-    fprintf(out, "phi%u", phi->value.id);
+/* Write a phi variable reference: phi<id>, mapped through the coalescing table
+ * so phis that share a C variable (same source var_id, disjoint live ranges)
+ * resolve to one representative name. */
+static void emit_phi_ref(const XiCgenCtx *ctx, FILE *out, const XiPhi *phi) {
+    uint32_t id = phi->value.id;
+    if (ctx && ctx->phi_repr_active && ctx->phi_repr && id < ctx->phi_repr_cap)
+        id = ctx->phi_repr[id];
+    fprintf(out, "phi%u", id);
 }
 
 /* ========== Value Emission ========== */
@@ -1725,7 +1745,8 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
         (cg_value_traces_to_inlined_struct(f, v->args[0]) ||
          cg_value_is_elided_heap_struct_alias(ctx, f, v) ||
          cg_value_is_elided_nested_struct_ref(f, v->args[0]) ||
-         cg_value_is_elided_fixed_array_ref(f, v->args[0])))
+         cg_value_is_elided_fixed_array_ref(f, v->args[0]) ||
+         cg_value_is_elided_inlined_struct_type_load(f, v)))
         return;
     if (cg_ownership_op_is_noop(v) || cg_shared_static_function_ownership_is_noop(ctx, f, v))
         return;
@@ -1847,7 +1868,7 @@ static void emit_phi_copies(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
             continue;
         if (pred_idx < phi->value.nargs && phi->value.args[pred_idx]) {
             fprintf(out, "    ");
-            emit_phi_ref(out, phi);
+            emit_phi_ref(ctx, out, phi);
             fprintf(out, " = ");
             emit_value_as_rep_ctx(ctx, out, phi->value.args[pred_idx],
                                   cg_value_plan_storage_rep(ctx, &phi->value));
@@ -2019,6 +2040,154 @@ static bool cg_value_skips_predecl(XiCgenCtx *ctx, const XiFunc *f, const XiValu
     return false;
 }
 
+/* ========== Phi Coalescing ========== */
+
+#define CG_PHI_COALESCE_MAX 256
+
+/* A phi eligible to share a C variable with another phi: any non-tagged local
+ * (the declaration the int64-phi audit counts) that gets an ordinary declaration
+ * (not an inlined-struct / heap-alias phi). A source var_id is deliberately NOT
+ * required: loop-lowered induction phis can carry no var_id at all, and merge
+ * correctness rests on the liveness non-interference test plus an exact declared
+ * C-type match (see cg_build_phi_coalesce), not on any source-variable identity. */
+static bool cg_phi_coalesce_candidate(const XiCgenCtx *ctx, const XiFunc *f, const XiPhi *phi) {
+    const XiValue *v = &phi->value;
+    if (cg_value_plan_storage_rep(ctx, v) == XR_REP_TAGGED)
+        return false;
+    if (cg_value_traces_to_inlined_struct(f, v) || cg_value_is_elided_heap_struct_alias(ctx, f, v))
+        return false;
+    return true;
+}
+
+/* Two phis interfere if their live ranges overlap: same defining block (both
+ * live from block entry), or one is live at the other's definition point
+ * (Chaitin's live-at-def test against per-block liveness). */
+static bool cg_phis_interfere(const XiLiveness *l, const XiPhi *a, const XiPhi *b) {
+    const XiValue *va = &a->value;
+    const XiValue *vb = &b->value;
+    if (va->block == vb->block)
+        return true;
+    if (vb->block && xi_is_live_in(l, vb->block, va))
+        return true;
+    if (va->block && xi_is_live_in(l, va->block, vb))
+        return true;
+    return false;
+}
+
+/* Build the per-function phi coalescing map: phis that share the exact same
+ * declared C type and that provably never interfere are merged onto one
+ * representative C variable. Liveness-based non-interference is the correctness
+ * guarantee; it generalizes the VM's var_id register coalescing (e.g. the
+ * induction variables of two sequential loops collapse to one local) to any
+ * pair of disjoint-lifetime phis. The exact C-type match is required because a
+ * coalesce class shares one declaration: the coarse storage rep is too weak
+ * (int32_t and int64_t both map to XR_REP_I64 yet differ in width/wraparound).
+ * On any allocation/liveness failure the map stays identity (no coalescing). */
+static void cg_build_phi_coalesce(XiCgenCtx *ctx, XiFunc *f) {
+    ctx->phi_repr_active = false;
+    if (f) {
+        f->phi_coalesce = NULL;
+        f->phi_coalesce_count = 0;
+    }
+    if (!f || f->nblocks == 0)
+        return;
+
+    uint32_t max_id = 0;
+    bool any = false;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *blk = f->blocks[bi];
+        if (!blk)
+            continue;
+        for (const XiPhi *phi = blk->phis; phi; phi = phi->next) {
+            if (phi->value.id > max_id)
+                max_id = phi->value.id;
+            any = true;
+        }
+    }
+    if (!any)
+        return;
+
+    uint32_t need = max_id + 1;
+    if (need > ctx->phi_repr_cap) {
+        uint32_t *grown = (uint32_t *) xr_realloc(ctx->phi_repr, (size_t) need * sizeof(*grown));
+        if (!grown)
+            return;
+        ctx->phi_repr = grown;
+        ctx->phi_repr_cap = need;
+    }
+    for (uint32_t i = 0; i < need; i++)
+        ctx->phi_repr[i] = i;
+
+    xi_ensure_rpo(f);
+    XiLiveness *live = xi_compute_liveness(f);
+    if (!live)
+        return;
+
+    const XiPhi *reps[CG_PHI_COALESCE_MAX];
+    int nreps = 0;
+    bool merged_any = false;
+    bool dbg = getenv("XRAY_DBG_PHI_COALESCE") != NULL;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *blk = f->blocks[bi];
+        if (!blk)
+            continue;
+        for (const XiPhi *phi = blk->phis; phi; phi = phi->next) {
+            if (dbg)
+                fprintf(stderr, "[phi-coalesce] phi%u ctype=%s cand=%d blk=%u\n", phi->value.id,
+                        local_ctype_str_ctx(ctx, f, &phi->value),
+                        (int) cg_phi_coalesce_candidate(ctx, f, phi),
+                        phi->value.block ? phi->value.block->id : 9999u);
+            if (!cg_phi_coalesce_candidate(ctx, f, phi))
+                continue;
+            int join = -1;
+            for (int r = 0; r < nreps && join < 0; r++) {
+                const XiPhi *rep = reps[r];
+                /* A coalesce class shares one C declaration, so every member must
+                 * have the identical declared C type. Storage rep is too coarse
+                 * (i32 and i64 both map to XR_REP_I64 yet differ in width). */
+                if (strcmp(local_ctype_str_ctx(ctx, f, &rep->value),
+                           local_ctype_str_ctx(ctx, f, &phi->value)) != 0)
+                    continue;
+                /* phi may join rep's class only if it interferes with no member
+                 * already mapped to rep (rep included via identity). */
+                bool ok = true;
+                for (uint32_t bj = 0; bj < f->nblocks && ok; bj++) {
+                    const XiBlock *b2 = f->blocks[bj];
+                    if (!b2)
+                        continue;
+                    for (const XiPhi *m = b2->phis; m; m = m->next) {
+                        if (m->value.id >= need || ctx->phi_repr[m->value.id] != rep->value.id)
+                            continue;
+                        if (cg_phis_interfere(live, phi, m)) {
+                            ok = false;
+                            break;
+                        }
+                    }
+                }
+                if (ok)
+                    join = r;
+            }
+            if (join >= 0) {
+                ctx->phi_repr[phi->value.id] = reps[join]->value.id;
+                merged_any = true;
+            } else if (nreps < CG_PHI_COALESCE_MAX) {
+                reps[nreps++] = phi;
+            }
+        }
+    }
+
+    xi_liveness_free(live);
+    ctx->phi_repr_active = merged_any;
+    if (merged_any) {
+        /* Publish a non-owning view so emit_vref (which has no ctx) can resolve
+         * coalesced phi operands via v->block->func. Valid for this function's
+         * emission window; the ctx buffer only grows, so it never moves before
+         * this function finishes emitting. */
+        f->phi_coalesce = ctx->phi_repr;
+        f->phi_coalesce_count = need;
+    }
+}
+
 /* Collect all values and phis to declare at function top.
  * When the function contains exception handling (setjmp/goto),
  * ALL SSA values are pre-declared to avoid jumping over decls. */
@@ -2044,9 +2213,14 @@ static void emit_declarations(XiCgenCtx *ctx, FILE *out, const XiFunc *f) {
                 continue;
             if (cg_value_is_elided_heap_struct_alias(ctx, f, &phi->value))
                 continue;
+            /* Coalesced non-representative phis share the representative's C
+             * variable; the representative emits the single declaration. */
+            if (ctx->phi_repr_active && phi->value.id < ctx->phi_repr_cap &&
+                ctx->phi_repr[phi->value.id] != phi->value.id)
+                continue;
             XrRep rep = cg_value_plan_storage_rep(ctx, &phi->value);
             fprintf(out, "    %s ", local_ctype_str_ctx(ctx, f, &phi->value));
-            emit_phi_ref(out, phi);
+            emit_phi_ref(ctx, out, phi);
             if (rep == XR_REP_TAGGED)
                 fprintf(out, " = XR_NULL_VAL;\n");
             else
@@ -2313,6 +2487,13 @@ static void xi_cgen_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefi
     bool boxed_adapter = cg_func_needs_boxed_adapter(ctx, f, prefix, typed_abi, native_receiver);
     cg_record_function_stats(ctx, f, typed_abi, native_receiver, needs_aot_coro);
 
+    /* Default to identity phi naming; the coro path and unbuilt functions never
+     * consult the (possibly stale) coalescing map from a previously emitted
+     * sibling/child function. */
+    ctx->phi_repr_active = false;
+    f->phi_coalesce = NULL;
+    f->phi_coalesce_count = 0;
+
     if (needs_aot_coro) {
         xi_cgen_coro_func(ctx, out, f, prefix);
         return;
@@ -2345,6 +2526,7 @@ static void xi_cgen_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefi
 
     ctx->pre_decl_all = cg_has_exception_handling(f);
     cg_prepare_cell_vars(ctx, f);
+    cg_build_phi_coalesce(ctx, f);
     cg_class_field_cache_collect(ctx, f);
     emit_declarations(ctx, out, f);
     emit_class_field_cache_decls(ctx, out);

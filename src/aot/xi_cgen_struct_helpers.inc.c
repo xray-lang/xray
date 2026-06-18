@@ -498,11 +498,30 @@ static bool cg_value_only_used_by_inlined_struct_new(const XiFunc *f, const XiVa
                     seen = true;
                     continue;
                 }
+                /* dup/drop the ownership pass attached to the type operand: the
+                 * shared slot holds the tagged-int type id, so the retain/release
+                 * is a runtime no-op and is elided alongside the load itself. */
+                if ((v->op == XI_RETAIN || v->op == XI_RELEASE) && a == 0)
+                    continue;
                 return false;
             }
         }
     }
     return seen;
+}
+
+/* The (tagged-int) type-id load consumed only by an inlined value struct, or an
+ * ARC dup/drop the ownership pass attached to that load. The inlined struct
+ * never references the type id and retaining a tagged int does nothing at
+ * runtime, so both the GET_SHARED and its retain/release are dead. */
+static bool cg_value_is_elided_inlined_struct_type_load(const XiFunc *f, const XiValue *v) {
+    if (!v)
+        return false;
+    const XiValue *target = v;
+    if ((v->op == XI_RETAIN || v->op == XI_RELEASE) && v->nargs >= 1)
+        target = v->args[0];
+    return target && target->op == XI_GET_SHARED &&
+           cg_value_only_used_by_inlined_struct_new(f, target);
 }
 
 static void emit_struct_field_ref(FILE *out, const XiValue *origin, int64_t idx) {

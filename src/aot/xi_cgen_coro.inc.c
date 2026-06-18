@@ -1354,7 +1354,7 @@ static void emit_coro_frame_type(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             if (!cg_coro_phi_needs_frame(ctx, f, live, phi))
                 continue;
             fprintf(out, "    %s ", ctype_str(cg_rep(&phi->value)));
-            emit_phi_ref(out, phi);
+            emit_phi_ref(ctx, out, phi);
             fprintf(out, ";\n");
         }
         for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
@@ -1424,7 +1424,7 @@ static void emit_coro_local_declarations(XiCgenCtx *ctx, FILE *out, const XiFunc
                 continue;
             XrRep rep = cg_rep(&phi->value);
             fprintf(out, "    %s ", ctype_str(rep));
-            emit_phi_ref(out, phi);
+            emit_phi_ref(ctx, out, phi);
             if (rep == XR_REP_TAGGED)
                 fprintf(out, " = XR_NULL_VAL;\n");
             else

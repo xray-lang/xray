@@ -246,7 +246,12 @@ static bool emit_bool_accumulate_diamond_stmt(XiCgenCtx *ctx, FILE *out, const X
         !cg_array_add_base_const_step(add, base, &step))
         return false;
 
-    fprintf(out, "    phi%u = ", phi->value.id);
+    /* Route the destination through emit_vref so a coalesced accumulator phi
+     * resolves to its representative C variable (this bypasses emit_phi_copies,
+     * which would otherwise be the only phi-name remap site). */
+    fprintf(out, "    ");
+    emit_vref(out, &phi->value);
+    fprintf(out, " = ");
     emit_value_as_rep_ctx(ctx, out, base, XR_REP_I64);
     fprintf(out, " + ((");
     emit_condition_expr_ctx(ctx, out, blk->control);
@@ -1591,7 +1596,12 @@ static bool emit_typed_array_map_inline_expr_cached(XiCgenCtx *ctx, FILE *out,
     }
     fprintf(out, "for (int64_t _i = 0; _i < _n; _i++) { _dstd[_i] = (%s)", map.dst_info.ctype);
     emit_fname(ctx, out, map.target_prefix, map.target);
-    fprintf(out, "(NULL, (%s)_srcd[_i]); } _out->length = _n; _outv; })", ctype_str(map.param_rep));
+    /* Yield the result array in the destination value's representation: a
+     * bare pointer when select_rep chose PTR for this value, otherwise the
+     * tagged XrValue. Without this the statement-expression always produced
+     * an XrValue and `void *vN = (XrValue)` failed to compile. */
+    fprintf(out, "(NULL, (%s)_srcd[_i]); } _out->length = _n; %s; })", ctype_str(map.param_rep),
+            cg_rep(v) == XR_REP_PTR ? "_outv.ptr" : "_outv");
     return true;
 }
 
@@ -1678,7 +1688,10 @@ static bool emit_typed_array_filter_inline_expr_cached(XiCgenCtx *ctx, FILE *out
     emit_fname(ctx, out, filter.target_prefix, filter.target);
     fprintf(out, "(NULL, (%s)_x) != 0) { _dstd[_out_len++] = (%s)_x; } } ",
             ctype_str(filter.param_rep), filter.dst_info.ctype);
-    fprintf(out, "_out->length = _out_len; _outv; })");
+    /* Yield in the destination value's representation (PTR -> bare pointer,
+     * else tagged XrValue); matches the `<ctype> vN =` declaration site. */
+    fprintf(out, "_out->length = _out_len; %s; })",
+            cg_rep(v) == XR_REP_PTR ? "_outv.ptr" : "_outv");
     return true;
 }
 
