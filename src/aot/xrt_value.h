@@ -141,6 +141,25 @@ static inline const char *xrt_enum_to_cstr(XrValue v, char *buf, size_t bufsz) {
     return buf;
 }
 
+static inline int xrt_cstr_eq(const char *a, const char *b) {
+    if (a == b)
+        return 1;
+    if (!a || !b)
+        return 0;
+    return strcmp(a, b) == 0;
+}
+
+static inline int xrt_enum_key_eq(XrValue a, XrValue b) {
+    if (a.ptr == b.ptr && a.ext == b.ext)
+        return 1;
+    if (a.ext != b.ext || !a.ptr || !b.ptr)
+        return 0;
+    const XrAotEnumValueView *ea = (const XrAotEnumValueView *) a.ptr;
+    const XrAotEnumValueView *eb = (const XrAotEnumValueView *) b.ptr;
+    return xrt_cstr_eq(ea->enum_name, eb->enum_name) &&
+           xrt_cstr_eq(ea->member_name, eb->member_name);
+}
+
 /* Native field tags mirror XrNativeType for standalone generated C. */
 #define XR_NATIVE_I64 0
 #define XR_NATIVE_F64 1
@@ -359,7 +378,7 @@ static inline int64_t xrt_eq(XrValue a, XrValue b) {
     if (ta != tb)
         return 0;
     if (ta == XR_TAG_ENUM)
-        return a.ptr == b.ptr && a.ext == b.ext;
+        return xrt_enum_key_eq(a, b);
     if (ta == XR_TAG_I64 || ta == XR_TAG_BOOL)
         return a.i == b.i;
     if (ta == XR_TAG_F64)

@@ -280,6 +280,91 @@ static void emit_enum_type_expr(XiCgenCtx *ctx, FILE *out, const XiEnumData *ed)
     fprintf(out, "_e; })");
 }
 
+typedef struct CgPreludeEnumMember {
+    const char *name;
+    bool has_payload;
+} CgPreludeEnumMember;
+
+typedef struct CgPreludeEnumData {
+    int builtin_index;
+    const char *enum_name;
+    const CgPreludeEnumMember *members;
+    uint32_t member_count;
+} CgPreludeEnumData;
+
+static const CgPreludeEnumData *cg_prelude_enum_data(int builtin_index) {
+    static const CgPreludeEnumMember ordering[] = {
+        {"Relaxed", false},        {"Acquire", false}, {"Release", false},
+        {"AcquireRelease", false}, {"SeqCst", false},
+    };
+    static const CgPreludeEnumMember recv[] = {
+        {"Value", true},
+        {"Empty", false},
+        {"Timeout", false},
+        {"Closed", false},
+    };
+    static const CgPreludeEnumMember send_result[] = {
+        {"Sent", false},
+        {"Full", false},
+        {"Timeout", false},
+        {"Closed", false},
+    };
+    static const CgPreludeEnumMember task_result[] = {
+        {"Success", true},  {"Failed", true},   {"Cancelled", false},
+        {"Timeout", false}, {"Pending", false},
+    };
+    static const CgPreludeEnumMember task_status[] = {
+        {"Pending", false}, {"Running", false},   {"Success", false},
+        {"Failed", false},  {"Cancelled", false},
+    };
+    static const CgPreludeEnumData enums[] = {
+        {XR_GLOBAL_VAR_ORDERING, "Ordering", ordering, 5},
+        {XR_GLOBAL_VAR_RECV, "Recv", recv, 4},
+        {XR_GLOBAL_VAR_SEND_RESULT, "SendResult", send_result, 4},
+        {XR_GLOBAL_VAR_TASK_RESULT, "TaskResult", task_result, 5},
+        {XR_GLOBAL_VAR_TASK_STATUS, "TaskStatus", task_status, 5},
+    };
+    for (uint32_t i = 0; i < (uint32_t) (sizeof(enums) / sizeof(enums[0])); i++) {
+        if (enums[i].builtin_index == builtin_index)
+            return &enums[i];
+    }
+    return NULL;
+}
+
+static void emit_prelude_enum_member_value_expr(FILE *out, const CgPreludeEnumData *ed,
+                                                uint32_t member_index) {
+    const CgPreludeEnumMember *member =
+        ed && member_index < ed->member_count ? &ed->members[member_index] : NULL;
+    if (!ed || !member) {
+        fprintf(out, "XR_NULL_VAL");
+        return;
+    }
+    if (member->has_payload) {
+        fprintf(out, "XR_FROM_INT(%u)", (unsigned) member_index);
+        return;
+    }
+    fprintf(out,
+            "({ static const XrAotEnumValueView _ev_%s_%s = {{0, 0}, NULL, \"%s\", "
+            "\"%s\"}; XrValue _v = {0}; _v.tag = XR_TAG_ENUM; _v.ext = %u; "
+            "_v.ptr = (void *)&_ev_%s_%s; _v; })",
+            ed->enum_name, member->name, ed->enum_name, member->name, (unsigned) member_index,
+            ed->enum_name, member->name);
+}
+
+static bool emit_prelude_enum_type_expr(FILE *out, int builtin_index) {
+    const CgPreludeEnumData *ed = cg_prelude_enum_data(builtin_index);
+    if (!ed)
+        return false;
+    fprintf(out, "({ XrValue _e = xrt_map_new(%u); ", (unsigned) ed->member_count);
+    for (uint32_t i = 0; i < ed->member_count; i++) {
+        fprintf(out, "xrt_map_set((xrt_map_t*)_e.ptr, xr_box_str(\"%s\"), ", ed->members[i].name);
+        emit_prelude_enum_member_value_expr(out, ed, i);
+        fprintf(out, "); ");
+    }
+    fprintf(out, "_e; })");
+    return true;
+}
+
 static int cg_enum_member_index(const XiEnumData *ed, const char *member_name) {
     if (!ed || !member_name)
         return -1;

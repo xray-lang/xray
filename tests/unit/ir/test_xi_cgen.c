@@ -374,6 +374,42 @@ TEST(cgen_initializes_used_process_builtin) {
     xi_func_free(ir);
 }
 
+TEST(cgen_standalone_prelude_enum_globals_generate_static_members) {
+    const char *src = "fn sent(r: SendResult) -> bool {\n"
+                      "    return match (r) {\n"
+                      "        SendResult.Sent -> true\n"
+                      "        _ -> false\n"
+                      "    }\n"
+                      "}\n"
+                      "fn empty(r: Recv<int>) -> bool {\n"
+                      "    return match (r) {\n"
+                      "        Recv.Empty -> true\n"
+                      "        _ -> false\n"
+                      "    }\n"
+                      "}\n"
+                      "print(sent(SendResult.Sent))\n"
+                      "print(empty(Recv.Empty))\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "standalone AOT prelude enum globals should generate");
+    assert(contains(code, "xrt_map_new(4)") &&
+           "standalone builtin enum globals should use lightweight enum maps");
+    assert(contains(code, "_ev_SendResult_Sent") &&
+           "no-payload SendResult members must be stable enum keys");
+    assert(contains(code, "_ev_Recv_Empty") && "no-payload Recv members must be stable enum keys");
+    assert(!contains(code, "xr_aot_load_builtin_field(ctx,") &&
+           "standalone AOT must not require a coroutine isolate for prelude enum fields");
+
+    printf("  Generated standalone prelude enum globals %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_variable_and_print) {
     /* Variable assignment and print */
     const char *src = "let x = 42\n"
@@ -4083,6 +4119,7 @@ int main(void) {
     run_cgen_simple_arith();
     run_cgen_skips_unused_process_builtin_init();
     run_cgen_initializes_used_process_builtin();
+    run_cgen_standalone_prelude_enum_globals_generate_static_members();
     run_cgen_variable_and_print();
     run_cgen_if_else();
     run_cgen_multi_print();
