@@ -400,6 +400,155 @@ static bool cg_class_native_map_method_call_is_direct(XiCgenCtx *ctx, const XiFu
     return false;
 }
 
+/* Receiver pointer for a local/param boxed typed map: (xrt_map_t *)recv.ptr.
+ * Unlike a class field (stored unboxed as xrt_map_t*), a local map is a tagged
+ * XrValue, so the underlying map pointer is read from the value payload. */
+static void cg_emit_local_map_recv(FILE *out, const XiValue *recv) {
+    fprintf(out, "((xrt_map_t *)(");
+    emit_value_as_rep(out, recv, XR_REP_TAGGED);
+    fprintf(out, ").ptr)");
+}
+
+/* A map method receiver that is a local/param boxed value (not a class field)
+ * whose static type is a native-direct Map. Such receivers otherwise fall back
+ * to boxed generic xrt_method dispatch (plus a per-call pending-error check);
+ * routing them through the typed-direct helpers removes both. */
+static bool cg_local_typed_map_receiver(XiCgenCtx *ctx, const XiFunc *f, const XiValue *recv,
+                                        CgMapElemInfo *map_info) {
+    if (!recv || !recv->type || cg_rep(recv) != XR_REP_TAGGED)
+        return false;
+    if (cg_class_native_receiver_ref_field(ctx, f, recv, XR_NATIVE_MAP_REF, NULL, NULL))
+        return false; /* class-field receivers use the class-native fast path */
+    return cg_map_type_direct_info_ctx(ctx, recv->type, map_info);
+}
+
+static bool cg_local_typed_map_method_call_is_direct(XiCgenCtx *ctx, const XiFunc *f,
+                                                     const XiValue *v) {
+    if (!v || v->op != XI_CALL_METHOD || v->nargs < 1 || !v->aux)
+        return false;
+    CgMapElemInfo map_info;
+    if (!cg_local_typed_map_receiver(ctx, f, v->args[0], &map_info))
+        return false;
+    const char *method = (const char *) v->aux;
+    uint16_t nargs = (uint16_t) (v->nargs - 1);
+    if (nargs == 0)
+        return strcmp(method, "length") == 0 || strcmp(method, "size") == 0;
+    if (nargs == 1) {
+        if (strcmp(method, "has") == 0)
+            return cg_map_direct_has_helper(&map_info) != NULL;
+        if (strcmp(method, "delete") == 0)
+            return cg_map_direct_delete_helper(&map_info) != NULL;
+        if (strcmp(method, "get") == 0)
+            return cg_rep(v) == map_info.value.rep || cg_rep(v) == XR_REP_TAGGED;
+        return false;
+    }
+    if (nargs == 2 && strcmp(method, "set") == 0)
+        return cg_map_direct_set_helper(&map_info) != NULL;
+    return false;
+}
+
+/* Typed-direct emission for a local/param typed-Map method call, mirroring the
+ * class-field path but reading the map pointer from the boxed receiver value. */
+static bool emit_local_typed_map_method_call_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                                  const XiValue *v) {
+    if (!v || v->op != XI_CALL_METHOD || v->nargs < 1 || !v->aux)
+        return false;
+    const XiValue *recv = v->args[0];
+    CgMapElemInfo map_info;
+    if (!cg_local_typed_map_receiver(ctx, f, recv, &map_info))
+        return false;
+    const char *method = (const char *) v->aux;
+    uint16_t nargs = (uint16_t) (v->nargs - 1);
+
+    if (nargs == 0 && (strcmp(method, "length") == 0 || strcmp(method, "size") == 0)) {
+        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
+        cg_emit_local_map_recv(out, recv);
+        fprintf(out, "->len");
+        emit_conversion_suffix(out, conv_suffix);
+        return true;
+    }
+    if (nargs == 1 && strcmp(method, "get") == 0) {
+        const char *find_helper = strcmp(map_info.key.elem_name, "XR_ELEM_BOOL") == 0
+                                      ? "xrt_map_find_bool_typed"
+                                      : (map_info.key.rep == XR_REP_F64 ? "xrt_map_find_f64_typed"
+                                                                        : "xrt_map_find_i64_typed");
+        const char *value_helper = map_info.value.rep == XR_REP_F64 ? "xrt_map_get_f64_value_typed"
+                                                                    : "xrt_map_get_i64_value_typed";
+        if (cg_rep(v) == map_info.value.rep) {
+            fprintf(out, "({ xrt_map_t *_xrm = ");
+            cg_emit_local_map_recv(out, recv);
+            fprintf(out, "; %s _xrk = ", ctype_str(map_info.key.rep));
+            emit_value_as_rep(out, v->args[1], map_info.key.rep);
+            fprintf(out, "; int64_t _xri = %s(_xrm, _xrk, %s, %s); %s(_xrm, _xri, %s); })",
+                    find_helper, map_info.key.elem_name, map_info.value.elem_name, value_helper,
+                    map_info.value.elem_name);
+            return true;
+        }
+        if (cg_rep(v) == XR_REP_TAGGED) {
+            fprintf(out, "({ xrt_map_t *_xrm = ");
+            cg_emit_local_map_recv(out, recv);
+            fprintf(out, "; %s _xrk = ", ctype_str(map_info.key.rep));
+            emit_value_as_rep(out, v->args[1], map_info.key.rep);
+            fprintf(out, "; int64_t _xri = %s(_xrm, _xrk, %s, %s); _xri >= 0 ? ", find_helper,
+                    map_info.key.elem_name, map_info.value.elem_name);
+            if (map_info.value.rep == XR_REP_F64)
+                fprintf(out, "XR_FROM_FLOAT(%s(_xrm, _xri, %s))", value_helper,
+                        map_info.value.elem_name);
+            else if (strcmp(map_info.value.elem_name, "XR_ELEM_BOOL") == 0)
+                fprintf(out, "XR_FROM_BOOL(%s(_xrm, _xri, %s) != 0)", value_helper,
+                        map_info.value.elem_name);
+            else
+                fprintf(out, "XR_FROM_INT(%s(_xrm, _xri, %s))", value_helper,
+                        map_info.value.elem_name);
+            fprintf(out, " : XR_NULL_VAL; })");
+            return true;
+        }
+        return false;
+    }
+    if (nargs == 1 && strcmp(method, "has") == 0) {
+        const char *helper = cg_map_direct_has_helper(&map_info);
+        if (!helper)
+            return false;
+        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
+        fprintf(out, "(int64_t)%s(", helper);
+        cg_emit_local_map_recv(out, recv);
+        fprintf(out, ", ");
+        emit_value_as_rep(out, v->args[1], map_info.key.rep);
+        fprintf(out, ", %s, %s)", map_info.key.elem_name, map_info.value.elem_name);
+        emit_conversion_suffix(out, conv_suffix);
+        return true;
+    }
+    if (nargs == 1 && strcmp(method, "delete") == 0) {
+        const char *helper = cg_map_direct_delete_helper(&map_info);
+        if (!helper)
+            return false;
+        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
+        fprintf(out, "(int64_t)%s(", helper);
+        cg_emit_local_map_recv(out, recv);
+        fprintf(out, ", ");
+        emit_value_as_rep(out, v->args[1], map_info.key.rep);
+        fprintf(out, ", %s, %s)", map_info.key.elem_name, map_info.value.elem_name);
+        emit_conversion_suffix(out, conv_suffix);
+        return true;
+    }
+    if (nargs == 2 && strcmp(method, "set") == 0) {
+        const char *helper = cg_map_direct_set_helper(&map_info);
+        if (!helper)
+            return false;
+        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+        fprintf(out, "(%s(", helper);
+        cg_emit_local_map_recv(out, recv);
+        fprintf(out, ", ");
+        emit_value_as_rep(out, v->args[1], map_info.key.rep);
+        fprintf(out, ", ");
+        emit_value_as_rep(out, v->args[2], map_info.value.rep);
+        fprintf(out, ", %s, %s), XR_NULL_VAL)", map_info.key.elem_name, map_info.value.elem_name);
+        emit_conversion_suffix(out, conv_suffix);
+        return true;
+    }
+    return false;
+}
+
 static bool emit_class_native_map_method_call_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                                    const XiValue *v) {
     if (!v || v->uses != 0 || v->op != XI_CALL_METHOD || v->nargs != 3 || !v->aux ||
@@ -655,6 +804,153 @@ static bool cg_class_native_set_method_call_is_direct(XiCgenCtx *ctx, const XiFu
     if (nargs == 1)
         return strcmp(method, "add") == 0 || strcmp(method, "has") == 0 ||
                strcmp(method, "delete") == 0;
+    return false;
+}
+
+/* Receiver pointer for a local/param boxed typed set: (xrt_set_t *)recv.ptr. */
+static void cg_emit_local_set_recv(FILE *out, const XiValue *recv) {
+    fprintf(out, "((xrt_set_t *)(");
+    emit_value_as_rep(out, recv, XR_REP_TAGGED);
+    fprintf(out, ").ptr)");
+}
+
+/* A set method receiver that is a local/param boxed value (not a class field)
+ * whose static type is a native-direct Set (i64/f64 element). Routes through the
+ * typed-direct helpers instead of boxed generic dispatch + pending-error check. */
+static bool cg_local_typed_set_receiver(XiCgenCtx *ctx, const XiFunc *f, const XiValue *recv,
+                                        CgSetElemInfo *set_info) {
+    if (!recv || !recv->type || cg_rep(recv) != XR_REP_TAGGED)
+        return false;
+    if (cg_class_native_receiver_ref_field(ctx, f, recv, XR_NATIVE_SET_REF, NULL, NULL))
+        return false; /* class-field receivers use the class-native fast path */
+    if (!cg_set_type_direct_info_ctx(ctx, recv->type, set_info))
+        return false;
+    return set_info->rep == XR_REP_I64 || set_info->rep == XR_REP_F64;
+}
+
+static bool cg_local_typed_set_method_call_is_direct(XiCgenCtx *ctx, const XiFunc *f,
+                                                     const XiValue *v) {
+    if (!v || v->op != XI_CALL_METHOD || v->nargs < 1 || !v->aux)
+        return false;
+    CgSetElemInfo set_info;
+    if (!cg_local_typed_set_receiver(ctx, f, v->args[0], &set_info))
+        return false;
+    const char *method = (const char *) v->aux;
+    uint16_t nargs = (uint16_t) (v->nargs - 1);
+    if (nargs == 0)
+        return strcmp(method, "length") == 0 || strcmp(method, "size") == 0 ||
+               strcmp(method, "clear") == 0 || strcmp(method, "values") == 0;
+    if (nargs == 1)
+        return strcmp(method, "add") == 0 || strcmp(method, "has") == 0 ||
+               strcmp(method, "delete") == 0;
+    return false;
+}
+
+/* Typed-direct emission for a local/param typed-Set method call (i64/f64), the
+ * local analogue of emit_class_native_set_method_call_expr. */
+static bool emit_local_typed_set_method_call_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                                  const XiValue *v) {
+    if (!v || v->op != XI_CALL_METHOD || v->nargs < 1 || !v->aux)
+        return false;
+    const XiValue *recv = v->args[0];
+    CgSetElemInfo set_info;
+    if (!cg_local_typed_set_receiver(ctx, f, recv, &set_info))
+        return false;
+    const char *method = (const char *) v->aux;
+    uint16_t nargs = (uint16_t) (v->nargs - 1);
+
+    if (nargs == 0 && (strcmp(method, "length") == 0 || strcmp(method, "size") == 0)) {
+        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
+        cg_emit_local_set_recv(out, recv);
+        fprintf(out, "->len");
+        emit_conversion_suffix(out, conv_suffix);
+        return true;
+    }
+    if (nargs == 0 && strcmp(method, "clear") == 0) {
+        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+        fprintf(out, "(xrt_set_clear(");
+        cg_emit_local_set_recv(out, recv);
+        fprintf(out, "), XR_NULL_VAL)");
+        emit_conversion_suffix(out, conv_suffix);
+        return true;
+    }
+    if (nargs == 0 && strcmp(method, "values") == 0) {
+        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+        fprintf(out, "xrt_set_values(");
+        cg_emit_local_set_recv(out, recv);
+        fprintf(out, ")");
+        emit_conversion_suffix(out, conv_suffix);
+        return true;
+    }
+    if (nargs == 1 && strcmp(method, "add") == 0) {
+        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+        if (set_info.rep == XR_REP_I64) {
+            fprintf(out, "(%s(",
+                    strcmp(set_info.elem_name, "XR_ELEM_I64") == 0 ? "xrt_set_add_i64"
+                                                                   : "xrt_set_add_i64_typed");
+            cg_emit_local_set_recv(out, recv);
+            fprintf(out, ", ");
+            emit_value_as_rep(out, v->args[1], XR_REP_I64);
+            if (strcmp(set_info.elem_name, "XR_ELEM_I64") != 0)
+                fprintf(out, ", %s", set_info.elem_name);
+            fprintf(out, "), XR_NULL_VAL)");
+            emit_conversion_suffix(out, conv_suffix);
+            return true;
+        }
+        fprintf(out, "(xrt_set_add_f64_typed(");
+        cg_emit_local_set_recv(out, recv);
+        fprintf(out, ", ");
+        emit_value_as_rep(out, v->args[1], XR_REP_F64);
+        fprintf(out, ", %s), XR_NULL_VAL)", set_info.elem_name);
+        emit_conversion_suffix(out, conv_suffix);
+        return true;
+    }
+    if (nargs == 1 && strcmp(method, "has") == 0) {
+        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
+        if (set_info.rep == XR_REP_I64) {
+            fprintf(out, "(int64_t)%s(",
+                    strcmp(set_info.elem_name, "XR_ELEM_I64") == 0 ? "xrt_set_has_i64"
+                                                                   : "xrt_set_has_i64_typed");
+            cg_emit_local_set_recv(out, recv);
+            fprintf(out, ", ");
+            emit_value_as_rep(out, v->args[1], XR_REP_I64);
+            if (strcmp(set_info.elem_name, "XR_ELEM_I64") != 0)
+                fprintf(out, ", %s", set_info.elem_name);
+            fprintf(out, ")");
+            emit_conversion_suffix(out, conv_suffix);
+            return true;
+        }
+        fprintf(out, "(int64_t)xrt_set_has_f64_typed(");
+        cg_emit_local_set_recv(out, recv);
+        fprintf(out, ", ");
+        emit_value_as_rep(out, v->args[1], XR_REP_F64);
+        fprintf(out, ", %s)", set_info.elem_name);
+        emit_conversion_suffix(out, conv_suffix);
+        return true;
+    }
+    if (nargs == 1 && strcmp(method, "delete") == 0) {
+        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
+        if (set_info.rep == XR_REP_I64) {
+            fprintf(out, "(int64_t)%s(",
+                    strcmp(set_info.elem_name, "XR_ELEM_I64") == 0 ? "xrt_set_delete_i64"
+                                                                   : "xrt_set_delete_i64_typed");
+            cg_emit_local_set_recv(out, recv);
+            fprintf(out, ", ");
+            emit_value_as_rep(out, v->args[1], XR_REP_I64);
+            if (strcmp(set_info.elem_name, "XR_ELEM_I64") != 0)
+                fprintf(out, ", %s", set_info.elem_name);
+            fprintf(out, ")");
+            emit_conversion_suffix(out, conv_suffix);
+            return true;
+        }
+        fprintf(out, "(int64_t)xrt_set_delete_f64_typed(");
+        cg_emit_local_set_recv(out, recv);
+        fprintf(out, ", ");
+        emit_value_as_rep(out, v->args[1], XR_REP_F64);
+        fprintf(out, ", %s)", set_info.elem_name);
+        emit_conversion_suffix(out, conv_suffix);
+        return true;
+    }
     return false;
 }
 
@@ -2373,6 +2669,10 @@ static bool cg_class_native_call_is_nothrow_direct_depth(XiCgenCtx *ctx, const X
     if (cg_class_native_map_method_call_is_direct(ctx, current, call))
         return true;
     if (cg_class_native_set_method_call_is_direct(ctx, current, call))
+        return true;
+    if (cg_local_typed_map_method_call_is_direct(ctx, current, call))
+        return true;
+    if (cg_local_typed_set_method_call_is_direct(ctx, current, call))
         return true;
     if (call->op == XI_CALL && call->nargs >= 1) {
         CgStaticFunctionCall direct = cg_resolve_static_function_call(ctx, current, call->args[0]);

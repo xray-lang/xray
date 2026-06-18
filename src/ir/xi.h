@@ -808,6 +808,14 @@ typedef struct XiFunc {
     /* C code generation scratch (assigned by xi_cgen, not by IR construction) */
     int cgen_id; /* unique name suffix for generated C functions */
 
+    /* Active phi coalescing map for this function during AOT emission: a
+     * value-id-indexed array mapping a phi's SSA id to the SSA id of the C
+     * variable it shares (identity = its own). Non-owning view into the
+     * XiCgenCtx scratch buffer, published by cg_build_phi_coalesce so the
+     * ctx-less emit_vref can resolve coalesced phi operands. NULL = identity. */
+    const uint32_t *phi_coalesce;
+    uint32_t phi_coalesce_count;
+
     /* Opaque side-tables owned by analysis passes. */
     void *analysis_data[2];
 } XiFunc;

@@ -1584,6 +1584,10 @@ static void xicgen_emit_runtime_method(XiCgenCtx *ctx, FILE *out, const XiFunc *
         return;
     if (emit_class_native_set_method_call_expr(ctx, out, f, v))
         return;
+    if (emit_local_typed_map_method_call_expr(ctx, out, f, v))
+        return;
+    if (emit_local_typed_set_method_call_expr(ctx, out, f, v))
+        return;
     const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
     if (nargs == 0) {
         fprintf(out, "xrt_method_0(");
