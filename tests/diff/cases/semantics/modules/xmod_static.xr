@@ -1,0 +1,8 @@
+// Cross-module static method dispatch through AOT separate compilation: the
+// entry calls static factory methods on a class imported from a sibling module,
+// then an instance method on the result.  VM and AOT must agree byte-for-byte.
+import { Shape } from "./_shapes"
+
+print(Shape.unit().area())
+print(Shape.square(5).area())
+print(new Shape(3).area())
