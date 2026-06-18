@@ -1,0 +1,13 @@
+// Shared library module imported by multimod_calls.xr (skipped as a
+// standalone diff case because its basename starts with '_').
+export fn add(a: int, b: int) -> int {
+    return a + b
+}
+
+export fn triple(x: int) -> int {
+    return x * 3
+}
+
+export fn label() -> string {
+    return "from-lib"
+}

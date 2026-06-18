@@ -1,0 +1,6 @@
+// Library module imported by xmod_coro.xr (skipped as a standalone diff case
+// because its basename starts with '_').  Its exported function is spawned as a
+// coroutine from another module, exercising cross-module coroutine linkage.
+export fn square_plus(x: int) -> int {
+    return x * x + 1
+}

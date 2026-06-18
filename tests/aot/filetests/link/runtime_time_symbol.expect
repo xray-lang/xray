@@ -1,0 +1,8 @@
+contains=xaot-plan v0
+contains="generated_c_files": ["<aot-generated-c>"]
+contains="runtime_objects": ["xray_core"]
+contains="stdlib_objects": ["time"]
+contains="stdlib_symbols": ["time.now"]
+regex="system_libs": \[[^]]*"m"
+regex="system_libs": \[[^]]*"pthread"
+contains="defines": ["XRT_IMPL"]

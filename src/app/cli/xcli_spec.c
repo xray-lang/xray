@@ -99,6 +99,10 @@ static const XrCliOptionSpec build_options[] = {
     {"dump-link-command", 0, XR_CLI_VALUE_NONE, false, false, NULL,
      "Dump resolved AOT link command"},
     {"keep-c", 0, XR_CLI_VALUE_NONE, false, false, NULL, "Keep generated temporary C source"},
+    {"cache-dir", 0, XR_CLI_VALUE_STRING, false, false, "DIR",
+     "AOT object cache directory (default <out>/.xray-cache or $XRAY_CACHE_DIR)"},
+    {"rebuild", 0, XR_CLI_VALUE_NONE, false, false, NULL,
+     "Force recompile all AOT modules, ignoring cached objects"},
     {"verbose", 'v', XR_CLI_VALUE_NONE, false, false, NULL, "Verbose output"},
     XR_CLI_OPT_END};
 

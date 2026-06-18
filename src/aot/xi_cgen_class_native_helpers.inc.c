@@ -1445,7 +1445,7 @@ static void emit_class_native_boxed_adapter(XiCgenCtx *ctx, FILE *out, const cha
     CgClassNativeFunc info = cg_class_native_func(ctx, f);
     if (!info.layout)
         return;
-    fprintf(out, "static XrValue ");
+    fprintf(out, "%sXrValue ", cg_linkage(ctx));
     emit_typed_abi_fname(ctx, out, prefix, f);
     fprintf(out, "(xrt_closure_t *_cl");
     for (uint16_t i = 0; i < f->nparams; i++)
@@ -1505,7 +1505,7 @@ static bool emit_class_native_typed_boxed_adapter(XiCgenCtx *ctx, FILE *out, con
     if (!cg_func_has_native_class_ptr_param(ctx, f))
         return false;
 
-    fprintf(out, "static XrValue ");
+    fprintf(out, "%sXrValue ", cg_linkage(ctx));
     emit_typed_abi_fname(ctx, out, prefix, f);
     fprintf(out, "(xrt_closure_t *_cl");
     for (uint16_t i = 0; i < f->nparams; i++)
@@ -2869,45 +2869,84 @@ static bool cg_class_native_err_check_after_nothrow_call(XiCgenCtx *ctx, const X
                                                   cg_class_native_prev_error_source_value(check));
 }
 
+/* Emit the C struct typedef (and dtor, if the layout has ARC ref fields) for a
+ * single native class under `prefix`.  Shared by own-module emission and the
+ * imported-class typedefs a separate-compilation unit needs for instances of
+ * classes defined in other modules (cross-module classes). */
+static void emit_one_class_native_typedef(XiCgenCtx *ctx, FILE *out, const XiClassData *cd,
+                                          const char *prefix) {
+    if (!cd || !cd->instance_layout)
+        return;
+    fprintf(out, "typedef struct ");
+    emit_class_native_type_name(out, prefix, cd->class_name);
+    fprintf(out, " { ");
+    if (cd->inherited_field_count > 0 && cd->super_name) {
+        emit_class_native_type_name(out, prefix, cd->super_name);
+        fprintf(out, " base; ");
+    }
+    for (uint16_t fi = cd->inherited_field_count; fi < cd->instance_layout->field_count; fi++)
+        fprintf(out, "%s f%u; ", cg_struct_field_c_type(cd->instance_layout, fi), (unsigned) fi);
+    fprintf(out, "} ");
+    emit_class_native_type_name(out, prefix, cd->class_name);
+    fprintf(out, ";\n");
+    if (!cg_class_native_layout_has_arc_ref_fields(cd->instance_layout))
+        return;
+    fprintf(out, "static void ");
+    emit_class_native_dtor_name(out, prefix, cd);
+    fprintf(out, "(void *obj) {\n");
+    fprintf(out, "    ");
+    emit_class_native_type_name(out, prefix, cd->class_name);
+    fprintf(out, " *self = (");
+    emit_class_native_type_name(out, prefix, cd->class_name);
+    fprintf(out, "*)obj;\n");
+    fprintf(out, "    if (!self) return;\n");
+    for (uint16_t fi = 0; fi < cd->instance_layout->field_count; fi++) {
+        if (!cg_class_native_field_is_arc_managed_ref(cg_struct_field(cd->instance_layout, fi)))
+            continue;
+        fprintf(out, "    xrt_release(");
+        emit_class_native_ref_field_value(ctx, out, cd, cd->instance_layout, fi, "self");
+        fprintf(out, ");\n");
+    }
+    fprintf(out, "}\n");
+}
+
 static void emit_class_native_typedefs(XiCgenCtx *ctx, FILE *out, XiModule *module,
                                        const char *prefix) {
     if (!module || !module->classes)
         return;
-    for (uint16_t ci = 0; ci < module->nclasses; ci++) {
-        const XiClassData *cd = module->classes[ci];
-        if (!cd || !cd->instance_layout)
+    for (uint16_t ci = 0; ci < module->nclasses; ci++)
+        emit_one_class_native_typedef(ctx, out, module->classes[ci], prefix);
+}
+
+/* Emit native typedefs for classes imported from other modules so a unit can
+ * declare and use instances of cross-module native classes.  Each distinct
+ * (class, exporter) pair is emitted once under the exporter's prefix, matching
+ * the definition in the exporter's own translation unit. */
+static void emit_imported_class_native_typedefs(XiCgenCtx *ctx, FILE *out) {
+    if (!ctx || !out)
+        return;
+    const char *own = ctx->module && ctx->module->name ? ctx->module->name : NULL;
+    const XiClassData *seen[64];
+    int nseen = 0;
+    for (int i = 0; i < ctx->nimports; i++) {
+        const CgImportEntry *imp = &ctx->imports[i];
+        if (!imp->target_class || !imp->target_mod_name)
             continue;
-        fprintf(out, "typedef struct ");
-        emit_class_native_type_name(out, prefix, cd->class_name);
-        fprintf(out, " { ");
-        if (cd->inherited_field_count > 0 && cd->super_name) {
-            emit_class_native_type_name(out, prefix, cd->super_name);
-            fprintf(out, " base; ");
-        }
-        for (uint16_t fi = cd->inherited_field_count; fi < cd->instance_layout->field_count; fi++)
-            fprintf(out, "%s f%u; ", cg_struct_field_c_type(cd->instance_layout, fi),
-                    (unsigned) fi);
-        fprintf(out, "} ");
-        emit_class_native_type_name(out, prefix, cd->class_name);
-        fprintf(out, ";\n");
-        if (!cg_class_native_layout_has_arc_ref_fields(cd->instance_layout))
+        /* Classes owned by the module being emitted are already declared by
+         * emit_class_native_typedefs; skip them to avoid a redefinition. */
+        if (own && strcmp(imp->target_mod_name, own) == 0)
             continue;
-        fprintf(out, "static void ");
-        emit_class_native_dtor_name(out, prefix, cd);
-        fprintf(out, "(void *obj) {\n");
-        fprintf(out, "    ");
-        emit_class_native_type_name(out, prefix, cd->class_name);
-        fprintf(out, " *self = (");
-        emit_class_native_type_name(out, prefix, cd->class_name);
-        fprintf(out, "*)obj;\n");
-        fprintf(out, "    if (!self) return;\n");
-        for (uint16_t fi = 0; fi < cd->instance_layout->field_count; fi++) {
-            if (!cg_class_native_field_is_arc_managed_ref(cg_struct_field(cd->instance_layout, fi)))
-                continue;
-            fprintf(out, "    xrt_release(");
-            emit_class_native_ref_field_value(ctx, out, cd, cd->instance_layout, fi, "self");
-            fprintf(out, ");\n");
+        bool dup = false;
+        for (int s = 0; s < nseen; s++) {
+            if (seen[s] == imp->target_class) {
+                dup = true;
+                break;
+            }
         }
-        fprintf(out, "}\n");
+        if (dup)
+            continue;
+        if (nseen < (int) (sizeof(seen) / sizeof(seen[0])))
+            seen[nseen++] = imp->target_class;
+        emit_one_class_native_typedef(ctx, out, imp->target_class, imp->target_mod_name);
     }
 }

@@ -1,0 +1,15 @@
+// Cross-module coroutine through AOT separate compilation: the entry spawns a
+// function imported from a sibling module with `go` and awaits the results, so
+// the coroutine frame factory / resume / descriptor must resolve across object
+// files.  VM and AOT must agree byte-for-byte.
+import { square_plus } from "./_corolib"
+
+fn run() {
+    let t1 = go square_plus(6)
+    let t2 = go square_plus(9)
+    let a = await t1
+    let b = await t2
+    print(a + b)
+}
+
+run()

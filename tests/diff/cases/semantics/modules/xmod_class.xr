@@ -1,0 +1,12 @@
+// Cross-module native class through AOT separate compilation: the entry imports
+// a class and a factory from a sibling module, constructs instances locally and
+// via the factory, and calls methods.  VM and AOT must agree byte-for-byte.
+import { Counter, make_counter } from "./_classlib"
+
+let c = new Counter(10)
+print(c.bump(5))
+print(c.bump(3))
+
+let d = make_counter(100)
+print(d.bump(1))
+print(d.bump(40))

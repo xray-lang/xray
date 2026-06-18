@@ -1,0 +1,17 @@
+// Library module imported by xmod_class.xr (skipped as a standalone diff case
+// because its basename starts with '_').  Exercises a cross-module native class:
+// the importer constructs instances and calls methods defined here.
+export class Counter {
+    value: int
+    constructor(start: int) {
+        this.value = start
+    }
+    bump(n: int) -> int {
+        this.value = this.value + n
+        return this.value
+    }
+}
+
+export fn make_counter(start: int) -> Counter {
+    return new Counter(start)
+}
