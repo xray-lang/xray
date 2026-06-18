@@ -1,0 +1,27 @@
+// Static method dispatch through AOT: a static factory returns a new instance,
+// a static method takes arguments, and a static method calls another static.
+// VM and AOT must agree byte-for-byte.
+class Vec {
+    x: int
+    y: int
+    constructor(x: int, y: int) {
+        this.x = x
+        this.y = y
+    }
+    static origin() -> Vec {
+        return new Vec(0, 0)
+    }
+    static of(x: int, y: int) -> Vec {
+        return new Vec(x, y)
+    }
+    static diagonal(n: int) -> Vec {
+        return Vec.of(n, n)
+    }
+    sum() -> int {
+        return this.x + this.y
+    }
+}
+
+print(Vec.origin().sum())
+print(Vec.of(3, 4).sum())
+print(Vec.diagonal(5).sum())

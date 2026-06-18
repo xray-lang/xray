@@ -1793,6 +1793,99 @@ static bool xicgen_emit_user_constructor(XiCgenCtx *ctx, FILE *out, const XiFunc
     return true;
 }
 
+/* Resolve a static method by class and name, walking the (possibly
+ * cross-module) inheritance chain.  Static methods have no receiver, so they
+ * are dispatched directly to the resolved function. */
+static const XiFunc *cg_lookup_static_method(XiCgenCtx *ctx, const char *class_name,
+                                             const char *method, const char **out_prefix) {
+    if (out_prefix)
+        *out_prefix = NULL;
+    if (!ctx || !class_name || !method)
+        return NULL;
+    const char *cur = class_name;
+    for (int depth = 0; cur && depth < 16; depth++) {
+        const XiClassData *cd = cg_class_native_data_by_name(ctx, cur);
+        if (!cd)
+            return NULL;
+        const XiModule *mod = cg_class_native_module_for_data(ctx, cd);
+        if (mod && mod->init && cd->methods && cd->child_idx) {
+            for (uint16_t mi = 0; mi < cd->nmethod; mi++) {
+                const XiClassMethod *m = &cd->methods[mi];
+                if (!m->is_static || m->is_static_constructor || !m->name ||
+                    strcmp(m->name, method) != 0)
+                    continue;
+                uint16_t idx = cd->child_idx[mi];
+                if (idx < mod->init->nchildren) {
+                    if (out_prefix)
+                        *out_prefix = mod->name;
+                    return mod->init->children[idx];
+                }
+            }
+        }
+        cur = cd->super_name;
+    }
+    return NULL;
+}
+
+/* Emit a static method call `Class.method(args)` as a direct call to the static
+ * function, dropping the class receiver (args[0]) since static methods take no
+ * `this`. */
+static bool xicgen_emit_static_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                                      const char *prefix) {
+    const char *method = (const char *) v->aux;
+    /* The receiver of a static call is the class object, not an instance, so its
+     * value type is unresolved; recover the class from the shared slot it loads. */
+    const char *recv_class = cg_class_native_receiver_class_name(ctx, f, v->args[0]);
+    if (!recv_class) {
+        const XiValue *rv = cg_unwrap_identity_value(v->args[0]);
+        if (rv && rv->op == XI_GET_SHARED) {
+            int slot = (int) rv->aux_int;
+            if (slot >= 0 && slot < ctx->nshared && slot < ctx->shared_cap &&
+                ctx->shared_class[slot])
+                recv_class = ctx->shared_class[slot]->class_name;
+        }
+    }
+    if (!method)
+        return false;
+    const char *sprefix = NULL;
+    const XiFunc *sfunc =
+        recv_class ? cg_lookup_static_method(ctx, recv_class, method, &sprefix) : NULL;
+    /* An imported class receiver loads from a slot the importer does not map to
+     * the class, so when the class name is unresolved, search the imported
+     * classes for the one declaring this static method. */
+    if (!sfunc) {
+        for (int i = 0; i < ctx->nimports && !sfunc; i++) {
+            const XiClassData *cd = ctx->imports[i].target_class;
+            if (cd && cd->class_name)
+                sfunc = cg_lookup_static_method(ctx, cd->class_name, method, &sprefix);
+        }
+    }
+    if (!sfunc)
+        return false;
+    if (cg_func_needs_aot_coro(sfunc)) {
+        ctx->error = true;
+        fprintf(stderr,
+                "[xi_cgen] ERROR: unsupported AOT sync call to suspendable static method '%s'\n",
+                method);
+        emit_codegen_abort_expr(out);
+        return true;
+    }
+    const char *conv_suffix = emit_direct_call_return_conversion_prefix(ctx, out, f, v, sfunc);
+    if (ctx->error) {
+        emit_codegen_abort_expr(out);
+        return true;
+    }
+    emit_fname(ctx, out, sprefix ? sprefix : prefix, sfunc);
+    fprintf(out, "(NULL");
+    for (uint16_t a = 1; a < v->nargs; a++) {
+        fprintf(out, ", ");
+        emit_value_as_direct_call_arg(ctx, out, f, v, sfunc, (uint16_t) (a - 1), v->args[a]);
+    }
+    fprintf(out, ")");
+    emit_conversion_suffix(out, conv_suffix);
+    return true;
+}
+
 static void xicgen_call_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                const char *prefix) {
     XR_DCHECK(v->nargs >= 1, "xicgen_call_method: need receiver");
@@ -1821,6 +1914,8 @@ static void xicgen_call_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
     if (xicgen_emit_task_method(ctx, out, v, method, nargs))
         return;
     if (xicgen_emit_direct_method(ctx, out, f, v, prefix, mfunc, method_prefix))
+        return;
+    if (!is_super && xicgen_emit_static_method(ctx, out, f, v, prefix))
         return;
     xicgen_emit_runtime_method(ctx, out, f, v, method, nargs);
 }

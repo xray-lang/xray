@@ -1,0 +1,18 @@
+// Library module imported by xmod_static.xr (skipped as a standalone diff case
+// because its basename starts with '_').  Exercises cross-module static method
+// dispatch: the importer calls static factory methods defined here.
+export class Shape {
+    side: int
+    constructor(s: int) {
+        this.side = s
+    }
+    static unit() -> Shape {
+        return new Shape(1)
+    }
+    static square(n: int) -> Shape {
+        return new Shape(n)
+    }
+    area() -> int {
+        return this.side * this.side
+    }
+}
