@@ -741,7 +741,7 @@ static int cmd_build_native(const char *input, const char *output, const char *c
                             const char *opt_flag, const char *cpu, bool c_only, bool strip,
                             bool debug_symbols, const char *sysroot, bool verbose,
                             bool dump_xaot_plan, bool dump_link_manifest, bool dump_link_command,
-                            bool keep_c, const char *cache_dir_arg, bool rebuild,
+                            bool keep_c, const char *cache_dir_arg, bool rebuild, bool lto,
                             const XrCliBuildTarget *target,
                             const XrCliToolchainPlan *toolchain_plan);
 
@@ -770,6 +770,7 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
     bool keep_c = xr_cli_opt_bool(&inv->options, "keep-c");
     const char *cache_dir_arg = xr_cli_opt_string(&inv->options, "cache-dir", NULL);
     bool rebuild = xr_cli_opt_bool(&inv->options, "rebuild");
+    bool lto = xr_cli_opt_bool(&inv->options, "lto");
     bool verbose = xr_cli_opt_bool(&inv->options, "verbose") || (inv->ctx && inv->ctx->verbose);
     XrCliBuildTarget target;
     XrCliToolchainKind toolchain_kind;
@@ -842,7 +843,7 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
     if (native_mode) {
         return cmd_build_native(input_file, output_file, cc, opt_flag, cpu, c_only, strip_symbols,
                                 debug_symbols, sysroot, verbose, dump_xaot_plan, dump_link_manifest,
-                                dump_link_command, keep_c, cache_dir_arg, rebuild, &target,
+                                dump_link_command, keep_c, cache_dir_arg, rebuild, lto, &target,
                                 &toolchain_plan);
     }
     return cmd_build_bytecode(input_file, output_file, cc, opt_flag, c_only, strip_symbols,
@@ -1125,7 +1126,7 @@ static int cmd_build_native(const char *input, const char *output, const char *c
                             const char *opt_flag, const char *cpu, bool c_only, bool strip,
                             bool debug_symbols, const char *sysroot, bool verbose,
                             bool dump_xaot_plan, bool dump_link_manifest, bool dump_link_command,
-                            bool keep_c, const char *cache_dir_arg, bool rebuild,
+                            bool keep_c, const char *cache_dir_arg, bool rebuild, bool lto,
                             const XrCliBuildTarget *target,
                             const XrCliToolchainPlan *toolchain_plan) {
     XaotBuildResult aot_result;
@@ -1154,6 +1155,18 @@ static int cmd_build_native(const char *input, const char *output, const char *c
         if (!xaot_cli_add_build_sanitizer_flags(&aot_result.link_manifest, target, normalize_err,
                                                 sizeof(normalize_err))) {
             fprintf(stderr, "Error: %s\n", normalize_err);
+            xaot_build_result_free(&aot_result);
+            return 1;
+        }
+        /* Whole-program LTO: compile each module to bitcode and let the linker
+         * inline across modules.  The per-module bitcode stays content-addressed
+         * (the cache key folds in cc flags), so only changed modules recompile
+         * while every link re-runs cross-module optimization. */
+        if (lto && (!xaot_link_manifest_add_unique(&aot_result.link_manifest, XAOT_LINK_CC_FLAG,
+                                                   "-flto") ||
+                    !xaot_link_manifest_add_unique(&aot_result.link_manifest, XAOT_LINK_LD_FLAG,
+                                                   "-flto"))) {
+            fprintf(stderr, "Error: failed to add LTO flags to AOT link manifest\n");
             xaot_build_result_free(&aot_result);
             return 1;
         }
