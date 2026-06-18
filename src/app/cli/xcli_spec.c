@@ -103,6 +103,8 @@ static const XrCliOptionSpec build_options[] = {
      "AOT object cache directory (default <out>/.xray-cache or $XRAY_CACHE_DIR)"},
     {"rebuild", 0, XR_CLI_VALUE_NONE, false, false, NULL,
      "Force recompile all AOT modules, ignoring cached objects"},
+    {"lto", 0, XR_CLI_VALUE_NONE, false, false, NULL,
+     "Whole-program link-time optimization (cross-module inlining)"},
     {"verbose", 'v', XR_CLI_VALUE_NONE, false, false, NULL, "Verbose output"},
     XR_CLI_OPT_END};
 

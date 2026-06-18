@@ -207,6 +207,19 @@ expect_state "$WORK/clog2" shape compiling "class-add-method"
 expect_state "$WORK/clog2" capp hit "class-add-method"
 expect_output "$WORK/capp2" "16" "class-add-method"
 
+# --- 7. Whole-program LTO mode: separate cache namespace, still incremental,
+#        and a correct cross-module binary. -----------------------------------
+LCACHE="$WORK/.ltocache"
+"$XRAY" build --native --lto --verbose --cache-dir "$LCACHE" -o "$WORK/lapp1" "$APP" >"$WORK/llog1" 2>&1 \
+    || { echo "FAIL: lto build 1 failed"; sed 's/^/  /' "$WORK/llog1"; exit 1; }
+expect_state "$WORK/llog1" mathlib compiling "lto-cold"
+expect_output "$WORK/lapp1" "$(printf '70\n10')" "lto-cold"
+"$XRAY" build --native --lto --verbose --cache-dir "$LCACHE" -o "$WORK/lapp2" "$APP" >"$WORK/llog2" 2>&1 \
+    || { echo "FAIL: lto build 2 failed"; sed 's/^/  /' "$WORK/llog2"; exit 1; }
+expect_state "$WORK/llog2" mathlib hit "lto-warm"
+expect_state "$WORK/llog2" app hit "lto-warm"
+expect_output "$WORK/lapp2" "$(printf '70\n10')" "lto-warm"
+
 echo ""
 echo "=== Results: $PASS passed, $FAIL failed ==="
 [ "$FAIL" -eq 0 ] && exit 0 || exit 1
