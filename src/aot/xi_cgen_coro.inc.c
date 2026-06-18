@@ -1045,10 +1045,17 @@ static void emit_sync_go_frame_type(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
     fprintf(out, "typedef struct ");
     emit_fname_suffix(ctx, out, prefix, f, "_aot_frame");
     fprintf(out, " {\n");
-    if (cg_func_frame_needs_cl(f))
+    bool has_field = false;
+    if (cg_func_frame_needs_cl(f)) {
         fprintf(out, "    xrt_closure_t *_cl;\n");
-    for (uint16_t i = 0; i < f->nparams; i++)
+        has_field = true;
+    }
+    for (uint16_t i = 0; i < f->nparams; i++) {
         fprintf(out, "    %s p%u;\n", ctype_str(cg_rep(f->params[i])), i);
+        has_field = true;
+    }
+    if (!has_field)
+        fprintf(out, "    uint8_t _empty;\n");
     fprintf(out, "} ");
     emit_fname_suffix(ctx, out, prefix, f, "_aot_frame");
     fprintf(out, ";\n\n");
@@ -1145,6 +1152,8 @@ static size_t estimate_sync_go_frame_size(const XiFunc *f) {
         cg_coro_layout_add(&size, &max_align, sizeof(void *), _Alignof(void *));
     for (uint16_t i = 0; f && i < f->nparams; i++)
         cg_coro_layout_add_rep(&size, &max_align, cg_rep(f->params[i]));
+    if (size == 0)
+        cg_coro_layout_add(&size, &max_align, sizeof(uint8_t), _Alignof(uint8_t));
     return cg_coro_align_up(size, max_align);
 }
 

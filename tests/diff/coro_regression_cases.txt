@@ -7,6 +7,7 @@ tests/regression/11_coroutine/1102_go_await.xr
 tests/regression/11_coroutine/1103_defer.xr
 tests/regression/11_coroutine/1105_defer_args.xr
 tests/regression/11_coroutine/1106_select.xr
+tests/regression/11_coroutine/1107_go_deferred.xr
 tests/regression/11_coroutine/1108_await_all.xr
 tests/regression/11_coroutine/1109_await_any.xr
 tests/regression/11_coroutine/1110_scope.xr
