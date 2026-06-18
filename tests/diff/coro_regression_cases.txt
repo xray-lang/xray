@@ -1,0 +1,39 @@
+# 123 M0 coroutine regression cases promoted into the VM/AOT diff net.
+# Keep this list to cases that are deterministic and currently compile/run on
+# both backends. Failing 11_coroutine cases remain tracked in the execution log.
+tests/regression/11_coroutine/1101_channel_basic.xr
+tests/regression/11_coroutine/1102_go_await.xr
+tests/regression/11_coroutine/1106_select.xr
+tests/regression/11_coroutine/1108_await_all.xr
+tests/regression/11_coroutine/1109_await_any.xr
+tests/regression/11_coroutine/1110_scope.xr
+tests/regression/11_coroutine/1112_go_block.xr
+tests/regression/11_coroutine/1113_select_send.xr
+tests/regression/11_coroutine/1114_select_after.xr
+tests/regression/11_coroutine/1115_cancel.xr
+tests/regression/11_coroutine/1116_task_status.xr
+tests/regression/11_coroutine/1117_await_timeout.xr
+tests/regression/11_coroutine/1118_comprehensive.xr
+tests/regression/11_coroutine/1119_await_all_syntax.xr
+tests/regression/11_coroutine/1120_scope_basic.xr
+tests/regression/11_coroutine/1122_coro_naming.xr
+tests/regression/11_coroutine/1128_yield.xr
+tests/regression/11_coroutine/1131_linked_go_expr.xr
+tests/regression/11_coroutine/1138_get_result.xr
+tests/regression/11_coroutine/1139_error_isolation.xr
+tests/regression/11_coroutine/1140_task_error.xr
+tests/regression/11_coroutine/1141_concurrent_producer_consumer.xr
+tests/regression/11_coroutine/1142_shared_move.xr
+tests/regression/11_coroutine/1146_multicore_string_concat.xr
+tests/regression/11_coroutine/1147_preempt_test.xr
+tests/regression/11_coroutine/1150_select_block_buffer_wake.xr
+tests/regression/11_coroutine/1151_inject_queue_spill.xr
+tests/regression/11_coroutine/1154_dynamic_channel_capacity.xr
+tests/regression/11_coroutine/1156_select_close_wake.xr
+tests/regression/11_coroutine/1159_work_queue_blocking_pop.xr
+tests/regression/11_coroutine/1160_work_queue_close_fanout.xr
+tests/regression/11_coroutine/1161_multiple_task_awaiters.xr
+tests/regression/11_coroutine/1162_overlapping_await_any_waiters.xr
+tests/regression/11_coroutine/1163_channel_send_opcode_preserves_receiver.xr
+tests/regression/11_coroutine/1164_channel_recv_raw_match_nullable_payload.xr
+tests/regression/11_coroutine/1166_channel_map_deep_copy_stress.xr

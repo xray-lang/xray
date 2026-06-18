@@ -12,6 +12,9 @@
 # Environment:
 #   XRAY_BIN            xray binary (default: build/xray; also XRAY_BUILD_DIR)
 #   XRAY_DIFF_BACKENDS  comma list subset of vm,aot (default: vm,aot)
+#   XRAY_DIFF_EXTRA_CASES_FILE
+#                       newline case manifest, relative to repo root or absolute
+#                       (default: tests/diff/coro_regression_cases.txt; empty disables)
 #
 # Per-case optional sidecar:
 #   <case>.args    first line = whitespace-separated program arguments
@@ -31,6 +34,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 CASE_DIR="$SCRIPT_DIR/cases"
 NORMALIZE="$SCRIPT_DIR/normalize.sed"
+EXTRA_CASES_FILE="${XRAY_DIFF_EXTRA_CASES_FILE-$SCRIPT_DIR/coro_regression_cases.txt}"
 
 XRAY="${1:-${XRAY_BIN:-}}"
 if [ -z "$XRAY" ]; then
@@ -119,7 +123,7 @@ run_case() {
     local case="$1"
     local name base anchor argfile
     name="$(rel_path "$case")"
-    base="$(basename "$case" .xr)"
+    base="$(printf '%s' "${name%.xr}" | sed 's#[^A-Za-z0-9_.-]#_#g')"
     printf '  %-52s' "$name"
 
     anchor="$(sed -n '1{s#^// *anchor: *##p;}' "$case" 2>/dev/null)"
@@ -231,13 +235,25 @@ if [ ! -d "$CASE_DIR" ]; then
     exit 0
 fi
 
+CASE_LIST="$WORK/cases.list"
+find "$CASE_DIR" -name '*.xr' | sort >"$CASE_LIST"
+if [ -n "$EXTRA_CASES_FILE" ] && [ -f "$EXTRA_CASES_FILE" ]; then
+    while IFS= read -r f; do
+        case "$f" in
+            ""|\#*) continue ;;
+            /*) printf '%s\n' "$f" ;;
+            *) printf '%s/%s\n' "$PROJECT_DIR" "$f" ;;
+        esac
+    done <"$EXTRA_CASES_FILE" >>"$CASE_LIST"
+fi
+
 while IFS= read -r f; do
     [ -f "$f" ] || continue
     case "$(basename "$f")" in
         _*) continue ;;
     esac
     run_case "$f"
-done < <(find "$CASE_DIR" -name '*.xr' | sort)
+done <"$CASE_LIST"
 
 echo ""
 echo "=== Results: $PASS passed, $FAIL failed, $SKIP skipped ==="
