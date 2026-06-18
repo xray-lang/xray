@@ -973,12 +973,13 @@ BinOp ::= '+' | '-' | '*' | '/' | '%'
 | `-` | int | float | float | ❌ | ❌ |
 | `*` | int | float | float | ❌ | ❌ |
 | `/` | int（整除） | float | float | ❌ | ❌ |
-| `%` | int | float（IEEE remainder） | float | ❌ | ❌ |
+| `%` | int | ❌ | ❌ | ❌ | ❌ |
 
 **特殊语义**：
 - `int / 0` → 运行时抛 `XR_ERR_DIV_BY_ZERO` (E0420)。
 - `int % 0` → 运行时抛 `XR_ERR_MOD_BY_ZERO` (E0421)。
-- `float / 0.0` → `+inf` / `-inf` / `NaN`（IEEE-754 语义，**不抛**异常）。
+- `float / 0.0`（及任何结果为 float 的除以零）→ 同样运行时抛 `XR_ERR_DIV_BY_ZERO` (E0420)；xray 算术**不产生** IEEE inf/NaN。
+- `%` 仅接受整数操作数；浮点求模（如 `5.0 % 2.0`）运行时抛 `XR_ERR_TYPE_MISMATCH` (E0404)。
 - 整数溢出：见 §2.3.1。
 - 字符串 `+ string` 是 O(n) 拼接；密集拼接请用 `StringBuilder`。
 
@@ -4820,7 +4821,7 @@ Bytecode  →  AOT (machine code)
 
 | 码 | 名称 | 描述 |
 |--|--|--|
-| `E0420` | `XR_ERR_DIV_BY_ZERO` | 整数除零 |
+| `E0420` | `XR_ERR_DIV_BY_ZERO` | 除零（整数或浮点） |
 | `E0421` | `XR_ERR_MOD_BY_ZERO` | 整数求模零 |
 | `E0422` | `XR_ERR_OVERFLOW` | 整数溢出 |
 

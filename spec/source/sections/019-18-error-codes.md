@@ -113,7 +113,7 @@ order: 019
 
 | 码 | 名称 | 描述 |
 |--|--|--|
-| `E0420` | `XR_ERR_DIV_BY_ZERO` | 整数除零 |
+| `E0420` | `XR_ERR_DIV_BY_ZERO` | 除零（整数或浮点） |
 | `E0421` | `XR_ERR_MOD_BY_ZERO` | 整数求模零 |
 | `E0422` | `XR_ERR_OVERFLOW` | 整数溢出 |
 
@@ -318,7 +318,7 @@ Analyzer enum codes (`XrErrorCode`, defined in the 350+ section of `xerror.h`):
 
 | Code | Name | Description |
 |--|--|--|
-| `E0420` | `XR_ERR_DIV_BY_ZERO` | integer division by zero |
+| `E0420` | `XR_ERR_DIV_BY_ZERO` | division by zero (integer or float) |
 | `E0421` | `XR_ERR_MOD_BY_ZERO` | integer modulo by zero |
 | `E0422` | `XR_ERR_OVERFLOW` | integer overflow |
 

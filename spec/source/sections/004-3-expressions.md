@@ -83,12 +83,13 @@ BinOp ::= '+' | '-' | '*' | '/' | '%'
 | `-` | int | float | float | ❌ | ❌ |
 | `*` | int | float | float | ❌ | ❌ |
 | `/` | int（整除） | float | float | ❌ | ❌ |
-| `%` | int | float（IEEE remainder） | float | ❌ | ❌ |
+| `%` | int | ❌ | ❌ | ❌ | ❌ |
 
 **特殊语义**：
 - `int / 0` → 运行时抛 `XR_ERR_DIV_BY_ZERO` (E0420)。
 - `int % 0` → 运行时抛 `XR_ERR_MOD_BY_ZERO` (E0421)。
-- `float / 0.0` → `+inf` / `-inf` / `NaN`（IEEE-754 语义，**不抛**异常）。
+- `float / 0.0`（及任何结果为 float 的除以零）→ 同样运行时抛 `XR_ERR_DIV_BY_ZERO` (E0420)；xray 算术**不产生** IEEE inf/NaN。
+- `%` 仅接受整数操作数；浮点求模（如 `5.0 % 2.0`）运行时抛 `XR_ERR_TYPE_MISMATCH` (E0404)。
 - 整数溢出：见 §2.3.1。
 - 字符串 `+ string` 是 O(n) 拼接；密集拼接请用 `StringBuilder`。
 
@@ -604,12 +605,13 @@ BinOp ::= '+' | '-' | '*' | '/' | '%'
 | `-` | int | float | float | ❌ | ❌ |
 | `*` | int | float | float | ❌ | ❌ |
 | `/` | int (truncating) | float | float | ❌ | ❌ |
-| `%` | int | float (IEEE remainder) | float | ❌ | ❌ |
+| `%` | int | ❌ | ❌ | ❌ | ❌ |
 
 **Special semantics**:
 - `int / 0` → throws `XR_ERR_DIV_BY_ZERO` (E0420) at runtime.
 - `int % 0` → throws `XR_ERR_MOD_BY_ZERO` (E0421) at runtime.
-- `float / 0.0` → `+inf` / `-inf` / `NaN` (IEEE-754 semantics; **does not** throw).
+- `float / 0.0` (and any float-result division by zero) → also throws `XR_ERR_DIV_BY_ZERO` (E0420) at runtime; xray arithmetic produces **no** IEEE inf/NaN.
+- `%` accepts integer operands only; float modulo (e.g. `5.0 % 2.0`) throws `XR_ERR_TYPE_MISMATCH` (E0404) at runtime.
 - Integer overflow: see §2.3.1.
 - `string + string` is O(n) concatenation; for heavy concatenation use `StringBuilder`.
 
