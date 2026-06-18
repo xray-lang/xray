@@ -1286,7 +1286,9 @@ static void xicgen_call_builtin(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
                                 const char *prefix) {
     const char *bn = v->aux ? (const char *) v->aux : "";
 
-    if (strcmp(bn, "print") == 0) {
+    if (bn[0] == '\0' && v->aux_int == 0 && v->nargs == 0) {
+        fprintf(out, "XR_FROM_BOOL(false)");
+    } else if (strcmp(bn, "print") == 0) {
         xicgen_emit_print_expr(ctx, out, v);
     } else if (strcmp(bn, "str_concat") == 0) {
         xicgen_str_concat(ctx, out, f, v, prefix);
@@ -1573,8 +1575,53 @@ static bool xicgen_emit_stringbuilder_append(FILE *out, const XiValue *v, const 
     return true;
 }
 
+static bool xicgen_emit_channel_method(FILE *out, const XiValue *v, const char *method,
+                                       uint16_t nargs) {
+    if (!v || v->nargs < 1 || !method || !cg_value_type_is_channel(v->args[0]))
+        return false;
+    bool is_try_send = strcmp(method, "trySend") == 0 && nargs == 1 && v->nargs >= 2;
+    bool is_try_recv = strcmp(method, "tryRecv") == 0 && nargs == 0;
+    bool is_close = strcmp(method, "close") == 0 && nargs == 0;
+    bool is_closed = strcmp(method, "isClosed") == 0 && nargs == 0;
+    if (!is_try_send && !is_try_recv && !is_close && !is_closed)
+        return false;
+
+    const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+    if (is_try_send) {
+        XrRep send_rep = v->nargs >= 2 ? cg_rep(v->args[1]) : XR_REP_TAGGED;
+        const char *helper = "xr_aot_chan_try_send_sync";
+        if (send_rep == XR_REP_I64)
+            helper = "xr_aot_chan_try_send_sync_i64";
+        else if (send_rep == XR_REP_F64)
+            helper = "xr_aot_chan_try_send_sync_f64";
+        fprintf(out, "%s(", helper);
+        emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
+        fprintf(out, ", ");
+        emit_value_as_rep(out, v->args[1],
+                          (send_rep == XR_REP_I64 || send_rep == XR_REP_F64) ? send_rep
+                                                                             : XR_REP_TAGGED);
+        fprintf(out, ")");
+    } else if (is_try_recv) {
+        fprintf(out, "xr_aot_chan_try_recv_sync(");
+        emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
+        fprintf(out, ")");
+    } else if (is_close) {
+        fprintf(out, "xr_aot_chan_close_sync(");
+        emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
+        fprintf(out, ")");
+    } else if (is_closed) {
+        fprintf(out, "xr_aot_chan_is_closed_sync(");
+        emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
+        fprintf(out, ")");
+    }
+    emit_conversion_suffix(out, conv_suffix);
+    return true;
+}
+
 static void xicgen_emit_runtime_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                        const char *method, uint16_t nargs) {
+    if (xicgen_emit_channel_method(out, v, method, nargs))
+        return;
     int sym = cg_method_sym(method);
     if (sym < 0 && xicgen_emit_stringbuilder_append(out, v, method, nargs))
         return;

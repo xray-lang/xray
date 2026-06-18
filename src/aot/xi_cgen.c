@@ -163,6 +163,8 @@ static bool cg_ownership_op_is_noop(const XiValue *v) {
 static bool cg_is_void_like(const XiValue *v) {
     if (!v)
         return false;
+    if (v->op == XI_DEFER)
+        return true;
     if (v->type && XR_TYPE_IS_UNIT(v->type))
         return true;
 
@@ -1785,6 +1787,9 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
                             const char *prefix) {
     XR_DCHECK(v != NULL, "emit_value_stmt: NULL value");
     emit_value_source_line(ctx, out, v);
+
+    if (v->op == XI_DEFER)
+        return;
 
     /* Inlined struct: emit local anonymous C struct with native fields. */
     if (v->op == XI_STRUCT_NEW && cg_struct_can_inline(f, v)) {
