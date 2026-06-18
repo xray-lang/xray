@@ -602,6 +602,26 @@ static inline int64_t xrt_swiss_find_free(const uint8_t *ctrl, int64_t slots, ui
     }
 }
 
+/* First EMPTY (never DELETED) slot along the probe sequence. Insertion uses this
+ * so a tombstoned slot is never reused while a stale order[] entry still points
+ * at it; tombstones are reclaimed only by rehash compaction. The caller must
+ * ensure a free slot exists (growth_left > 0). */
+static inline int64_t xrt_swiss_find_empty(const uint8_t *ctrl, int64_t slots, uint64_t hash) {
+    uint64_t mask = (uint64_t) slots - 1;
+    uint64_t pos = (hash >> 7) & mask;
+    uint64_t stride = 0;
+    for (;;) {
+        uint64_t g = xrt_group_load(ctrl + pos);
+        uint64_t m = xrt_group_match_empty(g);
+        if (m) {
+            int off = xrt_swar_first(m);
+            return (int64_t) ((pos + (uint64_t) off) & mask);
+        }
+        stride += XRT_GROUP;
+        pos = (pos + stride) & mask;
+    }
+}
+
 /* =========================================================================
  * Map runtime.
  *
@@ -762,19 +782,6 @@ static inline void xrt_map_order_reserve(xrt_map_t *m, int64_t need) {
 static inline void xrt_map_order_append(xrt_map_t *m, int64_t slot) {
     xrt_map_order_reserve(m, m->order_len + 1);
     m->order[m->order_len++] = slot;
-}
-
-static inline void xrt_map_order_remove(xrt_map_t *m, int64_t slot) {
-    for (int64_t i = 0; i < m->order_len; i++) {
-        if (m->order[i] != slot)
-            continue;
-        if (i + 1 < m->order_len) {
-            memmove(&m->order[i], &m->order[i + 1],
-                    (size_t) (m->order_len - i - 1) * sizeof(int64_t));
-        }
-        m->order_len--;
-        return;
-    }
 }
 
 static inline int64_t xrt_map_growth_budget(int64_t slots) {
@@ -1036,19 +1043,6 @@ static inline void xrt_set_order_append(xrt_set_t *s, int64_t slot) {
     s->order[s->order_len++] = slot;
 }
 
-static inline void xrt_set_order_remove(xrt_set_t *s, int64_t slot) {
-    for (int64_t i = 0; i < s->order_len; i++) {
-        if (s->order[i] != slot)
-            continue;
-        if (i + 1 < s->order_len) {
-            memmove(&s->order[i], &s->order[i + 1],
-                    (size_t) (s->order_len - i - 1) * sizeof(int64_t));
-        }
-        s->order_len--;
-        return;
-    }
-}
-
 static inline void xrt_set_alloc_slots(xrt_set_t *s, int64_t slots) {
     s->cap = slots;
     s->growth_left = slots - slots / 8;
@@ -1284,8 +1278,17 @@ static inline XrValue xrt_set_value_at(xrt_set_t *s, int64_t index) {
     if (index < 0)
         return XR_NULL_VAL;
     if (xrt_set_is_typed(s)) {
-        if (index < s->order_len)
-            return xrt_set_slot_item(s, s->order[index]);
+        // order[] may hold tombstoned slots (lazy delete); walk live slots in
+        // insertion order to the index-th one.
+        int64_t out = 0;
+        for (int64_t oi = 0; oi < s->order_len; oi++) {
+            int64_t slot = s->order[oi];
+            if (!xrt_set_slot_is_full(s, slot))
+                continue;
+            if (out == index)
+                return xrt_set_slot_item(s, slot);
+            out++;
+        }
         return XR_NULL_VAL;
     }
     int64_t out = 0;

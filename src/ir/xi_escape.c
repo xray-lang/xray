@@ -31,6 +31,8 @@
  */
 
 #include "xi_escape.h"
+#include "xi_analysis.h"
+#include "xi_loop.h"
 #include "../base/xchecks.h"
 
 /* ========== Helpers ========== */
@@ -52,6 +54,23 @@ static XiEscapeLevel use_escape_level(const XiValue *user, uint16_t arg_idx) {
     XR_DCHECK(user != NULL, "use_escape_level: NULL user");
     if (user->op == XI_CALL && arg_idx == 0)
         return XI_ESC_NONE; /* calling a closure does not make the closure escape */
+    /* Subscript store `c[k] = v` (INDEX_SET) escapes only the STORED VALUE (and
+     * key) into the heap collection; the collection itself (arg 0) is merely
+     * mutated and does not escape through the write. This mirrors the per-arg
+     * owned/borrow split ownership analysis already uses for the same op
+     * (XI_GEN_OWN_USE_STORED_VALUE: arg 0 = container, arg 1+ = stored value),
+     * so escape and ownership agree on which argument leaves the scope. Without
+     * this a fresh local array/map filled via INDEX_SET is pinned at
+     * HEAP_ESCAPE and can never be stack-allocated even when it stays local.
+     *
+     * Scoped to INDEX_SET (arrays/maps) on purpose: only collection allocations
+     * (ARRAY_NEW/MAP_NEW/...) are heap-alloc ops eligible for stack allocation,
+     * so this is exactly where dropping the container to NO_ESCAPE pays off.
+     * STORE_FIELD/STRUCT_SET targets (instances/value structs) are not
+     * heap-alloc ops, so refining their escape would change reported levels
+     * without enabling any stack allocation; left conservative. */
+    if (user->op == XI_INDEX_SET && arg_idx == 0)
+        return XI_ESC_NONE;
     return xi_op_use_escape_level(user->op);
 }
 
@@ -189,6 +208,40 @@ static void mark_capture_escapes(XiFunc *f) {
     }
 }
 
+/* ========== Loop-Allocation Demotion ========== */
+
+/* A heap allocation defined inside a loop must NOT be left at NO_ESCAPE.
+ *
+ *   - AOT would stack-allocate it (XI_STACK_ALLOC -> alloca), but alloca in a
+ *     loop accumulates one frame slot per iteration until the function returns,
+ *     overflowing the native stack for large trip counts.
+ *   - A NO_ESCAPE heap value is skipped by ARC (tracks_rc in xi_arc), so in the
+ *     VM, which never stack-allocates, the allocation would leak one object
+ *     per iteration.
+ *
+ * Demote such allocations to ARG_ESCAPE so BOTH backends manage them as heap
+ * objects with precise dup/drop (freed at the per-iteration death point). A
+ * single-execution (non-loop) allocation is left at NO_ESCAPE and still becomes
+ * a safe one-shot stack allocation in AOT. */
+static void demote_loop_heap_allocs(XiFunc *f) {
+    if (!f->nblocks)
+        return;
+    xi_ensure_dominators(f);
+    XiLoopInfo *loops = xi_ensure_loops(f);
+    if (!loops)
+        return; /* function has no loops: nothing to demote */
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        XiBlock *blk = f->blocks[b];
+        if (!blk || xi_block_loop_depth(loops, blk->id) == 0)
+            continue;
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            XiValue *v = blk->values[i];
+            if (v && v->escape == (uint8_t) XI_ESC_NONE && xi_op_is_heap_alloc(v->op))
+                v->escape = (uint8_t) XI_ESC_ARG;
+        }
+    }
+}
+
 /* ========== Single-Function Analysis ========== */
 
 static void analyze_func(XiFunc *f) {
@@ -242,6 +295,10 @@ static void analyze_func(XiFunc *f) {
         if (!c1 && !c2)
             break;
     }
+
+    /* Heap allocations inside loops cannot be safely stack-allocated and must
+     * stay ARC-managed (see demote_loop_heap_allocs). */
+    demote_loop_heap_allocs(f);
 }
 
 /* ========== Public API ========== */
