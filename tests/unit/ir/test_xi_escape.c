@@ -234,6 +234,57 @@ static void test_call_arg_escape(void) {
     xi_func_free(f);
 }
 
+/* ========== Test: array filled via INDEX_SET stays NO_ESCAPE (per-arg) ===== */
+
+/*
+ * func fill_local_array():
+ *   b0:
+ *     v0 = ARRAY_NEW cap=4       ; the container (heap alloc)
+ *     v1 = ARRAY_NEW cap=0       ; a heap value to store as an element
+ *     v2 = CONST 0               ; index
+ *     v3 = INDEX_SET v0, v2, v1  ; arr[0] = elem  (container mutated, elem stored)
+ *     v4 = CONST 0
+ *     v5 = INDEX_GET v0, v4      ; read back an element
+ *     RETURN v5                  ; returns the element, NOT the array
+ *
+ * The container (arg 0 of INDEX_SET) must NOT be forced to HEAP_ESCAPE by the
+ * store: it stays local -> NO_ESCAPE -> stack-allocatable. The stored element
+ * (arg 2) does escape into the heap container -> HEAP_ESCAPE.
+ */
+static void test_index_set_container_no_escape(void) {
+    XiFunc *f = make_func("fill_local_array", &t_any);
+    XiBlock *b0 = f->entry;
+
+    XiValue *cap = xi_const_int(f, b0, 4, &t_int);
+    XiValue *arr = xi_value_new(f, b0, XI_ARRAY_NEW, &t_array, 1);
+    arr->args[0] = cap;
+
+    XiValue *elem = xi_value_new(f, b0, XI_ARRAY_NEW, &t_array, 0);
+
+    XiValue *idx = xi_const_int(f, b0, 0, &t_int);
+    XiValue *set = xi_value_new(f, b0, XI_INDEX_SET, &t_any, 3);
+    set->args[0] = arr;
+    set->args[1] = idx;
+    set->args[2] = elem;
+    set->flags = XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM;
+
+    XiValue *idx2 = xi_const_int(f, b0, 0, &t_int);
+    XiValue *get = xi_value_new(f, b0, XI_INDEX_GET, &t_any, 2);
+    get->args[0] = arr;
+    get->args[1] = idx2;
+    xi_block_set_return(b0, get);
+
+    xi_escape_analyze(f);
+
+    ASSERT_EQ(arr->escape, XI_ESC_NONE, "array filled via INDEX_SET should stay NO_ESCAPE");
+    ASSERT_EQ(elem->escape, XI_ESC_HEAP, "element stored via INDEX_SET should be HEAP_ESCAPE");
+
+    xi_stack_alloc_rewrite(f);
+    ASSERT_EQ(arr->op, XI_STACK_ALLOC, "filled local array should become STACK_ALLOC");
+
+    xi_func_free(f);
+}
+
 /* ========== Test: xi_op_is_heap_alloc helper ========== */
 
 static void test_heap_alloc_check(void) {
@@ -576,6 +627,7 @@ int main(void) {
     test_chan_send_escape();
     test_set_shared_escape();
     test_call_arg_escape();
+    test_index_set_container_no_escape();
     test_arc_no_escape_skipped();
     test_arc_return_gets_retain();
     test_arc_heap_gets_retain_release();

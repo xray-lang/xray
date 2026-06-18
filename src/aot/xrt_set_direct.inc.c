@@ -228,6 +228,9 @@ static inline void xrt_set_rehash(xrt_set_t *s, int64_t new_slots) {
     // insertion order survives the rehash; alloc_slots leaves order[] untouched.
     int64_t old_order_len = s->order_len;
     xrt_set_alloc_slots(s, new_slots);
+    /* Compact: write only live entries to the front of order[], dropping
+     * tombstones (w <= oi, so no read-after-write clobber). */
+    int64_t w = 0;
     for (int64_t oi = 0; oi < old_order_len; oi++) {
         int64_t slot = s->order[oi];
         if (slot < 0 || slot >= old_slots || (old_ctrl[slot] & 0x80u))
@@ -239,9 +242,10 @@ static inline void xrt_set_rehash(xrt_set_t *s, int64_t new_slots) {
         xrt_swiss_ctrl_set(s->ctrl, s->cap, dst, (uint8_t) (hash & 0x7F));
         memcpy((uint8_t *) s->items + (size_t) dst * s->elem_size,
                (const uint8_t *) old_items + (size_t) slot * s->elem_size, s->elem_size);
-        s->order[oi] = dst;
+        s->order[w++] = dst;
         s->growth_left--;
     }
+    s->order_len = w;
     XRT_FREE(old_ctrl);
     XRT_FREE(old_items);
 }
@@ -249,9 +253,10 @@ static inline void xrt_set_rehash(xrt_set_t *s, int64_t new_slots) {
 static inline int64_t xrt_set_insert_slot(xrt_set_t *s, uint64_t hash) {
     if (s->growth_left <= 0)
         xrt_set_rehash(s, s->len >= (s->cap - s->cap / 8) / 2 ? s->cap * 2 : s->cap);
-    int64_t slot = xrt_swiss_find_free(s->ctrl, s->cap, hash);
-    if (s->ctrl[slot] == XRT_CTRL_EMPTY)
-        s->growth_left--;
+    /* EMPTY-only: never reuse a tombstoned slot while a stale order[] entry may
+     * still reference it; the reserve above guarantees an EMPTY slot exists. */
+    int64_t slot = xrt_swiss_find_empty(s->ctrl, s->cap, hash);
+    s->growth_left--;
     xrt_swiss_ctrl_set(s->ctrl, s->cap, slot, (uint8_t) (hash & 0x7F));
     s->len++;
     xrt_set_order_append(s, slot);
@@ -259,9 +264,11 @@ static inline int64_t xrt_set_insert_slot(xrt_set_t *s, uint64_t hash) {
 }
 
 static inline void xrt_set_erase_slot(xrt_set_t *s, int64_t slot) {
+    /* O(1) delete: tombstone the ctrl byte only; the order[] entry is skipped by
+     * slot_is_full on iteration and dropped by rehash compaction, avoiding the old
+     * O(n) order[] scan + memmove that made delete-heavy churn O(n^2)). */
     xrt_swiss_ctrl_set(s->ctrl, s->cap, slot, (uint8_t) XRT_CTRL_DELETED);
     s->len--;
-    xrt_set_order_remove(s, slot);
 }
 
 /* ---- direct typed helpers (codegen-emitted, signatures are an ABI) ------ */

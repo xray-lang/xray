@@ -205,6 +205,75 @@ static bool emit_class_native_map_length_expr(XiCgenCtx *ctx, FILE *out, const X
     return true;
 }
 
+static const char *cg_map_find_helper(const CgMapElemInfo *map_info) {
+    if (strcmp(map_info->key.elem_name, "XR_ELEM_BOOL") == 0)
+        return "xrt_map_find_bool_typed";
+    return map_info->key.rep == XR_REP_F64 ? "xrt_map_find_f64_typed" : "xrt_map_find_i64_typed";
+}
+
+static const char *cg_map_value_helper(const CgMapElemInfo *map_info) {
+    return map_info->value.rep == XR_REP_F64 ? "xrt_map_get_f64_value_typed"
+                                             : "xrt_map_get_i64_value_typed";
+}
+
+/* ===== Map has/get probe fusion =====================================
+ * For `if (m.has(k)) ... m.get(k) ...` on the same map+key with no map mutation
+ * between (exactly the condition under which the get is emitted present-direct),
+ * the has and get can share a single probe: the has writes the slot index into a
+ * pre-declared _mf<hasid> temp and tests it >= 0; the present-direct get reuses
+ * _mf<hasid> instead of probing again. */
+static bool cg_value_is_map_method(const XiValue *v, const char *name) {
+    return v && v->op == XI_CALL_METHOD && v->nargs == 2 && v->aux &&
+           strcmp((const char *) v->aux, name) == 0;
+}
+
+/* The present-direct 'get' this 'has' guards and can fuse with, else NULL.
+ * has must control its IF block whose then-edge leads to a block entered only
+ * from here; a present-direct map get there is, by the rep rule
+ * (sr_map_get_has_present_guard sets value-rep only when the guard's map+key
+ * match the get), already proven to match this has, so no separate recv/key
+ * comparison is needed (the get's key/receiver are distinct SSA values from the
+ * has's even when identical). The single-predecessor requirement guarantees the
+ * shared _mf temp is always assigned before the get reads it. */
+static const XiValue *cg_map_fusable_get_for_has(XiCgenCtx *ctx, const XiValue *has) {
+    if (!cg_value_is_map_method(has, "has") || !has->block)
+        return NULL;
+    const XiBlock *hb = has->block;
+    if (hb->kind != XI_BLOCK_IF || !hb->succs[0] || cg_unwrap_identity_value(hb->control) != has)
+        return NULL;
+    CgMapElemInfo hmi;
+    if (!cg_map_type_direct_info_ctx(ctx, has->args[0]->type, &hmi))
+        return NULL; /* receiver must be a direct map (excludes Set.has) */
+    const XiBlock *then_blk = hb->succs[0];
+    if (then_blk->npreds != 1 || then_blk->preds[0] != hb)
+        return NULL;
+    for (uint32_t i = 0; i < then_blk->nvalues; i++) {
+        const XiValue *g = then_blk->values[i];
+        if (!cg_value_is_map_method(g, "get"))
+            continue;
+        CgMapElemInfo mi;
+        if (!cg_map_type_direct_info_ctx(ctx, g->args[0]->type, &mi))
+            continue;
+        if (cg_rep(g) == mi.value.rep)
+            return g; /* present-direct get: fuse */
+    }
+    return NULL;
+}
+
+/* The guarding has whose _mf temp this present-direct get should reuse, else
+ * NULL. Symmetric with cg_map_fusable_get_for_has so both sides agree. */
+static const XiValue *cg_map_get_fusion_has(XiCgenCtx *ctx, const XiValue *get) {
+    if (!cg_value_is_map_method(get, "get") || !get->block || get->block->npreds != 1)
+        return NULL;
+    const XiBlock *p = get->block->preds[0];
+    if (!p || p->kind != XI_BLOCK_IF || p->succs[0] != get->block)
+        return NULL;
+    const XiValue *has = cg_unwrap_identity_value(p->control);
+    if (!cg_value_is_map_method(has, "has"))
+        return NULL;
+    return cg_map_fusable_get_for_has(ctx, has) == get ? has : NULL;
+}
+
 static bool emit_class_native_map_get_nullable_direct_expr(XiCgenCtx *ctx, FILE *out,
                                                            const XiValue *v,
                                                            const CgClassNativeFunc *info,
@@ -243,12 +312,15 @@ static bool emit_class_native_map_get_present_direct_expr(XiCgenCtx *ctx, FILE *
                                                           const CgMapElemInfo *map_info) {
     if (!info || !map_info || cg_rep(v) != map_info->value.rep)
         return false;
-    const char *find_helper = strcmp(map_info->key.elem_name, "XR_ELEM_BOOL") == 0
-                                  ? "xrt_map_find_bool_typed"
-                                  : (map_info->key.rep == XR_REP_F64 ? "xrt_map_find_f64_typed"
-                                                                     : "xrt_map_find_i64_typed");
-    const char *value_helper = map_info->value.rep == XR_REP_F64 ? "xrt_map_get_f64_value_typed"
-                                                                 : "xrt_map_get_i64_value_typed";
+    const XiValue *fuse_has = cg_map_get_fusion_has(ctx, v);
+    if (fuse_has) {
+        fprintf(out, "%s(", cg_map_value_helper(map_info));
+        emit_class_native_field_ref(ctx, out, info->class_data, "p0", field_idx);
+        fprintf(out, ", _mf%u, %s)", fuse_has->id, map_info->value.elem_name);
+        return true;
+    }
+    const char *find_helper = cg_map_find_helper(map_info);
+    const char *value_helper = cg_map_value_helper(map_info);
     fprintf(out, "({ xrt_map_t *_xrm = ");
     emit_class_native_field_ref(ctx, out, info->class_data, "p0", field_idx);
     fprintf(out, "; %s _xrk = ", ctype_str(map_info->key.rep));
@@ -312,9 +384,17 @@ static bool emit_class_native_map_method_call_expr(XiCgenCtx *ctx, FILE *out, co
     if (nargs == 1 && strcmp(method, "has") == 0) {
         const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
         CgMapElemInfo map_info;
-        const char *helper = cg_map_type_direct_info_ctx(ctx, v->args[0]->type, &map_info)
-                                 ? cg_map_direct_has_helper(&map_info)
-                                 : NULL;
+        bool direct = cg_map_type_direct_info_ctx(ctx, v->args[0]->type, &map_info);
+        if (direct && cg_map_fusable_get_for_has(ctx, v)) {
+            fprintf(out, "((_mf%u = %s(", v->id, cg_map_find_helper(&map_info));
+            emit_class_native_field_ref(ctx, out, info.class_data, "p0", idx);
+            fprintf(out, ", ");
+            emit_value_as_rep(out, v->args[1], map_info.key.rep);
+            fprintf(out, ", %s, %s)) >= 0)", map_info.key.elem_name, map_info.value.elem_name);
+            emit_conversion_suffix(out, conv_suffix);
+            return true;
+        }
+        const char *helper = direct ? cg_map_direct_has_helper(&map_info) : NULL;
         if (helper) {
             fprintf(out, "(int64_t)%s(", helper);
             emit_class_native_field_ref(ctx, out, info.class_data, "p0", idx);
@@ -475,6 +555,13 @@ static bool emit_local_typed_map_method_call_expr(XiCgenCtx *ctx, FILE *out, con
         const char *value_helper = map_info.value.rep == XR_REP_F64 ? "xrt_map_get_f64_value_typed"
                                                                     : "xrt_map_get_i64_value_typed";
         if (cg_rep(v) == map_info.value.rep) {
+            const XiValue *fuse_has = cg_map_get_fusion_has(ctx, v);
+            if (fuse_has) {
+                fprintf(out, "%s(", value_helper);
+                cg_emit_local_map_recv(out, recv);
+                fprintf(out, ", _mf%u, %s)", fuse_has->id, map_info.value.elem_name);
+                return true;
+            }
             fprintf(out, "({ xrt_map_t *_xrm = ");
             cg_emit_local_map_recv(out, recv);
             fprintf(out, "; %s _xrk = ", ctype_str(map_info.key.rep));
@@ -506,10 +593,19 @@ static bool emit_local_typed_map_method_call_expr(XiCgenCtx *ctx, FILE *out, con
         return false;
     }
     if (nargs == 1 && strcmp(method, "has") == 0) {
+        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
+        if (cg_map_fusable_get_for_has(ctx, v)) {
+            fprintf(out, "((_mf%u = %s(", v->id, cg_map_find_helper(&map_info));
+            cg_emit_local_map_recv(out, recv);
+            fprintf(out, ", ");
+            emit_value_as_rep(out, v->args[1], map_info.key.rep);
+            fprintf(out, ", %s, %s)) >= 0)", map_info.key.elem_name, map_info.value.elem_name);
+            emit_conversion_suffix(out, conv_suffix);
+            return true;
+        }
         const char *helper = cg_map_direct_has_helper(&map_info);
         if (!helper)
             return false;
-        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
         fprintf(out, "(int64_t)%s(", helper);
         cg_emit_local_map_recv(out, recv);
         fprintf(out, ", ");

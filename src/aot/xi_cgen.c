@@ -2050,7 +2050,7 @@ static bool cg_value_skips_predecl(XiCgenCtx *ctx, const XiFunc *f, const XiValu
  * required: loop-lowered induction phis can carry no var_id at all, and merge
  * correctness rests on the liveness non-interference test plus an exact declared
  * C-type match (see cg_build_phi_coalesce), not on any source-variable identity. */
-static bool cg_phi_coalesce_candidate(const XiCgenCtx *ctx, const XiFunc *f, const XiPhi *phi) {
+static bool cg_phi_coalesce_candidate(XiCgenCtx *ctx, const XiFunc *f, const XiPhi *phi) {
     const XiValue *v = &phi->value;
     if (cg_value_plan_storage_rep(ctx, v) == XR_REP_TAGGED)
         return false;
@@ -2241,6 +2241,19 @@ static void emit_declarations(XiCgenCtx *ctx, FILE *out, const XiFunc *f) {
                 else
                     fprintf(out, " = 0;\n");
             }
+        }
+    }
+
+    /* Map has/get probe fusion: pre-declare the shared slot-index temp for each
+     * fusable has so its single probe result is visible at the guarded get. */
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *blk = f->blocks[bi];
+        if (!blk)
+            continue;
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *v = blk->values[vi];
+            if (v && cg_map_fusable_get_for_has(ctx, v))
+                fprintf(out, "    int64_t _mf%u = 0;\n", v->id);
         }
     }
 }

@@ -260,6 +260,9 @@ static inline void xrt_map_rehash(xrt_map_t *m, int64_t new_slots) {
     int64_t old_order_len = m->order_len;
     xrt_map_alloc_slots(m, new_slots);
     if (old_order_len > 0) {
+        /* Compact: write only live entries to the front of order[], dropping
+         * tombstones (w <= oi, so no read-after-write clobber). */
+        int64_t w = 0;
         for (int64_t oi = 0; oi < old_order_len; oi++) {
             int64_t slot = m->order[oi];
             if (slot < 0 || slot >= old_slots || (old_ctrl[slot] & 0x80u))
@@ -271,9 +274,10 @@ static inline void xrt_map_rehash(xrt_map_t *m, int64_t new_slots) {
                    (const uint8_t *) old_keys + (size_t) slot * m->key_size, m->key_size);
             memcpy((uint8_t *) m->values + (size_t) dst * m->value_size,
                    (const uint8_t *) old_values + (size_t) slot * m->value_size, m->value_size);
-            m->order[oi] = dst;
+            m->order[w++] = dst;
             m->growth_left--;
         }
+        m->order_len = w;
     } else {
         for (int64_t slot = 0; slot < old_slots; slot++) {
             if (old_ctrl[slot] & 0x80u)
@@ -307,9 +311,10 @@ static inline void xrt_map_reserve_one(xrt_map_t *m) {
 
 static inline int64_t xrt_map_insert_slot(xrt_map_t *m, uint64_t hash) {
     xrt_map_reserve_one(m);
-    int64_t slot = xrt_swiss_find_free(m->ctrl, m->cap, hash);
-    if (m->ctrl[slot] == XRT_CTRL_EMPTY)
-        m->growth_left--;
+    /* EMPTY-only: never reuse a tombstoned slot while a stale order[] entry may
+     * still reference it; reserve_one guarantees an EMPTY slot exists. */
+    int64_t slot = xrt_swiss_find_empty(m->ctrl, m->cap, hash);
+    m->growth_left--;
     xrt_swiss_ctrl_set(m->ctrl, m->cap, slot, (uint8_t) (hash & 0x7F));
     m->len++;
     xrt_map_order_append(m, slot);
@@ -317,9 +322,12 @@ static inline int64_t xrt_map_insert_slot(xrt_map_t *m, uint64_t hash) {
 }
 
 static inline void xrt_map_erase_slot(xrt_map_t *m, int64_t slot) {
+    /* O(1) delete: tombstone the ctrl byte only. The slot's order[] entry stays
+     * in place and is skipped by slot_is_full during iteration, then dropped by
+     * rehash compaction, avoiding the old O(n) order[] scan + memmove that made
+     * delete-heavy churn O(n^2). */
     xrt_swiss_ctrl_set(m->ctrl, m->cap, slot, (uint8_t) XRT_CTRL_DELETED);
     m->len--;
-    xrt_map_order_remove(m, slot);
 }
 
 /* ---- tagged entry points via XrValue keys (typed maps unbox first) ------ */
@@ -409,15 +417,28 @@ static inline int64_t xrt_map_find_bool_typed(xrt_map_t *m, int64_t key, uint8_t
     (void) value_type;
     uint8_t needle = key != 0 ? 1u : 0u;
     const uint8_t *keys = (const uint8_t *) m->keys;
-    if (m->order_len > 0) {
+    if (m->len == m->order_len) {
+        if (m->len <= 0)
+            return -1;
         int64_t slot0 = m->order[0];
         if (keys[slot0] == needle)
             return slot0;
+        if (m->len > 1) {
+            int64_t slot1 = m->order[1];
+            if (keys[slot1] == needle)
+                return slot1;
+        }
+        return -1;
     }
-    if (m->order_len > 1) {
-        int64_t slot1 = m->order[1];
-        if (keys[slot1] == needle)
-            return slot1;
+    // At most two live bool keys, but order[] may carry tombstoned slots after
+    // lazy delete; skip dead slots (ctrl top bit set = EMPTY/DELETED) so a stale
+    // key byte can't false-match.
+    for (int64_t oi = 0; oi < m->order_len; oi++) {
+        int64_t slot = m->order[oi];
+        if (slot < 0 || (m->ctrl[slot] & 0x80u))
+            continue;
+        if (keys[slot] == needle)
+            return slot;
     }
     return -1;
 }
