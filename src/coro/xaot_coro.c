@@ -1237,6 +1237,26 @@ XrValue xr_aot_chan_try_send_ready(const XrAotContext *ctx, XrValue channel_valu
     return xr_bool(xr_chan_try_send(ctx->isolate, ch, send_value));
 }
 
+static bool aot_context_from_channel_value(XrValue channel_value, XrAotContext *out) {
+    if (!out || !xr_value_is_channel(channel_value))
+        return false;
+    XrChannel *ch = xr_value_to_channel(channel_value);
+    XrayIsolate *isolate = ch ? ch->isolate : NULL;
+    if (!isolate)
+        return false;
+    out->isolate = isolate;
+    out->coro = xr_current_coro(isolate);
+    out->worker = NULL;
+    return true;
+}
+
+XrValue xr_aot_chan_try_send_sync(XrValue channel_value, XrValue send_value) {
+    XrAotContext ctx = {0};
+    if (!aot_context_from_channel_value(channel_value, &ctx))
+        return XR_NULL_VAL;
+    return xr_aot_chan_try_send(&ctx, channel_value, send_value);
+}
+
 XrValue xr_aot_chan_try_recv(const XrAotContext *ctx, XrValue channel_value) {
     if (!ctx || !ctx->isolate || !xr_value_is_channel(channel_value))
         return aot_recv_closed(ctx);
@@ -1247,6 +1267,13 @@ XrValue xr_aot_chan_try_recv(const XrAotContext *ctx, XrValue channel_value) {
     if (ok)
         return aot_recv_value(ctx, recv_value);
     return xr_channel_is_closed(ch) ? aot_recv_closed(ctx) : aot_recv_empty(ctx);
+}
+
+XrValue xr_aot_chan_try_recv_sync(XrValue channel_value) {
+    XrAotContext ctx = {0};
+    if (!aot_context_from_channel_value(channel_value, &ctx))
+        return XR_NULL_VAL;
+    return xr_aot_chan_try_recv(&ctx, channel_value);
 }
 
 bool xr_aot_recv_is_value(XrValue recv_value) {
@@ -1283,6 +1310,13 @@ XrValue xr_aot_chan_close(const XrAotContext *ctx, XrValue channel_value) {
     return XR_NULL_VAL;
 }
 
+XrValue xr_aot_chan_close_sync(XrValue channel_value) {
+    XrAotContext ctx = {0};
+    if (!aot_context_from_channel_value(channel_value, &ctx))
+        return XR_NULL_VAL;
+    return xr_aot_chan_close(&ctx, channel_value);
+}
+
 XrValue xr_aot_chan_length(const XrAotContext *ctx, XrValue channel_value) {
     (void) ctx;
     if (!xr_value_is_channel(channel_value))
@@ -1299,6 +1333,12 @@ XrValue xr_aot_chan_capacity(const XrAotContext *ctx, XrValue channel_value) {
 
 XrValue xr_aot_chan_is_closed(const XrAotContext *ctx, XrValue channel_value) {
     if (!ctx || !xr_value_is_channel(channel_value))
+        return xr_bool(false);
+    return xr_bool(xr_channel_is_closed(xr_value_to_channel(channel_value)));
+}
+
+XrValue xr_aot_chan_is_closed_sync(XrValue channel_value) {
+    if (!xr_value_is_channel(channel_value))
         return xr_bool(false);
     return xr_bool(xr_channel_is_closed(xr_value_to_channel(channel_value)));
 }

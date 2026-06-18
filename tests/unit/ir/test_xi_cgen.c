@@ -410,6 +410,25 @@ TEST(cgen_standalone_prelude_enum_globals_generate_static_members) {
     xi_func_free(ir);
 }
 
+TEST(cgen_cancelled_builtin_generates_false) {
+    const char *src = "print(cancelled())\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "AOT cancelled() should generate");
+    assert(contains(code, "XR_FROM_BOOL(false)") && "cancelled() currently lowers to false");
+    assert(!contains(code, "unknown builtin") &&
+           "cancelled() must not be treated as a named builtin");
+
+    printf("  Generated cancelled() builtin %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_variable_and_print) {
     /* Variable assignment and print */
     const char *src = "let x = 42\n"
@@ -4007,6 +4026,56 @@ TEST(cgen_channel_fields_use_aot_helpers) {
     xi_func_free(ir);
 }
 
+TEST(cgen_sync_go_channel_try_methods_use_aot_helpers) {
+    const char *src = "fn recv_value(r: Recv<int>) -> int {\n"
+                      "    return match (r) {\n"
+                      "        Recv.Value(v) -> v\n"
+                      "        _ -> 0\n"
+                      "    }\n"
+                      "}\n"
+                      "fn producer(ch: Channel<int>) -> int {\n"
+                      "    ch.trySend(1)\n"
+                      "    ch.trySend(2)\n"
+                      "    return 0\n"
+                      "}\n"
+                      "fn consumer(ch: Channel<int>) -> int {\n"
+                      "    return recv_value(ch.tryRecv())\n"
+                      "}\n"
+                      "fn close_and_check(ch: Channel<int>) -> bool {\n"
+                      "    ch.close()\n"
+                      "    return ch.isClosed()\n"
+                      "}\n"
+                      "shared const ch = new Channel<int>(2)\n"
+                      "let p = go producer(ch)\n"
+                      "print(await p)\n"
+                      "let c = go consumer(ch)\n"
+                      "print(await c)\n"
+                      "let closed = go close_and_check(ch)\n"
+                      "print(await closed)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "AOT sync-go Channel nonblocking methods should generate");
+    assert(contains(code, "xr_aot_chan_try_send_sync_i64(") &&
+           "sync-go Channel.trySend should use the scalar sync AOT bridge");
+    assert(contains(code, "xr_aot_chan_try_recv_sync(") &&
+           "sync-go Channel.tryRecv should use the sync AOT bridge");
+    assert(contains(code, "xr_aot_chan_close_sync(") &&
+           "sync-go Channel.close should use the sync AOT bridge");
+    assert(contains(code, "xr_aot_chan_is_closed_sync(") &&
+           "sync-go Channel.isClosed should use the sync AOT bridge");
+    assert(!contains(code, "xrt_method_0(") && !contains(code, "xrt_method_1(") &&
+           "Channel nonblocking methods must not fall back to dynamic method dispatch");
+
+    printf("  Generated sync-go channel method helpers %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_coro_work_queue_resume_rebuilds_slot_and_traces_task) {
     const char *src = "shared const queue: WorkQueue<int> = WorkQueue<int>(1, 4)\n"
                       "fn consumer() -> int {\n"
@@ -4120,6 +4189,7 @@ int main(void) {
     run_cgen_skips_unused_process_builtin_init();
     run_cgen_initializes_used_process_builtin();
     run_cgen_standalone_prelude_enum_globals_generate_static_members();
+    run_cgen_cancelled_builtin_generates_false();
     run_cgen_variable_and_print();
     run_cgen_if_else();
     run_cgen_multi_print();
@@ -4212,6 +4282,7 @@ int main(void) {
     run_cgen_coro_await_any_uses_typed_aggregate_bridge();
     run_cgen_coro_scope_exit_publishes_state_before_block();
     run_cgen_channel_fields_use_aot_helpers();
+    run_cgen_sync_go_channel_try_methods_use_aot_helpers();
     run_cgen_coro_work_queue_resume_rebuilds_slot_and_traces_task();
     run_cgen_coro_task_status_uses_native_enum_status();
 

@@ -1,6 +1,7 @@
 # 123 M0 coroutine regression cases promoted into the VM/AOT diff net.
 # Keep this list to cases that are deterministic and currently compile/run on
 # both backends. Failing 11_coroutine cases remain tracked in the execution log.
+tests/regression/11_coroutine/1100_cancelled.xr
 tests/regression/11_coroutine/1101_channel_basic.xr
 tests/regression/11_coroutine/1102_go_await.xr
 tests/regression/11_coroutine/1103_defer.xr
@@ -9,6 +10,7 @@ tests/regression/11_coroutine/1106_select.xr
 tests/regression/11_coroutine/1108_await_all.xr
 tests/regression/11_coroutine/1109_await_any.xr
 tests/regression/11_coroutine/1110_scope.xr
+tests/regression/11_coroutine/1111_comprehensive.xr
 tests/regression/11_coroutine/1112_go_block.xr
 tests/regression/11_coroutine/1113_select_send.xr
 tests/regression/11_coroutine/1114_select_after.xr

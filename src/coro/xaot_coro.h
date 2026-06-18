@@ -165,6 +165,7 @@ XR_FUNC XrValue xr_aot_chan_try_send(const XrAotContext *ctx, XrValue channel_va
                                      XrValue send_value);
 XR_FUNC XrValue xr_aot_chan_try_send_ready(const XrAotContext *ctx, XrValue channel_value,
                                            XrValue send_value);
+XR_FUNC XrValue xr_aot_chan_try_send_sync(XrValue channel_value, XrValue send_value);
 
 static inline XrValue xr_aot_chan_try_send_i64(const XrAotContext *ctx, XrValue channel_value,
                                                int64_t send_value) {
@@ -174,6 +175,14 @@ static inline XrValue xr_aot_chan_try_send_i64(const XrAotContext *ctx, XrValue 
 static inline XrValue xr_aot_chan_try_send_f64(const XrAotContext *ctx, XrValue channel_value,
                                                double send_value) {
     return xr_aot_chan_try_send(ctx, channel_value, XR_FROM_FLOAT(send_value));
+}
+
+static inline XrValue xr_aot_chan_try_send_sync_i64(XrValue channel_value, int64_t send_value) {
+    return xr_aot_chan_try_send_sync(channel_value, XR_FROM_INT(send_value));
+}
+
+static inline XrValue xr_aot_chan_try_send_sync_f64(XrValue channel_value, double send_value) {
+    return xr_aot_chan_try_send_sync(channel_value, XR_FROM_FLOAT(send_value));
 }
 
 static inline XrValue xr_aot_chan_try_send_ready_i64(const XrAotContext *ctx, XrValue channel_value,
@@ -187,12 +196,15 @@ static inline XrValue xr_aot_chan_try_send_ready_f64(const XrAotContext *ctx, Xr
 }
 
 XR_FUNC XrValue xr_aot_chan_try_recv(const XrAotContext *ctx, XrValue channel_value);
+XR_FUNC XrValue xr_aot_chan_try_recv_sync(XrValue channel_value);
 XR_FUNC bool xr_aot_recv_is_value(XrValue recv_value);
 XR_FUNC XrValue xr_aot_recv_payload(XrValue recv_value);
 XR_FUNC XrValue xr_aot_chan_close(const XrAotContext *ctx, XrValue channel_value);
+XR_FUNC XrValue xr_aot_chan_close_sync(XrValue channel_value);
 XR_FUNC XrValue xr_aot_chan_length(const XrAotContext *ctx, XrValue channel_value);
 XR_FUNC XrValue xr_aot_chan_capacity(const XrAotContext *ctx, XrValue channel_value);
 XR_FUNC XrValue xr_aot_chan_is_closed(const XrAotContext *ctx, XrValue channel_value);
+XR_FUNC XrValue xr_aot_chan_is_closed_sync(XrValue channel_value);
 XR_FUNC XrValue xr_aot_work_queue_new(const XrAotContext *ctx, int64_t shard_count,
                                       int64_t shard_capacity);
 XR_FUNC XrValue xr_aot_work_queue_push(const XrAotContext *ctx, XrValue queue_value, XrValue value,
