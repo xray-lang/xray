@@ -674,38 +674,21 @@ static inline void xrt_map_init_header(xrt_map_t *m) {
     m->value_size = (uint8_t) sizeof(XrValue);
 }
 
+/* Candidate comparators for the shared Swiss probe (xr_{map,set}_lookup_slot):
+ * type tag then canonical equality. xrt_eq is type-aware, so the tag pre-check
+ * only short-circuits type-mismatched hash collisions. Return int (not bool) to
+ * match the runtime's bool-free generated-C convention. */
+static inline int xrt_map_key_eq(const XrMapEntry *e, XrValue key, uint8_t key_tt) {
+    return e->key_tt == key_tt && xrt_eq(e->key, key) != 0;
+}
+static inline int xrt_set_value_eq(const XrSetEntry *e, XrValue value, uint8_t val_tt) {
+    return e->val_tt == val_tt && xrt_eq(e->value, value) != 0;
+}
+
 static inline uint32_t xrt_map_find_entry_slot(xrt_map_t *m, XrValue key, uint32_t hash,
                                                uint8_t key_tt, int32_t *out_eidx) {
-    if (m->flags & XR_MAP_FLAG_DUMMY)
-        return UINT32_MAX;
-
-    uint32_t mask = m->indices_size - 1u;
-    uint8_t h2 = xr_swiss_h2(hash);
-    uint32_t pos = (hash >> 7u) & mask;
-    uint32_t stride = 0;
-
-    for (;;) {
-        uint64_t group = xr_swiss_group_load(m->ctrl + pos);
-        uint64_t matches = xr_swiss_group_match(group, h2);
-        while (matches) {
-            int off = xr_swiss_swar_first(matches);
-            uint32_t slot = (pos + (uint32_t) off) & mask;
-            int32_t eidx = m->indices[slot];
-            if (eidx >= 0) {
-                XrMapEntry *entry = &m->entries[eidx];
-                if (entry->hash == hash && entry->key_tt == key_tt && xrt_eq(entry->key, key)) {
-                    if (out_eidx)
-                        *out_eidx = eidx;
-                    return slot;
-                }
-            }
-            matches &= ~(0xFFull << ((unsigned) off * 8u));
-        }
-        if (xr_swiss_group_match_empty(group))
-            return UINT32_MAX;
-        stride += XR_SWISS_GROUP;
-        pos = (pos + stride) & mask;
-    }
+    return xr_map_lookup_slot(m->ctrl, m->indices, m->entries, m->indices_size, key, hash, key_tt,
+                              xrt_map_key_eq, out_eidx);
 }
 
 static inline int32_t xrt_map_find_entry(xrt_map_t *m, XrValue key, uint32_t hash, uint8_t key_tt) {
@@ -976,37 +959,8 @@ static inline void xrt_set_init_header(xrt_set_t *s, uint8_t elem_type) {
 
 static inline uint32_t xrt_set_find_entry_slot(xrt_set_t *s, XrValue value, uint32_t hash,
                                                int32_t *out_eidx) {
-    if (s->flags & XR_SET_FLAG_DUMMY)
-        return UINT32_MAX;
-
-    uint32_t mask = s->indices_size - 1u;
-    uint8_t h2 = xr_swiss_h2(hash);
-    uint32_t pos = (hash >> 7u) & mask;
-    uint32_t stride = 0;
-
-    for (;;) {
-        uint64_t group = xr_swiss_group_load(s->ctrl + pos);
-        uint64_t matches = xr_swiss_group_match(group, h2);
-        while (matches) {
-            int off = xr_swiss_swar_first(matches);
-            uint32_t slot = (pos + (uint32_t) off) & mask;
-            int32_t eidx = s->indices[slot];
-            if (eidx >= 0) {
-                XrSetEntry *entry = &s->entries[eidx];
-                if (entry->hash == hash && entry->val_tt == xrt_value_type_tag(value) &&
-                    xrt_eq(entry->value, value)) {
-                    if (out_eidx)
-                        *out_eidx = eidx;
-                    return slot;
-                }
-            }
-            matches &= ~(0xFFull << ((unsigned) off * 8u));
-        }
-        if (xr_swiss_group_match_empty(group))
-            return UINT32_MAX;
-        stride += XR_SWISS_GROUP;
-        pos = (pos + stride) & mask;
-    }
+    return xr_set_lookup_slot(s->ctrl, s->indices, s->entries, s->indices_size, value, hash,
+                              xrt_value_type_tag(value), xrt_set_value_eq, out_eidx);
 }
 
 static inline int32_t xrt_set_find_entry(xrt_set_t *s, XrValue value, uint32_t hash) {
