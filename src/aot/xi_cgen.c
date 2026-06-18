@@ -680,23 +680,32 @@ static const XiFunc *cg_lookup_class_ctor(XiCgenCtx *ctx, const char *class_name
     return NULL;
 }
 
+static const XiClassData *cg_class_native_data_by_name(const XiCgenCtx *ctx, const char *name);
+
 /* Lookup a class instance method by name and receiver class.
  * Builtin receivers must never fall through to a class method with the
  * same source-level name.
+ * Walks the inheritance chain so a method inherited from a (possibly
+ * cross-module) base class resolves on a derived receiver.
  * If out_prefix is non-NULL, stores the method's module prefix (for
  * cross-module class methods; NULL means current module). */
 static const XiFunc *cg_lookup_method(XiCgenCtx *ctx, const char *name, const char *class_name,
                                       const char **out_prefix) {
     if (!name || !class_name)
         return NULL;
-    for (int i = 0; i < ctx->nmethod; i++) {
-        if (!ctx->methods[i].name || strcmp(ctx->methods[i].name, name) != 0)
-            continue;
-        if (ctx->methods[i].class_name && strcmp(ctx->methods[i].class_name, class_name) == 0) {
-            if (out_prefix)
-                *out_prefix = ctx->methods[i].module_prefix;
-            return ctx->methods[i].func;
+    const char *cur = class_name;
+    for (int depth = 0; cur && depth < 16; depth++) {
+        for (int i = 0; i < ctx->nmethod; i++) {
+            if (!ctx->methods[i].name || strcmp(ctx->methods[i].name, name) != 0)
+                continue;
+            if (ctx->methods[i].class_name && strcmp(ctx->methods[i].class_name, cur) == 0) {
+                if (out_prefix)
+                    *out_prefix = ctx->methods[i].module_prefix;
+                return ctx->methods[i].func;
+            }
         }
+        const XiClassData *cd = cg_class_native_data_by_name(ctx, cur);
+        cur = cd ? cd->super_name : NULL;
     }
     if (out_prefix)
         *out_prefix = NULL;

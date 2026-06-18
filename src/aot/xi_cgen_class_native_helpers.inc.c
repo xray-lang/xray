@@ -2987,6 +2987,16 @@ static void emit_imported_class_native_typedefs(XiCgenCtx *ctx, FILE *out) {
     const char *own = ctx->module && ctx->module->name ? ctx->module->name : NULL;
     const XiClassData *seen[64];
     int nseen = 0;
+    /* A locally-defined class may extend an imported base, whose typedef must
+     * precede the derived class's `base` member. */
+    if (ctx->module && ctx->module->classes) {
+        for (uint16_t ci = 0; ci < ctx->module->nclasses; ci++) {
+            const XiClassData *cd = ctx->module->classes[ci];
+            if (cd && cd->super_name)
+                cg_collect_native_class(ctx, out, cg_class_native_data_by_name(ctx, cd->super_name),
+                                        own, seen, &nseen, (int) (sizeof(seen) / sizeof(seen[0])));
+        }
+    }
     for (int i = 0; i < ctx->n_xmod_refs; i++) {
         const XiFunc *f = ctx->xmod_ref_funcs[i];
         const char *prefix = ctx->xmod_ref_prefixes[i];

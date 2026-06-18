@@ -364,10 +364,11 @@ XR_FUNC void xi_cgen_module_tu(XiCgenCtx *ctx, FILE *out, XiModule **modules, in
     fprintf(out, "\n");
 
     /* Native class / struct typedefs must precede the forward declarations and
-     * bodies that use them.  Emit this module's own classes plus the imported
-     * classes whose instances this unit references (cross-module classes). */
-    emit_class_native_typedefs(ctx, out, module, prefix);
+     * bodies that use them.  Imported (and cross-module base) class typedefs
+     * come first so a locally-defined class can embed an imported base; then
+     * this module's own classes. */
     emit_imported_class_native_typedefs(ctx, out);
+    emit_class_native_typedefs(ctx, out, module, prefix);
     emit_class_shared_native_storage_decls(ctx, out, prefix);
     emit_struct_native_typedefs(out, module->init, prefix);
     fprintf(out, "\n");
