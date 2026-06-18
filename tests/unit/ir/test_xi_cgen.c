@@ -4135,6 +4135,42 @@ TEST(cgen_coro_work_queue_resume_rebuilds_slot_and_traces_task) {
     xi_func_free(ir);
 }
 
+TEST(cgen_work_queue_native_methods_use_aot_helpers) {
+    const char *src = "shared const queue: WorkQueue<int> = WorkQueue<int>(4, 2)\n"
+                      "fn use_queue() -> int {\n"
+                      "    assert_true(queue.push(1, 0))\n"
+                      "    let (value, ok) = queue.tryPop(0)\n"
+                      "    if (!ok) { return -1 }\n"
+                      "    if (queue.isClosed) { return -2 }\n"
+                      "    return value + queue.length + queue.shardCount\n"
+                      "}\n"
+                      "print(use_queue())\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "AOT WorkQueue native methods should generate");
+    assert(contains(code, "xr_aot_work_queue_push_sync(") &&
+           "WorkQueue.push should use the sync AOT bridge outside suspendable code");
+    assert(contains(code, "xr_aot_work_queue_try_pop_sync(") &&
+           "WorkQueue.tryPop should use the sync AOT bridge outside suspendable code");
+    assert(contains(code, "xr_aot_work_queue_length(") &&
+           "WorkQueue.length should read through the AOT helper");
+    assert(contains(code, "xr_aot_work_queue_shard_count(") &&
+           "WorkQueue.shardCount should read through the AOT helper");
+    assert(contains(code, "xr_aot_work_queue_is_closed(") &&
+           "WorkQueue.isClosed should read through the AOT helper");
+    assert(!contains(code, "xrt_method_0(") && !contains(code, "xrt_method_1(") &&
+           "WorkQueue native methods must not fall back to dynamic method dispatch");
+
+    printf("  Generated WorkQueue native method helpers %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_coro_task_status_uses_native_enum_status) {
     const char *src = "fn wait_for_value(ch: Channel<int>) -> int {\n"
                       "    match (ch.recv()) {\n"
@@ -4313,6 +4349,7 @@ int main(void) {
     run_cgen_channel_fields_use_aot_helpers();
     run_cgen_sync_go_channel_try_methods_use_aot_helpers();
     run_cgen_coro_work_queue_resume_rebuilds_slot_and_traces_task();
+    run_cgen_work_queue_native_methods_use_aot_helpers();
     run_cgen_coro_task_status_uses_native_enum_status();
 
     teardown();

@@ -1,0 +1,26 @@
+// anchor: coro-await-tuple-destructure
+// Destructuring a tuple inside suspendable (coroutine) code must produce
+// identical results on VM and AOT. Regression: the AOT coroutine path read
+// tuple elements through the runtime bridge xr_aot_tuple_get (which only
+// recognizes GC-header runtime tuples) while codegen produces AOT-native
+// tuples (XR_TAG_TUPLE), so every coroutine tuple element silently read back
+// as null on AOT while the VM produced the values.
+fn produce() -> (int, int) {
+    yield
+    return (10, 20)
+}
+
+let task = go produce()
+let (a, b) = await task
+print(a)
+print(b)
+
+// Tuple constructed and destructured within a coroutine body.
+fn sum_pair() -> int {
+    yield
+    let pair = (3, 4)
+    let (x, y) = pair
+    return x + y
+}
+
+print(await go sum_pair())

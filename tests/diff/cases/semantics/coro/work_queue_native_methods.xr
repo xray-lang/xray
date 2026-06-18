@@ -1,0 +1,32 @@
+shared const q: WorkQueue<int> = WorkQueue<int>(4, 2)
+
+assert_eq(q.shardCount, 4)
+assert_eq(q.length, 0)
+assert_false(q.isClosed)
+
+assert_true(q.push(1, 0))
+assert_true(q.push(2, 0))
+assert_true(q.push(3, 1))
+assert_eq(q.length, 3)
+
+let (own, own_ok) = q.tryPop(0)
+assert_true(own_ok)
+assert_eq(own, 2)
+
+let (stolen, stolen_ok) = q.tryPop(1)
+assert_true(stolen_ok)
+assert_eq(stolen, 3)
+
+let (remaining, remaining_ok) = q.tryPop(2)
+assert_true(remaining_ok)
+assert_eq(remaining, 1)
+
+let (_, empty_ok) = q.tryPop(0)
+assert_false(empty_ok)
+assert_eq(q.length, 0)
+
+q.close()
+assert_true(q.isClosed)
+assert_false(q.push(9, 0))
+
+print("workqueue native ok")

@@ -56,6 +56,18 @@ static const char *cg_channel_field_helper(const char *field) {
     return NULL;
 }
 
+static const char *cg_work_queue_field_helper(const char *field) {
+    if (!field)
+        return NULL;
+    if (strcmp(field, "length") == 0)
+        return "xr_aot_work_queue_length";
+    if (strcmp(field, "shardCount") == 0)
+        return "xr_aot_work_queue_shard_count";
+    if (strcmp(field, "isClosed") == 0)
+        return "xr_aot_work_queue_is_closed";
+    return NULL;
+}
+
 static bool cg_value_type_is_bool(const XiValue *v) {
     return v && v->type && v->type->kind == XR_KIND_BOOL;
 }
@@ -132,8 +144,7 @@ static bool cg_work_queue_method_needs_aot_coro(const XiValue *v) {
     if (!v || v->op != XI_CALL_METHOD || v->nargs < 1 || !cg_value_type_is_work_queue(v->args[0]))
         return false;
     const char *method = (const char *) v->aux;
-    return method && (strcmp(method, "push") == 0 || strcmp(method, "pop") == 0 ||
-                      strcmp(method, "tryPop") == 0 || strcmp(method, "close") == 0);
+    return method && strcmp(method, "pop") == 0;
 }
 
 static bool cg_work_queue_constructor_needs_aot_coro(const XiValue *v) {

@@ -1349,6 +1349,19 @@ static XrayIsolate *aot_work_queue_isolate(const XrAotContext *ctx, XrWorkQueue 
     return q ? q->isolate : NULL;
 }
 
+static bool aot_context_from_work_queue_value(XrValue queue_value, XrAotContext *out) {
+    if (!out || !xr_value_is_work_queue(queue_value))
+        return false;
+    XrWorkQueue *q = xr_value_to_work_queue(queue_value);
+    XrayIsolate *isolate = q ? q->isolate : NULL;
+    if (!isolate)
+        return false;
+    out->isolate = isolate;
+    out->coro = xr_current_coro(isolate);
+    out->worker = NULL;
+    return true;
+}
+
 static uint32_t aot_work_queue_sanitize_shards(int64_t value) {
     if (value <= 0)
         return XR_WORK_QUEUE_DEFAULT_SHARDS;
@@ -1383,6 +1396,41 @@ XrValue xr_aot_work_queue_push(const XrAotContext *ctx, XrValue queue_value, XrV
     if (!isolate)
         return xr_bool(false);
     return xr_bool(xr_work_queue_push(isolate, q, value, shard_hint));
+}
+
+XrValue xr_aot_work_queue_push_sync(XrValue queue_value, XrValue value, int64_t shard_hint) {
+    XrAotContext ctx = {0};
+    if (!aot_context_from_work_queue_value(queue_value, &ctx))
+        return xr_bool(false);
+    return xr_aot_work_queue_push(&ctx, queue_value, value, shard_hint);
+}
+
+bool xr_aot_work_queue_try_pop(const XrAotContext *ctx, XrValue queue_value, int64_t worker_hint,
+                               XrValue *out_value) {
+    if (out_value)
+        *out_value = XR_NULL_VAL;
+    if (!xr_value_is_work_queue(queue_value))
+        return false;
+    XrWorkQueue *q = xr_value_to_work_queue(queue_value);
+    XrayIsolate *isolate = aot_work_queue_isolate(ctx, q);
+    XrCoroutine *coro = ctx && ctx->coro ? ctx->coro : (isolate ? xr_current_coro(isolate) : NULL);
+    if (!isolate || !coro)
+        return false;
+
+    bool ok = false;
+    XrValue value = xr_work_queue_try_pop(isolate, q, worker_hint, &ok);
+    if (ok && out_value)
+        *out_value = value;
+    return ok;
+}
+
+bool xr_aot_work_queue_try_pop_sync(XrValue queue_value, int64_t worker_hint, XrValue *out_value) {
+    if (out_value)
+        *out_value = XR_NULL_VAL;
+    XrAotContext ctx = {0};
+    if (!aot_context_from_work_queue_value(queue_value, &ctx))
+        return false;
+    return xr_aot_work_queue_try_pop(&ctx, queue_value, worker_hint, out_value);
 }
 
 XrAotResult xr_aot_work_queue_pop(const XrAotContext *ctx, XrValue queue_value, int64_t worker_hint,
@@ -1431,11 +1479,39 @@ XrValue xr_aot_work_queue_close(const XrAotContext *ctx, XrValue queue_value) {
     return XR_NULL_VAL;
 }
 
+XrValue xr_aot_work_queue_close_sync(XrValue queue_value) {
+    XrAotContext ctx = {0};
+    if (!aot_context_from_work_queue_value(queue_value, &ctx))
+        return XR_NULL_VAL;
+    return xr_aot_work_queue_close(&ctx, queue_value);
+}
+
+XrValue xr_aot_work_queue_length(const XrAotContext *ctx, XrValue queue_value) {
+    (void) ctx;
+    if (!xr_value_is_work_queue(queue_value))
+        return XR_FROM_INT(0);
+    return XR_FROM_INT((int64_t) xr_work_queue_length(xr_value_to_work_queue(queue_value)));
+}
+
+XrValue xr_aot_work_queue_shard_count(const XrAotContext *ctx, XrValue queue_value) {
+    (void) ctx;
+    if (!xr_value_is_work_queue(queue_value))
+        return XR_FROM_INT(0);
+    return XR_FROM_INT((int64_t) xr_value_to_work_queue(queue_value)->shard_count);
+}
+
 XrValue xr_aot_work_queue_is_closed(const XrAotContext *ctx, XrValue queue_value) {
     (void) ctx;
     if (!xr_value_is_work_queue(queue_value))
         return xr_bool(false);
     return xr_bool(xr_work_queue_is_closed(xr_value_to_work_queue(queue_value)));
+}
+
+XrValue xr_aot_work_queue_is_closed_sync(XrValue queue_value) {
+    XrAotContext ctx = {0};
+    if (!aot_context_from_work_queue_value(queue_value, &ctx))
+        return xr_bool(false);
+    return xr_aot_work_queue_is_closed(&ctx, queue_value);
 }
 
 XrValue xr_aot_tuple_get(const XrAotContext *ctx, XrValue tuple_value, uint16_t index) {
