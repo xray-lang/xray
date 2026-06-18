@@ -1400,6 +1400,9 @@ static void xicgen_call_builtin(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
     }
 }
 
+static const XiFunc *cg_lookup_class_ctor_global(XiCgenCtx *ctx, const char *class_name,
+                                                 const char **out_prefix);
+
 static const XiFunc *xicgen_lookup_super_method(XiCgenCtx *ctx, const XiFunc *f, const char *method,
                                                 const char **method_prefix) {
     if (!ctx || !ctx->module)
@@ -1420,8 +1423,10 @@ static const XiFunc *xicgen_lookup_super_method(XiCgenCtx *ctx, const XiFunc *f,
     }
     if (!parent_class)
         return NULL;
+    /* The parent may live in another module (the derived class extends an
+     * imported base), so resolve through the cross-module lookups. */
     if (method && strcmp(method, "constructor") == 0)
-        return cg_lookup_class_ctor(ctx, parent_class);
+        return cg_lookup_class_ctor_global(ctx, parent_class, method_prefix);
     return cg_lookup_method(ctx, method, parent_class, method_prefix);
 }
 

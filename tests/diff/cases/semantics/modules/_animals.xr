@@ -1,0 +1,17 @@
+// Base class imported by xmod_inherit.xr (skipped as a standalone diff case
+// because its basename starts with '_').  The importer defines a subclass that
+// extends this class across the module boundary.
+export class Animal {
+    name: string
+    legs: int
+    constructor(n: string, l: int) {
+        this.name = n
+        this.legs = l
+    }
+    describe() -> string {
+        return this.name
+    }
+    leg_count() -> int {
+        return this.legs
+    }
+}
