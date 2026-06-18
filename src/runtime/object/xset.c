@@ -114,38 +114,17 @@ static void set_tombstone_entry_index(XrSet *set, uint32_t eidx) {
 
 /* ========== Swiss Index Lookup ========== */
 
+// Candidate comparator for the shared Swiss probe: type tag then canonical
+// equality. xr_value_eq is type-aware, so the tag pre-check never rejects a
+// true match; it only short-circuits type-mismatched hash collisions.
+static inline int vm_set_value_eq(const XrSetEntry *e, XrValue value, uint8_t val_tt) {
+    return e->val_tt == val_tt && xr_value_eq(e->value, value);
+}
+
 // Returns the ctrl/indices slot for `value`, or UINT32_MAX if absent.
 static uint32_t set_lookup_slot(XrSet *set, XrValue value, uint32_t hash, int32_t *out_eidx) {
-    if (set->flags & XR_SET_FLAG_DUMMY)
-        return UINT32_MAX;
-
-    uint32_t mask = set->indices_size - 1;
-    uint8_t h2 = xr_swiss_h2(hash);
-    uint32_t pos = (hash >> 7u) & mask;
-    uint32_t stride = 0;
-
-    for (;;) {
-        uint64_t group = xr_swiss_group_load(set->ctrl + pos);
-        uint64_t matches = xr_swiss_group_match(group, h2);
-        while (matches) {
-            int off = xr_swiss_swar_first(matches);
-            uint32_t slot = (pos + (uint32_t) off) & mask;
-            int32_t ix = set->indices[slot];
-            if (ix >= 0) {
-                XrSetEntry *e = &set->entries[ix];
-                if (e->hash == hash && xr_value_eq(e->value, value)) {
-                    if (out_eidx)
-                        *out_eidx = ix;
-                    return slot;
-                }
-            }
-            matches &= ~(0xFFull << ((unsigned) off * 8u));
-        }
-        if (xr_swiss_group_match_empty(group))
-            return UINT32_MAX;
-        stride += XR_SWISS_GROUP;
-        pos = (pos + stride) & mask;
-    }
+    return xr_set_lookup_slot(set->ctrl, set->indices, set->entries, set->indices_size, value, hash,
+                              get_val_tt(value), vm_set_value_eq, out_eidx);
 }
 
 // Returns entries[] index for `value`, or -1 if absent.

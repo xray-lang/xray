@@ -82,6 +82,55 @@ static inline uint32_t xr_map_rehash_into(XrMapEntry *new_entries, uint8_t *new_
     return w;
 }
 
+/* Per-backend key comparator for a candidate map entry. `query_tt` is the
+ * query key's type tag, precomputed by the caller. Invoked only on h2-matched
+ * candidates (never inside the probe loop), so the indirect call stays off the
+ * hot path; with a constant function argument and -O2 the compiler inlines the
+ * lookup and devirtualizes this call. Returns nonzero on equal (int, not bool,
+ * to match the AOT runtime headers' bool-free generated-C convention). */
+typedef int (*XrMapEqFn)(const XrMapEntry *e, XrValue query, uint8_t query_tt);
+
+/* Locate the ctrl/indices slot whose live entry matches (query, query_tt) with
+ * `hash`, writing its entries[] index to *out_eidx; returns UINT32_MAX if
+ * absent. This is the shared Swiss-probe core of tagged-map lookup, used by the
+ * VM (xmap.c) and AOT (xrt_coll.h); the key comparison is supplied via `eq`,
+ * and table allocation/representation stay backend-specific. Pass raw fields
+ * (not a struct) because the VM and AOT map structs carry a GC header before
+ * the shared ABI fields, so neither is castable to a common overlay. */
+static inline uint32_t xr_map_lookup_slot(const uint8_t *ctrl, const int32_t *indices,
+                                          const XrMapEntry *entries, uint32_t indices_size,
+                                          XrValue query, uint32_t hash, uint8_t query_tt,
+                                          XrMapEqFn eq, int32_t *out_eidx) {
+    if (indices_size == 0)
+        return UINT32_MAX; /* dummy: no allocation */
+    uint32_t mask = indices_size - 1u;
+    uint8_t h2 = xr_swiss_h2(hash);
+    uint32_t pos = (uint32_t) ((hash >> 7u) & mask);
+    uint32_t stride = 0;
+    for (;;) {
+        uint64_t group = xr_swiss_group_load(ctrl + pos);
+        uint64_t matches = xr_swiss_group_match(group, h2);
+        while (matches) {
+            int off = xr_swiss_swar_first(matches);
+            uint32_t slot = (pos + (uint32_t) off) & mask;
+            int32_t ix = indices[slot];
+            if (ix >= 0) {
+                const XrMapEntry *e = &entries[ix];
+                if (e->hash == hash && eq(e, query, query_tt)) {
+                    if (out_eidx)
+                        *out_eidx = ix;
+                    return slot;
+                }
+            }
+            matches &= ~(0xFFull << ((unsigned) off * 8u));
+        }
+        if (xr_swiss_group_match_empty(group))
+            return UINT32_MAX;
+        stride += XR_SWISS_GROUP;
+        pos = (pos + stride) & mask;
+    }
+}
+
 /* ========== Set Entry (insertion-order dense slot) ========== */
 
 typedef struct XrSetEntry {
@@ -142,6 +191,49 @@ static inline uint32_t xr_set_rehash_into(XrSetEntry *new_entries, uint8_t *new_
         w++;
     }
     return w;
+}
+
+/* Per-backend value comparator for a candidate set entry. `query_tt` is the
+ * query value's type tag, precomputed by the caller. See XrMapEqFn for why the
+ * indirect call is off the hot path and why it returns int rather than bool. */
+typedef int (*XrSetEqFn)(const XrSetEntry *e, XrValue query, uint8_t query_tt);
+
+/* Locate the ctrl/indices slot whose live entry matches (query, query_tt) with
+ * `hash`; returns UINT32_MAX if absent. Shared Swiss-probe core of tagged-set
+ * lookup for the VM (xset.c) and AOT (xrt_coll.h); see xr_map_lookup_slot for
+ * the raw-fields rationale. */
+static inline uint32_t xr_set_lookup_slot(const uint8_t *ctrl, const int32_t *indices,
+                                          const XrSetEntry *entries, uint32_t indices_size,
+                                          XrValue query, uint32_t hash, uint8_t query_tt,
+                                          XrSetEqFn eq, int32_t *out_eidx) {
+    if (indices_size == 0)
+        return UINT32_MAX; /* dummy: no allocation */
+    uint32_t mask = indices_size - 1u;
+    uint8_t h2 = xr_swiss_h2(hash);
+    uint32_t pos = (uint32_t) ((hash >> 7u) & mask);
+    uint32_t stride = 0;
+    for (;;) {
+        uint64_t group = xr_swiss_group_load(ctrl + pos);
+        uint64_t matches = xr_swiss_group_match(group, h2);
+        while (matches) {
+            int off = xr_swiss_swar_first(matches);
+            uint32_t slot = (pos + (uint32_t) off) & mask;
+            int32_t ix = indices[slot];
+            if (ix >= 0) {
+                const XrSetEntry *e = &entries[ix];
+                if (e->hash == hash && eq(e, query, query_tt)) {
+                    if (out_eidx)
+                        *out_eidx = ix;
+                    return slot;
+                }
+            }
+            matches &= ~(0xFFull << ((unsigned) off * 8u));
+        }
+        if (xr_swiss_group_match_empty(group))
+            return UINT32_MAX;
+        stride += XR_SWISS_GROUP;
+        pos = (pos + stride) & mask;
+    }
 }
 
 #endif  // XR_MAP_SET_ABI_H

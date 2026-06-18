@@ -88,7 +88,8 @@ static uint32_t hash_value(XrValue key) {
 }
 
 // Compare an entry's key against (key, key_tt). Short strings compare by data.
-static inline bool entry_key_equal(const XrMapEntry *e, XrValue key, uint8_t key_tt) {
+// Returns int (not bool) to match the shared XrMapEqFn comparator signature.
+static inline int entry_key_equal(const XrMapEntry *e, XrValue key, uint8_t key_tt) {
     if (e->key_tt != key_tt)
         return false;
 
@@ -171,39 +172,13 @@ static void map_tombstone_entry_index(XrMap *map, uint32_t eidx, XrCoroGC *gc) {
 
 /* ========== Swiss Index Lookup ========== */
 
-// Returns the ctrl/indices slot for `key`, or UINT32_MAX if absent.
+// Returns the ctrl/indices slot for `key`, or UINT32_MAX if absent. The
+// per-type key comparison is supplied via entry_key_equal (a constant function,
+// so -O2 inlines the shared probe and devirtualizes the call).
 static uint32_t map_lookup_slot(XrMap *map, XrValue key, uint32_t hash, uint8_t key_tt,
                                 int32_t *out_eidx) {
-    if (map->flags & XR_MAP_FLAG_DUMMY)
-        return UINT32_MAX;
-
-    uint32_t mask = map->indices_size - 1;
-    uint8_t h2 = xr_swiss_h2(hash);
-    uint32_t pos = (hash >> 7u) & mask;
-    uint32_t stride = 0;
-
-    for (;;) {
-        uint64_t group = xr_swiss_group_load(map->ctrl + pos);
-        uint64_t matches = xr_swiss_group_match(group, h2);
-        while (matches) {
-            int off = xr_swiss_swar_first(matches);
-            uint32_t slot = (pos + (uint32_t) off) & mask;
-            int32_t ix = map->indices[slot];
-            if (ix >= 0) {
-                XrMapEntry *e = &map->entries[ix];
-                if (e->hash == hash && entry_key_equal(e, key, key_tt)) {
-                    if (out_eidx)
-                        *out_eidx = ix;
-                    return slot;
-                }
-            }
-            matches &= ~(0xFFull << ((unsigned) off * 8u));
-        }
-        if (xr_swiss_group_match_empty(group))
-            return UINT32_MAX;
-        stride += XR_SWISS_GROUP;
-        pos = (pos + stride) & mask;
-    }
+    return xr_map_lookup_slot(map->ctrl, map->indices, map->entries, map->indices_size, key, hash,
+                              key_tt, entry_key_equal, out_eidx);
 }
 
 // Returns entries[] index for `key`, or -1 if absent.
