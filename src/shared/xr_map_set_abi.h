@@ -18,6 +18,27 @@
 #include "xr_swiss_index.h"
 #include <stdint.h>
 
+/* ========================================================================
+ * Sharing boundary (VM xmap.c/xset.c vs AOT xrt_coll.h)
+ *
+ * SHARED here and in xr_swiss_index.h is the allocator/GC-free *algorithmic*
+ * core of the dense-entry Map/Set: the Swiss control-byte probe primitives,
+ * index insertion (xr_swiss_indices_put), compact rehash (xr_*_rehash_into),
+ * and candidate lookup (xr_*_lookup_slot, with a per-backend equality
+ * comparator). After the tag/eq/hash unification these are byte-identical
+ * across backends, so one source of truth removes drift.
+ *
+ * NOT shared, by design, are the mutating operator bodies (add/set/delete/
+ * clear). Their remaining differences are entirely backend *policy*, not
+ * algorithm: table allocation (VM Region-GC blobs or malloc with external-byte
+ * accounting; AOT bump/calloc), reference counting (VM xr_rc_retain/release),
+ * the weak-key/value registry, and GC write barriers — AOT has none of these.
+ * Routing those bodies through shared callbacks would put indirection on the
+ * hot mutation/resize path for negligible dedup (the resize step also mutates
+ * the table pointers, which fights the raw-fields contract the shared cores
+ * use), so each backend keeps its own add/delete/clear around the shared cores.
+ * ======================================================================== */
+
 /* ========== Map Entry (insertion-order dense slot) ========== */
 
 typedef struct XrMapEntry {
