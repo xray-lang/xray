@@ -1953,17 +1953,30 @@ static void lower_defer(XiLower *l, AstNode *node) {
         int nargs = call->arg_count;
         XR_DCHECK(nargs <= 250, "lower_defer: too many arguments");
 
+        XiValue **arg_values = NULL;
+        XiValue *stack_arg_values[32];
+        if (nargs > 0) {
+            arg_values = stack_arg_values;
+            if (nargs > (int) (sizeof(stack_arg_values) / sizeof(stack_arg_values[0]))) {
+                arg_values = (XiValue **) xi_func_arena_alloc(
+                    l->func, (uint32_t) ((size_t) nargs * sizeof(XiValue *)));
+                XR_DCHECK(arg_values != NULL, "lower_defer: arena alloc failed");
+            }
+        }
+        for (int i = 0; i < nargs; i++) {
+            XiValue *arg = xi_lower_expr(l, call->arguments[i]);
+            if (!arg)
+                return;
+            arg_values[i] = arg;
+        }
+
         XiValue *v =
             xi_value_new(l->func, l->cur_block, XI_DEFER, l->type_unit, (uint16_t) (1 + nargs));
         if (!v)
             return;
         v->args[0] = callee;
-        for (int i = 0; i < nargs; i++) {
-            XiValue *arg = xi_lower_expr(l, call->arguments[i]);
-            if (!arg)
-                return;
-            v->args[1 + i] = arg;
-        }
+        for (int i = 0; i < nargs; i++)
+            v->args[1 + i] = arg_values[i];
         v->flags |= XI_FLAG_SIDE_EFFECT;
         v->line = (uint32_t) node->line;
     } else {

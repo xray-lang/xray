@@ -1667,10 +1667,59 @@ static bool emit_class_native_ref_stack_return_stmt(XiCgenCtx *ctx, FILE *out, c
     return true;
 }
 
+static bool emit_single_deferred_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                      const char *prefix, const XiValue *defer_v) {
+    if (!defer_v || defer_v->op != XI_DEFER || defer_v->nargs < 1)
+        return true;
+    const XiValue *callee = cg_unwrap_identity_value(defer_v->args[0]);
+    CgStaticFunctionCall call = cg_resolve_static_function_call(ctx, f, callee);
+    if (call.func && !call.is_class_constructor) {
+        if (cg_func_needs_aot_coro(call.func)) {
+            ctx->error = true;
+            fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT defer of suspendable function '%s'\n",
+                    call.func->name ? call.func->name : "?");
+            return false;
+        }
+        fprintf(out, "    ");
+        emit_fname(ctx, out, call.prefix ? call.prefix : prefix, call.func);
+        fprintf(out, "(");
+        emit_call_hidden_closure(out, f, call.func, callee);
+        for (uint16_t a = 1; a < defer_v->nargs; a++) {
+            fprintf(out, ", ");
+            emit_value_as_direct_call_arg(ctx, out, f, defer_v, call.func, (uint16_t) (a - 1),
+                                          defer_v->args[a]);
+        }
+        fprintf(out, ");\n");
+        return true;
+    }
+
+    bool indirect_closure = callee && ((callee->type && XR_TYPE_IS_FUNCTION(callee->type)) ||
+                                       callee->op == XI_LOAD_UPVAL);
+    if (indirect_closure) {
+        fprintf(out, "    { xrt_closure_t *_dcl = (xrt_closure_t *)");
+        emit_value_as_rep(out, callee, XR_REP_TAGGED);
+        fprintf(out, ".ptr; ((XrValue (*)(xrt_closure_t *");
+        for (uint16_t a = 1; a < defer_v->nargs; a++)
+            fprintf(out, ", XrValue");
+        fprintf(out, "))_dcl->fn)(_dcl");
+        for (uint16_t a = 1; a < defer_v->nargs; a++) {
+            fprintf(out, ", ");
+            emit_value_as_rep(out, defer_v->args[a], XR_REP_TAGGED);
+        }
+        fprintf(out, "); }\n");
+        return true;
+    }
+
+    ctx->error = true;
+    fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT defer target in %s: %s\n",
+            f && f->name ? f->name : "?", callee ? xi_op_name(callee->op) : "?");
+    return false;
+}
+
 static void emit_deferred_calls(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const char *prefix) {
-    const XiValue *deferred_vals[32];
+    const XiValue *deferred_vals[64];
     int ndeferred = 0;
-    for (uint32_t dbi = 0; dbi < f->nblocks && ndeferred < 32; dbi++) {
+    for (uint32_t dbi = 0; dbi < f->nblocks; dbi++) {
         const XiBlock *db = f->blocks[dbi];
         if (!db)
             continue;
@@ -1678,29 +1727,18 @@ static void emit_deferred_calls(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
             const XiValue *dv = db->values[dvi];
             if (!dv || dv->op != XI_DEFER || dv->nargs < 1)
                 continue;
-            const XiValue *callee = cg_unwrap_identity_value(dv->args[0]);
-            if (callee &&
-                (callee->op == XI_CLOSURE_NEW ||
-                 (callee->op == XI_STACK_ALLOC && callee->aux_int == XI_CLOSURE_NEW)) &&
-                callee->aux)
-                deferred_vals[ndeferred++] = callee;
+            if (ndeferred >= (int) (sizeof(deferred_vals) / sizeof(deferred_vals[0]))) {
+                ctx->error = true;
+                fprintf(stderr, "[xi_cgen] ERROR: too many AOT defer statements in %s\n",
+                        f && f->name ? f->name : "?");
+                return;
+            }
+            deferred_vals[ndeferred++] = dv;
         }
     }
     for (int di = ndeferred - 1; di >= 0; di--) {
-        const XiValue *cv = deferred_vals[di];
-        const XiFunc *cf = (const XiFunc *) cv->aux;
-        fprintf(out, "    ");
-        if (cg_func_uses_typed_abi(ctx, cf))
-            emit_typed_abi_fname(ctx, out, prefix, cf);
-        else
-            emit_fname(ctx, out, prefix, cf);
-        if (cf->ncaptures > 0) {
-            fprintf(out, "((xrt_closure_t*)");
-            emit_vref(out, cv);
-            fprintf(out, ".ptr);\n");
-        } else {
-            fprintf(out, "(NULL);\n");
-        }
+        if (!emit_single_deferred_call(ctx, out, f, prefix, deferred_vals[di]))
+            return;
     }
 }
 
@@ -1708,8 +1746,36 @@ static void emit_default_return_for_abi(XiCgenCtx *ctx, FILE *out, const XiFunc 
     XrRep ret_rep = cg_func_return_abi_rep(ctx, f);
     if (ret_rep == XR_REP_TAGGED)
         fprintf(out, "XR_NULL_VAL");
+    else if (ret_rep == XR_REP_PTR)
+        fprintf(out, "NULL");
     else
         fprintf(out, "0");
+}
+
+static void emit_fallthrough_return(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                    const char *prefix) {
+    emit_class_field_cache_flush(ctx, out);
+    emit_deferred_calls(ctx, out, f, prefix);
+    if (cg_func_return_abi_rep(ctx, f) == XR_REP_VOID) {
+        fprintf(out, "    return;\n");
+    } else {
+        fprintf(out, "    return ");
+        emit_default_return_for_abi(ctx, out, f);
+        fprintf(out, ";\n");
+    }
+}
+
+static bool func_needs_fallthrough_return(const XiFunc *f) {
+    if (!f)
+        return false;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *blk = f->blocks[bi];
+        if (!blk || blk->kind != XI_BLOCK_PLAIN)
+            continue;
+        if (!blk->succs[0])
+            return true;
+    }
+    return false;
 }
 
 #include "xi_cgen_stmt_dispatch_helpers.inc.c"
@@ -2550,6 +2616,8 @@ static void xi_cgen_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefi
             !cg_structured_array_fill_loop_block_is_elided(ctx, f, f->blocks[bi]))
             emit_block(ctx, out, f, f->blocks[bi], prefix);
     }
+    if (func_needs_fallthrough_return(f))
+        emit_fallthrough_return(ctx, out, f, prefix);
 
     fprintf(out, "}\n\n");
 

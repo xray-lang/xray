@@ -3,6 +3,8 @@
 # both backends. Failing 11_coroutine cases remain tracked in the execution log.
 tests/regression/11_coroutine/1101_channel_basic.xr
 tests/regression/11_coroutine/1102_go_await.xr
+tests/regression/11_coroutine/1103_defer.xr
+tests/regression/11_coroutine/1105_defer_args.xr
 tests/regression/11_coroutine/1106_select.xr
 tests/regression/11_coroutine/1108_await_all.xr
 tests/regression/11_coroutine/1109_await_any.xr
@@ -16,6 +18,7 @@ tests/regression/11_coroutine/1117_await_timeout.xr
 tests/regression/11_coroutine/1118_comprehensive.xr
 tests/regression/11_coroutine/1119_await_all_syntax.xr
 tests/regression/11_coroutine/1120_scope_basic.xr
+tests/regression/11_coroutine/1121_defer_block.xr
 tests/regression/11_coroutine/1122_coro_naming.xr
 tests/regression/11_coroutine/1128_yield.xr
 tests/regression/11_coroutine/1131_linked_go_expr.xr

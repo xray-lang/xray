@@ -1,0 +1,18 @@
+// anchor: defer-upval-closure
+// A defer target may flow through an enclosing closure upvalue. The AOT
+// backend must invoke that boxed closure instead of requiring a direct target.
+fn outer() {
+    fn cleanup(msg: string) {
+        print(msg)
+    }
+
+    fn worker() {
+        defer cleanup("upval-cleanup")
+        print("body")
+    }
+
+    worker()
+}
+
+outer()
+print("done")
