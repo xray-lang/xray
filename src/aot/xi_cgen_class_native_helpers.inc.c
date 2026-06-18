@@ -2918,35 +2918,88 @@ static void emit_class_native_typedefs(XiCgenCtx *ctx, FILE *out, XiModule *modu
         emit_one_class_native_typedef(ctx, out, module->classes[ci], prefix);
 }
 
-/* Emit native typedefs for classes imported from other modules so a unit can
- * declare and use instances of cross-module native classes.  Each distinct
- * (class, exporter) pair is emitted once under the exporter's prefix, matching
- * the definition in the exporter's own translation unit. */
+/* The exported class that owns f as a constructor or method, when f belongs to
+ * the module named `prefix`; NULL if f is a free function. */
+static const XiClassData *cg_func_owning_exported_class(const XiCgenCtx *ctx, const XiFunc *f,
+                                                        const char *prefix) {
+    if (!ctx || !f || !prefix)
+        return NULL;
+    for (int i = 0; i < ctx->all_nmodules; i++) {
+        XiModule *mod = ctx->all_modules ? ctx->all_modules[i] : NULL;
+        if (!mod || !mod->name || !mod->init || strcmp(mod->name, prefix) != 0)
+            continue;
+        for (uint16_t e = 0; e < mod->nexports; e++) {
+            const XiClassData *cd = mod->exports[e].class_data;
+            if (!cd || !cd->child_idx)
+                continue;
+            for (uint16_t mi = 0; mi < cd->nmethod; mi++) {
+                uint16_t ci = cd->child_idx[mi];
+                if (ci < mod->init->nchildren && mod->init->children[ci] == f)
+                    return cd;
+            }
+            if (cd->clinit_child_idx >= 0 &&
+                (uint16_t) cd->clinit_child_idx < mod->init->nchildren &&
+                mod->init->children[cd->clinit_child_idx] == f)
+                return cd;
+        }
+        return NULL;
+    }
+    return NULL;
+}
+
+/* Record a native class (and its cross-module ancestors) for typedef emission,
+ * skipping classes owned by the module currently being emitted (already
+ * declared) and duplicates.  Ancestors are pulled in so an inheriting class's
+ * `base` member resolves. */
+static void cg_collect_native_class(XiCgenCtx *ctx, FILE *out, const XiClassData *cd,
+                                    const char *own, const XiClassData **seen, int *nseen,
+                                    int seen_cap) {
+    while (cd && cd->instance_layout) {
+        const char *cpfx = cg_class_native_prefix_for_data(ctx, cd, NULL);
+        if (!cpfx || (own && strcmp(cpfx, own) == 0))
+            return; /* own-module class: emitted by emit_class_native_typedefs */
+        bool dup = false;
+        for (int s = 0; s < *nseen; s++) {
+            if (seen[s] == cd) {
+                dup = true;
+                break;
+            }
+        }
+        if (dup)
+            return;
+        if (*nseen < seen_cap)
+            seen[(*nseen)++] = cd;
+        emit_one_class_native_typedef(ctx, out, cd, cpfx);
+        /* Continue to the super class so the emitted `base` member resolves. */
+        cd = cd->super_name ? cg_class_native_data_by_name(ctx, cd->super_name) : NULL;
+    }
+}
+
+/* Emit native typedefs for the cross-module classes a unit actually references,
+ * derived from the imported functions it calls: the class owning an imported
+ * constructor/method, plus any native class in an imported function's parameter
+ * or return types.  Keeping this precise (rather than declaring every exported
+ * class) means an object stays cache-valid when an unrelated exported class
+ * changes (114 incremental caching). */
 static void emit_imported_class_native_typedefs(XiCgenCtx *ctx, FILE *out) {
     if (!ctx || !out)
         return;
     const char *own = ctx->module && ctx->module->name ? ctx->module->name : NULL;
     const XiClassData *seen[64];
     int nseen = 0;
-    for (int i = 0; i < ctx->nimports; i++) {
-        const CgImportEntry *imp = &ctx->imports[i];
-        if (!imp->target_class || !imp->target_mod_name)
+    for (int i = 0; i < ctx->n_xmod_refs; i++) {
+        const XiFunc *f = ctx->xmod_ref_funcs[i];
+        const char *prefix = ctx->xmod_ref_prefixes[i];
+        if (!f)
             continue;
-        /* Classes owned by the module being emitted are already declared by
-         * emit_class_native_typedefs; skip them to avoid a redefinition. */
-        if (own && strcmp(imp->target_mod_name, own) == 0)
-            continue;
-        bool dup = false;
-        for (int s = 0; s < nseen; s++) {
-            if (seen[s] == imp->target_class) {
-                dup = true;
-                break;
-            }
+        cg_collect_native_class(ctx, out, cg_func_owning_exported_class(ctx, f, prefix), own, seen,
+                                &nseen, (int) (sizeof(seen) / sizeof(seen[0])));
+        cg_collect_native_class(ctx, out, cg_class_native_data_for_abi_type(ctx, f->return_type),
+                                own, seen, &nseen, (int) (sizeof(seen) / sizeof(seen[0])));
+        for (uint16_t p = 0; p < f->nparams; p++) {
+            const XrType *pt = f->params && f->params[p] ? f->params[p]->type : NULL;
+            cg_collect_native_class(ctx, out, cg_class_native_data_for_abi_type(ctx, pt), own, seen,
+                                    &nseen, (int) (sizeof(seen) / sizeof(seen[0])));
         }
-        if (dup)
-            continue;
-        if (nseen < (int) (sizeof(seen) / sizeof(seen[0])))
-            seen[nseen++] = imp->target_class;
-        emit_one_class_native_typedef(ctx, out, imp->target_class, imp->target_mod_name);
     }
 }
