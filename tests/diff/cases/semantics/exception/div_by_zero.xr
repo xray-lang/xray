@@ -1,5 +1,5 @@
 // anchor: float-div-by-zero
-// Division by zero throws E0301 (xray has no IEEE inf/NaN). An uncaught
+// Division by zero throws E0420 (xray has no IEEE inf/NaN). An uncaught
 // exception must exit with status 1 on every backend: the AOT runtime reports
 // and exits cleanly rather than aborting with SIGABRT (134), so VM and AOT
 // agree on the observable exit code and (empty) stdout.

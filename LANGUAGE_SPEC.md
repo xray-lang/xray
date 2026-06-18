@@ -972,12 +972,13 @@ BinOp ::= '+' | '-' | '*' | '/' | '%'
 | `-` | int | float | float | ❌ | ❌ |
 | `*` | int | float | float | ❌ | ❌ |
 | `/` | int (truncating) | float | float | ❌ | ❌ |
-| `%` | int | float (IEEE remainder) | float | ❌ | ❌ |
+| `%` | int | ❌ | ❌ | ❌ | ❌ |
 
 **Special semantics**:
 - `int / 0` → throws `XR_ERR_DIV_BY_ZERO` (E0420) at runtime.
 - `int % 0` → throws `XR_ERR_MOD_BY_ZERO` (E0421) at runtime.
-- `float / 0.0` → `+inf` / `-inf` / `NaN` (IEEE-754 semantics; **does not** throw).
+- `float / 0.0` (and any float-result division by zero) → also throws `XR_ERR_DIV_BY_ZERO` (E0420) at runtime; xray arithmetic produces **no** IEEE inf/NaN.
+- `%` accepts integer operands only; float modulo (e.g. `5.0 % 2.0`) throws `XR_ERR_TYPE_MISMATCH` (E0404) at runtime.
 - Integer overflow: see §2.3.1.
 - `string + string` is O(n) concatenation; for heavy concatenation use `StringBuilder`.
 
@@ -4821,7 +4822,7 @@ Analyzer enum codes (`XrErrorCode`, defined in the 350+ section of `xerror.h`):
 
 | Code | Name | Description |
 |--|--|--|
-| `E0420` | `XR_ERR_DIV_BY_ZERO` | integer division by zero |
+| `E0420` | `XR_ERR_DIV_BY_ZERO` | division by zero (integer or float) |
 | `E0421` | `XR_ERR_MOD_BY_ZERO` | integer modulo by zero |
 | `E0422` | `XR_ERR_OVERFLOW` | integer overflow |
 
