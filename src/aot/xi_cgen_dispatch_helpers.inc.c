@@ -1618,9 +1618,62 @@ static bool xicgen_emit_channel_method(FILE *out, const XiValue *v, const char *
     return true;
 }
 
+static bool xicgen_emit_work_queue_method(FILE *out, const XiValue *v, const char *method,
+                                          uint16_t nargs) {
+    if (!v || v->nargs < 1 || !method || !cg_value_type_is_work_queue(v->args[0]))
+        return false;
+    bool is_push = strcmp(method, "push") == 0 && (nargs == 1 || nargs == 2) && v->nargs >= 2;
+    bool is_try_pop = strcmp(method, "tryPop") == 0 && (nargs == 0 || nargs == 1);
+    bool is_close = strcmp(method, "close") == 0 && nargs == 0;
+    bool is_closed = strcmp(method, "isClosed") == 0 && nargs == 0;
+    if (!is_push && !is_try_pop && !is_close && !is_closed)
+        return false;
+
+    const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+    if (is_push) {
+        fprintf(out, "xr_aot_work_queue_push_sync(");
+        emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
+        fprintf(out, ", ");
+        emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
+        fprintf(out, ", ");
+        if (nargs == 2 && v->nargs >= 3)
+            emit_value_as_rep(out, v->args[2], XR_REP_I64);
+        else
+            fprintf(out, "-1");
+        fprintf(out, ")");
+    } else if (is_try_pop) {
+        /* Pack the runtime's (out-param value, ok) into an AOT-native tuple so
+         * the destructuring XI_TUPLE_GET reads it like every other AOT tuple. */
+        fprintf(out, "({ XrValue _wq_tpv_%u = XR_NULL_VAL; bool _wq_tpok_%u = ", v->id, v->id);
+        fprintf(out, "xr_aot_work_queue_try_pop_sync(");
+        emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
+        fprintf(out, ", ");
+        if (nargs == 1 && v->nargs >= 2)
+            emit_value_as_rep(out, v->args[1], XR_REP_I64);
+        else
+            fprintf(out, "-1");
+        fprintf(out,
+                ", &_wq_tpv_%u); xrt_tuple_make(2, (XrValue[]){"
+                "xr_aot_bridge_value_to_xrt(_wq_tpv_%u), XR_FROM_BOOL(_wq_tpok_%u)}); })",
+                v->id, v->id, v->id);
+    } else if (is_close) {
+        fprintf(out, "xr_aot_work_queue_close_sync(");
+        emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
+        fprintf(out, ")");
+    } else if (is_closed) {
+        fprintf(out, "xr_aot_work_queue_is_closed_sync(");
+        emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
+        fprintf(out, ")");
+    }
+    emit_conversion_suffix(out, conv_suffix);
+    return true;
+}
+
 static void xicgen_emit_runtime_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                        const char *method, uint16_t nargs) {
     if (xicgen_emit_channel_method(out, v, method, nargs))
+        return;
+    if (xicgen_emit_work_queue_method(out, v, method, nargs))
         return;
     int sym = cg_method_sym(method);
     if (sym < 0 && xicgen_emit_stringbuilder_append(out, v, method, nargs))
@@ -2174,6 +2227,20 @@ static void xicgen_load_field(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
         else if (cg_rep(v) == XR_REP_F64)
             fprintf(out, "XR_TO_FLOAT(");
         fprintf(out, "%s(NULL, ", channel_helper);
+        emit_vref(out, v->args[0]);
+        fprintf(out, ")");
+        if (cg_rep(v) == XR_REP_I64 || cg_rep(v) == XR_REP_F64)
+            fprintf(out, ")");
+        return;
+    }
+    const char *work_queue_helper =
+        cg_value_type_is_work_queue(v->args[0]) ? cg_work_queue_field_helper(field) : NULL;
+    if (work_queue_helper) {
+        if (cg_rep(v) == XR_REP_I64)
+            fprintf(out, "XR_TO_INT(");
+        else if (cg_rep(v) == XR_REP_F64)
+            fprintf(out, "XR_TO_FLOAT(");
+        fprintf(out, "%s(NULL, ", work_queue_helper);
         emit_vref(out, v->args[0]);
         fprintf(out, ")");
         if (cg_rep(v) == XR_REP_I64 || cg_rep(v) == XR_REP_F64)

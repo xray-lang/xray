@@ -209,11 +209,20 @@ XR_FUNC XrValue xr_aot_work_queue_new(const XrAotContext *ctx, int64_t shard_cou
                                       int64_t shard_capacity);
 XR_FUNC XrValue xr_aot_work_queue_push(const XrAotContext *ctx, XrValue queue_value, XrValue value,
                                        int64_t shard_hint);
+XR_FUNC XrValue xr_aot_work_queue_push_sync(XrValue queue_value, XrValue value, int64_t shard_hint);
+XR_FUNC bool xr_aot_work_queue_try_pop(const XrAotContext *ctx, XrValue queue_value,
+                                       int64_t worker_hint, XrValue *out_value);
+XR_FUNC bool xr_aot_work_queue_try_pop_sync(XrValue queue_value, int64_t worker_hint,
+                                            XrValue *out_value);
 XR_FUNC XrAotResult xr_aot_work_queue_pop(const XrAotContext *ctx, XrValue queue_value,
                                           int64_t worker_hint, XrSlotRef out_slot);
 XR_FUNC XrAotResult xr_aot_work_queue_pop_resume(const XrAotContext *ctx, XrSlotRef out_slot);
 XR_FUNC XrValue xr_aot_work_queue_close(const XrAotContext *ctx, XrValue queue_value);
+XR_FUNC XrValue xr_aot_work_queue_close_sync(XrValue queue_value);
+XR_FUNC XrValue xr_aot_work_queue_length(const XrAotContext *ctx, XrValue queue_value);
+XR_FUNC XrValue xr_aot_work_queue_shard_count(const XrAotContext *ctx, XrValue queue_value);
 XR_FUNC XrValue xr_aot_work_queue_is_closed(const XrAotContext *ctx, XrValue queue_value);
+XR_FUNC XrValue xr_aot_work_queue_is_closed_sync(XrValue queue_value);
 XR_FUNC XrValue xr_aot_tuple_get(const XrAotContext *ctx, XrValue tuple_value, uint16_t index);
 XR_FUNC XrAotResult xr_aot_chan_send(const XrAotContext *ctx, XrValue channel_value,
                                      XrValue send_value, XrSlotRef result_slot, int64_t timeout_ms);

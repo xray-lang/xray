@@ -2156,8 +2156,8 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             emit_codegen_abort_aot_result(out);
             return;
         }
-        fprintf(out, "    XrValue _tuple_get_%u = xr_aot_tuple_get(ctx, ", v->id);
-        emit_vref(out, v->args[0]);
+        fprintf(out, "    XrValue _tuple_get_%u = xrt_tuple_get(", v->id);
+        emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
         fprintf(out, ", %u);\n", (unsigned) v->aux_int);
         if (cg_coro_value_has_storage(f, v)) {
             char tmp[32];
@@ -2226,6 +2226,27 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         if (cg_coro_value_has_storage(f, v)) {
             char tmp[32];
             snprintf(tmp, sizeof(tmp), "_chan_field_%u", v->id);
+            emit_assign_from_xrvalue_temp(out, v, tmp);
+        }
+        return;
+    }
+
+    if (v->op == XI_LOAD_FIELD && v->nargs >= 1 && cg_value_type_is_work_queue(v->args[0])) {
+        const char *field = (const char *) v->aux;
+        const char *helper = cg_work_queue_field_helper(field);
+        if (!helper) {
+            ctx->error = true;
+            fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT WorkQueue field '%s'\n",
+                    field ? field : "?");
+            emit_codegen_abort_aot_result(out);
+            return;
+        }
+        fprintf(out, "    XrValue _wq_field_%u = %s(ctx, ", v->id, helper);
+        emit_vref(out, v->args[0]);
+        fprintf(out, ");\n");
+        if (cg_coro_value_has_storage(f, v)) {
+            char tmp[32];
+            snprintf(tmp, sizeof(tmp), "_wq_field_%u", v->id);
             emit_assign_from_xrvalue_temp(out, v, tmp);
         }
         return;
@@ -2340,9 +2361,29 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
 
     if (cg_is_work_queue_method_call(v, "tryPop", 0) ||
         cg_is_work_queue_method_call(v, "tryPop", 1)) {
-        ctx->error = true;
-        fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT WorkQueue method 'tryPop'\n");
-        emit_codegen_abort_aot_result(out);
+        /* The runtime returns the popped value via out-param + an ok flag; the
+         * (value, ok) pair is packed here into an AOT-native tuple so downstream
+         * XI_TUPLE_GET reads it through xrt_tuple_get like every other AOT tuple.
+         * The popped value is bridged in case its element type is a heap object. */
+        fprintf(out, "    XrValue _wq_try_pop_val_%u = XR_NULL_VAL;\n", v->id);
+        fprintf(out, "    bool _wq_try_pop_ok_%u = xr_aot_work_queue_try_pop(ctx, ", v->id);
+        emit_vref(out, v->args[0]);
+        fprintf(out, ", ");
+        if (v->nargs >= 2)
+            emit_int64_arg(out, v->args[1]);
+        else
+            fprintf(out, "-1");
+        fprintf(out, ", &_wq_try_pop_val_%u);\n", v->id);
+        fprintf(
+            out,
+            "    XrValue _wq_try_pop_%u = xrt_tuple_make(2, (XrValue[]){"
+            "xr_aot_bridge_value_to_xrt(_wq_try_pop_val_%u), XR_FROM_BOOL(_wq_try_pop_ok_%u)});\n",
+            v->id, v->id, v->id);
+        if (cg_coro_value_has_storage(f, v)) {
+            char tmp[32];
+            snprintf(tmp, sizeof(tmp), "_wq_try_pop_%u", v->id);
+            emit_assign_from_xrvalue_temp(out, v, tmp);
+        }
         return;
     }
 

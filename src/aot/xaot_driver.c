@@ -31,6 +31,7 @@
 #include "../module/xmodule.h"
 #include "../base/xmalloc.h"
 #include "../base/xmemstream.h"
+#include "../base/xglobal_indices.h"
 #include "../ir/xi.h"
 #include "../ir/xi_pipeline.h"
 #include "../ir/xi_import_resolve.h"
@@ -170,6 +171,15 @@ static void scan_func_features(XiFunc *f, XaotFeatureSet *fs) {
                     break;
                 case XI_AWAIT:
                     fs->need_coro = true;
+                    break;
+                case XI_GET_BUILTIN:
+                    /* WorkQueue lowers through a generic builtin constructor call
+                     * rather than a dedicated XI op (unlike channels), so it must
+                     * be detected here. Any WorkQueue use pulls in the isolate /
+                     * scheduler runtime that codegen's xray_isolate_setup_full
+                     * (emitted for WorkQueue-bearing entries) depends on. */
+                    if (v->aux_int == XR_GLOBAL_VAR_WORKQUEUE)
+                        fs->need_coro = true;
                     break;
                 case XI_CALL_METHOD:
                     if (v->aux && strcmp((const char *) v->aux, "sleep") == 0 && v->nargs == 2) {
