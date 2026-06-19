@@ -114,3 +114,15 @@ XrValue xrt_regex_test(XrValue re_value, const char *text_data, int64_t text_len
     xrt_regex_object_t *obj = (xrt_regex_object_t *) re_value.ptr;
     return xr_regex_test(obj->regex, text_data, (int) text_len) ? XR_TRUE_VAL : XR_FALSE_VAL;
 }
+
+XrValue xrt_regex_count(XrValue re_value, const char *text_data, int64_t text_len) {
+    if (re_value.tag != XR_TAG_REGEX || !re_value.ptr || !text_data)
+        return XR_FROM_INT(0);
+    if (text_len < 0)
+        text_len = (int64_t) strlen(text_data);
+    if (text_len < 0 || text_len > (int64_t) INT_MAX)
+        return XR_FROM_INT(0);
+
+    xrt_regex_object_t *obj = (xrt_regex_object_t *) re_value.ptr;
+    return XR_FROM_INT((int64_t) xr_regex_count(obj->regex, text_data, (int) text_len));
+}

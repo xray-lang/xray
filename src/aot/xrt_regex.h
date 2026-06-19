@@ -30,6 +30,7 @@ XrValue xrt_regex_compile_with_flags(const char *pattern_data, int64_t pattern_l
                                      const char *flags_data, int64_t flags_len);
 XrValue xrt_regex_compile_default(const char *pattern_data, int64_t pattern_len);
 XrValue xrt_regex_test(XrValue re_value, const char *text_data, int64_t text_len);
+XrValue xrt_regex_count(XrValue re_value, const char *text_data, int64_t text_len);
 
 #ifdef XRT_ENABLE_REGEX
 static inline void xrt_regex_destroy_builtin(void *obj) {
