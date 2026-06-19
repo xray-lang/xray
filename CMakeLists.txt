@@ -1012,6 +1012,21 @@ if(BUILD_TESTS)
         TIMEOUT 120
     )
 
+    # Negative frontend/semantic cases: programs that must be rejected.
+    # Keeps ownership/in/ref diagnostics in the default CTest gate.
+    add_test(
+        NAME compile_error_tests
+        COMMAND ${CMAKE_COMMAND} -E env
+                XRAY=$<TARGET_FILE:xray>
+                bash
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/compile_errors/run_compile_error_tests.sh
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(compile_error_tests PROPERTIES
+        LABELS "frontend;negative;regression"
+        TIMEOUT 60
+    )
+
     # Cross-backend differential net: same .xr through VM / AOT must
     # produce byte-identical observable output. Safety net for the backend
     # unification work (tasks 108-118).
