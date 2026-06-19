@@ -22,6 +22,7 @@
 #include "../dap/xdap_controller.h"
 #include "../dap/xdap_transport.h"
 #include "../dap/xdap_protocol.h"
+#include "../dap/xdap_native.h"
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -29,6 +30,21 @@
 
 XR_FUNC int cmd_dap(const XrCliInvocation *inv) {
     XR_DCHECK(inv != NULL, "inv is NULL");
+
+    /* Native mode: hand off to the lldb-dap bridge. The bridge debugs a
+     * native AOT binary (xray build --native -g) at the source level via
+     * the toolchain debugger; the in-process interpreter controller below
+     * is not involved. Currently stdio-only. */
+    if (xr_cli_opt_bool(&inv->options, "native")) {
+        if (xr_cli_opt_present(&inv->options, "port")) {
+            xr_cli_error("dap", "--native currently supports stdio only (omit --port)");
+            return XR_CLI_EXIT_FAIL;
+        }
+        const char *self_exe = inv->ctx ? inv->ctx->program : NULL;
+        const char *debugger = xr_cli_opt_string(&inv->options, "debugger", NULL);
+        int rc = xdap_native_run(fileno(stdin), fileno(stdout), self_exe, debugger);
+        return (rc != 0) ? XR_CLI_EXIT_FAIL : XR_CLI_EXIT_OK;
+    }
 
     int tcp_port = -1; /* -1 means use stdio */
     bool port_set = xr_cli_opt_present(&inv->options, "port");

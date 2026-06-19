@@ -4,7 +4,7 @@
 #
 # Compiles tests/manual/iouring_completion_test.c against the built
 # libxray_core.a and runs it. Verifies the io_uring completion submit/reap
-# primitives (xr_netpoll_uring_submit_recv/_send). Skips cleanly when not on
+# primitives (xr_uring_ring_submit_recv/_send on a per-worker ring). Skips when not on
 # Linux or when liburing / the static lib is unavailable.
 #
 # In a container, io_uring syscalls must be permitted:

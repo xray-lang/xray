@@ -364,6 +364,22 @@ XrCoroutine *worker_poll_sources(XrWorker *worker) {
         }
     }
 
+#if defined(XR_OS_LINUX) && defined(XR_HAS_IO_URING)
+    // ===== Per-worker io_uring completion ring (zero contention) =====
+    // Drain cross-worker cancel requests first (submit cancels on our own ring),
+    // then reap completion CQEs. Both touch only this worker's ring.
+    if (p->local_poll.uring) {
+        xr_netpoll_drain_uring_cancel(p);
+        XrReadyList uring_ready = {0};
+        xr_uring_ring_reap(p->local_poll.uring, &uring_ready);
+        total_io_events += uring_ready.count;
+        XrCoroutine *claimed = worker_claim_io_ready_list(worker, uring_ready.head);
+        if (claimed) {
+            (void) xr_worker_push_lifo_batch(worker, claimed);
+        }
+    }
+#endif
+
     // ===== Shared netpoll (all workers, handles unbound fds) =====
     {
         XrReadyList ready = xr_netpoll_poll(&runtime->netpoll, 0);
@@ -751,6 +767,15 @@ static void worker_park(XrWorker *worker) {
     // Last-chance IO poll before sleep (avoids unnecessary futex wait)
     {
         XrReadyList ready = xr_netpoll_poll(&runtime->netpoll, 0);
+#if defined(XR_OS_LINUX) && defined(XR_HAS_IO_URING)
+        // Also flush+reap this worker's completion ring so a pending op SQE is
+        // submitted and a just-arrived CQE is picked up instead of waiting for
+        // the futex timeout.
+        if (worker->p.local_poll.uring) {
+            xr_netpoll_drain_uring_cancel(&worker->p);
+            xr_uring_ring_reap(worker->p.local_poll.uring, &ready);
+        }
+#endif
         if (ready.count > 0) {
             XrCoroutine *claimed = worker_claim_io_ready_list(worker, ready.head);
             if (!claimed)
@@ -799,11 +824,22 @@ park_recheck_work:
         if (timeout_ms < 1)
             timeout_ms = 1;
 
-        // Futex-based sleep with timeout
+        // Sleep with timeout. A worker holding outstanding io_uring completion
+        // ops blocks on its own ring so an arriving CQE resumes it immediately
+        // (the futex park cannot be woken by a completion); otherwise it
+        // futex-parks and is woken promptly by cross-worker work.
         uint32_t timeout_us = (uint32_t) (timeout_ms * 1000);
         atomic_store_explicit(&worker->m->park_state, XR_PARK_IDLE, memory_order_release);
         worker->p.stats.park_count++;
+#if defined(XR_OS_LINUX) && defined(XR_HAS_IO_URING)
+        if (worker->p.local_poll.uring && xr_uring_ring_inflight(worker->p.local_poll.uring) > 0) {
+            xr_uring_ring_wait(worker->p.local_poll.uring, (int64_t) timeout_us);
+        } else {
+            xr_park_futex_wait(&worker->m->park_state, XR_PARK_IDLE, timeout_us);
+        }
+#else
         xr_park_futex_wait(&worker->m->park_state, XR_PARK_IDLE, timeout_us);
+#endif
         worker->p.stats.unpark_count++;
     }
 
