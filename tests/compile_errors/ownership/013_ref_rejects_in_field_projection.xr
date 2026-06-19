@@ -1,0 +1,18 @@
+class Holder {
+    items: Array<int>
+
+    constructor() {
+        this.items = []
+    }
+}
+
+fn mutate(data: ref Array<int>) {
+    data.push(1)
+}
+
+fn view(holder: in Holder) {
+    mutate(holder.items)
+}
+
+let holder = new Holder()
+view(holder)

@@ -108,6 +108,93 @@ static bool xa_all_args_are_int(XrType **arg_types, int arg_count) {
     return true;
 }
 
+static uint8_t xa_call_param_mode(XrType *callee_type, int slot) {
+    if (!callee_type || !XR_TYPE_IS_FUNCTION(callee_type) || slot < 0 ||
+        slot >= callee_type->function.param_count || !callee_type->function.param_passing_modes)
+        return XR_PARAM_VALUE;
+    return callee_type->function.param_passing_modes[slot];
+}
+
+static const char *xa_call_param_mode_label(uint8_t mode) {
+    if (mode == XR_PARAM_IN)
+        return "in";
+    if (mode == XR_PARAM_REF)
+        return "ref";
+    return "value";
+}
+
+static XaSymbol *xa_call_variable_symbol(XaInferContext *ctx, AstNode *expr) {
+    if (!ctx || !ctx->analyzer || !expr || expr->type != AST_VARIABLE || !expr->as.variable.name)
+        return NULL;
+    return xa_scope_lookup(ctx->analyzer->current_scope, expr->as.variable.name);
+}
+
+static XaSymbol *xa_call_root_variable_symbol(XaInferContext *ctx, AstNode *expr) {
+    while (expr) {
+        if (expr->type == AST_VARIABLE)
+            return xa_call_variable_symbol(ctx, expr);
+        if (expr->type == AST_MEMBER_ACCESS) {
+            expr = expr->as.member_access.object;
+            continue;
+        }
+        if (expr->type == AST_INDEX_GET) {
+            expr = expr->as.index_get.array;
+            continue;
+        }
+        break;
+    }
+    return NULL;
+}
+
+static void xa_check_ref_argument_not_readonly(XaInferContext *ctx, AstNode *call_node,
+                                               AstNode *arg_node, int slot, uint8_t mode) {
+    if (!ctx || !ctx->analyzer || mode != XR_PARAM_REF || !arg_node)
+        return;
+    XaSymbol *root = xa_call_root_variable_symbol(ctx, arg_node);
+    if (!root || root->kind != XA_SYM_PARAMETER || root->passing_mode != XR_PARAM_IN)
+        return;
+
+    XrLocation loc = {.file = ctx->file_path,
+                      .line = arg_node->line ? arg_node->line : call_node->line,
+                      .column = arg_node->column ? arg_node->column : call_node->column};
+    char msg[192];
+    snprintf(msg, sizeof(msg),
+             "Cannot pass 'in' parameter '%s' to 'ref' parameter %d (readonly reference)",
+             root->name ? root->name : "?", slot + 1);
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_CONST_ASSIGN, msg,
+                               &loc);
+}
+
+static void xa_check_ref_argument_aliases(XaInferContext *ctx, AstNode *call_node,
+                                          uint32_t *arg_symbol_ids, const char **arg_names,
+                                          uint8_t *arg_modes, int arg_count) {
+    if (!ctx || !ctx->analyzer || !arg_symbol_ids || !arg_names || !arg_modes)
+        return;
+    for (int i = 0; i < arg_count; i++) {
+        if (arg_symbol_ids[i] == 0 || arg_modes[i] == XR_PARAM_VALUE)
+            continue;
+        for (int j = i + 1; j < arg_count; j++) {
+            if (arg_symbol_ids[j] == 0 || arg_modes[j] == XR_PARAM_VALUE)
+                continue;
+            if (arg_symbol_ids[i] != arg_symbol_ids[j])
+                continue;
+            if (arg_modes[i] != XR_PARAM_REF && arg_modes[j] != XR_PARAM_REF)
+                continue;
+
+            XrLocation loc = {
+                .file = ctx->file_path, .line = call_node->line, .column = call_node->column};
+            char msg[256];
+            snprintf(msg, sizeof(msg),
+                     "Cannot pass '%s' to both %s parameter %d and %s parameter %d in the same "
+                     "call",
+                     arg_names[i] ? arg_names[i] : "?", xa_call_param_mode_label(arg_modes[i]),
+                     i + 1, xa_call_param_mode_label(arg_modes[j]), j + 1);
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                       XR_ERR_ANALYZE_CONST_ASSIGN, msg, &loc);
+        }
+    }
+}
+
 static XrType *xa_math_runtime_shape_return_type(XaInferContext *ctx, CallExprNode *call,
                                                  XrType **arg_types, int arg_count) {
     const char *member = xa_math_module_call_member(ctx, call);
@@ -559,6 +646,14 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
     XrType **effective_arg_types = NULL;
     if (arg_count > 0)
         effective_arg_types = (XrType **) xr_calloc((size_t) arg_count, sizeof(XrType *));
+    uint32_t *effective_arg_symbol_ids = NULL;
+    const char **effective_arg_names = NULL;
+    uint8_t *effective_arg_modes = NULL;
+    if (arg_count > 0) {
+        effective_arg_symbol_ids = (uint32_t *) xr_calloc((size_t) arg_count, sizeof(uint32_t));
+        effective_arg_names = (const char **) xr_calloc((size_t) arg_count, sizeof(const char *));
+        effective_arg_modes = (uint8_t *) xr_calloc((size_t) arg_count, sizeof(uint8_t));
+    }
 
     // Check argument count (use min_params for functions with default parameters)
     int min_params = callee_type->function.min_params;
@@ -640,6 +735,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                 XrType *arg_type = src->tuple.element_types[j];
                 if (effective_arg_types && slot < arg_count)
                     effective_arg_types[slot] = arg_type;
+                if (effective_arg_modes && slot < arg_count)
+                    effective_arg_modes[slot] = xa_call_param_mode(callee_type, slot);
                 if (slot >= param_count)
                     continue;
                 XrType *param_type = param_types ? param_types[slot] : NULL;
@@ -667,6 +764,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             XrType *arg_type = xa_visit_infer_expr(ctx, arg_node);
             if (effective_arg_types && slot < arg_count)
                 effective_arg_types[slot] = arg_type;
+            if (effective_arg_modes && slot < arg_count)
+                effective_arg_modes[slot] = xa_call_param_mode(callee_type, slot);
             slot++;
             continue;
         }
@@ -680,6 +779,17 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         ctx->expected_type = saved_expected;
         if (effective_arg_types && slot < arg_count)
             effective_arg_types[slot] = arg_type;
+        uint8_t param_mode = xa_call_param_mode(callee_type, slot);
+        if (effective_arg_modes && slot < arg_count)
+            effective_arg_modes[slot] = param_mode;
+        xa_check_ref_argument_not_readonly(ctx, node, arg_node, slot, param_mode);
+        if (param_mode == XR_PARAM_IN || param_mode == XR_PARAM_REF) {
+            XaSymbol *arg_sym = xa_call_variable_symbol(ctx, arg_node);
+            if (arg_sym && effective_arg_symbol_ids && effective_arg_names && slot < arg_count) {
+                effective_arg_symbol_ids[slot] = arg_sym->id;
+                effective_arg_names[slot] = arg_sym->name;
+            }
+        }
 
         if (param_type && !XR_TYPE_IS_UNKNOWN(param_type)) {
             XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
@@ -697,6 +807,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         }
         slot++;
     }
+    xa_check_ref_argument_aliases(ctx, node, effective_arg_symbol_ids, effective_arg_names,
+                                  effective_arg_modes, arg_count);
 
     // Restore callback context
     ctx->callback_element_type = saved_elem_type;
@@ -855,5 +967,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
 
     XrType *final_type = return_type ? return_type : xr_type_new_unknown(NULL);
     xr_free(effective_arg_types);
+    xr_free(effective_arg_symbol_ids);
+    xr_free(effective_arg_names);
+    xr_free(effective_arg_modes);
     return final_type;
 }

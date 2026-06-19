@@ -1,0 +1,7 @@
+fn mutate_pair(left: ref Array<int>, right: ref Array<int>) {
+    left.push(1)
+    right.push(2)
+}
+
+let values: Array<int> = []
+mutate_pair(values, values)
