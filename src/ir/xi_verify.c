@@ -14,6 +14,7 @@
 #include "xi_verify.h"
 #include "xi_effect.h"
 #include "xi_backend.h"
+#include "xi_coro_analyze.h"
 #include "xi_ops_gen.h"
 #include "xi_verify_gen.h"
 #include "xi_op_name.h"
@@ -1030,6 +1031,187 @@ static void verify_narrow_before_typed_store(VerifyCtx *ctx, const XiFunc *f) {
     }
 }
 
+/* ========== Check 18: Coroutine Plan Consistency ========== */
+
+static bool coro_plan_value_belongs_to_func(const XiFunc *f, const XiValue *target) {
+    if (!f || !target)
+        return false;
+
+    for (uint16_t i = 0; i < f->nparams; i++) {
+        if (f->params && f->params[i] == target)
+            return true;
+    }
+
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        const XiBlock *blk = f->blocks[b];
+        if (!blk)
+            continue;
+        if (blk->control == target)
+            return true;
+        for (XiPhi *phi = blk->phis; phi; phi = phi->next) {
+            if (&phi->value == target)
+                return true;
+        }
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            if (blk->values[i] == target)
+                return true;
+        }
+    }
+
+    return false;
+}
+
+static bool coro_plan_has_slot_for_value(const XiCoroPlan *plan, const XiValue *value) {
+    if (!plan || !value || !plan->slots)
+        return false;
+    for (uint32_t i = 0; i < plan->nslots; i++) {
+        if (plan->slots[i].value == value)
+            return true;
+    }
+    return false;
+}
+
+static void verify_coro_plan(VerifyCtx *ctx, const XiFunc *f) {
+    if (ctx->failed || !f->coro_plan)
+        return;
+
+    const XiCoroPlan *plan = f->coro_plan;
+    if (plan->is_coroutine != (plan->nstates > 0)) {
+        verr(ctx,
+             "func '%s': coro plan is_coroutine=%u but nstates=%u "
+             "(expected is_coroutine == nstates>0)",
+             f->name, (unsigned) plan->is_coroutine, plan->nstates);
+        return;
+    }
+    if (plan->nstates > 0 && !plan->points) {
+        verr(ctx, "func '%s': coro plan has %u states but NULL points", f->name, plan->nstates);
+        return;
+    }
+    if (plan->nslots > 0 && !plan->slots) {
+        verr(ctx, "func '%s': coro plan has %u slots but NULL slots", f->name, plan->nslots);
+        return;
+    }
+
+    for (uint32_t i = 0; i < plan->nstates; i++) {
+        const XiCoroSuspendPoint *point = &plan->points[i];
+        if (point->state_id != i + 1) {
+            verr(ctx, "func '%s': coro point[%u] has state_id=%u (expected %u)", f->name, i,
+                 point->state_id, i + 1);
+            return;
+        }
+        if (!point->op) {
+            verr(ctx, "func '%s': coro point[%u] has NULL op", f->name, i);
+            return;
+        }
+        if (!coro_plan_value_belongs_to_func(f, point->op)) {
+            verr(ctx, "func '%s': coro point[%u] op v%u does not belong to function", f->name, i,
+                 point->op->id);
+            return;
+        }
+        if (point->kind > XI_CORO_SUSP_CALL) {
+            verr(ctx, "func '%s': coro point[%u] has invalid kind %u", f->name, i,
+                 (unsigned) point->kind);
+            return;
+        }
+        for (uint32_t j = 0; j < i; j++) {
+            if (plan->points[j].op == point->op) {
+                verr(ctx, "func '%s': coro point[%u] duplicates point[%u] op v%u", f->name, i, j,
+                     point->op->id);
+                return;
+            }
+        }
+        if (point->nlive > 0 && !point->live) {
+            verr(ctx, "func '%s': coro point[%u] has %u live values but NULL live set", f->name, i,
+                 point->nlive);
+            return;
+        }
+        for (uint32_t j = 0; j < point->nlive; j++) {
+            XiValue *live = point->live[j];
+            if (!live) {
+                verr(ctx, "func '%s': coro point[%u] live[%u] is NULL", f->name, i, j);
+                return;
+            }
+            if (!coro_plan_value_belongs_to_func(f, live)) {
+                verr(ctx, "func '%s': coro point[%u] live[%u] v%u does not belong to function",
+                     f->name, i, j, live->id);
+                return;
+            }
+            if (!coro_plan_has_slot_for_value(plan, live)) {
+                verr(ctx, "func '%s': coro point[%u] live[%u] v%u has no frame slot", f->name, i, j,
+                     live->id);
+                return;
+            }
+        }
+    }
+
+    uint32_t roots = 0;
+    uint32_t releases = 0;
+    for (uint32_t i = 0; i < plan->nslots; i++) {
+        const XiCoroSlot *slot = &plan->slots[i];
+        if (!slot->value) {
+            verr(ctx, "func '%s': coro slot[%u] has NULL value", f->name, i);
+            return;
+        }
+        if (!coro_plan_value_belongs_to_func(f, slot->value)) {
+            verr(ctx, "func '%s': coro slot[%u] v%u does not belong to function", f->name, i,
+                 slot->value->id);
+            return;
+        }
+        for (uint32_t j = 0; j < i; j++) {
+            if (plan->slots[j].value == slot->value) {
+                verr(ctx, "func '%s': coro slot[%u] duplicates slot[%u] value v%u", f->name, i, j,
+                     slot->value->id);
+                return;
+            }
+        }
+        if (slot->kind > XI_CORO_SLOT_VALUE) {
+            verr(ctx, "func '%s': coro slot[%u] has invalid kind %u", f->name, i,
+                 (unsigned) slot->kind);
+            return;
+        }
+        if (slot->type != slot->value->type) {
+            verr(ctx, "func '%s': coro slot[%u] v%u type does not match value type", f->name, i,
+                 slot->value->id);
+            return;
+        }
+        if (slot->logical_rep > XR_REP_STR) {
+            verr(ctx, "func '%s': coro slot[%u] v%u has invalid logical_rep %u", f->name, i,
+                 slot->value->id, (unsigned) slot->logical_rep);
+            return;
+        }
+        if (slot->frame_root && !slot->is_root) {
+            verr(ctx, "func '%s': coro slot[%u] v%u is frame_root without is_root", f->name, i,
+                 slot->value->id);
+            return;
+        }
+        if (slot->frame_release && !slot->needs_release) {
+            verr(ctx, "func '%s': coro slot[%u] v%u is frame_release without needs_release",
+                 f->name, i, slot->value->id);
+            return;
+        }
+        if (slot->frame_release && !slot->live_across) {
+            verr(ctx, "func '%s': coro slot[%u] v%u is frame_release without live_across", f->name,
+                 i, slot->value->id);
+            return;
+        }
+        if (slot->frame_root)
+            roots++;
+        if (slot->frame_release)
+            releases++;
+    }
+
+    if (plan->root_count != roots) {
+        verr(ctx, "func '%s': coro root_count=%u but slots contain %u frame roots", f->name,
+             plan->root_count, roots);
+        return;
+    }
+    if (plan->release_count != releases) {
+        verr(ctx, "func '%s': coro release_count=%u but slots contain %u frame releases", f->name,
+             plan->release_count, releases);
+        return;
+    }
+}
+
 /* ========== Public API ========== */
 
 XR_FUNC bool xi_verify(const XiFunc *f, char *errbuf, int errbuf_size) {
@@ -1123,6 +1305,11 @@ XR_FUNC bool xi_verify(const XiFunc *f, char *errbuf, int errbuf_size) {
     /* Tail call safety: only on call ops with valid callee */
     if (!ctx.failed) {
         verify_tail_calls(&ctx, f);
+    }
+
+    /* Coroutine plan consistency, when a pass has attached one. */
+    if (!ctx.failed) {
+        verify_coro_plan(&ctx, f);
     }
 
     /* Channel try ops check is now covered by verify_effect_flags */
