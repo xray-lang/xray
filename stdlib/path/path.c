@@ -257,47 +257,69 @@ static XrValue path_normalize(XrayIsolate *X, XrValue *args, int argc) {
     return ret;
 }
 
-// resolve(...) - Resolve to absolute path.
-//
-// Unlike the previous implementation this grows dynamically and accepts any
-// path length, and it recognises the platform-specific separator set
-// (backslash on Windows) through IS_SEP().
+static XrValue path_resolve_join_normalized(XrayIsolate *X, const char **parts, const size_t *lens,
+                                            size_t count) {
+    size_t joined_len = 0;
+    if (!xr_path_core_join_len(parts, lens, count, &joined_len))
+        return xr_null();
+    char *joined = (char *) xr_malloc(joined_len + 1);
+    if (!joined)
+        return xr_null();
+    xr_path_core_join_write(parts, lens, count, joined);
+
+    char *normalized = NULL;
+    size_t normalized_len = 0;
+    if (!path_normalize_alloc(joined, joined_len, &normalized, &normalized_len)) {
+        xr_free(joined);
+        return xr_null();
+    }
+    XrValue ret = xrs_string_value_n(X, normalized, normalized_len);
+    xr_free(normalized);
+    xr_free(joined);
+    return ret;
+}
+
 static XrValue path_resolve(XrayIsolate *X, XrValue *args, int argc) {
+    enum {
+        PATH_RESOLVE_STACK_PARTS = 17
+    };
+    const char *stack_parts[PATH_RESOLVE_STACK_PARTS];
+    size_t stack_lens[PATH_RESOLVE_STACK_PARTS];
+    const char **parts = stack_parts;
+    size_t *lens = stack_lens;
+    void *heap_buf = NULL;
+    size_t total = (size_t) argc + 1;
+    if (total > PATH_RESOLVE_STACK_PARTS) {
+        heap_buf = xr_malloc(sizeof(char *) * total + sizeof(size_t) * total);
+        if (!heap_buf)
+            return xr_null();
+        parts = (const char **) heap_buf;
+        lens = (size_t *) (parts + total);
+    }
+
+    for (int i = 0; i < argc; i++) {
+        size_t len = 0;
+        parts[i + 1] = xrs_string_arg(args[i], &len);
+        lens[i + 1] = parts[i + 1] ? len : 0;
+    }
+
+    if (xr_path_core_join_has_absolute(parts + 1, lens + 1, (size_t) argc)) {
+        XrValue ret = path_resolve_join_normalized(X, parts + 1, lens + 1, (size_t) argc);
+        xr_free(heap_buf);
+        return ret;
+    }
+
     char cwd[XR_PATH_MAX];
     if (xr_fs_getcwd(cwd, sizeof(cwd)) == NULL) {
         cwd[0] = PATH_SEP;
         cwd[1] = '\0';
     }
 
-    XrCtxBuf result;
-    xr_ctxbuf_init(&result, 256);
-    XR_DCHECK(result.data != NULL, "path_resolve: ctxbuf init must succeed");
-    xr_ctxbuf_append_cstr(&result, cwd);
-
-    for (int i = 0; i < argc; i++) {
-        const char *part = xrs_string_arg(args[i], NULL);
-        if (!part || part[0] == '\0')
-            continue;
-
-        if (IS_SEP(part[0])) {
-            // Absolute path resets the accumulated buffer.
-            result.len = 0;
-            if (result.data)
-                result.data[0] = '\0';
-            xr_ctxbuf_append_cstr(&result, part);
-        } else {
-            // Ensure a single separator between segments.
-            if (result.len > 0 && !IS_SEP(result.data[result.len - 1])) {
-                xr_ctxbuf_putc(&result, PATH_SEP);
-            }
-            xr_ctxbuf_append_cstr(&result, part);
-        }
-    }
-
-    // Normalize result using the existing path_normalize binding.
-    XrValue path_val = xrs_string_value_n(X, result.data ? result.data : "", result.len);
-    xr_ctxbuf_free(&result);
-    return path_normalize(X, &path_val, 1);
+    parts[0] = cwd;
+    lens[0] = strlen(cwd);
+    XrValue ret = path_resolve_join_normalized(X, parts, lens, total);
+    xr_free(heap_buf);
+    return ret;
 }
 
 // relative(from, to) - Compute relative path

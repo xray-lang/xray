@@ -31,22 +31,41 @@ static inline const char *xr_path_core_sep_str(void) {
 
 static inline bool xr_path_core_is_absolute(const char *path, size_t len);
 
+static inline bool xr_path_core_join_has_absolute(const char **parts, const size_t *lens,
+                                                  size_t count) {
+    for (size_t i = 0; i < count; i++) {
+        const char *part = parts ? parts[i] : NULL;
+        size_t len = lens ? lens[i] : 0;
+        if (part && len > 0 && xr_path_core_is_absolute(part, len))
+            return true;
+    }
+    return false;
+}
+
+static inline size_t xr_path_core_join_start_index(const char **parts, const size_t *lens,
+                                                   size_t count) {
+    size_t start = 0;
+    for (size_t i = 0; i < count; i++) {
+        const char *part = parts ? parts[i] : NULL;
+        size_t len = lens ? lens[i] : 0;
+        if (part && len > 0 && xr_path_core_is_absolute(part, len))
+            start = i;
+    }
+    return start;
+}
+
 static inline bool xr_path_core_join_len(const char **parts, const size_t *lens, size_t count,
                                          size_t *out_len) {
     if (!out_len)
         return false;
     size_t pos = 0;
     char last = '\0';
-    for (size_t i = 0; i < count; i++) {
+    size_t start_index = xr_path_core_join_start_index(parts, lens, count);
+    for (size_t i = start_index; i < count; i++) {
         const char *part = parts ? parts[i] : NULL;
         size_t len = lens ? lens[i] : 0;
         if (!part || len == 0)
             continue;
-
-        if (pos > 0 && xr_path_core_is_absolute(part, len)) {
-            pos = 0;
-            last = '\0';
-        }
 
         if (pos > 0 && !xr_path_core_is_sep(last) && !xr_path_core_is_sep(part[0])) {
             pos++;
@@ -69,14 +88,12 @@ static inline bool xr_path_core_join_len(const char **parts, const size_t *lens,
 static inline void xr_path_core_join_write(const char **parts, const size_t *lens, size_t count,
                                            char *out) {
     size_t pos = 0;
-    for (size_t i = 0; i < count; i++) {
+    size_t start_index = xr_path_core_join_start_index(parts, lens, count);
+    for (size_t i = start_index; i < count; i++) {
         const char *part = parts ? parts[i] : NULL;
         size_t len = lens ? lens[i] : 0;
         if (!part || len == 0)
             continue;
-
-        if (pos > 0 && xr_path_core_is_absolute(part, len))
-            pos = 0;
 
         if (pos > 0 && !xr_path_core_is_sep(out[pos - 1]) && !xr_path_core_is_sep(part[0]))
             out[pos++] = '/';
