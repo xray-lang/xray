@@ -700,6 +700,14 @@ set(CORE_ALL_SOURCES
 add_library(xray_core STATIC ${CORE_ALL_SOURCES})
 add_dependencies(xray_core gen-xi-ops gen-xi-verify gen-xi-lowering gen-aot-metadata)
 
+add_library(xray_aot_core STATIC
+    src/aot/xrt_regex_core.c
+    src/base/xarena.c
+    src/base/xlog.c
+    src/base/xunicode.c
+    stdlib/regex/xregex_parse.c
+)
+
 if(CMAKE_BUILD_TYPE STREQUAL "Release" AND MSVC)
     set_source_files_properties(
         src/vm/xvm.c
@@ -911,6 +919,7 @@ else()
 endif()
 
 add_executable(xray ${XRAY_CLI_SOURCES})
+add_dependencies(xray xray_aot_core)
 
 target_link_libraries(xray PRIVATE xray_core)
 if(READLINE_LIB)
@@ -1228,7 +1237,7 @@ install(TARGETS xray
 )
 
 # Install static library (for xray build)
-install(TARGETS xray_core
+install(TARGETS xray_core xray_aot_core
     ARCHIVE DESTINATION lib
 )
 

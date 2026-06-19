@@ -376,6 +376,17 @@ static bool add_stdlib_symbol_manifest_entries(XaotLinkManifest *manifest,
     return true;
 }
 
+static bool add_stdlib_core_object_manifest_entries(XaotLinkManifest *manifest,
+                                                    const XaotFeatureSet *features) {
+    for (uint16_t i = 0; i < features->n_stdlib_symbols; i++) {
+        const char *symbol = features->stdlib_symbols[i];
+        if (strcmp(symbol, "regex.isValid") == 0 &&
+            !xaot_link_manifest_add_unique(manifest, XAOT_LINK_STDLIB_OBJECT, "regex.isValid"))
+            return false;
+    }
+    return true;
+}
+
 static bool stdlib_set_needs_runtime_provider(XaotStdlibSet stdlib) {
     return (stdlib & ~(XAOT_STDLIB_MATH | XAOT_STDLIB_PATH | XAOT_STDLIB_ENCODING |
                        XAOT_STDLIB_BASE64 | XAOT_STDLIB_URL | XAOT_STDLIB_COMPRESS |
@@ -457,6 +468,8 @@ static bool build_link_manifest(const XaotFeatureSet *features, XaotLinkManifest
     }
 
     if (!add_stdlib_manifest_entries(manifest, features->stdlib))
+        goto done;
+    if (!add_stdlib_core_object_manifest_entries(manifest, features))
         goto done;
     if (!add_stdlib_symbol_manifest_entries(manifest, features))
         goto done;

@@ -243,6 +243,34 @@ static bool xaot_cli_link_add_runtime_object(XaotCliLinkCommand *cmd, const char
     return xaot_cli_link_add_prefixed(cmd, "-l", value, err, err_size);
 }
 
+static bool xaot_cli_stdlib_object_needs_aot_core(const char *value) {
+    return value && strcmp(value, "regex.isValid") == 0;
+}
+
+static bool xaot_cli_link_add_stdlib_object(XaotCliLinkCommand *cmd, const char *value, char *err,
+                                            size_t err_size) {
+    size_t len;
+
+    if (!value || !value[0] || xaot_cli_stdlib_object_needs_aot_core(value))
+        return true;
+    len = strlen(value);
+    if (strchr(value, '/') || (len > 2 && strcmp(value + len - 2, ".o") == 0) ||
+        (len > 2 && strcmp(value + len - 2, ".a") == 0) ||
+        (len > 2 && strcmp(value + len - 2, ".c") == 0))
+        return xaot_cli_link_add_arg(cmd, value, err, err_size);
+    return true;
+}
+
+static bool xaot_cli_manifest_needs_aot_core(const XaotLinkManifest *manifest) {
+    if (!manifest)
+        return false;
+    for (uint32_t i = 0; i < manifest->n_stdlib_objects; i++) {
+        if (xaot_cli_stdlib_object_needs_aot_core(manifest->stdlib_objects[i]))
+            return true;
+    }
+    return false;
+}
+
 static bool xaot_cli_link_ld_flag_supported(const XrCliBuildTarget *target, const char *flag) {
     if (!target || !flag)
         return true;
@@ -491,6 +519,7 @@ static bool xaot_cli_build_link_command(const XrCliToolchainPlan *plan,
     char runtime_include[600];
     char lib_path[512];
     bool needs_runtime;
+    bool needs_aot_core;
     uint32_t i;
     int in;
 
@@ -504,6 +533,7 @@ static bool xaot_cli_build_link_command(const XrCliToolchainPlan *plan,
     }
 
     needs_runtime = xaot_link_manifest_needs_runtime(manifest);
+    needs_aot_core = xaot_cli_manifest_needs_aot_core(manifest);
     if (needs_runtime && !target->is_native) {
         snprintf(err, err_size,
                  "cross target '%s' cannot consume runtime objects from AOT link manifest yet",
@@ -568,7 +598,7 @@ static bool xaot_cli_build_link_command(const XrCliToolchainPlan *plan,
             !xaot_cli_link_add_arg(cmd, "-fdata-sections", err, err_size))
             return false;
     }
-    if (needs_runtime &&
+    if ((needs_runtime || needs_aot_core) &&
         !xaot_cli_link_add_prefixed(
             cmd, "-L", resolve_xray_lib_path(sysroot, lib_path, sizeof(lib_path)), err, err_size))
         return false;
@@ -576,6 +606,12 @@ static bool xaot_cli_build_link_command(const XrCliToolchainPlan *plan,
         if (!xaot_cli_link_add_runtime_object(cmd, manifest->runtime_objects[i], err, err_size))
             return false;
     }
+    for (i = 0; i < manifest->n_stdlib_objects; i++) {
+        if (!xaot_cli_link_add_stdlib_object(cmd, manifest->stdlib_objects[i], err, err_size))
+            return false;
+    }
+    if (needs_aot_core && !xaot_cli_link_add_runtime_object(cmd, "xray_aot_core", err, err_size))
+        return false;
     for (i = 0; i < manifest->n_system_libs; i++) {
         if (!xaot_cli_link_add_prefixed(cmd, "-l", manifest->system_libs[i], err, err_size))
             return false;

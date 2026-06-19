@@ -91,6 +91,7 @@ static const CgAotStdlibMethod g_aot_stdlib_methods[] = {
     {"compress", "adler32", 1, "xrt_compress_adler32", "s", CG_AOT_RET_VALUE, NULL},
     {"crypto", "timingSafeEqual", 2, "xrt_crypto_timing_safe_equal", "ss", CG_AOT_RET_VALUE, NULL},
     {"regex", "escape", 1, "xrt_regex_escape", "s", CG_AOT_RET_VALUE, NULL},
+    {"regex", "isValid", 1, "xrt_regex_is_valid", "s", CG_AOT_RET_VALUE, NULL},
 };
 
 #define CG_AOT_STDLIB_METHOD_COUNT                                                                 \

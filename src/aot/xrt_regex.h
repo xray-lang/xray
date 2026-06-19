@@ -11,9 +11,14 @@
 #ifndef XRT_REGEX_H
 #define XRT_REGEX_H
 
+#include <stdbool.h>
+#include <stdint.h>
+
 #include "../shared/xr_regex_core.h"
 #include "xrt_arc.h"
 #include "xrt_value.h"
+
+bool xrt_regex_is_valid_core(const char *data, int64_t len);
 
 static inline XrValue xrt_regex_escape(const char *data, int64_t len) {
     if (!data && len != 0)
@@ -29,6 +34,10 @@ static inline XrValue xrt_regex_escape(const char *data, int64_t len) {
         return XR_NULL_VAL;
     }
     return result;
+}
+
+static inline XrValue xrt_regex_is_valid(const char *data, int64_t len) {
+    return xrt_regex_is_valid_core(data, len) ? XR_TRUE_VAL : XR_FALSE_VAL;
 }
 
 #endif  // XRT_REGEX_H
