@@ -265,6 +265,10 @@ static void emit_bridge_stored_tagged_value(FILE *out, const XiValue *value) {
     fprintf(out, ");\n");
 }
 
+static bool cg_coro_value_terminates_c_path(const XiValue *v) {
+    return v && (v->op == XI_ERR_RETURN || v->op == XI_THROW);
+}
+
 static void emit_assign_coro_param_from_xrvalue(FILE *out, const XiFunc *f, uint16_t index) {
     XrRep rep = cg_rep(f->params[index]);
     fprintf(out, "    f->p%u = ", index);
@@ -1167,6 +1171,27 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             fprintf(out, "    xrt_defer_push(&f->_xrt_ds, ");
             emit_boxed_vref(out, v->args[0]);
             fprintf(out, ");\n");
+        }
+        return;
+    }
+
+    if (v->op == XI_ERR_RETURN || v->op == XI_THROW) {
+        if (v->nargs < 1) {
+            fprintf(out, "    return xr_aot_error(XR_NULL_VAL, %s);\n",
+                    v->op == XI_ERR_RETURN ? "true" : "false");
+            return;
+        }
+        if (cg_func_has_defer_stmt(f)) {
+            fprintf(out, "    XrValue _xrt_err_%u = ", v->id);
+            emit_boxed_vref(out, v->args[0]);
+            fprintf(out, ";\n");
+            fprintf(out, "    xrt_defer_run(&f->_xrt_ds);\n");
+            fprintf(out, "    return xr_aot_error(_xrt_err_%u, %s);\n", v->id,
+                    v->op == XI_ERR_RETURN ? "true" : "false");
+        } else {
+            fprintf(out, "    return xr_aot_error(");
+            emit_boxed_vref(out, v->args[0]);
+            fprintf(out, ", %s);\n", v->op == XI_ERR_RETURN ? "true" : "false");
         }
         return;
     }
@@ -2400,8 +2425,11 @@ static void emit_coro_block(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
 
     for (uint32_t i = 0; i < blk->nvalues; i++) {
         XiValue *v = blk->values[i];
-        if (v)
+        if (v) {
             emit_coro_value_stmt(ctx, out, f, v, prefix, state_id);
+            if (cg_coro_value_terminates_c_path(v))
+                return;
+        }
     }
 
     switch (blk->kind) {
