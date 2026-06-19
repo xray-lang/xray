@@ -1798,24 +1798,28 @@ TEST(cgen_class_bool_key_map_uses_specialized_direct_helpers) {
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "class bool-key Map direct helpers should generate");
     const char *code_end = code + strlen(code);
-    assert(contains(code, "xrt_map_new_typed(0, XR_ELEM_BOOL, XR_ELEM_F32)"));
+    /* Map<bool,i64|f32> lowers to the 2-slot boolmap representation: created via
+     * xrt_boolmap_new_typed and probed with the dispatch-free boolmap helpers. */
+    assert(contains(code, "xrt_boolmap_new_typed(0, XR_ELEM_F32)"));
     assert(count_between(code, code_end, "xrt_map_set_bool_f32_typed(") == 2 &&
            count_between(code, code_end, "xrt_map_delete_bool_f32_typed(") == 1);
-    assert(contains(code, "xrt_map_new_typed(0, XR_ELEM_BOOL, XR_ELEM_I64)"));
+    assert(contains(code, "xrt_boolmap_new_typed(0, XR_ELEM_I64)"));
     assert(count_between(code, code_end, "xrt_map_set_bool_i64_typed(") == 2 &&
            count_between(code, code_end, "xrt_map_delete_bool_i64_typed(") == 1);
-    /* Each guarded get loads a typed value regardless of has+get probe fusion
-     * (a fused has writes the slot index that the get reads back; an unfused has
-     * keeps its own typed bool probe). The exact split of bool find vs has probes
-     * depends on block shape, so assert the fusion-independent invariants: every
-     * get is a typed value load, bool lookups stay typed, and nothing is boxed. */
-    assert(count_between(code, code_end, "xrt_map_get_f64_value_typed(") == 2 &&
-           count_between(code, code_end, "xrt_map_get_i64_value_typed(") == 2 &&
-           "bool-key Map.get should load typed values for both element types");
-    assert(count_between(code, code_end, "xrt_map_find_bool_typed(") >= 2 &&
-           "guarded bool-key gets should probe via the typed bool find helper");
+    /* Each guarded get loads a slot value through the boolmap value helpers,
+     * regardless of has+get probe fusion (a fused has writes the slot index the
+     * get reads back; an unfused has keeps its own boolmap find). */
+    assert(count_between(code, code_end, "xrt_boolmap_value_f64(") == 2 &&
+           count_between(code, code_end, "xrt_boolmap_value_i64(") == 2 &&
+           "bool-key Map.get should load values via the boolmap helpers");
+    assert(count_between(code, code_end, "xrt_boolmap_find(") >= 2 &&
+           "guarded bool-key gets should probe via the boolmap find helper");
     assert(!contains(code, "xrt_map_has(") && !contains(code, "xrt_map_get(") &&
            "bool-key Map hot methods must not fall back to boxed map helpers");
+    assert(!contains(code, "xrt_map_find_bool_typed(") &&
+           !contains(code, "xrt_map_get_i64_value_typed(") &&
+           !contains(code, "xrt_map_get_f64_value_typed(") &&
+           "Map<bool,i64|f32> must use the boolmap representation, not the generic typed probes");
     assert(!contains(code, "xrt_map_set_i64_i64_typed(") &&
            !contains(code, "xrt_map_find_i64_typed(") &&
            !contains(code, "xrt_map_get_i64_i64_typed(") &&

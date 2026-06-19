@@ -1,0 +1,72 @@
+// anchor: map-bool-key-2slot-specialization
+// Map<bool,scalar> uses the AOT 2-slot boolmap representation; VM keeps a
+// generic map. Their observable behavior (insertion order, get/has/delete/size,
+// keys()/values()/for-in, interop through a generic-typed parameter, float32
+// narrowing) must be byte-identical across backends.
+
+fn dump_int(m: Map<bool, int>) {
+    print("size=" + m.size.toString())
+    print("has true=" + m.has(true).toString() + " has false=" + m.has(false).toString())
+    for (k, v in m) { print("pair " + k.toString() + "=" + v.toString()) }
+    for (k in m.keys()) { print("key " + k.toString()) }
+    for (v in m.values()) { print("val " + v.toString()) }
+}
+
+print("-- insert false then true --")
+let a: Map<bool, int> = #{}
+a.set(false, 34)
+a.set(true, 21)
+dump_int(a)
+print("get true=" + a.get(true).toString() + " get false=" + a.get(false).toString())
+
+print("-- insert true then false --")
+let b: Map<bool, int> = #{}
+b.set(true, 7)
+b.set(false, 9)
+dump_int(b)
+
+print("-- update keeps position --")
+b.set(true, 70)
+dump_int(b)
+
+print("-- delete + reinsert moves to end --")
+b.delete(true)
+b.set(true, 700)
+dump_int(b)
+
+print("-- delete to empty --")
+b.delete(true)
+b.delete(false)
+print("size=" + b.size.toString() + " has true=" + b.has(true).toString())
+
+print("-- float32 narrowing --")
+let c: Map<bool, float32> = #{}
+c.set(true, 1.5)
+c.set(false, 2.25)
+print("csize=" + c.size.toString())
+print("cget true=" + c.get(true).toString() + " cget false=" + c.get(false).toString())
+for (k, v in c) { print("cf " + k.toString() + "=" + v.toString()) }
+
+class BoolIntMapBag {
+    values: Map<bool, int>
+    constructor() {
+        let values: Map<bool, int> = #{}
+        this.values = values
+    }
+    fill() -> int {
+        this.values.set(true, 21)
+        this.values.set(false, 34)
+        return this.values.size
+    }
+    probe() -> int {
+        let sum = 0
+        if (this.values.has(true)) { sum = sum + this.values.get(true) }
+        if (this.values.has(false)) { sum = sum + this.values.get(false) }
+        return sum
+    }
+}
+
+print("-- class field --")
+let bag = BoolIntMapBag()
+print("fill=" + bag.fill().toString())
+print("probe=" + bag.probe().toString())

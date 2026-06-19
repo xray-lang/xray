@@ -199,19 +199,27 @@ static bool emit_class_native_map_length_expr(XiCgenCtx *ctx, FILE *out, const X
     if (!cg_class_native_receiver_ref_field(ctx, f, v->args[0], XR_NATIVE_MAP_REF, &info, &idx))
         return false;
     const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
+    bool boolmap = cg_map_type_is_boolmap_ctx(ctx, v->args[0]->type);
+    if (boolmap)
+        fprintf(out, "xrt_boolmap_len((xrt_boolmap_t*)");
     emit_class_native_field_ref(ctx, out, info.class_data, "p0", idx);
-    fprintf(out, "->len");
+    fprintf(out, "%s", boolmap ? ")" : "->len");
     emit_conversion_suffix(out, conv_suffix);
     return true;
 }
 
 static const char *cg_map_find_helper(const CgMapElemInfo *map_info) {
+    if (cg_map_info_is_boolmap(map_info))
+        return "xrt_boolmap_find";
     if (strcmp(map_info->key.elem_name, "XR_ELEM_BOOL") == 0)
         return "xrt_map_find_bool_typed";
     return map_info->key.rep == XR_REP_F64 ? "xrt_map_find_f64_typed" : "xrt_map_find_i64_typed";
 }
 
 static const char *cg_map_value_helper(const CgMapElemInfo *map_info) {
+    if (cg_map_info_is_boolmap(map_info))
+        return map_info->value.rep == XR_REP_F64 ? "xrt_boolmap_value_f64"
+                                                 : "xrt_boolmap_value_i64";
     return map_info->value.rep == XR_REP_F64 ? "xrt_map_get_f64_value_typed"
                                              : "xrt_map_get_i64_value_typed";
 }
@@ -281,12 +289,8 @@ static bool emit_class_native_map_get_nullable_direct_expr(XiCgenCtx *ctx, FILE 
                                                            const CgMapElemInfo *map_info) {
     if (!info || !map_info || cg_rep(v) != XR_REP_TAGGED)
         return false;
-    const char *find_helper = strcmp(map_info->key.elem_name, "XR_ELEM_BOOL") == 0
-                                  ? "xrt_map_find_bool_typed"
-                                  : (map_info->key.rep == XR_REP_F64 ? "xrt_map_find_f64_typed"
-                                                                     : "xrt_map_find_i64_typed");
-    const char *value_helper = map_info->value.rep == XR_REP_F64 ? "xrt_map_get_f64_value_typed"
-                                                                 : "xrt_map_get_i64_value_typed";
+    const char *find_helper = cg_map_find_helper(map_info);
+    const char *value_helper = cg_map_value_helper(map_info);
     fprintf(out, "({ xrt_map_t *_xrm = ");
     emit_class_native_field_ref(ctx, out, info->class_data, "p0", field_idx);
     fprintf(out, "; %s _xrk = ", ctype_str(map_info->key.rep));
@@ -344,8 +348,11 @@ static bool emit_class_native_map_method_call_expr(XiCgenCtx *ctx, FILE *out, co
 
     if (nargs == 0 && (strcmp(method, "length") == 0 || strcmp(method, "size") == 0)) {
         const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
+        bool boolmap = cg_map_type_is_boolmap_ctx(ctx, v->args[0]->type);
+        if (boolmap)
+            fprintf(out, "xrt_boolmap_len((xrt_boolmap_t*)");
         emit_class_native_field_ref(ctx, out, info.class_data, "p0", idx);
-        fprintf(out, "->len");
+        fprintf(out, "%s", boolmap ? ")" : "->len");
         emit_conversion_suffix(out, conv_suffix);
         return true;
     }
@@ -542,18 +549,17 @@ static bool emit_local_typed_map_method_call_expr(XiCgenCtx *ctx, FILE *out, con
 
     if (nargs == 0 && (strcmp(method, "length") == 0 || strcmp(method, "size") == 0)) {
         const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
+        bool boolmap = cg_map_info_is_boolmap(&map_info);
+        if (boolmap)
+            fprintf(out, "xrt_boolmap_len((xrt_boolmap_t*)");
         cg_emit_local_map_recv(out, recv);
-        fprintf(out, "->len");
+        fprintf(out, "%s", boolmap ? ")" : "->len");
         emit_conversion_suffix(out, conv_suffix);
         return true;
     }
     if (nargs == 1 && strcmp(method, "get") == 0) {
-        const char *find_helper = strcmp(map_info.key.elem_name, "XR_ELEM_BOOL") == 0
-                                      ? "xrt_map_find_bool_typed"
-                                      : (map_info.key.rep == XR_REP_F64 ? "xrt_map_find_f64_typed"
-                                                                        : "xrt_map_find_i64_typed");
-        const char *value_helper = map_info.value.rep == XR_REP_F64 ? "xrt_map_get_f64_value_typed"
-                                                                    : "xrt_map_get_i64_value_typed";
+        const char *find_helper = cg_map_find_helper(&map_info);
+        const char *value_helper = cg_map_value_helper(&map_info);
         if (cg_rep(v) == map_info.value.rep) {
             const XiValue *fuse_has = cg_map_get_fusion_has(ctx, v);
             if (fuse_has) {

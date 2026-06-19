@@ -861,9 +861,12 @@ static inline XrValue xrt_map_new(int64_t cap) {
     })
 #endif
 
+#include "xrt_boolmap.inc.c"
 #include "xrt_map_typed.inc.c"
 
 static inline int64_t xrt_map_len(const xrt_map_t *m) {
+    if (xrt_map_is_boolmap(m))
+        return xrt_boolmap_len((const xrt_boolmap_t *) m);
     return xrt_map_is_typed(m) ? m->len : (int64_t) m->count;
 }
 
@@ -875,6 +878,8 @@ static inline int xrt_map_slot_is_full(const xrt_map_t *m, int64_t slot) {
 }
 
 static inline XrValue xrt_map_get(xrt_map_t *m, XrValue key) {
+    if (xrt_map_is_boolmap(m))
+        return xrt_boolmap_get_v((xrt_boolmap_t *) m, key);
     if (xrt_map_is_typed(m))
         return xrt_map_get_typed(m, key);
     uint8_t key_tt = xrt_value_type_tag(key);
@@ -884,12 +889,16 @@ static inline XrValue xrt_map_get(xrt_map_t *m, XrValue key) {
 }
 
 static inline int xrt_map_has(xrt_map_t *m, XrValue key) {
+    if (xrt_map_is_boolmap(m))
+        return xrt_boolmap_has_v((xrt_boolmap_t *) m, key);
     if (xrt_map_is_typed(m))
         return xrt_map_has_typed(m, key);
     return xrt_map_find_entry(m, key, xrt_hash32_value(key), xrt_value_type_tag(key)) >= 0;
 }
 
 static inline int xrt_map_delete(xrt_map_t *m, XrValue key) {
+    if (xrt_map_is_boolmap(m))
+        return xrt_boolmap_delete_v((xrt_boolmap_t *) m, key);
     if (xrt_map_is_typed(m))
         return xrt_map_delete_typed(m, key);
     uint8_t key_tt = xrt_value_type_tag(key);
@@ -908,6 +917,10 @@ static inline int xrt_map_delete(xrt_map_t *m, XrValue key) {
 }
 
 static inline void xrt_map_set(xrt_map_t *m, XrValue key, XrValue val) {
+    if (xrt_map_is_boolmap(m)) {
+        xrt_boolmap_set_v((xrt_boolmap_t *) m, key, val);
+        return;
+    }
     if (xrt_map_is_typed(m)) {
         xrt_map_set_typed(m, key, val);
         return;
@@ -1171,6 +1184,9 @@ static inline void xrt_coll_release(XrValue v) {
         case XR_TMAP:
             xrt_map_destroy((xrt_map_t *) v.ptr);
             break;
+        case XR_TBOOLMAP:
+            xrt_boolmap_destroy((xrt_boolmap_t *) v.ptr);
+            break;
         case XR_TSET:
             xrt_set_destroy((xrt_set_t *) v.ptr);
             break;
@@ -1342,6 +1358,8 @@ static inline XrValue xrt_set_values(xrt_set_t *s) {
 }
 
 static inline XrValue xrt_map_keys(xrt_map_t *m) {
+    if (xrt_map_is_boolmap(m))
+        return xrt_boolmap_keys((xrt_boolmap_t *) m);
     XrValue arr = xrt_array_new(xrt_map_len(m));
     if (!xrt_map_is_typed(m)) {
         for (uint32_t i = 0; i < m->nentries; i++) {
@@ -1359,6 +1377,8 @@ static inline XrValue xrt_map_keys(xrt_map_t *m) {
 }
 
 static inline XrValue xrt_map_values(xrt_map_t *m) {
+    if (xrt_map_is_boolmap(m))
+        return xrt_boolmap_values((xrt_boolmap_t *) m);
     XrValue arr = xrt_array_new(xrt_map_len(m));
     if (!xrt_map_is_typed(m)) {
         for (uint32_t i = 0; i < m->nentries; i++) {
@@ -1435,6 +1455,8 @@ static inline XrValue xrt_iterator_new(XrValue coll, uint8_t kind) {
 static inline int xrt_iterator_has_next(xrt_iterator_t *it) {
     if (XR_IS_MAP(it->coll)) {
         xrt_map_t *m = (xrt_map_t *) it->coll.ptr;
+        if (xrt_map_is_boolmap(m))
+            return it->cursor < xrt_boolmap_len((const xrt_boolmap_t *) m);
         if (xrt_map_is_typed(m)) {
             while (it->cursor < m->order_len) {
                 if (xrt_map_slot_is_full(m, m->order[it->cursor]))
@@ -1475,6 +1497,18 @@ static inline XrValue xrt_iterator_next(xrt_iterator_t *it) {
         return XR_NULL_VAL;
     if (XR_IS_MAP(it->coll)) {
         xrt_map_t *m = (xrt_map_t *) it->coll.ptr;
+        if (xrt_map_is_boolmap(m)) {
+            xrt_boolmap_t *b = (xrt_boolmap_t *) m;
+            int64_t cursor = it->cursor++;
+            if (it->kind == XRT_ITER_PAIRS) {
+                XrValue kv[2] = {xrt_boolmap_iter_key(b, cursor),
+                                 xrt_boolmap_iter_value(b, cursor)};
+                return xrt_tuple_make(2, kv);
+            }
+            if (it->kind == XRT_ITER_VALUES)
+                return xrt_boolmap_iter_value(b, cursor);
+            return xrt_boolmap_iter_key(b, cursor);
+        }
         int64_t slot = xrt_map_is_typed(m) ? m->order[it->cursor++] : it->cursor++;
         if (it->kind == XRT_ITER_PAIRS) {
             XrValue kv[2] = {xrt_map_slot_key(m, slot), xrt_map_slot_value(m, slot)};
@@ -1773,6 +1807,8 @@ static inline XrValue xrt_value_clone_for_coro(XrValue val) {
             xrt_map_t *src = (xrt_map_t *) val.ptr;
             if (!src)
                 return val;
+            if (xrt_map_is_boolmap(src))
+                return xrt_boolmap_clone((const xrt_boolmap_t *) src);
             if (!xrt_map_is_typed(src) && (src->flags & XR_MAP_FLAG_WEAK))
                 return xrt_map_new_flags(0, XR_MAP_FLAG_WEAK);
             XrValue dstv = xrt_map_is_typed(src)
