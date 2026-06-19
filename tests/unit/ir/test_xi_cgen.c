@@ -3051,6 +3051,40 @@ TEST(cgen_direct_suspend_call_propagates_cps) {
     xi_func_free(ir);
 }
 
+TEST(cgen_direct_suspend_method_call_propagates_cps) {
+    const char *src = "class Box {\n"
+                      "    bump(n: int) -> int {\n"
+                      "        yield\n"
+                      "        return n + 1\n"
+                      "    }\n"
+                      "}\n"
+                      "fn main() -> int {\n"
+                      "    let box = new Box()\n"
+                      "    return box.bump(41)\n"
+                      "}\n"
+                      "print(main())\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "static direct suspend method calls should CPS-propagate to the caller");
+    assert(contains(code, "call_frame_") &&
+           "caller frame should own the child method frame while blocked");
+    assert(contains(code, "_aot_resume(f->call_frame_") &&
+           "direct suspend method calls must resume through the child frame");
+    assert(contains(code, "_aot_frame_new(") &&
+           "direct suspend method calls must allocate a child frame");
+    assert(!contains(code, "unsupported AOT sync method call") &&
+           "method suspendability must be represented as CPS, not a sync-wrapper failure");
+
+    printf("  Generated direct suspend method call %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_shared_static_function_retain_is_elided) {
     const char *src = "fn inc(n: int) -> int {\n"
                       "    return n + 1\n"
@@ -4461,6 +4495,7 @@ int main(void) {
     run_cgen_unknown_method_symbol_fails_fast();
     run_cgen_suspendable_wrapper_aborts();
     run_cgen_direct_suspend_call_propagates_cps();
+    run_cgen_direct_suspend_method_call_propagates_cps();
     run_cgen_shared_static_function_retain_is_elided();
     run_cgen_coro_shared_static_function_retain_is_elided();
     run_cgen_suspendable_dependency_init_fails_fast();

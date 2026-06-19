@@ -1868,21 +1868,21 @@ static void xicgen_emit_runtime_method(XiCgenCtx *ctx, FILE *out, const XiFunc *
     const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
     if (nargs == 0) {
         fprintf(out, "xrt_method_0(");
-        emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
+        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
         fprintf(out, ", %d)", sym);
     } else if (nargs == 1) {
         fprintf(out, "xrt_method_1(");
-        emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
+        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
         fprintf(out, ", %d, ", sym);
-        emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
         fprintf(out, ")");
     } else if (nargs == 2) {
         fprintf(out, "xrt_method_2(");
-        emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
+        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
         fprintf(out, ", %d, ", sym);
-        emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
         fprintf(out, ", ");
-        emit_value_as_rep(out, v->args[2], XR_REP_TAGGED);
+        emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_TAGGED);
         fprintf(out, ")");
     } else {
         ctx->error = true;

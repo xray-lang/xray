@@ -99,12 +99,14 @@ typedef struct XiCoroPlan {
 /* Backend seam: keeps the analysis free of AOT/VM bundle types by routing
  * the two context-dependent queries through callbacks.
  *   - resolve_callee maps a call's callee value to its target XiFunc.
+ *   - resolve_method maps a method-call value to its statically known target.
  *   - value_is_module_import decides whether 'v' (as used in 'f') refers to
  *     an import of the named stdlib module (e.g. "time" for time.sleep).
  * Either callback may be NULL; the analysis then answers only from the
  * intraprocedural / direct-import information available in the IR. */
 typedef struct XiCoroResolver {
     const XiFunc *(*resolve_callee)(void *ud, const XiFunc *current, const XiValue *callee);
+    const XiFunc *(*resolve_method)(void *ud, const XiFunc *current, const XiValue *call);
     bool (*value_is_module_import)(void *ud, const XiFunc *f, const XiValue *v, const char *module);
     void *ud;
 } XiCoroResolver;
@@ -131,7 +133,7 @@ XR_FUNC bool xi_value_is_blocking_result_group_method_call(const XiValue *v);
 
 /* True if 'v' is a coroutine suspension site.  'resolver' supplies the two
  * context-dependent queries (stdlib module-import for time.sleep, and
- * interprocedural callee resolution for a direct call into a suspendable
+ * interprocedural callee/method resolution for a direct call into a suspendable
  * function); pass a resolver wired to the current backend's bundle. */
 XR_FUNC bool xi_coro_is_suspend_point(const XiFunc *f, const XiValue *v,
                                       const XiCoroResolver *resolver);

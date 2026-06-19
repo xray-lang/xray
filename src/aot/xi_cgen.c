@@ -965,6 +965,9 @@ typedef struct {
 } CgStaticFunctionCall;
 
 static bool cg_func_needs_aot_coro_ctx(XiCgenCtx *ctx, const XiFunc *f);
+static const XiFunc *cg_class_native_resolve_method_call(XiCgenCtx *ctx, const XiFunc *current,
+                                                         const XiValue *call,
+                                                         const char **out_prefix);
 
 static CgStaticFunctionCall cg_no_static_function_call(void) {
     CgStaticFunctionCall call;

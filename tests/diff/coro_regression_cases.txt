@@ -55,6 +55,7 @@ tests/regression/11_coroutine/1154_dynamic_channel_capacity.xr
 tests/regression/11_coroutine/1155_channel_close_timeout_fanout.xr
 tests/regression/11_coroutine/1156_select_close_wake.xr
 tests/regression/11_coroutine/1157_select_after_scope_cancel.xr
+tests/regression/11_coroutine/1157_work_queue_generic_class.xr
 tests/regression/11_coroutine/1158_work_queue_native.xr
 tests/regression/11_coroutine/1159_work_queue_blocking_pop.xr
 tests/regression/11_coroutine/1160_work_queue_close_fanout.xr
