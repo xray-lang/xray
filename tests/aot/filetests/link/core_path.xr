@@ -1,0 +1,6 @@
+import path
+
+print(path.isAbsolute("/usr/local/bin"))
+print(path.basename("/usr/local/bin/xray"))
+print(path.dirname("/usr/local/bin/xray"))
+print(path.extname("archive.tar.gz"))

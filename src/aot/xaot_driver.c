@@ -199,11 +199,11 @@ static const XiImportRef *stdlib_module_ref_of_value(const XiFunc *f, const XiVa
     return ref;
 }
 
-/* If v refers to a runtime-backed stdlib module (bare module identifier in the
- * stdlib table, excluding the direct-call core math path which is tracked via
+/* If v refers to a stdlib module with symbol-level tracking (bare module
+ * identifier in the stdlib table, excluding core math which is tracked via
  * XI_CALL_BUILTIN), return that module name; else NULL. Used to record the
  * referenced-symbol closure for method-form stdlib calls. */
-static const char *stdlib_runtime_module_of_value(const XiFunc *f, const XiValue *v) {
+static const char *stdlib_symbol_module_of_value(const XiFunc *f, const XiValue *v) {
     const XiImportRef *ref = stdlib_module_ref_of_value(f, v);
     if (!ref || !ref->module_path || ref->member_name)
         return NULL;
@@ -278,7 +278,7 @@ static void scan_func_features(XiFunc *f, XaotFeatureSet *fs) {
                      * import-ref naming the stdlib module, the method name is in
                      * aux. Record the precise referenced symbol. */
                     if (v->aux && v->nargs >= 1) {
-                        const char *mod = stdlib_runtime_module_of_value(f, v->args[0]);
+                        const char *mod = stdlib_symbol_module_of_value(f, v->args[0]);
                         if (mod)
                             features_add_stdlib_member(fs, mod, (const char *) v->aux);
                     }
@@ -350,21 +350,13 @@ static bool add_stdlib_manifest_entries(XaotLinkManifest *manifest, XaotStdlibSe
         XaotStdlibSet flag;
         const char *name;
     } table[] = {
-        {XAOT_STDLIB_JSON, "json"},
-        {XAOT_STDLIB_REGEX, "regex"},
-        {XAOT_STDLIB_TIME, "time"},
-        {XAOT_STDLIB_PATH, "path"},
-        {XAOT_STDLIB_IO, "io"},
-        {XAOT_STDLIB_OS, "os"},
-        {XAOT_STDLIB_NET, "net"},
-        {XAOT_STDLIB_HTTP, "http"},
-        {XAOT_STDLIB_CRYPTO, "crypto"},
-        {XAOT_STDLIB_BASE64, "base64"},
-        {XAOT_STDLIB_CSV, "csv"},
-        {XAOT_STDLIB_TOML, "toml"},
-        {XAOT_STDLIB_YAML, "yaml"},
-        {XAOT_STDLIB_XML, "xml"},
-        {XAOT_STDLIB_COMPRESS, "compress"},
+        {XAOT_STDLIB_JSON, "json"},     {XAOT_STDLIB_REGEX, "regex"},
+        {XAOT_STDLIB_TIME, "time"},     {XAOT_STDLIB_IO, "io"},
+        {XAOT_STDLIB_OS, "os"},         {XAOT_STDLIB_NET, "net"},
+        {XAOT_STDLIB_HTTP, "http"},     {XAOT_STDLIB_CRYPTO, "crypto"},
+        {XAOT_STDLIB_BASE64, "base64"}, {XAOT_STDLIB_CSV, "csv"},
+        {XAOT_STDLIB_TOML, "toml"},     {XAOT_STDLIB_YAML, "yaml"},
+        {XAOT_STDLIB_XML, "xml"},       {XAOT_STDLIB_COMPRESS, "compress"},
     };
 
     for (uint32_t i = 0; i < (uint32_t) (sizeof(table) / sizeof(table[0])); i++) {
@@ -386,7 +378,7 @@ static bool add_stdlib_symbol_manifest_entries(XaotLinkManifest *manifest,
 }
 
 static bool stdlib_set_needs_runtime_provider(XaotStdlibSet stdlib) {
-    return (stdlib & ~XAOT_STDLIB_MATH) != 0;
+    return (stdlib & ~(XAOT_STDLIB_MATH | XAOT_STDLIB_PATH)) != 0;
 }
 
 static bool build_link_manifest(const XaotFeatureSet *features, XaotLinkManifest *manifest) {

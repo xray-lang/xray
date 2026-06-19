@@ -19,6 +19,7 @@
 #include "../../src/runtime/object/xjson.h"
 #include "../../src/base/xplatform.h"
 #include "../../src/base/xchecks.h"
+#include "../../src/shared/xr_path_core.h"
 #include "../../src/coro/xcoroutine.h"  // xr_current_coro
 #include <limits.h>
 #include "../../src/os/os_fs.h"
@@ -113,25 +114,7 @@ static XrValue path_join(XrayIsolate *X, XrValue *args, int argc) {
 // VM binding and the AOT shim (115 single-definition). Borrows: the returned
 // pointer aliases `path` or static storage; the caller copies it.
 static const char *path_dirname_core(const char *path, size_t len, size_t *out_len) {
-    if (!path || len == 0) {
-        *out_len = 1;
-        return ".";
-    }
-    // Skip trailing separators
-    while (len > 0 && IS_SEP(path[len - 1]))
-        len--;
-    // Find last separator
-    while (len > 0 && !IS_SEP(path[len - 1]))
-        len--;
-    // Skip separators
-    while (len > 1 && IS_SEP(path[len - 1]))
-        len--;
-    if (len == 0) {
-        *out_len = 1;
-        return IS_SEP(path[0]) ? PATH_SEP_STR : ".";
-    }
-    *out_len = len;
-    return path;
+    return xr_path_core_dirname(path, len, out_len);
 }
 
 // dirname(path) - Get directory part
@@ -158,20 +141,7 @@ XR_FUNC const char *xr_aot_path_dirname(const char *path, int64_t len, int64_t *
 
 // basename core - returns a slice of `path`. Shared by VM binding + AOT shim.
 static const char *path_basename_core(const char *path, size_t len, size_t *out_len) {
-    *out_len = 0;
-    if (!path || len == 0)
-        return "";
-    // Skip trailing separators
-    while (len > 0 && IS_SEP(path[len - 1]))
-        len--;
-    if (len == 0)
-        return "";
-    // Find last separator
-    size_t start = len;
-    while (start > 0 && !IS_SEP(path[start - 1]))
-        start--;
-    *out_len = len - start;
-    return path + start;
+    return xr_path_core_basename(path, len, out_len);
 }
 
 // basename(path) - Get filename part
@@ -199,32 +169,7 @@ XR_FUNC const char *xr_aot_path_basename(const char *path, int64_t len, int64_t 
 // The slice runs to the input end (matches the historical NUL-terminated
 // return), so `plen` must be the full string length. Shared by VM + AOT.
 static const char *path_extname_core(const char *path, size_t plen, size_t *out_len) {
-    *out_len = 0;
-    if (!path || plen == 0)
-        return "";
-    // Get basename span first
-    size_t len = plen;
-    while (len > 0 && IS_SEP(path[len - 1]))
-        len--;
-    size_t start = len;
-    while (start > 0 && !IS_SEP(path[start - 1]))
-        start--;
-    const char *base = path + start;
-    size_t base_len = len - start;
-    // Find last dot in basename
-    const char *dot = NULL;
-    for (size_t i = base_len; i > 0; i--) {
-        if (base[i - 1] == '.') {
-            // Skip leading dot (e.g., .gitignore)
-            if (i > 1)
-                dot = base + i - 1;
-            break;
-        }
-    }
-    if (!dot)
-        return "";
-    *out_len = (size_t) ((path + plen) - dot);
-    return dot;
+    return xr_path_core_extname(path, plen, out_len);
 }
 
 // extname(path) - Get file extension
@@ -252,17 +197,7 @@ XR_FUNC const char *xr_aot_path_extname(const char *path, int64_t len, int64_t *
 // direct-call shim so the two signatures can never drift (115 single-definition
 // principle). Pure: no isolate, no allocation.
 static bool path_is_absolute_raw(const char *path, size_t len) {
-    if (!path || len == 0)
-        return false;
-#ifdef XR_OS_WINDOWS
-    // Windows: drive letter (C:) or UNC path (\\).
-    if (len >= 2 && ((path[0] >= 'A' && path[0] <= 'Z') || (path[0] >= 'a' && path[0] <= 'z')) &&
-        path[1] == ':')
-        return true;
-    if (len >= 2 && path[0] == '\\' && path[1] == '\\')
-        return true;
-#endif
-    return path[0] == '/';
+    return xr_path_core_is_absolute(path, len);
 }
 
 // isAbsolute(path) - Check if path is absolute
