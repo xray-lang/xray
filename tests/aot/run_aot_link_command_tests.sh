@@ -136,6 +136,23 @@ else
     sed 's/^/      /' "$ENC_LOG" | sed -n '1,120p'
 fi
 
+BASE64_SRC="$PROJECT_DIR/tests/aot/filetests/link/core_base64.xr"
+BASE64_BIN="$WORK/core_base64"
+BASE64_LOG="$WORK/core_base64.log"
+if build_native "$BASE64_SRC" "$BASE64_BIN" "$BASE64_LOG"; then
+    expect_log_contains "$BASE64_LOG" "Link command:" "core-base64: emitted link command"
+    expect_log_not_contains "$BASE64_LOG" "-lxray_core" "core-base64: does not link xray_core"
+    expect_log_not_contains "$BASE64_LOG" "-lpthread" "core-base64: does not link pthread"
+    expect_log_not_contains "$BASE64_LOG" "-lz" "core-base64: does not link zlib"
+    expect_log_not_contains "$BASE64_LOG" "-lssl" "core-base64: does not link ssl"
+    expect_log_not_contains "$BASE64_LOG" "-lcrypto" "core-base64: does not link crypto"
+    expect_log_contains "$BASE64_LOG" "-lm" "core-base64: links math lib only"
+    expect_output "$BASE64_BIN" $'true\nfalse\ntrue\ntrue\nfalse' "core-base64: binary output"
+else
+    record_fail "core-base64: build failed"
+    sed 's/^/      /' "$BASE64_LOG" | sed -n '1,120p'
+fi
+
 RUNTIME_SRC="$PROJECT_DIR/tests/aot/filetests/link/runtime_time.xr"
 RUNTIME_BIN="$WORK/runtime_time"
 RUNTIME_LOG="$WORK/runtime_time.log"
