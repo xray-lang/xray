@@ -1,6 +1,25 @@
 // AOT direct-call encoding predicates/counts must match VM tagged dispatch.
 import encoding
 
+print(encoding.hexEncode("Hello"))
+print(encoding.hexEncode("\t"))
+let bytes = encoding.hexDecode("48656c6c6f")
+if (bytes != null) {
+    print(bytes.length)
+    print(bytes[0])
+    print(bytes[1])
+    print(bytes[2])
+    print(bytes[3])
+    print(bytes[4])
+}
+print(encoding.hexDecodeString("48656C6C6F"))
+print(encoding.hexDecode("gg") == null)
+print(encoding.hexDecode("abc") == null)
+let emptyBytes = encoding.hexDecode("")
+if (emptyBytes != null) {
+    print(emptyBytes.length)
+}
+
 print(encoding.hexValid("48656c6c6f"))
 print(encoding.hexValid("ABCDEF"))
 print(encoding.hexValid("abc"))

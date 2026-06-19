@@ -28,11 +28,11 @@
 
 #include "xrt_value.h"      // L0: tags, boxing, unboxing, source-level aliases, XrtContext
 #include "xrt_path.h"       // L0: freestanding path string helpers
-#include "xrt_encoding.h"   // L0: freestanding encoding predicates/counts
 #include "xrt_arc.h"        // L1: bump alloc, xrt_str_alloc, xrt_str_concat
 #include "xrt_range.h"      // L1: lazy Range value
 #include "xrt_arith.h"      // L1: add/sub/mul/div/mod/neg, eq/lt/le, print
 #include "xrt_coll.h"       // L2: Array, Map, StringBuilder, Closure, index ops
+#include "xrt_encoding.h"   // L2: freestanding encoding string/Bytes helpers
 #include "xrt_base64.h"     // L2: freestanding Base64 string/Bytes helpers
 #include "xrt_method.h"     // L3: method_0/1/2, getprop, tostring, symbol IDs
 #include "xrt_exception.h"  // L4: setjmp/longjmp exception handling
