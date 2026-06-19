@@ -1,0 +1,8 @@
+import compress
+
+print(compress.crc32("123456789"))
+print(compress.crc32(""))
+print(compress.crc32("Hello"))
+print(compress.adler32("Wikipedia"))
+print(compress.adler32(""))
+print(compress.adler32("Hello"))
