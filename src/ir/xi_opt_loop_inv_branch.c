@@ -81,6 +81,14 @@ static XiBlock *find_invariant_branch(const XiLoop *loop) {
 
         XiValue *cond = blk->control;
 
+        /* Phi results are CFG edge selections, not ordinary pure expressions.
+         * Even when all incoming values are loop-invariant, the selected
+         * incoming edge may still be loop-variant, so cloning a PHI into the
+         * preheader would manufacture an invalid value-list PHI and change
+         * branch semantics. */
+        if (cond->op == XI_PHI)
+            continue;
+
         /* The condition itself must be defined outside the loop,
          * OR all its operands must be loop-invariant (and the op
          * itself is pure, so it can be hoisted). */
@@ -118,6 +126,9 @@ static bool hoist_invariant_condition(XiFunc *f, XiLoop *loop, XiBlock *branch_b
          * Return false to indicate no transformation applied. */
         return false;
     }
+
+    if (cond->op == XI_PHI)
+        return false;
 
     /* Clone the condition computation to the preheader. */
     XiValue *hoisted = xi_value_new(f, preheader, cond->op, cond->type, cond->nargs);

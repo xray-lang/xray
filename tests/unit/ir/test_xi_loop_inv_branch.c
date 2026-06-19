@@ -102,6 +102,65 @@ static XiFunc *build_loop_with_invariant_branch(void) {
     return f;
 }
 
+static XiFunc *build_loop_with_phi_branch_condition(void) {
+    XiFunc *f = xi_func_new("phi_branch_condition", &stub_int);
+    XiBlock *entry = xi_block_new(f);
+    XiBlock *header = xi_block_new(f);
+    XiBlock *split = xi_block_new(f);
+    XiBlock *true_edge = xi_block_new(f);
+    XiBlock *false_edge = xi_block_new(f);
+    XiBlock *phi_branch = xi_block_new(f);
+    XiBlock *then_body = xi_block_new(f);
+    XiBlock *else_body = xi_block_new(f);
+    XiBlock *merge = xi_block_new(f);
+    XiBlock *exit_blk = xi_block_new(f);
+    entry->sealed = header->sealed = split->sealed = true;
+    true_edge->sealed = false_edge->sealed = phi_branch->sealed = true;
+    then_body->sealed = else_body->sealed = merge->sealed = exit_blk->sealed = true;
+
+    XiValue *start = xi_const_int(f, entry, 0, &stub_int);
+    XiValue *limit = xi_const_int(f, entry, 10, &stub_int);
+    XiValue *step = xi_const_int(f, entry, 1, &stub_int);
+    XiValue *true_val = xi_const_bool(f, entry, true, &stub_bool);
+    XiValue *false_val = xi_const_bool(f, entry, false, &stub_bool);
+
+    xi_block_set_jump(entry, header);
+    xi_block_set_jump(merge, header);
+
+    XiPhi *iv = xi_phi_new(f, header, &stub_int, header->npreds);
+    XiValue *loop_cond = xi_binary(f, header, XI_LT, &stub_bool, &iv->value, limit);
+    xi_block_set_if(header, loop_cond, split, exit_blk);
+
+    XiValue *edge_cond = xi_binary(f, split, XI_GT, &stub_bool, &iv->value, start);
+    xi_block_set_if(split, edge_cond, true_edge, false_edge);
+
+    xi_block_set_jump(true_edge, phi_branch);
+    xi_block_set_jump(false_edge, phi_branch);
+
+    XiPhi *branch_cond = xi_phi_new(f, phi_branch, &stub_bool, phi_branch->npreds);
+    int true_idx = pred_index(phi_branch, true_edge);
+    int false_idx = pred_index(phi_branch, false_edge);
+    branch_cond->value.args[true_idx] = true_val;
+    branch_cond->value.args[false_idx] = false_val;
+    xi_block_set_if(phi_branch, &branch_cond->value, then_body, else_body);
+
+    xi_binary(f, then_body, XI_ADD, &stub_int, &iv->value, step);
+    xi_block_set_jump(then_body, merge);
+
+    xi_binary(f, else_body, XI_ADD, &stub_int, &iv->value, start);
+    xi_block_set_jump(else_body, merge);
+
+    XiValue *next = xi_binary(f, merge, XI_ADD, &stub_int, &iv->value, step);
+
+    int pre_idx = pred_index(header, entry);
+    int latch_idx = pred_index(header, merge);
+    iv->value.args[pre_idx] = start;
+    iv->value.args[latch_idx] = next;
+
+    xi_block_set_return(exit_blk, xi_const_int(f, exit_blk, 0, &stub_int));
+    return f;
+}
+
 TEST(hoists_invariant_condition_to_preheader) {
     XiFunc *f = build_loop_with_invariant_branch();
     ASSERT(f != NULL);
@@ -110,6 +169,19 @@ TEST(hoists_invariant_condition_to_preheader) {
     XiPassChange chg = xi_opt_loop_inv_branch(f);
     ASSERT(chg.values_changed);
     ASSERT(chg.n_added >= 1);
+    ASSERT(verify_func(f));
+    xi_func_free(f);
+}
+
+TEST(skips_phi_branch_condition) {
+    XiFunc *f = build_loop_with_phi_branch_condition();
+    ASSERT(f != NULL);
+    ASSERT(verify_func(f));
+
+    XiPassChange chg = xi_opt_loop_inv_branch(f);
+    ASSERT(!chg.values_changed);
+    ASSERT(chg.n_added == 0);
+    ASSERT(verify_func(f));
     xi_func_free(f);
 }
 
@@ -163,6 +235,7 @@ int main(void) {
     printf("=== Xi Loop Invariant Branch Tests ===\n\n");
 
     run_hoists_invariant_condition_to_preheader();
+    run_skips_phi_branch_condition();
     run_no_loop_no_change();
     run_skips_loop_variant_branch();
 
