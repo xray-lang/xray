@@ -170,6 +170,23 @@ else
     sed 's/^/      /' "$URL_LOG" | sed -n '1,120p'
 fi
 
+COMPRESS_SRC="$PROJECT_DIR/tests/aot/filetests/link/core_compress.xr"
+COMPRESS_BIN="$WORK/core_compress"
+COMPRESS_LOG="$WORK/core_compress.log"
+if build_native "$COMPRESS_SRC" "$COMPRESS_BIN" "$COMPRESS_LOG"; then
+    expect_log_contains "$COMPRESS_LOG" "Link command:" "core-compress: emitted link command"
+    expect_log_not_contains "$COMPRESS_LOG" "-lxray_core" "core-compress: does not link xray_core"
+    expect_log_not_contains "$COMPRESS_LOG" "-lpthread" "core-compress: does not link pthread"
+    expect_log_not_contains "$COMPRESS_LOG" "-lz" "core-compress: does not link zlib"
+    expect_log_not_contains "$COMPRESS_LOG" "-lssl" "core-compress: does not link ssl"
+    expect_log_not_contains "$COMPRESS_LOG" "-lcrypto" "core-compress: does not link crypto"
+    expect_log_contains "$COMPRESS_LOG" "-lm" "core-compress: links math lib only"
+    expect_output "$COMPRESS_BIN" $'3421780262\n0\n4157704578\n300286872\n1\n93061621' "core-compress: binary output"
+else
+    record_fail "core-compress: build failed"
+    sed 's/^/      /' "$COMPRESS_LOG" | sed -n '1,120p'
+fi
+
 RUNTIME_SRC="$PROJECT_DIR/tests/aot/filetests/link/runtime_time.xr"
 RUNTIME_BIN="$WORK/runtime_time"
 RUNTIME_LOG="$WORK/runtime_time.log"
