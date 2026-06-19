@@ -118,7 +118,6 @@ XR_FUNC void xi_cgen_main(XiCgenCtx *ctx, FILE *out, XiModule **modules, int n, 
     CgBuiltinInitPlan builtin_plan = cg_builtin_init_plan_for_modules(modules, n);
 
     fprintf(out, "int main(int argc, char **argv) {\n");
-    fprintf(out, "    xrt_bump_enabled = 1;\n");
     fprintf(out, "    xrt_arc_init();\n");
     emit_xrt_builtin_init(out, &builtin_plan);
     if (entry_is_coro) {
@@ -225,7 +224,6 @@ XR_FUNC void xi_cgen_program(XiCgenCtx *ctx, FILE *out, XiModule *module) {
     xi_cgen_func(ctx, body, main_func, prefix);
 
     fprintf(body, "int main(int argc, char **argv) {\n");
-    fprintf(body, "    xrt_bump_enabled = 1;\n");
     fprintf(body, "    xrt_arc_init();\n");
     CgBuiltinInitPlan builtin_plan = cg_builtin_init_plan_for_func(main_func);
     emit_xrt_builtin_init(body, &builtin_plan);

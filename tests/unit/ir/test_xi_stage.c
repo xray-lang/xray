@@ -52,15 +52,17 @@ static void test_stage_enum(void) {
     assert(XI_STAGE_CANONICAL > XI_STAGE_RAW);
     assert(XI_STAGE_CLOSED > XI_STAGE_CANONICAL);
     assert(XI_STAGE_OWNED > XI_STAGE_CLOSED);
-    assert(XI_STAGE_REPPED > XI_STAGE_OWNED);
+    assert(XI_STAGE_CORO_LOWERED > XI_STAGE_OWNED);
+    assert(XI_STAGE_REPPED > XI_STAGE_CORO_LOWERED);
     assert(XI_STAGE_BACKEND > XI_STAGE_REPPED);
-    assert(XI_STAGE_COUNT == 6);
+    assert(XI_STAGE_COUNT == 7);
 
     /* Verify names */
     assert(strcmp(xi_stage_name(XI_STAGE_RAW), "Raw") == 0);
     assert(strcmp(xi_stage_name(XI_STAGE_CANONICAL), "Canonical") == 0);
     assert(strcmp(xi_stage_name(XI_STAGE_CLOSED), "Closed") == 0);
     assert(strcmp(xi_stage_name(XI_STAGE_OWNED), "Owned") == 0);
+    assert(strcmp(xi_stage_name(XI_STAGE_CORO_LOWERED), "CoroLowered") == 0);
     assert(strcmp(xi_stage_name(XI_STAGE_REPPED), "Repped") == 0);
     assert(strcmp(xi_stage_name(XI_STAGE_BACKEND), "Backend") == 0);
 

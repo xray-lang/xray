@@ -52,6 +52,7 @@ static void test_free_aligned(void *ptr) {
 #define XRT_ALLOC_ALIGNED(sz) test_alloc_aligned(sz)
 #define XRT_FREE_ALIGNED(p) test_free_aligned(p)
 
+#define XRT_IMPL
 #if defined(__clang__)
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wundefined-internal"

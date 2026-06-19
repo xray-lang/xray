@@ -1,0 +1,60 @@
+// anchor: narrow-int-arith-wrap
+// 122 narrow-width direct lowering: native (T)(a op b) over <=16-bit operands
+// must wrap identically across VM and AOT. u16*u16, u32 MUL, and signed i32 ops
+// stay on the i64-wrap path because the native expression would risk C UB or
+// lose carry bits.
+
+fn add8(a: int8, b: int8) -> int8 { return a + b }
+fn sub8(a: int8, b: int8) -> int8 { return a - b }
+fn mul8(a: int8, b: int8) -> int8 { return a * b }
+
+fn addu8(a: uint8, b: uint8) -> uint8 { return a + b }
+fn subu8(a: uint8, b: uint8) -> uint8 { return a - b }
+fn mulu8(a: uint8, b: uint8) -> uint8 { return a * b }
+
+fn add16(a: int16, b: int16) -> int16 { return a + b }
+fn sub16(a: int16, b: int16) -> int16 { return a - b }
+fn mul16(a: int16, b: int16) -> int16 { return a * b }
+
+fn addu16(a: uint16, b: uint16) -> uint16 { return a + b }
+fn subu16(a: uint16, b: uint16) -> uint16 { return a - b }
+fn mulu16(a: uint16, b: uint16) -> uint16 { return a * b }
+
+fn mix(a: int8, b: int16) -> int { return a + b }
+
+fn addu32(a: uint32, b: uint32) -> uint32 { return a + b }
+fn subu32(a: uint32, b: uint32) -> uint32 { return a - b }
+fn mulu32(a: uint32, b: uint32) -> uint32 { return a * b }
+fn addi32(a: int32, b: int32) -> int32 { return a + b }
+fn subi32(a: int32, b: int32) -> int32 { return a - b }
+fn muli32(a: int32, b: int32) -> int32 { return a * b }
+
+print(add8(127, 1))          // -128
+print(sub8(-128, 1))         // 127
+print(mul8(100, 50))         // -120
+print(mul8(-100, 50))        // 120
+
+print(addu8(255, 1))         // 0
+print(subu8(0, 1))           // 255
+print(mulu8(200, 100))       // 32
+
+print(add16(32767, 1))       // -32768
+print(sub16(-32768, 1))      // 32767
+print(mul16(200, 250))       // -15536
+print(mul16(-200, 250))      // 15536
+
+print(addu16(65535, 1))      // 0
+print(subu16(0, 1))          // 65535
+print(mulu16(60000, 60000))  // 41984
+print(mulu16(300, 300))      // 24464
+
+print(mix(127, 32767))       // 32894
+print(mix(-128, -32768))     // -32896
+
+print(addu32(4000000000, 1000000000)) // 705032704
+print(subu32(0, 1))                    // 4294967295
+print(mulu32(100000, 100000))          // 1410065408
+
+print(addi32(2147483647, 1))           // -2147483648
+print(subi32(-2147483648, 1))          // 2147483647
+print(muli32(100000, 100000))          // 1410065408

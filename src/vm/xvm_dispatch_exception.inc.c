@@ -171,6 +171,20 @@ vmcase(OP_ERR_RETURN) {
      * Pure value-return: no handler stack, no unwind. */
     TRACE_EXECUTION();
     int a = GETARG_A(i);
+    {
+        XrDebugHooks *_eh = (XrDebugHooks *) isolate->debug_hooks;
+        if (_eh && _eh->on_exception) {
+            XrValue _err = R(a);
+            const char *_msg = xr_value_is_exception(isolate, _err)
+                                   ? xr_exception_get_message(isolate, _err)
+                                   : "<exception>";
+            if (_eh->on_exception(isolate, _msg, true) == XR_DBG_ACTION_BREAK) {
+                vm_ctx->pending_error = _err;
+                ci->pc = pc - 1;
+                return XR_VM_DEBUG_BREAK;
+            }
+        }
+    }
     vm_ctx->pending_error = R(a);
     vm_ctx->last_nret = 0;
     goto return_with_defer;

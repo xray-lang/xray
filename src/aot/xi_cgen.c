@@ -31,6 +31,8 @@
 #include "../ir/xi_opt.h"
 #include "../ir/xi_own.h"
 #include "../ir/xi_range.h"
+#include "../ir/xi_value_query.h"
+#include "../ir/xi_coro_analyze.h"
 #include "../base/xdefs.h"
 #include "../runtime/class/xenum.h"
 #include "../runtime/value/xstruct_layout.h"
@@ -148,8 +150,10 @@ static const XiValue *cg_unwrap_identity_value(const XiValue *v) {
 }
 
 static bool cg_type_has_no_aot_arc_header(const XrType *type) {
-    return type && (type->kind == XR_KIND_ARRAY || type->kind == XR_KIND_MAP ||
-                    type->kind == XR_KIND_SET || type->kind == XR_KIND_FIXED_ARRAY);
+    /* Arrays/maps/sets carry an embedded unified XrGCHeader and are reclaimed by
+     * xrt_retain/xrt_release. Fixed arrays are by-value aggregates with no
+     * standalone ARC header. */
+    return type && type->kind == XR_KIND_FIXED_ARRAY;
 }
 
 static bool cg_ownership_op_is_noop(const XiValue *v) {
@@ -172,14 +176,6 @@ static bool cg_is_void_like(const XiValue *v) {
     if (result_kind == XI_GEN_RESULT_VOID)
         return true;
     return false;
-}
-
-static bool cg_is_unsupported_coroutine_op(uint16_t op) {
-    return xi_generated_op_class(op) == XI_GEN_CLASS_COROUTINE;
-}
-
-static bool cg_is_aot_suspend_op(uint16_t op) {
-    return xi_generated_op_class(op) == XI_GEN_CLASS_COROUTINE;
 }
 
 static const XaotBundle *cg_ctx_aot_bundle(const XiCgenCtx *ctx);
@@ -234,32 +230,6 @@ static bool cg_value_is_module_import(const XiFunc *f, const XiValue *v, const c
             return true;
         if (f && f->module && f->module->init != f)
             return cg_shared_slot_is_module_import(f->module->init, (int) v->aux_int, module_name);
-    }
-    return false;
-}
-
-#include "xi_cgen_time_helpers.inc.c"
-static bool cg_value_needs_aot_coro(const XiFunc *f, const XiValue *v) {
-    if (!v)
-        return false;
-    if (cg_is_aot_suspend_op(v->op))
-        return true;
-    return cg_channel_method_may_suspend(v) || cg_work_queue_method_needs_aot_coro(v) ||
-           cg_work_queue_constructor_needs_aot_coro(v) || cg_is_time_sleep_call(f, v);
-}
-
-static bool cg_func_needs_aot_coro(const XiFunc *f) {
-    if (!f)
-        return false;
-    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
-        const XiBlock *blk = f->blocks[bi];
-        if (!blk)
-            continue;
-        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
-            const XiValue *v = blk->values[vi];
-            if (cg_value_needs_aot_coro(f, v))
-                return true;
-        }
     }
     return false;
 }
@@ -1034,6 +1004,7 @@ static const char *cg_module_prefix_for_func(const XiCgenCtx *ctx, const XiFunc 
 }
 
 #include "xi_cgen_call_resolve.inc.c"
+#include "xi_cgen_coro_resolver.inc.c"
 
 static bool cg_shared_static_function_ownership_is_noop(XiCgenCtx *ctx, const XiFunc *current,
                                                         const XiValue *v) {
@@ -1548,6 +1519,142 @@ static void emit_binop(FILE *out, const XiValue *v, const char *op) {
     emit_vref(out, v->args[1]);
 }
 
+/* 122: narrow-width direct lowering for integer arithmetic.
+ *
+ * AOT carries every integer in the i64 value model, so a sub-word op normally
+ * reads as widen(x) -> i64 op -> narrow(result). That is correct, but emits
+ * noisy C. When the operands provably fit a width that wraps identically, emit a
+ * native (T)(a op b) instead. The gate below only accepts cases where C integer
+ * promotion cannot introduce signed overflow and the final cast preserves the
+ * same low bits as the i64-wrap path. */
+static bool cg_value_narrow_int_rep(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v,
+                                    uint8_t *out_size, bool *out_signed) {
+    if (!v || cg_array_value_uses_native_local(ctx, f, v))
+        return false;
+    XaotRep rep;
+    bool have_rep = false;
+    const XaotValuePlan *plan = cg_value_plan(ctx, v);
+    if (plan) {
+        rep = plan->rep.rep;
+        have_rep = true;
+    } else {
+        uint8_t code = 0;
+        if (cg_value_narrow_local_native_width(v, 0, &code) &&
+            xaot_rep_from_native_type(code, &rep))
+            have_rep = true;
+    }
+    if (!have_rep)
+        return false;
+    const XaotRepInfo *info = xaot_rep_info(rep);
+    if (!info || !info->is_integer)
+        return false;
+    if (out_size)
+        *out_size = info->size;
+    if (out_signed)
+        *out_signed = info->is_signed;
+    return true;
+}
+
+static const XiValue *cg_arith_narrow_src(XiCgenCtx *ctx, const XiFunc *f, const XiValue *o,
+                                          uint8_t *out_size, bool *out_signed) {
+    if (!o)
+        return NULL;
+    uint8_t size = 0;
+    bool sign = false;
+    if (cg_value_narrow_int_rep(ctx, f, o, &size, &sign) && size <= 4) {
+        if (out_size)
+            *out_size = size;
+        if (out_signed)
+            *out_signed = sign;
+        return o;
+    }
+    if (xi_to_c_template_width_kind(o->op) == AOT_WIDTH_TEMPLATE_CAST_I64 && o->nargs >= 1 &&
+        o->args[0]) {
+        const XiValue *src = o->args[0];
+        if (cg_value_narrow_int_rep(ctx, f, src, &size, &sign) && size <= 4) {
+            if (out_size)
+                *out_size = size;
+            if (out_signed)
+                *out_signed = sign;
+            return src;
+        }
+    }
+    return NULL;
+}
+
+static bool cg_arith_is_clean_narrow(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v) {
+    if (!v || v->nargs < 2 || cg_rep(v) != XR_REP_I64)
+        return false;
+    if (v->op != XI_ADD && v->op != XI_SUB && v->op != XI_MUL)
+        return false;
+    uint8_t sa = 0, sb = 0;
+    bool ga = false, gb = false;
+    if (!cg_arith_narrow_src(ctx, f, v->args[0], &sa, &ga) ||
+        !cg_arith_narrow_src(ctx, f, v->args[1], &sb, &gb))
+        return false;
+    if (v->op == XI_MUL) {
+        unsigned eff_a = (unsigned) sa * 8u - (ga ? 1u : 0u);
+        unsigned eff_b = (unsigned) sb * 8u - (gb ? 1u : 0u);
+        if (eff_a + eff_b > 31u)
+            return false;
+    } else if (sa == 4 || sb == 4) {
+        if ((sa == 4 && ga) || (sb == 4 && gb))
+            return false;
+        uint8_t rsize = 0;
+        if (!cg_value_narrow_int_rep(ctx, f, v, &rsize, NULL) || rsize > 4)
+            return false;
+    }
+    return true;
+}
+
+static void cg_emit_narrow_arith_operand(XiCgenCtx *ctx, const XiFunc *f, FILE *out,
+                                         const XiValue *o) {
+    const XiValue *src = cg_arith_narrow_src(ctx, f, o, NULL, NULL);
+    emit_vref(out, src ? src : o);
+}
+
+static bool cg_widen_elided_into_narrow_arith(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v) {
+    if (!f || !v || xi_to_c_template_width_kind(v->op) != AOT_WIDTH_TEMPLATE_CAST_I64 ||
+        v->nargs < 1 || !v->args[0])
+        return false;
+    uint8_t size = 0;
+    bool sign = false;
+    if (!cg_value_narrow_int_rep(ctx, f, v, &size, &sign) || size <= 2)
+        return false;
+    if (!cg_arith_narrow_src(ctx, f, v, NULL, NULL))
+        return false;
+    bool any_user = false;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *blk = f->blocks[bi];
+        if (!blk)
+            continue;
+        if (blk->control == v)
+            return false;
+        for (const XiPhi *phi = blk->phis; phi; phi = phi->next)
+            for (uint16_t k = 0; k < phi->value.nargs; k++)
+                if (phi->value.args[k] == v)
+                    return false;
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *u = blk->values[vi];
+            if (!u || u == v)
+                continue;
+            bool uses_v = false;
+            for (uint16_t ai = 0; ai < u->nargs; ai++) {
+                if (u->args[ai] == v) {
+                    uses_v = true;
+                    break;
+                }
+            }
+            if (!uses_v)
+                continue;
+            if (!cg_arith_is_clean_narrow(ctx, f, u))
+                return false;
+            any_user = true;
+        }
+    }
+    return any_user;
+}
+
 static void emit_bitwise_binop_ctx(XiCgenCtx *ctx, FILE *out, const XiValue *v, const char *op) {
     bool boxed = cg_value_plan_storage_rep(ctx, v) == XR_REP_TAGGED;
     if (boxed)
@@ -1632,7 +1739,7 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
     XR_DCHECK(ctx != NULL, "emit_value_rhs: NULL ctx");
     XR_DCHECK(v != NULL, "emit_value_rhs: NULL value");
 
-    if (cg_is_unsupported_coroutine_op(v->op)) {
+    if (xi_op_is_coroutine(v->op)) {
         const char *op_name = xi_op_name(v->op);
         fprintf(stderr, "[xi_cgen] ERROR: unsupported coroutine Xi op %s\n", op_name);
         emit_codegen_abort_expr(out);
@@ -1954,6 +2061,9 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
     emit_value_source_line(ctx, out, v);
 
     if (v->op == XI_DEFER)
+        return;
+
+    if (cg_widen_elided_into_narrow_arith(ctx, f, v))
         return;
 
     /* Inlined struct: emit local anonymous C struct with native fields. */

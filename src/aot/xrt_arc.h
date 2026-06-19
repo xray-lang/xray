@@ -97,6 +97,12 @@ static inline void *xrt_alloc_aligned_impl(size_t size) {
 static inline void xrt_dispatch_destructor(uint16_t type_id, void *obj);
 static inline void xrt_dispatch_builtin_destructor(uint32_t kind, void *obj);
 
+/* Container RC dispatch. Arrays/maps/sets carry an embedded-at-0 XrGCHeader and
+ * per-type backing storage, so xrt_retain/xrt_release route container tags here
+ * instead of through the generic prepended-header path. Defined in xrt_coll.h. */
+static inline void xrt_coll_retain(XrValue v);
+static inline void xrt_coll_release(XrValue v);
+
 #define XRT_ARC_KIND_NONE 0u
 #define XRT_ARC_KIND_CLOSURE 1u
 #define XRT_ARC_KIND_CELL 2u
@@ -239,6 +245,10 @@ static inline int xrt_arc_value_has_header(XrValue v) {
  * Called by generated code for values with escape > NO_ESCAPE.
  * No-op for values that do not carry an XrGCHeader. */
 static inline void xrt_retain(XrValue v) {
+    if (XR_IS_ARRAY(v) || XR_IS_MAP(v) || XR_IS_SET(v)) {
+        xrt_coll_retain(v);
+        return;
+    }
     if (!xrt_arc_value_has_header(v))
         return;
     XrGCHeader *hdr = XRT_ARC_HDR(v.ptr);
@@ -269,6 +279,10 @@ static inline void xrt_finalize_one(XrGCHeader *hdr) {
 }
 
 static inline void xrt_release(XrValue v) {
+    if (XR_IS_ARRAY(v) || XR_IS_MAP(v) || XR_IS_SET(v)) {
+        xrt_coll_release(v);
+        return;
+    }
     if (!xrt_arc_value_has_header(v))
         return;
     XrGCHeader *hdr = XRT_ARC_HDR(v.ptr);
@@ -305,7 +319,8 @@ static inline void xrt_release(XrValue v) {
 }
 
 static inline void xrt_arc_init(void) {
-    (void) xrt_bump_enabled;
+    const char *arena = getenv("XRAY_AOT_ARENA");
+    xrt_bump_enabled = (arena && arena[0] == '1' && arena[1] == '\0') ? 1 : 0;
 }
 
 /* =========================================================================

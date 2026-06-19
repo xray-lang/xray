@@ -57,33 +57,34 @@ typedef enum {
 #define XI_BUDGET_OPT_NS (5ULL * 1000 * 1000)
 
 typedef struct XiPipelineConfig {
-    XiPipelineMode mode;    /* selects default pass sequence (can be overridden) */
-    bool run_verify;        /* run IR verification after lowering (default: true) */
-    bool run_optimize;      /* run optimization passes (default: true) */
-    XiOptLevel opt_level;   /* optimization aggressiveness (XI_OPT_LIGHT for VM,
-                             * XI_OPT_FULL for AOT) */
-    bool run_select_rep;    /* run SelectRepresentations pass (BOX/UNBOX insertion,
-                             * needed by the AOT backend for unboxed values;
-                             * default: false for VM, true for AOT) */
-    bool run_backend_lower; /* lower high-level ops to XI_CALL_BUILTIN, advancing
-                             * to STAGE_BACKEND (default: false for VM, true for AOT) */
-    bool run_escape;        /* run escape analysis (populates XiValue.escape;
-                             * default: false for VM, true for AOT) */
-    bool run_arc;           /* run precise dup/drop insertion (xi_arc) consuming
-                             * ownership analysis. Independent of run_backend_lower
-                             * so the VM can get dup/drop WITHOUT stack_alloc_rewrite
-                             * (the VM emitter has no XI_STACK_ALLOC handler).
-                             * default: false for VM (until RC takeover), true for AOT. */
-    bool run_emit;          /* emit bytecode (default: true for VM, false for AOT) */
-    bool dump_ir_before;    /* dump IR to stderr before optimization */
-    bool dump_ir_after;     /* dump IR to stderr after optimization */
-    uint64_t budget_ns;     /* optimization time budget in nanoseconds
-                             * (0 = unlimited; default XI_BUDGET_OPT_NS) */
-    bool repl_mode;         /* REPL incremental compilation: top-level bindings
-                             * are lowered to XI_GET/SET_GLOBAL (name-keyed dict)
-                             * instead of XI_GET/SET_SHARED (slot-indexed array).
-                             * Default: false (script-mode shared array path). */
-    XiRepPolicy rep_policy; /* policy for representation boundary insertion */
+    XiPipelineMode mode;     /* selects default pass sequence (can be overridden) */
+    bool run_verify;         /* run IR verification after lowering (default: true) */
+    bool run_optimize;       /* run optimization passes (default: true) */
+    XiOptLevel opt_level;    /* optimization aggressiveness (XI_OPT_LIGHT for VM,
+                              * XI_OPT_FULL for AOT) */
+    bool run_select_rep;     /* run SelectRepresentations pass (BOX/UNBOX insertion,
+                              * needed by the AOT backend for unboxed values;
+                              * default: false for VM, true for AOT) */
+    bool run_backend_lower;  /* lower high-level ops to XI_CALL_BUILTIN, advancing
+                              * to STAGE_BACKEND (default: false for VM, true for AOT) */
+    bool run_escape;         /* run escape analysis (populates XiValue.escape;
+                              * default: false for VM, true for AOT) */
+    bool run_arc;            /* run precise dup/drop insertion (xi_arc) consuming
+                              * ownership analysis. Independent of run_backend_lower
+                              * so the VM can get dup/drop WITHOUT stack_alloc_rewrite
+                              * (the VM emitter has no XI_STACK_ALLOC handler).
+                              * default: false for VM (until RC takeover), true for AOT. */
+    bool run_emit;           /* emit bytecode (default: true for VM, false for AOT) */
+    bool dump_ir_before;     /* dump IR to stderr before optimization */
+    bool dump_ir_after;      /* dump IR to stderr after optimization */
+    uint64_t budget_ns;      /* optimization time budget in nanoseconds
+                              * (0 = unlimited; default XI_BUDGET_OPT_NS) */
+    bool repl_mode;          /* REPL incremental compilation: top-level bindings
+                              * are lowered to XI_GET/SET_GLOBAL (name-keyed dict)
+                              * instead of XI_GET/SET_SHARED (slot-indexed array).
+                              * Default: false (script-mode shared array path). */
+    const char *source_file; /* Source path propagated to emitted XrProto debug info. */
+    XiRepPolicy rep_policy;  /* policy for representation boundary insertion */
     XiOptDisableMask disabled_opt_passes;
 } XiPipelineConfig;
 

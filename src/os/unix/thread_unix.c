@@ -145,6 +145,10 @@ void xr_mutex_unlock(xr_mutex_t *m) {
     pthread_mutex_unlock(m);
 }
 
+bool xr_mutex_trylock(xr_mutex_t *m) {
+    return pthread_mutex_trylock(m) == 0;
+}
+
 // === Condition variable ===
 
 void xr_cond_init(xr_cond_t *c) {

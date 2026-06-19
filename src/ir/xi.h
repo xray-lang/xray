@@ -46,6 +46,7 @@
 struct XrType;
 struct AstNode;
 struct XaAnalyzer;
+struct XiCoroPlan;
 
 /* ========== IR Stage ========== */
 
@@ -61,19 +62,25 @@ struct XaAnalyzer;
  * active simply pass through (input == output == same stage).
  */
 typedef enum {
-    XI_STAGE_RAW = 0,   /* direct AST lowering output; high-level ops present */
-    XI_STAGE_CANONICAL, /* evaluation order fixed, syntax sugar expanded */
-    XI_STAGE_CLOSED,    /* closure/module/class metadata materialized */
-    XI_STAGE_OWNED,     /* ownership/effect/lifetime explicit */
-    XI_STAGE_REPPED,    /* value representations selected, BOX/UNBOX inserted */
-    XI_STAGE_BACKEND,   /* low-level ops only, ready for code generation */
+    XI_STAGE_RAW = 0,      /* direct AST lowering output; high-level ops present */
+    XI_STAGE_CANONICAL,    /* evaluation order fixed, syntax sugar expanded */
+    XI_STAGE_CLOSED,       /* closure/module/class metadata materialized */
+    XI_STAGE_OWNED,        /* ownership/effect/lifetime explicit */
+    XI_STAGE_CORO_LOWERED, /* coroutine bodies lowered to explicit stackless state
+                            * machines (entry dispatch + suspend-split blocks +
+                            * explicit frame).  Selective and skippable: only
+                            * suspendable functions are rewritten, and the VM path
+                            * advances straight from OWNED to REPPED, so reaching
+                            * this stage establishes no new universal invariant. */
+    XI_STAGE_REPPED,       /* value representations selected, BOX/UNBOX inserted */
+    XI_STAGE_BACKEND,      /* low-level ops only, ready for code generation */
     XI_STAGE_COUNT,
 } XiStage;
 
 /* Human-readable stage name (for dumps and diagnostics). */
 static inline const char *xi_stage_name(XiStage s) {
     static const char *names[] = {
-        "Raw", "Canonical", "Closed", "Owned", "Repped", "Backend",
+        "Raw", "Canonical", "Closed", "Owned", "CoroLowered", "Repped", "Backend",
     };
     return (unsigned) s < XI_STAGE_COUNT ? names[s] : "?";
 }
@@ -128,6 +135,9 @@ static inline XiInvariantMask xi_stage_invariants(XiStage s) {
         case XI_STAGE_CLOSED:
             return XI_INV_SSA_DOM | XI_INV_CFG_CLOSED | XI_INV_EVAL_ORDER | XI_INV_UPVALS_RESOLVED;
         case XI_STAGE_OWNED:
+        /* Coroutine lowering rewrites only suspendable bodies and is skippable;
+         * it adds no universal invariant, so it shares OWNED's invariant set. */
+        case XI_STAGE_CORO_LOWERED:
             return XI_INV_SSA_DOM | XI_INV_CFG_CLOSED | XI_INV_EVAL_ORDER | XI_INV_UPVALS_RESOLVED |
                    XI_INV_ESCAPE_DONE;
         case XI_STAGE_REPPED:
@@ -689,6 +699,7 @@ struct XiBorrowSig;
  */
 typedef struct XiFunc {
     const char *name;           /* function name (debug, not owned) */
+    const char *source_file;    /* source path for VM/DAP debug hooks (not owned) */
     struct XrType *return_type; /* return type (from analyzer) */
 
     /* Function parameters as SSA values (in entry block) */
@@ -815,6 +826,11 @@ typedef struct XiFunc {
      * ctx-less emit_vref can resolve coalesced phi operands. NULL = identity. */
     const uint32_t *phi_coalesce;
     uint32_t phi_coalesce_count;
+
+    /* Backend-neutral coroutine plan produced by xi_coro_analyze() and
+     * consumed by both AOT and VM coroutine lowering.  Arena-allocated, so it
+     * lives and dies with this XiFunc.  NULL until the function is analyzed. */
+    struct XiCoroPlan *coro_plan;
 
     /* Opaque side-tables owned by analysis passes. */
     void *analysis_data[2];

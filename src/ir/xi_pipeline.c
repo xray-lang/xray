@@ -53,6 +53,14 @@ static void xi_rep_cleanup_recursive(XiFunc *f) {
         xi_rep_cleanup_recursive(f->children[i]);
 }
 
+static void xi_set_source_file_recursive(XiFunc *f, const char *source_file) {
+    if (!f)
+        return;
+    f->source_file = source_file;
+    for (uint16_t i = 0; i < f->nchildren; i++)
+        xi_set_source_file_recursive(f->children[i], source_file);
+}
+
 /* ========== Configuration ========== */
 
 XR_FUNC XiPipelineConfig xi_pipeline_default_config(void) {
@@ -286,6 +294,7 @@ XR_FUNC XiPipelineResult xi_pipeline_compile_func(struct AstNode *func_node,
     /* Canonicalization guarantees: advance stage and invariant mask
      * for the root and all nested child functions. */
     if (ir) {
+        xi_set_source_file_recursive(ir, cfg->source_file);
         xi_func_set_stage_recursive(ir, XI_STAGE_CANONICAL);
     }
 
@@ -322,6 +331,7 @@ XR_FUNC XiPipelineResult xi_pipeline_compile_program(struct AstNode *program_nod
     /* Canonicalization guarantees: advance stage and invariant mask
      * for the root and all nested child functions. */
     if (ir) {
+        xi_set_source_file_recursive(ir, cfg->source_file);
         xi_func_set_stage_recursive(ir, XI_STAGE_CANONICAL);
     }
 
