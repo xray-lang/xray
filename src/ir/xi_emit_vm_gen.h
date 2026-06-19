@@ -206,6 +206,7 @@ static inline bool xi_emit_vm_requires_fresh_dst(uint16_t op) {
 static inline bool xi_emit_vm_uses_raw_cell_args(uint16_t op) {
     switch ((XiOp) op) {
         case XI_CLOSURE_NEW: return true;
+        case XI_RELEASE: return true;
         case XI_OP_COUNT: return false;
         default: return false;
     }
