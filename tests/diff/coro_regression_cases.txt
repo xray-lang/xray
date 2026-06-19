@@ -24,6 +24,7 @@ tests/regression/11_coroutine/1119_await_all_syntax.xr
 tests/regression/11_coroutine/1120_scope_basic.xr
 tests/regression/11_coroutine/1121_defer_block.xr
 tests/regression/11_coroutine/1122_coro_naming.xr
+tests/regression/11_coroutine/1123_channel_timeout.xr
 tests/regression/11_coroutine/1128_yield.xr
 tests/regression/11_coroutine/1131_linked_go_expr.xr
 tests/regression/11_coroutine/1132_task_monitor.xr

@@ -393,19 +393,19 @@ static bool inline_call_site(XiFunc *caller, XiBlock *call_blk, uint32_t call_id
 
         /* Clone phi nodes */
         for (const XiPhi *src_phi = src_blk->phis; src_phi; src_phi = src_phi->next) {
-            XiValue *phi_clone =
-                xi_value_new(caller, dst_blk, XI_PHI, src_phi->value.type, src_phi->value.nargs);
+            XiPhi *phi_clone =
+                xi_phi_new(caller, dst_blk, src_phi->value.type, src_phi->value.nargs);
             if (!phi_clone)
                 continue;
             for (uint16_t a = 0; a < src_phi->value.nargs; a++) {
                 XiValue *orig = src_phi->value.args[a];
                 if (orig && orig->id < callee_max_id && value_map[orig->id])
-                    phi_clone->args[a] = value_map[orig->id];
+                    phi_clone->value.args[a] = value_map[orig->id];
                 else
-                    phi_clone->args[a] = orig;
+                    phi_clone->value.args[a] = orig;
             }
             if (src_phi->value.id < callee_max_id)
-                value_map[src_phi->value.id] = phi_clone;
+                value_map[src_phi->value.id] = &phi_clone->value;
         }
     }
 

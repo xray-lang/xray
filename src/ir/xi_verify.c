@@ -156,6 +156,13 @@ static void verify_value(VerifyCtx *ctx, const XiFunc *f, const XiBlock *blk, co
         return;
     }
 
+    if (v->op == XI_PHI) {
+        verr(ctx,
+             "func '%s': value-list entry v%u in b%u is XI_PHI; phi nodes must live on blk->phis",
+             f->name, v->id, blk->id);
+        return;
+    }
+
     /* Block back-pointer must match */
     if (v->block != blk) {
         verr(ctx, "func '%s': value v%u claims block b%u but is in b%u", f->name, v->id,
