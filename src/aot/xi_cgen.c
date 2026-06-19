@@ -2223,6 +2223,10 @@ static uint16_t find_pred_idx(const XiBlock *blk, const XiBlock *pred) {
 
 /* ========== Block Emission ========== */
 
+static bool cg_value_terminates_c_path(const XiValue *v) {
+    return v && (v->op == XI_ERR_RETURN || v->op == XI_THROW);
+}
+
 static void emit_block(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiBlock *blk,
                        const char *prefix) {
     XR_DCHECK(blk != NULL, "emit_block: NULL block");
@@ -2238,6 +2242,8 @@ static void emit_block(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiBlock
         if (!v)
             continue;
         emit_value_stmt(ctx, out, f, v, prefix);
+        if (cg_value_terminates_c_path(v))
+            return;
     }
 
     /* Terminator */
