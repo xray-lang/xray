@@ -121,7 +121,9 @@ XR_FUNC bool xaot_class_native_func_uses_receiver(const XaotBundle *bundle, cons
 }
 
 static const XiValue *xaot_class_native_unwrap_receiver_alias(const XiValue *value) {
-    while (value && (value->op == XI_COPY || value->op == XI_MOVE) && value->nargs >= 1)
+    while (value &&
+           ((value->op == XI_COPY && !xi_copy_is_value_clone(value)) || value->op == XI_MOVE) &&
+           value->nargs >= 1)
         value = value->args[0];
     return value;
 }

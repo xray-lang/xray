@@ -25,7 +25,7 @@ static bool emit_shared_slot_is_function(EmitCtx *ctx, int64_t slot) {
 }
 
 static bool emit_callee_is_plain_closure(EmitCtx *ctx, XiValue *callee) {
-    while (callee && callee->op == XI_COPY && callee->nargs >= 1)
+    while (callee && callee->op == XI_COPY && !xi_copy_is_value_clone(callee) && callee->nargs >= 1)
         callee = callee->args[0];
     if (!callee)
         return false;

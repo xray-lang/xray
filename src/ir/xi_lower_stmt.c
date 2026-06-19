@@ -53,6 +53,24 @@ static uint16_t stmt_narrow_op_for_type(struct XrType *type) {
     }
 }
 
+static bool stmt_type_needs_value_clone(struct XrType *type) {
+    if (!type)
+        return false;
+    if (type->is_value_type)
+        return true;
+    return type->kind == XR_KIND_INSTANCE && type->instance.class_ref &&
+           type->instance.class_ref->struct_layout != NULL;
+}
+
+static bool stmt_value_is_fresh_value_struct(XiValue *v) {
+    return v && v->op == XI_STRUCT_NEW;
+}
+
+static void stmt_mark_value_clone_copy(XiValue *v) {
+    if (v && v->op == XI_COPY)
+        v->aux_int = XI_COPY_KIND_VALUE_CLONE;
+}
+
 static XiValue *stmt_narrow_for_target_type(XiLower *l, AstNode *node, XiValue *val,
                                             struct XrType *target_type) {
     if (!val || !val->type || !XR_TYPE_IS_INT(val->type))
@@ -2255,13 +2273,18 @@ static void lower_var_decl(XiLower *l, AstNode *node) {
     /* Value types (structs) always need deep copy on assignment regardless
      * of var_id — the source could be a shared variable, upvalue, or
      * function return whose identity must not leak into the new binding. */
-    if (!needs_copy && type && type->is_value_type) {
+    bool value_clone_copy =
+        (stmt_type_needs_value_clone(type) || stmt_type_needs_value_clone(init_val->type)) &&
+        !stmt_value_is_fresh_value_struct(init_val);
+    if (!needs_copy && value_clone_copy) {
         needs_copy = true;
     }
     if (needs_copy) {
         XiValue *copy = xi_value_new(l->func, l->cur_block, XI_COPY, init_val->type, 1);
         if (copy) {
             copy->args[0] = init_val;
+            if (value_clone_copy)
+                stmt_mark_value_clone_copy(copy);
             init_val = copy;
         }
     }

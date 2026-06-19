@@ -1,0 +1,7 @@
+struct Pair { a: int; b: int }
+
+fn sum(p: Pair) -> int {
+    return p.a + p.b
+}
+
+print(sum(Pair{a: 1, b: 2}))

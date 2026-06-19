@@ -203,6 +203,8 @@ static void arc_copy_to_move(XiFunc *f) {
                 XiValue *v = blk->values[i];
                 if (!v || v->op != XI_COPY || v->nargs < 1 || !v->args[0])
                     continue;
+                if (xi_copy_is_value_clone(v))
+                    continue;
                 /* Only RC objects carry ownership; a scalar copy is irrelevant
                  * to ARC and must stay a plain copy. */
                 if (!xi_own_type_is_rc(v->type) || !xi_own_type_is_rc(v->args[0]->type))
@@ -412,7 +414,7 @@ static XiFunc *arc_resolve_callee(const XiFunc *caller, const XiValue *cv) {
         }
         return NULL;
     }
-    if (cv->op == XI_COPY && cv->nargs >= 1)
+    if (cv->op == XI_COPY && !xi_copy_is_value_clone(cv) && cv->nargs >= 1)
         return arc_resolve_callee(caller, cv->args[0]);
     return NULL;
 }

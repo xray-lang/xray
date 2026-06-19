@@ -304,7 +304,7 @@ static void rewrite_to_copy(XiValue *v, XiValue *src) {
     v->args[0] = src;
     v->nargs = 1;
     v->flags = xi_op_default_effects(XI_COPY);
-    v->aux_int = 0;
+    v->aux_int = XI_COPY_KIND_IDENTITY;
     v->aux = NULL;
     v->mem_group = XI_MEM_NONE;
 }
@@ -439,9 +439,9 @@ static XiValue *resolve_copy(XiValue *v) {
          * payload is the same value. */
         if (v->type && src && src->type && !xr_type_equals(v->type, src->type))
             break;
-        /* Stop at value-type copies — these become OP_COPY (deep copy) at
-         * emit time and must not be propagated away */
-        if (v->type && v->type->is_value_type)
+        /* Stop only at semantic value-clone copies. Optimizer-inserted COPY
+         * values are identity aliases, even when their type is a value struct. */
+        if (xi_copy_is_value_clone(v))
             break;
         v = src;
     }
@@ -841,7 +841,9 @@ static XrRep sr_typed_array_elem_rep(const XrType *type) {
 }
 
 static const XiValue *sr_unwrap_identity_value(const XiValue *v) {
-    while (v && (v->op == XI_BOX || v->op == XI_UNBOX || v->op == XI_COPY || v->op == XI_MOVE) &&
+    while (v &&
+           (v->op == XI_BOX || v->op == XI_UNBOX ||
+            (v->op == XI_COPY && !xi_copy_is_value_clone(v)) || v->op == XI_MOVE) &&
            v->nargs >= 1)
         v = v->args[0];
     return v;

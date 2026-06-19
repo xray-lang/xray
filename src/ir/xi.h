@@ -381,8 +381,10 @@ typedef enum {
     /* Conditional select (from if-conversion) */
     XI_SELECT, /* dst = args[0] ? args[1] : args[2] (cond, true_val, false_val) */
 
-    /* Identity / type narrowing */
-    XI_COPY, /* identity: dst = args[0], may carry narrowed type */
+    /* Identity / type narrowing.  Most XI_COPY values are optimizer-inserted
+     * aliases.  Lowering marks semantic value-struct copies with
+     * XI_COPY_KIND_VALUE_CLONE in aux_int so VM/AOT emit an independent clone. */
+    XI_COPY, /* identity by default: dst = args[0], may carry narrowed type */
 
     /* OOP: class creation */
     XI_CLASS_CREATE, /* create class from descriptor: aux=XiClassData* */
@@ -618,6 +620,13 @@ typedef struct XiValue {
     uint32_t line;         /* source line number (0 = unknown) */
     struct XiBlock *block; /* containing block */
 } XiValue;
+
+#define XI_COPY_KIND_IDENTITY 0
+#define XI_COPY_KIND_VALUE_CLONE INT64_C(0x58434F5059434C4E)
+
+static inline bool xi_copy_is_value_clone(const XiValue *v) {
+    return v && v->op == XI_COPY && v->aux_int == XI_COPY_KIND_VALUE_CLONE;
+}
 
 /*
  * Phi node: placed at block entry for control-flow merges.

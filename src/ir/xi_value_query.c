@@ -46,7 +46,10 @@ XR_FUNC bool xi_type_is_task(const XrType *type) {
 
 /* Strip BOX/UNBOX/COPY identity wrappers so the test sees the carried type. */
 static const XiValue *xi_value_unwrap_identity(const XiValue *v) {
-    while (v && (v->op == XI_BOX || v->op == XI_UNBOX || v->op == XI_COPY) && v->nargs >= 1)
+    while (v &&
+           (v->op == XI_BOX || v->op == XI_UNBOX ||
+            (v->op == XI_COPY && !xi_copy_is_value_clone(v))) &&
+           v->nargs >= 1)
         v = v->args[0];
     return v;
 }

@@ -66,8 +66,8 @@ static CgStaticFunctionCall cg_resolve_static_function_call(XiCgenCtx *ctx, cons
     if (!callee)
         return cg_no_static_function_call();
 
-    if ((callee->op == XI_BOX || callee->op == XI_UNBOX || callee->op == XI_COPY ||
-         callee->op == XI_MOVE) &&
+    if ((callee->op == XI_BOX || callee->op == XI_UNBOX ||
+         (callee->op == XI_COPY && !xi_copy_is_value_clone(callee)) || callee->op == XI_MOVE) &&
         callee->nargs >= 1) {
         CgStaticFunctionCall inner = cg_resolve_static_function_call(ctx, current, callee->args[0]);
         if (inner.func)

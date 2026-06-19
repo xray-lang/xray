@@ -505,7 +505,14 @@ static void emit_copy(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     XiEmitReg src = reg_of(ctx, v->args[0]);
     if (ctx->status != XI_EMIT_OK)
         return;
-    /* Value types need independent storage to maintain copy-on-assign semantics. */
+    /* Only lowering-marked value copies need independent storage. Optimizer
+     * copies are identity aliases, including for value-struct typed values. */
+    if (!xi_copy_is_value_clone(v)) {
+        if (dst != src)
+            emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, src, 0));
+        return;
+    }
+
     XrType *src_type = v->type ? v->type : v->args[0]->type;
     if (src_type && src_type->is_value_type) {
         XrStructLayout *layout = emit_value_struct_layout(src_type);

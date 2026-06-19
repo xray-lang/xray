@@ -146,7 +146,9 @@ static void features_add_stdlib_member(XaotFeatureSet *fs, const char *module, c
  * mirroring cg_unwrap_identity_value so feature inference sees the same module
  * identity the emitter resolves at the call site. */
 static const XiValue *stdlib_unwrap_value(const XiValue *v) {
-    while (v && (v->op == XI_BOX || v->op == XI_UNBOX || v->op == XI_COPY || v->op == XI_MOVE) &&
+    while (v &&
+           (v->op == XI_BOX || v->op == XI_UNBOX ||
+            (v->op == XI_COPY && !xi_copy_is_value_clone(v)) || v->op == XI_MOVE) &&
            v->nargs >= 1)
         v = v->args[0];
     return v;
@@ -209,6 +211,12 @@ static const char *stdlib_runtime_module_of_value(const XiFunc *f, const XiValue
     if (flag == 0 || flag == XAOT_STDLIB_MATH)
         return NULL;
     return ref->module_path;
+}
+
+static bool feature_copy_needs_deep_clone(const XiValue *v) {
+    if (!v || v->op != XI_COPY || v->nargs < 1 || !v->args[0])
+        return false;
+    return xi_copy_is_value_clone(v);
 }
 
 /* Scan a single XiFunc (non-recursive) for feature-indicating ops */
@@ -283,6 +291,10 @@ static void scan_func_features(XiFunc *f, XaotFeatureSet *fs) {
                     }
                     break;
                 }
+                case XI_COPY:
+                    if (feature_copy_needs_deep_clone(v))
+                        fs->need_deep_copy = true;
+                    break;
                 case XI_TRY:
                 case XI_THROW:
                     fs->need_exception = true;

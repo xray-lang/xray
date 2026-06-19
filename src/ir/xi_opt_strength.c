@@ -35,6 +35,8 @@ static void rewrite_to_copy(XiValue *v, XiValue *src) {
     v->op = XI_COPY;
     v->args[0] = src;
     v->nargs = 1;
+    v->aux_int = XI_COPY_KIND_IDENTITY;
+    v->aux = NULL;
 }
 
 /* Rewrite `v` as an integer constant zero. */

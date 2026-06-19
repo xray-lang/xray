@@ -538,6 +538,8 @@ XR_FUNC XiPassChange xi_opt_gvn_pre(XiFunc *f) {
             v->op = XI_COPY;
             v->args[0] = leader;
             v->nargs = 1;
+            v->aux_int = XI_COPY_KIND_IDENTITY;
+            v->aux = NULL;
             v->mem_group = XI_MEM_NONE;
             n_replaced++;
         }

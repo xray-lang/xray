@@ -134,7 +134,8 @@ static bool lower_vec_store(XiFunc *f, XiBlock *blk, XiValue *store) {
     store->op = XI_COPY;
     store->nargs = 1;
     store->args[0] = last;
-    store->aux_int = 0;
+    store->aux_int = XI_COPY_KIND_IDENTITY;
+    store->aux = NULL;
     store->flags |= xi_op_default_effects(XI_COPY);
     return true;
 }
