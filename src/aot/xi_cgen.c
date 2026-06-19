@@ -961,6 +961,7 @@ typedef struct {
     const XiFunc *func;
     const char *prefix;
     bool is_class_constructor;
+    const XiClassData *class_data;
 } CgStaticFunctionCall;
 
 static bool cg_func_needs_aot_coro_ctx(XiCgenCtx *ctx, const XiFunc *f);
@@ -970,6 +971,7 @@ static CgStaticFunctionCall cg_no_static_function_call(void) {
     call.func = NULL;
     call.prefix = NULL;
     call.is_class_constructor = false;
+    call.class_data = NULL;
     return call;
 }
 
@@ -978,15 +980,18 @@ static CgStaticFunctionCall cg_static_function_call(const XiFunc *func, const ch
     call.func = func;
     call.prefix = prefix;
     call.is_class_constructor = false;
+    call.class_data = NULL;
     return call;
 }
 
-static CgStaticFunctionCall cg_static_class_constructor_call(const XiFunc *func,
-                                                             const char *prefix) {
+static CgStaticFunctionCall cg_static_class_constructor_data_call(const XiFunc *func,
+                                                                  const char *prefix,
+                                                                  const XiClassData *class_data) {
     CgStaticFunctionCall call;
     call.func = func;
     call.prefix = prefix;
     call.is_class_constructor = true;
+    call.class_data = class_data;
     return call;
 }
 

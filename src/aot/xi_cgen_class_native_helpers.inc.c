@@ -1584,7 +1584,10 @@ static const XiClassData *cg_class_native_class_for_ctor_target(const XiCgenCtx 
     }
     for (int i = 0; i < ctx->nimports; i++) {
         const CgImportEntry *imp = &ctx->imports[i];
-        if (imp->target_func == target && imp->target_class && imp->target_class->instance_layout)
+        const XiFunc *ctor = imp->target_func;
+        if (!ctor && imp->target_class && imp->exporter_func)
+            ctor = cg_find_constructor(imp->exporter_func, imp->target_class);
+        if (ctor == target && imp->target_class && imp->target_class->instance_layout)
             return imp->target_class;
     }
     return NULL;
@@ -1598,13 +1601,19 @@ static const XiClassData *cg_class_native_ctor_call_data(XiCgenCtx *ctx, const X
         *out_target = NULL;
     if (out_prefix)
         *out_prefix = NULL;
-    if (!ctx || !call || call->op != XI_CALL || call->nargs < 1)
+    if (!ctx || !call || call->nargs < 1)
         return NULL;
-    const XiValue *callee = cg_unwrap_identity_value(call->args[0]);
-    CgStaticFunctionCall static_call = cg_resolve_static_function_call(ctx, f, callee);
+    if (call->op != XI_CALL && call->op != XI_CALL_METHOD)
+        return NULL;
+    const XiValue *callee = call->op == XI_CALL ? cg_unwrap_identity_value(call->args[0]) : NULL;
+    CgStaticFunctionCall static_call =
+        call->op == XI_CALL ? cg_resolve_static_function_call(ctx, f, callee)
+                            : cg_resolve_module_member_call(ctx, f, call, (const char *) call->aux);
     const XiFunc *target = static_call.func;
     const char *prefix = static_call.prefix;
-    const XiClassData *cd = NULL;
+    const XiClassData *cd = static_call.is_class_constructor ? static_call.class_data : NULL;
+    if (call->op == XI_CALL_METHOD && !static_call.is_class_constructor)
+        return NULL;
 
     if (callee && callee->op == XI_GET_SHARED) {
         int slot = (int) callee->aux_int;
@@ -1616,7 +1625,10 @@ static const XiClassData *cg_class_native_ctor_call_data(XiCgenCtx *ctx, const X
     } else if (callee && callee->op == XI_IMPORT_REF && callee->aux) {
         for (int i = 0; i < ctx->nimports; i++) {
             const CgImportEntry *imp = &ctx->imports[i];
-            if (imp->target_func == target && imp->target_class) {
+            const XiFunc *ctor = imp->target_func;
+            if (!ctor && imp->target_class && imp->exporter_func)
+                ctor = cg_find_constructor(imp->exporter_func, imp->target_class);
+            if (ctor == target && imp->target_class) {
                 cd = imp->target_class;
                 prefix = imp->target_mod_name;
                 break;
@@ -1625,7 +1637,8 @@ static const XiClassData *cg_class_native_ctor_call_data(XiCgenCtx *ctx, const X
     }
     if (!cd && target)
         cd = cg_class_native_class_for_ctor_target(ctx, target);
-    if (!cd || !cd->instance_layout || !target || !cg_class_func_is_native_constructor(ctx, target))
+    if (!cd || !cd->instance_layout ||
+        (target && !cg_class_func_is_native_constructor(ctx, target)))
         return NULL;
     if (out_target)
         *out_target = target;
@@ -1644,7 +1657,7 @@ static const XiValue *cg_class_native_trace_ctor_origin(XiCgenCtx *ctx, const Xi
             return NULL;
         v = v->args[0];
     }
-    if (!v || v->op != XI_CALL)
+    if (!v || (v->op != XI_CALL && v->op != XI_CALL_METHOD))
         return NULL;
     return cg_class_native_ctor_call_data(ctx, f, v, NULL, NULL) ? v : NULL;
 }
@@ -1679,6 +1692,11 @@ static bool cg_class_native_ctor_uses_safe(XiCgenCtx *ctx, const XiFunc *f, cons
                     const char *recv_class = target->type && target->type->kind == XR_KIND_INSTANCE
                                                  ? target->type->instance.class_name
                                                  : NULL;
+                    if (!recv_class) {
+                        const XiClassData *cd =
+                            cg_class_native_ctor_call_data(ctx, f, target, NULL, NULL);
+                        recv_class = cd ? cd->class_name : NULL;
+                    }
                     if (v->op == XI_CALL_METHOD_DIRECT)
                         mfunc =
                             cg_lookup_method_by_index(ctx, recv_class, (int) v->aux_int, &prefix);
@@ -1712,6 +1730,24 @@ static bool cg_class_native_ctor_can_inline(XiCgenCtx *ctx, const XiFunc *f, con
     return origin == v && cg_class_native_ctor_uses_safe(ctx, f, v, origin, 0);
 }
 
+static bool emit_class_native_default_ctor_value_stmt(XiCgenCtx *ctx, FILE *out,
+                                                      const XiClassData *cd,
+                                                      const char *class_prefix, const XiValue *v) {
+    if (!cd || !cd->instance_layout || cg_class_native_layout_has_ref_fields(cd->instance_layout))
+        return false;
+    fprintf(out, "    ");
+    emit_class_native_type_name(out, class_prefix, cd->class_name);
+    fprintf(out, " _ci%u;\n", v->id);
+    fprintf(out, "    memset(&_ci%u, 0, sizeof(_ci%u));\n", v->id, v->id);
+    fprintf(out, "    ");
+    emit_class_native_type_name(out, class_prefix, cd->class_name);
+    fprintf(out, " *");
+    emit_vref(out, v);
+    fprintf(out, " = &_ci%u;\n", v->id);
+    (void) ctx;
+    return true;
+}
+
 static bool emit_class_native_ctor_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                               const char *prefix, const XiValue *v) {
     if (!cg_class_native_ctor_can_inline(ctx, f, v))
@@ -1719,21 +1755,24 @@ static bool emit_class_native_ctor_value_stmt(XiCgenCtx *ctx, FILE *out, const X
     const XiFunc *target = NULL;
     const char *ctor_prefix = NULL;
     const XiClassData *cd = cg_class_native_ctor_call_data(ctx, f, v, &target, &ctor_prefix);
-    if (!cd || !target)
+    if (!cd)
         return false;
+    const char *class_prefix = ctor_prefix ? ctor_prefix : prefix;
+    if (!target)
+        return emit_class_native_default_ctor_value_stmt(ctx, out, cd, class_prefix, v);
     if (cg_class_native_layout_has_ref_fields(cd->instance_layout))
         return false;
     fprintf(out, "    ");
-    emit_class_native_type_name(out, ctor_prefix ? ctor_prefix : prefix, cd->class_name);
+    emit_class_native_type_name(out, class_prefix, cd->class_name);
     fprintf(out, " _ci%u;\n", v->id);
     fprintf(out, "    memset(&_ci%u, 0, sizeof(_ci%u));\n", v->id, v->id);
     fprintf(out, "    ");
-    emit_class_native_type_name(out, ctor_prefix ? ctor_prefix : prefix, cd->class_name);
+    emit_class_native_type_name(out, class_prefix, cd->class_name);
     fprintf(out, " *");
     emit_vref(out, v);
     fprintf(out, " = &_ci%u;\n", v->id);
     fprintf(out, "    (void)");
-    emit_fname(ctx, out, ctor_prefix ? ctor_prefix : prefix, target);
+    emit_fname(ctx, out, class_prefix, target);
     fprintf(out, "(NULL, ");
     emit_vref(out, v);
     for (uint16_t i = 1; i < v->nargs; i++) {
@@ -1741,6 +1780,26 @@ static bool emit_class_native_ctor_value_stmt(XiCgenCtx *ctx, FILE *out, const X
         emit_value_as_rep(out, v->args[i], cg_func_param_abi_rep(ctx, target, i));
     }
     fprintf(out, ");\n");
+    return true;
+}
+
+static bool emit_class_native_default_constructor_expr(XiCgenCtx *ctx, FILE *out,
+                                                       const char *prefix, const XiValue *v,
+                                                       const XiClassData *cd,
+                                                       const char *ctor_prefix) {
+    if (!cd || !cd->instance_layout || !cg_class_native_module_for_data(ctx, cd))
+        return false;
+    const char *class_prefix = ctor_prefix ? ctor_prefix : prefix;
+    bool returns_ptr = cg_value_plan_storage_rep(ctx, v) == XR_REP_PTR;
+    fprintf(out, "({ ");
+    emit_class_native_type_name(out, class_prefix, cd->class_name);
+    fprintf(out, " *_inst = (");
+    emit_class_native_type_name(out, class_prefix, cd->class_name);
+    fprintf(out, "*)xrt_obj_alloc((uint16_t)");
+    emit_class_native_type_id_expr(ctx, out, cd);
+    fprintf(out, ", (uint32_t)sizeof(*_inst)); memset(_inst, 0, sizeof(*_inst)); ");
+    fprintf(out, returns_ptr ? "_inst" : "xrt_box_obj(_inst)");
+    fprintf(out, "; })");
     return true;
 }
 
@@ -2917,6 +2976,8 @@ static void emit_one_class_native_typedef(XiCgenCtx *ctx, FILE *out, const XiCla
     }
     for (uint16_t fi = cd->inherited_field_count; fi < cd->instance_layout->field_count; fi++)
         fprintf(out, "%s f%u; ", cg_struct_field_c_type(cd->instance_layout, fi), (unsigned) fi);
+    if (cd->instance_layout->field_count == 0)
+        fprintf(out, "char _empty; ");
     fprintf(out, "} ");
     emit_class_native_type_name(out, prefix, cd->class_name);
     fprintf(out, ";\n");
