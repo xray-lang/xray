@@ -28,6 +28,25 @@ static void xicgen_const(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiVal
     }
 }
 
+static bool xicgen_same_rep_identity_alias(XiCgenCtx *ctx, const XiValue *v, const XiValue *arg) {
+    if (!ctx || !ctx->aot_bundle || !v || !arg)
+        return false;
+    const XaotValuePlan *value_plan = xaot_bundle_find_value_plan(ctx->aot_bundle, v);
+    const XaotValuePlan *arg_plan = xaot_bundle_find_value_plan(ctx->aot_bundle, arg);
+    return value_plan && arg_plan &&
+           xaot_value_storage_rep(value_plan->rep) == xaot_value_storage_rep(arg_plan->rep);
+}
+
+static const XiValue *xicgen_getprop_receiver_value(XiCgenCtx *ctx, const XiValue *v) {
+    while (v &&
+           (v->op == XI_UNBOX || (v->op == XI_COPY && !xi_copy_is_value_clone(v)) ||
+            v->op == XI_MOVE) &&
+           v->nargs >= 1 && xicgen_same_rep_identity_alias(ctx, v, v->args[0])) {
+        v = v->args[0];
+    }
+    return v;
+}
+
 static void xicgen_param(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                          const char *prefix) {
     (void) prefix;
@@ -2617,11 +2636,12 @@ static void xicgen_load_field(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
         emit_typed_array_length_expr(ctx, out, f, prefix, v))
         return;
     int sym = cg_method_sym(field);
+    const XiValue *receiver = xicgen_getprop_receiver_value(ctx, v->args[0]);
     if (sym >= 0) {
         const char *conv_suffix =
             emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
         fprintf(out, "xrt_getprop(");
-        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
+        emit_value_as_rep_ctx(ctx, out, receiver, XR_REP_TAGGED);
         fprintf(out, ", %d)", sym);
         emit_conversion_suffix(out, conv_suffix);
     } else {
@@ -2629,13 +2649,13 @@ static void xicgen_load_field(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
             emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
         if (cg_value_type_is_json(v->args[0])) {
             fprintf(out, "xrt_json_get_name(");
-            emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
+            emit_value_as_rep_ctx(ctx, out, receiver, XR_REP_TAGGED);
             fprintf(out, ", ");
             xicgen_emit_c_string_literal(out, field ? field : "?");
             fprintf(out, ")");
         } else {
             fprintf(out, "xrt_getprop_name(");
-            emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
+            emit_value_as_rep_ctx(ctx, out, receiver, XR_REP_TAGGED);
             fprintf(out, ", ");
             xicgen_emit_c_string_literal(out, field ? field : "?");
             fprintf(out, ")");

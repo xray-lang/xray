@@ -1876,16 +1876,42 @@ static bool emit_class_native_constructor_expr(XiCgenCtx *ctx, FILE *out, const 
     fprintf(out, "*)xrt_obj_alloc((uint16_t)");
     emit_class_native_type_id_expr(ctx, out, info.class_data);
     fprintf(out, ", (uint32_t)sizeof(*_inst)); ");
-    emit_fname(ctx, out, ctor_prefix ? ctor_prefix : prefix, target);
-    fprintf(out, "(NULL, _inst");
-    for (uint16_t a = 1; a < v->nargs; a++) {
-        fprintf(out, ", ");
-        emit_value_as_rep(out, v->args[a], cg_func_param_abi_rep(ctx, target, a));
+    if (cg_func_needs_aot_coro_ctx(ctx, target)) {
+        fprintf(out, "void *_ctor_frame = ");
+        emit_fname_suffix(ctx, out, ctor_prefix ? ctor_prefix : prefix, target, "_aot_frame_new");
+        fprintf(out, "(");
+        bool need_comma = false;
+        if (target->ncaptures > 0) {
+            fprintf(out, "NULL");
+            need_comma = true;
+        }
+        if (need_comma)
+            fprintf(out, ", ");
+        fprintf(out, "xrt_box_obj(_inst)");
+        need_comma = true;
+        for (uint16_t a = 1; a < v->nargs; a++) {
+            if (need_comma)
+                fprintf(out, ", ");
+            emit_value_as_rep_ctx(ctx, out, v->args[a], XR_REP_TAGGED);
+            need_comma = true;
+        }
+        fprintf(out, "); if (!_ctor_frame) abort(); XrAotResult _ctor_result = ");
+        emit_fname_suffix(ctx, out, ctor_prefix ? ctor_prefix : prefix, target, "_aot_resume");
+        fprintf(out, "(_ctor_frame, %s); ",
+                cg_func_needs_aot_coro_ctx(ctx, f) ? "ctx" : "&xrt_global_ctx");
+        emit_fname_suffix(ctx, out, ctor_prefix ? ctor_prefix : prefix, target, "_aot_release");
+        fprintf(out, "(_ctor_frame, NULL); if (_ctor_result.kind != XR_AOT_RUN_DONE) abort(); ");
+    } else {
+        emit_fname(ctx, out, ctor_prefix ? ctor_prefix : prefix, target);
+        fprintf(out, "(NULL, _inst");
+        for (uint16_t a = 1; a < v->nargs; a++) {
+            fprintf(out, ", ");
+            emit_value_as_rep(out, v->args[a], cg_func_param_abi_rep(ctx, target, a));
+        }
+        fprintf(out, "); ");
     }
-    fprintf(out, "); ");
     fprintf(out, returns_ptr ? "_inst" : "xrt_box_obj(_inst)");
     fprintf(out, "; })");
-    (void) f;
     return true;
 }
 
