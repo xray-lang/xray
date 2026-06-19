@@ -25,7 +25,10 @@ tests/regression/11_coroutine/1120_scope_basic.xr
 tests/regression/11_coroutine/1121_defer_block.xr
 tests/regression/11_coroutine/1122_coro_naming.xr
 tests/regression/11_coroutine/1123_channel_timeout.xr
+tests/regression/11_coroutine/1124_coro_stats.xr
+tests/regression/11_coroutine/1125_coro_local.xr
 tests/regression/11_coroutine/1128_yield.xr
+tests/regression/11_coroutine/1129_coro_dump.xr
 tests/regression/11_coroutine/1131_linked_go_expr.xr
 tests/regression/11_coroutine/1132_task_monitor.xr
 tests/regression/11_coroutine/1134_linked_go_propagation.xr
@@ -37,6 +40,7 @@ tests/regression/11_coroutine/1139_error_isolation.xr
 tests/regression/11_coroutine/1140_task_error.xr
 tests/regression/11_coroutine/1141_concurrent_producer_consumer.xr
 tests/regression/11_coroutine/1142_shared_move.xr
+tests/regression/11_coroutine/1144_coro_monitor.xr
 tests/regression/11_coroutine/1146_multicore_string_concat.xr
 tests/regression/11_coroutine/1147_preempt_test.xr
 tests/regression/11_coroutine/1150_select_block_buffer_wake.xr

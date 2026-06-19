@@ -14,6 +14,7 @@
 
 #include <stdatomic.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <string.h>
 
 #include "../base/xchecks.h"
@@ -28,14 +29,18 @@
 #include "../runtime/gc/xsystem_heap.h"
 #include "../runtime/object/xarray.h"
 #include "../runtime/object/xexception.h"
+#include "../runtime/object/xmap.h"
 #include "../runtime/object/xstring.h"
 #include "../runtime/object/xtuple.h"
 #include "../runtime/xisolate_internal.h"
+#include "../runtime/value/xchunk.h"
 #include "../os/os_time.h"
 #include "xblock.h"
 #include "xchannel_ops.h"
 #include "xcoroutine.h"
+#include "xcoro_registry.h"
 #include "xcoro_pool.h"
+#include "xcoro_snapshot.h"
 #include "xtask.h"
 #include "xworker.h"
 #include "xwork_queue.h"
@@ -571,6 +576,527 @@ static XrCoroutine *aot_context_coro(const XrAotContext *ctx, XrayIsolate *isola
     if (coro)
         return coro;
     return task ? xr_task_executor_peek(task) : NULL;
+}
+
+#define XR_AOT_CORO_COLLECT_MAX 10000
+
+static XrValue aot_coro_intern_key(XrayIsolate *isolate, const char *key) {
+    XrString *s = isolate && key ? xr_string_intern(isolate, key, strlen(key), 0) : NULL;
+    return s ? xr_string_value(s) : XR_NULL_VAL;
+}
+
+static XrMap *aot_coro_new_map(XrayIsolate *isolate, XrCoroutine *coro) {
+    if (!coro)
+        coro = isolate ? xr_current_coro(isolate) : NULL;
+    return coro ? xr_map_new(coro) : NULL;
+}
+
+static XrArray *aot_coro_new_array(XrayIsolate *isolate, XrCoroutine *coro) {
+    if (!coro)
+        coro = isolate ? xr_current_coro(isolate) : NULL;
+    return coro ? xr_array_new(coro) : NULL;
+}
+
+static XrValue aot_coro_empty_array_value(XrayIsolate *isolate, XrCoroutine *coro) {
+    XrArray *arr = aot_coro_new_array(isolate, coro);
+    return arr ? xr_value_from_array(arr) : XR_NULL_VAL;
+}
+
+static XrValue aot_coro_empty_map_value(XrayIsolate *isolate, XrCoroutine *coro) {
+    XrMap *map = aot_coro_new_map(isolate, coro);
+    return map ? xr_value_from_map(map) : XR_NULL_VAL;
+}
+
+static XrValue aot_coro_name_value(XrayIsolate *isolate, const XrCoroutine *coro) {
+    const char *name = xr_coro_name(coro);
+    if (!name)
+        return XR_NULL_VAL;
+    XrString *s = xr_string_intern(isolate, name, strlen(name), 0);
+    return s ? xr_string_value(s) : XR_NULL_VAL;
+}
+
+static void aot_coro_set_source_field(XrayIsolate *isolate, XrMap *info, const XrCoroutine *coro) {
+    const char *source_file = xr_coro_source_file(coro);
+    if (!isolate || !info || !source_file)
+        return;
+    char source_buf[256];
+    snprintf(source_buf, sizeof(source_buf), "%s:%d", source_file, xr_coro_source_line(coro));
+    XrString *source = xr_string_intern(isolate, source_buf, strlen(source_buf), 0);
+    if (source)
+        xr_map_set(info, aot_coro_intern_key(isolate, "source"), xr_string_value(source));
+}
+
+static int aot_coro_collect_all(XrayIsolate *isolate, XrCoroSnapshotEntry *out, int max_out) {
+    XrRuntime *runtime = isolate ? (XrRuntime *) isolate->vm.runtime : NULL;
+    return runtime ? xr_runtime_collect_coros(runtime, out, max_out) : 0;
+}
+
+static XrValue aot_coro_stats(XrayIsolate *isolate, XrCoroutine *owner) {
+    XrRuntime *runtime = isolate ? (XrRuntime *) isolate->vm.runtime : NULL;
+    if (!runtime)
+        return XR_NULL_VAL;
+
+    int blocked_count = 0;
+    int ready_count = 0;
+    int active_count = 0;
+    uint64_t total_created = 0;
+    for (int si = 0; si < runtime->worker_count; si++)
+        total_created += runtime->workers[si].p.stats.spawned_count;
+
+    XrCoroSnapshotEntry *entries =
+        (XrCoroSnapshotEntry *) xr_malloc(sizeof(XrCoroSnapshotEntry) * XR_AOT_CORO_COLLECT_MAX);
+    if (entries) {
+        int total = aot_coro_collect_all(isolate, entries, XR_AOT_CORO_COLLECT_MAX);
+        for (int i = 0; i < total; i++) {
+            if (strcmp(entries[i].state, "ready") == 0)
+                ready_count++;
+            else if (strcmp(entries[i].state, "blocked") == 0)
+                blocked_count++;
+            else if (strcmp(entries[i].state, "running") == 0)
+                active_count++;
+        }
+        xr_free(entries);
+    } else {
+        active_count = xr_runtime_active_coros(runtime);
+        for (int wi = 0; wi < runtime->worker_count; wi++) {
+            XrWorker *w = &runtime->workers[wi];
+            blocked_count += w->p.blocked_count;
+            ready_count += xr_runq_len(&w->p.runq);
+        }
+    }
+
+    XrMap *result = aot_coro_new_map(isolate, owner);
+    if (!result)
+        return XR_NULL_VAL;
+    int total_alive = ready_count + blocked_count + active_count;
+    xr_map_set(result, aot_coro_intern_key(isolate, "active"), xr_int(active_count));
+    xr_map_set(result, aot_coro_intern_key(isolate, "blocked"), xr_int(blocked_count));
+    xr_map_set(result, aot_coro_intern_key(isolate, "ready"), xr_int(ready_count));
+    xr_map_set(result, aot_coro_intern_key(isolate, "total"), xr_int(total_alive));
+    xr_map_set(result, aot_coro_intern_key(isolate, "created"), xr_int((int) total_created));
+    return xr_value_from_map(result);
+}
+
+static XrValue aot_coro_list(XrayIsolate *isolate, XrCoroutine *owner, const XrValue *args,
+                             int argc) {
+    int limit = 100000;
+    int state_filter = 0;
+
+    if (argc > 0 && XR_IS_INT(args[0])) {
+        limit = (int) XR_TO_INT(args[0]);
+        if (limit <= 0)
+            limit = 100000;
+    }
+    if (argc > 1) {
+        XrValue state_val = args[1];
+        if (XR_IS_INT(state_val)) {
+            state_filter = (int) XR_TO_INT(state_val);
+        } else if (XR_IS_STRING(state_val)) {
+            XrString *s = XR_TO_STRING(state_val);
+            if (strcmp(s->data, "ready") == 0)
+                state_filter = 1;
+            else if (strcmp(s->data, "blocked") == 0)
+                state_filter = 2;
+        }
+    }
+
+    XrArray *result = aot_coro_new_array(isolate, owner);
+    if (!result)
+        return XR_NULL_VAL;
+
+    XrCoroSnapshotEntry *entries =
+        (XrCoroSnapshotEntry *) xr_malloc(sizeof(XrCoroSnapshotEntry) * XR_AOT_CORO_COLLECT_MAX);
+    if (!entries)
+        return xr_value_from_array(result);
+
+    int total = aot_coro_collect_all(isolate, entries, XR_AOT_CORO_COLLECT_MAX);
+    int count = 0;
+    for (int i = 0; i < total && count < limit; i++) {
+        XrCoroutine *coro = entries[i].coro;
+        const char *st = entries[i].state;
+        bool is_ready = strcmp(st, "ready") == 0;
+        bool is_blocked = strcmp(st, "blocked") == 0;
+
+        if (state_filter == 1 && !is_ready)
+            continue;
+        if (state_filter == 2 && !is_blocked)
+            continue;
+
+        XrMap *info = aot_coro_new_map(isolate, owner);
+        if (!info)
+            continue;
+        xr_map_set(info, aot_coro_intern_key(isolate, "id"), xr_int(coro->id));
+        xr_map_set(info, aot_coro_intern_key(isolate, "name"), aot_coro_name_value(isolate, coro));
+        xr_map_set(info, aot_coro_intern_key(isolate, "state"),
+                   xr_string_value(xr_string_intern(isolate, st, strlen(st), 0)));
+        aot_coro_set_source_field(isolate, info, coro);
+        xr_array_push(result, xr_value_from_map(info));
+        count++;
+    }
+
+    xr_free(entries);
+    return xr_value_from_array(result);
+}
+
+static XrValue aot_coro_info(XrayIsolate *isolate, XrCoroutine *owner, XrValue coro_val) {
+    if (!xr_value_is_coro(coro_val))
+        return XR_NULL_VAL;
+
+    XrCoroutine *coro = xr_value_to_coro(coro_val);
+    XrMap *info = aot_coro_new_map(isolate, owner);
+    if (!info)
+        return XR_NULL_VAL;
+
+    uint32_t flags = xr_coro_flags_load(coro);
+    const char *state_str = "unknown";
+    if (flags & XR_CORO_FLG_DONE)
+        state_str = "done";
+    else if (flags & XR_CORO_FLG_BLOCKED)
+        state_str = "blocked";
+    else if (flags & XR_CORO_FLG_RUNNING)
+        state_str = "running";
+    else if (flags & XR_CORO_FLG_READY)
+        state_str = "ready";
+
+    xr_map_set(info, aot_coro_intern_key(isolate, "id"), xr_int(coro->id));
+    xr_map_set(info, aot_coro_intern_key(isolate, "name"), aot_coro_name_value(isolate, coro));
+    xr_map_set(info, aot_coro_intern_key(isolate, "state"),
+               xr_string_value(xr_string_intern(isolate, state_str, strlen(state_str), 0)));
+    xr_map_set(info, aot_coro_intern_key(isolate, "reductions"), xr_int(xr_coro_reds(coro)));
+    aot_coro_set_source_field(isolate, info, coro);
+
+    XrMap *locals = coro->ext ? coro->ext->locals : NULL;
+    xr_map_set(info, aot_coro_intern_key(isolate, "locals"),
+               locals ? xr_value_from_map(locals) : aot_coro_empty_map_value(isolate, owner));
+
+    const XrCoroWaitState *wait = xr_coro_wait_state_const(coro);
+    int wait_count = wait ? atomic_load(&wait->wait_count) : 0;
+    xr_map_set(info, aot_coro_intern_key(isolate, "waitCount"), xr_int(wait_count));
+    xr_map_set(info, aot_coro_intern_key(isolate, "cancelled"),
+               xr_bool(flags & XR_CORO_FLG_CANCELLED));
+    if (flags & XR_CORO_FLG_DONE)
+        xr_map_set(info, aot_coro_intern_key(isolate, "result"), coro->result);
+    if (flags & XR_CORO_FLG_BLOCKED) {
+        void *wait_channel =
+            coro->ext ? atomic_load_explicit(&coro->ext->wait_channel, memory_order_acquire) : NULL;
+        const char *reason = wait_channel ? "channel" : "await";
+        xr_map_set(info, aot_coro_intern_key(isolate, "blockedOn"),
+                   xr_string_value(xr_string_intern(isolate, reason, strlen(reason), 0)));
+    }
+    return xr_value_from_map(info);
+}
+
+static XrValue aot_coro_dump(XrayIsolate *isolate, const XrValue *args, int argc) {
+    int limit = 100;
+    if (argc > 0 && XR_IS_INT(args[0])) {
+        limit = (int) XR_TO_INT(args[0]);
+        if (limit <= 0)
+            limit = 100;
+    }
+
+    XrCoroSnapshotEntry *entries =
+        (XrCoroSnapshotEntry *) xr_malloc(sizeof(XrCoroSnapshotEntry) * XR_AOT_CORO_COLLECT_MAX);
+    if (!entries)
+        return XR_NULL_VAL;
+    int total = aot_coro_collect_all(isolate, entries, XR_AOT_CORO_COLLECT_MAX);
+
+    int ready_count = 0;
+    int blocked_count = 0;
+    for (int i = 0; i < total; i++) {
+        if (strcmp(entries[i].state, "ready") == 0)
+            ready_count++;
+        else if (strcmp(entries[i].state, "blocked") == 0)
+            blocked_count++;
+    }
+
+    printf("┌─────────────────────────────────────────────────────────────────────────┐\n");
+    printf("│                     Coroutine Status Snapshot                           │\n");
+    printf("├─────────────────────────────────────────────────────────────────────────┤\n");
+    printf("│ Stats: Total %-5d | Ready %-4d | Blocked %-4d                        │\n", total,
+           ready_count, blocked_count);
+    printf("├──────┬────────────────┬─────────┬─────────────────┬─────────────────────┤\n");
+    printf("│ ID   │ Name           │ State   │ Block Reason    │ Location            │\n");
+    printf("├──────┼────────────────┼─────────┼─────────────────┼─────────────────────┤\n");
+
+    int shown = 0;
+    for (int i = 0; i < total && shown < limit; i++) {
+        XrCoroutine *coro = entries[i].coro;
+        const char *state_upper = "READY";
+        if (strcmp(entries[i].state, "blocked") == 0)
+            state_upper = "BLOCKED";
+        else if (strcmp(entries[i].state, "running") == 0)
+            state_upper = "RUNNING";
+        const char *block_reason = "-";
+        if (strcmp(entries[i].state, "blocked") == 0) {
+            void *wait_channel =
+                coro->ext ? atomic_load_explicit(&coro->ext->wait_channel, memory_order_acquire)
+                          : NULL;
+            block_reason = wait_channel ? "channel" : "await";
+        }
+
+        const char *name = xr_coro_name(coro);
+        name = name ? name : "(anonymous)";
+        char name_buf[15];
+        snprintf(name_buf, sizeof(name_buf), "%.14s", name);
+
+        char source_buf[20] = "-";
+        const char *source_file = xr_coro_source_file(coro);
+        if (source_file) {
+            const char *fname = strrchr(source_file, '/');
+            fname = fname ? fname + 1 : source_file;
+            snprintf(source_buf, sizeof(source_buf), "%.12s:%d", fname, xr_coro_source_line(coro));
+        }
+
+        printf("│ %-4d │ %-14s │ %-7s │ %-15s │ %-19s │\n", coro->id, name_buf, state_upper,
+               block_reason, source_buf);
+        shown++;
+    }
+
+    printf("└──────┴────────────────┴─────────┴─────────────────┴─────────────────────┘\n");
+    xr_free(entries);
+    return XR_NULL_VAL;
+}
+
+static XrValue aot_coro_top(XrayIsolate *isolate, XrCoroutine *owner, const XrValue *args,
+                            int argc) {
+    int top_n = 10;
+    int metric = 0;
+    if (argc > 0 && XR_IS_INT(args[0])) {
+        top_n = (int) XR_TO_INT(args[0]);
+        if (top_n <= 0)
+            top_n = 10;
+        if (top_n > 1000)
+            top_n = 1000;
+    }
+    if (argc > 1 && XR_IS_STRING(args[1])) {
+        XrString *s = XR_TO_STRING(args[1]);
+        metric = strcmp(s->data, "reductions") == 0 ? 2 : 0;
+    }
+
+    XrArray *result = aot_coro_new_array(isolate, owner);
+    if (!result)
+        return XR_NULL_VAL;
+
+    XrCoroSnapshotEntry *entries =
+        (XrCoroSnapshotEntry *) xr_malloc(sizeof(XrCoroSnapshotEntry) * XR_AOT_CORO_COLLECT_MAX);
+    if (!entries)
+        return xr_value_from_array(result);
+    int count = aot_coro_collect_all(isolate, entries, XR_AOT_CORO_COLLECT_MAX);
+    for (int j = 0; j < top_n && j < count; j++) {
+        int max_idx = j;
+        for (int k = j + 1; k < count; k++) {
+            int64_t lhs =
+                metric == 2 ? xr_coro_reds(entries[k].coro) : (int64_t) entries[k].coro->id;
+            int64_t rhs = metric == 2 ? xr_coro_reds(entries[max_idx].coro)
+                                      : (int64_t) entries[max_idx].coro->id;
+            if (lhs > rhs)
+                max_idx = k;
+        }
+        if (max_idx != j) {
+            XrCoroSnapshotEntry tmp = entries[j];
+            entries[j] = entries[max_idx];
+            entries[max_idx] = tmp;
+        }
+    }
+
+    int result_count = top_n < count ? top_n : count;
+    for (int j = 0; j < result_count; j++) {
+        XrCoroutine *coro = entries[j].coro;
+        XrMap *info = aot_coro_new_map(isolate, owner);
+        if (!info)
+            continue;
+        xr_map_set(info, aot_coro_intern_key(isolate, "id"), xr_int(coro->id));
+        xr_map_set(info, aot_coro_intern_key(isolate, "name"), aot_coro_name_value(isolate, coro));
+        xr_map_set(info, aot_coro_intern_key(isolate, "state"),
+                   xr_string_value(
+                       xr_string_intern(isolate, entries[j].state, strlen(entries[j].state), 0)));
+        xr_map_set(info, aot_coro_intern_key(isolate, "reductions"), xr_int(xr_coro_reds(coro)));
+        aot_coro_set_source_field(isolate, info, coro);
+        xr_array_push(result, xr_value_from_map(info));
+    }
+
+    xr_free(entries);
+    return xr_value_from_array(result);
+}
+
+static XrValue aot_coro_group_by(XrayIsolate *isolate, XrCoroutine *owner, const XrValue *args,
+                                 int argc) {
+    int group_by = 0;
+    if (argc > 0 && XR_IS_STRING(args[0])) {
+        XrString *s = XR_TO_STRING(args[0]);
+        if (strcmp(s->data, "state") == 0)
+            group_by = 1;
+    }
+
+    XrMap *result = aot_coro_new_map(isolate, owner);
+    if (!result)
+        return XR_NULL_VAL;
+
+    XrCoroSnapshotEntry *entries =
+        (XrCoroSnapshotEntry *) xr_malloc(sizeof(XrCoroSnapshotEntry) * XR_AOT_CORO_COLLECT_MAX);
+    if (!entries)
+        return xr_value_from_map(result);
+    int total = aot_coro_collect_all(isolate, entries, XR_AOT_CORO_COLLECT_MAX);
+    for (int i = 0; i < total; i++) {
+        XrCoroutine *coro = entries[i].coro;
+        const char *key_str = group_by == 0 ? xr_coro_name(coro) : entries[i].state;
+        if (!key_str)
+            key_str = "(anonymous)";
+        XrValue key = xr_string_value(xr_string_intern(isolate, key_str, strlen(key_str), 0));
+        bool found = false;
+        XrValue existing = xr_map_get(result, key, &found);
+        xr_map_set(result, key,
+                   found && XR_IS_INT(existing) ? xr_int(XR_TO_INT(existing) + 1) : xr_int(1));
+    }
+
+    xr_free(entries);
+    return xr_value_from_map(result);
+}
+
+static XrCoroState *aot_coro_sched(XrayIsolate *isolate) {
+    return isolate ? (XrCoroState *) isolate->vm.coro_state : NULL;
+}
+
+XrValue xr_aot_coro_op(const XrAotContext *ctx, int32_t sub_op, const XrValue *args, int argc) {
+    if (argc < 0)
+        argc = 0;
+    XrayIsolate *isolate = aot_context_isolate(ctx, NULL);
+    XrCoroutine *current = aot_context_coro(ctx, isolate, NULL);
+    if (!isolate)
+        return XR_NULL_VAL;
+
+    switch (sub_op) {
+        case 0: {
+            if (argc < 2)
+                return XR_NULL_VAL;
+            if (!current) {
+                if (!isolate->vm.main_locals)
+                    isolate->vm.main_locals = aot_coro_new_map(isolate, current);
+                if (isolate->vm.main_locals)
+                    xr_map_set(isolate->vm.main_locals, args[0], args[1]);
+            } else {
+                XrCoroExt *ext = xr_coro_ensure_ext(current);
+                if (ext) {
+                    if (!ext->locals)
+                        ext->locals = xr_map_new(current);
+                    if (ext->locals)
+                        xr_map_set(ext->locals, args[0], args[1]);
+                }
+            }
+            return XR_NULL_VAL;
+        }
+        case 1: {
+            if (argc < 1)
+                return XR_NULL_VAL;
+            XrMap *locals =
+                current ? (current->ext ? current->ext->locals : NULL) : isolate->vm.main_locals;
+            if (!locals)
+                return XR_NULL_VAL;
+            bool found = false;
+            XrValue result = xr_map_get(locals, args[0], &found);
+            return found ? result : XR_NULL_VAL;
+        }
+        case 2: {
+            if (current) {
+                XrCoroExt *ext = xr_coro_ensure_ext(current);
+                if (ext) {
+                    int old_count = atomic_fetch_add(&ext->lock_count, 1);
+                    if (old_count == 0) {
+                        XrWorker *worker = xr_current_worker();
+                        ext->locked_worker = worker ? worker->p.id : 0;
+                    }
+                }
+            }
+            return XR_NULL_VAL;
+        }
+        case 3: {
+            if (current && current->ext) {
+                int old_count = atomic_fetch_sub(&current->ext->lock_count, 1);
+                if (old_count <= 1) {
+                    atomic_store(&current->ext->lock_count, 0);
+                    current->ext->locked_worker = -1;
+                }
+            }
+            return XR_NULL_VAL;
+        }
+        default:
+            break;
+    }
+
+    if (sub_op < 100)
+        return XR_NULL_VAL;
+    int ctrl_sub = sub_op - 100;
+    switch (ctrl_sub) {
+        case CORO_CTRL_STATS:
+            return aot_coro_stats(isolate, current);
+        case CORO_CTRL_LIST:
+            return aot_coro_list(isolate, current, args, argc);
+        case CORO_CTRL_INFO:
+            return argc > 0 ? aot_coro_info(isolate, current, args[0]) : XR_NULL_VAL;
+        case CORO_CTRL_DUMP:
+            return aot_coro_dump(isolate, args, argc);
+        case CORO_CTRL_STALLED:
+        case CORO_CTRL_DEADLOCKS:
+            return aot_coro_empty_array_value(isolate, current);
+        case CORO_CTRL_TOP:
+            return aot_coro_top(isolate, current, args, argc);
+        case CORO_CTRL_GROUP_BY:
+            return aot_coro_group_by(isolate, current, args, argc);
+        case CORO_CTRL_WHEREIS: {
+            if (argc < 1 || !XR_IS_STRING(args[0]))
+                return xr_bool(false);
+            XrCoroState *sched = aot_coro_sched(isolate);
+            if (!sched || !sched->coro_registry)
+                return xr_bool(false);
+            const char *name = xr_value_str_data(&args[0]);
+            return xr_bool(xr_coro_registry_whereis(sched->coro_registry, name) != NULL);
+        }
+        case CORO_CTRL_MONITOR: {
+            if (argc < 1 || !XR_IS_STRING(args[0]))
+                return XR_NULL_VAL;
+            XrCoroState *sched = aot_coro_sched(isolate);
+            if (!sched || !sched->coro_registry)
+                return XR_NULL_VAL;
+            const char *name = xr_value_str_data(&args[0]);
+            XrChannel *ch = xr_coro_monitor(isolate, sched->coro_registry, name);
+            return ch ? xr_value_from_channel(ch) : XR_NULL_VAL;
+        }
+        case CORO_CTRL_DEMONITOR: {
+            if (argc < 2 || !XR_IS_STRING(args[0]) || !xr_value_is_channel(args[1]))
+                return XR_NULL_VAL;
+            XrCoroState *sched = aot_coro_sched(isolate);
+            if (!sched || !sched->coro_registry)
+                return XR_NULL_VAL;
+            const char *name = xr_value_str_data(&args[0]);
+            XrCoroutine *coro = xr_coro_registry_whereis(sched->coro_registry, name);
+            if (coro)
+                xr_coro_demonitor(sched->coro_registry, coro, xr_value_to_channel(args[1]));
+            return XR_NULL_VAL;
+        }
+        case CORO_CTRL_KILL: {
+            if (argc < 1 || !XR_IS_STRING(args[0]))
+                return xr_bool(false);
+            XrCoroState *sched = aot_coro_sched(isolate);
+            if (!sched || !sched->coro_registry)
+                return xr_bool(false);
+            const char *name = xr_value_str_data(&args[0]);
+            XrCoroutine *target = xr_coro_registry_whereis(sched->coro_registry, name);
+            if (!target || xr_coro_flags_has(target, XR_CORO_FLG_DONE))
+                return xr_bool(false);
+            xr_coro_flags_set(target, XR_CORO_FLG_CANCEL_REQUESTED);
+            xr_coro_request_yield(target);
+            return xr_bool(true);
+        }
+        case CORO_CTRL_SELF: {
+            const char *name = xr_coro_name(current);
+            if (!name)
+                return XR_NULL_VAL;
+            XrString *s = xr_string_intern(isolate, name, strlen(name), 0);
+            return s ? xr_string_value(s) : XR_NULL_VAL;
+        }
+        default:
+            return XR_NULL_VAL;
+    }
 }
 
 static XrEnumType *aot_builtin_enum_type(const XrAotContext *ctx, int builtin_index) {
