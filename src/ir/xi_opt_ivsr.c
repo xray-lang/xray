@@ -171,6 +171,8 @@ static bool reduce_derived_iv(XiFunc *f, XiLoop *L, const XiBasicIV *biv, const 
     orig->op = XI_COPY;
     orig->args[0] = &jphi->value;
     orig->nargs = 1;
+    orig->aux_int = XI_COPY_KIND_IDENTITY;
+    orig->aux = NULL;
     /* Inputs that used to feed the multiply are now unreferenced; dce
      * will reap them along with the original op. */
     return true;

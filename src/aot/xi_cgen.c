@@ -142,7 +142,9 @@ static const char *local_ctype_str(const XiValue *v) {
 }
 
 static const XiValue *cg_unwrap_identity_value(const XiValue *v) {
-    while (v && (v->op == XI_BOX || v->op == XI_UNBOX || v->op == XI_COPY || v->op == XI_MOVE) &&
+    while (v &&
+           (v->op == XI_BOX || v->op == XI_UNBOX ||
+            (v->op == XI_COPY && !xi_copy_is_value_clone(v)) || v->op == XI_MOVE) &&
            v->nargs >= 1) {
         v = v->args[0];
     }
@@ -221,7 +223,10 @@ static bool cg_shared_slot_is_module_import(const XiFunc *f, int slot, const cha
 }
 
 static bool cg_value_is_module_import(const XiFunc *f, const XiValue *v, const char *module_name) {
-    while (v && (v->op == XI_BOX || v->op == XI_UNBOX || v->op == XI_COPY) && v->nargs >= 1)
+    while (v &&
+           (v->op == XI_BOX || v->op == XI_UNBOX ||
+            (v->op == XI_COPY && !xi_copy_is_value_clone(v))) &&
+           v->nargs >= 1)
         v = v->args[0];
     if (cg_import_ref_is_module(v, module_name))
         return true;

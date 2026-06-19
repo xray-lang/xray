@@ -55,9 +55,29 @@ static void xicgen_identity(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
     emit_conversion_suffix(out, conv_suffix);
 }
 
+static bool xicgen_copy_needs_value_clone(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v) {
+    (void) ctx;
+    (void) f;
+    if (!v || v->op != XI_COPY || v->nargs < 1 || !v->args[0])
+        return false;
+    return xi_copy_is_value_clone(v);
+}
+
 static void xicgen_copy(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                         const char *prefix) {
-    xicgen_identity(ctx, out, f, v, prefix);
+    (void) prefix;
+    XR_DCHECK(v->nargs >= 1, "xicgen_copy: need arg");
+    if (!xicgen_copy_needs_value_clone(ctx, f, v)) {
+        xicgen_identity(ctx, out, f, v, prefix);
+        return;
+    }
+
+    XrRep to_rep = cg_value_decl_storage_rep(ctx, f, v);
+    const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, to_rep);
+    fprintf(out, "xrt_value_clone_for_coro(");
+    emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
+    fprintf(out, ")");
+    emit_conversion_suffix(out, conv_suffix);
 }
 
 static void xicgen_move(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,

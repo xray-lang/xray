@@ -206,11 +206,15 @@ static XrRep cg_struct_field_rep(const XrStructLayout *sl, int64_t idx) {
     return field ? cg_struct_native_rep(field->native_type) : XR_REP_TAGGED;
 }
 
+static bool cg_is_identity_copy_or_move(const XiValue *v) {
+    return v && (v->op == XI_MOVE || (v->op == XI_COPY && !xi_copy_is_value_clone(v)));
+}
+
 static const XiValue *cg_trace_struct_new_depth(const XiValue *v, int depth) {
     if (!v || depth > 8)
         return NULL;
 
-    while (v && (v->op == XI_COPY || v->op == XI_MOVE) && v->nargs >= 1) {
+    while (v && cg_is_identity_copy_or_move(v) && v->nargs >= 1) {
         if (++depth > 8)
             return NULL;
         v = v->args[0];
@@ -284,7 +288,7 @@ static bool cg_value_traces_to_heap_struct_shared_depth(const XiCgenCtx *ctx, co
                                                         int *out_slot, int depth) {
     if (!v || depth > 8)
         return false;
-    while (v && (v->op == XI_COPY || v->op == XI_MOVE || v->op == XI_RETAIN) && v->nargs >= 1) {
+    while (v && (cg_is_identity_copy_or_move(v) || v->op == XI_RETAIN) && v->nargs >= 1) {
         if (++depth > 8)
             return false;
         v = v->args[0];
@@ -380,7 +384,7 @@ static bool cg_heap_struct_shared_alias_safe_uses(const XiCgenCtx *ctx, const Xi
                     continue;
                 if ((v->op == XI_RETAIN || v->op == XI_RELEASE) && a == 0)
                     continue;
-                if ((v->op == XI_COPY || v->op == XI_MOVE) && a == 0) {
+                if (cg_is_identity_copy_or_move(v) && a == 0) {
                     int alias_slot = -1;
                     if (!cg_value_traces_to_heap_struct_shared(ctx, f, v, NULL, &alias_slot) ||
                         alias_slot != slot)
@@ -444,7 +448,7 @@ static bool cg_struct_uses_safe_depth(const XiFunc *f, const XiValue *target, co
                     continue;
                 if ((v->op == XI_RETAIN || v->op == XI_RELEASE) && a == 0)
                     continue;
-                if ((v->op == XI_COPY || v->op == XI_MOVE) && a == 0) {
+                if (cg_is_identity_copy_or_move(v) && a == 0) {
                     if (cg_trace_struct_new(v) != origin)
                         return false;
                     if (!cg_struct_uses_safe_depth(f, v, origin, depth + 1))
@@ -650,7 +654,7 @@ static bool cg_nested_struct_ref_safe_uses(const XiFunc *f, const XiValue *targe
                     continue;
                 if ((v->op == XI_RETAIN || v->op == XI_RELEASE) && a == 0)
                     continue;
-                if ((v->op == XI_COPY || v->op == XI_MOVE) && a == 0) {
+                if (cg_is_identity_copy_or_move(v) && a == 0) {
                     if (!cg_nested_struct_ref_safe_uses(f, v, depth + 1))
                         return false;
                     continue;
@@ -664,7 +668,7 @@ static bool cg_nested_struct_ref_safe_uses(const XiFunc *f, const XiValue *targe
 
 static bool cg_value_is_elided_nested_struct_ref(const XiFunc *f, const XiValue *v) {
     const XiValue *target = v;
-    while (target && (target->op == XI_COPY || target->op == XI_MOVE) && target->nargs >= 1)
+    while (target && cg_is_identity_copy_or_move(target) && target->nargs >= 1)
         target = target->args[0];
     return cg_value_is_nested_struct_field_ref(target) &&
            cg_nested_struct_ref_safe_uses(f, target, 0);
@@ -790,7 +794,7 @@ static void emit_struct_heap_field_lvalue(XiCgenCtx *ctx, FILE *out, const XiFun
 static bool emit_struct_heap_nested_object_ptr_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                                     const XiValue *object, const char *prefix) {
     const XiValue *target = object;
-    while (target && (target->op == XI_COPY || target->op == XI_MOVE) && target->nargs >= 1)
+    while (target && cg_is_identity_copy_or_move(target) && target->nargs >= 1)
         target = target->args[0];
     if (!cg_value_is_elided_nested_struct_ref(f, target))
         return false;
@@ -892,7 +896,7 @@ static void emit_struct_fallback_field_set(XiCgenCtx *ctx, FILE *out, const XiFu
 }
 
 static const XiValue *cg_trace_fixed_array_field_ref(const XiValue *v) {
-    while (v && (v->op == XI_COPY || v->op == XI_MOVE) && v->nargs >= 1)
+    while (v && cg_is_identity_copy_or_move(v) && v->nargs >= 1)
         v = v->args[0];
     if (!v || v->op != XI_STRUCT_GET || v->nargs < 1)
         return NULL;
@@ -927,7 +931,7 @@ static bool cg_fixed_array_ref_safe_uses(const XiFunc *f, const XiValue *target,
                     continue;
                 if ((v->op == XI_INDEX_GET || v->op == XI_INDEX_SET) && a == 0)
                     continue;
-                if ((v->op == XI_COPY || v->op == XI_MOVE) && a == 0) {
+                if (cg_is_identity_copy_or_move(v) && a == 0) {
                     if (!cg_fixed_array_ref_safe_uses(f, v, depth + 1))
                         return false;
                     continue;

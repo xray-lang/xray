@@ -318,7 +318,8 @@ static XiRange eval_range(const XiValue *v, const RangeTable *rt, const XiLoopIn
  * plain phi union inside eval_range, which keeps the fixed-point
  * iteration monotone and convergent. */
 static const XiValue *unwrap_copy(const XiValue *v) {
-    while (v && (v->op == XI_COPY || v->op == XI_MOVE) && v->nargs >= 1)
+    while (v && ((v->op == XI_COPY && !xi_copy_is_value_clone(v)) || v->op == XI_MOVE) &&
+           v->nargs >= 1)
         v = v->args[0];
     return v;
 }

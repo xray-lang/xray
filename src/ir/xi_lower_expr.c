@@ -15,6 +15,7 @@
 #include "xi.h"
 #include "xi_effect.h"
 #include "xi_lower_expr_helpers.h"
+#include "xi_own.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
 #include "../runtime/value/xtype.h"
@@ -67,12 +68,26 @@ static XrStructLayout *xi_lower_lookup_struct_layout(XiLower *l, const char *nam
     return (links && links->class_info) ? links->class_info->struct_layout : NULL;
 }
 
-static XrStructLayout *xi_lower_value_struct_layout(XiValue *v) {
-    XrStructLayout *layout = xi_lower_struct_layout_of(v ? v->type : NULL);
+static XrStructLayout *xi_lower_type_struct_layout(XiLower *l, struct XrType *type) {
+    XrStructLayout *layout = xi_lower_struct_layout_of(type);
     if (layout)
         return layout;
-    while (v && (v->op == XI_COPY || v->op == XI_MOVE) && v->nargs >= 1)
+    if (!type)
+        return NULL;
+    const char *class_name = xr_type_get_class_name(type);
+    return class_name ? xi_lower_lookup_struct_layout(l, class_name) : NULL;
+}
+
+static XrStructLayout *xi_lower_value_struct_layout(XiLower *l, XiValue *v) {
+    XrStructLayout *layout = xi_lower_type_struct_layout(l, v ? v->type : NULL);
+    if (layout)
+        return layout;
+    while (v && ((v->op == XI_COPY && !xi_copy_is_value_clone(v)) || v->op == XI_MOVE) &&
+           v->nargs >= 1)
         v = v->args[0];
+    layout = xi_lower_type_struct_layout(l, v ? v->type : NULL);
+    if (layout)
+        return layout;
     if (!v || v->op != XI_STRUCT_GET)
         return NULL;
     XrStructLayout *parent = (XrStructLayout *) v->aux;
@@ -80,6 +95,105 @@ static XrStructLayout *xi_lower_value_struct_layout(XiValue *v) {
         return NULL;
     XrStructFieldLayout *field = &parent->fields[v->aux_int];
     return field->native_type == XR_NATIVE_STRUCT ? field->sub_layout : NULL;
+}
+
+static bool xi_lower_type_needs_value_clone(XiLower *l, struct XrType *type) {
+    return type && (type->is_value_type || xi_lower_type_struct_layout(l, type) != NULL);
+}
+
+static bool xi_lower_value_needs_value_clone(XiLower *l, XiValue *v) {
+    return v && xi_lower_type_needs_value_clone(l, v->type);
+}
+
+static bool xi_lower_value_is_fresh_value_struct(XiValue *v) {
+    return v && v->op == XI_STRUCT_NEW;
+}
+
+static void xi_lower_mark_value_clone_copy(XiValue *v) {
+    if (v && v->op == XI_COPY)
+        v->aux_int = XI_COPY_KIND_VALUE_CLONE;
+}
+
+static XiFunc *lower_resolve_static_callee_func(XiLower *l, XiValue *callee) {
+    while (callee && callee->op == XI_COPY && !xi_copy_is_value_clone(callee) && callee->nargs >= 1)
+        callee = callee->args[0];
+    if (!callee)
+        return NULL;
+    if (callee->op == XI_CLOSURE_NEW && callee->aux)
+        return (XiFunc *) callee->aux;
+    if (callee->op == XI_STACK_ALLOC && callee->aux_int == XI_CLOSURE_NEW && callee->aux)
+        return (XiFunc *) callee->aux;
+    if (callee->op == XI_GET_SHARED) {
+        int64_t slot = callee->aux_int;
+        for (XiFunc *fn = l ? l->func : NULL; fn; fn = fn->parent_func) {
+            if (fn->shared_slot_funcs && slot >= 0 && slot < (int64_t) fn->shared_slot_func_count &&
+                fn->shared_slot_funcs[slot])
+                return fn->shared_slot_funcs[slot];
+        }
+    }
+    return NULL;
+}
+
+static bool lower_value_param_is_readonly(XiFunc *callee, uint16_t pidx) {
+    if (!callee || pidx >= callee->nparams)
+        return false;
+    XiValue *param = callee->params[pidx];
+    if (!param)
+        return false;
+
+    for (uint32_t b = 0; b < callee->nblocks; b++) {
+        XiBlock *blk = callee->blocks[b];
+        if (!blk)
+            continue;
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            XiValue *user = blk->values[i];
+            if (!user)
+                continue;
+            for (uint16_t a = 0; a < user->nargs; a++) {
+                if (user->args[a] != param)
+                    continue;
+                if (xi_own_use_is_consuming(user->op, a))
+                    return false;
+                if ((xi_op_default_effects(user->op) | user->flags) & XI_FLAG_WRITES_MEM)
+                    return false;
+            }
+        }
+        for (XiPhi *phi = blk->phis; phi; phi = phi->next) {
+            for (uint16_t a = 0; a < phi->value.nargs; a++) {
+                if (phi->value.args[a] == param)
+                    return false;
+            }
+        }
+        if (blk->kind == XI_BLOCK_RETURN && blk->control == param)
+            return false;
+    }
+    return true;
+}
+
+static void lower_apply_auto_borrow_param_modes(XiLower *l, XiFunc *callee,
+                                                const uint8_t *explicit_modes, int explicit_count,
+                                                uint8_t *out_modes, int mode_count) {
+    if (!out_modes || mode_count <= 0)
+        return;
+    for (int i = 0; i < mode_count; i++) {
+        out_modes[i] = (explicit_modes && i < explicit_count) ? explicit_modes[i] : XR_PARAM_VALUE;
+    }
+    if (!l || !callee || callee->nparams == 0)
+        return;
+
+    XiOwnResult own;
+    if (!xi_own_analyze(callee, &own))
+        return;
+    if (own.sig.valid) {
+        int n = own.sig.nparams < mode_count ? own.sig.nparams : mode_count;
+        for (int i = 0; i < n; i++) {
+            if (out_modes[i] == XR_PARAM_VALUE && own.sig.param_own[i] == XI_OWN_BORROWED &&
+                lower_value_param_is_readonly(callee, (uint16_t) i)) {
+                out_modes[i] = XR_PARAM_IN;
+            }
+        }
+    }
+    xi_own_free(&own);
 }
 
 static XiValue *xi_lower_narrow_for_native_field(XiLower *l, AstNode *node, XiValue *val,
@@ -540,13 +654,17 @@ static XiValue *lower_assignment(XiLower *l, AstNode *node) {
          * the same physical register — corrupting loop-carried values
          * when the source variable is subsequently modified. */
         bool need_copy = (xi_var_id_is_valid(val->var_id) && val->var_id != (XiVarId) var_id);
-        /* Value types (structs) always need deep copy on assignment */
-        if (!need_copy && val->type && val->type->is_value_type)
+        /* Value types (structs) need independent storage on assignment. */
+        bool value_clone_copy =
+            xi_lower_value_needs_value_clone(l, val) && !xi_lower_value_is_fresh_value_struct(val);
+        if (!need_copy && value_clone_copy)
             need_copy = true;
         if (need_copy) {
             XiValue *copy = xi_value_new(l->func, l->cur_block, XI_COPY, val->type, 1);
             if (copy) {
                 copy->args[0] = val;
+                if (value_clone_copy)
+                    xi_lower_mark_value_clone_copy(copy);
                 val = copy;
             }
         }
@@ -796,7 +914,7 @@ static XiValue *lower_member_access(XiLower *l, AstNode *node) {
 
     /* Struct with compile-time layout → XI_STRUCT_GET (emitter decides
      * whether to stack-allocate or fall back to OP_GETPROP) */
-    XrStructLayout *slayout = xi_lower_value_struct_layout(obj);
+    XrStructLayout *slayout = xi_lower_value_struct_layout(l, obj);
     if (slayout) {
         int sidx = xi_lower_struct_field_index(slayout, ma->name);
         if (sidx >= 0) {
@@ -858,17 +976,25 @@ static XiValue *lower_member_access(XiLower *l, AstNode *node) {
     return v;
 }
 
+static XiValue *lower_member_set_target(XiValue *obj) {
+    while (obj && obj->op == XI_COPY && !xi_copy_is_value_clone(obj) && obj->nargs >= 1 &&
+           obj->args[0])
+        obj = obj->args[0];
+    return obj;
+}
+
 static XiValue *lower_member_set(XiLower *l, AstNode *node) {
     MemberSetNode *ms = &node->as.member_set;
     XiValue *obj = xi_lower_expr(l, ms->object);
     XiValue *val = xi_lower_expr(l, ms->value);
     if (!obj || !val)
         return NULL;
+    obj = lower_member_set_target(obj);
 
     struct XrType *result_type = val->type;
 
     /* Struct with compile-time layout → XI_STRUCT_SET */
-    XrStructLayout *slayout = xi_lower_value_struct_layout(obj);
+    XrStructLayout *slayout = xi_lower_value_struct_layout(l, obj);
     if (slayout) {
         int sidx = xi_lower_struct_field_index(slayout, ms->member);
         if (sidx >= 0) {
@@ -1566,10 +1692,12 @@ static bool lower_call_args_expand_spread(XiLower *l, CallExprNode *call, XiLowe
         if (!a)
             return false;
         uint8_t mode = (pmodes && args->count < pcount) ? pmodes[args->count] : XR_PARAM_VALUE;
-        if (a->type && a->type->is_value_type && mode == XR_PARAM_VALUE) {
+        if (xi_lower_value_needs_value_clone(l, a) && !xi_lower_value_is_fresh_value_struct(a) &&
+            mode == XR_PARAM_VALUE) {
             XiValue *cpy = xi_value_new(l->func, l->cur_block, XI_COPY, a->type, 1);
             if (cpy) {
                 cpy->args[0] = a;
+                xi_lower_mark_value_clone_copy(cpy);
                 a = cpy;
             }
         }
@@ -1863,12 +1991,30 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
         pmodes = callee_type->function.param_passing_modes;
         pcount = callee_type->function.param_count;
     }
+    XiFunc *static_callee = lower_resolve_static_callee_func(l, callee_val);
+    uint8_t stack_auto_modes[64];
+    const uint8_t *effective_pmodes = pmodes;
+    int effective_pcount = pcount;
+    int auto_count = pcount > 0 ? pcount : (static_callee ? (int) static_callee->nparams : 0);
+    if (static_callee && auto_count > 0) {
+        uint8_t *auto_modes =
+            auto_count <= (int) (sizeof(stack_auto_modes) / sizeof(stack_auto_modes[0]))
+                ? stack_auto_modes
+                : (uint8_t *) xi_func_arena_alloc(
+                      l->func, (uint32_t) ((size_t) auto_count * sizeof(uint8_t)));
+        if (auto_modes) {
+            lower_apply_auto_borrow_param_modes(l, static_callee, pmodes, pcount, auto_modes,
+                                                auto_count);
+            effective_pmodes = auto_modes;
+            effective_pcount = auto_count;
+        }
+    }
 
     XiValue *stack_args[XI_LOWER_CALL_ARG_STACK_CAP];
     XiLowerArgList args;
     xi_lower_arg_list_init(&args, stack_args, XI_LOWER_CALL_ARG_STACK_CAP);
-    if (!lower_call_args_expand_spread(l, call, &args, XI_LOWER_MAX_CALL_ARGS, pmodes, pcount,
-                                       (int) node->line))
+    if (!lower_call_args_expand_spread(l, call, &args, XI_LOWER_MAX_CALL_ARGS, effective_pmodes,
+                                       effective_pcount, (int) node->line))
         return NULL;
     XiValue **arg_vals = args.items;
     int n = args.count;

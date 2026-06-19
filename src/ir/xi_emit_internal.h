@@ -38,7 +38,8 @@ typedef uint16_t XiEmitReg;
 #define XI_EMIT_STRUCT_IS_PROMOTED(v) (((v)->aux_int & XI_EMIT_STRUCT_PROMOTED_BIT) != 0)
 
 static inline XiValue *xi_emit_trace_struct_origin(XiValue *v) {
-    while (v && (v->op == XI_COPY || v->op == XI_MOVE) && v->nargs >= 1)
+    while (v && ((v->op == XI_COPY && !xi_copy_is_value_clone(v)) || v->op == XI_MOVE) &&
+           v->nargs >= 1)
         v = v->args[0];
     return v;
 }

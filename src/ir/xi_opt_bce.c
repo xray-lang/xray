@@ -150,6 +150,8 @@ XR_FUNC XiPassChange xi_opt_bce(XiFunc *f) {
                 v->op = XI_COPY;
                 v->args[0] = idx;
                 v->nargs = 1;
+                v->aux_int = XI_COPY_KIND_IDENTITY;
+                v->aux = NULL;
                 v->flags &= ~(XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW);
                 eliminated++;
             } else {

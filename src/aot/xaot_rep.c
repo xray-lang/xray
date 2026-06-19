@@ -125,7 +125,8 @@ static bool rep_from_xr_storage(const XrType *type, XrRep storage, XaotRep *out)
 }
 
 static const XiValue *trace_fixed_array_field_ref(const XiValue *v) {
-    while (v && (v->op == XI_COPY || v->op == XI_MOVE) && v->nargs >= 1)
+    while (v && ((v->op == XI_COPY && !xi_copy_is_value_clone(v)) || v->op == XI_MOVE) &&
+           v->nargs >= 1)
         v = v->args[0];
     if (!v || v->op != XI_STRUCT_GET || v->nargs < 1)
         return NULL;

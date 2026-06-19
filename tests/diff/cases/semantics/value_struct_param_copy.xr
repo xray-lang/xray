@@ -1,0 +1,10 @@
+struct Pair { a: int; b: int }
+
+fn bump(p: Pair) -> int {
+    p.a = p.a + 10
+    return p.a + p.b
+}
+
+let p = Pair{a: 1, b: 2}
+print(bump(p))
+print(p.a)
