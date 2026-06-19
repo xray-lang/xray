@@ -1,0 +1,8 @@
+import crypto
+
+print(crypto.timingSafeEqual("abc", "abc"))
+print(crypto.timingSafeEqual("abc", "abd"))
+print(crypto.timingSafeEqual("abc", "ab"))
+print(crypto.timingSafeEqual("", ""))
+print(crypto.timingSafeEqual("xray", "xray"))
+print(crypto.timingSafeEqual("xray", "xrby"))

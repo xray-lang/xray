@@ -89,6 +89,7 @@ static const CgAotStdlibMethod g_aot_stdlib_methods[] = {
     {"url", "join", CG_AOT_STDLIB_VARIADIC, "xrt_url_join", "*", CG_AOT_RET_VALUE, NULL},
     {"compress", "crc32", 1, "xrt_compress_crc32", "s", CG_AOT_RET_VALUE, NULL},
     {"compress", "adler32", 1, "xrt_compress_adler32", "s", CG_AOT_RET_VALUE, NULL},
+    {"crypto", "timingSafeEqual", 2, "xrt_crypto_timing_safe_equal", "ss", CG_AOT_RET_VALUE, NULL},
 };
 
 #define CG_AOT_STDLIB_METHOD_COUNT                                                                 \

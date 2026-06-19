@@ -1,0 +1,10 @@
+// AOT direct-call crypto.timingSafeEqual must match VM tagged dispatch.
+import crypto
+
+print(crypto.timingSafeEqual("abc", "abc"))
+print(crypto.timingSafeEqual("abc", "abd"))
+print(crypto.timingSafeEqual("abc", "ab"))
+print(crypto.timingSafeEqual("", ""))
+print(crypto.timingSafeEqual("same length", "same length"))
+print(crypto.timingSafeEqual("same length", "same lengtz"))
+print(crypto.timingSafeEqual("prefix", "prefix suffix"))

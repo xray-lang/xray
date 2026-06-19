@@ -15,6 +15,7 @@
 
 #include "crypto.h"
 #include "../common.h"
+#include "../../src/shared/xr_crypto_core.h"
 #include "../../src/base/xmalloc.h"
 #include "../../src/os/os_random.h"
 #include "../../src/runtime/value/xvalue.h"
@@ -1178,18 +1179,9 @@ static XrValue crypto_timing_safe_equal(XrayIsolate *isolate, XrValue *args, int
         return xr_bool(false);
     XrString *a = XR_TO_STRING(args[0]);
     XrString *b = XR_TO_STRING(args[1]);
-    uint32_t len_a = a->length;
-    uint32_t len_b = b->length;
-    // Length mismatch guarantees false, but still compare all bytes
-    // of the shorter string to avoid leaking length info via timing
-    volatile uint8_t diff = (len_a != len_b) ? 1 : 0;
-    uint32_t min_len = len_a < len_b ? len_a : len_b;
-    const char *pa = XR_STRING_CHARS(a);
-    const char *pb = XR_STRING_CHARS(b);
-    for (uint32_t i = 0; i < min_len; i++) {
-        diff |= (uint8_t) (pa[i] ^ pb[i]);
-    }
-    return diff == 0 ? xr_bool(true) : xr_bool(false);
+    bool ok = xr_crypto_core_timing_safe_equal(XR_STRING_CHARS(a), a->length, XR_STRING_CHARS(b),
+                                               b->length);
+    return xr_bool(ok);
 }
 
 // ========== Type Declarations (parsed by gen_stdlib_types.py) ==========
