@@ -999,6 +999,19 @@ if(BUILD_TESTS)
         TIMEOUT 120
     )
 
+    # Link manifest contract: freestanding core-math direct calls must not drag
+    # in xray_core, while runtime-backed stdlib modules still do (115).
+    add_test(
+        NAME aot_link_command_manifest
+        COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_aot_link_command_tests.sh
+                $<TARGET_FILE:xray>
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(aot_link_command_manifest PROPERTIES
+        LABELS "aot;link;stdlib;smoke"
+        TIMEOUT 120
+    )
+
     # Cross-backend differential net: same .xr through VM / AOT must
     # produce byte-identical observable output. Safety net for the backend
     # unification work (tasks 108-118).
