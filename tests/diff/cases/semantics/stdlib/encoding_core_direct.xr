@@ -34,3 +34,29 @@ print(encoding.utf8Count("Hello"))
 print(encoding.utf8Count("你好"))
 print(encoding.utf8ByteLength("Hello"))
 print(encoding.utf8ByteLength("你好"))
+
+let u16le = encoding.utf16Encode("AB")
+print(u16le.length)
+print(u16le[0])
+print(u16le[1])
+print(u16le[2])
+print(u16le[3])
+print(encoding.utf16Decode(u16le))
+
+let u16be = encoding.utf16Encode("AB", 1)
+print(u16be.length)
+print(u16be[0])
+print(u16be[1])
+print(u16be[2])
+print(u16be[3])
+print(encoding.utf16Decode(u16be, 1))
+print(encoding.utf16Decode(u16be, 1, false))
+
+let bom = new Bytes(4)
+bom[0] = 254
+bom[1] = 255
+bom[2] = 0
+bom[3] = 65
+print(encoding.utf16Decode(bom))
+print(encoding.utf16Decode(bom, 1, false) == "A")
+print(encoding.utf16Decode(new Bytes(1)) == null)

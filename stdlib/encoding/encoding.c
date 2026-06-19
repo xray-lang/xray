@@ -15,7 +15,6 @@
 #include "encoding.h"
 #include "../common.h"
 #include "../../src/runtime/object/xarray.h"
-#include "../../src/base/xutf8.h"
 #include "../../src/base/xmalloc.h"
 #include "../../src/base/xchecks.h"
 #include "../../src/runtime/gc/xgc.h"
@@ -47,169 +46,42 @@ XR_FUNC bool xr_hex_valid(const char *hex, size_t len) {
 
 XR_FUNC int xr_utf16_encode(const uint8_t *utf8, size_t utf8_len, uint8_t *output, size_t out_cap,
                             XrUtf16Endian endian) {
-    if (!utf8 || !output)
+    size_t out_len = 0;
+    if (!xr_encoding_core_utf16_encode(
+            (const char *) utf8, utf8_len, output, out_cap,
+            endian == XR_UTF16_BE ? XR_ENCODING_UTF16_BE : XR_ENCODING_UTF16_LE, &out_len) ||
+        out_len > (size_t) INT_MAX)
         return -1;
-
-    size_t in_pos = 0;
-    size_t out_pos = 0;
-
-    while (in_pos < utf8_len) {
-        uint32_t cp;
-        int char_len = xr_utf8_decode((const char *) (utf8 + in_pos), utf8_len - in_pos, &cp);
-        if (char_len == 0)
-            return -1;
-        if (cp == XR_UNICODE_INVALID)
-            return -1;
-        in_pos += char_len;
-
-        if (cp <= 0xFFFF) {
-            if (out_pos + 2 > out_cap)
-                return -1;
-            if (endian == XR_UTF16_LE) {
-                output[out_pos++] = cp & 0xFF;
-                output[out_pos++] = (cp >> 8) & 0xFF;
-            } else {
-                output[out_pos++] = (cp >> 8) & 0xFF;
-                output[out_pos++] = cp & 0xFF;
-            }
-        } else {
-            if (out_pos + 4 > out_cap)
-                return -1;
-            cp -= 0x10000;
-            uint16_t high = 0xD800 + (cp >> 10);
-            uint16_t low = 0xDC00 + (cp & 0x3FF);
-            if (endian == XR_UTF16_LE) {
-                output[out_pos++] = high & 0xFF;
-                output[out_pos++] = (high >> 8) & 0xFF;
-                output[out_pos++] = low & 0xFF;
-                output[out_pos++] = (low >> 8) & 0xFF;
-            } else {
-                output[out_pos++] = (high >> 8) & 0xFF;
-                output[out_pos++] = high & 0xFF;
-                output[out_pos++] = (low >> 8) & 0xFF;
-                output[out_pos++] = low & 0xFF;
-            }
-        }
-    }
-
-    return (int) out_pos;
+    return (int) out_len;
 }
-
-// Endian-specialised decode helpers.
-//
-// The original loop branched on `endian` for every 2-byte read, which
-// pessimised the hot path for large buffers (e.g. a 4 MiB UTF-16 log
-// file). We now dispatch once at the public entry and let each
-// specialisation compile to a tight straight-line loop. Empirically this
-// yields ~12% throughput on the UTF-16 → UTF-8 conversion benchmark.
-#define XR_UTF16_DECODE_IMPL(suffix, read16)                                                       \
-    static int xr_utf16_decode_##suffix(const uint8_t *utf16, size_t utf16_len, uint8_t *output,   \
-                                        size_t out_cap) {                                          \
-        size_t in_pos = 0, out_pos = 0;                                                            \
-        while (in_pos < utf16_len) {                                                               \
-            uint16_t unit = read16(utf16 + in_pos);                                                \
-            in_pos += 2;                                                                           \
-            uint32_t cp;                                                                           \
-            if (unit >= 0xD800 && unit <= 0xDBFF) {                                                \
-                if (in_pos + 2 > utf16_len)                                                        \
-                    return -1;                                                                     \
-                uint16_t low = read16(utf16 + in_pos);                                             \
-                if (low < 0xDC00 || low > 0xDFFF)                                                  \
-                    return -1;                                                                     \
-                in_pos += 2;                                                                       \
-                cp = 0x10000 + ((unit - 0xD800) << 10) + (low - 0xDC00);                           \
-            } else if (unit >= 0xDC00 && unit <= 0xDFFF) {                                         \
-                return -1;                                                                         \
-            } else {                                                                               \
-                cp = unit;                                                                         \
-            }                                                                                      \
-            int needed = xr_utf8_encode_size(cp);                                                  \
-            if (needed == 0)                                                                       \
-                return -1;                                                                         \
-            if (out_pos + needed > out_cap)                                                        \
-                return -1;                                                                         \
-            int written = xr_utf8_encode(cp, (char *) (output + out_pos));                         \
-            if (written == 0)                                                                      \
-                return -1;                                                                         \
-            out_pos += written;                                                                    \
-        }                                                                                          \
-        return (int) out_pos;                                                                      \
-    }
-
-static inline uint16_t xr_utf16_read_le(const uint8_t *p) {
-    return (uint16_t) (p[0] | ((uint16_t) p[1] << 8));
-}
-static inline uint16_t xr_utf16_read_be(const uint8_t *p) {
-    return (uint16_t) (((uint16_t) p[0] << 8) | p[1]);
-}
-
-XR_UTF16_DECODE_IMPL(le, xr_utf16_read_le)
-XR_UTF16_DECODE_IMPL(be, xr_utf16_read_be)
 
 XR_FUNC int xr_utf16_decode(const uint8_t *utf16, size_t utf16_len, uint8_t *output, size_t out_cap,
                             XrUtf16Endian endian) {
-    if (!utf16 || !output)
+    size_t out_len = 0;
+    if (!xr_encoding_core_utf16_decode(
+            utf16, utf16_len, (char *) output, out_cap,
+            endian == XR_UTF16_BE ? XR_ENCODING_UTF16_BE : XR_ENCODING_UTF16_LE, &out_len) ||
+        out_len > (size_t) INT_MAX)
         return -1;
-    if (utf16_len % 2 != 0)
-        return -1;
-    return (endian == XR_UTF16_LE) ? xr_utf16_decode_le(utf16, utf16_len, output, out_cap)
-                                   : xr_utf16_decode_be(utf16, utf16_len, output, out_cap);
+    return (int) out_len;
 }
 
 XR_FUNC int xr_utf16_encoded_len(const uint8_t *utf8, size_t utf8_len) {
-    if (!utf8)
-        return 0;
-
-    int len = 0;
-    size_t i = 0;
-    while (i < utf8_len) {
-        uint32_t cp;
-        int char_len = xr_utf8_decode((const char *) (utf8 + i), utf8_len - i, &cp);
-        if (char_len == 0 || cp == XR_UNICODE_INVALID)
-            return -1;
-        i += char_len;
-        len += (cp > 0xFFFF) ? 4 : 2;
-    }
-    return len;
+    size_t out_len = 0;
+    if (!xr_encoding_core_utf16_encoded_len((const char *) utf8, utf8_len, &out_len) ||
+        out_len > (size_t) INT_MAX)
+        return -1;
+    return (int) out_len;
 }
 
 XR_FUNC int xr_utf16_to_utf8_len(const uint8_t *utf16, size_t utf16_len, XrUtf16Endian endian) {
-    if (!utf16 || utf16_len % 2 != 0)
+    size_t out_len = 0;
+    if (!xr_encoding_core_utf16_to_utf8_len(
+            utf16, utf16_len, endian == XR_UTF16_BE ? XR_ENCODING_UTF16_BE : XR_ENCODING_UTF16_LE,
+            &out_len) ||
+        out_len > (size_t) INT_MAX)
         return -1;
-    XR_DCHECK(endian == XR_UTF16_LE || endian == XR_UTF16_BE,
-              "xr_utf16_to_utf8_len: invalid endian value");
-
-    int len = 0;
-    size_t i = 0;
-    while (i < utf16_len) {
-        uint16_t unit;
-        if (endian == XR_UTF16_LE) {
-            unit = utf16[i] | (utf16[i + 1] << 8);
-        } else {
-            unit = (utf16[i] << 8) | utf16[i + 1];
-        }
-        i += 2;
-
-        uint32_t cp;
-        if (unit >= 0xD800 && unit <= 0xDBFF) {
-            if (i + 2 > utf16_len)
-                return -1;
-            i += 2;
-            cp = 0x10000;
-        } else {
-            cp = unit;
-        }
-
-        if (cp <= 0x7F)
-            len += 1;
-        else if (cp <= 0x7FF)
-            len += 2;
-        else if (cp <= 0xFFFF)
-            len += 3;
-        else
-            len += 4;
-    }
-    return len;
+    return (int) out_len;
 }
 
 /* ========== Helper Functions ========== */
