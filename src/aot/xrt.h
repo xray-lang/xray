@@ -28,6 +28,7 @@
 
 #include "xrt_value.h"      // L0: tags, boxing, unboxing, source-level aliases, XrtContext
 #include "xrt_path.h"       // L0: freestanding path string helpers
+#include "xrt_encoding.h"   // L0: freestanding encoding predicates/counts
 #include "xrt_arc.h"        // L1: bump alloc, xrt_str_alloc, xrt_str_concat
 #include "xrt_range.h"      // L1: lazy Range value
 #include "xrt_arith.h"      // L1: add/sub/mul/div/mod/neg, eq/lt/le, print

@@ -1,0 +1,7 @@
+import encoding
+
+print(encoding.hexValid("48656c6c6f"))
+print(encoding.hexValid("abc"))
+print(encoding.utf8Valid("hello"))
+print(encoding.utf8Count("你好"))
+print(encoding.utf8ByteLength("你好"))

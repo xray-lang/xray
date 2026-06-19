@@ -45,6 +45,10 @@ static const CgAotStdlibMethod g_aot_stdlib_methods[] = {
     {"path", "dirname", 1, "xrt_path_dirname", "s", CG_AOT_RET_STR_BORROWED, NULL},
     {"path", "basename", 1, "xrt_path_basename", "s", CG_AOT_RET_STR_BORROWED, NULL},
     {"path", "extname", 1, "xrt_path_extname", "s", CG_AOT_RET_STR_BORROWED, NULL},
+    {"encoding", "hexValid", 1, "xrt_encoding_hex_valid", "s", CG_AOT_RET_VALUE, NULL},
+    {"encoding", "utf8Valid", 1, "xrt_encoding_utf8_valid", "s", CG_AOT_RET_VALUE, NULL},
+    {"encoding", "utf8Count", 1, "xrt_encoding_utf8_count", "s", CG_AOT_RET_VALUE, NULL},
+    {"encoding", "utf8ByteLength", 1, "xrt_encoding_utf8_byte_length", "s", CG_AOT_RET_VALUE, NULL},
 };
 
 #define CG_AOT_STDLIB_METHOD_COUNT                                                                 \

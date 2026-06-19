@@ -102,14 +102,23 @@ static XaotStdlibSet stdlib_flag_for_import(const char *name) {
         const char *name;
         XaotStdlibSet flag;
     } table[] = {
-        {"regex", XAOT_STDLIB_REGEX},   {"math", XAOT_STDLIB_MATH},
-        {"time", XAOT_STDLIB_TIME},     {"datetime", XAOT_STDLIB_TIME},
-        {"path", XAOT_STDLIB_PATH},     {"io", XAOT_STDLIB_IO},
-        {"os", XAOT_STDLIB_OS},         {"net", XAOT_STDLIB_NET},
-        {"http", XAOT_STDLIB_HTTP},     {"crypto", XAOT_STDLIB_CRYPTO},
-        {"base64", XAOT_STDLIB_BASE64}, {"csv", XAOT_STDLIB_CSV},
-        {"toml", XAOT_STDLIB_TOML},     {"yaml", XAOT_STDLIB_YAML},
-        {"xml", XAOT_STDLIB_XML},       {"compress", XAOT_STDLIB_COMPRESS},
+        {"regex", XAOT_STDLIB_REGEX},
+        {"math", XAOT_STDLIB_MATH},
+        {"time", XAOT_STDLIB_TIME},
+        {"datetime", XAOT_STDLIB_TIME},
+        {"path", XAOT_STDLIB_PATH},
+        {"io", XAOT_STDLIB_IO},
+        {"os", XAOT_STDLIB_OS},
+        {"net", XAOT_STDLIB_NET},
+        {"http", XAOT_STDLIB_HTTP},
+        {"crypto", XAOT_STDLIB_CRYPTO},
+        {"base64", XAOT_STDLIB_BASE64},
+        {"encoding", XAOT_STDLIB_ENCODING},
+        {"csv", XAOT_STDLIB_CSV},
+        {"toml", XAOT_STDLIB_TOML},
+        {"yaml", XAOT_STDLIB_YAML},
+        {"xml", XAOT_STDLIB_XML},
+        {"compress", XAOT_STDLIB_COMPRESS},
     };
     for (int i = 0; i < (int) (sizeof(table) / sizeof(table[0])); i++) {
         if (strcmp(name, table[i].name) == 0)
@@ -378,7 +387,7 @@ static bool add_stdlib_symbol_manifest_entries(XaotLinkManifest *manifest,
 }
 
 static bool stdlib_set_needs_runtime_provider(XaotStdlibSet stdlib) {
-    return (stdlib & ~(XAOT_STDLIB_MATH | XAOT_STDLIB_PATH)) != 0;
+    return (stdlib & ~(XAOT_STDLIB_MATH | XAOT_STDLIB_PATH | XAOT_STDLIB_ENCODING)) != 0;
 }
 
 static bool build_link_manifest(const XaotFeatureSet *features, XaotLinkManifest *manifest) {
