@@ -368,6 +368,7 @@ XR_FUNC void xi_cgen_module_tu(XiCgenCtx *ctx, FILE *out, XiModule **modules, in
     emit_imported_class_native_typedefs(ctx, out);
     emit_class_native_typedefs(ctx, out, module, prefix);
     emit_class_shared_native_storage_decls(ctx, out, prefix);
+    emit_imported_class_shared_native_storage_decls(ctx, out);
     emit_struct_native_typedefs(out, module->init, prefix);
     fprintf(out, "\n");
 

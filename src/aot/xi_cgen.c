@@ -348,6 +348,8 @@ struct XiCgenCtx {
     int n_xmod_refs;
     int xmod_refs_cap;
     bool *cell_vars;
+    bool *cell_release_vars;
+    bool *cell_heap_capture_vars;
     const XiValue **cell_origins;
     uint32_t cell_var_count;
     /* Per-function phi coalescing: value-id-indexed map from a phi's SSA id to
@@ -2011,8 +2013,33 @@ static void emit_deferred_calls(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
         }
     }
     for (int di = ndeferred - 1; di >= 0; di--) {
+        uint32_t defer_id = deferred_vals[di]->id;
+        fprintf(out, "    { XrValue _xrt_defer_saved_error_%u = xrt_pending_error;\n", defer_id);
+        fprintf(out, "      int _xrt_defer_had_error_%u = xrt_has_pending_error();\n", defer_id);
+        fprintf(out, "      if (_xrt_defer_had_error_%u) xrt_pending_error = XR_NULL_VAL;\n",
+                defer_id);
         if (!emit_single_deferred_call(ctx, out, f, prefix, deferred_vals[di]))
             return;
+        fprintf(out, "      if (_xrt_defer_had_error_%u) {\n", defer_id);
+        fprintf(out, "          if (xrt_has_pending_error()) {\n");
+        fprintf(out, "              xrt_release(_xrt_defer_saved_error_%u);\n", defer_id);
+        fprintf(out, "          } else {\n");
+        fprintf(out, "              xrt_pending_error = _xrt_defer_saved_error_%u;\n", defer_id);
+        fprintf(out, "          }\n");
+        fprintf(out, "      }\n");
+        fprintf(out, "    }\n");
+    }
+}
+
+static void emit_cell_var_releases(XiCgenCtx *ctx, FILE *out) {
+    if (!ctx || !ctx->cell_release_vars)
+        return;
+    for (uint32_t var_id = 0; var_id < ctx->cell_var_count; var_id++) {
+        if (!ctx->cell_release_vars[var_id])
+            continue;
+        fprintf(out, "    xrt_release(");
+        emit_cell_ref(out, (XiVarId) var_id);
+        fprintf(out, ");\n");
     }
 }
 
@@ -2030,6 +2057,7 @@ static void emit_fallthrough_return(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                     const char *prefix) {
     emit_class_field_cache_flush(ctx, out);
     emit_deferred_calls(ctx, out, f, prefix);
+    emit_cell_var_releases(ctx, out);
     if (cg_func_return_abi_rep(ctx, f) == XR_REP_VOID) {
         fprintf(out, "    return;\n");
     } else {
@@ -2265,6 +2293,7 @@ static void emit_block(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiBlock
                 break;
             if (emit_class_native_return_stmt(ctx, out, f, blk))
                 break;
+            emit_cell_var_releases(ctx, out);
             if (blk->control) {
                 fprintf(out, "    return ");
                 emit_value_as_rep_ctx(ctx, out, blk->control, cg_func_return_abi_rep(ctx, f));
@@ -2996,9 +3025,24 @@ static void emit_one_forward_decl(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
         fprintf(out, "(");
         emit_aot_frame_new_params(out, f, needs_sync_go);
         fprintf(out, ");\n");
+        if (needs_aot_coro) {
+            fprintf(out, "%sbool ", cg_linkage(ctx));
+            emit_fname_suffix(ctx, out, prefix, f, "_aot_frame_init");
+            fprintf(out, "(void *raw_frame");
+            if (cg_func_frame_needs_cl(f) || f->nparams > 0)
+                fprintf(out, ", ");
+            emit_aot_frame_new_params(out, f, false);
+            fprintf(out, ");\n");
+        }
         fprintf(out, "%sXrAotResult ", cg_linkage(ctx));
         emit_fname_suffix(ctx, out, prefix, f, "_aot_resume");
         fprintf(out, "(void *raw_frame, const XrAotContext *ctx);\n");
+        fprintf(out, "%svoid ", cg_linkage(ctx));
+        emit_fname_suffix(ctx, out, prefix, f, "_aot_trace");
+        fprintf(out, "(void *frame, void *visitor);\n");
+        fprintf(out, "%svoid ", cg_linkage(ctx));
+        emit_fname_suffix(ctx, out, prefix, f, "_aot_release");
+        fprintf(out, "(void *frame, struct XrCoroGC *gc);\n");
         fprintf(out, "%sconst XrAotCoroDesc ", ctx->extern_linkage ? "extern " : "static ");
         emit_fname_suffix(ctx, out, prefix, f, "_aot_desc");
         fprintf(out, ";\n");

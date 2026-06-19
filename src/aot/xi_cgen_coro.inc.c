@@ -849,7 +849,7 @@ static void emit_sync_go_wrapper(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
     fprintf(out, "    return xr_aot_done(_result);\n");
     fprintf(out, "}\n\n");
 
-    fprintf(out, "static void ");
+    fprintf(out, "%svoid ", cg_linkage(ctx));
     emit_fname_suffix(ctx, out, prefix, f, "_aot_trace");
     fprintf(out, "(void *frame, void *visitor) {\n");
     fprintf(out, "    ");
@@ -867,7 +867,7 @@ static void emit_sync_go_wrapper(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
     }
     fprintf(out, "}\n\n");
 
-    fprintf(out, "static void ");
+    fprintf(out, "%svoid ", cg_linkage(ctx));
     emit_fname_suffix(ctx, out, prefix, f, "_aot_release");
     fprintf(out, "(void *frame, struct XrCoroGC *gc) {\n");
     fprintf(out, "    (void)gc;\n");
@@ -961,7 +961,7 @@ static void emit_aot_frame_param_names(FILE *out, const XiFunc *f) {
 }
 
 static void emit_coro_frame_init(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const char *prefix) {
-    fprintf(out, "static bool ");
+    fprintf(out, "%sbool ", cg_linkage(ctx));
     emit_fname_suffix(ctx, out, prefix, f, "_aot_frame_init");
     fprintf(out, "(void *raw_frame");
     if (cg_func_frame_needs_cl(f) || f->nparams > 0)
@@ -2647,7 +2647,7 @@ static void xi_cgen_coro_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *
     emit_coro_undefs(ctx, out, f);
     fprintf(out, "\n");
 
-    fprintf(out, "static void ");
+    fprintf(out, "%svoid ", cg_linkage(ctx));
     emit_fname_suffix(ctx, out, prefix, f, "_aot_trace");
     fprintf(out, "(void *frame, void *visitor) {\n");
     fprintf(out, "    ");
@@ -2660,7 +2660,7 @@ static void xi_cgen_coro_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *
     emit_coro_direct_call_frame_trace(ctx, out, f, prefix);
     fprintf(out, "}\n\n");
 
-    fprintf(out, "static void ");
+    fprintf(out, "%svoid ", cg_linkage(ctx));
     emit_fname_suffix(ctx, out, prefix, f, "_aot_release");
     fprintf(out, "(void *frame, struct XrCoroGC *gc) {\n");
     fprintf(out, "    ");
