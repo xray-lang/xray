@@ -233,6 +233,17 @@ static void emit_assign_from_xrvalue_temp(FILE *out, const XiValue *dst, const c
     fprintf(out, ";\n");
 }
 
+static void emit_coro_scope_exit_error_check(FILE *out, uint32_t id) {
+    fprintf(out, "    if (_scope_exit_%u.kind == XR_AOT_RUN_ERROR) {\n", id);
+    fprintf(out, "        f->state = 0;\n");
+    fprintf(out, "        if (_scope_exit_%u.error_is_value) {\n", id);
+    fprintf(out, "            xrt_pending_error = _scope_exit_%u.error;\n", id);
+    fprintf(out, "        } else {\n");
+    fprintf(out, "            return _scope_exit_%u;\n", id);
+    fprintf(out, "        }\n");
+    fprintf(out, "    }\n");
+}
+
 static void emit_aot_coro_op_stmt(FILE *out, const XiFunc *f, const XiValue *v) {
     char args_name[64];
     char tmp_name[64];
@@ -1553,10 +1564,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "    if (_scope_exit_%u.kind == XR_AOT_RUN_BLOCKED) {\n", v->id);
         fprintf(out, "        return _scope_exit_%u;\n", v->id);
         fprintf(out, "    }\n");
-        fprintf(out, "    if (_scope_exit_%u.kind == XR_AOT_RUN_ERROR) {\n", v->id);
-        fprintf(out, "        f->state = 0;\n");
-        fprintf(out, "        return _scope_exit_%u;\n", v->id);
-        fprintf(out, "    }\n");
+        emit_coro_scope_exit_error_check(out, v->id);
         fprintf(out, "    f->state = 0;\n");
         fprintf(out, "    goto S%d_DONE;\n", sid);
         fprintf(out, "S%d:;\n", sid);
@@ -1573,10 +1581,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "    if (_scope_exit_%u.kind == XR_AOT_RUN_BLOCKED) {\n", v->id);
         fprintf(out, "        return _scope_exit_%u;\n", v->id);
         fprintf(out, "    }\n");
-        fprintf(out, "    if (_scope_exit_%u.kind == XR_AOT_RUN_ERROR) {\n", v->id);
-        fprintf(out, "        f->state = 0;\n");
-        fprintf(out, "        return _scope_exit_%u;\n", v->id);
-        fprintf(out, "    }\n");
+        emit_coro_scope_exit_error_check(out, v->id);
         fprintf(out, "    f->state = 0;\n");
         fprintf(out, "S%d_DONE:;\n", sid);
         if (cg_coro_value_has_storage(f, v) && cg_rep(v) == XR_REP_TAGGED) {
@@ -2344,12 +2349,21 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         if (cg_coro_value_has_storage(f, v)) {
             fprintf(out, "    ");
             emit_vref(out, v);
-            if (cg_rep(v) == XR_REP_I64)
-                fprintf(out, " = 0;\n");
-            else if (cg_rep(v) == XR_REP_F64)
-                fprintf(out, " = 0.0;\n");
+            if (cg_rep(v) == XR_REP_TAGGED)
+                fprintf(out, " = XR_FROM_BOOL(xrt_has_pending_error());\n");
             else
-                fprintf(out, " = XR_NULL_VAL;\n");
+                fprintf(out, " = xrt_has_pending_error();\n");
+        }
+        return;
+    }
+
+    if (v->op == XI_ERR_CATCH) {
+        fprintf(out, "    XrValue _err_catch_%u = xrt_pending_error;\n", v->id);
+        fprintf(out, "    xrt_pending_error = XR_NULL_VAL;\n");
+        if (cg_coro_value_has_storage(f, v)) {
+            char tmp[32];
+            snprintf(tmp, sizeof(tmp), "_err_catch_%u", v->id);
+            emit_assign_from_xrvalue_temp(out, v, tmp);
         }
         return;
     }
