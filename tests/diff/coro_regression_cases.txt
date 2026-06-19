@@ -40,7 +40,9 @@ tests/regression/11_coroutine/1139_error_isolation.xr
 tests/regression/11_coroutine/1140_task_error.xr
 tests/regression/11_coroutine/1141_concurrent_producer_consumer.xr
 tests/regression/11_coroutine/1142_shared_move.xr
+tests/regression/11_coroutine/1143_syscall_handoff.xr
 tests/regression/11_coroutine/1144_coro_monitor.xr
+tests/regression/11_coroutine/1145_coro_error_patterns.xr
 tests/regression/11_coroutine/1146_multicore_string_concat.xr
 tests/regression/11_coroutine/1147_preempt_test.xr
 tests/regression/11_coroutine/1150_select_block_buffer_wake.xr
