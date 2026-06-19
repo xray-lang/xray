@@ -438,7 +438,7 @@ int main(void) {
     assert(xi_lowering_template_kind(XI_RELEASE) == XI_LOWER_TEMPLATE_CUSTOM);
     assert(xi_lowering_is_patterned(XI_RELEASE) == false);
     assert(xi_emit_vm_requires_fresh_dst(XI_RELEASE) == false);
-    assert(xi_emit_vm_uses_raw_cell_args(XI_RELEASE) == false);
+    assert(xi_emit_vm_uses_raw_cell_args(XI_RELEASE) == true);
     assert(xi_emit_vm_handles_cell_dst(XI_RELEASE) == false);
     assert(xi_lowering_generated_targets(XI_STACK_ALLOC) == (XI_LOWER_TARGET_AOT_C));
     assert(xi_lowering_required_targets(XI_STACK_ALLOC) == (XI_LOWER_TARGET_AOT_C));

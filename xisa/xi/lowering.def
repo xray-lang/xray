@@ -276,7 +276,7 @@
 (lower xi.release
   :match ()
   :required-targets (vm-bytecode aot-c)
-  :vm-bytecode (driver xi_emit_release)
+  :vm-bytecode (driver xi_emit_release :raw-cell-args yes)
   :aot-c (driver xicgen_release))
 
 (lower xi.stack.alloc
