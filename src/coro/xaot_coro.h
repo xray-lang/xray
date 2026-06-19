@@ -135,6 +135,8 @@ XR_FUNC XrValue xr_aot_time_monotonic(void);
 XR_FUNC XrValue xr_aot_time_nanos(void);
 XR_FUNC XrValue xr_aot_time_micros(void);
 XR_FUNC XrValue xr_aot_time_clock(void);
+XR_FUNC XrValue xr_aot_coro_op(const XrAotContext *ctx, int32_t sub_op, const XrValue *args,
+                               int argc);
 
 XR_FUNC struct XrCoroutine *xr_coro_create_aot(struct XrayIsolate *X, const XrAotCoroDesc *desc,
                                                void *frame, const char *name);

@@ -233,6 +233,28 @@ static void emit_assign_from_xrvalue_temp(FILE *out, const XiValue *dst, const c
     fprintf(out, ";\n");
 }
 
+static void emit_aot_coro_op_stmt(FILE *out, const XiFunc *f, const XiValue *v) {
+    char args_name[64];
+    char tmp_name[64];
+    snprintf(args_name, sizeof(args_name), "_coro_args_%u", v->id);
+    snprintf(tmp_name, sizeof(tmp_name), "_coro_value_%u", v->id);
+
+    if (v->nargs > 0) {
+        fprintf(out, "    XrValue %s[%u] = {", args_name, (unsigned) v->nargs);
+        for (uint16_t i = 0; i < v->nargs; i++) {
+            if (i > 0)
+                fprintf(out, ", ");
+            emit_boxed_value_ref(out, v->args[i]);
+        }
+        fprintf(out, "};\n");
+    }
+
+    fprintf(out, "    XrValue %s = xr_aot_coro_op(ctx, %d, %s, %u);\n", tmp_name, (int) v->aux_int,
+            v->nargs > 0 ? args_name : "NULL", (unsigned) v->nargs);
+    if (cg_coro_value_has_storage(f, v))
+        emit_assign_from_xrvalue_temp(out, v, tmp_name);
+}
+
 static void emit_bridge_stored_tagged_value(FILE *out, const XiValue *value) {
     if (!value || cg_rep(value) != XR_REP_TAGGED)
         return;
@@ -1433,9 +1455,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
     }
 
     if (v->op == XI_CORO_OP) {
-        ctx->error = true;
-        fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT coroutine Xi op %s\n", xi_op_name(v->op));
-        emit_codegen_abort_aot_result(out);
+        emit_aot_coro_op_stmt(out, f, v);
         return;
     }
 
@@ -2310,8 +2330,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
     }
 
     if (v->op == XI_CHAN_SEND || v->op == XI_CHAN_RECV || v->op == XI_CHAN_TRY_SEND ||
-        v->op == XI_CHAN_TRY_RECV || v->op == XI_CHAN_IS_CLOSED || v->op == XI_CHAN_NEW ||
-        v->op == XI_CORO_OP) {
+        v->op == XI_CHAN_TRY_RECV || v->op == XI_CHAN_IS_CLOSED || v->op == XI_CHAN_NEW) {
         ctx->error = true;
         fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT coroutine Xi op %s\n", xi_op_name(v->op));
         emit_codegen_abort_aot_result(out);
