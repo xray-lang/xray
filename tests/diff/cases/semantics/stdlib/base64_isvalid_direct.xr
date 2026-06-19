@@ -12,6 +12,27 @@ print(base64.encodeUrl("test data with special chars: +/="))
 print(base64.decodeUrl(base64.encodeUrl("test data with special chars: +/=")))
 print(base64.decode("A"))
 print(base64.decode("Q==="))
+
+let bytes = new Bytes(5)
+bytes[0] = 0
+bytes[1] = 127
+bytes[2] = 255
+bytes[3] = 1
+bytes[4] = 128
+let encodedBytes = base64.encodeBytes(bytes)
+print(encodedBytes)
+let decodedBytes = base64.decodeToBytes(encodedBytes)
+if (decodedBytes != null) {
+    print(decodedBytes.length)
+    print(decodedBytes[0])
+    print(decodedBytes[1])
+    print(decodedBytes[2])
+    print(decodedBytes[3])
+    print(decodedBytes[4])
+}
+print(base64.encodeBytes(new Bytes(0)))
+print(base64.decodeToBytes("!!!") == null)
+
 print(base64.isValid("SGVsbG8="))
 print(base64.isValid("QUJD"))
 print(base64.isValid("QQ=="))
