@@ -1,0 +1,22 @@
+class Counter {
+    value: int
+
+    constructor(v) {
+        this.value = v
+    }
+
+    bump() {
+        this.value = this.value + 1
+    }
+
+    callBump() {
+        this.bump()
+    }
+}
+
+fn view(counter: in Counter) {
+    counter.callBump()
+}
+
+let counter = new Counter(1)
+view(counter)

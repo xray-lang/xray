@@ -1,0 +1,22 @@
+class PureCounter {
+    value: int
+
+    constructor(v) {
+        this.value = v
+    }
+
+    push() -> int {
+        return this.value + 1
+    }
+
+    callPush() -> int {
+        return this.push()
+    }
+}
+
+fn view(counter: in PureCounter) -> int {
+    return counter.push() + counter.callPush()
+}
+
+let counter = new PureCounter(10)
+print(view(counter))

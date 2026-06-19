@@ -48,14 +48,21 @@
 #include "../../base/xchecks.h"
 #include "../../runtime/value/xstruct_layout.h"
 
+static bool xa_expr_is_this(AstNode *node) {
+    if (!node)
+        return false;
+    if (node->type == AST_THIS_EXPR)
+        return true;
+    return node->type == AST_VARIABLE && node->as.variable.name &&
+           strcmp(node->as.variable.name, "this") == 0;
+}
+
 static bool xa_expr_roots_at_this(AstNode *node) {
     if (!node)
         return false;
+    if (xa_expr_is_this(node))
+        return true;
     switch (node->type) {
-        case AST_THIS_EXPR:
-            return true;
-        case AST_VARIABLE:
-            return node->as.variable.name && strcmp(node->as.variable.name, "this") == 0;
         case AST_MEMBER_ACCESS:
             return xa_expr_roots_at_this(node->as.member_access.object);
         case AST_INDEX_GET:
@@ -65,103 +72,157 @@ static bool xa_expr_roots_at_this(AstNode *node) {
     }
 }
 
-static bool xa_method_body_mutates_receiver(AstNode *node) {
+static XrClassInfo *xa_type_class_info(XrType *type) {
+    if (!type || (!XR_TYPE_IS_INSTANCE(type) && !XR_TYPE_IS_CLASS(type)))
+        return NULL;
+    return type->instance.class_ref;
+}
+
+static XrClassInfo *xa_receiver_expr_class_info(XrClassInfo *receiver_info, AstNode *node) {
+    if (!receiver_info || !node)
+        return NULL;
+    if (xa_expr_is_this(node))
+        return receiver_info;
+    if (node->type != AST_MEMBER_ACCESS)
+        return NULL;
+
+    XrClassInfo *owner_info =
+        xa_receiver_expr_class_info(receiver_info, node->as.member_access.object);
+    if (!owner_info)
+        return NULL;
+
+    XaSymbol *member = xa_class_info_lookup_member(owner_info, node->as.member_access.name);
+    if (!member || (member->kind != XA_SYM_FIELD && member->kind != XA_SYM_PROPERTY))
+        return NULL;
+
+    return xa_type_class_info(member->links.type);
+}
+
+static XaSymbol *xa_receiver_method_symbol_for_call(XrClassInfo *receiver_info, AstNode *object,
+                                                    const char *method_name) {
+    XrClassInfo *target_info = xa_receiver_expr_class_info(receiver_info, object);
+    if (!target_info)
+        return NULL;
+    XaSymbol *method = xa_class_info_lookup_member(target_info, method_name);
+    return (method && method->kind == XA_SYM_METHOD) ? method : NULL;
+}
+
+static bool xa_method_body_mutates_receiver(AstNode *node, XrClassInfo *receiver_info) {
     if (!node)
         return false;
     switch (node->type) {
         case AST_BLOCK:
             for (int i = 0; i < node->as.block.count; i++) {
-                if (xa_method_body_mutates_receiver(node->as.block.statements[i]))
+                if (xa_method_body_mutates_receiver(node->as.block.statements[i], receiver_info))
                     return true;
             }
             return false;
         case AST_EXPR_STMT:
-            return xa_method_body_mutates_receiver(node->as.expr_stmt);
+            return xa_method_body_mutates_receiver(node->as.expr_stmt, receiver_info);
         case AST_MEMBER_SET:
             return xa_expr_roots_at_this(node->as.member_set.object) ||
-                   xa_method_body_mutates_receiver(node->as.member_set.value);
+                   xa_method_body_mutates_receiver(node->as.member_set.value, receiver_info);
         case AST_INDEX_SET:
             return xa_expr_roots_at_this(node->as.index_set.array) ||
-                   xa_method_body_mutates_receiver(node->as.index_set.index) ||
-                   xa_method_body_mutates_receiver(node->as.index_set.value);
+                   xa_method_body_mutates_receiver(node->as.index_set.index, receiver_info) ||
+                   xa_method_body_mutates_receiver(node->as.index_set.value, receiver_info);
         case AST_CALL_EXPR: {
             CallExprNode *call = &node->as.call_expr;
             if (call->callee && call->callee->type == AST_MEMBER_ACCESS) {
                 MemberAccessNode *ma = &call->callee->as.member_access;
-                if (xa_expr_roots_at_this(ma->object) && xa_method_name_mutates_receiver(ma->name))
-                    return true;
+                if (xa_expr_roots_at_this(ma->object)) {
+                    XaSymbol *method =
+                        xa_receiver_method_symbol_for_call(receiver_info, ma->object, ma->name);
+                    if (method) {
+                        if (method->mutates_receiver)
+                            return true;
+                    } else if (!xa_expr_is_this(ma->object) &&
+                               xa_method_name_mutates_receiver(ma->name)) {
+                        return true;
+                    }
+                }
             }
             for (int i = 0; i < call->arg_count; i++) {
-                if (xa_method_body_mutates_receiver(call->arguments[i]))
+                if (xa_method_body_mutates_receiver(call->arguments[i], receiver_info))
                     return true;
             }
             return false;
         }
         case AST_ASSIGNMENT:
             return (node->as.assignment.name && strcmp(node->as.assignment.name, "this") == 0) ||
-                   xa_method_body_mutates_receiver(node->as.assignment.value);
+                   xa_method_body_mutates_receiver(node->as.assignment.value, receiver_info);
         case AST_COMPOUND_ASSIGNMENT:
             return (node->as.compound_assignment.name &&
                     strcmp(node->as.compound_assignment.name, "this") == 0) ||
-                   xa_method_body_mutates_receiver(node->as.compound_assignment.object) ||
-                   xa_method_body_mutates_receiver(node->as.compound_assignment.value);
+                   xa_method_body_mutates_receiver(node->as.compound_assignment.object,
+                                                   receiver_info) ||
+                   xa_method_body_mutates_receiver(node->as.compound_assignment.value,
+                                                   receiver_info);
         case AST_VAR_DECL:
         case AST_CONST_DECL:
-            return xa_method_body_mutates_receiver(node->as.var_decl.initializer);
+            return xa_method_body_mutates_receiver(node->as.var_decl.initializer, receiver_info);
         case AST_RETURN_STMT:
             for (int i = 0; i < node->as.return_stmt.value_count; i++) {
-                if (xa_method_body_mutates_receiver(node->as.return_stmt.values[i]))
+                if (xa_method_body_mutates_receiver(node->as.return_stmt.values[i], receiver_info))
                     return true;
             }
             return false;
         case AST_IF_STMT:
-            return xa_method_body_mutates_receiver(node->as.if_stmt.condition) ||
-                   xa_method_body_mutates_receiver(node->as.if_stmt.then_branch) ||
-                   xa_method_body_mutates_receiver(node->as.if_stmt.else_branch);
+            return xa_method_body_mutates_receiver(node->as.if_stmt.condition, receiver_info) ||
+                   xa_method_body_mutates_receiver(node->as.if_stmt.then_branch, receiver_info) ||
+                   xa_method_body_mutates_receiver(node->as.if_stmt.else_branch, receiver_info);
         case AST_WHILE_STMT:
-            return xa_method_body_mutates_receiver(node->as.while_stmt.condition) ||
-                   xa_method_body_mutates_receiver(node->as.while_stmt.body);
+            return xa_method_body_mutates_receiver(node->as.while_stmt.condition, receiver_info) ||
+                   xa_method_body_mutates_receiver(node->as.while_stmt.body, receiver_info);
         case AST_FOR_STMT:
-            return xa_method_body_mutates_receiver(node->as.for_stmt.initializer) ||
-                   xa_method_body_mutates_receiver(node->as.for_stmt.condition) ||
-                   xa_method_body_mutates_receiver(node->as.for_stmt.increment) ||
-                   xa_method_body_mutates_receiver(node->as.for_stmt.body);
+            return xa_method_body_mutates_receiver(node->as.for_stmt.initializer, receiver_info) ||
+                   xa_method_body_mutates_receiver(node->as.for_stmt.condition, receiver_info) ||
+                   xa_method_body_mutates_receiver(node->as.for_stmt.increment, receiver_info) ||
+                   xa_method_body_mutates_receiver(node->as.for_stmt.body, receiver_info);
         case AST_FOR_IN_STMT:
-            return xa_method_body_mutates_receiver(node->as.for_in_stmt.collection) ||
-                   xa_method_body_mutates_receiver(node->as.for_in_stmt.body);
+            return xa_method_body_mutates_receiver(node->as.for_in_stmt.collection,
+                                                   receiver_info) ||
+                   xa_method_body_mutates_receiver(node->as.for_in_stmt.body, receiver_info);
         case AST_DESTRUCTURE_DECL:
-            return xa_method_body_mutates_receiver(node->as.destructure_decl.initializer);
+            return xa_method_body_mutates_receiver(node->as.destructure_decl.initializer,
+                                                   receiver_info);
         case AST_DESTRUCTURE_ASSIGN:
-            return xa_method_body_mutates_receiver(node->as.destructure_assign.value);
+            return xa_method_body_mutates_receiver(node->as.destructure_assign.value,
+                                                   receiver_info);
         case AST_ARRAY_LITERAL:
             for (int i = 0; i < node->as.array_literal.count; i++) {
-                if (xa_method_body_mutates_receiver(node->as.array_literal.elements[i]))
+                if (xa_method_body_mutates_receiver(node->as.array_literal.elements[i],
+                                                    receiver_info))
                     return true;
             }
             return false;
         case AST_TUPLE_LITERAL:
             for (int i = 0; i < node->as.tuple_literal.count; i++) {
-                if (xa_method_body_mutates_receiver(node->as.tuple_literal.elements[i]))
+                if (xa_method_body_mutates_receiver(node->as.tuple_literal.elements[i],
+                                                    receiver_info))
                     return true;
             }
             return false;
         case AST_OBJECT_LITERAL:
             for (int i = 0; i < node->as.object_literal.count; i++) {
-                if (xa_method_body_mutates_receiver(node->as.object_literal.keys[i]) ||
-                    xa_method_body_mutates_receiver(node->as.object_literal.values[i]))
+                if (xa_method_body_mutates_receiver(node->as.object_literal.keys[i],
+                                                    receiver_info) ||
+                    xa_method_body_mutates_receiver(node->as.object_literal.values[i],
+                                                    receiver_info))
                     return true;
             }
             return false;
         case AST_MAP_LITERAL:
             for (int i = 0; i < node->as.map_literal.count; i++) {
-                if (xa_method_body_mutates_receiver(node->as.map_literal.keys[i]) ||
-                    xa_method_body_mutates_receiver(node->as.map_literal.values[i]))
+                if (xa_method_body_mutates_receiver(node->as.map_literal.keys[i], receiver_info) ||
+                    xa_method_body_mutates_receiver(node->as.map_literal.values[i], receiver_info))
                     return true;
             }
             return false;
         case AST_SET_LITERAL:
             for (int i = 0; i < node->as.set_literal.count; i++) {
-                if (xa_method_body_mutates_receiver(node->as.set_literal.elements[i]))
+                if (xa_method_body_mutates_receiver(node->as.set_literal.elements[i],
+                                                    receiver_info))
                     return true;
             }
             return false;
@@ -185,33 +246,58 @@ static bool xa_method_body_mutates_receiver(AstNode *node) {
         case AST_BINARY_BXOR:
         case AST_BINARY_LSHIFT:
         case AST_BINARY_RSHIFT:
-            return xa_method_body_mutates_receiver(node->as.binary.left) ||
-                   xa_method_body_mutates_receiver(node->as.binary.right);
+            return xa_method_body_mutates_receiver(node->as.binary.left, receiver_info) ||
+                   xa_method_body_mutates_receiver(node->as.binary.right, receiver_info);
         case AST_UNARY_NEG:
         case AST_UNARY_NOT:
         case AST_UNARY_BNOT:
-            return xa_method_body_mutates_receiver(node->as.unary.operand);
+            return xa_method_body_mutates_receiver(node->as.unary.operand, receiver_info);
         case AST_INDEX_GET:
-            return xa_method_body_mutates_receiver(node->as.index_get.array) ||
-                   xa_method_body_mutates_receiver(node->as.index_get.index);
+            return xa_method_body_mutates_receiver(node->as.index_get.array, receiver_info) ||
+                   xa_method_body_mutates_receiver(node->as.index_get.index, receiver_info);
         case AST_MEMBER_ACCESS:
-            return xa_method_body_mutates_receiver(node->as.member_access.object);
+            return xa_method_body_mutates_receiver(node->as.member_access.object, receiver_info);
         case AST_TERNARY:
-            return xa_method_body_mutates_receiver(node->as.ternary.condition) ||
-                   xa_method_body_mutates_receiver(node->as.ternary.true_expr) ||
-                   xa_method_body_mutates_receiver(node->as.ternary.false_expr);
+            return xa_method_body_mutates_receiver(node->as.ternary.condition, receiver_info) ||
+                   xa_method_body_mutates_receiver(node->as.ternary.true_expr, receiver_info) ||
+                   xa_method_body_mutates_receiver(node->as.ternary.false_expr, receiver_info);
         case AST_MOVE_EXPR:
-            return xa_method_body_mutates_receiver(node->as.move_expr.expr);
+            return xa_method_body_mutates_receiver(node->as.move_expr.expr, receiver_info);
         case AST_AWAIT_EXPR:
-            return xa_method_body_mutates_receiver(node->as.await_expr.expr) ||
-                   xa_method_body_mutates_receiver(node->as.await_expr.timeout);
+            return xa_method_body_mutates_receiver(node->as.await_expr.expr, receiver_info) ||
+                   xa_method_body_mutates_receiver(node->as.await_expr.timeout, receiver_info);
         case AST_SCOPE_BLOCK:
-            return xa_method_body_mutates_receiver(node->as.scope_block.body);
+            return xa_method_body_mutates_receiver(node->as.scope_block.body, receiver_info);
         case AST_DEFER_STMT:
-            return xa_method_body_mutates_receiver(node->as.defer_stmt.expr);
+            return xa_method_body_mutates_receiver(node->as.defer_stmt.expr, receiver_info);
         default:
             return false;
     }
+}
+
+static void xa_class_propagate_receiver_mutations(XrClassInfo *info, ClassDeclNode *cls) {
+    if (!info || !cls)
+        return;
+
+    bool changed;
+    do {
+        changed = false;
+        for (int i = 0; i < cls->method_count; i++) {
+            AstNode *method = cls->methods[i];
+            if (!method || method->type != AST_METHOD_DECL)
+                continue;
+            MethodDeclNode *md = &method->as.method_decl;
+            if (md->is_static)
+                continue;
+            XaSymbol *method_sym = xa_class_info_lookup_member(info, md->name);
+            if (!method_sym || method_sym->kind != XA_SYM_METHOD || method_sym->mutates_receiver)
+                continue;
+            if (xa_method_body_mutates_receiver(md->body, info)) {
+                method_sym->mutates_receiver = true;
+                changed = true;
+            }
+        }
+    } while (changed);
 }
 
 // Recursively collect all return types from a statement tree
@@ -1564,7 +1650,8 @@ skip_layout:
             method_sym->location.line = method->line;
             method_sym->is_static = md->is_static;
             method_sym->is_private = md->is_private;
-            method_sym->mutates_receiver = xa_method_body_mutates_receiver(md->body);
+            method_sym->mutates_receiver =
+                !md->is_static && xa_method_body_mutates_receiver(md->body, info);
             xa_visit_add_symbol_checked(ctx, method_sym, 0);
 
             // Build method type
@@ -1702,6 +1789,8 @@ skip_layout:
                 xr_free(param_names);
         }
     }
+
+    xa_class_propagate_receiver_mutations(info, cls);
 
     validate_class_field_default_initialization(ctx, node, cls, info);
 
