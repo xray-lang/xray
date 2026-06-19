@@ -104,6 +104,11 @@ static void aot_mark_running(XrCoroutine *coro) {
                        XR_CORO_FLG_RUNNING | XR_CORO_FLG_STARTED);
 }
 
+static bool aot_coro_cancelled(const XrCoroutine *coro) {
+    return coro && xr_coro_flags_has((XrCoroutine *) coro,
+                                     XR_CORO_FLG_CANCEL_REQUESTED | XR_CORO_FLG_CANCELLED);
+}
+
 static XrCoroRunResult aot_map_result(XrCoroutine *coro, XrAotResult result) {
     switch (result.kind) {
         case XR_AOT_RUN_DONE:
@@ -130,6 +135,8 @@ static XrCoroRunResult aot_backend_resume(XrCoroutine *coro, const XrCoroEvent *
     if (!coro || !state || !state->desc || !state->desc->resume)
         return xr_coro_run_error(XR_NULL_VAL, false);
     if (event && event->kind == XR_CORO_EVENT_CANCEL)
+        return xr_coro_run_result(XR_CORO_RUN_CANCELLED);
+    if (aot_coro_cancelled(coro))
         return xr_coro_run_result(XR_CORO_RUN_CANCELLED);
 
     aot_mark_running(coro);
@@ -378,6 +385,36 @@ static void aot_detach_completed_executor(XrTask *task) {
         return;
     }
     exec->task = NULL;
+}
+
+static void aot_task_recycle_cancelled_executor(XrTask *task, XrCoroutine *coro,
+                                                uint32_t before_cancel_flags) {
+    if (!task || !coro || xr_coro_flags_has(coro, XR_CORO_FLG_MAIN))
+        return;
+    if ((task->flags & XR_TASK_FLG_RUNTIME_OWNED) == 0)
+        return;
+    if (xr_task_claim_executor(task) != coro)
+        return;
+
+    coro->task = NULL;
+    coro->gc_flags |= XR_CORO_GC_RECYCLABLE | XR_CORO_GC_TRIM_BACKEND_STORAGE;
+
+    if ((before_cancel_flags & XR_CORO_FLG_BLOCKED) == 0)
+        return;
+    if (coro->ext && (coro->ext->wait_bucket || xr_coro_select_wait(coro)))
+        return;
+
+    XrWorker *worker = xr_current_worker();
+    XrRuntime *runtime = worker ? worker->p.runtime
+                                : (coro->isolate ? (XrRuntime *) coro->isolate->vm.runtime : NULL);
+    int owner_id = atomic_load_explicit(&coro->affinity_p, memory_order_acquire);
+    if (worker && runtime == worker->p.runtime && worker->p.id == owner_id) {
+        xr_worker_unblock(worker, coro);
+        xr_coro_recycle_local(worker, coro);
+        return;
+    }
+    if (runtime && owner_id >= 0 && owner_id < runtime->worker_count)
+        xr_worker_inbox_enqueue(runtime, owner_id, coro);
 }
 
 static XrAotResult aot_store_slot_result(XrSlotRef out_slot, XrValue value) {
@@ -902,7 +939,11 @@ XrAotSpawnResult xr_aot_spawn(const XrAotContext *ctx, const XrAotCoroDesc *desc
 XrAotResult xr_aot_sleep(const XrAotContext *ctx, int64_t milliseconds) {
     if (!ctx || !ctx->coro)
         return xr_aot_error(XR_NULL_VAL, false);
+    if (aot_coro_cancelled(ctx->coro))
+        return xr_aot_result(XR_AOT_RUN_CANCELLED);
     XrCoroBlockResult block = xr_coro_sleep(ctx->coro, milliseconds);
+    if (aot_coro_cancelled(ctx->coro))
+        return xr_aot_result(XR_AOT_RUN_CANCELLED);
     if (block.kind == XR_CORO_BLOCK_BLOCKED)
         return xr_aot_blocked();
     if (block.kind == XR_CORO_BLOCK_READY)
@@ -1051,7 +1092,8 @@ XrValue xr_aot_task_cancel(const XrAotContext *ctx, XrValue task_value) {
         return xr_null();
     XrTask *task = xr_value_to_task(task_value);
     XrCoroutine *coro = xr_task_executor_peek(task);
-    if (coro && !xr_task_is_done(task)) {
+    if (!xr_task_is_done(task) && coro) {
+        uint32_t before_cancel_flags = xr_coro_flags_load(coro);
         xr_coro_cancel(coro);
         xr_task_cancel(task);
         XrayIsolate *isolate = ctx ? ctx->isolate : NULL;
@@ -1059,6 +1101,9 @@ XrValue xr_aot_task_cancel(const XrAotContext *ctx, XrValue task_value) {
             isolate = coro->isolate;
         if (isolate)
             xr_coro_wake_waiter(isolate, coro);
+        aot_task_recycle_cancelled_executor(task, coro, before_cancel_flags);
+    } else if (!xr_task_is_done(task)) {
+        xr_task_cancel(task);
     }
     return xr_null();
 }
