@@ -77,6 +77,14 @@ int main(int argc, char **argv) {
     _CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_FILE);
     _CrtSetReportFile(_CRT_ERROR, _CRTDBG_FILE_STDERR);
 #endif
+#ifndef XR_OS_WINDOWS
+    /* A networking runtime must never die because a peer closed the connection
+     * mid-write. Ignore SIGPIPE process-wide so socket/pipe writes report EPIPE
+     * through their return value (every send/write path already treats a failed
+     * write as a normal I/O error). Set unconditionally — unlike the crash
+     * handlers below this is safe and desired under sanitizers too. */
+    signal(SIGPIPE, SIG_IGN);
+#endif
 #if !defined(XR_OS_WINDOWS) && !defined(__SANITIZE_ADDRESS__) && !defined(__SANITIZE_THREAD__) &&  \
     !(__has_feature(address_sanitizer) || __has_feature(thread_sanitizer))
     signal(SIGSEGV, crash_handler);

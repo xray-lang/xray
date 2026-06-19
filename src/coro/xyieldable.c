@@ -248,16 +248,23 @@ bool xr_yield_for_uring_io(XrayIsolate *X, struct XrPollDesc *pd, int mode,
         XrCoroBlockSnapshot block_snapshot = xr_coro_begin_reversible_block(coro);
         yield_commit_io_wait(coro);
 
+        // Claim the completion direction BEFORE publishing the coro on gpp. The
+        // fd stays in the worker's local epoll for readiness, so a readiness edge
+        // can race this submit; xr_netpoll_ready strips readiness for a direction
+        // with an active op (the CQE is the sole waker). Setting op->active only
+        // AFTER the gpp CAS left a window where a readiness edge woke the coro
+        // while its recv/send op was still in flight — the coro then re-parked
+        // and submitted a SECOND op reusing this same XrUringOp, so one CQE was
+        // lost and the coroutine hung. Claiming the direction first closes it.
+        atomic_store(&op->active, true);
+
         uintptr_t expect = XR_PD_NIL;
         if (!atomic_compare_exchange_strong(gpp, &expect, (uintptr_t) coro)) {
+            atomic_store(&op->active, false);
             yield_abort_io_wait(coro, block_snapshot);
             continue;  // raced to READY — retry
         }
 
-        // Claim the direction for completion before submitting: makes the op's
-        // CQE the sole waker (iouring_dispatch_cqe drops a stale poll-add for an
-        // active direction, and xr_netpoll_close skips its readiness unblock).
-        atomic_store(&op->active, true);
         atomic_fetch_add(&pd->netpoll->waiters, 1);
         if (xr_netpoll_uring_op_submit(pd, mode, req) != 0) {
             // Submission queue exhausted (or not io_uring): unwind cleanly and

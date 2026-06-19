@@ -128,12 +128,6 @@ typedef struct XrMachine {
      * stall detection to auto-upgrade FAST cfuncs. */
     _Atomic(void *) current_cfunc;  // XrCFunction* when executing C code, NULL otherwise
 
-    /* === Next P to acquire (set before unpark) === */
-    struct XrProc *next_p;
-
-    /* === Syscall handoff: Worker that M was running when it blocked === */
-    struct XrWorker *blocked_worker;
-
     /* === M Linked Lists === */
     struct XrMachine *all_link;  // Global all-M list
     /* Relaxed atomic: Treiber-stack link. A losing pop contender may read it
@@ -153,9 +147,6 @@ typedef struct XrMachine {
 
     /* === Runtime back pointer === */
     struct XrRuntime *runtime;
-
-    /* === Thread Reuse (handoff M keeps thread alive) === */
-    _Atomic bool has_thread;  // true if M has a parked thread waiting for next_p
 } XrMachine;
 
 /* ========== M Lifecycle API ========== */
@@ -168,24 +159,5 @@ XR_FUNC void xr_machine_init(XrMachine *m, int id, struct XrRuntime *runtime);
 
 // Destroy M resources
 XR_FUNC void xr_machine_destroy(XrMachine *m);
-
-// Park M (block until woken)
-// Reference: Go src/runtime/proc.go stopm()
-XR_FUNC void xr_park_m(XrMachine *m);
-
-// Unpark M (wake from sleep)
-XR_FUNC void xr_unpark_m(XrMachine *m);
-
-/* ========== Idle M Management ========== */
-
-// Get an idle M from runtime pool
-XR_FUNC XrMachine *xr_get_idle_m(struct XrRuntime *runtime);
-
-// Put M into idle pool
-XR_FUNC void xr_put_idle_m(struct XrRuntime *runtime, XrMachine *m);
-
-// Start or wake an M to run a P
-// Reference: Go src/runtime/proc.go startm()
-XR_FUNC void xr_startm(struct XrProc *p, bool spinning);
 
 #endif  // XMACHINE_H

@@ -534,23 +534,16 @@ XR_FUNC void xr_worker_unblock_select(XrWorker *worker, XrCoroutine *coro);
 XR_FUNC void xr_worker_teardown_select_wait(XrWorker *worker, XrCoroutine *coro);
 XR_FUNC int xr_runtime_next_coro_id(XrRuntime *runtime);
 
-/* ========== Syscall Enter/Exit (P Handoff) ========== */
+/* ========== Syscall Enter/Exit (blocking-cfunc P status) ========== */
 
-// Release P from current M and hand off to idle/new M.
-// Called before blocking C code. P transitions: P_RUNNING → P_SYSCALL.
-// A handoff M acquires P and runs its scheduling loop.
+// Mark the current worker's P as P_SYSCALL around a non-yieldable blocking C
+// call so sysmon does not treat the stalled heartbeat as a stuck coroutine. The
+// M keeps its P; there is no handoff (hot I/O is yieldable, never blocks an M).
 XR_FUNC void xr_worker_entersyscall(void);
 
-// Re-acquire P after blocking C code returns.
-// Signals handoff M to release P, spins until P is available.
+// Restore P_RUNNING after the blocking C call returns (balances entersyscall,
+// including nested blocking helpers).
 XR_FUNC void xr_worker_exitsyscall(void);
-
-// Thread entry for handoff M. Runs P's scheduling loop until
-// original M returns (handoff_exit signal) or no work remains.
-XR_FUNC void *xr_handoff_thread_entry(void *arg);
-
-// Reserve a new M id within the runtime handoff budget.
-XR_FUNC int xr_runtime_reserve_handoff_m_id(XrRuntime *runtime);
 
 /* ========== Diagnostics ========== */
 

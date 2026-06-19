@@ -288,6 +288,15 @@ struct XrNetpoll {
     // Wakeup mechanism
     int wakeup_pipe[2];          // Wakeup pipe (read/write ends)
     _Atomic bool break_pending;  // Whether there's pending wakeup
+
+#if defined(XR_OS_LINUX) && defined(XR_HAS_IO_URING)
+    // True when per-worker io_uring completion rings are usable on this host
+    // (kernel supports io_uring and XRAY_IO_BACKEND did not force epoll). The
+    // global backend (ops) is always epoll on Linux now — io_uring lives only
+    // in the per-worker rings (XrLocalPoll::uring). Set once during init before
+    // any worker starts, read-only afterwards.
+    bool uring_avail;
+#endif
 };
 
 // ========== fd_map Two-Level Access Helpers ==========
@@ -373,13 +382,24 @@ static inline void xr_fdmap_destroy(XrNetpoll *np) {
 // The global XrNetpoll still owns the fd_map and PollDesc cache.
 
 typedef struct XrLocalPoll {
-    int poll_fd;         // per-worker kqueue/epoll fd (-1 = uninitialized)
+    int poll_fd;         // per-worker kqueue/epoll fd (readiness); -1 = uninitialized
     int wakeup_pipe[2];  // per-worker wakeup pipe
     _Atomic bool break_pending;
+#if defined(XR_OS_LINUX) && defined(XR_HAS_IO_URING)
+    // Per-worker io_uring ring for completion-mode socket/file I/O (recv/send/
+    // accept/connect/file read+write). NULL when io_uring is unavailable (the
+    // worker then uses only the local epoll above). The ring is touched solely
+    // by its owner worker thread: submission is single-producer and reaping is
+    // single-consumer, so no lock is needed (this is what replaces the old
+    // single global ring + mutex that serialised every worker). Readiness still
+    // flows through the local epoll above; the ring carries completion ops only.
+    void *uring;  // XrUringRing*
+#endif
 } XrLocalPoll;
 
-// Initialize per-worker poll state (creates kqueue/epoll fd + wakeup pipe)
-XR_FUNC int xr_local_poll_init(XrLocalPoll *lp);
+// Initialize per-worker poll state (creates the kqueue/epoll fd + wakeup pipe,
+// and a per-worker io_uring completion ring when use_uring is true on Linux).
+XR_FUNC int xr_local_poll_init(XrLocalPoll *lp, bool use_uring);
 // Cleanup per-worker poll state
 XR_FUNC void xr_local_poll_cleanup(XrLocalPoll *lp);
 // Register fd with per-worker poller
@@ -495,28 +515,45 @@ XR_FUNC void xr_netpoll_drain_deferred(XrNetpoll *np, struct XrProc *p);
 
 // ========== io_uring Completion Mode (Linux only) ==========
 //
-// On Linux with io_uring, network/file I/O can use the completion model:
-// submit a recv/send SQE and let the CQE carry the byte count back, saving the
+// On Linux with io_uring, network/file I/O uses the completion model: submit a
+// recv/send SQE and let the CQE carry the byte count back, saving the
 // "readiness -> separate read()/write()" second syscall. This unifies with the
-// IOCP completion model on Windows; epoll / kqueue / io_uring-POLL keep the
-// readiness model. io_uring CQEs are demultiplexed by user_data: poll re-arm,
-// wakeup, and completion ops are distinguished without a second ring.
+// IOCP completion model on Windows; epoll / kqueue keep the readiness model.
 //
-// Submission must run on the thread that owns the netpoll ring (the same
-// single-producer constraint as the io_uring SQ). The byte count (or -errno)
-// is delivered to op->res, with op->done set, during a later poll cycle
-// (xr_netpoll_poll). The caller owns the XrUringOp and the buffer until done.
+// Each worker owns its own io_uring ring (XrLocalPoll::uring): completion ops
+// submit to the current worker's ring (single-producer, no lock) and are reaped
+// by that worker's poll cycle (single-consumer, no lock). The byte count (or
+// -errno) is delivered to op->res with op->done set during a later poll cycle.
+// The caller owns the XrUringOp and the buffer until done. Readiness still flows
+// through the per-worker local epoll; the ring carries completion ops only.
 // (XrUringOp is defined above so it can be embedded in XrPollDesc.)
 #if defined(XR_OS_LINUX) && defined(XR_HAS_IO_URING)
 
-// Returns 0 if the SQE was queued, -1 if the submission queue is exhausted or
-// the backend is not io_uring (e.g. fell back to epoll on an old kernel).
-XR_FUNC int xr_netpoll_uring_submit_recv(XrNetpoll *np, XrUringOp *op, int fd, void *buf,
-                                         unsigned len);
-XR_FUNC int xr_netpoll_uring_submit_send(XrNetpoll *np, XrUringOp *op, int fd, const void *buf,
-                                         unsigned len);
+// ---- Per-worker io_uring completion ring (opaque XrUringRing handle) ----
+//
+// Created per worker at startup when XrNetpoll::uring_avail; touched only by the
+// owning worker thread. Also used standalone by the io_uring completion test.
+XR_FUNC void *xr_uring_ring_create(void);
+XR_FUNC void xr_uring_ring_destroy(void *ring);
+// Reap all currently-available CQEs on `ring` (non-blocking), routing completion
+// wakeups into `list`. Returns the number of CQEs processed.
+XR_FUNC int xr_uring_ring_reap(void *ring, XrReadyList *list);
+// Number of submitted-but-unreaped completion ops on `ring`.
+XR_FUNC int xr_uring_ring_inflight(void *ring);
+// Block up to timeout_us for a completion on `ring` (does not consume the CQE).
+// An idle worker with outstanding ops uses this instead of the futex park so an
+// arriving completion resumes it immediately.
+XR_FUNC void xr_uring_ring_wait(void *ring, int64_t timeout_us);
+// Raw completion primitives (no pd wake routing, no timeout): submit a recv/send
+// SQE on `ring`; the caller polls op->done and reaps via xr_uring_ring_reap.
+// Returns 0 if queued, -1 if the submission queue is exhausted.
+XR_FUNC int xr_uring_ring_submit_recv(void *ring, XrUringOp *op, int fd, void *buf, unsigned len);
+XR_FUNC int xr_uring_ring_submit_send(void *ring, XrUringOp *op, int fd, const void *buf,
+                                      unsigned len);
 
-// True when the active backend is io_uring (vs the epoll fallback).
+// True when the current worker has an io_uring completion ring (i.e. completion
+// mode is usable for an op submitted from this thread). False outside a worker
+// or when io_uring is unavailable (callers then use the readiness path).
 XR_FUNC bool xr_netpoll_uring_active(XrNetpoll *np);
 
 // ---- Yieldable completion socket I/O (the coroutine net path) ----
@@ -550,6 +587,13 @@ typedef enum {
 // Releases the pd pin taken at submit; if a close raced the op, performs the
 // deferred pd free here (the waiter's continuation is the last reader).
 XR_FUNC long xr_netpoll_uring_xfer_result(XrPollDesc *pd, int mode, XrUringXferKind *out_kind);
+
+// Drain the current worker's cross-worker io_uring cancel queue. When a close
+// runs off the fd's owner worker it cannot submit a cancel SQE to the owner's
+// ring (single-producer), so it queues the pd here; the owner drains this in its
+// poll cycle and cancels the in-flight ops on its own ring. Called once per
+// scheduling cycle by the owner worker.
+XR_FUNC void xr_netpoll_drain_uring_cancel(struct XrProc *p);
 #endif
 
 #endif  // XNETPOLL_H

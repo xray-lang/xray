@@ -95,6 +95,12 @@ static int invoke_cc(const char *cc, const char *opt_flag, const char *output_fi
 #endif
     spawn_argv[ai++] = lib_flag;
     spawn_argv[ai++] = "-lxray_core";
+#ifdef XR_HAS_IO_URING
+    /* xray_core embeds the per-worker io_uring completion rings (netpoll_iouring),
+     * so the AOT-linked program must resolve liburing too. Must follow
+     * -lxray_core: the archive pulls in io_uring_* only on demand. */
+    spawn_argv[ai++] = "-luring";
+#endif
 #ifdef XR_OS_MACOS
     /* Override for Intel Homebrew (/usr/local) or custom openssl prefixes;
      * default stays Apple-Silicon Homebrew. ssl_flag outlives the spawn. */
