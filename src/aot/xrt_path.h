@@ -18,6 +18,16 @@ static inline XrValue xrt_path_is_absolute(const char *path, int64_t len) {
     return XR_FROM_BOOL(xr_path_core_is_absolute(path, len < 0 ? 0 : (size_t) len));
 }
 
+static inline XrValue xrt_path_join(int64_t count_i, const char **parts, const size_t *lens) {
+    size_t count = count_i < 0 ? 0 : (size_t) count_i;
+    size_t out_len = 0;
+    if (!xr_path_core_join_len(parts, lens, count, &out_len))
+        return XR_NULL_VAL;
+    XrValue result = xrt_str_alloc(out_len);
+    xr_path_core_join_write(parts, lens, count, xr_str_buf(result));
+    return result;
+}
+
 static inline const char *xrt_path_dirname(const char *path, int64_t len, int64_t *out_len) {
     size_t rl = 0;
     const char *r = xr_path_core_dirname(path, len < 0 ? 0 : (size_t) len, &rl);
