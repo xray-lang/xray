@@ -27,6 +27,8 @@ typedef enum {
                               * input/static buffer; copied into an AOT string */
 } CgAotRetKind;
 
+#define CG_AOT_STDLIB_VARIADIC UINT16_MAX
+
 typedef struct CgAotStdlibMethod {
     const char *module; /* stdlib module identifier (e.g. "path") */
     const char *method; /* method name (e.g. "isAbsolute") */
@@ -34,13 +36,15 @@ typedef struct CgAotStdlibMethod {
     const char *shim;   /* xr_aot_<module>_<method> runtime symbol */
     /* One character per argument describing how it is passed to the shim:
      *   's' = string, lowered to specialized (const char *data, int64_t len)
-     *   'v' = tagged XrValue passed as-is */
+     *   'v' = tagged XrValue passed as-is
+     *   '*' = variadic strings, lowered to (argc, data[], len[]) */
     const char *arg_spec;
     CgAotRetKind ret_kind;
     const char *extern_decl; /* forward declaration emitted into generated C */
 } CgAotStdlibMethod;
 
 static const CgAotStdlibMethod g_aot_stdlib_methods[] = {
+    {"path", "join", CG_AOT_STDLIB_VARIADIC, "xrt_path_join", "*", CG_AOT_RET_VALUE, NULL},
     {"path", "isAbsolute", 1, "xrt_path_is_absolute", "s", CG_AOT_RET_VALUE, NULL},
     {"path", "dirname", 1, "xrt_path_dirname", "s", CG_AOT_RET_STR_BORROWED, NULL},
     {"path", "basename", 1, "xrt_path_basename", "s", CG_AOT_RET_STR_BORROWED, NULL},
@@ -94,7 +98,8 @@ static const CgAotStdlibMethod *cg_find_aot_stdlib_method(const char *module, co
         return NULL;
     for (int i = 0; i < CG_AOT_STDLIB_METHOD_COUNT; i++) {
         const CgAotStdlibMethod *m = &g_aot_stdlib_methods[i];
-        if (m->argc == argc && strcmp(module, m->module) == 0 && strcmp(method, m->method) == 0)
+        if ((m->argc == argc || m->argc == CG_AOT_STDLIB_VARIADIC) &&
+            strcmp(module, m->module) == 0 && strcmp(method, m->method) == 0)
             return m;
     }
     return NULL;
@@ -134,6 +139,10 @@ static void cg_emit_aot_stdlib_args(XiCgenCtx *ctx, FILE *out, const XiFunc *f, 
             emit_value_as_rep_ctx(ctx, out, arg, XR_REP_TAGGED);
         }
     }
+}
+
+static bool cg_aot_stdlib_method_is_variadic_strings(const CgAotStdlibMethod *m) {
+    return m && m->argc == CG_AOT_STDLIB_VARIADIC && m->arg_spec && strcmp(m->arg_spec, "*") == 0;
 }
 
 /* Emit a direct AOT call for a stdlib module method.
@@ -184,12 +193,42 @@ static bool xicgen_emit_stdlib_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f
         return true;
     }
 
-    /* CG_AOT_RET_VALUE: shim returns a tagged XrValue. */
-    const char *suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, target_rep);
-    fprintf(out, "%s(", m->shim);
-    cg_emit_aot_stdlib_args(ctx, out, f, v, m, call_argc);
-    fprintf(out, ")");
-    emit_conversion_suffix(out, suffix);
+    if (cg_aot_stdlib_method_is_variadic_strings(m)) {
+        unsigned id = v->id;
+        if (call_argc > 0) {
+            fprintf(out, "const char *_asd%u[%u] = {", id, (unsigned) call_argc);
+            for (uint16_t a = 0; a < call_argc; a++) {
+                if (a > 0)
+                    fprintf(out, ", ");
+                fprintf(out, "xr_str_data(");
+                emit_value_as_rep_ctx(ctx, out, v->args[1 + a], XR_REP_TAGGED);
+                fprintf(out, ")");
+            }
+            fprintf(out, "}; size_t _asl%u[%u] = {", id, (unsigned) call_argc);
+            for (uint16_t a = 0; a < call_argc; a++) {
+                if (a > 0)
+                    fprintf(out, ", ");
+                fprintf(out, "(size_t) xr_str_len(");
+                emit_value_as_rep_ctx(ctx, out, v->args[1 + a], XR_REP_TAGGED);
+                fprintf(out, ")");
+            }
+            fprintf(out, "}; ");
+            fprintf(out, "XrValue _arv%u = %s((int64_t) %u, _asd%u, _asl%u); ", id, m->shim,
+                    (unsigned) call_argc, id, id);
+        } else {
+            fprintf(out, "XrValue _arv%u = %s(0, NULL, NULL); ", id, m->shim);
+        }
+        const char *suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, target_rep);
+        fprintf(out, "_arv%u", id);
+        emit_conversion_suffix(out, suffix);
+    } else {
+        /* CG_AOT_RET_VALUE: shim returns a tagged XrValue. */
+        const char *suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, target_rep);
+        fprintf(out, "%s(", m->shim);
+        cg_emit_aot_stdlib_args(ctx, out, f, v, m, call_argc);
+        fprintf(out, ")");
+        emit_conversion_suffix(out, suffix);
+    }
     fprintf(out, "; })");
     return true;
 }

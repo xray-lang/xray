@@ -53,60 +53,48 @@ static XrValue path_join(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 1)
         return xrs_string_value_c(X, "");
 
-    // Calculate max result length
-    size_t total_len = 0;
+    enum {
+        PATH_JOIN_STACK_PARTS = 16
+    };
+    const char *stack_parts[PATH_JOIN_STACK_PARTS];
+    size_t stack_lens[PATH_JOIN_STACK_PARTS];
+    const char **parts = stack_parts;
+    size_t *lens = stack_lens;
+    void *heap_buf = NULL;
+    if (argc > PATH_JOIN_STACK_PARTS) {
+        size_t count = (size_t) argc;
+        heap_buf = xr_malloc(sizeof(char *) * count + sizeof(size_t) * count);
+        if (!heap_buf)
+            return xr_null();
+        parts = (const char **) heap_buf;
+        lens = (size_t *) (parts + count);
+    }
     for (int i = 0; i < argc; i++) {
-        const char *s = xrs_string_arg(args[i], NULL);
-        if (s)
-            total_len += strlen(s) + 1;
+        size_t len = 0;
+        parts[i] = xrs_string_arg(args[i], &len);
+        lens[i] = parts[i] ? len : 0;
     }
 
-    if (total_len == 0)
-        return xrs_string_value_c(X, "");
-
-    char *result = (char *) xr_malloc(total_len + 1);
-    if (!result)
+    size_t out_len = 0;
+    if (!xr_path_core_join_len(parts, lens, (size_t) argc, &out_len)) {
+        xr_free(heap_buf);
         return xr_null();
-
-    size_t pos = 0;
-    XR_DCHECK(total_len > 0, "path_join: total_len already validated > 0");
-
-    for (int i = 0; i < argc; i++) {
-        const char *part = xrs_string_arg(args[i], NULL);
-        if (!part || part[0] == '\0')
-            continue;
-
-        // Check absolute path FIRST, before adding separator
-#ifdef XR_OS_WINDOWS
-        bool is_abs = IS_SEP(part[0]) ||
-                      (((part[0] >= 'A' && part[0] <= 'Z') || (part[0] >= 'a' && part[0] <= 'z')) &&
-                       part[1] == ':');
-#else
-        bool is_abs = (part[0] == '/');
-#endif
-        if (pos > 0 && is_abs) {
-            pos = 0;
-        }
-
-        // Add separator if needed
-        if (pos > 0 && !IS_SEP(result[pos - 1]) && !IS_SEP(part[0])) {
-            result[pos++] = PATH_SEP;
-        }
-
-        // Skip leading separator if already have content
-        if (pos > 0 && IS_SEP(part[0])) {
-            part++;
-        }
-
-        size_t part_len = strlen(part);
-        memcpy(result + pos, part, part_len);
-        pos += part_len;
+    }
+    if (out_len == 0) {
+        xr_free(heap_buf);
+        return xrs_string_value_c(X, "");
     }
 
-    result[pos] = '\0';
+    char *result = (char *) xr_malloc(out_len + 1);
+    if (!result) {
+        xr_free(heap_buf);
+        return xr_null();
+    }
+    xr_path_core_join_write(parts, lens, (size_t) argc, result);
 
-    XrValue ret = xrs_string_value_c(X, result);
+    XrValue ret = xrs_string_value_n(X, result, out_len);
     xr_free(result);
+    xr_free(heap_buf);
     return ret;
 }
 

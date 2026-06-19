@@ -29,6 +29,70 @@ static inline const char *xr_path_core_sep_str(void) {
     return "/";
 }
 
+static inline bool xr_path_core_is_absolute(const char *path, size_t len);
+
+static inline bool xr_path_core_join_len(const char **parts, const size_t *lens, size_t count,
+                                         size_t *out_len) {
+    if (!out_len)
+        return false;
+    size_t pos = 0;
+    char last = '\0';
+    for (size_t i = 0; i < count; i++) {
+        const char *part = parts ? parts[i] : NULL;
+        size_t len = lens ? lens[i] : 0;
+        if (!part || len == 0)
+            continue;
+
+        if (pos > 0 && xr_path_core_is_absolute(part, len)) {
+            pos = 0;
+            last = '\0';
+        }
+
+        if (pos > 0 && !xr_path_core_is_sep(last) && !xr_path_core_is_sep(part[0])) {
+            pos++;
+            last = '/';
+        }
+
+        size_t start = 0;
+        if (pos > 0 && xr_path_core_is_sep(part[0]))
+            start = 1;
+        size_t copy_len = len - start;
+        if (copy_len > 0) {
+            pos += copy_len;
+            last = part[len - 1];
+        }
+    }
+    *out_len = pos;
+    return true;
+}
+
+static inline void xr_path_core_join_write(const char **parts, const size_t *lens, size_t count,
+                                           char *out) {
+    size_t pos = 0;
+    for (size_t i = 0; i < count; i++) {
+        const char *part = parts ? parts[i] : NULL;
+        size_t len = lens ? lens[i] : 0;
+        if (!part || len == 0)
+            continue;
+
+        if (pos > 0 && xr_path_core_is_absolute(part, len))
+            pos = 0;
+
+        if (pos > 0 && !xr_path_core_is_sep(out[pos - 1]) && !xr_path_core_is_sep(part[0]))
+            out[pos++] = '/';
+
+        size_t start = 0;
+        if (pos > 0 && xr_path_core_is_sep(part[0]))
+            start = 1;
+        size_t copy_len = len - start;
+        if (copy_len > 0) {
+            memcpy(out + pos, part + start, copy_len);
+            pos += copy_len;
+        }
+    }
+    out[pos] = '\0';
+}
+
 static inline const char *xr_path_core_dirname(const char *path, size_t len, size_t *out_len) {
     if (!out_len)
         return ".";

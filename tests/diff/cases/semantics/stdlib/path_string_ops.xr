@@ -32,6 +32,14 @@ print(path.relative("/usr/local/bin", "/usr/local"))
 print(path.relative("/a/b/c", "/a/x/y"))
 print(path.relative("foo/bar/../baz", "foo/qux/./zap"))
 
+print(path.join("foo", "bar"))
+print(path.join("foo", "bar", "baz"))
+print(path.join("/usr", "local", "bin"))
+print(path.join("foo/", "bar"))
+print(path.join("foo", "/bar", "baz"))
+print(path.join() == "")
+print(path.join("", "x"))
+
 let f = "/srv/data/report.csv"
 print(path.dirname(f))
 print(path.basename(f))
