@@ -2674,11 +2674,30 @@ static void emit_class_shared_native_storage_decls(XiCgenCtx *ctx, FILE *out, co
         if (!cg_class_shared_native_slot_active(ctx, slot))
             continue;
         const CgSharedNativeInstance *inst = &ctx->shared_native_instances[slot];
-        fprintf(out, "static ");
+        bool exported = ctx->extern_linkage && cg_class_shared_native_slot_is_exported(ctx, slot);
+        fprintf(out, "%s", exported ? "" : "static ");
         emit_class_native_type_name(out, inst->ctor_prefix ? inst->ctor_prefix : prefix,
                                     inst->class_data->class_name);
         fprintf(out, " ");
         emit_class_shared_native_storage_name(ctx, out, slot);
+        fprintf(out, ";\n");
+    }
+}
+
+static void emit_imported_class_shared_native_storage_decls(XiCgenCtx *ctx, FILE *out) {
+    if (!ctx || !out)
+        return;
+    int current_module_index = cg_class_shared_native_module_index(ctx, ctx->module);
+    for (int i = 0; i < ctx->nshared_native_exports; i++) {
+        const CgSharedNativeExport *exp = &ctx->shared_native_exports[i];
+        if (!exp->active || !exp->class_data || !exp->class_data->instance_layout ||
+            exp->module_index == current_module_index)
+            continue;
+        fprintf(out, "extern ");
+        emit_class_native_type_name(out, exp->module_name ? exp->module_name : "mod",
+                                    exp->class_data->class_name);
+        fprintf(out, " ");
+        emit_class_shared_native_export_storage_name(out, exp);
         fprintf(out, ";\n");
     }
 }

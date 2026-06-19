@@ -2754,6 +2754,41 @@ TEST(cgen_int_const_div_mod_uses_native_ops) {
     xi_func_free(ir);
 }
 
+TEST(cgen_defer_isolates_existing_pending_error) {
+    const char *src = "enum E { Bad(code: int) }\n"
+                      "fn run() -> int {\n"
+                      "    let log: Array<int> = []\n"
+                      "    fn body() {\n"
+                      "        defer { log.push(100) }\n"
+                      "        throw E.Bad(1)\n"
+                      "    }\n"
+                      "    try { body() } catch (e) { log.push(1) }\n"
+                      "    return log[0] + log[1]\n"
+                      "}\n"
+                      "print(run())\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "defer over pending error should generate");
+
+    assert(contains(code, "XrValue _xrt_defer_saved_error_") &&
+           "defer emission must save an existing pending error");
+    assert(contains(code, "int _xrt_defer_had_error_") &&
+           "defer emission must remember whether the error channel was active");
+    assert(contains(code, "xrt_pending_error = XR_NULL_VAL;") &&
+           "defer body must run with the old pending error temporarily cleared");
+    assert(contains(code, "xrt_release(_xrt_defer_saved_error_") &&
+           "a defer-raised replacement error must release the old pending error");
+
+    printf("  Generated defer pending-error isolation %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_unsupported_coroutine_ops_fail_fast) {
     static const struct {
         XiOp op;
@@ -3554,8 +3589,12 @@ TEST(cgen_coro_scalar_await_uses_tagged_slot) {
     assert(count_between(frame, frame_end, "int64_t v") >= 1 &&
            "await Task<int> should reserve a native scalar frame slot");
 
-    const char *resume = strstr(code, "static XrAotResult test_main_plus_");
-    const char *trace = resume ? strstr(resume, "static void test_main_plus_") : NULL;
+    const char *main_plus = strstr(code, "test_main_plus_");
+    const char *resume =
+        main_plus ? strstr(main_plus, "_aot_resume(void *raw_frame, const XrAotContext *ctx) {")
+                  : NULL;
+    const char *trace = resume ? strstr(resume, "test_main_plus_") : NULL;
+    trace = trace ? strstr(trace, "_aot_trace(void *frame") : NULL;
     assert(resume != NULL && trace != NULL && "main_plus resume function should be emitted");
     assert(count_between(resume, trace, "xr_aot_await_task(ctx,") == 1 &&
            "initial scalar await should use the slot bridge");
@@ -3736,8 +3775,12 @@ TEST(cgen_coro_scalar_channel_recv_uses_tagged_slot) {
     assert(nonzero_state_precedes_call(code, "xr_aot_chan_recv_slot(ctx,") &&
            "scalar channel recv must publish the AOT resume state before runtime blocking");
 
-    const char *resume = strstr(code, "static XrAotResult test_recv_plus_");
-    const char *trace = resume ? strstr(resume, "static void test_recv_plus_") : NULL;
+    const char *recv_plus = strstr(code, "test_recv_plus_");
+    const char *resume =
+        recv_plus ? strstr(recv_plus, "_aot_resume(void *raw_frame, const XrAotContext *ctx) {")
+                  : NULL;
+    const char *trace = resume ? strstr(resume, "test_recv_plus_") : NULL;
+    trace = trace ? strstr(trace, "_aot_trace(void *frame") : NULL;
     assert(resume != NULL && trace != NULL && "recv_plus resume function should be emitted");
     printf("  Generated scalar channel recv slot %zu bytes of C code\n", strlen(code));
     xr_free(code);
@@ -4307,6 +4350,7 @@ int main(void) {
     run_cgen_typed_array_reduce_uses_native_accumulator_fast_path();
     run_cgen_typed_array_reduce_captured_callback_uses_runtime_helper();
     run_cgen_int_const_div_mod_uses_native_ops();
+    run_cgen_defer_isolates_existing_pending_error();
     run_cgen_unsupported_coroutine_ops_fail_fast();
     run_cgen_unresolved_import_fails_fast();
     run_cgen_unknown_method_symbol_fails_fast();

@@ -1688,8 +1688,7 @@ static inline XrValue xrt_closure_new(void *fn, int nupvals) {
         size_t _obj_size = xrt_closure_object_size(_nupvals);                                      \
         XrGCHeader *_hdr = (XrGCHeader *) __builtin_alloca(sizeof(XrGCHeader) + _obj_size);        \
         memset(_hdr, 0, sizeof(XrGCHeader) + _obj_size);                                           \
-        _hdr->extra = XR_OBJ_HAS_DTOR | XR_OBJ_STORAGE_STACK;                                      \
-        _hdr->_rsv = XRT_ARC_KIND_CLOSURE;                                                         \
+        _hdr->extra = XR_OBJ_STORAGE_STACK;                                                        \
         xrt_closure_t *_c = (xrt_closure_t *) ((char *) _hdr + sizeof(XrGCHeader));                \
         xrt_closure_init(_c, (fn_expr), _nupvals);                                                 \
         xr_mkptr(_c, XR_TAG_CLOSURE);                                                              \
@@ -1710,6 +1709,7 @@ static inline XrValue xrt_cell_new(XrValue value) {
     }
     xrt_arc_mark_builtin(cell, XRT_ARC_KIND_CELL);
     cell->value = value;
+    xrt_retain(value);
     return xr_mkptr(cell, XR_TAG_CELL);
 }
 
@@ -1722,7 +1722,11 @@ static inline XrValue xrt_cell_get(XrValue cell_value) {
 static inline void xrt_cell_set(XrValue cell_value, XrValue value) {
     if (cell_value.tag != XR_TAG_CELL || !cell_value.ptr)
         return;
-    ((xrt_cell_t *) cell_value.ptr)->value = value;
+    xrt_cell_t *cell = (xrt_cell_t *) cell_value.ptr;
+    XrValue old = cell->value;
+    xrt_retain(value);
+    cell->value = value;
+    xrt_release(old);
 }
 
 static inline void xrt_dispatch_builtin_destructor(uint32_t kind, void *obj) {

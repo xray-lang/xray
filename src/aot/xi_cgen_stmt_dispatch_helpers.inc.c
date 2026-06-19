@@ -95,6 +95,7 @@ static bool xicgen_stmt_err_return(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
     fprintf(out, ";\n");
     emit_class_field_cache_flush(ctx, out);
     emit_deferred_calls(ctx, out, f, prefix);
+    emit_cell_var_releases(ctx, out);
     fprintf(out, "    return ");
     emit_default_return_for_abi(ctx, out, f);
     fprintf(out, ";\n");
@@ -130,6 +131,7 @@ static bool xicgen_stmt_err_check(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
     fprintf(out, "    if (XR_UNLIKELY(xrt_has_pending_error())) {\n");
     emit_class_field_cache_flush(ctx, out);
     emit_deferred_calls(ctx, out, f, prefix);
+    emit_cell_var_releases(ctx, out);
     fprintf(out, "        return ");
     emit_default_return_for_abi(ctx, out, f);
     fprintf(out, ";\n");

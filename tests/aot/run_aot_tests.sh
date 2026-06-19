@@ -51,9 +51,11 @@ run_test() {
         return
     fi
 
-    # Step 2: Compile .c → binary. Coroutine AOT needs xray_core and
-    # platform runtime libs, so delegate that link mode to xray build.
-    if grep -q "xr_aot_run_main" "$c_out"; then
+    # Step 2: Compile .c → binary. Coroutine and multi-module AOT need the
+    # real native build driver: coroutine output links xray_core, while
+    # multi-module output is compiled as per-module objects and linked
+    # together (114), not as one concatenated translation unit.
+    if grep -q "xr_aot_run_main\\|/\\* ==== module:" "$c_out"; then
         if ! "$XRAY" build --native "$xr_file" -o "$bin_out" >/dev/null 2>&1; then
             echo "FAIL (runtime link error)"
             FAIL=$((FAIL + 1))

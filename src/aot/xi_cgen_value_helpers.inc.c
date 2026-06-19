@@ -166,20 +166,33 @@ static bool cg_reset_cell_var_tables(XiCgenCtx *ctx, const XiFunc *f) {
     }
     if (need > ctx->cell_var_count) {
         bool *new_vars = (bool *) xr_realloc(ctx->cell_vars, (size_t) need * sizeof(*new_vars));
+        bool *new_release_vars =
+            (bool *) xr_realloc(ctx->cell_release_vars, (size_t) need * sizeof(*new_release_vars));
+        bool *new_heap_capture_vars = (bool *) xr_realloc(
+            ctx->cell_heap_capture_vars, (size_t) need * sizeof(*new_heap_capture_vars));
         const XiValue **new_origins =
             (const XiValue **) xr_realloc(ctx->cell_origins, (size_t) need * sizeof(*new_origins));
-        if (!new_vars || !new_origins) {
+        if (!new_vars || !new_release_vars || !new_heap_capture_vars || !new_origins) {
             ctx->cell_vars = new_vars ? new_vars : ctx->cell_vars;
+            ctx->cell_release_vars = new_release_vars ? new_release_vars : ctx->cell_release_vars;
+            ctx->cell_heap_capture_vars =
+                new_heap_capture_vars ? new_heap_capture_vars : ctx->cell_heap_capture_vars;
             ctx->cell_origins = new_origins ? new_origins : ctx->cell_origins;
             ctx->cell_var_count = 0;
             ctx->error = true;
             return false;
         }
         ctx->cell_vars = new_vars;
+        ctx->cell_release_vars = new_release_vars;
+        ctx->cell_heap_capture_vars = new_heap_capture_vars;
         ctx->cell_origins = new_origins;
         ctx->cell_var_count = need;
     }
     memset(ctx->cell_vars, 0, (size_t) ctx->cell_var_count * sizeof(*ctx->cell_vars));
+    memset(ctx->cell_release_vars, 0,
+           (size_t) ctx->cell_var_count * sizeof(*ctx->cell_release_vars));
+    memset(ctx->cell_heap_capture_vars, 0,
+           (size_t) ctx->cell_var_count * sizeof(*ctx->cell_heap_capture_vars));
     memset(ctx->cell_origins, 0, (size_t) ctx->cell_var_count * sizeof(*ctx->cell_origins));
     return true;
 }
@@ -198,6 +211,9 @@ static void cg_prepare_cell_vars(XiCgenCtx *ctx, const XiFunc *f) {
             if (!cg_value_is_closure_alloc(v))
                 continue;
             const XiFunc *child = (const XiFunc *) v->aux;
+            if (!child)
+                continue;
+            bool stack_closure = v->op == XI_STACK_ALLOC && v->aux_int == XI_CLOSURE_NEW;
             for (uint16_t ci = 0; ci < child->ncaptures; ci++) {
                 const XiCapture *cap = &child->captures[ci];
                 if (!cap->needs_cell || cap->source != XI_CAPTURE_SRC_REG)
@@ -208,6 +224,13 @@ static void cg_prepare_cell_vars(XiCgenCtx *ctx, const XiFunc *f) {
                     continue;
                 XiVarId var_id = cap_val->var_id;
                 ctx->cell_vars[var_id] = true;
+                if (stack_closure) {
+                    if (!ctx->cell_heap_capture_vars[var_id])
+                        ctx->cell_release_vars[var_id] = true;
+                } else {
+                    ctx->cell_heap_capture_vars[var_id] = true;
+                    ctx->cell_release_vars[var_id] = false;
+                }
                 if (!ctx->cell_origins[var_id])
                     ctx->cell_origins[var_id] = cap_val;
             }

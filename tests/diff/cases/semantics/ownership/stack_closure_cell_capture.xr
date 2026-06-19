@@ -1,0 +1,14 @@
+// Stack-allocated direct-call closures borrow their captured cell. Releasing
+// one closure must not destroy the shared cell before another closure or the
+// parent function uses it.
+
+fn run() -> int {
+    let log: Array<int> = []
+    fn a() { log.push(1) }
+    fn b() { log.push(2) }
+    a()
+    b()
+    return log[0] * 10 + log[1]
+}
+
+print(run()) // 12

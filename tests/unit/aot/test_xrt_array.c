@@ -8,6 +8,7 @@
 static int g_passed;
 static int g_failed;
 static int g_malloc_count;
+static int g_free_count;
 static int g_aligned_alloc_count;
 static int g_aligned_free_count;
 
@@ -28,6 +29,8 @@ static void *test_realloc(void *ptr, size_t size) {
 }
 
 static void test_free(void *ptr) {
+    if (ptr)
+        g_free_count++;
     free(ptr);
 }
 
@@ -67,6 +70,11 @@ static void test_free_aligned(void *ptr) {
 #pragma clang diagnostic pop
 #endif
 
+static inline void xrt_dispatch_destructor(uint16_t type_id, void *obj) {
+    (void) type_id;
+    (void) obj;
+}
+
 #define ASSERT_TRUE(cond, msg)                                                                     \
     do {                                                                                           \
         if (!(cond)) {                                                                             \
@@ -90,6 +98,7 @@ static void test_free_aligned(void *ptr) {
 
 static void reset_alloc_counts(void) {
     g_malloc_count = 0;
+    g_free_count = 0;
     g_aligned_alloc_count = 0;
     g_aligned_free_count = 0;
 }
@@ -183,11 +192,36 @@ static void test_slice_marks_borrowed_storage(void) {
     free_test_array(a);
 }
 
+static XrValue dummy_closure_body(xrt_closure_t *cl) {
+    (void) cl;
+    return XR_NULL_VAL;
+}
+
+static void test_stack_closure_borrows_cell_upval(void) {
+    reset_alloc_counts();
+    XrValue arr = xrt_array_new_typed(0, XR_ELEM_I64);
+    XrValue cell = xrt_cell_new(XR_NULL_VAL);
+    xrt_cell_set(cell, arr);
+
+    XrValue closure = xrt_closure_stack_new((void *) dummy_closure_body, 1);
+    ((xrt_closure_t *) closure.ptr)->upvals[0] = cell;
+    xrt_release(closure);
+
+    xrt_array_push(arr, XR_FROM_INT(42));
+    xrt_array_t *a = (xrt_array_t *) arr.ptr;
+    ASSERT_EQ_INT(a->length, 1, "stack closure release must not destroy borrowed cell");
+    ASSERT_EQ_INT(((int64_t *) a->data)[0], 42, "array remains writable through local owner");
+
+    xrt_release(arr);
+    xrt_release(cell);
+}
+
 int main(void) {
     test_small_array_uses_inline_storage();
     test_typed_exact_zero_uses_header_only();
     test_growth_spills_inline_to_heap_and_preserves_values();
     test_slice_marks_borrowed_storage();
+    test_stack_closure_borrows_cell_upval();
     printf("test_xrt_array: %d passed, %d failed\n", g_passed, g_failed);
     return g_failed ? 1 : 0;
 }
