@@ -173,8 +173,58 @@ static inline const char *xr_path_core_extname(const char *path, size_t plen, si
     if (!dot)
         return "";
     if (out_len)
-        *out_len = (size_t) ((path + plen) - dot);
+        *out_len = (size_t) ((path + len) - dot);
     return dot;
+}
+
+typedef struct XrPathCoreSlice {
+    const char *data;
+    size_t len;
+} XrPathCoreSlice;
+
+typedef struct XrPathCoreParsePlan {
+    XrPathCoreSlice root;
+    XrPathCoreSlice dir;
+    XrPathCoreSlice base;
+    XrPathCoreSlice name;
+    XrPathCoreSlice ext;
+} XrPathCoreParsePlan;
+
+static inline XrPathCoreSlice xr_path_core_slice(const char *data, size_t len) {
+    XrPathCoreSlice s;
+    s.data = data;
+    s.len = len;
+    return s;
+}
+
+static inline bool xr_path_core_parse_plan(const char *path, size_t len,
+                                           XrPathCoreParsePlan *plan) {
+    if (!plan)
+        return false;
+    if (!path) {
+        path = "";
+        len = 0;
+    }
+
+    size_t dir_len = 0;
+    size_t base_len = 0;
+    size_t ext_len = 0;
+    const char *dir = xr_path_core_dirname(path, len, &dir_len);
+    const char *base = xr_path_core_basename(path, len, &base_len);
+    const char *ext = xr_path_core_extname(base, base_len, &ext_len);
+
+    size_t name_len = base_len;
+    if (ext_len > 0)
+        name_len = (size_t) (ext - base);
+
+    plan->root = (len > 0 && xr_path_core_is_sep(path[0]))
+                     ? xr_path_core_slice(xr_path_core_sep_str(), 1)
+                     : xr_path_core_slice("", 0);
+    plan->dir = xr_path_core_slice(dir, dir_len);
+    plan->base = xr_path_core_slice(base, base_len);
+    plan->name = xr_path_core_slice(base, name_len);
+    plan->ext = xr_path_core_slice(ext, ext_len);
+    return true;
 }
 
 static inline bool xr_path_core_is_absolute(const char *path, size_t len) {

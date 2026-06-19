@@ -24,3 +24,21 @@ print(path.resolve("/foo", "bar"))
 print(path.resolve("/foo", "/bar", "baz"))
 print(path.resolve("/tmp", "../var"))
 print(path.resolve("/foo", ".."))
+
+let parsed = path.parse("/home/user/file.txt")
+print(parsed.root)
+print(parsed.dir)
+print(parsed.base)
+print(parsed.name)
+print(parsed.ext)
+
+let trailing = path.parse("foo.txt/")
+print(trailing.base)
+print(trailing.name)
+print(trailing.ext)
+
+print(path.format(parsed))
+let formatted = { dir: "/home/user", base: "file.txt", root: "", name: "", ext: "" }
+print(path.format(formatted))
+let derived = { dir: "", base: "", root: "", name: "archive", ext: ".tar" }
+print(path.format(derived))

@@ -12,6 +12,7 @@
 #define XRT_PATH_H
 
 #include "xrt_arc.h"
+#include "xrt_coll.h"
 #include "../shared/xr_path_core.h"
 
 #if defined(XR_OS_WINDOWS)
@@ -122,6 +123,85 @@ static inline XrValue xrt_path_resolve(int64_t count_i, const char **parts, cons
 
     XrValue result = xrt_path_join_then_normalize(all_parts, all_lens, total);
     XRT_FREE(heap_buf);
+    return result;
+}
+
+static inline XrValue xrt_path_string_from_slice(XrPathCoreSlice slice) {
+    XrValue result = xrt_str_alloc(slice.len);
+    if (slice.len > 0 && slice.data)
+        memcpy(xr_str_buf(result), slice.data, slice.len);
+    return result;
+}
+
+static inline XrValue xrt_path_parse(const char *path, int64_t len_i) {
+    size_t len = (!path || len_i < 0) ? 0 : (size_t) len_i;
+    XrPathCoreParsePlan plan;
+    if (!xr_path_core_parse_plan(path, len, &plan))
+        return XR_NULL_VAL;
+
+    static const char *const fields[] = {"root", "dir", "base", "name", "ext"};
+    XrValue obj = xrt_json_new_named(5, fields);
+    xrt_json_set_field(obj, 0, xrt_path_string_from_slice(plan.root));
+    xrt_json_set_field(obj, 1, xrt_path_string_from_slice(plan.dir));
+    xrt_json_set_field(obj, 2, xrt_path_string_from_slice(plan.base));
+    xrt_json_set_field(obj, 3, xrt_path_string_from_slice(plan.name));
+    xrt_json_set_field(obj, 4, xrt_path_string_from_slice(plan.ext));
+    return obj;
+}
+
+static inline XrPathCoreSlice xrt_path_string_view(XrValue value) {
+    if (!XR_IS_STR(value) || !value.ptr)
+        return xr_path_core_slice(NULL, 0);
+    int64_t len = xr_str_len(value);
+    if (len <= 0)
+        return xr_path_core_slice(xr_str_data(value), 0);
+    return xr_path_core_slice(xr_str_data(value), (size_t) len);
+}
+
+static inline void xrt_path_copy_slice(char *out, size_t *pos, XrPathCoreSlice slice) {
+    if (slice.len > 0 && slice.data) {
+        memcpy(out + *pos, slice.data, slice.len);
+        *pos += slice.len;
+    }
+}
+
+static inline XrValue xrt_path_format(XrValue obj) {
+    if (obj.tag != XR_TAG_PTR || !obj.ptr)
+        return xrt_str_alloc(0);
+
+    XrPathCoreSlice dir = xrt_path_string_view(xrt_json_get_name(obj, "dir"));
+    XrPathCoreSlice base = xrt_path_string_view(xrt_json_get_name(obj, "base"));
+    XrPathCoreSlice name = xrt_path_string_view(xrt_json_get_name(obj, "name"));
+    XrPathCoreSlice ext = xrt_path_string_view(xrt_json_get_name(obj, "ext"));
+
+    XrPathCoreSlice base_a = base;
+    XrPathCoreSlice base_b = xr_path_core_slice(NULL, 0);
+    if (base.len == 0 && name.len > 0) {
+        base_a = name;
+        base_b = ext;
+    }
+
+    size_t base_len = base_a.len + base_b.len;
+    if (dir.len > 0) {
+        bool need_sep = !xr_path_core_is_sep(dir.data[dir.len - 1]);
+        XrValue result = xrt_str_alloc(dir.len + (need_sep ? 1 : 0) + base_len);
+        char *out = xr_str_buf(result);
+        size_t pos = 0;
+        xrt_path_copy_slice(out, &pos, dir);
+        if (need_sep)
+            out[pos++] = '/';
+        xrt_path_copy_slice(out, &pos, base_a);
+        xrt_path_copy_slice(out, &pos, base_b);
+        out[pos] = '\0';
+        return result;
+    }
+
+    XrValue result = xrt_str_alloc(base_len);
+    char *out = xr_str_buf(result);
+    size_t pos = 0;
+    xrt_path_copy_slice(out, &pos, base_a);
+    xrt_path_copy_slice(out, &pos, base_b);
+    out[pos] = '\0';
     return result;
 }
 

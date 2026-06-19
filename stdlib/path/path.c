@@ -46,6 +46,10 @@ static inline XrValue make_string_n(XrayIsolate *X, const char *s, size_t len) {
     return xrs_string_value_n(X, s, len);
 }
 
+static inline XrValue make_string_slice(XrayIsolate *X, XrPathCoreSlice slice) {
+    return make_string_n(X, slice.data, slice.len);
+}
+
 /* ========== Path Operations ========== */
 
 // join(...) - Join multiple path segments
@@ -388,33 +392,20 @@ static XrValue path_parse(XrayIsolate *X, XrValue *args, int argc) {
         return xr_json_value(json);
     }
 
-    const char *path = xrs_string_arg(args[0], NULL);
+    size_t plen = 0;
+    const char *path = xrs_string_arg(args[0], &plen);
     if (!path)
         path = "";
 
-    // Get each part
-    XrValue dir = path_dirname(X, args, 1);
-    XrValue base = path_basename(X, args, 1);
-    XrValue ext = path_extname(X, args, 1);
+    XrPathCoreParsePlan plan;
+    if (!xr_path_core_parse_plan(path, plen, &plan))
+        return xr_null();
 
-    // name = basename without ext
-    const char *base_str = xrs_string_arg(base, NULL);
-    const char *ext_str = xrs_string_arg(ext, NULL);
-    size_t base_len = base_str ? strlen(base_str) : 0;
-    size_t ext_len = ext_str ? strlen(ext_str) : 0;
-    XrValue name = make_string_n(X, base_str, base_len - ext_len);
-
-    // root
-    XrValue root = xrs_string_value_c(X, "");
-    if (path[0] == '/') {
-        root = xrs_string_value_c(X, "/");
-    }
-
-    xr_json_set_by_key(X, json, "root", root);
-    xr_json_set_by_key(X, json, "dir", dir);
-    xr_json_set_by_key(X, json, "base", base);
-    xr_json_set_by_key(X, json, "name", name);
-    xr_json_set_by_key(X, json, "ext", ext);
+    xr_json_set_by_key(X, json, "root", make_string_slice(X, plan.root));
+    xr_json_set_by_key(X, json, "dir", make_string_slice(X, plan.dir));
+    xr_json_set_by_key(X, json, "base", make_string_slice(X, plan.base));
+    xr_json_set_by_key(X, json, "name", make_string_slice(X, plan.name));
+    xr_json_set_by_key(X, json, "ext", make_string_slice(X, plan.ext));
 
     return xr_json_value(json);
 }
