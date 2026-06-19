@@ -419,6 +419,12 @@ static bool build_link_manifest(const XaotFeatureSet *features, XaotLinkManifest
             goto done;
         if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_SYSTEM_LIB, "z"))
             goto done;
+#ifdef XR_HAS_IO_URING
+        /* xray_core embeds the per-worker io_uring completion rings, so a native
+         * program that links the runtime must resolve liburing too. */
+        if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_SYSTEM_LIB, "uring"))
+            goto done;
+#endif
 #ifdef XR_OS_MACOS
         {
             /* Default to the Apple-Silicon Homebrew prefix, but allow an

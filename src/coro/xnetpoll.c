@@ -397,22 +397,17 @@ static void close_wakeup_pipe(int pipe_fds[2]) {
 #include "../os/netpoll/netpoll_iocp.c"
 #endif
 
-// Select best available ops for current platform.
-// On Linux with XR_HAS_IO_URING: io_uring by default, unless XRAY_IO_BACKEND=epoll
-// forces the epoll backend (escape hatch for restricted environments and the
-// A/B oracle for io_uring completion-mode behavior).
+// Select the global netpoll backend for the current platform. On Linux this is
+// always epoll now: io_uring lives in the per-worker completion rings
+// (XrLocalPoll::uring), not in a single shared global ring. The global epoll
+// serves unbound fds and the thread-blocking xr_netpoll_block_sync path; the
+// per-worker rings carry coroutine completion I/O. XRAY_IO_BACKEND=epoll
+// additionally disables the per-worker rings (see xr_netpoll_init).
 static const XrNetpollOps *netpoll_default_ops(void) {
 #ifdef XR_OS_MACOS
     return &kqueue_ops;
 #elif defined(XR_OS_LINUX)
-#if defined(XR_HAS_IO_URING)
-    const char *backend = getenv("XRAY_IO_BACKEND");
-    if (backend && (strcmp(backend, "epoll") == 0 || strcmp(backend, "EPOLL") == 0))
-        return &epoll_ops;
-    return &iouring_ops;
-#else
     return &epoll_ops;
-#endif
 #elif defined(XR_OS_WINDOWS)
     return &iocp_ops;
 #else
@@ -428,17 +423,12 @@ void xr_netpoll_arm_mode(XrPollDesc *pd, int mode) {
         if (mode & XR_POLL_WRITE)
             iocp_arm_write(pd->netpoll, pd);
     }
-#elif defined(XR_OS_LINUX) && defined(XR_HAS_IO_URING)
-    /* io_uring arms a one-shot poll-add per wait (on demand), mirroring IOCP.
-     * The epoll fallback instead keeps a standing registration from add_fd, so
-     * only arm when the io_uring backend is the active one. */
-    if (pd && pd->netpoll && xr_netpoll_uring_active(pd->netpoll)) {
-        if (mode & XR_POLL_READ)
-            iouring_arm(pd->netpoll, pd, XR_POLL_READ);
-        if (mode & XR_POLL_WRITE)
-            iouring_arm(pd->netpoll, pd, XR_POLL_WRITE);
-    }
 #else
+    /* epoll / kqueue keep a standing readiness registration from add_fd (global)
+     * and bind_worker (per-worker local poll), so there is nothing to arm per
+     * wait. Linux io_uring completion ops are submitted directly by
+     * xr_yield_for_uring_io to the worker's ring, not through this readiness
+     * hook. */
     (void) pd;
     (void) mode;
 #endif
@@ -457,12 +447,15 @@ void xr_netpoll_arm_mode(XrPollDesc *pd, int mode) {
 
 #ifndef XR_OS_WINDOWS
 
-int xr_local_poll_init(XrLocalPoll *lp) {
+int xr_local_poll_init(XrLocalPoll *lp, bool use_uring) {
     if (!lp)
         return -1;
     lp->poll_fd = -1;
     lp->wakeup_pipe[0] = lp->wakeup_pipe[1] = -1;
     atomic_store(&lp->break_pending, false);
+#if defined(XR_OS_LINUX) && defined(XR_HAS_IO_URING)
+    lp->uring = NULL;
+#endif
 
 #ifdef XR_OS_MACOS
     lp->poll_fd = kqueue();
@@ -489,12 +482,28 @@ int xr_local_poll_init(XrLocalPoll *lp) {
     struct epoll_event ev = {.events = EPOLLIN | EPOLLET, .data.fd = lp->wakeup_pipe[0]};
     epoll_ctl(lp->poll_fd, EPOLL_CTL_ADD, lp->wakeup_pipe[0], &ev);
 #endif
+
+#if defined(XR_OS_LINUX) && defined(XR_HAS_IO_URING)
+    // Per-worker io_uring completion ring. Readiness keeps using the epoll fd
+    // above; the ring carries completion ops only. If creation fails this worker
+    // silently uses the readiness path (xr_netpoll_uring_active stays false).
+    if (use_uring)
+        lp->uring = xr_uring_ring_create();
+#else
+    (void) use_uring;
+#endif
     return 0;
 }
 
 void xr_local_poll_cleanup(XrLocalPoll *lp) {
     if (!lp)
         return;
+#if defined(XR_OS_LINUX) && defined(XR_HAS_IO_URING)
+    if (lp->uring) {
+        xr_uring_ring_destroy(lp->uring);
+        lp->uring = NULL;
+    }
+#endif
     close_wakeup_pipe(lp->wakeup_pipe);
     if (lp->poll_fd >= 0) {
         close(lp->poll_fd);
@@ -638,7 +647,8 @@ void xr_local_poll_wakeup(XrLocalPoll *lp) {
 // fd is delivered via the shared netpoll IOCP, and these stubs preserve
 // the unified call surface so worker setup / teardown stays branch-free.
 
-int xr_local_poll_init(XrLocalPoll *lp) {
+int xr_local_poll_init(XrLocalPoll *lp, bool use_uring) {
+    (void) use_uring;  // io_uring is Linux-only
     if (!lp)
         return -1;
     lp->poll_fd = -1;
@@ -697,19 +707,31 @@ int xr_netpoll_init(XrNetpoll *np) {
     if (create_wakeup_pipe(np->wakeup_pipe) < 0)
         return -1;
 
+    // The global backend is the readiness poller (epoll / kqueue / IOCP). On
+    // Linux it is always epoll; io_uring lives only in the per-worker rings.
     if (np->ops->init(np) < 0) {
-#if defined(XR_OS_LINUX) && defined(XR_HAS_IO_URING)
-        // io_uring failed (old kernel?), fall back to epoll
-        np->ops = &epoll_ops;
-        if (np->ops->init(np) < 0) {
-            close_wakeup_pipe(np->wakeup_pipe);
-            return -1;
-        }
-#else
         close_wakeup_pipe(np->wakeup_pipe);
         return -1;
-#endif
     }
+
+#if defined(XR_OS_LINUX) && defined(XR_HAS_IO_URING)
+    // Probe io_uring once: per-worker rings are usable iff a ring can be created
+    // and XRAY_IO_BACKEND did not force the readiness-only epoll path. Each
+    // worker creates its own ring in xr_local_poll_init based on this flag.
+    np->uring_avail = false;
+    {
+        const char *backend = getenv("XRAY_IO_BACKEND");
+        bool force_epoll =
+            backend && (strcmp(backend, "epoll") == 0 || strcmp(backend, "EPOLL") == 0);
+        if (!force_epoll) {
+            void *probe = xr_uring_ring_create();
+            if (probe) {
+                xr_uring_ring_destroy(probe);
+                np->uring_avail = true;
+            }
+        }
+    }
+#endif
 
     atomic_store(&np->waiters, 0);
     atomic_store(&np->break_pending, false);
@@ -887,16 +909,42 @@ void xr_netpoll_close(XrNetpoll *np, XrPollDesc *pd) {
     np->ops->del_fd(np, fd, pd);
 
 #if defined(XR_OS_LINUX) && defined(XR_HAS_IO_URING)
-    // io_uring completion mode: a direction with an in-flight completion op is
-    // woken solely by that op's CQE (del_fd above queued the cancel → the op
-    // completes with -ECANCELED). Unblocking it here would resume the waiter
-    // before the kernel releases its target buffer. Skip those directions; wake
-    // only readiness waiters. The pd is reference counted (uring_refs): dropping
-    // the owner ref frees the pd iff no op still holds a ref, otherwise the last
-    // xr_netpoll_uring_xfer_result performs the free.
-    if (!atomic_load(&pd->uring_rop.active))
+    // io_uring completion mode: an in-flight completion op is woken solely by its
+    // CQE. Cancel it (by user_data) so the parked waiter is resumed promptly with
+    // XR_URING_XFER_CLOSED instead of hanging until the op completes naturally;
+    // the op must complete before the waiter resumes (its buffer is owned by the
+    // kernel until then). Cancellation submits to the OWNER worker's ring (single
+    // producer): synchronously when close runs on the owner, otherwise via the
+    // owner's cross-worker cancel queue (the pd is pinned for the queue).
+    bool rop_active = atomic_load(&pd->uring_rop.active);
+    bool wop_active = atomic_load(&pd->uring_wop.active);
+    if (rop_active || wop_active) {
+        XrWorker *cur = xr_current_worker();
+        if (cur && cur->p.id == pd->owner_worker_id && cur->p.local_poll.uring) {
+            XrUringRing *r = (XrUringRing *) cur->p.local_poll.uring;
+            if (rop_active)
+                uring_ring_cancel_op(r, &pd->uring_rop);
+            if (wop_active)
+                uring_ring_cancel_op(r, &pd->uring_wop);
+        } else if (pd->owner_worker_id >= 0) {
+            XrWorker *current = xr_current_worker();
+            XrRuntime *rt = current ? current->p.runtime : NULL;
+            if (rt && pd->owner_worker_id < rt->worker_count &&
+                rt->workers[pd->owner_worker_id].p.local_poll.uring) {
+                // Pin pd for the queue (taken before the owner-ref drop below so
+                // refs never transiently hit zero), then hand off to the owner.
+                atomic_fetch_add(&pd->uring_refs, 1);
+                uring_cancel_enqueue(&rt->workers[pd->owner_worker_id].p, pd);
+            }
+        }
+    }
+    // Unblocking an active-op direction here would resume the waiter before the
+    // kernel releases its buffer; skip those (the CQE wakes them). Wake only
+    // readiness waiters. The pd is reference counted (uring_refs): dropping the
+    // owner ref frees it iff nothing else holds a ref.
+    if (!rop_active)
         xr_netpoll_unblock(pd, XR_POLL_READ, false);
-    if (!atomic_load(&pd->uring_wop.active))
+    if (!wop_active)
         xr_netpoll_unblock(pd, XR_POLL_WRITE, false);
 #else
     xr_netpoll_unblock(pd, XR_POLL_READ, false);
@@ -1262,9 +1310,20 @@ int xr_netpoll_bind_worker(XrPollDesc *pd) {
     // Bind to current Worker
     if (worker) {
         pd->owner_worker_id = worker->p.id;
-        // Register fd with worker's local poll for zero-contention IO delivery
+        // Register fd with worker's local poll for zero-contention IO delivery.
+        // In io_uring mode the local epoll also serves as the readiness backstop
+        // for the rare SQE-submit-exhausted fallback (xr_yield_for_io).
         if (pd->fd >= 0 && worker->p.local_poll.poll_fd >= 0) {
             xr_local_poll_add_fd(&worker->p.local_poll, pd->fd, pd);
+#if defined(XR_OS_LINUX) && defined(XR_HAS_IO_URING)
+            // io_uring mode: completion ops carry the data, so drop the standing
+            // global-epoll registration (added by xr_netpoll_open) — a single
+            // owner-worker poller, no cross-worker readiness churn.
+            if (worker->p.local_poll.uring && pd->netpoll && pd->netpoll->ops &&
+                pd->netpoll->ops->del_fd) {
+                pd->netpoll->ops->del_fd(pd->netpoll, pd->fd, pd);
+            }
+#endif
         }
         return worker->p.id;
     }

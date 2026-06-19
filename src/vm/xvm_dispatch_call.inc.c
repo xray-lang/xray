@@ -219,12 +219,18 @@ op_call_cfunc:
                 atomic_store_explicit(&_w->m->current_cfunc, cfunc, memory_order_relaxed);
         }
 
-        /* SLOW C functions release P before execution.
-        ** This prevents long-running C code from blocking the
-        ** scheduler. Other coroutines continue on other M's. */
+        /* P handoff is ONLY for genuinely M-blocking (non-yieldable) SLOW
+        ** cfuncs: those run long synchronous C code, so releasing P lets other
+        ** coroutines run on other M's. A YIELDABLE cfunc instead suspends its
+        ** coroutine via a continuation and returns to the scheduler — it does
+        ** NOT block the M — so handing off P for it is pointless and harmful:
+        ** the brief (and, under load, deeply nested) handoff churn is what drove
+        ** the P/M handoff races. Yieldable I/O is the intended non-blocking model
+        ** and must never hand off; only mark the handoff for non-yieldable SLOW. */
         bool is_slow =
             (atomic_load_explicit(&cfunc->cfunc_class, memory_order_acquire) == XR_CFUNC_SLOW);
-        if (is_slow) {
+        bool handoff_p = is_slow && !cfunc->is_yieldable;
+        if (handoff_p) {
             xr_worker_entersyscall();
         }
 
@@ -238,7 +244,7 @@ op_call_cfunc:
             XrValue result;
             XrCFuncResult status = cfunc->as.yieldable(isolate, &R(a + 1), nargs, &result);
 
-            if (is_slow) {
+            if (handoff_p) {
                 xr_worker_exitsyscall();
             }
             VM_REBIND_AFTER_NATIVE_CALL();
@@ -273,7 +279,7 @@ op_call_cfunc:
             // Normal C function
             XrValue result = cfunc->as.func(isolate, &R(a + 1), nargs);
 
-            if (is_slow) {
+            if (handoff_p) {
                 xr_worker_exitsyscall();
             }
             VM_REBIND_AFTER_NATIVE_CALL();

@@ -174,8 +174,13 @@ void xr_worker_init(XrWorker *worker, int id, XrRuntime *runtime) {
     xr_chan_wake_queue_init(&worker->p.chan_wake_queue);
     worker->p.check_balance_reds = XR_CALL_CHECK_BALANCE_REDS;
 
-    // Initialize Per-Worker local poll (kqueue/epoll fd for fast IO delivery)
-    xr_local_poll_init(&worker->p.local_poll);
+    // Initialize Per-Worker local poll (kqueue/epoll fd for readiness; on Linux
+    // also a per-worker io_uring completion ring when io_uring is available).
+    bool use_uring = false;
+#if defined(XR_OS_LINUX) && defined(XR_HAS_IO_URING)
+    use_uring = runtime->netpoll.uring_avail;
+#endif
+    xr_local_poll_init(&worker->p.local_poll, use_uring);
 
     // Initialize continuation stealing deque
     xr_steal_queue_init(&worker->p.cont_deque, 64);

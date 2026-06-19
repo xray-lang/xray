@@ -258,12 +258,45 @@ static int cache_lookup_all(struct XrIoDnsCache *cache, const char *hostname, Xr
 
 /* ========== Synchronous resolution ========== */
 
+// Literal numeric address fast path: a host like "127.0.0.1" or "::1" is already
+// an address — it needs no getaddrinfo (no DNS query, no blocking) and so must
+// never enter a syscall / hand off P. inet_pton parses it directly. Returns 1
+// (one address written) on a literal, 0 otherwise.
+static int resolve_literal_ip(const char *host, XrAddrFamily family, XrSockAddr *out) {
+    if (family == XR_AF_UNSPEC || family == XR_AF_INET) {
+        struct in_addr v4;
+        if (inet_pton(AF_INET, host, &v4) == 1) {
+            memset(out, 0, sizeof(*out));
+            out->family = AF_INET;
+            out->addr.v4.sin_family = AF_INET;
+            out->addr.v4.sin_addr = v4;
+            return 1;
+        }
+    }
+    if (family == XR_AF_UNSPEC || family == XR_AF_INET6) {
+        struct in6_addr v6;
+        if (inet_pton(AF_INET6, host, &v6) == 1) {
+            memset(out, 0, sizeof(*out));
+            out->family = AF_INET6;
+            out->addr.v6.sin6_family = AF_INET6;
+            out->addr.v6.sin6_addr = v6;
+            return 1;
+        }
+    }
+    return 0;
+}
+
 // Resolve all addresses via getaddrinfo and write them into the cache.
 // Output addresses are interleaved IPv6/IPv4 (RFC 8305 §4) so callers
 // that try them in order get coarse Happy Eyeballs behaviour without
 // explicit failover code.
 static int do_resolve_all(struct XrIoDnsCache *cache, const char *hostname, XrSockAddr *addrs,
                           int max_addrs, XrAddrFamily family) {
+    // Literal IP needs no getaddrinfo and must not hand off P (the entersyscall
+    // below is only for the genuinely-blocking name lookup).
+    if (resolve_literal_ip(hostname, family, &addrs[0]))
+        return 1;
+
     struct addrinfo hints, *res, *rp;
     memset(&hints, 0, sizeof(hints));
 

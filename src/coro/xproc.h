@@ -294,9 +294,13 @@ typedef struct XrProc {
     /* === Deferred Free Queue (MPSC Treiber stack for cross-worker PollDesc) === */
     _Atomic(void *) deferred_free_head;
 
-    /* === Handoff Signaling === */
-    _Atomic bool handoff_exit;  // Signal handoff M to release P
-    _Atomic int handoff_sync;   // Futex word: exitsyscall waits, handoff M wakes after releasing P
+#if defined(XR_OS_LINUX) && defined(XR_HAS_IO_URING)
+    /* === io_uring Cross-Worker Cancel Queue (MPSC Treiber stack of XrPollDesc*) ===
+     * A close running off the fd's owner worker queues the pd here so the owner
+     * cancels its in-flight completion ops on its own ring (single-producer SQ).
+     * Each queued pd holds an extra uring_refs pin until the owner drains it. */
+    _Atomic(void *) uring_cancel_head;
+#endif
 
     /* === Continuation Stealing === */
     XrStealQueue cont_deque;  // Chase-Lev deque for parent continuations
@@ -406,7 +410,6 @@ XR_FUNC void xr_proc_destroy(XrProc *p);
 
 XR_FUNC void xr_acquirep(struct XrMachine *m, XrProc *p);
 XR_FUNC XrProc *xr_releasep(struct XrMachine *m);
-XR_FUNC void xr_handoffp(XrProc *p);
 
 static inline int xr_proc_total_queue_len(XrProc *p) {
     return p ? xr_runq_len(&p->runq) : 0;
