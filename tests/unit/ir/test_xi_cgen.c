@@ -2831,6 +2831,39 @@ TEST(cgen_defer_isolates_existing_pending_error) {
     xi_func_free(ir);
 }
 
+TEST(cgen_err_return_stops_unreachable_tail) {
+    const char *src = "enum E { Msg(s: string) }\n"
+                      "fn failing() -> int {\n"
+                      "    throw E.Msg(\"boom\")\n"
+                      "    return 0\n"
+                      "}\n"
+                      "print(failing())\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "throw plus unreachable return should generate");
+
+    const char *fn = strstr(code, "static int64_t test_failing_");
+    assert(fn != NULL && "failing function should be generated with native int ABI");
+    const char *fn_end = next_static_after(fn);
+    assert(count_between(fn, fn_end, "xrt_pending_error =") == 1 &&
+           "throw outside try should lower to exactly one pending-error write");
+    assert(count_between(fn, fn_end, "return 0;") == 1 &&
+           "throw outside try should return the int ABI default once");
+    assert(count_between(fn, fn_end, "return 0;\n    v") == 0 &&
+           "AOT must not emit unreachable SSA statements after ERR_RETURN");
+    assert(count_between(fn, fn_end, "return (int64_t)(v") == 0 &&
+           "AOT must not emit the unreachable source return after ERR_RETURN");
+
+    printf("  Generated ERR_RETURN tail stop %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_unsupported_coroutine_ops_fail_fast) {
     static const struct {
         XiOp op;
@@ -4394,6 +4427,7 @@ int main(void) {
     run_cgen_typed_array_reduce_captured_callback_uses_runtime_helper();
     run_cgen_int_const_div_mod_uses_native_ops();
     run_cgen_defer_isolates_existing_pending_error();
+    run_cgen_err_return_stops_unreachable_tail();
     run_cgen_unsupported_coroutine_ops_fail_fast();
     run_cgen_unresolved_import_fails_fast();
     run_cgen_unknown_method_symbol_fails_fast();
