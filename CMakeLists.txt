@@ -971,6 +971,20 @@ if(BUILD_TESTS)
         TIMEOUT 120
     )
 
+    if(XR_BUILD_DAP)
+        add_test(
+            NAME dap_native_smoke
+            COMMAND ${CMAKE_COMMAND} -E env
+                    XRAY_BUILD_DIR=$<TARGET_FILE_DIR:xray>
+                    ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_dap_native_tests.sh
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        )
+        set_tests_properties(dap_native_smoke PROPERTIES
+            LABELS "dap;native;debug;smoke"
+            TIMEOUT 120
+        )
+    endif()
+
     # Per-module incremental object cache: only modules whose generated C
     # changed are recompiled; dependents hit the cache and relink (114).
     add_test(
