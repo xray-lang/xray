@@ -12,9 +12,10 @@
  *     L0  xrt_hash.h    - content hash primitives (shared with xi_cgen)
  *     L0  xrt_value.h   - tags, boxing/unboxing, source-level aliases, XrtContext
  *     L1  xrt_arc.h     - bump allocator, str_alloc/str_concat
- *     L1  xrt_path.h    - freestanding path string helpers
- *     L1  xrt_arith.h   - arithmetic, comparison, print
- *     L2  xrt_coll.h    - Array, Map, StringBuilder, Closure, index ops
+ *     L1  xrt_range.h   - lazy Range value
+ *     L2  xrt_coll.h    - Array, Map, Json, StringBuilder, Closure, index ops
+ *     L2  xrt_path.h    - freestanding path helpers (parse/format use Json)
+ *     L2  xrt_arith.h   - arithmetic, comparison, print
  *     L3  xrt_method.h  - method dispatch, property access, toString
  *
  *   All runtime primitives are fully self-contained (no extern VM dependency).
@@ -29,10 +30,10 @@
 
 #include "xrt_value.h"      // L0: tags, boxing, unboxing, source-level aliases, XrtContext
 #include "xrt_arc.h"        // L1: bump alloc, xrt_str_alloc, xrt_str_concat
-#include "xrt_path.h"       // L1: freestanding path string helpers
 #include "xrt_range.h"      // L1: lazy Range value
-#include "xrt_arith.h"      // L1: add/sub/mul/div/mod/neg, eq/lt/le, print
-#include "xrt_coll.h"       // L2: Array, Map, StringBuilder, Closure, index ops
+#include "xrt_coll.h"       // L2: Array, Map, Json, StringBuilder, Closure, index ops
+#include "xrt_path.h"       // L2: freestanding path helpers
+#include "xrt_arith.h"      // L2: add/sub/mul/div/mod/neg, eq/lt/le, print
 #include "xrt_encoding.h"   // L2: freestanding encoding string/Bytes helpers
 #include "xrt_base64.h"     // L2: freestanding Base64 string/Bytes helpers
 #include "xrt_method.h"     // L3: method_0/1/2, getprop, tostring, symbol IDs

@@ -113,6 +113,12 @@ fn test_extname_dotfile() {
     assert_eq(result, "")
 }
 
+@test
+fn test_extname_trailing_separator() {
+    let result = path.extname("foo.txt/")
+    assert_eq(result, ".txt")
+}
+
 // ===== normalize =====
 
 @test
@@ -234,6 +240,16 @@ fn test_parse_basic() {
     assert_eq(p.root, "/")
 }
 
+@test
+fn test_parse_trailing_separator() {
+    let p = path.parse("foo.txt/")
+    assert_eq(p.base, "foo.txt")
+    assert_eq(p.ext, ".txt")
+    assert_eq(p.name, "foo")
+    assert_eq(p.dir, ".")
+    assert_eq(p.root, "")
+}
+
 // ===== format =====
 
 @test
@@ -242,4 +258,11 @@ fn test_format_basic() {
     let obj = { dir: "/home/user", base: "file.txt", root: "", name: "", ext: "" }
     let result = path.format(obj)
     assert_eq(result, "/home/user/file.txt")
+}
+
+@test
+fn test_format_derive_base_from_name_ext() {
+    let obj = { dir: "", base: "", root: "", name: "archive", ext: ".tar" }
+    let result = path.format(obj)
+    assert_eq(result, "archive.tar")
 }
