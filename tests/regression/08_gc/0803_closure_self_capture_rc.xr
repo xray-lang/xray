@@ -1,0 +1,30 @@
+// Regression: a closure declared inside a loop and capturing its own binding
+// must not keep a chain of previous-iteration closures alive.
+
+import gc
+
+fn churn_self_capture(count: int) {
+    let i = 0
+    while (i < count) {
+        let f = fn() -> int {
+            if (false) {
+                return f()
+            }
+            return 1
+        }
+        i += 1
+    }
+}
+
+@test
+fn test_self_capture_closure_reclaimed_each_iteration() {
+    gc.collect()
+    let base_objects = gc.objects()
+    let base_bytes = gc.countb()
+
+    churn_self_capture(10000)
+
+    gc.collect()
+    assert_eq(gc.objects() - base_objects, 0)
+    assert_eq(gc.countb() - base_bytes, 0)
+}
