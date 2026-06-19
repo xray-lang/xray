@@ -22,6 +22,8 @@ _build_*.bat
 _jit_*.bat
 _commit_msg.*
 *.tmp
+__pycache__/
+*.py[cod]
 
 # ============================================================================
 # Build artifacts
