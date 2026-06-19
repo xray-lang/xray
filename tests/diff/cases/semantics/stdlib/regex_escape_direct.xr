@@ -1,0 +1,9 @@
+// AOT direct-call regex.escape must match VM tagged dispatch.
+import regex
+
+print(regex.escape("a.b*c?"))
+print(regex.escape("[x](y){z}|^$\\"))
+print(regex.escape("plain"))
+print(regex.escape(""))
+print(regex.escape("x+y"))
+print(regex.escape("hello/world"))

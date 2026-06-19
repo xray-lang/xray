@@ -12,6 +12,7 @@
  */
 
 #include "xregex_internal.h"
+#include "../../src/shared/xr_regex_core.h"
 
 /* ========================================================================
  * Error Messages
@@ -742,29 +743,11 @@ XR_FUNC int xr_regex_split(const XrRegex *re, const char *text, int len, XrSplit
  * ======================================================================== */
 
 XR_FUNC int xr_regex_escape(const char *text, int len, char *out, size_t out_size) {
-    if (!text || !out || out_size == 0)
+    if (!text && len != 0)
         return -1;
     if (len < 0)
         len = (int) strlen(text);
-
-    const char *p = text;
-    const char *end = text + len;
-    char *o = out;
-    char *oend = out + out_size - 1;
-
-    while (p < end && o < oend) {
-        char c = *p++;
-        // Escape special characters
-        if (strchr("\\.+*?[](){}|^$", c)) {
-            if (o + 1 >= oend)
-                return -1;
-            *o++ = '\\';
-        }
-        *o++ = c;
-    }
-
-    *o = '\0';
-    return (int) (o - out);
+    return xr_regex_core_escape(text, (size_t) len, out, out_size);
 }
 
 XR_FUNC bool xr_regex_is_valid(const char *pattern, XrRegexFlags flags) {
