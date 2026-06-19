@@ -1735,6 +1735,10 @@ typedef struct xrt_cell {
     XR_CELL_ABI_FIELDS;
 } xrt_cell_t;
 
+#ifdef XRT_ENABLE_REGEX
+static inline void xrt_regex_destroy_builtin(void *obj);
+#endif
+
 static inline XrValue xrt_cell_new(XrValue value) {
     xrt_cell_t *cell = (xrt_cell_t *) xrt_arc_alloc(sizeof(xrt_cell_t));
     if (XR_UNLIKELY(!cell)) {
@@ -1776,6 +1780,11 @@ static inline void xrt_dispatch_builtin_destructor(uint32_t kind, void *obj) {
         case XRT_ARC_KIND_CELL:
             xrt_release(((xrt_cell_t *) obj)->value);
             break;
+#ifdef XRT_ENABLE_REGEX
+        case XRT_ARC_KIND_REGEX:
+            xrt_regex_destroy_builtin(obj);
+            break;
+#endif
         default:
             break;
     }
@@ -1912,6 +1921,9 @@ static inline XrValue xrt_value_clone_for_coro(XrValue val) {
             return storage_size ? xr_struct_ref(dst, storage_size)
                                 : xr_mkptr(dst, XR_TAG_STRUCT_REF);
         }
+        case XR_TAG_REGEX:
+            xrt_retain(val);
+            return val;
         default:
             return val;
     }
