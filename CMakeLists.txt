@@ -1025,6 +1025,17 @@ if(BUILD_TESTS)
         LABELS "diff;cross;backend"
         TIMEOUT 180
     )
+
+    add_test(
+        NAME regression_gc_closure_self_capture_rc
+        COMMAND $<TARGET_FILE:xray> test
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/regression/08_gc/0803_closure_self_capture_rc.xr
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(regression_gc_closure_self_capture_rc PROPERTIES
+        LABELS "regression;gc;vm"
+        TIMEOUT 30
+    )
 endif()
 
 # Fuzzing tests (optional, requires Clang with libFuzzer)

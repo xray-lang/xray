@@ -2144,6 +2144,26 @@ static void lower_destructure_assign(XiLower *l, AstNode *node) {
 
 /* ========== Statement Lowering ========== */
 
+static void lower_mark_decl_captured_by_child(XiLower *l, int var_id, const char *name,
+                                              XiValue *value) {
+    if (!l || var_id < 0 || var_id >= l->var_count || !name)
+        return;
+    for (uint16_t ci_fn = 0; ci_fn < l->func->nchildren; ci_fn++) {
+        XiFunc *child = l->func->children[ci_fn];
+        if (!child)
+            continue;
+        for (uint16_t ci = 0; ci < child->ncaptures; ci++) {
+            XiCapture *cap = &child->captures[ci];
+            if (cap->source == XI_CAPTURE_SRC_REG && cap->name && strcmp(cap->name, name) == 0) {
+                cap->needs_cell = true;
+                l->vars[var_id].captured_by_child = true;
+                if (value)
+                    value->flags |= XI_FLAG_SIDE_EFFECT;
+            }
+        }
+    }
+}
+
 static void lower_var_decl(XiLower *l, AstNode *node) {
     const char *name = node->as.var_decl.name;
     uint32_t sid = node->as.var_decl.symbol_id;
@@ -2153,9 +2173,19 @@ static void lower_var_decl(XiLower *l, AstNode *node) {
 
     XiValue *init_val;
     if (node->as.var_decl.initializer) {
+        /* Self-referential initializers must bind to this declaration, not a
+         * loop-carried value from a previous iteration. If a child closure
+         * captures this null placeholder, resolve_upvalue marks it as a cell
+         * capture and the real initializer below is written through that cell.
+         */
+        XiValue *placeholder = xi_const_null(l->func, l->cur_block, l->type_null);
+        if (placeholder)
+            xi_lower_braun_write(l, var_id, l->cur_block, placeholder);
+
         init_val = xi_lower_expr(l, node->as.var_decl.initializer);
         if (!init_val)
             return;
+        lower_mark_decl_captured_by_child(l, var_id, name, init_val);
         /* Implicit int→float promotion: when the variable is declared as
          * float but the initializer evaluates to int, insert XI_CONVERT. */
         if (type && XR_TYPE_IS_FLOAT(type) && init_val->type && XR_TYPE_IS_INT(init_val->type)) {
