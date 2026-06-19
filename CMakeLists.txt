@@ -705,6 +705,10 @@ add_library(xray_aot_core STATIC
     src/base/xarena.c
     src/base/xlog.c
     src/base/xunicode.c
+    stdlib/regex/xregex.c
+    stdlib/regex/xregex_compile.c
+    stdlib/regex/xregex_dfa.c
+    stdlib/regex/xregex_nfa.c
     stdlib/regex/xregex_parse.c
 )
 

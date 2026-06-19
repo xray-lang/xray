@@ -134,6 +134,7 @@ typedef struct XrValue {
 #define XR_TAG_RANGE 23    /* AOT range */
 #define XR_TAG_ENUM 24     /* AOT bridged enum key */
 #define XR_TAG_ITERATOR 25 /* AOT map/set iterator (for-in over the iterator protocol) */
+#define XR_TAG_REGEX 26    /* AOT compiled regex handle */
 
 typedef struct XrAotEnumValueView {
     uint64_t gc_words[2];
