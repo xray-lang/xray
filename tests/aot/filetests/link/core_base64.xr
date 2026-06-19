@@ -1,7 +1,8 @@
 import base64
 
+print(base64.encode("Hello"))
+print(base64.decode("SGVsbG8="))
+print(base64.encodeUrl("AB"))
+print(base64.decodeUrl("QUI"))
+print(base64.decode("A"))
 print(base64.isValid("SGVsbG8="))
-print(base64.isValid("A"))
-print(base64.isValid("QQ"))
-print(base64.isValid(""))
-print(base64.isValid("not valid base64!!!"))

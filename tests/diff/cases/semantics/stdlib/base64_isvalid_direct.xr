@@ -1,6 +1,17 @@
-// AOT direct-call base64.isValid must match VM tagged dispatch.
+// AOT direct-call Base64 string helpers must match VM tagged dispatch.
 import base64
 
+print(base64.encode("Hello, World!"))
+print(base64.decode("SGVsbG8sIFdvcmxkIQ=="))
+print(base64.encode(""))
+print(base64.decode(""))
+print(base64.encode("A"))
+print(base64.encode("AB"))
+print(base64.encode("ABC"))
+print(base64.encodeUrl("test data with special chars: +/="))
+print(base64.decodeUrl(base64.encodeUrl("test data with special chars: +/=")))
+print(base64.decode("A"))
+print(base64.decode("Q==="))
 print(base64.isValid("SGVsbG8="))
 print(base64.isValid("QUJD"))
 print(base64.isValid("QQ=="))
