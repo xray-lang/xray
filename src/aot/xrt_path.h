@@ -14,6 +14,25 @@
 #include "xrt_arc.h"
 #include "../shared/xr_path_core.h"
 
+#if defined(XR_OS_WINDOWS)
+#include <direct.h>
+#define xrt_path_getcwd _getcwd
+#else
+#include <limits.h>
+#include <unistd.h>
+#define xrt_path_getcwd getcwd
+#endif
+
+#ifndef XRT_PATH_MAX
+#if defined(XR_OS_WINDOWS)
+#define XRT_PATH_MAX 4096
+#elif defined(PATH_MAX)
+#define XRT_PATH_MAX PATH_MAX
+#else
+#define XRT_PATH_MAX 4096
+#endif
+#endif
+
 static inline XrValue xrt_path_is_absolute(const char *path, int64_t len) {
     return XR_FROM_BOOL(xr_path_core_is_absolute(path, len < 0 ? 0 : (size_t) len));
 }
@@ -25,6 +44,84 @@ static inline XrValue xrt_path_join(int64_t count_i, const char **parts, const s
         return XR_NULL_VAL;
     XrValue result = xrt_str_alloc(out_len);
     xr_path_core_join_write(parts, lens, count, xr_str_buf(result));
+    return result;
+}
+
+static inline XrValue xrt_path_normalize_joined(const char *path, size_t path_len) {
+    size_t max_segs = xr_path_core_normalize_segment_cap(path_len);
+    size_t *seg_buf = (size_t *) XRT_MALLOC(sizeof(size_t) * max_segs * 2);
+    if (!seg_buf)
+        return XR_NULL_VAL;
+
+    size_t *seg_starts = seg_buf;
+    size_t *seg_lens = seg_buf + max_segs;
+    size_t seg_count = 0;
+    bool is_absolute = false;
+    size_t out_len = 0;
+    bool ok = xr_path_core_normalize_plan(path, path_len, seg_starts, seg_lens, max_segs,
+                                          &seg_count, &is_absolute, &out_len);
+    if (!ok) {
+        XRT_FREE(seg_buf);
+        return XR_NULL_VAL;
+    }
+
+    XrValue result = xrt_str_alloc(out_len);
+    xr_path_core_normalize_write(path, seg_starts, seg_lens, seg_count, is_absolute,
+                                 xr_str_buf(result));
+    XRT_FREE(seg_buf);
+    return result;
+}
+
+static inline XrValue xrt_path_join_then_normalize(const char **parts, const size_t *lens,
+                                                   size_t count) {
+    size_t joined_len = 0;
+    if (!xr_path_core_join_len(parts, lens, count, &joined_len))
+        return XR_NULL_VAL;
+    char *joined = (char *) XRT_MALLOC(joined_len + 1);
+    if (!joined)
+        return XR_NULL_VAL;
+    xr_path_core_join_write(parts, lens, count, joined);
+    XrValue result = xrt_path_normalize_joined(joined, joined_len);
+    XRT_FREE(joined);
+    return result;
+}
+
+static inline XrValue xrt_path_resolve(int64_t count_i, const char **parts, const size_t *lens) {
+    size_t count = count_i < 0 ? 0 : (size_t) count_i;
+    if (xr_path_core_join_has_absolute(parts, lens, count))
+        return xrt_path_join_then_normalize(parts, lens, count);
+
+    enum {
+        XRT_PATH_RESOLVE_STACK_PARTS = 17
+    };
+    const char *stack_parts[XRT_PATH_RESOLVE_STACK_PARTS];
+    size_t stack_lens[XRT_PATH_RESOLVE_STACK_PARTS];
+    const char **all_parts = stack_parts;
+    size_t *all_lens = stack_lens;
+    void *heap_buf = NULL;
+    size_t total = count + 1;
+    if (total > XRT_PATH_RESOLVE_STACK_PARTS) {
+        heap_buf = XRT_MALLOC(sizeof(char *) * total + sizeof(size_t) * total);
+        if (!heap_buf)
+            return XR_NULL_VAL;
+        all_parts = (const char **) heap_buf;
+        all_lens = (size_t *) (all_parts + total);
+    }
+
+    char cwd[XRT_PATH_MAX];
+    if (!xrt_path_getcwd(cwd, sizeof(cwd))) {
+        cwd[0] = '/';
+        cwd[1] = '\0';
+    }
+    all_parts[0] = cwd;
+    all_lens[0] = strlen(cwd);
+    for (size_t i = 0; i < count; i++) {
+        all_parts[i + 1] = parts ? parts[i] : NULL;
+        all_lens[i + 1] = lens ? lens[i] : 0;
+    }
+
+    XrValue result = xrt_path_join_then_normalize(all_parts, all_lens, total);
+    XRT_FREE(heap_buf);
     return result;
 }
 
@@ -87,28 +184,7 @@ static inline bool xrt_path_normalize_temp(const char *path, size_t path_len, ch
 
 static inline XrValue xrt_path_normalize(const char *path, int64_t len) {
     size_t path_len = (!path || len < 0) ? 0 : (size_t) len;
-    size_t max_segs = xr_path_core_normalize_segment_cap(path_len);
-    size_t *seg_buf = (size_t *) XRT_MALLOC(sizeof(size_t) * max_segs * 2);
-    if (!seg_buf)
-        return XR_NULL_VAL;
-
-    size_t *seg_starts = seg_buf;
-    size_t *seg_lens = seg_buf + max_segs;
-    size_t seg_count = 0;
-    bool is_absolute = false;
-    size_t out_len = 0;
-    bool ok = xr_path_core_normalize_plan(path, path_len, seg_starts, seg_lens, max_segs,
-                                          &seg_count, &is_absolute, &out_len);
-    if (!ok) {
-        XRT_FREE(seg_buf);
-        return XR_NULL_VAL;
-    }
-
-    XrValue result = xrt_str_alloc(out_len);
-    xr_path_core_normalize_write(path, seg_starts, seg_lens, seg_count, is_absolute,
-                                 xr_str_buf(result));
-    XRT_FREE(seg_buf);
-    return result;
+    return xrt_path_normalize_joined(path, path_len);
 }
 
 static inline XrValue xrt_path_relative(const char *from, int64_t from_len_i, const char *to,

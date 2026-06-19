@@ -42,6 +42,11 @@ fn test_join_trailing_slash() {
     assert_eq(result, "foo/bar")
 }
 
+@test
+fn test_join_long_prefix_absolute_reset() {
+    assert_eq(path.join("very/long/prefix/that/resets", "/x"), "/x")
+}
+
 // ===== dirname =====
 
 @test
@@ -141,6 +146,13 @@ fn test_is_absolute_false() {
 fn test_resolve_absolute() {
     let result = path.resolve("/foo", "bar")
     assert_eq(result, "/foo/bar")
+}
+
+@test
+fn test_resolve_absolute_reset_and_normalize() {
+    assert_eq(path.resolve("/foo", "/bar", "baz"), "/bar/baz")
+    assert_eq(path.resolve("/tmp", "../var"), "/var")
+    assert_eq(path.resolve("/foo", ".."), "/")
 }
 
 @test
