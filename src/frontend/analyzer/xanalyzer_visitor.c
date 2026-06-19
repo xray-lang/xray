@@ -2456,6 +2456,10 @@ void xa_analyze_ast(XaAnalyzer *analyzer, AstNode *ast) {
     // Pass 1.5: Link class inheritance chains
     xa_link_class_inheritance(analyzer);
 
+    // Pass 1.5b: Recompute receiver mutation flags after inheritance is linked.
+    while (xa_propagate_receiver_mutations_for_ast(analyzer, ast)) {
+    }
+
     // Pass 1.6: Detect classes that form reference cycles (cycle collector)
     xa_mark_cycle_candidates(analyzer);
 

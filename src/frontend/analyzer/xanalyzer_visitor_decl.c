@@ -275,10 +275,11 @@ static bool xa_method_body_mutates_receiver(AstNode *node, XrClassInfo *receiver
     }
 }
 
-static void xa_class_propagate_receiver_mutations(XrClassInfo *info, ClassDeclNode *cls) {
+static bool xa_class_propagate_receiver_mutations(XrClassInfo *info, ClassDeclNode *cls) {
     if (!info || !cls)
-        return;
+        return false;
 
+    bool any_changed = false;
     bool changed;
     do {
         changed = false;
@@ -295,9 +296,44 @@ static void xa_class_propagate_receiver_mutations(XrClassInfo *info, ClassDeclNo
             if (xa_method_body_mutates_receiver(md->body, info)) {
                 method_sym->mutates_receiver = true;
                 changed = true;
+                any_changed = true;
             }
         }
     } while (changed);
+    return any_changed;
+}
+
+XR_FUNC bool xa_propagate_receiver_mutations_for_ast(XaAnalyzer *analyzer, AstNode *node) {
+    if (!analyzer || !node)
+        return false;
+
+    bool changed = false;
+    switch (node->type) {
+        case AST_PROGRAM:
+            for (int i = 0; i < node->as.program.count; i++) {
+                if (xa_propagate_receiver_mutations_for_ast(analyzer,
+                                                            node->as.program.statements[i]))
+                    changed = true;
+            }
+            return changed;
+        case AST_EXPORT_STMT:
+            return xa_propagate_receiver_mutations_for_ast(analyzer,
+                                                           node->as.export_stmt.declaration);
+        case AST_CLASS_DECL:
+        case AST_STRUCT_DECL: {
+            ClassDeclNode *cls =
+                (node->type == AST_STRUCT_DECL) ? &node->as.struct_decl : &node->as.class_decl;
+            if (!cls->name)
+                return false;
+            XaSymbol *class_sym = xa_scope_lookup(analyzer->global_scope, cls->name);
+            XaSymbolLinks *links = class_sym ? xa_analyzer_get_links(analyzer, class_sym) : NULL;
+            return links && links->class_info
+                       ? xa_class_propagate_receiver_mutations(links->class_info, cls)
+                       : false;
+        }
+        default:
+            return false;
+    }
 }
 
 // Recursively collect all return types from a statement tree

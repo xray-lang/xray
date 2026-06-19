@@ -1,0 +1,28 @@
+class CounterBase {
+    value: int
+
+    constructor(v) {
+        this.value = v
+    }
+
+    bump() {
+        this.value = this.value + 1
+    }
+}
+
+class CounterChild extends CounterBase {
+    constructor(v) {
+        super(v)
+    }
+
+    callBaseBump() {
+        this.bump()
+    }
+}
+
+fn view(counter: in CounterChild) {
+    counter.callBaseBump()
+}
+
+let counter = new CounterChild(1)
+view(counter)
