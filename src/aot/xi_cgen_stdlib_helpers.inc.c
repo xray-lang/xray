@@ -45,6 +45,7 @@ static const CgAotStdlibMethod g_aot_stdlib_methods[] = {
     {"path", "dirname", 1, "xrt_path_dirname", "s", CG_AOT_RET_STR_BORROWED, NULL},
     {"path", "basename", 1, "xrt_path_basename", "s", CG_AOT_RET_STR_BORROWED, NULL},
     {"path", "extname", 1, "xrt_path_extname", "s", CG_AOT_RET_STR_BORROWED, NULL},
+    {"path", "normalize", 1, "xrt_path_normalize", "s", CG_AOT_RET_VALUE, NULL},
     {"encoding", "hexEncode", 1, "xrt_encoding_hex_encode", "s", CG_AOT_RET_VALUE, NULL},
     {"encoding", "hexDecode", 1, "xrt_encoding_hex_decode", "s", CG_AOT_RET_VALUE, NULL},
     {"encoding", "hexDecodeString", 1, "xrt_encoding_hex_decode_string", "s", CG_AOT_RET_VALUE,

@@ -13,6 +13,7 @@
 
 #include <stdbool.h>
 #include <stddef.h>
+#include <string.h>
 
 #include "../base/xplatform.h"
 
@@ -106,6 +107,100 @@ static inline bool xr_path_core_is_absolute(const char *path, size_t len) {
         return true;
 #endif
     return path[0] == '/';
+}
+
+static inline size_t xr_path_core_normalize_segment_cap(size_t len) {
+    return len / 2 + 2;
+}
+
+static inline bool xr_path_core_segment_is_dotdot(const char *path, const size_t *seg_starts,
+                                                  const size_t *seg_lens, size_t idx) {
+    return seg_lens[idx] == 2 && path[seg_starts[idx]] == '.' && path[seg_starts[idx] + 1] == '.';
+}
+
+static inline bool xr_path_core_normalize_plan(const char *path, size_t len, size_t *seg_starts,
+                                               size_t *seg_lens, size_t seg_cap,
+                                               size_t *out_seg_count, bool *out_is_absolute,
+                                               size_t *out_len) {
+    if (!out_seg_count || !out_is_absolute || !out_len)
+        return false;
+
+    *out_seg_count = 0;
+    *out_is_absolute = false;
+    *out_len = 1;
+    if (!path || len == 0)
+        return true;
+
+    bool is_absolute = xr_path_core_is_sep(path[0]);
+    size_t seg_count = 0;
+    size_t i = 0;
+    while (i < len) {
+        while (i < len && xr_path_core_is_sep(path[i]))
+            i++;
+        if (i >= len)
+            break;
+
+        size_t seg_start = i;
+        while (i < len && !xr_path_core_is_sep(path[i]))
+            i++;
+        size_t seg_len = i - seg_start;
+
+        if (seg_len == 1 && path[seg_start] == '.') {
+            continue;
+        }
+        if (seg_len == 2 && path[seg_start] == '.' && path[seg_start + 1] == '.') {
+            if (seg_count > 0 &&
+                !xr_path_core_segment_is_dotdot(path, seg_starts, seg_lens, seg_count - 1)) {
+                seg_count--;
+            } else if (!is_absolute) {
+                if (seg_count >= seg_cap)
+                    return false;
+                seg_starts[seg_count] = seg_start;
+                seg_lens[seg_count] = seg_len;
+                seg_count++;
+            }
+            continue;
+        }
+
+        if (seg_count >= seg_cap)
+            return false;
+        seg_starts[seg_count] = seg_start;
+        seg_lens[seg_count] = seg_len;
+        seg_count++;
+    }
+
+    size_t result_len = is_absolute ? 1 : 0;
+    for (size_t s = 0; s < seg_count; s++) {
+        if (s > 0)
+            result_len++;
+        result_len += seg_lens[s];
+    }
+    if (result_len == 0)
+        result_len = 1;
+
+    *out_seg_count = seg_count;
+    *out_is_absolute = is_absolute;
+    *out_len = result_len;
+    return true;
+}
+
+static inline void xr_path_core_normalize_write(const char *path, const size_t *seg_starts,
+                                                const size_t *seg_lens, size_t seg_count,
+                                                bool is_absolute, char *out) {
+    size_t pos = 0;
+    if (is_absolute)
+        out[pos++] = '/';
+
+    for (size_t s = 0; s < seg_count; s++) {
+        if (s > 0)
+            out[pos++] = '/';
+        memcpy(out + pos, path + seg_starts[s], seg_lens[s]);
+        pos += seg_lens[s];
+    }
+
+    if (pos == 0)
+        out[pos++] = '.';
+    out[pos] = '\0';
 }
 
 #endif  // XR_PATH_CORE_H
