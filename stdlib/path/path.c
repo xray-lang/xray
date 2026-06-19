@@ -219,8 +219,37 @@ XR_FUNC XrValue xr_aot_path_isAbsolute(const char *path, int64_t len) {
     return xr_bool(path_is_absolute_raw(path, len < 0 ? 0 : (size_t) len));
 }
 
+static bool path_normalize_alloc(const char *path, size_t len, char **out, size_t *out_len) {
+    if (!out || !out_len)
+        return false;
+    *out = NULL;
+    *out_len = 0;
+    size_t max_segs = xr_path_core_normalize_segment_cap(len);
+    size_t *seg_buf = (size_t *) xr_malloc(sizeof(size_t) * max_segs * 2);
+    if (!seg_buf)
+        return false;
+    size_t *seg_starts = seg_buf;
+    size_t *seg_lens = seg_buf + max_segs;
+    size_t seg_count = 0;
+    bool is_absolute = false;
+    if (!xr_path_core_normalize_plan(path, len, seg_starts, seg_lens, max_segs, &seg_count,
+                                     &is_absolute, out_len)) {
+        xr_free(seg_buf);
+        return false;
+    }
+
+    char *result = (char *) xr_malloc(*out_len + 1);
+    if (!result) {
+        xr_free(seg_buf);
+        return false;
+    }
+    xr_path_core_normalize_write(path, seg_starts, seg_lens, seg_count, is_absolute, result);
+    xr_free(seg_buf);
+    *out = result;
+    return true;
+}
+
 // normalize(path) - Normalize path (resolve . and ..)
-// Thread-safe: no strtok. Zero-copy: uses offset array into original string.
 static XrValue path_normalize(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 1)
         return xrs_string_value_c(X, ".");
@@ -230,31 +259,13 @@ static XrValue path_normalize(XrayIsolate *X, XrValue *args, int argc) {
     if (!path)
         return xrs_string_value_c(X, ".");
 
-    size_t max_segs = xr_path_core_normalize_segment_cap(len);
-    size_t *seg_buf = (size_t *) xr_malloc(sizeof(size_t) * max_segs * 2);
-    if (!seg_buf)
-        return xr_null();
-    size_t *seg_starts = seg_buf;
-    size_t *seg_lens = seg_buf + max_segs;
-    size_t seg_count = 0;
-    bool is_absolute = false;
+    char *result = NULL;
     size_t out_len = 0;
-    if (!xr_path_core_normalize_plan(path, len, seg_starts, seg_lens, max_segs, &seg_count,
-                                     &is_absolute, &out_len)) {
-        xr_free(seg_buf);
+    if (!path_normalize_alloc(path, len, &result, &out_len))
         return xr_null();
-    }
-
-    char *result = (char *) xr_malloc(out_len + 1);
-    if (!result) {
-        xr_free(seg_buf);
-        return xr_null();
-    }
-    xr_path_core_normalize_write(path, seg_starts, seg_lens, seg_count, is_absolute, result);
 
     XrValue ret = xrs_string_value_n(X, result, out_len);
     xr_free(result);
-    xr_free(seg_buf);
     return ret;
 }
 
@@ -307,94 +318,41 @@ static XrValue path_relative(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 2)
         return xrs_string_value_c(X, "");
 
-    const char *from = xrs_string_arg(args[0], NULL);
-    const char *to = xrs_string_arg(args[1], NULL);
-
+    size_t from_len = 0;
+    size_t to_len = 0;
+    const char *from = xrs_string_arg(args[0], &from_len);
+    const char *to = xrs_string_arg(args[1], &to_len);
     if (!from || !to)
         return xrs_string_value_c(X, "");
 
-    // Normalize both paths first
-    XrValue from_norm = path_normalize(X, args, 1);
-    XrValue to_norm = path_normalize(X, args + 1, 1);
-
-    from = xrs_string_arg(from_norm, NULL);
-    to = xrs_string_arg(to_norm, NULL);
-
-    if (!from || !to)
-        return xrs_string_value_c(X, "");
-
-    // Find common prefix at segment boundary
-    size_t common = 0;
-    size_t last_sep = 0;
-    while (from[common] && to[common] && from[common] == to[common]) {
-        if (IS_SEP(from[common]))
-            last_sep = common;
-        common++;
-    }
-
-    // Adjust to last complete segment boundary.
-    // Common prefix is valid only if both sides end at a segment boundary:
-    //   - both strings exhausted at same point, OR
-    //   - the diverging char is a separator on at least one side
-    if (from[common] == '\0' && to[common] == '\0') {
-        // Identical paths
-    } else if (from[common] == '\0' && IS_SEP(to[common])) {
-        // from is prefix of to, at segment boundary
-    } else if (to[common] == '\0' && IS_SEP(from[common])) {
-        // to is prefix of from, at segment boundary
-    } else {
-        // Mid-segment divergence: roll back to last separator
-        common = last_sep;
-    }
-
-    // Count ".." segments needed from 'from' remainder
-    int up_count = 0;
-    const char *fp = from + common;
-    while (*fp && IS_SEP(*fp))
-        fp++;
-    if (*fp) {
-        up_count = 1;
-        for (; *fp; fp++) {
-            if (IS_SEP(*fp))
-                up_count++;
-        }
-    }
-
-    // Get 'to' remainder, skip leading separators
-    const char *to_rest = to + common;
-    while (*to_rest && IS_SEP(*to_rest))
-        to_rest++;
-    size_t to_rest_len = strlen(to_rest);
-
-    // Calculate result size: up_count * 3 ("../" per entry) + to_rest_len
-    size_t result_size = (up_count > 0 ? (size_t) up_count * 3 : 0) + to_rest_len + 2;
-    char *result = (char *) xr_malloc(result_size);
-    if (!result)
+    char *from_norm = NULL;
+    char *to_norm = NULL;
+    size_t from_norm_len = 0;
+    size_t to_norm_len = 0;
+    if (!path_normalize_alloc(from, from_len, &from_norm, &from_norm_len))
         return xr_null();
-
-    size_t pos = 0;
-    for (int i = 0; i < up_count; i++) {
-        if (pos > 0)
-            result[pos++] = '/';
-        result[pos++] = '.';
-        result[pos++] = '.';
+    if (!path_normalize_alloc(to, to_len, &to_norm, &to_norm_len)) {
+        xr_free(from_norm);
+        return xr_null();
     }
 
-    if (to_rest_len > 0) {
-        if (pos > 0)
-            result[pos++] = '/';
-        memcpy(result + pos, to_rest, to_rest_len);
-        pos += to_rest_len;
+    XrPathCoreRelativePlan plan;
+    if (!xr_path_core_relative_plan(from_norm, from_norm_len, to_norm, to_norm_len, &plan)) {
+        xr_free(from_norm);
+        xr_free(to_norm);
+        return xr_null();
     }
 
-    result[pos] = '\0';
-
-    XrValue ret;
-    if (pos == 0) {
-        ret = xrs_string_value_c(X, ".");
-    } else {
-        ret = xrs_string_value_c(X, result);
+    char *result = (char *) xr_malloc(plan.out_len + 1);
+    if (!result) {
+        xr_free(from_norm);
+        xr_free(to_norm);
+        return xr_null();
     }
+    xr_path_core_relative_write(to_norm, &plan, result);
+    XrValue ret = xrs_string_value_n(X, result, plan.out_len);
+    xr_free(from_norm);
+    xr_free(to_norm);
     xr_free(result);
     return ret;
 }

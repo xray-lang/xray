@@ -24,8 +24,17 @@ print(path.normalize("/../foo"))
 print(path.normalize("."))
 print(path.normalize(""))
 
+print(path.relative("/usr/local/bin", "/usr/local/lib"))
+print(path.relative("/usr/local", "/usr/local"))
+print(path.relative("/foo", "/foobar"))
+print(path.relative("/usr/local", "/usr/local/bin"))
+print(path.relative("/usr/local/bin", "/usr/local"))
+print(path.relative("/a/b/c", "/a/x/y"))
+print(path.relative("foo/bar/../baz", "foo/qux/./zap"))
+
 let f = "/srv/data/report.csv"
 print(path.dirname(f))
 print(path.basename(f))
 print(path.extname(f))
 print(path.normalize(f))
+print(path.relative("/srv/data", f))

@@ -203,4 +203,96 @@ static inline void xr_path_core_normalize_write(const char *path, const size_t *
     out[pos] = '\0';
 }
 
+typedef struct XrPathCoreRelativePlan {
+    size_t up_count;
+    size_t to_rest_start;
+    size_t to_rest_len;
+    size_t out_len;
+} XrPathCoreRelativePlan;
+
+static inline bool xr_path_core_relative_plan(const char *from, size_t from_len, const char *to,
+                                              size_t to_len, XrPathCoreRelativePlan *plan) {
+    if (!plan)
+        return false;
+    if (!from) {
+        from = "";
+        from_len = 0;
+    }
+    if (!to) {
+        to = "";
+        to_len = 0;
+    }
+
+    size_t common = 0;
+    size_t last_sep = 0;
+    while (common < from_len && common < to_len && from[common] == to[common]) {
+        if (xr_path_core_is_sep(from[common]))
+            last_sep = common;
+        common++;
+    }
+
+    bool at_boundary = (common == from_len && common == to_len) ||
+                       (common == from_len && common < to_len && xr_path_core_is_sep(to[common])) ||
+                       (common == to_len && common < from_len && xr_path_core_is_sep(from[common]));
+    if (!at_boundary)
+        common = last_sep;
+
+    size_t from_pos = common;
+    while (from_pos < from_len && xr_path_core_is_sep(from[from_pos]))
+        from_pos++;
+
+    size_t up_count = 0;
+    if (from_pos < from_len) {
+        up_count = 1;
+        for (size_t i = from_pos; i < from_len; i++) {
+            if (xr_path_core_is_sep(from[i]))
+                up_count++;
+        }
+    }
+
+    size_t to_rest_start = common;
+    while (to_rest_start < to_len && xr_path_core_is_sep(to[to_rest_start]))
+        to_rest_start++;
+    size_t to_rest_len = to_len - to_rest_start;
+
+    size_t out_len = 0;
+    if (up_count > 0)
+        out_len += up_count * 2 + (up_count - 1);
+    if (to_rest_len > 0) {
+        if (out_len > 0)
+            out_len++;
+        out_len += to_rest_len;
+    }
+    if (out_len == 0)
+        out_len = 1;
+
+    plan->up_count = up_count;
+    plan->to_rest_start = to_rest_start;
+    plan->to_rest_len = to_rest_len;
+    plan->out_len = out_len;
+    return true;
+}
+
+static inline void xr_path_core_relative_write(const char *to, const XrPathCoreRelativePlan *plan,
+                                               char *out) {
+    size_t pos = 0;
+    for (size_t i = 0; i < plan->up_count; i++) {
+        if (pos > 0)
+            out[pos++] = '/';
+        out[pos++] = '.';
+        out[pos++] = '.';
+    }
+
+    if (plan->to_rest_len > 0) {
+        if (pos > 0)
+            out[pos++] = '/';
+        memcpy(out + pos, to + plan->to_rest_start, plan->to_rest_len);
+        pos += plan->to_rest_len;
+    }
+
+    if (pos == 0)
+        out[pos++] = '.';
+    out[pos] = '\0';
+}
+
 #endif  // XR_PATH_CORE_H

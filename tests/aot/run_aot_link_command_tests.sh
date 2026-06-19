@@ -113,7 +113,7 @@ if build_native "$PATH_SRC" "$PATH_BIN" "$PATH_LOG"; then
     expect_log_not_contains "$PATH_LOG" "-lssl" "core-path: does not link ssl"
     expect_log_not_contains "$PATH_LOG" "-lcrypto" "core-path: does not link crypto"
     expect_log_contains "$PATH_LOG" "-lm" "core-path: links math lib only"
-    expect_output "$PATH_BIN" $'true\nxray\n/usr/local/bin\n.gz\n/usr/bin/xray\nbaz\n/foo\n.' "core-path: binary output"
+    expect_output "$PATH_BIN" $'true\nxray\n/usr/local/bin\n.gz\n/usr/bin/xray\nbaz\n/foo\n.\n../lib\n../foobar\nbin\n..' "core-path: binary output"
 else
     record_fail "core-path: build failed"
     sed 's/^/      /' "$PATH_LOG" | sed -n '1,120p'
