@@ -24,6 +24,15 @@ struct XrayIsolate;
 struct XrCoroGC;
 struct XrCoroutine;
 
+#define XR_RESULT_GROUP_DEFAULT_BATCH 64u
+#define XR_RESULT_GROUP_MAX_BATCH (1u << 20)
+
+typedef enum XrResultGroupRecvStatus {
+    XR_RESULT_GROUP_RECV_DONE = 0,
+    XR_RESULT_GROUP_RECV_BLOCKED,
+    XR_RESULT_GROUP_RECV_ERROR
+} XrResultGroupRecvStatus;
+
 typedef struct XrResultGroupBatch {
     int64_t value;
     uint32_t count;
@@ -51,6 +60,13 @@ XR_FUNC XrResultGroup *xr_result_group_new(struct XrayIsolate *X, uint32_t batch
 XR_FUNC bool xr_result_group_add(XrResultGroup *g, int64_t value);
 XR_FUNC bool xr_result_group_flush(XrResultGroup *g);
 XR_FUNC bool xr_result_group_try_recv(XrResultGroup *g, int64_t *out);
+XR_FUNC XrResultGroupRecvStatus xr_result_group_recv_for_coro(struct XrayIsolate *X,
+                                                              XrResultGroup *g,
+                                                              struct XrCoroutine *coro,
+                                                              XrValue *result);
+XR_FUNC XrResultGroupRecvStatus xr_result_group_recv_resume_for_coro(struct XrayIsolate *X,
+                                                                     struct XrCoroutine *coro,
+                                                                     XrValue *result);
 XR_FUNC void xr_result_group_cancel_waiter(struct XrCoroutine *coro);
 XR_FUNC void xr_result_group_close(XrResultGroup *g);
 XR_FUNC bool xr_result_group_is_closed(XrResultGroup *g);

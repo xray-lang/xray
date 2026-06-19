@@ -225,6 +225,25 @@ XR_FUNC XrValue xr_aot_work_queue_length(const XrAotContext *ctx, XrValue queue_
 XR_FUNC XrValue xr_aot_work_queue_shard_count(const XrAotContext *ctx, XrValue queue_value);
 XR_FUNC XrValue xr_aot_work_queue_is_closed(const XrAotContext *ctx, XrValue queue_value);
 XR_FUNC XrValue xr_aot_work_queue_is_closed_sync(XrValue queue_value);
+XR_FUNC XrValue xr_aot_result_group_new(const XrAotContext *ctx, int64_t batch_size);
+XR_FUNC XrValue xr_aot_result_group_add(const XrAotContext *ctx, XrValue group_value,
+                                        int64_t value);
+XR_FUNC XrValue xr_aot_result_group_add_sync(XrValue group_value, int64_t value);
+XR_FUNC XrValue xr_aot_result_group_flush(const XrAotContext *ctx, XrValue group_value);
+XR_FUNC XrValue xr_aot_result_group_flush_sync(XrValue group_value);
+XR_FUNC bool xr_aot_result_group_try_recv(const XrAotContext *ctx, XrValue group_value,
+                                          XrValue *out_value);
+XR_FUNC bool xr_aot_result_group_try_recv_sync(XrValue group_value, XrValue *out_value);
+XR_FUNC XrAotResult xr_aot_result_group_recv(const XrAotContext *ctx, XrValue group_value,
+                                             XrSlotRef out_slot);
+XR_FUNC XrAotResult xr_aot_result_group_recv_resume(const XrAotContext *ctx, XrSlotRef out_slot);
+XR_FUNC XrValue xr_aot_result_group_close(const XrAotContext *ctx, XrValue group_value);
+XR_FUNC XrValue xr_aot_result_group_close_sync(XrValue group_value);
+XR_FUNC XrValue xr_aot_result_group_length(const XrAotContext *ctx, XrValue group_value);
+XR_FUNC XrValue xr_aot_result_group_pending_count(const XrAotContext *ctx, XrValue group_value);
+XR_FUNC XrValue xr_aot_result_group_batch_size(const XrAotContext *ctx, XrValue group_value);
+XR_FUNC XrValue xr_aot_result_group_is_closed(const XrAotContext *ctx, XrValue group_value);
+XR_FUNC XrValue xr_aot_result_group_is_closed_sync(XrValue group_value);
 XR_FUNC XrValue xr_aot_tuple_get(const XrAotContext *ctx, XrValue tuple_value, uint16_t index);
 XR_FUNC XrAotResult xr_aot_chan_send(const XrAotContext *ctx, XrValue channel_value,
                                      XrValue send_value, XrSlotRef result_slot, int64_t timeout_ms);

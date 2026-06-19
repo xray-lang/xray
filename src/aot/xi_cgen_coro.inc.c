@@ -1900,6 +1900,27 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         return;
     }
 
+    if (v->op == XI_LOAD_FIELD && v->nargs >= 1 && xi_value_type_is_result_group(v->args[0])) {
+        const char *field = (const char *) v->aux;
+        const char *helper = cg_result_group_field_helper(field);
+        if (!helper) {
+            ctx->error = true;
+            fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT ResultGroup field '%s'\n",
+                    field ? field : "?");
+            emit_codegen_abort_aot_result(out);
+            return;
+        }
+        fprintf(out, "    XrValue _rg_field_%u = %s(ctx, ", v->id, helper);
+        emit_vref(out, v->args[0]);
+        fprintf(out, ");\n");
+        if (cg_coro_value_has_storage(f, v)) {
+            char tmp[32];
+            snprintf(tmp, sizeof(tmp), "_rg_field_%u", v->id);
+            emit_assign_from_xrvalue_temp(out, v, tmp);
+        }
+        return;
+    }
+
     if (xi_value_is_task_method_call(v, "cancel", 0)) {
         fprintf(out, "    XrValue _task_method_%u = xr_aot_task_cancel(ctx, ", v->id);
         emit_vref(out, v->args[0]);
@@ -2080,6 +2101,105 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
     if (v->op == XI_CALL_METHOD && v->nargs >= 1 && xi_value_type_is_work_queue(v->args[0])) {
         ctx->error = true;
         fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT WorkQueue method '%s'\n",
+                v->aux ? (const char *) v->aux : "?");
+        emit_codegen_abort_aot_result(out);
+        return;
+    }
+
+    if (xi_value_is_result_group_method_call(v, "add", 1)) {
+        fprintf(out, "    XrValue _rg_add_%u = xr_aot_result_group_add(ctx, ", v->id);
+        emit_vref(out, v->args[0]);
+        fprintf(out, ", ");
+        emit_int64_arg(out, v->args[1]);
+        fprintf(out, ");\n");
+        if (cg_coro_value_has_storage(f, v)) {
+            char tmp[32];
+            snprintf(tmp, sizeof(tmp), "_rg_add_%u", v->id);
+            emit_assign_from_xrvalue_temp(out, v, tmp);
+        }
+        return;
+    }
+
+    if (xi_value_is_result_group_method_call(v, "flush", 0)) {
+        fprintf(out, "    XrValue _rg_flush_%u = xr_aot_result_group_flush(ctx, ", v->id);
+        emit_vref(out, v->args[0]);
+        fprintf(out, ");\n");
+        if (cg_coro_value_has_storage(f, v)) {
+            char tmp[32];
+            snprintf(tmp, sizeof(tmp), "_rg_flush_%u", v->id);
+            emit_assign_from_xrvalue_temp(out, v, tmp);
+        }
+        return;
+    }
+
+    if (xi_value_is_result_group_method_call(v, "tryRecv", 0)) {
+        fprintf(out, "    XrValue _rg_try_recv_val_%u = XR_NULL_VAL;\n", v->id);
+        fprintf(out, "    bool _rg_try_recv_ok_%u = xr_aot_result_group_try_recv(ctx, ", v->id);
+        emit_vref(out, v->args[0]);
+        fprintf(out, ", &_rg_try_recv_val_%u);\n", v->id);
+        fprintf(out,
+                "    XrValue _rg_try_recv_%u = xrt_tuple_make(2, (XrValue[]){_rg_try_recv_val_%u, "
+                "XR_FROM_BOOL(_rg_try_recv_ok_%u)});\n",
+                v->id, v->id, v->id);
+        if (cg_coro_value_has_storage(f, v)) {
+            char tmp[32];
+            snprintf(tmp, sizeof(tmp), "_rg_try_recv_%u", v->id);
+            emit_assign_from_xrvalue_temp(out, v, tmp);
+        }
+        return;
+    }
+
+    if (xi_value_is_result_group_method_call(v, "close", 0)) {
+        fprintf(out, "    XrValue _rg_close_%u = xr_aot_result_group_close(ctx, ", v->id);
+        emit_vref(out, v->args[0]);
+        fprintf(out, ");\n");
+        if (cg_coro_value_has_storage(f, v)) {
+            char tmp[32];
+            snprintf(tmp, sizeof(tmp), "_rg_close_%u", v->id);
+            emit_assign_from_xrvalue_temp(out, v, tmp);
+        }
+        return;
+    }
+
+    if (xi_value_is_blocking_result_group_method_call(v)) {
+        int sid = ++(*state_id);
+        fprintf(out, "    XrSlotRef _rg_recv_slot_%u = ", v->id);
+        emit_coro_optional_slot_ref(ctx, out, f, prefix, v);
+        fprintf(out, ";\n");
+        fprintf(out, "    f->state = %d;\n", sid);
+        fprintf(out, "    XrAotResult _rg_recv_%u = xr_aot_result_group_recv(ctx, ", v->id);
+        emit_vref(out, v->args[0]);
+        fprintf(out, ", _rg_recv_slot_%u);\n", v->id);
+        fprintf(out, "    if (_rg_recv_%u.kind == XR_AOT_RUN_BLOCKED) {\n", v->id);
+        fprintf(out, "        return _rg_recv_%u;\n", v->id);
+        fprintf(out, "    }\n");
+        fprintf(out, "    if (_rg_recv_%u.kind == XR_AOT_RUN_ERROR) {\n", v->id);
+        fprintf(out, "        f->state = 0;\n");
+        fprintf(out, "        return _rg_recv_%u;\n", v->id);
+        fprintf(out, "    }\n");
+        fprintf(out, "    f->state = 0;\n");
+        fprintf(out, "    goto S%d_DONE;\n", sid);
+        fprintf(out, "S%d:;\n", sid);
+        fprintf(out, "    f->state = %d;\n", sid);
+        fprintf(out, "    _rg_recv_slot_%u = ", v->id);
+        emit_coro_optional_slot_ref(ctx, out, f, prefix, v);
+        fprintf(out, ";\n");
+        fprintf(out, "    _rg_recv_%u = xr_aot_result_group_recv_resume(ctx, _rg_recv_slot_%u);\n",
+                v->id, v->id);
+        fprintf(out, "    if (_rg_recv_%u.kind == XR_AOT_RUN_BLOCKED)\n", v->id);
+        fprintf(out, "        return _rg_recv_%u;\n", v->id);
+        fprintf(out, "    if (_rg_recv_%u.kind == XR_AOT_RUN_ERROR) {\n", v->id);
+        fprintf(out, "        f->state = 0;\n");
+        fprintf(out, "        return _rg_recv_%u;\n", v->id);
+        fprintf(out, "    }\n");
+        fprintf(out, "    f->state = 0;\n");
+        fprintf(out, "S%d_DONE:;\n", sid);
+        return;
+    }
+
+    if (v->op == XI_CALL_METHOD && v->nargs >= 1 && xi_value_type_is_result_group(v->args[0])) {
+        ctx->error = true;
+        fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT ResultGroup method '%s'\n",
                 v->aux ? (const char *) v->aux : "?");
         emit_codegen_abort_aot_result(out);
         return;

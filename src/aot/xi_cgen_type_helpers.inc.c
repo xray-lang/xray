@@ -22,6 +22,20 @@ static const char *cg_work_queue_field_helper(const char *field) {
     return NULL;
 }
 
+static const char *cg_result_group_field_helper(const char *field) {
+    if (!field)
+        return NULL;
+    if (strcmp(field, "length") == 0)
+        return "xr_aot_result_group_length";
+    if (strcmp(field, "pendingCount") == 0)
+        return "xr_aot_result_group_pending_count";
+    if (strcmp(field, "batchSize") == 0)
+        return "xr_aot_result_group_batch_size";
+    if (strcmp(field, "isClosed") == 0)
+        return "xr_aot_result_group_is_closed";
+    return NULL;
+}
+
 static bool cg_value_type_is_bool(const XiValue *v) {
     return v && v->type && v->type->kind == XR_KIND_BOOL;
 }
