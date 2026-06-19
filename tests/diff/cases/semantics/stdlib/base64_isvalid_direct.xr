@@ -1,0 +1,13 @@
+// AOT direct-call base64.isValid must match VM tagged dispatch.
+import base64
+
+print(base64.isValid("SGVsbG8="))
+print(base64.isValid("QUJD"))
+print(base64.isValid("QQ=="))
+print(base64.isValid(""))
+print(base64.isValid("QQ"))
+print(base64.isValid("QUI"))
+print(base64.isValid("not valid base64!!!"))
+print(base64.isValid("A"))
+print(base64.isValid("Q==="))
+print(base64.isValid("SGVsbG8_"))

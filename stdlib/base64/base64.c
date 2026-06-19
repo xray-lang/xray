@@ -15,6 +15,7 @@
 #include "base64.h"
 #include "../common.h"
 #include "../../src/coro/xcoroutine.h"
+#include "../../src/shared/xr_base64_core.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -201,24 +202,7 @@ static unsigned char *base64_decode_internal(const char *data, size_t len, size_
 
 // Internal validation function
 static bool base64_is_valid_internal(const char *data, size_t len) {
-    // Validate and strip trailing padding
-    int pad = count_padding(data, len);
-    if (pad < 0)
-        return false;
-    len -= (size_t) pad;
-
-    // len%4 == 1 is structurally invalid
-    if (len % 4 == 1)
-        return false;
-
-    // Check each character
-    for (size_t i = 0; i < len; i++) {
-        if (BASE64_DECODE_TABLE[(unsigned char) data[i]] == 64) {
-            return false;
-        }
-    }
-
-    return true;
+    return xr_base64_core_is_valid(data, len);
 }
 
 /* ========== C-level API implementation ========== */

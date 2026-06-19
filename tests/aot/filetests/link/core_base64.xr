@@ -1,0 +1,7 @@
+import base64
+
+print(base64.isValid("SGVsbG8="))
+print(base64.isValid("A"))
+print(base64.isValid("QQ"))
+print(base64.isValid(""))
+print(base64.isValid("not valid base64!!!"))

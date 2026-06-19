@@ -49,6 +49,7 @@ static const CgAotStdlibMethod g_aot_stdlib_methods[] = {
     {"encoding", "utf8Valid", 1, "xrt_encoding_utf8_valid", "s", CG_AOT_RET_VALUE, NULL},
     {"encoding", "utf8Count", 1, "xrt_encoding_utf8_count", "s", CG_AOT_RET_VALUE, NULL},
     {"encoding", "utf8ByteLength", 1, "xrt_encoding_utf8_byte_length", "s", CG_AOT_RET_VALUE, NULL},
+    {"base64", "isValid", 1, "xrt_base64_is_valid", "s", CG_AOT_RET_VALUE, NULL},
 };
 
 #define CG_AOT_STDLIB_METHOD_COUNT                                                                 \
