@@ -1,0 +1,26 @@
+// AOT direct-call URL helpers must match VM tagged stdlib dispatch.
+
+import url
+
+print(url.encode("hello 世界!"))
+print(url.decode("hello%20%E4%B8%96%E7%95%8C%21"))
+print(url.encodeForm("a b+c"))
+print(url.decodeForm("a+b%2Bc"))
+
+let r = url.parse("https://example.com:8080/path?q=1#top")
+print(r.protocol)
+print(r.hostname)
+print(r.port)
+print(r.pathname)
+print(r.search)
+print(r.hash)
+print(r.host)
+print(r.origin)
+print(url.format(r))
+
+let q = url.parseQuery("msg=hello+world&key=a%26b")
+print(q.msg)
+print(q.key)
+print(url.buildQuery(q))
+print(url.resolve("https://example.com/a/b/c", "d.html"))
+print(url.join("/api/", "/v1/", "/users"))

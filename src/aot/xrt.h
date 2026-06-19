@@ -15,6 +15,7 @@
  *     L1  xrt_range.h   - lazy Range value
  *     L2  xrt_coll.h    - Array, Map, Json, StringBuilder, Closure, index ops
  *     L2  xrt_path.h    - freestanding path helpers (parse/format use Json)
+ *     L2  xrt_url.h     - freestanding URL helpers (parse/query use Json)
  *     L2  xrt_arith.h   - arithmetic, comparison, print
  *     L3  xrt_method.h  - method dispatch, property access, toString
  *
@@ -33,6 +34,7 @@
 #include "xrt_range.h"      // L1: lazy Range value
 #include "xrt_coll.h"       // L2: Array, Map, Json, StringBuilder, Closure, index ops
 #include "xrt_path.h"       // L2: freestanding path helpers
+#include "xrt_url.h"        // L2: freestanding URL helpers
 #include "xrt_arith.h"      // L2: add/sub/mul/div/mod/neg, eq/lt/le, print
 #include "xrt_encoding.h"   // L2: freestanding encoding string/Bytes helpers
 #include "xrt_base64.h"     // L2: freestanding Base64 string/Bytes helpers

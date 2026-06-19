@@ -153,6 +153,23 @@ else
     sed 's/^/      /' "$BASE64_LOG" | sed -n '1,120p'
 fi
 
+URL_SRC="$PROJECT_DIR/tests/aot/filetests/link/core_url.xr"
+URL_BIN="$WORK/core_url"
+URL_LOG="$WORK/core_url.log"
+if build_native "$URL_SRC" "$URL_BIN" "$URL_LOG"; then
+    expect_log_contains "$URL_LOG" "Link command:" "core-url: emitted link command"
+    expect_log_not_contains "$URL_LOG" "-lxray_core" "core-url: does not link xray_core"
+    expect_log_not_contains "$URL_LOG" "-lpthread" "core-url: does not link pthread"
+    expect_log_not_contains "$URL_LOG" "-lz" "core-url: does not link zlib"
+    expect_log_not_contains "$URL_LOG" "-lssl" "core-url: does not link ssl"
+    expect_log_not_contains "$URL_LOG" "-lcrypto" "core-url: does not link crypto"
+    expect_log_contains "$URL_LOG" "-lm" "core-url: links math lib only"
+    expect_output "$URL_BIN" $'hello%20%E4%B8%96%E7%95%8C%21\nhello 世界!\na+b%2Bc\na b+c\nhttps:\nexample.com\n8080\n/path\n?q=1\n#top\nexample.com:8080\nhttps://example.com:8080\nhttps://example.com:8080/path?q=1#top\nhello world\na&b\nmsg=hello+world&key=a%26b\nhttps://example.com/a/b/d.html\n/api/v1/users' "core-url: binary output"
+else
+    record_fail "core-url: build failed"
+    sed 's/^/      /' "$URL_LOG" | sed -n '1,120p'
+fi
+
 RUNTIME_SRC="$PROJECT_DIR/tests/aot/filetests/link/runtime_time.xr"
 RUNTIME_BIN="$WORK/runtime_time"
 RUNTIME_LOG="$WORK/runtime_time.log"

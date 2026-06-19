@@ -1,0 +1,482 @@
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ *
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * xrt_url.h - Freestanding AOT URL helpers
+ */
+
+#ifndef XRT_URL_H
+#define XRT_URL_H
+
+#include "../shared/xr_url_core.h"
+#include "xrt_coll.h"
+#include <stdint.h>
+#include <string.h>
+
+static inline void xrt_url_buf_append_raw(xrt_strbuf_t *sb, const char *data, size_t len) {
+    if (!sb || !data || len == 0)
+        return;
+    xrt_strbuf_grow(sb, (int64_t) len);
+    memcpy(sb->buf + sb->len, data, len);
+    sb->len += (int64_t) len;
+    sb->buf[sb->len] = '\0';
+}
+
+static inline void xrt_url_buf_putc(xrt_strbuf_t *sb, char c) {
+    if (!sb)
+        return;
+    xrt_strbuf_grow(sb, 1);
+    sb->buf[sb->len++] = c;
+    sb->buf[sb->len] = '\0';
+}
+
+static inline XrValue xrt_url_str_slice(const char *data, size_t len) {
+    XrValue out = xrt_str_alloc(len);
+    if (len > 0 && data)
+        memcpy(xr_str_buf(out), data, len);
+    return out;
+}
+
+static inline XrValue xrt_url_encode_impl(const char *data, int64_t len_i, bool form) {
+    if (!data && len_i != 0)
+        return XR_NULL_VAL;
+    size_t len = len_i < 0 ? 0 : (size_t) len_i;
+    size_t out_len = 0;
+    if (!xr_url_core_encoded_len(data, len, form, &out_len))
+        return XR_NULL_VAL;
+    XrValue out = xrt_str_alloc(out_len);
+    if (!xr_url_core_encode(data, len, form, xr_str_buf(out), &out_len))
+        return XR_NULL_VAL;
+    return out;
+}
+
+static inline XrValue xrt_url_encode(const char *data, int64_t len) {
+    return xrt_url_encode_impl(data, len, false);
+}
+
+static inline XrValue xrt_url_decode_impl(const char *data, int64_t len_i, bool form) {
+    if (!data && len_i != 0)
+        return XR_NULL_VAL;
+    size_t len = len_i < 0 ? 0 : (size_t) len_i;
+    size_t out_len = 0;
+    if (!xr_url_core_decoded_len(data, len, &out_len))
+        return XR_NULL_VAL;
+    XrValue out = xrt_str_alloc(out_len);
+    if (!xr_url_core_decode(data, len, form, xr_str_buf(out), &out_len))
+        return XR_NULL_VAL;
+    return out;
+}
+
+static inline XrValue xrt_url_decode(const char *data, int64_t len) {
+    return xrt_url_decode_impl(data, len, false);
+}
+
+static inline XrValue xrt_url_encode_form(const char *data, int64_t len) {
+    return xrt_url_encode_impl(data, len, true);
+}
+
+static inline XrValue xrt_url_decode_form(const char *data, int64_t len) {
+    return xrt_url_decode_impl(data, len, true);
+}
+
+static inline void xrt_url_json_set_slice(XrValue obj, int field, const char *data, size_t len) {
+    xrt_json_set_field(obj, field, xrt_url_str_slice(data, data ? len : 0));
+}
+
+static inline void xrt_url_map_set_slice(XrValue obj, const char *key, const char *data,
+                                         size_t len) {
+    xrt_map_set((xrt_map_t *) obj.ptr, xr_box_str(key), xrt_url_str_slice(data, data ? len : 0));
+}
+
+static inline void xrt_url_append_host(xrt_strbuf_t *sb, const XrUrlCoreParts *parts,
+                                       bool valid_port) {
+    if (!sb || !parts)
+        return;
+    if (parts->hostname && parts->hostname_len > 0)
+        xrt_url_buf_append_raw(sb, parts->hostname, parts->hostname_len);
+    if (valid_port) {
+        xrt_url_buf_putc(sb, ':');
+        xrt_url_buf_append_raw(sb, parts->port, parts->port_len);
+    }
+}
+
+static inline XrValue xrt_url_parse(const char *data, int64_t len_i) {
+    size_t len = len_i < 0 ? 0 : (size_t) len_i;
+    XrUrlCoreParts parts;
+    xr_url_core_parse(data, len, &parts);
+
+    XrValue obj = xrt_map_new(10);
+    bool valid_port = xr_url_core_port_is_valid(&parts);
+
+    xrt_url_map_set_slice(obj, "protocol", parts.protocol, parts.protocol_len);
+    xrt_url_map_set_slice(obj, "hostname", parts.hostname, parts.hostname_len);
+    xrt_url_map_set_slice(obj, "port", valid_port ? parts.port : NULL,
+                          valid_port ? parts.port_len : 0);
+    if (parts.pathname && parts.pathname_len > 0)
+        xrt_url_map_set_slice(obj, "pathname", parts.pathname, parts.pathname_len);
+    else
+        xrt_url_map_set_slice(obj, "pathname", "/", 1);
+    xrt_url_map_set_slice(obj, "search", parts.search, parts.search_len);
+    xrt_url_map_set_slice(obj, "hash", parts.hash, parts.hash_len);
+    xrt_url_map_set_slice(obj, "username", parts.username, parts.username_len);
+    xrt_url_map_set_slice(obj, "password", parts.password, parts.password_len);
+
+    XrValue host_bufv = xrt_strbuf_new();
+    xrt_strbuf_t *host_buf = (xrt_strbuf_t *) host_bufv.ptr;
+    xrt_url_append_host(host_buf, &parts, valid_port);
+    XrValue host = xrt_strbuf_finish(host_bufv);
+    xrt_map_set((xrt_map_t *) obj.ptr, xr_box_str("host"), host);
+
+    XrValue origin_bufv = xrt_strbuf_new();
+    xrt_strbuf_t *origin_buf = (xrt_strbuf_t *) origin_bufv.ptr;
+    if (parts.protocol && parts.protocol_len > 0) {
+        xrt_url_buf_append_raw(origin_buf, parts.protocol, parts.protocol_len);
+        xrt_url_buf_append_raw(origin_buf, "//", 2);
+    }
+    xrt_url_buf_append_raw(origin_buf, xr_str_data(host), (size_t) xr_str_len(host));
+    xrt_map_set((xrt_map_t *) obj.ptr, xr_box_str("origin"), xrt_strbuf_finish(origin_bufv));
+    return obj;
+}
+
+static inline XrValue xrt_url_get_name(XrValue obj, const char *name) {
+    if (XR_IS_MAP(obj))
+        return xrt_map_get((xrt_map_t *) obj.ptr, xr_box_str(name));
+    if (obj.tag == XR_TAG_PTR && obj.ptr)
+        return xrt_json_get_name(obj, name);
+    return XR_NULL_VAL;
+}
+
+static inline void xrt_url_append_string_value(xrt_strbuf_t *sb, XrValue value) {
+    if (XR_IS_STR(value) && xr_str_len(value) > 0)
+        xrt_url_buf_append_raw(sb, xr_str_data(value), (size_t) xr_str_len(value));
+}
+
+static inline XrValue xrt_url_format(XrValue obj) {
+    if (obj.tag != XR_TAG_PTR && !XR_IS_MAP(obj))
+        return XR_NULL_VAL;
+
+    XrValue protocol = xrt_url_get_name(obj, "protocol");
+    XrValue hostname = xrt_url_get_name(obj, "hostname");
+    XrValue port = xrt_url_get_name(obj, "port");
+    XrValue pathname = xrt_url_get_name(obj, "pathname");
+    XrValue search = xrt_url_get_name(obj, "search");
+    XrValue hash = xrt_url_get_name(obj, "hash");
+    XrValue username = xrt_url_get_name(obj, "username");
+    XrValue password = xrt_url_get_name(obj, "password");
+
+    XrValue bufv = xrt_strbuf_new();
+    xrt_strbuf_t *buf = (xrt_strbuf_t *) bufv.ptr;
+    if (XR_IS_STR(protocol) && xr_str_len(protocol) > 0) {
+        xrt_url_append_string_value(buf, protocol);
+        xrt_url_buf_append_raw(buf, "//", 2);
+    }
+    if (XR_IS_STR(username) && xr_str_len(username) > 0) {
+        xrt_url_append_string_value(buf, username);
+        if (XR_IS_STR(password) && xr_str_len(password) > 0) {
+            xrt_url_buf_putc(buf, ':');
+            xrt_url_append_string_value(buf, password);
+        }
+        xrt_url_buf_putc(buf, '@');
+    }
+    xrt_url_append_string_value(buf, hostname);
+    if (XR_IS_STR(port) && xr_str_len(port) > 0) {
+        xrt_url_buf_putc(buf, ':');
+        xrt_url_append_string_value(buf, port);
+    }
+    xrt_url_append_string_value(buf, pathname);
+    xrt_url_append_string_value(buf, search);
+    xrt_url_append_string_value(buf, hash);
+    return xrt_strbuf_finish(bufv);
+}
+
+static inline void xrt_url_json_set_dynamic(XrValue obj, XrValue key, XrValue value) {
+    xrt_json_t *j = (xrt_json_t *) obj.ptr;
+    if (!j->dynamic_fields) {
+        XrValue dyn = xrt_map_new(8);
+        j->dynamic_fields = (xrt_map_t *) dyn.ptr;
+    }
+    xrt_map_set(j->dynamic_fields, key, value);
+}
+
+static inline XrValue xrt_url_parse_query(const char *data, int64_t len_i) {
+    size_t len = len_i < 0 ? 0 : (size_t) len_i;
+    if (!data && len != 0)
+        return XR_NULL_VAL;
+    if (len > 0 && data[0] == '?') {
+        data++;
+        len--;
+    }
+
+    XrValue obj = xrt_json_new(0);
+    if (len == 0)
+        return obj;
+
+    const char *p = data;
+    const char *end = data + len;
+    while (p < end) {
+        const char *amp = memchr(p, '&', (size_t) (end - p));
+        const char *pair_end = amp ? amp : end;
+        const char *eq = memchr(p, '=', (size_t) (pair_end - p));
+        const char *key_start = p;
+        size_t key_len = eq ? (size_t) (eq - key_start) : (size_t) (pair_end - key_start);
+        const char *val_start = eq ? eq + 1 : NULL;
+        size_t val_len = eq ? (size_t) (pair_end - val_start) : 0;
+
+        if (key_len > 0) {
+            size_t decoded_key_len = 0;
+            xr_url_core_decoded_len(key_start, key_len, &decoded_key_len);
+            XrValue key = xrt_str_alloc(decoded_key_len);
+            xr_url_core_decode(key_start, key_len, true, xr_str_buf(key), &decoded_key_len);
+
+            XrValue val;
+            if (val_start) {
+                size_t decoded_val_len = 0;
+                xr_url_core_decoded_len(val_start, val_len, &decoded_val_len);
+                val = xrt_str_alloc(decoded_val_len);
+                xr_url_core_decode(val_start, val_len, true, xr_str_buf(val), &decoded_val_len);
+            } else {
+                val = xrt_str_alloc(0);
+            }
+            xrt_url_json_set_dynamic(obj, key, val);
+        }
+        p = amp ? amp + 1 : end;
+    }
+    return obj;
+}
+
+static inline void xrt_url_append_encoded_form(xrt_strbuf_t *buf, const char *data, size_t len) {
+    if (!buf || !data || len == 0)
+        return;
+    size_t encoded_len = 0;
+    if (!xr_url_core_encoded_len(data, len, true, &encoded_len))
+        return;
+    xrt_strbuf_grow(buf, (int64_t) encoded_len);
+    size_t written = 0;
+    xr_url_core_encode(data, len, true, buf->buf + buf->len, &written);
+    buf->len += (int64_t) written;
+    buf->buf[buf->len] = '\0';
+}
+
+static inline void xrt_url_build_query_pair(xrt_strbuf_t *buf, const char *key, size_t key_len,
+                                            XrValue val) {
+    if (!buf || !key)
+        return;
+    if (buf->len > 0)
+        xrt_url_buf_putc(buf, '&');
+    xrt_url_append_encoded_form(buf, key, key_len);
+    if (XR_IS_NULL(val))
+        return;
+    xrt_url_buf_putc(buf, '=');
+    if (XR_IS_STR(val)) {
+        xrt_url_append_encoded_form(buf, xr_str_data(val), (size_t) xr_str_len(val));
+    } else {
+        char tmp[128];
+        const char *s = xr_to_cstr(val, tmp, sizeof(tmp));
+        xrt_url_append_encoded_form(buf, s, strlen(s));
+    }
+}
+
+static inline void xrt_url_build_query_json_fields(xrt_strbuf_t *buf, xrt_json_t *j) {
+    if (!buf || !j)
+        return;
+    for (int64_t i = 0; i < j->field_count; i++) {
+        const char *key = j->field_names ? j->field_names[i] : NULL;
+        if (key)
+            xrt_url_build_query_pair(buf, key, strlen(key), j->fields[i]);
+    }
+    if (!j->dynamic_fields)
+        return;
+    xrt_map_t *m = j->dynamic_fields;
+    for (uint32_t i = 0; i < m->nentries; i++) {
+        XrMapEntry *entry = &m->entries[i];
+        if (entry->key_tt == XR_MAP_ENTRY_NIL_KEY)
+            continue;
+        char key_buf[128];
+        const char *key = XR_IS_STR(entry->key) ? xr_str_data(entry->key)
+                                                : xr_to_cstr(entry->key, key_buf, sizeof(key_buf));
+        size_t key_len = XR_IS_STR(entry->key) ? (size_t) xr_str_len(entry->key) : strlen(key);
+        xrt_url_build_query_pair(buf, key, key_len, entry->value);
+    }
+}
+
+static inline void xrt_url_build_query_map_fields(xrt_strbuf_t *buf, xrt_map_t *m) {
+    if (!buf || !m)
+        return;
+    if (!xrt_map_is_typed(m)) {
+        for (uint32_t i = 0; i < m->nentries; i++) {
+            XrMapEntry *entry = &m->entries[i];
+            if (entry->key_tt == XR_MAP_ENTRY_NIL_KEY)
+                continue;
+            char key_buf[128];
+            const char *key = XR_IS_STR(entry->key)
+                                  ? xr_str_data(entry->key)
+                                  : xr_to_cstr(entry->key, key_buf, sizeof(key_buf));
+            size_t key_len = XR_IS_STR(entry->key) ? (size_t) xr_str_len(entry->key) : strlen(key);
+            xrt_url_build_query_pair(buf, key, key_len, entry->value);
+        }
+        return;
+    }
+    for (int64_t oi = 0; oi < m->order_len; oi++) {
+        int64_t slot = m->order[oi];
+        if (!xrt_map_slot_is_full(m, slot))
+            continue;
+        XrValue keyv = xrt_map_slot_key(m, slot);
+        XrValue val = xrt_map_slot_value(m, slot);
+        char key_buf[128];
+        const char *key =
+            XR_IS_STR(keyv) ? xr_str_data(keyv) : xr_to_cstr(keyv, key_buf, sizeof(key_buf));
+        size_t key_len = XR_IS_STR(keyv) ? (size_t) xr_str_len(keyv) : strlen(key);
+        xrt_url_build_query_pair(buf, key, key_len, val);
+    }
+}
+
+static inline XrValue xrt_url_build_query(XrValue obj) {
+    if (obj.tag != XR_TAG_PTR && !XR_IS_MAP(obj))
+        return XR_NULL_VAL;
+    XrValue bufv = xrt_strbuf_new();
+    xrt_strbuf_t *buf = (xrt_strbuf_t *) bufv.ptr;
+    if (XR_IS_MAP(obj))
+        xrt_url_build_query_map_fields(buf, (xrt_map_t *) obj.ptr);
+    else
+        xrt_url_build_query_json_fields(buf, (xrt_json_t *) obj.ptr);
+    return xrt_strbuf_finish(bufv);
+}
+
+static inline void xrt_url_emit_base_authority(xrt_strbuf_t *out, const XrUrlCoreParts *bp) {
+    if (bp->protocol && bp->protocol_len > 0) {
+        xrt_url_buf_append_raw(out, bp->protocol, bp->protocol_len);
+        xrt_url_buf_append_raw(out, "//", 2);
+    }
+    if (bp->hostname && bp->hostname_len > 0)
+        xrt_url_buf_append_raw(out, bp->hostname, bp->hostname_len);
+    if (bp->port && bp->port_len > 0) {
+        xrt_url_buf_putc(out, ':');
+        xrt_url_buf_append_raw(out, bp->port, bp->port_len);
+    }
+}
+
+static inline XrValue xrt_url_resolve(const char *base, int64_t base_len_i, const char *rel,
+                                      int64_t rel_len_i) {
+    size_t base_len = base_len_i < 0 ? 0 : (size_t) base_len_i;
+    size_t rel_len = rel_len_i < 0 ? 0 : (size_t) rel_len_i;
+    if ((!base && base_len != 0) || (!rel && rel_len != 0))
+        return XR_NULL_VAL;
+
+    const char *colon = memchr(rel, ':', rel_len);
+    if (colon && colon + 2 < rel + rel_len && colon[1] == '/' && colon[2] == '/')
+        return xrt_url_str_slice(rel, rel_len);
+
+    XrUrlCoreParts bp;
+    xr_url_core_parse(base, base_len, &bp);
+
+    const char *rel_hash = memchr(rel, '#', rel_len);
+    size_t rel_hash_len = rel_hash ? (size_t) ((rel + rel_len) - rel_hash) : 0;
+    size_t rel_no_hash_len = rel_hash ? (size_t) (rel_hash - rel) : rel_len;
+    const char *rel_query = memchr(rel, '?', rel_no_hash_len);
+    size_t rel_query_len = 0;
+    size_t rel_path_len = rel_no_hash_len;
+    if (rel_query) {
+        rel_query_len = (size_t) ((rel + rel_no_hash_len) - rel_query);
+        rel_path_len = (size_t) (rel_query - rel);
+    }
+
+    XrValue resultv = xrt_strbuf_new();
+    xrt_strbuf_t *result = (xrt_strbuf_t *) resultv.ptr;
+    size_t path_start = 0;
+    size_t path_end = 0;
+
+    if (rel_len > 1 && rel[0] == '/' && rel[1] == '/') {
+        if (bp.protocol && bp.protocol_len > 0)
+            xrt_url_buf_append_raw(result, bp.protocol, bp.protocol_len);
+        xrt_url_buf_append_raw(result, rel, 2);
+        size_t a = 2;
+        while (a < rel_no_hash_len && rel[a] != '/' && rel[a] != '?')
+            a++;
+        xrt_url_buf_append_raw(result, rel + 2, a - 2);
+        path_start = (size_t) result->len;
+        if (rel_path_len > a)
+            xrt_url_buf_append_raw(result, rel + a, rel_path_len - a);
+        path_end = (size_t) result->len;
+    } else if (rel_path_len > 0 && rel[0] == '/') {
+        xrt_url_emit_base_authority(result, &bp);
+        path_start = (size_t) result->len;
+        xrt_url_buf_append_raw(result, rel, rel_path_len);
+        path_end = (size_t) result->len;
+    } else if (rel_path_len == 0) {
+        xrt_url_emit_base_authority(result, &bp);
+        path_start = (size_t) result->len;
+        if (bp.pathname && bp.pathname_len > 0)
+            xrt_url_buf_append_raw(result, bp.pathname, bp.pathname_len);
+        path_end = (size_t) result->len;
+        if (!rel_query && bp.search && bp.search_len > 0)
+            xrt_url_buf_append_raw(result, bp.search, bp.search_len);
+    } else {
+        xrt_url_emit_base_authority(result, &bp);
+        path_start = (size_t) result->len;
+        if (bp.pathname && bp.pathname_len > 0) {
+            const char *last_slash = NULL;
+            for (size_t i = bp.pathname_len; i > 0; i--) {
+                if (bp.pathname[i - 1] == '/') {
+                    last_slash = &bp.pathname[i - 1];
+                    break;
+                }
+            }
+            if (last_slash) {
+                size_t prefix = (size_t) (last_slash - bp.pathname + 1);
+                xrt_url_buf_append_raw(result, bp.pathname, prefix);
+            } else {
+                xrt_url_buf_putc(result, '/');
+            }
+        } else {
+            xrt_url_buf_putc(result, '/');
+        }
+        xrt_url_buf_append_raw(result, rel, rel_path_len);
+        path_end = (size_t) result->len;
+    }
+
+    if (!(rel_path_len == 0 && !rel_query && bp.search && bp.search_len > 0)) {
+        if (rel_query)
+            xrt_url_buf_append_raw(result, rel_query, rel_query_len);
+    }
+    if (rel_hash)
+        xrt_url_buf_append_raw(result, rel_hash, rel_hash_len);
+
+    if (path_end > path_start) {
+        size_t old_path_len = path_end - path_start;
+        size_t new_path_len =
+            xr_url_core_remove_dot_segments(result->buf + path_start, old_path_len);
+        size_t shrink = old_path_len - new_path_len;
+        if (shrink > 0) {
+            size_t tail_len = (size_t) result->len - path_end;
+            if (tail_len > 0)
+                memmove(result->buf + path_start + new_path_len, result->buf + path_end, tail_len);
+            result->len -= (int64_t) shrink;
+            result->buf[result->len] = '\0';
+        }
+    }
+    return xrt_strbuf_finish(resultv);
+}
+
+static inline XrValue xrt_url_join(int64_t count_i, const char **parts, const size_t *lens) {
+    if (count_i <= 0)
+        return xrt_str_alloc(0);
+    XrValue bufv = xrt_strbuf_new();
+    xrt_strbuf_t *buf = (xrt_strbuf_t *) bufv.ptr;
+    for (int64_t i = 0; i < count_i; i++) {
+        const char *seg = parts ? parts[i] : NULL;
+        size_t seg_len = lens ? lens[i] : 0;
+        if (!seg || seg_len == 0)
+            continue;
+        if (buf->len > 0 && buf->buf[buf->len - 1] == '/')
+            buf->len--;
+        if (buf->len > 0 && seg[0] != '/')
+            xrt_url_buf_putc(buf, '/');
+        xrt_url_buf_append_raw(buf, seg, seg_len);
+    }
+    return xrt_strbuf_finish(bufv);
+}
+
+#endif  // XRT_URL_H
