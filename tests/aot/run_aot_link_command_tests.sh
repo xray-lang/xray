@@ -147,7 +147,7 @@ if build_native "$BASE64_SRC" "$BASE64_BIN" "$BASE64_LOG"; then
     expect_log_not_contains "$BASE64_LOG" "-lssl" "core-base64: does not link ssl"
     expect_log_not_contains "$BASE64_LOG" "-lcrypto" "core-base64: does not link crypto"
     expect_log_contains "$BASE64_LOG" "-lm" "core-base64: links math lib only"
-    expect_output "$BASE64_BIN" $'SGVsbG8=\nHello\nQUI\nAB\nnull\ntrue' "core-base64: binary output"
+    expect_output "$BASE64_BIN" $'SGVsbG8=\nHello\nQUI\nAB\nnull\ntrue\nSGVs\n3\n72\n101\n108\ntrue' "core-base64: binary output"
 else
     record_fail "core-base64: build failed"
     sed 's/^/      /' "$BASE64_LOG" | sed -n '1,120p'

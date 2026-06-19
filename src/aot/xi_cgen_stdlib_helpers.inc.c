@@ -53,6 +53,8 @@ static const CgAotStdlibMethod g_aot_stdlib_methods[] = {
     {"base64", "decode", 1, "xrt_base64_decode", "s", CG_AOT_RET_VALUE, NULL},
     {"base64", "encodeUrl", 1, "xrt_base64_encode_url", "s", CG_AOT_RET_VALUE, NULL},
     {"base64", "decodeUrl", 1, "xrt_base64_decode_url", "s", CG_AOT_RET_VALUE, NULL},
+    {"base64", "encodeBytes", 1, "xrt_base64_encode_bytes", "v", CG_AOT_RET_VALUE, NULL},
+    {"base64", "decodeToBytes", 1, "xrt_base64_decode_to_bytes", "s", CG_AOT_RET_VALUE, NULL},
     {"base64", "isValid", 1, "xrt_base64_is_valid", "s", CG_AOT_RET_VALUE, NULL},
 };
 
