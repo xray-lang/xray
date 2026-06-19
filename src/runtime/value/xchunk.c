@@ -134,6 +134,10 @@ void xr_vm_proto_free(XrProto *proto) {
         xr_free(proto->return_type);
         proto->return_type = NULL;
     }
+    if (proto->source_file != NULL) {
+        xr_free((void *) proto->source_file);
+        proto->source_file = NULL;
+    }
 
     // Free per-function symbol table
     if (proto->symbols != NULL) {

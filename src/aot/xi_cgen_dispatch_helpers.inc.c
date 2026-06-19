@@ -67,8 +67,6 @@ static void xicgen_move(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValu
 
 static void xicgen_arith(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                          const char *prefix) {
-    (void) ctx;
-    (void) f;
     (void) prefix;
     XrRep result_rep = cg_rep(v);
     XrRep a_rep = cg_rep(v->args[0]);
@@ -120,8 +118,14 @@ static void xicgen_arith(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiVal
             fprintf(out, ")");
         }
     } else if (result_rep == XR_REP_I64) {
-        // Native int64: must wrap on overflow (raw + - * is signed UB in C).
-        if (!emit_native_i64_wrap_arith_expr(out, v)) {
+        if (cg_arith_is_clean_narrow(ctx, f, v)) {
+            fprintf(out, "(%s)(", local_ctype_str_ctx(ctx, f, v));
+            cg_emit_narrow_arith_operand(ctx, f, out, v->args[0]);
+            fprintf(out, " %s ", xi_to_c_template_arith_native_op(v->op));
+            cg_emit_narrow_arith_operand(ctx, f, out, v->args[1]);
+            fprintf(out, ")");
+        } else if (!emit_native_i64_wrap_arith_expr(out, v)) {
+            // Native int64: must wrap on overflow (raw + - * is signed UB in C).
             fprintf(out, "%s(", xi_to_c_template_arith_i64_wrap_fn(v->op));
             emit_vref(out, v->args[0]);
             fprintf(out, ", ");
@@ -1501,7 +1505,7 @@ static bool xicgen_emit_enum_method(XiCgenCtx *ctx, FILE *out, const XiValue *v,
 
 static bool xicgen_emit_task_method(XiCgenCtx *ctx, FILE *out, const XiValue *v, const char *method,
                                     uint16_t nargs) {
-    if (v->op != XI_CALL_METHOD || !cg_value_type_is_task(v->args[0]))
+    if (v->op != XI_CALL_METHOD || !xi_value_type_is_task(v->args[0]))
         return false;
     if (nargs == 0 && method && strcmp(method, "cancel") == 0) {
         if (cg_rep(v) == XR_REP_I64)
@@ -1587,7 +1591,7 @@ static bool xicgen_emit_stringbuilder_append(FILE *out, const XiValue *v, const 
 
 static bool xicgen_emit_channel_method(FILE *out, const XiValue *v, const char *method,
                                        uint16_t nargs) {
-    if (!v || v->nargs < 1 || !method || !cg_value_type_is_channel(v->args[0]))
+    if (!v || v->nargs < 1 || !method || !xi_value_type_is_channel(v->args[0]))
         return false;
     bool is_try_send = strcmp(method, "trySend") == 0 && nargs == 1 && v->nargs >= 2;
     bool is_try_recv = strcmp(method, "tryRecv") == 0 && nargs == 0;
@@ -1630,7 +1634,7 @@ static bool xicgen_emit_channel_method(FILE *out, const XiValue *v, const char *
 
 static bool xicgen_emit_work_queue_method(FILE *out, const XiValue *v, const char *method,
                                           uint16_t nargs) {
-    if (!v || v->nargs < 1 || !method || !cg_value_type_is_work_queue(v->args[0]))
+    if (!v || v->nargs < 1 || !method || !xi_value_type_is_work_queue(v->args[0]))
         return false;
     bool is_push = strcmp(method, "push") == 0 && (nargs == 1 || nargs == 2) && v->nargs >= 2;
     bool is_try_pop = strcmp(method, "tryPop") == 0 && (nargs == 0 || nargs == 1);
@@ -1975,12 +1979,15 @@ static void xicgen_throw(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiVal
 
 static void xicgen_ownership_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                   const char *prefix, const char *fn_name) {
-    (void) ctx;
-    (void) f;
     (void) prefix;
     XR_DCHECK(v->nargs >= 1, "xicgen_ownership_call: need arg");
+    const XiValue *arg = v->args[0];
     fprintf(out, "%s(", fn_name);
-    emit_vref(out, v->args[0]);
+    XrRep from_rep = xicgen_value_c_storage_rep(ctx, f, arg);
+    const char *conv_suffix =
+        emit_conversion_prefix(out, arg ? arg->type : NULL, from_rep, XR_REP_TAGGED);
+    emit_vref(out, arg);
+    emit_conversion_suffix(out, conv_suffix);
     fprintf(out, ")");
 }
 
@@ -2139,9 +2146,24 @@ XI_TO_C_TEMPLATE_STRICT_COMPARE_DRIVERS(XICGEN_DEFINE_TEMPLATE_STRICT_COMPARE_DR
 
 #undef XICGEN_DEFINE_TEMPLATE_STRICT_COMPARE_DRIVER
 
-static void xicgen_cast_i64_arg(FILE *out, const XiValue *v, const char *ctype) {
+static void xicgen_cast_i64_arg(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                                const char *ctype) {
+    const XiValue *arg = v->nargs > 0 ? v->args[0] : NULL;
+    if (arg && ctype) {
+        const char *arg_ctype = local_ctype_str_ctx(ctx, f, arg);
+        if (arg_ctype && strcmp(arg_ctype, ctype) == 0) {
+            const char *res_ctype = local_ctype_str_ctx(ctx, f, v);
+            if (res_ctype && strcmp(res_ctype, ctype) == 0) {
+                emit_vref(out, arg);
+            } else {
+                fprintf(out, "(int64_t)");
+                emit_vref(out, arg);
+            }
+            return;
+        }
+    }
     fprintf(out, "(int64_t)(%s)", ctype);
-    emit_vref(out, v->args[0]);
+    emit_vref(out, arg);
 }
 
 static void xicgen_f32_roundtrip(FILE *out, const XiValue *v, bool preserve_loaded_float32) {
@@ -2154,7 +2176,7 @@ static void xicgen_template_width(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
     (void) prefix;
     switch (xi_to_c_template_width_kind(v->op)) {
         case AOT_WIDTH_TEMPLATE_CAST_I64:
-            xicgen_cast_i64_arg(out, v, xi_to_c_template_width_cast_type(v->op));
+            xicgen_cast_i64_arg(ctx, out, f, v, xi_to_c_template_width_cast_type(v->op));
             return;
         case AOT_WIDTH_TEMPLATE_F32_ROUNDTRIP:
             xicgen_f32_roundtrip(out, v,
@@ -2313,7 +2335,7 @@ static void xicgen_load_field(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
         return;
     }
     const char *task_helper =
-        cg_value_type_is_task(v->args[0]) ? cg_task_field_helper(field) : NULL;
+        xi_value_type_is_task(v->args[0]) ? cg_task_field_helper(field) : NULL;
     if (task_helper) {
         if (cg_rep(v) == XR_REP_I64)
             fprintf(out, "XR_TO_INT(");
@@ -2327,7 +2349,7 @@ static void xicgen_load_field(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
         return;
     }
     const char *channel_helper =
-        cg_value_type_is_channel(v->args[0]) ? cg_channel_field_helper(field) : NULL;
+        xi_value_type_is_channel(v->args[0]) ? cg_channel_field_helper(field) : NULL;
     if (channel_helper) {
         if (cg_rep(v) == XR_REP_I64)
             fprintf(out, "XR_TO_INT(");
@@ -2341,7 +2363,7 @@ static void xicgen_load_field(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
         return;
     }
     const char *work_queue_helper =
-        cg_value_type_is_work_queue(v->args[0]) ? cg_work_queue_field_helper(field) : NULL;
+        xi_value_type_is_work_queue(v->args[0]) ? cg_work_queue_field_helper(field) : NULL;
     if (work_queue_helper) {
         if (cg_rep(v) == XR_REP_I64)
             fprintf(out, "XR_TO_INT(");

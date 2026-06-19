@@ -95,7 +95,14 @@ static void net_close_fd(XrayIsolate *X, int fd) {
  * On immediate connect (ret 0) the caller can proceed directly.
  * *out_ret receives the connect() return value (0 or -1 with errno).
  */
-static int net_tcp_connect(XrayIsolate *X, const char *host, int port, int *out_ret) {
+/*
+ * DNS resolve + create non-blocking TCP socket (TCP_NODELAY), without calling
+ * connect(). Fills the resolved, port-set sockaddr into *sa_out/*salen_out so
+ * the caller can connect() (readiness) or submit an io_uring connect op
+ * (completion). Returns fd on success, -1 on failure.
+ */
+static int net_tcp_socket_for(XrayIsolate *X, const char *host, int port,
+                              struct sockaddr_storage *sa_out, socklen_t *salen_out) {
     XrSockAddr addr;
     if (!xr_dns_resolve(X, host, &addr, XR_AF_UNSPEC))
         return -1;
@@ -108,19 +115,33 @@ static int net_tcp_connect(XrayIsolate *X, const char *host, int port, int *out_
     int opt = 1;
     setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &opt, sizeof(opt));
 
-    struct sockaddr *sa;
-    socklen_t sa_len;
     if (addr.family == AF_INET) {
         addr.addr.v4.sin_port = htons(port);
-        sa = (struct sockaddr *) &addr.addr.v4;
-        sa_len = sizeof(struct sockaddr_in);
+        memcpy(sa_out, &addr.addr.v4, sizeof(struct sockaddr_in));
+        *salen_out = sizeof(struct sockaddr_in);
     } else {
         addr.addr.v6.sin6_port = htons(port);
-        sa = (struct sockaddr *) &addr.addr.v6;
-        sa_len = sizeof(struct sockaddr_in6);
+        memcpy(sa_out, &addr.addr.v6, sizeof(struct sockaddr_in6));
+        *salen_out = sizeof(struct sockaddr_in6);
     }
+    return fd;
+}
 
-    int ret = connect(fd, sa, sa_len);
+/*
+ * DNS resolve + create non-blocking TCP socket + start connect.
+ * Returns fd on success (connect may still be in progress), -1 on failure.
+ * On EINPROGRESS the caller should yield for write then check SO_ERROR.
+ * On immediate connect (ret 0) the caller can proceed directly.
+ * *out_ret receives the connect() return value (0 or -1 with errno).
+ */
+static int net_tcp_connect(XrayIsolate *X, const char *host, int port, int *out_ret) {
+    struct sockaddr_storage sa;
+    socklen_t sa_len;
+    int fd = net_tcp_socket_for(X, host, port, &sa, &sa_len);
+    if (fd < 0)
+        return -1;
+
+    int ret = connect(fd, (struct sockaddr *) &sa, sa_len);
     if (out_ret)
         *out_ret = ret;
 
@@ -427,7 +448,10 @@ static int handle_get_fd(XrayIsolate *X, XrValue handle) {
 
 typedef struct {
     int fd;
-    int phase;  // 0=connect_start done, waiting for writable; 1=connect_finish
+    int phase;                     // 0=connect_start done, waiting for writable; 1=connect_finish
+    XrPollDesc *pd;                // set on the io_uring completion path
+    struct sockaddr_storage addr;  // resolved target; kept valid for the connect op
+    socklen_t addrlen;
 } NetDialState;
 
 static XrCFuncResult net_dial_step(XrayIsolate *X, NetDialState *state, XrValue *result);
@@ -443,6 +467,29 @@ static XrCFuncResult net_dial_continue(XrayIsolate *X, int status, XrValue resum
     }
     return net_dial_step(X, state, result);
 }
+
+#if defined(XR_OS_LINUX) && defined(XR_HAS_IO_URING)
+// Completion continuation for connect: the connect op resolved to 0 (connected)
+// or -errno. No SO_ERROR round-trip needed — the CQE carries the verdict.
+static XrCFuncResult net_dial_complete(XrayIsolate *X, int status, XrValue resume_value, void *ctx,
+                                       XrValue *result) {
+    (void) status;
+    (void) resume_value;
+    NetDialState *state = (NetDialState *) ctx;
+    XrUringXferKind kind;
+    long res = xr_netpoll_uring_xfer_result(state->pd, XR_POLL_WRITE, &kind);
+    if (kind == XR_URING_XFER_DATA && res == 0) {
+        int fd = state->fd;
+        xr_free(state);
+        *result = make_conn_handle(X, fd, false);
+        return XR_CFUNC_DONE;
+    }
+    net_close_fd(X, state->fd);
+    xr_free(state);
+    *result = XR_NULL_VAL;
+    return XR_CFUNC_DONE;
+}
+#endif
 
 static XrCFuncResult net_dial_step(XrayIsolate *X, NetDialState *state, XrValue *result) {
     // Check the connect result.
@@ -473,21 +520,19 @@ static XrCFuncResult net_dial_yieldable(XrayIsolate *X, XrValue *args, int nargs
 
     XrString *host = XR_TO_STRING(args[0]);
     int port_num = (int) XR_TO_INT(args[1]);
+    int timeout_ms = (nargs > 2 && XR_IS_INT(args[2])) ? (int) XR_TO_INT(args[2]) : 30000;
 
-    int conn_ret;
-    int fd = net_tcp_connect(X, XR_STRING_CHARS(host), port_num, &conn_ret);
+    // Resolve + create the socket once; connect via io_uring completion when
+    // available, otherwise via connect() + readiness.
+    struct sockaddr_storage sa;
+    socklen_t sa_len;
+    int fd = net_tcp_socket_for(X, XR_STRING_CHARS(host), port_num, &sa, &sa_len);
     if (fd < 0) {
         *result = XR_NULL_VAL;
         return XR_CFUNC_DONE;
     }
 
-    if (conn_ret == 0) {
-        *result = make_conn_handle(X, fd, false);
-        return XR_CFUNC_DONE;
-    }
-
-    // EINPROGRESS: yield for write, then check connect result
-    NetDialState *state = (NetDialState *) xr_malloc(sizeof(NetDialState));
+    NetDialState *state = (NetDialState *) xr_calloc(1, sizeof(NetDialState));
     if (!state) {
         close(fd);
         *result = XR_NULL_VAL;
@@ -495,8 +540,42 @@ static XrCFuncResult net_dial_yieldable(XrayIsolate *X, XrValue *args, int nargs
     }
     state->fd = fd;
     state->phase = 1;
+    memcpy(&state->addr, &sa, sa_len);
+    state->addrlen = sa_len;
 
-    int timeout_ms = (nargs > 2 && XR_IS_INT(args[2])) ? (int) XR_TO_INT(args[2]) : 30000;
+#if defined(XR_OS_LINUX) && defined(XR_HAS_IO_URING)
+    // Completion mode: submit a connect op; its CQE is the connect verdict.
+    XrRuntime *rt = (XrRuntime *) X->vm.runtime;
+    if (rt && xr_netpoll_uring_active(&rt->netpoll)) {
+        XrPollDesc *pd = xr_netpoll_open(&rt->netpoll, fd);
+        if (pd) {
+            state->pd = pd;
+            XrCFuncResult cr;
+            XrUringReq req = {.kind = XR_URING_OP_CONNECT,
+                              .addr = &state->addr,
+                              .addrlen = state->addrlen,
+                              .timeout_ms = timeout_ms};
+            if (xr_yield_for_uring_io(X, pd, XR_POLL_WRITE, &req, net_dial_complete, state, result,
+                                      &cr))
+                return cr;
+            state->pd = NULL;  // completion not taken — fall through to readiness connect
+        }
+    }
+#endif
+
+    // Readiness connect: start connect(), then wait for writable + SO_ERROR.
+    int ret = connect(fd, (struct sockaddr *) &state->addr, state->addrlen);
+    if (ret == 0) {
+        xr_free(state);
+        *result = make_conn_handle(X, fd, false);
+        return XR_CFUNC_DONE;
+    }
+    if (errno != EINPROGRESS) {
+        net_close_fd(X, fd);
+        xr_free(state);
+        *result = XR_NULL_VAL;
+        return XR_CFUNC_DONE;
+    }
     return xr_yield_for_io(X, fd, XR_WAIT_WRITE, timeout_ms, net_dial_continue, state, result);
 }
 
@@ -505,6 +584,7 @@ static XrCFuncResult net_dial_yieldable(XrayIsolate *X, XrValue *args, int nargs
 typedef struct {
     int listen_fd;
     XrNetListener *listener;
+    XrPollDesc *pd;  // set on the io_uring completion path
 } NetAcceptState;
 
 static XrCFuncResult net_accept_step(XrayIsolate *X, NetAcceptState *state, XrValue *result);
@@ -522,6 +602,36 @@ static XrCFuncResult net_accept_continue(XrayIsolate *X, int status, XrValue res
     return net_accept_step(X, state, result);
 }
 
+#if defined(XR_OS_LINUX) && defined(XR_HAS_IO_URING)
+// Completion continuation for accept: the accept op's new fd is in the pd. The
+// kernel returned a SOCK_NONBLOCK fd (accept4 flags); set TCP_NODELAY to match
+// the readiness accept path (xr_socket_accept_try).
+static XrCFuncResult net_accept_complete(XrayIsolate *X, int status, XrValue resume_value,
+                                         void *ctx, XrValue *result) {
+    (void) status;
+    (void) resume_value;
+    NetAcceptState *state = (NetAcceptState *) ctx;
+    XrUringXferKind kind;
+    long fd = xr_netpoll_uring_xfer_result(state->pd, XR_POLL_READ, &kind);
+    if (kind == XR_URING_XFER_DATA && fd >= 0) {
+        int client_fd = (int) fd;
+        int opt = 1;
+        setsockopt(client_fd, IPPROTO_TCP, TCP_NODELAY, &opt, sizeof(opt));
+        net_listener_clear_error(state->listener);
+        xr_free(state);
+        *result = make_conn_handle(X, client_fd, false);
+        return XR_CFUNC_DONE;
+    }
+    uint8_t err = (kind == XR_URING_XFER_TIMEOUT)  ? XR_NETERR_TIMEOUT
+                  : (kind == XR_URING_XFER_CLOSED) ? XR_NETERR_CLOSED
+                                                   : net_error_from_errno((int) (-fd));
+    net_listener_set_error(state->listener, err, (kind == XR_URING_XFER_ERROR) ? (int) (-fd) : 0);
+    xr_free(state);
+    *result = XR_NULL_VAL;
+    return XR_CFUNC_DONE;
+}
+#endif
+
 static XrCFuncResult net_accept_step(XrayIsolate *X, NetAcceptState *state, XrValue *result) {
     XrIOTryResult r = xr_socket_accept_try(X, state->listen_fd);
     if (r.ready) {
@@ -537,11 +647,28 @@ static XrCFuncResult net_accept_step(XrayIsolate *X, NetAcceptState *state, XrVa
         *result = make_conn_handle(X, client_fd, false);
         return XR_CFUNC_DONE;
     }
-    // EAGAIN - yield for read
-    return xr_yield_for_io(
-        X, state->listen_fd, XR_WAIT_READ,
-        net_timeout_until(state->listener ? state->listener->accept_deadline_ms : 0),
-        net_accept_continue, state, result);
+    // EAGAIN - wait for an incoming connection.
+    int64_t timeout_ms =
+        net_timeout_until(state->listener ? state->listener->accept_deadline_ms : 0);
+#if defined(XR_OS_LINUX) && defined(XR_HAS_IO_URING)
+    // Completion mode: submit an accept op; the CQE carries the new fd directly
+    // (no second accept() after readiness).
+    XrRuntime *rt = (XrRuntime *) X->vm.runtime;
+    if (rt && xr_netpoll_uring_active(&rt->netpoll)) {
+        XrPollDesc *pd = xr_netpoll_open(&rt->netpoll, state->listen_fd);
+        if (pd) {
+            state->pd = pd;
+            XrCFuncResult cr;
+            XrUringReq req = {.kind = XR_URING_OP_ACCEPT, .timeout_ms = timeout_ms};
+            if (xr_yield_for_uring_io(X, pd, XR_POLL_READ, &req, net_accept_complete, state, result,
+                                      &cr))
+                return cr;
+            state->pd = NULL;
+        }
+    }
+#endif
+    return xr_yield_for_io(X, state->listen_fd, XR_WAIT_READ, timeout_ms, net_accept_continue,
+                           state, result);
 }
 
 /*
@@ -628,6 +755,7 @@ typedef struct {
     char *buf;  // Points to coroutine's io_buf (not owned)
     size_t max_len;
     bool is_tls;
+    XrPollDesc *pd;  // set on the io_uring completion path; consumed by the completion continuation
 } NetReadHandleState;
 
 static XrCFuncResult net_read_handle_step(XrayIsolate *X, NetReadHandleState *state,
@@ -645,6 +773,33 @@ static XrCFuncResult net_read_handle_continue(XrayIsolate *X, int status, XrValu
     }
     return net_read_handle_step(X, state, result);
 }
+
+#if defined(XR_OS_LINUX) && defined(XR_HAS_IO_URING)
+// Completion continuation: the recv op finished, its byte count is in the pd.
+// Resume status is always IO_READY (the op CQE is the sole waker); the outcome
+// is read from xr_netpoll_uring_xfer_result, not from `status`.
+static XrCFuncResult net_read_handle_complete(XrayIsolate *X, int status, XrValue resume_value,
+                                              void *ctx, XrValue *result) {
+    (void) status;
+    (void) resume_value;
+    NetReadHandleState *state = (NetReadHandleState *) ctx;
+    XrUringXferKind kind;
+    long n = xr_netpoll_uring_xfer_result(state->pd, XR_POLL_READ, &kind);
+    if (kind == XR_URING_XFER_DATA) {
+        net_conn_clear_error(state->conn);
+        *result = (n > 0) ? xr_string_value(xr_string_new(X, state->buf, (int) n)) : XR_NULL_VAL;
+        xr_free(state);
+        return XR_CFUNC_DONE;
+    }
+    uint8_t err = (kind == XR_URING_XFER_TIMEOUT)  ? XR_NETERR_TIMEOUT
+                  : (kind == XR_URING_XFER_CLOSED) ? XR_NETERR_CLOSED
+                                                   : net_error_from_errno((int) (-n));
+    net_conn_set_error(state->conn, err, (kind == XR_URING_XFER_ERROR) ? (int) (-n) : 0);
+    xr_free(state);
+    *result = XR_NULL_VAL;
+    return XR_CFUNC_DONE;
+}
+#endif
 
 static XrCFuncResult net_read_handle_step(XrayIsolate *X, NetReadHandleState *state,
                                           XrValue *result) {
@@ -701,9 +856,30 @@ static XrCFuncResult net_read_handle_step(XrayIsolate *X, NetReadHandleState *st
         return XR_CFUNC_DONE;
     }
     if (errno == EAGAIN || errno == EWOULDBLOCK) {
-        return xr_yield_for_io(X, state->fd, XR_WAIT_READ,
-                               net_timeout_until(state->conn ? state->conn->read_deadline_ms : 0),
-                               net_read_handle_continue, state, result);
+        int64_t timeout_ms = net_timeout_until(state->conn ? state->conn->read_deadline_ms : 0);
+#if defined(XR_OS_LINUX) && defined(XR_HAS_IO_URING)
+        // Completion mode: submit a recv op and park; the CQE carries the byte
+        // count back directly (no second read() after readiness). Falls back to
+        // the readiness path below if io_uring is not the active backend.
+        XrRuntime *rt = (XrRuntime *) X->vm.runtime;
+        if (rt && xr_netpoll_uring_active(&rt->netpoll)) {
+            XrPollDesc *pd = xr_netpoll_open(&rt->netpoll, state->fd);
+            if (pd) {
+                state->pd = pd;
+                XrCFuncResult cr;
+                XrUringReq req = {.kind = XR_URING_OP_RECV,
+                                  .buf = state->buf,
+                                  .len = (unsigned) state->max_len,
+                                  .timeout_ms = timeout_ms};
+                if (xr_yield_for_uring_io(X, pd, XR_POLL_READ, &req, net_read_handle_complete,
+                                          state, result, &cr))
+                    return cr;
+                state->pd = NULL;  // completion not taken — fall through to readiness
+            }
+        }
+#endif
+        return xr_yield_for_io(X, state->fd, XR_WAIT_READ, timeout_ms, net_read_handle_continue,
+                               state, result);
     }
     net_conn_set_error(state->conn, net_error_from_errno(errno), errno);
     xr_free(state);
@@ -774,6 +950,7 @@ typedef struct {
     XrArray *buf;  // Bytes buffer supplied by caller (not owned)
     size_t max_len;
     bool is_tls;
+    XrPollDesc *pd;  // set on the io_uring completion path
 } NetReadIntoState;
 
 static XrCFuncResult net_read_into_step(XrayIsolate *X, NetReadIntoState *state, XrValue *result);
@@ -807,6 +984,26 @@ static XrCFuncResult net_read_into_done(NetReadIntoState *state, ssize_t n, XrVa
     xr_free(state);
     return done;
 }
+
+#if defined(XR_OS_LINUX) && defined(XR_HAS_IO_URING)
+// Completion continuation for readInto: the recv op's byte count is in the pd.
+static XrCFuncResult net_read_into_complete(XrayIsolate *X, int status, XrValue resume_value,
+                                            void *ctx, XrValue *result) {
+    (void) X;
+    (void) status;
+    (void) resume_value;
+    NetReadIntoState *state = (NetReadIntoState *) ctx;
+    XrUringXferKind kind;
+    long n = xr_netpoll_uring_xfer_result(state->pd, XR_POLL_READ, &kind);
+    if (kind == XR_URING_XFER_DATA)
+        return net_read_into_done(state, n, result);  // n >= 0 (0 == EOF) sets buf->length
+    uint8_t err = (kind == XR_URING_XFER_TIMEOUT)  ? XR_NETERR_TIMEOUT
+                  : (kind == XR_URING_XFER_CLOSED) ? XR_NETERR_CLOSED
+                                                   : net_error_from_errno((int) (-n));
+    net_conn_set_error(state->conn, err, (kind == XR_URING_XFER_ERROR) ? (int) (-n) : 0);
+    return net_read_into_done(state, -1, result);
+}
+#endif
 
 static XrCFuncResult net_read_into_wait(XrayIsolate *X, XrNetConn *conn, XrArray *buf,
                                         size_t max_len, bool is_tls, int wait_mode,
@@ -854,9 +1051,27 @@ static XrCFuncResult net_read_into_step(XrayIsolate *X, NetReadIntoState *state,
     if (n >= 0)
         return net_read_into_done(state, n, result);
     if (errno == EAGAIN || errno == EWOULDBLOCK) {
-        return xr_yield_for_io(X, state->fd, XR_WAIT_READ,
-                               net_timeout_until(state->conn ? state->conn->read_deadline_ms : 0),
-                               net_read_into_continue, state, result);
+        int64_t timeout_ms = net_timeout_until(state->conn ? state->conn->read_deadline_ms : 0);
+#if defined(XR_OS_LINUX) && defined(XR_HAS_IO_URING)
+        XrRuntime *rt = (XrRuntime *) X->vm.runtime;
+        if (rt && xr_netpoll_uring_active(&rt->netpoll)) {
+            XrPollDesc *pd = xr_netpoll_open(&rt->netpoll, state->fd);
+            if (pd) {
+                state->pd = pd;
+                XrCFuncResult cr;
+                XrUringReq req = {.kind = XR_URING_OP_RECV,
+                                  .buf = data,
+                                  .len = (unsigned) state->max_len,
+                                  .timeout_ms = timeout_ms};
+                if (xr_yield_for_uring_io(X, pd, XR_POLL_READ, &req, net_read_into_complete, state,
+                                          result, &cr))
+                    return cr;
+                state->pd = NULL;
+            }
+        }
+#endif
+        return xr_yield_for_io(X, state->fd, XR_WAIT_READ, timeout_ms, net_read_into_continue,
+                               state, result);
     }
     net_conn_set_error(state->conn, net_error_from_errno(errno), errno);
     return net_read_into_done(state, -1, result);
@@ -939,6 +1154,7 @@ typedef struct {
     size_t len;
     size_t written;
     bool is_tls;
+    XrPollDesc *pd;  // set on the io_uring completion path
 } NetWriteHandleState;
 
 static XrCFuncResult net_write_handle_step(XrayIsolate *X, NetWriteHandleState *state,
@@ -957,6 +1173,41 @@ static XrCFuncResult net_write_handle_continue(XrayIsolate *X, int status, XrVal
     }
     return net_write_handle_step(X, state, result);
 }
+
+#if defined(XR_OS_LINUX) && defined(XR_HAS_IO_URING)
+// Completion continuation for write: a send op delivered its byte count. Add it
+// to the running total and re-enter the step to send any remainder (which uses a
+// non-blocking write() fast path and only submits another send op on EAGAIN).
+static XrCFuncResult net_write_handle_complete(XrayIsolate *X, int status, XrValue resume_value,
+                                               void *ctx, XrValue *result) {
+    (void) status;
+    (void) resume_value;
+    NetWriteHandleState *state = (NetWriteHandleState *) ctx;
+    XrUringXferKind kind;
+    long n = xr_netpoll_uring_xfer_result(state->pd, XR_POLL_WRITE, &kind);
+    state->pd = NULL;
+    if (kind == XR_URING_XFER_DATA) {
+        if (n > 0)
+            state->written += (size_t) n;
+        if (n > 0 && state->written < state->len)
+            return net_write_handle_step(X, state, result);  // send the remainder
+        int total = state->written > 0 ? (int) state->written : -1;
+        if (state->written == state->len)
+            net_conn_clear_error(state->conn);
+        xr_free(state);
+        *result = XR_FROM_INT(total);
+        return XR_CFUNC_DONE;
+    }
+    uint8_t err = (kind == XR_URING_XFER_TIMEOUT)  ? XR_NETERR_TIMEOUT
+                  : (kind == XR_URING_XFER_CLOSED) ? XR_NETERR_CLOSED
+                                                   : net_error_from_errno((int) (-n));
+    net_conn_set_error(state->conn, err, (kind == XR_URING_XFER_ERROR) ? (int) (-n) : 0);
+    int total = state->written > 0 ? (int) state->written : -1;
+    xr_free(state);
+    *result = XR_FROM_INT(total);
+    return XR_CFUNC_DONE;
+}
+#endif
 
 static XrCFuncResult net_write_handle_wait(XrayIsolate *X, XrNetConn *conn, const char *data,
                                            size_t len, size_t written, bool is_tls, int wait_mode,
@@ -1027,10 +1278,28 @@ static XrCFuncResult net_write_handle_step(XrayIsolate *X, NetWriteHandleState *
         if (n == 0)
             break;
         if (errno == EAGAIN || errno == EWOULDBLOCK) {
-            return xr_yield_for_io(
-                X, state->fd, XR_WAIT_WRITE,
-                net_timeout_until(state->conn ? state->conn->write_deadline_ms : 0),
-                net_write_handle_continue, state, result);
+            int64_t timeout_ms =
+                net_timeout_until(state->conn ? state->conn->write_deadline_ms : 0);
+#if defined(XR_OS_LINUX) && defined(XR_HAS_IO_URING)
+            XrRuntime *rt = (XrRuntime *) X->vm.runtime;
+            if (rt && xr_netpoll_uring_active(&rt->netpoll)) {
+                XrPollDesc *pd = xr_netpoll_open(&rt->netpoll, state->fd);
+                if (pd) {
+                    state->pd = pd;
+                    XrCFuncResult cr;
+                    XrUringReq req = {.kind = XR_URING_OP_SEND,
+                                      .buf = (void *) (state->data + state->written),
+                                      .len = (unsigned) (state->len - state->written),
+                                      .timeout_ms = timeout_ms};
+                    if (xr_yield_for_uring_io(X, pd, XR_POLL_WRITE, &req, net_write_handle_complete,
+                                              state, result, &cr))
+                        return cr;
+                    state->pd = NULL;
+                }
+            }
+#endif
+            return xr_yield_for_io(X, state->fd, XR_WAIT_WRITE, timeout_ms,
+                                   net_write_handle_continue, state, result);
         }
         net_conn_set_error(state->conn, net_error_from_errno(errno), errno);
         break;

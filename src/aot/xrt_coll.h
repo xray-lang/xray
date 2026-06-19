@@ -60,6 +60,17 @@ static inline size_t xrt_array_data_bytes_or_abort(int64_t cap, uint8_t elem_siz
     return (size_t) cap * (size_t) elem_size;
 }
 
+/* Heap containers start with a bump-style header because the same init helpers
+ * are shared by stack and heap constructors. Under the default deterministic
+ * policy, heap containers become normal RC objects; under XRAY_AOT_ARENA=1 they
+ * keep bump lifetime and release at process exit. */
+static inline void xrt_coll_make_deterministic(XrGCHeader *h) {
+    if (xrt_bump_enabled)
+        return;
+    h->extra &= (uint16_t) ~(uint16_t) XR_OBJ_STORAGE_BUMP;
+    atomic_store_explicit(&h->refcount, 0, memory_order_relaxed);
+}
+
 static inline void xrt_array_init_header(xrt_array_t *a, int64_t cap, uint8_t etype,
                                          uint8_t elem_size) {
     xrt_bump_header_init(&a->gc, XR_TARRAY);
@@ -93,6 +104,7 @@ static inline xrt_array_t *xrt_array_alloc_inline(int64_t cap, uint8_t etype, in
         abort();
     }
     xrt_array_init_header(a, cap, etype, elem_size);
+    xrt_coll_make_deterministic(&a->gc);
     if (data_bytes) {
         a->data =
             (void *) (((uintptr_t) ((char *) a + sizeof(xrt_array_t)) + (XRT_DATA_ALIGN - 1)) &
@@ -807,6 +819,7 @@ static inline XrValue xrt_map_new_flags(int64_t cap, uint8_t flags) {
         abort();
     }
     xrt_map_init_header(m);
+    xrt_coll_make_deterministic(&m->gc);
     m->flags |= (uint8_t) (flags & XR_MAP_FLAG_WEAK);
     if (cap > 0)
         xrt_map_resize_tagged(m, (uint32_t) cap);
@@ -1063,6 +1076,7 @@ static inline XrValue xrt_set_new_typed(int64_t cap, uint8_t elem_type) {
         abort();
     }
     xrt_set_init_header(s, elem_type);
+    xrt_coll_make_deterministic(&s->gc);
     if (elem_type == XR_ELEM_ANY) {
         if (cap > 0)
             xrt_set_resize_tagged(s, (uint32_t) cap);
@@ -1076,6 +1090,93 @@ static inline XrValue xrt_set_new_flags(int64_t cap, uint8_t flags) {
     XrValue v = xrt_set_new_typed(cap, XR_ELEM_ANY);
     ((xrt_set_t *) v.ptr)->flags |= (uint8_t) (flags & XR_SET_FLAG_WEAK);
     return v;
+}
+
+static inline int xrt_set_is_typed(const xrt_set_t *s);
+
+static inline void xrt_array_destroy(xrt_array_t *a) {
+    if (!a)
+        return;
+    if (a->elem_type == XR_ELEM_ANY && a->data_storage != XR_ARRAY_DATA_BORROWED && a->data &&
+        a->length > 0) {
+        XrValue *items = (XrValue *) a->data;
+        for (int64_t i = 0; i < a->length; i++)
+            xrt_release(items[i]);
+    }
+    if (a->data_storage == XR_ARRAY_DATA_HEAP && a->data)
+        XRT_FREE_ALIGNED(a->data);
+    XRT_FREE(a);
+}
+
+static inline void xrt_map_destroy(xrt_map_t *m) {
+    if (!m)
+        return;
+    if (!xrt_map_is_typed(m) && !(m->flags & (XR_MAP_FLAG_DUMMY | XR_MAP_FLAG_WEAK)) &&
+        m->entries) {
+        for (uint32_t i = 0; i < m->nentries; i++) {
+            if (m->entries[i].key_tt == XR_MAP_ENTRY_NIL_KEY)
+                continue;
+            xrt_release(m->entries[i].key);
+            xrt_release(m->entries[i].value);
+        }
+    }
+    XRT_FREE(m->ctrl);
+    XRT_FREE(m->indices);
+    XRT_FREE(m->entries);
+    XRT_FREE(m->keys);
+    XRT_FREE(m->values);
+    XRT_FREE(m->order);
+    XRT_FREE(m);
+}
+
+static inline void xrt_set_destroy(xrt_set_t *s) {
+    if (!s)
+        return;
+    if (!xrt_set_is_typed(s) && !(s->flags & (XR_SET_FLAG_DUMMY | XR_SET_FLAG_WEAK)) &&
+        s->entries) {
+        for (uint32_t i = 0; i < s->nentries; i++) {
+            if (s->entries[i].val_tt == XR_SET_ENTRY_NIL)
+                continue;
+            xrt_release(s->entries[i].value);
+        }
+    }
+    XRT_FREE(s->ctrl);
+    XRT_FREE(s->indices);
+    XRT_FREE(s->entries);
+    XRT_FREE(s->items);
+    XRT_FREE(s->order);
+    XRT_FREE(s);
+}
+
+static inline void xrt_coll_retain(XrValue v) {
+    XrGCHeader *h = (XrGCHeader *) v.ptr;
+    if (!h || (h->extra & XR_OBJ_STORAGE_BUMP))
+        return;
+    atomic_fetch_add_explicit(&h->refcount, 1, memory_order_relaxed);
+}
+
+static inline void xrt_coll_release(XrValue v) {
+    XrGCHeader *h = (XrGCHeader *) v.ptr;
+    if (!h || (h->extra & XR_OBJ_STORAGE_BUMP))
+        return;
+    int32_t rc = atomic_load_explicit(&h->refcount, memory_order_relaxed);
+    if (rc != 0) {
+        atomic_store_explicit(&h->refcount, rc - 1, memory_order_relaxed);
+        return;
+    }
+    switch (h->type) {
+        case XR_TARRAY:
+            xrt_array_destroy((xrt_array_t *) v.ptr);
+            break;
+        case XR_TMAP:
+            xrt_map_destroy((xrt_map_t *) v.ptr);
+            break;
+        case XR_TSET:
+            xrt_set_destroy((xrt_set_t *) v.ptr);
+            break;
+        default:
+            break;
+    }
 }
 
 static inline XrValue xrt_set_new(int64_t cap) {

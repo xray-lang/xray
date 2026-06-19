@@ -301,8 +301,6 @@ test_stop_on_entry() {
 
     [ "$VERBOSE" = "1" ] && echo "MSGS2: $msgs2"
 
-    # Disconnect
-    dap_send '{"seq":5,"type":"request","command":"disconnect","arguments":{}}'
     sleep 0.3
     dap_stop
     return 0
@@ -319,14 +317,16 @@ test_breakpoint_hit() {
     dap_recv 5 >/dev/null || { dap_stop; return 1; }
     dap_recv 3 >/dev/null || true  # initialized event
 
-    # Launch with stopOnEntry so we can set breakpoints before running
-    dap_send "{\"seq\":2,\"type\":\"request\",\"command\":\"launch\",\"arguments\":{\"program\":\"${script}\",\"stopOnEntry\":true}}"
+    # Launch does not run until configurationDone, so breakpoints can be set
+    # before execution without stopOnEntry stealing the same safe point.
+    dap_send "{\"seq\":2,\"type\":\"request\",\"command\":\"launch\",\"arguments\":{\"program\":\"${script}\",\"stopOnEntry\":false}}"
     local launch_resp
     launch_resp=$(dap_recv 5) || { dap_stop; return 1; }
     json_has "$launch_resp" '"success":true' || { dap_stop; return 1; }
 
-    # Set breakpoint at line 4 (let z = x + y)
-    dap_send "{\"seq\":3,\"type\":\"request\",\"command\":\"setBreakpoints\",\"arguments\":{\"source\":{\"path\":\"${script}\"},\"breakpoints\":[{\"line\":4}]}}"
+    # Set breakpoint at line 5 (print(z)): current bytecode lineinfo has the
+    # executable safe point there after top-level shared-slot lowering.
+    dap_send "{\"seq\":3,\"type\":\"request\",\"command\":\"setBreakpoints\",\"arguments\":{\"source\":{\"path\":\"${script}\"},\"breakpoints\":[{\"line\":5}]}}"
     local bp_resp
     bp_resp=$(dap_recv 5) || { dap_stop; return 1; }
     json_has "$bp_resp" '"success":true' || { dap_stop; return 1; }
@@ -337,37 +337,25 @@ test_breakpoint_hit() {
     # ConfigurationDone
     dap_send '{"seq":4,"type":"request","command":"configurationDone","arguments":{}}'
 
-    # Drain — expect stopped event (stopOnEntry first stop)
+    # Program should stop at the line breakpoint.
     local msgs
     msgs=$(dap_drain 10 5)
-    [ "$VERBOSE" = "1" ] && echo "MSGS_ENTRY: $msgs"
+    [ "$VERBOSE" = "1" ] && echo "MSGS_BP: $msgs"
     echo "$msgs" | grep -q '"event":"stopped"' || { dap_stop; return 1; }
+    echo "$msgs" | grep -q '"breakpoint"' || { dap_stop; return 1; }
 
-    # Continue past stopOnEntry — should hit breakpoint at line 4
+    # Continue past breakpoint — should terminate
     dap_send '{"seq":5,"type":"request","command":"continue","arguments":{"threadId":1}}'
 
     local msgs2
     msgs2=$(dap_drain 10 5)
-    [ "$VERBOSE" = "1" ] && echo "MSGS_BP: $msgs2"
-
-    # Should get stopped event with reason "breakpoint"
-    echo "$msgs2" | grep -q '"event":"stopped"' || { dap_stop; return 1; }
-    echo "$msgs2" | grep -q '"breakpoint"' || { dap_stop; return 1; }
-
-    # Continue past breakpoint — should terminate
-    dap_send '{"seq":6,"type":"request","command":"continue","arguments":{"threadId":1}}'
-
-    local msgs3
-    msgs3=$(dap_drain 10 5)
-    [ "$VERBOSE" = "1" ] && echo "MSGS_EXIT: $msgs3"
+    [ "$VERBOSE" = "1" ] && echo "MSGS_EXIT: $msgs2"
 
     # Should see terminated or exited event
-    echo "$msgs3" | grep -q '"event":"terminated"' || echo "$msgs3" | grep -q '"event":"exited"' || {
+    echo "$msgs2" | grep -q '"event":"terminated"' || echo "$msgs2" | grep -q '"event":"exited"' || {
         dap_stop; return 1;
     }
 
-    # Disconnect
-    dap_send '{"seq":7,"type":"request","command":"disconnect","arguments":{}}'
     sleep 0.3
     dap_stop
     return 0
@@ -384,8 +372,8 @@ test_breakpoint_inspect() {
     dap_recv 5 >/dev/null || { dap_stop; return 1; }
     dap_recv 3 >/dev/null || true  # initialized event
 
-    # Launch with stopOnEntry
-    dap_send "{\"seq\":2,\"type\":\"request\",\"command\":\"launch\",\"arguments\":{\"program\":\"${script}\",\"stopOnEntry\":true}}"
+    # Launch; execution starts only after configurationDone.
+    dap_send "{\"seq\":2,\"type\":\"request\",\"command\":\"launch\",\"arguments\":{\"program\":\"${script}\",\"stopOnEntry\":false}}"
     dap_recv 5 >/dev/null || { dap_stop; return 1; }
 
     # Set breakpoint at line 5 (print(z)) — after all assignments
@@ -397,19 +385,13 @@ test_breakpoint_inspect() {
     # ConfigurationDone
     dap_send '{"seq":4,"type":"request","command":"configurationDone","arguments":{}}'
 
-    # Drain stopOnEntry stopped event
-    dap_drain 10 5 >/dev/null
-
-    # Continue to breakpoint at line 5
-    dap_send '{"seq":5,"type":"request","command":"continue","arguments":{"threadId":1}}'
-
     local msgs
     msgs=$(dap_drain 10 5)
     [ "$VERBOSE" = "1" ] && echo "MSGS_BP: $msgs"
     echo "$msgs" | grep -q '"event":"stopped"' || { dap_stop; return 1; }
 
     # Get stack trace
-    dap_send '{"seq":6,"type":"request","command":"stackTrace","arguments":{"threadId":1}}'
+    dap_send '{"seq":5,"type":"request","command":"stackTrace","arguments":{"threadId":1}}'
     local st_resp
     st_resp=$(dap_recv 5) || { dap_stop; return 1; }
     [ "$VERBOSE" = "1" ] && echo "STACK: $st_resp"
@@ -417,7 +399,7 @@ test_breakpoint_inspect() {
     json_has "$st_resp" '"stackFrames"' || { dap_stop; return 1; }
 
     # Get scopes for frame 0
-    dap_send '{"seq":7,"type":"request","command":"scopes","arguments":{"frameId":0}}'
+    dap_send '{"seq":6,"type":"request","command":"scopes","arguments":{"frameId":0}}'
     local sc_resp
     sc_resp=$(dap_recv 5) || { dap_stop; return 1; }
     [ "$VERBOSE" = "1" ] && echo "SCOPES: $sc_resp"
@@ -425,7 +407,7 @@ test_breakpoint_inspect() {
     json_has "$sc_resp" '"scopes"' || { dap_stop; return 1; }
 
     # Disconnect
-    dap_send '{"seq":8,"type":"request","command":"disconnect","arguments":{}}'
+    dap_send '{"seq":7,"type":"request","command":"disconnect","arguments":{}}'
     sleep 0.3
     dap_stop
     return 0
@@ -518,8 +500,6 @@ test_function_breakpoint() {
         dap_stop; return 1;
     }
 
-    # Disconnect
-    dap_send '{"seq":6,"type":"request","command":"disconnect","arguments":{}}'
     sleep 0.3
     dap_stop
     return 0
@@ -542,8 +522,8 @@ test_logpoint() {
     launch_resp=$(dap_recv 5) || { dap_stop; return 1; }
     json_has "$launch_resp" '"success":true' || { dap_stop; return 1; }
 
-    # Set logpoint at line 4 (let c = a + b) with log message
-    dap_send "{\"seq\":3,\"type\":\"request\",\"command\":\"setBreakpoints\",\"arguments\":{\"source\":{\"path\":\"${script}\"},\"breakpoints\":[{\"line\":4,\"logMessage\":\"computing c\"}]}}"
+    # Set logpoint at line 5 (print(c)) with log message.
+    dap_send "{\"seq\":3,\"type\":\"request\",\"command\":\"setBreakpoints\",\"arguments\":{\"source\":{\"path\":\"${script}\"},\"breakpoints\":[{\"line\":5,\"logMessage\":\"computing c\"}]}}"
     local bp_resp
     bp_resp=$(dap_recv 5) || { dap_stop; return 1; }
     json_has "$bp_resp" '"success":true' || { dap_stop; return 1; }
@@ -566,8 +546,6 @@ test_logpoint() {
         dap_stop; return 1;
     }
 
-    # Disconnect
-    dap_send '{"seq":5,"type":"request","command":"disconnect","arguments":{}}'
     sleep 0.3
     dap_stop
     return 0

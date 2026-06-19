@@ -81,6 +81,18 @@ bool xr_debug_eval_condition_truthy(XrayIsolate *isolate, const char *condition)
 // VM Debug Hook Callbacks (new unified interface)
 // ============================================================================
 
+static int proto_first_source_line(const XrProto *proto) {
+    if (!proto)
+        return 0;
+    int line_count = PROTO_LINE_COUNT(proto);
+    for (int i = 0; i < line_count; i++) {
+        int line = PROTO_LINE(proto, i);
+        if (line > 0)
+            return line;
+    }
+    return 0;
+}
+
 // Record stop position and signal the controller event loop.
 // stop_reason tells the controller why we stopped (entry/breakpoint/step/pause).
 static void hook_record_stop(XrayIsolate *isolate, XrDebugState *dbg, const char *path, int line,
@@ -153,7 +165,7 @@ static XrDebugAction hook_on_line(XrayIsolate *isolate, const char *path, int li
 
     // 3. Function breakpoint check (only on function entry — first line of proto)
     if (line_changed && closure && closure->proto && closure->proto->name) {
-        int first_line = PROTO_LINE_COUNT(closure->proto) > 0 ? PROTO_LINE(closure->proto, 0) : 0;
+        int first_line = proto_first_source_line(closure->proto);
         if (line == first_line) {
             const char *func_name = XR_STRING_CHARS(closure->proto->name);
             if (xr_debug_check_function_breakpoint(isolate, func_name)) {

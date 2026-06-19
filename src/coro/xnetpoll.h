@@ -60,6 +60,58 @@ typedef enum {
     XR_PD_WAIT = 2    // Waiting
 } XrPdState;
 
+// ========== io_uring Completion Op (Linux only) ==========
+//
+// Defined ahead of XrPollDesc so a read/write op can be embedded per-fd (see
+// the uring_rop/uring_wop slots below). On Linux with io_uring active, socket
+// read/write submit one of these as a recv/send SQE; the CQE delivers the byte
+// count (or -errno) to res and sets done, then routes a wakeup through the
+// owning pd. The op lives inside the pd, so its lifetime is pinned by
+// pd->uring_inflight until the parked waiter consumes the result (see
+// xr_netpoll_uring_xfer_result), which keeps the kernel's target memory valid
+// even if the fd is closed while the op is in flight.
+#if defined(XR_OS_LINUX) && defined(XR_HAS_IO_URING)
+struct XrPollDesc;
+
+// Completion op kind. recv/send transfer over a socket buffer; accept returns a
+// new fd; connect resolves to 0 / -errno; file read/write transfer at an offset
+// (io_uring's unique advantage — epoll cannot async regular files). One submit +
+// park + result path serves them all (xr_netpoll_uring_op_submit /
+// xr_yield_for_uring_io).
+typedef enum {
+    XR_URING_OP_RECV = 0,
+    XR_URING_OP_SEND = 1,
+    XR_URING_OP_ACCEPT = 2,
+    XR_URING_OP_CONNECT = 3,
+    XR_URING_OP_FILE_READ = 4,
+    XR_URING_OP_FILE_WRITE = 5
+} XrUringOpKind;
+
+// Completion submit request. Only the fields a given kind needs are read:
+//   recv/send/file: buf, len (file also offset)
+//   connect:        addr, addrlen
+//   accept:         none (peer address is not captured)
+// timeout_ms > 0 attaches a native io_uring linked timeout.
+typedef struct XrUringReq {
+    XrUringOpKind kind;
+    void *buf;
+    unsigned len;
+    const void *addr;
+    unsigned addrlen;
+    uint64_t offset;
+    int64_t timeout_ms;
+} XrUringReq;
+
+typedef struct XrUringOp {
+    _Atomic int done;       // 0 = pending, 1 = completed (release-paired with res)
+    long res;               // recv/send: byte count; accept: new fd; connect: 0; or -errno
+    struct XrPollDesc *pd;  // owning pd: the CQE routes a wakeup via xr_netpoll_ready
+    int mode;               // XR_POLL_READ / XR_POLL_WRITE — which waiter slot to wake
+    _Atomic bool active;    // a waiter is parked on this op (submit..result window);
+                            // lets close skip the readiness unblock for this direction
+} XrUringOp;
+#endif
+
 // ========== Poll Descriptor (one per fd, lock-free design) ==========
 
 // Design notes:
@@ -114,6 +166,18 @@ typedef struct XrPollDesc {
 
     // self pointer (for timer callback)
     struct XrPollDesc *self;
+
+#if defined(XR_OS_LINUX) && defined(XR_HAS_IO_URING)
+    // io_uring completion-mode per-direction ops (recv/send). Embedded so the
+    // kernel's target XrUringOp stays valid while in flight. uring_refs is a
+    // tiny reference count = 1 (the fdmap/owner ref dropped by xr_netpoll_close)
+    // + 1 per in-flight completion op (dropped by xr_netpoll_uring_xfer_result).
+    // Whoever drops it to zero frees the pd, so a close racing an in-flight op
+    // can neither free the pd out from under the kernel/continuation nor leak it.
+    XrUringOp uring_rop;
+    XrUringOp uring_wop;
+    _Atomic int uring_refs;
+#endif
 
 #ifdef XR_OS_WINDOWS
     // IOCP backend per-socket state. The actual layout is defined in
@@ -428,5 +492,64 @@ XR_FUNC void xr_netpoll_deferred_free(XrNetpoll *np, XrPollDesc *pd);
 
 // Drain deferred free queue on current worker (called during poll cycle)
 XR_FUNC void xr_netpoll_drain_deferred(XrNetpoll *np, struct XrProc *p);
+
+// ========== io_uring Completion Mode (Linux only) ==========
+//
+// On Linux with io_uring, network/file I/O can use the completion model:
+// submit a recv/send SQE and let the CQE carry the byte count back, saving the
+// "readiness -> separate read()/write()" second syscall. This unifies with the
+// IOCP completion model on Windows; epoll / kqueue / io_uring-POLL keep the
+// readiness model. io_uring CQEs are demultiplexed by user_data: poll re-arm,
+// wakeup, and completion ops are distinguished without a second ring.
+//
+// Submission must run on the thread that owns the netpoll ring (the same
+// single-producer constraint as the io_uring SQ). The byte count (or -errno)
+// is delivered to op->res, with op->done set, during a later poll cycle
+// (xr_netpoll_poll). The caller owns the XrUringOp and the buffer until done.
+// (XrUringOp is defined above so it can be embedded in XrPollDesc.)
+#if defined(XR_OS_LINUX) && defined(XR_HAS_IO_URING)
+
+// Returns 0 if the SQE was queued, -1 if the submission queue is exhausted or
+// the backend is not io_uring (e.g. fell back to epoll on an old kernel).
+XR_FUNC int xr_netpoll_uring_submit_recv(XrNetpoll *np, XrUringOp *op, int fd, void *buf,
+                                         unsigned len);
+XR_FUNC int xr_netpoll_uring_submit_send(XrNetpoll *np, XrUringOp *op, int fd, const void *buf,
+                                         unsigned len);
+
+// True when the active backend is io_uring (vs the epoll fallback).
+XR_FUNC bool xr_netpoll_uring_active(XrNetpoll *np);
+
+// ---- Yieldable completion socket I/O (the coroutine net path) ----
+//
+// Sentinel returned by xr_netpoll_uring_op_submit when completion mode is not
+// usable for this call (backend is not io_uring, SQ exhausted, or a waiter is
+// already parked on this direction). The caller must fall back to the readiness
+// path (try syscall + xr_yield_for_io). Distinct from any byte count / -errno.
+#define XR_URING_XFER_FALLBACK 1
+
+// Submit a completion op (`req`) for the coroutine currently parking on `pd` in
+// `mode`. The op is stored in pd and its CQE wakes the parked waiter via
+// xr_netpoll_ready(pd, mode). req->timeout_ms > 0 attaches a native io_uring
+// linked timeout so the op self-cancels on deadline (CQE res == -ECANCELED);
+// <= 0 waits until the op naturally completes. On success returns 0 and pins pd;
+// on failure returns XR_URING_XFER_FALLBACK and pins nothing. The caller must
+// have already CAS-parked the coro on pd->rg/wg (see xr_yield_for_uring_io).
+XR_FUNC int xr_netpoll_uring_op_submit(XrPollDesc *pd, int mode, const XrUringReq *req);
+
+// Completion outcome categories returned by xr_netpoll_uring_xfer_result via
+// *out_kind, so the caller maps to its own error model without inspecting errno.
+typedef enum {
+    XR_URING_XFER_DATA = 0,     // res >= 0 bytes transferred (0 == EOF for recv)
+    XR_URING_XFER_TIMEOUT = 1,  // linked timeout fired
+    XR_URING_XFER_CLOSED = 2,   // fd closed while in flight
+    XR_URING_XFER_ERROR = 3     // other error; res holds -errno
+} XrUringXferKind;
+
+// Consume the completed op for `mode` after the waiter resumed. Returns the byte
+// count (>= 0) when *out_kind == XR_URING_XFER_DATA, otherwise a negative errno.
+// Releases the pd pin taken at submit; if a close raced the op, performs the
+// deferred pd free here (the waiter's continuation is the last reader).
+XR_FUNC long xr_netpoll_uring_xfer_result(XrPollDesc *pd, int mode, XrUringXferKind *out_kind);
+#endif
 
 #endif  // XNETPOLL_H

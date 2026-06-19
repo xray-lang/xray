@@ -17,6 +17,9 @@
 #include <string.h>
 #include <stdio.h>
 #include <ctype.h>
+#ifndef XR_OS_WINDOWS
+#include <unistd.h>
+#endif
 
 #define INITIAL_BUF_SIZE 4096
 #define MAX_HEADER_SIZE 256
@@ -120,6 +123,14 @@ XdapTransport *xdap_transport_stdio(void) {
 
     t->read_fd = xr_stdin_fd();
     t->write_fd = xr_stdout_fd();
+#ifndef XR_OS_WINDOWS
+    int protocol_fd = dup(t->write_fd);
+    if (protocol_fd < 0) {
+        xdap_transport_free(t);
+        return NULL;
+    }
+    t->write_fd = protocol_fd;
+#endif
 
     // Set stdin to non-blocking
     set_nonblock(t->read_fd);
@@ -352,7 +363,12 @@ void xdap_transport_free(XdapTransport *t) {
         xr_poll_destroy(&t->poll);
     }
 
-    if (t->type == XDAP_TRANSPORT_TCP_SERVER || t->type == XDAP_TRANSPORT_TCP_CLIENT) {
+    if (t->type == XDAP_TRANSPORT_STDIO) {
+#ifndef XR_OS_WINDOWS
+        if (t->write_fd >= 0 && t->write_fd != xr_stdout_fd())
+            close(t->write_fd);
+#endif
+    } else if (t->type == XDAP_TRANSPORT_TCP_SERVER || t->type == XDAP_TRANSPORT_TCP_CLIENT) {
         if (t->read_fd >= 0)
             xr_closesocket(t->read_fd);
         // For TCP, write_fd == read_fd; for safety, only close if different

@@ -21,8 +21,14 @@
 #include "../../src/runtime/symbol/xsymbol_table.h"
 #include "../../src/runtime/xisolate_api.h"
 #include "../../src/runtime/object/xarray.h"
+#include "../../src/runtime/object/xstring.h"
 #include "../../src/base/xmalloc.h"
 #include "../../src/base/xchecks.h"
+#include "../../src/coro/xyieldable.h"
+#include "../../src/coro/xnetpoll.h"
+#include "../../src/coro/xworker.h"
+#include "../../src/vm/xvm.h"  // xr_vm_yieldable_cfunction_new (XRS_EXPORT_YIELDABLE)
+#include "../../src/runtime/xisolate_internal.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -126,121 +132,313 @@ static XrValue io_readStdin(XrayIsolate *X, XrValue *args, int argc) {
     return xr_string_value(str);
 }
 
-// readFile(path) - Read file content
-static XrValue io_readFile(XrayIsolate *X, XrValue *args, int argc) {
-    if (argc < 1)
-        return xr_null();
-    const char *path = xrs_string_arg(args[0], NULL);
-    if (!path)
-        return xr_null();
+/* ========== io_uring async file I/O (Linux) ==========
+ *
+ * Regular files are always "ready" for epoll/kqueue, so readiness pollers cannot
+ * make file I/O async — the syscall blocks the worker. io_uring can: it submits
+ * a file read/write SQE and parks the coroutine until the CQE. These yieldable
+ * builtins use that on Linux when io_uring is active and a coroutine is running;
+ * everywhere else (Windows, macOS, the epoll fallback, or non-coroutine callers)
+ * they complete synchronously via the portable fopen/fread/fwrite path below.
+ */
+#if defined(XR_OS_LINUX) && defined(XR_HAS_IO_URING)
 
-    XR_DCHECK(path[0] != '\0', "io_readFile: path must be non-empty after validation");
+typedef enum {
+    FILE_IO_READ_BYTES,
+    FILE_IO_READ_STRING,
+    FILE_IO_WRITE
+} FileIoKind;
+
+typedef struct {
+    int fd;
+    XrPollDesc *pd;
+    char *rbuf;        // read: owned raw buffer (freed on completion)
+    const char *wbuf;  // write: borrowed source (rooted .xr arg)
+    size_t len;
+    size_t off;
+    FileIoKind kind;
+} FileIoState;
+
+static XrCFuncResult file_io_step(XrayIsolate *X, FileIoState *st, XrValue *result);
+
+static XrCFuncResult file_io_finish(XrayIsolate *X, FileIoState *st, bool ok, XrValue *result) {
+    XrValue r;
+    if (!ok) {
+        r = (st->kind == FILE_IO_WRITE) ? xr_bool(false) : xr_null();
+    } else if (st->kind == FILE_IO_WRITE) {
+        r = xr_bool(st->off == st->len);
+    } else if (st->kind == FILE_IO_READ_STRING) {
+        r = xr_string_value(xr_string_intern(X, st->rbuf, st->off, 0));
+    } else {  // FILE_IO_READ_BYTES
+        XrArray *arr = xr_array_bytes_new(xr_current_coro(X), (int32_t) st->off);
+        if (arr) {
+            memcpy(arr->data, st->rbuf, st->off);
+            arr->length = (int32_t) st->off;
+            r = xr_value_from_array(arr);
+        } else {
+            r = xr_null();
+        }
+    }
+    if (st->pd)
+        xr_netpoll_close(&((XrRuntime *) X->vm.runtime)->netpoll, st->pd);
+    if (st->fd >= 0)
+        close(st->fd);
+    if (st->rbuf)
+        xr_free(st->rbuf);
+    xr_free(st);
+    *result = r;
+    return XR_CFUNC_DONE;
+}
+
+// Fallback used when an SQE cannot be queued (submission queue momentarily full):
+// finish the remaining transfer synchronously with pread/pwrite at the offset.
+static XrCFuncResult file_io_sync_rest(XrayIsolate *X, FileIoState *st, XrValue *result) {
+    bool is_write = (st->kind == FILE_IO_WRITE);
+    while (st->off < st->len) {
+        ssize_t n = is_write ? pwrite(st->fd, st->wbuf + st->off, st->len - st->off, st->off)
+                             : pread(st->fd, st->rbuf + st->off, st->len - st->off, st->off);
+        if (n > 0) {
+            st->off += (size_t) n;
+            continue;
+        }
+        if (n == 0)
+            break;  // read EOF
+        if (errno == EINTR)
+            continue;
+        return file_io_finish(X, st, !is_write, result);  // read keeps partial; write fails
+    }
+    return file_io_finish(X, st, true, result);
+}
+
+static XrCFuncResult file_io_complete(XrayIsolate *X, int status, XrValue resume_value, void *ctx,
+                                      XrValue *result) {
+    (void) status;
+    (void) resume_value;
+    FileIoState *st = (FileIoState *) ctx;
+    bool is_write = (st->kind == FILE_IO_WRITE);
+    XrUringXferKind kind;
+    long n = xr_netpoll_uring_xfer_result(st->pd, is_write ? XR_POLL_WRITE : XR_POLL_READ, &kind);
+    if (kind != XR_URING_XFER_DATA)
+        return file_io_finish(X, st, !is_write && st->off > 0, result);
+    if (n > 0)
+        st->off += (size_t) n;
+    if (n > 0 && st->off < st->len)
+        return file_io_step(X, st, result);  // more to transfer
+    return file_io_finish(X, st, true, result);
+}
+
+static XrCFuncResult file_io_step(XrayIsolate *X, FileIoState *st, XrValue *result) {
+    bool is_write = (st->kind == FILE_IO_WRITE);
+    XrUringReq req = {
+        .kind = is_write ? XR_URING_OP_FILE_WRITE : XR_URING_OP_FILE_READ,
+        .buf = is_write ? (void *) (st->wbuf + st->off) : (void *) (st->rbuf + st->off),
+        .len = (unsigned) (st->len - st->off),
+        .offset = st->off,
+    };
+    XrCFuncResult cr;
+    if (xr_yield_for_uring_io(X, st->pd, is_write ? XR_POLL_WRITE : XR_POLL_READ, &req,
+                              file_io_complete, st, result, &cr))
+        return cr;
+    return file_io_sync_rest(X, st, result);  // SQ exhausted — finish synchronously
+}
+
+// Try the io_uring completion path. Returns true (and sets *out) if taken;
+// false if the caller should run the synchronous fopen/fread path. `rbuf` is an
+// owned buffer for reads (adopted by the state); `wbuf` is a borrowed source.
+static bool file_io_try_uring(XrayIsolate *X, int fd, FileIoKind kind, char *rbuf, const char *wbuf,
+                              size_t len, XrValue *result, XrCFuncResult *out) {
+    XrRuntime *rt = (XrRuntime *) X->vm.runtime;
+    if (!rt || !xr_current_coro(X) || !xr_netpoll_uring_active(&rt->netpoll))
+        return false;
+    XrPollDesc *pd = xr_netpoll_open(&rt->netpoll, fd);
+    if (!pd)
+        return false;
+    FileIoState *st = (FileIoState *) xr_calloc(1, sizeof(FileIoState));
+    if (!st) {
+        xr_netpoll_close(&rt->netpoll, pd);
+        return false;
+    }
+    st->fd = fd;
+    st->pd = pd;
+    st->kind = kind;
+    st->rbuf = rbuf;
+    st->wbuf = wbuf;
+    st->len = len;
+    *out = (len == 0) ? file_io_finish(X, st, true, result) : file_io_step(X, st, result);
+    return true;
+}
+#endif  // XR_OS_LINUX && XR_HAS_IO_URING
+
+// readFile(path) - Read file content (yieldable; io_uring async when available)
+static XrCFuncResult io_readFile(XrayIsolate *X, XrValue *args, int argc, XrValue *result) {
+    *result = xr_null();
+    if (argc < 1)
+        return XR_CFUNC_DONE;
+    const char *path = xrs_string_arg(args[0], NULL);
+    if (!path || path[0] == '\0')
+        return XR_CFUNC_DONE;
+
+#if defined(XR_OS_LINUX) && defined(XR_HAS_IO_URING)
+    {
+        int fd = open(path, O_RDONLY | O_CLOEXEC);
+        if (fd >= 0) {
+            struct stat sb;
+            if (fstat(fd, &sb) == 0 && S_ISREG(sb.st_mode) && sb.st_size >= 0 &&
+                sb.st_size <= IO_MAX_READ_BYTES) {
+                char *buf = (char *) xr_malloc((size_t) sb.st_size + 1);
+                if (buf) {
+                    XrCFuncResult out;
+                    if (file_io_try_uring(X, fd, FILE_IO_READ_STRING, buf, NULL,
+                                          (size_t) sb.st_size, result, &out))
+                        return out;
+                    xr_free(buf);  // not taken — fall through to the sync path
+                }
+            }
+            close(fd);
+        }
+    }
+#endif
+
     FILE *f = fopen(path, "rb");
     if (!f)
-        return xr_null();
-
+        return XR_CFUNC_DONE;
     fseek(f, 0, SEEK_END);
     long size = ftell(f);
     if (size < 0 || size > IO_MAX_READ_BYTES) {
         fclose(f);
-        return xr_null();
+        return XR_CFUNC_DONE;
     }
     fseek(f, 0, SEEK_SET);
-
     char *buf = (char *) xr_malloc((size_t) size + 1);
     if (!buf) {
         fclose(f);
-        return xr_null();
+        return XR_CFUNC_DONE;
     }
-
     size_t read_size = fread(buf, 1, (size_t) size, f);
     buf[read_size] = '\0';
     fclose(f);
-
-    XrString *str = xr_string_intern(X, buf, read_size, 0);
+    *result = xr_string_value(xr_string_intern(X, buf, read_size, 0));
     xr_free(buf);
-    return xr_string_value(str);
+    return XR_CFUNC_DONE;
 }
 
-// readFileBytes(path) - Read file as byte array (Array<uint8>)
-static XrValue io_readFileBytes(XrayIsolate *X, XrValue *args, int argc) {
+// readFileBytes(path) - Read file as byte array (yieldable; io_uring async when available)
+static XrCFuncResult io_readFileBytes(XrayIsolate *X, XrValue *args, int argc, XrValue *result) {
+    *result = xr_null();
     if (argc < 1)
-        return xr_null();
+        return XR_CFUNC_DONE;
     const char *path = xrs_string_arg(args[0], NULL);
     if (!path)
-        return xr_null();
+        return XR_CFUNC_DONE;
+
+#if defined(XR_OS_LINUX) && defined(XR_HAS_IO_URING)
+    {
+        int fd = open(path, O_RDONLY | O_CLOEXEC);
+        if (fd >= 0) {
+            struct stat sb;
+            if (fstat(fd, &sb) == 0 && S_ISREG(sb.st_mode) && sb.st_size >= 0 &&
+                sb.st_size <= IO_MAX_READ_BYTES) {
+                char *buf = (char *) xr_malloc((size_t) sb.st_size + 1);
+                if (buf) {
+                    XrCFuncResult out;
+                    if (file_io_try_uring(X, fd, FILE_IO_READ_BYTES, buf, NULL, (size_t) sb.st_size,
+                                          result, &out))
+                        return out;
+                    xr_free(buf);
+                }
+            }
+            close(fd);
+        }
+    }
+#endif
 
     FILE *f = fopen(path, "rb");
     if (!f)
-        return xr_null();
-
+        return XR_CFUNC_DONE;
     fseek(f, 0, SEEK_END);
     long size = ftell(f);
     if (size < 0 || size > IO_MAX_READ_BYTES) {
         fclose(f);
-        return xr_null();
+        return XR_CFUNC_DONE;
     }
     fseek(f, 0, SEEK_SET);
-
     XrArray *arr = xr_array_bytes_new(xr_current_coro(X), (int32_t) size);
     if (!arr) {
         fclose(f);
-        return xr_null();
+        return XR_CFUNC_DONE;
     }
-
     size_t read_size = fread(arr->data, 1, (size_t) size, f);
     fclose(f);
     arr->length = (int32_t) read_size;
-
-    return xr_value_from_array(arr);
+    *result = xr_value_from_array(arr);
+    return XR_CFUNC_DONE;
 }
 
-// writeFileBytes(path, bytes) - Write byte array to file
-static XrValue io_writeFileBytes(XrayIsolate *X, XrValue *args, int argc) {
-    (void) X;
+// writeFileBytes(path, bytes) - Write byte array (yieldable; io_uring async when available)
+static XrCFuncResult io_writeFileBytes(XrayIsolate *X, XrValue *args, int argc, XrValue *result) {
+    *result = xr_bool(false);
     if (argc < 2)
-        return xr_bool(false);
-
+        return XR_CFUNC_DONE;
     const char *path = xrs_string_arg(args[0], NULL);
     if (!path)
-        return xr_bool(false);
-
-    // Accept Array<uint8>
+        return XR_CFUNC_DONE;
     if (!xr_value_is_array(args[1]))
-        return xr_bool(false);
+        return XR_CFUNC_DONE;
     XrArray *arr = xr_value_to_array(args[1]);
     if (!arr || arr->elem_type != XR_ELEM_U8)
-        return xr_bool(false);
+        return XR_CFUNC_DONE;
+
+#if defined(XR_OS_LINUX) && defined(XR_HAS_IO_URING)
+    {
+        int fd = open(path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
+        if (fd >= 0) {
+            XrCFuncResult out;
+            if (file_io_try_uring(X, fd, FILE_IO_WRITE, NULL, (const char *) arr->data,
+                                  (size_t) arr->length, result, &out))
+                return out;
+            close(fd);
+        }
+    }
+#endif
 
     FILE *f = fopen(path, "wb");
     if (!f)
-        return xr_bool(false);
-
+        return XR_CFUNC_DONE;
     size_t written = fwrite(arr->data, 1, arr->length, f);
     fclose(f);
-
-    return xr_bool(written == (size_t) arr->length);
+    *result = xr_bool(written == (size_t) arr->length);
+    return XR_CFUNC_DONE;
 }
 
-// writeFile(path, content) - Write to file
-static XrValue io_writeFile(XrayIsolate *X, XrValue *args, int argc) {
-    (void) X;
+// writeFile(path, content) - Write string (yieldable; io_uring async when available)
+static XrCFuncResult io_writeFile(XrayIsolate *X, XrValue *args, int argc, XrValue *result) {
+    *result = xr_bool(false);
     if (argc < 2)
-        return xr_bool(false);
-
+        return XR_CFUNC_DONE;
     const char *path = xrs_string_arg(args[0], NULL);
     if (!path || !XR_IS_STRING(args[1]))
-        return xr_bool(false);
-
+        return XR_CFUNC_DONE;
     XrString *str = XR_TO_STRING(args[1]);
+
+#if defined(XR_OS_LINUX) && defined(XR_HAS_IO_URING)
+    {
+        int fd = open(path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
+        if (fd >= 0) {
+            XrCFuncResult out;
+            if (file_io_try_uring(X, fd, FILE_IO_WRITE, NULL, str->data, str->length, result, &out))
+                return out;
+            close(fd);
+        }
+    }
+#endif
+
     FILE *f = fopen(path, "wb");
     if (!f)
-        return xr_bool(false);
-
+        return XR_CFUNC_DONE;
     size_t written = fwrite(str->data, 1, str->length, f);
     fclose(f);
-
-    return xr_bool(written == str->length);
+    *result = xr_bool(written == str->length);
+    return XR_CFUNC_DONE;
 }
 
 // appendFile(path, content) - Append to file
@@ -1068,11 +1266,11 @@ XR_FUNC XrModule *xr_load_module_io(XrayIsolate *isolate) {
     // needed at module-load time.
 
     // File read/write
-    XRS_EXPORT(mod, isolate, "readFile", io_readFile);
-    XRS_EXPORT(mod, isolate, "readFileBytes", io_readFileBytes);
+    XRS_EXPORT_YIELDABLE(mod, isolate, "readFile", io_readFile);
+    XRS_EXPORT_YIELDABLE(mod, isolate, "readFileBytes", io_readFileBytes);
     XRS_EXPORT(mod, isolate, "readStdin", io_readStdin);
-    XRS_EXPORT(mod, isolate, "writeFile", io_writeFile);
-    XRS_EXPORT(mod, isolate, "writeFileBytes", io_writeFileBytes);
+    XRS_EXPORT_YIELDABLE(mod, isolate, "writeFile", io_writeFile);
+    XRS_EXPORT_YIELDABLE(mod, isolate, "writeFileBytes", io_writeFileBytes);
     XRS_EXPORT(mod, isolate, "appendFile", io_appendFile);
 
     // File checks

@@ -136,6 +136,65 @@ void xdap_send_output_event(XdapController *ctrl, const char *category, const ch
     xdap_send_event(ctrl, "output", body);
 }
 
+typedef struct {
+    FILE *file;
+    int saved_fd;
+    bool active;
+} XdapStdoutCapture;
+
+static void xdap_stdout_capture_begin(XdapStdoutCapture *cap) {
+    if (!cap)
+        return;
+    cap->file = NULL;
+    cap->saved_fd = -1;
+    cap->active = false;
+#ifndef XR_OS_WINDOWS
+    fflush(stdout);
+    FILE *tmp = tmpfile();
+    if (!tmp)
+        return;
+    int saved = dup(STDOUT_FILENO);
+    if (saved < 0) {
+        fclose(tmp);
+        return;
+    }
+    if (dup2(fileno(tmp), STDOUT_FILENO) < 0) {
+        close(saved);
+        fclose(tmp);
+        return;
+    }
+    cap->file = tmp;
+    cap->saved_fd = saved;
+    cap->active = true;
+#endif
+}
+
+static void xdap_stdout_capture_end(XdapController *ctrl, XdapStdoutCapture *cap) {
+    if (!cap || !cap->active)
+        return;
+#ifndef XR_OS_WINDOWS
+    fflush(stdout);
+    dup2(cap->saved_fd, STDOUT_FILENO);
+    close(cap->saved_fd);
+    cap->saved_fd = -1;
+
+    if (cap->file) {
+        char buf[4096];
+        rewind(cap->file);
+        for (;;) {
+            size_t n = fread(buf, 1, sizeof(buf) - 1, cap->file);
+            if (n == 0)
+                break;
+            buf[n] = '\0';
+            xdap_send_output_event(ctrl, "stdout", buf);
+        }
+        fclose(cap->file);
+        cap->file = NULL;
+    }
+    cap->active = false;
+#endif
+}
+
 // ============================================================================
 // Request Handlers
 // ============================================================================
@@ -1096,8 +1155,11 @@ int xdap_run(XdapController *ctrl) {
                 // First launch: compile and execute program
                 ctrl->program_launched = true;
                 XrProto *proto = NULL;
+                XdapStdoutCapture out_cap;
+                xdap_stdout_capture_begin(&out_cap);
                 int result =
                     xray_isolate_dofile_debug(ctrl->isolate, ctrl->program_path, (void **) &proto);
+                xdap_stdout_capture_end(ctrl, &out_cap);
                 ctrl->debug_proto = proto;
 
                 if (ctrl->vm_state == XDAP_VM_PAUSED) {
@@ -1116,7 +1178,10 @@ int xdap_run(XdapController *ctrl) {
                 }
             } else {
                 // Resume after pause: continue execution from where we stopped
+                XdapStdoutCapture out_cap;
+                xdap_stdout_capture_begin(&out_cap);
                 XdapResumeResult resume = xr_debug_resume_execution(ctrl->isolate);
+                xdap_stdout_capture_end(ctrl, &out_cap);
 
                 switch (resume) {
                     case XDAP_RESUME_STOPPED:

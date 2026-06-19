@@ -130,9 +130,14 @@ static const XrCliOptionSpec lsp_options[] = {
 #endif
 
 #ifdef XR_HAS_DAP
-static const XrCliOptionSpec dap_options[] = {{"port", 'p', XR_CLI_VALUE_INT, false, false, "PORT",
-                                               "TCP port (0 for random, omit for stdio)"},
-                                              XR_CLI_OPT_END};
+static const XrCliOptionSpec dap_options[] = {
+    {"port", 'p', XR_CLI_VALUE_INT, false, false, "PORT",
+     "TCP port (0 for random, omit for stdio)"},
+    {"native", 'N', XR_CLI_VALUE_NONE, false, false, NULL,
+     "Debug a native AOT binary via the lldb/gdb backend"},
+    {"debugger", 0, XR_CLI_VALUE_STRING, false, false, "PATH",
+     "Path to lldb-dap for native mode (default: autodetect)"},
+    XR_CLI_OPT_END};
 #endif
 
 #ifdef XR_HAS_MCP

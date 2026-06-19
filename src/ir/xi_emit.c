@@ -789,6 +789,10 @@ XR_FUNC XiEmitStatus xi_emit(XiFunc *f, struct XrayIsolate *isolate, struct XrPr
         xr_free(rpo_order);
         return XI_EMIT_ERR_INTERNAL;
     }
+    if (isolate && f->name && f->name[0])
+        ctx.proto->name = xr_compile_time_intern(isolate, f->name, strlen(f->name));
+    if (f->source_file && f->source_file[0])
+        ctx.proto->source_file = xr_strdup(f->source_file);
 
     /* Top-level variables are stored in the name-keyed globals dict
      * via OP_GETGLOBAL / OP_SETGLOBAL.  The legacy shared array is

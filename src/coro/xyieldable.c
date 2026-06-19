@@ -197,6 +197,83 @@ XrCFuncResult xr_yield_for_io(XrayIsolate *X, int fd, int events, int64_t timeou
     return XR_CFUNC_BLOCKED;
 }
 
+#if defined(XR_OS_LINUX) && defined(XR_HAS_IO_URING)
+// io_uring completion-mode park: same coroutine registration as the I/O branch
+// of xr_yield_for_io, but submits a recv/send op (with optional linked timeout)
+// in place of arming a readiness poll-add. The op's CQE wakes the coro; the
+// continuation reads the byte count via xr_netpoll_uring_xfer_result.
+bool xr_yield_for_uring_io(XrayIsolate *X, struct XrPollDesc *pd, int mode,
+                           const struct XrUringReq *req, XrContinuation cont, void *user_data,
+                           XrValue *result, XrCFuncResult *out) {
+    (void) result;
+    XrCoroutine *coro = get_current_coro(X);
+    if (!coro || !pd || !req)
+        return false;
+
+    int fd = pd->fd;
+    int events = (mode == XR_POLL_WRITE) ? XR_WAIT_WRITE : XR_WAIT_READ;
+    _Atomic uintptr_t *gpp = (mode == XR_POLL_WRITE) ? &pd->wg : &pd->rg;
+    XrUringOp *op = (mode == XR_POLL_WRITE) ? &pd->uring_wop : &pd->uring_rop;
+
+    xr_netpoll_bind_worker(pd);
+    pd->user_data = coro;
+
+    for (;;) {
+        uintptr_t old = atomic_load(gpp);
+
+        if (old == XR_PD_READY) {
+            // No poll-add is armed for a completion direction, so a stale READY
+            // is unexpected; consume it and submit the op anyway (we want the
+            // recv/send result, not a bare readiness signal).
+            atomic_compare_exchange_strong(gpp, &old, XR_PD_NIL);
+            continue;
+        }
+        if (old != XR_PD_NIL) {
+            *out = XR_CFUNC_ERROR;  // another coro already parked on this direction
+            return true;
+        }
+
+        // old == NIL: set up the wait + continuation frame, then CAS NIL -> coro.
+        // timeout_ms is delivered to the kernel via the op's linked timeout, so
+        // no timer-wheel deadline is armed here (-1).
+        if (!yield_prepare_io_wait(coro, fd, events, -1)) {
+            *out = XR_CFUNC_ERROR;
+            return true;
+        }
+        if (!yield_setup_continuation(X, coro, cont, user_data)) {
+            yield_abort_io_wait(coro, (XrCoroBlockSnapshot) {0});
+            *out = XR_CFUNC_ERROR;
+            return true;
+        }
+        XrCoroBlockSnapshot block_snapshot = xr_coro_begin_reversible_block(coro);
+        yield_commit_io_wait(coro);
+
+        uintptr_t expect = XR_PD_NIL;
+        if (!atomic_compare_exchange_strong(gpp, &expect, (uintptr_t) coro)) {
+            yield_abort_io_wait(coro, block_snapshot);
+            continue;  // raced to READY — retry
+        }
+
+        // Claim the direction for completion before submitting: makes the op's
+        // CQE the sole waker (iouring_dispatch_cqe drops a stale poll-add for an
+        // active direction, and xr_netpoll_close skips its readiness unblock).
+        atomic_store(&op->active, true);
+        atomic_fetch_add(&pd->netpoll->waiters, 1);
+        if (xr_netpoll_uring_op_submit(pd, mode, req) != 0) {
+            // Submission queue exhausted (or not io_uring): unwind cleanly and
+            // let the caller fall back to the readiness path.
+            atomic_store(&op->active, false);
+            atomic_fetch_sub(&pd->netpoll->waiters, 1);
+            atomic_exchange(gpp, XR_PD_NIL);
+            yield_abort_io_wait(coro, block_snapshot);
+            return false;
+        }
+        *out = XR_CFUNC_BLOCKED;
+        return true;
+    }
+}
+#endif
+
 // xr_yield_for_timeout - Wait for timeout and yield (convenience function)
 //
 // Equivalent to xr_yield_for_io(X, -1, 0, timeout_ms, cont, user_data)
