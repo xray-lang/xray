@@ -330,6 +330,19 @@ static bool cg_coro_value_may_hold_frame_root(XiCgenCtx *ctx, const XiFunc *f, c
            xi_coro_value_is_aggregate_await_tasks(f, v);
 }
 
+static bool cg_coro_value_is_borrowed_unbox_alias(const XiValue *v) {
+    return v && v->op == XI_UNBOX && v->nargs >= 1 && v->args[0] && cg_rep(v) == XR_REP_PTR &&
+           cg_rep(v->args[0]) == XR_REP_TAGGED && xi_coro_value_rep_can_trace_root(v);
+}
+
+static bool cg_coro_value_can_trace_frame_slot(const XiValue *v) {
+    return xi_coro_value_rep_can_trace_root(v) && !cg_coro_value_is_borrowed_unbox_alias(v);
+}
+
+static bool cg_coro_value_needs_frame_arc_release(const XiValue *v) {
+    return xi_coro_value_needs_arc_release(v) && !cg_coro_value_is_borrowed_unbox_alias(v);
+}
+
 static size_t cg_coro_align_up(size_t size, size_t align) {
     if (align <= 1)
         return size;
@@ -2397,6 +2410,8 @@ static void emit_coro_frame_slot_as_xrvalue(FILE *out, const XrType *type, XrRep
         fprintf(out, "%s%u", slot_prefix, slot_id);
     } else if (rep == XR_REP_PTR && type && type->kind == XR_KIND_STRING) {
         fprintf(out, "xr_str_value_from_ptr(%s%u)", slot_prefix, slot_id);
+    } else if (rep == XR_REP_PTR && cg_type_is_class_instance_ptr(type)) {
+        fprintf(out, "xrt_box_obj(%s%u)", slot_prefix, slot_id);
     } else if (rep == XR_REP_PTR) {
         fprintf(out, "xr_mkptr(%s%u%s", slot_prefix, slot_id, cg_ptr_box_suffix_for_type(type));
     } else if (rep == XR_REP_F64) {
@@ -2412,7 +2427,7 @@ static void emit_coro_frame_value_visit(XiCgenCtx *ctx, FILE *out, const XiFunc 
                                         const char *helper, bool with_visitor) {
     (void) ctx;
     for (uint16_t i = 0; i < f->nparams; i++) {
-        if (!xi_coro_value_rep_can_trace_root(f->params[i]) ||
+        if (!cg_coro_value_can_trace_frame_slot(f->params[i]) ||
             !cg_coro_value_live_across_suspend(ctx, f, f->params[i]))
             continue;
         fprintf(out, "    %s(", helper);
@@ -2426,7 +2441,7 @@ static void emit_coro_frame_value_visit(XiCgenCtx *ctx, FILE *out, const XiFunc 
         if (!blk)
             continue;
         for (const XiPhi *phi = blk->phis; phi; phi = phi->next) {
-            if (!xi_coro_value_rep_can_trace_root(&phi->value) ||
+            if (!cg_coro_value_can_trace_frame_slot(&phi->value) ||
                 !cg_coro_value_live_across_suspend(ctx, f, &phi->value))
                 continue;
             fprintf(out, "    %s(", helper);
@@ -2438,7 +2453,7 @@ static void emit_coro_frame_value_visit(XiCgenCtx *ctx, FILE *out, const XiFunc 
         }
         for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
             const XiValue *v = blk->values[vi];
-            if (!cg_coro_value_needs_frame(ctx, f, v) || !xi_coro_value_rep_can_trace_root(v) ||
+            if (!cg_coro_value_needs_frame(ctx, f, v) || !cg_coro_value_can_trace_frame_slot(v) ||
                 !cg_coro_value_may_hold_frame_root(ctx, f, v))
                 continue;
             fprintf(out, "    %s(", helper);
@@ -2513,6 +2528,16 @@ static bool cg_coro_plan_slot_is_physical(const XiFunc *f, const XiCoroSlot *s) 
     return s->kind != XI_CORO_SLOT_VALUE || cg_coro_value_has_storage(f, s->value);
 }
 
+static bool cg_coro_plan_slot_is_physical_root(const XiFunc *f, const XiCoroSlot *s) {
+    return s && s->frame_root && cg_coro_plan_slot_is_physical(f, s) &&
+           cg_coro_value_can_trace_frame_slot(s->value);
+}
+
+static bool cg_coro_plan_slot_is_physical_release(const XiFunc *f, const XiCoroSlot *s) {
+    return s && s->frame_release && cg_coro_plan_slot_is_physical(f, s) &&
+           cg_coro_value_needs_frame_arc_release(s->value);
+}
+
 /* Physical GC-root count for the coroutine frame: each plan slot whose logical
  * frame_root survives the storage filter, plus the direct suspend-call pointers.
  * Matches what emit_coro_frame_value_visit traces by construction. */
@@ -2522,7 +2547,7 @@ static uint32_t cg_coro_plan_frame_roots(XiCgenCtx *ctx, const XiFunc *f, const 
         return count;
     for (uint32_t i = 0; i < plan->nslots; i++) {
         const XiCoroSlot *s = &plan->slots[i];
-        if (s->frame_root && cg_coro_plan_slot_is_physical(f, s))
+        if (cg_coro_plan_slot_is_physical_root(f, s))
             count++;
     }
     return count;
@@ -2531,7 +2556,7 @@ static uint32_t cg_coro_plan_frame_roots(XiCgenCtx *ctx, const XiFunc *f, const 
 static void emit_coro_frame_arc_release(XiCgenCtx *ctx, FILE *out, const XiFunc *f) {
     (void) ctx;
     for (uint16_t i = 0; i < f->nparams; i++) {
-        if (!xi_coro_value_needs_arc_release(f->params[i]) ||
+        if (!cg_coro_value_needs_frame_arc_release(f->params[i]) ||
             !cg_coro_value_live_across_suspend(ctx, f, f->params[i]))
             continue;
         fprintf(out, "    xrt_release(");
@@ -2543,7 +2568,7 @@ static void emit_coro_frame_arc_release(XiCgenCtx *ctx, FILE *out, const XiFunc 
         if (!blk)
             continue;
         for (const XiPhi *phi = blk->phis; phi; phi = phi->next) {
-            if (!xi_coro_value_needs_arc_release(&phi->value) ||
+            if (!cg_coro_value_needs_frame_arc_release(&phi->value) ||
                 !cg_coro_value_live_across_suspend(ctx, f, &phi->value))
                 continue;
             fprintf(out, "    xrt_release(");
@@ -2553,7 +2578,8 @@ static void emit_coro_frame_arc_release(XiCgenCtx *ctx, FILE *out, const XiFunc 
         }
         for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
             const XiValue *v = blk->values[vi];
-            if (!cg_coro_value_needs_frame(ctx, f, v) || !xi_coro_value_needs_arc_release(v) ||
+            if (!cg_coro_value_needs_frame(ctx, f, v) ||
+                !cg_coro_value_needs_frame_arc_release(v) ||
                 !cg_coro_value_live_across_suspend(ctx, f, v))
                 continue;
             fprintf(out, "    xrt_release(");
@@ -2574,7 +2600,7 @@ static uint32_t cg_coro_plan_frame_releases(XiCgenCtx *ctx, const XiFunc *f,
         return count;
     for (uint32_t i = 0; i < plan->nslots; i++) {
         const XiCoroSlot *s = &plan->slots[i];
-        if (s->frame_release && cg_coro_plan_slot_is_physical(f, s))
+        if (cg_coro_plan_slot_is_physical_release(f, s))
             count++;
     }
     return count;

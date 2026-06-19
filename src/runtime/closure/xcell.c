@@ -33,6 +33,17 @@ XrCell *xr_cell_new(XrayIsolate *isolate, struct XrCoroutine *coro) {
     }
 
     xr_gc_header_init_type(&cell->gc, XR_TCELL);
+    if (coro && coro->coro_gc) {
+        XR_OBJ_SET_FLAG(&cell->gc, XR_OBJ_CYCLE_CANDIDATE);
+    }
     cell->value = xr_null();
     return cell;
+}
+
+XR_FUNC void xr_gc_destroy_cell(XrGCHeader *obj, XrCoroGC *owning_gc) {
+    if (!obj)
+        return;
+    XrCell *cell = (XrCell *) obj;
+    xr_rc_release_value(owning_gc, cell->value);
+    cell->value = xr_null();
 }

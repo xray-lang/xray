@@ -70,7 +70,8 @@ const XrTypeOps g_type_ops[XGC_MAX_TYPES] = {
     [XR_TINSTANCE] = {.destroy = xr_gc_destroy_instance,
                       .deep_copy = xr_deep_copy_instance_with_ctx,
                       .to_shared = xr_to_shared_instance},
-    [XR_TFUNCTION] = {.deep_copy = xr_deep_copy_closure_with_ctx,
+    [XR_TFUNCTION] = {.destroy = xr_gc_destroy_closure,
+                      .deep_copy = xr_deep_copy_closure_with_ctx,
                       .to_shared = xr_to_shared_closure},
 
     // Channels — already shared at construction; pass-through across coro.
@@ -90,7 +91,7 @@ const XrTypeOps g_type_ops[XGC_MAX_TYPES] = {
     // value, matching the pre-table default).
     [XR_TCOROUTINE] = {.destroy = xr_gc_destroy_coroutine},
     [XR_TTASK] = {.destroy = xr_gc_destroy_task},
-    [XR_TCELL] = {0},
+    [XR_TCELL] = {.destroy = xr_gc_destroy_cell, .deep_copy = xr_deep_copy_cell_with_ctx},
     [XR_TBOUND_METHOD] = {0},
     [XR_TMODULE] = {0},
     [XR_TERROR] = {0},

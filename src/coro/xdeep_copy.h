@@ -154,6 +154,7 @@ XR_FUNC XrValue xr_deep_copy_map_with_ctx(struct XrCopyContext *ctx, struct XrGC
 XR_FUNC XrValue xr_deep_copy_set_with_ctx(struct XrCopyContext *ctx, struct XrGCHeader *obj);
 XR_FUNC XrValue xr_deep_copy_instance_with_ctx(struct XrCopyContext *ctx, struct XrGCHeader *obj);
 XR_FUNC XrValue xr_deep_copy_closure_with_ctx(struct XrCopyContext *ctx, struct XrGCHeader *obj);
+XR_FUNC XrValue xr_deep_copy_cell_with_ctx(struct XrCopyContext *ctx, struct XrGCHeader *obj);
 
 XR_FUNC XrValue xr_to_shared_array(struct XrayIsolate *X, struct XrGCHeader *obj);
 XR_FUNC XrValue xr_to_shared_map(struct XrayIsolate *X, struct XrGCHeader *obj);
