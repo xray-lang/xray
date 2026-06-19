@@ -6,6 +6,7 @@
 #include "../../../src/ir/xi_verify.h"
 #include "../../../src/ir/xi_tbaa.h"
 #include "../../../src/ir/xi_backend.h"
+#include "../../../src/ir/xi_coro_analyze.h"
 #include "../../../src/ir/xi.h"
 #include "../../../src/runtime/value/xtype.h"
 #include "../../../src/base/xmalloc.h"
@@ -777,6 +778,160 @@ TEST(stage_invariant_mask_missing_bits_fails) {
     xi_func_free(f);
 }
 
+/* ========== Coroutine plan contracts ========== */
+
+TEST(coro_plan_accepts_dense_state_ids) {
+    XiFunc *f = make_func("coro_plan_dense");
+    ASSERT(f != NULL);
+    XiBlock *entry = f->entry;
+
+    XiValue *susp = xi_value_new(f, entry, XI_YIELD, &stub_unit, 0);
+    XiValue *ret = xi_const_int(f, entry, 1, &stub_int);
+    ASSERT(susp != NULL);
+    ASSERT(ret != NULL);
+    xi_block_set_return(entry, ret);
+
+    XiCoroSuspendPoint points[1] = {{0}};
+    points[0].state_id = 1;
+    points[0].op = susp;
+    points[0].kind = XI_CORO_SUSP_YIELD;
+
+    XiCoroPlan plan = {0};
+    plan.is_coroutine = true;
+    plan.nstates = 1;
+    plan.points = points;
+    f->coro_plan = &plan;
+
+    ASSERT(verify_ok(f));
+    f->coro_plan = NULL;
+    xi_func_free(f);
+}
+
+TEST(coro_plan_rejects_sparse_state_id) {
+    XiFunc *f = make_func("coro_plan_sparse");
+    ASSERT(f != NULL);
+    XiBlock *entry = f->entry;
+
+    XiValue *susp = xi_value_new(f, entry, XI_YIELD, &stub_unit, 0);
+    XiValue *ret = xi_const_int(f, entry, 1, &stub_int);
+    ASSERT(susp != NULL);
+    ASSERT(ret != NULL);
+    xi_block_set_return(entry, ret);
+
+    XiCoroSuspendPoint points[1] = {{0}};
+    points[0].state_id = 2;
+    points[0].op = susp;
+    points[0].kind = XI_CORO_SUSP_YIELD;
+
+    XiCoroPlan plan = {0};
+    plan.is_coroutine = true;
+    plan.nstates = 1;
+    plan.points = points;
+    f->coro_plan = &plan;
+
+    ASSERT(verify_fail(f));
+    f->coro_plan = NULL;
+    xi_func_free(f);
+}
+
+TEST(coro_plan_rejects_live_value_without_slot) {
+    XiFunc *f = make_func("coro_plan_live_no_slot");
+    ASSERT(f != NULL);
+    XiBlock *entry = f->entry;
+
+    XiValue *susp = xi_value_new(f, entry, XI_YIELD, &stub_unit, 0);
+    XiValue *ret = xi_const_int(f, entry, 1, &stub_int);
+    ASSERT(susp != NULL);
+    ASSERT(ret != NULL);
+    xi_block_set_return(entry, ret);
+
+    XiValue *live[1] = {ret};
+    XiCoroSuspendPoint points[1] = {{0}};
+    points[0].state_id = 1;
+    points[0].op = susp;
+    points[0].kind = XI_CORO_SUSP_YIELD;
+    points[0].live = live;
+    points[0].nlive = 1;
+
+    XiCoroPlan plan = {0};
+    plan.is_coroutine = true;
+    plan.nstates = 1;
+    plan.points = points;
+    f->coro_plan = &plan;
+
+    ASSERT(verify_fail(f));
+    f->coro_plan = NULL;
+    xi_func_free(f);
+}
+
+TEST(coro_plan_rejects_stale_point_op) {
+    XiFunc *f = make_func("coro_plan_stale_op");
+    ASSERT(f != NULL);
+    XiBlock *entry = f->entry;
+
+    XiValue *susp = xi_value_new(f, entry, XI_YIELD, &stub_unit, 0);
+    XiValue *ret = xi_const_int(f, entry, 1, &stub_int);
+    ASSERT(susp != NULL);
+    ASSERT(ret != NULL);
+    xi_block_set_return(entry, ret);
+
+    XiValue stale = *susp;
+    stale.id = susp->id + 100;
+    XiCoroSuspendPoint points[1] = {{0}};
+    points[0].state_id = 1;
+    points[0].op = &stale;
+    points[0].kind = XI_CORO_SUSP_YIELD;
+
+    XiCoroPlan plan = {0};
+    plan.is_coroutine = true;
+    plan.nstates = 1;
+    plan.points = points;
+    f->coro_plan = &plan;
+
+    ASSERT(verify_fail(f));
+    f->coro_plan = NULL;
+    xi_func_free(f);
+}
+
+TEST(coro_plan_rejects_root_count_mismatch) {
+    XiFunc *f = make_func("coro_plan_root_count");
+    ASSERT(f != NULL);
+    XiBlock *entry = f->entry;
+
+    XiValue *susp = xi_value_new(f, entry, XI_YIELD, &stub_unit, 0);
+    XiValue *ret = xi_const_int(f, entry, 1, &stub_int);
+    ASSERT(susp != NULL);
+    ASSERT(ret != NULL);
+    xi_block_set_return(entry, ret);
+
+    XiCoroSuspendPoint points[1] = {{0}};
+    points[0].state_id = 1;
+    points[0].op = susp;
+    points[0].kind = XI_CORO_SUSP_YIELD;
+
+    XiCoroSlot slots[1] = {{0}};
+    slots[0].value = ret;
+    slots[0].type = ret->type;
+    slots[0].logical_rep = XR_REP_TAGGED;
+    slots[0].kind = XI_CORO_SLOT_VALUE;
+    slots[0].is_root = true;
+    slots[0].live_across = true;
+    slots[0].frame_root = true;
+
+    XiCoroPlan plan = {0};
+    plan.is_coroutine = true;
+    plan.nstates = 1;
+    plan.points = points;
+    plan.slots = slots;
+    plan.nslots = 1;
+    plan.root_count = 0;
+    f->coro_plan = &plan;
+
+    ASSERT(verify_fail(f));
+    f->coro_plan = NULL;
+    xi_func_free(f);
+}
+
 /* ========== Backend legality ========== */
 
 TEST(backend_rejects_unlowered_iter_op) {
@@ -1084,6 +1239,11 @@ int main(void) {
     run_closed_stage_rejects_bad_upval_index();
     run_repped_stage_rejects_box_i64_rep();
     run_stage_invariant_mask_missing_bits_fails();
+    run_coro_plan_accepts_dense_state_ids();
+    run_coro_plan_rejects_sparse_state_id();
+    run_coro_plan_rejects_live_value_without_slot();
+    run_coro_plan_rejects_stale_point_op();
+    run_coro_plan_rejects_root_count_mismatch();
     run_backend_rejects_unlowered_iter_op();
     run_backend_rejects_malformed_call_method();
 
