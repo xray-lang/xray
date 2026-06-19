@@ -320,7 +320,7 @@ static bool cg_coro_value_needs_frame(XiCgenCtx *ctx, const XiFunc *f, const XiV
 }
 
 static bool cg_coro_phi_needs_frame(XiCgenCtx *ctx, const XiFunc *f, const XiPhi *phi) {
-    return phi && cg_coro_value_live_across_suspend(ctx, f, &phi->value);
+    return cg_phi_has_storage(phi) && cg_coro_value_live_across_suspend(ctx, f, &phi->value);
 }
 
 static bool cg_coro_value_may_hold_frame_root(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v) {
@@ -1014,6 +1014,8 @@ static void emit_coro_local_declarations(XiCgenCtx *ctx, FILE *out, const XiFunc
         if (!blk)
             continue;
         for (const XiPhi *phi = blk->phis; phi; phi = phi->next) {
+            if (!cg_phi_has_storage(phi))
+                continue;
             if (cg_coro_phi_needs_frame(ctx, f, phi))
                 continue;
             /* Declare with the storage rep (matches the value emission and the

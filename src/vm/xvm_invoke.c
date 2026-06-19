@@ -475,12 +475,14 @@ XR_FUNC XrDispatchAction vm_invoke_task_handle(XrayIsolate *isolate, XrVMContext
     XrTask *task = xr_value_to_task(receiver);
     if (nargs == 0 && method_symbol == SYMBOL_CANCEL) {
         XrCoroutine *coro = xr_task_executor_peek(task);
-        if (coro && !xr_task_is_done(task)) {
+        if (!xr_task_is_done(task) && coro) {
             uint32_t before_cancel_flags = xr_coro_flags_load(coro);
             xr_coro_cancel(coro);
             xr_task_cancel(task);
             xr_coro_wake_waiter(isolate, coro);
             vm_task_recycle_cancelled_executor(task, coro, before_cancel_flags);
+        } else if (!xr_task_is_done(task)) {
+            xr_task_cancel(task);
         }
         base[a] = xr_null();
         return XR_DISP_NEXT;

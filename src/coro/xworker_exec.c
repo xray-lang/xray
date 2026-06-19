@@ -568,6 +568,12 @@ exec_fast:  // Fast re-dispatch entry: local_active_coros already correct
     // BLOCKED fast re-dispatch: skip full result handling/reductions tracking
     // for maximum throughput. Optimal for serial message chains (pingpong, ring).
     // BLOCKED flag already set by the active backend.
+    bool cancel_observed =
+        xr_coro_flags_has(coro, XR_CORO_FLG_CANCEL_REQUESTED | XR_CORO_FLG_CANCELLED);
+    if (result.kind == XR_CORO_RUN_BLOCKED && cancel_observed) {
+        result = xr_coro_run_result(XR_CORO_RUN_CANCELLED);
+        goto normal_result_path;
+    }
     if (result.kind == XR_CORO_RUN_BLOCKED && fast_dispatch_budget <= 1) {
         p->stats.fast_dispatch_budget_stop_count++;
     }
@@ -612,7 +618,7 @@ exec_fast:  // Fast re-dispatch entry: local_active_coros already correct
 
 normal_result_path:
     // Check cancel flag (sysmon may have marked it)
-    if (xr_coro_flags_has(coro, XR_CORO_FLG_CANCEL_REQUESTED)) {
+    if (xr_coro_flags_has(coro, XR_CORO_FLG_CANCEL_REQUESTED | XR_CORO_FLG_CANCELLED)) {
         result = xr_coro_run_result(XR_CORO_RUN_CANCELLED);
     }
 

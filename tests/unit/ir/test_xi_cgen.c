@@ -3542,6 +3542,34 @@ TEST(cgen_coro_scalar_channel_send_skips_clone) {
     xi_func_free(ir);
 }
 
+TEST(cgen_coro_unit_match_send_omits_void_phi) {
+    const char *src = "fn recv_timeout_until_close(ch: Channel<int>, done: Channel<int>) {\n"
+                      "    match (ch.recvTimeout(1)) {\n"
+                      "        Recv.Value(value) -> done.send(value)\n"
+                      "        _ -> done.send(-1)\n"
+                      "    }\n"
+                      "}\n"
+                      "let ch = new Channel<int>(0)\n"
+                      "let done = new Channel<int>(1)\n"
+                      "go recv_timeout_until_close(ch, done)\n"
+                      "ch.close()\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "AOT unit match coroutine should generate");
+    assert(contains(code, "xr_aot_chan_send_i64(ctx,") &&
+           "unit match branches should still emit typed channel sends");
+    assert(!contains(code, "phi") && "unit/void phi values should not materialize in C");
+
+    printf("  Generated unit match send without void phi %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_coro_scalar_channel_try_send_uses_typed_bridge) {
     const char *src = "let ch = new Channel<int>(1)\n"
                       "let ok = ch.trySend(42)\n"
@@ -4448,6 +4476,7 @@ int main(void) {
     run_cgen_coro_sync_go_wrappers_only_for_go_targets();
     run_cgen_coro_channel_send_clones_value();
     run_cgen_coro_scalar_channel_send_skips_clone();
+    run_cgen_coro_unit_match_send_omits_void_phi();
     run_cgen_coro_scalar_channel_try_send_uses_typed_bridge();
     run_cgen_coro_builtin_no_payload_enum_fields_skip_bridge();
     run_cgen_coro_await_clones_tagged_result();

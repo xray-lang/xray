@@ -181,6 +181,10 @@ static bool cg_is_void_like(const XiValue *v) {
     return false;
 }
 
+static bool cg_phi_has_storage(const XiPhi *phi) {
+    return phi && !cg_is_void_like(&phi->value);
+}
+
 static const XaotBundle *cg_ctx_aot_bundle(const XiCgenCtx *ctx);
 
 #include "xi_cgen_type_helpers.inc.c"
@@ -2194,6 +2198,8 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
 static void emit_phi_copies(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiBlock *target,
                             uint16_t pred_idx) {
     for (const XiPhi *phi = target->phis; phi; phi = phi->next) {
+        if (!cg_phi_has_storage(phi))
+            continue;
         if (cg_value_traces_to_inlined_struct(f, &phi->value))
             continue;
         if (!cg_func_needs_aot_coro_ctx(ctx, f) &&
@@ -2549,6 +2555,8 @@ static void emit_declarations(XiCgenCtx *ctx, FILE *out, const XiFunc *f) {
 
         /* Phi variables (always pre-declared) */
         for (const XiPhi *phi = blk->phis; phi; phi = phi->next) {
+            if (!cg_phi_has_storage(phi))
+                continue;
             if (cg_value_traces_to_inlined_struct(f, &phi->value))
                 continue;
             if (cg_value_is_elided_heap_struct_alias(ctx, f, &phi->value))

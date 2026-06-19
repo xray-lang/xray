@@ -934,6 +934,8 @@ void xr_coro_cancel(XrCoroutine *coro) {
     if (!coro || xr_coro_flags_has(coro, XR_CORO_FLG_DONE))
         return;
 
+    xr_coro_flags_set(coro, XR_CORO_FLG_CANCEL_REQUESTED);
+
     bool timed = coro->ext && atomic_load_explicit(&coro->ext->timer_active, memory_order_relaxed);
 
     if (coro->ext && !timed) {
@@ -942,7 +944,6 @@ void xr_coro_cancel(XrCoroutine *coro) {
         if (wait_ch && !xr_channel_remove_waiter(wait_ch, coro)) {
             // A concurrent send/recv/close dequeued the waiter first and owns
             // its wake. Cooperative cancellation only.
-            xr_coro_flags_set(coro, XR_CORO_FLG_CANCEL_REQUESTED);
             return;
         }
     }
@@ -959,7 +960,8 @@ void xr_coro_cancel(XrCoroutine *coro) {
 
     // Set cancelled and done flags
     xr_coro_flags_set(coro, XR_CORO_FLG_CANCELLED | XR_CORO_FLG_DONE);
-    xr_coro_flags_clear(coro, XR_CORO_FLG_BLOCKED | XR_CORO_FLG_RUNNING | XR_CORO_FLG_READY);
+    xr_coro_flags_clear(coro, XR_CORO_FLG_CANCEL_REQUESTED | XR_CORO_FLG_BLOCKED |
+                                  XR_CORO_FLG_RUNNING | XR_CORO_FLG_READY);
 
     // Clear blocked info
     XrCoroExt *cancel_ext = coro->ext;
