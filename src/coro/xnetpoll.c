@@ -312,6 +312,22 @@ struct XrCoroutine *xr_netpoll_unblock(XrPollDesc *pd, int mode, bool io_ready) 
 void xr_netpoll_ready(XrReadyList *list, XrPollDesc *pd, int mode) {
     XR_DCHECK(list != NULL, "netpoll_ready: NULL list");
     XR_DCHECK(pd != NULL, "netpoll_ready: NULL pd");
+
+#if defined(XR_OS_LINUX) && defined(XR_HAS_IO_URING)
+    /* A direction running an io_uring completion op is woken solely by that op's
+     * CQE (which clears `active` before it reaches here). Drop readiness from any
+     * other source — a stale one-shot io_uring poll-add or the per-worker local
+     * epoll, both of which still watch the fd — so the completion waiter is not
+     * resumed before its recv/send actually completed (which would deliver a
+     * zero-byte result and lose the data). */
+    if ((mode & XR_POLL_READ) && atomic_load(&pd->uring_rop.active))
+        mode &= ~XR_POLL_READ;
+    if ((mode & XR_POLL_WRITE) && atomic_load(&pd->uring_wop.active))
+        mode &= ~XR_POLL_WRITE;
+    if (!mode)
+        return;
+#endif
+
     struct XrCoroutine *rg = NULL;
     struct XrCoroutine *wg = NULL;
 
@@ -382,12 +398,17 @@ static void close_wakeup_pipe(int pipe_fds[2]) {
 #endif
 
 // Select best available ops for current platform.
-// On Linux with XR_HAS_IO_URING: try io_uring first, fall back to epoll.
+// On Linux with XR_HAS_IO_URING: io_uring by default, unless XRAY_IO_BACKEND=epoll
+// forces the epoll backend (escape hatch for restricted environments and the
+// A/B oracle for io_uring completion-mode behavior).
 static const XrNetpollOps *netpoll_default_ops(void) {
 #ifdef XR_OS_MACOS
     return &kqueue_ops;
 #elif defined(XR_OS_LINUX)
 #if defined(XR_HAS_IO_URING)
+    const char *backend = getenv("XRAY_IO_BACKEND");
+    if (backend && (strcmp(backend, "epoll") == 0 || strcmp(backend, "EPOLL") == 0))
+        return &epoll_ops;
     return &iouring_ops;
 #else
     return &epoll_ops;
@@ -406,6 +427,16 @@ void xr_netpoll_arm_mode(XrPollDesc *pd, int mode) {
             iocp_arm_read(pd->netpoll, pd);
         if (mode & XR_POLL_WRITE)
             iocp_arm_write(pd->netpoll, pd);
+    }
+#elif defined(XR_OS_LINUX) && defined(XR_HAS_IO_URING)
+    /* io_uring arms a one-shot poll-add per wait (on demand), mirroring IOCP.
+     * The epoll fallback instead keeps a standing registration from add_fd, so
+     * only arm when the io_uring backend is the active one. */
+    if (pd && pd->netpoll && xr_netpoll_uring_active(pd->netpoll)) {
+        if (mode & XR_POLL_READ)
+            iouring_arm(pd->netpoll, pd, XR_POLL_READ);
+        if (mode & XR_POLL_WRITE)
+            iouring_arm(pd->netpoll, pd, XR_POLL_WRITE);
     }
 #else
     (void) pd;
@@ -752,6 +783,11 @@ XrPollDesc *xr_netpoll_open(XrNetpoll *np, int fd) {
         pd->rd = 0;
         pd->wd = 0;
         pd->netpoll = np;
+#if defined(XR_OS_LINUX) && defined(XR_HAS_IO_URING)
+        atomic_store(&pd->uring_refs, 1);
+        atomic_store(&pd->uring_rop.active, false);
+        atomic_store(&pd->uring_wop.active, false);
+#endif
         return pd;
     }
 
@@ -762,6 +798,11 @@ XrPollDesc *xr_netpoll_open(XrNetpoll *np, int fd) {
 
     pd->fd = fd;
     pd->netpoll = np;
+#if defined(XR_OS_LINUX) && defined(XR_HAS_IO_URING)
+    atomic_store(&pd->uring_refs, 1);  // owner ref; +1 per in-flight completion op
+    atomic_store(&pd->uring_rop.active, false);
+    atomic_store(&pd->uring_wop.active, false);
+#endif
 
     // Register with shared kqueue
     if (np->ops->add_fd(np, fd, pd) < 0) {
@@ -845,8 +886,22 @@ void xr_netpoll_close(XrNetpoll *np, XrPollDesc *pd) {
     // outstanding async work the backend may need to cancel.
     np->ops->del_fd(np, fd, pd);
 
+#if defined(XR_OS_LINUX) && defined(XR_HAS_IO_URING)
+    // io_uring completion mode: a direction with an in-flight completion op is
+    // woken solely by that op's CQE (del_fd above queued the cancel → the op
+    // completes with -ECANCELED). Unblocking it here would resume the waiter
+    // before the kernel releases its target buffer. Skip those directions; wake
+    // only readiness waiters. The pd is reference counted (uring_refs): dropping
+    // the owner ref frees the pd iff no op still holds a ref, otherwise the last
+    // xr_netpoll_uring_xfer_result performs the free.
+    if (!atomic_load(&pd->uring_rop.active))
+        xr_netpoll_unblock(pd, XR_POLL_READ, false);
+    if (!atomic_load(&pd->uring_wop.active))
+        xr_netpoll_unblock(pd, XR_POLL_WRITE, false);
+#else
     xr_netpoll_unblock(pd, XR_POLL_READ, false);
     xr_netpoll_unblock(pd, XR_POLL_WRITE, false);
+#endif
 
 #ifdef XR_OS_WINDOWS
     // The IOCP backend may still hold an async ref to pd's embedded
@@ -861,12 +916,56 @@ void xr_netpoll_close(XrNetpoll *np, XrPollDesc *pd) {
     }
 #endif
 
+#if defined(XR_OS_LINUX) && defined(XR_HAS_IO_URING)
+    // Drop the owner ref. If a completion op still holds a ref, its
+    // xr_netpoll_uring_xfer_result drops the last ref and frees the pd.
+    if (atomic_fetch_sub(&pd->uring_refs, 1) != 1)
+        return;
+#endif
+
     if (can_free_pd) {
         xr_poll_cache_free(&np->cache, pd);
     } else {
         xr_netpoll_deferred_free(np, pd);
     }
 }
+
+#if defined(XR_OS_LINUX) && defined(XR_HAS_IO_URING)
+// Consume a completed io_uring recv/send op after the parked waiter resumed.
+// The waiter only runs because the op's CQE fired (iouring_dispatch_cqe set
+// done with release and routed the wakeup), so done is observed here; the
+// acquire load pairs with that release so op->res is visible.
+long xr_netpoll_uring_xfer_result(XrPollDesc *pd, int mode, XrUringXferKind *out_kind) {
+    XrUringOp *op = (mode == XR_POLL_WRITE) ? &pd->uring_wop : &pd->uring_rop;
+    (void) atomic_load_explicit(&op->done, memory_order_acquire);
+    long res = op->res;
+    atomic_store(&op->active, false);
+
+    XrUringXferKind kind;
+    if (res >= 0) {
+        kind = XR_URING_XFER_DATA;  // >= 0 bytes (0 == EOF for recv)
+    } else if (atomic_load(&pd->closing)) {
+        kind = XR_URING_XFER_CLOSED;  // del_fd cancelled the op during close
+    } else if (res == -ECANCELED) {
+        kind = XR_URING_XFER_TIMEOUT;  // linked timeout fired
+    } else {
+        kind = XR_URING_XFER_ERROR;  // res holds -errno
+    }
+    if (out_kind)
+        *out_kind = kind;
+
+    // Drop this op's pd pin. If close already dropped the owner ref we are the
+    // last reference and must free the pd (the kernel is done with it).
+    XrNetpoll *np = pd->netpoll;
+    if (atomic_fetch_sub(&pd->uring_refs, 1) == 1) {
+        if (netpoll_pd_reclaimable(pd))
+            xr_poll_cache_free(&np->cache, pd);
+        else
+            xr_netpoll_deferred_free(np, pd);
+    }
+    return res;
+}
+#endif
 
 XrReadyList xr_netpoll_poll(XrNetpoll *np, int64_t delta_ns) {
     XrReadyList list;

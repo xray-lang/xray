@@ -128,6 +128,29 @@ typedef XrCFuncResult (*XrContinuation)(struct XrayIsolate *X, int status, XrVal
 XR_FUNC XrCFuncResult xr_yield_for_io(struct XrayIsolate *X, int fd, int events, int64_t timeout_ms,
                                       XrContinuation cont, void *user_data, XrValue *result);
 
+#if defined(XR_OS_LINUX) && defined(XR_HAS_IO_URING)
+struct XrPollDesc;
+struct XrUringReq;
+
+// xr_yield_for_uring_io - io_uring completion-mode counterpart of xr_yield_for_io.
+//
+// Parks the current coroutine on pd and submits the completion op described by
+// `req` (recv/send/accept/connect/file) instead of arming a readiness poll-add.
+// The CQE delivers the result (byte count / new fd / 0) and wakes the coro; the
+// continuation must call xr_netpoll_uring_xfer_result to read it. A positive
+// req->timeout_ms attaches a native linked timeout (no timer-wheel arming here).
+//
+// Returns true if the completion path was taken; *out then holds the
+// XrCFuncResult (normally XR_CFUNC_BLOCKED, or XR_CFUNC_ERROR if a waiter is
+// already parked on this direction). Returns false (leaving *out untouched, no
+// coroutine state changed) when completion is not usable — backend is not
+// io_uring or the submission queue is momentarily exhausted — so the caller
+// falls back to the readiness path (xr_yield_for_io).
+XR_FUNC bool xr_yield_for_uring_io(struct XrayIsolate *X, struct XrPollDesc *pd, int mode,
+                                   const struct XrUringReq *req, XrContinuation cont,
+                                   void *user_data, XrValue *result, XrCFuncResult *out);
+#endif
+
 // xr_yield_for_timeout - Wait for timeout and yield (convenience function)
 //
 // Equivalent to xr_yield_for_io(X, -1, 0, timeout_ms, cont, user_data)

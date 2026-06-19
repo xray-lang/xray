@@ -185,6 +185,11 @@ XR_FUNC void xr_mutex_destroy(xr_mutex_t *m);
 XR_FUNC void xr_mutex_lock(xr_mutex_t *m);
 XR_FUNC void xr_mutex_unlock(xr_mutex_t *m);
 
+// Non-blocking acquire. Returns true if the lock was taken, false if it is
+// already held (by this or another thread). Used for "single owner at a time"
+// fast paths where a contending caller should skip rather than wait.
+XR_FUNC bool xr_mutex_trylock(xr_mutex_t *m);
+
 // === Condition variable ===
 
 XR_FUNC void xr_cond_init(xr_cond_t *c);
