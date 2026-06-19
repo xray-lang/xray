@@ -52,6 +52,10 @@ static void test_free_aligned(void *ptr) {
 #define XRT_ALLOC_ALIGNED(sz) test_alloc_aligned(sz)
 #define XRT_FREE_ALIGNED(p) test_free_aligned(p)
 
+// Emit the runtime impl (bump globals + allocator) into this TU using the custom
+// XRT_* allocators above. Without it the static helpers in xrt_arc.h reference
+// undefined externs whenever the compiler keeps an unused static (GCC at -O0/-O2
+// on Linux); clang on macOS elided them, so the gap only showed under GCC.
 #define XRT_IMPL
 #if defined(__clang__)
 #pragma clang diagnostic push

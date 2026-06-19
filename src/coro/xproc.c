@@ -121,13 +121,6 @@ XrProc *xr_releasep(XrMachine *m) {
     return p;
 }
 
-void xr_handoffp(XrProc *p) {
-    XR_DCHECK(p != NULL, "handoffp: NULL proc");
-
-    // Delegate to startm: wake idle M or create new M to run this P
-    xr_startm(p, false);
-}
-
 // ========== Idle P Management ==========
 
 // Idle P list is a lock-free Treiber stack.
