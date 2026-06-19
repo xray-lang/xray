@@ -885,6 +885,11 @@ static void emit_sync_go_wrapper(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         emit_xrvalue_from_native_expr(out, f->return_type, result_rep, "_raw_result");
         fprintf(out, ";\n");
     }
+    fprintf(out, "    if (XR_UNLIKELY(xrt_has_pending_error())) {\n");
+    fprintf(out, "        XrValue _error = xrt_pending_error;\n");
+    fprintf(out, "        xrt_pending_error = XR_NULL_VAL;\n");
+    fprintf(out, "        return xr_aot_error(_error, true);\n");
+    fprintf(out, "    }\n");
     for (uint16_t i = 0; i < f->nparams; i++) {
         if (!cg_sync_go_param_needs_release(f, i))
             continue;
