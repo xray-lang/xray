@@ -1,0 +1,14 @@
+contains=xaot-plan v0
+contains="generated_c_files": ["<aot-generated-c>"]
+contains="runtime_objects": []
+contains="stdlib_objects": []
+contains="stdlib_symbols": ["encoding.hexValid", "encoding.utf8Valid", "encoding.utf8Count", "encoding.utf8ByteLength"]
+contains="system_libs": ["m"]
+contains="defines": ["XRT_IMPL"]
+not_contains="runtime_objects": ["xray_core"]
+not_contains="stdlib_objects": ["encoding"]
+c_contains=xrt_encoding_hex_valid(
+c_contains=xrt_encoding_utf8_valid(
+c_contains=xrt_encoding_utf8_count(
+c_contains=xrt_encoding_utf8_byte_length(
+c_not_contains=xrt_method_

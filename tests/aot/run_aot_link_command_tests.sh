@@ -119,6 +119,23 @@ else
     sed 's/^/      /' "$PATH_LOG" | sed -n '1,120p'
 fi
 
+ENC_SRC="$PROJECT_DIR/tests/aot/filetests/link/core_encoding.xr"
+ENC_BIN="$WORK/core_encoding"
+ENC_LOG="$WORK/core_encoding.log"
+if build_native "$ENC_SRC" "$ENC_BIN" "$ENC_LOG"; then
+    expect_log_contains "$ENC_LOG" "Link command:" "core-encoding: emitted link command"
+    expect_log_not_contains "$ENC_LOG" "-lxray_core" "core-encoding: does not link xray_core"
+    expect_log_not_contains "$ENC_LOG" "-lpthread" "core-encoding: does not link pthread"
+    expect_log_not_contains "$ENC_LOG" "-lz" "core-encoding: does not link zlib"
+    expect_log_not_contains "$ENC_LOG" "-lssl" "core-encoding: does not link ssl"
+    expect_log_not_contains "$ENC_LOG" "-lcrypto" "core-encoding: does not link crypto"
+    expect_log_contains "$ENC_LOG" "-lm" "core-encoding: links math lib only"
+    expect_output "$ENC_BIN" $'true\nfalse\ntrue\n2\n6' "core-encoding: binary output"
+else
+    record_fail "core-encoding: build failed"
+    sed 's/^/      /' "$ENC_LOG" | sed -n '1,120p'
+fi
+
 RUNTIME_SRC="$PROJECT_DIR/tests/aot/filetests/link/runtime_time.xr"
 RUNTIME_BIN="$WORK/runtime_time"
 RUNTIME_LOG="$WORK/runtime_time.log"

@@ -1,0 +1,17 @@
+// AOT direct-call encoding predicates/counts must match VM tagged dispatch.
+import encoding
+
+print(encoding.hexValid("48656c6c6f"))
+print(encoding.hexValid("ABCDEF"))
+print(encoding.hexValid("abc"))
+print(encoding.hexValid("gg"))
+print(encoding.hexValid(""))
+
+print(encoding.utf8Valid("Hello"))
+print(encoding.utf8Valid("你好"))
+print(encoding.utf8Valid(""))
+
+print(encoding.utf8Count("Hello"))
+print(encoding.utf8Count("你好"))
+print(encoding.utf8ByteLength("Hello"))
+print(encoding.utf8ByteLength("你好"))

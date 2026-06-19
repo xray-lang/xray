@@ -57,6 +57,7 @@ enum {
     XAOT_STDLIB_YAML = 1 << 13,
     XAOT_STDLIB_XML = 1 << 14,
     XAOT_STDLIB_COMPRESS = 1 << 15,
+    XAOT_STDLIB_ENCODING = 1 << 16,
 };
 
 /* Runtime feature set inferred from analysis.

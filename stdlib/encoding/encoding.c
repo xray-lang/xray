@@ -21,6 +21,7 @@
 #include "../../src/base/xmalloc.h"
 #include "../../src/base/xchecks.h"
 #include "../../src/runtime/gc/xgc.h"
+#include "../../src/shared/xr_encoding_core.h"
 #include <string.h>
 
 /* ========== Hex Encoding ========== */
@@ -58,16 +59,7 @@ XR_FUNC int xr_hex_decode(const char *hex, size_t len, uint8_t *output) {
 }
 
 XR_FUNC bool xr_hex_valid(const char *hex, size_t len) {
-    if (!hex)
-        return false;
-    if (len % 2 != 0)
-        return false;
-
-    for (size_t i = 0; i < len; i++) {
-        if (XR_HEX_TO_VAL(hex[i]) == 255)
-            return false;
-    }
-    return true;
+    return xr_encoding_core_hex_valid(hex, len);
 }
 
 /* ========== UTF-16 Implementation ========== */
@@ -352,7 +344,7 @@ static XrValue encoding_utf8_valid(XrayIsolate *X, XrValue *args, int nargs) {
     if (!str)
         return xr_bool(false);
 
-    return xr_bool(xr_utf8_validate(str, len));
+    return xr_bool(xr_encoding_core_utf8_valid(str, len));
 }
 
 // encoding.utf8Count(str) -> int
@@ -366,7 +358,7 @@ static XrValue encoding_utf8_count(XrayIsolate *X, XrValue *args, int nargs) {
     if (!str)
         return xr_int(0);
 
-    return xr_int((int64_t) xr_utf8_strlen(str, len));
+    return xr_int((int64_t) xr_encoding_core_utf8_count(str, len));
 }
 
 // encoding.utf8ByteLength(str) -> int
