@@ -344,6 +344,10 @@ XrValue xr_deep_copy_closure_with_ctx(XrCopyContext *ctx, XrGCHeader *obj) {
 
     new_closure->proto = closure->proto;
     new_closure->upval_count = closure->upval_count;
+    if (ctx->dst_coro_gc)
+        XR_OBJ_SET_FLAG(&new_closure->gc, XR_OBJ_CYCLE_CANDIDATE);
+    for (uint16_t i = 0; i < new_closure->upval_count; i++)
+        new_closure->upvals[i] = XR_NULL_VAL;
 
     XrValue result = XR_FROM_PTR(new_closure);
     xr_copy_context_record(ctx, closure, result);
@@ -353,6 +357,29 @@ XrValue xr_deep_copy_closure_with_ctx(XrCopyContext *ctx, XrGCHeader *obj) {
     for (int i = 0; i < closure->upval_count; i++) {
         new_closure->upvals[i] = xr_deep_copy_with_ctx(ctx, closure->upvals[i]);
     }
+    return result;
+}
+
+XrValue xr_deep_copy_cell_with_ctx(XrCopyContext *ctx, XrGCHeader *obj) {
+    XrCell *cell = (XrCell *) obj;
+    if (!cell || !ctx->dst_gc)
+        return XR_NULL_VAL;
+    XrValue cached = xr_copy_context_lookup(ctx, cell);
+    if (!XR_IS_NULL(cached))
+        return cached;
+
+    XrCell *new_cell = (XrCell *) copy_ctx_alloc(ctx, sizeof(XrCell), XR_TCELL);
+    if (!new_cell)
+        return XR_NULL_VAL;
+    if (ctx->dst_coro_gc)
+        XR_OBJ_SET_FLAG(&new_cell->gc, XR_OBJ_CYCLE_CANDIDATE);
+    new_cell->value = XR_NULL_VAL;
+
+    XrValue result = XR_FROM_PTR(new_cell);
+    xr_copy_context_record(ctx, cell, result);
+    ctx->objects_copied++;
+
+    new_cell->value = xr_deep_copy_with_ctx(ctx, cell->value);
     return result;
 }
 

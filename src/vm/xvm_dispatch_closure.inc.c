@@ -120,6 +120,7 @@ vmcase(OP_CLOSURE) {
         } else if (uv->source == UPVAL_SRC_UPVAL) {
             int idx = uv->index;
             closure->upvals[j] = (idx < cl->upval_count) ? cl->upvals[idx] : xr_null();
+            xr_rc_retain_value(closure->upvals[j]);
         } else {
             closure->upvals[j] = xr_null();  // fallback
         }
@@ -167,7 +168,11 @@ vmcase(OP_CELL_SET) {
     int a = GETARG_A(i);
     int b = GETARG_B(i);
     XrCell *cell = (XrCell *) R(a).ptr;
-    if (cell)
+    if (cell) {
+        XrValue old = cell->value;
         cell->value = R(b);
+        XrCoroutine *_co = (XrCoroutine *) VM_CURRENT_CORO;
+        xr_rc_release_value(_co ? _co->coro_gc : NULL, old);
+    }
     vmbreak;
 }

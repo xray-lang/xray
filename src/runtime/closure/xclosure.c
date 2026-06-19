@@ -39,6 +39,9 @@ XrClosure *xr_closure_new(XrayIsolate *isolate, XrProto *proto, struct XrCorouti
     }
 
     xr_gc_header_init_type(&closure->gc, XR_TFUNCTION);
+    if (coro && coro->coro_gc) {
+        XR_OBJ_SET_FLAG(&closure->gc, XR_OBJ_CYCLE_CANDIDATE);
+    }
     closure->proto = proto;
     closure->upval_count = (uint16_t) nuv;
 
@@ -47,6 +50,16 @@ XrClosure *xr_closure_new(XrayIsolate *isolate, XrProto *proto, struct XrCorouti
     }
 
     return closure;
+}
+
+XR_FUNC void xr_gc_destroy_closure(XrGCHeader *obj, XrCoroGC *owning_gc) {
+    if (!obj)
+        return;
+    XrClosure *closure = (XrClosure *) obj;
+    for (uint16_t i = 0; i < closure->upval_count; i++) {
+        xr_rc_release_value(owning_gc, closure->upvals[i]);
+        closure->upvals[i] = xr_null();
+    }
 }
 
 XrClosure *xr_closure_from_arg(XrayIsolate *isolate, XrValue v, const char *api_name) {

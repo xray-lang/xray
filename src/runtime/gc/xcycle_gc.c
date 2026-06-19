@@ -42,6 +42,8 @@
 #include "xgc_internal.h"
 #include "../class/xinstance.h"
 #include "../class/xclass.h"
+#include "../closure/xcell.h"
+#include "../closure/xclosure.h"
 #include "../object/xarray.h"
 #include "../object/xmap.h"
 #include "../object/xset.h"
@@ -162,17 +164,30 @@ static void visit_children(XrGCHeader *obj, ChildVisitor visitor, void *ctx) {
             }
             break;
         }
+        case XR_TFUNCTION: {
+            XrClosure *closure = (XrClosure *) obj;
+            for (uint16_t i = 0; i < closure->upval_count; i++) {
+                XrValue v = closure->upvals[i];
+                if (XR_IS_PTR(v)) {
+                    XrGCHeader *child = XR_VALUE_GCPTR(v);
+                    if (child)
+                        visitor(child, ctx);
+                }
+            }
+            break;
+        }
+        case XR_TCELL: {
+            XrCell *cell = (XrCell *) obj;
+            XrValue v = cell->value;
+            if (XR_IS_PTR(v)) {
+                XrGCHeader *child = XR_VALUE_GCPTR(v);
+                if (child)
+                    visitor(child, ctx);
+            }
+            break;
+        }
         default:
-            /* Known limitation: closure/upvalue-cell edges (XR_TFUNCTION /
-             * XR_TCELL) are not traversed, so cycles closed exclusively
-             * through captured closures stay uncollected (a leak, never a
-             * corruption — untraversed edges count as external refs and
-             * keep the cycle alive). This is correct ONLY while closure
-             * captures are uncounted borrows (the creating scope owns the
-             * cell): traversing/trial-decrementing an uncounted edge would
-             * corrupt refcounts. Enabling closure cycle collection requires
-             * the compiler to first make captures owned (counted) references
-             * with a balanced release on closure/cell destroy. */
+            /* Leaf or runtime-managed type: no coro-local RC children. */
             break;
     }
 }

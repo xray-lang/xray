@@ -91,15 +91,10 @@ vmcase(OP_CLINIT_CALL) {
     // Get and execute static constructor
     XrProto *clinit_proto = DYNARRAY_GET(&proto->protos, desc->clinit_proto_index, XrProto *);
     XrCoroutine *_clinit_coro = (XrCoroutine *) vm_ctx->current_coro;
-    XrClosure *clinit_closure;
-    if (_clinit_coro && _clinit_coro->coro_gc) {
-        clinit_closure =
-            (XrClosure *) xr_coro_gc_newobj(_clinit_coro->coro_gc, XR_TFUNCTION, sizeof(XrClosure));
-    } else {
-        clinit_closure = (XrClosure *) xr_gc_alloc(&isolate->gc, sizeof(XrClosure), XR_TFUNCTION);
+    XrClosure *clinit_closure = xr_closure_new(isolate, clinit_proto, _clinit_coro);
+    if (!clinit_closure) {
+        VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, "OP_CLINIT_CALL: failed to allocate closure");
     }
-    xr_gc_header_init_type(&clinit_closure->gc, XR_TFUNCTION);
-    clinit_closure->proto = clinit_proto;
 
     cls->flags |= XR_CLASS_INITIALIZED;
 

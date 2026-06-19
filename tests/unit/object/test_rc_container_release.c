@@ -12,12 +12,16 @@
 #include "../test_helper.h"
 #include "runtime/class/xclass.h"
 #include "runtime/class/xinstance.h"
+#include "runtime/closure/xcell.h"
+#include "runtime/closure/xclosure.h"
 #include "runtime/gc/xalloc_unified.h"
 #include "runtime/gc/xgc.h"
+#include "runtime/gc/xcoro_gc.h"
 #include "runtime/object/xarray.h"
 #include "runtime/object/xmap.h"
 #include "runtime/object/xset.h"
 #include "runtime/object/xtuple.h"
+#include "runtime/value/xchunk.h"
 
 static XrayIsolate *X = NULL;
 static XrCoroutine *main_coro = NULL;
@@ -57,6 +61,18 @@ static XrClass *make_dynamic_root(uint16_t capacity) {
     cls->flags = XR_CLASS_DYNAMIC_LAYOUT;
     cls->in_object_capacity = capacity;
     return cls;
+}
+
+static XrProto *make_proto_with_upvalues(int count) {
+    XrProto *proto = xr_vm_proto_new();
+    if (!proto)
+        return NULL;
+    for (int i = 0; i < count; i++) {
+        UpvalInfo uv = {0};
+        uv.source = UPVAL_SRC_REG;
+        DYNARRAY_ADD(&proto->upvalues, uv, UpvalInfo);
+    }
+    return proto;
 }
 
 TEST(array_destroy_releases_child_array) {
@@ -207,6 +223,89 @@ TEST(dynamic_instance_destroy_releases_overflow_fields) {
     teardown();
 }
 
+TEST(closure_destroy_releases_upvals) {
+    setup();
+    XrProto *proto = make_proto_with_upvalues(1);
+    ASSERT_NOT_NULL(proto);
+    XrClosure *closure = xr_closure_new(X, proto, main_coro);
+    XrArray *child = xr_array_new(main_coro);
+    ASSERT_NOT_NULL(closure);
+    ASSERT_NOT_NULL(child);
+
+    closure->upvals[0] = xr_value_from_array(child);
+
+    XrCoroGC *gc = test_gc();
+    ASSERT_NOT_NULL(gc);
+    xr_rc_release_value(gc, xr_value_from_closure(closure));
+    ASSERT_TRUE(is_dead(&closure->gc));
+    ASSERT_TRUE(is_dead(&child->gc));
+
+    xr_vm_proto_free(proto);
+    teardown();
+}
+
+TEST(cell_destroy_and_replace_release_values) {
+    setup();
+    XrCell *cell = xr_cell_new(X, main_coro);
+    XrArray *first = xr_array_new(main_coro);
+    XrArray *second = xr_array_new(main_coro);
+    ASSERT_NOT_NULL(cell);
+    ASSERT_NOT_NULL(first);
+    ASSERT_NOT_NULL(second);
+
+    cell->value = xr_value_from_array(first);
+    XrCoroGC *gc = test_gc();
+    ASSERT_NOT_NULL(gc);
+
+    XrValue old = cell->value;
+    cell->value = xr_value_from_array(second);
+    xr_rc_release_value(gc, old);
+    ASSERT_TRUE(is_dead(&first->gc));
+    ASSERT_FALSE(is_dead(&second->gc));
+
+    xr_rc_release_value(gc, XR_FROM_PTR(cell));
+    ASSERT_TRUE(is_dead(&cell->gc));
+    ASSERT_TRUE(is_dead(&second->gc));
+    teardown();
+}
+
+TEST(closure_cell_cycle_is_collected) {
+    setup();
+    XrProto *proto = make_proto_with_upvalues(1);
+    ASSERT_NOT_NULL(proto);
+    XrClosure *closure = xr_closure_new(X, proto, main_coro);
+    XrCell *cell = xr_cell_new(X, main_coro);
+    ASSERT_NOT_NULL(closure);
+    ASSERT_NOT_NULL(cell);
+
+    XrValue closure_value = xr_value_from_closure(closure);
+    XrValue cell_value = XR_FROM_PTR(cell);
+    xr_rc_retain_value(cell_value);
+    closure->upvals[0] = cell_value;
+    xr_rc_retain_value(closure_value);
+    cell->value = closure_value;
+
+    XrCoroGC *gc = test_gc();
+    ASSERT_NOT_NULL(gc);
+    ASSERT_EQ_INT(closure->gc.refcount, 1);
+    ASSERT_EQ_INT(cell->gc.refcount, 1);
+
+    xr_rc_release_value(gc, closure_value);
+    xr_rc_release_value(gc, cell_value);
+    ASSERT_FALSE(is_dead(&closure->gc));
+    ASSERT_FALSE(is_dead(&cell->gc));
+    ASSERT_EQ_INT(closure->gc.refcount, 0);
+    ASSERT_EQ_INT(cell->gc.refcount, 0);
+    ASSERT_TRUE(gc->cycle_root_count >= 2);
+
+    xr_coro_gc_fullgc(gc);
+    ASSERT_TRUE(is_dead(&closure->gc));
+    ASSERT_TRUE(is_dead(&cell->gc));
+
+    xr_vm_proto_free(proto);
+    teardown();
+}
+
 TEST(whole_block_reclaim_returns_empty_blocks) {
     setup();
     XrCoroGC *gc = test_gc();
@@ -263,6 +362,9 @@ int main(void) {
     RUN_TEST(weak_set_does_not_retain_element);
     RUN_TEST(tuple_instance_destroy_releases_elements);
     RUN_TEST(dynamic_instance_destroy_releases_overflow_fields);
+    RUN_TEST(closure_destroy_releases_upvals);
+    RUN_TEST(cell_destroy_and_replace_release_values);
+    RUN_TEST(closure_cell_cycle_is_collected);
     RUN_TEST(whole_block_reclaim_returns_empty_blocks);
     TEST_REPORT();
     return TEST_EXIT();
