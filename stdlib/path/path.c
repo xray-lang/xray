@@ -225,83 +225,34 @@ static XrValue path_normalize(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 1)
         return xrs_string_value_c(X, ".");
 
-    const char *path = xrs_string_arg(args[0], NULL);
-    if (!path || path[0] == '\0')
+    size_t len = 0;
+    const char *path = xrs_string_arg(args[0], &len);
+    if (!path)
         return xrs_string_value_c(X, ".");
 
-    size_t len = strlen(path);
-    int is_absolute = IS_SEP(path[0]);
-
-    // Offset array: each entry is (start, length) pair into original path.
-    // Max segments = len/2 + 1 (e.g. "a/b/c").
-    size_t max_segs = len / 2 + 2;
+    size_t max_segs = xr_path_core_normalize_segment_cap(len);
     size_t *seg_buf = (size_t *) xr_malloc(sizeof(size_t) * max_segs * 2);
     if (!seg_buf)
         return xr_null();
     size_t *seg_starts = seg_buf;
     size_t *seg_lens = seg_buf + max_segs;
-    int seg_count = 0;
-
-    // Manual tokenization (thread-safe, no strtok)
-    size_t i = 0;
-    while (i < len) {
-        // Skip separators
-        while (i < len && IS_SEP(path[i]))
-            i++;
-        if (i >= len)
-            break;
-
-        // Find segment end
-        size_t seg_start = i;
-        while (i < len && !IS_SEP(path[i]))
-            i++;
-        size_t seg_len = i - seg_start;
-
-        if (seg_len == 1 && path[seg_start] == '.') {
-            // Skip "."
-        } else if (seg_len == 2 && path[seg_start] == '.' && path[seg_start + 1] == '.') {
-            if (seg_count > 0 &&
-                !(seg_lens[seg_count - 1] == 2 && path[seg_starts[seg_count - 1]] == '.' &&
-                  path[seg_starts[seg_count - 1] + 1] == '.')) {
-                seg_count--;
-            } else if (!is_absolute) {
-                seg_starts[seg_count] = seg_start;
-                seg_lens[seg_count] = seg_len;
-                seg_count++;
-            }
-        } else {
-            seg_starts[seg_count] = seg_start;
-            seg_lens[seg_count] = seg_len;
-            seg_count++;
-        }
-    }
-
-    // Build result
-    char *result = (char *) xr_malloc(len + 2);
-    if (!result) {
+    size_t seg_count = 0;
+    bool is_absolute = false;
+    size_t out_len = 0;
+    if (!xr_path_core_normalize_plan(path, len, seg_starts, seg_lens, max_segs, &seg_count,
+                                     &is_absolute, &out_len)) {
         xr_free(seg_buf);
         return xr_null();
     }
 
-    size_t pos = 0;
-    if (is_absolute) {
-        result[pos++] = '/';
+    char *result = (char *) xr_malloc(out_len + 1);
+    if (!result) {
+        xr_free(seg_buf);
+        return xr_null();
     }
+    xr_path_core_normalize_write(path, seg_starts, seg_lens, seg_count, is_absolute, result);
 
-    for (int s = 0; s < seg_count; s++) {
-        if (s > 0)
-            result[pos++] = '/';
-        memcpy(result + pos, path + seg_starts[s], seg_lens[s]);
-        pos += seg_lens[s];
-    }
-
-    if (pos == 0) {
-        result[0] = '.';
-        pos = 1;
-    }
-    result[pos] = '\0';
-
-    XrValue ret = xrs_string_value_c(X, result);
+    XrValue ret = xrs_string_value_n(X, result, out_len);
     xr_free(result);
     xr_free(seg_buf);
     return ret;

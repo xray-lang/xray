@@ -12,6 +12,7 @@
  *     L0  xrt_hash.h    - content hash primitives (shared with xi_cgen)
  *     L0  xrt_value.h   - tags, boxing/unboxing, source-level aliases, XrtContext
  *     L1  xrt_arc.h     - bump allocator, str_alloc/str_concat
+ *     L1  xrt_path.h    - freestanding path string helpers
  *     L1  xrt_arith.h   - arithmetic, comparison, print
  *     L2  xrt_coll.h    - Array, Map, StringBuilder, Closure, index ops
  *     L3  xrt_method.h  - method dispatch, property access, toString
@@ -27,8 +28,8 @@
 #define XRT_H
 
 #include "xrt_value.h"      // L0: tags, boxing, unboxing, source-level aliases, XrtContext
-#include "xrt_path.h"       // L0: freestanding path string helpers
 #include "xrt_arc.h"        // L1: bump alloc, xrt_str_alloc, xrt_str_concat
+#include "xrt_path.h"       // L1: freestanding path string helpers
 #include "xrt_range.h"      // L1: lazy Range value
 #include "xrt_arith.h"      // L1: add/sub/mul/div/mod/neg, eq/lt/le, print
 #include "xrt_coll.h"       // L2: Array, Map, StringBuilder, Closure, index ops
