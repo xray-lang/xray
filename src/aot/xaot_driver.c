@@ -380,8 +380,8 @@ static bool add_stdlib_core_object_manifest_entries(XaotLinkManifest *manifest,
                                                     const XaotFeatureSet *features) {
     for (uint16_t i = 0; i < features->n_stdlib_symbols; i++) {
         const char *symbol = features->stdlib_symbols[i];
-        if ((strcmp(symbol, "regex.compile") == 0 || strcmp(symbol, "regex.isValid") == 0 ||
-             strcmp(symbol, "regex.test") == 0) &&
+        if ((strcmp(symbol, "regex.compile") == 0 || strcmp(symbol, "regex.count") == 0 ||
+             strcmp(symbol, "regex.isValid") == 0 || strcmp(symbol, "regex.test") == 0) &&
             !xaot_link_manifest_add_unique(manifest, XAOT_LINK_STDLIB_OBJECT, symbol))
             return false;
     }
@@ -473,6 +473,7 @@ static bool build_link_manifest(const XaotFeatureSet *features, XaotLinkManifest
     if (!add_stdlib_core_object_manifest_entries(manifest, features))
         goto done;
     if (xaot_link_manifest_contains(manifest, XAOT_LINK_STDLIB_OBJECT, "regex.compile") ||
+        xaot_link_manifest_contains(manifest, XAOT_LINK_STDLIB_OBJECT, "regex.count") ||
         xaot_link_manifest_contains(manifest, XAOT_LINK_STDLIB_OBJECT, "regex.test")) {
         if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_DEFINE, "XRT_ENABLE_REGEX"))
             goto done;
