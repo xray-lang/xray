@@ -9,10 +9,9 @@
  *
  * Recognizes `<module>.<method>(...)` calls whose receiver resolves to a
  * runtime stdlib module import and emits a direct call to the matching
- * isolate-free xr_aot_<module>_<method> shim, bypassing the tagged runtime
- * module table. Each shim lives in stdlib (linked into the program through
- * xray_core + dead-strip); generated C reaches it via a local extern
- * declaration, so no extra runtime header is needed on the AOT include path.
+ * isolate-free helper, bypassing the tagged runtime module table. Pure helpers
+ * can live in the freestanding AOT runtime (xrt_*) while runtime-backed
+ * helpers may still be local extern shims.
  *
  * This is the general, table-driven successor to the bespoke math/time AOT
  * paths: new functions are added as data rows, not new code paths. A module
@@ -42,14 +41,10 @@ typedef struct CgAotStdlibMethod {
 } CgAotStdlibMethod;
 
 static const CgAotStdlibMethod g_aot_stdlib_methods[] = {
-    {"path", "isAbsolute", 1, "xr_aot_path_isAbsolute", "s", CG_AOT_RET_VALUE,
-     "extern XrValue xr_aot_path_isAbsolute(const char*, int64_t);"},
-    {"path", "dirname", 1, "xr_aot_path_dirname", "s", CG_AOT_RET_STR_BORROWED,
-     "extern const char* xr_aot_path_dirname(const char*, int64_t, int64_t*);"},
-    {"path", "basename", 1, "xr_aot_path_basename", "s", CG_AOT_RET_STR_BORROWED,
-     "extern const char* xr_aot_path_basename(const char*, int64_t, int64_t*);"},
-    {"path", "extname", 1, "xr_aot_path_extname", "s", CG_AOT_RET_STR_BORROWED,
-     "extern const char* xr_aot_path_extname(const char*, int64_t, int64_t*);"},
+    {"path", "isAbsolute", 1, "xrt_path_is_absolute", "s", CG_AOT_RET_VALUE, NULL},
+    {"path", "dirname", 1, "xrt_path_dirname", "s", CG_AOT_RET_STR_BORROWED, NULL},
+    {"path", "basename", 1, "xrt_path_basename", "s", CG_AOT_RET_STR_BORROWED, NULL},
+    {"path", "extname", 1, "xrt_path_extname", "s", CG_AOT_RET_STR_BORROWED, NULL},
 };
 
 #define CG_AOT_STDLIB_METHOD_COUNT                                                                 \
@@ -98,6 +93,7 @@ static const char *cg_aot_stdlib_module_of_receiver(const XiCgenCtx *ctx, const 
  * safe. */
 static void cg_emit_aot_stdlib_args(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                     const CgAotStdlibMethod *m, uint16_t call_argc) {
+    (void) f;
     for (uint16_t a = 0; a < call_argc; a++) {
         const XiValue *arg = v->args[1 + a];
         char spec = m->arg_spec[a];
@@ -143,7 +139,9 @@ static bool xicgen_emit_stdlib_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f
      * self-contained at the call site, then convert the result to the value's
      * required storage representation. */
     XrRep target_rep = xicgen_value_c_storage_rep(ctx, f, v);
-    fprintf(out, "({ %s ", m->extern_decl);
+    fprintf(out, "({ ");
+    if (m->extern_decl && m->extern_decl[0])
+        fprintf(out, "%s ", m->extern_decl);
 
     if (m->ret_kind == CG_AOT_RET_STR_BORROWED) {
         /* The shim returns a borrowed (data, *out_len) slice; copy it into a

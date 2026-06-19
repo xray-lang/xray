@@ -38,10 +38,9 @@ struct XrModule;
 
 XR_FUNC struct XrModule *xr_load_module_path(struct XrayIsolate *isolate);
 
-/* AOT direct-call shims with specialized (raw data, length) signatures.
- * Generated AOT C calls these symbols directly (no module dispatch).
- * Scalar shims return a tagged XrValue; string shims return a borrowed
- * (data, *out_len) slice that generated C copies into an AOT string. */
+/* Runtime-archive AOT shims kept for the runtime-backed stdlib build. The
+ * native AOT backend now emits freestanding xrt_path_* inline calls for the
+ * supported pure path subset, so those programs do not link xray_core. */
 XR_FUNC XrValue xr_aot_path_isAbsolute(const char *path, int64_t len);
 XR_FUNC const char *xr_aot_path_dirname(const char *path, int64_t len, int64_t *out_len);
 XR_FUNC const char *xr_aot_path_basename(const char *path, int64_t len, int64_t *out_len);
