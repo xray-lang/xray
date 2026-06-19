@@ -17,6 +17,7 @@
  *     L2  xrt_path.h    - freestanding path helpers (parse/format use Json)
  *     L2  xrt_url.h     - freestanding URL helpers (parse/query use Json)
  *     L2  xrt_compress.h - freestanding checksum helpers
+ *     L2  xrt_crypto.h  - freestanding crypto utilities
  *     L2  xrt_arith.h   - arithmetic, comparison, print
  *     L3  xrt_method.h  - method dispatch, property access, toString
  *
@@ -40,6 +41,7 @@
 #include "xrt_encoding.h"   // L2: freestanding encoding string/Bytes helpers
 #include "xrt_base64.h"     // L2: freestanding Base64 string/Bytes helpers
 #include "xrt_compress.h"   // L2: freestanding checksum helpers
+#include "xrt_crypto.h"     // L2: freestanding crypto helpers
 #include "xrt_method.h"     // L3: method_0/1/2, getprop, tostring, symbol IDs
 #include "xrt_exception.h"  // L4: setjmp/longjmp exception handling
 #include "xrt_defer.h"      // L4: function-scoped deferred cleanup (uses L1/L2/L4)

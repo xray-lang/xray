@@ -187,6 +187,23 @@ else
     sed 's/^/      /' "$COMPRESS_LOG" | sed -n '1,120p'
 fi
 
+CRYPTO_SRC="$PROJECT_DIR/tests/aot/filetests/link/core_crypto.xr"
+CRYPTO_BIN="$WORK/core_crypto"
+CRYPTO_LOG="$WORK/core_crypto.log"
+if build_native "$CRYPTO_SRC" "$CRYPTO_BIN" "$CRYPTO_LOG"; then
+    expect_log_contains "$CRYPTO_LOG" "Link command:" "core-crypto: emitted link command"
+    expect_log_not_contains "$CRYPTO_LOG" "-lxray_core" "core-crypto: does not link xray_core"
+    expect_log_not_contains "$CRYPTO_LOG" "-lpthread" "core-crypto: does not link pthread"
+    expect_log_not_contains "$CRYPTO_LOG" "-lz" "core-crypto: does not link zlib"
+    expect_log_not_contains "$CRYPTO_LOG" "-lssl" "core-crypto: does not link ssl"
+    expect_log_not_contains "$CRYPTO_LOG" "-lcrypto" "core-crypto: does not link crypto"
+    expect_log_contains "$CRYPTO_LOG" "-lm" "core-crypto: links math lib only"
+    expect_output "$CRYPTO_BIN" $'true\nfalse\nfalse\ntrue\ntrue\nfalse' "core-crypto: binary output"
+else
+    record_fail "core-crypto: build failed"
+    sed 's/^/      /' "$CRYPTO_LOG" | sed -n '1,120p'
+fi
+
 RUNTIME_SRC="$PROJECT_DIR/tests/aot/filetests/link/runtime_time.xr"
 RUNTIME_BIN="$WORK/runtime_time"
 RUNTIME_LOG="$WORK/runtime_time.log"
