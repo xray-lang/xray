@@ -204,6 +204,23 @@ else
     sed 's/^/      /' "$CRYPTO_LOG" | sed -n '1,120p'
 fi
 
+REGEX_SRC="$PROJECT_DIR/tests/aot/filetests/link/core_regex.xr"
+REGEX_BIN="$WORK/core_regex"
+REGEX_LOG="$WORK/core_regex.log"
+if build_native "$REGEX_SRC" "$REGEX_BIN" "$REGEX_LOG"; then
+    expect_log_contains "$REGEX_LOG" "Link command:" "core-regex: emitted link command"
+    expect_log_not_contains "$REGEX_LOG" "-lxray_core" "core-regex: does not link xray_core"
+    expect_log_not_contains "$REGEX_LOG" "-lpthread" "core-regex: does not link pthread"
+    expect_log_not_contains "$REGEX_LOG" "-lz" "core-regex: does not link zlib"
+    expect_log_not_contains "$REGEX_LOG" "-lssl" "core-regex: does not link ssl"
+    expect_log_not_contains "$REGEX_LOG" "-lcrypto" "core-regex: does not link crypto"
+    expect_log_contains "$REGEX_LOG" "-lm" "core-regex: links math lib only"
+    expect_output "$REGEX_BIN" $'a\\.b\\*c\\?\nplain\nx\\+y\n\\[abc\\]' "core-regex: binary output"
+else
+    record_fail "core-regex: build failed"
+    sed 's/^/      /' "$REGEX_LOG" | sed -n '1,120p'
+fi
+
 RUNTIME_SRC="$PROJECT_DIR/tests/aot/filetests/link/runtime_time.xr"
 RUNTIME_BIN="$WORK/runtime_time"
 RUNTIME_LOG="$WORK/runtime_time.log"

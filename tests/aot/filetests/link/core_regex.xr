@@ -1,0 +1,6 @@
+import regex
+
+print(regex.escape("a.b*c?"))
+print(regex.escape("plain"))
+print(regex.escape("x+y"))
+print(regex.escape("[abc]"))
