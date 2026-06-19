@@ -77,7 +77,9 @@ typedef struct ClassDeclNode {
     int method_count;
     bool is_abstract;
     bool is_final;
-    bool is_native;                // @native: C runtime provides implementation
+    bool is_native;            // @native: C runtime provides implementation
+    XrAttribute **attributes;  // Declaration attributes (@repr, @align, ...)
+    int attr_count;
     XrGenericParam **type_params;  // Generic type parameters
     int type_param_count;
     uint32_t symbol_id;  // Unique ID from analyzer; 0 = unresolved

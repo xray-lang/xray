@@ -251,9 +251,67 @@ AstNode *xr_parse_cancelled_expr(Parser *parser) {
     return xr_ast_cancelled_expr(parser->X, line);
 }
 
+/* Wrap an expression in a zero-arg anonymous closure: `{ <expr>; }`.
+ * The defer runtime invokes a first-class callable; wrapping makes method
+ * calls (whose receiver is not a first-class callee value) and builtin calls
+ * (print/dump/...) deferrable through the same closure path as `defer { ... }`. */
+static AstNode *defer_wrap_in_closure(Parser *parser, AstNode *call_expr, int line) {
+    AstNode *body = xr_ast_block(parser->X, line);
+    xr_ast_block_add(parser->X, body, xr_ast_expr_stmt(parser->X, call_expr, line));
+    AstNode *fn_expr = xr_ast_function_expr(parser->X, NULL, 0, body, line);
+    return xr_ast_defer_stmt(parser->X, fn_expr, line);
+}
+
+/* Desugar `defer callee(a0, a1, ...)` into eager argument capture plus a
+ * deferred closure:
+ *
+ *   {
+ *       let __xr_dtmp_0 = a0     // arguments evaluated NOW (eager, Go-style)
+ *       let __xr_dtmp_1 = a1
+ *       defer { callee(__xr_dtmp_0, __xr_dtmp_1) }
+ *   }
+ *
+ * The callee (free function, method receiver, or builtin) stays inside the
+ * closure body so it resolves through the normal call path; only the arguments
+ * are snapshotted, matching the eager argument semantics of `defer fn(args)`.
+ * Each desugared defer gets its own block scope, so the fixed temp names never
+ * collide across sibling defers. */
+static AstNode *defer_desugar_call(Parser *parser, AstNode *call_node, int line) {
+    XrayIsolate *X = parser->X;
+    CallExprNode *call = &call_node->as.call_expr;
+    int n = call->arg_count;
+
+    if (n == 0)
+        return defer_wrap_in_closure(parser, call_node, line);
+
+    /* Build temp references and the rewritten call that uses them. */
+    AstNode **temp_refs = (AstNode **) ast_alloc_array(X, sizeof(AstNode *), (size_t) n);
+    char name[24];
+    for (int k = 0; k < n; k++) {
+        snprintf(name, sizeof(name), "__xr_dtmp_%d", k);
+        temp_refs[k] = xr_ast_variable(X, name, line);
+    }
+    AstNode *new_call = xr_ast_call_expr_generic(X, call->callee, temp_refs, n, call->type_args,
+                                                 call->type_arg_count, line);
+
+    /* Outer block: snapshot args into temps, then defer the rewritten call. */
+    AstNode *outer = xr_ast_block(X, line);
+    for (int k = 0; k < n; k++) {
+        snprintf(name, sizeof(name), "__xr_dtmp_%d", k);
+        xr_ast_block_add(X, outer, xr_ast_var_decl(X, name, call->arguments[k], false, line));
+    }
+    xr_ast_block_add(X, outer, defer_wrap_in_closure(parser, new_call, line));
+    return outer;
+}
+
 /*
  * Parse defer statement
- * defer fn() or defer { block }
+ * defer fn() or defer obj.method() or defer { block }
+ *
+ * Call-expression forms are desugared into a deferred closure (see
+ * defer_desugar_call) so method-call and builtin-call defers work and arguments
+ * are captured eagerly. A bare non-call expression (a first-class closure value)
+ * is deferred directly.
  */
 AstNode *xr_parse_defer_statement(Parser *parser) {
     XR_DCHECK(parser != NULL, "parse_defer_statement: NULL parser");
@@ -276,6 +334,9 @@ AstNode *xr_parse_defer_statement(Parser *parser) {
         xr_parser_error(parser, "defer requires function call or code block");
         return NULL;
     }
+
+    if (expr->type == AST_CALL_EXPR)
+        return defer_desugar_call(parser, expr, line);
 
     return xr_ast_defer_stmt(parser->X, expr, line);
 }
@@ -517,4 +578,33 @@ AstNode *xr_parse_move_expr(Parser *parser) {
     }
 
     return xr_ast_move_expr(parser->X, expr, line, column);
+}
+
+/*
+ * Parse unsafe expression: unsafe { stmt* }
+ *
+ * The braces delimit a statement block whose trailing expression (if any)
+ * becomes the value of the unsafe expression. The wrapper is semantically
+ * transparent — it only marks a region where the analyzer permits extern calls
+ * and raw-pointer dereference. Used both as a value (let r = unsafe { sqrt(2.0) }
+ * — a single trailing expression) and as a statement block executed for effect
+ * (unsafe { p[0] = 1; p[1] = 2; free(p) }).
+ */
+AstNode *xr_parse_unsafe_expr(Parser *parser) {
+    XR_DCHECK(parser != NULL, "parse_unsafe_expr: NULL parser");
+    int line = parser->previous.line;
+    int column = parser->previous.column;
+
+    xr_parser_consume(parser, TK_LBRACE, "expected '{' after 'unsafe'");
+
+    /* xr_parse_block assumes the '{' was already consumed and consumes the
+     * matching '}'. The body is an AST_BLOCK; the analyzer/lowerer treat its
+     * trailing expression statement as the unsafe expression's value. */
+    AstNode *body = xr_parse_block(parser);
+    if (!body) {
+        xr_parser_error(parser, "expected statements inside 'unsafe { }'");
+        return NULL;
+    }
+
+    return xr_ast_unsafe_expr(parser->X, body, line, column);
 }

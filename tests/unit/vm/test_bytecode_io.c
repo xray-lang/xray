@@ -15,6 +15,7 @@
 #include "runtime/xisolate_api.h"
 #include "runtime/symbol/xsymbol_table.h"
 #include "runtime/value/xchunk.h"
+#include "runtime/value/xffi_sig.h"
 #include "xray_isolate.h"
 
 static XrayIsolate *new_test_isolate(void) {
@@ -32,7 +33,9 @@ static XrProto *make_minimal_proto(void) {
     XrProto *proto = xr_vm_proto_new();
     if (!proto)
         return NULL;
-    proto->source_file = "<bytecode-io-test>";
+    /* XrProto owns source_file (freed in xr_vm_proto_free), so it must be
+     * heap-allocated — never a string literal. */
+    proto->source_file = xr_strdup("<bytecode-io-test>");
     proto->maxstacksize = 1;
     xr_vm_proto_write(proto, CREATE_ABC(OP_RETURN, 0, 0, 0), 1);
     return proto;
@@ -127,7 +130,8 @@ TEST(bytecode_roundtrips_symbol_index_above_255) {
 
     XrProto *proto = xr_vm_proto_new();
     ASSERT_NOT_NULL(proto);
-    proto->source_file = "<bytecode-symbol-test>";
+    /* XrProto owns source_file (freed in xr_vm_proto_free); use a heap copy. */
+    proto->source_file = xr_strdup("<bytecode-symbol-test>");
     proto->maxstacksize = 2;
 
     XrSymbolTable *st = (XrSymbolTable *) xr_isolate_get_symbol_table(iso);
@@ -170,12 +174,89 @@ TEST(bytecode_roundtrips_symbol_index_above_255) {
     xray_isolate_delete(iso);
 }
 
+TEST(bytecode_roundtrips_extern_ffi_signature) {
+    XrayIsolate *iso = new_test_isolate();
+    ASSERT_NOT_NULL(iso);
+
+    /* @extern fn pow(base: float64, exp: float64) -> float64 @dylib("m").
+     * The Xi IR is not serialized into embedded bytecode, so the FFI signature
+     * must round-trip on the proto for the libffi invoker to work. */
+    XrProto *proto = make_minimal_proto();
+    ASSERT_NOT_NULL(proto);
+    proto->is_extern = true;
+    XrFFISig *sig = xr_ffi_sig_new("pow", "m", 2);
+    ASSERT_NOT_NULL(sig);
+    sig->params[0] = XR_FFI_T_F64;
+    sig->params[1] = XR_FFI_T_F64;
+    sig->ret = XR_FFI_T_F64;
+    proto->ffi_sig = sig;
+
+    size_t size = 0;
+    uint8_t *bytes = xr_bytecode_write(iso, proto, 0, &size);
+    ASSERT_NOT_NULL(bytes);
+
+    XrBcError error = XR_BC_OK;
+    XrProto *roundtrip = xr_bytecode_read(iso, bytes, size, &error);
+    ASSERT_NOT_NULL(roundtrip);
+    ASSERT_EQ_INT(error, XR_BC_OK);
+    ASSERT_TRUE(roundtrip->is_extern);
+    ASSERT_NOT_NULL(roundtrip->ffi_sig);
+    ASSERT_STR_EQ(roundtrip->ffi_sig->symbol, "pow");
+    ASSERT_NOT_NULL(roundtrip->ffi_sig->dylib);
+    ASSERT_STR_EQ(roundtrip->ffi_sig->dylib, "m");
+    ASSERT_EQ_UINT(roundtrip->ffi_sig->nparams, 2);
+    ASSERT_EQ_UINT(roundtrip->ffi_sig->params[0], XR_FFI_T_F64);
+    ASSERT_EQ_UINT(roundtrip->ffi_sig->params[1], XR_FFI_T_F64);
+    ASSERT_EQ_UINT(roundtrip->ffi_sig->ret, XR_FFI_T_F64);
+
+    xr_vm_proto_free(roundtrip);
+    xr_free(bytes);
+    xr_vm_proto_free(proto);
+    xray_isolate_delete(iso);
+}
+
+TEST(bytecode_roundtrips_extern_default_library) {
+    XrayIsolate *iso = new_test_isolate();
+    ASSERT_NOT_NULL(iso);
+
+    /* @extern fn sqrt(x: float64) -> float64 (no @dylib -> default/process). */
+    XrProto *proto = make_minimal_proto();
+    ASSERT_NOT_NULL(proto);
+    proto->is_extern = true;
+    XrFFISig *sig = xr_ffi_sig_new("sqrt", NULL, 1);
+    ASSERT_NOT_NULL(sig);
+    sig->params[0] = XR_FFI_T_F64;
+    sig->ret = XR_FFI_T_F64;
+    proto->ffi_sig = sig;
+
+    size_t size = 0;
+    uint8_t *bytes = xr_bytecode_write(iso, proto, 0, &size);
+    ASSERT_NOT_NULL(bytes);
+
+    XrBcError error = XR_BC_OK;
+    XrProto *roundtrip = xr_bytecode_read(iso, bytes, size, &error);
+    ASSERT_NOT_NULL(roundtrip);
+    ASSERT_EQ_INT(error, XR_BC_OK);
+    ASSERT_TRUE(roundtrip->is_extern);
+    ASSERT_NOT_NULL(roundtrip->ffi_sig);
+    ASSERT_STR_EQ(roundtrip->ffi_sig->symbol, "sqrt");
+    ASSERT_NULL(roundtrip->ffi_sig->dylib);
+    ASSERT_EQ_UINT(roundtrip->ffi_sig->nparams, 1);
+
+    xr_vm_proto_free(roundtrip);
+    xr_free(bytes);
+    xr_vm_proto_free(proto);
+    xray_isolate_delete(iso);
+}
+
 static void run_all_tests(void) {
     RUN_TEST_SUITE("Bytecode I/O");
     RUN_TEST(bytecode_write_emits_v5_header_and_roundtrips_u64_instruction);
     RUN_TEST(bytecode_reader_rejects_previous_layout_version);
     RUN_TEST(bytecode_roundtrips_u16_upvalue_index);
     RUN_TEST(bytecode_roundtrips_symbol_index_above_255);
+    RUN_TEST(bytecode_roundtrips_extern_ffi_signature);
+    RUN_TEST(bytecode_roundtrips_extern_default_library);
 }
 
 TEST_MAIN_BEGIN()

@@ -626,6 +626,24 @@ XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyz
     l.func->parent_func = parent_ctx ? parent_ctx->func : NULL;
     l.func->analyzer = analyzer;
 
+    /* FFI: @extern("C") functions are bodyless foreign declarations. Record
+     * the C symbol + optional dylib; the body below stays empty and a trivial
+     * zero return is synthesized so the IR is well-formed (codegen replaces it
+     * with `extern Ret sym(...)` and direct calls). */
+    if (fdecl->attributes) {
+        for (int i = 0; i < fdecl->attr_count; i++) {
+            XrAttribute *a = fdecl->attributes[i];
+            if (!a)
+                continue;
+            if (a->kind == ATTR_EXTERN) {
+                l.func->is_extern = true;
+                l.func->extern_symbol = fdecl->name;
+            } else if (a->kind == ATTR_DYLIB) {
+                l.func->extern_dylib = a->str_arg;
+            }
+        }
+    }
+
     /* Entry block (no predecessors — seal immediately) */
     XiBlock *entry = xi_block_new(l.func);
     entry->sealed = true;
@@ -739,14 +757,28 @@ XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyz
         }
     }
 
-    /* Lower function body */
+    /* Lower function body (extern functions are bodyless) */
     if (fdecl->body) {
         xi_lower_stmt(&l, fdecl->body);
     }
 
-    /* If last block not terminated, add implicit void return */
+    /* If last block not terminated, add implicit return. Extern functions
+     * return a zero of the declared type so the synthesized stub type-checks;
+     * everything else returns void. */
     if (l.cur_block) {
-        xi_block_set_return(l.cur_block, NULL);
+        if (l.func->is_extern) {
+            XrRep rep = xr_type_rep(ret_type);
+            XiValue *zero = NULL;
+            if (rep == XR_REP_F64)
+                zero = xi_const_float(l.func, l.cur_block, 0.0, ret_type);
+            else if (rep == XR_REP_I64)
+                zero = xi_const_int(l.func, l.cur_block, 0, ret_type);
+            else if (rep != XR_REP_VOID)
+                zero = xi_const_null(l.func, l.cur_block, ret_type);
+            xi_block_set_return(l.cur_block, zero);
+        } else {
+            xi_block_set_return(l.cur_block, NULL);
+        }
     }
 
     XiFunc *result = l.had_error ? NULL : l.func;

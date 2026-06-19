@@ -327,6 +327,32 @@ XR_FUNC void xi_emit_bytes_load_u64_le(EmitCtx *ctx, XiValue *v, XiEmitReg dst) 
     emit_builtin_bytes_load_op(ctx, v, dst, OP_BYTES_LOAD_U64_LE);
 }
 
+/* FFI raw-pointer load: R[dst] = *(T*)R[addr], width code in C operand. */
+XR_FUNC void xi_emit_ptr_load(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    if (v->nargs != 1) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+    XiEmitReg addr = reg_of(ctx, v->args[0]);
+    if (ctx->status != XI_EMIT_OK)
+        return;
+    emit_inst(ctx, CREATE_ABC(OP_PTR_LOAD, dst, addr, (XiEmitReg) (v->aux_int & 0xff)));
+}
+
+/* FFI raw-pointer store: *(T*)R[addr] = R[val], width code in C operand. */
+XR_FUNC void xi_emit_ptr_store(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    (void) dst;
+    if (v->nargs != 2) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+    XiEmitReg addr = reg_of(ctx, v->args[0]);
+    XiEmitReg val = reg_of(ctx, v->args[1]);
+    if (ctx->status != XI_EMIT_OK)
+        return;
+    emit_inst(ctx, CREATE_ABC(OP_PTR_STORE, addr, val, (XiEmitReg) (v->aux_int & 0xff)));
+}
+
 XR_FUNC void xi_emit_bytes_copy_within(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     emit_builtin_bytes_window_op(ctx, v, dst, OP_BYTES_COPY_WITHIN, 4);
 }

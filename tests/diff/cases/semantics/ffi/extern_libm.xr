@@ -1,0 +1,9 @@
+// FFI: call C standard-library math functions through @extern.
+// Verifies the VM (libffi) and AOT (direct C call) backends agree.
+@extern("C") fn sqrt(x: float64) -> float64
+@extern("C") fn pow(base: float64, exp: float64) -> float64
+@extern("C") fn abs(x: int32) -> int32
+
+print(unsafe { sqrt(2.0) })
+print(unsafe { pow(2.0, 10.0) })
+print(unsafe { abs(-7) })

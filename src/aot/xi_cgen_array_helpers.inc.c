@@ -1210,33 +1210,33 @@ static bool emit_typed_array_index_get_expr(XiCgenCtx *ctx, FILE *out, const XiF
         if (use_cache)
             emit_aot_hot_region_end(out, "typed_array_raw_access");
     } else if (info.rep == XR_REP_F64) {
+        /* Bounds-checked read: an index outside [0, length) — including negatives —
+         * throws E0430 (spec §3), matching the VM. No from-end wraparound. */
         fprintf(out, "({ xrt_array_t *_a = ");
         emit_typed_array_ptr_expr(ctx, out, f, v->args[0], prefix);
         fprintf(out, "; int64_t _idx = ");
         emit_value_as_rep(out, v->args[1], XR_REP_I64);
-        fprintf(out, "; if (_idx < 0) _idx += _a->length; ");
-        fprintf(out, "XR_LIKELY(_idx >= 0 && _idx < _a->length) ? (double)");
+        fprintf(out, "; XR_LIKELY(_idx >= 0 && _idx < _a->length) ? (double)");
         if (use_cache) {
             emit_typed_array_data_cache_ref(out, cached_origin);
             fprintf(out, "[_idx]");
         } else {
             fprintf(out, "((%s*)_a->data)[_idx]", info.ctype);
         }
-        fprintf(out, " : 0.0; })");
+        fprintf(out, " : (xrt_index_oob(_idx, _a->length), 0.0); })");
     } else {
         fprintf(out, "({ xrt_array_t *_a = ");
         emit_typed_array_ptr_expr(ctx, out, f, v->args[0], prefix);
         fprintf(out, "; int64_t _idx = ");
         emit_value_as_rep(out, v->args[1], XR_REP_I64);
-        fprintf(out, "; if (_idx < 0) _idx += _a->length; ");
-        fprintf(out, "XR_LIKELY(_idx >= 0 && _idx < _a->length) ? (int64_t)");
+        fprintf(out, "; XR_LIKELY(_idx >= 0 && _idx < _a->length) ? (int64_t)");
         if (use_cache) {
             emit_typed_array_data_cache_ref(out, cached_origin);
             fprintf(out, "[_idx]");
         } else {
             fprintf(out, "((%s*)_a->data)[_idx]", info.ctype);
         }
-        fprintf(out, " : 0; })");
+        fprintf(out, " : (xrt_index_oob(_idx, _a->length), 0); })");
     }
     emit_conversion_suffix(out, conv_suffix);
     return true;

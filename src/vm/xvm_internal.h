@@ -34,6 +34,7 @@
 #include "../runtime/class/xenum.h"
 #include "../runtime/object/xexception.h"
 #include "../runtime/object/xbigint.h"
+#include "../runtime/value/xstruct_layout.h"
 #include "../runtime/symbol/xsymbol_table.h"
 #include "../base/xglobal_indices.h"
 #include "xvm_coro_api.h"
@@ -45,6 +46,12 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include "../base/xdefs.h"
+
+XR_FUNC XrStructLayout *xr_vm_struct_ref_layout(XrayIsolate *isolate, XrValue ref);
+XR_FUNC uint8_t *xr_vm_struct_ref_payload(XrayIsolate *isolate, XrValue ref,
+                                          XrStructLayout **layout_out);
+XR_FUNC int xr_vm_struct_layout_field_index(XrayIsolate *isolate, const XrStructLayout *layout,
+                                            int prop_symbol);
 
 /* ========== Inline Helper Functions ========== */
 

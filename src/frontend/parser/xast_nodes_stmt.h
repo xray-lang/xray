@@ -239,6 +239,14 @@ typedef struct MoveExprNode {
     AstNode *expr;  // must be a variable reference
 } MoveExprNode;
 
+// unsafe expression: unsafe { expr }
+// Semantically transparent (value/type = operand); the wrapper exists so
+// the analyzer can permit otherwise-restricted operations (extern calls,
+// raw-pointer dereference) only inside its dynamic extent.
+typedef struct UnsafeExprNode {
+    AstNode *operand;
+} UnsafeExprNode;
+
 // cancelled() expression
 typedef struct CancelledExprNode {
     int placeholder;

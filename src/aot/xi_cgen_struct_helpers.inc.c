@@ -54,6 +54,10 @@ static uint64_t cg_struct_layout_hash_depth(const XrStructLayout *sl, int depth)
         return h ^ UINT64_C(0x9e3779b97f4a7c15);
     h ^= sl->field_count;
     h *= UINT64_C(1099511628211);
+    h ^= sl->repr;
+    h *= UINT64_C(1099511628211);
+    h ^= sl->explicit_align;
+    h *= UINT64_C(1099511628211);
     for (uint16_t i = 0; i < sl->field_count; i++) {
         h ^= sl->fields[i].native_type;
         h *= UINT64_C(1099511628211);
@@ -81,7 +85,8 @@ static bool cg_struct_layout_same_shape_depth(const XrStructLayout *a, const XrS
                                               int depth) {
     if (a == b)
         return true;
-    if (!a || !b || a->field_count != b->field_count || depth > 8)
+    if (!a || !b || a->field_count != b->field_count || a->repr != b->repr ||
+        a->explicit_align != b->explicit_align || depth > 8)
         return false;
     for (uint16_t i = 0; i < a->field_count; i++) {
         if (a->fields[i].native_type != b->fields[i].native_type ||
@@ -130,7 +135,9 @@ static void emit_struct_field_decl(FILE *out, const XrStructLayout *sl, int64_t 
 static void emit_struct_native_typedef(FILE *out, const XrStructLayout *sl, const char *prefix) {
     char tname[128];
     cg_struct_heap_type_name(tname, sizeof(tname), prefix, sl);
-    fprintf(out, "typedef struct %s { uint32_t _size; uint32_t _layout; ", tname);
+    fprintf(out, "typedef struct %s { ", tname);
+    if (xr_struct_layout_header_size(sl) != 0)
+        fprintf(out, "uint32_t _size; uint32_t _layout; ");
     for (uint16_t i = 0; i < sl->field_count; i++) {
         char fname[32];
         snprintf(fname, sizeof(fname), "f%u", i);
@@ -536,9 +543,11 @@ static void emit_struct_inline_field_get_expr(FILE *out, const XrStructLayout *s
                                               const XiValue *origin, int64_t idx) {
     const XrStructFieldLayout *field = cg_struct_field(sl, idx);
     if (field && field->native_type == XR_NATIVE_STRUCT) {
-        fprintf(out, "xr_mkptr(&");
+        fprintf(out, "xr_struct_ref(&");
         emit_struct_field_ref(out, origin, idx);
-        fprintf(out, ", XR_TAG_STRUCT_REF)");
+        fprintf(out, ", (uint16_t)sizeof(");
+        emit_struct_field_ref(out, origin, idx);
+        fprintf(out, "))");
         return;
     }
     if (field && field->native_type == XR_NATIVE_ARRAY) {
@@ -746,11 +755,18 @@ static void emit_struct_fallback_new_expr(FILE *out, const XrStructLayout *sl, c
     if (cg_struct_native_heap_supported(sl)) {
         char tname[128];
         cg_struct_heap_type_name(tname, sizeof(tname), prefix, sl);
-        fprintf(out,
-                "({ %s *_s = (%s*)xrt_arc_alloc(sizeof(%s)); _s->_size = "
-                "(uint32_t)sizeof(%s); _s->_layout = UINT32_C(%" PRIu32 "); "
-                "xr_mkptr(_s, XR_TAG_STRUCT_REF); })",
-                tname, tname, tname, tname, (uint32_t) cg_struct_layout_hash(sl));
+        if (xr_struct_layout_header_size(sl) == 0) {
+            fprintf(out,
+                    "({ %s *_s = (%s*)xrt_arc_alloc(sizeof(%s)); "
+                    "xr_struct_ref(_s, (uint16_t)sizeof(%s)); })",
+                    tname, tname, tname, tname);
+        } else {
+            fprintf(out,
+                    "({ %s *_s = (%s*)xrt_arc_alloc(sizeof(%s)); _s->_size = "
+                    "(uint32_t)sizeof(%s); _s->_layout = UINT32_C(%" PRIu32 "); "
+                    "xr_mkptr(_s, XR_TAG_STRUCT_REF); })",
+                    tname, tname, tname, tname, (uint32_t) cg_struct_layout_hash(sl));
+        }
         return;
     }
 
@@ -811,9 +827,11 @@ static bool emit_struct_heap_field_get_expr(XiCgenCtx *ctx, FILE *out, const XiF
         return false;
     const XrStructFieldLayout *field = cg_struct_field(sl, idx);
     if (field && field->native_type == XR_NATIVE_STRUCT) {
-        fprintf(out, "xr_mkptr(&");
+        fprintf(out, "xr_struct_ref(&");
         emit_struct_heap_field_lvalue(ctx, out, f, sl, idx, object, prefix);
-        fprintf(out, ", XR_TAG_STRUCT_REF)");
+        fprintf(out, ", (uint16_t)sizeof(");
+        emit_struct_heap_field_lvalue(ctx, out, f, sl, idx, object, prefix);
+        fprintf(out, "))");
         return true;
     }
     if (field && field->native_type == XR_NATIVE_ARRAY) {
@@ -1005,12 +1023,11 @@ static bool emit_struct_fixed_array_index_get_expr(XiCgenCtx *ctx, FILE *out, co
     bool unchecked = cg_fixed_array_index_bounds_proven(v, field->elem_count);
     const char *conv_suffix = emit_conversion_prefix(out, v->type, elem_rep, cg_rep(v));
     if (!unchecked) {
+        /* OOB (incl. negative) throws E0430, catchable + matching the VM, rather
+         * than abort()'ing the process. */
         fprintf(out, "({ int64_t _idx = ");
         emit_value_as_rep(out, v->args[1], XR_REP_I64);
-        fprintf(out,
-                "; if (_idx < 0 || _idx >= %u) { fprintf(stderr, "
-                "\"fixed array index out of range: %%lld (length %u)\\n\", "
-                "(long long)_idx); abort(); } ",
+        fprintf(out, "; if (XR_UNLIKELY(_idx < 0 || _idx >= %u)) xrt_index_oob(_idx, %u); ",
                 (unsigned) field->elem_count, (unsigned) field->elem_count);
     }
     fprintf(out, elem_rep == XR_REP_F64 ? "(double)" : "(int64_t)");

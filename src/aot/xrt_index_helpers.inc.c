@@ -1,5 +1,14 @@
 /* Fixed native arrays and dynamic index access helpers. */
 
+/* Out-of-bounds array index throws E0430 (spec §3 expr-index-access), matching
+ * the VM's XR_ERR_INDEX_OUT_OF_BOUNDS. An `int` index outside [0, length) —
+ * including any negative index — is a fault: there is no from-end wraparound.
+ * Defined in xrt_exception.h (pulled in ahead of this header via xrt_arith.h in
+ * the full runtime); forward-declared here so the index helpers still parse in
+ * standalone TUs that include xrt_coll.h alone (those never reach the throwing
+ * path, so the static-inline callers are elided). */
+static XRT_COLD _Noreturn void xrt_index_oob(int64_t idx, int64_t length);
+
 static inline size_t xrt_native_type_size(uint8_t native_type) {
     switch (native_type) {
         case XR_NATIVE_I64:
@@ -160,17 +169,14 @@ static inline XrValue xrt_index_get(XrValue obj, XrValue key) {
         uint16_t count = XR_ARRAY_REF_ELEM_COUNT(obj);
         if (XR_LIKELY(idx >= 0 && idx < count))
             return xrt_fixed_array_get(obj.ptr, XR_ARRAY_REF_ELEM_TYPE(obj), idx);
-        fprintf(stderr, "fixed array index out of range: %lld (length %u)\n", (long long) idx,
-                (unsigned) count);
-        abort();
+        xrt_index_oob(idx, count);
     }
     if (XR_IS_ARRAY(obj) && key.tag == XR_TAG_I64) {
         xrt_array_t *a = (xrt_array_t *) obj.ptr;
         int64_t idx = key.i;
-        if (idx < 0)
-            idx += a->length;
         if (XR_LIKELY(idx >= 0 && idx < a->length))
             return xr_typed_get(a->data, (int32_t) idx, a->elem_type);
+        xrt_index_oob(idx, a->length);
     } else if (XR_IS_STR(obj) && key.tag == XR_TAG_I64) {
         return xrt_string_index_get(obj, key.i);
     } else if (obj.tag == XR_TAG_RANGE && key.tag == XR_TAG_I64) {

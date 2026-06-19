@@ -679,6 +679,10 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
             n->as.await_expr.is_all = node->as.await_expr.is_all;
             n->as.await_expr.is_any_success = node->as.await_expr.is_any_success;
             break;
+        case AST_UNSAFE_EXPR:
+            n->as.unsafe_expr.operand =
+                xr_ast_clone_ctx(node->as.unsafe_expr.operand, map, mc, clone_ctx);
+            break;
         case AST_CHANNEL_NEW:
             n->as.channel_new.buffer_size =
                 xr_ast_clone_ctx(node->as.channel_new.buffer_size, map, mc, clone_ctx);
@@ -730,6 +734,9 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
             dst->methods = clone_node_array(src->methods, src->method_count, map, mc, clone_ctx);
             dst->is_abstract = src->is_abstract;
             dst->is_final = src->is_final;
+            dst->is_native = src->is_native;
+            dst->attributes = src->attributes;
+            dst->attr_count = src->attr_count;
             dst->type_params = NULL;  // Cleared: mono version has no type params
             dst->type_param_count = 0;
             break;
@@ -1286,6 +1293,9 @@ static void collect_instantiation_sites(AstNode *node, XaGenericRegistry *regist
         case AST_AWAIT_EXPR:
             collect_instantiation_sites(node->as.await_expr.expr, registry, collector);
             break;
+        case AST_UNSAFE_EXPR:
+            collect_instantiation_sites(node->as.unsafe_expr.operand, registry, collector);
+            break;
         case AST_SCOPE_BLOCK:
             collect_instantiation_sites(node->as.scope_block.body, registry, collector);
             break;
@@ -1482,6 +1492,9 @@ static void rewrite_call_sites(AstNode *node, XaGenericRegistry *registry,
             break;
         case AST_AWAIT_EXPR:
             rewrite_call_sites(node->as.await_expr.expr, registry, collector);
+            break;
+        case AST_UNSAFE_EXPR:
+            rewrite_call_sites(node->as.unsafe_expr.operand, registry, collector);
             break;
         case AST_SCOPE_BLOCK:
             rewrite_call_sites(node->as.scope_block.body, registry, collector);

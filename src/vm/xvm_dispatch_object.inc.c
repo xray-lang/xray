@@ -455,13 +455,13 @@ vmcase(OP_GETPROP) {
     }
 
     // Stack-allocated struct field access
-    if (XR_IS_STRUCT_REF(obj)) {
-        uint8_t *sptr = (uint8_t *) xr_to_struct_ptr(obj);
-        XrClass *scls = *(XrClass **) sptr;
-        int fidx = xr_class_lookup_field(scls, prop_symbol);
-        if (fidx >= 0 && scls->struct_layout && fidx < scls->struct_layout->field_count) {
-            XrStructFieldLayout *sf = &scls->struct_layout->fields[fidx];
-            uint8_t *fp = sptr + 8 + sf->offset;
+    if (XR_IS_STRUCT_REF(obj) && !XR_IS_ARRAY_REF(obj)) {
+        XrStructLayout *slayout = NULL;
+        uint8_t *payload = xr_vm_struct_ref_payload(isolate, obj, &slayout);
+        int fidx = xr_vm_struct_layout_field_index(isolate, slayout, prop_symbol);
+        if (fidx >= 0 && fidx < slayout->field_count) {
+            XrStructFieldLayout *sf = &slayout->fields[fidx];
+            uint8_t *fp = payload + sf->offset;
             switch (sf->native_type) {
                 case XR_NATIVE_I64:
                     R(a) = XR_FROM_INT(*(int64_t *) fp);

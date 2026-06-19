@@ -49,6 +49,10 @@ typedef struct XaInferContext {
     XrType *callback_index_type;        // Index type for callback second param (always int)
     XrType *callback_accumulator_type;  // Accumulator type for reduce (from initial value)
     XrType *callback_array_type;        // Original array type for callbacks needing it
+
+    // Nonzero inside an `unsafe { }` region. Gates raw-pointer dereference and
+    // extern-function calls: those are errors at depth 0 (Rust model).
+    int unsafe_depth;
 } XaInferContext;
 
 // API: Context lifecycle

@@ -60,6 +60,12 @@ typedef enum {
 
 struct XrStructLayout;
 
+typedef enum {
+    XR_STRUCT_REPR_XRAY = 0,    // Xray value struct: [XrClass*][payload]
+    XR_STRUCT_REPR_C = 1,       // C ABI payload only
+    XR_STRUCT_REPR_PACKED = 2,  // C ABI payload only, byte-packed fields
+} XrStructRepr;
+
 // Per-field descriptor within a struct layout
 typedef struct {
     uint16_t offset;                    // byte offset within struct
@@ -84,9 +90,25 @@ typedef struct XrStructLayout {
     uint16_t alignment;        // alignment requirement
     uint16_t field_count;      // number of fields
     uint16_t layout_id;        // global layout registry index
+    uint8_t repr;              // XrStructRepr
+    uint8_t explicit_align;    // @align(N), 0 = natural
     const char **field_names;  // [field_count] parallel to fields[], NULL-able
     XrStructFieldLayout fields[XR_MAX_STRUCT_FIELDS];
 } XrStructLayout;
+
+static inline bool xr_struct_layout_is_headerless(const XrStructLayout *layout) {
+    return layout && (layout->repr == XR_STRUCT_REPR_C || layout->repr == XR_STRUCT_REPR_PACKED);
+}
+
+static inline uint16_t xr_struct_layout_header_size(const XrStructLayout *layout) {
+    return xr_struct_layout_is_headerless(layout) ? 0 : 8;
+}
+
+static inline uint32_t xr_struct_layout_storage_size(const XrStructLayout *layout) {
+    if (!layout)
+        return 0;
+    return (uint32_t) xr_struct_layout_header_size(layout) + (uint32_t) layout->total_size;
+}
 
 /* ========== Layout Computation ========== */
 

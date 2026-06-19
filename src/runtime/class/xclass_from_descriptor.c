@@ -249,6 +249,7 @@ XrClass *xr_class_from_descriptor(XrayIsolate *isolate, const XrClassDescriptor 
     // Set struct_layout and VALUE_TYPE / FLAT_COPYABLE flags
     if (desc->struct_layout) {
         cls->struct_layout = desc->struct_layout;
+        xr_vm_struct_layout_register(xr_isolate_get_vm_state(isolate), cls->struct_layout);
         cls->flags |= XR_CLASS_VALUE_TYPE;
 
         /* A struct is flat-copyable when every field can preserve value

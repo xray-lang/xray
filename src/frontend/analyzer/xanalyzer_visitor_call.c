@@ -234,6 +234,20 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         if (fn_sym && fn_sym->kind == XA_SYM_FUNCTION) {
             fn_links = xa_analyzer_get_links(ctx->analyzer, fn_sym);
 
+            // FFI: calling an @extern function is unsafe — it crosses into a
+            // foreign C ABI with no Xray safety guarantees. Permit it only
+            // inside an `unsafe { }` region (Rust model).
+            if (fn_links && fn_links->is_extern && ctx->unsafe_depth == 0) {
+                XrLocation loc = {
+                    .file = ctx->file_path, .line = node->line, .column = node->column};
+                char msg[256];
+                snprintf(msg, sizeof(msg),
+                         "call to extern function '%s' must be inside an `unsafe { }` block",
+                         fn_name ? fn_name : "?");
+                xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                           XR_ERR_ANALYZE_NOT_CALLABLE, msg, &loc);
+            }
+
             if (ctx->current_function && ctx->analyzer->incremental) {
                 XaIncrementalCtx *incr = (XaIncrementalCtx *) ctx->analyzer->incremental;
                 xa_dep_add(incr, ctx->current_function->id, fn_sym->id, XA_DEP_CALL);

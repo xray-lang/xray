@@ -58,6 +58,7 @@
 #define KOP_ABC_BIN_K XR_OPF_REG_OUT, XR_OPF_REG_IN, XR_OPF_K_IDX
 #define KOP_ABC_BIN_S XR_OPF_REG_OUT, XR_OPF_REG_IN, XR_OPF_LIT_S
 #define KOP_ABC_BIN_LIT XR_OPF_REG_OUT, XR_OPF_REG_IN, XR_OPF_LIT
+#define KOP_ABC_STORE_LIT XR_OPF_REG_IN, XR_OPF_REG_IN, XR_OPF_LIT
 #define KOP_ABC_INPLACE_K XR_OPF_REG_INOUT, XR_OPF_K_IDX, XR_OPF_REG_IN
 #define KOP_ABC_INPLACE_LIT XR_OPF_REG_INOUT, XR_OPF_LIT, XR_OPF_REG_IN
 #define KOP_AB_TEST XR_OPF_REG_IN, XR_OPF_REG_IN, XR_OPF_LIT_FLAG
@@ -317,6 +318,8 @@
     _(STRUCT_GET, FMT_ABC, KOP_ABC_BIN_LIT, "R[A] = struct(R[B]).field[C]")                        \
     _(STRUCT_SET, FMT_ABC, KOP_ABC_INPLACE_LIT, "struct(R[A]).field[B] = R[C]")                    \
     _(STRUCT_COPY, FMT_ABC, KOP_ABC_BIN_LIT, "R[A] = memcpy struct R[B] into struct_area slot C")  \
+    _(PTR_LOAD, FMT_ABC, KOP_ABC_BIN_LIT, "R[A] = *(T*)R[B], C = XrFFIType width of T")            \
+    _(PTR_STORE, FMT_ABC, KOP_ABC_STORE_LIT, "*(T*)R[A] = R[B], C = XrFFIType width of T")         \
     _(NOP, FMT_SPECIAL, KOP_SPECIAL, "no-op / spawn metadata")
 
 #endif  // XOPCODE_DEF_H

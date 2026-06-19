@@ -109,8 +109,7 @@ vmcase(OP_TFIELD_SET) {
 
 vmcase(OP_NEW_STRUCT) {
     /* A = dest reg, B = class reg, C = struct_area slot offset
-     * Allocate struct in per-frame struct_area (zero heap allocation).
-     * Layout: [XrClass* 8B][field data...] */
+     * Allocate struct in per-frame struct_area (zero heap allocation). */
     TRACE_EXECUTION();
     int a = GETARG_A(i);
     int b = GETARG_B(i);
@@ -119,12 +118,19 @@ vmcase(OP_NEW_STRUCT) {
     XrClass *cls = xr_value_to_class(class_val);
     XrStructLayout *layout = cls->struct_layout;
     XR_DCHECK(layout != NULL, "OP_NEW_STRUCT requires struct_layout");
+    uint16_t layout_id = xr_vm_struct_layout_register(&isolate->vm, layout);
+    if (XR_UNLIKELY(layout_id == 0 && xr_struct_layout_is_headerless(layout))) {
+        VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, "failed to register @repr(C) struct layout");
+    }
     XR_DCHECK(vm_ctx->struct_areas && vm_ctx->struct_areas[VM_FRAME_COUNT - 1],
               "OP_NEW_STRUCT requires allocated struct_area");
 
     uint8_t *struct_ptr = vm_ctx->struct_areas[VM_FRAME_COUNT - 1] + c * 16;
-    *(XrClass **) struct_ptr = cls;
-    memset(struct_ptr + 8, 0, layout->total_size);
+    uint16_t header_size = xr_struct_layout_header_size(layout);
+    if (header_size)
+        *(XrClass **) struct_ptr = cls;
+    uint8_t *payload = struct_ptr + header_size;
+    memset(payload, 0, layout->total_size);
 
     // Apply field default values from class descriptor
     if (cls->field_default_values) {
@@ -134,7 +140,7 @@ vmcase(OP_NEW_STRUCT) {
             if (dv.tag == XR_TAG_NULL)
                 continue;
             XrStructFieldLayout *fl = &layout->fields[fi];
-            uint8_t *fp = struct_ptr + 8 + fl->offset;
+            uint8_t *fp = payload + fl->offset;
             switch (fl->native_type) {
                 case XR_NATIVE_I64:
                     *(int64_t *) fp = XR_TO_INT(dv);
@@ -183,7 +189,7 @@ vmcase(OP_NEW_STRUCT) {
         }
     }
 
-    R(a) = xr_struct_ref(struct_ptr, 0);
+    R(a) = xr_struct_ref(struct_ptr, layout_id);
     vmbreak;
 }
 
@@ -195,11 +201,13 @@ vmcase(OP_STRUCT_GET) {
     int b = GETARG_B(i);
     int c = GETARG_C(i);
 
-    uint8_t *struct_ptr = (uint8_t *) xr_to_struct_ptr(R(b));
-    XrClass *cls = *(XrClass **) struct_ptr;
-    XrStructLayout *layout = cls->struct_layout;
+    XrStructLayout *layout = NULL;
+    uint8_t *payload = xr_vm_struct_ref_payload(isolate, R(b), &layout);
+    if (XR_UNLIKELY(!payload || !layout || c < 0 || c >= layout->field_count)) {
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "invalid struct field read");
+    }
     XrStructFieldLayout *field = &layout->fields[c];
-    uint8_t *fp = struct_ptr + 8 + field->offset;
+    uint8_t *fp = payload + field->offset;
 
     switch (field->native_type) {
         case XR_NATIVE_I64:
@@ -243,6 +251,9 @@ vmcase(OP_STRUCT_GET) {
             break;
         }
         case XR_NATIVE_STRUCT:
+            if (field->sub_layout && field->sub_layout_id == 0)
+                field->sub_layout_id =
+                    xr_vm_struct_layout_register(&isolate->vm, field->sub_layout);
             R(a) = xr_struct_ref(fp, field->sub_layout_id);
             break;
         case XR_NATIVE_ARRAY:
@@ -268,11 +279,13 @@ vmcase(OP_STRUCT_SET) {
     int b = GETARG_B(i);
     int c = GETARG_C(i);
 
-    uint8_t *struct_ptr = (uint8_t *) xr_to_struct_ptr(R(a));
-    XrClass *cls = *(XrClass **) struct_ptr;
-    XrStructLayout *layout = cls->struct_layout;
+    XrStructLayout *layout = NULL;
+    uint8_t *payload = xr_vm_struct_ref_payload(isolate, R(a), &layout);
+    if (XR_UNLIKELY(!payload || !layout || b < 0 || b >= layout->field_count)) {
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "invalid struct field write");
+    }
     XrStructFieldLayout *field = &layout->fields[b];
-    uint8_t *fp = struct_ptr + 8 + field->offset;
+    uint8_t *fp = payload + field->offset;
     XrValue src = R(c);
 
     switch (field->native_type) {
@@ -311,7 +324,7 @@ vmcase(OP_STRUCT_SET) {
             break;
         }
         case XR_NATIVE_STRUCT: {
-            if (!vm_struct_write_field_bytes(fp, field, src)) {
+            if (!vm_struct_write_field_bytes(isolate, fp, field, src)) {
                 VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
                                  "cannot assign non-struct value to nested struct field");
             }
@@ -390,13 +403,19 @@ vmcase(OP_STRUCT_COPY) {
     int b = GETARG_B(i);
     int c = GETARG_C(i);
 
-    uint8_t *src_ptr = (uint8_t *) xr_to_struct_ptr(R(b));
-    XrClass *cls = *(XrClass **) src_ptr;
-    XrStructLayout *layout = cls->struct_layout;
+    XrValue src = R(b);
+    uint8_t *src_ptr = (uint8_t *) xr_to_struct_ptr(src);
+    XrStructLayout *layout = xr_vm_struct_ref_layout(isolate, src);
+    if (XR_UNLIKELY(!src_ptr || !layout)) {
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "invalid struct copy");
+    }
+    uint16_t layout_id = xr_struct_layout_id(src);
+    if (layout_id == 0)
+        layout_id = xr_vm_struct_layout_register(&isolate->vm, layout);
 
     uint8_t *dst_ptr = vm_ctx->struct_areas[VM_FRAME_COUNT - 1] + c * 16;
 
-    memcpy(dst_ptr, src_ptr, 8 + layout->total_size);
-    R(a) = xr_struct_ref(dst_ptr, 0);
+    memcpy(dst_ptr, src_ptr, xr_struct_layout_storage_size(layout));
+    R(a) = xr_struct_ref(dst_ptr, layout_id);
     vmbreak;
 }

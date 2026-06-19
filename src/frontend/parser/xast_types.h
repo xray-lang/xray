@@ -206,6 +206,7 @@ typedef enum {
     AST_YIELD_STMT,      // yield - give up execution
     AST_CANCELLED_EXPR,  // cancelled() check
     AST_MOVE_EXPR,       // move var - explicit ownership transfer
+    AST_UNSAFE_EXPR,     // unsafe { expr } - FFI / raw-pointer escape hatch
 
     // Program node
     AST_PROGRAM  // Root node
@@ -234,6 +235,11 @@ typedef enum {
     ATTR_AFTER_ALL,     // @after_all
     ATTR_NATIVE,        // @native — implementation provided by C runtime
     ATTR_DEPRECATED,    // @deprecated or @deprecated("message")
+    ATTR_EXTERN,        // @extern("C") — foreign function (FFI), calling convention in str_arg
+    ATTR_DYLIB,         // @dylib("name") — resolve symbol from a named dynamic library
+    ATTR_REPR_C,        // @repr(C) — struct laid out per C ABI
+    ATTR_REPR_PACKED,   // @repr(packed) — struct with no inter-field padding
+    ATTR_ALIGN,         // @align(N) — struct alignment override (N in timeout)
 } AttributeKind;
 
 // Destructuring pattern types (flat only, no nesting)

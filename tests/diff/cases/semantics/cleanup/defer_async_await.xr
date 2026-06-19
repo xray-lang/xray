@@ -1,0 +1,31 @@
+// anchor: defer-in-suspendable-coroutine
+// A `defer` inside a suspendable (await-containing) coroutine runs at the
+// coroutine function's exit, after any suspension/resume. The defer scope lives
+// in the heap coro frame, so defers registered both before and after an `await`
+// survive suspension and run LIFO at completion. Regression: AOT previously
+// rejected `defer` in async functions outright (unsupported Xi op DEFER); and a
+// native-class instance (here Conn) captured by a defer and held across `await`
+// exercised the coro-frame native-class storage-rep path.
+class Conn {
+    id: int
+    constructor(id: int) { this.id = id }
+    close() { print("close conn " + string(this.id)) }
+}
+
+fn leaf(n: int) -> int { return n + 1 }
+
+fn worker(id: int) -> int {
+    let c = Conn(id)
+    defer c.close()                           // method-call defer, held across await
+    defer print("defer-builtin " + string(id))
+    print("before-await " + string(id))
+    let r = await go leaf(id)
+    defer print("defer-after " + string(r))   // registered AFTER suspension
+    print("after-await " + string(r))
+    return r * 10
+    // LIFO at exit: defer-after, defer-builtin, close conn
+}
+
+let t = go worker(7)
+print(await t)
+print("done")

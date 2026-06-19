@@ -134,6 +134,7 @@ static bool is_expression_node(AstNodeType t) {
         case AST_CHAN_RECV:
         case AST_CANCELLED_EXPR:
         case AST_MOVE_EXPR:
+        case AST_UNSAFE_EXPR:
         /* Match */
         case AST_MATCH_EXPR:
         /* Function expression */
@@ -440,6 +441,10 @@ static void check_node(CoverageCtx *ctx, AstNode *node) {
 
         case AST_MOVE_EXPR:
             check_node(ctx, node->as.move_expr.expr);
+            break;
+
+        case AST_UNSAFE_EXPR:
+            check_node(ctx, node->as.unsafe_expr.operand);
             break;
 
         case AST_SELECT_STMT: {

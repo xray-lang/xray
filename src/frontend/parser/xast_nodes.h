@@ -142,6 +142,7 @@ struct AstNode {
         ScopeBlockNode scope_block;
         CancelledExprNode cancelled_expr;
         MoveExprNode move_expr;
+        UnsafeExprNode unsafe_expr;
         ProgramNode program;
     } as;
 };

@@ -89,7 +89,7 @@ build_docker_image() {
 FROM ubuntu:24.04
 ${MIRROR_CMD}
 RUN apt-get update && apt-get install -y --no-install-recommends \\
-    cmake gcc g++ make zlib1g-dev libssl-dev \\
+    cmake gcc g++ make zlib1g-dev libssl-dev liburing-dev \\
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /xray
 DOCKERFILE
@@ -130,7 +130,7 @@ RUN dpkg --add-architecture amd64 && \\
     apt-get update && \\
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \\
     cmake make gcc-x86-64-linux-gnu g++-x86-64-linux-gnu \\
-    zlib1g-dev:amd64 libssl-dev:amd64 \\
+    zlib1g-dev:amd64 libssl-dev:amd64 liburing-dev:amd64 \\
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /xray
 DOCKERFILE

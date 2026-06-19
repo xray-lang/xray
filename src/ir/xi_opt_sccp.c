@@ -840,6 +840,19 @@ XR_FUNC XiPassChange xi_opt_sccp(XiFunc *f) {
                     ctx.cells[dv] = neu;
                     enqueue_uses(&ctx, dv);
                 }
+
+                /* Exception edge: an XI_TRY opens a panic scope whose handler
+                 * block is reached only via the unwind path, with no normal CFG
+                 * predecessor. Mark it reachable when the try block is, so SCCP
+                 * does not prune the catch block (which would leave a dangling
+                 * goto in the AOT backend). */
+                if (v->op == XI_TRY && v->aux) {
+                    uint32_t hbi = 0;
+                    if (block_index(&ctx, (XiBlock *) v->aux, &hbi) && !ctx.reachable[hbi]) {
+                        ctx.reachable[hbi] = true;
+                        cfg_push(&ctx.cfg, ce.to, hbi);
+                    }
+                }
             }
 
             visit_terminator(&ctx, blk);

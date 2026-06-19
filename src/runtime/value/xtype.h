@@ -70,6 +70,8 @@ typedef enum XrTypeKind {
     XR_KIND_TUPLE,
     XR_KIND_UNION,        // Union type: int | string (compile-time only)
     XR_KIND_FIXED_ARRAY,  // Fixed-length array: [N]T (compile-time length, runtime Array<T>)
+    XR_KIND_POINTER,      // FFI raw pointer: RawPtr<T> (const) / RawMut<T> (mut). Address-
+                          // width integer at the value level, invisible to the GC.
     XR_KIND_COUNT
 } XrTypeKind;
 
@@ -205,6 +207,7 @@ struct XrType {
     bool is_literal;          // Literal type: kind + literal union holds value
     bool is_weak;             // Weak variant: WeakMap (kind==MAP) / WeakSet (kind==SET)
     bool is_cycle_candidate;  // Class type graph forms a cycle (RC cycle collector)
+    bool ptr_is_mut;          // POINTER only: RawMut<T> (true) vs RawPtr<T> (false, const)
 
     // Native width for int/float types (XrSlotType value)
     // 0 = default (int=int64, float=float64), nonzero = specific width
@@ -270,6 +273,7 @@ static inline bool xr_type_is_runtime_managed(const XrType *t) {
 #define XR_TYPE_IS_OPTIONAL(t) ((t)->is_nullable)
 #define XR_TYPE_IS_ENUM(t) ((t)->kind == XR_KIND_ENUM)
 #define XR_TYPE_IS_UNION(t) ((t)->kind == XR_KIND_UNION)
+#define XR_TYPE_IS_POINTER(t) ((t)->kind == XR_KIND_POINTER)
 
 #define XR_UNION_MAX_MEMBERS 6
 
@@ -281,6 +285,8 @@ static inline XrRep xr_type_base_rep(const XrType *t) {
         case XR_KIND_INT:
         case XR_KIND_BOOL:
         case XR_KIND_NULL:
+        case XR_KIND_POINTER:
+            /* Raw pointer = address-width integer; GC never scans it. */
             return XR_REP_I64;
         case XR_KIND_FLOAT:
             return XR_REP_F64;
@@ -354,6 +360,11 @@ XR_FUNC XrType *xr_type_new_unit(XrayIsolate *X);
 XR_FUNC XrType *xr_type_new_int_width(XrayIsolate *X, int width);    // XrNativeType value
 XR_FUNC XrType *xr_type_new_float_width(XrayIsolate *X, int width);  // XrNativeType value
 
+// API: FFI raw pointer type. element_type = pointee (T), is_mut selects
+// RawMut<T> (true) vs RawPtr<T> (false, const). Address-width int at the value
+// level; the GC never scans it.
+XR_FUNC XrType *xr_type_new_pointer(XrayIsolate *X, XrType *element_type, bool is_mut);
+
 // API: Derive XrSlotType from XrType for the unified type pipeline.
 // Returns the storage slot type — used by GC scanning and AOT codegen.
 // native_width stores XrNativeType; widen all int variants to I64, float variants to F64.
@@ -370,6 +381,9 @@ static inline uint8_t xr_type_to_slot_type(XrType *type) {
     }
     switch (type->kind) {
         case XR_KIND_INT:
+            return XR_SLOT_I64;
+        case XR_KIND_POINTER:
+            /* Raw pointer = address-width integer slot (GC-invisible). */
             return XR_SLOT_I64;
         case XR_KIND_FLOAT:
             return XR_SLOT_F64;
@@ -419,6 +433,8 @@ static inline uint8_t xr_type_to_xr_tag(const XrType *t) {
     switch (t->kind) {
         case XR_KIND_INT:
             return XR_TAG_I64;
+        case XR_KIND_POINTER:
+            return XR_TAG_I64;  // raw pointer = address-width integer
         case XR_KIND_FLOAT:
             return XR_TAG_F64;
         case XR_KIND_BOOL:

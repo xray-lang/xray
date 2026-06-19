@@ -215,6 +215,9 @@ static void visit_children(AstNode *node, XaAstVisitor *v) {
             visit_node(node->as.go_expr.expr, v);
             break;
 
+        case AST_UNSAFE_EXPR:
+            visit_node(node->as.unsafe_expr.operand, v);
+            break;
         case AST_AWAIT_EXPR:
             visit_node(node->as.await_expr.expr, v);
             break;

@@ -25,6 +25,9 @@ static bool xicgen_stmt_try(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
     const XiBlock *catch_blk = (const XiBlock *) v->aux;
     fprintf(out, "    XrtExcFrame _ef%u;\n", v->id);
     fprintf(out, "    _ef%u.prev = xrt_exc_top;\n", v->id);
+    /* Record the defer-chain top at try entry: a panic caught here unwinds and
+     * runs only the defers registered after this point (xrt_defer_unwind_to). */
+    fprintf(out, "    _ef%u.defer_mark = xrt_defer_top;\n", v->id);
     fprintf(out, "    xrt_exc_top = &_ef%u;\n", v->id);
     if (catch_blk) {
         fprintf(out,
@@ -68,10 +71,18 @@ static bool xicgen_stmt_catch(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
 static bool xicgen_stmt_defer(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                               const char *prefix) {
     (void) ctx;
-    (void) out;
     (void) f;
-    (void) v;
     (void) prefix;
+    /* Register the deferred closure onto this function's defer scope. The IR
+     * desugars every `defer` into a zero-arg closure that eagerly captures its
+     * operands, so registration is a single push; the scope runs it LIFO at
+     * exit (emit_deferred_calls) or on panic unwind (xrt_throw_exc). XI_DEFER
+     * consumes the closure, so the scope owns this reference. */
+    if (!v || v->nargs < 1)
+        return true;
+    fprintf(out, "    xrt_defer_push(&_xrt_ds, ");
+    emit_value_as_rep(out, cg_unwrap_identity_value(v->args[0]), XR_REP_TAGGED);
+    fprintf(out, ");\n");
     return true;
 }
 

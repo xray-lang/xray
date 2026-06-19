@@ -1,5 +1,5 @@
 FROM ubuntu:24.04
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    cmake clang make libreadline-dev libssl-dev \
+    cmake clang make libreadline-dev libssl-dev liburing-dev \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /xray

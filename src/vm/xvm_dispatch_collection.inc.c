@@ -850,6 +850,24 @@ vmcase(OP_BYTES_LOAD_U64_LE) {
     vmbreak;
 }
 
+/* FFI raw-pointer access. B (load) / A (store) holds an address-width int;
+ * C is the XrFFIType width of the pointee. No bounds/null check (unsafe). */
+vmcase(OP_PTR_LOAD) {
+    int a = GETARG_A(i);
+    int b = GETARG_B(i);
+    int c = GETARG_C(i);
+    R(a) = xr_ffi_ptr_load((uintptr_t) (intptr_t) XR_TO_INT(R(b)), (uint8_t) c);
+    vmbreak;
+}
+
+vmcase(OP_PTR_STORE) {
+    int a = GETARG_A(i);
+    int b = GETARG_B(i);
+    int c = GETARG_C(i);
+    xr_ffi_ptr_store((uintptr_t) (intptr_t) XR_TO_INT(R(a)), (uint8_t) c, R(b));
+    vmbreak;
+}
+
 vmcase(OP_BYTES_COPY_WITHIN) {
     int a = GETARG_A(i);
     if (!XR_IS_ARRAY(R(a)) || !XR_IS_INT(R(a + 1)) || !XR_IS_INT(R(a + 2)) ||
@@ -1180,11 +1198,14 @@ vmcase(OP_INDEX_GET) {
     if (XR_IS_ARRAY(obj_val)) {
         XrArray *arr = XR_TO_ARRAY(obj_val);
         int idx = (int) XR_TO_INT(key_val);
+        /* Spec §3 (expr-index-access): an `int` index outside [0, length) — including
+         * any negative index — throws E0430. No Python-style from-end wraparound. */
         if ((unsigned) idx < (unsigned) arr->length) {
             R(a) = (arr->elem_type == XR_ELEM_ANY) ? ((XrValue *) arr->data)[idx]
                                                    : xr_array_get_element(arr, idx);
         } else {
-            R(a) = xr_null();
+            VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "array index out of range: %d (length %d)",
+                             idx, (int) arr->length);
         }
         vmbreak;
     }

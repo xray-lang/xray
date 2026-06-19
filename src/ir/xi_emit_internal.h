@@ -70,7 +70,7 @@ typedef struct {
     int current_line; /* line of the value being emitted */
 
     /* Struct-area slot allocator: tracks byte offset for OP_NEW_STRUCT.
-     * Each struct occupies ceil16(8 + layout->total_size) bytes.
+     * Each struct occupies ceil16(xr_struct_layout_storage_size(layout)) bytes.
      * Proto->struct_area_size is set to this at end of emit. */
     uint16_t struct_area_offset; /* running byte offset (in 16-byte units) */
 
@@ -198,6 +198,10 @@ XR_FUNC void xi_emit_bytes_load_u64_le(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
 XR_FUNC void xi_emit_bytes_copy_within(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
 XR_FUNC void xi_emit_bytes_copy_from(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
 XR_FUNC void xi_emit_bytes_repeat_from(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+
+/* ========== Generated FFI raw-pointer lowering drivers ========== */
+XR_FUNC void xi_emit_ptr_load(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_ptr_store(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
 
 /* ========== Emit Handler Type ========== */
 

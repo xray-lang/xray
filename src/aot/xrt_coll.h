@@ -1903,12 +1903,14 @@ static inline XrValue xrt_value_clone_for_coro(XrValue val) {
                 memcpy(dst, val.ptr, size);
                 return xr_array_ref(dst, elem_type, elem_count);
             }
-            uint32_t size = *(uint32_t *) val.ptr;
+            uint16_t storage_size = val.heap_type;
+            uint32_t size = storage_size ? storage_size : *(uint32_t *) val.ptr;
             if (size == 0 || size > (16u * 1024u * 1024u))
                 return val;
             void *dst = xrt_arc_alloc(size);
             memcpy(dst, val.ptr, size);
-            return xr_mkptr(dst, XR_TAG_STRUCT_REF);
+            return storage_size ? xr_struct_ref(dst, storage_size)
+                                : xr_mkptr(dst, XR_TAG_STRUCT_REF);
         }
         default:
             return val;

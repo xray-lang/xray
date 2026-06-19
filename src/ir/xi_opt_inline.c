@@ -527,6 +527,8 @@ XR_FUNC XiPassChange xi_opt_inline(XiFunc *f) {
                 continue;
             if (callee == f)
                 continue; /* no self-recursion */
+            if (callee->is_extern)
+                continue; /* FFI: extern call must survive to a direct C call */
             if (callee->nblocks == 0)
                 continue;
 

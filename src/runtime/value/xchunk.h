@@ -219,6 +219,8 @@ typedef struct XrLocVar {
 #define XR_ENTRY_DEFAULTS 1   // has default parameters (fill missing args with null)
 #define XR_ENTRY_GENERATOR 2  // generator function (supports yield)
 
+struct XrFFISig;
+
 // Function prototype (compiled function)
 typedef struct XrProto {
     XrDynArray code;          // bytecode array
@@ -271,6 +273,12 @@ typedef struct XrProto {
     uint8_t test_attr;  // test attribute type
     int test_timeout;   // test timeout (seconds)
     bool is_coro_safe;  // safe to call in coroutine
+    // FFI: @extern foreign function. The VM routes calls to the libffi invoker
+    // (xr_ffi_call_proto) instead of executing the synthesized stub body. The C
+    // symbol name and signature are read from `ffi_sig` (self-contained, survives
+    // bytecode serialization), not the compile-time `xi_func`.
+    bool is_extern;
+    struct XrFFISig *ffi_sig;  // @extern signature (owned, NULL unless is_extern)
 
     // bit[i]=1: TFIELD field index i is F64. Typed-compilation metadata set by
     // the compiler; consumed by AOT codegen and VM typed struct access.

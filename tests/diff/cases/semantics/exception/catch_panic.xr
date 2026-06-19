@@ -1,0 +1,34 @@
+// anchor: catch-panic-channel
+// `catch panic (p)` catches runtime faults (e.g. div-by-zero) via the unwind
+// channel — distinct from the value-return `catch (e)`. Regression: the AOT
+// backend used to prune the panic-catch block (reached only via the unwind
+// edge, invisible to SCCP reachability), leaving a dangling `goto` that failed
+// to compile. VM and AOT must agree on which faults are caught and the result.
+fn divide(a: int, b: int) -> int {
+    return a / b
+}
+
+fn run(b: int) -> string {
+    try {
+        let r = divide(10, b)
+        return "ok:" + string(r)
+    } catch panic (p) {
+        return "caught"
+    }
+}
+
+print(run(2))
+print(run(0))
+
+// Nested: an inner panic not caught by an inner value-catch propagates to the
+// outer panic handler.
+fn nested() -> string {
+    try {
+        let q = divide(5, 0)
+        return "no-panic:" + string(q)
+    } catch panic (p) {
+        return "outer-caught"
+    }
+}
+print(nested())
+print("done")

@@ -420,20 +420,20 @@ static bool xicgen_upval_needs_cell(const XiFunc *f, const XiValue *v) {
 
 static void xicgen_load_upval(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                               const char *prefix) {
-    (void) ctx;
     (void) prefix;
     if (xicgen_upval_needs_cell(f, v)) {
         char cell_expr[64];
         snprintf(cell_expr, sizeof(cell_expr), "_cl->upvals[%d]", (int) v->aux_int);
         emit_cell_get_for_rep(out, v, cell_expr);
     } else {
-        fprintf(out, "_cl->upvals[%d]", (int) v->aux_int);
+        char up_expr[64];
+        snprintf(up_expr, sizeof(up_expr), "_cl->upvals[%d]", (int) v->aux_int);
+        emit_upval_get_for_rep(out, cg_value_decl_storage_rep(ctx, f, v), up_expr);
     }
 }
 
 static void xicgen_store_upval(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                const char *prefix) {
-    (void) ctx;
     (void) prefix;
     if (xicgen_upval_needs_cell(f, v)) {
         fprintf(out, "(xrt_cell_set(_cl->upvals[%d], ", (int) v->aux_int);
@@ -441,7 +441,7 @@ static void xicgen_store_upval(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
         fprintf(out, "), XR_NULL_VAL)");
     } else {
         fprintf(out, "(_cl->upvals[%d] = ", (int) v->aux_int);
-        emit_vref(out, v->args[0]);
+        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
         fprintf(out, ")");
     }
 }
@@ -622,6 +622,56 @@ static void xicgen_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValu
         return;
     }
 
+    /* FFI: direct C-ABI call to an @extern function. Emit `c_sym(args)` with no
+     * hidden _cl closure and arguments converted to their native C reps (the
+     * same conversion as a typed direct call, so e.g. tagged -> double). */
+    if (target && target->is_extern) {
+        /* FFI: raw pointers cross the C boundary as real C pointers but are held
+         * internally as address-width ints, so cast int64 <-> pointer here. A
+         * pointer return is cast back to the int64 address; other return reps go
+         * through the normal conversion prefix/suffix. */
+        const XrType *ret_type = target->return_type;
+        bool ret_is_ptr = ret_type && ret_type->kind == XR_KIND_POINTER;
+        const char *conv_suffix = NULL;
+        if (ret_is_ptr) {
+            fprintf(out, "(int64_t)(intptr_t)(");
+        } else {
+            conv_suffix = emit_direct_call_return_conversion_prefix(ctx, out, f, v, target);
+            if (ctx->error) {
+                emit_codegen_abort_expr(out);
+                return;
+            }
+        }
+        fprintf(out, "xr_ffi_%s(",
+                target->extern_symbol ? target->extern_symbol : (target->name ? target->name : ""));
+        for (uint16_t a = 1; a < v->nargs; a++) {
+            if (a > 1)
+                fprintf(out, ", ");
+            const XrType *pt =
+                (target->params && (a - 1) < target->nparams && target->params[a - 1])
+                    ? target->params[a - 1]->type
+                    : NULL;
+            const char *p_ptr = cg_extern_ptr_boundary_c_type(pt);
+            if (p_ptr) {
+                /* A RawPtr<T>/RawMut<T> argument is an address-width int; emit it
+                 * as I64 and cast straight to the C pointer type. Routing through
+                 * the ABI-slot rep would re-box it to a tagged XrValue. */
+                fprintf(out, "(%s)(intptr_t)(", p_ptr);
+                emit_value_as_rep_ctx(ctx, out, v->args[a], XR_REP_I64);
+                fprintf(out, ")");
+            } else {
+                emit_value_as_direct_call_arg(ctx, out, f, v, target, (uint16_t) (a - 1),
+                                              v->args[a]);
+            }
+        }
+        fprintf(out, ")");
+        if (ret_is_ptr)
+            fprintf(out, ")");
+        else
+            emit_conversion_suffix(out, conv_suffix);
+        return;
+    }
+
     if (target) {
         const char *conv_suffix = emit_direct_call_return_conversion_prefix(ctx, out, f, v, target);
         if (ctx->error) {
@@ -651,7 +701,11 @@ static void xicgen_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValu
      * through the coroutine emitter). */
     {
         const XiValue *fn_val = cg_unwrap_identity_value(callee);
-        if (fn_val && fn_val->type && XR_TYPE_IS_FUNCTION(fn_val->type)) {
+        /* A function-valued upvalue can lose its static function type through
+         * capture, but a value used as a call target is always a closure, so a
+         * LOAD_UPVAL callee is invoked through the same boxed-entry path. */
+        if (fn_val &&
+            ((fn_val->type && XR_TYPE_IS_FUNCTION(fn_val->type)) || fn_val->op == XI_LOAD_UPVAL)) {
             const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED,
                                                              cg_value_plan_storage_rep(ctx, v));
             fprintf(out, "({ xrt_closure_t *_icl = (xrt_closure_t *)");
@@ -2672,6 +2726,95 @@ static void xicgen_bytes_repeat_from(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
     xicgen_bytes_i64_arg(out, v, 3);
     fprintf(out, ")");
     xicgen_bytes_box_array_result(out, boxed);
+}
+
+/* FFI raw-pointer access: pick the exact C scalar type for a pointee width.
+ * XI_PTR_LOAD/STORE carry the XrFFIType code in aux_int. */
+static const char *cg_ffi_pointee_c_type(uint8_t code) {
+    switch ((XrFFIType) code) {
+        case XR_FFI_T_I8:
+            return "int8_t";
+        case XR_FFI_T_U8:
+            return "uint8_t";
+        case XR_FFI_T_I16:
+            return "int16_t";
+        case XR_FFI_T_U16:
+            return "uint16_t";
+        case XR_FFI_T_I32:
+            return "int32_t";
+        case XR_FFI_T_U32:
+            return "uint32_t";
+        case XR_FFI_T_I64:
+            return "int64_t";
+        case XR_FFI_T_U64:
+            return "uint64_t";
+        case XR_FFI_T_F32:
+            return "float";
+        case XR_FFI_T_F64:
+            return "double";
+        case XR_FFI_T_BOOL:
+            return "uint8_t";
+        case XR_FFI_T_PTR:
+            return "void *";
+        case XR_FFI_T_VOID:
+        default:
+            return "int64_t";
+    }
+}
+
+static bool cg_ffi_code_is_float(uint8_t code) {
+    return (XrFFIType) code == XR_FFI_T_F32 || (XrFFIType) code == XR_FFI_T_F64;
+}
+
+static bool cg_ffi_code_is_ptr(uint8_t code) {
+    return (XrFFIType) code == XR_FFI_T_PTR;
+}
+
+/* R[dst] = *(T*)addr — inline typed load from a raw address. */
+static void xicgen_ptr_load(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                            const char *prefix) {
+    (void) f;
+    (void) prefix;
+    uint8_t code = (uint8_t) (v->aux_int & 0xff);
+    const char *cty = cg_ffi_pointee_c_type(code);
+    XrRep from_rep = cg_ffi_code_is_float(code) ? XR_REP_F64 : XR_REP_I64;
+    const char *conv_suffix =
+        emit_conversion_prefix(out, v->type, from_rep, cg_value_plan_storage_rep(ctx, v));
+    if (cg_ffi_code_is_float(code))
+        fprintf(out, "(double)");
+    else if (cg_ffi_code_is_ptr(code))
+        fprintf(out, "(int64_t)(uintptr_t)");
+    else
+        fprintf(out, "(int64_t)");
+    fprintf(out, "(*(%s *)(uintptr_t)(", cty);
+    emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
+    fprintf(out, "))");
+    emit_conversion_suffix(out, conv_suffix);
+}
+
+/* *(T*)addr = value — inline typed store to a raw address (void statement). */
+static void xicgen_ptr_store(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                             const char *prefix) {
+    (void) f;
+    (void) prefix;
+    uint8_t code = (uint8_t) (v->aux_int & 0xff);
+    const char *cty = cg_ffi_pointee_c_type(code);
+    fprintf(out, "(*(%s *)(uintptr_t)(", cty);
+    emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
+    fprintf(out, ")) = ");
+    if (cg_ffi_code_is_float(code)) {
+        fprintf(out, "(%s)(", cty);
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_F64);
+        fprintf(out, ")");
+    } else if (cg_ffi_code_is_ptr(code)) {
+        fprintf(out, "(void *)(uintptr_t)(");
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
+        fprintf(out, ")");
+    } else {
+        fprintf(out, "(%s)(", cty);
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
+        fprintf(out, ")");
+    }
 }
 
 static bool xi_to_c_emit_generated(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,

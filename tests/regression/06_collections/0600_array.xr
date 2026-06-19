@@ -57,8 +57,23 @@ fn test_index_access() {
 @test
 fn test_out_of_bounds() {
     let arr = [1, 2, 3]
-    assert_eq(arr[100], null)
-    assert_eq(arr[-1], null)
+    let caught_high = false
+    try {
+        let high_value = arr[100]
+        print(high_value)
+    } catch panic (p) {
+        caught_high = true
+    }
+    assert_eq(caught_high, true)
+
+    let caught_negative = false
+    try {
+        let negative_value = arr[-1]
+        print(negative_value)
+    } catch panic (p) {
+        caught_negative = true
+    }
+    assert_eq(caught_negative, true)
 }
 
 @test

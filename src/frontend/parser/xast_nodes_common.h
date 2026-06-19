@@ -59,10 +59,14 @@ typedef struct LiteralNode {
     } raw_value;
 } LiteralNode;
 
-// Attribute node (test framework)
+// Attribute node (test framework + FFI)
 typedef struct XrAttribute {
     AttributeKind kind;
     int timeout;
+    // String argument for attributes that carry one: @extern("C") (ABI name),
+    // @dylib("name") (library name). Arena-allocated, NUL-terminated; NULL when
+    // absent. @align(N) stores N in `timeout`.
+    const char *str_arg;
 } XrAttribute;
 
 // Destructuring pattern structure (flat only, no nesting)

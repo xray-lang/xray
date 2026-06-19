@@ -57,8 +57,10 @@ void xr_struct_layout_compute(XrStructLayout *layout) {
         }
 
         uint8_t field_align;
-        if (f->native_type == XR_NATIVE_STRUCT) {
-            field_align = 8;  // nested structs: 8-byte aligned
+        if (layout->repr == XR_STRUCT_REPR_PACKED) {
+            field_align = 1;
+        } else if (f->native_type == XR_NATIVE_STRUCT) {
+            field_align = f->sub_layout ? (uint8_t) f->sub_layout->alignment : 8;
         } else if (f->native_type == XR_NATIVE_ARRAY) {
             field_align = xr_native_type_align(f->elem_native_type);
         } else {
@@ -74,6 +76,10 @@ void xr_struct_layout_compute(XrStructLayout *layout) {
         if (field_align > max_align) {
             max_align = field_align;
         }
+    }
+
+    if (layout->explicit_align > max_align) {
+        max_align = layout->explicit_align;
     }
 
     // Pad total size to alignment

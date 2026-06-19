@@ -35,6 +35,7 @@
 #include "../base/xglobal_indices.h"
 #include "../base/xconstants.h"
 #include "../runtime/value/xstruct_layout.h"
+#include "../runtime/value/xffi_sig.h"
 
 #include <string.h>
 #include <stdio.h>
@@ -106,7 +107,7 @@ static bool xi_lower_value_needs_value_clone(XiLower *l, XiValue *v) {
 }
 
 static bool xi_lower_value_is_fresh_value_struct(XiValue *v) {
-    return v && v->op == XI_STRUCT_NEW;
+    return v && v->op == XI_STRUCT_NEW && !xi_var_id_is_valid(v->var_id);
 }
 
 static void xi_lower_mark_value_clone_copy(XiValue *v) {
@@ -1112,12 +1113,108 @@ static struct XrType *xi_lower_struct_field_type(XiLower *l, struct XrType *fall
     return xi_lower_type_for_native_layout(l, fallback, field->native_type);
 }
 
+/* Byte size of a raw pointer's pointee, for scaling p[i] / p.offset(i). C
+ * pointer arithmetic on RawPtr<T> advances by sizeof(T), matching `T*`. */
+static int64_t xi_pointer_pointee_size(struct XrType *ptr_type) {
+    if (!ptr_type || !XR_TYPE_IS_POINTER(ptr_type))
+        return 1;
+    struct XrType *pointee = ptr_type->container.element_type;
+    if (!pointee)
+        return 1;
+    if (pointee->native_width != 0)
+        return (int64_t) xr_native_type_size(pointee->native_width);
+    switch (pointee->kind) {
+        case XR_KIND_INT:
+        case XR_KIND_FLOAT:
+        case XR_KIND_POINTER:
+            return 8;
+        case XR_KIND_BOOL:
+            return 1;
+        default:
+            return 1;
+    }
+}
+
+/* XrFFIType width code of a raw pointer's pointee (carried on PTR_LOAD/STORE). */
+static uint8_t xi_pointer_pointee_ffi(struct XrType *ptr_type) {
+    struct XrType *pointee =
+        (ptr_type && XR_TYPE_IS_POINTER(ptr_type)) ? ptr_type->container.element_type : NULL;
+    return xr_ffi_type_from_xrtype(pointee, false);
+}
+
+/* Build the scaled address `ptr + idx * sizeof(pointee)` as an integer SSA
+ * value. Used by raw-pointer subscript and offset(). */
+static XiValue *xi_lower_ptr_scaled_addr(XiLower *l, AstNode *node, XiValue *ptr, XiValue *idx,
+                                         struct XrType *ptr_type, struct XrType *addr_type) {
+    XiValue *scaled = idx;
+    int64_t size = xi_pointer_pointee_size(ptr_type);
+    if (size != 1) {
+        XiValue *sz = xi_const_int(l->func, l->cur_block, size, l->type_int);
+        XiValue *mul = xi_value_new(l->func, l->cur_block, XI_MUL, l->type_int, 2);
+        if (!mul)
+            return NULL;
+        mul->args[0] = idx;
+        mul->args[1] = sz;
+        mul->line = (uint32_t) node->line;
+        scaled = mul;
+    }
+    XiValue *add = xi_value_new(l->func, l->cur_block, XI_ADD, addr_type, 2);
+    if (!add)
+        return NULL;
+    add->args[0] = ptr;
+    add->args[1] = scaled;
+    add->line = (uint32_t) node->line;
+    return add;
+}
+
+/* Lower `unsafe { stmt* }`: run the statements; the value is the trailing
+ * expression statement (or null). unsafe is otherwise codegen-transparent. */
+static XiValue *lower_unsafe_expr(XiLower *l, AstNode *node) {
+    AstNode *body = node->as.unsafe_expr.operand;
+    if (!body)
+        return xi_const_null(l->func, l->cur_block, l->type_null);
+    if (body->type != AST_BLOCK)
+        return xi_lower_expr(l, body);
+    BlockNode *blk = &body->as.block;
+    XiValue *value = NULL;
+    for (int i = 0; i < blk->count; i++) {
+        AstNode *stmt = blk->statements[i];
+        if (!stmt)
+            continue;
+        bool is_last = (i == blk->count - 1);
+        if (is_last && stmt->type == AST_EXPR_STMT && stmt->as.expr_stmt) {
+            value = xi_lower_expr(l, stmt->as.expr_stmt);
+        } else {
+            xi_lower_stmt(l, stmt);
+        }
+    }
+    if (!value)
+        value = xi_const_null(l->func, l->cur_block, l->type_null);
+    return value;
+}
+
 static XiValue *lower_index_get(XiLower *l, AstNode *node) {
     IndexGetNode *ig = &node->as.index_get;
     XiValue *obj = xi_lower_expr(l, ig->array);
     XiValue *idx = xi_lower_expr(l, ig->index);
     if (!obj || !idx)
         return NULL;
+
+    /* FFI raw pointer subscript p[i] => XI_PTR_LOAD(p + i*sizeof(T)). */
+    if (obj->type && XR_TYPE_IS_POINTER(obj->type)) {
+        struct XrType *result_type = xi_lower_node_type(l, node);
+        XiValue *addr = xi_lower_ptr_scaled_addr(l, node, obj, idx, obj->type, l->type_int);
+        if (!addr)
+            return NULL;
+        XiValue *v = xi_value_new(l->func, l->cur_block, XI_PTR_LOAD, result_type, 1);
+        if (!v)
+            return NULL;
+        v->args[0] = addr;
+        v->aux_int = (int64_t) xi_pointer_pointee_ffi(obj->type);
+        v->flags |= XI_FLAG_READS_MEM;
+        v->line = (uint32_t) node->line;
+        return v;
+    }
 
     struct XrType *result_type = xi_lower_node_type(l, node);
     if (obj->type && XR_TYPE_IS_MAP(obj->type))
@@ -1155,6 +1252,22 @@ static XiValue *lower_index_set(XiLower *l, AstNode *node) {
     XiValue *val = xi_lower_expr(l, is_node->value);
     if (!obj || !idx || !val)
         return NULL;
+
+    /* FFI raw pointer store p[i] = v => XI_PTR_STORE(p + i*sizeof(T), v). */
+    if (obj->type && XR_TYPE_IS_POINTER(obj->type)) {
+        XiValue *addr = xi_lower_ptr_scaled_addr(l, node, obj, idx, obj->type, l->type_int);
+        if (!addr)
+            return NULL;
+        XiValue *v = xi_value_new(l->func, l->cur_block, XI_PTR_STORE, l->type_unit, 2);
+        if (!v)
+            return NULL;
+        v->args[0] = addr;
+        v->args[1] = val;
+        v->aux_int = (int64_t) xi_pointer_pointee_ffi(obj->type);
+        v->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM;
+        v->line = (uint32_t) node->line;
+        return v;
+    }
 
     if (obj->type && XR_TYPE_IS_MAP(obj->type)) {
         idx = xi_lower_narrow_for_static_type(l, node, idx, obj->type->map.key_type);
@@ -1831,6 +1944,37 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
             v->flags |= XI_FLAG_SIDE_EFFECT;
             v->line = (uint32_t) node->line;
             return v;
+        }
+
+        /* FFI raw pointer methods: deref()/offset(i)/isNull(). */
+        if (recv->type && XR_TYPE_IS_POINTER(recv->type) && ma->name) {
+            if (strcmp(ma->name, "deref") == 0 && n == 0) {
+                XiValue *v = xi_value_new(l->func, l->cur_block, XI_PTR_LOAD, result_type, 1);
+                if (!v)
+                    return NULL;
+                v->args[0] = recv;
+                v->aux_int = (int64_t) xi_pointer_pointee_ffi(recv->type);
+                v->flags |= XI_FLAG_READS_MEM;
+                v->line = (uint32_t) node->line;
+                return v;
+            }
+            if (strcmp(ma->name, "offset") == 0 && n == 1) {
+                XiValue *v =
+                    xi_lower_ptr_scaled_addr(l, node, recv, arg_vals[0], recv->type, recv->type);
+                if (!v)
+                    return NULL;
+                return v;
+            }
+            if (strcmp(ma->name, "isNull") == 0 && n == 0) {
+                XiValue *zero = xi_const_int(l->func, l->cur_block, 0, l->type_int);
+                XiValue *v = xi_value_new(l->func, l->cur_block, XI_EQ, l->type_bool, 2);
+                if (!v)
+                    return NULL;
+                v->args[0] = recv;
+                v->args[1] = zero;
+                v->line = (uint32_t) node->line;
+                return v;
+            }
         }
 
         if (xi_type_is_bytes(recv->type) && ma->name) {
@@ -3500,6 +3644,11 @@ XR_FUNC XiValue *xi_lower_expr(XiLower *l, AstNode *node) {
             return lower_go_expr(l, node);
         case AST_AWAIT_EXPR:
             return lower_await_expr(l, node);
+        case AST_UNSAFE_EXPR:
+            /* Transparent: unsafe only constrains analysis, not codegen. The
+             * body is a statement block; its trailing expression statement is
+             * the value (or null when the block ends with a non-expression). */
+            return lower_unsafe_expr(l, node);
         case AST_CHANNEL_NEW:
             return lower_channel_new(l, node);
 

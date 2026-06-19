@@ -72,3 +72,14 @@
   :default-rep ptr
   :native-width no
   :typed-boundary yes)
+
+; FFI raw pointer (RawPtr<T> / RawMut<T>). Carried as an address-width integer
+; so the GC never traces it; the FFI boundary casts int64 <-> the real C pointer
+; type. Native (non-tagged) boundary, exactly like the other scalars.
+(define-aot-abi pointer
+  :type-kind XR_KIND_POINTER
+  :nullable no
+  :abi-class scalar
+  :default-rep i64
+  :native-width no
+  :typed-boundary yes)

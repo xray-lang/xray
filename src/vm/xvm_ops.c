@@ -492,17 +492,13 @@ bool vm_values_equal_deep(XrayIsolate *isolate, XrValue a, XrValue b) {
 
     // Struct ref: field-by-field comparison via native layout
     if (XR_IS_STRUCT_REF(a) && XR_IS_STRUCT_REF(b)) {
-        uint8_t *sa = (uint8_t *) xr_to_struct_ptr(a);
-        uint8_t *sb = (uint8_t *) xr_to_struct_ptr(b);
-        XrClass *ca = *(XrClass **) sa;
-        XrClass *cb = *(XrClass **) sb;
-        if (ca != cb)
+        XrStructLayout *la = NULL;
+        XrStructLayout *lb = NULL;
+        uint8_t *pa = xr_vm_struct_ref_payload(isolate, a, &la);
+        uint8_t *pb = xr_vm_struct_ref_payload(isolate, b, &lb);
+        if (!pa || !pb || la != lb)
             return false;
-        XrStructLayout *layout = ca->struct_layout;
-        if (!layout)
-            return sa == sb;
-        // Compare the entire native field data area
-        return memcmp(sa + 8, sb + 8, layout->total_size) == 0;
+        return memcmp(pa, pb, la->total_size) == 0;
     }
 
     if (XR_IS_ARRAY(a) || XR_IS_MAP(a) || XR_IS_SET(a) || xr_value_is_instance(a)) {

@@ -111,6 +111,36 @@ static XrType *xa_bytes_method_type(XaInferContext *ctx, XrType *receiver, const
     return NULL;
 }
 
+// FFI raw pointer (RawPtr<T>/RawMut<T>) instance methods. Returns the method's
+// function type, or NULL if `name` is not a pointer method.
+//   p.deref()    -> T          (read *p; unsafe — requires `unsafe { }`)
+//   p.offset(i)  -> RawPtr<T>  (p + i, scaled by sizeof(T); safe pointer math)
+//   p.isNull()   -> bool       (p == null; safe)
+static XrType *xa_pointer_method_type(XaInferContext *ctx, XrType *receiver, const char *name,
+                                      AstNode *node) {
+    if (!receiver || !XR_TYPE_IS_POINTER(receiver) || !name)
+        return NULL;
+    XrayIsolate *X = ctx->analyzer->isolate;
+    XrType *pointee = receiver->container.element_type;
+    if (!pointee)
+        pointee = xr_type_new_unknown(X);
+    if (strcmp(name, "deref") == 0) {
+        // Dereference is unsafe (no null/bounds guarantee).
+        if (ctx->unsafe_depth == 0 && node) {
+            XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+            xa_analyzer_add_diagnostic(
+                ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
+                "raw pointer `deref()` must be inside an `unsafe { }` block", &loc);
+        }
+        return xr_type_new_function(X, NULL, 0, pointee, false);
+    }
+    if (strcmp(name, "offset") == 0)
+        return xa_function_type1(ctx, xr_type_new_int(X), receiver);
+    if (strcmp(name, "isNull") == 0)
+        return xr_type_new_function(X, NULL, 0, xr_type_new_bool(X), false);
+    return NULL;
+}
+
 static XrType *xa_static_capacity_method_type(XaInferContext *ctx, AstNode *object,
                                               const char *name) {
     if (!object || object->type != AST_VARIABLE || !name || strcmp(name, "withCapacity") != 0)
@@ -691,6 +721,10 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
     if (bytes_method)
         return bytes_method;
 
+    XrType *ptr_method = xa_pointer_method_type(ctx, obj_type, ma->name, node);
+    if (ptr_method)
+        return ptr_method;
+
     // Handle built-in methods (return function type for method access)
     if (xa_builtin_is_method(obj_type, ma->name)) {
         const char *sig = xa_builtin_get_member_signature(obj_type, ma->name);
@@ -853,6 +887,22 @@ XrType *xa_visit_index_get(XaInferContext *ctx, AstNode *node) {
     XrType *index_type = NULL;
     if (ig->index) {
         index_type = xa_visit_infer_expr(ctx, ig->index);
+    }
+
+    // FFI raw pointer subscript p[i] => *(p + i): yields the pointee type.
+    // Dereferencing is unsafe (no bounds/null check), so it is only allowed
+    // inside `unsafe { }`. Taking/holding/offsetting a pointer stays safe.
+    if (XR_TYPE_IS_POINTER(container)) {
+        if (ctx->unsafe_depth == 0) {
+            XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+            xa_analyzer_add_diagnostic(
+                ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
+                "raw pointer index `p[i]` must be inside an `unsafe { }` block", &loc);
+        }
+        if (index_type && !XR_TYPE_IS_UNKNOWN(index_type) && !XR_TYPE_IS_INT(index_type))
+            add_index_type_error(ctx, node, index_type, xr_type_new_int(NULL));
+        XrType *pointee = container->container.element_type;
+        return pointee ? pointee : xr_type_new_unknown(NULL);
     }
 
     if (XR_TYPE_IS_ARRAY(container) && container->container.element_type) {
@@ -2166,6 +2216,45 @@ XrType *xa_visit_await_expr(XaInferContext *ctx, AstNode *node) {
     }
 
     return xr_type_new_unknown(NULL);
+}
+
+/*
+ * Visit unsafe expression: unsafe { operand }
+ *
+ * Transparent: the value and type are those of the operand. The wrapper
+ * raises ctx->unsafe_depth for the operand's analysis so that extern calls
+ * and raw-pointer dereference inside are permitted (and rejected outside).
+ */
+XrType *xa_visit_unsafe_expr(XaInferContext *ctx, AstNode *node) {
+    if (!ctx || !node)
+        return xr_type_new_unknown(NULL);
+    AstNode *body = node->as.unsafe_expr.operand;
+    if (!body)
+        return xr_type_new_unit(ctx->analyzer->isolate);
+
+    ctx->unsafe_depth++;
+    XrType *result = NULL;
+    if (body->type == AST_BLOCK) {
+        /* Statement block: visit each statement; the trailing expression
+         * statement (if any) yields the unsafe expression's value. */
+        BlockNode *blk = &body->as.block;
+        for (int i = 0; i < blk->count; i++) {
+            AstNode *stmt = blk->statements[i];
+            if (!stmt)
+                continue;
+            bool is_last = (i == blk->count - 1);
+            if (is_last && stmt->type == AST_EXPR_STMT && stmt->as.expr_stmt) {
+                result = xa_visit_infer_expr(ctx, stmt->as.expr_stmt);
+            } else {
+                xa_visit_infer_stmt(ctx, stmt);
+            }
+        }
+    } else {
+        /* Defensive: a non-block body is a single expression. */
+        result = xa_visit_infer_expr(ctx, body);
+    }
+    ctx->unsafe_depth--;
+    return result ? result : xr_type_new_unit(ctx->analyzer->isolate);
 }
 
 /*

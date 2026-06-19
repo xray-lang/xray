@@ -678,6 +678,9 @@ static void canon_node(XrCanonCtx *ctx, AstNode *node) {
             canon_node(ctx, node->as.go_expr.expr);
             break;
 
+        case AST_UNSAFE_EXPR:
+            canon_node(ctx, node->as.unsafe_expr.operand);
+            break;
         case AST_AWAIT_EXPR:
             canon_node(ctx, node->as.await_expr.expr);
             if (node->as.await_expr.timeout)

@@ -39,6 +39,19 @@ static inline void free_param_nodes(XrayIsolate *X, XrParamNode **params, int co
 
 /* ========== Function Parsing ========== */
 
+// Extract the content of the just-consumed string-literal token (quotes
+// stripped) into an arena-allocated, NUL-terminated string. Used for
+// attribute string arguments like @extern("C") / @dylib("name").
+static const char *xr_attr_string_arg(Parser *parser) {
+    Token t = parser->previous;
+    size_t len = t.length >= 2 ? (size_t) (t.length - 2) : 0;
+    char *s = (char *) ast_alloc(parser->X, len + 1);
+    if (len > 0)
+        memcpy(s, t.start + 1, len);
+    s[len] = '\0';
+    return s;
+}
+
 // Parse single attribute: @test, @test(skip), @test(timeout: 30), etc.
 static XrAttribute *xr_parse_single_attribute(Parser *parser) {
     XR_DCHECK(parser != NULL, "parse_single_attribute: NULL parser");
@@ -50,6 +63,7 @@ static XrAttribute *xr_parse_single_attribute(Parser *parser) {
     XrAttribute *attr = (XrAttribute *) ast_alloc(parser->X, sizeof(XrAttribute));
     attr->kind = ATTR_NONE;
     attr->timeout = 0;
+    attr->str_arg = NULL;
     if (name_token.length == 4 && memcmp(name_token.start, "test", 4) == 0) {
         attr->kind = ATTR_TEST;
 
@@ -95,6 +109,65 @@ static XrAttribute *xr_parse_single_attribute(Parser *parser) {
             }
             xr_parser_consume(parser, TK_RPAREN, "expected ')' to close @deprecated");
         }
+    } else if (name_token.length == 6 && memcmp(name_token.start, "extern", 6) == 0) {
+        // @extern("C") — foreign function. The string is the calling convention
+        // (only "C" is supported for now); it is an open/text arg, hence a string
+        // literal rather than a bare keyword.
+        attr->kind = ATTR_EXTERN;
+        attr->str_arg = "C";
+        if (xr_parser_match(parser, TK_LPAREN)) {
+            if (xr_parser_check(parser, TK_LITERAL_STRING)) {
+                xr_parser_advance(parser);
+                attr->str_arg = xr_attr_string_arg(parser);
+            }
+            xr_parser_consume(parser, TK_RPAREN, "expected ')' to close @extern");
+        }
+    } else if (name_token.length == 5 && memcmp(name_token.start, "dylib", 5) == 0) {
+        // @dylib("name") — resolve from a named dynamic library.
+        attr->kind = ATTR_DYLIB;
+        xr_parser_consume(parser, TK_LPAREN, "expected '(' after @dylib");
+        if (xr_parser_check(parser, TK_LITERAL_STRING)) {
+            xr_parser_advance(parser);
+            attr->str_arg = xr_attr_string_arg(parser);
+        } else {
+            xr_parser_error(parser, "@dylib requires a library name string, e.g. @dylib(\"m\")");
+        }
+        xr_parser_consume(parser, TK_RPAREN, "expected ')' to close @dylib");
+    } else if (name_token.length == 4 && memcmp(name_token.start, "repr", 4) == 0) {
+        // @repr(C) / @repr(packed) — layout control. The variant is a closed
+        // compiler-known set, hence a bare identifier rather than a string.
+        attr->kind = ATTR_REPR_C;
+        xr_parser_consume(parser, TK_LPAREN, "expected '(' after @repr");
+        if (xr_parser_check(parser, TK_NAME)) {
+            Token v = parser->current;
+            xr_parser_advance(parser);
+            if (v.length == 1 && memcmp(v.start, "C", 1) == 0) {
+                attr->kind = ATTR_REPR_C;
+            } else if (v.length == 6 && memcmp(v.start, "packed", 6) == 0) {
+                attr->kind = ATTR_REPR_PACKED;
+            } else {
+                xr_parser_error(parser, "unknown @repr kind (expected C or packed)");
+            }
+        } else {
+            xr_parser_error(parser, "@repr requires a kind: @repr(C) or @repr(packed)");
+        }
+        xr_parser_consume(parser, TK_RPAREN, "expected ')' to close @repr");
+    } else if (name_token.length == 5 && memcmp(name_token.start, "align", 5) == 0) {
+        // @align(N) — explicit struct alignment; N is numeric.
+        attr->kind = ATTR_ALIGN;
+        xr_parser_consume(parser, TK_LPAREN, "expected '(' after @align");
+        if (xr_parser_check(parser, TK_LITERAL_INT)) {
+            Token n = parser->current;
+            xr_parser_advance(parser);
+            char buf[32];
+            int len = n.length < 31 ? n.length : 31;
+            memcpy(buf, n.start, len);
+            buf[len] = '\0';
+            attr->timeout = atoi(buf);
+        } else {
+            xr_parser_error(parser, "@align requires an integer, e.g. @align(8)");
+        }
+        xr_parser_consume(parser, TK_RPAREN, "expected ')' to close @align");
     } else {
         xr_parser_error(parser, "unknown attribute name");
         return NULL;
@@ -146,6 +219,8 @@ static AstNode *xr_parse_attributed_declaration(Parser *parser) {
             return NULL;
         cls->as.class_decl.is_final = is_final;
         cls->as.class_decl.is_native = is_native;
+        cls->as.class_decl.attributes = attributes;
+        cls->as.class_decl.attr_count = attr_count;
         return cls;
     }
 
@@ -157,12 +232,17 @@ static AstNode *xr_parse_attributed_declaration(Parser *parser) {
         if (!st)
             return NULL;
         st->as.class_decl.is_native = is_native;
+        st->as.class_decl.attributes = attributes;
+        st->as.class_decl.attr_count = attr_count;
         return st;
     }
 
-    // @test fn ..., @native fn ...
+    // @test fn ..., @native fn ..., @extern("C") fn ...
     if (xr_parser_match(parser, TK_FN)) {
+        bool is_extern = attrs_has(attributes, attr_count, ATTR_EXTERN);
+        parser->parsing_extern_fn = is_extern;
         AstNode *func = xr_parse_function_declaration(parser);
+        parser->parsing_extern_fn = false;
         if (!func)
             return NULL;
         func->as.function_decl.attributes = attributes;
@@ -397,14 +477,21 @@ AstNode *xr_parse_function_declaration(Parser *parser) {
         return_type = xr_parse_type_annotation(parser);
     }
 
-    // Parse function body (must be block)
-    xr_parser_consume(parser, TK_LBRACE, "function body must use braces { }");
-    parser->scope_depth++;
-    AstNode *body = xr_parse_block(parser);
-    parser->scope_depth--;
+    // Parse function body. @extern functions are bodyless: the implementation
+    // lives in a foreign C library, so the signature stands alone (optionally
+    // followed by a `;`). All other functions require a `{ }` block.
+    AstNode *body = NULL;
+    if (parser->parsing_extern_fn) {
+        xr_parser_match(parser, TK_SEMICOLON);  // optional trailing ';'
+    } else {
+        xr_parser_consume(parser, TK_LBRACE, "function body must use braces { }");
+        parser->scope_depth++;
+        body = xr_parse_block(parser);
+        parser->scope_depth--;
+    }
 
     // If has destructure params, insert destructure code at function body start
-    for (int i = 0; i < param_count; i++) {
+    for (int i = 0; body && i < param_count; i++) {
         if (params[i] && params[i]->pattern != NULL) {
             AstNode *param_var = xr_ast_variable(parser->X, params[i]->name, line);
 
@@ -439,8 +526,13 @@ AstNode *xr_parse_function_declaration(Parser *parser) {
     AstNode *func_decl =
         xr_ast_function_decl(parser->X, func_name, params, param_count, body, line);
     func_decl->column = name_column;
-    func_decl->end_line = body->end_line;
-    func_decl->end_column = body->end_column;
+    if (body) {
+        func_decl->end_line = body->end_line;
+        func_decl->end_column = body->end_column;
+    } else {
+        func_decl->end_line = parser->previous.line;
+        func_decl->end_column = parser->previous.column;
+    }
 
     func_decl->as.function_decl.return_type = return_type;
     func_decl->as.function_decl.required_count = required_count;

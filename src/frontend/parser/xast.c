@@ -875,6 +875,8 @@ AstNode *xr_ast_class_decl(XrayIsolate *X, const char *name, const char *super_n
     node->as.class_decl.methods = methods;
     node->as.class_decl.method_count = method_count;
     node->as.class_decl.is_abstract = false;
+    node->as.class_decl.attributes = NULL;
+    node->as.class_decl.attr_count = 0;
     return node;
 }
 
@@ -893,6 +895,8 @@ AstNode *xr_ast_struct_decl(XrayIsolate *X, const char *name, AstNode **fields, 
     node->as.struct_decl.method_count = method_count;
     node->as.struct_decl.is_abstract = false;
     node->as.struct_decl.is_final = true;  // structs are implicitly final
+    node->as.struct_decl.attributes = NULL;
+    node->as.struct_decl.attr_count = 0;
     node->as.struct_decl.type_params = NULL;
     node->as.struct_decl.type_param_count = 0;
     return node;
@@ -1441,6 +1445,8 @@ const char *xr_ast_typename(AstNodeType type) {
             return "PatternType";
         case AST_TYPE_ALIAS:
             return "TypeAlias";
+        case AST_UNSAFE_EXPR:
+            return "UnsafeExpr";
         case AST_PROGRAM:
             return "Program";
         default:
@@ -2113,5 +2119,12 @@ AstNode *xr_ast_move_expr(XrayIsolate *X, AstNode *expr, int line, int column) {
     AstNode *node = alloc_node(X, AST_MOVE_EXPR, line);
     node->column = column;
     node->as.move_expr.expr = expr;
+    return node;
+}
+
+AstNode *xr_ast_unsafe_expr(XrayIsolate *X, AstNode *operand, int line, int column) {
+    AstNode *node = alloc_node(X, AST_UNSAFE_EXPR, line);
+    node->column = column;
+    node->as.unsafe_expr.operand = operand;
     return node;
 }

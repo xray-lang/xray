@@ -141,11 +141,12 @@ static ParseRule rules[] = {
     [TK_UNDERSCORE] = {NULL, NULL, PREC_NONE},  // _ wildcard (pattern only)
 
     // Coroutine keywords
-    [TK_GO] = {xr_parse_go_expr, NULL, PREC_NONE},        // go expression
-    [TK_AWAIT] = {xr_parse_await_expr, NULL, PREC_NONE},  // await expression
-    [TK_SELECT] = {NULL, NULL, PREC_NONE},                // select statement
-    [TK_DEFER] = {NULL, NULL, PREC_NONE},                 // defer statement
-    [TK_SCOPE] = {NULL, NULL, PREC_NONE},                 // scope block
+    [TK_GO] = {xr_parse_go_expr, NULL, PREC_NONE},          // go expression
+    [TK_AWAIT] = {xr_parse_await_expr, NULL, PREC_NONE},    // await expression
+    [TK_SELECT] = {NULL, NULL, PREC_NONE},                  // select statement
+    [TK_DEFER] = {NULL, NULL, PREC_NONE},                   // defer statement
+    [TK_SCOPE] = {NULL, NULL, PREC_NONE},                   // scope block
+    [TK_UNSAFE] = {xr_parse_unsafe_expr, NULL, PREC_NONE},  // unsafe { expr }
     // cancelled(), move, and Channel(...) are all contextual keywords
     // handled in xr_parse_variable — they reach the parser as plain
     // TK_NAME tokens (the lexer no longer special-cases them).
@@ -844,6 +845,7 @@ static void xr_parser_init_internal(Parser *parser, XrayIsolate *X, const char *
 
     parser->allow_bare_container = false;
     parser->parsing_native_class = false;
+    parser->parsing_extern_fn = false;
     parser->scope_depth = 0;
 }
 

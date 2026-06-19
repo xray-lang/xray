@@ -40,6 +40,7 @@
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
 #include "../runtime/value/xtype.h"
+#include "../runtime/value/xffi_sig.h"
 #include "xrt_method_symbols.h"
 #include "xrt_hash.h"
 #include "../base/xmemstream.h"
@@ -1508,6 +1509,28 @@ static XrRep cg_value_decl_storage_rep(XiCgenCtx *ctx, const XiFunc *f, const Xi
     return cg_value_plan_storage_rep(ctx, v);
 }
 
+/* Coro non-frame local declaration helpers. A coroutine resume body re-declares
+ * every non-frame local up front, so the slot type must match the value's own
+ * emission. This uses the planned storage rep (so a native class instance is a
+ * PTR slot, matching its `void *`/`Conn *` value), with two deliberate
+ * departures from the sync local helpers:
+ *   - the array native-local override is dropped: coroutine bodies always emit
+ *     arrays boxed (XrValue), never as a raw xrt_array_t* local;
+ *   - a unit/void value keeps an XrValue slot, since declaring a `void` local is
+ *     illegal C and such slots are never read as values. */
+static const char *cg_coro_decl_ctype(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v) {
+    (void) f;
+    const XaotValuePlan *plan = cg_value_plan(ctx, v);
+    const char *t = (plan && plan->rep.c_type) ? plan->rep.c_type : local_ctype_str(v);
+    return (t && strcmp(t, "void") == 0) ? "XrValue" : t;
+}
+
+static XrRep cg_coro_decl_rep(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v) {
+    (void) f;
+    XrRep r = cg_value_plan_storage_rep(ctx, v);
+    return (r == XR_REP_VOID) ? XR_REP_TAGGED : r;
+}
+
 /* Write a phi variable reference: phi<id>, mapped through the coalescing table
  * so phis that share a C variable (same source var_id, disjoint live ranges)
  * resolve to one representative name. */
@@ -1948,92 +1971,19 @@ static bool emit_class_native_ref_stack_return_stmt(XiCgenCtx *ctx, FILE *out, c
     return true;
 }
 
-static bool emit_single_deferred_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
-                                      const char *prefix, const XiValue *defer_v) {
-    if (!defer_v || defer_v->op != XI_DEFER || defer_v->nargs < 1)
-        return true;
-    const XiValue *callee = cg_unwrap_identity_value(defer_v->args[0]);
-    CgStaticFunctionCall call = cg_resolve_static_function_call(ctx, f, callee);
-    if (call.func && !call.is_class_constructor) {
-        if (cg_func_needs_aot_coro(call.func)) {
-            ctx->error = true;
-            fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT defer of suspendable function '%s'\n",
-                    call.func->name ? call.func->name : "?");
-            return false;
-        }
-        fprintf(out, "    ");
-        emit_fname(ctx, out, call.prefix ? call.prefix : prefix, call.func);
-        fprintf(out, "(");
-        emit_call_hidden_closure(out, f, call.func, callee);
-        for (uint16_t a = 1; a < defer_v->nargs; a++) {
-            fprintf(out, ", ");
-            emit_value_as_direct_call_arg(ctx, out, f, defer_v, call.func, (uint16_t) (a - 1),
-                                          defer_v->args[a]);
-        }
-        fprintf(out, ");\n");
-        return true;
-    }
-
-    bool indirect_closure = callee && ((callee->type && XR_TYPE_IS_FUNCTION(callee->type)) ||
-                                       callee->op == XI_LOAD_UPVAL);
-    if (indirect_closure) {
-        fprintf(out, "    { xrt_closure_t *_dcl = (xrt_closure_t *)");
-        emit_value_as_rep(out, callee, XR_REP_TAGGED);
-        fprintf(out, ".ptr; ((XrValue (*)(xrt_closure_t *");
-        for (uint16_t a = 1; a < defer_v->nargs; a++)
-            fprintf(out, ", XrValue");
-        fprintf(out, "))_dcl->fn)(_dcl");
-        for (uint16_t a = 1; a < defer_v->nargs; a++) {
-            fprintf(out, ", ");
-            emit_value_as_rep(out, defer_v->args[a], XR_REP_TAGGED);
-        }
-        fprintf(out, "); }\n");
-        return true;
-    }
-
-    ctx->error = true;
-    fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT defer target in %s: %s\n",
-            f && f->name ? f->name : "?", callee ? xi_op_name(callee->op) : "?");
-    return false;
-}
-
+/* Run this function's pending defers at an exit point. The IR lowers every
+ * `defer` into a zero-arg closure pushed onto a stack-local XrtDeferScope at the
+ * defer site (xicgen_stmt_defer); here we unlink that scope and run it LIFO.
+ * Doing this dynamically — rather than statically unrolling each defer site at
+ * every exit — is what makes loops, conditional registration, and early returns
+ * run exactly the defers that executed, matching the VM. The panic path is
+ * handled by xrt_throw_exc (xrt_defer_unwind_to); ordering and Go-style error
+ * replacement live in the runtime (xrt_defer.h). */
 static void emit_deferred_calls(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const char *prefix) {
-    const XiValue *deferred_vals[64];
-    int ndeferred = 0;
-    for (uint32_t dbi = 0; dbi < f->nblocks; dbi++) {
-        const XiBlock *db = f->blocks[dbi];
-        if (!db)
-            continue;
-        for (uint32_t dvi = 0; dvi < db->nvalues; dvi++) {
-            const XiValue *dv = db->values[dvi];
-            if (!dv || dv->op != XI_DEFER || dv->nargs < 1)
-                continue;
-            if (ndeferred >= (int) (sizeof(deferred_vals) / sizeof(deferred_vals[0]))) {
-                ctx->error = true;
-                fprintf(stderr, "[xi_cgen] ERROR: too many AOT defer statements in %s\n",
-                        f && f->name ? f->name : "?");
-                return;
-            }
-            deferred_vals[ndeferred++] = dv;
-        }
-    }
-    for (int di = ndeferred - 1; di >= 0; di--) {
-        uint32_t defer_id = deferred_vals[di]->id;
-        fprintf(out, "    { XrValue _xrt_defer_saved_error_%u = xrt_pending_error;\n", defer_id);
-        fprintf(out, "      int _xrt_defer_had_error_%u = xrt_has_pending_error();\n", defer_id);
-        fprintf(out, "      if (_xrt_defer_had_error_%u) xrt_pending_error = XR_NULL_VAL;\n",
-                defer_id);
-        if (!emit_single_deferred_call(ctx, out, f, prefix, deferred_vals[di]))
-            return;
-        fprintf(out, "      if (_xrt_defer_had_error_%u) {\n", defer_id);
-        fprintf(out, "          if (xrt_has_pending_error()) {\n");
-        fprintf(out, "              xrt_release(_xrt_defer_saved_error_%u);\n", defer_id);
-        fprintf(out, "          } else {\n");
-        fprintf(out, "              xrt_pending_error = _xrt_defer_saved_error_%u;\n", defer_id);
-        fprintf(out, "          }\n");
-        fprintf(out, "      }\n");
-        fprintf(out, "    }\n");
-    }
+    (void) ctx;
+    (void) prefix;
+    if (cg_func_has_defer_stmt(f))
+        fprintf(out, "    xrt_defer_leave(&_xrt_ds);\n");
 }
 
 static void emit_cell_var_releases(XiCgenCtx *ctx, FILE *out) {
@@ -2093,8 +2043,12 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
     XR_DCHECK(v != NULL, "emit_value_stmt: NULL value");
     emit_value_source_line(ctx, out, v);
 
-    if (v->op == XI_DEFER)
+    /* defer registers its closure onto the function's defer scope at this site
+     * (xicgen_stmt_defer); the scope runs LIFO at exit. */
+    if (v->op == XI_DEFER) {
+        xi_to_c_emit_stmt_generated(ctx, out, f, v, prefix);
         return;
+    }
 
     if (cg_widen_elided_into_narrow_arith(ctx, f, v))
         return;
@@ -2856,6 +2810,11 @@ static void emit_func_attr_qualifier(XiCgenCtx *ctx, FILE *out, const XiFunc *f)
 static void xi_cgen_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefix) {
     XR_DCHECK(out != NULL, "xi_cgen_func: NULL output");
     XR_DCHECK(f != NULL, "xi_cgen_func: NULL func");
+    /* FFI: @extern functions have no Xray definition. Only the `extern Ret
+     * sym(...)` forward declaration is emitted (see emit_one_forward_decl);
+     * call sites emit a direct C call. Never emit a body. */
+    if (f->is_extern)
+        return;
     /* Auto-lower if callers bypass the pipeline. */
     if (f->stage < XI_STAGE_REPPED) {
         XiRepPolicy policy = xi_rep_policy_native_boundary();
@@ -2924,6 +2883,13 @@ static void xi_cgen_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefi
     emit_declarations(ctx, out, f);
     emit_class_field_cache_decls(ctx, out);
 
+    /* Function-scoped defer: own a stack-local scope and link it onto the global
+     * defer chain at entry. Defers (lowered to zero-arg closures) are pushed
+     * here and run LIFO at every exit (emit_deferred_calls -> xrt_defer_leave)
+     * or during a panic unwind (xrt_throw_exc -> xrt_defer_unwind_to). */
+    if (cg_func_has_defer_stmt(f))
+        fprintf(out, "    XrtDeferScope _xrt_ds; xrt_defer_enter(&_xrt_ds);\n");
+
     /* Blocks in order */
     for (uint32_t bi = 0; bi < f->nblocks; bi++) {
         if (f->blocks[bi] && !cg_structured_counted_loop_block_is_elided(f, f->blocks[bi]) &&
@@ -2981,6 +2947,39 @@ static void xi_cgen_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefi
  * needs.  Used both for a unit's own functions (via emit_forward_decls) and for
  * the imported cross-module functions a unit references (114). */
 static void emit_one_forward_decl(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const char *prefix) {
+    /* FFI: @extern function — declare the foreign C symbol directly (no name
+     * mangling, no hidden _cl). The linker resolves it from the process / a
+     * linked library; call sites emit `sym(args)`. */
+    if (f->is_extern) {
+        const char *sym = f->extern_symbol ? f->extern_symbol : (f->name ? f->name : "");
+        const char *ret_ptr = cg_extern_ptr_boundary_c_type(f->return_type);
+        /* Bind a fresh `xr_ffi_<sym>` alias to the real C symbol via an asm label.
+         * Using a distinct name avoids libc fortify macros (memcpy, ...) and any
+         * mismatch with system prototypes (e.g. size_t vs uint64_t), while still
+         * calling the exact symbol. */
+        fprintf(out, "extern ");
+        if (ret_ptr)
+            fprintf(out, "%s", ret_ptr);
+        else if (!emit_class_native_return_type(ctx, out, prefix, f))
+            fprintf(out, "%s", cg_func_return_abi_c_type(ctx, f));
+        fprintf(out, " xr_ffi_%s(", sym);
+        if (f->nparams == 0) {
+            fprintf(out, "void");
+        } else {
+            for (uint16_t i = 0; i < f->nparams; i++) {
+                if (i > 0)
+                    fprintf(out, ", ");
+                const XrType *pt = (f->params && f->params[i]) ? f->params[i]->type : NULL;
+                const char *p_ptr = cg_extern_ptr_boundary_c_type(pt);
+                if (p_ptr)
+                    fprintf(out, "%s", p_ptr);
+                else
+                    fprintf(out, "%s", cg_func_param_abi_c_type(ctx, f, i));
+            }
+        }
+        fprintf(out, ") __asm__(XR_FFI_ASMNAME(\"%s\"));\n", sym);
+        return;
+    }
     bool needs_aot_coro = cg_func_needs_aot_coro_ctx(ctx, f);
     /* Coroutine functions are emitted (definition) with file-static linkage by
      * the coro codegen, so their forward declaration must match; only plain

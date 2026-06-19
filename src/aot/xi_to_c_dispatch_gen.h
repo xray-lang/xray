@@ -101,7 +101,9 @@
     X(BYTES_LOAD_U64_LE, "xi.bytes.load.u64.le", xicgen_bytes_load_u64_le) \
     X(BYTES_COPY_WITHIN, "xi.bytes.copy.within", xicgen_bytes_copy_within) \
     X(BYTES_COPY_FROM, "xi.bytes.copy.from", xicgen_bytes_copy_from) \
-    X(BYTES_REPEAT_FROM, "xi.bytes.repeat.from", xicgen_bytes_repeat_from)
+    X(BYTES_REPEAT_FROM, "xi.bytes.repeat.from", xicgen_bytes_repeat_from) \
+    X(PTR_LOAD, "xi.ptr.load", xicgen_ptr_load) \
+    X(PTR_STORE, "xi.ptr.store", xicgen_ptr_store)
 
 
 #define XI_TO_C_TEMPLATE_ARITH_DRIVERS(X) \

@@ -1,0 +1,25 @@
+// anchor: defer-conditional-and-early-return
+// A defer is registered when its statement executes, so a defer in an untaken
+// branch never runs; defers fire on whichever `return` is taken, in LIFO.
+// Regression: AOT previously emitted all defer sites at every exit (running
+// unregistered/wrong-branch defers); it now runs exactly those registered.
+fn pick(n: int) -> string {
+    defer print("always")
+    if (n < 0) {
+        defer print("neg-branch")
+        return "neg"
+    }
+    if (n == 0) {
+        defer print("zero-branch")
+        return "zero"
+    }
+    defer print("pos-branch")
+    return "pos"
+}
+
+print(pick(-1))
+print("--")
+print(pick(0))
+print("--")
+print(pick(5))
+print("done")

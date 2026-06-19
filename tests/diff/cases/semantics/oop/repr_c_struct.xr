@@ -1,0 +1,28 @@
+@repr(C)
+struct CPoint {
+    x: int32
+    y: int32
+}
+
+@repr(C)
+struct CBox {
+    p: CPoint
+    tag: uint8
+}
+
+fn make_point() -> CPoint {
+    return CPoint{x: 10, y: 20}
+}
+
+let p = make_point()
+p.x = p.x + 2
+let q = CPoint{x: 12, y: 20}
+print(p.x)
+print(p.y)
+print(p == q)
+
+let b = CBox{p: CPoint{x: 1, y: 2}, tag: 3}
+b.p.x = b.p.x + b.tag
+print(b.p.x)
+print(b.p.y)
+print(b.tag)

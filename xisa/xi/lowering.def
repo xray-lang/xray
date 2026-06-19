@@ -720,3 +720,15 @@
   :required-targets (vm-bytecode aot-c)
   :vm-bytecode (driver xi_emit_bytes_repeat_from)
   :aot-c (driver xicgen_bytes_repeat_from))
+
+(lower xi.ptr.load
+  :match ()
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_ptr_load)
+  :aot-c (driver xicgen_ptr_load))
+
+(lower xi.ptr.store
+  :match ()
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_ptr_store)
+  :aot-c (driver xicgen_ptr_store))

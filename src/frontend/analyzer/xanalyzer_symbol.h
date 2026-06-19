@@ -84,6 +84,7 @@ struct XaSymbolLinks {
     int param_count;
     XrType *return_type;
     bool return_type_inferred;
+    bool is_extern;         // @extern foreign function (FFI): calls require unsafe { }
     XrErrorSet *error_set;  // Inferred error set (NULL = infallible)
 
     // Call-site inferred parameter types (for unannotated params)

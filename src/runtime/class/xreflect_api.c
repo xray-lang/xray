@@ -23,6 +23,7 @@
 #include "../value/xtype_names.h"
 #include "../value/xvalue.h"
 #include "../value/xstruct_layout.h"
+#include "../xexec_state.h"
 
 XrValue xr_create_type_object(XrayIsolate *X, XrTypeMetadata *meta) {
     XR_DCHECK(X != NULL, "create_type_object: NULL isolate");
@@ -284,6 +285,12 @@ XrValue xr_reflect_fieldCount(XrayIsolate *isolate, XrValue self, XrValue *args,
 
     // Struct ref (skip array_ref which uses ext for elem metadata)
     if (XR_IS_STRUCT_REF(obj) && !XR_IS_ARRAY_REF(obj)) {
+        XrStructLayout *layout =
+            xr_vm_struct_layout_lookup(xr_isolate_get_vm_state(isolate), xr_struct_layout_id(obj));
+        if (layout)
+            return xr_int((xr_Integer) layout->field_count);
+        if (xr_struct_layout_id(obj) != 0)
+            return xr_int(0);
         uint8_t *sptr = (uint8_t *) xr_to_struct_ptr(obj);
         XrClass *scls = *(XrClass **) sptr;
         if (scls && scls->struct_layout)

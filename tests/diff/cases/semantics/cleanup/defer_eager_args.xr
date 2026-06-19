@@ -1,0 +1,17 @@
+// anchor: defer-eager-argument-capture
+// `defer f(args)` snapshots its arguments at registration time (Go-style eager
+// capture): mutating the captured variable afterward must NOT change what the
+// deferred call observes. VM and AOT must agree on the snapshotted value.
+fn show(label: string, n: int) { print(label + "=" + string(n)) }
+
+fn eager() {
+    let x = 1
+    defer show("x", x)   // snapshots x == 1
+    x = 99
+    defer show("x", x)   // snapshots x == 99
+    print("body x=" + string(x))
+    // LIFO at exit: x=99 then x=1
+}
+
+eager()
+print("done")

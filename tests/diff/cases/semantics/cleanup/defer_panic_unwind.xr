@@ -1,0 +1,32 @@
+// anchor: defer-caught-panic-cross-frame-unwind
+// On a CAUGHT panic the stack unwinds across frames to the `catch panic`
+// handler, running each skipped frame's defers in LIFO on the way. This is a
+// different channel from the value-return error path. VM and AOT must agree on
+// the defer order observed during the panic unwind, and the handler's own
+// frame's defers run at its normal exit afterward.
+fn boom(x: int) -> int {
+    defer print("boom-defer")
+    let z = 0
+    return x / z
+}
+
+fn mid() -> int {
+    defer print("mid-defer-1")
+    defer print("mid-defer-2")
+    let r = boom(10)
+    print("unreachable-mid")
+    return r
+}
+
+fn top() {
+    defer print("top-defer")
+    try {
+        mid()
+        print("unreachable-top")
+    } catch panic (p) {
+        print("caught")
+    }
+}
+
+top()
+print("done")
