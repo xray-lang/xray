@@ -24,6 +24,23 @@ static const XiFunc *cg_coro_resolve_callee_cb(void *ud, const XiFunc *current,
     return cg_resolve_static_function_call((XiCgenCtx *) ud, current, callee).func;
 }
 
+static const XiFunc *cg_coro_resolve_method_cb(void *ud, const XiFunc *current,
+                                               const XiValue *call) {
+    XiCgenCtx *ctx = (XiCgenCtx *) ud;
+    if (!ctx || !call || (call->op != XI_CALL_METHOD && call->op != XI_CALL_METHOD_DIRECT))
+        return NULL;
+    const char *method = (const char *) call->aux;
+    bool is_super = call->op == XI_CALL_METHOD && (call->aux_int & 1) != 0;
+    if (!is_super && method) {
+        CgStaticFunctionCall module_call =
+            cg_resolve_module_member_call(ctx, current, call, method);
+        if (module_call.func)
+            return module_call.func;
+    }
+    const char *method_prefix = NULL;
+    return cg_class_native_resolve_method_call(ctx, current, call, &method_prefix);
+}
+
 static bool cg_coro_module_import_intra_cb(void *ud, const XiFunc *f, const XiValue *v,
                                            const char *module) {
     (void) ud;
@@ -38,6 +55,7 @@ static bool cg_coro_module_import_ctx_cb(void *ud, const XiFunc *f, const XiValu
 static XiCoroResolver cg_coro_resolver_intra(void) {
     XiCoroResolver resolver;
     resolver.resolve_callee = NULL;
+    resolver.resolve_method = NULL;
     resolver.value_is_module_import = cg_coro_module_import_intra_cb;
     resolver.ud = NULL;
     return resolver;
@@ -46,6 +64,7 @@ static XiCoroResolver cg_coro_resolver_intra(void) {
 static XiCoroResolver cg_coro_resolver_ctx(XiCgenCtx *ctx) {
     XiCoroResolver resolver;
     resolver.resolve_callee = cg_coro_resolve_callee_cb;
+    resolver.resolve_method = cg_coro_resolve_method_cb;
     resolver.value_is_module_import = cg_coro_module_import_ctx_cb;
     resolver.ud = ctx;
     return resolver;

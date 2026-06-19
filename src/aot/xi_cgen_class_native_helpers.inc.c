@@ -29,6 +29,33 @@ static void emit_class_native_field_ref(XiCgenCtx *ctx, FILE *out, const XiClass
     emit_class_native_field_path(ctx, out, cd, idx);
 }
 
+static const XiValue *cg_class_native_receiver_value(const XiCgenCtx *ctx, const XiFunc *f,
+                                                     const XiValue *v);
+
+static void emit_class_native_receiver_object_ref(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                                  const XiClassData *cd, const XiValue *recv) {
+    if (cg_func_needs_aot_coro_ctx(ctx, f)) {
+        const XiValue *receiver = cg_class_native_receiver_value(ctx, f, recv);
+        fprintf(out, "((");
+        emit_class_native_type_name(out, cg_class_native_prefix_for_data(ctx, cd, NULL),
+                                    cd ? cd->class_name : "Class");
+        fprintf(out, "*)");
+        emit_vref(out, receiver ? receiver : recv);
+        fprintf(out, ")");
+        return;
+    }
+    fprintf(out, "p0");
+}
+
+static void emit_class_native_receiver_field_ref(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                                 const XiClassData *cd, const XiValue *recv,
+                                                 uint16_t idx) {
+    fprintf(out, "(");
+    emit_class_native_receiver_object_ref(ctx, out, f, cd, recv);
+    fprintf(out, ")->");
+    emit_class_native_field_path(ctx, out, cd, idx);
+}
+
 static const char *cg_class_native_ref_field_tag_name(uint8_t native_type) {
     return xaot_layout_ref_tag_name_for_native_type(native_type);
 }
@@ -108,6 +135,34 @@ static bool emit_class_native_ref_field_store_expr(XiCgenCtx *ctx, FILE *out, co
         fprintf(out, "; ");
     }
     emit_class_native_field_ref(ctx, out, cd, object_expr, idx);
+    if (tag_name) {
+        fprintf(out, " = (%s)_new.ptr", cg_struct_field_c_type(layout, idx));
+    } else {
+        fprintf(out, " = _new");
+    }
+    fprintf(out, "; })");
+    return true;
+}
+
+static bool emit_class_native_receiver_ref_field_store_expr(XiCgenCtx *ctx, FILE *out,
+                                                            const XiFunc *f, const XiClassData *cd,
+                                                            const XrStructLayout *layout,
+                                                            uint16_t idx, const XiValue *recv,
+                                                            const XiValue *value) {
+    const XrStructFieldLayout *field = cg_struct_field(layout, idx);
+    if (!cg_class_native_field_is_ref(field))
+        return false;
+    const char *tag_name = cg_class_native_ref_field_tag_name(field->native_type);
+    fprintf(out, "({ XrValue _new = ");
+    emit_value_as_rep_ctx(ctx, out, value, XR_REP_TAGGED);
+    if (cg_class_native_field_is_arc_managed_ref(field)) {
+        fprintf(out, "; xrt_retain(_new); xrt_release(");
+        emit_class_native_receiver_field_ref(ctx, out, f, cd, recv, idx);
+        fprintf(out, "); ");
+    } else {
+        fprintf(out, "; ");
+    }
+    emit_class_native_receiver_field_ref(ctx, out, f, cd, recv, idx);
     if (tag_name) {
         fprintf(out, " = (%s)_new.ptr", cg_struct_field_c_type(layout, idx));
     } else {
@@ -1308,17 +1363,19 @@ static bool emit_class_native_receiver_field_load_expr(XiCgenCtx *ctx, FILE *out
     XrRep target_rep = cg_value_plan_storage_rep(ctx, v);
     if (tag_name) {
         if (target_rep == XR_REP_PTR) {
-            emit_class_native_field_ref(ctx, out, info.class_data, "p0", (uint16_t) idx);
+            emit_class_native_receiver_field_ref(ctx, out, f, info.class_data, v->args[0],
+                                                 (uint16_t) idx);
         } else {
             fprintf(out, "xr_mkptr(");
-            emit_class_native_field_ref(ctx, out, info.class_data, "p0", (uint16_t) idx);
+            emit_class_native_receiver_field_ref(ctx, out, f, info.class_data, v->args[0],
+                                                 (uint16_t) idx);
             fprintf(out, ", %s)", tag_name);
         }
         return true;
     }
     const char *conv_suffix =
         emit_conversion_prefix(out, v->type, cg_struct_field_rep(info.layout, idx), target_rep);
-    emit_class_native_field_ref(ctx, out, info.class_data, "p0", (uint16_t) idx);
+    emit_class_native_receiver_field_ref(ctx, out, f, info.class_data, v->args[0], (uint16_t) idx);
     emit_conversion_suffix(out, conv_suffix);
     return true;
 }
@@ -1333,11 +1390,11 @@ static bool emit_class_native_receiver_field_store_expr(XiCgenCtx *ctx, FILE *ou
     if (idx < 0)
         return false;
     const XrStructFieldLayout *field = cg_struct_field(info.layout, idx);
-    if (emit_class_native_ref_field_store_expr(ctx, out, info.class_data, info.layout,
-                                               (uint16_t) idx, "p0", v->args[1]))
+    if (emit_class_native_receiver_ref_field_store_expr(ctx, out, f, info.class_data, info.layout,
+                                                        (uint16_t) idx, v->args[0], v->args[1]))
         return true;
     fprintf(out, "(");
-    emit_class_native_field_ref(ctx, out, info.class_data, "p0", (uint16_t) idx);
+    emit_class_native_receiver_field_ref(ctx, out, f, info.class_data, v->args[0], (uint16_t) idx);
     if (field && cg_class_native_ref_field_tag_name(field->native_type)) {
         fprintf(out, " = (%s)(", cg_struct_field_c_type(info.layout, idx));
         emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
@@ -2093,7 +2150,8 @@ static const char *cg_class_native_receiver_class_name(XiCgenCtx *ctx, const XiF
 static void emit_class_native_instance_base_ref(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                                 const XiValue *v) {
     if (cg_class_native_receiver_value(ctx, f, v)) {
-        fprintf(out, "p0");
+        const XiClassData *cd = cg_class_native_instance_data(ctx, f, v);
+        emit_class_native_receiver_object_ref(ctx, out, f, cd, v);
         return;
     }
     const XiClassData *typed_ptr = cg_class_native_value_type_data(ctx, v);

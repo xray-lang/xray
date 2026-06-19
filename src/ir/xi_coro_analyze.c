@@ -182,7 +182,7 @@ static bool xi_coro_func_is_suspendable_depth(const XiFunc *f, const XiCoroResol
                                               int depth) {
     if (xi_coro_func_intrinsic_suspends(f, resolver))
         return true;
-    if (!f || !resolver || !resolver->resolve_callee || depth >= XI_CORO_RESOLVE_DEPTH_MAX)
+    if (!f || !resolver || depth >= XI_CORO_RESOLVE_DEPTH_MAX)
         return false;
     for (uint32_t bi = 0; bi < f->nblocks; bi++) {
         const XiBlock *blk = f->blocks[bi];
@@ -190,9 +190,15 @@ static bool xi_coro_func_is_suspendable_depth(const XiFunc *f, const XiCoroResol
             continue;
         for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
             const XiValue *v = blk->values[vi];
-            if (!v || v->op != XI_CALL || v->nargs < 1)
+            if (!v)
                 continue;
-            const XiFunc *target = resolver->resolve_callee(resolver->ud, f, v->args[0]);
+            const XiFunc *target = NULL;
+            if (v->op == XI_CALL && v->nargs >= 1 && resolver->resolve_callee) {
+                target = resolver->resolve_callee(resolver->ud, f, v->args[0]);
+            } else if ((v->op == XI_CALL_METHOD || v->op == XI_CALL_METHOD_DIRECT) &&
+                       v->nargs >= 1 && resolver->resolve_method) {
+                target = resolver->resolve_method(resolver->ud, f, v);
+            }
             if (!target || target == f)
                 continue;
             if (xi_coro_func_is_suspendable_depth(target, resolver, depth + 1))
@@ -218,6 +224,18 @@ static bool xi_coro_call_suspends(const XiFunc *f, const XiValue *v,
     return target && xi_coro_func_is_suspendable(target, resolver);
 }
 
+/* A statically resolved method call whose target is (transitively)
+ * suspendable is also a suspension site in the caller. */
+static bool xi_coro_method_call_suspends(const XiFunc *f, const XiValue *v,
+                                         const XiCoroResolver *resolver) {
+    if (!v || (v->op != XI_CALL_METHOD && v->op != XI_CALL_METHOD_DIRECT) || v->nargs < 1)
+        return false;
+    if (!resolver || !resolver->resolve_method)
+        return false;
+    const XiFunc *target = resolver->resolve_method(resolver->ud, f, v);
+    return target && xi_coro_func_is_suspendable(target, resolver);
+}
+
 /* ========== Suspension-point predicate ========== */
 
 XR_FUNC bool xi_coro_is_suspend_point(const XiFunc *f, const XiValue *v,
@@ -233,7 +251,7 @@ XR_FUNC bool xi_coro_is_suspend_point(const XiFunc *f, const XiValue *v,
         return true;
     if (xi_coro_is_time_sleep_call(f, v, resolver))
         return true;
-    return xi_coro_call_suspends(f, v, resolver);
+    return xi_coro_call_suspends(f, v, resolver) || xi_coro_method_call_suspends(f, v, resolver);
 }
 
 /* ========== Typed recv/await slot-reuse recognizers ========== */
