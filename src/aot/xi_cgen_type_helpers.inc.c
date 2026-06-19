@@ -180,6 +180,20 @@ static const char *cg_map_direct_set_helper(const CgMapElemInfo *info) {
     return NULL;
 }
 
+/* Map<bool,i64> / Map<bool,f32>: the value layouts codegen routes to the
+ * bool-direct helpers and therefore stores in the 2-slot xrt_boolmap_t. Every
+ * other bool-keyed value (i32, f64, refs, ...) keeps the generic typed map. */
+static bool cg_map_info_is_boolmap(const CgMapElemInfo *info) {
+    return info && strcmp(info->key.elem_name, "XR_ELEM_BOOL") == 0 &&
+           (strcmp(info->value.elem_name, "XR_ELEM_I64") == 0 ||
+            strcmp(info->value.elem_name, "XR_ELEM_F32") == 0);
+}
+
+static bool cg_map_type_is_boolmap_ctx(XiCgenCtx *ctx, const XrType *type) {
+    CgMapElemInfo info;
+    return cg_map_type_direct_info_ctx(ctx, type, &info) && cg_map_info_is_boolmap(&info);
+}
+
 static bool emit_typed_map_new_expr(XiCgenCtx *ctx, FILE *out, const XiValue *v, int64_t cap) {
     CgMapElemInfo info;
     const XaotContainerTypePlan *plan =
@@ -188,6 +202,10 @@ static bool emit_typed_map_new_expr(XiCgenCtx *ctx, FILE *out, const XiValue *v,
         !cg_set_elem_info_from_plan(&plan->plan.key, &info.key) ||
         !cg_set_elem_info_from_plan(&plan->plan.value, &info.value))
         return false;
+    if (cg_map_info_is_boolmap(&info)) {
+        fprintf(out, "xrt_boolmap_new_typed(%" PRId64 ", %s)", cap, info.value.elem_name);
+        return true;
+    }
     fprintf(out, "xrt_map_new_typed(%" PRId64 ", %s, %s)", cap, info.key.elem_name,
             info.value.elem_name);
     return true;

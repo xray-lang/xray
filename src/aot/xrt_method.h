@@ -149,7 +149,7 @@ static XrValue xrt_to_bool(XrValue val) {
     if (XR_IS_ARRAY(val))
         return XR_FROM_BOOL(((xrt_array_t *) val.ptr)->length > 0);
     if (XR_IS_MAP(val))
-        return XR_FROM_BOOL(((xrt_map_t *) val.ptr)->len > 0);
+        return XR_FROM_BOOL(xrt_map_len((xrt_map_t *) val.ptr) > 0);
     if (XR_IS_SET(val))
         return XR_FROM_BOOL(((xrt_set_t *) val.ptr)->len > 0);
     return XR_TRUE_VAL;
@@ -272,7 +272,7 @@ static inline XrValue xrt_method_0(XrValue recv, int sym) {
             return XR_FROM_INT(xrt_map_len(m));
         if (sym == XRT_SYM_IS_EMPTY)
             return XR_FROM_BOOL(xrt_map_len(m) == 0);
-        if (m->flags & XR_MAP_FLAG_WEAK)
+        if (!xrt_map_is_boolmap(m) && (m->flags & XR_MAP_FLAG_WEAK))
             return XR_NULL_VAL;
         if (sym == XRT_SYM_KEYS)
             return xrt_map_keys(m);
@@ -337,6 +337,8 @@ static inline XrValue xrt_method_0(XrValue recv, int sym) {
     }
     if (recv.tag == XR_TAG_F64) {
         double v = recv.f;
+        if (sym == XRT_SYM_TOSTRING)
+            return xrt_tostring(recv, 2);
         if (sym == XRT_SYM_FLOOR)
             return XR_FROM_FLOAT(floor(v));
         if (sym == XRT_SYM_CEIL)
@@ -348,6 +350,8 @@ static inline XrValue xrt_method_0(XrValue recv, int sym) {
         if (sym == XRT_SYM_SQRT)
             return XR_FROM_FLOAT(sqrt(v));
     }
+    if (recv.tag == XR_TAG_BOOL && sym == XRT_SYM_TOSTRING)
+        return xrt_tostring(recv, 0);
     return (XrValue) {.i = 0, .tag = XR_TAG_NULL};
 }
 
