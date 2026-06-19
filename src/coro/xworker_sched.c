@@ -715,6 +715,32 @@ static bool runtime_has_work(XrRuntime *runtime) {
 static void worker_park(XrWorker *worker) {
     XrRuntime *runtime = worker->p.runtime;
 
+#if defined(XR_OS_LINUX) && defined(XR_HAS_IO_URING)
+    // A worker holding in-flight io_uring completion ops is NOT idle: it is
+    // waiting for kernel completions. Those are delivered through io_uring's
+    // completion task_work, which runs only when THIS thread enters the kernel
+    // via io_uring_enter (xr_uring_ring_wait). The idle/last-spinner protocol
+    // below keeps re-spinning a "would-be idle" worker in pure userspace and
+    // never calls io_uring_enter, so a completion that carries no paired
+    // readiness event — e.g. a linked-timeout accept/recv cancellation, which
+    // is the sole waker for a timed-out accept on an otherwise silent listener
+    // — would never be reaped and its coroutine would hang forever. Block on
+    // the ring instead (2ms: the io-heavy park budget, so cross-worker work is
+    // still picked up promptly on the next loop); the CQE lands in the CQ and is
+    // reaped by the next worker_poll_sources cycle. Other workers (inflight==0)
+    // fall through to the normal idle path below.
+    if (worker->p.local_poll.uring && xr_uring_ring_inflight(worker->p.local_poll.uring) > 0) {
+        if (worker->m->spinning) {
+            worker->m->spinning = false;
+            int prev = atomic_fetch_sub(&runtime->spinning_count, 1);
+            if (prev <= 0)
+                atomic_store(&runtime->spinning_count, 0);
+        }
+        xr_uring_ring_wait(worker->p.local_poll.uring, 2000);
+        return;
+    }
+#endif
+
     // Step 1: exit spinning state before parking
     if (worker->m->spinning) {
         worker->m->spinning = false;

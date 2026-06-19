@@ -163,6 +163,8 @@ static inline XiInvariantMask xi_stage_invariants(XiStage s) {
  *  XI_PARAM         —                    parameter index
  *  XI_LOAD_FIELD    field name or NULL   symbol id or field index
  *  XI_STORE_FIELD   field name or NULL   symbol id or field index
+ *  XI_PTR_LOAD      —                    XrFFIType width of pointee
+ *  XI_PTR_STORE     —                    XrFFIType width of pointee
  *  XI_JSON_NEW      char** field_names   field count
  *  XI_JSON_INIT_F   —                    field index
  *  XI_JSON_GET_F    —                    field index
@@ -269,6 +271,17 @@ typedef enum {
     XI_BYTES_COPY_WITHIN,
     XI_BYTES_COPY_FROM,
     XI_BYTES_REPEAT_FROM,
+
+    /* FFI raw-pointer memory access. The address is an address-width int
+     * (RawPtr<T>/RawMut<T> value). aux_int carries the XrFFIType width code of
+     * the pointee so both backends pick the exact C scalar type without re-
+     * deriving it from operand types. No bounds check: only valid inside
+     * `unsafe` (analyzer-enforced). The pointee group aliases everything (C may
+     * mutate it), so these ops are never value-numbered or hoisted.
+     * LOAD args: args[0]=address; result type = pointee T.
+     * STORE args: args[0]=address, args[1]=value; result void. */
+    XI_PTR_LOAD,
+    XI_PTR_STORE,
 
     /* Struct native storage: typed field access with compile-time layout.
      * args[0]=class_val for NEW; args[0]=struct for GET/SET.
@@ -806,6 +819,16 @@ typedef struct XiFunc {
     uint16_t min_params; /* required parameter count (no defaults) */
     uint8_t test_attr;   /* AttributeKind: @test / @before_each / etc. */
     int test_timeout;    /* @test(timeout: N) seconds, 0 = no timeout */
+
+    /* FFI: foreign function declared with @extern("C"). When set, this XiFunc
+     * has no real body — the implementation is a C symbol. The AOT backend
+     * emits `extern Ret sym(typed args);` plus direct C calls (no hidden _cl,
+     * no tagged boxing); the VM binds `sym` through libffi. A trivial
+     * zero-valued return body is synthesized so the IR stays well-formed for
+     * pipeline passes; codegen never emits it. */
+    bool is_extern;
+    const char *extern_symbol; /* C symbol to resolve (defaults to the xray name) */
+    const char *extern_dylib;  /* @dylib("name") library, or NULL = default/process */
 
     /* True when params[0] is a borrowed method receiver. */
     bool receiver_borrowed;

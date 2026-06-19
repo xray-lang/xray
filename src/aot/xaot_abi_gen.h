@@ -36,7 +36,8 @@ typedef struct {
     X(ARRAY, "array", XR_KIND_ARRAY, XAOT_ABI_CLASS_POINTER, XAOT_REP_PTR, false, false, true) \
     X(MAP, "map", XR_KIND_MAP, XAOT_ABI_CLASS_POINTER, XAOT_REP_PTR, false, false, true) \
     X(SET, "set", XR_KIND_SET, XAOT_ABI_CLASS_POINTER, XAOT_REP_PTR, false, false, true) \
-    X(TUPLE, "tuple", XR_KIND_TUPLE, XAOT_ABI_CLASS_POINTER, XAOT_REP_PTR, false, false, true)
+    X(TUPLE, "tuple", XR_KIND_TUPLE, XAOT_ABI_CLASS_POINTER, XAOT_REP_PTR, false, false, true) \
+    X(POINTER, "pointer", XR_KIND_POINTER, XAOT_ABI_CLASS_SCALAR, XAOT_REP_I64, false, false, true)
 
 
 static inline const XaotAbiInfo *xaot_abi_for_type_kind(XrTypeKind kind) {
@@ -76,6 +77,10 @@ static inline const XaotAbiInfo *xaot_abi_for_type_kind(XrTypeKind kind) {
         {"tuple", XR_KIND_TUPLE,
          XAOT_ABI_CLASS_POINTER,
          XAOT_REP_PTR, false,
+         false, true},
+        {"pointer", XR_KIND_POINTER,
+         XAOT_ABI_CLASS_SCALAR,
+         XAOT_REP_I64, false,
          false, true},
     };
     for (unsigned i = 0; i < sizeof(table) / sizeof(table[0]); i++) {

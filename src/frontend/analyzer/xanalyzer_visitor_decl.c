@@ -48,6 +48,28 @@
 #include "../../base/xchecks.h"
 #include "../../runtime/value/xstruct_layout.h"
 
+static bool xa_class_attr_has(const ClassDeclNode *cls, AttributeKind kind) {
+    if (!cls || !cls->attributes)
+        return false;
+    for (int i = 0; i < cls->attr_count; i++) {
+        if (cls->attributes[i] && cls->attributes[i]->kind == kind)
+            return true;
+    }
+    return false;
+}
+
+static uint8_t xa_class_attr_align(const ClassDeclNode *cls) {
+    if (!cls || !cls->attributes)
+        return 0;
+    for (int i = 0; i < cls->attr_count; i++) {
+        XrAttribute *attr = cls->attributes[i];
+        if (attr && attr->kind == ATTR_ALIGN && attr->timeout > 0 && attr->timeout <= UINT8_MAX) {
+            return (uint8_t) attr->timeout;
+        }
+    }
+    return 0;
+}
+
 static bool xa_expr_is_this(AstNode *node) {
     if (!node)
         return false;
@@ -263,6 +285,8 @@ static bool xa_method_body_mutates_receiver(AstNode *node, XrClassInfo *receiver
                    xa_method_body_mutates_receiver(node->as.ternary.false_expr, receiver_info);
         case AST_MOVE_EXPR:
             return xa_method_body_mutates_receiver(node->as.move_expr.expr, receiver_info);
+        case AST_UNSAFE_EXPR:
+            return xa_method_body_mutates_receiver(node->as.unsafe_expr.operand, receiver_info);
         case AST_AWAIT_EXPR:
             return xa_method_body_mutates_receiver(node->as.await_expr.expr, receiver_info) ||
                    xa_method_body_mutates_receiver(node->as.await_expr.timeout, receiver_info);
@@ -623,6 +647,14 @@ void xa_visit_collect_function_decl_only(XaInferContext *ctx, AstNode *node) {
     links->type = fn_type;
     links->declared_type = fn_type;
     links->file_path = ctx->file_path;
+
+    // FFI: mark @extern functions so call sites can require `unsafe { }`.
+    for (int ai = 0; ai < fn->attr_count; ai++) {
+        if (fn->attributes && fn->attributes[ai] && fn->attributes[ai]->kind == ATTR_EXTERN) {
+            links->is_extern = true;
+            break;
+        }
+    }
 
     // Store parameter names for LSP inlay hints
     xa_symbol_links_set_function_sig(links, param_types, param_names, fn->param_count, return_type);
@@ -1541,15 +1573,33 @@ skip_interfaces:
         if (!layout)
             goto skip_layout;
         layout->field_count = (uint16_t) info->field_count;
+        if (xa_class_attr_has(cls, ATTR_REPR_PACKED)) {
+            layout->repr = XR_STRUCT_REPR_PACKED;
+        } else if (xa_class_attr_has(cls, ATTR_REPR_C)) {
+            layout->repr = XR_STRUCT_REPR_C;
+        }
+        layout->explicit_align = xa_class_attr_align(cls);
+        bool layout_valid = true;
+        if (layout->explicit_align != 0 &&
+            (layout->explicit_align & (uint8_t) (layout->explicit_align - 1)) != 0) {
+            XrLocation loc = {.file = ctx->file_path, .line = node->line};
+            char msg[256];
+            snprintf(msg, sizeof(msg), "Struct '%s' @align value must be a power of two",
+                     cls->name ? cls->name : "?");
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                       XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
+            layout_valid = false;
+        }
         /* Populate field_names parallel to fields[] for codegen/diagnostics */
         layout->field_names = xr_calloc((size_t) info->field_count, sizeof(const char *));
         if (layout->field_names) {
             for (int i = 0; i < info->field_count; i++)
                 layout->field_names[i] = info->fields[i] ? info->fields[i]->name : NULL;
         }
-        bool layout_valid = true;
 
         for (int i = 0; i < info->field_count && i < XR_MAX_STRUCT_FIELDS; i++) {
+            if (!layout_valid)
+                break;
             XaSymbol *fs = info->fields[i];
             if (!fs) {
                 layout_valid = false;
@@ -1630,9 +1680,21 @@ skip_interfaces:
                     }
                 }
                 if (sub_layout) {
-                    // Nested struct: embed with class ptr prefix (8 + data)
+                    if (xr_struct_layout_is_headerless(layout) &&
+                        !xr_struct_layout_is_headerless(sub_layout)) {
+                        XrLocation loc = {.file = ctx->file_path, .line = node->line};
+                        char msg[256];
+                        snprintf(msg, sizeof(msg),
+                                 "@repr(C) struct '%s' field '%s' must use a @repr(C) or "
+                                 "@repr(packed) nested struct",
+                                 cls->name ? cls->name : "?", fs->name ? fs->name : "?");
+                        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                                   XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
+                        layout_valid = false;
+                        break;
+                    }
                     layout->fields[i].native_type = XR_NATIVE_STRUCT;
-                    layout->fields[i].size = 8 + sub_layout->total_size;
+                    layout->fields[i].size = (uint16_t) xr_struct_layout_storage_size(sub_layout);
                     layout->fields[i].sub_layout_id = sub_layout->layout_id;
                     layout->fields[i].sub_layout = sub_layout;
                 } else {

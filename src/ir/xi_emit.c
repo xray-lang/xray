@@ -19,6 +19,7 @@
 #include "xi_emit_vm_gen.h"
 #include "xi_opt.h"
 #include "../runtime/value/xtype.h"
+#include "../runtime/value/xffi_sig.h"
 #include "../runtime/object/xstring.h"
 #include "../runtime/object/xbigint.h"
 #include "../runtime/class/xclass_info.h"
@@ -54,7 +55,7 @@ XR_FUNC bool xi_emit_alloc_struct_area_slot(EmitCtx *ctx, const XrStructLayout *
     }
 
     uint32_t slot = ctx->struct_area_offset;
-    uint32_t bytes_needed = 8u + (uint32_t) layout->total_size;
+    uint32_t bytes_needed = xr_struct_layout_storage_size(layout);
     uint32_t slots_needed = (bytes_needed + 15u) / 16u;
     uint32_t next = slot + slots_needed;
     if (slot > MAXARG_C || next > UINT16_MAX) {
@@ -947,6 +948,23 @@ XR_FUNC XiEmitStatus xi_emit(XiFunc *f, struct XrayIsolate *isolate, struct XrPr
     ctx.proto->struct_area_size = (uint16_t) (ctx.struct_area_offset * 16);
     ctx.proto->test_attr = f->test_attr;
     ctx.proto->test_timeout = f->test_timeout;
+    ctx.proto->is_extern = f->is_extern;
+    /* FFI: build the self-contained @extern signature on the proto so the VM's
+     * libffi invoker works without the Xi IR (which is not serialized into an
+     * embedded bytecode binary). The AOT backend ignores this and emits direct
+     * C calls. */
+    if (f->is_extern && !ctx.proto->ffi_sig) {
+        const char *sym = f->extern_symbol ? f->extern_symbol : f->name;
+        XrFFISig *sig = xr_ffi_sig_new(sym, f->extern_dylib, (uint8_t) f->nparams);
+        if (sig) {
+            for (uint16_t pi = 0; pi < f->nparams; pi++) {
+                const struct XrType *pt = (f->params && f->params[pi]) ? f->params[pi]->type : NULL;
+                sig->params[pi] = xr_ffi_type_from_xrtype(pt, false);
+            }
+            sig->ret = xr_ffi_type_from_xrtype(f->return_type, true);
+            ctx.proto->ffi_sig = sig;
+        }
+    }
     /* Propagate the declared return type so downstream AOT codegen (RET
      * tagging) can tag values precisely instead of falling back to
      * UNKNOWN → I64.

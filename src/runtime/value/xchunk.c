@@ -13,6 +13,7 @@
  */
 
 #include "xchunk.h"
+#include "xffi_sig.h"
 #include "../object/xstring.h"
 #include "../../base/xmalloc.h"
 #include <stdatomic.h>
@@ -160,6 +161,12 @@ void xr_vm_proto_free(XrProto *proto) {
     if (proto->xi_func != NULL) {
         xi_func_free((struct XiFunc *) proto->xi_func);
         proto->xi_func = NULL;
+    }
+
+    // Free self-contained @extern signature
+    if (proto->ffi_sig != NULL) {
+        xr_ffi_sig_free(proto->ffi_sig);
+        proto->ffi_sig = NULL;
     }
 
     // Inline caches are owned by XrVMContext (per-coroutine), not the

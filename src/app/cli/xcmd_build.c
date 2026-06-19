@@ -74,7 +74,7 @@ static int invoke_cc(const char *cc, const char *opt_flag, const char *output_fi
     snprintf(include_flag, sizeof(include_flag), "-I%s", xray_include);
     snprintf(lib_flag, sizeof(lib_flag), "-L%s", xray_lib);
 
-    const char *spawn_argv[30];
+    const char *spawn_argv[32];
     int ai = 0;
     spawn_argv[ai++] = cc;
     spawn_argv[ai++] = opt_flag;
@@ -96,6 +96,12 @@ static int invoke_cc(const char *cc, const char *opt_flag, const char *output_fi
 #endif
     spawn_argv[ai++] = lib_flag;
     spawn_argv[ai++] = "-lxray_core";
+#ifdef XRAY_HAVE_LIBFFI
+    /* xray_core embeds the VM's libffi-based @extern invoker (xi_ffi.c), so a
+     * program that links the runtime must resolve libffi too. Must follow
+     * -lxray_core: the archive pulls in ffi_* only on demand. */
+    spawn_argv[ai++] = "-lffi";
+#endif
 #ifdef XR_HAS_IO_URING
     /* xray_core embeds the per-worker io_uring completion rings (netpoll_iouring),
      * so the AOT-linked program must resolve liburing too. Must follow

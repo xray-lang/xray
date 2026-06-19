@@ -117,6 +117,7 @@ vmcase(OP_CLOSURE) {
         UpvalInfo *uv = &DYNARRAY_GET(&proto->upvalues, j, UpvalInfo);
         if (uv->source == UPVAL_SRC_REG) {
             closure->upvals[j] = R(uv->index);
+            xr_rc_retain_value(closure->upvals[j]);
         } else if (uv->source == UPVAL_SRC_UPVAL) {
             int idx = uv->index;
             closure->upvals[j] = (idx < cl->upval_count) ? cl->upvals[idx] : xr_null();

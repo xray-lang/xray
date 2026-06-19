@@ -37,6 +37,17 @@
  * hot path straight-line and moves cold blocks out of the way.
  * ========================================================================= */
 
+/* FFI: assembler symbol name for an @extern C function. The Mach-O toolchain
+ * prefixes C symbols with an underscore; ELF/PE64 do not. Used as a GCC/clang
+ * asm label so the generated alias binds to the real symbol without colliding
+ * with libc prototypes or fortify macros (memcpy, memset, ...). Resolved by the
+ * TARGET compiler so cross-compiled output stays correct. */
+#if defined(__APPLE__)
+#define XR_FFI_ASMNAME(s) "_" s
+#else
+#define XR_FFI_ASMNAME(s) s
+#endif
+
 #if defined(__GNUC__) || defined(__clang__)
 #define XR_LIKELY(x) __builtin_expect(!!(x), 1)
 #define XR_UNLIKELY(x) __builtin_expect(!!(x), 0)
@@ -305,6 +316,14 @@ static inline XrValue xr_mkptr(void *p, uint8_t tag) {
     return r;
 }
 
+static inline XrValue xr_struct_ref(void *p, uint16_t storage_size) {
+    XrValue r = {0};
+    r.tag = XR_TAG_STRUCT_REF;
+    r.heap_type = storage_size;
+    r.ptr = p;
+    return r;
+}
+
 /* Logical object-kind tag used by kind-dispatch switches. The header-bearing
  * containers box as XR_TAG_PTR + heap_type, so map them back to their
  * XR_TAG_ARRAY/MAP/SET kind; every other value's physical tag is already its
@@ -363,6 +382,24 @@ static inline const char *xr_unbox_str(XrValue v) {
     return xr_str_data(v);
 }
 
+static inline size_t xrt_value_native_type_size(uint8_t native_type) {
+    switch (native_type) {
+        case XR_NATIVE_I8:
+        case XR_NATIVE_U8:
+        case XR_NATIVE_BOOL:
+            return 1;
+        case XR_NATIVE_I16:
+        case XR_NATIVE_U16:
+            return 2;
+        case XR_NATIVE_I32:
+        case XR_NATIVE_U32:
+        case XR_NATIVE_F32:
+            return 4;
+        default:
+            return 8;
+    }
+}
+
 /* =========================================================================
  * Value equality — single authoritative implementation for the AOT runtime.
  * Mirrors the VM's xr_value_eq semantics: strings compare by content
@@ -393,6 +430,27 @@ static inline int64_t xrt_eq(XrValue a, XrValue b) {
         if (sa->hash && sb->hash && sa->hash != sb->hash)
             return 0;
         return memcmp(sa->data, sb->data, (size_t) sa->len) == 0;
+    }
+    if (ta == XR_TAG_STRUCT_REF) {
+        if (a.ptr == b.ptr)
+            return 1;
+        if (!a.ptr || !b.ptr || a.ext != b.ext)
+            return 0;
+        if (XR_IS_ARRAY_REF(a)) {
+            size_t size = xrt_value_native_type_size(XR_ARRAY_REF_ELEM_TYPE(a)) *
+                          (size_t) XR_ARRAY_REF_ELEM_COUNT(a);
+            return memcmp(a.ptr, b.ptr, size) == 0;
+        }
+        if (a.heap_type != 0 || b.heap_type != 0) {
+            if (a.heap_type == 0 || b.heap_type == 0 || a.heap_type != b.heap_type)
+                return 0;
+            return memcmp(a.ptr, b.ptr, (size_t) a.heap_type) == 0;
+        }
+        uint32_t sa = *(uint32_t *) a.ptr;
+        uint32_t sb = *(uint32_t *) b.ptr;
+        if (sa == 0 || sb == 0 || sa != sb || sa > (16u * 1024u * 1024u))
+            return 0;
+        return memcmp(a.ptr, b.ptr, (size_t) sa) == 0;
     }
     return a.ptr == b.ptr;
 }

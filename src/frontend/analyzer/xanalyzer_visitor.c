@@ -1304,6 +1304,9 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
         case AST_AWAIT_EXPR:
             result = xa_visit_await_expr(ctx, node);
             break;
+        case AST_UNSAFE_EXPR:
+            result = xa_visit_unsafe_expr(ctx, node);
+            break;
         case AST_MATCH_EXPR:
             result = xa_visit_match_expr(ctx, node);
             break;
@@ -2303,6 +2306,31 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                 xa_analyzer_add_diagnostic(
                     ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TUPLE_IMMUTABLE,
                     "Cannot assign to tuple element: tuples are immutable", &loc);
+                break;
+            }
+            // FFI raw pointer store p[i] = v: writes *(p + i). Unsafe (no bounds/
+            // null check), and only a mutable RawMut<T> may be written through.
+            if (array_type && XR_TYPE_IS_POINTER(array_type)) {
+                XrLocation loc = {
+                    .file = ctx->file_path, .line = node->line, .column = node->column};
+                if (ctx->unsafe_depth == 0) {
+                    xa_analyzer_add_diagnostic(
+                        ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
+                        "raw pointer store `p[i] = v` must be inside an `unsafe { }` block", &loc);
+                }
+                if (!array_type->ptr_is_mut) {
+                    xa_analyzer_add_diagnostic(
+                        ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_CONST_ASSIGN,
+                        "cannot store through a const `RawPtr<T>` (use `RawMut<T>`)", &loc);
+                }
+                if (index_type && !XR_TYPE_IS_UNKNOWN(index_type) && !XR_TYPE_IS_INT(index_type)) {
+                    char msg[160];
+                    snprintf(msg, sizeof(msg),
+                             "Index type '%s' is not assignable to expected type 'int'",
+                             xr_type_to_string(index_type));
+                    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                               XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
+                }
                 break;
             }
             if (array_type && XR_TYPE_IS_JSON(array_type) && array_type->object.field_count > 0 &&

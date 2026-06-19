@@ -1,0 +1,30 @@
+// FFI: raw pointer memory through malloc / memcpy / free.
+// Exercises RawPtr/RawMut subscript read+write, deref(), offset(), isNull(),
+// and a multi-statement unsafe block. The VM (libffi + OP_PTR_LOAD/STORE) and
+// AOT (direct C call + inline *(T*)) backends must produce identical output.
+@extern("C") fn malloc(n: uintsize) -> RawMut<uint8>
+@extern("C") fn free(p: RawMut<uint8>)
+@extern("C") fn memcpy(dst: RawMut<uint8>, src: RawPtr<uint8>, n: uintsize) -> RawMut<uint8>
+
+let src = unsafe { malloc(4) }
+let dst = unsafe { malloc(4) }
+
+unsafe {
+    src[0] = 10
+    src[1] = 20
+    src[2] = 30
+    src[3] = 40
+    memcpy(dst, src, 4)
+    print(dst[0])
+    print(dst[1])
+    print(dst[2])
+    print(dst[3])
+    let mid = dst.offset(2)
+    print(mid.deref())
+}
+
+print(src.isNull())
+print(dst.isNull())
+
+unsafe { free(src) }
+unsafe { free(dst) }

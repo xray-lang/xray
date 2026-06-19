@@ -1,0 +1,26 @@
+// anchor: defer-builtin-method-freefn-mix
+// All defer call shapes must work and run LIFO across backends: builtin calls
+// (`print`/`dump`, which are not first-class values), method calls (receiver
+// captured), free-function calls, and block form. Regression: builtin defers
+// failed to compile and method defers lost their receiver before this was
+// lowered to eager-capture closures.
+class Box {
+    tag: string
+    constructor(tag: string) { this.tag = tag }
+    drop() { print("drop " + this.tag) }
+}
+
+fn cleanup(msg: string) { print("fn " + msg) }
+
+fn mix() {
+    let box = Box("B")
+    defer print("builtin")
+    defer cleanup("free")
+    defer box.drop()
+    defer { print("block") }
+    print("body")
+    // LIFO: block, drop B, fn free, builtin
+}
+
+mix()
+print("done")

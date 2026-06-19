@@ -1055,6 +1055,44 @@ TEST(cgen_escaping_struct_string_field_uses_heap_native_storage) {
     xi_func_free(ir);
 }
 
+TEST(cgen_repr_c_struct_omits_native_header) {
+    const char *src = "@repr(C)\n"
+                      "struct CPair {\n"
+                      "    a: int32\n"
+                      "    b: uint8\n"
+                      "}\n"
+                      "let p = CPair{a: 41, b: 1}\n"
+                      "p.a = p.a + 1\n"
+                      "print(p.a + p.b)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "@repr(C) struct path should generate");
+
+    const char *typedef_start = strstr(code, "typedef struct xrt_struct_test_");
+    assert(typedef_start != NULL && "@repr(C) struct must emit a native typedef");
+    const char *typedef_end = strstr(typedef_start, ";\n");
+    assert(typedef_end != NULL && "typedef should be bounded");
+    assert(count_between(typedef_start, typedef_end, "_size") == 0 &&
+           "@repr(C) typedef must not include the Xray size header");
+    assert(count_between(typedef_start, typedef_end, "_layout") == 0 &&
+           "@repr(C) typedef must not include the Xray layout header");
+    assert(count_between(typedef_start, typedef_end, "int32_t f0") == 1 &&
+           "@repr(C) int32 field must be placed at payload offset 0");
+    assert(count_between(typedef_start, typedef_end, "uint8_t f1") == 1 &&
+           "@repr(C) uint8 field must be emitted as raw C storage");
+    assert(contains(code, "xr_struct_ref(_s, (uint16_t)sizeof(") &&
+           "@repr(C) struct refs must carry storage size outside the payload");
+
+    printf("  Generated @repr(C) headerless struct path %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_nested_struct_field_uses_embedded_heap_native_storage) {
     const char *src = "struct Point {\n"
                       "    x: int\n"
@@ -4321,6 +4359,7 @@ int main(void) {
     run_cgen_inlined_struct_uses_native_field_storage();
     run_cgen_escaping_struct_uses_heap_native_storage();
     run_cgen_escaping_struct_string_field_uses_heap_native_storage();
+    run_cgen_repr_c_struct_omits_native_header();
     run_cgen_nested_struct_field_uses_embedded_heap_native_storage();
     run_cgen_fixed_array_struct_field_uses_embedded_heap_native_storage();
     run_cgen_shared_struct_alias_elides_tagged_hot_locals();

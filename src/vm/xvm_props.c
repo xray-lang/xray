@@ -174,15 +174,18 @@ XR_FUNC XrDispatchAction vm_setprop_type_dispatch(XrayIsolate *isolate, XrVMCont
     }
 
     // Struct ref: stored field write or setter method
-    if (XR_IS_STRUCT_REF(obj)) {
+    if (XR_IS_STRUCT_REF(obj) && !XR_IS_ARRAY_REF(obj)) {
         uint8_t *sptr = (uint8_t *) xr_to_struct_ptr(obj);
-        XrClass *scls = *(XrClass **) sptr;
+        XrStructLayout *slayout = NULL;
+        uint8_t *payload = xr_vm_struct_ref_payload(isolate, obj, &slayout);
+        XrClass *scls =
+            (slayout && !xr_struct_layout_is_headerless(slayout)) ? *(XrClass **) sptr : NULL;
 
         // Try stored field first
-        int fidx = xr_class_lookup_field(scls, prop_symbol);
-        if (fidx >= 0 && scls->struct_layout && fidx < scls->struct_layout->field_count) {
-            XrStructFieldLayout *sf = &scls->struct_layout->fields[fidx];
-            uint8_t *fp = sptr + 8 + sf->offset;
+        int fidx = xr_vm_struct_layout_field_index(isolate, slayout, prop_symbol);
+        if (payload && fidx >= 0 && fidx < slayout->field_count) {
+            XrStructFieldLayout *sf = &slayout->fields[fidx];
+            uint8_t *fp = payload + sf->offset;
             switch (sf->native_type) {
                 case XR_NATIVE_I64:
                     *(int64_t *) fp = XR_TO_INT(value);
@@ -231,7 +234,7 @@ XR_FUNC XrDispatchAction vm_setprop_type_dispatch(XrayIsolate *isolate, XrVMCont
         // Try setter method: set:<prop_name>
         XrSymbolTable *sym_table = (XrSymbolTable *) isolate->symbol_table;
         const char *prop_name = xr_symbol_get_name_in_table(sym_table, prop_symbol);
-        if (prop_name) {
+        if (prop_name && scls) {
             char setter_name[256];
             snprintf(setter_name, sizeof(setter_name), "set:%s", prop_name);
             int setter_symbol = xr_symbol_register_in_table(sym_table, setter_name);
@@ -887,12 +890,14 @@ XR_FUNC XrDispatchAction vm_getprop_type_dispatch(XrayIsolate *isolate, XrVMCont
     }
 
     // Struct ref: getter/method lookup when field not found in layout
-    if (XR_IS_STRUCT_REF(obj)) {
+    if (XR_IS_STRUCT_REF(obj) && !XR_IS_ARRAY_REF(obj)) {
         uint8_t *sptr = (uint8_t *) xr_to_struct_ptr(obj);
-        XrClass *scls = *(XrClass **) sptr;
+        XrStructLayout *slayout = xr_vm_struct_ref_layout(isolate, obj);
+        XrClass *scls =
+            (slayout && !xr_struct_layout_is_headerless(slayout)) ? *(XrClass **) sptr : NULL;
         XrSymbolTable *sym_table = (XrSymbolTable *) isolate->symbol_table;
         const char *prop_name = xr_symbol_get_name_in_table(sym_table, prop_symbol);
-        if (prop_name) {
+        if (prop_name && scls) {
             // Try getter method: get:<prop_name>
             char getter_name[256];
             snprintf(getter_name, sizeof(getter_name), "get:%s", prop_name);

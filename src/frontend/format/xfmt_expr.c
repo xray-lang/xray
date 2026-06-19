@@ -896,6 +896,19 @@ void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
             break;
         }
 
+        // Unsafe expression: unsafe { stmt* }
+        case AST_UNSAFE_EXPR:
+            xfmt_write_indent(ctx);
+            xfmt_write_str(ctx, "unsafe ");
+            if (node->as.unsafe_expr.operand && node->as.unsafe_expr.operand->type == AST_BLOCK) {
+                xfmt_emit_block(ctx, node->as.unsafe_expr.operand);
+            } else {
+                xfmt_write_str(ctx, "{ ");
+                xfmt_emit_expression(ctx, node->as.unsafe_expr.operand);
+                xfmt_write_str(ctx, " }");
+            }
+            break;
+
         // Channel
         case AST_CHANNEL_NEW:
             xfmt_write_indent(ctx);

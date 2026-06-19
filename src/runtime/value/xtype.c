@@ -221,6 +221,15 @@ XrType *xr_type_new_channel(XrayIsolate *X, XrType *element_type) {
     return type;
 }
 
+XrType *xr_type_new_pointer(XrayIsolate *X, XrType *element_type, bool is_mut) {
+    XrType *type = type_alloc(X, XR_KIND_POINTER);
+    if (!type)
+        return NULL;
+    type->container.element_type = element_type;
+    type->ptr_is_mut = is_mut;
+    return type;
+}
+
 XrType *xr_type_new_task(XrayIsolate *X, XrType *result_type) {
     X = resolve_isolate(X);
     XrType *type = type_alloc(X, XR_KIND_INSTANCE);
@@ -902,7 +911,9 @@ XrType *xr_type_copy(XrayIsolate *X, XrType *type) {
         case XR_KIND_ARRAY:
         case XR_KIND_SET:
         case XR_KIND_CHANNEL:
+        case XR_KIND_POINTER:
             copy->container.element_type = type->container.element_type;
+            copy->ptr_is_mut = type->ptr_is_mut;  // harmless for non-pointer container kinds
             break;
         case XR_KIND_MAP:
             copy->map.key_type = type->map.key_type;
@@ -1364,6 +1375,19 @@ bool xr_type_assignable(XrType *target, XrType *source) {
         return xr_type_assignable(target->container.element_type, source->container.element_type);
     }
 
+    // Raw pointer compatibility (FFI). RawMut<T> is assignable to RawPtr<T>
+    // (mut -> const), not the reverse; pointee types are invariant. A null
+    // raw pointer (RawPtr.null()) is modelled as POINTER and assignable either way.
+    if (target->kind == XR_KIND_POINTER && source->kind == XR_KIND_POINTER) {
+        if (source->ptr_is_mut == false && target->ptr_is_mut == true)
+            return false;  // const -> mut is not allowed
+        XrType *te = target->container.element_type;
+        XrType *se = source->container.element_type;
+        if (!te || !se || XR_TYPE_IS_UNKNOWN(te) || XR_TYPE_IS_UNKNOWN(se))
+            return true;
+        return xr_type_equals(te, se);
+    }
+
     // Task type compatibility: both are INSTANCE with class_name="Task"
     if (xr_type_is_named_class(target, "Task") && xr_type_is_named_class(source, "Task")) {
         XrType *tr = (target->instance.type_arg_count > 0) ? target->instance.type_args[0] : NULL;
@@ -1520,6 +1544,10 @@ bool xr_type_equals(XrType *a, XrType *b) {
     // Check type-specific data
     if (a->kind == XR_KIND_ARRAY || a->kind == XR_KIND_SET || a->kind == XR_KIND_CHANNEL) {
         return xr_type_equals(a->container.element_type, b->container.element_type);
+    }
+    if (a->kind == XR_KIND_POINTER) {
+        return a->ptr_is_mut == b->ptr_is_mut &&
+               xr_type_equals(a->container.element_type, b->container.element_type);
     }
     if (a->kind == XR_KIND_MAP) {
         return xr_type_equals(a->map.key_type, b->map.key_type) &&

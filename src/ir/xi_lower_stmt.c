@@ -53,17 +53,8 @@ static uint16_t stmt_narrow_op_for_type(struct XrType *type) {
     }
 }
 
-static bool stmt_type_needs_value_clone(struct XrType *type) {
-    if (!type)
-        return false;
-    if (type->is_value_type)
-        return true;
-    return type->kind == XR_KIND_INSTANCE && type->instance.class_ref &&
-           type->instance.class_ref->struct_layout != NULL;
-}
-
 static bool stmt_value_is_fresh_value_struct(XiValue *v) {
-    return v && v->op == XI_STRUCT_NEW;
+    return v && v->op == XI_STRUCT_NEW && !xi_var_id_is_valid(v->var_id);
 }
 
 static void stmt_mark_value_clone_copy(XiValue *v) {
@@ -105,6 +96,20 @@ static XrStructLayout *stmt_lookup_struct_layout(XiLower *l, const char *name) {
         return NULL;
     XaSymbolLinks *links = xa_analyzer_get_links(l->analyzer, sym);
     return (links && links->class_info) ? links->class_info->struct_layout : NULL;
+}
+
+static XrStructLayout *stmt_type_struct_layout(XiLower *l, struct XrType *type) {
+    XrStructLayout *layout = xi_lower_struct_layout_of(type);
+    if (layout)
+        return layout;
+    const char *class_name = xr_type_get_class_name(type);
+    return class_name ? stmt_lookup_struct_layout(l, class_name) : NULL;
+}
+
+static bool stmt_type_needs_value_clone(XiLower *l, struct XrType *type) {
+    if (!type)
+        return false;
+    return type->is_value_type || stmt_type_struct_layout(l, type) != NULL;
 }
 
 static XrClassInfo *stmt_class_info_for_type(XiLower *l, struct XrType *type) {
@@ -1959,57 +1964,22 @@ static void lower_defer(XiLower *l, AstNode *node) {
     if (!expr || !l->cur_block)
         return;
 
-    /* OP_DEFER expects: args[0]=callee, args[1..n]=call arguments.
-     * The parser stores either a call expression (defer fn(a, b))
-     * or a closure (defer { block }).  Decompose accordingly. */
-    if (expr->type == AST_CALL_EXPR) {
-        CallExprNode *call = &expr->as.call_expr;
-        XiValue *callee = xi_lower_expr(l, call->callee);
-        if (!callee || !l->cur_block)
-            return;
+    /* The parser desugars every `defer <call>` into a deferred closure (see
+     * defer_desugar_call: arguments are snapshotted eagerly, the call moves into
+     * an anonymous function) and wraps `defer { block }` in an anonymous
+     * function too. A bare `defer <expr>` is a first-class callable. So the
+     * deferred target is always a single closure value; OP_DEFER stores it and
+     * the backend invokes it with no arguments at scope exit. */
+    XiValue *callee = xi_lower_expr(l, expr);
+    if (!callee || !l->cur_block)
+        return;
 
-        int nargs = call->arg_count;
-        XR_DCHECK(nargs <= 250, "lower_defer: too many arguments");
-
-        XiValue **arg_values = NULL;
-        XiValue *stack_arg_values[32];
-        if (nargs > 0) {
-            arg_values = stack_arg_values;
-            if (nargs > (int) (sizeof(stack_arg_values) / sizeof(stack_arg_values[0]))) {
-                arg_values = (XiValue **) xi_func_arena_alloc(
-                    l->func, (uint32_t) ((size_t) nargs * sizeof(XiValue *)));
-                XR_DCHECK(arg_values != NULL, "lower_defer: arena alloc failed");
-            }
-        }
-        for (int i = 0; i < nargs; i++) {
-            XiValue *arg = xi_lower_expr(l, call->arguments[i]);
-            if (!arg)
-                return;
-            arg_values[i] = arg;
-        }
-
-        XiValue *v =
-            xi_value_new(l->func, l->cur_block, XI_DEFER, l->type_unit, (uint16_t) (1 + nargs));
-        if (!v)
-            return;
-        v->args[0] = callee;
-        for (int i = 0; i < nargs; i++)
-            v->args[1 + i] = arg_values[i];
-        v->flags |= XI_FLAG_SIDE_EFFECT;
-        v->line = (uint32_t) node->line;
-    } else {
-        /* defer { block } — parser wraps in anonymous function expr */
-        XiValue *callee = xi_lower_expr(l, expr);
-        if (!callee || !l->cur_block)
-            return;
-
-        XiValue *v = xi_value_new(l->func, l->cur_block, XI_DEFER, l->type_unit, 1);
-        if (!v)
-            return;
-        v->args[0] = callee;
-        v->flags |= XI_FLAG_SIDE_EFFECT;
-        v->line = (uint32_t) node->line;
-    }
+    XiValue *v = xi_value_new(l->func, l->cur_block, XI_DEFER, l->type_unit, 1);
+    if (!v)
+        return;
+    v->args[0] = callee;
+    v->flags |= XI_FLAG_SIDE_EFFECT;
+    v->line = (uint32_t) node->line;
 }
 
 static void lower_yield_stmt(XiLower *l, AstNode *node) {
@@ -2274,7 +2244,7 @@ static void lower_var_decl(XiLower *l, AstNode *node) {
      * of var_id — the source could be a shared variable, upvalue, or
      * function return whose identity must not leak into the new binding. */
     bool value_clone_copy =
-        (stmt_type_needs_value_clone(type) || stmt_type_needs_value_clone(init_val->type)) &&
+        (stmt_type_needs_value_clone(l, type) || stmt_type_needs_value_clone(l, init_val->type)) &&
         !stmt_value_is_fresh_value_struct(init_val);
     if (!needs_copy && value_clone_copy) {
         needs_copy = true;
@@ -2896,6 +2866,7 @@ XR_FUNC void xi_lower_stmt(XiLower *l, AstNode *node) {
         case AST_AWAIT_EXPR:
         case AST_NEW_EXPR:
         case AST_MOVE_EXPR:
+        case AST_UNSAFE_EXPR:
             xi_lower_expr(l, node);
             break;
 

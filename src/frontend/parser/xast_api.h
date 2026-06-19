@@ -377,6 +377,7 @@ XR_FUNC AstNode *xr_ast_cancelled_expr(XrayIsolate *X, int line);
 
 // Create move expression node (explicit ownership transfer)
 XR_FUNC AstNode *xr_ast_move_expr(XrayIsolate *X, AstNode *expr, int line, int column);
+XR_FUNC AstNode *xr_ast_unsafe_expr(XrayIsolate *X, AstNode *operand, int line, int column);
 
 // Debug: print AST structure
 XR_FUNC void xr_ast_print(AstNode *node, int indent);

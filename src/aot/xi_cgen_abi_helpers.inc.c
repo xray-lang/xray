@@ -65,6 +65,17 @@ static const char *cg_func_return_abi_c_type(XiCgenCtx *ctx, const XiFunc *f) {
     return plan && plan->abi.ret.c_type ? plan->abi.ret.c_type : "XrValue";
 }
 
+/* FFI: a raw pointer (RawPtr<T>/RawMut<T>) is stored internally as an address-
+ * width int, but must cross the C ABI boundary as a real C pointer. Returns the
+ * boundary C type ("void *" / "const void *") when `t` is a pointer, else NULL.
+ * Pointee precision is unnecessary at the call boundary: deref/index sites cast
+ * to the exact element type. */
+static const char *cg_extern_ptr_boundary_c_type(const XrType *t) {
+    if (t && t->kind == XR_KIND_POINTER)
+        return t->ptr_is_mut ? "void *" : "const void *";
+    return NULL;
+}
+
 static XrRep cg_func_param_abi_rep(XiCgenCtx *ctx, const XiFunc *f, uint16_t param_idx) {
     const XaotFuncPlan *plan = cg_func_plan(ctx, f);
     if (!plan || param_idx >= plan->abi.nparams || !plan->abi.params)

@@ -144,6 +144,7 @@ typedef enum {
     TK_SELECT,  // select - multiplexing
     TK_DEFER,   // defer - deferred execution
     TK_SCOPE,   // scope - structured concurrency
+    TK_UNSAFE,  // unsafe - FFI / raw-pointer escape hatch block
 
     // Type keywords
     TK_INT,      // int (= int64)

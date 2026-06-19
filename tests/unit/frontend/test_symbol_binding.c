@@ -293,6 +293,9 @@ static int count_unresolved_vars(AstNode *node) {
         case AST_MOVE_EXPR:
             count += count_unresolved_vars(node->as.move_expr.expr);
             break;
+        case AST_UNSAFE_EXPR:
+            count += count_unresolved_vars(node->as.unsafe_expr.operand);
+            break;
         case AST_SELECT_STMT: {
             SelectStmtNode *sel = &node->as.select_stmt;
             for (int i = 0; i < sel->case_count; i++) {

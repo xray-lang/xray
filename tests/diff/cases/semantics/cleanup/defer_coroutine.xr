@@ -1,0 +1,15 @@
+// anchor: defer-in-coroutine-body
+// A `defer` inside a coroutine body runs at the coroutine function's exit. With
+// each task awaited before the next is spawned, the schedule is deterministic,
+// so VM and AOT must agree on the interleaving of body / deferred output.
+fn task(id: int) -> int {
+    defer print("task-defer " + string(id))
+    print("task-body " + string(id))
+    return id * 10
+}
+
+let t1 = go task(1)
+print(await t1)
+let t2 = go task(2)
+print(await t2)
+print("done")

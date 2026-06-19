@@ -21,6 +21,7 @@
 #include "xexec_state.h"
 #include "../runtime/value/xchunk.h"
 #include "../runtime/value/xslot_type.h"
+#include "../runtime/value/xffi_sig.h"
 #include "../runtime/value/xtype.h"
 #include "../runtime/object/xstring.h"
 #include "../runtime/value/xvalue.h"
@@ -426,6 +427,30 @@ static bool bc_write_proto(BcWriter *w, XrProto *proto) {
     if (!bc_put_u8(w, proto->is_coro_safe ? 1 : 0))
         return false;
 
+    // 3b. FFI @extern signature (self-contained; the Xi IR is not serialized,
+    // so the embedded-bytecode VM resolves the C symbol from here). The flag
+    // doubles as "a signature follows" so a malformed extern proto without a
+    // sig stays byte-aligned.
+    {
+        XrFFISig *sig = (proto->is_extern && proto->ffi_sig) ? proto->ffi_sig : NULL;
+        if (!bc_put_u8(w, sig ? 1 : 0))
+            return false;
+        if (sig) {
+            if (!bc_put_string(w, sig->symbol))
+                return false;
+            if (!bc_put_string(w, sig->dylib))
+                return false;
+            if (!bc_put_u8(w, sig->nparams))
+                return false;
+            for (uint8_t i = 0; i < sig->nparams; i++) {
+                if (!bc_put_u8(w, sig->params[i]))
+                    return false;
+            }
+            if (!bc_put_u8(w, sig->ret))
+                return false;
+        }
+    }
+
     // 4. Bytecode
     uint32_t code_count = (uint32_t) PROTO_CODE_COUNT(proto);
     if (!bc_put_u32(w, code_count))
@@ -539,6 +564,39 @@ static XrProto *bc_read_proto_depth(BcReader *r, int depth) {
     proto->is_coro_safe = bc_get_u8(r) != 0;
     if (r->error != XR_BC_OK)
         goto fail;
+
+    // 3b. FFI @extern signature
+    {
+        uint8_t has_ffi = bc_get_u8(r);
+        if (r->error != XR_BC_OK)
+            goto fail;
+        if (has_ffi) {
+            char *sym = bc_get_string(r);
+            char *dylib = bc_get_string(r);
+            uint8_t np = bc_get_u8(r);
+            if (r->error != XR_BC_OK) {
+                xr_free(sym);
+                xr_free(dylib);
+                goto fail;
+            }
+            XrFFISig *sig = xr_ffi_sig_new(sym ? sym : "", dylib, np);
+            xr_free(sym);
+            xr_free(dylib);
+            if (!sig) {
+                r->error = XR_BC_ERR_ALLOC;
+                goto fail;
+            }
+            for (uint8_t i = 0; i < np; i++)
+                sig->params[i] = bc_get_u8(r);
+            sig->ret = bc_get_u8(r);
+            if (r->error != XR_BC_OK) {
+                xr_ffi_sig_free(sig);
+                goto fail;
+            }
+            proto->ffi_sig = sig;
+            proto->is_extern = true;
+        }
+    }
 
     // 4. Bytecode
     uint32_t code_count = bc_get_u32(r);

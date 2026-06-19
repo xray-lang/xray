@@ -54,6 +54,24 @@ static void emit_cell_get_for_rep(FILE *out, const XiValue *v, const char *cell_
     }
 }
 
+/* Read a non-cell upvalue stored as a tagged XrValue and unbox it to the
+ * declared storage rep of the consuming local (mirrors emit_cell_get_for_rep).
+ * Callers pass the storage rep (cg_value_decl_storage_rep), not cg_rep: a native
+ * class instance has cg_rep == TAGGED but a PTR storage local, so without this a
+ * captured instance is read as a raw XrValue into a `void *` slot — a C type
+ * error. */
+static void emit_upval_get_for_rep(FILE *out, XrRep rep, const char *up_expr) {
+    if (rep == XR_REP_TAGGED) {
+        fprintf(out, "%s", up_expr);
+    } else if (rep == XR_REP_PTR) {
+        fprintf(out, "%s.ptr", up_expr);
+    } else if (rep == XR_REP_F64) {
+        fprintf(out, "%s.f", up_expr);
+    } else {
+        fprintf(out, "%s.i", up_expr);
+    }
+}
+
 static bool cg_value_has_cell(const XiCgenCtx *ctx, const XiValue *v) {
     return ctx && v && xi_var_id_is_valid(v->var_id) && v->var_id < ctx->cell_var_count &&
            ctx->cell_vars[v->var_id];
@@ -523,6 +541,15 @@ static void emit_closure_new_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *curre
                                   const char *prefix, const XiValue *v) {
     if (v->aux) {
         XiFunc *child = (XiFunc *) v->aux;
+        /* FFI: an @extern function has no Xray closure entry (its body is the
+         * foreign C symbol). Calls to it resolve statically to a direct C call,
+         * so the closure value itself is never invoked — emit a NULL so the
+         * shared-slot store is well-formed without referencing a missing
+         * boxed entry. */
+        if (child->is_extern) {
+            fprintf(out, "XR_NULL_VAL");
+            return;
+        }
         if (cg_func_needs_aot_coro_ctx(ctx, child) &&
             !cg_aot_coro_closure_has_only_supported_uses(ctx, current, v, child, 0)) {
             ctx->error = true;
@@ -533,9 +560,8 @@ static void emit_closure_new_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *curre
             return;
         }
         uint16_t ncap = child->ncaptures;
-        const char *alloc_fn = (v->op == XI_STACK_ALLOC && v->aux_int == XI_CLOSURE_NEW)
-                                   ? "xrt_closure_stack_new"
-                                   : "xrt_closure_new";
+        bool stack_closure = v->op == XI_STACK_ALLOC && v->aux_int == XI_CLOSURE_NEW;
+        const char *alloc_fn = stack_closure ? "xrt_closure_stack_new" : "xrt_closure_new";
         fprintf(out, "({ xrt_closure_t *_c = (xrt_closure_t*)%s((void*)", alloc_fn);
         if (cg_func_uses_typed_abi(ctx, child) && !cg_func_needs_aot_coro_ctx(ctx, child))
             emit_typed_abi_fname(ctx, out, prefix, child);
@@ -555,8 +581,12 @@ static void emit_closure_new_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *curre
                     fprintf(out, "XR_NULL_VAL");
                 fprintf(out, "; ");
             } else if (ci < v->nargs && v->args[ci]) {
+                /* Upvals are stored as tagged XrValues; convert the capture from
+                 * its declared storage rep to TAGGED (e.g. box an all-scalar
+                 * native class instance via xrt_box_obj) so the assignment is
+                 * well-typed and the load can unbox it back. */
                 fprintf(out, "_c->upvals[%u] = ", ci);
-                emit_vref(out, v->args[ci]);
+                emit_value_as_rep_ctx(ctx, out, v->args[ci], XR_REP_TAGGED);
                 fprintf(out, "; ");
             } else if (cap->source == XI_CAPTURE_SRC_UPVAL) {
                 fprintf(out, "_c->upvals[%u] = _cl ? _cl->upvals[%u] : XR_NULL_VAL; ", ci,
@@ -567,6 +597,8 @@ static void emit_closure_new_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *curre
                         cap->name ? cap->name : "?");
                 fprintf(out, "_c->upvals[%u] = XR_NULL_VAL; ", ci);
             }
+            if (!stack_closure)
+                fprintf(out, "xrt_retain(_c->upvals[%u]); ", ci);
         }
         fprintf(out, "xr_mkptr(_c, XR_TAG_CLOSURE); })");
     } else {

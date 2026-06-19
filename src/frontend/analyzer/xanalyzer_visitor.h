@@ -56,6 +56,7 @@ XR_FUNC XrType *xa_visit_ternary(XaInferContext *ctx, AstNode *node);
 XR_FUNC XrType *xa_visit_function_expr(XaInferContext *ctx, AstNode *node);
 XR_FUNC XrType *xa_visit_go_expr(XaInferContext *ctx, AstNode *node);
 XR_FUNC XrType *xa_visit_await_expr(XaInferContext *ctx, AstNode *node);
+XR_FUNC XrType *xa_visit_unsafe_expr(XaInferContext *ctx, AstNode *node);
 XR_FUNC XrType *xa_visit_move_expr(XaInferContext *ctx, AstNode *node);
 
 // Statement inference (updates flow graph)

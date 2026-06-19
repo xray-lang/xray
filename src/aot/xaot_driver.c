@@ -423,6 +423,12 @@ static bool build_link_manifest(const XaotFeatureSet *features, XaotLinkManifest
             goto done;
         if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_SYSTEM_LIB, "z"))
             goto done;
+#ifdef XRAY_HAVE_LIBFFI
+        /* xray_core embeds the VM's libffi-based @extern invoker (xi_ffi.c), so
+         * a native program that links the runtime must resolve libffi too. */
+        if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_SYSTEM_LIB, "ffi"))
+            goto done;
+#endif
 #ifdef XR_HAS_IO_URING
         /* xray_core embeds the per-worker io_uring completion rings, so a native
          * program that links the runtime must resolve liburing too. */

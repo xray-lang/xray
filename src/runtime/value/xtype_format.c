@@ -109,6 +109,14 @@ const char *xr_type_to_string(XrType *type) {
         return xr_pool_strdup(pool, buf);
     }
 
+    if (type->kind == XR_KIND_POINTER) {
+        const char *elem = type->container.element_type
+                               ? xr_type_to_string(type->container.element_type)
+                               : "unknown";
+        snprintf(buf, TYPE_STR_BUF_SIZE, "%s<%s>", type->ptr_is_mut ? "RawMut" : "RawPtr", elem);
+        return xr_pool_strdup(pool, buf);
+    }
+
     if (type->kind == XR_KIND_FIXED_ARRAY) {
         const char *elem = type->fixed_array.element_type
                                ? xr_type_to_string(type->fixed_array.element_type)

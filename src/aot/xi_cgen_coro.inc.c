@@ -939,6 +939,10 @@ static void emit_coro_frame_type(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         for (const XiPhi *phi = blk->phis; phi; phi = phi->next) {
             if (!cg_coro_phi_needs_frame(ctx, f, phi))
                 continue;
+            /* Frame fields hold values across a suspension: a TAGGED-rep value is
+             * spilled boxed (XrValue), a native-rep value keeps its rep. The slot
+             * type therefore follows cg_rep, matching the spill/reload in
+             * emit_coro_value_stmt (which keys on cg_rep == XR_REP_TAGGED). */
             fprintf(out, "    %s ", ctype_str(cg_rep(&phi->value)));
             emit_phi_ref(ctx, out, phi);
             fprintf(out, ";\n");
@@ -954,6 +958,10 @@ static void emit_coro_frame_type(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             fprintf(out, ";\n");
         }
     }
+    /* Function-scoped defers live in the frame so they survive suspensions; the
+     * scope is run at the coroutine's exit (xr_aot_done) and on release. */
+    if (cg_func_has_defer_stmt(f))
+        fprintf(out, "    XrtDeferScope _xrt_ds;\n");
     fprintf(out, "} ");
     emit_fname_suffix(ctx, out, prefix, f, "_aot_frame");
     fprintf(out, ";\n\n");
@@ -988,6 +996,8 @@ static void emit_coro_frame_init(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
     fprintf(out, " *)raw_frame;\n");
     fprintf(out, "    if (!f)\n        return false;\n");
     fprintf(out, "    f->state = 0;\n");
+    if (cg_func_has_defer_stmt(f))
+        fprintf(out, "    xrt_defer_init(&f->_xrt_ds);\n");
     if (cg_func_frame_needs_cl(f)) {
         fprintf(out, "    f->_cl = _cl;\n");
         fprintf(out, "    if (_cl)\n        xrt_retain(xr_mkptr(_cl, XR_TAG_CLOSURE));\n");
@@ -999,7 +1009,6 @@ static void emit_coro_frame_init(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
 }
 
 static void emit_coro_local_declarations(XiCgenCtx *ctx, FILE *out, const XiFunc *f) {
-    (void) ctx;
     for (uint32_t bi = 0; bi < f->nblocks; bi++) {
         const XiBlock *blk = f->blocks[bi];
         if (!blk)
@@ -1007,25 +1016,22 @@ static void emit_coro_local_declarations(XiCgenCtx *ctx, FILE *out, const XiFunc
         for (const XiPhi *phi = blk->phis; phi; phi = phi->next) {
             if (cg_coro_phi_needs_frame(ctx, f, phi))
                 continue;
-            XrRep rep = cg_rep(&phi->value);
-            fprintf(out, "    %s ", ctype_str(rep));
+            /* Declare with the storage rep (matches the value emission and the
+             * sync path); cg_rep would type a native class instance as XrValue
+             * while its value is a PTR. */
+            XrRep rep = cg_coro_decl_rep(ctx, f, &phi->value);
+            fprintf(out, "    %s ", cg_coro_decl_ctype(ctx, f, &phi->value));
             emit_phi_ref(ctx, out, phi);
-            if (rep == XR_REP_TAGGED)
-                fprintf(out, " = XR_NULL_VAL;\n");
-            else
-                fprintf(out, " = 0;\n");
+            fprintf(out, rep == XR_REP_TAGGED ? " = XR_NULL_VAL;\n" : " = 0;\n");
         }
         for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
             const XiValue *v = blk->values[vi];
             if (!cg_coro_value_has_storage(f, v) || cg_coro_value_needs_frame(ctx, f, v))
                 continue;
-            XrRep rep = cg_rep(v);
-            fprintf(out, "    %s ", ctype_str(rep));
+            XrRep rep = cg_coro_decl_rep(ctx, f, v);
+            fprintf(out, "    %s ", cg_coro_decl_ctype(ctx, f, v));
             emit_vref(out, v);
-            if (rep == XR_REP_TAGGED)
-                fprintf(out, " = XR_NULL_VAL;\n");
-            else
-                fprintf(out, " = 0;\n");
+            fprintf(out, rep == XR_REP_TAGGED ? " = XR_NULL_VAL;\n" : " = 0;\n");
         }
     }
 }
@@ -1126,6 +1132,18 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "    return xr_aot_yielded();\n");
         fprintf(out, "S%d:;\n", sid);
         fprintf(out, "    f->state = 0;\n");
+        return;
+    }
+
+    if (v->op == XI_DEFER) {
+        /* Register the deferred closure onto the frame-stored defer scope; it
+         * runs LIFO at the coroutine's exit (see emit_coro_block RETURN) and on
+         * release. The scope lives in the frame so it survives suspensions. */
+        if (v->nargs >= 1) {
+            fprintf(out, "    xrt_defer_push(&f->_xrt_ds, ");
+            emit_boxed_vref(out, v->args[0]);
+            fprintf(out, ");\n");
+        }
         return;
     }
 
@@ -2368,7 +2386,19 @@ static void emit_coro_block(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
     switch (blk->kind) {
         case XI_BLOCK_RETURN:
             emit_value_source_line(ctx, out, blk->control);
-            if (blk->control) {
+            if (cg_func_has_defer_stmt(f)) {
+                /* Function-scope exit: capture the result, run pending defers
+                 * LIFO, then complete. Defers run before the awaiting caller
+                 * observes the result, matching the VM. */
+                fprintf(out, "    { XrValue _xrt_dret = ");
+                if (blk->control)
+                    emit_boxed_vref(out, blk->control);
+                else
+                    fprintf(out, "XR_NULL_VAL");
+                fprintf(out, ";\n");
+                fprintf(out, "      xrt_defer_run(&f->_xrt_ds);\n");
+                fprintf(out, "      return xr_aot_done(_xrt_dret); }\n");
+            } else if (blk->control) {
                 fprintf(out, "    return xr_aot_done(");
                 emit_boxed_vref(out, blk->control);
                 fprintf(out, ");\n");
@@ -2425,7 +2455,6 @@ static void emit_coro_frame_slot_as_xrvalue(FILE *out, const XrType *type, XrRep
 
 static void emit_coro_frame_value_visit(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                         const char *helper, bool with_visitor) {
-    (void) ctx;
     for (uint16_t i = 0; i < f->nparams; i++) {
         if (!cg_coro_value_can_trace_frame_slot(f->params[i]) ||
             !cg_coro_value_live_across_suspend(ctx, f, f->params[i]))
@@ -2554,7 +2583,6 @@ static uint32_t cg_coro_plan_frame_roots(XiCgenCtx *ctx, const XiFunc *f, const 
 }
 
 static void emit_coro_frame_arc_release(XiCgenCtx *ctx, FILE *out, const XiFunc *f) {
-    (void) ctx;
     for (uint16_t i = 0; i < f->nparams; i++) {
         if (!cg_coro_value_needs_frame_arc_release(f->params[i]) ||
             !cg_coro_value_live_across_suspend(ctx, f, f->params[i]))
@@ -2696,6 +2724,11 @@ static void xi_cgen_coro_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *
     fprintf(out, " *)frame;\n");
     fprintf(out, "    (void)gc;\n");
     fprintf(out, "    if (!f)\n        return;\n");
+    /* Run any defers still pending when the frame is released (e.g. a coroutine
+     * cancelled mid-flight before reaching its return). Idempotent: a normal
+     * completion already drained the scope (count==0), so this is a no-op then. */
+    if (cg_func_has_defer_stmt(f))
+        fprintf(out, "    xrt_defer_run(&f->_xrt_ds);\n");
     emit_coro_direct_call_frame_release(ctx, out, f, prefix);
     emit_coro_frame_arc_release(ctx, out, f);
     if (cg_func_frame_needs_cl(f))

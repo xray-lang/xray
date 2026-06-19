@@ -295,6 +295,15 @@ op_call_closure:
         XrClosure *closure = xr_value_to_closure(func_val);
         XrProto *proto = closure->proto;
 
+        // FFI: @extern foreign function — marshal args and invoke the C symbol
+        // through libffi instead of executing the synthesized stub body.
+        if (XR_UNLIKELY(proto->is_extern)) {
+            XrValue result = xr_ffi_call_proto(isolate, proto, &R(a + 1), nargs);
+            VM_REBIND_AFTER_NATIVE_CALL();
+            R(a) = result;
+            vmbreak;
+        }
+
         // Argument count check
         if (proto->is_vararg) {
             // vararg function: check minimum required args
@@ -918,9 +927,9 @@ vmcase(OP_RETURN1) {
             uint8_t *sptr = (uint8_t *) ret_val.ptr;
             uint16_t sa_cap = vm_ctx->struct_area_caps[sa_idx];
             if (sa && sptr >= sa && sptr < sa + sa_cap) {
-                XrClass *rcls = *(XrClass **) sptr;
-                if (rcls && rcls->struct_layout) {
-                    uint32_t total = 8 + rcls->struct_layout->total_size;
+                XrStructLayout *layout = xr_vm_struct_ref_layout(isolate, ret_val);
+                if (layout) {
+                    uint32_t total = xr_struct_layout_storage_size(layout);
                     // Align to 16 bytes
                     total = (total + 15) & ~15u;
                     uint32_t need = vm_ctx->struct_ret_arena_used + total;
@@ -943,7 +952,7 @@ vmcase(OP_RETURN1) {
                         vm_ctx->struct_ret_arena_cap = new_cap;
                     }
                     uint8_t *dst = vm_ctx->struct_ret_arena + vm_ctx->struct_ret_arena_used;
-                    memcpy(dst, sptr, 8 + rcls->struct_layout->total_size);
+                    memcpy(dst, sptr, xr_struct_layout_storage_size(layout));
                     vm_ctx->struct_ret_arena_used = need;
                     return_slot->ptr = dst;
                 }

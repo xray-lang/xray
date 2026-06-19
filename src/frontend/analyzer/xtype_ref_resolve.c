@@ -107,6 +107,10 @@ static XrType *resolve_generic(XrayIsolate *X, const XrTypeRef *t) {
         result = xr_type_new_map(X, args[0], args[1]);
     } else if (strcmp(name, "Task") == 0 && nargs >= 1) {
         result = xr_type_new_task(X, args[0]);
+    } else if (strcmp(name, "RawPtr") == 0 && nargs >= 1) {
+        result = xr_type_new_pointer(X, args[0], false);  // const raw pointer
+    } else if (strcmp(name, "RawMut") == 0 && nargs >= 1) {
+        result = xr_type_new_pointer(X, args[0], true);  // mutable raw pointer
     } else if (xa_is_builtin_interface_name(name)) {
         /* Built-in interface with type args: e.g. Iterable<int>. Create a fresh
          * generic interface type via the current isolate. */

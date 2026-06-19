@@ -56,6 +56,7 @@
 
 #include "../runtime/gc/xcoro_gc.h"
 #include "../runtime/gc/xalloc_unified.h"
+#include "../ir/xi_ffi.h"
 
 #include <math.h>
 #include <inttypes.h>
@@ -170,20 +171,26 @@ static inline XrValue vm_bigint_divop(void *ctx, XrValue left, XrValue right, Xr
         }                                                                                          \
     } while (0)
 
-static bool vm_struct_write_field_bytes(uint8_t *fp, const XrStructFieldLayout *field, XrValue src);
+static bool vm_struct_write_field_bytes(XrayIsolate *isolate, uint8_t *fp,
+                                        const XrStructFieldLayout *field, XrValue src);
 
-static bool vm_struct_write_instance_bytes(uint8_t *dst, XrInstance *inst) {
+static bool vm_struct_write_instance_bytes(XrayIsolate *isolate, uint8_t *dst, XrInstance *inst) {
     if (!dst || !inst || !inst->klass || !inst->klass->struct_layout)
         return false;
     XrStructLayout *layout = inst->klass->struct_layout;
     if (layout->field_count > xr_class_instance_field_count(inst->klass))
         return false;
 
-    *(XrClass **) dst = inst->klass;
+    if (isolate)
+        xr_vm_struct_layout_register(&isolate->vm, layout);
+    uint16_t header_size = xr_struct_layout_header_size(layout);
+    if (header_size)
+        *(XrClass **) dst = inst->klass;
+    uint8_t *payload = dst + header_size;
     for (uint16_t i = 0; i < layout->field_count; i++) {
         XrStructFieldLayout *field = &layout->fields[i];
-        uint8_t *fp = dst + 8 + field->offset;
-        if (!vm_struct_write_field_bytes(fp, field, inst->fields[i]))
+        uint8_t *fp = payload + field->offset;
+        if (!vm_struct_write_field_bytes(isolate, fp, field, inst->fields[i]))
             return false;
     }
     return true;
@@ -198,8 +205,8 @@ static bool vm_struct_write_array_bytes(uint8_t *fp, const XrStructFieldLayout *
         for (int idx = 0; idx < count; idx++) {
             XrValue elem = xr_array_get(arr, idx);
             if (!vm_struct_write_field_bytes(
-                    fp + idx * es, &(XrStructFieldLayout) {.native_type = field->elem_native_type},
-                    elem))
+                    NULL, fp + idx * es,
+                    &(XrStructFieldLayout) {.native_type = field->elem_native_type}, elem))
                 return false;
         }
         if (count < field->elem_count)
@@ -213,8 +220,8 @@ static bool vm_struct_write_array_bytes(uint8_t *fp, const XrStructFieldLayout *
     return false;
 }
 
-static bool vm_struct_write_field_bytes(uint8_t *fp, const XrStructFieldLayout *field,
-                                        XrValue src) {
+static bool vm_struct_write_field_bytes(XrayIsolate *isolate, uint8_t *fp,
+                                        const XrStructFieldLayout *field, XrValue src) {
     if (!fp || !field)
         return false;
     switch (field->native_type) {
@@ -261,7 +268,7 @@ static bool vm_struct_write_field_bytes(uint8_t *fp, const XrStructFieldLayout *
                 return true;
             }
             if (XR_IS_INSTANCE(src))
-                return vm_struct_write_instance_bytes(fp, XR_TO_INSTANCE(src));
+                return vm_struct_write_instance_bytes(isolate, fp, XR_TO_INSTANCE(src));
             return false;
         case XR_NATIVE_ARRAY:
             return vm_struct_write_array_bytes(fp, field, src);

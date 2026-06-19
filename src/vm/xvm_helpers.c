@@ -17,7 +17,117 @@
 #include "../runtime/gc/xgc.h"
 #include "../runtime/gc/xcoro_gc.h"
 #include "../runtime/xerror_codes.h"
+#include "../runtime/value/xstruct_layout.h"
 #include "../base/xsource_cache.h"
+
+/* ========== Struct Layout Registry ========== */
+
+static void xr_vm_struct_layout_register_children(XrVMState *vm, XrStructLayout *layout) {
+    if (!vm || !layout)
+        return;
+    for (uint16_t i = 0; i < layout->field_count; i++) {
+        XrStructFieldLayout *field = &layout->fields[i];
+        if (field->native_type == XR_NATIVE_STRUCT && field->sub_layout) {
+            field->sub_layout_id = xr_vm_struct_layout_register(vm, field->sub_layout);
+        }
+    }
+}
+
+uint16_t xr_vm_struct_layout_register(XrVMState *vm, XrStructLayout *layout) {
+    if (!vm || !layout)
+        return 0;
+
+    xr_vm_struct_layout_register_children(vm, layout);
+
+    if (layout->layout_id != 0) {
+        XrStructLayout *registered = xr_vm_struct_layout_lookup(vm, layout->layout_id);
+        if (registered == layout)
+            return layout->layout_id;
+    }
+
+    for (uint16_t i = 1; i < vm->struct_layout_count; i++) {
+        if (vm->struct_layouts && vm->struct_layouts[i] == layout) {
+            layout->layout_id = i;
+            return i;
+        }
+    }
+
+    if (vm->struct_layout_count == UINT16_MAX)
+        return 0;
+
+    if (vm->struct_layout_capacity == 0) {
+        uint16_t cap = 16;
+        vm->struct_layouts = (XrStructLayout **) xr_calloc(cap, sizeof(*vm->struct_layouts));
+        if (!vm->struct_layouts)
+            return 0;
+        vm->struct_layout_capacity = cap;
+        vm->struct_layout_count = 1;
+    } else if (vm->struct_layout_count >= vm->struct_layout_capacity) {
+        uint16_t old_cap = vm->struct_layout_capacity;
+        uint16_t new_cap = (old_cap <= UINT16_MAX / 2) ? (uint16_t) (old_cap * 2) : UINT16_MAX;
+        XrStructLayout **new_layouts = (XrStructLayout **) xr_realloc(
+            vm->struct_layouts, (size_t) new_cap * sizeof(*new_layouts));
+        if (!new_layouts)
+            return 0;
+        memset(new_layouts + old_cap, 0, (size_t) (new_cap - old_cap) * sizeof(*new_layouts));
+        vm->struct_layouts = new_layouts;
+        vm->struct_layout_capacity = new_cap;
+    }
+
+    uint16_t id = vm->struct_layout_count++;
+    vm->struct_layouts[id] = layout;
+    layout->layout_id = id;
+    return id;
+}
+
+XrStructLayout *xr_vm_struct_layout_lookup(XrVMState *vm, uint16_t layout_id) {
+    if (!vm || layout_id == 0 || layout_id >= vm->struct_layout_count || !vm->struct_layouts)
+        return NULL;
+    return vm->struct_layouts[layout_id];
+}
+
+XrStructLayout *xr_vm_struct_ref_layout(XrayIsolate *isolate, XrValue ref) {
+    if (!XR_IS_STRUCT_REF(ref) || XR_IS_ARRAY_REF(ref) || !ref.ptr)
+        return NULL;
+
+    uint16_t layout_id = xr_struct_layout_id(ref);
+    if (layout_id != 0 && isolate) {
+        XrStructLayout *layout = xr_vm_struct_layout_lookup(&isolate->vm, layout_id);
+        if (layout)
+            return layout;
+    }
+
+    XrClass *cls = *(XrClass **) ref.ptr;
+    if (!cls || !cls->struct_layout)
+        return NULL;
+    if (isolate)
+        xr_vm_struct_layout_register(&isolate->vm, cls->struct_layout);
+    return cls->struct_layout;
+}
+
+uint8_t *xr_vm_struct_ref_payload(XrayIsolate *isolate, XrValue ref, XrStructLayout **layout_out) {
+    XrStructLayout *layout = xr_vm_struct_ref_layout(isolate, ref);
+    if (layout_out)
+        *layout_out = layout;
+    if (!layout || !ref.ptr)
+        return NULL;
+    return (uint8_t *) ref.ptr + xr_struct_layout_header_size(layout);
+}
+
+int xr_vm_struct_layout_field_index(XrayIsolate *isolate, const XrStructLayout *layout,
+                                    int prop_symbol) {
+    if (!isolate || !layout || !layout->field_names)
+        return -1;
+    XrSymbolTable *sym_table = (XrSymbolTable *) isolate->symbol_table;
+    const char *prop_name = xr_symbol_get_name_in_table(sym_table, prop_symbol);
+    if (!prop_name)
+        return -1;
+    for (uint16_t i = 0; i < layout->field_count; i++) {
+        if (layout->field_names[i] && strcmp(layout->field_names[i], prop_name) == 0)
+            return (int) i;
+    }
+    return -1;
+}
 
 /* ========== Runtime Error Handling ========== */
 
@@ -324,6 +434,11 @@ void xr_vm_vm_free(XrayIsolate *isolate) {
         xr_hashmap_free(isolate->vm.strings_map);
         isolate->vm.strings_map = NULL;
     }
+
+    xr_free(isolate->vm.struct_layouts);
+    isolate->vm.struct_layouts = NULL;
+    isolate->vm.struct_layout_count = 0;
+    isolate->vm.struct_layout_capacity = 0;
 
     // Free all GC objects
     // NOTE: XrObject has been removed, object freeing handled automatically by GC system

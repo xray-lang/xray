@@ -231,6 +231,7 @@ XR_FUNC AstNode *xr_parse_await_expr(Parser *parser);
 XR_FUNC AstNode *xr_parse_channel_new(Parser *parser);
 XR_FUNC AstNode *xr_parse_cancelled_expr(Parser *parser);
 XR_FUNC AstNode *xr_parse_move_expr(Parser *parser);
+XR_FUNC AstNode *xr_parse_unsafe_expr(Parser *parser);
 XR_FUNC AstNode *xr_parse_defer_statement(Parser *parser);
 XR_FUNC AstNode *xr_parse_select_statement(Parser *parser);
 XR_FUNC AstNode *xr_parse_scope_block(Parser *parser);

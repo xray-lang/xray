@@ -542,6 +542,29 @@
   :observable (lz-match-copy)
   :targets (vm-bytecode aot-c aot-verify))
 
+; FFI raw-pointer load/store. The address is an address-width int; aux_int holds
+; the XrFFIType width of the pointee. No bounds check (unsafe-only). Modeled on
+; the bytes primitives: implicit TBAA-NONE keeps them out of value numbering and
+; alias-based reordering, which is the conservative truth for memory C may mutate.
+(define-xi-op xi.ptr.load
+  :class memory-read
+  :arity 1
+  :effects (memory-read)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode aot-c aot-verify))
+
+(define-xi-op xi.ptr.store
+  :class memory-write
+  :arity 2
+  :result-kind void
+  :result-ownership none
+  :own-use borrow
+  :effects (side-effect memory-write)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode aot-c aot-verify))
+
 (define-xi-op xi.struct.new
   :class allocation
   :arity 1
