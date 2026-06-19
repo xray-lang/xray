@@ -48,6 +48,7 @@ tests/regression/11_coroutine/1145_coro_error_patterns.xr
 tests/regression/11_coroutine/1146_multicore_string_concat.xr
 tests/regression/11_coroutine/1147_preempt_test.xr
 tests/regression/11_coroutine/1148_scope_race_stress.xr
+tests/regression/11_coroutine/1149_module_call_stack_grow.xr
 tests/regression/11_coroutine/1150_select_block_buffer_wake.xr
 tests/regression/11_coroutine/1151_inject_queue_spill.xr
 tests/regression/11_coroutine/1154_dynamic_channel_capacity.xr

@@ -393,9 +393,21 @@ static void xicgen_import_ref(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
         }
     }
     if (!found) {
-        if (ref && ref->module_path && !ref->member_name &&
-            (strcmp(ref->module_path, "time") == 0 || strcmp(ref->module_path, "math") == 0 ||
-             cg_module_has_aot_direct_calls(ref->module_path))) {
+        bool known_module_import = false;
+        if (ref && ref->module_path && !ref->member_name) {
+            known_module_import =
+                ref->resolved_mod_index >= 0 && ref->resolved_mod_index < ctx->all_nmodules;
+            for (int ii = 0; !known_module_import && ii < ctx->nimports; ii++) {
+                known_module_import = ctx->imports[ii].module_path &&
+                                      strcmp(ctx->imports[ii].module_path, ref->module_path) == 0;
+            }
+        }
+        if (known_module_import) {
+            fprintf(out, "XR_NULL_VAL /* module import: %s */", ref->module_path);
+        } else if (ref && ref->module_path && !ref->member_name &&
+                   (strcmp(ref->module_path, "time") == 0 ||
+                    strcmp(ref->module_path, "math") == 0 ||
+                    cg_module_has_aot_direct_calls(ref->module_path))) {
             fprintf(out, "XR_NULL_VAL /* builtin module: %s */", ref->module_path);
         } else if (xicgen_import_ref_is_core_math_member(ref)) {
             fprintf(out, "XR_NULL_VAL /* builtin math.%s */", ref->member_name);
@@ -604,6 +616,16 @@ static void xicgen_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValu
         ctx->error = true;
         fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT sync call to suspendable function '%s'\n",
                 target->name ? target->name : "?");
+        emit_codegen_abort_expr(out);
+        return;
+    }
+
+    if (!target && static_call.is_class_constructor && static_call.class_data) {
+        if (emit_class_native_default_constructor_expr(ctx, out, prefix, v, static_call.class_data,
+                                                       call_prefix))
+            return;
+        ctx->error = true;
+        fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT class constructor call\n");
         emit_codegen_abort_expr(out);
         return;
     }
@@ -1964,6 +1986,62 @@ static bool xicgen_emit_static_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f
     return true;
 }
 
+static bool xicgen_emit_import_module_member_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                                  const XiValue *v, const char *prefix,
+                                                  const char *method) {
+    CgStaticFunctionCall call = cg_resolve_module_member_call(ctx, f, v, method);
+    const XiFunc *target = call.func;
+    if (!target && !(call.is_class_constructor && call.class_data))
+        return false;
+    if (target && cg_func_needs_aot_coro(target)) {
+        ctx->error = true;
+        fprintf(stderr,
+                "[xi_cgen] ERROR: unsupported AOT sync module-member call to suspendable "
+                "function '%s'\n",
+                target->name ? target->name : "?");
+        emit_codegen_abort_expr(out);
+        return true;
+    }
+    if (call.is_class_constructor) {
+        if (!target && emit_class_native_default_constructor_expr(ctx, out, prefix, v,
+                                                                  call.class_data, call.prefix))
+            return true;
+        if (emit_class_native_constructor_expr(ctx, out, f, prefix, v, target, call.prefix))
+            return true;
+        if (!target) {
+            ctx->error = true;
+            fprintf(stderr,
+                    "[xi_cgen] ERROR: unsupported AOT module-member class constructor '%s'\n",
+                    method ? method : "?");
+            emit_codegen_abort_expr(out);
+            return true;
+        }
+        fprintf(out, "({ XrValue _inst = xrt_map_new(4); ");
+        emit_fname(ctx, out, call.prefix ? call.prefix : prefix, target);
+        fprintf(out, "(NULL, _inst");
+        for (uint16_t a = 1; a < v->nargs; a++) {
+            fprintf(out, ", ");
+            emit_value_as_rep(out, v->args[a], XR_REP_TAGGED);
+        }
+        fprintf(out, "); _inst; })");
+        return true;
+    }
+    const char *conv_suffix = emit_direct_call_return_conversion_prefix(ctx, out, f, v, target);
+    if (ctx->error) {
+        emit_codegen_abort_expr(out);
+        return true;
+    }
+    emit_fname(ctx, out, call.prefix ? call.prefix : prefix, target);
+    fprintf(out, "(NULL");
+    for (uint16_t a = 1; a < v->nargs; a++) {
+        fprintf(out, ", ");
+        emit_value_as_direct_call_arg(ctx, out, f, v, target, (uint16_t) (a - 1), v->args[a]);
+    }
+    fprintf(out, ")");
+    emit_conversion_suffix(out, conv_suffix);
+    return true;
+}
+
 static void xicgen_call_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                const char *prefix) {
     XR_DCHECK(v->nargs >= 1, "xicgen_call_method: need receiver");
@@ -1978,6 +2056,8 @@ static void xicgen_call_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
         return;
     if (!is_super && method && strcmp(method, "constructor") == 0 &&
         xicgen_emit_user_constructor(ctx, out, f, v, prefix))
+        return;
+    if (!is_super && xicgen_emit_import_module_member_call(ctx, out, f, v, prefix, method))
         return;
     if (is_super)
         mfunc = xicgen_lookup_super_method(ctx, f, method, &method_prefix);

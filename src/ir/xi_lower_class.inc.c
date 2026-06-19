@@ -77,7 +77,7 @@ static XrStructLayout *class_make_native_instance_layout(XiLower *l, ClassDeclNo
             instance_fields++;
     }
     int total_fields = (int) inherited + instance_fields;
-    if (total_fields <= 0 || total_fields > XR_MAX_STRUCT_FIELDS)
+    if (total_fields < 0 || total_fields > XR_MAX_STRUCT_FIELDS)
         return NULL;
 
     XrStructLayout *layout =
@@ -85,10 +85,13 @@ static XrStructLayout *class_make_native_instance_layout(XiLower *l, ClassDeclNo
     if (!layout)
         return NULL;
     layout->field_count = (uint16_t) total_fields;
-    layout->field_names = (const char **) xi_func_arena_alloc(
-        l->func, (uint32_t) (sizeof(const char *) * (size_t) total_fields));
-    if (!layout->field_names)
-        return NULL;
+    layout->field_names = NULL;
+    if (total_fields > 0) {
+        layout->field_names = (const char **) xi_func_arena_alloc(
+            l->func, (uint32_t) (sizeof(const char *) * (size_t) total_fields));
+        if (!layout->field_names)
+            return NULL;
+    }
 
     uint16_t out_idx = 0;
     if (super_data && super_data->instance_layout) {

@@ -8,40 +8,76 @@
  * xi_cgen_call_resolve.inc.c - AOT static function call resolution helpers
  */
 
-static CgStaticFunctionCall cg_resolve_import_function_call(XiCgenCtx *ctx,
-                                                            const XiImportRef *ref) {
-    if (!ctx || !ref)
-        return cg_no_static_function_call();
-
+static bool cg_import_entry_matches_ref(const XiCgenCtx *ctx, const CgImportEntry *imp,
+                                        const XiImportRef *ref, const char *member_name) {
+    if (!ctx || !imp || !ref || !member_name || !imp->member_name ||
+        strcmp(imp->member_name, member_name) != 0)
+        return false;
     if (ref->resolved_mod_index >= 0 && ref->resolved_mod_index < ctx->all_nmodules) {
         const XiModule *target_module = ctx->all_modules[ref->resolved_mod_index];
         const char *target_module_name = target_module ? target_module->name : NULL;
-        for (int ii = 0; ii < ctx->nimports; ii++) {
-            CgImportEntry *imp = &ctx->imports[ii];
-            if (!imp->target_func)
-                continue;
-            if (imp->target_mod_name && target_module_name &&
-                strcmp(imp->target_mod_name, target_module_name) == 0 && imp->member_name &&
-                ref->member_name && strcmp(imp->member_name, ref->member_name) == 0) {
-                return imp->target_class
-                           ? cg_static_class_constructor_call(imp->target_func,
-                                                              imp->target_mod_name)
-                           : cg_static_function_call(imp->target_func, imp->target_mod_name);
-            }
-        }
+        if (imp->target_mod_name && target_module_name &&
+            strcmp(imp->target_mod_name, target_module_name) == 0)
+            return true;
     }
+    return imp->module_path && ref->module_path && strcmp(imp->module_path, ref->module_path) == 0;
+}
+
+static CgStaticFunctionCall cg_import_entry_static_call(const CgImportEntry *imp) {
+    if (!imp)
+        return cg_no_static_function_call();
+    const XiFunc *target = imp->target_func;
+    if (!target && imp->target_class && imp->exporter_func)
+        target = cg_find_constructor(imp->exporter_func, imp->target_class);
+    if (!target && !imp->target_class)
+        return cg_no_static_function_call();
+    return imp->target_class ? cg_static_class_constructor_data_call(target, imp->target_mod_name,
+                                                                     imp->target_class)
+                             : cg_static_function_call(target, imp->target_mod_name);
+}
+
+static CgStaticFunctionCall cg_resolve_import_function_call(XiCgenCtx *ctx,
+                                                            const XiImportRef *ref) {
+    if (!ctx || !ref || !ref->member_name)
+        return cg_no_static_function_call();
 
     for (int ii = 0; ii < ctx->nimports; ii++) {
         CgImportEntry *imp = &ctx->imports[ii];
-        if (!imp->target_func)
-            continue;
-        if (imp->module_path && ref->module_path &&
-            strcmp(imp->module_path, ref->module_path) == 0 && imp->member_name &&
-            ref->member_name && strcmp(imp->member_name, ref->member_name) == 0) {
-            return imp->target_class
-                       ? cg_static_class_constructor_call(imp->target_func, imp->target_mod_name)
-                       : cg_static_function_call(imp->target_func, imp->target_mod_name);
-        }
+        if (cg_import_entry_matches_ref(ctx, imp, ref, ref->member_name))
+            return cg_import_entry_static_call(imp);
+    }
+    return cg_no_static_function_call();
+}
+
+static const XiImportRef *cg_module_import_ref_for_value(XiCgenCtx *ctx, const XiFunc *f,
+                                                         const XiValue *value) {
+    const XiValue *v = cg_unwrap_identity_value(value);
+    const XiImportRef *ref = cg_value_import_ref(v);
+    if (ref && !ref->member_name)
+        return ref;
+    if (!v || v->op != XI_GET_SHARED)
+        return NULL;
+    int slot = (int) v->aux_int;
+    ref = cg_shared_slot_import_ref(f, slot);
+    if (!ref && f && f->module && f->module->init != f)
+        ref = cg_shared_slot_import_ref(f->module->init, slot);
+    if (!ref && ctx && ctx->module && ctx->module->init && ctx->module->init != f)
+        ref = cg_shared_slot_import_ref(ctx->module->init, slot);
+    return ref && !ref->member_name ? ref : NULL;
+}
+
+static CgStaticFunctionCall cg_resolve_module_member_call(XiCgenCtx *ctx, const XiFunc *f,
+                                                          const XiValue *call,
+                                                          const char *member_name) {
+    if (!ctx || !call || call->nargs < 1 || !member_name)
+        return cg_no_static_function_call();
+    const XiImportRef *module_ref = cg_module_import_ref_for_value(ctx, f, call->args[0]);
+    if (!module_ref)
+        return cg_no_static_function_call();
+    for (int ii = 0; ii < ctx->nimports; ii++) {
+        CgImportEntry *imp = &ctx->imports[ii];
+        if (cg_import_entry_matches_ref(ctx, imp, module_ref, member_name))
+            return cg_import_entry_static_call(imp);
     }
     return cg_no_static_function_call();
 }
