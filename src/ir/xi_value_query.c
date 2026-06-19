@@ -69,6 +69,11 @@ XR_FUNC bool xi_value_type_is_work_queue(const XiValue *v) {
     return v && xi_type_is_named_instance(v->type, "WorkQueue");
 }
 
+XR_FUNC bool xi_value_type_is_result_group(const XiValue *v) {
+    v = xi_value_unwrap_identity(v);
+    return v && xi_type_is_named_instance(v->type, "ResultGroup");
+}
+
 XR_FUNC bool xi_value_type_is_unknown(const XiValue *v) {
     v = xi_value_unwrap_identity(v);
     return !v || !v->type || v->type->kind == XR_KIND_UNKNOWN;

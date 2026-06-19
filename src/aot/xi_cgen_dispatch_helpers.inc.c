@@ -541,6 +541,9 @@ static void xicgen_get_builtin(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
     if (v->aux_int == XR_GLOBAL_VAR_PROCESS || v->aux_int == XR_GLOBAL_VAR_FILE ||
         v->aux_int == XR_GLOBAL_VAR_DIR) {
         fprintf(out, "xrt_builtins[%d]", (int) v->aux_int);
+    } else if (v->aux_int == XR_GLOBAL_VAR_WORKQUEUE || v->aux_int == XR_GLOBAL_VAR_RESULTGROUP) {
+        fprintf(out, "XR_NULL_VAL /* builtin native class token: %s */",
+                v->aux ? (const char *) v->aux : "?");
     } else if (emit_prelude_enum_type_expr(out, (int) v->aux_int)) {
         /* Prelude enum type object: standalone AOT uses the same lightweight
          * map representation as user enums, avoiding a full isolate solely for
@@ -586,6 +589,15 @@ static bool xicgen_call_is_work_queue_constructor(const XiValue *callee) {
     return origin && origin->op == XI_GET_BUILTIN && origin->aux_int == XR_GLOBAL_VAR_WORKQUEUE;
 }
 
+static bool xicgen_call_is_result_group_constructor(const XiValue *callee) {
+    const XiValue *origin = cg_unwrap_identity_value(callee);
+    return origin && origin->op == XI_GET_BUILTIN && origin->aux_int == XR_GLOBAL_VAR_RESULTGROUP;
+}
+
+static const char *xicgen_aot_context_expr(XiCgenCtx *ctx, const XiFunc *f) {
+    return cg_func_needs_aot_coro_ctx(ctx, f) ? "ctx" : "&xrt_global_ctx";
+}
+
 static void xicgen_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                         const char *prefix) {
     XR_DCHECK(v->nargs >= 1, "xicgen_call: need callee");
@@ -598,7 +610,7 @@ static void xicgen_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValu
                          xicgen_resolve_direct_class_ctor(f, callee, &target);
 
     if (xicgen_call_is_work_queue_constructor(callee)) {
-        fprintf(out, "xr_aot_work_queue_new(ctx, ");
+        fprintf(out, "xr_aot_work_queue_new(%s, ", xicgen_aot_context_expr(ctx, f));
         if (v->nargs >= 2)
             emit_value_as_rep(out, v->args[1], XR_REP_I64);
         else
@@ -606,6 +618,16 @@ static void xicgen_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValu
         fprintf(out, ", ");
         if (v->nargs >= 3)
             emit_value_as_rep(out, v->args[2], XR_REP_I64);
+        else
+            fprintf(out, "0");
+        fprintf(out, ")");
+        return;
+    }
+
+    if (xicgen_call_is_result_group_constructor(callee)) {
+        fprintf(out, "xr_aot_result_group_new(%s, ", xicgen_aot_context_expr(ctx, f));
+        if (v->nargs >= 2)
+            emit_value_as_rep(out, v->args[1], XR_REP_I64);
         else
             fprintf(out, "0");
         fprintf(out, ")");
@@ -1779,11 +1801,52 @@ static bool xicgen_emit_work_queue_method(FILE *out, const XiValue *v, const cha
     return true;
 }
 
+static bool xicgen_emit_result_group_method(FILE *out, const XiValue *v, const char *method,
+                                            uint16_t nargs) {
+    if (!v || v->nargs < 1 || !method || !xi_value_type_is_result_group(v->args[0]))
+        return false;
+    bool is_add = strcmp(method, "add") == 0 && nargs == 1 && v->nargs >= 2;
+    bool is_flush = strcmp(method, "flush") == 0 && nargs == 0;
+    bool is_try_recv = strcmp(method, "tryRecv") == 0 && nargs == 0;
+    bool is_close = strcmp(method, "close") == 0 && nargs == 0;
+    if (!is_add && !is_flush && !is_try_recv && !is_close)
+        return false;
+
+    const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+    if (is_add) {
+        fprintf(out, "xr_aot_result_group_add_sync(");
+        emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
+        fprintf(out, ", ");
+        emit_value_as_rep(out, v->args[1], XR_REP_I64);
+        fprintf(out, ")");
+    } else if (is_flush) {
+        fprintf(out, "xr_aot_result_group_flush_sync(");
+        emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
+        fprintf(out, ")");
+    } else if (is_try_recv) {
+        fprintf(out, "({ XrValue _rg_trv_%u = XR_NULL_VAL; bool _rg_trok_%u = ", v->id, v->id);
+        fprintf(out, "xr_aot_result_group_try_recv_sync(");
+        emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
+        fprintf(out,
+                ", &_rg_trv_%u); xrt_tuple_make(2, (XrValue[]){_rg_trv_%u, "
+                "XR_FROM_BOOL(_rg_trok_%u)}); })",
+                v->id, v->id, v->id);
+    } else if (is_close) {
+        fprintf(out, "xr_aot_result_group_close_sync(");
+        emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
+        fprintf(out, ")");
+    }
+    emit_conversion_suffix(out, conv_suffix);
+    return true;
+}
+
 static void xicgen_emit_runtime_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                        const char *method, uint16_t nargs) {
     if (xicgen_emit_channel_method(out, v, method, nargs))
         return;
     if (xicgen_emit_work_queue_method(out, v, method, nargs))
+        return;
+    if (xicgen_emit_result_group_method(out, v, method, nargs))
         return;
     int sym = cg_method_sym(method);
     if (sym < 0 && xicgen_emit_stringbuilder_append(out, v, method, nargs))
@@ -2524,6 +2587,20 @@ static void xicgen_load_field(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
         else if (cg_rep(v) == XR_REP_F64)
             fprintf(out, "XR_TO_FLOAT(");
         fprintf(out, "%s(NULL, ", work_queue_helper);
+        emit_vref(out, v->args[0]);
+        fprintf(out, ")");
+        if (cg_rep(v) == XR_REP_I64 || cg_rep(v) == XR_REP_F64)
+            fprintf(out, ")");
+        return;
+    }
+    const char *result_group_helper =
+        xi_value_type_is_result_group(v->args[0]) ? cg_result_group_field_helper(field) : NULL;
+    if (result_group_helper) {
+        if (cg_rep(v) == XR_REP_I64)
+            fprintf(out, "XR_TO_INT(");
+        else if (cg_rep(v) == XR_REP_F64)
+            fprintf(out, "XR_TO_FLOAT(");
+        fprintf(out, "%s(NULL, ", result_group_helper);
         emit_vref(out, v->args[0]);
         fprintf(out, ")");
         if (cg_rep(v) == XR_REP_I64 || cg_rep(v) == XR_REP_F64)

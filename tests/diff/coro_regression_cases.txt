@@ -62,4 +62,5 @@ tests/regression/11_coroutine/1161_multiple_task_awaiters.xr
 tests/regression/11_coroutine/1162_overlapping_await_any_waiters.xr
 tests/regression/11_coroutine/1163_channel_send_opcode_preserves_receiver.xr
 tests/regression/11_coroutine/1164_channel_recv_raw_match_nullable_payload.xr
+tests/regression/11_coroutine/1165_result_group_native.xr
 tests/regression/11_coroutine/1166_channel_map_deep_copy_stress.xr

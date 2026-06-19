@@ -33,6 +33,7 @@ XR_FUNC bool xi_type_is_task(const struct XrType *type);
 XR_FUNC bool xi_value_type_is_channel(const XiValue *v);
 XR_FUNC bool xi_value_type_is_task(const XiValue *v);
 XR_FUNC bool xi_value_type_is_work_queue(const XiValue *v);
+XR_FUNC bool xi_value_type_is_result_group(const XiValue *v);
 XR_FUNC bool xi_value_type_is_unknown(const XiValue *v);
 
 #endif  // XI_VALUE_QUERY_H

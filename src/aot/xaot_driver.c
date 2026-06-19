@@ -275,7 +275,8 @@ static void scan_func_features(XiFunc *f, XaotFeatureSet *fs) {
                      * be detected here. Any WorkQueue use pulls in the isolate /
                      * scheduler runtime that codegen's xray_isolate_setup_full
                      * (emitted for WorkQueue-bearing entries) depends on. */
-                    if (v->aux_int == XR_GLOBAL_VAR_WORKQUEUE)
+                    if (v->aux_int == XR_GLOBAL_VAR_WORKQUEUE ||
+                        v->aux_int == XR_GLOBAL_VAR_RESULTGROUP)
                         fs->need_coro = true;
                     break;
                 case XI_CALL_METHOD:

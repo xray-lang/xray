@@ -66,6 +66,15 @@ XR_FUNC bool xi_value_is_work_queue_method_call(const XiValue *v, const char *me
     return nargs < 0 || (int) v->nargs - 1 == nargs;
 }
 
+XR_FUNC bool xi_value_is_result_group_method_call(const XiValue *v, const char *method, int nargs) {
+    if (!v || v->op != XI_CALL_METHOD || v->nargs < 1 || !xi_value_type_is_result_group(v->args[0]))
+        return false;
+    const char *actual = (const char *) v->aux;
+    if (!actual || strcmp(actual, method) != 0)
+        return false;
+    return nargs < 0 || (int) v->nargs - 1 == nargs;
+}
+
 static bool xi_value_is_blocking_channel_method_call(const XiValue *v) {
     return xi_value_is_channel_method_call(v, "send", 1) ||
            xi_value_is_channel_method_call(v, "sendTimeout", 2) ||
@@ -81,6 +90,10 @@ XR_FUNC bool xi_value_is_blocking_task_method_call(const XiValue *v) {
 XR_FUNC bool xi_value_is_blocking_work_queue_method_call(const XiValue *v) {
     return xi_value_is_work_queue_method_call(v, "pop", 0) ||
            xi_value_is_work_queue_method_call(v, "pop", 1);
+}
+
+XR_FUNC bool xi_value_is_blocking_result_group_method_call(const XiValue *v) {
+    return xi_value_is_result_group_method_call(v, "recv", 0);
 }
 
 /* ========== Intrinsic suspendability predicates (intraprocedural) ========== */
@@ -110,6 +123,10 @@ static bool xi_work_queue_method_needs_coro(const XiValue *v) {
         return false;
     const char *method = (const char *) v->aux;
     return method && strcmp(method, "pop") == 0;
+}
+
+static bool xi_result_group_method_needs_coro(const XiValue *v) {
+    return xi_value_is_blocking_result_group_method_call(v);
 }
 
 static bool xi_work_queue_constructor_needs_coro(const XiValue *v) {
@@ -152,7 +169,7 @@ static bool xi_coro_func_intrinsic_suspends(const XiFunc *f, const XiCoroResolve
             if (xi_op_is_coroutine(v->op))
                 return true;
             if (xi_channel_method_may_suspend(v) || xi_work_queue_method_needs_coro(v) ||
-                xi_work_queue_constructor_needs_coro(v))
+                xi_result_group_method_needs_coro(v) || xi_work_queue_constructor_needs_coro(v))
                 return true;
             if (xi_coro_is_time_sleep_call(f, v, resolver))
                 return true;
@@ -211,7 +228,8 @@ XR_FUNC bool xi_coro_is_suspend_point(const XiFunc *f, const XiValue *v,
         v->op == XI_CHAN_RECV || v->op == XI_SELECT_BLOCK || v->op == XI_SCOPE_EXIT)
         return true;
     if (xi_value_is_blocking_channel_method_call(v) || xi_value_is_blocking_task_method_call(v) ||
-        xi_value_is_blocking_work_queue_method_call(v))
+        xi_value_is_blocking_work_queue_method_call(v) ||
+        xi_value_is_blocking_result_group_method_call(v))
         return true;
     if (xi_coro_is_time_sleep_call(f, v, resolver))
         return true;
@@ -360,6 +378,7 @@ XR_FUNC bool xi_coro_value_needs_runtime_slot(const XiValue *v) {
                  xi_value_is_channel_method_call(v, "recv", 0) ||
                  xi_value_is_channel_method_call(v, "recvTimeout", 1) ||
                  xi_value_is_blocking_work_queue_method_call(v) ||
+                 xi_value_is_blocking_result_group_method_call(v) ||
                  xi_value_is_blocking_task_method_call(v));
 }
 
@@ -621,7 +640,9 @@ static XiCoroSuspendKind xi_coro_suspend_kind(const XiFunc *f, const XiValue *v,
     if (xi_value_is_channel_method_call(v, "recv", 0) ||
         xi_value_is_channel_method_call(v, "recvTimeout", 1))
         return XI_CORO_SUSP_CHAN_RECV;
-    if (xi_value_is_blocking_task_method_call(v) || xi_value_is_blocking_work_queue_method_call(v))
+    if (xi_value_is_blocking_task_method_call(v) ||
+        xi_value_is_blocking_work_queue_method_call(v) ||
+        xi_value_is_blocking_result_group_method_call(v))
         return XI_CORO_SUSP_AWAIT;
     if (xi_coro_is_time_sleep_call(f, v, resolver))
         return XI_CORO_SUSP_SLEEP;

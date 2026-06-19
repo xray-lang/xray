@@ -44,6 +44,7 @@
 #include "xtask.h"
 #include "xworker.h"
 #include "xwork_queue.h"
+#include "xresult_group.h"
 
 typedef struct XrAotCoroState {
     const XrAotCoroDesc *desc;
@@ -2083,6 +2084,176 @@ XrValue xr_aot_work_queue_is_closed_sync(XrValue queue_value) {
     if (!aot_context_from_work_queue_value(queue_value, &ctx))
         return xr_bool(false);
     return xr_aot_work_queue_is_closed(&ctx, queue_value);
+}
+
+static bool aot_context_from_result_group_value(XrValue group_value, XrAotContext *out) {
+    if (!out || !xr_value_is_result_group(group_value))
+        return false;
+    XrResultGroup *g = xr_value_to_result_group(group_value);
+    XrayIsolate *isolate = g ? g->isolate : NULL;
+    if (!isolate)
+        return false;
+    out->isolate = isolate;
+    out->coro = xr_current_coro(isolate);
+    out->worker = NULL;
+    return true;
+}
+
+static uint32_t aot_result_group_sanitize_batch(int64_t value) {
+    if (value <= 0)
+        return XR_RESULT_GROUP_DEFAULT_BATCH;
+    if (value > XR_RESULT_GROUP_MAX_BATCH)
+        return XR_RESULT_GROUP_MAX_BATCH;
+    return (uint32_t) value;
+}
+
+XrValue xr_aot_result_group_new(const XrAotContext *ctx, int64_t batch_size) {
+    if (!ctx || !ctx->isolate)
+        return XR_NULL_VAL;
+    XrResultGroup *g =
+        xr_result_group_new(ctx->isolate, aot_result_group_sanitize_batch(batch_size));
+    return g ? xr_value_from_result_group(g) : XR_NULL_VAL;
+}
+
+XrValue xr_aot_result_group_add(const XrAotContext *ctx, XrValue group_value, int64_t value) {
+    (void) ctx;
+    if (!xr_value_is_result_group(group_value))
+        return xr_bool(false);
+    return xr_bool(xr_result_group_add(xr_value_to_result_group(group_value), value));
+}
+
+XrValue xr_aot_result_group_add_sync(XrValue group_value, int64_t value) {
+    XrAotContext ctx = {0};
+    if (!aot_context_from_result_group_value(group_value, &ctx))
+        return xr_bool(false);
+    return xr_aot_result_group_add(&ctx, group_value, value);
+}
+
+XrValue xr_aot_result_group_flush(const XrAotContext *ctx, XrValue group_value) {
+    (void) ctx;
+    if (!xr_value_is_result_group(group_value))
+        return XR_NULL_VAL;
+    xr_result_group_flush(xr_value_to_result_group(group_value));
+    return XR_NULL_VAL;
+}
+
+XrValue xr_aot_result_group_flush_sync(XrValue group_value) {
+    XrAotContext ctx = {0};
+    if (!aot_context_from_result_group_value(group_value, &ctx))
+        return XR_NULL_VAL;
+    return xr_aot_result_group_flush(&ctx, group_value);
+}
+
+bool xr_aot_result_group_try_recv(const XrAotContext *ctx, XrValue group_value,
+                                  XrValue *out_value) {
+    (void) ctx;
+    if (out_value)
+        *out_value = XR_NULL_VAL;
+    if (!xr_value_is_result_group(group_value))
+        return false;
+    XrResultGroup *g = xr_value_to_result_group(group_value);
+    int64_t value = 0;
+    bool ok = g && xr_result_group_try_recv(g, &value);
+    if (ok && out_value)
+        *out_value = XR_FROM_INT(value);
+    return ok;
+}
+
+bool xr_aot_result_group_try_recv_sync(XrValue group_value, XrValue *out_value) {
+    if (out_value)
+        *out_value = XR_NULL_VAL;
+    XrAotContext ctx = {0};
+    if (!aot_context_from_result_group_value(group_value, &ctx))
+        return false;
+    return xr_aot_result_group_try_recv(&ctx, group_value, out_value);
+}
+
+XrAotResult xr_aot_result_group_recv(const XrAotContext *ctx, XrValue group_value,
+                                     XrSlotRef out_slot) {
+    if (!ctx || !ctx->isolate || !ctx->coro || !xr_value_is_result_group(group_value))
+        return xr_aot_error(XR_NULL_VAL, false);
+    XrValue value = XR_NULL_VAL;
+    XrResultGroup *g = xr_value_to_result_group(group_value);
+    switch (xr_result_group_recv_for_coro(ctx->isolate, g, ctx->coro, &value)) {
+        case XR_RESULT_GROUP_RECV_DONE:
+            if (out_slot.kind == XR_SLOT_NONE)
+                return xr_aot_done(value);
+            return aot_store_slot_result(out_slot, value);
+        case XR_RESULT_GROUP_RECV_BLOCKED:
+            return xr_aot_blocked();
+        case XR_RESULT_GROUP_RECV_ERROR:
+        default:
+            return xr_aot_error(XR_NULL_VAL, false);
+    }
+}
+
+XrAotResult xr_aot_result_group_recv_resume(const XrAotContext *ctx, XrSlotRef out_slot) {
+    if (!ctx || !ctx->isolate || !ctx->coro)
+        return xr_aot_error(XR_NULL_VAL, false);
+    XrValue value = XR_NULL_VAL;
+    switch (xr_result_group_recv_resume_for_coro(ctx->isolate, ctx->coro, &value)) {
+        case XR_RESULT_GROUP_RECV_DONE:
+            if (out_slot.kind == XR_SLOT_NONE)
+                return xr_aot_done(value);
+            return aot_store_slot_result(out_slot, value);
+        case XR_RESULT_GROUP_RECV_BLOCKED:
+            return xr_aot_blocked();
+        case XR_RESULT_GROUP_RECV_ERROR:
+        default:
+            return xr_aot_error(XR_NULL_VAL, false);
+    }
+}
+
+XrValue xr_aot_result_group_close(const XrAotContext *ctx, XrValue group_value) {
+    (void) ctx;
+    if (!xr_value_is_result_group(group_value))
+        return XR_NULL_VAL;
+    xr_result_group_close(xr_value_to_result_group(group_value));
+    return XR_NULL_VAL;
+}
+
+XrValue xr_aot_result_group_close_sync(XrValue group_value) {
+    XrAotContext ctx = {0};
+    if (!aot_context_from_result_group_value(group_value, &ctx))
+        return XR_NULL_VAL;
+    return xr_aot_result_group_close(&ctx, group_value);
+}
+
+XrValue xr_aot_result_group_length(const XrAotContext *ctx, XrValue group_value) {
+    (void) ctx;
+    if (!xr_value_is_result_group(group_value))
+        return XR_FROM_INT(0);
+    return XR_FROM_INT((int64_t) xr_result_group_length(xr_value_to_result_group(group_value)));
+}
+
+XrValue xr_aot_result_group_pending_count(const XrAotContext *ctx, XrValue group_value) {
+    (void) ctx;
+    if (!xr_value_is_result_group(group_value))
+        return XR_FROM_INT(0);
+    return XR_FROM_INT(
+        (int64_t) xr_result_group_pending_count(xr_value_to_result_group(group_value)));
+}
+
+XrValue xr_aot_result_group_batch_size(const XrAotContext *ctx, XrValue group_value) {
+    (void) ctx;
+    if (!xr_value_is_result_group(group_value))
+        return XR_FROM_INT(0);
+    XrResultGroup *g = xr_value_to_result_group(group_value);
+    return XR_FROM_INT(g ? (int64_t) g->batch_size : 0);
+}
+
+XrValue xr_aot_result_group_is_closed(const XrAotContext *ctx, XrValue group_value) {
+    (void) ctx;
+    if (!xr_value_is_result_group(group_value))
+        return xr_bool(true);
+    return xr_bool(xr_result_group_is_closed(xr_value_to_result_group(group_value)));
+}
+
+XrValue xr_aot_result_group_is_closed_sync(XrValue group_value) {
+    XrAotContext ctx = {0};
+    if (!aot_context_from_result_group_value(group_value, &ctx))
+        return xr_bool(true);
+    return xr_aot_result_group_is_closed(&ctx, group_value);
 }
 
 XrValue xr_aot_tuple_get(const XrAotContext *ctx, XrValue tuple_value, uint16_t index) {

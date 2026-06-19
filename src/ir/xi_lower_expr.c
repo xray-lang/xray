@@ -79,6 +79,31 @@ static XrStructLayout *xi_lower_type_struct_layout(XiLower *l, struct XrType *ty
     return class_name ? xi_lower_lookup_struct_layout(l, class_name) : NULL;
 }
 
+static bool xi_lower_type_is_named_instance(const XrType *type, const char *name) {
+    if (!type || !name)
+        return false;
+    if (type->kind == XR_KIND_INSTANCE)
+        return type->instance.class_name && strcmp(type->instance.class_name, name) == 0;
+    if (type->kind == XR_KIND_UNION) {
+        for (uint8_t i = 0; i < type->union_type.member_count; i++) {
+            if (xi_lower_type_is_named_instance(type->union_type.members[i], name))
+                return true;
+        }
+    }
+    return false;
+}
+
+static bool xi_lower_method_may_suspend(const XrType *receiver_type, const char *method,
+                                        int nargs) {
+    if (!receiver_type || !method)
+        return false;
+    if (xi_lower_type_is_named_instance(receiver_type, "WorkQueue"))
+        return strcmp(method, "pop") == 0 && (nargs == 0 || nargs == 1);
+    if (xi_lower_type_is_named_instance(receiver_type, "ResultGroup"))
+        return strcmp(method, "recv") == 0 && nargs == 0;
+    return false;
+}
+
 static XrStructLayout *xi_lower_value_struct_layout(XiLower *l, XiValue *v) {
     XrStructLayout *layout = xi_lower_type_struct_layout(l, v ? v->type : NULL);
     if (layout)
@@ -2034,6 +2059,8 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
         v->aux = (void *) arena_strdup(l->func, ma->name);
         v->aux_int = (int64_t) xi_lower_method_symbol(l, ma->name) << 1;
         v->flags |= XI_FLAG_SIDE_EFFECT;
+        if (xi_lower_method_may_suspend(recv->type, ma->name, n))
+            v->flags |= XI_FLAG_MAY_SUSPEND;
         v->line = (uint32_t) node->line;
 
         xi_lower_insert_err_check(l, node);

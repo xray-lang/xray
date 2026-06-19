@@ -27,9 +27,6 @@
 #include "xworker.h"
 #include "xyieldable.h"
 
-#define XR_RESULT_GROUP_DEFAULT_BATCH 64u
-#define XR_RESULT_GROUP_MAX_BATCH (1u << 20)
-
 static uint32_t sanitize_batch_size(int64_t value) {
     if (value <= 0)
         return XR_RESULT_GROUP_DEFAULT_BATCH;
@@ -487,6 +484,7 @@ void xr_gc_destroy_result_group(XrGCHeader *obj, XrCoroGC *owning_gc) {
 
 static XrValue m_add(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
+    (void) nargs;
     XrResultGroup *g = xr_value_to_result_group(self);
     XR_DCHECK(g != NULL, "ResultGroup.add: NULL group");
     XR_DCHECK(nargs >= 1, "ResultGroup.add: missing value");
@@ -527,31 +525,27 @@ static void result_group_finish_wait_if_current(XrCoroutine *coro, XrResultGroup
         xr_result_group_wait_token_finish(&wait->result_group_token);
 }
 
-static XrCFuncResult ym_recv(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs,
-                             XrValue *result) {
-    (void) args;
-    (void) nargs;
-    XrResultGroup *g = xr_value_to_result_group(self);
-    XR_DCHECK(g != NULL, "ResultGroup.recv: NULL group");
-    XR_DCHECK(result != NULL, "ResultGroup.recv: NULL result");
-
-    XrCoroutine *coro = xr_current_coro(isolate);
+XrResultGroupRecvStatus xr_result_group_recv_for_coro(XrayIsolate *isolate, XrResultGroup *g,
+                                                      XrCoroutine *coro, XrValue *result) {
+    (void) isolate;
+    if (!g || !result)
+        return XR_RESULT_GROUP_RECV_ERROR;
     int64_t value = 0;
     if (xr_result_group_try_recv(g, &value)) {
         result_group_finish_wait_if_current(coro, g);
         *result = xr_int(value);
-        return XR_CFUNC_DONE;
+        return XR_RESULT_GROUP_RECV_DONE;
     }
     if (xr_result_group_is_closed(g)) {
         result_group_finish_wait_if_current(coro, g);
         *result = xr_null();
-        return XR_CFUNC_DONE;
+        return XR_RESULT_GROUP_RECV_DONE;
     }
     if (!coro)
-        return XR_CFUNC_ERROR;
+        return XR_RESULT_GROUP_RECV_ERROR;
     XrCoroWaitState *wait = xr_coro_ensure_wait_state(coro);
     if (!wait)
-        return XR_CFUNC_ERROR;
+        return XR_RESULT_GROUP_RECV_ERROR;
     xr_result_group_wait_token_prepare(&wait->result_group_token, g);
 
     xr_amutex_lock(&g->lock);
@@ -559,13 +553,13 @@ static XrCFuncResult ym_recv(XrayIsolate *isolate, XrValue self, XrValue *args, 
         xr_amutex_unlock(&g->lock);
         xr_result_group_wait_token_finish(&wait->result_group_token);
         *result = xr_int(value);
-        return XR_CFUNC_DONE;
+        return XR_RESULT_GROUP_RECV_DONE;
     }
     if (xr_result_group_is_closed(g)) {
         xr_amutex_unlock(&g->lock);
         xr_result_group_wait_token_finish(&wait->result_group_token);
         *result = xr_null();
-        return XR_CFUNC_DONE;
+        return XR_RESULT_GROUP_RECV_DONE;
     }
 
     xr_coro_set_wait_reason(coro, XR_CORO_WAIT_RESULTGROUP >> XR_CORO_WAIT_SHIFT);
@@ -576,12 +570,45 @@ static XrCFuncResult ym_recv(XrayIsolate *isolate, XrValue self, XrValue *args, 
         xr_amutex_unlock(&g->lock);
         xr_result_group_wait_token_finish(&wait->result_group_token);
         xr_coro_flags_clear(coro, XR_CORO_WAIT_MASK);
-        return XR_CFUNC_ERROR;
+        return XR_RESULT_GROUP_RECV_ERROR;
     }
     xr_result_group_wait_token_commit(&wait->result_group_token);
     (void) xr_coro_publish_wait_block(coro);
     xr_amutex_unlock(&g->lock);
-    return XR_CFUNC_BLOCKED;
+    return XR_RESULT_GROUP_RECV_BLOCKED;
+}
+
+XrResultGroupRecvStatus xr_result_group_recv_resume_for_coro(XrayIsolate *isolate,
+                                                             XrCoroutine *coro, XrValue *result) {
+    if (!coro || !result)
+        return XR_RESULT_GROUP_RECV_ERROR;
+    XrCoroWaitState *wait = xr_coro_wait_state(coro);
+    if (!wait)
+        return XR_RESULT_GROUP_RECV_ERROR;
+    XrResultGroup *g = (XrResultGroup *) atomic_load_explicit(&wait->result_group_token.group,
+                                                              memory_order_acquire);
+    if (!g)
+        return XR_RESULT_GROUP_RECV_ERROR;
+    return xr_result_group_recv_for_coro(isolate, g, coro, result);
+}
+
+static XrCFuncResult ym_recv(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs,
+                             XrValue *result) {
+    (void) args;
+    (void) nargs;
+    XrResultGroup *g = xr_value_to_result_group(self);
+    XR_DCHECK(g != NULL, "ResultGroup.recv: NULL group");
+    XR_DCHECK(result != NULL, "ResultGroup.recv: NULL result");
+
+    switch (xr_result_group_recv_for_coro(isolate, g, xr_current_coro(isolate), result)) {
+        case XR_RESULT_GROUP_RECV_DONE:
+            return XR_CFUNC_DONE;
+        case XR_RESULT_GROUP_RECV_BLOCKED:
+            return XR_CFUNC_BLOCKED;
+        case XR_RESULT_GROUP_RECV_ERROR:
+        default:
+            return XR_CFUNC_ERROR;
+    }
 }
 
 static XrValue m_close(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
