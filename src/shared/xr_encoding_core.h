@@ -38,6 +38,51 @@ static inline bool xr_encoding_core_hex_valid(const char *hex, size_t len) {
     return true;
 }
 
+static inline bool xr_encoding_core_hex_encoded_len(size_t len, size_t *out_len) {
+    if (len > (SIZE_MAX - 1u) / 2u)
+        return false;
+    if (out_len)
+        *out_len = len * 2u;
+    return true;
+}
+
+static inline bool xr_encoding_core_hex_encode(const uint8_t *data, size_t len, char *output) {
+    static const char chars[] = "0123456789abcdef";
+    if ((!data && len != 0) || !output)
+        return false;
+    for (size_t i = 0; i < len; i++) {
+        output[i * 2u] = chars[data[i] >> 4];
+        output[i * 2u + 1u] = chars[data[i] & 0x0F];
+    }
+    output[len * 2u] = '\0';
+    return true;
+}
+
+static inline bool xr_encoding_core_hex_decoded_len(const char *hex, size_t len, size_t *out_len) {
+    if (!xr_encoding_core_hex_valid(hex, len))
+        return false;
+    if (out_len)
+        *out_len = len / 2u;
+    return true;
+}
+
+static inline bool xr_encoding_core_hex_decode(const char *hex, size_t len, uint8_t *output,
+                                               size_t *out_len) {
+    size_t n = 0;
+    if (!xr_encoding_core_hex_decoded_len(hex, len, &n))
+        return false;
+    if (!output && n != 0)
+        return false;
+    for (size_t i = 0; i < n; i++) {
+        uint8_t hi = xr_encoding_core_hex_value((unsigned char) hex[i * 2u]);
+        uint8_t lo = xr_encoding_core_hex_value((unsigned char) hex[i * 2u + 1u]);
+        output[i] = (uint8_t) ((hi << 4) | lo);
+    }
+    if (out_len)
+        *out_len = n;
+    return true;
+}
+
 static inline int xr_encoding_core_utf8_char_size(uint8_t first_byte) {
     if ((first_byte & 0x80) == 0x00)
         return 1;

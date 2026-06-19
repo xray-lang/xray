@@ -8,8 +8,7 @@
  * encoding.c - Character encoding conversion implementation
  *
  * KEY CONCEPT:
- *   Hex encoding uses lookup tables from xray_simd.h.
- *   UTF-8 operations delegate to core xutf8.h (zero duplication).
+ *   Hex and UTF-8 scalar operations delegate to shared core helpers.
  *   UTF-16 encode returns Array<uint8> (binary data, not string).
  */
 
@@ -17,44 +16,26 @@
 #include "../common.h"
 #include "../../src/runtime/object/xarray.h"
 #include "../../src/base/xutf8.h"
-#include "../../src/base/xsimd.h"
 #include "../../src/base/xmalloc.h"
 #include "../../src/base/xchecks.h"
 #include "../../src/runtime/gc/xgc.h"
 #include "../../src/shared/xr_encoding_core.h"
+#include <limits.h>
 #include <string.h>
 
-/* ========== Hex Encoding ========== */
-
-static const char HEX_CHARS_LOWER[] = "0123456789abcdef";
-
 XR_FUNC int xr_hex_encode(const uint8_t *data, size_t len, char *output) {
-    if (!data || !output)
+    size_t out_len = 0;
+    if (!xr_encoding_core_hex_encoded_len(len, &out_len) || out_len > (size_t) INT_MAX)
         return 0;
-    XR_DCHECK(len <= (SIZE_MAX / 2), "xr_hex_encode: len must not overflow output index");
-
-    for (size_t i = 0; i < len; i++) {
-        output[i * 2] = HEX_CHARS_LOWER[data[i] >> 4];
-        output[i * 2 + 1] = HEX_CHARS_LOWER[data[i] & 0x0F];
-    }
-    output[len * 2] = '\0';
-    return (int) (len * 2);
+    if (!xr_encoding_core_hex_encode(data, len, output))
+        return 0;
+    return (int) out_len;
 }
 
 XR_FUNC int xr_hex_decode(const char *hex, size_t len, uint8_t *output) {
-    if (!hex || !output)
+    size_t out_len = 0;
+    if (!xr_encoding_core_hex_decode(hex, len, output, &out_len) || out_len > (size_t) INT_MAX)
         return -1;
-    if (len % 2 != 0)
-        return -1;
-
-    size_t out_len = len / 2;
-    for (size_t i = 0; i < out_len; i++) {
-        uint8_t hi = XR_HEX_TO_VAL(hex[i * 2]);
-        uint8_t lo = XR_HEX_TO_VAL(hex[i * 2 + 1]);
-        if (hi == 255 || lo == 255)
-            return -1;
-        output[i] = (hi << 4) | lo;
-    }
     return (int) out_len;
 }
 

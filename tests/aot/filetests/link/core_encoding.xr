@@ -1,5 +1,19 @@
 import encoding
 
+print(encoding.hexEncode("Hello"))
+let decoded = encoding.hexDecode("48656c6c6f")
+if (decoded != null) {
+    print(decoded.length)
+    print(decoded[0])
+    print(decoded[4])
+}
+print(encoding.hexDecodeString("48656C6C6F"))
+print(encoding.hexDecode("gg") == null)
+print(encoding.hexDecode("abc") == null)
+let empty = encoding.hexDecode("")
+if (empty != null) {
+    print(empty.length)
+}
 print(encoding.hexValid("48656c6c6f"))
 print(encoding.hexValid("abc"))
 print(encoding.utf8Valid("hello"))
