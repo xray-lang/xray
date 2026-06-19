@@ -1,0 +1,7 @@
+fn mutate_and_read(target: ref Array<int>, snapshot: in Array<int>) {
+    target.push(1)
+    print(snapshot[0])
+}
+
+let values: Array<int> = [0]
+mutate_and_read(values, values)

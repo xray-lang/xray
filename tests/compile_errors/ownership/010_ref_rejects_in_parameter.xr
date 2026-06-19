@@ -1,0 +1,10 @@
+fn mutate(data: ref Array<int>) {
+    data.push(1)
+}
+
+fn view(data: in Array<int>) {
+    mutate(data)
+}
+
+let values: Array<int> = []
+view(values)
