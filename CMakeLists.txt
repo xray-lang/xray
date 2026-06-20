@@ -1078,6 +1078,21 @@ if(BUILD_TESTS)
         TIMEOUT 60
     )
 
+    # FFI ASan matrix: ASan builds must exercise raw pointers, CFn callbacks,
+    # and headerless repr(C) structs through VM/AOT; normal builds skip.
+    add_test(
+        NAME ffi_asan_smoke
+        COMMAND bash
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/ffi/run_ffi_asan_smoke.sh
+                $<TARGET_FILE:xray>
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(ffi_asan_smoke PROPERTIES
+        LABELS "ffi;aot;vm;asan;regression"
+        SKIP_RETURN_CODE 77
+        TIMEOUT 90
+    )
+
     # Negative frontend/semantic cases: programs that must be rejected.
     # Keeps ownership/in/ref diagnostics in the default CTest gate.
     add_test(
