@@ -531,7 +531,8 @@ static const XaBuiltinMember g_gen_regex_functions[] = {
      true, false},
     {"replaceAll", "(pattern: Regex, s: string, replacement: string): string",
      "Replace all matches", true, false},
-    {"split", "(pattern: Regex, s: string): Array<string>", "Split by pattern", true, false},
+    {"split", "(pattern: Regex, s: string, limit?: int): Array<string>", "Split by pattern", true,
+     false},
     {"escape", "(s: string): string", "Escape regex special chars", true, false},
     {"isValid", "(pattern: string): bool", "Check if pattern is valid", true, false},
 };

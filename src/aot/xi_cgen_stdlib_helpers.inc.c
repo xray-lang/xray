@@ -99,6 +99,8 @@ static const CgAotStdlibMethod g_aot_stdlib_methods[] = {
     {"regex", "isValid", 1, "xrt_regex_is_valid", "s", CG_AOT_RET_VALUE, NULL},
     {"regex", "replace", 3, "xrt_regex_replace", "vss", CG_AOT_RET_VALUE, NULL},
     {"regex", "replaceAll", 3, "xrt_regex_replace_all", "vss", CG_AOT_RET_VALUE, NULL},
+    {"regex", "split", 2, "xrt_regex_split", "vs", CG_AOT_RET_VALUE, NULL},
+    {"regex", "split", 3, "xrt_regex_split_limit", "vsv", CG_AOT_RET_VALUE, NULL},
     {"regex", "test", 2, "xrt_regex_test", "vs", CG_AOT_RET_VALUE, NULL},
 };
 

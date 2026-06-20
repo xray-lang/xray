@@ -8,6 +8,7 @@
  * xrt_regex_core.c - Freestanding AOT regex engine helpers
  */
 
+#include "xrt_coll.h"
 #include "xrt_regex.h"
 #include "../../stdlib/regex/xregex.h"
 #include "../../stdlib/regex/xregex_internal.h"
@@ -128,6 +129,15 @@ XrValue xrt_regex_count(XrValue re_value, const char *text_data, int64_t text_le
     return XR_FROM_INT((int64_t) xr_regex_count(obj->regex, text_data, (int) text_len));
 }
 
+static XrValue xrt_regex_copy_slice(const char *start, int64_t len) {
+    if ((!start && len != 0) || len < 0)
+        return XR_NULL_VAL;
+    XrValue result = xrt_str_alloc((size_t) len);
+    if (len > 0)
+        memcpy(xr_str_buf(result), start, (size_t) len);
+    return result;
+}
+
 static XrValue xrt_regex_match_group_to_string(const XrMatch *match, int group_index) {
     if (!match || group_index < 0 || group_index >= match->group_count)
         return XR_NULL_VAL;
@@ -136,11 +146,7 @@ static XrValue xrt_regex_match_group_to_string(const XrMatch *match, int group_i
     if (!start || !end || end < start)
         return XR_NULL_VAL;
 
-    size_t len = (size_t) (end - start);
-    XrValue result = xrt_str_alloc(len);
-    if (len > 0)
-        memcpy(xr_str_buf(result), start, len);
-    return result;
+    return xrt_regex_copy_slice(start, (int64_t) (end - start));
 }
 
 XrValue xrt_regex_find_text(XrValue re_value, const char *text_data, int64_t text_len) {
@@ -214,4 +220,40 @@ XrValue xrt_regex_replace_all(XrValue re_value, const char *text_data, int64_t t
                               const char *replacement_data, int64_t replacement_len) {
     return xrt_regex_replace_impl(re_value, text_data, text_len, replacement_data, replacement_len,
                                   true);
+}
+
+static int xrt_regex_split_limit_from_value(XrValue limit_value) {
+    if (!XR_IS_INT(limit_value))
+        return -1;
+    int64_t limit = XR_TO_INT(limit_value);
+    if (limit > (int64_t) INT_MAX)
+        return INT_MAX;
+    if (limit < (int64_t) INT_MIN)
+        return INT_MIN;
+    return (int) limit;
+}
+
+XrValue xrt_regex_split_limit(XrValue re_value, const char *text_data, int64_t text_len,
+                              XrValue limit_value) {
+    XrValue result = xrt_array_new(0);
+    if (re_value.tag != XR_TAG_REGEX || !re_value.ptr || !text_data)
+        return result;
+    if (text_len < 0)
+        text_len = (int64_t) strlen(text_data);
+    if (text_len < 0 || text_len > (int64_t) INT_MAX)
+        return result;
+
+    int limit = xrt_regex_split_limit_from_value(limit_value);
+    int max_parts = (limit > 0 && limit < 256) ? limit : 256;
+    XrSplitPart parts[256];
+
+    xrt_regex_object_t *obj = (xrt_regex_object_t *) re_value.ptr;
+    int count = xr_regex_split(obj->regex, text_data, (int) text_len, parts, max_parts, limit);
+    for (int i = 0; i < count; i++)
+        xrt_array_push(result, xrt_regex_copy_slice(parts[i].str, parts[i].len));
+    return result;
+}
+
+XrValue xrt_regex_split(XrValue re_value, const char *text_data, int64_t text_len) {
+    return xrt_regex_split_limit(re_value, text_data, text_len, XR_FROM_INT(-1));
 }
