@@ -36,6 +36,7 @@
 #include "../base/xconstants.h"
 #include "../runtime/value/xstruct_layout.h"
 #include "../runtime/value/xffi_sig.h"
+#include "../shared/xr_encoding_core.h"
 
 #include <string.h>
 #include <stdio.h>
@@ -881,6 +882,23 @@ static bool lower_math_constant(XiLower *l, const char *name, XiValue **out) {
     return *out != NULL;
 }
 
+static bool lower_encoding_constant(XiLower *l, const char *name, XiValue **out) {
+    if (!out)
+        return false;
+    *out = NULL;
+    if (!name)
+        return false;
+
+    if (strcmp(name, "LE") == 0)
+        *out = xi_const_int(l->func, l->cur_block, XR_ENCODING_UTF16_LE, l->type_int);
+    else if (strcmp(name, "BE") == 0)
+        *out = xi_const_int(l->func, l->cur_block, XR_ENCODING_UTF16_BE, l->type_int);
+    else
+        return false;
+
+    return *out != NULL;
+}
+
 static bool lower_math_call_arity_ok(const char *name, int nargs) {
     if (!name || nargs < 0)
         return false;
@@ -949,6 +967,11 @@ static XiValue *lower_member_access(XiLower *l, AstNode *node) {
     if (lower_value_is_whole_module_import(l, obj, "math")) {
         XiValue *constant = NULL;
         if (lower_math_constant(l, ma->name, &constant))
+            return constant;
+    }
+    if (lower_value_is_whole_module_import(l, obj, "encoding")) {
+        XiValue *constant = NULL;
+        if (lower_encoding_constant(l, ma->name, &constant))
             return constant;
     }
 

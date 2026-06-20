@@ -227,7 +227,7 @@ if build_native "$ENC_SRC" "$ENC_BIN" "$ENC_LOG"; then
     expect_log_not_contains "$ENC_LOG" "-lssl" "core-encoding: does not link ssl"
     expect_log_not_contains "$ENC_LOG" "-lcrypto" "core-encoding: does not link crypto"
     expect_log_contains "$ENC_LOG" "-lm" "core-encoding: links math lib only"
-    expect_output "$ENC_BIN" $'48656c6c6f\n5\n72\n111\nHello\ntrue\ntrue\n0\ntrue\nfalse\ntrue\n2\n6\n4\n65\n0\n66\n0\nAB\n0\n65\nAB\nAB\nA\nfalse\ntrue' "core-encoding: binary output"
+    expect_output "$ENC_BIN" $'48656c6c6f\n5\n72\n111\nHello\ntrue\ntrue\n0\ntrue\nfalse\ntrue\n2\n6\n0\n1\n4\n65\n0\n66\n0\nAB\n0\n65\nAB\nAB\nA\nfalse\ntrue' "core-encoding: binary output"
 else
     record_fail "core-encoding: build failed"
     sed 's/^/      /' "$ENC_LOG" | sed -n '1,120p'

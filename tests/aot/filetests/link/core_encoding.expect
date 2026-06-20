@@ -16,4 +16,5 @@ c_contains=xrt_encoding_utf8_count(
 c_contains=xrt_encoding_utf8_byte_length(
 c_contains=xrt_encoding_utf16_encode(
 c_contains=xrt_encoding_utf16_decode(
+c_not_contains=xrt_getprop_name
 c_not_contains=xrt_method_
