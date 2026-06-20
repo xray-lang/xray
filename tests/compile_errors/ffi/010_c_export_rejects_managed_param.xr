@@ -1,0 +1,6 @@
+@c_export("xr_bad_string")
+fn bad(s: string) -> int32 {
+    return 1
+}
+
+print(bad("x"))

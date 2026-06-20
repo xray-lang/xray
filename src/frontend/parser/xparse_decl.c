@@ -133,6 +133,19 @@ static XrAttribute *xr_parse_single_attribute(Parser *parser) {
             xr_parser_error(parser, "@dylib requires a library name string, e.g. @dylib(\"m\")");
         }
         xr_parser_consume(parser, TK_RPAREN, "expected ')' to close @dylib");
+    } else if (name_token.length == 8 && memcmp(name_token.start, "c_export", 8) == 0) {
+        // @c_export("name") — expose a top-level function through an AOT C ABI
+        // wrapper. The exported symbol is open text, so it uses a string arg.
+        attr->kind = ATTR_C_EXPORT;
+        xr_parser_consume(parser, TK_LPAREN, "expected '(' after @c_export");
+        if (xr_parser_check(parser, TK_LITERAL_STRING)) {
+            xr_parser_advance(parser);
+            attr->str_arg = xr_attr_string_arg(parser);
+        } else {
+            xr_parser_error(parser,
+                            "@c_export requires a C symbol string, e.g. @c_export(\"xray_add\")");
+        }
+        xr_parser_consume(parser, TK_RPAREN, "expected ')' to close @c_export");
     } else if (name_token.length == 4 && memcmp(name_token.start, "repr", 4) == 0) {
         // @repr(C) / @repr(packed) — layout control. The variant is a closed
         // compiler-known set, hence a bare identifier rather than a string.
@@ -199,9 +212,18 @@ static AstNode *xr_parse_attributed_declaration(Parser *parser) {
     }
 
     bool is_native = attrs_has(attributes, attr_count, ATTR_NATIVE);
+    bool is_c_export = attrs_has(attributes, attr_count, ATTR_C_EXPORT);
+    if (is_c_export && parser->scope_depth > 0) {
+        xr_parser_error(parser, "@c_export can only annotate a module-level function");
+        return NULL;
+    }
 
     // @native class / @native final class
     if (xr_parser_check(parser, TK_CLASS) || xr_parser_check(parser, TK_FINAL)) {
+        if (is_c_export) {
+            xr_parser_error(parser, "@c_export can only annotate a module-level function");
+            return NULL;
+        }
         bool is_final = xr_parser_match(parser, TK_FINAL);
         if (is_final) {
             if (!xr_parser_match(parser, TK_CLASS)) {
@@ -226,6 +248,10 @@ static AstNode *xr_parse_attributed_declaration(Parser *parser) {
 
     // @native struct
     if (xr_parser_match(parser, TK_STRUCT)) {
+        if (is_c_export) {
+            xr_parser_error(parser, "@c_export can only annotate a module-level function");
+            return NULL;
+        }
         parser->parsing_native_class = is_native;
         AstNode *st = xr_parse_struct_declaration(parser);
         parser->parsing_native_class = false;
@@ -237,7 +263,7 @@ static AstNode *xr_parse_attributed_declaration(Parser *parser) {
         return st;
     }
 
-    // @test fn ..., @native fn ..., @extern("C") fn ...
+    // @test fn ..., @native fn ..., @extern("C") fn ..., @c_export("sym") fn ...
     if (xr_parser_match(parser, TK_FN)) {
         bool is_extern = attrs_has(attributes, attr_count, ATTR_EXTERN);
         parser->parsing_extern_fn = is_extern;

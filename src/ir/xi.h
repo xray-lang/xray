@@ -838,6 +838,13 @@ typedef struct XiFunc {
     const char *extern_symbol; /* C symbol to resolve (defaults to the xray name) */
     const char *extern_dylib;  /* @dylib("name") library, or NULL = default/process */
 
+    /* FFI export: top-level AOT function exposed as a C ABI wrapper. The
+     * internal Xray function keeps its normal hidden closure/context parameter;
+     * codegen emits a public wrapper named c_export_symbol with C scalar/raw
+     * pointer parameters and return value. */
+    bool c_export;
+    const char *c_export_symbol;
+
     /* True when params[0] is a borrowed method receiver. */
     bool receiver_borrowed;
 

@@ -3356,6 +3356,85 @@ static void emit_cfn_stub_definition(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
     fprintf(out, "}\n\n");
 }
 
+static bool cg_func_can_have_c_export_stub(XiCgenCtx *ctx, const XiFunc *f) {
+    if (!f || !f->c_export || !f->c_export_symbol || !f->c_export_symbol[0] || f->is_extern ||
+        !cg_cfn_func_has_module_level_storage(ctx, f) || f->ncaptures > 0 ||
+        cg_func_needs_aot_coro_ctx(ctx, f))
+        return false;
+    return cg_cfn_xray_func_signature_supported(f);
+}
+
+static void emit_c_export_stub_signature(FILE *out, const XiFunc *f) {
+    fprintf(out, "%s %s(", cg_cfn_value_c_type(f->return_type, true), f->c_export_symbol);
+    if (f->nparams == 0) {
+        fprintf(out, "void");
+    } else {
+        for (uint16_t i = 0; i < f->nparams; i++) {
+            if (i > 0)
+                fprintf(out, ", ");
+            const XrType *pt = f->params && f->params[i] ? f->params[i]->type : NULL;
+            fprintf(out, "%s p%u", cg_cfn_value_c_type(pt, false), i);
+        }
+    }
+    fprintf(out, ")");
+}
+
+static void emit_c_export_stub_definition(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                          const char *prefix) {
+    const XrType *ret_type;
+    const char *ret_c_type;
+    XrRep ret_rep;
+    XrRep c_ret_rep;
+
+    if (!f || !f->c_export)
+        return;
+    if (!cg_func_can_have_c_export_stub(ctx, f)) {
+        fprintf(stderr,
+                "[xi_cgen] ERROR: @c_export function '%s' must be a top-level noncapturing "
+                "non-coroutine function with a supported C ABI signature\n",
+                f->name ? f->name : "<anonymous>");
+        ctx->error = true;
+        return;
+    }
+
+    emit_c_export_stub_signature(out, f);
+    fprintf(out, " {\n");
+
+    ret_type = f->return_type;
+    if (!ret_type || ret_type->kind == XR_KIND_UNIT) {
+        fprintf(out, "    ");
+        emit_cfn_target_call_expr(ctx, out, f, prefix);
+        fprintf(out, ";\n");
+        fprintf(out, "}\n\n");
+        return;
+    }
+
+    ret_c_type = cg_cfn_value_c_type(ret_type, true);
+    ret_rep = cg_func_return_abi_rep(ctx, f);
+    c_ret_rep = cg_cfn_value_storage_rep(ret_type, true);
+
+    fprintf(out, "    return ");
+    if (ret_type->kind == XR_KIND_POINTER) {
+        if (ret_rep == XR_REP_PTR) {
+            fprintf(out, "(%s)", ret_c_type);
+            emit_cfn_target_call_expr(ctx, out, f, prefix);
+        } else {
+            fprintf(out, "(%s)(uintptr_t)(", ret_c_type);
+            emit_cfn_target_call_expr(ctx, out, f, prefix);
+            fprintf(out, ")");
+        }
+    } else {
+        const char *suffix;
+        fprintf(out, "(%s)(", ret_c_type);
+        suffix = emit_conversion_prefix(out, ret_type, ret_rep, c_ret_rep);
+        emit_cfn_target_call_expr(ctx, out, f, prefix);
+        emit_conversion_suffix(out, suffix);
+        fprintf(out, ")");
+    }
+    fprintf(out, ";\n");
+    fprintf(out, "}\n\n");
+}
+
 static void xi_cgen_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefix) {
     XR_DCHECK(out != NULL, "xi_cgen_func: NULL output");
     XR_DCHECK(f != NULL, "xi_cgen_func: NULL func");
@@ -3452,6 +3531,7 @@ static void xi_cgen_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefi
     fprintf(out, "}\n\n");
 
     emit_cfn_stub_definition(ctx, out, f, prefix);
+    emit_c_export_stub_definition(ctx, out, f, prefix);
 
     if (native_receiver && boxed_adapter) {
         ctx->stats.boxed_adapters++;
@@ -3561,6 +3641,10 @@ static void emit_one_forward_decl(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
 
     if (cg_func_can_have_cfn_stub(ctx, f)) {
         emit_cfn_stub_signature(ctx, out, f, prefix);
+        fprintf(out, ";\n");
+    }
+    if (cg_func_can_have_c_export_stub(ctx, f)) {
+        emit_c_export_stub_signature(out, f);
         fprintf(out, ";\n");
     }
 

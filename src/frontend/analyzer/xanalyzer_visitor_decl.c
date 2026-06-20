@@ -70,6 +70,47 @@ static uint8_t xa_class_attr_align(const ClassDeclNode *cls) {
     return 0;
 }
 
+static XrAttribute *xa_function_attr(const FunctionDeclNode *fn, AttributeKind kind) {
+    if (!fn || !fn->attributes)
+        return NULL;
+    for (int i = 0; i < fn->attr_count; i++) {
+        if (fn->attributes[i] && fn->attributes[i]->kind == kind)
+            return fn->attributes[i];
+    }
+    return NULL;
+}
+
+static bool xa_c_symbol_is_identifier(const char *name) {
+    if (!name || !name[0])
+        return false;
+    char c = name[0];
+    if (!((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == '_'))
+        return false;
+    for (const char *p = name + 1; *p; p++) {
+        c = *p;
+        if (!((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') ||
+              c == '_'))
+            return false;
+    }
+    return true;
+}
+
+static bool xa_c_export_type_supported(XrType *type, bool is_return) {
+    if (!type)
+        return false;
+    switch (type->kind) {
+        case XR_KIND_UNIT:
+            return is_return;
+        case XR_KIND_BOOL:
+        case XR_KIND_FLOAT:
+        case XR_KIND_INT:
+        case XR_KIND_POINTER:
+            return true;
+        default:
+            return false;
+    }
+}
+
 static void xa_validate_extern_function_abi(XaInferContext *ctx, AstNode *node,
                                             const FunctionDeclNode *fn, XrType **param_types,
                                             XrType *return_type) {
@@ -99,6 +140,57 @@ static void xa_validate_extern_function_abi(XaInferContext *ctx, AstNode *node,
             ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
             "extern function returns Xray function type; use CFn<...> for C function pointers",
             &loc);
+    }
+}
+
+static void xa_validate_c_export_function_abi(XaInferContext *ctx, AstNode *node,
+                                              const FunctionDeclNode *fn, XrType **param_types,
+                                              XrType *return_type, XrAttribute *attr,
+                                              bool is_extern) {
+    if (!ctx || !ctx->analyzer || !fn || !attr)
+        return;
+
+    XrLocation fn_loc = {
+        .file = ctx->file_path, .line = node ? node->line : 0, .column = node ? node->column : 0};
+
+    if (!xa_c_symbol_is_identifier(attr->str_arg)) {
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+                                   "@c_export requires a non-empty C identifier symbol name",
+                                   &fn_loc);
+    }
+
+    if (is_extern) {
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+                                   "@c_export cannot be used on an @extern function", &fn_loc);
+    }
+
+    if (!fn->body) {
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+                                   "@c_export requires a function body", &fn_loc);
+    }
+
+    for (int i = 0; i < fn->param_count; i++) {
+        XrType *type = param_types ? param_types[i] : NULL;
+        if (xa_c_export_type_supported(type, false))
+            continue;
+        XrParamNode *param = fn->params ? fn->params[i] : NULL;
+        XrLocation loc = {.file = ctx->file_path,
+                          .line = param ? param->line : fn_loc.line,
+                          .column = param ? param->column : fn_loc.column};
+        char msg[256];
+        snprintf(
+            msg, sizeof(msg), "C export function parameter '%s' uses unsupported C ABI type '%s'",
+            param && param->name ? param->name : "?", type ? xr_type_to_string(type) : "<unknown>");
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE, msg,
+                                   &loc);
+    }
+
+    if (!xa_c_export_type_supported(return_type, true)) {
+        char msg[256];
+        snprintf(msg, sizeof(msg), "C export function returns unsupported C ABI type '%s'",
+                 return_type ? xr_type_to_string(return_type) : "<unknown>");
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE, msg,
+                                   &fn_loc);
     }
 }
 
@@ -1399,14 +1491,13 @@ void xa_visit_collect_function_decl_only(XaInferContext *ctx, AstNode *node) {
     links->file_path = ctx->file_path;
 
     // FFI: mark @extern functions so call sites can require `unsafe { }`.
-    for (int ai = 0; ai < fn->attr_count; ai++) {
-        if (fn->attributes && fn->attributes[ai] && fn->attributes[ai]->kind == ATTR_EXTERN) {
-            links->is_extern = true;
-            break;
-        }
-    }
+    XrAttribute *c_export_attr = xa_function_attr(fn, ATTR_C_EXPORT);
+    links->is_extern = xa_function_attr(fn, ATTR_EXTERN) != NULL;
     if (links->is_extern)
         xa_validate_extern_function_abi(ctx, node, fn, param_types, return_type);
+    if (c_export_attr)
+        xa_validate_c_export_function_abi(ctx, node, fn, param_types, return_type, c_export_attr,
+                                          links->is_extern);
 
     // Store parameter names for LSP inlay hints
     xa_symbol_links_set_function_sig(links, param_types, param_names, fn->param_count, return_type);

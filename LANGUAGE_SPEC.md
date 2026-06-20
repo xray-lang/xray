@@ -2026,6 +2026,27 @@ fn zeroCmp(a: RawPtr<uint8>, b: RawPtr<uint8>) -> int32 {
 // zeroCmp is a module-level noncapturing function and can be used as a CFn callback.
 ```
 
+#### 5.2.10 `@c_export` AOT C ABI Exports
+
+`@c_export("symbol")` additionally exposes a module-level xray function as an AOT C ABI wrapper. It does not change ordinary xray call semantics; the VM still runs the function as a normal xray function, while AOT codegen emits the requested C symbol in the generated native artifact.
+
+```xray
+@c_export("xr_add_i32")
+fn add(a: int32, b: int32) -> int32 {
+    return a + b
+}
+
+print(add(19, 23))        // still an ordinary xray call inside xray
+```
+
+Rules:
+- `@c_export` may only annotate a module-level `fn` declaration; it cannot annotate classes, structs, methods, anonymous functions, or nested functions.
+- A `@c_export` function must have an xray function body and cannot also be an `@extern` function.
+- The string argument must be a non-empty C identifier; that string is the exported C symbol name.
+- Currently supported export boundary types are `bool`, sized integers, `float32` / `float64`, `uintsize` / `intsize`, `RawPtr<T>`, `RawMut<T>`, and `()` returns.
+- Managed xray values such as `string`, class instances, Array/Map/Set, ordinary closures, and by-value aggregates are not exported directly today. To share struct memory with C, pass an address through `RawPtr<T>` / `RawMut<T>`.
+- `@c_export` defines only the function ABI wrapper; shared-library packaging, header generation, and runtime initialization policy are build/embedder concerns.
+
 ### 5.3 `class` declaration
 
 ```ebnf
@@ -5304,7 +5325,7 @@ ImportMembers ::= '{' ImportMember (',' ImportMember)* ','? '}'
 ImportMember  ::= Identifier ('as' Identifier)?
 ImportModule  ::= StringLiteral | Identifier ('/' Identifier)?
 
-AttrList ::= ('@' Identifier ('(' ArgList? ')')?)*  // e.g. @extern("C"), @dylib("m"), @repr(C)
+AttrList ::= ('@' Identifier ('(' ArgList? ')')?)*  // e.g. @extern("C"), @dylib("m"), @c_export("sym"), @repr(C)
 
 OperatorToken ::= '+' | '-' | '*' | '/' | '%'
                |  '&' | '|' | '^'
