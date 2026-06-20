@@ -188,9 +188,14 @@ TEST(analyzer_check_assignment_rejects_unknown_source) {
 TEST(type_to_string) {
     XrType *t_int = xr_type_new_int(NULL);
     XrType *t_arr = xr_type_new_array(g_isolate, xr_type_new_string(NULL));
+    XrType *fn_params[] = {xr_type_new_int_width(NULL, XR_NATIVE_I32)};
+    XrType *t_cfn = xr_type_new_function(g_isolate, fn_params, 1,
+                                         xr_type_new_int_width(NULL, XR_NATIVE_I32), false);
+    t_cfn->function.is_c_abi = true;
 
     ASSERT(strcmp(xr_type_to_string(t_int), "int") == 0);
     ASSERT(strcmp(xr_type_to_string(t_arr), "Array<string>") == 0);
+    ASSERT(strcmp(xr_type_to_string(t_cfn), "CFn<fn(int): int>") == 0);
 }
 
 TEST(type_narrowing) {
@@ -504,6 +509,7 @@ TEST(type_function_copy_preserves_metadata) {
     uint8_t modes[] = {XR_PARAM_IN, XR_PARAM_REF};
     fn->function.min_params = 1;
     fn->function.param_passing_modes = modes;
+    fn->function.is_c_abi = true;
 
     XrType *copy = xr_type_copy(g_isolate, fn);
     ASSERT(copy != NULL);
@@ -514,6 +520,12 @@ TEST(type_function_copy_preserves_metadata) {
     ASSERT(copy->function.param_passing_modes != fn->function.param_passing_modes);
     ASSERT(copy->function.param_passing_modes[0] == XR_PARAM_IN);
     ASSERT(copy->function.param_passing_modes[1] == XR_PARAM_REF);
+    ASSERT(copy->function.is_c_abi);
+
+    XrType *normal = xr_type_new_function(g_isolate, param_types, 2, xr_type_new_bool(NULL), false);
+    ASSERT(!xr_type_equals(fn, normal));
+    ASSERT(!xr_type_assignable(fn, normal));
+    ASSERT(!xr_type_assignable(normal, fn));
 }
 
 // ============================================================================

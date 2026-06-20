@@ -152,6 +152,7 @@ struct XrType {
             XrType *return_type;
             uint8_t *param_passing_modes;  // NULL or [param_count] of XR_PARAM_*
             bool is_variadic;
+            bool is_c_abi;  // C function pointer ABI (`CFn<...>`), no Xray closure header
             const char **type_param_names;
             XrType ***type_param_constraints;
             int *type_param_constraint_counts;
@@ -257,6 +258,7 @@ static inline bool xr_type_is_runtime_managed(const XrType *t) {
 #define XR_TYPE_IS_MAP(t) ((t)->kind == XR_KIND_MAP)
 #define XR_TYPE_IS_SET(t) ((t)->kind == XR_KIND_SET)
 #define XR_TYPE_IS_FUNCTION(t) ((t)->kind == XR_KIND_FUNCTION)
+#define XR_TYPE_IS_C_FUNCTION(t) ((t)->kind == XR_KIND_FUNCTION && (t)->function.is_c_abi)
 #define XR_TYPE_IS_INSTANCE(t) ((t)->kind == XR_KIND_INSTANCE)
 #define XR_TYPE_IS_UNKNOWN(t) ((t)->kind == XR_KIND_UNKNOWN)
 #define XR_TYPE_IS_NEVER(t) ((t)->kind == XR_KIND_NEVER)

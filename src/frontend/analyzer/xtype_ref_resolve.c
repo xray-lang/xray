@@ -111,6 +111,11 @@ static XrType *resolve_generic(XrayIsolate *X, const XrTypeRef *t) {
         result = xr_type_new_pointer(X, args[0], false);  // const raw pointer
     } else if (strcmp(name, "RawMut") == 0 && nargs >= 1) {
         result = xr_type_new_pointer(X, args[0], true);  // mutable raw pointer
+    } else if (strcmp(name, "CFn") == 0 && nargs == 1 && args[0] &&
+               args[0]->kind == XR_KIND_FUNCTION) {
+        result = xr_type_copy(X, args[0]);
+        if (result)
+            result->function.is_c_abi = true;
     } else if (xa_is_builtin_interface_name(name)) {
         /* Built-in interface with type args: e.g. Iterable<int>. Create a fresh
          * generic interface type via the current isolate. */

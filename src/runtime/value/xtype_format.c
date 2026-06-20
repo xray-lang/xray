@@ -225,7 +225,7 @@ const char *xr_type_to_string(XrType *type) {
     if (XR_TYPE_IS_FUNCTION(type)) {
         char *ptr = buf;
         size_t remaining = TYPE_STR_BUF_SIZE;
-        int n = snprintf(ptr, remaining, "fn");
+        int n = snprintf(ptr, remaining, "%sfn", type->function.is_c_abi ? "CFn<" : "");
         ptr += n;
         remaining -= n;
 
@@ -296,7 +296,7 @@ const char *xr_type_to_string(XrType *type) {
         const char *ret_str = type->function.return_type
                                   ? xr_type_to_string(type->function.return_type)
                                   : TYPE_NAME_UNIT;
-        snprintf(ptr, remaining, "): %s", ret_str);
+        snprintf(ptr, remaining, "): %s%s", ret_str, type->function.is_c_abi ? ">" : "");
         return xr_pool_strdup(pool, buf);
     }
 
