@@ -167,6 +167,22 @@ else
     sed 's/^/      /' "$TIME_QUERY_LOG" | sed -n '1,120p'
 fi
 
+DATETIME_OFFSET_SRC="$PROJECT_DIR/tests/aot/filetests/link/system_datetime_offset.xr"
+DATETIME_OFFSET_BIN="$WORK/system_datetime_offset"
+DATETIME_OFFSET_LOG="$WORK/system_datetime_offset.log"
+if build_native "$DATETIME_OFFSET_SRC" "$DATETIME_OFFSET_BIN" "$DATETIME_OFFSET_LOG"; then
+    expect_log_contains "$DATETIME_OFFSET_LOG" "Link command:" "system-datetime-offset: emitted link command"
+    expect_log_not_contains "$DATETIME_OFFSET_LOG" "-lxray_core" "system-datetime-offset: does not link xray_core"
+    expect_log_not_contains "$DATETIME_OFFSET_LOG" "-lxray_aot_core" "system-datetime-offset: does not link AOT core"
+    expect_log_not_contains "$DATETIME_OFFSET_LOG" "-lpthread" "system-datetime-offset: does not link pthread"
+    expect_log_not_contains "$DATETIME_OFFSET_LOG" "-lz" "system-datetime-offset: does not link zlib"
+    expect_log_contains "$DATETIME_OFFSET_LOG" "-lm" "system-datetime-offset: links math lib only"
+    expect_output "$DATETIME_OFFSET_BIN" $'true\ntrue\ntrue' "system-datetime-offset: binary output"
+else
+    record_fail "system-datetime-offset: build failed"
+    sed 's/^/      /' "$DATETIME_OFFSET_LOG" | sed -n '1,120p'
+fi
+
 OS_QUERY_SRC="$PROJECT_DIR/tests/aot/filetests/link/system_os_queries.xr"
 OS_QUERY_BIN="$WORK/system_os_queries"
 OS_QUERY_LOG="$WORK/system_os_queries.log"

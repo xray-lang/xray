@@ -1,0 +1,6 @@
+import datetime
+
+let off = datetime.offset()
+print(off >= -1440)
+print(off <= 1440)
+print(datetime.offset() >= -1440)
