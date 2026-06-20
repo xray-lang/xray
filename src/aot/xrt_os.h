@@ -14,6 +14,7 @@
 #include "xrt_arc.h"
 #include "xrt_coll.h"
 #include "xrt_value.h"
+#include <signal.h>
 #include <stdbool.h>
 #include <time.h>
 
@@ -299,6 +300,20 @@ static inline XrValue xrt_os_ppid(void) {
 #else
     return XR_FROM_INT((int64_t) getppid());
 #endif
+}
+
+static inline XrValue xrt_os_kill_signal(XrValue pid_value, XrValue sig_value) {
+    if (!XR_IS_INT(pid_value) || !XR_IS_INT(sig_value))
+        return XR_FROM_BOOL(false);
+#ifdef _WIN32
+    return XR_FROM_BOOL(false);
+#else
+    return XR_FROM_BOOL(kill((pid_t) XR_TO_INT(pid_value), (int) XR_TO_INT(sig_value)) == 0);
+#endif
+}
+
+static inline XrValue xrt_os_kill(XrValue pid_value) {
+    return xrt_os_kill_signal(pid_value, XR_FROM_INT(SIGTERM));
 }
 
 static inline XrValue xrt_os_total_memory(void) {

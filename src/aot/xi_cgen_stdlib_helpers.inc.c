@@ -104,6 +104,8 @@ static const CgAotStdlibMethod g_aot_stdlib_methods[] = {
     {"os", "gid", 0, "xrt_os_gid", "", CG_AOT_RET_VALUE, NULL},
     {"os", "cpuCount", 0, "xrt_os_cpu_count", "", CG_AOT_RET_VALUE, NULL},
     {"os", "ppid", 0, "xrt_os_ppid", "", CG_AOT_RET_VALUE, NULL},
+    {"os", "kill", 1, "xrt_os_kill", "v", CG_AOT_RET_VALUE, NULL},
+    {"os", "kill", 2, "xrt_os_kill_signal", "vv", CG_AOT_RET_VALUE, NULL},
     {"os", "totalMemory", 0, "xrt_os_total_memory", "", CG_AOT_RET_VALUE, NULL},
     {"os", "freeMemory", 0, "xrt_os_free_memory", "", CG_AOT_RET_VALUE, NULL},
     {"os", "uptime", 0, "xrt_os_uptime", "", CG_AOT_RET_VALUE, NULL},
