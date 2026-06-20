@@ -93,6 +93,7 @@ trap cleanup EXIT
 
 SCALAR="$PROJECT_DIR/tests/ir/rc_count/scalar_no_rc.xr"
 BORROWED="$PROJECT_DIR/tests/ir/rc_count/value_struct_borrowed_param.xr"
+HEAP_READONLY="$PROJECT_DIR/tests/ir/rc_count/heap_readonly_param.xr"
 
 run_case "$SCALAR" "$WORK/scalar_disabled.out" "$WORK/scalar_disabled.err" env
 expect_output "$WORK/scalar_disabled.out" "2" "scalar: program output"
@@ -106,6 +107,11 @@ expect_count_max "$WORK/scalar_enabled.err" 0 "scalar: no heap RC ops"
 run_case "$BORROWED" "$WORK/borrowed.out" "$WORK/borrowed.err" env XRAY_XI_RC_COUNT=1
 expect_output "$WORK/borrowed.out" "3" "borrowed value param: program output"
 expect_count_max "$WORK/borrowed.err" 2 "borrowed value param: RC budget"
+
+run_case "$HEAP_READONLY" "$WORK/heap_readonly.out" "$WORK/heap_readonly.err" env \
+    XRAY_XI_RC_COUNT=1
+expect_output "$WORK/heap_readonly.out" "3" "heap readonly param: program output"
+expect_count_max "$WORK/heap_readonly.err" 0 "heap readonly param: RC budget"
 
 echo ""
 echo "Passed: $PASS"
