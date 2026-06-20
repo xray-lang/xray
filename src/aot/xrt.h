@@ -21,6 +21,7 @@
  *     L2  xrt_regex.h   - freestanding regex utilities
  *     L2  xrt_math.h    - freestanding math system helpers
  *     L2  xrt_time.h    - freestanding time query helpers
+ *     L2  xrt_datetime.h - freestanding datetime module queries
  *     L2  xrt_os.h      - freestanding OS query helpers
  *     L2  xrt_io.h      - freestanding sync filesystem helpers
  *     L2  xrt_arith.h   - arithmetic, comparison, print
@@ -50,6 +51,7 @@
 #include "xrt_regex.h"      // L2: freestanding regex helpers
 #include "xrt_math.h"       // L2: freestanding math helpers
 #include "xrt_time.h"       // L2: freestanding time query helpers
+#include "xrt_datetime.h"   // L2: freestanding datetime module queries
 #include "xrt_os.h"         // L2: freestanding OS query helpers
 #include "xrt_io.h"         // L2: freestanding sync filesystem helpers
 #include "xrt_method.h"     // L3: method_0/1/2, getprop, tostring, symbol IDs

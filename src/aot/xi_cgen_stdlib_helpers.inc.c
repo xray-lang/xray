@@ -46,6 +46,7 @@ typedef struct CgAotStdlibMethod {
 static const CgAotStdlibMethod g_aot_stdlib_methods[] = {
     {"math", "random", 0, "xrt_math_random", "", CG_AOT_RET_VALUE, NULL},
     {"math", "randomInt", 2, "xrt_math_random_int", "vv", CG_AOT_RET_VALUE, NULL},
+    {"datetime", "offset", 0, "xrt_datetime_offset", "", CG_AOT_RET_VALUE, NULL},
     {"path", "join", CG_AOT_STDLIB_VARIADIC, "xrt_path_join", "*", CG_AOT_RET_VALUE, NULL},
     {"path", "isAbsolute", 1, "xrt_path_is_absolute", "s", CG_AOT_RET_VALUE, NULL},
     {"path", "dirname", 1, "xrt_path_dirname", "s", CG_AOT_RET_STR_BORROWED, NULL},
