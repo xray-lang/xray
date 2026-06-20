@@ -41,7 +41,7 @@ static XrProto *make_minimal_proto(void) {
     return proto;
 }
 
-TEST(bytecode_write_emits_v5_header_and_roundtrips_u64_instruction) {
+TEST(bytecode_write_emits_v6_header_and_roundtrips_u64_instruction) {
     XrayIsolate *iso = new_test_isolate();
     ASSERT_NOT_NULL(iso);
 
@@ -249,14 +249,54 @@ TEST(bytecode_roundtrips_extern_default_library) {
     xray_isolate_delete(iso);
 }
 
+TEST(bytecode_roundtrips_extern_cfn_callback_signature) {
+    XrayIsolate *iso = new_test_isolate();
+    ASSERT_NOT_NULL(iso);
+
+    XrProto *proto = make_minimal_proto();
+    ASSERT_NOT_NULL(proto);
+    proto->is_extern = true;
+    XrFFISig *sig = xr_ffi_sig_new("call_cb", NULL, 1);
+    ASSERT_NOT_NULL(sig);
+    uint8_t cb_params[] = {XR_FFI_T_I32};
+    ASSERT_TRUE(xr_ffi_sig_set_param_callback_codes(sig, 0, cb_params, 1, XR_FFI_T_I32));
+    sig->ret = XR_FFI_T_I32;
+    proto->ffi_sig = sig;
+
+    size_t size = 0;
+    uint8_t *bytes = xr_bytecode_write(iso, proto, 0, &size);
+    ASSERT_NOT_NULL(bytes);
+
+    XrBcError error = XR_BC_OK;
+    XrProto *roundtrip = xr_bytecode_read(iso, bytes, size, &error);
+    ASSERT_NOT_NULL(roundtrip);
+    ASSERT_EQ_INT(error, XR_BC_OK);
+    ASSERT_TRUE(roundtrip->is_extern);
+    ASSERT_NOT_NULL(roundtrip->ffi_sig);
+    ASSERT_EQ_UINT(roundtrip->ffi_sig->nparams, 1);
+    ASSERT_EQ_UINT(roundtrip->ffi_sig->params[0], XR_FFI_T_PTR);
+    ASSERT_NOT_NULL(roundtrip->ffi_sig->param_cbacks);
+    ASSERT_NOT_NULL(roundtrip->ffi_sig->param_cbacks[0]);
+    ASSERT_EQ_UINT(roundtrip->ffi_sig->param_cbacks[0]->nparams, 1);
+    ASSERT_EQ_UINT(roundtrip->ffi_sig->param_cbacks[0]->params[0], XR_FFI_T_I32);
+    ASSERT_EQ_UINT(roundtrip->ffi_sig->param_cbacks[0]->ret, XR_FFI_T_I32);
+    ASSERT_EQ_UINT(roundtrip->ffi_sig->ret, XR_FFI_T_I32);
+
+    xr_vm_proto_free(roundtrip);
+    xr_free(bytes);
+    xr_vm_proto_free(proto);
+    xray_isolate_delete(iso);
+}
+
 static void run_all_tests(void) {
     RUN_TEST_SUITE("Bytecode I/O");
-    RUN_TEST(bytecode_write_emits_v5_header_and_roundtrips_u64_instruction);
+    RUN_TEST(bytecode_write_emits_v6_header_and_roundtrips_u64_instruction);
     RUN_TEST(bytecode_reader_rejects_previous_layout_version);
     RUN_TEST(bytecode_roundtrips_u16_upvalue_index);
     RUN_TEST(bytecode_roundtrips_symbol_index_above_255);
     RUN_TEST(bytecode_roundtrips_extern_ffi_signature);
     RUN_TEST(bytecode_roundtrips_extern_default_library);
+    RUN_TEST(bytecode_roundtrips_extern_cfn_callback_signature);
 }
 
 TEST_MAIN_BEGIN()

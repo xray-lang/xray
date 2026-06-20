@@ -960,6 +960,8 @@ XR_FUNC XiEmitStatus xi_emit(XiFunc *f, struct XrayIsolate *isolate, struct XrPr
             for (uint16_t pi = 0; pi < f->nparams; pi++) {
                 const struct XrType *pt = (f->params && f->params[pi]) ? f->params[pi]->type : NULL;
                 sig->params[pi] = xr_ffi_type_from_xrtype(pt, false);
+                if (pt && pt->kind == XR_KIND_FUNCTION && pt->function.is_c_abi)
+                    xr_ffi_sig_set_param_callback(sig, (uint8_t) pi, pt);
             }
             sig->ret = xr_ffi_type_from_xrtype(f->return_type, true);
             ctx.proto->ffi_sig = sig;

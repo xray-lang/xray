@@ -445,6 +445,19 @@ static bool bc_write_proto(BcWriter *w, XrProto *proto) {
             for (uint8_t i = 0; i < sig->nparams; i++) {
                 if (!bc_put_u8(w, sig->params[i]))
                     return false;
+                XrFFICallbackSig *cb = sig->param_cbacks ? sig->param_cbacks[i] : NULL;
+                if (!bc_put_u8(w, cb ? 1 : 0))
+                    return false;
+                if (cb) {
+                    if (!bc_put_u8(w, cb->nparams))
+                        return false;
+                    for (uint8_t ci = 0; ci < cb->nparams; ci++) {
+                        if (!bc_put_u8(w, cb->params[ci]))
+                            return false;
+                    }
+                    if (!bc_put_u8(w, cb->ret))
+                        return false;
+                }
             }
             if (!bc_put_u8(w, sig->ret))
                 return false;
@@ -586,8 +599,41 @@ static XrProto *bc_read_proto_depth(BcReader *r, int depth) {
                 r->error = XR_BC_ERR_ALLOC;
                 goto fail;
             }
-            for (uint8_t i = 0; i < np; i++)
+            for (uint8_t i = 0; i < np; i++) {
                 sig->params[i] = bc_get_u8(r);
+                uint8_t has_cb = bc_get_u8(r);
+                if (r->error != XR_BC_OK) {
+                    xr_ffi_sig_free(sig);
+                    goto fail;
+                }
+                if (has_cb) {
+                    uint8_t cb_np = bc_get_u8(r);
+                    uint8_t cb_stack[16];
+                    uint8_t *cb_params = cb_np <= 16 ? cb_stack : xr_malloc(cb_np);
+                    if (cb_np > 0 && !cb_params) {
+                        xr_ffi_sig_free(sig);
+                        r->error = XR_BC_ERR_ALLOC;
+                        goto fail;
+                    }
+                    for (uint8_t ci = 0; ci < cb_np; ci++)
+                        cb_params[ci] = bc_get_u8(r);
+                    uint8_t cb_ret = bc_get_u8(r);
+                    if (r->error != XR_BC_OK) {
+                        if (cb_params != cb_stack)
+                            xr_free(cb_params);
+                        xr_ffi_sig_free(sig);
+                        goto fail;
+                    }
+                    bool ok = xr_ffi_sig_set_param_callback_codes(sig, i, cb_params, cb_np, cb_ret);
+                    if (cb_params != cb_stack)
+                        xr_free(cb_params);
+                    if (!ok) {
+                        xr_ffi_sig_free(sig);
+                        r->error = XR_BC_ERR_ALLOC;
+                        goto fail;
+                    }
+                }
+            }
             sig->ret = bc_get_u8(r);
             if (r->error != XR_BC_OK) {
                 xr_ffi_sig_free(sig);
