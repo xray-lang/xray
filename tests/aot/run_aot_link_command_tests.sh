@@ -102,6 +102,21 @@ else
     sed 's/^/      /' "$CORE_LOG" | sed -n '1,120p'
 fi
 
+CORE_FULL_SRC="$PROJECT_DIR/tests/aot/filetests/link/core_math.xr"
+CORE_FULL_BIN="$WORK/core_math_full"
+CORE_FULL_LOG="$WORK/core_math_full.log"
+if build_native "$CORE_FULL_SRC" "$CORE_FULL_BIN" "$CORE_FULL_LOG"; then
+    expect_log_contains "$CORE_FULL_LOG" "Link command:" "core-math-full: emitted link command"
+    expect_log_not_contains "$CORE_FULL_LOG" "-lxray_core" "core-math-full: does not link xray_core"
+    expect_log_not_contains "$CORE_FULL_LOG" "-lpthread" "core-math-full: does not link pthread"
+    expect_log_not_contains "$CORE_FULL_LOG" "-lz" "core-math-full: does not link zlib"
+    expect_log_contains "$CORE_FULL_LOG" "-lm" "core-math-full: links math lib only"
+    expect_output "$CORE_FULL_BIN" $'9.0\n8.0\n81.0\n7\n1\n2\n2\n1\n0.0\n1.0\n0.0\n0.0\n0.0\n0.0\n0.0\n0.0\n2.0\n3.0\n1.0\n0.0\n1.0\n0.0\n5.0\n3.0\n3.0\n0.0\n0.0\n2.5\n0.0\n0.0\n-1\ntrue\ntrue\nfalse\n3\n7\n5' "core-math-full: binary output"
+else
+    record_fail "core-math-full: build failed"
+    sed 's/^/      /' "$CORE_FULL_LOG" | sed -n '1,120p'
+fi
+
 PATH_SRC="$PROJECT_DIR/tests/aot/filetests/link/core_path.xr"
 PATH_BIN="$WORK/core_path"
 PATH_LOG="$WORK/core_path.log"

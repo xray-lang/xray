@@ -1,6 +1,76 @@
 import math
-import { sqrt, pow } from "math"
+import {
+    abs,
+    acos,
+    asin,
+    atan,
+    atan2,
+    cbrt,
+    ceil,
+    clamp,
+    cos,
+    cosh,
+    degToRad,
+    exp,
+    expm1,
+    floor,
+    fmod,
+    hypot,
+    isFinite,
+    isNaN,
+    lerp,
+    log,
+    log10,
+    log1p,
+    log2,
+    max,
+    min,
+    pow,
+    radToDeg,
+    round,
+    sign,
+    sin,
+    sinh,
+    sqrt,
+    tan,
+    tanh,
+    trunc
+} from "math"
 
 print(math.sqrt(81))
 print(sqrt(64))
 print(pow(3, 4))
+print(abs(-7))
+print(floor(1.8))
+print(ceil(1.2))
+print(round(1.6))
+print(trunc(1.8))
+print(sin(0))
+print(cos(0))
+print(tan(0))
+print(asin(0))
+print(acos(1))
+print(atan(0))
+print(atan2(0, 1))
+print(log(1))
+print(log10(100))
+print(log2(8))
+print(exp(0))
+print(sinh(0))
+print(cosh(0))
+print(tanh(0))
+print(hypot(3, 4))
+print(cbrt(27))
+print(fmod(7, 4))
+print(log1p(0))
+print(expm1(0))
+print(lerp(2, 4, 0.25))
+print(degToRad(0))
+print(radToDeg(0))
+print(sign(-10))
+print(isNaN(sqrt(-1)))
+print(isFinite(1))
+print(isFinite(sqrt(-1)))
+print(min(3, 7, 5))
+print(max(3, 7, 5))
+print(clamp(5, 10, 0))
