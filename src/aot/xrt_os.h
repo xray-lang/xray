@@ -12,6 +12,7 @@
 #define XRT_OS_H
 
 #include "xrt_arc.h"
+#include "xrt_coll.h"
 #include "xrt_value.h"
 #include <time.h>
 
@@ -263,6 +264,31 @@ static inline XrValue xrt_os_uptime(void) {
 #else
     return XR_FROM_FLOAT(0.0);
 #endif
+}
+
+static inline XrValue xrt_os_loadavg(void) {
+    double avg[3] = {0.0, 0.0, 0.0};
+#ifdef _WIN32
+    /* Windows has no load average equivalent in the VM stdlib today. */
+#elif defined(__linux__)
+    struct sysinfo si;
+    if (sysinfo(&si) == 0) {
+        avg[0] = (double) si.loads[0] / 65536.0;
+        avg[1] = (double) si.loads[1] / 65536.0;
+        avg[2] = (double) si.loads[2] / 65536.0;
+    }
+#else
+    if (getloadavg(avg, 3) < 0) {
+        avg[0] = 0.0;
+        avg[1] = 0.0;
+        avg[2] = 0.0;
+    }
+#endif
+    XrValue arr = xrt_array_new(3);
+    xrt_array_push(arr, XR_FROM_FLOAT(avg[0]));
+    xrt_array_push(arr, XR_FROM_FLOAT(avg[1]));
+    xrt_array_push(arr, XR_FROM_FLOAT(avg[2]));
+    return arr;
 }
 
 static inline XrValue xrt_os_clock(void) {
