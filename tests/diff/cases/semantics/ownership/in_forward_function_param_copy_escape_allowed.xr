@@ -1,0 +1,14 @@
+fn wrap(data: in Array<int>, out: ref Array<Array<int>>) {
+    stash(copy(data), out)
+}
+
+fn stash(value: Array<int>, out: ref Array<Array<int>>) {
+    out.push(value)
+}
+
+let values: Array<int> = [1, 2, 3]
+let out: Array<Array<int>> = []
+wrap(values, out)
+values.push(4)
+print(out[0].length)
+print(values.length)

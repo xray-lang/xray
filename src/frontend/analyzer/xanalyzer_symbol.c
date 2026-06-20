@@ -66,6 +66,8 @@ static void links_release_dynamic(XaSymbolLinks *links) {
         }
         xr_free(links->param_names);
     }
+    if (links->param_escapes)
+        xr_free(links->param_escapes);
     if (links->type_param_names) {
         for (int i = 0; i < links->type_param_count; i++) {
             if (links->type_param_names[i])
@@ -413,6 +415,11 @@ void xa_symbol_links_set_function_sig(XaSymbolLinks *links, XrType **param_types
         }
         xr_free(links->param_names);
         links->param_names = NULL;
+    }
+    if (links->param_escapes) {
+        xr_free(links->param_escapes);
+        links->param_escapes = NULL;
+        links->param_escape_count = 0;
     }
 
     // Copy param types

@@ -82,6 +82,8 @@ struct XaSymbolLinks {
     XrType **param_types;
     const char **param_names;  // Parameter names (for inlay hints)
     int param_count;
+    uint8_t *param_escapes;  // Per-parameter summary: value may be stored/returned/captured
+    int param_escape_count;
     XrType *return_type;
     bool return_type_inferred;
     bool is_extern;         // @extern foreign function (FFI): calls require unsafe { }

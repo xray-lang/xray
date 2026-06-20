@@ -243,6 +243,49 @@ static void xa_check_borrowed_mutator_arg_escape(XaInferContext *ctx, AstNode *c
                                &loc);
 }
 
+static XaSymbolLinks *xa_method_symbol_links_for_call(XaInferContext *ctx, XrType *receiver_type,
+                                                      const char *method_name) {
+    if (!ctx || !receiver_type || !method_name)
+        return NULL;
+    const char *class_name = xr_type_get_class_name(receiver_type);
+    if (!class_name)
+        return NULL;
+    XaSymbol *class_sym = xa_scope_lookup(ctx->analyzer->global_scope, class_name);
+    XaSymbolLinks *class_links = class_sym ? xa_analyzer_get_links(ctx->analyzer, class_sym) : NULL;
+    XaSymbol *method_sym = (class_links && class_links->class_info)
+                               ? xa_class_info_lookup_member(class_links->class_info, method_name)
+                               : NULL;
+    return method_sym ? xa_analyzer_get_links(ctx->analyzer, method_sym) : NULL;
+}
+
+static void xa_check_borrowed_escaping_param_arg(XaInferContext *ctx, AstNode *call_node,
+                                                 XaSymbolLinks *callee_links,
+                                                 const char *callee_name, AstNode *arg_node,
+                                                 XrType *arg_type, int slot) {
+    if (!ctx || !call_node || !callee_links || !callee_links->param_escapes || slot < 0 ||
+        slot >= callee_links->param_escape_count || !callee_links->param_escapes[slot])
+        return;
+    if (!xa_type_needs_borrow_escape_guard(arg_type))
+        return;
+    XaSymbol *borrowed_root = xa_borrowed_param_root_symbol(ctx, arg_node);
+    if (!borrowed_root)
+        return;
+
+    XrLocation loc = {.file = ctx->file_path,
+                      .line = arg_node && arg_node->line ? arg_node->line : call_node->line,
+                      .column =
+                          arg_node && arg_node->column ? arg_node->column : call_node->column};
+    const char *mode = borrowed_root->passing_mode == XR_PARAM_REF ? "ref" : "in";
+    const char *name = borrowed_root->name ? borrowed_root->name : "?";
+    char msg[256];
+    snprintf(msg, sizeof(msg),
+             "cannot pass borrowed '%s' parameter '%s' to escaping parameter %d of '%s'; pass an "
+             "owned value or copy(%s)",
+             mode, name, slot + 1, callee_name ? callee_name : "callee", name);
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH, msg,
+                               &loc);
+}
+
 static XrType *xa_math_runtime_shape_return_type(XaInferContext *ctx, CallExprNode *call,
                                                  XrType **arg_types, int arg_count) {
     const char *member = xa_math_module_call_member(ctx, call);
@@ -871,6 +914,37 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
     }
     xa_check_ref_argument_aliases(ctx, node, effective_arg_symbol_ids, effective_arg_names,
                                   effective_arg_modes, arg_count);
+    XaSymbolLinks *escape_links = fn_links;
+    const char *escape_name = NULL;
+    if (call->callee && call->callee->type == AST_VARIABLE)
+        escape_name = call->callee->as.variable.name;
+    if (!escape_links && method_name && callee_obj_type) {
+        escape_links = xa_method_symbol_links_for_call(ctx, callee_obj_type, method_name);
+        escape_name = method_name;
+    }
+    if (escape_links && call->arg_count > 0) {
+        int direct_slot = 0;
+        for (int i = 0; i < call->arg_count; i++) {
+            AstNode *arg_node = call->arguments[i];
+            if (!arg_node)
+                continue;
+            if (arg_node->type == AST_SPREAD_EXPR) {
+                XrType *src =
+                    xa_analyzer_get_node_type(ctx->analyzer, arg_node->as.spread_expr.expr);
+                if (!src)
+                    src = xa_visit_infer_expr(ctx, arg_node->as.spread_expr.expr);
+                if (src && XR_TYPE_IS_TUPLE(src))
+                    direct_slot += src->tuple.element_count;
+                continue;
+            }
+            XrType *arg_type = (direct_slot >= 0 && direct_slot < arg_count)
+                                   ? effective_arg_types[direct_slot]
+                                   : xa_visit_infer_expr(ctx, arg_node);
+            xa_check_borrowed_escaping_param_arg(ctx, node, escape_links, escape_name, arg_node,
+                                                 arg_type, direct_slot);
+            direct_slot++;
+        }
+    }
     if (method_name && callee_obj_type && call->arg_count > 0) {
         int direct_slot = 0;
         for (int i = 0; i < call->arg_count; i++) {
