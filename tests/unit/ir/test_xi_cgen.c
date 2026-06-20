@@ -723,6 +723,48 @@ TEST(cgen_emits_shadowed_debug_source_var_slots) {
     xi_func_free(ir);
 }
 
+TEST(cgen_struct_debug_source_var_slots_use_typed_pointers) {
+    const char *src = "@repr(C)\n"
+                      "struct Point {\n"
+                      "    x: int32\n"
+                      "    y: int32\n"
+                      "}\n"
+                      "fn make(seed: int32) -> Point {\n"
+                      "    if (seed < 0) { return Point{x: 0, y: 0} }\n"
+                      "    let p = Point{x: seed + 1, y: seed + 2}\n"
+                      "    let q = p\n"
+                      "    return q\n"
+                      "}\n"
+                      "let out = make(20)\n"
+                      "print(out.x)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "struct debug source-var slot test should generate");
+    assert(contains(code, "#if defined(XRAY_AOT_DEBUG_LOCALS)") &&
+           "struct debug source locals should be guarded by the debug-local define");
+    assert(contains(code, "xrt_struct_test_") &&
+           "test module should emit native struct storage types");
+    assert(contains(code, "* p = 0;") && "struct source local p should use a typed pointer");
+    assert(contains(code, "* q = 0;") && "struct source local q should use a typed pointer");
+    assert(contains(code, "p = (xrt_struct_test_") &&
+           "struct source local p should synchronize from the native heap pointer");
+    assert(contains(code, "q = (xrt_struct_test_") &&
+           "struct source local q should synchronize from the native heap pointer");
+    assert(!contains(code, "XrValue p = XR_NULL_VAL;") &&
+           "struct source local p should not degrade to an opaque XrValue debug slot");
+    assert(!contains(code, "XrValue q = XR_NULL_VAL;") &&
+           "struct source local q should not degrade to an opaque XrValue debug slot");
+
+    printf("  Generated struct debug source-var mapped C %zu bytes\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_coro_emits_source_line_directives) {
     const char *src = "fn worker(n: int) -> int {\n"
                       "    yield\n"
@@ -4634,6 +4676,7 @@ int main(void) {
     run_cgen_emits_source_line_directives();
     run_cgen_emits_debug_source_var_slots();
     run_cgen_emits_shadowed_debug_source_var_slots();
+    run_cgen_struct_debug_source_var_slots_use_typed_pointers();
     run_cgen_coro_emits_source_line_directives();
     run_cgen_coro_emits_debug_source_var_slots();
     run_cgen_coro_syncs_helper_result_debug_source_vars();
