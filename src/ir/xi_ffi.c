@@ -11,6 +11,8 @@
 #include "xi_ffi.h"
 #include "../runtime/value/xchunk.h"
 #include "../runtime/value/xffi_sig.h"
+#include "../runtime/closure/xclosure.h"
+#include "../runtime/xvm_call.h"
 #include "../runtime/xisolate_api.h"
 #include "../os/os_dylib.h"
 
@@ -139,6 +141,255 @@ static ffi_type *ffi_type_for_code(uint8_t code) {
     }
 }
 
+typedef union XrFFISlot {
+    int8_t i8;
+    uint8_t u8;
+    int16_t i16;
+    uint16_t u16;
+    int32_t i32;
+    uint32_t u32;
+    int64_t i64;
+    uint64_t u64;
+    double f64;
+    float f32;
+    void *ptr;
+} XrFFISlot;
+
+typedef struct XrFFICallbackBridge {
+    struct XrayIsolate *X;
+    XrClosure *closure;
+    const XrFFICallbackSig *sig;
+    ffi_cif cif;
+    ffi_type *atypes[XR_FFI_MAX_ARGS];
+    ffi_closure *closure_mem;
+    void *code;
+} XrFFICallbackBridge;
+
+static int64_t ffi_value_as_i64(XrValue v) {
+    if (XR_IS_INT(v))
+        return XR_TO_INT(v);
+    if (XR_IS_BOOL(v))
+        return XR_TO_BOOL(v) ? 1 : 0;
+    if (XR_IS_FLOAT(v))
+        return (int64_t) XR_TO_FLOAT(v);
+    return 0;
+}
+
+static double ffi_value_as_f64(XrValue v) {
+    if (XR_IS_FLOAT(v))
+        return XR_TO_FLOAT(v);
+    if (XR_IS_INT(v))
+        return (double) XR_TO_INT(v);
+    if (XR_IS_BOOL(v))
+        return XR_TO_BOOL(v) ? 1.0 : 0.0;
+    return 0.0;
+}
+
+static void *ffi_value_as_ptr(XrValue v) {
+    if (XR_IS_INT(v))
+        return (void *) (uintptr_t) XR_TO_INT(v);
+    if (XR_IS_PTR(v))
+        return XR_TO_PTR(v);
+    return NULL;
+}
+
+static void *ffi_store_arg_slot(XrFFISlot *slot, uint8_t code, XrValue v) {
+    int64_t iv = ffi_value_as_i64(v);
+    switch (code) {
+        case XR_FFI_T_BOOL:
+            slot->u8 = (uint8_t) (iv != 0);
+            return &slot->u8;
+        case XR_FFI_T_I8:
+            slot->i8 = (int8_t) iv;
+            return &slot->i8;
+        case XR_FFI_T_U8:
+            slot->u8 = (uint8_t) iv;
+            return &slot->u8;
+        case XR_FFI_T_I16:
+            slot->i16 = (int16_t) iv;
+            return &slot->i16;
+        case XR_FFI_T_U16:
+            slot->u16 = (uint16_t) iv;
+            return &slot->u16;
+        case XR_FFI_T_I32:
+            slot->i32 = (int32_t) iv;
+            return &slot->i32;
+        case XR_FFI_T_U32:
+            slot->u32 = (uint32_t) iv;
+            return &slot->u32;
+        case XR_FFI_T_I64:
+            slot->i64 = (int64_t) iv;
+            return &slot->i64;
+        case XR_FFI_T_U64:
+            slot->u64 = (uint64_t) iv;
+            return &slot->u64;
+        case XR_FFI_T_F32:
+            slot->f32 = (float) ffi_value_as_f64(v);
+            return &slot->f32;
+        case XR_FFI_T_F64:
+            slot->f64 = ffi_value_as_f64(v);
+            return &slot->f64;
+        case XR_FFI_T_PTR:
+            slot->ptr = ffi_value_as_ptr(v);
+            return &slot->ptr;
+        case XR_FFI_T_VOID:
+            slot->i64 = 0;
+            return &slot->i64;
+    }
+    slot->i64 = 0;
+    return &slot->i64;
+}
+
+static XrValue ffi_value_from_c_arg(uint8_t code, void *addr) {
+    switch (code) {
+        case XR_FFI_T_BOOL:
+            return xr_bool(*(const uint8_t *) addr != 0);
+        case XR_FFI_T_I8:
+            return xr_int(*(const int8_t *) addr);
+        case XR_FFI_T_U8:
+            return xr_int(*(const uint8_t *) addr);
+        case XR_FFI_T_I16:
+            return xr_int(*(const int16_t *) addr);
+        case XR_FFI_T_U16:
+            return xr_int(*(const uint16_t *) addr);
+        case XR_FFI_T_I32:
+            return xr_int(*(const int32_t *) addr);
+        case XR_FFI_T_U32:
+            return xr_int(*(const uint32_t *) addr);
+        case XR_FFI_T_I64:
+            return xr_int(*(const int64_t *) addr);
+        case XR_FFI_T_U64:
+            return xr_int((xr_Integer) * (const uint64_t *) addr);
+        case XR_FFI_T_F32:
+            return xr_float((double) *(const float *) addr);
+        case XR_FFI_T_F64:
+            return xr_float(*(const double *) addr);
+        case XR_FFI_T_PTR:
+            return xr_int((xr_Integer) (uintptr_t) *(void *const *) addr);
+        case XR_FFI_T_VOID:
+            return xr_null();
+    }
+    return xr_null();
+}
+
+static void ffi_store_c_return(uint8_t code, XrValue v, void *ret) {
+    if (!ret || code == XR_FFI_T_VOID)
+        return;
+    int64_t iv = ffi_value_as_i64(v);
+    switch (code) {
+        case XR_FFI_T_BOOL:
+            *(uint8_t *) ret = (uint8_t) (iv != 0);
+            break;
+        case XR_FFI_T_I8:
+            *(int8_t *) ret = (int8_t) iv;
+            break;
+        case XR_FFI_T_U8:
+            *(uint8_t *) ret = (uint8_t) iv;
+            break;
+        case XR_FFI_T_I16:
+            *(int16_t *) ret = (int16_t) iv;
+            break;
+        case XR_FFI_T_U16:
+            *(uint16_t *) ret = (uint16_t) iv;
+            break;
+        case XR_FFI_T_I32:
+            *(int32_t *) ret = (int32_t) iv;
+            break;
+        case XR_FFI_T_U32:
+            *(uint32_t *) ret = (uint32_t) iv;
+            break;
+        case XR_FFI_T_I64:
+            *(int64_t *) ret = (int64_t) iv;
+            break;
+        case XR_FFI_T_U64:
+            *(uint64_t *) ret = (uint64_t) iv;
+            break;
+        case XR_FFI_T_F32:
+            *(float *) ret = (float) ffi_value_as_f64(v);
+            break;
+        case XR_FFI_T_F64:
+            *(double *) ret = ffi_value_as_f64(v);
+            break;
+        case XR_FFI_T_PTR:
+            *(void **) ret = ffi_value_as_ptr(v);
+            break;
+        case XR_FFI_T_VOID:
+            break;
+    }
+}
+
+static void ffi_callback_bridge_invoke(ffi_cif *cif, void *ret, void **c_args, void *user_data) {
+    (void) cif;
+    XrFFICallbackBridge *bridge = (XrFFICallbackBridge *) user_data;
+    if (!bridge || !bridge->X || !bridge->closure || !bridge->sig) {
+        ffi_store_c_return(XR_FFI_T_VOID, xr_null(), ret);
+        return;
+    }
+
+    XrValue args[XR_FFI_MAX_ARGS];
+    int nargs = (int) bridge->sig->nparams;
+    for (int i = 0; i < nargs; i++)
+        args[i] = ffi_value_from_c_arg(bridge->sig->params[i], c_args[i]);
+
+    XrValue result = xr_vm_call_closure(bridge->X, bridge->closure, args, nargs);
+    ffi_store_c_return(bridge->sig->ret, result, ret);
+}
+
+static void ffi_callback_bridge_free(XrFFICallbackBridge *bridge) {
+    if (!bridge || !bridge->closure_mem)
+        return;
+    ffi_closure_free(bridge->closure_mem);
+    bridge->closure_mem = NULL;
+    bridge->code = NULL;
+}
+
+static void ffi_callback_bridges_free(XrFFICallbackBridge *bridges, int count) {
+    if (!bridges)
+        return;
+    for (int i = 0; i < count; i++)
+        ffi_callback_bridge_free(&bridges[i]);
+}
+
+static bool ffi_callback_bridge_prepare(struct XrayIsolate *X, const XrFFICallbackSig *sig,
+                                        XrClosure *closure, XrFFICallbackBridge *bridge) {
+    if (!sig || !closure || !bridge)
+        return false;
+    if (sig->nparams > XR_FFI_MAX_ARGS) {
+        xr_runtime_error(X, "FFI: CFn callback has too many parameters (%u > %d)\n", sig->nparams,
+                         XR_FFI_MAX_ARGS);
+        return false;
+    }
+
+    memset(bridge, 0, sizeof(*bridge));
+    bridge->X = X;
+    bridge->closure = closure;
+    bridge->sig = sig;
+    for (uint8_t i = 0; i < sig->nparams; i++)
+        bridge->atypes[i] = ffi_type_for_code(sig->params[i]);
+
+    ffi_type *rtype = ffi_type_for_code(sig->ret);
+    if (ffi_prep_cif(&bridge->cif, FFI_DEFAULT_ABI, sig->nparams, rtype, bridge->atypes) !=
+        FFI_OK) {
+        xr_runtime_error(X, "FFI: failed to prepare CFn callback trampoline\n");
+        return false;
+    }
+
+    bridge->closure_mem = (ffi_closure *) ffi_closure_alloc(sizeof(ffi_closure), &bridge->code);
+    if (!bridge->closure_mem || !bridge->code) {
+        ffi_callback_bridge_free(bridge);
+        xr_runtime_error(X, "FFI: failed to allocate CFn callback trampoline\n");
+        return false;
+    }
+
+    if (ffi_prep_closure_loc(bridge->closure_mem, &bridge->cif, ffi_callback_bridge_invoke, bridge,
+                             bridge->code) != FFI_OK) {
+        ffi_callback_bridge_free(bridge);
+        xr_runtime_error(X, "FFI: failed to prepare CFn callback trampoline\n");
+        return false;
+    }
+    return true;
+}
+
 /* Resolve `symbol` from a foreign library (or the running process when
  * `dylib` is NULL). Returns NULL when the symbol cannot be found. */
 static void *ffi_resolve_symbol(struct XrayIsolate *X, const char *symbol, const char *dylib) {
@@ -209,33 +460,33 @@ XrValue xr_ffi_call_proto(struct XrayIsolate *X, struct XrProto *proto, XrValue 
 
     ffi_type *atypes[XR_FFI_MAX_ARGS];
     void *avalues[XR_FFI_MAX_ARGS];
-    union FfiSlot {
-        int64_t i64;
-        uint64_t u64;
-        double f64;
-        float f32;
-        void *ptr;
-    } slots[XR_FFI_MAX_ARGS];
+    XrFFISlot slots[XR_FFI_MAX_ARGS];
+    XrFFICallbackBridge callbacks[XR_FFI_MAX_ARGS];
+    memset(callbacks, 0, sizeof(callbacks));
 
     for (int i = 0; i < np; i++) {
         uint8_t code = sig->params[i];
         atypes[i] = ffi_type_for_code(code);
         XrValue a = args[i];
-        if (code == XR_FFI_T_F32 || code == XR_FFI_T_F64) {
-            double d =
-                XR_IS_FLOAT(a) ? XR_TO_FLOAT(a) : (XR_IS_INT(a) ? (double) XR_TO_INT(a) : 0.0);
-            if (code == XR_FFI_T_F32)
-                slots[i].f32 = (float) d;
-            else
-                slots[i].f64 = d;
-        } else if (code == XR_FFI_T_PTR) {
-            /* Raw pointers / function pointers travel as address-sized ints. */
-            slots[i].ptr = (void *) (intptr_t) (XR_IS_INT(a) ? XR_TO_INT(a) : 0);
-        } else {
-            slots[i].i64 =
-                XR_IS_INT(a) ? XR_TO_INT(a) : (XR_IS_FLOAT(a) ? (int64_t) XR_TO_FLOAT(a) : 0);
+
+        const XrFFICallbackSig *cb_sig =
+            (sig->param_cbacks && code == XR_FFI_T_PTR) ? sig->param_cbacks[i] : NULL;
+        if (cb_sig) {
+            XrClosure *closure = xr_closure_from_arg(X, a, "FFI CFn callback");
+            if (!closure) {
+                ffi_callback_bridges_free(callbacks, np);
+                return xr_null();
+            }
+            if (!ffi_callback_bridge_prepare(X, cb_sig, closure, &callbacks[i])) {
+                ffi_callback_bridges_free(callbacks, np);
+                return xr_null();
+            }
+            slots[i].ptr = callbacks[i].code;
+            avalues[i] = &slots[i].ptr;
+            continue;
         }
-        avalues[i] = &slots[i];
+
+        avalues[i] = ffi_store_arg_slot(&slots[i], code, a);
     }
 
     ffi_type *rtype = ffi_type_for_code(sig->ret);
@@ -243,6 +494,7 @@ XrValue xr_ffi_call_proto(struct XrayIsolate *X, struct XrProto *proto, XrValue 
     ffi_cif cif;
     if (ffi_prep_cif(&cif, FFI_DEFAULT_ABI, (unsigned) np, rtype, atypes) != FFI_OK) {
         xr_runtime_error(X, "FFI: failed to prepare call for '%s'\n", symbol ? symbol : "?");
+        ffi_callback_bridges_free(callbacks, np);
         return xr_null();
     }
 
@@ -258,21 +510,30 @@ XrValue xr_ffi_call_proto(struct XrayIsolate *X, struct XrProto *proto, XrValue 
     ret.u64 = 0;
     ffi_call(&cif, FFI_FN(fn), &ret, avalues);
 
+    XrValue result;
     switch (sig->ret) {
         case XR_FFI_T_VOID:
-            return xr_null();
+            result = xr_null();
+            break;
         case XR_FFI_T_F32:
-            return xr_float((double) ret.f32);
+            result = xr_float((double) ret.f32);
+            break;
         case XR_FFI_T_F64:
-            return xr_float(ret.f64);
+            result = xr_float(ret.f64);
+            break;
         case XR_FFI_T_BOOL:
-            return xr_bool((int64_t) ret.a != 0);
+            result = xr_bool((int64_t) ret.a != 0);
+            break;
         case XR_FFI_T_PTR:
-            return xr_int((int64_t) (intptr_t) ret.ptr);
+            result = xr_int((int64_t) (intptr_t) ret.ptr);
+            break;
         default:
             /* Integer-like: ffi_arg holds the (sign/zero-extended) value. */
-            return xr_int((int64_t) ret.a);
+            result = xr_int((int64_t) ret.a);
+            break;
     }
+    ffi_callback_bridges_free(callbacks, np);
+    return result;
 }
 
 #else /* !XRAY_HAVE_LIBFFI */
