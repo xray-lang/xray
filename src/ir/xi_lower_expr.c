@@ -140,7 +140,7 @@ static void xi_lower_mark_value_clone_copy(XiValue *v) {
         v->aux_int = XI_COPY_KIND_VALUE_CLONE;
 }
 
-static XiFunc *lower_resolve_static_callee_func(XiLower *l, XiValue *callee) {
+static XiFunc *lower_resolve_static_callee_func_in_scope(XiFunc *scope, XiValue *callee) {
     while (callee && callee->op == XI_COPY && !xi_copy_is_value_clone(callee) && callee->nargs >= 1)
         callee = callee->args[0];
     if (!callee)
@@ -151,7 +151,7 @@ static XiFunc *lower_resolve_static_callee_func(XiLower *l, XiValue *callee) {
         return (XiFunc *) callee->aux;
     if (callee->op == XI_GET_SHARED) {
         int64_t slot = callee->aux_int;
-        for (XiFunc *fn = l ? l->func : NULL; fn; fn = fn->parent_func) {
+        for (XiFunc *fn = scope; fn; fn = fn->parent_func) {
             if (fn->shared_slot_funcs && slot >= 0 && slot < (int64_t) fn->shared_slot_func_count &&
                 fn->shared_slot_funcs[slot])
                 return fn->shared_slot_funcs[slot];
@@ -160,8 +160,26 @@ static XiFunc *lower_resolve_static_callee_func(XiLower *l, XiValue *callee) {
     return NULL;
 }
 
-static bool lower_value_param_is_readonly(XiFunc *callee, uint16_t pidx) {
+static XiFunc *lower_resolve_static_callee_func(XiLower *l, XiValue *callee) {
+    return lower_resolve_static_callee_func_in_scope(l ? l->func : NULL, callee);
+}
+
+static bool lower_value_param_is_readonly_depth(XiFunc *callee, uint16_t pidx, int depth);
+
+static bool lower_call_arg_is_readonly_forward(XiFunc *scope, XiValue *call, uint16_t arg_idx,
+                                               int depth) {
+    if (!scope || !call || call->op != XI_CALL || arg_idx == 0 || arg_idx >= call->nargs)
+        return false;
+    XiFunc *target = lower_resolve_static_callee_func_in_scope(scope, call->args[0]);
+    if (!target)
+        return false;
+    return lower_value_param_is_readonly_depth(target, (uint16_t) (arg_idx - 1), depth + 1);
+}
+
+static bool lower_value_param_is_readonly_depth(XiFunc *callee, uint16_t pidx, int depth) {
     if (!callee || pidx >= callee->nparams)
+        return false;
+    if (depth > 32)
         return false;
     XiValue *param = callee->params[pidx];
     if (!param)
@@ -177,6 +195,8 @@ static bool lower_value_param_is_readonly(XiFunc *callee, uint16_t pidx) {
                 continue;
             for (uint16_t a = 0; a < user->nargs; a++) {
                 if (user->args[a] != param)
+                    continue;
+                if (lower_call_arg_is_readonly_forward(callee, user, a, depth))
                     continue;
                 if (xi_own_use_is_consuming(user->op, a))
                     return false;
@@ -196,6 +216,10 @@ static bool lower_value_param_is_readonly(XiFunc *callee, uint16_t pidx) {
     return true;
 }
 
+static bool lower_value_param_is_readonly(XiFunc *callee, uint16_t pidx) {
+    return lower_value_param_is_readonly_depth(callee, pidx, 0);
+}
+
 static void lower_apply_auto_borrow_param_modes(XiLower *l, XiFunc *callee,
                                                 const uint8_t *explicit_modes, int explicit_count,
                                                 uint8_t *out_modes, int mode_count) {
@@ -207,19 +231,11 @@ static void lower_apply_auto_borrow_param_modes(XiLower *l, XiFunc *callee,
     if (!l || !callee || callee->nparams == 0)
         return;
 
-    XiOwnResult own;
-    if (!xi_own_analyze(callee, &own))
-        return;
-    if (own.sig.valid) {
-        int n = own.sig.nparams < mode_count ? own.sig.nparams : mode_count;
-        for (int i = 0; i < n; i++) {
-            if (out_modes[i] == XR_PARAM_VALUE && own.sig.param_own[i] == XI_OWN_BORROWED &&
-                lower_value_param_is_readonly(callee, (uint16_t) i)) {
-                out_modes[i] = XR_PARAM_IN;
-            }
-        }
+    int n = callee->nparams < (uint16_t) mode_count ? (int) callee->nparams : mode_count;
+    for (int i = 0; i < n; i++) {
+        if (out_modes[i] == XR_PARAM_VALUE && lower_value_param_is_readonly(callee, (uint16_t) i))
+            out_modes[i] = XR_PARAM_IN;
     }
-    xi_own_free(&own);
 }
 
 static XiValue *xi_lower_narrow_for_native_field(XiLower *l, AstNode *node, XiValue *val,

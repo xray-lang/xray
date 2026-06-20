@@ -1,0 +1,5 @@
+contains=xaot-plan v0
+regex=function [0-9]+ name=wrap module=0 depth=1 abi=native boundary=none params=1 ret=int64_t/scalar/i64
+c_not_regex=XrValue v[0-9]+ = xrt_value_clone_for_coro\(v[0-9]+\);
+c_not_contains=xrt_getprop_name(
+c_not_contains=xrt_setprop_name(
