@@ -87,6 +87,54 @@ if [ ! -x "$XRAY" ]; then
     exit 1
 fi
 
+FFI_LIB_SRC="$WORK/xrayffi_smoke.c"
+FFI_LIB_EXT=".so"
+FFI_LIB_CC_ARGS=(-shared -fPIC)
+case "$(uname -s 2>/dev/null)" in
+    Darwin)
+        FFI_LIB_EXT=".dylib"
+        ;;
+esac
+FFI_LIB="$WORK/libxrayffi_smoke$FFI_LIB_EXT"
+cat > "$FFI_LIB_SRC" <<'C'
+#include <stdint.h>
+
+int32_t xrayffi_add1(int32_t x) {
+    return x + 1;
+}
+C
+if [ "$FFI_LIB_EXT" = ".dylib" ]; then
+    FFI_LIB_CC_ARGS=(-dynamiclib -install_name "$FFI_LIB")
+fi
+
+FFI_SRC="$WORK/ffi_dylib_path.xr"
+cat > "$FFI_SRC" <<XR
+@extern("C") @dylib("$FFI_LIB") fn xrayffi_add1(x: int32) -> int32
+
+print(unsafe { xrayffi_add1(41) })
+XR
+FFI_BIN="$WORK/ffi_dylib_path"
+FFI_LOG="$WORK/ffi_dylib_path.log"
+if cc "${FFI_LIB_CC_ARGS[@]}" -o "$FFI_LIB" "$FFI_LIB_SRC" >"$WORK/ffi_lib_build.log" 2>&1; then
+    if build_native "$FFI_SRC" "$FFI_BIN" "$FFI_LOG"; then
+        expect_log_contains "$FFI_LOG" "Link command:" "ffi-dylib: emitted link command"
+        expect_log_contains "$FFI_LOG" "$FFI_LIB" "ffi-dylib: links explicit dylib path"
+        expect_log_not_contains "$FFI_LOG" "-lxray_core" "ffi-dylib: does not link xray_core"
+        got="$(DYLD_LIBRARY_PATH="$WORK" LD_LIBRARY_PATH="$WORK" "$FFI_BIN" 2>/dev/null)"
+        if [ "$got" = "42" ]; then
+            record_pass "ffi-dylib: binary output"
+        else
+            record_fail "ffi-dylib: output '$got' != '42'"
+        fi
+    else
+        record_fail "ffi-dylib: build failed"
+        sed 's/^/      /' "$FFI_LOG" | sed -n '1,120p'
+    fi
+else
+    record_fail "ffi-dylib: helper library build failed"
+    sed 's/^/      /' "$WORK/ffi_lib_build.log" | sed -n '1,80p'
+fi
+
 CORE_SRC="$PROJECT_DIR/tests/aot/filetests/link/core_math_single_symbol.xr"
 CORE_BIN="$WORK/core_math"
 CORE_LOG="$WORK/core_math.log"

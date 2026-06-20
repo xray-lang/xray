@@ -133,6 +133,19 @@ static void features_add_stdlib_symbol(XaotFeatureSet *fs, const char *symbol) {
     fs->n_stdlib_symbols++;
 }
 
+static void features_add_extern_dylib(XaotFeatureSet *fs, const char *dylib) {
+    if (!fs || !dylib || !dylib[0] || strlen(dylib) >= XAOT_EXTERN_DYLIB_NAME_MAX)
+        return;
+    for (uint16_t i = 0; i < fs->n_extern_dylibs; i++) {
+        if (strcmp(fs->extern_dylibs[i], dylib) == 0)
+            return;
+    }
+    if (fs->n_extern_dylibs >= XAOT_MAX_EXTERN_DYLIBS)
+        return;
+    memcpy(fs->extern_dylibs[fs->n_extern_dylibs], dylib, strlen(dylib) + 1);
+    fs->n_extern_dylibs++;
+}
+
 /* Record "module.member" into the referenced stdlib-symbol closure. */
 static void features_add_stdlib_member(XaotFeatureSet *fs, const char *module, const char *member) {
     if (!fs || !module || !module[0] || !member || !member[0])
@@ -363,6 +376,8 @@ static void scan_func_features(XiFunc *f, XaotFeatureSet *fs) {
 static void infer_features_recursive(XiFunc *f, XaotFeatureSet *fs) {
     if (!f)
         return;
+    if (f->is_extern && f->extern_dylib && f->extern_dylib[0])
+        features_add_extern_dylib(fs, f->extern_dylib);
     scan_func_features(f, fs);
     for (uint16_t c = 0; c < f->nchildren; c++)
         infer_features_recursive(f->children[c], fs);
@@ -409,6 +424,27 @@ static bool add_stdlib_symbol_manifest_entries(XaotLinkManifest *manifest,
         if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_STDLIB_SYMBOL,
                                            features->stdlib_symbols[i]))
             return false;
+    }
+    return true;
+}
+
+static bool extern_dylib_is_link_name(const char *dylib) {
+    return dylib && dylib[0] && strchr(dylib, '/') == NULL && strstr(dylib, ".so") == NULL &&
+           strstr(dylib, ".dylib") == NULL && strstr(dylib, ".dll") == NULL;
+}
+
+static bool add_extern_dylib_manifest_entries(XaotLinkManifest *manifest,
+                                              const XaotFeatureSet *features) {
+    for (uint16_t i = 0; features && i < features->n_extern_dylibs; i++) {
+        const char *dylib = features->extern_dylibs[i];
+        if (!dylib || !dylib[0])
+            continue;
+        if (extern_dylib_is_link_name(dylib)) {
+            if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_SYSTEM_LIB, dylib))
+                return false;
+        } else if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_LD_FLAG, dylib)) {
+            return false;
+        }
     }
     return true;
 }
@@ -521,6 +557,8 @@ static bool build_link_manifest(const XaotFeatureSet *features, XaotLinkManifest
     if (!add_stdlib_manifest_entries(manifest, features->stdlib))
         goto done;
     if (!add_runtime_time_manifest_entries(manifest, features))
+        goto done;
+    if (!add_extern_dylib_manifest_entries(manifest, features))
         goto done;
     if (!add_stdlib_core_object_manifest_entries(manifest, features))
         goto done;

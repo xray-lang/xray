@@ -34,6 +34,8 @@
 
 #define XAOT_MAX_STDLIB_SYMBOLS 128
 #define XAOT_STDLIB_SYMBOL_NAME_MAX 96
+#define XAOT_MAX_EXTERN_DYLIBS 64
+#define XAOT_EXTERN_DYLIB_NAME_MAX 512
 
 /* Bitfield of stdlib modules referenced by the compiled bundle.
  * Runtime-backed modules become stdlib_objects in the link manifest; direct-call
@@ -81,6 +83,8 @@ typedef struct {
     XaotStdlibSet stdlib;
     char stdlib_symbols[XAOT_MAX_STDLIB_SYMBOLS][XAOT_STDLIB_SYMBOL_NAME_MAX];
     uint16_t n_stdlib_symbols;
+    char extern_dylibs[XAOT_MAX_EXTERN_DYLIBS][XAOT_EXTERN_DYLIB_NAME_MAX];
+    uint16_t n_extern_dylibs;
 } XaotFeatureSet;
 
 /* ========== Build API ========== */

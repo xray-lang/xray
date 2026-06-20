@@ -1,0 +1,6 @@
+// FFI: explicit @dylib("m") must resolve consistently in VM and AOT.
+@extern("C") @dylib("m") fn cos(x: float64) -> float64
+@extern("C") @dylib("m") fn pow(base: float64, exp: float64) -> float64
+
+print(unsafe { cos(0.0) })
+print(unsafe { pow(3.0, 2.0) })
