@@ -1178,6 +1178,152 @@ static void emit_typed_array_ptr_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f
     fprintf(out, ")");
 }
 
+static bool cg_class_native_array_receiver_ref_field(XiCgenCtx *ctx, const XiFunc *f,
+                                                     const XiValue *recv,
+                                                     CgClassNativeFunc *out_info,
+                                                     uint16_t *out_idx) {
+    return cg_class_native_receiver_ref_field(ctx, f, recv, XR_NATIVE_ARRAY_REF, out_info, out_idx);
+}
+
+static void emit_class_native_array_field_box(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                              const CgClassNativeFunc *info, const XiValue *recv,
+                                              uint16_t idx) {
+    fprintf(out, "xr_mkptr(");
+    emit_class_native_receiver_field_ref(ctx, out, f, info->class_data, recv, idx);
+    fprintf(out, ", XR_TAG_ARRAY)");
+}
+
+static bool emit_class_native_array_length_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                                const XiValue *v) {
+    if (!v || v->op != XI_LOAD_FIELD || v->nargs < 1 || !v->aux)
+        return false;
+    const char *field = (const char *) v->aux;
+    if (strcmp(field, "length") != 0 && strcmp(field, "size") != 0)
+        return false;
+    CgClassNativeFunc info;
+    uint16_t idx = 0;
+    if (!cg_class_native_array_receiver_ref_field(ctx, f, v->args[0], &info, &idx))
+        return false;
+    const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
+    emit_class_native_receiver_field_ref(ctx, out, f, info.class_data, v->args[0], idx);
+    fprintf(out, "->length");
+    emit_conversion_suffix(out, conv_suffix);
+    return true;
+}
+
+static bool emit_class_native_array_index_get_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                                   const XiValue *v) {
+    if (!v || v->op != XI_INDEX_GET || v->nargs < 2)
+        return false;
+    CgClassNativeFunc info;
+    uint16_t idx = 0;
+    if (!cg_class_native_array_receiver_ref_field(ctx, f, v->args[0], &info, &idx))
+        return false;
+    const char *conv_suffix =
+        emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
+    fprintf(out, "xrt_index_get(");
+    emit_class_native_array_field_box(ctx, out, f, &info, v->args[0], idx);
+    fprintf(out, ", ");
+    emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
+    fprintf(out, ")");
+    emit_conversion_suffix(out, conv_suffix);
+    return true;
+}
+
+static bool emit_class_native_array_index_set_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                                   const XiValue *v) {
+    if (!v || v->op != XI_INDEX_SET || v->nargs < 3)
+        return false;
+    CgClassNativeFunc info;
+    uint16_t idx = 0;
+    if (!cg_class_native_array_receiver_ref_field(ctx, f, v->args[0], &info, &idx))
+        return false;
+    fprintf(out, "xrt_index_set(");
+    emit_class_native_array_field_box(ctx, out, f, &info, v->args[0], idx);
+    fprintf(out, ", ");
+    emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
+    fprintf(out, ", ");
+    emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_TAGGED);
+    fprintf(out, ")");
+    return true;
+}
+
+static bool emit_class_native_array_method_call_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                                     const XiValue *v) {
+    if (!v || v->op != XI_CALL_METHOD || v->nargs < 1 || !v->aux)
+        return false;
+    CgClassNativeFunc info;
+    uint16_t idx = 0;
+    if (!cg_class_native_array_receiver_ref_field(ctx, f, v->args[0], &info, &idx))
+        return false;
+    const char *method = (const char *) v->aux;
+    int sym = cg_method_sym(method);
+    if (sym < 0)
+        return false;
+    uint16_t nargs = (uint16_t) (v->nargs - 1);
+    if (nargs > 2)
+        return false;
+    const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+    if (nargs == 0) {
+        fprintf(out, "xrt_method_0(");
+        emit_class_native_array_field_box(ctx, out, f, &info, v->args[0], idx);
+        fprintf(out, ", %d)", sym);
+    } else if (nargs == 1) {
+        fprintf(out, "xrt_method_1(");
+        emit_class_native_array_field_box(ctx, out, f, &info, v->args[0], idx);
+        fprintf(out, ", %d, ", sym);
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
+        fprintf(out, ")");
+    } else if (nargs == 2) {
+        fprintf(out, "xrt_method_2(");
+        emit_class_native_array_field_box(ctx, out, f, &info, v->args[0], idx);
+        fprintf(out, ", %d, ", sym);
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
+        fprintf(out, ", ");
+        emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_TAGGED);
+        fprintf(out, ")");
+    }
+    emit_conversion_suffix(out, conv_suffix);
+    return true;
+}
+
+static bool emit_class_native_array_method_call_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                                     const XiValue *v) {
+    if (!v || v->uses != 0 || v->op != XI_CALL_METHOD || v->nargs < 1 || !v->aux)
+        return false;
+    CgClassNativeFunc info;
+    uint16_t idx = 0;
+    if (!cg_class_native_array_receiver_ref_field(ctx, f, v->args[0], &info, &idx))
+        return false;
+    const char *method = (const char *) v->aux;
+    uint16_t nargs = (uint16_t) (v->nargs - 1);
+    if (nargs == 1 && strcmp(method, "push") == 0) {
+        fprintf(out, "    xrt_array_push(");
+        emit_class_native_array_field_box(ctx, out, f, &info, v->args[0], idx);
+        fprintf(out, ", ");
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
+        fprintf(out, ");\n");
+        return true;
+    }
+    if (nargs > 2 || cg_method_sym(method) < 0)
+        return false;
+    fprintf(out, "    ");
+    if (!emit_class_native_array_method_call_expr(ctx, out, f, v))
+        return false;
+    fprintf(out, ";\n");
+    return true;
+}
+
+static bool cg_class_native_array_method_call_value_is_elided(XiCgenCtx *ctx, const XiFunc *f,
+                                                              const XiValue *v) {
+    if (!v || v->uses != 0 || v->op != XI_CALL_METHOD || v->nargs < 1 || !v->aux)
+        return false;
+    if (!cg_class_native_array_receiver_ref_field(ctx, f, v->args[0], NULL, NULL))
+        return false;
+    uint16_t nargs = (uint16_t) (v->nargs - 1);
+    return nargs <= 2 && cg_method_sym((const char *) v->aux) >= 0;
+}
+
 static bool emit_typed_array_index_get_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                             const XiValue *v, const char *prefix) {
     CgArrayElemInfo info;
