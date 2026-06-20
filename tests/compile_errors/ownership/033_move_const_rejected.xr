@@ -1,0 +1,5 @@
+fn main() {
+    const source: Array<int> = [1, 2]
+    let moved = move source
+    print(moved.length)
+}

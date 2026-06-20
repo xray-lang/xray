@@ -1,0 +1,5 @@
+fn main() {
+    let value = 42
+    let moved = move value
+    print(moved)
+}
