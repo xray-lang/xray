@@ -2043,6 +2043,7 @@ Rules:
 - `@c_export` may only annotate a module-level `fn` declaration; it cannot annotate classes, structs, methods, anonymous functions, or nested functions.
 - A `@c_export` function must have an xray function body and cannot also be an `@extern` function.
 - The string argument must be a non-empty C identifier; that string is the exported C symbol name.
+- Each `@c_export` symbol name must be unique within one AOT bundle; duplicate symbols are compile errors.
 - Currently supported export boundary types are `bool`, sized integers, `float32` / `float64`, `uintsize` / `intsize`, `RawPtr<T>`, `RawMut<T>`, and `()` returns.
 - Managed xray values such as `string`, class instances, Array/Map/Set, ordinary closures, and by-value aggregates are not exported directly today. To share struct memory with C, pass an address through `RawPtr<T>` / `RawMut<T>`.
 - `@c_export` defines only the function ABI wrapper; shared-library packaging, header generation, and runtime initialization policy are build/embedder concerns.

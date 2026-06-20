@@ -2042,6 +2042,7 @@ print(add(19, 23))        // xray 内部仍是普通函数调用
 - `@c_export` 只能标注模块级 `fn` 声明；不能标注 class、struct、方法、匿名函数或嵌套函数。
 - `@c_export` 函数必须有 xray 函数体，不能同时是 `@extern` 函数。
 - 字符串参数必须是非空 C identifier；该字符串就是导出的 C 符号名。
+- 同一个 AOT bundle 中每个 `@c_export` 符号名必须唯一；重复符号是编译错误。
 - 当前支持的导出边界类型是 `bool`、精确整数、`float32` / `float64`、`uintsize` / `intsize`、`RawPtr<T>`、`RawMut<T>`，以及 `()` 返回。
 - 当前不导出 xray 管理值（如 `string`、class instance、Array/Map/Set、普通 closure）或 by-value aggregate；需要与 C 共享结构体内存时，先通过 `RawPtr<T>` / `RawMut<T>` 传递地址。
 - `@c_export` 只定义函数 ABI wrapper，不定义共享库打包、头文件生成或运行时初始化策略；这些由 build/embedder 层决定。

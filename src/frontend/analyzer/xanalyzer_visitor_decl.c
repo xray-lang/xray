@@ -143,10 +143,41 @@ static void xa_validate_extern_function_abi(XaInferContext *ctx, AstNode *node,
     }
 }
 
+static void xa_validate_c_export_unique_symbol(XaInferContext *ctx, AstNode *node, XaSymbol *sym,
+                                               XrAttribute *attr) {
+    if (!ctx || !ctx->analyzer || !attr || !xa_c_symbol_is_identifier(attr->str_arg))
+        return;
+
+    int count = 0;
+    XaSymbol **symbols = xa_scope_get_all_symbols(ctx->analyzer->global_scope, &count);
+    for (int i = 0; i < count; i++) {
+        XaSymbol *other = symbols[i];
+        if (!other || other == sym || other->kind != XA_SYM_FUNCTION)
+            continue;
+        XaSymbolLinks *other_links = xa_analyzer_get_links(ctx->analyzer, other);
+        if (!other_links || !other_links->is_c_export || !other_links->c_export_symbol)
+            continue;
+        if (strcmp(other_links->c_export_symbol, attr->str_arg) != 0)
+            continue;
+
+        XrLocation loc = {.file = ctx->file_path,
+                          .line = node ? node->line : 0,
+                          .column = node ? node->column : 0};
+        char msg[256];
+        snprintf(msg, sizeof(msg), "duplicate @c_export symbol '%s' already used by function '%s'",
+                 attr->str_arg, other->name ? other->name : "?");
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE, msg,
+                                   &loc);
+        break;
+    }
+    if (symbols)
+        xr_free(symbols);
+}
+
 static void xa_validate_c_export_function_abi(XaInferContext *ctx, AstNode *node,
-                                              const FunctionDeclNode *fn, XrType **param_types,
-                                              XrType *return_type, XrAttribute *attr,
-                                              bool is_extern) {
+                                              const FunctionDeclNode *fn, XaSymbol *sym,
+                                              XrType **param_types, XrType *return_type,
+                                              XrAttribute *attr, bool is_extern) {
     if (!ctx || !ctx->analyzer || !fn || !attr)
         return;
 
@@ -158,6 +189,8 @@ static void xa_validate_c_export_function_abi(XaInferContext *ctx, AstNode *node
                                    "@c_export requires a non-empty C identifier symbol name",
                                    &fn_loc);
     }
+
+    xa_validate_c_export_unique_symbol(ctx, node, sym, attr);
 
     if (is_extern) {
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
@@ -1493,11 +1526,14 @@ void xa_visit_collect_function_decl_only(XaInferContext *ctx, AstNode *node) {
     // FFI: mark @extern functions so call sites can require `unsafe { }`.
     XrAttribute *c_export_attr = xa_function_attr(fn, ATTR_C_EXPORT);
     links->is_extern = xa_function_attr(fn, ATTR_EXTERN) != NULL;
+    links->is_c_export = c_export_attr != NULL;
+    links->c_export_symbol =
+        c_export_attr && c_export_attr->str_arg ? xr_strdup(c_export_attr->str_arg) : NULL;
     if (links->is_extern)
         xa_validate_extern_function_abi(ctx, node, fn, param_types, return_type);
     if (c_export_attr)
-        xa_validate_c_export_function_abi(ctx, node, fn, param_types, return_type, c_export_attr,
-                                          links->is_extern);
+        xa_validate_c_export_function_abi(ctx, node, fn, sym, param_types, return_type,
+                                          c_export_attr, links->is_extern);
 
     // Store parameter names for LSP inlay hints
     xa_symbol_links_set_function_sig(links, param_types, param_names, fn->param_count, return_type);
