@@ -93,6 +93,7 @@ trap cleanup EXIT
 
 SCALAR="$PROJECT_DIR/tests/ir/rc_count/scalar_no_rc.xr"
 BORROWED="$PROJECT_DIR/tests/ir/rc_count/value_struct_borrowed_param.xr"
+BORROWED_WRAPPER="$PROJECT_DIR/tests/ir/rc_count/value_struct_wrapper_borrowed_param.xr"
 HEAP_READONLY="$PROJECT_DIR/tests/ir/rc_count/heap_readonly_param.xr"
 CLASS_READONLY="$PROJECT_DIR/tests/ir/rc_count/class_readonly_param.xr"
 
@@ -108,6 +109,12 @@ expect_count_max "$WORK/scalar_enabled.err" 0 "scalar: no heap RC ops"
 run_case "$BORROWED" "$WORK/borrowed.out" "$WORK/borrowed.err" env XRAY_XI_RC_COUNT=1
 expect_output "$WORK/borrowed.out" "3" "borrowed value param: program output"
 expect_count_max "$WORK/borrowed.err" 2 "borrowed value param: RC budget"
+
+run_case "$BORROWED_WRAPPER" "$WORK/borrowed_wrapper.out" "$WORK/borrowed_wrapper.err" \
+    env XRAY_XI_RC_COUNT=1
+expect_output "$WORK/borrowed_wrapper.out" "3
+1" "borrowed value wrapper param: program output"
+expect_count_max "$WORK/borrowed_wrapper.err" 1 "borrowed value wrapper param: RC budget"
 
 run_case "$HEAP_READONLY" "$WORK/heap_readonly.out" "$WORK/heap_readonly.err" env \
     XRAY_XI_RC_COUNT=1
