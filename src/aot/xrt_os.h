@@ -139,6 +139,25 @@ static inline XrValue xrt_os_tmpdir(void) {
     return xrt_os_cstr_value(tmpdir);
 }
 
+static inline XrValue xrt_os_username(void) {
+#ifdef _WIN32
+    const char *user = getenv("USERNAME");
+    if (!user)
+        user = getenv("USER");
+    if (!user)
+        user = getenv("LOGNAME");
+    return xrt_os_cstr_value(user);
+#else
+    struct passwd *pw = getpwuid(getuid());
+    if (pw && pw->pw_name)
+        return xrt_os_cstr_value(pw->pw_name);
+    const char *user = getenv("USER");
+    if (!user)
+        user = getenv("LOGNAME");
+    return xrt_os_cstr_value(user);
+#endif
+}
+
 static inline XrValue xrt_os_homedir(void) {
     const char *home = getenv("HOME");
 #ifdef _WIN32
