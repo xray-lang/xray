@@ -813,6 +813,49 @@ TEST(cgen_coro_emits_debug_source_var_slots) {
     xi_func_free(ir);
 }
 
+TEST(cgen_coro_syncs_helper_result_debug_source_vars) {
+    const char *src = "fn produce() -> int {\n"
+                      "    return 41\n"
+                      "}\n"
+                      "fn worker(ch: Channel<int>) -> int {\n"
+                      "    let task = go produce()\n"
+                      "    let result = await task\n"
+                      "    ch.send(result)\n"
+                      "    let received = ch.recv()\n"
+                      "    return received + 1\n"
+                      "}\n"
+                      "shared const ch: Channel<int> = new Channel(1)\n"
+                      "let task = go worker(ch)\n"
+                      "print(await task)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+    assert(ir->module != NULL && "pipeline should produce module metadata");
+    ir->module->path = "debug_coro_helper_results.xr";
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "coroutine helper debug source-var test should generate");
+    assert(contains(code, "_aot_resume") && "test source should emit coroutine resume bodies");
+    assert(contains(code, "xr_aot_await_task") &&
+           "test should exercise the await helper result path");
+    assert(contains(code, "xr_aot_chan_recv_slot") &&
+           "test should exercise the channel recv helper result path");
+    assert(contains(code, "int64_t result = 0;") &&
+           "await result source variable should get a debug local");
+    assert(contains(code, "int64_t received = 0;") &&
+           "recv result source variable should get a debug local");
+    assert(contains(code, "result = (int64_t)") &&
+           "await helper result should be synchronized into the source debug local");
+    assert(contains(code, "received = (int64_t)") &&
+           "recv helper result should be synchronized into the source debug local");
+
+    printf("  Generated coroutine helper debug source-var mapped C %zu bytes\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_recursive) {
     /* Recursive function: factorial */
     const char *src = "fn fact(n: int) -> int {\n"
@@ -4575,6 +4618,7 @@ int main(void) {
     run_cgen_emits_shadowed_debug_source_var_slots();
     run_cgen_coro_emits_source_line_directives();
     run_cgen_coro_emits_debug_source_var_slots();
+    run_cgen_coro_syncs_helper_result_debug_source_vars();
     run_cgen_recursive();
     run_cgen_for_loop();
     run_cgen_typed_array_uses_raw_storage_fast_path();

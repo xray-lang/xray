@@ -335,6 +335,22 @@ static void emit_coro_await_result_slot(XiCgenCtx *ctx, FILE *out, const XiFunc 
     fprintf(out, "xr_slot_none()");
 }
 
+static void emit_coro_debug_result_source_var_sync(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                                   const XiValue *v) {
+    if (!v)
+        return;
+
+    const XiValue *slot_value = NULL;
+    if (v->op == XI_AWAIT)
+        slot_value = xi_coro_typed_await_unbox_user(f, v);
+    if (!slot_value)
+        slot_value = xi_coro_typed_recv_unbox_user(f, v);
+
+    if (slot_value && slot_value != v)
+        emit_debug_source_var_sync(ctx, out, f, slot_value);
+    emit_debug_source_var_sync(ctx, out, f, v);
+}
+
 static const XiFunc *cg_coro_direct_suspend_call_target(XiCgenCtx *ctx, const XiFunc *current,
                                                         const XiValue *v);
 
@@ -1469,6 +1485,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             emit_vref(out, v);
             fprintf(out, ");\n");
         }
+        emit_coro_debug_result_source_var_sync(ctx, out, f, v);
         return;
     }
 
@@ -1588,6 +1605,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "    }\n");
         fprintf(out, "    return _call_%u;\n", v->id);
         fprintf(out, "S%d_DONE:;\n", sid);
+        emit_coro_debug_result_source_var_sync(ctx, out, f, v);
         return;
     }
 
@@ -1702,6 +1720,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             snprintf(tmp, sizeof(tmp), "_scope_exit_value_%u", v->id);
             emit_assign_from_xrvalue_temp(out, v, tmp);
         }
+        emit_coro_debug_result_source_var_sync(ctx, out, f, v);
         return;
     }
 
@@ -1850,6 +1869,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             snprintf(tmp, sizeof(tmp), "_chan_try_payload_%u", v->id);
             emit_assign_from_xrvalue_temp(out, v, tmp);
         }
+        emit_coro_debug_result_source_var_sync(ctx, out, f, v);
         return;
     }
 
@@ -1875,6 +1895,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
                 emit_vref(out, v->args[0]);
                 fprintf(out, ");\n");
             }
+            emit_coro_debug_result_source_var_sync(ctx, out, f, v);
         }
         return;
     }
@@ -1884,6 +1905,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             fprintf(out, "    ");
             emit_vref(out, v);
             fprintf(out, " = !xr_aot_recv_is_value(_chan_try_%u);\n", v->args[0]->id);
+            emit_coro_debug_result_source_var_sync(ctx, out, f, v);
         }
         return;
     }
@@ -2095,6 +2117,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "S%d_DONE:;\n", sid);
         if (cg_coro_value_has_storage(f, v))
             emit_bridge_stored_tagged_value(out, v);
+        emit_coro_debug_result_source_var_sync(ctx, out, f, v);
         return;
     }
 
@@ -2204,6 +2227,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "    }\n");
         fprintf(out, "    f->state = 0;\n");
         fprintf(out, "S%d_DONE:;\n", sid);
+        emit_coro_debug_result_source_var_sync(ctx, out, f, v);
         return;
     }
 
@@ -2303,6 +2327,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "    }\n");
         fprintf(out, "    f->state = 0;\n");
         fprintf(out, "S%d_DONE:;\n", sid);
+        emit_coro_debug_result_source_var_sync(ctx, out, f, v);
         return;
     }
 
@@ -2346,6 +2371,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "    if (_chan_send_timeout_%u.kind == XR_AOT_RUN_ERROR)\n", v->id);
         fprintf(out, "        return _chan_send_timeout_%u;\n", v->id);
         fprintf(out, "S%d_DONE:;\n", sid);
+        emit_coro_debug_result_source_var_sync(ctx, out, f, v);
         return;
     }
 
@@ -2378,6 +2404,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "S%d_DONE:;\n", sid);
         if (cg_coro_value_has_storage(f, v))
             emit_bridge_stored_tagged_value(out, v);
+        emit_coro_debug_result_source_var_sync(ctx, out, f, v);
         return;
     }
 
@@ -2423,6 +2450,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             snprintf(tmp, sizeof(tmp), "_chan_send_value_%u", v->id);
             emit_assign_from_xrvalue_temp(out, v, tmp);
         }
+        emit_coro_debug_result_source_var_sync(ctx, out, f, v);
         return;
     }
 
@@ -2481,6 +2509,9 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "    if (_chan_recv_%u.kind == XR_AOT_RUN_ERROR)\n", v->id);
         fprintf(out, "        return _chan_recv_%u;\n", v->id);
         fprintf(out, "S%d_DONE:;\n", sid);
+        emit_coro_debug_result_source_var_sync(ctx, out, f, v);
+        if (status)
+            emit_coro_debug_result_source_var_sync(ctx, out, f, status);
         return;
     }
 
@@ -2518,6 +2549,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "S%d_DONE:;\n", sid);
         if (cg_coro_value_has_storage(f, v))
             emit_bridge_stored_tagged_value(out, v);
+        emit_coro_debug_result_source_var_sync(ctx, out, f, v);
         return;
     }
 
@@ -2561,6 +2593,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
                 emit_assign_from_xrvalue_temp(out, v, tmp);
                 emit_bridge_stored_tagged_value(out, v);
             }
+            emit_coro_debug_result_source_var_sync(ctx, out, f, v);
             return;
         }
         if (xi_value_is_channel_method_call(v, "close", 0)) {
