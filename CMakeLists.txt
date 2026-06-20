@@ -1078,6 +1078,20 @@ if(BUILD_TESTS)
         TIMEOUT 60
     )
 
+    # Borrow/ownership instrumentation: keep a machine-parseable Xi
+    # retain/release budget available for RC-overhead regression work.
+    add_test(
+        NAME xi_rc_count_smoke
+        COMMAND bash
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/ir/run_rc_count_tests.sh
+                $<TARGET_FILE:xray>
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(xi_rc_count_smoke PROPERTIES
+        LABELS "ir;ownership;regression"
+        TIMEOUT 30
+    )
+
     # Cross-backend differential net: same .xr through VM / AOT must
     # produce byte-identical observable output. Safety net for the backend
     # unification work (tasks 108-118).
