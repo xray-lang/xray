@@ -711,6 +711,7 @@ add_library(xray_aot_core STATIC
     src/base/xarena.c
     src/base/xlog.c
     src/base/xunicode.c
+    stdlib/compress/compress.c
     stdlib/crypto/crypto.c
     stdlib/regex/xregex.c
     stdlib/regex/xregex_compile.c
@@ -718,7 +719,7 @@ add_library(xray_aot_core STATIC
     stdlib/regex/xregex_nfa.c
     stdlib/regex/xregex_parse.c
 )
-target_compile_definitions(xray_aot_core PRIVATE XR_CRYPTO_CORE_ONLY=1)
+target_compile_definitions(xray_aot_core PRIVATE XR_COMPRESS_CORE_ONLY=1 XR_CRYPTO_CORE_ONLY=1)
 
 if(CMAKE_BUILD_TYPE STREQUAL "Release" AND MSVC)
     set_source_files_properties(

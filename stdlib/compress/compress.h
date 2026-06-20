@@ -45,16 +45,22 @@
 #define XR_STDLIB_COMPRESS_H
 
 #include "../../src/base/xdefs.h"
+#include "../../src/shared/xr_compress_core.h"
 
 /* ========== Compression Levels ========== */
 
+#ifndef XR_COMPRESS_LEVELS_DEFINED
+#define XR_COMPRESS_LEVELS_DEFINED
 #define XR_COMPRESS_NO_COMPRESSION 0
 #define XR_COMPRESS_BEST_SPEED 1
 #define XR_COMPRESS_BEST_COMPRESSION 9
 #define XR_COMPRESS_DEFAULT_COMPRESSION 6
+#endif
 
 /* ========== Error Codes ========== */
 
+#ifndef XR_COMPRESS_ERROR_DEFINED
+#define XR_COMPRESS_ERROR_DEFINED
 typedef enum {
     XR_COMPRESS_OK = 0,
     XR_COMPRESS_ERR_MEMORY,
@@ -64,6 +70,7 @@ typedef enum {
     XR_COMPRESS_ERR_HEADER,
     XR_COMPRESS_ERR_CHECKSUM
 } XrCompressError;
+#endif
 
 /* ========== Deflate Compression/Decompression ========== */
 

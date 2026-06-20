@@ -149,6 +149,15 @@ static bool stdlib_symbol_is_time_query(const char *symbol) {
                       strcmp(symbol, "time.clock") == 0);
 }
 
+static bool stdlib_symbol_is_compress_core_object(const char *symbol) {
+    return symbol &&
+           (strcmp(symbol, "compress.deflate") == 0 || strcmp(symbol, "compress.gunzip") == 0 ||
+            strcmp(symbol, "compress.gzip") == 0 || strcmp(symbol, "compress.inflate") == 0 ||
+            strcmp(symbol, "compress.isGzip") == 0 || strcmp(symbol, "compress.isZlib") == 0 ||
+            strcmp(symbol, "compress.zlibCompress") == 0 ||
+            strcmp(symbol, "compress.zlibDecompress") == 0);
+}
+
 /* Unwrap value-identity ops (box/unbox/copy/move) to the underlying value,
  * mirroring cg_unwrap_identity_value so feature inference sees the same module
  * identity the emitter resolves at the call site. */
@@ -403,12 +412,13 @@ static bool add_stdlib_core_object_manifest_entries(XaotLinkManifest *manifest,
              strcmp(symbol, "crypto.sha256") == 0 || strcmp(symbol, "crypto.sha512") == 0 ||
              strcmp(symbol, "crypto.uuid") == 0 || strcmp(symbol, "math.random") == 0 ||
              strcmp(symbol, "math.randomInt") == 0 || strcmp(symbol, "regex.compile") == 0 ||
-             stdlib_symbol_is_time_query(symbol) || strcmp(symbol, "regex.count") == 0 ||
-             strcmp(symbol, "regex.find") == 0 || strcmp(symbol, "regex.findAll") == 0 ||
-             strcmp(symbol, "regex.findGroup") == 0 || strcmp(symbol, "regex.findText") == 0 ||
-             strcmp(symbol, "regex.fullFind") == 0 || strcmp(symbol, "regex.isValid") == 0 ||
-             strcmp(symbol, "regex.replace") == 0 || strcmp(symbol, "regex.replaceAll") == 0 ||
-             strcmp(symbol, "regex.split") == 0 || strcmp(symbol, "regex.test") == 0) &&
+             stdlib_symbol_is_compress_core_object(symbol) || stdlib_symbol_is_time_query(symbol) ||
+             strcmp(symbol, "regex.count") == 0 || strcmp(symbol, "regex.find") == 0 ||
+             strcmp(symbol, "regex.findAll") == 0 || strcmp(symbol, "regex.findGroup") == 0 ||
+             strcmp(symbol, "regex.findText") == 0 || strcmp(symbol, "regex.fullFind") == 0 ||
+             strcmp(symbol, "regex.isValid") == 0 || strcmp(symbol, "regex.replace") == 0 ||
+             strcmp(symbol, "regex.replaceAll") == 0 || strcmp(symbol, "regex.split") == 0 ||
+             strcmp(symbol, "regex.test") == 0) &&
             !xaot_link_manifest_add_unique(manifest, XAOT_LINK_STDLIB_OBJECT, symbol))
             return false;
     }

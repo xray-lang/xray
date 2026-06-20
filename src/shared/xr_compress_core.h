@@ -11,8 +11,32 @@
 #ifndef XR_COMPRESS_CORE_H
 #define XR_COMPRESS_CORE_H
 
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+
+#include "../base/xdefs.h"
+
+#ifndef XR_COMPRESS_LEVELS_DEFINED
+#define XR_COMPRESS_LEVELS_DEFINED
+#define XR_COMPRESS_NO_COMPRESSION 0
+#define XR_COMPRESS_BEST_SPEED 1
+#define XR_COMPRESS_BEST_COMPRESSION 9
+#define XR_COMPRESS_DEFAULT_COMPRESSION 6
+#endif
+
+#ifndef XR_COMPRESS_ERROR_DEFINED
+#define XR_COMPRESS_ERROR_DEFINED
+typedef enum {
+    XR_COMPRESS_OK = 0,
+    XR_COMPRESS_ERR_MEMORY,
+    XR_COMPRESS_ERR_DATA,
+    XR_COMPRESS_ERR_BUFFER,
+    XR_COMPRESS_ERR_STREAM,
+    XR_COMPRESS_ERR_HEADER,
+    XR_COMPRESS_ERR_CHECKSUM
+} XrCompressError;
+#endif
 
 static const uint32_t XR_COMPRESS_CORE_CRC32_TABLE[256] = {
     0x00000000, 0x77073096, 0xEE0E612C, 0x990951BA, 0x076DC419, 0x706AF48F, 0xE963A535, 0x9E6495A3,
@@ -87,5 +111,22 @@ static inline uint32_t xr_compress_core_adler32_update(uint32_t adler, const uin
 static inline uint32_t xr_compress_core_adler32(const uint8_t *data, size_t len) {
     return xr_compress_core_adler32_update(1, data, len);
 }
+
+XR_FUNC XrCompressError xr_deflate(const uint8_t *input, size_t in_len, uint8_t *output,
+                                   size_t out_cap, size_t *out_len, int level);
+XR_FUNC XrCompressError xr_inflate(const uint8_t *input, size_t in_len, uint8_t *output,
+                                   size_t out_cap, size_t *out_len);
+XR_FUNC size_t xr_deflate_bound(size_t in_len);
+XR_FUNC XrCompressError xr_gzip(const uint8_t *input, size_t in_len, uint8_t *output,
+                                size_t out_cap, size_t *out_len, int level);
+XR_FUNC XrCompressError xr_gunzip(const uint8_t *input, size_t in_len, uint8_t *output,
+                                  size_t out_cap, size_t *out_len);
+XR_FUNC bool xr_is_gzip(const uint8_t *data, size_t len);
+XR_FUNC uint32_t xr_gzip_original_size(const uint8_t *data, size_t len);
+XR_FUNC XrCompressError xr_zlib_compress(const uint8_t *input, size_t in_len, uint8_t *output,
+                                         size_t out_cap, size_t *out_len, int level);
+XR_FUNC XrCompressError xr_zlib_decompress(const uint8_t *input, size_t in_len, uint8_t *output,
+                                           size_t out_cap, size_t *out_len);
+XR_FUNC bool xr_is_zlib(const uint8_t *data, size_t len);
 
 #endif  // XR_COMPRESS_CORE_H

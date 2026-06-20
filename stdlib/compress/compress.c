@@ -13,18 +13,24 @@
  */
 
 #include "compress.h"
-#include "../common.h"
-#include "../../src/base/xmalloc.h"
 #include "../../src/shared/xr_compress_core.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
 
+#ifdef XR_COMPRESS_CORE_ONLY
+#define xr_malloc malloc
+#define xr_free free
+#else
+#include "../common.h"
+#include "../../src/base/xmalloc.h"
+
 /* ========== External Declarations ========== */
 
 extern XrValue xr_string_value(XrString *str);
 extern XrString *xr_string_intern(XrayIsolate *X, const char *str, size_t len, uint32_t hash);
+#endif
 
 /* ========== CRC32 Implementation ========== */
 
@@ -1060,6 +1066,8 @@ XR_FUNC const char *xr_compress_error_str(XrCompressError err) {
 
 /* ========== Helper Functions ========== */
 
+#ifndef XR_COMPRESS_CORE_ONLY
+
 static XrValue make_string_n(XrayIsolate *X, const char *s, size_t len) {
     if (!s)
         return xr_null();
@@ -1364,3 +1372,5 @@ XR_FUNC XrModule *xr_load_module_compress(XrayIsolate *isolate) {
     module->loaded = true;
     return module;
 }
+
+#endif /* XR_COMPRESS_CORE_ONLY */
