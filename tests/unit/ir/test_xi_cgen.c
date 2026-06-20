@@ -715,6 +715,44 @@ TEST(cgen_coro_emits_source_line_directives) {
     xi_func_free(ir);
 }
 
+TEST(cgen_coro_emits_debug_source_var_slots) {
+    const char *src = "fn worker(seed: int) -> int {\n"
+                      "    let answer = seed + 1\n"
+                      "    yield\n"
+                      "    let doubled = answer * 2\n"
+                      "    return doubled\n"
+                      "}\n"
+                      "let task = go worker(20)\n"
+                      "print(await task)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "coroutine debug source-var slot test should generate");
+    assert(contains(code, "_aot_resume") && "test source should emit a coroutine resume body");
+    assert(contains(code, "#if defined(XRAY_AOT_DEBUG_LOCALS)") &&
+           "coroutine debug source locals should be guarded by the debug-local define");
+    assert(contains(code, "int64_t seed = 0;") &&
+           "coroutine source parameter should get a debug local");
+    assert(contains(code, "int64_t answer = 0;") &&
+           "coroutine source local before suspension should get a debug local");
+    assert(contains(code, "int64_t doubled = 0;") &&
+           "coroutine source local after suspension should get a debug local");
+    assert(contains(code, "seed = (int64_t)") &&
+           "coroutine source parameter should be synchronized from the frame");
+    assert(contains(code, "answer = (int64_t)") &&
+           "coroutine source local should be synchronized after assignment/resume");
+    assert(contains(code, "doubled = (int64_t)") &&
+           "post-resume source local should be synchronized after assignment");
+
+    printf("  Generated coroutine debug source-var mapped C %zu bytes\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_recursive) {
     /* Recursive function: factorial */
     const char *src = "fn fact(n: int) -> int {\n"
@@ -4475,6 +4513,7 @@ int main(void) {
     run_cgen_emits_source_line_directives();
     run_cgen_emits_debug_source_var_slots();
     run_cgen_coro_emits_source_line_directives();
+    run_cgen_coro_emits_debug_source_var_slots();
     run_cgen_recursive();
     run_cgen_for_loop();
     run_cgen_typed_array_uses_raw_storage_fast_path();
