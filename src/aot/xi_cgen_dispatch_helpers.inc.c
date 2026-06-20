@@ -1512,10 +1512,10 @@ static void xicgen_call_builtin(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
         fprintf(out, "xrt_json_get_field(");
         emit_vref(out, v->args[0]);
         fprintf(out, ", %d)", (int) v->aux_int);
-    } else if (strcmp(bn, "copy") == 0) {
-        /* copy(x): explicit deep copy. Reuses the coroutine deep-clone runtime
-         * (xrt_value_clone_for_coro / xrt_json_clone_for_coro), giving an
-         * independent recursive copy that matches the VM OP_COPY semantics. */
+    } else if (strcmp(bn, "copy") == 0 || strcmp(bn, "to_shared") == 0) {
+        /* copy(x): explicit deep copy. The internal to_shared form is used
+         * only for shared-slot stores; standalone AOT has one RC heap, so it
+         * is still a single recursive clone rather than a VM heap promotion. */
         XR_DCHECK(v->nargs >= 1, "builtin copy: need arg");
         bool is_json = v->args[0] && v->args[0]->type && v->args[0]->type->kind == XR_KIND_JSON;
         const char *conv_suffix =

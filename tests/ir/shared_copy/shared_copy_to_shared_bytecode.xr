@@ -1,0 +1,3 @@
+let xs: Array<int> = [1, 2]
+shared const ys = copy(xs)
+print(ys.length)
