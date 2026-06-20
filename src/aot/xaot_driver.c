@@ -201,15 +201,14 @@ static const XiImportRef *stdlib_module_ref_of_value(const XiFunc *f, const XiVa
 }
 
 /* If v refers to a stdlib module with symbol-level tracking (bare module
- * identifier in the stdlib table, excluding core math which is tracked via
- * XI_CALL_BUILTIN), return that module name; else NULL. Used to record the
- * referenced-symbol closure for method-form stdlib calls. */
+ * identifier in the stdlib table), return that module name; else NULL. Used
+ * to record the referenced-symbol closure for method-form stdlib calls. */
 static const char *stdlib_symbol_module_of_value(const XiFunc *f, const XiValue *v) {
     const XiImportRef *ref = stdlib_module_ref_of_value(f, v);
     if (!ref || !ref->module_path || ref->member_name)
         return NULL;
     XaotStdlibSet flag = stdlib_flag_for_import(ref->module_path);
-    if (flag == 0 || flag == XAOT_STDLIB_MATH)
+    if (flag == 0)
         return NULL;
     return ref->module_path;
 }
@@ -382,7 +381,8 @@ static bool add_stdlib_core_object_manifest_entries(XaotLinkManifest *manifest,
         const char *symbol = features->stdlib_symbols[i];
         if ((strcmp(symbol, "crypto.hmac") == 0 || strcmp(symbol, "crypto.md5") == 0 ||
              strcmp(symbol, "crypto.sha1") == 0 || strcmp(symbol, "crypto.sha256") == 0 ||
-             strcmp(symbol, "crypto.sha512") == 0 || strcmp(symbol, "regex.compile") == 0 ||
+             strcmp(symbol, "crypto.sha512") == 0 || strcmp(symbol, "math.random") == 0 ||
+             strcmp(symbol, "math.randomInt") == 0 || strcmp(symbol, "regex.compile") == 0 ||
              strcmp(symbol, "regex.count") == 0 || strcmp(symbol, "regex.find") == 0 ||
              strcmp(symbol, "regex.findAll") == 0 || strcmp(symbol, "regex.findGroup") == 0 ||
              strcmp(symbol, "regex.findText") == 0 || strcmp(symbol, "regex.fullFind") == 0 ||

@@ -117,6 +117,22 @@ else
     sed 's/^/      /' "$CORE_FULL_LOG" | sed -n '1,120p'
 fi
 
+RANDOM_MATH_SRC="$PROJECT_DIR/tests/aot/filetests/link/system_math_random.xr"
+RANDOM_MATH_BIN="$WORK/system_math_random"
+RANDOM_MATH_LOG="$WORK/system_math_random.log"
+if build_native "$RANDOM_MATH_SRC" "$RANDOM_MATH_BIN" "$RANDOM_MATH_LOG"; then
+    expect_log_contains "$RANDOM_MATH_LOG" "Link command:" "system-math-random: emitted link command"
+    expect_log_not_contains "$RANDOM_MATH_LOG" "-lxray_core" "system-math-random: does not link xray_core"
+    expect_log_not_contains "$RANDOM_MATH_LOG" "-lpthread" "system-math-random: does not link pthread"
+    expect_log_not_contains "$RANDOM_MATH_LOG" "-lz" "system-math-random: does not link zlib"
+    expect_log_contains "$RANDOM_MATH_LOG" "-lxray_aot_core" "system-math-random: links AOT core stdlib only"
+    expect_log_contains "$RANDOM_MATH_LOG" "-lm" "system-math-random: links math lib"
+    expect_output "$RANDOM_MATH_BIN" $'true\n7' "system-math-random: binary output"
+else
+    record_fail "system-math-random: build failed"
+    sed 's/^/      /' "$RANDOM_MATH_LOG" | sed -n '1,120p'
+fi
+
 PATH_SRC="$PROJECT_DIR/tests/aot/filetests/link/core_path.xr"
 PATH_BIN="$WORK/core_path"
 PATH_LOG="$WORK/core_path.log"

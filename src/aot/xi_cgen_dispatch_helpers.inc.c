@@ -1126,6 +1126,14 @@ static void xicgen_range(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiVal
 static bool xicgen_math_result_rep(const char *name, XrRep *out_rep) {
     if (!name || !out_rep)
         return false;
+    if (strcmp(name, "random") == 0) {
+        *out_rep = XR_REP_F64;
+        return true;
+    }
+    if (strcmp(name, "randomInt") == 0) {
+        *out_rep = XR_REP_I64;
+        return true;
+    }
     if (strcmp(name, "floor") == 0 || strcmp(name, "ceil") == 0 || strcmp(name, "round") == 0 ||
         strcmp(name, "trunc") == 0 || strcmp(name, "sign") == 0 || strcmp(name, "isNaN") == 0 ||
         strcmp(name, "isFinite") == 0) {
@@ -1268,6 +1276,18 @@ static bool xicgen_emit_math_raw_expr(FILE *out, const XiValue *v, const char *n
     if (!name || !v)
         return false;
 
+    if (strcmp(name, "random") == 0 && v->nargs == 0) {
+        fprintf(out, "xrt_math_random_f64()");
+        return true;
+    }
+    if (strcmp(name, "randomInt") == 0 && v->nargs == 2) {
+        fprintf(out, "xrt_math_random_i64(");
+        emit_value_as_rep(out, v->args[0], XR_REP_I64);
+        fprintf(out, ", ");
+        emit_value_as_rep(out, v->args[1], XR_REP_I64);
+        fprintf(out, ")");
+        return true;
+    }
     if (strcmp(name, "abs") == 0 && v->nargs == 1 && cg_rep(v) == XR_REP_TAGGED) {
         fprintf(out, "xrt_math_abs(");
         emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
