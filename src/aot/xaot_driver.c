@@ -720,6 +720,7 @@ XR_FUNC int xaot_build(const char *input_path, bool emit_plan_dump, XaotBuildRes
     bool aot_bundle_initialized = false;
     XaotPrepareStats prepare_stats;
     char *plan_dump = NULL;
+    char *c_export_header = NULL;
     XaotLinkManifest link_manifest;
     bool link_manifest_initialized = false;
     memset(&aot_bundle, 0, sizeof(aot_bundle));
@@ -880,6 +881,32 @@ XR_FUNC int xaot_build(const char *input_path, bool emit_plan_dump, XaotBuildRes
     }
     XiCgenStats cgen_stats = xi_cgen_stats(cg_ctx);
     XiCgenCoroFrameStats coro_frame_stats = xi_cgen_coro_frame_stats(cg_ctx);
+
+    size_t c_export_header_sz = 0;
+    FILE *header_mem = xr_open_memstream(&c_export_header, &c_export_header_sz);
+    if (!header_mem) {
+        fprintf(stderr, "Error: xr_open_memstream failed\n");
+        xi_cgen_ctx_free(cg_ctx);
+        for (int m = 0; m < n_sources; m++) {
+            xr_free(sources[m].name);
+            xr_free(sources[m].c_source);
+        }
+        xr_free(sources);
+        goto fail_free_ir;
+    }
+    xi_cgen_c_export_header(cg_ctx, header_mem, modules, nmodules, "XRAY_AOT_C_EXPORTS_H");
+    if (xr_close_memstream(header_mem, &c_export_header, &c_export_header_sz) != 0 ||
+        xi_cgen_has_error(cg_ctx)) {
+        fprintf(stderr, "Error: AOT C export header generation failed\n");
+        xr_free(c_export_header);
+        xi_cgen_ctx_free(cg_ctx);
+        for (int m = 0; m < n_sources; m++) {
+            xr_free(sources[m].name);
+            xr_free(sources[m].c_source);
+        }
+        xr_free(sources);
+        goto fail_free_ir;
+    }
     xi_cgen_ctx_free(cg_ctx);
 
     /* Infer runtime features before freeing IR */
@@ -912,6 +939,8 @@ XR_FUNC int xaot_build(const char *input_path, bool emit_plan_dump, XaotBuildRes
     result->n_sources = n_sources;
     result->plan_dump = plan_dump;
     plan_dump = NULL;
+    result->c_export_header = c_export_header;
+    c_export_header = NULL;
     result->link_manifest = link_manifest;
     memset(&link_manifest, 0, sizeof(link_manifest));
     link_manifest_initialized = false;
@@ -934,6 +963,7 @@ XR_FUNC int xaot_build(const char *input_path, bool emit_plan_dump, XaotBuildRes
 
 fail_free_ir:
     xr_free(plan_dump);
+    xr_free(c_export_header);
     if (link_manifest_initialized)
         xaot_link_manifest_free(&link_manifest);
     if (aot_bundle_initialized)
@@ -982,6 +1012,7 @@ XR_FUNC void xaot_build_result_free(XaotBuildResult *result) {
         xr_free(result->sources);
     }
     xr_free(result->plan_dump);
+    xr_free(result->c_export_header);
     xaot_link_manifest_free(&result->link_manifest);
     memset(result, 0, sizeof(*result));
 }

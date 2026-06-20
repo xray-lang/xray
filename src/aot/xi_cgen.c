@@ -3379,6 +3379,53 @@ static void emit_c_export_stub_signature(FILE *out, const XiFunc *f) {
     fprintf(out, ")");
 }
 
+static void emit_c_export_header_func(XiCgenCtx *ctx, FILE *out, const XiFunc *f, uint32_t *count) {
+    if (!f)
+        return;
+    if (f->c_export) {
+        if (!cg_func_can_have_c_export_stub(ctx, f)) {
+            fprintf(stderr,
+                    "[xi_cgen] ERROR: @c_export function '%s' must be a top-level "
+                    "noncapturing non-coroutine function with a supported C ABI signature\n",
+                    f->name ? f->name : "<anonymous>");
+            ctx->error = true;
+            return;
+        }
+        emit_c_export_stub_signature(out, f);
+        fprintf(out, ";\n");
+        if (count)
+            (*count)++;
+    }
+    for (uint16_t i = 0; i < f->nchildren; i++)
+        emit_c_export_header_func(ctx, out, f->children[i], count);
+}
+
+XR_FUNC void xi_cgen_c_export_header(XiCgenCtx *ctx, FILE *out, struct XiModule **modules,
+                                     int nmodules, const char *guard) {
+    const char *header_guard = (guard && guard[0]) ? guard : "XRAY_AOT_C_EXPORTS_H";
+    uint32_t count = 0;
+
+    XR_DCHECK(ctx != NULL, "xi_cgen_c_export_header: NULL ctx");
+    XR_DCHECK(out != NULL, "xi_cgen_c_export_header: NULL out");
+
+    fprintf(out, "#ifndef %s\n", header_guard);
+    fprintf(out, "#define %s\n\n", header_guard);
+    fprintf(out, "#include <stdint.h>\n");
+    fprintf(out, "#include <stddef.h>\n\n");
+    fprintf(out, "#ifdef __cplusplus\nextern \"C\" {\n#endif\n\n");
+
+    for (int i = 0; i < nmodules; i++) {
+        if (!modules || !modules[i] || !modules[i]->init)
+            continue;
+        emit_c_export_header_func(ctx, out, modules[i]->init, &count);
+    }
+    if (count == 0)
+        fprintf(out, "/* No @c_export symbols. */\n");
+
+    fprintf(out, "\n#ifdef __cplusplus\n}\n#endif\n\n");
+    fprintf(out, "#endif /* %s */\n", header_guard);
+}
+
 static void emit_c_export_stub_definition(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                           const char *prefix) {
     const XrType *ret_type;

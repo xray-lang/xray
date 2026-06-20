@@ -66,6 +66,7 @@ fi
 
 SRC="$WORK/c_export_link.xr"
 GEN_C="$WORK/c_export_link.c"
+GEN_H="$WORK/c_export_link.h"
 GEN_OBJ="$WORK/c_export_link.o"
 CALLER_C="$WORK/caller.c"
 CALLER_BIN="$WORK/caller"
@@ -108,10 +109,10 @@ fn write_i32_ptr(p: RawMut<int32>, v: int32) -> int32 {
 print(add_i32(19, 23))
 XR
 
-if "$XRAY" build --native -c -o "$GEN_C" "$SRC" >"$GEN_LOG" 2>&1; then
-    record_pass "generate native C source"
+if "$XRAY" build --native -c --c-header "$GEN_H" -o "$GEN_C" "$SRC" >"$GEN_LOG" 2>&1; then
+    record_pass "generate native C source and export header"
 else
-    record_fail "generate native C source"
+    record_fail "generate native C source and export header"
     sed 's/^/      /' "$GEN_LOG" | sed -n '1,120p'
 fi
 
@@ -130,6 +131,23 @@ if [ -f "$GEN_C" ]; then
         "int32 export is public"
 fi
 
+if [ -f "$GEN_H" ]; then
+    expect_file_contains "$GEN_H" "#ifndef XRAY_AOT_C_EXPORTS_H" \
+        "header has include guard"
+    expect_file_contains "$GEN_H" "#ifdef __cplusplus" \
+        "header is C++ friendly"
+    expect_file_contains "$GEN_H" "int32_t xr_add_i32(int32_t p0, int32_t p1);" \
+        "header declares int32 export"
+    expect_file_contains "$GEN_H" "int64_t xr_mix_i64(int64_t p0, int64_t p1);" \
+        "header declares int64 export"
+    expect_file_contains "$GEN_H" "double xr_mix_f64(double p0, double p1);" \
+        "header declares float64 export"
+    expect_file_contains "$GEN_H" "int32_t xr_read_i32_ptr(const void * p0);" \
+        "header declares RawPtr export"
+    expect_file_contains "$GEN_H" "int32_t xr_write_i32_ptr(void * p0, int32_t p1);" \
+        "header declares RawMut export"
+fi
+
 if cc -O2 -Wall -Wno-initializer-overrides -Wno-unused-function -Wno-unused-variable \
     -Dmain=xray_generated_main \
     -I "$PROJECT_DIR/src/aot" -I "$PROJECT_DIR/include" \
@@ -145,11 +163,7 @@ cat >"$CALLER_C" <<'C'
 #include <stdint.h>
 #include <stdio.h>
 
-int32_t xr_add_i32(int32_t a, int32_t b);
-int64_t xr_mix_i64(int64_t a, int64_t b);
-double xr_mix_f64(double a, double b);
-int32_t xr_read_i32_ptr(const void *p);
-int32_t xr_write_i32_ptr(void *p, int32_t v);
+#include "c_export_link.h"
 
 int main(void) {
     double d;
@@ -173,7 +187,7 @@ int main(void) {
 C
 
 if [ -f "$GEN_OBJ" ] &&
-    cc -O2 -Wall "$CALLER_C" "$GEN_OBJ" -lm -o "$CALLER_BIN" >"$LINK_LOG" 2>&1; then
+    cc -O2 -Wall -I "$WORK" "$CALLER_C" "$GEN_OBJ" -lm -o "$CALLER_BIN" >"$LINK_LOG" 2>&1; then
     record_pass "link C caller with exported symbols"
 else
     record_fail "link C caller with exported symbols"
