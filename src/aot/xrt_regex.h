@@ -38,6 +38,9 @@ XrValue xrt_regex_replace(XrValue re_value, const char *text_data, int64_t text_
                           const char *replacement_data, int64_t replacement_len);
 XrValue xrt_regex_replace_all(XrValue re_value, const char *text_data, int64_t text_len,
                               const char *replacement_data, int64_t replacement_len);
+XrValue xrt_regex_split(XrValue re_value, const char *text_data, int64_t text_len);
+XrValue xrt_regex_split_limit(XrValue re_value, const char *text_data, int64_t text_len,
+                              XrValue limit_value);
 
 #ifdef XRT_ENABLE_REGEX
 static inline void xrt_regex_destroy_builtin(void *obj) {

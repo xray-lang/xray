@@ -85,7 +85,8 @@ static const XlspParamInfo regex_find_params[] = {{"text", "string", "String to 
 static const XlspParamInfo regex_replace_params[] = {
     {"text", "string", "String to modify"}, {"replacement", "string", "Replacement string"}};
 
-static const XlspParamInfo regex_split_params[] = {{"text", "string", "String to split"}};
+static const XlspParamInfo regex_split_params[] = {{"text", "string", "String to split"},
+                                                   {"limit", "int", "Maximum split count"}};
 
 static const XlspSymbolInfo regex_symbols[] = {
     {"test", XLSP_SYM_METHOD, "fn(text: string): bool", "Tests if the pattern matches the string",
@@ -96,8 +97,8 @@ static const XlspSymbolInfo regex_symbols[] = {
      "Finds all matches in the string", regex_find_params, 1},
     {"replace", XLSP_SYM_METHOD, "fn(text: string, replacement: string): string",
      "Replaces matches with replacement string", regex_replace_params, 2},
-    {"split", XLSP_SYM_METHOD, "fn(text: string): Array<string>",
-     "Splits the string by the pattern", regex_split_params, 1},
+    {"split", XLSP_SYM_METHOD, "fn(text: string, limit?: int): Array<string>",
+     "Splits the string by the pattern", regex_split_params, 2},
 };
 
 // ============================================================================

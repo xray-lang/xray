@@ -99,7 +99,8 @@ static const char xr_native_def_regex[] =
     "Array<string>\n}\n\n@native\nclass Regex {\n    test(text: string) -> bool\n    find(text: "
     "string) -> RegexMatch?\n    findText(text: string) -> string?\n    findGroup(text: string, "
     "index: int) -> string?\n    findAll(text: string) -> Array<RegexMatch>\n    replace(text: "
-    "string, replacement: string) -> string\n    split(text: string) -> Array<string>\n}\n";
+    "string, replacement: string) -> string\n    split(text: string, limit?: int) -> "
+    "Array<string>\n}\n";
 
 static const char xr_native_def_resultgroup[] =
     "// Built-in ResultGroup type; implemented by the runtime.\n// First VM prototype supports "

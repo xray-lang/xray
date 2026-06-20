@@ -797,7 +797,7 @@ XR_DEFINE_BUILTIN(regex_replace, "replace",
                   "(pattern: Regex, s: string, replacement: string): string", "Replace first match")
 XR_DEFINE_BUILTIN(regex_replace_all, "replaceAll",
                   "(pattern: Regex, s: string, replacement: string): string", "Replace all matches")
-XR_DEFINE_BUILTIN(regex_split, "split", "(pattern: Regex, s: string): Array<string>",
+XR_DEFINE_BUILTIN(regex_split, "split", "(pattern: Regex, s: string, limit?: int): Array<string>",
                   "Split by pattern")
 XR_DEFINE_BUILTIN(regex_escape, "escape", "(s: string): string", "Escape regex special chars")
 XR_DEFINE_BUILTIN(regex_is_valid, "isValid", "(pattern: string): bool", "Check if pattern is valid")

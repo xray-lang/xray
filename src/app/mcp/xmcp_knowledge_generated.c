@@ -1667,7 +1667,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_regex[] = {
     },
     {
         .name = "split",
-        .signature = "(pattern: Regex, s: string): Array<string>",
+        .signature = "(pattern: Regex, s: string, limit?: int): Array<string>",
         .summary = "Split by pattern",
     },
     {
@@ -4012,7 +4012,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `regex.isValid` | `(pattern: string): bool` | Check if pattern is valid |\n"
             "| `regex.replace` | `(pattern: Regex, s: string, replacement: string): string` | Replace first match |\n"
             "| `regex.replaceAll` | `(pattern: Regex, s: string, replacement: string): string` | Replace all matches |\n"
-            "| `regex.split` | `(pattern: Regex, s: string): Array<string>` | Split by pattern |\n"
+            "| `regex.split` | `(pattern: Regex, s: string, limit?: int): Array<string>` | Split by pattern |\n"
             "| `regex.test` | `(pattern: Regex, s: string): bool` | Test if pattern matches string |\n"
             "",
         .symbols = _symbols_regex,
