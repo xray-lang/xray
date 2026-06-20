@@ -14,6 +14,7 @@
 #include "xrt_arc.h"
 #include "xrt_coll.h"
 #include "xrt_value.h"
+#include <stdbool.h>
 #include <time.h>
 
 #ifdef _WIN32
@@ -41,24 +42,74 @@ static inline XrValue xrt_os_cstr_value(const char *s) {
     return s ? xrt_str_from_cstr(s) : XR_NULL_VAL;
 }
 
+static inline char *xrt_os_copy_cstr_arg(const char *data, int64_t len, char *stack,
+                                         size_t stack_cap, char **owned_out) {
+    *owned_out = NULL;
+    if (!data || len < 0 || stack_cap == 0)
+        return NULL;
+    char *out = stack;
+    if ((size_t) len >= stack_cap) {
+        *owned_out = (char *) XRT_MALLOC((size_t) len + 1);
+        if (!*owned_out)
+            return NULL;
+        out = *owned_out;
+    }
+    memcpy(out, data, (size_t) len);
+    out[len] = '\0';
+    return out;
+}
+
 static inline XrValue xrt_os_getenv(const char *name, int64_t len) {
-    if (!name || len < 0)
-        return XR_NULL_VAL;
     char stack_name[256];
     char *owned = NULL;
-    char *key = stack_name;
-    if ((size_t) len >= sizeof(stack_name)) {
-        owned = (char *) XRT_MALLOC((size_t) len + 1);
-        if (!owned)
-            return XR_NULL_VAL;
-        key = owned;
-    }
-    memcpy(key, name, (size_t) len);
-    key[len] = '\0';
+    char *key = xrt_os_copy_cstr_arg(name, len, stack_name, sizeof(stack_name), &owned);
+    if (!key)
+        return XR_NULL_VAL;
     const char *value = getenv(key);
     if (owned)
         XRT_FREE(owned);
     return xrt_os_cstr_value(value);
+}
+
+static inline XrValue xrt_os_setenv(const char *name, int64_t name_len, const char *value,
+                                    int64_t value_len) {
+    char stack_name[256];
+    char stack_value[512];
+    char *owned_name = NULL;
+    char *owned_value = NULL;
+    char *key = xrt_os_copy_cstr_arg(name, name_len, stack_name, sizeof(stack_name), &owned_name);
+    char *val =
+        xrt_os_copy_cstr_arg(value, value_len, stack_value, sizeof(stack_value), &owned_value);
+    bool ok = false;
+    if (key && val) {
+#ifdef _WIN32
+        ok = _putenv_s(key, val) == 0;
+#else
+        ok = setenv(key, val, 1) == 0;
+#endif
+    }
+    if (owned_name)
+        XRT_FREE(owned_name);
+    if (owned_value)
+        XRT_FREE(owned_value);
+    return XR_FROM_BOOL(ok);
+}
+
+static inline XrValue xrt_os_unsetenv(const char *name, int64_t len) {
+    char stack_name[256];
+    char *owned = NULL;
+    char *key = xrt_os_copy_cstr_arg(name, len, stack_name, sizeof(stack_name), &owned);
+    bool ok = false;
+    if (key) {
+#ifdef _WIN32
+        ok = _putenv_s(key, "") == 0;
+#else
+        ok = unsetenv(key) == 0;
+#endif
+    }
+    if (owned)
+        XRT_FREE(owned);
+    return XR_FROM_BOOL(ok);
 }
 
 static inline XrValue xrt_os_getpid(void) {
