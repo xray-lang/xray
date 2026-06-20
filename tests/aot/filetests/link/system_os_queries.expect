@@ -1,0 +1,15 @@
+contains=xaot-plan v0
+contains="generated_c_files": ["<aot-generated-c>"]
+contains="runtime_objects": []
+contains="stdlib_objects": []
+contains="stdlib_symbols": ["os.getpid", "os.uid", "os.gid", "os.cpuCount", "os.clock"]
+contains="system_libs": ["m"]
+contains="defines": ["XRT_IMPL"]
+not_contains="runtime_objects": ["xray_core"]
+not_contains="stdlib_objects": ["os"]
+c_contains=xrt_os_getpid(
+c_contains=xrt_os_uid(
+c_contains=xrt_os_gid(
+c_contains=xrt_os_cpu_count(
+c_contains=xrt_os_clock(
+c_not_contains=xrt_method_

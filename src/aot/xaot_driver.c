@@ -358,9 +358,8 @@ static bool add_stdlib_manifest_entries(XaotLinkManifest *manifest, XaotStdlibSe
         const char *name;
     } table[] = {
         {XAOT_STDLIB_JSON, "json"}, {XAOT_STDLIB_DATETIME, "datetime"}, {XAOT_STDLIB_IO, "io"},
-        {XAOT_STDLIB_OS, "os"},     {XAOT_STDLIB_NET, "net"},           {XAOT_STDLIB_HTTP, "http"},
-        {XAOT_STDLIB_CSV, "csv"},   {XAOT_STDLIB_TOML, "toml"},         {XAOT_STDLIB_YAML, "yaml"},
-        {XAOT_STDLIB_XML, "xml"},
+        {XAOT_STDLIB_NET, "net"},   {XAOT_STDLIB_HTTP, "http"},         {XAOT_STDLIB_CSV, "csv"},
+        {XAOT_STDLIB_TOML, "toml"}, {XAOT_STDLIB_YAML, "yaml"},         {XAOT_STDLIB_XML, "xml"},
     };
 
     for (uint32_t i = 0; i < (uint32_t) (sizeof(table) / sizeof(table[0])); i++) {
@@ -376,6 +375,16 @@ static bool add_runtime_time_manifest_entries(XaotLinkManifest *manifest,
     for (uint16_t i = 0; i < features->n_stdlib_symbols; i++) {
         if (strcmp(features->stdlib_symbols[i], "time.sleep") == 0 &&
             !xaot_link_manifest_add_unique(manifest, XAOT_LINK_STDLIB_OBJECT, "time"))
+            return false;
+    }
+    return true;
+}
+
+static bool add_runtime_os_manifest_entries(XaotLinkManifest *manifest,
+                                            const XaotFeatureSet *features) {
+    for (uint16_t i = 0; i < features->n_stdlib_symbols; i++) {
+        if (strcmp(features->stdlib_symbols[i], "os.sleep") == 0 &&
+            !xaot_link_manifest_add_unique(manifest, XAOT_LINK_STDLIB_OBJECT, "os"))
             return false;
     }
     return true;
@@ -412,9 +421,10 @@ static bool add_stdlib_core_object_manifest_entries(XaotLinkManifest *manifest,
 }
 
 static bool stdlib_set_needs_runtime_provider(XaotStdlibSet stdlib) {
-    return (stdlib & ~(XAOT_STDLIB_MATH | XAOT_STDLIB_PATH | XAOT_STDLIB_ENCODING |
-                       XAOT_STDLIB_BASE64 | XAOT_STDLIB_URL | XAOT_STDLIB_COMPRESS |
-                       XAOT_STDLIB_CRYPTO | XAOT_STDLIB_REGEX | XAOT_STDLIB_TIME)) != 0;
+    return (stdlib &
+            ~(XAOT_STDLIB_MATH | XAOT_STDLIB_PATH | XAOT_STDLIB_ENCODING | XAOT_STDLIB_BASE64 |
+              XAOT_STDLIB_URL | XAOT_STDLIB_COMPRESS | XAOT_STDLIB_CRYPTO | XAOT_STDLIB_REGEX |
+              XAOT_STDLIB_TIME | XAOT_STDLIB_OS)) != 0;
 }
 
 static bool build_link_manifest(const XaotFeatureSet *features, XaotLinkManifest *manifest) {
@@ -494,6 +504,8 @@ static bool build_link_manifest(const XaotFeatureSet *features, XaotLinkManifest
     if (!add_stdlib_manifest_entries(manifest, features->stdlib))
         goto done;
     if (!add_runtime_time_manifest_entries(manifest, features))
+        goto done;
+    if (!add_runtime_os_manifest_entries(manifest, features))
         goto done;
     if (!add_stdlib_core_object_manifest_entries(manifest, features))
         goto done;

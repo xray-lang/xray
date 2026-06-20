@@ -1,0 +1,7 @@
+import os
+
+print(os.getpid() > 0)
+print(os.uid() >= 0)
+print(os.gid() >= 0)
+print(os.cpuCount() >= 1)
+print(os.clock() >= 0.0)

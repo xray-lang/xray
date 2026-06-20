@@ -149,6 +149,22 @@ else
     sed 's/^/      /' "$TIME_QUERY_LOG" | sed -n '1,120p'
 fi
 
+OS_QUERY_SRC="$PROJECT_DIR/tests/aot/filetests/link/system_os_queries.xr"
+OS_QUERY_BIN="$WORK/system_os_queries"
+OS_QUERY_LOG="$WORK/system_os_queries.log"
+if build_native "$OS_QUERY_SRC" "$OS_QUERY_BIN" "$OS_QUERY_LOG"; then
+    expect_log_contains "$OS_QUERY_LOG" "Link command:" "system-os-query: emitted link command"
+    expect_log_not_contains "$OS_QUERY_LOG" "-lxray_core" "system-os-query: does not link xray_core"
+    expect_log_not_contains "$OS_QUERY_LOG" "-lxray_aot_core" "system-os-query: does not link AOT core"
+    expect_log_not_contains "$OS_QUERY_LOG" "-lpthread" "system-os-query: does not link pthread"
+    expect_log_not_contains "$OS_QUERY_LOG" "-lz" "system-os-query: does not link zlib"
+    expect_log_contains "$OS_QUERY_LOG" "-lm" "system-os-query: links math lib only"
+    expect_output "$OS_QUERY_BIN" $'true\ntrue\ntrue\ntrue\ntrue' "system-os-query: binary output"
+else
+    record_fail "system-os-query: build failed"
+    sed 's/^/      /' "$OS_QUERY_LOG" | sed -n '1,120p'
+fi
+
 PATH_SRC="$PROJECT_DIR/tests/aot/filetests/link/core_path.xr"
 PATH_BIN="$WORK/core_path"
 PATH_LOG="$WORK/core_path.log"
