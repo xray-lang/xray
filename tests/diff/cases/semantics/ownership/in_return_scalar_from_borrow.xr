@@ -1,0 +1,6 @@
+fn lenOf(data: in Array<int>) -> int {
+    return data.length
+}
+
+let values: Array<int> = [1, 2, 3]
+print(lenOf(values))

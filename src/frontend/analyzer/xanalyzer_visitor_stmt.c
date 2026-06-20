@@ -85,6 +85,66 @@ static bool xa_shared_init_type_needs_boundary(XrType *type) {
     }
 }
 
+static XaSymbol *xa_borrowed_param_root_symbol(XaInferContext *ctx, AstNode *expr) {
+    if (!ctx || !ctx->analyzer)
+        return NULL;
+    while (expr) {
+        switch (expr->type) {
+            case AST_VARIABLE: {
+                const char *name = expr->as.variable.name;
+                if (!name)
+                    return NULL;
+                XaSymbol *sym = xa_scope_lookup(ctx->analyzer->current_scope, name);
+                if (sym && sym->kind == XA_SYM_PARAMETER &&
+                    (sym->passing_mode == XR_PARAM_IN || sym->passing_mode == XR_PARAM_REF))
+                    return sym;
+                return NULL;
+            }
+            case AST_MEMBER_ACCESS:
+                expr = expr->as.member_access.object;
+                break;
+            case AST_INDEX_GET:
+                expr = expr->as.index_get.array;
+                break;
+            case AST_SLICE_EXPR:
+                expr = expr->as.slice_expr.source;
+                break;
+            case AST_OPTIONAL_CHAIN:
+                expr = expr->as.optional_chain.object;
+                break;
+            case AST_GROUPING:
+                expr = expr->as.grouping;
+                break;
+            case AST_FORCE_UNWRAP:
+                expr = expr->as.unary.operand;
+                break;
+            default:
+                return NULL;
+        }
+    }
+    return NULL;
+}
+
+static void xa_check_borrowed_return_escape(XaInferContext *ctx, AstNode *return_node,
+                                            AstNode *value, XrType *value_type) {
+    if (!ctx || !return_node || !value || !xa_shared_init_type_needs_boundary(value_type))
+        return;
+    XaSymbol *root = xa_borrowed_param_root_symbol(ctx, value);
+    if (!root)
+        return;
+
+    XrLocation loc = {.file = ctx->file_path,
+                      .line = value->line ? value->line : return_node->line,
+                      .column = value->column ? value->column : return_node->column};
+    const char *mode = root->passing_mode == XR_PARAM_REF ? "ref" : "in";
+    char msg[256];
+    snprintf(msg, sizeof(msg),
+             "cannot return borrowed '%s' parameter '%s'; return an owned value or copy(%s)", mode,
+             root->name ? root->name : "?", root->name ? root->name : "?");
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH, msg,
+                               &loc);
+}
+
 static bool xa_call_is_copy_builtin(AstNode *node) {
     if (!node || node->type != AST_CALL_EXPR)
         return false;
@@ -597,6 +657,7 @@ void xa_visit_return_stmt(XaInferContext *ctx, AstNode *node) {
             }
             return_type = xa_visit_infer_expr(ctx, ret->values[0]);
             ctx->expected_type = saved_expected;
+            xa_check_borrowed_return_escape(ctx, node, ret->values[0], return_type);
         }
     } else {
         // Legacy AST multi-expression return is treated as a tuple type.
@@ -604,6 +665,7 @@ void xa_visit_return_stmt(XaInferContext *ctx, AstNode *node) {
         for (int i = 0; i < ret->value_count; i++) {
             if (ret->values[i]) {
                 element_types[i] = xa_visit_infer_expr(ctx, ret->values[i]);
+                xa_check_borrowed_return_escape(ctx, node, ret->values[i], element_types[i]);
             } else {
                 element_types[i] = xr_type_new_unknown(NULL);
             }
