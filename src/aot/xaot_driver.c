@@ -380,9 +380,9 @@ static bool add_stdlib_manifest_entries(XaotLinkManifest *manifest, XaotStdlibSe
         XaotStdlibSet flag;
         const char *name;
     } table[] = {
-        {XAOT_STDLIB_JSON, "json"}, {XAOT_STDLIB_DATETIME, "datetime"}, {XAOT_STDLIB_IO, "io"},
-        {XAOT_STDLIB_NET, "net"},   {XAOT_STDLIB_HTTP, "http"},         {XAOT_STDLIB_CSV, "csv"},
-        {XAOT_STDLIB_TOML, "toml"}, {XAOT_STDLIB_YAML, "yaml"},         {XAOT_STDLIB_XML, "xml"},
+        {XAOT_STDLIB_JSON, "json"}, {XAOT_STDLIB_DATETIME, "datetime"}, {XAOT_STDLIB_NET, "net"},
+        {XAOT_STDLIB_HTTP, "http"}, {XAOT_STDLIB_CSV, "csv"},           {XAOT_STDLIB_TOML, "toml"},
+        {XAOT_STDLIB_YAML, "yaml"}, {XAOT_STDLIB_XML, "xml"},
     };
 
     for (uint32_t i = 0; i < (uint32_t) (sizeof(table) / sizeof(table[0])); i++) {
@@ -440,7 +440,7 @@ static bool stdlib_set_needs_runtime_provider(XaotStdlibSet stdlib) {
     return (stdlib &
             ~(XAOT_STDLIB_MATH | XAOT_STDLIB_PATH | XAOT_STDLIB_ENCODING | XAOT_STDLIB_BASE64 |
               XAOT_STDLIB_URL | XAOT_STDLIB_COMPRESS | XAOT_STDLIB_CRYPTO | XAOT_STDLIB_REGEX |
-              XAOT_STDLIB_TIME | XAOT_STDLIB_OS | XAOT_STDLIB_LOG)) != 0;
+              XAOT_STDLIB_TIME | XAOT_STDLIB_OS | XAOT_STDLIB_LOG | XAOT_STDLIB_IO)) != 0;
 }
 
 static bool build_link_manifest(const XaotFeatureSet *features, XaotLinkManifest *manifest) {

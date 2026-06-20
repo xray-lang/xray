@@ -1637,6 +1637,8 @@ static inline XrValue xrt_json_set_name(XrValue obj, const char *name, XrValue v
 static inline XrValue xrt_getprop_name(XrValue obj, const char *name) {
     if (XR_IS_MAP(obj))
         return xrt_map_get((xrt_map_t *) obj.ptr, xr_box_str(name));
+    if (obj.tag == XR_TAG_PTR && obj.ptr && obj.heap_type == 0)
+        return xrt_json_get_name(obj, name);
     return XR_NULL_VAL;
 }
 
@@ -1645,6 +1647,8 @@ static inline XrValue xrt_setprop_name(XrValue obj, const char *name, XrValue va
         xrt_map_set((xrt_map_t *) obj.ptr, xr_box_str(name), val);
         return val;
     }
+    if (obj.tag == XR_TAG_PTR && obj.ptr && obj.heap_type == 0)
+        return xrt_json_set_name(obj, name, val);
     return val;
 }
 

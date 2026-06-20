@@ -22,6 +22,7 @@
  *     L2  xrt_math.h    - freestanding math system helpers
  *     L2  xrt_time.h    - freestanding time query helpers
  *     L2  xrt_os.h      - freestanding OS query helpers
+ *     L2  xrt_io.h      - freestanding sync filesystem helpers
  *     L2  xrt_arith.h   - arithmetic, comparison, print
  *     L3  xrt_method.h  - method dispatch, property access, toString
  *
@@ -50,6 +51,7 @@
 #include "xrt_math.h"       // L2: freestanding math helpers
 #include "xrt_time.h"       // L2: freestanding time query helpers
 #include "xrt_os.h"         // L2: freestanding OS query helpers
+#include "xrt_io.h"         // L2: freestanding sync filesystem helpers
 #include "xrt_method.h"     // L3: method_0/1/2, getprop, tostring, symbol IDs
 #include "xrt_exception.h"  // L4: setjmp/longjmp exception handling
 #include "xrt_defer.h"      // L4: function-scoped deferred cleanup (uses L1/L2/L4)
