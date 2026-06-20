@@ -243,7 +243,11 @@ XR_FUNC bool xi_coro_is_suspend_point(const XiFunc *f, const XiValue *v,
     if (!v)
         return false;
     if (v->op == XI_YIELD || v->op == XI_GO || v->op == XI_AWAIT || v->op == XI_CHAN_SEND ||
-        v->op == XI_CHAN_RECV || v->op == XI_SELECT_BLOCK || v->op == XI_SCOPE_EXIT)
+        v->op == XI_CHAN_RECV || v->op == XI_CHAN_TRY_SEND || v->op == XI_CHAN_TRY_RECV ||
+        v->op == XI_SELECT_BLOCK || v->op == XI_SCOPE_EXIT)
+        return true;
+    if (xi_value_is_channel_method_call(v, "trySend", 1) ||
+        xi_value_is_channel_method_call(v, "tryRecv", 0))
         return true;
     if (xi_value_is_blocking_channel_method_call(v) || xi_value_is_blocking_task_method_call(v) ||
         xi_value_is_blocking_work_queue_method_call(v) ||
@@ -648,10 +652,18 @@ static XiCoroSuspendKind xi_coro_suspend_kind(const XiFunc *f, const XiValue *v,
         return XI_CORO_SUSP_CHAN_SEND;
     if (v->op == XI_CHAN_RECV)
         return XI_CORO_SUSP_CHAN_RECV;
+    if (v->op == XI_CHAN_TRY_SEND)
+        return XI_CORO_SUSP_CHAN_SEND;
+    if (v->op == XI_CHAN_TRY_RECV)
+        return XI_CORO_SUSP_CHAN_RECV;
     if (v->op == XI_SELECT_BLOCK)
         return XI_CORO_SUSP_SELECT;
     if (v->op == XI_SCOPE_EXIT)
         return XI_CORO_SUSP_SCOPE_EXIT;
+    if (xi_value_is_channel_method_call(v, "trySend", 1))
+        return XI_CORO_SUSP_CHAN_SEND;
+    if (xi_value_is_channel_method_call(v, "tryRecv", 0))
+        return XI_CORO_SUSP_CHAN_RECV;
     if (xi_value_is_channel_method_call(v, "send", 1) ||
         xi_value_is_channel_method_call(v, "sendTimeout", 2))
         return XI_CORO_SUSP_CHAN_SEND;

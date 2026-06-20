@@ -1228,6 +1228,16 @@ static void emit_coro_sync_wrapper(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
     fprintf(out, "}\n\n");
 }
 
+static void emit_coro_poll_yield_guard(FILE *out, uint32_t id, const char *ready_expr, int sid) {
+    fprintf(out, "    if (!(%s)) {\n", ready_expr);
+    fprintf(out, "        XrAotResult _poll_%u = xr_aot_poll_yield(ctx);\n", id);
+    fprintf(out, "        if (_poll_%u.kind != XR_AOT_RUN_DONE) {\n", id);
+    fprintf(out, "            f->state = %d;\n", sid);
+    fprintf(out, "            return _poll_%u;\n", id);
+    fprintf(out, "        }\n");
+    fprintf(out, "    }\n");
+}
+
 static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                  const char *prefix, int *state_id) {
     XR_DCHECK(v != NULL, "emit_coro_value_stmt: NULL value");
@@ -1772,6 +1782,9 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             emit_codegen_abort_aot_result(out);
             return;
         }
+        int sid = ++(*state_id);
+        fprintf(out, "S%d:;\n", sid);
+        fprintf(out, "    f->state = 0;\n");
         const XiValue *send_arg = NULL;
         const char *helper =
             cg_coro_typed_send_helper("xr_aot_chan_try_send_ready", v->args[1], &send_arg);
@@ -1780,6 +1793,10 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, ", ");
         emit_coro_send_value(ctx, out, v->args[1], send_arg);
         fprintf(out, ");\n");
+        char ready_expr[64];
+        snprintf(ready_expr, sizeof(ready_expr),
+                 "(XR_IS_BOOL(_chan_try_%u) && _chan_try_%u.i != 0)", v->id, v->id);
+        emit_coro_poll_yield_guard(out, v->id, ready_expr, sid);
         if (cg_coro_value_has_storage(f, v)) {
             char tmp[32];
             snprintf(tmp, sizeof(tmp), "_chan_try_%u", v->id);
@@ -1795,9 +1812,15 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             emit_codegen_abort_aot_result(out);
             return;
         }
+        int sid = ++(*state_id);
+        fprintf(out, "S%d:;\n", sid);
+        fprintf(out, "    f->state = 0;\n");
         fprintf(out, "    XrValue _chan_try_%u = xr_aot_chan_try_recv(ctx, ", v->id);
         emit_vref(out, v->args[0]);
         fprintf(out, ");\n");
+        char ready_expr[80];
+        snprintf(ready_expr, sizeof(ready_expr), "xr_aot_recv_is_value(_chan_try_%u)", v->id);
+        emit_coro_poll_yield_guard(out, v->id, ready_expr, sid);
         fprintf(out, "    XrValue _chan_try_payload_%u = xr_aot_recv_payload(_chan_try_%u);\n",
                 v->id, v->id);
         if (cg_coro_value_has_storage(f, v)) {
@@ -2478,6 +2501,9 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
 
     if (v->op == XI_CALL_METHOD && xi_value_type_is_channel(v->args[0])) {
         if (xi_value_is_channel_method_call(v, "trySend", 1)) {
+            int sid = ++(*state_id);
+            fprintf(out, "S%d:;\n", sid);
+            fprintf(out, "    f->state = 0;\n");
             const XiValue *send_arg = NULL;
             const char *helper =
                 cg_coro_typed_send_helper("xr_aot_chan_try_send", v->args[1], &send_arg);
@@ -2486,6 +2512,9 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             fprintf(out, ", ");
             emit_coro_send_value(ctx, out, v->args[1], send_arg);
             fprintf(out, ");\n");
+            char ready_expr[80];
+            snprintf(ready_expr, sizeof(ready_expr), "xr_aot_send_is_sent(_chan_method_%u)", v->id);
+            emit_coro_poll_yield_guard(out, v->id, ready_expr, sid);
             if (cg_coro_value_has_storage(f, v)) {
                 char tmp[32];
                 snprintf(tmp, sizeof(tmp), "_chan_method_%u", v->id);
@@ -2494,9 +2523,16 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             return;
         }
         if (xi_value_is_channel_method_call(v, "tryRecv", 0)) {
+            int sid = ++(*state_id);
+            fprintf(out, "S%d:;\n", sid);
+            fprintf(out, "    f->state = 0;\n");
             fprintf(out, "    XrValue _chan_method_%u = xr_aot_chan_try_recv(ctx, ", v->id);
             emit_vref(out, v->args[0]);
             fprintf(out, ");\n");
+            char ready_expr[80];
+            snprintf(ready_expr, sizeof(ready_expr), "xr_aot_recv_is_value(_chan_method_%u)",
+                     v->id);
+            emit_coro_poll_yield_guard(out, v->id, ready_expr, sid);
             if (cg_coro_value_has_storage(f, v)) {
                 char tmp[32];
                 snprintf(tmp, sizeof(tmp), "_chan_method_%u", v->id);

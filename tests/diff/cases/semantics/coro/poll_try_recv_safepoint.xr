@@ -1,0 +1,40 @@
+// anchor: coro-poll-tryrecv-safepoint
+// A nonblocking recv poll loop must remain cooperative in AOT coroutines.
+// Without the poll safepoint, deterministic single-worker AOT spins forever
+// before the producer coroutine can run.
+
+fn recv_int(ch: Channel<int>) -> int {
+    return match (ch.tryRecv()) {
+        Recv.Value(v) -> v
+        _ -> -1
+    }
+}
+
+fn producer(ch: Channel<int>) {
+    ch.send(42)
+}
+
+fn spin_until_value(ch: Channel<int>, out: Channel<int>) {
+    let got = -1
+    while (got < 0) {
+        got = recv_int(ch)
+    }
+    out.send(got)
+}
+
+shared const data: Channel<int> = new Channel(0)
+shared const out: Channel<int> = new Channel(1)
+
+go spin_until_value(data, out)
+go producer(data)
+
+let result = match (out.recvTimeout(1000)) {
+    Recv.Value(v) -> v
+    _ -> -1
+}
+
+data.close()
+out.close()
+
+assert_eq(result, 42)
+print(result)
