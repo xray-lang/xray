@@ -1,13 +1,15 @@
 contains=xaot-plan v0
 contains="generated_c_files": ["<aot-generated-c>"]
 contains="runtime_objects": []
-contains="stdlib_objects": ["crypto.md5", "crypto.sha1", "crypto.sha256", "crypto.sha512", "crypto.hmac"]
-contains="stdlib_symbols": ["crypto.timingSafeEqual", "crypto.md5", "crypto.sha1", "crypto.sha256", "crypto.sha512", "crypto.hmac"]
+contains="stdlib_objects": ["crypto.encrypt", "crypto.decrypt", "crypto.md5", "crypto.sha1", "crypto.sha256", "crypto.sha512", "crypto.hmac"]
+contains="stdlib_symbols": ["crypto.timingSafeEqual", "crypto.encrypt", "crypto.decrypt", "crypto.md5", "crypto.sha1", "crypto.sha256", "crypto.sha512", "crypto.hmac"]
 contains="system_libs": ["m"]
 contains="defines": ["XRT_IMPL"]
 not_contains="runtime_objects": ["xray_core"]
 not_contains="stdlib_objects": ["crypto"]
 c_contains=xrt_crypto_timing_safe_equal(
+c_contains=xrt_crypto_encrypt(
+c_contains=xrt_crypto_decrypt(
 c_contains=xrt_crypto_md5(
 c_contains=xrt_crypto_sha1(
 c_contains=xrt_crypto_sha256(
