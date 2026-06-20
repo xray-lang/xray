@@ -2136,6 +2136,8 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
         fprintf(out, ";\n");
         return;
     }
+    if (emit_class_native_array_method_call_stmt(ctx, out, f, v))
+        return;
 
     if (emit_class_native_ctor_value_stmt(ctx, out, f, prefix, v))
         return;
@@ -2387,6 +2389,8 @@ static bool cg_value_skips_predecl(XiCgenCtx *ctx, const XiFunc *f, const XiValu
     if (cg_class_native_ref_stack_return_takes_value(ctx, f, v))
         return true;
     if (cg_array_typed_push_value_is_elided(ctx, f, v))
+        return true;
+    if (cg_class_native_array_method_call_value_is_elided(ctx, f, v))
         return true;
     if ((v->op == XI_GET_SHARED && cg_value_only_used_by_inlined_struct_new(f, v)) ||
         cg_value_is_elided_heap_struct_alias(ctx, f, v))

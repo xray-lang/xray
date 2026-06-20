@@ -1900,6 +1900,8 @@ static void xicgen_emit_runtime_method(XiCgenCtx *ctx, FILE *out, const XiFunc *
         return;
     if (emit_class_native_set_method_call_expr(ctx, out, f, v))
         return;
+    if (emit_class_native_array_method_call_expr(ctx, out, f, v))
+        return;
     if (emit_local_typed_map_method_call_expr(ctx, out, f, v))
         return;
     if (emit_local_typed_set_method_call_expr(ctx, out, f, v))
@@ -2653,6 +2655,9 @@ static void xicgen_load_field(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
         emit_class_native_set_length_expr(ctx, out, f, v))
         return;
     if (field && (strcmp(field, "length") == 0 || strcmp(field, "size") == 0) &&
+        emit_class_native_array_length_expr(ctx, out, f, v))
+        return;
+    if (field && (strcmp(field, "length") == 0 || strcmp(field, "size") == 0) &&
         emit_typed_array_length_expr(ctx, out, f, prefix, v))
         return;
     int sym = cg_method_sym(field);
@@ -2719,7 +2724,8 @@ static void xicgen_index_get(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
                              const char *prefix) {
     XR_DCHECK(v->nargs >= 2, "xicgen_index_get: need obj and key");
     if (emit_struct_fixed_array_index_get_expr(ctx, out, f, v, prefix) ||
-        emit_typed_array_index_get_expr(ctx, out, f, v, prefix))
+        emit_typed_array_index_get_expr(ctx, out, f, v, prefix) ||
+        emit_class_native_array_index_get_expr(ctx, out, f, v))
         return;
     const char *conv_suffix =
         emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
@@ -2737,6 +2743,8 @@ static void xicgen_index_set(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
     if (emit_struct_fixed_array_index_set_expr(ctx, out, f, v, prefix))
         return;
     if (emit_typed_array_index_set_expr(ctx, out, f, v, prefix))
+        return;
+    if (emit_class_native_array_index_set_expr(ctx, out, f, v))
         return;
     fprintf(out, "xrt_index_set(");
     emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
