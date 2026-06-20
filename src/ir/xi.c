@@ -547,6 +547,7 @@ void xi_block_set_jump(XiBlock *blk, XiBlock *target) {
     XR_DCHECK(target != NULL, "xi_block_set_jump: target is NULL");
     blk->kind = XI_BLOCK_PLAIN;
     blk->control = NULL;
+    blk->line = 0;
     blk->succs[0] = target;
     blk->succs[1] = NULL;
     xi_block_add_pred(target, blk);
@@ -559,6 +560,7 @@ void xi_block_set_if(XiBlock *blk, XiValue *cond, XiBlock *then_blk, XiBlock *el
     XR_DCHECK(else_blk != NULL, "xi_block_set_if: else_blk is NULL");
     blk->kind = XI_BLOCK_IF;
     blk->control = cond;
+    blk->line = 0;
     blk->succs[0] = then_blk;
     blk->succs[1] = else_blk;
     xi_block_add_pred(then_blk, blk);

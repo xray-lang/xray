@@ -115,6 +115,7 @@ static bool try_eliminate_empty(XiFunc *f, XiBlock *blk) {
     blk->control = NULL;
     blk->succs[0] = NULL;
     blk->succs[1] = NULL;
+    blk->line = 0;
     blk->npreds = 0;
     return true;
 }
@@ -164,6 +165,7 @@ static bool try_merge_into_pred(XiFunc *f, XiBlock *blk) {
     /* Transfer terminator: pred takes blk's kind, control, and succs. */
     pred->kind = blk->kind;
     pred->control = blk->control;
+    pred->line = blk->line;
     pred->succs[0] = blk->succs[0];
     pred->succs[1] = blk->succs[1];
 
@@ -177,6 +179,7 @@ static bool try_merge_into_pred(XiFunc *f, XiBlock *blk) {
     blk->kind = XI_BLOCK_UNREACHABLE;
     blk->succs[0] = NULL;
     blk->succs[1] = NULL;
+    blk->line = 0;
     blk->nvalues = 0;
     blk->npreds = 0;
     return true;

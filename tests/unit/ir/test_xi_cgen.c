@@ -705,6 +705,8 @@ TEST(cgen_coro_emits_source_line_directives) {
     assert(contains(code, "_aot_resume") && "test source should emit a coroutine resume body");
     assert(contains(code, "#line 2 \"debug_coro.xr\"") &&
            "yield should be mapped inside the coroutine resume body");
+    assert(contains(code, "#line 3 \"debug_coro.xr\"") &&
+           "coroutine return should be mapped to the source return line");
     assert(contains(code, "#line 6 \"debug_coro.xr\"") &&
            "await should be mapped inside the entry coroutine resume body");
     assert(contains(code, "#line 7 \"debug_coro.xr\"") &&
@@ -727,12 +729,20 @@ TEST(cgen_coro_emits_debug_source_var_slots) {
 
     XiFunc *ir = compile_to_ir(src);
     assert(ir != NULL && "IR compilation failed");
+    assert(ir->module != NULL && "pipeline should produce module metadata");
+    ir->module->path = "debug_coro_locals.xr";
 
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "coroutine debug source-var slot test should generate");
     assert(contains(code, "_aot_resume") && "test source should emit a coroutine resume body");
+    assert(contains(code, "#line 2 \"debug_coro_locals.xr\"") &&
+           "pre-suspend local initializer should carry its source line");
+    assert(contains(code, "#line 4 \"debug_coro_locals.xr\"") &&
+           "post-resume local initializer should carry its source line");
+    assert(contains(code, "#line 5 \"debug_coro_locals.xr\"") &&
+           "coroutine return terminator should carry its source line");
     assert(contains(code, "#if defined(XRAY_AOT_DEBUG_LOCALS)") &&
            "coroutine debug source locals should be guarded by the debug-local define");
     assert(contains(code, "int64_t seed = 0;") &&

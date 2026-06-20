@@ -223,17 +223,22 @@ static bool split_loop(XiFunc *f, XiLoop *loop, XiBlock *exit_block, XiValue *ch
     XiValue *guard_cond = xi_binary(f, guard, check->op, check->type, guard_args[0], guard_args[1]);
     if (!guard_cond)
         return false;
+    guard_cond->line = check->line;
 
     /* Determine which successor of exit_block is the early exit
      * and which continues in the loop. */
     bool exit_on_true = (exit_block->succs[0] == early_exit);
     XiBlock *continue_succ = exit_on_true ? exit_block->succs[1] : exit_block->succs[0];
+    uint32_t guard_line = exit_block->line;
+    if (guard_line == 0 && exit_block->control)
+        guard_line = exit_block->control->line;
 
     /* In the main loop body: convert the early-exit IF into an
      * unconditional jump to the continue successor. */
     xi_cfg_remove_pred(early_exit, exit_block);
     exit_block->kind = XI_BLOCK_PLAIN;
     exit_block->control = NULL;
+    exit_block->line = 0;
     exit_block->succs[0] = continue_succ;
     exit_block->succs[1] = NULL;
 
@@ -241,6 +246,7 @@ static bool split_loop(XiFunc *f, XiLoop *loop, XiBlock *exit_block, XiValue *ch
      * jump directly to the early exit; otherwise enter the loop. */
     guard->kind = XI_BLOCK_IF;
     guard->control = guard_cond;
+    guard->line = guard_line;
     if (exit_on_true) {
         guard->succs[0] = early_exit;
         guard->succs[1] = header;

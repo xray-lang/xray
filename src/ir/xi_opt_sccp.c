@@ -742,6 +742,7 @@ static bool rewrite_function(SccpCtx *ctx) {
                 blk->succs[0] = taken;
                 blk->succs[1] = NULL;
                 blk->control = NULL;
+                blk->line = 0;
                 any = true;
                 continue;
             }
@@ -758,11 +759,20 @@ static bool rewrite_function(SccpCtx *ctx) {
                 blk->succs[0] = taken;
                 blk->succs[1] = NULL;
                 blk->control = NULL;
+                blk->line = 0;
                 any = true;
             }
         }
     }
     return any;
+}
+
+static void sccp_set_unreachable(XiBlock *blk) {
+    blk->kind = XI_BLOCK_UNREACHABLE;
+    blk->control = NULL;
+    blk->line = 0;
+    blk->succs[0] = NULL;
+    blk->succs[1] = NULL;
 }
 
 /* ========== Driver ========== */
@@ -892,10 +902,7 @@ XR_FUNC XiPassChange xi_opt_sccp(XiFunc *f) {
             while (xi_cfg_remove_pred(succ, dead)) {
             }
         }
-        dead->kind = XI_BLOCK_UNREACHABLE;
-        dead->control = NULL;
-        dead->succs[0] = NULL;
-        dead->succs[1] = NULL;
+        sccp_set_unreachable(dead);
     }
     uint32_t removed = xi_cfg_compact_blocks(f);
     bool blocks_removed = removed > 0;

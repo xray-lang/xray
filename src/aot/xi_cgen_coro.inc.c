@@ -1268,6 +1268,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         int sid = ++(*state_id);
         fprintf(out, "    f->state = %d;\n", sid);
         fprintf(out, "    return xr_aot_yielded();\n");
+        emit_value_generated_line_reset(ctx, out, v);
         fprintf(out, "S%d:;\n", sid);
         fprintf(out, "    f->state = 0;\n");
         return;
@@ -2668,6 +2669,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "    ");
         emit_value_rhs(ctx, out, f, v, prefix);
         fprintf(out, ";\n");
+        emit_value_generated_line_reset(ctx, out, v);
         return;
     }
 
@@ -2676,6 +2678,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
     fprintf(out, " = ");
     emit_value_rhs(ctx, out, f, v, prefix);
     fprintf(out, ";\n");
+    emit_value_generated_line_reset(ctx, out, v);
     emit_debug_source_var_sync(ctx, out, f, v);
 }
 
@@ -2695,7 +2698,7 @@ static void emit_coro_block(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
 
     switch (blk->kind) {
         case XI_BLOCK_RETURN:
-            emit_value_source_line(ctx, out, blk->control);
+            emit_block_terminator_source_line(ctx, out, blk);
             if (cg_func_has_defer_stmt(f)) {
                 /* Function-scope exit: capture the result, run pending defers
                  * LIFO, then complete. Defers run before the awaiting caller
@@ -2715,6 +2718,7 @@ static void emit_coro_block(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
             } else {
                 fprintf(out, "    return xr_aot_done(XR_NULL_VAL);\n");
             }
+            emit_block_terminator_generated_line_reset(ctx, out, blk);
             break;
         case XI_BLOCK_PLAIN:
             if (blk->succs[0]) {
@@ -2724,7 +2728,7 @@ static void emit_coro_block(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
             break;
         case XI_BLOCK_IF:
             XR_DCHECK(blk->control != NULL, "AOT coro IF block missing control");
-            emit_value_source_line(ctx, out, blk->control);
+            emit_block_terminator_source_line(ctx, out, blk);
             fprintf(out, "    if (");
             emit_condition_expr(out, blk->control);
             fprintf(out, ") {\n");

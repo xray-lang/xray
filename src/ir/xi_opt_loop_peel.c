@@ -212,16 +212,21 @@ static void wire_peeled_body_block(XiFunc *f, const XiLoop *loop, XiBlock *src, 
     if (src->kind == XI_BLOCK_PLAIN && src->succs[0]) {
         XiBlock *target = map_peel_successor(loop, peeled_bodies, src->succs[0]);
         xi_block_set_jump(dst, target);
+        dst->line = src->line;
     } else if (src->kind == XI_BLOCK_IF && src->control) {
         XiValue *cond = peel_resolve_arg(map, src->control);
         XiBlock *then_t = map_peel_successor(loop, peeled_bodies, src->succs[0]);
         XiBlock *else_t = map_peel_successor(loop, peeled_bodies, src->succs[1]);
-        if (cond && then_t && else_t)
+        if (cond && then_t && else_t) {
             xi_block_set_if(dst, cond, then_t, else_t);
+            dst->line = src->line;
+        }
     } else if (src->kind == XI_BLOCK_RETURN && src->control) {
         XiValue *ret = peel_resolve_arg(map, src->control);
-        if (ret)
+        if (ret) {
             xi_block_set_return(dst, ret);
+            dst->line = src->line;
+        }
     }
     (void) f;
     dst->sealed = true;

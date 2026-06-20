@@ -32,6 +32,11 @@
 /* Forward declaration */
 static void lower_stmts(XiLower *l, AstNode **stmts, int count);
 
+static void stmt_set_missing_line(XiValue *v, int line) {
+    if (v && v->line == 0 && line > 0)
+        v->line = (uint32_t) line;
+}
+
 static uint16_t stmt_narrow_op_for_type(struct XrType *type) {
     if (!type || type->kind != XR_KIND_INT || type->native_width == 0)
         return 0;
@@ -2173,6 +2178,10 @@ static void lower_var_decl(XiLower *l, AstNode *node) {
         init_val = xi_lower_expr(l, node->as.var_decl.initializer);
         if (!init_val)
             return;
+        int init_line = node->as.var_decl.initializer->line > 0
+                            ? node->as.var_decl.initializer->line
+                            : node->line;
+        stmt_set_missing_line(init_val, init_line);
         lower_mark_decl_captured_by_child(l, var_id, name, init_val);
         /* Implicit int→float promotion: when the variable is declared as
          * float but the initializer evaluates to int, insert XI_CONVERT. */
@@ -2202,6 +2211,7 @@ static void lower_var_decl(XiLower *l, AstNode *node) {
         else
             init_val = xi_const_null(l->func, l->cur_block, l->type_null);
     }
+    stmt_set_missing_line(init_val, node->line);
 
     /* Propagate reified generic elem_tid when there is an explicit type
      * annotation on a container literal (e.g. let a: Array<int> = [1,2]).
@@ -2253,6 +2263,7 @@ static void lower_var_decl(XiLower *l, AstNode *node) {
         XiValue *copy = xi_value_new(l->func, l->cur_block, XI_COPY, init_val->type, 1);
         if (copy) {
             copy->args[0] = init_val;
+            copy->line = (uint32_t) node->line;
             if (value_clone_copy)
                 stmt_mark_value_clone_copy(copy);
             init_val = copy;
@@ -2334,6 +2345,7 @@ static void lower_return(XiLower *l, AstNode *node) {
 
     if (ret->value_count == 1 && ret->values[0]) {
         val = xi_lower_expr(l, ret->values[0]);
+        stmt_set_missing_line(val, node->line);
         /* Tail-call detection: mark calls in return position so the emitter
          * uses OP_TAILCALL / OP_INVOKE_TAIL (constant-space recursion).
          *
@@ -2365,6 +2377,11 @@ static void lower_return(XiLower *l, AstNode *node) {
         return;
     }
 
+    int ret_line = node->line;
+    if (ret_line <= 0 && ret->value_count == 1 && ret->values[0])
+        ret_line = ret->values[0]->line;
+    if (l->cur_block && ret_line > 0)
+        l->cur_block->line = (uint32_t) ret_line;
     xi_block_set_return(l->cur_block, val);
     l->cur_block = NULL;
 }

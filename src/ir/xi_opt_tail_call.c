@@ -102,6 +102,7 @@ static XiBlock *insert_loop_header(XiFunc *f) {
     /* Header inherits entry's terminator and successors. */
     header->kind = entry->kind;
     header->control = entry->control;
+    header->line = entry->line;
     header->succs[0] = entry->succs[0];
     header->succs[1] = entry->succs[1];
 
@@ -139,6 +140,7 @@ static XiBlock *insert_loop_header(XiFunc *f) {
     /* Entry becomes a plain jump to header. */
     entry->kind = XI_BLOCK_PLAIN;
     entry->control = NULL;
+    entry->line = 0;
     entry->succs[0] = header;
     entry->succs[1] = NULL;
     xi_block_add_pred(header, entry);
@@ -210,6 +212,7 @@ static bool rewrite_tail_call(XiFunc *f, XiBlock *blk, XiValue *call, XiBlock *h
     /* Change block to PLAIN jumping to header. */
     blk->kind = XI_BLOCK_PLAIN;
     blk->control = NULL;
+    blk->line = 0;
     blk->succs[0] = header;
     blk->succs[1] = NULL;
 

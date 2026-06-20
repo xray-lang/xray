@@ -86,7 +86,7 @@ XR
 echo "=== Native Debug Smoke ==="
 echo "Binary: $XRAY"
 
-if ! "$XRAY" build --native -g --dump-link-command -o "$BIN" "$SRC" > "$BUILD_LOG" 2>&1; then
+if ! "$XRAY" build --native -g --rebuild --dump-link-command -o "$BIN" "$SRC" > "$BUILD_LOG" 2>&1; then
     fail "debug build failed"
     sed -n '1,80p' "$BUILD_LOG" >&2
     exit 1
@@ -152,7 +152,7 @@ let task = go worker(20)
 print(await task)
 XR
 
-if ! "$XRAY" build --native -g --dump-link-command -o "$CORO_BIN" "$CORO_SRC" > "$CORO_BUILD_LOG" 2>&1; then
+if ! "$XRAY" build --native -g --rebuild --dump-link-command -o "$CORO_BIN" "$CORO_SRC" > "$CORO_BUILD_LOG" 2>&1; then
     fail "coroutine debug build failed"
     sed -n '1,80p' "$CORO_BUILD_LOG" >&2
     exit 1
@@ -181,7 +181,7 @@ else
 fi
 
 if ! lldb --no-lldbinit -b \
-        -o "breakpoint set --file coro_debug_locals.xr --line 4" \
+        -o "breakpoint set --file coro_debug_locals.xr --line 5" \
         -o run \
         -o "frame variable seed" \
         -o "frame variable answer" \
@@ -195,8 +195,8 @@ fi
 if ! grep -Fq "coro_debug_locals_worker" "$CORO_LLDB_LOG"; then
     fail "coroutine lldb backtrace did not show worker coroutine resume"
 fi
-if ! grep -Fq "coro_debug_locals.xr:4" "$CORO_LLDB_LOG"; then
-    fail "coroutine lldb breakpoint/backtrace did not report coro_debug_locals.xr:4"
+if ! grep -Fq "coro_debug_locals.xr:5" "$CORO_LLDB_LOG"; then
+    fail "coroutine lldb breakpoint/backtrace did not report coro_debug_locals.xr:5"
 fi
 if ! grep -Eq "seed = 20" "$CORO_LLDB_LOG"; then
     fail "coroutine lldb did not expose source local seed=20"
@@ -204,8 +204,8 @@ fi
 if ! grep -Eq "answer = 21" "$CORO_LLDB_LOG"; then
     fail "coroutine lldb did not expose source local answer=21"
 fi
-if ! grep -Eq "doubled = (0|42)" "$CORO_LLDB_LOG"; then
-    fail "coroutine lldb did not expose source local doubled"
+if ! grep -Eq "doubled = 42" "$CORO_LLDB_LOG"; then
+    fail "coroutine lldb did not expose source local doubled=42"
 fi
 
 if [ "$FAIL" -ne 0 ]; then

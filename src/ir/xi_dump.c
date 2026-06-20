@@ -218,9 +218,12 @@ static void dump_block(FILE *out, const XiBlock *blk) {
             break;
         case XI_BLOCK_RETURN:
             if (blk->control)
-                fprintf(out, "    RET v%u\n", blk->control->id);
+                fprintf(out, "    RET v%u", blk->control->id);
             else
-                fprintf(out, "    RET\n");
+                fprintf(out, "    RET");
+            if (blk->line > 0)
+                fprintf(out, " L%u", blk->line);
+            fprintf(out, "\n");
             break;
         case XI_BLOCK_UNREACHABLE:
             fprintf(out, "    UNREACHABLE\n");
