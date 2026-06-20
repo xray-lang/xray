@@ -500,6 +500,7 @@ Xray is statically typed; every expression has a determined type at compile time
 | Union | `A \| B \| ...` |
 | Tuple | `(T1, T2, ...)` |
 | Function | `fn(T1, T2) -> R` |
+| FFI / C ABI | `RawPtr<T>`, `RawMut<T>`, `CFn<(T) -> R>`, `uintsize`, `intsize` |
 | Class / Struct / Interface | user-defined (nominal) |
 | Enum | user-defined (incl. ADT enum, see §5.6) |
 | Type alias | `type Name = SomeType` |
@@ -583,6 +584,36 @@ let r: () = log("hi")                        // allowed; r is a Unit value
 
 - A function omitting its return type is equivalent to `-> ()`.
 - `void` is not a type name: `fn f() -> void` is rejected (`E0804`); use `-> ()` or omit the return type to indicate no return value.
+
+#### 2.3.6 FFI Scalars and C ABI Boundary Types
+
+Xray's C FFI uses explicit boundary types so ordinary xray objects are not implicitly interpreted as C data:
+
+| Type | C ABI meaning | Notes |
+|--|--|--|
+| `uintsize` | `size_t` | `uint64` on the currently supported targets |
+| `intsize` | `ptrdiff_t` / platform signed width | `int64` on the currently supported targets |
+| `RawPtr<T>` | `const void *` boundary value | read-only raw pointer; `T` gives the xray-side dereference/index width |
+| `RawMut<T>` | `void *` boundary value | mutable raw pointer; assignable where `RawPtr<T>` is expected |
+| `CFn<(A, B) -> R>` | C ABI function pointer | passes an xray function as a C callback argument to an `@extern` function |
+
+Raw pointer values may be stored, passed, compared, and offset with `offset(i)` using element-width scaling in safe code; actually reading or writing foreign memory must be inside `unsafe { }`:
+
+```xray
+@extern("C") fn malloc(n: uintsize) -> RawMut<uint8>
+@extern("C") fn free(p: RawMut<uint8>)
+
+let p = unsafe { malloc(4) }
+unsafe {
+    p[0] = 42
+    print(p.deref())
+    free(p)
+}
+```
+
+`RawPtr<T>` is read-only; writes require `RawMut<T>`. `unsafe` does not bypass that type rule. Raw pointer access performs no null or bounds checks, so the caller must guarantee address validity, lifetime, alignment, and aliasing correctness.
+
+`CFn<(...) -> ...>` is not an ordinary xray closure type. The current VM/AOT backends support passing module-level, noncapturing xray functions with an exact signature match to C; capturing closures, anonymous functions, and `@extern` functions themselves cannot be used as `CFn` callback arguments.
 
 ### 2.4 Composite Types
 
@@ -906,7 +937,7 @@ Full precedence table (highest → lowest; operators at the same level share ass
 | Level | Operators | Assoc. | Description |
 |--|--|--|--|
 | 17 | `(...)` `[...]` `.x` `?.x` `?[...]` `f()` `e!` | left | postfix: grouping, index, member, optional chain, call, force unwrap |
-| 16 | prefix `-` `+` `!` `~` `new` `move` `await` `go` | right | unary prefix + coroutine operators (`++` / `--` are postfix only) |
+| 16 | prefix `-` `+` `!` `~` `new` `move` `await` `go` `unsafe` | right | unary prefix + coroutine/FFI boundary operators (`++` / `--` are postfix only) |
 | 15 | `as` `is` | left | type cast / check (`as T?` is the safe form via a nullable target type, not a separate `as?` operator) |
 | 14 | `*` `/` `%` | left | multiplication / division / modulo |
 | 13 | `+` `-` | left | addition / subtraction |
@@ -934,6 +965,7 @@ UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
             | 'move' UnaryExpr
             | 'await' ('all' | 'any')? UnaryExpr
             | 'go' (Block | PostfixExpr)
+            | 'unsafe' Block
             | PostfixExpr
 ```
 
@@ -951,6 +983,24 @@ UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
 - Cannot be inlined within a binary expression (`a + x++`, `f(x++)`, `x++ + 1` etc.); the parser reports "++/-- must be standalone statement". `let y = x++` is allowed (assignment on the immediate left), and `y` receives the post-update value.
 - Applies only to lvalues (variables, fields, indexes).
 - Floating-point values **do not support** `++`/`--` (compile error).
+
+#### `unsafe { }`
+
+`unsafe { ... }` is an explicit FFI/raw-pointer boundary expression. Inside the block, xray permits calls to `@extern` functions, reads/writes through `RawPtr<T>` / `RawMut<T>` foreign memory, and `deref()` calls that dereference raw pointers.
+
+```xray
+@extern("C") fn malloc(n: uintsize) -> RawMut<uint8>
+@extern("C") fn free(p: RawMut<uint8>)
+
+let p = unsafe { malloc(1) }      // the final expression is the block result
+unsafe {
+    p[0] = 7                      // RawMut writes must be inside unsafe
+    print(p.deref())              // dereference must be inside unsafe
+    free(p)                       // @extern calls must be inside unsafe
+}
+```
+
+`unsafe` does not change the expression's result type; in a multi-statement block, the trailing expression statement yields the block value, otherwise the result is `()`. `unsafe` also does not disable ordinary type checking: `RawPtr<T>` is still read-only, and writes require `RawMut<T>`; null pointers, bounds, lifetimes, and alignment remain the caller's responsibility.
 
 ### 3.3 Binary Expressions
 
@@ -1794,13 +1844,15 @@ Constraints:
 ### 5.2 `fn` function declaration
 
 ```ebnf
-FnDecl ::= AttrList? Modifier* 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
+FnDecl ::= AttrList? Modifier* 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? FnBody
 ParamList ::= Param (',' Param)*
 Param     ::= Modifier* Identifier ':' Type ('=' DefaultValue)?
             | '...' Identifier ':' Type
 Modifier  ::= 'in' | 'ref'
 ReturnType ::= '->' Type
             |  '->' '(' Type (',' Type)+ ')'   // tuple return
+FnBody ::= Block
+         | <empty>                              // only @extern functions may omit a body
 TypeParams ::= '<' Identifier (',' Identifier)* '>'
 AttrList ::= ('@' Identifier ('(' AttrArgList? ')')?)*
 ```
@@ -1932,6 +1984,47 @@ greet()                   // must be called explicitly
 - `fn main()` has no special meaning; call `main()` explicitly if desired.
 - Top-level `return` is forbidden (compile error `E0306`).
 - Multi-file projects specify the entry via the `entry` field of `xray.toml`; the corresponding file follows the script execution rules above.
+
+#### 5.2.9 `@extern` C FFI Functions
+
+`@extern("C")` declares an external C ABI function. An external function has no xray function body, and call sites must be written explicitly inside `unsafe { }`:
+
+```xray
+@extern("C") fn malloc(n: uintsize) -> RawMut<uint8>
+@extern("C") fn free(p: RawMut<uint8>)
+@extern("C") @dylib("m") fn cos(x: float64) -> float64
+
+let p = unsafe { malloc(4) }
+unsafe {
+    p[0] = 42
+    print(cos(0.0))
+    free(p)
+}
+```
+
+Rules:
+- `@extern("C")` currently denotes the default C ABI; omitting the string is also treated as C ABI.
+- `@dylib("name")` selects the dynamic library that provides the symbol; without it, resolution uses the default process/system lookup path.
+- An `@extern` function may only declare its signature and cannot have a `{ }` body; every non-`@extern` function must have a block body.
+- Boundary types that are aligned across the VM/AOT backends include `bool`, sized integers, `float32` / `float64`, `uintsize` / `intsize`, `RawPtr<T>`, `RawMut<T>`, and `()` returns.
+- C callback parameters must use `CFn<(A, B) -> R>`, not the ordinary xray function type `(A, B) -> R`.
+- A current `CFn` argument must be a module-level, noncapturing xray function with an exact signature match; anonymous functions, capturing closures, and `@extern` functions themselves are rejected.
+
+```xray
+@extern("C") fn bsearch(
+    key: RawPtr<uint8>,
+    base: RawPtr<uint8>,
+    count: uintsize,
+    size: uintsize,
+    cmp: CFn<(RawPtr<uint8>, RawPtr<uint8>) -> int32>
+) -> RawPtr<uint8>
+
+fn zeroCmp(a: RawPtr<uint8>, b: RawPtr<uint8>) -> int32 {
+    return 0
+}
+
+// zeroCmp is a module-level noncapturing function and can be used as a CFn callback.
+```
 
 ### 5.3 `class` declaration
 
@@ -4973,7 +5066,9 @@ Type ::= UnionType
 UnionType ::= IntersectionType ('|' IntersectionType)*
 IntersectionType ::= NullableType
 NullableType ::= PrimaryType '?'?
-PrimaryType ::= NamedType | FunctionType | TupleType | ObjectType
+PrimaryType ::= FFIPointerType | CFunctionType | NamedType | FunctionType | TupleType | ObjectType
+FFIPointerType ::= ('RawPtr' | 'RawMut') '<' Type '>'
+CFunctionType ::= 'CFn' '<' FunctionType '>'
 NamedType   ::= QualifiedIdent TypeArgs?
 FunctionType ::= '(' TypeList? ')' '->' Type
 TupleType   ::= '(' Type (',' Type)+ ')'
@@ -5014,6 +5109,7 @@ UnaryExpr ::= ('-' | '+' | '!' | '~' | '++' | '--') UnaryExpr
            |  'move' UnaryExpr
            |  'await' ('all' | 'any' | 'anySuccess')? UnaryExpr
            |  'go' (Block | PostfixExpr)
+           |  'unsafe' Block
            |  PostfixExpr
 
 PostfixExpr ::= Primary PostfixOp*
@@ -5156,7 +5252,8 @@ BindingPattern ::= Identifier
                 |  '(' BindingPattern (',' BindingPattern)+ ','? ')'
                 |  '{' Identifier (',' Identifier)* ','? '}'
 
-FnDecl ::= AttrList? Modifier* 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
+FnDecl ::= AttrList? Modifier* 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? FnBody
+FnBody ::= Block | ';'?                         // empty body is only allowed for @extern
 ParamList ::= Param (',' Param)* ','?
 Param     ::= Modifier* Identifier ':' Type ('=' Expression)?
            |  '...' Identifier ':' Type
@@ -5207,7 +5304,7 @@ ImportMembers ::= '{' ImportMember (',' ImportMember)* ','? '}'
 ImportMember  ::= Identifier ('as' Identifier)?
 ImportModule  ::= StringLiteral | Identifier ('/' Identifier)?
 
-AttrList ::= ('@' Identifier ('(' ArgList? ')')?)*
+AttrList ::= ('@' Identifier ('(' ArgList? ')')?)*  // e.g. @extern("C"), @dylib("m"), @repr(C)
 
 OperatorToken ::= '+' | '-' | '*' | '/' | '%'
                |  '&' | '|' | '^'

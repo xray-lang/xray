@@ -91,13 +91,15 @@ let { name, age } = { name: "Alice", age: 30 }
 ### 5.2 `fn` 函数声明
 
 ```ebnf
-FnDecl ::= AttrList? Modifier* 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
+FnDecl ::= AttrList? Modifier* 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? FnBody
 ParamList ::= Param (',' Param)*
 Param     ::= Modifier* Identifier ':' Type ('=' DefaultValue)?
             | '...' Identifier ':' Type
 Modifier  ::= 'in' | 'ref'
 ReturnType ::= '->' Type
             |  '->' '(' Type (',' Type)+ ')'   // 元组返回
+FnBody ::= Block
+         | <empty>                              // 仅 @extern 函数可省略函数体
 TypeParams ::= '<' Identifier (',' Identifier)* '>'
 AttrList ::= ('@' Identifier ('(' AttrArgList? ')')?)*
 ```
@@ -229,6 +231,47 @@ greet()                   // 必须显式调用
 - `fn main()` 没有任何特殊含义；如需手动调用，写 `main()`。
 - 顶层不允许 `return`（编译错误 `E0306`）。
 - 多文件项目的入口由 `xray.toml` 的 `entry` 字段指定，对应文件按上述脚本规则执行。
+
+#### 5.2.9 `@extern` C FFI 函数
+
+`@extern("C")` 声明外部 C ABI 函数。外部函数没有 xray 函数体，调用点必须显式写在 `unsafe { }` 内：
+
+```xray
+@extern("C") fn malloc(n: uintsize) -> RawMut<uint8>
+@extern("C") fn free(p: RawMut<uint8>)
+@extern("C") @dylib("m") fn cos(x: float64) -> float64
+
+let p = unsafe { malloc(4) }
+unsafe {
+    p[0] = 42
+    print(cos(0.0))
+    free(p)
+}
+```
+
+规则：
+- `@extern("C")` 当前表示默认 C ABI；省略字符串时也按 C ABI 处理。
+- `@dylib("name")` 指定符号所在动态库；未指定时从默认进程/系统查找路径解析。
+- `@extern` 函数只能声明签名，不能带 `{ }` 函数体；非 `@extern` 函数必须带块体。
+- 跨 VM/AOT 后端已收口的边界类型包括 `bool`、精确整数、`float32` / `float64`、`uintsize` / `intsize`、`RawPtr<T>`、`RawMut<T>`，以及 `()` 返回。
+- C 回调参数必须写成 `CFn<(A, B) -> R>`，不能使用普通 xray 函数类型 `(A, B) -> R`。
+- 当前 `CFn` 实参必须是模块级、非捕获、签名精确匹配的 xray 函数；匿名函数、捕获闭包和 `@extern` 函数本身会被拒绝。
+
+```xray
+@extern("C") fn bsearch(
+    key: RawPtr<uint8>,
+    base: RawPtr<uint8>,
+    count: uintsize,
+    size: uintsize,
+    cmp: CFn<(RawPtr<uint8>, RawPtr<uint8>) -> int32>
+) -> RawPtr<uint8>
+
+fn zeroCmp(a: RawPtr<uint8>, b: RawPtr<uint8>) -> int32 {
+    return 0
+}
+
+// zeroCmp 是模块级非捕获函数，可作为 CFn 回调。
+```
 
 ### 5.3 `class` 声明
 
@@ -870,13 +913,15 @@ Constraints:
 ### 5.2 `fn` function declaration
 
 ```ebnf
-FnDecl ::= AttrList? Modifier* 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
+FnDecl ::= AttrList? Modifier* 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? FnBody
 ParamList ::= Param (',' Param)*
 Param     ::= Modifier* Identifier ':' Type ('=' DefaultValue)?
             | '...' Identifier ':' Type
 Modifier  ::= 'in' | 'ref'
 ReturnType ::= '->' Type
             |  '->' '(' Type (',' Type)+ ')'   // tuple return
+FnBody ::= Block
+         | <empty>                              // only @extern functions may omit a body
 TypeParams ::= '<' Identifier (',' Identifier)* '>'
 AttrList ::= ('@' Identifier ('(' AttrArgList? ')')?)*
 ```
@@ -1008,6 +1053,47 @@ greet()                   // must be called explicitly
 - `fn main()` has no special meaning; call `main()` explicitly if desired.
 - Top-level `return` is forbidden (compile error `E0306`).
 - Multi-file projects specify the entry via the `entry` field of `xray.toml`; the corresponding file follows the script execution rules above.
+
+#### 5.2.9 `@extern` C FFI Functions
+
+`@extern("C")` declares an external C ABI function. An external function has no xray function body, and call sites must be written explicitly inside `unsafe { }`:
+
+```xray
+@extern("C") fn malloc(n: uintsize) -> RawMut<uint8>
+@extern("C") fn free(p: RawMut<uint8>)
+@extern("C") @dylib("m") fn cos(x: float64) -> float64
+
+let p = unsafe { malloc(4) }
+unsafe {
+    p[0] = 42
+    print(cos(0.0))
+    free(p)
+}
+```
+
+Rules:
+- `@extern("C")` currently denotes the default C ABI; omitting the string is also treated as C ABI.
+- `@dylib("name")` selects the dynamic library that provides the symbol; without it, resolution uses the default process/system lookup path.
+- An `@extern` function may only declare its signature and cannot have a `{ }` body; every non-`@extern` function must have a block body.
+- Boundary types that are aligned across the VM/AOT backends include `bool`, sized integers, `float32` / `float64`, `uintsize` / `intsize`, `RawPtr<T>`, `RawMut<T>`, and `()` returns.
+- C callback parameters must use `CFn<(A, B) -> R>`, not the ordinary xray function type `(A, B) -> R`.
+- A current `CFn` argument must be a module-level, noncapturing xray function with an exact signature match; anonymous functions, capturing closures, and `@extern` functions themselves are rejected.
+
+```xray
+@extern("C") fn bsearch(
+    key: RawPtr<uint8>,
+    base: RawPtr<uint8>,
+    count: uintsize,
+    size: uintsize,
+    cmp: CFn<(RawPtr<uint8>, RawPtr<uint8>) -> int32>
+) -> RawPtr<uint8>
+
+fn zeroCmp(a: RawPtr<uint8>, b: RawPtr<uint8>) -> int32 {
+    return 0
+}
+
+// zeroCmp is a module-level noncapturing function and can be used as a CFn callback.
+```
 
 ### 5.3 `class` declaration
 

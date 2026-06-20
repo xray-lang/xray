@@ -501,6 +501,7 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 | Union | `A \| B \| ...` |
 | Tuple | `(T1, T2, ...)` |
 | Function | `fn(T1, T2) -> R` |
+| FFI / C ABI | `RawPtr<T>`、`RawMut<T>`、`CFn<(T) -> R>`、`uintsize`、`intsize` |
 | Class / Struct / Interface | 用户定义（nominal） |
 | Enum | 用户定义（含 ADT enum，见 §5.6） |
 | Type alias | `type Name = SomeType` |
@@ -584,6 +585,36 @@ let r: () = log("hi")                        // 允许；r 是 Unit 值
 
 - 一个函数省略返回类型等同于 `-> ()`。
 - `void` 不是类型名：写 `fn f() -> void` 会被拒绝（`E0804`）；无返回值使用 `-> ()` 或省略返回类型。
+
+#### 2.3.6 FFI 标量与 C ABI 边界类型
+
+xray 的 C FFI 使用一组显式边界类型，避免把普通 xray 对象隐式解释成 C 数据：
+
+| 类型 | C ABI 含义 | 备注 |
+|--|--|--|
+| `uintsize` | `size_t` | 当前支持目标上为 `uint64` |
+| `intsize` | `ptrdiff_t` / 平台有符号宽度 | 当前支持目标上为 `int64` |
+| `RawPtr<T>` | `const void *` 边界值 | 只读裸指针；`T` 用于 xray 端解引用/索引宽度 |
+| `RawMut<T>` | `void *` 边界值 | 可写裸指针；可传给需要 `RawPtr<T>` 的位置 |
+| `CFn<(A, B) -> R>` | C ABI 函数指针 | 用于把 xray 函数作为 C 回调传入 `@extern` 函数 |
+
+裸指针值可以安全地保存、传递、比较和用 `offset(i)` 做按元素宽度缩放的指针偏移；真正读写外部内存必须写在 `unsafe { }` 内：
+
+```xray
+@extern("C") fn malloc(n: uintsize) -> RawMut<uint8>
+@extern("C") fn free(p: RawMut<uint8>)
+
+let p = unsafe { malloc(4) }
+unsafe {
+    p[0] = 42
+    print(p.deref())
+    free(p)
+}
+```
+
+`RawPtr<T>` 只能读取，写入必须使用 `RawMut<T>`；`unsafe` 不会绕过这个类型规则。裸指针访问不做空指针或边界检查，调用方必须保证地址、生命周期、对齐和别名规则正确。
+
+`CFn<(...) -> ...>` 不是普通 xray 闭包类型。当前 VM/AOT 后端支持把模块级、非捕获、签名精确匹配的 xray 函数传给 C；捕获闭包、匿名函数和 `@extern` 函数本身不能作为 `CFn` 回调实参。
 
 ### 2.4 复合类型
 
@@ -907,7 +938,7 @@ Reflect.getAllTypes()       // 所有已注册类型
 | 级 | 运算符 | 结合性 | 说明 |
 |--|--|--|--|
 | 17 | `(...)` `[...]` `.x` `?.x` `?[...]` `f()` `e!` | 左 | 后缀：分组、索引、成员、可选链、调用、强制解包 |
-| 16 | 前缀 `-` `+` `!` `~` `new` `move` `await` `go` | 右 | 一元前缀 + 协程操作（`++` / `--` 仅后缀） |
+| 16 | 前缀 `-` `+` `!` `~` `new` `move` `await` `go` `unsafe` | 右 | 一元前缀 + 协程/FFI 边界操作（`++` / `--` 仅后缀） |
 | 15 | `as` `is` | 左 | 类型转换 / 检查（`as T?` 安全形式靠目标类型可空，非独立 `as?` 运算符） |
 | 14 | `*` `/` `%` | 左 | 乘除取模 |
 | 13 | `+` `-` | 左 | 加减 |
@@ -935,6 +966,7 @@ UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
             | 'move' UnaryExpr
             | 'await' ('all' | 'any')? UnaryExpr
             | 'go' (Block | PostfixExpr)
+            | 'unsafe' Block
             | PostfixExpr
 ```
 
@@ -952,6 +984,24 @@ UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
 - 不能内联在二元表达式中（如 `a + x++`、`f(x++)`、`x++ + 1`）；解析器会报"++/-- must be standalone statement"。允许 `let y = x++`（赋值左侧紧邻），此时 `y` 取到的是修改后的值。
 - 仅作用于左值（变量、字段、索引）。
 - 浮点数**不支持** `++`/`--`（编译错误）。
+
+#### `unsafe { }`
+
+`unsafe { ... }` 是显式 FFI/裸指针边界表达式。块内允许调用 `@extern` 函数、读取/写入 `RawPtr<T>` / `RawMut<T>` 指向的外部内存，以及调用需要裸指针解引用的 `deref()`。
+
+```xray
+@extern("C") fn malloc(n: uintsize) -> RawMut<uint8>
+@extern("C") fn free(p: RawMut<uint8>)
+
+let p = unsafe { malloc(1) }      // 块的最后一个表达式作为结果
+unsafe {
+    p[0] = 7                      // RawMut 写入必须在 unsafe 内
+    print(p.deref())              // 解引用必须在 unsafe 内
+    free(p)                       // @extern 调用必须在 unsafe 内
+}
+```
+
+`unsafe` 不改变表达式的结果类型；多语句块的最后一个表达式语句产生块值，否则结果为 `()`。`unsafe` 也不关闭普通类型检查：`RawPtr<T>` 仍不可写，`RawMut<T>` 才能写入；空指针、越界、生命周期和对齐由调用方负责。
 
 ### 3.3 二元表达式
 
@@ -1793,13 +1843,15 @@ let { name, age } = { name: "Alice", age: 30 }
 ### 5.2 `fn` 函数声明
 
 ```ebnf
-FnDecl ::= AttrList? Modifier* 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
+FnDecl ::= AttrList? Modifier* 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? FnBody
 ParamList ::= Param (',' Param)*
 Param     ::= Modifier* Identifier ':' Type ('=' DefaultValue)?
             | '...' Identifier ':' Type
 Modifier  ::= 'in' | 'ref'
 ReturnType ::= '->' Type
             |  '->' '(' Type (',' Type)+ ')'   // 元组返回
+FnBody ::= Block
+         | <empty>                              // 仅 @extern 函数可省略函数体
 TypeParams ::= '<' Identifier (',' Identifier)* '>'
 AttrList ::= ('@' Identifier ('(' AttrArgList? ')')?)*
 ```
@@ -1931,6 +1983,47 @@ greet()                   // 必须显式调用
 - `fn main()` 没有任何特殊含义；如需手动调用，写 `main()`。
 - 顶层不允许 `return`（编译错误 `E0306`）。
 - 多文件项目的入口由 `xray.toml` 的 `entry` 字段指定，对应文件按上述脚本规则执行。
+
+#### 5.2.9 `@extern` C FFI 函数
+
+`@extern("C")` 声明外部 C ABI 函数。外部函数没有 xray 函数体，调用点必须显式写在 `unsafe { }` 内：
+
+```xray
+@extern("C") fn malloc(n: uintsize) -> RawMut<uint8>
+@extern("C") fn free(p: RawMut<uint8>)
+@extern("C") @dylib("m") fn cos(x: float64) -> float64
+
+let p = unsafe { malloc(4) }
+unsafe {
+    p[0] = 42
+    print(cos(0.0))
+    free(p)
+}
+```
+
+规则：
+- `@extern("C")` 当前表示默认 C ABI；省略字符串时也按 C ABI 处理。
+- `@dylib("name")` 指定符号所在动态库；未指定时从默认进程/系统查找路径解析。
+- `@extern` 函数只能声明签名，不能带 `{ }` 函数体；非 `@extern` 函数必须带块体。
+- 跨 VM/AOT 后端已收口的边界类型包括 `bool`、精确整数、`float32` / `float64`、`uintsize` / `intsize`、`RawPtr<T>`、`RawMut<T>`，以及 `()` 返回。
+- C 回调参数必须写成 `CFn<(A, B) -> R>`，不能使用普通 xray 函数类型 `(A, B) -> R`。
+- 当前 `CFn` 实参必须是模块级、非捕获、签名精确匹配的 xray 函数；匿名函数、捕获闭包和 `@extern` 函数本身会被拒绝。
+
+```xray
+@extern("C") fn bsearch(
+    key: RawPtr<uint8>,
+    base: RawPtr<uint8>,
+    count: uintsize,
+    size: uintsize,
+    cmp: CFn<(RawPtr<uint8>, RawPtr<uint8>) -> int32>
+) -> RawPtr<uint8>
+
+fn zeroCmp(a: RawPtr<uint8>, b: RawPtr<uint8>) -> int32 {
+    return 0
+}
+
+// zeroCmp 是模块级非捕获函数，可作为 CFn 回调。
+```
 
 ### 5.3 `class` 声明
 
@@ -4972,7 +5065,9 @@ Type ::= UnionType
 UnionType ::= IntersectionType ('|' IntersectionType)*
 IntersectionType ::= NullableType
 NullableType ::= PrimaryType '?'?
-PrimaryType ::= NamedType | FunctionType | TupleType | ObjectType
+PrimaryType ::= FFIPointerType | CFunctionType | NamedType | FunctionType | TupleType | ObjectType
+FFIPointerType ::= ('RawPtr' | 'RawMut') '<' Type '>'
+CFunctionType ::= 'CFn' '<' FunctionType '>'
 NamedType   ::= QualifiedIdent TypeArgs?
 FunctionType ::= '(' TypeList? ')' '->' Type
 TupleType   ::= '(' Type (',' Type)+ ')'
@@ -5013,6 +5108,7 @@ UnaryExpr ::= ('-' | '+' | '!' | '~' | '++' | '--') UnaryExpr
            |  'move' UnaryExpr
            |  'await' ('all' | 'any' | 'anySuccess')? UnaryExpr
            |  'go' (Block | PostfixExpr)
+           |  'unsafe' Block
            |  PostfixExpr
 
 PostfixExpr ::= Primary PostfixOp*
@@ -5155,7 +5251,8 @@ BindingPattern ::= Identifier
                 |  '(' BindingPattern (',' BindingPattern)+ ','? ')'
                 |  '{' Identifier (',' Identifier)* ','? '}'
 
-FnDecl ::= AttrList? Modifier* 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
+FnDecl ::= AttrList? Modifier* 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? FnBody
+FnBody ::= Block | ';'?                         // 空函数体仅允许 @extern
 ParamList ::= Param (',' Param)* ','?
 Param     ::= Modifier* Identifier ':' Type ('=' Expression)?
            |  '...' Identifier ':' Type
@@ -5206,7 +5303,7 @@ ImportMembers ::= '{' ImportMember (',' ImportMember)* ','? '}'
 ImportMember  ::= Identifier ('as' Identifier)?
 ImportModule  ::= StringLiteral | Identifier ('/' Identifier)?
 
-AttrList ::= ('@' Identifier ('(' ArgList? ')')?)*
+AttrList ::= ('@' Identifier ('(' ArgList? ')')?)*  // 例如 @extern("C")、@dylib("m")、@repr(C)
 
 OperatorToken ::= '+' | '-' | '*' | '/' | '%'
                |  '&' | '|' | '^'
