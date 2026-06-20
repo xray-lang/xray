@@ -245,7 +245,10 @@ static bool xaot_cli_link_add_runtime_object(XaotCliLinkCommand *cmd, const char
 
 static bool xaot_cli_stdlib_object_needs_aot_core(const char *value) {
     return value && (strncmp(value, "crypto.", 7) == 0 || strncmp(value, "regex.", 6) == 0 ||
-                     strcmp(value, "math.random") == 0 || strcmp(value, "math.randomInt") == 0);
+                     strcmp(value, "math.random") == 0 || strcmp(value, "math.randomInt") == 0 ||
+                     strcmp(value, "time.now") == 0 || strcmp(value, "time.monotonic") == 0 ||
+                     strcmp(value, "time.nanos") == 0 || strcmp(value, "time.micros") == 0 ||
+                     strcmp(value, "time.clock") == 0);
 }
 
 static bool xaot_cli_link_add_stdlib_object(XaotCliLinkCommand *cmd, const char *value, char *err,

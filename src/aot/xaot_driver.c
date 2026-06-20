@@ -103,7 +103,7 @@ static XaotStdlibSet stdlib_flag_for_import(const char *name) {
         XaotStdlibSet flag;
     } table[] = {
         {"regex", XAOT_STDLIB_REGEX},   {"math", XAOT_STDLIB_MATH},
-        {"time", XAOT_STDLIB_TIME},     {"datetime", XAOT_STDLIB_TIME},
+        {"time", XAOT_STDLIB_TIME},     {"datetime", XAOT_STDLIB_DATETIME},
         {"path", XAOT_STDLIB_PATH},     {"io", XAOT_STDLIB_IO},
         {"os", XAOT_STDLIB_OS},         {"net", XAOT_STDLIB_NET},
         {"http", XAOT_STDLIB_HTTP},     {"crypto", XAOT_STDLIB_CRYPTO},
@@ -141,6 +141,12 @@ static void features_add_stdlib_member(XaotFeatureSet *fs, const char *module, c
     if (n <= 0 || n >= (int) sizeof(symbol))
         return;
     features_add_stdlib_symbol(fs, symbol);
+}
+
+static bool stdlib_symbol_is_time_query(const char *symbol) {
+    return symbol && (strcmp(symbol, "time.now") == 0 || strcmp(symbol, "time.monotonic") == 0 ||
+                      strcmp(symbol, "time.nanos") == 0 || strcmp(symbol, "time.micros") == 0 ||
+                      strcmp(symbol, "time.clock") == 0);
 }
 
 /* Unwrap value-identity ops (box/unbox/copy/move) to the underlying value,
@@ -312,9 +318,9 @@ static void scan_func_features(XiFunc *f, XaotFeatureSet *fs) {
                         /* net/http imply netpoll runtime */
                         if (flag & (XAOT_STDLIB_NET | XAOT_STDLIB_HTTP))
                             fs->need_netpoll = true;
-                        /* time implies timer subsystem */
-                        if (flag & XAOT_STDLIB_TIME)
-                            fs->need_timer = true;
+                        /* time.sleep / select-after mark timer use precisely;
+                         * importing time for pure query helpers stays
+                         * freestanding. */
                         /* Member-import form (e.g. `import { now } from "time"`):
                          * the import-ref carries the member name directly. Core
                          * math is excluded; it is tracked via XI_CALL_BUILTIN. */
@@ -351,15 +357,25 @@ static bool add_stdlib_manifest_entries(XaotLinkManifest *manifest, XaotStdlibSe
         XaotStdlibSet flag;
         const char *name;
     } table[] = {
-        {XAOT_STDLIB_JSON, "json"}, {XAOT_STDLIB_TIME, "time"}, {XAOT_STDLIB_IO, "io"},
-        {XAOT_STDLIB_OS, "os"},     {XAOT_STDLIB_NET, "net"},   {XAOT_STDLIB_HTTP, "http"},
-        {XAOT_STDLIB_CSV, "csv"},   {XAOT_STDLIB_TOML, "toml"}, {XAOT_STDLIB_YAML, "yaml"},
+        {XAOT_STDLIB_JSON, "json"}, {XAOT_STDLIB_DATETIME, "datetime"}, {XAOT_STDLIB_IO, "io"},
+        {XAOT_STDLIB_OS, "os"},     {XAOT_STDLIB_NET, "net"},           {XAOT_STDLIB_HTTP, "http"},
+        {XAOT_STDLIB_CSV, "csv"},   {XAOT_STDLIB_TOML, "toml"},         {XAOT_STDLIB_YAML, "yaml"},
         {XAOT_STDLIB_XML, "xml"},
     };
 
     for (uint32_t i = 0; i < (uint32_t) (sizeof(table) / sizeof(table[0])); i++) {
         if ((stdlib & table[i].flag) &&
             !xaot_link_manifest_add_unique(manifest, XAOT_LINK_STDLIB_OBJECT, table[i].name))
+            return false;
+    }
+    return true;
+}
+
+static bool add_runtime_time_manifest_entries(XaotLinkManifest *manifest,
+                                              const XaotFeatureSet *features) {
+    for (uint16_t i = 0; i < features->n_stdlib_symbols; i++) {
+        if (strcmp(features->stdlib_symbols[i], "time.sleep") == 0 &&
+            !xaot_link_manifest_add_unique(manifest, XAOT_LINK_STDLIB_OBJECT, "time"))
             return false;
     }
     return true;
@@ -383,12 +399,12 @@ static bool add_stdlib_core_object_manifest_entries(XaotLinkManifest *manifest,
              strcmp(symbol, "crypto.sha1") == 0 || strcmp(symbol, "crypto.sha256") == 0 ||
              strcmp(symbol, "crypto.sha512") == 0 || strcmp(symbol, "math.random") == 0 ||
              strcmp(symbol, "math.randomInt") == 0 || strcmp(symbol, "regex.compile") == 0 ||
-             strcmp(symbol, "regex.count") == 0 || strcmp(symbol, "regex.find") == 0 ||
-             strcmp(symbol, "regex.findAll") == 0 || strcmp(symbol, "regex.findGroup") == 0 ||
-             strcmp(symbol, "regex.findText") == 0 || strcmp(symbol, "regex.fullFind") == 0 ||
-             strcmp(symbol, "regex.isValid") == 0 || strcmp(symbol, "regex.replace") == 0 ||
-             strcmp(symbol, "regex.replaceAll") == 0 || strcmp(symbol, "regex.split") == 0 ||
-             strcmp(symbol, "regex.test") == 0) &&
+             stdlib_symbol_is_time_query(symbol) || strcmp(symbol, "regex.count") == 0 ||
+             strcmp(symbol, "regex.find") == 0 || strcmp(symbol, "regex.findAll") == 0 ||
+             strcmp(symbol, "regex.findGroup") == 0 || strcmp(symbol, "regex.findText") == 0 ||
+             strcmp(symbol, "regex.fullFind") == 0 || strcmp(symbol, "regex.isValid") == 0 ||
+             strcmp(symbol, "regex.replace") == 0 || strcmp(symbol, "regex.replaceAll") == 0 ||
+             strcmp(symbol, "regex.split") == 0 || strcmp(symbol, "regex.test") == 0) &&
             !xaot_link_manifest_add_unique(manifest, XAOT_LINK_STDLIB_OBJECT, symbol))
             return false;
     }
@@ -398,7 +414,7 @@ static bool add_stdlib_core_object_manifest_entries(XaotLinkManifest *manifest,
 static bool stdlib_set_needs_runtime_provider(XaotStdlibSet stdlib) {
     return (stdlib & ~(XAOT_STDLIB_MATH | XAOT_STDLIB_PATH | XAOT_STDLIB_ENCODING |
                        XAOT_STDLIB_BASE64 | XAOT_STDLIB_URL | XAOT_STDLIB_COMPRESS |
-                       XAOT_STDLIB_CRYPTO | XAOT_STDLIB_REGEX)) != 0;
+                       XAOT_STDLIB_CRYPTO | XAOT_STDLIB_REGEX | XAOT_STDLIB_TIME)) != 0;
 }
 
 static bool build_link_manifest(const XaotFeatureSet *features, XaotLinkManifest *manifest) {
@@ -476,6 +492,8 @@ static bool build_link_manifest(const XaotFeatureSet *features, XaotLinkManifest
     }
 
     if (!add_stdlib_manifest_entries(manifest, features->stdlib))
+        goto done;
+    if (!add_runtime_time_manifest_entries(manifest, features))
         goto done;
     if (!add_stdlib_core_object_manifest_entries(manifest, features))
         goto done;
