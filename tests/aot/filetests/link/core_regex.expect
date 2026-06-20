@@ -1,8 +1,8 @@
 contains=xaot-plan v0
 contains="generated_c_files": ["<aot-generated-c>"]
 contains="runtime_objects": []
-contains="stdlib_objects": ["regex.isValid", "regex.compile", "regex.test", "regex.count", "regex.findText", "regex.findGroup"]
-contains="stdlib_symbols": ["regex.escape", "regex.isValid", "regex.compile", "regex.test", "regex.count", "regex.findText", "regex.findGroup"]
+contains="stdlib_objects": ["regex.isValid", "regex.compile", "regex.test", "regex.count", "regex.findText", "regex.findGroup", "regex.replace", "regex.replaceAll"]
+contains="stdlib_symbols": ["regex.escape", "regex.isValid", "regex.compile", "regex.test", "regex.count", "regex.findText", "regex.findGroup", "regex.replace", "regex.replaceAll"]
 contains="system_libs": ["m"]
 contains="defines": ["XRT_IMPL", "XRT_ENABLE_REGEX"]
 not_contains="runtime_objects": ["xray_core"]
@@ -15,4 +15,6 @@ c_contains=xrt_regex_test(
 c_contains=xrt_regex_count(
 c_contains=xrt_regex_find_text(
 c_contains=xrt_regex_find_group(
+c_contains=xrt_regex_replace(
+c_contains=xrt_regex_replace_all(
 c_not_contains=xrt_method_
