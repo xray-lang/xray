@@ -38,6 +38,9 @@ XrValue xrt_regex_find(XrValue re_value, const char *text_data, int64_t text_len
 XrValue xrt_regex_find_offset(XrValue re_value, const char *text_data, int64_t text_len,
                               XrValue offset_value);
 XrValue xrt_regex_full_find(XrValue re_value, const char *text_data, int64_t text_len);
+XrValue xrt_regex_find_all(XrValue re_value, const char *text_data, int64_t text_len);
+XrValue xrt_regex_find_all_limit(XrValue re_value, const char *text_data, int64_t text_len,
+                                 XrValue limit_value);
 XrValue xrt_regex_replace(XrValue re_value, const char *text_data, int64_t text_len,
                           const char *replacement_data, int64_t replacement_len);
 XrValue xrt_regex_replace_all(XrValue re_value, const char *text_data, int64_t text_len,

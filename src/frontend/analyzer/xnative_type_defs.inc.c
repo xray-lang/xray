@@ -98,8 +98,8 @@ static const char xr_native_def_regex[] =
     "RegexMatch {\n    start: int\n    end: int\n    text: string\n    groups: "
     "Array<string>\n}\n\n@native\nclass Regex {\n    test(text: string) -> bool\n    find(text: "
     "string) -> RegexMatch?\n    findText(text: string) -> string?\n    findGroup(text: string, "
-    "index: int) -> string?\n    findAll(text: string) -> Array<RegexMatch>\n    replace(text: "
-    "string, replacement: string) -> string\n    split(text: string, limit?: int) -> "
+    "index: int) -> string?\n    findAll(text: string, limit?: int) -> Array<RegexMatch>\n    "
+    "replace(text: string, replacement: string) -> string\n    split(text: string, limit?: int) -> "
     "Array<string>\n}\n";
 
 static const char xr_native_def_resultgroup[] =

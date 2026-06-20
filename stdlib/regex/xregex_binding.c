@@ -791,8 +791,8 @@ XR_DEFINE_BUILTIN(regex_find_group, "findGroup", "(pattern: Regex, s: string, in
 XR_DEFINE_BUILTIN(regex_full_match, "fullFind", "(pattern: Regex, s: string): RegexMatch?",
                   "Full match with captures")
 XR_DEFINE_BUILTIN(regex_count, "count", "(pattern: Regex, s: string): int", "Count matches")
-XR_DEFINE_BUILTIN(regex_find_all, "findAll", "(pattern: Regex, s: string): Array<RegexMatch>",
-                  "Find all matches")
+XR_DEFINE_BUILTIN(regex_find_all, "findAll",
+                  "(pattern: Regex, s: string, limit?: int): Array<RegexMatch>", "Find all matches")
 XR_DEFINE_BUILTIN(regex_replace, "replace",
                   "(pattern: Regex, s: string, replacement: string): string", "Replace first match")
 XR_DEFINE_BUILTIN(regex_replace_all, "replaceAll",

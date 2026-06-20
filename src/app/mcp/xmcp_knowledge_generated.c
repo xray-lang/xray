@@ -1632,7 +1632,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_regex[] = {
     },
     {
         .name = "findAll",
-        .signature = "(pattern: Regex, s: string): Array<RegexMatch>",
+        .signature = "(pattern: Regex, s: string, limit?: int): Array<RegexMatch>",
         .summary = "Find all matches",
     },
     {
@@ -4005,7 +4005,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `regex.count` | `(pattern: Regex, s: string): int` | Count matches |\n"
             "| `regex.escape` | `(s: string): string` | Escape regex special chars |\n"
             "| `regex.find` | `(pattern: Regex, s: string, offset?: int): RegexMatch?` | Find first match |\n"
-            "| `regex.findAll` | `(pattern: Regex, s: string): Array<RegexMatch>` | Find all matches |\n"
+            "| `regex.findAll` | `(pattern: Regex, s: string, limit?: int): Array<RegexMatch>` | Find all matches |\n"
             "| `regex.findGroup` | `(pattern: Regex, s: string, index: int): string?` | Find first match, return single capture group (zero-alloc) |\n"
             "| `regex.findText` | `(pattern: Regex, s: string): string?` | Find first match, return matched text only (zero-alloc) |\n"
             "| `regex.fullFind` | `(pattern: Regex, s: string): RegexMatch?` | Full match with captures |\n"
