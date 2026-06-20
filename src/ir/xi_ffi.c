@@ -391,8 +391,13 @@ static bool ffi_callback_bridge_prepare(struct XrayIsolate *X, const XrFFICallba
 }
 
 /* Resolve `symbol` from a foreign library (or the running process when
- * `dylib` is NULL). Returns NULL when the symbol cannot be found. */
-static void *ffi_resolve_symbol(struct XrayIsolate *X, const char *symbol, const char *dylib) {
+ * `dylib` is NULL). Returns NULL when the symbol cannot be found. When loading
+ * the requested library itself fails, sets `library_error` so the caller does
+ * not emit a misleading second "symbol not found" diagnostic. */
+static void *ffi_resolve_symbol(struct XrayIsolate *X, const char *symbol, const char *dylib,
+                                bool *library_error) {
+    if (library_error)
+        *library_error = false;
     if (!symbol || !symbol[0])
         return NULL;
     if (dylib && dylib[0]) {
@@ -416,6 +421,8 @@ static void *ffi_resolve_symbol(struct XrayIsolate *X, const char *symbol, const
         }
         XrDylib *lib = xr_dylib_open(path);
         if (!lib) {
+            if (library_error)
+                *library_error = true;
             xr_runtime_error(X, "FFI: cannot load library '%s': %s\n", dylib,
                              xr_dylib_last_error());
             return NULL;
@@ -451,8 +458,11 @@ XrValue xr_ffi_call_proto(struct XrayIsolate *X, struct XrProto *proto, XrValue 
         return xr_null();
     }
 
-    void *fn = ffi_resolve_symbol(X, symbol, sig->dylib);
+    bool library_error = false;
+    void *fn = ffi_resolve_symbol(X, symbol, sig->dylib, &library_error);
     if (!fn) {
+        if (library_error)
+            return xr_null();
         xr_runtime_error(X, "FFI: symbol '%s' not found%s%s\n", symbol ? symbol : "?",
                          sig->dylib ? " in library " : "", sig->dylib ? sig->dylib : "");
         return xr_null();

@@ -1064,6 +1064,20 @@ if(BUILD_TESTS)
         TIMEOUT 120
     )
 
+    # FFI runtime/link diagnostics: missing libraries and symbols must fail
+    # with stable, user-facing messages instead of cascading or opaque errors.
+    add_test(
+        NAME ffi_diagnostics
+        COMMAND bash
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/ffi/run_ffi_diagnostics.sh
+                $<TARGET_FILE:xray>
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(ffi_diagnostics PROPERTIES
+        LABELS "ffi;aot;vm;negative;regression"
+        TIMEOUT 60
+    )
+
     # Negative frontend/semantic cases: programs that must be rejected.
     # Keeps ownership/in/ref diagnostics in the default CTest gate.
     add_test(
