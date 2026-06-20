@@ -10,6 +10,7 @@
 
 #include "time.h"
 #include "../common.h"
+#include "../../src/coro/xworker.h"
 #include "../../src/coro/xyieldable.h"
 #include "../../src/vm/xvm.h"  // xr_vm_yieldable_cfunction_new
 #include "../../src/base/xchecks.h"
@@ -22,7 +23,7 @@ static int64_t get_timestamp_ms(void) {
 }
 
 static int64_t get_monotonic_ns(void) {
-    return (int64_t) xr_time_monotonic_ns();
+    return xr_runtime_current_monotonic_ns();
 }
 
 // ========== Module-private function bindings ==========

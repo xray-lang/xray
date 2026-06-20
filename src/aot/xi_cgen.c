@@ -551,6 +551,8 @@ static void cg_array_data_cache_decls_reset(XiCgenCtx *ctx) {
         ctx->narray_data_cache_decls = 0;
 }
 
+static bool cg_func_needs_aot_coro_ctx(XiCgenCtx *ctx, const XiFunc *f);
+
 static bool cg_array_data_cache_decl_mark(XiCgenCtx *ctx, const XiValue *origin) {
     if (!ctx || !origin)
         return false;

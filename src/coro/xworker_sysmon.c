@@ -270,7 +270,7 @@ int xr_main_thread_run(XrayIsolate *X, XrCoroutine *main_coro) {
     // Initialize main thread Worker's Timer Wheel (owner is worker 0)
     if (!worker->p.timer_wheel) {
         worker->p.timer_wheel = xr_timer_wheel_create(runtime, 0);  // Worker 0 owns this
-        xr_proc_set_last_timer_tick(&worker->p, xr_monotonic_ticks());
+        xr_proc_set_last_timer_tick(&worker->p, xr_runtime_now_ticks(runtime));
     }
 
     // Put the main coroutine into Worker 0's local queue.

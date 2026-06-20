@@ -234,6 +234,15 @@ typedef struct XrRuntime {
     /* === Machines (M) — pre-allocated 1:1 with Workers === */
     XrMachine *machines;
 
+    /* === Deterministic Test Mode ===
+     *
+     * XRAY_CORO_DETERMINISTIC=1 forces a single-worker runtime, fixes the
+     * worker PRNG seed, and lets the scheduler advance this virtual millisecond
+     * clock to the next timer deadline instead of sleeping on wall time. */
+    bool deterministic_sched;
+    uint32_t deterministic_seed;
+    _Atomic int64_t virtual_time_ms;
+
     /* === Idle P/M Management (lock-free Treiber stacks) ===
      *
      * All three lists are lock-free stacks chained via XrMachine::idle_link
@@ -396,6 +405,11 @@ XR_FUNC void xr_runtime_start(XrRuntime *runtime);
 XR_FUNC void xr_runtime_ensure_workers(XrRuntime *runtime);
 XR_FUNC void xr_runtime_stop(XrRuntime *runtime);
 XR_FUNC void xr_runtime_force_stop(XrRuntime *runtime);
+XR_FUNC bool xr_runtime_deterministic_mode(const XrRuntime *runtime);
+XR_FUNC int64_t xr_runtime_now_ticks(XrRuntime *runtime);
+XR_FUNC void xr_runtime_advance_virtual_time(XrRuntime *runtime, int64_t target_ticks);
+XR_FUNC int64_t xr_runtime_current_monotonic_ms(void);
+XR_FUNC int64_t xr_runtime_current_monotonic_ns(void);
 XR_FUNC void xr_runtime_spawn(XrRuntime *runtime, XrCoroutine *coro);
 XR_FUNC void xr_runtime_spawn_local(XrWorker *worker, XrCoroutine *coro);
 XR_FUNC void xr_worker_init(XrWorker *worker, int id, XrRuntime *runtime);

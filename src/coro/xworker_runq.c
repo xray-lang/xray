@@ -44,7 +44,7 @@ static int64_t worker_schedule_time(XrWorker *worker) {
     if (!worker)
         return xr_monotonic_ticks();
     if (worker->p.sched_time_budget == 0 || worker->p.sched_time_cache <= 0) {
-        worker->p.sched_time_cache = xr_monotonic_ticks();
+        worker->p.sched_time_cache = xr_runtime_now_ticks(worker->p.runtime);
         worker->p.sched_time_budget = XR_SCHED_TIME_CACHE_BUDGET;
     }
     worker->p.sched_time_budget--;
@@ -187,7 +187,8 @@ XrCoroutine *xr_worker_try_pop_lifo(XrWorker *worker, bool consume_poll_budget) 
             worker->p.lifo_polls++;
         XrRuntime *runtime = worker->p.runtime;
         if (XR_UNLIKELY(runtime && runtime->sched_stats_enabled)) {
-            xr_proc_stats_record_runnable_wait(&worker->p.stats, lifo, xr_monotonic_ticks());
+            xr_proc_stats_record_runnable_wait(&worker->p.stats, lifo,
+                                               xr_runtime_now_ticks(runtime));
         }
         xr_proc_local_runq_dec(&worker->p, 1);
         worker->p.stats.lifo_hit_count++;
@@ -210,7 +211,7 @@ static XrCoroutine *worker_pop_local(XrWorker *worker) {
     worker->p.stats.local_runq_pop_count++;
     XrRuntime *runtime = worker->p.runtime;
     if (XR_UNLIKELY(runtime && runtime->sched_stats_enabled)) {
-        xr_proc_stats_record_runnable_wait(&worker->p.stats, coro, xr_monotonic_ticks());
+        xr_proc_stats_record_runnable_wait(&worker->p.stats, coro, xr_runtime_now_ticks(runtime));
     }
     xr_proc_local_runq_dec(&worker->p, 1);
     return coro;
@@ -307,7 +308,7 @@ static void injectq_push_batch_internal(XrRuntime *runtime, XrCoroutine *first, 
     XrCoroutine *cur = first;
     XrCoroutine *actual_last = NULL;
     int actual_count = 0;
-    int64_t submit_time = prepare_items ? xr_monotonic_ticks() : 0;
+    int64_t submit_time = prepare_items ? xr_runtime_now_ticks(runtime) : 0;
     while (cur && (count <= 0 || actual_count < count)) {
         XrCoroutine *next = cur->sched_link;
         if (prepare_items) {

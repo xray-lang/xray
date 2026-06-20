@@ -597,7 +597,7 @@ exec_fast:  // Fast re-dispatch entry: local_active_coros already correct
             worker_pull_inject(worker, XR_FAST_DISPATCH_INJECT_BATCH);
         }
         if ((fast_dispatch_budget & 15) == 0) {
-            int64_t _now = xr_monotonic_ticks();
+            int64_t _now = xr_runtime_now_ticks(p->runtime);
             if (p->timer_wheel &&
                 (xr_timer_cancel_pending(p->timer_wheel) || _now > xr_proc_last_timer_tick(p))) {
                 xr_bump_timers(p->timer_wheel, _now);

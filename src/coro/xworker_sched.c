@@ -31,6 +31,8 @@
 #include "../os/os_thread.h"
 #include <time.h>
 
+static bool runtime_has_work(XrRuntime *runtime);
+
 // ========== Lock-free Idle Worker Stack ==========
 //
 // Treiber stack of parked XrMachine*. Replaces the prior
@@ -343,6 +345,70 @@ static XrCoroutine *worker_claim_io_ready_list(XrWorker *worker, XrCoroutine *he
     return claimed_first;
 }
 
+static bool worker_advance_deterministic_timer(XrWorker *worker, int64_t *now_out,
+                                               bool require_idle) {
+    if (!worker)
+        return false;
+    XrRuntime *runtime = worker->p.runtime;
+    XrTimerWheel *tw = worker->p.timer_wheel;
+    if (!xr_runtime_deterministic_mode(runtime) || !tw || tw->nto <= 0)
+        return false;
+    if (require_idle && (atomic_load_explicit(&worker->p.lifo_slot, memory_order_relaxed) != NULL ||
+                         runtime_has_work(runtime))) {
+        return false;
+    }
+
+    int64_t now = xr_runtime_now_ticks(runtime);
+    int64_t next = xr_check_next_timeout_time(tw);
+    if (next > now) {
+        xr_runtime_advance_virtual_time(runtime, next);
+        now = next;
+    }
+    if (now_out)
+        *now_out = now;
+    return true;
+}
+
+static bool worker_bump_due_timers(XrWorker *worker, int64_t now, bool force) {
+    XrRuntime *runtime = worker->p.runtime;
+    XrProc *p = &worker->p;
+    if (!p->timer_wheel)
+        return false;
+    if (!force && !xr_timer_cancel_pending(p->timer_wheel) && now <= xr_proc_last_timer_tick(p))
+        return false;
+
+    int timer_passes = 0;
+    do {
+        xr_bump_timers(p->timer_wheel, now);
+        timer_passes++;
+    } while (p->timer_wheel->yield_slot != XR_TW_SLOT_INACTIVE);
+    p->stats.timer_bump_count += (uint64_t) timer_passes;
+    if (timer_passes > 1) {
+        p->stats.timer_burst_count++;
+    }
+    if (now > xr_proc_last_timer_tick(p)) {
+        xr_proc_set_last_timer_tick(p, now);
+    }
+
+    // Timer callbacks deliver wakes into per-worker inboxes; count nonempty
+    // inboxes and wake at most that many parked workers.
+    int pending_inboxes = 0;
+    for (int i = 0; i < runtime->worker_count; i++) {
+        if (!xr_mpsc_empty(&runtime->workers[i].p.inbox))
+            pending_inboxes++;
+    }
+    if (pending_inboxes > 0) {
+        int idle_count = atomic_load_explicit(&runtime->idle_worker_count, memory_order_relaxed);
+        if (idle_count < 0)
+            idle_count = 0;
+        int wakes = pending_inboxes < idle_count ? pending_inboxes : idle_count;
+        if (wakes < 1)
+            wakes = 1;
+        wake_idle_workers(runtime, wakes);
+    }
+    return true;
+}
+
 // Poll all I/O sources and drain MPSC inbox into P's local run queue.
 // Returns a fast-path IO coroutine (single wakeup with affinity to this
 // worker) that the caller should execute directly, bypassing the queue.
@@ -419,40 +485,9 @@ after_netpoll:
     // Loop until all expired timers are drained: the timer wheel yields
     // after ~100 timeouts per bump call (XR_TW_COST_TIMEOUT=100), so a
     // burst of 10000 timers requires ~100 iterations.
-    int64_t now = xr_monotonic_ticks();
-    if (p->timer_wheel &&
-        (xr_timer_cancel_pending(p->timer_wheel) || now > xr_proc_last_timer_tick(p))) {
-        int timer_passes = 0;
-        do {
-            xr_bump_timers(p->timer_wheel, now);
-            timer_passes++;
-        } while (p->timer_wheel->yield_slot != XR_TW_SLOT_INACTIVE);
-        p->stats.timer_bump_count += (uint64_t) timer_passes;
-        if (timer_passes > 1) {
-            p->stats.timer_burst_count++;
-        }
-        if (now > xr_proc_last_timer_tick(p)) {
-            xr_proc_set_last_timer_tick(p, now);
-        }
-        // After timer batch: wake idle workers to help process the burst.
-        // Timer callbacks deliver wakes into per-worker inboxes; count the
-        // nonempty inboxes (bounded scan) and wake at most that many.
-        int pending_inboxes = 0;
-        for (int i = 0; i < runtime->worker_count; i++) {
-            if (!xr_mpsc_empty(&runtime->workers[i].p.inbox))
-                pending_inboxes++;
-        }
-        if (pending_inboxes > 0) {
-            int idle_count =
-                atomic_load_explicit(&runtime->idle_worker_count, memory_order_relaxed);
-            if (idle_count < 0)
-                idle_count = 0;
-            int wakes = pending_inboxes < idle_count ? pending_inboxes : idle_count;
-            if (wakes < 1)
-                wakes = 1;
-            wake_idle_workers(runtime, wakes);
-        }
-    }
+    int64_t now = xr_runtime_now_ticks(runtime);
+    bool deterministic_timer = worker_advance_deterministic_timer(worker, &now, true);
+    worker_bump_due_timers(worker, now, deterministic_timer);
 
     // Drain deferred free queue (cross-worker PollDesc cleanup)
     // Must run after timer bump so zombie timers are already cleaned up.
@@ -614,7 +649,7 @@ void xr_worker_add_sleep_timer(XrWorker *worker, XrCoroutine *coro, int64_t dela
     atomic_fetch_add(&text->timer_seq, 1);
 
     // Calculate timeout position
-    int64_t timeout_pos = xr_monotonic_ticks() + delay_ms;
+    int64_t timeout_pos = xr_runtime_now_ticks(worker->p.runtime) + delay_ms;
     int wait_reason = xr_coro_get_wait_reason(xr_coro_flags_load(coro));
     xr_timer_wait_token_prepare(&text->wait.timer_token, worker->p.id, wait_reason, timeout_pos);
 
@@ -714,6 +749,14 @@ static bool runtime_has_work(XrRuntime *runtime) {
 // 4. Condition variable for final sleep with timer-based timeout
 static void worker_park(XrWorker *worker) {
     XrRuntime *runtime = worker->p.runtime;
+
+    if (xr_runtime_deterministic_mode(runtime) && !runtime_has_work(runtime)) {
+        int64_t now = xr_runtime_now_ticks(runtime);
+        bool deterministic_timer = worker_advance_deterministic_timer(worker, &now, true);
+        if (worker_bump_due_timers(worker, now, deterministic_timer) && runtime_has_work(runtime)) {
+            return;
+        }
+    }
 
 #if defined(XR_OS_LINUX) && defined(XR_HAS_IO_URING)
     // A worker holding in-flight io_uring completion ops is NOT idle: it is
@@ -833,13 +876,19 @@ park_recheck_work:
             timeout_ms = 2;
         }
 
+        bool virtual_timer_advanced = false;
         // Timer-aware: clamp timeout to next timer expiry
         if (worker->p.timer_wheel && xr_timer_cancel_pending(worker->p.timer_wheel)) {
             timeout_ms = 1;
         } else if (worker->p.timer_wheel) {
             int64_t next = xr_check_next_timeout_time(worker->p.timer_wheel);
-            int64_t now_ticks = xr_monotonic_ticks();
-            if (next > now_ticks) {
+            int64_t now_ticks = xr_runtime_now_ticks(runtime);
+            if (xr_runtime_deterministic_mode(runtime) && worker->p.timer_wheel->nto > 0) {
+                if (next > now_ticks)
+                    xr_runtime_advance_virtual_time(runtime, next);
+                timeout_ms = 0;
+                virtual_timer_advanced = true;
+            } else if (next > now_ticks) {
                 int64_t delta = next - now_ticks;
                 if (delta < timeout_ms)
                     timeout_ms = delta;
@@ -847,7 +896,7 @@ park_recheck_work:
                 timeout_ms = 1;
             }
         }
-        if (timeout_ms < 1)
+        if (timeout_ms < 1 && !virtual_timer_advanced)
             timeout_ms = 1;
 
         // Sleep with timeout. A worker holding outstanding io_uring completion
@@ -857,6 +906,8 @@ park_recheck_work:
         uint32_t timeout_us = (uint32_t) (timeout_ms * 1000);
         atomic_store_explicit(&worker->m->park_state, XR_PARK_IDLE, memory_order_release);
         worker->p.stats.park_count++;
+        if (virtual_timer_advanced)
+            goto deterministic_timer_advanced;
 #if defined(XR_OS_LINUX) && defined(XR_HAS_IO_URING)
         if (worker->p.local_poll.uring && xr_uring_ring_inflight(worker->p.local_poll.uring) > 0) {
             xr_uring_ring_wait(worker->p.local_poll.uring, (int64_t) timeout_us);
@@ -866,6 +917,7 @@ park_recheck_work:
 #else
         xr_park_futex_wait(&worker->m->park_state, XR_PARK_IDLE, timeout_us);
 #endif
+    deterministic_timer_advanced:
         worker->p.stats.unpark_count++;
     }
 
@@ -1221,7 +1273,7 @@ static XrCoroutine *worker_spin(XrWorker *worker, XrRuntime *runtime, _Atomic bo
         return NULL;
 
     XrCoroutine *coro = NULL;
-    int64_t cached_now = xr_monotonic_ticks();
+    int64_t cached_now = xr_runtime_now_ticks(runtime);
     for (int spin = 0; spin < XR_WORKER_SPIN_COUNT && !coro; spin++) {
         if (!atomic_load(running_ptr)) {
             *should_exit = true;
@@ -1230,15 +1282,14 @@ static XrCoroutine *worker_spin(XrWorker *worker, XrRuntime *runtime, _Atomic bo
         worker_drain_inbox(worker);
         worker_pull_inject(worker, XR_INJECT_POP_BATCH);
         if ((spin & 0x3) == 0) {
-            cached_now = xr_monotonic_ticks();
+            cached_now = xr_runtime_now_ticks(runtime);
         }
-        if (worker->p.timer_wheel && (xr_timer_cancel_pending(worker->p.timer_wheel) ||
-                                      cached_now > xr_proc_last_timer_tick(&worker->p))) {
-            xr_bump_timers(worker->p.timer_wheel, cached_now);
-            worker->p.stats.timer_bump_count++;
-            if (cached_now > xr_proc_last_timer_tick(&worker->p)) {
-                xr_proc_set_last_timer_tick(&worker->p, cached_now);
-            }
+        bool deterministic_timer = worker_advance_deterministic_timer(worker, &cached_now, true);
+        if (worker->p.timer_wheel &&
+            (deterministic_timer || xr_timer_cancel_pending(worker->p.timer_wheel) ||
+             cached_now > xr_proc_last_timer_tick(&worker->p))) {
+            worker_bump_due_timers(worker, cached_now, deterministic_timer);
+            worker_drain_inbox(worker);
         }
         coro = xr_worker_pop(worker);
     }

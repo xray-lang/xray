@@ -56,11 +56,24 @@ static inline void chan_try_deliver_recv(XrCoroutine *receiver, XrValue v) {
     ext->chan_resume_delivered = true;
 }
 
-static XrRuntime *channel_stats_runtime(XrChannel *ch) {
+static XrRuntime *channel_runtime(XrChannel *ch) {
     if (!ch || !ch->isolate || !ch->isolate->vm.runtime)
         return NULL;
-    XrRuntime *runtime = (XrRuntime *) ch->isolate->vm.runtime;
-    return XR_UNLIKELY(runtime->sched_stats_enabled) ? runtime : NULL;
+    return (XrRuntime *) ch->isolate->vm.runtime;
+}
+
+static XrRuntime *channel_stats_runtime(XrChannel *ch) {
+    XrRuntime *runtime = channel_runtime(ch);
+    return runtime && XR_UNLIKELY(runtime->sched_stats_enabled) ? runtime : NULL;
+}
+
+static int64_t channel_now_ticks(XrChannel *ch) {
+    return xr_runtime_now_ticks(channel_runtime(ch));
+}
+
+static int64_t isolate_now_ticks(XrayIsolate *X) {
+    XrRuntime *runtime = (X && X->vm.runtime) ? (XrRuntime *) X->vm.runtime : NULL;
+    return xr_runtime_now_ticks(runtime);
 }
 
 #define CHANNEL_METRIC_INC(ch, field)                                                              \
@@ -752,7 +765,7 @@ static void timer_channel_deliver(XrChannel *ch) {
     if (atomic_load_explicit(&ch->timer_fired, memory_order_relaxed))
         return;
 
-    int64_t now = xr_monotonic_ticks();
+    int64_t now = channel_now_ticks(ch);
     XrCoroutine *receiver = NULL;
     XrChannelKind wake_kind = channel_wake_kind_for_stats(ch);
 
@@ -838,7 +851,7 @@ XrChannel *xr_channel_new_timer(struct XrayIsolate *X, int64_t timeout_ms) {
     ch->timer_timeout_ms = timeout_ms;
 
     // Record start time
-    ch->timer_start_ticks = xr_monotonic_ticks();
+    ch->timer_start_ticks = isolate_now_ticks(X);
 
     atomic_store_explicit(&ch->timer_fired, false, memory_order_relaxed);
     atomic_store_explicit(&ch->timer_disposed, false, memory_order_relaxed);
@@ -871,7 +884,7 @@ void xr_channel_timer_arm(XrChannel *ch, XrTimerWheel *tw) {
               "xr_channel_timer_arm: not a timer channel");
 
     int64_t timeout_pos = ch->timer_start_ticks + ch->timer_timeout_ms;
-    int64_t now = xr_monotonic_ticks();
+    int64_t now = channel_now_ticks(ch);
     if (now >= timeout_pos) {
         // Already elapsed: deliver inline (avoids round-trip via wheel). No wheel
         // reference is taken — the node is never queued.
