@@ -86,7 +86,9 @@ struct XaSymbolLinks {
     int param_escape_count;
     XrType *return_type;
     bool return_type_inferred;
-    bool is_extern;         // @extern foreign function (FFI): calls require unsafe { }
+    bool is_extern;    // @extern foreign function (FFI): calls require unsafe { }
+    bool is_c_export;  // @c_export AOT C ABI wrapper
+    const char *c_export_symbol;
     XrErrorSet *error_set;  // Inferred error set (NULL = infallible)
 
     // Call-site inferred parameter types (for unannotated params)

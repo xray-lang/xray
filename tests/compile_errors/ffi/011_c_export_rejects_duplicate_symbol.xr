@@ -1,0 +1,13 @@
+@c_export("xr_dup")
+fn first(a: int32) -> int32 {
+    return a
+}
+
+@c_export("xr_dup")
+fn second(a: int32) -> int32 {
+    return a + 1
+}
+
+fn main() {
+    print(first(1) + second(1))
+}
