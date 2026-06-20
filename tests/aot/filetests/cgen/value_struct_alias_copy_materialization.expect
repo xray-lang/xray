@@ -1,0 +1,8 @@
+contains=xaot-plan v0
+contains=function 1 name=bump_alias module=0 depth=1 abi=native boundary=none params=1 ret=int64_t/scalar/i64
+regex=  value v[0-9]+ op=COPY kind=tagged rep=tagged c_type=XrValue
+regex=  value v[0-9]+ op=STRUCT_SET kind=void rep=void c_type=void
+c_regex=XrValue v[0-9]+ = xrt_value_clone_for_coro\(v[0-9]+\);
+c_regex=\(\(\(xrt_struct_value_struct_alias_copy_materialization_[A-Za-z0-9_]+\*\)v[0-9]+\.ptr\)->f0 = \(int64_t\)v[0-9]+\)
+c_not_contains=xrt_getprop_name(
+c_not_contains=xrt_setprop_name(

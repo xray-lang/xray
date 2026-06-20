@@ -45,6 +45,17 @@ static void xi_lower_rewrite_shared_store_copy(XiValue *val) {
         val->aux = (void *) "to_shared";
 }
 
+static struct XrType *xi_lower_param_type(XiLower *l, XrParamNode *param) {
+    if (l && l->analyzer && param && param->symbol_id != 0) {
+        XaSymbol *sym = xa_scope_lookup_by_id(l->analyzer->global_scope, param->symbol_id);
+        XaSymbolLinks *links = sym ? xa_analyzer_get_links(l->analyzer, sym) : NULL;
+        if (links && links->type)
+            return links->type;
+    }
+    struct XrType *type = (param && param->type) ? xr_tref_resolve(l->isolate, param->type) : NULL;
+    return type ? type : (l ? l->type_any : NULL);
+}
+
 /* ========== Dynamic capacity growth (vars / blocks) ========== */
 
 /* Grow the variable dimension: vars, the parallel shared-slot tables, and the
@@ -697,14 +708,7 @@ XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyz
 
     for (int i = 0; i < fdecl->param_count; i++) {
         XrParamNode *p = fdecl->params[i];
-        /* p->type is XrTypeRef* (AST syntax), not XrType* — resolve it
-         * before handing to the IR layer.  Treating the ref directly as
-         * XrType* puts an unrelated struct layout into XiValue->type and
-         * downstream readers (struct_layout_of, AOT codegen, TFA) read
-         * garbage bytes for every field. */
-        struct XrType *ptype = p->type ? xr_tref_resolve(isolate, p->type) : l.type_any;
-        if (!ptype)
-            ptype = l.type_any;
+        struct XrType *ptype = xi_lower_param_type(&l, p);
 
         XiValue *param_val = xi_param(l.func, entry, (uint16_t) i, ptype);
         l.func->params[i] = param_val;
@@ -725,9 +729,7 @@ XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyz
         if (!p->default_value)
             continue;
 
-        struct XrType *ptype = p->type ? xr_tref_resolve(isolate, p->type) : l.type_any;
-        if (!ptype)
-            ptype = l.type_any;
+        struct XrType *ptype = xi_lower_param_type(&l, p);
         int var_id = xi_lower_var_create(&l, p->symbol_id, p->name, ptype);
         XR_DCHECK(var_id >= 0, "default param var not found");
         XiValue *cur = xi_lower_braun_read(&l, var_id, l.cur_block);
