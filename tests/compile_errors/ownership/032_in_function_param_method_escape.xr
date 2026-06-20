@@ -1,0 +1,23 @@
+class Holder {
+    items: Array<Array<int>>
+
+    constructor() {
+        this.items = []
+    }
+
+    store(value: Array<int>) {
+        this.items.push(value)
+    }
+}
+
+fn wrap(value: Array<int>, holder: ref Holder) {
+    holder.store(value)
+}
+
+fn stash(data: in Array<int>, holder: ref Holder) {
+    wrap(data, holder)
+}
+
+let values: Array<int> = [1, 2]
+let holder = new Holder()
+stash(values, holder)
