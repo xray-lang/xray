@@ -97,6 +97,8 @@ static const CgAotStdlibMethod g_aot_stdlib_methods[] = {
     {"regex", "findGroup", 3, "xrt_regex_find_group", "vsv", CG_AOT_RET_VALUE, NULL},
     {"regex", "findText", 2, "xrt_regex_find_text", "vs", CG_AOT_RET_VALUE, NULL},
     {"regex", "isValid", 1, "xrt_regex_is_valid", "s", CG_AOT_RET_VALUE, NULL},
+    {"regex", "replace", 3, "xrt_regex_replace", "vss", CG_AOT_RET_VALUE, NULL},
+    {"regex", "replaceAll", 3, "xrt_regex_replace_all", "vss", CG_AOT_RET_VALUE, NULL},
     {"regex", "test", 2, "xrt_regex_test", "vs", CG_AOT_RET_VALUE, NULL},
 };
 

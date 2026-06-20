@@ -178,3 +178,40 @@ XrValue xrt_regex_find_group(XrValue re_value, const char *text_data, int64_t te
         return XR_NULL_VAL;
     return xrt_regex_match_group_to_string(&match, (int) group_i64);
 }
+
+static XrValue xrt_regex_replace_impl(XrValue re_value, const char *text_data, int64_t text_len,
+                                      const char *replacement_data, int64_t replacement_len,
+                                      bool all) {
+    (void) replacement_len;
+    if (re_value.tag != XR_TAG_REGEX || !re_value.ptr || !text_data || !replacement_data)
+        return XR_NULL_VAL;
+    if (text_len < 0)
+        text_len = (int64_t) strlen(text_data);
+    if (text_len < 0 || text_len > (int64_t) INT_MAX)
+        return XR_NULL_VAL;
+
+    xrt_regex_object_t *obj = (xrt_regex_object_t *) re_value.ptr;
+    char *replaced =
+        xr_regex_replace_alloc(obj->regex, text_data, (int) text_len, replacement_data, all);
+    if (!replaced)
+        return XR_NULL_VAL;
+
+    size_t out_len = strlen(replaced);
+    XrValue result = xrt_str_alloc(out_len);
+    if (out_len > 0)
+        memcpy(xr_str_buf(result), replaced, out_len);
+    xr_re_free(replaced);
+    return result;
+}
+
+XrValue xrt_regex_replace(XrValue re_value, const char *text_data, int64_t text_len,
+                          const char *replacement_data, int64_t replacement_len) {
+    return xrt_regex_replace_impl(re_value, text_data, text_len, replacement_data, replacement_len,
+                                  false);
+}
+
+XrValue xrt_regex_replace_all(XrValue re_value, const char *text_data, int64_t text_len,
+                              const char *replacement_data, int64_t replacement_len) {
+    return xrt_regex_replace_impl(re_value, text_data, text_len, replacement_data, replacement_len,
+                                  true);
+}
