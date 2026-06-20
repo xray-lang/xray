@@ -47,20 +47,20 @@ fn test_sha512_long_string() {
 
 @test
 fn test_hmac_sha512_basic() {
-    let hmac = crypto.hmac("sha512", "key", "message")
+    let hmac = crypto.hmac("sha512", "key", "message")!
     // HMAC-SHA512 length is 128 hex chars
     assert_eq(hmac.length, 128)
 }
 
 @test
 fn test_hmac_sha512_empty_message() {
-    let hmac = crypto.hmac("sha512", "key", "")
+    let hmac = crypto.hmac("sha512", "key", "")!
     assert_eq(hmac.length, 128)
 }
 
 @test
 fn test_hmac_sha512_known_vector() {
     // RFC 4231 test case 2
-    let hmac = crypto.hmac("sha512", "Jefe", "what do ya want for nothing?")
+    let hmac = crypto.hmac("sha512", "Jefe", "what do ya want for nothing?")!
     assert_eq(hmac, "164b7a7bfcf819e2e395fbe73b56e0a387bd64222e831fd610270cd7ea2505549758bf75c05a994a6d034f65f8f0e6fdcaeab1a34d4a6b4b636e070a38bce737")
 }

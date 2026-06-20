@@ -197,8 +197,9 @@ if build_native "$CRYPTO_SRC" "$CRYPTO_BIN" "$CRYPTO_LOG"; then
     expect_log_not_contains "$CRYPTO_LOG" "-lz" "core-crypto: does not link zlib"
     expect_log_not_contains "$CRYPTO_LOG" "-lssl" "core-crypto: does not link ssl"
     expect_log_not_contains "$CRYPTO_LOG" "-lcrypto" "core-crypto: does not link crypto"
+    expect_log_contains "$CRYPTO_LOG" "-lxray_aot_core" "core-crypto: links AOT core stdlib only"
     expect_log_contains "$CRYPTO_LOG" "-lm" "core-crypto: links math lib only"
-    expect_output "$CRYPTO_BIN" $'true\nfalse\nfalse\ntrue\ntrue\nfalse' "core-crypto: binary output"
+    expect_output "$CRYPTO_BIN" $'true\nfalse\nfalse\ntrue\ntrue\nfalse\n900150983cd24fb0d6963f7d28e17f72\na9993e364706816aba3e25717850c26c9cd0d89d\nba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad\nddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f\n9d5c73ef85594d34ec4438b7c97e51d8\n104152c5bfdca07bc633eebd46199f0255c9f49d\n5031fe3d989c6d1537a013fa6e739da23463fdaec3b70137d828e36ace221bd0\n3c5953a18f7303ec653ba170ae334fafa08e3846f2efe317b87efce82376253cb52a8c31ddcde5a3a2eee183c2b34cb91f85e64ddbc325f7692b199473579c58\ntrue' "core-crypto: binary output"
 else
     record_fail "core-crypto: build failed"
     sed 's/^/      /' "$CRYPTO_LOG" | sed -n '1,120p'

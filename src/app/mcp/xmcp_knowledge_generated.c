@@ -186,7 +186,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_crypto[] = {
     },
     {
         .name = "hmac",
-        .signature = "(algo: string, key: string, data: string): string",
+        .signature = "(algo: string, key: string, data: string): string?",
         .summary = "Compute HMAC",
     },
     {
@@ -3453,7 +3453,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "|--|--|--|\n"
             "| `crypto.decrypt` | `(key: string, ciphertext: string): string?` | AES-256-CBC decrypt |\n"
             "| `crypto.encrypt` | `(key: string, plaintext: string): string` | AES-256-CBC encrypt |\n"
-            "| `crypto.hmac` | `(algo: string, key: string, data: string): string` | Compute HMAC |\n"
+            "| `crypto.hmac` | `(algo: string, key: string, data: string): string?` | Compute HMAC |\n"
             "| `crypto.md5` | `(data: string): string` | Compute MD5 hash |\n"
             "| `crypto.randomBytes` | `(n: int): string` | Generate random bytes |\n"
             "| `crypto.sha1` | `(data: string): string` | Compute SHA-1 hash |\n"

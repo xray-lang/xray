@@ -15,6 +15,24 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "../base/xdefs.h"
+
+XR_FUNC void xr_md5(const uint8_t *data, size_t len, uint8_t digest[16]);
+XR_FUNC void xr_sha1(const uint8_t *data, size_t len, uint8_t digest[20]);
+XR_FUNC void xr_sha256(const uint8_t *data, size_t len, uint8_t digest[32]);
+XR_FUNC void xr_sha512(const uint8_t *data, size_t len, uint8_t digest[64]);
+
+XR_FUNC void xr_hmac_md5(const uint8_t *key, size_t key_len, const uint8_t *data, size_t data_len,
+                         uint8_t digest[16]);
+XR_FUNC void xr_hmac_sha1(const uint8_t *key, size_t key_len, const uint8_t *data, size_t data_len,
+                          uint8_t digest[20]);
+XR_FUNC void xr_hmac_sha256(const uint8_t *key, size_t key_len, const uint8_t *data,
+                            size_t data_len, uint8_t digest[32]);
+XR_FUNC void xr_hmac_sha512(const uint8_t *key, size_t key_len, const uint8_t *data,
+                            size_t data_len, uint8_t digest[64]);
+
+XR_FUNC void xr_bytes_to_hex(const uint8_t *bytes, size_t len, char *output);
+
 static inline bool xr_crypto_core_timing_safe_equal(const char *a, size_t a_len, const char *b,
                                                     size_t b_len) {
     if ((!a && a_len != 0) || (!b && b_len != 0))
