@@ -1,0 +1,9 @@
+struct Pair { a: int; b: int }
+
+fn id_pair(p: Pair) -> Pair {
+    return p
+}
+
+let p = Pair{a: 1, b: 2}
+let q = id_pair(p)
+print(q.a + q.b)
