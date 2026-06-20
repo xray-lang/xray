@@ -111,6 +111,7 @@ static XaotStdlibSet stdlib_flag_for_import(const char *name) {
         {"url", XAOT_STDLIB_URL},       {"csv", XAOT_STDLIB_CSV},
         {"toml", XAOT_STDLIB_TOML},     {"yaml", XAOT_STDLIB_YAML},
         {"xml", XAOT_STDLIB_XML},       {"compress", XAOT_STDLIB_COMPRESS},
+        {"log", XAOT_STDLIB_LOG},
     };
     for (int i = 0; i < (int) (sizeof(table) / sizeof(table[0])); i++) {
         if (strcmp(name, table[i].name) == 0)
@@ -439,7 +440,7 @@ static bool stdlib_set_needs_runtime_provider(XaotStdlibSet stdlib) {
     return (stdlib &
             ~(XAOT_STDLIB_MATH | XAOT_STDLIB_PATH | XAOT_STDLIB_ENCODING | XAOT_STDLIB_BASE64 |
               XAOT_STDLIB_URL | XAOT_STDLIB_COMPRESS | XAOT_STDLIB_CRYPTO | XAOT_STDLIB_REGEX |
-              XAOT_STDLIB_TIME | XAOT_STDLIB_OS)) != 0;
+              XAOT_STDLIB_TIME | XAOT_STDLIB_OS | XAOT_STDLIB_LOG)) != 0;
 }
 
 static bool build_link_manifest(const XaotFeatureSet *features, XaotLinkManifest *manifest) {
