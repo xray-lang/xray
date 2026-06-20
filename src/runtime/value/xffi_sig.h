@@ -45,16 +45,23 @@ typedef enum XrFFIType {
     XR_FFI_T_PTR = 12
 } XrFFIType;
 
+typedef struct XrFFICallbackSig {
+    uint8_t *params; /* [nparams] XrFFIType codes (owned, NULL when nparams==0) */
+    uint8_t nparams;
+    uint8_t ret;
+} XrFFICallbackSig;
+
 /*
  * @extern call signature. Owned by the XrProto that carries it and freed via
  * xr_ffi_sig_free in xr_proto_free.
  */
 typedef struct XrFFISig {
-    char *symbol;    /* C symbol to resolve (owned, never NULL) */
-    char *dylib;     /* @dylib library name, or NULL = process/default (owned) */
-    uint8_t *params; /* [nparams] XrFFIType codes (owned, NULL when nparams==0) */
-    uint8_t nparams; /* declared parameter count */
-    uint8_t ret;     /* XrFFIType return code */
+    char *symbol;                    /* C symbol to resolve (owned, never NULL) */
+    char *dylib;                     /* @dylib library name, or NULL = process/default (owned) */
+    uint8_t *params;                 /* [nparams] XrFFIType codes (owned, NULL when nparams==0) */
+    XrFFICallbackSig **param_cbacks; /* [nparams] optional CFn signatures */
+    uint8_t nparams;                 /* declared parameter count */
+    uint8_t ret;                     /* XrFFIType return code */
 } XrFFISig;
 
 /* Allocate a signature for `symbol` with `nparams` parameter slots. `symbol`
@@ -63,6 +70,13 @@ typedef struct XrFFISig {
 XR_FUNC XrFFISig *xr_ffi_sig_new(const char *symbol, const char *dylib, uint8_t nparams);
 
 XR_FUNC void xr_ffi_sig_free(XrFFISig *sig);
+
+XR_FUNC bool xr_ffi_sig_set_param_callback(XrFFISig *sig, uint8_t index,
+                                           const struct XrType *fn_type);
+
+XR_FUNC bool xr_ffi_sig_set_param_callback_codes(XrFFISig *sig, uint8_t index,
+                                                 const uint8_t *params, uint8_t nparams,
+                                                 uint8_t ret);
 
 /* Map an Xray static type to its compact C-ABI code. NULL maps to VOID on the
  * return side and I64 on the argument side. */
