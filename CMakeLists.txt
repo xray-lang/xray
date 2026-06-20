@@ -1093,6 +1093,20 @@ if(BUILD_TESTS)
         TIMEOUT 90
     )
 
+    # AOT @c_export smoke: generated public C ABI symbols must be linkable
+    # from an external C translation unit and callable with scalar values.
+    add_test(
+        NAME ffi_c_export_smoke
+        COMMAND bash
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/ffi/run_c_export_smoke.sh
+                $<TARGET_FILE:xray>
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(ffi_c_export_smoke PROPERTIES
+        LABELS "ffi;aot;regression"
+        TIMEOUT 60
+    )
+
     # Negative frontend/semantic cases: programs that must be rejected.
     # Keeps ownership/in/ref diagnostics in the default CTest gate.
     add_test(
