@@ -1,0 +1,27 @@
+// AOT direct-call compress helpers must match VM stdlib dispatch.
+import compress
+
+let data = "Hello, World! This is a test string for compression."
+
+let gz = compress.gzip(data) ?? ""
+print(compress.isGzip(gz))
+print(compress.gunzip(gz) == data)
+let gz0 = compress.gzip(data, 0) ?? ""
+print(compress.gunzip(gz0) == data)
+
+let deflated = compress.deflate(data) ?? ""
+print(compress.inflate(deflated) == data)
+let deflated9 = compress.deflate(data, 9) ?? ""
+print(compress.inflate(deflated9) == data)
+
+let zlibbed = compress.zlibCompress(data) ?? ""
+print(compress.isZlib(zlibbed))
+print(compress.zlibDecompress(zlibbed) == data)
+let zlib0 = compress.zlibCompress(data, 0) ?? ""
+print(compress.zlibDecompress(zlib0) == data)
+
+print(compress.isGzip("not gzip"))
+print(compress.isZlib("not zlib"))
+print(compress.gunzip("not gzip") == null)
+print(compress.inflate("not deflate") == null)
+print(compress.zlibDecompress("not zlib") == null)

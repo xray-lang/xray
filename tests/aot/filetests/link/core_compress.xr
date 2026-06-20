@@ -6,3 +6,27 @@ print(compress.crc32("Hello"))
 print(compress.adler32("Wikipedia"))
 print(compress.adler32(""))
 print(compress.adler32("Hello"))
+
+let sample = "Hello, World! This is a test string for compression."
+let gz = compress.gzip(sample) ?? ""
+print(compress.isGzip(gz))
+print(compress.gunzip(gz) == sample)
+let gz0 = compress.gzip(sample, 0) ?? ""
+print(compress.gunzip(gz0) == sample)
+
+let deflated = compress.deflate(sample) ?? ""
+print(compress.inflate(deflated) == sample)
+let deflated9 = compress.deflate(sample, 9) ?? ""
+print(compress.inflate(deflated9) == sample)
+
+let zlibbed = compress.zlibCompress(sample) ?? ""
+print(compress.isZlib(zlibbed))
+print(compress.zlibDecompress(zlibbed) == sample)
+let zlib0 = compress.zlibCompress(sample, 0) ?? ""
+print(compress.zlibDecompress(zlib0) == sample)
+
+print(compress.isGzip("not gzip"))
+print(compress.isZlib("not zlib"))
+print(compress.gunzip("not gzip") == null)
+print(compress.inflate("not deflate") == null)
+print(compress.zlibDecompress("not zlib") == null)

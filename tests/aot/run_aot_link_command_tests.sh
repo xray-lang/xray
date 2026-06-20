@@ -277,8 +277,9 @@ if build_native "$COMPRESS_SRC" "$COMPRESS_BIN" "$COMPRESS_LOG"; then
     expect_log_not_contains "$COMPRESS_LOG" "-lz" "core-compress: does not link zlib"
     expect_log_not_contains "$COMPRESS_LOG" "-lssl" "core-compress: does not link ssl"
     expect_log_not_contains "$COMPRESS_LOG" "-lcrypto" "core-compress: does not link crypto"
+    expect_log_contains "$COMPRESS_LOG" "-lxray_aot_core" "core-compress: links AOT core stdlib only"
     expect_log_contains "$COMPRESS_LOG" "-lm" "core-compress: links math lib only"
-    expect_output "$COMPRESS_BIN" $'3421780262\n0\n4157704578\n300286872\n1\n93061621' "core-compress: binary output"
+    expect_output "$COMPRESS_BIN" $'3421780262\n0\n4157704578\n300286872\n1\n93061621\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\nfalse\nfalse\ntrue\ntrue\ntrue' "core-compress: binary output"
 else
     record_fail "core-compress: build failed"
     sed 's/^/      /' "$COMPRESS_LOG" | sed -n '1,120p'
