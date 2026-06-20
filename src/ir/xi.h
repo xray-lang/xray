@@ -728,6 +728,13 @@ typedef struct XiFunc {
     XiValue **params;
     uint16_t nparams;
 
+    /* Source variable metadata captured during lowering.  XiValue::var_id
+     * indexes these arrays; AOT debug codegen uses them to expose stable
+     * source-level locals without depending on the lowerer's temporary tables. */
+    uint32_t source_var_count;
+    const char **source_var_names;    /* arena-allocated array */
+    struct XrType **source_var_types; /* arena-allocated array */
+
     /* Basic blocks */
     XiBlock **blocks;
     uint32_t nblocks;

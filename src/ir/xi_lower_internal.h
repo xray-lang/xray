@@ -41,6 +41,7 @@ XR_FUNC int xi_lower_var_create(XiLower *l, uint32_t symbol_id, const char *name
 XR_FUNC void xi_lower_braun_write(XiLower *l, int var_id, XiBlock *blk, XiValue *val);
 XR_FUNC XiValue *xi_lower_braun_read(XiLower *l, int var_id, XiBlock *blk);
 XR_FUNC void xi_lower_braun_seal(XiLower *l, XiBlock *blk);
+XR_FUNC void xi_lower_capture_source_vars(XiLower *l);
 
 /* ========== Variable / Scope Lookup (xi_lower.c) ========== */
 
