@@ -1,0 +1,7 @@
+fn leak(data: ref Array<int>) -> Array<int> {
+    return data
+}
+
+let values: Array<int> = [1, 2]
+let leaked = leak(values)
+print(leaked.length)
