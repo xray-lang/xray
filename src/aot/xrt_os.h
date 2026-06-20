@@ -24,6 +24,7 @@
 #else
 #include <unistd.h>
 #include <pwd.h>
+extern char **environ;
 #endif
 
 #ifdef __APPLE__
@@ -40,6 +41,15 @@
 
 static inline XrValue xrt_os_cstr_value(const char *s) {
     return s ? xrt_str_from_cstr(s) : XR_NULL_VAL;
+}
+
+static inline XrValue xrt_os_str_slice_value(const char *s, size_t len) {
+    if (!s)
+        return XR_NULL_VAL;
+    XrValue v = xrt_str_alloc(len);
+    if (len)
+        memcpy(xr_str_buf(v), s, len);
+    return v;
 }
 
 static inline char *xrt_os_copy_cstr_arg(const char *data, int64_t len, char *stack,
@@ -110,6 +120,32 @@ static inline XrValue xrt_os_unsetenv(const char *name, int64_t len) {
     if (owned)
         XRT_FREE(owned);
     return XR_FROM_BOOL(ok);
+}
+
+static inline void xrt_os_environ_set_entry(xrt_map_t *map, const char *entry) {
+    const char *eq = entry ? strchr(entry, '=') : NULL;
+    if (!eq || eq == entry)
+        return;
+    XrValue key = xrt_os_str_slice_value(entry, (size_t) (eq - entry));
+    const char *value = eq + 1;
+    xrt_map_set(map, key, xrt_os_str_slice_value(value, strlen(value)));
+}
+
+static inline XrValue xrt_os_environ(void) {
+    XrValue map_value = xrt_map_new(64);
+    xrt_map_t *map = (xrt_map_t *) map_value.ptr;
+#ifdef _WIN32
+    LPCH env_block = GetEnvironmentStringsA();
+    if (!env_block)
+        return map_value;
+    for (const char *p = env_block; *p; p += strlen(p) + 1)
+        xrt_os_environ_set_entry(map, p);
+    FreeEnvironmentStringsA(env_block);
+#else
+    for (char **env = environ; env && *env; env++)
+        xrt_os_environ_set_entry(map, *env);
+#endif
+    return map_value;
 }
 
 static inline XrValue xrt_os_getpid(void) {

@@ -92,6 +92,7 @@ static const CgAotStdlibMethod g_aot_stdlib_methods[] = {
     {"os", "getenv", 1, "xrt_os_getenv", "s", CG_AOT_RET_VALUE, NULL},
     {"os", "setenv", 2, "xrt_os_setenv", "ss", CG_AOT_RET_VALUE, NULL},
     {"os", "unsetenv", 1, "xrt_os_unsetenv", "s", CG_AOT_RET_VALUE, NULL},
+    {"os", "environ", 0, "xrt_os_environ", "", CG_AOT_RET_VALUE, NULL},
     {"os", "getpid", 0, "xrt_os_getpid", "", CG_AOT_RET_VALUE, NULL},
     {"os", "getcwd", 0, "xrt_os_getcwd", "", CG_AOT_RET_VALUE, NULL},
     {"os", "chdir", 1, "xrt_os_chdir", "s", CG_AOT_RET_VALUE, NULL},
