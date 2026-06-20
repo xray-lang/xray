@@ -2493,8 +2493,8 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
         XR_DCHECK(sl != NULL, "inlined XI_STRUCT_NEW: missing layout");
         fprintf(out, "    struct { ");
         for (uint16_t i = 0; i < sl->field_count; i++) {
-            char fname[32];
-            snprintf(fname, sizeof(fname), "f%u", i);
+            char fname[128];
+            cg_struct_field_c_name(sl, i, fname, sizeof(fname));
             emit_struct_field_decl(out, sl, i, fname, prefix);
             fprintf(out, "; ");
         }
