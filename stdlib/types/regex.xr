@@ -14,7 +14,7 @@ class Regex {
     find(text: string) -> RegexMatch?
     findText(text: string) -> string?
     findGroup(text: string, index: int) -> string?
-    findAll(text: string) -> Array<RegexMatch>
+    findAll(text: string, limit?: int) -> Array<RegexMatch>
     replace(text: string, replacement: string) -> string
     split(text: string, limit?: int) -> Array<string>
 }

@@ -80,7 +80,14 @@ static const XlspSymbolInfo http_symbols[] = {
 
 static const XlspParamInfo regex_test_params[] = {{"text", "string", "String to test against"}};
 
-static const XlspParamInfo regex_find_params[] = {{"text", "string", "String to search in"}};
+static const XlspParamInfo regex_find_params[] = {{"text", "string", "String to search in"},
+                                                  {"offset", "int", "Optional byte offset"}};
+
+static const XlspParamInfo regex_find_group_params[] = {{"text", "string", "String to search in"},
+                                                        {"index", "int", "Capture group index"}};
+
+static const XlspParamInfo regex_find_all_params[] = {{"text", "string", "String to search in"},
+                                                      {"limit", "int", "Maximum match count"}};
 
 static const XlspParamInfo regex_replace_params[] = {
     {"text", "string", "String to modify"}, {"replacement", "string", "Replacement string"}};
@@ -91,10 +98,14 @@ static const XlspParamInfo regex_split_params[] = {{"text", "string", "String to
 static const XlspSymbolInfo regex_symbols[] = {
     {"test", XLSP_SYM_METHOD, "fn(text: string): bool", "Tests if the pattern matches the string",
      regex_test_params, 1},
-    {"find", XLSP_SYM_METHOD, "fn(text: string): string?", "Finds the first match in the string",
-     regex_find_params, 1},
-    {"findAll", XLSP_SYM_METHOD, "fn(text: string): Array<string>",
-     "Finds all matches in the string", regex_find_params, 1},
+    {"find", XLSP_SYM_METHOD, "fn(text: string, offset?: int): RegexMatch?",
+     "Finds the first match in the string", regex_find_params, 2},
+    {"findText", XLSP_SYM_METHOD, "fn(text: string): string?",
+     "Finds the first match text in the string", regex_test_params, 1},
+    {"findGroup", XLSP_SYM_METHOD, "fn(text: string, index: int): string?",
+     "Finds the first match capture group in the string", regex_find_group_params, 2},
+    {"findAll", XLSP_SYM_METHOD, "fn(text: string, limit?: int): Array<RegexMatch>",
+     "Finds all matches in the string", regex_find_all_params, 2},
     {"replace", XLSP_SYM_METHOD, "fn(text: string, replacement: string): string",
      "Replaces matches with replacement string", regex_replace_params, 2},
     {"split", XLSP_SYM_METHOD, "fn(text: string, limit?: int): Array<string>",

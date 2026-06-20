@@ -381,11 +381,11 @@ static bool add_stdlib_core_object_manifest_entries(XaotLinkManifest *manifest,
     for (uint16_t i = 0; i < features->n_stdlib_symbols; i++) {
         const char *symbol = features->stdlib_symbols[i];
         if ((strcmp(symbol, "regex.compile") == 0 || strcmp(symbol, "regex.count") == 0 ||
-             strcmp(symbol, "regex.find") == 0 || strcmp(symbol, "regex.findGroup") == 0 ||
-             strcmp(symbol, "regex.findText") == 0 || strcmp(symbol, "regex.fullFind") == 0 ||
-             strcmp(symbol, "regex.isValid") == 0 || strcmp(symbol, "regex.replace") == 0 ||
-             strcmp(symbol, "regex.replaceAll") == 0 || strcmp(symbol, "regex.split") == 0 ||
-             strcmp(symbol, "regex.test") == 0) &&
+             strcmp(symbol, "regex.find") == 0 || strcmp(symbol, "regex.findAll") == 0 ||
+             strcmp(symbol, "regex.findGroup") == 0 || strcmp(symbol, "regex.findText") == 0 ||
+             strcmp(symbol, "regex.fullFind") == 0 || strcmp(symbol, "regex.isValid") == 0 ||
+             strcmp(symbol, "regex.replace") == 0 || strcmp(symbol, "regex.replaceAll") == 0 ||
+             strcmp(symbol, "regex.split") == 0 || strcmp(symbol, "regex.test") == 0) &&
             !xaot_link_manifest_add_unique(manifest, XAOT_LINK_STDLIB_OBJECT, symbol))
             return false;
     }
@@ -479,6 +479,7 @@ static bool build_link_manifest(const XaotFeatureSet *features, XaotLinkManifest
     if (xaot_link_manifest_contains(manifest, XAOT_LINK_STDLIB_OBJECT, "regex.compile") ||
         xaot_link_manifest_contains(manifest, XAOT_LINK_STDLIB_OBJECT, "regex.count") ||
         xaot_link_manifest_contains(manifest, XAOT_LINK_STDLIB_OBJECT, "regex.find") ||
+        xaot_link_manifest_contains(manifest, XAOT_LINK_STDLIB_OBJECT, "regex.findAll") ||
         xaot_link_manifest_contains(manifest, XAOT_LINK_STDLIB_OBJECT, "regex.findGroup") ||
         xaot_link_manifest_contains(manifest, XAOT_LINK_STDLIB_OBJECT, "regex.findText") ||
         xaot_link_manifest_contains(manifest, XAOT_LINK_STDLIB_OBJECT, "regex.fullFind") ||
