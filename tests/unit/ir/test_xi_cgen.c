@@ -691,6 +691,38 @@ TEST(cgen_emits_debug_source_var_slots) {
     xi_func_free(ir);
 }
 
+TEST(cgen_emits_shadowed_debug_source_var_slots) {
+    const char *src = "fn compute(seed: int) -> int {\n"
+                      "    let answer = seed + 1\n"
+                      "    if (answer > 0) {\n"
+                      "        let shadowSeed = answer + 10\n"
+                      "        let answer = shadowSeed\n"
+                      "        print(answer)\n"
+                      "    }\n"
+                      "    return answer\n"
+                      "}\n"
+                      "print(compute(20))\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "shadowed debug source-var slot test should generate");
+    assert(contains(code, "int64_t answer = 0;") &&
+           "first source variable with a repeated name should keep its source name");
+    assert(contains(code, "int64_t _xray_dbg_shadow_1_answer = 0;") &&
+           "shadowed source variable should get a stable debug fallback name");
+    assert(contains(code, "answer = (int64_t)") && "outer answer should be synchronized");
+    assert(contains(code, "_xray_dbg_shadow_1_answer = (int64_t)") &&
+           "shadowed answer should be synchronized");
+
+    printf("  Generated shadowed debug source-var mapped C %zu bytes\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_coro_emits_source_line_directives) {
     const char *src = "fn worker(n: int) -> int {\n"
                       "    yield\n"
@@ -4540,6 +4572,7 @@ int main(void) {
     run_cgen_module_prefix_is_c_identifier();
     run_cgen_emits_source_line_directives();
     run_cgen_emits_debug_source_var_slots();
+    run_cgen_emits_shadowed_debug_source_var_slots();
     run_cgen_coro_emits_source_line_directives();
     run_cgen_coro_emits_debug_source_var_slots();
     run_cgen_recursive();

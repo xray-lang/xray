@@ -2087,6 +2087,8 @@ typedef struct CgDebugSourceVarInfo {
     const char *name;
     const char *ctype;
     XrRep rep;
+    XiVarId var_id;
+    uint32_t shadow_index;
 } CgDebugSourceVarInfo;
 
 static bool cg_debug_is_ident_start(char ch) {
@@ -2149,7 +2151,7 @@ static bool cg_debug_source_name_is_safe(const char *name) {
     return true;
 }
 
-static bool cg_debug_source_var_name_is_unique(const XiFunc *f, XiVarId var_id) {
+static bool cg_debug_source_var_name_is_usable(const XiFunc *f, XiVarId var_id) {
     if (!f || !xi_var_id_is_valid(var_id) || var_id >= f->source_var_count || !f->source_var_names)
         return false;
     const char *name = f->source_var_names[var_id];
@@ -2157,13 +2159,19 @@ static bool cg_debug_source_var_name_is_unique(const XiFunc *f, XiVarId var_id) 
         return false;
     if (f->name && strcmp(f->name, name) == 0)
         return false;
+    return true;
+}
 
-    uint32_t matches = 0;
-    for (uint32_t i = 0; i < f->source_var_count; i++) {
+static uint32_t cg_debug_source_var_shadow_index(const XiFunc *f, XiVarId var_id) {
+    if (!cg_debug_source_var_name_is_usable(f, var_id))
+        return 0;
+    const char *name = f->source_var_names[var_id];
+    uint32_t shadow_index = 0;
+    for (uint32_t i = 0; i < (uint32_t) var_id; i++) {
         if (f->source_var_names[i] && strcmp(f->source_var_names[i], name) == 0)
-            matches++;
+            shadow_index++;
     }
-    return matches == 1;
+    return shadow_index;
 }
 
 static const XaotValuePlan *cg_debug_value_plan(XiCgenCtx *ctx, const XiValue *v) {
@@ -2191,7 +2199,7 @@ static XrRep cg_debug_value_decl_storage_rep(XiCgenCtx *ctx, const XiFunc *f, co
 static bool cg_debug_value_has_source_storage(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v) {
     if (!v || !xi_var_id_is_valid(v->var_id))
         return false;
-    if (!cg_debug_source_var_name_is_unique(f, v->var_id))
+    if (!cg_debug_source_var_name_is_usable(f, v->var_id))
         return false;
     if (cg_is_void_like(v) || v->op == XI_TRY || v->op == XI_END_TRY)
         return false;
@@ -2244,7 +2252,7 @@ static bool cg_debug_value_has_source_storage(XiCgenCtx *ctx, const XiFunc *f, c
 
 static bool cg_debug_source_var_storage_info(XiCgenCtx *ctx, const XiFunc *f, XiVarId var_id,
                                              CgDebugSourceVarInfo *out_info) {
-    if (!out_info || !cg_debug_source_var_name_is_unique(f, var_id))
+    if (!out_info || !cg_debug_source_var_name_is_usable(f, var_id))
         return false;
 
     const char *ctype = NULL;
@@ -2311,7 +2319,19 @@ static bool cg_debug_source_var_storage_info(XiCgenCtx *ctx, const XiFunc *f, Xi
     out_info->name = f->source_var_names[var_id];
     out_info->ctype = ctype;
     out_info->rep = rep;
+    out_info->var_id = var_id;
+    out_info->shadow_index = cg_debug_source_var_shadow_index(f, var_id);
     return true;
+}
+
+static void emit_debug_source_var_c_name(FILE *out, const CgDebugSourceVarInfo *info) {
+    if (!info)
+        return;
+    if (info->shadow_index == 0) {
+        fprintf(out, "%s", info->name);
+        return;
+    }
+    fprintf(out, "_xray_dbg_shadow_%u_%s", (unsigned) info->shadow_index, info->name);
 }
 
 static void emit_debug_source_var_declarations(XiCgenCtx *ctx, FILE *out, const XiFunc *f) {
@@ -2327,7 +2347,9 @@ static void emit_debug_source_var_declarations(XiCgenCtx *ctx, FILE *out, const 
             fprintf(out, "#if defined(XRAY_AOT_DEBUG_LOCALS)\n");
             emitted_guard = true;
         }
-        fprintf(out, "    %s %s = ", info.ctype, info.name);
+        fprintf(out, "    %s ", info.ctype);
+        emit_debug_source_var_c_name(out, &info);
+        fprintf(out, " = ");
         if (info.rep == XR_REP_TAGGED)
             fprintf(out, "XR_NULL_VAL");
         else
@@ -2347,7 +2369,9 @@ static void emit_debug_source_var_sync(XiCgenCtx *ctx, FILE *out, const XiFunc *
         return;
 
     fprintf(out, "#if defined(XRAY_AOT_DEBUG_LOCALS)\n");
-    fprintf(out, "    %s = ", info.name);
+    fprintf(out, "    ");
+    emit_debug_source_var_c_name(out, &info);
+    fprintf(out, " = ");
     if (strcmp(info.ctype, "XrValue") == 0) {
         emit_value_as_rep_ctx(ctx, out, v, info.rep);
     } else {
