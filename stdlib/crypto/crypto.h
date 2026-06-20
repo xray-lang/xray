@@ -39,57 +39,10 @@
 #define XR_STDLIB_CRYPTO_H
 
 #include "../../src/base/xdefs.h"
+#include "../../src/shared/xr_crypto_core.h"
 
-/* ========== Internal Data Structures ========== */
-
-/*
- * MD5 context for incremental hashing.
- * Allows processing data in chunks via init/update/final pattern.
- */
-typedef struct {
-    uint32_t state[4];   // Current hash state (A, B, C, D)
-    uint32_t count[2];   // Number of bits processed (low, high)
-    uint8_t buffer[64];  // Input buffer for incomplete block
-} XrMD5Context;
-
-/*
- * SHA-1 context for incremental hashing.
- * NOTE: SHA-1 is considered weak, use SHA-256 for new applications.
- */
-typedef struct {
-    uint32_t state[5];   // Current hash state (H0-H4)
-    uint32_t count[2];   // Number of bits processed (low, high)
-    uint8_t buffer[64];  // Input buffer for incomplete block
-} XrSHA1Context;
-
-/*
- * SHA-256 context for incremental hashing.
- * Recommended for general-purpose cryptographic hashing.
- */
-typedef struct {
-    uint32_t state[8];   // Current hash state (H0-H7)
-    uint64_t count;      // Number of bytes processed
-    uint8_t buffer[64];  // Input buffer for incomplete block (512-bit blocks)
-} XrSHA256Context;
-
-/*
- * SHA-512 context for incremental hashing.
- * Uses 64-bit operations, may be faster on 64-bit platforms.
- */
-typedef struct {
-    uint64_t state[8];    // Current hash state (H0-H7)
-    uint64_t count[2];    // Number of bits processed (low, high)
-    uint8_t buffer[128];  // Input buffer for incomplete block (1024-bit blocks)
-} XrSHA512Context;
-
-/*
- * AES context for encryption/decryption.
- * Supports AES-128 (10 rounds), AES-192 (12 rounds), AES-256 (14 rounds).
- */
-typedef struct {
-    uint32_t round_key[60];  // Expanded key schedule (max 60 words for AES-256)
-    int rounds;              // Number of rounds: 10, 12, or 14
-} XrAESContext;
+/* Hash/AES context structs live in xr_crypto_core.h so VM stdlib and
+ * freestanding AOT helpers share one declaration surface. */
 
 /* ========== Hash Functions ========== */
 
