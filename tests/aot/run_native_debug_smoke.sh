@@ -70,6 +70,11 @@ CORO_SRC="$WORK/coro_debug_locals.xr"
 CORO_BUILD_LOG="$WORK/coro_build.log"
 CORO_DWARF_LOG="$WORK/coro_dwarf.log"
 CORO_LLDB_LOG="$WORK/coro_lldb.log"
+AGG_BIN="$WORK/agg_debug_locals"
+AGG_SRC="$WORK/agg_debug_locals.xr"
+AGG_BUILD_LOG="$WORK/agg_build.log"
+AGG_DWARF_LOG="$WORK/agg_dwarf.log"
+AGG_LLDB_LOG="$WORK/agg_lldb.log"
 
 cat > "$SRC" <<'XR'
 fn compute(seed: int) -> int {
@@ -150,6 +155,87 @@ if ! grep -Eq "ratio = 21(\\.0+)?" "$LLDB_LOG"; then
 fi
 if ! grep -Eq "ok = .*(true|1|\\\\x01)" "$LLDB_LOG"; then
     fail "lldb did not expose source local ok=true"
+fi
+
+cat > "$AGG_SRC" <<'XR'
+@repr(C)
+struct Point {
+    x: int32
+    y: int32
+}
+fn make(seed: int32) -> Point {
+    if (seed < 0) { return Point{x: 0, y: 0} }
+    let p = Point{x: seed + 1, y: seed + 2}
+    let q = p
+    let total = q.x + q.y
+    print(total)
+    return q
+}
+make(20)
+XR
+
+if ! "$XRAY" build --native -g --rebuild --dump-link-command -o "$AGG_BIN" "$AGG_SRC" > "$AGG_BUILD_LOG" 2>&1; then
+    fail "aggregate debug build failed"
+    sed -n '1,80p' "$AGG_BUILD_LOG" >&2
+    exit 1
+fi
+
+if ! grep -Fq "Debug info command: dsymutil" "$AGG_BUILD_LOG"; then
+    fail "aggregate debug build did not run dsymutil"
+fi
+if ! grep -Fq -- "-DXRAY_AOT_DEBUG_LOCALS=1" "$AGG_BUILD_LOG"; then
+    fail "aggregate debug build did not enable AOT source-variable locals"
+fi
+
+AGG_RUN_OUT="$("$AGG_BIN" 2>&1)"
+if [ "$AGG_RUN_OUT" != "43" ]; then
+    fail "aggregate debug binary output mismatch: $AGG_RUN_OUT"
+fi
+
+if [ ! -d "$AGG_BIN.dSYM" ]; then
+    fail "aggregate debug build did not produce dSYM"
+else
+    if ! "$DWARFDUMP" --debug-line "$AGG_BIN.dSYM" > "$AGG_DWARF_LOG" 2>&1; then
+        fail "aggregate llvm-dwarfdump failed"
+    elif ! grep -Fq 'name: "agg_debug_locals.xr"' "$AGG_DWARF_LOG"; then
+        fail "aggregate dSYM line table does not reference agg_debug_locals.xr"
+    fi
+fi
+
+if ! lldb --no-lldbinit -b \
+        -o "breakpoint set --file agg_debug_locals.xr --line 11" \
+        -o run \
+        -o "frame variable p->f0" \
+        -o "frame variable p->f1" \
+        -o "frame variable q->f0" \
+        -o "frame variable q->f1" \
+        -o "frame variable total" \
+        -o bt -- "$AGG_BIN" > "$AGG_LLDB_LOG" 2>&1; then
+    fail "aggregate lldb failed"
+fi
+if ! grep -Fq "stop reason = breakpoint" "$AGG_LLDB_LOG"; then
+    fail "aggregate lldb did not stop at breakpoint"
+fi
+if ! grep -Fq "agg_debug_locals_make" "$AGG_LLDB_LOG"; then
+    fail "aggregate lldb backtrace did not show xray-derived function name"
+fi
+if ! grep -Fq "agg_debug_locals.xr:11" "$AGG_LLDB_LOG"; then
+    fail "aggregate lldb breakpoint/backtrace did not report agg_debug_locals.xr:11"
+fi
+if ! grep -Eq "p->f0 = 21" "$AGG_LLDB_LOG"; then
+    fail "aggregate lldb did not expose source local p->f0=21"
+fi
+if ! grep -Eq "p->f1 = 22" "$AGG_LLDB_LOG"; then
+    fail "aggregate lldb did not expose source local p->f1=22"
+fi
+if ! grep -Eq "q->f0 = 21" "$AGG_LLDB_LOG"; then
+    fail "aggregate lldb did not expose source local q->f0=21"
+fi
+if ! grep -Eq "q->f1 = 22" "$AGG_LLDB_LOG"; then
+    fail "aggregate lldb did not expose source local q->f1=22"
+fi
+if ! grep -Eq "total = 43" "$AGG_LLDB_LOG"; then
+    fail "aggregate lldb did not expose source local total=43"
 fi
 
 cat > "$CORO_SRC" <<'XR'
@@ -235,6 +321,10 @@ if [ "$FAIL" -ne 0 ]; then
     sed -n '1,120p' "$BUILD_LOG" >&2
     echo "--- lldb log ---" >&2
     sed -n '1,160p' "$LLDB_LOG" >&2
+    echo "--- aggregate build log ---" >&2
+    sed -n '1,120p' "$AGG_BUILD_LOG" >&2
+    echo "--- aggregate lldb log ---" >&2
+    sed -n '1,180p' "$AGG_LLDB_LOG" >&2
     echo "--- coroutine build log ---" >&2
     sed -n '1,120p' "$CORO_BUILD_LOG" >&2
     echo "--- coroutine lldb log ---" >&2
@@ -242,5 +332,5 @@ if [ "$FAIL" -ne 0 ]; then
     exit 1
 fi
 
-PASS=$((PASS + 2))
+PASS=$((PASS + 3))
 echo "=== Results: $PASS passed, 0 failed, 0 skipped ==="

@@ -35,6 +35,7 @@
 #include "../ir/xi_coro_analyze.h"
 #include "../base/xdefs.h"
 #include "../runtime/class/xenum.h"
+#include "../runtime/class/xclass_info.h"
 #include "../runtime/value/xstruct_layout.h"
 #include "../base/xglobal_indices.h"
 #include "../base/xchecks.h"
@@ -2086,6 +2087,7 @@ static bool func_needs_fallthrough_return(const XiFunc *f) {
 typedef struct CgDebugSourceVarInfo {
     const char *name;
     const char *ctype;
+    char ctype_buf[160];
     XrRep rep;
     XiVarId var_id;
     uint32_t shadow_index;
@@ -2196,6 +2198,50 @@ static XrRep cg_debug_value_decl_storage_rep(XiCgenCtx *ctx, const XiFunc *f, co
     return plan ? xaot_value_storage_rep(plan->rep) : XR_REP_VOID;
 }
 
+static const XrStructLayout *cg_debug_type_struct_layout(const XrType *type) {
+    if (!type || (type->kind != XR_KIND_CLASS && type->kind != XR_KIND_INSTANCE) ||
+        !type->instance.class_ref)
+        return NULL;
+    return type->instance.class_ref->struct_layout;
+}
+
+static const XrStructLayout *cg_debug_value_struct_layout(XiCgenCtx *ctx, const XiFunc *f,
+                                                          const XiValue *v) {
+    if (!v)
+        return NULL;
+
+    const XiValue *cur = v;
+    for (int depth = 0; cur && depth <= 8; depth++) {
+        if (cur->op == XI_STRUCT_NEW)
+            return (const XrStructLayout *) cur->aux;
+        if ((cur->op == XI_COPY || cur->op == XI_MOVE || cur->op == XI_RETAIN) && cur->nargs >= 1) {
+            cur = cur->args[0];
+            continue;
+        }
+        break;
+    }
+
+    const XrStructLayout *shared_layout = NULL;
+    if (cg_value_traces_to_heap_struct_shared(ctx, f, v, &shared_layout, NULL))
+        return shared_layout;
+
+    return cg_debug_type_struct_layout(v->type);
+}
+
+static bool cg_debug_value_struct_ptr_ctype(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v,
+                                            char *buf, size_t buflen) {
+    if (!buf || buflen == 0)
+        return false;
+    const XrStructLayout *sl = cg_debug_value_struct_layout(ctx, f, v);
+    if (!cg_struct_native_heap_supported(sl))
+        return false;
+    char type_name[128];
+    cg_struct_heap_type_name(type_name, sizeof(type_name),
+                             ctx && ctx->module ? ctx->module->name : NULL, sl);
+    snprintf(buf, buflen, "%s *", type_name);
+    return true;
+}
+
 static const XiValue *cg_debug_source_var_storage_value(const XiFunc *f, const XiValue *v) {
     if (!v)
         return NULL;
@@ -2282,12 +2328,19 @@ static bool cg_debug_source_var_storage_info(XiCgenCtx *ctx, const XiFunc *f, Xi
         if (!v || v->var_id != var_id || !cg_debug_value_has_source_storage(ctx, f, v))
             continue;
         const XiValue *storage_v = cg_debug_source_var_storage_value(f, v);
+        char cur_ctype_buf[160];
         const char *cur_ctype = cg_debug_value_ctype(ctx, f, storage_v);
         XrRep cur_rep = cg_debug_value_decl_storage_rep(ctx, f, storage_v);
+        if (cg_debug_value_struct_ptr_ctype(ctx, f, storage_v, cur_ctype_buf,
+                                            sizeof(cur_ctype_buf))) {
+            cur_ctype = cur_ctype_buf;
+            cur_rep = XR_REP_PTR;
+        }
         if (!cur_ctype || strcmp(cur_ctype, "void") == 0 || cur_rep == XR_REP_VOID)
             return false;
         if (!found) {
-            ctype = cur_ctype;
+            snprintf(out_info->ctype_buf, sizeof(out_info->ctype_buf), "%s", cur_ctype);
+            ctype = out_info->ctype_buf;
             rep = cur_rep;
             found = true;
         } else if (strcmp(ctype, cur_ctype) != 0 || rep != cur_rep) {
@@ -2304,12 +2357,19 @@ static bool cg_debug_source_var_storage_info(XiCgenCtx *ctx, const XiFunc *f, Xi
             if (v->var_id != var_id || !cg_debug_value_has_source_storage(ctx, f, v))
                 continue;
             const XiValue *storage_v = cg_debug_source_var_storage_value(f, v);
+            char cur_ctype_buf[160];
             const char *cur_ctype = cg_debug_value_ctype(ctx, f, storage_v);
             XrRep cur_rep = cg_debug_value_decl_storage_rep(ctx, f, storage_v);
+            if (cg_debug_value_struct_ptr_ctype(ctx, f, storage_v, cur_ctype_buf,
+                                                sizeof(cur_ctype_buf))) {
+                cur_ctype = cur_ctype_buf;
+                cur_rep = XR_REP_PTR;
+            }
             if (!cur_ctype || strcmp(cur_ctype, "void") == 0 || cur_rep == XR_REP_VOID)
                 return false;
             if (!found) {
-                ctype = cur_ctype;
+                snprintf(out_info->ctype_buf, sizeof(out_info->ctype_buf), "%s", cur_ctype);
+                ctype = out_info->ctype_buf;
                 rep = cur_rep;
                 found = true;
             } else if (strcmp(ctype, cur_ctype) != 0 || rep != cur_rep) {
@@ -2321,12 +2381,19 @@ static bool cg_debug_source_var_storage_info(XiCgenCtx *ctx, const XiFunc *f, Xi
             if (!v || v->var_id != var_id || !cg_debug_value_has_source_storage(ctx, f, v))
                 continue;
             const XiValue *storage_v = cg_debug_source_var_storage_value(f, v);
+            char cur_ctype_buf[160];
             const char *cur_ctype = cg_debug_value_ctype(ctx, f, storage_v);
             XrRep cur_rep = cg_debug_value_decl_storage_rep(ctx, f, storage_v);
+            if (cg_debug_value_struct_ptr_ctype(ctx, f, storage_v, cur_ctype_buf,
+                                                sizeof(cur_ctype_buf))) {
+                cur_ctype = cur_ctype_buf;
+                cur_rep = XR_REP_PTR;
+            }
             if (!cur_ctype || strcmp(cur_ctype, "void") == 0 || cur_rep == XR_REP_VOID)
                 return false;
             if (!found) {
-                ctype = cur_ctype;
+                snprintf(out_info->ctype_buf, sizeof(out_info->ctype_buf), "%s", cur_ctype);
+                ctype = out_info->ctype_buf;
                 rep = cur_rep;
                 found = true;
             } else if (strcmp(ctype, cur_ctype) != 0 || rep != cur_rep) {
