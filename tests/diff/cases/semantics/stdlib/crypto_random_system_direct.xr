@@ -1,0 +1,19 @@
+import crypto
+
+let r8 = crypto.randomBytes(8)
+let r16 = crypto.randomBytes(16)
+let uuid = crypto.uuid()
+let parts = uuid.split("-")
+let variant = uuid.charAt(19)
+
+print(r8.length == 16)
+print(r16.length == 32)
+print(uuid.length == 36)
+print(parts.length == 5)
+print(parts[0].length == 8)
+print(parts[1].length == 4)
+print(parts[2].length == 4)
+print(parts[3].length == 4)
+print(parts[4].length == 12)
+print(uuid.charAt(14) == "4")
+print(variant == "8" || variant == "9" || variant == "a" || variant == "b")

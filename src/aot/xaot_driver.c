@@ -398,8 +398,9 @@ static bool add_stdlib_core_object_manifest_entries(XaotLinkManifest *manifest,
     for (uint16_t i = 0; i < features->n_stdlib_symbols; i++) {
         const char *symbol = features->stdlib_symbols[i];
         if ((strcmp(symbol, "crypto.hmac") == 0 || strcmp(symbol, "crypto.md5") == 0 ||
-             strcmp(symbol, "crypto.sha1") == 0 || strcmp(symbol, "crypto.sha256") == 0 ||
-             strcmp(symbol, "crypto.sha512") == 0 || strcmp(symbol, "math.random") == 0 ||
+             strcmp(symbol, "crypto.randomBytes") == 0 || strcmp(symbol, "crypto.sha1") == 0 ||
+             strcmp(symbol, "crypto.sha256") == 0 || strcmp(symbol, "crypto.sha512") == 0 ||
+             strcmp(symbol, "crypto.uuid") == 0 || strcmp(symbol, "math.random") == 0 ||
              strcmp(symbol, "math.randomInt") == 0 || strcmp(symbol, "regex.compile") == 0 ||
              stdlib_symbol_is_time_query(symbol) || strcmp(symbol, "regex.count") == 0 ||
              strcmp(symbol, "regex.find") == 0 || strcmp(symbol, "regex.findAll") == 0 ||

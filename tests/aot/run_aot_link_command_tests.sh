@@ -133,6 +133,24 @@ else
     sed 's/^/      /' "$RANDOM_MATH_LOG" | sed -n '1,120p'
 fi
 
+RANDOM_CRYPTO_SRC="$PROJECT_DIR/tests/aot/filetests/link/system_crypto_random.xr"
+RANDOM_CRYPTO_BIN="$WORK/system_crypto_random"
+RANDOM_CRYPTO_LOG="$WORK/system_crypto_random.log"
+if build_native "$RANDOM_CRYPTO_SRC" "$RANDOM_CRYPTO_BIN" "$RANDOM_CRYPTO_LOG"; then
+    expect_log_contains "$RANDOM_CRYPTO_LOG" "Link command:" "system-crypto-random: emitted link command"
+    expect_log_not_contains "$RANDOM_CRYPTO_LOG" "-lxray_core" "system-crypto-random: does not link xray_core"
+    expect_log_not_contains "$RANDOM_CRYPTO_LOG" "-lpthread" "system-crypto-random: does not link pthread"
+    expect_log_not_contains "$RANDOM_CRYPTO_LOG" "-lz" "system-crypto-random: does not link zlib"
+    expect_log_not_contains "$RANDOM_CRYPTO_LOG" "-lssl" "system-crypto-random: does not link ssl"
+    expect_log_not_contains "$RANDOM_CRYPTO_LOG" "-lcrypto" "system-crypto-random: does not link crypto"
+    expect_log_contains "$RANDOM_CRYPTO_LOG" "-lxray_aot_core" "system-crypto-random: links AOT core stdlib only"
+    expect_log_contains "$RANDOM_CRYPTO_LOG" "-lm" "system-crypto-random: links math lib"
+    expect_output "$RANDOM_CRYPTO_BIN" $'true\ntrue\ntrue' "system-crypto-random: binary output"
+else
+    record_fail "system-crypto-random: build failed"
+    sed 's/^/      /' "$RANDOM_CRYPTO_LOG" | sed -n '1,120p'
+fi
+
 TIME_QUERY_SRC="$PROJECT_DIR/tests/aot/filetests/link/system_time_queries.xr"
 TIME_QUERY_BIN="$WORK/system_time_queries"
 TIME_QUERY_LOG="$WORK/system_time_queries.log"

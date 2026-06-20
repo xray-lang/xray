@@ -1,0 +1,12 @@
+contains=xaot-plan v0
+contains="generated_c_files": ["<aot-generated-c>"]
+contains="runtime_objects": []
+contains="stdlib_objects": ["crypto.randomBytes", "crypto.uuid"]
+contains="stdlib_symbols": ["crypto.randomBytes", "crypto.uuid"]
+contains="system_libs": ["m"]
+contains="defines": ["XRT_IMPL"]
+not_contains="runtime_objects": ["xray_core"]
+not_contains="stdlib_objects": ["crypto"]
+c_contains=xrt_crypto_random_bytes(
+c_contains=xrt_crypto_uuid(
+c_not_contains=xrt_method_

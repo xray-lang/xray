@@ -1,0 +1,5 @@
+import crypto
+
+print(crypto.randomBytes(8).length == 16)
+print(crypto.randomBytes(16).length == 32)
+print(crypto.uuid().length == 36)
