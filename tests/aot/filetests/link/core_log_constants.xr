@@ -1,0 +1,9 @@
+import log
+
+print(log.DEBUG)
+print(log.INFO)
+print(log.WARN)
+print(log.ERROR)
+print(log.FATAL)
+print(log.DEBUG < log.INFO)
+print(log.FATAL > log.ERROR)

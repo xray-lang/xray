@@ -60,6 +60,7 @@ enum {
     XAOT_STDLIB_ENCODING = 1 << 16,
     XAOT_STDLIB_URL = 1 << 17,
     XAOT_STDLIB_DATETIME = 1 << 18,
+    XAOT_STDLIB_LOG = 1 << 19,
 };
 
 /* Runtime feature set inferred from analysis.

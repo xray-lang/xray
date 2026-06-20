@@ -233,6 +233,24 @@ else
     sed 's/^/      /' "$ENC_LOG" | sed -n '1,120p'
 fi
 
+LOG_CONST_SRC="$PROJECT_DIR/tests/aot/filetests/link/core_log_constants.xr"
+LOG_CONST_BIN="$WORK/core_log_constants"
+LOG_CONST_LOG="$WORK/core_log_constants.log"
+if build_native "$LOG_CONST_SRC" "$LOG_CONST_BIN" "$LOG_CONST_LOG"; then
+    expect_log_contains "$LOG_CONST_LOG" "Link command:" "core-log-constants: emitted link command"
+    expect_log_not_contains "$LOG_CONST_LOG" "-lxray_core" "core-log-constants: does not link xray_core"
+    expect_log_not_contains "$LOG_CONST_LOG" "-lxray_aot_core" "core-log-constants: does not link AOT core"
+    expect_log_not_contains "$LOG_CONST_LOG" "-lpthread" "core-log-constants: does not link pthread"
+    expect_log_not_contains "$LOG_CONST_LOG" "-lz" "core-log-constants: does not link zlib"
+    expect_log_not_contains "$LOG_CONST_LOG" "-lssl" "core-log-constants: does not link ssl"
+    expect_log_not_contains "$LOG_CONST_LOG" "-lcrypto" "core-log-constants: does not link crypto"
+    expect_log_contains "$LOG_CONST_LOG" "-lm" "core-log-constants: links math lib only"
+    expect_output "$LOG_CONST_BIN" $'10\n20\n30\n40\n50\ntrue\ntrue' "core-log-constants: binary output"
+else
+    record_fail "core-log-constants: build failed"
+    sed 's/^/      /' "$LOG_CONST_LOG" | sed -n '1,120p'
+fi
+
 BASE64_SRC="$PROJECT_DIR/tests/aot/filetests/link/core_base64.xr"
 BASE64_BIN="$WORK/core_base64"
 BASE64_LOG="$WORK/core_base64.log"

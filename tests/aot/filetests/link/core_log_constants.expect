@@ -1,0 +1,16 @@
+contains=xaot-plan v0
+contains="generated_c_files": ["<aot-generated-c>"]
+contains="runtime_objects": []
+contains="stdlib_objects": []
+contains="stdlib_symbols": ["log.DEBUG", "log.INFO", "log.WARN", "log.ERROR", "log.FATAL"]
+contains="system_libs": ["m"]
+contains="defines": ["XRT_IMPL"]
+not_contains="runtime_objects": ["xray_core"]
+not_contains="stdlib_objects": ["log"]
+c_contains=INT64_C(10)
+c_contains=INT64_C(20)
+c_contains=INT64_C(30)
+c_contains=INT64_C(40)
+c_contains=INT64_C(50)
+c_not_contains=xrt_getprop_name
+c_not_contains=xrt_method_
