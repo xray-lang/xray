@@ -14,6 +14,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <limits.h>
+#include <string.h>
 
 static char *xrt_regex_copy_cstring(const char *data, int64_t len) {
     if (!data && len != 0)
@@ -125,4 +126,55 @@ XrValue xrt_regex_count(XrValue re_value, const char *text_data, int64_t text_le
 
     xrt_regex_object_t *obj = (xrt_regex_object_t *) re_value.ptr;
     return XR_FROM_INT((int64_t) xr_regex_count(obj->regex, text_data, (int) text_len));
+}
+
+static XrValue xrt_regex_match_group_to_string(const XrMatch *match, int group_index) {
+    if (!match || group_index < 0 || group_index >= match->group_count)
+        return XR_NULL_VAL;
+    const char *start = match->groups[group_index].start;
+    const char *end = match->groups[group_index].end;
+    if (!start || !end || end < start)
+        return XR_NULL_VAL;
+
+    size_t len = (size_t) (end - start);
+    XrValue result = xrt_str_alloc(len);
+    if (len > 0)
+        memcpy(xr_str_buf(result), start, len);
+    return result;
+}
+
+XrValue xrt_regex_find_text(XrValue re_value, const char *text_data, int64_t text_len) {
+    if (re_value.tag != XR_TAG_REGEX || !re_value.ptr || !text_data)
+        return XR_NULL_VAL;
+    if (text_len < 0)
+        text_len = (int64_t) strlen(text_data);
+    if (text_len < 0 || text_len > (int64_t) INT_MAX)
+        return XR_NULL_VAL;
+
+    xrt_regex_object_t *obj = (xrt_regex_object_t *) re_value.ptr;
+    XrMatch match;
+    if (!xr_regex_match(obj->regex, text_data, (int) text_len, &match))
+        return XR_NULL_VAL;
+    return xrt_regex_match_group_to_string(&match, 0);
+}
+
+XrValue xrt_regex_find_group(XrValue re_value, const char *text_data, int64_t text_len,
+                             XrValue group_value) {
+    if (!XR_IS_INT(group_value))
+        return XR_NULL_VAL;
+    int64_t group_i64 = XR_TO_INT(group_value);
+    if (group_i64 < 0 || group_i64 > INT_MAX)
+        return XR_NULL_VAL;
+    if (re_value.tag != XR_TAG_REGEX || !re_value.ptr || !text_data)
+        return XR_NULL_VAL;
+    if (text_len < 0)
+        text_len = (int64_t) strlen(text_data);
+    if (text_len < 0 || text_len > (int64_t) INT_MAX)
+        return XR_NULL_VAL;
+
+    xrt_regex_object_t *obj = (xrt_regex_object_t *) re_value.ptr;
+    XrMatch match;
+    if (!xr_regex_match(obj->regex, text_data, (int) text_len, &match))
+        return XR_NULL_VAL;
+    return xrt_regex_match_group_to_string(&match, (int) group_i64);
 }
