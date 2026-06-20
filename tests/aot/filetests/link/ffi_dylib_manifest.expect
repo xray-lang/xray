@@ -1,0 +1,8 @@
+contains=xaot-plan v0
+contains="runtime_objects": []
+contains="stdlib_objects": []
+contains="system_libs": ["m", "xrayffi_smoke"]
+contains="defines": ["XRT_IMPL"]
+not_contains="runtime_objects": ["xray_core"]
+c_contains=extern int32_t xr_ffi_xrayffi_add1(int32_t) __asm__(XR_FFI_ASMNAME("xrayffi_add1"));
+c_contains=int32_t v4 = xr_ffi_xrayffi_add1(v3);
