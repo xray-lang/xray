@@ -149,6 +149,33 @@ static XrValue xrt_regex_match_group_to_string(const XrMatch *match, int group_i
     return xrt_regex_copy_slice(start, (int64_t) (end - start));
 }
 
+static XrValue xrt_regex_make_match_object(const char *text_data, const XrMatch *match) {
+    XrValue obj = xrt_map_new(4);
+    int64_t start_offset = 0;
+    int64_t end_offset = 0;
+
+    if (match && match->group_count > 0 && match->groups[0].start && match->groups[0].end) {
+        start_offset = (int64_t) (match->groups[0].start - text_data);
+        end_offset = (int64_t) (match->groups[0].end - text_data);
+        xrt_map_set(
+            (xrt_map_t *) obj.ptr, xr_box_str("text"),
+            xrt_regex_copy_slice(match->groups[0].start,
+                                 (int64_t) (match->groups[0].end - match->groups[0].start)));
+    } else {
+        xrt_map_set((xrt_map_t *) obj.ptr, xr_box_str("text"), XR_NULL_VAL);
+    }
+
+    xrt_map_set((xrt_map_t *) obj.ptr, xr_box_str("start"), XR_FROM_INT(start_offset));
+    xrt_map_set((xrt_map_t *) obj.ptr, xr_box_str("end"), XR_FROM_INT(end_offset));
+
+    int group_count = match && match->group_count > 0 ? match->group_count : 0;
+    XrValue groups = xrt_array_new(group_count);
+    for (int i = 0; i < group_count; i++)
+        xrt_array_push(groups, xrt_regex_match_group_to_string(match, i));
+    xrt_map_set((xrt_map_t *) obj.ptr, xr_box_str("groups"), groups);
+    return obj;
+}
+
 XrValue xrt_regex_find_text(XrValue re_value, const char *text_data, int64_t text_len) {
     if (re_value.tag != XR_TAG_REGEX || !re_value.ptr || !text_data)
         return XR_NULL_VAL;
@@ -183,6 +210,49 @@ XrValue xrt_regex_find_group(XrValue re_value, const char *text_data, int64_t te
     if (!xr_regex_match(obj->regex, text_data, (int) text_len, &match))
         return XR_NULL_VAL;
     return xrt_regex_match_group_to_string(&match, (int) group_i64);
+}
+
+XrValue xrt_regex_find_offset(XrValue re_value, const char *text_data, int64_t text_len,
+                              XrValue offset_value) {
+    if (re_value.tag != XR_TAG_REGEX || !re_value.ptr || !text_data)
+        return XR_NULL_VAL;
+    if (text_len < 0)
+        text_len = (int64_t) strlen(text_data);
+    if (text_len < 0 || text_len > (int64_t) INT_MAX)
+        return XR_NULL_VAL;
+
+    int offset = 0;
+    if (XR_IS_INT(offset_value)) {
+        int64_t offset_i64 = XR_TO_INT(offset_value);
+        if (offset_i64 < (int64_t) INT_MIN || offset_i64 > (int64_t) INT_MAX)
+            return XR_NULL_VAL;
+        offset = (int) offset_i64;
+    }
+
+    xrt_regex_object_t *obj = (xrt_regex_object_t *) re_value.ptr;
+    XrMatch match;
+    if (!xr_regex_match_at(obj->regex, text_data, (int) text_len, offset, &match))
+        return XR_NULL_VAL;
+    return xrt_regex_make_match_object(text_data, &match);
+}
+
+XrValue xrt_regex_find(XrValue re_value, const char *text_data, int64_t text_len) {
+    return xrt_regex_find_offset(re_value, text_data, text_len, XR_FROM_INT(0));
+}
+
+XrValue xrt_regex_full_find(XrValue re_value, const char *text_data, int64_t text_len) {
+    if (re_value.tag != XR_TAG_REGEX || !re_value.ptr || !text_data)
+        return XR_NULL_VAL;
+    if (text_len < 0)
+        text_len = (int64_t) strlen(text_data);
+    if (text_len < 0 || text_len > (int64_t) INT_MAX)
+        return XR_NULL_VAL;
+
+    xrt_regex_object_t *obj = (xrt_regex_object_t *) re_value.ptr;
+    XrMatch match;
+    if (!xr_regex_full_match(obj->regex, text_data, (int) text_len, &match))
+        return XR_NULL_VAL;
+    return xrt_regex_make_match_object(text_data, &match);
 }
 
 static XrValue xrt_regex_replace_impl(XrValue re_value, const char *text_data, int64_t text_len,
