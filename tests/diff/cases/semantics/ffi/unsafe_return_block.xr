@@ -1,0 +1,11 @@
+// FFI unsafe blocks are expression-transparent, but they may also contain
+// non-local exits. Lowering must stop after `return` instead of emitting
+// fallback values into a dead block.
+fn earlyReturn() -> int {
+    unsafe {
+        return 42
+    }
+    return 0
+}
+
+print(earlyReturn())

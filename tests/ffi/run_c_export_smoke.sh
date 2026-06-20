@@ -90,6 +90,21 @@ fn mix_f64(a: float64, b: float64) -> float64 {
     return a * 2.0 + b
 }
 
+@c_export("xr_read_i32_ptr")
+fn read_i32_ptr(p: RawPtr<int32>) -> int32 {
+    unsafe {
+        return p[0]
+    }
+}
+
+@c_export("xr_write_i32_ptr")
+fn write_i32_ptr(p: RawMut<int32>, v: int32) -> int32 {
+    unsafe {
+        p[0] = v
+        return p[0]
+    }
+}
+
 print(add_i32(19, 23))
 XR
 
@@ -107,6 +122,10 @@ if [ -f "$GEN_C" ]; then
         "declares int64 export"
     expect_file_contains "$GEN_C" "double xr_mix_f64(double p0, double p1);" \
         "declares float64 export"
+    expect_file_contains "$GEN_C" "int32_t xr_read_i32_ptr(const void * p0);" \
+        "declares RawPtr export"
+    expect_file_contains "$GEN_C" "int32_t xr_write_i32_ptr(void * p0, int32_t p1);" \
+        "declares RawMut export"
     expect_file_not_contains "$GEN_C" "static int32_t xr_add_i32" \
         "int32 export is public"
 fi
@@ -129,9 +148,12 @@ cat >"$CALLER_C" <<'C'
 int32_t xr_add_i32(int32_t a, int32_t b);
 int64_t xr_mix_i64(int64_t a, int64_t b);
 double xr_mix_f64(double a, double b);
+int32_t xr_read_i32_ptr(const void *p);
+int32_t xr_write_i32_ptr(void *p, int32_t v);
 
 int main(void) {
     double d;
+    int32_t value = 10;
     if (xr_add_i32(40, 2) != 42)
         return 10;
     if (xr_mix_i64(6, 7) != 49)
@@ -139,6 +161,12 @@ int main(void) {
     d = xr_mix_f64(1.25, 2.0);
     if (fabs(d - 4.5) > 0.000001)
         return 12;
+    if (xr_read_i32_ptr(&value) != 10)
+        return 13;
+    if (xr_write_i32_ptr(&value, 77) != 77)
+        return 14;
+    if (value != 77)
+        return 15;
     puts("ok");
     return 0;
 }
