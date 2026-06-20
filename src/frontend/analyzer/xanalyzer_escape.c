@@ -49,6 +49,8 @@ typedef struct {
     int func_boundary;      // scope depth at current function entry
     bool in_go_closure;     // true when inside a go-spawned closure body
     int go_scope_boundary;  // scope depth where go closure starts (captures below this are outer)
+    bool in_fn_closure;     // true when inside a non-go function-expression body
+    int fn_scope_boundary;  // scope depth where the function expression starts
     XaAnalyzer *analyzer;   // optional: for emitting diagnostics
     const char *file_path;  // source file path for diagnostic locations
 } EaContext;
@@ -187,6 +189,26 @@ static void ea_mark_capture_for_go(EaContext *ctx, AstNode *ref_node, const char
     }
 }
 
+static void ea_mark_borrowed_capture_for_closure(EaContext *ctx, AstNode *ref_node,
+                                                 const char *name) {
+    for (int d = ctx->fn_scope_boundary - 1; d >= 0; d--) {
+        EaScope *scope = &ctx->scopes[d];
+        for (int i = scope->count - 1; i >= 0; i--) {
+            EaVarEntry *entry = &scope->vars[i];
+            if (!entry->name || strcmp(entry->name, name) != 0)
+                continue;
+            if (entry->is_param && (entry->param_passing_mode == XR_PARAM_IN ||
+                                    entry->param_passing_mode == XR_PARAM_REF)) {
+                ea_emit_error(ctx, ref_node, XR_ERR_ANALYZE_CLOSURE_CAPTURE,
+                              "closure cannot capture borrowed parameter '%s'\n"
+                              "hint: capture an owned value or copy(%s) instead",
+                              name);
+            }
+            return;
+        }
+    }
+}
+
 /* ========== AST Walk ========== */
 
 static void ea_walk(EaContext *ctx, AstNode *node);
@@ -307,6 +329,25 @@ static void ea_walk_go_closure(EaContext *ctx, FunctionDeclNode *fn) {
     ea_pop_scope(ctx);
 }
 
+static void ea_walk_function_expr_closure(EaContext *ctx, FunctionDeclNode *fn) {
+    ea_push_scope(ctx);
+    int old_boundary = ctx->func_boundary;
+    bool old_in_closure = ctx->in_fn_closure;
+    int old_closure_boundary = ctx->fn_scope_boundary;
+
+    ctx->func_boundary = ctx->depth;
+    ctx->in_fn_closure = true;
+    ctx->fn_scope_boundary = ctx->depth;
+    ea_register_params(ctx, fn);
+    if (fn->body)
+        ea_walk(ctx, fn->body);
+
+    ctx->func_boundary = old_boundary;
+    ctx->in_fn_closure = old_in_closure;
+    ctx->fn_scope_boundary = old_closure_boundary;
+    ea_pop_scope(ctx);
+}
+
 static void ea_walk(EaContext *ctx, AstNode *node) {
     if (!node)
         return;
@@ -333,8 +374,7 @@ static void ea_walk(EaContext *ctx, AstNode *node) {
             break;
 
         // ---- Function declarations: new function boundary ----
-        case AST_FUNCTION_DECL:
-        case AST_FUNCTION_EXPR: {
+        case AST_FUNCTION_DECL: {
             FunctionDeclNode *fn = &node->as.function_decl;
             ea_push_scope(ctx);
             int old_boundary = ctx->func_boundary;
@@ -346,6 +386,10 @@ static void ea_walk(EaContext *ctx, AstNode *node) {
             ea_pop_scope(ctx);
             break;
         }
+
+        case AST_FUNCTION_EXPR:
+            ea_walk_function_expr_closure(ctx, &node->as.function_expr);
+            break;
 
         // ---- go expression: check arguments for move + closure captures ----
         case AST_GO_EXPR: {
@@ -648,6 +692,11 @@ static void ea_walk(EaContext *ctx, AstNode *node) {
                 if (name && !ea_is_local_name(ctx, name)) {
                     ea_mark_capture_for_go(ctx, node, name);
                 }
+            } else if (ctx->in_fn_closure) {
+                const char *name = node->as.variable.name;
+                if (name && !ea_is_local_name(ctx, name)) {
+                    ea_mark_borrowed_capture_for_closure(ctx, node, name);
+                }
             }
             break;
         }
@@ -693,6 +742,8 @@ void xa_escape_analyze(AstNode *ast, XaAnalyzer *analyzer) {
     ctx.func_boundary = 0;
     ctx.in_go_closure = false;
     ctx.go_scope_boundary = 0;
+    ctx.in_fn_closure = false;
+    ctx.fn_scope_boundary = 0;
     ctx.analyzer = analyzer;
     ctx.file_path = NULL;
     ctx.scopes[0].count = 0;
