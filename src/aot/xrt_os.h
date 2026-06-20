@@ -14,6 +14,7 @@
 #include "xrt_arc.h"
 #include "xrt_coll.h"
 #include "xrt_value.h"
+#include "../base/xplatform.h"
 #ifndef _WIN32
 #include <errno.h>
 #endif
@@ -48,6 +49,58 @@ extern char **environ;
 
 static inline XrValue xrt_os_cstr_value(const char *s) {
     return s ? xrt_str_from_cstr(s) : XR_NULL_VAL;
+}
+
+static inline const char *xrt_os_platform_cstr(void) {
+#if defined(XR_OS_WINDOWS) || defined(_WIN64)
+    return "windows";
+#elif defined(XR_OS_MACOS) && defined(__MACH__)
+    return "darwin";
+#elif defined(XR_OS_LINUX)
+    return "linux";
+#elif defined(XR_OS_BSD)
+    return "freebsd";
+#else
+    return "unknown";
+#endif
+}
+
+static inline const char *xrt_os_arch_cstr(void) {
+#if defined(XR_ARCH_ARM64) || defined(_M_ARM64)
+    return "arm64";
+#elif defined(XR_ARCH_X86_64) || defined(_M_X64)
+    return "x64";
+#elif defined(XR_ARCH_X86) || defined(_M_IX86)
+    return "x86";
+#elif defined(XR_ARCH_ARM) || defined(_M_ARM)
+    return "arm";
+#else
+    return "unknown";
+#endif
+}
+
+static inline XrValue xrt_os_platform(void) {
+    return xrt_str_from_cstr(xrt_os_platform_cstr());
+}
+
+static inline XrValue xrt_os_arch(void) {
+    return xrt_str_from_cstr(xrt_os_arch_cstr());
+}
+
+static inline XrValue xrt_os_sep(void) {
+#ifdef XR_OS_WINDOWS
+    return xrt_str_from_cstr("\\");
+#else
+    return xrt_str_from_cstr("/");
+#endif
+}
+
+static inline XrValue xrt_os_eol(void) {
+#ifdef XR_OS_WINDOWS
+    return xrt_str_from_cstr("\r\n");
+#else
+    return xrt_str_from_cstr("\n");
+#endif
 }
 
 static inline XrValue xrt_os_str_slice_value(const char *s, size_t len) {

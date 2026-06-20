@@ -2583,6 +2583,31 @@ static void xicgen_load_field(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
     if (emit_class_native_instance_field_load_expr(ctx, out, f, v, prefix))
         return;
     const char *field = (const char *) v->aux;
+    if (field) {
+        const char *helper = NULL;
+        if (cg_value_is_module_import_ctx(ctx, f, v->args[0], "path")) {
+            if (strcmp(field, "sep") == 0)
+                helper = "xrt_path_sep";
+            else if (strcmp(field, "delimiter") == 0)
+                helper = "xrt_path_delimiter";
+        } else if (cg_value_is_module_import_ctx(ctx, f, v->args[0], "os")) {
+            if (strcmp(field, "platform") == 0)
+                helper = "xrt_os_platform";
+            else if (strcmp(field, "arch") == 0)
+                helper = "xrt_os_arch";
+            else if (strcmp(field, "sep") == 0)
+                helper = "xrt_os_sep";
+            else if (strcmp(field, "eol") == 0)
+                helper = "xrt_os_eol";
+        }
+        if (helper) {
+            const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED,
+                                                             cg_value_plan_storage_rep(ctx, v));
+            fprintf(out, "%s()", helper);
+            emit_conversion_suffix(out, conv_suffix);
+            return;
+        }
+    }
     if (!field && v->aux_int >= 0) {
         const char *conv_suffix =
             emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));

@@ -1,6 +1,9 @@
 // AOT direct-call string-returning path ops must match VM tagged dispatch.
 import path
 
+print(path.sep)
+print(path.delimiter.length == 1)
+
 print(path.dirname("/usr/local/bin"))
 print(path.dirname("foo/bar.txt"))
 print(path.dirname("/"))

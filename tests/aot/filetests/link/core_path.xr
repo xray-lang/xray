@@ -1,5 +1,7 @@
 import path
 
+print(path.sep == "/")
+print(path.delimiter.length == 1)
 print(path.isAbsolute("/usr/local/bin"))
 print(path.basename("/usr/local/bin/xray"))
 print(path.dirname("/usr/local/bin/xray"))
