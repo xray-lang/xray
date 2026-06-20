@@ -1,0 +1,27 @@
+class Box {
+    value: int
+
+    constructor(value: int) {
+        this.value = value
+    }
+
+    get() -> int {
+        return this.value
+    }
+
+    set(value: int) {
+        this.value = value
+    }
+}
+
+fn idBox(box: Box) -> Box {
+    let alias = box
+    return alias
+}
+
+let box = new Box(7)
+let alias = idBox(box)
+alias.set(9)
+
+print(box.get())
+print(alias.get())
