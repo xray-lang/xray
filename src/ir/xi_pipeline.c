@@ -26,9 +26,15 @@
 #include "../base/xdefs.h"
 #include "../base/xchecks.h"
 
+#include <inttypes.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+
+static bool xi_env_is_enabled(const char *name) {
+    const char *env = getenv(name);
+    return env && env[0] == '1' && env[1] == '\0';
+}
 
 /* Debug helper: dump ownership analysis for a function and all its nested
  * children (methods, closures). Gated by XRAY_XI_OWN_DUMP=1. */
@@ -42,6 +48,29 @@ static void xi_own_dump_recursive(XiFunc *f) {
     }
     for (uint16_t i = 0; i < f->nchildren; i++)
         xi_own_dump_recursive(f->children[i]);
+}
+
+/* Sum RC ops that survive xi_arc_elim across a function tree. This is the
+ * backend-independent static dup/drop budget consumed by regression gates. */
+static void xi_count_rc_ops_recursive(const XiFunc *f, uint64_t *retain, uint64_t *release) {
+    if (!f)
+        return;
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        const XiBlock *blk = f->blocks[b];
+        if (!blk)
+            continue;
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            const XiValue *v = blk->values[i];
+            if (!v)
+                continue;
+            if (v->op == XI_RETAIN)
+                (*retain)++;
+            else if (v->op == XI_RELEASE)
+                (*release)++;
+        }
+    }
+    for (uint16_t i = 0; i < f->nchildren; i++)
+        xi_count_rc_ops_recursive(f->children[i], retain, release);
 }
 
 static void xi_rep_cleanup_recursive(XiFunc *f) {
@@ -150,8 +179,7 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrayIsolate *X,
                                          cfg->disabled_opt_passes);
 
         /* Optional dump: XRAY_XI_STATS=1 prints per-function stats */
-        const char *env = getenv("XRAY_XI_STATS");
-        if (env && env[0] == '1') {
+        if (xi_env_is_enabled("XRAY_XI_STATS")) {
             xi_pipeline_stats_dump(&stats, ir->name);
         }
     }
@@ -167,8 +195,7 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrayIsolate *X,
      * Gated behind XRAY_XI_OWN_DUMP=1 for manual verification of dup/drop
      * decisions; the xi_arc rewrite consumes these annotations directly. */
     {
-        const char *own_env = getenv("XRAY_XI_OWN_DUMP");
-        if (own_env && own_env[0] == '1') {
+        if (xi_env_is_enabled("XRAY_XI_OWN_DUMP")) {
             xi_own_dump_recursive(ir);
         }
     }
@@ -198,6 +225,14 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrayIsolate *X,
          * the value is merely forwarded (copy→move optimization). Runs on
          * all backends including VM (fewer RC ops = faster interpretation). */
         xi_arc_elim(ir);
+        if (xi_env_is_enabled("XRAY_XI_RC_COUNT")) {
+            uint64_t nret = 0, nrel = 0;
+            xi_count_rc_ops_recursive(ir, &nret, &nrel);
+            fprintf(stderr,
+                    "[xi-rc-count] func=%s retain=%" PRIu64 " release=%" PRIu64 " total=%" PRIu64
+                    "\n",
+                    ir->name ? ir->name : "<anon>", nret, nrel, nret + nrel);
+        }
         xi_func_set_stage_recursive(ir, XI_STAGE_OWNED);
     }
 
