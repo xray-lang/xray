@@ -1,0 +1,11 @@
+let closures: Array<() -> int> = []
+
+fn stash(data: in Array<int>) {
+    closures.push(fn() -> int {
+        return data.length
+    })
+}
+
+let values: Array<int> = [1, 2, 3, 4]
+stash(values)
+print(closures[0]())

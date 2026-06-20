@@ -1,0 +1,12 @@
+fn make(data: in Array<int>) -> () -> int {
+    let owned = copy(data)
+    return fn() -> int {
+        return owned.length
+    }
+}
+
+let values: Array<int> = [1, 2, 3, 4]
+let f = make(values)
+values.push(5)
+print(f())
+print(values.length)
