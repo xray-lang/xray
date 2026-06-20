@@ -1,0 +1,7 @@
+@extern("C") fn call_cfn(cb: CFn<(int32) -> int32>, x: int32) -> int32
+
+fn wrongArity(x: int32, y: int32) -> int32 {
+    return x + y
+}
+
+print(unsafe { call_cfn(wrongArity, 41) })

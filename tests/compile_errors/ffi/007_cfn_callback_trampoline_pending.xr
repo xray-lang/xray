@@ -1,7 +1,0 @@
-@extern("C") fn call_cfn(cb: CFn<(int32) -> int32>, x: int32) -> int32
-
-fn inc(x: int32) -> int32 {
-    return x + 1
-}
-
-print(unsafe { call_cfn(inc, 41) })

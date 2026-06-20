@@ -76,6 +76,130 @@ static const char *cg_extern_ptr_boundary_c_type(const XrType *t) {
     return NULL;
 }
 
+static bool cg_type_is_c_callback(const XrType *type) {
+    return type && XR_TYPE_IS_C_FUNCTION(type);
+}
+
+static const char *cg_cfn_value_c_type(const XrType *type, bool is_return) {
+    if (!type)
+        return is_return ? "void" : "int64_t";
+    switch (type->kind) {
+        case XR_KIND_UNIT:
+            return is_return ? "void" : NULL;
+        case XR_KIND_BOOL:
+            return "uint8_t";
+        case XR_KIND_FLOAT:
+            return type->native_width == XR_NATIVE_F32 ? "float" : "double";
+        case XR_KIND_INT:
+            switch (type->native_width) {
+                case XR_NATIVE_I8:
+                    return "int8_t";
+                case XR_NATIVE_U8:
+                    return "uint8_t";
+                case XR_NATIVE_I16:
+                    return "int16_t";
+                case XR_NATIVE_U16:
+                    return "uint16_t";
+                case XR_NATIVE_I32:
+                    return "int32_t";
+                case XR_NATIVE_U32:
+                    return "uint32_t";
+                case XR_NATIVE_U64:
+                    return "uint64_t";
+                default:
+                    return "int64_t";
+            }
+        case XR_KIND_POINTER:
+            return type->ptr_is_mut ? "void *" : "const void *";
+        default:
+            return NULL;
+    }
+}
+
+static XrRep cg_cfn_value_storage_rep(const XrType *type, bool is_return) {
+    if (!type || (is_return && type->kind == XR_KIND_UNIT))
+        return XR_REP_VOID;
+    if (type->kind == XR_KIND_FLOAT)
+        return XR_REP_F64;
+    if (type->kind == XR_KIND_POINTER || type->kind == XR_KIND_INT || type->kind == XR_KIND_BOOL)
+        return XR_REP_I64;
+    return XR_REP_TAGGED;
+}
+
+static bool cg_cfn_value_type_supported(const XrType *type, bool is_return) {
+    return cg_cfn_value_c_type(type, is_return) != NULL;
+}
+
+static bool cg_cfn_function_signature_supported(const XrType *fn_type) {
+    if (!cg_type_is_c_callback(fn_type) || fn_type->function.is_variadic)
+        return false;
+    if (!cg_cfn_value_type_supported(fn_type->function.return_type, true))
+        return false;
+    for (int i = 0; i < fn_type->function.param_count; i++) {
+        const XrType *pt = fn_type->function.param_types ? fn_type->function.param_types[i] : NULL;
+        if (!cg_cfn_value_type_supported(pt, false))
+            return false;
+    }
+    return true;
+}
+
+static bool cg_cfn_xray_func_signature_supported(const XiFunc *f) {
+    if (!f || f->is_vararg)
+        return false;
+    if (!cg_cfn_value_type_supported(f->return_type, true))
+        return false;
+    for (uint16_t i = 0; i < f->nparams; i++) {
+        const XrType *pt = f->params && f->params[i] ? f->params[i]->type : NULL;
+        if (!cg_cfn_value_type_supported(pt, false))
+            return false;
+    }
+    return true;
+}
+
+static bool cg_cfn_xray_func_matches_expected(const XiFunc *f, const XrType *expected) {
+    if (!f || !cg_type_is_c_callback(expected))
+        return false;
+    if ((int) f->nparams != expected->function.param_count)
+        return false;
+    if (!xr_type_equals(f->return_type, expected->function.return_type))
+        return false;
+    for (uint16_t i = 0; i < f->nparams; i++) {
+        const XrType *actual = f->params && f->params[i] ? f->params[i]->type : NULL;
+        const XrType *want =
+            expected->function.param_types ? expected->function.param_types[i] : NULL;
+        if (!xr_type_equals((XrType *) actual, (XrType *) want))
+            return false;
+    }
+    return true;
+}
+
+static void emit_cfn_pointer_type(XiCgenCtx *ctx, FILE *out, const XrType *fn_type,
+                                  const char *name) {
+    if (!cg_cfn_function_signature_supported(fn_type)) {
+        if (ctx)
+            ctx->error = true;
+        fprintf(out, "void *");
+        if (name && name[0])
+            fprintf(out, "%s", name);
+        return;
+    }
+
+    fprintf(out, "%s (*%s)(", cg_cfn_value_c_type(fn_type->function.return_type, true),
+            name ? name : "");
+    if (fn_type->function.param_count == 0) {
+        fprintf(out, "void");
+    } else {
+        for (int i = 0; i < fn_type->function.param_count; i++) {
+            if (i > 0)
+                fprintf(out, ", ");
+            const XrType *pt =
+                fn_type->function.param_types ? fn_type->function.param_types[i] : NULL;
+            fprintf(out, "%s", cg_cfn_value_c_type(pt, false));
+        }
+    }
+    fprintf(out, ")");
+}
+
 static XrRep cg_func_param_abi_rep(XiCgenCtx *ctx, const XiFunc *f, uint16_t param_idx) {
     const XaotFuncPlan *plan = cg_func_plan(ctx, f);
     if (!plan || param_idx >= plan->abi.nparams || !plan->abi.params)
@@ -93,6 +217,10 @@ static const char *cg_func_param_abi_c_type(XiCgenCtx *ctx, const XiFunc *f, uin
 
 static void emit_typed_abi_fname(XiCgenCtx *ctx, FILE *out, const char *prefix, const XiFunc *f) {
     emit_fname_suffix(ctx, out, prefix, f, "_boxed");
+}
+
+static void emit_cfn_stub_fname(XiCgenCtx *ctx, FILE *out, const char *prefix, const XiFunc *f) {
+    emit_fname_suffix(ctx, out, prefix, f, "_cfn");
 }
 
 static void cg_prepare_func_tree_for_cgen(XiFunc *f) {
@@ -290,4 +418,63 @@ static void emit_value_as_direct_call_arg(XiCgenCtx *ctx, FILE *out, const XiFun
     conv_suffix = emit_conversion_prefix(out, arg ? arg->type : NULL, from_rep, to_rep);
     emit_vref(out, arg);
     emit_conversion_suffix(out, conv_suffix);
+}
+
+static const XiModule *cg_cfn_module_for_func(XiCgenCtx *ctx, const XiFunc *f) {
+    if (!f)
+        return NULL;
+
+    const XiFunc *root = f;
+    while (root->parent_func)
+        root = root->parent_func;
+    if (root->module && root->module->init == root)
+        return root->module;
+
+    if (ctx && ctx->module && ctx->module->init && cg_func_tree_contains(ctx->module->init, f))
+        return ctx->module;
+
+    if (ctx && ctx->all_modules) {
+        for (int i = 0; i < ctx->all_nmodules; i++) {
+            const XiModule *mod = ctx->all_modules[i];
+            if (mod && mod->init && cg_func_tree_contains(mod->init, f))
+                return mod;
+        }
+    }
+
+    return NULL;
+}
+
+static bool cg_cfn_func_has_module_level_storage(XiCgenCtx *ctx, const XiFunc *f) {
+    const XiModule *mod = cg_cfn_module_for_func(ctx, f);
+    return f && mod && mod->init && f->parent_func == mod->init;
+}
+
+static bool cg_func_can_have_cfn_stub(XiCgenCtx *ctx, const XiFunc *f) {
+    if (!f || f->is_extern || !cg_cfn_func_has_module_level_storage(ctx, f) || f->ncaptures > 0 ||
+        cg_func_needs_aot_coro_ctx(ctx, f))
+        return false;
+    return cg_cfn_xray_func_signature_supported(f);
+}
+
+static bool emit_cfn_callback_arg(XiCgenCtx *ctx, FILE *out, const XiFunc *current,
+                                  const char *prefix, const XiValue *call, uint16_t arg_index,
+                                  const XrType *expected_type, const XiValue *arg) {
+    CgStaticFunctionCall cb = cg_resolve_static_function_call(ctx, current, arg);
+    const char *cb_prefix = NULL;
+
+    if (!cb.func || cb.is_class_constructor || cb.func->is_extern ||
+        !cg_func_can_have_cfn_stub(ctx, cb.func) ||
+        !cg_cfn_xray_func_matches_expected(cb.func, expected_type)) {
+        fprintf(stderr,
+                "[xi_cgen] ERROR: unsupported CFn callback argument at v%u arg %u; expected a "
+                "top-level noncapturing function with an exact CFn signature\n",
+                call ? call->id : 0, (unsigned) arg_index + 1);
+        ctx->error = true;
+        emit_codegen_abort_expr(out);
+        return false;
+    }
+
+    cb_prefix = cb.prefix ? cb.prefix : prefix;
+    emit_cfn_stub_fname(ctx, out, cb_prefix, cb.func);
+    return true;
 }

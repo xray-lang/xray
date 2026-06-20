@@ -52,12 +52,57 @@ static bool xa_type_is_c_callback(const XrType *type) {
     return type && XR_TYPE_IS_C_FUNCTION(type);
 }
 
-static void xa_report_c_callback_trampoline_pending(XaInferContext *ctx, AstNode *site, int slot) {
+static void xa_report_c_callback_requires_top_level(XaInferContext *ctx, AstNode *site, int slot) {
     XrLocation loc = {
         .file = ctx->file_path, .line = site ? site->line : 0, .column = site ? site->column : 0};
     char msg[256];
-    snprintf(msg, sizeof(msg), "Argument %d: CFn callback trampoline is not implemented yet",
-             slot + 1);
+    snprintf(msg, sizeof(msg),
+             "Argument %d: CFn callback must be a top-level non-extern function name", slot + 1);
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE, msg,
+                               &loc);
+}
+
+static bool xa_c_callback_arg_is_top_level_function(XaInferContext *ctx, AstNode *arg_node) {
+    if (!ctx || !ctx->analyzer || !arg_node || arg_node->type != AST_VARIABLE)
+        return false;
+    const char *name = arg_node->as.variable.name;
+    XaSymbol *sym = name ? xa_scope_lookup(ctx->analyzer->current_scope, name) : NULL;
+    if (!sym || sym->kind != XA_SYM_FUNCTION || sym->scope != ctx->analyzer->global_scope ||
+        sym->is_builtin)
+        return false;
+    XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
+    return !links || !links->is_extern;
+}
+
+static bool xa_c_callback_signature_matches(XrType *callback_type, XrType *arg_type) {
+    if (!xa_type_is_c_callback(callback_type) || !arg_type || !XR_TYPE_IS_FUNCTION(arg_type))
+        return false;
+    if (arg_type->function.is_c_abi || arg_type->function.is_variadic)
+        return false;
+    if (callback_type->function.param_count != arg_type->function.param_count)
+        return false;
+    if (!xr_type_equals(callback_type->function.return_type, arg_type->function.return_type))
+        return false;
+    for (int i = 0; i < callback_type->function.param_count; i++) {
+        XrType *want =
+            callback_type->function.param_types ? callback_type->function.param_types[i] : NULL;
+        XrType *got = arg_type->function.param_types ? arg_type->function.param_types[i] : NULL;
+        if (!xr_type_equals(want, got))
+            return false;
+    }
+    return true;
+}
+
+static void xa_report_c_callback_signature_mismatch(XaInferContext *ctx, AstNode *site, int slot,
+                                                    XrType *callback_type, XrType *arg_type) {
+    XrLocation loc = {
+        .file = ctx->file_path, .line = site ? site->line : 0, .column = site ? site->column : 0};
+    char msg[256];
+    snprintf(msg, sizeof(msg),
+             "Argument %d: CFn callback type '%s' requires top-level function with exact "
+             "signature '%s'",
+             slot + 1, arg_type ? xr_type_to_string(arg_type) : "<unknown>",
+             callback_type ? xr_type_to_string(callback_type) : "<unknown>");
     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE, msg,
                                &loc);
 }
@@ -862,7 +907,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                 if (!param_type || XR_TYPE_IS_UNKNOWN(param_type))
                     continue;
                 if (xa_type_is_c_callback(param_type)) {
-                    xa_report_c_callback_trampoline_pending(ctx, arg_node, slot);
+                    xa_report_c_callback_requires_top_level(ctx, arg_node, slot);
                     continue;
                 }
                 XrLocation loc = {
@@ -916,7 +961,12 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
 
         if (param_type && !XR_TYPE_IS_UNKNOWN(param_type)) {
             if (xa_type_is_c_callback(param_type)) {
-                xa_report_c_callback_trampoline_pending(ctx, arg_node, slot);
+                if (!xa_c_callback_arg_is_top_level_function(ctx, arg_node)) {
+                    xa_report_c_callback_requires_top_level(ctx, arg_node, slot);
+                } else if (!xa_c_callback_signature_matches(param_type, arg_type)) {
+                    xa_report_c_callback_signature_mismatch(ctx, arg_node, slot, param_type,
+                                                            arg_type);
+                }
                 slot++;
                 continue;
             }
