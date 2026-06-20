@@ -1,0 +1,24 @@
+class Box {
+    value: int
+
+    constructor(value: int) {
+        this.value = value
+    }
+
+    get() -> int {
+        return this.value
+    }
+
+    set(value: int) {
+        this.value = value
+    }
+}
+
+fn readBox(box: Box) -> int {
+    return box.get()
+}
+
+let box = new Box(7)
+print(readBox(box))
+box.set(9)
+print(readBox(box))
