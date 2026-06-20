@@ -50,7 +50,9 @@ Type ::= UnionType
 UnionType ::= IntersectionType ('|' IntersectionType)*
 IntersectionType ::= NullableType
 NullableType ::= PrimaryType '?'?
-PrimaryType ::= NamedType | FunctionType | TupleType | ObjectType
+PrimaryType ::= FFIPointerType | CFunctionType | NamedType | FunctionType | TupleType | ObjectType
+FFIPointerType ::= ('RawPtr' | 'RawMut') '<' Type '>'
+CFunctionType ::= 'CFn' '<' FunctionType '>'
 NamedType   ::= QualifiedIdent TypeArgs?
 FunctionType ::= '(' TypeList? ')' '->' Type
 TupleType   ::= '(' Type (',' Type)+ ')'
@@ -91,6 +93,7 @@ UnaryExpr ::= ('-' | '+' | '!' | '~' | '++' | '--') UnaryExpr
            |  'move' UnaryExpr
            |  'await' ('all' | 'any' | 'anySuccess')? UnaryExpr
            |  'go' (Block | PostfixExpr)
+           |  'unsafe' Block
            |  PostfixExpr
 
 PostfixExpr ::= Primary PostfixOp*
@@ -233,7 +236,8 @@ BindingPattern ::= Identifier
                 |  '(' BindingPattern (',' BindingPattern)+ ','? ')'
                 |  '{' Identifier (',' Identifier)* ','? '}'
 
-FnDecl ::= AttrList? Modifier* 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
+FnDecl ::= AttrList? Modifier* 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? FnBody
+FnBody ::= Block | ';'?                         // 空函数体仅允许 @extern
 ParamList ::= Param (',' Param)* ','?
 Param     ::= Modifier* Identifier ':' Type ('=' Expression)?
            |  '...' Identifier ':' Type
@@ -284,7 +288,7 @@ ImportMembers ::= '{' ImportMember (',' ImportMember)* ','? '}'
 ImportMember  ::= Identifier ('as' Identifier)?
 ImportModule  ::= StringLiteral | Identifier ('/' Identifier)?
 
-AttrList ::= ('@' Identifier ('(' ArgList? ')')?)*
+AttrList ::= ('@' Identifier ('(' ArgList? ')')?)*  // 例如 @extern("C")、@dylib("m")、@repr(C)
 
 OperatorToken ::= '+' | '-' | '*' | '/' | '%'
                |  '&' | '|' | '^'
@@ -343,7 +347,9 @@ Type ::= UnionType
 UnionType ::= IntersectionType ('|' IntersectionType)*
 IntersectionType ::= NullableType
 NullableType ::= PrimaryType '?'?
-PrimaryType ::= NamedType | FunctionType | TupleType | ObjectType
+PrimaryType ::= FFIPointerType | CFunctionType | NamedType | FunctionType | TupleType | ObjectType
+FFIPointerType ::= ('RawPtr' | 'RawMut') '<' Type '>'
+CFunctionType ::= 'CFn' '<' FunctionType '>'
 NamedType   ::= QualifiedIdent TypeArgs?
 FunctionType ::= '(' TypeList? ')' '->' Type
 TupleType   ::= '(' Type (',' Type)+ ')'
@@ -384,6 +390,7 @@ UnaryExpr ::= ('-' | '+' | '!' | '~' | '++' | '--') UnaryExpr
            |  'move' UnaryExpr
            |  'await' ('all' | 'any' | 'anySuccess')? UnaryExpr
            |  'go' (Block | PostfixExpr)
+           |  'unsafe' Block
            |  PostfixExpr
 
 PostfixExpr ::= Primary PostfixOp*
@@ -526,7 +533,8 @@ BindingPattern ::= Identifier
                 |  '(' BindingPattern (',' BindingPattern)+ ','? ')'
                 |  '{' Identifier (',' Identifier)* ','? '}'
 
-FnDecl ::= AttrList? Modifier* 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
+FnDecl ::= AttrList? Modifier* 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? FnBody
+FnBody ::= Block | ';'?                         // empty body is only allowed for @extern
 ParamList ::= Param (',' Param)* ','?
 Param     ::= Modifier* Identifier ':' Type ('=' Expression)?
            |  '...' Identifier ':' Type
@@ -577,7 +585,7 @@ ImportMembers ::= '{' ImportMember (',' ImportMember)* ','? '}'
 ImportMember  ::= Identifier ('as' Identifier)?
 ImportModule  ::= StringLiteral | Identifier ('/' Identifier)?
 
-AttrList ::= ('@' Identifier ('(' ArgList? ')')?)*
+AttrList ::= ('@' Identifier ('(' ArgList? ')')?)*  // e.g. @extern("C"), @dylib("m"), @repr(C)
 
 OperatorToken ::= '+' | '-' | '*' | '/' | '%'
                |  '&' | '|' | '^'
