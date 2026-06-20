@@ -1248,8 +1248,12 @@ static XiValue *lower_unsafe_expr(XiLower *l, AstNode *node) {
         bool is_last = (i == blk->count - 1);
         if (is_last && stmt->type == AST_EXPR_STMT && stmt->as.expr_stmt) {
             value = xi_lower_expr(l, stmt->as.expr_stmt);
+            if (!l->cur_block)
+                return NULL;
         } else {
             xi_lower_stmt(l, stmt);
+            if (!l->cur_block)
+                return NULL;
         }
     }
     if (!value)
