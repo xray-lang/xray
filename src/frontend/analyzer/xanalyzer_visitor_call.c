@@ -48,6 +48,20 @@ static bool xa_object_literal_bool_field(AstNode *node, const char *field_name, 
     return false;
 }
 
+static bool xa_type_is_c_callback(const XrType *type) {
+    return type && XR_TYPE_IS_C_FUNCTION(type);
+}
+
+static void xa_report_c_callback_trampoline_pending(XaInferContext *ctx, AstNode *site, int slot) {
+    XrLocation loc = {
+        .file = ctx->file_path, .line = site ? site->line : 0, .column = site ? site->column : 0};
+    char msg[256];
+    snprintf(msg, sizeof(msg), "Argument %d: CFn callback trampoline is not implemented yet",
+             slot + 1);
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE, msg,
+                               &loc);
+}
+
 static bool xa_is_module_call(CallExprNode *call, const char *module_name, const char *func_name) {
     if (!call || !module_name || !func_name || !call->callee ||
         call->callee->type != AST_MEMBER_ACCESS)
@@ -847,6 +861,10 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                 XrType *param_type = param_types ? param_types[slot] : NULL;
                 if (!param_type || XR_TYPE_IS_UNKNOWN(param_type))
                     continue;
+                if (xa_type_is_c_callback(param_type)) {
+                    xa_report_c_callback_trampoline_pending(ctx, arg_node, slot);
+                    continue;
+                }
                 XrLocation loc = {
                     .file = ctx->file_path, .line = arg_node->line, .column = arg_node->column};
                 bool null_err =
@@ -897,7 +915,13 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         }
 
         if (param_type && !XR_TYPE_IS_UNKNOWN(param_type)) {
-            XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+            if (xa_type_is_c_callback(param_type)) {
+                xa_report_c_callback_trampoline_pending(ctx, arg_node, slot);
+                slot++;
+                continue;
+            }
+            XrLocation loc = {
+                .file = ctx->file_path, .line = arg_node->line, .column = arg_node->column};
             bool null_err =
                 xa_check_null_safety(ctx->analyzer, param_type, arg_type, "Argument", &loc);
             if (!null_err && !xa_typecheck_assignable(param_type, arg_type) &&

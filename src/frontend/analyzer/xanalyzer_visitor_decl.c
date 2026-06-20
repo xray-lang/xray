@@ -70,6 +70,38 @@ static uint8_t xa_class_attr_align(const ClassDeclNode *cls) {
     return 0;
 }
 
+static void xa_validate_extern_function_abi(XaInferContext *ctx, AstNode *node,
+                                            const FunctionDeclNode *fn, XrType **param_types,
+                                            XrType *return_type) {
+    if (!ctx || !ctx->analyzer || !fn)
+        return;
+    for (int i = 0; i < fn->param_count; i++) {
+        XrType *type = param_types ? param_types[i] : NULL;
+        if (!type || !XR_TYPE_IS_FUNCTION(type) || XR_TYPE_IS_C_FUNCTION(type))
+            continue;
+        XrParamNode *param = fn->params ? fn->params[i] : NULL;
+        XrLocation loc = {.file = ctx->file_path,
+                          .line = param ? param->line : (node ? node->line : 0),
+                          .column = param ? param->column : (node ? node->column : 0)};
+        char msg[256];
+        snprintf(msg, sizeof(msg),
+                 "extern function parameter '%s' uses Xray function type; use CFn<...> for C "
+                 "function pointers",
+                 param && param->name ? param->name : "?");
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE, msg,
+                                   &loc);
+    }
+    if (return_type && XR_TYPE_IS_FUNCTION(return_type) && !XR_TYPE_IS_C_FUNCTION(return_type)) {
+        XrLocation loc = {.file = ctx->file_path,
+                          .line = node ? node->line : 0,
+                          .column = node ? node->column : 0};
+        xa_analyzer_add_diagnostic(
+            ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+            "extern function returns Xray function type; use CFn<...> for C function pointers",
+            &loc);
+    }
+}
+
 static bool xa_expr_is_this(AstNode *node) {
     if (!node)
         return false;
@@ -1373,6 +1405,8 @@ void xa_visit_collect_function_decl_only(XaInferContext *ctx, AstNode *node) {
             break;
         }
     }
+    if (links->is_extern)
+        xa_validate_extern_function_abi(ctx, node, fn, param_types, return_type);
 
     // Store parameter names for LSP inlay hints
     xa_symbol_links_set_function_sig(links, param_types, param_names, fn->param_count, return_type);

@@ -1,0 +1,7 @@
+@extern("C") fn call_plain(cb: (int32) -> int32) -> int32
+
+fn inc(x: int32) -> int32 {
+    return x + 1
+}
+
+print(unsafe { call_plain(inc) })

@@ -970,6 +970,7 @@ XrType *xr_type_copy(XrayIsolate *X, XrType *type) {
             copy->function.min_params = type->function.min_params;
             copy->function.return_type = type->function.return_type;
             copy->function.is_variadic = type->function.is_variadic;
+            copy->function.is_c_abi = type->function.is_c_abi;
             if (type->function.type_param_count > 0 && type->function.type_param_names) {
                 xr_type_set_function_type_params(
                     X, copy, type->function.type_param_names, type->function.type_param_constraints,
@@ -1407,6 +1408,9 @@ bool xr_type_assignable(XrType *target, XrType *source) {
     // declare *more* parameters than target, since those would never get
     // a value.
     if (XR_TYPE_IS_FUNCTION(target) && XR_TYPE_IS_FUNCTION(source)) {
+        if (target->function.is_c_abi != source->function.is_c_abi) {
+            return false;
+        }
         if (source->function.param_count > target->function.param_count) {
             return false;
         }
@@ -1591,6 +1595,8 @@ bool xr_type_equals(XrType *a, XrType *b) {
         if (a->function.min_params != b->function.min_params)
             return false;
         if (a->function.is_variadic != b->function.is_variadic)
+            return false;
+        if (a->function.is_c_abi != b->function.is_c_abi)
             return false;
         if (!function_type_params_equal(a, b))
             return false;
