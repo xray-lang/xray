@@ -1,0 +1,36 @@
+// anchor: coro-deterministic-timer-schedule-order
+// Timer-driven coroutine wakeups should resume in deadline order. The
+// deterministic CTest gate runs this under virtual time; the normal diff gate
+// keeps the same observable order under wall time.
+
+import time
+
+fn recv_int(ch: Channel<int>) -> int {
+    return match (ch.recv()) {
+        Recv.Value(v) -> v
+        _ -> -1
+    }
+}
+
+fn send_after(ch: Channel<int>, id: int, delay_ms: int) {
+    time.sleep(delay_ms)
+    ch.send(id)
+}
+
+shared const ch: Channel<int> = new Channel(3)
+
+go send_after(ch, 1, 50)
+go send_after(ch, 2, 10)
+go send_after(ch, 3, 30)
+
+let first = recv_int(ch)
+let second = recv_int(ch)
+let third = recv_int(ch)
+
+assert_eq(first, 2)
+assert_eq(second, 3)
+assert_eq(third, 1)
+
+print(first)
+print(second)
+print(third)

@@ -1122,6 +1122,20 @@ if(BUILD_TESTS)
     )
 
     add_test(
+        NAME backend_diff_deterministic
+        COMMAND ${CMAKE_COMMAND} -E env
+                XRAY_CORO_DETERMINISTIC=1
+                XRAY_CORO_SEED=12345
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/diff/run_backend_diff.sh
+                $<TARGET_FILE:xray>
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(backend_diff_deterministic PROPERTIES
+        LABELS "diff;cross;backend;coro;deterministic"
+        TIMEOUT 240
+    )
+
+    add_test(
         NAME regression_gc_closure_self_capture_rc
         COMMAND $<TARGET_FILE:xray> test
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/regression/08_gc/0803_closure_self_capture_rc.xr
