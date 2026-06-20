@@ -244,7 +244,7 @@ static bool xaot_cli_link_add_runtime_object(XaotCliLinkCommand *cmd, const char
 }
 
 static bool xaot_cli_stdlib_object_needs_aot_core(const char *value) {
-    return value && strncmp(value, "regex.", 6) == 0;
+    return value && (strncmp(value, "crypto.", 7) == 0 || strncmp(value, "regex.", 6) == 0);
 }
 
 static bool xaot_cli_link_add_stdlib_object(XaotCliLinkCommand *cmd, const char *value, char *err,

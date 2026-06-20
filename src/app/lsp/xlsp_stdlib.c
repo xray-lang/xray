@@ -244,6 +244,10 @@ static const XlspSymbolInfo fs_symbols[] = {
 
 static const XlspParamInfo crypto_hash_params[] = {{"data", "string", "Data to hash"}};
 
+static const XlspParamInfo crypto_hmac_params[] = {{"algo", "string", "Hash algorithm"},
+                                                   {"key", "string", "HMAC key"},
+                                                   {"data", "string", "Data to authenticate"}};
+
 static const XlspParamInfo crypto_random_params[] = {{"length", "int", "Number of random bytes"}};
 
 static const XlspSymbolInfo crypto_symbols[] = {
@@ -253,7 +257,11 @@ static const XlspSymbolInfo crypto_symbols[] = {
      crypto_hash_params, 1},
     {"sha256", XLSP_SYM_FUNCTION, "fn(data: string): string", "Computes SHA-256 hash (hex)",
      crypto_hash_params, 1},
-    {"randomBytes", XLSP_SYM_FUNCTION, "fn(length: int): Bytes",
+    {"sha512", XLSP_SYM_FUNCTION, "fn(data: string): string", "Computes SHA-512 hash (hex)",
+     crypto_hash_params, 1},
+    {"hmac", XLSP_SYM_FUNCTION, "fn(algo: string, key: string, data: string): string?",
+     "Computes HMAC (hex)", crypto_hmac_params, 3},
+    {"randomBytes", XLSP_SYM_FUNCTION, "fn(length: int): string",
      "Generates cryptographically secure random bytes", crypto_random_params, 1},
 };
 

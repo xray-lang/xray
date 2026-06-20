@@ -14,12 +14,15 @@
  */
 
 #include "crypto.h"
-#include "../common.h"
 #include "../../src/shared/xr_crypto_core.h"
+#include "../../src/base/xchecks.h"
 #include "../../src/base/xmalloc.h"
+#ifndef XR_CRYPTO_CORE_ONLY
+#include "../common.h"
 #include "../../src/os/os_random.h"
 #include "../../src/runtime/value/xvalue.h"
 #include "../../src/runtime/object/xstring.h"
+#endif
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -890,6 +893,8 @@ XR_FUNC int xr_hex_to_bytes(const char *hex, uint8_t *output, size_t max_len) {
     return (int) (len / 2);
 }
 
+#ifndef XR_CRYPTO_CORE_ONLY
+
 /* ========== Module Bindings ========== */
 
 static XrValue crypto_md5(XrayIsolate *isolate, XrValue *args, int nargs) {
@@ -1194,7 +1199,7 @@ XR_DEFINE_BUILTIN(crypto_md5, "md5", "(data: string): string", "Compute MD5 hash
 XR_DEFINE_BUILTIN(crypto_sha1, "sha1", "(data: string): string", "Compute SHA-1 hash")
 XR_DEFINE_BUILTIN(crypto_sha256, "sha256", "(data: string): string", "Compute SHA-256 hash")
 XR_DEFINE_BUILTIN(crypto_sha512, "sha512", "(data: string): string", "Compute SHA-512 hash")
-XR_DEFINE_BUILTIN(crypto_hmac, "hmac", "(algo: string, key: string, data: string): string",
+XR_DEFINE_BUILTIN(crypto_hmac, "hmac", "(algo: string, key: string, data: string): string?",
                   "Compute HMAC")
 XR_DEFINE_BUILTIN(crypto_random_bytes, "randomBytes", "(n: int): string", "Generate random bytes")
 XR_DEFINE_BUILTIN(crypto_uuid, "uuid", "(): string", "Generate UUID v4")
@@ -1224,3 +1229,5 @@ XR_FUNC XrModule *xr_load_module_crypto(XrayIsolate *isolate) {
     mod->loaded = true;
     return mod;
 }
+
+#endif /* XR_CRYPTO_CORE_ONLY */

@@ -1,4 +1,4 @@
-// AOT direct-call crypto.timingSafeEqual must match VM tagged dispatch.
+// AOT direct-call crypto core helpers must match VM tagged dispatch.
 import crypto
 
 print(crypto.timingSafeEqual("abc", "abc"))
@@ -8,3 +8,12 @@ print(crypto.timingSafeEqual("", ""))
 print(crypto.timingSafeEqual("same length", "same length"))
 print(crypto.timingSafeEqual("same length", "same lengtz"))
 print(crypto.timingSafeEqual("prefix", "prefix suffix"))
+print(crypto.md5("abc"))
+print(crypto.sha1("abc"))
+print(crypto.sha256("abc"))
+print(crypto.sha512("abc"))
+print(crypto.hmac("md5", "key", "data"))
+print(crypto.hmac("sha1", "key", "data"))
+print(crypto.hmac("sha256", "key", "data"))
+print(crypto.hmac("sha512", "key", "data"))
+print(crypto.hmac("sha224", "key", "data") == null)

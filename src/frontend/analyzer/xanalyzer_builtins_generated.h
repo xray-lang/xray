@@ -96,7 +96,7 @@ static const XaBuiltinMember g_gen_crypto_functions[] = {
     {"sha1", "(data: string): string", "Compute SHA-1 hash", true, false},
     {"sha256", "(data: string): string", "Compute SHA-256 hash", true, false},
     {"sha512", "(data: string): string", "Compute SHA-512 hash", true, false},
-    {"hmac", "(algo: string, key: string, data: string): string", "Compute HMAC", true, false},
+    {"hmac", "(algo: string, key: string, data: string): string?", "Compute HMAC", true, false},
     {"randomBytes", "(n: int): string", "Generate random bytes", true, false},
     {"uuid", "(): string", "Generate UUID v4", true, false},
     {"encrypt", "(key: string, plaintext: string): string", "AES-256-CBC encrypt", true, false},
