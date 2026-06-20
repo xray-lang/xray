@@ -583,6 +583,36 @@ TEST(cgen_function_call) {
     xi_func_free(ir);
 }
 
+TEST(cgen_c_export_emits_public_c_abi_wrapper) {
+    const char *src = "@c_export(\"xr_add\")\n"
+                      "fn add(a: int32, b: int32) -> int32 {\n"
+                      "    return a + b\n"
+                      "}\n"
+                      "print(add(3, 4))\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "@c_export scalar function should generate");
+    assert(contains(code, "\nint32_t xr_add(int32_t p0, int32_t p1);") &&
+           "@c_export should emit a public C ABI forward declaration");
+    assert(contains(code, "\nint32_t xr_add(int32_t p0, int32_t p1) {") &&
+           "@c_export should emit a public C ABI wrapper definition");
+    assert(!contains(code, "static int32_t xr_add(") &&
+           "@c_export wrapper must not be file-static");
+    assert(!contains(code, "xr_add(xrt_closure_t") &&
+           "@c_export wrapper must not expose Xray's hidden closure parameter");
+    assert(contains(code, "test_add_") && contains(code, "(NULL, (int64_t)p0, (int64_t)p1)") &&
+           "@c_export wrapper should call the internal Xray function with a NULL closure");
+
+    printf("  Generated C export wrapper %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_stats_tracks_native_abi) {
     const char *src = "fn inc(x: int) -> int { return x + 1 }\n"
                       "print(inc(41))\n";
@@ -4671,6 +4701,7 @@ int main(void) {
     run_cgen_while_loop();
     run_cgen_string_literal();
     run_cgen_function_call();
+    run_cgen_c_export_emits_public_c_abi_wrapper();
     run_cgen_stats_tracks_native_abi();
     run_cgen_module_prefix_is_c_identifier();
     run_cgen_emits_source_line_directives();

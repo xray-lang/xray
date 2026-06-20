@@ -237,6 +237,7 @@ typedef enum {
     ATTR_DEPRECATED,    // @deprecated or @deprecated("message")
     ATTR_EXTERN,        // @extern("C") — foreign function (FFI), calling convention in str_arg
     ATTR_DYLIB,         // @dylib("name") — resolve symbol from a named dynamic library
+    ATTR_C_EXPORT,      // @c_export("name") — expose an AOT C ABI wrapper symbol
     ATTR_REPR_C,        // @repr(C) — struct laid out per C ABI
     ATTR_REPR_PACKED,   // @repr(packed) — struct with no inter-field padding
     ATTR_ALIGN,         // @align(N) — struct alignment override (N in timeout)

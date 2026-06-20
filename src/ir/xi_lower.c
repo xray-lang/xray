@@ -691,6 +691,9 @@ XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyz
                 l.func->extern_symbol = fdecl->name;
             } else if (a->kind == ATTR_DYLIB) {
                 l.func->extern_dylib = a->str_arg;
+            } else if (a->kind == ATTR_C_EXPORT) {
+                l.func->c_export = true;
+                l.func->c_export_symbol = a->str_arg ? a->str_arg : fdecl->name;
             }
         }
     }

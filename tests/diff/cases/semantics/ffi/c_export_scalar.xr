@@ -1,0 +1,8 @@
+// FFI export: @c_export emits an AOT C ABI wrapper while VM/AOT source
+// semantics remain an ordinary Xray function call.
+@c_export("xr_add_i32")
+fn add(a: int32, b: int32) -> int32 {
+    return a + b
+}
+
+print(add(19, 23))

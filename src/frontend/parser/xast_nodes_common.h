@@ -64,8 +64,9 @@ typedef struct XrAttribute {
     AttributeKind kind;
     int timeout;
     // String argument for attributes that carry one: @extern("C") (ABI name),
-    // @dylib("name") (library name). Arena-allocated, NUL-terminated; NULL when
-    // absent. @align(N) stores N in `timeout`.
+    // @dylib("name") (library name), @c_export("name") (C symbol).
+    // Arena-allocated, NUL-terminated; NULL when absent. @align(N) stores N in
+    // `timeout`.
     const char *str_arg;
 } XrAttribute;
 
