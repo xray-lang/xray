@@ -1,0 +1,1 @@
+cannot store borrowed 'in' parameter 'data' into index target; store an owned value or copy(data)

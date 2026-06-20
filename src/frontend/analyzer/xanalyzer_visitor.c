@@ -1631,6 +1631,22 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             XrType *value_type = xa_visit_infer_expr(ctx, ms->value);
             ctx->expected_type = saved_expected;
             xa_assign_check_type(ctx, node, member_type, value_type, ms->member, "member");
+            if (xa_type_needs_borrow_escape_guard(value_type)) {
+                XaSymbol *borrowed_root = xa_borrowed_param_root_symbol(ctx, ms->value);
+                if (borrowed_root) {
+                    XrLocation loc = {
+                        .file = ctx->file_path, .line = node->line, .column = node->column};
+                    const char *mode = borrowed_root->passing_mode == XR_PARAM_REF ? "ref" : "in";
+                    const char *name = borrowed_root->name ? borrowed_root->name : "?";
+                    char msg[256];
+                    snprintf(msg, sizeof(msg),
+                             "cannot store borrowed '%s' parameter '%s' into member '%s'; "
+                             "store an owned value or copy(%s)",
+                             mode, name, ms->member ? ms->member : "?", name);
+                    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                               XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
+                }
+            }
             if (XR_TYPE_IS_JSON(obj_type) && obj_type->object.field_count > 0 && ms->member) {
                 int field_idx = json_field_index_local(obj_type, ms->member);
                 XrLocation loc = {
@@ -2286,8 +2302,25 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                 array_type = xa_visit_infer_expr(ctx, is->array);
             if (is->index)
                 index_type = xa_visit_infer_expr(ctx, is->index);
+            XrType *value_type = NULL;
             if (is->value)
-                xa_visit_infer_expr(ctx, is->value);
+                value_type = xa_visit_infer_expr(ctx, is->value);
+            if (xa_type_needs_borrow_escape_guard(value_type)) {
+                XaSymbol *borrowed_root = xa_borrowed_param_root_symbol(ctx, is->value);
+                if (borrowed_root) {
+                    XrLocation loc = {
+                        .file = ctx->file_path, .line = node->line, .column = node->column};
+                    const char *mode = borrowed_root->passing_mode == XR_PARAM_REF ? "ref" : "in";
+                    const char *name = borrowed_root->name ? borrowed_root->name : "?";
+                    char msg[256];
+                    snprintf(msg, sizeof(msg),
+                             "cannot store borrowed '%s' parameter '%s' into index target; "
+                             "store an owned value or copy(%s)",
+                             mode, name, name);
+                    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                               XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
+                }
+            }
             XaSymbol *in_param = xa_in_param_symbol_for_expr(ctx, is->array);
             if (in_param) {
                 XrLocation loc = {
