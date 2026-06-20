@@ -98,6 +98,13 @@ XR_FUNC XaSymbol *xa_borrowed_param_root_symbol(XaInferContext *ctx, AstNode *ex
                 if (sym && sym->kind == XA_SYM_PARAMETER &&
                     (sym->passing_mode == XR_PARAM_IN || sym->passing_mode == XR_PARAM_REF))
                     return sym;
+                if (sym && sym->borrowed_root_symbol_id != 0) {
+                    XaSymbol *root = xa_scope_lookup_by_id(ctx->analyzer->current_scope,
+                                                           sym->borrowed_root_symbol_id);
+                    if (root && root->kind == XA_SYM_PARAMETER &&
+                        (root->passing_mode == XR_PARAM_IN || root->passing_mode == XR_PARAM_REF))
+                        return root;
+                }
                 return NULL;
             }
             case AST_MEMBER_ACCESS:
@@ -123,6 +130,18 @@ XR_FUNC XaSymbol *xa_borrowed_param_root_symbol(XaInferContext *ctx, AstNode *ex
         }
     }
     return NULL;
+}
+
+static void xa_update_borrowed_alias_root(XaInferContext *ctx, XaSymbol *sym, AstNode *value,
+                                          XrType *value_type) {
+    if (!sym || sym->kind != XA_SYM_VARIABLE)
+        return;
+    sym->borrowed_root_symbol_id = 0;
+    if (!value || !xa_type_needs_borrow_escape_guard(value_type))
+        return;
+    XaSymbol *root = xa_borrowed_param_root_symbol(ctx, value);
+    if (root)
+        sym->borrowed_root_symbol_id = root->id;
 }
 
 static void xa_check_borrowed_return_escape(XaInferContext *ctx, AstNode *return_node,
@@ -346,6 +365,7 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
     }
 
     links->type = var_type;
+    xa_update_borrowed_alias_root(ctx, sym, var->initializer, var_type);
 
     /* Shared mutable runtime primitives require an immutable binding. */
     if (var_type && (xr_type_is_named_class(var_type, "Atomic") ||
@@ -455,6 +475,7 @@ void xa_visit_assignment_stmt(XaInferContext *ctx, AstNode *node) {
         links->is_definitely_assigned = true;
         links->assign_count++;
     }
+    xa_update_borrowed_alias_root(ctx, sym, assign->value, value_type);
 
     xa_assign_check_type(ctx, node, var_type, value_type, assign->name, NULL);
 

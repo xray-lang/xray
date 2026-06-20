@@ -1,0 +1,7 @@
+fn leak(data: in Array<int>) -> Array<int> {
+    let alias = data
+    return alias
+}
+
+let values: Array<int> = [1, 2]
+print(leak(values).length)
