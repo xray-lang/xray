@@ -1,0 +1,10 @@
+fn launch(data: ref Array<int>) {
+    let task = go {
+        data.push(4)
+        return data.length
+    }
+    print(await task)
+}
+
+let values: Array<int> = [1, 2, 3]
+launch(values)

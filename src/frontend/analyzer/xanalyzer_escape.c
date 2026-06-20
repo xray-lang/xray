@@ -34,6 +34,8 @@
 typedef struct {
     const char *name;
     AstNode *decl_node;  // AST_VAR_DECL or AST_CONST_DECL node
+    bool is_param;
+    uint8_t param_passing_mode;
 } EaVarEntry;
 
 typedef struct {
@@ -81,13 +83,20 @@ static void ea_pop_scope(EaContext *ctx) {
         ctx->depth--;
 }
 
-static void ea_register_var(EaContext *ctx, const char *name, AstNode *decl) {
+static void ea_register_var_entry(EaContext *ctx, const char *name, AstNode *decl, bool is_param,
+                                  uint8_t param_passing_mode) {
     EaScope *scope = &ctx->scopes[ctx->depth];
     if (scope->count >= EA_MAX_VARS_PER_SCOPE)
         return;
     scope->vars[scope->count].name = name;
     scope->vars[scope->count].decl_node = decl;
+    scope->vars[scope->count].is_param = is_param;
+    scope->vars[scope->count].param_passing_mode = param_passing_mode;
     scope->count++;
+}
+
+static void ea_register_var(EaContext *ctx, const char *name, AstNode *decl) {
+    ea_register_var_entry(ctx, name, decl, false, XR_PARAM_VALUE);
 }
 
 /*
@@ -113,7 +122,8 @@ static bool ea_is_local_name(EaContext *ctx, const char *name) {
 static void ea_register_params(EaContext *ctx, FunctionDeclNode *fn) {
     for (int i = 0; i < fn->param_count; i++) {
         if (fn->params[i] && fn->params[i]->name) {
-            ea_register_var(ctx, fn->params[i]->name, NULL);
+            ea_register_var_entry(ctx, fn->params[i]->name, NULL, true,
+                                  fn->params[i]->passing_mode);
         }
     }
 }
@@ -132,6 +142,18 @@ static void ea_mark_capture_for_go(EaContext *ctx, AstNode *ref_node, const char
         EaScope *scope = &ctx->scopes[d];
         for (int i = scope->count - 1; i >= 0; i--) {
             if (scope->vars[i].name && strcmp(scope->vars[i].name, name) == 0) {
+                EaVarEntry *entry = &scope->vars[i];
+                if (entry->is_param) {
+                    uint8_t mode = entry->param_passing_mode;
+                    if (mode == XR_PARAM_IN || mode == XR_PARAM_REF) {
+                        ea_emit_error(ctx, ref_node, XR_ERR_ANALYZE_CLOSURE_CAPTURE,
+                                      "go closure cannot capture borrowed parameter '%s'\n"
+                                      "hint: pass an owned value or copy(%s) through an explicit "
+                                      "go argument",
+                                      name);
+                    }
+                    return;
+                }
                 AstNode *decl = scope->vars[i].decl_node;
                 if (!decl)
                     return;  // param or loop var — always safe (arg-passed/local)
