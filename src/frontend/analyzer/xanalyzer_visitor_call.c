@@ -195,6 +195,54 @@ static void xa_check_ref_argument_aliases(XaInferContext *ctx, AstNode *call_nod
     }
 }
 
+static bool xa_method_stores_argument(XrType *receiver_type, const char *method_name, int slot) {
+    if (!receiver_type || !method_name || slot < 0)
+        return false;
+    if (XR_TYPE_IS_ARRAY(receiver_type)) {
+        return slot == 0 &&
+               (strcmp(method_name, "push") == 0 || strcmp(method_name, "unshift") == 0 ||
+                strcmp(method_name, "fill") == 0);
+    }
+    if (XR_TYPE_IS_MAP(receiver_type))
+        return strcmp(method_name, "set") == 0 && (slot == 0 || slot == 1);
+    if (receiver_type->kind == XR_KIND_SET)
+        return strcmp(method_name, "add") == 0 && slot == 0;
+    if (receiver_type->kind == XR_KIND_CHANNEL) {
+        return slot == 0 &&
+               (strcmp(method_name, "send") == 0 || strcmp(method_name, "trySend") == 0 ||
+                strcmp(method_name, "sendTimeout") == 0);
+    }
+    if (xr_type_is_named_class(receiver_type, "WorkQueue"))
+        return strcmp(method_name, "push") == 0 && slot == 0;
+    return false;
+}
+
+static void xa_check_borrowed_mutator_arg_escape(XaInferContext *ctx, AstNode *call_node,
+                                                 XrType *receiver_type, const char *method_name,
+                                                 AstNode *arg_node, XrType *arg_type, int slot) {
+    if (!ctx || !call_node || !arg_node ||
+        !xa_method_stores_argument(receiver_type, method_name, slot))
+        return;
+    if (!xa_type_needs_borrow_escape_guard(arg_type))
+        return;
+    XaSymbol *borrowed_root = xa_borrowed_param_root_symbol(ctx, arg_node);
+    if (!borrowed_root)
+        return;
+
+    XrLocation loc = {.file = ctx->file_path,
+                      .line = arg_node->line ? arg_node->line : call_node->line,
+                      .column = arg_node->column ? arg_node->column : call_node->column};
+    const char *mode = borrowed_root->passing_mode == XR_PARAM_REF ? "ref" : "in";
+    const char *name = borrowed_root->name ? borrowed_root->name : "?";
+    char msg[256];
+    snprintf(msg, sizeof(msg),
+             "cannot pass borrowed '%s' parameter '%s' to mutating method '%s'; pass an owned "
+             "value or copy(%s)",
+             mode, name, method_name ? method_name : "?", name);
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH, msg,
+                               &loc);
+}
+
 static XrType *xa_math_runtime_shape_return_type(XaInferContext *ctx, CallExprNode *call,
                                                  XrType **arg_types, int arg_count) {
     const char *member = xa_math_module_call_member(ctx, call);
@@ -823,6 +871,29 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
     }
     xa_check_ref_argument_aliases(ctx, node, effective_arg_symbol_ids, effective_arg_names,
                                   effective_arg_modes, arg_count);
+    if (method_name && callee_obj_type && call->arg_count > 0) {
+        int direct_slot = 0;
+        for (int i = 0; i < call->arg_count; i++) {
+            AstNode *arg_node = call->arguments[i];
+            if (!arg_node)
+                continue;
+            if (arg_node->type == AST_SPREAD_EXPR) {
+                XrType *src =
+                    xa_analyzer_get_node_type(ctx->analyzer, arg_node->as.spread_expr.expr);
+                if (!src)
+                    src = xa_visit_infer_expr(ctx, arg_node->as.spread_expr.expr);
+                if (src && XR_TYPE_IS_TUPLE(src))
+                    direct_slot += src->tuple.element_count;
+                continue;
+            }
+            XrType *arg_type = (direct_slot >= 0 && direct_slot < arg_count)
+                                   ? effective_arg_types[direct_slot]
+                                   : xa_visit_infer_expr(ctx, arg_node);
+            xa_check_borrowed_mutator_arg_escape(ctx, node, callee_obj_type, method_name, arg_node,
+                                                 arg_type, direct_slot);
+            direct_slot++;
+        }
+    }
 
     // Restore callback context
     ctx->callback_element_type = saved_elem_type;

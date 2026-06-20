@@ -1,0 +1,7 @@
+fn stash(data: in Array<int>, out: ref Map<string, Array<int>>) {
+    out.set("x", data)
+}
+
+let values: Array<int> = [1, 2, 3]
+let out: Map<string, Array<int>> = #{}
+stash(values, out)

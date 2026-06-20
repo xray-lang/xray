@@ -1,0 +1,8 @@
+fn stashLength(data: in Array<int>, out: ref Array<int>) {
+    out.push(data.length)
+}
+
+let values: Array<int> = [1, 2, 3, 4, 5]
+let out: Array<int> = []
+stashLength(values, out)
+print(out[0])
