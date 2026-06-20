@@ -715,7 +715,11 @@ static void xicgen_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValu
                     ? target->params[a - 1]->type
                     : NULL;
             const char *p_ptr = cg_extern_ptr_boundary_c_type(pt);
-            if (p_ptr) {
+            if (cg_type_is_c_callback(pt)) {
+                if (!emit_cfn_callback_arg(ctx, out, f, prefix, v, (uint16_t) (a - 1), pt,
+                                           v->args[a]))
+                    return;
+            } else if (p_ptr) {
                 /* A RawPtr<T>/RawMut<T> argument is an address-width int; emit it
                  * as I64 and cast straight to the C pointer type. Routing through
                  * the ABI-slot rep would re-box it to a tagged XrValue. */

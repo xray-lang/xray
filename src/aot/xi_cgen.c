@@ -3149,6 +3149,100 @@ static void emit_func_attr_qualifier(XiCgenCtx *ctx, FILE *out, const XiFunc *f)
         fprintf(out, "XRT_FN_PURE ");
 }
 
+static void emit_cfn_stub_signature(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                    const char *prefix) {
+    fprintf(out, "%s%s ", cg_linkage(ctx), cg_cfn_value_c_type(f->return_type, true));
+    emit_cfn_stub_fname(ctx, out, prefix, f);
+    fprintf(out, "(");
+    if (f->nparams == 0) {
+        fprintf(out, "void");
+    } else {
+        for (uint16_t i = 0; i < f->nparams; i++) {
+            if (i > 0)
+                fprintf(out, ", ");
+            const XrType *pt = f->params && f->params[i] ? f->params[i]->type : NULL;
+            fprintf(out, "%s p%u", cg_cfn_value_c_type(pt, false), i);
+        }
+    }
+    fprintf(out, ")");
+}
+
+static void emit_cfn_c_param_storage_expr(FILE *out, const XrType *type, uint16_t index) {
+    if (type && type->kind == XR_KIND_POINTER) {
+        fprintf(out, "(int64_t)(intptr_t)p%u", index);
+    } else if (type && type->kind == XR_KIND_FLOAT) {
+        fprintf(out, "(double)p%u", index);
+    } else {
+        fprintf(out, "(int64_t)p%u", index);
+    }
+}
+
+static void emit_cfn_target_call_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                      const char *prefix) {
+    emit_fname(ctx, out, prefix, f);
+    fprintf(out, "(NULL");
+    for (uint16_t i = 0; i < f->nparams; i++) {
+        const XrType *pt = f->params && f->params[i] ? f->params[i]->type : NULL;
+        XrRep from_rep = cg_cfn_value_storage_rep(pt, false);
+        XrRep to_rep = cg_func_param_abi_rep(ctx, f, i);
+        const char *suffix;
+
+        fprintf(out, ", ");
+        suffix = emit_conversion_prefix(out, pt, from_rep, to_rep);
+        emit_cfn_c_param_storage_expr(out, pt, i);
+        emit_conversion_suffix(out, suffix);
+    }
+    fprintf(out, ")");
+}
+
+static void emit_cfn_stub_definition(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                     const char *prefix) {
+    const XrType *ret_type;
+    const char *ret_c_type;
+    XrRep ret_rep;
+    XrRep c_ret_rep;
+
+    if (!cg_func_can_have_cfn_stub(ctx, f))
+        return;
+
+    emit_cfn_stub_signature(ctx, out, f, prefix);
+    fprintf(out, " {\n");
+
+    ret_type = f->return_type;
+    if (!ret_type || ret_type->kind == XR_KIND_UNIT) {
+        fprintf(out, "    ");
+        emit_cfn_target_call_expr(ctx, out, f, prefix);
+        fprintf(out, ";\n");
+        fprintf(out, "}\n\n");
+        return;
+    }
+
+    ret_c_type = cg_cfn_value_c_type(ret_type, true);
+    ret_rep = cg_func_return_abi_rep(ctx, f);
+    c_ret_rep = cg_cfn_value_storage_rep(ret_type, true);
+
+    fprintf(out, "    return ");
+    if (ret_type->kind == XR_KIND_POINTER) {
+        if (ret_rep == XR_REP_PTR) {
+            fprintf(out, "(%s)", ret_c_type);
+            emit_cfn_target_call_expr(ctx, out, f, prefix);
+        } else {
+            fprintf(out, "(%s)(uintptr_t)(", ret_c_type);
+            emit_cfn_target_call_expr(ctx, out, f, prefix);
+            fprintf(out, ")");
+        }
+    } else {
+        const char *suffix;
+        fprintf(out, "(%s)(", ret_c_type);
+        suffix = emit_conversion_prefix(out, ret_type, ret_rep, c_ret_rep);
+        emit_cfn_target_call_expr(ctx, out, f, prefix);
+        emit_conversion_suffix(out, suffix);
+        fprintf(out, ")");
+    }
+    fprintf(out, ";\n");
+    fprintf(out, "}\n\n");
+}
+
 static void xi_cgen_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefix) {
     XR_DCHECK(out != NULL, "xi_cgen_func: NULL output");
     XR_DCHECK(f != NULL, "xi_cgen_func: NULL func");
@@ -3244,6 +3338,8 @@ static void xi_cgen_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefi
 
     fprintf(out, "}\n\n");
 
+    emit_cfn_stub_definition(ctx, out, f, prefix);
+
     if (native_receiver && boxed_adapter) {
         ctx->stats.boxed_adapters++;
         emit_class_native_boxed_adapter(ctx, out, prefix, f);
@@ -3314,7 +3410,9 @@ static void emit_one_forward_decl(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
                     fprintf(out, ", ");
                 const XrType *pt = (f->params && f->params[i]) ? f->params[i]->type : NULL;
                 const char *p_ptr = cg_extern_ptr_boundary_c_type(pt);
-                if (p_ptr)
+                if (cg_type_is_c_callback(pt))
+                    emit_cfn_pointer_type(ctx, out, pt, NULL);
+                else if (p_ptr)
                     fprintf(out, "%s", p_ptr);
                 else
                     fprintf(out, "%s", cg_func_param_abi_c_type(ctx, f, i));
@@ -3347,6 +3445,11 @@ static void emit_one_forward_decl(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
         }
     }
     fprintf(out, ");\n");
+
+    if (cg_func_can_have_cfn_stub(ctx, f)) {
+        emit_cfn_stub_signature(ctx, out, f, prefix);
+        fprintf(out, ";\n");
+    }
 
     bool typed_abi = cg_func_uses_typed_abi(ctx, f);
     bool native_receiver = cg_class_func_uses_native_receiver(ctx, f);
