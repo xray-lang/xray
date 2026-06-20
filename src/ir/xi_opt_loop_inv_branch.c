@@ -135,6 +135,7 @@ static bool hoist_invariant_condition(XiFunc *f, XiLoop *loop, XiBlock *branch_b
     if (!hoisted)
         return false;
     hoisted->flags = cond->flags;
+    hoisted->line = cond->line;
     for (uint16_t a = 0; a < cond->nargs; a++) {
         hoisted->args[a] = cond->args[a];
     }

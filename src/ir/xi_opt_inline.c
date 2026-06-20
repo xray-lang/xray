@@ -259,6 +259,7 @@ static bool inline_call_site(XiFunc *caller, XiBlock *call_blk, uint32_t call_id
     }
     cont_blk->kind = call_blk->kind;
     cont_blk->control = call_blk->control;
+    cont_blk->line = call_blk->line;
     cont_blk->succs[0] = call_blk->succs[0];
     cont_blk->succs[1] = call_blk->succs[1];
     for (uint16_t s = 0; s < 2; s++) {
@@ -320,6 +321,7 @@ static bool inline_call_site(XiFunc *caller, XiBlock *call_blk, uint32_t call_id
     for (uint32_t bi = 0; bi < callee_nblk; bi++) {
         XiBlock *src_blk = callee->blocks[bi];
         XiBlock *dst_blk = cloned_blks[bi];
+        dst_blk->line = src_blk->line;
 
         /* Clone values */
         for (uint32_t vi = 0; vi < src_blk->nvalues; vi++) {
@@ -375,6 +377,7 @@ static bool inline_call_site(XiFunc *caller, XiBlock *call_blk, uint32_t call_id
             case XI_BLOCK_RETURN:
                 /* Replace RETURN with JMP to continuation. */
                 dst_blk->kind = XI_BLOCK_PLAIN;
+                dst_blk->line = 0;
                 dst_blk->succs[0] = cont_blk;
                 if (nret < 32) {
                     XiValue *ret_val = NULL;
@@ -388,6 +391,7 @@ static bool inline_call_site(XiFunc *caller, XiBlock *call_blk, uint32_t call_id
 
             default:
                 dst_blk->kind = XI_BLOCK_UNREACHABLE;
+                dst_blk->line = 0;
                 break;
         }
 
@@ -412,6 +416,7 @@ static bool inline_call_site(XiFunc *caller, XiBlock *call_blk, uint32_t call_id
     /* Wire call_blk → callee entry block. */
     call_blk->kind = XI_BLOCK_PLAIN;
     call_blk->control = NULL;
+    call_blk->line = 0;
     call_blk->succs[0] = cloned_blks[0];
     call_blk->succs[1] = NULL;
     xi_block_add_pred(cloned_blks[0], call_blk);

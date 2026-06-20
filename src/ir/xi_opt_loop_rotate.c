@@ -277,6 +277,7 @@ static bool wire_guard_edges(XiBlock *guard, XiValue *guard_cond, XiBlock *body,
         xi_cfg_remove_pred(body, guard);
         guard->kind = XI_BLOCK_UNREACHABLE;
         guard->control = NULL;
+        guard->line = 0;
         guard->succs[0] = NULL;
         guard->succs[1] = NULL;
         return false;
@@ -389,6 +390,7 @@ static bool cleanup_failed_rotation(XiFunc *f, XiBlock *guard, uint32_t saved_nb
     if (guard) {
         guard->kind = XI_BLOCK_UNREACHABLE;
         guard->control = NULL;
+        guard->line = 0;
         guard->succs[0] = NULL;
         guard->succs[1] = NULL;
         if (f && saved_nblocks < f->nblocks && f->blocks[saved_nblocks] == guard)
@@ -431,6 +433,9 @@ static bool rotate_loop(XiFunc *f, XiLoop *loop) {
         return cleanup_failed_rotation(f, guard, saved_nblocks, body, exit_blk, saved_body_phis);
     if (!wire_guard_edges(guard, guard_cond, body, exit_blk, exit_args, n_exit_args))
         return cleanup_failed_rotation(f, guard, saved_nblocks, body, exit_blk, saved_body_phis);
+    guard->line = header->line;
+    if (guard->line == 0 && header->control)
+        guard->line = header->control->line;
     if (!create_body_phis(f, loop, body, guard, &defs, &start_map, &guard_map, &body_map))
         return cleanup_failed_rotation(f, guard, saved_nblocks, body, exit_blk, saved_body_phis);
     if (!xi_cfg_redirect_edge(preheader, header, guard, NULL, 0))

@@ -662,6 +662,7 @@ typedef struct XiBlock {
     uint16_t kind; /* XiBlockKind */
     bool visited;  /* traversal scratch */
     uint8_t _pad;
+    uint32_t line; /* source line for the block terminator (0 = unknown) */
 
     /* Phi nodes at entry (linked list; NULL if no merge point) */
     XiPhi *phis;

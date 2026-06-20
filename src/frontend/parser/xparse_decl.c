@@ -1066,7 +1066,7 @@ AstNode *xr_parse_member_access(Parser *parser, AstNode *object) {
  */
 AstNode *xr_parse_return_statement(Parser *parser) {
     XR_DCHECK(parser != NULL, "parse_return_statement: NULL parser");
-    int line = parser->previous.line;
+    int line = parser->current.line;
     xr_parser_advance(parser);  // Consume 'return'
 
     // Bare `return` or `return` followed by block-close: void return.

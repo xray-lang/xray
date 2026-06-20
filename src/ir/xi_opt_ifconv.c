@@ -200,15 +200,18 @@ XR_FUNC XiPassChange xi_opt_ifconv(XiFunc *f) {
             /* Rewire: ifblk becomes PLAIN → join_blk. */
             ifblk->kind = XI_BLOCK_PLAIN;
             ifblk->control = NULL;
+            ifblk->line = 0;
             ifblk->succs[0] = join_blk;
             ifblk->succs[1] = NULL;
 
             /* Clear then/else blocks. */
             then_blk->nvalues = 0;
             then_blk->kind = XI_BLOCK_UNREACHABLE;
+            then_blk->line = 0;
             then_blk->succs[0] = NULL;
             else_blk->nvalues = 0;
             else_blk->kind = XI_BLOCK_UNREACHABLE;
+            else_blk->line = 0;
             else_blk->succs[0] = NULL;
 
             /* Update join_blk predecessors: only ifblk now. */

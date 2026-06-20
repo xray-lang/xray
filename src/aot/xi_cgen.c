@@ -1255,6 +1255,38 @@ static void emit_value_source_line(XiCgenCtx *ctx, FILE *out, const XiValue *v) 
         emit_source_line_directive(ctx, out, v->line);
 }
 
+static void emit_generated_line_reset(XiCgenCtx *ctx, FILE *out) {
+    (void) ctx;
+    if (!out)
+        return;
+    fprintf(out, "#line 1 \"<xray-generated>\"\n");
+}
+
+static void emit_value_generated_line_reset(XiCgenCtx *ctx, FILE *out, const XiValue *v) {
+    if (v && v->line > 0)
+        emit_generated_line_reset(ctx, out);
+}
+
+static void emit_block_terminator_source_line(XiCgenCtx *ctx, FILE *out, const XiBlock *blk) {
+    if (!blk)
+        return;
+    uint32_t line = blk->line;
+    if (line == 0 && blk->control)
+        line = blk->control->line;
+    emit_source_line_directive(ctx, out, line);
+}
+
+static void emit_block_terminator_generated_line_reset(XiCgenCtx *ctx, FILE *out,
+                                                       const XiBlock *blk) {
+    if (!blk)
+        return;
+    uint32_t line = blk->line;
+    if (line == 0 && blk->control)
+        line = blk->control->line;
+    if (line > 0)
+        emit_generated_line_reset(ctx, out);
+}
+
 #include "xi_cgen_struct_helpers.inc.c"
 #include "xi_cgen_class_helpers.inc.c"
 static bool cg_has_exception_handling(const XiFunc *f);
@@ -2354,6 +2386,7 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
             fprintf(out, "; ");
         }
         fprintf(out, "} _st%u = {0};\n", v->id);
+        emit_value_generated_line_reset(ctx, out, v);
         return;
     }
 
@@ -2411,6 +2444,7 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
         fprintf(out, "    ");
         emit_value_rhs(ctx, out, f, v, prefix);
         fprintf(out, ";\n");
+        emit_value_generated_line_reset(ctx, out, v);
         return;
     }
     if (emit_class_native_array_method_call_stmt(ctx, out, f, v))
@@ -2439,6 +2473,7 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
         fprintf(out, "    ");
         emit_value_rhs(ctx, out, f, v, prefix);
         fprintf(out, ";\n");
+        emit_value_generated_line_reset(ctx, out, v);
         return;
     }
 
@@ -2463,6 +2498,7 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
         fprintf(out, ";\n");
     }
     emit_typed_array_data_cache_decl(ctx, out, v);
+    emit_value_generated_line_reset(ctx, out, v);
     emit_debug_source_var_sync(ctx, out, f, v);
     if (cell_origin) {
         fprintf(out, "    ");
@@ -2546,7 +2582,7 @@ static void emit_block(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiBlock
         case XI_BLOCK_RETURN: {
             if (blk->control && blk->control->op == XI_ERR_RETURN)
                 break;
-            emit_value_source_line(ctx, out, blk->control);
+            emit_block_terminator_source_line(ctx, out, blk);
             emit_class_field_cache_flush(ctx, out);
             emit_deferred_calls(ctx, out, f, prefix);
             if (emit_class_native_ref_stack_return_stmt(ctx, out, f, blk, prefix))
@@ -2564,6 +2600,7 @@ static void emit_block(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiBlock
                 else
                     fprintf(out, "    return 0;\n");
             }
+            emit_block_terminator_generated_line_reset(ctx, out, blk);
             break;
         }
 
@@ -2580,7 +2617,7 @@ static void emit_block(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiBlock
             XR_DCHECK(blk->control != NULL, "IF block missing control");
             XR_DCHECK(blk->succs[0] != NULL, "IF block missing then");
             XR_DCHECK(blk->succs[1] != NULL, "IF block missing else");
-            emit_value_source_line(ctx, out, blk->control);
+            emit_block_terminator_source_line(ctx, out, blk);
             if (emit_structured_array_fill_loop_stmt(ctx, out, f, blk, prefix))
                 break;
             if (emit_bool_accumulate_diamond_stmt(ctx, out, blk))

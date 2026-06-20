@@ -298,6 +298,7 @@ TEST(parser_return_stmt) {
     ASSERT_TRUE(body->as.block.count > 0);
     AstNode *ret = body->as.block.statements[0];
     ASSERT_EQ_INT(ret->type, AST_RETURN_STMT);
+    ASSERT_EQ_INT(ret->line, 2);
     teardown();
 }
 
