@@ -1,0 +1,6 @@
+// 113 FFI: raw pointer indexing reads through a C pointer and must be unsafe.
+@extern("C") fn raw_addr() -> RawPtr<uint8>
+
+let p = unsafe { raw_addr() }
+let x = p[0]
+print(x)
