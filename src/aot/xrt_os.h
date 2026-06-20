@@ -26,8 +26,11 @@
 #include <windows.h>
 #include <tlhelp32.h>
 #else
+#include <fcntl.h>
+#include <poll.h>
 #include <unistd.h>
 #include <pwd.h>
+#include <sys/wait.h>
 extern char **environ;
 #endif
 
@@ -441,6 +444,284 @@ static inline XrValue xrt_os_sleep(XrValue ms_value) {
         req = rem;
 #endif
     return XR_NULL_VAL;
+}
+
+static inline bool xrt_os_exec_buffer_init(char **buf, size_t *len, size_t *cap) {
+    *len = 0;
+    *cap = 4096;
+    *buf = (char *) XRT_MALLOC(*cap);
+    if (!*buf) {
+        *cap = 0;
+        return false;
+    }
+    (*buf)[0] = '\0';
+    return true;
+}
+
+static inline bool xrt_os_exec_buffer_append(char **buf, size_t *len, size_t *cap, const char *data,
+                                             size_t n) {
+    if (!buf || !len || !cap || !data)
+        return false;
+    if (*len + n + 1 > *cap) {
+        size_t new_cap = *cap ? *cap : 4096;
+        while (*len + n + 1 > new_cap) {
+            size_t next = new_cap * 2;
+            if (next <= new_cap)
+                return false;
+            new_cap = next;
+        }
+        char *grown = (char *) XRT_REALLOC(*buf, new_cap);
+        if (!grown)
+            return false;
+        *buf = grown;
+        *cap = new_cap;
+    }
+    memcpy(*buf + *len, data, n);
+    *len += n;
+    (*buf)[*len] = '\0';
+    return true;
+}
+
+static inline XrValue xrt_os_exec_result(const char *stdout_buf, const char *stderr_buf,
+                                         int64_t exit_code) {
+    static const char *const fields[] = {"stdout", "stderr", "exitCode"};
+    XrValue obj = xrt_json_new_named(3, fields);
+    xrt_json_set_field(obj, 0, xrt_os_cstr_value(stdout_buf ? stdout_buf : ""));
+    xrt_json_set_field(obj, 1, xrt_os_cstr_value(stderr_buf ? stderr_buf : ""));
+    xrt_json_set_field(obj, 2, XR_FROM_INT(exit_code));
+    return obj;
+}
+
+#ifndef _WIN32
+typedef struct {
+    int fd;
+    char *buf;
+    size_t len;
+    size_t cap;
+    bool open;
+} xrt_os_exec_pipe_t;
+
+static inline bool xrt_os_exec_pipe_init(xrt_os_exec_pipe_t *pipe, int fd) {
+    pipe->fd = fd;
+    pipe->buf = NULL;
+    pipe->len = 0;
+    pipe->cap = 0;
+    pipe->open = true;
+    if (!xrt_os_exec_buffer_init(&pipe->buf, &pipe->len, &pipe->cap)) {
+        close(fd);
+        pipe->open = false;
+        return false;
+    }
+
+    int flags = fcntl(fd, F_GETFL, 0);
+    if (flags >= 0)
+        (void) fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+    return true;
+}
+
+static inline void xrt_os_exec_pipe_close(xrt_os_exec_pipe_t *pipe) {
+    if (pipe->open) {
+        close(pipe->fd);
+        pipe->open = false;
+    }
+}
+
+static inline void xrt_os_exec_pipe_free(xrt_os_exec_pipe_t *pipe) {
+    xrt_os_exec_pipe_close(pipe);
+    if (pipe->buf)
+        XRT_FREE(pipe->buf);
+    pipe->buf = NULL;
+    pipe->len = 0;
+    pipe->cap = 0;
+}
+
+static inline bool xrt_os_exec_pipe_drain(xrt_os_exec_pipe_t *pipe) {
+    char tmp[4096];
+    for (;;) {
+        ssize_t n = read(pipe->fd, tmp, sizeof(tmp));
+        if (n > 0) {
+            if (!xrt_os_exec_buffer_append(&pipe->buf, &pipe->len, &pipe->cap, tmp, (size_t) n))
+                return false;
+            continue;
+        }
+        if (n == 0) {
+            xrt_os_exec_pipe_close(pipe);
+            return true;
+        }
+        if (errno == EINTR)
+            continue;
+        if (errno == EAGAIN || errno == EWOULDBLOCK)
+            return true;
+        xrt_os_exec_pipe_close(pipe);
+        return false;
+    }
+}
+
+static inline bool xrt_os_read_exec_pipes(int stdout_fd, int stderr_fd, char **stdout_buf,
+                                          char **stderr_buf) {
+    xrt_os_exec_pipe_t pipes[2];
+    if (!xrt_os_exec_pipe_init(&pipes[0], stdout_fd)) {
+        close(stderr_fd);
+        return false;
+    }
+    if (!xrt_os_exec_pipe_init(&pipes[1], stderr_fd)) {
+        xrt_os_exec_pipe_free(&pipes[0]);
+        return false;
+    }
+
+    while (pipes[0].open || pipes[1].open) {
+        struct pollfd pfds[2];
+        nfds_t nfds = 0;
+        for (int i = 0; i < 2; i++) {
+            if (!pipes[i].open)
+                continue;
+            pfds[nfds].fd = pipes[i].fd;
+            pfds[nfds].events = POLLIN | POLLHUP | POLLERR;
+            pfds[nfds].revents = 0;
+            nfds++;
+        }
+
+        int rc;
+        do {
+            rc = poll(pfds, nfds, -1);
+        } while (rc < 0 && errno == EINTR);
+        if (rc < 0)
+            goto fail;
+
+        nfds_t pos = 0;
+        for (int i = 0; i < 2; i++) {
+            if (!pipes[i].open)
+                continue;
+            short revents = pfds[pos++].revents;
+            if (revents & (POLLIN | POLLHUP | POLLERR)) {
+                if (!xrt_os_exec_pipe_drain(&pipes[i]))
+                    goto fail;
+            }
+        }
+    }
+
+    *stdout_buf = pipes[0].buf;
+    *stderr_buf = pipes[1].buf;
+    return true;
+
+fail:
+    xrt_os_exec_pipe_free(&pipes[0]);
+    xrt_os_exec_pipe_free(&pipes[1]);
+    return false;
+}
+#endif
+
+static inline XrValue xrt_os_exec(const char *cmd_data, int64_t cmd_len) {
+    char stack_cmd[1024];
+    char *owned_cmd = NULL;
+    char *cmd = xrt_os_copy_cstr_arg(cmd_data, cmd_len, stack_cmd, sizeof(stack_cmd), &owned_cmd);
+    if (!cmd || cmd[0] == '\0') {
+        if (owned_cmd)
+            XRT_FREE(owned_cmd);
+        return XR_NULL_VAL;
+    }
+
+#ifdef _WIN32
+    FILE *fp = _popen(cmd, "r");
+    if (owned_cmd)
+        XRT_FREE(owned_cmd);
+    if (!fp)
+        return XR_NULL_VAL;
+
+    char *output = NULL;
+    size_t len = 0;
+    size_t cap = 0;
+    if (!xrt_os_exec_buffer_init(&output, &len, &cap)) {
+        _pclose(fp);
+        return XR_NULL_VAL;
+    }
+
+    char tmp[4096];
+    size_t n;
+    bool ok = true;
+    while ((n = fread(tmp, 1, sizeof(tmp), fp)) > 0) {
+        if (!xrt_os_exec_buffer_append(&output, &len, &cap, tmp, n)) {
+            ok = false;
+            break;
+        }
+    }
+
+    int raw_status = _pclose(fp);
+    if (!ok) {
+        XRT_FREE(output);
+        return XR_NULL_VAL;
+    }
+    int64_t exit_code = raw_status < 0 ? -1 : (raw_status & 0xFF);
+    XrValue result = xrt_os_exec_result(output, "", exit_code);
+    XRT_FREE(output);
+    return result;
+#else
+    int stdout_pipe[2];
+    int stderr_pipe[2];
+    if (pipe(stdout_pipe) != 0) {
+        if (owned_cmd)
+            XRT_FREE(owned_cmd);
+        return XR_NULL_VAL;
+    }
+    if (pipe(stderr_pipe) != 0) {
+        close(stdout_pipe[0]);
+        close(stdout_pipe[1]);
+        if (owned_cmd)
+            XRT_FREE(owned_cmd);
+        return XR_NULL_VAL;
+    }
+
+    pid_t pid = fork();
+    if (pid < 0) {
+        close(stdout_pipe[0]);
+        close(stdout_pipe[1]);
+        close(stderr_pipe[0]);
+        close(stderr_pipe[1]);
+        if (owned_cmd)
+            XRT_FREE(owned_cmd);
+        return XR_NULL_VAL;
+    }
+
+    if (pid == 0) {
+        close(stdout_pipe[0]);
+        close(stderr_pipe[0]);
+        dup2(stdout_pipe[1], STDOUT_FILENO);
+        dup2(stderr_pipe[1], STDERR_FILENO);
+        close(stdout_pipe[1]);
+        close(stderr_pipe[1]);
+        execl("/bin/sh", "sh", "-c", cmd, (char *) NULL);
+        _exit(127);
+    }
+
+    close(stdout_pipe[1]);
+    close(stderr_pipe[1]);
+    if (owned_cmd)
+        XRT_FREE(owned_cmd);
+
+    char *stdout_buf = NULL;
+    char *stderr_buf = NULL;
+    bool read_ok = xrt_os_read_exec_pipes(stdout_pipe[0], stderr_pipe[0], &stdout_buf, &stderr_buf);
+
+    int status = 0;
+    pid_t waited;
+    do {
+        waited = waitpid(pid, &status, 0);
+    } while (waited < 0 && errno == EINTR);
+
+    if (!read_ok) {
+        if (stdout_buf)
+            XRT_FREE(stdout_buf);
+        if (stderr_buf)
+            XRT_FREE(stderr_buf);
+        return XR_NULL_VAL;
+    }
+
+    int64_t exit_code = (waited >= 0 && WIFEXITED(status)) ? WEXITSTATUS(status) : -1;
+    XrValue result = xrt_os_exec_result(stdout_buf, stderr_buf, exit_code);
+    XRT_FREE(stdout_buf);
+    XRT_FREE(stderr_buf);
+    return result;
+#endif
 }
 
 #endif  // XRT_OS_H

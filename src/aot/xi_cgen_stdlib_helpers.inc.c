@@ -112,6 +112,7 @@ static const CgAotStdlibMethod g_aot_stdlib_methods[] = {
     {"os", "loadavg", 0, "xrt_os_loadavg", "", CG_AOT_RET_VALUE, NULL},
     {"os", "clock", 0, "xrt_os_clock", "", CG_AOT_RET_VALUE, NULL},
     {"os", "sleep", 1, "xrt_os_sleep", "v", CG_AOT_RET_VALUE, NULL},
+    {"os", "exec", 1, "xrt_os_exec", "s", CG_AOT_RET_VALUE, NULL},
     {"compress", "crc32", 1, "xrt_compress_crc32", "s", CG_AOT_RET_VALUE, NULL},
     {"compress", "adler32", 1, "xrt_compress_adler32", "s", CG_AOT_RET_VALUE, NULL},
     {"crypto", "hmac", 3, "xrt_crypto_hmac", "sss", CG_AOT_RET_VALUE, NULL},

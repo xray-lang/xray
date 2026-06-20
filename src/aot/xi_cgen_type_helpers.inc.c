@@ -46,7 +46,8 @@ static bool cg_type_is_json(const XrType *type) {
     if (type->kind == XR_KIND_JSON)
         return true;
     if (type->kind == XR_KIND_INSTANCE && type->instance.class_name &&
-        strcmp(type->instance.class_name, "PathInfo") == 0)
+        (strcmp(type->instance.class_name, "PathInfo") == 0 ||
+         strcmp(type->instance.class_name, "ExecResult") == 0))
         return true;
     if (type->kind == XR_KIND_UNION) {
         for (uint8_t i = 0; i < type->union_type.member_count; i++) {
