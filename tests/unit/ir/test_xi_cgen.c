@@ -658,6 +658,9 @@ TEST(cgen_emits_debug_source_var_slots) {
     const char *src = "fn compute(seed: int) -> int {\n"
                       "    let answer = seed + 1\n"
                       "    let doubled = answer * 2\n"
+                      "    let ratio = doubled / 2.0\n"
+                      "    let ok = ratio == 21.0\n"
+                      "    if (!ok) { return 0 }\n"
                       "    return doubled\n"
                       "}\n"
                       "print(compute(20))\n";
@@ -675,9 +678,13 @@ TEST(cgen_emits_debug_source_var_slots) {
     assert(contains(code, "int64_t answer = 0;") && "source local should get a debug local");
     assert(contains(code, "int64_t doubled = 0;") &&
            "second source local should get a debug local");
+    assert(contains(code, "double ratio = 0;") && "float source local should get a debug local");
+    assert(contains(code, "uint8_t ok = 0;") && "bool source local should get a debug local");
     assert(contains(code, "seed = (int64_t)") && "source parameter should be synchronized");
     assert(contains(code, "answer = (int64_t)") && "answer should be synchronized");
     assert(contains(code, "doubled = (int64_t)") && "doubled should be synchronized");
+    assert(contains(code, "ratio = (double)") && "ratio should be synchronized");
+    assert(contains(code, "ok = (uint8_t)") && "ok should be synchronized");
 
     printf("  Generated debug source-var mapped C %zu bytes\n", strlen(code));
     xr_free(code);
@@ -722,6 +729,9 @@ TEST(cgen_coro_emits_debug_source_var_slots) {
                       "    let answer = seed + 1\n"
                       "    yield\n"
                       "    let doubled = answer * 2\n"
+                      "    let ratio = doubled / 2.0\n"
+                      "    let ok = ratio == 21.0\n"
+                      "    if (!ok) { return 0 }\n"
                       "    return doubled\n"
                       "}\n"
                       "let task = go worker(20)\n"
@@ -741,7 +751,7 @@ TEST(cgen_coro_emits_debug_source_var_slots) {
            "pre-suspend local initializer should carry its source line");
     assert(contains(code, "#line 4 \"debug_coro_locals.xr\"") &&
            "post-resume local initializer should carry its source line");
-    assert(contains(code, "#line 5 \"debug_coro_locals.xr\"") &&
+    assert(contains(code, "#line 8 \"debug_coro_locals.xr\"") &&
            "coroutine return terminator should carry its source line");
     assert(contains(code, "#if defined(XRAY_AOT_DEBUG_LOCALS)") &&
            "coroutine debug source locals should be guarded by the debug-local define");
@@ -751,12 +761,20 @@ TEST(cgen_coro_emits_debug_source_var_slots) {
            "coroutine source local before suspension should get a debug local");
     assert(contains(code, "int64_t doubled = 0;") &&
            "coroutine source local after suspension should get a debug local");
+    assert(contains(code, "double ratio = 0;") &&
+           "coroutine float source local should get a debug local");
+    assert(contains(code, "uint8_t ok = 0;") &&
+           "coroutine bool source local should get a debug local");
     assert(contains(code, "seed = (int64_t)") &&
            "coroutine source parameter should be synchronized from the frame");
     assert(contains(code, "answer = (int64_t)") &&
            "coroutine source local should be synchronized after assignment/resume");
     assert(contains(code, "doubled = (int64_t)") &&
            "post-resume source local should be synchronized after assignment");
+    assert(contains(code, "ratio = (double)") &&
+           "coroutine float source local should be synchronized after assignment");
+    assert(contains(code, "ok = (uint8_t)") &&
+           "coroutine bool source local should be synchronized after assignment");
 
     printf("  Generated coroutine debug source-var mapped C %zu bytes\n", strlen(code));
     xr_free(code);

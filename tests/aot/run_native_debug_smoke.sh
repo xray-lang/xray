@@ -76,6 +76,9 @@ fn compute(seed: int) -> int {
     if (seed <= 0) { return 0 }
     let answer = seed + 1
     let doubled = answer * 2
+    let ratio = doubled / 2.0
+    let ok = ratio == 21.0
+    if (!ok) { return 0 }
     print(doubled)
     return compute(seed - seed) + doubled
 }
@@ -118,10 +121,12 @@ else
 fi
 
 if ! lldb --no-lldbinit -b \
-        -o "breakpoint set --file debug_locals.xr --line 5" \
+        -o "breakpoint set --file debug_locals.xr --line 8" \
         -o run \
         -o "frame variable answer" \
         -o "frame variable doubled" \
+        -o "frame variable ratio" \
+        -o "frame variable ok" \
         -o bt -- "$BIN" > "$LLDB_LOG" 2>&1; then
     fail "lldb failed"
 fi
@@ -131,8 +136,8 @@ fi
 if ! grep -Fq "debug_locals_compute" "$LLDB_LOG"; then
     fail "lldb backtrace did not show xray-derived function name"
 fi
-if ! grep -Fq "debug_locals.xr:5" "$LLDB_LOG"; then
-    fail "lldb breakpoint/backtrace did not report debug_locals.xr:5"
+if ! grep -Fq "debug_locals.xr:8" "$LLDB_LOG"; then
+    fail "lldb breakpoint/backtrace did not report debug_locals.xr:8"
 fi
 if ! grep -Eq "answer = 21" "$LLDB_LOG"; then
     fail "lldb did not expose source local answer=21"
@@ -140,12 +145,21 @@ fi
 if ! grep -Eq "doubled = 42" "$LLDB_LOG"; then
     fail "lldb did not expose source local doubled=42"
 fi
+if ! grep -Eq "ratio = 21(\\.0+)?" "$LLDB_LOG"; then
+    fail "lldb did not expose source local ratio=21"
+fi
+if ! grep -Eq "ok = .*(true|1|\\\\x01)" "$LLDB_LOG"; then
+    fail "lldb did not expose source local ok=true"
+fi
 
 cat > "$CORO_SRC" <<'XR'
 fn worker(seed: int) -> int {
     let answer = seed + 1
     yield
     let doubled = answer * 2
+    let ratio = doubled / 2.0
+    let ok = ratio == 21.0
+    if (!ok) { return 0 }
     return doubled
 }
 let task = go worker(20)
@@ -181,11 +195,13 @@ else
 fi
 
 if ! lldb --no-lldbinit -b \
-        -o "breakpoint set --file coro_debug_locals.xr --line 5" \
+        -o "breakpoint set --file coro_debug_locals.xr --line 8" \
         -o run \
         -o "frame variable seed" \
         -o "frame variable answer" \
         -o "frame variable doubled" \
+        -o "frame variable ratio" \
+        -o "frame variable ok" \
         -o bt -- "$CORO_BIN" > "$CORO_LLDB_LOG" 2>&1; then
     fail "coroutine lldb failed"
 fi
@@ -195,8 +211,8 @@ fi
 if ! grep -Fq "coro_debug_locals_worker" "$CORO_LLDB_LOG"; then
     fail "coroutine lldb backtrace did not show worker coroutine resume"
 fi
-if ! grep -Fq "coro_debug_locals.xr:5" "$CORO_LLDB_LOG"; then
-    fail "coroutine lldb breakpoint/backtrace did not report coro_debug_locals.xr:5"
+if ! grep -Fq "coro_debug_locals.xr:8" "$CORO_LLDB_LOG"; then
+    fail "coroutine lldb breakpoint/backtrace did not report coro_debug_locals.xr:8"
 fi
 if ! grep -Eq "seed = 20" "$CORO_LLDB_LOG"; then
     fail "coroutine lldb did not expose source local seed=20"
@@ -206,6 +222,12 @@ if ! grep -Eq "answer = 21" "$CORO_LLDB_LOG"; then
 fi
 if ! grep -Eq "doubled = 42" "$CORO_LLDB_LOG"; then
     fail "coroutine lldb did not expose source local doubled=42"
+fi
+if ! grep -Eq "ratio = 21(\\.0+)?" "$CORO_LLDB_LOG"; then
+    fail "coroutine lldb did not expose source local ratio=21"
+fi
+if ! grep -Eq "ok = .*(true|1|\\\\x01)" "$CORO_LLDB_LOG"; then
+    fail "coroutine lldb did not expose source local ok=true"
 fi
 
 if [ "$FAIL" -ne 0 ]; then
