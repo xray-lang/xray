@@ -654,6 +654,36 @@ TEST(cgen_emits_source_line_directives) {
     xi_func_free(ir);
 }
 
+TEST(cgen_emits_debug_source_var_slots) {
+    const char *src = "fn compute(seed: int) -> int {\n"
+                      "    let answer = seed + 1\n"
+                      "    let doubled = answer * 2\n"
+                      "    return doubled\n"
+                      "}\n"
+                      "print(compute(20))\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "debug source-var slot test should generate");
+    assert(contains(code, "#if defined(XRAY_AOT_DEBUG_LOCALS)") &&
+           "debug source locals should be guarded by the debug-local define");
+    assert(contains(code, "int64_t seed = 0;") && "source parameter should get a debug local");
+    assert(contains(code, "int64_t answer = 0;") && "source local should get a debug local");
+    assert(contains(code, "int64_t doubled = 0;") &&
+           "second source local should get a debug local");
+    assert(contains(code, "seed = (int64_t)") && "source parameter should be synchronized");
+    assert(contains(code, "answer = (int64_t)") && "answer should be synchronized");
+    assert(contains(code, "doubled = (int64_t)") && "doubled should be synchronized");
+
+    printf("  Generated debug source-var mapped C %zu bytes\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_coro_emits_source_line_directives) {
     const char *src = "fn worker(n: int) -> int {\n"
                       "    yield\n"
@@ -4443,6 +4473,7 @@ int main(void) {
     run_cgen_stats_tracks_native_abi();
     run_cgen_module_prefix_is_c_identifier();
     run_cgen_emits_source_line_directives();
+    run_cgen_emits_debug_source_var_slots();
     run_cgen_coro_emits_source_line_directives();
     run_cgen_recursive();
     run_cgen_for_loop();

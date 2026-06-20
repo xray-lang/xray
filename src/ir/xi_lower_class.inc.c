@@ -264,6 +264,7 @@ static XiFunc *lower_method_as_func(XiLower *l, MethodDeclNode *m, bool is_inst,
         }
     }
 
+    xi_lower_capture_source_vars(&ml);
     xi_lower_cleanup(&ml);
     return ml.func;
 }

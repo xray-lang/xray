@@ -381,6 +381,35 @@ XR_FUNC XiValue *xi_lower_braun_read(XiLower *l, int var_id, XiBlock *blk) {
     return braun_read_recursive(l, var_id, blk);
 }
 
+XR_FUNC void xi_lower_capture_source_vars(XiLower *l) {
+    if (!l || !l->func || l->var_count <= 0) {
+        if (l && l->func)
+            l->func->source_var_count = 0;
+        return;
+    }
+
+    uint32_t count = (uint32_t) l->var_count;
+    const char **names =
+        (const char **) xi_func_arena_alloc(l->func, count * (uint32_t) sizeof(const char *));
+    struct XrType **types =
+        (struct XrType **) xi_func_arena_alloc(l->func, count * (uint32_t) sizeof(struct XrType *));
+    if (!names || !types) {
+        l->func->source_var_count = 0;
+        l->func->source_var_names = NULL;
+        l->func->source_var_types = NULL;
+        return;
+    }
+
+    for (uint32_t i = 0; i < count; i++) {
+        names[i] = arena_strdup(l->func, l->vars[i].name);
+        types[i] = l->vars[i].type;
+    }
+
+    l->func->source_var_count = count;
+    l->func->source_var_names = names;
+    l->func->source_var_types = types;
+}
+
 /* Try to remove trivial phi: if all operands are the same (or self),
  * replace with that single value. */
 static XiValue *try_remove_trivial_phi(XiLower *l, int var_id, XiPhi *phi) {
@@ -798,6 +827,7 @@ XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyz
     if (result) {
         result->stage = XI_STAGE_RAW;
         result->invariant_mask = xi_stage_invariants(XI_STAGE_RAW);
+        xi_lower_capture_source_vars(&l);
         xi_lower_assert_var_ids(&l, result);
     }
     xi_lower_cleanup(&l);
@@ -1261,6 +1291,7 @@ XR_FUNC XiFunc *xi_lower_program_ex(AstNode *program_node, struct XaAnalyzer *an
     if (result) {
         result->stage = XI_STAGE_RAW;
         result->invariant_mask = xi_stage_invariants(XI_STAGE_RAW);
+        xi_lower_capture_source_vars(&l);
         xi_lower_assert_var_ids(&l, result);
     }
     xi_lower_cleanup(&l);

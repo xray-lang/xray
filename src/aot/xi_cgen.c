@@ -2049,6 +2049,281 @@ static bool func_needs_fallthrough_return(const XiFunc *f) {
 
 #include "xi_cgen_stmt_dispatch_helpers.inc.c"
 
+typedef struct CgDebugSourceVarInfo {
+    const char *name;
+    const char *ctype;
+    XrRep rep;
+} CgDebugSourceVarInfo;
+
+static bool cg_debug_is_ident_start(char ch) {
+    return (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || ch == '_';
+}
+
+static bool cg_debug_is_ident_part(char ch) {
+    return cg_debug_is_ident_start(ch) || (ch >= '0' && ch <= '9');
+}
+
+static bool cg_debug_name_has_digit_suffix(const char *name, const char *prefix) {
+    size_t n = strlen(prefix);
+    if (strncmp(name, prefix, n) != 0)
+        return false;
+    if (name[n] == '\0')
+        return false;
+    for (const char *p = name + n; *p; p++) {
+        if (*p < '0' || *p > '9')
+            return false;
+    }
+    return true;
+}
+
+static bool cg_debug_source_name_is_c_keyword(const char *name) {
+    static const char *keywords[] = {
+        "auto",     "break",      "case",     "char",   "const",        "continue", "default",
+        "do",       "double",     "else",     "enum",   "extern",       "float",    "for",
+        "goto",     "if",         "inline",   "int",    "long",         "register", "restrict",
+        "return",   "short",      "signed",   "sizeof", "static",       "struct",   "switch",
+        "typedef",  "union",      "unsigned", "void",   "volatile",     "while",    "_Bool",
+        "_Complex", "_Imaginary", "bool",     "true",   "false",        "null",     "NULL",
+        "XrValue",  "int64_t",    "uint64_t", "size_t", "xrt_closure_t"};
+    size_t n = sizeof(keywords) / sizeof(keywords[0]);
+    for (size_t i = 0; i < n; i++) {
+        if (strcmp(name, keywords[i]) == 0)
+            return true;
+    }
+    return false;
+}
+
+static bool cg_debug_source_name_is_safe(const char *name) {
+    if (!name || !name[0])
+        return false;
+    if (name[0] == '_')
+        return false;
+    if (!cg_debug_is_ident_start(name[0]))
+        return false;
+    for (const char *p = name + 1; *p; p++) {
+        if (!cg_debug_is_ident_part(*p))
+            return false;
+    }
+    if (cg_debug_source_name_is_c_keyword(name))
+        return false;
+    if (cg_debug_name_has_digit_suffix(name, "v") || cg_debug_name_has_digit_suffix(name, "p") ||
+        cg_debug_name_has_digit_suffix(name, "phi") ||
+        cg_debug_name_has_digit_suffix(name, "cell_"))
+        return false;
+    if (strcmp(name, "ctx") == 0 || strcmp(name, "f") == 0 || strcmp(name, "_cl") == 0)
+        return false;
+    return true;
+}
+
+static bool cg_debug_source_var_name_is_unique(const XiFunc *f, XiVarId var_id) {
+    if (!f || !xi_var_id_is_valid(var_id) || var_id >= f->source_var_count || !f->source_var_names)
+        return false;
+    const char *name = f->source_var_names[var_id];
+    if (!cg_debug_source_name_is_safe(name))
+        return false;
+    if (f->name && strcmp(f->name, name) == 0)
+        return false;
+
+    uint32_t matches = 0;
+    for (uint32_t i = 0; i < f->source_var_count; i++) {
+        if (f->source_var_names[i] && strcmp(f->source_var_names[i], name) == 0)
+            matches++;
+    }
+    return matches == 1;
+}
+
+static const XaotValuePlan *cg_debug_value_plan(XiCgenCtx *ctx, const XiValue *v) {
+    if (!ctx || !v)
+        return NULL;
+    return xaot_bundle_find_value_plan(ctx->aot_bundle, v);
+}
+
+static const char *cg_debug_value_ctype(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v) {
+    if (cg_array_value_uses_native_local(ctx, f, v))
+        return "xrt_array_t *";
+    const XaotValuePlan *plan = cg_debug_value_plan(ctx, v);
+    if (plan && plan->rep.c_type)
+        return plan->rep.c_type;
+    return local_ctype_str(v);
+}
+
+static XrRep cg_debug_value_decl_storage_rep(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v) {
+    if (cg_array_value_uses_native_local(ctx, f, v))
+        return XR_REP_PTR;
+    const XaotValuePlan *plan = cg_debug_value_plan(ctx, v);
+    return plan ? xaot_value_storage_rep(plan->rep) : XR_REP_VOID;
+}
+
+static bool cg_debug_value_has_source_storage(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v) {
+    if (!v || !xi_var_id_is_valid(v->var_id))
+        return false;
+    if (!cg_debug_source_var_name_is_unique(f, v->var_id))
+        return false;
+    if (cg_is_void_like(v) || v->op == XI_TRY || v->op == XI_END_TRY)
+        return false;
+    if (!cg_debug_value_plan(ctx, v))
+        return false;
+    if (v->op == XI_PHI) {
+        const XiPhi *phi = (const XiPhi *) v;
+        if (!cg_phi_has_storage(phi))
+            return false;
+        if (cg_value_traces_to_inlined_struct(f, v) ||
+            cg_value_is_elided_heap_struct_alias(ctx, f, v))
+            return false;
+        return true;
+    }
+    if (v->op == XI_STRUCT_NEW && cg_struct_can_inline(f, v))
+        return false;
+    if ((v->op == XI_COPY || v->op == XI_MOVE) && (cg_value_traces_to_inlined_struct(f, v) ||
+                                                   cg_value_is_elided_heap_struct_alias(ctx, f, v)))
+        return false;
+    if (cg_value_traces_to_inlined_struct(f, v) ||
+        cg_value_is_elided_heap_struct_alias(ctx, f, v) ||
+        cg_value_is_elided_nested_struct_ref(f, v) || cg_value_is_elided_fixed_array_ref(f, v) ||
+        cg_value_is_elided_inlined_struct_type_load(f, v))
+        return false;
+    if (cg_ownership_op_is_noop(v) || cg_shared_static_function_ownership_is_noop(ctx, f, v))
+        return false;
+    if (cg_shared_static_function_value_is_elided(ctx, f, v) ||
+        cg_class_descriptor_value_is_elided(ctx, f, v) ||
+        xicgen_box_only_feeds_native_int_print(ctx, f, v) ||
+        cg_class_native_value_stmt_is_elided(ctx, f, v) ||
+        cg_class_native_ctor_can_inline(ctx, f, v) ||
+        cg_class_shared_native_ctor_value_is_elided(ctx, f, v, NULL) ||
+        cg_class_shared_native_set_is_elided(ctx, f, v) ||
+        cg_class_shared_native_value_is_elided(ctx, f, v) ||
+        cg_array_class_field_alloc_value_is_elided(ctx, f, v) ||
+        cg_array_class_field_value_is_elided(ctx, f, v) ||
+        cg_class_native_map_field_value_is_elided(ctx, f, v) ||
+        cg_class_native_set_field_value_is_elided(ctx, f, v) ||
+        cg_class_native_map_method_call_value_is_elided(ctx, f, v) ||
+        cg_class_native_set_method_call_value_is_elided(ctx, f, v) ||
+        cg_class_native_ref_stack_return_takes_value(ctx, f, v) ||
+        cg_array_typed_push_value_is_elided(ctx, f, v) ||
+        cg_class_native_array_method_call_value_is_elided(ctx, f, v) ||
+        cg_value_is_dead_aot_marker(ctx, f, v))
+        return false;
+    if (v->op == XI_GET_SHARED && cg_value_only_used_by_inlined_struct_new(f, v))
+        return false;
+    return true;
+}
+
+static bool cg_debug_source_var_storage_info(XiCgenCtx *ctx, const XiFunc *f, XiVarId var_id,
+                                             CgDebugSourceVarInfo *out_info) {
+    if (!out_info || !cg_debug_source_var_name_is_unique(f, var_id))
+        return false;
+
+    const char *ctype = NULL;
+    XrRep rep = XR_REP_VOID;
+    bool found = false;
+
+    for (uint16_t i = 0; i < f->nparams; i++) {
+        const XiValue *v = f->params ? f->params[i] : NULL;
+        if (!v || v->var_id != var_id || !cg_debug_value_has_source_storage(ctx, f, v))
+            continue;
+        const char *cur_ctype = cg_debug_value_ctype(ctx, f, v);
+        XrRep cur_rep = cg_debug_value_decl_storage_rep(ctx, f, v);
+        if (!cur_ctype || strcmp(cur_ctype, "void") == 0 || cur_rep == XR_REP_VOID)
+            return false;
+        if (!found) {
+            ctype = cur_ctype;
+            rep = cur_rep;
+            found = true;
+        } else if (strcmp(ctype, cur_ctype) != 0 || rep != cur_rep) {
+            return false;
+        }
+    }
+
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *blk = f->blocks[bi];
+        if (!blk)
+            continue;
+        for (const XiPhi *phi = blk->phis; phi; phi = phi->next) {
+            const XiValue *v = &phi->value;
+            if (v->var_id != var_id || !cg_debug_value_has_source_storage(ctx, f, v))
+                continue;
+            const char *cur_ctype = cg_debug_value_ctype(ctx, f, v);
+            XrRep cur_rep = cg_debug_value_decl_storage_rep(ctx, f, v);
+            if (!cur_ctype || strcmp(cur_ctype, "void") == 0 || cur_rep == XR_REP_VOID)
+                return false;
+            if (!found) {
+                ctype = cur_ctype;
+                rep = cur_rep;
+                found = true;
+            } else if (strcmp(ctype, cur_ctype) != 0 || rep != cur_rep) {
+                return false;
+            }
+        }
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *v = blk->values[vi];
+            if (!v || v->var_id != var_id || !cg_debug_value_has_source_storage(ctx, f, v))
+                continue;
+            const char *cur_ctype = cg_debug_value_ctype(ctx, f, v);
+            XrRep cur_rep = cg_debug_value_decl_storage_rep(ctx, f, v);
+            if (!cur_ctype || strcmp(cur_ctype, "void") == 0 || cur_rep == XR_REP_VOID)
+                return false;
+            if (!found) {
+                ctype = cur_ctype;
+                rep = cur_rep;
+                found = true;
+            } else if (strcmp(ctype, cur_ctype) != 0 || rep != cur_rep) {
+                return false;
+            }
+        }
+    }
+
+    if (!found)
+        return false;
+    out_info->name = f->source_var_names[var_id];
+    out_info->ctype = ctype;
+    out_info->rep = rep;
+    return true;
+}
+
+static void emit_debug_source_var_declarations(XiCgenCtx *ctx, FILE *out, const XiFunc *f) {
+    if (!f || f->source_var_count == 0 || !f->source_var_names)
+        return;
+
+    bool emitted_guard = false;
+    for (uint32_t i = 0; i < f->source_var_count; i++) {
+        CgDebugSourceVarInfo info;
+        if (!cg_debug_source_var_storage_info(ctx, f, (XiVarId) i, &info))
+            continue;
+        if (!emitted_guard) {
+            fprintf(out, "#if defined(XRAY_AOT_DEBUG_LOCALS)\n");
+            emitted_guard = true;
+        }
+        fprintf(out, "    %s %s = ", info.ctype, info.name);
+        if (info.rep == XR_REP_TAGGED)
+            fprintf(out, "XR_NULL_VAL");
+        else
+            fprintf(out, "0");
+        fprintf(out, ";\n");
+    }
+    if (emitted_guard)
+        fprintf(out, "#endif\n");
+}
+
+static void emit_debug_source_var_sync(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                       const XiValue *v) {
+    if (!cg_debug_value_has_source_storage(ctx, f, v))
+        return;
+    CgDebugSourceVarInfo info;
+    if (!cg_debug_source_var_storage_info(ctx, f, v->var_id, &info))
+        return;
+
+    fprintf(out, "#if defined(XRAY_AOT_DEBUG_LOCALS)\n");
+    fprintf(out, "    %s = ", info.name);
+    if (strcmp(info.ctype, "XrValue") == 0) {
+        emit_value_as_rep_ctx(ctx, out, v, info.rep);
+    } else {
+        fprintf(out, "(%s)", info.ctype);
+        emit_value_as_rep_ctx(ctx, out, v, info.rep);
+    }
+    fprintf(out, ";\n");
+    fprintf(out, "#endif\n");
+}
+
 /* Emit a complete value statement: type vN = <rhs>; */
 static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                             const char *prefix) {
@@ -2186,6 +2461,7 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
         fprintf(out, ";\n");
     }
     emit_typed_array_data_cache_decl(ctx, out, v);
+    emit_debug_source_var_sync(ctx, out, f, v);
     if (cell_origin) {
         fprintf(out, "    ");
         emit_cell_ref(out, v->var_id);
@@ -2222,6 +2498,7 @@ static void emit_phi_copies(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
             emit_value_as_rep_ctx(ctx, out, phi->value.args[pred_idx],
                                   cg_value_plan_storage_rep(ctx, &phi->value));
             fprintf(out, ";\n");
+            emit_debug_source_var_sync(ctx, out, f, &phi->value);
         }
     }
 }
@@ -2907,6 +3184,7 @@ static void xi_cgen_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefi
     cg_build_phi_coalesce(ctx, f);
     cg_class_field_cache_collect(ctx, f);
     emit_declarations(ctx, out, f);
+    emit_debug_source_var_declarations(ctx, out, f);
     emit_class_field_cache_decls(ctx, out);
 
     /* Function-scoped defer: own a stack-local scope and link it onto the global

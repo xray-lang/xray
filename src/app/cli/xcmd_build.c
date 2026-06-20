@@ -378,7 +378,8 @@ static bool xaot_cli_add_build_sanitizer_flags(XaotLinkManifest *manifest,
 
 static bool xaot_cli_add_build_debug_flags(XaotLinkManifest *manifest, char *err, size_t err_size) {
     if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_CC_FLAG, "-g") ||
-        !xaot_link_manifest_add_unique(manifest, XAOT_LINK_CC_FLAG, "-fno-omit-frame-pointer")) {
+        !xaot_link_manifest_add_unique(manifest, XAOT_LINK_CC_FLAG, "-fno-omit-frame-pointer") ||
+        !xaot_link_manifest_add_unique(manifest, XAOT_LINK_DEFINE, "XRAY_AOT_DEBUG_LOCALS=1")) {
         snprintf(err, err_size, "failed to add debug flags to AOT link manifest");
         return false;
     }
