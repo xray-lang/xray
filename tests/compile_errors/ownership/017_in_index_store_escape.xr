@@ -1,0 +1,7 @@
+fn stash(data: in Array<int>, slots: ref Array<Array<int>>) {
+    slots[0] = data
+}
+
+let values: Array<int> = [1, 2]
+let slots: Array<Array<int>> = [[0]]
+stash(values, slots)

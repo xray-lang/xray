@@ -55,7 +55,7 @@ XR_FUNC void xa_assign_check_type(XaInferContext *ctx, AstNode *node, XrType *ta
                                &loc);
 }
 
-static bool xa_shared_init_type_needs_boundary(XrType *type) {
+XR_FUNC bool xa_type_needs_borrow_escape_guard(XrType *type) {
     if (!type || XR_TYPE_IS_UNKNOWN(type) || XR_TYPE_IS_NULL(type))
         return false;
     if (type->is_value_type)
@@ -63,7 +63,7 @@ static bool xa_shared_init_type_needs_boundary(XrType *type) {
     if (XR_TYPE_IS_UNION(type)) {
         int n = xr_type_union_count(type);
         for (int i = 0; i < n; i++) {
-            if (xa_shared_init_type_needs_boundary(xr_type_union_member(type, i)))
+            if (xa_type_needs_borrow_escape_guard(xr_type_union_member(type, i)))
                 return true;
         }
         return false;
@@ -85,7 +85,7 @@ static bool xa_shared_init_type_needs_boundary(XrType *type) {
     }
 }
 
-static XaSymbol *xa_borrowed_param_root_symbol(XaInferContext *ctx, AstNode *expr) {
+XR_FUNC XaSymbol *xa_borrowed_param_root_symbol(XaInferContext *ctx, AstNode *expr) {
     if (!ctx || !ctx->analyzer)
         return NULL;
     while (expr) {
@@ -127,7 +127,7 @@ static XaSymbol *xa_borrowed_param_root_symbol(XaInferContext *ctx, AstNode *exp
 
 static void xa_check_borrowed_return_escape(XaInferContext *ctx, AstNode *return_node,
                                             AstNode *value, XrType *value_type) {
-    if (!ctx || !return_node || !value || !xa_shared_init_type_needs_boundary(value_type))
+    if (!ctx || !return_node || !value || !xa_type_needs_borrow_escape_guard(value_type))
         return;
     XaSymbol *root = xa_borrowed_param_root_symbol(ctx, value);
     if (!root)
@@ -212,7 +212,7 @@ static void xa_check_shared_initializer_boundary(XaInferContext *ctx, AstNode *d
         return;
     }
 
-    if (!xa_shared_init_type_needs_boundary(init_type))
+    if (!xa_type_needs_borrow_escape_guard(init_type))
         return;
 
     char msg[256];
