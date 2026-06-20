@@ -1,0 +1,1 @@
+raw pointer store `p[i] = v` must be inside an `unsafe { }` block

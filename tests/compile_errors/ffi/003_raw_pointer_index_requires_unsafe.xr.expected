@@ -1,0 +1,1 @@
+raw pointer index `p[i]` must be inside an `unsafe { }` block

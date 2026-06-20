@@ -2244,7 +2244,15 @@ XrType *xa_visit_unsafe_expr(XaInferContext *ctx, AstNode *node) {
                 continue;
             bool is_last = (i == blk->count - 1);
             if (is_last && stmt->type == AST_EXPR_STMT && stmt->as.expr_stmt) {
-                result = xa_visit_infer_expr(ctx, stmt->as.expr_stmt);
+                AstNode *inner = stmt->as.expr_stmt;
+                if (inner && (inner->type == AST_MEMBER_SET || inner->type == AST_ASSIGNMENT ||
+                              inner->type == AST_COMPOUND_ASSIGNMENT || inner->type == AST_INC ||
+                              inner->type == AST_DEC || inner->type == AST_INDEX_SET)) {
+                    xa_visit_infer_stmt(ctx, inner);
+                    result = xr_type_new_unit(ctx->analyzer->isolate);
+                } else {
+                    result = xa_visit_infer_expr(ctx, inner);
+                }
             } else {
                 xa_visit_infer_stmt(ctx, stmt);
             }

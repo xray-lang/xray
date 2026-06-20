@@ -1,0 +1,1 @@
+cannot store through a const `RawPtr<T>` (use `RawMut<T>`)
