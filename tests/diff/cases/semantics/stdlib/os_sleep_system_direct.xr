@@ -1,0 +1,5 @@
+import os
+
+print("before")
+os.sleep(0)
+print("after")

@@ -14,6 +14,9 @@
 #include "xrt_arc.h"
 #include "xrt_coll.h"
 #include "xrt_value.h"
+#ifndef _WIN32
+#include <errno.h>
+#endif
 #include <signal.h>
 #include <stdbool.h>
 #include <time.h>
@@ -412,6 +415,32 @@ static inline XrValue xrt_os_loadavg(void) {
 
 static inline XrValue xrt_os_clock(void) {
     return XR_FROM_FLOAT((double) clock() / (double) CLOCKS_PER_SEC);
+}
+
+static inline XrValue xrt_os_sleep(XrValue ms_value) {
+    if (!XR_IS_INT(ms_value))
+        return XR_NULL_VAL;
+
+    int64_t ms = XR_TO_INT(ms_value);
+    if (ms <= 0)
+        return XR_NULL_VAL;
+
+#ifdef _WIN32
+    uint64_t remaining = (uint64_t) ms;
+    while (remaining > 0) {
+        DWORD chunk = remaining > 0xffffffffULL ? 0xffffffffUL : (DWORD) remaining;
+        Sleep(chunk);
+        remaining -= (uint64_t) chunk;
+    }
+#else
+    struct timespec req;
+    req.tv_sec = (time_t) (ms / 1000);
+    req.tv_nsec = (long) ((ms % 1000) * 1000000L);
+    struct timespec rem;
+    while (nanosleep(&req, &rem) == -1 && errno == EINTR)
+        req = rem;
+#endif
+    return XR_NULL_VAL;
 }
 
 #endif  // XRT_OS_H
