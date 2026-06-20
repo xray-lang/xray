@@ -41,14 +41,14 @@ static const char *cg_time_module_helper_ctx(const XiCgenCtx *ctx, const XiFunc 
     if (!method)
         return NULL;
     if (strcmp(method, "now") == 0)
-        return "xr_aot_time_now";
+        return "xrt_time_now";
     if (strcmp(method, "monotonic") == 0)
-        return "xr_aot_time_monotonic";
+        return "xrt_time_monotonic";
     if (strcmp(method, "nanos") == 0)
-        return "xr_aot_time_nanos";
+        return "xrt_time_nanos";
     if (strcmp(method, "micros") == 0)
-        return "xr_aot_time_micros";
+        return "xrt_time_micros";
     if (strcmp(method, "clock") == 0)
-        return "xr_aot_time_clock";
+        return "xrt_time_clock";
     return NULL;
 }

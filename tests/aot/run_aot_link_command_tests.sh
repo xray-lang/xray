@@ -133,6 +133,22 @@ else
     sed 's/^/      /' "$RANDOM_MATH_LOG" | sed -n '1,120p'
 fi
 
+TIME_QUERY_SRC="$PROJECT_DIR/tests/aot/filetests/link/system_time_queries.xr"
+TIME_QUERY_BIN="$WORK/system_time_queries"
+TIME_QUERY_LOG="$WORK/system_time_queries.log"
+if build_native "$TIME_QUERY_SRC" "$TIME_QUERY_BIN" "$TIME_QUERY_LOG"; then
+    expect_log_contains "$TIME_QUERY_LOG" "Link command:" "system-time-query: emitted link command"
+    expect_log_not_contains "$TIME_QUERY_LOG" "-lxray_core" "system-time-query: does not link xray_core"
+    expect_log_not_contains "$TIME_QUERY_LOG" "-lpthread" "system-time-query: does not link pthread"
+    expect_log_not_contains "$TIME_QUERY_LOG" "-lz" "system-time-query: does not link zlib"
+    expect_log_contains "$TIME_QUERY_LOG" "-lxray_aot_core" "system-time-query: links AOT core stdlib only"
+    expect_log_contains "$TIME_QUERY_LOG" "-lm" "system-time-query: links math lib"
+    expect_output "$TIME_QUERY_BIN" $'true\ntrue\ntrue\ntrue\ntrue' "system-time-query: binary output"
+else
+    record_fail "system-time-query: build failed"
+    sed 's/^/      /' "$TIME_QUERY_LOG" | sed -n '1,120p'
+fi
+
 PATH_SRC="$PROJECT_DIR/tests/aot/filetests/link/core_path.xr"
 PATH_BIN="$WORK/core_path"
 PATH_LOG="$WORK/core_path.log"

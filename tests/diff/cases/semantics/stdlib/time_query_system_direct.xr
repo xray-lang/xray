@@ -1,0 +1,7 @@
+import time
+
+print(time.now() > 0)
+print(time.monotonic() >= 0)
+print(time.nanos() >= 0)
+print(time.micros() >= 0)
+print(time.clock() >= 0)

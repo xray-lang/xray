@@ -517,9 +517,11 @@ file(GLOB BASE_SRC "src/base/*.c")
 if(WIN32)
     file(GLOB OS_SRC "src/os/win/*.c")
     set(AOT_RANDOM_SRC "src/os/win/random_win.c")
+    set(AOT_TIME_SRC "src/os/win/time_win.c")
 else()
     file(GLOB OS_SRC "src/os/unix/*.c")
     set(AOT_RANDOM_SRC "src/os/unix/random_unix.c")
+    set(AOT_TIME_SRC "src/os/unix/time_unix.c")
 endif()
 file(GLOB RUNTIME_TOP_SRC "src/runtime/*.c")
 file(GLOB RUNTIME_VALUE_SRC "src/runtime/value/*.c")
@@ -705,6 +707,7 @@ add_dependencies(xray_core gen-xi-ops gen-xi-verify gen-xi-lowering gen-aot-meta
 add_library(xray_aot_core STATIC
     src/aot/xrt_regex_core.c
     ${AOT_RANDOM_SRC}
+    ${AOT_TIME_SRC}
     src/base/xarena.c
     src/base/xlog.c
     src/base/xunicode.c
