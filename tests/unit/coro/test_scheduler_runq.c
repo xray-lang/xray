@@ -20,6 +20,35 @@
 #include <stdatomic.h>
 #include <string.h>
 
+static char *dup_env_value(const char *value) {
+    if (!value)
+        return NULL;
+    size_t len = strlen(value) + 1;
+    char *copy = (char *) malloc(len);
+    if (!copy) {
+        fprintf(stderr, "dup_env_value: out of memory\n");
+        abort();
+    }
+    memcpy(copy, value, len);
+    return copy;
+}
+
+static void set_test_env(const char *name, const char *value) {
+#ifdef _WIN32
+    _putenv_s(name, value ? value : "");
+#else
+    if (value)
+        setenv(name, value, 1);
+    else
+        unsetenv(name);
+#endif
+}
+
+static void restore_test_env(const char *name, char *saved) {
+    set_test_env(name, saved);
+    free(saved);
+}
+
 typedef struct SchedulerFixture {
     XrayIsolate isolate_storage;
     XrSystemHeap sys_heap;
@@ -394,6 +423,53 @@ TEST(single_worker_ensure_skips_sysmon_thread) {
     scheduler_fixture_cleanup(&f);
 }
 
+TEST(deterministic_runtime_forces_single_worker_and_virtual_clock) {
+    char *old_det = dup_env_value(getenv("XRAY_CORO_DETERMINISTIC"));
+    char *old_workers = dup_env_value(getenv("XRAY_WORKERS"));
+    char *old_seed = dup_env_value(getenv("XRAY_CORO_SEED"));
+    set_test_env("XRAY_CORO_DETERMINISTIC", "1");
+    set_test_env("XRAY_WORKERS", "4");
+    set_test_env("XRAY_CORO_SEED", "12345");
+
+    XrayIsolate isolate;
+    XrSystemHeap sys_heap;
+    memset(&isolate, 0, sizeof(isolate));
+    ASSERT_TRUE(xr_sysheap_init(&sys_heap, NULL));
+    isolate.sys_heap = &sys_heap;
+
+    XrRuntime *runtime = xr_runtime_create(&isolate, 0);
+    ASSERT_NOT_NULL(runtime);
+    isolate.vm.runtime = runtime;
+
+    ASSERT_TRUE(xr_runtime_deterministic_mode(runtime));
+    ASSERT_EQ_INT(runtime->worker_count, 1);
+    ASSERT_EQ_INT((int) runtime->workers[0].p.rng_state, 12345);
+    ASSERT_EQ_INT((int) xr_runtime_now_ticks(runtime), 0);
+    xr_runtime_advance_virtual_time(runtime, 25);
+    ASSERT_EQ_INT((int) xr_runtime_now_ticks(runtime), 25);
+    xr_runtime_advance_virtual_time(runtime, 10);
+    ASSERT_EQ_INT((int) xr_runtime_now_ticks(runtime), 25);
+
+    xr_runtime_destroy(runtime);
+    xr_sysheap_destroy(&sys_heap);
+    restore_test_env("XRAY_CORO_DETERMINISTIC", old_det);
+    restore_test_env("XRAY_WORKERS", old_workers);
+    restore_test_env("XRAY_CORO_SEED", old_seed);
+}
+
+TEST(current_monotonic_uses_virtual_time_in_deterministic_runtime) {
+    SchedulerFixture f;
+    ASSERT_TRUE(scheduler_fixture_init(&f));
+
+    f.runtime.deterministic_sched = true;
+    atomic_store_explicit(&f.runtime.virtual_time_ms, 33, memory_order_relaxed);
+
+    ASSERT_EQ_INT((int) xr_runtime_current_monotonic_ms(), 33);
+    ASSERT_EQ_INT((int) xr_runtime_current_monotonic_ns(), 33000000);
+
+    scheduler_fixture_cleanup(&f);
+}
+
 TEST(work_stealing_moves_batch_and_returns_direct_item) {
     StealFixture f;
     ASSERT_TRUE(steal_fixture_init(&f));
@@ -571,6 +647,8 @@ RUN_TEST(global_inject_spill_preserves_all_work);
 RUN_TEST(global_coro_pool_get_pops_bounded_batches);
 RUN_TEST(coro_ext_init_sets_timer_and_owner_sentinels);
 RUN_TEST(single_worker_ensure_skips_sysmon_thread);
+RUN_TEST(deterministic_runtime_forces_single_worker_and_virtual_clock);
+RUN_TEST(current_monotonic_uses_virtual_time_in_deterministic_runtime);
 RUN_TEST(work_stealing_moves_batch_and_returns_direct_item);
 RUN_TEST(spawn_burst_shares_same_parent_fanout);
 RUN_TEST(spawn_burst_resets_after_yield);

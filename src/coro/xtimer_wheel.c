@@ -284,7 +284,7 @@ static int64_t find_next_timeout(XrTimerWheel *tw) {
     XR_TW_ASSERT(tw->yield_slot == XR_TW_SLOT_INACTIVE);
 
     if (tw->nto == 0) {
-        int64_t curr_time = xr_monotonic_ticks();
+        int64_t curr_time = xr_runtime_now_ticks(tw->runtime);
         tw->pos = min_timeout_pos = curr_time;
         tw->later.pos = min_timeout_pos + XR_TW_SOON_WHEEL_SIZE;
         tw->later.pos &= XR_TW_LATER_WHEEL_POS_MASK;
@@ -659,7 +659,7 @@ XrTimerWheel *xr_timer_wheel_create(XrRuntime *runtime, int owner_worker_id) {
     for (i = 0; i < XR_TW_SCNT_SIZE; i++)
         tw->scnt[i] = 0;
 
-    mtime = xr_monotonic_ticks();
+    mtime = xr_runtime_now_ticks(runtime);
     tw->pos = mtime;
     tw->nto = 0;
     tw->at_once.nto = 0;

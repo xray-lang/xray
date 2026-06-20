@@ -44,6 +44,8 @@
 XR_THREAD_LOCAL XrWorker *tls_current_worker = NULL;
 XR_THREAD_LOCAL XrMachine *tls_current_machine = NULL;
 
+#define XR_CORO_DETERMINISTIC_DEFAULT_SEED 0x5eed1234u
+
 static bool env_flag_enabled(const char *name) {
     const char *value = getenv(name);
     if (!value || value[0] == '\0' || value[0] == '0')
@@ -66,6 +68,54 @@ static int env_int_clamped(const char *name, int fallback, int min_value, int ma
     if (parsed > max_value)
         parsed = max_value;
     return parsed;
+}
+
+static uint32_t env_u32_seed(const char *name, uint32_t fallback) {
+    const char *value = getenv(name);
+    if (!value || value[0] == '\0')
+        return fallback;
+    char *end = NULL;
+    unsigned long parsed = strtoul(value, &end, 0);
+    if (end == value || parsed == 0)
+        return fallback;
+    return (uint32_t) parsed;
+}
+
+bool xr_runtime_deterministic_mode(const XrRuntime *runtime) {
+    return runtime && runtime->deterministic_sched;
+}
+
+int64_t xr_runtime_now_ticks(XrRuntime *runtime) {
+    if (xr_runtime_deterministic_mode(runtime)) {
+        return atomic_load_explicit(&runtime->virtual_time_ms, memory_order_relaxed);
+    }
+    return xr_monotonic_ticks();
+}
+
+void xr_runtime_advance_virtual_time(XrRuntime *runtime, int64_t target_ticks) {
+    if (!xr_runtime_deterministic_mode(runtime))
+        return;
+    int64_t cur = atomic_load_explicit(&runtime->virtual_time_ms, memory_order_relaxed);
+    while (cur < target_ticks &&
+           !atomic_compare_exchange_weak_explicit(&runtime->virtual_time_ms, &cur, target_ticks,
+                                                  memory_order_relaxed, memory_order_relaxed)) {
+    }
+}
+
+int64_t xr_runtime_current_monotonic_ms(void) {
+    XrWorker *worker = xr_current_worker();
+    XrRuntime *runtime = worker ? worker->p.runtime : NULL;
+    if (xr_runtime_deterministic_mode(runtime))
+        return xr_runtime_now_ticks(runtime);
+    return (int64_t) xr_time_monotonic_ms();
+}
+
+int64_t xr_runtime_current_monotonic_ns(void) {
+    XrWorker *worker = xr_current_worker();
+    XrRuntime *runtime = worker ? worker->p.runtime : NULL;
+    if (xr_runtime_deterministic_mode(runtime))
+        return xr_runtime_now_ticks(runtime) * 1000000LL;
+    return (int64_t) xr_time_monotonic_ns();
 }
 
 static void runtime_drain_timer_cancel_stacks(XrRuntime *runtime) {
@@ -158,8 +208,15 @@ void xr_worker_init(XrWorker *worker, int id, XrRuntime *runtime) {
     atomic_store_explicit(&worker->p.lifo_slot, NULL, memory_order_relaxed);
     worker->p.lifo_polls = 0;
 
-    // Initialize random seed
-    worker->p.rng_state = (uint32_t) (time(NULL) ^ (id * 0x9e3779b9));
+    // Initialize scheduler PRNG seed. Deterministic mode keeps steal/inbox
+    // sampling reproducible; normal runs keep time-based variation.
+    if (xr_runtime_deterministic_mode(runtime)) {
+        worker->p.rng_state = runtime->deterministic_seed ^ ((uint32_t) id * 0x9e3779b9u);
+        if (worker->p.rng_state == 0)
+            worker->p.rng_state = XR_CORO_DETERMINISTIC_DEFAULT_SEED;
+    } else {
+        worker->p.rng_state = (uint32_t) (time(NULL) ^ (id * 0x9e3779b9));
+    }
 
     // Initialize local coroutine object pool
     worker->p.local_free_list = NULL;
@@ -167,7 +224,7 @@ void xr_worker_init(XrWorker *worker, int id, XrRuntime *runtime) {
 
     // Initialize Per-Worker Timer Wheel (lock-free, owner-private)
     worker->p.timer_wheel = xr_timer_wheel_create(runtime, id);
-    xr_proc_set_last_timer_tick(&worker->p, xr_monotonic_ticks());
+    xr_proc_set_last_timer_tick(&worker->p, xr_runtime_now_ticks(runtime));
 
     // Initialize MPSC inbox
     xr_mpsc_init(&worker->p.inbox);
@@ -255,7 +312,10 @@ void xr_worker_destroy(XrWorker *worker) {
 // Create Runtime
 XrRuntime *xr_runtime_create(XrayIsolate *isolate, int num_workers) {
     XR_DCHECK(isolate != NULL, "runtime_create: NULL isolate");
-    if (num_workers <= 0) {
+    bool deterministic = env_flag_enabled("XRAY_CORO_DETERMINISTIC");
+    if (deterministic) {
+        num_workers = 1;
+    } else if (num_workers <= 0) {
         // Allow override via environment variable (for benchmarking)
         const char *env = getenv("XRAY_WORKERS");
         if (env && atoi(env) > 0) {
@@ -277,6 +337,10 @@ XrRuntime *xr_runtime_create(XrayIsolate *isolate, int num_workers) {
 
     runtime->isolate = isolate;
     runtime->worker_count = num_workers;
+    runtime->deterministic_sched = deterministic;
+    runtime->deterministic_seed =
+        env_u32_seed("XRAY_CORO_SEED", XR_CORO_DETERMINISTIC_DEFAULT_SEED);
+    atomic_store_explicit(&runtime->virtual_time_ms, 0, memory_order_relaxed);
     atomic_store(&runtime->running, false);
     atomic_store(&runtime->threads_started, false);
     atomic_store(&runtime->sysmon_started, false);

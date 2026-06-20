@@ -876,7 +876,7 @@ static void coro_select_arm_timer(XrWorker *worker, XrCoroutine *coro, XrChannel
         return;
     }
 
-    int64_t now_ms = xr_monotonic_ticks();
+    int64_t now_ms = xr_runtime_now_ticks(worker->p.runtime);
     int64_t elapsed = now_ms - timer_ch->timer_start_ticks;
     int64_t remaining = timer_ch->timer_timeout_ms - elapsed;
     if (remaining < 1) {

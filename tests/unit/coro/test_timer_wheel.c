@@ -19,6 +19,11 @@ static void timer_test_noop(void *arg) {
     (void) arg;
 }
 
+static void timer_test_mark_fired(void *arg) {
+    bool *fired = (bool *) arg;
+    *fired = true;
+}
+
 TEST(cancel_queue_drains_clustered_remote_timers) {
     enum {
         TIMER_COUNT = 8192
@@ -69,9 +74,42 @@ TEST(cancel_queue_drains_clustered_remote_timers) {
     xr_timer_wheel_destroy(tw);
 }
 
+TEST(deterministic_virtual_time_drives_timer_wheel) {
+    XrRuntime runtime;
+    XrWorker worker;
+    memset(&runtime, 0, sizeof(runtime));
+    memset(&worker, 0, sizeof(worker));
+    runtime.worker_count = 1;
+    runtime.workers = &worker;
+    runtime.deterministic_sched = true;
+    runtime.deterministic_seed = 12345;
+    atomic_store_explicit(&runtime.virtual_time_ms, 100, memory_order_relaxed);
+
+    XrTimerWheel *tw = xr_timer_wheel_create(&runtime, 0);
+    ASSERT_NOT_NULL(tw);
+    ASSERT_EQ_INT((int) tw->pos, 100);
+
+    XrTWheelTimer timer;
+    memset(&timer, 0, sizeof(timer));
+    timer.slot = XR_TW_SLOT_INACTIVE;
+    atomic_store_explicit(&timer.state, XR_TIMER_STATE_ACTIVE, memory_order_relaxed);
+    atomic_store_explicit(&timer.cancel_next, NULL, memory_order_relaxed);
+
+    bool fired = false;
+    ASSERT_TRUE(xr_twheel_set_timer(tw, &timer, timer_test_mark_fired, &fired, 125));
+    ASSERT_FALSE(fired);
+    xr_runtime_advance_virtual_time(&runtime, 125);
+    xr_bump_timers(tw, xr_runtime_now_ticks(&runtime));
+    ASSERT_TRUE(fired);
+    ASSERT_EQ_INT(tw->nto, 0);
+
+    xr_timer_wheel_destroy(tw);
+}
+
 TEST_MAIN_BEGIN()
 
 RUN_TEST_SUITE("Timer Wheel");
 RUN_TEST(cancel_queue_drains_clustered_remote_timers);
+RUN_TEST(deterministic_virtual_time_drives_timer_wheel);
 
 TEST_MAIN_END()

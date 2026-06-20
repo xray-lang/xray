@@ -336,15 +336,15 @@ XrValue xr_aot_time_now(void) {
 }
 
 XrValue xr_aot_time_monotonic(void) {
-    return XR_FROM_INT((int64_t) (xr_time_monotonic_ns() / 1000000ULL));
+    return XR_FROM_INT(xr_runtime_current_monotonic_ms());
 }
 
 XrValue xr_aot_time_nanos(void) {
-    return XR_FROM_INT((int64_t) xr_time_monotonic_ns());
+    return XR_FROM_INT(xr_runtime_current_monotonic_ns());
 }
 
 XrValue xr_aot_time_micros(void) {
-    return XR_FROM_INT((int64_t) (xr_time_monotonic_ns() / 1000ULL));
+    return XR_FROM_INT(xr_runtime_current_monotonic_ns() / 1000LL);
 }
 
 XrValue xr_aot_time_clock(void) {
