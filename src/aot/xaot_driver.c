@@ -277,17 +277,20 @@ static void scan_func_features(XiFunc *f, XaotFeatureSet *fs) {
                         fs->need_coro = true;
                     break;
                 case XI_CALL_METHOD:
-                    if (v->aux && strcmp((const char *) v->aux, "sleep") == 0 && v->nargs == 2) {
-                        fs->need_coro = true;
-                        fs->need_timer = true;
-                    }
                     /* Module-form call (e.g. `time.now()`): the receiver is an
                      * import-ref naming the stdlib module, the method name is in
                      * aux. Record the precise referenced symbol. */
                     if (v->aux && v->nargs >= 1) {
                         const char *mod = stdlib_symbol_module_of_value(f, v->args[0]);
-                        if (mod)
-                            features_add_stdlib_member(fs, mod, (const char *) v->aux);
+                        const char *method = (const char *) v->aux;
+                        if (mod) {
+                            features_add_stdlib_member(fs, mod, method);
+                            if (strcmp(mod, "time") == 0 && strcmp(method, "sleep") == 0 &&
+                                v->nargs == 2) {
+                                fs->need_coro = true;
+                                fs->need_timer = true;
+                            }
+                        }
                     }
                     break;
                 case XI_CALL_BUILTIN: {
@@ -375,16 +378,6 @@ static bool add_runtime_time_manifest_entries(XaotLinkManifest *manifest,
     for (uint16_t i = 0; i < features->n_stdlib_symbols; i++) {
         if (strcmp(features->stdlib_symbols[i], "time.sleep") == 0 &&
             !xaot_link_manifest_add_unique(manifest, XAOT_LINK_STDLIB_OBJECT, "time"))
-            return false;
-    }
-    return true;
-}
-
-static bool add_runtime_os_manifest_entries(XaotLinkManifest *manifest,
-                                            const XaotFeatureSet *features) {
-    for (uint16_t i = 0; i < features->n_stdlib_symbols; i++) {
-        if (strcmp(features->stdlib_symbols[i], "os.sleep") == 0 &&
-            !xaot_link_manifest_add_unique(manifest, XAOT_LINK_STDLIB_OBJECT, "os"))
             return false;
     }
     return true;
@@ -504,8 +497,6 @@ static bool build_link_manifest(const XaotFeatureSet *features, XaotLinkManifest
     if (!add_stdlib_manifest_entries(manifest, features->stdlib))
         goto done;
     if (!add_runtime_time_manifest_entries(manifest, features))
-        goto done;
-    if (!add_runtime_os_manifest_entries(manifest, features))
         goto done;
     if (!add_stdlib_core_object_manifest_entries(manifest, features))
         goto done;
