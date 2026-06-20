@@ -11,6 +11,7 @@
 #ifndef XRT_OS_H
 #define XRT_OS_H
 
+#include "xrt_arc.h"
 #include "xrt_value.h"
 #include <time.h>
 
@@ -20,6 +21,7 @@
 #include <tlhelp32.h>
 #else
 #include <unistd.h>
+#include <pwd.h>
 #endif
 
 #ifdef __APPLE__
@@ -29,6 +31,34 @@
 #elif defined(__linux__)
 #include <sys/sysinfo.h>
 #endif
+
+#ifndef XRT_OS_PATH_MAX
+#define XRT_OS_PATH_MAX 4096
+#endif
+
+static inline XrValue xrt_os_cstr_value(const char *s) {
+    return s ? xrt_str_from_cstr(s) : XR_NULL_VAL;
+}
+
+static inline XrValue xrt_os_getenv(const char *name, int64_t len) {
+    if (!name || len < 0)
+        return XR_NULL_VAL;
+    char stack_name[256];
+    char *owned = NULL;
+    char *key = stack_name;
+    if ((size_t) len >= sizeof(stack_name)) {
+        owned = (char *) XRT_MALLOC((size_t) len + 1);
+        if (!owned)
+            return XR_NULL_VAL;
+        key = owned;
+    }
+    memcpy(key, name, (size_t) len);
+    key[len] = '\0';
+    const char *value = getenv(key);
+    if (owned)
+        XRT_FREE(owned);
+    return xrt_os_cstr_value(value);
+}
 
 static inline XrValue xrt_os_getpid(void) {
 #ifdef _WIN32
@@ -62,6 +92,64 @@ static inline XrValue xrt_os_cpu_count(void) {
 #else
     long n = sysconf(_SC_NPROCESSORS_ONLN);
     return XR_FROM_INT((int64_t) (n > 0 ? n : 1));
+#endif
+}
+
+static inline XrValue xrt_os_getcwd(void) {
+    char buf[XRT_OS_PATH_MAX];
+#ifdef _WIN32
+    DWORD n = GetCurrentDirectoryA((DWORD) sizeof(buf), buf);
+    if (n == 0 || n >= (DWORD) sizeof(buf))
+        return XR_NULL_VAL;
+#else
+    if (!getcwd(buf, sizeof(buf)))
+        return XR_NULL_VAL;
+#endif
+    return xrt_os_cstr_value(buf);
+}
+
+static inline XrValue xrt_os_hostname(void) {
+    char buf[256];
+#ifdef _WIN32
+    DWORD n = (DWORD) sizeof(buf);
+    if (!GetComputerNameA(buf, &n))
+        return XR_NULL_VAL;
+    buf[sizeof(buf) - 1] = '\0';
+#else
+    if (gethostname(buf, sizeof(buf)) != 0)
+        return XR_NULL_VAL;
+    buf[sizeof(buf) - 1] = '\0';
+#endif
+    return xrt_os_cstr_value(buf);
+}
+
+static inline XrValue xrt_os_tmpdir(void) {
+    const char *tmpdir = getenv("TMPDIR");
+    if (!tmpdir)
+        tmpdir = getenv("TMP");
+    if (!tmpdir)
+        tmpdir = getenv("TEMP");
+    if (!tmpdir) {
+#ifdef _WIN32
+        tmpdir = "C:\\Windows\\Temp";
+#else
+        tmpdir = "/tmp";
+#endif
+    }
+    return xrt_os_cstr_value(tmpdir);
+}
+
+static inline XrValue xrt_os_homedir(void) {
+    const char *home = getenv("HOME");
+#ifdef _WIN32
+    if (!home)
+        home = getenv("USERPROFILE");
+    return xrt_os_cstr_value(home);
+#else
+    if (home)
+        return xrt_os_cstr_value(home);
+    struct passwd *pw = getpwuid(getuid());
+    return pw ? xrt_os_cstr_value(pw->pw_dir) : XR_NULL_VAL;
 #endif
 }
 
