@@ -46,6 +46,81 @@ static bool cg_struct_native_heap_supported(const XrStructLayout *sl) {
     return cg_struct_native_heap_supported_depth(sl, 0);
 }
 
+static bool cg_struct_c_identifier_is_valid(const char *s) {
+    if (!s || !((*s >= 'A' && *s <= 'Z') || (*s >= 'a' && *s <= 'z') || *s == '_'))
+        return false;
+    for (const char *p = s + 1; *p; p++) {
+        if (!((*p >= 'A' && *p <= 'Z') || (*p >= 'a' && *p <= 'z') || (*p >= '0' && *p <= '9') ||
+              *p == '_'))
+            return false;
+    }
+    return true;
+}
+
+static bool cg_struct_c_identifier_is_reserved(const char *s) {
+    static const char *const reserved[] = {
+        "alignas",       "alignof",  "auto",           "bool",          "break",    "case",
+        "char",          "const",    "continue",       "default",       "do",       "double",
+        "else",          "enum",     "extern",         "false",         "float",    "for",
+        "goto",          "if",       "inline",         "int",           "long",     "register",
+        "restrict",      "return",   "short",          "signed",        "sizeof",   "static",
+        "static_assert", "struct",   "switch",         "thread_local",  "true",     "typedef",
+        "union",         "unsigned", "void",           "volatile",      "while",    "_Alignas",
+        "_Alignof",      "_Atomic",  "_Bool",          "_Complex",      "_Generic", "_Imaginary",
+        "_Noreturn",     "_Pragma",  "_Static_assert", "_Thread_local",
+    };
+    if (!s)
+        return true;
+    for (size_t i = 0; i < sizeof(reserved) / sizeof(reserved[0]); i++) {
+        if (strcmp(s, reserved[i]) == 0)
+            return true;
+    }
+    return false;
+}
+
+static bool cg_struct_source_field_name_is_usable(const XrStructLayout *sl, int64_t idx) {
+    if (!sl || idx < 0 || idx >= sl->field_count || !sl->field_names)
+        return false;
+    const char *name = sl->field_names[idx];
+    if (!cg_struct_c_identifier_is_valid(name) || cg_struct_c_identifier_is_reserved(name))
+        return false;
+    for (uint16_t i = 0; i < sl->field_count; i++) {
+        if ((int64_t) i == idx)
+            continue;
+        const char *other = sl->field_names[i];
+        if (other && cg_struct_c_identifier_is_valid(other) &&
+            !cg_struct_c_identifier_is_reserved(other) && strcmp(name, other) == 0)
+            return false;
+    }
+    return true;
+}
+
+static void cg_struct_field_c_name(const XrStructLayout *sl, int64_t idx, char *buf,
+                                   size_t buflen) {
+    if (!buf || buflen == 0)
+        return;
+    if (cg_struct_source_field_name_is_usable(sl, idx)) {
+        const char *name = sl->field_names[idx];
+        if (strlen(name) < buflen) {
+            snprintf(buf, buflen, "%s", name);
+            return;
+        }
+    }
+    snprintf(buf, buflen, "f%d", (int) idx);
+}
+
+static uint64_t cg_struct_hash_string(uint64_t h, const char *s) {
+    if (!s)
+        return h;
+    for (const unsigned char *p = (const unsigned char *) s; *p; p++) {
+        h ^= *p;
+        h *= UINT64_C(1099511628211);
+    }
+    h ^= UINT64_C(0xff);
+    h *= UINT64_C(1099511628211);
+    return h;
+}
+
 static uint64_t cg_struct_layout_hash_depth(const XrStructLayout *sl, int depth) {
     uint64_t h = UINT64_C(1469598103934665603);
     if (!sl)
@@ -59,6 +134,9 @@ static uint64_t cg_struct_layout_hash_depth(const XrStructLayout *sl, int depth)
     h ^= sl->explicit_align;
     h *= UINT64_C(1099511628211);
     for (uint16_t i = 0; i < sl->field_count; i++) {
+        char fname[128];
+        cg_struct_field_c_name(sl, i, fname, sizeof(fname));
+        h = cg_struct_hash_string(h, fname);
         h ^= sl->fields[i].native_type;
         h *= UINT64_C(1099511628211);
         h ^= sl->fields[i].elem_native_type;
@@ -89,6 +167,12 @@ static bool cg_struct_layout_same_shape_depth(const XrStructLayout *a, const XrS
         a->explicit_align != b->explicit_align || depth > 8)
         return false;
     for (uint16_t i = 0; i < a->field_count; i++) {
+        char aname[128];
+        char bname[128];
+        cg_struct_field_c_name(a, i, aname, sizeof(aname));
+        cg_struct_field_c_name(b, i, bname, sizeof(bname));
+        if (strcmp(aname, bname) != 0)
+            return false;
         if (a->fields[i].native_type != b->fields[i].native_type ||
             a->fields[i].elem_native_type != b->fields[i].elem_native_type ||
             a->fields[i].elem_count != b->fields[i].elem_count ||
@@ -139,8 +223,8 @@ static void emit_struct_native_typedef(FILE *out, const XrStructLayout *sl, cons
     if (xr_struct_layout_header_size(sl) != 0)
         fprintf(out, "uint32_t _size; uint32_t _layout; ");
     for (uint16_t i = 0; i < sl->field_count; i++) {
-        char fname[32];
-        snprintf(fname, sizeof(fname), "f%u", i);
+        char fname[128];
+        cg_struct_field_c_name(sl, i, fname, sizeof(fname));
         emit_struct_field_decl(out, sl, i, fname, prefix);
         fprintf(out, "; ");
     }
@@ -535,8 +619,11 @@ static bool cg_value_is_elided_inlined_struct_type_load(const XiFunc *f, const X
            cg_value_only_used_by_inlined_struct_new(f, target);
 }
 
-static void emit_struct_field_ref(FILE *out, const XiValue *origin, int64_t idx) {
-    fprintf(out, "_st%u.f%d", origin ? origin->id : 0, (int) idx);
+static void emit_struct_field_ref(FILE *out, const XrStructLayout *sl, const XiValue *origin,
+                                  int64_t idx) {
+    char fname[128];
+    cg_struct_field_c_name(sl, idx, fname, sizeof(fname));
+    fprintf(out, "_st%u.%s", origin ? origin->id : 0, fname);
 }
 
 static void emit_struct_inline_field_get_expr(FILE *out, const XrStructLayout *sl,
@@ -544,32 +631,32 @@ static void emit_struct_inline_field_get_expr(FILE *out, const XrStructLayout *s
     const XrStructFieldLayout *field = cg_struct_field(sl, idx);
     if (field && field->native_type == XR_NATIVE_STRUCT) {
         fprintf(out, "xr_struct_ref(&");
-        emit_struct_field_ref(out, origin, idx);
+        emit_struct_field_ref(out, sl, origin, idx);
         fprintf(out, ", (uint16_t)sizeof(");
-        emit_struct_field_ref(out, origin, idx);
+        emit_struct_field_ref(out, sl, origin, idx);
         fprintf(out, "))");
         return;
     }
     if (field && field->native_type == XR_NATIVE_ARRAY) {
         fprintf(out, "xr_array_ref(&");
-        emit_struct_field_ref(out, origin, idx);
+        emit_struct_field_ref(out, sl, origin, idx);
         fprintf(out, "[0], %u, %u)", (unsigned) field->elem_native_type,
                 (unsigned) field->elem_count);
         return;
     }
     if (field && field->native_type == XR_NATIVE_ARRAY_REF) {
         fprintf(out, "xr_mkptr(");
-        emit_struct_field_ref(out, origin, idx);
+        emit_struct_field_ref(out, sl, origin, idx);
         fprintf(out, ", XR_TAG_ARRAY)");
         return;
     }
     if (field && field->native_type == XR_NATIVE_MAP_REF) {
         fprintf(out, "xr_mkptr(");
-        emit_struct_field_ref(out, origin, idx);
+        emit_struct_field_ref(out, sl, origin, idx);
         fprintf(out, ", XR_TAG_MAP)");
         return;
     }
-    emit_struct_field_ref(out, origin, idx);
+    emit_struct_field_ref(out, sl, origin, idx);
 }
 
 static void emit_struct_field_store_value(FILE *out, const XrStructLayout *sl, int64_t idx,
@@ -599,11 +686,11 @@ static void emit_struct_inline_field_set_expr(FILE *out, const XrStructLayout *s
     const XrStructFieldLayout *field = cg_struct_field(sl, idx);
     if (field && field->native_type == XR_NATIVE_STRUCT) {
         fprintf(out, "(memcpy(&");
-        emit_struct_field_ref(out, origin, idx);
+        emit_struct_field_ref(out, sl, origin, idx);
         fprintf(out, ", ");
         emit_value_as_rep(out, value, XR_REP_TAGGED);
         fprintf(out, ".ptr, sizeof(");
-        emit_struct_field_ref(out, origin, idx);
+        emit_struct_field_ref(out, sl, origin, idx);
         fprintf(out, ")), ");
         emit_value_as_rep(out, value, cg_rep(value));
         fprintf(out, ")");
@@ -611,7 +698,7 @@ static void emit_struct_inline_field_set_expr(FILE *out, const XrStructLayout *s
     }
     if (field && field->native_type == XR_NATIVE_ARRAY) {
         fprintf(out, "(xrt_fixed_array_copy(&");
-        emit_struct_field_ref(out, origin, idx);
+        emit_struct_field_ref(out, sl, origin, idx);
         fprintf(out, "[0], ");
         emit_value_as_rep(out, value, XR_REP_TAGGED);
         fprintf(out, ", %u, %u), ", (unsigned) field->elem_native_type,
@@ -621,7 +708,7 @@ static void emit_struct_inline_field_set_expr(FILE *out, const XrStructLayout *s
         return;
     }
     fprintf(out, "(");
-    emit_struct_field_ref(out, origin, idx);
+    emit_struct_field_ref(out, sl, origin, idx);
     fprintf(out, " = ");
     emit_struct_field_store_value(out, sl, idx, value);
     fprintf(out, ")");
@@ -796,15 +883,17 @@ static void emit_struct_heap_field_lvalue(XiCgenCtx *ctx, FILE *out, const XiFun
     const XiValue *origin = cg_trace_struct_new(object);
     if (origin && cg_struct_can_inline(f, origin) &&
         cg_struct_layout_same_shape((const XrStructLayout *) origin->aux, sl)) {
-        emit_struct_field_ref(out, origin, idx);
+        emit_struct_field_ref(out, sl, origin, idx);
         return;
     }
     char tname[128];
+    char fname[128];
     cg_struct_heap_type_name(tname, sizeof(tname), prefix, sl);
+    cg_struct_field_c_name(sl, idx, fname, sizeof(fname));
     fprintf(out, "((%s*)", tname);
     if (!emit_struct_heap_nested_object_ptr_expr(ctx, out, f, object, prefix))
         emit_struct_heap_object_ptr_expr(ctx, out, f, sl, object);
-    fprintf(out, ")->f%d", (int) idx);
+    fprintf(out, ")->%s", fname);
 }
 
 static bool emit_struct_heap_nested_object_ptr_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,

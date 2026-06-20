@@ -1227,10 +1227,10 @@ TEST(cgen_inlined_struct_uses_native_field_storage) {
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "inlined struct native fields should generate");
-    assert(contains(code, "struct { int64_t f0; double f1; uint8_t f2; uint8_t f3; }") &&
+    assert(contains(code, "struct { int64_t x; double y; uint8_t ok; uint8_t byte; }") &&
            "inlined struct must use native C field storage");
     assert(contains(code, "(uint8_t)") && "sub-width struct stores must narrow to storage width");
-    assert(!contains(code, "XrValue f0") && "inlined scalar struct fields must not be boxed");
+    assert(!contains(code, "XrValue x") && "inlined scalar struct fields must not be boxed");
     assert(!contains(code, "xrt_getprop(") &&
            "inlined scalar struct field reads must not use dynamic property dispatch");
     assert(!contains(code, "xrt_map_set(") &&
@@ -1269,8 +1269,8 @@ TEST(cgen_escaping_struct_uses_heap_native_storage) {
            "escaping primitive struct must emit a native heap layout");
     assert(contains(code, "XR_TAG_STRUCT_REF") &&
            "escaping primitive struct must allocate as an AOT struct reference");
-    assert(contains(code, "->f0") && contains(code, "->f1") && contains(code, "->f2") &&
-           contains(code, "->f3") && "escaping primitive struct fields must use direct access");
+    assert(contains(code, "->x") && contains(code, "->y") && contains(code, "->ok") &&
+           contains(code, "->byte") && "escaping primitive struct fields must use direct access");
     assert(!contains(code, "xrt_map_new(") && "primitive struct must not allocate runtime map");
     assert(!contains(code, "xrt_map_get(") && "primitive struct reads must not use runtime map");
     assert(!contains(code, "xrt_map_set(") && "primitive struct writes must not use runtime map");
@@ -1278,6 +1278,41 @@ TEST(cgen_escaping_struct_uses_heap_native_storage) {
            "escaping struct path must not call an undeclared constructor helper");
 
     printf("  Generated escaping struct heap-native path %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_same_shape_structs_keep_distinct_source_field_names) {
+    const char *src = "struct Point {\n"
+                      "    x: int\n"
+                      "    y: int\n"
+                      "}\n"
+                      "struct Pair {\n"
+                      "    a: int\n"
+                      "    b: int\n"
+                      "}\n"
+                      "let p = Point{x: 1, y: 2}\n"
+                      "let q = Pair{a: 3, b: 4}\n"
+                      "print(p.x + p.y + q.a + q.b)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "same-shape source-named structs should generate");
+    const char *code_end = code + strlen(code);
+    assert(count_between(code, code_end, "typedef struct xrt_struct_test_") >= 2 &&
+           "same-shape structs with different source field names must not share one typedef");
+    assert(contains(code, "int64_t x; int64_t y;") &&
+           "Point native layout must preserve source field names");
+    assert(contains(code, "int64_t a; int64_t b;") &&
+           "Pair native layout must preserve source field names");
+    assert(contains(code, "->x") && contains(code, "->y") && contains(code, "->a") &&
+           contains(code, "->b") && "field access must use each struct's source field names");
+
+    printf("  Generated distinct same-shape struct layouts %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
@@ -1301,11 +1336,11 @@ TEST(cgen_escaping_struct_string_field_uses_heap_native_storage) {
     assert(!had_error && "string-field heap-native struct path should generate");
     assert(contains(code, "typedef struct xrt_struct_test_") &&
            "mixed scalar/string struct must emit a native heap layout");
-    assert(contains(code, "XrValue f1") &&
+    assert(contains(code, "XrValue name") &&
            "string struct field must be stored as a tagged immutable reference field");
     assert(contains(code, "XR_TAG_STRUCT_REF") &&
            "mixed scalar/string struct must allocate as an AOT struct reference");
-    assert(contains(code, "->f0") && contains(code, "->f1") &&
+    assert(contains(code, "->count") && contains(code, "->name") &&
            "mixed scalar/string struct fields must use direct access");
     assert(!contains(code, "xrt_map_new(") && "mixed scalar/string struct must not allocate map");
     assert(!contains(code, "xrt_map_get(") && "mixed scalar/string struct reads must not use map");
@@ -1342,9 +1377,9 @@ TEST(cgen_repr_c_struct_omits_native_header) {
            "@repr(C) typedef must not include the Xray size header");
     assert(count_between(typedef_start, typedef_end, "_layout") == 0 &&
            "@repr(C) typedef must not include the Xray layout header");
-    assert(count_between(typedef_start, typedef_end, "int32_t f0") == 1 &&
+    assert(count_between(typedef_start, typedef_end, "int32_t a") == 1 &&
            "@repr(C) int32 field must be placed at payload offset 0");
-    assert(count_between(typedef_start, typedef_end, "uint8_t f1") == 1 &&
+    assert(count_between(typedef_start, typedef_end, "uint8_t b") == 1 &&
            "@repr(C) uint8 field must be emitted as raw C storage");
     assert(contains(code, "xr_struct_ref(_s, (uint16_t)sizeof(") &&
            "@repr(C) struct refs must carry storage size outside the payload");
@@ -1377,7 +1412,7 @@ TEST(cgen_nested_struct_field_uses_embedded_heap_native_storage) {
     const char *code_end = code + strlen(code);
     assert(count_between(code, code_end, "typedef struct xrt_struct_test_") >= 2 &&
            "nested struct path must emit parent and child native heap layouts");
-    assert(contains(code, "xrt_struct_test_") && contains(code, " f0;") &&
+    assert(contains(code, "xrt_struct_test_") && contains(code, " p;") &&
            "parent heap layout must embed the child native struct field");
     assert(contains(code, "memcpy(&") &&
            "nested struct field assignment must copy embedded native bytes");
@@ -1426,11 +1461,11 @@ TEST(cgen_fixed_array_struct_field_uses_embedded_heap_native_storage) {
     assert(fn_body != NULL && fn_end != NULL && fn_body < fn_end &&
            "run function body should be bounded");
 
-    assert(contains(code, "uint8_t f0[4]") &&
+    assert(contains(code, "uint8_t data[4]") &&
            "fixed array field must be embedded in the native heap layout");
     assert(contains(code, "xrt_fixed_array_copy") &&
            "fixed array field initialization must copy into embedded storage");
-    assert(count_between(fn_body, fn_end, "f0[") > 0 &&
+    assert(count_between(fn_body, fn_end, "data[") > 0 &&
            "fixed array hot path must use direct C array indexing");
     assert(count_between(fn_body, fn_end, "\n    XrValue v") == 0 &&
            "fixed array hot function must not materialize tagged array refs");
@@ -4720,6 +4755,7 @@ int main(void) {
     run_cgen_typed_array_float_and_bool_use_raw_storage_fast_path();
     run_cgen_inlined_struct_uses_native_field_storage();
     run_cgen_escaping_struct_uses_heap_native_storage();
+    run_cgen_same_shape_structs_keep_distinct_source_field_names();
     run_cgen_escaping_struct_string_field_uses_heap_native_storage();
     run_cgen_repr_c_struct_omits_native_header();
     run_cgen_nested_struct_field_uses_embedded_heap_native_storage();

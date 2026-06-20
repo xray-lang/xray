@@ -205,10 +205,10 @@ fi
 if ! lldb --no-lldbinit -b \
         -o "breakpoint set --file agg_debug_locals.xr --line 11" \
         -o run \
-        -o "frame variable p->f0" \
-        -o "frame variable p->f1" \
-        -o "frame variable q->f0" \
-        -o "frame variable q->f1" \
+        -o "frame variable p->x" \
+        -o "frame variable p->y" \
+        -o "frame variable q->x" \
+        -o "frame variable q->y" \
         -o "frame variable total" \
         -o bt -- "$AGG_BIN" > "$AGG_LLDB_LOG" 2>&1; then
     fail "aggregate lldb failed"
@@ -222,17 +222,17 @@ fi
 if ! grep -Fq "agg_debug_locals.xr:11" "$AGG_LLDB_LOG"; then
     fail "aggregate lldb breakpoint/backtrace did not report agg_debug_locals.xr:11"
 fi
-if ! grep -Eq "p->f0 = 21" "$AGG_LLDB_LOG"; then
-    fail "aggregate lldb did not expose source local p->f0=21"
+if ! grep -Eq "p->x = 21" "$AGG_LLDB_LOG"; then
+    fail "aggregate lldb did not expose source local p->x=21"
 fi
-if ! grep -Eq "p->f1 = 22" "$AGG_LLDB_LOG"; then
-    fail "aggregate lldb did not expose source local p->f1=22"
+if ! grep -Eq "p->y = 22" "$AGG_LLDB_LOG"; then
+    fail "aggregate lldb did not expose source local p->y=22"
 fi
-if ! grep -Eq "q->f0 = 21" "$AGG_LLDB_LOG"; then
-    fail "aggregate lldb did not expose source local q->f0=21"
+if ! grep -Eq "q->x = 21" "$AGG_LLDB_LOG"; then
+    fail "aggregate lldb did not expose source local q->x=21"
 fi
-if ! grep -Eq "q->f1 = 22" "$AGG_LLDB_LOG"; then
-    fail "aggregate lldb did not expose source local q->f1=22"
+if ! grep -Eq "q->y = 22" "$AGG_LLDB_LOG"; then
+    fail "aggregate lldb did not expose source local q->y=22"
 fi
 if ! grep -Eq "total = 43" "$AGG_LLDB_LOG"; then
     fail "aggregate lldb did not expose source local total=43"
