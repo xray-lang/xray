@@ -199,10 +199,8 @@ else
 fi
 
 if ! lldb --no-lldbinit -b \
-        -o "breakpoint set --name xr_aot_done" \
+        -o "breakpoint set --file coro_debug_locals.xr --line 12" \
         -o run \
-        -o continue \
-        -o "frame select 1" \
         -o "frame variable answer" \
         -o "frame variable doubled" \
         -o "frame variable ratio" \
@@ -217,7 +215,7 @@ if ! grep -Fq "coro_debug_locals_worker" "$CORO_LLDB_LOG"; then
     fail "coroutine lldb backtrace did not show worker coroutine resume"
 fi
 if ! grep -Fq "coro_debug_locals.xr:12" "$CORO_LLDB_LOG"; then
-    fail "coroutine lldb backtrace did not report coro_debug_locals.xr:12"
+    fail "coroutine lldb breakpoint/backtrace did not report coro_debug_locals.xr:12"
 fi
 if ! grep -Eq "answer = 21" "$CORO_LLDB_LOG"; then
     fail "coroutine lldb did not expose await result source local answer=21"

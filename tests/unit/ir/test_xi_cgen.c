@@ -750,6 +750,24 @@ TEST(cgen_coro_emits_source_line_directives) {
            "await should be mapped inside the entry coroutine resume body");
     assert(contains(code, "#line 7 \"debug_coro.xr\"") &&
            "post-await print should be mapped inside the entry coroutine resume body");
+    assert(contains(code, "#line 2 \"debug_coro.xr\"\n"
+                          "    return xr_aot_yielded();\n"
+                          "#line 1 \"<xray-generated>\"") &&
+           "yield should reset generated control flow after the source-mapped yield");
+    assert(contains(code, "#line 5 \"debug_coro.xr\"\n"
+                          "    void *_child_frame_") &&
+           "go should map only its source operation, not later state-machine control flow");
+    assert(contains(code, ");\n"
+                          "#line 1 \"<xray-generated>\"\n"
+                          "    XrAotSpawnResult _spawn_") &&
+           "go frame setup should reset before generated spawn bookkeeping");
+    assert(contains(code, "#line 6 \"debug_coro.xr\"\n"
+                          "    XrAotResult _await_") &&
+           "await helper call should carry the await source line");
+    assert(contains(code, "false);\n"
+                          "#line 1 \"<xray-generated>\"\n"
+                          "    if (_await_") &&
+           "await helper should reset before generated blocked/error checks");
 
     printf("  Generated coroutine source-line mapped C %zu bytes\n", strlen(code));
     xr_free(code);
