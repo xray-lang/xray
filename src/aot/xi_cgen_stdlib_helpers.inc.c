@@ -90,6 +90,8 @@ static const CgAotStdlibMethod g_aot_stdlib_methods[] = {
     {"url", "resolve", 2, "xrt_url_resolve", "ss", CG_AOT_RET_VALUE, NULL},
     {"url", "join", CG_AOT_STDLIB_VARIADIC, "xrt_url_join", "*", CG_AOT_RET_VALUE, NULL},
     {"os", "getenv", 1, "xrt_os_getenv", "s", CG_AOT_RET_VALUE, NULL},
+    {"os", "setenv", 2, "xrt_os_setenv", "ss", CG_AOT_RET_VALUE, NULL},
+    {"os", "unsetenv", 1, "xrt_os_unsetenv", "s", CG_AOT_RET_VALUE, NULL},
     {"os", "getpid", 0, "xrt_os_getpid", "", CG_AOT_RET_VALUE, NULL},
     {"os", "getcwd", 0, "xrt_os_getcwd", "", CG_AOT_RET_VALUE, NULL},
     {"os", "hostname", 0, "xrt_os_hostname", "", CG_AOT_RET_VALUE, NULL},
