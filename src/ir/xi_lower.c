@@ -35,6 +35,16 @@
 /* Forward declarations */
 static void finalize_capture_metadata(XiFunc *f);
 
+static bool xi_lower_is_builtin_call(const XiValue *v, const char *name) {
+    return v && v->op == XI_CALL_BUILTIN && v->aux && name &&
+           strcmp((const char *) v->aux, name) == 0;
+}
+
+static void xi_lower_rewrite_shared_store_copy(XiValue *val) {
+    if (xi_lower_is_builtin_call(val, "copy"))
+        val->aux = (void *) "to_shared";
+}
+
 /* ========== Dynamic capacity growth (vars / blocks) ========== */
 
 /* Grow the variable dimension: vars, the parallel shared-slot tables, and the
@@ -213,6 +223,7 @@ XR_FUNC XiValue *xi_lower_emit_top_store(XiLower *l, XiTopBinding binding, XiVal
             store->flags |= XI_FLAG_SIDE_EFFECT;
         }
     } else {
+        xi_lower_rewrite_shared_store_copy(val);
         store = xi_value_new(l->func, l->cur_block, XI_SET_SHARED, l->type_unit, 1);
         if (store) {
             store->args[0] = val;

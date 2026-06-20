@@ -1092,6 +1092,20 @@ if(BUILD_TESTS)
         TIMEOUT 30
     )
 
+    # Shared binding copy lowering: copy(x) into a shared slot must lower
+    # through OP_TO_SHARED in the VM instead of COPY + SETSHARED.
+    add_test(
+        NAME xi_shared_copy_smoke
+        COMMAND bash
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/ir/run_shared_copy_tests.sh
+                $<TARGET_FILE:xray>
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(xi_shared_copy_smoke PROPERTIES
+        LABELS "ir;ownership;regression"
+        TIMEOUT 30
+    )
+
     # Cross-backend differential net: same .xr through VM / AOT must
     # produce byte-identical observable output. Safety net for the backend
     # unification work (tasks 108-118).
