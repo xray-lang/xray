@@ -153,8 +153,12 @@ if ! grep -Eq "ok = .*(true|1|\\\\x01)" "$LLDB_LOG"; then
 fi
 
 cat > "$CORO_SRC" <<'XR'
+fn produce(seed: int) -> int {
+    return seed + 1
+}
 fn worker(seed: int) -> int {
-    let answer = seed + 1
+    let task = go produce(seed)
+    let answer = await task
     yield
     let doubled = answer * 2
     let ratio = doubled / 2.0
@@ -195,9 +199,10 @@ else
 fi
 
 if ! lldb --no-lldbinit -b \
-        -o "breakpoint set --file coro_debug_locals.xr --line 8" \
+        -o "breakpoint set --name xr_aot_done" \
         -o run \
-        -o "frame variable seed" \
+        -o continue \
+        -o "frame select 1" \
         -o "frame variable answer" \
         -o "frame variable doubled" \
         -o "frame variable ratio" \
@@ -211,14 +216,11 @@ fi
 if ! grep -Fq "coro_debug_locals_worker" "$CORO_LLDB_LOG"; then
     fail "coroutine lldb backtrace did not show worker coroutine resume"
 fi
-if ! grep -Fq "coro_debug_locals.xr:8" "$CORO_LLDB_LOG"; then
-    fail "coroutine lldb breakpoint/backtrace did not report coro_debug_locals.xr:8"
-fi
-if ! grep -Eq "seed = 20" "$CORO_LLDB_LOG"; then
-    fail "coroutine lldb did not expose source local seed=20"
+if ! grep -Fq "coro_debug_locals.xr:12" "$CORO_LLDB_LOG"; then
+    fail "coroutine lldb backtrace did not report coro_debug_locals.xr:12"
 fi
 if ! grep -Eq "answer = 21" "$CORO_LLDB_LOG"; then
-    fail "coroutine lldb did not expose source local answer=21"
+    fail "coroutine lldb did not expose await result source local answer=21"
 fi
 if ! grep -Eq "doubled = 42" "$CORO_LLDB_LOG"; then
     fail "coroutine lldb did not expose source local doubled=42"

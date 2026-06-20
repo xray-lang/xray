@@ -2196,10 +2196,20 @@ static XrRep cg_debug_value_decl_storage_rep(XiCgenCtx *ctx, const XiFunc *f, co
     return plan ? xaot_value_storage_rep(plan->rep) : XR_REP_VOID;
 }
 
-static bool cg_debug_value_has_source_storage(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v) {
-    if (!v || !xi_var_id_is_valid(v->var_id))
-        return false;
-    if (!cg_debug_source_var_name_is_usable(f, v->var_id))
+static const XiValue *cg_debug_source_var_storage_value(const XiFunc *f, const XiValue *v) {
+    if (!v)
+        return NULL;
+    const XiValue *slot_value = NULL;
+    if (v->op == XI_AWAIT)
+        slot_value = xi_coro_typed_await_unbox_user(f, v);
+    if (!slot_value)
+        slot_value = xi_coro_typed_recv_unbox_user(f, v);
+    return slot_value ? slot_value : v;
+}
+
+static bool cg_debug_value_has_storage_for_source(XiCgenCtx *ctx, const XiFunc *f,
+                                                  const XiValue *v) {
+    if (!v)
         return false;
     if (cg_is_void_like(v) || v->op == XI_TRY || v->op == XI_END_TRY)
         return false;
@@ -2250,6 +2260,14 @@ static bool cg_debug_value_has_source_storage(XiCgenCtx *ctx, const XiFunc *f, c
     return true;
 }
 
+static bool cg_debug_value_has_source_storage(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v) {
+    if (!v || !xi_var_id_is_valid(v->var_id))
+        return false;
+    if (!cg_debug_source_var_name_is_usable(f, v->var_id))
+        return false;
+    return cg_debug_value_has_storage_for_source(ctx, f, cg_debug_source_var_storage_value(f, v));
+}
+
 static bool cg_debug_source_var_storage_info(XiCgenCtx *ctx, const XiFunc *f, XiVarId var_id,
                                              CgDebugSourceVarInfo *out_info) {
     if (!out_info || !cg_debug_source_var_name_is_usable(f, var_id))
@@ -2263,8 +2281,9 @@ static bool cg_debug_source_var_storage_info(XiCgenCtx *ctx, const XiFunc *f, Xi
         const XiValue *v = f->params ? f->params[i] : NULL;
         if (!v || v->var_id != var_id || !cg_debug_value_has_source_storage(ctx, f, v))
             continue;
-        const char *cur_ctype = cg_debug_value_ctype(ctx, f, v);
-        XrRep cur_rep = cg_debug_value_decl_storage_rep(ctx, f, v);
+        const XiValue *storage_v = cg_debug_source_var_storage_value(f, v);
+        const char *cur_ctype = cg_debug_value_ctype(ctx, f, storage_v);
+        XrRep cur_rep = cg_debug_value_decl_storage_rep(ctx, f, storage_v);
         if (!cur_ctype || strcmp(cur_ctype, "void") == 0 || cur_rep == XR_REP_VOID)
             return false;
         if (!found) {
@@ -2284,8 +2303,9 @@ static bool cg_debug_source_var_storage_info(XiCgenCtx *ctx, const XiFunc *f, Xi
             const XiValue *v = &phi->value;
             if (v->var_id != var_id || !cg_debug_value_has_source_storage(ctx, f, v))
                 continue;
-            const char *cur_ctype = cg_debug_value_ctype(ctx, f, v);
-            XrRep cur_rep = cg_debug_value_decl_storage_rep(ctx, f, v);
+            const XiValue *storage_v = cg_debug_source_var_storage_value(f, v);
+            const char *cur_ctype = cg_debug_value_ctype(ctx, f, storage_v);
+            XrRep cur_rep = cg_debug_value_decl_storage_rep(ctx, f, storage_v);
             if (!cur_ctype || strcmp(cur_ctype, "void") == 0 || cur_rep == XR_REP_VOID)
                 return false;
             if (!found) {
@@ -2300,8 +2320,9 @@ static bool cg_debug_source_var_storage_info(XiCgenCtx *ctx, const XiFunc *f, Xi
             const XiValue *v = blk->values[vi];
             if (!v || v->var_id != var_id || !cg_debug_value_has_source_storage(ctx, f, v))
                 continue;
-            const char *cur_ctype = cg_debug_value_ctype(ctx, f, v);
-            XrRep cur_rep = cg_debug_value_decl_storage_rep(ctx, f, v);
+            const XiValue *storage_v = cg_debug_source_var_storage_value(f, v);
+            const char *cur_ctype = cg_debug_value_ctype(ctx, f, storage_v);
+            XrRep cur_rep = cg_debug_value_decl_storage_rep(ctx, f, storage_v);
             if (!cur_ctype || strcmp(cur_ctype, "void") == 0 || cur_rep == XR_REP_VOID)
                 return false;
             if (!found) {
@@ -2364,6 +2385,7 @@ static void emit_debug_source_var_sync(XiCgenCtx *ctx, FILE *out, const XiFunc *
                                        const XiValue *v) {
     if (!cg_debug_value_has_source_storage(ctx, f, v))
         return;
+    const XiValue *storage_v = cg_debug_source_var_storage_value(f, v);
     CgDebugSourceVarInfo info;
     if (!cg_debug_source_var_storage_info(ctx, f, v->var_id, &info))
         return;
@@ -2373,10 +2395,10 @@ static void emit_debug_source_var_sync(XiCgenCtx *ctx, FILE *out, const XiFunc *
     emit_debug_source_var_c_name(out, &info);
     fprintf(out, " = ");
     if (strcmp(info.ctype, "XrValue") == 0) {
-        emit_value_as_rep_ctx(ctx, out, v, info.rep);
+        emit_value_as_rep_ctx(ctx, out, storage_v, info.rep);
     } else {
         fprintf(out, "(%s)", info.ctype);
-        emit_value_as_rep_ctx(ctx, out, v, info.rep);
+        emit_value_as_rep_ctx(ctx, out, storage_v, info.rep);
     }
     fprintf(out, ";\n");
     fprintf(out, "#endif\n");
