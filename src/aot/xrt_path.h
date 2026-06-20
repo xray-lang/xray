@@ -34,6 +34,18 @@
 #endif
 #endif
 
+static inline XrValue xrt_path_sep(void) {
+    return xrt_str_from_cstr(xr_path_core_sep_str());
+}
+
+static inline XrValue xrt_path_delimiter(void) {
+#ifdef XR_OS_WINDOWS
+    return xrt_str_from_cstr(";");
+#else
+    return xrt_str_from_cstr(":");
+#endif
+}
+
 static inline XrValue xrt_path_is_absolute(const char *path, int64_t len) {
     return XR_FROM_BOOL(xr_path_core_is_absolute(path, len < 0 ? 0 : (size_t) len));
 }

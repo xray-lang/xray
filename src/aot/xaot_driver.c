@@ -302,6 +302,16 @@ static void scan_func_features(XiFunc *f, XaotFeatureSet *fs) {
                         }
                     }
                     break;
+                case XI_LOAD_FIELD:
+                    /* Module constants (e.g. `path.sep`, `os.platform`) lower
+                     * as field loads from the whole-module import. Track them
+                     * in the same symbol-level closure as method-form calls. */
+                    if (v->aux && v->nargs >= 1) {
+                        const char *mod = stdlib_symbol_module_of_value(f, v->args[0]);
+                        if (mod)
+                            features_add_stdlib_member(fs, mod, (const char *) v->aux);
+                    }
+                    break;
                 case XI_CALL_BUILTIN: {
                     const char *name = (const char *) v->aux;
                     if (name && strncmp(name, "math.", 5) == 0) {

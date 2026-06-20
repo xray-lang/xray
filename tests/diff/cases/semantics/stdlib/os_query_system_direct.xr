@@ -1,5 +1,9 @@
 import os
 
+print(os.platform.length > 0)
+print(os.arch.length > 0)
+print(os.sep.length > 0)
+print(os.eol.length >= 1)
 print(os.getpid() > 0)
 print(os.uid() >= 0)
 print(os.gid() >= 0)
