@@ -76,6 +76,27 @@ expect_count_max() {
     fi
 }
 
+expect_count_min() {
+    local err="$1"
+    local min_total="$2"
+    local name="$3"
+    local total
+    if ! grep -Eq '\[xi-rc-count\] func=[^ ]+ retain=[0-9]+ release=[0-9]+ total=[0-9]+' "$err"; then
+        record_fail "$name: missing parseable rc-count line"
+        sed 's/^/      /' "$err" | sed -n '1,80p'
+        return
+    fi
+    total="$(extract_total "$err")"
+    if [ -z "$total" ]; then
+        record_fail "$name: missing total"
+    elif [ "$total" -ge "$min_total" ]; then
+        record_pass "$name: total=$total >= $min_total"
+    else
+        record_fail "$name: total=$total < $min_total"
+        sed 's/^/      /' "$err" | sed -n '1,80p'
+    fi
+}
+
 echo "=== Xi RC Count Tests ==="
 echo "Binary: $XRAY"
 echo ""
@@ -96,6 +117,7 @@ BORROWED="$PROJECT_DIR/tests/ir/rc_count/value_struct_borrowed_param.xr"
 BORROWED_WRAPPER="$PROJECT_DIR/tests/ir/rc_count/value_struct_wrapper_borrowed_param.xr"
 HEAP_READONLY="$PROJECT_DIR/tests/ir/rc_count/heap_readonly_param.xr"
 CLASS_READONLY="$PROJECT_DIR/tests/ir/rc_count/class_readonly_param.xr"
+CLASS_ALIAS_RETURN="$PROJECT_DIR/tests/ir/rc_count/class_alias_return_downgrade.xr"
 
 run_case "$SCALAR" "$WORK/scalar_disabled.out" "$WORK/scalar_disabled.err" env
 expect_output "$WORK/scalar_disabled.out" "2" "scalar: program output"
@@ -125,6 +147,13 @@ run_case "$CLASS_READONLY" "$WORK/class_readonly.out" "$WORK/class_readonly.err"
     XRAY_XI_RC_COUNT=1
 expect_output "$WORK/class_readonly.out" "7" "class readonly param: program output"
 expect_count_max "$WORK/class_readonly.err" 0 "class readonly param: RC budget"
+
+run_case "$CLASS_ALIAS_RETURN" "$WORK/class_alias_return.out" "$WORK/class_alias_return.err" env \
+    XRAY_XI_RC_COUNT=1
+expect_output "$WORK/class_alias_return.out" "9
+9" "class alias-return downgrade: program output"
+expect_count_min "$WORK/class_alias_return.err" 1 "class alias-return downgrade: not borrowed"
+expect_count_max "$WORK/class_alias_return.err" 4 "class alias-return downgrade: RC budget"
 
 echo ""
 echo "Passed: $PASS"
