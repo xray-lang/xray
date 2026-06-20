@@ -65,6 +65,11 @@ SRC="$WORK/debug_locals.xr"
 BUILD_LOG="$WORK/build.log"
 DWARF_LOG="$WORK/dwarf.log"
 LLDB_LOG="$WORK/lldb.log"
+CORO_BIN="$WORK/coro_debug_locals"
+CORO_SRC="$WORK/coro_debug_locals.xr"
+CORO_BUILD_LOG="$WORK/coro_build.log"
+CORO_DWARF_LOG="$WORK/coro_dwarf.log"
+CORO_LLDB_LOG="$WORK/coro_lldb.log"
 
 cat > "$SRC" <<'XR'
 fn compute(seed: int) -> int {
@@ -136,13 +141,84 @@ if ! grep -Eq "doubled = 42" "$LLDB_LOG"; then
     fail "lldb did not expose source local doubled=42"
 fi
 
+cat > "$CORO_SRC" <<'XR'
+fn worker(seed: int) -> int {
+    let answer = seed + 1
+    yield
+    let doubled = answer * 2
+    return doubled
+}
+let task = go worker(20)
+print(await task)
+XR
+
+if ! "$XRAY" build --native -g --dump-link-command -o "$CORO_BIN" "$CORO_SRC" > "$CORO_BUILD_LOG" 2>&1; then
+    fail "coroutine debug build failed"
+    sed -n '1,80p' "$CORO_BUILD_LOG" >&2
+    exit 1
+fi
+
+if ! grep -Fq "Debug info command: dsymutil" "$CORO_BUILD_LOG"; then
+    fail "coroutine debug build did not run dsymutil"
+fi
+if ! grep -Fq -- "-DXRAY_AOT_DEBUG_LOCALS=1" "$CORO_BUILD_LOG"; then
+    fail "coroutine debug build did not enable AOT source-variable locals"
+fi
+
+CORO_RUN_OUT="$("$CORO_BIN" 2>&1)"
+if [ "$CORO_RUN_OUT" != "42" ]; then
+    fail "coroutine debug binary output mismatch: $CORO_RUN_OUT"
+fi
+
+if [ ! -d "$CORO_BIN.dSYM" ]; then
+    fail "coroutine debug build did not produce dSYM"
+else
+    if ! "$DWARFDUMP" --debug-line "$CORO_BIN.dSYM" > "$CORO_DWARF_LOG" 2>&1; then
+        fail "coroutine llvm-dwarfdump failed"
+    elif ! grep -Fq 'name: "coro_debug_locals.xr"' "$CORO_DWARF_LOG"; then
+        fail "coroutine dSYM line table does not reference coro_debug_locals.xr"
+    fi
+fi
+
+if ! lldb --no-lldbinit -b \
+        -o "breakpoint set --file coro_debug_locals.xr --line 4" \
+        -o run \
+        -o "frame variable seed" \
+        -o "frame variable answer" \
+        -o "frame variable doubled" \
+        -o bt -- "$CORO_BIN" > "$CORO_LLDB_LOG" 2>&1; then
+    fail "coroutine lldb failed"
+fi
+if ! grep -Fq "stop reason = breakpoint" "$CORO_LLDB_LOG"; then
+    fail "coroutine lldb did not stop at breakpoint"
+fi
+if ! grep -Fq "coro_debug_locals_worker" "$CORO_LLDB_LOG"; then
+    fail "coroutine lldb backtrace did not show worker coroutine resume"
+fi
+if ! grep -Fq "coro_debug_locals.xr:4" "$CORO_LLDB_LOG"; then
+    fail "coroutine lldb breakpoint/backtrace did not report coro_debug_locals.xr:4"
+fi
+if ! grep -Eq "seed = 20" "$CORO_LLDB_LOG"; then
+    fail "coroutine lldb did not expose source local seed=20"
+fi
+if ! grep -Eq "answer = 21" "$CORO_LLDB_LOG"; then
+    fail "coroutine lldb did not expose source local answer=21"
+fi
+if ! grep -Eq "doubled = (0|42)" "$CORO_LLDB_LOG"; then
+    fail "coroutine lldb did not expose source local doubled"
+fi
+
 if [ "$FAIL" -ne 0 ]; then
     echo "--- build log ---" >&2
     sed -n '1,120p' "$BUILD_LOG" >&2
     echo "--- lldb log ---" >&2
     sed -n '1,160p' "$LLDB_LOG" >&2
+    echo "--- coroutine build log ---" >&2
+    sed -n '1,120p' "$CORO_BUILD_LOG" >&2
+    echo "--- coroutine lldb log ---" >&2
+    sed -n '1,180p' "$CORO_LLDB_LOG" >&2
     exit 1
 fi
 
-PASS=$((PASS + 1))
+PASS=$((PASS + 2))
 echo "=== Results: $PASS passed, 0 failed, 0 skipped ==="
