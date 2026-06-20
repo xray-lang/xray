@@ -1,0 +1,16 @@
+class Holder {
+    items: Array<int>
+
+    constructor() {
+        this.items = []
+    }
+}
+
+fn stash(data: in Array<int>, holder: ref Holder) {
+    let alias = data
+    holder.items = alias
+}
+
+let values: Array<int> = [1, 2]
+let holder = new Holder()
+stash(values, holder)

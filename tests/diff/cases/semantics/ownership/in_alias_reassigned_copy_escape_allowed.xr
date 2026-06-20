@@ -1,0 +1,11 @@
+fn stash(data: in Array<int>, out: ref Array<Array<int>>) {
+    let alias = data
+    alias = copy(data)
+    out.push(alias)
+}
+
+let values: Array<int> = [1, 2, 3, 4, 5, 6]
+let out: Array<Array<int>> = []
+stash(values, out)
+values.push(7)
+print(out[0].length)

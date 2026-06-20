@@ -145,6 +145,7 @@ struct XaSymbol {
     bool is_builtin;        // built-in type member (Array.push, etc.)
     bool mutates_receiver;  // method body writes through `this`
     uint8_t passing_mode;   // XR_PARAM_VALUE / XR_PARAM_IN / XR_PARAM_REF (for parameters)
+    uint32_t borrowed_root_symbol_id;  // local alias root for in/ref parameter borrowing
 
     // Parent references
     XaScope *scope;    // Containing scope
