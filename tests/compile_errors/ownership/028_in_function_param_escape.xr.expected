@@ -1,0 +1,1 @@
+cannot pass borrowed 'in' parameter 'data' to escaping parameter 1 of 'sink'; pass an owned value or copy(data)

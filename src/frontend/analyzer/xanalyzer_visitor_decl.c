@@ -79,6 +79,553 @@ static bool xa_expr_is_this(AstNode *node) {
            strcmp(node->as.variable.name, "this") == 0;
 }
 
+typedef struct XaParamEscapeSummary {
+    const char **param_names;
+    int param_count;
+    uint8_t *escapes;
+    XrType *return_type;
+    const char *aliases[128];
+    int alias_slot[128];
+    int alias_count;
+    XaInferContext *ctx;
+} XaParamEscapeSummary;
+
+static int xa_summary_param_slot(XaParamEscapeSummary *summary, const char *name) {
+    if (!summary || !name)
+        return -1;
+    for (int i = summary->alias_count - 1; i >= 0; i--) {
+        if (summary->aliases[i] && strcmp(summary->aliases[i], name) == 0)
+            return summary->alias_slot[i];
+    }
+    for (int i = 0; i < summary->param_count; i++) {
+        if (summary->param_names && summary->param_names[i] &&
+            strcmp(summary->param_names[i], name) == 0)
+            return i;
+    }
+    return -1;
+}
+
+static void xa_summary_set_alias(XaParamEscapeSummary *summary, const char *name, int slot) {
+    if (!summary || !name)
+        return;
+    for (int i = summary->alias_count - 1; i >= 0; i--) {
+        if (summary->aliases[i] && strcmp(summary->aliases[i], name) == 0) {
+            summary->alias_slot[i] = slot;
+            return;
+        }
+    }
+    if (summary->alias_count >= 128)
+        return;
+    summary->aliases[summary->alias_count] = name;
+    summary->alias_slot[summary->alias_count] = slot;
+    summary->alias_count++;
+}
+
+static int xa_summary_expr_root_param_slot(XaParamEscapeSummary *summary, AstNode *expr) {
+    while (expr) {
+        switch (expr->type) {
+            case AST_VARIABLE:
+                return xa_summary_param_slot(summary, expr->as.variable.name);
+            case AST_MEMBER_ACCESS:
+                expr = expr->as.member_access.object;
+                break;
+            case AST_INDEX_GET:
+                expr = expr->as.index_get.array;
+                break;
+            case AST_SLICE_EXPR:
+                expr = expr->as.slice_expr.source;
+                break;
+            case AST_OPTIONAL_CHAIN:
+                expr = expr->as.optional_chain.object;
+                break;
+            case AST_GROUPING:
+                expr = expr->as.grouping;
+                break;
+            case AST_FORCE_UNWRAP:
+                expr = expr->as.unary.operand;
+                break;
+            case AST_MOVE_EXPR:
+                expr = expr->as.move_expr.expr;
+                break;
+            case AST_CALL_EXPR: {
+                CallExprNode *call = &expr->as.call_expr;
+                if (call->callee && call->callee->type == AST_VARIABLE &&
+                    call->callee->as.variable.name &&
+                    strcmp(call->callee->as.variable.name, "copy") == 0)
+                    return -1;
+                return -1;
+            }
+            default:
+                return -1;
+        }
+    }
+    return -1;
+}
+
+static bool xa_summary_method_stores_argument(const char *method_name, int slot);
+static XaSymbolLinks *xa_summary_function_links(XaParamEscapeSummary *summary, AstNode *callee);
+static void xa_summary_mark_expr(XaParamEscapeSummary *summary, AstNode *expr);
+static void xa_summary_walk(XaParamEscapeSummary *summary, AstNode *node);
+
+static void xa_summary_mark_call_expr(XaParamEscapeSummary *summary, AstNode *expr) {
+    if (!summary || !expr || expr->type != AST_CALL_EXPR)
+        return;
+    CallExprNode *call = &expr->as.call_expr;
+    if (call->callee && call->callee->type == AST_VARIABLE && call->callee->as.variable.name &&
+        strcmp(call->callee->as.variable.name, "copy") == 0)
+        return;
+    XaSymbolLinks *fn_links = xa_summary_function_links(summary, call->callee);
+    if (fn_links && fn_links->param_escapes) {
+        for (int i = 0; i < call->arg_count && i < fn_links->param_escape_count; i++) {
+            if (fn_links->param_escapes[i])
+                xa_summary_mark_expr(summary, call->arguments[i]);
+        }
+    }
+    if (call->callee && call->callee->type == AST_MEMBER_ACCESS) {
+        const char *method_name = call->callee->as.member_access.name;
+        for (int i = 0; i < call->arg_count; i++) {
+            if (xa_summary_method_stores_argument(method_name, i))
+                xa_summary_mark_expr(summary, call->arguments[i]);
+        }
+    }
+}
+
+static void xa_summary_mark_expr(XaParamEscapeSummary *summary, AstNode *expr) {
+    if (!summary || !expr)
+        return;
+    int slot = xa_summary_expr_root_param_slot(summary, expr);
+    if (slot >= 0 && slot < summary->param_count)
+        summary->escapes[slot] = 1;
+    switch (expr->type) {
+        case AST_CALL_EXPR:
+            xa_summary_mark_call_expr(summary, expr);
+            break;
+        case AST_GROUPING:
+            xa_summary_mark_expr(summary, expr->as.grouping);
+            break;
+        case AST_FORCE_UNWRAP:
+        case AST_UNARY_NEG:
+        case AST_UNARY_NOT:
+        case AST_UNARY_BNOT:
+            xa_summary_mark_expr(summary, expr->as.unary.operand);
+            break;
+        case AST_MOVE_EXPR:
+            xa_summary_mark_expr(summary, expr->as.move_expr.expr);
+            break;
+        case AST_SLICE_EXPR:
+            xa_summary_mark_expr(summary, expr->as.slice_expr.source);
+            break;
+        case AST_BINARY_ADD:
+        case AST_BINARY_SUB:
+        case AST_BINARY_MUL:
+        case AST_BINARY_DIV:
+        case AST_BINARY_MOD:
+        case AST_BINARY_BAND:
+        case AST_BINARY_BOR:
+        case AST_BINARY_BXOR:
+        case AST_BINARY_LSHIFT:
+        case AST_BINARY_RSHIFT:
+        case AST_BINARY_EQ:
+        case AST_BINARY_NE:
+        case AST_BINARY_EQ_STRICT:
+        case AST_BINARY_NE_STRICT:
+        case AST_BINARY_LT:
+        case AST_BINARY_LE:
+        case AST_BINARY_GT:
+        case AST_BINARY_GE:
+        case AST_BINARY_AND:
+        case AST_BINARY_OR:
+        case AST_NULLISH_COALESCE:
+            xa_summary_mark_expr(summary, expr->as.binary.left);
+            xa_summary_mark_expr(summary, expr->as.binary.right);
+            break;
+        case AST_TERNARY:
+            xa_summary_mark_expr(summary, expr->as.ternary.true_expr);
+            xa_summary_mark_expr(summary, expr->as.ternary.false_expr);
+            break;
+        case AST_ARRAY_LITERAL:
+            for (int i = 0; i < expr->as.array_literal.count; i++)
+                xa_summary_mark_expr(summary, expr->as.array_literal.elements[i]);
+            break;
+        case AST_OBJECT_LITERAL:
+            for (int i = 0; i < expr->as.object_literal.count; i++)
+                xa_summary_mark_expr(summary, expr->as.object_literal.values[i]);
+            break;
+        case AST_MAP_LITERAL:
+            for (int i = 0; i < expr->as.map_literal.count; i++) {
+                xa_summary_mark_expr(summary, expr->as.map_literal.keys[i]);
+                xa_summary_mark_expr(summary, expr->as.map_literal.values[i]);
+            }
+            break;
+        default:
+            break;
+    }
+}
+
+static bool xa_summary_method_stores_argument(const char *method_name, int slot) {
+    if (!method_name || slot < 0)
+        return false;
+    if ((strcmp(method_name, "push") == 0 || strcmp(method_name, "unshift") == 0 ||
+         strcmp(method_name, "fill") == 0 || strcmp(method_name, "add") == 0 ||
+         strcmp(method_name, "send") == 0 || strcmp(method_name, "trySend") == 0 ||
+         strcmp(method_name, "sendTimeout") == 0) &&
+        slot == 0)
+        return true;
+    return strcmp(method_name, "set") == 0 && (slot == 0 || slot == 1);
+}
+
+static XaSymbolLinks *xa_summary_function_links(XaParamEscapeSummary *summary, AstNode *callee) {
+    if (!summary || !summary->ctx || !callee || callee->type != AST_VARIABLE ||
+        !callee->as.variable.name)
+        return NULL;
+    XaSymbol *sym =
+        xa_scope_lookup(summary->ctx->analyzer->current_scope, callee->as.variable.name);
+    if (!sym && summary->ctx->analyzer->global_scope)
+        sym = xa_scope_lookup(summary->ctx->analyzer->global_scope, callee->as.variable.name);
+    if (!sym || sym->kind != XA_SYM_FUNCTION)
+        return NULL;
+    return xa_analyzer_get_links(summary->ctx->analyzer, sym);
+}
+
+static void xa_summary_mark_capture_refs(XaParamEscapeSummary *summary, AstNode *node) {
+    if (!summary || !node)
+        return;
+    int slot = xa_summary_expr_root_param_slot(summary, node);
+    if (slot >= 0 && slot < summary->param_count)
+        summary->escapes[slot] = 1;
+
+    switch (node->type) {
+        case AST_BLOCK:
+            for (int i = 0; i < node->as.block.count; i++)
+                xa_summary_mark_capture_refs(summary, node->as.block.statements[i]);
+            break;
+        case AST_EXPR_STMT:
+            xa_summary_mark_capture_refs(summary, node->as.expr_stmt);
+            break;
+        case AST_VAR_DECL:
+        case AST_CONST_DECL:
+            xa_summary_mark_capture_refs(summary, node->as.var_decl.initializer);
+            xa_summary_set_alias(summary, node->as.var_decl.name, -1);
+            break;
+        case AST_ASSIGNMENT:
+            xa_summary_mark_capture_refs(summary, node->as.assignment.value);
+            break;
+        case AST_RETURN_STMT:
+            for (int i = 0; i < node->as.return_stmt.value_count; i++)
+                xa_summary_mark_capture_refs(summary, node->as.return_stmt.values[i]);
+            break;
+        case AST_CALL_EXPR:
+            xa_summary_mark_capture_refs(summary, node->as.call_expr.callee);
+            for (int i = 0; i < node->as.call_expr.arg_count; i++)
+                xa_summary_mark_capture_refs(summary, node->as.call_expr.arguments[i]);
+            break;
+        case AST_MEMBER_ACCESS:
+            xa_summary_mark_capture_refs(summary, node->as.member_access.object);
+            break;
+        case AST_MEMBER_SET:
+            xa_summary_mark_capture_refs(summary, node->as.member_set.object);
+            xa_summary_mark_capture_refs(summary, node->as.member_set.value);
+            break;
+        case AST_INDEX_GET:
+            xa_summary_mark_capture_refs(summary, node->as.index_get.array);
+            xa_summary_mark_capture_refs(summary, node->as.index_get.index);
+            break;
+        case AST_INDEX_SET:
+            xa_summary_mark_capture_refs(summary, node->as.index_set.array);
+            xa_summary_mark_capture_refs(summary, node->as.index_set.index);
+            xa_summary_mark_capture_refs(summary, node->as.index_set.value);
+            break;
+        case AST_ARRAY_LITERAL:
+            for (int i = 0; i < node->as.array_literal.count; i++)
+                xa_summary_mark_capture_refs(summary, node->as.array_literal.elements[i]);
+            break;
+        case AST_OBJECT_LITERAL:
+            for (int i = 0; i < node->as.object_literal.count; i++)
+                xa_summary_mark_capture_refs(summary, node->as.object_literal.values[i]);
+            break;
+        case AST_MAP_LITERAL:
+            for (int i = 0; i < node->as.map_literal.count; i++) {
+                xa_summary_mark_capture_refs(summary, node->as.map_literal.keys[i]);
+                xa_summary_mark_capture_refs(summary, node->as.map_literal.values[i]);
+            }
+            break;
+        case AST_PRINT_STMT:
+            for (int i = 0; i < node->as.print_stmt.expr_count; i++)
+                xa_summary_mark_capture_refs(summary, node->as.print_stmt.exprs[i]);
+            break;
+        case AST_IF_STMT:
+            xa_summary_mark_capture_refs(summary, node->as.if_stmt.condition);
+            xa_summary_mark_capture_refs(summary, node->as.if_stmt.then_branch);
+            xa_summary_mark_capture_refs(summary, node->as.if_stmt.else_branch);
+            break;
+        case AST_WHILE_STMT:
+            xa_summary_mark_capture_refs(summary, node->as.while_stmt.condition);
+            xa_summary_mark_capture_refs(summary, node->as.while_stmt.body);
+            break;
+        case AST_FOR_STMT:
+            xa_summary_mark_capture_refs(summary, node->as.for_stmt.initializer);
+            xa_summary_mark_capture_refs(summary, node->as.for_stmt.condition);
+            xa_summary_mark_capture_refs(summary, node->as.for_stmt.increment);
+            xa_summary_mark_capture_refs(summary, node->as.for_stmt.body);
+            break;
+        case AST_FUNCTION_EXPR:
+            break;
+        case AST_GROUPING:
+            xa_summary_mark_capture_refs(summary, node->as.grouping);
+            break;
+        case AST_FORCE_UNWRAP:
+        case AST_UNARY_NEG:
+        case AST_UNARY_NOT:
+        case AST_UNARY_BNOT:
+            xa_summary_mark_capture_refs(summary, node->as.unary.operand);
+            break;
+        case AST_MOVE_EXPR:
+            xa_summary_mark_capture_refs(summary, node->as.move_expr.expr);
+            break;
+        case AST_SLICE_EXPR:
+            xa_summary_mark_capture_refs(summary, node->as.slice_expr.source);
+            xa_summary_mark_capture_refs(summary, node->as.slice_expr.start);
+            xa_summary_mark_capture_refs(summary, node->as.slice_expr.end);
+            break;
+        case AST_TERNARY:
+            xa_summary_mark_capture_refs(summary, node->as.ternary.condition);
+            xa_summary_mark_capture_refs(summary, node->as.ternary.true_expr);
+            xa_summary_mark_capture_refs(summary, node->as.ternary.false_expr);
+            break;
+        case AST_BINARY_ADD:
+        case AST_BINARY_SUB:
+        case AST_BINARY_MUL:
+        case AST_BINARY_DIV:
+        case AST_BINARY_MOD:
+        case AST_BINARY_BAND:
+        case AST_BINARY_BOR:
+        case AST_BINARY_BXOR:
+        case AST_BINARY_LSHIFT:
+        case AST_BINARY_RSHIFT:
+        case AST_BINARY_EQ:
+        case AST_BINARY_NE:
+        case AST_BINARY_EQ_STRICT:
+        case AST_BINARY_NE_STRICT:
+        case AST_BINARY_LT:
+        case AST_BINARY_LE:
+        case AST_BINARY_GT:
+        case AST_BINARY_GE:
+        case AST_BINARY_AND:
+        case AST_BINARY_OR:
+        case AST_NULLISH_COALESCE:
+            xa_summary_mark_capture_refs(summary, node->as.binary.left);
+            xa_summary_mark_capture_refs(summary, node->as.binary.right);
+            break;
+        default:
+            break;
+    }
+}
+
+static void xa_summary_walk_call(XaParamEscapeSummary *summary, AstNode *node) {
+    CallExprNode *call = &node->as.call_expr;
+    if (call->callee && call->callee->type == AST_MEMBER_ACCESS) {
+        const char *method_name = call->callee->as.member_access.name;
+        for (int i = 0; i < call->arg_count; i++) {
+            AstNode *arg = call->arguments[i];
+            if (xa_summary_method_stores_argument(method_name, i))
+                xa_summary_mark_expr(summary, arg);
+            xa_summary_walk(summary, arg);
+        }
+        xa_summary_walk(summary, call->callee);
+        return;
+    }
+
+    XaSymbolLinks *fn_links = xa_summary_function_links(summary, call->callee);
+    if (fn_links && fn_links->param_escapes) {
+        for (int i = 0; i < call->arg_count && i < fn_links->param_escape_count; i++) {
+            if (fn_links->param_escapes[i])
+                xa_summary_mark_expr(summary, call->arguments[i]);
+        }
+    }
+    xa_summary_walk(summary, call->callee);
+    for (int i = 0; i < call->arg_count; i++)
+        xa_summary_walk(summary, call->arguments[i]);
+}
+
+static void xa_summary_walk_function_expr(XaParamEscapeSummary *summary, AstNode *node) {
+    FunctionDeclNode *fn = &node->as.function_expr;
+    if (!fn->body)
+        return;
+    int saved_alias_count = summary->alias_count;
+    for (int i = 0; i < fn->param_count; i++) {
+        XrParamNode *param = fn->params ? fn->params[i] : NULL;
+        xa_summary_set_alias(summary, param ? param->name : NULL, -1);
+    }
+    xa_summary_mark_capture_refs(summary, fn->body);
+    xa_summary_walk(summary, fn->body);
+    summary->alias_count = saved_alias_count;
+}
+
+static void xa_summary_walk(XaParamEscapeSummary *summary, AstNode *node) {
+    if (!summary || !node)
+        return;
+    switch (node->type) {
+        case AST_BLOCK: {
+            int saved_alias_count = summary->alias_count;
+            for (int i = 0; i < node->as.block.count; i++)
+                xa_summary_walk(summary, node->as.block.statements[i]);
+            summary->alias_count = saved_alias_count;
+            break;
+        }
+        case AST_EXPR_STMT:
+            xa_summary_walk(summary, node->as.expr_stmt);
+            break;
+        case AST_VAR_DECL:
+        case AST_CONST_DECL: {
+            VarDeclNode *var = &node->as.var_decl;
+            int slot = xa_summary_expr_root_param_slot(summary, var->initializer);
+            xa_summary_set_alias(summary, var->name, slot);
+            xa_summary_walk(summary, var->initializer);
+            break;
+        }
+        case AST_ASSIGNMENT: {
+            AssignmentNode *assign = &node->as.assignment;
+            int slot = xa_summary_expr_root_param_slot(summary, assign->value);
+            xa_summary_set_alias(summary, assign->name, slot);
+            xa_summary_walk(summary, assign->value);
+            break;
+        }
+        case AST_RETURN_STMT: {
+            ReturnStmtNode *ret = &node->as.return_stmt;
+            for (int i = 0; i < ret->value_count; i++) {
+                if (xa_type_needs_borrow_escape_guard(summary->return_type))
+                    xa_summary_mark_expr(summary, ret->values[i]);
+                xa_summary_walk(summary, ret->values[i]);
+            }
+            break;
+        }
+        case AST_MEMBER_SET:
+            xa_summary_walk(summary, node->as.member_set.object);
+            xa_summary_mark_expr(summary, node->as.member_set.value);
+            xa_summary_walk(summary, node->as.member_set.value);
+            break;
+        case AST_INDEX_SET:
+            xa_summary_walk(summary, node->as.index_set.array);
+            xa_summary_walk(summary, node->as.index_set.index);
+            xa_summary_mark_expr(summary, node->as.index_set.value);
+            xa_summary_walk(summary, node->as.index_set.value);
+            break;
+        case AST_CALL_EXPR:
+            xa_summary_walk_call(summary, node);
+            break;
+        case AST_FUNCTION_EXPR:
+            xa_summary_walk_function_expr(summary, node);
+            break;
+        case AST_PRINT_STMT:
+            for (int i = 0; i < node->as.print_stmt.expr_count; i++)
+                xa_summary_walk(summary, node->as.print_stmt.exprs[i]);
+            break;
+        case AST_IF_STMT:
+            xa_summary_walk(summary, node->as.if_stmt.condition);
+            xa_summary_walk(summary, node->as.if_stmt.then_branch);
+            xa_summary_walk(summary, node->as.if_stmt.else_branch);
+            break;
+        case AST_WHILE_STMT:
+            xa_summary_walk(summary, node->as.while_stmt.condition);
+            xa_summary_walk(summary, node->as.while_stmt.body);
+            break;
+        case AST_FOR_STMT:
+            xa_summary_walk(summary, node->as.for_stmt.initializer);
+            xa_summary_walk(summary, node->as.for_stmt.condition);
+            xa_summary_walk(summary, node->as.for_stmt.increment);
+            xa_summary_walk(summary, node->as.for_stmt.body);
+            break;
+        case AST_ARRAY_LITERAL:
+            for (int i = 0; i < node->as.array_literal.count; i++)
+                xa_summary_walk(summary, node->as.array_literal.elements[i]);
+            break;
+        case AST_OBJECT_LITERAL:
+            for (int i = 0; i < node->as.object_literal.count; i++)
+                xa_summary_walk(summary, node->as.object_literal.values[i]);
+            break;
+        case AST_MAP_LITERAL:
+            for (int i = 0; i < node->as.map_literal.count; i++) {
+                xa_summary_walk(summary, node->as.map_literal.keys[i]);
+                xa_summary_walk(summary, node->as.map_literal.values[i]);
+            }
+            break;
+        case AST_GROUPING:
+            xa_summary_walk(summary, node->as.grouping);
+            break;
+        case AST_FORCE_UNWRAP:
+        case AST_UNARY_NEG:
+        case AST_UNARY_NOT:
+        case AST_UNARY_BNOT:
+            xa_summary_walk(summary, node->as.unary.operand);
+            break;
+        case AST_MOVE_EXPR:
+            xa_summary_walk(summary, node->as.move_expr.expr);
+            break;
+        case AST_SLICE_EXPR:
+            xa_summary_walk(summary, node->as.slice_expr.source);
+            xa_summary_walk(summary, node->as.slice_expr.start);
+            xa_summary_walk(summary, node->as.slice_expr.end);
+            break;
+        case AST_MEMBER_ACCESS:
+            xa_summary_walk(summary, node->as.member_access.object);
+            break;
+        case AST_INDEX_GET:
+            xa_summary_walk(summary, node->as.index_get.array);
+            xa_summary_walk(summary, node->as.index_get.index);
+            break;
+        case AST_TERNARY:
+            xa_summary_walk(summary, node->as.ternary.condition);
+            xa_summary_walk(summary, node->as.ternary.true_expr);
+            xa_summary_walk(summary, node->as.ternary.false_expr);
+            break;
+        case AST_BINARY_ADD:
+        case AST_BINARY_SUB:
+        case AST_BINARY_MUL:
+        case AST_BINARY_DIV:
+        case AST_BINARY_MOD:
+        case AST_BINARY_BAND:
+        case AST_BINARY_BOR:
+        case AST_BINARY_BXOR:
+        case AST_BINARY_LSHIFT:
+        case AST_BINARY_RSHIFT:
+        case AST_BINARY_EQ:
+        case AST_BINARY_NE:
+        case AST_BINARY_EQ_STRICT:
+        case AST_BINARY_NE_STRICT:
+        case AST_BINARY_LT:
+        case AST_BINARY_LE:
+        case AST_BINARY_GT:
+        case AST_BINARY_GE:
+        case AST_BINARY_AND:
+        case AST_BINARY_OR:
+        case AST_NULLISH_COALESCE:
+            xa_summary_walk(summary, node->as.binary.left);
+            xa_summary_walk(summary, node->as.binary.right);
+            break;
+        default:
+            break;
+    }
+}
+
+static void xa_symbol_links_set_param_escape_summary(XaInferContext *ctx, XaSymbolLinks *links,
+                                                     const char **param_names, int param_count,
+                                                     XrType *return_type, AstNode *body) {
+    if (!links || param_count <= 0 || !body)
+        return;
+    if (links->param_escapes)
+        xr_free(links->param_escapes);
+    links->param_escapes = xr_calloc((size_t) param_count, sizeof(uint8_t));
+    links->param_escape_count = links->param_escapes ? param_count : 0;
+    if (!links->param_escapes)
+        return;
+    XaParamEscapeSummary summary = {.param_names = param_names,
+                                    .param_count = param_count,
+                                    .escapes = links->param_escapes,
+                                    .return_type = return_type,
+                                    .ctx = ctx};
+    xa_summary_walk(&summary, body);
+}
+
 static bool xa_expr_roots_at_this(AstNode *node) {
     if (!node)
         return false;
@@ -658,6 +1205,8 @@ void xa_visit_collect_function_decl_only(XaInferContext *ctx, AstNode *node) {
 
     // Store parameter names for LSP inlay hints
     xa_symbol_links_set_function_sig(links, param_types, param_names, fn->param_count, return_type);
+    xa_symbol_links_set_param_escape_summary(ctx, links, param_names, fn->param_count, return_type,
+                                             fn->body);
 
     // Store generic type parameters and intersection-style constraint lists.
     if (fn->type_param_count > 0 && fn->type_params) {
@@ -888,6 +1437,11 @@ void xa_visit_collect_function_body(XaInferContext *ctx, AstNode *node) {
     // Collect body declarations
     if (fn->body) {
         xa_visit_collect(ctx, fn->body);
+    }
+
+    if (links) {
+        xa_symbol_links_set_param_escape_summary(ctx, links, links->param_names, links->param_count,
+                                                 links->return_type, fn->body);
     }
 
     // Infer return type for unannotated functions that always return same-shape objects.
@@ -1846,6 +2400,8 @@ skip_layout:
             // Store parameter info for LSP
             xa_symbol_links_set_function_sig(method_links, param_types, param_names,
                                              md->param_count, ret_type);
+            xa_symbol_links_set_param_escape_summary(ctx, method_links, param_names,
+                                                     md->param_count, ret_type, md->body);
 
             // Store generic type parameters for the method.  Method-level
             // constraints aren't tracked in the method-decl AST yet, so the
@@ -1933,6 +2489,12 @@ skip_layout:
         // Visit body for nested declarations (variables, nested functions, etc.)
         if (md->body)
             xa_visit_collect(ctx, md->body);
+
+        if (mlinks) {
+            xa_symbol_links_set_param_escape_summary(ctx, mlinks, mlinks->param_names,
+                                                     mlinks->param_count, mlinks->return_type,
+                                                     md->body);
+        }
 
         xa_analyzer_exit_scope(ctx->analyzer);
     }

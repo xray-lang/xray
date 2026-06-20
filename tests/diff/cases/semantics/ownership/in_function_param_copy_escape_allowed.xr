@@ -1,0 +1,14 @@
+fn sink(value: Array<int>, out: ref Array<Array<int>>) {
+    out.push(value)
+}
+
+fn stash(data: in Array<int>, out: ref Array<Array<int>>) {
+    sink(copy(data), out)
+}
+
+let values: Array<int> = [1, 2, 3, 4]
+let out: Array<Array<int>> = []
+stash(values, out)
+values.push(5)
+print(out[0].length)
+print(values.length)
