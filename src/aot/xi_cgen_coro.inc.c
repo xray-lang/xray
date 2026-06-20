@@ -1143,6 +1143,27 @@ static void emit_coro_local_declarations(XiCgenCtx *ctx, FILE *out, const XiFunc
     }
 }
 
+static void emit_coro_debug_frame_source_var_syncs(XiCgenCtx *ctx, FILE *out, const XiFunc *f) {
+    for (uint16_t i = 0; i < f->nparams; i++) {
+        if (f->params && f->params[i])
+            emit_debug_source_var_sync(ctx, out, f, f->params[i]);
+    }
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *blk = f->blocks[bi];
+        if (!blk)
+            continue;
+        for (const XiPhi *phi = blk->phis; phi; phi = phi->next) {
+            if (cg_coro_phi_needs_frame(ctx, f, phi))
+                emit_debug_source_var_sync(ctx, out, f, &phi->value);
+        }
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *v = blk->values[vi];
+            if (cg_coro_value_needs_frame(ctx, f, v))
+                emit_debug_source_var_sync(ctx, out, f, v);
+        }
+    }
+}
+
 static void emit_coro_macros(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const char *prefix) {
     (void) ctx;
     (void) prefix;
@@ -2655,6 +2676,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
     fprintf(out, " = ");
     emit_value_rhs(ctx, out, f, v, prefix);
     fprintf(out, ";\n");
+    emit_debug_source_var_sync(ctx, out, f, v);
 }
 
 static void emit_coro_block(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiBlock *blk,
@@ -2971,7 +2993,9 @@ static void xi_cgen_coro_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *
     }
 
     emit_coro_local_declarations(ctx, out, f);
+    emit_debug_source_var_declarations(ctx, out, f);
     emit_coro_macros(ctx, out, f, prefix);
+    emit_coro_debug_frame_source_var_syncs(ctx, out, f);
 
     int state_count = (int) plan->nstates;
     if (state_count > 0) {
