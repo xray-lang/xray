@@ -199,6 +199,24 @@ else
     sed 's/^/      /' "$OS_EXEC_LOG" | sed -n '1,120p'
 fi
 
+SYSTEM_IO_SRC="$PROJECT_DIR/tests/aot/filetests/link/system_io_basic.xr"
+SYSTEM_IO_BIN="$WORK/system_io_basic"
+SYSTEM_IO_LOG="$WORK/system_io_basic.log"
+if build_native "$SYSTEM_IO_SRC" "$SYSTEM_IO_BIN" "$SYSTEM_IO_LOG"; then
+    expect_log_contains "$SYSTEM_IO_LOG" "Link command:" "system-io-basic: emitted link command"
+    expect_log_not_contains "$SYSTEM_IO_LOG" "-lxray_core" "system-io-basic: does not link xray_core"
+    expect_log_not_contains "$SYSTEM_IO_LOG" "-lxray_aot_core" "system-io-basic: does not link AOT core"
+    expect_log_not_contains "$SYSTEM_IO_LOG" "-lpthread" "system-io-basic: does not link pthread"
+    expect_log_not_contains "$SYSTEM_IO_LOG" "-lz" "system-io-basic: does not link zlib"
+    expect_log_not_contains "$SYSTEM_IO_LOG" "-lssl" "system-io-basic: does not link ssl"
+    expect_log_not_contains "$SYSTEM_IO_LOG" "-lcrypto" "system-io-basic: does not link crypto"
+    expect_log_contains "$SYSTEM_IO_LOG" "-lm" "system-io-basic: links math lib only"
+    expect_output "$SYSTEM_IO_BIN" $'true\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\n5\ntrue\ntrue\n2\nhello\nworld\ntrue\n3\n65\n0\n255\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue' "system-io-basic: binary output"
+else
+    record_fail "system-io-basic: build failed"
+    sed 's/^/      /' "$SYSTEM_IO_LOG" | sed -n '1,120p'
+fi
+
 PATH_SRC="$PROJECT_DIR/tests/aot/filetests/link/core_path.xr"
 PATH_BIN="$WORK/core_path"
 PATH_LOG="$WORK/core_path.log"

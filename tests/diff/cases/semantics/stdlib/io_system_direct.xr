@@ -1,0 +1,92 @@
+// AOT direct-call filesystem helpers must match VM stdlib dispatch without
+// pulling in the runtime-backed io module.
+import io
+
+let root = io.tempDir() ?? ""
+print(root.length > 0)
+
+let dir = root + "/a/b"
+print(io.mkdirp(dir))
+print(io.isDir(dir))
+
+let file = dir + "/sample.txt"
+print(io.writeFile(file, "hello"))
+print(io.exists(file))
+print(io.isFile(file))
+print(!io.isDir(file))
+print(io.fileSize(file))
+print(io.readFile(file) == "hello")
+print(io.appendFile(file, "\nworld"))
+
+let lines = io.readLines(file)
+print(lines.length)
+print(lines[0])
+print(lines[1])
+
+let bytesFile = dir + "/bytes.bin"
+let bytes = new Bytes(3)
+bytes[0] = 65
+bytes[1] = 0
+bytes[2] = 255
+print(io.writeFileBytes(bytesFile, bytes))
+let readBytes = io.readFileBytes(bytesFile)
+if (readBytes != null) {
+    print(readBytes.length)
+    print(readBytes[0])
+    print(readBytes[1])
+    print(readBytes[2])
+} else {
+    print(0)
+    print(0)
+    print(0)
+    print(0)
+}
+
+let copied = root + "/copy.txt"
+print(io.copyFile(file, copied))
+print(io.readFile(copied) == "hello\nworld")
+let moved = root + "/moved.txt"
+print(io.rename(copied, moved))
+print(!io.exists(copied))
+print(io.exists(moved))
+
+let stat = io.stat(file)
+print(stat != null)
+print(stat.size == 11)
+print(stat.isFile)
+print(!stat.isDir)
+
+let touched = root + "/touched.txt"
+print(io.touch(touched))
+print(io.chmod(file, 420))
+
+let entries = io.readDir(dir)
+print(entries.length >= 2)
+let recursive = io.readDirRecursive(root)
+print(recursive.length >= 4)
+
+let resolvedDir = io.realpath(dir) ?? ""
+let oldCwd = io.cwd()
+print(oldCwd.length > 0)
+print(resolvedDir.length > 0)
+print(io.chdir(dir))
+print(io.cwd() == resolvedDir)
+print(io.chdir(oldCwd))
+
+let link = root + "/sample-link.txt"
+let linkOk = io.symlink(file, link)
+if (linkOk) {
+    print(io.isSymlink(link))
+    print(io.readlink(link) != null)
+} else {
+    print(true)
+    print(true)
+}
+
+let tmpFile = io.tempFile() ?? ""
+print(tmpFile.length > 0)
+print(io.exists(tmpFile))
+print(io.remove(tmpFile))
+
+print(io.removeAll(root))
+print(!io.exists(root))
