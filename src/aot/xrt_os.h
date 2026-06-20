@@ -160,6 +160,23 @@ static inline XrValue xrt_os_getcwd(void) {
     return xrt_os_cstr_value(buf);
 }
 
+static inline XrValue xrt_os_chdir(const char *path, int64_t len) {
+    char stack_path[XRT_OS_PATH_MAX];
+    char *owned = NULL;
+    char *dir = xrt_os_copy_cstr_arg(path, len, stack_path, sizeof(stack_path), &owned);
+    bool ok = false;
+    if (dir) {
+#ifdef _WIN32
+        ok = SetCurrentDirectoryA(dir) != 0;
+#else
+        ok = chdir(dir) == 0;
+#endif
+    }
+    if (owned)
+        XRT_FREE(owned);
+    return XR_FROM_BOOL(ok);
+}
+
 static inline XrValue xrt_os_hostname(void) {
     char buf[256];
 #ifdef _WIN32

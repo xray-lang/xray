@@ -159,7 +159,7 @@ if build_native "$OS_QUERY_SRC" "$OS_QUERY_BIN" "$OS_QUERY_LOG"; then
     expect_log_not_contains "$OS_QUERY_LOG" "-lpthread" "system-os-query: does not link pthread"
     expect_log_not_contains "$OS_QUERY_LOG" "-lz" "system-os-query: does not link zlib"
     expect_log_contains "$OS_QUERY_LOG" "-lm" "system-os-query: links math lib only"
-    expect_output "$OS_QUERY_BIN" $'true\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue' "system-os-query: binary output"
+    expect_output "$OS_QUERY_BIN" $'true\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue' "system-os-query: binary output"
 else
     record_fail "system-os-query: build failed"
     sed 's/^/      /' "$OS_QUERY_LOG" | sed -n '1,120p'
