@@ -1,0 +1,13 @@
+struct Pair { a: int; b: int }
+
+fn sum(p: Pair) -> int {
+    return p.a + p.b
+}
+
+fn wrap(p: Pair) -> int {
+    return sum(p)
+}
+
+let p = Pair{a: 1, b: 2}
+print(wrap(p))
+print(p.a)
