@@ -1,0 +1,7 @@
+fn stash(data: ref Array<int>, out: ref Array<Array<int>>) {
+    out.push(data)
+}
+
+let values: Array<int> = [1, 2]
+let out: Array<Array<int>> = []
+stash(values, out)

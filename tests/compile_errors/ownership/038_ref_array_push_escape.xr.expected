@@ -1,0 +1,1 @@
+cannot pass borrowed 'ref' parameter 'data' to mutating method 'push'; pass an owned value or copy(data)
