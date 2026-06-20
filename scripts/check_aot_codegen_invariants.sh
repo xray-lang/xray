@@ -27,6 +27,8 @@ Expectation file format:
   runtime_map_calls=0
   runtime_set_calls=0
   runtime_property_calls=0
+  dtor_emitted=0
+  release_runs_dtor=0
   typed_array_data_field_load_count=1
   typed_array_direct_data_index_count=0
   typed_array_per_iter_len_store_count=0
@@ -317,6 +319,8 @@ runtime_set_calls=$(count_pattern 'xrt_set_[A-Za-z0-9_]*[[:space:]]*\(')
 runtime_property_calls=$(count_pattern 'xrt_(getprop|setprop)[[:space:]]*\(')
 dynamic_dispatch_calls=$(count_pattern 'xrt_(call_method|method|vcall|invoke|dispatch)[A-Za-z0-9_]*[[:space:]]*\(')
 pending_error_check_count=$(count_pattern 'xrt_has_pending_error[[:space:]]*\(')
+dtor_emitted=$(count_pattern '^static[[:space:]]+void[[:space:]]+[A-Za-z0-9_]+_dtor[[:space:]]*\(void[[:space:]]+\*obj\)')
+release_runs_dtor=$(count_pattern 'xrt_type_register[[:space:]]*\([^;]*_dtor')
 restrict_local_count=$(count_pattern '\*[[:space:]]*XRT_RESTRICT[[:space:]]+_ad')
 vm_jit_include_count=$(count_pattern '^#include[[:space:]]+["<].*(src/)?(vm|jit|xvm|xm_)')
 
@@ -389,6 +393,8 @@ metric_value() {
         runtime_property_calls) printf '%s\n' "$runtime_property_calls" ;;
         dynamic_dispatch_calls) printf '%s\n' "$dynamic_dispatch_calls" ;;
         pending_error_check_count) printf '%s\n' "$pending_error_check_count" ;;
+        dtor_emitted) printf '%s\n' "$dtor_emitted" ;;
+        release_runs_dtor) printf '%s\n' "$release_runs_dtor" ;;
         restrict_local_count) printf '%s\n' "$restrict_local_count" ;;
         vm_jit_include_count) printf '%s\n' "$vm_jit_include_count" ;;
         hot_function_count) printf '%s\n' "$hot_function_count" ;;
@@ -500,6 +506,8 @@ runtime_set_calls=$runtime_set_calls
 runtime_property_calls=$runtime_property_calls
 dynamic_dispatch_calls=$dynamic_dispatch_calls
 pending_error_check_count=$pending_error_check_count
+dtor_emitted=$dtor_emitted
+release_runs_dtor=$release_runs_dtor
 vm_jit_include_count=$vm_jit_include_count
 hot_function_count=$hot_function_count
 hot_xrvalue_count=$hot_xrvalue_count
