@@ -1848,6 +1848,38 @@ XrValue xr_aot_chan_try_recv_sync(XrValue channel_value) {
     return xr_aot_chan_try_recv(&ctx, channel_value);
 }
 
+XrAotResult xr_aot_poll_yield(const XrAotContext *ctx) {
+    if (!ctx || !ctx->coro)
+        return xr_aot_done(XR_NULL_VAL);
+    if (xr_coro_consume_reds(ctx->coro, 1) > 0)
+        return xr_aot_done(XR_NULL_VAL);
+    if (xr_coro_flags_has(ctx->coro, XR_CORO_FLG_CANCEL_REQUESTED | XR_CORO_FLG_CANCELLED))
+        return xr_aot_result(XR_AOT_RUN_CANCELLED);
+    xr_coro_set_reds(ctx->coro, XR_CORO_REDUCTIONS);
+    return xr_aot_yielded();
+}
+
+bool xr_aot_send_is_sent(XrValue send_value) {
+    if (!XR_IS_INSTANCE(send_value))
+        return false;
+    XrInstance *inst = xr_value_to_instance(send_value);
+    if (!inst || !inst->klass)
+        return false;
+    if (inst->klass->builtin_kind == XR_BK_ENUM_VALUE) {
+        XrEnumValue *variant = (XrEnumValue *) inst;
+        return variant->parent_type && variant->parent_type->name &&
+               strcmp(variant->parent_type->name, "SendResult") == 0 && variant->member_index == 0;
+    }
+    if (inst->klass->builtin_kind != XR_BK_ADT_ENUM)
+        return false;
+    XrValue tag = inst->fields[0];
+    if (!XR_IS_INSTANCE(tag))
+        return false;
+    XrEnumValue *variant = (XrEnumValue *) XR_TO_INSTANCE(tag);
+    return variant->parent_type && variant->parent_type->name &&
+           strcmp(variant->parent_type->name, "SendResult") == 0 && variant->member_index == 0;
+}
+
 bool xr_aot_recv_is_value(XrValue recv_value) {
     if (!XR_IS_INSTANCE(recv_value))
         return false;

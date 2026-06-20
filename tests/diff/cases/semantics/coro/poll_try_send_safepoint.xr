@@ -1,0 +1,47 @@
+// anchor: coro-poll-trysend-safepoint
+// A nonblocking send poll loop must yield when the channel is full, otherwise
+// deterministic single-worker AOT can starve the drainer coroutine forever.
+
+fn sent(r: SendResult) -> bool {
+    return match (r) {
+        SendResult.Sent -> true
+        _ -> false
+    }
+}
+
+fn spin_until_sent(ch: Channel<int>, out: Channel<int>) {
+    let ok = false
+    while (!ok) {
+        ok = sent(ch.trySend(42))
+    }
+    out.send(1)
+}
+
+fn drain_one(ch: Channel<int>) {
+    let ignored = ch.recv()
+}
+
+shared const data: Channel<int> = new Channel(1)
+shared const out: Channel<int> = new Channel(1)
+
+assert_eq(sent(data.trySend(7)), true)
+
+go spin_until_sent(data, out)
+go drain_one(data)
+
+let done = match (out.recvTimeout(1000)) {
+    Recv.Value(v) -> v
+    _ -> -1
+}
+let value = match (data.recvTimeout(1000)) {
+    Recv.Value(v) -> v
+    _ -> -1
+}
+
+data.close()
+out.close()
+
+assert_eq(done, 1)
+assert_eq(value, 42)
+print(done)
+print(value)

@@ -199,6 +199,8 @@ static inline XrValue xr_aot_chan_try_send_ready_f64(const XrAotContext *ctx, Xr
 
 XR_FUNC XrValue xr_aot_chan_try_recv(const XrAotContext *ctx, XrValue channel_value);
 XR_FUNC XrValue xr_aot_chan_try_recv_sync(XrValue channel_value);
+XR_FUNC XrAotResult xr_aot_poll_yield(const XrAotContext *ctx);
+XR_FUNC bool xr_aot_send_is_sent(XrValue send_value);
 XR_FUNC bool xr_aot_recv_is_value(XrValue recv_value);
 XR_FUNC XrValue xr_aot_recv_payload(XrValue recv_value);
 XR_FUNC XrValue xr_aot_chan_close(const XrAotContext *ctx, XrValue channel_value);
