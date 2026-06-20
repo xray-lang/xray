@@ -2521,6 +2521,10 @@ void xa_analyze_ast(XaAnalyzer *analyzer, AstNode *ast) {
     while (xa_propagate_receiver_mutations_for_ast(analyzer, ast)) {
     }
 
+    // Pass 1.5c: Recompute parameter escape summaries after classes and wrappers are linked.
+    while (xa_propagate_param_escape_summaries_for_ast(ctx, ast)) {
+    }
+
     // Pass 1.6: Detect classes that form reference cycles (cycle collector)
     xa_mark_cycle_candidates(analyzer);
 

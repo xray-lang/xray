@@ -80,6 +80,7 @@ static bool xa_expr_is_this(AstNode *node) {
 }
 
 typedef struct XaParamEscapeSummary {
+    XrType **param_types;
     const char **param_names;
     int param_count;
     uint8_t *escapes;
@@ -165,19 +166,67 @@ static int xa_summary_expr_root_param_slot(XaParamEscapeSummary *summary, AstNod
 
 static bool xa_summary_method_stores_argument(const char *method_name, int slot);
 static XaSymbolLinks *xa_summary_function_links(XaParamEscapeSummary *summary, AstNode *callee);
+static XrClassInfo *xa_type_class_info(XrType *type);
+static XrClassInfo *xa_summary_type_class_info(XaParamEscapeSummary *summary, XrType *type);
 static XaSymbol *xa_receiver_method_symbol_for_call(XrClassInfo *receiver_info, AstNode *object,
                                                     const char *method_name);
 static void xa_summary_mark_expr(XaParamEscapeSummary *summary, AstNode *expr);
 static void xa_summary_walk(XaParamEscapeSummary *summary, AstNode *node);
 
+static XrClassInfo *xa_summary_type_class_info(XaParamEscapeSummary *summary, XrType *type) {
+    XrClassInfo *info = xa_type_class_info(type);
+    if (info || !summary || !summary->ctx || !summary->ctx->analyzer || !type)
+        return info;
+    const char *class_name = xr_type_get_class_name(type);
+    if (!class_name)
+        return NULL;
+    XaSymbol *sym = xa_scope_lookup(summary->ctx->analyzer->global_scope, class_name);
+    XaSymbolLinks *links = sym ? xa_analyzer_get_links(summary->ctx->analyzer, sym) : NULL;
+    return links ? links->class_info : NULL;
+}
+
+static XrClassInfo *xa_summary_expr_class_info(XaParamEscapeSummary *summary, AstNode *node) {
+    if (!summary || !node)
+        return NULL;
+    if (xa_expr_is_this(node))
+        return summary->receiver_info;
+    switch (node->type) {
+        case AST_VARIABLE: {
+            int slot = xa_summary_param_slot(summary, node->as.variable.name);
+            if (slot < 0 || slot >= summary->param_count || !summary->param_types)
+                return NULL;
+            return xa_summary_type_class_info(summary, summary->param_types[slot]);
+        }
+        case AST_MEMBER_ACCESS: {
+            XrClassInfo *owner_info =
+                xa_summary_expr_class_info(summary, node->as.member_access.object);
+            if (!owner_info)
+                return NULL;
+            XaSymbol *member = xa_class_info_lookup_member(owner_info, node->as.member_access.name);
+            if (!member || (member->kind != XA_SYM_FIELD && member->kind != XA_SYM_PROPERTY))
+                return NULL;
+            return xa_summary_type_class_info(summary, member->links.type);
+        }
+        case AST_GROUPING:
+            return xa_summary_expr_class_info(summary, node->as.grouping);
+        case AST_FORCE_UNWRAP:
+            return xa_summary_expr_class_info(summary, node->as.unary.operand);
+        case AST_MOVE_EXPR:
+            return xa_summary_expr_class_info(summary, node->as.move_expr.expr);
+        default:
+            return NULL;
+    }
+}
+
 static XaSymbolLinks *xa_summary_receiver_method_links(XaParamEscapeSummary *summary,
                                                        AstNode *callee) {
-    if (!summary || !summary->ctx || !summary->receiver_info || !callee ||
-        callee->type != AST_MEMBER_ACCESS)
+    if (!summary || !summary->ctx || !callee || callee->type != AST_MEMBER_ACCESS)
         return NULL;
     MemberAccessNode *ma = &callee->as.member_access;
-    XaSymbol *method_sym =
-        xa_receiver_method_symbol_for_call(summary->receiver_info, ma->object, ma->name);
+    XrClassInfo *target_info = xa_summary_expr_class_info(summary, ma->object);
+    XaSymbol *method_sym = target_info ? xa_class_info_lookup_member(target_info, ma->name) : NULL;
+    if (!method_sym || method_sym->kind != XA_SYM_METHOD)
+        return NULL;
     return method_sym ? xa_analyzer_get_links(summary->ctx->analyzer, method_sym) : NULL;
 }
 
@@ -636,15 +685,16 @@ static void xa_summary_walk(XaParamEscapeSummary *summary, AstNode *node) {
 }
 
 static bool xa_symbol_links_set_param_escape_summary(XaInferContext *ctx, XaSymbolLinks *links,
-                                                     const char **param_names, int param_count,
-                                                     XrType *return_type, AstNode *body,
-                                                     XrClassInfo *receiver_info) {
+                                                     XrType **param_types, const char **param_names,
+                                                     int param_count, XrType *return_type,
+                                                     AstNode *body, XrClassInfo *receiver_info) {
     if (!links || param_count <= 0 || !body)
         return false;
     uint8_t *escapes = xr_calloc((size_t) param_count, sizeof(uint8_t));
     if (!escapes)
         return false;
-    XaParamEscapeSummary summary = {.param_names = param_names,
+    XaParamEscapeSummary summary = {.param_types = param_types,
+                                    .param_names = param_names,
                                     .param_count = param_count,
                                     .escapes = escapes,
                                     .return_type = return_type,
@@ -949,6 +999,85 @@ XR_FUNC bool xa_propagate_receiver_mutations_for_ast(XaAnalyzer *analyzer, AstNo
     }
 }
 
+static bool xa_propagate_function_param_escape_summary(XaInferContext *ctx, AstNode *node) {
+    if (!ctx || !node || node->type != AST_FUNCTION_DECL)
+        return false;
+    FunctionDeclNode *fn = &node->as.function_decl;
+    if (!fn->name)
+        return false;
+    XaSymbol *sym = xa_scope_lookup(ctx->analyzer->current_scope, fn->name);
+    if (!sym && ctx->analyzer->global_scope)
+        sym = xa_scope_lookup(ctx->analyzer->global_scope, fn->name);
+    if (!sym || sym->kind != XA_SYM_FUNCTION)
+        return false;
+    XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
+    return xa_symbol_links_set_param_escape_summary(
+        ctx, links, links ? links->param_types : NULL, links ? links->param_names : NULL,
+        links ? links->param_count : 0, links ? links->return_type : NULL, fn->body, NULL);
+}
+
+static bool xa_propagate_class_param_escape_summaries(XaInferContext *ctx, AstNode *node) {
+    if (!ctx || !node || (node->type != AST_CLASS_DECL && node->type != AST_STRUCT_DECL))
+        return false;
+    ClassDeclNode *cls =
+        (node->type == AST_STRUCT_DECL) ? &node->as.struct_decl : &node->as.class_decl;
+    if (!cls->name)
+        return false;
+
+    XaSymbol *class_sym = xa_scope_lookup(ctx->analyzer->global_scope, cls->name);
+    XaSymbolLinks *class_links = class_sym ? xa_analyzer_get_links(ctx->analyzer, class_sym) : NULL;
+    XrClassInfo *info = class_links ? class_links->class_info : NULL;
+    if (!info)
+        return false;
+
+    bool changed = false;
+    xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_CLASS, node);
+    for (int i = 0; i < cls->method_count; i++) {
+        AstNode *method = cls->methods ? cls->methods[i] : NULL;
+        if (!method || method->type != AST_METHOD_DECL)
+            continue;
+        MethodDeclNode *md = &method->as.method_decl;
+        XaSymbol *method_sym = xa_class_info_lookup_member(info, md->name);
+        XaSymbolLinks *method_links =
+            method_sym ? xa_analyzer_get_links(ctx->analyzer, method_sym) : NULL;
+        if (!method_links)
+            continue;
+        if (xa_symbol_links_set_param_escape_summary(
+                ctx, method_links, method_links->param_types, method_links->param_names,
+                method_links->param_count, method_links->return_type, md->body, info)) {
+            changed = true;
+        }
+    }
+    xa_analyzer_exit_scope(ctx->analyzer);
+    return changed;
+}
+
+XR_FUNC bool xa_propagate_param_escape_summaries_for_ast(XaInferContext *ctx, AstNode *node) {
+    if (!ctx || !ctx->analyzer || !node)
+        return false;
+
+    bool changed = false;
+    switch (node->type) {
+        case AST_PROGRAM:
+            for (int i = 0; i < node->as.program.count; i++) {
+                if (xa_propagate_param_escape_summaries_for_ast(ctx,
+                                                                node->as.program.statements[i]))
+                    changed = true;
+            }
+            return changed;
+        case AST_EXPORT_STMT:
+            return xa_propagate_param_escape_summaries_for_ast(ctx,
+                                                               node->as.export_stmt.declaration);
+        case AST_FUNCTION_DECL:
+            return xa_propagate_function_param_escape_summary(ctx, node);
+        case AST_CLASS_DECL:
+        case AST_STRUCT_DECL:
+            return xa_propagate_class_param_escape_summaries(ctx, node);
+        default:
+            return false;
+    }
+}
+
 // Recursively collect all return types from a statement tree
 static void collect_return_types(XaInferContext *ctx, AstNode *node, XrType ***types, int *count,
                                  int *cap) {
@@ -1247,8 +1376,8 @@ void xa_visit_collect_function_decl_only(XaInferContext *ctx, AstNode *node) {
 
     // Store parameter names for LSP inlay hints
     xa_symbol_links_set_function_sig(links, param_types, param_names, fn->param_count, return_type);
-    xa_symbol_links_set_param_escape_summary(ctx, links, param_names, fn->param_count, return_type,
-                                             fn->body, NULL);
+    xa_symbol_links_set_param_escape_summary(ctx, links, param_types, param_names, fn->param_count,
+                                             return_type, fn->body, NULL);
 
     // Store generic type parameters and intersection-style constraint lists.
     if (fn->type_param_count > 0 && fn->type_params) {
@@ -1482,8 +1611,9 @@ void xa_visit_collect_function_body(XaInferContext *ctx, AstNode *node) {
     }
 
     if (links) {
-        xa_symbol_links_set_param_escape_summary(ctx, links, links->param_names, links->param_count,
-                                                 links->return_type, fn->body, NULL);
+        xa_symbol_links_set_param_escape_summary(ctx, links, links->param_types, links->param_names,
+                                                 links->param_count, links->return_type, fn->body,
+                                                 NULL);
     }
 
     // Infer return type for unannotated functions that always return same-shape objects.
@@ -2442,7 +2572,7 @@ skip_layout:
             // Store parameter info for LSP
             xa_symbol_links_set_function_sig(method_links, param_types, param_names,
                                              md->param_count, ret_type);
-            xa_symbol_links_set_param_escape_summary(ctx, method_links, param_names,
+            xa_symbol_links_set_param_escape_summary(ctx, method_links, param_types, param_names,
                                                      md->param_count, ret_type, md->body, info);
 
             // Store generic type parameters for the method.  Method-level
@@ -2533,9 +2663,9 @@ skip_layout:
             xa_visit_collect(ctx, md->body);
 
         if (mlinks) {
-            xa_symbol_links_set_param_escape_summary(ctx, mlinks, mlinks->param_names,
-                                                     mlinks->param_count, mlinks->return_type,
-                                                     md->body, info);
+            xa_symbol_links_set_param_escape_summary(ctx, mlinks, mlinks->param_types,
+                                                     mlinks->param_names, mlinks->param_count,
+                                                     mlinks->return_type, md->body, info);
         }
 
         xa_analyzer_exit_scope(ctx->analyzer);
@@ -2556,8 +2686,8 @@ skip_layout:
             if (!method_links)
                 continue;
             if (xa_symbol_links_set_param_escape_summary(
-                    ctx, method_links, method_links->param_names, method_links->param_count,
-                    method_links->return_type, md->body, info)) {
+                    ctx, method_links, method_links->param_types, method_links->param_names,
+                    method_links->param_count, method_links->return_type, md->body, info)) {
                 changed = true;
             }
         }
