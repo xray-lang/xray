@@ -799,8 +799,8 @@ static int cmd_build_native(const char *input, const char *output, const char *c
                             const char *opt_flag, const char *cpu, bool c_only, bool strip,
                             bool debug_symbols, const char *sysroot, bool verbose,
                             bool dump_xaot_plan, bool dump_link_manifest, bool dump_link_command,
-                            bool keep_c, const char *cache_dir_arg, bool rebuild, bool lto,
-                            const XrCliBuildTarget *target,
+                            const char *c_header, bool keep_c, const char *cache_dir_arg,
+                            bool rebuild, bool lto, const XrCliBuildTarget *target,
                             const XrCliToolchainPlan *toolchain_plan);
 
 /* ========== CLI Entry Point ========== */
@@ -825,6 +825,7 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
     bool dump_xaot_plan = xr_cli_opt_bool(&inv->options, "dump-xaot-plan");
     bool dump_link_manifest = xr_cli_opt_bool(&inv->options, "dump-link-manifest");
     bool dump_link_command = xr_cli_opt_bool(&inv->options, "dump-link-command");
+    const char *c_header = xr_cli_opt_string(&inv->options, "c-header", NULL);
     bool keep_c = xr_cli_opt_bool(&inv->options, "keep-c");
     const char *cache_dir_arg = xr_cli_opt_string(&inv->options, "cache-dir", NULL);
     bool rebuild = xr_cli_opt_bool(&inv->options, "rebuild");
@@ -867,6 +868,10 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
         fprintf(stderr, "Error: --toolchain/--zig/--keep-c require --native\n");
         return 2;
     }
+    if (c_header && !native_mode) {
+        fprintf(stderr, "Error: --c-header requires --native\n");
+        return 2;
+    }
     if ((xr_cli_opt_present(&inv->options, "cache-dir") || rebuild) && !native_mode) {
         fprintf(stderr, "Error: --cache-dir/--rebuild require --native\n");
         return 2;
@@ -901,8 +906,8 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
     if (native_mode) {
         return cmd_build_native(input_file, output_file, cc, opt_flag, cpu, c_only, strip_symbols,
                                 debug_symbols, sysroot, verbose, dump_xaot_plan, dump_link_manifest,
-                                dump_link_command, keep_c, cache_dir_arg, rebuild, lto, &target,
-                                &toolchain_plan);
+                                dump_link_command, c_header, keep_c, cache_dir_arg, rebuild, lto,
+                                &target, &toolchain_plan);
     }
     return cmd_build_bytecode(input_file, output_file, cc, opt_flag, c_only, strip_symbols,
                               debug_symbols, sysroot);
@@ -1180,12 +1185,33 @@ static int xaot_compile_source_cached(const XrCliToolchainPlan *plan,
     return ret;
 }
 
+static int xaot_write_c_export_header(const XaotBuildResult *result, const char *path) {
+    FILE *f;
+
+    if (!path || !path[0])
+        return 0;
+    f = fopen(path, "w");
+    if (!f) {
+        fprintf(stderr, "Error: cannot create '%s'\n", path);
+        return 1;
+    }
+    fputs(result && result->c_export_header ? result->c_export_header
+                                            : "/* No @c_export symbols. */\n",
+          f);
+    if (fclose(f) != 0) {
+        fprintf(stderr, "Error: failed to write '%s'\n", path);
+        return 1;
+    }
+    printf("Generated header: %s\n", path);
+    return 0;
+}
+
 static int cmd_build_native(const char *input, const char *output, const char *cc,
                             const char *opt_flag, const char *cpu, bool c_only, bool strip,
                             bool debug_symbols, const char *sysroot, bool verbose,
                             bool dump_xaot_plan, bool dump_link_manifest, bool dump_link_command,
-                            bool keep_c, const char *cache_dir_arg, bool rebuild, bool lto,
-                            const XrCliBuildTarget *target,
+                            const char *c_header, bool keep_c, const char *cache_dir_arg,
+                            bool rebuild, bool lto, const XrCliBuildTarget *target,
                             const XrCliToolchainPlan *toolchain_plan) {
     XaotBuildResult aot_result;
     int rc = xaot_build(input, dump_xaot_plan, &aot_result);
@@ -1277,6 +1303,11 @@ static int cmd_build_native(const char *input, const char *output, const char *c
     int n_sources = aot_result.n_sources;
     if (n_sources <= 0 || !aot_result.sources) {
         fprintf(stderr, "Error: AOT build produced no C sources\n");
+        xaot_build_result_free(&aot_result);
+        return 1;
+    }
+
+    if (xaot_write_c_export_header(&aot_result, c_header) != 0) {
         xaot_build_result_free(&aot_result);
         return 1;
     }

@@ -84,6 +84,11 @@ XR_FUNC void xi_cgen_main(XiCgenCtx *ctx, FILE *out, struct XiModule **modules, 
 XR_FUNC void xi_cgen_module_tu(XiCgenCtx *ctx, FILE *out, struct XiModule **modules, int nmodules,
                                int mod_index, int entry_index);
 
+/* Emit a public C header for every @c_export wrapper in a bundle.  The header
+ * contains only C ABI declarations, not generated runtime internals. */
+XR_FUNC void xi_cgen_c_export_header(XiCgenCtx *ctx, FILE *out, struct XiModule **modules,
+                                     int nmodules, const char *guard);
+
 /* Emit static const xrt_str_t definitions for every string literal
  * interned while emitting module bodies.  Multi-module flow: buffer
  * module/main output in a memstream, emit these defs after the header,

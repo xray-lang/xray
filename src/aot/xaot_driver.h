@@ -102,6 +102,7 @@ typedef struct {
     XaotModuleSource *sources; /* per-module generated C (malloc'd array) */
     int n_sources;             /* number of generated C translation units */
     char *plan_dump;           /* stable AOT prepare plan dump (malloc'd) */
+    char *c_export_header;     /* public @c_export C declarations (malloc'd) */
     XaotLinkManifest link_manifest;
     int total_compiled;      /* number of functions successfully transpiled */
     int total_aot;           /* total AOT-eligible functions found */

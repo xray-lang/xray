@@ -293,7 +293,7 @@ print(add(19, 23))        // xray 内部仍是普通函数调用
 - 同一个 AOT bundle 中每个 `@c_export` 符号名必须唯一；重复符号是编译错误。
 - 当前支持的导出边界类型是 `bool`、精确整数、`float32` / `float64`、`uintsize` / `intsize`、`RawPtr<T>`、`RawMut<T>`，以及 `()` 返回。
 - 当前不导出 xray 管理值（如 `string`、class instance、Array/Map/Set、普通 closure）或 by-value aggregate；需要与 C 共享结构体内存时，先通过 `RawPtr<T>` / `RawMut<T>` 传递地址。
-- `@c_export` 只定义函数 ABI wrapper，不定义共享库打包、头文件生成或运行时初始化策略；这些由 build/embedder 层决定。
+- `@c_export` 只定义函数 ABI wrapper；`xray build --native --c-header FILE` 可为这些 wrapper 生成 C 原型头文件。共享库打包与运行时初始化策略仍由 build/embedder 层决定。
 
 ### 5.3 `class` 声明
 
@@ -1137,7 +1137,7 @@ Rules:
 - Each `@c_export` symbol name must be unique within one AOT bundle; duplicate symbols are compile errors.
 - Currently supported export boundary types are `bool`, sized integers, `float32` / `float64`, `uintsize` / `intsize`, `RawPtr<T>`, `RawMut<T>`, and `()` returns.
 - Managed xray values such as `string`, class instances, Array/Map/Set, ordinary closures, and by-value aggregates are not exported directly today. To share struct memory with C, pass an address through `RawPtr<T>` / `RawMut<T>`.
-- `@c_export` defines only the function ABI wrapper; shared-library packaging, header generation, and runtime initialization policy are build/embedder concerns.
+- `@c_export` defines only the function ABI wrapper; `xray build --native --c-header FILE` can emit a C prototype header for those wrappers. Shared-library packaging and runtime initialization policy remain build/embedder concerns.
 
 ### 5.3 `class` declaration
 
