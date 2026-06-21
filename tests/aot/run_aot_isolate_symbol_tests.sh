@@ -6,7 +6,7 @@
 #
 # Environment:
 #   XRAY_AOT_ISOLATE_JOBS  parallel workers (default: auto, capped by
-#                          XRAY_AOT_ISOLATE_MAX_AUTO_JOBS=4;
+#                          XRAY_AOT_ISOLATE_MAX_AUTO_JOBS=5;
 #                          XRAY_TEST_JOBS also works)
 #   XRAY_AOT_ISOLATE_BUILD_CACHE_DIR
 #                          persistent AOT object cache for cold symbol-gate
@@ -78,7 +78,7 @@ configure_jobs() {
     case "$requested" in
         ""|auto)
             JOBS="$(detect_cores)"
-            max_auto="${XRAY_AOT_ISOLATE_MAX_AUTO_JOBS:-4}"
+            max_auto="${XRAY_AOT_ISOLATE_MAX_AUTO_JOBS:-5}"
             if is_uint "$max_auto" && [ "$max_auto" -gt 0 ] && [ "$JOBS" -gt "$max_auto" ]; then
                 JOBS="$max_auto"
             fi
