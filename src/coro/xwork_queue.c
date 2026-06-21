@@ -14,6 +14,7 @@
 
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
+#include "../runtime/core/xr_runtime_core.h"
 #include "../runtime/gc/xsystem_heap.h"
 #include "../runtime/object/xexception.h"
 #include "../runtime/object/xnative_type.h"
@@ -134,9 +135,7 @@ static bool shard_pop_head(XrWorkQueueShard *shard, XrValue *out) {
 }
 
 static XrRuntime *work_queue_runtime(XrWorkQueue *q) {
-    if (!q || !q->isolate)
-        return NULL;
-    return (XrRuntime *) q->isolate->scheduler_runtime;
+    return q ? (XrRuntime *) q->scheduler : NULL;
 }
 
 static bool work_queue_runtime_can_wake(XrRuntime *runtime) {
@@ -417,8 +416,9 @@ static XrValue work_queue_try_pop_raw(XrWorkQueue *q, int64_t worker_hint, bool 
     return xr_null();
 }
 
-XrWorkQueue *xr_work_queue_new(XrayIsolate *X, uint32_t shard_count, uint32_t shard_capacity) {
-    if (!X || !xr_isolate_get_sys_heap(X))
+XrWorkQueue *xr_work_queue_new(XrRuntimeCore *core, XrRuntime *scheduler, uint32_t shard_count,
+                               uint32_t shard_capacity) {
+    if (!core || !core->sys_heap)
         return NULL;
     if (shard_count == 0)
         shard_count = XR_WORK_QUEUE_DEFAULT_SHARDS;
@@ -430,8 +430,8 @@ XrWorkQueue *xr_work_queue_new(XrayIsolate *X, uint32_t shard_count, uint32_t sh
         shard_capacity = XR_WORK_QUEUE_MAX_CAPACITY;
 
     size_t alloc_size = sizeof(XrWorkQueue) + (size_t) shard_count * sizeof(XrWorkQueueShard);
-    XrWorkQueue *q = (XrWorkQueue *) xr_sysheap_alloc_shared(xr_isolate_get_sys_heap(X), alloc_size,
-                                                             XR_TWORKQUEUE);
+    XrWorkQueue *q =
+        (XrWorkQueue *) xr_sysheap_alloc_shared(core->sys_heap, alloc_size, XR_TWORKQUEUE);
     if (!q)
         return NULL;
 
@@ -447,7 +447,9 @@ XrWorkQueue *xr_work_queue_new(XrayIsolate *X, uint32_t shard_count, uint32_t sh
     xr_amutex_init(&q->wait_lock);
     q->wait_first = NULL;
     q->wait_last = NULL;
-    q->isolate = X;
+    q->core = core;
+    q->scheduler = scheduler;
+    q->vm_bridge_isolate = NULL;
 
     for (uint32_t i = 0; i < shard_count; i++) {
         if (!shard_init(&q->shards[i], shard_capacity)) {
@@ -458,6 +460,11 @@ XrWorkQueue *xr_work_queue_new(XrayIsolate *X, uint32_t shard_count, uint32_t sh
         }
     }
     return q;
+}
+
+void xr_work_queue_set_vm_bridge_isolate(XrWorkQueue *q, XrayIsolate *isolate) {
+    if (q)
+        q->vm_bridge_isolate = isolate;
 }
 
 bool xr_work_queue_push(XrayIsolate *X, XrWorkQueue *q, XrValue value, int64_t shard_hint) {
@@ -736,7 +743,9 @@ static XrValue work_queue_construct(XrayIsolate *isolate, XrValue receiver, XrVa
     if (nargs >= 2 && XR_IS_INT(args[1]))
         capacity = sanitize_capacity(XR_TO_INT(args[1]));
 
-    XrWorkQueue *q = xr_work_queue_new(isolate, shards, capacity);
+    XrWorkQueue *q = xr_work_queue_new(xr_isolate_get_runtime_core(isolate),
+                                       xr_isolate_get_scheduler_runtime(isolate), shards, capacity);
+    xr_work_queue_set_vm_bridge_isolate(q, isolate);
     if (!q) {
         XrValue exc =
             xr_exception_newf(isolate, XR_ERR_OUT_OF_MEMORY, "WorkQueue allocation failed");
