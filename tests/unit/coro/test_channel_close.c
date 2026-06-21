@@ -66,6 +66,7 @@ static bool close_fixture_init(CloseFixture *f) {
     f->saved_worker = tls_current_worker;
     f->saved_machine = tls_current_machine;
 
+    f->runtime.core = &f->core;
     f->runtime.isolate = &f->isolate_storage;
     f->runtime.worker_count = 1;
     f->runtime.workers = &f->worker;
@@ -108,6 +109,7 @@ static bool wake_route_fixture_init(WakeRouteFixture *f) {
     f->saved_worker = tls_current_worker;
     f->saved_machine = tls_current_machine;
 
+    f->runtime.core = &f->core;
     f->runtime.isolate = &f->isolate_storage;
     f->runtime.worker_count = WAKE_ROUTE_WORKERS;
     f->runtime.workers = f->workers;

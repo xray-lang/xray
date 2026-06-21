@@ -67,6 +67,7 @@ typedef struct SchedulerFixture {
 static void fixture_init_runtime(XrRuntime *runtime, XrayIsolate *isolate, XrWorker *workers,
                                  XrMachine *machines, int worker_count) {
     memset(runtime, 0, sizeof(*runtime));
+    runtime->core = isolate ? isolate->core_rt : NULL;
     runtime->isolate = isolate;
     runtime->worker_count = worker_count;
     runtime->workers = workers;
@@ -449,6 +450,7 @@ TEST(deterministic_runtime_forces_single_worker_and_virtual_clock) {
     isolate.vm.runtime = runtime;
 
     ASSERT_TRUE(xr_runtime_deterministic_mode(runtime));
+    ASSERT_EQ_PTR(runtime->core, &core);
     ASSERT_EQ_INT(runtime->worker_count, 1);
     ASSERT_EQ_INT((int) runtime->workers[0].p.rng_state, 12345);
     ASSERT_EQ_INT((int) xr_runtime_now_ticks(runtime), 0);

@@ -89,6 +89,7 @@ TEST(close_without_workers_keeps_waiter_blocked) {
 
     XrRuntime runtime;
     memset(&runtime, 0, sizeof(runtime));
+    runtime.core = &f.core;
     runtime.isolate = &f.isolate_storage;
     runtime.worker_count = 0;
     runtime.workers = NULL;

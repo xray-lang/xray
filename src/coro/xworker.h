@@ -25,11 +25,13 @@
 #include <stdatomic.h>
 #include <stdbool.h>
 #include "../runtime/gc/xgc_internal.h"  // XrLocalAlloc
-#include "xnetpoll.h"                    // XrNetpoll
-#include "xproc.h"                       // XrProc, XrRunQueue
-#include "xmachine.h"                    // XrMachine
-#include "xbalance.h"                    // XrMigrationPath
-#include "xcoro_abi.h"                   // XrCoroRunResult
+#include "../runtime/gc/xsystem_heap.h"  // XrSystemHeap
+#include "../runtime/core/xr_runtime_core.h"
+#include "xnetpoll.h"   // XrNetpoll
+#include "xproc.h"      // XrProc, XrRunQueue
+#include "xmachine.h"   // XrMachine
+#include "xbalance.h"   // XrMigrationPath
+#include "xcoro_abi.h"  // XrCoroRunResult
 
 // Forward decl: full definition in src/io/xio_runtime.h. Coro is the
 // lower layer and must not include the IO header.
@@ -226,9 +228,14 @@ typedef struct XrInjectQueue {
 /* ========== Runtime Structure ========== */
 
 typedef struct XrRuntime {
+    /* === VM-neutral Runtime Core === */
+    XrRuntimeCore *core;
+
     /* === Workers (P) === */
     XrWorker *workers;
     int worker_count;
+
+    /* VM execution bridge. Scheduler-owned resources must use core instead. */
     XrayIsolate *isolate;
 
     /* === Machines (M) — pre-allocated 1:1 with Workers === */
@@ -335,6 +342,22 @@ typedef struct XrRuntime {
         bool warned;
     } sysmon_state[XR_MAX_WORKERS];
 } XrRuntime;
+
+typedef XrRuntime XrSchedulerRuntime;
+
+static inline XrRuntimeCore *xr_runtime_get_core(const XrRuntime *runtime) {
+    return runtime ? runtime->core : NULL;
+}
+
+static inline XrSystemHeap *xr_runtime_get_sys_heap(const XrRuntime *runtime) {
+    XrRuntimeCore *core = xr_runtime_get_core(runtime);
+    return core ? core->sys_heap : NULL;
+}
+
+static inline struct XrCoroStructPool *xr_runtime_get_coro_pool(const XrRuntime *runtime) {
+    XrSystemHeap *heap = xr_runtime_get_sys_heap(runtime);
+    return heap ? heap->coro_pool : NULL;
+}
 
 static inline uint64_t xr_runtime_worker_bit(int worker_id) {
     if (worker_id < 0 || worker_id >= 64)
