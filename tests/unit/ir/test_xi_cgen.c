@@ -4778,14 +4778,16 @@ TEST(cgen_coro_task_status_uses_native_enum_status) {
     assert(contains(code, "xr_aot_task_poll(ctx,") && "Task.poll must use the AOT Task bridge");
     assert(contains(code, "xr_aot_task_await_result(ctx,") &&
            "Task.awaitResult must use the AOT TaskResult bridge");
-    assert(contains(code, "xr_aot_task_done(NULL,") &&
-           "sync AOT Task.done must use the AOT Task bridge");
-    assert(contains(code, "xr_aot_task_status(NULL,") &&
-           "sync AOT Task.status must use the AOT Task bridge");
-    assert(!contains(code, "xr_aot_bridge_value_to_xrt(xr_aot_task_status(NULL") &&
+    assert(contains(code, "xr_aot_task_done(&xrt_global_ctx,") &&
+           "sync AOT Task.done must use the global AOT context");
+    assert(contains(code, "xr_aot_task_status(&xrt_global_ctx,") &&
+           "sync AOT Task.status must use the global AOT context");
+    assert(!contains(code, "xr_aot_bridge_value_to_xrt(xr_aot_task_status(&xrt_global_ctx") &&
            "sync Task.status must already return AOT-native enum values");
-    assert(contains(code, "xr_aot_task_poll(NULL,") &&
-           "sync AOT Task.poll must use the AOT Task bridge");
+    assert(contains(code, "xr_aot_task_poll(&xrt_global_ctx,") &&
+           "sync AOT Task.poll must use the global AOT context");
+    assert(!contains(code, "xr_aot_task_poll(NULL,") &&
+           "sync AOT Task.poll must not lose runtime/builtin context");
     assert(!contains(code, "xrt_method_0(v") &&
            "Task.cancel must not fall back to AOT dynamic method dispatch");
     assert(!contains(code, "xrt_getprop(v") &&

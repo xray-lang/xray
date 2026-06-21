@@ -498,6 +498,7 @@ XR_FUNC void xr_multicore_destroy(struct XrayIsolate *X);
 XR_FUNC void xr_scheduler_ready(struct XrRuntime *runtime, XrCoroutine *gp, bool next);
 XR_FUNC void xr_coro_ready(struct XrayIsolate *X, XrCoroutine *gp, bool next);
 XR_FUNC XrCoroutine *xr_current_coro(struct XrayIsolate *X);
+XR_FUNC void xr_coro_wake_waiter_runtime(struct XrRuntime *runtime, XrCoroutine *coro);
 XR_FUNC void xr_coro_wake_waiter(struct XrayIsolate *X, XrCoroutine *coro);
 XR_FUNC void xr_coro_wake_scope_waiter(struct XrayIsolate *X, XrCoroutine *coro);
 

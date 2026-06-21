@@ -389,6 +389,7 @@ XR_FUNC void xr_multicore_destroy(XrayIsolate *X);
 // Wake mechanism
 XR_FUNC void xr_coro_ready(XrayIsolate *X, XrCoroutine *gp, bool next);
 XR_FUNC XrCoroutine *xr_current_coro(XrayIsolate *X);
+XR_FUNC void xr_coro_wake_waiter_runtime(XrRuntime *runtime, XrCoroutine *coro);
 XR_FUNC void xr_coro_wake_waiter(XrayIsolate *X, XrCoroutine *coro);
 
 // Multicore runtime channel wake (auto fallback to single-thread mode)

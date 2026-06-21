@@ -1664,16 +1664,17 @@ static bool xicgen_emit_enum_method(XiCgenCtx *ctx, FILE *out, const XiValue *v,
     return true;
 }
 
-static bool xicgen_emit_task_method(XiCgenCtx *ctx, FILE *out, const XiValue *v, const char *method,
-                                    uint16_t nargs) {
+static bool xicgen_emit_task_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                                    const char *method, uint16_t nargs) {
     if (v->op != XI_CALL_METHOD || !xi_value_type_is_task(v->args[0]))
         return false;
+    const char *aot_ctx = xicgen_aot_context_expr(ctx, f);
     if (nargs == 0 && method && strcmp(method, "cancel") == 0) {
         if (cg_rep(v) == XR_REP_I64)
             fprintf(out, "XR_TO_INT(");
         else if (cg_rep(v) == XR_REP_F64)
             fprintf(out, "XR_TO_FLOAT(");
-        fprintf(out, "xr_aot_task_cancel(NULL, ");
+        fprintf(out, "xr_aot_task_cancel(%s, ", aot_ctx);
         emit_vref(out, v->args[0]);
         fprintf(out, ")");
         if (cg_rep(v) == XR_REP_I64 || cg_rep(v) == XR_REP_F64)
@@ -1685,7 +1686,7 @@ static bool xicgen_emit_task_method(XiCgenCtx *ctx, FILE *out, const XiValue *v,
             fprintf(out, "XR_TO_FLOAT(");
         if (cg_rep(v) == XR_REP_TAGGED)
             fprintf(out, "xr_aot_bridge_value_to_xrt(");
-        fprintf(out, "xr_aot_task_poll(NULL, ");
+        fprintf(out, "xr_aot_task_poll(%s, ", aot_ctx);
         emit_vref(out, v->args[0]);
         fprintf(out, ")");
         if (cg_rep(v) == XR_REP_TAGGED)
@@ -2177,7 +2178,7 @@ static void xicgen_call_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
         return;
     if (xicgen_emit_enum_method(ctx, out, v, method))
         return;
-    if (xicgen_emit_task_method(ctx, out, v, method, nargs))
+    if (xicgen_emit_task_method(ctx, out, f, v, method, nargs))
         return;
     if (xicgen_emit_direct_method(ctx, out, f, v, prefix, mfunc, method_prefix))
         return;
@@ -2654,7 +2655,7 @@ static void xicgen_load_field(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
             fprintf(out, "XR_TO_INT(");
         else if (cg_rep(v) == XR_REP_F64)
             fprintf(out, "XR_TO_FLOAT(");
-        fprintf(out, "%s(NULL, ", task_helper);
+        fprintf(out, "%s(%s, ", task_helper, xicgen_aot_context_expr(ctx, f));
         emit_vref(out, v->args[0]);
         fprintf(out, ")");
         if (cg_rep(v) == XR_REP_I64 || cg_rep(v) == XR_REP_F64)

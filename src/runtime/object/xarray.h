@@ -82,6 +82,8 @@ XR_FUNC XrArray *xr_array_with_capacity(struct XrCoroutine *coro, int capacity);
 /* Empty ANY array on the shared (system) heap, for cross-coroutine collection
  * points pushed into by children across workers (see definition). */
 struct XrayIsolate;
+struct XrRuntimeCore;
+XR_FUNC XrArray *xr_array_new_shared_core(struct XrRuntimeCore *core, int capacity);
 XR_FUNC XrArray *xr_array_new_shared(struct XrayIsolate *X, int capacity);
 XR_FUNC XrArray *xr_array_with_capacity_typed(struct XrCoroutine *coro, int capacity,
                                               XrArrayElemType elem_type);

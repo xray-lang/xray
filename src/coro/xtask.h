@@ -56,6 +56,7 @@ struct XrArray;
 struct XrayIsolate;
 struct XrChannel;
 struct XrRuntime;
+struct XrRuntimeCore;
 
 /* ========== Task State (6-state machine) ========== */
 /*
@@ -264,7 +265,7 @@ XR_FUNC void xr_task_fire_completion(struct XrTask *task);
 /* Read the completed task's result, deep-copying it into dst_coro's heap
  * (and caching the copy) under the await lock. Serializes concurrent
  * awaiters of the same task against torn 16-byte result writes. */
-XR_FUNC XrValue xr_task_consume_result_copy(struct XrayIsolate *X, struct XrTask *task,
+XR_FUNC XrValue xr_task_consume_result_copy(struct XrRuntimeCore *core, struct XrTask *task,
                                             struct XrCoroutine *dst_coro);
 
 // Bidirectional link: a fails → cancel b, b fails → cancel a
@@ -277,6 +278,7 @@ XR_FUNC void xr_task_unlink(struct XrTask *a, struct XrTask *b);
 XR_FUNC void xr_task_add_completion(struct XrTask *task, struct XrCompletionNode *node);
 
 // Wake the waiter registered on this task (replaces xr_coro_wake_waiter for Task path)
+XR_FUNC void xr_task_wake_waiter_runtime(struct XrRuntime *runtime, struct XrTask *task);
 XR_FUNC void xr_task_wake_waiter(struct XrayIsolate *X, struct XrTask *task);
 
 // Clear coroutine-owned await registrations from pending tasks.

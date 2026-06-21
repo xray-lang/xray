@@ -69,15 +69,12 @@ XR_FUNC XrCoroBlockResult xr_coro_chan_recv(struct XrCoroutine *coro, XrChannel 
 XR_FUNC XrCoroBlockResult xr_coro_await_task_resume(struct XrCoroutine *coro, struct XrTask *task);
 XR_FUNC XrCoroBlockResult xr_coro_await_task(struct XrCoroutine *coro, struct XrTask *task,
                                              int64_t timeout_ms);
-XR_FUNC XrValue xr_coro_await_result_value(struct XrayIsolate *isolate,
-                                           struct XrCoroutine *dst_coro, struct XrTask *task,
-                                           bool discard_result);
-XR_FUNC XrCoroBlockResult xr_coro_await_task_resume_slot(struct XrayIsolate *isolate,
-                                                         struct XrCoroutine *coro,
+XR_FUNC XrValue xr_coro_await_result_value(struct XrRuntimeCore *core, struct XrCoroutine *dst_coro,
+                                           struct XrTask *task, bool discard_result);
+XR_FUNC XrCoroBlockResult xr_coro_await_task_resume_slot(struct XrCoroutine *coro,
                                                          struct XrTask *task, XrSlotRef result_slot,
                                                          bool discard_result);
-XR_FUNC XrCoroBlockResult xr_coro_await_task_slot(struct XrayIsolate *isolate,
-                                                  struct XrCoroutine *coro, struct XrTask *task,
+XR_FUNC XrCoroBlockResult xr_coro_await_task_slot(struct XrCoroutine *coro, struct XrTask *task,
                                                   XrSlotRef result_slot, int64_t timeout_ms,
                                                   bool discard_result);
 XR_FUNC XrCoroBlockResult xr_coro_await_all_tasks(struct XrCoroutine *coro, struct XrArray *tasks);
@@ -103,12 +100,10 @@ XR_FUNC void xr_coro_rollback_reversible_block(struct XrCoroutine *coro,
 XR_FUNC bool xr_coro_finalize_blocked_suspend(struct XrCoroutine *coro);
 XR_FUNC void xr_coro_finish_backend_resume_tokens(struct XrCoroutine *coro, int resume_status);
 XR_FUNC XrCoroBlockResult xr_coro_sleep(struct XrCoroutine *coro, int64_t milliseconds);
-XR_FUNC XrCoroBlockResult xr_coro_select_block(struct XrayIsolate *isolate,
-                                               struct XrCoroutine *coro,
+XR_FUNC XrCoroBlockResult xr_coro_select_block(struct XrCoroutine *coro,
                                                const XrValue *channel_values, int ch_count,
                                                const XrSlotRef *result_slots, int case_count);
-XR_FUNC XrCoroBlockResult xr_coro_scope_enter(struct XrayIsolate *isolate, struct XrCoroutine *coro,
-                                              uint8_t scope_mode);
+XR_FUNC XrCoroBlockResult xr_coro_scope_enter(struct XrCoroutine *coro, uint8_t scope_mode);
 XR_FUNC XrCoroBlockResult xr_coro_scope_exit(struct XrCoroutine *coro, uint8_t scope_mode);
 
 #endif  // XBLOCK_H

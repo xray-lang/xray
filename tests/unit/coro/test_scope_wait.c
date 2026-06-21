@@ -100,7 +100,7 @@ TEST(scope_wait_token_tracks_block_wake_and_exit) {
     init_running_scope_coro(&owner, &owner_ext, 501, &f.isolate_storage);
     init_running_scope_coro(&child, &child_ext, 502, &f.isolate_storage);
 
-    XrCoroBlockResult entered = xr_coro_scope_enter(&f.isolate_storage, &owner, XR_SCOPE_WAIT);
+    XrCoroBlockResult entered = xr_coro_scope_enter(&owner, XR_SCOPE_WAIT);
     ASSERT_EQ_INT((int) entered.kind, (int) XR_CORO_BLOCK_READY);
     ASSERT_NOT_NULL(owner.current_scope);
 
@@ -144,7 +144,7 @@ TEST(scope_wait_token_resolves_after_published_block) {
     init_running_scope_coro(&owner, &owner_ext, 601, &f.isolate_storage);
     init_running_scope_coro(&child, &child_ext, 602, &f.isolate_storage);
 
-    XrCoroBlockResult entered = xr_coro_scope_enter(&f.isolate_storage, &owner, XR_SCOPE_WAIT);
+    XrCoroBlockResult entered = xr_coro_scope_enter(&owner, XR_SCOPE_WAIT);
     ASSERT_EQ_INT((int) entered.kind, (int) XR_CORO_BLOCK_READY);
 
     XrScopeContext *scope = owner.current_scope;

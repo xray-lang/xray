@@ -402,9 +402,14 @@ static inline void xr_scheduler_host_wake_coro_waiter(XrRuntime *runtime, XrCoro
         runtime->host.ops->wake_coro_waiter(runtime->host.ctx, coro);
 }
 
+XR_FUNC void xr_task_wake_waiter_runtime(XrRuntime *runtime, struct XrTask *task);
+
 static inline void xr_scheduler_host_wake_task_waiter(XrRuntime *runtime, struct XrTask *task) {
-    if (runtime && runtime->host.ops && runtime->host.ops->wake_task_waiter)
+    if (runtime && runtime->host.ops && runtime->host.ops->wake_task_waiter) {
         runtime->host.ops->wake_task_waiter(runtime->host.ctx, task);
+        return;
+    }
+    xr_task_wake_waiter_runtime(runtime, task);
 }
 
 static inline bool xr_scheduler_host_adopt_deferred_tasks(XrRuntime *runtime, struct XrTask *tasks,

@@ -17,6 +17,7 @@
 
 #include "xarray.h"
 #include "xstring.h"
+#include "../core/xr_runtime_core.h"
 #include "../xisolate_api.h"
 #include "../../base/xchecks.h"
 #include "../class/xclass.h"
@@ -162,8 +163,8 @@ void xr_array_init_inplace(XrArray *arr, int capacity, uint8_t elem_type) {
  * the array is freed by the owner's gc, underflowing the owner's byte counter
  * (and the data buffer would be reclaimed against the wrong heap). A shared
  * array carries no per-coro accounting and is reclaimed via xr_shared_destroy. */
-XrArray *xr_array_new_shared(struct XrayIsolate *X, int capacity) {
-    XrSystemHeap *heap = xr_isolate_get_sys_heap(X);
+XrArray *xr_array_new_shared_core(XrRuntimeCore *core, int capacity) {
+    XrSystemHeap *heap = core ? core->sys_heap : NULL;
     if (!heap)
         return NULL;
     XrArray *arr = (XrArray *) xr_sysheap_alloc_shared(heap, sizeof(XrArray), XR_TARRAY);
@@ -173,6 +174,10 @@ XrArray *xr_array_new_shared(struct XrayIsolate *X, int capacity) {
     XR_GC_SET_STORAGE(&arr->gc, XR_GC_STORAGE_SHARED);
     xr_shared_set_refc(&arr->gc, 1);
     return arr;
+}
+
+XrArray *xr_array_new_shared(struct XrayIsolate *X, int capacity) {
+    return xr_array_new_shared_core(xr_isolate_get_runtime_core(X), capacity);
 }
 
 XrArray *xr_array_from_values(struct XrCoroutine *coro, XrValue *elements, int count) {

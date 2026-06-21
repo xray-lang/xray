@@ -24,6 +24,7 @@
 #include "../../base/xutf8.h"
 #include "../xstrbuf.h"
 #include "xstringbuilder.h"
+#include "../core/xr_runtime_core.h"
 #include "../xisolate_api.h"
 #include "../xisolate_api.h"
 #include "../../base/xchecks.h"
@@ -433,53 +434,38 @@ XrString *xr_string_new(XrayIsolate *iso, const char *chars, size_t length) {
 
 // String interning (short/long separation)
 // Short strings (<=64B): global pool with rwlock
-// Long strings (>64B): coroutine heap allocation
-XrString *xr_string_intern(XrayIsolate *iso, const char *chars, size_t length, uint32_t hash) {
-    if (!iso) {
-        xr_log_warning("string", "string_intern: isolate is NULL");
-        abort();
+// Long strings (>64B): shared system-heap allocation
+XrString *xr_string_intern_core(XrRuntimeCore *core, const char *chars, size_t length,
+                                uint32_t hash) {
+    if (!core || !chars) {
+        xr_log_warning("string", "string_intern_core: core or chars is NULL");
+        return NULL;
     }
 
-    // Compute hash if not provided
     if (hash == 0) {
         hash = xr_string_hash(chars, length);
     }
 
-    // Long string: not interned, allocate as shared on system heap.
-    // Strings are immutable → safe for concurrent read by multiple coroutines.
-    // Lifetime managed by atomic shared-RC (xshared.h).
     if (length > XR_SHORT_STR_MAX) {
-        XrString *str = NULL;
-        if (xr_isolate_get_sys_heap(iso)) {
-            size_t total_size = sizeof(XrString) + length + 1;
-            str = (XrString *) xr_sysheap_alloc_shared(xr_isolate_get_sys_heap(iso), total_size,
-                                                       XR_TSTRING);
-            if (str) {
-                str->length = (uint32_t) length;
-                str->hash = hash;
-                memcpy(str->data, chars, length);
-                str->data[length] = '\0';
-                XR_STR_SET_LONG(str);
-                xr_shared_set_refc(&str->gc, 1);
-            }
-        } else {
-            // Fallback: coroutine heap (during early init before sys_heap)
-            str = string_alloc(iso, chars, length);
-            if (str) {
-                str->hash = hash;
-                XR_STR_SET_LONG(str);
-            }
+        XrSystemHeap *heap = core->sys_heap;
+        if (!heap)
+            return NULL;
+        size_t total_size = sizeof(XrString) + length + 1;
+        XrString *str = (XrString *) xr_sysheap_alloc_shared(heap, total_size, XR_TSTRING);
+        if (str) {
+            str->length = (uint32_t) length;
+            str->hash = hash;
+            memcpy(str->data, chars, length);
+            str->data[length] = '\0';
+            XR_STR_SET_LONG(str);
+            xr_shared_set_refc(&str->gc, 1);
         }
         return str;
     }
 
-    XrGlobalStringPool *pool = xr_isolate_get_string_pool(iso);
+    XrGlobalStringPool *pool = core->global_string_pool;
     if (!pool) {
-        // No global pool, fallback to normal allocation
-        XrString *s = string_alloc(iso, chars, length);
-        if (s)
-            s->hash = hash;
-        return s;
+        return NULL;
     }
 
     // Step 1: Read lock lookup
@@ -505,14 +491,22 @@ XrString *xr_string_intern(XrayIsolate *iso, const char *chars, size_t length, u
     XrString *str = global_pool_insert_unlocked(pool, chars, length, hash);
     xr_rwlock_wrunlock(&pool->lock);
 
-    // If global pool full, fallback to coroutine heap
-    if (!str) {
-        str = string_alloc(iso, chars, length);
-        if (str)
-            str->hash = hash;
-    }
-
     return str;
+}
+
+XrString *xr_string_intern(XrayIsolate *iso, const char *chars, size_t length, uint32_t hash) {
+    if (!iso) {
+        xr_log_warning("string", "string_intern: isolate is NULL");
+        abort();
+    }
+    XrRuntimeCore *core = xr_isolate_get_runtime_core(iso);
+    if (core) {
+        return xr_string_intern_core(core, chars, length, hash);
+    }
+    XrString *s = string_alloc(iso, chars, length);
+    if (s && hash)
+        s->hash = hash;
+    return s;
 }
 
 // Concatenate two strings (uses XrStrBuf for efficiency)

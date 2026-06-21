@@ -362,8 +362,7 @@ TEST(select_block_probes_already_closed_channel_without_ext) {
     atomic_store(&coro.affinity_p, 0);
 
     XrValue channel_values[1] = {xr_value_from_channel(ch)};
-    XrCoroBlockResult result =
-        xr_coro_select_block(&f.isolate_storage, &coro, channel_values, 1, NULL, 1);
+    XrCoroBlockResult result = xr_coro_select_block(&coro, channel_values, 1, NULL, 1);
 
     ASSERT_EQ_INT((int) result.kind, (int) XR_CORO_BLOCK_READY);
     ASSERT_NULL(coro.ext);
@@ -395,8 +394,7 @@ TEST(select_waiter_cancel_unlinks_worker_buckets) {
     atomic_store(&waiter.affinity_p, 0);
 
     XrValue channels[1] = {xr_value_from_channel(ch)};
-    XrCoroBlockResult blocked =
-        xr_coro_select_block(&f.isolate_storage, &waiter, channels, 1, NULL, 1);
+    XrCoroBlockResult blocked = xr_coro_select_block(&waiter, channels, 1, NULL, 1);
     ASSERT_EQ_INT((int) blocked.kind, (int) XR_CORO_BLOCK_BLOCKED);
     ASSERT_EQ_INT(f.worker.p.select_waiter_count, 1);
     ASSERT_EQ_INT(f.worker.p.blocked_count, 1);
@@ -1418,8 +1416,7 @@ TEST(select_waiter_cancel_routes_foreign_owner_detach) {
     tls_current_worker = &f.workers[1];
     tls_current_machine = &f.machines[1];
     XrValue channels[1] = {xr_value_from_channel(ch)};
-    XrCoroBlockResult blocked =
-        xr_coro_select_block(&f.isolate_storage, &waiter, channels, 1, NULL, 1);
+    XrCoroBlockResult blocked = xr_coro_select_block(&waiter, channels, 1, NULL, 1);
     ASSERT_EQ_INT((int) blocked.kind, (int) XR_CORO_BLOCK_BLOCKED);
     ASSERT_EQ_INT(f.workers[1].p.select_waiter_count, 1);
     ASSERT_EQ_INT(f.workers[1].p.blocked_count, 1);
@@ -1497,7 +1494,7 @@ TEST(await_wait_token_tracks_register_resolve_and_resume) {
 
     task.result = xr_int(9);
     atomic_store(&task.state, XR_TASK_COMPLETED);
-    xr_task_wake_waiter(&f.isolate_storage, &task);
+    xr_task_wake_waiter_runtime(&f.runtime, &task);
 
     ASSERT_EQ_INT(atomic_load(&waiter_ext.wait.await_token.state), XR_AWAIT_WAIT_RESOLVED);
     ASSERT_TRUE(xr_coro_flags_has(&waiter, XR_CORO_FLG_READY));
@@ -1554,7 +1551,7 @@ TEST(single_task_await_wakes_multiple_waiters) {
     ASSERT_EQ_INT(xr_flag_to_state(atomic_load(&second_waiter.flags)), XR_CORO_STATE_BLOCKED);
     task.result = xr_int(77);
     atomic_store(&task.state, XR_TASK_COMPLETED);
-    xr_task_wake_waiter(&f.isolate_storage, &task);
+    xr_task_wake_waiter_runtime(&f.runtime, &task);
 
     ASSERT_NULL(task.await_waiters);
     ASSERT_EQ_INT(atomic_load(&first_ext.wait.await_token.state), XR_AWAIT_WAIT_RESOLVED);
@@ -1607,7 +1604,7 @@ TEST(single_task_await_legacy_and_node_wake_claim_once) {
     task.waiter_index = -1;
     task.result = xr_int(33);
     atomic_store(&task.state, XR_TASK_COMPLETED);
-    xr_task_wake_waiter(&f.isolate_storage, &task);
+    xr_task_wake_waiter_runtime(&f.runtime, &task);
 
     ASSERT_NULL(task.await_waiters);
     ASSERT_NULL(task.waiter);
@@ -1642,21 +1639,21 @@ TEST(single_task_await_cancelled_resolution_preserves_result_slot) {
     init_stack_task(&task, XR_TASK_ACTIVE, xr_null(), xr_null());
     XrValue result_slot = xr_int(99);
 
-    XrCoroBlockResult blocked = xr_coro_await_task_slot(
-        &f.isolate_storage, &waiter, &task, xr_slot_xvalue_ptr(&result_slot), -1, false);
+    XrCoroBlockResult blocked =
+        xr_coro_await_task_slot(&waiter, &task, xr_slot_xvalue_ptr(&result_slot), -1, false);
     ASSERT_EQ_INT((int) blocked.kind, (int) XR_CORO_BLOCK_BLOCKED);
     ASSERT_EQ_PTR(task.await_waiters, &waiter_ext.wait.await_token.node);
     ASSERT_TRUE(xr_coro_flags_has(&waiter, XR_CORO_FLG_BLOCKED));
 
     task.result = xr_int(77);
     atomic_store(&task.state, XR_TASK_CANCELLED);
-    xr_task_wake_waiter(&f.isolate_storage, &task);
+    xr_task_wake_waiter_runtime(&f.runtime, &task);
 
     ASSERT_TRUE(xr_coro_flags_has(&waiter, XR_CORO_FLG_READY));
     ASSERT_EQ_PTR(xr_worker_pop(&f.worker), &waiter);
 
-    XrCoroBlockResult resumed = xr_coro_await_task_resume_slot(
-        &f.isolate_storage, &waiter, &task, xr_slot_xvalue_ptr(&result_slot), false);
+    XrCoroBlockResult resumed =
+        xr_coro_await_task_resume_slot(&waiter, &task, xr_slot_xvalue_ptr(&result_slot), false);
     ASSERT_EQ_INT((int) resumed.kind, (int) XR_CORO_BLOCK_CLOSED);
     ASSERT_EQ_INT((int) XR_TO_INT(result_slot), 99);
     ASSERT_EQ_INT(atomic_load(&waiter_ext.wait.await_token.state), XR_AWAIT_WAIT_IDLE);
@@ -1768,8 +1765,7 @@ TEST(timer_wait_token_cancels_select_timer_on_channel_wake) {
     atomic_store(&waiter.affinity_p, 0);
 
     XrValue channels[2] = {xr_value_from_channel(ch), xr_value_from_channel(timer_ch)};
-    XrCoroBlockResult blocked =
-        xr_coro_select_block(&f.isolate_storage, &waiter, channels, 2, NULL, 2);
+    XrCoroBlockResult blocked = xr_coro_select_block(&waiter, channels, 2, NULL, 2);
     ASSERT_EQ_INT((int) blocked.kind, (int) XR_CORO_BLOCK_BLOCKED);
     ASSERT_EQ_INT(atomic_load(&waiter_ext.wait.timer_token.state), XR_TIMER_WAIT_REGISTERED);
     ASSERT_EQ_INT(waiter_ext.wait.timer_token.wait_reason,
@@ -1941,7 +1937,7 @@ TEST(multi_await_node_list_wakes_overlapping_any_waiters) {
     atomic_store(&second_waiter.flags, XR_CORO_FLG_BLOCKED | XR_CORO_WAIT_AWAIT_ANY);
     shared.result = xr_int(88);
     atomic_store(&shared.state, XR_TASK_COMPLETED);
-    xr_task_wake_waiter(&f.isolate_storage, &shared);
+    xr_task_wake_waiter_runtime(&f.runtime, &shared);
 
     ASSERT_NULL(shared.await_waiters);
     ASSERT_EQ_INT(atomic_load(&first_ext.wait.multi_await_token.state),

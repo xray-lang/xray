@@ -154,7 +154,7 @@ vmcase(OP_SCOPE_ENTER) {
     // Enter structured concurrency scope
     XrCoroutine *current = (XrCoroutine *) VM_CURRENT_CORO;
     int scope_mode = GETARG_A(i);
-    XrCoroBlockResult enter_result = xr_coro_scope_enter(isolate, current, (uint8_t) scope_mode);
+    XrCoroBlockResult enter_result = xr_coro_scope_enter(current, (uint8_t) scope_mode);
     if (enter_result.kind == XR_CORO_BLOCK_ERROR) {
         VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, "scope: out of memory");
     }

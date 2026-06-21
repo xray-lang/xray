@@ -65,6 +65,10 @@ struct XrInstance {
 /* ========== Instance Operations ========== */
 
 // All fields initialized to null, constructor not called
+struct XrCoroutine;
+struct XrRuntimeCore;
+XR_FUNC XrInstance *xr_instance_new_core(struct XrRuntimeCore *core, struct XrCoroutine *coro,
+                                         XrClass *cls);
 XR_FUNC XrInstance *xr_instance_new(XrayIsolate *X, XrClass *cls);
 
 XR_FUNC void xr_instance_init_inplace(XrInstance *inst, XrClass *cls);

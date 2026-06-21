@@ -16,6 +16,7 @@
 #include "coro/xcoroutine.h"
 #include "coro/xdeep_copy.h"
 #include "coro/xresult_group.h"
+#include "coro/xtask.h"
 #include "coro/xworker.h"
 #include "coro/xwork_queue.h"
 #include "coro/xyieldable.h"
@@ -526,6 +527,41 @@ TEST(aot_channel_uses_runtime_owner_without_isolate) {
     xr_aot_runtime_delete(runtime);
 }
 
+TEST(aot_task_await_uses_runtime_owner_without_isolate) {
+    XrAotRuntimeConfig cfg;
+    xr_aot_runtime_config_init(&cfg);
+    cfg.caps = XR_AOT_CAP_CORO;
+    cfg.scheduler_workers = 0;
+
+    XrAotRuntime *runtime = xr_aot_runtime_new(&cfg);
+    ASSERT_NOT_NULL(runtime);
+
+    XrAotContext ctx;
+    memset(&ctx, 0, sizeof(ctx));
+    ctx.runtime = runtime;
+    ctx.coro = xr_coro_create_runtime_empty(xr_aot_runtime_core(runtime),
+                                            xr_aot_runtime_scheduler(runtime), "aot_task_parent");
+    ASSERT_NOT_NULL(ctx.coro);
+    ASSERT_NULL(ctx.isolate);
+
+    XrCoroutine *child = xr_coro_create_runtime_empty(
+        xr_aot_runtime_core(runtime), xr_aot_runtime_scheduler(runtime), "aot_task_child");
+    ASSERT_NOT_NULL(child);
+    XrTask *task = xr_task_create(xr_aot_runtime_scheduler(runtime), ctx.coro, child);
+    ASSERT_NOT_NULL(task);
+    xr_task_complete(task, xr_int(91));
+
+    int64_t result = 0;
+    XrAotResult await = xr_aot_await_task(&ctx, xr_value_from_task(task),
+                                          xr_slot_native_ptr(&result, XR_REP_I64), -1, false);
+    ASSERT_EQ_INT(await.kind, XR_AOT_RUN_DONE);
+    ASSERT_EQ_INT((int) result, 91);
+    ASSERT_NULL(ctx.isolate);
+
+    xr_coro_destroy(ctx.coro);
+    xr_aot_runtime_delete(runtime);
+}
+
 TEST(coroutine_recycle_hooks_are_backend_abi_contract) {
     const XrCoroBackendVTable *vm_backend = xr_coro_vm_backend_vtable();
     ASSERT_NOT_NULL(vm_backend);
@@ -591,6 +627,7 @@ RUN_TEST(aot_runtime_copy_context_uses_core_without_isolate);
 RUN_TEST(aot_result_group_uses_runtime_without_isolate);
 RUN_TEST(aot_work_queue_uses_runtime_owner_without_isolate);
 RUN_TEST(aot_channel_uses_runtime_owner_without_isolate);
+RUN_TEST(aot_task_await_uses_runtime_owner_without_isolate);
 RUN_TEST(coroutine_recycle_hooks_are_backend_abi_contract);
 
 TEST_MAIN_END()

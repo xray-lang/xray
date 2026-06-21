@@ -158,7 +158,7 @@ XR_FUNC XrDispatchAction vm_select_block(XrayIsolate *isolate, XrVMContext *vm_c
 
     vm_suspend_continue_from_next(frame, pc);
     XrCoroBlockResult result =
-        xr_coro_select_block(isolate, coro, &base[base_reg], ch_count, result_slots, case_count);
+        xr_coro_select_block(coro, &base[base_reg], ch_count, result_slots, case_count);
     if (result_slots != stack_result_slots) {
         xr_free(result_slots);
     }

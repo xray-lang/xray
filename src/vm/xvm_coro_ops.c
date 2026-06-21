@@ -761,7 +761,8 @@ XR_FUNC XrDispatchAction vm_go(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInst
 /* Read task->result with deep copy to dst_coro's heap. */
 static inline XrValue vm_task_consume_result(XrayIsolate *isolate, XrTask *task,
                                              XrCoroutine *dst_coro, bool discard_result) {
-    XrValue res = xr_coro_await_result_value(isolate, dst_coro, task, discard_result);
+    XrValue res = xr_coro_await_result_value(xr_isolate_get_runtime_core(isolate), dst_coro, task,
+                                             discard_result);
     return discard_result ? xr_null() : res;
 }
 
@@ -862,7 +863,7 @@ XR_FUNC XrDispatchAction vm_await(XrayIsolate *isolate, XrVMContext *vm_ctx, XrI
         XrSlotRef result_slot = xr_slot_xvalue_ptr(&base[a]);
         if (current) {
             XrCoroBlockResult resumed =
-                xr_coro_await_task_resume_slot(isolate, current, task, result_slot, discard_result);
+                xr_coro_await_task_resume_slot(current, task, result_slot, discard_result);
             if (resumed.kind == XR_CORO_BLOCK_READY) {
                 if (one_shot_go && a != b)
                     base[b] = xr_null();
@@ -910,7 +911,7 @@ XR_FUNC XrDispatchAction vm_await(XrayIsolate *isolate, XrVMContext *vm_ctx, XrI
             vm_ctx->stack_top = base + frame->closure->proto->maxstacksize;
             vm_suspend_replay_current(frame, pc);
             XrCoroBlockResult await_result =
-                xr_coro_await_task_slot(isolate, current, task, result_slot, -1, discard_result);
+                xr_coro_await_task_slot(current, task, result_slot, -1, discard_result);
             if (await_result.kind == XR_CORO_BLOCK_BLOCKED) {
                 /* Frame state saved above; the dispatch loop may switch to a
                  * just-woken LIFO partner without exiting run(). */
@@ -1003,7 +1004,7 @@ XR_FUNC XrDispatchAction vm_await_timeout(XrayIsolate *isolate, XrVMContext *vm_
         XrSlotRef result_slot = xr_slot_xvalue_ptr(&base[a]);
         if (caller) {
             XrCoroBlockResult resumed =
-                xr_coro_await_task_resume_slot(isolate, caller, task, result_slot, false);
+                xr_coro_await_task_resume_slot(caller, task, result_slot, false);
             if (resumed.kind == XR_CORO_BLOCK_TIMEOUT || resumed.kind == XR_CORO_BLOCK_CLOSED) {
                 return XR_DISP_NEXT;
             }
@@ -1033,7 +1034,7 @@ XR_FUNC XrDispatchAction vm_await_timeout(XrayIsolate *isolate, XrVMContext *vm_
         XrCoroutine *current = vm_get_coro(vm_ctx);
         if (current && rt) {
             XrCoroBlockResult await_result =
-                xr_coro_await_task_slot(isolate, current, task, result_slot, timeout_ms, false);
+                xr_coro_await_task_slot(current, task, result_slot, timeout_ms, false);
             if (await_result.kind == XR_CORO_BLOCK_BLOCKED) {
                 return XR_DISP_BLOCKED;
             }

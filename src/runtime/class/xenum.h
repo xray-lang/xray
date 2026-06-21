@@ -93,6 +93,12 @@ XR_FUNC const char *xr_enum_value_name(XrEnumValue *enum_val);
  *   field[1..payload_count] = payload values copied from args[]
  * Returns NULL on allocation failure or if the enum is not ADT. */
 struct XrInstance;
+struct XrCoroutine;
+struct XrRuntimeCore;
+XR_FUNC struct XrInstance *xr_enum_adt_construct_core(struct XrRuntimeCore *core,
+                                                      struct XrCoroutine *coro,
+                                                      XrEnumType *enum_type, uint32_t member_index,
+                                                      XrValue *args, int nargs);
 XR_FUNC struct XrInstance *xr_enum_adt_construct(struct XrayIsolate *X, XrEnumType *enum_type,
                                                  uint32_t member_index, XrValue *args, int nargs);
 
