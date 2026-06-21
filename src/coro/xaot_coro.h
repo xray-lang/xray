@@ -27,6 +27,11 @@
 
 struct XrCoroutine;
 struct XrCoroGC;
+struct XrCoroRegistry;
+struct XrCoroState;
+struct XrArray;
+struct XrChannel;
+struct XrMap;
 struct XrRuntime;
 struct XrRuntimeCore;
 struct XrTask;
@@ -69,10 +74,30 @@ typedef struct XrAotResult {
     bool error_is_value;
 } XrAotResult;
 
+typedef struct XrAotVmHostOps {
+    XrValue (*get_builtin)(void *host, int32_t index);
+    struct XrRuntimeCore *(*runtime_core)(void *host);
+    struct XrRuntime *(*scheduler)(void *host);
+    struct XrCoroutine *(*current_coro)(void *host);
+    XrValue (*intern_string_value)(void *host, const char *data, size_t len);
+    struct XrMap *(*new_map)(void *host, struct XrCoroutine *owner);
+    struct XrArray *(*new_array)(void *host, struct XrCoroutine *owner);
+    struct XrMap *(*main_locals)(void *host);
+    struct XrMap *(*ensure_main_locals)(void *host, struct XrCoroutine *owner);
+    struct XrCoroState *(*coro_state)(void *host);
+    struct XrChannel *(*new_channel)(void *host, uint32_t buffer_size);
+    struct XrChannel *(*new_timer_channel)(void *host, int64_t timeout_ms);
+    struct XrChannel *(*monitor)(void *host, struct XrCoroRegistry *registry, const char *name);
+    XrValue (*exception_new)(void *host, int code, const char *message);
+    bool (*is_exception)(void *host, XrValue value);
+    XrValue (*exception_from_value)(void *host, XrValue value);
+} XrAotVmHostOps;
+
 typedef struct XrAotContext {
     XrAotRuntime *runtime;
     struct XrCoroutine *coro;
-    /* VM-only host bridge for legacy VM-facing helper calls; runtime AOT keeps this NULL. */
+    /* Optional VM-only host bridge; pure runtime AOT keeps both fields NULL. */
+    const XrAotVmHostOps *vm_host_ops;
     void *vm_host;
     void *worker;
 } XrAotContext;
