@@ -232,12 +232,8 @@ int xr_runtime_next_coro_id(XrRuntime *runtime) {
 // 2. main coroutine put into global queue
 // 3. Directly call worker_loop, no code duplication
 // 4. When main coroutine completes, worker_loop internally sets runtime->running = false
-int xr_main_thread_run(XrayIsolate *X, XrCoroutine *main_coro) {
-    if (!X || !main_coro)
-        return -1;
-
-    XrRuntime *runtime = (XrRuntime *) X->scheduler_runtime;
-    if (!runtime)
+int xr_runtime_main_thread_run(XrRuntime *runtime, XrCoroutine *main_coro) {
+    if (!runtime || !main_coro)
         return -1;
 
     // Main thread reuses Worker 0
@@ -333,11 +329,19 @@ int xr_main_thread_run(XrayIsolate *X, XrCoroutine *main_coro) {
     if (xr_coro_flags_has(main_coro, XR_CORO_FLG_CANCELLED) || !XR_IS_NULL(main_coro->error)) {
         return -1;
     }
+    return 0;
+}
+
+int xr_main_thread_run(XrayIsolate *X, XrCoroutine *main_coro) {
+    if (!X)
+        return -1;
+    int rc = xr_runtime_main_thread_run((XrRuntime *) X->scheduler_runtime, main_coro);
+    if (rc != 0)
+        return rc;
     /* Value-return error channel: uncaught throw propagates via
      * pending_error and exits OK from the VM's perspective. */
-    if (!XR_IS_NULL(X->vm.pending_error)) {
+    if (!XR_IS_NULL(X->vm.pending_error))
         return -1;
-    }
     return 0;
 }
 

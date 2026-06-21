@@ -470,6 +470,8 @@ struct XrClosure;
 
 // Lifecycle
 XR_FUNC XrCoroutine *xr_coro_create_empty(struct XrayIsolate *X, const char *name);
+XR_FUNC XrCoroutine *xr_coro_create_runtime_empty(struct XrRuntimeCore *core,
+                                                  struct XrRuntime *runtime, const char *name);
 XR_FUNC XrCoroutine *xr_coro_create_native(struct XrayIsolate *X, void (*func)(void *), void *arg,
                                            const char *name);
 XR_FUNC void xr_coro_free(XrCoroutine *coro);

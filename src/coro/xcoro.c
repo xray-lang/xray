@@ -398,8 +398,9 @@ static void coro_clear_scope_membership(XrCoroutine *coro) {
     coro->ext->scope_sibling = NULL;
 }
 
-bool xr_coro_init_shell(XrCoroutine *coro, XrayIsolate *X, const char *name, bool need_storage) {
-    XrCoroState *sched = (XrCoroState *) X->vm.coro_state;
+static bool xr_coro_init_shell_owner(XrCoroutine *coro, XrayIsolate *X, XrRuntimeCore *core,
+                                     XrRuntime *runtime, XrCoroState *sched, const char *name,
+                                     bool need_storage) {
     const XrCoroBackendVTable *backend = coro ? coro->backend : NULL;
     if (need_storage && (!backend || !backend->prepare_execution_state))
         return false;
@@ -474,8 +475,8 @@ bool xr_coro_init_shell(XrCoroutine *coro, XrayIsolate *X, const char *name, boo
     XR_OBJ_SET_FLAG(&coro->gc, XR_OBJ_MANAGED);
     coro->schedule_count = 1;
     coro->spawn_burst_count = 0;
-    coro->core = xr_isolate_get_runtime_core(X);
-    coro->scheduler = X->scheduler_runtime ? (XrRuntime *) X->scheduler_runtime : NULL;
+    coro->core = core;
+    coro->scheduler = runtime;
     coro->isolate = X;
     if (!xr_coro_set_name(coro, name))
         return false;
@@ -492,6 +493,8 @@ bool xr_coro_init_shell(XrCoroutine *coro, XrayIsolate *X, const char *name, boo
 
     backend = coro->backend;
     if (backend && backend->prepare_execution_state) {
+        if (!X)
+            return false;
         if (!backend->prepare_execution_state(coro, X, w, need_storage, is_clean))
             return false;
     } else if (need_storage) {
@@ -510,6 +513,8 @@ bool xr_coro_init_shell(XrCoroutine *coro, XrayIsolate *X, const char *name, boo
             coro->id = base;
         } else if (sched) {
             coro->id = atomic_fetch_add(&sched->total_created, 1);
+        } else if (runtime) {
+            coro->id = xr_runtime_next_coro_id(runtime);
         } else {
             static _Atomic int global_coro_id = 0;
             coro->id = atomic_fetch_add(&global_coro_id, 1);
@@ -524,6 +529,15 @@ bool xr_coro_init_shell(XrCoroutine *coro, XrayIsolate *X, const char *name, boo
     return true;
 }
 
+bool xr_coro_init_shell(XrCoroutine *coro, XrayIsolate *X, const char *name, bool need_storage) {
+    if (!X)
+        return false;
+    return xr_coro_init_shell_owner(coro, X, xr_isolate_get_runtime_core(X),
+                                    X->scheduler_runtime ? (XrRuntime *) X->scheduler_runtime
+                                                         : NULL,
+                                    (XrCoroState *) X->vm.coro_state, name, need_storage);
+}
+
 XrCoroutine *xr_coro_create_empty(XrayIsolate *X, const char *name) {
     XR_DCHECK(X != NULL, "coro_create_empty: NULL isolate");
 
@@ -532,6 +546,24 @@ XrCoroutine *xr_coro_create_empty(XrayIsolate *X, const char *name) {
         return NULL;
 
     if (!xr_coro_init_shell(coro, X, name, false)) {
+        xr_coro_free(coro);
+        xr_coro_discard_uninitialized(coro);
+        return NULL;
+    }
+
+    return coro;
+}
+
+XrCoroutine *xr_coro_create_runtime_empty(XrRuntimeCore *core, XrRuntime *runtime,
+                                          const char *name) {
+    if (!core)
+        return NULL;
+
+    XrCoroutine *coro = coro_alloc_lightweight_shell();
+    if (!coro)
+        return NULL;
+
+    if (!xr_coro_init_shell_owner(coro, NULL, core, runtime, NULL, name, false)) {
         xr_coro_free(coro);
         xr_coro_discard_uninitialized(coro);
         return NULL;

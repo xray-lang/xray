@@ -150,7 +150,7 @@ XR_FUNC void xi_cgen_main(XiCgenCtx *ctx, FILE *out, XiModule **modules, int n, 
             emit_fname_suffix(ctx, out, modules[m]->name ? modules[m]->name : "mod",
                               modules[m]->init, "_aot_frame_new");
             fprintf(out, "();\n");
-            fprintf(out, "    xr_aot_run_main(X, &");
+            fprintf(out, "    xr_aot_run_main_vm_bridge(X, &");
             emit_fname_suffix(ctx, out, modules[m]->name ? modules[m]->name : "mod",
                               modules[m]->init, "_aot_desc");
             fprintf(out, ", _entry_frame);\n");
@@ -256,7 +256,7 @@ XR_FUNC void xi_cgen_program(XiCgenCtx *ctx, FILE *out, XiModule *module) {
             fprintf(body, "    void *_entry_frame = ");
             emit_fname_suffix(ctx, body, prefix, main_func, "_aot_frame_new");
             fprintf(body, "();\n");
-            fprintf(body, "    xr_aot_run_main(X, &");
+            fprintf(body, "    xr_aot_run_main_vm_bridge(X, &");
             emit_fname_suffix(ctx, body, prefix, main_func, "_aot_desc");
             fprintf(body, ", _entry_frame);\n");
         } else {
