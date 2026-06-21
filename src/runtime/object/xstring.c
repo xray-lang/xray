@@ -123,6 +123,7 @@ static void global_pool_grow(XrGlobalStringPool *pool) {
         }
     }
 
+    (void) saved_count;
     XR_DCHECK(pool->count == saved_count, "global_pool_grow: count mismatch after rehash");
     xr_free(old_entries);
 }
@@ -247,28 +248,6 @@ XrString *xr_global_pool_lookup(XrGlobalStringPool *pool, const char *chars, siz
 
         index = (index + 1) & mask;
     }
-}
-
-// Compile-time string intern (write to global pool)
-// Called only at compile time, lookup first then insert
-XrString *xr_compile_time_intern(XrayIsolate *iso, const char *chars, size_t len) {
-    XrGlobalStringPool *pool = xr_isolate_get_string_pool(iso);
-    if (!pool) {
-        xr_log_warning("string", "compile_time_intern: isolate or global pool is NULL");
-        return NULL;
-    }
-
-    // Compute hash
-    uint32_t hash = xr_string_hash(chars, len);
-
-    // Lookup first
-    XrString *found = xr_global_pool_lookup(pool, chars, len, hash);
-    if (found) {
-        return found;
-    }
-
-    // Insert to global pool
-    return xr_global_pool_insert(pool, iso, chars, len, hash);
 }
 
 /*

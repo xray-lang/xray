@@ -37,24 +37,6 @@ static int64_t xr_now_ns(void) {
 #endif
 }
 
-/* ========== Memory Subsystem ========== */
-
-XrRuntimeCore *xr_isolate_get_runtime_core(XrayIsolate *X) {
-    return X ? X->core_rt : NULL;
-}
-
-XrRuntime *xr_isolate_get_scheduler_runtime(XrayIsolate *X) {
-    return X ? X->scheduler_runtime : NULL;
-}
-
-XrGC *xr_isolate_get_gc(XrayIsolate *X) {
-    return (X && X->core_rt) ? &X->core_rt->gc : NULL;
-}
-
-struct XrSystemHeap *xr_isolate_get_sys_heap(XrayIsolate *X) {
-    return (X && X->core_rt) ? X->core_rt->sys_heap : NULL;
-}
-
 struct XrCoroGC *xr_isolate_get_coro_gc(XrayIsolate *X) {
     if (!X || !X->main_coro)
         return NULL;
@@ -77,10 +59,6 @@ void xr_isolate_set_type_registry(XrayIsolate *X, XrTypeRegistry *registry) {
 // xr_isolate_get_symbol_table defined in api/xisolate.c
 
 /* ========== Class Subsystem ========== */
-
-struct XrayCoreClasses *xr_isolate_get_core_classes(XrayIsolate *X) {
-    return X ? X->core : NULL;
-}
 
 XrClass *xr_isolate_get_native_type_class(XrayIsolate *X, uint8_t type_id) {
     if (!X || type_id >= XR_NATIVE_TYPE_MAX)
@@ -404,28 +382,4 @@ void xr_register_extension_traverse(XrayIsolate *isolate, uint8_t type_id,
         return;
     core->ext_traverse_funcs[type_id] = (void *) traverse_fn;
     core->ext_has_refs_bitmap |= (1ULL << type_id);
-}
-
-uint64_t xr_isolate_get_ext_finalize_bitmap(XrayIsolate *isolate) {
-    XrRuntimeCore *core = xr_isolate_get_runtime_core(isolate);
-    return core ? core->ext_finalize_bitmap : 0;
-}
-
-uint64_t xr_isolate_get_ext_has_refs_bitmap(XrayIsolate *isolate) {
-    XrRuntimeCore *core = xr_isolate_get_runtime_core(isolate);
-    return core ? core->ext_has_refs_bitmap : 0;
-}
-
-XrExtDestroyFn xr_isolate_get_ext_destroy(XrayIsolate *isolate, uint8_t type_id) {
-    XrRuntimeCore *core = xr_isolate_get_runtime_core(isolate);
-    if (!core || type_id >= XGC_MAX_TYPES)
-        return NULL;
-    return (XrExtDestroyFn) core->ext_destroy_funcs[type_id];
-}
-
-XrExtTraverseFn xr_isolate_get_ext_traverse(XrayIsolate *isolate, uint8_t type_id) {
-    XrRuntimeCore *core = xr_isolate_get_runtime_core(isolate);
-    if (!core || type_id >= XGC_MAX_TYPES)
-        return NULL;
-    return (XrExtTraverseFn) core->ext_traverse_funcs[type_id];
 }

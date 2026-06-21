@@ -36,6 +36,10 @@ static bool xaot_link_select_list(XaotLinkManifest *manifest, XaotLinkEntryKind 
             *out_items = &manifest->generated_c_files;
             *out_count = &manifest->n_generated_c_files;
             return true;
+        case XAOT_LINK_RUNTIME_CAP:
+            *out_items = &manifest->runtime_caps;
+            *out_count = &manifest->n_runtime_caps;
+            return true;
         case XAOT_LINK_RUNTIME_OBJECT:
             *out_items = &manifest->runtime_objects;
             *out_count = &manifest->n_runtime_objects;
@@ -78,6 +82,10 @@ static bool xaot_link_list_for_kind(const XaotLinkManifest *manifest, XaotLinkEn
         case XAOT_LINK_GENERATED_C_FILE:
             *out_items = manifest->generated_c_files;
             *out_count = manifest->n_generated_c_files;
+            return true;
+        case XAOT_LINK_RUNTIME_CAP:
+            *out_items = manifest->runtime_caps;
+            *out_count = manifest->n_runtime_caps;
             return true;
         case XAOT_LINK_RUNTIME_OBJECT:
             *out_items = manifest->runtime_objects;
@@ -353,6 +361,7 @@ XR_FUNC void xaot_link_manifest_free(XaotLinkManifest *manifest) {
 
     xaot_target_free(&manifest->target);
     xaot_link_string_list_free(manifest->generated_c_files, manifest->n_generated_c_files);
+    xaot_link_string_list_free(manifest->runtime_caps, manifest->n_runtime_caps);
     xaot_link_string_list_free(manifest->runtime_objects, manifest->n_runtime_objects);
     xaot_link_string_list_free(manifest->stdlib_objects, manifest->n_stdlib_objects);
     xaot_link_string_list_free(manifest->stdlib_symbols, manifest->n_stdlib_symbols);
@@ -460,6 +469,8 @@ XR_FUNC char *xaot_link_manifest_dump_json(const XaotLinkManifest *manifest) {
     ok = ok && xaot_json_write_target(out, &manifest->target);
     ok = ok && xaot_json_write_string_array(out, "generated_c_files", manifest->generated_c_files,
                                             manifest->n_generated_c_files, true);
+    ok = ok && xaot_json_write_string_array(out, "runtime_caps", manifest->runtime_caps,
+                                            manifest->n_runtime_caps, true);
     ok = ok && xaot_json_write_string_array(out, "runtime_objects", manifest->runtime_objects,
                                             manifest->n_runtime_objects, true);
     ok = ok && xaot_json_write_string_array(out, "stdlib_objects", manifest->stdlib_objects,

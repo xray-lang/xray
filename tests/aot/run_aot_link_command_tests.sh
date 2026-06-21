@@ -3,7 +3,7 @@
 #
 # The link manifest is the source of truth, but this smoke verifies the native
 # build driver actually obeys it: core math direct calls stay freestanding, while
-# runtime-backed stdlib modules still link xray_core and its system deps.
+# runtime-backed stdlib modules link only their capability runtime archive.
 #
 # By default the large link matrix uses `xray build --dry-run-link`: it exercises
 # the real AOT/link planning path and validates the resolved link command without
@@ -455,9 +455,13 @@ RUNTIME_BIN="$WORK/runtime_time"
 RUNTIME_LOG="$WORK/runtime_time.log"
 if build_native "$RUNTIME_SRC" "$RUNTIME_BIN" "$RUNTIME_LOG"; then
     expect_log_contains "$RUNTIME_LOG" "Link command:" "runtime-time: emitted link command"
-    expect_log_contains "$RUNTIME_LOG" "-lxray_core" "runtime-time: links xray_core"
+    expect_log_not_contains "$RUNTIME_LOG" "-lxray_core" "runtime-time: does not link xray_core"
+    expect_log_contains "$RUNTIME_LOG" "-lxray_rt_coro" "runtime-time: links AOT runtime archive"
     expect_log_contains "$RUNTIME_LOG" "-lpthread" "runtime-time: links pthread"
-    expect_log_contains "$RUNTIME_LOG" "-lz" "runtime-time: links zlib"
+    expect_log_not_contains "$RUNTIME_LOG" "-lz" "runtime-time: does not link zlib"
+    expect_log_not_contains "$RUNTIME_LOG" "-lffi" "runtime-time: does not link libffi"
+    expect_log_not_contains "$RUNTIME_LOG" "-lssl" "runtime-time: does not link ssl"
+    expect_log_not_contains "$RUNTIME_LOG" "-lcrypto" "runtime-time: does not link crypto"
     expect_output "$RUNTIME_BIN" "7" "runtime-time: binary output"
 else
     record_fail "runtime-time: build failed"

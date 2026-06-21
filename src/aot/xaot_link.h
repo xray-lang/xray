@@ -24,6 +24,7 @@ typedef struct XaotTarget {
 
 typedef enum XaotLinkEntryKind {
     XAOT_LINK_GENERATED_C_FILE,
+    XAOT_LINK_RUNTIME_CAP,
     XAOT_LINK_RUNTIME_OBJECT,
     XAOT_LINK_STDLIB_OBJECT,
     XAOT_LINK_STDLIB_SYMBOL,
@@ -38,6 +39,9 @@ typedef struct XaotLinkManifest {
 
     char **generated_c_files;
     uint32_t n_generated_c_files;
+
+    char **runtime_caps;
+    uint32_t n_runtime_caps;
 
     char **runtime_objects;
     uint32_t n_runtime_objects;
