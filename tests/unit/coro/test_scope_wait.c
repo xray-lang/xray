@@ -80,6 +80,8 @@ static void init_running_scope_coro(XrCoroutine *coro, XrCoroExt *ext, int id,
     memset(ext, 0, sizeof(*ext));
     coro->id = id;
     coro->isolate = isolate;
+    coro->core = isolate ? isolate->core_rt : NULL;
+    coro->scheduler = (isolate && isolate->vm.runtime) ? (XrRuntime *) isolate->vm.runtime : NULL;
     coro->ext = ext;
     atomic_store(&coro->flags, XR_CORO_FLG_RUNNING);
     atomic_store(&coro->resume_status, XR_RESUME_OK);

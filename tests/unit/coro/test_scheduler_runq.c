@@ -221,6 +221,8 @@ static void init_ready_coro(XrCoroutine *coro, int id, XrayIsolate *isolate) {
     memset(coro, 0, sizeof(*coro));
     coro->id = id;
     coro->isolate = isolate;
+    coro->core = isolate ? isolate->core_rt : NULL;
+    coro->scheduler = (isolate && isolate->vm.runtime) ? (XrRuntime *) isolate->vm.runtime : NULL;
     atomic_store(&coro->flags, XR_CORO_FLG_READY);
     atomic_store(&coro->resume_status, XR_RESUME_OK);
     atomic_store(&coro->affinity_p, 0);

@@ -772,13 +772,17 @@ void xr_task_cancel_await_waiters(XrCoroutine *waiter) {
 }
 
 static void task_ready_waiter(XrayIsolate *X, XrCoroutine *waiter) {
-    if (!X || !waiter)
+    if (!waiter)
         return;
+
+    XrRuntime *runtime = (XrRuntime *) xr_coro_scheduler(waiter);
+    if (!runtime && X)
+        runtime = (XrRuntime *) X->vm.runtime;
 
     /* xr_coro_ready owns the BLOCKED -> READY claim. Keeping the claim in one
      * place prevents task completion, timeout, and cancellation races from
      * growing independent "if still blocked" enqueue paths. */
-    xr_coro_ready(X, waiter, true);
+    xr_scheduler_ready(runtime, waiter, true);
 }
 
 static void task_wake_await_node(XrayIsolate *X, XrTask *task, XrTaskAwaitNode *node) {
@@ -978,8 +982,9 @@ void xr_task_fire_completion(XrTask *task) {
         XrCompletionNode *next = node->next;
         switch (node->type) {
             case XR_COMPLETION_WAKE:
-                if (node->as.waiter && node->as.waiter->isolate) {
-                    xr_coro_ready(node->as.waiter->isolate, node->as.waiter, true);
+                if (node->as.waiter) {
+                    xr_scheduler_ready((XrRuntime *) xr_coro_scheduler(node->as.waiter),
+                                       node->as.waiter, true);
                 }
                 break;
             case XR_COMPLETION_CHANNEL: {
