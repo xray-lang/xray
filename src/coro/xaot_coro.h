@@ -170,10 +170,15 @@ XR_FUNC XrValue xr_aot_time_clock(void);
 XR_FUNC XrValue xr_aot_coro_op(const XrAotContext *ctx, int32_t sub_op, const XrValue *args,
                                int argc);
 
-XR_FUNC struct XrCoroutine *xr_coro_create_aot(struct XrayIsolate *X, const XrAotCoroDesc *desc,
+XR_FUNC struct XrCoroutine *xr_coro_create_aot(XrAotRuntime *runtime, const XrAotCoroDesc *desc,
                                                void *frame, const char *name);
+XR_FUNC struct XrCoroutine *xr_coro_create_aot_vm_bridge(struct XrayIsolate *X,
+                                                         const XrAotCoroDesc *desc, void *frame,
+                                                         const char *name);
 
-XR_FUNC XrValue xr_aot_run_main(struct XrayIsolate *X, const XrAotCoroDesc *desc, void *frame);
+XR_FUNC XrValue xr_aot_run_main(XrAotRuntime *runtime, const XrAotCoroDesc *desc, void *frame);
+XR_FUNC XrValue xr_aot_run_main_vm_bridge(struct XrayIsolate *X, const XrAotCoroDesc *desc,
+                                          void *frame);
 
 XR_FUNC XrAotSpawnResult xr_aot_spawn(const XrAotContext *ctx, const XrAotCoroDesc *desc,
                                       void *frame, int link_mode, bool fire_and_forget,

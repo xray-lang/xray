@@ -138,7 +138,7 @@ TEST(aot_coroutine_uses_aot_backend_without_vm_state_and_maps_done) {
         aot_test_frame_new(AOT_TEST_DONE, xr_int(42), XR_NULL_VAL, &release_count, &trace_count);
     ASSERT_NOT_NULL(frame);
 
-    XrCoroutine *coro = xr_coro_create_aot(&isolate, &aot_test_desc, frame, "aot_done");
+    XrCoroutine *coro = xr_coro_create_aot_vm_bridge(&isolate, &aot_test_desc, frame, "aot_done");
     ASSERT_NOT_NULL(coro);
     ASSERT_NOT_NULL(coro->backend);
     ASSERT_EQ_INT(coro->backend->kind, XR_CORO_BACKEND_AOT);
@@ -184,7 +184,8 @@ TEST(aot_coroutine_maps_block_error_and_cancel_to_common_run_results) {
         aot_test_frame_new(AOT_TEST_BLOCK, XR_NULL_VAL, XR_NULL_VAL, &block_release_count, NULL);
     ASSERT_NOT_NULL(block_frame);
 
-    XrCoroutine *blocked = xr_coro_create_aot(&isolate, &aot_test_desc, block_frame, "aot_block");
+    XrCoroutine *blocked =
+        xr_coro_create_aot_vm_bridge(&isolate, &aot_test_desc, block_frame, "aot_block");
     ASSERT_NOT_NULL(blocked);
 
     XrCoroRunContext run_ctx = {
@@ -205,7 +206,8 @@ TEST(aot_coroutine_maps_block_error_and_cancel_to_common_run_results) {
         aot_test_frame_new(AOT_TEST_ERROR, XR_NULL_VAL, xr_int(77), &error_release_count, NULL);
     ASSERT_NOT_NULL(error_frame);
 
-    XrCoroutine *errored = xr_coro_create_aot(&isolate, &aot_test_desc, error_frame, "aot_error");
+    XrCoroutine *errored =
+        xr_coro_create_aot_vm_bridge(&isolate, &aot_test_desc, error_frame, "aot_error");
     ASSERT_NOT_NULL(errored);
     XrCoroRunResult error_result = errored->backend->resume(errored, NULL, &run_ctx);
     ASSERT_EQ_INT(error_result.kind, XR_CORO_RUN_ERROR);
@@ -222,7 +224,7 @@ TEST(aot_coroutine_maps_block_error_and_cancel_to_common_run_results) {
     ASSERT_NOT_NULL(cancel_frame);
 
     XrCoroutine *cancelled =
-        xr_coro_create_aot(&isolate, &aot_test_desc, cancel_frame, "aot_cancel");
+        xr_coro_create_aot_vm_bridge(&isolate, &aot_test_desc, cancel_frame, "aot_cancel");
     ASSERT_NOT_NULL(cancelled);
     XrCoroEvent cancel_event = {
         .kind = XR_CORO_EVENT_CANCEL,
@@ -249,7 +251,7 @@ TEST(aot_coroutine_create_failure_releases_frame) {
     XrAotCoroDesc invalid_desc = aot_test_desc;
     invalid_desc.resume = NULL;
 
-    XrCoroutine *coro = xr_coro_create_aot(&isolate, &invalid_desc, frame, "invalid_aot");
+    XrCoroutine *coro = xr_coro_create_aot_vm_bridge(&isolate, &invalid_desc, frame, "invalid_aot");
     ASSERT_NULL(coro);
     ASSERT_EQ_INT(release_count, 1);
 }
@@ -298,6 +300,61 @@ TEST(aot_runtime_creates_scheduler_for_runtime_caps) {
     ASSERT_NOT_NULL(scheduler);
     ASSERT_EQ_PTR(xr_runtime_get_core(scheduler), xr_aot_runtime_core(runtime));
     ASSERT_EQ_PTR(xr_scheduler_host_backend_context(scheduler), runtime);
+
+    xr_aot_runtime_delete(runtime);
+}
+
+TEST(aot_runtime_creates_isolate_free_aot_coroutine) {
+    XrAotRuntimeConfig cfg;
+    xr_aot_runtime_config_init(&cfg);
+    cfg.caps = XR_AOT_CAP_CORO;
+    cfg.scheduler_workers = 0;
+
+    XrAotRuntime *runtime = xr_aot_runtime_new(&cfg);
+    ASSERT_NOT_NULL(runtime);
+
+    int release_count = 0;
+    AotTestFrame *frame =
+        aot_test_frame_new(AOT_TEST_DONE, xr_int(7), XR_NULL_VAL, &release_count, NULL);
+    ASSERT_NOT_NULL(frame);
+
+    XrCoroutine *coro = xr_coro_create_aot(runtime, &aot_test_desc, frame, "aot_runtime");
+    ASSERT_NOT_NULL(coro);
+    ASSERT_NULL(coro->isolate);
+    ASSERT_EQ_PTR(coro->core, xr_aot_runtime_core(runtime));
+    ASSERT_EQ_PTR(coro->scheduler, xr_aot_runtime_scheduler(runtime));
+
+    XrCoroRunContext run_ctx = {
+        .worker = NULL,
+        .backend_ctx = runtime,
+    };
+    XrCoroRunResult result = coro->backend->resume(coro, NULL, &run_ctx);
+    ASSERT_EQ_INT(result.kind, XR_CORO_RUN_DONE);
+    ASSERT_EQ_INT(XR_TO_INT(result.value), 7);
+    ASSERT_EQ_INT(frame->resume_count, 1);
+
+    xr_coro_destroy(coro);
+    ASSERT_EQ_INT(release_count, 1);
+    xr_aot_runtime_delete(runtime);
+}
+
+TEST(aot_run_main_uses_runtime_without_isolate) {
+    XrAotRuntimeConfig cfg;
+    xr_aot_runtime_config_init(&cfg);
+    cfg.caps = XR_AOT_CAP_CORO;
+    cfg.scheduler_workers = 0;
+
+    XrAotRuntime *runtime = xr_aot_runtime_new(&cfg);
+    ASSERT_NOT_NULL(runtime);
+
+    int release_count = 0;
+    AotTestFrame *frame =
+        aot_test_frame_new(AOT_TEST_DONE, xr_int(123), XR_NULL_VAL, &release_count, NULL);
+    ASSERT_NOT_NULL(frame);
+
+    XrValue result = xr_aot_run_main(runtime, &aot_test_desc, frame);
+    ASSERT_EQ_INT(XR_TO_INT(result), 123);
+    ASSERT_EQ_INT(release_count, 1);
 
     xr_aot_runtime_delete(runtime);
 }
@@ -355,7 +412,7 @@ TEST(coroutine_recycle_hooks_are_backend_abi_contract) {
     AotTestFrame *frame =
         aot_test_frame_new(AOT_TEST_DONE, xr_int(1), XR_NULL_VAL, &release_count, NULL);
     ASSERT_NOT_NULL(frame);
-    XrCoroutine *aot = xr_coro_create_aot(&isolate, &aot_test_desc, frame, "aot_no_pool");
+    XrCoroutine *aot = xr_coro_create_aot_vm_bridge(&isolate, &aot_test_desc, frame, "aot_no_pool");
     ASSERT_NOT_NULL(aot);
     ASSERT_FALSE(xr_coro_backend_prepare_recycle(aot, NULL));
     ASSERT_FALSE(xr_coro_backend_reset_reusable(aot));
@@ -378,6 +435,8 @@ RUN_TEST(aot_coroutine_create_failure_releases_frame);
 RUN_TEST(aot_frame_alloc_accepts_zero_state_frames);
 RUN_TEST(aot_runtime_owns_core_without_isolate);
 RUN_TEST(aot_runtime_creates_scheduler_for_runtime_caps);
+RUN_TEST(aot_runtime_creates_isolate_free_aot_coroutine);
+RUN_TEST(aot_run_main_uses_runtime_without_isolate);
 RUN_TEST(aot_context_builtin_prefers_runtime_table);
 RUN_TEST(coroutine_recycle_hooks_are_backend_abi_contract);
 

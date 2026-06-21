@@ -4385,6 +4385,27 @@ TEST(cgen_coro_sleep_publishes_state_before_block) {
     xi_func_free(ir);
 }
 
+TEST(cgen_runtime_needed_main_uses_explicit_vm_bridge) {
+    const char *src = "import time\n"
+                      "time.sleep(5)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "AOT sleep should generate");
+    assert(contains(code, "xr_aot_run_main_vm_bridge(X,") &&
+           "transition generated main must name the isolate bridge explicitly");
+    assert(!contains(code, "xr_aot_run_main(X,") &&
+           "transition generated main must not call the final runtime API with an isolate");
+
+    printf("  Generated explicit VM bridge main %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_coro_select_publishes_state_before_block) {
     const char *src = "let ch = new Channel<int>(0)\n"
                       "select {\n"
@@ -4886,6 +4907,7 @@ int main(void) {
     run_cgen_coro_scalar_channel_try_recv_returns_recv_enum();
     run_cgen_coro_select_try_recv_uses_ready_bit();
     run_cgen_coro_sleep_publishes_state_before_block();
+    run_cgen_runtime_needed_main_uses_explicit_vm_bridge();
     run_cgen_coro_select_publishes_state_before_block();
     run_cgen_coro_channel_timeout_publishes_state_before_block();
     run_cgen_coro_recv_slot_is_traced_as_frame_root();

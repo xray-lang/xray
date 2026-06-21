@@ -653,6 +653,7 @@ XR_FUNC void xr_runtime_print_stats(XrRuntime *runtime);
 
 // Run main coroutine on calling thread using unified scheduling loop
 XR_FUNC int xr_main_thread_run(XrayIsolate *X, XrCoroutine *main_coro);
+XR_FUNC int xr_runtime_main_thread_run(XrRuntime *runtime, XrCoroutine *main_coro);
 
 /* ========== Debug Support ========== */
 

@@ -469,8 +469,42 @@ XrValue xr_aot_time_clock(void) {
     return XR_FROM_INT((int64_t) (xr_time_process_cpu_ns() / 1000000ULL));
 }
 
-XrCoroutine *xr_coro_create_aot(XrayIsolate *X, const XrAotCoroDesc *desc, void *frame,
+XrCoroutine *xr_coro_create_aot(XrAotRuntime *runtime, const XrAotCoroDesc *desc, void *frame,
                                 const char *name) {
+    if (!runtime || !desc || !desc->resume || !frame) {
+        aot_release_frame(desc, frame, NULL);
+        return NULL;
+    }
+
+    XrRuntimeCore *core = xr_aot_runtime_core(runtime);
+    XrRuntime *scheduler = xr_aot_runtime_scheduler(runtime);
+    if (!core || !scheduler) {
+        aot_release_frame(desc, frame, NULL);
+        return NULL;
+    }
+
+    XrAotCoroState *state = (XrAotCoroState *) xr_calloc(1, sizeof(XrAotCoroState));
+    if (!state) {
+        aot_release_frame(desc, frame, NULL);
+        return NULL;
+    }
+    state->desc = desc;
+    state->frame = frame;
+    state->runtime = runtime;
+
+    XrCoroutine *coro = xr_coro_create_runtime_empty(core, scheduler, name ? name : desc->name);
+    if (!coro) {
+        aot_release_frame(desc, frame, NULL);
+        xr_free(state);
+        return NULL;
+    }
+
+    xr_coro_attach_backend(coro, &aot_backend_vtable, state);
+    return coro;
+}
+
+XrCoroutine *xr_coro_create_aot_vm_bridge(XrayIsolate *X, const XrAotCoroDesc *desc, void *frame,
+                                          const char *name) {
     if (!X || !desc || !desc->resume || !frame) {
         aot_release_frame(desc, frame, NULL);
         return NULL;
@@ -1499,8 +1533,19 @@ static XrAotResult aot_await_any_ready_result(const XrAotContext *ctx, XrArray *
     return xr_aot_result(XR_AOT_RUN_BLOCKED);
 }
 
-XrValue xr_aot_run_main(XrayIsolate *X, const XrAotCoroDesc *desc, void *frame) {
-    XrCoroutine *main_coro = xr_coro_create_aot(X, desc, frame, desc ? desc->name : "main");
+XrValue xr_aot_run_main(XrAotRuntime *runtime, const XrAotCoroDesc *desc, void *frame) {
+    XrCoroutine *main_coro = xr_coro_create_aot(runtime, desc, frame, desc ? desc->name : "main");
+    if (!main_coro)
+        return XR_NULL_VAL;
+    xr_runtime_main_thread_run(xr_aot_runtime_scheduler(runtime), main_coro);
+    XrValue result = main_coro->result;
+    xr_coro_destroy(main_coro);
+    return result;
+}
+
+XrValue xr_aot_run_main_vm_bridge(XrayIsolate *X, const XrAotCoroDesc *desc, void *frame) {
+    XrCoroutine *main_coro =
+        xr_coro_create_aot_vm_bridge(X, desc, frame, desc ? desc->name : "main");
     if (!main_coro)
         return XR_NULL_VAL;
     xr_main_thread_run(X, main_coro);
@@ -1515,14 +1560,18 @@ XrAotSpawnResult xr_aot_spawn(const XrAotContext *ctx, const XrAotCoroDesc *desc
     result.task_value = XR_NULL_VAL;
     result.child = NULL;
 
-    if (!ctx || !ctx->isolate || !desc || !frame)
+    if (!ctx || !desc || !frame)
         return result;
 
-    XrCoroutine *child = xr_coro_create_aot(ctx->isolate, desc, frame, name);
+    XrCoroutine *child = ctx->runtime
+                             ? xr_coro_create_aot(ctx->runtime, desc, frame, name)
+                             : xr_coro_create_aot_vm_bridge(ctx->isolate, desc, frame, name);
     if (!child)
         return result;
 
-    XrRuntime *runtime = (XrRuntime *) ctx->isolate->scheduler_runtime;
+    XrRuntime *runtime =
+        ctx->runtime ? xr_aot_runtime_scheduler(ctx->runtime)
+                     : (ctx->isolate ? (XrRuntime *) ctx->isolate->scheduler_runtime : NULL);
     if (!runtime) {
         xr_coro_destroy(child);
         return result;
