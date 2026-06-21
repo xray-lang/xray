@@ -15,7 +15,7 @@
 #
 # Environment:
 #   XRAY_AOT_TEST_OPT   native C compiler optimization level for this
-#                       correctness/cache gate (default: 3)
+#                       correctness/cache gate (default: 0)
 
 set -u
 
@@ -24,7 +24,7 @@ WORK="${TMPDIR:-/tmp}/xray_aot_incr_cache_$$"
 CACHE="$WORK/.cache"
 LIB="$WORK/mathlib.xr"
 APP="$WORK/app.xr"
-AOT_OPT_LEVEL="${XRAY_AOT_TEST_OPT:-3}"
+AOT_OPT_LEVEL="${XRAY_AOT_TEST_OPT:-0}"
 
 PASS=0
 FAIL=0

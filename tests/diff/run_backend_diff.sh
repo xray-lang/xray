@@ -21,8 +21,13 @@
 #                       (default: tests/diff/coro_regression_cases.txt; empty disables)
 #   XRAY_DIFF_CASES_FILE
 #                       optional base case manifest replacing tests/diff/cases/**/*.xr
+#   XRAY_DIFF_CACHE_DIR shared native object cache for AOT backend builds
+#                       (default: build/.xray-test-cache/backend-diff/<xray-key>)
+#   XRAY_DIFF_BIN_CACHE_DIR
+#                       cached AOT backend test binaries
+#                       (default: build/.xray-test-cache/backend-diff-bin/<xray-key>/O<opt>)
 #   XRAY_AOT_TEST_OPT   AOT C compiler optimization level for correctness gates
-#                       (default: 3; set to 0 for compile-speed experiments)
+#                       (default: 0; set to 3 for optimized smoke/CI)
 #
 # Per-case optional sidecar:
 #   <case>.args    first line = whitespace-separated program arguments
@@ -40,6 +45,7 @@ set -u
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+. "$PROJECT_DIR/tests/test_common.sh"
 CASE_DIR="$SCRIPT_DIR/cases"
 NORMALIZE="$SCRIPT_DIR/normalize.sed"
 EXTRA_CASES_FILE="${XRAY_DIFF_EXTRA_CASES_FILE-$SCRIPT_DIR/coro_regression_cases.txt}"
@@ -60,7 +66,9 @@ BACKENDS="${XRAY_DIFF_BACKENDS:-vm,aot}"
 # warnings), so it is NOT part of pass/fail unless XRAY_DIFF_STDERR=1.
 DIFF_STDERR="${XRAY_DIFF_STDERR:-0}"
 REQUESTED_JOBS="${XRAY_DIFF_JOBS:-${XRAY_TEST_JOBS:-auto}}"
-AOT_OPT_LEVEL="${XRAY_AOT_TEST_OPT:-3}"
+AOT_OPT_LEVEL="${XRAY_AOT_TEST_OPT:-0}"
+AOT_CACHE="${XRAY_DIFF_CACHE_DIR:-$(xray_test_stable_cache_dir "$PROJECT_DIR" "backend-diff" "$XRAY")}"
+AOT_BIN_CACHE="${XRAY_DIFF_BIN_CACHE_DIR:-$(xray_test_stable_cache_dir "$PROJECT_DIR" "backend-diff-bin" "$XRAY")/O$AOT_OPT_LEVEL}"
 SHARD_TOTAL="${XRAY_DIFF_SHARD_TOTAL:-1}"
 SHARD_INDEX="${XRAY_DIFF_SHARD_INDEX:-0}"
 SINGLE_CASE="${XRAY_DIFF_SINGLE_CASE:-}"
@@ -193,12 +201,30 @@ run_backend() {
             fi
             ;;
         aot)
-            local bin="$out_prefix.bin"
-            if ! "$XRAY" build --native -O "$AOT_OPT_LEVEL" "$case" -o "$bin" \
-                    >"$out_prefix.buildlog" 2>&1; then
-                echo "BUILDFAIL" >"$out_prefix.out"
-                : >"$raw_err"
-                rc=200
+            local rel safe key bin_dir bin tmp_bin
+            rel="$(rel_path "$case")"
+            safe="$(printf '%s' "${rel%.xr}" | sed 's#[^A-Za-z0-9_.-]#_#g')"
+            key="$(xray_test_case_dir_key "$case")"
+            bin_dir="$AOT_BIN_CACHE/$safe-$key"
+            bin="$bin_dir/aot"
+            tmp_bin="$bin_dir/aot.$$"
+            if [ ! -x "$bin" ]; then
+                mkdir -p "$bin_dir"
+                rm -f "$tmp_bin"
+                if ! "$XRAY" build --native -O "$AOT_OPT_LEVEL" --cache-dir "$AOT_CACHE" "$case" \
+                        -o "$tmp_bin" >"$out_prefix.buildlog" 2>&1; then
+                    echo "BUILDFAIL" >"$out_prefix.out"
+                    : >"$raw_err"
+                    rc=200
+                else
+                    mv "$tmp_bin" "$bin"
+                fi
+                rm -f "$tmp_bin"
+            else
+                printf 'cached: %s\n' "$bin" >"$out_prefix.buildlog"
+            fi
+            if [ "$rc" -eq 200 ]; then
+                :
             else
                 if [ "$#" -gt 0 ]; then
                     "$bin" "$@" >"$out_prefix.out" 2>"$raw_err" || rc=$?
@@ -395,6 +421,8 @@ echo "Binary:   $XRAY"
 echo "Backends: $BACKENDS"
 echo "Jobs:     $JOBS"
 echo "AOT opt:  -O$AOT_OPT_LEVEL"
+echo "Cache:    $AOT_CACHE"
+echo "BinCache: $AOT_BIN_CACHE"
 if [ "$SHARD_TOTAL" -gt 1 ]; then
     echo "Shard:    $SHARD_INDEX / $SHARD_TOTAL"
 fi
