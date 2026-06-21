@@ -2140,8 +2140,6 @@ XrValue xr_aot_work_queue_new(const XrAotContext *ctx, int64_t shard_count,
                      : (ctx->isolate ? (XrRuntime *) ctx->isolate->scheduler_runtime : NULL);
     XrWorkQueue *q = xr_work_queue_new(core, scheduler, aot_work_queue_sanitize_shards(shard_count),
                                        aot_work_queue_sanitize_capacity(shard_capacity));
-    if (q && ctx->isolate)
-        xr_work_queue_set_vm_bridge_isolate(q, ctx->isolate);
     return q ? xr_value_from_work_queue(q) : XR_NULL_VAL;
 }
 
