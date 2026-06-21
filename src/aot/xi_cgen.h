@@ -53,6 +53,7 @@ typedef struct XiCgenStats {
 XR_FUNC XiCgenCtx *xi_cgen_ctx_new(void);
 XR_FUNC void xi_cgen_ctx_free(XiCgenCtx *ctx);
 XR_FUNC void xi_cgen_ctx_set_aot_bundle(XiCgenCtx *ctx, const XaotBundle *bundle);
+XR_FUNC void xi_cgen_ctx_set_emit_main(XiCgenCtx *ctx, bool emit_main);
 XR_FUNC bool xi_cgen_has_error(const XiCgenCtx *ctx);
 XR_FUNC XiCgenCoroFrameStats xi_cgen_coro_frame_stats(const XiCgenCtx *ctx);
 XR_FUNC XiCgenStats xi_cgen_stats(const XiCgenCtx *ctx);

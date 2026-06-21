@@ -13,6 +13,7 @@ XR_FUNC XiCgenCtx *xi_cgen_ctx_new(void) {
     if (!ctx)
         return NULL;
     ctx->shared_name = "xrt_shared";
+    ctx->emit_main = true;
     /* Allocate the grow-on-demand shared-slot / method / import tables at
      * their initial capacity (cg_reserve_* grow them for large modules). */
     ctx->shared_funcs = (const XiFunc **) xr_calloc(CG_INIT_SHARED, sizeof(const XiFunc *));
@@ -67,6 +68,11 @@ XR_FUNC void xi_cgen_ctx_free(XiCgenCtx *ctx) {
 XR_FUNC void xi_cgen_ctx_set_aot_bundle(XiCgenCtx *ctx, const XaotBundle *bundle) {
     if (ctx)
         ctx->aot_bundle = bundle;
+}
+
+XR_FUNC void xi_cgen_ctx_set_emit_main(XiCgenCtx *ctx, bool emit_main) {
+    if (ctx)
+        ctx->emit_main = emit_main;
 }
 
 XR_FUNC bool xi_cgen_has_error(const XiCgenCtx *ctx) {

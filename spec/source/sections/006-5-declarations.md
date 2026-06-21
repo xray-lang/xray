@@ -293,7 +293,8 @@ print(add(19, 23))        // xray 内部仍是普通函数调用
 - 同一个 AOT bundle 中每个 `@c_export` 符号名必须唯一；重复符号是编译错误。
 - 当前支持的导出边界类型是 `bool`、精确整数、`float32` / `float64`、`uintsize` / `intsize`、`RawPtr<T>`、`RawMut<T>`，以及 `()` 返回。
 - 当前不导出 xray 管理值（如 `string`、class instance、Array/Map/Set、普通 closure）或 by-value aggregate；需要与 C 共享结构体内存时，先通过 `RawPtr<T>` / `RawMut<T>` 传递地址。
-- `@c_export` 只定义函数 ABI wrapper；`xray build --native --c-header FILE` 可为这些 wrapper 生成 C 原型头文件。共享库打包与运行时初始化策略仍由 build/embedder 层决定。
+- `@c_export` 定义函数 ABI wrapper；`xray build --native --c-header FILE` 可为这些 wrapper 生成 C 原型头文件，`xray build --native --shared --c-header FILE` 可生成 native shared library 和匹配头文件。
+- `--shared` 当前只支持无需 Xray runtime 初始化的 scalar / raw pointer 导出；runtime-backed 特性、managed ownership、aggregate by-value 和初始化/关闭策略仍由后续 FFI 任务定义。
 
 ### 5.3 `class` 声明
 
@@ -1137,7 +1138,8 @@ Rules:
 - Each `@c_export` symbol name must be unique within one AOT bundle; duplicate symbols are compile errors.
 - Currently supported export boundary types are `bool`, sized integers, `float32` / `float64`, `uintsize` / `intsize`, `RawPtr<T>`, `RawMut<T>`, and `()` returns.
 - Managed xray values such as `string`, class instances, Array/Map/Set, ordinary closures, and by-value aggregates are not exported directly today. To share struct memory with C, pass an address through `RawPtr<T>` / `RawMut<T>`.
-- `@c_export` defines only the function ABI wrapper; `xray build --native --c-header FILE` can emit a C prototype header for those wrappers. Shared-library packaging and runtime initialization policy remain build/embedder concerns.
+- `@c_export` defines the function ABI wrapper; `xray build --native --c-header FILE` can emit a C prototype header for those wrappers, and `xray build --native --shared --c-header FILE` can emit a native shared library with a matching header.
+- `--shared` currently supports only scalar / raw pointer exports that do not require Xray runtime initialization; runtime-backed features, managed ownership, aggregate by-value, and initialization/shutdown policy remain future FFI work.
 
 ### 5.3 `class` declaration
 

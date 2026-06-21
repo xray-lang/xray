@@ -124,6 +124,8 @@ typedef struct {
  * skipped (it is pure diagnostics and most builds discard it).
  * Caller frees the result via xaot_build_result_free(). */
 XR_FUNC int xaot_build(const char *input_path, bool emit_plan_dump, XaotBuildResult *result);
+XR_FUNC int xaot_build_ex(const char *input_path, bool emit_plan_dump, bool emit_program_main,
+                          XaotBuildResult *result);
 XR_FUNC void xaot_build_result_free(XaotBuildResult *result);
 
 #endif  // XAOT_DRIVER_H

@@ -610,6 +610,11 @@ static int report_analyzer_diagnostics(XaAnalyzer *analyzer, const char *fallbac
 }
 
 XR_FUNC int xaot_build(const char *input_path, bool emit_plan_dump, XaotBuildResult *result) {
+    return xaot_build_ex(input_path, emit_plan_dump, true, result);
+}
+
+XR_FUNC int xaot_build_ex(const char *input_path, bool emit_plan_dump, bool emit_program_main,
+                          XaotBuildResult *result) {
     XR_DCHECK(input_path != NULL, "xaot_build: NULL input_path");
     XR_DCHECK(result != NULL, "xaot_build: NULL result");
     memset(result, 0, sizeof(*result));
@@ -824,6 +829,7 @@ XR_FUNC int xaot_build(const char *input_path, bool emit_plan_dump, XaotBuildRes
         goto fail_free_ir;
     }
     xi_cgen_ctx_set_aot_bundle(cg_ctx, &aot_bundle);
+    xi_cgen_ctx_set_emit_main(cg_ctx, emit_program_main);
 
     /* --- Resolve cross-module imports for C codegen --- */
     xi_cgen_resolve_module_imports(cg_ctx, modules, nmodules);

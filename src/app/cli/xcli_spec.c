@@ -90,6 +90,8 @@ static const XrCliOptionSpec build_options[] = {
     {"sysroot", 'r', XR_CLI_VALUE_STRING, false, false, "DIR", "System root directory"},
     {"strip", 'S', XR_CLI_VALUE_NONE, false, false, NULL, "Strip debug symbols"},
     {"native", 'N', XR_CLI_VALUE_NONE, false, false, NULL, "Use AOT native backend"},
+    {"shared", 0, XR_CLI_VALUE_NONE, false, false, NULL,
+     "Build a native shared library for @c_export symbols"},
     {"target", 0, XR_CLI_VALUE_STRING, false, false, "TRIPLE", "AOT target triple"},
     {"toolchain", 0, XR_CLI_VALUE_STRING, false, false, "KIND",
      "AOT toolchain: auto, host, zig, clang"},
