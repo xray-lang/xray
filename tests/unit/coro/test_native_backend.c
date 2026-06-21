@@ -9,9 +9,11 @@
  */
 
 #include "../test_framework.h"
+#include "base/xglobal_indices.h"
 #include "coro/xaot_coro.h"
 #include "coro/xcoro_pool.h"
 #include "coro/xcoroutine.h"
+#include "coro/xworker.h"
 #include "coro/xyieldable.h"
 #include "runtime/xisolate_internal.h"
 #include <stdatomic.h>
@@ -258,6 +260,66 @@ TEST(aot_frame_alloc_accepts_zero_state_frames) {
     xr_aot_frame_free(frame);
 }
 
+TEST(aot_runtime_owns_core_without_isolate) {
+    char *argv[] = {"alpha", "beta"};
+    int userdata = 123;
+
+    XrAotRuntimeConfig cfg;
+    xr_aot_runtime_config_init(&cfg);
+    cfg.caps = XR_AOT_CAP_NONE;
+    cfg.argc = 2;
+    cfg.argv = argv;
+    cfg.file = "main.xr";
+    cfg.userdata = &userdata;
+
+    XrAotRuntime *runtime = xr_aot_runtime_new(&cfg);
+    ASSERT_NOT_NULL(runtime);
+    ASSERT_EQ_INT((int) xr_aot_runtime_caps(runtime), XR_AOT_CAP_NONE);
+    ASSERT_NOT_NULL(xr_aot_runtime_core(runtime));
+    ASSERT_NULL(xr_aot_runtime_scheduler(runtime));
+    ASSERT_NULL(xr_aot_runtime_core(runtime)->gc.isolate);
+    ASSERT_EQ_PTR(xr_aot_runtime_core(runtime)->userdata, &userdata);
+    ASSERT_STR_EQ(xr_aot_runtime_core(runtime)->script_info.file, "main.xr");
+    ASSERT_EQ_INT(xr_aot_runtime_core(runtime)->script_info.argc, 2);
+    ASSERT_EQ_PTR(xr_aot_runtime_core(runtime)->script_info.argv, argv);
+
+    xr_aot_runtime_delete(runtime);
+}
+
+TEST(aot_runtime_creates_scheduler_for_runtime_caps) {
+    XrAotRuntimeConfig cfg;
+    xr_aot_runtime_config_init(&cfg);
+    cfg.caps = XR_AOT_CAP_CORO | XR_AOT_CAP_TIMER | XR_AOT_CAP_CHANNEL;
+    cfg.scheduler_workers = 0;
+
+    XrAotRuntime *runtime = xr_aot_runtime_new(&cfg);
+    ASSERT_NOT_NULL(runtime);
+    XrRuntime *scheduler = xr_aot_runtime_scheduler(runtime);
+    ASSERT_NOT_NULL(scheduler);
+    ASSERT_EQ_PTR(xr_runtime_get_core(scheduler), xr_aot_runtime_core(runtime));
+    ASSERT_EQ_PTR(xr_scheduler_host_backend_context(scheduler), runtime);
+
+    xr_aot_runtime_delete(runtime);
+}
+
+TEST(aot_context_builtin_prefers_runtime_table) {
+    XrAotRuntimeConfig cfg;
+    xr_aot_runtime_config_init(&cfg);
+
+    XrAotRuntime *runtime = xr_aot_runtime_new(&cfg);
+    ASSERT_NOT_NULL(runtime);
+
+    XrValue expected = xr_int(99);
+    xr_aot_runtime_set_builtin(runtime, XR_GLOBAL_VAR_PROCESS, expected);
+
+    XrAotContext ctx;
+    memset(&ctx, 0, sizeof(ctx));
+    ctx.runtime = runtime;
+    ASSERT_EQ_INT(XR_TO_INT(xr_aot_get_builtin(&ctx, XR_GLOBAL_VAR_PROCESS)), 99);
+
+    xr_aot_runtime_delete(runtime);
+}
+
 TEST(coroutine_recycle_hooks_are_backend_abi_contract) {
     const XrCoroBackendVTable *vm_backend = xr_coro_vm_backend_vtable();
     ASSERT_NOT_NULL(vm_backend);
@@ -314,6 +376,9 @@ RUN_TEST(aot_coroutine_uses_aot_backend_without_vm_state_and_maps_done);
 RUN_TEST(aot_coroutine_maps_block_error_and_cancel_to_common_run_results);
 RUN_TEST(aot_coroutine_create_failure_releases_frame);
 RUN_TEST(aot_frame_alloc_accepts_zero_state_frames);
+RUN_TEST(aot_runtime_owns_core_without_isolate);
+RUN_TEST(aot_runtime_creates_scheduler_for_runtime_caps);
+RUN_TEST(aot_context_builtin_prefers_runtime_table);
 RUN_TEST(coroutine_recycle_hooks_are_backend_abi_contract);
 
 TEST_MAIN_END()

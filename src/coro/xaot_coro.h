@@ -28,7 +28,30 @@
 struct XrayIsolate;
 struct XrCoroutine;
 struct XrCoroGC;
+struct XrRuntime;
+struct XrRuntimeCore;
 struct XrTask;
+
+typedef struct XrAotRuntime XrAotRuntime;
+
+typedef enum {
+    XR_AOT_CAP_NONE = 0,
+    XR_AOT_CAP_CORO = 1u << 0,
+    XR_AOT_CAP_TIMER = 1u << 1,
+    XR_AOT_CAP_CHANNEL = 1u << 2,
+    XR_AOT_CAP_WORK_QUEUE = 1u << 3,
+    XR_AOT_CAP_RESULT_GROUP = 1u << 4,
+    XR_AOT_CAP_PROCESS = 1u << 5,
+} XrAotRuntimeCap;
+
+typedef struct XrAotRuntimeConfig {
+    uint32_t caps;
+    int scheduler_workers;
+    int argc;
+    char **argv;
+    const char *file;
+    void *userdata;
+} XrAotRuntimeConfig;
 
 typedef enum {
     XR_AOT_RUN_DONE = 0,
@@ -48,6 +71,7 @@ typedef struct XrAotResult {
 } XrAotResult;
 
 typedef struct XrAotContext {
+    XrAotRuntime *runtime;
     struct XrCoroutine *coro;
     struct XrayIsolate *isolate;
     void *worker;
@@ -118,6 +142,14 @@ static inline XrAotResult xr_aot_error(XrValue error, bool error_is_value) {
 
 XR_FUNC void *xr_aot_frame_alloc(size_t size);
 XR_FUNC void xr_aot_frame_free(void *frame);
+XR_FUNC void xr_aot_runtime_config_init(XrAotRuntimeConfig *cfg);
+XR_FUNC XrAotRuntime *xr_aot_runtime_new(const XrAotRuntimeConfig *cfg);
+XR_FUNC void xr_aot_runtime_delete(XrAotRuntime *runtime);
+XR_FUNC uint32_t xr_aot_runtime_caps(const XrAotRuntime *runtime);
+XR_FUNC struct XrRuntimeCore *xr_aot_runtime_core(XrAotRuntime *runtime);
+XR_FUNC struct XrRuntime *xr_aot_runtime_scheduler(XrAotRuntime *runtime);
+XR_FUNC XrValue xr_aot_runtime_builtin(const XrAotRuntime *runtime, int32_t index);
+XR_FUNC void xr_aot_runtime_set_builtin(XrAotRuntime *runtime, int32_t index, XrValue value);
 XR_FUNC void xr_aot_trace_frame_value(void *visitor, XrValue value);
 XR_FUNC void xr_aot_release_frame_value(struct XrCoroGC *gc, XrValue value);
 XR_FUNC XrValue xr_aot_get_builtin(const XrAotContext *ctx, int32_t index);
