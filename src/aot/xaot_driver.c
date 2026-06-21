@@ -480,6 +480,72 @@ static bool stdlib_set_needs_runtime_provider(XaotStdlibSet stdlib) {
            0;
 }
 
+static bool add_runtime_cap(XaotLinkManifest *manifest, const char *cap) {
+    return xaot_link_manifest_add_unique(manifest, XAOT_LINK_RUNTIME_CAP, cap);
+}
+
+static bool add_aot_runtime_archive(XaotLinkManifest *manifest) {
+    return xaot_link_manifest_add_unique(manifest, XAOT_LINK_RUNTIME_OBJECT, "xray_rt_coro");
+}
+
+static bool add_runtime_cap_manifest_entries(const XaotFeatureSet *features,
+                                             XaotLinkManifest *manifest) {
+    bool needs_aot_runtime = false;
+
+    if (features->need_coro || features->need_scope) {
+        if (!add_runtime_cap(manifest, "coro"))
+            return false;
+        needs_aot_runtime = true;
+    }
+    if (features->need_channel) {
+        if (!add_runtime_cap(manifest, "coro") || !add_runtime_cap(manifest, "channel"))
+            return false;
+        needs_aot_runtime = true;
+    }
+    if (features->need_timer) {
+        if (!add_runtime_cap(manifest, "coro") || !add_runtime_cap(manifest, "timer"))
+            return false;
+        needs_aot_runtime = true;
+    }
+    if (features->need_netpoll) {
+        if (!add_runtime_cap(manifest, "coro") || !add_runtime_cap(manifest, "netpoll"))
+            return false;
+        needs_aot_runtime = true;
+    }
+    if (features->need_deep_copy) {
+        if (!add_runtime_cap(manifest, "deep_copy"))
+            return false;
+        needs_aot_runtime = true;
+    }
+    if (features->need_reflection) {
+        if (!add_runtime_cap(manifest, "reflection"))
+            return false;
+        needs_aot_runtime = true;
+    }
+    if (features->need_instanceof) {
+        if (!add_runtime_cap(manifest, "type"))
+            return false;
+        needs_aot_runtime = true;
+    }
+    if (features->need_stacktrace) {
+        if (!add_runtime_cap(manifest, "stacktrace"))
+            return false;
+        needs_aot_runtime = true;
+    }
+    if (stdlib_set_needs_runtime_provider(features->stdlib)) {
+        if (!add_runtime_cap(manifest, "stdlib_runtime"))
+            return false;
+        needs_aot_runtime = true;
+    }
+
+    if (needs_aot_runtime && !add_aot_runtime_archive(manifest))
+        return false;
+    if (needs_aot_runtime &&
+        !xaot_link_manifest_add_unique(manifest, XAOT_LINK_SYSTEM_LIB, "pthread"))
+        return false;
+    return true;
+}
+
 static bool build_link_manifest(const XaotFeatureSet *features, XaotLinkManifest *manifest) {
     XaotTarget target;
     bool ok = false;
@@ -512,47 +578,8 @@ static bool build_link_manifest(const XaotFeatureSet *features, XaotLinkManifest
         goto done;
 #endif
 
-    if (features->need_coro || features->need_channel || features->need_scope ||
-        features->need_timer || features->need_netpoll || features->need_deep_copy ||
-        features->need_exception || features->need_reflection || features->need_stacktrace ||
-        features->need_instanceof || stdlib_set_needs_runtime_provider(features->stdlib)) {
-        if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_RUNTIME_OBJECT, "xray_core"))
-            goto done;
-        if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_SYSTEM_LIB, "pthread"))
-            goto done;
-        if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_SYSTEM_LIB, "z"))
-            goto done;
-#ifdef XRAY_HAVE_LIBFFI
-        /* xray_core embeds the VM's libffi-based @extern invoker (xi_ffi.c), so
-         * a native program that links the runtime must resolve libffi too. */
-        if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_SYSTEM_LIB, "ffi"))
-            goto done;
-#endif
-#ifdef XR_HAS_IO_URING
-        /* xray_core embeds the per-worker io_uring completion rings, so a native
-         * program that links the runtime must resolve liburing too. */
-        if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_SYSTEM_LIB, "uring"))
-            goto done;
-#endif
-#ifdef XR_OS_MACOS
-        {
-            /* Default to the Apple-Silicon Homebrew prefix, but allow an
-             * override for Intel Homebrew (/usr/local) or custom prefixes. */
-            const char *ssl_libdir = getenv("XRAY_OPENSSL_LIBDIR");
-            char ssl_flag[512];
-            snprintf(ssl_flag, sizeof(ssl_flag), "-L%s",
-                     ssl_libdir && ssl_libdir[0] ? ssl_libdir : "/opt/homebrew/opt/openssl@3/lib");
-            if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_LD_FLAG, ssl_flag))
-                goto done;
-        }
-#endif
-#ifdef XR_ENABLE_TLS
-        if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_SYSTEM_LIB, "ssl"))
-            goto done;
-        if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_SYSTEM_LIB, "crypto"))
-            goto done;
-#endif
-    }
+    if (!add_runtime_cap_manifest_entries(features, manifest))
+        goto done;
 
     if (!add_stdlib_manifest_entries(manifest, features->stdlib))
         goto done;

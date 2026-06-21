@@ -1236,6 +1236,7 @@ static uint64_t xaot_link_output_cache_key(const XaotBuildResult *result, const 
     h = xaot_hash_fold_str(h, sysroot);
     if (result) {
         const XaotLinkManifest *manifest = &result->link_manifest;
+        h = xaot_hash_fold_string_list(h, manifest->runtime_caps, manifest->n_runtime_caps);
         h = xaot_hash_fold_string_list(h, manifest->runtime_objects, manifest->n_runtime_objects);
         h = xaot_hash_fold_string_list(h, manifest->stdlib_objects, manifest->n_stdlib_objects);
         h = xaot_hash_fold_string_list(h, manifest->generated_c_files,

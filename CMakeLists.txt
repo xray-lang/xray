@@ -724,6 +724,27 @@ add_library(xray_aot_core STATIC
 )
 target_compile_definitions(xray_aot_core PRIVATE XR_COMPRESS_CORE_ONLY=1 XR_CRYPTO_CORE_ONLY=1)
 
+set(XRAY_RT_CORO_SOURCES
+    ${BASE_SRC}
+    ${OS_SRC}
+    ${RUNTIME_TOP_SRC}
+    ${RUNTIME_CORE_SRC}
+    ${RUNTIME_VALUE_SRC}
+    ${RUNTIME_GC_SRC}
+    ${RUNTIME_OBJECT_SRC}
+    ${RUNTIME_CLASS_SRC}
+    ${RUNTIME_CLOSURE_SRC}
+    ${RUNTIME_SYMBOL_SRC}
+    ${CORO_SRC}
+    ${IO_SRC}
+)
+list(FILTER XRAY_RT_CORO_SOURCES EXCLUDE REGEX ".*/src/runtime/xisolate_api\\.c$")
+list(FILTER XRAY_RT_CORO_SOURCES EXCLUDE REGEX ".*/src/runtime/value/xchunk\\.c$")
+list(FILTER XRAY_RT_CORO_SOURCES EXCLUDE REGEX ".*/src/runtime/value/xopcode_info\\.c$")
+
+add_library(xray_rt_coro STATIC ${XRAY_RT_CORO_SOURCES})
+add_dependencies(xray_rt_coro gen-xi-ops gen-xi-verify gen-xi-lowering gen-aot-metadata)
+
 if(CMAKE_BUILD_TYPE STREQUAL "Release" AND MSVC)
     set_source_files_properties(
         src/vm/xvm.c
@@ -748,13 +769,23 @@ target_include_directories(xray_core PRIVATE
     ${XRAY_COMMON_INCLUDES}
 )
 
+target_include_directories(xray_rt_coro PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+
+target_include_directories(xray_rt_coro PRIVATE
+    ${XRAY_COMMON_INCLUDES}
+)
+
 # Link libraries
 if(WIN32)
     # Math library is part of the MSVC runtime; ws2_32 for sockets,
     # synchronization for WaitOnAddress/WakeByAddressSingle
     target_link_libraries(xray_core PUBLIC ws2_32 synchronization)
+    target_link_libraries(xray_rt_coro PUBLIC ws2_32 synchronization)
 else()
     target_link_libraries(xray_core PUBLIC m pthread)
+    target_link_libraries(xray_rt_coro PUBLIC m pthread)
 endif()
 if(ZLIB_FOUND)
     target_link_libraries(xray_core PUBLIC ZLIB::ZLIB)
@@ -935,7 +966,7 @@ else()
 endif()
 
 add_executable(xray ${XRAY_CLI_SOURCES})
-add_dependencies(xray xray_aot_core)
+add_dependencies(xray xray_aot_core xray_rt_coro)
 
 target_link_libraries(xray PRIVATE xray_core)
 if(READLINE_LIB)
@@ -1087,8 +1118,8 @@ if(BUILD_TESTS)
         TIMEOUT 120
     )
 
-    # Link manifest contract: freestanding core-math direct calls must not drag
-    # in xray_core, while runtime-backed stdlib modules still do (115).
+    # Link manifest contract: freestanding direct calls and runtime-backed
+    # stdlib modules must not drag in the full xray_core library.
     add_test(
         NAME aot_link_command_manifest
         COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_aot_link_command_tests.sh
@@ -1101,9 +1132,8 @@ if(BUILD_TESTS)
         TIMEOUT 120
     )
 
-    # Isolate/runtime split guard (132/M0 + 133/I0): freestanding AOT binaries
-    # must stay VM-free; runtime-backed samples record the current isolate debt
-    # until 133/I3-I4 turn that baseline into a hard gate.
+    # Isolate/runtime split guard (132/M0 + 133/I0/I4): AOT binaries must stay
+    # free of xray_core and public isolate/VM/compiler/module-loader symbols.
     add_test(
         NAME aot_isolate_symbol_gate
         COMMAND ${CMAKE_COMMAND} -E env
@@ -1400,7 +1430,7 @@ install(TARGETS xray
 )
 
 # Install static library (for xray build)
-install(TARGETS xray_core xray_aot_core
+install(TARGETS xray_core xray_aot_core xray_rt_coro
     ARCHIVE DESTINATION lib
 )
 

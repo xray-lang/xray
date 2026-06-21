@@ -1,12 +1,8 @@
 #!/bin/bash
 # AOT isolate/VM symbol gate for tasks 132/M0 + 133/I0.
 #
-# This gate has two modes by design:
-#   - freestanding AOT samples are hard failures if they link xray_core or carry
-#     isolate/VM/compiler/module-loader symbols.
-#   - runtime-backed samples still record xray_core linkage as a library-split
-#     baseline, but forbidden isolate/VM/compiler/module-loader symbols are hard
-#     failures.
+# Freestanding and runtime-backed AOT samples are hard failures if they link
+# xray_core or carry public isolate/VM/compiler/module-loader symbols.
 #
 # Environment:
 #   XRAY_AOT_ISOLATE_JOBS  parallel workers (default: auto, capped by
@@ -25,7 +21,6 @@ WORK="$(mktemp -d "${TMPDIR:-/tmp}/xray_aot_isolate_symbols.XXXXXX")" || {
 CACHE="$WORK/.cache"
 PASS=0
 FAIL=0
-BASELINE=0
 REQUESTED_JOBS="${XRAY_AOT_ISOLATE_JOBS:-${XRAY_TEST_JOBS:-auto}}"
 JOBS=1
 
@@ -47,11 +42,6 @@ record_pass() {
 record_fail() {
     echo "  FAIL: $1"
     FAIL=$((FAIL + 1))
-}
-
-record_baseline() {
-    echo "  BASELINE: $1"
-    BASELINE=$((BASELINE + 1))
 }
 
 is_uint() {
@@ -213,11 +203,7 @@ run_runtime_case() {
     echo "-- $name"
     if build_native "$src" "$bin" "$log"; then
         echo "  size: $(binary_size "$bin") bytes"
-        if grep -Fq -- "-lxray_core" "$log"; then
-            record_baseline "$name: currently links xray_core"
-        else
-            record_pass "$name: does not link xray_core"
-        fi
+        expect_log_not_contains "$log" "-lxray_core" "$name: does not link xray_core"
         check_no_forbidden_symbols "$bin" "$slug" "$name"
         if [ -n "$want_output" ]; then
             expect_output "$bin" "$want_output" "$name: binary output"
@@ -268,11 +254,24 @@ run_case_by_id() {
     esac
 }
 
+check_runtime_archive() {
+    local dir archive
+    dir="$(cd "$(dirname "$XRAY")" && pwd)"
+    archive="$dir/libxray_rt_coro.a"
+
+    echo ""
+    echo "-- runtime-archive/xray_rt_coro"
+    if [ ! -f "$archive" ]; then
+        record_fail "runtime-archive/xray_rt_coro: archive missing at $archive"
+        return
+    fi
+    check_no_forbidden_symbols "$archive" "xray_rt_coro_archive" "runtime-archive/xray_rt_coro"
+}
+
 record_parallel_result() {
     local log="$1"
     cat "$log"
     PASS=$((PASS + $(grep -c '^  PASS:' "$log" || true)))
-    BASELINE=$((BASELINE + $(grep -c '^  BASELINE:' "$log" || true)))
     FAIL=$((FAIL + $(grep -c '^  FAIL:' "$log" || true)))
 }
 
@@ -339,6 +338,8 @@ if [ ! -x "$XRAY" ]; then
     exit 1
 fi
 
+check_runtime_archive
+
 if [ "$JOBS" -le 1 ]; then
     for case_id in \
         core_math_single_symbol \
@@ -354,5 +355,5 @@ else
 fi
 
 echo ""
-echo "=== Results: $PASS passed, $BASELINE baseline, $FAIL failed ==="
+echo "=== Results: $PASS passed, $FAIL failed ==="
 [ "$FAIL" -eq 0 ] && exit 0 || exit 1
