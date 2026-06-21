@@ -474,6 +474,8 @@ bool xr_coro_init_shell(XrCoroutine *coro, XrayIsolate *X, const char *name, boo
     XR_OBJ_SET_FLAG(&coro->gc, XR_OBJ_MANAGED);
     coro->schedule_count = 1;
     coro->spawn_burst_count = 0;
+    coro->core = xr_isolate_get_runtime_core(X);
+    coro->scheduler = X->vm.runtime ? (XrRuntime *) X->vm.runtime : NULL;
     coro->isolate = X;
     if (!xr_coro_set_name(coro, name))
         return false;
@@ -861,9 +863,7 @@ void xr_gc_destroy_coroutine(XrGCHeader *obj, struct XrCoroGC *owning_gc) {
 static XrRuntime *coro_cancel_runtime(XrCoroutine *coro, XrWorker *current_worker) {
     if (current_worker && current_worker->p.runtime)
         return current_worker->p.runtime;
-    if (coro && coro->isolate)
-        return (XrRuntime *) coro->isolate->vm.runtime;
-    return NULL;
+    return (XrRuntime *) xr_coro_scheduler(coro);
 }
 
 static bool coro_cancel_detach_channel_waiter(XrCoroutine *coro, XrWorker *current_worker) {
@@ -1052,6 +1052,10 @@ void xr_multicore_init(XrayIsolate *X, int num_workers) {
         xr_scheduler_runtime_attach_isolate(runtime, X);
         X->vm.runtime = runtime;
         X->vm.multicore_enabled = true;
+        if (X->main_coro) {
+            X->main_coro->core = xr_isolate_get_runtime_core(X);
+            X->main_coro->scheduler = runtime;
+        }
 
         // Start Worker threads
         xr_runtime_start(runtime);
@@ -1067,6 +1071,10 @@ void xr_multicore_destroy(XrayIsolate *X) {
     bool stats_enabled = xr_sched_stats_enabled(runtime);
     uint64_t total_start_ns = xr_time_monotonic_ns();
     uint64_t stage_start_ns = total_start_ns;
+
+    if (X->main_coro && X->main_coro->scheduler == runtime) {
+        X->main_coro->scheduler = NULL;
+    }
 
     // Stop Runtime (if started)
     xr_runtime_stop(runtime);

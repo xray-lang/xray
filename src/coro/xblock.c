@@ -31,9 +31,7 @@ static inline XrCoroBlockResult block_result(XrCoroBlockKind kind, XrValue value
 }
 
 static XrRuntime *coro_stats_runtime(XrCoroutine *coro) {
-    if (!coro || !coro->isolate || !coro->isolate->vm.runtime)
-        return NULL;
-    XrRuntime *runtime = (XrRuntime *) coro->isolate->vm.runtime;
+    XrRuntime *runtime = (XrRuntime *) xr_coro_scheduler(coro);
     return xr_sched_stats_enabled(runtime) ? runtime : NULL;
 }
 

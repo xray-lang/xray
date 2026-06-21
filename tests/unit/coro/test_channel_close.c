@@ -142,6 +142,14 @@ static void wake_route_fixture_cleanup(WakeRouteFixture *f) {
     }
 }
 
+static void attach_test_coro_context(XrCoroutine *coro, XrayIsolate *isolate) {
+    if (!coro)
+        return;
+    coro->isolate = isolate;
+    coro->core = isolate ? isolate->core_rt : NULL;
+    coro->scheduler = (isolate && isolate->vm.runtime) ? (XrRuntime *) isolate->vm.runtime : NULL;
+}
+
 static bool wake_queue_has_pending(XrWorker *worker) {
     XrChanWakeCmdQueue *q = &worker->p.chan_wake_queue;
     XrChanWakeCmd *head = atomic_load_explicit(&q->head, memory_order_acquire);
@@ -184,7 +192,7 @@ static void init_blocked_channel_coro(XrCoroutine *coro, XrCoroExt *ext, int id,
     memset(coro, 0, sizeof(*coro));
     memset(ext, 0, sizeof(*ext));
     coro->id = id;
-    coro->isolate = isolate;
+    attach_test_coro_context(coro, isolate);
     coro->ext = ext;
     uint32_t wait_flag = wait_send ? XR_CORO_WAIT_CHANNEL_SEND : XR_CORO_WAIT_CHANNEL_RECV;
     atomic_store(&coro->flags, XR_CORO_FLG_BLOCKED | wait_flag);
@@ -202,7 +210,7 @@ static void init_blocked_io_coro(XrCoroutine *coro, XrCoroExt *ext, int id, Xray
     memset(coro, 0, sizeof(*coro));
     memset(ext, 0, sizeof(*ext));
     coro->id = id;
-    coro->isolate = isolate;
+    attach_test_coro_context(coro, isolate);
     coro->ext = ext;
     atomic_store(&coro->flags, XR_CORO_FLG_BLOCKED | XR_CORO_WAIT_IO);
     atomic_store(&coro->resume_status, XR_RESUME_OK);
@@ -216,7 +224,7 @@ static void init_select_recv_coro(XrCoroutine *coro, XrCoroExt *ext, int id, Xra
     memset(coro, 0, sizeof(*coro));
     memset(ext, 0, sizeof(*ext));
     coro->id = id;
-    coro->isolate = isolate;
+    attach_test_coro_context(coro, isolate);
     coro->ext = ext;
     atomic_store(&coro->flags, XR_CORO_WAIT_SELECT | XR_CORO_FLG_BLOCKED);
     atomic_store(&coro->resume_status, XR_RESUME_OK);
@@ -245,7 +253,7 @@ TEST(channel_close_wakes_select_waiter_without_caller_fanout) {
     XrCoroutine coro;
     memset(&coro, 0, sizeof(coro));
     coro.id = 7;
-    coro.isolate = &f.isolate_storage;
+    attach_test_coro_context(&coro, &f.isolate_storage);
     atomic_store(&coro.flags, XR_CORO_WAIT_SELECT | XR_CORO_FLG_BLOCKED);
     atomic_store(&coro.resume_status, XR_RESUME_OK);
     atomic_store(&coro.affinity_p, 0);
@@ -347,7 +355,7 @@ TEST(select_block_probes_already_closed_channel_without_ext) {
     XrCoroutine coro;
     memset(&coro, 0, sizeof(coro));
     coro.id = 8;
-    coro.isolate = &f.isolate_storage;
+    attach_test_coro_context(&coro, &f.isolate_storage);
     atomic_store(&coro.flags, XR_CORO_FLG_RUNNING);
     atomic_store(&coro.resume_status, XR_RESUME_OK);
     atomic_store(&coro.affinity_p, 0);
@@ -379,7 +387,7 @@ TEST(select_waiter_cancel_unlinks_worker_buckets) {
     memset(&waiter, 0, sizeof(waiter));
     memset(&waiter_ext, 0, sizeof(waiter_ext));
     waiter.id = 13;
-    waiter.isolate = &f.isolate_storage;
+    attach_test_coro_context(&waiter, &f.isolate_storage);
     waiter.ext = &waiter_ext;
     atomic_store(&waiter.flags, XR_CORO_FLG_RUNNING);
     atomic_store(&waiter.resume_status, XR_RESUME_OK);
@@ -564,7 +572,7 @@ TEST(channel_ready_wake_metrics_track_waiter_kind_and_direction) {
     memset(&receiver, 0, sizeof(receiver));
     memset(&receiver_ext, 0, sizeof(receiver_ext));
     receiver.id = 501;
-    receiver.isolate = &f.isolate_storage;
+    attach_test_coro_context(&receiver, &f.isolate_storage);
     receiver.ext = &receiver_ext;
     atomic_store(&receiver.flags, XR_CORO_FLG_RUNNING);
     atomic_store(&receiver.resume_status, XR_RESUME_OK);
@@ -581,7 +589,7 @@ TEST(channel_ready_wake_metrics_track_waiter_kind_and_direction) {
     memset(&sender, 0, sizeof(sender));
     memset(&sender_ext, 0, sizeof(sender_ext));
     sender.id = 502;
-    sender.isolate = &f.isolate_storage;
+    attach_test_coro_context(&sender, &f.isolate_storage);
     sender.ext = &sender_ext;
     atomic_store(&sender.flags, XR_CORO_FLG_RUNNING);
     atomic_store(&sender.resume_status, XR_RESUME_OK);
@@ -624,7 +632,7 @@ TEST(channel_ready_wake_retarget_metrics_track_current_lifo_pull) {
     memset(&receiver, 0, sizeof(receiver));
     memset(&receiver_ext, 0, sizeof(receiver_ext));
     receiver.id = 503;
-    receiver.isolate = &f.isolate_storage;
+    attach_test_coro_context(&receiver, &f.isolate_storage);
     receiver.ext = &receiver_ext;
     atomic_store(&receiver.flags, XR_CORO_FLG_RUNNING);
     atomic_store(&receiver.resume_status, XR_RESUME_OK);
@@ -650,7 +658,7 @@ TEST(channel_ready_wake_retarget_metrics_track_current_lifo_pull) {
     memset(&sender, 0, sizeof(sender));
     memset(&sender_ext, 0, sizeof(sender_ext));
     sender.id = 504;
-    sender.isolate = &f.isolate_storage;
+    attach_test_coro_context(&sender, &f.isolate_storage);
     sender.ext = &sender_ext;
     atomic_store(&sender.flags, XR_CORO_FLG_RUNNING);
     atomic_store(&sender.resume_status, XR_RESUME_OK);
@@ -689,7 +697,7 @@ TEST(work_queue_recv_wake_uses_target_inbox_near_lifo_budget) {
     memset(&receiver, 0, sizeof(receiver));
     memset(&receiver_ext, 0, sizeof(receiver_ext));
     receiver.id = 505;
-    receiver.isolate = &f.isolate_storage;
+    attach_test_coro_context(&receiver, &f.isolate_storage);
     receiver.ext = &receiver_ext;
     atomic_store(&receiver.flags, XR_CORO_FLG_RUNNING);
     atomic_store(&receiver.resume_status, XR_RESUME_OK);
@@ -733,7 +741,7 @@ TEST(channel_block_metrics_track_waiter_kind_and_direction) {
     XrCoroutine sender;
     memset(&sender, 0, sizeof(sender));
     sender.id = 507;
-    sender.isolate = &f.isolate_storage;
+    attach_test_coro_context(&sender, &f.isolate_storage);
     atomic_store(&sender.flags, XR_CORO_FLG_RUNNING);
     atomic_store(&sender.resume_status, XR_RESUME_OK);
     atomic_store(&sender.affinity_p, 0);
@@ -757,7 +765,7 @@ TEST(channel_block_metrics_track_waiter_kind_and_direction) {
     XrCoroutine receiver;
     memset(&receiver, 0, sizeof(receiver));
     receiver.id = 508;
-    receiver.isolate = &f.isolate_storage;
+    attach_test_coro_context(&receiver, &f.isolate_storage);
     atomic_store(&receiver.flags, XR_CORO_FLG_RUNNING);
     atomic_store(&receiver.resume_status, XR_RESUME_OK);
     atomic_store(&receiver.affinity_p, 0);
@@ -827,8 +835,8 @@ TEST(channel_shape_op_metrics_track_logical_and_worker_kinds) {
     memset(&consumer, 0, sizeof(consumer));
     producer.id = 101;
     consumer.id = 202;
-    producer.isolate = &f.isolate_storage;
-    consumer.isolate = &f.isolate_storage;
+    attach_test_coro_context(&producer, &f.isolate_storage);
+    attach_test_coro_context(&consumer, &f.isolate_storage);
 
     ASSERT_EQ_INT((int) xr_channel_send(ch, xr_int(1), &producer, -1), (int) XR_CHAN_OK);
     XrValue out = xr_null();
@@ -869,7 +877,7 @@ TEST(coro_channel_buffer_fast_paths_do_not_allocate_ext) {
     XrCoroutine sender;
     memset(&sender, 0, sizeof(sender));
     sender.id = 401;
-    sender.isolate = &f.isolate_storage;
+    attach_test_coro_context(&sender, &f.isolate_storage);
     atomic_store(&sender.flags, XR_CORO_FLG_RUNNING);
     atomic_store(&sender.resume_status, XR_RESUME_OK);
     atomic_store(&sender.affinity_p, 0);
@@ -889,7 +897,7 @@ TEST(coro_channel_buffer_fast_paths_do_not_allocate_ext) {
     XrCoroutine receiver;
     memset(&receiver, 0, sizeof(receiver));
     receiver.id = 402;
-    receiver.isolate = &f.isolate_storage;
+    attach_test_coro_context(&receiver, &f.isolate_storage);
     atomic_store(&receiver.flags, XR_CORO_FLG_RUNNING);
     atomic_store(&receiver.resume_status, XR_RESUME_OK);
     atomic_store(&receiver.affinity_p, 0);
@@ -922,7 +930,7 @@ TEST(coro_channel_recv_sets_recv_slot_only_when_blocking) {
     XrCoroutine receiver;
     memset(&receiver, 0, sizeof(receiver));
     receiver.id = 403;
-    receiver.isolate = &f.isolate_storage;
+    attach_test_coro_context(&receiver, &f.isolate_storage);
     atomic_store(&receiver.flags, XR_CORO_FLG_RUNNING);
     atomic_store(&receiver.resume_status, XR_RESUME_OK);
     atomic_store(&receiver.affinity_p, 0);
@@ -961,7 +969,7 @@ TEST(coro_channel_recv_delivered_wake_writes_value_and_ok_slots) {
     XrCoroutine receiver;
     memset(&receiver, 0, sizeof(receiver));
     receiver.id = 405;
-    receiver.isolate = &f.isolate_storage;
+    attach_test_coro_context(&receiver, &f.isolate_storage);
     atomic_store(&receiver.flags, XR_CORO_FLG_RUNNING);
     atomic_store(&receiver.resume_status, XR_RESUME_OK);
     atomic_store(&receiver.affinity_p, 0);
@@ -1005,7 +1013,7 @@ TEST(coro_channel_recv_delivery_gated_for_deep_copy_values) {
     XrCoroutine receiver;
     memset(&receiver, 0, sizeof(receiver));
     receiver.id = 406;
-    receiver.isolate = &f.isolate_storage;
+    attach_test_coro_context(&receiver, &f.isolate_storage);
     atomic_store(&receiver.flags, XR_CORO_FLG_RUNNING);
     atomic_store(&receiver.resume_status, XR_RESUME_OK);
     atomic_store(&receiver.affinity_p, 0);
@@ -1049,7 +1057,7 @@ TEST(coro_channel_recv_close_wake_stays_on_replay_protocol) {
     XrCoroutine receiver;
     memset(&receiver, 0, sizeof(receiver));
     receiver.id = 407;
-    receiver.isolate = &f.isolate_storage;
+    attach_test_coro_context(&receiver, &f.isolate_storage);
     atomic_store(&receiver.flags, XR_CORO_FLG_RUNNING);
     atomic_store(&receiver.resume_status, XR_RESUME_OK);
     atomic_store(&receiver.affinity_p, 0);
@@ -1091,7 +1099,7 @@ TEST(channel_wait_token_tracks_block_wake_and_resume) {
     memset(&sender, 0, sizeof(sender));
     memset(&sender_ext, 0, sizeof(sender_ext));
     sender.id = 301;
-    sender.isolate = &f.isolate_storage;
+    attach_test_coro_context(&sender, &f.isolate_storage);
     sender.ext = &sender_ext;
     atomic_store(&sender.flags, XR_CORO_FLG_RUNNING);
     atomic_store(&sender.resume_status, XR_RESUME_OK);
@@ -1137,7 +1145,7 @@ TEST(channel_timed_wait_cancels_timer_on_channel_wake) {
     memset(&sender, 0, sizeof(sender));
     memset(&sender_ext, 0, sizeof(sender_ext));
     sender.id = 302;
-    sender.isolate = &f.isolate_storage;
+    attach_test_coro_context(&sender, &f.isolate_storage);
     sender.ext = &sender_ext;
     atomic_store(&sender.flags, XR_CORO_FLG_RUNNING);
     atomic_store(&sender.resume_status, XR_RESUME_OK);
@@ -1150,7 +1158,7 @@ TEST(channel_timed_wait_cancels_timer_on_channel_wake) {
     XrCoroutine receiver;
     memset(&receiver, 0, sizeof(receiver));
     receiver.id = 303;
-    receiver.isolate = &f.isolate_storage;
+    attach_test_coro_context(&receiver, &f.isolate_storage);
     atomic_store(&receiver.flags, XR_CORO_FLG_RUNNING);
     atomic_store(&receiver.resume_status, XR_RESUME_OK);
     atomic_store(&receiver.affinity_p, 0);
@@ -1179,7 +1187,7 @@ TEST(channel_notify_send_without_current_worker_routes_to_inbox) {
     memset(&receiver, 0, sizeof(receiver));
     memset(&receiver_ext, 0, sizeof(receiver_ext));
     receiver.id = 304;
-    receiver.isolate = &f.isolate_storage;
+    attach_test_coro_context(&receiver, &f.isolate_storage);
     receiver.ext = &receiver_ext;
     atomic_store(&receiver.flags, XR_CORO_FLG_RUNNING);
     atomic_store(&receiver.resume_status, XR_RESUME_OK);
@@ -1239,7 +1247,7 @@ TEST(channel_waiter_wake_claims_ready_once) {
     memset(&receiver, 0, sizeof(receiver));
     memset(&receiver_ext, 0, sizeof(receiver_ext));
     receiver.id = 305;
-    receiver.isolate = &f.isolate_storage;
+    attach_test_coro_context(&receiver, &f.isolate_storage);
     receiver.ext = &receiver_ext;
     atomic_store(&receiver.flags, XR_CORO_FLG_RUNNING);
     atomic_store(&receiver.resume_status, XR_RESUME_OK);
@@ -1293,7 +1301,7 @@ TEST(channel_waiter_cancel_unlinks_channel_and_worker_queues) {
     memset(&sender, 0, sizeof(sender));
     memset(&sender_ext, 0, sizeof(sender_ext));
     sender.id = 302;
-    sender.isolate = &f.isolate_storage;
+    attach_test_coro_context(&sender, &f.isolate_storage);
     sender.ext = &sender_ext;
     atomic_store(&sender.flags, XR_CORO_FLG_RUNNING);
     atomic_store(&sender.resume_status, XR_RESUME_OK);
@@ -1350,7 +1358,7 @@ TEST(channel_waiter_cancel_routes_foreign_owner_detach) {
     memset(&sender, 0, sizeof(sender));
     memset(&sender_ext, 0, sizeof(sender_ext));
     sender.id = 303;
-    sender.isolate = &f.isolate_storage;
+    attach_test_coro_context(&sender, &f.isolate_storage);
     sender.ext = &sender_ext;
     atomic_store(&sender.flags, XR_CORO_FLG_RUNNING);
     atomic_store(&sender.resume_status, XR_RESUME_OK);
@@ -1409,7 +1417,7 @@ TEST(select_waiter_cancel_routes_foreign_owner_detach) {
     memset(&waiter, 0, sizeof(waiter));
     memset(&waiter_ext, 0, sizeof(waiter_ext));
     waiter.id = 304;
-    waiter.isolate = &f.isolate_storage;
+    attach_test_coro_context(&waiter, &f.isolate_storage);
     waiter.ext = &waiter_ext;
     atomic_store(&waiter.flags, XR_CORO_FLG_RUNNING);
     atomic_store(&waiter.resume_status, XR_RESUME_OK);
@@ -1467,7 +1475,7 @@ TEST(await_wait_token_tracks_register_resolve_and_resume) {
     memset(&task, 0, sizeof(task));
 
     waiter.id = 401;
-    waiter.isolate = &f.isolate_storage;
+    attach_test_coro_context(&waiter, &f.isolate_storage);
     waiter.ext = &waiter_ext;
     atomic_store(&waiter.flags, XR_CORO_FLG_RUNNING);
     atomic_store(&waiter.resume_status, XR_RESUME_OK);
@@ -1527,8 +1535,8 @@ TEST(single_task_await_wakes_multiple_waiters) {
     memset(&second_ext, 0, sizeof(second_ext));
     first_waiter.id = 421;
     second_waiter.id = 422;
-    first_waiter.isolate = &f.isolate_storage;
-    second_waiter.isolate = &f.isolate_storage;
+    attach_test_coro_context(&first_waiter, &f.isolate_storage);
+    attach_test_coro_context(&second_waiter, &f.isolate_storage);
     first_waiter.ext = &first_ext;
     second_waiter.ext = &second_ext;
     atomic_store(&first_waiter.flags, XR_CORO_FLG_RUNNING);
@@ -1588,7 +1596,7 @@ TEST(single_task_await_legacy_and_node_wake_claim_once) {
     memset(&waiter, 0, sizeof(waiter));
     memset(&waiter_ext, 0, sizeof(waiter_ext));
     waiter.id = 424;
-    waiter.isolate = &f.isolate_storage;
+    attach_test_coro_context(&waiter, &f.isolate_storage);
     waiter.ext = &waiter_ext;
     atomic_store(&waiter.flags, XR_CORO_FLG_RUNNING);
     atomic_store(&waiter.resume_status, XR_RESUME_OK);
@@ -1632,7 +1640,7 @@ TEST(single_task_await_cancelled_resolution_preserves_result_slot) {
     memset(&waiter, 0, sizeof(waiter));
     memset(&waiter_ext, 0, sizeof(waiter_ext));
     waiter.id = 425;
-    waiter.isolate = &f.isolate_storage;
+    attach_test_coro_context(&waiter, &f.isolate_storage);
     waiter.ext = &waiter_ext;
     atomic_store(&waiter.flags, XR_CORO_FLG_RUNNING);
     atomic_store(&waiter.resume_status, XR_RESUME_OK);
@@ -1674,7 +1682,7 @@ TEST(single_task_await_timeout_unlinks_waiter_node) {
     memset(&waiter, 0, sizeof(waiter));
     memset(&waiter_ext, 0, sizeof(waiter_ext));
     waiter.id = 423;
-    waiter.isolate = &f.isolate_storage;
+    attach_test_coro_context(&waiter, &f.isolate_storage);
     waiter.ext = &waiter_ext;
     atomic_store(&waiter.flags, XR_CORO_FLG_RUNNING);
     atomic_store(&waiter.resume_status, XR_RESUME_OK);
@@ -1713,7 +1721,7 @@ TEST(timer_wait_token_tracks_channel_timeout_cancel_on_wake) {
     memset(&sender, 0, sizeof(sender));
     memset(&sender_ext, 0, sizeof(sender_ext));
     sender.id = 501;
-    sender.isolate = &f.isolate_storage;
+    attach_test_coro_context(&sender, &f.isolate_storage);
     sender.ext = &sender_ext;
     atomic_store(&sender.flags, XR_CORO_FLG_RUNNING);
     atomic_store(&sender.resume_status, XR_RESUME_OK);
@@ -1761,7 +1769,7 @@ TEST(timer_wait_token_cancels_select_timer_on_channel_wake) {
     memset(&waiter, 0, sizeof(waiter));
     memset(&waiter_ext, 0, sizeof(waiter_ext));
     waiter.id = 502;
-    waiter.isolate = &f.isolate_storage;
+    attach_test_coro_context(&waiter, &f.isolate_storage);
     waiter.ext = &waiter_ext;
     atomic_store(&waiter.flags, XR_CORO_FLG_RUNNING);
     atomic_store(&waiter.resume_status, XR_RESUME_OK);
@@ -1912,8 +1920,8 @@ TEST(multi_await_node_list_wakes_overlapping_any_waiters) {
     memset(&second_ext, 0, sizeof(second_ext));
     first_waiter.id = 603;
     second_waiter.id = 604;
-    first_waiter.isolate = &f.isolate_storage;
-    second_waiter.isolate = &f.isolate_storage;
+    attach_test_coro_context(&first_waiter, &f.isolate_storage);
+    attach_test_coro_context(&second_waiter, &f.isolate_storage);
     first_waiter.ext = &first_ext;
     second_waiter.ext = &second_ext;
     atomic_store(&first_waiter.flags, XR_CORO_FLG_RUNNING);

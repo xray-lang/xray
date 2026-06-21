@@ -1252,8 +1252,7 @@ XrValue xr_channel_try_recv(XrChannel *ch, bool *ok) {
 // is_close: whether this is a close wake (needs to recheck buffer)
 static XrRuntime *channel_wake_runtime(XrCoroutine *coro, XrWorker **out_current) {
     XrWorker *current = xr_current_worker();
-    XrRuntime *coro_runtime =
-        (coro && coro->isolate) ? (XrRuntime *) coro->isolate->vm.runtime : NULL;
+    XrRuntime *coro_runtime = (XrRuntime *) xr_coro_scheduler(coro);
     XrRuntime *runtime = NULL;
     if (current && current->p.runtime && (!coro_runtime || current->p.runtime == coro_runtime)) {
         runtime = current->p.runtime;

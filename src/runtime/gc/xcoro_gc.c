@@ -22,6 +22,7 @@
 #include "../xshared.h"
 #include "xsystem_heap.h"
 #include "../object/xstring.h"
+#include "../core/xr_runtime_core.h"
 #include "../xisolate_api.h"
 #include "../xisolate_internal.h"
 #include "../../runtime/xexec_state.h"
@@ -54,9 +55,9 @@
 
 // Resolve the system heap that owns the L2 pool for a given coroutine
 // or coroutine GC. Returns NULL only when the bootstrap path has not
-// yet wired the isolate, in which case callers fall back to malloc/free.
+// yet wired the runtime core, in which case callers fall back to malloc/free.
 static inline XrSystemHeap *gc_pool_heap_from_coro(struct XrCoroutine *coro) {
-    return (coro && coro->isolate) ? xr_isolate_get_sys_heap(coro->isolate) : NULL;
+    return (coro && coro->core) ? coro->core->sys_heap : NULL;
 }
 
 static inline XrSystemHeap *gc_pool_heap_from_gc(XrCoroGC *gc) {
@@ -158,8 +159,8 @@ XrCoroGC *xr_coro_gc_create(struct XrCoroutine *coro) {
 
     // Initialize Region heap
     xr_region_init(&gc->region);
-    // Wire the per-isolate L2 block cache (NULL during bootstrap → OS alloc).
-    gc->region.sys_heap = coro->isolate ? xr_isolate_get_sys_heap(coro->isolate) : NULL;
+    // Wire the runtime-core L2 block cache (NULL during bootstrap → OS alloc).
+    gc->region.sys_heap = gc_pool_heap_from_coro(coro);
 
     gc_init_runtime_state(gc);
 

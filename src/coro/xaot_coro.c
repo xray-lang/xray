@@ -411,8 +411,7 @@ static void aot_task_recycle_cancelled_executor(XrTask *task, XrCoroutine *coro,
         return;
 
     XrWorker *worker = xr_current_worker();
-    XrRuntime *runtime = worker ? worker->p.runtime
-                                : (coro->isolate ? (XrRuntime *) coro->isolate->vm.runtime : NULL);
+    XrRuntime *runtime = worker ? worker->p.runtime : (XrRuntime *) xr_coro_scheduler(coro);
     int owner_id = atomic_load_explicit(&coro->affinity_p, memory_order_acquire);
     if (worker && runtime == worker->p.runtime && worker->p.id == owner_id) {
         xr_worker_unblock(worker, coro);

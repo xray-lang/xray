@@ -28,6 +28,7 @@
 #include "../../base/xlog.h"
 #include "../../base/xmutex.h"
 #include "../value/xvalue.h"
+#include "../core/xr_runtime_core.h"
 #include "../xisolate_api.h"
 #include "../xisolate_internal.h"
 #include "../../coro/xcoroutine.h"
@@ -409,10 +410,10 @@ void *xr_alloc(struct XrCoroutine *coro, size_t size, uint8_t type) {
         return NULL;
     }
 
-    // Fallback: use isolate's global GC (needed during early isolate init
-    // when coro_gc creation fails due to missing worker/machine)
-    if (coro->isolate) {
-        return xr_gc_alloc(xr_isolate_get_gc(coro->isolate), size, type);
+    // Fallback: use runtime core's global GC (needed during early init
+    // when coro_gc creation fails due to missing worker/machine).
+    if (coro->core) {
+        return xr_gc_alloc(&coro->core->gc, size, type);
     }
     return NULL;
 }

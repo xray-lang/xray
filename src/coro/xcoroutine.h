@@ -75,6 +75,8 @@
 struct XrCoroGC;
 struct XrCoroMonitor;
 struct XrCoroRegistry;
+struct XrRuntime;
+struct XrRuntimeCore;
 typedef struct XrWaitQueue XrWaitQueue;
 typedef struct XrCoroutine XrCoroutine;
 
@@ -183,7 +185,9 @@ struct XrCoroutine {
      * WARM ZONE — GC/result hot fields and backend-owned cold state
      * ================================================================ */
     struct XrCoroGC *coro_gc;     // GC safepoint: checked every loop back-edge
-    struct XrayIsolate *isolate;  // isolate handle (hot: used throughout execution)
+    struct XrRuntimeCore *core;   // VM-neutral runtime resources for this coroutine
+    struct XrRuntime *scheduler;  // owning scheduler runtime, NULL before multicore attach
+    struct XrayIsolate *isolate;  // VM/AOT bridge while backend APIs still need isolate
     XrValue result;
     XrValue error;
     /* true: `error` came from the value-return channel (user `throw <enum>`);
@@ -213,6 +217,14 @@ struct XrCoroutine {
      * accessors below. */
     _Atomic(XrCoroExt *) ext;
 };
+
+static inline struct XrRuntimeCore *xr_coro_core(const XrCoroutine *coro) {
+    return coro ? coro->core : NULL;
+}
+
+static inline struct XrRuntime *xr_coro_scheduler(const XrCoroutine *coro) {
+    return coro ? coro->scheduler : NULL;
+}
 
 static inline bool xr_coro_backend_is_vm(const XrCoroutine *coro) {
     return coro && coro->backend && coro->backend->kind == XR_CORO_BACKEND_VM;
