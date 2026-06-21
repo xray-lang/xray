@@ -18,14 +18,20 @@
 #include "xvalue.h"
 #include <stdio.h>
 
+typedef struct XrayIsolate XrayIsolate;
+
 /* ========== Core API ========== */
 
 XR_FUNC void xr_value_print(XrValue value);
 XR_FUNC void xr_value_println(XrValue value);
 XR_FUNC void xr_value_fprint(FILE *stream, XrValue value);
+XR_FUNC void xr_value_print_with_isolate(XrayIsolate *isolate, XrValue value);
+XR_FUNC void xr_value_println_with_isolate(XrayIsolate *isolate, XrValue value);
+XR_FUNC void xr_value_fprint_with_isolate(FILE *stream, XrayIsolate *isolate, XrValue value);
 
 /* ========== Formatted Dump ========== */
 
 XR_FUNC void xr_value_dump(XrValue value, int indent);
+XR_FUNC void xr_value_dump_with_isolate(XrayIsolate *isolate, XrValue value, int indent);
 
 #endif  // XVALUE_PRINT_H

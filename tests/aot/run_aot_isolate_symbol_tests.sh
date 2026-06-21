@@ -4,9 +4,9 @@
 # This gate has two modes by design:
 #   - freestanding AOT samples are hard failures if they link xray_core or carry
 #     isolate/VM/compiler/module-loader symbols.
-#   - runtime-backed samples record the current isolate/VM dependency as a
-#     baseline. Later 133/I3-I4 should flip these baseline checks into hard
-#     failures once XrAotRuntime no longer creates a VM isolate.
+#   - runtime-backed samples still record xray_core linkage as a library-split
+#     baseline, but forbidden isolate/VM/compiler/module-loader symbols are hard
+#     failures.
 #
 # Environment:
 #   XRAY_AOT_ISOLATE_JOBS  parallel workers (default: auto, capped by
@@ -178,29 +178,6 @@ check_no_forbidden_symbols() {
     fi
 }
 
-record_runtime_symbol_baseline() {
-    local bin="$1"
-    local slug="$2"
-    local name="$3"
-    local symbols="$WORK/$slug.symbols"
-    local hits="$WORK/$slug.forbidden"
-    local count
-
-    if ! dump_symbols "$bin" "$symbols"; then
-        record_fail "$name: nm failed"
-        print_log_tail "$symbols.err"
-        return
-    fi
-
-    if grep -E "$FORBIDDEN_SYMBOL_RE" "$symbols" >"$hits"; then
-        count="$(wc -l <"$hits" | tr -d ' ')"
-        record_baseline "$name: currently has $count isolate/VM/compiler symbols"
-        sed 's/^/      /' "$hits" | sed -n '1,40p'
-    else
-        record_pass "$name: no forbidden isolate/VM/compiler symbols"
-    fi
-}
-
 run_freestanding_case() {
     local slug="$1"
     local name="$2"
@@ -224,7 +201,7 @@ run_freestanding_case() {
     fi
 }
 
-run_runtime_baseline_case() {
+run_runtime_case() {
     local slug="$1"
     local name="$2"
     local src="$3"
@@ -241,7 +218,7 @@ run_runtime_baseline_case() {
         else
             record_pass "$name: does not link xray_core"
         fi
-        record_runtime_symbol_baseline "$bin" "$slug" "$name"
+        check_no_forbidden_symbols "$bin" "$slug" "$name"
         if [ -n "$want_output" ]; then
             expect_output "$bin" "$want_output" "$name: binary output"
         fi
@@ -275,14 +252,14 @@ run_case_by_id() {
                 ""
             ;;
         runtime_time_sleep)
-            run_runtime_baseline_case \
+            run_runtime_case \
                 "runtime_time_sleep" \
                 "runtime-time-sleep" \
                 "$PROJECT_DIR/tests/aot/filetests/link/runtime_time.xr" \
                 "7"
             ;;
         runtime_coro_minimal)
-            run_runtime_baseline_case \
+            run_runtime_case \
                 "runtime_coro_minimal" \
                 "runtime-coro-minimal" \
                 "$PROJECT_DIR/tests/aot/coro/spawn_await_yield.xr" \

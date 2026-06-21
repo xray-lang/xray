@@ -771,7 +771,7 @@ startfunc:
         printf("          ");                                                                      \
         for (XrValue *slot = VM_STACK; slot < VM_STACK_TOP; slot++) {                              \
             printf("[ ");                                                                          \
-            xr_value_print(*slot);                                                                 \
+            xr_value_print_with_isolate(isolate, *slot);                                           \
             printf(" ]");                                                                          \
         }                                                                                          \
         printf("\n");                                                                              \

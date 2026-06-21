@@ -24,7 +24,6 @@
 #include "../object/xmap.h"
 #include "../object/xset.h"
 #include "../object/xtuple.h"
-#include "../xisolate_api.h"
 #include "../../base/xconstants.h"
 #include "../symbol/xsymbol_table.h"
 #include <stdio.h>
@@ -44,13 +43,11 @@
 
 // Print value to file stream
 // Delegates to xr_value_to_string for consistent output across print/toString/string+
-void xr_value_fprint(FILE *stream, XrValue value) {
-    XrayIsolate *X = xray_isolate_current();
-    if (X) {
-        XrString *str = xr_value_to_string(X, value);
+void xr_value_fprint_with_isolate(FILE *stream, XrayIsolate *isolate, XrValue value) {
+    if (isolate) {
+        XrString *str = xr_value_to_string(isolate, value);
         fprintf(stream, "%s", str->data);
     } else {
-        // Fallback when no isolate (early init or shutdown)
         if (XR_IS_INT(value))
             fprintf(stream, "%lld", (long long) XR_TO_INT(value));
         else if (XR_IS_FLOAT(value)) {
@@ -69,23 +66,36 @@ void xr_value_fprint(FILE *stream, XrValue value) {
     }
 }
 
+void xr_value_fprint(FILE *stream, XrValue value) {
+    xr_value_fprint_with_isolate(stream, NULL, value);
+}
+
 // Print value to stdout
+void xr_value_print_with_isolate(XrayIsolate *isolate, XrValue value) {
+    xr_value_fprint_with_isolate(stdout, isolate, value);
+}
+
 void xr_value_print(XrValue value) {
-    xr_value_fprint(stdout, value);
+    xr_value_print_with_isolate(NULL, value);
 }
 
 // Print value with newline
-void xr_value_println(XrValue value) {
-    xr_value_print(value);
+void xr_value_println_with_isolate(XrayIsolate *isolate, XrValue value) {
+    xr_value_print_with_isolate(isolate, value);
     printf("\n");
+}
+
+void xr_value_println(XrValue value) {
+    xr_value_println_with_isolate(NULL, value);
 }
 
 // ========== Formatted Print (dump) ==========
 
 // Dump context
 typedef struct {
-    int indent;  // Indent spaces
-    int depth;   // Current depth
+    XrayIsolate *isolate;
+    int indent;
+    int depth;
 } DumpContext;
 
 // Forward declaration
@@ -323,8 +333,7 @@ static void dump_value_internal(XrValue value, DumpContext *ctx) {
                     dump_tuple((XrTuple *) gc, ctx);
                     return;
                 }
-                XrayIsolate *X = xray_isolate_current();
-                if (X && xr_value_is_datetime(X, value)) {
+                if (ctx->isolate && xr_value_is_datetime(ctx->isolate, value)) {
                     void *dt = xr_instance_native_body(inst);
                     char buf[64];
                     int n = xr_datetime_format(dt, XR_DATETIME_DEFAULT_FORMAT, buf, sizeof(buf));
@@ -343,9 +352,8 @@ static void dump_value_internal(XrValue value, DumpContext *ctx) {
     }
 
     // All other types: delegate to xr_value_to_string, with inline fallback
-    XrayIsolate *X = xray_isolate_current();
-    if (X) {
-        XrString *str = xr_value_to_string(X, value);
+    if (ctx->isolate) {
+        XrString *str = xr_value_to_string(ctx->isolate, value);
         printf("%s", str->data);
     } else if (XR_IS_INT(value)) {
         printf("%lld", (long long) XR_TO_INT(value));
@@ -364,13 +372,17 @@ static void dump_value_internal(XrValue value, DumpContext *ctx) {
 
 // Formatted print value (with indentation)
 // Maintains xray native syntax format
-void xr_value_dump(XrValue value, int indent) {
+void xr_value_dump_with_isolate(XrayIsolate *isolate, XrValue value, int indent) {
     if (indent < 0)
         indent = 0;
     if (indent > 8)
         indent = 8;
 
-    DumpContext ctx = {.indent = indent, .depth = 0};
+    DumpContext ctx = {.isolate = isolate, .indent = indent, .depth = 0};
     dump_value_internal(value, &ctx);
     printf("\n");
+}
+
+void xr_value_dump(XrValue value, int indent) {
+    xr_value_dump_with_isolate(NULL, value, indent);
 }
