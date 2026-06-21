@@ -115,7 +115,7 @@ TEST(native_coroutine_uses_native_backend_without_vm_state) {
     };
     XrCoroRunContext run_ctx = {
         .worker = NULL,
-        .isolate = &isolate,
+        .backend_ctx = &isolate,
     };
     XrCoroRunResult result = coro->backend->resume(coro, &event, &run_ctx);
 
@@ -160,7 +160,7 @@ TEST(aot_coroutine_uses_aot_backend_without_vm_state_and_maps_done) {
     };
     XrCoroRunContext run_ctx = {
         .worker = NULL,
-        .isolate = &isolate,
+        .backend_ctx = &isolate,
     };
     XrCoroRunResult result = coro->backend->resume(coro, &event, &run_ctx);
 
@@ -187,7 +187,7 @@ TEST(aot_coroutine_maps_block_error_and_cancel_to_common_run_results) {
 
     XrCoroRunContext run_ctx = {
         .worker = NULL,
-        .isolate = &isolate,
+        .backend_ctx = &isolate,
     };
     XrCoroRunResult block_result = blocked->backend->resume(blocked, NULL, &run_ctx);
     ASSERT_EQ_INT(block_result.kind, XR_CORO_RUN_BLOCKED);

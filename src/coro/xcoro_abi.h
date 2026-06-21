@@ -23,7 +23,6 @@
 
 typedef struct XrCoroutine XrCoroutine;
 typedef struct XrWorker XrWorker;
-typedef struct XrayIsolate XrayIsolate;
 typedef struct XrClosure XrClosure;
 
 #ifndef XR_CFUNC_RESULT_DEFINED
@@ -92,7 +91,7 @@ typedef struct XrCoroEvent {
 
 typedef struct XrCoroRunContext {
     XrWorker *worker;
-    XrayIsolate *isolate;
+    void *backend_ctx;
 } XrCoroRunContext;
 
 typedef struct XrCoroDebugSnapshot {

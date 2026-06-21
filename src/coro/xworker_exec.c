@@ -674,9 +674,8 @@ pop_continuation:
 XrCoroRunResult xr_coro_run_on_worker(XrWorker *worker, XrCoroutine *coro) {
     XrCoroRunContext run_ctx;
     run_ctx.worker = worker;
-    run_ctx.isolate = (worker && worker->p.runtime)
-                          ? (XrayIsolate *) xr_scheduler_host_backend_context(worker->p.runtime)
-                          : NULL;
+    run_ctx.backend_ctx =
+        (worker && worker->p.runtime) ? xr_scheduler_host_backend_context(worker->p.runtime) : NULL;
 
     XrCoroEvent event = worker_event_from_coro(coro);
     if (!coro || !coro->backend || !coro->backend->resume)
