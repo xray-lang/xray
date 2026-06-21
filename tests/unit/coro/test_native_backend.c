@@ -10,6 +10,7 @@
 
 #include "../test_framework.h"
 #include "base/xglobal_indices.h"
+#include "coro/xchannel.h"
 #include "coro/xaot_coro.h"
 #include "coro/xcoro_pool.h"
 #include "coro/xcoroutine.h"
@@ -482,6 +483,49 @@ TEST(aot_work_queue_uses_runtime_owner_without_isolate) {
     xr_aot_runtime_delete(runtime);
 }
 
+TEST(aot_channel_uses_runtime_owner_without_isolate) {
+    XrAotRuntimeConfig cfg;
+    xr_aot_runtime_config_init(&cfg);
+    cfg.caps = XR_AOT_CAP_CHANNEL;
+    cfg.scheduler_workers = 0;
+
+    XrAotRuntime *runtime = xr_aot_runtime_new(&cfg);
+    ASSERT_NOT_NULL(runtime);
+
+    XrAotContext ctx;
+    memset(&ctx, 0, sizeof(ctx));
+    ctx.runtime = runtime;
+    ctx.coro = xr_coro_create_runtime_empty(xr_aot_runtime_core(runtime),
+                                            xr_aot_runtime_scheduler(runtime), "aot_channel_owner");
+    ASSERT_NOT_NULL(ctx.coro);
+    ASSERT_NULL(ctx.isolate);
+
+    XrValue channel_value = xr_aot_channel_new(&ctx, 2);
+    ASSERT_TRUE(xr_value_is_channel(channel_value));
+    XrChannel *channel = xr_value_to_channel(channel_value);
+    ASSERT_EQ_PTR(channel->core, xr_aot_runtime_core(runtime));
+    ASSERT_EQ_PTR(channel->scheduler, xr_aot_runtime_scheduler(runtime));
+    ASSERT_NULL(channel->vm_host_isolate);
+
+    ASSERT_TRUE(XR_TO_BOOL(xr_aot_chan_try_send_ready(&ctx, channel_value, xr_int(77))));
+
+    int64_t received = 0;
+    int64_t ok = 0;
+    XrAotResult recv =
+        xr_aot_chan_recv_pair_i64(&ctx, channel_value, xr_slot_native_ptr(&received, XR_REP_I64),
+                                  xr_slot_native_ptr(&ok, XR_REP_I64));
+    ASSERT_EQ_INT(recv.kind, XR_AOT_RUN_DONE);
+    ASSERT_EQ_INT((int) received, 77);
+    ASSERT_EQ_INT((int) ok, 1);
+
+    xr_aot_chan_close(&ctx, channel_value);
+    ASSERT_TRUE(XR_TO_BOOL(xr_aot_chan_is_closed(&ctx, channel_value)));
+
+    xr_coro_destroy(ctx.coro);
+    xr_gc_destroy_channel(&channel->gc_header, NULL);
+    xr_aot_runtime_delete(runtime);
+}
+
 TEST(coroutine_recycle_hooks_are_backend_abi_contract) {
     const XrCoroBackendVTable *vm_backend = xr_coro_vm_backend_vtable();
     ASSERT_NOT_NULL(vm_backend);
@@ -546,6 +590,7 @@ RUN_TEST(aot_context_builtin_prefers_runtime_table);
 RUN_TEST(aot_runtime_copy_context_uses_core_without_isolate);
 RUN_TEST(aot_result_group_uses_runtime_without_isolate);
 RUN_TEST(aot_work_queue_uses_runtime_owner_without_isolate);
+RUN_TEST(aot_channel_uses_runtime_owner_without_isolate);
 RUN_TEST(coroutine_recycle_hooks_are_backend_abi_contract);
 
 TEST_MAIN_END()

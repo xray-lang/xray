@@ -441,7 +441,7 @@ int xr_cluster_channel_handle_push(XrCluster *c, const char *channel_name,
         return -1;
 
     // Wake select waiters
-    xr_runtime_wake_channel(c->isolate, dc->channel, false);
+    xr_runtime_wake_channel(dc->channel ? dc->channel->scheduler : NULL, dc->channel, false);
 
     return 0;
 }

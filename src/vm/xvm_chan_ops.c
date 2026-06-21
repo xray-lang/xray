@@ -69,7 +69,7 @@ static XrDispatchAction vm_time_after_impl(XrayIsolate *isolate, XrVMContext *vm
         timeout_ms = 0;
     }
 
-    XrChannel *timer_ch = xr_channel_new_timer(isolate, timeout_ms);
+    XrChannel *timer_ch = xr_channel_new_timer_vm(isolate, timeout_ms);
     if (!timer_ch) {
         VM_THROW(frame, pc, XR_ERR_OUT_OF_MEMORY, "time.after: out of memory");
     }
@@ -198,7 +198,7 @@ XR_FUNC XrDispatchAction vm_chan_send(XrayIsolate *isolate, XrVMContext *vm_ctx,
     XrChannel *ch = xr_value_to_channel(ch_val);
 
     vm_suspend_replay_yielded(frame, pc);
-    XrCoroBlockResult result = xr_coro_chan_send(isolate, current, ch, base[c], xr_slot_none(), -1);
+    XrCoroBlockResult result = xr_coro_chan_send(current, ch, base[c], xr_slot_none(), -1);
     if (result.kind == XR_CORO_BLOCK_READY) {
         vm_suspend_clear_yielded(frame);
         base[a] = xr_null();
@@ -226,8 +226,8 @@ XR_FUNC XrDispatchAction vm_chan_recv(XrayIsolate *isolate, XrVMContext *vm_ctx,
 
     XrCoroutine *current = vm_get_coro(vm_ctx);
     if (current) {
-        XrCoroBlockResult resumed = xr_coro_chan_recv_resume(
-            isolate, current, xr_slot_xvalue_ptr(&base[a]), xr_slot_xvalue_ptr(&base[a + 1]));
+        XrCoroBlockResult resumed = xr_coro_chan_recv_resume(current, xr_slot_xvalue_ptr(&base[a]),
+                                                             xr_slot_xvalue_ptr(&base[a + 1]));
         if (resumed.kind == XR_CORO_BLOCK_READY) {
             return XR_DISP_NEXT;
         }
@@ -250,7 +250,7 @@ XR_FUNC XrDispatchAction vm_chan_recv(XrayIsolate *isolate, XrVMContext *vm_ctx,
     // are delivered by the waker and resume at the next instruction; values
     // needing a receive-side deep copy replay through the resume protocol.
     vm_suspend_replay_yielded(frame, pc);
-    XrCoroBlockResult result = xr_coro_chan_recv(isolate, current, ch, xr_slot_xvalue_ptr(&base[a]),
+    XrCoroBlockResult result = xr_coro_chan_recv(current, ch, xr_slot_xvalue_ptr(&base[a]),
                                                  xr_slot_xvalue_ptr(&base[a + 1]), -1, true);
     if (result.kind == XR_CORO_BLOCK_READY || result.kind == XR_CORO_BLOCK_CLOSED) {
         vm_suspend_clear_yielded(frame);
@@ -303,8 +303,7 @@ XR_FUNC XrDispatchAction vm_chan_send_timeout(XrayIsolate *isolate, XrVMContext 
             return XR_DISP_NEXT;
         }
         vm_suspend_replay_current(frame, pc);
-        XrCoroBlockResult result =
-            xr_coro_chan_send(isolate, current, ch, value, result_slot, timeout_ms);
+        XrCoroBlockResult result = xr_coro_chan_send(current, ch, value, result_slot, timeout_ms);
         if (result.kind == XR_CORO_BLOCK_READY || result.kind == XR_CORO_BLOCK_TIMEOUT ||
             result.kind == XR_CORO_BLOCK_CLOSED || result.kind == XR_CORO_BLOCK_NO_CORO) {
             vm_suspend_continue_from_next(frame, pc);
@@ -324,7 +323,7 @@ XR_FUNC XrDispatchAction vm_chan_send_timeout(XrayIsolate *isolate, XrVMContext 
     value = xr_chan_prepare_send(isolate, value);
     if (xr_channel_try_send(ch, value)) {
         base[a] = xr_bool(true);
-        xr_runtime_wake_channel(isolate, ch, false);
+        xr_runtime_wake_channel(ch->scheduler, ch, false);
         return XR_DISP_NEXT;
     }
     if (xr_channel_is_closed(ch) || timeout_ms <= 0) {
@@ -343,7 +342,7 @@ XR_FUNC XrDispatchAction vm_chan_send_timeout(XrayIsolate *isolate, XrVMContext 
         }
         if (xr_channel_try_send(ch, value)) {
             base[a] = xr_bool(true);
-            xr_runtime_wake_channel(isolate, ch, false);
+            xr_runtime_wake_channel(ch->scheduler, ch, false);
             break;
         }
         if (xr_channel_is_closed(ch)) {
@@ -382,14 +381,14 @@ XR_FUNC XrDispatchAction vm_chan_recv_timeout(XrayIsolate *isolate, XrVMContext 
     if (current) {
         XrSlotRef value_slot = xr_slot_xvalue_ptr(&base[a]);
         XrSlotRef ok_slot = xr_slot_xvalue_ptr(&base[a + 1]);
-        XrCoroBlockResult resumed = xr_coro_chan_recv_resume(isolate, current, value_slot, ok_slot);
+        XrCoroBlockResult resumed = xr_coro_chan_recv_resume(current, value_slot, ok_slot);
         if (resumed.kind == XR_CORO_BLOCK_READY || resumed.kind == XR_CORO_BLOCK_TIMEOUT ||
             resumed.kind == XR_CORO_BLOCK_CLOSED) {
             return XR_DISP_NEXT;
         }
         vm_suspend_replay_current(frame, pc);
         XrCoroBlockResult result =
-            xr_coro_chan_recv(isolate, current, ch, value_slot, ok_slot, timeout_ms, false);
+            xr_coro_chan_recv(current, ch, value_slot, ok_slot, timeout_ms, false);
         if (result.kind == XR_CORO_BLOCK_READY || result.kind == XR_CORO_BLOCK_TIMEOUT ||
             result.kind == XR_CORO_BLOCK_CLOSED || result.kind == XR_CORO_BLOCK_NO_CORO) {
             vm_suspend_continue_from_next(frame, pc);

@@ -1028,7 +1028,7 @@ XrChannel *xr_cluster_node_add_pending(XrClusterNode *node, uint64_t request_id,
         return NULL;
 
     // Create a buffered(1) channel so sender doesn't block
-    XrChannel *ch = xr_channel_new(X, 1);
+    XrChannel *ch = xr_channel_new_vm(X, 1);
     if (!ch) {
         xr_free(pr);
         return NULL;

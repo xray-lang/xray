@@ -475,7 +475,7 @@ struct XrChannel *xr_cluster_topic_subscribe(XrayIsolate *X, const char *pattern
     sub->pattern[XR_TOPIC_PATTERN_MAX] = '\0';
 
     // Buffered channel for receiving published values
-    XrChannel *ch = xr_channel_new(X, 64);
+    XrChannel *ch = xr_channel_new_vm(X, 64);
     if (!ch) {
         xr_free(sub);
         return NULL;

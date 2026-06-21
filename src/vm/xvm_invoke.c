@@ -295,8 +295,7 @@ XR_FUNC XrDispatchAction vm_invoke_channel(XrayIsolate *isolate, XrVMContext *vm
             VM_THROW(frame, pc, XR_ERR_CORO_DEAD, "Channel is closed");
         }
         vm_suspend_replay_yielded(frame, pc);
-        XrCoroBlockResult result =
-            xr_coro_chan_send(isolate, current, ch, base[a + 2], xr_slot_none(), -1);
+        XrCoroBlockResult result = xr_coro_chan_send(current, ch, base[a + 2], xr_slot_none(), -1);
         if (result.kind == XR_CORO_BLOCK_READY) {
             vm_suspend_clear_yielded(frame);
             base[a] = xr_null();
@@ -316,8 +315,7 @@ XR_FUNC XrDispatchAction vm_invoke_channel(XrayIsolate *isolate, XrVMContext *vm
     if (nargs == 0 && method_symbol == SYMBOL_RECV) {
         XrCoroutine *current = (XrCoroutine *) vm_ctx->current_coro;
         XrSlotRef value_slot = xr_slot_xvalue_ptr(&base[a]);
-        XrCoroBlockResult resumed =
-            xr_coro_chan_recv_resume(isolate, current, value_slot, xr_slot_none());
+        XrCoroBlockResult resumed = xr_coro_chan_recv_resume(current, value_slot, xr_slot_none());
         if (resumed.kind == XR_CORO_BLOCK_READY) {
             base[a] = vm_recv_value(isolate, base[a]);
             return XR_DISP_NEXT;
@@ -328,7 +326,7 @@ XR_FUNC XrDispatchAction vm_invoke_channel(XrayIsolate *isolate, XrVMContext *vm
         }
         vm_suspend_replay_yielded(frame, pc);
         XrCoroBlockResult result =
-            xr_coro_chan_recv(isolate, current, ch, value_slot, xr_slot_none(), -1, false);
+            xr_coro_chan_recv(current, ch, value_slot, xr_slot_none(), -1, false);
         if (result.kind == XR_CORO_BLOCK_READY) {
             vm_suspend_clear_yielded(frame);
             base[a] = vm_recv_value(isolate, base[a]);
@@ -380,7 +378,7 @@ XR_FUNC XrDispatchAction vm_invoke_channel(XrayIsolate *isolate, XrVMContext *vm
 
         vm_suspend_replay_current(frame, pc);
         XrCoroBlockResult result =
-            xr_coro_chan_send(isolate, current, ch, base[a + 2], result_slot, timeout_ms);
+            xr_coro_chan_send(current, ch, base[a + 2], result_slot, timeout_ms);
         if (result.kind == XR_CORO_BLOCK_READY) {
             vm_suspend_continue_from_next(frame, pc);
             base[a] = vm_send_result(isolate, 0);
@@ -407,8 +405,7 @@ XR_FUNC XrDispatchAction vm_invoke_channel(XrayIsolate *isolate, XrVMContext *vm
         int64_t timeout_ms = XR_TO_INT(base[a + 2]);
 
         XrSlotRef value_slot = xr_slot_xvalue_ptr(&base[a]);
-        XrCoroBlockResult resumed =
-            xr_coro_chan_recv_resume(isolate, current, value_slot, xr_slot_none());
+        XrCoroBlockResult resumed = xr_coro_chan_recv_resume(current, value_slot, xr_slot_none());
         if (resumed.kind == XR_CORO_BLOCK_TIMEOUT) {
             base[a] = vm_recv_timeout(isolate);
             return XR_DISP_NEXT;
@@ -424,7 +421,7 @@ XR_FUNC XrDispatchAction vm_invoke_channel(XrayIsolate *isolate, XrVMContext *vm
 
         vm_suspend_replay_current(frame, pc);
         XrCoroBlockResult result =
-            xr_coro_chan_recv(isolate, current, ch, value_slot, xr_slot_none(), timeout_ms, false);
+            xr_coro_chan_recv(current, ch, value_slot, xr_slot_none(), timeout_ms, false);
         if (result.kind == XR_CORO_BLOCK_READY) {
             vm_suspend_continue_from_next(frame, pc);
             base[a] = vm_recv_value(isolate, base[a]);
@@ -575,7 +572,7 @@ XR_FUNC XrDispatchAction vm_invoke_task_handle(XrayIsolate *isolate, XrVMContext
     }
     if (nargs == 0 && method_symbol == SYMBOL_MONITOR) {
         // task.monitor() — create buffered Channel that receives completion event
-        XrChannel *ch = xr_channel_new(isolate, 1);
+        XrChannel *ch = xr_channel_new_vm(isolate, 1);
         if (!ch) {
             VM_THROW(frame, pc, XR_ERR_CORO_DEAD, "task.monitor: failed to create channel");
         }

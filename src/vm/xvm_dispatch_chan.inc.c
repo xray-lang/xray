@@ -27,7 +27,7 @@ vmcase(OP_CHAN_NEW) {
     int buffer_size = GETARG_Bx(i);
 
     // Create GC-managed Channel
-    XrChannel *ch = xr_channel_new(isolate, (uint32_t) buffer_size);
+    XrChannel *ch = xr_channel_new_vm(isolate, (uint32_t) buffer_size);
     if (!ch) {
         VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, "Channel creation failed");
     }
@@ -50,7 +50,7 @@ vmcase(OP_CHAN_NEW_CAP) {
             buffer_size = (uint32_t) v;
     }
 
-    XrChannel *ch = xr_channel_new(isolate, buffer_size);
+    XrChannel *ch = xr_channel_new_vm(isolate, buffer_size);
     if (!ch) {
         VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, "Channel creation failed");
     }
@@ -91,7 +91,7 @@ vmcase(OP_CHAN_NEW_NAMED) {
     }
 #endif
 
-    XrChannel *ch = xr_channel_new(isolate, buf_size);
+    XrChannel *ch = xr_channel_new_vm(isolate, buf_size);
     if (!ch) {
         VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, "Channel creation failed");
     }
