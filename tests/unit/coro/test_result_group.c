@@ -21,6 +21,7 @@
 typedef struct ResultGroupFixture {
     XrayIsolate isolate_storage;
     XrRuntimeCore core;
+    XrRuntime runtime;
     XrSystemHeap sys_heap;
     bool sys_heap_initialized;
 } ResultGroupFixture;
@@ -32,6 +33,9 @@ static bool result_group_fixture_init(ResultGroupFixture *f) {
     f->sys_heap_initialized = true;
     f->core.sys_heap = &f->sys_heap;
     f->isolate_storage.core_rt = &f->core;
+    f->runtime.core = &f->core;
+    xr_scheduler_runtime_attach_isolate(&f->runtime, &f->isolate_storage);
+    f->isolate_storage.scheduler_runtime = &f->runtime;
     return true;
 }
 
@@ -63,8 +67,10 @@ TEST(batch_add_flush_and_recv_tracks_counts) {
     ResultGroupFixture f;
     ASSERT_TRUE(result_group_fixture_init(&f));
 
-    XrResultGroup *g = xr_result_group_new(&f.isolate_storage, 3);
+    XrResultGroup *g = xr_result_group_new(&f.core, &f.runtime, 3);
     ASSERT_NOT_NULL(g);
+    ASSERT_EQ_PTR(g->core, &f.core);
+    ASSERT_EQ_PTR(g->scheduler, &f.runtime);
 
     ASSERT_TRUE(xr_result_group_add(g, 1));
     ASSERT_TRUE(xr_result_group_add(g, 2));
@@ -89,7 +95,7 @@ TEST(close_flushes_partial_batch) {
     ResultGroupFixture f;
     ASSERT_TRUE(result_group_fixture_init(&f));
 
-    XrResultGroup *g = xr_result_group_new(&f.isolate_storage, 4);
+    XrResultGroup *g = xr_result_group_new(&f.core, &f.runtime, 4);
     ASSERT_NOT_NULL(g);
 
     ASSERT_TRUE(xr_result_group_add(g, 10));
@@ -111,14 +117,9 @@ TEST(sched_stats_track_batch_lifecycle) {
     ResultGroupFixture f;
     ASSERT_TRUE(result_group_fixture_init(&f));
 
-    XrRuntime runtime;
-    memset(&runtime, 0, sizeof(runtime));
-    runtime.core = &f.core;
-    xr_scheduler_runtime_attach_isolate(&runtime, &f.isolate_storage);
-    runtime.sched_stats_enabled = true;
-    f.isolate_storage.scheduler_runtime = &runtime;
+    f.runtime.sched_stats_enabled = true;
 
-    XrResultGroup *g = xr_result_group_new(&f.isolate_storage, 2);
+    XrResultGroup *g = xr_result_group_new(&f.core, &f.runtime, 2);
     ASSERT_NOT_NULL(g);
 
     ASSERT_TRUE(xr_result_group_add(g, 11));
@@ -134,15 +135,15 @@ TEST(sched_stats_track_batch_lifecycle) {
     ASSERT_TRUE(xr_result_group_try_recv(g, &value));
     ASSERT_EQ_INT(value, 5);
 
-    ASSERT_EQ_UINT(xr_sched_metric_load(&runtime.sched_stats.result_group_add_count), 3);
-    ASSERT_EQ_UINT(xr_sched_metric_load(&runtime.sched_stats.result_group_flush_count), 2);
-    ASSERT_EQ_UINT(xr_sched_metric_load(&runtime.sched_stats.result_group_flush_item_count), 3);
-    ASSERT_EQ_UINT(xr_sched_metric_load(&runtime.sched_stats.result_group_recv_count), 2);
-    ASSERT_EQ_UINT(xr_sched_metric_load(&runtime.sched_stats.result_group_recv_empty_count), 1);
-    ASSERT_EQ_UINT(xr_sched_metric_load(&runtime.sched_stats.result_group_block_count), 0);
-    ASSERT_EQ_UINT(xr_sched_metric_load(&runtime.sched_stats.result_group_wake_count), 0);
-    ASSERT_EQ_UINT(xr_sched_metric_load(&runtime.sched_stats.result_group_close_count), 1);
-    ASSERT_EQ_UINT(xr_sched_metric_load(&runtime.sched_stats.result_group_close_wake_count), 0);
+    ASSERT_EQ_UINT(xr_sched_metric_load(&f.runtime.sched_stats.result_group_add_count), 3);
+    ASSERT_EQ_UINT(xr_sched_metric_load(&f.runtime.sched_stats.result_group_flush_count), 2);
+    ASSERT_EQ_UINT(xr_sched_metric_load(&f.runtime.sched_stats.result_group_flush_item_count), 3);
+    ASSERT_EQ_UINT(xr_sched_metric_load(&f.runtime.sched_stats.result_group_recv_count), 2);
+    ASSERT_EQ_UINT(xr_sched_metric_load(&f.runtime.sched_stats.result_group_recv_empty_count), 1);
+    ASSERT_EQ_UINT(xr_sched_metric_load(&f.runtime.sched_stats.result_group_block_count), 0);
+    ASSERT_EQ_UINT(xr_sched_metric_load(&f.runtime.sched_stats.result_group_wake_count), 0);
+    ASSERT_EQ_UINT(xr_sched_metric_load(&f.runtime.sched_stats.result_group_close_count), 1);
+    ASSERT_EQ_UINT(xr_sched_metric_load(&f.runtime.sched_stats.result_group_close_wake_count), 0);
 
     xr_gc_destroy_result_group(&g->gc, NULL);
     result_group_fixture_cleanup(&f);
@@ -152,7 +153,7 @@ TEST(cancel_waiter_unlinks_coroutine_from_result_group) {
     ResultGroupFixture f;
     ASSERT_TRUE(result_group_fixture_init(&f));
 
-    XrResultGroup *g = xr_result_group_new(&f.isolate_storage, 2);
+    XrResultGroup *g = xr_result_group_new(&f.core, &f.runtime, 2);
     ASSERT_NOT_NULL(g);
 
     XrCoroutine coro;
@@ -180,15 +181,10 @@ TEST(close_without_workers_keeps_waiter_blocked) {
     ResultGroupFixture f;
     ASSERT_TRUE(result_group_fixture_init(&f));
 
-    XrRuntime runtime;
-    memset(&runtime, 0, sizeof(runtime));
-    runtime.core = &f.core;
-    xr_scheduler_runtime_attach_isolate(&runtime, &f.isolate_storage);
-    runtime.worker_count = 0;
-    runtime.workers = NULL;
-    f.isolate_storage.scheduler_runtime = &runtime;
+    f.runtime.worker_count = 0;
+    f.runtime.workers = NULL;
 
-    XrResultGroup *g = xr_result_group_new(&f.isolate_storage, 2);
+    XrResultGroup *g = xr_result_group_new(&f.core, &f.runtime, 2);
     ASSERT_NOT_NULL(g);
 
     XrCoroutine coro;
