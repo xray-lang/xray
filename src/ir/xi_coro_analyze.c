@@ -463,6 +463,23 @@ static bool xi_coro_block_uses_target_after(const XiBlock *blk, uint32_t start,
     return blk->control == target;
 }
 
+static bool xi_coro_block_successor_phi_uses_target(const XiBlock *blk, const XiValue *target) {
+    if (!blk || !target)
+        return false;
+    for (int s = 0; s < 2; s++) {
+        const XiBlock *succ = blk->succs[s];
+        if (!succ)
+            continue;
+        for (const XiPhi *phi = succ->phis; phi; phi = phi->next) {
+            for (uint16_t p = 0; p < succ->npreds && p < phi->value.nargs; p++) {
+                if (succ->preds[p] == blk && phi->value.args[p] == target)
+                    return true;
+            }
+        }
+    }
+    return false;
+}
+
 XR_FUNC bool xi_coro_value_live_across_suspend(const XiFunc *f, const XiLiveness *live,
                                                const XiValue *target,
                                                const XiCoroResolver *resolver) {
@@ -486,7 +503,8 @@ XR_FUNC bool xi_coro_value_live_across_suspend(const XiFunc *f, const XiLiveness
             if (!available || !xi_coro_is_suspend_point(f, v, resolver))
                 continue;
             if (xi_is_live_out(live, blk, target) ||
-                xi_coro_block_uses_target_after(blk, vi + 1, target))
+                xi_coro_block_uses_target_after(blk, vi + 1, target) ||
+                xi_coro_block_successor_phi_uses_target(blk, target))
                 return true;
         }
     }

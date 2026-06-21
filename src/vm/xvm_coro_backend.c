@@ -231,8 +231,8 @@ static XrCoroutine *vm_backend_alloc_shell(XrayIsolate *X, bool use_runtime_pool
         }
     }
     if (!coro) {
-        if (X->sys_heap) {
-            coro = xr_sysheap_alloc_coro(X->sys_heap);
+        if (xr_isolate_get_sys_heap(X)) {
+            coro = xr_sysheap_alloc_coro(xr_isolate_get_sys_heap(X));
             if (!coro)
                 return NULL;
             coro->coro_gc = NULL;

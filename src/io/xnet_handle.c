@@ -34,7 +34,7 @@ static void *alloc_handle(struct XrayIsolate *X, size_t size) {
      * NetConn / NetListener must be shareable across coroutines (go accept
      * → go serve). Allocate on the system shared heap like Channel.
      */
-    if (X->sys_heap) {
+    if (xr_isolate_get_sys_heap(X)) {
         return xr_sysheap_alloc_shared(xr_isolate_get_sys_heap(X), size, XR_TINSTANCE);
     }
     struct XrCoroutine *coro = xr_current_coro(X);

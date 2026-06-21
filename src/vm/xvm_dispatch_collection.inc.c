@@ -55,9 +55,10 @@ vmcase(OP_NEWARRAY) {
     uint8_t elem_type = xr_tid_to_elem_type(elem_tid);
 
     XrArray *array;
-    if (storage_mode != 0 && isolate->sys_heap) {
+    if (storage_mode != 0 && xr_isolate_get_sys_heap(isolate)) {
         // shared: allocate on system heap
-        array = (XrArray *) xr_sysheap_alloc_shared(isolate->sys_heap, sizeof(XrArray), XR_TARRAY);
+        array = (XrArray *) xr_sysheap_alloc_shared(xr_isolate_get_sys_heap(isolate),
+                                                    sizeof(XrArray), XR_TARRAY);
         if (array) {
             xr_array_init_inplace(array, b > 0 ? b : 4, elem_type);
             // Set storage mode
@@ -114,8 +115,9 @@ vmcase(OP_ARRAY_NEW_CAP) {
     uint8_t elem_type = xr_tid_to_elem_type(elem_tid);
 
     XrArray *array;
-    if (storage_mode != 0 && isolate->sys_heap) {
-        array = (XrArray *) xr_sysheap_alloc_shared(isolate->sys_heap, sizeof(XrArray), XR_TARRAY);
+    if (storage_mode != 0 && xr_isolate_get_sys_heap(isolate)) {
+        array = (XrArray *) xr_sysheap_alloc_shared(xr_isolate_get_sys_heap(isolate),
+                                                    sizeof(XrArray), XR_TARRAY);
         if (array) {
             xr_array_init_inplace(array, cap, elem_type);
             XR_GC_SET_STORAGE(&array->gc, storage_mode);
@@ -199,9 +201,10 @@ vmcase(OP_NEWMAP) {
     uint8_t key_tid = (key_kind == 1) ? XR_TID_STRING : (key_kind == 2) ? XR_TID_INT : 0;
 
     XrMap *map;
-    if (storage_mode != 0 && isolate->sys_heap) {
+    if (storage_mode != 0 && xr_isolate_get_sys_heap(isolate)) {
         // shared: allocate on system heap
-        map = (XrMap *) xr_sysheap_alloc_shared(isolate->sys_heap, sizeof(XrMap), XR_TMAP);
+        map = (XrMap *) xr_sysheap_alloc_shared(xr_isolate_get_sys_heap(isolate), sizeof(XrMap),
+                                                XR_TMAP);
         if (map) {
             xr_map_init_inplace(map, b > 0 ? b : 8);
             // Set storage mode
@@ -244,9 +247,11 @@ vmcase(OP_NEWSET) {
     uint8_t elem_tid = (uint8_t) ((b_arg >> 2) & 0x1F);
 
     XrSet *set;
-    if (init_mode == 1 && XR_IS_ARRAY(R(a + 1)) && storage_mode != 0 && isolate->sys_heap) {
+    if (init_mode == 1 && XR_IS_ARRAY(R(a + 1)) && storage_mode != 0 &&
+        xr_isolate_get_sys_heap(isolate)) {
         // Initialize from array on system heap (shared)
-        set = (XrSet *) xr_sysheap_alloc_shared(isolate->sys_heap, sizeof(XrSet), XR_TSET);
+        set = (XrSet *) xr_sysheap_alloc_shared(xr_isolate_get_sys_heap(isolate), sizeof(XrSet),
+                                                XR_TSET);
         if (set) {
             xr_set_init_inplace(set);
             XR_GC_SET_STORAGE(&set->gc, storage_mode);
@@ -261,9 +266,10 @@ vmcase(OP_NEWSET) {
         // Initialize from array on coroutine heap
         XrArray *arr = XR_TO_ARRAY(R(a + 1));
         set = xr_set_from_array(xr_current_coro(isolate), arr);
-    } else if (storage_mode != 0 && isolate->sys_heap) {
+    } else if (storage_mode != 0 && xr_isolate_get_sys_heap(isolate)) {
         // shared: allocate on system heap
-        set = (XrSet *) xr_sysheap_alloc_shared(isolate->sys_heap, sizeof(XrSet), XR_TSET);
+        set = (XrSet *) xr_sysheap_alloc_shared(xr_isolate_get_sys_heap(isolate), sizeof(XrSet),
+                                                XR_TSET);
         if (set) {
             xr_set_init_inplace(set);
             XR_GC_SET_STORAGE(&set->gc, storage_mode);
@@ -332,10 +338,10 @@ vmcase(OP_NEWSTRINGBUILDER) {
     int storage_mode = GETARG_B(i);
 
     XrStringBuilder *sb;
-    if (storage_mode != 0 && isolate->sys_heap) {
+    if (storage_mode != 0 && xr_isolate_get_sys_heap(isolate)) {
         // shared: allocate on system heap
-        sb = (XrStringBuilder *) xr_sysheap_alloc_shared(isolate->sys_heap, sizeof(XrStringBuilder),
-                                                         XR_TINSTANCE);
+        sb = (XrStringBuilder *) xr_sysheap_alloc_shared(xr_isolate_get_sys_heap(isolate),
+                                                         sizeof(XrStringBuilder), XR_TINSTANCE);
         if (sb) {
             sb->klass = isolate->core->stringBuilderClass;
             xr_stringbuilder_init_inplace(sb);

@@ -35,6 +35,7 @@
 #include "../runtime/xexec_frame.h"  // VM state types (XrBcCallFrame, etc.)
 #include "../runtime/xexec_state.h"  // XrVMState - VM execution state
 #include "object/xnative_type.h"     // XR_NATIVE_TYPE_MAX
+#include "core/xr_runtime_core.h"
 
 // Thread-local storage class is provided by base/xdefs.h as
 // XR_THREAD_LOCAL. Use it directly here; do not redefine the macro.
@@ -75,12 +76,9 @@ struct XrayIsolate {
     XrayCoreClasses *core;          // Core classes (Object, Class, String, etc.)
     XrTypeRegistry *type_registry;  // Type registry for reflection
 
-    // Memory management - Per-Coroutine GC
-    // - Runtime objects allocated on coroutine-private heap
-    // - System objects (coroutines, classes, modules) on system heap
-    // - Entire heap freed when coroutine exits
-    XrGC gc;                        // GC instance (manages fixedgc list only)
-    struct XrSystemHeap *sys_heap;  // System heap (coroutine pool, class Arena)
+    // VM-neutral runtime core: GC, system heap, string pool, config,
+    // script metadata, weak registry, and extension type registry.
+    XrRuntimeCore *core_rt;
 
     // Main coroutine (unified GC architecture)
     // - All coroutines (including main) use XrCoroGC + XrCoroHeap
@@ -91,9 +89,7 @@ struct XrayIsolate {
     size_t deferred_task_count;
 
     // Global state
-    XrGlobalsTable *globals;                 // Dynamic global variables table
-    XrGlobalStringPool *global_string_pool;  // Global string pool (read-only)
-    struct XrStrBuf *tmp_strbuf;             // Single-thread scratch buffer for string ops
+    XrGlobalsTable *globals;  // Dynamic global variables table
 
     // Type system
     XrTypeInferContext *type_infer_context;  // Type inference context
@@ -105,8 +101,6 @@ struct XrayIsolate {
 
     // Configuration
     XrayIsolateParams params;  // Creation parameters
-    XrayConfig *config;        // Global configuration
-    void *userdata;            // User data pointer
     uint32_t init_flags;       // Which subsystems were initialized (XR_INIT_*)
 
     // Global object (simplified: embedded directly in Isolate)
@@ -176,8 +170,6 @@ struct XrayIsolate {
     /* WeakMap / WeakSet registry. Lazily allocated by the first weak insert
      * and swept when a weakable target reaches RC zero. Kept opaque here so
      * the isolate core does not depend on container internals. */
-    void *weak_registry;  // XrWeakContainerRegistry*
-
     /* ========== VM Engine State ========== */
 
     // VM state uses independent type XrVMState (defined in xr_vm_state.h)
@@ -227,18 +219,6 @@ struct XrayIsolate {
      * in-process channels only".
      */
     void *channel_dist_hooks;  // XrChannelDistHooks*
-
-    /* ========== Extension Type System (dlopen packages) ========== */
-    // Dynamic type allocation: next type ID to assign (starts at XR_TTASK + 1)
-    uint8_t ext_type_next;
-    // Per-type name strings (only extension slots used)
-    const char *ext_type_names[XGC_MAX_TYPES];
-    // Runtime bitmaps (OR'd with compile-time constants in GC hot path)
-    uint64_t ext_finalize_bitmap;  // types needing finalization
-    uint64_t ext_has_refs_bitmap;  // types needing GC traversal
-    // Per-type callbacks (only extension slots used)
-    XrGCDestroyFn ext_destroy_funcs[XGC_MAX_TYPES];
-    void *ext_traverse_funcs[XGC_MAX_TYPES];  // XrGCTraverseFn equivalent
 
     /* ========== stdlib per-isolate cache ========== */
     // Opaque pointer owned by stdlib/stdlib_cache.h. Holds memoised

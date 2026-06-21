@@ -25,6 +25,7 @@
 #include "../../../src/runtime/gc/xregion.h"
 #include "../../../src/runtime/gc/xgc_header.h"
 #include "../../../src/runtime/value/xvalue.h"
+#include "../../../src/runtime/xisolate_api.h"
 #include "../../../src/runtime/xisolate_internal.h"
 #include "../../../src/coro/xcoroutine.h"
 #include "../test_win_compat.h"
@@ -32,6 +33,7 @@
 /* Dummy coroutine for GC tests (gc_create only stores gc->owner, no dereference) */
 static XrCoroutine dummy_coro;
 static XrayIsolate g_test_iso;
+static XrRuntimeCore g_test_core;
 
 #define XR_TEST_EXT_TYPE 63
 
@@ -43,10 +45,15 @@ static void test_ext_destroy(XrGCHeader *obj, XrCoroGC *owning_gc) {
     g_destroy_count++;
 }
 
+static void test_ext_destroy_api(XrGCHeader *obj, void *owning_gc) {
+    test_ext_destroy(obj, (XrCoroGC *) owning_gc);
+}
+
 static void setup_test_ext_finalizer(void) {
     memset(&g_test_iso, 0, sizeof(g_test_iso));
-    g_test_iso.ext_finalize_bitmap = 1ULL << XR_TEST_EXT_TYPE;
-    g_test_iso.ext_destroy_funcs[XR_TEST_EXT_TYPE] = test_ext_destroy;
+    memset(&g_test_core, 0, sizeof(g_test_core));
+    g_test_iso.core_rt = &g_test_core;
+    xr_register_extension_destroy(&g_test_iso, XR_TEST_EXT_TYPE, test_ext_destroy_api);
     dummy_coro.isolate = &g_test_iso;
 }
 

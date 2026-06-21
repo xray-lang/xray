@@ -27,6 +27,7 @@
 
 typedef struct CloseFixture {
     XrayIsolate isolate_storage;
+    XrRuntimeCore core;
     XrSystemHeap sys_heap;
     XrRuntime runtime;
     XrWorker worker;
@@ -41,6 +42,7 @@ typedef struct CloseFixture {
 
 typedef struct WakeRouteFixture {
     XrayIsolate isolate_storage;
+    XrRuntimeCore core;
     XrSystemHeap sys_heap;
     XrRuntime runtime;
     XrWorker workers[WAKE_ROUTE_WORKERS];
@@ -58,7 +60,8 @@ static bool close_fixture_init(CloseFixture *f) {
         return false;
     }
     f->sys_heap_initialized = true;
-    f->isolate_storage.sys_heap = &f->sys_heap;
+    f->core.sys_heap = &f->sys_heap;
+    f->isolate_storage.core_rt = &f->core;
 
     f->saved_worker = tls_current_worker;
     f->saved_machine = tls_current_machine;
@@ -99,7 +102,8 @@ static bool wake_route_fixture_init(WakeRouteFixture *f) {
         return false;
     }
     f->sys_heap_initialized = true;
-    f->isolate_storage.sys_heap = &f->sys_heap;
+    f->core.sys_heap = &f->sys_heap;
+    f->isolate_storage.core_rt = &f->core;
 
     f->saved_worker = tls_current_worker;
     f->saved_machine = tls_current_machine;

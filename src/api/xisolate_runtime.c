@@ -129,11 +129,6 @@ static void isolate_register_vm_builtins(XrayIsolate *isolate) {
 static int isolate_init_runtime(XrayIsolate *isolate) {
     XR_DCHECK(isolate != NULL, "isolate_init_runtime: NULL isolate");
 
-    isolate->config = xr_malloc(sizeof(XrayConfig));
-    if (!isolate->config)
-        return -1;
-    xr_config_init((XrayConfig *) isolate->config);
-
     xr_type_global_init();
     isolate->symbol_table = xr_symbol_table_create();
     if (!isolate->symbol_table)

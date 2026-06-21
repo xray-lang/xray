@@ -13,6 +13,7 @@
 #include "../../coro/xcoroutine.h"
 #include "../gc/xcoro_gc.h"
 #include "../gc/xgc.h"
+#include "../xisolate_api.h"
 #include "../xisolate_internal.h"
 
 /*
@@ -26,7 +27,7 @@ XrCell *xr_cell_new(XrayIsolate *isolate, struct XrCoroutine *coro) {
     if (coro && coro->coro_gc) {
         cell = (XrCell *) xr_coro_gc_newobj(coro->coro_gc, XR_TCELL, XR_CELL_SIZE);
     } else {
-        cell = (XrCell *) xr_gc_alloc(&isolate->gc, XR_CELL_SIZE, XR_TCELL);
+        cell = (XrCell *) xr_gc_alloc(xr_isolate_get_gc(isolate), XR_CELL_SIZE, XR_TCELL);
     }
     if (cell == NULL) {
         return NULL;

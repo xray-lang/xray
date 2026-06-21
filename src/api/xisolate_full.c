@@ -51,11 +51,6 @@
 
 static int isolate_init_full(XrayIsolate *isolate) {
     XR_DCHECK(isolate != NULL, "isolate_init_full: NULL isolate");
-    // Config
-    isolate->config = xr_malloc(sizeof(XrayConfig));
-    if (!isolate->config)
-        return -1;
-    xr_config_init((XrayConfig *) isolate->config);
 
     // Process-level type singletons (idempotent, safe to call multiple times)
     xr_type_global_init();

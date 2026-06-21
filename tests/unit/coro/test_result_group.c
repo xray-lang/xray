@@ -20,6 +20,7 @@
 
 typedef struct ResultGroupFixture {
     XrayIsolate isolate_storage;
+    XrRuntimeCore core;
     XrSystemHeap sys_heap;
     bool sys_heap_initialized;
 } ResultGroupFixture;
@@ -29,7 +30,8 @@ static bool result_group_fixture_init(ResultGroupFixture *f) {
     if (!xr_sysheap_init(&f->sys_heap, NULL))
         return false;
     f->sys_heap_initialized = true;
-    f->isolate_storage.sys_heap = &f->sys_heap;
+    f->core.sys_heap = &f->sys_heap;
+    f->isolate_storage.core_rt = &f->core;
     return true;
 }
 

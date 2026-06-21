@@ -51,6 +51,7 @@ static void restore_test_env(const char *name, char *saved) {
 
 typedef struct SchedulerFixture {
     XrayIsolate isolate_storage;
+    XrRuntimeCore core;
     XrSystemHeap sys_heap;
     XrRuntime runtime;
     XrWorker worker;
@@ -88,7 +89,8 @@ static bool scheduler_fixture_init(SchedulerFixture *f) {
     if (!xr_sysheap_init(&f->sys_heap, NULL))
         return false;
     f->sys_heap_initialized = true;
-    f->isolate_storage.sys_heap = &f->sys_heap;
+    f->core.sys_heap = &f->sys_heap;
+    f->isolate_storage.core_rt = &f->core;
 
     f->saved_worker = tls_current_worker;
     f->saved_machine = tls_current_machine;
@@ -132,6 +134,7 @@ static void scheduler_fixture_cleanup(SchedulerFixture *f) {
 
 typedef struct StealFixture {
     XrayIsolate isolate_storage;
+    XrRuntimeCore core;
     XrSystemHeap sys_heap;
     XrRuntime runtime;
     XrWorker workers[2];
@@ -151,7 +154,8 @@ static bool steal_fixture_init(StealFixture *f) {
     if (!xr_sysheap_init(&f->sys_heap, NULL))
         return false;
     f->sys_heap_initialized = true;
-    f->isolate_storage.sys_heap = &f->sys_heap;
+    f->core.sys_heap = &f->sys_heap;
+    f->isolate_storage.core_rt = &f->core;
 
     f->saved_worker = tls_current_worker;
     f->saved_machine = tls_current_machine;
@@ -432,10 +436,13 @@ TEST(deterministic_runtime_forces_single_worker_and_virtual_clock) {
     set_test_env("XRAY_CORO_SEED", "12345");
 
     XrayIsolate isolate;
+    XrRuntimeCore core;
     XrSystemHeap sys_heap;
     memset(&isolate, 0, sizeof(isolate));
+    memset(&core, 0, sizeof(core));
     ASSERT_TRUE(xr_sysheap_init(&sys_heap, NULL));
-    isolate.sys_heap = &sys_heap;
+    core.sys_heap = &sys_heap;
+    isolate.core_rt = &core;
 
     XrRuntime *runtime = xr_runtime_create(&isolate, 0);
     ASSERT_NOT_NULL(runtime);

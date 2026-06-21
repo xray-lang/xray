@@ -18,6 +18,7 @@
 
 #include "../runtime/xisolate_internal.h"
 #include "../runtime/xisolate_api.h"
+#include "../runtime/core/xr_runtime_core.h"
 #include "../base/xchecks.h"
 #include "../frontend/parser/xparse.h"
 #include "../frontend/parser/xast.h"
@@ -241,9 +242,9 @@ void xray_isolate_set_script_info(XrayIsolate *isolate, const char *script_file,
     if (isolate == NULL)
         return;
 
-    isolate->params.script_file = script_file;
-    isolate->params.script_argc = argc;
-    isolate->params.script_argv = argv;
+    if (isolate->core_rt) {
+        xr_script_info_set(&isolate->core_rt->script_info, script_file, argc, argv);
+    }
 
     char abs_path[XR_PATH_MAX];
     char dir_path[XR_PATH_MAX];

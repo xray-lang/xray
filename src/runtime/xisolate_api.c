@@ -10,6 +10,7 @@
 
 #include "xisolate_api.h"
 #include "xisolate_internal.h"
+#include "core/xr_runtime_core.h"
 #include "../coro/xcoroutine.h"
 #include "../base/xlog.h"
 #include <string.h>
@@ -38,12 +39,16 @@ static int64_t xr_now_ns(void) {
 
 /* ========== Memory Subsystem ========== */
 
+XrRuntimeCore *xr_isolate_get_runtime_core(XrayIsolate *X) {
+    return X ? X->core_rt : NULL;
+}
+
 XrGC *xr_isolate_get_gc(XrayIsolate *X) {
-    return X ? &X->gc : NULL;
+    return (X && X->core_rt) ? &X->core_rt->gc : NULL;
 }
 
 struct XrSystemHeap *xr_isolate_get_sys_heap(XrayIsolate *X) {
-    return X ? X->sys_heap : NULL;
+    return (X && X->core_rt) ? X->core_rt->sys_heap : NULL;
 }
 
 struct XrCoroGC *xr_isolate_get_coro_gc(XrayIsolate *X) {
@@ -117,11 +122,11 @@ XrGlobalObject *xr_isolate_get_global_object(XrayIsolate *X) {
 }
 
 struct XrGlobalStringPool *xr_isolate_get_string_pool(XrayIsolate *X) {
-    return X ? X->global_string_pool : NULL;
+    return (X && X->core_rt) ? X->core_rt->global_string_pool : NULL;
 }
 
 struct XrStrBuf **xr_isolate_tmp_strbuf_slot(XrayIsolate *X) {
-    return X ? &X->tmp_strbuf : NULL;
+    return (X && X->core_rt) ? &X->core_rt->tmp_strbuf : NULL;
 }
 
 /* ========== Coroutine ========== */
@@ -160,11 +165,11 @@ void xr_isolate_set_storage_mode(XrayIsolate *X, uint8_t mode) {
 /* ========== Config ========== */
 
 void *xr_isolate_get_userdata(XrayIsolate *X) {
-    return X ? X->userdata : NULL;
+    return (X && X->core_rt) ? X->core_rt->userdata : NULL;
 }
 
 struct XrayConfig *xr_isolate_get_config(XrayIsolate *X) {
-    return X ? X->config : NULL;
+    return (X && X->core_rt) ? X->core_rt->config : NULL;
 }
 
 uint32_t xr_isolate_get_init_flags(XrayIsolate *X) {
@@ -172,7 +177,15 @@ uint32_t xr_isolate_get_init_flags(XrayIsolate *X) {
 }
 
 const char *xr_isolate_get_script_file(XrayIsolate *X) {
-    return X ? X->params.script_file : NULL;
+    return (X && X->core_rt) ? X->core_rt->script_info.file : NULL;
+}
+
+int xr_isolate_get_script_argc(XrayIsolate *X) {
+    return (X && X->core_rt) ? X->core_rt->script_info.argc : 0;
+}
+
+char **xr_isolate_get_script_argv(XrayIsolate *X) {
+    return (X && X->core_rt) ? X->core_rt->script_info.argv : NULL;
 }
 
 /* ========== Parser Arena ========== */
@@ -358,52 +371,59 @@ bool xr_isolate_module_allowed(XrayIsolate *X, const char *module_name) {
 /* ========== Extension Type System ========== */
 
 uint8_t xr_alloc_extension_type(XrayIsolate *isolate, const char *name) {
-    if (!isolate)
+    XrRuntimeCore *core = xr_isolate_get_runtime_core(isolate);
+    if (!core)
         return 0;
-    uint8_t id = isolate->ext_type_next;
+    uint8_t id = core->ext_type_next;
     if (id >= XGC_MAX_TYPES) {
         xr_log_warning("ext_type", "extension type slots exhausted (max %d)", XGC_MAX_TYPES);
         return 0;
     }
-    isolate->ext_type_next = id + 1;
-    isolate->ext_type_names[id] = name;
+    core->ext_type_next = id + 1;
+    core->ext_type_names[id] = name;
     return id;
 }
 
 void xr_register_extension_destroy(XrayIsolate *isolate, uint8_t type_id,
                                    XrExtDestroyFn destroy_fn) {
-    if (!isolate || type_id >= XGC_MAX_TYPES)
+    XrRuntimeCore *core = xr_isolate_get_runtime_core(isolate);
+    if (!core || type_id >= XGC_MAX_TYPES)
         return;
-    isolate->ext_destroy_funcs[type_id] = (XrGCDestroyFn) destroy_fn;
-    isolate->ext_finalize_bitmap |= (1ULL << type_id);
+    core->ext_destroy_funcs[type_id] = (XrGCDestroyFn) destroy_fn;
+    core->ext_finalize_bitmap |= (1ULL << type_id);
 }
 
 void xr_register_extension_traverse(XrayIsolate *isolate, uint8_t type_id,
                                     XrExtTraverseFn traverse_fn) {
-    if (!isolate || type_id >= XGC_MAX_TYPES)
+    XrRuntimeCore *core = xr_isolate_get_runtime_core(isolate);
+    if (!core || type_id >= XGC_MAX_TYPES)
         return;
-    isolate->ext_traverse_funcs[type_id] = (void *) traverse_fn;
-    isolate->ext_has_refs_bitmap |= (1ULL << type_id);
+    core->ext_traverse_funcs[type_id] = (void *) traverse_fn;
+    core->ext_has_refs_bitmap |= (1ULL << type_id);
 }
 
 uint64_t xr_isolate_get_ext_finalize_bitmap(XrayIsolate *isolate) {
-    return isolate ? isolate->ext_finalize_bitmap : 0;
+    XrRuntimeCore *core = xr_isolate_get_runtime_core(isolate);
+    return core ? core->ext_finalize_bitmap : 0;
 }
 
 uint64_t xr_isolate_get_ext_has_refs_bitmap(XrayIsolate *isolate) {
-    return isolate ? isolate->ext_has_refs_bitmap : 0;
+    XrRuntimeCore *core = xr_isolate_get_runtime_core(isolate);
+    return core ? core->ext_has_refs_bitmap : 0;
 }
 
 XrExtDestroyFn xr_isolate_get_ext_destroy(XrayIsolate *isolate, uint8_t type_id) {
-    if (!isolate || type_id >= XGC_MAX_TYPES)
+    XrRuntimeCore *core = xr_isolate_get_runtime_core(isolate);
+    if (!core || type_id >= XGC_MAX_TYPES)
         return NULL;
-    return (XrExtDestroyFn) isolate->ext_destroy_funcs[type_id];
+    return (XrExtDestroyFn) core->ext_destroy_funcs[type_id];
 }
 
 XrExtTraverseFn xr_isolate_get_ext_traverse(XrayIsolate *isolate, uint8_t type_id) {
-    if (!isolate || type_id >= XGC_MAX_TYPES)
+    XrRuntimeCore *core = xr_isolate_get_runtime_core(isolate);
+    if (!core || type_id >= XGC_MAX_TYPES)
         return NULL;
-    return (XrExtTraverseFn) isolate->ext_traverse_funcs[type_id];
+    return (XrExtTraverseFn) core->ext_traverse_funcs[type_id];
 }
 
 /* ========== Thread Local API ========== */

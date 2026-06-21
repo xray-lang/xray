@@ -32,7 +32,7 @@ XrClosure *xr_closure_new(XrayIsolate *isolate, XrProto *proto, struct XrCorouti
     if (coro && coro->coro_gc) {
         closure = (XrClosure *) xr_coro_gc_newobj(coro->coro_gc, XR_TFUNCTION, size);
     } else {
-        closure = (XrClosure *) xr_gc_alloc(&isolate->gc, size, XR_TFUNCTION);
+        closure = (XrClosure *) xr_gc_alloc(xr_isolate_get_gc(isolate), size, XR_TFUNCTION);
     }
     if (closure == NULL) {
         return NULL;
