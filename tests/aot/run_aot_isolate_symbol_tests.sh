@@ -8,17 +8,25 @@
 #   XRAY_AOT_ISOLATE_JOBS  parallel workers (default: auto, capped by
 #                          XRAY_AOT_ISOLATE_MAX_AUTO_JOBS=4;
 #                          XRAY_TEST_JOBS also works)
+#   XRAY_AOT_ISOLATE_BUILD_CACHE_DIR
+#                          persistent AOT object cache for cold symbol-gate
+#                          builds (default: build/.xray-test-cache/aot-isolate-objects)
+#   XRAY_AOT_ISOLATE_BIN_CACHE_DIR
+#                          persistent native binary cache for warm symbol-gate
+#                          reruns (default: build/.xray-test-cache/aot-isolate-bin/<toolchain-key>)
 
 set -u
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+. "$PROJECT_DIR/tests/test_common.sh"
 XRAY="${1:-${XRAY_BIN:-$PROJECT_DIR/build/xray}}"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/xray_aot_isolate_symbols.XXXXXX")" || {
     echo "FAIL: cannot create temporary directory" >&2
     exit 1
 }
-CACHE="$WORK/.cache"
+BUILD_CACHE="${XRAY_AOT_ISOLATE_BUILD_CACHE_DIR:-$(xray_test_shared_cache_dir "$PROJECT_DIR" "aot-isolate-objects")}"
+BIN_CACHE="${XRAY_AOT_ISOLATE_BIN_CACHE_DIR:-$(xray_test_stable_cache_dir "$PROJECT_DIR" "aot-isolate-bin" "$XRAY")}"
 PASS=0
 FAIL=0
 REQUESTED_JOBS="${XRAY_AOT_ISOLATE_JOBS:-${XRAY_TEST_JOBS:-auto}}"
@@ -96,8 +104,41 @@ build_native() {
     local src="$1"
     local out="$2"
     local log="$3"
-    "$XRAY" build --native --rebuild --dump-link-command --cache-dir "$CACHE" -o "$out" "$src" \
-        >"$log" 2>&1
+    local rel safe key bin_dir cached tmp
+
+    rel="${src#"$PROJECT_DIR"/}"
+    safe="$(printf '%s' "${rel%.xr}" | sed 's#[^A-Za-z0-9_.-]#_#g')"
+    key="$(xray_test_case_dir_key "$src")"
+    bin_dir="$BIN_CACHE/$safe-$key"
+    cached="$bin_dir/aot"
+    tmp="$bin_dir/aot.$$"
+
+    if [ ! -x "$cached" ]; then
+        mkdir -p "$bin_dir" || return 1
+        if ! xray_test_lock_dir "$bin_dir.lock"; then
+            printf 'cannot lock binary cache: %s\n' "$bin_dir.lock" >"$log"
+            return 1
+        fi
+        if [ ! -x "$cached" ]; then
+            rm -f "$tmp"
+            if "$XRAY" build --native --dump-link-command --cache-dir "$BUILD_CACHE" -o "$tmp" "$src" \
+                    >"$log" 2>&1; then
+                mv "$tmp" "$cached"
+            else
+                rm -f "$tmp"
+                xray_test_unlock_dir "$bin_dir.lock"
+                return 1
+            fi
+        else
+            printf 'cached: %s\n' "$cached" >"$log"
+        fi
+        xray_test_unlock_dir "$bin_dir.lock"
+    else
+        printf 'cached: %s\n' "$cached" >"$log"
+    fi
+
+    cp "$cached" "$out"
+    chmod +x "$out"
 }
 
 binary_size() {
@@ -331,6 +372,8 @@ configure_jobs "$REQUESTED_JOBS"
 echo "=== AOT Isolate Symbol Gate ==="
 echo "Binary: $XRAY"
 echo "Jobs:   $JOBS"
+echo "Cache:  $BUILD_CACHE"
+echo "BinCache: $BIN_CACHE"
 echo ""
 
 if [ ! -x "$XRAY" ]; then

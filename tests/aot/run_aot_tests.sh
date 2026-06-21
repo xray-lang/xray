@@ -14,6 +14,9 @@
 #                       (default: build/.xray-test-cache/aot-bin/<xray-key>/O<opt>)
 #   XRAY_AOT_TEST_OPT   native C compiler optimization level for correctness
 #                       gates (default: 0; set to 3 for optimized smoke/CI)
+#   XRAY_TEST_DISABLE_RUN_CACHE
+#                       set to 1 to force executing cached native binaries and
+#                       VM runs even when a previous identical run passed
 #   XRAY_AOT_KEEP_WORK  keep temporary outputs on exit for debugging
 
 set -u
@@ -109,6 +112,7 @@ echo ""
 run_test() {
     local xr_file="$1"
     local rel_name test_name safe_name case_key case_work bin_dir bin_out tmp_bin vm_out aot_out
+    local run_key_material run_key run_dir
     local test_args=()
     local vm_rc=0
     local aot_rc=0
@@ -132,6 +136,17 @@ run_test() {
     case "$(basename "$xr_file" .xr)" in
         process_args*) test_args=("100000" "abc") ;;
     esac
+
+    run_key_material="args:"
+    if [ "${#test_args[@]}" -gt 0 ]; then
+        run_key_material="$run_key_material
+$(printf '%s\n' "${test_args[@]}")"
+    fi
+    run_key_material="$run_key_material
+XRAY_CORO_DETERMINISTIC=${XRAY_CORO_DETERMINISTIC:-}
+XRAY_CORO_SEED=${XRAY_CORO_SEED:-}"
+    run_key="$(xray_test_string_key "$run_key_material")"
+    run_dir="$bin_dir/run-$run_key"
 
     printf "  %-42s" "$test_name"
 
@@ -173,6 +188,13 @@ run_test() {
         xray_test_unlock_dir "$bin_dir.lock"
     fi
 
+    if [ "${XRAY_TEST_DISABLE_RUN_CACHE:-0}" != "1" ] && [ -f "$run_dir/pass" ]; then
+        echo "PASS (cached)"
+        PASS=$((PASS + 1))
+        rm -rf "$case_work"
+        return 0
+    fi
+
     # Step 2: Run VM and AOT, capturing stdout AND exit code (if-form keeps
     # set -e from aborting on a non-zero program exit).
     if [ "${#test_args[@]}" -gt 0 ]; then
@@ -191,6 +213,18 @@ run_test() {
     elif diff -u "$vm_out" "$aot_out" > /dev/null 2>&1; then
         echo "PASS"
         PASS=$((PASS + 1))
+        if [ "${XRAY_TEST_DISABLE_RUN_CACHE:-0}" != "1" ] &&
+                xray_test_lock_dir "$run_dir.lock"; then
+            if [ ! -f "$run_dir/pass" ]; then
+                mkdir -p "$run_dir"
+                cp "$vm_out" "$run_dir/vm.out"
+                cp "$aot_out" "$run_dir/aot.out"
+                printf '%s\n' "$vm_rc" >"$run_dir/vm.rc"
+                printf '%s\n' "$aot_rc" >"$run_dir/aot.rc"
+                : >"$run_dir/pass"
+            fi
+            xray_test_unlock_dir "$run_dir.lock"
+        fi
         rm -rf "$case_work"
         return 0
     else
