@@ -338,16 +338,18 @@ TEST(parse_build_cross_toolchain_options) {
 
     XrCliContext ctx = {.program = "xray"};
     XrCliInvocation inv;
-    char *argv[] = {"--native", "--target", "x86_64-linux-musl",   "--toolchain", "zig",
-                    "--zig",    "/opt/zig", "--dump-link-command", "--keep-c",    "file.xr"};
+    char *argv[] = {"--native", "--target", "x86_64-linux-musl",   "--toolchain",    "zig",
+                    "--zig",    "/opt/zig", "--dump-link-command", "--dry-run-link", "--keep-c",
+                    "file.xr"};
 
-    XrCliExitCode rc = xr_cli_parse_command(spec, 10, argv, &ctx, &inv);
+    XrCliExitCode rc = xr_cli_parse_command(spec, 11, argv, &ctx, &inv);
     ASSERT_EQ_INT(rc, XR_CLI_EXIT_OK);
     ASSERT_TRUE(xr_cli_opt_bool(&inv.options, "native"));
     ASSERT_STR_EQ(xr_cli_opt_string(&inv.options, "target", NULL), "x86_64-linux-musl");
     ASSERT_STR_EQ(xr_cli_opt_string(&inv.options, "toolchain", NULL), "zig");
     ASSERT_STR_EQ(xr_cli_opt_string(&inv.options, "zig", NULL), "/opt/zig");
     ASSERT_TRUE(xr_cli_opt_bool(&inv.options, "dump-link-command"));
+    ASSERT_TRUE(xr_cli_opt_bool(&inv.options, "dry-run-link"));
     ASSERT_TRUE(xr_cli_opt_bool(&inv.options, "keep-c"));
     ASSERT_EQ_INT(inv.positional_count, 1);
 

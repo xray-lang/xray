@@ -664,7 +664,8 @@ static int invoke_aot_manifest_link(const XrCliToolchainPlan *plan, const XrCliB
                                     const XaotLinkManifest *manifest, const char *opt_flag,
                                     const char *output_file, const char *const *inputs,
                                     int n_inputs, bool strip_symbols, bool shared_library,
-                                    const char *sysroot, bool dump_link_command) {
+                                    const char *sysroot, bool dump_link_command,
+                                    bool dry_run_link) {
     char err[512];
     XaotCliLinkCommand cmd;
 
@@ -677,6 +678,9 @@ static int invoke_aot_manifest_link(const XrCliToolchainPlan *plan, const XrCliB
 
     if (dump_link_command)
         xaot_cli_link_print_command(&cmd);
+
+    if (dry_run_link)
+        return 0;
 
     XrProcId pid = xr_proc_spawn(cmd.program, cmd.argv);
     if (pid == XR_PROC_INVALID) {
@@ -819,8 +823,8 @@ static int cmd_build_native(const char *input, const char *output, const char *c
                             const char *opt_flag, const char *cpu, bool c_only, bool strip,
                             bool debug_symbols, bool shared_library, const char *sysroot,
                             bool verbose, bool dump_xaot_plan, bool dump_link_manifest,
-                            bool dump_link_command, const char *c_header, bool keep_c,
-                            const char *cache_dir_arg, bool rebuild, bool lto,
+                            bool dump_link_command, bool dry_run_link, const char *c_header,
+                            bool keep_c, const char *cache_dir_arg, bool rebuild, bool lto,
                             const XrCliBuildTarget *target,
                             const XrCliToolchainPlan *toolchain_plan);
 
@@ -847,6 +851,7 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
     bool dump_xaot_plan = xr_cli_opt_bool(&inv->options, "dump-xaot-plan");
     bool dump_link_manifest = xr_cli_opt_bool(&inv->options, "dump-link-manifest");
     bool dump_link_command = xr_cli_opt_bool(&inv->options, "dump-link-command");
+    bool dry_run_link = xr_cli_opt_bool(&inv->options, "dry-run-link");
     const char *c_header = xr_cli_opt_string(&inv->options, "c-header", NULL);
     bool keep_c = xr_cli_opt_bool(&inv->options, "keep-c");
     const char *cache_dir_arg = xr_cli_opt_string(&inv->options, "cache-dir", NULL);
@@ -880,6 +885,10 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
         fprintf(stderr, "Error: --dump-link-command requires --native\n");
         return 2;
     }
+    if (dry_run_link && !native_mode) {
+        fprintf(stderr, "Error: --dry-run-link requires --native\n");
+        return 2;
+    }
     if (!target.is_native && !native_mode) {
         fprintf(stderr, "Error: --target %s requires --native\n", target.name);
         return 2;
@@ -900,6 +909,10 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
     }
     if (shared_library && c_only) {
         fprintf(stderr, "Error: --shared cannot be combined with --c-only\n");
+        return 2;
+    }
+    if (dry_run_link && c_only) {
+        fprintf(stderr, "Error: --dry-run-link cannot be combined with --c-only\n");
         return 2;
     }
     if (shared_library && !target.is_native) {
@@ -952,8 +965,8 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
     if (native_mode) {
         return cmd_build_native(input_file, output_file, cc, opt_flag, cpu, c_only, strip_symbols,
                                 debug_symbols, shared_library, sysroot, verbose, dump_xaot_plan,
-                                dump_link_manifest, dump_link_command, c_header, keep_c,
-                                cache_dir_arg, rebuild, lto, &target, &toolchain_plan);
+                                dump_link_manifest, dump_link_command, dry_run_link, c_header,
+                                keep_c, cache_dir_arg, rebuild, lto, &target, &toolchain_plan);
     }
     return cmd_build_bytecode(input_file, output_file, cc, opt_flag, c_only, strip_symbols,
                               debug_symbols, sysroot);
@@ -1186,7 +1199,7 @@ static int xaot_compile_source_cached(const XrCliToolchainPlan *plan,
                                       const XaotLinkManifest *manifest, const char *opt_flag,
                                       const XaotModuleSource *src, const char *cache_dir,
                                       const char *sysroot, bool dump_command, bool keep_c,
-                                      bool verbose, bool force_rebuild, char *obj_out,
+                                      bool verbose, bool force_rebuild, bool dry_run, char *obj_out,
                                       size_t obj_out_sz) {
     uint64_t key = xaot_object_cache_key(src->c_source, opt_flag, target, plan, manifest, sysroot);
     char tmp_c[XR_PATH_MAX];
@@ -1194,6 +1207,12 @@ static int xaot_compile_source_cached(const XrCliToolchainPlan *plan,
     int ret;
 
     snprintf(obj_out, obj_out_sz, "%s/%016llx.o", cache_dir, (unsigned long long) key);
+    if (dry_run) {
+        if (verbose)
+            printf("[xi-native] link-plan object: %s (%016llx)\n", src->name ? src->name : "?",
+                   (unsigned long long) key);
+        return 0;
+    }
     if (!force_rebuild && xr_fs_is_file(obj_out)) {
         if (verbose)
             printf("[xi-native] cache hit: %s (%016llx)\n", src->name ? src->name : "?",
@@ -1256,8 +1275,8 @@ static int cmd_build_native(const char *input, const char *output, const char *c
                             const char *opt_flag, const char *cpu, bool c_only, bool strip,
                             bool debug_symbols, bool shared_library, const char *sysroot,
                             bool verbose, bool dump_xaot_plan, bool dump_link_manifest,
-                            bool dump_link_command, const char *c_header, bool keep_c,
-                            const char *cache_dir_arg, bool rebuild, bool lto,
+                            bool dump_link_command, bool dry_run_link, const char *c_header,
+                            bool keep_c, const char *cache_dir_arg, bool rebuild, bool lto,
                             const XrCliBuildTarget *target,
                             const XrCliToolchainPlan *toolchain_plan) {
     XaotBuildResult aot_result;
@@ -1426,7 +1445,7 @@ static int cmd_build_native(const char *input, const char *output, const char *c
         ret = xaot_compile_source_cached(toolchain_plan, target, &aot_result.link_manifest,
                                          opt_flag, &aot_result.sources[i], cache_dir, sysroot,
                                          dump_link_command || verbose, keep_c, verbose, rebuild,
-                                         obj_bufs[i], XR_PATH_MAX);
+                                         dry_run_link, obj_bufs[i], XR_PATH_MAX);
         if (ret != 0)
             break;
         obj_ptrs[i] = obj_bufs[i];
@@ -1435,9 +1454,9 @@ static int cmd_build_native(const char *input, const char *output, const char *c
     if (ret == 0)
         ret = invoke_aot_manifest_link(toolchain_plan, target, &aot_result.link_manifest, opt_flag,
                                        output, obj_ptrs, n_sources, strip, shared_library, sysroot,
-                                       dump_link_command || verbose);
+                                       dump_link_command || verbose || dry_run_link, dry_run_link);
 #ifdef XR_OS_MACOS
-    if (ret == 0 && build_dsym)
+    if (ret == 0 && build_dsym && !dry_run_link)
         ret = invoke_dsymutil(output, dump_link_command || verbose);
 #else
     (void) build_dsym;
@@ -1449,7 +1468,7 @@ static int cmd_build_native(const char *input, const char *output, const char *c
     if (ret == 0 && strip)
         remove_dsym_bundle(output);
 #endif
-    if (ret == 0)
+    if (ret == 0 && !dry_run_link)
         printf("Generated: %s\n", output);
     xaot_build_result_free(&aot_result);
     return ret;

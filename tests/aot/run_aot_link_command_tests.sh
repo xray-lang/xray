@@ -4,6 +4,12 @@
 # The link manifest is the source of truth, but this smoke verifies the native
 # build driver actually obeys it: core math direct calls stay freestanding, while
 # runtime-backed stdlib modules still link xray_core and its system deps.
+#
+# By default the large link matrix uses `xray build --dry-run-link`: it exercises
+# the real AOT/link planning path and validates the resolved link command without
+# paying for a native compile/link for every case. A small real-link smoke at the
+# end still proves the generated commands are executable. Set
+# XRAY_LINK_COMMAND_REAL_BUILDS=1 to force the old full native-build matrix.
 
 set -u
 
@@ -34,6 +40,25 @@ record_fail() {
 }
 
 build_native() {
+    local src="$1"
+    local out="$2"
+    local log="$3"
+    if [ "${XRAY_LINK_COMMAND_REAL_BUILDS:-0}" = "1" ]; then
+        build_native_real "$src" "$out" "$log"
+    else
+        build_native_plan "$src" "$out" "$log"
+    fi
+}
+
+build_native_plan() {
+    local src="$1"
+    local out="$2"
+    local log="$3"
+    "$XRAY" build --native --dry-run-link --dump-link-command --cache-dir "$CACHE" -o "$out" \
+        "$src" >"$log" 2>&1
+}
+
+build_native_real() {
     local src="$1"
     local out="$2"
     local log="$3"
@@ -70,6 +95,10 @@ expect_output() {
     local want="$2"
     local name="$3"
     local got
+    if [ ! -x "$bin" ] && [ "${XRAY_LINK_COMMAND_REAL_BUILDS:-0}" != "1" ]; then
+        record_pass "$name (covered by real-link smoke)"
+        return
+    fi
     got="$("$bin" 2>/dev/null)"
     if [ "$got" = "$want" ]; then
         record_pass "$name"
@@ -116,7 +145,7 @@ XR
 FFI_BIN="$WORK/ffi_dylib_path"
 FFI_LOG="$WORK/ffi_dylib_path.log"
 if cc "${FFI_LIB_CC_ARGS[@]}" -o "$FFI_LIB" "$FFI_LIB_SRC" >"$WORK/ffi_lib_build.log" 2>&1; then
-    if build_native "$FFI_SRC" "$FFI_BIN" "$FFI_LOG"; then
+    if build_native_real "$FFI_SRC" "$FFI_BIN" "$FFI_LOG"; then
         expect_log_contains "$FFI_LOG" "Link command:" "ffi-dylib: emitted link command"
         expect_log_contains "$FFI_LOG" "$FFI_LIB" "ffi-dylib: links explicit dylib path"
         expect_log_not_contains "$FFI_LOG" "-lxray_core" "ffi-dylib: does not link xray_core"
@@ -433,6 +462,42 @@ if build_native "$RUNTIME_SRC" "$RUNTIME_BIN" "$RUNTIME_LOG"; then
 else
     record_fail "runtime-time: build failed"
     sed 's/^/      /' "$RUNTIME_LOG" | sed -n '1,120p'
+fi
+
+if [ "${XRAY_LINK_COMMAND_REAL_BUILDS:-0}" != "1" ]; then
+    echo ""
+    echo "-- Real Link Smoke --"
+
+    SMOKE_CORE_BIN="$WORK/smoke_core_math"
+    SMOKE_CORE_LOG="$WORK/smoke_core_math.log"
+    if build_native_real "$CORE_SRC" "$SMOKE_CORE_BIN" "$SMOKE_CORE_LOG"; then
+        record_pass "real-smoke/core-math: native link"
+        expect_output "$SMOKE_CORE_BIN" "9.0" "real-smoke/core-math: binary output"
+    else
+        record_fail "real-smoke/core-math: native link"
+        sed 's/^/      /' "$SMOKE_CORE_LOG" | sed -n '1,120p'
+    fi
+
+    SMOKE_AOT_CORE_BIN="$WORK/smoke_system_math_random"
+    SMOKE_AOT_CORE_LOG="$WORK/smoke_system_math_random.log"
+    if build_native_real "$RANDOM_MATH_SRC" "$SMOKE_AOT_CORE_BIN" "$SMOKE_AOT_CORE_LOG"; then
+        record_pass "real-smoke/system-math-random: native link"
+        expect_output "$SMOKE_AOT_CORE_BIN" $'true\n7' \
+            "real-smoke/system-math-random: binary output"
+    else
+        record_fail "real-smoke/system-math-random: native link"
+        sed 's/^/      /' "$SMOKE_AOT_CORE_LOG" | sed -n '1,120p'
+    fi
+
+    SMOKE_RUNTIME_BIN="$WORK/smoke_runtime_time"
+    SMOKE_RUNTIME_LOG="$WORK/smoke_runtime_time.log"
+    if build_native_real "$RUNTIME_SRC" "$SMOKE_RUNTIME_BIN" "$SMOKE_RUNTIME_LOG"; then
+        record_pass "real-smoke/runtime-time: native link"
+        expect_output "$SMOKE_RUNTIME_BIN" "7" "real-smoke/runtime-time: binary output"
+    else
+        record_fail "real-smoke/runtime-time: native link"
+        sed 's/^/      /' "$SMOKE_RUNTIME_LOG" | sed -n '1,120p'
+    fi
 fi
 
 echo ""

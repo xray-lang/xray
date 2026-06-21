@@ -4,6 +4,11 @@
 # Usage:
 #   tests/aot/run_aot_filetests.sh [xray_binary]
 #   tests/aot/run_aot_filetests.sh --mode rep [xray_binary]
+#
+# Environment:
+#   XRAY_AOT_FILETEST_JOBS  parallel workers (default: auto, capped by
+#                           XRAY_AOT_FILETEST_MAX_AUTO_JOBS=4;
+#                           XRAY_TEST_JOBS also works)
 
 set -u
 
@@ -19,6 +24,8 @@ KEEP_TMP=0
 PASS=0
 FAIL=0
 SKIP=0
+REQUESTED_JOBS="${XRAY_AOT_FILETEST_JOBS:-${XRAY_TEST_JOBS:-auto}}"
+JOBS=1
 
 usage() {
     printf '%s\n' \
@@ -131,6 +138,47 @@ is_collected_test() {
         _*) return 1 ;;
         *.xr) return 0 ;;
         *) return 1 ;;
+    esac
+}
+
+is_uint() {
+    case "$1" in
+        ""|*[!0-9]*) return 1 ;;
+        *) return 0 ;;
+    esac
+}
+
+detect_cores() {
+    local cores=""
+    if command -v getconf >/dev/null 2>&1; then
+        cores="$(getconf _NPROCESSORS_ONLN 2>/dev/null || true)"
+    fi
+    if ! is_uint "$cores" && command -v sysctl >/dev/null 2>&1; then
+        cores="$(sysctl -n hw.logicalcpu 2>/dev/null || true)"
+    fi
+    if ! is_uint "$cores" || [ "$cores" -lt 1 ]; then
+        cores=1
+    fi
+    printf '%s\n' "$cores"
+}
+
+configure_jobs() {
+    local requested="$1" max_auto
+    case "$requested" in
+        ""|auto)
+            JOBS="$(detect_cores)"
+            max_auto="${XRAY_AOT_FILETEST_MAX_AUTO_JOBS:-4}"
+            if is_uint "$max_auto" && [ "$max_auto" -gt 0 ] && [ "$JOBS" -gt "$max_auto" ]; then
+                JOBS="$max_auto"
+            fi
+            ;;
+        *)
+            if is_uint "$requested" && [ "$requested" -gt 0 ]; then
+                JOBS="$requested"
+            else
+                JOBS=1
+            fi
+            ;;
     esac
 }
 
@@ -333,9 +381,89 @@ run_one() {
     check_expect "$expect" "$dump" "$c_out"
 }
 
+record_filetest_log() {
+    local log="$1" status="$2" first_line rc
+    cat "$log"
+
+    first_line="$(sed -n '1p' "$log")"
+    rc="$(cat "$status" 2>/dev/null || printf '99')"
+    case "$first_line" in
+        *PASS*) PASS=$((PASS + 1)) ;;
+        *SKIP*) SKIP=$((SKIP + 1)) ;;
+        *)
+            FAIL=$((FAIL + 1))
+            if [ "$rc" -ne 0 ] 2>/dev/null && [ -z "$first_line" ]; then
+                echo "  <worker>                                                       FAIL (worker exited $rc)"
+            fi
+            ;;
+    esac
+}
+
+run_mode_parallel() {
+    local mode="$1"
+    local dir="$2"
+    local jobs="$3"
+    local list="$WORK/${mode}.list"
+    local idx=0 f log status sem token i p pids logs
+
+    : >"$list"
+    for f in "$dir"/*.xr; do
+        [ -f "$f" ] || continue
+        is_collected_test "$f" || continue
+        printf '%s\n' "$f" >>"$list"
+    done
+
+    mkdir -p "$WORK/logs"
+    sem="$WORK/${mode}.sem"
+    if ! mkfifo "$sem"; then
+        echo "error: cannot create worker semaphore" >&2
+        FAIL=$((FAIL + 1))
+        return 1
+    fi
+    exec 9<>"$sem"
+    rm -f "$sem"
+
+    i=0
+    while [ "$i" -lt "$jobs" ]; do
+        printf '.' >&9
+        i=$((i + 1))
+    done
+
+    pids=""
+    logs=""
+    while IFS= read -r f; do
+        [ -n "$f" ] || continue
+        IFS= read -r -n 1 token <&9
+        log="$WORK/logs/${mode}_${idx}.log"
+        status="$WORK/logs/${mode}_${idx}.status"
+        (
+            run_one "$mode" "$f" >"$log" 2>&1
+            printf '%s\n' "$?" >"$status"
+            printf '.' >&9
+        ) &
+        pids="$pids $!"
+        logs="$logs $log"
+        idx=$((idx + 1))
+    done <"$list"
+
+    for p in $pids; do
+        wait "$p"
+    done
+    exec 9>&-
+    exec 9<&-
+
+    for log in $logs; do
+        status="${log%.log}.status"
+        record_filetest_log "$log" "$status"
+    done
+}
+
+configure_jobs "$REQUESTED_JOBS"
+
 echo "=== AOT Filetests (XAOT plan scaffold) ==="
 echo "Binary: $XRAY"
 echo "Mode:   $MODE"
+echo "Jobs:   $JOBS"
 echo ""
 
 TEST_COUNT="$(count_selected_tests)"
@@ -368,11 +496,15 @@ for mode in $SELECTED_MODES; do
     dir="$FILETEST_DIR/$mode"
     [ -d "$dir" ] || continue
     echo "--- $mode ---"
-    for f in "$dir"/*.xr; do
-        [ -f "$f" ] || continue
-        is_collected_test "$f" || continue
-        run_one "$mode" "$f"
-    done
+    if [ "$JOBS" -le 1 ]; then
+        for f in "$dir"/*.xr; do
+            [ -f "$f" ] || continue
+            is_collected_test "$f" || continue
+            run_one "$mode" "$f"
+        done
+    else
+        run_mode_parallel "$mode" "$dir" "$JOBS"
+    fi
     echo ""
 done
 
