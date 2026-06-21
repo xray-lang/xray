@@ -11,6 +11,7 @@
 #include "xenum.h"
 #include "../../base/xchecks.h"
 #include "../xisolate_api.h"
+#include "../core/xr_runtime_core.h"
 #include "../../base/xmalloc.h"
 #include "../object/xstring.h"
 #include "../symbol/xsymbol_table.h"
@@ -265,9 +266,10 @@ const char *xr_enum_value_name(XrEnumValue *enum_val) {
 
 /* ========== ADT Variant Construction ========== */
 
-XR_FUNC XrInstance *xr_enum_adt_construct(XrayIsolate *X, XrEnumType *enum_type,
-                                          uint32_t member_index, XrValue *args, int nargs) {
-    XR_DCHECK(X != NULL, "adt_construct: NULL isolate");
+XR_FUNC XrInstance *xr_enum_adt_construct_core(XrRuntimeCore *core, struct XrCoroutine *coro,
+                                               XrEnumType *enum_type, uint32_t member_index,
+                                               XrValue *args, int nargs) {
+    XR_DCHECK(core != NULL || coro != NULL, "adt_construct_core: NULL owner");
     XR_DCHECK(enum_type != NULL, "adt_construct: NULL enum_type");
     XR_DCHECK(enum_type->is_adt, "adt_construct: enum is not ADT");
     XR_DCHECK(member_index < enum_type->member_count, "adt_construct: member_index out of bounds");
@@ -281,7 +283,7 @@ XR_FUNC XrInstance *xr_enum_adt_construct(XrayIsolate *X, XrEnumType *enum_type,
     XrClass *klass = enum_type->enum_class;
     XR_DCHECK(klass != NULL, "adt_construct: NULL enum_class");
 
-    XrInstance *inst = xr_instance_new(X, klass);
+    XrInstance *inst = xr_instance_new_core(core, coro, klass);
     if (!inst)
         return NULL;
 
@@ -300,6 +302,12 @@ XR_FUNC XrInstance *xr_enum_adt_construct(XrayIsolate *X, XrEnumType *enum_type,
     }
 
     return inst;
+}
+
+XR_FUNC XrInstance *xr_enum_adt_construct(XrayIsolate *X, XrEnumType *enum_type,
+                                          uint32_t member_index, XrValue *args, int nargs) {
+    return xr_enum_adt_construct_core(xr_isolate_get_runtime_core(X), xr_current_coro(X), enum_type,
+                                      member_index, args, nargs);
 }
 
 /* Release malloc-backed side resources owned by the enum value.

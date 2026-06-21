@@ -484,7 +484,7 @@ XrCoroBlockResult xr_coro_await_task_resume(XrCoroutine *coro, XrTask *task) {
     return block_result(XR_CORO_BLOCK_NOT_RESUMED, xr_null(), false);
 }
 
-XrValue xr_coro_await_result_value(XrayIsolate *isolate, XrCoroutine *dst_coro, XrTask *task,
+XrValue xr_coro_await_result_value(XrRuntimeCore *core, XrCoroutine *dst_coro, XrTask *task,
                                    bool discard_result) {
     if (discard_result || !task)
         return xr_null();
@@ -496,15 +496,18 @@ XrValue xr_coro_await_result_value(XrayIsolate *isolate, XrCoroutine *dst_coro, 
      * pure tag check — any torn old/new mix still has a pointer-kind tag,
      * and the locked path re-reads a clean value. */
     XrValue result = task->result;
-    if (dst_coro && isolate && XR_IS_PTR(result)) {
-        result = xr_task_consume_result_copy(isolate, task, dst_coro);
+    if (dst_coro && XR_IS_PTR(result)) {
+        if (!core)
+            core = dst_coro->core;
+        result = xr_task_consume_result_copy(core, task, dst_coro);
     }
     return result;
 }
 
-static bool await_store_result(XrayIsolate *isolate, XrCoroutine *coro, XrTask *task,
-                               XrSlotRef result_slot, bool discard_result, XrValue *out_value) {
-    XrValue result = xr_coro_await_result_value(isolate, coro, task, discard_result);
+static bool await_store_result(XrCoroutine *coro, XrTask *task, XrSlotRef result_slot,
+                               bool discard_result, XrValue *out_value) {
+    XrValue result =
+        xr_coro_await_result_value(coro ? coro->core : NULL, coro, task, discard_result);
     if (out_value)
         *out_value = result;
     return xr_slot_store_value(result_slot, result);
@@ -568,13 +571,12 @@ static XrTaskAwaitNode *coro_prepare_multi_await_nodes(XrMultiAwaitWaitToken *to
     return nodes;
 }
 
-XrCoroBlockResult xr_coro_await_task_resume_slot(XrayIsolate *isolate, XrCoroutine *coro,
-                                                 XrTask *task, XrSlotRef result_slot,
-                                                 bool discard_result) {
+XrCoroBlockResult xr_coro_await_task_resume_slot(XrCoroutine *coro, XrTask *task,
+                                                 XrSlotRef result_slot, bool discard_result) {
     XrCoroBlockResult result = xr_coro_await_task_resume(coro, task);
     if (result.kind == XR_CORO_BLOCK_READY) {
         XrValue value = xr_null();
-        if (!await_store_result(isolate, coro, task, result_slot, discard_result, &value))
+        if (!await_store_result(coro, task, result_slot, discard_result, &value))
             return block_result(XR_CORO_BLOCK_ERROR, xr_null(), false);
         result.value = value;
     }
@@ -604,12 +606,12 @@ XrCoroBlockResult xr_coro_await_task(XrCoroutine *coro, XrTask *task, int64_t ti
     return coro_register_single_await(coro, task, timeout_ms);
 }
 
-XrCoroBlockResult xr_coro_await_task_slot(XrayIsolate *isolate, XrCoroutine *coro, XrTask *task,
-                                          XrSlotRef result_slot, int64_t timeout_ms,
-                                          bool discard_result) {
+XrCoroBlockResult xr_coro_await_task_slot(XrCoroutine *coro, XrTask *task, XrSlotRef result_slot,
+                                          int64_t timeout_ms, bool discard_result) {
     XrCoroBlockResult result = xr_coro_await_task(coro, task, timeout_ms);
     if (result.kind == XR_CORO_BLOCK_READY) {
-        XrValue value = xr_coro_await_result_value(isolate, coro, task, discard_result);
+        XrValue value =
+            xr_coro_await_result_value(coro ? coro->core : NULL, coro, task, discard_result);
         if (!xr_slot_store_value(result_slot, value))
             return block_result(XR_CORO_BLOCK_ERROR, xr_null(), false);
         result.value = value;
@@ -859,16 +861,16 @@ static XrSelectCase *coro_select_alloc_cases(XrRuntime *runtime, XrSelectStorage
     return storage->heap_cases;
 }
 
-static void coro_select_notify_enter(XrayIsolate *isolate, XrSelectWait *sw) {
-    XrChannelDistHooks *dhooks =
-        isolate ? (XrChannelDistHooks *) isolate->channel_dist_hooks : NULL;
-    if (!dhooks || !dhooks->on_select_enter) {
+static void coro_select_notify_enter(XrSelectWait *sw) {
+    if (!sw) {
         return;
     }
 
     for (int ci = 0; ci < sw->case_count; ci++) {
         XrChannel *ch = (XrChannel *) sw->cases[ci].channel;
-        if (ch && ch->dist) {
+        XrayIsolate *host = ch ? ch->vm_host_isolate : NULL;
+        XrChannelDistHooks *dhooks = host ? (XrChannelDistHooks *) host->channel_dist_hooks : NULL;
+        if (ch && ch->dist && dhooks && dhooks->on_select_enter) {
             dhooks->on_select_enter(ch);
         }
     }
@@ -952,9 +954,9 @@ static bool coro_select_recheck_after_block(XrWorker *worker, XrCoroutine *coro,
     return false;
 }
 
-XrCoroBlockResult xr_coro_select_block(XrayIsolate *isolate, XrCoroutine *coro,
-                                       const XrValue *channel_values, int ch_count,
-                                       const XrSlotRef *result_slots, int case_count) {
+XrCoroBlockResult xr_coro_select_block(XrCoroutine *coro, const XrValue *channel_values,
+                                       int ch_count, const XrSlotRef *result_slots,
+                                       int case_count) {
     if (!coro) {
         return block_result(XR_CORO_BLOCK_NO_CORO, xr_null(), false);
     }
@@ -1026,7 +1028,7 @@ XrCoroBlockResult xr_coro_select_block(XrayIsolate *isolate, XrCoroutine *coro,
 
     xr_coro_set_wait_reason(coro, XR_CORO_WAIT_SELECT >> XR_CORO_WAIT_SHIFT);
     coro_select_arm_timer(worker, coro, timer_ch);
-    coro_select_notify_enter(isolate, sw);
+    coro_select_notify_enter(sw);
 
     xr_worker_block_select(worker, coro, NULL, sw->case_count);
     if (coro_select_recheck_after_block(worker, coro, sw)) {
@@ -1035,9 +1037,8 @@ XrCoroBlockResult xr_coro_select_block(XrayIsolate *isolate, XrCoroutine *coro,
     return block_result(XR_CORO_BLOCK_BLOCKED, xr_null(), false);
 }
 
-XrCoroBlockResult xr_coro_scope_enter(XrayIsolate *isolate, XrCoroutine *coro, uint8_t scope_mode) {
-    XrCoroState *sched = isolate ? (XrCoroState *) isolate->vm.coro_state : NULL;
-    if (!coro && !sched)
+XrCoroBlockResult xr_coro_scope_enter(XrCoroutine *coro, uint8_t scope_mode) {
+    if (!coro)
         return block_result(XR_CORO_BLOCK_NO_CORO, xr_null(), false);
 
     if (coro) {
@@ -1063,16 +1064,14 @@ XrCoroBlockResult xr_coro_scope_enter(XrayIsolate *isolate, XrCoroutine *coro, u
      * heap so its growth/teardown carries no per-coroutine gc accounting (a
      * per-coro array would underflow the owner's byte counter when a child grows
      * it). */
-    scope->errors =
-        (scope_mode == XR_SCOPE_SUPERVISOR && coro) ? xr_array_new_shared(coro->isolate, 4) : NULL;
+    scope->errors = (scope_mode == XR_SCOPE_SUPERVISOR && coro)
+                        ? xr_array_new_shared_core(coro->core, 4)
+                        : NULL;
     scope->first_child = NULL;
     scope->owner = coro;
     if (coro) {
         scope->parent = atomic_load_explicit(&coro->current_scope, memory_order_relaxed);
         atomic_store_explicit(&coro->current_scope, scope, memory_order_release);
-    } else {
-        scope->parent = sched->current_scope;
-        sched->current_scope = scope;
     }
     return block_result(XR_CORO_BLOCK_READY, xr_null(), true);
 }

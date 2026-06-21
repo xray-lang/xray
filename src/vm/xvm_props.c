@@ -357,7 +357,8 @@ XR_FUNC XrDispatchAction vm_getprop_type_dispatch(XrayIsolate *isolate, XrVMCont
         } else if (prop_symbol == SYMBOL_RESULT) {
             XrCoroutine *caller = (XrCoroutine *) vm_ctx->current_coro;
             base[a] = (tstate == XR_TASK_COMPLETED)
-                          ? xr_coro_await_result_value(isolate, caller, task, false)
+                          ? xr_coro_await_result_value(xr_isolate_get_runtime_core(isolate), caller,
+                                                       task, false)
                           : xr_null();
         } else if (prop_symbol == SYMBOL_ERROR) {
             if (tstate == XR_TASK_FAILED && !XR_IS_NULL(task->error)) {

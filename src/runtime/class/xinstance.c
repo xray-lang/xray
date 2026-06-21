@@ -21,6 +21,7 @@
 #include "../gc/xgc.h"
 #include "../gc/xcoro_gc.h"
 #include "../gc/xalloc_unified.h"
+#include "../core/xr_runtime_core.h"
 #include "../object/xstring.h"
 #include "../symbol/xsymbol_table.h"
 #include "../xisolate_api.h"
@@ -31,7 +32,7 @@
 
 /* ========== Instance Operations ========== */
 
-XrInstance *xr_instance_new(XrayIsolate *X, XrClass *cls) {
+XrInstance *xr_instance_new_core(XrRuntimeCore *core, XrCoroutine *coro, XrClass *cls) {
     XR_DCHECK(cls != NULL, "Class must not be NULL");
 
     const char *class_name = cls->name ? cls->name : "<unnamed>";
@@ -43,11 +44,10 @@ XrInstance *xr_instance_new(XrayIsolate *X, XrClass *cls) {
     // bootstrap path working before main_coro is ready (and matches
     // deep-copy's fallback when dst_coro_gc is unavailable).
     XrInstance *inst = NULL;
-    XrCoroutine *coro = xr_current_coro(X);
     if (coro) {
         inst = (XrInstance *) xr_alloc(coro, size, XR_TINSTANCE);
-    } else {
-        inst = (XrInstance *) xr_gc_alloc(xr_isolate_get_gc(X), size, XR_TINSTANCE);
+    } else if (core) {
+        inst = (XrInstance *) xr_gc_alloc(&core->gc, size, XR_TINSTANCE);
     }
 
     if (!inst) {
@@ -73,6 +73,10 @@ XrInstance *xr_instance_new(XrayIsolate *X, XrClass *cls) {
     }
 
     return inst;
+}
+
+XrInstance *xr_instance_new(XrayIsolate *X, XrClass *cls) {
+    return xr_instance_new_core(xr_isolate_get_runtime_core(X), xr_current_coro(X), cls);
 }
 
 void xr_instance_init_inplace(XrInstance *inst, XrClass *cls) {

@@ -28,6 +28,7 @@
 
 // Forward declaration
 struct XrArray;
+struct XrRuntimeCore;
 
 /* ========== String Object ========== */
 
@@ -163,6 +164,8 @@ XR_FUNC XrString *xr_string_from_float(XrayIsolate *iso, xr_Number n);
 
 XR_FUNC XrString *xr_string_intern(XrayIsolate *iso, const char *chars, size_t length,
                                    uint32_t hash);
+XR_FUNC XrString *xr_string_intern_core(struct XrRuntimeCore *core, const char *chars,
+                                        size_t length, uint32_t hash);
 
 /* ========== String Pool Management ========== */
 

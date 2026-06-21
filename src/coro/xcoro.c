@@ -1361,9 +1361,9 @@ static void wake_waiter_handle_scope_completion(XrCoroutine *coro, XrScopeContex
     wake_waiter_finish_scope_completion(coro, scope);
 }
 
-static void wake_waiter_notify_task(XrayIsolate *X, XrCoroutine *coro) {
+static void wake_waiter_notify_task(XrRuntime *runtime, XrCoroutine *coro) {
     if (coro->task) {
-        xr_task_wake_waiter(X, coro->task);
+        xr_task_wake_waiter_runtime(runtime, coro->task);
     }
 }
 
@@ -1390,10 +1390,17 @@ void xr_coro_wake_scope_waiter(XrayIsolate *X, XrCoroutine *coro) {
 // scope-side bookkeeping (which is orthogonal to the task tree, see
 // the doc comments on XrScopeContext / XrTask) and then delegates to
 // xr_task_wake_waiter for the per-task await/listener path.
+void xr_coro_wake_waiter_runtime(XrRuntime *runtime, XrCoroutine *coro) {
+    if (!coro)
+        return;
+
+    xr_coro_wake_scope_waiter(NULL, coro);
+    wake_waiter_notify_task(runtime, coro);
+}
+
 void xr_coro_wake_waiter(XrayIsolate *X, XrCoroutine *coro) {
     if (!X || !coro)
         return;
 
-    xr_coro_wake_scope_waiter(X, coro);
-    wake_waiter_notify_task(X, coro);
+    xr_coro_wake_waiter_runtime((XrRuntime *) X->scheduler_runtime, coro);
 }
