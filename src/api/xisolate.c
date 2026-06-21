@@ -28,11 +28,8 @@
 #include "../base/xlog.h"
 #include "../runtime/xisolate_internal.h"
 #include "../base/xchecks.h"
-#include "../runtime/gc/xgc.h"
+#include "../runtime/core/xr_runtime_core.h"
 #include "../runtime/gc/xsystem_heap.h"
-#include "../runtime/gc/xweak_registry.h"
-#include "../runtime/object/xstring.h"
-#include "../runtime/xstrbuf.h"
 #include "../base/xmalloc.h"
 #include "../runtime/xglobals_table.h"
 #include "../coro/xcoroutine.h"
@@ -72,7 +69,6 @@ XrayIsolate *xray_isolate_new(const XrayIsolateParams *params) {
         return NULL;
     }
     memset(isolate, 0, sizeof(XrayIsolate));
-    isolate->ext_type_next = XR_TTASK + 1;
 
     if (params) {
         isolate->params = *params;
@@ -80,26 +76,19 @@ XrayIsolate *xray_isolate_new(const XrayIsolateParams *params) {
         // Minimal init — no full-runtime callbacks unless caller sets them
         xray_isolate_params_init(&isolate->params);
     }
-    isolate->userdata = isolate->params.userdata;
     isolate->init_flags = isolate->params.init_flags;
 
-    // --- Core: string pool ---
-    isolate->global_string_pool = xr_malloc(sizeof(XrGlobalStringPool));
-    if (!isolate->global_string_pool)
+    XrRuntimeCoreConfig core_cfg = {
+        .owner_isolate = isolate,
+        .userdata = isolate->params.userdata,
+    };
+    isolate->core_rt = xr_runtime_core_new(&core_cfg);
+    if (!isolate->core_rt)
         goto fail;
-    memset(isolate->global_string_pool, 0, sizeof(XrGlobalStringPool));
-    xr_global_pool_init(isolate->global_string_pool);
+    xr_script_info_set(&isolate->core_rt->script_info, isolate->params.script_file,
+                       isolate->params.script_argc, isolate->params.script_argv);
 
-    // --- Core: GC ---
-    xr_gc_init(&isolate->gc, isolate);
-
-    // --- Core: system heap + main coroutine ---
-    isolate->sys_heap = xr_malloc(sizeof(XrSystemHeap));
-    if (!isolate->sys_heap)
-        goto fail;
-    if (!xr_sysheap_init(isolate->sys_heap, NULL))
-        goto fail;
-
+    // --- VM main coroutine ---
     isolate->main_coro = xr_coro_create_bootstrap(isolate);
     if (!isolate->main_coro)
         goto fail;
@@ -138,21 +127,9 @@ XrayIsolate *xray_isolate_new(const XrayIsolateParams *params) {
 fail_after_vm:
     xr_vm_cleanup(isolate);
 fail:
-    if (isolate->tmp_strbuf) {
-        xr_strbuf_free(isolate->tmp_strbuf);
-        isolate->tmp_strbuf = NULL;
-    }
     if (isolate->globals)
         xr_globals_destroy((XrGlobalsTable *) isolate->globals);
-    if (isolate->sys_heap) {
-        xr_sysheap_destroy(isolate->sys_heap);
-        xr_free(isolate->sys_heap);
-    }
-    xr_gc_cleanup(&isolate->gc);
-    if (isolate->global_string_pool) {
-        xr_global_pool_free(isolate->global_string_pool);
-        xr_free(isolate->global_string_pool);
-    }
+    xr_runtime_core_delete(isolate->core_rt);
     xr_free(isolate);
     return NULL;
 }
@@ -229,10 +206,7 @@ void xray_isolate_delete(XrayIsolate *isolate) {
     vm_cleanup_ms = isolate_teardown_elapsed_ms(stage_start_ns);
 
     stage_start_ns = xr_time_monotonic_ns();
-    if (isolate->tmp_strbuf) {
-        xr_strbuf_free(isolate->tmp_strbuf);
-        isolate->tmp_strbuf = NULL;
-    }
+    xr_runtime_core_free_tmp_strbuf(isolate->core_rt);
     tmp_strbuf_ms = isolate_teardown_elapsed_ms(stage_start_ns);
 
     // The globals table stores XrValue entries that reference fixedgc
@@ -248,17 +222,14 @@ void xray_isolate_delete(XrayIsolate *isolate) {
     globals_ms = isolate_teardown_elapsed_ms(stage_start_ns);
 
     stage_start_ns = xr_time_monotonic_ns();
-    if (isolate->sys_heap) {
-        /* Coroutine shells must release their per-coroutine heaps before
-         * fixed GC finalization. Class/module metadata remains alive until
-         * fixed GC destroy hooks finish reading instance layouts. */
-        xr_sysheap_destroy_coro_storage(isolate->sys_heap);
-    }
+    /* Coroutine shells must release their per-coroutine heaps before
+     * fixed GC finalization. Class/module metadata remains alive until
+     * fixed GC destroy hooks finish reading instance layouts. */
+    xr_runtime_core_destroy_coro_storage(isolate->core_rt);
     coro_storage_ms = isolate_teardown_elapsed_ms(stage_start_ns);
 
     stage_start_ns = xr_time_monotonic_ns();
-    xr_gc_cleanup(&isolate->gc);
-    xr_weak_registry_destroy(isolate);
+    xr_runtime_core_cleanup_gc(isolate->core_rt);
     gc_cleanup_ms = isolate_teardown_elapsed_ms(stage_start_ns);
 
     stage_start_ns = xr_time_monotonic_ns();
@@ -266,18 +237,18 @@ void xray_isolate_delete(XrayIsolate *isolate) {
     deferred_tasks_ms = isolate_teardown_elapsed_ms(stage_start_ns);
 
     stage_start_ns = xr_time_monotonic_ns();
-    if (isolate->sys_heap) {
-        xr_sysheap_destroy(isolate->sys_heap);
-        xr_free(isolate->sys_heap);
-        isolate->sys_heap = NULL;
+    if (isolate->core_rt && isolate->core_rt->sys_heap) {
+        xr_sysheap_destroy(isolate->core_rt->sys_heap);
+        xr_free(isolate->core_rt->sys_heap);
+        isolate->core_rt->sys_heap = NULL;
     }
     sys_heap_ms = isolate_teardown_elapsed_ms(stage_start_ns);
 
     stage_start_ns = xr_time_monotonic_ns();
-    if (isolate->global_string_pool) {
-        xr_global_pool_free(isolate->global_string_pool);
-        xr_free(isolate->global_string_pool);
-        isolate->global_string_pool = NULL;
+    if (isolate->core_rt && isolate->core_rt->global_string_pool) {
+        xr_global_pool_free(isolate->core_rt->global_string_pool);
+        xr_free(isolate->core_rt->global_string_pool);
+        isolate->core_rt->global_string_pool = NULL;
     }
     string_pool_ms = isolate_teardown_elapsed_ms(stage_start_ns);
 
@@ -288,11 +259,14 @@ void xray_isolate_delete(XrayIsolate *isolate) {
     stdlib_cache_ms = isolate_teardown_elapsed_ms(stage_start_ns);
 
     stage_start_ns = xr_time_monotonic_ns();
-    if (isolate->config) {
-        xr_free(isolate->config);
-        isolate->config = NULL;
+    if (isolate->core_rt && isolate->core_rt->config) {
+        xr_free(isolate->core_rt->config);
+        isolate->core_rt->config = NULL;
     }
     config_ms = isolate_teardown_elapsed_ms(stage_start_ns);
+
+    xr_runtime_core_delete(isolate->core_rt);
+    isolate->core_rt = NULL;
 
     if (teardown_stats) {
         fprintf(stderr,
@@ -331,12 +305,13 @@ XrayBackendType xray_isolate_get_backend(XrayIsolate *isolate) {
 
 void xray_isolate_set_userdata(XrayIsolate *isolate, void *userdata) {
     xray_api_check(isolate != NULL, "xray_isolate_set_userdata: NULL isolate");
-    isolate->userdata = userdata;
+    if (isolate->core_rt)
+        isolate->core_rt->userdata = userdata;
 }
 
 void *xray_isolate_get_userdata(XrayIsolate *isolate) {
     xray_api_checkr(isolate != NULL, "xray_isolate_get_userdata: NULL isolate", NULL);
-    return isolate->userdata;
+    return isolate->core_rt ? isolate->core_rt->userdata : NULL;
 }
 
 /* ========== Statistics and Debugging ========== */
@@ -344,7 +319,7 @@ void *xray_isolate_get_userdata(XrayIsolate *isolate) {
 void xray_isolate_get_stats(XrayIsolate *isolate, size_t *bytes_allocated, int *gc_count) {
     xray_api_check(isolate != NULL, "xray_isolate_get_stats: NULL isolate");
     if (bytes_allocated)
-        *bytes_allocated = (size_t) isolate->gc.totalbytes;
+        *bytes_allocated = isolate->core_rt ? (size_t) isolate->core_rt->gc.totalbytes : (size_t) 0;
     if (gc_count) {
         XrCoroGC *coro_gc = xr_isolate_get_coro_gc(isolate);
         *gc_count = coro_gc ? (int) coro_gc->gc_count : 0;

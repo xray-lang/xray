@@ -442,7 +442,7 @@ static void emit_const(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
             /* BigInt: aux holds decimal digit string, create XrBigInt object */
             if (xr_type_is_named_class(ty, "BigInt") && v->aux) {
                 const char *digits = (const char *) v->aux;
-                XrBigInt *bi = xr_bigint_from_string_on_gc(&ctx->isolate->gc, digits);
+                XrBigInt *bi = xr_bigint_from_string_on_gc(xr_isolate_get_gc(ctx->isolate), digits);
                 if (!bi) {
                     emit_error(ctx, XI_EMIT_ERR_INTERNAL);
                     return;

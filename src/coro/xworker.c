@@ -34,6 +34,7 @@
 #include "../base/xlog.h"
 #include "../runtime/gc/xregion.h"
 #include "../runtime/gc/xcoro_gc.h"
+#include "../runtime/xisolate_api.h"
 #include "../io/xio_runtime.h"  // xr_io_runtime_new / xr_io_runtime_free
 #include <stdlib.h>
 #include <string.h>
@@ -297,7 +298,7 @@ void xr_worker_destroy(XrWorker *worker) {
 
     // Per-isolate L2 pool for both block and CoroGC-struct flushes below.
     XrSystemHeap *gc_heap = (worker->p.runtime && worker->p.runtime->isolate)
-                                ? worker->p.runtime->isolate->sys_heap
+                                ? xr_isolate_get_sys_heap(worker->p.runtime->isolate)
                                 : NULL;
 
     // Flush Per-Worker Region block cache L1 → L2 (per-isolate pool)
@@ -502,9 +503,9 @@ void xr_runtime_destroy(XrRuntime *runtime) {
     stage_start_ns = xr_time_monotonic_ns();
     {
         uint64_t ch_closed = xr_channel_get_close_count(runtime->isolate);
-        if (runtime->isolate && runtime->isolate->sys_heap) {
+        if (runtime->isolate && xr_isolate_get_sys_heap(runtime->isolate)) {
             uint64_t ch_created =
-                atomic_load(&runtime->isolate->sys_heap->stats.channel_create_count);
+                atomic_load(&xr_isolate_get_sys_heap(runtime->isolate)->stats.channel_create_count);
             if (ch_created > ch_closed) {
                 xr_log_warning("runtime",
                                "%llu channel(s) not closed "

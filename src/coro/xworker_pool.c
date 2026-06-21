@@ -25,6 +25,7 @@
  */
 #include "xworker_internal.h"
 #include "../base/xchecks.h"
+#include "../runtime/xisolate_api.h"
 
 // Get coroutine object from pool (per-Worker + batch steal)
 XrCoroutine *xr_coro_pool_get(XrRuntime *runtime) {
@@ -63,8 +64,8 @@ XrCoroutine *xr_coro_pool_get(XrRuntime *runtime) {
     // whole chain and pushing the remainder back would require finding the
     // remainder tail for every batch, which turns large reuse waves into O(n^2).
     // Pop only the batch we need from the Treiber stack.
-    if (worker && runtime->isolate && runtime->isolate->sys_heap) {
-        XrCoroStructPool *pool = runtime->isolate->sys_heap->coro_pool;
+    if (worker && runtime->isolate && xr_isolate_get_sys_heap(runtime->isolate)) {
+        XrCoroStructPool *pool = xr_isolate_get_sys_heap(runtime->isolate)->coro_pool;
         if (pool && pool->initialized) {
             int batch = 0;
             while (batch < XR_CORO_BATCH_SIZE) {
@@ -95,8 +96,8 @@ XrCoroutine *xr_coro_pool_get(XrRuntime *runtime) {
     }
 
     // Per-Worker batch arena allocation (avoids per-coro atomic_fetch_add on alloc_idx)
-    if (worker && runtime->isolate && runtime->isolate->sys_heap) {
-        XrCoroStructPool *pool = runtime->isolate->sys_heap->coro_pool;
+    if (worker && runtime->isolate && xr_isolate_get_sys_heap(runtime->isolate)) {
+        XrCoroStructPool *pool = xr_isolate_get_sys_heap(runtime->isolate)->coro_pool;
         if (pool && pool->initialized) {
             // Check local arena cache first (use cached block pointer)
             XrCoroPoolBlock *cached_block = (XrCoroPoolBlock *) worker->p.arena_cache_block;
@@ -161,8 +162,8 @@ void xr_coro_pool_put(XrRuntime *runtime, XrCoroutine *coro) {
     XrWorker *worker = xr_current_worker();
     if (!worker) {
         // No worker context: return directly to global free list (lock-free).
-        if (runtime->isolate && runtime->isolate->sys_heap) {
-            XrCoroStructPool *pool = runtime->isolate->sys_heap->coro_pool;
+        if (runtime->isolate && xr_isolate_get_sys_heap(runtime->isolate)) {
+            XrCoroStructPool *pool = xr_isolate_get_sys_heap(runtime->isolate)->coro_pool;
             if (pool && pool->initialized) {
                 XrCoroutine *head;
                 do {
@@ -189,8 +190,8 @@ void xr_coro_pool_put(XrRuntime *runtime, XrCoroutine *coro) {
     // Lock-free splice. Detach the first `batch` nodes from
     // worker local list as a sub-chain (head=batch_head, tail=batch_tail),
     // then CAS-splice onto global free_list in a single step.
-    if (runtime->isolate && runtime->isolate->sys_heap) {
-        XrCoroStructPool *pool = runtime->isolate->sys_heap->coro_pool;
+    if (runtime->isolate && xr_isolate_get_sys_heap(runtime->isolate)) {
+        XrCoroStructPool *pool = xr_isolate_get_sys_heap(runtime->isolate)->coro_pool;
         if (pool && pool->initialized) {
             int batch = worker->p.local_free_count / 2;
             XrCoroutine *batch_head = NULL;

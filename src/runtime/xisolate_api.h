@@ -30,6 +30,11 @@
 
 /* ========== Subsystem Accessors ========== */
 
+typedef struct XrRuntimeCore XrRuntimeCore;
+
+// Runtime core
+XR_FUNC XrRuntimeCore *xr_isolate_get_runtime_core(XrayIsolate *X);
+
 // Memory subsystem
 XR_FUNC XrGC *xr_isolate_get_gc(XrayIsolate *X);
 XR_FUNC struct XrSystemHeap *xr_isolate_get_sys_heap(XrayIsolate *X);
@@ -74,6 +79,8 @@ XR_FUNC void *xr_isolate_get_userdata(XrayIsolate *X);
 XR_FUNC struct XrayConfig *xr_isolate_get_config(XrayIsolate *X);
 XR_FUNC uint32_t xr_isolate_get_init_flags(XrayIsolate *X);
 XR_FUNC const char *xr_isolate_get_script_file(XrayIsolate *X);
+XR_FUNC int xr_isolate_get_script_argc(XrayIsolate *X);
+XR_FUNC char **xr_isolate_get_script_argv(XrayIsolate *X);
 
 // Parser arena
 XR_FUNC struct XrArena *xr_isolate_get_current_arena(XrayIsolate *X);

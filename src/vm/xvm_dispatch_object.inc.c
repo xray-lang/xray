@@ -274,10 +274,11 @@ vmcase(OP_NEWJSON) {
     // Class stored as integer pointer (not GC managed; lives with isolate)
     XrClass *cls = (XrClass *) (intptr_t) XR_TO_INT(cls_val);
     XrJson *json;
-    if (storage_mode != 0 && isolate->sys_heap) {
+    if (storage_mode != 0 && xr_isolate_get_sys_heap(isolate)) {
         // shared: allocate on system heap
         size_t size = xr_json_size(cls);
-        json = (XrJson *) xr_sysheap_alloc_shared(isolate->sys_heap, size, XR_TINSTANCE);
+        json = (XrJson *) xr_sysheap_alloc_shared(xr_isolate_get_sys_heap(isolate), size,
+                                                  XR_TINSTANCE);
         if (json) {
             xr_json_init_inplace(json, cls);
             XR_GC_SET_STORAGE(&json->gc, storage_mode);

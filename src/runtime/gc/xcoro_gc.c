@@ -56,7 +56,7 @@
 // or coroutine GC. Returns NULL only when the bootstrap path has not
 // yet wired the isolate, in which case callers fall back to malloc/free.
 static inline XrSystemHeap *gc_pool_heap_from_coro(struct XrCoroutine *coro) {
-    return (coro && coro->isolate) ? coro->isolate->sys_heap : NULL;
+    return (coro && coro->isolate) ? xr_isolate_get_sys_heap(coro->isolate) : NULL;
 }
 
 static inline XrSystemHeap *gc_pool_heap_from_gc(XrCoroGC *gc) {
@@ -98,7 +98,7 @@ static inline bool xr_gc_needs_finalize_ext(XrCoroGC *gc, uint8_t type) {
     if (g_type_ops[type].destroy)
         return true;
     XrayIsolate *iso = gc_get_isolate(gc);
-    return iso && (iso->ext_finalize_bitmap & (1ULL << type));
+    return iso && (xr_isolate_get_ext_finalize_bitmap(iso) & (1ULL << type));
 }
 
 static inline XrGCDestroyFn get_destroy_func_ext(XrCoroGC *gc, uint8_t type) {
@@ -108,7 +108,7 @@ static inline XrGCDestroyFn get_destroy_func_ext(XrCoroGC *gc, uint8_t type) {
     if (fn)
         return fn;
     XrayIsolate *iso = gc_get_isolate(gc);
-    return iso ? iso->ext_destroy_funcs[type] : NULL;
+    return iso ? (XrGCDestroyFn) xr_isolate_get_ext_destroy(iso, type) : NULL;
 }
 
 /*
@@ -159,7 +159,7 @@ XrCoroGC *xr_coro_gc_create(struct XrCoroutine *coro) {
     // Initialize Region heap
     xr_region_init(&gc->region);
     // Wire the per-isolate L2 block cache (NULL during bootstrap → OS alloc).
-    gc->region.sys_heap = coro->isolate ? coro->isolate->sys_heap : NULL;
+    gc->region.sys_heap = coro->isolate ? xr_isolate_get_sys_heap(coro->isolate) : NULL;
 
     gc_init_runtime_state(gc);
 
@@ -401,7 +401,7 @@ void xr_coro_gc_reset(XrCoroGC *gc, struct XrCoroutine *new_owner) {
     gc_init_runtime_state(gc);
     gc->owner = new_owner;
     // Re-wire the per-isolate L2 block cache (region reset cleared it).
-    gc->region.sys_heap = new_owner->isolate ? new_owner->isolate->sys_heap : NULL;
+    gc->region.sys_heap = new_owner->isolate ? xr_isolate_get_sys_heap(new_owner->isolate) : NULL;
 }
 
 /* ========== Allocation Helpers ========== */

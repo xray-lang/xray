@@ -20,6 +20,7 @@
 
 typedef struct ScopeFixture {
     XrayIsolate isolate_storage;
+    XrRuntimeCore core;
     XrSystemHeap sys_heap;
     XrRuntime runtime;
     XrWorker worker;
@@ -37,7 +38,8 @@ static bool scope_fixture_init(ScopeFixture *f) {
         return false;
     }
     f->sys_heap_initialized = true;
-    f->isolate_storage.sys_heap = &f->sys_heap;
+    f->core.sys_heap = &f->sys_heap;
+    f->isolate_storage.core_rt = &f->core;
 
     f->saved_worker = tls_current_worker;
     f->saved_machine = tls_current_machine;

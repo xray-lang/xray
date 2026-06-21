@@ -212,7 +212,7 @@ XR_FUNC void xr_vm_ctx_free_ic_tables(XrVMContext *ctx);
 #define VMCTX_EXCEPTION(ctx) ((ctx)->current_exception)
 #define VMCTX_CORO(ctx) ((ctx)->current_coro)
 #define VMCTX_ISOLATE(ctx) ((ctx)->isolate)
-#define VMCTX_GC(ctx) (&VMCTX_ISOLATE(ctx)->gc)
+#define VMCTX_GC(ctx) (xr_isolate_get_gc(VMCTX_ISOLATE(ctx)))
 #define VMCTX_GLOBALS(ctx) (VMCTX_ISOLATE(ctx)->vm.builtins)
 #define VMCTX_GLOBAL_COUNT(ctx) (VMCTX_ISOLATE(ctx)->vm.builtin_count)
 #define VMCTX_STRINGS(ctx) (VMCTX_ISOLATE(ctx)->vm.strings_map)

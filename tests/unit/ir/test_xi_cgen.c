@@ -3558,6 +3558,59 @@ TEST(cgen_coro_frame_skips_dead_ssa_slots) {
     xi_func_free(ir);
 }
 
+TEST(cgen_coro_loop_tail_phi_survives_poll_suspend) {
+    const char *src = "fn worker(ch: Channel<int>, timeout_ms: int, value: int) -> bool {\n"
+                      "    return match (ch.sendTimeout(value, timeout_ms)) {\n"
+                      "        SendResult.Timeout -> true\n"
+                      "        _ -> false\n"
+                      "    }\n"
+                      "}\n"
+                      "fn run_once(count: int, timeout_ms: int) -> int {\n"
+                      "    shared const ch = new Channel(1)\n"
+                      "    ch.send(1)\n"
+                      "    let tasks: Array<Task> = []\n"
+                      "    for (let i = 0; i < count; i++) {\n"
+                      "        tasks.push(go worker(ch, timeout_ms, i + 2))\n"
+                      "    }\n"
+                      "    let total = 0\n"
+                      "    for (task in tasks) {\n"
+                      "        if (await task) {\n"
+                      "            total++\n"
+                      "        }\n"
+                      "    }\n"
+                      "    let _drain = ch.recv()\n"
+                      "    ch.close()\n"
+                      "    return total\n"
+                      "}\n"
+                      "print(run_once(3, 10))\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "AOT coroutine loop-tail phi should generate");
+
+    const char *frame = strstr(code, "typedef struct test_run_once_");
+    assert(frame != NULL && "run_once coroutine frame should be emitted");
+    const char *frame_end = strstr(frame, "} test_run_once_");
+    assert(frame_end != NULL && "run_once coroutine frame should have an end marker");
+    assert(count_between(frame, frame_end, "\n    int64_t phi") >= 4 &&
+           "loop-tail accumulator phi must be stored in the frame across poll suspend");
+
+    const char *resume = strstr(frame_end, "test_run_once_");
+    resume = resume ? strstr(resume, "_aot_resume(void *raw_frame") : NULL;
+    const char *trace = resume ? strstr(resume, "_aot_trace(void *frame") : NULL;
+    assert(resume != NULL && trace != NULL && "run_once resume/trace functions should exist");
+    assert(count_between(resume, trace, "\n    int64_t phi") == 0 &&
+           "cross-suspend phi values must not be resume-local zeroed temporaries");
+
+    printf("  Generated loop-tail phi frame %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_runtime_managed_types_skip_arc) {
     XrType task_type = {.kind = XR_KIND_INSTANCE};
     XrType channel_type = {.kind = XR_KIND_CHANNEL};
@@ -4808,6 +4861,7 @@ int main(void) {
     run_cgen_suspendable_dependency_init_fails_fast();
     run_cgen_coro_frame_params_use_typed_storage();
     run_cgen_coro_frame_skips_dead_ssa_slots();
+    run_cgen_coro_loop_tail_phi_survives_poll_suspend();
     run_cgen_runtime_managed_types_skip_arc();
     run_cgen_coro_frame_release_uses_aot_arc();
     run_cgen_coro_go_clones_tagged_args();

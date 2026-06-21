@@ -473,6 +473,7 @@ set(XRAY_COMMON_INCLUDES
     ${CMAKE_CURRENT_SOURCE_DIR}/src/base
     ${CMAKE_CURRENT_SOURCE_DIR}/src/os
     ${CMAKE_CURRENT_SOURCE_DIR}/src/runtime
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/core
     ${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/value
     ${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/gc
     ${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/object
@@ -524,6 +525,7 @@ else()
     set(AOT_TIME_SRC "src/os/unix/time_unix.c")
 endif()
 file(GLOB RUNTIME_TOP_SRC "src/runtime/*.c")
+file(GLOB RUNTIME_CORE_SRC "src/runtime/core/*.c")
 file(GLOB RUNTIME_VALUE_SRC "src/runtime/value/*.c")
 file(GLOB RUNTIME_GC_SRC "src/runtime/gc/*.c")
 file(GLOB RUNTIME_OBJECT_SRC "src/runtime/object/*.c")
@@ -661,7 +663,7 @@ endif()
 # C include fragments use *.inc.c for editor support, but they are included
 # from owning .c files and must never be compiled as standalone translation units.
 foreach(XRAY_SRC_LIST
-        BASE_SRC OS_SRC RUNTIME_TOP_SRC RUNTIME_VALUE_SRC RUNTIME_GC_SRC
+        BASE_SRC OS_SRC RUNTIME_TOP_SRC RUNTIME_CORE_SRC RUNTIME_VALUE_SRC RUNTIME_GC_SRC
         RUNTIME_OBJECT_SRC RUNTIME_OBJECT_BUILTINS_SRC RUNTIME_CLASS_SRC
         RUNTIME_CLOSURE_SRC RUNTIME_SYMBOL_SRC CORO_SRC IO_SRC
         FRONTEND_LEXER_SRC FRONTEND_PARSER_SRC FRONTEND_CODEGEN_SRC
@@ -679,6 +681,7 @@ set(CORE_ALL_SOURCES
     ${BASE_SRC}
     ${OS_SRC}
     ${RUNTIME_TOP_SRC}
+    ${RUNTIME_CORE_SRC}
     ${RUNTIME_VALUE_SRC}
     ${RUNTIME_GC_SRC}
     ${RUNTIME_OBJECT_SRC}

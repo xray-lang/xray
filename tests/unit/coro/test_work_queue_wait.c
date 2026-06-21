@@ -19,6 +19,7 @@
 
 typedef struct WorkQueueFixture {
     XrayIsolate isolate_storage;
+    XrRuntimeCore core;
     XrSystemHeap sys_heap;
     bool sys_heap_initialized;
 } WorkQueueFixture;
@@ -28,7 +29,8 @@ static bool work_queue_fixture_init(WorkQueueFixture *f) {
     if (!xr_sysheap_init(&f->sys_heap, NULL))
         return false;
     f->sys_heap_initialized = true;
-    f->isolate_storage.sys_heap = &f->sys_heap;
+    f->core.sys_heap = &f->sys_heap;
+    f->isolate_storage.core_rt = &f->core;
     return true;
 }
 

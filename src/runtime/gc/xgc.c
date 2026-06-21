@@ -120,16 +120,17 @@ typedef struct XrWeakContainerRegistry {
 } XrWeakContainerRegistry;
 
 static XrWeakContainerRegistry *weak_registry_get(XrayIsolate *isolate, bool create) {
-    if (!isolate)
+    XrRuntimeCore *core = xr_isolate_get_runtime_core(isolate);
+    if (!core)
         return NULL;
-    XrWeakContainerRegistry *registry = (XrWeakContainerRegistry *) isolate->weak_registry;
+    XrWeakContainerRegistry *registry = (XrWeakContainerRegistry *) core->weak_registry;
     if (registry || !create)
         return registry;
     registry = (XrWeakContainerRegistry *) xr_calloc(1, sizeof(XrWeakContainerRegistry));
     if (!registry)
         return NULL;
     xr_amutex_init(&registry->lock);
-    isolate->weak_registry = registry;
+    core->weak_registry = registry;
     return registry;
 }
 
@@ -272,13 +273,14 @@ void xr_weak_registry_target_dying(XrayIsolate *isolate, XrGCHeader *target, XrC
 }
 
 void xr_weak_registry_destroy(XrayIsolate *isolate) {
-    if (!isolate || !isolate->weak_registry)
+    XrRuntimeCore *core = xr_isolate_get_runtime_core(isolate);
+    if (!core || !core->weak_registry)
         return;
-    XrWeakContainerRegistry *registry = (XrWeakContainerRegistry *) isolate->weak_registry;
+    XrWeakContainerRegistry *registry = (XrWeakContainerRegistry *) core->weak_registry;
     xr_free(registry->maps);
     xr_free(registry->sets);
     xr_free(registry);
-    isolate->weak_registry = NULL;
+    core->weak_registry = NULL;
 }
 
 static XrGCDestroyFn get_destroy_func(uint8_t type) {
@@ -293,7 +295,6 @@ XR_FUNC bool xr_gc_type_may_need_finalize(uint8_t type) {
 
 void xr_gc_init(XrGC *gc, struct XrayIsolate *isolate) {
     XR_DCHECK(gc != NULL, "gc_init: NULL gc");
-    XR_DCHECK(isolate != NULL, "gc_init: NULL isolate");
     memset(gc, 0, sizeof(XrGC));
     gc->isolate = isolate;
     gc->gcstate = XGC_IDLE;
@@ -309,7 +310,7 @@ void xr_gc_cleanup(XrGC *gc) {
         uint8_t type = xr_gc_gettype(obj);
         XrGCDestroyFn destroy = get_destroy_func(type);
         if (!destroy && gc->isolate) {
-            destroy = gc->isolate->ext_destroy_funcs[type];
+            destroy = (XrGCDestroyFn) xr_isolate_get_ext_destroy(gc->isolate, type);
         }
         if (destroy != NULL) {
             destroy(obj, NULL);
@@ -411,7 +412,7 @@ void *xr_alloc(struct XrCoroutine *coro, size_t size, uint8_t type) {
     // Fallback: use isolate's global GC (needed during early isolate init
     // when coro_gc creation fails due to missing worker/machine)
     if (coro->isolate) {
-        return xr_gc_alloc(&coro->isolate->gc, size, type);
+        return xr_gc_alloc(xr_isolate_get_gc(coro->isolate), size, type);
     }
     return NULL;
 }

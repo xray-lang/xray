@@ -1155,10 +1155,10 @@ XR_FUNC XrDispatchAction vm_invoke_module(XrayIsolate *isolate, XrVMContext *vm_
         uint8_t storage_mode =
             atomic_exchange_explicit(&isolate->current_storage_mode, 0, memory_order_relaxed);
 
-        if (storage_mode != 0 && isolate->sys_heap) {
+        if (storage_mode != 0 && xr_isolate_get_sys_heap(isolate)) {
             size_t size = xr_instance_size(klass);
-            instance =
-                (XrInstance *) xr_sysheap_alloc_shared(isolate->sys_heap, size, XR_TINSTANCE);
+            instance = (XrInstance *) xr_sysheap_alloc_shared(xr_isolate_get_sys_heap(isolate),
+                                                              size, XR_TINSTANCE);
             if (instance) {
                 xr_instance_init_inplace(instance, klass);
                 XR_GC_SET_STORAGE(&instance->gc, storage_mode);
