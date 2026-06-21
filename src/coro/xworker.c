@@ -296,15 +296,13 @@ void xr_worker_destroy(XrWorker *worker) {
         worker->p.blocked_buckets[i] = NULL;
     }
 
-    // Per-isolate L2 pool for both block and CoroGC-struct flushes below.
-    XrSystemHeap *gc_heap = (worker->p.runtime && worker->p.runtime->isolate)
-                                ? xr_isolate_get_sys_heap(worker->p.runtime->isolate)
-                                : NULL;
+    // Per-runtime L2 pool for both block and CoroGC-struct flushes below.
+    XrSystemHeap *gc_heap = xr_runtime_get_sys_heap(worker->p.runtime);
 
-    // Flush Per-Worker Region block cache L1 → L2 (per-isolate pool)
+    // Flush Per-Worker Region block cache L1 → L2 (runtime-core pool)
     xr_region_flush_block_cache(gc_heap, worker->p.block_cache, &worker->p.block_cache_count);
 
-    // Flush Per-Worker CoroGC free list L1 → L2 (per-isolate pool)
+    // Flush Per-Worker CoroGC free list L1 → L2 (runtime-core pool)
     xr_coro_gc_flush_pool(gc_heap, &worker->p.gc_free_list, &worker->p.gc_free_count);
 }
 
@@ -336,6 +334,8 @@ XrRuntime *xr_runtime_create(XrayIsolate *isolate, int num_workers) {
     if (!runtime)
         return NULL;
 
+    runtime->core = xr_isolate_get_runtime_core(isolate);
+    XR_DCHECK(runtime->core != NULL, "runtime_create: isolate has no runtime core");
     runtime->isolate = isolate;
     runtime->worker_count = num_workers;
     runtime->deterministic_sched = deterministic;
@@ -502,10 +502,10 @@ void xr_runtime_destroy(XrRuntime *runtime) {
     // Channel leak detection: compare create vs close counts
     stage_start_ns = xr_time_monotonic_ns();
     {
-        uint64_t ch_closed = xr_channel_get_close_count(runtime->isolate);
-        if (runtime->isolate && xr_isolate_get_sys_heap(runtime->isolate)) {
-            uint64_t ch_created =
-                atomic_load(&xr_isolate_get_sys_heap(runtime->isolate)->stats.channel_create_count);
+        XrSystemHeap *heap = xr_runtime_get_sys_heap(runtime);
+        uint64_t ch_closed = heap ? atomic_load(&heap->stats.channel_close_count) : 0;
+        if (heap) {
+            uint64_t ch_created = atomic_load(&heap->stats.channel_create_count);
             if (ch_created > ch_closed) {
                 xr_log_warning("runtime",
                                "%llu channel(s) not closed "
