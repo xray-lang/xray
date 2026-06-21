@@ -535,6 +535,8 @@ file(GLOB RUNTIME_CLASS_SRC "src/runtime/class/*.c")
 file(GLOB RUNTIME_CLOSURE_SRC "src/runtime/closure/*.c")
 file(GLOB RUNTIME_SYMBOL_SRC "src/runtime/symbol/*.c")
 file(GLOB CORO_SRC "src/coro/*.c")
+list(APPEND CORO_SRC "src/coro/xaot_runtime.c")
+list(REMOVE_DUPLICATES CORO_SRC)
 file(GLOB IO_SRC "src/io/*.c")
 
 # Stackful coroutine context switch removed — fully stackless now
