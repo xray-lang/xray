@@ -48,6 +48,38 @@ XrEnumValue *xr_enum_value_new(XrayIsolate *X, const char *enum_name, const char
     return enum_val;
 }
 
+XrEnumValue *xr_enum_value_new_core(XrRuntimeCore *core, const char *enum_name,
+                                    const char *member_name, XrValue raw_value, uint32_t index) {
+    XR_DCHECK(core != NULL, "enum_value_new_core: NULL core");
+    XR_DCHECK(enum_name != NULL, "enum_value_new_core: NULL enum_name");
+    XR_DCHECK(member_name != NULL, "enum_value_new_core: NULL member_name");
+
+    XrEnumValue *enum_val =
+        (XrEnumValue *) xr_gc_alloc(&core->gc, sizeof(XrEnumValue), XR_TINSTANCE);
+    if (!enum_val)
+        return NULL;
+    enum_val->klass = NULL;
+    enum_val->enum_name = enum_name;
+    enum_val->member_name = member_name;
+    enum_val->raw_value = raw_value;
+    enum_val->member_index = index;
+    enum_val->parent_type = NULL;
+    return enum_val;
+}
+
+static XrClass *xr_enum_minimal_adt_class_new(const char *name, uint16_t field_count) {
+    XrClass *cls = (XrClass *) xr_calloc(1, sizeof(XrClass));
+    if (!cls)
+        return NULL;
+    cls->name = name;
+    cls->display_name = name;
+    cls->field_count = field_count;
+    cls->own_field_count = field_count;
+    cls->builtin_kind = XR_BK_ADT_ENUM;
+    cls->flags = XR_CLASS_BUILTIN | XR_CLASS_FINAL | XR_CLASS_INITIALIZED;
+    return cls;
+}
+
 XrEnumType *xr_enum_type_new(XrayIsolate *X, const char *name, int base_type, char **member_names,
                              XrValue *member_values, int count) {
     XrayCoreClasses *core = xr_isolate_get_core_classes(X);
@@ -76,6 +108,7 @@ XrEnumType *xr_enum_type_new(XrayIsolate *X, const char *name, int base_type, ch
     enum_type->is_adt = false;
     enum_type->max_payload = 0;
     enum_type->payload_counts = NULL;
+    enum_type->owns_enum_class = false;
 
     enum_type->members = (struct XrEnumMember *) xr_malloc(sizeof(*enum_type->members) * count);
     if (!enum_type->members) {
@@ -146,6 +179,125 @@ XrEnumType *xr_enum_type_new(XrayIsolate *X, const char *name, int base_type, ch
     }
 
     return enum_type;
+}
+
+XrEnumType *xr_enum_type_new_core(XrRuntimeCore *core, const char *name, int base_type,
+                                  char **member_names, XrValue *member_values, int count) {
+    if (!core || !name || !member_names || !member_values || count <= 0)
+        return NULL;
+
+    XrEnumType *enum_type = (XrEnumType *) xr_gc_alloc(&core->gc, sizeof(XrEnumType), XR_TINSTANCE);
+    if (!enum_type)
+        return NULL;
+    enum_type->klass = NULL;
+    enum_type->enum_class = NULL;
+    enum_type->name = name;
+    enum_type->base_type = base_type;
+    enum_type->member_count = (uint32_t) count;
+    enum_type->symbol_to_index = NULL;
+    enum_type->symbol_map_capacity = 0;
+    enum_type->is_contiguous_int = false;
+    enum_type->min_int_value = 0;
+    enum_type->value_to_index = NULL;
+    enum_type->value_map_range = 0;
+    enum_type->is_adt = false;
+    enum_type->max_payload = 0;
+    enum_type->payload_counts = NULL;
+    enum_type->owns_enum_class = false;
+
+    enum_type->members = (struct XrEnumMember *) xr_malloc(sizeof(*enum_type->members) * count);
+    if (!enum_type->members)
+        return NULL;
+
+    for (int i = 0; i < count; i++) {
+        enum_type->members[i].name = member_names[i];
+        enum_type->members[i].symbol = -1;
+        enum_type->members[i].value = member_values[i];
+        enum_type->members[i].instance =
+            xr_enum_value_new_core(core, name, member_names[i], member_values[i], (uint32_t) i);
+        if (enum_type->members[i].instance)
+            enum_type->members[i].instance->parent_type = enum_type;
+    }
+
+    if (base_type == XR_TINT && count > 0) {
+        int64_t min_val = XR_TO_INT(member_values[0]);
+        int64_t max_val = min_val;
+        bool contiguous = true;
+
+        for (int i = 0; i < count; i++) {
+            int64_t v = XR_TO_INT(member_values[i]);
+            if (v < min_val)
+                min_val = v;
+            if (v > max_val)
+                max_val = v;
+            if (v != XR_TO_INT(member_values[0]) + i)
+                contiguous = false;
+        }
+
+        enum_type->min_int_value = min_val;
+        if (contiguous) {
+            enum_type->is_contiguous_int = true;
+        } else {
+            int64_t range = max_val - min_val + 1;
+            if (range > 0 && range <= (int64_t) count * 4 && range <= INT32_MAX) {
+                enum_type->value_map_range = (int) range;
+                enum_type->value_to_index = (int *) xr_malloc(sizeof(int) * (size_t) range);
+                if (enum_type->value_to_index) {
+                    for (int64_t i = 0; i < range; i++)
+                        enum_type->value_to_index[i] = -1;
+                    for (int i = 0; i < count; i++) {
+                        int64_t slot = XR_TO_INT(member_values[i]) - min_val;
+                        enum_type->value_to_index[slot] = i;
+                    }
+                } else {
+                    enum_type->value_map_range = 0;
+                }
+            }
+        }
+    }
+
+    return enum_type;
+}
+
+bool xr_enum_type_ensure_adt_class(XrEnumType *enum_type) {
+    if (!enum_type)
+        return false;
+    uint16_t field_count =
+        (uint16_t) (1 + (enum_type->max_payload > 0 ? enum_type->max_payload : 0));
+    if (enum_type->enum_class) {
+        enum_type->enum_class->field_count = field_count;
+        enum_type->enum_class->own_field_count = field_count;
+        enum_type->enum_class->builtin_kind = XR_BK_ADT_ENUM;
+        return true;
+    }
+    enum_type->enum_class = xr_enum_minimal_adt_class_new(enum_type->name, field_count);
+    enum_type->owns_enum_class = enum_type->enum_class != NULL;
+    return enum_type->enum_class != NULL;
+}
+
+bool xr_enum_type_set_adt_payloads(XrEnumType *enum_type, const int *payload_counts, int count) {
+    if (!enum_type || !payload_counts || count <= 0 || (uint32_t) count != enum_type->member_count)
+        return false;
+
+    int *payload_copy = (int *) xr_calloc((size_t) count, sizeof(int));
+    if (!payload_copy)
+        return false;
+
+    int max_payload = 0;
+    for (int i = 0; i < count; i++) {
+        payload_copy[i] = payload_counts[i];
+        if (payload_counts[i] > max_payload)
+            max_payload = payload_counts[i];
+    }
+
+    if (enum_type->payload_counts)
+        xr_free(enum_type->payload_counts);
+    enum_type->payload_counts = payload_copy;
+    enum_type->is_adt = true;
+    enum_type->max_payload = max_payload;
+    if (max_payload > 0)
+        return xr_enum_type_ensure_adt_class(enum_type);
+    return true;
 }
 
 /* ========== Enum Access ========== */
@@ -347,6 +499,11 @@ void xr_gc_destroy_enum_type(XrGCHeader *obj, XrCoroGC *owning_gc) {
     if (enum_type->payload_counts) {
         xr_free(enum_type->payload_counts);
         enum_type->payload_counts = NULL;
+    }
+    if (enum_type->owns_enum_class && enum_type->enum_class) {
+        xr_free(enum_type->enum_class);
+        enum_type->enum_class = NULL;
+        enum_type->owns_enum_class = false;
     }
     // enum_type->name is interned; not owned.
 }

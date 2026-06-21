@@ -23,20 +23,51 @@ typedef struct CgBuiltinInitPlan {
     bool process;
     bool file;
     bool dir;
-    bool runtime;
+    uint32_t runtime_caps;
 } CgBuiltinInitPlan;
 
 static void cg_builtin_init_scan_value(CgBuiltinInitPlan *plan, const XiValue *v) {
-    if (!plan || !v || v->op != XI_GET_BUILTIN)
+    if (!plan || !v)
         return;
-    if (v->aux_int == XR_GLOBAL_VAR_PROCESS)
-        plan->process = true;
-    else if (v->aux_int == XR_GLOBAL_VAR_FILE)
-        plan->file = true;
-    else if (v->aux_int == XR_GLOBAL_VAR_DIR)
-        plan->dir = true;
-    else if (v->aux_int == XR_GLOBAL_VAR_WORKQUEUE || v->aux_int == XR_GLOBAL_VAR_RESULTGROUP)
-        plan->runtime = true;
+
+    switch (v->op) {
+        case XI_YIELD:
+        case XI_GO:
+        case XI_AWAIT:
+        case XI_SCOPE_ENTER:
+        case XI_SCOPE_EXIT:
+            plan->runtime_caps |= XR_AOT_CAP_CORO;
+            break;
+        case XI_CHAN_NEW:
+        case XI_CHAN_SEND:
+        case XI_CHAN_RECV:
+        case XI_CHAN_TRY_SEND:
+        case XI_CHAN_TRY_RECV:
+        case XI_CHAN_RECV_STATUS:
+        case XI_CHAN_IS_CLOSED:
+        case XI_SELECT_BLOCK:
+            plan->runtime_caps |= XR_AOT_CAP_CORO | XR_AOT_CAP_CHANNEL;
+            break;
+        case XI_TIME_AFTER:
+        case XI_CHAN_TIMER_DISPOSE:
+            plan->runtime_caps |= XR_AOT_CAP_CORO | XR_AOT_CAP_CHANNEL | XR_AOT_CAP_TIMER;
+            break;
+        case XI_GET_BUILTIN:
+            if (v->aux_int == XR_GLOBAL_VAR_PROCESS) {
+                plan->process = true;
+            } else if (v->aux_int == XR_GLOBAL_VAR_FILE) {
+                plan->file = true;
+            } else if (v->aux_int == XR_GLOBAL_VAR_DIR) {
+                plan->dir = true;
+            } else if (v->aux_int == XR_GLOBAL_VAR_WORKQUEUE) {
+                plan->runtime_caps |= XR_AOT_CAP_WORK_QUEUE;
+            } else if (v->aux_int == XR_GLOBAL_VAR_RESULTGROUP) {
+                plan->runtime_caps |= XR_AOT_CAP_RESULT_GROUP;
+            }
+            break;
+        default:
+            break;
+    }
 }
 
 static void cg_builtin_init_scan_func(CgBuiltinInitPlan *plan, const XiFunc *func) {
@@ -111,6 +142,71 @@ static void emit_xrt_builtin_init(FILE *out, const CgBuiltinInitPlan *plan) {
         fprintf(out, "    xrt_builtins[%d] = XR_NULL_VAL;\n", XR_GLOBAL_VAR_DIR);
 }
 
+static void emit_xrt_runtime_caps_expr(FILE *out, uint32_t caps) {
+    struct CapName {
+        uint32_t bit;
+        const char *name;
+    };
+    static const struct CapName cap_names[] = {
+        {XR_AOT_CAP_CORO, "XR_AOT_CAP_CORO"},
+        {XR_AOT_CAP_TIMER, "XR_AOT_CAP_TIMER"},
+        {XR_AOT_CAP_CHANNEL, "XR_AOT_CAP_CHANNEL"},
+        {XR_AOT_CAP_WORK_QUEUE, "XR_AOT_CAP_WORK_QUEUE"},
+        {XR_AOT_CAP_RESULT_GROUP, "XR_AOT_CAP_RESULT_GROUP"},
+        {XR_AOT_CAP_PROCESS, "XR_AOT_CAP_PROCESS"},
+    };
+
+    if (caps == XR_AOT_CAP_NONE) {
+        fprintf(out, "XR_AOT_CAP_NONE");
+        return;
+    }
+
+    bool first = true;
+    for (uint32_t i = 0; i < (uint32_t) (sizeof(cap_names) / sizeof(cap_names[0])); i++) {
+        if ((caps & cap_names[i].bit) == 0)
+            continue;
+        if (!first)
+            fprintf(out, " | ");
+        fprintf(out, "%s", cap_names[i].name);
+        first = false;
+    }
+}
+
+static void emit_xrt_runtime_builtin_sync(FILE *out, const CgBuiltinInitPlan *plan,
+                                          const char *runtime_var) {
+    if (!plan)
+        return;
+    if (plan->process) {
+        fprintf(out, "    xr_aot_runtime_set_builtin(%s, %d, xrt_builtins[%d]);\n", runtime_var,
+                XR_GLOBAL_VAR_PROCESS, XR_GLOBAL_VAR_PROCESS);
+    }
+    if (plan->file) {
+        fprintf(out, "    xr_aot_runtime_set_builtin(%s, %d, xrt_builtins[%d]);\n", runtime_var,
+                XR_GLOBAL_VAR_FILE, XR_GLOBAL_VAR_FILE);
+    }
+    if (plan->dir) {
+        fprintf(out, "    xr_aot_runtime_set_builtin(%s, %d, xrt_builtins[%d]);\n", runtime_var,
+                XR_GLOBAL_VAR_DIR, XR_GLOBAL_VAR_DIR);
+    }
+}
+
+static void emit_xrt_runtime_init(FILE *out, const CgBuiltinInitPlan *plan, uint32_t runtime_caps) {
+    fprintf(out, "    XrAotRuntimeConfig runtime_cfg;\n");
+    fprintf(out, "    xr_aot_runtime_config_init(&runtime_cfg);\n");
+    fprintf(out, "    runtime_cfg.caps = ");
+    emit_xrt_runtime_caps_expr(out, runtime_caps);
+    fprintf(out, ";\n");
+    fprintf(out, "    runtime_cfg.argc = argc > 1 ? argc - 1 : 0;\n");
+    fprintf(out, "    runtime_cfg.argv = argc > 1 ? argv + 1 : NULL;\n");
+    fprintf(out, "    XrAotRuntime *rt = xr_aot_runtime_new(&runtime_cfg);\n");
+    fprintf(out, "    if (!rt) { xrt_bump_destroy(); return 1; }\n");
+    emit_xrt_runtime_builtin_sync(out, plan, "rt");
+    fprintf(out, "    xrt_global_ctx.runtime = rt;\n");
+    fprintf(out, "    xrt_global_ctx.coro = NULL;\n");
+    fprintf(out, "    xrt_global_ctx.isolate = NULL;\n");
+    fprintf(out, "    xrt_global_ctx.worker = NULL;\n");
+}
+
 XR_FUNC void xi_cgen_main(XiCgenCtx *ctx, FILE *out, XiModule **modules, int n, int entry_index) {
     XR_DCHECK(ctx != NULL, "xi_cgen_main: NULL ctx");
     XR_DCHECK(out != NULL, "xi_cgen_main: NULL output");
@@ -120,24 +216,16 @@ XR_FUNC void xi_cgen_main(XiCgenCtx *ctx, FILE *out, XiModule **modules, int n, 
     bool entry_is_coro = modules[entry_index] && modules[entry_index]->init &&
                          cg_func_needs_aot_coro_ctx(ctx, modules[entry_index]->init);
     CgBuiltinInitPlan builtin_plan = cg_builtin_init_plan_for_modules(modules, n);
-    bool entry_needs_runtime = entry_is_coro || builtin_plan.runtime;
+    uint32_t runtime_caps = builtin_plan.runtime_caps;
+    if (entry_is_coro)
+        runtime_caps |= XR_AOT_CAP_CORO;
+    bool entry_needs_runtime = runtime_caps != XR_AOT_CAP_NONE;
 
     fprintf(out, "int main(int argc, char **argv) {\n");
     fprintf(out, "    xrt_arc_init();\n");
     emit_xrt_builtin_init(out, &builtin_plan);
     if (entry_needs_runtime) {
-        fprintf(out, "    XrayIsolateParams params;\n");
-        fprintf(out, "    xray_isolate_params_init(&params);\n");
-        fprintf(out, "    xray_isolate_setup_runtime(&params);\n");
-        fprintf(out, "    params.init_flags = XR_INIT_RUNTIME;\n");
-        fprintf(out, "    XrayIsolate *X = xray_isolate_new(&params);\n");
-        fprintf(out, "    if (!X) return 1;\n");
-        fprintf(out, "    xr_multicore_init(X, 0);\n");
-        fprintf(out, "    xray_isolate_set_script_info(X, NULL, argc > 1 ? argc - 1 : 0, "
-                     "argc > 1 ? argv + 1 : NULL);\n");
-        fprintf(out, "    xrt_global_ctx.isolate = X;\n");
-        fprintf(out, "    xrt_global_ctx.coro = NULL;\n");
-        fprintf(out, "    xrt_global_ctx.worker = NULL;\n");
+        emit_xrt_runtime_init(out, &builtin_plan, runtime_caps);
     } else {
         fprintf(out, "    (void) argc;\n");
         fprintf(out, "    (void) argv;\n");
@@ -150,7 +238,7 @@ XR_FUNC void xi_cgen_main(XiCgenCtx *ctx, FILE *out, XiModule **modules, int n, 
             emit_fname_suffix(ctx, out, modules[m]->name ? modules[m]->name : "mod",
                               modules[m]->init, "_aot_frame_new");
             fprintf(out, "();\n");
-            fprintf(out, "    xr_aot_run_main_vm_bridge(X, &");
+            fprintf(out, "    xr_aot_run_main(rt, &");
             emit_fname_suffix(ctx, out, modules[m]->name ? modules[m]->name : "mod",
                               modules[m]->init, "_aot_desc");
             fprintf(out, ", _entry_frame);\n");
@@ -170,8 +258,7 @@ XR_FUNC void xi_cgen_main(XiCgenCtx *ctx, FILE *out, XiModule **modules, int n, 
         }
     }
     if (entry_needs_runtime) {
-        fprintf(out, "    xr_multicore_destroy(X);\n");
-        fprintf(out, "    xray_isolate_delete(X);\n");
+        fprintf(out, "    xr_aot_runtime_delete(rt);\n");
     }
     fprintf(out, "    xrt_bump_destroy();\n");
     fprintf(out, "    return 0;\n");
@@ -237,26 +324,18 @@ XR_FUNC void xi_cgen_program(XiCgenCtx *ctx, FILE *out, XiModule *module) {
         CgBuiltinInitPlan builtin_plan = cg_builtin_init_plan_for_func(main_func);
         emit_xrt_builtin_init(body, &builtin_plan);
         bool entry_is_coro = cg_func_needs_aot_coro_ctx(ctx, main_func);
-        bool entry_needs_runtime = entry_is_coro || builtin_plan.runtime;
+        uint32_t runtime_caps = builtin_plan.runtime_caps;
+        if (entry_is_coro)
+            runtime_caps |= XR_AOT_CAP_CORO;
+        bool entry_needs_runtime = runtime_caps != XR_AOT_CAP_NONE;
         if (entry_needs_runtime) {
-            fprintf(body, "    XrayIsolateParams params;\n");
-            fprintf(body, "    xray_isolate_params_init(&params);\n");
-            fprintf(body, "    xray_isolate_setup_runtime(&params);\n");
-            fprintf(body, "    params.init_flags = XR_INIT_RUNTIME;\n");
-            fprintf(body, "    XrayIsolate *X = xray_isolate_new(&params);\n");
-            fprintf(body, "    if (!X) return 1;\n");
-            fprintf(body, "    xr_multicore_init(X, 0);\n");
-            fprintf(body, "    xray_isolate_set_script_info(X, NULL, argc > 1 ? argc - 1 : 0, "
-                          "argc > 1 ? argv + 1 : NULL);\n");
-            fprintf(body, "    xrt_global_ctx.isolate = X;\n");
-            fprintf(body, "    xrt_global_ctx.coro = NULL;\n");
-            fprintf(body, "    xrt_global_ctx.worker = NULL;\n");
+            emit_xrt_runtime_init(body, &builtin_plan, runtime_caps);
         }
         if (entry_is_coro) {
             fprintf(body, "    void *_entry_frame = ");
             emit_fname_suffix(ctx, body, prefix, main_func, "_aot_frame_new");
             fprintf(body, "();\n");
-            fprintf(body, "    xr_aot_run_main_vm_bridge(X, &");
+            fprintf(body, "    xr_aot_run_main(rt, &");
             emit_fname_suffix(ctx, body, prefix, main_func, "_aot_desc");
             fprintf(body, ", _entry_frame);\n");
         } else {
@@ -269,8 +348,7 @@ XR_FUNC void xi_cgen_program(XiCgenCtx *ctx, FILE *out, XiModule *module) {
             fprintf(body, "(NULL);\n");
         }
         if (entry_needs_runtime) {
-            fprintf(body, "    xr_multicore_destroy(X);\n");
-            fprintf(body, "    xray_isolate_delete(X);\n");
+            fprintf(body, "    xr_aot_runtime_delete(rt);\n");
         }
         fprintf(body, "    xrt_bump_destroy();\n");
         fprintf(body, "    return 0;\n");
