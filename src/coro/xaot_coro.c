@@ -2288,11 +2288,11 @@ static bool aot_context_from_result_group_value(XrValue group_value, XrAotContex
     if (!out || !xr_value_is_result_group(group_value))
         return false;
     XrResultGroup *g = xr_value_to_result_group(group_value);
-    XrayIsolate *isolate = g ? g->isolate : NULL;
-    if (!isolate)
+    if (!g)
         return false;
-    out->isolate = isolate;
-    out->coro = xr_current_coro(isolate);
+    out->runtime = NULL;
+    out->isolate = NULL;
+    out->coro = NULL;
     out->worker = NULL;
     return true;
 }
@@ -2306,10 +2306,15 @@ static uint32_t aot_result_group_sanitize_batch(int64_t value) {
 }
 
 XrValue xr_aot_result_group_new(const XrAotContext *ctx, int64_t batch_size) {
-    if (!ctx || !ctx->isolate)
+    if (!ctx)
         return XR_NULL_VAL;
+    XrRuntimeCore *core = ctx->runtime ? xr_aot_runtime_core(ctx->runtime)
+                                       : (ctx->isolate ? ctx->isolate->core_rt : NULL);
+    XrRuntime *scheduler =
+        ctx->runtime ? xr_aot_runtime_scheduler(ctx->runtime)
+                     : (ctx->isolate ? (XrRuntime *) ctx->isolate->scheduler_runtime : NULL);
     XrResultGroup *g =
-        xr_result_group_new(ctx->isolate, aot_result_group_sanitize_batch(batch_size));
+        xr_result_group_new(core, scheduler, aot_result_group_sanitize_batch(batch_size));
     return g ? xr_value_from_result_group(g) : XR_NULL_VAL;
 }
 
@@ -2368,11 +2373,11 @@ bool xr_aot_result_group_try_recv_sync(XrValue group_value, XrValue *out_value) 
 
 XrAotResult xr_aot_result_group_recv(const XrAotContext *ctx, XrValue group_value,
                                      XrSlotRef out_slot) {
-    if (!ctx || !ctx->isolate || !ctx->coro || !xr_value_is_result_group(group_value))
+    if (!ctx || !ctx->coro || !xr_value_is_result_group(group_value))
         return xr_aot_error(XR_NULL_VAL, false);
     XrValue value = XR_NULL_VAL;
     XrResultGroup *g = xr_value_to_result_group(group_value);
-    switch (xr_result_group_recv_for_coro(ctx->isolate, g, ctx->coro, &value)) {
+    switch (xr_result_group_recv_for_coro(g, ctx->coro, &value)) {
         case XR_RESULT_GROUP_RECV_DONE:
             if (out_slot.kind == XR_SLOT_NONE)
                 return xr_aot_done(value);
@@ -2386,10 +2391,10 @@ XrAotResult xr_aot_result_group_recv(const XrAotContext *ctx, XrValue group_valu
 }
 
 XrAotResult xr_aot_result_group_recv_resume(const XrAotContext *ctx, XrSlotRef out_slot) {
-    if (!ctx || !ctx->isolate || !ctx->coro)
+    if (!ctx || !ctx->coro)
         return xr_aot_error(XR_NULL_VAL, false);
     XrValue value = XR_NULL_VAL;
-    switch (xr_result_group_recv_resume_for_coro(ctx->isolate, ctx->coro, &value)) {
+    switch (xr_result_group_recv_resume_for_coro(ctx->coro, &value)) {
         case XR_RESULT_GROUP_RECV_DONE:
             if (out_slot.kind == XR_SLOT_NONE)
                 return xr_aot_done(value);

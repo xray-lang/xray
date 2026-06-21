@@ -14,6 +14,7 @@
 
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
+#include "../runtime/core/xr_runtime_core.h"
 #include "../runtime/gc/xsystem_heap.h"
 #include "../runtime/object/xexception.h"
 #include "../runtime/object/xnative_type.h"
@@ -36,9 +37,7 @@ static uint32_t sanitize_batch_size(int64_t value) {
 }
 
 static XrRuntime *result_group_runtime(XrResultGroup *g) {
-    if (!g || !g->isolate)
-        return NULL;
-    return (XrRuntime *) g->isolate->scheduler_runtime;
+    return g ? (XrRuntime *) g->scheduler : NULL;
 }
 
 static bool result_group_runtime_can_wake(XrRuntime *runtime) {
@@ -341,8 +340,8 @@ static void result_group_wake_all(XrResultGroup *g) {
     }
 }
 
-XrResultGroup *xr_result_group_new(XrayIsolate *X, uint32_t batch_size) {
-    if (!X || !xr_isolate_get_sys_heap(X))
+XrResultGroup *xr_result_group_new(XrRuntimeCore *core, XrRuntime *scheduler, uint32_t batch_size) {
+    if (!core || !core->sys_heap)
         return NULL;
     if (batch_size == 0)
         batch_size = XR_RESULT_GROUP_DEFAULT_BATCH;
@@ -350,7 +349,7 @@ XrResultGroup *xr_result_group_new(XrayIsolate *X, uint32_t batch_size) {
         batch_size = XR_RESULT_GROUP_MAX_BATCH;
 
     XrResultGroup *g = (XrResultGroup *) xr_sysheap_alloc_shared(
-        xr_isolate_get_sys_heap(X), sizeof(XrResultGroup), XR_TRESULTGROUP);
+        core->sys_heap, sizeof(XrResultGroup), XR_TRESULTGROUP);
     if (!g)
         return NULL;
 
@@ -369,7 +368,8 @@ XrResultGroup *xr_result_group_new(XrayIsolate *X, uint32_t batch_size) {
     g->batch_last = NULL;
     g->wait_first = NULL;
     g->wait_last = NULL;
-    g->isolate = X;
+    g->core = core;
+    g->scheduler = scheduler;
     return g;
 }
 
@@ -525,9 +525,8 @@ static void result_group_finish_wait_if_current(XrCoroutine *coro, XrResultGroup
         xr_result_group_wait_token_finish(&wait->result_group_token);
 }
 
-XrResultGroupRecvStatus xr_result_group_recv_for_coro(XrayIsolate *isolate, XrResultGroup *g,
-                                                      XrCoroutine *coro, XrValue *result) {
-    (void) isolate;
+XrResultGroupRecvStatus xr_result_group_recv_for_coro(XrResultGroup *g, XrCoroutine *coro,
+                                                      XrValue *result) {
     if (!g || !result)
         return XR_RESULT_GROUP_RECV_ERROR;
     int64_t value = 0;
@@ -578,8 +577,7 @@ XrResultGroupRecvStatus xr_result_group_recv_for_coro(XrayIsolate *isolate, XrRe
     return XR_RESULT_GROUP_RECV_BLOCKED;
 }
 
-XrResultGroupRecvStatus xr_result_group_recv_resume_for_coro(XrayIsolate *isolate,
-                                                             XrCoroutine *coro, XrValue *result) {
+XrResultGroupRecvStatus xr_result_group_recv_resume_for_coro(XrCoroutine *coro, XrValue *result) {
     if (!coro || !result)
         return XR_RESULT_GROUP_RECV_ERROR;
     XrCoroWaitState *wait = xr_coro_wait_state(coro);
@@ -589,7 +587,7 @@ XrResultGroupRecvStatus xr_result_group_recv_resume_for_coro(XrayIsolate *isolat
                                                               memory_order_acquire);
     if (!g)
         return XR_RESULT_GROUP_RECV_ERROR;
-    return xr_result_group_recv_for_coro(isolate, g, coro, result);
+    return xr_result_group_recv_for_coro(g, coro, result);
 }
 
 static XrCFuncResult ym_recv(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs,
@@ -600,7 +598,7 @@ static XrCFuncResult ym_recv(XrayIsolate *isolate, XrValue self, XrValue *args, 
     XR_DCHECK(g != NULL, "ResultGroup.recv: NULL group");
     XR_DCHECK(result != NULL, "ResultGroup.recv: NULL result");
 
-    switch (xr_result_group_recv_for_coro(isolate, g, xr_current_coro(isolate), result)) {
+    switch (xr_result_group_recv_for_coro(g, xr_current_coro(isolate), result)) {
         case XR_RESULT_GROUP_RECV_DONE:
             return XR_CFUNC_DONE;
         case XR_RESULT_GROUP_RECV_BLOCKED:
@@ -655,7 +653,8 @@ static XrValue result_group_construct(XrayIsolate *isolate, XrValue receiver, Xr
     if (nargs >= 1 && XR_IS_INT(args[0]))
         batch_size = sanitize_batch_size(XR_TO_INT(args[0]));
 
-    XrResultGroup *g = xr_result_group_new(isolate, batch_size);
+    XrResultGroup *g = xr_result_group_new(xr_isolate_get_runtime_core(isolate),
+                                           xr_isolate_get_scheduler_runtime(isolate), batch_size);
     if (!g) {
         XrValue exc =
             xr_exception_newf(isolate, XR_ERR_OUT_OF_MEMORY, "ResultGroup allocation failed");
