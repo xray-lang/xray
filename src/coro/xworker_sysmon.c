@@ -236,7 +236,7 @@ int xr_main_thread_run(XrayIsolate *X, XrCoroutine *main_coro) {
     if (!X || !main_coro)
         return -1;
 
-    XrRuntime *runtime = (XrRuntime *) X->vm.runtime;
+    XrRuntime *runtime = (XrRuntime *) X->scheduler_runtime;
     if (!runtime)
         return -1;
 
@@ -349,7 +349,7 @@ int xr_debug_resume_coro(XrayIsolate *X, XrCoroutine *coro) {
     if (!X || !coro)
         return -1;
 
-    XrRuntime *runtime = (XrRuntime *) X->vm.runtime;
+    XrRuntime *runtime = (XrRuntime *) X->scheduler_runtime;
     if (!runtime)
         return -1;
 

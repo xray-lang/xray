@@ -41,7 +41,7 @@ vmcase(OP_AWAIT) {
         XrValue _aw_tv = base[_aw_b];
         if (xr_value_is_task(_aw_tv)) {
             XrTask *_aw_task = xr_value_to_task(_aw_tv);
-            XrRuntime *_aw_runtime = isolate ? (XrRuntime *) isolate->vm.runtime : NULL;
+            XrRuntime *_aw_runtime = isolate ? (XrRuntime *) isolate->scheduler_runtime : NULL;
             if (_aw_one_shot && _aw_runtime) {
                 xr_sched_metric_inc(_aw_runtime,
                                     &_aw_runtime->sched_stats.task_one_shot_await_count);

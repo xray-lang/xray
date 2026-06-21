@@ -104,7 +104,7 @@ static void vm_coro_set_source_field(XrayIsolate *isolate, XrMap *info, const Xr
 // Returns the number of entries written. Best-effort snapshot (not atomic).
 int vm_collect_all_coros(XrayIsolate *isolate, VmCoroEntry *out, int max_out) {
     XR_DCHECK(isolate != NULL, "vm_collect_all_coros: NULL isolate");
-    XrRuntime *runtime = (XrRuntime *) isolate->vm.runtime;
+    XrRuntime *runtime = (XrRuntime *) isolate->scheduler_runtime;
     if (!runtime)
         return 0;
     return xr_runtime_collect_coros(runtime, out, max_out);
@@ -122,7 +122,7 @@ XR_FUNC XrDispatchAction vm_coro_ctrl(XrayIsolate *isolate, XrVMContext *vm_ctx,
 
     switch (coro_sub) {
         case CORO_CTRL_STATS: {
-            XrRuntime *runtime = (XrRuntime *) isolate->vm.runtime;
+            XrRuntime *runtime = (XrRuntime *) isolate->scheduler_runtime;
             if (!runtime) {
                 base[a] = xr_null();
                 return XR_DISP_NEXT;
@@ -663,7 +663,7 @@ XR_FUNC XrDispatchAction vm_go(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInst
         VM_THROW(frame, pc, XR_ERR_CORO_DEAD, "go: failed to create coroutine");
     }
 
-    XrRuntime *runtime = (XrRuntime *) isolate->vm.runtime;
+    XrRuntime *runtime = (XrRuntime *) isolate->scheduler_runtime;
     if (!runtime) {
         VM_THROW(frame, pc, XR_ERR_CORO_DEAD, "go: Runtime not initialized");
     }
@@ -825,7 +825,7 @@ static inline void vm_task_destroy_one_shot_success(XrayIsolate *isolate, XrTask
                                                     bool one_shot) {
     if (!one_shot || !isolate || !task)
         return;
-    xr_task_runtime_try_destroy_detached((XrRuntime *) isolate->vm.runtime, task);
+    xr_task_runtime_try_destroy_detached((XrRuntime *) isolate->scheduler_runtime, task);
 }
 
 static inline void vm_task_detach_completed_executor(XrTask *task) {
@@ -852,7 +852,7 @@ XR_FUNC XrDispatchAction vm_await(XrayIsolate *isolate, XrVMContext *vm_ctx, XrI
     if (xr_value_is_task(task_val)) {
         XrTask *task = xr_value_to_task(task_val);
         if (one_shot_go) {
-            XrRuntime *rt = isolate ? (XrRuntime *) isolate->vm.runtime : NULL;
+            XrRuntime *rt = isolate ? (XrRuntime *) isolate->scheduler_runtime : NULL;
             if (rt)
                 xr_sched_metric_inc(rt, &rt->sched_stats.task_one_shot_await_count);
         }
@@ -901,7 +901,7 @@ XR_FUNC XrDispatchAction vm_await(XrayIsolate *isolate, XrVMContext *vm_ctx, XrI
         }
 
         // Slow path: task still active, need to suspend
-        XrRuntime *rt = (XrRuntime *) isolate->vm.runtime;
+        XrRuntime *rt = (XrRuntime *) isolate->scheduler_runtime;
         if (!rt) {
             VM_THROW(frame, pc, XR_ERR_CORO_DEAD, "await: runtime not initialized");
         }
@@ -1026,7 +1026,7 @@ XR_FUNC XrDispatchAction vm_await_timeout(XrayIsolate *isolate, XrVMContext *vm_
             return XR_DISP_NEXT;
         }
 
-        XrRuntime *rt = (XrRuntime *) isolate->vm.runtime;
+        XrRuntime *rt = (XrRuntime *) isolate->scheduler_runtime;
         vm_suspend_replay_current(frame, pc);
         vm_ctx->stack_top = base + frame->closure->proto->maxstacksize;
 
@@ -1123,7 +1123,7 @@ XR_FUNC XrDispatchAction vm_await_all(XrayIsolate *isolate, XrVMContext *vm_ctx,
     vm_suspend_replay_current(frame, pc);
     vm_ctx->stack_top = base + frame->closure->proto->maxstacksize;
 
-    XrRuntime *rt = (XrRuntime *) isolate->vm.runtime;
+    XrRuntime *rt = (XrRuntime *) isolate->scheduler_runtime;
     if (!rt) {
         VM_THROW(frame, pc, XR_ERR_CORO_DEAD, "await all: runtime not initialized");
     }

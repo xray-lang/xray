@@ -42,9 +42,9 @@ void xr_io_runtime_free(XrIoRuntime *io) {
 }
 
 XrIoRuntime *xr_io_runtime_from_isolate(struct XrayIsolate *X) {
-    if (!X || !X->vm.runtime)
+    if (!X || !X->scheduler_runtime)
         return NULL;
-    return ((XrRuntime *) X->vm.runtime)->io;
+    return ((XrRuntime *) X->scheduler_runtime)->io;
 }
 
 XrIoRuntime *xr_io_runtime_from_runtime(struct XrRuntime *rt) {

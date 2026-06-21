@@ -617,14 +617,14 @@ static const char *coro_state_string(XrCoroutine *coro) {
 }
 
 int xr_debug_get_coro_count(XrayIsolate *isolate) {
-    if (!isolate || !xr_isolate_get_vm_state(isolate)->runtime)
+    if (!isolate || !xr_isolate_get_scheduler_runtime(isolate))
         return 0;
 
     XrCoroSnapshotEntry *entries =
         (XrCoroSnapshotEntry *) xr_malloc(sizeof(XrCoroSnapshotEntry) * XDAP_CORO_SNAPSHOT_MAX);
     if (!entries)
         return 0;
-    XrRuntime *rt = (XrRuntime *) xr_isolate_get_vm_state(isolate)->runtime;
+    XrRuntime *rt = (XrRuntime *) xr_isolate_get_scheduler_runtime(isolate);
     int count = xr_runtime_collect_coros(rt, entries, XDAP_CORO_SNAPSHOT_MAX);
     xr_free(entries);
     return count;
@@ -632,7 +632,7 @@ int xr_debug_get_coro_count(XrayIsolate *isolate) {
 
 bool xr_debug_get_coro_info(XrayIsolate *isolate, int coro_idx, int *out_id, const char **out_name,
                             const char **out_state) {
-    if (!isolate || coro_idx < 0 || !xr_isolate_get_vm_state(isolate)->runtime)
+    if (!isolate || coro_idx < 0 || !xr_isolate_get_scheduler_runtime(isolate))
         return false;
 
     XrCoroSnapshotEntry *entries =
@@ -640,7 +640,7 @@ bool xr_debug_get_coro_info(XrayIsolate *isolate, int coro_idx, int *out_id, con
     if (!entries)
         return false;
 
-    XrRuntime *rt = (XrRuntime *) xr_isolate_get_vm_state(isolate)->runtime;
+    XrRuntime *rt = (XrRuntime *) xr_isolate_get_scheduler_runtime(isolate);
     int count = xr_runtime_collect_coros(rt, entries, XDAP_CORO_SNAPSHOT_MAX);
     XrCoroutine *target = coro_idx < count ? entries[coro_idx].coro : NULL;
 

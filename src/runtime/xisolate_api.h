@@ -35,6 +35,9 @@ typedef struct XrRuntimeCore XrRuntimeCore;
 // Runtime core
 XR_FUNC XrRuntimeCore *xr_isolate_get_runtime_core(XrayIsolate *X);
 
+// Scheduler runtime
+XR_FUNC XrRuntime *xr_isolate_get_scheduler_runtime(XrayIsolate *X);
+
 // Memory subsystem
 XR_FUNC XrGC *xr_isolate_get_gc(XrayIsolate *X);
 XR_FUNC struct XrSystemHeap *xr_isolate_get_sys_heap(XrayIsolate *X);

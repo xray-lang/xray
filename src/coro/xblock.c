@@ -36,9 +36,9 @@ static XrRuntime *coro_stats_runtime(XrCoroutine *coro) {
 }
 
 static XrRuntime *isolate_stats_runtime(XrayIsolate *isolate) {
-    if (!isolate || !isolate->vm.runtime)
+    if (!isolate || !isolate->scheduler_runtime)
         return NULL;
-    XrRuntime *runtime = (XrRuntime *) isolate->vm.runtime;
+    XrRuntime *runtime = (XrRuntime *) isolate->scheduler_runtime;
     return xr_sched_stats_enabled(runtime) ? runtime : NULL;
 }
 

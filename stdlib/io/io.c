@@ -180,7 +180,7 @@ static XrCFuncResult file_io_finish(XrayIsolate *X, FileIoState *st, bool ok, Xr
         }
     }
     if (st->pd)
-        xr_netpoll_close(&((XrRuntime *) X->vm.runtime)->netpoll, st->pd);
+        xr_netpoll_close(&((XrRuntime *) X->scheduler_runtime)->netpoll, st->pd);
     if (st->fd >= 0)
         close(st->fd);
     if (st->rbuf)
@@ -247,7 +247,7 @@ static XrCFuncResult file_io_step(XrayIsolate *X, FileIoState *st, XrValue *resu
 // owned buffer for reads (adopted by the state); `wbuf` is a borrowed source.
 static bool file_io_try_uring(XrayIsolate *X, int fd, FileIoKind kind, char *rbuf, const char *wbuf,
                               size_t len, XrValue *result, XrCFuncResult *out) {
-    XrRuntime *rt = (XrRuntime *) X->vm.runtime;
+    XrRuntime *rt = (XrRuntime *) X->scheduler_runtime;
     if (!rt || !xr_current_coro(X) || !xr_netpoll_uring_active(&rt->netpoll))
         return false;
     XrPollDesc *pd = xr_netpoll_open(&rt->netpoll, fd);

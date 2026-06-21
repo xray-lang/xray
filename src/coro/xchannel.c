@@ -57,9 +57,9 @@ static inline void chan_try_deliver_recv(XrCoroutine *receiver, XrValue v) {
 }
 
 static XrRuntime *channel_runtime(XrChannel *ch) {
-    if (!ch || !ch->isolate || !ch->isolate->vm.runtime)
+    if (!ch || !ch->isolate || !ch->isolate->scheduler_runtime)
         return NULL;
-    return (XrRuntime *) ch->isolate->vm.runtime;
+    return (XrRuntime *) ch->isolate->scheduler_runtime;
 }
 
 static XrRuntime *channel_stats_runtime(XrChannel *ch) {
@@ -72,7 +72,7 @@ static int64_t channel_now_ticks(XrChannel *ch) {
 }
 
 static int64_t isolate_now_ticks(XrayIsolate *X) {
-    XrRuntime *runtime = (X && X->vm.runtime) ? (XrRuntime *) X->vm.runtime : NULL;
+    XrRuntime *runtime = (X && X->scheduler_runtime) ? (XrRuntime *) X->scheduler_runtime : NULL;
     return xr_runtime_now_ticks(runtime);
 }
 
@@ -97,7 +97,7 @@ static void channel_arm_timeout_locked(XrChannel *ch, XrCoroutine *coro, int64_t
     if (!worker)
         return;
     xr_worker_add_sleep_timer(worker, coro, timeout_ms);
-    XrRuntime *runtime = ch && ch->isolate ? (XrRuntime *) ch->isolate->vm.runtime : NULL;
+    XrRuntime *runtime = ch && ch->isolate ? (XrRuntime *) ch->isolate->scheduler_runtime : NULL;
     if (runtime) {
         xr_sched_metric_inc(runtime, &runtime->sched_stats.timeout_event_block_count);
     }

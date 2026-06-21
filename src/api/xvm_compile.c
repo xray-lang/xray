@@ -166,7 +166,7 @@ int xr_execute(XrayIsolate *isolate, XrProto *proto) {
         return -1;
     }
 
-    XrRuntime *runtime = (XrRuntime *) isolate->vm.runtime;
+    XrRuntime *runtime = (XrRuntime *) isolate->scheduler_runtime;
     if (!runtime) {
         XrVMResult result = xr_vm_interpret_proto_isolate(isolate, proto);
         if (result == XR_VM_OK && !XR_IS_NULL(isolate->vm.pending_error)) {

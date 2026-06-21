@@ -475,7 +475,7 @@ bool xr_coro_init_shell(XrCoroutine *coro, XrayIsolate *X, const char *name, boo
     coro->schedule_count = 1;
     coro->spawn_burst_count = 0;
     coro->core = xr_isolate_get_runtime_core(X);
-    coro->scheduler = X->vm.runtime ? (XrRuntime *) X->vm.runtime : NULL;
+    coro->scheduler = X->scheduler_runtime ? (XrRuntime *) X->scheduler_runtime : NULL;
     coro->isolate = X;
     if (!xr_coro_set_name(coro, name))
         return false;
@@ -572,7 +572,7 @@ void xr_coro_spawn(XrayIsolate *X, XrCoroutine *coro) {
         return;
 
     // Use multi-core Runtime
-    XrRuntime *runtime = (XrRuntime *) X->vm.runtime;
+    XrRuntime *runtime = (XrRuntime *) X->scheduler_runtime;
     if (runtime) {
         xr_runtime_spawn(runtime, coro);
     }
@@ -765,7 +765,7 @@ XrCoroutine *xr_runtime_wake_channel(XrayIsolate *X, void *channel, bool wake_se
     if (!X || !channel)
         return NULL;
 
-    XrRuntime *runtime = (XrRuntime *) X->vm.runtime;
+    XrRuntime *runtime = (XrRuntime *) X->scheduler_runtime;
     if (!runtime)
         return NULL;
 
@@ -815,7 +815,7 @@ void xr_runtime_wake_channel_all(XrayIsolate *X, void *channel) {
     if (!X || !channel)
         return;
 
-    XrRuntime *runtime = (XrRuntime *) X->vm.runtime;
+    XrRuntime *runtime = (XrRuntime *) X->scheduler_runtime;
     if (!runtime)
         return;
 
@@ -1050,8 +1050,7 @@ void xr_multicore_init(XrayIsolate *X, int num_workers) {
     XrRuntime *runtime = xr_scheduler_runtime_new(xr_isolate_get_runtime_core(X), num_workers);
     if (runtime) {
         xr_scheduler_runtime_attach_isolate(runtime, X);
-        X->vm.runtime = runtime;
-        X->vm.multicore_enabled = true;
+        X->scheduler_runtime = runtime;
         if (X->main_coro) {
             X->main_coro->core = xr_isolate_get_runtime_core(X);
             X->main_coro->scheduler = runtime;
@@ -1064,10 +1063,10 @@ void xr_multicore_init(XrayIsolate *X, int num_workers) {
 
 // Destroy multi-core runtime
 void xr_multicore_destroy(XrayIsolate *X) {
-    if (!X || !X->vm.runtime)
+    if (!X || !X->scheduler_runtime)
         return;
 
-    XrRuntime *runtime = (XrRuntime *) X->vm.runtime;
+    XrRuntime *runtime = (XrRuntime *) X->scheduler_runtime;
     bool stats_enabled = xr_sched_stats_enabled(runtime);
     uint64_t total_start_ns = xr_time_monotonic_ns();
     uint64_t stage_start_ns = total_start_ns;
@@ -1092,8 +1091,7 @@ void xr_multicore_destroy(XrayIsolate *X) {
                 (unsigned long long) total_ms);
     }
 
-    X->vm.runtime = NULL;
-    X->vm.multicore_enabled = false;
+    X->scheduler_runtime = NULL;
 }
 
 // xr_current_coro - Get current coroutine
@@ -1166,7 +1164,7 @@ void xr_scheduler_ready(XrRuntime *runtime, XrCoroutine *gp, bool next) {
 void xr_coro_ready(XrayIsolate *X, XrCoroutine *gp, bool next) {
     if (!X)
         return;
-    xr_scheduler_ready((XrRuntime *) X->vm.runtime, gp, next);
+    xr_scheduler_ready((XrRuntime *) X->scheduler_runtime, gp, next);
 }
 
 /* ========== Scope Child List — Lock Helpers ==========

@@ -43,6 +43,10 @@ XrRuntimeCore *xr_isolate_get_runtime_core(XrayIsolate *X) {
     return X ? X->core_rt : NULL;
 }
 
+XrRuntime *xr_isolate_get_scheduler_runtime(XrayIsolate *X) {
+    return X ? X->scheduler_runtime : NULL;
+}
+
 XrGC *xr_isolate_get_gc(XrayIsolate *X) {
     return (X && X->core_rt) ? &X->core_rt->gc : NULL;
 }
