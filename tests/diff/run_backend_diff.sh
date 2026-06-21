@@ -28,6 +28,10 @@
 #                       (default: build/.xray-test-cache/backend-diff-bin/<xray-key>/O<opt>)
 #   XRAY_AOT_TEST_OPT   AOT C compiler optimization level for correctness gates
 #                       (default: 0; set to 3 for optimized smoke/CI)
+#   XRAY_DIFF_ENABLE_RUN_CACHE
+#                       set to 1 to reuse backend stdout/stderr/rc outputs.
+#                       Default is 0 because the warm VM/AOT diff path is
+#                       usually faster than copying hundreds of tiny cache files.
 #
 # Per-case optional sidecar:
 #   <case>.args    first line = whitespace-separated program arguments
@@ -69,6 +73,8 @@ REQUESTED_JOBS="${XRAY_DIFF_JOBS:-${XRAY_TEST_JOBS:-auto}}"
 AOT_OPT_LEVEL="${XRAY_AOT_TEST_OPT:-0}"
 AOT_CACHE="${XRAY_DIFF_CACHE_DIR:-$(xray_test_shared_cache_dir "$PROJECT_DIR" "aot-objects")}"
 AOT_BIN_CACHE="${XRAY_DIFF_BIN_CACHE_DIR:-$(xray_test_stable_cache_dir "$PROJECT_DIR" "backend-diff-bin" "$XRAY")/O$AOT_OPT_LEVEL}"
+RUN_CACHE="${XRAY_DIFF_RUN_CACHE_DIR:-$(xray_test_stable_cache_dir "$PROJECT_DIR" "backend-diff-run" "$XRAY")/O$AOT_OPT_LEVEL}"
+RUN_CACHE_ENABLED="${XRAY_DIFF_ENABLE_RUN_CACHE:-0}"
 SHARD_TOTAL="${XRAY_DIFF_SHARD_TOTAL:-1}"
 SHARD_INDEX="${XRAY_DIFF_SHARD_INDEX:-0}"
 SINGLE_CASE="${XRAY_DIFF_SINGLE_CASE:-}"
@@ -191,9 +197,41 @@ run_backend() {
     local kind="$1" case="$2" out_prefix="$3"
     shift 3
     local raw_err="$out_prefix.rawerr"
+    local rel safe key run_key_material run_key run_cache_dir
+    local arg
     local rc=0
+
+    rel="$(rel_path "$case")"
+    if [ "$kind" = "aot" ] || [ "$RUN_CACHE_ENABLED" = "1" ]; then
+        safe="$(printf '%s' "${rel%.xr}" | sed 's#[^A-Za-z0-9_.-]#_#g')"
+        key="$(xray_test_case_dir_key "$case")"
+    fi
+    if [ "$RUN_CACHE_ENABLED" = "1" ]; then
+        run_key_material="backend=$kind
+case=$rel
+case_key=$key
+normalize=$(xray_test_file_key "$NORMALIZE")
+XRAY_CORO_DETERMINISTIC=${XRAY_CORO_DETERMINISTIC:-}
+XRAY_CORO_SEED=${XRAY_CORO_SEED:-}
+args:"
+        for arg in "$@"; do
+            run_key_material="$run_key_material
+$arg"
+        done
+    fi
+
     case "$kind" in
         vm)
+            if [ "$RUN_CACHE_ENABLED" = "1" ]; then
+                run_key="$(xray_test_string_key "$run_key_material")"
+                run_cache_dir="$RUN_CACHE/vm/$safe-$key/run-$run_key"
+                if [ -f "$run_cache_dir/done" ]; then
+                    cp "$run_cache_dir/out" "$out_prefix.out"
+                    cp "$run_cache_dir/err" "$out_prefix.err"
+                    cp "$run_cache_dir/rc" "$out_prefix.rc"
+                    return 0
+                fi
+            fi
             if [ "$#" -gt 0 ]; then
                 "$XRAY" run "$case" -- "$@" >"$out_prefix.out" 2>"$raw_err" || rc=$?
             else
@@ -201,13 +239,21 @@ run_backend() {
             fi
             ;;
         aot)
-            local rel safe key bin_dir bin tmp_bin
-            rel="$(rel_path "$case")"
-            safe="$(printf '%s' "${rel%.xr}" | sed 's#[^A-Za-z0-9_.-]#_#g')"
-            key="$(xray_test_case_dir_key "$case")"
+            local bin_dir bin tmp_bin
             bin_dir="$AOT_BIN_CACHE/$safe-$key"
             bin="$bin_dir/aot"
             tmp_bin="$bin_dir/aot.$$"
+            if [ "$RUN_CACHE_ENABLED" = "1" ]; then
+                run_key="$(xray_test_string_key "$run_key_material")"
+                run_cache_dir="$bin_dir/run-$run_key"
+                if [ -f "$run_cache_dir/done" ]; then
+                    cp "$run_cache_dir/out" "$out_prefix.out"
+                    cp "$run_cache_dir/err" "$out_prefix.err"
+                    cp "$run_cache_dir/rc" "$out_prefix.rc"
+                    printf 'cached-run: %s\n' "$bin" >"$out_prefix.buildlog"
+                    return 0
+                fi
+            fi
             if [ ! -x "$bin" ]; then
                 mkdir -p "$bin_dir"
                 if ! xray_test_lock_dir "$bin_dir.lock"; then
@@ -247,6 +293,17 @@ run_backend() {
     esac
     normalize "$raw_err" >"$out_prefix.err"
     printf '%s' "$rc" >"$out_prefix.rc"
+    if [ "$RUN_CACHE_ENABLED" = "1" ] && [ "$rc" -ne 200 ] &&
+            xray_test_lock_dir "$run_cache_dir.lock"; then
+        if [ ! -f "$run_cache_dir/done" ]; then
+            mkdir -p "$run_cache_dir"
+            cp "$out_prefix.out" "$run_cache_dir/out"
+            cp "$out_prefix.err" "$run_cache_dir/err"
+            cp "$out_prefix.rc" "$run_cache_dir/rc"
+            : >"$run_cache_dir/done"
+        fi
+        xray_test_unlock_dir "$run_cache_dir.lock"
+    fi
 }
 
 run_case() {
@@ -434,6 +491,11 @@ echo "Jobs:     $JOBS"
 echo "AOT opt:  -O$AOT_OPT_LEVEL"
 echo "Cache:    $AOT_CACHE"
 echo "BinCache: $AOT_BIN_CACHE"
+if [ "$RUN_CACHE_ENABLED" = "1" ]; then
+    echo "RunCache: $RUN_CACHE"
+else
+    echo "RunCache: disabled"
+fi
 if [ "$SHARD_TOTAL" -gt 1 ]; then
     echo "Shard:    $SHARD_INDEX / $SHARD_TOTAL"
 fi

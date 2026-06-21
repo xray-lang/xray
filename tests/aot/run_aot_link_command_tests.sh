@@ -10,17 +10,31 @@
 # paying for a native compile/link for every case. A small real-link smoke at the
 # end still proves the generated commands are executable. Set
 # XRAY_LINK_COMMAND_REAL_BUILDS=1 to force the old full native-build matrix.
+#
+# Environment:
+#   XRAY_LINK_COMMAND_PLAN_CACHE_DIR
+#       persistent dry-run link-command log cache
+#   XRAY_LINK_COMMAND_BUILD_CACHE_DIR
+#       persistent AOT object cache for real smoke builds
+#   XRAY_LINK_COMMAND_BIN_CACHE_DIR
+#       persistent native binary cache for real smoke builds
+#   XRAY_TEST_DISABLE_RUN_CACHE=1
+#       bypass persistent plan/binary caches
 
 set -u
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+. "$PROJECT_DIR/tests/test_common.sh"
 XRAY="${1:-${XRAY_BIN:-$PROJECT_DIR/build/xray}}"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/xray_aot_linkcmd.XXXXXX")" || {
     echo "FAIL: cannot create temporary directory" >&2
     exit 1
 }
-CACHE="$WORK/.cache"
+WORK_CACHE="$WORK/.cache"
+PLAN_CACHE="${XRAY_LINK_COMMAND_PLAN_CACHE_DIR:-$(xray_test_stable_cache_dir "$PROJECT_DIR" "aot-link-command-plan" "$XRAY")}"
+BUILD_CACHE="${XRAY_LINK_COMMAND_BUILD_CACHE_DIR:-$(xray_test_shared_cache_dir "$PROJECT_DIR" "aot-link-command-objects")}"
+BIN_CACHE="${XRAY_LINK_COMMAND_BIN_CACHE_DIR:-$(xray_test_stable_cache_dir "$PROJECT_DIR" "aot-link-command-bin" "$XRAY")}"
 PASS=0
 FAIL=0
 
@@ -54,16 +68,113 @@ build_native_plan() {
     local src="$1"
     local out="$2"
     local log="$3"
-    "$XRAY" build --native --dry-run-link --dump-link-command --cache-dir "$CACHE" -o "$out" \
-        "$src" >"$log" 2>&1
+    local rel safe key plan_dir cached tmp
+
+    rel="${src#"$PROJECT_DIR"/}"
+    safe="$(printf '%s' "${rel%.xr}" | sed 's#[^A-Za-z0-9_.-]#_#g')"
+    key="$(xray_test_case_dir_key "$src")"
+    plan_dir="$PLAN_CACHE/$safe-$key"
+    cached="$plan_dir/link.log"
+    tmp="$plan_dir/link.log.$$"
+
+    if [ "${XRAY_TEST_DISABLE_RUN_CACHE:-0}" != "1" ] && [ -f "$cached" ]; then
+        cp "$cached" "$log"
+        return 0
+    fi
+
+    mkdir -p "$plan_dir" || return 1
+    if ! xray_test_lock_dir "$plan_dir.lock"; then
+        printf 'cannot lock plan cache: %s\n' "$plan_dir.lock" >"$log"
+        return 1
+    fi
+    if [ "${XRAY_TEST_DISABLE_RUN_CACHE:-0}" != "1" ] && [ -f "$cached" ]; then
+        cp "$cached" "$log"
+        xray_test_unlock_dir "$plan_dir.lock"
+        return 0
+    fi
+
+    if "$XRAY" build --native --dry-run-link --dump-link-command --cache-dir "$BUILD_CACHE" -o "$out" \
+            "$src" >"$tmp" 2>&1; then
+        cp "$tmp" "$log"
+        if [ "${XRAY_TEST_DISABLE_RUN_CACHE:-0}" != "1" ]; then
+            mv "$tmp" "$cached"
+        else
+            rm -f "$tmp"
+        fi
+        xray_test_unlock_dir "$plan_dir.lock"
+        return 0
+    fi
+
+    cp "$tmp" "$log" 2>/dev/null || true
+    rm -f "$tmp"
+    xray_test_unlock_dir "$plan_dir.lock"
+    return 1
 }
 
 build_native_real() {
     local src="$1"
     local out="$2"
     local log="$3"
-    "$XRAY" build --native --dump-link-command --cache-dir "$CACHE" -o "$out" "$src" \
-        >"$log" 2>&1
+    local rel safe key bin_dir cached cached_log tmp tmp_log
+
+    case "$src" in
+        "$PROJECT_DIR"/*) ;;
+        *)
+            "$XRAY" build --native --dump-link-command --cache-dir "$WORK_CACHE" -o "$out" "$src" \
+                >"$log" 2>&1
+            return $?
+            ;;
+    esac
+
+    rel="${src#"$PROJECT_DIR"/}"
+    safe="$(printf '%s' "${rel%.xr}" | sed 's#[^A-Za-z0-9_.-]#_#g')"
+    key="$(xray_test_case_dir_key "$src")"
+    bin_dir="$BIN_CACHE/$safe-$key"
+    cached="$bin_dir/aot"
+    cached_log="$bin_dir/build.log"
+    tmp="$bin_dir/aot.$$"
+    tmp_log="$bin_dir/build.log.$$"
+
+    if [ "${XRAY_TEST_DISABLE_RUN_CACHE:-0}" != "1" ] && [ -x "$cached" ] && [ -f "$cached_log" ]; then
+        cp "$cached" "$out"
+        chmod +x "$out"
+        cp "$cached_log" "$log"
+        return 0
+    fi
+
+    mkdir -p "$bin_dir" || return 1
+    if ! xray_test_lock_dir "$bin_dir.lock"; then
+        printf 'cannot lock binary cache: %s\n' "$bin_dir.lock" >"$log"
+        return 1
+    fi
+    if [ "${XRAY_TEST_DISABLE_RUN_CACHE:-0}" != "1" ] && [ -x "$cached" ] && [ -f "$cached_log" ]; then
+        cp "$cached" "$out"
+        chmod +x "$out"
+        cp "$cached_log" "$log"
+        xray_test_unlock_dir "$bin_dir.lock"
+        return 0
+    fi
+
+    rm -f "$tmp" "$tmp_log"
+    if "$XRAY" build --native --dump-link-command --cache-dir "$BUILD_CACHE" -o "$tmp" "$src" \
+            >"$tmp_log" 2>&1; then
+        cp "$tmp" "$out"
+        chmod +x "$out"
+        cp "$tmp_log" "$log"
+        if [ "${XRAY_TEST_DISABLE_RUN_CACHE:-0}" != "1" ]; then
+            mv "$tmp" "$cached"
+            mv "$tmp_log" "$cached_log"
+        else
+            rm -f "$tmp" "$tmp_log"
+        fi
+        xray_test_unlock_dir "$bin_dir.lock"
+        return 0
+    fi
+
+    cp "$tmp_log" "$log" 2>/dev/null || true
+    rm -f "$tmp" "$tmp_log"
+    xray_test_unlock_dir "$bin_dir.lock"
+    return 1
 }
 
 expect_log_contains() {
@@ -109,6 +220,9 @@ expect_output() {
 
 echo "=== AOT Link Command Tests ==="
 echo "Binary: $XRAY"
+echo "PlanCache: $PLAN_CACHE"
+echo "BuildCache: $BUILD_CACHE"
+echo "BinCache: $BIN_CACHE"
 echo ""
 
 if [ ! -x "$XRAY" ]; then
