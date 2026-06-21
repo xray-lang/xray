@@ -114,7 +114,7 @@ TEST(sched_stats_track_batch_lifecycle) {
     XrRuntime runtime;
     memset(&runtime, 0, sizeof(runtime));
     runtime.core = &f.core;
-    runtime.isolate = &f.isolate_storage;
+    xr_scheduler_runtime_attach_isolate(&runtime, &f.isolate_storage);
     runtime.sched_stats_enabled = true;
     f.isolate_storage.scheduler_runtime = &runtime;
 
@@ -183,7 +183,7 @@ TEST(close_without_workers_keeps_waiter_blocked) {
     XrRuntime runtime;
     memset(&runtime, 0, sizeof(runtime));
     runtime.core = &f.core;
-    runtime.isolate = &f.isolate_storage;
+    xr_scheduler_runtime_attach_isolate(&runtime, &f.isolate_storage);
     runtime.worker_count = 0;
     runtime.workers = NULL;
     f.isolate_storage.scheduler_runtime = &runtime;

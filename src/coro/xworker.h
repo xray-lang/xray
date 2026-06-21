@@ -24,6 +24,7 @@
 #include "../os/os_thread.h"
 #include <stdatomic.h>
 #include <stdbool.h>
+#include <stddef.h>
 #include "../runtime/gc/xgc_internal.h"  // XrLocalAlloc
 #include "../runtime/gc/xsystem_heap.h"  // XrSystemHeap
 #include "../runtime/core/xr_runtime_core.h"
@@ -37,6 +38,21 @@
 // lower layer and must not include the IO header.
 struct XrIoRuntime;
 struct XrTask;
+
+typedef struct XrSchedulerHostOps {
+    void *(*backend_context)(void *ctx);
+    void (*notify_coro)(void *ctx, XrCoroutine *coro, const char *reason);
+    void (*coro_on_exit)(void *ctx, XrCoroutine *coro);
+    void (*wake_scope_waiter)(void *ctx, XrCoroutine *coro);
+    void (*wake_coro_waiter)(void *ctx, XrCoroutine *coro);
+    void (*wake_task_waiter)(void *ctx, struct XrTask *task);
+    void (*adopt_deferred_tasks)(void *ctx, struct XrTask *tasks, size_t count);
+} XrSchedulerHostOps;
+
+typedef struct XrSchedulerHost {
+    const XrSchedulerHostOps *ops;
+    void *ctx;
+} XrSchedulerHost;
 
 /* ========== Worker Structure (P + M* pointer) ========== */
 
@@ -235,8 +251,8 @@ typedef struct XrRuntime {
     XrWorker *workers;
     int worker_count;
 
-    /* VM execution bridge. Scheduler-owned resources must use core instead. */
-    XrayIsolate *isolate;
+    /* Host bridge for VM/AOT backend callbacks. Scheduler-owned resources must use core. */
+    XrSchedulerHost host;
 
     /* === Machines (M) — pre-allocated 1:1 with Workers === */
     XrMachine *machines;
@@ -332,7 +348,7 @@ typedef struct XrRuntime {
     XrMigrationPath migration_paths[XR_MAX_WORKERS];
     int64_t last_balance_time;
 
-    /* === Load Balance State (per-Isolate) === */
+    /* === Load Balance State (per-runtime) === */
     XrBalanceInfo balance_info;
 
     /* === Sysmon Per-Worker State === */
@@ -357,6 +373,48 @@ static inline XrSystemHeap *xr_runtime_get_sys_heap(const XrRuntime *runtime) {
 static inline struct XrCoroStructPool *xr_runtime_get_coro_pool(const XrRuntime *runtime) {
     XrSystemHeap *heap = xr_runtime_get_sys_heap(runtime);
     return heap ? heap->coro_pool : NULL;
+}
+
+static inline void *xr_scheduler_host_backend_context(const XrRuntime *runtime) {
+    if (!runtime || !runtime->host.ops || !runtime->host.ops->backend_context)
+        return NULL;
+    return runtime->host.ops->backend_context(runtime->host.ctx);
+}
+
+static inline void xr_scheduler_host_notify_coro(XrRuntime *runtime, XrCoroutine *coro,
+                                                 const char *reason) {
+    if (runtime && runtime->host.ops && runtime->host.ops->notify_coro)
+        runtime->host.ops->notify_coro(runtime->host.ctx, coro, reason);
+}
+
+static inline void xr_scheduler_host_coro_on_exit(XrRuntime *runtime, XrCoroutine *coro) {
+    if (runtime && runtime->host.ops && runtime->host.ops->coro_on_exit)
+        runtime->host.ops->coro_on_exit(runtime->host.ctx, coro);
+}
+
+static inline void xr_scheduler_host_wake_scope_waiter(XrRuntime *runtime, XrCoroutine *coro) {
+    if (runtime && runtime->host.ops && runtime->host.ops->wake_scope_waiter)
+        runtime->host.ops->wake_scope_waiter(runtime->host.ctx, coro);
+}
+
+static inline void xr_scheduler_host_wake_coro_waiter(XrRuntime *runtime, XrCoroutine *coro) {
+    if (runtime && runtime->host.ops && runtime->host.ops->wake_coro_waiter)
+        runtime->host.ops->wake_coro_waiter(runtime->host.ctx, coro);
+}
+
+static inline void xr_scheduler_host_wake_task_waiter(XrRuntime *runtime, struct XrTask *task) {
+    if (runtime && runtime->host.ops && runtime->host.ops->wake_task_waiter)
+        runtime->host.ops->wake_task_waiter(runtime->host.ctx, task);
+}
+
+static inline bool xr_scheduler_host_adopt_deferred_tasks(XrRuntime *runtime, struct XrTask *tasks,
+                                                          size_t count) {
+    if (runtime && runtime->host.ops && runtime->host.ops->adopt_deferred_tasks) {
+        runtime->host.ops->adopt_deferred_tasks(runtime->host.ctx, tasks, count);
+        return true;
+    }
+    (void) count;
+    return false;
 }
 
 static inline uint64_t xr_runtime_worker_bit(int worker_id) {
@@ -423,6 +481,9 @@ static inline uint64_t xr_sched_metric_load(_Atomic uint64_t *counter) {
 /* ========== API ========== */
 
 XR_FUNC XrSchedulerRuntime *xr_scheduler_runtime_new(XrRuntimeCore *core, int num_workers);
+XR_FUNC void xr_scheduler_runtime_attach_host(XrSchedulerRuntime *runtime,
+                                              const XrSchedulerHost *host);
+XR_FUNC void xr_scheduler_runtime_clear_host(XrSchedulerRuntime *runtime);
 XR_FUNC void xr_scheduler_runtime_attach_isolate(XrSchedulerRuntime *runtime, XrayIsolate *isolate);
 XR_FUNC void xr_scheduler_runtime_delete(XrSchedulerRuntime *runtime);
 XR_FUNC void xr_runtime_start(XrRuntime *runtime);

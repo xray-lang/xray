@@ -1553,9 +1553,9 @@ static XrVMResult vm_backend_resume_on_worker(XrWorker *worker, XrCoroutine *cor
     }
 
     XR_DCHECK(worker->p.runtime != NULL, "worker thread: runtime is NULL");
-    XR_DCHECK(worker->p.runtime->isolate != NULL, "worker thread: isolate is NULL");
+    XrayIsolate *isolate = (XrayIsolate *) xr_scheduler_host_backend_context(worker->p.runtime);
+    XR_DCHECK(isolate != NULL, "worker thread: VM scheduler host isolate is NULL");
 
-    XrayIsolate *isolate = worker->p.runtime->isolate;
     XrVMContext *ctx = xr_vm_machine_ctx(worker->m, isolate);
     if (!ctx)
         return XR_VM_RUNTIME_ERROR;

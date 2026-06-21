@@ -45,7 +45,7 @@ static bool scope_fixture_init(ScopeFixture *f) {
     f->saved_machine = tls_current_machine;
 
     f->runtime.core = &f->core;
-    f->runtime.isolate = &f->isolate_storage;
+    xr_scheduler_runtime_attach_isolate(&f->runtime, &f->isolate_storage);
     f->runtime.worker_count = 1;
     f->runtime.workers = &f->worker;
     f->runtime.machines = &f->machine;

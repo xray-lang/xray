@@ -303,10 +303,8 @@ static bool worker_handle_run_result(XrWorker *worker, XrCoroutine *coro, XrCoro
             // Inline fast path: skip extern calls for anonymous coros without monitors
             if (__builtin_expect(xr_coro_name(coro) != NULL || (coro->ext && coro->ext->watched_by),
                                  0)) {
-                XrCoroState *_s = (XrCoroState *) runtime->isolate->vm.coro_state;
-                xr_coro_notify_monitors(runtime->isolate, _s ? _s->coro_registry : NULL, coro,
-                                        "normal");
-                xr_coro_on_exit(runtime->isolate, coro);
+                xr_scheduler_host_notify_coro(runtime, coro, "normal");
+                xr_scheduler_host_coro_on_exit(runtime, coro);
             }
             worker->p.stats.completed_count++;
 
@@ -314,7 +312,7 @@ static bool worker_handle_run_result(XrWorker *worker, XrCoroutine *coro, XrCoro
              * before publication (after COMPLETED is visible an awaiter may
              * claim and recycle the shell). It does not depend on task
              * state, so the early wake is benign. */
-            xr_coro_wake_scope_waiter(runtime->isolate, coro);
+            xr_scheduler_host_wake_scope_waiter(runtime, coro);
 
             if (done_task) {
                 /* Publication point: cache result in Task, CAS the state to
@@ -325,7 +323,7 @@ static bool worker_handle_run_result(XrWorker *worker, XrCoroutine *coro, XrCoro
                  * Uses done_task directly: coro->task is already detached
                  * in the reclaim case, and the shell itself must not be
                  * dereferenced post-publication in the non-reclaim case. */
-                xr_task_wake_waiter(runtime->isolate, done_task);
+                xr_scheduler_host_wake_task_waiter(runtime, done_task);
                 atomic_store_explicit(&done_task->completer_done, 1, memory_order_release);
                 /* No access to done_task (or, unless reclaimed, coro)
                  * beyond this point. */
@@ -387,14 +385,10 @@ static bool worker_handle_run_result(XrWorker *worker, XrCoroutine *coro, XrCoro
             if (coro->task) {
                 xr_task_cancel(coro->task);
             }
-            {
-                XrCoroState *_s = (XrCoroState *) runtime->isolate->vm.coro_state;
-                xr_coro_notify_monitors(runtime->isolate, _s ? _s->coro_registry : NULL, coro,
-                                        "cancelled");
-            }
-            xr_coro_on_exit(runtime->isolate, coro);
+            xr_scheduler_host_notify_coro(runtime, coro, "cancelled");
+            xr_scheduler_host_coro_on_exit(runtime, coro);
             worker->p.stats.completed_count++;
-            xr_coro_wake_waiter(runtime->isolate, coro);
+            xr_scheduler_host_wake_coro_waiter(runtime, coro);
             if (coro->task) {
                 XrTask *t = coro->task;
                 /* Exchange-claim: the task.cancel() API path may detach the
@@ -428,14 +422,10 @@ static bool worker_handle_run_result(XrWorker *worker, XrCoroutine *coro, XrCoro
                     xr_task_fail(coro->task, coro->error);
                 }
             }
-            {
-                XrCoroState *_s = (XrCoroState *) runtime->isolate->vm.coro_state;
-                xr_coro_notify_monitors(runtime->isolate, _s ? _s->coro_registry : NULL, coro,
-                                        "error");
-            }
-            xr_coro_on_exit(runtime->isolate, coro);
+            xr_scheduler_host_notify_coro(runtime, coro, "error");
+            xr_scheduler_host_coro_on_exit(runtime, coro);
             worker->p.stats.completed_count++;
-            xr_coro_wake_waiter(runtime->isolate, coro);
+            xr_scheduler_host_wake_coro_waiter(runtime, coro);
             if (coro->task) {
                 XrTask *t = coro->task;
                 if (xr_task_claim_executor(t) == coro) {
@@ -684,7 +674,9 @@ pop_continuation:
 XrCoroRunResult xr_coro_run_on_worker(XrWorker *worker, XrCoroutine *coro) {
     XrCoroRunContext run_ctx;
     run_ctx.worker = worker;
-    run_ctx.isolate = (worker && worker->p.runtime) ? worker->p.runtime->isolate : NULL;
+    run_ctx.isolate = (worker && worker->p.runtime)
+                          ? (XrayIsolate *) xr_scheduler_host_backend_context(worker->p.runtime)
+                          : NULL;
 
     XrCoroEvent event = worker_event_from_coro(coro);
     if (!coro || !coro->backend || !coro->backend->resume)
