@@ -308,9 +308,9 @@ void xr_worker_destroy(XrWorker *worker) {
 
 // ========== Runtime Construction / Destruction ==========
 
-// Create Runtime
-XrRuntime *xr_runtime_create(XrayIsolate *isolate, int num_workers) {
-    XR_DCHECK(isolate != NULL, "runtime_create: NULL isolate");
+// Create scheduler Runtime
+XrSchedulerRuntime *xr_scheduler_runtime_new(XrRuntimeCore *core, int num_workers) {
+    XR_DCHECK(core != NULL, "scheduler_runtime_new: NULL core");
     bool deterministic = env_flag_enabled("XRAY_CORO_DETERMINISTIC");
     if (deterministic) {
         num_workers = 1;
@@ -334,9 +334,8 @@ XrRuntime *xr_runtime_create(XrayIsolate *isolate, int num_workers) {
     if (!runtime)
         return NULL;
 
-    runtime->core = xr_isolate_get_runtime_core(isolate);
-    XR_DCHECK(runtime->core != NULL, "runtime_create: isolate has no runtime core");
-    runtime->isolate = isolate;
+    runtime->core = core;
+    runtime->isolate = NULL;
     runtime->worker_count = num_workers;
     runtime->deterministic_sched = deterministic;
     runtime->deterministic_seed =
@@ -447,8 +446,18 @@ XrRuntime *xr_runtime_create(XrayIsolate *isolate, int num_workers) {
     return runtime;
 }
 
-// Destroy Runtime
-void xr_runtime_destroy(XrRuntime *runtime) {
+void xr_scheduler_runtime_attach_isolate(XrSchedulerRuntime *runtime, XrayIsolate *isolate) {
+    if (!runtime)
+        return;
+    if (isolate) {
+        XR_DCHECK(xr_isolate_get_runtime_core(isolate) == runtime->core,
+                  "scheduler_runtime_attach_isolate: isolate core mismatch");
+    }
+    runtime->isolate = isolate;
+}
+
+// Destroy scheduler Runtime
+void xr_scheduler_runtime_delete(XrSchedulerRuntime *runtime) {
     if (!runtime)
         return;
 

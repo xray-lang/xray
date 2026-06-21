@@ -445,8 +445,9 @@ TEST(deterministic_runtime_forces_single_worker_and_virtual_clock) {
     core.sys_heap = &sys_heap;
     isolate.core_rt = &core;
 
-    XrRuntime *runtime = xr_runtime_create(&isolate, 0);
+    XrRuntime *runtime = xr_scheduler_runtime_new(&core, 0);
     ASSERT_NOT_NULL(runtime);
+    xr_scheduler_runtime_attach_isolate(runtime, &isolate);
     isolate.vm.runtime = runtime;
 
     ASSERT_TRUE(xr_runtime_deterministic_mode(runtime));
@@ -459,7 +460,7 @@ TEST(deterministic_runtime_forces_single_worker_and_virtual_clock) {
     xr_runtime_advance_virtual_time(runtime, 10);
     ASSERT_EQ_INT((int) xr_runtime_now_ticks(runtime), 25);
 
-    xr_runtime_destroy(runtime);
+    xr_scheduler_runtime_delete(runtime);
     xr_sysheap_destroy(&sys_heap);
     restore_test_env("XRAY_CORO_DETERMINISTIC", old_det);
     restore_test_env("XRAY_WORKERS", old_workers);
