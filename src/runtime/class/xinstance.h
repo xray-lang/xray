@@ -143,6 +143,7 @@ XR_FUNC XrValue xr_instance_get_dynamic_field(XrInstance *inst, uint16_t index);
 
 // Write a logical field on a dynamic-layout instance.
 // Returns false if overflow allocation fails.
+XR_FUNC bool xr_instance_set_dynamic_field_direct(XrInstance *inst, uint16_t index, XrValue value);
 XR_FUNC bool xr_instance_set_dynamic_field(struct XrayIsolate *X, XrInstance *inst, uint16_t index,
                                            XrValue value);
 

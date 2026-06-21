@@ -2113,25 +2113,6 @@ XrValue xr_aot_chan_is_closed_sync(XrValue channel_value) {
     return xr_bool(xr_channel_is_closed(xr_value_to_channel(channel_value)));
 }
 
-static XrayIsolate *aot_work_queue_isolate(const XrAotContext *ctx, XrWorkQueue *q) {
-    if (ctx && ctx->isolate)
-        return ctx->isolate;
-    return q ? q->vm_bridge_isolate : NULL;
-}
-
-static bool aot_context_from_work_queue_value(XrValue queue_value, XrAotContext *out) {
-    if (!out || !xr_value_is_work_queue(queue_value))
-        return false;
-    XrWorkQueue *q = xr_value_to_work_queue(queue_value);
-    XrayIsolate *isolate = q ? q->vm_bridge_isolate : NULL;
-    if (!isolate)
-        return false;
-    out->isolate = isolate;
-    out->coro = xr_current_coro(isolate);
-    out->worker = NULL;
-    return true;
-}
-
 static uint32_t aot_work_queue_sanitize_shards(int64_t value) {
     if (value <= 0)
         return XR_WORK_QUEUE_DEFAULT_SHARDS;
@@ -2169,17 +2150,18 @@ XrValue xr_aot_work_queue_push(const XrAotContext *ctx, XrValue queue_value, XrV
     if (!xr_value_is_work_queue(queue_value))
         return xr_bool(false);
     XrWorkQueue *q = xr_value_to_work_queue(queue_value);
-    XrayIsolate *isolate = aot_work_queue_isolate(ctx, q);
-    if (!isolate)
-        return xr_bool(false);
-    return xr_bool(xr_work_queue_push(isolate, q, value, shard_hint));
+    XrRuntimeCore *core =
+        ctx && ctx->runtime
+            ? xr_aot_runtime_core(ctx->runtime)
+            : (ctx && ctx->isolate ? xr_isolate_get_runtime_core(ctx->isolate) : q->core);
+    return xr_bool(xr_work_queue_push_core(core, q, value, shard_hint));
 }
 
 XrValue xr_aot_work_queue_push_sync(XrValue queue_value, XrValue value, int64_t shard_hint) {
-    XrAotContext ctx = {0};
-    if (!aot_context_from_work_queue_value(queue_value, &ctx))
+    if (!xr_value_is_work_queue(queue_value))
         return xr_bool(false);
-    return xr_aot_work_queue_push(&ctx, queue_value, value, shard_hint);
+    XrWorkQueue *q = xr_value_to_work_queue(queue_value);
+    return xr_bool(xr_work_queue_push_core(q ? q->core : NULL, q, value, shard_hint));
 }
 
 bool xr_aot_work_queue_try_pop(const XrAotContext *ctx, XrValue queue_value, int64_t worker_hint,
@@ -2189,13 +2171,16 @@ bool xr_aot_work_queue_try_pop(const XrAotContext *ctx, XrValue queue_value, int
     if (!xr_value_is_work_queue(queue_value))
         return false;
     XrWorkQueue *q = xr_value_to_work_queue(queue_value);
-    XrayIsolate *isolate = aot_work_queue_isolate(ctx, q);
-    XrCoroutine *coro = ctx && ctx->coro ? ctx->coro : (isolate ? xr_current_coro(isolate) : NULL);
-    if (!isolate || !coro)
+    XrRuntimeCore *core =
+        ctx && ctx->runtime
+            ? xr_aot_runtime_core(ctx->runtime)
+            : (ctx && ctx->isolate ? xr_isolate_get_runtime_core(ctx->isolate) : q->core);
+    XrCoroutine *coro = ctx && ctx->coro ? ctx->coro : NULL;
+    if (!core)
         return false;
 
     bool ok = false;
-    XrValue value = xr_work_queue_try_pop(isolate, q, worker_hint, &ok);
+    XrValue value = xr_work_queue_try_pop_for_coro_core(core, q, worker_hint, coro, &ok);
     if (ok && out_value)
         *out_value = value;
     return ok;
@@ -2204,19 +2189,27 @@ bool xr_aot_work_queue_try_pop(const XrAotContext *ctx, XrValue queue_value, int
 bool xr_aot_work_queue_try_pop_sync(XrValue queue_value, int64_t worker_hint, XrValue *out_value) {
     if (out_value)
         *out_value = XR_NULL_VAL;
-    XrAotContext ctx = {0};
-    if (!aot_context_from_work_queue_value(queue_value, &ctx))
+    if (!xr_value_is_work_queue(queue_value))
         return false;
-    return xr_aot_work_queue_try_pop(&ctx, queue_value, worker_hint, out_value);
+    XrWorkQueue *q = xr_value_to_work_queue(queue_value);
+    bool ok = false;
+    XrValue value =
+        xr_work_queue_try_pop_for_coro_core(q ? q->core : NULL, q, worker_hint, NULL, &ok);
+    if (ok && out_value)
+        *out_value = value;
+    return ok;
 }
 
 XrAotResult xr_aot_work_queue_pop(const XrAotContext *ctx, XrValue queue_value, int64_t worker_hint,
                                   XrSlotRef out_slot) {
-    if (!ctx || !ctx->isolate || !ctx->coro || !xr_value_is_work_queue(queue_value))
+    if (!ctx || !ctx->coro || !xr_value_is_work_queue(queue_value))
         return xr_aot_error(XR_NULL_VAL, false);
     XrValue value = XR_NULL_VAL;
     XrWorkQueue *q = xr_value_to_work_queue(queue_value);
-    switch (xr_work_queue_pop_for_coro(ctx->isolate, q, ctx->coro, worker_hint, &value)) {
+    XrRuntimeCore *core =
+        ctx->runtime ? xr_aot_runtime_core(ctx->runtime)
+                     : (ctx->isolate ? xr_isolate_get_runtime_core(ctx->isolate) : q->core);
+    switch (xr_work_queue_pop_for_coro_core(core, q, ctx->coro, worker_hint, &value)) {
         case XR_WORK_QUEUE_POP_DONE:
             if (out_slot.kind == XR_SLOT_NONE)
                 return xr_aot_done(value);
@@ -2231,10 +2224,13 @@ XrAotResult xr_aot_work_queue_pop(const XrAotContext *ctx, XrValue queue_value, 
 }
 
 XrAotResult xr_aot_work_queue_pop_resume(const XrAotContext *ctx, XrSlotRef out_slot) {
-    if (!ctx || !ctx->isolate || !ctx->coro)
+    if (!ctx || !ctx->coro)
         return xr_aot_error(XR_NULL_VAL, false);
     XrValue value = XR_NULL_VAL;
-    switch (xr_work_queue_pop_resume_for_coro(ctx->isolate, ctx->coro, &value)) {
+    XrRuntimeCore *core =
+        ctx->runtime ? xr_aot_runtime_core(ctx->runtime)
+                     : (ctx->isolate ? xr_isolate_get_runtime_core(ctx->isolate) : ctx->coro->core);
+    switch (xr_work_queue_pop_resume_for_coro_core(core, ctx->coro, &value)) {
         case XR_WORK_QUEUE_POP_DONE:
             if (out_slot.kind == XR_SLOT_NONE)
                 return xr_aot_done(value);
@@ -2257,10 +2253,10 @@ XrValue xr_aot_work_queue_close(const XrAotContext *ctx, XrValue queue_value) {
 }
 
 XrValue xr_aot_work_queue_close_sync(XrValue queue_value) {
-    XrAotContext ctx = {0};
-    if (!aot_context_from_work_queue_value(queue_value, &ctx))
+    if (!xr_value_is_work_queue(queue_value))
         return XR_NULL_VAL;
-    return xr_aot_work_queue_close(&ctx, queue_value);
+    xr_work_queue_close(xr_value_to_work_queue(queue_value));
+    return XR_NULL_VAL;
 }
 
 XrValue xr_aot_work_queue_length(const XrAotContext *ctx, XrValue queue_value) {
@@ -2285,10 +2281,9 @@ XrValue xr_aot_work_queue_is_closed(const XrAotContext *ctx, XrValue queue_value
 }
 
 XrValue xr_aot_work_queue_is_closed_sync(XrValue queue_value) {
-    XrAotContext ctx = {0};
-    if (!aot_context_from_work_queue_value(queue_value, &ctx))
+    if (!xr_value_is_work_queue(queue_value))
         return xr_bool(false);
-    return xr_aot_work_queue_is_closed(&ctx, queue_value);
+    return xr_bool(xr_work_queue_is_closed(xr_value_to_work_queue(queue_value)));
 }
 
 static bool aot_context_from_result_group_value(XrValue group_value, XrAotContext *out) {

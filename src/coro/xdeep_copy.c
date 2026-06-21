@@ -12,10 +12,12 @@
 #include "../base/xchecks.h"
 #include "../runtime/xshared.h"
 #include "../runtime/value/xvalue.h"
+#include "../runtime/core/xr_runtime_core.h"
 #include "../runtime/gc/xgc.h"
 #include "../runtime/gc/xgc_internal.h"
 #include "../runtime/gc/xcoro_gc.h"
 #include "../runtime/gc/xalloc_unified.h"
+#include "../runtime/gc/xsystem_heap.h"
 #include "../runtime/object/xarray.h"
 #include "../runtime/object/xmap.h"
 #include "../runtime/object/xstring.h"
@@ -66,11 +68,13 @@ static inline int seen_hash_n(void *ptr, int bucket_count) {
     return (int) (xr_hash_int((int) (uintptr_t) ptr) % (unsigned int) bucket_count);
 }
 
-void xr_copy_context_init(XrCopyContext *ctx, struct XrayIsolate *X, struct XrGC *dst_gc) {
+static void copy_context_init_common(XrCopyContext *ctx, XrRuntimeCore *core, XrayIsolate *bridge,
+                                     XrGC *dst_gc) {
     XR_DCHECK(ctx != NULL, "copy_context_init: NULL ctx");
-    XR_DCHECK(X != NULL, "copy_context_init: NULL isolate");
-    ctx->X = X;
-    ctx->dst_gc = dst_gc;
+    XR_DCHECK(core != NULL, "copy_context_init: NULL runtime core");
+    ctx->core = core;
+    ctx->vm_bridge_isolate = bridge;
+    ctx->dst_gc = dst_gc ? dst_gc : &core->gc;
     ctx->dst_coro_gc = NULL;
     ctx->to_transit = false;
     ctx->buckets = NULL;
@@ -79,13 +83,21 @@ void xr_copy_context_init(XrCopyContext *ctx, struct XrayIsolate *X, struct XrGC
     ctx->arena_head = NULL;
 }
 
-#include "../runtime/gc/xsystem_heap.h"
+void xr_copy_context_init_core(XrCopyContext *ctx, XrRuntimeCore *core, XrGC *dst_gc) {
+    copy_context_init_common(ctx, core, NULL, dst_gc);
+}
+
+void xr_copy_context_init(XrCopyContext *ctx, struct XrayIsolate *X, struct XrGC *dst_gc) {
+    XR_DCHECK(X != NULL, "copy_context_init: NULL isolate");
+    copy_context_init_common(ctx, xr_isolate_get_runtime_core(X), X,
+                             dst_gc ? dst_gc : xr_isolate_get_gc(X));
+}
 
 // Channel-transit allocation: coroutine-independent shared object with
 // one atomic reference owned by the channel buffer. Freed wholesale via
 // xr_shared_destroy when the receive-side copy releases that reference.
 static void *copy_ctx_alloc_transit(XrCopyContext *ctx, size_t size, uint8_t type) {
-    XrSystemHeap *heap = xr_isolate_get_sys_heap(ctx->X);
+    XrSystemHeap *heap = ctx->core ? ctx->core->sys_heap : NULL;
     if (!heap)
         return NULL;
     XrGCHeader *obj = (XrGCHeader *) xr_sysheap_alloc_shared(heap, size, type);
@@ -444,10 +456,10 @@ XrValue xr_deep_copy_instance_with_ctx(XrCopyContext *ctx, XrGCHeader *obj) {
             if (src_overflow) {
                 uint16_t overflow_count = field_count - (cap - 1);
                 // Allocate overflow for new instance
-                xr_instance_set_dynamic_field(ctx->X, new_inst, cap - 1, xr_null());
+                xr_instance_set_dynamic_field_direct(new_inst, cap - 1, xr_null());
                 for (uint16_t i = 0; i < overflow_count; i++) {
                     XrValue copied = xr_deep_copy_with_ctx(ctx, src_overflow[i]);
-                    xr_instance_set_dynamic_field(ctx->X, new_inst, (cap - 1) + i, copied);
+                    xr_instance_set_dynamic_field_direct(new_inst, (cap - 1) + i, copied);
                 }
             }
         }
@@ -527,14 +539,32 @@ XrValue xr_deep_copy_with_ctx(XrCopyContext *ctx, XrValue value) {
     return fn ? fn(ctx, obj) : value;
 }
 
-XrValue xr_deep_copy(struct XrayIsolate *X, XrValue value, struct XrGC *dst_gc) {
-    XR_DCHECK(X != NULL, "deep_copy: NULL isolate");
+XrValue xr_deep_copy_core(XrRuntimeCore *core, XrValue value, XrGC *dst_gc) {
+    XR_DCHECK(core != NULL, "deep_copy_core: NULL runtime core");
     if (xr_value_copy_kind(value) != XR_COPY_DEEP)
         return value;
     if (!dst_gc)
-        dst_gc = xr_isolate_get_gc(X);
+        dst_gc = &core->gc;
     XrCopyContext ctx;
-    xr_copy_context_init(&ctx, X, dst_gc);
+    xr_copy_context_init_core(&ctx, core, dst_gc);
+    XrValue result = xr_deep_copy_with_ctx(&ctx, value);
+    xr_copy_context_cleanup(&ctx);
+    return result;
+}
+
+XrValue xr_deep_copy(struct XrayIsolate *X, XrValue value, struct XrGC *dst_gc) {
+    XR_DCHECK(X != NULL, "deep_copy: NULL isolate");
+    return xr_deep_copy_core(xr_isolate_get_runtime_core(X), value,
+                             dst_gc ? dst_gc : xr_isolate_get_gc(X));
+}
+
+XrValue xr_deep_copy_to_transit_core(XrRuntimeCore *core, XrValue value) {
+    XR_DCHECK(core != NULL, "deep_copy_to_transit_core: NULL runtime core");
+    if (xr_value_copy_kind(value) != XR_COPY_DEEP)
+        return value;
+    XrCopyContext ctx;
+    xr_copy_context_init_core(&ctx, core, &core->gc);
+    ctx.to_transit = true;
     XrValue result = xr_deep_copy_with_ctx(&ctx, value);
     xr_copy_context_cleanup(&ctx);
     return result;
@@ -542,14 +572,7 @@ XrValue xr_deep_copy(struct XrayIsolate *X, XrValue value, struct XrGC *dst_gc) 
 
 XrValue xr_deep_copy_to_transit(struct XrayIsolate *X, XrValue value) {
     XR_DCHECK(X != NULL, "deep_copy_to_transit: NULL isolate");
-    if (xr_value_copy_kind(value) != XR_COPY_DEEP)
-        return value;
-    XrCopyContext ctx;
-    xr_copy_context_init(&ctx, X, xr_isolate_get_gc(X));
-    ctx.to_transit = true;
-    XrValue result = xr_deep_copy_with_ctx(&ctx, value);
-    xr_copy_context_cleanup(&ctx);
-    return result;
+    return xr_deep_copy_to_transit_core(xr_isolate_get_runtime_core(X), value);
 }
 
 void xr_chan_transit_release(XrValue value) {
@@ -585,8 +608,8 @@ static bool array_is_movable_scalar(const XrArray *a) {
            !a->data_on_gc_heap && a->data != NULL && a->length > 0;
 }
 
-bool xr_chan_try_move_array_to_transit(struct XrayIsolate *X, XrValue value, XrValue *out) {
-    if (!X || !out || !XR_IS_PTR(value))
+bool xr_chan_try_move_array_to_transit_core(XrRuntimeCore *core, XrValue value, XrValue *out) {
+    if (!core || !out || !XR_IS_PTR(value))
         return false;
     XrGCHeader *obj = XR_VALUE_GCPTR(value);
     if (!obj || XR_GC_GET_TYPE(obj) != XR_TARRAY || XR_GC_IS_SHARED(obj))
@@ -595,7 +618,7 @@ bool xr_chan_try_move_array_to_transit(struct XrayIsolate *X, XrValue value, XrV
     if (!array_is_movable_scalar(src))
         return false;
 
-    XrSystemHeap *heap = xr_isolate_get_sys_heap(X);
+    XrSystemHeap *heap = core->sys_heap;
     if (!heap)
         return false;
     XrGCHeader *th = (XrGCHeader *) xr_sysheap_alloc_shared(heap, sizeof(XrArray), XR_TARRAY);
@@ -632,9 +655,15 @@ bool xr_chan_try_move_array_to_transit(struct XrayIsolate *X, XrValue value, XrV
     return true;
 }
 
-bool xr_chan_try_adopt_array_from_transit(struct XrayIsolate *X, XrValue value,
-                                          struct XrCoroutine *recv_coro, XrValue *out) {
-    if (!X || !out || !recv_coro || !XR_IS_PTR(value))
+bool xr_chan_try_move_array_to_transit(struct XrayIsolate *X, XrValue value, XrValue *out) {
+    if (!X)
+        return false;
+    return xr_chan_try_move_array_to_transit_core(xr_isolate_get_runtime_core(X), value, out);
+}
+
+bool xr_chan_try_adopt_array_from_transit_core(XrValue value, struct XrCoroutine *recv_coro,
+                                               XrValue *out) {
+    if (!out || !recv_coro || !XR_IS_PTR(value))
         return false;
     XrGCHeader *obj = XR_VALUE_GCPTR(value);
     if (!obj || XR_GC_GET_TYPE(obj) != XR_TARRAY || !XR_OBJ_GET_FLAG(obj, XR_OBJ_TRANSIT))
@@ -681,18 +710,24 @@ bool xr_chan_try_adopt_array_from_transit(struct XrayIsolate *X, XrValue value,
     return true;
 }
 
-XrValue xr_deep_copy_counted(struct XrayIsolate *X, XrValue value, struct XrGC *dst_gc,
-                             int *out_count) {
-    XR_DCHECK(X != NULL, "deep_copy_counted: NULL isolate");
+bool xr_chan_try_adopt_array_from_transit(struct XrayIsolate *X, XrValue value,
+                                          struct XrCoroutine *recv_coro, XrValue *out) {
+    (void) X;
+    return xr_chan_try_adopt_array_from_transit_core(value, recv_coro, out);
+}
+
+XrValue xr_deep_copy_counted_core(XrRuntimeCore *core, XrValue value, XrGC *dst_gc,
+                                  int *out_count) {
+    XR_DCHECK(core != NULL, "deep_copy_counted_core: NULL runtime core");
     if (xr_value_copy_kind(value) != XR_COPY_DEEP) {
         if (out_count)
             *out_count = 0;
         return value;
     }
     if (!dst_gc)
-        dst_gc = xr_isolate_get_gc(X);
+        dst_gc = &core->gc;
     XrCopyContext ctx;
-    xr_copy_context_init(&ctx, X, dst_gc);
+    xr_copy_context_init_core(&ctx, core, dst_gc);
     XrValue result = xr_deep_copy_with_ctx(&ctx, value);
     if (out_count)
         *out_count = ctx.objects_copied;
@@ -700,8 +735,18 @@ XrValue xr_deep_copy_counted(struct XrayIsolate *X, XrValue value, struct XrGC *
     return result;
 }
 
-XrValue xr_deep_copy_to_coro(struct XrayIsolate *X, XrValue value, struct XrCoroutine *dst_coro) {
-    XR_DCHECK(X != NULL, "deep_copy_to_coro: NULL isolate");
+XrValue xr_deep_copy_counted(struct XrayIsolate *X, XrValue value, struct XrGC *dst_gc,
+                             int *out_count) {
+    XR_DCHECK(X != NULL, "deep_copy_counted: NULL isolate");
+    return xr_deep_copy_counted_core(xr_isolate_get_runtime_core(X), value,
+                                     dst_gc ? dst_gc : xr_isolate_get_gc(X), out_count);
+}
+
+XrValue xr_deep_copy_to_coro_core(XrRuntimeCore *core, XrValue value,
+                                  struct XrCoroutine *dst_coro) {
+    if (!core && dst_coro)
+        core = dst_coro->core;
+    XR_DCHECK(core != NULL, "deep_copy_to_coro_core: NULL runtime core");
     if (!XR_IS_PTR(value))
         return value;
     // Shared objects (channel, etc): just increment refcount, no copy needed.
@@ -722,17 +767,25 @@ XrValue xr_deep_copy_to_coro(struct XrayIsolate *X, XrValue value, struct XrCoro
      * its data buffer. xr_coro_ensure_gc creates the heap on demand. */
     if (dst_coro) {
         XrCopyContext ctx;
-        xr_copy_context_init(&ctx, X, xr_isolate_get_gc(X));
+        xr_copy_context_init_core(&ctx, core, &core->gc);
         ctx.dst_coro_gc = xr_coro_ensure_gc(dst_coro);
         XrValue result = xr_deep_copy_with_ctx(&ctx, value);
         xr_copy_context_cleanup(&ctx);
         return result;
     }
-    return xr_deep_copy(X, value, xr_isolate_get_gc(X));
+    return xr_deep_copy_core(core, value, &core->gc);
 }
 
-XrValue xr_deep_copy_to_coro_counted(struct XrayIsolate *X, XrValue value,
-                                     struct XrCoroutine *dst_coro, int *out_count) {
+XrValue xr_deep_copy_to_coro(struct XrayIsolate *X, XrValue value, struct XrCoroutine *dst_coro) {
+    XR_DCHECK(X != NULL, "deep_copy_to_coro: NULL isolate");
+    return xr_deep_copy_to_coro_core(xr_isolate_get_runtime_core(X), value, dst_coro);
+}
+
+XrValue xr_deep_copy_to_coro_counted_core(XrRuntimeCore *core, XrValue value,
+                                          struct XrCoroutine *dst_coro, int *out_count) {
+    if (!core && dst_coro)
+        core = dst_coro->core;
+    XR_DCHECK(core != NULL, "deep_copy_to_coro_counted_core: NULL runtime core");
     if (xr_value_copy_kind(value) != XR_COPY_DEEP) {
         if (out_count)
             *out_count = 0;
@@ -740,7 +793,7 @@ XrValue xr_deep_copy_to_coro_counted(struct XrayIsolate *X, XrValue value,
     }
     if (dst_coro) {
         XrCopyContext ctx;
-        xr_copy_context_init(&ctx, X, xr_isolate_get_gc(X));
+        xr_copy_context_init_core(&ctx, core, &core->gc);
         ctx.dst_coro_gc = xr_coro_ensure_gc(dst_coro);
         XrValue result = xr_deep_copy_with_ctx(&ctx, value);
         if (out_count)
@@ -748,7 +801,14 @@ XrValue xr_deep_copy_to_coro_counted(struct XrayIsolate *X, XrValue value,
         xr_copy_context_cleanup(&ctx);
         return result;
     }
-    return xr_deep_copy_counted(X, value, xr_isolate_get_gc(X), out_count);
+    return xr_deep_copy_counted_core(core, value, &core->gc, out_count);
+}
+
+XrValue xr_deep_copy_to_coro_counted(struct XrayIsolate *X, XrValue value,
+                                     struct XrCoroutine *dst_coro, int *out_count) {
+    XR_DCHECK(X != NULL, "deep_copy_to_coro_counted: NULL isolate");
+    return xr_deep_copy_to_coro_counted_core(xr_isolate_get_runtime_core(X), value, dst_coro,
+                                             out_count);
 }
 
 XrValue xr_deep_copy_array(struct XrayIsolate *X, struct XrArray *array, struct XrGC *dst_gc) {

@@ -13,10 +13,12 @@
 #include "coro/xaot_coro.h"
 #include "coro/xcoro_pool.h"
 #include "coro/xcoroutine.h"
+#include "coro/xdeep_copy.h"
 #include "coro/xresult_group.h"
 #include "coro/xworker.h"
 #include "coro/xwork_queue.h"
 #include "coro/xyieldable.h"
+#include "runtime/object/xarray.h"
 #include "runtime/xisolate_internal.h"
 #include <stdatomic.h>
 #include <string.h>
@@ -379,6 +381,42 @@ TEST(aot_context_builtin_prefers_runtime_table) {
     xr_aot_runtime_delete(runtime);
 }
 
+TEST(aot_runtime_copy_context_uses_core_without_isolate) {
+    XrAotRuntimeConfig cfg;
+    xr_aot_runtime_config_init(&cfg);
+
+    XrAotRuntime *runtime = xr_aot_runtime_new(&cfg);
+    ASSERT_NOT_NULL(runtime);
+    XrRuntimeCore *core = xr_aot_runtime_core(runtime);
+    ASSERT_NOT_NULL(core);
+    ASSERT_NULL(core->gc.isolate);
+
+    XrCoroutine *owner = xr_coro_create_runtime_empty(core, NULL, "copy_owner");
+    ASSERT_NOT_NULL(owner);
+    XrArray *source = xr_array_with_capacity_typed(owner, 3, XR_ELEM_I64);
+    ASSERT_NOT_NULL(source);
+    source->length = 3;
+    xr_array_set_i64(source, 0, 11);
+    xr_array_set_i64(source, 1, 22);
+    xr_array_set_i64(source, 2, 33);
+
+    XrValue transit = xr_deep_copy_to_transit_core(core, xr_value_from_array(source));
+    ASSERT_TRUE(xr_value_is_array(transit));
+    XrArray *copied = xr_value_to_array(transit);
+    ASSERT_NOT_NULL(copied);
+    ASSERT_TRUE(copied != source);
+    ASSERT_TRUE(XR_OBJ_GET_FLAG(&copied->gc, XR_OBJ_TRANSIT));
+    ASSERT_TRUE(XR_GC_IS_SHARED(&copied->gc));
+    ASSERT_EQ_INT((int) copied->length, 3);
+    ASSERT_EQ_INT((int) xr_array_get_i64(copied, 0), 11);
+    ASSERT_EQ_INT((int) xr_array_get_i64(copied, 1), 22);
+    ASSERT_EQ_INT((int) xr_array_get_i64(copied, 2), 33);
+
+    xr_chan_transit_release(transit);
+    xr_coro_destroy(owner);
+    xr_aot_runtime_delete(runtime);
+}
+
 TEST(aot_result_group_uses_runtime_without_isolate) {
     XrAotRuntimeConfig cfg;
     xr_aot_runtime_config_init(&cfg);
@@ -429,6 +467,17 @@ TEST(aot_work_queue_uses_runtime_owner_without_isolate) {
     ASSERT_EQ_PTR(queue->core, xr_aot_runtime_core(runtime));
     ASSERT_EQ_PTR(queue->scheduler, xr_aot_runtime_scheduler(runtime));
     ASSERT_NULL(queue->vm_bridge_isolate);
+
+    ASSERT_TRUE(XR_TO_BOOL(xr_aot_work_queue_push(&ctx, queue_value, xr_int(44), 0)));
+    XrValue popped = XR_NULL_VAL;
+    ASSERT_TRUE(xr_aot_work_queue_try_pop(&ctx, queue_value, 0, &popped));
+    ASSERT_EQ_INT(XR_TO_INT(popped), 44);
+
+    ASSERT_TRUE(XR_TO_BOOL(xr_aot_work_queue_push_sync(queue_value, xr_int(55), 0)));
+    ASSERT_TRUE(xr_aot_work_queue_try_pop_sync(queue_value, 0, &popped));
+    ASSERT_EQ_INT(XR_TO_INT(popped), 55);
+    xr_aot_work_queue_close_sync(queue_value);
+    ASSERT_TRUE(XR_TO_BOOL(xr_aot_work_queue_is_closed_sync(queue_value)));
 
     xr_gc_destroy_work_queue(&queue->gc, NULL);
     xr_aot_runtime_delete(runtime);
@@ -495,6 +544,7 @@ RUN_TEST(aot_runtime_creates_scheduler_for_runtime_caps);
 RUN_TEST(aot_runtime_creates_isolate_free_aot_coroutine);
 RUN_TEST(aot_run_main_uses_runtime_without_isolate);
 RUN_TEST(aot_context_builtin_prefers_runtime_table);
+RUN_TEST(aot_runtime_copy_context_uses_core_without_isolate);
 RUN_TEST(aot_result_group_uses_runtime_without_isolate);
 RUN_TEST(aot_work_queue_uses_runtime_owner_without_isolate);
 RUN_TEST(coroutine_recycle_hooks_are_backend_abi_contract);
