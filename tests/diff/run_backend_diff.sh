@@ -12,6 +12,10 @@
 # Environment:
 #   XRAY_BIN            xray binary (default: build/xray; also XRAY_BUILD_DIR)
 #   XRAY_DIFF_BACKENDS  comma list subset of vm,aot (default: vm,aot)
+#   XRAY_DIFF_JOBS      parallel case workers (default: auto, capped by
+#                       XRAY_DIFF_MAX_AUTO_JOBS=16; XRAY_TEST_JOBS also works)
+#   XRAY_DIFF_SHARD_TOTAL / XRAY_DIFF_SHARD_INDEX
+#                       run only one stable 0-based shard of the case list
 #   XRAY_DIFF_EXTRA_CASES_FILE
 #                       newline case manifest, relative to repo root or absolute
 #                       (default: tests/diff/coro_regression_cases.txt; empty disables)
@@ -50,6 +54,13 @@ BACKENDS="${XRAY_DIFF_BACKENDS:-vm,aot}"
 # stderr is backend-diagnostic-heavy (AOT cc/build logs, native-class
 # warnings), so it is NOT part of pass/fail unless XRAY_DIFF_STDERR=1.
 DIFF_STDERR="${XRAY_DIFF_STDERR:-0}"
+REQUESTED_JOBS="${XRAY_DIFF_JOBS:-${XRAY_TEST_JOBS:-auto}}"
+SHARD_TOTAL="${XRAY_DIFF_SHARD_TOTAL:-1}"
+SHARD_INDEX="${XRAY_DIFF_SHARD_INDEX:-0}"
+SINGLE_CASE="${XRAY_DIFF_SINGLE_CASE:-}"
+SINGLE_ID="${XRAY_DIFF_SINGLE_ID:-0}"
+TAB="$(printf '\t')"
+JOBS=1
 
 PASS=0
 FAIL=0
@@ -61,6 +72,62 @@ WORK="$(mktemp -d "${TMPDIR:-/tmp}/xray_backend_diff.XXXXXX")" || {
 }
 cleanup() { rm -rf "$WORK"; }
 trap cleanup EXIT
+
+is_uint() {
+    case "$1" in
+        ""|*[!0-9]*) return 1 ;;
+        *) return 0 ;;
+    esac
+}
+
+detect_cores() {
+    local cores=""
+    if command -v getconf >/dev/null 2>&1; then
+        cores="$(getconf _NPROCESSORS_ONLN 2>/dev/null || true)"
+    fi
+    if ! is_uint "$cores" && command -v sysctl >/dev/null 2>&1; then
+        cores="$(sysctl -n hw.logicalcpu 2>/dev/null || true)"
+    fi
+    if ! is_uint "$cores" || [ "$cores" -lt 1 ]; then
+        cores=1
+    fi
+    printf '%s\n' "$cores"
+}
+
+configure_jobs() {
+    local requested="$1" max_auto
+    case "$requested" in
+        ""|auto)
+            JOBS="$(detect_cores)"
+            max_auto="${XRAY_DIFF_MAX_AUTO_JOBS:-16}"
+            if is_uint "$max_auto" && [ "$max_auto" -gt 0 ] && [ "$JOBS" -gt "$max_auto" ]; then
+                JOBS="$max_auto"
+            fi
+            ;;
+        *)
+            if is_uint "$requested" && [ "$requested" -gt 0 ]; then
+                JOBS="$requested"
+            else
+                JOBS=1
+            fi
+            ;;
+    esac
+}
+
+validate_shard_config() {
+    if ! is_uint "$SHARD_TOTAL" || ! is_uint "$SHARD_INDEX"; then
+        echo "error: shard config must be numeric: total=$SHARD_TOTAL index=$SHARD_INDEX" >&2
+        exit 2
+    fi
+    if [ "$SHARD_TOTAL" -lt 1 ]; then
+        echo "error: XRAY_DIFF_SHARD_TOTAL must be >= 1" >&2
+        exit 2
+    fi
+    if [ "$SHARD_INDEX" -ge "$SHARD_TOTAL" ]; then
+        echo "error: XRAY_DIFF_SHARD_INDEX must be in [0,total): index=$SHARD_INDEX total=$SHARD_TOTAL" >&2
+        exit 2
+    fi
+}
 
 backend_enabled() {
     case ",$BACKENDS," in
@@ -121,10 +188,11 @@ run_backend() {
 
 run_case() {
     local case="$1"
+    local case_id="${2:-0}"
     local name base anchor argfile
     name="$(rel_path "$case")"
-    base="$(printf '%s' "${name%.xr}" | sed 's#[^A-Za-z0-9_.-]#_#g')"
-    printf '  %-52s' "$name"
+    base="$(printf '%05d_%s' "$case_id" "$(printf '%s' "${name%.xr}" | sed 's#[^A-Za-z0-9_.-]#_#g')")"
+    printf '  %-84s' "$name"
 
     anchor="$(sed -n '1{s#^// *anchor: *##p;}' "$case" 2>/dev/null)"
 
@@ -218,9 +286,94 @@ run_case() {
     return 1
 }
 
+record_case_log() {
+    local log="$1" status="$2" first_line rc
+    cat "$log"
+
+    first_line="$(sed -n '1p' "$log")"
+    rc="$(cat "$status" 2>/dev/null || printf '99')"
+    case "$first_line" in
+        *PASS*) PASS=$((PASS + 1)) ;;
+        *SKIP*) SKIP=$((SKIP + 1)) ;;
+        *)
+            FAIL=$((FAIL + 1))
+            if [ "$rc" -eq 0 ] 2>/dev/null; then
+                :
+            else
+                [ -n "$first_line" ] || echo "  <worker>                                                                FAIL (worker exited $rc)"
+            fi
+            ;;
+    esac
+}
+
+run_cases_parallel() {
+    local list="$1"
+    local jobs="$2"
+    local idx case log status sem token i p pids logs
+    mkdir -p "$WORK/logs"
+
+    sem="$WORK/worker.sem"
+    if ! mkfifo "$sem"; then
+        echo "error: cannot create worker semaphore" >&2
+        FAIL=$((FAIL + 1))
+        return 1
+    fi
+    exec 9<>"$sem"
+    rm -f "$sem"
+
+    i=0
+    while [ "$i" -lt "$jobs" ]; do
+        printf '.' >&9
+        i=$((i + 1))
+    done
+
+    pids=""
+    logs=""
+
+    while IFS="$TAB" read -r idx case; do
+        [ -n "$case" ] || continue
+        IFS= read -r -n 1 token <&9
+        log="$WORK/logs/$idx.log"
+        status="$WORK/logs/$idx.status"
+        (
+            XRAY_DIFF_SINGLE_CASE="$case" \
+            XRAY_DIFF_SINGLE_ID="$idx" \
+            XRAY_DIFF_JOBS=1 \
+            "$SCRIPT_DIR/run_backend_diff.sh" "$XRAY" >"$log" 2>&1
+            printf '%s\n' "$?" >"$status"
+            printf '.' >&9
+        ) &
+        pids="$pids $!"
+        logs="$logs $log"
+    done <"$list"
+
+    for p in $pids; do
+        wait "$p"
+    done
+    exec 9>&-
+    exec 9<&-
+
+    for log in $logs; do
+        status="${log%.log}.status"
+        record_case_log "$log" "$status"
+    done
+}
+
+configure_jobs "$REQUESTED_JOBS"
+validate_shard_config
+
+if [ -n "$SINGLE_CASE" ]; then
+    run_case "$SINGLE_CASE" "$SINGLE_ID"
+    exit $?
+fi
+
 echo "=== Backend Differential (VM / AOT) ==="
 echo "Binary:   $XRAY"
 echo "Backends: $BACKENDS"
+echo "Jobs:     $JOBS"
+if [ "$SHARD_TOTAL" -gt 1 ]; then
+    echo "Shard:    $SHARD_INDEX / $SHARD_TOTAL"
+fi
 echo ""
 
 if ! command -v "$XRAY" >/dev/null 2>&1 && [ ! -x "$XRAY" ]; then
@@ -247,13 +400,34 @@ if [ -n "$EXTRA_CASES_FILE" ] && [ -f "$EXTRA_CASES_FILE" ]; then
     done <"$EXTRA_CASES_FILE" >>"$CASE_LIST"
 fi
 
+CASE_RUN_LIST="$WORK/cases.run.list"
+: >"$CASE_RUN_LIST"
+CASE_INDEX=0
 while IFS= read -r f; do
     [ -f "$f" ] || continue
     case "$(basename "$f")" in
         _*) continue ;;
     esac
-    run_case "$f"
+    if [ $((CASE_INDEX % SHARD_TOTAL)) -eq "$SHARD_INDEX" ]; then
+        printf '%s\t%s\n' "$CASE_INDEX" "$f" >>"$CASE_RUN_LIST"
+    fi
+    CASE_INDEX=$((CASE_INDEX + 1))
 done <"$CASE_LIST"
+
+if [ "$SHARD_TOTAL" -gt 1 ]; then
+    SELECTED_CASES="$(wc -l <"$CASE_RUN_LIST" | tr -d ' ')"
+    echo "Cases:    $SELECTED_CASES / $CASE_INDEX"
+    echo ""
+fi
+
+if [ "$JOBS" -le 1 ]; then
+    while IFS="$TAB" read -r idx f; do
+        [ -n "$f" ] || continue
+        run_case "$f" "$idx"
+    done <"$CASE_RUN_LIST"
+else
+    run_cases_parallel "$CASE_RUN_LIST" "$JOBS"
+fi
 
 echo ""
 echo "=== Results: $PASS passed, $FAIL failed, $SKIP skipped ==="

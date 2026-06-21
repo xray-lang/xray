@@ -3,75 +3,136 @@
 # Gold standard: diff <(xray run X) <(./aot_X) must be empty
 #
 # Usage: ./tests/aot/run_aot_tests.sh [xray_binary]
+#
+# Environment:
+#   XRAY_AOT_JOBS       parallel test workers (default: auto, capped by
+#                       XRAY_AOT_MAX_AUTO_JOBS=16; XRAY_TEST_JOBS also works)
+#   XRAY_AOT_KEEP_WORK  keep temporary outputs on exit for debugging
 
-set -e
+set -u
 
 XRAY="${1:-./build/xray}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
-AOT_INCLUDE="$PROJECT_DIR/src/aot"
-VM_INCLUDE="$PROJECT_DIR/include"
-WORK="${TMPDIR:-/tmp}/aot_test_$$"
-mkdir -p "$WORK"
+WORK="$(mktemp -d "${TMPDIR:-/tmp}/aot_test.XXXXXX")" || {
+    echo "error: cannot create temp dir" >&2
+    exit 1
+}
+cleanup() {
+    if [ "${XRAY_AOT_KEEP_WORK:-0}" = "1" ]; then
+        echo "Work dir: $WORK"
+    else
+        rm -rf "$WORK"
+    fi
+}
+trap cleanup EXIT
+
+REQUESTED_JOBS="${XRAY_AOT_JOBS:-${XRAY_TEST_JOBS:-auto}}"
+JOBS=1
 PASS=0
 FAIL=0
 SKIP=0
 
 echo "=== AOT VM-AOT Diff Tests ==="
 echo "Binary: $XRAY"
+
+is_uint() {
+    case "$1" in
+        ""|*[!0-9]*) return 1 ;;
+        *) return 0 ;;
+    esac
+}
+
+detect_cores() {
+    local cores=""
+    if command -v getconf >/dev/null 2>&1; then
+        cores="$(getconf _NPROCESSORS_ONLN 2>/dev/null || true)"
+    fi
+    if ! is_uint "$cores" && command -v sysctl >/dev/null 2>&1; then
+        cores="$(sysctl -n hw.logicalcpu 2>/dev/null || true)"
+    fi
+    if ! is_uint "$cores" || [ "$cores" -lt 1 ]; then
+        cores=1
+    fi
+    printf '%s\n' "$cores"
+}
+
+configure_jobs() {
+    local requested="$1" max_auto
+    case "$requested" in
+        ""|auto)
+            JOBS="$(detect_cores)"
+            max_auto="${XRAY_AOT_MAX_AUTO_JOBS:-16}"
+            if is_uint "$max_auto" && [ "$max_auto" -gt 0 ] && [ "$JOBS" -gt "$max_auto" ]; then
+                JOBS="$max_auto"
+            fi
+            ;;
+        *)
+            if is_uint "$requested" && [ "$requested" -gt 0 ]; then
+                JOBS="$requested"
+            else
+                JOBS=1
+            fi
+            ;;
+    esac
+}
+
+rel_case_name() {
+    case "$1" in
+        "$SCRIPT_DIR"/*) printf '%s' "${1#"$SCRIPT_DIR"/}" ;;
+        *) printf '%s' "$(basename "$1")" ;;
+    esac
+}
+
+safe_case_name() {
+    printf '%s' "${1%.xr}" | sed 's#[^A-Za-z0-9_.-]#_#g'
+}
+
+configure_jobs "$REQUESTED_JOBS"
+echo "Jobs:   $JOBS"
 echo ""
 
 run_test() {
     local xr_file="$1"
-    local test_name="$(basename "$xr_file" .xr)"
-    local c_out="$WORK/${test_name}.c"
-    local bin_out="$WORK/${test_name}"
-    local vm_out="$WORK/${test_name}.vm"
-    local aot_out="$WORK/${test_name}.aot"
+    local rel_name test_name safe_name case_work bin_out vm_out aot_out
     local test_args=()
+    local vm_rc=0
+    local aot_rc=0
 
-    case "$test_name" in
+    rel_name="$(rel_case_name "$xr_file")"
+    test_name="${rel_name%.xr}"
+    safe_name="$(safe_case_name "$rel_name")"
+    case_work="$WORK/$safe_name"
+    mkdir -p "$case_work" || {
+        printf "  %-42sFAIL (cannot create work dir)\n" "$test_name"
+        FAIL=$((FAIL + 1))
+        return 1
+    }
+    bin_out="$case_work/aot"
+    vm_out="$case_work/vm.out"
+    aot_out="$case_work/aot.out"
+
+    case "$(basename "$xr_file" .xr)" in
         process_args*) test_args=("100000" "abc") ;;
     esac
 
-    printf "  %-30s" "$test_name"
+    printf "  %-42s" "$test_name"
 
-    # Step 1: Transpile .xr → .c (retry up to 3x for intermittent XIR pass crashes)
+    # Step 1: Build .xr → native binary through the public AOT path.
     local ok=0
     for attempt in 1 2 3; do
-        if "$XRAY" build --native -c "$xr_file" -o "$c_out" >/dev/null 2>&1; then
+        if "$XRAY" build --native "$xr_file" -o "$bin_out" >/dev/null 2>&1; then
             ok=1; break
         fi
     done
     if [ "$ok" -eq 0 ]; then
-        # Positive dirs must transpile; a persistent failure is a regression,
+        # Positive dirs must build; a persistent failure is a regression,
         # not a skip (expected-unsupported cases live under negative/).
-        echo "FAIL (transpile failed after retries)"
+        echo "FAIL (native build failed after retries)"
         FAIL=$((FAIL + 1))
-        return
+        return 1
     fi
 
-    # Step 2: Compile .c → binary. Coroutine and multi-module AOT need the
-    # real native build driver: coroutine output links xray_core, while
-    # multi-module output is compiled as per-module objects and linked
-    # together (114), not as one concatenated translation unit.
-    if grep -q "xr_aot_run_main\\|/\\* ==== module:" "$c_out"; then
-        if ! "$XRAY" build --native "$xr_file" -o "$bin_out" >/dev/null 2>&1; then
-            echo "FAIL (runtime link error)"
-            FAIL=$((FAIL + 1))
-            return
-        fi
-    else
-        if ! cc -O2 -Wall -Wno-initializer-overrides \
-                -I "$AOT_INCLUDE" -I "$VM_INCLUDE" \
-                "$c_out" -o "$bin_out" -lm 2>/dev/null; then
-            echo "FAIL (C compile error)"
-            FAIL=$((FAIL + 1))
-            return
-        fi
-    fi
-
-    # Step 3: Run VM and AOT, capturing stdout AND exit code (if-form keeps
+    # Step 2: Run VM and AOT, capturing stdout AND exit code (if-form keeps
     # set -e from aborting on a non-zero program exit).
     if [ "${#test_args[@]}" -gt 0 ]; then
         if "$XRAY" run "$xr_file" -- "${test_args[@]}" > "$vm_out" 2>/dev/null; then vm_rc=0; else vm_rc=$?; fi
@@ -81,71 +142,173 @@ run_test() {
         if "$bin_out" > "$aot_out" 2>/dev/null; then aot_rc=0; else aot_rc=$?; fi
     fi
 
-    # Step 4: Compare exit codes, then stdout
+    # Step 3: Compare exit codes, then stdout
     if [ "$vm_rc" != "$aot_rc" ]; then
         echo "FAIL (exit code: VM=$vm_rc AOT=$aot_rc)"
         FAIL=$((FAIL + 1))
-        rm -f "$bin_out" "$vm_out" "$aot_out"
+        return 1
     elif diff -u "$vm_out" "$aot_out" > /dev/null 2>&1; then
         echo "PASS"
         PASS=$((PASS + 1))
-        rm -f "$c_out" "$bin_out" "$vm_out" "$aot_out"
+        rm -rf "$case_work"
+        return 0
     else
         echo "FAIL (output mismatch)"
         echo "    VM:  $(head -5 "$vm_out" | tr '\n' '|')"
         echo "    AOT: $(head -5 "$aot_out" | tr '\n' '|')"
         FAIL=$((FAIL + 1))
-        # Keep .c file on failure for debugging
-        rm -f "$bin_out" "$vm_out" "$aot_out"
+        return 1
     fi
 }
 
 run_negative_test() {
     local xr_file="$1"
-    local test_name="$(basename "$xr_file" .xr)"
-    local c_out="$WORK/${test_name}.c"
-    local log_out="$WORK/${test_name}.log"
+    local rel_name test_name safe_name case_work bin_out log_out
 
-    printf "  %-30s" "$test_name"
+    rel_name="$(rel_case_name "$xr_file")"
+    test_name="${rel_name%.xr}"
+    safe_name="$(safe_case_name "$rel_name")"
+    case_work="$WORK/$safe_name"
+    mkdir -p "$case_work" || {
+        printf "  %-42sFAIL (cannot create work dir)\n" "$test_name"
+        FAIL=$((FAIL + 1))
+        return 1
+    }
+    bin_out="$case_work/aot"
+    log_out="$case_work/build.log"
 
-    if "$XRAY" build --native -c "$xr_file" -o "$c_out" >"$log_out" 2>&1; then
+    printf "  %-42s" "$test_name"
+
+    if "$XRAY" build --native "$xr_file" -o "$bin_out" >"$log_out" 2>&1; then
         echo "FAIL (unexpected AOT success)"
         FAIL=$((FAIL + 1))
-        rm -f "$c_out" "$log_out"
-        return
+        return 1
     fi
 
     if grep -Eq "unsupported .*coroutine Xi op|unsupported AOT sync call to suspendable function|unsupported AOT indirect call|exceptions inside AOT coroutine are unsupported|unsupported Xi op ERR_|semantic analysis failed|: error: " "$log_out"; then
         echo "PASS (rejected)"
         PASS=$((PASS + 1))
-        rm -f "$c_out" "$log_out"
+        rm -rf "$case_work"
+        return 0
     else
         echo "FAIL (wrong rejection)"
         echo "    $(head -5 "$log_out" | tr '\n' '|')"
         FAIL=$((FAIL + 1))
-        rm -f "$c_out"
+        return 1
+    fi
+}
+
+record_case_log() {
+    local log="$1" status="$2" first_line rc
+    cat "$log"
+
+    first_line="$(sed -n '1p' "$log")"
+    rc="$(cat "$status" 2>/dev/null || printf '99')"
+    case "$first_line" in
+        *PASS*) PASS=$((PASS + 1)) ;;
+        *SKIP*) SKIP=$((SKIP + 1)) ;;
+        *)
+            FAIL=$((FAIL + 1))
+            if [ "$rc" -eq 0 ] 2>/dev/null; then
+                :
+            else
+                [ -n "$first_line" ] || echo "  <worker>                                  FAIL (worker exited $rc)"
+            fi
+            ;;
+    esac
+}
+
+run_case_file() {
+    local kind="$1"
+    local f="$2"
+    case "$kind" in
+        negative) run_negative_test "$f" ;;
+        *) run_test "$f" ;;
+    esac
+}
+
+run_list_parallel() {
+    local kind="$1"
+    local list="$2"
+    local jobs="$3"
+    local idx=0 f log status sem token i p pids logs
+    mkdir -p "$WORK/logs"
+
+    sem="$WORK/${kind}.sem"
+    if ! mkfifo "$sem"; then
+        echo "error: cannot create worker semaphore" >&2
+        FAIL=$((FAIL + 1))
+        return 1
+    fi
+    exec 9<>"$sem"
+    rm -f "$sem"
+
+    i=0
+    while [ "$i" -lt "$jobs" ]; do
+        printf '.' >&9
+        i=$((i + 1))
+    done
+
+    pids=""
+    logs=""
+
+    while IFS= read -r f; do
+        [ -n "$f" ] || continue
+        IFS= read -r -n 1 token <&9
+        log="$WORK/logs/${kind}_${idx}.log"
+        status="$WORK/logs/${kind}_${idx}.status"
+        (
+            run_case_file "$kind" "$f" >"$log" 2>&1
+            printf '%s\n' "$?" >"$status"
+            printf '.' >&9
+        ) &
+        pids="$pids $!"
+        logs="$logs $log"
+        idx=$((idx + 1))
+    done <"$list"
+
+    for p in $pids; do
+        wait "$p"
+    done
+    exec 9>&-
+    exec 9<&-
+
+    for log in $logs; do
+        status="${log%.log}.status"
+        record_case_log "$log" "$status"
+    done
+}
+
+run_section() {
+    local title="$1"
+    local kind="$2"
+    local dir="$3"
+    local list="$WORK/${title}.list"
+    local f
+
+    if [ -d "$dir" ]; then
+        echo "--- $title ---"
+        : >"$list"
+        for f in "$dir"/*.xr; do
+            [ -f "$f" ] && printf '%s\n' "$f" >>"$list"
+        done
+        if [ "$JOBS" -le 1 ]; then
+            while IFS= read -r f; do
+                [ -n "$f" ] || continue
+                run_case_file "$kind" "$f"
+            done <"$list"
+        else
+            run_list_parallel "$kind" "$list" "$JOBS"
+        fi
+        echo ""
     fi
 }
 
 # Run all .xr files in test directories
-for dir in "$SCRIPT_DIR"/basic "$SCRIPT_DIR"/modules "$SCRIPT_DIR"/coro; do
-    if [ -d "$dir" ]; then
-        echo "--- $(basename "$dir") ---"
-        for f in "$dir"/*.xr; do
-            [ -f "$f" ] && run_test "$f"
-        done
-        echo ""
-    fi
-done
-
-if [ -d "$SCRIPT_DIR/negative" ]; then
-    echo "--- negative ---"
-    for f in "$SCRIPT_DIR"/negative/*.xr; do
-        [ -f "$f" ] && run_negative_test "$f"
-    done
-    echo ""
-fi
+run_section "basic" "positive" "$SCRIPT_DIR/basic"
+run_section "modules" "positive" "$SCRIPT_DIR/modules"
+run_section "coro" "positive" "$SCRIPT_DIR/coro"
+run_section "negative" "negative" "$SCRIPT_DIR/negative"
 
 echo "=== Results: $PASS passed, $FAIL failed, $SKIP skipped ==="
-rm -rf "$WORK"
 [ "$FAIL" -eq 0 ] && exit 0 || exit 1
