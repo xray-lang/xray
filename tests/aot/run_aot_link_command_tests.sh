@@ -258,11 +258,17 @@ print(unsafe { xrayffi_add1(41) })
 XR
 FFI_BIN="$WORK/ffi_dylib_path"
 FFI_LOG="$WORK/ffi_dylib_path.log"
-if cc "${FFI_LIB_CC_ARGS[@]}" -o "$FFI_LIB" "$FFI_LIB_SRC" >"$WORK/ffi_lib_build.log" 2>&1; then
-    if build_native_real "$FFI_SRC" "$FFI_BIN" "$FFI_LOG"; then
-        expect_log_contains "$FFI_LOG" "Link command:" "ffi-dylib: emitted link command"
-        expect_log_contains "$FFI_LOG" "$FFI_LIB" "ffi-dylib: links explicit dylib path"
-        expect_log_not_contains "$FFI_LOG" "-lxray_core" "ffi-dylib: does not link xray_core"
+if [ "${XRAY_LINK_COMMAND_REAL_BUILDS:-0}" = "1" ] &&
+        ! cc "${FFI_LIB_CC_ARGS[@]}" -o "$FFI_LIB" "$FFI_LIB_SRC" >"$WORK/ffi_lib_build.log" 2>&1; then
+    record_fail "ffi-dylib: helper library build failed"
+    sed 's/^/      /' "$WORK/ffi_lib_build.log" | sed -n '1,80p'
+fi
+
+if build_native "$FFI_SRC" "$FFI_BIN" "$FFI_LOG"; then
+    expect_log_contains "$FFI_LOG" "Link command:" "ffi-dylib: emitted link command"
+    expect_log_contains "$FFI_LOG" "$FFI_LIB" "ffi-dylib: links explicit dylib path"
+    expect_log_not_contains "$FFI_LOG" "-lxray_core" "ffi-dylib: does not link xray_core"
+    if [ "${XRAY_LINK_COMMAND_REAL_BUILDS:-0}" = "1" ]; then
         got="$(DYLD_LIBRARY_PATH="$WORK" LD_LIBRARY_PATH="$WORK" "$FFI_BIN" 2>/dev/null)"
         if [ "$got" = "42" ]; then
             record_pass "ffi-dylib: binary output"
@@ -270,12 +276,11 @@ if cc "${FFI_LIB_CC_ARGS[@]}" -o "$FFI_LIB" "$FFI_LIB_SRC" >"$WORK/ffi_lib_build
             record_fail "ffi-dylib: output '$got' != '42'"
         fi
     else
-        record_fail "ffi-dylib: build failed"
-        sed 's/^/      /' "$FFI_LOG" | sed -n '1,120p'
+        expect_output "$FFI_BIN" "42" "ffi-dylib: binary output"
     fi
 else
-    record_fail "ffi-dylib: helper library build failed"
-    sed 's/^/      /' "$WORK/ffi_lib_build.log" | sed -n '1,80p'
+    record_fail "ffi-dylib: build failed"
+    sed 's/^/      /' "$FFI_LOG" | sed -n '1,120p'
 fi
 
 CORE_SRC="$PROJECT_DIR/tests/aot/filetests/link/core_math_single_symbol.xr"
