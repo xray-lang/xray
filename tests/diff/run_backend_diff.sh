@@ -22,7 +22,7 @@
 #   XRAY_DIFF_CASES_FILE
 #                       optional base case manifest replacing tests/diff/cases/**/*.xr
 #   XRAY_DIFF_CACHE_DIR shared native object cache for AOT backend builds
-#                       (default: build/.xray-test-cache/backend-diff/<xray-key>)
+#                       (default: build/.xray-test-cache/aot-objects)
 #   XRAY_DIFF_BIN_CACHE_DIR
 #                       cached AOT backend test binaries
 #                       (default: build/.xray-test-cache/backend-diff-bin/<xray-key>/O<opt>)
@@ -67,7 +67,7 @@ BACKENDS="${XRAY_DIFF_BACKENDS:-vm,aot}"
 DIFF_STDERR="${XRAY_DIFF_STDERR:-0}"
 REQUESTED_JOBS="${XRAY_DIFF_JOBS:-${XRAY_TEST_JOBS:-auto}}"
 AOT_OPT_LEVEL="${XRAY_AOT_TEST_OPT:-0}"
-AOT_CACHE="${XRAY_DIFF_CACHE_DIR:-$(xray_test_stable_cache_dir "$PROJECT_DIR" "backend-diff" "$XRAY")}"
+AOT_CACHE="${XRAY_DIFF_CACHE_DIR:-$(xray_test_shared_cache_dir "$PROJECT_DIR" "aot-objects")}"
 AOT_BIN_CACHE="${XRAY_DIFF_BIN_CACHE_DIR:-$(xray_test_stable_cache_dir "$PROJECT_DIR" "backend-diff-bin" "$XRAY")/O$AOT_OPT_LEVEL}"
 SHARD_TOTAL="${XRAY_DIFF_SHARD_TOTAL:-1}"
 SHARD_INDEX="${XRAY_DIFF_SHARD_INDEX:-0}"
@@ -210,16 +210,27 @@ run_backend() {
             tmp_bin="$bin_dir/aot.$$"
             if [ ! -x "$bin" ]; then
                 mkdir -p "$bin_dir"
-                rm -f "$tmp_bin"
-                if ! "$XRAY" build --native -O "$AOT_OPT_LEVEL" --cache-dir "$AOT_CACHE" "$case" \
-                        -o "$tmp_bin" >"$out_prefix.buildlog" 2>&1; then
+                if ! xray_test_lock_dir "$bin_dir.lock"; then
+                    echo "cannot lock binary cache: $bin_dir.lock" >"$out_prefix.buildlog"
                     echo "BUILDFAIL" >"$out_prefix.out"
                     : >"$raw_err"
                     rc=200
+                elif [ ! -x "$bin" ]; then
+                    rm -f "$tmp_bin"
+                    if ! "$XRAY" build --native -O "$AOT_OPT_LEVEL" --cache-dir "$AOT_CACHE" "$case" \
+                            -o "$tmp_bin" >"$out_prefix.buildlog" 2>&1; then
+                        echo "BUILDFAIL" >"$out_prefix.out"
+                        : >"$raw_err"
+                        rc=200
+                    else
+                        mv "$tmp_bin" "$bin"
+                    fi
+                    rm -f "$tmp_bin"
+                    xray_test_unlock_dir "$bin_dir.lock"
                 else
-                    mv "$tmp_bin" "$bin"
+                    printf 'cached: %s\n' "$bin" >"$out_prefix.buildlog"
+                    xray_test_unlock_dir "$bin_dir.lock"
                 fi
-                rm -f "$tmp_bin"
             else
                 printf 'cached: %s\n' "$bin" >"$out_prefix.buildlog"
             fi
