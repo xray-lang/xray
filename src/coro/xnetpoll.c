@@ -1140,8 +1140,8 @@ void xr_netpoll_deadline_impl(XrPollDesc *pd, uintptr_t seq, bool read) {
             XrCoroutine *coro = (XrCoroutine *) old;
             XrWorker *current_worker = xr_current_worker();
             XrRuntime *rt = current_worker ? current_worker->p.runtime : NULL;
-            if (!rt && coro->isolate)
-                rt = (XrRuntime *) coro->isolate->vm.runtime;
+            if (!rt)
+                rt = (XrRuntime *) xr_coro_scheduler(coro);
             if (!rt || !rt->workers || rt->worker_count <= 0)
                 return;
 
