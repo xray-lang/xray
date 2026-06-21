@@ -13,7 +13,7 @@
 #   XRAY_BIN            xray binary (default: build/xray; also XRAY_BUILD_DIR)
 #   XRAY_DIFF_BACKENDS  comma list subset of vm,aot (default: vm,aot)
 #   XRAY_DIFF_JOBS      parallel case workers (default: auto, capped by
-#                       XRAY_DIFF_MAX_AUTO_JOBS=16; XRAY_TEST_JOBS also works)
+#                       XRAY_DIFF_MAX_AUTO_JOBS=4; XRAY_TEST_JOBS also works)
 #   XRAY_DIFF_SHARD_TOTAL / XRAY_DIFF_SHARD_INDEX
 #                       run only one stable 0-based shard of the case list
 #   XRAY_DIFF_EXTRA_CASES_FILE
@@ -48,6 +48,19 @@
 set -u
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+if [ "${XRAY_DIFF_RUNNER:-python}" != "bash" ] &&
+        [ "${XRAY_DIFF_ENABLE_RUN_CACHE:-0}" != "1" ] &&
+        [ "${XRAY_DIFF_STDERR:-0}" != "1" ]; then
+    PYTHON_BIN="${PYTHON:-python3}"
+    if command -v "$PYTHON_BIN" >/dev/null 2>&1; then
+        exec "$PYTHON_BIN" "$SCRIPT_DIR/run_backend_diff_fast.py" "$@"
+    fi
+    if [ "${XRAY_DIFF_RUNNER:-python}" = "python" ]; then
+        echo "error: python3 is required for XRAY_DIFF_RUNNER=python; set XRAY_DIFF_RUNNER=bash to use the legacy runner" >&2
+        exit 2
+    fi
+fi
+
 PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 . "$PROJECT_DIR/tests/test_common.sh"
 CASE_DIR="$SCRIPT_DIR/cases"
@@ -119,7 +132,7 @@ configure_jobs() {
     case "$requested" in
         ""|auto)
             JOBS="$(detect_cores)"
-            max_auto="${XRAY_DIFF_MAX_AUTO_JOBS:-16}"
+            max_auto="${XRAY_DIFF_MAX_AUTO_JOBS:-4}"
             if is_uint "$max_auto" && [ "$max_auto" -gt 0 ] && [ "$JOBS" -gt "$max_auto" ]; then
                 JOBS="$max_auto"
             fi

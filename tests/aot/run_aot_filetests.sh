@@ -9,11 +9,16 @@
 #   XRAY_AOT_FILETEST_JOBS  parallel workers (default: auto, capped by
 #                           XRAY_AOT_FILETEST_MAX_AUTO_JOBS=4;
 #                           XRAY_TEST_JOBS also works)
+#   XRAY_AOT_FILETEST_CACHE_DIR
+#                           persistent dump/generated-C cache for warm reruns
+#   XRAY_TEST_DISABLE_RUN_CACHE=1
+#                           bypass persistent dump/generated-C cache
 
 set -u
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+. "$PROJECT_DIR/tests/test_common.sh"
 FILETEST_DIR="$SCRIPT_DIR/filetests"
 ALL_MODES="rep layout abi boundary container link cgen"
 
@@ -113,6 +118,8 @@ if [ -z "$XRAY" ]; then
     fi
 fi
 
+FILETEST_CACHE="${XRAY_AOT_FILETEST_CACHE_DIR:-$(xray_test_stable_cache_dir "$PROJECT_DIR" "aot-filetest-dumps" "$XRAY")}"
+
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/xray_aot_filetests.XXXXXX")" || {
     echo "error: cannot create temporary directory" >&2
     exit 1
@@ -199,6 +206,10 @@ count_selected_tests() {
 
 first_nonempty_line() {
     sed -n '/[^[:space:]]/{p;q;}' "$1" 2>/dev/null
+}
+
+safe_case_name() {
+    printf '%s' "${1%.xr}" | sed 's#[^A-Za-z0-9_.-]#_#g'
 }
 
 expect_args() {
@@ -350,10 +361,28 @@ check_expect() {
     return 0
 }
 
+run_dump_command() {
+    local out_c="$1"
+    local out_dump="$2"
+    local xr_file="$3"
+    local extra_args="$4"
+    local build_args=(build --native --dump-xaot-plan --dump-link-manifest)
+
+    if [ -n "$extra_args" ]; then
+        local expect_build_args=($extra_args)
+        build_args+=("${expect_build_args[@]}")
+    fi
+    build_args+=(-c -o "$out_c" "$xr_file")
+
+    "$XRAY" "${build_args[@]}" >"$out_dump" 2>&1
+}
+
 run_one() {
     local mode="$1"
     local xr_file="$2"
-    local test_name base dump c_out expect extra_args
+    local case_key="${3:-}"
+    local test_name base dump c_out expect extra_args rel safe args_key
+    local cache_dir cached_dump cached_c tmp_dump tmp_c
 
     base="$(basename "$xr_file" .xr)"
     test_name="$(rel_path "$xr_file")"
@@ -364,18 +393,62 @@ run_one() {
 
     printf '  %-9s %-48s' "$mode" "$test_name"
 
-    local build_args=(build --native --dump-xaot-plan --dump-link-manifest)
-    if [ -n "$extra_args" ]; then
-        local expect_build_args=($extra_args)
-        build_args+=("${expect_build_args[@]}")
+    rel="$(rel_path "$xr_file")"
+    safe="$(safe_case_name "$rel")"
+    if [ -z "$case_key" ]; then
+        case_key="$(xray_test_case_dir_key "$xr_file")"
     fi
-    build_args+=(-c -o "$c_out" "$xr_file")
+    args_key="$(xray_test_string_key "$extra_args")"
+    cache_dir="$FILETEST_CACHE/$mode/$safe-$case_key-$args_key"
+    cached_dump="$cache_dir/dump"
+    cached_c="$cache_dir/generated.c"
+    tmp_dump="$cache_dir/dump.$$"
+    tmp_c="$cache_dir/generated.c.$$"
 
-    if ! "$XRAY" "${build_args[@]}" > "$dump" 2>&1; then
-        echo "FAIL (dump command failed)"
-        show_excerpt "$dump"
-        FAIL=$((FAIL + 1))
-        return 1
+    if [ "${XRAY_TEST_DISABLE_RUN_CACHE:-0}" != "1" ] &&
+            [ -f "$cached_dump" ] && [ -f "$cached_c" ]; then
+        cp "$cached_dump" "$dump"
+        cp "$cached_c" "$c_out"
+    else
+        if [ "${XRAY_TEST_DISABLE_RUN_CACHE:-0}" != "1" ]; then
+            mkdir -p "$cache_dir" || {
+                echo "FAIL (cannot create cache dir)"
+                FAIL=$((FAIL + 1))
+                return 1
+            }
+            if ! xray_test_lock_dir "$cache_dir.lock"; then
+                echo "FAIL (cannot lock cache dir)"
+                FAIL=$((FAIL + 1))
+                return 1
+            fi
+            if [ -f "$cached_dump" ] && [ -f "$cached_c" ]; then
+                cp "$cached_dump" "$dump"
+                cp "$cached_c" "$c_out"
+                xray_test_unlock_dir "$cache_dir.lock"
+            else
+                rm -f "$tmp_dump" "$tmp_c"
+                if run_dump_command "$tmp_c" "$tmp_dump" "$xr_file" "$extra_args"; then
+                    mv "$tmp_dump" "$cached_dump"
+                    mv "$tmp_c" "$cached_c"
+                    cp "$cached_dump" "$dump"
+                    cp "$cached_c" "$c_out"
+                    xray_test_unlock_dir "$cache_dir.lock"
+                else
+                    cp "$tmp_dump" "$dump" 2>/dev/null || true
+                    rm -f "$tmp_dump" "$tmp_c"
+                    xray_test_unlock_dir "$cache_dir.lock"
+                    echo "FAIL (dump command failed)"
+                    show_excerpt "$dump"
+                    FAIL=$((FAIL + 1))
+                    return 1
+                fi
+            fi
+        elif ! run_dump_command "$c_out" "$dump" "$xr_file" "$extra_args"; then
+            echo "FAIL (dump command failed)"
+            show_excerpt "$dump"
+            FAIL=$((FAIL + 1))
+            return 1
+        fi
     fi
 
     check_expect "$expect" "$dump" "$c_out"
@@ -399,22 +472,27 @@ record_filetest_log() {
     esac
 }
 
-run_mode_parallel() {
-    local mode="$1"
-    local dir="$2"
-    local jobs="$3"
-    local list="$WORK/${mode}.list"
-    local idx=0 f log status sem token i p pids logs
+run_selected_parallel() {
+    local jobs="$1"
+    local list="$WORK/selected.list"
+    local mode dir f dir_key idx=0 log status sem token i p pids logs
+    local tab
 
+    tab="$(printf '\t')"
     : >"$list"
-    for f in "$dir"/*.xr; do
-        [ -f "$f" ] || continue
-        is_collected_test "$f" || continue
-        printf '%s\n' "$f" >>"$list"
+    for mode in $SELECTED_MODES; do
+        dir="$FILETEST_DIR/$mode"
+        [ -d "$dir" ] || continue
+        dir_key="$(xray_test_case_dir_key "$dir/__dir_key__")"
+        for f in "$dir"/*.xr; do
+            [ -f "$f" ] || continue
+            is_collected_test "$f" || continue
+            printf '%s\t%s\t%s\n' "$mode" "$dir_key" "$f" >>"$list"
+        done
     done
 
     mkdir -p "$WORK/logs"
-    sem="$WORK/${mode}.sem"
+    sem="$WORK/selected.sem"
     if ! mkfifo "$sem"; then
         echo "error: cannot create worker semaphore" >&2
         FAIL=$((FAIL + 1))
@@ -431,13 +509,13 @@ run_mode_parallel() {
 
     pids=""
     logs=""
-    while IFS= read -r f; do
+    while IFS="$tab" read -r mode dir_key f; do
         [ -n "$f" ] || continue
         IFS= read -r -n 1 token <&9
-        log="$WORK/logs/${mode}_${idx}.log"
-        status="$WORK/logs/${mode}_${idx}.status"
+        log="$WORK/logs/selected_${idx}.log"
+        status="$WORK/logs/selected_${idx}.status"
         (
-            run_one "$mode" "$f" >"$log" 2>&1
+            run_one "$mode" "$f" "$dir_key" >"$log" 2>&1
             printf '%s\n' "$?" >"$status"
             printf '.' >&9
         ) &
@@ -464,6 +542,7 @@ echo "=== AOT Filetests (XAOT plan scaffold) ==="
 echo "Binary: $XRAY"
 echo "Mode:   $MODE"
 echo "Jobs:   $JOBS"
+echo "Cache:  $FILETEST_CACHE"
 echo ""
 
 TEST_COUNT="$(count_selected_tests)"
@@ -492,21 +571,23 @@ if [ "$TEST_COUNT" -eq 0 ]; then
     exit 0
 fi
 
-for mode in $SELECTED_MODES; do
-    dir="$FILETEST_DIR/$mode"
-    [ -d "$dir" ] || continue
-    echo "--- $mode ---"
-    if [ "$JOBS" -le 1 ]; then
+if [ "$JOBS" -le 1 ]; then
+    for mode in $SELECTED_MODES; do
+        dir="$FILETEST_DIR/$mode"
+        [ -d "$dir" ] || continue
+        echo "--- $mode ---"
         for f in "$dir"/*.xr; do
             [ -f "$f" ] || continue
             is_collected_test "$f" || continue
             run_one "$mode" "$f"
         done
-    else
-        run_mode_parallel "$mode" "$dir" "$JOBS"
-    fi
+        echo ""
+    done
+else
+    echo "--- selected ---"
+    run_selected_parallel "$JOBS"
     echo ""
-done
+fi
 
 echo "=== Results: $PASS passed, $FAIL failed, $SKIP skipped ==="
 [ "$FAIL" -eq 0 ] && exit 0 || exit 1
