@@ -49,7 +49,15 @@
 typedef struct XrAotCoroState {
     const XrAotCoroDesc *desc;
     void *frame;
+    XrAotRuntime *runtime;
 } XrAotCoroState;
+
+struct XrAotRuntime {
+    uint32_t caps;
+    XrRuntimeCore *core;
+    XrSchedulerRuntime *scheduler;
+    XrValue builtins[XR_USER_GLOBALS_START];
+};
 
 enum {
     XR_AOT_VALUE_TAG_ARRAY = 15,
@@ -110,6 +118,19 @@ static void aot_mark_running(XrCoroutine *coro) {
                        XR_CORO_FLG_RUNNING | XR_CORO_FLG_STARTED);
 }
 
+static bool aot_caps_need_scheduler(uint32_t caps) {
+    return (caps & (XR_AOT_CAP_CORO | XR_AOT_CAP_TIMER | XR_AOT_CAP_CHANNEL |
+                    XR_AOT_CAP_WORK_QUEUE | XR_AOT_CAP_RESULT_GROUP)) != 0;
+}
+
+static void *aot_host_backend_context(void *ctx) {
+    return ctx;
+}
+
+static const XrSchedulerHostOps AOT_SCHEDULER_HOST_OPS = {
+    .backend_context = aot_host_backend_context,
+};
+
 static bool aot_coro_cancelled(const XrCoroutine *coro) {
     return coro && xr_coro_flags_has((XrCoroutine *) coro,
                                      XR_CORO_FLG_CANCEL_REQUESTED | XR_CORO_FLG_CANCELLED);
@@ -148,9 +169,14 @@ static XrCoroRunResult aot_backend_resume(XrCoroutine *coro, const XrCoroEvent *
     aot_mark_running(coro);
 
     XrAotContext ctx;
+    ctx.runtime = state->runtime;
     ctx.coro = coro;
-    ctx.isolate =
-        run_ctx && run_ctx->backend_ctx ? (XrayIsolate *) run_ctx->backend_ctx : coro->isolate;
+    if (state->runtime) {
+        ctx.isolate = NULL;
+    } else {
+        ctx.isolate =
+            run_ctx && run_ctx->backend_ctx ? (XrayIsolate *) run_ctx->backend_ctx : coro->isolate;
+    }
     ctx.worker = run_ctx ? (void *) run_ctx->worker : NULL;
 
     XrayIsolate *previous_isolate = xray_isolate_current();
@@ -196,6 +222,93 @@ void xr_aot_frame_free(void *frame) {
     xr_free(frame);
 }
 
+void xr_aot_runtime_config_init(XrAotRuntimeConfig *cfg) {
+    if (!cfg)
+        return;
+    memset(cfg, 0, sizeof(*cfg));
+}
+
+XrAotRuntime *xr_aot_runtime_new(const XrAotRuntimeConfig *cfg) {
+    XrAotRuntimeConfig local_cfg;
+    if (cfg) {
+        local_cfg = *cfg;
+    } else {
+        xr_aot_runtime_config_init(&local_cfg);
+    }
+
+    XrAotRuntime *runtime = (XrAotRuntime *) xr_calloc(1, sizeof(XrAotRuntime));
+    if (!runtime)
+        return NULL;
+    runtime->caps = local_cfg.caps;
+    for (int i = 0; i < XR_USER_GLOBALS_START; i++)
+        runtime->builtins[i] = XR_NULL_VAL;
+
+    XrRuntimeCoreConfig core_cfg = {
+        .owner_isolate = NULL,
+        .userdata = local_cfg.userdata,
+    };
+    runtime->core = xr_runtime_core_new(&core_cfg);
+    if (!runtime->core)
+        goto fail;
+    xr_script_info_set(&runtime->core->script_info, local_cfg.file, local_cfg.argc, local_cfg.argv);
+
+    if (aot_caps_need_scheduler(runtime->caps)) {
+        runtime->scheduler = xr_scheduler_runtime_new(runtime->core, local_cfg.scheduler_workers);
+        if (!runtime->scheduler)
+            goto fail;
+        XrSchedulerHost host = {
+            .ops = &AOT_SCHEDULER_HOST_OPS,
+            .ctx = runtime,
+        };
+        xr_scheduler_runtime_attach_host(runtime->scheduler, &host);
+        xr_runtime_start(runtime->scheduler);
+    }
+
+    return runtime;
+
+fail:
+    xr_aot_runtime_delete(runtime);
+    return NULL;
+}
+
+void xr_aot_runtime_delete(XrAotRuntime *runtime) {
+    if (!runtime)
+        return;
+    if (runtime->scheduler) {
+        xr_scheduler_runtime_delete(runtime->scheduler);
+        runtime->scheduler = NULL;
+    }
+    if (runtime->core) {
+        xr_runtime_core_delete(runtime->core);
+        runtime->core = NULL;
+    }
+    xr_free(runtime);
+}
+
+uint32_t xr_aot_runtime_caps(const XrAotRuntime *runtime) {
+    return runtime ? runtime->caps : XR_AOT_CAP_NONE;
+}
+
+XrRuntimeCore *xr_aot_runtime_core(XrAotRuntime *runtime) {
+    return runtime ? runtime->core : NULL;
+}
+
+XrRuntime *xr_aot_runtime_scheduler(XrAotRuntime *runtime) {
+    return runtime ? runtime->scheduler : NULL;
+}
+
+XrValue xr_aot_runtime_builtin(const XrAotRuntime *runtime, int32_t index) {
+    if (!runtime || index < 0 || index >= XR_USER_GLOBALS_START)
+        return XR_NULL_VAL;
+    return runtime->builtins[index];
+}
+
+void xr_aot_runtime_set_builtin(XrAotRuntime *runtime, int32_t index, XrValue value) {
+    if (!runtime || index < 0 || index >= XR_USER_GLOBALS_START)
+        return;
+    runtime->builtins[index] = value;
+}
+
 void xr_aot_trace_frame_value(void *visitor, XrValue value) {
     if (!visitor || !XR_IS_PTR(value))
         return;
@@ -211,7 +324,11 @@ void xr_aot_release_frame_value(XrCoroGC *gc, XrValue value) {
 }
 
 XrValue xr_aot_get_builtin(const XrAotContext *ctx, int32_t index) {
-    if (!ctx || !ctx->isolate || index < 0 || index >= XR_GLOBALS_MAX)
+    if (!ctx || index < 0)
+        return XR_NULL_VAL;
+    if (ctx->runtime && index < XR_USER_GLOBALS_START)
+        return xr_aot_runtime_builtin(ctx->runtime, index);
+    if (!ctx->isolate || index >= XR_GLOBALS_MAX)
         return XR_NULL_VAL;
     return ctx->isolate->vm.builtins[index];
 }
