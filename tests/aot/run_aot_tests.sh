@@ -7,8 +7,8 @@
 # Environment:
 #   XRAY_AOT_JOBS       parallel test workers (default: auto, capped by
 #                       XRAY_AOT_MAX_AUTO_JOBS=16; XRAY_TEST_JOBS also works)
-#   XRAY_AOT_CACHE_DIR  shared native object cache for this run
-#                       (default: build/.xray-test-cache/aot-diff/<xray-key>)
+#   XRAY_AOT_CACHE_DIR  shared native object cache for AOT test builds
+#                       (default: build/.xray-test-cache/aot-objects)
 #   XRAY_AOT_BIN_CACHE_DIR
 #                       cached native test binaries
 #                       (default: build/.xray-test-cache/aot-bin/<xray-key>/O<opt>)
@@ -37,7 +37,7 @@ trap cleanup EXIT
 
 REQUESTED_JOBS="${XRAY_AOT_JOBS:-${XRAY_TEST_JOBS:-auto}}"
 AOT_OPT_LEVEL="${XRAY_AOT_TEST_OPT:-0}"
-AOT_CACHE="${XRAY_AOT_CACHE_DIR:-$(xray_test_stable_cache_dir "$PROJECT_DIR" "aot-diff" "$XRAY")}"
+AOT_CACHE="${XRAY_AOT_CACHE_DIR:-$(xray_test_shared_cache_dir "$PROJECT_DIR" "aot-objects")}"
 AOT_BIN_CACHE="${XRAY_AOT_BIN_CACHE_DIR:-$(xray_test_stable_cache_dir "$PROJECT_DIR" "aot-bin" "$XRAY")/O$AOT_OPT_LEVEL}"
 JOBS=1
 PASS=0
@@ -144,24 +144,33 @@ run_test() {
             FAIL=$((FAIL + 1))
             return 1
         }
-        local ok=0
-        for attempt in 1 2 3; do
-            rm -f "$tmp_bin"
-            if "$XRAY" build --native -O "$AOT_OPT_LEVEL" --cache-dir "$AOT_CACHE" "$xr_file" \
-                    -o "$tmp_bin" \
-                    >/dev/null 2>&1; then
-                mv "$tmp_bin" "$bin_out"
-                ok=1; break
-            fi
-        done
-        rm -f "$tmp_bin"
-        if [ "$ok" -eq 0 ]; then
-            # Positive dirs must build; a persistent failure is a regression,
-            # not a skip (expected-unsupported cases live under negative/).
-            echo "FAIL (native build failed after retries)"
+        if ! xray_test_lock_dir "$bin_dir.lock"; then
+            echo "FAIL (cannot lock binary cache)"
             FAIL=$((FAIL + 1))
             return 1
         fi
+        if [ ! -x "$bin_out" ]; then
+            local ok=0
+            for attempt in 1 2 3; do
+                rm -f "$tmp_bin"
+                if "$XRAY" build --native -O "$AOT_OPT_LEVEL" --cache-dir "$AOT_CACHE" "$xr_file" \
+                        -o "$tmp_bin" \
+                        >/dev/null 2>&1; then
+                    mv "$tmp_bin" "$bin_out"
+                    ok=1; break
+                fi
+            done
+            rm -f "$tmp_bin"
+            if [ "$ok" -eq 0 ]; then
+                xray_test_unlock_dir "$bin_dir.lock"
+                # Positive dirs must build; a persistent failure is a regression,
+                # not a skip (expected-unsupported cases live under negative/).
+                echo "FAIL (native build failed after retries)"
+                FAIL=$((FAIL + 1))
+                return 1
+            fi
+        fi
+        xray_test_unlock_dir "$bin_dir.lock"
     fi
 
     # Step 2: Run VM and AOT, capturing stdout AND exit code (if-form keeps

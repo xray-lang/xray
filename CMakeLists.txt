@@ -1221,6 +1221,7 @@ if(BUILD_TESTS)
     set_tests_properties(backend_diff PROPERTIES
         LABELS "diff;cross;backend"
         PROCESSORS ${XRAY_CTEST_DIFF_PROCESSORS}
+        RESOURCE_LOCK aot_backend_diff_cache
         TIMEOUT 900
     )
 
@@ -1238,6 +1239,7 @@ if(BUILD_TESTS)
     set_tests_properties(backend_diff_deterministic PROPERTIES
         LABELS "diff;cross;backend;coro;deterministic"
         PROCESSORS ${XRAY_CTEST_DETERMINISTIC_DIFF_JOBS}
+        RESOURCE_LOCK aot_backend_diff_cache
         TIMEOUT 900
     )
 

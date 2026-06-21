@@ -34,6 +34,13 @@
 #include <stdbool.h>
 #include "../../os/os_fs.h"
 #include "../../os/os_proc.h"
+#ifdef XR_OS_WINDOWS
+#include <io.h>
+#define XR_CLI_CHMOD _chmod
+#else
+#include <sys/stat.h>
+#define XR_CLI_CHMOD chmod
+#endif
 #ifdef XR_OS_MACOS
 #include <ftw.h>
 #endif
@@ -1095,6 +1102,84 @@ static uint64_t xaot_hash_fold_str(uint64_t h, const char *s) {
     return s ? xaot_hash_fold(h, s, strlen(s) + 1) : xaot_hash_fold(h, "", 1);
 }
 
+static uint64_t xaot_hash_fold_bool(uint64_t h, bool v) {
+    uint8_t b = v ? 1 : 0;
+    return xaot_hash_fold(h, &b, sizeof(b));
+}
+
+static uint64_t xaot_hash_fold_string_list(uint64_t h, char **items, uint32_t count) {
+    h = xaot_hash_fold(h, &count, sizeof(count));
+    for (uint32_t i = 0; i < count; i++)
+        h = xaot_hash_fold_str(h, items[i]);
+    return h;
+}
+
+static uint64_t xaot_hash_fold_file_stat(uint64_t h, const char *path) {
+    XrFsStat st;
+    int ok;
+
+    h = xaot_hash_fold_str(h, path);
+    ok = (path && path[0] && xr_fs_stat(path, &st) == 0) ? 1 : 0;
+    h = xaot_hash_fold(h, &ok, sizeof(ok));
+    if (ok) {
+        h = xaot_hash_fold(h, &st.kind, sizeof(st.kind));
+        h = xaot_hash_fold(h, &st.size, sizeof(st.size));
+        h = xaot_hash_fold(h, &st.mtime_ns, sizeof(st.mtime_ns));
+    }
+    return h;
+}
+
+static bool xaot_link_value_is_path(const char *value) {
+    size_t len;
+
+    if (!value)
+        return false;
+    len = strlen(value);
+    return strchr(value, '/') || (len > 2 && strcmp(value + len - 2, ".o") == 0) ||
+           (len > 2 && strcmp(value + len - 2, ".a") == 0) ||
+           (len > 4 && strcmp(value + len - 4, ".lib") == 0);
+}
+
+static void xaot_runtime_archive_path(const char *lib_dir, const char *name, char *out,
+                                      size_t out_sz) {
+#ifdef XR_OS_WINDOWS
+    snprintf(out, out_sz, "%s/lib%s.a", lib_dir ? lib_dir : "", name ? name : "");
+#else
+    snprintf(out, out_sz, "%s/lib%s.a", lib_dir ? lib_dir : "", name ? name : "");
+#endif
+}
+
+static uint64_t xaot_hash_fold_link_dependency_stats(uint64_t h, const XaotLinkManifest *manifest,
+                                                     const char *sysroot) {
+    char lib_dir[XR_PATH_MAX];
+    char dep[XR_PATH_MAX];
+    const char *resolved_lib_dir = resolve_xray_lib_path(sysroot, lib_dir, sizeof(lib_dir));
+
+    if (!manifest)
+        return h;
+
+    h = xaot_hash_fold_str(h, resolved_lib_dir);
+    for (uint32_t i = 0; i < manifest->n_runtime_objects; i++) {
+        const char *value = manifest->runtime_objects[i];
+        if (xaot_link_value_is_path(value)) {
+            h = xaot_hash_fold_file_stat(h, value);
+        } else {
+            xaot_runtime_archive_path(resolved_lib_dir, value, dep, sizeof(dep));
+            h = xaot_hash_fold_file_stat(h, dep);
+        }
+    }
+    for (uint32_t i = 0; i < manifest->n_stdlib_objects; i++) {
+        const char *value = manifest->stdlib_objects[i];
+        if (xaot_link_value_is_path(value))
+            h = xaot_hash_fold_file_stat(h, value);
+    }
+    if (xaot_cli_manifest_needs_aot_core(manifest)) {
+        xaot_runtime_archive_path(resolved_lib_dir, "xray_aot_core", dep, sizeof(dep));
+        h = xaot_hash_fold_file_stat(h, dep);
+    }
+    return h;
+}
+
 /* Cache key = content hash of the generated C plus everything that changes the
  * resulting object: optimization level, target, toolchain, sysroot, and every
  * preprocessor define / cc flag carried by the link manifest (which already
@@ -1126,6 +1211,49 @@ static uint64_t xaot_object_cache_key(const char *c_source, const char *opt_flag
     return h;
 }
 
+static uint64_t xaot_link_output_cache_key(const XaotBuildResult *result, const char *opt_flag,
+                                           const XrCliBuildTarget *target,
+                                           const XrCliToolchainPlan *plan, const char *sysroot,
+                                           bool strip_symbols, bool shared_library) {
+    uint64_t h = XR_FNV64_OFFSET_BASIS;
+
+    h = xaot_hash_fold_str(h, "xaot-link-output-cache-v1");
+    h = xaot_hash_fold_str(h, opt_flag);
+    h = xaot_hash_fold_bool(h, strip_symbols);
+    h = xaot_hash_fold_bool(h, shared_library);
+    h = xaot_hash_fold_str(h, getenv("XRAY_INCLUDE"));
+    h = xaot_hash_fold_str(h, getenv("XRAY_LIB"));
+    h = xaot_hash_fold_str(h, getenv("XRAY_OPENSSL_LIBDIR"));
+    if (target) {
+        h = xaot_hash_fold_str(h, target->name);
+        h = xaot_hash_fold_str(h, target->zig_triple);
+        h = xaot_hash_fold_bool(h, target->is_native);
+    }
+    if (plan) {
+        h = xaot_hash_fold_str(h, plan->program);
+        h = xaot_hash_fold(h, &plan->kind, sizeof(plan->kind));
+    }
+    h = xaot_hash_fold_str(h, sysroot);
+    if (result) {
+        const XaotLinkManifest *manifest = &result->link_manifest;
+        h = xaot_hash_fold_string_list(h, manifest->runtime_objects, manifest->n_runtime_objects);
+        h = xaot_hash_fold_string_list(h, manifest->stdlib_objects, manifest->n_stdlib_objects);
+        h = xaot_hash_fold_string_list(h, manifest->generated_c_files,
+                                       manifest->n_generated_c_files);
+        h = xaot_hash_fold_string_list(h, manifest->system_libs, manifest->n_system_libs);
+        h = xaot_hash_fold_string_list(h, manifest->defines, manifest->n_defines);
+        h = xaot_hash_fold_string_list(h, manifest->cc_flags, manifest->n_cc_flags);
+        h = xaot_hash_fold_string_list(h, manifest->ld_flags, manifest->n_ld_flags);
+        h = xaot_hash_fold_link_dependency_stats(h, manifest, sysroot);
+        h = xaot_hash_fold(h, &result->n_sources, sizeof(result->n_sources));
+        for (int i = 0; i < result->n_sources; i++) {
+            h = xaot_hash_fold_str(h, result->sources[i].name);
+            h = xaot_hash_fold_str(h, result->sources[i].c_source);
+        }
+    }
+    return h;
+}
+
 /* Create directory `path` and all missing parents (like `mkdir -p`). */
 static int xaot_mkdir_p(const char *path) {
     char buf[XR_PATH_MAX];
@@ -1150,6 +1278,85 @@ static int xaot_mkdir_p(const char *path) {
     if (xr_fs_mkdir(buf, 0755) != 0 && !xr_fs_is_dir(buf))
         return -1;
     return 0;
+}
+
+static int xaot_copy_file(const char *src, const char *dst, unsigned int mode) {
+    FILE *in;
+    FILE *out;
+    char buf[64 * 1024];
+    size_t n;
+    int rc = 0;
+
+    in = fopen(src, "rb");
+    if (!in)
+        return -1;
+    out = fopen(dst, "wb");
+    if (!out) {
+        fclose(in);
+        return -1;
+    }
+    while ((n = fread(buf, 1, sizeof(buf), in)) > 0) {
+        if (fwrite(buf, 1, n, out) != n) {
+            rc = -1;
+            break;
+        }
+    }
+    if (ferror(in))
+        rc = -1;
+    if (fclose(out) != 0)
+        rc = -1;
+    fclose(in);
+    if (rc != 0) {
+        xr_fs_remove(dst);
+        return -1;
+    }
+    (void) XR_CLI_CHMOD(dst, (int) mode);
+    return 0;
+}
+
+static int xaot_link_output_cache_path(const char *cache_dir, uint64_t key, char *out,
+                                       size_t out_sz) {
+    char bin_dir[XR_PATH_MAX];
+    int n;
+
+    n = snprintf(bin_dir, sizeof(bin_dir), "%s/bin", cache_dir ? cache_dir : "");
+    if (n < 0 || (size_t) n >= sizeof(bin_dir))
+        return -1;
+    if (xaot_mkdir_p(bin_dir) != 0)
+        return -1;
+    n = snprintf(out, out_sz, "%s/%016llx.bin", bin_dir, (unsigned long long) key);
+    return (n >= 0 && (size_t) n < out_sz) ? 0 : -1;
+}
+
+static int xaot_restore_link_output_cache(const char *cache_dir, uint64_t key, const char *output,
+                                          bool verbose) {
+    char cached[XR_PATH_MAX];
+
+    if (xaot_link_output_cache_path(cache_dir, key, cached, sizeof(cached)) != 0)
+        return 0;
+    if (!xr_fs_is_file(cached))
+        return 0;
+    if (xaot_copy_file(cached, output, 0755) != 0)
+        return -1;
+    if (verbose)
+        printf("[xi-native] output cache hit: %016llx\n", (unsigned long long) key);
+    return 1;
+}
+
+static void xaot_store_link_output_cache(const char *cache_dir, uint64_t key, const char *output) {
+    char cached[XR_PATH_MAX];
+    char tmp[XR_PATH_MAX];
+    int n;
+
+    if (xaot_link_output_cache_path(cache_dir, key, cached, sizeof(cached)) != 0)
+        return;
+    n = snprintf(tmp, sizeof(tmp), "%s.%d.tmp", cached, (int) xr_proc_self_pid());
+    if (n < 0 || (size_t) n >= sizeof(tmp))
+        return;
+    if (xaot_copy_file(output, tmp, 0755) != 0)
+        return;
+    if (xr_fs_rename(tmp, cached) != 0)
+        xr_fs_remove(tmp);
 }
 
 static void xaot_dirname(const char *path, char *out, size_t out_sz) {
@@ -1430,6 +1637,21 @@ static int cmd_build_native(const char *input, const char *output, const char *c
         return 1;
     }
 
+    bool use_link_output_cache = !rebuild && !dry_run_link && !dump_link_command && !verbose &&
+                                 !debug_symbols && !shared_library && !keep_c;
+    uint64_t link_output_cache_key = 0;
+    if (use_link_output_cache) {
+        link_output_cache_key = xaot_link_output_cache_key(
+            &aot_result, opt_flag, target, toolchain_plan, sysroot, strip, shared_library);
+        int cache_hit =
+            xaot_restore_link_output_cache(cache_dir, link_output_cache_key, output, verbose);
+        if (cache_hit > 0) {
+            printf("Generated: %s\n", output);
+            xaot_build_result_free(&aot_result);
+            return 0;
+        }
+    }
+
     char (*obj_bufs)[XR_PATH_MAX] =
         (char (*)[XR_PATH_MAX]) xr_calloc((size_t) n_sources, XR_PATH_MAX);
     const char **obj_ptrs = (const char **) xr_calloc((size_t) n_sources, sizeof(char *));
@@ -1468,6 +1690,8 @@ static int cmd_build_native(const char *input, const char *output, const char *c
     if (ret == 0 && strip)
         remove_dsym_bundle(output);
 #endif
+    if (ret == 0 && use_link_output_cache)
+        xaot_store_link_output_cache(cache_dir, link_output_cache_key, output);
     if (ret == 0 && !dry_run_link)
         printf("Generated: %s\n", output);
     xaot_build_result_free(&aot_result);
