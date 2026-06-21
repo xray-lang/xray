@@ -25,7 +25,6 @@
 #include "../runtime/value/xvalue.h"
 #endif
 
-struct XrayIsolate;
 struct XrCoroutine;
 struct XrCoroGC;
 struct XrRuntime;
@@ -73,7 +72,8 @@ typedef struct XrAotResult {
 typedef struct XrAotContext {
     XrAotRuntime *runtime;
     struct XrCoroutine *coro;
-    struct XrayIsolate *isolate;
+    /* VM-only host bridge for legacy VM-facing helper calls; runtime AOT keeps this NULL. */
+    void *vm_host;
     void *worker;
 } XrAotContext;
 
