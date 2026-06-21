@@ -70,10 +70,28 @@ GEN_H="$WORK/c_export_link.h"
 GEN_OBJ="$WORK/c_export_link.o"
 CALLER_C="$WORK/caller.c"
 CALLER_BIN="$WORK/caller"
+CALLER_SHARED_BIN="$WORK/caller_shared"
 GEN_LOG="$WORK/generate.log"
 OBJ_LOG="$WORK/generated_obj.log"
 LINK_LOG="$WORK/link.log"
 RUN_LOG="$WORK/run.log"
+SHARED_LOG="$WORK/shared.log"
+SHARED_LINK_LOG="$WORK/shared_link.log"
+SHARED_RUN_LOG="$WORK/shared_run.log"
+MAIN_SRC="$WORK/c_export_main.xr"
+MAIN_LIB_LOG="$WORK/c_export_main_shared.log"
+case "$(uname -s)" in
+    Darwin)
+        GEN_LIB="$WORK/libxray_c_export.dylib"
+        MAIN_LIB="$WORK/libxray_c_export_main.dylib"
+        SHARED_LINK_FLAG="-dynamiclib"
+        ;;
+    *)
+        GEN_LIB="$WORK/libxray_c_export.so"
+        MAIN_LIB="$WORK/libxray_c_export_main.so"
+        SHARED_LINK_FLAG="-shared"
+        ;;
+esac
 
 cat >"$SRC" <<'XR'
 @c_export("xr_add_i32")
@@ -186,6 +204,23 @@ int main(void) {
 }
 C
 
+if "$XRAY" build --native --shared --dump-link-command --c-header "$GEN_H" -o "$GEN_LIB" \
+    "$SRC" >"$SHARED_LOG" 2>&1; then
+    record_pass "build native shared library"
+else
+    record_fail "build native shared library"
+    sed 's/^/      /' "$SHARED_LOG" | sed -n '1,160p'
+fi
+
+expect_file_contains "$SHARED_LOG" "$SHARED_LINK_FLAG" \
+    "shared build uses platform dynamic-library link flag"
+
+if [ -f "$GEN_LIB" ]; then
+    record_pass "shared library artifact exists"
+else
+    record_fail "shared library artifact exists"
+fi
+
 if [ -f "$GEN_OBJ" ] &&
     cc -O2 -Wall -I "$WORK" "$CALLER_C" "$GEN_OBJ" -lm -o "$CALLER_BIN" >"$LINK_LOG" 2>&1; then
     record_pass "link C caller with exported symbols"
@@ -201,6 +236,39 @@ if [ -x "$CALLER_BIN" ]; then
         record_fail "C caller invokes @c_export wrappers"
         sed 's/^/      /' "$RUN_LOG" | sed -n '1,80p'
     fi
+fi
+
+if [ -f "$GEN_LIB" ] &&
+    cc -O2 -Wall -I "$WORK" "$CALLER_C" "$GEN_LIB" -Wl,-rpath,"$WORK" -lm \
+        -o "$CALLER_SHARED_BIN" >"$SHARED_LINK_LOG" 2>&1; then
+    record_pass "link C caller with shared library"
+else
+    record_fail "link C caller with shared library"
+    sed 's/^/      /' "$SHARED_LINK_LOG" | sed -n '1,160p'
+fi
+
+if [ -x "$CALLER_SHARED_BIN" ]; then
+    if "$CALLER_SHARED_BIN" >"$SHARED_RUN_LOG" 2>&1 &&
+        [ "$(cat "$SHARED_RUN_LOG")" = "ok" ]; then
+        record_pass "C caller invokes shared-library exports"
+    else
+        record_fail "C caller invokes shared-library exports"
+        sed 's/^/      /' "$SHARED_RUN_LOG" | sed -n '1,80p'
+    fi
+fi
+
+cat >"$MAIN_SRC" <<'XR'
+@c_export("main")
+fn exported_main() -> int32 {
+    return 0
+}
+XR
+
+if "$XRAY" build --native --shared -o "$MAIN_LIB" "$MAIN_SRC" >"$MAIN_LIB_LOG" 2>&1; then
+    record_pass "shared library permits exported main symbol"
+else
+    record_fail "shared library permits exported main symbol"
+    sed 's/^/      /' "$MAIN_LIB_LOG" | sed -n '1,160p'
 fi
 
 echo ""
