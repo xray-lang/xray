@@ -409,7 +409,8 @@ TEST(aot_runtime_registers_prelude_enums_without_isolate) {
     memset(&ctx, 0, sizeof(ctx));
     ctx.runtime = runtime;
 
-    XrValue recv_type_value = xr_aot_runtime_builtin(runtime, XR_GLOBAL_VAR_RECV);
+    ASSERT_TRUE(XR_IS_NULL(xr_aot_runtime_builtin(runtime, XR_GLOBAL_VAR_RECV)));
+    XrValue recv_type_value = xr_aot_get_builtin(&ctx, XR_GLOBAL_VAR_RECV);
     ASSERT_TRUE(XR_IS_PTR(recv_type_value));
     XrEnumType *recv_type = XR_TO_ENUM_TYPE(recv_type_value);
     ASSERT_STR_EQ(recv_type->name, "Recv");
