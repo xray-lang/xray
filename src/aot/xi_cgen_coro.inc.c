@@ -2778,6 +2778,9 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             char tmp[64];
             snprintf(tmp, sizeof(tmp), "_builtin_value_%u", v->id);
             fprintf(out, "    XrValue %s = xr_aot_get_builtin(ctx, %d);\n", tmp, (int) v->aux_int);
+            if (cg_rep(v) == XR_REP_TAGGED &&
+                (v->aux_int == XR_GLOBAL_VAR_FILE || v->aux_int == XR_GLOBAL_VAR_DIR))
+                fprintf(out, "    %s = xr_aot_bridge_value_to_xrt(%s);\n", tmp, tmp);
             emit_assign_from_xrvalue_temp(out, v, tmp);
         } else {
             fprintf(out, "    (void) xr_aot_get_builtin(ctx, %d);\n", (int) v->aux_int);

@@ -1,0 +1,22 @@
+fn check() -> int {
+    yield
+    if (!__file__.endsWith("script_info_runtime.xr")) {
+        return 1
+    }
+    if (__dir__.length <= 0) {
+        return 2
+    }
+    if (!process.file.endsWith("script_info_runtime.xr")) {
+        return 3
+    }
+    if (process.dir.length <= 0) {
+        return 4
+    }
+    if (process.args.length != 0) {
+        return 5
+    }
+    return 0
+}
+
+let task = go check()
+print(await task)
