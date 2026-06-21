@@ -71,7 +71,7 @@ XrChannel *xr_cluster_monitor_node(XrayIsolate *X, const char *node_name) {
 
     // Buffered(8) channel for notifications — see comment above for
     // the drop-on-overflow policy rationale.
-    XrChannel *ch = xr_channel_new(X, 8);
+    XrChannel *ch = xr_channel_new_vm(X, 8);
     if (!ch) {
         xr_free(m);
         return NULL;
@@ -142,7 +142,7 @@ XrChannel *xr_cluster_monitor_coro(XrayIsolate *X, const char *node_name, const 
         return NULL;
 
     // Create notification channel
-    XrChannel *ch = xr_channel_new(X, 1);
+    XrChannel *ch = xr_channel_new_vm(X, 1);
     if (!ch)
         return NULL;
 

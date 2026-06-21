@@ -16,6 +16,7 @@
 
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
+#include "../runtime/core/xr_runtime_core.h"
 #include "../runtime/object/xarray.h"
 #include "../runtime/xisolate_internal.h"
 #include "xchannel_ops.h"
@@ -35,19 +36,23 @@ static XrRuntime *coro_stats_runtime(XrCoroutine *coro) {
     return xr_sched_stats_enabled(runtime) ? runtime : NULL;
 }
 
-static XrRuntime *isolate_stats_runtime(XrayIsolate *isolate) {
-    if (!isolate || !isolate->scheduler_runtime)
-        return NULL;
-    XrRuntime *runtime = (XrRuntime *) isolate->scheduler_runtime;
-    return xr_sched_stats_enabled(runtime) ? runtime : NULL;
-}
-
 static inline bool channel_value_needs_deep_copy(XrValue value) {
     return XR_IS_PTR(value) && xr_value_needs_copy(value);
 }
 
-static void record_channel_ownership_metric(XrayIsolate *isolate, XrValue value, bool recv) {
-    XrRuntime *runtime = isolate_stats_runtime(isolate);
+static XrRuntimeCore *channel_transfer_core(XrChannel *ch, XrCoroutine *coro) {
+    if (ch && ch->core)
+        return ch->core;
+    return coro ? coro->core : NULL;
+}
+
+static XrRuntime *channel_transfer_stats_runtime(XrChannel *ch, XrCoroutine *coro) {
+    XrRuntime *runtime =
+        ch && ch->scheduler ? (XrRuntime *) ch->scheduler : coro_stats_runtime(coro);
+    return xr_sched_stats_enabled(runtime) ? runtime : NULL;
+}
+
+static void record_channel_ownership_metric(XrRuntime *runtime, XrValue value, bool recv) {
     if (!runtime)
         return;
     bool deep_copy = channel_value_needs_deep_copy(value);
@@ -257,8 +262,8 @@ XrCoroBlockResult xr_coro_chan_send_resume(XrCoroutine *coro, XrSlotRef result_s
     return block_result(XR_CORO_BLOCK_NOT_RESUMED, xr_null(), false);
 }
 
-XrCoroBlockResult xr_coro_chan_recv_resume(XrayIsolate *isolate, XrCoroutine *coro,
-                                           XrSlotRef value_slot, XrSlotRef ok_slot) {
+XrCoroBlockResult xr_coro_chan_recv_resume(XrCoroutine *coro, XrSlotRef value_slot,
+                                           XrSlotRef ok_slot) {
     if (!coro)
         return block_result(XR_CORO_BLOCK_NOT_RESUMED, xr_null(), false);
 
@@ -266,10 +271,10 @@ XrCoroBlockResult xr_coro_chan_recv_resume(XrayIsolate *isolate, XrCoroutine *co
     if (resume_status == XR_RESUME_CHANNEL) {
         XrValue value = xr_null();
         (void) xr_slot_load_value(value_slot, &value);
-        record_channel_ownership_metric(isolate, value, true);
+        record_channel_ownership_metric(coro_stats_runtime(coro), value, true);
         bool needs_copy = channel_value_needs_deep_copy(value);
         if (needs_copy)
-            value = xr_chan_copy_recv(isolate, value, coro);
+            value = xr_chan_copy_recv_core(coro ? coro->core : NULL, value, coro);
         coro_finish_resume(coro);
         if (needs_copy)
             xr_slot_store_value(value_slot, value);
@@ -291,13 +296,14 @@ XrCoroBlockResult xr_coro_chan_recv_resume(XrayIsolate *isolate, XrCoroutine *co
     return block_result(XR_CORO_BLOCK_NOT_RESUMED, xr_null(), false);
 }
 
-XrCoroBlockResult xr_coro_chan_send(XrayIsolate *isolate, XrCoroutine *coro, XrChannel *ch,
-                                    XrValue value, XrSlotRef result_slot, int64_t timeout_ms) {
+XrCoroBlockResult xr_coro_chan_send(XrCoroutine *coro, XrChannel *ch, XrValue value,
+                                    XrSlotRef result_slot, int64_t timeout_ms) {
     XR_DCHECK(ch != NULL, "xr_coro_chan_send: NULL channel");
 
     bool had_ext = coro && coro->ext != NULL;
-    record_channel_ownership_metric(isolate, value, false);
-    value = xr_chan_prepare_send(isolate, value);
+    XrRuntimeCore *core = channel_transfer_core(ch, coro);
+    record_channel_ownership_metric(channel_transfer_stats_runtime(ch, coro), value, false);
+    value = xr_chan_prepare_send_core(core, value);
 
     if (timeout_ms == 0) {
         if (xr_channel_try_send(ch, value)) {
@@ -349,16 +355,16 @@ XrCoroBlockResult xr_coro_chan_send(XrayIsolate *isolate, XrCoroutine *coro, XrC
     return block_result(XR_CORO_BLOCK_ERROR, xr_null(), false);
 }
 
-XrCoroBlockResult xr_coro_chan_recv(XrayIsolate *isolate, XrCoroutine *coro, XrChannel *ch,
-                                    XrSlotRef value_slot, XrSlotRef ok_slot, int64_t timeout_ms,
-                                    bool deliver) {
+XrCoroBlockResult xr_coro_chan_recv(XrCoroutine *coro, XrChannel *ch, XrSlotRef value_slot,
+                                    XrSlotRef ok_slot, int64_t timeout_ms, bool deliver) {
     XR_DCHECK(ch != NULL, "xr_coro_chan_recv: NULL channel");
 
     bool had_ext = coro && coro->ext != NULL;
+    XrRuntimeCore *core = channel_transfer_core(ch, coro);
 
     if (timeout_ms == 0) {
         XrValue recv_val;
-        if (xr_chan_try_recv(isolate, ch, &recv_val, coro)) {
+        if (xr_chan_try_recv_core(core, ch, &recv_val, coro)) {
             if (coro && !had_ext) {
                 XrRuntime *runtime = coro_stats_runtime(coro);
                 if (runtime)
@@ -388,8 +394,8 @@ XrCoroBlockResult xr_coro_chan_recv(XrayIsolate *isolate, XrCoroutine *coro, XrC
             if (runtime)
                 xr_sched_metric_inc(runtime, &runtime->sched_stats.vm_chan_recv_fast_no_ext_count);
         }
-        record_channel_ownership_metric(isolate, recv_val, true);
-        recv_val = xr_chan_copy_recv(isolate, recv_val, coro);
+        record_channel_ownership_metric(channel_transfer_stats_runtime(ch, coro), recv_val, true);
+        recv_val = xr_chan_copy_recv_core(core, recv_val, coro);
         xr_slot_store_value(value_slot, recv_val);
         xr_slot_store_value(ok_slot, xr_bool(true));
         return block_result(XR_CORO_BLOCK_READY, recv_val, true);

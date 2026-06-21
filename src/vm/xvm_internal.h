@@ -392,8 +392,8 @@ XR_FUNC XrCoroutine *xr_current_coro(XrayIsolate *X);
 XR_FUNC void xr_coro_wake_waiter(XrayIsolate *X, XrCoroutine *coro);
 
 // Multicore runtime channel wake (auto fallback to single-thread mode)
-XR_FUNC XrCoroutine *xr_runtime_wake_channel(XrayIsolate *X, void *channel, bool wake_sender);
-XR_FUNC void xr_runtime_wake_channel_all(XrayIsolate *X, void *channel);
+XR_FUNC XrCoroutine *xr_runtime_wake_channel(XrRuntime *runtime, void *channel, bool wake_sender);
+XR_FUNC void xr_runtime_wake_channel_all(XrRuntime *runtime, void *channel);
 
 // Coroutine control
 XR_FUNC void xr_coro_cancel(XrCoroutine *coro);

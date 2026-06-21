@@ -753,7 +753,7 @@ XrChannel *xr_cluster_register_service(XrayIsolate *X, const char *name) {
     se->name[XR_SERVICE_NAME_MAX] = '\0';
 
     // Create a buffered channel for incoming requests
-    se->request_ch = xr_channel_new(X, 64);
+    se->request_ch = xr_channel_new_vm(X, 64);
     if (!se->request_ch) {
         xr_free(se);
         return NULL;
@@ -1025,7 +1025,7 @@ static XrValue cluster_channel_fn(XrayIsolate *X, XrValue *args, int argc) {
         }
     }
 
-    XrChannel *ch = xr_channel_new(X, buf_size);
+    XrChannel *ch = xr_channel_new_vm(X, buf_size);
     if (!ch)
         return xr_null();
 
@@ -1160,7 +1160,7 @@ static XrValue cluster_call_fn(XrayIsolate *X, XrValue *args, int argc) {
     if (se && se->request_ch) {
         // Local service: directly send to request channel
         uint64_t req_id = atomic_fetch_add(&c->next_request_id, 1);
-        XrChannel *rsp_ch = xr_channel_new(X, 1);
+        XrChannel *rsp_ch = xr_channel_new_vm(X, 1);
         if (!rsp_ch)
             return xr_null();
 
@@ -1526,7 +1526,7 @@ void xr_cluster_process_node(XrCluster *c, XrClusterNode *node) {
                         dc->owner_node = node;
                         dc->cluster = c;
                         // Create local buffered channel for receiving PUSH data
-                        dc->channel = xr_channel_new(c->isolate, remote_buf_size);
+                        dc->channel = xr_channel_new_vm(c->isolate, remote_buf_size);
                         if (dc->channel) {
                             dc->channel->name = dc->name;
                             dc->channel->dist = dc;

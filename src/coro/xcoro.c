@@ -793,12 +793,8 @@ static bool runtime_dispatch_channel_wake_to_first(XrRuntime *runtime, uint64_t 
     return false;
 }
 
-XrCoroutine *xr_runtime_wake_channel(XrayIsolate *X, void *channel, bool wake_sender) {
-    if (!X || !channel)
-        return NULL;
-
-    XrRuntime *runtime = (XrRuntime *) X->scheduler_runtime;
-    if (!runtime)
+XrCoroutine *xr_runtime_wake_channel(XrRuntime *runtime, void *channel, bool wake_sender) {
+    if (!runtime || !channel)
         return NULL;
 
     XrWorker *current = xr_current_worker();
@@ -843,12 +839,8 @@ XrCoroutine *xr_runtime_wake_channel(XrayIsolate *X, void *channel, bool wake_se
 // and wakes them via channel_wake_coro_ex().  This function handles:
 //   1. Select waiters (not in ch->sendq/recvq, only in blocked buckets)
 //   2. Cleanup of stale blocked bucket entries for timer-based waiters
-void xr_runtime_wake_channel_all(XrayIsolate *X, void *channel) {
-    if (!X || !channel)
-        return;
-
-    XrRuntime *runtime = (XrRuntime *) X->scheduler_runtime;
-    if (!runtime)
+void xr_runtime_wake_channel_all(XrRuntime *runtime, void *channel) {
+    if (!runtime || !channel)
         return;
 
     XrWorker *current = xr_current_worker();

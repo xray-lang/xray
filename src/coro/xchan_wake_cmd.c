@@ -349,7 +349,7 @@ static void worker_forward_chan_wakes(void *channel, bool wake_sender, int count
         return;
     XrChannel *ch = (XrChannel *) channel;
     for (int i = 0; i < count; i++) {
-        (void) xr_runtime_wake_channel(ch->isolate, channel, wake_sender);
+        (void) xr_runtime_wake_channel(ch->scheduler, channel, wake_sender);
     }
 }
 

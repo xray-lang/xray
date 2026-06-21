@@ -25,6 +25,7 @@
 #include "xworker.h"
 #include "../runtime/xisolate_api.h"
 #include "../runtime/xisolate_internal.h"
+#include "../runtime/core/xr_runtime_core.h"
 #include "../base/xchecks.h"
 #include "xdeep_copy.h"
 #include "../runtime/gc/xsystem_heap.h"
@@ -57,9 +58,16 @@ static inline void chan_try_deliver_recv(XrCoroutine *receiver, XrValue v) {
 }
 
 static XrRuntime *channel_runtime(XrChannel *ch) {
-    if (!ch || !ch->isolate || !ch->isolate->scheduler_runtime)
-        return NULL;
-    return (XrRuntime *) ch->isolate->scheduler_runtime;
+    return ch ? (XrRuntime *) ch->scheduler : NULL;
+}
+
+static XrRuntimeCore *channel_core(XrChannel *ch) {
+    return ch ? ch->core : NULL;
+}
+
+static XrChannelDistHooks *channel_dist_hooks(XrChannel *ch) {
+    XrayIsolate *host = ch ? ch->vm_host_isolate : NULL;
+    return host ? (XrChannelDistHooks *) host->channel_dist_hooks : NULL;
 }
 
 static XrRuntime *channel_stats_runtime(XrChannel *ch) {
@@ -69,11 +77,6 @@ static XrRuntime *channel_stats_runtime(XrChannel *ch) {
 
 static int64_t channel_now_ticks(XrChannel *ch) {
     return xr_runtime_now_ticks(channel_runtime(ch));
-}
-
-static int64_t isolate_now_ticks(XrayIsolate *X) {
-    XrRuntime *runtime = (X && X->scheduler_runtime) ? (XrRuntime *) X->scheduler_runtime : NULL;
-    return xr_runtime_now_ticks(runtime);
 }
 
 #define CHANNEL_METRIC_INC(ch, field)                                                              \
@@ -97,7 +100,7 @@ static void channel_arm_timeout_locked(XrChannel *ch, XrCoroutine *coro, int64_t
     if (!worker)
         return;
     xr_worker_add_sleep_timer(worker, coro, timeout_ms);
-    XrRuntime *runtime = ch && ch->isolate ? (XrRuntime *) ch->isolate->scheduler_runtime : NULL;
+    XrRuntime *runtime = channel_runtime(ch);
     if (runtime) {
         xr_sched_metric_inc(runtime, &runtime->sched_stats.timeout_event_block_count);
     }
@@ -547,17 +550,16 @@ static void channel_note_participant_locked(XrChannel *ch, XrCoroutine *coro, bo
     channel_record_kind_op_metric(runtime, worker_kind, true);
 }
 
-// Distributed channel hooks live on XrayIsolate::channel_dist_hooks.
-// Fetch via channel->isolate->channel_dist_hooks in the functions below.
+// Distributed channel hooks are VM-hosted today. Runtime-backed AOT channels
+// leave vm_host_isolate NULL and never consult these hooks.
 //
 // Channel close counter lives on XrSystemHeap::stats.channel_close_count
-// (mirrors channel_create_count; see xsystem_heap.h). Access via the
-// isolate-aware xr_channel_get_close_count(X) below.
+// (mirrors channel_create_count; see xsystem_heap.h).
 
-uint64_t xr_channel_get_close_count(struct XrayIsolate *X) {
-    if (!X || !xr_isolate_get_sys_heap(X))
+uint64_t xr_channel_get_close_count(XrRuntimeCore *core) {
+    if (!core || !core->sys_heap)
         return 0;
-    return atomic_load(&xr_isolate_get_sys_heap(X)->stats.channel_close_count);
+    return atomic_load(&core->sys_heap->stats.channel_close_count);
 }
 
 // ========== Wait Queue Implementation ==========
@@ -707,14 +709,13 @@ void xr_gc_destroy_channel(XrGCHeader *obj, struct XrCoroGC *owning_gc) {
 // buffer_size = 0: unbuffered sync channel
 // buffer_size > 0: buffered async channel
 // Channel is always allocated on system heap (shared across coroutines)
-XrChannel *xr_channel_new(struct XrayIsolate *X, uint32_t buffer_size) {
-    if (!X || !xr_isolate_get_sys_heap(X))
+XrChannel *xr_channel_new(XrRuntimeCore *core, XrRuntime *scheduler, uint32_t buffer_size) {
+    if (!core || !core->sys_heap)
         return NULL;
 
     // Single allocation: XrChannel + inline buffer (like Go's makechan)
     size_t alloc_size = sizeof(XrChannel) + (size_t) buffer_size * sizeof(XrValue);
-    XrChannel *ch =
-        (XrChannel *) xr_sysheap_alloc_shared(xr_isolate_get_sys_heap(X), alloc_size, XR_TCHANNEL);
+    XrChannel *ch = (XrChannel *) xr_sysheap_alloc_shared(core->sys_heap, alloc_size, XR_TCHANNEL);
     if (!ch)
         return NULL;
 
@@ -740,9 +741,18 @@ XrChannel *xr_channel_new(struct XrayIsolate *X, uint32_t buffer_size) {
     atomic_init(&ch->worker_kind, (int) initial_kind);
     ch->producer_coro_id = -1;
     ch->consumer_coro_id = -1;
-    ch->isolate = X;
+    ch->core = core;
+    ch->scheduler = scheduler;
 
-    atomic_fetch_add(&xr_isolate_get_sys_heap(X)->stats.channel_create_count, 1);
+    atomic_fetch_add(&core->sys_heap->stats.channel_create_count, 1);
+    return ch;
+}
+
+XrChannel *xr_channel_new_vm(XrayIsolate *X, uint32_t buffer_size) {
+    XrChannel *ch = xr_channel_new(xr_isolate_get_runtime_core(X),
+                                   xr_isolate_get_scheduler_runtime(X), buffer_size);
+    if (ch)
+        ch->vm_host_isolate = X;
     return ch;
 }
 
@@ -808,14 +818,13 @@ static void timer_channel_fire_cb(void *arg) {
 // Create Timer Channel
 // Returns a read-only channel that sends current time after timeout.
 // Uses the channel's embedded tw_timer for timer wheel registration.
-XrChannel *xr_channel_new_timer(struct XrayIsolate *X, int64_t timeout_ms) {
-    if (!X || !xr_isolate_get_sys_heap(X))
+XrChannel *xr_channel_new_timer(XrRuntimeCore *core, XrRuntime *scheduler, int64_t timeout_ms) {
+    if (!core || !core->sys_heap)
         return NULL;
 
     // Single allocation: XrChannel + 1-element inline buffer
     size_t alloc_size = sizeof(XrChannel) + sizeof(XrValue);
-    XrChannel *ch =
-        (XrChannel *) xr_sysheap_alloc_shared(xr_isolate_get_sys_heap(X), alloc_size, XR_TCHANNEL);
+    XrChannel *ch = (XrChannel *) xr_sysheap_alloc_shared(core->sys_heap, alloc_size, XR_TCHANNEL);
     if (!ch)
         return NULL;
 
@@ -851,7 +860,7 @@ XrChannel *xr_channel_new_timer(struct XrayIsolate *X, int64_t timeout_ms) {
     ch->timer_timeout_ms = timeout_ms;
 
     // Record start time
-    ch->timer_start_ticks = isolate_now_ticks(X);
+    ch->timer_start_ticks = xr_runtime_now_ticks(scheduler);
 
     atomic_store_explicit(&ch->timer_fired, false, memory_order_relaxed);
     atomic_store_explicit(&ch->timer_disposed, false, memory_order_relaxed);
@@ -867,9 +876,18 @@ XrChannel *xr_channel_new_timer(struct XrayIsolate *X, int64_t timeout_ms) {
     ch->elem_tid = 0;
     ch->dist = NULL;
     ch->name = NULL;
-    ch->isolate = X;
+    ch->core = core;
+    ch->scheduler = scheduler;
 
-    atomic_fetch_add(&xr_isolate_get_sys_heap(X)->stats.channel_create_count, 1);
+    atomic_fetch_add(&core->sys_heap->stats.channel_create_count, 1);
+    return ch;
+}
+
+XrChannel *xr_channel_new_timer_vm(XrayIsolate *X, int64_t timeout_ms) {
+    XrChannel *ch = xr_channel_new_timer(xr_isolate_get_runtime_core(X),
+                                         xr_isolate_get_scheduler_runtime(X), timeout_ms);
+    if (ch)
+        ch->vm_host_isolate = X;
     return ch;
 }
 
@@ -936,8 +954,9 @@ void xr_channel_timer_dispose(XrChannel *ch) {
     // Account this timer channel as cleaned up (mirrors channel_create_count in
     // xr_channel_new_timer) so the teardown leak check is not tripped by timer
     // channels, which are disposed rather than close()d.
-    if (ch->isolate && xr_isolate_get_sys_heap(ch->isolate)) {
-        atomic_fetch_add(&xr_isolate_get_sys_heap(ch->isolate)->stats.channel_close_count, 1);
+    XrRuntimeCore *core = channel_core(ch);
+    if (core && core->sys_heap) {
+        atomic_fetch_add(&core->sys_heap->stats.channel_close_count, 1);
     }
 
     XrWorker *worker = xr_current_worker();
@@ -973,7 +992,7 @@ void xr_channel_destroy(XrChannel *ch) {
         return;
 
     // Notify cluster layer before destroying
-    XrChannelDistHooks *hooks = ch->isolate ? ch->isolate->channel_dist_hooks : NULL;
+    XrChannelDistHooks *hooks = channel_dist_hooks(ch);
     if (ch->dist && hooks && hooks->destroy) {
         hooks->destroy(ch);
         ch->dist = NULL;
@@ -1008,9 +1027,9 @@ static void channel_finish_claimed_wake(XrCoroutine *coro, bool is_close, XrChan
                                         bool wake_sender);
 
 static void channel_wake_select_waiter(XrChannel *ch) {
-    if (!ch || !ch->isolate)
+    if (!ch || !ch->scheduler)
         return;
-    xr_runtime_wake_channel(ch->isolate, ch, false);
+    xr_runtime_wake_channel(ch->scheduler, ch, false);
 }
 
 static void channel_wake_select_waiter_if_present(XrChannel *ch) {
@@ -1170,7 +1189,7 @@ bool xr_channel_try_send(XrChannel *ch, XrValue value) {
     XR_DCHECK(ch != NULL, "channel is NULL");
 
     // Distributed channel: delegate to cluster hooks
-    XrChannelDistHooks *hooks = ch->isolate ? ch->isolate->channel_dist_hooks : NULL;
+    XrChannelDistHooks *hooks = channel_dist_hooks(ch);
     if (ch->dist && hooks && hooks->try_send) {
         return hooks->try_send(ch, value);
     }
@@ -1208,7 +1227,7 @@ XrValue xr_channel_try_recv(XrChannel *ch, bool *ok) {
     XR_DCHECK(ok != NULL, "ok pointer is NULL");
 
     // Distributed channel: delegate to cluster hooks
-    XrChannelDistHooks *hooks = ch->isolate ? ch->isolate->channel_dist_hooks : NULL;
+    XrChannelDistHooks *hooks = channel_dist_hooks(ch);
     if (ch->dist && hooks && hooks->try_recv) {
         return hooks->try_recv(ch, ok);
     }
@@ -1422,7 +1441,7 @@ void xr_channel_close(XrChannel *ch) {
     XR_DCHECK(ch != NULL, "channel is NULL");
 
     // Distributed channel: notify cluster before local close
-    XrChannelDistHooks *hooks = ch->isolate ? ch->isolate->channel_dist_hooks : NULL;
+    XrChannelDistHooks *hooks = channel_dist_hooks(ch);
     if (ch->dist && hooks && hooks->close) {
         hooks->close(ch);
     }
@@ -1436,8 +1455,9 @@ void xr_channel_close(XrChannel *ch) {
     }
 
     atomic_store_explicit(&ch->closed, true, memory_order_release);
-    if (ch->isolate && xr_isolate_get_sys_heap(ch->isolate)) {
-        atomic_fetch_add(&xr_isolate_get_sys_heap(ch->isolate)->stats.channel_close_count, 1);
+    XrRuntimeCore *core = channel_core(ch);
+    if (core && core->sys_heap) {
+        atomic_fetch_add(&core->sys_heap->stats.channel_close_count, 1);
     }
 
     // Collect all waiters, wake after releasing lock
@@ -1502,7 +1522,7 @@ void xr_channel_close(XrChannel *ch) {
                                           deferred_recv_waiters == 0);
     CHANNEL_METRIC_ADD(ch, chan_close_deferred_send_waiter_count, deferred_send_waiters);
     CHANNEL_METRIC_ADD(ch, chan_close_deferred_recv_waiter_count, deferred_recv_waiters);
-    xr_runtime_wake_channel_all(ch->isolate, ch);
+    xr_runtime_wake_channel_all(ch->scheduler, ch);
 }
 
 bool xr_channel_is_closed(XrChannel *ch) {
@@ -1522,7 +1542,7 @@ XrChanResult xr_channel_send(XrChannel *ch, XrValue value, XrCoroutine *coro, in
     XR_DCHECK(ch != NULL, "channel is NULL");
 
     // Distributed channel: delegate to cluster hooks
-    XrChannelDistHooks *hooks = ch->isolate ? ch->isolate->channel_dist_hooks : NULL;
+    XrChannelDistHooks *hooks = channel_dist_hooks(ch);
     if (ch->dist && hooks && hooks->send) {
         return (XrChanResult) hooks->send(ch, value, coro);
     }
@@ -1624,7 +1644,7 @@ XrChanResult xr_channel_recv_slot(XrChannel *ch, XrValue *out, XrCoroutine *coro
     XR_DCHECK(!deliver || timeout_ms < 0, "recv_slot: delivered resume cannot carry a timeout");
 
     // Distributed channel: delegate to cluster hooks
-    XrChannelDistHooks *hooks = ch->isolate ? ch->isolate->channel_dist_hooks : NULL;
+    XrChannelDistHooks *hooks = channel_dist_hooks(ch);
     if (ch->dist && hooks && hooks->recv) {
         return (XrChanResult) hooks->recv(ch, out, coro);
     }

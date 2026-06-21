@@ -69,6 +69,9 @@
 
 typedef struct XrCoroutine XrCoroutine;
 typedef struct XrCoroState XrCoroState;
+struct XrayIsolate;
+struct XrRuntime;
+struct XrRuntimeCore;
 
 /* ========== Channel Lock ========== */
 
@@ -199,8 +202,12 @@ typedef struct XrChannel {
     _Atomic(uint64_t) receiver_waiter_worker_mask;
     _Atomic(uint64_t) select_waiter_worker_mask;
 
-    /* === Owner Isolate (for dist hook dispatch + stats) === */
-    struct XrayIsolate *isolate;  // Set at xr_channel_new
+    /* === Runtime owner === */
+    struct XrRuntimeCore *core;
+    struct XrRuntime *scheduler;
+
+    /* Optional VM host binding for VM-only distributed-channel hooks. */
+    struct XrayIsolate *vm_host_isolate;
 } XrChannel;
 
 static inline uint64_t xr_channel_worker_bit(int worker_id) {
@@ -301,8 +308,12 @@ XR_FUNC void xr_channel_record_ready_wake_retarget_metric(struct XrRuntime *runt
 
 /* ========== Channel API ========== */
 
-XR_FUNC XrChannel *xr_channel_new(struct XrayIsolate *X, uint32_t buffer_size);
-XR_FUNC XrChannel *xr_channel_new_timer(struct XrayIsolate *X, int64_t timeout_ms);
+XR_FUNC XrChannel *xr_channel_new(struct XrRuntimeCore *core, struct XrRuntime *scheduler,
+                                  uint32_t buffer_size);
+XR_FUNC XrChannel *xr_channel_new_vm(struct XrayIsolate *X, uint32_t buffer_size);
+XR_FUNC XrChannel *xr_channel_new_timer(struct XrRuntimeCore *core, struct XrRuntime *scheduler,
+                                        int64_t timeout_ms);
+XR_FUNC XrChannel *xr_channel_new_timer_vm(struct XrayIsolate *X, int64_t timeout_ms);
 XR_FUNC void xr_channel_timer_arm(XrChannel *ch, XrTimerWheel *tw);
 // Release a select-owned timer channel (drops the select handle reference, and
 // cancels the still-armed wheel timer when on its owner worker). See design/885.
@@ -349,9 +360,9 @@ XR_FUNC XrChanResult xr_channel_recv_slot(XrChannel *ch, XrValue *out, struct Xr
 
 /* ========== Diagnostics ========== */
 
-// Get channel close count for this isolate (for leak detection).
+// Get channel close count for this runtime core (for leak detection).
 // Reads from XrSystemHeap::stats.channel_close_count.
-XR_FUNC uint64_t xr_channel_get_close_count(struct XrayIsolate *X);
+XR_FUNC uint64_t xr_channel_get_close_count(struct XrRuntimeCore *core);
 
 /* ========== Channel Value Macros ========== */
 

@@ -502,9 +502,9 @@ XR_FUNC void xr_coro_wake_waiter(struct XrayIsolate *X, XrCoroutine *coro);
 XR_FUNC void xr_coro_wake_scope_waiter(struct XrayIsolate *X, XrCoroutine *coro);
 
 // Channel wake (auto fallback to single-thread mode)
-XR_FUNC XrCoroutine *xr_runtime_wake_channel(struct XrayIsolate *X, void *channel,
+XR_FUNC XrCoroutine *xr_runtime_wake_channel(struct XrRuntime *runtime, void *channel,
                                              bool wake_sender);
-XR_FUNC void xr_runtime_wake_channel_all(struct XrayIsolate *X, void *channel);
+XR_FUNC void xr_runtime_wake_channel_all(struct XrRuntime *runtime, void *channel);
 
 // Control
 XR_FUNC void xr_coro_cancel(XrCoroutine *coro);

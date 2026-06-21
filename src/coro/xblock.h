@@ -21,6 +21,7 @@
 struct XrayIsolate;
 struct XrArray;
 struct XrCoroutine;
+struct XrRuntimeCore;
 struct XrTask;
 
 typedef enum {
@@ -50,21 +51,19 @@ XR_FUNC XrValue *xr_slot_value_address(XrSlotRef slot);
 XR_FUNC bool xr_coro_store_recv_value(struct XrCoroutine *coro, XrValue value);
 
 XR_FUNC XrCoroBlockResult xr_coro_chan_send_resume(struct XrCoroutine *coro, XrSlotRef result_slot);
-XR_FUNC XrCoroBlockResult xr_coro_chan_recv_resume(struct XrayIsolate *isolate,
-                                                   struct XrCoroutine *coro, XrSlotRef value_slot,
+XR_FUNC XrCoroBlockResult xr_coro_chan_recv_resume(struct XrCoroutine *coro, XrSlotRef value_slot,
                                                    XrSlotRef ok_slot);
 
-XR_FUNC XrCoroBlockResult xr_coro_chan_send(struct XrayIsolate *isolate, struct XrCoroutine *coro,
-                                            XrChannel *ch, XrValue value, XrSlotRef result_slot,
-                                            int64_t timeout_ms);
+XR_FUNC XrCoroBlockResult xr_coro_chan_send(struct XrCoroutine *coro, XrChannel *ch, XrValue value,
+                                            XrSlotRef result_slot, int64_t timeout_ms);
 /* deliver=true registers value_slot+ok_slot for waker-side delivery: when
  * the woken value needs no receive-side deep copy, the waker stores value+ok
  * directly and the coroutine can resume without replaying the channel
  * operation. Values that need a receive-side deep copy, timeout variants,
  * method-call and cfunc continuations keep the replay/resume protocol
  * and must pass deliver=false. */
-XR_FUNC XrCoroBlockResult xr_coro_chan_recv(struct XrayIsolate *isolate, struct XrCoroutine *coro,
-                                            XrChannel *ch, XrSlotRef value_slot, XrSlotRef ok_slot,
+XR_FUNC XrCoroBlockResult xr_coro_chan_recv(struct XrCoroutine *coro, XrChannel *ch,
+                                            XrSlotRef value_slot, XrSlotRef ok_slot,
                                             int64_t timeout_ms, bool deliver);
 
 XR_FUNC XrCoroBlockResult xr_coro_await_task_resume(struct XrCoroutine *coro, struct XrTask *task);

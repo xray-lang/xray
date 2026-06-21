@@ -248,7 +248,7 @@ TEST(channel_close_wakes_select_waiter_without_caller_fanout) {
     CloseFixture f;
     ASSERT_TRUE(close_fixture_init(&f));
 
-    XrChannel *ch = xr_channel_new(&f.isolate_storage, 0);
+    XrChannel *ch = xr_channel_new_vm(&f.isolate_storage, 0);
     ASSERT_NOT_NULL(ch);
 
     XrCoroutine coro;
@@ -298,7 +298,7 @@ TEST(channel_close_batches_select_waiter_wakes) {
     CloseFixture f;
     ASSERT_TRUE(close_fixture_init(&f));
 
-    XrChannel *ch = xr_channel_new(&f.isolate_storage, 0);
+    XrChannel *ch = xr_channel_new_vm(&f.isolate_storage, 0);
     ASSERT_NOT_NULL(ch);
 
     enum {
@@ -349,7 +349,7 @@ TEST(select_block_probes_already_closed_channel_without_ext) {
     CloseFixture f;
     ASSERT_TRUE(close_fixture_init(&f));
 
-    XrChannel *ch = xr_channel_new(&f.isolate_storage, 0);
+    XrChannel *ch = xr_channel_new_vm(&f.isolate_storage, 0);
     ASSERT_NOT_NULL(ch);
     xr_channel_close(ch);
 
@@ -380,7 +380,7 @@ TEST(select_waiter_cancel_unlinks_worker_buckets) {
     CloseFixture f;
     ASSERT_TRUE(close_fixture_init(&f));
 
-    XrChannel *ch = xr_channel_new(&f.isolate_storage, 0);
+    XrChannel *ch = xr_channel_new_vm(&f.isolate_storage, 0);
     ASSERT_NOT_NULL(ch);
 
     XrCoroutine waiter;
@@ -425,13 +425,13 @@ TEST(channel_ready_wake_dispatches_single_remote_worker) {
     WakeRouteFixture f;
     ASSERT_TRUE(wake_route_fixture_init(&f));
 
-    XrChannel *ch = xr_channel_new(&f.isolate_storage, 1);
+    XrChannel *ch = xr_channel_new_vm(&f.isolate_storage, 1);
     ASSERT_NOT_NULL(ch);
 
     uint64_t remote_waiters = ((uint64_t) 1 << 1) | ((uint64_t) 1 << 2);
     atomic_store_explicit(&ch->waiter_worker_mask, remote_waiters, memory_order_release);
 
-    ASSERT_NULL(xr_runtime_wake_channel(&f.isolate_storage, ch, false));
+    ASSERT_NULL(xr_runtime_wake_channel(&f.runtime, ch, false));
 
     ASSERT_EQ_INT((int) xr_sched_metric_load(&f.runtime.sched_stats.chan_wake_cmd_dispatch_count),
                   1);
@@ -453,7 +453,7 @@ TEST(channel_wake_command_batches_ready_waiters) {
     WakeRouteFixture f;
     ASSERT_TRUE(wake_route_fixture_init(&f));
 
-    XrChannel *ch = xr_channel_new(&f.isolate_storage, 0);
+    XrChannel *ch = xr_channel_new_vm(&f.isolate_storage, 0);
     ASSERT_NOT_NULL(ch);
 
     enum {
@@ -509,7 +509,7 @@ TEST(channel_direction_masks_refresh_after_partial_wake) {
     ASSERT_TRUE(close_fixture_init(&f));
     f.runtime.sched_stats_enabled = true;
 
-    XrChannel *ch = xr_channel_new(&f.isolate_storage, 0);
+    XrChannel *ch = xr_channel_new_vm(&f.isolate_storage, 0);
     ASSERT_NOT_NULL(ch);
 
     XrCoroutine sender;
@@ -565,7 +565,7 @@ TEST(channel_ready_wake_metrics_track_waiter_kind_and_direction) {
     ASSERT_TRUE(close_fixture_init(&f));
     f.runtime.sched_stats_enabled = true;
 
-    XrChannel *ch = xr_channel_new(&f.isolate_storage, 0);
+    XrChannel *ch = xr_channel_new_vm(&f.isolate_storage, 0);
     ASSERT_NOT_NULL(ch);
 
     XrCoroutine receiver;
@@ -625,7 +625,7 @@ TEST(channel_ready_wake_retarget_metrics_track_current_lifo_pull) {
     WakeRouteFixture f;
     ASSERT_TRUE(wake_route_fixture_init(&f));
 
-    XrChannel *ch = xr_channel_new(&f.isolate_storage, 0);
+    XrChannel *ch = xr_channel_new_vm(&f.isolate_storage, 0);
     ASSERT_NOT_NULL(ch);
 
     XrCoroutine receiver;
@@ -690,7 +690,7 @@ TEST(work_queue_recv_wake_uses_target_inbox_near_lifo_budget) {
     WakeRouteFixture f;
     ASSERT_TRUE(wake_route_fixture_init(&f));
 
-    XrChannel *ch = xr_channel_new(&f.isolate_storage, 1);
+    XrChannel *ch = xr_channel_new_vm(&f.isolate_storage, 1);
     ASSERT_NOT_NULL(ch);
 
     XrCoroutine receiver;
@@ -736,7 +736,7 @@ TEST(channel_block_metrics_track_waiter_kind_and_direction) {
     ASSERT_TRUE(close_fixture_init(&f));
     f.runtime.sched_stats_enabled = true;
 
-    XrChannel *send_ch = xr_channel_new(&f.isolate_storage, 0);
+    XrChannel *send_ch = xr_channel_new_vm(&f.isolate_storage, 0);
     ASSERT_NOT_NULL(send_ch);
 
     XrCoroutine sender;
@@ -760,7 +760,7 @@ TEST(channel_block_metrics_track_waiter_kind_and_direction) {
     xr_channel_destroy(send_ch);
     xr_sysheap_free_shared(send_ch, sizeof(XrChannel));
 
-    XrChannel *recv_ch = xr_channel_new(&f.isolate_storage, 0);
+    XrChannel *recv_ch = xr_channel_new_vm(&f.isolate_storage, 0);
     ASSERT_NOT_NULL(recv_ch);
 
     XrCoroutine receiver;
@@ -792,7 +792,7 @@ TEST(worker_block_clears_stale_bucket_link_before_reblock) {
     CloseFixture f;
     ASSERT_TRUE(close_fixture_init(&f));
 
-    XrChannel *ch = xr_channel_new(&f.isolate_storage, 0);
+    XrChannel *ch = xr_channel_new_vm(&f.isolate_storage, 0);
     ASSERT_NOT_NULL(ch);
 
     XrCoroutine receiver;
@@ -827,7 +827,7 @@ TEST(channel_shape_op_metrics_track_logical_and_worker_kinds) {
     ASSERT_TRUE(close_fixture_init(&f));
     f.runtime.sched_stats_enabled = true;
 
-    XrChannel *ch = xr_channel_new(&f.isolate_storage, 4);
+    XrChannel *ch = xr_channel_new_vm(&f.isolate_storage, 4);
     ASSERT_NOT_NULL(ch);
 
     XrCoroutine producer;
@@ -873,7 +873,7 @@ TEST(coro_channel_buffer_fast_paths_do_not_allocate_ext) {
     ASSERT_TRUE(close_fixture_init(&f));
     f.runtime.sched_stats_enabled = true;
 
-    XrChannel *send_ch = xr_channel_new(&f.isolate_storage, 1);
+    XrChannel *send_ch = xr_channel_new_vm(&f.isolate_storage, 1);
     ASSERT_NOT_NULL(send_ch);
     XrCoroutine sender;
     memset(&sender, 0, sizeof(sender));
@@ -884,14 +884,13 @@ TEST(coro_channel_buffer_fast_paths_do_not_allocate_ext) {
     atomic_store(&sender.affinity_p, 0);
 
     ASSERT_NULL(sender.ext);
-    XrCoroBlockResult sent =
-        xr_coro_chan_send(&f.isolate_storage, &sender, send_ch, xr_int(11), xr_slot_none(), -1);
+    XrCoroBlockResult sent = xr_coro_chan_send(&sender, send_ch, xr_int(11), xr_slot_none(), -1);
     ASSERT_EQ_INT((int) sent.kind, (int) XR_CORO_BLOCK_READY);
     ASSERT_NULL(sender.ext);
     ASSERT_EQ_INT((int) xr_sched_metric_load(&f.runtime.sched_stats.vm_chan_send_fast_no_ext_count),
                   1);
 
-    XrChannel *recv_ch = xr_channel_new(&f.isolate_storage, 1);
+    XrChannel *recv_ch = xr_channel_new_vm(&f.isolate_storage, 1);
     ASSERT_NOT_NULL(recv_ch);
     ASSERT_EQ_INT((int) xr_channel_send(recv_ch, xr_int(22), NULL, -1), (int) XR_CHAN_OK);
 
@@ -905,9 +904,8 @@ TEST(coro_channel_buffer_fast_paths_do_not_allocate_ext) {
 
     XrValue recv_value = xr_null();
     ASSERT_NULL(receiver.ext);
-    XrCoroBlockResult received =
-        xr_coro_chan_recv(&f.isolate_storage, &receiver, recv_ch, xr_slot_xvalue_ptr(&recv_value),
-                          xr_slot_none(), -1, false);
+    XrCoroBlockResult received = xr_coro_chan_recv(
+        &receiver, recv_ch, xr_slot_xvalue_ptr(&recv_value), xr_slot_none(), -1, false);
     ASSERT_EQ_INT((int) received.kind, (int) XR_CORO_BLOCK_READY);
     ASSERT_EQ_INT((int) XR_TO_INT(recv_value), 22);
     ASSERT_NULL(receiver.ext);
@@ -925,7 +923,7 @@ TEST(coro_channel_recv_sets_recv_slot_only_when_blocking) {
     CloseFixture f;
     ASSERT_TRUE(close_fixture_init(&f));
 
-    XrChannel *ch = xr_channel_new(&f.isolate_storage, 0);
+    XrChannel *ch = xr_channel_new_vm(&f.isolate_storage, 0);
     ASSERT_NOT_NULL(ch);
 
     XrCoroutine receiver;
@@ -938,9 +936,8 @@ TEST(coro_channel_recv_sets_recv_slot_only_when_blocking) {
 
     XrValue recv_value = xr_null();
     ASSERT_NULL(receiver.ext);
-    XrCoroBlockResult blocked =
-        xr_coro_chan_recv(&f.isolate_storage, &receiver, ch, xr_slot_xvalue_ptr(&recv_value),
-                          xr_slot_none(), -1, false);
+    XrCoroBlockResult blocked = xr_coro_chan_recv(&receiver, ch, xr_slot_xvalue_ptr(&recv_value),
+                                                  xr_slot_none(), -1, false);
     ASSERT_EQ_INT((int) blocked.kind, (int) XR_CORO_BLOCK_BLOCKED);
     ASSERT_NOT_NULL(receiver.ext);
     ASSERT_EQ_PTR(receiver.ext->recv_slot, &recv_value);
@@ -948,8 +945,8 @@ TEST(coro_channel_recv_sets_recv_slot_only_when_blocking) {
     ASSERT_EQ_PTR(receiver.ext->recv_slot_ref.base, &recv_value);
 
     xr_channel_close(ch);
-    XrCoroBlockResult resumed = xr_coro_chan_recv_resume(
-        &f.isolate_storage, &receiver, xr_slot_xvalue_ptr(&recv_value), xr_slot_none());
+    XrCoroBlockResult resumed =
+        xr_coro_chan_recv_resume(&receiver, xr_slot_xvalue_ptr(&recv_value), xr_slot_none());
     ASSERT_EQ_INT((int) resumed.kind, (int) XR_CORO_BLOCK_CLOSED);
 
     xr_channel_destroy(ch);
@@ -964,7 +961,7 @@ TEST(coro_channel_recv_delivered_wake_writes_value_and_ok_slots) {
     CloseFixture f;
     ASSERT_TRUE(close_fixture_init(&f));
 
-    XrChannel *ch = xr_channel_new(&f.isolate_storage, 0);
+    XrChannel *ch = xr_channel_new_vm(&f.isolate_storage, 0);
     ASSERT_NOT_NULL(ch);
 
     XrCoroutine receiver;
@@ -976,17 +973,15 @@ TEST(coro_channel_recv_delivered_wake_writes_value_and_ok_slots) {
     atomic_store(&receiver.affinity_p, 0);
 
     XrValue regs[2] = {xr_int(-1), xr_int(-1)};
-    XrCoroBlockResult blocked =
-        xr_coro_chan_recv(&f.isolate_storage, &receiver, ch, xr_slot_xvalue_ptr(&regs[0]),
-                          xr_slot_xvalue_ptr(&regs[1]), -1, true);
+    XrCoroBlockResult blocked = xr_coro_chan_recv(&receiver, ch, xr_slot_xvalue_ptr(&regs[0]),
+                                                  xr_slot_xvalue_ptr(&regs[1]), -1, true);
     ASSERT_EQ_INT((int) blocked.kind, (int) XR_CORO_BLOCK_BLOCKED);
     ASSERT_NOT_NULL(receiver.ext);
     ASSERT_EQ_INT((int) receiver.ext->chan_ok_slot_ref.kind, (int) XR_SLOT_XVALUE_PTR);
     ASSERT_EQ_PTR(receiver.ext->chan_ok_slot_ref.base, &regs[1]);
     ASSERT_FALSE(receiver.ext->chan_resume_delivered);
 
-    XrCoroBlockResult sent =
-        xr_coro_chan_send(&f.isolate_storage, NULL, ch, xr_int(99), xr_slot_none(), -1);
+    XrCoroBlockResult sent = xr_coro_chan_send(NULL, ch, xr_int(99), xr_slot_none(), -1);
     ASSERT_EQ_INT((int) sent.kind, (int) XR_CORO_BLOCK_READY);
     ASSERT_EQ_INT((int) XR_TO_INT(regs[0]), 99);
     ASSERT_TRUE(XR_IS_BOOL(regs[1]));
@@ -1008,7 +1003,7 @@ TEST(coro_channel_recv_delivery_gated_for_deep_copy_values) {
     CloseFixture f;
     ASSERT_TRUE(close_fixture_init(&f));
 
-    XrChannel *ch = xr_channel_new(&f.isolate_storage, 0);
+    XrChannel *ch = xr_channel_new_vm(&f.isolate_storage, 0);
     ASSERT_NOT_NULL(ch);
 
     XrCoroutine receiver;
@@ -1020,9 +1015,8 @@ TEST(coro_channel_recv_delivery_gated_for_deep_copy_values) {
     atomic_store(&receiver.affinity_p, 0);
 
     XrValue regs[2] = {xr_int(-1), xr_int(-1)};
-    XrCoroBlockResult blocked =
-        xr_coro_chan_recv(&f.isolate_storage, &receiver, ch, xr_slot_xvalue_ptr(&regs[0]),
-                          xr_slot_xvalue_ptr(&regs[1]), -1, true);
+    XrCoroBlockResult blocked = xr_coro_chan_recv(&receiver, ch, xr_slot_xvalue_ptr(&regs[0]),
+                                                  xr_slot_xvalue_ptr(&regs[1]), -1, true);
     ASSERT_EQ_INT((int) blocked.kind, (int) XR_CORO_BLOCK_BLOCKED);
     ASSERT_NOT_NULL(receiver.ext);
     ASSERT_FALSE(receiver.ext->chan_resume_delivered);
@@ -1052,7 +1046,7 @@ TEST(coro_channel_recv_close_wake_stays_on_replay_protocol) {
     CloseFixture f;
     ASSERT_TRUE(close_fixture_init(&f));
 
-    XrChannel *ch = xr_channel_new(&f.isolate_storage, 0);
+    XrChannel *ch = xr_channel_new_vm(&f.isolate_storage, 0);
     ASSERT_NOT_NULL(ch);
 
     XrCoroutine receiver;
@@ -1064,9 +1058,8 @@ TEST(coro_channel_recv_close_wake_stays_on_replay_protocol) {
     atomic_store(&receiver.affinity_p, 0);
 
     XrValue regs[2] = {xr_int(-1), xr_int(-1)};
-    XrCoroBlockResult blocked =
-        xr_coro_chan_recv(&f.isolate_storage, &receiver, ch, xr_slot_xvalue_ptr(&regs[0]),
-                          xr_slot_xvalue_ptr(&regs[1]), -1, true);
+    XrCoroBlockResult blocked = xr_coro_chan_recv(&receiver, ch, xr_slot_xvalue_ptr(&regs[0]),
+                                                  xr_slot_xvalue_ptr(&regs[1]), -1, true);
     ASSERT_EQ_INT((int) blocked.kind, (int) XR_CORO_BLOCK_BLOCKED);
     ASSERT_NOT_NULL(receiver.ext);
 
@@ -1075,8 +1068,8 @@ TEST(coro_channel_recv_close_wake_stays_on_replay_protocol) {
     ASSERT_EQ_INT((int) XR_TO_INT(regs[1]), -1);
     ASSERT_EQ_INT(xr_coro_resume_load(&receiver), XR_RESUME_CHANNEL_CLOSED);
 
-    XrCoroBlockResult resumed = xr_coro_chan_recv_resume(
-        &f.isolate_storage, &receiver, xr_slot_xvalue_ptr(&regs[0]), xr_slot_xvalue_ptr(&regs[1]));
+    XrCoroBlockResult resumed = xr_coro_chan_recv_resume(&receiver, xr_slot_xvalue_ptr(&regs[0]),
+                                                         xr_slot_xvalue_ptr(&regs[1]));
     ASSERT_EQ_INT((int) resumed.kind, (int) XR_CORO_BLOCK_CLOSED);
     ASSERT_TRUE(XR_IS_BOOL(regs[1]));
     ASSERT_FALSE(XR_TO_BOOL(regs[1]));
@@ -1092,7 +1085,7 @@ TEST(channel_wait_token_tracks_block_wake_and_resume) {
     CloseFixture f;
     ASSERT_TRUE(close_fixture_init(&f));
 
-    XrChannel *ch = xr_channel_new(&f.isolate_storage, 0);
+    XrChannel *ch = xr_channel_new_vm(&f.isolate_storage, 0);
     ASSERT_NOT_NULL(ch);
 
     XrCoroutine sender;
@@ -1138,7 +1131,7 @@ TEST(channel_timed_wait_cancels_timer_on_channel_wake) {
     CloseFixture f;
     ASSERT_TRUE(close_fixture_init(&f));
 
-    XrChannel *ch = xr_channel_new(&f.isolate_storage, 0);
+    XrChannel *ch = xr_channel_new_vm(&f.isolate_storage, 0);
     ASSERT_NOT_NULL(ch);
 
     XrCoroutine sender;
@@ -1180,7 +1173,7 @@ TEST(channel_notify_send_without_current_worker_routes_to_inbox) {
     CloseFixture f;
     ASSERT_TRUE(close_fixture_init(&f));
 
-    XrChannel *ch = xr_channel_new(&f.isolate_storage, 0);
+    XrChannel *ch = xr_channel_new_vm(&f.isolate_storage, 0);
     ASSERT_NOT_NULL(ch);
 
     XrCoroutine receiver;
@@ -1195,9 +1188,8 @@ TEST(channel_notify_send_without_current_worker_routes_to_inbox) {
     atomic_store(&receiver.affinity_p, 0);
 
     XrValue recv_value = xr_null();
-    XrCoroBlockResult blocked =
-        xr_coro_chan_recv(&f.isolate_storage, &receiver, ch, xr_slot_xvalue_ptr(&recv_value),
-                          xr_slot_none(), -1, false);
+    XrCoroBlockResult blocked = xr_coro_chan_recv(&receiver, ch, xr_slot_xvalue_ptr(&recv_value),
+                                                  xr_slot_none(), -1, false);
     ASSERT_EQ_INT((int) blocked.kind, (int) XR_CORO_BLOCK_BLOCKED);
 #if XR_CHAN_WAIT_TOKEN_CHECKS
     ASSERT_EQ_INT(atomic_load(&receiver_ext.chan_wait_token.state), XR_CHAN_WAIT_REGISTERED);
@@ -1223,8 +1215,8 @@ TEST(channel_notify_send_without_current_worker_routes_to_inbox) {
     ASSERT_TRUE(xr_mpsc_empty(&f.worker.p.inbox));
     ASSERT_EQ_PTR(xr_worker_pop(&f.worker), &receiver);
 
-    XrCoroBlockResult resumed = xr_coro_chan_recv_resume(
-        &f.isolate_storage, &receiver, xr_slot_xvalue_ptr(&recv_value), xr_slot_none());
+    XrCoroBlockResult resumed =
+        xr_coro_chan_recv_resume(&receiver, xr_slot_xvalue_ptr(&recv_value), xr_slot_none());
     ASSERT_EQ_INT((int) resumed.kind, (int) XR_CORO_BLOCK_READY);
     ASSERT_EQ_INT((int) XR_TO_INT(recv_value), 44);
 #if XR_CHAN_WAIT_TOKEN_CHECKS
@@ -1240,7 +1232,7 @@ TEST(channel_waiter_wake_claims_ready_once) {
     CloseFixture f;
     ASSERT_TRUE(close_fixture_init(&f));
 
-    XrChannel *ch = xr_channel_new(&f.isolate_storage, 0);
+    XrChannel *ch = xr_channel_new_vm(&f.isolate_storage, 0);
     ASSERT_NOT_NULL(ch);
 
     XrCoroutine receiver;
@@ -1255,9 +1247,8 @@ TEST(channel_waiter_wake_claims_ready_once) {
     atomic_store(&receiver.affinity_p, 0);
 
     XrValue recv_value = xr_null();
-    XrCoroBlockResult blocked =
-        xr_coro_chan_recv(&f.isolate_storage, &receiver, ch, xr_slot_xvalue_ptr(&recv_value),
-                          xr_slot_none(), -1, false);
+    XrCoroBlockResult blocked = xr_coro_chan_recv(&receiver, ch, xr_slot_xvalue_ptr(&recv_value),
+                                                  xr_slot_none(), -1, false);
     ASSERT_EQ_INT((int) blocked.kind, (int) XR_CORO_BLOCK_BLOCKED);
     ASSERT_TRUE(xr_coro_flags_has(&receiver, XR_CORO_FLG_BLOCKED));
     ASSERT_EQ_PTR(ch->recvq.first, &receiver);
@@ -1277,8 +1268,8 @@ TEST(channel_waiter_wake_claims_ready_once) {
     ASSERT_EQ_INT(xr_coro_resume_load(&receiver), XR_RESUME_CHANNEL);
     ASSERT_EQ_INT((int) XR_TO_INT(recv_value), 55);
 
-    XrCoroBlockResult resumed = xr_coro_chan_recv_resume(
-        &f.isolate_storage, &receiver, xr_slot_xvalue_ptr(&recv_value), xr_slot_none());
+    XrCoroBlockResult resumed =
+        xr_coro_chan_recv_resume(&receiver, xr_slot_xvalue_ptr(&recv_value), xr_slot_none());
     ASSERT_EQ_INT((int) resumed.kind, (int) XR_CORO_BLOCK_READY);
     ASSERT_EQ_INT((int) XR_TO_INT(recv_value), 55);
 #if XR_CHAN_WAIT_TOKEN_CHECKS
@@ -1294,7 +1285,7 @@ TEST(channel_waiter_cancel_unlinks_channel_and_worker_queues) {
     CloseFixture f;
     ASSERT_TRUE(close_fixture_init(&f));
 
-    XrChannel *ch = xr_channel_new(&f.isolate_storage, 0);
+    XrChannel *ch = xr_channel_new_vm(&f.isolate_storage, 0);
     ASSERT_NOT_NULL(ch);
 
     XrCoroutine sender;
@@ -1309,8 +1300,8 @@ TEST(channel_waiter_cancel_unlinks_channel_and_worker_queues) {
     atomic_store(&sender.affinity_p, 0);
 
     XrValue send_ok = xr_null();
-    XrCoroBlockResult blocked = xr_coro_chan_send(&f.isolate_storage, &sender, ch, xr_int(11),
-                                                  xr_slot_xvalue_ptr(&send_ok), -1);
+    XrCoroBlockResult blocked =
+        xr_coro_chan_send(&sender, ch, xr_int(11), xr_slot_xvalue_ptr(&send_ok), -1);
     ASSERT_EQ_INT((int) blocked.kind, (int) XR_CORO_BLOCK_BLOCKED);
     ASSERT_EQ_PTR(ch->sendq.first, &sender);
     ASSERT_EQ_PTR(ch->sendq.last, &sender);
@@ -1351,7 +1342,7 @@ TEST(channel_waiter_cancel_routes_foreign_owner_detach) {
     WakeRouteFixture f;
     ASSERT_TRUE(wake_route_fixture_init(&f));
 
-    XrChannel *ch = xr_channel_new(&f.isolate_storage, 0);
+    XrChannel *ch = xr_channel_new_vm(&f.isolate_storage, 0);
     ASSERT_NOT_NULL(ch);
 
     XrCoroutine sender;
@@ -1368,8 +1359,8 @@ TEST(channel_waiter_cancel_routes_foreign_owner_detach) {
     tls_current_worker = &f.workers[1];
     tls_current_machine = &f.machines[1];
     XrValue send_ok = xr_null();
-    XrCoroBlockResult blocked = xr_coro_chan_send(&f.isolate_storage, &sender, ch, xr_int(12),
-                                                  xr_slot_xvalue_ptr(&send_ok), -1);
+    XrCoroBlockResult blocked =
+        xr_coro_chan_send(&sender, ch, xr_int(12), xr_slot_xvalue_ptr(&send_ok), -1);
     ASSERT_EQ_INT((int) blocked.kind, (int) XR_CORO_BLOCK_BLOCKED);
     xr_worker_block(&f.workers[1], &sender);
     ASSERT_EQ_INT(f.workers[1].p.blocked_count, 1);
@@ -1410,7 +1401,7 @@ TEST(select_waiter_cancel_routes_foreign_owner_detach) {
     WakeRouteFixture f;
     ASSERT_TRUE(wake_route_fixture_init(&f));
 
-    XrChannel *ch = xr_channel_new(&f.isolate_storage, 0);
+    XrChannel *ch = xr_channel_new_vm(&f.isolate_storage, 0);
     ASSERT_NOT_NULL(ch);
 
     XrCoroutine waiter;
@@ -1714,7 +1705,7 @@ TEST(timer_wait_token_tracks_channel_timeout_cancel_on_wake) {
     CloseFixture f;
     ASSERT_TRUE(close_fixture_init(&f));
 
-    XrChannel *ch = xr_channel_new(&f.isolate_storage, 0);
+    XrChannel *ch = xr_channel_new_vm(&f.isolate_storage, 0);
     ASSERT_NOT_NULL(ch);
 
     XrCoroutine sender;
@@ -1729,8 +1720,8 @@ TEST(timer_wait_token_tracks_channel_timeout_cancel_on_wake) {
     atomic_store(&sender.affinity_p, 0);
 
     XrValue send_ok = xr_null();
-    XrCoroBlockResult blocked = xr_coro_chan_send(&f.isolate_storage, &sender, ch, xr_int(7),
-                                                  xr_slot_xvalue_ptr(&send_ok), 1000);
+    XrCoroBlockResult blocked =
+        xr_coro_chan_send(&sender, ch, xr_int(7), xr_slot_xvalue_ptr(&send_ok), 1000);
     ASSERT_EQ_INT((int) blocked.kind, (int) XR_CORO_BLOCK_BLOCKED);
     ASSERT_EQ_INT(atomic_load(&sender_ext.wait.timer_token.state), XR_TIMER_WAIT_REGISTERED);
     ASSERT_EQ_INT(sender_ext.wait.timer_token.owner_worker_id, 0);
@@ -1760,8 +1751,8 @@ TEST(timer_wait_token_cancels_select_timer_on_channel_wake) {
     CloseFixture f;
     ASSERT_TRUE(close_fixture_init(&f));
 
-    XrChannel *ch = xr_channel_new(&f.isolate_storage, 0);
-    XrChannel *timer_ch = xr_channel_new_timer(&f.isolate_storage, 1000);
+    XrChannel *ch = xr_channel_new_vm(&f.isolate_storage, 0);
+    XrChannel *timer_ch = xr_channel_new_timer_vm(&f.isolate_storage, 1000);
     ASSERT_NOT_NULL(ch);
     ASSERT_NOT_NULL(timer_ch);
 

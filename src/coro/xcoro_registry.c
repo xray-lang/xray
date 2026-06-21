@@ -192,7 +192,7 @@ XrChannel *xr_coro_monitor(XrayIsolate *X, XrCoroRegistry *reg, const char *name
         return NULL;
 
     // Create notification channel (buffered=1 so send never blocks)
-    XrChannel *ch = xr_channel_new(X, 1);
+    XrChannel *ch = xr_channel_new_vm(X, 1);
     if (!ch)
         return NULL;
 
