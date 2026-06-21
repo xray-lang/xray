@@ -8,15 +8,20 @@
 #   XRAY_AOT_JOBS       parallel test workers (default: auto, capped by
 #                       XRAY_AOT_MAX_AUTO_JOBS=16; XRAY_TEST_JOBS also works)
 #   XRAY_AOT_CACHE_DIR  shared native object cache for this run
-#                       (default: <temp>/.xray-cache)
+#                       (default: build/.xray-test-cache/aot-diff/<xray-key>)
+#   XRAY_AOT_BIN_CACHE_DIR
+#                       cached native test binaries
+#                       (default: build/.xray-test-cache/aot-bin/<xray-key>/O<opt>)
 #   XRAY_AOT_TEST_OPT   native C compiler optimization level for correctness
-#                       gates (default: 3; set to 0 for compile-speed experiments)
+#                       gates (default: 0; set to 3 for optimized smoke/CI)
 #   XRAY_AOT_KEEP_WORK  keep temporary outputs on exit for debugging
 
 set -u
 
 XRAY="${1:-./build/xray}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+. "$PROJECT_DIR/tests/test_common.sh"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/aot_test.XXXXXX")" || {
     echo "error: cannot create temp dir" >&2
     exit 1
@@ -31,8 +36,9 @@ cleanup() {
 trap cleanup EXIT
 
 REQUESTED_JOBS="${XRAY_AOT_JOBS:-${XRAY_TEST_JOBS:-auto}}"
-AOT_CACHE="${XRAY_AOT_CACHE_DIR:-$WORK/.xray-cache}"
-AOT_OPT_LEVEL="${XRAY_AOT_TEST_OPT:-3}"
+AOT_OPT_LEVEL="${XRAY_AOT_TEST_OPT:-0}"
+AOT_CACHE="${XRAY_AOT_CACHE_DIR:-$(xray_test_stable_cache_dir "$PROJECT_DIR" "aot-diff" "$XRAY")}"
+AOT_BIN_CACHE="${XRAY_AOT_BIN_CACHE_DIR:-$(xray_test_stable_cache_dir "$PROJECT_DIR" "aot-bin" "$XRAY")/O$AOT_OPT_LEVEL}"
 JOBS=1
 PASS=0
 FAIL=0
@@ -96,12 +102,13 @@ safe_case_name() {
 configure_jobs "$REQUESTED_JOBS"
 echo "Jobs:   $JOBS"
 echo "Cache:  $AOT_CACHE"
+echo "BinCache: $AOT_BIN_CACHE"
 echo "AOT opt: -O$AOT_OPT_LEVEL"
 echo ""
 
 run_test() {
     local xr_file="$1"
-    local rel_name test_name safe_name case_work bin_out vm_out aot_out
+    local rel_name test_name safe_name case_key case_work bin_dir bin_out tmp_bin vm_out aot_out
     local test_args=()
     local vm_rc=0
     local aot_rc=0
@@ -109,13 +116,16 @@ run_test() {
     rel_name="$(rel_case_name "$xr_file")"
     test_name="${rel_name%.xr}"
     safe_name="$(safe_case_name "$rel_name")"
+    case_key="$(xray_test_case_dir_key "$xr_file")"
     case_work="$WORK/$safe_name"
     mkdir -p "$case_work" || {
         printf "  %-42sFAIL (cannot create work dir)\n" "$test_name"
         FAIL=$((FAIL + 1))
         return 1
     }
-    bin_out="$case_work/aot"
+    bin_dir="$AOT_BIN_CACHE/$safe_name-$case_key"
+    bin_out="$bin_dir/aot"
+    tmp_bin="$bin_dir/aot.$$"
     vm_out="$case_work/vm.out"
     aot_out="$case_work/aot.out"
 
@@ -126,20 +136,32 @@ run_test() {
     printf "  %-42s" "$test_name"
 
     # Step 1: Build .xr → native binary through the public AOT path.
-    local ok=0
-    for attempt in 1 2 3; do
-        if "$XRAY" build --native -O "$AOT_OPT_LEVEL" --cache-dir "$AOT_CACHE" "$xr_file" \
-                -o "$bin_out" \
-                >/dev/null 2>&1; then
-            ok=1; break
+    # The final executable is content-addressed by xray binary + local test
+    # sources + opt level. Warm reruns skip frontend/codegen/link entirely.
+    if [ ! -x "$bin_out" ]; then
+        mkdir -p "$bin_dir" || {
+            echo "FAIL (cannot create binary cache dir)"
+            FAIL=$((FAIL + 1))
+            return 1
+        }
+        local ok=0
+        for attempt in 1 2 3; do
+            rm -f "$tmp_bin"
+            if "$XRAY" build --native -O "$AOT_OPT_LEVEL" --cache-dir "$AOT_CACHE" "$xr_file" \
+                    -o "$tmp_bin" \
+                    >/dev/null 2>&1; then
+                mv "$tmp_bin" "$bin_out"
+                ok=1; break
+            fi
+        done
+        rm -f "$tmp_bin"
+        if [ "$ok" -eq 0 ]; then
+            # Positive dirs must build; a persistent failure is a regression,
+            # not a skip (expected-unsupported cases live under negative/).
+            echo "FAIL (native build failed after retries)"
+            FAIL=$((FAIL + 1))
+            return 1
         fi
-    done
-    if [ "$ok" -eq 0 ]; then
-        # Positive dirs must build; a persistent failure is a regression,
-        # not a skip (expected-unsupported cases live under negative/).
-        echo "FAIL (native build failed after retries)"
-        FAIL=$((FAIL + 1))
-        return 1
     fi
 
     # Step 2: Run VM and AOT, capturing stdout AND exit code (if-form keeps
@@ -316,10 +338,41 @@ run_section() {
     fi
 }
 
+append_section() {
+    local dir="$1"
+    local list="$2"
+    local f
+    [ -d "$dir" ] || return 0
+    for f in "$dir"/*.xr; do
+        [ -f "$f" ] && printf '%s\n' "$f" >>"$list"
+    done
+}
+
+run_positive_sections() {
+    local list="$WORK/positive.list"
+    : >"$list"
+    append_section "$SCRIPT_DIR/basic" "$list"
+    append_section "$SCRIPT_DIR/modules" "$list"
+    append_section "$SCRIPT_DIR/coro" "$list"
+
+    if [ ! -s "$list" ]; then
+        return 0
+    fi
+
+    echo "--- positive ---"
+    if [ "$JOBS" -le 1 ]; then
+        while IFS= read -r f; do
+            [ -n "$f" ] || continue
+            run_case_file "positive" "$f"
+        done <"$list"
+    else
+        run_list_parallel "positive" "$list" "$JOBS"
+    fi
+    echo ""
+}
+
 # Run all .xr files in test directories
-run_section "basic" "positive" "$SCRIPT_DIR/basic"
-run_section "modules" "positive" "$SCRIPT_DIR/modules"
-run_section "coro" "positive" "$SCRIPT_DIR/coro"
+run_positive_sections
 run_section "negative" "negative" "$SCRIPT_DIR/negative"
 
 echo "=== Results: $PASS passed, $FAIL failed, $SKIP skipped ==="
