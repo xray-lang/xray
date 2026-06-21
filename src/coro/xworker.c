@@ -34,7 +34,6 @@
 #include "../base/xlog.h"
 #include "../runtime/gc/xregion.h"
 #include "../runtime/gc/xcoro_gc.h"
-#include "../runtime/xisolate_api.h"
 #include "../io/xio_runtime.h"  // xr_io_runtime_new / xr_io_runtime_free
 #include <stdlib.h>
 #include <string.h>
@@ -335,7 +334,7 @@ XrSchedulerRuntime *xr_scheduler_runtime_new(XrRuntimeCore *core, int num_worker
         return NULL;
 
     runtime->core = core;
-    runtime->isolate = NULL;
+    runtime->host = (XrSchedulerHost) {0};
     runtime->worker_count = num_workers;
     runtime->deterministic_sched = deterministic;
     runtime->deterministic_seed =
@@ -446,14 +445,16 @@ XrSchedulerRuntime *xr_scheduler_runtime_new(XrRuntimeCore *core, int num_worker
     return runtime;
 }
 
-void xr_scheduler_runtime_attach_isolate(XrSchedulerRuntime *runtime, XrayIsolate *isolate) {
+void xr_scheduler_runtime_attach_host(XrSchedulerRuntime *runtime, const XrSchedulerHost *host) {
     if (!runtime)
         return;
-    if (isolate) {
-        XR_DCHECK(xr_isolate_get_runtime_core(isolate) == runtime->core,
-                  "scheduler_runtime_attach_isolate: isolate core mismatch");
-    }
-    runtime->isolate = isolate;
+    runtime->host = host ? *host : (XrSchedulerHost) {0};
+}
+
+void xr_scheduler_runtime_clear_host(XrSchedulerRuntime *runtime) {
+    if (!runtime)
+        return;
+    runtime->host = (XrSchedulerHost) {0};
 }
 
 // Destroy scheduler Runtime
@@ -538,7 +539,10 @@ void xr_scheduler_runtime_delete(XrSchedulerRuntime *runtime) {
 
     stage_start_ns = xr_time_monotonic_ns();
     XrTask *deferred_tasks = xr_task_runtime_detach_all(runtime, &deferred_task_count);
-    xr_task_isolate_adopt_deferred(runtime->isolate, deferred_tasks, deferred_task_count);
+    if (deferred_tasks &&
+        !xr_scheduler_host_adopt_deferred_tasks(runtime, deferred_tasks, deferred_task_count)) {
+        xr_task_destroy_list(deferred_tasks);
+    }
     xr_mutex_destroy(&runtime->task_lock);
     task_defer_ms = teardown_elapsed_ms(stage_start_ns);
 

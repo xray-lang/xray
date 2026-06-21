@@ -427,17 +427,14 @@ void xr_task_finalize(XrTask *task, uint8_t final_state) {
      * task's executor and there is no such caller. Resolve isolate via the
      * executor coroutine; fall back to current worker if the executor was
      * already detached (we are running on a worker thread either way). */
-    XrayIsolate *X = NULL;
     XrCoroutine *executor = xr_task_executor_peek(task);
-    if (executor)
-        X = executor->isolate;
-    if (!X) {
+    XrRuntime *runtime = executor ? xr_coro_scheduler(executor) : NULL;
+    if (!runtime) {
         XrWorker *w = xr_current_worker();
         if (w && w->p.runtime)
-            X = w->p.runtime->isolate;
+            runtime = w->p.runtime;
     }
-    if (X)
-        xr_task_wake_waiter(X, task);
+    xr_scheduler_host_wake_task_waiter(runtime, task);
 }
 
 void xr_task_child_completed(XrTask *parent, XrTask *child) {

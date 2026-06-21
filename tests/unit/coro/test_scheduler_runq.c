@@ -68,7 +68,7 @@ static void fixture_init_runtime(XrRuntime *runtime, XrayIsolate *isolate, XrWor
                                  XrMachine *machines, int worker_count) {
     memset(runtime, 0, sizeof(*runtime));
     runtime->core = isolate ? isolate->core_rt : NULL;
-    runtime->isolate = isolate;
+    xr_scheduler_runtime_attach_isolate(runtime, isolate);
     runtime->worker_count = worker_count;
     runtime->workers = workers;
     runtime->machines = machines;
