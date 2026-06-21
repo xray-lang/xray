@@ -20,6 +20,7 @@
 #include "coro/xworker.h"
 #include "coro/xwork_queue.h"
 #include "coro/xyieldable.h"
+#include "runtime/class/xenum.h"
 #include "runtime/object/xarray.h"
 #include "runtime/xisolate_internal.h"
 #include <stdatomic.h>
@@ -383,6 +384,46 @@ TEST(aot_context_builtin_prefers_runtime_table) {
     xr_aot_runtime_delete(runtime);
 }
 
+TEST(aot_runtime_registers_prelude_enums_without_isolate) {
+    XrAotRuntimeConfig cfg;
+    xr_aot_runtime_config_init(&cfg);
+
+    XrAotRuntime *runtime = xr_aot_runtime_new(&cfg);
+    ASSERT_NOT_NULL(runtime);
+    ASSERT_NULL(xr_aot_runtime_core(runtime)->gc.isolate);
+
+    XrAotContext ctx;
+    memset(&ctx, 0, sizeof(ctx));
+    ctx.runtime = runtime;
+
+    XrValue recv_type_value = xr_aot_runtime_builtin(runtime, XR_GLOBAL_VAR_RECV);
+    ASSERT_TRUE(XR_IS_PTR(recv_type_value));
+    XrEnumType *recv_type = XR_TO_ENUM_TYPE(recv_type_value);
+    ASSERT_STR_EQ(recv_type->name, "Recv");
+    ASSERT_TRUE(recv_type->is_adt);
+    ASSERT_EQ_INT(recv_type->payload_counts[0], 1);
+
+    XrValue recv_value = xr_aot_load_builtin_field(&ctx, XR_GLOBAL_VAR_RECV, "Value");
+    const char *enum_name = NULL;
+    const char *member_name = NULL;
+    uint32_t member_index = 99;
+    bool is_adt = false;
+    int payload_count = -1;
+    ASSERT_TRUE(xr_aot_runtime_enum_value_info(recv_value, &enum_name, &member_name, &member_index,
+                                               &is_adt, &payload_count));
+    ASSERT_STR_EQ(enum_name, "Recv");
+    ASSERT_STR_EQ(member_name, "Value");
+    ASSERT_EQ_INT((int) member_index, 0);
+    ASSERT_TRUE(is_adt);
+    ASSERT_EQ_INT(payload_count, 1);
+
+    XrValue task_pending = xr_aot_load_builtin_field(&ctx, XR_GLOBAL_VAR_TASK_RESULT, "Pending");
+    ASSERT_EQ_INT(task_pending.tag, 24);
+    ASSERT_EQ_INT((int) task_pending.ext, 4);
+
+    xr_aot_runtime_delete(runtime);
+}
+
 TEST(aot_runtime_copy_context_uses_core_without_isolate) {
     XrAotRuntimeConfig cfg;
     xr_aot_runtime_config_init(&cfg);
@@ -623,6 +664,7 @@ RUN_TEST(aot_runtime_creates_scheduler_for_runtime_caps);
 RUN_TEST(aot_runtime_creates_isolate_free_aot_coroutine);
 RUN_TEST(aot_run_main_uses_runtime_without_isolate);
 RUN_TEST(aot_context_builtin_prefers_runtime_table);
+RUN_TEST(aot_runtime_registers_prelude_enums_without_isolate);
 RUN_TEST(aot_runtime_copy_context_uses_core_without_isolate);
 RUN_TEST(aot_result_group_uses_runtime_without_isolate);
 RUN_TEST(aot_work_queue_uses_runtime_owner_without_isolate);

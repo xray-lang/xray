@@ -392,14 +392,24 @@ static inline void xr_scheduler_host_coro_on_exit(XrRuntime *runtime, XrCoroutin
         runtime->host.ops->coro_on_exit(runtime->host.ctx, coro);
 }
 
+XR_FUNC void xr_coro_wake_scope_waiter_runtime(XrRuntime *runtime, XrCoroutine *coro);
+
 static inline void xr_scheduler_host_wake_scope_waiter(XrRuntime *runtime, XrCoroutine *coro) {
-    if (runtime && runtime->host.ops && runtime->host.ops->wake_scope_waiter)
+    if (runtime && runtime->host.ops && runtime->host.ops->wake_scope_waiter) {
         runtime->host.ops->wake_scope_waiter(runtime->host.ctx, coro);
+        return;
+    }
+    xr_coro_wake_scope_waiter_runtime(runtime, coro);
 }
 
+XR_FUNC void xr_coro_wake_waiter_runtime(XrRuntime *runtime, XrCoroutine *coro);
+
 static inline void xr_scheduler_host_wake_coro_waiter(XrRuntime *runtime, XrCoroutine *coro) {
-    if (runtime && runtime->host.ops && runtime->host.ops->wake_coro_waiter)
+    if (runtime && runtime->host.ops && runtime->host.ops->wake_coro_waiter) {
         runtime->host.ops->wake_coro_waiter(runtime->host.ctx, coro);
+        return;
+    }
+    xr_coro_wake_waiter_runtime(runtime, coro);
 }
 
 XR_FUNC void xr_task_wake_waiter_runtime(XrRuntime *runtime, struct XrTask *task);

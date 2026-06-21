@@ -42,6 +42,7 @@
 #include "../base/xmalloc.h"
 #include "../runtime/value/xtype.h"
 #include "../runtime/value/xffi_sig.h"
+#include "../coro/xaot_coro.h"
 #include "xrt_method_symbols.h"
 #include "xrt_hash.h"
 #include "../base/xmemstream.h"

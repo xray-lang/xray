@@ -18,6 +18,8 @@
 #include "../value/xvalue.h"
 #include <stdint.h>
 
+struct XrRuntimeCore;
+
 // Singleton enum member (e.g., Status.Success)
 // Layout-compatible with XrInstance + native body (0 fields).
 // GC tag is XR_TINSTANCE; class has builtin_kind == XR_BK_ENUM_VALUE.
@@ -70,15 +72,29 @@ typedef struct XrEnumType {
     bool is_adt;
     int max_payload;      // max(payload_counts[0..member_count-1])
     int *payload_counts;  // per-variant payload field count; NULL for simple enums
+
+    /* Core-only AOT/runtime enums create a minimal field-layout class without
+     * VM reflection registration. VM-created enums leave this false because
+     * their enum_class is owned by the class system. */
+    bool owns_enum_class;
 } XrEnumType;
 
 /* ========== Creation ========== */
 
 XR_FUNC XrEnumType *xr_enum_type_new(XrayIsolate *X, const char *name, int base_type,
                                      char **member_names, XrValue *member_values, int count);
+XR_FUNC XrEnumType *xr_enum_type_new_core(struct XrRuntimeCore *core, const char *name,
+                                          int base_type, char **member_names,
+                                          XrValue *member_values, int count);
 
 XR_FUNC XrEnumValue *xr_enum_value_new(XrayIsolate *X, const char *enum_name,
                                        const char *member_name, XrValue raw_value, uint32_t index);
+XR_FUNC XrEnumValue *xr_enum_value_new_core(struct XrRuntimeCore *core, const char *enum_name,
+                                            const char *member_name, XrValue raw_value,
+                                            uint32_t index);
+XR_FUNC bool xr_enum_type_set_adt_payloads(XrEnumType *enum_type, const int *payload_counts,
+                                           int count);
+XR_FUNC bool xr_enum_type_ensure_adt_class(XrEnumType *enum_type);
 
 /* ========== Access ========== */
 
@@ -94,7 +110,6 @@ XR_FUNC const char *xr_enum_value_name(XrEnumValue *enum_val);
  * Returns NULL on allocation failure or if the enum is not ADT. */
 struct XrInstance;
 struct XrCoroutine;
-struct XrRuntimeCore;
 XR_FUNC struct XrInstance *xr_enum_adt_construct_core(struct XrRuntimeCore *core,
                                                       struct XrCoroutine *coro,
                                                       XrEnumType *enum_type, uint32_t member_index,

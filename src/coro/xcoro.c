@@ -1384,6 +1384,11 @@ void xr_coro_wake_scope_waiter(XrayIsolate *X, XrCoroutine *coro) {
     }
 }
 
+void xr_coro_wake_scope_waiter_runtime(XrRuntime *runtime, XrCoroutine *coro) {
+    (void) runtime;
+    xr_coro_wake_scope_waiter(NULL, coro);
+}
+
 // xr_coro_wake_waiter - Wake waiter when coroutine completes.
 //
 // All await coordination lives on XrTask. This function handles the
@@ -1394,7 +1399,7 @@ void xr_coro_wake_waiter_runtime(XrRuntime *runtime, XrCoroutine *coro) {
     if (!coro)
         return;
 
-    xr_coro_wake_scope_waiter(NULL, coro);
+    xr_coro_wake_scope_waiter_runtime(runtime, coro);
     wake_waiter_notify_task(runtime, coro);
 }
 

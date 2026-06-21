@@ -123,6 +123,49 @@ static bool aot_caps_need_scheduler(uint32_t caps) {
                     XR_AOT_CAP_WORK_QUEUE | XR_AOT_CAP_RESULT_GROUP)) != 0;
 }
 
+static XrEnumType *aot_runtime_register_prelude_enum(XrAotRuntime *runtime, int builtin_index,
+                                                     const char *name, char **members,
+                                                     int member_count, const int *payload_counts) {
+    if (!runtime || !runtime->core)
+        return NULL;
+
+    XrValue values[8];
+    if (member_count <= 0 || member_count > (int) (sizeof(values) / sizeof(values[0])))
+        return NULL;
+    for (int i = 0; i < member_count; i++)
+        values[i] = XR_FROM_INT(i);
+
+    XrEnumType *type =
+        xr_enum_type_new_core(runtime->core, name, XR_TINT, members, values, member_count);
+    if (!type)
+        return NULL;
+    if (payload_counts && !xr_enum_type_set_adt_payloads(type, payload_counts, member_count))
+        return NULL;
+    xr_aot_runtime_set_builtin(runtime, builtin_index, XR_FROM_PTR(type));
+    return type;
+}
+
+static bool aot_runtime_register_prelude_enums(XrAotRuntime *runtime) {
+    char *ordering_members[] = {"Relaxed", "Acquire", "Release", "AcquireRelease", "SeqCst"};
+    char *recv_members[] = {"Value", "Empty", "Timeout", "Closed"};
+    char *send_result_members[] = {"Sent", "Full", "Timeout", "Closed"};
+    char *task_result_members[] = {"Success", "Failed", "Cancelled", "Timeout", "Pending"};
+    char *task_status_members[] = {"Pending", "Running", "Success", "Failed", "Cancelled"};
+    const int recv_payloads[] = {1, 0, 0, 0};
+    const int task_result_payloads[] = {1, 1, 0, 0, 0};
+
+    return aot_runtime_register_prelude_enum(runtime, XR_GLOBAL_VAR_ORDERING, "Ordering",
+                                             ordering_members, 5, NULL) &&
+           aot_runtime_register_prelude_enum(runtime, XR_GLOBAL_VAR_RECV, "Recv", recv_members, 4,
+                                             recv_payloads) &&
+           aot_runtime_register_prelude_enum(runtime, XR_GLOBAL_VAR_SEND_RESULT, "SendResult",
+                                             send_result_members, 4, NULL) &&
+           aot_runtime_register_prelude_enum(runtime, XR_GLOBAL_VAR_TASK_RESULT, "TaskResult",
+                                             task_result_members, 5, task_result_payloads) &&
+           aot_runtime_register_prelude_enum(runtime, XR_GLOBAL_VAR_TASK_STATUS, "TaskStatus",
+                                             task_status_members, 5, NULL);
+}
+
 static void *aot_host_backend_context(void *ctx) {
     return ctx;
 }
@@ -251,6 +294,8 @@ XrAotRuntime *xr_aot_runtime_new(const XrAotRuntimeConfig *cfg) {
     if (!runtime->core)
         goto fail;
     xr_script_info_set(&runtime->core->script_info, local_cfg.file, local_cfg.argc, local_cfg.argv);
+    if (!aot_runtime_register_prelude_enums(runtime))
+        goto fail;
 
     if (aot_caps_need_scheduler(runtime->caps)) {
         runtime->scheduler = xr_scheduler_runtime_new(runtime->core, local_cfg.scheduler_workers);
@@ -309,6 +354,49 @@ void xr_aot_runtime_set_builtin(XrAotRuntime *runtime, int32_t index, XrValue va
     runtime->builtins[index] = value;
 }
 
+static bool aot_value_is_runtime_instance(XrValue value);
+
+static bool aot_builtin_index_is_prelude_enum(int32_t index) {
+    return index == XR_GLOBAL_VAR_ORDERING || index == XR_GLOBAL_VAR_RECV ||
+           index == XR_GLOBAL_VAR_SEND_RESULT || index == XR_GLOBAL_VAR_TASK_RESULT ||
+           index == XR_GLOBAL_VAR_TASK_STATUS;
+}
+
+static XrValue aot_runtime_process_field(const XrAotContext *ctx, const char *field) {
+    if (!ctx || !ctx->runtime || !field)
+        return XR_NULL_VAL;
+    XrRuntimeCore *core = xr_aot_runtime_core(ctx->runtime);
+    if (!core)
+        return XR_NULL_VAL;
+
+    XrScriptInfo *info = &core->script_info;
+    if (strcmp(field, "args") == 0) {
+        int argc = info->argc > 0 ? info->argc : 0;
+        XrArray *args = xr_array_new_shared_core(core, argc);
+        if (!args)
+            return XR_NULL_VAL;
+        for (int i = 0; i < argc; i++) {
+            const char *arg = info->argv && info->argv[i] ? info->argv[i] : "";
+            XrString *s = xr_string_intern_core(core, arg, strlen(arg), 0);
+            xr_array_push(args, s ? xr_string_value(s) : XR_NULL_VAL);
+        }
+        return XR_FROM_PTR(args);
+    }
+
+    const char *text = NULL;
+    if (strcmp(field, "file") == 0) {
+        text = info->file;
+    } else if (strcmp(field, "dir") == 0) {
+        text = NULL;
+    } else {
+        return XR_NULL_VAL;
+    }
+    if (!text)
+        return XR_NULL_VAL;
+    XrString *s = xr_string_intern_core(core, text, strlen(text), 0);
+    return s ? xr_string_value(s) : XR_NULL_VAL;
+}
+
 void xr_aot_trace_frame_value(void *visitor, XrValue value) {
     if (!visitor || !XR_IS_PTR(value))
         return;
@@ -338,12 +426,16 @@ XrValue xr_aot_load_builtin_field(const XrAotContext *ctx, int32_t index, const 
         return XR_NULL_VAL;
 
     XrValue builtin = xr_aot_get_builtin(ctx, index);
-    if (XR_IS_PTR(builtin) && XR_HEAP_TYPE(builtin) == XR_TINSTANCE && builtin.ptr) {
+    if (aot_value_is_runtime_instance(builtin)) {
         XrGCHeader *gc = (XrGCHeader *) builtin.ptr;
         if (XR_GC_GET_TYPE(gc) == XR_TINSTANCE) {
             XrInstance *inst = xr_value_to_instance(builtin);
-            if (inst && inst->klass && inst->klass->builtin_kind == XR_BK_ENUM_TYPE) {
-                XrEnumType *enum_type = (XrEnumType *) inst;
+            XrEnumType *enum_type = (XrEnumType *) inst;
+            bool is_enum_type =
+                inst && ((inst->klass && inst->klass->builtin_kind == XR_BK_ENUM_TYPE) ||
+                         (aot_builtin_index_is_prelude_enum(index) && enum_type->members &&
+                          enum_type->member_count > 0));
+            if (is_enum_type) {
                 for (uint32_t i = 0; i < enum_type->member_count; i++) {
                     if (enum_type->members[i].name &&
                         strcmp(enum_type->members[i].name, field) == 0 &&
@@ -367,6 +459,10 @@ XrValue xr_aot_load_builtin_field(const XrAotContext *ctx, int32_t index, const 
     if (index != XR_GLOBAL_VAR_PROCESS)
         return XR_NULL_VAL;
 
+    XrValue runtime_field = aot_runtime_process_field(ctx, field);
+    if (!XR_IS_NULL(runtime_field))
+        return runtime_field;
+
     XrValue process = builtin;
     if (!XR_IS_INSTANCE(process))
         return XR_NULL_VAL;
@@ -385,7 +481,7 @@ XrValue xr_aot_load_builtin_field(const XrAotContext *ctx, int32_t index, const 
 }
 
 static bool aot_value_is_runtime_instance(XrValue value) {
-    if (!XR_IS_PTR(value) || XR_HEAP_TYPE(value) != XR_TINSTANCE || !value.ptr)
+    if (!XR_IS_PTR(value) || !value.ptr)
         return false;
     XrGCHeader *gc = (XrGCHeader *) value.ptr;
     return XR_GC_GET_TYPE(gc) == XR_TINSTANCE;
@@ -396,11 +492,15 @@ bool xr_aot_runtime_enum_value_info(XrValue value, const char **enum_name, const
     if (!aot_value_is_runtime_instance(value))
         return false;
     XrInstance *inst = xr_value_to_instance(value);
-    if (!inst || !inst->klass || inst->klass->builtin_kind != XR_BK_ENUM_VALUE)
+    if (!inst || (inst->klass && inst->klass->builtin_kind != XR_BK_ENUM_VALUE))
         return false;
 
     XrEnumValue *enum_value = (XrEnumValue *) inst;
     XrEnumType *parent = enum_value->parent_type;
+    if (!parent || enum_value->member_index >= parent->member_count ||
+        parent->members[enum_value->member_index].instance != enum_value) {
+        return false;
+    }
     if (enum_name)
         *enum_name = enum_value->enum_name ? enum_value->enum_name : "";
     if (member_name)

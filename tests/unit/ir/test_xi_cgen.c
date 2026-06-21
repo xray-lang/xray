@@ -4385,7 +4385,7 @@ TEST(cgen_coro_sleep_publishes_state_before_block) {
     xi_func_free(ir);
 }
 
-TEST(cgen_runtime_needed_main_uses_explicit_vm_bridge) {
+TEST(cgen_runtime_needed_main_uses_aot_runtime) {
     const char *src = "import time\n"
                       "time.sleep(5)\n";
 
@@ -4396,12 +4396,28 @@ TEST(cgen_runtime_needed_main_uses_explicit_vm_bridge) {
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "AOT sleep should generate");
-    assert(contains(code, "xr_aot_run_main_vm_bridge(X,") &&
-           "transition generated main must name the isolate bridge explicitly");
-    assert(!contains(code, "xr_aot_run_main(X,") &&
-           "transition generated main must not call the final runtime API with an isolate");
+    assert(contains(code, "XrAotRuntimeConfig runtime_cfg;") &&
+           "runtime-needed generated main must create an AOT runtime config");
+    assert(contains(code, "XrAotRuntime *rt = xr_aot_runtime_new(&runtime_cfg);") &&
+           "runtime-needed generated main must create XrAotRuntime directly");
+    assert(contains(code, "xrt_global_ctx.runtime = rt;") &&
+           "generated sync helpers must see the AOT runtime owner");
+    assert(contains(code, "xr_aot_run_main(rt,") &&
+           "generated coroutine main must call the final runtime API");
+    assert(contains(code, "xr_aot_runtime_delete(rt);") &&
+           "generated main must tear down XrAotRuntime directly");
+    assert(!contains(code, "XrayIsolateParams") &&
+           "generated main must not construct VM isolate params");
+    assert(!contains(code, "xray_isolate_new(") &&
+           "generated main must not construct a VM isolate");
+    assert(!contains(code, "xr_multicore_init(") &&
+           "generated main must not initialize scheduler through isolate");
+    assert(!contains(code, "xr_aot_run_main_vm_bridge(") &&
+           "generated main must not use the VM bridge entry");
+    assert(!contains(code, "xray_isolate_delete(") &&
+           "generated main must not tear down a VM isolate");
 
-    printf("  Generated explicit VM bridge main %zu bytes of C code\n", strlen(code));
+    printf("  Generated AOT runtime main %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
@@ -4717,6 +4733,11 @@ TEST(cgen_work_queue_native_methods_use_aot_helpers) {
            "WorkQueue.shardCount should read through the AOT helper");
     assert(contains(code, "xr_aot_work_queue_is_closed(") &&
            "WorkQueue.isClosed should read through the AOT helper");
+    assert(contains(code, "runtime_cfg.caps = XR_AOT_CAP_WORK_QUEUE;") &&
+           "sync WorkQueue main must create a work-queue-capable AOT runtime");
+    assert(contains(code, "xrt_global_ctx.runtime = rt;") &&
+           "sync WorkQueue helpers must receive a runtime-backed global context");
+    assert(!contains(code, "xray_isolate_new(") && "sync WorkQueue main must not use a VM isolate");
     assert(!contains(code, "xrt_method_0(") && !contains(code, "xrt_method_1(") &&
            "WorkQueue native methods must not fall back to dynamic method dispatch");
 
@@ -4909,7 +4930,7 @@ int main(void) {
     run_cgen_coro_scalar_channel_try_recv_returns_recv_enum();
     run_cgen_coro_select_try_recv_uses_ready_bit();
     run_cgen_coro_sleep_publishes_state_before_block();
-    run_cgen_runtime_needed_main_uses_explicit_vm_bridge();
+    run_cgen_runtime_needed_main_uses_aot_runtime();
     run_cgen_coro_select_publishes_state_before_block();
     run_cgen_coro_channel_timeout_publishes_state_before_block();
     run_cgen_coro_recv_slot_is_traced_as_frame_root();
