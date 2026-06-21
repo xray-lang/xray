@@ -32,6 +32,10 @@ if ! command -v lldb >/dev/null 2>&1; then
     skip "lldb not found"
 fi
 
+if ! xcrun -f debugserver >/dev/null 2>&1 && ! command -v debugserver >/dev/null 2>&1; then
+    skip "debugserver not found; install full Xcode or provide debugserver to run lldb smoke"
+fi
+
 DWARFDUMP="${LLVM_DWARFDUMP:-}"
 if [ -z "$DWARFDUMP" ]; then
     if command -v llvm-dwarfdump >/dev/null 2>&1; then

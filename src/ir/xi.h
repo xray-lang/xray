@@ -184,6 +184,7 @@ static inline XiInvariantMask xi_stage_invariants(XiStage s) {
  *  XI_CLASS_CREATE  XiClassData*         —
  *  XI_SCOPE_ENTER   —                    scope mode
  *  XI_SCOPE_EXIT    —                    scope mode
+ *  XI_YIELD         —                    0=immediate, >0=poll/reduction hint
  *  XI_ASSERT        loc string (char*)   0=assert_true, 1=assert_false
  *  XI_GET_BUILTIN   name string (char*)  global index
  *  XI_IMPORT_REF    XiImportRef*         resolved shared slot (-1=unresolved)
@@ -557,6 +558,10 @@ typedef enum {
 /* XI_GO aux_int bits. Low 8 bits carry link mode. */
 #define XI_GO_AUX_LINK_MASK 0xff
 #define XI_GO_AUX_ONE_SHOT_AWAIT (1 << 8)
+
+/* XI_YIELD aux_int values. */
+#define XI_YIELD_AUX_IMMEDIATE 0
+#define XI_YIELD_AUX_POLL 1
 
 /* ========== Upvalue Capture Info ========== */
 

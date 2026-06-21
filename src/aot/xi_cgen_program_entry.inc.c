@@ -128,7 +128,7 @@ XR_FUNC void xi_cgen_main(XiCgenCtx *ctx, FILE *out, XiModule **modules, int n, 
     if (entry_needs_runtime) {
         fprintf(out, "    XrayIsolateParams params;\n");
         fprintf(out, "    xray_isolate_params_init(&params);\n");
-        fprintf(out, "    xray_isolate_setup_full(&params);\n");
+        fprintf(out, "    xray_isolate_setup_runtime(&params);\n");
         fprintf(out, "    params.init_flags = XR_INIT_RUNTIME;\n");
         fprintf(out, "    XrayIsolate *X = xray_isolate_new(&params);\n");
         fprintf(out, "    if (!X) return 1;\n");
@@ -241,7 +241,7 @@ XR_FUNC void xi_cgen_program(XiCgenCtx *ctx, FILE *out, XiModule *module) {
         if (entry_needs_runtime) {
             fprintf(body, "    XrayIsolateParams params;\n");
             fprintf(body, "    xray_isolate_params_init(&params);\n");
-            fprintf(body, "    xray_isolate_setup_full(&params);\n");
+            fprintf(body, "    xray_isolate_setup_runtime(&params);\n");
             fprintf(body, "    params.init_flags = XR_INIT_RUNTIME;\n");
             fprintf(body, "    XrayIsolate *X = xray_isolate_new(&params);\n");
             fprintf(body, "    if (!X) return 1;\n");

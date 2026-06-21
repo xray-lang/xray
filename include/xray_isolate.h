@@ -98,6 +98,10 @@ XRAY_API void xray_isolate_params_init(XrayIsolateParams *params);
 // Bytecode-bundled executables skip this for minimal binary size.
 XRAY_API void xray_isolate_setup_full(XrayIsolateParams *params);
 
+// Setup coroutine runtime only (core classes + runtime ABI enums, no compiler/modules/prelude
+// import). Used by AOT-generated main() when coroutines or runtime-backed stdlib are needed.
+XRAY_API void xray_isolate_setup_runtime(XrayIsolateParams *params);
+
 // Destroy Isolate and free all resources. Safe to pass NULL.
 XRAY_API void xray_isolate_delete(XrayIsolate *isolate);
 

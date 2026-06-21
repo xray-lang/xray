@@ -1,0 +1,247 @@
+#!/bin/bash
+# AOT isolate/VM symbol gate for tasks 132/M0 + 133/I0.
+#
+# This gate has two modes by design:
+#   - freestanding AOT samples are hard failures if they link xray_core or carry
+#     isolate/VM/compiler/module-loader symbols.
+#   - runtime-backed samples record the current isolate/VM dependency as a
+#     baseline. Later 133/I3-I4 should flip these baseline checks into hard
+#     failures once XrAotRuntime no longer creates a VM isolate.
+
+set -u
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+XRAY="${1:-${XRAY_BIN:-$PROJECT_DIR/build/xray}}"
+WORK="$(mktemp -d "${TMPDIR:-/tmp}/xray_aot_isolate_symbols.XXXXXX")" || {
+    echo "FAIL: cannot create temporary directory" >&2
+    exit 1
+}
+CACHE="$WORK/.cache"
+PASS=0
+FAIL=0
+BASELINE=0
+
+# Keep this intentionally broad. Pure AOT binaries should not expose any public
+# isolate API, VM init/cleanup, source compiler entry, analyzer, or module loader
+# symbol. Darwin nm prefixes C symbols with '_', so every alternative allows it.
+FORBIDDEN_SYMBOL_RE='(^|[^[:alnum:]_])_?(xray_isolate_|xr_vm_|xr_parse|xr_compile|xanalyzer_|xr_load_module_)'
+
+cleanup() {
+    rm -rf "$WORK"
+}
+trap cleanup EXIT
+
+record_pass() {
+    echo "  PASS: $1"
+    PASS=$((PASS + 1))
+}
+
+record_fail() {
+    echo "  FAIL: $1"
+    FAIL=$((FAIL + 1))
+}
+
+record_baseline() {
+    echo "  BASELINE: $1"
+    BASELINE=$((BASELINE + 1))
+}
+
+print_log_tail() {
+    local log="$1"
+    if [ -f "$log" ]; then
+        sed 's/^/      /' "$log" | sed -n '1,120p'
+    fi
+}
+
+build_native() {
+    local src="$1"
+    local out="$2"
+    local log="$3"
+    "$XRAY" build --native --rebuild --dump-link-command --cache-dir "$CACHE" -o "$out" "$src" \
+        >"$log" 2>&1
+}
+
+binary_size() {
+    local bin="$1"
+    if stat -f%z "$bin" >/dev/null 2>&1; then
+        stat -f%z "$bin"
+    else
+        stat -c%s "$bin"
+    fi
+}
+
+dump_symbols() {
+    local bin="$1"
+    local symbols="$2"
+    case "$(uname -s 2>/dev/null)" in
+        Darwin)
+            nm -U "$bin" >"$symbols" 2>"$symbols.err"
+            ;;
+        *)
+            nm "$bin" >"$symbols" 2>"$symbols.err"
+            ;;
+    esac
+}
+
+expect_log_not_contains() {
+    local log="$1"
+    local needle="$2"
+    local name="$3"
+    if grep -Fq -- "$needle" "$log"; then
+        record_fail "$name"
+        print_log_tail "$log"
+    else
+        record_pass "$name"
+    fi
+}
+
+expect_output() {
+    local bin="$1"
+    local want="$2"
+    local name="$3"
+    local got
+    got="$("$bin" 2>/dev/null)"
+    if [ "$got" = "$want" ]; then
+        record_pass "$name"
+    else
+        record_fail "$name: output '$got' != '$want'"
+    fi
+}
+
+check_no_forbidden_symbols() {
+    local bin="$1"
+    local slug="$2"
+    local name="$3"
+    local symbols="$WORK/$slug.symbols"
+    local hits="$WORK/$slug.forbidden"
+
+    if ! dump_symbols "$bin" "$symbols"; then
+        record_fail "$name: nm failed"
+        print_log_tail "$symbols.err"
+        return
+    fi
+
+    if grep -E "$FORBIDDEN_SYMBOL_RE" "$symbols" >"$hits"; then
+        record_fail "$name: forbidden isolate/VM/compiler symbols present"
+        sed 's/^/      /' "$hits" | sed -n '1,60p'
+    else
+        record_pass "$name: no forbidden isolate/VM/compiler symbols"
+    fi
+}
+
+record_runtime_symbol_baseline() {
+    local bin="$1"
+    local slug="$2"
+    local name="$3"
+    local symbols="$WORK/$slug.symbols"
+    local hits="$WORK/$slug.forbidden"
+    local count
+
+    if ! dump_symbols "$bin" "$symbols"; then
+        record_fail "$name: nm failed"
+        print_log_tail "$symbols.err"
+        return
+    fi
+
+    if grep -E "$FORBIDDEN_SYMBOL_RE" "$symbols" >"$hits"; then
+        count="$(wc -l <"$hits" | tr -d ' ')"
+        record_baseline "$name: currently has $count isolate/VM/compiler symbols"
+        sed 's/^/      /' "$hits" | sed -n '1,40p'
+    else
+        record_pass "$name: no forbidden isolate/VM/compiler symbols"
+    fi
+}
+
+run_freestanding_case() {
+    local slug="$1"
+    local name="$2"
+    local src="$3"
+    local want_output="$4"
+    local bin="$WORK/$slug"
+    local log="$WORK/$slug.log"
+
+    echo ""
+    echo "-- $name"
+    if build_native "$src" "$bin" "$log"; then
+        echo "  size: $(binary_size "$bin") bytes"
+        expect_log_not_contains "$log" "-lxray_core" "$name: does not link xray_core"
+        check_no_forbidden_symbols "$bin" "$slug" "$name"
+        if [ -n "$want_output" ]; then
+            expect_output "$bin" "$want_output" "$name: binary output"
+        fi
+    else
+        record_fail "$name: build failed"
+        print_log_tail "$log"
+    fi
+}
+
+run_runtime_baseline_case() {
+    local slug="$1"
+    local name="$2"
+    local src="$3"
+    local want_output="$4"
+    local bin="$WORK/$slug"
+    local log="$WORK/$slug.log"
+
+    echo ""
+    echo "-- $name"
+    if build_native "$src" "$bin" "$log"; then
+        echo "  size: $(binary_size "$bin") bytes"
+        if grep -Fq -- "-lxray_core" "$log"; then
+            record_baseline "$name: currently links xray_core"
+        else
+            record_pass "$name: does not link xray_core"
+        fi
+        record_runtime_symbol_baseline "$bin" "$slug" "$name"
+        if [ -n "$want_output" ]; then
+            expect_output "$bin" "$want_output" "$name: binary output"
+        fi
+    else
+        record_fail "$name: build failed"
+        print_log_tail "$log"
+    fi
+}
+
+echo "=== AOT Isolate Symbol Gate ==="
+echo "Binary: $XRAY"
+echo ""
+
+if [ ! -x "$XRAY" ]; then
+    echo "FAIL: xray binary not executable: $XRAY" >&2
+    exit 1
+fi
+
+run_freestanding_case \
+    "core_math_single_symbol" \
+    "core-math-single-symbol" \
+    "$PROJECT_DIR/tests/aot/filetests/link/core_math_single_symbol.xr" \
+    "9.0"
+
+run_freestanding_case \
+    "system_time_queries" \
+    "system-time-queries" \
+    "$PROJECT_DIR/tests/aot/filetests/link/system_time_queries.xr" \
+    ""
+
+run_freestanding_case \
+    "core_crypto" \
+    "core-crypto" \
+    "$PROJECT_DIR/tests/aot/filetests/link/core_crypto.xr" \
+    ""
+
+run_runtime_baseline_case \
+    "runtime_time_sleep" \
+    "runtime-time-sleep" \
+    "$PROJECT_DIR/tests/aot/filetests/link/runtime_time.xr" \
+    "7"
+
+run_runtime_baseline_case \
+    "runtime_coro_minimal" \
+    "runtime-coro-minimal" \
+    "$PROJECT_DIR/tests/aot/coro/spawn_await_yield.xr" \
+    "42"
+
+echo ""
+echo "=== Results: $PASS passed, $BASELINE baseline, $FAIL failed ==="
+[ "$FAIL" -eq 0 ] && exit 0 || exit 1

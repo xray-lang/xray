@@ -45,11 +45,16 @@ echo -e "======================================${NC}"
 # --- Preconditions (skip, do not fail, when unmet) -------------------------
 skip() {
     echo -e "${YELLOW}SKIP${NC} — $1"
-    exit 0
+    exit 77
 }
 
 [ -f "$XRAY_BIN" ] || skip "xray binary not found at ${XRAY_BIN} (build first)"
 command -v python3 >/dev/null 2>&1 || skip "python3 not found"
+if [ "$(uname -s)" = "Darwin" ] &&
+        ! xcrun -f debugserver >/dev/null 2>&1 &&
+        ! command -v debugserver >/dev/null 2>&1; then
+    skip "debugserver not found; install full Xcode or provide debugserver to run native DAP tests"
+fi
 
 # Locate lldb-dap the same way the native bridge does.
 find_lldb_dap() {
