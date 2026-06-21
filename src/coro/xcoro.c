@@ -1111,16 +1111,14 @@ XrCoroutine *xr_current_coro(XrayIsolate *X) {
     return X->main_coro;
 }
 
-// xr_coro_ready - Wake coroutine
+// xr_scheduler_ready - Wake coroutine on an explicit scheduler.
 //
-// Put coroutine into run queue
-// next=true uses the run-next slot for locality.
-void xr_coro_ready(XrayIsolate *X, XrCoroutine *gp, bool next) {
-    if (!X || !gp)
+// Put coroutine into run queue. next=true uses the run-next slot for locality.
+void xr_scheduler_ready(XrRuntime *runtime, XrCoroutine *gp, bool next) {
+    if (!runtime || !gp)
         return;
 
-    XrRuntime *runtime = (XrRuntime *) X->vm.runtime;
-    if (!runtime || !runtime->workers || runtime->worker_count <= 0)
+    if (!runtime->workers || runtime->worker_count <= 0)
         return;
 
     XrWorker *worker = xr_current_worker();
@@ -1162,6 +1160,13 @@ void xr_coro_ready(XrayIsolate *X, XrCoroutine *gp, bool next) {
 
     // Wake one idle worker
     xr_runtime_wake_idle_worker(runtime);
+}
+
+// xr_coro_ready - VM-facing wake wrapper.
+void xr_coro_ready(XrayIsolate *X, XrCoroutine *gp, bool next) {
+    if (!X)
+        return;
+    xr_scheduler_ready((XrRuntime *) X->vm.runtime, gp, next);
 }
 
 /* ========== Scope Child List — Lock Helpers ==========
@@ -1277,7 +1282,7 @@ static void wake_waiter_unlink_from_scope_locked(XrCoroutine *coro, XrScopeConte
 /* Linked-mode failure propagation. Caller must hold scope->child_lock and
  * must have already unlinked the failing child, so the walk only visits
  * still-live siblings. Each sibling receives a cooperative cancel request. */
-static void wake_waiter_cancel_linked_siblings_locked(XrayIsolate *X, XrScopeContext *scope) {
+static void wake_waiter_cancel_linked_siblings_locked(XrScopeContext *scope) {
     for (XrCoroutine *sib = scope->first_child; sib; sib = xr_coro_scope_sibling(sib)) {
         if (xr_coro_flags_has(sib, XR_CORO_FLG_DONE))
             continue;
@@ -1293,7 +1298,7 @@ static void wake_waiter_cancel_linked_siblings_locked(XrayIsolate *X, XrScopeCon
          * scope->count so the scope owner is released. xr_coro_ready is a no-op
          * for a sibling that is not BLOCKED (claim_wake fails), so a running
          * sibling still stops cooperatively via the reduction poke above. */
-        xr_coro_ready(X, sib, false);
+        xr_scheduler_ready((XrRuntime *) xr_coro_scheduler(sib), sib, false);
     }
 }
 
@@ -1308,8 +1313,7 @@ static bool wake_waiter_scope_owner_ready(const XrScopeContext *scope, const XrC
     return xr_coro_flags_has(owner, XR_CORO_FLG_BLOCKED);
 }
 
-static void wake_waiter_finish_scope_completion(XrayIsolate *X, XrCoroutine *coro,
-                                                XrScopeContext *scope) {
+static void wake_waiter_finish_scope_completion(XrCoroutine *coro, XrScopeContext *scope) {
     XrCoroutine *owner = scope->owner;
     bool owner_waiting_scope = wake_waiter_scope_owner_ready(scope, owner);
     int remaining = atomic_fetch_sub(&scope->count, 1) - 1;
@@ -1318,22 +1322,21 @@ static void wake_waiter_finish_scope_completion(XrayIsolate *X, XrCoroutine *cor
         XrCoroWaitState *wait = xr_coro_wait_state(owner);
         if (wait)
             xr_scope_wait_token_resolve(&wait->scope_token);
-        xr_coro_ready(X, owner, true);
+        xr_scheduler_ready((XrRuntime *) xr_coro_scheduler(owner), owner, true);
     }
 }
 
-static void wake_waiter_handle_scope_completion(XrayIsolate *X, XrCoroutine *coro,
-                                                XrScopeContext *scope) {
+static void wake_waiter_handle_scope_completion(XrCoroutine *coro, XrScopeContext *scope) {
     scope_lock_acquire(scope);
     bool child_failed = wake_waiter_record_child_error_locked(coro, scope);
     wake_waiter_unlink_from_scope_locked(coro, scope);
     if (child_failed && scope->mode == XR_SCOPE_LINKED &&
         !atomic_exchange(&scope->cancel_requested, true)) {
-        wake_waiter_cancel_linked_siblings_locked(X, scope);
+        wake_waiter_cancel_linked_siblings_locked(scope);
     }
     scope_lock_release(scope);
 
-    wake_waiter_finish_scope_completion(X, coro, scope);
+    wake_waiter_finish_scope_completion(coro, scope);
 }
 
 static void wake_waiter_notify_task(XrayIsolate *X, XrCoroutine *coro) {
@@ -1349,12 +1352,13 @@ static void wake_waiter_notify_task(XrayIsolate *X, XrCoroutine *coro) {
 // after — once COMPLETED is visible, a woken awaiter may recycle the
 // executor shell, so the coroutine must not be dereferenced anymore.
 void xr_coro_wake_scope_waiter(XrayIsolate *X, XrCoroutine *coro) {
-    if (!X || !coro)
+    (void) X;
+    if (!coro)
         return;
 
     XrScopeContext *scope = xr_coro_parent_scope(coro);
     if (scope) {
-        wake_waiter_handle_scope_completion(X, coro, scope);
+        wake_waiter_handle_scope_completion(coro, scope);
     }
 }
 

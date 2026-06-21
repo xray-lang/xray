@@ -32,7 +32,7 @@ static inline bool worker_blocked_post_check(XrRuntime *runtime, XrCoroutine *co
             int astate = atomic_load_explicit(&task->await_state, memory_order_acquire);
             if (astate == XR_AWAIT_RESOLVED) {
                 xr_await_wait_token_resolve(&wait->await_token);
-                xr_coro_ready(runtime->isolate, coro, true);
+                xr_scheduler_ready(runtime, coro, true);
                 return true;
             }
         }
@@ -41,7 +41,7 @@ static inline bool worker_blocked_post_check(XrRuntime *runtime, XrCoroutine *co
         if (!wait || atomic_load(&wait->wait_count) == 0) {
             if (wait)
                 xr_multi_await_wait_token_resolve(&wait->multi_await_token);
-            xr_coro_ready(runtime->isolate, coro, true);
+            xr_scheduler_ready(runtime, coro, true);
             return true;
         }
     } else if (wr == (XR_CORO_WAIT_SCOPE >> XR_CORO_WAIT_SHIFT)) {
@@ -50,7 +50,7 @@ static inline bool worker_blocked_post_check(XrRuntime *runtime, XrCoroutine *co
             XrCoroWaitState *wait = xr_coro_wait_state(coro);
             if (wait)
                 xr_scope_wait_token_resolve(&wait->scope_token);
-            xr_coro_ready(runtime->isolate, coro, true);
+            xr_scheduler_ready(runtime, coro, true);
             return true;
         }
     } else if (wr == (XR_CORO_WAIT_AWAIT_ANY >> XR_CORO_WAIT_SHIFT)) {
@@ -58,7 +58,7 @@ static inline bool worker_blocked_post_check(XrRuntime *runtime, XrCoroutine *co
         if (!wait || atomic_load(&wait->any_done) || atomic_load(&wait->wait_count) == 0) {
             if (wait)
                 xr_multi_await_wait_token_resolve(&wait->multi_await_token);
-            xr_coro_ready(runtime->isolate, coro, true);
+            xr_scheduler_ready(runtime, coro, true);
             return true;
         }
     }

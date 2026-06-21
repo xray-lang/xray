@@ -47,6 +47,8 @@ static void init_blocked_work_queue_coro(XrCoroutine *coro, XrCoroExt *ext, Xray
     memset(ext, 0, sizeof(*ext));
     coro->id = 700;
     coro->isolate = isolate;
+    coro->core = isolate ? isolate->core_rt : NULL;
+    coro->scheduler = (isolate && isolate->vm.runtime) ? (XrRuntime *) isolate->vm.runtime : NULL;
     coro->ext = ext;
     atomic_store(&coro->flags, XR_CORO_FLG_BLOCKED | XR_CORO_WAIT_WORKQUEUE);
     atomic_store(&coro->affinity_p, 0);
