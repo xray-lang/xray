@@ -40,6 +40,7 @@
 
 struct XrCoroutine;
 struct XrGC;
+struct XrRuntimeCore;
 struct XrayIsolate;
 
 typedef enum {
@@ -85,7 +86,8 @@ typedef struct XrSeenArena {
 struct XrCoroGC;
 
 typedef struct XrCopyContext {
-    struct XrayIsolate *X;
+    struct XrRuntimeCore *core;
+    struct XrayIsolate *vm_bridge_isolate;
     struct XrGC *dst_gc;           // fixed GC fallback
     struct XrCoroGC *dst_coro_gc;  // Region heap (preferred when non-NULL)
     bool to_transit;               // channel-transit copy: sysheap + XR_OBJ_TRANSIT
@@ -95,9 +97,19 @@ typedef struct XrCopyContext {
     XrSeenArena *arena_head;  // arena block list for seen entries
 } XrCopyContext;
 
+XR_FUNC void xr_copy_context_init_core(XrCopyContext *ctx, struct XrRuntimeCore *core,
+                                       struct XrGC *dst_gc);
 XR_FUNC void xr_copy_context_init(XrCopyContext *ctx, struct XrayIsolate *X, struct XrGC *dst_gc);
 XR_FUNC void xr_copy_context_cleanup(XrCopyContext *ctx);
 XR_FUNC XrValue xr_deep_copy_with_ctx(XrCopyContext *ctx, XrValue value);
+
+XR_FUNC XrValue xr_deep_copy_core(struct XrRuntimeCore *core, XrValue value, struct XrGC *dst_gc);
+XR_FUNC XrValue xr_deep_copy_counted_core(struct XrRuntimeCore *core, XrValue value,
+                                          struct XrGC *dst_gc, int *out_count);
+XR_FUNC XrValue xr_deep_copy_to_coro_core(struct XrRuntimeCore *core, XrValue value,
+                                          struct XrCoroutine *dst_coro);
+XR_FUNC XrValue xr_deep_copy_to_coro_counted_core(struct XrRuntimeCore *core, XrValue value,
+                                                  struct XrCoroutine *dst_coro, int *out_count);
 
 /* ========== Channel Transit Copies ==========
  *
@@ -108,6 +120,7 @@ XR_FUNC XrValue xr_deep_copy_with_ctx(XrCopyContext *ctx, XrValue value);
  * coroutine's heap and releases the buffer reference, which frees the
  * whole transit graph through the regular shared-destroy path. */
 
+XR_FUNC XrValue xr_deep_copy_to_transit_core(struct XrRuntimeCore *core, XrValue value);
 XR_FUNC XrValue xr_deep_copy_to_transit(struct XrayIsolate *X, XrValue value);
 XR_FUNC void xr_chan_transit_release(XrValue value);
 
@@ -131,7 +144,11 @@ XR_FUNC void xr_chan_transit_release(XrValue value);
  * xr_chan_try_adopt_array_from_transit: recv side. On success *out is a
  *   receiver-heap array that stole the transit buffer, and the emptied transit
  *   struct has been released. */
+XR_FUNC bool xr_chan_try_move_array_to_transit_core(struct XrRuntimeCore *core, XrValue value,
+                                                    XrValue *out);
 XR_FUNC bool xr_chan_try_move_array_to_transit(struct XrayIsolate *X, XrValue value, XrValue *out);
+XR_FUNC bool xr_chan_try_adopt_array_from_transit_core(XrValue value, struct XrCoroutine *recv_coro,
+                                                       XrValue *out);
 XR_FUNC bool xr_chan_try_adopt_array_from_transit(struct XrayIsolate *X, XrValue value,
                                                   struct XrCoroutine *recv_coro, XrValue *out);
 

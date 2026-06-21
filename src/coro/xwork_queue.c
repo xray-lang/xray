@@ -467,8 +467,13 @@ void xr_work_queue_set_vm_bridge_isolate(XrWorkQueue *q, XrayIsolate *isolate) {
         q->vm_bridge_isolate = isolate;
 }
 
-bool xr_work_queue_push(XrayIsolate *X, XrWorkQueue *q, XrValue value, int64_t shard_hint) {
+bool xr_work_queue_push_core(XrRuntimeCore *core, XrWorkQueue *q, XrValue value,
+                             int64_t shard_hint) {
     XR_DCHECK(q != NULL, "xr_work_queue_push: NULL queue");
+    if (!core)
+        core = q->core;
+    if (!core)
+        return false;
     if (atomic_load_explicit(&q->closed, memory_order_acquire))
         return false;
 
@@ -481,7 +486,7 @@ bool xr_work_queue_push(XrayIsolate *X, XrWorkQueue *q, XrValue value, int64_t s
             atomic_fetch_add_explicit(&q->next_shard, 1, memory_order_relaxed) % shard_count;
     }
 
-    value = xr_chan_prepare_send(X, value);
+    value = xr_chan_prepare_send_core(core, value);
     XrWorkQueueShard *shard = &q->shards[shard_idx];
     bool ok;
     xr_amutex_lock(&shard->lock);
@@ -503,6 +508,10 @@ bool xr_work_queue_push(XrayIsolate *X, XrWorkQueue *q, XrValue value, int64_t s
     return ok;
 }
 
+bool xr_work_queue_push(XrayIsolate *X, XrWorkQueue *q, XrValue value, int64_t shard_hint) {
+    return xr_work_queue_push_core(X ? xr_isolate_get_runtime_core(X) : NULL, q, value, shard_hint);
+}
+
 static bool work_queue_pop_from_shard(XrWorkQueue *q, uint32_t shard_idx, bool own_shard,
                                       XrValue *out) {
     XrWorkQueueShard *shard = &q->shards[shard_idx];
@@ -521,14 +530,26 @@ static bool work_queue_pop_from_shard(XrWorkQueue *q, uint32_t shard_idx, bool o
     return ok;
 }
 
-XrValue xr_work_queue_try_pop(XrayIsolate *X, XrWorkQueue *q, int64_t worker_hint, bool *ok) {
+XrValue xr_work_queue_try_pop_for_coro_core(XrRuntimeCore *core, XrWorkQueue *q,
+                                            int64_t worker_hint, XrCoroutine *recv_coro, bool *ok) {
     XR_DCHECK(q != NULL, "xr_work_queue_try_pop: NULL queue");
     XR_DCHECK(ok != NULL, "xr_work_queue_try_pop: NULL ok");
+    if (!core)
+        core = q->core;
+    if (!core) {
+        *ok = false;
+        return xr_null();
+    }
 
     XrValue value = work_queue_try_pop_raw(q, worker_hint, ok);
     if (*ok)
-        return xr_chan_copy_recv(X, value, xr_current_coro(X));
+        return xr_chan_copy_recv_core(core, value, recv_coro);
     return xr_null();
+}
+
+XrValue xr_work_queue_try_pop(XrayIsolate *X, XrWorkQueue *q, int64_t worker_hint, bool *ok) {
+    return xr_work_queue_try_pop_for_coro_core(X ? xr_isolate_get_runtime_core(X) : NULL, q,
+                                               worker_hint, X ? xr_current_coro(X) : NULL, ok);
 }
 
 void xr_work_queue_cancel_waiter(XrCoroutine *coro) {
@@ -610,14 +631,18 @@ static void work_queue_finish_wait_if_current(XrCoroutine *coro, XrWorkQueue *q)
         xr_work_queue_wait_token_finish(&wait->work_queue_token);
 }
 
-XrWorkQueuePopStatus xr_work_queue_pop_for_coro(XrayIsolate *isolate, XrWorkQueue *q,
-                                                XrCoroutine *coro, int64_t worker,
-                                                XrValue *result) {
+XrWorkQueuePopStatus xr_work_queue_pop_for_coro_core(XrRuntimeCore *core, XrWorkQueue *q,
+                                                     XrCoroutine *coro, int64_t worker,
+                                                     XrValue *result) {
     XR_DCHECK(q != NULL, "xr_work_queue_pop_for_coro: NULL queue");
     XR_DCHECK(result != NULL, "xr_work_queue_pop_for_coro: NULL result");
+    if (!core)
+        core = q->core;
+    if (!core)
+        return XR_WORK_QUEUE_POP_ERROR;
 
     bool ok = false;
-    XrValue value = xr_work_queue_try_pop(isolate, q, worker, &ok);
+    XrValue value = xr_work_queue_try_pop_for_coro_core(core, q, worker, coro, &ok);
     if (ok) {
         work_queue_finish_wait_if_current(coro, q);
         *result = value;
@@ -640,7 +665,7 @@ XrWorkQueuePopStatus xr_work_queue_pop_for_coro(XrayIsolate *isolate, XrWorkQueu
     if (ok) {
         xr_amutex_unlock(&q->wait_lock);
         xr_work_queue_wait_token_finish(&wait->work_queue_token);
-        *result = xr_chan_copy_recv(isolate, value, coro);
+        *result = xr_chan_copy_recv_core(core, value, coro);
         return XR_WORK_QUEUE_POP_DONE;
     }
     if (xr_work_queue_is_closed(q)) {
@@ -666,8 +691,15 @@ XrWorkQueuePopStatus xr_work_queue_pop_for_coro(XrayIsolate *isolate, XrWorkQueu
     return XR_WORK_QUEUE_POP_BLOCKED;
 }
 
-XrWorkQueuePopStatus xr_work_queue_pop_resume_for_coro(XrayIsolate *isolate, XrCoroutine *coro,
-                                                       XrValue *result) {
+XrWorkQueuePopStatus xr_work_queue_pop_for_coro(XrayIsolate *isolate, XrWorkQueue *q,
+                                                XrCoroutine *coro, int64_t worker,
+                                                XrValue *result) {
+    return xr_work_queue_pop_for_coro_core(isolate ? xr_isolate_get_runtime_core(isolate) : NULL, q,
+                                           coro, worker, result);
+}
+
+XrWorkQueuePopStatus xr_work_queue_pop_resume_for_coro_core(XrRuntimeCore *core, XrCoroutine *coro,
+                                                            XrValue *result) {
     if (!coro || !result)
         return XR_WORK_QUEUE_POP_ERROR;
     XrCoroWaitState *wait = xr_coro_wait_state(coro);
@@ -678,7 +710,13 @@ XrWorkQueuePopStatus xr_work_queue_pop_resume_for_coro(XrayIsolate *isolate, XrC
     if (!q)
         return XR_WORK_QUEUE_POP_ERROR;
     int64_t worker = coro->ext ? coro->ext->work_queue_hint : -1;
-    return xr_work_queue_pop_for_coro(isolate, q, coro, worker, result);
+    return xr_work_queue_pop_for_coro_core(core ? core : q->core, q, coro, worker, result);
+}
+
+XrWorkQueuePopStatus xr_work_queue_pop_resume_for_coro(XrayIsolate *isolate, XrCoroutine *coro,
+                                                       XrValue *result) {
+    return xr_work_queue_pop_resume_for_coro_core(
+        isolate ? xr_isolate_get_runtime_core(isolate) : NULL, coro, result);
 }
 
 static XrCFuncResult ym_pop(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs,

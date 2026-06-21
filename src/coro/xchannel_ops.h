@@ -23,6 +23,7 @@
 #include "xchannel.h"
 #include "xdeep_copy.h"
 #include "../runtime/value/xvalue.h"
+#include "../runtime/core/xr_runtime_core.h"
 #include "../runtime/xisolate_api.h"
 #include "../runtime/xshared.h"
 #include "../runtime/gc/xalloc_unified.h"
@@ -45,7 +46,7 @@ struct XrayIsolate;
  *
  * Re-entrant: a value that is already a TRANSIT root (a blocked send
  * being retried after suspension) passes through unchanged. */
-static inline XrValue xr_chan_prepare_send(struct XrayIsolate *isolate, XrValue value) {
+static inline XrValue xr_chan_prepare_send_core(XrRuntimeCore *core, XrValue value) {
     if (!XR_IS_PTR(value))
         return value;
     XrGCHeader *obj = XR_VALUE_GCPTR(value);
@@ -64,23 +65,27 @@ static inline XrValue xr_chan_prepare_send(struct XrayIsolate *isolate, XrValue 
         /* Unique owner (move semantics): steal the buffer for self-contained
          * scalar arrays, else deep-copy. Either way free the source struct. */
         XrValue moved;
-        if (xr_chan_try_move_array_to_transit(isolate, value, &moved)) {
+        if (xr_chan_try_move_array_to_transit_core(core, value, &moved)) {
             xr_coro_gc_rc_destroy(xr_current_coro_gc(), obj); /* free emptied source struct */
             return moved;
         }
-        XrValue copied = xr_deep_copy_to_transit(isolate, value);
+        XrValue copied = xr_deep_copy_to_transit_core(core, value);
         xr_coro_gc_rc_destroy(xr_current_coro_gc(), obj);
         return copied;
     }
     if (coro_local) {
         /* Not the last reference (already dropped above): copy, no destroy. */
-        return xr_deep_copy_to_transit(isolate, value);
+        return xr_deep_copy_to_transit_core(core, value);
     }
     /* Shared / pointer-shared values: original copy-then-drop order. */
-    XrValue copied = xr_deep_copy_to_transit(isolate, value);
+    XrValue copied = xr_deep_copy_to_transit_core(core, value);
     if (obj && xr_obj_drop_is_last((XrObjHeader *) obj))
         xr_coro_gc_rc_destroy(xr_current_coro_gc(), obj);
     return copied;
+}
+
+static inline XrValue xr_chan_prepare_send(struct XrayIsolate *isolate, XrValue value) {
+    return xr_chan_prepare_send_core(isolate ? xr_isolate_get_runtime_core(isolate) : NULL, value);
 }
 
 /* A prepared send value that never entered the channel — try-send
@@ -114,8 +119,8 @@ static inline void xr_chan_abandon_send(XrValue prepared) {
  * receiver's coroutine-local GC, then release the channel buffer's
  * transit reference (frees the transit graph).  Returns the original
  * value unchanged for scalars and immutables. */
-static inline XrValue xr_chan_copy_recv(struct XrayIsolate *isolate, XrValue value,
-                                        struct XrCoroutine *recv_coro) {
+static inline XrValue xr_chan_copy_recv_core(XrRuntimeCore *core, XrValue value,
+                                             struct XrCoroutine *recv_coro) {
     if (!XR_IS_PTR(value))
         return value;
     if (!xr_value_needs_copy(value))
@@ -124,11 +129,17 @@ static inline XrValue xr_chan_copy_recv(struct XrayIsolate *isolate, XrValue val
      * scalar array, steal its buffer into the receiver heap instead of copying;
      * the helper releases the emptied transit struct on success. */
     XrValue adopted;
-    if (xr_chan_try_adopt_array_from_transit(isolate, value, recv_coro, &adopted))
+    if (xr_chan_try_adopt_array_from_transit_core(value, recv_coro, &adopted))
         return adopted;
-    XrValue copied = xr_deep_copy_to_coro(isolate, value, recv_coro);
+    XrValue copied = xr_deep_copy_to_coro_core(core, value, recv_coro);
     xr_chan_transit_release(value);
     return copied;
+}
+
+static inline XrValue xr_chan_copy_recv(struct XrayIsolate *isolate, XrValue value,
+                                        struct XrCoroutine *recv_coro) {
+    return xr_chan_copy_recv_core(isolate ? xr_isolate_get_runtime_core(isolate) : NULL, value,
+                                  recv_coro);
 }
 
 /* ========== tryRecv — non-blocking receive ========== */
@@ -141,8 +152,8 @@ static inline XrValue xr_chan_copy_recv(struct XrayIsolate *isolate, XrValue val
  *            isolate-level GC fallback inside xr_deep_copy_to_coro)
  *
  * Returns true if a value was received, false otherwise. */
-static inline bool xr_chan_try_recv(struct XrayIsolate *isolate, XrChannel *ch, XrValue *out_value,
-                                    struct XrCoroutine *recv_coro) {
+static inline bool xr_chan_try_recv_core(XrRuntimeCore *core, XrChannel *ch, XrValue *out_value,
+                                         struct XrCoroutine *recv_coro) {
     XR_DCHECK(ch != NULL, "xr_chan_try_recv: NULL channel");
     XR_DCHECK(out_value != NULL, "xr_chan_try_recv: NULL out_value");
 
@@ -150,12 +161,18 @@ static inline bool xr_chan_try_recv(struct XrayIsolate *isolate, XrChannel *ch, 
     XrValue value = xr_channel_try_recv(ch, &ok);
 
     if (ok) {
-        *out_value = xr_chan_copy_recv(isolate, value, recv_coro);
+        *out_value = xr_chan_copy_recv_core(core, value, recv_coro);
         return true;
     }
 
     *out_value = xr_null();
     return false;
+}
+
+static inline bool xr_chan_try_recv(struct XrayIsolate *isolate, XrChannel *ch, XrValue *out_value,
+                                    struct XrCoroutine *recv_coro) {
+    return xr_chan_try_recv_core(isolate ? xr_isolate_get_runtime_core(isolate) : NULL, ch,
+                                 out_value, recv_coro);
 }
 
 /* ========== trySend — non-blocking send ========== */
@@ -164,14 +181,18 @@ static inline bool xr_chan_try_recv(struct XrayIsolate *isolate, XrChannel *ch, 
  * on success.  Returns true if the value was enqueued. The argument is
  * consumed either way (single-shot semantics): on failure the prepared
  * value is released. */
-static inline bool xr_chan_try_send(struct XrayIsolate *isolate, XrChannel *ch, XrValue value) {
+static inline bool xr_chan_try_send_core(XrRuntimeCore *core, XrChannel *ch, XrValue value) {
     XR_DCHECK(ch != NULL, "xr_chan_try_send: NULL channel");
 
-    value = xr_chan_prepare_send(isolate, value);
+    value = xr_chan_prepare_send_core(core, value);
     if (xr_channel_try_send(ch, value))
         return true;
     xr_chan_abandon_send(value);
     return false;
+}
+
+static inline bool xr_chan_try_send(struct XrayIsolate *isolate, XrChannel *ch, XrValue value) {
+    return xr_chan_try_send_core(isolate ? xr_isolate_get_runtime_core(isolate) : NULL, ch, value);
 }
 
 #endif  // XCHANNEL_OPS_H

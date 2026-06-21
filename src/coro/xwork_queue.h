@@ -66,13 +66,25 @@ typedef enum XrWorkQueuePopStatus {
 XR_FUNC XrWorkQueue *xr_work_queue_new(struct XrRuntimeCore *core, struct XrRuntime *scheduler,
                                        uint32_t shard_count, uint32_t shard_capacity);
 XR_FUNC void xr_work_queue_set_vm_bridge_isolate(XrWorkQueue *q, struct XrayIsolate *isolate);
+XR_FUNC bool xr_work_queue_push_core(struct XrRuntimeCore *core, XrWorkQueue *q, XrValue value,
+                                     int64_t shard_hint);
 XR_FUNC bool xr_work_queue_push(struct XrayIsolate *X, XrWorkQueue *q, XrValue value,
                                 int64_t shard_hint);
+XR_FUNC XrValue xr_work_queue_try_pop_for_coro_core(struct XrRuntimeCore *core, XrWorkQueue *q,
+                                                    int64_t worker_hint,
+                                                    struct XrCoroutine *recv_coro, bool *ok);
 XR_FUNC XrValue xr_work_queue_try_pop(struct XrayIsolate *X, XrWorkQueue *q, int64_t worker_hint,
                                       bool *ok);
+XR_FUNC XrWorkQueuePopStatus xr_work_queue_pop_for_coro_core(struct XrRuntimeCore *core,
+                                                             XrWorkQueue *q,
+                                                             struct XrCoroutine *coro,
+                                                             int64_t worker_hint, XrValue *result);
 XR_FUNC XrWorkQueuePopStatus xr_work_queue_pop_for_coro(struct XrayIsolate *X, XrWorkQueue *q,
                                                         struct XrCoroutine *coro,
                                                         int64_t worker_hint, XrValue *result);
+XR_FUNC XrWorkQueuePopStatus xr_work_queue_pop_resume_for_coro_core(struct XrRuntimeCore *core,
+                                                                    struct XrCoroutine *coro,
+                                                                    XrValue *result);
 XR_FUNC XrWorkQueuePopStatus xr_work_queue_pop_resume_for_coro(struct XrayIsolate *X,
                                                                struct XrCoroutine *coro,
                                                                XrValue *result);

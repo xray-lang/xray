@@ -429,10 +429,8 @@ XrValue xr_instance_get_dynamic_field(XrInstance *inst, uint16_t index) {
     return overflow[overflow_idx];
 }
 
-bool xr_instance_set_dynamic_field(XrayIsolate *X, XrInstance *inst, uint16_t index,
-                                   XrValue value) {
+bool xr_instance_set_dynamic_field_direct(XrInstance *inst, uint16_t index, XrValue value) {
     XR_DCHECK(inst != NULL, "set_dynamic_field: NULL inst");
-    XR_DCHECK(X != NULL, "set_dynamic_field: NULL isolate");
     XrClass *klass = inst->klass;
     XR_DCHECK(klass->flags & XR_CLASS_DYNAMIC_LAYOUT, "set_dynamic_field: not dynamic");
     uint16_t cap = klass->in_object_capacity;
@@ -485,6 +483,13 @@ bool xr_instance_set_dynamic_field(XrayIsolate *X, XrInstance *inst, uint16_t in
     xr_rc_release_value(xr_current_coro_gc(), overflow[overflow_idx]);
     overflow[overflow_idx] = value;
     return true;
+}
+
+bool xr_instance_set_dynamic_field(XrayIsolate *X, XrInstance *inst, uint16_t index,
+                                   XrValue value) {
+    XR_DCHECK(X != NULL, "set_dynamic_field: NULL isolate");
+    (void) X;
+    return xr_instance_set_dynamic_field_direct(inst, index, value);
 }
 
 /* ========== Class Transition ========== */
