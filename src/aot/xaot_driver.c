@@ -546,9 +546,23 @@ static bool add_runtime_cap_manifest_entries(const XaotFeatureSet *features,
     return true;
 }
 
+static bool xaot_fast_test_build_enabled(void) {
+    const char *flag = getenv("XRAY_AOT_FAST_TEST_BUILD");
+    return flag && flag[0] && strcmp(flag, "0") != 0;
+}
+
+static bool xaot_fast_test_can_skip_size_link_flags(const XaotFeatureSet *features) {
+    return features && !features->need_coro && !features->need_channel && !features->need_scope &&
+           !features->need_timer && !features->need_netpoll && !features->need_deep_copy &&
+           !features->need_reflection && !features->need_stacktrace && !features->need_instanceof &&
+           features->stdlib == 0 && features->n_stdlib_symbols == 0 &&
+           features->n_extern_dylibs == 0;
+}
+
 static bool build_link_manifest(const XaotFeatureSet *features, XaotLinkManifest *manifest) {
     XaotTarget target;
     bool ok = false;
+    bool fast_test;
 
     if (!features || !manifest)
         return false;
@@ -566,17 +580,24 @@ static bool build_link_manifest(const XaotFeatureSet *features, XaotLinkManifest
         goto done;
     if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_SYSTEM_LIB, "m"))
         goto done;
+    fast_test = xaot_fast_test_build_enabled();
+    if (fast_test) {
+        if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_CC_FLAG, "-w"))
+            goto done;
+    }
+    if (!fast_test || !xaot_fast_test_can_skip_size_link_flags(features)) {
 #ifdef XR_OS_MACOS
-    if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_LD_FLAG, "-Wl,-dead_strip"))
-        goto done;
+        if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_LD_FLAG, "-Wl,-dead_strip"))
+            goto done;
 #else
-    if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_CC_FLAG, "-ffunction-sections"))
-        goto done;
-    if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_CC_FLAG, "-fdata-sections"))
-        goto done;
-    if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_LD_FLAG, "-Wl,--gc-sections"))
-        goto done;
+        if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_CC_FLAG, "-ffunction-sections"))
+            goto done;
+        if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_CC_FLAG, "-fdata-sections"))
+            goto done;
+        if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_LD_FLAG, "-Wl,--gc-sections"))
+            goto done;
 #endif
+    }
 
     if (!add_runtime_cap_manifest_entries(features, manifest))
         goto done;

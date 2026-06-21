@@ -14,6 +14,9 @@
 #                       (default: build/.xray-test-cache/aot-bin/<xray-key>/O<opt>)
 #   XRAY_AOT_TEST_OPT   native C compiler optimization level for correctness
 #                       gates (default: 0; set to 3 for optimized smoke/CI)
+#   XRAY_AOT_FAST_TEST_BUILD
+#                       use correctness-test AOT link flags (default: 1);
+#                       set to 0 to exercise product size/link flags
 #   XRAY_TEST_DISABLE_RUN_CACHE
 #                       set to 1 to force executing cached native binaries and
 #                       VM runs even when a previous identical run passed
@@ -42,6 +45,8 @@ REQUESTED_JOBS="${XRAY_AOT_JOBS:-${XRAY_TEST_JOBS:-auto}}"
 AOT_OPT_LEVEL="${XRAY_AOT_TEST_OPT:-0}"
 AOT_CACHE="${XRAY_AOT_CACHE_DIR:-$(xray_test_shared_cache_dir "$PROJECT_DIR" "aot-objects")}"
 AOT_BIN_CACHE="${XRAY_AOT_BIN_CACHE_DIR:-$(xray_test_stable_cache_dir "$PROJECT_DIR" "aot-bin" "$XRAY")/O$AOT_OPT_LEVEL}"
+: "${XRAY_AOT_FAST_TEST_BUILD:=1}"
+export XRAY_AOT_FAST_TEST_BUILD
 JOBS=1
 PASS=0
 FAIL=0

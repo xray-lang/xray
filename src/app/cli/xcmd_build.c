@@ -1479,6 +1479,39 @@ static int xaot_write_c_export_header(const XaotBuildResult *result, const char 
     return 0;
 }
 
+static bool xaot_cli_fast_test_build_enabled(void) {
+    const char *flag = getenv("XRAY_AOT_FAST_TEST_BUILD");
+    return flag && flag[0] && strcmp(flag, "0") != 0;
+}
+
+static int xaot_write_temp_c_source(const char *cache_dir, uint64_t key,
+                                    const XaotModuleSource *src, char *out, size_t out_sz) {
+    int n;
+    FILE *f;
+
+    n = snprintf(out, out_sz, "%s/%016llx.%d.fast-test.c", cache_dir ? cache_dir : "",
+                 (unsigned long long) key, (int) xr_proc_self_pid());
+    if (n < 0 || (size_t) n >= out_sz)
+        return 1;
+    f = fopen(out, "w");
+    if (!f) {
+        fprintf(stderr, "Error: cannot create '%s'\n", out);
+        return 1;
+    }
+    if (fputs(src && src->c_source ? src->c_source : "", f) < 0 || fclose(f) != 0) {
+        fprintf(stderr, "Error: failed to write '%s'\n", out);
+        xr_fs_remove(out);
+        return 1;
+    }
+    return 0;
+}
+
+static bool xaot_cli_fast_test_direct_link_allowed(const XaotLinkManifest *manifest) {
+    return manifest && !xaot_link_manifest_needs_runtime(manifest) &&
+           !xaot_cli_manifest_needs_aot_core(manifest) && manifest->n_runtime_objects == 0 &&
+           manifest->n_stdlib_objects == 0;
+}
+
 static int cmd_build_native(const char *input, const char *output, const char *cc,
                             const char *opt_flag, const char *cpu, bool c_only, bool strip,
                             bool debug_symbols, bool shared_library, const char *sysroot,
@@ -1651,6 +1684,42 @@ static int cmd_build_native(const char *input, const char *output, const char *c
             xaot_build_result_free(&aot_result);
             return 0;
         }
+    }
+
+    if (xaot_cli_fast_test_build_enabled() && n_sources == 1 &&
+        xaot_cli_fast_test_direct_link_allowed(&aot_result.link_manifest) && !rebuild &&
+        !dry_run_link && !debug_symbols && !shared_library) {
+        char c_file[XR_PATH_MAX];
+        const char *inputs[1];
+        int ret;
+        uint64_t key =
+            link_output_cache_key
+                ? link_output_cache_key
+                : xaot_link_output_cache_key(&aot_result, opt_flag, target, toolchain_plan, sysroot,
+                                             strip, shared_library);
+        if (xaot_write_temp_c_source(cache_dir, key, &aot_result.sources[0], c_file,
+                                     sizeof(c_file)) != 0) {
+            xaot_build_result_free(&aot_result);
+            return 1;
+        }
+        inputs[0] = c_file;
+        ret = invoke_aot_manifest_link(toolchain_plan, target, &aot_result.link_manifest, opt_flag,
+                                       output, inputs, 1, strip, shared_library, sysroot,
+                                       dump_link_command || verbose, false);
+        if (keep_c)
+            printf("Kept C source: %s\n", c_file);
+        else
+            xr_fs_remove(c_file);
+#ifdef XR_OS_MACOS
+        if (ret == 0 && strip)
+            remove_dsym_bundle(output);
+#endif
+        if (ret == 0 && use_link_output_cache)
+            xaot_store_link_output_cache(cache_dir, link_output_cache_key, output);
+        if (ret == 0)
+            printf("Generated: %s\n", output);
+        xaot_build_result_free(&aot_result);
+        return ret;
     }
 
     char (*obj_bufs)[XR_PATH_MAX] =
