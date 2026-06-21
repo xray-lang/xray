@@ -149,7 +149,8 @@ static XrCoroRunResult aot_backend_resume(XrCoroutine *coro, const XrCoroEvent *
 
     XrAotContext ctx;
     ctx.coro = coro;
-    ctx.isolate = run_ctx && run_ctx->isolate ? run_ctx->isolate : coro->isolate;
+    ctx.isolate =
+        run_ctx && run_ctx->backend_ctx ? (XrayIsolate *) run_ctx->backend_ctx : coro->isolate;
     ctx.worker = run_ctx ? (void *) run_ctx->worker : NULL;
 
     XrayIsolate *previous_isolate = xray_isolate_current();
