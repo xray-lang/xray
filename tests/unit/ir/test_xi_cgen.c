@@ -366,10 +366,66 @@ TEST(cgen_initializes_used_process_builtin) {
     assert(!had_error && "process.args AOT program should generate");
     assert(contains(code, "xrt_builtins[5] = xrt_process_new(") &&
            "used process builtin slot must be initialized");
+    assert(contains(code, "xrt_process_new(\"test.xr\",") &&
+           "process builtin must receive the entry source path");
     assert(contains(code, "argc > 1 ? argc - 1 : 0") &&
            "process.args must still receive script arguments");
 
     printf("  Generated process-aware entry %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_initializes_file_dir_builtins_from_entry_source) {
+    const char *src = "print(__file__)\n"
+                      "print(__dir__)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+    assert(ir->module != NULL && "lowering should attach module metadata");
+    ir->module->path = "/tmp/xray/main.xr";
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "main", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "__file__/__dir__ AOT program should generate");
+    assert(contains(code, "xrt_builtins[6] = xr_box_str(\"/tmp/xray/main.xr\")") &&
+           "__file__ must be initialized from the entry source path");
+    assert(contains(code, "xrt_builtins[7] = xr_box_str(\"/tmp/xray\")") &&
+           "__dir__ must be initialized from the entry source directory");
+    assert(!contains(code, "xray_isolate_set_script_info") &&
+           "AOT generated C must not route script info through VM isolate");
+
+    printf("  Generated file/dir-aware entry %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_runtime_file_dir_stays_runtime_owned) {
+    const char *src = "import time\n"
+                      "print(__file__)\n"
+                      "print(__dir__)\n"
+                      "time.sleep(0)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "main", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "runtime-backed __file__/__dir__ AOT program should generate");
+    assert(contains(code, "runtime_cfg.file = \"test.xr\";") &&
+           "runtime-backed generated main must pass script info to XrAotRuntimeConfig");
+    assert(contains(code, "xrt_builtins[6] = xr_box_str(\"test.xr\")") &&
+           "sync helpers may still initialize standalone __file__");
+    assert(!contains(code, "xr_aot_runtime_set_builtin(rt, 6") &&
+           "runtime-owned __file__ must not be overwritten with an xrt string");
+    assert(!contains(code, "xr_aot_runtime_set_builtin(rt, 7") &&
+           "runtime-owned __dir__ must not be overwritten with an xrt string");
+    assert(!contains(code, "xray_isolate_set_script_info") &&
+           "AOT generated C must not route script info through VM isolate");
+
+    printf("  Generated runtime-owned file/dir entry %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
@@ -4400,6 +4456,8 @@ TEST(cgen_runtime_needed_main_uses_aot_runtime) {
            "runtime-needed generated main must create an AOT runtime config");
     assert(contains(code, "XrAotRuntime *rt = xr_aot_runtime_new(&runtime_cfg);") &&
            "runtime-needed generated main must create XrAotRuntime directly");
+    assert(contains(code, "runtime_cfg.file = \"test.xr\";") &&
+           "runtime-needed generated main must pass entry source path to AOT runtime");
     assert(contains(code, "xrt_global_ctx.runtime = rt;") &&
            "generated sync helpers must see the AOT runtime owner");
     assert(contains(code, "xr_aot_run_main(rt,") &&
@@ -4829,6 +4887,8 @@ int main(void) {
     run_cgen_simple_arith();
     run_cgen_skips_unused_process_builtin_init();
     run_cgen_initializes_used_process_builtin();
+    run_cgen_initializes_file_dir_builtins_from_entry_source();
+    run_cgen_runtime_file_dir_stays_runtime_owned();
     run_cgen_standalone_prelude_enum_globals_generate_static_members();
     run_cgen_cancelled_builtin_generates_false();
     run_cgen_variable_and_print();

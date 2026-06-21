@@ -1,0 +1,5 @@
+print(__file__.endsWith("script_info.xr"))
+print(__dir__.length > 0)
+print(process.file.endsWith("script_info.xr"))
+print(process.dir.length > 0)
+print(process.args.length)

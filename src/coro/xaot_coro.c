@@ -278,6 +278,46 @@ void xr_aot_runtime_config_init(XrAotRuntimeConfig *cfg) {
     memset(cfg, 0, sizeof(*cfg));
 }
 
+static const char *aot_script_dir_bounds(const char *file, size_t *out_len) {
+    if (out_len)
+        *out_len = 0;
+    if (!file || !file[0])
+        return NULL;
+    const char *last_slash = strrchr(file, '/');
+    if (!last_slash)
+        return NULL;
+    size_t len = (size_t) (last_slash - file);
+    if (len == 0)
+        len = 1;
+    if (out_len)
+        *out_len = len;
+    return file;
+}
+
+static bool aot_runtime_init_script_builtins(XrAotRuntime *runtime) {
+    if (!runtime || !runtime->core)
+        return false;
+
+    const char *file = runtime->core->script_info.file;
+    if (file && file[0]) {
+        XrString *file_str = xr_string_intern_core(runtime->core, file, strlen(file), 0);
+        if (!file_str)
+            return false;
+        runtime->builtins[XR_GLOBAL_VAR_FILE] = xr_string_value(file_str);
+    }
+
+    size_t dir_len = 0;
+    const char *dir = aot_script_dir_bounds(file, &dir_len);
+    if (dir && dir_len > 0) {
+        XrString *dir_str = xr_string_intern_core(runtime->core, dir, dir_len, 0);
+        if (!dir_str)
+            return false;
+        runtime->builtins[XR_GLOBAL_VAR_DIR] = xr_string_value(dir_str);
+    }
+
+    return true;
+}
+
 XrAotRuntime *xr_aot_runtime_new(const XrAotRuntimeConfig *cfg) {
     XrAotRuntimeConfig local_cfg;
     if (cfg) {
@@ -302,6 +342,8 @@ XrAotRuntime *xr_aot_runtime_new(const XrAotRuntimeConfig *cfg) {
         goto fail;
     xr_script_info_set(&runtime->core->script_info, local_cfg.file, local_cfg.argc, local_cfg.argv);
     if (!aot_runtime_register_prelude_enums(runtime))
+        goto fail;
+    if (!aot_runtime_init_script_builtins(runtime))
         goto fail;
 
     if (aot_caps_need_scheduler(runtime->caps)) {
@@ -391,16 +433,18 @@ static XrValue aot_runtime_process_field(const XrAotContext *ctx, const char *fi
     }
 
     const char *text = NULL;
+    size_t text_len = 0;
     if (strcmp(field, "file") == 0) {
         text = info->file;
+        text_len = text ? strlen(text) : 0;
     } else if (strcmp(field, "dir") == 0) {
-        text = NULL;
+        text = aot_script_dir_bounds(info->file, &text_len);
     } else {
         return XR_NULL_VAL;
     }
     if (!text)
         return XR_NULL_VAL;
-    XrString *s = xr_string_intern_core(core, text, strlen(text), 0);
+    XrString *s = xr_string_intern_core(core, text, text_len, 0);
     return s ? xr_string_value(s) : XR_NULL_VAL;
 }
 
@@ -435,6 +479,14 @@ XrValue xr_aot_load_builtin_field(const XrAotContext *ctx, int32_t index, const 
         return XR_NULL_VAL;
 
     XrValue builtin = xr_aot_get_builtin(ctx, index);
+    if (XR_IS_STRING(builtin)) {
+        if (strcmp(field, "length") == 0 || strcmp(field, "size") == 0) {
+            XrString *str = XR_TO_STRING(builtin);
+            return XR_FROM_INT(str ? (int64_t) str->length : 0);
+        }
+        return XR_NULL_VAL;
+    }
+
     if (aot_value_is_runtime_instance(builtin)) {
         XrGCHeader *gc = (XrGCHeader *) builtin.ptr;
         if (XR_GC_GET_TYPE(gc) == XR_TINSTANCE) {

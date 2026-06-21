@@ -26,6 +26,70 @@ typedef struct CgBuiltinInitPlan {
     uint32_t runtime_caps;
 } CgBuiltinInitPlan;
 
+static const char *cg_entry_source_path(XiCgenCtx *ctx, XiModule **modules, int n,
+                                        int entry_index) {
+    if (modules && entry_index >= 0 && entry_index < n && modules[entry_index]) {
+        XiModule *entry = modules[entry_index];
+        if (entry->path && entry->path[0])
+            return entry->path;
+        if (entry->name && entry->name[0])
+            return entry->name;
+    }
+    return cg_current_source_path(ctx);
+}
+
+static const char *cg_source_dir_bounds(const char *file, size_t *out_len) {
+    if (out_len)
+        *out_len = 0;
+    if (!file || !file[0])
+        return NULL;
+    const char *last_slash = strrchr(file, '/');
+    if (!last_slash)
+        return NULL;
+    size_t len = (size_t) (last_slash - file);
+    if (len == 0)
+        len = 1;
+    if (out_len)
+        *out_len = len;
+    return file;
+}
+
+static void emit_c_string_literal_n(FILE *out, const char *s, size_t len) {
+    fputc('"', out);
+    if (s) {
+        for (size_t i = 0; i < len; i++) {
+            char ch = s[i];
+            if (ch == '"')
+                fprintf(out, "\\\"");
+            else if (ch == '\\')
+                fprintf(out, "\\\\");
+            else if (ch == '\n')
+                fprintf(out, "\\n");
+            else if (ch == '\t')
+                fprintf(out, "\\t");
+            else
+                fputc(ch, out);
+        }
+    }
+    fputc('"', out);
+}
+
+static void emit_optional_c_string_literal(FILE *out, const char *s) {
+    if (s && s[0])
+        emit_c_string_literal(out, s);
+    else
+        fprintf(out, "NULL");
+}
+
+static void emit_optional_source_dir_literal(FILE *out, const char *source_path) {
+    size_t dir_len = 0;
+    const char *dir = cg_source_dir_bounds(source_path, &dir_len);
+    if (dir && dir_len > 0)
+        emit_c_string_literal_n(out, dir, dir_len);
+    else
+        fprintf(out, "NULL");
+}
+
 static void cg_builtin_init_scan_value(CgBuiltinInitPlan *plan, const XiValue *v) {
     if (!plan || !v)
         return;
@@ -127,17 +191,39 @@ XR_FUNC void xi_cgen_header(FILE *out) {
     fprintf(out, "static XrValue xrt_builtins[%d];\n\n", XR_USER_GLOBALS_START);
 }
 
-static void emit_xrt_builtin_init(FILE *out, const CgBuiltinInitPlan *plan) {
+static void emit_xrt_builtin_init(FILE *out, const CgBuiltinInitPlan *plan,
+                                  const char *source_path) {
     if (plan && plan->process) {
-        fprintf(out,
-                "    xrt_builtins[%d] = xrt_process_new(NULL, argc > 1 ? argc - 1 : 0, "
-                "argc > 1 ? argv + 1 : NULL, NULL);\n",
-                XR_GLOBAL_VAR_PROCESS);
+        fprintf(out, "    xrt_builtins[%d] = xrt_process_new(", XR_GLOBAL_VAR_PROCESS);
+        emit_optional_c_string_literal(out, source_path);
+        fprintf(out, ", argc > 1 ? argc - 1 : 0, argc > 1 ? argv + 1 : NULL, ");
+        emit_optional_source_dir_literal(out, source_path);
+        fprintf(out, ");\n");
     }
-    if (plan && plan->file)
-        fprintf(out, "    xrt_builtins[%d] = XR_NULL_VAL;\n", XR_GLOBAL_VAR_FILE);
-    if (plan && plan->dir)
-        fprintf(out, "    xrt_builtins[%d] = XR_NULL_VAL;\n", XR_GLOBAL_VAR_DIR);
+    if (plan && plan->file) {
+        fprintf(out, "    xrt_builtins[%d] = ", XR_GLOBAL_VAR_FILE);
+        if (source_path && source_path[0]) {
+            fprintf(out, "xr_box_str(");
+            emit_c_string_literal(out, source_path);
+            fprintf(out, ")");
+        } else {
+            fprintf(out, "XR_NULL_VAL");
+        }
+        fprintf(out, ";\n");
+    }
+    if (plan && plan->dir) {
+        fprintf(out, "    xrt_builtins[%d] = ", XR_GLOBAL_VAR_DIR);
+        size_t dir_len = 0;
+        const char *dir = cg_source_dir_bounds(source_path, &dir_len);
+        if (dir && dir_len > 0) {
+            fprintf(out, "xr_box_str(");
+            emit_c_string_literal_n(out, dir, dir_len);
+            fprintf(out, ")");
+        } else {
+            fprintf(out, "XR_NULL_VAL");
+        }
+        fprintf(out, ";\n");
+    }
 }
 
 static void emit_xrt_runtime_caps_expr(FILE *out, uint32_t caps) {
@@ -178,17 +264,10 @@ static void emit_xrt_runtime_builtin_sync(FILE *out, const CgBuiltinInitPlan *pl
         fprintf(out, "    xr_aot_runtime_set_builtin(%s, %d, xrt_builtins[%d]);\n", runtime_var,
                 XR_GLOBAL_VAR_PROCESS, XR_GLOBAL_VAR_PROCESS);
     }
-    if (plan->file) {
-        fprintf(out, "    xr_aot_runtime_set_builtin(%s, %d, xrt_builtins[%d]);\n", runtime_var,
-                XR_GLOBAL_VAR_FILE, XR_GLOBAL_VAR_FILE);
-    }
-    if (plan->dir) {
-        fprintf(out, "    xr_aot_runtime_set_builtin(%s, %d, xrt_builtins[%d]);\n", runtime_var,
-                XR_GLOBAL_VAR_DIR, XR_GLOBAL_VAR_DIR);
-    }
 }
 
-static void emit_xrt_runtime_init(FILE *out, const CgBuiltinInitPlan *plan, uint32_t runtime_caps) {
+static void emit_xrt_runtime_init(FILE *out, const CgBuiltinInitPlan *plan, uint32_t runtime_caps,
+                                  const char *source_path) {
     fprintf(out, "    XrAotRuntimeConfig runtime_cfg;\n");
     fprintf(out, "    xr_aot_runtime_config_init(&runtime_cfg);\n");
     fprintf(out, "    runtime_cfg.caps = ");
@@ -196,6 +275,9 @@ static void emit_xrt_runtime_init(FILE *out, const CgBuiltinInitPlan *plan, uint
     fprintf(out, ";\n");
     fprintf(out, "    runtime_cfg.argc = argc > 1 ? argc - 1 : 0;\n");
     fprintf(out, "    runtime_cfg.argv = argc > 1 ? argv + 1 : NULL;\n");
+    fprintf(out, "    runtime_cfg.file = ");
+    emit_optional_c_string_literal(out, source_path);
+    fprintf(out, ";\n");
     fprintf(out, "    XrAotRuntime *rt = xr_aot_runtime_new(&runtime_cfg);\n");
     fprintf(out, "    if (!rt) { xrt_bump_destroy(); return 1; }\n");
     emit_xrt_runtime_builtin_sync(out, plan, "rt");
@@ -219,12 +301,13 @@ XR_FUNC void xi_cgen_main(XiCgenCtx *ctx, FILE *out, XiModule **modules, int n, 
     if (entry_is_coro)
         runtime_caps |= XR_AOT_CAP_CORO;
     bool entry_needs_runtime = runtime_caps != XR_AOT_CAP_NONE;
+    const char *entry_source_path = cg_entry_source_path(ctx, modules, n, entry_index);
 
     fprintf(out, "int main(int argc, char **argv) {\n");
     fprintf(out, "    xrt_arc_init();\n");
-    emit_xrt_builtin_init(out, &builtin_plan);
+    emit_xrt_builtin_init(out, &builtin_plan, entry_source_path);
     if (entry_needs_runtime) {
-        emit_xrt_runtime_init(out, &builtin_plan, runtime_caps);
+        emit_xrt_runtime_init(out, &builtin_plan, runtime_caps, entry_source_path);
     } else {
         fprintf(out, "    (void) argc;\n");
         fprintf(out, "    (void) argv;\n");
@@ -321,14 +404,15 @@ XR_FUNC void xi_cgen_program(XiCgenCtx *ctx, FILE *out, XiModule *module) {
         fprintf(body, "int main(int argc, char **argv) {\n");
         fprintf(body, "    xrt_arc_init();\n");
         CgBuiltinInitPlan builtin_plan = cg_builtin_init_plan_for_func(main_func);
-        emit_xrt_builtin_init(body, &builtin_plan);
+        const char *entry_source_path = cg_entry_source_path(ctx, single_module, 1, 0);
+        emit_xrt_builtin_init(body, &builtin_plan, entry_source_path);
         bool entry_is_coro = cg_func_needs_aot_coro_ctx(ctx, main_func);
         uint32_t runtime_caps = builtin_plan.runtime_caps;
         if (entry_is_coro)
             runtime_caps |= XR_AOT_CAP_CORO;
         bool entry_needs_runtime = runtime_caps != XR_AOT_CAP_NONE;
         if (entry_needs_runtime) {
-            emit_xrt_runtime_init(body, &builtin_plan, runtime_caps);
+            emit_xrt_runtime_init(body, &builtin_plan, runtime_caps, entry_source_path);
         }
         if (entry_is_coro) {
             fprintf(body, "    void *_entry_frame = ");
