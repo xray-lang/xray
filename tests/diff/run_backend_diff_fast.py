@@ -253,7 +253,9 @@ def build_aot_binary(config: RunnerConfig, case: Path, rel: str, case_key: str) 
             "-o",
             str(tmp),
         ]
-        proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        env = os.environ.copy()
+        env.setdefault("XRAY_AOT_FAST_TEST_BUILD", "1")
+        proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env)
         if proc.returncode != 0:
             try:
                 tmp.unlink()
@@ -438,11 +440,16 @@ def main(argv: list[str]) -> int:
         print("=== Results: 0 passed, 0 failed, 0 skipped ===")
         return 0
 
+    base_cases_file = os.environ.get("XRAY_DIFF_CASES_FILE", "")
+    if "XRAY_DIFF_EXTRA_CASES_FILE" in os.environ:
+        extra_cases_file = os.environ["XRAY_DIFF_EXTRA_CASES_FILE"]
+    elif base_cases_file:
+        extra_cases_file = ""
+    else:
+        extra_cases_file = str(SCRIPT_DIR / "coro_regression_cases.txt")
+
     try:
-        all_cases = collect_cases(
-            os.environ.get("XRAY_DIFF_CASES_FILE", ""),
-            os.environ.get("XRAY_DIFF_EXTRA_CASES_FILE", str(SCRIPT_DIR / "coro_regression_cases.txt")),
-        )
+        all_cases = collect_cases(base_cases_file, extra_cases_file)
     except FileNotFoundError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2

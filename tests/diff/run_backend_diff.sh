@@ -17,8 +17,9 @@
 #   XRAY_DIFF_SHARD_TOTAL / XRAY_DIFF_SHARD_INDEX
 #                       run only one stable 0-based shard of the case list
 #   XRAY_DIFF_EXTRA_CASES_FILE
-#                       newline case manifest, relative to repo root or absolute
-#                       (default: tests/diff/coro_regression_cases.txt; empty disables)
+#                       newline case manifest, relative to repo root or absolute.
+#                       Defaults to tests/diff/coro_regression_cases.txt only
+#                       when XRAY_DIFF_CASES_FILE is not set; empty disables.
 #   XRAY_DIFF_CASES_FILE
 #                       optional base case manifest replacing tests/diff/cases/**/*.xr
 #   XRAY_DIFF_CACHE_DIR shared native object cache for AOT backend builds
@@ -28,6 +29,9 @@
 #                       (default: build/.xray-test-cache/backend-diff-bin/<xray-key>/O<opt>)
 #   XRAY_AOT_TEST_OPT   AOT C compiler optimization level for correctness gates
 #                       (default: 0; set to 3 for optimized smoke/CI)
+#   XRAY_AOT_FAST_TEST_BUILD
+#                       use correctness-test AOT link flags (default: 1);
+#                       set to 0 to exercise product size/link flags
 #   XRAY_DIFF_ENABLE_RUN_CACHE
 #                       set to 1 to reuse backend stdout/stderr/rc outputs.
 #                       Default is 0 because the warm VM/AOT diff path is
@@ -48,6 +52,8 @@
 set -u
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+: "${XRAY_AOT_FAST_TEST_BUILD:=1}"
+export XRAY_AOT_FAST_TEST_BUILD
 if [ "${XRAY_DIFF_RUNNER:-python}" != "bash" ] &&
         [ "${XRAY_DIFF_ENABLE_RUN_CACHE:-0}" != "1" ] &&
         [ "${XRAY_DIFF_STDERR:-0}" != "1" ]; then
@@ -65,8 +71,14 @@ PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 . "$PROJECT_DIR/tests/test_common.sh"
 CASE_DIR="$SCRIPT_DIR/cases"
 NORMALIZE="$SCRIPT_DIR/normalize.sed"
-EXTRA_CASES_FILE="${XRAY_DIFF_EXTRA_CASES_FILE-$SCRIPT_DIR/coro_regression_cases.txt}"
 BASE_CASES_FILE="${XRAY_DIFF_CASES_FILE:-}"
+if [ "${XRAY_DIFF_EXTRA_CASES_FILE+x}" = "x" ]; then
+    EXTRA_CASES_FILE="${XRAY_DIFF_EXTRA_CASES_FILE}"
+elif [ -n "$BASE_CASES_FILE" ]; then
+    EXTRA_CASES_FILE=""
+else
+    EXTRA_CASES_FILE="$SCRIPT_DIR/coro_regression_cases.txt"
+fi
 
 XRAY="${1:-${XRAY_BIN:-}}"
 if [ -z "$XRAY" ]; then
