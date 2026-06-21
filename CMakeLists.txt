@@ -976,18 +976,46 @@ message(STATUS "Main executable: xray (${MODULES_ENABLED})")
 if(BUILD_TESTS)
     enable_testing()
 
+    include(ProcessorCount)
+    ProcessorCount(XRAY_HOST_PROCESSOR_COUNT)
+    if(NOT XRAY_HOST_PROCESSOR_COUNT OR XRAY_HOST_PROCESSOR_COUNT LESS 1)
+        set(XRAY_HOST_PROCESSOR_COUNT 8)
+    endif()
+    set(XRAY_CTEST_DIFF_JOBS ${XRAY_HOST_PROCESSOR_COUNT})
+    if(XRAY_CTEST_DIFF_JOBS LESS 4)
+        set(XRAY_CTEST_DIFF_JOBS 4)
+    endif()
+    if(XRAY_CTEST_DIFF_JOBS GREATER 12)
+        set(XRAY_CTEST_DIFF_JOBS 12)
+    endif()
+    set(XRAY_CTEST_DIFF_PROCESSORS ${XRAY_CTEST_DIFF_JOBS})
+    set(XRAY_CTEST_DETERMINISTIC_DIFF_JOBS 4)
+    if(XRAY_HOST_PROCESSOR_COUNT LESS XRAY_CTEST_DETERMINISTIC_DIFF_JOBS)
+        set(XRAY_CTEST_DETERMINISTIC_DIFF_JOBS ${XRAY_HOST_PROCESSOR_COUNT})
+    endif()
+    set(XRAY_CTEST_AOT_FILETEST_JOBS 4)
+    if(XRAY_HOST_PROCESSOR_COUNT LESS XRAY_CTEST_AOT_FILETEST_JOBS)
+        set(XRAY_CTEST_AOT_FILETEST_JOBS ${XRAY_HOST_PROCESSOR_COUNT})
+    endif()
+    set(XRAY_CTEST_AOT_ISOLATE_JOBS 4)
+    if(XRAY_HOST_PROCESSOR_COUNT LESS XRAY_CTEST_AOT_ISOLATE_JOBS)
+        set(XRAY_CTEST_AOT_ISOLATE_JOBS ${XRAY_HOST_PROCESSOR_COUNT})
+    endif()
+
     # All unit tests are managed by tests/unit/CMakeLists.txt
     add_subdirectory(tests/unit)
 
     add_test(
         NAME aot_filetests
-        COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_aot_filetests.sh
+        COMMAND ${CMAKE_COMMAND} -E env
+                XRAY_AOT_FILETEST_JOBS=${XRAY_CTEST_AOT_FILETEST_JOBS}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_aot_filetests.sh
                 --xray $<TARGET_FILE:xray>
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
     set_tests_properties(aot_filetests PROPERTIES
         LABELS "aot;filetests"
-        PROCESSORS 2
+        PROCESSORS ${XRAY_CTEST_AOT_FILETEST_JOBS}
         TIMEOUT 120
     )
 
@@ -1078,13 +1106,15 @@ if(BUILD_TESTS)
     # until 133/I3-I4 turn that baseline into a hard gate.
     add_test(
         NAME aot_isolate_symbol_gate
-        COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_aot_isolate_symbol_tests.sh
+        COMMAND ${CMAKE_COMMAND} -E env
+                XRAY_AOT_ISOLATE_JOBS=${XRAY_CTEST_AOT_ISOLATE_JOBS}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_aot_isolate_symbol_tests.sh
                 $<TARGET_FILE:xray>
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
     set_tests_properties(aot_isolate_symbol_gate PROPERTIES
         LABELS "aot;link;isolate;smoke"
-        PROCESSORS 4
+        PROCESSORS ${XRAY_CTEST_AOT_ISOLATE_JOBS}
         TIMEOUT 180
     )
 
@@ -1183,14 +1213,14 @@ if(BUILD_TESTS)
     add_test(
         NAME backend_diff
         COMMAND ${CMAKE_COMMAND} -E env
-                XRAY_DIFF_JOBS=8
+                XRAY_DIFF_JOBS=${XRAY_CTEST_DIFF_JOBS}
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/diff/run_backend_diff.sh
                 $<TARGET_FILE:xray>
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
     set_tests_properties(backend_diff PROPERTIES
         LABELS "diff;cross;backend"
-        PROCESSORS 8
+        PROCESSORS ${XRAY_CTEST_DIFF_PROCESSORS}
         TIMEOUT 900
     )
 
@@ -1200,14 +1230,14 @@ if(BUILD_TESTS)
                 XRAY_CORO_DETERMINISTIC=1
                 XRAY_CORO_SEED=12345
                 XRAY_DIFF_CASES_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/diff/deterministic_cases.txt
-                XRAY_DIFF_JOBS=8
+                XRAY_DIFF_JOBS=${XRAY_CTEST_DETERMINISTIC_DIFF_JOBS}
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/diff/run_backend_diff.sh
                 $<TARGET_FILE:xray>
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
     set_tests_properties(backend_diff_deterministic PROPERTIES
         LABELS "diff;cross;backend;coro;deterministic"
-        PROCESSORS 8
+        PROCESSORS ${XRAY_CTEST_DETERMINISTIC_DIFF_JOBS}
         TIMEOUT 900
     )
 

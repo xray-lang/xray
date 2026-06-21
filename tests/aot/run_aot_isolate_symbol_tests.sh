@@ -7,6 +7,11 @@
 #   - runtime-backed samples record the current isolate/VM dependency as a
 #     baseline. Later 133/I3-I4 should flip these baseline checks into hard
 #     failures once XrAotRuntime no longer creates a VM isolate.
+#
+# Environment:
+#   XRAY_AOT_ISOLATE_JOBS  parallel workers (default: auto, capped by
+#                          XRAY_AOT_ISOLATE_MAX_AUTO_JOBS=4;
+#                          XRAY_TEST_JOBS also works)
 
 set -u
 
@@ -21,6 +26,8 @@ CACHE="$WORK/.cache"
 PASS=0
 FAIL=0
 BASELINE=0
+REQUESTED_JOBS="${XRAY_AOT_ISOLATE_JOBS:-${XRAY_TEST_JOBS:-auto}}"
+JOBS=1
 
 # Keep this intentionally broad. Pure AOT binaries should not expose any public
 # isolate API, VM init/cleanup, source compiler entry, analyzer, or module loader
@@ -45,6 +52,47 @@ record_fail() {
 record_baseline() {
     echo "  BASELINE: $1"
     BASELINE=$((BASELINE + 1))
+}
+
+is_uint() {
+    case "$1" in
+        ""|*[!0-9]*) return 1 ;;
+        *) return 0 ;;
+    esac
+}
+
+detect_cores() {
+    local cores=""
+    if command -v getconf >/dev/null 2>&1; then
+        cores="$(getconf _NPROCESSORS_ONLN 2>/dev/null || true)"
+    fi
+    if ! is_uint "$cores" && command -v sysctl >/dev/null 2>&1; then
+        cores="$(sysctl -n hw.logicalcpu 2>/dev/null || true)"
+    fi
+    if ! is_uint "$cores" || [ "$cores" -lt 1 ]; then
+        cores=1
+    fi
+    printf '%s\n' "$cores"
+}
+
+configure_jobs() {
+    local requested="$1" max_auto
+    case "$requested" in
+        ""|auto)
+            JOBS="$(detect_cores)"
+            max_auto="${XRAY_AOT_ISOLATE_MAX_AUTO_JOBS:-4}"
+            if is_uint "$max_auto" && [ "$max_auto" -gt 0 ] && [ "$JOBS" -gt "$max_auto" ]; then
+                JOBS="$max_auto"
+            fi
+            ;;
+        *)
+            if is_uint "$requested" && [ "$requested" -gt 0 ]; then
+                JOBS="$requested"
+            else
+                JOBS=1
+            fi
+            ;;
+    esac
 }
 
 print_log_tail() {
@@ -203,8 +251,110 @@ run_runtime_baseline_case() {
     fi
 }
 
+run_case_by_id() {
+    case "$1" in
+        core_math_single_symbol)
+            run_freestanding_case \
+                "core_math_single_symbol" \
+                "core-math-single-symbol" \
+                "$PROJECT_DIR/tests/aot/filetests/link/core_math_single_symbol.xr" \
+                "9.0"
+            ;;
+        system_time_queries)
+            run_freestanding_case \
+                "system_time_queries" \
+                "system-time-queries" \
+                "$PROJECT_DIR/tests/aot/filetests/link/system_time_queries.xr" \
+                ""
+            ;;
+        core_crypto)
+            run_freestanding_case \
+                "core_crypto" \
+                "core-crypto" \
+                "$PROJECT_DIR/tests/aot/filetests/link/core_crypto.xr" \
+                ""
+            ;;
+        runtime_time_sleep)
+            run_runtime_baseline_case \
+                "runtime_time_sleep" \
+                "runtime-time-sleep" \
+                "$PROJECT_DIR/tests/aot/filetests/link/runtime_time.xr" \
+                "7"
+            ;;
+        runtime_coro_minimal)
+            run_runtime_baseline_case \
+                "runtime_coro_minimal" \
+                "runtime-coro-minimal" \
+                "$PROJECT_DIR/tests/aot/coro/spawn_await_yield.xr" \
+                "42"
+            ;;
+    esac
+}
+
+record_parallel_result() {
+    local log="$1"
+    cat "$log"
+    PASS=$((PASS + $(grep -c '^  PASS:' "$log" || true)))
+    BASELINE=$((BASELINE + $(grep -c '^  BASELINE:' "$log" || true)))
+    FAIL=$((FAIL + $(grep -c '^  FAIL:' "$log" || true)))
+}
+
+run_cases_parallel() {
+    local jobs="$1"
+    local idx=0 case_id log sem token i p pids logs
+
+    mkdir -p "$WORK/logs"
+    sem="$WORK/cases.sem"
+    if ! mkfifo "$sem"; then
+        echo "error: cannot create worker semaphore" >&2
+        FAIL=$((FAIL + 1))
+        return 1
+    fi
+    exec 9<>"$sem"
+    rm -f "$sem"
+
+    i=0
+    while [ "$i" -lt "$jobs" ]; do
+        printf '.' >&9
+        i=$((i + 1))
+    done
+
+    pids=""
+    logs=""
+    for case_id in \
+        core_math_single_symbol \
+        system_time_queries \
+        core_crypto \
+        runtime_time_sleep \
+        runtime_coro_minimal
+    do
+        IFS= read -r -n 1 token <&9
+        log="$WORK/logs/${idx}_${case_id}.log"
+        (
+            run_case_by_id "$case_id" >"$log" 2>&1
+            printf '.' >&9
+        ) &
+        pids="$pids $!"
+        logs="$logs $log"
+        idx=$((idx + 1))
+    done
+
+    for p in $pids; do
+        wait "$p"
+    done
+    exec 9>&-
+    exec 9<&-
+
+    for log in $logs; do
+        record_parallel_result "$log"
+    done
+}
+
+configure_jobs "$REQUESTED_JOBS"
+
 echo "=== AOT Isolate Symbol Gate ==="
 echo "Binary: $XRAY"
+echo "Jobs:   $JOBS"
 echo ""
 
 if [ ! -x "$XRAY" ]; then
@@ -212,35 +362,19 @@ if [ ! -x "$XRAY" ]; then
     exit 1
 fi
 
-run_freestanding_case \
-    "core_math_single_symbol" \
-    "core-math-single-symbol" \
-    "$PROJECT_DIR/tests/aot/filetests/link/core_math_single_symbol.xr" \
-    "9.0"
-
-run_freestanding_case \
-    "system_time_queries" \
-    "system-time-queries" \
-    "$PROJECT_DIR/tests/aot/filetests/link/system_time_queries.xr" \
-    ""
-
-run_freestanding_case \
-    "core_crypto" \
-    "core-crypto" \
-    "$PROJECT_DIR/tests/aot/filetests/link/core_crypto.xr" \
-    ""
-
-run_runtime_baseline_case \
-    "runtime_time_sleep" \
-    "runtime-time-sleep" \
-    "$PROJECT_DIR/tests/aot/filetests/link/runtime_time.xr" \
-    "7"
-
-run_runtime_baseline_case \
-    "runtime_coro_minimal" \
-    "runtime-coro-minimal" \
-    "$PROJECT_DIR/tests/aot/coro/spawn_await_yield.xr" \
-    "42"
+if [ "$JOBS" -le 1 ]; then
+    for case_id in \
+        core_math_single_symbol \
+        system_time_queries \
+        core_crypto \
+        runtime_time_sleep \
+        runtime_coro_minimal
+    do
+        run_case_by_id "$case_id"
+    done
+else
+    run_cases_parallel "$JOBS"
+fi
 
 echo ""
 echo "=== Results: $PASS passed, $BASELINE baseline, $FAIL failed ==="

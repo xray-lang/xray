@@ -12,6 +12,10 @@
 #   - adding an unrelated export to a dependency leaves dependents cache-valid
 #     (stable cross-module names + per-import forward declarations);
 #   - editing only the entry leaves the dependency cache-valid.
+#
+# Environment:
+#   XRAY_AOT_TEST_OPT   native C compiler optimization level for this
+#                       correctness/cache gate (default: 3)
 
 set -u
 
@@ -20,6 +24,7 @@ WORK="${TMPDIR:-/tmp}/xray_aot_incr_cache_$$"
 CACHE="$WORK/.cache"
 LIB="$WORK/mathlib.xr"
 APP="$WORK/app.xr"
+AOT_OPT_LEVEL="${XRAY_AOT_TEST_OPT:-3}"
 
 PASS=0
 FAIL=0
@@ -30,6 +35,7 @@ trap 'rm -rf "$WORK"' EXIT
 echo "=== AOT Incremental Cache Tests ==="
 echo "Binary: $XRAY"
 echo "Work:   $WORK"
+echo "AOT opt: -O$AOT_OPT_LEVEL"
 echo ""
 
 if [ ! -x "$XRAY" ]; then
@@ -52,7 +58,8 @@ record_fail() {
 build_log() {
     local out="$1" log="$2"
     shift 2
-    "$XRAY" build --native --verbose --cache-dir "$CACHE" "$@" -o "$out" "$APP" >"$log" 2>&1
+    "$XRAY" build --native -O "$AOT_OPT_LEVEL" --verbose --cache-dir "$CACHE" "$@" -o "$out" \
+        "$APP" >"$log" 2>&1
 }
 
 # expect_state <log> <module> <compiling|hit> <test-name>
@@ -177,7 +184,8 @@ export class Box {
 }
 XR_EOF
 
-"$XRAY" build --native --verbose --cache-dir "$CCACHE" -o "$WORK/capp1" "$CAPP" >"$WORK/clog1" 2>&1 \
+"$XRAY" build --native -O "$AOT_OPT_LEVEL" --verbose --cache-dir "$CCACHE" -o "$WORK/capp1" \
+    "$CAPP" >"$WORK/clog1" 2>&1 \
     || { echo "FAIL: class build 1 failed"; sed 's/^/  /' "$WORK/clog1"; exit 1; }
 if grep -q "compiling: capp " "$WORK/clog1" && grep -q "compiling: shape " "$WORK/clog1"; then
     record_pass "class-cold: both modules compiled"
@@ -201,7 +209,8 @@ export class Box {
 }
 XR_EOF
 
-"$XRAY" build --native --verbose --cache-dir "$CCACHE" -o "$WORK/capp2" "$CAPP" >"$WORK/clog2" 2>&1 \
+"$XRAY" build --native -O "$AOT_OPT_LEVEL" --verbose --cache-dir "$CCACHE" -o "$WORK/capp2" \
+    "$CAPP" >"$WORK/clog2" 2>&1 \
     || { echo "FAIL: class build 2 failed"; sed 's/^/  /' "$WORK/clog2"; exit 1; }
 expect_state "$WORK/clog2" shape compiling "class-add-method"
 expect_state "$WORK/clog2" capp hit "class-add-method"
@@ -210,11 +219,13 @@ expect_output "$WORK/capp2" "16" "class-add-method"
 # --- 7. Whole-program LTO mode: separate cache namespace, still incremental,
 #        and a correct cross-module binary. -----------------------------------
 LCACHE="$WORK/.ltocache"
-"$XRAY" build --native --lto --verbose --cache-dir "$LCACHE" -o "$WORK/lapp1" "$APP" >"$WORK/llog1" 2>&1 \
+"$XRAY" build --native -O "$AOT_OPT_LEVEL" --lto --verbose --cache-dir "$LCACHE" \
+    -o "$WORK/lapp1" "$APP" >"$WORK/llog1" 2>&1 \
     || { echo "FAIL: lto build 1 failed"; sed 's/^/  /' "$WORK/llog1"; exit 1; }
 expect_state "$WORK/llog1" mathlib compiling "lto-cold"
 expect_output "$WORK/lapp1" "$(printf '70\n10')" "lto-cold"
-"$XRAY" build --native --lto --verbose --cache-dir "$LCACHE" -o "$WORK/lapp2" "$APP" >"$WORK/llog2" 2>&1 \
+"$XRAY" build --native -O "$AOT_OPT_LEVEL" --lto --verbose --cache-dir "$LCACHE" \
+    -o "$WORK/lapp2" "$APP" >"$WORK/llog2" 2>&1 \
     || { echo "FAIL: lto build 2 failed"; sed 's/^/  /' "$WORK/llog2"; exit 1; }
 expect_state "$WORK/llog2" mathlib hit "lto-warm"
 expect_state "$WORK/llog2" app hit "lto-warm"

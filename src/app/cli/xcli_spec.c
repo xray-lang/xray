@@ -100,6 +100,8 @@ static const XrCliOptionSpec build_options[] = {
     {"dump-link-manifest", 0, XR_CLI_VALUE_NONE, false, false, NULL, "Dump AOT link manifest"},
     {"dump-link-command", 0, XR_CLI_VALUE_NONE, false, false, NULL,
      "Dump resolved AOT link command"},
+    {"dry-run-link", 0, XR_CLI_VALUE_NONE, false, false, NULL,
+     "Resolve the AOT link command without invoking the native toolchain"},
     {"c-header", 0, XR_CLI_VALUE_STRING, false, false, "FILE",
      "Emit a C header for @c_export symbols"},
     {"keep-c", 0, XR_CLI_VALUE_NONE, false, false, NULL, "Keep generated temporary C source"},

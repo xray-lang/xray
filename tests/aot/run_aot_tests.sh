@@ -7,6 +7,10 @@
 # Environment:
 #   XRAY_AOT_JOBS       parallel test workers (default: auto, capped by
 #                       XRAY_AOT_MAX_AUTO_JOBS=16; XRAY_TEST_JOBS also works)
+#   XRAY_AOT_CACHE_DIR  shared native object cache for this run
+#                       (default: <temp>/.xray-cache)
+#   XRAY_AOT_TEST_OPT   native C compiler optimization level for correctness
+#                       gates (default: 3; set to 0 for compile-speed experiments)
 #   XRAY_AOT_KEEP_WORK  keep temporary outputs on exit for debugging
 
 set -u
@@ -27,6 +31,8 @@ cleanup() {
 trap cleanup EXIT
 
 REQUESTED_JOBS="${XRAY_AOT_JOBS:-${XRAY_TEST_JOBS:-auto}}"
+AOT_CACHE="${XRAY_AOT_CACHE_DIR:-$WORK/.xray-cache}"
+AOT_OPT_LEVEL="${XRAY_AOT_TEST_OPT:-3}"
 JOBS=1
 PASS=0
 FAIL=0
@@ -89,6 +95,8 @@ safe_case_name() {
 
 configure_jobs "$REQUESTED_JOBS"
 echo "Jobs:   $JOBS"
+echo "Cache:  $AOT_CACHE"
+echo "AOT opt: -O$AOT_OPT_LEVEL"
 echo ""
 
 run_test() {
@@ -120,7 +128,9 @@ run_test() {
     # Step 1: Build .xr → native binary through the public AOT path.
     local ok=0
     for attempt in 1 2 3; do
-        if "$XRAY" build --native "$xr_file" -o "$bin_out" >/dev/null 2>&1; then
+        if "$XRAY" build --native -O "$AOT_OPT_LEVEL" --cache-dir "$AOT_CACHE" "$xr_file" \
+                -o "$bin_out" \
+                >/dev/null 2>&1; then
             ok=1; break
         fi
     done
@@ -179,7 +189,9 @@ run_negative_test() {
 
     printf "  %-42s" "$test_name"
 
-    if "$XRAY" build --native "$xr_file" -o "$bin_out" >"$log_out" 2>&1; then
+    if "$XRAY" build --native -O "$AOT_OPT_LEVEL" --cache-dir "$AOT_CACHE" "$xr_file" \
+            -o "$bin_out" \
+            >"$log_out" 2>&1; then
         echo "FAIL (unexpected AOT success)"
         FAIL=$((FAIL + 1))
         return 1

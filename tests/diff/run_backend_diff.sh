@@ -21,6 +21,8 @@
 #                       (default: tests/diff/coro_regression_cases.txt; empty disables)
 #   XRAY_DIFF_CASES_FILE
 #                       optional base case manifest replacing tests/diff/cases/**/*.xr
+#   XRAY_AOT_TEST_OPT   AOT C compiler optimization level for correctness gates
+#                       (default: 3; set to 0 for compile-speed experiments)
 #
 # Per-case optional sidecar:
 #   <case>.args    first line = whitespace-separated program arguments
@@ -58,6 +60,7 @@ BACKENDS="${XRAY_DIFF_BACKENDS:-vm,aot}"
 # warnings), so it is NOT part of pass/fail unless XRAY_DIFF_STDERR=1.
 DIFF_STDERR="${XRAY_DIFF_STDERR:-0}"
 REQUESTED_JOBS="${XRAY_DIFF_JOBS:-${XRAY_TEST_JOBS:-auto}}"
+AOT_OPT_LEVEL="${XRAY_AOT_TEST_OPT:-3}"
 SHARD_TOTAL="${XRAY_DIFF_SHARD_TOTAL:-1}"
 SHARD_INDEX="${XRAY_DIFF_SHARD_INDEX:-0}"
 SINGLE_CASE="${XRAY_DIFF_SINGLE_CASE:-}"
@@ -191,7 +194,8 @@ run_backend() {
             ;;
         aot)
             local bin="$out_prefix.bin"
-            if ! "$XRAY" build --native "$case" -o "$bin" >"$out_prefix.buildlog" 2>&1; then
+            if ! "$XRAY" build --native -O "$AOT_OPT_LEVEL" "$case" -o "$bin" \
+                    >"$out_prefix.buildlog" 2>&1; then
                 echo "BUILDFAIL" >"$out_prefix.out"
                 : >"$raw_err"
                 rc=200
@@ -390,6 +394,7 @@ echo "=== Backend Differential (VM / AOT) ==="
 echo "Binary:   $XRAY"
 echo "Backends: $BACKENDS"
 echo "Jobs:     $JOBS"
+echo "AOT opt:  -O$AOT_OPT_LEVEL"
 if [ "$SHARD_TOTAL" -gt 1 ]; then
     echo "Shard:    $SHARD_INDEX / $SHARD_TOTAL"
 fi
