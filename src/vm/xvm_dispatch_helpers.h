@@ -138,7 +138,7 @@ vm_ready_operation_next_or_yield(XrayIsolate *isolate, XrCoroutine *current, XrB
     if (xr_coro_consume_reds(current, reduction_cost) > 0)
         return XR_DISP_NEXT;
     xr_coro_set_reds(current, XR_CORO_REDUCTIONS);
-    if (XR_LIKELY(isolate && isolate->vm.runtime != NULL)) {
+    if (XR_LIKELY(isolate && isolate->scheduler_runtime != NULL)) {
         vm_suspend_continue_from_next(frame, pc);
         return XR_DISP_YIELD;
     }

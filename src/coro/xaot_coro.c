@@ -627,12 +627,12 @@ static void aot_coro_set_source_field(XrayIsolate *isolate, XrMap *info, const X
 }
 
 static int aot_coro_collect_all(XrayIsolate *isolate, XrCoroSnapshotEntry *out, int max_out) {
-    XrRuntime *runtime = isolate ? (XrRuntime *) isolate->vm.runtime : NULL;
+    XrRuntime *runtime = isolate ? (XrRuntime *) isolate->scheduler_runtime : NULL;
     return runtime ? xr_runtime_collect_coros(runtime, out, max_out) : 0;
 }
 
 static XrValue aot_coro_stats(XrayIsolate *isolate, XrCoroutine *owner) {
-    XrRuntime *runtime = isolate ? (XrRuntime *) isolate->vm.runtime : NULL;
+    XrRuntime *runtime = isolate ? (XrRuntime *) isolate->scheduler_runtime : NULL;
     if (!runtime)
         return XR_NULL_VAL;
 
@@ -1404,7 +1404,7 @@ XrAotSpawnResult xr_aot_spawn(const XrAotContext *ctx, const XrAotCoroDesc *desc
     if (!child)
         return result;
 
-    XrRuntime *runtime = (XrRuntime *) ctx->isolate->vm.runtime;
+    XrRuntime *runtime = (XrRuntime *) ctx->isolate->scheduler_runtime;
     if (!runtime) {
         xr_coro_destroy(child);
         return result;

@@ -38,7 +38,7 @@ static uint32_t sanitize_batch_size(int64_t value) {
 static XrRuntime *result_group_runtime(XrResultGroup *g) {
     if (!g || !g->isolate)
         return NULL;
-    return (XrRuntime *) g->isolate->vm.runtime;
+    return (XrRuntime *) g->isolate->scheduler_runtime;
 }
 
 static bool result_group_runtime_can_wake(XrRuntime *runtime) {

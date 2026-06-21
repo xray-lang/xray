@@ -106,7 +106,7 @@ XrCFuncResult xr_yield_for_io(XrayIsolate *X, int fd, int events, int64_t timeou
     // Wait tokens are prepared only on the actual-yield path so the IO-ready
     // fast path avoids touching the coroutine extension.
     if (fd >= 0) {
-        XrRuntime *runtime = (XrRuntime *) X->vm.runtime;
+        XrRuntime *runtime = (XrRuntime *) X->scheduler_runtime;
         if (runtime) {
             XrPollDesc *pd = xr_netpoll_open(&runtime->netpoll, fd);
             if (pd) {

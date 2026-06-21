@@ -89,7 +89,7 @@ int xr_socket_accept(XrayIsolate *X, int listen_fd) {
     if (!X)
         return -1;
 
-    XrRuntime *runtime = (XrRuntime *) X->vm.runtime;
+    XrRuntime *runtime = (XrRuntime *) X->scheduler_runtime;
     if (!runtime) {
         // No Runtime, use system blocking accept
         struct sockaddr_in client_addr;
@@ -174,7 +174,7 @@ int xr_socket_read(XrayIsolate *X, int fd, char *buf, size_t len) {
     if (!X || fd < 0 || !buf || len == 0)
         return -1;
 
-    XrRuntime *runtime = (XrRuntime *) X->vm.runtime;
+    XrRuntime *runtime = (XrRuntime *) X->scheduler_runtime;
     if (!runtime) {
         // No Runtime, use system blocking read
         return (int) xr_socket_recv((xr_socket_t) fd, buf, len);
@@ -213,7 +213,7 @@ int xr_socket_write(XrayIsolate *X, int fd, const char *buf, size_t len) {
     if (!X || fd < 0 || !buf || len == 0)
         return -1;
 
-    XrRuntime *runtime = (XrRuntime *) X->vm.runtime;
+    XrRuntime *runtime = (XrRuntime *) X->scheduler_runtime;
     if (!runtime) {
         // No Runtime, use system blocking write
         return (int) xr_socket_send((xr_socket_t) fd, buf, len);
@@ -299,7 +299,7 @@ void xr_socket_set_read_timeout(XrayIsolate *X, int fd, int timeout_ms) {
     if (!X || fd < 0)
         return;
 
-    XrRuntime *runtime = (XrRuntime *) X->vm.runtime;
+    XrRuntime *runtime = (XrRuntime *) X->scheduler_runtime;
     if (!runtime)
         return;
 
@@ -336,7 +336,7 @@ int xr_socket_wait_readable(XrayIsolate *X, int fd, int timeout_ms) {
     if (!X || fd < 0)
         return -1;
 
-    XrRuntime *runtime = (XrRuntime *) X->vm.runtime;
+    XrRuntime *runtime = (XrRuntime *) X->scheduler_runtime;
     if (!runtime)
         return -1;
 
@@ -376,7 +376,7 @@ int xr_socket_wait_writable(XrayIsolate *X, int fd, int timeout_ms) {
     if (!X || fd < 0)
         return -1;
 
-    XrRuntime *runtime = (XrRuntime *) X->vm.runtime;
+    XrRuntime *runtime = (XrRuntime *) X->scheduler_runtime;
     if (!runtime)
         return -1;
 
@@ -407,7 +407,7 @@ void xr_socket_set_write_timeout(XrayIsolate *X, int fd, int timeout_ms) {
     if (!X || fd < 0)
         return;
 
-    XrRuntime *runtime = (XrRuntime *) X->vm.runtime;
+    XrRuntime *runtime = (XrRuntime *) X->scheduler_runtime;
     if (!runtime)
         return;
 
@@ -439,7 +439,7 @@ XrCFuncResult xr_socket_accept_yieldable(XrayIsolate *X, XrAcceptState *state) {
     if (!X || !state)
         return XR_CFUNC_ERROR;
 
-    XrRuntime *runtime = (XrRuntime *) X->vm.runtime;
+    XrRuntime *runtime = (XrRuntime *) X->scheduler_runtime;
     if (!runtime) {
         // No Runtime, use blocking accept
         struct sockaddr_in client_addr;

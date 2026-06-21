@@ -137,7 +137,8 @@ void xr_net_conn_set_tls(XrNetConn *c, void *tls_state) {
 static void close_fd_with_netpoll(struct XrayIsolate *X, int fd) {
     if (fd < 0)
         return;
-    struct XrRuntime *rt = (X && X->vm.runtime) ? (struct XrRuntime *) X->vm.runtime : NULL;
+    struct XrRuntime *rt =
+        (X && X->scheduler_runtime) ? (struct XrRuntime *) X->scheduler_runtime : NULL;
     if (rt) {
         XrPollDesc *pd = xr_fdmap_get(&rt->netpoll, fd);
         if (pd)

@@ -48,7 +48,8 @@ static void init_blocked_work_queue_coro(XrCoroutine *coro, XrCoroExt *ext, Xray
     coro->id = 700;
     coro->isolate = isolate;
     coro->core = isolate ? isolate->core_rt : NULL;
-    coro->scheduler = (isolate && isolate->vm.runtime) ? (XrRuntime *) isolate->vm.runtime : NULL;
+    coro->scheduler =
+        (isolate && isolate->scheduler_runtime) ? (XrRuntime *) isolate->scheduler_runtime : NULL;
     coro->ext = ext;
     atomic_store(&coro->flags, XR_CORO_FLG_BLOCKED | XR_CORO_WAIT_WORKQUEUE);
     atomic_store(&coro->affinity_p, 0);
@@ -95,7 +96,7 @@ TEST(close_without_workers_keeps_waiter_blocked) {
     runtime.isolate = &f.isolate_storage;
     runtime.worker_count = 0;
     runtime.workers = NULL;
-    f.isolate_storage.vm.runtime = &runtime;
+    f.isolate_storage.scheduler_runtime = &runtime;
 
     XrWorkQueue *q = xr_work_queue_new(&f.isolate_storage, 1, 1);
     ASSERT_NOT_NULL(q);

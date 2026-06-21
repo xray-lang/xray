@@ -85,7 +85,7 @@ void xr_io_dns_cache_destroy(struct XrIoDnsCache *cache) {
 static struct XrIoDnsCache *cache_for(struct XrayIsolate *X) {
     if (!X)
         return NULL;
-    XrRuntime *rt = (XrRuntime *) X->vm.runtime;
+    XrRuntime *rt = (XrRuntime *) X->scheduler_runtime;
     if (!rt || !rt->io)
         return NULL;
     return &rt->io->dns;
@@ -431,7 +431,7 @@ bool xr_dns_resolve_async(struct XrayIsolate *X, struct XrCoroutine *coro, int w
         return false;
 
     struct XrIoDnsCache *cache = cache_for(X);
-    XrRuntime *rt = (X && X->vm.runtime) ? (XrRuntime *) X->vm.runtime : NULL;
+    XrRuntime *rt = (X && X->scheduler_runtime) ? (XrRuntime *) X->scheduler_runtime : NULL;
     XrAsyncPool *pool = rt ? rt->async_pool : NULL;
 
     if (cache && cache_lookup(cache, hostname, addr, family))

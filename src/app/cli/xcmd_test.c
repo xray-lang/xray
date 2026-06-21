@@ -180,7 +180,7 @@ static void *file_watchdog_thread(void *arg) {
             break;
         bool signalled = xr_cond_wait_for_ns(&wd->cond, &wd->mutex, deadline_ns - now_ns);
         if (!signalled && !wd->done) {
-            XrRuntime *runtime = (XrRuntime *) xr_isolate_get_vm_state(wd->X)->runtime;
+            XrRuntime *runtime = (XrRuntime *) xr_isolate_get_scheduler_runtime(wd->X);
             if (runtime)
                 xr_runtime_force_stop(runtime);
             break;

@@ -777,7 +777,7 @@ static void task_ready_waiter(XrayIsolate *X, XrCoroutine *waiter) {
 
     XrRuntime *runtime = (XrRuntime *) xr_coro_scheduler(waiter);
     if (!runtime && X)
-        runtime = (XrRuntime *) X->vm.runtime;
+        runtime = (XrRuntime *) X->scheduler_runtime;
 
     /* xr_coro_ready owns the BLOCKED -> READY claim. Keeping the claim in one
      * place prevents task completion, timeout, and cancellation races from

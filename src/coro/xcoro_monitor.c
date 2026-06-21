@@ -64,7 +64,7 @@ static void print_header(int interval_ms) {
 }
 
 static void print_stats(XrayIsolate *X) {
-    XrRuntime *runtime = (XrRuntime *) xr_isolate_get_vm_state(X)->runtime;
+    XrRuntime *runtime = (XrRuntime *) xr_isolate_get_scheduler_runtime(X);
     if (!runtime) {
         printf("║ Runtime not initialized                                                ║\n");
         return;
@@ -87,7 +87,7 @@ static void print_stats(XrayIsolate *X) {
 }
 
 static void print_top_coros(XrayIsolate *X, int limit) {
-    XrRuntime *runtime = (XrRuntime *) xr_isolate_get_vm_state(X)->runtime;
+    XrRuntime *runtime = (XrRuntime *) xr_isolate_get_scheduler_runtime(X);
     if (!runtime)
         return;
 

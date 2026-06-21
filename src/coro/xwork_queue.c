@@ -136,7 +136,7 @@ static bool shard_pop_head(XrWorkQueueShard *shard, XrValue *out) {
 static XrRuntime *work_queue_runtime(XrWorkQueue *q) {
     if (!q || !q->isolate)
         return NULL;
-    return (XrRuntime *) q->isolate->vm.runtime;
+    return (XrRuntime *) q->isolate->scheduler_runtime;
 }
 
 static bool work_queue_runtime_can_wake(XrRuntime *runtime) {

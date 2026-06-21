@@ -61,9 +61,9 @@ static int64_t get_deadline_ns(int timeout_ms) {
 }
 
 static XrNetpoll *netpoll_for(struct XrayIsolate *X) {
-    if (!X || !X->vm.runtime)
+    if (!X || !X->scheduler_runtime)
         return NULL;
-    return &((XrRuntime *) X->vm.runtime)->netpoll;
+    return &((XrRuntime *) X->scheduler_runtime)->netpoll;
 }
 
 /* ========== Connection API ========== */
