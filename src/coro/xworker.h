@@ -422,8 +422,9 @@ static inline uint64_t xr_sched_metric_load(_Atomic uint64_t *counter) {
 
 /* ========== API ========== */
 
-XR_FUNC XrRuntime *xr_runtime_create(XrayIsolate *isolate, int num_workers);
-XR_FUNC void xr_runtime_destroy(XrRuntime *runtime);
+XR_FUNC XrSchedulerRuntime *xr_scheduler_runtime_new(XrRuntimeCore *core, int num_workers);
+XR_FUNC void xr_scheduler_runtime_attach_isolate(XrSchedulerRuntime *runtime, XrayIsolate *isolate);
+XR_FUNC void xr_scheduler_runtime_delete(XrSchedulerRuntime *runtime);
 XR_FUNC void xr_runtime_start(XrRuntime *runtime);
 XR_FUNC void xr_runtime_ensure_workers(XrRuntime *runtime);
 XR_FUNC void xr_runtime_stop(XrRuntime *runtime);

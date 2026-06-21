@@ -16,6 +16,7 @@
 
 #include "xcoroutine.h"
 #include "../runtime/xisolate_internal.h"  // XrayIsolate definition
+#include "../runtime/xisolate_api.h"
 #include "../base/xmalloc.h"
 #include "../base/xchecks.h"
 #include "../runtime/xray_debug.h"
@@ -1046,8 +1047,9 @@ void xr_multicore_init(XrayIsolate *X, int num_workers) {
     if (!X)
         return;
 
-    XrRuntime *runtime = xr_runtime_create(X, num_workers);
+    XrRuntime *runtime = xr_scheduler_runtime_new(xr_isolate_get_runtime_core(X), num_workers);
     if (runtime) {
+        xr_scheduler_runtime_attach_isolate(runtime, X);
         X->vm.runtime = runtime;
         X->vm.multicore_enabled = true;
 
@@ -1072,7 +1074,7 @@ void xr_multicore_destroy(XrayIsolate *X) {
 
     // Free resources
     stage_start_ns = xr_time_monotonic_ns();
-    xr_runtime_destroy(runtime);
+    xr_scheduler_runtime_delete(runtime);
     uint64_t destroy_ms = (xr_time_monotonic_ns() - stage_start_ns) / 1000000ULL;
 
     if (stats_enabled) {

@@ -286,7 +286,7 @@ void xr_async_pool_destroy(XrAsyncPool *pool) {
     // ordering (store outside, broadcast inside) opened a window where
     // a waiter that had just popped from cond_wait could re-check the
     // loop predicate at xasync.c:97 against a value MSan tracked as
-    // released by xr_runtime_destroy's pool teardown, surfacing the
+    // released by xr_scheduler_runtime_delete's pool teardown, surfacing the
     // shutdown UAF reported on 1148_scope_race_stress.xr.
     xr_mutex_lock(&pool->queue_mutex);
     pool->running = false;

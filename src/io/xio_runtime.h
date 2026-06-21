@@ -78,7 +78,7 @@ typedef struct XrIoRuntime {
 /* ========== Lifecycle ========== */
 
 /* Allocate and initialize an XrIoRuntime on the heap. Returns NULL on
- * allocation failure. Owned by xr_runtime_create / xr_runtime_destroy;
+ * allocation failure. Owned by xr_scheduler_runtime_new / xr_scheduler_runtime_delete;
  * other callers should not free the returned pointer. */
 XR_FUNC XrIoRuntime *xr_io_runtime_new(void);
 
