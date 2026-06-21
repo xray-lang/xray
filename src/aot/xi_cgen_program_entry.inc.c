@@ -117,8 +117,6 @@ static void cg_emit_tu_includes(FILE *out, bool define_impl) {
     }
     fprintf(out, "#include <math.h>\n");
     fprintf(out, "#include \"xrt.h\"\n\n");
-    fprintf(out, "#include \"xray.h\"\n");
-    fprintf(out, "#include \"xray_isolate.h\"\n");
     fprintf(out, "#include \"xaot_coro.h\"\n\n");
 }
 
@@ -203,7 +201,7 @@ static void emit_xrt_runtime_init(FILE *out, const CgBuiltinInitPlan *plan, uint
     emit_xrt_runtime_builtin_sync(out, plan, "rt");
     fprintf(out, "    xrt_global_ctx.runtime = rt;\n");
     fprintf(out, "    xrt_global_ctx.coro = NULL;\n");
-    fprintf(out, "    xrt_global_ctx.isolate = NULL;\n");
+    fprintf(out, "    xrt_global_ctx.vm_host = NULL;\n");
     fprintf(out, "    xrt_global_ctx.worker = NULL;\n");
 }
 

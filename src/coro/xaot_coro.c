@@ -234,7 +234,7 @@ static XrCoroRunResult aot_runtime_backend_resume(XrCoroutine *coro, const XrCor
     XrAotContext ctx;
     ctx.runtime = state->runtime;
     ctx.coro = coro;
-    ctx.isolate = NULL;
+    ctx.vm_host = NULL;
     ctx.worker = run_ctx ? (void *) run_ctx->worker : NULL;
 
     return aot_map_result(coro, state->desc->resume(state->frame, &ctx));
@@ -423,9 +423,10 @@ XrValue xr_aot_get_builtin(const XrAotContext *ctx, int32_t index) {
         return XR_NULL_VAL;
     if (ctx->runtime && index < XR_USER_GLOBALS_START)
         return xr_aot_runtime_builtin(ctx->runtime, index);
-    if (!ctx->isolate || index >= XR_GLOBALS_MAX)
+    XrayIsolate *vm_host = (XrayIsolate *) ctx->vm_host;
+    if (!vm_host || index >= XR_GLOBALS_MAX)
         return XR_NULL_VAL;
-    return ctx->isolate->vm.builtins[index];
+    return vm_host->vm.builtins[index];
 }
 
 XrValue xr_aot_load_builtin_field(const XrAotContext *ctx, int32_t index, const char *field) {
@@ -787,9 +788,9 @@ static bool aot_slot_store_scalar_null_fast(XrSlotRef slot) {
     return xr_slot_store_value(slot, XR_NULL_VAL);
 }
 
-static XrayIsolate *aot_context_isolate(const XrAotContext *ctx, const XrTask *task) {
-    if (ctx && ctx->isolate)
-        return ctx->isolate;
+static XrayIsolate *aot_context_vm_host(const XrAotContext *ctx, const XrTask *task) {
+    if (ctx && ctx->vm_host)
+        return (XrayIsolate *) ctx->vm_host;
     if (task) {
         XrCoroutine *exec = xr_task_executor_peek(task);
         if (exec)
@@ -1190,7 +1191,7 @@ static XrCoroState *aot_coro_sched(XrayIsolate *isolate) {
 XrValue xr_aot_coro_op(const XrAotContext *ctx, int32_t sub_op, const XrValue *args, int argc) {
     if (argc < 0)
         argc = 0;
-    XrayIsolate *isolate = aot_context_isolate(ctx, NULL);
+    XrayIsolate *isolate = aot_context_vm_host(ctx, NULL);
     XrCoroutine *current = aot_context_coro(ctx, isolate, NULL);
     if (!isolate)
         return XR_NULL_VAL;
@@ -1430,7 +1431,7 @@ static XrValue aot_task_result_success(const XrAotContext *ctx, XrValue value) {
 }
 
 static XrValue aot_task_failure_exception(const XrAotContext *ctx, XrTask *task) {
-    XrayIsolate *isolate = aot_context_isolate(ctx, task);
+    XrayIsolate *isolate = aot_context_vm_host(ctx, task);
     XrCoroutine *coro = aot_context_coro(ctx, isolate, task);
     XrRuntimeCore *core = aot_context_runtime_core(ctx);
     XrValue error = task ? task->error : xr_null();
@@ -1461,7 +1462,7 @@ static XrValue aot_task_result_from_terminal(const XrAotContext *ctx, XrTask *ta
     uint8_t state =
         task ? atomic_load_explicit(&task->state, memory_order_acquire) : XR_TASK_CANCELLED;
     if (state == XR_TASK_COMPLETED) {
-        XrayIsolate *isolate = aot_context_isolate(ctx, task);
+        XrayIsolate *isolate = aot_context_vm_host(ctx, task);
         XrCoroutine *coro = aot_context_coro(ctx, isolate, task);
         XrValue value =
             xr_coro_await_result_value(aot_context_runtime_core(ctx), coro, task, false);
@@ -1494,7 +1495,7 @@ static XrAotResult aot_task_terminal_error(const XrAotContext *ctx, XrTask *task
     if (state == XR_TASK_FAILED) {
         error = aot_task_failure_exception(ctx, task);
     } else {
-        XrayIsolate *isolate = aot_context_isolate(ctx, task);
+        XrayIsolate *isolate = aot_context_vm_host(ctx, task);
         if (isolate) {
             error = xr_exception_new(isolate, XR_ERR_CORO_CANCELLED, "Task cancelled");
         } else {
@@ -1507,7 +1508,7 @@ static XrAotResult aot_task_terminal_error(const XrAotContext *ctx, XrTask *task
 }
 
 static XrAotResult aot_channel_closed_error(const XrAotContext *ctx) {
-    XrayIsolate *isolate = aot_context_isolate(ctx, NULL);
+    XrayIsolate *isolate = aot_context_vm_host(ctx, NULL);
     XrValue error;
     if (isolate) {
         error = xr_exception_new(isolate, XR_ERR_CORO_DEAD, "Channel is closed");
@@ -1767,15 +1768,17 @@ XrValue xr_aot_time_after(const XrAotContext *ctx, int64_t milliseconds) {
     if (milliseconds < 0)
         milliseconds = 0;
 
-    XrRuntimeCore *core = ctx->runtime ? xr_aot_runtime_core(ctx->runtime)
-                                       : (ctx->isolate ? xr_isolate_get_runtime_core(ctx->isolate)
-                                                       : (ctx->coro ? ctx->coro->core : NULL));
+    XrRuntimeCore *core =
+        ctx->runtime ? xr_aot_runtime_core(ctx->runtime)
+                     : (ctx->vm_host ? xr_isolate_get_runtime_core((XrayIsolate *) ctx->vm_host)
+                                     : (ctx->coro ? ctx->coro->core : NULL));
     XrRuntime *scheduler =
-        ctx->runtime ? xr_aot_runtime_scheduler(ctx->runtime)
-                     : (ctx->isolate ? xr_isolate_get_scheduler_runtime(ctx->isolate)
-                                     : (ctx->coro ? (XrRuntime *) ctx->coro->scheduler : NULL));
-    XrChannel *timer_ch = ctx->isolate && !ctx->runtime
-                              ? xr_channel_new_timer_vm(ctx->isolate, milliseconds)
+        ctx->runtime
+            ? xr_aot_runtime_scheduler(ctx->runtime)
+            : (ctx->vm_host ? xr_isolate_get_scheduler_runtime((XrayIsolate *) ctx->vm_host)
+                            : (ctx->coro ? (XrRuntime *) ctx->coro->scheduler : NULL));
+    XrChannel *timer_ch = ctx->vm_host && !ctx->runtime
+                              ? xr_channel_new_timer_vm((XrayIsolate *) ctx->vm_host, milliseconds)
                               : xr_channel_new_timer(core, scheduler, milliseconds);
     if (!timer_ch)
         return XR_NULL_VAL;
@@ -2043,8 +2046,8 @@ XrAotResult xr_aot_await_any_task_resume(const XrAotContext *ctx, XrSlotRef out_
 static XrRuntimeCore *aot_context_runtime_core(const XrAotContext *ctx) {
     if (ctx && ctx->runtime)
         return xr_aot_runtime_core(ctx->runtime);
-    if (ctx && ctx->isolate)
-        return xr_isolate_get_runtime_core(ctx->isolate);
+    if (ctx && ctx->vm_host)
+        return xr_isolate_get_runtime_core((XrayIsolate *) ctx->vm_host);
     if (ctx && ctx->coro)
         return ctx->coro->core;
     return NULL;
@@ -2053,8 +2056,8 @@ static XrRuntimeCore *aot_context_runtime_core(const XrAotContext *ctx) {
 static XrRuntime *aot_context_scheduler(const XrAotContext *ctx) {
     if (ctx && ctx->runtime)
         return xr_aot_runtime_scheduler(ctx->runtime);
-    if (ctx && ctx->isolate)
-        return xr_isolate_get_scheduler_runtime(ctx->isolate);
+    if (ctx && ctx->vm_host)
+        return xr_isolate_get_scheduler_runtime((XrayIsolate *) ctx->vm_host);
     if (ctx && ctx->coro)
         return (XrRuntime *) ctx->coro->scheduler;
     return NULL;
@@ -2065,8 +2068,8 @@ XrValue xr_aot_channel_new(const XrAotContext *ctx, int64_t buffer_size) {
         return XR_NULL_VAL;
     if (buffer_size < 0)
         buffer_size = 0;
-    XrChannel *ch = ctx->isolate && !ctx->runtime
-                        ? xr_channel_new_vm(ctx->isolate, (uint32_t) buffer_size)
+    XrChannel *ch = ctx->vm_host && !ctx->runtime
+                        ? xr_channel_new_vm((XrayIsolate *) ctx->vm_host, (uint32_t) buffer_size)
                         : xr_channel_new(aot_context_runtime_core(ctx), aot_context_scheduler(ctx),
                                          (uint32_t) buffer_size);
     return ch ? xr_value_from_channel(ch) : XR_NULL_VAL;
@@ -2105,7 +2108,7 @@ static bool aot_context_from_channel_value(XrValue channel_value, XrAotContext *
     if (!isolate)
         return false;
     out->runtime = NULL;
-    out->isolate = isolate;
+    out->vm_host = isolate;
     out->coro = xr_current_coro(isolate);
     out->worker = NULL;
     return true;
@@ -2413,7 +2416,7 @@ static bool aot_context_from_result_group_value(XrValue group_value, XrAotContex
     if (!g)
         return false;
     out->runtime = NULL;
-    out->isolate = NULL;
+    out->vm_host = NULL;
     out->coro = NULL;
     out->worker = NULL;
     return true;

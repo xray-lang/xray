@@ -553,7 +553,7 @@ TEST(aot_channel_uses_runtime_owner_without_isolate) {
     ctx.coro = xr_coro_create_runtime_empty(xr_aot_runtime_core(runtime),
                                             xr_aot_runtime_scheduler(runtime), "aot_channel_owner");
     ASSERT_NOT_NULL(ctx.coro);
-    ASSERT_NULL(ctx.isolate);
+    ASSERT_NULL(ctx.vm_host);
 
     XrValue channel_value = xr_aot_channel_new(&ctx, 2);
     ASSERT_TRUE(xr_value_is_channel(channel_value));
@@ -596,7 +596,7 @@ TEST(aot_task_await_uses_runtime_owner_without_isolate) {
     ctx.coro = xr_coro_create_runtime_empty(xr_aot_runtime_core(runtime),
                                             xr_aot_runtime_scheduler(runtime), "aot_task_parent");
     ASSERT_NOT_NULL(ctx.coro);
-    ASSERT_NULL(ctx.isolate);
+    ASSERT_NULL(ctx.vm_host);
 
     XrCoroutine *child = xr_coro_create_runtime_empty(
         xr_aot_runtime_core(runtime), xr_aot_runtime_scheduler(runtime), "aot_task_child");
@@ -610,7 +610,7 @@ TEST(aot_task_await_uses_runtime_owner_without_isolate) {
                                           xr_slot_native_ptr(&result, XR_REP_I64), -1, false);
     ASSERT_EQ_INT(await.kind, XR_AOT_RUN_DONE);
     ASSERT_EQ_INT((int) result, 91);
-    ASSERT_NULL(ctx.isolate);
+    ASSERT_NULL(ctx.vm_host);
 
     xr_coro_destroy(ctx.coro);
     xr_aot_runtime_delete(runtime);
