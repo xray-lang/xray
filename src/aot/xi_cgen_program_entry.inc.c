@@ -201,6 +201,7 @@ static void emit_xrt_runtime_init(FILE *out, const CgBuiltinInitPlan *plan, uint
     emit_xrt_runtime_builtin_sync(out, plan, "rt");
     fprintf(out, "    xrt_global_ctx.runtime = rt;\n");
     fprintf(out, "    xrt_global_ctx.coro = NULL;\n");
+    fprintf(out, "    xrt_global_ctx.vm_host_ops = NULL;\n");
     fprintf(out, "    xrt_global_ctx.vm_host = NULL;\n");
     fprintf(out, "    xrt_global_ctx.worker = NULL;\n");
 }
