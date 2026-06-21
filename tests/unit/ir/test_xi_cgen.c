@@ -3914,6 +3914,8 @@ TEST(cgen_coro_scalar_channel_try_send_uses_typed_bridge) {
     assert(!had_error && "AOT scalar channel trySend should generate");
     assert(contains(code, "xr_aot_chan_try_send_i64(ctx,") &&
            "scalar channel trySend must use the typed AOT bridge");
+    assert(!contains(code, "xr_aot_poll_yield(ctx)") &&
+           "nonblocking trySend must not own a suspend/poll state");
     assert(!contains(code, "xr_aot_chan_try_send(ctx,") &&
            "scalar channel trySend must not re-box at the generated call site");
     assert(count_between(code, code + strlen(code), "XR_FROM_INT(") == 1 &&
@@ -4274,6 +4276,8 @@ TEST(cgen_coro_scalar_channel_try_recv_returns_recv_enum) {
     assert(!had_error && "AOT channel tryRecv should generate");
     assert(contains(code, "xr_aot_chan_try_recv(ctx,") &&
            "tryRecv must use the Recv<T> enum bridge");
+    assert(!contains(code, "xr_aot_poll_yield(ctx)") &&
+           "nonblocking tryRecv must not own a suspend/poll state");
     assert(!contains(code, "xr_aot_chan_try_recv_slot(ctx,") &&
            "tryRecv must not use the old typed slot bridge");
     assert(!contains(code, "_chan_try_ok_") && "tryRecv must not expose an ok bit");

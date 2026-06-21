@@ -23,6 +23,9 @@ SKIP=0
 
 mkdir -p "$WORK"
 trap 'rm -rf "$WORK"' EXIT
+export ZIG_GLOBAL_CACHE_DIR="${ZIG_GLOBAL_CACHE_DIR:-$WORK/zig-global-cache}"
+export ZIG_LOCAL_CACHE_DIR="${ZIG_LOCAL_CACHE_DIR:-$WORK/zig-local-cache}"
+mkdir -p "$ZIG_GLOBAL_CACHE_DIR" "$ZIG_LOCAL_CACHE_DIR"
 
 cat > "$BASIC_SRC" <<'XR_EOF'
 fn answer() -> int {

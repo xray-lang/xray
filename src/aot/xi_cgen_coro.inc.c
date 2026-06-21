@@ -1265,14 +1265,53 @@ static void emit_coro_sync_wrapper(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
     fprintf(out, "}\n\n");
 }
 
-static void emit_coro_poll_yield_guard(FILE *out, uint32_t id, const char *ready_expr, int sid) {
-    fprintf(out, "    if (!(%s)) {\n", ready_expr);
-    fprintf(out, "        XrAotResult _poll_%u = xr_aot_poll_yield(ctx);\n", id);
-    fprintf(out, "        if (_poll_%u.kind != XR_AOT_RUN_DONE) {\n", id);
-    fprintf(out, "            f->state = %d;\n", sid);
-    fprintf(out, "            return _poll_%u;\n", id);
-    fprintf(out, "        }\n");
-    fprintf(out, "    }\n");
+static bool cg_coro_edge_is_backedge(const XiBlock *from, const XiBlock *to) {
+    return from && to && to->rpo <= from->rpo;
+}
+
+static bool cg_coro_block_has_backedge(const XiBlock *blk) {
+    if (!blk)
+        return false;
+    switch (blk->kind) {
+        case XI_BLOCK_PLAIN:
+            return cg_coro_edge_is_backedge(blk, blk->succs[0]);
+        case XI_BLOCK_IF:
+            return cg_coro_edge_is_backedge(blk, blk->succs[0]) ||
+                   cg_coro_edge_is_backedge(blk, blk->succs[1]);
+        default:
+            return false;
+    }
+}
+
+static bool cg_coro_block_ends_with_yield(const XiBlock *blk) {
+    if (!blk || blk->nvalues == 0)
+        return false;
+    const XiValue *last = blk->values[blk->nvalues - 1];
+    return last && last->op == XI_YIELD;
+}
+
+static void cg_coro_insert_loop_poll_safepoints(XiFunc *f) {
+    if (!f)
+        return;
+    xi_ensure_rpo(f);
+    xr_type_global_init();
+    XrType *unit_type = xr_type_new_unit(NULL);
+    bool changed = false;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        XiBlock *blk = f->blocks[bi];
+        if (!cg_coro_block_has_backedge(blk) || cg_coro_block_ends_with_yield(blk))
+            continue;
+        XiValue *poll = xi_value_new(f, blk, XI_YIELD, unit_type, 0);
+        if (!poll)
+            continue;
+        poll->aux_int = XI_YIELD_AUX_POLL;
+        poll->line = blk->line;
+        changed = true;
+    }
+    if (changed) {
+        f->coro_plan = NULL;
+        xi_func_compute_effects(f);
+    }
 }
 
 static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
@@ -1283,10 +1322,19 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
     if (v->op == XI_YIELD) {
         int sid = ++(*state_id);
         emit_value_generated_line_reset(ctx, out, v);
-        fprintf(out, "    f->state = %d;\n", sid);
-        emit_value_source_line(ctx, out, v);
-        fprintf(out, "    return xr_aot_yielded();\n");
-        emit_value_generated_line_reset(ctx, out, v);
+        if (v->aux_int > XI_YIELD_AUX_IMMEDIATE) {
+            emit_value_source_line(ctx, out, v);
+            fprintf(out, "    XrAotResult _yield_poll_%u = xr_aot_poll_yield(ctx);\n", v->id);
+            fprintf(out, "    if (_yield_poll_%u.kind != XR_AOT_RUN_DONE) {\n", v->id);
+            fprintf(out, "        f->state = %d;\n", sid);
+            fprintf(out, "        return _yield_poll_%u;\n", v->id);
+            fprintf(out, "    }\n");
+        } else {
+            fprintf(out, "    f->state = %d;\n", sid);
+            emit_value_source_line(ctx, out, v);
+            fprintf(out, "    return xr_aot_yielded();\n");
+            emit_value_generated_line_reset(ctx, out, v);
+        }
         fprintf(out, "S%d:;\n", sid);
         fprintf(out, "    f->state = 0;\n");
         return;
@@ -1853,9 +1901,6 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             emit_codegen_abort_aot_result(out);
             return;
         }
-        int sid = ++(*state_id);
-        fprintf(out, "S%d:;\n", sid);
-        fprintf(out, "    f->state = 0;\n");
         const XiValue *send_arg = NULL;
         const char *helper =
             cg_coro_typed_send_helper("xr_aot_chan_try_send_ready", v->args[1], &send_arg);
@@ -1866,10 +1911,6 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         emit_coro_send_value(ctx, out, v->args[1], send_arg);
         fprintf(out, ");\n");
         emit_value_generated_line_reset(ctx, out, v);
-        char ready_expr[64];
-        snprintf(ready_expr, sizeof(ready_expr),
-                 "(XR_IS_BOOL(_chan_try_%u) && _chan_try_%u.i != 0)", v->id, v->id);
-        emit_coro_poll_yield_guard(out, v->id, ready_expr, sid);
         if (cg_coro_value_has_storage(f, v)) {
             char tmp[32];
             snprintf(tmp, sizeof(tmp), "_chan_try_%u", v->id);
@@ -1886,17 +1927,11 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             emit_codegen_abort_aot_result(out);
             return;
         }
-        int sid = ++(*state_id);
-        fprintf(out, "S%d:;\n", sid);
-        fprintf(out, "    f->state = 0;\n");
         emit_value_source_line(ctx, out, v);
         fprintf(out, "    XrValue _chan_try_%u = xr_aot_chan_try_recv(ctx, ", v->id);
         emit_vref(out, v->args[0]);
         fprintf(out, ");\n");
         emit_value_generated_line_reset(ctx, out, v);
-        char ready_expr[80];
-        snprintf(ready_expr, sizeof(ready_expr), "xr_aot_recv_is_value(_chan_try_%u)", v->id);
-        emit_coro_poll_yield_guard(out, v->id, ready_expr, sid);
         fprintf(out, "    XrValue _chan_try_payload_%u = xr_aot_recv_payload(_chan_try_%u);\n",
                 v->id, v->id);
         if (cg_coro_value_has_storage(f, v)) {
@@ -2631,9 +2666,6 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
     if (v->op == XI_CALL_METHOD && xi_value_type_is_channel(v->args[0])) {
         if (xi_value_is_channel_method_call(v, "trySend", 1)) {
             emit_value_generated_line_reset(ctx, out, v);
-            int sid = ++(*state_id);
-            fprintf(out, "S%d:;\n", sid);
-            fprintf(out, "    f->state = 0;\n");
             const XiValue *send_arg = NULL;
             const char *helper =
                 cg_coro_typed_send_helper("xr_aot_chan_try_send", v->args[1], &send_arg);
@@ -2644,9 +2676,6 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             emit_coro_send_value(ctx, out, v->args[1], send_arg);
             fprintf(out, ");\n");
             emit_value_generated_line_reset(ctx, out, v);
-            char ready_expr[80];
-            snprintf(ready_expr, sizeof(ready_expr), "xr_aot_send_is_sent(_chan_method_%u)", v->id);
-            emit_coro_poll_yield_guard(out, v->id, ready_expr, sid);
             if (cg_coro_value_has_storage(f, v)) {
                 char tmp[32];
                 snprintf(tmp, sizeof(tmp), "_chan_method_%u", v->id);
@@ -2656,18 +2685,11 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         }
         if (xi_value_is_channel_method_call(v, "tryRecv", 0)) {
             emit_value_generated_line_reset(ctx, out, v);
-            int sid = ++(*state_id);
-            fprintf(out, "S%d:;\n", sid);
-            fprintf(out, "    f->state = 0;\n");
             emit_value_source_line(ctx, out, v);
             fprintf(out, "    XrValue _chan_method_%u = xr_aot_chan_try_recv(ctx, ", v->id);
             emit_vref(out, v->args[0]);
             fprintf(out, ");\n");
             emit_value_generated_line_reset(ctx, out, v);
-            char ready_expr[80];
-            snprintf(ready_expr, sizeof(ready_expr), "xr_aot_recv_is_value(_chan_method_%u)",
-                     v->id);
-            emit_coro_poll_yield_guard(out, v->id, ready_expr, sid);
             if (cg_coro_value_has_storage(f, v)) {
                 char tmp[32];
                 snprintf(tmp, sizeof(tmp), "_chan_method_%u", v->id);
@@ -3078,6 +3100,7 @@ static bool cg_coro_direct_call_frame_reusable(XiCgenCtx *ctx, const XiFunc *tar
 
 static void xi_cgen_coro_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefix) {
     xi_ensure_rpo(f);
+    cg_coro_insert_loop_poll_safepoints(f);
     const XiCoroResolver resolver = cg_coro_resolver_ctx(ctx);
     const XiCoroPlan *plan = xi_coro_analyze(f, &resolver);
     if (!plan) {

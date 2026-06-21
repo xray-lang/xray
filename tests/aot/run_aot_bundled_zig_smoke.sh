@@ -21,6 +21,8 @@ OUT="$WORK/basic_bundled_zig"
 DOCTOR_LOG="$WORK/doctor.log"
 BUILD_LOG="$WORK/build.log"
 RESTRICTED_PATH="/usr/bin:/bin"
+export ZIG_GLOBAL_CACHE_DIR="${ZIG_GLOBAL_CACHE_DIR:-$WORK/zig-global-cache}"
+export ZIG_LOCAL_CACHE_DIR="${ZIG_LOCAL_CACHE_DIR:-$WORK/zig-local-cache}"
 
 cleanup() {
     rm -rf "$WORK"
@@ -64,7 +66,7 @@ run_with_bundled_env() {
     (
         unset XRAY_ZIG
         PATH="$RESTRICTED_PATH"
-        export PATH
+        export PATH ZIG_GLOBAL_CACHE_DIR ZIG_LOCAL_CACHE_DIR
         "$@"
     )
 }
@@ -88,6 +90,7 @@ if [ ! -x "$XRAY" ]; then
 fi
 
 mkdir -p "$PKG/bin" "$PKG/libexec/xray"
+mkdir -p "$ZIG_GLOBAL_CACHE_DIR" "$ZIG_LOCAL_CACHE_DIR"
 ln -s "$XRAY" "$PKG/bin/xray"
 ln -s "$ZIG_ROOT" "$PKG/libexec/xray/zig"
 

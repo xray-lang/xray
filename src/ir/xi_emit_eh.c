@@ -256,9 +256,13 @@ XR_FUNC void xi_emit_await(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
 
 /* Yield */
 XR_FUNC void xi_emit_yield(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
-    (void) v;
     (void) dst;
-    emit_inst(ctx, CREATE_ABC(OP_YIELD, 0, 0, 0));
+    int64_t hint = v ? v->aux_int : XI_YIELD_AUX_IMMEDIATE;
+    if (hint < 0)
+        hint = XI_YIELD_AUX_IMMEDIATE;
+    if (hint > MAXARG_A)
+        hint = MAXARG_A;
+    emit_inst(ctx, CREATE_ABC(OP_YIELD, (int) hint, 0, 0));
 }
 
 /* Channel new */

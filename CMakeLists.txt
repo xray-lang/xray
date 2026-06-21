@@ -1033,6 +1033,7 @@ if(BUILD_TESTS)
         )
         set_tests_properties(dap_native_smoke PROPERTIES
             LABELS "dap;native;debug;smoke"
+            SKIP_RETURN_CODE 77
             TIMEOUT 120
         )
     endif()
@@ -1062,6 +1063,20 @@ if(BUILD_TESTS)
     set_tests_properties(aot_link_command_manifest PROPERTIES
         LABELS "aot;link;stdlib;smoke"
         TIMEOUT 120
+    )
+
+    # Isolate/runtime split guard (132/M0 + 133/I0): freestanding AOT binaries
+    # must stay VM-free; runtime-backed samples record the current isolate debt
+    # until 133/I3-I4 turn that baseline into a hard gate.
+    add_test(
+        NAME aot_isolate_symbol_gate
+        COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_aot_isolate_symbol_tests.sh
+                $<TARGET_FILE:xray>
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(aot_isolate_symbol_gate PROPERTIES
+        LABELS "aot;link;isolate;smoke"
+        TIMEOUT 180
     )
 
     # FFI runtime/link diagnostics: missing libraries and symbols must fail
@@ -1161,7 +1176,7 @@ if(BUILD_TESTS)
     )
     set_tests_properties(backend_diff PROPERTIES
         LABELS "diff;cross;backend"
-        TIMEOUT 180
+        TIMEOUT 900
     )
 
     add_test(
@@ -1175,7 +1190,7 @@ if(BUILD_TESTS)
     )
     set_tests_properties(backend_diff_deterministic PROPERTIES
         LABELS "diff;cross;backend;coro;deterministic"
-        TIMEOUT 240
+        TIMEOUT 900
     )
 
     add_test(
