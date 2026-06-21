@@ -68,12 +68,10 @@ static inline int seen_hash_n(void *ptr, int bucket_count) {
     return (int) (xr_hash_int((int) (uintptr_t) ptr) % (unsigned int) bucket_count);
 }
 
-static void copy_context_init_common(XrCopyContext *ctx, XrRuntimeCore *core, XrayIsolate *bridge,
-                                     XrGC *dst_gc) {
+static void copy_context_init_common(XrCopyContext *ctx, XrRuntimeCore *core, XrGC *dst_gc) {
     XR_DCHECK(ctx != NULL, "copy_context_init: NULL ctx");
     XR_DCHECK(core != NULL, "copy_context_init: NULL runtime core");
     ctx->core = core;
-    ctx->vm_bridge_isolate = bridge;
     ctx->dst_gc = dst_gc ? dst_gc : &core->gc;
     ctx->dst_coro_gc = NULL;
     ctx->to_transit = false;
@@ -84,12 +82,12 @@ static void copy_context_init_common(XrCopyContext *ctx, XrRuntimeCore *core, Xr
 }
 
 void xr_copy_context_init_core(XrCopyContext *ctx, XrRuntimeCore *core, XrGC *dst_gc) {
-    copy_context_init_common(ctx, core, NULL, dst_gc);
+    copy_context_init_common(ctx, core, dst_gc);
 }
 
 void xr_copy_context_init(XrCopyContext *ctx, struct XrayIsolate *X, struct XrGC *dst_gc) {
     XR_DCHECK(X != NULL, "copy_context_init: NULL isolate");
-    copy_context_init_common(ctx, xr_isolate_get_runtime_core(X), X,
+    copy_context_init_common(ctx, xr_isolate_get_runtime_core(X),
                              dst_gc ? dst_gc : xr_isolate_get_gc(X));
 }
 

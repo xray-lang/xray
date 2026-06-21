@@ -87,7 +87,6 @@ struct XrCoroGC;
 
 typedef struct XrCopyContext {
     struct XrRuntimeCore *core;
-    struct XrayIsolate *vm_bridge_isolate;
     struct XrGC *dst_gc;           // fixed GC fallback
     struct XrCoroGC *dst_coro_gc;  // Region heap (preferred when non-NULL)
     bool to_transit;               // channel-transit copy: sysheap + XR_OBJ_TRANSIT

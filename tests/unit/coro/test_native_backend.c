@@ -466,7 +466,6 @@ TEST(aot_work_queue_uses_runtime_owner_without_isolate) {
     XrWorkQueue *queue = xr_value_to_work_queue(queue_value);
     ASSERT_EQ_PTR(queue->core, xr_aot_runtime_core(runtime));
     ASSERT_EQ_PTR(queue->scheduler, xr_aot_runtime_scheduler(runtime));
-    ASSERT_NULL(queue->vm_bridge_isolate);
 
     ASSERT_TRUE(XR_TO_BOOL(xr_aot_work_queue_push(&ctx, queue_value, xr_int(44), 0)));
     XrValue popped = XR_NULL_VAL;

@@ -52,7 +52,6 @@ typedef struct XrWorkQueue {
     struct XrCoroutine *wait_last;
     struct XrRuntimeCore *core;
     struct XrRuntime *scheduler;
-    struct XrayIsolate *vm_bridge_isolate;
     XrWorkQueueShard shards[];
 } XrWorkQueue;
 
@@ -65,7 +64,6 @@ typedef enum XrWorkQueuePopStatus {
 
 XR_FUNC XrWorkQueue *xr_work_queue_new(struct XrRuntimeCore *core, struct XrRuntime *scheduler,
                                        uint32_t shard_count, uint32_t shard_capacity);
-XR_FUNC void xr_work_queue_set_vm_bridge_isolate(XrWorkQueue *q, struct XrayIsolate *isolate);
 XR_FUNC bool xr_work_queue_push_core(struct XrRuntimeCore *core, XrWorkQueue *q, XrValue value,
                                      int64_t shard_hint);
 XR_FUNC bool xr_work_queue_push(struct XrayIsolate *X, XrWorkQueue *q, XrValue value,

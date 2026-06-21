@@ -449,7 +449,6 @@ XrWorkQueue *xr_work_queue_new(XrRuntimeCore *core, XrRuntime *scheduler, uint32
     q->wait_last = NULL;
     q->core = core;
     q->scheduler = scheduler;
-    q->vm_bridge_isolate = NULL;
 
     for (uint32_t i = 0; i < shard_count; i++) {
         if (!shard_init(&q->shards[i], shard_capacity)) {
@@ -460,11 +459,6 @@ XrWorkQueue *xr_work_queue_new(XrRuntimeCore *core, XrRuntime *scheduler, uint32
         }
     }
     return q;
-}
-
-void xr_work_queue_set_vm_bridge_isolate(XrWorkQueue *q, XrayIsolate *isolate) {
-    if (q)
-        q->vm_bridge_isolate = isolate;
 }
 
 bool xr_work_queue_push_core(XrRuntimeCore *core, XrWorkQueue *q, XrValue value,
@@ -783,7 +777,6 @@ static XrValue work_queue_construct(XrayIsolate *isolate, XrValue receiver, XrVa
 
     XrWorkQueue *q = xr_work_queue_new(xr_isolate_get_runtime_core(isolate),
                                        xr_isolate_get_scheduler_runtime(isolate), shards, capacity);
-    xr_work_queue_set_vm_bridge_isolate(q, isolate);
     if (!q) {
         XrValue exc =
             xr_exception_newf(isolate, XR_ERR_OUT_OF_MEMORY, "WorkQueue allocation failed");
