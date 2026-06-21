@@ -6,7 +6,9 @@
 #   <tmp>/pkg/libexec/xray/zig/zig
 #
 # Then it runs xray with XRAY_ZIG unset and a restricted PATH, so success means
-# discovery came from the bundled layout rather than the developer shell.
+# discovery came from the bundled layout rather than the developer shell.  The
+# default build path is a dry-run link because this gate validates discovery and
+# command construction; tests/aot/run_aot_cross_smoke.sh owns real cross links.
 
 set -u
 
@@ -21,8 +23,7 @@ OUT="$WORK/basic_bundled_zig"
 DOCTOR_LOG="$WORK/doctor.log"
 BUILD_LOG="$WORK/build.log"
 RESTRICTED_PATH="/usr/bin:/bin"
-export ZIG_GLOBAL_CACHE_DIR="${ZIG_GLOBAL_CACHE_DIR:-$WORK/zig-global-cache}"
-export ZIG_LOCAL_CACHE_DIR="${ZIG_LOCAL_CACHE_DIR:-$WORK/zig-local-cache}"
+REAL_BUILD="${XRAY_BUNDLED_ZIG_REAL_BUILD:-0}"
 
 cleanup() {
     rm -rf "$WORK"
@@ -44,6 +45,12 @@ resolve_path() {
     dir="$(cd -P "$(dirname "$path")" && pwd)"
     printf '%s/%s\n' "$dir" "$(basename "$path")"
 }
+
+XRAY="$(resolve_path "$XRAY")"
+XRAY_DIR="$(cd "$(dirname "$XRAY")" 2>/dev/null && pwd || printf '.')"
+ZIG_CACHE_ROOT="${XRAY_ZIG_CACHE_ROOT:-$XRAY_DIR/zig-cache}"
+export ZIG_GLOBAL_CACHE_DIR="${ZIG_GLOBAL_CACHE_DIR:-$ZIG_CACHE_ROOT/global}"
+export ZIG_LOCAL_CACHE_DIR="${ZIG_LOCAL_CACHE_DIR:-$ZIG_CACHE_ROOT/bundled-smoke-local}"
 
 find_zig() {
     local cand
@@ -109,6 +116,7 @@ echo "Binary:       $XRAY"
 echo "Zig root:     $ZIG_ROOT"
 echo "Package root: $PKG"
 echo "Expected Zig: $EXPECTED_ZIG"
+echo "Mode:         $([ "$REAL_BUILD" = "1" ] && printf 'real-link' || printf 'dry-run-link')"
 echo ""
 
 if ! run_with_bundled_env "$PKG/bin/xray" toolchain doctor >"$DOCTOR_LOG" 2>&1; then
@@ -123,8 +131,13 @@ if ! grep -Fq "$EXPECTED_ZIG" "$DOCTOR_LOG"; then
     exit 1
 fi
 
-if ! run_with_bundled_env "$PKG/bin/xray" build --native --target x86_64-linux-musl \
-        --dump-link-command -o "$OUT" "$BASIC_SRC" >"$BUILD_LOG" 2>&1; then
+BUILD_ARGS=(build --native --target x86_64-linux-musl --dump-link-command)
+if [ "$REAL_BUILD" != "1" ]; then
+    BUILD_ARGS+=(--dry-run-link)
+fi
+BUILD_ARGS+=(-o "$OUT" "$BASIC_SRC")
+
+if ! run_with_bundled_env "$PKG/bin/xray" "${BUILD_ARGS[@]}" >"$BUILD_LOG" 2>&1; then
     echo "FAIL: bundled Zig cross build failed"
     sed 's/^/    /' "$BUILD_LOG" | head -60
     exit 1
@@ -136,12 +149,12 @@ if ! grep -Fq "$EXPECTED_ZIG" "$BUILD_LOG"; then
     exit 1
 fi
 
-if [ ! -s "$OUT" ]; then
+if [ "$REAL_BUILD" = "1" ] && [ ! -s "$OUT" ]; then
     echo "FAIL: missing cross build output"
     exit 1
 fi
 
 echo "PASS: bundled Zig discovery works with package layout"
-if command -v file >/dev/null 2>&1; then
+if [ "$REAL_BUILD" = "1" ] && command -v file >/dev/null 2>&1; then
     file "$OUT" | sed 's/^/    /'
 fi

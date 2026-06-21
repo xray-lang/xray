@@ -1031,6 +1031,10 @@ if(BUILD_TESTS)
     if(XRAY_HOST_PROCESSOR_COUNT LESS XRAY_CTEST_AOT_ISOLATE_JOBS)
         set(XRAY_CTEST_AOT_ISOLATE_JOBS ${XRAY_HOST_PROCESSOR_COUNT})
     endif()
+    set(XRAY_CTEST_AOT_INCREMENTAL_JOBS 3)
+    if(XRAY_HOST_PROCESSOR_COUNT LESS XRAY_CTEST_AOT_INCREMENTAL_JOBS)
+        set(XRAY_CTEST_AOT_INCREMENTAL_JOBS ${XRAY_HOST_PROCESSOR_COUNT})
+    endif()
 
     # All unit tests are managed by tests/unit/CMakeLists.txt
     add_subdirectory(tests/unit)
@@ -1070,9 +1074,9 @@ if(BUILD_TESTS)
     )
     set_tests_properties(aot_bundled_zig_smoke PROPERTIES
         LABELS "aot;cross;toolchain;smoke"
-        PROCESSORS 4
+        PROCESSORS 1
         SKIP_RETURN_CODE 77
-        TIMEOUT 120
+        TIMEOUT 60
     )
 
     add_test(
@@ -1106,13 +1110,15 @@ if(BUILD_TESTS)
     # changed are recompiled; dependents hit the cache and relink (114).
     add_test(
         NAME aot_incremental_cache
-        COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_aot_incremental_cache.sh
+        COMMAND ${CMAKE_COMMAND} -E env
+                XRAY_AOT_INCREMENTAL_JOBS=${XRAY_CTEST_AOT_INCREMENTAL_JOBS}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_aot_incremental_cache.sh
                 $<TARGET_FILE:xray>
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
     set_tests_properties(aot_incremental_cache PROPERTIES
         LABELS "aot;cache;smoke"
-        PROCESSORS 4
+        PROCESSORS ${XRAY_CTEST_AOT_INCREMENTAL_JOBS}
         SKIP_RETURN_CODE 77
         TIMEOUT 120
     )
@@ -1127,7 +1133,7 @@ if(BUILD_TESTS)
     )
     set_tests_properties(aot_link_command_manifest PROPERTIES
         LABELS "aot;link;stdlib;smoke"
-        PROCESSORS 4
+        PROCESSORS 2
         TIMEOUT 120
     )
 
