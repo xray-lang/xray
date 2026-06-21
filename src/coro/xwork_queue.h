@@ -28,6 +28,8 @@
 struct XrayIsolate;
 struct XrCoroGC;
 struct XrCoroutine;
+struct XrRuntime;
+struct XrRuntimeCore;
 
 typedef struct XrWorkQueueShard {
     XrAdaptiveMutex lock;
@@ -48,7 +50,9 @@ typedef struct XrWorkQueue {
     XrAdaptiveMutex wait_lock;
     struct XrCoroutine *wait_first;
     struct XrCoroutine *wait_last;
-    struct XrayIsolate *isolate;
+    struct XrRuntimeCore *core;
+    struct XrRuntime *scheduler;
+    struct XrayIsolate *vm_bridge_isolate;
     XrWorkQueueShard shards[];
 } XrWorkQueue;
 
@@ -59,8 +63,9 @@ typedef enum XrWorkQueuePopStatus {
     XR_WORK_QUEUE_POP_ERROR
 } XrWorkQueuePopStatus;
 
-XR_FUNC XrWorkQueue *xr_work_queue_new(struct XrayIsolate *X, uint32_t shard_count,
-                                       uint32_t shard_capacity);
+XR_FUNC XrWorkQueue *xr_work_queue_new(struct XrRuntimeCore *core, struct XrRuntime *scheduler,
+                                       uint32_t shard_count, uint32_t shard_capacity);
+XR_FUNC void xr_work_queue_set_vm_bridge_isolate(XrWorkQueue *q, struct XrayIsolate *isolate);
 XR_FUNC bool xr_work_queue_push(struct XrayIsolate *X, XrWorkQueue *q, XrValue value,
                                 int64_t shard_hint);
 XR_FUNC XrValue xr_work_queue_try_pop(struct XrayIsolate *X, XrWorkQueue *q, int64_t worker_hint,

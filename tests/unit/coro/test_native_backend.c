@@ -15,6 +15,7 @@
 #include "coro/xcoroutine.h"
 #include "coro/xresult_group.h"
 #include "coro/xworker.h"
+#include "coro/xwork_queue.h"
 #include "coro/xyieldable.h"
 #include "runtime/xisolate_internal.h"
 #include <stdatomic.h>
@@ -409,6 +410,30 @@ TEST(aot_result_group_uses_runtime_without_isolate) {
     xr_aot_runtime_delete(runtime);
 }
 
+TEST(aot_work_queue_uses_runtime_owner_without_isolate) {
+    XrAotRuntimeConfig cfg;
+    xr_aot_runtime_config_init(&cfg);
+    cfg.caps = XR_AOT_CAP_WORK_QUEUE;
+    cfg.scheduler_workers = 0;
+
+    XrAotRuntime *runtime = xr_aot_runtime_new(&cfg);
+    ASSERT_NOT_NULL(runtime);
+
+    XrAotContext ctx;
+    memset(&ctx, 0, sizeof(ctx));
+    ctx.runtime = runtime;
+
+    XrValue queue_value = xr_aot_work_queue_new(&ctx, 2, 4);
+    ASSERT_TRUE(xr_value_is_work_queue(queue_value));
+    XrWorkQueue *queue = xr_value_to_work_queue(queue_value);
+    ASSERT_EQ_PTR(queue->core, xr_aot_runtime_core(runtime));
+    ASSERT_EQ_PTR(queue->scheduler, xr_aot_runtime_scheduler(runtime));
+    ASSERT_NULL(queue->vm_bridge_isolate);
+
+    xr_gc_destroy_work_queue(&queue->gc, NULL);
+    xr_aot_runtime_delete(runtime);
+}
+
 TEST(coroutine_recycle_hooks_are_backend_abi_contract) {
     const XrCoroBackendVTable *vm_backend = xr_coro_vm_backend_vtable();
     ASSERT_NOT_NULL(vm_backend);
@@ -471,6 +496,7 @@ RUN_TEST(aot_runtime_creates_isolate_free_aot_coroutine);
 RUN_TEST(aot_run_main_uses_runtime_without_isolate);
 RUN_TEST(aot_context_builtin_prefers_runtime_table);
 RUN_TEST(aot_result_group_uses_runtime_without_isolate);
+RUN_TEST(aot_work_queue_uses_runtime_owner_without_isolate);
 RUN_TEST(coroutine_recycle_hooks_are_backend_abi_contract);
 
 TEST_MAIN_END()

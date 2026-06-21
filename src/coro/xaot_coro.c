@@ -2116,14 +2116,14 @@ XrValue xr_aot_chan_is_closed_sync(XrValue channel_value) {
 static XrayIsolate *aot_work_queue_isolate(const XrAotContext *ctx, XrWorkQueue *q) {
     if (ctx && ctx->isolate)
         return ctx->isolate;
-    return q ? q->isolate : NULL;
+    return q ? q->vm_bridge_isolate : NULL;
 }
 
 static bool aot_context_from_work_queue_value(XrValue queue_value, XrAotContext *out) {
     if (!out || !xr_value_is_work_queue(queue_value))
         return false;
     XrWorkQueue *q = xr_value_to_work_queue(queue_value);
-    XrayIsolate *isolate = q ? q->isolate : NULL;
+    XrayIsolate *isolate = q ? q->vm_bridge_isolate : NULL;
     if (!isolate)
         return false;
     out->isolate = isolate;
@@ -2150,10 +2150,17 @@ static uint32_t aot_work_queue_sanitize_capacity(int64_t value) {
 
 XrValue xr_aot_work_queue_new(const XrAotContext *ctx, int64_t shard_count,
                               int64_t shard_capacity) {
-    if (!ctx || !ctx->isolate)
+    if (!ctx)
         return XR_NULL_VAL;
-    XrWorkQueue *q = xr_work_queue_new(ctx->isolate, aot_work_queue_sanitize_shards(shard_count),
+    XrRuntimeCore *core = ctx->runtime ? xr_aot_runtime_core(ctx->runtime)
+                                       : (ctx->isolate ? ctx->isolate->core_rt : NULL);
+    XrRuntime *scheduler =
+        ctx->runtime ? xr_aot_runtime_scheduler(ctx->runtime)
+                     : (ctx->isolate ? (XrRuntime *) ctx->isolate->scheduler_runtime : NULL);
+    XrWorkQueue *q = xr_work_queue_new(core, scheduler, aot_work_queue_sanitize_shards(shard_count),
                                        aot_work_queue_sanitize_capacity(shard_capacity));
+    if (q && ctx->isolate)
+        xr_work_queue_set_vm_bridge_isolate(q, ctx->isolate);
     return q ? xr_value_from_work_queue(q) : XR_NULL_VAL;
 }
 

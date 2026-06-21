@@ -20,6 +20,7 @@
 typedef struct WorkQueueFixture {
     XrayIsolate isolate_storage;
     XrRuntimeCore core;
+    XrRuntime runtime;
     XrSystemHeap sys_heap;
     bool sys_heap_initialized;
 } WorkQueueFixture;
@@ -31,6 +32,9 @@ static bool work_queue_fixture_init(WorkQueueFixture *f) {
     f->sys_heap_initialized = true;
     f->core.sys_heap = &f->sys_heap;
     f->isolate_storage.core_rt = &f->core;
+    f->runtime.core = &f->core;
+    xr_scheduler_runtime_attach_isolate(&f->runtime, &f->isolate_storage);
+    f->isolate_storage.scheduler_runtime = &f->runtime;
     return true;
 }
 
@@ -62,8 +66,10 @@ TEST(cancel_waiter_unlinks_coroutine_from_work_queue) {
     WorkQueueFixture f;
     ASSERT_TRUE(work_queue_fixture_init(&f));
 
-    XrWorkQueue *q = xr_work_queue_new(&f.isolate_storage, 1, 1);
+    XrWorkQueue *q = xr_work_queue_new(&f.core, &f.runtime, 1, 1);
     ASSERT_NOT_NULL(q);
+    ASSERT_EQ_PTR(q->core, &f.core);
+    ASSERT_EQ_PTR(q->scheduler, &f.runtime);
 
     XrCoroutine coro;
     XrCoroExt ext;
@@ -90,15 +96,10 @@ TEST(close_without_workers_keeps_waiter_blocked) {
     WorkQueueFixture f;
     ASSERT_TRUE(work_queue_fixture_init(&f));
 
-    XrRuntime runtime;
-    memset(&runtime, 0, sizeof(runtime));
-    runtime.core = &f.core;
-    xr_scheduler_runtime_attach_isolate(&runtime, &f.isolate_storage);
-    runtime.worker_count = 0;
-    runtime.workers = NULL;
-    f.isolate_storage.scheduler_runtime = &runtime;
+    f.runtime.worker_count = 0;
+    f.runtime.workers = NULL;
 
-    XrWorkQueue *q = xr_work_queue_new(&f.isolate_storage, 1, 1);
+    XrWorkQueue *q = xr_work_queue_new(&f.core, &f.runtime, 1, 1);
     ASSERT_NOT_NULL(q);
 
     XrCoroutine coro;
