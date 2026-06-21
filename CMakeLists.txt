@@ -987,6 +987,7 @@ if(BUILD_TESTS)
     )
     set_tests_properties(aot_filetests PROPERTIES
         LABELS "aot;filetests"
+        PROCESSORS 2
         TIMEOUT 120
     )
 
@@ -998,6 +999,7 @@ if(BUILD_TESTS)
     )
     set_tests_properties(aot_cross_smoke PROPERTIES
         LABELS "aot;cross;smoke"
+        PROCESSORS 4
         SKIP_RETURN_CODE 77
         TIMEOUT 120
     )
@@ -1010,6 +1012,7 @@ if(BUILD_TESTS)
     )
     set_tests_properties(aot_bundled_zig_smoke PROPERTIES
         LABELS "aot;cross;toolchain;smoke"
+        PROCESSORS 4
         SKIP_RETURN_CODE 77
         TIMEOUT 120
     )
@@ -1051,6 +1054,7 @@ if(BUILD_TESTS)
     )
     set_tests_properties(aot_incremental_cache PROPERTIES
         LABELS "aot;cache;smoke"
+        PROCESSORS 4
         SKIP_RETURN_CODE 77
         TIMEOUT 120
     )
@@ -1065,6 +1069,7 @@ if(BUILD_TESTS)
     )
     set_tests_properties(aot_link_command_manifest PROPERTIES
         LABELS "aot;link;stdlib;smoke"
+        PROCESSORS 4
         TIMEOUT 120
     )
 
@@ -1079,6 +1084,7 @@ if(BUILD_TESTS)
     )
     set_tests_properties(aot_isolate_symbol_gate PROPERTIES
         LABELS "aot;link;isolate;smoke"
+        PROCESSORS 4
         TIMEOUT 180
     )
 
@@ -1093,6 +1099,7 @@ if(BUILD_TESTS)
     )
     set_tests_properties(ffi_diagnostics PROPERTIES
         LABELS "ffi;aot;vm;negative;regression"
+        PROCESSORS 2
         TIMEOUT 60
     )
 
@@ -1122,6 +1129,7 @@ if(BUILD_TESTS)
     )
     set_tests_properties(ffi_c_export_smoke PROPERTIES
         LABELS "ffi;aot;regression"
+        PROCESSORS 2
         TIMEOUT 60
     )
 
@@ -1137,6 +1145,7 @@ if(BUILD_TESTS)
     )
     set_tests_properties(compile_error_tests PROPERTIES
         LABELS "frontend;negative;regression"
+        PROCESSORS 2
         TIMEOUT 60
     )
 
@@ -1174,14 +1183,14 @@ if(BUILD_TESTS)
     add_test(
         NAME backend_diff
         COMMAND ${CMAKE_COMMAND} -E env
-                XRAY_DIFF_JOBS=16
+                XRAY_DIFF_JOBS=8
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/diff/run_backend_diff.sh
                 $<TARGET_FILE:xray>
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
     set_tests_properties(backend_diff PROPERTIES
         LABELS "diff;cross;backend"
-        PROCESSORS 16
+        PROCESSORS 8
         TIMEOUT 900
     )
 
@@ -1190,14 +1199,15 @@ if(BUILD_TESTS)
         COMMAND ${CMAKE_COMMAND} -E env
                 XRAY_CORO_DETERMINISTIC=1
                 XRAY_CORO_SEED=12345
-                XRAY_DIFF_JOBS=16
+                XRAY_DIFF_CASES_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/diff/deterministic_cases.txt
+                XRAY_DIFF_JOBS=8
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/diff/run_backend_diff.sh
                 $<TARGET_FILE:xray>
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
     set_tests_properties(backend_diff_deterministic PROPERTIES
         LABELS "diff;cross;backend;coro;deterministic"
-        PROCESSORS 16
+        PROCESSORS 8
         TIMEOUT 900
     )
 

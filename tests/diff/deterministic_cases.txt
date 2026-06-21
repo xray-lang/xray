@@ -1,0 +1,17 @@
+# Coroutine/scheduler cases for the deterministic VM/AOT diff gate.
+# The default coro_regression_cases.txt manifest is appended separately.
+tests/diff/cases/limits/select_cases_over_32.xr
+tests/diff/cases/semantics/cleanup/defer_async_await.xr
+tests/diff/cases/semantics/cleanup/defer_coroutine.xr
+tests/diff/cases/semantics/coro/await_array.xr
+tests/diff/cases/semantics/coro/await_tuple_destructure.xr
+tests/diff/cases/semantics/coro/channel_nonblocking_prelude_enums.xr
+tests/diff/cases/semantics/coro/deterministic_timer_schedule_order.xr
+tests/diff/cases/semantics/coro/poll_try_recv_safepoint.xr
+tests/diff/cases/semantics/coro/poll_try_send_safepoint.xr
+tests/diff/cases/semantics/coro/work_queue_native_methods.xr
+tests/diff/cases/semantics/modules/xmod_coro.xr
+tests/diff/cases/semantics/ownership/in_go_copy_argument_allowed.xr
+tests/diff/cases/semantics/ownership/move_into_go.xr
+tests/diff/cases/semantics/ownership/shared_class_copy_go.xr
+tests/diff/cases/semantics/ownership/shared_freeze_go.xr
