@@ -429,9 +429,3 @@ XrExtTraverseFn xr_isolate_get_ext_traverse(XrayIsolate *isolate, uint8_t type_i
         return NULL;
     return (XrExtTraverseFn) core->ext_traverse_funcs[type_id];
 }
-
-/* ========== Thread Local API ========== */
-
-XrayIsolate *xray_isolate_current(void) {
-    return g_current_isolate;
-}

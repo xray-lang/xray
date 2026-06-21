@@ -31,3 +31,7 @@ void xray_isolate_enter(XrayIsolate *isolate) {
 void xray_isolate_exit(void) {
     g_current_isolate = NULL;
 }
+
+XrayIsolate *xray_isolate_current(void) {
+    return g_current_isolate;
+}

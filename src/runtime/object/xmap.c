@@ -24,7 +24,6 @@
 
 #include "xmap.h"
 #include "xstring.h"
-#include "../xisolate_api.h"
 #include "../gc/xalloc_unified.h"
 #include "../gc/xweak_registry.h"
 #include "../../base/xchecks.h"
@@ -136,7 +135,7 @@ static inline bool map_is_weak(const XrMap *map) {
 static XrayIsolate *map_owning_isolate(XrCoroGC *gc) {
     if (gc && gc->owner)
         return gc->owner->isolate;
-    return xray_isolate_current();
+    return NULL;
 }
 
 static void xr_map_release_entry_values(XrMap *map, XrMapEntry *e, XrCoroGC *gc) {
@@ -147,12 +146,12 @@ static void xr_map_release_entry_values(XrMap *map, XrMapEntry *e, XrCoroGC *gc)
     e->value = xr_null();
 }
 
-static void xr_map_prepare_weak_key(XrMap *map, XrValue key) {
+static void xr_map_prepare_weak_key(XrMap *map, XrValue key, XrCoroGC *gc) {
     if (!map_is_weak(map) || !XR_IS_PTR(key))
         return;
     XrGCHeader *target = XR_VALUE_GCPTR(key);
     XR_OBJ_SET_FLAG(target, XR_OBJ_WEAKABLE);
-    xr_weak_registry_register_map(xray_isolate_current(), map);
+    xr_weak_registry_register_map(map_owning_isolate(gc), map);
 }
 
 static void map_tombstone_entry_index(XrMap *map, uint32_t eidx, XrCoroGC *gc) {
@@ -433,7 +432,7 @@ void xr_map_set(XrMap *map, XrValue key, XrValue value) {
 
     xr_swiss_indices_put(map->ctrl, map->indices, map->indices_size, hash, (int32_t) eidx);
     if (map_is_weak(map)) {
-        xr_map_prepare_weak_key(map, key);
+        xr_map_prepare_weak_key(map, key, gc);
         xr_rc_release_value(gc, key);
     }
     XR_GC_BARRIER_BACK_SAFE(gc, map);

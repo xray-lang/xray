@@ -174,7 +174,7 @@ vmcase(OP_DUMP) {
     int a = GETARG_A(i);
     int b = GETARG_B(i);
     XrValue val = R(a);
-    xr_value_dump(val, b);
+    xr_value_dump_with_isolate(isolate, val, b);
     vmbreak;
 }
 

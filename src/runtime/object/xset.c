@@ -23,7 +23,6 @@
  */
 
 #include "xset.h"
-#include "../xisolate_api.h"
 #include "../../base/xchecks.h"
 #include "../value/xvalue_hash.h"
 #include "../../base/xmalloc.h"
@@ -79,7 +78,7 @@ static inline bool set_is_weak(const XrSet *set) {
 static XrayIsolate *set_owning_isolate(XrCoroGC *gc) {
     if (gc && gc->owner)
         return gc->owner->isolate;
-    return xray_isolate_current();
+    return NULL;
 }
 
 static void xr_set_release_stored_entry(XrSet *set, XrSetEntry *e, XrCoroGC *gc) {
@@ -89,12 +88,12 @@ static void xr_set_release_stored_entry(XrSet *set, XrSetEntry *e, XrCoroGC *gc)
         e->value = xr_null();
 }
 
-static void xr_set_prepare_weak_value(XrSet *set, XrValue value) {
+static void xr_set_prepare_weak_value(XrSet *set, XrValue value, XrCoroGC *gc) {
     if (!set_is_weak(set) || !XR_IS_PTR(value))
         return;
     XrGCHeader *target = XR_VALUE_GCPTR(value);
     XR_OBJ_SET_FLAG(target, XR_OBJ_WEAKABLE);
-    xr_weak_registry_register_set(xray_isolate_current(), set);
+    xr_weak_registry_register_set(set_owning_isolate(gc), set);
 }
 
 static void set_tombstone_entry_index(XrSet *set, uint32_t eidx) {
@@ -320,7 +319,7 @@ bool xr_set_add(XrSet *set, XrValue value) {
 
     xr_swiss_indices_put(set->ctrl, set->indices, set->indices_size, hash, (int32_t) eidx);
     if (set_is_weak(set)) {
-        xr_set_prepare_weak_value(set, value);
+        xr_set_prepare_weak_value(set, value, gc);
         xr_rc_release_value(gc, value);
     }
     XR_GC_BARRIER_BACK_SAFE(gc, set);

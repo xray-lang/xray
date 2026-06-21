@@ -22,7 +22,6 @@
 #include <stdio.h>
 
 #include "xtype_internal.h"
-#include "../xisolate_api.h"
 #include "../xisolate_internal.h"
 
 // ========== Process-level static singletons (early init) ==========
@@ -46,6 +45,8 @@ static XrType g_type_float_nullable;
 static XrType g_type_string_nullable;
 static XrType g_type_bool_nullable;
 static XrType g_type_json_nullable;
+
+static XR_THREAD_LOCAL XrTypePool *g_current_type_pool = NULL;
 
 static void init_singleton(XrType *t, XrTypeKind kind, uint32_t id, bool nullable,
                            uint8_t native_width) {
@@ -83,33 +84,33 @@ void xr_type_global_init(void) {
     init_singleton(&g_type_json_nullable, XR_KIND_JSON, id++, true, 0);
 }
 
-// Set current type pool on the active isolate (called by XaAnalyzer)
+// Set the analyzer/current type pool for no-isolate type helpers.
 void xr_type_set_current_pool(XrTypePool *pool, uint32_t *id_counter) {
     (void) id_counter;  // ID counter now managed by pool itself
-    XrayIsolate *X = xray_isolate_current();
-    if (X)
-        X->current_type_pool = pool;
+    g_current_type_pool = pool;
 }
 
-// Get current type pool from active isolate (for rare no-X contexts like xr_type_to_string)
+// Get current type pool for rare no-X contexts like xr_type_to_string.
 XrTypePool *xr_type_get_current_pool(void) {
-    XrayIsolate *X = xray_isolate_current();
-    return X ? X->current_type_pool : NULL;
+    return g_current_type_pool;
 }
 
-// Resolve isolate: use explicit X, or fallback to TLS current isolate.
-// Many callers (xr_type_to_string, xr_type_assignable, etc.) pass NULL.
 static inline XrayIsolate *resolve_isolate(XrayIsolate *X) {
-    return X ? X : xray_isolate_current();
+    return X;
+}
+
+static inline XrTypePool *resolve_type_pool(XrayIsolate *X) {
+    if (X && X->current_type_pool)
+        return X->current_type_pool;
+    return g_current_type_pool;
 }
 
 // Helper: allocate and initialize a type (for non-singleton types)
 // Uses pool arena for allocation - memory freed when pool is reset/destroyed
 static XrType *type_alloc(XrayIsolate *X, XrTypeKind kind) {
     X = resolve_isolate(X);
-    XR_CHECK(X != NULL, "type_alloc: no isolate (explicit or TLS)");
-    XrTypePool *pool = X->current_type_pool;
-    XR_CHECK(pool != NULL, "Type pool not set - ensure isolate has current_type_pool");
+    XrTypePool *pool = resolve_type_pool(X);
+    XR_CHECK(pool != NULL, "Type pool not set - pass an isolate or call xr_type_set_current_pool");
     return xr_pool_alloc_type(pool, kind);
 }
 
@@ -237,7 +238,7 @@ XrType *xr_type_new_task(XrayIsolate *X, XrType *result_type) {
         return NULL;
     type->instance.class_name = "Task";
     if (result_type) {
-        XrTypePool *pool = X->current_type_pool;
+        XrTypePool *pool = resolve_type_pool(X);
         XrType **args = (XrType **) xr_pool_alloc(pool, sizeof(XrType *));
         if (args) {
             args[0] = result_type;
@@ -263,7 +264,7 @@ XrType *xr_type_new_json_with_fields(XrayIsolate *X, const char **names, XrType 
     XrType *type = type_alloc(X, XR_KIND_JSON);
     if (!type)
         return NULL;
-    XrTypePool *pool = X->current_type_pool;
+    XrTypePool *pool = resolve_type_pool(X);
     if (count > 0 && names && types) {
         const char **field_names =
             (const char **) type_alloc_array(pool, sizeof(char *), count, NULL);
@@ -288,10 +289,9 @@ XR_FUNC void xr_type_set_json_field_readonly(XrayIsolate *X, XrType *type, const
         count != type->object.field_count)
         return;
     X = resolve_isolate(X);
-    if (!X || !X->current_type_pool)
+    XrTypePool *pool = resolve_type_pool(X);
+    if (!pool)
         return;
-
-    XrTypePool *pool = X->current_type_pool;
     type->object.field_readonly = (bool *) type_alloc_array(pool, sizeof(bool), count, NULL);
     if (!type->object.field_readonly)
         return;
@@ -302,9 +302,10 @@ XR_FUNC void xr_type_set_json_type_name(XrayIsolate *X, XrType *type, const char
     if (!type || type->kind != XR_KIND_JSON || !name)
         return;
     X = resolve_isolate(X);
-    if (!X || !X->current_type_pool)
+    XrTypePool *pool = resolve_type_pool(X);
+    if (!pool)
         return;
-    type->object.type_name = xr_pool_strdup(X->current_type_pool, name);
+    type->object.type_name = xr_pool_strdup(pool, name);
 }
 
 // Optional type (T?) - unified: uses is_nullable on the base type itself
@@ -322,7 +323,7 @@ XrType *xr_type_new_type_param(XrayIsolate *X, const char *name, int id) {
     XrType *type = type_alloc(X, XR_KIND_TYPE_PARAM);
     if (!type)
         return NULL;
-    XrTypePool *pool = X->current_type_pool;
+    XrTypePool *pool = resolve_type_pool(X);
     type->type_param.name = name ? xr_pool_strdup(pool, name) : NULL;
     type->type_param.id = id;
     type->type_param.constraint = NULL;
@@ -342,7 +343,7 @@ XrType *xr_type_new_class(XrayIsolate *X, const char *class_name) {
     X = resolve_isolate(X);
     XrType *type = type_alloc(X, XR_KIND_CLASS);
     if (type && class_name) {
-        XrTypePool *pool = X->current_type_pool;
+        XrTypePool *pool = resolve_type_pool(X);
         type->instance.class_name = xr_pool_strdup(pool, class_name);
     }
     return type;
@@ -352,7 +353,7 @@ XrType *xr_type_new_interface(XrayIsolate *X, const char *interface_name) {
     X = resolve_isolate(X);
     XrType *type = type_alloc(X, XR_KIND_INTERFACE);
     if (type && interface_name) {
-        XrTypePool *pool = X->current_type_pool;
+        XrTypePool *pool = resolve_type_pool(X);
         type->instance.class_name = xr_pool_strdup(pool, interface_name);
     }
     return type;
@@ -372,7 +373,7 @@ XrType *xr_type_new_generic_interface(XrayIsolate *X, const char *interface_name
     XrType *type = type_alloc(X, XR_KIND_INTERFACE);
     if (!type)
         return NULL;
-    XrTypePool *pool = X->current_type_pool;
+    XrTypePool *pool = resolve_type_pool(X);
 
     type->instance.class_name = interface_name ? xr_pool_strdup(pool, interface_name) : NULL;
     type->instance.class_ref = NULL;
@@ -453,7 +454,7 @@ XrType *xr_type_new_instance(XrayIsolate *X, XrClassInfo *class_info) {
     type->instance.class_ref = class_info;
     // Extract class_name from class_info for type comparison and display
     if (class_info && class_info->name) {
-        XrTypePool *pool = X->current_type_pool;
+        XrTypePool *pool = resolve_type_pool(X);
         type->instance.class_name = xr_pool_strdup(pool, class_info->name);
     }
     type->instance.type_args = NULL;
@@ -472,7 +473,7 @@ XrType *xr_type_new_generic_instance(XrayIsolate *X, const char *class_name,
     XrType *type = type_alloc(X, XR_KIND_INSTANCE);
     if (!type)
         return NULL;
-    XrTypePool *pool = X->current_type_pool;
+    XrTypePool *pool = resolve_type_pool(X);
 
     type->instance.class_name = class_name ? xr_pool_strdup(pool, class_name) : NULL;
     type->instance.class_ref = class_info;
@@ -506,7 +507,7 @@ XrType *xr_type_new_function(XrayIsolate *X, XrType **param_types, int param_cou
     XrType *type = type_alloc(X, XR_KIND_FUNCTION);
     if (!type)
         return NULL;
-    XrTypePool *pool = X->current_type_pool;
+    XrTypePool *pool = resolve_type_pool(X);
 
     if (param_count > 0 && param_types) {
         size_t param_size;
@@ -529,10 +530,9 @@ XR_FUNC void xr_type_set_function_type_params(XrayIsolate *X, XrType *type, cons
     if (!type || type->kind != XR_KIND_FUNCTION || count <= 0 || !names)
         return;
     X = resolve_isolate(X);
-    if (!X || !X->current_type_pool)
+    XrTypePool *pool = resolve_type_pool(X);
+    if (!pool)
         return;
-
-    XrTypePool *pool = X->current_type_pool;
     type->function.type_param_names =
         (const char **) type_alloc_array(pool, sizeof(const char *), count, NULL);
     type->function.type_param_constraints =
@@ -603,7 +603,7 @@ XrType *xr_type_new_tuple(XrayIsolate *X, XrType **element_types, int count) {
     XrType *type = type_alloc(X, XR_KIND_TUPLE);
     if (!type)
         return NULL;
-    XrTypePool *pool = X->current_type_pool;
+    XrTypePool *pool = resolve_type_pool(X);
 
     if (count > 0 && element_types) {
         size_t element_size;
@@ -759,7 +759,7 @@ XrType *xr_type_new_union(XrayIsolate *X, XrType **members, int count) {
     XrType *type = type_alloc(X, XR_KIND_UNION);
     if (!type)
         return xr_type_new_unknown(X);
-    XrTypePool *pool = X->current_type_pool;
+    XrTypePool *pool = resolve_type_pool(X);
     size_t member_size;
     type->union_type.members =
         (XrType **) type_alloc_array(pool, sizeof(XrType *), result_count, &member_size);
@@ -892,15 +892,11 @@ XrType *xr_type_copy(XrayIsolate *X, XrType *type) {
     if (!type)
         return NULL;
     XR_DCHECK(type->kind < XR_KIND_COUNT, "type_copy: invalid kind");
-    // Resolve X early for callers that pass NULL (e.g. xr_type_to_string)
-    if (!X)
-        X = xray_isolate_current();
-
     XrType *copy = type_alloc(X, type->kind);
     if (!copy)
         return NULL;
 
-    XrTypePool *pool = X->current_type_pool;
+    XrTypePool *pool = resolve_type_pool(X);
 
     copy->is_nullable = type->is_nullable;
 
@@ -1086,7 +1082,7 @@ XrType *xr_type_make_nullable(XrayIsolate *X, XrType *type) {
         return &g_type_json_nullable;
 
     // Also handle pool singletons (frozen types from type pool)
-    if (type->frozen && X && X->current_type_pool) {
+    if (type->frozen && resolve_type_pool(X)) {
         switch (type->kind) {
             case XR_KIND_INT:
                 return &g_type_int_nullable;
