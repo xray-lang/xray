@@ -1173,12 +1173,15 @@ if(BUILD_TESTS)
     # unification work (tasks 108-118).
     add_test(
         NAME backend_diff
-        COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tests/diff/run_backend_diff.sh
+        COMMAND ${CMAKE_COMMAND} -E env
+                XRAY_DIFF_JOBS=16
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/diff/run_backend_diff.sh
                 $<TARGET_FILE:xray>
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
     set_tests_properties(backend_diff PROPERTIES
         LABELS "diff;cross;backend"
+        PROCESSORS 16
         TIMEOUT 900
     )
 
@@ -1187,12 +1190,14 @@ if(BUILD_TESTS)
         COMMAND ${CMAKE_COMMAND} -E env
                 XRAY_CORO_DETERMINISTIC=1
                 XRAY_CORO_SEED=12345
+                XRAY_DIFF_JOBS=16
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/diff/run_backend_diff.sh
                 $<TARGET_FILE:xray>
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
     set_tests_properties(backend_diff_deterministic PROPERTIES
         LABELS "diff;cross;backend;coro;deterministic"
+        PROCESSORS 16
         TIMEOUT 900
     )
 
