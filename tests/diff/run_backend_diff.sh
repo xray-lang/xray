@@ -19,6 +19,8 @@
 #   XRAY_DIFF_EXTRA_CASES_FILE
 #                       newline case manifest, relative to repo root or absolute
 #                       (default: tests/diff/coro_regression_cases.txt; empty disables)
+#   XRAY_DIFF_CASES_FILE
+#                       optional base case manifest replacing tests/diff/cases/**/*.xr
 #
 # Per-case optional sidecar:
 #   <case>.args    first line = whitespace-separated program arguments
@@ -39,6 +41,7 @@ PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 CASE_DIR="$SCRIPT_DIR/cases"
 NORMALIZE="$SCRIPT_DIR/normalize.sed"
 EXTRA_CASES_FILE="${XRAY_DIFF_EXTRA_CASES_FILE-$SCRIPT_DIR/coro_regression_cases.txt}"
+BASE_CASES_FILE="${XRAY_DIFF_CASES_FILE:-}"
 
 XRAY="${1:-${XRAY_BIN:-}}"
 if [ -z "$XRAY" ]; then
@@ -149,6 +152,25 @@ rel_path() {
         "$PROJECT_DIR"/*) printf '%s' "${1#"$PROJECT_DIR"/}" ;;
         *) printf '%s' "$1" ;;
     esac
+}
+
+append_case_manifest() {
+    local manifest="$1"
+    local manifest_path
+    [ -n "$manifest" ] || return 0
+    case "$manifest" in
+        /*) manifest_path="$manifest" ;;
+        *) manifest_path="$PROJECT_DIR/$manifest" ;;
+    esac
+    [ -f "$manifest_path" ] || return 1
+
+    while IFS= read -r f; do
+        case "$f" in
+            ""|\#*) continue ;;
+            /*) printf '%s\n' "$f" ;;
+            *) printf '%s/%s\n' "$PROJECT_DIR" "$f" ;;
+        esac
+    done <"$manifest_path"
 }
 
 # run_backend KIND CASE OUT_PREFIX [args...]
@@ -336,10 +358,7 @@ run_cases_parallel() {
         log="$WORK/logs/$idx.log"
         status="$WORK/logs/$idx.status"
         (
-            XRAY_DIFF_SINGLE_CASE="$case" \
-            XRAY_DIFF_SINGLE_ID="$idx" \
-            XRAY_DIFF_JOBS=1 \
-            "$SCRIPT_DIR/run_backend_diff.sh" "$XRAY" >"$log" 2>&1
+            run_case "$case" "$idx" >"$log" 2>&1
             printf '%s\n' "$?" >"$status"
             printf '.' >&9
         ) &
@@ -389,15 +408,16 @@ if [ ! -d "$CASE_DIR" ]; then
 fi
 
 CASE_LIST="$WORK/cases.list"
-find "$CASE_DIR" -name '*.xr' | sort >"$CASE_LIST"
-if [ -n "$EXTRA_CASES_FILE" ] && [ -f "$EXTRA_CASES_FILE" ]; then
-    while IFS= read -r f; do
-        case "$f" in
-            ""|\#*) continue ;;
-            /*) printf '%s\n' "$f" ;;
-            *) printf '%s/%s\n' "$PROJECT_DIR" "$f" ;;
-        esac
-    done <"$EXTRA_CASES_FILE" >>"$CASE_LIST"
+if [ -n "$BASE_CASES_FILE" ]; then
+    if ! append_case_manifest "$BASE_CASES_FILE" | sort >"$CASE_LIST"; then
+        echo "error: base case manifest not found: $BASE_CASES_FILE" >&2
+        exit 2
+    fi
+else
+    find "$CASE_DIR" -name '*.xr' | sort >"$CASE_LIST"
+fi
+if [ -n "$EXTRA_CASES_FILE" ]; then
+    append_case_manifest "$EXTRA_CASES_FILE" >>"$CASE_LIST" || true
 fi
 
 CASE_RUN_LIST="$WORK/cases.run.list"

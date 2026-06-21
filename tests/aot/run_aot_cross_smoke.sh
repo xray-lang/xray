@@ -12,7 +12,10 @@ set -u
 
 XRAY="${1:-./build/xray}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-WORK="${TMPDIR:-/tmp}/xray_aot_cross_smoke_$$"
+WORK="$(mktemp -d "${TMPDIR:-/tmp}/xray_aot_cross_smoke.XXXXXX")" || {
+    echo "FAIL: cannot create temporary directory" >&2
+    exit 1
+}
 BASIC_SRC="$WORK/basic_cross_standalone.xr"
 RUNTIME_SRC="$SCRIPT_DIR/coro/typed_channel.xr"
 ZIG_BIN="${XRAY_ZIG:-}"
@@ -21,11 +24,7 @@ PASS=0
 FAIL=0
 SKIP=0
 
-mkdir -p "$WORK"
 trap 'rm -rf "$WORK"' EXIT
-export ZIG_GLOBAL_CACHE_DIR="${ZIG_GLOBAL_CACHE_DIR:-$WORK/zig-global-cache}"
-export ZIG_LOCAL_CACHE_DIR="${ZIG_LOCAL_CACHE_DIR:-$WORK/zig-local-cache}"
-mkdir -p "$ZIG_GLOBAL_CACHE_DIR" "$ZIG_LOCAL_CACHE_DIR"
 
 cat > "$BASIC_SRC" <<'XR_EOF'
 fn answer() -> int {
@@ -53,7 +52,14 @@ if [ -z "$ZIG_BIN" ] || [ ! -x "$ZIG_BIN" ]; then
     exit 77
 fi
 
+XRAY_DIR="$(cd "$(dirname "$XRAY")" && pwd)"
+ZIG_CACHE_ROOT="${XRAY_ZIG_CACHE_ROOT:-$XRAY_DIR/zig-cache}"
+export ZIG_GLOBAL_CACHE_DIR="${ZIG_GLOBAL_CACHE_DIR:-$ZIG_CACHE_ROOT/global}"
+export ZIG_LOCAL_CACHE_DIR="${ZIG_LOCAL_CACHE_DIR:-$WORK/zig-local-cache}"
+mkdir -p "$ZIG_GLOBAL_CACHE_DIR" "$ZIG_LOCAL_CACHE_DIR"
+
 echo "Zig:    $ZIG_BIN"
+echo "Cache:  $ZIG_GLOBAL_CACHE_DIR"
 echo ""
 
 target_suffix() {
@@ -71,6 +77,19 @@ record_pass() {
 record_fail() {
     echo "FAIL ($1)"
     FAIL=$((FAIL + 1))
+}
+
+record_parallel_result() {
+    local log="$1"
+    cat "$log"
+    if grep -q "FAIL" "$log"; then
+        FAIL=$((FAIL + 1))
+    elif grep -q "PASS" "$log"; then
+        PASS=$((PASS + 1))
+    else
+        FAIL=$((FAIL + 1))
+        echo "  FAIL (worker produced no result): $(basename "$log")"
+    fi
 }
 
 run_cross_build() {
@@ -131,16 +150,33 @@ run_runtime_rejection() {
     record_pass
 }
 
+mkdir -p "$WORK/logs"
+pids=""
+logs=""
 for target in \
     x86_64-linux-musl \
     aarch64-linux-musl \
     x86_64-windows-gnu \
     aarch64-windows-gnu
 do
-    run_cross_build "$target"
+    log="$WORK/logs/${target}.log"
+    ( run_cross_build "$target" >"$log" 2>&1 ) &
+    pids="$pids $!"
+    logs="$logs $log"
 done
 
-run_runtime_rejection
+runtime_log="$WORK/logs/runtime_rejection.log"
+( run_runtime_rejection >"$runtime_log" 2>&1 ) &
+pids="$pids $!"
+logs="$logs $runtime_log"
+
+for p in $pids; do
+    wait "$p"
+done
+
+for log in $logs; do
+    record_parallel_result "$log"
+done
 
 echo ""
 echo "=== Results: $PASS passed, $FAIL failed, $SKIP skipped ==="
