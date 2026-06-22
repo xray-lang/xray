@@ -10,13 +10,13 @@
  * KEY CONCEPT:
  *   Flexible array member stores field values.
  *   Field order: superclass fields first, then this class.
- *   Compact GC header for memory efficiency.
+ *   Compact object header for memory efficiency.
  *
  * MEMORY LAYOUT:
  *
  *   XrInstance (variable size)
  *   +------------------+
- *   | XrObjHeader gc    |  8 bytes (type tag + flags + classObj)
+ *   | XrObjHeader hdr    |  8 bytes (type tag + flags + classObj)
  *   +------------------+
  *   | klass            |  8 bytes (-> XrClass)
  *   +------------------+
@@ -57,7 +57,7 @@
 #include "../gc/xgc_header.h"
 
 struct XrInstance {
-    XrObjHeader gc;
+    XrObjHeader hdr;
     struct XrClass *klass;
     XrValue fields[];  // Flexible array member
 };

@@ -19,7 +19,7 @@
 #include "../coro/xaot_task.h"
 
 typedef struct XrAotRuntimeStringView {
-    XrObjHeader gc;
+    XrObjHeader hdr;
     uint32_t length;
     uint32_t hash;
     char data[];
@@ -29,7 +29,7 @@ typedef struct XrAotRuntimeStringView {
  * bridge reads VM-layout arrays through this view, so it must embed the exact
  * same shared field macro plus the VM-only data_on_gc_heap tail. */
 typedef struct XrAotRuntimeArrayView {
-    XrObjHeader gc;
+    XrObjHeader hdr;
     XR_ARRAY_ABI_FIELDS;
     uint8_t data_on_gc_heap;
     uint8_t pad[2];

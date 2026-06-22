@@ -330,8 +330,8 @@ XR_FUNC int add_const_string(EmitCtx *ctx, const char *str) {
         XrString *xs = xr_compile_time_intern(ctx->isolate, str, strlen(str));
         xv = xr_string_value(xs);
     } else {
-        /* No isolate: raw C string pointers are not valid GC objects,
-         * so xr_make_ptr_val would read garbage GC header bytes.
+        /* No isolate: raw C string pointers are not valid heap objects,
+         * so xr_make_ptr_val would read garbage object header bytes.
          * Use null placeholder — callers without isolate only check
          * instruction sequences, not constant pool values. */
         xv = xr_null();

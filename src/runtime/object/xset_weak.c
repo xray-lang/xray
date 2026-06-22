@@ -29,7 +29,7 @@ static void weak_set_tombstone_entry(XrSet *set, uint32_t eidx) {
 
 uint32_t xr_set_purge_weak_target(XrSet *set, XrObjHeader *target) {
     if (!set || !target || !(set->flags & XR_SET_FLAG_WEAK) || xr_set_isdummy(set) ||
-        !set->entries || (set->gc.extra & XR_OBJ_DEAD))
+        !set->entries || (set->hdr.extra & XR_OBJ_DEAD))
         return 0;
 
     uint32_t removed = 0;

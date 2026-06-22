@@ -148,7 +148,7 @@ XrString *xr_string_intern_core(XrRuntimeCore *core, const char *chars, size_t l
             memcpy(str->data, chars, length);
             str->data[length] = '\0';
             XR_STR_SET_LONG(str);
-            xr_shared_set_refc(&str->gc, 1);
+            xr_shared_set_refc(&str->hdr, 1);
         }
         return str;
     }

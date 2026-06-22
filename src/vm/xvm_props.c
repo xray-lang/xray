@@ -1162,9 +1162,9 @@ XR_FUNC XrDispatchAction vm_invoke_module(XrayIsolate *isolate, XrVMContext *vm_
                                                               size, XR_TINSTANCE);
             if (instance) {
                 xr_instance_init_inplace(instance, klass);
-                XR_OBJ_SET_STORAGE(&instance->gc, storage_mode);
+                XR_OBJ_SET_STORAGE(&instance->hdr, storage_mode);
                 if (storage_mode == XR_OBJ_STORAGE_SHARED) {
-                    xr_shared_set_refc(&instance->gc, 1);
+                    xr_shared_set_refc(&instance->hdr, 1);
                 }
             }
         } else {

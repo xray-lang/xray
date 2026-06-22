@@ -265,11 +265,11 @@ XrCFunction *xr_vm_cfunction_new(XrayIsolate *isolate, XrCFunctionPtr func, cons
         return NULL;
     }
 
-    // Fully initialize GC header. xr_malloc returns uninitialized memory,
+    // Fully initialize object header. xr_malloc returns uninitialized memory,
     // so the fields not set below must be cleared explicitly.
-    memset(&cfunc->gc, 0, sizeof(XrObjHeader));
-    cfunc->gc.type = XR_TCFUNCTION;
-    cfunc->gc.objsize = (uint32_t) sizeof(XrCFunction);
+    memset(&cfunc->hdr, 0, sizeof(XrObjHeader));
+    cfunc->hdr.type = XR_TCFUNCTION;
+    cfunc->hdr.objsize = (uint32_t) sizeof(XrCFunction);
     cfunc->as.func = func;
     cfunc->name = name;
     cfunc->is_yieldable = false;
@@ -290,10 +290,10 @@ XrCFunction *xr_vm_yieldable_cfunction_new(XrayIsolate *isolate, XrYieldableCFun
         return NULL;
     }
 
-    // Fully initialize GC header — see xr_vm_cfunction_new for rationale.
-    memset(&cfunc->gc, 0, sizeof(XrObjHeader));
-    cfunc->gc.type = XR_TCFUNCTION;
-    cfunc->gc.objsize = (uint32_t) sizeof(XrCFunction);
+    // Fully initialize object header — see xr_vm_cfunction_new for rationale.
+    memset(&cfunc->hdr, 0, sizeof(XrObjHeader));
+    cfunc->hdr.type = XR_TCFUNCTION;
+    cfunc->hdr.objsize = (uint32_t) sizeof(XrCFunction);
     cfunc->as.yieldable = func;
     cfunc->name = name;
     cfunc->is_yieldable = true;

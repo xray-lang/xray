@@ -35,7 +35,7 @@ static inline XrValue xrt_map_new_typed(int64_t cap, uint8_t key_type, uint8_t v
     if (!m)
         xrt_map_typed_abort("xrt_map_new_typed", "out of memory");
     xrt_map_init_header(m);
-    xrt_coll_make_deterministic(&m->gc);
+    xrt_coll_make_deterministic(&m->hdr);
     m->key_type = key_type;
     m->value_type = value_type;
     m->key_size = XR_ELEM_SIZES[key_type];

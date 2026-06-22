@@ -37,7 +37,7 @@ XrValue xr_create_type_object(XrayIsolate *X, XrTypeMetadata *meta) {
 
     XrClass *typeClass =
         xr_isolate_get_core_classes(X) ? xr_isolate_get_core_classes(X)->typeClass : NULL;
-    xr_obj_header_init_type(&wrapper->gc, XR_TINSTANCE);
+    xr_obj_header_init_type(&wrapper->hdr, XR_TINSTANCE);
     wrapper->klass = typeClass;
     wrapper->metadata = *meta;
 
@@ -56,7 +56,7 @@ XrValue xr_create_field_object(XrayIsolate *X, XrFieldMetadata *field) {
 
     XrClass *fieldClass =
         xr_isolate_get_core_classes(X) ? xr_isolate_get_core_classes(X)->fieldClass : NULL;
-    xr_obj_header_init_type(&wrapper->gc, XR_TINSTANCE);
+    xr_obj_header_init_type(&wrapper->hdr, XR_TINSTANCE);
     wrapper->klass = fieldClass;
     wrapper->metadata = *field;
 
@@ -75,7 +75,7 @@ XrValue xr_create_method_object(XrayIsolate *X, XrMethodMetadata *method) {
 
     XrClass *methodClass =
         xr_isolate_get_core_classes(X) ? xr_isolate_get_core_classes(X)->methodClass : NULL;
-    xr_obj_header_init_type(&wrapper->gc, XR_TINSTANCE);
+    xr_obj_header_init_type(&wrapper->hdr, XR_TINSTANCE);
     wrapper->klass = methodClass;
     wrapper->metadata = *method;
 
@@ -98,7 +98,7 @@ XrValue xr_create_parameter_object(XrayIsolate *X, XrParameterMetadata *param) {
 
     XrClass *paramClass =
         xr_isolate_get_core_classes(X) ? xr_isolate_get_core_classes(X)->parameterClass : NULL;
-    xr_obj_header_init_type(&wrapper->gc, XR_TINSTANCE);
+    xr_obj_header_init_type(&wrapper->hdr, XR_TINSTANCE);
     wrapper->klass = paramClass;
     wrapper->metadata = *param;
 

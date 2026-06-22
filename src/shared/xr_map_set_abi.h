@@ -116,7 +116,7 @@ typedef int (*XrMapEqFn)(const XrMapEntry *e, XrValue query, uint8_t query_tt);
  * absent. This is the shared Swiss-probe core of tagged-map lookup, used by the
  * VM (xmap.c) and AOT (xrt_coll.h); the key comparison is supplied via `eq`,
  * and table allocation/representation stay backend-specific. Pass raw fields
- * (not a struct) because the VM and AOT map structs carry a GC header before
+ * (not a struct) because the VM and AOT map structs carry an object header before
  * the shared ABI fields, so neither is castable to a common overlay. */
 static inline uint32_t xr_map_lookup_slot(const uint8_t *ctrl, const int32_t *indices,
                                           const XrMapEntry *entries, uint32_t indices_size,

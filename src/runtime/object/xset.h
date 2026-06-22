@@ -32,7 +32,7 @@
 /* ========== Set Object ========== */
 
 typedef struct XrSet {
-    XrObjHeader gc;
+    XrObjHeader hdr;
     struct XrCoroGC *owner_gc;
     XR_SET_ABI_FIELDS;
 } XrSet;

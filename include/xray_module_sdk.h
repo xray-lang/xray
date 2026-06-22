@@ -9,7 +9,7 @@
  *
  * This is the only header third-party native packages need to include.
  * It aggregates all public APIs required to implement a native module:
- * value system, GC header, object types, module creation, native type
+ * value system, object header, object types, module creation, native type
  * registration, allocation, isolate accessors, and export macros.
  *
  * TECH DEBT (accepted for v1):
@@ -29,7 +29,7 @@
 /* ========== Value System ========== */
 #include "../src/runtime/value/xvalue.h"
 
-/* ========== GC Header (for custom types) ========== */
+/* ========== Object Header (for custom types) ========== */
 #include "../src/runtime/gc/xgc_header.h"
 
 /* ========== Core Object Types ========== */

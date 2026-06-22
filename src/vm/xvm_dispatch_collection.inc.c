@@ -62,9 +62,9 @@ vmcase(OP_NEWARRAY) {
         if (array) {
             xr_array_init_inplace(array, b > 0 ? b : 4, elem_type);
             // Set storage mode
-            XR_OBJ_SET_STORAGE(&array->gc, storage_mode);
+            XR_OBJ_SET_STORAGE(&array->hdr, storage_mode);
             if (storage_mode == XR_OBJ_STORAGE_SHARED) {
-                xr_shared_set_refc(&array->gc, 1);
+                xr_shared_set_refc(&array->hdr, 1);
             }
         }
     } else {
@@ -120,9 +120,9 @@ vmcase(OP_ARRAY_NEW_CAP) {
                                                     sizeof(XrArray), XR_TARRAY);
         if (array) {
             xr_array_init_inplace(array, cap, elem_type);
-            XR_OBJ_SET_STORAGE(&array->gc, storage_mode);
+            XR_OBJ_SET_STORAGE(&array->hdr, storage_mode);
             if (storage_mode == XR_OBJ_STORAGE_SHARED)
-                xr_shared_set_refc(&array->gc, 1);
+                xr_shared_set_refc(&array->hdr, 1);
         }
     } else {
         array = xr_array_with_capacity_typed(VM_CURRENT_CORO, cap, elem_type);
@@ -208,9 +208,9 @@ vmcase(OP_NEWMAP) {
         if (map) {
             xr_map_init_inplace(map, b > 0 ? b : 8);
             // Set storage mode
-            XR_OBJ_SET_STORAGE(&map->gc, storage_mode);
+            XR_OBJ_SET_STORAGE(&map->hdr, storage_mode);
             if (storage_mode == XR_OBJ_STORAGE_SHARED) {
-                xr_shared_set_refc(&map->gc, 1);
+                xr_shared_set_refc(&map->hdr, 1);
             }
         }
     } else {
@@ -254,8 +254,8 @@ vmcase(OP_NEWSET) {
                                                 XR_TSET);
         if (set) {
             xr_set_init_inplace(set);
-            XR_OBJ_SET_STORAGE(&set->gc, storage_mode);
-            xr_shared_set_refc(&set->gc, 1);
+            XR_OBJ_SET_STORAGE(&set->hdr, storage_mode);
+            xr_shared_set_refc(&set->hdr, 1);
             XrArray *arr = XR_TO_ARRAY(R(a + 1));
             int32_t len = arr->length;
             XrValue *elems = (XrValue *) arr->data;
@@ -272,9 +272,9 @@ vmcase(OP_NEWSET) {
                                                 XR_TSET);
         if (set) {
             xr_set_init_inplace(set);
-            XR_OBJ_SET_STORAGE(&set->gc, storage_mode);
+            XR_OBJ_SET_STORAGE(&set->hdr, storage_mode);
             if (storage_mode == XR_OBJ_STORAGE_SHARED) {
-                xr_shared_set_refc(&set->gc, 1);
+                xr_shared_set_refc(&set->hdr, 1);
             }
         }
     } else {
@@ -345,9 +345,9 @@ vmcase(OP_NEWSTRINGBUILDER) {
         if (sb) {
             sb->klass = isolate->core->stringBuilderClass;
             xr_stringbuilder_init_inplace(sb);
-            XR_OBJ_SET_STORAGE(&sb->gc, storage_mode);
+            XR_OBJ_SET_STORAGE(&sb->hdr, storage_mode);
             if (storage_mode == XR_OBJ_STORAGE_SHARED) {
-                xr_shared_set_refc(&sb->gc, 1);
+                xr_shared_set_refc(&sb->hdr, 1);
             }
         }
     } else {

@@ -301,7 +301,7 @@ XrResultGroup *xr_result_group_new(XrRuntimeCore *core, XrRuntime *scheduler, ui
 
     /* Atomic shared-RC like `shared const`: the compiler tracks the handle and
      * the last drop frees. NOT XR_OBJ_MANAGED (that no-ops drop -> leak). */
-    xr_shared_set_refc(&g->gc, 1);
+    xr_shared_set_refc(&g->hdr, 1);
     xr_amutex_init(&g->lock);
     atomic_store_explicit(&g->length, 0, memory_order_relaxed);
     atomic_store_explicit(&g->pending_count, 0, memory_order_relaxed);

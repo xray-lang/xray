@@ -73,8 +73,8 @@ XrTask *xr_task_create(XrRuntime *runtime, XrCoroutine *parent_coro, XrCoroutine
     if (!task)
         return NULL;
 
-    xr_obj_header_init_type(&task->gc, XR_TTASK);
-    task->gc.objsize = (uint32_t) sizeof(XrTask);
+    xr_obj_header_init_type(&task->hdr, XR_TTASK);
+    task->hdr.objsize = (uint32_t) sizeof(XrTask);
 
     /* Runtime-managed: Task handles can be observed by scheduler, awaiters,
      * and completion listeners across coroutine boundaries. dup/drop remain
@@ -87,8 +87,8 @@ XrTask *xr_task_create(XrRuntime *runtime, XrCoroutine *parent_coro, XrCoroutine
      * system heap via xr_calloc), underflowing its byte counter. Seat the
      * count in the atomic band so every dup/drop is the intended no-op (same
      * contract as Channel). */
-    XR_OBJ_SET_FLAG(&task->gc, XR_OBJ_MANAGED);
-    xr_shared_set_refc(&task->gc, 1);
+    XR_OBJ_SET_FLAG(&task->hdr, XR_OBJ_MANAGED);
+    xr_shared_set_refc(&task->hdr, 1);
 
     task->result = xr_null();
     task->error = xr_null();
@@ -207,7 +207,7 @@ bool xr_task_runtime_try_destroy_detached(XrRuntime *runtime, XrTask *task) {
         return false;
     }
 
-    xr_gc_destroy_task(&task->gc, NULL);
+    xr_gc_destroy_task(&task->hdr, NULL);
     xr_free(task);
     xr_sched_metric_inc(runtime, &runtime->sched_stats.task_one_shot_destroy_success_count);
     return true;
@@ -217,7 +217,7 @@ void xr_task_destroy_list(XrTask *task) {
     while (task) {
         XrTask *next = task->runtime_next;
         task->runtime_next = NULL;
-        xr_gc_destroy_task(&task->gc, NULL);
+        xr_gc_destroy_task(&task->hdr, NULL);
         xr_free(task);
         task = next;
     }

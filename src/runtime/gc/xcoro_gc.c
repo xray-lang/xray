@@ -665,8 +665,8 @@ XR_FUNC void xr_coro_gc_rc_destroy(XrCoroGC *gc, XrObjHeader *obj) {
 XrObjHeader *xr_coro_gc_newobj(XrCoroGC *gc, uint8_t type, size_t size) {
     if (!gc)
         return NULL;
-    XR_DCHECK(type < XGC_MAX_TYPES, "invalid GC type");
-    XR_DCHECK(size >= sizeof(XrObjHeader), "alloc size too small for GC header");
+    XR_DCHECK(type < XGC_MAX_TYPES, "invalid object type");
+    XR_DCHECK(size >= sizeof(XrObjHeader), "alloc size too small for object header");
     XR_DCHECK(gc->owner != NULL, "GC has no owner coroutine");
 
     size_t total = XGC_ALIGN(size);

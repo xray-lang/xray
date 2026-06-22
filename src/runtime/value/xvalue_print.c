@@ -122,7 +122,7 @@ static void dump_newline(DumpContext *ctx) {
 // Dump Array
 static void dump_array(XrArray *arr, DumpContext *ctx) {
     XR_DCHECK(arr != NULL, "dump_array: NULL array");
-    XR_DCHECK(XR_OBJ_GET_TYPE(&arr->gc) == XR_TARRAY, "dump_array: object is not an array");
+    XR_DCHECK(XR_OBJ_GET_TYPE(&arr->hdr) == XR_TARRAY, "dump_array: object is not an array");
     printf("[");
     int32_t count = arr->length;
     if (count == 0) {
@@ -168,7 +168,7 @@ static void dump_tuple(XrTuple *tup, DumpContext *ctx) {
 // Dump Map
 static void dump_map(XrMap *map, DumpContext *ctx) {
     XR_DCHECK(map != NULL, "dump_map: NULL map");
-    XR_DCHECK(XR_OBJ_GET_TYPE(&map->gc) == XR_TMAP, "dump_map: object is not a map");
+    XR_DCHECK(XR_OBJ_GET_TYPE(&map->hdr) == XR_TMAP, "dump_map: object is not a map");
     if (map->count == 0) {
         printf("#{}");
         return;
@@ -200,7 +200,7 @@ static void dump_map(XrMap *map, DumpContext *ctx) {
 // Dump Set
 static void dump_set(XrSet *set, DumpContext *ctx) {
     XR_DCHECK(set != NULL, "dump_set: NULL set");
-    XR_DCHECK(XR_OBJ_GET_TYPE(&set->gc) == XR_TSET, "dump_set: object is not a set");
+    XR_DCHECK(XR_OBJ_GET_TYPE(&set->hdr) == XR_TSET, "dump_set: object is not a set");
     printf("#[");
     if (set->count == 0) {
         printf("]");

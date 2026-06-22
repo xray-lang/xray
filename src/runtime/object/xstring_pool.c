@@ -118,9 +118,9 @@ XrString *xr_global_pool_insert_locked(XrGlobalStringPool *pool, const char *cha
             if (!str)
                 return NULL;
 
-            memset(&str->gc, 0, sizeof(XrObjHeader));
-            str->gc.type = XR_TSTRING;
-            str->gc.objsize = (uint32_t) total_size;
+            memset(&str->hdr, 0, sizeof(XrObjHeader));
+            str->hdr.type = XR_TSTRING;
+            str->hdr.objsize = (uint32_t) total_size;
 
             str->length = (uint32_t) len;
             str->hash = hash;
@@ -128,7 +128,7 @@ XrString *xr_global_pool_insert_locked(XrGlobalStringPool *pool, const char *cha
             str->data[len] = '\0';
 
             XR_STR_SET_GLOBAL(str);
-            XR_OBJ_SET_STORAGE(&str->gc, XR_OBJ_STORAGE_SHARED);
+            XR_OBJ_SET_STORAGE(&str->hdr, XR_OBJ_STORAGE_SHARED);
 
             pool->entries[index] = str;
             pool->count++;

@@ -34,13 +34,13 @@ struct XrRuntimeCore;
 
 /*
  * Memory layout (header + data):
- *   [0-15]  GC header
+ *   [0-15]  object header
  *   [16-19] length (4 bytes, max 4GB)
  *   [20-23] hash (4 bytes, FNV-1a)
  *   [24+]   data[] (flexible array)
  */
 typedef struct XrString {
-    XrObjHeader gc;
+    XrObjHeader hdr;
     uint32_t length;
     uint32_t hash;
     char data[];
@@ -67,11 +67,11 @@ _Static_assert(sizeof(XrString) == 24, "XrString must be 24 bytes (16B header + 
 #define XR_STR_LONG_FLAG 0x10
 
 // Check if long string
-#define XR_STR_IS_LONG(s) ((s)->gc.extra & XR_STR_LONG_FLAG)
+#define XR_STR_IS_LONG(s) ((s)->hdr.extra & XR_STR_LONG_FLAG)
 #define XR_STR_IS_SHORT(s) (!XR_STR_IS_LONG(s))
 
 // Set long string flag
-#define XR_STR_SET_LONG(s) ((s)->gc.extra |= XR_STR_LONG_FLAG)
+#define XR_STR_SET_LONG(s) ((s)->hdr.extra |= XR_STR_LONG_FLAG)
 
 /* ========== String Interning Pool ========== */
 
@@ -102,7 +102,7 @@ typedef struct XrStringPool {
  * lock (LRU heuristic), so plain |= would be a racy RMW that could drop a
  * concurrent bit update. Same cast-to-_Atomic idiom as task->waiter. */
 #define XR_STR_FLAGS_RELAXED(s)                                                                    \
-    atomic_load_explicit((_Atomic uint16_t *) &(s)->gc.extra, memory_order_relaxed)
+    atomic_load_explicit((_Atomic uint16_t *) &(s)->hdr.extra, memory_order_relaxed)
 
 // Check macros
 #define XR_STR_IS_INTERNED(s) (XR_STR_FLAGS_RELAXED(s) & STR_FLAG_INTERNED)
@@ -113,14 +113,14 @@ typedef struct XrStringPool {
 
 // Set macros
 #define XR_STR_SET_FLAGS_RELAXED(s, bits)                                                          \
-    ((void) atomic_fetch_or_explicit((_Atomic uint16_t *) &(s)->gc.extra, (uint16_t) (bits),       \
+    ((void) atomic_fetch_or_explicit((_Atomic uint16_t *) &(s)->hdr.extra, (uint16_t) (bits),      \
                                      memory_order_relaxed))
 #define XR_STR_SET_GLOBAL(s) XR_STR_SET_FLAGS_RELAXED(s, STR_FLAG_INTERNED | STR_FLAG_GLOBAL)
 #define XR_STR_SET_LOCAL(s) XR_STR_SET_FLAGS_RELAXED(s, STR_FLAG_INTERNED | STR_FLAG_LOCAL)
 #define XR_STR_SET_PERMANENT(s) XR_STR_SET_FLAGS_RELAXED(s, STR_FLAG_PERMANENT)
 #define XR_STR_SET_ACCESSED(s) XR_STR_SET_FLAGS_RELAXED(s, STR_FLAG_ACCESSED)
 #define XR_STR_CLR_ACCESSED(s)                                                                     \
-    ((void) atomic_fetch_and_explicit((_Atomic uint16_t *) &(s)->gc.extra,                         \
+    ((void) atomic_fetch_and_explicit((_Atomic uint16_t *) &(s)->hdr.extra,                        \
                                       (uint16_t) ~STR_FLAG_ACCESSED, memory_order_relaxed))
 
 // XrGlobalStringPool - Global string intern pool (thread-safe)

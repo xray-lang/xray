@@ -700,9 +700,9 @@ int64_t xr_datetime_diff(XrDateTime *dt1, XrDateTime *dt2, const char *unit) {
 /* ========== Timezone API ========== */
 
 // Copy every user-visible field explicitly instead of doing a raw memcpy
-// past the GC header: the old byte-level copy silently broke every time
-// XrObjHeader changed layout, and produced subtle aliasing issues when the
-// GC added mark bits to the header.
+// past the object header: the old byte-level copy silently broke every time
+// XrObjHeader changed layout, and produced subtle aliasing issues when header
+// metadata grew.
 static void datetime_copy_fields(XrDateTime *dst, const XrDateTime *src) {
     dst->timestamp = src->timestamp;
     dst->milliseconds = src->milliseconds;

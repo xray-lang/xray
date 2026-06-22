@@ -23,7 +23,7 @@
  *
  * Boxing: a boolmap boxes as XR_TAG_MAP exactly like a generic map (the boxed
  * value's heap_type is XR_TMAP), so XR_IS_MAP / typeof / interop are unchanged.
- * The heap object's gc.type is XR_TBOOLMAP, which is how the generic map entry
+ * The heap object's hdr.type is XR_TBOOLMAP, which is how the generic map entry
  * points and the RC collector discriminate it from a Swiss-table map.
  *
  * Iteration order: Map preserves insertion order, so the two keys are tracked
@@ -39,7 +39,7 @@ typedef union {
 } xrt_boolmap_slot;
 
 typedef struct xrt_boolmap_t {
-    XrObjHeader gc;        /* embedded-at-0 header; gc.type == XR_TBOOLMAP */
+    XrObjHeader hdr;       /* embedded-at-0 header; hdr.type == XR_TBOOLMAP */
     uint8_t value_type;    /* XR_ELEM_I64 or XR_ELEM_F32 */
     uint8_t present;       /* bit0: key false present, bit1: key true present */
     uint8_t order[2];      /* insertion order; order[n] is the key (0|1) inserted n-th */
@@ -48,7 +48,7 @@ typedef struct xrt_boolmap_t {
 } xrt_boolmap_t;
 
 /* A boxed map value points at either an xrt_map_t or an xrt_boolmap_t; the two
- * share the XrObjHeader prefix, so gc.type is the safe discriminator before any
+ * share the XrObjHeader prefix, so hdr.type is the safe discriminator before any
  * map-specific field is touched. */
 static inline int xrt_map_is_boolmap(const xrt_map_t *m) {
     return m && ((const XrObjHeader *) m)->type == XR_TBOOLMAP;
@@ -65,8 +65,8 @@ static inline XrValue xrt_boolmap_new_typed(int64_t cap, uint8_t value_type) {
         fprintf(stderr, "xrt_boolmap_new: out of memory\n");
         abort();
     }
-    xrt_bump_header_init(&b->gc, XR_TBOOLMAP);
-    xrt_coll_make_deterministic(&b->gc);
+    xrt_bump_header_init(&b->hdr, XR_TBOOLMAP);
+    xrt_coll_make_deterministic(&b->hdr);
     b->value_type = value_type;
     b->present = 0;
     b->order[0] = 0;

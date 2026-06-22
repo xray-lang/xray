@@ -37,12 +37,12 @@ XrInstance *xr_instance_new_core(XrRuntimeCore *core, XrCoroutine *coro, XrClass
         return NULL;
     }
 
-    xr_obj_header_init_type(&inst->gc, XR_TINSTANCE);
+    xr_obj_header_init_type(&inst->hdr, XR_TINSTANCE);
     xr_instance_init_inplace(inst, cls);
 
     if (cls->flags & XR_CLASS_CYCLE_CANDIDATE) {
-        XR_OBJ_SET_FLAG(&inst->gc, XR_OBJ_CYCLE_CANDIDATE);
-        inst->gc._rsv = XR_CYCLE_NOT_IN_ROOTS;
+        XR_OBJ_SET_FLAG(&inst->hdr, XR_OBJ_CYCLE_CANDIDATE);
+        inst->hdr._rsv = XR_CYCLE_NOT_IN_ROOTS;
     }
 
     XrNativeBodyDesc *desc = cls->native_body;
@@ -124,7 +124,7 @@ XrInstance *xr_instance_clone(XrayIsolate *X, XrInstance *src) {
     if (!dst)
         return NULL;
 
-    xr_obj_header_init_type(&dst->gc, XR_TINSTANCE);
+    xr_obj_header_init_type(&dst->hdr, XR_TINSTANCE);
     xr_instance_init_inplace(dst, cls);
     if (cls->flags & XR_CLASS_DYNAMIC_LAYOUT) {
         uint16_t cap = cls->in_object_capacity;

@@ -13,7 +13,7 @@
  *   - Same boxing API (XR_FROM_* / XR_TO_*)
  *   - Same truthiness semantics
  *
- * AOT-specific extensions (tags >= 8) encode object types without GC headers.
+ * AOT-specific extensions (tags >= 8) encode object types without object headers.
  */
 
 #ifndef XRT_VALUE_H
@@ -110,7 +110,7 @@ typedef struct XrValue {
 
 /* =========================================================================
  * Tag constants — base tags (0-7) identical to VM's XrValueTag.
- * Extended tags (>= 8) are AOT-specific: encode object type without GC header.
+ * Extended tags (>= 8) are AOT-specific: encode object type without object header.
  * ========================================================================= */
 
 #define XR_TAG_NULL 0       /* null singleton */
@@ -121,7 +121,7 @@ typedef struct XrValue {
 #define XR_TAG_STRUCT_REF 6 /* AOT native struct reference */
 #define XR_TAG_NOTFOUND 7   /* sentinel: map lookup miss */
 
-/* AOT extensions — object type encoded in tag (no GC header available) */
+/* AOT extensions — object type encoded in tag (no object header available) */
 #define XR_TAG_STR 14      /* static / literal string (const char*) */
 #define XR_TAG_ARRAY 15    /* AOT array */
 #define XR_TAG_MAP 16      /* AOT map */

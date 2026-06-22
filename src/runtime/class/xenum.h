@@ -24,7 +24,7 @@ struct XrRuntimeCore;
 // Layout-compatible with XrInstance + native body (0 fields).
 // GC tag is XR_TINSTANCE; class has builtin_kind == XR_BK_ENUM_VALUE.
 typedef struct XrEnumValue {
-    XrObjHeader gc;
+    XrObjHeader hdr;
     struct XrClass *klass;  // Points to enumValueClass
     // Both names are interned in the isolate's symbol table; not owned.
     const char *enum_name;
@@ -38,7 +38,7 @@ typedef struct XrEnumValue {
 // Layout-compatible with XrInstance + native body (0 fields).
 // GC tag is XR_TINSTANCE; class has builtin_kind == XR_BK_ENUM_TYPE.
 typedef struct XrEnumType {
-    XrObjHeader gc;
+    XrObjHeader hdr;
     struct XrClass *klass;  // Points to enumTypeClass
     const char *name;       // Interned in symbol table; not owned.
     int base_type;

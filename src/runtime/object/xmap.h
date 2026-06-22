@@ -36,7 +36,7 @@
 /* ========== Map Object ========== */
 
 typedef struct XrMap {
-    XrObjHeader gc;
+    XrObjHeader hdr;
     struct XrCoroGC *owner_gc;
     XR_MAP_ABI_FIELDS;
 } XrMap;

@@ -18,7 +18,7 @@
 #include <time.h>
 
 /* DateTime is now stored as the native body of an XrInstance — the
- * body struct itself has no GC header. These tests work on stack-
+ * body struct itself has no object header. These tests work on stack-
  * allocated body structs and only call helpers that touch the body. */
 
 typedef struct XrDateTime {

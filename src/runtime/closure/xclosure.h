@@ -31,7 +31,7 @@ struct XrCoroutine;
 // upvals[] trails the struct; its length equals `upval_count` and is
 // determined by proto->upvalues at allocation time.
 typedef struct XrClosure {
-    XrObjHeader gc;
+    XrObjHeader hdr;
     XrProto *proto;        // compiled function prototype
     uint16_t upval_count;  // number of entries in upvals[]
     XrValue upvals[];      // flat upvalue array (const values + cell refs)
