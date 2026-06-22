@@ -144,9 +144,6 @@ struct XrayIsolate {
     const char *const *module_allowlist;
     size_t module_allowlist_count;
 
-    // Per-isolate active type pool (replaces XR_THREAD_LOCAL g_current_pool)
-    struct XrTypePool *current_type_pool;
-
     /* WeakMap / WeakSet registry. Lazily allocated by the first weak insert
      * and swept when a weakable target reaches RC zero. Kept opaque here so
      * the isolate core does not depend on container internals. */

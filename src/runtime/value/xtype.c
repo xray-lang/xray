@@ -22,7 +22,6 @@
 #include <stdio.h>
 
 #include "xtype_internal.h"
-#include "../xisolate_internal.h"
 
 // ========== Process-level static singletons (early init) ==========
 // Basic types are immutable and globally shared. No allocation needed.
@@ -100,8 +99,7 @@ static inline XrayIsolate *resolve_isolate(XrayIsolate *X) {
 }
 
 static inline XrTypePool *resolve_type_pool(XrayIsolate *X) {
-    if (X && X->current_type_pool)
-        return X->current_type_pool;
+    (void) X;
     return g_current_type_pool;
 }
 
@@ -110,7 +108,7 @@ static inline XrTypePool *resolve_type_pool(XrayIsolate *X) {
 static XrType *type_alloc(XrayIsolate *X, XrTypeKind kind) {
     X = resolve_isolate(X);
     XrTypePool *pool = resolve_type_pool(X);
-    XR_CHECK(pool != NULL, "Type pool not set - pass an isolate or call xr_type_set_current_pool");
+    XR_CHECK(pool != NULL, "Type pool not set - call xr_type_set_current_pool first");
     return xr_pool_alloc_type(pool, kind);
 }
 

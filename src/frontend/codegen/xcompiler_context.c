@@ -11,6 +11,7 @@
 #include "xcompiler_context.h"
 #include "../../base/xchecks.h"
 #include "../../runtime/xisolate_internal.h"
+#include "../../runtime/value/xtype_internal.h"
 #include "../../base/xmalloc.h"
 #include "../xdiag_fmt.h"
 #include <string.h>
@@ -83,11 +84,8 @@ static XrCompilerContext *xr_compiler_context_new_impl(XrayIsolate *X, XaAnalyze
     if (analyzer) {
         ctx->analyzer = analyzer;
         ctx->owns_analyzer = false;
-        /* Install the borrowed analyzer's type pool on the isolate so
-         * xr_type_new_* calls during parse / analysis allocate into it. */
-        if (X && analyzer->type_pool) {
-            X->current_type_pool = analyzer->type_pool;
-        }
+        if (analyzer->type_pool)
+            xr_type_set_current_pool(analyzer->type_pool, &analyzer->type_pool->next_type_id);
     } else {
         ctx->analyzer = xa_analyzer_new(ctx->X);
         ctx->owns_analyzer = true;
