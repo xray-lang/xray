@@ -96,7 +96,7 @@ static inline bool coro_heap_type_needs_destroy(XrCoroHeap *heap, uint8_t type) 
     return xr_runtime_core_type_needs_destroy(coro_heap_core(heap), type);
 }
 
-static inline XrGCDestroyFn coro_heap_destroy_func(XrCoroHeap *heap, uint8_t type) {
+static inline XrObjDestroyFn coro_heap_destroy_func(XrCoroHeap *heap, uint8_t type) {
     return xr_runtime_core_destroy_op(coro_heap_core(heap), type);
 }
 
@@ -257,7 +257,7 @@ static void coro_heap_finalize_registered_objects(XrCoroHeap *heap) {
         if (!xr_gc_ptrset_slot_live(obj) || (obj->extra & XR_OBJ_DEAD))
             continue;
         obj->extra |= XR_OBJ_DEAD;
-        XrGCDestroyFn destroy = coro_heap_destroy_func(heap, obj->type);
+        XrObjDestroyFn destroy = coro_heap_destroy_func(heap, obj->type);
         if (destroy) {
             destroy(obj, heap);
             heap->finalizer_count++;
@@ -569,7 +569,7 @@ static void rc_destroy_one(XrCoroHeap *heap, XrObjHeader *obj) {
     /* Run the type destructor (closes files/sockets, frees side buffers,
      * drops child references — which may push more onto deferred_drops). */
     if (heap && coro_heap_type_needs_destroy(heap, obj->type)) {
-        XrGCDestroyFn destroy = coro_heap_destroy_func(heap, obj->type);
+        XrObjDestroyFn destroy = coro_heap_destroy_func(heap, obj->type);
         if (destroy) {
             destroy(obj, heap);
             heap->finalizer_count++;
@@ -656,7 +656,7 @@ XR_FUNC void xr_coro_heap_destroy_obj(XrCoroHeap *heap, XrObjHeader *obj) {
 XrObjHeader *xr_coro_heap_new_obj(XrCoroHeap *heap, uint8_t type, size_t size) {
     if (!heap)
         return NULL;
-    XR_DCHECK(type < XGC_MAX_TYPES, "invalid object type");
+    XR_DCHECK(type < XR_OBJ_TYPE_MAX, "invalid object type");
     XR_DCHECK(size >= sizeof(XrObjHeader), "alloc size too small for object header");
     XR_DCHECK(heap->owner != NULL, "coroutine heap has no owner coroutine");
 

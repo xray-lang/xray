@@ -328,8 +328,8 @@ uint8_t xr_alloc_extension_type(XrayIsolate *isolate, const char *name) {
     if (!core)
         return 0;
     uint8_t id = core->ext_type_next;
-    if (id >= XGC_MAX_TYPES) {
-        xr_log_warning("ext_type", "extension type slots exhausted (max %d)", XGC_MAX_TYPES);
+    if (id >= XR_OBJ_TYPE_MAX) {
+        xr_log_warning("ext_type", "extension type slots exhausted (max %d)", XR_OBJ_TYPE_MAX);
         return 0;
     }
     core->ext_type_next = id + 1;
@@ -340,17 +340,17 @@ uint8_t xr_alloc_extension_type(XrayIsolate *isolate, const char *name) {
 void xr_register_extension_destroy(XrayIsolate *isolate, uint8_t type_id,
                                    XrExtDestroyFn destroy_fn) {
     XrRuntimeCore *core = xr_isolate_get_runtime_core(isolate);
-    if (!core || type_id >= XGC_MAX_TYPES)
+    if (!core || type_id >= XR_OBJ_TYPE_MAX)
         return;
-    core->ext_destroy_funcs[type_id] = (XrGCDestroyFn) destroy_fn;
+    core->ext_destroy_funcs[type_id] = (XrObjDestroyFn) destroy_fn;
     core->ext_finalize_bitmap |= (1ULL << type_id);
-    xr_runtime_core_set_destroy_op(core, type_id, (XrGCDestroyFn) destroy_fn);
+    xr_runtime_core_set_destroy_op(core, type_id, (XrObjDestroyFn) destroy_fn);
 }
 
 void xr_register_extension_traverse(XrayIsolate *isolate, uint8_t type_id,
                                     XrExtTraverseFn traverse_fn) {
     XrRuntimeCore *core = xr_isolate_get_runtime_core(isolate);
-    if (!core || type_id >= XGC_MAX_TYPES)
+    if (!core || type_id >= XR_OBJ_TYPE_MAX)
         return;
     core->ext_traverse_funcs[type_id] = (void *) traverse_fn;
     core->ext_has_refs_bitmap |= (1ULL << type_id);

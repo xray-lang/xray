@@ -72,8 +72,8 @@ void xr_runtime_core_cleanup_fixed_heap(XrRuntimeCore *core) {
         xr_weak_registry_destroy(core->fixed_heap.isolate);
 }
 
-void xr_runtime_core_set_destroy_op(XrRuntimeCore *core, uint8_t type, XrGCDestroyFn destroy) {
-    if (!core || type >= XGC_MAX_TYPES)
+void xr_runtime_core_set_destroy_op(XrRuntimeCore *core, uint8_t type, XrObjDestroyFn destroy) {
+    if (!core || type >= XR_OBJ_TYPE_MAX)
         return;
     core->destroy_ops[type] = destroy;
     if (destroy)
@@ -82,14 +82,14 @@ void xr_runtime_core_set_destroy_op(XrRuntimeCore *core, uint8_t type, XrGCDestr
         core->destroy_bitmap &= ~(1ULL << type);
 }
 
-XrGCDestroyFn xr_runtime_core_destroy_op(const XrRuntimeCore *core, uint8_t type) {
-    if (!core || type >= XGC_MAX_TYPES)
+XrObjDestroyFn xr_runtime_core_destroy_op(const XrRuntimeCore *core, uint8_t type) {
+    if (!core || type >= XR_OBJ_TYPE_MAX)
         return NULL;
     return core->destroy_ops[type];
 }
 
 bool xr_runtime_core_type_needs_destroy(const XrRuntimeCore *core, uint8_t type) {
-    return core && type < XGC_MAX_TYPES && (core->destroy_bitmap & (1ULL << type)) != 0;
+    return core && type < XR_OBJ_TYPE_MAX && (core->destroy_bitmap & (1ULL << type)) != 0;
 }
 
 void xr_runtime_core_set_scope_transfer_ops(XrRuntimeCore *core, const XrScopeTransferOps *ops) {

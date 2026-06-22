@@ -33,13 +33,13 @@
 #include <string.h>
 #include "../base/xhash.h"
 
-const XrGCDeepCopyFn g_type_deep_copy_ops[XGC_MAX_TYPES] = {
+const XrObjDeepCopyFn xr_obj_deep_copy_ops[XR_OBJ_TYPE_MAX] = {
     [XR_TARRAY] = xr_deep_copy_array_with_ctx,      [XR_TMAP] = xr_deep_copy_map_with_ctx,
     [XR_TSET] = xr_deep_copy_set_with_ctx,          [XR_TINSTANCE] = xr_deep_copy_instance_with_ctx,
     [XR_TFUNCTION] = xr_deep_copy_closure_with_ctx, [XR_TCELL] = xr_deep_copy_cell_with_ctx,
 };
 
-const XrGCToSharedFn g_type_to_shared_ops[XGC_MAX_TYPES] = {
+const XrObjToSharedFn xr_obj_to_shared_ops[XR_OBJ_TYPE_MAX] = {
     [XR_TARRAY] = xr_to_shared_array,      [XR_TMAP] = xr_to_shared_map,
     [XR_TSET] = xr_to_shared_set,          [XR_TINSTANCE] = xr_to_shared_instance,
     [XR_TFUNCTION] = xr_to_shared_closure,
@@ -518,15 +518,15 @@ XrValue xr_deep_copy_with_ctx(XrCopyContext *ctx, XrValue value) {
     }
 
     uint8_t type = XR_OBJ_GET_TYPE(obj);
-    if (type >= XGC_MAX_TYPES)
+    if (type >= XR_OBJ_TYPE_MAX)
         return value;
 
-    // Compile-time types resolve through g_type_deep_copy_ops in O(1). Slot is
+    // Compile-time types resolve through xr_obj_deep_copy_ops in O(1). Slot is
     // NULL for types that are either immutable across coroutines (TSTRING,
     // TBLOB) or simply not transferable (TCHANNEL, TCOROUTINE, TTASK,
     // TCELL, TBOUND_METHOD, TEXCEPTION, TERROR). The dispatcher returns
     // the raw value for those, matching the previous default branch.
-    XrGCDeepCopyFn fn = g_type_deep_copy_ops[type];
+    XrObjDeepCopyFn fn = xr_obj_deep_copy_ops[type];
     return fn ? fn(ctx, obj) : value;
 }
 
@@ -1014,13 +1014,13 @@ XrValue xr_to_shared(struct XrayIsolate *X, XrValue value) {
         return value;
 
     uint8_t type = XR_OBJ_GET_TYPE(obj);
-    if (type >= XGC_MAX_TYPES)
+    if (type >= XR_OBJ_TYPE_MAX)
         return value;
 
-    // Compile-time types resolve through g_type_to_shared_ops in O(1). Slot is
+    // Compile-time types resolve through xr_obj_to_shared_ops in O(1). Slot is
     // NULL for types that have no shared form (channels are already
     // shared at construction; coroutines / tasks / cells / bound-methods
     // / exceptions / errors are deliberately not transferable).
-    XrGCToSharedFn fn = g_type_to_shared_ops[type];
+    XrObjToSharedFn fn = xr_obj_to_shared_ops[type];
     return fn ? fn(X, obj) : value;
 }
