@@ -8,7 +8,8 @@
  * xalloc_unified.h - Unified allocation API for coroutine heap
  *
  * KEY CONCEPT:
- *   Provides unified allocation interface for Arena Mark-Sweep GC.
+ *   Provides the allocation bridge from coroutine/runtime code to the
+ *   per-coroutine Region + RC heap.
  */
 
 #ifndef XALLOC_UNIFIED_H
@@ -33,20 +34,20 @@ XR_FUNC struct XrayIsolate *xr_coro_get_isolate(struct XrCoroutine *coro);
 // Lazy initialization: create heap on first heap allocation demand
 XR_FUNC XrCoroHeap *xr_coro_ensure_heap(struct XrCoroutine *coro);
 
-// Allocate GC-managed object for coroutine
+// Allocate an RC-managed object for a coroutine
 XR_FUNC void *xr_coro_alloc(struct XrCoroutine *coro, size_t size, uint8_t type);
 
-// Get coroutine's GC context (for write barriers etc.)
+// Get coroutine's heap context
 XR_FUNC XrCoroHeap *xr_coro_get_heap(struct XrCoroutine *coro);
 
-// Get current coroutine's GC context via TLS
+// Get current coroutine's heap context via TLS
 XR_FUNC XrCoroHeap *xr_current_coro_heap(void);
 
-// Allocate raw byte buffer on coroutine's Region GC heap (XR_TBLOB)
-static inline void *xr_coro_alloc_blob(XrCoroHeap *gc, size_t data_size) {
-    if (!gc)
+// Allocate raw byte buffer on the coroutine's Region heap (XR_TBLOB)
+static inline void *xr_coro_alloc_blob(XrCoroHeap *heap, size_t data_size) {
+    if (!heap)
         return NULL;
-    XrObjHeader *obj = xr_coro_heap_new_obj(gc, XR_TBLOB, sizeof(XrObjHeader) + data_size);
+    XrObjHeader *obj = xr_coro_heap_new_obj(heap, XR_TBLOB, sizeof(XrObjHeader) + data_size);
     return obj ? (obj + 1) : NULL;
 }
 
@@ -55,12 +56,12 @@ static inline void *xr_coro_alloc_blob(XrCoroHeap *gc, size_t data_size) {
 // is no sweep), so containers MUST release their backing blob explicitly
 // when they are destroyed or when they reallocate their storage —
 // otherwise the blob stays live until coroutine teardown.
-static inline void xr_coro_free_blob(XrCoroHeap *gc, void *data) {
-    if (!gc || !data)
+static inline void xr_coro_free_blob(XrCoroHeap *heap, void *data) {
+    if (!heap || !data)
         return;
     XrObjHeader *obj = ((XrObjHeader *) data) - 1;
     XR_DCHECK(XR_OBJ_GET_TYPE(obj) == XR_TBLOB, "free_blob: not a blob");
-    xr_coro_heap_destroy_obj(gc, obj);
+    xr_coro_heap_destroy_obj(heap, obj);
 }
 
 // Write barrier for container modifications

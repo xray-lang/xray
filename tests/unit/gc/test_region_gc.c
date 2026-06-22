@@ -30,7 +30,7 @@
 #include "../../../src/coro/xcoroutine.h"
 #include "../test_win_compat.h"
 
-/* Dummy coroutine for GC tests (gc_create only stores gc->owner, no dereference) */
+/* Dummy coroutine for heap tests (xr_coro_heap_create only stores heap->owner, no dereference) */
 static XrCoroutine dummy_coro;
 static XrayIsolate g_test_iso;
 static XrRuntimeCore g_test_core;
@@ -150,45 +150,45 @@ static void test_region_objects_skip_metadata_line(void) {
 static void test_region_block_accounting(void) {
     TEST("region: per-block alloc_count tracks bumped slots");
 
-    XrCoroHeap *gc = xr_coro_heap_create(&dummy_coro);
-    ASSERT(gc != NULL, "create failed");
+    XrCoroHeap *heap = xr_coro_heap_create(&dummy_coro);
+    ASSERT(heap != NULL, "create failed");
 
-    XrObjHeader *a = xr_coro_heap_new_obj(gc, XR_TBLOB, 64);
-    XrObjHeader *b = xr_coro_heap_new_obj(gc, XR_TBLOB, 64);
+    XrObjHeader *a = xr_coro_heap_new_obj(heap, XR_TBLOB, 64);
+    XrObjHeader *b = xr_coro_heap_new_obj(heap, XR_TBLOB, 64);
     ASSERT(a != NULL && b != NULL, "alloc failed");
 
     XrRegionBlock *block = XR_REGION_BLOCK_FROM_PTR(a);
     ASSERT(block->alloc_count >= 2, "alloc_count should count bumped slots");
     ASSERT(block->alloc_bytes >= 128, "alloc_bytes should track allocated size");
 
-    xr_coro_heap_destroy(gc);
+    xr_coro_heap_destroy(heap);
     PASS();
 }
 
-/* ========== 2. CoroGC Integration Tests ========== */
+/* ========== 2. Coroutine Heap Integration Tests ========== */
 
 static void test_gc_create_destroy(void) {
-    TEST("CoroGC create/destroy");
+    TEST("CoroHeap create/destroy");
 
-    XrCoroHeap *gc = xr_coro_heap_create(&dummy_coro);
-    ASSERT(gc != NULL, "create failed");
-    ASSERT(gc->totalbytes == 0, "initial bytes should be 0");
+    XrCoroHeap *heap = xr_coro_heap_create(&dummy_coro);
+    ASSERT(heap != NULL, "create failed");
+    ASSERT(heap->totalbytes == 0, "initial bytes should be 0");
 
-    xr_coro_heap_destroy(gc);
+    xr_coro_heap_destroy(heap);
     PASS();
 }
 
 static void test_large_object(void) {
     TEST("large object: goes to malloc, not Region");
 
-    XrCoroHeap *gc = xr_coro_heap_create(&dummy_coro);
-    ASSERT(gc != NULL, "create failed");
+    XrCoroHeap *heap = xr_coro_heap_create(&dummy_coro);
+    ASSERT(heap != NULL, "create failed");
 
-    XrObjHeader *large = xr_coro_heap_new_obj(gc, XR_TSTRING, 8 * 1024);
+    XrObjHeader *large = xr_coro_heap_new_obj(heap, XR_TSTRING, 8 * 1024);
     ASSERT(large != NULL, "large alloc failed");
-    ASSERT(gc->large_set.count == 1, "should have large object registered");
+    ASSERT(heap->large_set.count == 1, "should have large object registered");
 
-    xr_coro_heap_destroy(gc);
+    xr_coro_heap_destroy(heap);
     PASS();
 }
 
@@ -198,14 +198,14 @@ static void test_teardown_finalizer_registry(void) {
     setup_test_ext_finalizer();
     g_destroy_count = 0;
 
-    XrCoroHeap *gc = xr_coro_heap_create(&dummy_coro);
-    ASSERT(gc != NULL, "create failed");
+    XrCoroHeap *heap = xr_coro_heap_create(&dummy_coro);
+    ASSERT(heap != NULL, "create failed");
 
-    XrObjHeader *obj = xr_coro_heap_new_obj(gc, XR_TEST_EXT_TYPE, 64);
+    XrObjHeader *obj = xr_coro_heap_new_obj(heap, XR_TEST_EXT_TYPE, 64);
     ASSERT(obj != NULL, "alloc failed");
     ASSERT(XR_OBJ_HAS_DESTRUCTOR(obj), "object should carry destructor flag");
 
-    xr_coro_heap_destroy(gc);
+    xr_coro_heap_destroy(heap);
     ASSERT(g_destroy_count == 1, "teardown should run finalizer once");
     PASS();
 }
@@ -216,17 +216,17 @@ static void test_rc_destroy_unregisters_finalizer(void) {
     setup_test_ext_finalizer();
     g_destroy_count = 0;
 
-    XrCoroHeap *gc = xr_coro_heap_create(&dummy_coro);
-    ASSERT(gc != NULL, "create failed");
+    XrCoroHeap *heap = xr_coro_heap_create(&dummy_coro);
+    ASSERT(heap != NULL, "create failed");
 
-    XrObjHeader *obj = xr_coro_heap_new_obj(gc, XR_TEST_EXT_TYPE, 64);
+    XrObjHeader *obj = xr_coro_heap_new_obj(heap, XR_TEST_EXT_TYPE, 64);
     ASSERT(obj != NULL, "alloc failed");
 
-    xr_coro_heap_destroy_obj(gc, obj);
+    xr_coro_heap_destroy_obj(heap, obj);
     ASSERT(g_destroy_count == 1, "RC destroy should run finalizer once");
-    ASSERT(gc->finalize_set.count == 0, "RC destroy should unregister finalizer");
+    ASSERT(heap->finalize_set.count == 0, "RC destroy should unregister finalizer");
 
-    xr_coro_heap_destroy(gc);
+    xr_coro_heap_destroy(heap);
     ASSERT(g_destroy_count == 1, "teardown should not rerun finalizer");
     PASS();
 }
@@ -234,18 +234,18 @@ static void test_rc_destroy_unregisters_finalizer(void) {
 static void test_large_object_rc_free_unregisters_node(void) {
     TEST("large object: RC free unregisters large object node");
 
-    XrCoroHeap *gc = xr_coro_heap_create(&dummy_coro);
-    ASSERT(gc != NULL, "create failed");
+    XrCoroHeap *heap = xr_coro_heap_create(&dummy_coro);
+    ASSERT(heap != NULL, "create failed");
 
-    XrObjHeader *large = xr_coro_heap_new_obj(gc, XR_TSTRING, 8 * 1024);
+    XrObjHeader *large = xr_coro_heap_new_obj(heap, XR_TSTRING, 8 * 1024);
     ASSERT(large != NULL, "large alloc failed");
-    ASSERT(gc->large_set.count == 1, "large registration missing");
+    ASSERT(heap->large_set.count == 1, "large registration missing");
 
-    xr_coro_heap_destroy_obj(gc, large);
-    ASSERT(gc->large_set.count == 0, "large registration should be removed");
-    ASSERT(gc->large_bytes == 0, "large bytes should be decremented");
+    xr_coro_heap_destroy_obj(heap, large);
+    ASSERT(heap->large_set.count == 0, "large registration should be removed");
+    ASSERT(heap->large_bytes == 0, "large bytes should be decremented");
 
-    xr_coro_heap_destroy(gc);
+    xr_coro_heap_destroy(heap);
     PASS();
 }
 
@@ -254,43 +254,43 @@ static void test_large_object_rc_free_unregisters_node(void) {
 static void perf_allocation_throughput(void) {
     TEST("perf: allocation throughput");
 
-    XrCoroHeap *gc = xr_coro_heap_create(&dummy_coro);
-    gc->cycle_collection_disabled++;
+    XrCoroHeap *heap = xr_coro_heap_create(&dummy_coro);
+    heap->cycle_collection_disabled++;
 
     const int COUNT = 100000;
     uint64_t start = time_ns();
 
     for (int i = 0; i < COUNT; i++) {
-        xr_coro_heap_new_obj(gc, XR_TSTRING, 64);
+        xr_coro_heap_new_obj(heap, XR_TSTRING, 64);
     }
 
     uint64_t elapsed = time_ns() - start;
     double ms = elapsed / 1e6;
     double mps = COUNT / (ms / 1000.0) / 1e6;
 
-    gc->cycle_collection_disabled--;
+    heap->cycle_collection_disabled--;
     printf("%.1fM/s (%.1fms) ", mps, ms);
-    xr_coro_heap_destroy(gc);
+    xr_coro_heap_destroy(heap);
     PASS();
 }
 
 static void perf_bulk_destroy(void) {
     TEST("perf: bulk destroy (coroutine exit)");
 
-    XrCoroHeap *gc = xr_coro_heap_create(&dummy_coro);
-    gc->cycle_collection_disabled++;
+    XrCoroHeap *heap = xr_coro_heap_create(&dummy_coro);
+    heap->cycle_collection_disabled++;
 
     const int COUNT = 100000;
     for (int i = 0; i < COUNT; i++) {
-        xr_coro_heap_new_obj(gc, XR_TSTRING, 64);
+        xr_coro_heap_new_obj(heap, XR_TSTRING, 64);
     }
-    gc->cycle_collection_disabled--;
+    heap->cycle_collection_disabled--;
 
     XrRegionStats stats;
-    xr_region_get_stats(&gc->region, &stats);
+    xr_region_get_stats(&heap->region, &stats);
 
     uint64_t start = time_ns();
-    xr_coro_heap_destroy(gc);
+    xr_coro_heap_destroy(heap);
     uint64_t elapsed = time_ns() - start;
 
     printf("%.0fus (%zu blocks) ", elapsed / 1e3, stats.total_blocks);
@@ -310,7 +310,7 @@ int main(void) {
     test_region_objects_skip_metadata_line();
     test_region_block_accounting();
 
-    printf("\n--- CoroGC Integration ---\n");
+    printf("\n--- Coroutine Heap Integration ---\n");
     test_gc_create_destroy();
     test_large_object();
     test_teardown_finalizer_registry();

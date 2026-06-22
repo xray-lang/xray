@@ -100,9 +100,9 @@ XrValue xr_regex_make_match_object(XrayIsolate *isolate, const char *text, XrMat
     /* Temporarily disable GC: multiple allocations below (Instance,
      * String, Array) are not rooted from the VM stack. */
     XrCoroutine *coro = xr_current_coro(isolate);
-    XrCoroHeap *gc = coro ? coro->heap : NULL;
-    if (gc)
-        gc->cycle_collection_disabled++;
+    XrCoroHeap *heap = coro ? coro->heap : NULL;
+    if (heap)
+        heap->cycle_collection_disabled++;
 
     XrInstance *inst = xr_instance_new(isolate, core->regexMatchClass);
     XR_DCHECK(inst != NULL, "make_match_object: instance alloc failed");
@@ -135,8 +135,8 @@ XrValue xr_regex_make_match_object(XrayIsolate *isolate, const char *text, XrMat
     }
     xr_instance_set_field_fast(inst, REGEX_MATCH_FIELD_GROUPS, xr_value_from_array(groups));
 
-    if (gc)
-        gc->cycle_collection_disabled--;
+    if (heap)
+        heap->cycle_collection_disabled--;
     return XR_FROM_PTR(inst);
 }
 

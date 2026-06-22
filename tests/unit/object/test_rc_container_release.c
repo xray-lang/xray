@@ -45,8 +45,8 @@ static void teardown(void) {
 }
 
 static XrCoroHeap *test_heap(void) {
-    XrCoroHeap *gc = xr_coro_get_heap(main_coro);
-    return gc;
+    XrCoroHeap *heap = xr_coro_get_heap(main_coro);
+    return heap;
 }
 
 static bool is_dead(XrObjHeader *obj) {
@@ -85,9 +85,9 @@ TEST(array_destroy_releases_child_array) {
      * it does not retain). */
     ASSERT_EQ_INT(child->hdr.refcount, 0);
 
-    XrCoroHeap *gc = test_heap();
-    ASSERT_NOT_NULL(gc);
-    xr_rc_release_value(gc, xr_value_from_array(parent));
+    XrCoroHeap *heap = test_heap();
+    ASSERT_NOT_NULL(heap);
+    xr_rc_release_value(heap, xr_value_from_array(parent));
     ASSERT_TRUE(is_dead(&parent->hdr));
     ASSERT_TRUE(is_dead(&child->hdr));
     teardown();
@@ -103,9 +103,9 @@ TEST(map_destroy_releases_key_and_value) {
     ASSERT_EQ_INT(key->hdr.refcount, 0);
     ASSERT_EQ_INT(value->hdr.refcount, 0);
 
-    XrCoroHeap *gc = test_heap();
-    ASSERT_NOT_NULL(gc);
-    xr_rc_release_value(gc, xr_value_from_map(map));
+    XrCoroHeap *heap = test_heap();
+    ASSERT_NOT_NULL(heap);
+    xr_rc_release_value(heap, xr_value_from_map(map));
     ASSERT_TRUE(is_dead(&map->hdr));
     ASSERT_TRUE(is_dead(&key->hdr));
     ASSERT_TRUE(is_dead(&value->hdr));
@@ -120,9 +120,9 @@ TEST(set_destroy_releases_value) {
     ASSERT_TRUE(xr_set_add(set, xr_value_from_array(child)));
     ASSERT_EQ_INT(child->hdr.refcount, 0);
 
-    XrCoroHeap *gc = test_heap();
-    ASSERT_NOT_NULL(gc);
-    xr_rc_release_value(gc, xr_value_from_set(set));
+    XrCoroHeap *heap = test_heap();
+    ASSERT_NOT_NULL(heap);
+    xr_rc_release_value(heap, xr_value_from_set(set));
     ASSERT_TRUE(is_dead(&set->hdr));
     ASSERT_TRUE(is_dead(&child->hdr));
     teardown();
@@ -145,14 +145,14 @@ TEST(weak_map_does_not_retain_key_and_purges_value) {
     ASSERT_FALSE(is_dead(&key->hdr));
     ASSERT_FALSE(is_dead(&value->hdr));
 
-    XrCoroHeap *gc = test_heap();
-    ASSERT_NOT_NULL(gc);
-    xr_rc_release_value(gc, xr_value_from_array(key));
+    XrCoroHeap *heap = test_heap();
+    ASSERT_NOT_NULL(heap);
+    xr_rc_release_value(heap, xr_value_from_array(key));
     ASSERT_TRUE(is_dead(&key->hdr));
     ASSERT_TRUE(is_dead(&value->hdr));
     ASSERT_EQ_INT(map->count, 0);
 
-    xr_rc_release_value(gc, xr_value_from_map(map));
+    xr_rc_release_value(heap, xr_value_from_map(map));
     ASSERT_TRUE(is_dead(&map->hdr));
     teardown();
 }
@@ -169,13 +169,13 @@ TEST(weak_set_does_not_retain_element) {
     ASSERT_EQ_INT(set->count, 1);
     ASSERT_FALSE(is_dead(&elem->hdr));
 
-    XrCoroHeap *gc = test_heap();
-    ASSERT_NOT_NULL(gc);
-    xr_rc_release_value(gc, xr_value_from_array(elem));
+    XrCoroHeap *heap = test_heap();
+    ASSERT_NOT_NULL(heap);
+    xr_rc_release_value(heap, xr_value_from_array(elem));
     ASSERT_TRUE(is_dead(&elem->hdr));
     ASSERT_EQ_INT(set->count, 0);
 
-    xr_rc_release_value(gc, xr_value_from_set(set));
+    xr_rc_release_value(heap, xr_value_from_set(set));
     ASSERT_TRUE(is_dead(&set->hdr));
     teardown();
 }
@@ -189,9 +189,9 @@ TEST(tuple_instance_destroy_releases_elements) {
     xr_tuple_set(tuple, 0, xr_value_from_array(left));
     xr_tuple_set(tuple, 1, xr_value_from_array(right));
 
-    XrCoroHeap *gc = test_heap();
-    ASSERT_NOT_NULL(gc);
-    xr_rc_release_value(gc, xr_value_from_tuple(tuple));
+    XrCoroHeap *heap = test_heap();
+    ASSERT_NOT_NULL(heap);
+    xr_rc_release_value(heap, xr_value_from_tuple(tuple));
     ASSERT_TRUE(is_dead(&tuple->hdr));
     ASSERT_TRUE(is_dead(&left->hdr));
     ASSERT_TRUE(is_dead(&right->hdr));
@@ -213,9 +213,9 @@ TEST(dynamic_instance_destroy_releases_overflow_fields) {
     ASSERT_TRUE(xr_instance_set_dynamic_field(X, inst, 1, xr_value_from_array(b)));
     ASSERT_TRUE(xr_instance_set_dynamic_field(X, inst, 2, xr_value_from_array(c)));
 
-    XrCoroHeap *gc = test_heap();
-    ASSERT_NOT_NULL(gc);
-    xr_rc_release_value(gc, XR_FROM_PTR(inst));
+    XrCoroHeap *heap = test_heap();
+    ASSERT_NOT_NULL(heap);
+    xr_rc_release_value(heap, XR_FROM_PTR(inst));
     ASSERT_TRUE(is_dead(&inst->hdr));
     ASSERT_TRUE(is_dead(&a->hdr));
     ASSERT_TRUE(is_dead(&b->hdr));
@@ -234,9 +234,9 @@ TEST(closure_destroy_releases_upvals) {
 
     closure->upvals[0] = xr_value_from_array(child);
 
-    XrCoroHeap *gc = test_heap();
-    ASSERT_NOT_NULL(gc);
-    xr_rc_release_value(gc, xr_value_from_closure(closure));
+    XrCoroHeap *heap = test_heap();
+    ASSERT_NOT_NULL(heap);
+    xr_rc_release_value(heap, xr_value_from_closure(closure));
     ASSERT_TRUE(is_dead(&closure->hdr));
     ASSERT_TRUE(is_dead(&child->hdr));
 
@@ -254,16 +254,16 @@ TEST(cell_destroy_and_replace_release_values) {
     ASSERT_NOT_NULL(second);
 
     cell->value = xr_value_from_array(first);
-    XrCoroHeap *gc = test_heap();
-    ASSERT_NOT_NULL(gc);
+    XrCoroHeap *heap = test_heap();
+    ASSERT_NOT_NULL(heap);
 
     XrValue old = cell->value;
     cell->value = xr_value_from_array(second);
-    xr_rc_release_value(gc, old);
+    xr_rc_release_value(heap, old);
     ASSERT_TRUE(is_dead(&first->hdr));
     ASSERT_FALSE(is_dead(&second->hdr));
 
-    xr_rc_release_value(gc, XR_FROM_PTR(cell));
+    xr_rc_release_value(heap, XR_FROM_PTR(cell));
     ASSERT_TRUE(is_dead(&cell->hdr));
     ASSERT_TRUE(is_dead(&second->hdr));
     teardown();
@@ -285,20 +285,20 @@ TEST(closure_cell_cycle_is_collected) {
     xr_rc_retain_value(closure_value);
     cell->value = closure_value;
 
-    XrCoroHeap *gc = test_heap();
-    ASSERT_NOT_NULL(gc);
+    XrCoroHeap *heap = test_heap();
+    ASSERT_NOT_NULL(heap);
     ASSERT_EQ_INT(closure->hdr.refcount, 1);
     ASSERT_EQ_INT(cell->hdr.refcount, 1);
 
-    xr_rc_release_value(gc, closure_value);
-    xr_rc_release_value(gc, cell_value);
+    xr_rc_release_value(heap, closure_value);
+    xr_rc_release_value(heap, cell_value);
     ASSERT_FALSE(is_dead(&closure->hdr));
     ASSERT_FALSE(is_dead(&cell->hdr));
     ASSERT_EQ_INT(closure->hdr.refcount, 0);
     ASSERT_EQ_INT(cell->hdr.refcount, 0);
-    ASSERT_TRUE(gc->cycle_root_count >= 2);
+    ASSERT_TRUE(heap->cycle_root_count >= 2);
 
-    xr_coro_heap_collect_cycles(gc);
+    xr_coro_heap_collect_cycles(heap);
     ASSERT_TRUE(is_dead(&closure->hdr));
     ASSERT_TRUE(is_dead(&cell->hdr));
 
@@ -308,8 +308,8 @@ TEST(closure_cell_cycle_is_collected) {
 
 TEST(whole_block_reclaim_returns_empty_blocks) {
     setup();
-    XrCoroHeap *gc = test_heap();
-    ASSERT_NOT_NULL(gc);
+    XrCoroHeap *heap = test_heap();
+    ASSERT_NOT_NULL(heap);
 
     /* Fill several Region blocks with freelistable blobs (256B → ~63 per 16KB
      * block; 256 objects span ~4 blocks), then free every one. */
@@ -319,23 +319,23 @@ TEST(whole_block_reclaim_returns_empty_blocks) {
     };
     XrObjHeader *objs[N];
     for (int i = 0; i < N; i++) {
-        objs[i] = xr_coro_heap_new_obj(gc, XR_TBLOB, SZ);
+        objs[i] = xr_coro_heap_new_obj(heap, XR_TBLOB, SZ);
         ASSERT_NOT_NULL(objs[i]);
     }
 
     XrRegionStats before;
-    xr_region_get_stats(&gc->region, &before);
+    xr_region_get_stats(&heap->region, &before);
     ASSERT_TRUE(before.full_blocks >= 1);
 
     for (int i = 0; i < N; i++)
-        xr_coro_heap_destroy_obj(gc, objs[i]);
+        xr_coro_heap_destroy_obj(heap, objs[i]);
 
     /* Reclaim: fully-dead retired blocks return to the free pool so memory is
      * reusable by ANY size class (bounds peak retention under shifting loads). */
-    xr_coro_heap_reclaim_empty_blocks(gc);
+    xr_coro_heap_reclaim_empty_blocks(heap);
 
     XrRegionStats after;
-    xr_region_get_stats(&gc->region, &after);
+    xr_region_get_stats(&heap->region, &after);
     ASSERT_TRUE(after.free_blocks > before.free_blocks);
     ASSERT_TRUE(after.full_blocks < before.full_blocks);
     /* Memory kept for reuse (not returned to OS), so total is unchanged. */
@@ -344,10 +344,10 @@ TEST(whole_block_reclaim_returns_empty_blocks) {
     /* A later allocation of a DIFFERENT size class reuses the reclaimed
      * blocks without growing the heap. */
     size_t total_after = after.total_blocks;
-    XrObjHeader *reuse = xr_coro_heap_new_obj(gc, XR_TBLOB, 512);
+    XrObjHeader *reuse = xr_coro_heap_new_obj(heap, XR_TBLOB, 512);
     ASSERT_NOT_NULL(reuse);
     XrRegionStats reused;
-    xr_region_get_stats(&gc->region, &reused);
+    xr_region_get_stats(&heap->region, &reused);
     ASSERT_TRUE(reused.total_blocks <= total_after);
 
     teardown();

@@ -92,9 +92,9 @@ static void aot_test_trace(void *raw_frame, void *visitor) {
         (*frame->trace_count)++;
 }
 
-static void aot_test_release(void *raw_frame, struct XrCoroHeap *gc) {
+static void aot_test_release(void *raw_frame, struct XrCoroHeap *heap) {
     AotTestFrame *frame = (AotTestFrame *) raw_frame;
-    (void) gc;
+    (void) heap;
     if (frame && frame->release_count)
         (*frame->release_count)++;
     xr_aot_frame_free(frame);

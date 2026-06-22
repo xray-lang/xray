@@ -295,13 +295,13 @@ void xr_worker_destroy(XrWorker *worker) {
         worker->p.blocked_buckets[i] = NULL;
     }
 
-    // Per-runtime L2 pool for both block and CoroGC-struct flushes below.
+    // Per-runtime L2 pool for both block and coroutine-heap struct flushes below.
     XrSystemHeap *gc_heap = xr_runtime_get_sys_heap(worker->p.runtime);
 
     // Flush Per-Worker Region block cache L1 → L2 (runtime-core pool)
     xr_region_flush_block_cache(gc_heap, worker->p.block_cache, &worker->p.block_cache_count);
 
-    // Flush Per-Worker CoroGC free list L1 → L2 (runtime-core pool)
+    // Flush per-worker coroutine heap free list L1 -> L2 (runtime-core pool)
     xr_coro_heap_flush_pool(gc_heap, &worker->p.heap_free_list, &worker->p.heap_free_count);
 }
 

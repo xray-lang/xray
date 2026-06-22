@@ -130,30 +130,30 @@ static inline bool map_is_weak(const XrMap *map) {
 }
 
 static inline XrCoroHeap *map_current_or_owner_heap(XrMap *map) {
-    XrCoroHeap *gc = xr_current_coro_heap();
-    return gc ? gc : (map ? map->owner_heap : NULL);
+    XrCoroHeap *heap = xr_current_coro_heap();
+    return heap ? heap : (map ? map->owner_heap : NULL);
 }
 
-static XrayIsolate *map_owning_isolate(XrCoroHeap *gc) {
-    if (gc && gc->owner)
-        return gc->owner->isolate;
+static XrayIsolate *map_owning_isolate(XrCoroHeap *heap) {
+    if (heap && heap->owner)
+        return heap->owner->isolate;
     return NULL;
 }
 
-static void xr_map_release_entry_values(XrMap *map, XrMapEntry *e, XrCoroHeap *gc) {
+static void xr_map_release_entry_values(XrMap *map, XrMapEntry *e, XrCoroHeap *heap) {
     if (!map_is_weak(map))
-        xr_rc_release_value(gc, e->key);
-    xr_rc_release_value(gc, e->value);
+        xr_rc_release_value(heap, e->key);
+    xr_rc_release_value(heap, e->value);
     e->key = xr_null();
     e->value = xr_null();
 }
 
-static void xr_map_prepare_weak_key(XrMap *map, XrValue key, XrCoroHeap *gc) {
+static void xr_map_prepare_weak_key(XrMap *map, XrValue key, XrCoroHeap *heap) {
     if (!map_is_weak(map) || !XR_IS_PTR(key))
         return;
     XrObjHeader *target = XR_VALUE_GCPTR(key);
     XR_OBJ_SET_FLAG(target, XR_OBJ_WEAKABLE);
-    xr_weak_registry_register_map(map_owning_isolate(gc), map);
+    xr_weak_registry_register_map(map_owning_isolate(heap), map);
 }
 
 /* ========== Swiss Index Lookup ========== */
@@ -178,7 +178,7 @@ static int32_t map_lookup(XrMap *map, XrValue key, uint32_t hash, uint8_t key_tt
 // Grow (and compact away tombstones) to hold at least `min_needed` live entries.
 // Handles the dummy -> first-allocation case too. Returns false on OOM.
 static bool map_resize(XrMap *map, uint32_t min_needed) {
-    XrCoroHeap *gc = map_current_or_owner_heap(map);
+    XrCoroHeap *heap = map_current_or_owner_heap(map);
     bool was_dummy = xr_map_isdummy(map);
     XrMapEntry *old_entries = was_dummy ? NULL : map->entries;
     uint8_t *old_ctrl = was_dummy ? NULL : map->ctrl;
@@ -186,7 +186,7 @@ static bool map_resize(XrMap *map, uint32_t min_needed) {
     uint32_t old_nentries = was_dummy ? 0 : map->nentries;
     uint32_t old_isize = was_dummy ? 0 : map->indices_size;
     uint32_t old_ecap = was_dummy ? 0 : map->entries_cap;
-    bool old_on_gc = (map->flags & XR_MAP_FLAG_NODES_ON_GC) != 0;
+    bool old_on_heap = (map->flags & XR_MAP_FLAG_NODES_ON_GC) != 0;
 
     uint32_t needed = map->count > min_needed ? map->count : min_needed;
     if (needed < 1)
@@ -199,7 +199,7 @@ static bool map_resize(XrMap *map, uint32_t min_needed) {
     // First allocation from dummy may use the Region GC blob heap; subsequent
     // resizes force malloc (region recycling could overlap the old blob while
     // we copy live entries out of it).
-    bool new_on_gc = was_dummy && old_on_gc;
+    bool new_on_heap = was_dummy && old_on_heap;
 
     size_t cbytes = (size_t) new_isize + XR_SWISS_GROUP;
     size_t ibytes = sizeof(int32_t) * (size_t) new_isize;
@@ -208,35 +208,35 @@ static bool map_resize(XrMap *map, uint32_t min_needed) {
     int32_t *new_indices = NULL;
     XrMapEntry *new_entries = NULL;
 
-    if (new_on_gc && gc) {
-        new_ctrl = (uint8_t *) xr_coro_alloc_blob(gc, cbytes);
-        new_indices = (int32_t *) xr_coro_alloc_blob(gc, ibytes);
-        new_entries = (XrMapEntry *) xr_coro_alloc_blob(gc, ebytes);
+    if (new_on_heap && heap) {
+        new_ctrl = (uint8_t *) xr_coro_alloc_blob(heap, cbytes);
+        new_indices = (int32_t *) xr_coro_alloc_blob(heap, ibytes);
+        new_entries = (XrMapEntry *) xr_coro_alloc_blob(heap, ebytes);
         if (!new_ctrl || !new_indices || !new_entries) {
-            xr_coro_free_blob(gc, new_ctrl);
-            xr_coro_free_blob(gc, new_indices);
-            xr_coro_free_blob(gc, new_entries);
-            new_on_gc = false;
+            xr_coro_free_blob(heap, new_ctrl);
+            xr_coro_free_blob(heap, new_indices);
+            xr_coro_free_blob(heap, new_entries);
+            new_on_heap = false;
             new_ctrl = (uint8_t *) xr_malloc(cbytes);
             new_indices = (int32_t *) xr_malloc(ibytes);
             new_entries = (XrMapEntry *) xr_malloc(ebytes);
         }
     } else {
-        new_on_gc = false;
+        new_on_heap = false;
         new_ctrl = (uint8_t *) xr_malloc(cbytes);
         new_indices = (int32_t *) xr_malloc(ibytes);
         new_entries = (XrMapEntry *) xr_malloc(ebytes);
     }
     if (!new_ctrl || !new_indices || !new_entries) {
-        if (!new_on_gc) {
+        if (!new_on_heap) {
             xr_free(new_ctrl);
             xr_free(new_indices);
             xr_free(new_entries);
         }
         return false;
     }
-    if (!new_on_gc)
-        xr_coro_heap_add_external(gc, (int64_t) (cbytes + ibytes + ebytes));
+    if (!new_on_heap)
+        xr_coro_heap_add_external(heap, (int64_t) (cbytes + ibytes + ebytes));
 
     memset(new_ctrl, (int) XR_SWISS_CTRL_EMPTY, cbytes);
     for (uint32_t i = 0; i < new_isize; i++)
@@ -254,36 +254,36 @@ static bool map_resize(XrMap *map, uint32_t min_needed) {
     map->entries_cap = new_ecap;
     map->nentries = w;
     map->flags &= ~XR_MAP_FLAG_DUMMY;
-    if (new_on_gc)
+    if (new_on_heap)
         map->flags |= XR_MAP_FLAG_NODES_ON_GC;
     else
         map->flags &= ~XR_MAP_FLAG_NODES_ON_GC;
 
     if (old_entries) {
-        if (old_on_gc) {
-            xr_coro_free_blob(gc, old_ctrl);
-            xr_coro_free_blob(gc, old_indices);
-            xr_coro_free_blob(gc, old_entries);
+        if (old_on_heap) {
+            xr_coro_free_blob(heap, old_ctrl);
+            xr_coro_free_blob(heap, old_indices);
+            xr_coro_free_blob(heap, old_entries);
         } else {
             xr_free(old_ctrl);
             xr_free(old_indices);
             xr_free(old_entries);
-            xr_coro_heap_sub_external(gc, (int64_t) ((size_t) old_isize + XR_SWISS_GROUP +
-                                                     sizeof(int32_t) * (size_t) old_isize +
-                                                     sizeof(XrMapEntry) * (size_t) old_ecap));
+            xr_coro_heap_sub_external(heap, (int64_t) ((size_t) old_isize + XR_SWISS_GROUP +
+                                                       sizeof(int32_t) * (size_t) old_isize +
+                                                       sizeof(XrMapEntry) * (size_t) old_ecap));
         }
     }
     return true;
 }
 
 // Pre-allocate (malloc-backed) ctrl[]/indices[]/entries[] sized for `count` live
-// entries, charging the external-byte accounting to `gc` rather than the
+// entries, charging the external-byte accounting to `heap` rather than the
 // current coroutine. Deep-copy runs off the destination coroutine and must
-// charge the destination's gc (which later frees the map), so this avoids the
+// charge the destination's heap (which later frees the map), so this avoids the
 // byte-counter underflow that a current-coro accounting would cause. The map
 // must be freshly dummy. After this, inserting up to `count` entries via
 // xr_map_set will not trigger a resize.
-bool xr_map_reserve_external(XrMap *map, uint32_t count, struct XrCoroHeap *gc) {
+bool xr_map_reserve_external(XrMap *map, uint32_t count, struct XrCoroHeap *heap) {
     if (count == 0)
         return true;  // Stays dummy; first insert will allocate.
 
@@ -304,8 +304,8 @@ bool xr_map_reserve_external(XrMap *map, uint32_t count, struct XrCoroHeap *gc) 
         xr_free(ent);
         return false;
     }
-    if (gc)
-        xr_coro_heap_add_external(gc, (int64_t) (cbytes + ibytes + ebytes));
+    if (heap)
+        xr_coro_heap_add_external(heap, (int64_t) (cbytes + ibytes + ebytes));
 
     memset(ctrl, (int) XR_SWISS_CTRL_EMPTY, cbytes);
     for (uint32_t i = 0; i < isize; i++)
@@ -320,7 +320,7 @@ bool xr_map_reserve_external(XrMap *map, uint32_t count, struct XrCoroHeap *gc) 
     map->nentries = 0;
     map->flags &= ~XR_MAP_FLAG_DUMMY;
     map->flags &= ~XR_MAP_FLAG_NODES_ON_GC;  // malloc-backed
-    map->owner_heap = gc;
+    map->owner_heap = heap;
     return true;
 }
 
@@ -392,16 +392,16 @@ void xr_map_set(XrMap *map, XrValue key, XrValue value) {
 
     uint8_t key_tt = get_key_tt(key);
     uint32_t hash = hash_value(key);
-    XrCoroHeap *gc = map_current_or_owner_heap(map);
+    XrCoroHeap *heap = map_current_or_owner_heap(map);
 
     int32_t ix = map_lookup(map, key, hash, key_tt);
     if (ix >= 0) {
         // Update existing: keep the stored key, drop the incoming key + old value.
         XrMapEntry *e = &map->entries[ix];
-        xr_rc_release_value(gc, key);
-        xr_rc_release_value(gc, e->value);
+        xr_rc_release_value(heap, key);
+        xr_rc_release_value(heap, e->value);
         e->value = value;
-        XR_GC_BARRIER_BACK_SAFE(gc, map);
+        XR_GC_BARRIER_BACK_SAFE(heap, map);
         return;
     }
 
@@ -422,10 +422,10 @@ void xr_map_set(XrMap *map, XrValue key, XrValue value) {
 
     xr_swiss_indices_put(map->ctrl, map->indices, map->indices_size, hash, (int32_t) eidx);
     if (map_is_weak(map)) {
-        xr_map_prepare_weak_key(map, key, gc);
-        xr_rc_release_value(gc, key);
+        xr_map_prepare_weak_key(map, key, heap);
+        xr_rc_release_value(heap, key);
     }
-    XR_GC_BARRIER_BACK_SAFE(gc, map);
+    XR_GC_BARRIER_BACK_SAFE(heap, map);
 }
 
 XrValue xr_map_get(XrMap *map, XrValue key, bool *found) {
@@ -482,11 +482,11 @@ void xr_map_clear(XrMap *map) {
     if (xr_map_isdummy(map))
         return;
 
-    XrCoroHeap *gc = map_current_or_owner_heap(map);
+    XrCoroHeap *heap = map_current_or_owner_heap(map);
     for (uint32_t i = 0; i < map->nentries; i++) {
         XrMapEntry *e = &map->entries[i];
         if (e->key_tt != XR_MAP_ENTRY_NIL_KEY) {
-            xr_map_release_entry_values(map, e, gc);
+            xr_map_release_entry_values(map, e, heap);
             e->key_tt = XR_MAP_ENTRY_NIL_KEY;
         }
     }

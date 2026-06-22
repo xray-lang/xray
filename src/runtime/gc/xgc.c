@@ -329,9 +329,9 @@ void *xr_alloc(struct XrCoroutine *coro, size_t size, uint8_t type) {
         return NULL;
 
     // Lazy heap creation on first heap allocation
-    XrCoroHeap *gc = xr_coro_ensure_heap(coro);
-    if (gc) {
-        XrObjHeader *obj = xr_coro_heap_new_obj(gc, type, size);
+    XrCoroHeap *heap = xr_coro_ensure_heap(coro);
+    if (heap) {
+        XrObjHeader *obj = xr_coro_heap_new_obj(heap, type, size);
         if (obj)
             return obj;
         xr_log_warning("gc", "xr_alloc: heap allocation failed for type=%d size=%zu", type, size);

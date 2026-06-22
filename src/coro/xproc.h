@@ -273,7 +273,7 @@ typedef struct XrProc {
     void *block_cache[XR_BLOCK_CACHE_L1_MAX];  // Cached aligned blocks
     int block_cache_count;                     // Number of cached blocks
 
-    /* === CoroGC Free List (avoids malloc/free per coroutine that needs heap) === */
+    /* === Coroutine Heap Free List (avoids malloc/free per coroutine that needs heap) === */
     struct XrCoroHeap *heap_free_list;  // Free list of XrCoroHeap structs (320B each)
     int heap_free_count;                // Number of XrCoroHeap in free list
 

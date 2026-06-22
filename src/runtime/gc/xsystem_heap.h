@@ -158,7 +158,7 @@ XR_FUNC void xr_sysheap_free_shared(void *ptr, size_t size);
 #define XR_SYSHEAP_CORO_HEAP_POOL_MAX 256
 
 XR_FUNC struct XrCoroHeap *xr_sysheap_coro_heap_pool_pop(XrSystemHeap *heap);
-XR_FUNC bool xr_sysheap_coro_heap_pool_push(XrSystemHeap *heap, struct XrCoroHeap *gc);
+XR_FUNC bool xr_sysheap_coro_heap_pool_push(XrSystemHeap *heap, struct XrCoroHeap *coro_heap);
 
 /* ========== Region Block Pool (L2) ==========
  *
