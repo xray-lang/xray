@@ -27,7 +27,7 @@ typedef struct XrWeakContainerRegistry {
     uint32_t set_cap;
 } XrWeakContainerRegistry;
 
-static XrWeakContainerRegistry *weak_registry_get(XrayIsolate *isolate, bool create) {
+static XrWeakContainerRegistry *weak_registry_get(XrVMRuntime *isolate, bool create) {
     XrRuntimeCore *core = xr_isolate_get_runtime_core(isolate);
     if (!core)
         return NULL;
@@ -70,7 +70,7 @@ static bool weak_sets_reserve(XrWeakContainerRegistry *registry, uint32_t needed
     return true;
 }
 
-void xr_weak_registry_register_map(XrayIsolate *isolate, XrMap *map) {
+void xr_weak_registry_register_map(XrVMRuntime *isolate, XrMap *map) {
     if (!isolate || !map || !(map->flags & XR_MAP_FLAG_WEAK) ||
         (map->flags & XR_MAP_FLAG_WEAK_REGISTERED))
         return;
@@ -87,7 +87,7 @@ void xr_weak_registry_register_map(XrayIsolate *isolate, XrMap *map) {
     xr_amutex_unlock(&registry->lock);
 }
 
-void xr_weak_registry_unregister_map(XrayIsolate *isolate, XrMap *map) {
+void xr_weak_registry_unregister_map(XrVMRuntime *isolate, XrMap *map) {
     if (!isolate || !map || !(map->flags & XR_MAP_FLAG_WEAK_REGISTERED))
         return;
     XrWeakContainerRegistry *registry = weak_registry_get(isolate, false);
@@ -104,7 +104,7 @@ void xr_weak_registry_unregister_map(XrayIsolate *isolate, XrMap *map) {
     xr_amutex_unlock(&registry->lock);
 }
 
-void xr_weak_registry_register_set(XrayIsolate *isolate, XrSet *set) {
+void xr_weak_registry_register_set(XrVMRuntime *isolate, XrSet *set) {
     if (!isolate || !set || !(set->flags & XR_SET_FLAG_WEAK) ||
         (set->flags & XR_SET_FLAG_WEAK_REGISTERED))
         return;
@@ -121,7 +121,7 @@ void xr_weak_registry_register_set(XrayIsolate *isolate, XrSet *set) {
     xr_amutex_unlock(&registry->lock);
 }
 
-void xr_weak_registry_unregister_set(XrayIsolate *isolate, XrSet *set) {
+void xr_weak_registry_unregister_set(XrVMRuntime *isolate, XrSet *set) {
     if (!isolate || !set || !(set->flags & XR_SET_FLAG_WEAK_REGISTERED))
         return;
     XrWeakContainerRegistry *registry = weak_registry_get(isolate, false);
@@ -138,7 +138,7 @@ void xr_weak_registry_unregister_set(XrayIsolate *isolate, XrSet *set) {
     xr_amutex_unlock(&registry->lock);
 }
 
-void xr_weak_registry_target_dying(XrayIsolate *isolate, XrObjHeader *target,
+void xr_weak_registry_target_dying(XrVMRuntime *isolate, XrObjHeader *target,
                                    XrCoroHeap *owner_heap) {
     if (!isolate || !target || !(target->extra & XR_OBJ_WEAKABLE))
         return;
@@ -181,7 +181,7 @@ void xr_weak_registry_target_dying(XrayIsolate *isolate, XrObjHeader *target,
         xr_free(sets);
 }
 
-void xr_weak_registry_destroy(XrayIsolate *isolate) {
+void xr_weak_registry_destroy(XrVMRuntime *isolate) {
     XrRuntimeCore *core = xr_isolate_get_runtime_core(isolate);
     if (!core || !core->weak_registry)
         return;

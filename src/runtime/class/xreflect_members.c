@@ -58,7 +58,7 @@ static inline XrFieldMetadata *get_field_meta(XrValue val) {
 
 /* ========== Field Property Getters ========== */
 
-XrValue xr_field_getName(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+XrValue xr_field_getName(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     XR_DCHECK(isolate != NULL, "field_getName: NULL isolate");
     (void) args;
     (void) nargs;
@@ -74,7 +74,7 @@ XrValue xr_field_getName(XrayIsolate *isolate, XrValue self, XrValue *args, int 
     return xr_string_value(xr_string_intern(isolate, desc->name, strlen(desc->name), 0));
 }
 
-XrValue xr_field_getType(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+XrValue xr_field_getType(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     XR_DCHECK(isolate != NULL, "field_getType: NULL isolate");
     (void) args;
     (void) nargs;
@@ -96,7 +96,7 @@ XrValue xr_field_getType(XrayIsolate *isolate, XrValue self, XrValue *args, int 
     return xr_null();
 }
 
-XrValue xr_field_getIsStatic(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+XrValue xr_field_getIsStatic(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
     (void) args;
     (void) nargs;
@@ -109,7 +109,7 @@ XrValue xr_field_getIsStatic(XrayIsolate *isolate, XrValue self, XrValue *args, 
     return xr_bool((desc->flags & XR_FIELD_STATIC) != 0);
 }
 
-XrValue xr_field_getIsReadonly(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+XrValue xr_field_getIsReadonly(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
     (void) args;
     (void) nargs;
@@ -122,7 +122,7 @@ XrValue xr_field_getIsReadonly(XrayIsolate *isolate, XrValue self, XrValue *args
     return xr_bool(desc->flags & XR_FIELD_FINAL);
 }
 
-XrValue xr_field_getIsPrivate(XrayIsolate *X, XrValue self, XrValue *args, int nargs) {
+XrValue xr_field_getIsPrivate(XrVMRuntime *X, XrValue self, XrValue *args, int nargs) {
     (void) X;
     (void) args;
     (void) nargs;
@@ -134,7 +134,7 @@ XrValue xr_field_getIsPrivate(XrayIsolate *X, XrValue self, XrValue *args, int n
     return xr_bool(xr_class_is_field_private(meta->owner, meta->field_index));
 }
 
-XrValue xr_field_getDeclaringType(XrayIsolate *X, XrValue self, XrValue *args, int nargs) {
+XrValue xr_field_getDeclaringType(XrVMRuntime *X, XrValue self, XrValue *args, int nargs) {
     (void) args;
     (void) nargs;
 
@@ -148,7 +148,7 @@ XrValue xr_field_getDeclaringType(XrayIsolate *X, XrValue self, XrValue *args, i
 
 /* ========== Field Methods ========== */
 
-XrValue xr_field_get(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+XrValue xr_field_get(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
     if (nargs < 1) {
         xr_log_warning("reflect", "Field.get: requires 1 argument");
@@ -168,7 +168,7 @@ XrValue xr_field_get(XrayIsolate *isolate, XrValue self, XrValue *args, int narg
     return xr_instance_get_field_by_index(XR_TO_INSTANCE(instance), field->field_index);
 }
 
-XrValue xr_field_set(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+XrValue xr_field_set(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
     if (nargs < 2) {
         xr_log_warning("reflect", "Field.set: requires 2 arguments");
@@ -190,7 +190,7 @@ XrValue xr_field_set(XrayIsolate *isolate, XrValue self, XrValue *args, int narg
     return xr_null();
 }
 
-XrValue xr_field_getStatic(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+XrValue xr_field_getStatic(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
     (void) args;
     (void) nargs;
@@ -216,7 +216,7 @@ XrValue xr_field_getStatic(XrayIsolate *isolate, XrValue self, XrValue *args, in
     return xr_null();
 }
 
-XrValue xr_field_setStatic(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+XrValue xr_field_setStatic(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
     if (nargs < 1) {
         xr_log_warning("reflect", "Field.setStatic: requires 1 argument");
@@ -250,7 +250,7 @@ XrValue xr_field_setStatic(XrayIsolate *isolate, XrValue self, XrValue *args, in
 /* === Method property getters (was xreflect_method_stubs)=== */
 /* ========================================================== */
 
-XrValue xr_method_getIsStatic(XrayIsolate *X, XrValue self, XrValue *args, int nargs) {
+XrValue xr_method_getIsStatic(XrVMRuntime *X, XrValue self, XrValue *args, int nargs) {
     (void) X;
     (void) args;
     (void) nargs;
@@ -263,7 +263,7 @@ XrValue xr_method_getIsStatic(XrayIsolate *X, XrValue self, XrValue *args, int n
     return xr_bool((method->flags & XMETHOD_FLAG_STATIC) != 0);
 }
 
-XrValue xr_method_getIsPrivate(XrayIsolate *X, XrValue self, XrValue *args, int nargs) {
+XrValue xr_method_getIsPrivate(XrVMRuntime *X, XrValue self, XrValue *args, int nargs) {
     (void) X;
     (void) args;
     (void) nargs;
@@ -276,7 +276,7 @@ XrValue xr_method_getIsPrivate(XrayIsolate *X, XrValue self, XrValue *args, int 
     return xr_bool((method->flags & XMETHOD_FLAG_PRIVATE) != 0);
 }
 
-XrValue xr_method_getIsAbstract(XrayIsolate *X, XrValue self, XrValue *args, int nargs) {
+XrValue xr_method_getIsAbstract(XrVMRuntime *X, XrValue self, XrValue *args, int nargs) {
     (void) X;
     (void) args;
     (void) nargs;
@@ -293,7 +293,7 @@ XrValue xr_method_getIsAbstract(XrayIsolate *X, XrValue self, XrValue *args, int
 /* === Constructor section (was xreflect_constructor.c)   === */
 /* ========================================================== */
 
-XrValue xr_constructor_newInstance(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+XrValue xr_constructor_newInstance(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     XR_DCHECK(isolate != NULL, "constructor_newInstance: NULL isolate");
 
     XrMethodMetadata *ctor = xr_get_method_metadata(self);
@@ -303,7 +303,7 @@ XrValue xr_constructor_newInstance(XrayIsolate *isolate, XrValue self, XrValue *
         return xr_null();
     }
 
-    XrayIsolate *X = isolate;
+    XrVMRuntime *X = isolate;
     XrClass *klass = ctor->owner;
 
     XrInstance *instance = xr_instance_new(X, klass);

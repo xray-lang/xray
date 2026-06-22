@@ -32,7 +32,7 @@
 
 /* ========== Constructor ========== */
 
-XrAtomic *xr_atomic_new(XrayIsolate *X, XrAtomicKind kind, int64_t initial) {
+XrAtomic *xr_atomic_new(XrVMRuntime *X, XrAtomicKind kind, int64_t initial) {
     XR_DCHECK(X != NULL, "xr_atomic_new: NULL isolate");
     XR_DCHECK(kind <= XR_ATOMIC_BOOL, "xr_atomic_new: invalid kind");
 
@@ -123,7 +123,7 @@ static XrAtomicOrdering parse_ordering(XrValue *args, int nargs, int ord_idx) {
 /* ========== Native Method Implementations ========== */
 
 /* .load(ordering?) -> T */
-static XrValue m_load(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+static XrValue m_load(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
     XrAtomic *a = xr_value_to_atomic(self);
     XR_DCHECK(a != NULL, "Atomic.load: NULL atomic");
@@ -133,7 +133,7 @@ static XrValue m_load(XrayIsolate *isolate, XrValue self, XrValue *args, int nar
 }
 
 /* .store(value, ordering?) -> null */
-static XrValue m_store(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+static XrValue m_store(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
     XrAtomic *a = xr_value_to_atomic(self);
     XR_DCHECK(a != NULL, "Atomic.store: NULL atomic");
@@ -145,7 +145,7 @@ static XrValue m_store(XrayIsolate *isolate, XrValue self, XrValue *args, int na
 }
 
 /* .add(delta, ordering?) -> null */
-static XrValue m_add(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+static XrValue m_add(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
     XrAtomic *a = xr_value_to_atomic(self);
     XR_DCHECK(a != NULL, "Atomic.add: NULL atomic");
@@ -172,7 +172,7 @@ static XrValue m_add(XrayIsolate *isolate, XrValue self, XrValue *args, int narg
 }
 
 /* .sub(delta, ordering?) -> null */
-static XrValue m_sub(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+static XrValue m_sub(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
     XrAtomic *a = xr_value_to_atomic(self);
     XR_DCHECK(a != NULL, "Atomic.sub: NULL atomic");
@@ -198,7 +198,7 @@ static XrValue m_sub(XrayIsolate *isolate, XrValue self, XrValue *args, int narg
 }
 
 /* .fetchAdd(delta, ordering?) -> T (old value) */
-static XrValue m_fetch_add(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+static XrValue m_fetch_add(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
     XrAtomic *a = xr_value_to_atomic(self);
     XR_DCHECK(a != NULL, "Atomic.fetchAdd: NULL atomic");
@@ -227,7 +227,7 @@ static XrValue m_fetch_add(XrayIsolate *isolate, XrValue self, XrValue *args, in
 }
 
 /* .fetchSub(delta, ordering?) -> T (old value) */
-static XrValue m_fetch_sub(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+static XrValue m_fetch_sub(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
     XrAtomic *a = xr_value_to_atomic(self);
     XR_DCHECK(a != NULL, "Atomic.fetchSub: NULL atomic");
@@ -256,7 +256,7 @@ static XrValue m_fetch_sub(XrayIsolate *isolate, XrValue self, XrValue *args, in
 }
 
 /* .swap(desired, ordering?) -> T (old value) */
-static XrValue m_swap(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+static XrValue m_swap(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
     XrAtomic *a = xr_value_to_atomic(self);
     XR_DCHECK(a != NULL, "Atomic.swap: NULL atomic");
@@ -269,7 +269,7 @@ static XrValue m_swap(XrayIsolate *isolate, XrValue self, XrValue *args, int nar
 }
 
 /* .compareExchange(expected, desired, ordering?) -> (T, bool) */
-static XrValue m_compare_exchange(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+static XrValue m_compare_exchange(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     XrAtomic *a = xr_value_to_atomic(self);
     XR_DCHECK(a != NULL, "Atomic.compareExchange: NULL atomic");
     XR_DCHECK(nargs >= 2, "Atomic.compareExchange: need expected and desired");
@@ -292,7 +292,7 @@ static XrValue m_compare_exchange(XrayIsolate *isolate, XrValue self, XrValue *a
 }
 
 /* .toggle(ordering?) -> bool (old value) — bool only */
-static XrValue m_toggle(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+static XrValue m_toggle(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
     XrAtomic *a = xr_value_to_atomic(self);
     XR_DCHECK(a != NULL, "Atomic.toggle: NULL atomic");
@@ -304,7 +304,7 @@ static XrValue m_toggle(XrayIsolate *isolate, XrValue self, XrValue *args, int n
 }
 
 /* .toString() -> string */
-static XrValue m_to_string(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+static XrValue m_to_string(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     (void) args;
     (void) nargs;
     XrAtomic *a = xr_value_to_atomic(self);
@@ -319,7 +319,7 @@ static XrValue m_to_string(XrayIsolate *isolate, XrValue self, XrValue *args, in
 /* ========== Builtin Constructor ========== */
 
 /* Atomic(initialValue) — called by the VM as static constructor */
-static XrValue xr_builtin_atomic_construct(XrayIsolate *isolate, XrValue receiver, XrValue *args,
+static XrValue xr_builtin_atomic_construct(XrVMRuntime *isolate, XrValue receiver, XrValue *args,
                                            int nargs) {
     (void) receiver;
     XR_DCHECK(nargs >= 1, "Atomic constructor requires initial value");
@@ -356,7 +356,7 @@ static XrValue xr_builtin_atomic_construct(XrayIsolate *isolate, XrValue receive
 
 /* ========== Native Type Registration ========== */
 
-void xr_atomic_register_native_type(XrayIsolate *isolate) {
+void xr_atomic_register_native_type(XrVMRuntime *isolate) {
     static const XrNativeMethod atomic_methods[] = {
         {"load", m_load, 0},
         {"store", m_store, 1},

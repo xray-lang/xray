@@ -23,7 +23,7 @@
 #include "../base/xdefs.h"
 
 // Forward declarations
-typedef struct XrayIsolate XrayIsolate;
+typedef struct XrVMRuntime XrVMRuntime;
 typedef struct XrCompilerContext XrCompilerContext;
 typedef struct XrCompilerSession XrCompilerSession;
 typedef struct XrString XrString;
@@ -50,7 +50,7 @@ XR_FUNC void xr_repl_symbols_clear(XrReplSymbolTable *table);
 /* Return the isolate's REPL symbol table (NULL before any REPL compile).
  * Read-only view for tab completion / introspection by CLI / embedders;
  * callers must not free the table. */
-XR_FUNC XrReplSymbolTable *xr_repl_symbols_of(XrayIsolate *isolate);
+XR_FUNC XrReplSymbolTable *xr_repl_symbols_of(XrVMRuntime *isolate);
 
 /* Return the C string for a REPL symbol's name without leaking the
  * XrString definition to callers (xrepl.h forward-declares XrString). */
@@ -61,7 +61,7 @@ XR_FUNC const char *xr_repl_symbol_cname(const XrReplSymbol *sym);
  * binding does not exist or holds a non-integer value.  Intended for
  * tests and tools that need to verify scalar binding state without
  * pulling in the full XrValue ABI. */
-XR_FUNC bool xr_repl_peek_int(XrayIsolate *isolate, const char *name, int64_t *out);
+XR_FUNC bool xr_repl_peek_int(XrVMRuntime *isolate, const char *name, int64_t *out);
 
 // Seed compiler context with prior definitions
 XR_FUNC void xr_repl_symbols_seed_context(XrReplSymbolTable *table, XrCompilerContext *ctx);
@@ -89,7 +89,7 @@ XR_FUNC XrInputStatus xr_repl_check_input(const char *source);
  * - Updates repl_symbols with new definitions
  * Returns compiled proto, or NULL on error.
  */
-XR_FUNC XrProto *xr_repl_compile(XrCompilerSession *session, XrayIsolate *vm_host,
+XR_FUNC XrProto *xr_repl_compile(XrCompilerSession *session, XrVMRuntime *vm_host,
                                  const char *source);
 
 /* ========== Interactive Inspection ========== */
@@ -101,7 +101,7 @@ XR_FUNC XrProto *xr_repl_compile(XrCompilerSession *session, XrayIsolate *vm_hos
  * Cheap, no compilation or execution side effects.  Safe to call
  * before the first compile (prints nothing).
  */
-XR_FUNC void xr_repl_print_vars(XrayIsolate *isolate);
+XR_FUNC void xr_repl_print_vars(XrVMRuntime *isolate);
 
 /*
  * Show the runtime type name of `expr`.  Synthesises and runs
@@ -112,6 +112,6 @@ XR_FUNC void xr_repl_print_vars(XrayIsolate *isolate);
  * use the analyzer directly.  Empty / NULL expr is a user error and
  * reports a message without aborting.
  */
-XR_FUNC void xr_repl_print_type(XrayIsolate *isolate, const char *expr);
+XR_FUNC void xr_repl_print_type(XrVMRuntime *isolate, const char *expr);
 
 #endif  // XREPL_H

@@ -50,7 +50,7 @@
 #define XR_SERIAL_MAX_DEPTH 128
 
 // Forward declarations
-struct XrayIsolate;
+struct XrVMRuntime;
 
 /* ========== Encode Buffer ========== */
 
@@ -77,7 +77,7 @@ XR_FUNC void xr_serial_buf_free(XrSerialBuf *buf);
  *
  * The isolate is needed for Json → JSON string conversion.
  */
-XR_FUNC int xr_cluster_encode(struct XrayIsolate *X, XrValue value, XrSerialBuf *buf);
+XR_FUNC int xr_cluster_encode(struct XrVMRuntime *X, XrValue value, XrSerialBuf *buf);
 
 /* ========== Decode API ========== */
 
@@ -89,10 +89,10 @@ typedef struct {
     size_t len;
     size_t pos;
     int depth;
-    struct XrayIsolate *X;
+    struct XrVMRuntime *X;
 } XrSerialReader;
 
-XR_FUNC void xr_serial_reader_init(XrSerialReader *r, struct XrayIsolate *X, const uint8_t *data,
+XR_FUNC void xr_serial_reader_init(XrSerialReader *r, struct XrVMRuntime *X, const uint8_t *data,
                                    size_t len);
 
 /*
@@ -109,7 +109,7 @@ XR_FUNC int xr_cluster_decode(XrSerialReader *r, XrValue *out);
  * Encode value to a newly allocated buffer.
  * Caller must call xr_serial_buf_free() on the result.
  */
-static inline int xr_cluster_encode_value(struct XrayIsolate *X, XrValue value, uint8_t **out_data,
+static inline int xr_cluster_encode_value(struct XrVMRuntime *X, XrValue value, uint8_t **out_data,
                                           size_t *out_len) {
     XrSerialBuf buf;
     xr_serial_buf_init(&buf);
@@ -128,7 +128,7 @@ static inline int xr_cluster_encode_value(struct XrayIsolate *X, XrValue value, 
 /*
  * Decode value from a buffer.
  */
-static inline int xr_cluster_decode_value(struct XrayIsolate *X, const uint8_t *data, size_t len,
+static inline int xr_cluster_decode_value(struct XrVMRuntime *X, const uint8_t *data, size_t len,
                                           XrValue *out) {
     XrSerialReader r;
     xr_serial_reader_init(&r, X, data, len);

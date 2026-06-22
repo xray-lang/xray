@@ -17,13 +17,13 @@
 #include "runtime/symbol/xsymbol_table.h"
 #include "runtime/xisolate_api.h"
 
-static XrayIsolate *X = NULL;
+static XrVMRuntime *X = NULL;
 static XrCoroutine *main_coro = NULL;
 
 /* ========== Setup / Teardown ========== */
 
 static void setup(void) {
-    X = xray_isolate_new(NULL);
+    X = xray_vm_new(NULL);
     ASSERT_NOT_NULL(X);
     main_coro = xr_test_init_coro(X);
     ASSERT_NOT_NULL(main_coro);
@@ -31,7 +31,7 @@ static void setup(void) {
 
 static void teardown(void) {
     if (X) {
-        xray_isolate_delete(X);
+        xray_vm_delete(X);
         X = NULL;
         main_coro = NULL;
     }

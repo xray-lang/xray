@@ -17,7 +17,7 @@
 #include "xcli_fs.h"
 #include "../../api/xisolate_profile.h"
 #include "xray.h"
-#include "xray_isolate.h"
+#include "xray_vm.h"
 #include "../../runtime/xisolate_api.h"
 #include "../../frontend/parser/xparse.h"
 #include "../../frontend/parser/xast_api.h"
@@ -112,7 +112,7 @@ XR_FUNC int cmd_compile(const XrCliInvocation *inv) {
     /* Resources to clean up */
     int result = XR_CLI_EXIT_FAIL;
     char *gen_var_name = NULL;
-    XrayIsolate *X = NULL;
+    XrVMRuntime *X = NULL;
     char *source = NULL;
     AstNode *ast = NULL;
 
@@ -197,7 +197,7 @@ cleanup:
     }
     xr_free(source);
     if (X)
-        xray_isolate_delete(X);
+        xray_vm_delete(X);
     xr_free(gen_var_name);
     return result;
 }

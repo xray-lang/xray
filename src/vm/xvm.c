@@ -171,10 +171,10 @@ static inline XrValue vm_bigint_divop(void *ctx, XrValue left, XrValue right, Xr
         }                                                                                          \
     } while (0)
 
-static bool vm_struct_write_field_bytes(XrayIsolate *isolate, uint8_t *fp,
+static bool vm_struct_write_field_bytes(XrVMRuntime *isolate, uint8_t *fp,
                                         const XrStructFieldLayout *field, XrValue src);
 
-static bool vm_struct_write_instance_bytes(XrayIsolate *isolate, uint8_t *dst, XrInstance *inst) {
+static bool vm_struct_write_instance_bytes(XrVMRuntime *isolate, uint8_t *dst, XrInstance *inst) {
     if (!dst || !inst || !inst->klass || !inst->klass->struct_layout)
         return false;
     XrStructLayout *layout = inst->klass->struct_layout;
@@ -220,7 +220,7 @@ static bool vm_struct_write_array_bytes(uint8_t *fp, const XrStructFieldLayout *
     return false;
 }
 
-static bool vm_struct_write_field_bytes(XrayIsolate *isolate, uint8_t *fp,
+static bool vm_struct_write_field_bytes(XrVMRuntime *isolate, uint8_t *fp,
                                         const XrStructFieldLayout *field, XrValue src) {
     if (!fp || !field)
         return false;
@@ -285,7 +285,7 @@ static bool vm_struct_write_field_bytes(XrayIsolate *isolate, uint8_t *fp,
 /* ========== VM Execution Loop ========== */
 
 // Optimized VM loop with local variable caching
-XrVMResult run(XrayIsolate *isolate, XrVMContext *vm_ctx) {
+XrVMResult run(XrVMRuntime *isolate, XrVMContext *vm_ctx) {
     XR_CHECK(isolate != NULL, "run: NULL isolate");
     XR_CHECK(vm_ctx != NULL, "run: NULL vm_ctx");
 

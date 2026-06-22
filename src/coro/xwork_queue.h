@@ -25,7 +25,7 @@
 #define XR_WORK_QUEUE_MAX_SHARDS 65536u
 #define XR_WORK_QUEUE_MAX_CAPACITY (1u << 30)
 
-struct XrayIsolate;
+struct XrVMRuntime;
 struct XrCoroHeap;
 struct XrCoroutine;
 struct XrRuntime;
@@ -66,24 +66,24 @@ XR_FUNC XrWorkQueue *xr_work_queue_new(struct XrRuntimeCore *core, struct XrRunt
                                        uint32_t shard_count, uint32_t shard_capacity);
 XR_FUNC bool xr_work_queue_push_core(struct XrRuntimeCore *core, XrWorkQueue *q, XrValue value,
                                      int64_t shard_hint);
-XR_FUNC bool xr_work_queue_push(struct XrayIsolate *X, XrWorkQueue *q, XrValue value,
+XR_FUNC bool xr_work_queue_push(struct XrVMRuntime *X, XrWorkQueue *q, XrValue value,
                                 int64_t shard_hint);
 XR_FUNC XrValue xr_work_queue_try_pop_for_coro_core(struct XrRuntimeCore *core, XrWorkQueue *q,
                                                     int64_t worker_hint,
                                                     struct XrCoroutine *recv_coro, bool *ok);
-XR_FUNC XrValue xr_work_queue_try_pop(struct XrayIsolate *X, XrWorkQueue *q, int64_t worker_hint,
+XR_FUNC XrValue xr_work_queue_try_pop(struct XrVMRuntime *X, XrWorkQueue *q, int64_t worker_hint,
                                       bool *ok);
 XR_FUNC XrWorkQueuePopStatus xr_work_queue_pop_for_coro_core(struct XrRuntimeCore *core,
                                                              XrWorkQueue *q,
                                                              struct XrCoroutine *coro,
                                                              int64_t worker_hint, XrValue *result);
-XR_FUNC XrWorkQueuePopStatus xr_work_queue_pop_for_coro(struct XrayIsolate *X, XrWorkQueue *q,
+XR_FUNC XrWorkQueuePopStatus xr_work_queue_pop_for_coro(struct XrVMRuntime *X, XrWorkQueue *q,
                                                         struct XrCoroutine *coro,
                                                         int64_t worker_hint, XrValue *result);
 XR_FUNC XrWorkQueuePopStatus xr_work_queue_pop_resume_for_coro_core(struct XrRuntimeCore *core,
                                                                     struct XrCoroutine *coro,
                                                                     XrValue *result);
-XR_FUNC XrWorkQueuePopStatus xr_work_queue_pop_resume_for_coro(struct XrayIsolate *X,
+XR_FUNC XrWorkQueuePopStatus xr_work_queue_pop_resume_for_coro(struct XrVMRuntime *X,
                                                                struct XrCoroutine *coro,
                                                                XrValue *result);
 XR_FUNC void xr_work_queue_cancel_waiter(struct XrCoroutine *coro);
@@ -91,7 +91,7 @@ XR_FUNC void xr_work_queue_close(XrWorkQueue *q);
 XR_FUNC bool xr_work_queue_is_closed(XrWorkQueue *q);
 XR_FUNC uint64_t xr_work_queue_length(XrWorkQueue *q);
 XR_FUNC void xr_obj_destroy_work_queue(XrObjHeader *obj, struct XrCoroHeap *owner_heap);
-XR_FUNC void xr_work_queue_register_native_type(struct XrayIsolate *X);
+XR_FUNC void xr_work_queue_register_native_type(struct XrVMRuntime *X);
 
 static inline bool xr_value_is_work_queue(XrValue v) {
     return XR_IS_PTR(v) && XR_HEAP_TYPE(v) == XR_TWORKQUEUE;

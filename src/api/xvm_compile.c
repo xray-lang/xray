@@ -41,12 +41,12 @@ static void restore_session_type_pool(XrCompilerSession *session) {
         xr_compiler_session_install_analyzer_pool(session);
 }
 
-static XrayIsolate *compile_session_vm_host(XrCompilerSession *session, const char *who) {
+static XrVMRuntime *compile_session_vm_host(XrCompilerSession *session, const char *who) {
     if (!session) {
         xr_log_warning("vm", "%s: compiler session is required", who);
         return NULL;
     }
-    XrayIsolate *isolate = xr_compiler_session_vm_host(session);
+    XrVMRuntime *isolate = xr_compiler_session_vm_host(session);
     if (!isolate) {
         xr_log_warning("vm", "%s: compiler session has no VM host", who);
         return NULL;
@@ -61,7 +61,7 @@ static XrayIsolate *compile_session_vm_host(XrCompilerSession *session, const ch
 // synthetic nodes share the AST lifetime without mutating VM isolate state.
 static XrProto *compile_ast_internal(XrCompilerSession *session, AstNode *ast,
                                      const char *source_file) {
-    XrayIsolate *isolate = compile_session_vm_host(session, "compile_ast_internal");
+    XrVMRuntime *isolate = compile_session_vm_host(session, "compile_ast_internal");
     if (!isolate)
         return NULL;
     XR_DCHECK(ast != NULL, "compile_ast_internal: NULL ast");
@@ -112,7 +112,7 @@ XrProto *xr_compile_ast_with_source(XrCompilerSession *session, AstNode *ast,
 
 XrProto *xr_compile_source_with_path(XrCompilerSession *session, const char *source,
                                      const char *source_file) {
-    XrayIsolate *isolate = compile_session_vm_host(session, "compile_source_with_path");
+    XrVMRuntime *isolate = compile_session_vm_host(session, "compile_source_with_path");
     if (!isolate)
         return NULL;
     XR_DCHECK(source != NULL, "compile_source_with_path: NULL source");

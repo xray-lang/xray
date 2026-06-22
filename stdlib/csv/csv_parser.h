@@ -118,7 +118,7 @@ typedef struct {
 /* ========== Parser Context ========== */
 
 typedef struct {
-    XrayIsolate *isolate;
+    XrVMRuntime *isolate;
 
     // Input data (no copy)
     const char *data;
@@ -162,10 +162,10 @@ extern XrValue xr_value_from_map(XrMap *map);
 XR_FUNC void csv_config_init(CsvConfig *config);
 
 // Extract config from Json object
-XR_FUNC void csv_config_from_json(XrayIsolate *X, CsvConfig *config, XrJson *json);
+XR_FUNC void csv_config_from_json(XrVMRuntime *X, CsvConfig *config, XrJson *json);
 
 // Initialize parser
-XR_FUNC void csv_parser_init(CsvParser *parser, XrayIsolate *isolate, const char *data, size_t len,
+XR_FUNC void csv_parser_init(CsvParser *parser, XrVMRuntime *isolate, const char *data, size_t len,
                              CsvConfig *config);
 
 // Execute parsing
@@ -178,6 +178,6 @@ XR_FUNC void csv_parser_cleanup(CsvParser *parser);
 XR_FUNC char csv_detect_delimiter(const char *data, size_t len);
 
 // Auto type conversion
-XR_FUNC XrValue csv_convert_value(XrayIsolate *isolate, const char *field, size_t len);
+XR_FUNC XrValue csv_convert_value(XrVMRuntime *isolate, const char *field, size_t len);
 
 #endif

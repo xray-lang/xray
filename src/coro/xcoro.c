@@ -15,7 +15,7 @@
  */
 
 #include "xcoroutine.h"
-#include "../runtime/xisolate_internal.h"  // XrayIsolate definition
+#include "../runtime/xisolate_internal.h"  // XrVMRuntime definition
 #include "../runtime/xisolate_api.h"
 #include "../base/xmalloc.h"
 #include "../base/xchecks.h"
@@ -56,7 +56,7 @@ int xr_coro_heap_safepoint(XrCoroutine *coro) {
     return 0;
 }
 
-bool xr_coro_reset_execution_state(XrCoroutine *coro, XrayIsolate *X) {
+bool xr_coro_reset_execution_state(XrCoroutine *coro, XrVMRuntime *X) {
     const XrCoroBackendVTable *backend = coro ? coro->backend : NULL;
     if (!backend || !backend->reset_execution_state)
         return false;
@@ -358,7 +358,7 @@ static void coro_clear_scope_membership(XrCoroutine *coro) {
     coro->ext->scope_sibling = NULL;
 }
 
-static bool xr_coro_init_shell_owner(XrCoroutine *coro, XrayIsolate *X, XrRuntimeCore *core,
+static bool xr_coro_init_shell_owner(XrCoroutine *coro, XrVMRuntime *X, XrRuntimeCore *core,
                                      XrRuntime *runtime, XrCoroState *sched, const char *name,
                                      bool need_storage) {
     const XrCoroBackendVTable *backend = coro ? coro->backend : NULL;
@@ -488,7 +488,7 @@ static bool xr_coro_init_shell_owner(XrCoroutine *coro, XrayIsolate *X, XrRuntim
     return true;
 }
 
-bool xr_coro_init_shell(XrCoroutine *coro, XrayIsolate *X, const char *name, bool need_storage) {
+bool xr_coro_init_shell(XrCoroutine *coro, XrVMRuntime *X, const char *name, bool need_storage) {
     if (!X)
         return false;
     return xr_coro_init_shell_owner(coro, X, xr_isolate_get_runtime_core(X),
@@ -496,7 +496,7 @@ bool xr_coro_init_shell(XrCoroutine *coro, XrayIsolate *X, const char *name, boo
                                     (XrCoroState *) X->vm.coro_state, name, need_storage);
 }
 
-XrCoroutine *xr_coro_create_empty(XrayIsolate *X, const char *name) {
+XrCoroutine *xr_coro_create_empty(XrVMRuntime *X, const char *name) {
     XR_DCHECK(X != NULL, "coro_create_empty: NULL isolate");
 
     XrCoroutine *coro = coro_alloc_lightweight_shell();
@@ -532,7 +532,7 @@ XrCoroutine *xr_coro_create_runtime_empty(XrRuntimeCore *core, XrRuntime *runtim
 
 // Create Native coroutine (C function callback, no Yieldable support)
 // For simple callbacks without I/O wait
-XrCoroutine *xr_coro_create_native(XrayIsolate *X, void (*func)(void *), void *arg,
+XrCoroutine *xr_coro_create_native(XrVMRuntime *X, void (*func)(void *), void *arg,
                                    const char *name) {
     if (!X || !func)
         return NULL;
@@ -557,7 +557,7 @@ XrCoroutine *xr_coro_create_native(XrayIsolate *X, void (*func)(void *), void *a
 // Native-stackful coroutine creation was removed; coroutines resume from VM state.
 
 // Add coroutine to scheduler queue
-void xr_coro_spawn(XrayIsolate *X, XrCoroutine *coro) {
+void xr_coro_spawn(XrVMRuntime *X, XrCoroutine *coro) {
     if (!X || !coro)
         return;
 
@@ -978,7 +978,7 @@ void xr_coro_cancel(XrCoroutine *coro) {
 }
 
 // xr_current_coro - Get current coroutine
-XrCoroutine *xr_current_coro(XrayIsolate *X) {
+XrCoroutine *xr_current_coro(XrVMRuntime *X) {
     if (!X)
         return NULL;
 
@@ -1044,7 +1044,7 @@ void xr_scheduler_ready(XrRuntime *runtime, XrCoroutine *gp, bool next) {
 }
 
 // xr_coro_ready - VM-facing wake wrapper.
-void xr_coro_ready(XrayIsolate *X, XrCoroutine *gp, bool next) {
+void xr_coro_ready(XrVMRuntime *X, XrCoroutine *gp, bool next) {
     if (!X)
         return;
     xr_scheduler_ready((XrRuntime *) X->vm.scheduler, gp, next);

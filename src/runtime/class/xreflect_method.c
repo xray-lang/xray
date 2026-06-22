@@ -30,7 +30,7 @@ static inline XrMethodMetadata *get_method_metadata_internal(XrValue val) {
 
 /* ========== Method Property Getters ========== */
 
-XrValue xr_method_getName(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+XrValue xr_method_getName(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     XR_DCHECK(isolate != NULL, "method_getName: NULL isolate");
     (void) args;
     (void) nargs;
@@ -48,7 +48,7 @@ XrValue xr_method_getName(XrayIsolate *isolate, XrValue self, XrValue *args, int
     return xr_string_value(xr_string_intern(isolate, name, strlen(name), 0));
 }
 
-XrValue xr_method_getDeclaringType(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+XrValue xr_method_getDeclaringType(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     XR_DCHECK(isolate != NULL, "method_getDeclaringType: NULL isolate");
     (void) args;
     (void) nargs;
@@ -64,7 +64,7 @@ XrValue xr_method_getDeclaringType(XrayIsolate *isolate, XrValue self, XrValue *
 /**
  * Method.isOverride: bool
  */
-XrValue xr_method_getIsOverride(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+XrValue xr_method_getIsOverride(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
     (void) args;
     (void) nargs;
@@ -87,7 +87,7 @@ XrValue xr_method_getIsOverride(XrayIsolate *isolate, XrValue self, XrValue *arg
     return xr_bool(false);
 }
 
-XrValue xr_method_getIsGetter(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+XrValue xr_method_getIsGetter(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
     (void) args;
     (void) nargs;
@@ -100,7 +100,7 @@ XrValue xr_method_getIsGetter(XrayIsolate *isolate, XrValue self, XrValue *args,
     return xr_bool(m->type == XMETHOD_GETTER);
 }
 
-XrValue xr_method_getIsSetter(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+XrValue xr_method_getIsSetter(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
     (void) args;
     (void) nargs;
@@ -113,7 +113,7 @@ XrValue xr_method_getIsSetter(XrayIsolate *isolate, XrValue self, XrValue *args,
     return xr_bool(m->type == XMETHOD_SETTER);
 }
 
-XrValue xr_method_getIsOperator(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+XrValue xr_method_getIsOperator(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
     (void) args;
     (void) nargs;
@@ -126,7 +126,7 @@ XrValue xr_method_getIsOperator(XrayIsolate *isolate, XrValue self, XrValue *arg
     return xr_bool(m->type == XMETHOD_OPERATOR);
 }
 
-XrValue xr_method_getReturnType(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+XrValue xr_method_getReturnType(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     XR_DCHECK(isolate != NULL, "method_getReturnType: NULL isolate");
     (void) args;
     (void) nargs;
@@ -168,7 +168,7 @@ XrValue xr_method_getReturnType(XrayIsolate *isolate, XrValue self, XrValue *arg
     return xr_null();
 }
 
-XrValue xr_method_getParameterCount(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+XrValue xr_method_getParameterCount(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
     (void) args;
     (void) nargs;
@@ -218,7 +218,7 @@ static const char *type_kind_to_name(XrTypeKind kind) {
     }
 }
 
-XrValue xr_method_getParameters(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+XrValue xr_method_getParameters(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     XR_DCHECK(isolate != NULL, "method_getParameters: NULL isolate");
     (void) args;
     (void) nargs;
@@ -256,7 +256,7 @@ XrValue xr_method_getParameters(XrayIsolate *isolate, XrValue self, XrValue *arg
 
 /* ========== Method.invoke ========== */
 
-XrValue xr_method_invoke(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+XrValue xr_method_invoke(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     XR_DCHECK(isolate != NULL, "method_invoke: NULL isolate");
     if (nargs < 1) {
         xr_log_warning("reflect", "Method.invoke: requires at least 1 argument");
@@ -323,7 +323,7 @@ XrValue xr_method_invoke(XrayIsolate *isolate, XrValue self, XrValue *args, int 
     }
 }
 
-XrValue xr_method_invokeStatic(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+XrValue xr_method_invokeStatic(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     XR_DCHECK(isolate != NULL, "method_invokeStatic: NULL isolate");
 
     XrMethodMetadata *method = get_method_metadata_internal(self);

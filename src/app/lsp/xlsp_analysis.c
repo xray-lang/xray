@@ -40,7 +40,7 @@
 #include "../../frontend/format/xfmt.h"
 #include "../../frontend/analyzer/xanalyzer_ast_visitor.h"
 
-static XrTypePool *lsp_compiler_analyzer_pool(XrayIsolate *isolate) {
+static XrTypePool *lsp_compiler_analyzer_pool(XrVMRuntime *isolate) {
     XrCompilerSession *session = xr_compiler_session_current_for_isolate(isolate);
     return xr_compiler_session_analyzer_pool(session);
 }
@@ -331,7 +331,7 @@ void xlsp_parse_document(XrLspDocument *doc, XrLspServer *server) {
     }
 
     lsp_log("parse_document: start %s", doc->uri ? doc->uri : "(null)");
-    XrayIsolate *isolate = server->isolate;
+    XrVMRuntime *isolate = server->isolate;
 
     // Free previous diagnostics cache before resetting arena
     xlsp_free_document_cache(doc);

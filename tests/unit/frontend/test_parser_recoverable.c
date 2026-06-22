@@ -44,7 +44,7 @@
 #include "base/xarena.h"
 #include "base/xmalloc.h"
 #include "toolchain/xcompiler_session.h"
-#include "xray_isolate.h"
+#include "xray_vm.h"
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -54,14 +54,14 @@
 /* Fixtures                                                                */
 /* ====================================================================== */
 
-static XrayIsolate *g_iso = NULL;
+static XrVMRuntime *g_iso = NULL;
 static XrCompilerSession *g_session = NULL;
 
 static void setup(void) {
     if (!g_iso) {
-        XrayIsolateParams p;
-        xray_isolate_params_init(&p);
-        g_iso = xray_isolate_new(&p);
+        XrVMConfig p;
+        xray_vm_config_init(&p);
+        g_iso = xray_vm_new(&p);
         ASSERT_NOT_NULL(g_iso);
         XrCompilerSessionConfig cfg = {.vm_host = g_iso};
         g_session = xr_compiler_session_new(&cfg);
@@ -76,7 +76,7 @@ static void teardown(void) {
         g_session = NULL;
     }
     if (g_iso) {
-        xray_isolate_delete(g_iso);
+        xray_vm_delete(g_iso);
         g_iso = NULL;
     }
 }

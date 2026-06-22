@@ -45,7 +45,7 @@ typedef struct ConstEntry {
 
 struct XrCompilerContext {
     struct XrCompilerSession *compiler_session;
-    XrayIsolate *X;  // Borrowed VM host, for bytecode VM shared/global state.
+    XrVMRuntime *X;  // Borrowed VM host, for bytecode VM shared/global state.
 
     int current_line;
     int current_column;

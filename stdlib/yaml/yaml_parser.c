@@ -59,7 +59,7 @@ void yaml_config_init(YamlConfig *config) {
     config->max_depth = XR_STDLIB_MAX_DEPTH;
 }
 
-void yaml_config_from_json(XrayIsolate *X, YamlConfig *config, XrJson *json) {
+void yaml_config_from_json(XrVMRuntime *X, YamlConfig *config, XrJson *json) {
     yaml_config_init(config);
     if (!json)
         return;
@@ -71,7 +71,7 @@ void yaml_config_from_json(XrayIsolate *X, YamlConfig *config, XrJson *json) {
 
 // ========== Parser Initialization ==========
 
-void yaml_parser_init(YamlParser *parser, XrayIsolate *isolate, const char *data, size_t len,
+void yaml_parser_init(YamlParser *parser, XrVMRuntime *isolate, const char *data, size_t len,
                       YamlConfig *config) {
     memset(parser, 0, sizeof(YamlParser));
 

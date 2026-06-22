@@ -35,17 +35,17 @@
 
 /* ========== External Declarations ========== */
 
-extern struct XrCoroutine *xr_current_coro(XrayIsolate *X);
+extern struct XrCoroutine *xr_current_coro(XrVMRuntime *X);
 
 /* ========== Helpers ========== */
 
-static XrValue make_str(XrayIsolate *X, const char *s, size_t len) {
+static XrValue make_str(XrVMRuntime *X, const char *s, size_t len) {
     if (!s || len == 0)
         return xr_string_value(xr_string_intern(X, "", 0, 0));
     return xr_string_value(xr_string_intern(X, s, len, 0));
 }
 
-static XrValue make_cstr(XrayIsolate *X, const char *s) {
+static XrValue make_cstr(XrVMRuntime *X, const char *s) {
     if (!s)
         return xr_string_value(xr_string_intern(X, "", 0, 0));
     return xr_string_value(xr_string_intern(X, s, strlen(s), 0));
@@ -53,7 +53,7 @@ static XrValue make_cstr(XrayIsolate *X, const char *s) {
 
 // Finalize an XrCtxBuf into a pooled XrValue and release the buffer. Used
 // as a single exit step from the url_* binding helpers.
-static XrValue ctxbuf_to_value(XrayIsolate *X, XrCtxBuf *b) {
+static XrValue ctxbuf_to_value(XrVMRuntime *X, XrCtxBuf *b) {
     XrValue v = make_str(X, b->data ? b->data : "", (int) b->len);
     xr_ctxbuf_free(b);
     return v;
@@ -81,7 +81,7 @@ int xr_url_decode_form(const char *str, size_t len, char *buf, size_t buf_size) 
 
 /* ========== Module Bindings ========== */
 
-static XrValue url_encode_fn(XrayIsolate *X, XrValue *args, int nargs) {
+static XrValue url_encode_fn(XrVMRuntime *X, XrValue *args, int nargs) {
     if (nargs < 1 || !XR_IS_STRING(args[0]))
         return XR_NULL_VAL;
     XrString *s = XR_TO_STRING(args[0]);
@@ -95,7 +95,7 @@ static XrValue url_encode_fn(XrayIsolate *X, XrValue *args, int nargs) {
     return result;
 }
 
-static XrValue url_decode_fn(XrayIsolate *X, XrValue *args, int nargs) {
+static XrValue url_decode_fn(XrVMRuntime *X, XrValue *args, int nargs) {
     if (nargs < 1 || !XR_IS_STRING(args[0]))
         return XR_NULL_VAL;
     XrString *s = XR_TO_STRING(args[0]);
@@ -109,7 +109,7 @@ static XrValue url_decode_fn(XrayIsolate *X, XrValue *args, int nargs) {
     return result;
 }
 
-static XrValue url_encode_form_fn(XrayIsolate *X, XrValue *args, int nargs) {
+static XrValue url_encode_form_fn(XrVMRuntime *X, XrValue *args, int nargs) {
     if (nargs < 1 || !XR_IS_STRING(args[0]))
         return XR_NULL_VAL;
     XrString *s = XR_TO_STRING(args[0]);
@@ -123,7 +123,7 @@ static XrValue url_encode_form_fn(XrayIsolate *X, XrValue *args, int nargs) {
     return result;
 }
 
-static XrValue url_decode_form_fn(XrayIsolate *X, XrValue *args, int nargs) {
+static XrValue url_decode_form_fn(XrVMRuntime *X, XrValue *args, int nargs) {
     if (nargs < 1 || !XR_IS_STRING(args[0]))
         return XR_NULL_VAL;
     XrString *s = XR_TO_STRING(args[0]);
@@ -137,7 +137,7 @@ static XrValue url_decode_form_fn(XrayIsolate *X, XrValue *args, int nargs) {
     return result;
 }
 
-static XrValue url_parse_fn(XrayIsolate *X, XrValue *args, int nargs) {
+static XrValue url_parse_fn(XrVMRuntime *X, XrValue *args, int nargs) {
     if (nargs < 1 || !XR_IS_STRING(args[0]))
         return XR_NULL_VAL;
     XrString *url_str = XR_TO_STRING(args[0]);
@@ -224,7 +224,7 @@ static XrValue url_parse_fn(XrayIsolate *X, XrValue *args, int nargs) {
     return xr_json_value(json);
 }
 
-static XrValue url_format_fn(XrayIsolate *X, XrValue *args, int nargs) {
+static XrValue url_format_fn(XrVMRuntime *X, XrValue *args, int nargs) {
     if (nargs < 1 || !xr_value_is_json(args[0]))
         return XR_NULL_VAL;
     XrJson *json = xr_value_to_json(args[0]);
@@ -283,7 +283,7 @@ static XrValue url_format_fn(XrayIsolate *X, XrValue *args, int nargs) {
     return ctxbuf_to_value(X, &buf);
 }
 
-static XrValue url_parse_query_fn(XrayIsolate *X, XrValue *args, int nargs) {
+static XrValue url_parse_query_fn(XrVMRuntime *X, XrValue *args, int nargs) {
     if (nargs < 1 || !XR_IS_STRING(args[0]))
         return XR_NULL_VAL;
     XrString *qs = XR_TO_STRING(args[0]);
@@ -387,7 +387,7 @@ static void ctxbuf_append_url_form(XrCtxBuf *buf, const char *src, size_t src_le
     buf->data[buf->len] = '\0';
 }
 
-static XrValue url_build_query_fn(XrayIsolate *X, XrValue *args, int nargs) {
+static XrValue url_build_query_fn(XrVMRuntime *X, XrValue *args, int nargs) {
     if (nargs < 1 || !xr_value_is_json(args[0]))
         return XR_NULL_VAL;
     XrJson *json = xr_value_to_json(args[0]);
@@ -446,7 +446,7 @@ static void url_emit_base_authority(XrCtxBuf *out, const XrUrlCoreParts *bp) {
 // the reference-transforming rules from §5.2.2 including fragment-only
 // references, empty paths, and the query-retention corner cases that the
 // previous ad-hoc implementation silently mishandled.
-static XrValue url_resolve_fn(XrayIsolate *X, XrValue *args, int nargs) {
+static XrValue url_resolve_fn(XrVMRuntime *X, XrValue *args, int nargs) {
     if (nargs < 2 || !XR_IS_STRING(args[0]) || !XR_IS_STRING(args[1]))
         return XR_NULL_VAL;
 
@@ -589,7 +589,7 @@ static XrValue url_resolve_fn(XrayIsolate *X, XrValue *args, int nargs) {
     return ctxbuf_to_value(X, &result);
 }
 
-static XrValue url_join_fn(XrayIsolate *X, XrValue *args, int nargs) {
+static XrValue url_join_fn(XrVMRuntime *X, XrValue *args, int nargs) {
     if (nargs < 1)
         return make_cstr(X, "");
 
@@ -652,7 +652,7 @@ XR_DEFINE_BUILTIN(url_join_fn, "join", "(...parts: string): string", "Join URL p
 
 /* ========== Module Registration ========== */
 
-XR_FUNC XrModule *xr_load_module_url(XrayIsolate *X) {
+XR_FUNC XrModule *xr_load_module_url(XrVMRuntime *X) {
     XR_DCHECK(X != NULL, "xr_load_module_url: NULL isolate");
 
     XrModule *mod = xr_module_create_native(X, "url");

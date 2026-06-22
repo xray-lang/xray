@@ -17,7 +17,7 @@
 
 #include "../../src/base/xdefs.h"
 
-struct XrayIsolate;
+struct XrVMRuntime;
 struct XrModule;
 
 /*
@@ -59,6 +59,6 @@ struct XrModule;
  *   sep                  - Path separator ("/" or "\\")
  *   eol                  - Line ending ("\n" or "\r\n")
  */
-XR_FUNC struct XrModule *xr_load_module_os(struct XrayIsolate *isolate);
+XR_FUNC struct XrModule *xr_load_module_os(struct XrVMRuntime *isolate);
 
 #endif  // XR_STDLIB_OS_H

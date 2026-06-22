@@ -20,7 +20,7 @@
 #include "../runtime/mem/xobj_header.h"
 #include "../runtime/value/xvalue.h"
 
-struct XrayIsolate;
+struct XrVMRuntime;
 struct XrCoroHeap;
 struct XrCoroutine;
 struct XrRuntime;
@@ -75,7 +75,7 @@ XR_FUNC bool xr_result_group_is_closed(XrResultGroup *g);
 XR_FUNC uint64_t xr_result_group_length(XrResultGroup *g);
 XR_FUNC uint64_t xr_result_group_pending_count(XrResultGroup *g);
 XR_FUNC void xr_obj_destroy_result_group(XrObjHeader *obj, struct XrCoroHeap *owner_heap);
-XR_FUNC void xr_result_group_register_native_type(struct XrayIsolate *X);
+XR_FUNC void xr_result_group_register_native_type(struct XrVMRuntime *X);
 
 static inline bool xr_value_is_result_group(XrValue v) {
     return XR_IS_PTR(v) && XR_HEAP_TYPE(v) == XR_TRESULTGROUP;

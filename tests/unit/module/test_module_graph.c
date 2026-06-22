@@ -25,12 +25,12 @@
 
 /* The graph builder needs a compiler session for parsing. */
 #include "xray.h"
-#include "xray_isolate.h"
+#include "xray_vm.h"
 
 /* ========== Test Fixtures ========== */
 
 static char g_tmpdir[512];
-static XrayIsolate *g_iso;
+static XrVMRuntime *g_iso;
 static XrCompilerSession *g_session;
 
 static void setup(void) {
@@ -293,7 +293,7 @@ TEST(graph_entry_not_found) {
 TEST_MAIN_BEGIN()
 
 /* Global isolate for all tests */
-g_iso = xray_isolate_new(NULL);
+g_iso = xray_vm_new(NULL);
 XrCompilerSessionConfig compiler_cfg = {.vm_host = g_iso};
 g_session = xr_compiler_session_new(&compiler_cfg);
 xr_compiler_session_attach_isolate(g_iso, g_session);
@@ -319,7 +319,7 @@ if (g_session) {
     xr_compiler_session_delete(g_session);
     g_session = NULL;
 }
-xray_isolate_delete(g_iso);
+xray_vm_delete(g_iso);
 g_iso = NULL;
 
 TEST_MAIN_END()

@@ -19,7 +19,7 @@
 #include <stddef.h>
 
 // Forward declaration
-typedef struct XrayIsolate XrayIsolate;
+typedef struct XrVMRuntime XrVMRuntime;
 
 /* ========== Proxy Config ========== */
 
@@ -70,26 +70,26 @@ XR_FUNC int xr_proxy_parse_connect_response(const char *response, size_t len);
 /*
  * Set proxy
  */
-XR_FUNC void xr_set_proxy(XrayIsolate *X, const char *proxy_url);
+XR_FUNC void xr_set_proxy(XrVMRuntime *X, const char *proxy_url);
 
 /*
  * Get proxy config
  */
-XR_FUNC XrProxyConfig *xr_get_proxy(XrayIsolate *X);
+XR_FUNC XrProxyConfig *xr_get_proxy(XrVMRuntime *X);
 
 /*
  * Clear proxy
  */
-XR_FUNC void xr_clear_proxy(XrayIsolate *X);
+XR_FUNC void xr_clear_proxy(XrVMRuntime *X);
 
 /*
  * Check if proxy should be used
  */
-XR_FUNC bool xr_should_use_proxy(XrayIsolate *X, const char *host);
+XR_FUNC bool xr_should_use_proxy(XrVMRuntime *X, const char *host);
 
 /*
  * Add to no_proxy list
  */
-XR_FUNC void xr_add_no_proxy(XrayIsolate *X, const char *host);
+XR_FUNC void xr_add_no_proxy(XrVMRuntime *X, const char *host);
 
 #endif

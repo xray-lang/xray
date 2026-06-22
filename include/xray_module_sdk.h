@@ -54,7 +54,7 @@
 /* ========== Error Reporting ========== */
 /* Forward-declare only the error function to avoid header conflicts
  * between xruntime.h and xmap.h (different signatures for xr_map_*). */
-XR_FUNC void xr_runtime_error(XrayIsolate *X, const char *fmt, ...);
+XR_FUNC void xr_runtime_error(XrVMRuntime *X, const char *fmt, ...);
 
 /* ========== Isolate API (opaque accessors) ========== */
 #include "../src/runtime/xisolate_api.h"
@@ -95,6 +95,6 @@ XR_FUNC void xr_runtime_error(XrayIsolate *X, const char *fmt, ...);
  */
 #define XRAY_MODULE_ENTRY(name)                                                                    \
     XR_EXPORT_SYM const int xr_module_abi_version_##name = XRAY_MODULE_ABI_VERSION;                \
-    XR_EXPORT_SYM XrModule *xr_load_module_##name(XrayIsolate *isolate)
+    XR_EXPORT_SYM XrModule *xr_load_module_##name(XrVMRuntime *isolate)
 
 #endif  // XRAY_MODULE_SDK_H

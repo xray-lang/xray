@@ -25,7 +25,7 @@
 #include "../../base/xchecks.h"
 #include "../../base/xjson.h"
 #include "../../api/xisolate_profile.h"
-#include "xray_isolate.h"
+#include "xray_vm.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdarg.h>
@@ -436,7 +436,7 @@ void xmcp_server_free(XmcpServer *s) {
     if (s->knowledge)
         xmcp_knowledge_free(s->knowledge);
     if (s->isolate)
-        xray_isolate_delete(s->isolate);
+        xray_vm_delete(s->isolate);
     if (s->log_file)
         fclose(s->log_file);
     xmcp_stdio_destroy(&s->transport);

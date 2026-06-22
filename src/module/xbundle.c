@@ -39,7 +39,7 @@
 /* ========== Internal Structures ========== */
 
 typedef struct {
-    XrayIsolate *X;
+    XrVMRuntime *X;
     XrCompilerSession *session;
     XrBundle *bundle;
     XrHashMap *visited;
@@ -351,11 +351,11 @@ static void collect_imports_from_ast(BundleContext *ctx, AstNode *node, const ch
 
 /* ========== Public API ========== */
 
-XrBundle *xr_bundle_create(XrayIsolate *X, const char *entry_file) {
+XrBundle *xr_bundle_create(XrVMRuntime *X, const char *entry_file) {
     return xr_bundle_create_ex(X, entry_file, XR_BUNDLE_DEFAULT);
 }
 
-XrBundle *xr_bundle_create_ex(XrayIsolate *X, const char *entry_file, XrBundleFlags flags) {
+XrBundle *xr_bundle_create_ex(XrVMRuntime *X, const char *entry_file, XrBundleFlags flags) {
     XR_DCHECK(X != NULL, "bundle_create_ex: NULL isolate");
     XR_DCHECK(entry_file != NULL, "bundle_create_ex: NULL entry_file");
     if (!X || !entry_file)

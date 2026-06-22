@@ -368,7 +368,7 @@ bool xr_type_is_const(XrType *type) {
     return type->is_const;
 }
 
-XrType *xr_type_make_const(XrayIsolate *X, XrType *base) {
+XrType *xr_type_make_const(XrVMRuntime *X, XrType *base) {
     if (!base)
         return NULL;
     if (xr_type_is_inherently_immutable(base))

@@ -21,7 +21,7 @@
  */
 
 #include "../test_framework.h"
-#include "xray_isolate.h"
+#include "xray_vm.h"
 #include "../test_helper.h"
 
 #include "runtime/xisolate_internal.h"
@@ -33,10 +33,10 @@
 
 /* Helper: spin up a full-feature isolate with stderr suppression
  * (uncaught throws still update ctx->current_exception). */
-static XrayIsolate *make_quiet_isolate(void) {
-    XrayIsolateParams params;
-    xray_isolate_params_init(&params);
-    XrayIsolate *iso = xray_isolate_new_full(&params);
+static XrVMRuntime *make_quiet_isolate(void) {
+    XrVMConfig params;
+    xray_vm_config_init(&params);
+    XrVMRuntime *iso = xray_vm_new_full(&params);
     if (!iso)
         return NULL;
     xr_isolate_set_suppress_exception_print(iso, true);
@@ -46,7 +46,7 @@ static XrayIsolate *make_quiet_isolate(void) {
 /* ========== User throw propagates through call chain via error channel ========== */
 
 TEST(unwind_records_full_call_chain) {
-    XrayIsolate *iso = make_quiet_isolate();
+    XrVMRuntime *iso = make_quiet_isolate();
     ASSERT_NOT_NULL(iso);
 
     /* In the new error model, throw writes to pending_error and returns.
@@ -60,17 +60,17 @@ TEST(unwind_records_full_call_chain) {
                       "fn level1() { level2() }\n"
                       "level1()\n";
 
-    int rc = xray_isolate_dostring(iso, src);
+    int rc = xray_vm_dostring(iso, src);
     /* Uncaught error — dostring returns non-zero. */
     ASSERT(rc != 0);
 
-    xray_isolate_delete(iso);
+    xray_vm_delete(iso);
 }
 
 /* ========== Runtime error (e.g. division by zero) carries a trace ========== */
 
 TEST(runtime_error_records_trace) {
-    XrayIsolate *iso = make_quiet_isolate();
+    XrVMRuntime *iso = make_quiet_isolate();
     ASSERT_NOT_NULL(iso);
 
     /* Force the interpreter's VM_RUNTIME_ERROR path via a divide
@@ -80,7 +80,7 @@ TEST(runtime_error_records_trace) {
     const char *src = "fn divider(a: int, b: int) -> int { return a / b }\n"
                       "let r = divider(10, 0)\n";
 
-    int rc = xray_isolate_dostring(iso, src);
+    int rc = xray_vm_dostring(iso, src);
     /* Uncaught panic fail-fasts — dostring returns non-zero. */
     ASSERT(rc != 0);
 
@@ -90,13 +90,13 @@ TEST(runtime_error_records_trace) {
     ASSERT(XR_IS_NULL(ctx->pending_error));
     ASSERT(xr_value_is_exception(iso, ctx->current_exception));
 
-    xray_isolate_delete(iso);
+    xray_vm_delete(iso);
 }
 
 /* ========== Catch clears the pending error channel ========== */
 
 TEST(catch_clears_pending_exception_state) {
-    XrayIsolate *iso = make_quiet_isolate();
+    XrVMRuntime *iso = make_quiet_isolate();
     ASSERT_NOT_NULL(iso);
 
     /* In the new model, catch reads and clears pending_error.
@@ -112,13 +112,13 @@ TEST(catch_clears_pending_exception_state) {
                       "let x = 42\n"
                       "assert_eq(x, 42)\n";
 
-    int rc = xray_isolate_dostring(iso, src);
+    int rc = xray_vm_dostring(iso, src);
     ASSERT_EQ_INT(rc, 0);
     /* No error left dangling. */
     XrVMContext *ctx = xr_vm_current_ctx(iso);
     ASSERT(XR_IS_NULL(ctx->pending_error));
 
-    xray_isolate_delete(iso);
+    xray_vm_delete(iso);
 }
 
 /* ========== Caught exception keeps its trace through the catch block ========== */
@@ -136,7 +136,7 @@ TEST(catch_clears_pending_exception_state) {
  * clears it.
  */
 TEST(caught_exception_trace_survives_catch) {
-    XrayIsolate *iso = make_quiet_isolate();
+    XrVMRuntime *iso = make_quiet_isolate();
     ASSERT_NOT_NULL(iso);
 
     /* In the new model, throw + catch + re-throw all go through
@@ -147,14 +147,14 @@ TEST(caught_exception_trace_survives_catch) {
                       "fn level1() { level2() }\n"
                       "try { level1() } catch (e) { throw e }\n";
 
-    int rc = xray_isolate_dostring(iso, src);
+    int rc = xray_vm_dostring(iso, src);
     ASSERT(rc != 0);
 
     /* Error propagated to top level via pending_error */
     XrVMContext *ctx = xr_vm_current_ctx(iso);
     ASSERT(!XR_IS_NULL(ctx->pending_error));
 
-    xray_isolate_delete(iso);
+    xray_vm_delete(iso);
 }
 
 /* ========== Main ========== */

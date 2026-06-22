@@ -11,7 +11,7 @@
 #include "xfloat_methods.h"
 #include "../object/xnative_type.h"
 
-void xr_float_register_native_type(XrayIsolate *isolate) {
+void xr_float_register_native_type(XrVMRuntime *isolate) {
     static const XrNativeMethod float_methods[] = {
         {"toString", xr_float_to_string_method, 0},
         {"toFixed", xr_float_to_fixed_method, 0},

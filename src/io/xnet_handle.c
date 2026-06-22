@@ -28,7 +28,7 @@
 
 /* ========== Allocation helpers ========== */
 
-static void *alloc_handle(struct XrayIsolate *X, size_t size) {
+static void *alloc_handle(struct XrVMRuntime *X, size_t size) {
     XR_DCHECK(X != NULL, "net_handle: alloc requires isolate");
     /*
      * NetConn / NetListener must be shareable across coroutines (go accept
@@ -49,7 +49,7 @@ static void *alloc_handle(struct XrayIsolate *X, size_t size) {
 
 /* ========== Constructors ========== */
 
-XrNetConn *xr_net_conn_new(struct XrayIsolate *X, int fd, XrNetConnKind kind) {
+XrNetConn *xr_net_conn_new(struct XrVMRuntime *X, int fd, XrNetConnKind kind) {
     XrNetConn *c = (XrNetConn *) alloc_handle(X, sizeof(XrNetConn));
     if (!c)
         return NULL;
@@ -67,7 +67,7 @@ XrNetConn *xr_net_conn_new(struct XrayIsolate *X, int fd, XrNetConnKind kind) {
     return c;
 }
 
-XrNetListener *xr_net_listener_new(struct XrayIsolate *X, int fd, int port) {
+XrNetListener *xr_net_listener_new(struct XrVMRuntime *X, int fd, int port) {
     XrNetListener *l = (XrNetListener *) alloc_handle(X, sizeof(XrNetListener));
     if (!l)
         return NULL;
@@ -134,7 +134,7 @@ void xr_net_conn_set_tls(XrNetConn *c, void *tls_state) {
  * buffers before the underlying fd vanishes.
  */
 
-static void close_fd_with_netpoll(struct XrayIsolate *X, int fd) {
+static void close_fd_with_netpoll(struct XrVMRuntime *X, int fd) {
     if (fd < 0)
         return;
     struct XrRuntime *rt = (X && X->vm.scheduler) ? (struct XrRuntime *) X->vm.scheduler : NULL;

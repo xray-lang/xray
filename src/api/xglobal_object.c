@@ -23,7 +23,7 @@
 
 /* ========== Global Object Creation and Destruction ========== */
 
-XrGlobalObject *xr_global_object_create(XrayIsolate *isolate) {
+XrGlobalObject *xr_global_object_create(XrVMRuntime *isolate) {
     xray_api_checkr(isolate != NULL, "global_object_create: NULL isolate", NULL);
 
     XrGlobalObject *global = (XrGlobalObject *) xr_malloc(sizeof(XrGlobalObject));
@@ -86,7 +86,7 @@ bool xr_global_register_class(XrGlobalObject *global, const char *name, XrClass 
     return true;
 }
 
-bool xr_global_register_all_core_classes(XrGlobalObject *global, XrayIsolate *isolate) {
+bool xr_global_register_all_core_classes(XrGlobalObject *global, XrVMRuntime *isolate) {
     if (global == NULL || isolate == NULL || xr_isolate_get_core_classes(isolate) == NULL) {
         xr_log_warning("global", "register_all_core_classes: invalid parameters");
         return false;

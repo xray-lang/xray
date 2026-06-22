@@ -462,7 +462,7 @@ bool xr_topic_match(const char *pattern, const char *topic) {
 
 /* ========== Subscribe / Unsubscribe ========== */
 
-struct XrChannel *xr_cluster_topic_subscribe(XrayIsolate *X, const char *pattern) {
+struct XrChannel *xr_cluster_topic_subscribe(XrVMRuntime *X, const char *pattern) {
     XrCluster *c = (XrCluster *) X->cluster;
     if (!c || !pattern || !c->topic_root)
         return NULL;
@@ -665,7 +665,7 @@ void xr_cluster_topic_deliver_local(XrCluster *c, const char *topic, XrValue val
  * Returns 0 on success, -1 on alloc failure. On success the caller
  * owns fb and must free with xr_frame_buf_free.
  */
-static int topic_build_publish_frame(XrayIsolate *X, const char *topic, const XrValue *value,
+static int topic_build_publish_frame(XrVMRuntime *X, const char *topic, const XrValue *value,
                                      uint8_t hop_limit, XrFrameBuf *fb_out) {
     if (!topic || !value || !fb_out)
         return -1;
@@ -765,7 +765,7 @@ void xr_cluster_topic_handle_publish(XrCluster *c, XrClusterNode *from, const ch
     xr_frame_buf_free(&fb);
 }
 
-int xr_cluster_topic_publish(XrayIsolate *X, const char *topic, XrValue value) {
+int xr_cluster_topic_publish(XrVMRuntime *X, const char *topic, XrValue value) {
     XrCluster *c = (XrCluster *) X->cluster;
     if (!c || !topic)
         return -1;

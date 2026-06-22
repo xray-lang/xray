@@ -126,7 +126,7 @@ void toml_config_init(TomlConfig *config) {
     config->allow_duplicate_keys = false;
 }
 
-void toml_config_from_json(XrayIsolate *X, TomlConfig *config, XrJson *json) {
+void toml_config_from_json(XrVMRuntime *X, TomlConfig *config, XrJson *json) {
     toml_config_init(config);
     if (!json)
         return;
@@ -135,7 +135,7 @@ void toml_config_from_json(XrayIsolate *X, TomlConfig *config, XrJson *json) {
     xrs_cfg_get_bool(X, json, "allowDuplicateKeys", &config->allow_duplicate_keys);
 }
 
-void toml_parser_init(TomlParser *parser, XrayIsolate *isolate, const char *data, size_t len,
+void toml_parser_init(TomlParser *parser, XrVMRuntime *isolate, const char *data, size_t len,
                       TomlConfig *config) {
     memset(parser, 0, sizeof(TomlParser));
 

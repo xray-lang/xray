@@ -227,7 +227,7 @@ void xr_task_runtime_destroy_all(XrRuntime *runtime) {
     xr_task_destroy_list(xr_task_runtime_detach_all(runtime, NULL));
 }
 
-void xr_task_isolate_adopt_deferred(XrayIsolate *isolate, XrTask *tasks, size_t count) {
+void xr_task_isolate_adopt_deferred(XrVMRuntime *isolate, XrTask *tasks, size_t count) {
     if (!tasks)
         return;
     if (!isolate) {
@@ -250,7 +250,7 @@ void xr_task_isolate_adopt_deferred(XrayIsolate *isolate, XrTask *tasks, size_t 
     isolate->deferred_task_count += count;
 }
 
-void xr_task_isolate_destroy_deferred(XrayIsolate *isolate) {
+void xr_task_isolate_destroy_deferred(XrVMRuntime *isolate) {
     if (!isolate || !isolate->deferred_tasks)
         return;
     XrTask *tasks = isolate->deferred_tasks;
@@ -798,7 +798,7 @@ void xr_task_wake_waiter_runtime(XrRuntime *runtime, XrTask *task) {
     }
 }
 
-void xr_task_wake_waiter(XrayIsolate *X, XrTask *task) {
+void xr_task_wake_waiter(XrVMRuntime *X, XrTask *task) {
     xr_task_wake_waiter_runtime(X ? (XrRuntime *) X->vm.scheduler : NULL, task);
 }
 

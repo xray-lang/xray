@@ -19,7 +19,7 @@
 #include <string.h>
 
 typedef struct ResultGroupFixture {
-    XrayIsolate isolate_storage;
+    XrVMRuntime isolate_storage;
     XrRuntimeCore core;
     XrRuntime runtime;
     XrSystemHeap sys_heap;
@@ -47,7 +47,7 @@ static void result_group_fixture_cleanup(ResultGroupFixture *f) {
     }
 }
 
-static void init_blocked_result_group_coro(XrCoroutine *coro, XrCoroExt *ext, XrayIsolate *isolate,
+static void init_blocked_result_group_coro(XrCoroutine *coro, XrCoroExt *ext, XrVMRuntime *isolate,
                                            XrResultGroup *g) {
     memset(coro, 0, sizeof(*coro));
     memset(ext, 0, sizeof(*ext));

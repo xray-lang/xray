@@ -15,7 +15,7 @@
 #include "xdap_debug.h"
 #include "../../runtime/xisolate_api.h"
 #include "../../base/xmalloc.h"
-#include "xray_isolate.h"
+#include "xray_vm.h"
 #include "../../coro/xcoroutine.h"
 #include "../../module/xmodule.h"
 #include "../../vm/xvm_internal.h"
@@ -61,7 +61,7 @@ void xdap_controller_free(XdapController *ctrl) {
     // Free isolate if owned by controller
     if (ctrl->isolate) {
         xr_debug_free(ctrl->isolate);  // Free debug state first
-        xray_isolate_delete(ctrl->isolate);
+        xray_vm_delete(ctrl->isolate);
         ctrl->isolate = NULL;
     }
 
@@ -111,23 +111,23 @@ bool xdap_controller_launch(XdapController *ctrl, const char *program, char **ar
     }
 
     // Create isolate
-    XrayIsolateParams params;
-    xray_isolate_params_init(&params);
+    XrVMConfig params;
+    xray_vm_config_init(&params);
     params.trace_execution = false;
 
-    ctrl->isolate = xray_isolate_new_full(&params);
+    ctrl->isolate = xray_vm_new_full(&params);
     if (!ctrl->isolate) {
         return false;
     }
 
     // Set userdata to controller for callbacks
-    xray_isolate_set_userdata(ctrl->isolate, ctrl);
+    xray_vm_set_userdata(ctrl->isolate, ctrl);
 
     // Initialize multicore runtime
-    xr_multicore_init(ctrl->isolate, 0);
+    xray_vm_multicore_init(ctrl->isolate, 0);
 
     // Set script info
-    xray_isolate_set_script_info(ctrl->isolate, program, arg_count, args);
+    xray_vm_set_script_info(ctrl->isolate, program, arg_count, args);
 
     // Initialize module system
     xr_module_system_init_with_script(ctrl->isolate, program);
@@ -232,7 +232,7 @@ bool xdap_controller_restart(XdapController *ctrl) {
     //    fields unconditionally, so we MUST null them first — otherwise
     //    the `ctrl->program_path = xr_strdup(...)` at the top of launch
     //    would silently leak our snapshot.
-    XrayIsolate *old_isolate = ctrl->isolate;
+    XrVMRuntime *old_isolate = ctrl->isolate;
     XrProto *old_debug_proto = ctrl->debug_proto;
     char *old_program_path = ctrl->program_path;
     char **old_program_args = ctrl->program_args;
@@ -270,8 +270,8 @@ bool xdap_controller_restart(XdapController *ctrl) {
         //     old isolate and its program info.
         if (old_isolate) {
             xr_debug_free(old_isolate);
-            xr_multicore_destroy(old_isolate);
-            xray_isolate_delete(old_isolate);
+            xray_vm_multicore_destroy(old_isolate);
+            xray_vm_delete(old_isolate);
         }
         xr_free(old_program_path);
         if (old_program_args) {
@@ -297,8 +297,8 @@ bool xdap_controller_restart(XdapController *ctrl) {
     }
     if (ctrl->isolate) {
         xr_debug_free(ctrl->isolate);
-        xr_multicore_destroy(ctrl->isolate);
-        xray_isolate_delete(ctrl->isolate);
+        xray_vm_multicore_destroy(ctrl->isolate);
+        xray_vm_delete(ctrl->isolate);
     }
 
     ctrl->isolate = old_isolate;
@@ -318,7 +318,7 @@ void xdap_controller_terminate(XdapController *ctrl) {
 
     // Cleanup
     if (ctrl->isolate) {
-        xr_multicore_destroy(ctrl->isolate);
+        xray_vm_multicore_destroy(ctrl->isolate);
     }
 }
 

@@ -29,7 +29,7 @@
 #include "../runtime/mem/xalloc_unified.h"
 
 struct XrCoroutine;
-struct XrayIsolate;
+struct XrVMRuntime;
 
 /* ========== Send-side ownership ========== */
 
@@ -84,7 +84,7 @@ static inline XrValue xr_chan_prepare_send_core(XrRuntimeCore *core, XrValue val
     return copied;
 }
 
-static inline XrValue xr_chan_prepare_send(struct XrayIsolate *isolate, XrValue value) {
+static inline XrValue xr_chan_prepare_send(struct XrVMRuntime *isolate, XrValue value) {
     return xr_chan_prepare_send_core(isolate ? xr_isolate_get_runtime_core(isolate) : NULL, value);
 }
 
@@ -136,7 +136,7 @@ static inline XrValue xr_chan_copy_recv_core(XrRuntimeCore *core, XrValue value,
     return copied;
 }
 
-static inline XrValue xr_chan_copy_recv(struct XrayIsolate *isolate, XrValue value,
+static inline XrValue xr_chan_copy_recv(struct XrVMRuntime *isolate, XrValue value,
                                         struct XrCoroutine *recv_coro) {
     return xr_chan_copy_recv_core(isolate ? xr_isolate_get_runtime_core(isolate) : NULL, value,
                                   recv_coro);
@@ -169,7 +169,7 @@ static inline bool xr_chan_try_recv_core(XrRuntimeCore *core, XrChannel *ch, XrV
     return false;
 }
 
-static inline bool xr_chan_try_recv(struct XrayIsolate *isolate, XrChannel *ch, XrValue *out_value,
+static inline bool xr_chan_try_recv(struct XrVMRuntime *isolate, XrChannel *ch, XrValue *out_value,
                                     struct XrCoroutine *recv_coro) {
     return xr_chan_try_recv_core(isolate ? xr_isolate_get_runtime_core(isolate) : NULL, ch,
                                  out_value, recv_coro);
@@ -191,7 +191,7 @@ static inline bool xr_chan_try_send_core(XrRuntimeCore *core, XrChannel *ch, XrV
     return false;
 }
 
-static inline bool xr_chan_try_send(struct XrayIsolate *isolate, XrChannel *ch, XrValue value) {
+static inline bool xr_chan_try_send(struct XrVMRuntime *isolate, XrChannel *ch, XrValue value) {
     return xr_chan_try_send_core(isolate ? xr_isolate_get_runtime_core(isolate) : NULL, ch, value);
 }
 

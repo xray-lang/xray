@@ -420,8 +420,8 @@ static inline int xr_coro_wake_target_id(XrCoroutine *coro) {
 
 /* ========== Backend Integration APIs ========== */
 
-XR_FUNC bool xr_coro_reset_execution_state(XrCoroutine *coro, struct XrayIsolate *X);
-XR_FUNC bool xr_coro_init_shell(XrCoroutine *coro, struct XrayIsolate *X, const char *name,
+XR_FUNC bool xr_coro_reset_execution_state(XrCoroutine *coro, struct XrVMRuntime *X);
+XR_FUNC bool xr_coro_init_shell(XrCoroutine *coro, struct XrVMRuntime *X, const char *name,
                                 bool need_storage);
 XR_FUNC void xr_coro_discard_uninitialized(XrCoroutine *coro);
 
@@ -464,18 +464,18 @@ typedef struct XrCoroState {
 
 /* ========== Coroutine API ========== */
 
-struct XrayIsolate;
+struct XrVMRuntime;
 struct XrClosure;
 
 // Lifecycle
-XR_FUNC XrCoroutine *xr_coro_create_empty(struct XrayIsolate *X, const char *name);
+XR_FUNC XrCoroutine *xr_coro_create_empty(struct XrVMRuntime *X, const char *name);
 XR_FUNC XrCoroutine *xr_coro_create_runtime_empty(struct XrRuntimeCore *core,
                                                   struct XrRuntime *runtime, const char *name);
-XR_FUNC XrCoroutine *xr_coro_create_native(struct XrayIsolate *X, void (*func)(void *), void *arg,
+XR_FUNC XrCoroutine *xr_coro_create_native(struct XrVMRuntime *X, void (*func)(void *), void *arg,
                                            const char *name);
 XR_FUNC void xr_coro_free(XrCoroutine *coro);
 XR_FUNC void xr_coro_destroy(XrCoroutine *coro);
-XR_FUNC void xr_coro_spawn(struct XrayIsolate *X, XrCoroutine *coro);
+XR_FUNC void xr_coro_spawn(struct XrVMRuntime *X, XrCoroutine *coro);
 XR_FUNC struct XrScopeContext *xr_coro_parent_scope(const XrCoroutine *coro);
 XR_FUNC bool xr_coro_set_parent_scope(XrCoroutine *coro, struct XrScopeContext *scope);
 XR_FUNC XrCoroutine *xr_coro_scope_sibling(const XrCoroutine *coro);
@@ -491,12 +491,12 @@ XR_FUNC void xr_coro_state_destroy(XrCoroState *state);
 
 // Wake mechanism
 XR_FUNC void xr_scheduler_ready(struct XrRuntime *runtime, XrCoroutine *gp, bool next);
-XR_FUNC void xr_coro_ready(struct XrayIsolate *X, XrCoroutine *gp, bool next);
-XR_FUNC XrCoroutine *xr_current_coro(struct XrayIsolate *X);
+XR_FUNC void xr_coro_ready(struct XrVMRuntime *X, XrCoroutine *gp, bool next);
+XR_FUNC XrCoroutine *xr_current_coro(struct XrVMRuntime *X);
 XR_FUNC void xr_coro_wake_waiter_runtime(struct XrRuntime *runtime, XrCoroutine *coro);
-XR_FUNC void xr_coro_wake_waiter(struct XrayIsolate *X, XrCoroutine *coro);
+XR_FUNC void xr_coro_wake_waiter(struct XrVMRuntime *X, XrCoroutine *coro);
 XR_FUNC void xr_coro_wake_scope_waiter_runtime(struct XrRuntime *runtime, XrCoroutine *coro);
-XR_FUNC void xr_coro_wake_scope_waiter(struct XrayIsolate *X, XrCoroutine *coro);
+XR_FUNC void xr_coro_wake_scope_waiter(struct XrVMRuntime *X, XrCoroutine *coro);
 
 // Channel wake (auto fallback to single-thread mode)
 XR_FUNC XrCoroutine *xr_runtime_wake_channel(struct XrRuntime *runtime, void *channel,

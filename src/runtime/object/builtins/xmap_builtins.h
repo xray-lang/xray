@@ -15,10 +15,10 @@
 #include "xdefs.h"
 
 // Global Map constructor (self = class value, ignored)
-XR_FUNC XrValue xr_builtin_map_construct(XrayIsolate *isolate, XrValue self, XrValue *args,
+XR_FUNC XrValue xr_builtin_map_construct(XrVMRuntime *isolate, XrValue self, XrValue *args,
                                          int argc);
 
 // Static methods (self = class value, ignored)
-XR_FUNC XrValue xr_builtin_map_from(XrayIsolate *isolate, XrValue self, XrValue *args, int argc);
+XR_FUNC XrValue xr_builtin_map_from(XrVMRuntime *isolate, XrValue self, XrValue *args, int argc);
 
 #endif  // XMAP_BUILTINS_H

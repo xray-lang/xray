@@ -34,7 +34,7 @@
 // (POSIX: re-exports <sys/uio.h>; Windows: WSASend-based shim).
 #include "../../src/os/os_net.h"
 
-struct XrayIsolate;
+struct XrVMRuntime;
 
 /* ========== I/O Connection Context ========== */
 
@@ -45,7 +45,7 @@ typedef struct XrIOConn {
     bool is_tls;            // Whether TLS enabled
     int timeout_ms;         // Default timeout (milliseconds)
     XrNetError last_error;  // Last error
-    struct XrayIsolate *X;  // Owning isolate, captured at create; drives yield
+    struct XrVMRuntime *X;  // Owning isolate, captured at create; drives yield
 } XrIOConn;
 
 /* ========== Connection API ========== */
@@ -63,7 +63,7 @@ typedef struct XrIOConn {
  * Returns: connection context, NULL on failure. The caller owns the
  * returned XrIOConn and must release it via xr_io_close().
  */
-XR_FUNC XrIOConn *xr_io_connect(struct XrayIsolate *X, const char *host, int port, int timeout_ms);
+XR_FUNC XrIOConn *xr_io_connect(struct XrVMRuntime *X, const char *host, int port, int timeout_ms);
 
 /*
  * Create a TLS connection wrapped over xr_io_connect().
@@ -76,7 +76,7 @@ XR_FUNC XrIOConn *xr_io_connect(struct XrayIsolate *X, const char *host, int por
  * handshake / verify failure (the caller never sees a half-wrapped
  * connection).
  */
-XR_FUNC XrIOConn *xr_io_connect_tls_with_ctx(struct XrayIsolate *X, XrTlsContext *ctx,
+XR_FUNC XrIOConn *xr_io_connect_tls_with_ctx(struct XrVMRuntime *X, XrTlsContext *ctx,
                                              const char *host, int port, int timeout_ms);
 
 // Close connection (uses conn->X to resolve netpoll). Safe to call
@@ -128,7 +128,7 @@ XR_FUNC int xr_io_listen(const char *addr, int port, int backlog);
  * XrIOConn whose ownership transfers to the caller. NULL on a hard
  * accept failure.
  */
-XR_FUNC XrIOConn *xr_io_accept(struct XrayIsolate *X, int listen_fd);
+XR_FUNC XrIOConn *xr_io_accept(struct XrVMRuntime *X, int listen_fd);
 
 /*
  * Accept + server-side TLS handshake. `ctx` (server context built
@@ -136,7 +136,7 @@ XR_FUNC XrIOConn *xr_io_accept(struct XrayIsolate *X, int listen_fd);
  * mTLS) stays under caller ownership and must outlive every accepted
  * connection. NULL on any failure leaves no half-wrapped fd behind.
  */
-XR_FUNC XrIOConn *xr_io_accept_tls_with_ctx(struct XrayIsolate *X, int listen_fd,
+XR_FUNC XrIOConn *xr_io_accept_tls_with_ctx(struct XrVMRuntime *X, int listen_fd,
                                             XrTlsContext *ctx);
 
 /*
@@ -144,7 +144,7 @@ XR_FUNC XrIOConn *xr_io_accept_tls_with_ctx(struct XrayIsolate *X, int listen_fd
  * for the fd before this call. Sets non-blocking mode and TCP_NODELAY
  * automatically.
  */
-XR_FUNC XrIOConn *xr_io_conn_from_fd(struct XrayIsolate *X, int fd, int timeout_ms);
+XR_FUNC XrIOConn *xr_io_conn_from_fd(struct XrVMRuntime *X, int fd, int timeout_ms);
 
 /* ========== Utility Functions ========== */
 

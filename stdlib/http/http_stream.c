@@ -38,7 +38,7 @@
 
 /* ========== Internal: per-Isolate pool accessor ========== */
 
-static XrConnPool *stream_get_pool(struct XrayIsolate *X) {
+static XrConnPool *stream_get_pool(struct XrVMRuntime *X) {
     if (!X)
         return NULL;
     XrHttpContext *ctx = xr_http_get_context(X);
@@ -77,7 +77,7 @@ void xr_stream_config_init(XrStreamConfig *config) {
     config->follow_redirects = true;
 }
 
-XrStreamResult xr_http_download(struct XrayIsolate *X, const char *url, const char *output_path,
+XrStreamResult xr_http_download(struct XrVMRuntime *X, const char *url, const char *output_path,
                                 XrHttpProgressCallback on_progress, void *user_data) {
     XrStreamConfig config;
     xr_stream_config_init(&config);
@@ -89,7 +89,7 @@ XrStreamResult xr_http_download(struct XrayIsolate *X, const char *url, const ch
     return xr_http_stream(X, &config);
 }
 
-XrStreamResult xr_http_stream(struct XrayIsolate *X, const XrStreamConfig *config) {
+XrStreamResult xr_http_stream(struct XrVMRuntime *X, const XrStreamConfig *config) {
     XrStreamResult result;
     memset(&result, 0, sizeof(result));
 
@@ -277,7 +277,7 @@ cleanup:
     return result;
 }
 
-XrStreamResult xr_http_resume_download(struct XrayIsolate *X, const char *url,
+XrStreamResult xr_http_resume_download(struct XrVMRuntime *X, const char *url,
                                        const char *output_path, XrHttpProgressCallback on_progress,
                                        void *user_data) {
     XrStreamConfig config;
@@ -296,7 +296,7 @@ XrStreamResult xr_http_resume_download(struct XrayIsolate *X, const char *url,
     return xr_http_stream(X, &config);
 }
 
-long long xr_http_get_content_length(XrayIsolate *X, const char *url) {
+long long xr_http_get_content_length(XrVMRuntime *X, const char *url) {
     XrHttpRequestConfig config;
     xr_http_request_config_init(&config);
     config.url = url;

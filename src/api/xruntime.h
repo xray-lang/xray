@@ -17,7 +17,7 @@
  *   - High performance: Minimal overhead, direct access to core functions
  *
  * RELATED MODULES:
- *   - xray_isolate.h: Isolate lifecycle management
+ *   - xray_vm.h: Isolate lifecycle management
  *   - xvalue.h: Value representation (tagged union)
  *   - xheap.h: heap allocation internals
  */
@@ -49,10 +49,10 @@ typedef struct Upvalue Upvalue;
 /* ========== Runtime Initialization and Cleanup ========== */
 
 // Create runtime state, returns NULL on failure
-XRAY_API XrayIsolate *xray_runtime_init(void);
+XRAY_API XrVMRuntime *xray_runtime_init(void);
 
 // Destroy runtime and release all resources
-XRAY_API void xray_runtime_cleanup(XrayIsolate *X);
+XRAY_API void xray_runtime_cleanup(XrVMRuntime *X);
 
 // Get runtime version string
 XRAY_API const char *xray_runtime_version(void);
@@ -60,49 +60,49 @@ XRAY_API const char *xray_runtime_version(void);
 /* ========== Memory Allocation ========== */
 
 // Allocate runtime-managed memory.
-XRAY_API void *xray_alloc(XrayIsolate *X, size_t size);
+XRAY_API void *xray_alloc(XrVMRuntime *X, size_t size);
 
 // Reallocate memory (for non-GC-managed memory only)
-XRAY_API void *xray_realloc(XrayIsolate *X, void *ptr, size_t old_size, size_t new_size);
+XRAY_API void *xray_realloc(XrVMRuntime *X, void *ptr, size_t old_size, size_t new_size);
 
 /* ========== Object Creation ========== */
 
 // Create empty array
-XRAY_API XrArray *xray_array_new(XrayIsolate *X);
+XRAY_API XrArray *xray_array_new(XrVMRuntime *X);
 
 // Create array with pre-allocated capacity
-XRAY_API XrArray *xray_array_new_with_capacity(XrayIsolate *X, size_t capacity);
+XRAY_API XrArray *xray_array_new_with_capacity(XrVMRuntime *X, size_t capacity);
 
 // Create empty map
-XRAY_API XrMap *xray_map_new(XrayIsolate *X);
+XRAY_API XrMap *xray_map_new(XrVMRuntime *X);
 
 // Create empty set
-XRAY_API XrSet *xray_set_new(XrayIsolate *X);
+XRAY_API XrSet *xray_set_new(XrVMRuntime *X);
 
 // Create interned string from C string
-XRAY_API XrString *xray_string_new(XrayIsolate *X, const char *str, size_t len);
+XRAY_API XrString *xray_string_new(XrVMRuntime *X, const char *str, size_t len);
 
 // Create class - declared in xclass.h
-// Use: XrClass* xr_class_new(XrayIsolate *X, const char *name, XrClass *super);
+// Use: XrClass* xr_class_new(XrVMRuntime *X, const char *name, XrClass *super);
 
 // Create instance of a class
-XR_FUNC XrInstance *xr_instance_new(XrayIsolate *X, XrClass *klass);
+XR_FUNC XrInstance *xr_instance_new(XrVMRuntime *X, XrClass *klass);
 
 // Closure creation is declared in runtime/closure/xclosure.h.
 
 /* ========== Array Operations ========== */
 
 // Push element to array end
-XR_FUNC void xr_array_push(XrayIsolate *X, XrArray *arr, XrValue val);
+XR_FUNC void xr_array_push(XrVMRuntime *X, XrArray *arr, XrValue val);
 
 // Pop element from array end
-XR_FUNC XrValue xr_array_pop(XrayIsolate *X, XrArray *arr);
+XR_FUNC XrValue xr_array_pop(XrVMRuntime *X, XrArray *arr);
 
 // Get array element by index
-XR_FUNC XrValue xr_array_get(XrayIsolate *X, XrArray *arr, int index);
+XR_FUNC XrValue xr_array_get(XrVMRuntime *X, XrArray *arr, int index);
 
 // Set array element by index
-XR_FUNC void xr_array_set(XrayIsolate *X, XrArray *arr, int index, XrValue val);
+XR_FUNC void xr_array_set(XrVMRuntime *X, XrArray *arr, int index, XrValue val);
 
 // Get array length
 XR_FUNC size_t xr_array_length(XrArray *arr);
@@ -110,16 +110,16 @@ XR_FUNC size_t xr_array_length(XrArray *arr);
 /* ========== Map Operations ========== */
 
 // Set map key-value pair
-XR_FUNC void xr_map_set(XrayIsolate *X, XrMap *map, XrValue key, XrValue val);
+XR_FUNC void xr_map_set(XrVMRuntime *X, XrMap *map, XrValue key, XrValue val);
 
 // Get map value, returns null if key not found
-XR_FUNC XrValue xr_map_get(XrayIsolate *X, XrMap *map, XrValue key);
+XR_FUNC XrValue xr_map_get(XrVMRuntime *X, XrMap *map, XrValue key);
 
 // Delete map entry, returns true if key existed
-XR_FUNC bool xr_map_delete(XrayIsolate *X, XrMap *map, XrValue key);
+XR_FUNC bool xr_map_delete(XrVMRuntime *X, XrMap *map, XrValue key);
 
 // Check if key exists in map
-XR_FUNC bool xr_map_contains(XrayIsolate *X, XrMap *map, XrValue key);
+XR_FUNC bool xr_map_contains(XrVMRuntime *X, XrMap *map, XrValue key);
 
 // Get number of entries in map
 XR_FUNC size_t xr_map_size(XrMap *map);
@@ -127,7 +127,7 @@ XR_FUNC size_t xr_map_size(XrMap *map);
 /* ========== String Operations ========== */
 
 // Concatenate two strings
-XR_FUNC XrString *xr_string_concat(XrayIsolate *X, XrString *a, XrString *b);
+XR_FUNC XrString *xr_string_concat(XrVMRuntime *X, XrString *a, XrString *b);
 
 // Compare strings: 0=equal, <0=a<b, >0=a>b
 XR_FUNC int xr_string_compare(XrString *a, XrString *b);
@@ -141,10 +141,10 @@ XR_FUNC const char *xr_string_cstr(XrString *str);
 /* ========== Closure and Upvalue ========== */
 
 // Create upvalue pointing to stack slot
-XR_FUNC Upvalue *xr_upvalue_new(XrayIsolate *X, XrValue *slot);
+XR_FUNC Upvalue *xr_upvalue_new(XrVMRuntime *X, XrValue *slot);
 
 // Close upvalues: copy stack values to heap
-XR_FUNC void xr_upvalue_close(XrayIsolate *X, XrValue *last);
+XR_FUNC void xr_upvalue_close(XrVMRuntime *X, XrValue *last);
 
 /* ========== Type Checking ========== */
 XR_FUNC bool xr_is_null(XrValue val);
@@ -181,7 +181,7 @@ XR_FUNC XrValue xr_value_object(void *obj);
 /* ========== Debug and Printing ========== */
 
 // Print value for debugging
-XR_FUNC void xr_value_print(XrayIsolate *X, XrValue val);
+XR_FUNC void xr_value_print(XrVMRuntime *X, XrValue val);
 
 // Get type name of value
 XR_FUNC const char *xr_value_type_name(XrValue val);
@@ -189,16 +189,16 @@ XR_FUNC const char *xr_value_type_name(XrValue val);
 /* ========== Error Handling ========== */
 
 // Report runtime error with printf-style format
-XR_FUNC void xr_runtime_error(XrayIsolate *X, const char *fmt, ...);
+XR_FUNC void xr_runtime_error(XrVMRuntime *X, const char *fmt, ...);
 
 // Check if there is a pending error
-XR_FUNC bool xr_runtime_has_error(XrayIsolate *X);
+XR_FUNC bool xr_runtime_has_error(XrVMRuntime *X);
 
 // Get error message string
-XR_FUNC const char *xr_runtime_error_message(XrayIsolate *X);
+XR_FUNC const char *xr_runtime_error_message(XrVMRuntime *X);
 
 // Clear error state
-XR_FUNC void xr_runtime_clear_error(XrayIsolate *X);
+XR_FUNC void xr_runtime_clear_error(XrVMRuntime *X);
 
 #ifdef __cplusplus
 }

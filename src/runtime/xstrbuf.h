@@ -29,7 +29,7 @@ typedef struct XrStrBuf {
     char *data;
     size_t length;
     size_t capacity;
-    XrayIsolate *X;
+    XrVMRuntime *X;
 } XrStrBuf;
 
 #define XR_STRBUF_MIN_CAP 64
@@ -37,7 +37,7 @@ typedef struct XrStrBuf {
 
 /* ========== Creation and Destruction ========== */
 
-XR_FUNC XrStrBuf *xr_strbuf_new(XrayIsolate *X, size_t init_cap);
+XR_FUNC XrStrBuf *xr_strbuf_new(XrVMRuntime *X, size_t init_cap);
 XR_FUNC void xr_strbuf_free(XrStrBuf *sb);
 
 /* ========== Capacity Management ========== */

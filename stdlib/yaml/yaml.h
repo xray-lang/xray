@@ -48,17 +48,17 @@
 struct XrModule;
 
 // Parse YAML string (single document)
-XR_FUNC XrValue xr_yaml_parse(XrayIsolate *isolate, const char *data, size_t len);
+XR_FUNC XrValue xr_yaml_parse(XrVMRuntime *isolate, const char *data, size_t len);
 
 // Parse YAML string (multi-document)
 // Returns: Array, each element is a document
-XR_FUNC XrValue xr_yaml_parse_all(XrayIsolate *isolate, const char *data, size_t len);
+XR_FUNC XrValue xr_yaml_parse_all(XrVMRuntime *isolate, const char *data, size_t len);
 
 // Serialize to YAML string
 // indent: number of spaces for indentation, default 2.
-XR_FUNC XrValue xr_yaml_stringify(XrayIsolate *isolate, XrValue value, int indent);
+XR_FUNC XrValue xr_yaml_stringify(XrVMRuntime *isolate, XrValue value, int indent);
 
 // Load yaml module
-XR_FUNC struct XrModule *xr_load_module_yaml(XrayIsolate *isolate);
+XR_FUNC struct XrModule *xr_load_module_yaml(XrVMRuntime *isolate);
 
 #endif  // XR_STDLIB_YAML_H

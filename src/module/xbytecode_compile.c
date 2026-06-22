@@ -15,7 +15,7 @@
 #include "../runtime/xisolate_api.h"
 #include "../runtime/value/xchunk.h"
 #include "../toolchain/xcompiler_session.h"
-#include "xray_isolate.h"
+#include "xray_vm.h"
 #include <stdio.h>
 
 bool xr_compile_to_file(XrCompilerSession *session, const char *source_file,
@@ -24,7 +24,7 @@ bool xr_compile_to_file(XrCompilerSession *session, const char *source_file,
         xr_log_warning("compile", "compiler session is required");
         return false;
     }
-    XrayIsolate *X = xr_compiler_session_vm_host(session);
+    XrVMRuntime *X = xr_compiler_session_vm_host(session);
     if (!X) {
         xr_log_warning("compile", "compiler session has no VM host");
         return false;

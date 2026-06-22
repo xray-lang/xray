@@ -45,7 +45,7 @@ static _Atomic int64_t g_counter = 0;
 // Scenario 1: Basic yield test
 /* ========================================================================== */
 
-static XrCFuncResult test_yield_continue(XrayIsolate *X, int status, XrValue resume_value,
+static XrCFuncResult test_yield_continue(XrVMRuntime *X, int status, XrValue resume_value,
                                          void *ctx, XrValue *result) {
     (void) X;
     (void) ctx;
@@ -54,7 +54,7 @@ static XrCFuncResult test_yield_continue(XrayIsolate *X, int status, XrValue res
     return XR_CFUNC_DONE;
 }
 
-static XrCFuncResult test_yield_simple(XrayIsolate *X, XrValue *args, int argc, XrValue *result) {
+static XrCFuncResult test_yield_simple(XrVMRuntime *X, XrValue *args, int argc, XrValue *result) {
     (void) args;
     (void) argc;
     (void) result;
@@ -70,7 +70,7 @@ typedef struct {
     int64_t b;
 } AddState;
 
-static XrCFuncResult test_yield_add_continue(XrayIsolate *X, int status, XrValue resume_value,
+static XrCFuncResult test_yield_add_continue(XrVMRuntime *X, int status, XrValue resume_value,
                                              void *ctx, XrValue *result) {
     (void) X;
     (void) status;
@@ -81,7 +81,7 @@ static XrCFuncResult test_yield_add_continue(XrayIsolate *X, int status, XrValue
     return XR_CFUNC_DONE;
 }
 
-static XrCFuncResult test_yield_add(XrayIsolate *X, XrValue *args, int argc, XrValue *result) {
+static XrCFuncResult test_yield_add(XrVMRuntime *X, XrValue *args, int argc, XrValue *result) {
     if (argc < 2) {
         *result = xr_null();
         return XR_CFUNC_ERROR;
@@ -103,14 +103,14 @@ static XrCFuncResult test_yield_add(XrayIsolate *X, XrValue *args, int argc, XrV
 // Scenario 3: Normal C function (non-Yieldable)
 /* ========================================================================== */
 
-static XrValue test_yield_sync(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue test_yield_sync(XrVMRuntime *X, XrValue *args, int argc) {
     (void) X;
     (void) args;
     (void) argc;
     return xr_int(100);
 }
 
-static XrValue test_yield_blocking_sleep(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue test_yield_blocking_sleep(XrVMRuntime *X, XrValue *args, int argc) {
     (void) X;
     int64_t ms = (argc > 0 && XR_IS_INT(args[0])) ? XR_TO_INT(args[0]) : 10;
     if (ms < 0)
@@ -132,10 +132,10 @@ typedef struct {
     int max_steps;  // Maximum number of steps
 } MultiYieldState;
 
-static XrCFuncResult multi_yield_continue(XrayIsolate *X, int status, XrValue resume_value,
+static XrCFuncResult multi_yield_continue(XrVMRuntime *X, int status, XrValue resume_value,
                                           void *ctx, XrValue *result);
 
-static XrCFuncResult multi_yield_step(XrayIsolate *X, MultiYieldState *state, XrValue *result) {
+static XrCFuncResult multi_yield_step(XrVMRuntime *X, MultiYieldState *state, XrValue *result) {
     state->step++;
     state->value += state->step * 10;  // Each step adds step*10
 
@@ -151,7 +151,7 @@ static XrCFuncResult multi_yield_step(XrayIsolate *X, MultiYieldState *state, Xr
     return xr_yield(X, multi_yield_continue, state);
 }
 
-static XrCFuncResult multi_yield_continue(XrayIsolate *X, int status, XrValue resume_value,
+static XrCFuncResult multi_yield_continue(XrVMRuntime *X, int status, XrValue resume_value,
                                           void *ctx, XrValue *result) {
     (void) status;
     MultiYieldState *state = (MultiYieldState *) ctx;
@@ -163,7 +163,7 @@ static XrCFuncResult multi_yield_continue(XrayIsolate *X, int status, XrValue re
  * Executes 'steps' yields, each adding step*10, returns total sum
  * Example: multi_yield(3) = 10 + 20 + 30 = 60
  */
-static XrCFuncResult test_yield_multi(XrayIsolate *X, XrValue *args, int argc, XrValue *result) {
+static XrCFuncResult test_yield_multi(XrVMRuntime *X, XrValue *args, int argc, XrValue *result) {
     int max_steps = (argc > 0 && XR_IS_INT(args[0])) ? (int) XR_TO_INT(args[0]) : 3;
     if (max_steps < 1)
         max_steps = 1;
@@ -192,10 +192,10 @@ typedef struct {
     int64_t accumulated;  // Accumulated value
 } ChainState;
 
-static XrCFuncResult chain_continue(XrayIsolate *X, int status, XrValue resume_value, void *ctx,
+static XrCFuncResult chain_continue(XrVMRuntime *X, int status, XrValue resume_value, void *ctx,
                                     XrValue *result);
 
-static XrCFuncResult chain_step(XrayIsolate *X, ChainState *state, XrValue *result) {
+static XrCFuncResult chain_step(XrVMRuntime *X, ChainState *state, XrValue *result) {
     if (state->n <= 0) {
         int64_t final_value = state->accumulated;
         xr_free(state);
@@ -210,7 +210,7 @@ static XrCFuncResult chain_step(XrayIsolate *X, ChainState *state, XrValue *resu
     return xr_yield(X, chain_continue, state);
 }
 
-static XrCFuncResult chain_continue(XrayIsolate *X, int status, XrValue resume_value, void *ctx,
+static XrCFuncResult chain_continue(XrVMRuntime *X, int status, XrValue resume_value, void *ctx,
                                     XrValue *result) {
     (void) status;
     ChainState *state = (ChainState *) ctx;
@@ -222,7 +222,7 @@ static XrCFuncResult chain_continue(XrayIsolate *X, int status, XrValue resume_v
  * Computes 1+2+...+n, yielding once for each number processed
  * Example: chain(5) = 1+2+3+4+5 = 15
  */
-static XrCFuncResult test_yield_chain(XrayIsolate *X, XrValue *args, int argc, XrValue *result) {
+static XrCFuncResult test_yield_chain(XrVMRuntime *X, XrValue *args, int argc, XrValue *result) {
     int64_t n = (argc > 0 && XR_IS_INT(args[0])) ? XR_TO_INT(args[0]) : 5;
     if (n < 0)
         n = 0;
@@ -249,7 +249,7 @@ typedef struct {
     int error_code;
 } ErrorState;
 
-static XrCFuncResult error_continue(XrayIsolate *X, int status, XrValue resume_value, void *ctx,
+static XrCFuncResult error_continue(XrVMRuntime *X, int status, XrValue resume_value, void *ctx,
                                     XrValue *result) {
     (void) X;
     ErrorState *state = (ErrorState *) ctx;
@@ -277,7 +277,7 @@ static XrCFuncResult error_continue(XrayIsolate *X, int status, XrValue resume_v
  * test_yield.error_test(should_error, error_code) -> int
  * If should_error is true, returns error after yield
  */
-static XrCFuncResult test_yield_error(XrayIsolate *X, XrValue *args, int argc, XrValue *result) {
+static XrCFuncResult test_yield_error(XrVMRuntime *X, XrValue *args, int argc, XrValue *result) {
     int should_error = (argc > 0 && XR_IS_INT(args[0])) ? (int) XR_TO_INT(args[0]) : 0;
     int error_code = (argc > 1 && XR_IS_INT(args[1])) ? (int) XR_TO_INT(args[1]) : -100;
 
@@ -301,7 +301,7 @@ typedef struct {
     int64_t resource_id;
 } CancelState;
 
-static XrCFuncResult cancel_continue(XrayIsolate *X, int status, XrValue resume_value, void *ctx,
+static XrCFuncResult cancel_continue(XrVMRuntime *X, int status, XrValue resume_value, void *ctx,
                                      XrValue *result) {
     (void) X;
     CancelState *state = (CancelState *) ctx;
@@ -325,7 +325,7 @@ static XrCFuncResult cancel_continue(XrayIsolate *X, int status, XrValue resume_
  * test_yield.cancel_test(resource_id) -> int
  * Simulates a cancellable operation, returns resource_id (negative if cancelled)
  */
-static XrCFuncResult test_yield_cancel(XrayIsolate *X, XrValue *args, int argc, XrValue *result) {
+static XrCFuncResult test_yield_cancel(XrVMRuntime *X, XrValue *args, int argc, XrValue *result) {
     int64_t resource_id = (argc > 0 && XR_IS_INT(args[0])) ? XR_TO_INT(args[0]) : 42;
 
     CancelState *state = (CancelState *) xr_malloc(sizeof(CancelState));
@@ -343,7 +343,7 @@ static XrCFuncResult test_yield_cancel(XrayIsolate *X, XrValue *args, int argc, 
 // Scenario 8: Concurrent counter
 /* ========================================================================== */
 
-static XrCFuncResult counter_continue(XrayIsolate *X, int status, XrValue resume_value, void *ctx,
+static XrCFuncResult counter_continue(XrVMRuntime *X, int status, XrValue resume_value, void *ctx,
                                       XrValue *result) {
     (void) X;
     (void) status;
@@ -358,7 +358,7 @@ static XrCFuncResult counter_continue(XrayIsolate *X, int status, XrValue resume
  * test_yield.counter_inc() -> int
  * Increments global counter, yields, then returns current value.
  */
-static XrCFuncResult test_yield_counter_inc(XrayIsolate *X, XrValue *args, int argc,
+static XrCFuncResult test_yield_counter_inc(XrVMRuntime *X, XrValue *args, int argc,
                                             XrValue *result) {
     (void) args;
     (void) argc;
@@ -371,7 +371,7 @@ static XrCFuncResult test_yield_counter_inc(XrayIsolate *X, XrValue *args, int a
  * test_yield.counter_get() -> int
  * Gets global counter value (synchronous function).
  */
-static XrValue test_yield_counter_get(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue test_yield_counter_get(XrVMRuntime *X, XrValue *args, int argc) {
     (void) X;
     (void) args;
     (void) argc;
@@ -382,7 +382,7 @@ static XrValue test_yield_counter_get(XrayIsolate *X, XrValue *args, int argc) {
  * test_yield.counter_reset() -> int
  * Resets global counter (synchronous function).
  */
-static XrValue test_yield_counter_reset(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue test_yield_counter_reset(XrVMRuntime *X, XrValue *args, int argc) {
     (void) X;
     (void) args;
     (void) argc;
@@ -401,10 +401,10 @@ typedef struct {
     int64_t inner_val;
 } NestedState;
 
-static XrCFuncResult nested_continue(XrayIsolate *X, int status, XrValue resume_value, void *ctx,
+static XrCFuncResult nested_continue(XrVMRuntime *X, int status, XrValue resume_value, void *ctx,
                                      XrValue *result);
 
-static XrCFuncResult nested_step(XrayIsolate *X, NestedState *state, XrValue *result) {
+static XrCFuncResult nested_step(XrVMRuntime *X, NestedState *state, XrValue *result) {
     switch (state->phase) {
         case 0:
             // Outer yield done, start inner
@@ -430,7 +430,7 @@ static XrCFuncResult nested_step(XrayIsolate *X, NestedState *state, XrValue *re
     }
 }
 
-static XrCFuncResult nested_continue(XrayIsolate *X, int status, XrValue resume_value, void *ctx,
+static XrCFuncResult nested_continue(XrVMRuntime *X, int status, XrValue resume_value, void *ctx,
                                      XrValue *result) {
     (void) status;
     NestedState *state = (NestedState *) ctx;
@@ -441,7 +441,7 @@ static XrCFuncResult nested_continue(XrayIsolate *X, int status, XrValue resume_
  * test_yield.nested() -> int
  * Simulates nested yield: outer yield -> inner yield -> returns 150
  */
-static XrCFuncResult test_yield_nested(XrayIsolate *X, XrValue *args, int argc, XrValue *result) {
+static XrCFuncResult test_yield_nested(XrVMRuntime *X, XrValue *args, int argc, XrValue *result) {
     (void) args;
     (void) argc;
 
@@ -468,10 +468,10 @@ typedef struct {
     int64_t result;
 } LongTaskState;
 
-static XrCFuncResult long_task_continue(XrayIsolate *X, int status, XrValue resume_value, void *ctx,
+static XrCFuncResult long_task_continue(XrVMRuntime *X, int status, XrValue resume_value, void *ctx,
                                         XrValue *result);
 
-static XrCFuncResult long_task_step(XrayIsolate *X, LongTaskState *state, XrValue *result) {
+static XrCFuncResult long_task_step(XrVMRuntime *X, LongTaskState *state, XrValue *result) {
     if (state->current >= state->iterations) {
         int64_t final_result = state->result;
         xr_free(state);
@@ -487,7 +487,7 @@ static XrCFuncResult long_task_step(XrayIsolate *X, LongTaskState *state, XrValu
     return xr_yield(X, long_task_continue, state);
 }
 
-static XrCFuncResult long_task_continue(XrayIsolate *X, int status, XrValue resume_value, void *ctx,
+static XrCFuncResult long_task_continue(XrVMRuntime *X, int status, XrValue resume_value, void *ctx,
                                         XrValue *result) {
     (void) status;
     LongTaskState *state = (LongTaskState *) ctx;
@@ -498,7 +498,7 @@ static XrCFuncResult long_task_continue(XrayIsolate *X, int status, XrValue resu
  * test_yield.long_task(n) -> int
  * Simulates long running task: computes 0^2 + 1^2 + ... + (n-1)^2, yielding each iteration
  */
-static XrCFuncResult test_yield_long_task(XrayIsolate *X, XrValue *args, int argc,
+static XrCFuncResult test_yield_long_task(XrVMRuntime *X, XrValue *args, int argc,
                                           XrValue *result) {
     int iterations = (argc > 0 && XR_IS_INT(args[0])) ? (int) XR_TO_INT(args[0]) : 10;
     if (iterations < 0)
@@ -527,7 +527,7 @@ static XrCFuncResult test_yield_long_task(XrayIsolate *X, XrValue *args, int arg
 // Module registration
 /* ========================================================================== */
 
-XR_FUNC XrModule *xr_load_module_test_yield(XrayIsolate *isolate) {
+XR_FUNC XrModule *xr_load_module_test_yield(XrVMRuntime *isolate) {
     XR_DCHECK(isolate != NULL, "xr_load_module_test_yield: NULL isolate");
 
     XrModule *mod = xr_module_create_native(isolate, "test_yield");

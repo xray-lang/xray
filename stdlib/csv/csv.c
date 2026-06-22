@@ -27,7 +27,7 @@
 /* ========== Helper Functions ========== */
 
 // Extract config from Json object
-static void extract_config(XrayIsolate *X, XrValue config_val, CsvConfig *config) {
+static void extract_config(XrVMRuntime *X, XrValue config_val, CsvConfig *config) {
     csv_config_init(config);
 
     if (xr_value_is_json(config_val)) {
@@ -40,7 +40,7 @@ static void extract_config(XrayIsolate *X, XrValue config_val, CsvConfig *config
 
 typedef struct {
     XrSerWriter sw;        // shared buffer: sw.data / sw.len / sw.cap
-    XrayIsolate *isolate;  // needed for nested JSON stringify
+    XrVMRuntime *isolate;  // needed for nested JSON stringify
     char delimiter;
     char quote_char;
     char escape_char;       // if != quote_char, use prefix escape
@@ -48,7 +48,7 @@ typedef struct {
     size_t linebreak_len;
 } CsvWriter;
 
-static inline void cw_init(CsvWriter *w, XrayIsolate *isolate, char delim, char quote, char escape,
+static inline void cw_init(CsvWriter *w, XrVMRuntime *isolate, char delim, char quote, char escape,
                            const char *linebreak) {
     xr_serw_init(&w->sw, 256);
     w->isolate = isolate;
@@ -191,7 +191,7 @@ static void write_row(CsvWriter *w, XrArray *row) {
 /* ========== Module Functions ========== */
 
 // parse(str) or parse(str, config)
-static XrValue csv_parse(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue csv_parse(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1 || !XR_IS_STRING(args[0])) {
         return xr_value_from_array(xr_array_new(xr_current_coro(X)));
     }
@@ -216,7 +216,7 @@ static XrValue csv_parse(XrayIsolate *X, XrValue *args, int argc) {
 }
 
 // parseDetailed(str, config) - returns detailed result
-static XrValue csv_parse_detailed(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue csv_parse_detailed(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1 || !XR_IS_STRING(args[0])) {
         XrMap *result = xr_map_new(xr_current_coro(X));
         XrValue key_data = xr_string_value(xr_string_intern(X, "data", 4, 0));
@@ -278,7 +278,7 @@ static XrValue csv_parse_detailed(XrayIsolate *X, XrValue *args, int argc) {
 }
 
 // parseTsv(str) - TSV shortcut
-static XrValue csv_parse_tsv(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue csv_parse_tsv(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1 || !XR_IS_STRING(args[0])) {
         return xr_value_from_array(xr_array_new(xr_current_coro(X)));
     }
@@ -304,7 +304,7 @@ static XrValue csv_parse_tsv(XrayIsolate *X, XrValue *args, int argc) {
 }
 
 // parseAuto(str) - auto-detect delimiter
-static XrValue csv_parse_auto(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue csv_parse_auto(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1 || !XR_IS_STRING(args[0])) {
         return xr_value_from_array(xr_array_new(xr_current_coro(X)));
     }
@@ -333,7 +333,7 @@ static XrValue csv_parse_auto(XrayIsolate *X, XrValue *args, int argc) {
 }
 
 // stringify(data) or stringify(data, config)
-static XrValue csv_stringify(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue csv_stringify(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1 || !XR_IS_ARRAY(args[0])) {
         return xr_string_value(xr_string_intern(X, "", 0, 0));
     }
@@ -395,7 +395,7 @@ static XrValue csv_stringify(XrayIsolate *X, XrValue *args, int argc) {
 
 // parseFile(path) or parseFile(path, config).
 // Synchronous; see stdlib/common_io.h for the P9 async plan.
-static XrValue csv_parse_file(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue csv_parse_file(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1 || !XR_IS_STRING(args[0])) {
         return xr_value_from_array(xr_array_new(xr_current_coro(X)));
     }
@@ -428,7 +428,7 @@ static XrValue csv_parse_file(XrayIsolate *X, XrValue *args, int argc) {
 
 // writeFile(path, data) or writeFile(path, data, config).
 // Synchronous; see stdlib/common_io.h for the P9 async plan.
-static XrValue csv_write_file(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue csv_write_file(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 2 || !XR_IS_STRING(args[0]) || !XR_IS_ARRAY(args[1])) {
         return xr_bool(false);
     }
@@ -471,7 +471,7 @@ XR_DEFINE_BUILTIN(csv_write_file, "writeFile",
                   "(path: string, data: Array<Array<string>>, options?: Json): bool",
                   "Write CSV file")
 
-XR_FUNC XrModule *xr_load_module_csv(XrayIsolate *isolate) {
+XR_FUNC XrModule *xr_load_module_csv(XrVMRuntime *isolate) {
     XrModule *mod = xr_module_create_native(isolate, "csv");
     if (!mod)
         return NULL;

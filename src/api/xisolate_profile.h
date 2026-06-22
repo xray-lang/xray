@@ -8,7 +8,7 @@
  * xisolate_profile.h - Profile-based isolate creation
  *
  * KEY CONCEPT:
- *   Replaces scattered XrayIsolateParams setup across CLI subcommands and
+ *   Replaces scattered XrVMConfig setup across CLI subcommands and
  *   MCP server with a single full-VM factory. Callers can override individual
  *   fields (trace, workers) before calling xr_isolate_profile_create().
  *
@@ -20,7 +20,7 @@
 #define XISOLATE_PROFILE_H
 
 #include "../base/xdefs.h"
-#include "xray_isolate.h"
+#include "xray_vm.h"
 
 /* ========== Isolate Profiles ========== */
 
@@ -35,16 +35,16 @@ typedef enum {
 
 /* Initialize params for the given profile.
  * Caller can then override fields before calling xr_isolate_profile_create(). */
-XR_FUNC void xr_isolate_profile_params(XrIsolateProfile profile, XrayIsolateParams *out);
+XR_FUNC void xr_isolate_profile_params(XrIsolateProfile profile, XrVMConfig *out);
 
 /* Create isolate from pre-configured params.
- * Thin wrapper: calls xray_isolate_new and logs error on failure.
+ * Thin wrapper: calls xray_vm_new and logs error on failure.
  * Returns NULL on failure. */
-XR_FUNC XrayIsolate *xr_isolate_profile_create(const XrayIsolateParams *params);
+XR_FUNC XrVMRuntime *xr_isolate_profile_create(const XrVMConfig *params);
 
 /* Convenience: init params for profile + create in one call.
  * Equivalent to xr_isolate_profile_params + xr_isolate_profile_create.
  * For simple cases where no override is needed. */
-XR_FUNC XrayIsolate *xr_isolate_profile_new(XrIsolateProfile profile);
+XR_FUNC XrVMRuntime *xr_isolate_profile_new(XrIsolateProfile profile);
 
 #endif  // XISOLATE_PROFILE_H

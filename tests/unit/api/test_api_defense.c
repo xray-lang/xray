@@ -8,27 +8,27 @@
  * test_api_defense.c - Unit tests for API boundary defense
  *
  * KEY CONCEPT:
- *   Verifies that all public API functions (xray_isolate_*, xray_alloc, etc.)
+ *   Verifies that all public API functions (xray_vm_*, xray_alloc, etc.)
  *   gracefully handle NULL parameters without crashing.
  *   In Release builds, these return early with safe defaults.
  *   In Debug builds, XR_DCHECK fires before the early return.
  */
 
 #include "../test_framework.h"
-#include "xray_isolate.h"
+#include "xray_vm.h"
 #include <stddef.h>
 
 /* ========== Isolate Lifecycle NULL Safety ========== */
 
 TEST(api_isolate_delete_null) {
-    // xray_isolate_delete(NULL) should be safe (no-op)
-    xray_isolate_delete(NULL);
+    // xray_vm_delete(NULL) should be safe (no-op)
+    xray_vm_delete(NULL);
     ASSERT_TRUE(1);  // survived without crash
 }
 
 TEST(api_isolate_params_init_null) {
-    // xray_isolate_params_init(NULL) should be safe
-    xray_isolate_params_init(NULL);
+    // xray_vm_config_init(NULL) should be safe
+    xray_vm_config_init(NULL);
     ASSERT_TRUE(1);
 }
 
@@ -47,7 +47,7 @@ TEST(api_isolate_dostring_null_isolate) {
         ASSERT_TRUE(1);
         return;
     }
-    int result = xray_isolate_dostring(NULL, "print(1)");
+    int result = xray_vm_dostring(NULL, "print(1)");
     ASSERT_EQ_INT(result, -1);
 }
 
@@ -57,18 +57,18 @@ TEST(api_isolate_dostring_null_source) {
         return;
     }
     // Need a valid isolate to test NULL source
-    XrayIsolateParams params;
-    xray_isolate_params_init(&params);
-    XrayIsolate *iso = xray_isolate_new(&params);
+    XrVMConfig params;
+    xray_vm_config_init(&params);
+    XrVMRuntime *iso = xray_vm_new(&params);
     if (!iso) {
         ASSERT_TRUE(1);
         return;
     }  // alloc failure
 
-    int result = xray_isolate_dostring(iso, NULL);
+    int result = xray_vm_dostring(iso, NULL);
     ASSERT_EQ_INT(result, -1);
 
-    xray_isolate_delete(iso);
+    xray_vm_delete(iso);
 }
 
 TEST(api_isolate_dofile_null_isolate) {
@@ -76,7 +76,7 @@ TEST(api_isolate_dofile_null_isolate) {
         ASSERT_TRUE(1);
         return;
     }
-    int result = xray_isolate_dofile(NULL, "test.xr");
+    int result = xray_vm_dofile(NULL, "test.xr");
     ASSERT_EQ_INT(result, -1);
 }
 
@@ -85,18 +85,18 @@ TEST(api_isolate_dofile_null_filename) {
         ASSERT_TRUE(1);
         return;
     }
-    XrayIsolateParams params;
-    xray_isolate_params_init(&params);
-    XrayIsolate *iso = xray_isolate_new(&params);
+    XrVMConfig params;
+    xray_vm_config_init(&params);
+    XrVMRuntime *iso = xray_vm_new(&params);
     if (!iso) {
         ASSERT_TRUE(1);
         return;
     }
 
-    int result = xray_isolate_dofile(iso, NULL);
+    int result = xray_vm_dofile(iso, NULL);
     ASSERT_EQ_INT(result, -1);
 
-    xray_isolate_delete(iso);
+    xray_vm_delete(iso);
 }
 
 /* ========== Advanced API NULL Safety ========== */
@@ -106,7 +106,7 @@ TEST(api_isolate_get_backend_null) {
         ASSERT_TRUE(1);
         return;
     }
-    int backend = xray_isolate_get_backend(NULL);
+    int backend = xray_vm_get_backend(NULL);
     ASSERT_EQ_INT(backend, 0);
 }
 
@@ -116,7 +116,7 @@ TEST(api_isolate_set_userdata_null) {
         return;
     }
     // Should not crash
-    xray_isolate_set_userdata(NULL, (void *) 0x1234);
+    xray_vm_set_userdata(NULL, (void *) 0x1234);
     ASSERT_TRUE(1);
 }
 
@@ -125,7 +125,7 @@ TEST(api_isolate_get_userdata_null) {
         ASSERT_TRUE(1);
         return;
     }
-    void *ud = xray_isolate_get_userdata(NULL);
+    void *ud = xray_vm_get_userdata(NULL);
     ASSERT_NULL(ud);
 }
 
@@ -136,7 +136,7 @@ TEST(api_isolate_get_stats_null) {
     }
     size_t bytes = 999;
     int cycle_count = 999;
-    xray_isolate_get_stats(NULL, &bytes, &cycle_count);
+    xray_vm_get_stats(NULL, &bytes, &cycle_count);
     // After NULL guard returns early, values should be unchanged
     ASSERT_EQ_UINT(bytes, 999);
     ASSERT_EQ_INT(cycle_count, 999);
@@ -147,7 +147,7 @@ TEST(api_isolate_collect_garbage_null) {
         ASSERT_TRUE(1);
         return;
     }
-    xray_isolate_collect_garbage(NULL);
+    xray_vm_collect_cycles(NULL);
     ASSERT_TRUE(1);
 }
 
@@ -156,7 +156,7 @@ TEST(api_isolate_set_trace_null) {
         ASSERT_TRUE(1);
         return;
     }
-    xray_isolate_set_trace(NULL, true);
+    xray_vm_set_trace(NULL, true);
     ASSERT_TRUE(1);
 }
 
@@ -165,50 +165,50 @@ TEST(api_isolate_set_dump_bytecode_null) {
         ASSERT_TRUE(1);
         return;
     }
-    xray_isolate_set_dump_bytecode(NULL, true);
+    xray_vm_set_dump_bytecode(NULL, true);
     ASSERT_TRUE(1);
 }
 
 /* ========== Isolate Lifecycle (valid) ========== */
 
 TEST(api_isolate_create_destroy) {
-    XrayIsolateParams params;
-    xray_isolate_params_init(&params);
+    XrVMConfig params;
+    xray_vm_config_init(&params);
 
-    XrayIsolate *iso = xray_isolate_new(&params);
+    XrVMRuntime *iso = xray_vm_new(&params);
     ASSERT_NOT_NULL(iso);
 
-    xray_isolate_delete(iso);
+    xray_vm_delete(iso);
 }
 
 TEST(api_isolate_userdata_roundtrip) {
-    XrayIsolateParams params;
-    xray_isolate_params_init(&params);
-    XrayIsolate *iso = xray_isolate_new(&params);
+    XrVMConfig params;
+    xray_vm_config_init(&params);
+    XrVMRuntime *iso = xray_vm_new(&params);
     ASSERT_NOT_NULL(iso);
 
     void *data = (void *) 0xDEADBEEF;
-    xray_isolate_set_userdata(iso, data);
-    void *got = xray_isolate_get_userdata(iso);
+    xray_vm_set_userdata(iso, data);
+    void *got = xray_vm_get_userdata(iso);
     ASSERT_EQ_PTR(got, data);
 
-    xray_isolate_delete(iso);
+    xray_vm_delete(iso);
 }
 
 TEST(api_isolate_stats_valid) {
-    XrayIsolateParams params;
-    xray_isolate_params_init(&params);
-    XrayIsolate *iso = xray_isolate_new(&params);
+    XrVMConfig params;
+    xray_vm_config_init(&params);
+    XrVMRuntime *iso = xray_vm_new(&params);
     ASSERT_NOT_NULL(iso);
 
     size_t bytes = 0;
     int cycle_count = -1;
-    xray_isolate_get_stats(iso, &bytes, &cycle_count);
+    xray_vm_get_stats(iso, &bytes, &cycle_count);
     // After creation, some memory should be allocated
     ASSERT_GE(bytes, 0);
     ASSERT_GE(cycle_count, 0);
 
-    xray_isolate_delete(iso);
+    xray_vm_delete(iso);
 }
 
 /* ========== Main ========== */

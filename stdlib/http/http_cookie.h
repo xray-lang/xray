@@ -22,7 +22,7 @@
 #include <time.h>
 
 // Forward declaration
-typedef struct XrayIsolate XrayIsolate;
+typedef struct XrVMRuntime XrVMRuntime;
 
 /* ========== Cookie Structure ========== */
 
@@ -142,16 +142,16 @@ XR_FUNC void xr_cookie_jar_clear(XrCookieJar *jar);
 /*
  * Get Isolate's cookie jar (auto-create)
  */
-XR_FUNC XrCookieJar *xr_get_cookie_jar(XrayIsolate *X);
+XR_FUNC XrCookieJar *xr_get_cookie_jar(XrVMRuntime *X);
 
 /*
  * Set whether cookie jar is enabled
  */
-XR_FUNC void xr_set_cookie_jar_enabled(XrayIsolate *X, bool enabled);
+XR_FUNC void xr_set_cookie_jar_enabled(XrVMRuntime *X, bool enabled);
 
 /*
  * Check if cookie jar is enabled
  */
-XR_FUNC bool xr_is_cookie_jar_enabled(XrayIsolate *X);
+XR_FUNC bool xr_is_cookie_jar_enabled(XrVMRuntime *X);
 
 #endif

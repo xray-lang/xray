@@ -79,15 +79,15 @@ typedef struct XrLoggerBody {
 
 /* ========== Type Check ========== */
 
-XR_FUNC bool xr_value_is_logger(struct XrayIsolate *X, XrValue v);
-XR_FUNC XrLogger *xr_value_get_logger(struct XrayIsolate *X, XrValue v);
+XR_FUNC bool xr_value_is_logger(struct XrVMRuntime *X, XrValue v);
+XR_FUNC XrLogger *xr_value_get_logger(struct XrVMRuntime *X, XrValue v);
 
 /* ========== Class Registration ========== */
 
-XR_FUNC void xr_register_logger_class(struct XrayIsolate *X);
+XR_FUNC void xr_register_logger_class(struct XrVMRuntime *X);
 
 /* ========== Module Loader ========== */
 
-XR_FUNC struct XrModule *xr_load_module_log(struct XrayIsolate *isolate);
+XR_FUNC struct XrModule *xr_load_module_log(struct XrVMRuntime *isolate);
 
 #endif  // XR_STDLIB_LOG_H

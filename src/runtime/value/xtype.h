@@ -345,27 +345,27 @@ typedef enum XrTypeRelation {
 } XrTypeRelation;
 
 // API: Type creation
-XR_FUNC XrType *xr_type_new(XrayIsolate *X, XrTypeKind kind);
-XR_FUNC XrType *xr_type_new_int(XrayIsolate *X);
-XR_FUNC XrType *xr_type_new_float(XrayIsolate *X);
-XR_FUNC XrType *xr_type_new_string(XrayIsolate *X);
-XR_FUNC XrType *xr_type_new_bool(XrayIsolate *X);
-XR_FUNC XrType *xr_type_new_null(XrayIsolate *X);
-XR_FUNC XrType *xr_type_new_unknown(XrayIsolate *X);
-XR_FUNC XrType *xr_type_new_never(XrayIsolate *X);
+XR_FUNC XrType *xr_type_new(XrVMRuntime *X, XrTypeKind kind);
+XR_FUNC XrType *xr_type_new_int(XrVMRuntime *X);
+XR_FUNC XrType *xr_type_new_float(XrVMRuntime *X);
+XR_FUNC XrType *xr_type_new_string(XrVMRuntime *X);
+XR_FUNC XrType *xr_type_new_bool(XrVMRuntime *X);
+XR_FUNC XrType *xr_type_new_null(XrVMRuntime *X);
+XR_FUNC XrType *xr_type_new_unknown(XrVMRuntime *X);
+XR_FUNC XrType *xr_type_new_never(XrVMRuntime *X);
 // Unit type singleton (XR_KIND_UNIT, spelled `()` in user syntax). The
 // canonical "no meaningful value" type used for functions that return
 // nothing and for the empty tuple literal.
-XR_FUNC XrType *xr_type_new_unit(XrayIsolate *X);
+XR_FUNC XrType *xr_type_new_unit(XrVMRuntime *X);
 
 // API: Native-width types (int8/16/32/64, uint8/16/32/64, float32/64)
-XR_FUNC XrType *xr_type_new_int_width(XrayIsolate *X, int width);    // XrNativeType value
-XR_FUNC XrType *xr_type_new_float_width(XrayIsolate *X, int width);  // XrNativeType value
+XR_FUNC XrType *xr_type_new_int_width(XrVMRuntime *X, int width);    // XrNativeType value
+XR_FUNC XrType *xr_type_new_float_width(XrVMRuntime *X, int width);  // XrNativeType value
 
 // API: FFI raw pointer type. element_type = pointee (T), is_mut selects
 // RawMut<T> (true) vs RawPtr<T> (false, const). Address-width int at the value
 // level; the GC never scans it.
-XR_FUNC XrType *xr_type_new_pointer(XrayIsolate *X, XrType *element_type, bool is_mut);
+XR_FUNC XrType *xr_type_new_pointer(XrVMRuntime *X, XrType *element_type, bool is_mut);
 
 // API: Derive XrSlotType from XrType for the unified type pipeline.
 // Returns the storage slot type — used by GC scanning and AOT codegen.
@@ -503,50 +503,50 @@ static inline uint8_t xr_type_element_gc_tag(XrType *type) {
 }
 
 // API: Container types
-XR_FUNC XrType *xr_type_new_array(XrayIsolate *X, XrType *element_type);
-XR_FUNC XrType *xr_type_new_map(XrayIsolate *X, XrType *key_type, XrType *value_type);
-XR_FUNC XrType *xr_type_new_set(XrayIsolate *X, XrType *element_type);
-XR_FUNC XrType *xr_type_new_channel(XrayIsolate *X, XrType *element_type);
-XR_FUNC XrType *xr_type_new_task(XrayIsolate *X, XrType *result_type);
+XR_FUNC XrType *xr_type_new_array(XrVMRuntime *X, XrType *element_type);
+XR_FUNC XrType *xr_type_new_map(XrVMRuntime *X, XrType *key_type, XrType *value_type);
+XR_FUNC XrType *xr_type_new_set(XrVMRuntime *X, XrType *element_type);
+XR_FUNC XrType *xr_type_new_channel(XrVMRuntime *X, XrType *element_type);
+XR_FUNC XrType *xr_type_new_task(XrVMRuntime *X, XrType *result_type);
 
 // API: Object types
-XR_FUNC XrType *xr_type_new_json(XrayIsolate *X);
-XR_FUNC XrType *xr_type_new_json_with_fields(XrayIsolate *X, const char **names, XrType **types,
+XR_FUNC XrType *xr_type_new_json(XrVMRuntime *X);
+XR_FUNC XrType *xr_type_new_json_with_fields(XrVMRuntime *X, const char **names, XrType **types,
                                              int count, bool is_sealed);
-XR_FUNC void xr_type_set_json_field_readonly(XrayIsolate *X, XrType *type, const bool *readonly,
+XR_FUNC void xr_type_set_json_field_readonly(XrVMRuntime *X, XrType *type, const bool *readonly,
                                              int count);
-XR_FUNC void xr_type_set_json_type_name(XrayIsolate *X, XrType *type, const char *name);
-XR_FUNC XrType *xr_type_new_class(XrayIsolate *X, const char *class_name);
-XR_FUNC XrType *xr_type_new_interface(XrayIsolate *X, const char *interface_name);
-XR_FUNC XrType *xr_type_new_generic_interface(XrayIsolate *X, const char *interface_name,
+XR_FUNC void xr_type_set_json_type_name(XrVMRuntime *X, XrType *type, const char *name);
+XR_FUNC XrType *xr_type_new_class(XrVMRuntime *X, const char *class_name);
+XR_FUNC XrType *xr_type_new_interface(XrVMRuntime *X, const char *interface_name);
+XR_FUNC XrType *xr_type_new_generic_interface(XrVMRuntime *X, const char *interface_name,
                                               XrType **type_args, int type_arg_count);
-XR_FUNC XrType *xr_type_new_instance(XrayIsolate *X, XrClassInfo *class_info);
-XR_FUNC XrType *xr_type_new_generic_instance(XrayIsolate *X, const char *class_name,
+XR_FUNC XrType *xr_type_new_instance(XrVMRuntime *X, XrClassInfo *class_info);
+XR_FUNC XrType *xr_type_new_generic_instance(XrVMRuntime *X, const char *class_name,
                                              XrClassInfo *class_info, XrType **type_args,
                                              int type_arg_count);
-XR_FUNC XrType *xr_type_new_bigint(XrayIsolate *X);
-XR_FUNC XrType *xr_type_new_datetime(XrayIsolate *X);
-XR_FUNC XrType *xr_type_new_bytes(XrayIsolate *X);
-XR_FUNC XrType *xr_type_new_regex(XrayIsolate *X);
-XR_FUNC XrType *xr_type_new_stringbuilder(XrayIsolate *X);
+XR_FUNC XrType *xr_type_new_bigint(XrVMRuntime *X);
+XR_FUNC XrType *xr_type_new_datetime(XrVMRuntime *X);
+XR_FUNC XrType *xr_type_new_bytes(XrVMRuntime *X);
+XR_FUNC XrType *xr_type_new_regex(XrVMRuntime *X);
+XR_FUNC XrType *xr_type_new_stringbuilder(XrVMRuntime *X);
 XR_FUNC XrType *
-xr_type_new_named_instance(XrayIsolate *X,
+xr_type_new_named_instance(XrVMRuntime *X,
                            const char *name);  // generic named class (Exception/Range/etc)
-XR_FUNC XrType *xr_type_new_enum(XrayIsolate *X, const char *enum_name);
+XR_FUNC XrType *xr_type_new_enum(XrVMRuntime *X, const char *enum_name);
 
 // API: Optional type (T?)
-XR_FUNC XrType *xr_type_new_optional(XrayIsolate *X, XrType *base_type);
+XR_FUNC XrType *xr_type_new_optional(XrVMRuntime *X, XrType *base_type);
 XR_FUNC XrType *xr_type_get_base(XrType *optional_type);
 
 // API: Type parameter (for generics)
-XR_FUNC XrType *xr_type_new_type_param(XrayIsolate *X, const char *name, int id);
-XR_FUNC XrType *xr_type_new_type_param_constrained(XrayIsolate *X, const char *name, int id,
+XR_FUNC XrType *xr_type_new_type_param(XrVMRuntime *X, const char *name, int id);
+XR_FUNC XrType *xr_type_new_type_param_constrained(XrVMRuntime *X, const char *name, int id,
                                                    XrType *constraint);
 
 // API: Function type
-XR_FUNC XrType *xr_type_new_function(XrayIsolate *X, XrType **param_types, int param_count,
+XR_FUNC XrType *xr_type_new_function(XrVMRuntime *X, XrType **param_types, int param_count,
                                      XrType *return_type, bool is_variadic);
-XR_FUNC void xr_type_set_function_type_params(XrayIsolate *X, XrType *type, const char **names,
+XR_FUNC void xr_type_set_function_type_params(XrVMRuntime *X, XrType *type, const char **names,
                                               XrType ***constraint_lists,
                                               const int *constraint_counts, int count);
 
@@ -556,17 +556,17 @@ XR_FUNC XrErrorSet *xr_type_get_error_set(const XrType *func_type);
 XR_FUNC bool xr_type_is_fallible(const XrType *func_type);
 
 // API: Tuple type (for multi-value return)
-XR_FUNC XrType *xr_type_new_tuple(XrayIsolate *X, XrType **element_types, int count);
+XR_FUNC XrType *xr_type_new_tuple(XrVMRuntime *X, XrType **element_types, int count);
 XR_FUNC int xr_type_tuple_count(XrType *type);
 XR_FUNC XrType *xr_type_tuple_get(XrType *type, int index);
 
 // API: Union type construction and operations
-XR_FUNC XrType *xr_type_new_union(XrayIsolate *X, XrType **members, int count);
-XR_FUNC XrType *xr_type_union(XrayIsolate *X, XrType *a, XrType *b);
+XR_FUNC XrType *xr_type_new_union(XrVMRuntime *X, XrType **members, int count);
+XR_FUNC XrType *xr_type_union(XrVMRuntime *X, XrType *a, XrType *b);
 XR_FUNC int xr_type_union_count(XrType *type);
 XR_FUNC XrType *xr_type_union_member(XrType *type, int index);
 XR_FUNC bool xr_type_union_contains(XrType *type, XrTypeKind kind);
-XR_FUNC XrType *xr_type_union_remove(XrayIsolate *X, XrType *type, XrTypeKind kind);
+XR_FUNC XrType *xr_type_union_remove(XrVMRuntime *X, XrType *type, XrTypeKind kind);
 
 // Whether a type's value domain natively includes null, as a property
 // distinct from the `is_nullable` decoration.
@@ -704,20 +704,20 @@ static inline bool xr_type_is_json_field_compatible(XrType *type) {
 }
 
 // API: Fixed-length array ([N]T - compile-time length, runtime Array<T>)
-XR_FUNC XrType *xr_type_new_fixed_array(XrayIsolate *X, XrType *element_type, int length);
+XR_FUNC XrType *xr_type_new_fixed_array(XrVMRuntime *X, XrType *element_type, int length);
 
 // API: Type operations
-XR_FUNC XrType *xr_type_copy(XrayIsolate *X, XrType *type);
+XR_FUNC XrType *xr_type_copy(XrVMRuntime *X, XrType *type);
 XR_FUNC bool xr_type_assignable(XrType *target, XrType *source);
 XR_FUNC bool xr_type_equals(XrType *a, XrType *b);
 
 // API: Nullable operations (safe for singletons - copies if frozen)
-XR_FUNC XrType *xr_type_make_nullable(XrayIsolate *X, XrType *type);
+XR_FUNC XrType *xr_type_make_nullable(XrVMRuntime *X, XrType *type);
 
 // API: Type narrowing
-XR_FUNC XrType *xr_type_filter(XrayIsolate *X, XrType *type, XrTypeKind kind);
-XR_FUNC XrType *xr_type_exclude(XrayIsolate *X, XrType *type, XrTypeKind kind);
-XR_FUNC XrType *xr_type_non_nullable(XrayIsolate *X, XrType *type);
+XR_FUNC XrType *xr_type_filter(XrVMRuntime *X, XrType *type, XrTypeKind kind);
+XR_FUNC XrType *xr_type_exclude(XrVMRuntime *X, XrType *type, XrTypeKind kind);
+XR_FUNC XrType *xr_type_non_nullable(XrVMRuntime *X, XrType *type);
 
 // API: Type utilities
 XR_FUNC const char *xr_type_to_string(XrType *type);
@@ -736,7 +736,7 @@ XR_FUNC bool xr_type_is_default_initializable(const XrType *type);
 
 // API: Immutability
 XR_FUNC bool xr_type_is_const(XrType *type);
-XR_FUNC XrType *xr_type_make_const(XrayIsolate *X, XrType *base);
+XR_FUNC XrType *xr_type_make_const(XrVMRuntime *X, XrType *base);
 
 // API: Structural compatibility (for JSON objects)
 XR_FUNC XrType *xr_type_object_get_field(XrType *type, const char *field_name);
@@ -748,7 +748,7 @@ XR_FUNC bool xr_type_satisfies_constraint(XrType *type, XrType *constraint);
 // Substitute type parameters with actual types
 // e.g., substitute(T, ["T"], [int]) = int
 //       substitute(Array<T>, ["T"], [int]) = Array<int>
-XR_FUNC XrType *xr_type_substitute(XrayIsolate *X, XrType *type, const char **param_names,
+XR_FUNC XrType *xr_type_substitute(XrVMRuntime *X, XrType *type, const char **param_names,
                                    XrType **actual_types, int count);
 
 // API: Initialize process-level type singletons (call once at startup)
@@ -798,7 +798,7 @@ static inline XrType **xr_type_get_param_types(XrType *t) {
 
 // Convert XrSlotType to XrType* singleton. Returns NULL for ANY/unknown.
 // Singletons are global read-only; X is passed for API consistency.
-static inline XrType *xr_slot_type_to_type(XrayIsolate *X, uint8_t slot_type) {
+static inline XrType *xr_slot_type_to_type(XrVMRuntime *X, uint8_t slot_type) {
     switch (slot_type) {
         case XR_SLOT_I64:
             return xr_type_new_int(X);

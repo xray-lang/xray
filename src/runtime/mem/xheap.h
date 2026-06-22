@@ -42,10 +42,10 @@
 
 // Forward declarations
 struct XrCoroutine;
-struct XrayIsolate;
+struct XrVMRuntime;
 
 XR_FUNC void *xr_alloc(struct XrCoroutine *coro, size_t size, uint8_t type);
-XR_FUNC struct XrCoroutine *xr_current_coro(struct XrayIsolate *X);
+XR_FUNC struct XrCoroutine *xr_current_coro(struct XrVMRuntime *X);
 
 /* ========== Debug ========== */
 

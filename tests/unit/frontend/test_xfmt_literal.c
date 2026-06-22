@@ -29,17 +29,17 @@
 #include "frontend/parser/xast_nodes.h"
 #include "frontend/format/xfmt.h"
 #include "xray.h"
-#include "xray_isolate.h"
+#include "xray_vm.h"
 #include "base/xmalloc.h"
 #include "toolchain/xcompiler_session.h"
 
 /* ========== Test infrastructure ========== */
 
-static XrayIsolate *X = NULL;
+static XrVMRuntime *X = NULL;
 static XrCompilerSession *X_session = NULL;
 
 static void setup(void) {
-    X = xray_isolate_new(NULL);
+    X = xray_vm_new(NULL);
     ASSERT_NOT_NULL(X);
     XrCompilerSessionConfig cfg = {.vm_host = X};
     X_session = xr_compiler_session_new(&cfg);
@@ -53,7 +53,7 @@ static void teardown(void) {
         X_session = NULL;
     }
     if (X) {
-        xray_isolate_delete(X);
+        xray_vm_delete(X);
         X = NULL;
     }
 }

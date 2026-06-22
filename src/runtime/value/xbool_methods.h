@@ -34,7 +34,7 @@ extern "C" {
  * pointer to an interned XrString, so it is safe to keep across GC
  * safepoints.
  */
-static inline XrValue xr_bool_to_string(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static inline XrValue xr_bool_to_string(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) args;
     (void) argc;
     XR_DCHECK(iso != NULL, "xr_bool_to_string: NULL isolate");
@@ -42,8 +42,8 @@ static inline XrValue xr_bool_to_string(XrayIsolate *iso, XrValue self, XrValue 
                             : xr_string_value(xr_string_intern(iso, "false", 5, 0));
 }
 
-struct XrayIsolate;
-XR_FUNC void xr_bool_register_native_type(struct XrayIsolate *isolate);
+struct XrVMRuntime;
+XR_FUNC void xr_bool_register_native_type(struct XrVMRuntime *isolate);
 
 #ifdef __cplusplus
 }

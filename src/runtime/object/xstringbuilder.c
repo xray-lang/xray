@@ -26,7 +26,7 @@
 
 XrStringBuilder *xr_stringbuilder_new(struct XrCoroutine *coro) {
     XR_DCHECK(coro != NULL, "stringbuilder_new: NULL coro");
-    XrayIsolate *X = xr_coro_vm_owner(coro);
+    XrVMRuntime *X = xr_coro_vm_owner(coro);
     XrClass *cls = xr_isolate_get_core_classes(X)->stringBuilderClass;
     XR_DCHECK(cls != NULL, "stringbuilder_new: NULL stringBuilderClass");
 
@@ -163,7 +163,7 @@ static void stringbuilder_body_destroy(void *body) {
 }
 
 // to_shared hook: allocate a fresh buffer on the shared heap and copy content
-static bool stringbuilder_body_to_shared(XrayIsolate *X, XrInstance *src, XrInstance *dst) {
+static bool stringbuilder_body_to_shared(XrVMRuntime *X, XrInstance *src, XrInstance *dst) {
     (void) X;
     XrStringBuilder *src_sb = (XrStringBuilder *) src;
     XrStringBuilder *dst_sb = (XrStringBuilder *) dst;

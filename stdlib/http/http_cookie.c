@@ -493,7 +493,7 @@ void xr_cookie_jar_clear(XrCookieJar *jar) {
 
 /* ========== Cookie Jar (managed via XrHttpContext) ========== */
 
-XrCookieJar *xr_get_cookie_jar(XrayIsolate *X) {
+XrCookieJar *xr_get_cookie_jar(XrVMRuntime *X) {
     XrHttpContext *ctx = xr_http_get_context(X);
     if (!ctx)
         return NULL;
@@ -504,7 +504,7 @@ XrCookieJar *xr_get_cookie_jar(XrayIsolate *X) {
     return ctx->cookie_jar;
 }
 
-void xr_set_cookie_jar_enabled(XrayIsolate *X, bool enabled) {
+void xr_set_cookie_jar_enabled(XrVMRuntime *X, bool enabled) {
     XrHttpContext *ctx = xr_http_get_context(X);
     if (!ctx)
         return;
@@ -516,7 +516,7 @@ void xr_set_cookie_jar_enabled(XrayIsolate *X, bool enabled) {
     }
 }
 
-bool xr_is_cookie_jar_enabled(XrayIsolate *X) {
+bool xr_is_cookie_jar_enabled(XrVMRuntime *X) {
     XrHttpContext *ctx = xr_http_get_context(X);
     return ctx ? ctx->cookie_jar_enabled : false;
 }

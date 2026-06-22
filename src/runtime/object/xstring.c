@@ -73,7 +73,7 @@ void xr_string_pool_free_internal(XrStringPool *pool) {
 /* ========== String Creation ========== */
 
 // Allocate string object on coroutine heap (shared by both paths)
-static XrString *string_alloc(XrayIsolate *iso, const char *chars, size_t length) {
+static XrString *string_alloc(XrVMRuntime *iso, const char *chars, size_t length) {
     if (length > UINT32_MAX)
         return NULL;
 
@@ -93,7 +93,7 @@ static XrString *string_alloc(XrayIsolate *iso, const char *chars, size_t length
 }
 
 // Create non-interned string (lazy hash: computed on first use)
-XrString *xr_string_new(XrayIsolate *iso, const char *chars, size_t length) {
+XrString *xr_string_new(XrVMRuntime *iso, const char *chars, size_t length) {
     XR_DCHECK(iso != NULL, "string_new: NULL isolate");
     XR_DCHECK(length == 0 || chars != NULL, "string_new: NULL chars with length > 0");
     XrString *str = string_alloc(iso, chars, length);
@@ -103,7 +103,7 @@ XrString *xr_string_new(XrayIsolate *iso, const char *chars, size_t length) {
     return str;
 }
 
-XrString *xr_string_concat(XrayIsolate *iso, XrString *a, XrString *b) {
+XrString *xr_string_concat(XrVMRuntime *iso, XrString *a, XrString *b) {
     XR_DCHECK(iso != NULL, "string_concat: NULL isolate");
     if (!a || !b)
         return NULL;
@@ -184,7 +184,7 @@ XrString *xr_string_intern_core(XrRuntimeCore *core, const char *chars, size_t l
     return str;
 }
 
-XrString *xr_string_intern(XrayIsolate *iso, const char *chars, size_t length, uint32_t hash) {
+XrString *xr_string_intern(XrVMRuntime *iso, const char *chars, size_t length, uint32_t hash) {
     if (!iso) {
         xr_log_warning("string", "string_intern: isolate is NULL");
         abort();
@@ -243,7 +243,7 @@ static inline int fast_int_to_str(xr_Integer i, char *buffer) {
 }
 
 // Create string from integer
-XrString *xr_string_from_int(XrayIsolate *iso, xr_Integer i) {
+XrString *xr_string_from_int(XrVMRuntime *iso, xr_Integer i) {
     XR_DCHECK(iso != NULL, "string_from_int: NULL isolate");
     char buffer[32];
     int len = fast_int_to_str(i, buffer);
@@ -252,7 +252,7 @@ XrString *xr_string_from_int(XrayIsolate *iso, xr_Integer i) {
 
 // Create string from float
 // Guarantees a decimal point so 0.0 prints as "0.0", not "0".
-XrString *xr_string_from_float(XrayIsolate *iso, xr_Number n) {
+XrString *xr_string_from_float(XrVMRuntime *iso, xr_Number n) {
     XR_DCHECK(iso != NULL, "string_from_float: NULL isolate");
     char buffer[64];
     int len = xr_format_float(buffer, sizeof(buffer), n);
@@ -323,7 +323,7 @@ int xr_string_compare(XrString *a, XrString *b) {
 /* ========== String Basic Methods ========== */
 
 // charAt - get character at position (supports negative index)
-XrString *xr_string_char_at(XrayIsolate *iso, XrString *str, xr_Integer index) {
+XrString *xr_string_char_at(XrVMRuntime *iso, XrString *str, xr_Integer index) {
     XR_DCHECK(iso != NULL, "string_char_at: NULL isolate");
     if (str == NULL || str->length == 0)
         return NULL;
@@ -343,7 +343,7 @@ XrString *xr_string_char_at(XrayIsolate *iso, XrString *str, xr_Integer index) {
 }
 
 // substring - extract substring
-XrString *xr_string_substring(XrayIsolate *iso, XrString *str, xr_Integer start, xr_Integer end) {
+XrString *xr_string_substring(XrVMRuntime *iso, XrString *str, xr_Integer start, xr_Integer end) {
     XR_DCHECK(iso != NULL, "string_substring: NULL isolate");
     if (str == NULL)
         return NULL;
@@ -365,7 +365,7 @@ XrString *xr_string_substring(XrayIsolate *iso, XrString *str, xr_Integer start,
 }
 
 // slice - slice with negative index support
-XrString *xr_string_slice(XrayIsolate *iso, XrString *str, xr_Integer start, xr_Integer end) {
+XrString *xr_string_slice(XrVMRuntime *iso, XrString *str, xr_Integer start, xr_Integer end) {
     if (!iso || !str)
         return NULL;
 
@@ -401,7 +401,7 @@ XrString *xr_string_slice(XrayIsolate *iso, XrString *str, xr_Integer start, xr_
 
 // indexOf - find substring position
 // Tiered optimization: single char (memchr), short pattern (<=8), long pattern (Horspool)
-xr_Integer xr_string_index_of(XrayIsolate *iso, XrString *str, XrString *substr) {
+xr_Integer xr_string_index_of(XrVMRuntime *iso, XrString *str, XrString *substr) {
     (void) iso;
     if (str == NULL || substr == NULL)
         return -1;
@@ -474,7 +474,7 @@ xr_Integer xr_string_index_of(XrayIsolate *iso, XrString *str, XrString *substr)
 }
 
 // size - get string length
-int xr_string_size(XrayIsolate *iso, XrString *str) {
+int xr_string_size(XrVMRuntime *iso, XrString *str) {
     (void) iso;
     if (!str)
         return 0;
@@ -482,7 +482,7 @@ int xr_string_size(XrayIsolate *iso, XrString *str) {
 }
 
 // isEmpty - check if string is empty
-bool xr_string_is_empty(XrayIsolate *iso, XrString *str) {
+bool xr_string_is_empty(XrVMRuntime *iso, XrString *str) {
     (void) iso;
     if (!str)
         return true;
@@ -490,12 +490,12 @@ bool xr_string_is_empty(XrayIsolate *iso, XrString *str) {
 }
 
 // has - check if contains substring
-bool xr_string_has(XrayIsolate *iso, XrString *str, XrString *substr) {
+bool xr_string_has(XrVMRuntime *iso, XrString *str, XrString *substr) {
     return xr_string_index_of(iso, str, substr) >= 0;
 }
 
 // startsWith - check prefix
-bool xr_string_starts_with(XrayIsolate *iso, XrString *str, XrString *prefix) {
+bool xr_string_starts_with(XrVMRuntime *iso, XrString *str, XrString *prefix) {
     (void) iso;
     if (str == NULL || prefix == NULL)
         return false;
@@ -508,7 +508,7 @@ bool xr_string_starts_with(XrayIsolate *iso, XrString *str, XrString *prefix) {
 }
 
 // endsWith - check suffix
-bool xr_string_ends_with(XrayIsolate *iso, XrString *str, XrString *suffix) {
+bool xr_string_ends_with(XrVMRuntime *iso, XrString *str, XrString *suffix) {
     (void) iso;
     if (str == NULL || suffix == NULL)
         return false;
@@ -524,7 +524,7 @@ bool xr_string_ends_with(XrayIsolate *iso, XrString *str, XrString *suffix) {
 #define CASE_STACK_BUF 256
 
 // toLowerCase - convert to lowercase
-XrString *xr_string_to_lower_case(XrayIsolate *iso, XrString *str) {
+XrString *xr_string_to_lower_case(XrVMRuntime *iso, XrString *str) {
     XR_DCHECK(iso != NULL, "string_to_lower_case: NULL isolate");
     if (str == NULL)
         return NULL;
@@ -545,7 +545,7 @@ XrString *xr_string_to_lower_case(XrayIsolate *iso, XrString *str) {
 }
 
 // toUpperCase - convert to uppercase
-XrString *xr_string_to_upper_case(XrayIsolate *iso, XrString *str) {
+XrString *xr_string_to_upper_case(XrVMRuntime *iso, XrString *str) {
     XR_DCHECK(iso != NULL, "string_to_upper_case: NULL isolate");
     if (str == NULL)
         return NULL;
@@ -566,7 +566,7 @@ XrString *xr_string_to_upper_case(XrayIsolate *iso, XrString *str) {
 }
 
 // trim - remove leading and trailing whitespace
-XrString *xr_string_trim(XrayIsolate *iso, XrString *str) {
+XrString *xr_string_trim(XrVMRuntime *iso, XrString *str) {
     XR_DCHECK(iso != NULL, "string_trim: NULL isolate");
     if (str == NULL)
         return NULL;
@@ -596,7 +596,7 @@ XrString *xr_string_trim(XrayIsolate *iso, XrString *str) {
 }
 
 // trimStart - remove leading whitespace (SIMD optimized)
-XrString *xr_string_trim_start(XrayIsolate *iso, XrString *str) {
+XrString *xr_string_trim_start(XrVMRuntime *iso, XrString *str) {
     XR_DCHECK(iso != NULL, "string_trim_start: NULL isolate");
     if (str == NULL)
         return NULL;
@@ -618,7 +618,7 @@ XrString *xr_string_trim_start(XrayIsolate *iso, XrString *str) {
 }
 
 // trimEnd - remove trailing whitespace
-XrString *xr_string_trim_end(XrayIsolate *iso, XrString *str) {
+XrString *xr_string_trim_end(XrVMRuntime *iso, XrString *str) {
     XR_DCHECK(iso != NULL, "string_trim_end: NULL isolate");
     if (str == NULL)
         return NULL;
@@ -640,7 +640,7 @@ XrString *xr_string_trim_end(XrayIsolate *iso, XrString *str) {
 }
 
 // padStart - pad at start to target length
-XrString *xr_string_pad_start(XrayIsolate *iso, XrString *str, size_t target_len,
+XrString *xr_string_pad_start(XrVMRuntime *iso, XrString *str, size_t target_len,
                               XrString *pad_str) {
     if (str == NULL)
         return NULL;
@@ -682,7 +682,7 @@ XrString *xr_string_pad_start(XrayIsolate *iso, XrString *str, size_t target_len
 }
 
 // padEnd - pad at end to target length
-XrString *xr_string_pad_end(XrayIsolate *iso, XrString *str, size_t target_len, XrString *pad_str) {
+XrString *xr_string_pad_end(XrVMRuntime *iso, XrString *str, size_t target_len, XrString *pad_str) {
     if (str == NULL)
         return NULL;
 
@@ -724,7 +724,7 @@ XrString *xr_string_pad_end(XrayIsolate *iso, XrString *str, size_t target_len, 
 }
 
 // lastIndexOf - find substring from end
-xr_Integer xr_string_last_index_of(XrayIsolate *iso, XrString *str, XrString *substr) {
+xr_Integer xr_string_last_index_of(XrVMRuntime *iso, XrString *str, XrString *substr) {
     (void) iso;
     if (str == NULL || substr == NULL)
         return -1;
@@ -748,7 +748,7 @@ xr_Integer xr_string_last_index_of(XrayIsolate *iso, XrString *str, XrString *su
 /* ========== String Advanced Methods ========== */
 
 // split - split string into array
-XrArray *xr_string_split(XrayIsolate *iso, XrString *str, XrString *delimiter) {
+XrArray *xr_string_split(XrVMRuntime *iso, XrString *str, XrString *delimiter) {
     XR_DCHECK(iso != NULL, "string_split: NULL isolate");
     XrArray *result = xr_array_new(xr_current_coro(iso));
 
@@ -792,7 +792,7 @@ XrArray *xr_string_split(XrayIsolate *iso, XrString *str, XrString *delimiter) {
 }
 
 // replace - replace first occurrence
-XrString *xr_string_replace(XrayIsolate *iso, XrString *str, XrString *old_str, XrString *new_str) {
+XrString *xr_string_replace(XrVMRuntime *iso, XrString *str, XrString *old_str, XrString *new_str) {
     XR_DCHECK(iso != NULL, "string_replace: NULL isolate");
     if (str == NULL || old_str == NULL || new_str == NULL)
         return str;
@@ -822,7 +822,7 @@ XrString *xr_string_replace(XrayIsolate *iso, XrString *str, XrString *old_str, 
 }
 
 // replaceAll - replace all occurrences
-XrString *xr_string_replace_all(XrayIsolate *iso, XrString *str, XrString *old_str,
+XrString *xr_string_replace_all(XrVMRuntime *iso, XrString *str, XrString *old_str,
                                 XrString *new_str) {
     XR_DCHECK(iso != NULL, "string_replace_all: NULL isolate");
     if (str == NULL || old_str == NULL || new_str == NULL)
@@ -876,7 +876,7 @@ XrString *xr_string_replace_all(XrayIsolate *iso, XrString *str, XrString *old_s
 }
 
 // repeat - repeat string
-XrString *xr_string_repeat(XrayIsolate *iso, XrString *str, xr_Integer count) {
+XrString *xr_string_repeat(XrVMRuntime *iso, XrString *str, xr_Integer count) {
     XR_DCHECK(iso != NULL, "string_repeat: NULL isolate");
     if (str == NULL || count <= 0) {
         return xr_string_intern(iso, "", 0, 0);
@@ -899,7 +899,7 @@ XrString *xr_string_repeat(XrayIsolate *iso, XrString *str, xr_Integer count) {
 }
 
 // reverse - reverse string (Unicode aware, no temp arrays)
-XrString *xr_string_reverse(XrayIsolate *iso, XrString *str) {
+XrString *xr_string_reverse(XrVMRuntime *iso, XrString *str) {
     if (!iso || !str)
         return NULL;
     if (str->length == 0)
@@ -937,7 +937,7 @@ XrString *xr_string_reverse(XrayIsolate *iso, XrString *str) {
 }
 
 // byteAt - O(1) byte index (supports negative index)
-XrString *xr_string_byte_at(XrayIsolate *iso, XrString *str, xr_Integer index) {
+XrString *xr_string_byte_at(XrVMRuntime *iso, XrString *str, xr_Integer index) {
     if (!iso || !str || str->length == 0)
         return NULL;
 
@@ -958,7 +958,7 @@ XrString *xr_string_byte_at(XrayIsolate *iso, XrString *str, xr_Integer index) {
 }
 
 // translate - Unicode char mapping (UTF-8 aware)
-XrString *xr_string_translate(XrayIsolate *iso, XrString *str, XrMap *table) {
+XrString *xr_string_translate(XrVMRuntime *iso, XrString *str, XrMap *table) {
     if (!iso || !str)
         return NULL;
     if (!table)
@@ -1023,7 +1023,7 @@ int32_t xr_string_char_code_at(XrString *str, size_t index) {
 }
 
 // charAtUnicode - get char by Unicode char index
-XrString *xr_string_char_at_unicode(XrayIsolate *iso, XrString *str, size_t index) {
+XrString *xr_string_char_at_unicode(XrVMRuntime *iso, XrString *str, size_t index) {
     if (!iso || !str)
         return NULL;
 
@@ -1046,7 +1046,7 @@ XrString *xr_string_char_at_unicode(XrayIsolate *iso, XrString *str, size_t inde
 /*
 ** substringByChar - substring by char index
 */
-XrString *xr_string_substring_by_char(XrayIsolate *iso, XrString *str, size_t start, size_t end) {
+XrString *xr_string_substring_by_char(XrVMRuntime *iso, XrString *str, size_t start, size_t end) {
     if (!iso || !str)
         return NULL;
     if (start > end)
@@ -1069,7 +1069,7 @@ XrString *xr_string_substring_by_char(XrayIsolate *iso, XrString *str, size_t st
 /*
 ** fromCodePoint - create string from Unicode codepoint
 */
-XrString *xr_string_from_codepoint(XrayIsolate *iso, uint32_t codepoint) {
+XrString *xr_string_from_codepoint(XrVMRuntime *iso, uint32_t codepoint) {
     if (!iso)
         return NULL;
 

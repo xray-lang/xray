@@ -66,7 +66,7 @@ static XrRuntimeCore *channel_core(XrChannel *ch) {
 }
 
 static XrChannelDistHooks *channel_dist_hooks(XrChannel *ch) {
-    XrayIsolate *host = ch ? ch->vm_host_isolate : NULL;
+    XrVMRuntime *host = ch ? ch->vm_host_isolate : NULL;
     return host ? (XrChannelDistHooks *) host->channel_dist_hooks : NULL;
 }
 
@@ -748,7 +748,7 @@ XrChannel *xr_channel_new(XrRuntimeCore *core, XrRuntime *scheduler, uint32_t bu
     return ch;
 }
 
-XrChannel *xr_channel_new_vm(XrayIsolate *X, uint32_t buffer_size) {
+XrChannel *xr_channel_new_vm(XrVMRuntime *X, uint32_t buffer_size) {
     XrChannel *ch = xr_channel_new(xr_isolate_get_runtime_core(X),
                                    xr_isolate_get_scheduler_runtime(X), buffer_size);
     if (ch)
@@ -883,7 +883,7 @@ XrChannel *xr_channel_new_timer(XrRuntimeCore *core, XrRuntime *scheduler, int64
     return ch;
 }
 
-XrChannel *xr_channel_new_timer_vm(XrayIsolate *X, int64_t timeout_ms) {
+XrChannel *xr_channel_new_timer_vm(XrVMRuntime *X, int64_t timeout_ms) {
     XrChannel *ch = xr_channel_new_timer(xr_isolate_get_runtime_core(X),
                                          xr_isolate_get_scheduler_runtime(X), timeout_ms);
     if (ch)

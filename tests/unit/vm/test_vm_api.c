@@ -12,11 +12,11 @@
  *       large maxstacksize, deep recursion, vararg or NULL inputs.
  *
  *   These tests are intentionally low-level; they exercise the C-side
- *   entry path directly rather than going through xray_isolate_dostring.
+ *   entry path directly rather than going through xray_vm_dostring.
  */
 
 #include "../test_framework.h"
-#include "xray_isolate.h"
+#include "xray_vm.h"
 #include "../test_helper.h"
 
 #include <stddef.h>
@@ -27,9 +27,9 @@
 /* ========== xr_vm_current_ctx contract ========== */
 
 TEST(vm_current_ctx_returns_main_coro_ctx) {
-    XrayIsolateParams params;
-    xray_isolate_params_init(&params);
-    XrayIsolate *iso = xray_isolate_new_full(&params);
+    XrVMConfig params;
+    xray_vm_config_init(&params);
+    XrVMRuntime *iso = xray_vm_new_full(&params);
     ASSERT_NOT_NULL(iso);
 
     /* On a fresh isolate the main coroutine owns the canonical vm_ctx. */
@@ -47,15 +47,15 @@ TEST(vm_current_ctx_returns_main_coro_ctx) {
      * prepare_entry can grow the backing storage on demand. */
     ASSERT_NOT_NULL(ctx->current_coro);
 
-    xray_isolate_delete(iso);
+    xray_vm_delete(iso);
 }
 
 /* ========== xr_vm_prepare_entry contract ========== */
 
 TEST(vm_prepare_entry_within_capacity_is_noop) {
-    XrayIsolateParams params;
-    xray_isolate_params_init(&params);
-    XrayIsolate *iso = xray_isolate_new_full(&params);
+    XrVMConfig params;
+    xray_vm_config_init(&params);
+    XrVMRuntime *iso = xray_vm_new_full(&params);
     ASSERT_NOT_NULL(iso);
 
     XrVMContext *ctx = xr_vm_current_ctx(iso);
@@ -69,13 +69,13 @@ TEST(vm_prepare_entry_within_capacity_is_noop) {
     ASSERT_EQ_INT(ctx->stack_capacity, prev_cap);
     ASSERT_EQ_INT(ctx->frame_capacity, prev_fcap);
 
-    xray_isolate_delete(iso);
+    xray_vm_delete(iso);
 }
 
 TEST(vm_prepare_entry_grows_for_large_window) {
-    XrayIsolateParams params;
-    xray_isolate_params_init(&params);
-    XrayIsolate *iso = xray_isolate_new_full(&params);
+    XrVMConfig params;
+    xray_vm_config_init(&params);
+    XrVMRuntime *iso = xray_vm_new_full(&params);
     ASSERT_NOT_NULL(iso);
 
     XrVMContext *ctx = xr_vm_current_ctx(iso);
@@ -95,13 +95,13 @@ TEST(vm_prepare_entry_grows_for_large_window) {
     ASSERT_GE(ctx->stack_top, ctx->stack);
     ASSERT_LE(ctx->stack_top, ctx->stack + ctx->stack_capacity);
 
-    xray_isolate_delete(iso);
+    xray_vm_delete(iso);
 }
 
 TEST(vm_prepare_entry_zero_extra_succeeds) {
-    XrayIsolateParams params;
-    xray_isolate_params_init(&params);
-    XrayIsolate *iso = xray_isolate_new_full(&params);
+    XrVMConfig params;
+    xray_vm_config_init(&params);
+    XrVMRuntime *iso = xray_vm_new_full(&params);
     ASSERT_NOT_NULL(iso);
 
     XrVMContext *ctx = xr_vm_current_ctx(iso);
@@ -109,31 +109,31 @@ TEST(vm_prepare_entry_zero_extra_succeeds) {
     bool ok = xr_vm_prepare_entry(ctx, 0);
     ASSERT_TRUE(ok);
 
-    xray_isolate_delete(iso);
+    xray_vm_delete(iso);
 }
 
 /* ========== xr_vm_call_closure NULL safety ========== */
 
 TEST(vm_call_closure_null_closure_returns_null) {
-    XrayIsolateParams params;
-    xray_isolate_params_init(&params);
-    XrayIsolate *iso = xray_isolate_new_full(&params);
+    XrVMConfig params;
+    xray_vm_config_init(&params);
+    XrVMRuntime *iso = xray_vm_new_full(&params);
     ASSERT_NOT_NULL(iso);
 
     /* NULL closure must short-circuit to xr_null without crashing. */
     XrValue r = xr_vm_call_closure(iso, NULL, NULL, 0);
     ASSERT_TRUE(XR_IS_NULL(r));
 
-    xray_isolate_delete(iso);
+    xray_vm_delete(iso);
 }
 
 /* ========== xr_vm_interpret_proto NULL safety (Debug-aware) ========== */
 
 #ifdef NDEBUG
 TEST(vm_interpret_proto_null_proto_returns_error) {
-    XrayIsolateParams params;
-    xray_isolate_params_init(&params);
-    XrayIsolate *iso = xray_isolate_new_full(&params);
+    XrVMConfig params;
+    xray_vm_config_init(&params);
+    XrVMRuntime *iso = xray_vm_new_full(&params);
     ASSERT_NOT_NULL(iso);
 
     /* In Release the DCHECK is a no-op; entry must still surface an error
@@ -141,16 +141,16 @@ TEST(vm_interpret_proto_null_proto_returns_error) {
     XrVMResult r = xr_vm_interpret_proto(iso, NULL);
     ASSERT_NE(r, XR_VM_OK);
 
-    xray_isolate_delete(iso);
+    xray_vm_delete(iso);
 }
 #endif
 
 /* ========== End-to-end: deep recursion exercises grow path ========== */
 
 TEST(vm_deep_recursion_via_dostring) {
-    XrayIsolateParams params;
-    xray_isolate_params_init(&params);
-    XrayIsolate *iso = xray_isolate_new_full(&params);
+    XrVMConfig params;
+    xray_vm_config_init(&params);
+    XrVMRuntime *iso = xray_vm_new_full(&params);
     ASSERT_NOT_NULL(iso);
 
     /* 200 levels of recursion: well below stack overflow threshold but
@@ -163,18 +163,18 @@ TEST(vm_deep_recursion_via_dostring) {
                       "let r = dive(200);\n"
                       "if (r != 200) { throw new Exception(\"wrong recursion result\"); }\n";
 
-    int rc = xray_isolate_dostring(iso, src);
+    int rc = xray_vm_dostring(iso, src);
     ASSERT_EQ_INT(rc, 0);
 
-    xray_isolate_delete(iso);
+    xray_vm_delete(iso);
 }
 
 /* ========== End-to-end: large maxstacksize entry ========== */
 
 TEST(vm_large_maxstacksize_entry) {
-    XrayIsolateParams params;
-    xray_isolate_params_init(&params);
-    XrayIsolate *iso = xray_isolate_new_full(&params);
+    XrVMConfig params;
+    xray_vm_config_init(&params);
+    XrVMRuntime *iso = xray_vm_new_full(&params);
     ASSERT_NOT_NULL(iso);
 
     /* Many local variables push proto->maxstacksize past the 128-slot
@@ -194,18 +194,18 @@ TEST(vm_large_maxstacksize_entry) {
                       "let r = wide();\n"
                       "if (r != 33) { throw new Exception(\"wide failed\"); }\n";
 
-    int rc = xray_isolate_dostring(iso, src);
+    int rc = xray_vm_dostring(iso, src);
     ASSERT_EQ_INT(rc, 0);
 
-    xray_isolate_delete(iso);
+    xray_vm_delete(iso);
 }
 
 /* ========== End-to-end: vararg entry ========== */
 
 TEST(vm_vararg_entry) {
-    XrayIsolateParams params;
-    xray_isolate_params_init(&params);
-    XrayIsolate *iso = xray_isolate_new_full(&params);
+    XrVMConfig params;
+    xray_vm_config_init(&params);
+    XrVMRuntime *iso = xray_vm_new_full(&params);
     ASSERT_NOT_NULL(iso);
 
     /* Xray rest-param syntax: ...nums (no type annotation on rest param).
@@ -220,10 +220,10 @@ TEST(vm_vararg_entry) {
                       "let r = sumAll(1, 2, 3, 4, 5)\n"
                       "if (r != 15) { throw new Exception(\"vararg failed\") }\n";
 
-    int rc = xray_isolate_dostring(iso, src);
+    int rc = xray_vm_dostring(iso, src);
     ASSERT_EQ_INT(rc, 0);
 
-    xray_isolate_delete(iso);
+    xray_vm_delete(iso);
 }
 
 TEST(vm_dofile_debug_null_out_proto_releases_proto) {
@@ -235,15 +235,15 @@ TEST(vm_dofile_debug_null_out_proto_releases_proto) {
     fputs("let answer = 40 + 2\nif (answer != 42) { throw new Exception(\"bad\") }\n", f);
     fclose(f);
 
-    XrayIsolateParams params;
-    xray_isolate_params_init(&params);
-    XrayIsolate *iso = xray_isolate_new_full(&params);
+    XrVMConfig params;
+    xray_vm_config_init(&params);
+    XrVMRuntime *iso = xray_vm_new_full(&params);
     ASSERT_NOT_NULL(iso);
 
-    int rc = xray_isolate_dofile_debug(iso, path, NULL);
+    int rc = xray_vm_dofile_debug(iso, path, NULL);
     ASSERT_EQ_INT(rc, 0);
 
-    xray_isolate_delete(iso);
+    xray_vm_delete(iso);
     unlink(path);
 }
 

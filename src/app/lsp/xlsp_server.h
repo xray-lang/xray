@@ -18,7 +18,7 @@
 #include "../../base/xjson.h"
 #include "xlsp_types.h"
 #include "xlsp_async.h"
-#include "xray_isolate.h"
+#include "xray_vm.h"
 #include "../../base/xarena.h"
 #include <stdbool.h>
 #include <stdio.h>  // FILE *log_file in XrLspServer
@@ -216,7 +216,7 @@ struct XrLspServer {
     XrLspTransport *transport;
 
     // Parser context
-    XrayIsolate *isolate;
+    XrVMRuntime *isolate;
 
     // Documents (hash table for O(1) lookup by URI)
     XrLspDocTable *doc_table;

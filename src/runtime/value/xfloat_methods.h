@@ -34,7 +34,7 @@ extern "C" {
 
 /* float.toString() -> shortest round-trip string. Allocates.
  * Guarantees a decimal point so 0.0.toString() == "0.0", not "0". */
-static inline XrValue xr_float_to_string_method(XrayIsolate *iso, XrValue self, XrValue *args,
+static inline XrValue xr_float_to_string_method(XrVMRuntime *iso, XrValue self, XrValue *args,
                                                 int argc) {
     (void) args;
     (void) argc;
@@ -46,7 +46,7 @@ static inline XrValue xr_float_to_string_method(XrayIsolate *iso, XrValue self, 
 }
 
 /* float.toFixed(decimals=0) -> fixed-precision string. Allocates. */
-static inline XrValue xr_float_to_fixed_method(XrayIsolate *iso, XrValue self, XrValue *args,
+static inline XrValue xr_float_to_fixed_method(XrVMRuntime *iso, XrValue self, XrValue *args,
                                                int argc) {
     XR_DCHECK(iso != NULL, "xr_float_to_fixed_method: NULL isolate");
     int decimals = (argc >= 1 && XR_IS_INT(args[0])) ? (int) XR_TO_INT(args[0]) : 0;
@@ -61,7 +61,7 @@ static inline XrValue xr_float_to_fixed_method(XrayIsolate *iso, XrValue self, X
 }
 
 /* float.floor() -> int. Pure, no GC. */
-static inline XrValue xr_float_floor_method(XrayIsolate *iso, XrValue self, XrValue *args,
+static inline XrValue xr_float_floor_method(XrVMRuntime *iso, XrValue self, XrValue *args,
                                             int argc) {
     (void) iso;
     (void) args;
@@ -70,7 +70,7 @@ static inline XrValue xr_float_floor_method(XrayIsolate *iso, XrValue self, XrVa
 }
 
 /* float.ceil() -> int. Pure, no GC. */
-static inline XrValue xr_float_ceil_method(XrayIsolate *iso, XrValue self, XrValue *args,
+static inline XrValue xr_float_ceil_method(XrVMRuntime *iso, XrValue self, XrValue *args,
                                            int argc) {
     (void) iso;
     (void) args;
@@ -79,7 +79,7 @@ static inline XrValue xr_float_ceil_method(XrayIsolate *iso, XrValue self, XrVal
 }
 
 /* float.round() -> int. Pure, no GC. */
-static inline XrValue xr_float_round_method(XrayIsolate *iso, XrValue self, XrValue *args,
+static inline XrValue xr_float_round_method(XrVMRuntime *iso, XrValue self, XrValue *args,
                                             int argc) {
     (void) iso;
     (void) args;
@@ -88,7 +88,7 @@ static inline XrValue xr_float_round_method(XrayIsolate *iso, XrValue self, XrVa
 }
 
 /* float.abs() -> float. Pure, no GC. */
-static inline XrValue xr_float_abs_method(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static inline XrValue xr_float_abs_method(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) iso;
     (void) args;
     (void) argc;
@@ -96,7 +96,7 @@ static inline XrValue xr_float_abs_method(XrayIsolate *iso, XrValue self, XrValu
 }
 
 /* float.sqrt() -> float. Returns NaN for negative input. Pure, no GC. */
-static inline XrValue xr_float_sqrt_method(XrayIsolate *iso, XrValue self, XrValue *args,
+static inline XrValue xr_float_sqrt_method(XrVMRuntime *iso, XrValue self, XrValue *args,
                                            int argc) {
     (void) iso;
     (void) args;
@@ -108,7 +108,7 @@ static inline XrValue xr_float_sqrt_method(XrayIsolate *iso, XrValue self, XrVal
 }
 
 /* float.toInt() -> int (truncation). Pure, no GC. */
-static inline XrValue xr_float_to_int_method(XrayIsolate *iso, XrValue self, XrValue *args,
+static inline XrValue xr_float_to_int_method(XrVMRuntime *iso, XrValue self, XrValue *args,
                                              int argc) {
     (void) iso;
     (void) args;
@@ -117,7 +117,7 @@ static inline XrValue xr_float_to_int_method(XrayIsolate *iso, XrValue self, XrV
 }
 
 /* float.pow(exponent) -> float. Pure, no GC. */
-static inline XrValue xr_float_pow_method(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static inline XrValue xr_float_pow_method(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) iso;
     xr_Number value = XR_TO_FLOAT(self);
     if (argc < 1)
@@ -133,8 +133,8 @@ static inline XrValue xr_float_pow_method(XrayIsolate *iso, XrValue self, XrValu
     return xr_float(pow(value, exponent));
 }
 
-struct XrayIsolate;
-XR_FUNC void xr_float_register_native_type(struct XrayIsolate *isolate);
+struct XrVMRuntime;
+XR_FUNC void xr_float_register_native_type(struct XrVMRuntime *isolate);
 
 #ifdef __cplusplus
 }

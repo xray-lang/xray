@@ -53,7 +53,7 @@
 
 struct XrCoroutine;
 struct XrArray;
-struct XrayIsolate;
+struct XrVMRuntime;
 struct XrChannel;
 struct XrRuntime;
 struct XrRuntimeCore;
@@ -227,9 +227,9 @@ XR_FUNC struct XrTask *xr_task_runtime_detach_all(struct XrRuntime *runtime, siz
 XR_FUNC bool xr_task_runtime_try_destroy_detached(struct XrRuntime *runtime, struct XrTask *task);
 XR_FUNC void xr_task_destroy_list(struct XrTask *task);
 XR_FUNC void xr_task_runtime_destroy_all(struct XrRuntime *runtime);
-XR_FUNC void xr_task_isolate_adopt_deferred(struct XrayIsolate *isolate, struct XrTask *tasks,
+XR_FUNC void xr_task_isolate_adopt_deferred(struct XrVMRuntime *isolate, struct XrTask *tasks,
                                             size_t count);
-XR_FUNC void xr_task_isolate_destroy_deferred(struct XrayIsolate *isolate);
+XR_FUNC void xr_task_isolate_destroy_deferred(struct XrVMRuntime *isolate);
 
 // Simple state setters (called from xworker.c on executor completion)
 XR_FUNC void xr_task_complete(struct XrTask *task, XrValue result);
@@ -279,7 +279,7 @@ XR_FUNC void xr_task_add_completion(struct XrTask *task, struct XrCompletionNode
 
 // Wake the waiter registered on this task (replaces xr_coro_wake_waiter for Task path)
 XR_FUNC void xr_task_wake_waiter_runtime(struct XrRuntime *runtime, struct XrTask *task);
-XR_FUNC void xr_task_wake_waiter(struct XrayIsolate *X, struct XrTask *task);
+XR_FUNC void xr_task_wake_waiter(struct XrVMRuntime *X, struct XrTask *task);
 
 // Clear coroutine-owned await registrations from pending tasks.
 XR_FUNC bool xr_task_register_await_node(struct XrTask *task, struct XrCoroutine *waiter,

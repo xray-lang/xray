@@ -23,11 +23,11 @@
 /* ========== Forward Declarations ========== */
 
 struct XrCoroutine;
-struct XrayIsolate;
+struct XrVMRuntime;
 
 /* ========== Coroutine VM-owner Accessor (avoids coro/ include) ========== */
 
-XR_FUNC struct XrayIsolate *xr_coro_vm_owner(const struct XrCoroutine *coro);
+XR_FUNC struct XrVMRuntime *xr_coro_vm_owner(const struct XrCoroutine *coro);
 
 /* ========== Unified Allocation API ========== */
 

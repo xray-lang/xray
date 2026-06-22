@@ -13,7 +13,7 @@
  *   process-level statics (xtype.c), not in the pool.
  *
  * WHY THIS DESIGN:
- *   - Decoupled from XrayIsolate internals
+ *   - Decoupled from XrVMRuntime internals
  *   - Each analyzer instance owns its pool
  *   - Can be unit tested independently
  */

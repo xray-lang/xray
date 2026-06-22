@@ -13,7 +13,7 @@
  *
  * RELATED MODULES:
  *   - xray_isolate.c: core lifecycle (new/delete)
- *   - xray_isolate_tls.c: thread-local storage
+ *   - xisolate_tls.c: thread-local storage
  */
 
 #include "../runtime/xisolate_internal.h"
@@ -39,7 +39,7 @@
 #include "../base/xsource_cache.h"
 #include "../toolchain/xcompiler_session.h"
 
-static XrSourceCache *ensure_script_source_cache(XrayIsolate *isolate) {
+static XrSourceCache *ensure_script_source_cache(XrVMRuntime *isolate) {
     XrCompilerSession *session = xr_compiler_session_current_for_isolate(isolate);
     return xr_compiler_session_ensure_source_cache(session);
 }
@@ -67,7 +67,7 @@ static void dump_ic_feedback_recursive(XrVMContext *ctx, XrProto *proto) {
 }
 
 // Common execute + optional dump logic shared by dostring/dofile
-static int execute_and_dump(XrayIsolate *isolate, XrProto *code, const char *label) {
+static int execute_and_dump(XrVMRuntime *isolate, XrProto *code, const char *label) {
     if (isolate->params.dump_bytecode) {
         xr_disassemble_proto(code, label);
     }
@@ -136,9 +136,9 @@ static char *read_file_source(const char *filename) {
 
 /* ========== Execution API ========== */
 
-int xray_isolate_dostring(XrayIsolate *isolate, const char *source) {
-    xray_api_checkr(isolate != NULL, "xray_isolate_dostring: NULL isolate", -1);
-    xray_api_checkr(source != NULL, "xray_isolate_dostring: NULL source", -1);
+int xray_vm_dostring(XrVMRuntime *isolate, const char *source) {
+    xray_api_checkr(isolate != NULL, "xray_vm_dostring: NULL isolate", -1);
+    xray_api_checkr(source != NULL, "xray_vm_dostring: NULL source", -1);
 
     XrCompilerSession *session = xr_compiler_session_current_for_isolate(isolate);
     if (!session) {
@@ -158,9 +158,9 @@ int xray_isolate_dostring(XrayIsolate *isolate, const char *source) {
     return result;
 }
 
-int xray_isolate_dofile(XrayIsolate *isolate, const char *filename) {
-    xray_api_checkr(isolate != NULL, "xray_isolate_dofile: NULL isolate", -1);
-    xray_api_checkr(filename != NULL, "xray_isolate_dofile: NULL filename", -1);
+int xray_vm_dofile(XrVMRuntime *isolate, const char *filename) {
+    xray_api_checkr(isolate != NULL, "xray_vm_dofile: NULL isolate", -1);
+    xray_api_checkr(filename != NULL, "xray_vm_dofile: NULL filename", -1);
 
     char *source = read_file_source(filename);
     if (source == NULL) {
@@ -195,9 +195,9 @@ int xray_isolate_dofile(XrayIsolate *isolate, const char *filename) {
 
 // Debug version: compile and execute but don't free code (for debug resume)
 // Returns proto via out_proto, caller must free with xr_free_code when done
-int xray_isolate_dofile_debug(XrayIsolate *isolate, const char *filename, void **out_proto) {
-    xray_api_checkr(isolate != NULL, "xray_isolate_dofile_debug: NULL isolate", -1);
-    xray_api_checkr(filename != NULL, "xray_isolate_dofile_debug: NULL filename", -1);
+int xray_vm_dofile_debug(XrVMRuntime *isolate, const char *filename, void **out_proto) {
+    xray_api_checkr(isolate != NULL, "xray_vm_dofile_debug: NULL isolate", -1);
+    xray_api_checkr(filename != NULL, "xray_vm_dofile_debug: NULL filename", -1);
 
     char *source = read_file_source(filename);
     if (source == NULL) {
@@ -237,8 +237,7 @@ int xray_isolate_dofile_debug(XrayIsolate *isolate, const char *filename, void *
 
 /* ========== Script Info ========== */
 
-void xray_isolate_set_script_info(XrayIsolate *isolate, const char *script_file, int argc,
-                                  char **argv) {
+void xray_vm_set_script_info(XrVMRuntime *isolate, const char *script_file, int argc, char **argv) {
     if (isolate == NULL)
         return;
 

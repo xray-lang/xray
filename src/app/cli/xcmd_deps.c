@@ -15,7 +15,7 @@
 #include "xcli_spec.h"
 #include "../../api/xisolate_profile.h"
 #include "xray.h"
-#include "xray_isolate.h"
+#include "xray_vm.h"
 #include "../../module/xbundle.h"
 #include "../../base/xchecks.h"
 #include <stdio.h>
@@ -69,14 +69,14 @@ XR_FUNC int cmd_deps(const XrCliInvocation *inv) {
         format = OUTPUT_SHELL;
 
     /* Create isolate and analyze dependencies */
-    XrayIsolate *X = xr_isolate_profile_new(XR_ISOLATE_PROFILE_RUN);
+    XrVMRuntime *X = xr_isolate_profile_new(XR_ISOLATE_PROFILE_RUN);
     if (!X) {
         xr_cli_error("deps", "failed to create isolate");
         return XR_CLI_EXIT_INTERNAL;
     }
 
     XrBundle *bundle = xr_bundle_create(X, input_file);
-    xray_isolate_delete(X);
+    xray_vm_delete(X);
 
     if (!bundle) {
         xr_cli_error("deps", "dependency analysis failed for '%s'", input_file);

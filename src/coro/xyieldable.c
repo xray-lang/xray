@@ -26,7 +26,7 @@
 // ========== Internal Helper Functions ==========
 
 // Get current coroutine via per-worker TLS (thread-safe for multi-worker)
-static inline XrCoroutine *get_current_coro(XrayIsolate *X) {
+static inline XrCoroutine *get_current_coro(XrVMRuntime *X) {
     (void) X;
     XrWorker *worker = xr_current_worker();
     if (worker && worker->m) {
@@ -42,7 +42,7 @@ static int64_t get_time_us(void) {
     return (int64_t) (xr_time_monotonic_ns() / 1000ULL);
 }
 
-static inline bool yield_setup_continuation(XrayIsolate *X, XrCoroutine *coro, XrContinuation cont,
+static inline bool yield_setup_continuation(XrVMRuntime *X, XrCoroutine *coro, XrContinuation cont,
                                             void *user_data) {
     const XrCoroBackendVTable *backend = coro ? coro->backend : NULL;
     if (!backend || !backend->setup_yield_continuation)
@@ -95,7 +95,7 @@ static void yield_abort_io_wait(XrCoroutine *coro, XrCoroBlockSnapshot block_sna
 //   user_data: user data
 //
 // Returns: XR_CFUNC_BLOCKED
-XrCFuncResult xr_yield_for_io(XrayIsolate *X, int fd, int events, int64_t timeout_ms,
+XrCFuncResult xr_yield_for_io(XrVMRuntime *X, int fd, int events, int64_t timeout_ms,
                               XrContinuation cont, void *user_data, XrValue *result) {
     XR_DCHECK(X != NULL, "yield_for_io: NULL isolate");
     XrCoroutine *coro = get_current_coro(X);
@@ -202,7 +202,7 @@ XrCFuncResult xr_yield_for_io(XrayIsolate *X, int fd, int events, int64_t timeou
 // of xr_yield_for_io, but submits a recv/send op (with optional linked timeout)
 // in place of arming a readiness poll-add. The op's CQE wakes the coro; the
 // continuation reads the byte count via xr_netpoll_uring_xfer_result.
-bool xr_yield_for_uring_io(XrayIsolate *X, struct XrPollDesc *pd, int mode,
+bool xr_yield_for_uring_io(XrVMRuntime *X, struct XrPollDesc *pd, int mode,
                            const struct XrUringReq *req, XrContinuation cont, void *user_data,
                            XrValue *result, XrCFuncResult *out) {
     (void) result;
@@ -284,7 +284,7 @@ bool xr_yield_for_uring_io(XrayIsolate *X, struct XrPollDesc *pd, int mode,
 // xr_yield_for_timeout - Wait for timeout and yield (convenience function)
 //
 // Equivalent to xr_yield_for_io(X, -1, 0, timeout_ms, cont, user_data)
-XrCFuncResult xr_yield_for_timeout(XrayIsolate *X, int64_t timeout_ms, XrContinuation cont,
+XrCFuncResult xr_yield_for_timeout(XrVMRuntime *X, int64_t timeout_ms, XrContinuation cont,
                                    void *user_data, XrValue *result) {
     return xr_yield_for_io(X, -1, 0, timeout_ms, cont, user_data, result);
 }
@@ -299,7 +299,7 @@ XrCFuncResult xr_yield_for_timeout(XrayIsolate *X, int64_t timeout_ms, XrContinu
 //   user_data: user data
 //
 // Returns: XR_CFUNC_YIELD
-XrCFuncResult xr_yield(XrayIsolate *X, XrContinuation cont, void *user_data) {
+XrCFuncResult xr_yield(XrVMRuntime *X, XrContinuation cont, void *user_data) {
     XR_DCHECK(X != NULL, "yield: NULL isolate");
     XrCoroutine *coro = get_current_coro(X);
     if (!coro) {
@@ -336,7 +336,7 @@ bool xr_coro_has_continuation(XrCoroutine *coro) {
 // with XR_RESUME_CLOSURE_DONE and the closure's return value delivered
 // through the resume_value parameter (or XR_RESUME_CLOSURE_ERROR plus the
 // uncaught exception value on failure).
-XrCFuncResult xr_call_closure(XrayIsolate *X, XrClosure *closure, XrValue *args, int nargs,
+XrCFuncResult xr_call_closure(XrVMRuntime *X, XrClosure *closure, XrValue *args, int nargs,
                               XrContinuation on_complete, void *user_ctx, XrValue *result) {
     XR_DCHECK(X != NULL, "call_closure: NULL isolate");
     XR_DCHECK(closure != NULL, "call_closure: NULL closure");

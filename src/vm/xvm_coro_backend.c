@@ -42,18 +42,18 @@
 
 // ========== Forward Declarations ==========
 
-static XrVMResult run_finalize(XrayIsolate *isolate, XrWorker *worker, XrCoroutine *coro,
+static XrVMResult run_finalize(XrVMRuntime *isolate, XrWorker *worker, XrCoroutine *coro,
                                XrVMContext *ctx, XrVMContext *coro_ctx, XrVMResult result);
 
-static XrVMResult run_first_exec(XrayIsolate *isolate, XrWorker *worker, XrCoroutine *coro,
+static XrVMResult run_first_exec(XrVMRuntime *isolate, XrWorker *worker, XrCoroutine *coro,
                                  XrVMContext *ctx, XrVMContext *coro_ctx);
 
-static XrVMResult run_resume_path(XrayIsolate *isolate, XrWorker *worker, XrCoroutine *coro,
+static XrVMResult run_resume_path(XrVMRuntime *isolate, XrWorker *worker, XrCoroutine *coro,
                                   XrVMContext *ctx, XrVMContext *coro_ctx);
 
-static XrVMResult run_cfunc_coro(XrWorker *worker, XrCoroutine *coro, XrayIsolate *isolate);
+static XrVMResult run_cfunc_coro(XrWorker *worker, XrCoroutine *coro, XrVMRuntime *isolate);
 
-static XrVMResult try_recover_via_closure_continuation(XrayIsolate *isolate, XrWorker *worker,
+static XrVMResult try_recover_via_closure_continuation(XrVMRuntime *isolate, XrWorker *worker,
                                                        XrCoroutine *coro, XrVMContext *ctx,
                                                        XrVMContext *coro_ctx);
 
@@ -65,21 +65,21 @@ static const char *vm_backend_debug_name(const XrCoroutine *coro);
 static void vm_backend_debug_snapshot(const XrCoroutine *coro, XrCoroDebugSnapshot *snapshot);
 static void vm_backend_destroy(XrCoroutine *coro);
 static bool vm_backend_ensure_state(XrCoroutine *coro);
-static bool vm_backend_prepare_execution_state(XrCoroutine *coro, XrayIsolate *X, XrWorker *worker,
+static bool vm_backend_prepare_execution_state(XrCoroutine *coro, XrVMRuntime *X, XrWorker *worker,
                                                bool need_storage, bool is_clean);
-static void vm_backend_reset_execution_state(XrCoroutine *coro, XrayIsolate *X);
+static void vm_backend_reset_execution_state(XrCoroutine *coro, XrVMRuntime *X);
 static void vm_backend_clear_entry_state(XrCoroutine *coro);
 static void vm_backend_reset_entry_state_no_free(XrCoroutine *coro);
-static bool vm_backend_bind_closure_entry(XrCoroutine *coro, XrayIsolate *X, XrClosure *closure,
+static bool vm_backend_bind_closure_entry(XrCoroutine *coro, XrVMRuntime *X, XrClosure *closure,
                                           XrValue *args, int arg_count, bool copy_args);
 static bool vm_backend_bind_cfunc_entry(XrCoroutine *coro, XrCoroCFuncEntry cfunc, XrValue *args,
                                         int arg_count);
 static bool vm_backend_prepare_recycle(XrCoroutine *coro, XrWorker *worker);
 static void vm_backend_reset_reusable(XrCoroutine *coro);
-static bool vm_backend_setup_yield_continuation(XrayIsolate *X, XrCoroutine *coro,
+static bool vm_backend_setup_yield_continuation(XrVMRuntime *X, XrCoroutine *coro,
                                                 void *continuation, void *user_data);
 static bool vm_backend_has_continuation(const XrCoroutine *coro);
-static XrCFuncResult vm_backend_call_closure(XrayIsolate *X, XrCoroutine *coro, XrClosure *closure,
+static XrCFuncResult vm_backend_call_closure(XrVMRuntime *X, XrCoroutine *coro, XrClosure *closure,
                                              XrValue *args, int nargs, void *continuation,
                                              void *user_ctx, XrValue *result);
 
@@ -222,7 +222,7 @@ static bool vm_backend_ensure_state(XrCoroutine *coro) {
     return true;
 }
 
-static XrCoroutine *vm_backend_alloc_shell(XrayIsolate *X, bool use_runtime_pool) {
+static XrCoroutine *vm_backend_alloc_shell(XrVMRuntime *X, bool use_runtime_pool) {
     XrCoroutine *coro = NULL;
     if (use_runtime_pool) {
         XrRuntime *runtime = (XrRuntime *) X->vm.scheduler;
@@ -253,7 +253,7 @@ static XrCoroutine *vm_backend_alloc_shell(XrayIsolate *X, bool use_runtime_pool
 }
 
 // Create bootstrap main coroutine before script execution.
-XrCoroutine *xr_coro_create_bootstrap(XrayIsolate *X) {
+XrCoroutine *xr_coro_create_bootstrap(XrVMRuntime *X) {
     XR_DCHECK(X != NULL, "coro_create_bootstrap: NULL isolate");
     XrCoroutine *coro = vm_backend_alloc_shell(X, false);
     if (!coro)
@@ -280,7 +280,7 @@ XrCoroutine *xr_coro_create_bootstrap(XrayIsolate *X) {
     return coro;
 }
 
-void xr_coro_setup_main(XrCoroutine *coro, XrayIsolate *X, XrClosure *closure) {
+void xr_coro_setup_main(XrCoroutine *coro, XrVMRuntime *X, XrClosure *closure) {
     XR_DCHECK(coro != NULL, "coro_setup_main: NULL coro");
     XR_DCHECK(X != NULL, "coro_setup_main: NULL isolate");
     XR_DCHECK(closure != NULL, "coro_setup_main: NULL closure");
@@ -290,7 +290,7 @@ void xr_coro_setup_main(XrCoroutine *coro, XrayIsolate *X, XrClosure *closure) {
     vm_backend_reset_execution_state(coro, X);
 }
 
-void xr_coro_reset_for_call(XrCoroutine *coro, XrayIsolate *X, XrClosure *closure) {
+void xr_coro_reset_for_call(XrCoroutine *coro, XrVMRuntime *X, XrClosure *closure) {
     XR_DCHECK(coro != NULL, "coro_reset_for_call: NULL coro");
     XR_DCHECK(X != NULL, "coro_reset_for_call: NULL isolate");
     XR_DCHECK(closure != NULL, "coro_reset_for_call: NULL closure");
@@ -310,7 +310,7 @@ void xr_coro_reset_for_call(XrCoroutine *coro, XrayIsolate *X, XrClosure *closur
     atomic_store_explicit(&coro->current_scope, NULL, memory_order_relaxed);
 }
 
-XrCoroutine *xr_coro_create_vm_closure(XrayIsolate *X, XrClosure *closure, XrValue *args,
+XrCoroutine *xr_coro_create_vm_closure(XrVMRuntime *X, XrClosure *closure, XrValue *args,
                                        int arg_count, const char *name, const char *file,
                                        int line) {
     XR_DCHECK(X != NULL, "coro_create_vm_closure: NULL isolate");
@@ -348,7 +348,7 @@ XrCoroutine *xr_coro_create_vm_closure(XrayIsolate *X, XrClosure *closure, XrVal
     return coro;
 }
 
-XrCoroutine *xr_coro_create_vm_cfunc(XrayIsolate *X, XrCoroCFuncEntry cfunc, XrValue *args,
+XrCoroutine *xr_coro_create_vm_cfunc(XrVMRuntime *X, XrCoroCFuncEntry cfunc, XrValue *args,
                                      int argc, const char *name) {
     XrCoroutine *coro = vm_backend_alloc_shell(X, true);
     if (!coro)
@@ -369,7 +369,7 @@ XrCoroutine *xr_coro_create_vm_cfunc(XrayIsolate *X, XrCoroCFuncEntry cfunc, XrV
     return coro;
 }
 
-static void vm_backend_reset_execution_state(XrCoroutine *coro, XrayIsolate *X) {
+static void vm_backend_reset_execution_state(XrCoroutine *coro, XrVMRuntime *X) {
     if (!coro)
         return;
 
@@ -404,7 +404,7 @@ static void vm_backend_clear_entry_state(XrCoroutine *coro) {
     vm_entry_reset_no_free(state);
 }
 
-static bool vm_entry_copy_args(XrCoroutine *coro, XrayIsolate *X, XrVmCoroState *state,
+static bool vm_entry_copy_args(XrCoroutine *coro, XrVMRuntime *X, XrVmCoroState *state,
                                XrValue *args, int arg_count, bool copy_args) {
     if (!state || arg_count < 0 || (arg_count > 0 && !args))
         return false;
@@ -434,7 +434,7 @@ static bool vm_entry_copy_args(XrCoroutine *coro, XrayIsolate *X, XrVmCoroState 
     return true;
 }
 
-static bool vm_backend_bind_closure_entry(XrCoroutine *coro, XrayIsolate *X, XrClosure *closure,
+static bool vm_backend_bind_closure_entry(XrCoroutine *coro, XrVMRuntime *X, XrClosure *closure,
                                           XrValue *args, int arg_count, bool copy_args) {
     if (!coro || !closure)
         return false;
@@ -510,7 +510,7 @@ static void vm_backend_clear_stack_frames(XrVMContext *ctx) {
     }
 }
 
-static bool vm_backend_prepare_execution_state(XrCoroutine *coro, XrayIsolate *X, XrWorker *worker,
+static bool vm_backend_prepare_execution_state(XrCoroutine *coro, XrVMRuntime *X, XrWorker *worker,
                                                bool need_storage, bool is_clean) {
     XrVmCoroState *state = vm_state_for_coro(coro);
     if (!state)
@@ -648,7 +648,7 @@ static void vm_backend_reset_reusable(XrCoroutine *coro) {
     vm_backend_clear_entry_state(coro);
 }
 
-static bool vm_backend_setup_yield_continuation(XrayIsolate *X, XrCoroutine *coro,
+static bool vm_backend_setup_yield_continuation(XrVMRuntime *X, XrCoroutine *coro,
                                                 void *continuation, void *user_data) {
     if (!coro || !continuation)
         return false;
@@ -686,7 +686,7 @@ static bool vm_backend_has_continuation(const XrCoroutine *coro) {
     return (frame->call_status & XR_CALL_HAS_CONT) && frame->u.c.continuation;
 }
 
-static XrCFuncResult vm_backend_call_closure(XrayIsolate *X, XrCoroutine *coro, XrClosure *closure,
+static XrCFuncResult vm_backend_call_closure(XrVMRuntime *X, XrCoroutine *coro, XrClosure *closure,
                                              XrValue *args, int nargs, void *continuation,
                                              void *user_ctx, XrValue *result) {
     (void) X;
@@ -884,7 +884,7 @@ static XrCoroRunResult vm_backend_resume(XrCoroutine *coro, const XrCoroEvent *e
 // ========== Yieldable C-function coroutine ==========
 
 // First call of a cfunc coroutine: build the C frame, run the body.
-static XrVMResult run_cfunc_first_exec(XrayIsolate *isolate, XrCoroutine *coro,
+static XrVMResult run_cfunc_first_exec(XrVMRuntime *isolate, XrCoroutine *coro,
                                        XrVMContext *coro_ctx, uint32_t cur_flags) {
     XrVmCoroState *vm_state = vm_state_for_coro(coro);
     if (!vm_state || vm_state->entry_type != XR_CORO_ENTRY_CFUNC || !vm_state->entry.cfunc)
@@ -940,7 +940,7 @@ static XrVMResult run_cfunc_first_exec(XrayIsolate *isolate, XrCoroutine *coro,
 // Resume a previously-suspended cfunc coroutine. Includes an inline fast
 // path for the common "single C frame with continuation" case (HTTP/WS
 // handlers); falls back to VM continuation unroll otherwise.
-static XrVMResult run_cfunc_resume(XrayIsolate *isolate, XrCoroutine *coro, XrVMContext *coro_ctx,
+static XrVMResult run_cfunc_resume(XrVMRuntime *isolate, XrCoroutine *coro, XrVMContext *coro_ctx,
                                    uint32_t cur_flags) {
     (void) cur_flags;
     xr_coro_transition_to_running(coro);
@@ -1007,7 +1007,7 @@ static XrVMResult run_cfunc_resume(XrayIsolate *isolate, XrCoroutine *coro, XrVM
 //
 // First-exec and resume are factored into helpers above so the
 // orchestration here stays small and obvious.
-static XrVMResult run_cfunc_coro(XrWorker *worker, XrCoroutine *coro, XrayIsolate *isolate) {
+static XrVMResult run_cfunc_coro(XrWorker *worker, XrCoroutine *coro, XrVMRuntime *isolate) {
     XrVMContext *ctx = xr_vm_machine_ctx(worker->m, isolate);
     if (!ctx)
         return XR_VM_RUNTIME_ERROR;
@@ -1074,7 +1074,7 @@ static XrVMResult run_cfunc_coro(XrWorker *worker, XrCoroutine *coro, XrayIsolat
 //
 // Returns the new XrVMResult to use for finalization, or XR_VM_RUNTIME_ERROR
 // if no pending closure frame existed (caller falls through to error path).
-static XrVMResult try_recover_via_closure_continuation(XrayIsolate *isolate, XrWorker *worker,
+static XrVMResult try_recover_via_closure_continuation(XrVMRuntime *isolate, XrWorker *worker,
                                                        XrCoroutine *coro, XrVMContext *ctx,
                                                        XrVMContext *coro_ctx) {
     (void) worker;
@@ -1145,7 +1145,7 @@ static XrVMResult try_recover_via_closure_continuation(XrayIsolate *isolate, XrW
 // every execution path in xr_coro_run_on_worker must perform.
 // Assumes ctx->current_coro == coro; clears it before returning (except for
 // continuation-stealing / debug-break which leave the caller in charge).
-static XrVMResult run_finalize(XrayIsolate *isolate, XrWorker *worker, XrCoroutine *coro,
+static XrVMResult run_finalize(XrVMRuntime *isolate, XrWorker *worker, XrCoroutine *coro,
                                XrVMContext *ctx, XrVMContext *coro_ctx, XrVMResult result) {
     (void) worker;
     /* Iteratively drain pending closure continuations on uncaught exception:
@@ -1247,7 +1247,7 @@ static XrVMResult run_finalize(XrayIsolate *isolate, XrWorker *worker, XrCorouti
 // Nested run() entries (xr_call_closure, module exec, cfunc continuation
 // closures) must NOT use this wrapper: a switch there would let the next
 // coroutine return through a foreign native frame.
-static XrVMResult run_dispatch_and_finalize(XrayIsolate *isolate, XrWorker *worker,
+static XrVMResult run_dispatch_and_finalize(XrVMRuntime *isolate, XrWorker *worker,
                                             XrCoroutine *coro, XrVMContext *ctx,
                                             XrVMContext *coro_ctx) {
     /* Worker-local admission flag: written only by the owner thread, so it
@@ -1281,7 +1281,7 @@ static XrVMResult run_dispatch_and_finalize(XrayIsolate *isolate, XrWorker *work
 //
 // Admission is deliberately narrow; every excluded shape falls back to the
 // ordinary XR_VM_BLOCKED slow path with unchanged semantics.
-XR_FUNC XrVMContext *xr_vm_try_direct_switch(XrayIsolate *isolate, XrVMContext *cur_ctx) {
+XR_FUNC XrVMContext *xr_vm_try_direct_switch(XrVMRuntime *isolate, XrVMContext *cur_ctx) {
 #if !XR_VM_DIRECT_SWITCH
     (void) isolate;
     (void) cur_ctx;
@@ -1424,7 +1424,7 @@ XR_FUNC XrVMContext *xr_vm_try_direct_switch(XrayIsolate *isolate, XrVMContext *
 // Precondition: caller has already set RUNNING|STARTED on coro->flags and
 // bound current_coro on both ctx and coro_ctx. VM state must carry a
 // non-NULL closure with a non-NULL proto (validated upstream).
-static XrVMResult run_first_exec(XrayIsolate *isolate, XrWorker *worker, XrCoroutine *coro,
+static XrVMResult run_first_exec(XrVMRuntime *isolate, XrWorker *worker, XrCoroutine *coro,
                                  XrVMContext *ctx, XrVMContext *coro_ctx) {
     (void) worker;
     XrVmCoroState *vm_state = vm_state_for_coro(coro);
@@ -1480,7 +1480,7 @@ static XrVMResult run_first_exec(XrayIsolate *isolate, XrWorker *worker, XrCorou
 // xr_coro_run_on_worker handles directly.  Supports:
 //   - XR_RESUME_CONTINUATION / XR_RESUME_DEBUG (run() directly)
 //   - Default unroll via VM continuation unroll then run()
-static XrVMResult run_resume_path(XrayIsolate *isolate, XrWorker *worker, XrCoroutine *coro,
+static XrVMResult run_resume_path(XrVMRuntime *isolate, XrWorker *worker, XrCoroutine *coro,
                                   XrVMContext *ctx, XrVMContext *coro_ctx) {
     (void) worker;
     xr_coro_transition_to_running(coro);
@@ -1553,7 +1553,7 @@ static XrVMResult vm_backend_resume_on_worker(XrWorker *worker, XrCoroutine *cor
     }
 
     XR_DCHECK(worker->p.runtime != NULL, "worker thread: runtime is NULL");
-    XrayIsolate *isolate = (XrayIsolate *) xr_scheduler_host_backend_context(worker->p.runtime);
+    XrVMRuntime *isolate = (XrVMRuntime *) xr_scheduler_host_backend_context(worker->p.runtime);
     XR_DCHECK(isolate != NULL, "worker thread: VM scheduler host isolate is NULL");
 
     XrVMContext *ctx = xr_vm_machine_ctx(worker->m, isolate);

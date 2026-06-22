@@ -15,20 +15,20 @@
 #include "xdefs.h"
 
 // Constructor (self = class value, ignored)
-XR_FUNC XrValue xr_builtin_stringbuilder_new(XrayIsolate *isolate, XrValue self, XrValue *args,
+XR_FUNC XrValue xr_builtin_stringbuilder_new(XrVMRuntime *isolate, XrValue self, XrValue *args,
                                              int argc);
 
 // Instance methods (self = receiver StringBuilder)
-XR_FUNC XrValue xr_builtin_stringbuilder_append(XrayIsolate *isolate, XrValue self, XrValue *args,
+XR_FUNC XrValue xr_builtin_stringbuilder_append(XrVMRuntime *isolate, XrValue self, XrValue *args,
                                                 int argc);
-XR_FUNC XrValue xr_builtin_stringbuilder_toString(XrayIsolate *isolate, XrValue self, XrValue *args,
+XR_FUNC XrValue xr_builtin_stringbuilder_toString(XrVMRuntime *isolate, XrValue self, XrValue *args,
                                                   int argc);
-XR_FUNC XrValue xr_builtin_stringbuilder_clear(XrayIsolate *isolate, XrValue self, XrValue *args,
+XR_FUNC XrValue xr_builtin_stringbuilder_clear(XrVMRuntime *isolate, XrValue self, XrValue *args,
                                                int argc);
-XR_FUNC XrValue xr_builtin_stringbuilder_length(XrayIsolate *isolate, XrValue self, XrValue *args,
+XR_FUNC XrValue xr_builtin_stringbuilder_length(XrVMRuntime *isolate, XrValue self, XrValue *args,
                                                 int argc);
 
 // Build StringBuilder class with native body and register in core classes
-XR_FUNC void xr_stringbuilder_register_class(XrayIsolate *X);
+XR_FUNC void xr_stringbuilder_register_class(XrVMRuntime *X);
 
 #endif  // XSTRINGBUILDER_BUILTINS_H

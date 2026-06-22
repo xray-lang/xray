@@ -31,7 +31,7 @@ typedef struct XrCompilerSessionScope {
 } XrCompilerSessionScope;
 
 typedef struct XrCompilerSessionConfig {
-    XrayIsolate *vm_host;
+    XrVMRuntime *vm_host;
     const char *project_root;
     const char *source_file;
     bool repl_mode;
@@ -41,9 +41,9 @@ typedef struct XrCompilerSessionConfig {
 XR_FUNC XrCompilerSession *xr_compiler_session_new(const XrCompilerSessionConfig *cfg);
 XR_FUNC void xr_compiler_session_delete(XrCompilerSession *session);
 
-XR_FUNC XrayIsolate *xr_compiler_session_vm_host(const XrCompilerSession *session);
-XR_FUNC XrCompilerSession *xr_compiler_session_current_for_isolate(XrayIsolate *isolate);
-XR_FUNC XrCompilerSession *xr_compiler_session_attach_isolate(XrayIsolate *isolate,
+XR_FUNC XrVMRuntime *xr_compiler_session_vm_host(const XrCompilerSession *session);
+XR_FUNC XrCompilerSession *xr_compiler_session_current_for_isolate(XrVMRuntime *isolate);
+XR_FUNC XrCompilerSession *xr_compiler_session_attach_isolate(XrVMRuntime *isolate,
                                                               XrCompilerSession *session);
 
 XR_FUNC struct XrArena *xr_compiler_session_current_arena(const XrCompilerSession *session);

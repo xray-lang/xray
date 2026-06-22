@@ -33,7 +33,7 @@
 // Variable Reference API (for object expansion)
 // ============================================================================
 
-int xr_debug_create_var_ref(XrayIsolate *isolate, XdapVarRefType type, int frame_idx,
+int xr_debug_create_var_ref(XrVMRuntime *isolate, XdapVarRefType type, int frame_idx,
                             XrValue value) {
     XrDebugState *dbg = (XrDebugState *) xr_isolate_get_debug_state(isolate);
     if (!dbg)
@@ -60,7 +60,7 @@ int xr_debug_create_var_ref(XrayIsolate *isolate, XdapVarRefType type, int frame
     return id;
 }
 
-XrDebugVarRef *xr_debug_get_var_ref(XrayIsolate *isolate, int ref_id) {
+XrDebugVarRef *xr_debug_get_var_ref(XrVMRuntime *isolate, int ref_id) {
     XrDebugState *dbg = (XrDebugState *) xr_isolate_get_debug_state(isolate);
     if (!dbg)
         return NULL;
@@ -74,7 +74,7 @@ XrDebugVarRef *xr_debug_get_var_ref(XrayIsolate *isolate, int ref_id) {
     return &dbg->var_refs[idx];
 }
 
-void xr_debug_clear_var_refs(XrayIsolate *isolate) {
+void xr_debug_clear_var_refs(XrVMRuntime *isolate) {
     XrDebugState *dbg = (XrDebugState *) xr_isolate_get_debug_state(isolate);
     if (!dbg)
         return;
@@ -102,7 +102,7 @@ void xr_debug_var_info_array_free(XdapVarInfo *vars, int count) {
     xr_free(vars);
 }
 
-bool xr_debug_value_is_expandable(XrayIsolate *isolate, XrValue value) {
+bool xr_debug_value_is_expandable(XrVMRuntime *isolate, XrValue value) {
     (void) isolate;
     if (XR_IS_ARRAY(value))
         return true;
@@ -137,7 +137,7 @@ XdapVarRefType xr_debug_get_ref_type(XrValue value) {
 // Children Expansion Helpers
 // ============================================================================
 
-static int get_array_children(XrayIsolate *isolate, XrArray *arr, XdapVarInfo **out_vars) {
+static int get_array_children(XrVMRuntime *isolate, XrArray *arr, XdapVarInfo **out_vars) {
     int count = xr_array_size(arr);
     if (count == 0) {
         *out_vars = NULL;
@@ -170,7 +170,7 @@ static int get_array_children(XrayIsolate *isolate, XrArray *arr, XdapVarInfo **
     return count;
 }
 
-static int get_map_children(XrayIsolate *isolate, XrMap *map, XdapVarInfo **out_vars) {
+static int get_map_children(XrVMRuntime *isolate, XrMap *map, XdapVarInfo **out_vars) {
     uint32_t count = map->count;
     if (count == 0 || xr_map_isdummy(map)) {
         *out_vars = NULL;
@@ -203,7 +203,7 @@ static int get_map_children(XrayIsolate *isolate, XrMap *map, XdapVarInfo **out_
     return idx;
 }
 
-static int get_json_children(XrayIsolate *isolate, XrJson *json, XdapVarInfo **out_vars) {
+static int get_json_children(XrVMRuntime *isolate, XrJson *json, XdapVarInfo **out_vars) {
     uint16_t count = xr_json_field_count(isolate, json);
     if (count == 0) {
         *out_vars = NULL;
@@ -235,7 +235,7 @@ static int get_json_children(XrayIsolate *isolate, XrJson *json, XdapVarInfo **o
     return count;
 }
 
-static int get_instance_children(XrayIsolate *isolate, XrInstance *inst, XdapVarInfo **out_vars) {
+static int get_instance_children(XrVMRuntime *isolate, XrInstance *inst, XdapVarInfo **out_vars) {
     if (!inst || !inst->klass) {
         *out_vars = NULL;
         return 0;
@@ -272,7 +272,7 @@ static int get_instance_children(XrayIsolate *isolate, XrInstance *inst, XdapVar
     return count;
 }
 
-static int get_scope_locals(XrayIsolate *isolate, int frame_idx, XdapVarInfo **out_vars) {
+static int get_scope_locals(XrVMRuntime *isolate, int frame_idx, XdapVarInfo **out_vars) {
     XrDebugFrameCtx fctx;
     xr_debug_get_frame_ctx_ex(isolate, &fctx);
 
@@ -317,7 +317,7 @@ static int get_scope_locals(XrayIsolate *isolate, int frame_idx, XdapVarInfo **o
     return count;
 }
 
-int xr_debug_get_var_children(XrayIsolate *isolate, int ref_id, XdapVarInfo **out_vars) {
+int xr_debug_get_var_children(XrVMRuntime *isolate, int ref_id, XdapVarInfo **out_vars) {
     XrDebugVarRef *ref = xr_debug_get_var_ref(isolate, ref_id);
     if (!ref) {
         *out_vars = NULL;
@@ -371,7 +371,7 @@ int xr_debug_get_var_children(XrayIsolate *isolate, int ref_id, XdapVarInfo **ou
 // Local Variable Inspection
 // ============================================================================
 
-int xr_debug_get_local_count(XrayIsolate *isolate, int frame_idx) {
+int xr_debug_get_local_count(XrVMRuntime *isolate, int frame_idx) {
     XrDebugFrameCtx fctx;
     xr_debug_get_frame_ctx_ex(isolate, &fctx);
 
@@ -389,7 +389,7 @@ int xr_debug_get_local_count(XrayIsolate *isolate, int frame_idx) {
     return PROTO_LOCVAR_COUNT(frame->closure->proto);
 }
 
-bool xr_debug_get_local(XrayIsolate *isolate, int frame_idx, int local_idx, const char **out_name,
+bool xr_debug_get_local(XrVMRuntime *isolate, int frame_idx, int local_idx, const char **out_name,
                         char **out_value, char **out_type) {
     XrDebugFrameCtx fctx;
     xr_debug_get_frame_ctx_ex(isolate, &fctx);
@@ -442,7 +442,7 @@ bool xr_debug_get_local(XrayIsolate *isolate, int frame_idx, int local_idx, cons
 // ============================================================================
 
 // Parse a debug value string into XrValue. Returns true on success.
-static bool parse_debug_value(XrayIsolate *isolate, const char *value, XrValue *out) {
+static bool parse_debug_value(XrVMRuntime *isolate, const char *value, XrValue *out) {
     if (!value)
         return false;
 
@@ -482,7 +482,7 @@ static bool parse_debug_value(XrayIsolate *isolate, const char *value, XrValue *
     return false;
 }
 
-char *xr_debug_set_variable(XrayIsolate *isolate, int var_ref, const char *name,
+char *xr_debug_set_variable(XrVMRuntime *isolate, int var_ref, const char *name,
                             const char *value) {
     if (!isolate || !name || !value)
         return NULL;
@@ -616,7 +616,7 @@ static const char *coro_state_string(XrCoroutine *coro) {
     }
 }
 
-int xr_debug_get_coro_count(XrayIsolate *isolate) {
+int xr_debug_get_coro_count(XrVMRuntime *isolate) {
     if (!isolate || !xr_isolate_get_scheduler_runtime(isolate))
         return 0;
 
@@ -630,7 +630,7 @@ int xr_debug_get_coro_count(XrayIsolate *isolate) {
     return count;
 }
 
-bool xr_debug_get_coro_info(XrayIsolate *isolate, int coro_idx, int *out_id, const char **out_name,
+bool xr_debug_get_coro_info(XrVMRuntime *isolate, int coro_idx, int *out_id, const char **out_name,
                             const char **out_state) {
     if (!isolate || coro_idx < 0 || !xr_isolate_get_scheduler_runtime(isolate))
         return false;
@@ -723,7 +723,7 @@ static char *get_instruction_comment(XrProto *proto, int offset) {
     return NULL;
 }
 
-int xr_debug_get_disassembly(XrayIsolate *isolate, int frame_idx, XdapDisasmInstr **out_instrs,
+int xr_debug_get_disassembly(XrVMRuntime *isolate, int frame_idx, XdapDisasmInstr **out_instrs,
                              int *out_count) {
     if (!isolate || !out_instrs || !out_count)
         return -1;
@@ -768,7 +768,7 @@ int xr_debug_get_disassembly(XrayIsolate *isolate, int frame_idx, XdapDisasmInst
     return 0;
 }
 
-int xr_debug_get_current_pc(XrayIsolate *isolate, int frame_idx) {
+int xr_debug_get_current_pc(XrVMRuntime *isolate, int frame_idx) {
     if (!isolate)
         return -1;
 
@@ -808,7 +808,7 @@ void xr_debug_free_disasm(XdapDisasmInstr *instrs, int count) {
 // Async Stack Trace (lazy capture - walk parent chain)
 // ============================================================================
 
-bool xr_debug_get_async_stack(XrayIsolate *isolate, int *out_depth, const char ***out_names,
+bool xr_debug_get_async_stack(XrVMRuntime *isolate, int *out_depth, const char ***out_names,
                               const char ***out_files, int **out_lines) {
     if (!isolate || !out_depth)
         return false;
@@ -864,7 +864,7 @@ bool xr_debug_get_async_stack(XrayIsolate *isolate, int *out_depth, const char *
 // Hot Reload (Not Implemented — see comments in xdap_debug.c for rationale)
 // ============================================================================
 
-bool xr_debug_hot_reload(XrayIsolate *isolate, const char *path) {
+bool xr_debug_hot_reload(XrVMRuntime *isolate, const char *path) {
     (void) isolate;
     (void) path;
     return false;

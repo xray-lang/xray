@@ -51,9 +51,9 @@
 /* ========== External Declarations ========== */
 
 extern XrValue xr_string_value(XrString *str);
-extern XrString *xr_string_intern(XrayIsolate *X, const char *str, size_t len, uint32_t hash);
+extern XrString *xr_string_intern(XrVMRuntime *X, const char *str, size_t len, uint32_t hash);
 struct XrCoroutine;
-extern struct XrCoroutine *xr_current_coro(XrayIsolate *X);
+extern struct XrCoroutine *xr_current_coro(XrVMRuntime *X);
 extern XrArray *xr_array_new(struct XrCoroutine *coro);
 extern void xr_array_push(XrArray *arr, XrValue value);
 extern XrValue xr_value_from_array(XrArray *arr);
@@ -95,7 +95,7 @@ extern XrValue xr_value_from_array(XrArray *arr);
 /* ========== Helper Functions ========== */
 
 // Get string field from Json
-static const char *get_json_string(XrayIsolate *X, XrJson *json, const char *key, size_t *out_len) {
+static const char *get_json_string(XrVMRuntime *X, XrJson *json, const char *key, size_t *out_len) {
     XrValue val = xr_json_get_by_key(X, json, key);
 
     if (!XR_IS_STRING(val)) {
@@ -111,7 +111,7 @@ static const char *get_json_string(XrayIsolate *X, XrJson *json, const char *key
 }
 
 // Get int field from Json
-static int64_t get_json_int(XrayIsolate *X, XrJson *json, const char *key, int64_t default_val) {
+static int64_t get_json_int(XrVMRuntime *X, XrJson *json, const char *key, int64_t default_val) {
     XrValue val = xr_json_get_by_key(X, json, key);
 
     if (XR_IS_INT(val))
@@ -122,7 +122,7 @@ static int64_t get_json_int(XrayIsolate *X, XrJson *json, const char *key, int64
 }
 
 // Convert HTTP result to xray Json
-static XrValue result_to_json(XrayIsolate *X, XrHttpResult *result) {
+static XrValue result_to_json(XrVMRuntime *X, XrHttpResult *result) {
     // Create response object (dictionary mode for flexible field names)
     XrJson *json = xr_json_new(xr_current_coro(X));
 
@@ -177,7 +177,7 @@ static XrValue result_to_json(XrayIsolate *X, XrHttpResult *result) {
 /* ========== HTTP Method Implementations ========== */
 
 // http.get(url: string) -> Response
-static XrValue http_get(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue http_get(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1) {
         fprintf(stderr, "http.get() requires 1 argument\n");
         return xr_null();
@@ -205,7 +205,7 @@ static XrValue http_get(XrayIsolate *X, XrValue *args, int argc) {
 }
 
 // http.post(url: string, body?: string, contentType?: string) -> Response
-static XrValue http_post(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue http_post(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1) {
         fprintf(stderr, "http.post() requires at least 1 argument\n");
         return xr_null();
@@ -245,7 +245,7 @@ static XrValue http_post(XrayIsolate *X, XrValue *args, int argc) {
 }
 
 // http.put(url: string, body?: string, contentType?: string) -> Response
-static XrValue http_put(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue http_put(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1) {
         fprintf(stderr, "http.put() requires at least 1 argument\n");
         return xr_null();
@@ -282,7 +282,7 @@ static XrValue http_put(XrayIsolate *X, XrValue *args, int argc) {
 }
 
 // http.delete(url: string) -> Response
-static XrValue http_delete(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue http_delete(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1) {
         fprintf(stderr, "http.delete() requires 1 argument\n");
         return xr_null();
@@ -308,7 +308,7 @@ static XrValue http_delete(XrayIsolate *X, XrValue *args, int argc) {
 
 // http.request(options: Json) -> Response
 // options: url (required), method, body, headers, timeout (ms)
-static XrValue http_request(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue http_request(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1) {
         fprintf(stderr, "http.request() requires 1 argument\n");
         return xr_null();
@@ -510,7 +510,7 @@ static XrValue http_request(XrayIsolate *X, XrValue *args, int argc) {
 
 // http.readChunk(resp, maxBytes?) -> string | null
 // Read next chunk from streaming response. Returns null on EOF.
-static XrValue http_read_chunk(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue http_read_chunk(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1 || !xr_value_is_json(args[0]))
         return xr_null();
     XrJson *resp = xr_value_to_json(args[0]);
@@ -546,7 +546,7 @@ static XrValue http_read_chunk(XrayIsolate *X, XrValue *args, int argc) {
 
 // http.closeStream(resp) -> void
 // Close a streaming response and release resources.
-static XrValue http_close_stream(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue http_close_stream(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1 || !xr_value_is_json(args[0]))
         return xr_null();
     XrJson *resp = xr_value_to_json(args[0]);
@@ -567,7 +567,7 @@ static XrValue http_close_stream(XrayIsolate *X, XrValue *args, int argc) {
 }
 
 // http.urlEncode(str: string) -> string
-static XrValue http_url_encode(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue http_url_encode(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1 || !XR_IS_STRING(args[0])) {
         return xr_null();
     }
@@ -603,7 +603,7 @@ static XrValue http_url_encode(XrayIsolate *X, XrValue *args, int argc) {
 }
 
 // http.urlDecode(str: string) -> string
-static XrValue http_url_decode(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue http_url_decode(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1 || !XR_IS_STRING(args[0])) {
         return xr_null();
     }
@@ -652,7 +652,7 @@ static XrValue http_url_decode(XrayIsolate *X, XrValue *args, int argc) {
 /* ========== HTTP Context Management ========== */
 
 // Get HTTP context (stored in module's native_handle)
-XrHttpContext *xr_http_get_context(XrayIsolate *X) {
+XrHttpContext *xr_http_get_context(XrVMRuntime *X) {
     if (!X || !X->module_registry)
         return NULL;
 
@@ -761,7 +761,7 @@ void xr_http_module_context_free(XrHttpContext *ctx) {
 
 // http.route(method, path, handler) - Register route
 // handler: function or static string
-static XrValue http_route(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue http_route(XrVMRuntime *X, XrValue *args, int argc) {
     XrHttpContext *ctx = xr_http_get_context(X);
     if (argc < 3 || !ctx) {
         return xr_null();
@@ -849,7 +849,7 @@ static XrValue http_route(XrayIsolate *X, XrValue *args, int argc) {
 }
 
 // http.static(method, path, content) - Register static route (pre-built response)
-static XrValue http_static(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue http_static(XrVMRuntime *X, XrValue *args, int argc) {
     XrHttpContext *ctx = xr_http_get_context(X);
     if (argc < 3 || !ctx) {
         return xr_null();
@@ -911,7 +911,7 @@ static XrValue http_static(XrayIsolate *X, XrValue *args, int argc) {
 // http.ws(path, handler) - Register WebSocket upgrade route on HTTP server
 // When a GET request with Upgrade:websocket hits this path, the connection
 // is upgraded in-place and handler(wsConn) is called.
-static XrValue http_ws_route(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue http_ws_route(XrVMRuntime *X, XrValue *args, int argc) {
     XrHttpContext *ctx = xr_http_get_context(X);
     if (argc < 2 || !ctx)
         return xr_null();
@@ -958,7 +958,7 @@ static XrValue http_ws_route(XrayIsolate *X, XrValue *args, int argc) {
 
 // http.setConnHandler(handler) - Set connection handler closure
 // Handler receives client_fd, handles entire connection lifecycle
-static XrValue http_set_conn_handler(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue http_set_conn_handler(XrVMRuntime *X, XrValue *args, int argc) {
     XrHttpContext *ctx = xr_http_get_context(X);
     if (argc < 1 || !ctx) {
         return xr_null();
@@ -995,7 +995,7 @@ static XrValue http_set_conn_handler(XrayIsolate *X, XrValue *args, int argc) {
 }
 
 // http.__getConnHandler() -> closure | null (for http.xr)
-static XrValue http_get_conn_handler(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue http_get_conn_handler(XrVMRuntime *X, XrValue *args, int argc) {
     (void) args;
     (void) argc;
     XrHttpContext *ctx = xr_http_get_context(X);
@@ -1013,7 +1013,7 @@ static XrValue http_get_conn_handler(XrayIsolate *X, XrValue *args, int argc) {
  */
 
 // http.stopServer() -> void
-static XrValue http_stop_server(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue http_stop_server(XrVMRuntime *X, XrValue *args, int argc) {
     (void) args;
     (void) argc;
 
@@ -1029,7 +1029,7 @@ static XrValue http_stop_server(XrayIsolate *X, XrValue *args, int argc) {
 
 // http.parseRequest(fd) -> [method, path, keepAlive] or null
 // High-performance parsing, returns array to avoid JSON overhead
-static XrValue http_parse_request_fast(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue http_parse_request_fast(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1)
         return xr_null();
 
@@ -1080,7 +1080,7 @@ static XrValue http_parse_request_fast(XrayIsolate *X, XrValue *args, int argc) 
 }
 
 // http.sendResponse(fd, body, status?) -> bool (high-performance)
-static XrValue http_send_response_fast(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue http_send_response_fast(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 2)
         return xr_bool(false);
 
@@ -1129,7 +1129,7 @@ static XrValue http_send_response_fast(XrayIsolate *X, XrValue *args, int argc) 
 /* ========== Streaming Download API ========== */
 
 // http.download(url, path) -> Json (streaming download to local file)
-static XrValue http_download(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue http_download(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 2)
         return xr_null();
 
@@ -1177,7 +1177,7 @@ static XrValue http_download(XrayIsolate *X, XrValue *args, int argc) {
 }
 
 // http.getContentLength(url) -> int (HEAD request for file size)
-static XrValue http_get_content_length(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue http_get_content_length(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1)
         return xr_int(-1);
 
@@ -1199,7 +1199,7 @@ static XrValue http_get_content_length(XrayIsolate *X, XrValue *args, int argc) 
 // http.formDataNew(maxTotalSize?, maxFileSize?) -> bool
 // Pass 0 to disable the corresponding limit.
 // Omit to use defaults (64MB total, 32MB per file).
-static XrValue http_form_data_new(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue http_form_data_new(XrVMRuntime *X, XrValue *args, int argc) {
     XrHttpContext *ctx = xr_http_get_context(X);
     if (!ctx)
         return xr_bool(false);
@@ -1226,7 +1226,7 @@ static XrValue http_form_data_new(XrayIsolate *X, XrValue *args, int argc) {
 }
 
 // http.formDataAppend(name, value) -> void
-static XrValue http_form_data_append(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue http_form_data_append(XrVMRuntime *X, XrValue *args, int argc) {
     XrHttpContext *ctx = xr_http_get_context(X);
     if (argc < 2 || !ctx || !ctx->form_data)
         return xr_null();
@@ -1251,7 +1251,7 @@ static XrValue http_form_data_append(XrayIsolate *X, XrValue *args, int argc) {
 }
 
 // http.formDataAppendFile(name, filepath) -> bool
-static XrValue http_form_data_append_file(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue http_form_data_append_file(XrVMRuntime *X, XrValue *args, int argc) {
     XrHttpContext *ctx = xr_http_get_context(X);
     if (argc < 2 || !ctx || !ctx->form_data)
         return xr_bool(false);
@@ -1284,7 +1284,7 @@ static XrValue http_form_data_append_file(XrayIsolate *X, XrValue *args, int arg
 }
 
 // http.formDataPost(url) -> Json
-static XrValue http_form_data_post(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue http_form_data_post(XrVMRuntime *X, XrValue *args, int argc) {
     XrHttpContext *ctx = xr_http_get_context(X);
     if (argc < 1 || !ctx || !ctx->form_data)
         return xr_null();
@@ -1332,7 +1332,7 @@ static XrValue http_form_data_post(XrayIsolate *X, XrValue *args, int argc) {
 /* ========== Proxy Settings API ========== */
 
 // http.setProxy(url) -> void (format: http://[user:pass@]host:port)
-static XrValue http_set_proxy(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue http_set_proxy(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1)
         return xr_null();
 
@@ -1350,7 +1350,7 @@ static XrValue http_set_proxy(XrayIsolate *X, XrValue *args, int argc) {
 }
 
 // http.clearProxy() -> void
-static XrValue http_clear_proxy(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue http_clear_proxy(XrVMRuntime *X, XrValue *args, int argc) {
     (void) args;
     (void) argc;
     xr_clear_proxy(X);
@@ -1417,7 +1417,7 @@ XR_DEFINE_BUILTIN(h2_request, "h2Request",
 
 /* ========== Module Loading ========== */
 
-XR_FUNC XrModule *xr_load_module_http(XrayIsolate *isolate) {
+XR_FUNC XrModule *xr_load_module_http(XrVMRuntime *isolate) {
     // 1. Create Native module
     XrModule *mod = xr_module_create_native(isolate, "http");
     if (!mod)
@@ -1469,18 +1469,18 @@ XR_FUNC XrModule *xr_load_module_http(XrayIsolate *isolate) {
     // NOTE: WebSocket functions moved to separate 'ws' module
 
     // HTTP/2 client functions
-    extern XrValue h2_get(XrayIsolate * X, XrValue * args, int argc);
-    extern XrValue h2_post(XrayIsolate * X, XrValue * args, int argc);
-    extern XrValue h2_request(XrayIsolate * X, XrValue * args, int argc);
+    extern XrValue h2_get(XrVMRuntime * X, XrValue * args, int argc);
+    extern XrValue h2_post(XrVMRuntime * X, XrValue * args, int argc);
+    extern XrValue h2_request(XrVMRuntime * X, XrValue * args, int argc);
     XRS_EXPORT(mod, isolate, "h2Get", h2_get);
     XRS_EXPORT(mod, isolate, "h2Post", h2_post);
     XRS_EXPORT(mod, isolate, "h2Request", h2_request);
 
     // HTTP/2 server functions
-    extern XrValue h2_create_server(XrayIsolate * X, XrValue * args, int argc);
-    extern XrValue h2_server_listen(XrayIsolate * X, XrValue * args, int argc);
-    extern XrValue h2_server_stop(XrayIsolate * X, XrValue * args, int argc);
-    extern XrValue h2_push(XrayIsolate * X, XrValue * args, int argc);
+    extern XrValue h2_create_server(XrVMRuntime * X, XrValue * args, int argc);
+    extern XrValue h2_server_listen(XrVMRuntime * X, XrValue * args, int argc);
+    extern XrValue h2_server_stop(XrVMRuntime * X, XrValue * args, int argc);
+    extern XrValue h2_push(XrVMRuntime * X, XrValue * args, int argc);
     XRS_EXPORT(mod, isolate, "h2CreateServer", h2_create_server);
     XRS_EXPORT(mod, isolate, "h2Listen", h2_server_listen);
     XRS_EXPORT(mod, isolate, "h2Stop", h2_server_stop);

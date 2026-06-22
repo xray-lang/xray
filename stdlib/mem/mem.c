@@ -36,7 +36,7 @@
 
 /* ========== Helper ========== */
 
-static XrCoroHeap *get_heap(XrayIsolate *isolate) {
+static XrCoroHeap *get_heap(XrVMRuntime *isolate) {
     XR_DCHECK(isolate != NULL, "get_heap: isolate must not be NULL");
     // Try current coroutine first (ensure heap exists via lazy init)
     XrCoroutine *coro = xr_current_coro(isolate);
@@ -56,7 +56,7 @@ static XrCoroHeap *get_heap(XrayIsolate *isolate) {
 // Run the cycle collector + whole-block reclaim on the current coroutine.
 // Returns the cumulative cycle-collection count. Runs even when the
 // automatic collector is disabled (explicit user request).
-static XrValue mem_collect_cycles(XrayIsolate *isolate, XrValue *args, int argc) {
+static XrValue mem_collect_cycles(XrVMRuntime *isolate, XrValue *args, int argc) {
     (void) argc;
     (void) args;
     XrCoroHeap *heap = get_heap(isolate);
@@ -70,7 +70,7 @@ static XrValue mem_collect_cycles(XrayIsolate *isolate, XrValue *args, int argc)
 /* ========== mem.liveBytes() ========== */
 
 // Return live memory usage in bytes
-static XrValue mem_live_bytes(XrayIsolate *isolate, XrValue *args, int argc) {
+static XrValue mem_live_bytes(XrVMRuntime *isolate, XrValue *args, int argc) {
     (void) argc;
     (void) args;
     XrCoroHeap *heap = get_heap(isolate);
@@ -82,7 +82,7 @@ static XrValue mem_live_bytes(XrayIsolate *isolate, XrValue *args, int argc) {
 // Pause the automatic cycle collector (increment cycle_collection_disabled, saturate at 255).
 // Under RC the only thing that can be paused is the cycle-collector
 // auto-trigger; xr_cycle_add_root honours cycle_collection_disabled.
-static XrValue mem_disable_cycle_collection(XrayIsolate *isolate, XrValue *args, int argc) {
+static XrValue mem_disable_cycle_collection(XrVMRuntime *isolate, XrValue *args, int argc) {
     (void) argc;
     (void) args;
     XrCoroHeap *heap = get_heap(isolate);
@@ -93,7 +93,7 @@ static XrValue mem_disable_cycle_collection(XrayIsolate *isolate, XrValue *args,
 }
 
 // Resume the automatic cycle collector (decrement cycle_collection_disabled)
-static XrValue mem_enable_cycle_collection(XrayIsolate *isolate, XrValue *args, int argc) {
+static XrValue mem_enable_cycle_collection(XrVMRuntime *isolate, XrValue *args, int argc) {
     (void) argc;
     (void) args;
     XrCoroHeap *heap = get_heap(isolate);
@@ -106,7 +106,7 @@ static XrValue mem_enable_cycle_collection(XrayIsolate *isolate, XrValue *args, 
 /* ========== mem.isCycleCollectionEnabled() ========== */
 
 // Whether the automatic cycle collector is enabled
-static XrValue mem_is_cycle_collection_enabled(XrayIsolate *isolate, XrValue *args, int argc) {
+static XrValue mem_is_cycle_collection_enabled(XrVMRuntime *isolate, XrValue *args, int argc) {
     (void) argc;
     (void) args;
     XrCoroHeap *heap = get_heap(isolate);
@@ -116,7 +116,7 @@ static XrValue mem_is_cycle_collection_enabled(XrayIsolate *isolate, XrValue *ar
 /* ========== mem.liveObjects() ========== */
 
 // Return total live object count (O(1) via incremental counter)
-static XrValue mem_live_objects(XrayIsolate *isolate, XrValue *args, int argc) {
+static XrValue mem_live_objects(XrVMRuntime *isolate, XrValue *args, int argc) {
     (void) argc;
     (void) args;
     XrCoroHeap *heap = get_heap(isolate);
@@ -129,7 +129,7 @@ static XrValue mem_live_objects(XrayIsolate *isolate, XrValue *args, int argc) {
 #define MAP_SET(map, key_str, val) xr_map_set((map), xrs_string_value_c(isolate, (key_str)), (val))
 
 // Return memory-model-native info as a Map
-static XrValue mem_info(XrayIsolate *isolate, XrValue *args, int argc) {
+static XrValue mem_info(XrVMRuntime *isolate, XrValue *args, int argc) {
     (void) argc;
     (void) args;
 
@@ -183,7 +183,7 @@ XR_DEFINE_BUILTIN(mem_live_bytes, "liveBytes", "(): int", "Get live memory usage
 XR_DEFINE_BUILTIN(mem_live_objects, "liveObjects", "(): int", "Get live object count")
 XR_DEFINE_BUILTIN(mem_info, "info", "(): Map", "Get memory-model runtime info as Map")
 
-XR_FUNC XrModule *xr_load_module_mem(XrayIsolate *isolate) {
+XR_FUNC XrModule *xr_load_module_mem(XrVMRuntime *isolate) {
     XR_DCHECK(isolate != NULL, "xr_load_module_mem: NULL isolate");
 
     XrModule *module = xr_module_create_native(isolate, "mem");

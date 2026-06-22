@@ -45,9 +45,9 @@
 
 #include "../../src/base/xdefs.h"
 
-struct XrayIsolate;
+struct XrVMRuntime;
 struct XrModule;
 
-XR_FUNC struct XrModule *xr_load_module_xml(struct XrayIsolate *isolate);
+XR_FUNC struct XrModule *xr_load_module_xml(struct XrVMRuntime *isolate);
 
 #endif  // XR_STDLIB_XML_H

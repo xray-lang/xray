@@ -327,9 +327,9 @@ XrLspServer *xlsp_server_new(void) {
     }
 
     // Create isolate for parsing
-    XrayIsolateParams params;
-    xray_isolate_params_init(&params);
-    server->isolate = xray_isolate_new_full(&params);
+    XrVMConfig params;
+    xray_vm_config_init(&params);
+    server->isolate = xray_vm_new_full(&params);
     if (!server->isolate) {
         lsp_log("Warning: Failed to create isolate, parser features limited");
     }
@@ -348,7 +348,7 @@ XrLspServer *xlsp_server_new(void) {
     if (!server->doc_table) {
         xlsp_transport_free(server->transport);
         if (server->isolate)
-            xray_isolate_delete(server->isolate);
+            xray_vm_delete(server->isolate);
         xr_free(server);
         return NULL;
     }
@@ -431,7 +431,7 @@ void xlsp_server_free(XrLspServer *server) {
     }
 
     if (server->isolate) {
-        xray_isolate_delete(server->isolate);
+        xray_vm_delete(server->isolate);
     }
 
     // Free method dispatch table

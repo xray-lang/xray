@@ -91,13 +91,13 @@ static inline bool xi_top_binding_valid(XiTopBinding b) {
 
 /* ========== Context Init / Cleanup (xi_lower.c) ========== */
 
-XR_FUNC void xi_lower_init(XiLower *l, struct XaAnalyzer *analyzer, struct XrayIsolate *isolate);
+XR_FUNC void xi_lower_init(XiLower *l, struct XaAnalyzer *analyzer, struct XrVMRuntime *isolate);
 XR_FUNC void xi_lower_cleanup(XiLower *l);
 
 /* ========== Function Lowering (xi_lower.c) ========== */
 
 XR_FUNC XiFunc *xi_lower_func_impl(struct AstNode *func_node, struct XaAnalyzer *analyzer,
-                                   struct XrayIsolate *isolate, XiLower *parent_ctx);
+                                   struct XrVMRuntime *isolate, XiLower *parent_ctx);
 
 /* ========== AST Lowering Primitives ========== */
 

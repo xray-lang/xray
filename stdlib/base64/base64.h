@@ -36,9 +36,9 @@ XR_FUNC bool xr_base64_is_valid(const char *data, size_t len);
 
 /* ========== Module Loader ========== */
 
-struct XrayIsolate;
+struct XrVMRuntime;
 struct XrModule;
 
-XR_FUNC struct XrModule *xr_load_module_base64(struct XrayIsolate *isolate);
+XR_FUNC struct XrModule *xr_load_module_base64(struct XrVMRuntime *isolate);
 
 #endif  // XR_STDLIB_BASE64_H

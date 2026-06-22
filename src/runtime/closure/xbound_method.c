@@ -19,7 +19,7 @@
 #include "../xisolate_internal.h"
 #include "../xisolate_api.h"
 
-XrBoundMethod *xr_bound_method_new(XrayIsolate *isolate, XrValue receiver, MethodHandler handler) {
+XrBoundMethod *xr_bound_method_new(XrVMRuntime *isolate, XrValue receiver, MethodHandler handler) {
     XR_DCHECK(isolate != NULL, "bound_method_new: NULL isolate");
     XrBoundMethod *bm = (XrBoundMethod *) xr_fixed_heap_alloc(
         xr_isolate_get_fixed_heap(isolate), sizeof(XrBoundMethod), XR_TBOUND_METHOD);
@@ -57,7 +57,7 @@ XrBoundMethod *xr_value_to_bound_method(XrValue v) {
  * xvm_dispatch_call.inc.c raises XR_ERR_TYPE_NO_METHOD with the
  * caller's PC. The error surfaces immediately at the call site
  * rather than masking the missing method as a null result. */
-static XrValue bound_method_stub(XrayIsolate *isolate, XrValue receiver, XrValue *args, int argc) {
+static XrValue bound_method_stub(XrVMRuntime *isolate, XrValue receiver, XrValue *args, int argc) {
     (void) isolate;
     (void) receiver;
     (void) args;
@@ -68,7 +68,7 @@ static XrValue bound_method_stub(XrayIsolate *isolate, XrValue receiver, XrValue
 /* Resolve a primitive method handler from native_type_classes.
  * Returns NULL if the type is not registered or the method is
  * not found / not a primitive. */
-static MethodHandler resolve_native_handler(XrayIsolate *isolate, XrObjType gc_type, int symbol) {
+static MethodHandler resolve_native_handler(XrVMRuntime *isolate, XrObjType gc_type, int symbol) {
     XR_DCHECK(isolate != NULL, "resolve_native_handler: NULL isolate");
     if ((int) gc_type >= XR_NATIVE_TYPE_MAX)
         return NULL;
@@ -81,7 +81,7 @@ static MethodHandler resolve_native_handler(XrayIsolate *isolate, XrObjType gc_t
     return NULL;
 }
 
-MethodHandler xr_map_get_handler(XrayIsolate *isolate, int symbol) {
+MethodHandler xr_map_get_handler(XrVMRuntime *isolate, int symbol) {
     MethodHandler h = resolve_native_handler(isolate, XR_TMAP, symbol);
     if (h)
         return h;
@@ -90,7 +90,7 @@ MethodHandler xr_map_get_handler(XrayIsolate *isolate, int symbol) {
     return NULL;
 }
 
-MethodHandler xr_array_get_handler(XrayIsolate *isolate, int symbol) {
+MethodHandler xr_array_get_handler(XrVMRuntime *isolate, int symbol) {
     MethodHandler h = resolve_native_handler(isolate, XR_TARRAY, symbol);
     if (h)
         return h;
@@ -99,7 +99,7 @@ MethodHandler xr_array_get_handler(XrayIsolate *isolate, int symbol) {
     return NULL;
 }
 
-MethodHandler xr_set_get_handler(XrayIsolate *isolate, int symbol) {
+MethodHandler xr_set_get_handler(XrVMRuntime *isolate, int symbol) {
     MethodHandler h = resolve_native_handler(isolate, XR_TSET, symbol);
     if (h)
         return h;
@@ -108,7 +108,7 @@ MethodHandler xr_set_get_handler(XrayIsolate *isolate, int symbol) {
     return NULL;
 }
 
-MethodHandler xr_string_get_handler(XrayIsolate *isolate, int symbol) {
+MethodHandler xr_string_get_handler(XrVMRuntime *isolate, int symbol) {
     MethodHandler h = resolve_native_handler(isolate, XR_TSTRING, symbol);
     if (h)
         return h;
@@ -117,7 +117,7 @@ MethodHandler xr_string_get_handler(XrayIsolate *isolate, int symbol) {
     return NULL;
 }
 
-XrValue xr_enum_get_member_handler(XrayIsolate *isolate, XrValue receiver, XrValue *args,
+XrValue xr_enum_get_member_handler(XrVMRuntime *isolate, XrValue receiver, XrValue *args,
                                    int argc) {
     (void) isolate;
     if (argc < 1 || !XR_IS_INT(args[0]))

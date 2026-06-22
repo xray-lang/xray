@@ -25,7 +25,7 @@
 #include "../value/xstruct_layout.h"
 #include "../xexec_state.h"
 
-XrValue xr_create_type_object(XrayIsolate *X, XrTypeMetadata *meta) {
+XrValue xr_create_type_object(XrVMRuntime *X, XrTypeMetadata *meta) {
     XR_DCHECK(X != NULL, "create_type_object: NULL isolate");
     if (!meta)
         return xr_null();
@@ -44,7 +44,7 @@ XrValue xr_create_type_object(XrayIsolate *X, XrTypeMetadata *meta) {
     return wrapper_to_value(wrapper);
 }
 
-XrValue xr_create_field_object(XrayIsolate *X, XrFieldMetadata *field) {
+XrValue xr_create_field_object(XrVMRuntime *X, XrFieldMetadata *field) {
     XR_DCHECK(X != NULL, "create_field_object: NULL isolate");
     if (!field)
         return xr_null();
@@ -63,7 +63,7 @@ XrValue xr_create_field_object(XrayIsolate *X, XrFieldMetadata *field) {
     return wrapper_to_value(wrapper);
 }
 
-XrValue xr_create_method_object(XrayIsolate *X, XrMethodMetadata *method) {
+XrValue xr_create_method_object(XrVMRuntime *X, XrMethodMetadata *method) {
     XR_DCHECK(X != NULL, "create_method_object: NULL isolate");
     if (!method)
         return xr_null();
@@ -82,11 +82,11 @@ XrValue xr_create_method_object(XrayIsolate *X, XrMethodMetadata *method) {
     return wrapper_to_value(wrapper);
 }
 
-XrValue xr_create_constructor_object(XrayIsolate *X, XrMethodMetadata *ctor) {
+XrValue xr_create_constructor_object(XrVMRuntime *X, XrMethodMetadata *ctor) {
     return xr_create_method_object(X, ctor);
 }
 
-XrValue xr_create_parameter_object(XrayIsolate *X, XrParameterMetadata *param) {
+XrValue xr_create_parameter_object(XrVMRuntime *X, XrParameterMetadata *param) {
     XR_DCHECK(X != NULL, "create_parameter_object: NULL isolate");
     if (!param)
         return xr_null();
@@ -138,7 +138,7 @@ XrParameterMetadata *xr_get_parameter_metadata(XrValue param_obj) {
 
 /* ========== Reflect Class Methods ========== */
 
-XrValue xr_reflect_getType(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+XrValue xr_reflect_getType(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     (void) self;
     XR_DCHECK(isolate != NULL, "reflect_getType: NULL isolate");
     if (nargs < 1) {
@@ -147,7 +147,7 @@ XrValue xr_reflect_getType(XrayIsolate *isolate, XrValue self, XrValue *args, in
     }
 
     XrValue obj = args[0];
-    XrayIsolate *X = isolate;
+    XrVMRuntime *X = isolate;
 
     XrClass *klass = NULL;
     if (xr_value_is_class(obj)) {
@@ -172,7 +172,7 @@ XrValue xr_reflect_getType(XrayIsolate *isolate, XrValue self, XrValue *args, in
     return xr_create_type_object(X, meta);
 }
 
-XrValue xr_reflect_getTypeByName(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+XrValue xr_reflect_getTypeByName(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     (void) self;
     XR_DCHECK(isolate != NULL, "reflect_getTypeByName: NULL isolate");
     if (nargs < 1) {
@@ -185,7 +185,7 @@ XrValue xr_reflect_getTypeByName(XrayIsolate *isolate, XrValue self, XrValue *ar
         return xr_null();
     }
 
-    XrayIsolate *X = isolate;
+    XrVMRuntime *X = isolate;
     XrString *name_str = XR_TO_STRING(args[0]);
     const char *name = name_str->data;
 
@@ -196,13 +196,13 @@ XrValue xr_reflect_getTypeByName(XrayIsolate *isolate, XrValue self, XrValue *ar
     return xr_create_type_object(X, meta);
 }
 
-XrValue xr_reflect_getAllTypes(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+XrValue xr_reflect_getAllTypes(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     (void) self;
     XR_DCHECK(isolate != NULL, "reflect_getAllTypes: NULL isolate");
     (void) args;
     (void) nargs;
 
-    XrayIsolate *X = isolate;
+    XrVMRuntime *X = isolate;
 
     int count = 0;
     XrTypeMetadata **all_types = xr_registry_get_all_types(X, &count);
@@ -222,7 +222,7 @@ XrValue xr_reflect_getAllTypes(XrayIsolate *isolate, XrValue self, XrValue *args
     return xr_value_from_array(array);
 }
 
-XrValue xr_reflect_isInstance(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+XrValue xr_reflect_isInstance(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     (void) self;
     XR_DCHECK(isolate != NULL, "reflect_isInstance: NULL isolate");
     if (nargs < 2) {
@@ -244,7 +244,7 @@ XrValue xr_reflect_isInstance(XrayIsolate *isolate, XrValue self, XrValue *args,
     return xr_bool(xr_class_instanceof(obj_class, type_meta->klass));
 }
 
-XrValue xr_reflect_isInstanceOf(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+XrValue xr_reflect_isInstanceOf(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     (void) self;
     XR_DCHECK(isolate != NULL, "reflect_isInstanceOf: NULL isolate");
     if (nargs < 2) {
@@ -257,7 +257,7 @@ XrValue xr_reflect_isInstanceOf(XrayIsolate *isolate, XrValue self, XrValue *arg
         return xr_bool(false);
     }
 
-    XrayIsolate *X = isolate;
+    XrVMRuntime *X = isolate;
     XrValue obj = args[0];
     XrString *type_name = XR_TO_STRING(args[1]);
 
@@ -272,7 +272,7 @@ XrValue xr_reflect_isInstanceOf(XrayIsolate *isolate, XrValue self, XrValue *arg
 
 // Reflect.fieldCount(obj: Json): int
 // Supports Json, struct (stack-allocated), and class instances
-XrValue xr_reflect_fieldCount(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+XrValue xr_reflect_fieldCount(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     (void) self;
     if (nargs < 1)
         return xr_int(0);
@@ -310,7 +310,7 @@ XrValue xr_reflect_fieldCount(XrayIsolate *isolate, XrValue self, XrValue *args,
 }
 
 // Helper: convert tid to interned string value
-static XrValue tid_to_string_value(XrayIsolate *isolate, uint8_t tid) {
+static XrValue tid_to_string_value(XrVMRuntime *isolate, uint8_t tid) {
     const char *name = (tid == 0) ? "any" : xr_typeid_name((XrTypeId) tid);
     size_t len = strlen(name);
     uint32_t hash = xr_string_hash(name, len);
@@ -318,7 +318,7 @@ static XrValue tid_to_string_value(XrayIsolate *isolate, uint8_t tid) {
 }
 
 // Reflect.elementType(obj: Array|Set|Channel): string
-XrValue xr_reflect_elementType(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+XrValue xr_reflect_elementType(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     (void) self;
     XR_DCHECK(isolate != NULL, "reflect_elementType: NULL isolate");
     if (nargs < 1)
@@ -337,7 +337,7 @@ XrValue xr_reflect_elementType(XrayIsolate *isolate, XrValue self, XrValue *args
 }
 
 // Reflect.keyType(obj: Map): string
-XrValue xr_reflect_keyType(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+XrValue xr_reflect_keyType(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     (void) self;
     XR_DCHECK(isolate != NULL, "reflect_keyType: NULL isolate");
     if (nargs < 1)
@@ -351,7 +351,7 @@ XrValue xr_reflect_keyType(XrayIsolate *isolate, XrValue self, XrValue *args, in
 }
 
 // Reflect.valueType(obj: Map): string
-XrValue xr_reflect_valueType(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+XrValue xr_reflect_valueType(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     (void) self;
     XR_DCHECK(isolate != NULL, "reflect_valueType: NULL isolate");
     if (nargs < 1)
@@ -366,7 +366,7 @@ XrValue xr_reflect_valueType(XrayIsolate *isolate, XrValue self, XrValue *args, 
 
 // Reflect.typeOf(obj: Json): string
 // Returns full generic type string, e.g. "Array<int>", "Map<string, int>"
-XrValue xr_reflect_typeOf(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+XrValue xr_reflect_typeOf(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     (void) self;
     XR_DCHECK(isolate != NULL, "reflect_typeOf: NULL isolate");
     if (nargs < 1)

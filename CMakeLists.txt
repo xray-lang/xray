@@ -752,6 +752,7 @@ set(XRAY_RT_CORO_SOURCES
 list(FILTER XRAY_RT_CORO_SOURCES EXCLUDE REGEX ".*/src/runtime/xisolate_api\\.c$")
 list(FILTER XRAY_RT_CORO_SOURCES EXCLUDE REGEX ".*/src/runtime/value/xchunk\\.c$")
 list(FILTER XRAY_RT_CORO_SOURCES EXCLUDE REGEX ".*/src/runtime/value/xopcode_info\\.c$")
+list(FILTER XRAY_RT_CORO_SOURCES EXCLUDE REGEX ".*/src/coro/xcoro_monitor\\.c$")
 
 add_library(xray_rt_coro STATIC ${XRAY_RT_CORO_SOURCES})
 add_dependencies(xray_rt_coro gen-xi-ops gen-xi-verify gen-xi-lowering gen-aot-metadata)
@@ -1416,11 +1417,6 @@ install(TARGETS xray
     RUNTIME DESTINATION bin
 )
 
-install(DIRECTORY include/
-    DESTINATION include
-    FILES_MATCHING PATTERN "*.h"
-)
-
 install(DIRECTORY stdlib/
     DESTINATION lib/xray/stdlib
     FILES_MATCHING PATTERN "*.xr"
@@ -1555,7 +1551,7 @@ install(TARGETS xray_aot_core xray_rt_coro xray_vm_runtime
 # Install header files (to include/xray directory)
 install(FILES
     ${CMAKE_SOURCE_DIR}/include/xray.h
-    ${CMAKE_SOURCE_DIR}/include/xray_isolate.h
+    ${CMAKE_SOURCE_DIR}/include/xray_vm.h
     ${CMAKE_SOURCE_DIR}/include/xray_export.h
     ${CMAKE_SOURCE_DIR}/include/xray_version.h
     DESTINATION include/xray

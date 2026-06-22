@@ -60,10 +60,10 @@ typedef struct XrAtomic {
 
 /* ========== Constructor ========== */
 
-struct XrayIsolate;
+struct XrVMRuntime;
 
 /* Allocate Atomic on system heap with initial value. */
-XR_FUNC XrAtomic *xr_atomic_new(struct XrayIsolate *X, XrAtomicKind kind, int64_t initial);
+XR_FUNC XrAtomic *xr_atomic_new(struct XrVMRuntime *X, XrAtomicKind kind, int64_t initial);
 
 /* ========== Value Conversion Helpers ========== */
 
@@ -144,6 +144,6 @@ static inline XrValue xr_value_from_atomic(XrAtomic *a) {
 
 /* ========== Native Type Registration ========== */
 
-XR_FUNC void xr_atomic_register_native_type(struct XrayIsolate *X);
+XR_FUNC void xr_atomic_register_native_type(struct XrVMRuntime *X);
 
 #endif  // XATOMIC_H

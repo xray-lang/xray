@@ -32,6 +32,6 @@ XR_FUNC const XaBuiltinType *xa_native_get_builtin_types(void);
 
 /* Debug-only: verify that C-registered native methods match .xr declarations.
  * Logs warnings for any mismatches.  Returns number of mismatches (0 = OK). */
-XR_FUNC int xa_native_verify_protocol(struct XrayIsolate *X);
+XR_FUNC int xa_native_verify_protocol(struct XrVMRuntime *X);
 
 #endif  // XANALYZER_NATIVE_TYPES_H

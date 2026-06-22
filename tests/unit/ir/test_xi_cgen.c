@@ -25,7 +25,7 @@
 #include "../../../src/base/xmalloc.h"
 #include "../../../src/base/xmemstream.h"
 #include "../../../src/toolchain/xcompiler_session.h"
-#include "../../../include/xray_isolate.h"
+#include "../../../include/xray_vm.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -34,7 +34,7 @@
 
 /* ========== Test Infrastructure ========== */
 
-static XrayIsolate *g_iso = NULL;
+static XrVMRuntime *g_iso = NULL;
 static int tests_passed = 0;
 static int tests_failed = 0;
 
@@ -55,15 +55,15 @@ typedef struct TestAotPlan {
 
 static void setup(void) {
     if (!g_iso) {
-        XrayIsolateParams p;
-        xray_isolate_params_init(&p);
-        g_iso = xray_isolate_new_full(&p);
+        XrVMConfig p;
+        xray_vm_config_init(&p);
+        g_iso = xray_vm_new_full(&p);
     }
 }
 
 static void teardown(void) {
     if (g_iso) {
-        xray_isolate_delete(g_iso);
+        xray_vm_delete(g_iso);
         g_iso = NULL;
     }
 }
@@ -394,7 +394,7 @@ TEST(cgen_initializes_file_dir_builtins_from_entry_source) {
            "__file__ must be initialized from the entry source path");
     assert(contains(code, "xrt_builtins[7] = xr_box_str(\"/tmp/xray\")") &&
            "__dir__ must be initialized from the entry source directory");
-    assert(!contains(code, "xray_isolate_set_script_info") &&
+    assert(!contains(code, "xray_vm_set_script_info") &&
            "AOT generated C must not route script info through VM isolate");
 
     printf("  Generated file/dir-aware entry %zu bytes of C code\n", strlen(code));
@@ -423,7 +423,7 @@ TEST(cgen_runtime_file_dir_stays_runtime_owned) {
            "runtime-owned __file__ must not be overwritten with an xrt string");
     assert(!contains(code, "xr_aot_runtime_set_builtin(rt, 7") &&
            "runtime-owned __dir__ must not be overwritten with an xrt string");
-    assert(!contains(code, "xray_isolate_set_script_info") &&
+    assert(!contains(code, "xray_vm_set_script_info") &&
            "AOT generated C must not route script info through VM isolate");
 
     printf("  Generated runtime-owned file/dir entry %zu bytes of C code\n", strlen(code));
@@ -4465,16 +4465,13 @@ TEST(cgen_runtime_needed_main_uses_aot_runtime) {
            "generated coroutine main must call the final runtime API");
     assert(contains(code, "xr_aot_runtime_delete(rt);") &&
            "generated main must tear down XrAotRuntime directly");
-    assert(!contains(code, "XrayIsolateParams") &&
-           "generated main must not construct VM isolate params");
-    assert(!contains(code, "xray_isolate_new(") &&
-           "generated main must not construct a VM isolate");
-    assert(!contains(code, "xr_multicore_init(") &&
+    assert(!contains(code, "XrVMConfig") && "generated main must not construct VM isolate params");
+    assert(!contains(code, "xray_vm_new(") && "generated main must not construct a VM isolate");
+    assert(!contains(code, "xray_vm_multicore_init(") &&
            "generated main must not initialize scheduler through isolate");
     assert(!contains(code, "xr_aot_run_main_vm_bridge(") &&
            "generated main must not use the VM bridge entry");
-    assert(!contains(code, "xray_isolate_delete(") &&
-           "generated main must not tear down a VM isolate");
+    assert(!contains(code, "xray_vm_delete(") && "generated main must not tear down a VM isolate");
 
     printf("  Generated AOT runtime main %zu bytes of C code\n", strlen(code));
     xr_free(code);
@@ -4796,7 +4793,7 @@ TEST(cgen_work_queue_native_methods_use_aot_helpers) {
            "sync WorkQueue main must create a work-queue-capable AOT runtime");
     assert(contains(code, "xrt_global_ctx.runtime = rt;") &&
            "sync WorkQueue helpers must receive a runtime-backed global context");
-    assert(!contains(code, "xray_isolate_new(") && "sync WorkQueue main must not use a VM isolate");
+    assert(!contains(code, "xray_vm_new(") && "sync WorkQueue main must not use a VM isolate");
     assert(!contains(code, "xrt_method_0(") && !contains(code, "xrt_method_1(") &&
            "WorkQueue native methods must not fall back to dynamic method dispatch");
 

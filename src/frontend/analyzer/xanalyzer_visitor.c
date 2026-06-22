@@ -127,7 +127,7 @@ static XrType *member_set_substitute_field_type(XaInferContext *ctx, XrType *typ
  */
 // Cross-TU helper used by xa_visit_collect_class in
 // xanalyzer_visitor_decl.c when registering generic-method types.
-XrType *resolve_class_to_type_param(XrayIsolate *X, XrType *type, const char **tp_names,
+XrType *resolve_class_to_type_param(XrVMRuntime *X, XrType *type, const char **tp_names,
                                     int tp_count) {
     if (!type || tp_count <= 0)
         return type;

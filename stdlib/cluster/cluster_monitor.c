@@ -57,7 +57,7 @@
  * unbounded memory. Callers that need a larger buffer can subscribe
  * to cluster_info() metrics instead.
  */
-XrChannel *xr_cluster_monitor_node(XrayIsolate *X, const char *node_name) {
+XrChannel *xr_cluster_monitor_node(XrVMRuntime *X, const char *node_name) {
     XrCluster *c = (XrCluster *) X->cluster;
     if (!c || !node_name)
         return NULL;
@@ -131,7 +131,7 @@ void xr_cluster_fire_monitors(XrCluster *c, const char *node_name) {
 
 /* ========== Remote Coroutine Monitor ========== */
 
-XrChannel *xr_cluster_monitor_coro(XrayIsolate *X, const char *node_name, const char *coro_name) {
+XrChannel *xr_cluster_monitor_coro(XrVMRuntime *X, const char *node_name, const char *coro_name) {
     XrCluster *c = (XrCluster *) X->cluster;
     if (!c || !node_name || !coro_name)
         return NULL;

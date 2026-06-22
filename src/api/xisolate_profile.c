@@ -11,7 +11,7 @@
  *   Each profile starts from bytecode VM defaults; callers override only what
  *   they need (trace, workers, etc.).  Creation uses the explicit full VM
  *   constructor. This eliminates the repeated
- *   XrayIsolateParams boilerplate across run/repl/test/check/fmt/compile/
+ *   XrVMConfig boilerplate across run/repl/test/check/fmt/compile/
  *   deps/eval and the MCP analyzer isolate.
  */
 
@@ -22,29 +22,29 @@
 
 /* ========== Profile Configuration ========== */
 
-void xr_isolate_profile_params(XrIsolateProfile profile, XrayIsolateParams *out) {
+void xr_isolate_profile_params(XrIsolateProfile profile, XrVMConfig *out) {
     XR_DCHECK(out != NULL, "out must not be NULL");
 
     /* Start with defaults */
-    xray_isolate_params_init(out);
+    xray_vm_config_init(out);
 
     (void) profile;
 }
 
 /* ========== Create ========== */
 
-XrayIsolate *xr_isolate_profile_create(const XrayIsolateParams *params) {
+XrVMRuntime *xr_isolate_profile_create(const XrVMConfig *params) {
     XR_DCHECK(params != NULL, "params must not be NULL");
 
-    XrayIsolate *iso = xray_isolate_new_full(params);
+    XrVMRuntime *iso = xray_vm_new_full(params);
     if (!iso) {
         fprintf(stderr, "xray: failed to create isolate\n");
     }
     return iso;
 }
 
-XrayIsolate *xr_isolate_profile_new(XrIsolateProfile profile) {
-    XrayIsolateParams params;
+XrVMRuntime *xr_isolate_profile_new(XrIsolateProfile profile) {
+    XrVMConfig params;
     xr_isolate_profile_params(profile, &params);
     return xr_isolate_profile_create(&params);
 }

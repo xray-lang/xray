@@ -54,7 +54,7 @@
 
 /* ========== Container helpers (static) ========== */
 
-static void format_array(XrayIsolate *isolate, XrStrBuf *sb, XrArray *arr, int depth) {
+static void format_array(XrVMRuntime *isolate, XrStrBuf *sb, XrArray *arr, int depth) {
     xr_strbuf_append_cstr(sb, "[", 1);
     int len = arr->length;
     int limit = (len > XR_FORMAT_MAX_ELEMENTS) ? XR_FORMAT_MAX_ELEMENTS : len;
@@ -71,7 +71,7 @@ static void format_array(XrayIsolate *isolate, XrStrBuf *sb, XrArray *arr, int d
     xr_strbuf_append_cstr(sb, "]", 1);
 }
 
-static void format_tuple(XrayIsolate *isolate, XrStrBuf *sb, XrTuple *tup, int depth) {
+static void format_tuple(XrVMRuntime *isolate, XrStrBuf *sb, XrTuple *tup, int depth) {
     xr_strbuf_append_cstr(sb, "(", 1);
     uint16_t n = xr_tuple_arity(tup);
     uint16_t limit = (n > XR_FORMAT_MAX_ELEMENTS) ? XR_FORMAT_MAX_ELEMENTS : n;
@@ -90,7 +90,7 @@ static void format_tuple(XrayIsolate *isolate, XrStrBuf *sb, XrTuple *tup, int d
     xr_strbuf_append_cstr(sb, ")", 1);
 }
 
-static void format_map(XrayIsolate *isolate, XrStrBuf *sb, XrMap *map, int depth) {
+static void format_map(XrVMRuntime *isolate, XrStrBuf *sb, XrMap *map, int depth) {
     xr_strbuf_append_cstr(sb, "#{", 2);
     if (!xr_map_isdummy(map)) {
         uint32_t size = map->nentries;
@@ -115,7 +115,7 @@ static void format_map(XrayIsolate *isolate, XrStrBuf *sb, XrMap *map, int depth
     xr_strbuf_append_cstr(sb, "}", 1);
 }
 
-static void format_set(XrayIsolate *isolate, XrStrBuf *sb, XrSet *set, int depth) {
+static void format_set(XrVMRuntime *isolate, XrStrBuf *sb, XrSet *set, int depth) {
     xr_strbuf_append_cstr(sb, "#[", 2);
     int count = 0;
     for (uint32_t i = 0; i < set->nentries && count < XR_FORMAT_MAX_ELEMENTS; i++) {
@@ -135,7 +135,7 @@ static void format_set(XrayIsolate *isolate, XrStrBuf *sb, XrSet *set, int depth
     xr_strbuf_append_cstr(sb, "]", 1);
 }
 
-static void format_json(XrayIsolate *isolate, XrStrBuf *sb, XrJson *json, int depth) {
+static void format_json(XrVMRuntime *isolate, XrStrBuf *sb, XrJson *json, int depth) {
     xr_strbuf_append_cstr(sb, "{", 1);
     XrClass *cls = json->klass;
     if (!cls) {
@@ -159,7 +159,7 @@ static void format_json(XrayIsolate *isolate, XrStrBuf *sb, XrJson *json, int de
 
 /* ========== Public API ========== */
 
-void xr_value_to_strbuf(XrayIsolate *isolate, XrStrBuf *sb, XrValue val, int depth) {
+void xr_value_to_strbuf(XrVMRuntime *isolate, XrStrBuf *sb, XrValue val, int depth) {
     if (XR_IS_STRING(val)) {
         if (depth > 0)
             xr_strbuf_append_cstr(sb, "\"", 1);
@@ -441,7 +441,7 @@ void xr_value_to_strbuf(XrayIsolate *isolate, XrStrBuf *sb, XrValue val, int dep
     }
 }
 
-XrString *xr_value_to_string(XrayIsolate *isolate, XrValue val) {
+XrString *xr_value_to_string(XrVMRuntime *isolate, XrValue val) {
     XR_DCHECK(isolate != NULL, "xr_value_to_string: NULL isolate");
 
     // Fast paths for common types (no XrStrBuf needed)

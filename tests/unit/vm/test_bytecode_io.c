@@ -16,12 +16,12 @@
 #include "runtime/symbol/xsymbol_table.h"
 #include "runtime/value/xchunk.h"
 #include "runtime/value/xffi_sig.h"
-#include "xray_isolate.h"
+#include "xray_vm.h"
 
-static XrayIsolate *new_test_isolate(void) {
-    XrayIsolateParams params;
-    xray_isolate_params_init(&params);
-    return xray_isolate_new_full(&params);
+static XrVMRuntime *new_test_isolate(void) {
+    XrVMConfig params;
+    xray_vm_config_init(&params);
+    return xray_vm_new_full(&params);
 }
 
 static uint16_t read_le16(const uint8_t *p) {
@@ -41,7 +41,7 @@ static XrProto *make_minimal_proto(void) {
 }
 
 TEST(bytecode_write_emits_v6_header_and_roundtrips_u64_instruction) {
-    XrayIsolate *iso = new_test_isolate();
+    XrVMRuntime *iso = new_test_isolate();
     ASSERT_NOT_NULL(iso);
 
     XrProto *proto = make_minimal_proto();
@@ -64,11 +64,11 @@ TEST(bytecode_write_emits_v6_header_and_roundtrips_u64_instruction) {
     xr_vm_proto_free(roundtrip);
     xr_free(bytes);
     xr_vm_proto_free(proto);
-    xray_isolate_delete(iso);
+    xray_vm_delete(iso);
 }
 
 TEST(bytecode_reader_rejects_previous_layout_version) {
-    XrayIsolate *iso = new_test_isolate();
+    XrVMRuntime *iso = new_test_isolate();
     ASSERT_NOT_NULL(iso);
 
     XrProto *proto = make_minimal_proto();
@@ -90,11 +90,11 @@ TEST(bytecode_reader_rejects_previous_layout_version) {
 
     xr_free(bytes);
     xr_vm_proto_free(proto);
-    xray_isolate_delete(iso);
+    xray_vm_delete(iso);
 }
 
 TEST(bytecode_roundtrips_u16_upvalue_index) {
-    XrayIsolate *iso = new_test_isolate();
+    XrVMRuntime *iso = new_test_isolate();
     ASSERT_NOT_NULL(iso);
 
     XrProto *proto = make_minimal_proto();
@@ -120,11 +120,11 @@ TEST(bytecode_roundtrips_u16_upvalue_index) {
     xr_vm_proto_free(roundtrip);
     xr_free(bytes);
     xr_vm_proto_free(proto);
-    xray_isolate_delete(iso);
+    xray_vm_delete(iso);
 }
 
 TEST(bytecode_roundtrips_symbol_index_above_255) {
-    XrayIsolate *iso = new_test_isolate();
+    XrVMRuntime *iso = new_test_isolate();
     ASSERT_NOT_NULL(iso);
 
     XrProto *proto = xr_vm_proto_new();
@@ -170,11 +170,11 @@ TEST(bytecode_roundtrips_symbol_index_above_255) {
     xr_vm_proto_free(roundtrip);
     xr_free(bytes);
     xr_vm_proto_free(proto);
-    xray_isolate_delete(iso);
+    xray_vm_delete(iso);
 }
 
 TEST(bytecode_roundtrips_extern_ffi_signature) {
-    XrayIsolate *iso = new_test_isolate();
+    XrVMRuntime *iso = new_test_isolate();
     ASSERT_NOT_NULL(iso);
 
     /* @extern fn pow(base: float64, exp: float64) -> float64 @dylib("m").
@@ -211,11 +211,11 @@ TEST(bytecode_roundtrips_extern_ffi_signature) {
     xr_vm_proto_free(roundtrip);
     xr_free(bytes);
     xr_vm_proto_free(proto);
-    xray_isolate_delete(iso);
+    xray_vm_delete(iso);
 }
 
 TEST(bytecode_roundtrips_extern_default_library) {
-    XrayIsolate *iso = new_test_isolate();
+    XrVMRuntime *iso = new_test_isolate();
     ASSERT_NOT_NULL(iso);
 
     /* @extern fn sqrt(x: float64) -> float64 (no @dylib -> default/process). */
@@ -245,11 +245,11 @@ TEST(bytecode_roundtrips_extern_default_library) {
     xr_vm_proto_free(roundtrip);
     xr_free(bytes);
     xr_vm_proto_free(proto);
-    xray_isolate_delete(iso);
+    xray_vm_delete(iso);
 }
 
 TEST(bytecode_roundtrips_extern_cfn_callback_signature) {
-    XrayIsolate *iso = new_test_isolate();
+    XrVMRuntime *iso = new_test_isolate();
     ASSERT_NOT_NULL(iso);
 
     XrProto *proto = make_minimal_proto();
@@ -284,7 +284,7 @@ TEST(bytecode_roundtrips_extern_cfn_callback_signature) {
     xr_vm_proto_free(roundtrip);
     xr_free(bytes);
     xr_vm_proto_free(proto);
-    xray_isolate_delete(iso);
+    xray_vm_delete(iso);
 }
 
 static void run_all_tests(void) {

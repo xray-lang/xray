@@ -40,20 +40,20 @@
 /* ========== Helper Functions ========== */
 
 // Create string from buffer with specified length.
-static inline XrValue make_string_n(XrayIsolate *X, const char *s, size_t len) {
+static inline XrValue make_string_n(XrVMRuntime *X, const char *s, size_t len) {
     if (!s || len == 0)
         return xrs_string_value_c(X, "");
     return xrs_string_value_n(X, s, len);
 }
 
-static inline XrValue make_string_slice(XrayIsolate *X, XrPathCoreSlice slice) {
+static inline XrValue make_string_slice(XrVMRuntime *X, XrPathCoreSlice slice) {
     return make_string_n(X, slice.data, slice.len);
 }
 
 /* ========== Path Operations ========== */
 
 // join(...) - Join multiple path segments
-static XrValue path_join(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue path_join(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1)
         return xrs_string_value_c(X, "");
 
@@ -109,7 +109,7 @@ static const char *path_dirname_core(const char *path, size_t len, size_t *out_l
 }
 
 // dirname(path) - Get directory part
-static XrValue path_dirname(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue path_dirname(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1)
         return xrs_string_value_c(X, ".");
     size_t plen = 0;
@@ -127,7 +127,7 @@ static const char *path_basename_core(const char *path, size_t len, size_t *out_
 }
 
 // basename(path) - Get filename part
-static XrValue path_basename(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue path_basename(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1)
         return xrs_string_value_c(X, "");
     size_t plen = 0;
@@ -147,7 +147,7 @@ static const char *path_extname_core(const char *path, size_t plen, size_t *out_
 }
 
 // extname(path) - Get file extension
-static XrValue path_extname(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue path_extname(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1)
         return xrs_string_value_c(X, "");
     size_t plen = 0;
@@ -165,7 +165,7 @@ static bool path_is_absolute_raw(const char *path, size_t len) {
 }
 
 // isAbsolute(path) - Check if path is absolute
-static XrValue path_isAbsolute(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue path_isAbsolute(XrVMRuntime *X, XrValue *args, int argc) {
     (void) X;
     if (argc < 1)
         return xr_bool(false);
@@ -205,7 +205,7 @@ static bool path_normalize_alloc(const char *path, size_t len, char **out, size_
 }
 
 // normalize(path) - Normalize path (resolve . and ..)
-static XrValue path_normalize(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue path_normalize(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1)
         return xrs_string_value_c(X, ".");
 
@@ -224,7 +224,7 @@ static XrValue path_normalize(XrayIsolate *X, XrValue *args, int argc) {
     return ret;
 }
 
-static XrValue path_resolve_join_normalized(XrayIsolate *X, const char **parts, const size_t *lens,
+static XrValue path_resolve_join_normalized(XrVMRuntime *X, const char **parts, const size_t *lens,
                                             size_t count) {
     size_t joined_len = 0;
     if (!xr_path_core_join_len(parts, lens, count, &joined_len))
@@ -246,7 +246,7 @@ static XrValue path_resolve_join_normalized(XrayIsolate *X, const char **parts, 
     return ret;
 }
 
-static XrValue path_resolve(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue path_resolve(XrVMRuntime *X, XrValue *args, int argc) {
     enum {
         PATH_RESOLVE_STACK_PARTS = 17
     };
@@ -291,7 +291,7 @@ static XrValue path_resolve(XrayIsolate *X, XrValue *args, int argc) {
 
 // relative(from, to) - Compute relative path
 // Fixed: segment-boundary-aware common prefix (avoids /foo vs /foobar mismatch)
-static XrValue path_relative(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue path_relative(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 2)
         return xrs_string_value_c(X, "");
 
@@ -337,7 +337,7 @@ static XrValue path_relative(XrayIsolate *X, XrValue *args, int argc) {
 // parse(path) - Parse path into a PathInfo handle (Json with fixed shape:
 // root, dir, base, name, ext). Returns Json so user code uses .field access
 // (e.g. `let p = path.parse(s); p.dir`) instead of `.get("dir")`.
-static XrValue path_parse(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue path_parse(XrVMRuntime *X, XrValue *args, int argc) {
     // Short-circuit on bad input — return an empty Json with the same five
     // fields populated as empty strings, so downstream `.field` access on
     // the result never NPEs.
@@ -378,7 +378,7 @@ static XrValue path_parse(XrayIsolate *X, XrValue *args, int argc) {
 // Uses a dynamic buffer so arbitrarily long paths are preserved, and honours
 // PATH_SEP rather than hard-coding '/'. That avoids mixed-separator output
 // on Windows, e.g. `C:\foo/bar`.
-static XrValue path_format(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue path_format(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1)
         return xrs_string_value_c(X, "");
     if (!xr_value_is_json(args[0]))
@@ -454,7 +454,7 @@ XR_DEFINE_BUILTIN(path_parse, "parse", "(path: string): PathInfo",
                   "Parse path into components (root, dir, base, name, ext)")
 XR_DEFINE_BUILTIN(path_format, "format", "(obj: PathInfo): string", "Format path from components")
 
-XR_FUNC XrModule *xr_load_module_path(XrayIsolate *isolate) {
+XR_FUNC XrModule *xr_load_module_path(XrVMRuntime *isolate) {
     XR_DCHECK(isolate != NULL, "xr_load_module_path: NULL isolate");
 
     XrModule *mod = xr_module_create_native(isolate, "path");

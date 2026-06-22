@@ -42,9 +42,9 @@
  * Eliminates per-module extern declarations and EXPORT_CFUNC macro duplication.
  */
 struct XrCFunction;
-struct XrayIsolate;
-typedef XrValue (*XrCFunctionPtr)(struct XrayIsolate *, XrValue *, int);
-extern struct XrCFunction *xr_vm_cfunction_new(struct XrayIsolate *isolate, XrCFunctionPtr func,
+struct XrVMRuntime;
+typedef XrValue (*XrCFunctionPtr)(struct XrVMRuntime *, XrValue *, int);
+extern struct XrCFunction *xr_vm_cfunction_new(struct XrVMRuntime *isolate, XrCFunctionPtr func,
                                                const char *name);
 extern XrValue xr_value_from_cfunction(struct XrCFunction *cfunc);
 

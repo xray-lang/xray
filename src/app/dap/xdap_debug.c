@@ -41,13 +41,13 @@
 #include "../../base/xmalloc.h"
 
 // Forward declaration (public, also used by xdap_eval.c)
-XrCoroutine *xr_debug_get_coro(XrayIsolate *isolate);
+XrCoroutine *xr_debug_get_coro(XrVMRuntime *isolate);
 
 // ============================================================================
 // Internal Helpers
 // ============================================================================
 
-bool xr_debug_get_frame_ctx_ex(XrayIsolate *isolate, XrDebugFrameCtx *out) {
+bool xr_debug_get_frame_ctx_ex(XrVMRuntime *isolate, XrDebugFrameCtx *out) {
     XrCoroutine *coro = xr_debug_get_coro(isolate);
     if (coro) {
         out->frames = xr_coro_vm_ctx(coro)->frames;
@@ -64,7 +64,7 @@ bool xr_debug_get_frame_ctx_ex(XrayIsolate *isolate, XrDebugFrameCtx *out) {
 
 // Evaluate condition string and return truthiness
 // Used by both line breakpoints and function breakpoints
-bool xr_debug_eval_condition_truthy(XrayIsolate *isolate, const char *condition) {
+bool xr_debug_eval_condition_truthy(XrVMRuntime *isolate, const char *condition) {
     if (!condition || condition[0] == '\0')
         return true;
     char *result = xr_debug_evaluate(isolate, condition, 0);
@@ -95,7 +95,7 @@ static int proto_first_source_line(const XrProto *proto) {
 
 // Record stop position and signal the controller event loop.
 // stop_reason tells the controller why we stopped (entry/breakpoint/step/pause).
-static void hook_record_stop(XrayIsolate *isolate, XrDebugState *dbg, const char *path, int line,
+static void hook_record_stop(XrVMRuntime *isolate, XrDebugState *dbg, const char *path, int line,
                              XrClosure *closure, int frame_depth, XdapStopReason stop_reason) {
     xr_free(dbg->last_path);
     dbg->last_path = path ? xr_strdup(path) : NULL;
@@ -110,7 +110,7 @@ static void hook_record_stop(XrayIsolate *isolate, XrDebugState *dbg, const char
     }
 
     // Wire up the controller so the event loop sees PAUSED
-    XdapController *ctrl = (XdapController *) xray_isolate_get_userdata(isolate);
+    XdapController *ctrl = (XdapController *) xray_vm_get_userdata(isolate);
     if (ctrl) {
         ctrl->vm_state = XDAP_VM_PAUSED;
         ctrl->stop_reason = stop_reason;
@@ -122,7 +122,7 @@ static void hook_record_stop(XrayIsolate *isolate, XrDebugState *dbg, const char
 
 // Unified on_line hook — owns ALL debug decision logic.
 // Called by VM at each line-change safe point.
-static XrDebugAction hook_on_line(XrayIsolate *isolate, const char *path, int line,
+static XrDebugAction hook_on_line(XrVMRuntime *isolate, const char *path, int line,
                                   XrClosure *closure, XrBcCallFrame *frame, int frame_depth) {
     (void) frame;
     XrDebugState *dbg = (XrDebugState *) xr_isolate_get_debug_state(isolate);
@@ -133,7 +133,7 @@ static XrDebugAction hook_on_line(XrayIsolate *isolate, const char *path, int li
     XrDebugAction action = dbg->current_action;
 
     // 1. Pause check (highest priority) — set by controller via atomic flag
-    XdapController *ctrl = (XdapController *) xray_isolate_get_userdata(isolate);
+    XdapController *ctrl = (XdapController *) xray_vm_get_userdata(isolate);
     if (ctrl && atomic_load(&ctrl->cmd_pending)) {
         int cmd = atomic_load(&ctrl->pending_cmd);
         if (cmd == XDAP_CMD_PAUSE) {
@@ -205,7 +205,7 @@ static XrDebugAction hook_on_line(XrayIsolate *isolate, const char *path, int li
 }
 
 // Exception hook — called by VM/runtime when exception is thrown
-static XrDebugAction hook_on_exception(XrayIsolate *isolate, const char *message,
+static XrDebugAction hook_on_exception(XrVMRuntime *isolate, const char *message,
                                        bool is_uncaught) {
     XrDebugState *dbg = (XrDebugState *) xr_isolate_get_debug_state(isolate);
     if (!dbg)
@@ -218,7 +218,7 @@ static XrDebugAction hook_on_exception(XrayIsolate *isolate, const char *message
         dbg->current_action = XR_DBG_ACTION_BREAK;
 
         // Signal controller event loop
-        XdapController *ctrl = (XdapController *) xray_isolate_get_userdata(isolate);
+        XdapController *ctrl = (XdapController *) xray_vm_get_userdata(isolate);
         if (ctrl) {
             ctrl->vm_state = XDAP_VM_PAUSED;
             ctrl->stop_reason = XDAP_STOP_EXCEPTION;
@@ -229,7 +229,7 @@ static XrDebugAction hook_on_exception(XrayIsolate *isolate, const char *message
     return XR_DBG_ACTION_CONTINUE;
 }
 
-static bool hook_is_enabled(XrayIsolate *isolate) {
+static bool hook_is_enabled(XrVMRuntime *isolate) {
     XrDebugState *dbg = (XrDebugState *) xr_isolate_get_debug_state(isolate);
     return dbg && dbg->enabled;
 }
@@ -269,7 +269,7 @@ const char *xr_value_type_name(XrValue val) {
     return TYPE_NAME_OBJECT;
 }
 
-char *xr_value_to_debug_string(XrayIsolate *isolate, XrValue val) {
+char *xr_value_to_debug_string(XrVMRuntime *isolate, XrValue val) {
     char buf[512];
 
     if (XR_IS_INT(val)) {
@@ -382,7 +382,7 @@ char *xr_value_to_debug_string(XrayIsolate *isolate, XrValue val) {
 // Debug State Management
 // ============================================================================
 
-void xr_debug_init(XrayIsolate *isolate) {
+void xr_debug_init(XrVMRuntime *isolate) {
     XrDebugState *dbg = (XrDebugState *) xr_calloc(1, sizeof(XrDebugState));
     if (!dbg)
         return;
@@ -398,7 +398,7 @@ void xr_debug_init(XrayIsolate *isolate) {
     xr_debug_register_hooks(isolate, &g_debug_hooks);
 }
 
-void xr_debug_free(XrayIsolate *isolate) {
+void xr_debug_free(XrVMRuntime *isolate) {
     if (!xr_isolate_get_debug_state(isolate))
         return;
 
@@ -454,7 +454,7 @@ void xr_debug_free(XrayIsolate *isolate) {
 // Hook Management
 // ============================================================================
 
-void xr_debug_enable(XrayIsolate *isolate, bool enable) {
+void xr_debug_enable(XrVMRuntime *isolate, bool enable) {
     XrDebugState *dbg = (XrDebugState *) xr_isolate_get_debug_state(isolate);
     if (!dbg)
         return;
@@ -466,14 +466,14 @@ void xr_debug_enable(XrayIsolate *isolate, bool enable) {
 // Execution Control
 // ============================================================================
 
-void xr_debug_continue(XrayIsolate *isolate) {
+void xr_debug_continue(XrVMRuntime *isolate) {
     XrDebugState *dbg = (XrDebugState *) xr_isolate_get_debug_state(isolate);
     if (!dbg)
         return;
     dbg->current_action = XR_DBG_ACTION_CONTINUE;
 }
 
-void xr_debug_step_in(XrayIsolate *isolate) {
+void xr_debug_step_in(XrVMRuntime *isolate) {
     XrDebugState *dbg = (XrDebugState *) xr_isolate_get_debug_state(isolate);
     if (!dbg)
         return;
@@ -483,7 +483,7 @@ void xr_debug_step_in(XrayIsolate *isolate) {
         coro ? xr_coro_vm_ctx(coro)->frame_count : xr_isolate_get_vm_state(isolate)->frame_count;
 }
 
-void xr_debug_step_out(XrayIsolate *isolate) {
+void xr_debug_step_out(XrVMRuntime *isolate) {
     XrDebugState *dbg = (XrDebugState *) xr_isolate_get_debug_state(isolate);
     if (!dbg)
         return;
@@ -493,7 +493,7 @@ void xr_debug_step_out(XrayIsolate *isolate) {
         coro ? xr_coro_vm_ctx(coro)->frame_count : xr_isolate_get_vm_state(isolate)->frame_count;
 }
 
-void xr_debug_step_over(XrayIsolate *isolate) {
+void xr_debug_step_over(XrVMRuntime *isolate) {
     XrDebugState *dbg = (XrDebugState *) xr_isolate_get_debug_state(isolate);
     if (!dbg)
         return;
@@ -505,7 +505,7 @@ void xr_debug_step_over(XrayIsolate *isolate) {
 
 // Resume coroutine execution after a debug break.
 // Returns classified result instead of flattened bool.
-XdapResumeResult xr_debug_resume_execution(XrayIsolate *isolate) {
+XdapResumeResult xr_debug_resume_execution(XrVMRuntime *isolate) {
     if (!isolate)
         return XDAP_RESUME_ERROR;
 
@@ -531,17 +531,17 @@ XdapResumeResult xr_debug_resume_execution(XrayIsolate *isolate) {
 // ============================================================================
 
 // Helper to get main coroutine (where debug state is)
-XrCoroutine *xr_debug_get_coro(XrayIsolate *isolate) {
+XrCoroutine *xr_debug_get_coro(XrVMRuntime *isolate) {
     return xr_isolate_get_main_coro(isolate);
 }
 
-int xr_debug_get_stack_depth(XrayIsolate *isolate) {
+int xr_debug_get_stack_depth(XrVMRuntime *isolate) {
     XrDebugFrameCtx fctx;
     xr_debug_get_frame_ctx_ex(isolate, &fctx);
     return fctx.frame_count;
 }
 
-bool xr_debug_get_frame_info(XrayIsolate *isolate, int frame_idx, const char **out_func_name,
+bool xr_debug_get_frame_info(XrVMRuntime *isolate, int frame_idx, const char **out_func_name,
                              const char **out_source, int *out_line) {
     XrDebugFrameCtx fctx;
     xr_debug_get_frame_ctx_ex(isolate, &fctx);

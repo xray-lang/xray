@@ -45,9 +45,9 @@ typedef struct XrCell {
 _Static_assert(sizeof(XrCell) == 32, "XrCell must be 32 bytes (16B header + 16B value)");
 
 struct XrCoroutine;
-struct XrayIsolate;
+struct XrVMRuntime;
 
 // Allocate a new Cell on the coroutine Region heap.
-XR_FUNC XrCell *xr_cell_new(struct XrayIsolate *isolate, struct XrCoroutine *coro);
+XR_FUNC XrCell *xr_cell_new(struct XrVMRuntime *isolate, struct XrCoroutine *coro);
 
 #endif  // XCELL_H

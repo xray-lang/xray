@@ -19,9 +19,10 @@
 #include "../../api/xisolate_profile.h"
 #include "xcli_output.h"
 #include "xray.h"
-#include "xray_isolate.h"
+#include "xray_vm.h"
 #include "../../api/xrepl.h"
 #include "../../runtime/xisolate_api.h"
+#include "../../vm/xvm_internal.h"
 #include "../../toolchain/xcompiler_session.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
@@ -49,7 +50,7 @@
 #define REPL_PROTO_INITIAL_CAP 32
 
 typedef struct {
-    XrayIsolate *isolate;
+    XrVMRuntime *isolate;
     char *buffer;  // Current input buffer
     size_t buffer_size;
     size_t buffer_len;
@@ -536,14 +537,14 @@ static bool handle_command(ReplState *state, const char *input) {
     // .reset
     if (strcmp(input, ".reset") == 0) {
         repl_free_protos(state);
-        xr_multicore_destroy(state->isolate);
-        xray_isolate_delete(state->isolate);
+        xray_vm_multicore_destroy(state->isolate);
+        xray_vm_delete(state->isolate);
         state->isolate = xr_isolate_profile_new(XR_ISOLATE_PROFILE_REPL);
         if (!state->isolate) {
             fprintf(stderr, "Error: failed to create isolate\n");
             return true;
         }
-        xr_multicore_init(state->isolate, 0);
+        xray_vm_multicore_init(state->isolate, 0);
         print_colored(state, XR_CLR_GREEN, "Environment reset\n");
         return true;
     }
@@ -708,7 +709,7 @@ XR_FUNC int cmd_repl(const XrCliInvocation *inv) {
         xr_free(state.protos);
         return XR_CLI_EXIT_INTERNAL;
     }
-    xr_multicore_init(state.isolate, 0);
+    xray_vm_multicore_init(state.isolate, 0);
 
     // Print welcome
     print_welcome(&state);
@@ -810,8 +811,8 @@ XR_FUNC int cmd_repl(const XrCliInvocation *inv) {
     else
         printf("bye\n");
     repl_free_protos(&state);
-    xr_multicore_destroy(state.isolate);
-    xray_isolate_delete(state.isolate);
+    xray_vm_multicore_destroy(state.isolate);
+    xray_vm_delete(state.isolate);
     xr_free(state.protos);
     xr_free(state.buffer);
 

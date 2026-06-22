@@ -24,11 +24,11 @@
 #include <string.h>
 
 /* Resolve child type refs recursively. */
-static XrType *resolve_impl(XrayIsolate *X, const XrTypeRef *t);
+static XrType *resolve_impl(XrVMRuntime *X, const XrTypeRef *t);
 
 /* Map a named type to its runtime XrType*.
  * Order: built-in interfaces → prelude → well-known singletons → class fallback. */
-static XrType *resolve_named(XrayIsolate *X, const char *name) {
+static XrType *resolve_named(XrVMRuntime *X, const char *name) {
     XR_DCHECK(name != NULL, "resolve_named: NULL name");
 
     /* Built-in interfaces (Comparable, Hashable, Stringable, Equatable, ...).
@@ -81,7 +81,7 @@ static XrType *resolve_named(XrayIsolate *X, const char *name) {
 }
 
 /* Map a generic type (Name<T1, ...>) to its runtime XrType*. */
-static XrType *resolve_generic(XrayIsolate *X, const XrTypeRef *t) {
+static XrType *resolve_generic(XrVMRuntime *X, const XrTypeRef *t) {
     XR_DCHECK(t != NULL && t->name != NULL, "resolve_generic: NULL");
     const char *name = t->name;
     int nargs = t->nchildren;
@@ -130,7 +130,7 @@ static XrType *resolve_generic(XrayIsolate *X, const XrTypeRef *t) {
     return result;
 }
 
-static XrType *resolve_impl(XrayIsolate *X, const XrTypeRef *t) {
+static XrType *resolve_impl(XrVMRuntime *X, const XrTypeRef *t) {
     if (!t)
         return xr_type_new_unknown(NULL);
 
@@ -243,7 +243,7 @@ static XrType *resolve_impl(XrayIsolate *X, const XrTypeRef *t) {
     return xr_type_new_unknown(NULL);
 }
 
-XR_FUNC XrType *xr_tref_resolve(XrayIsolate *X, const XrTypeRef *tref) {
+XR_FUNC XrType *xr_tref_resolve(XrVMRuntime *X, const XrTypeRef *tref) {
     return resolve_impl(X, tref);
 }
 

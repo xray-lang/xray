@@ -58,7 +58,7 @@ XR_FUNC int xr_datetime_to_iso_string(XrDateTime *dt, char *buf, size_t buf_size
  * Number heuristic: JSON has no integer type; we return xr_int when the
  * double has no fractional part and fits in int64, else xr_float.
  */
-static XrValue dom_to_xrvalue(XrayIsolate *X, XrJsonValue *v) {
+static XrValue dom_to_xrvalue(XrVMRuntime *X, XrJsonValue *v) {
     if (!v)
         return xr_null();
 
@@ -109,14 +109,14 @@ typedef struct {
     char *data;
     size_t len;
     size_t cap;
-    XrayIsolate *isolate;
+    XrVMRuntime *isolate;
     int indent;
     int depth;
     bool has_error;
     char error_msg[128];
 } JsonWriter;
 
-static inline void writer_init(JsonWriter *w, XrayIsolate *isolate, int indent) {
+static inline void writer_init(JsonWriter *w, XrVMRuntime *isolate, int indent) {
     w->cap = 1024;
     w->data = (char *) xr_malloc(w->cap);
     XR_CHECK(w->data != NULL, "JsonWriter: allocation failed");
@@ -479,7 +479,7 @@ static void stringify_value(JsonWriter *w, XrValue val) {
 /* ========== Public Functions ========== */
 
 // parse(str) - Parse JSON string
-XrValue xr_json_fn_parse(XrayIsolate *X, XrValue self, XrValue *args, int argc) {
+XrValue xr_json_fn_parse(XrVMRuntime *X, XrValue self, XrValue *args, int argc) {
     (void) self;
     if (argc < 1 || !XR_IS_STRING(args[0])) {
         return xr_null();
@@ -497,7 +497,7 @@ XrValue xr_json_fn_parse(XrayIsolate *X, XrValue self, XrValue *args, int argc) 
 
 // Core stringify: serialize value to string, return result + error info.
 // Does NOT throw — the caller decides how to handle errors.
-XrJsonStringifyResult xr_json_stringify_core(XrayIsolate *X, XrValue val, int indent) {
+XrJsonStringifyResult xr_json_stringify_core(XrVMRuntime *X, XrValue val, int indent) {
     XrJsonStringifyResult out = {.result = xr_null(), .has_error = false};
     out.error_msg[0] = '\0';
 
@@ -528,7 +528,7 @@ XrJsonStringifyResult xr_json_stringify_core(XrayIsolate *X, XrValue val, int in
 // Serialize XrValue to JSON C-string.
 // Caller MUST release the returned pointer with xr_free() (not free()) so
 // that the debug allocator tracks the deallocation correctly.
-char *xr_json_stringify_to_cstr(XrayIsolate *X, XrValue val, size_t *out_len) {
+char *xr_json_stringify_to_cstr(XrVMRuntime *X, XrValue val, size_t *out_len) {
     JsonWriter writer;
     writer_init(&writer, X, 0);
     stringify_value(&writer, val);
@@ -545,7 +545,7 @@ char *xr_json_stringify_to_cstr(XrayIsolate *X, XrValue val, size_t *out_len) {
 
 // Parse JSON C-string to XrValue
 // Returns xr_null() on parse error. Input need not be null-terminated if len is provided.
-XrValue xr_json_parse_from_cstr(XrayIsolate *X, const char *json_str, size_t len) {
+XrValue xr_json_parse_from_cstr(XrVMRuntime *X, const char *json_str, size_t len) {
     if (!X || !json_str || len == 0)
         return xr_null();
 
@@ -770,7 +770,7 @@ static void validate_value(JsonValidator *v) {
 // isValid(str, strict?) - Check if string is valid JSON (zero allocation).
 // strict (bool, default false): when true, additionally reject
 // unescaped control bytes (< 0x20) inside strings, matching RFC 8259 §7.
-XrValue xr_json_fn_is_valid(XrayIsolate *X, XrValue self, XrValue *args, int argc) {
+XrValue xr_json_fn_is_valid(XrVMRuntime *X, XrValue self, XrValue *args, int argc) {
     (void) X;
     (void) self;
     if (argc < 1 || !XR_IS_STRING(args[0])) {
@@ -804,7 +804,7 @@ XrValue xr_json_fn_is_valid(XrayIsolate *X, XrValue self, XrValue *args, int arg
 
 // tryParse(str) - Try to parse JSON
 // Returns Json: {value: parsed result, error: error message or null}
-XrValue xr_json_fn_try_parse(XrayIsolate *X, XrValue self, XrValue *args, int argc) {
+XrValue xr_json_fn_try_parse(XrVMRuntime *X, XrValue self, XrValue *args, int argc) {
     (void) self;
     XrJson *result = xr_json_new(xr_current_coro(X));
 

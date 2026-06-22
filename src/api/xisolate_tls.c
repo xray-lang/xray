@@ -18,9 +18,9 @@
 #include <stdio.h>
 #include "../base/xlog.h"
 
-XR_THREAD_LOCAL XrayIsolate *g_current_isolate = NULL;
+XR_THREAD_LOCAL XrVMRuntime *g_current_isolate = NULL;
 
-void xray_isolate_enter(XrayIsolate *isolate) {
+void xray_vm_enter(XrVMRuntime *isolate) {
     if (isolate == NULL) {
         xr_log_warning("isolate", "isolate_enter: isolate is NULL");
         return;
@@ -28,10 +28,10 @@ void xray_isolate_enter(XrayIsolate *isolate) {
     g_current_isolate = isolate;
 }
 
-void xray_isolate_exit(void) {
+void xray_vm_exit(void) {
     g_current_isolate = NULL;
 }
 
-XrayIsolate *xray_isolate_current(void) {
+XrVMRuntime *xray_vm_current(void) {
     return g_current_isolate;
 }

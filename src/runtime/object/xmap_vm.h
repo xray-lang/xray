@@ -15,9 +15,9 @@
 
 struct XrClosure;
 struct XrIterator;
-struct XrayIsolate;
+struct XrVMRuntime;
 
-XR_FUNC struct XrIterator *xr_map_entries_iterator(struct XrayIsolate *iso, XrMap *map);
-XR_FUNC void xr_map_foreach(struct XrayIsolate *iso, XrMap *map, struct XrClosure *callback);
+XR_FUNC struct XrIterator *xr_map_entries_iterator(struct XrVMRuntime *iso, XrMap *map);
+XR_FUNC void xr_map_foreach(struct XrVMRuntime *iso, XrMap *map, struct XrClosure *callback);
 
 #endif  // XMAP_VM_H

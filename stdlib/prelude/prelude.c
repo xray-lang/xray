@@ -61,16 +61,16 @@ static const XrPreludeSymbols g_prelude_symbols = {
  * register function. We declare them here so prelude.c does not need
  * to drag in the full stdlib/{log,datetime,regex,net} headers.
  */
-struct XrayIsolate;
+struct XrVMRuntime;
 /* Types not registered by xr_core_init — they live in stdlib or
  * depend on runtime infrastructure only available after core init. */
-extern void xr_iterator_register_class(XrayIsolate *isolate);
-extern void xr_register_range_class(XrayIsolate *isolate);
-extern void xr_register_logger_class(XrayIsolate *isolate);
-extern void xr_register_datetime_class(XrayIsolate *isolate);
-extern void xr_regex_register_class(XrayIsolate *isolate);
-extern void xr_netconn_register_class(XrayIsolate *isolate);
-extern void xr_netlistener_register_class(XrayIsolate *isolate);
+extern void xr_iterator_register_class(XrVMRuntime *isolate);
+extern void xr_register_range_class(XrVMRuntime *isolate);
+extern void xr_register_logger_class(XrVMRuntime *isolate);
+extern void xr_register_datetime_class(XrVMRuntime *isolate);
+extern void xr_regex_register_class(XrVMRuntime *isolate);
+extern void xr_netconn_register_class(XrVMRuntime *isolate);
+extern void xr_netlistener_register_class(XrVMRuntime *isolate);
 
 #include "../../src/base/xglobal_indices.h"
 #include "../../src/runtime/class/xclass_system.h"
@@ -84,7 +84,7 @@ extern void xr_netlistener_register_class(XrayIsolate *isolate);
  * table maps user-visible names ("Exception", "Range", "DateTime", ...)
  * onto these indices via XI_GET_BUILTIN, so `new Exception(...)`
  * resolves to the actual class value at run time. */
-static void bind_class_global(XrayIsolate *X, int global_index, void *cls) {
+static void bind_class_global(XrVMRuntime *X, int global_index, void *cls) {
     if (!X || !cls)
         return;
     if ((size_t) global_index < (size_t) XR_USER_GLOBALS_START) {
@@ -101,7 +101,7 @@ static void bind_class_global(XrayIsolate *X, int global_index, void *cls) {
  * which created a distinct enum type per module and broke cross-module
  * pattern matching.  Members/values are interned/copied by
  * xr_enum_type_new, so the input arrays are freed here. */
-static XrEnumType *make_prelude_enum(XrayIsolate *X, const char *name, const char **member_names,
+static XrEnumType *make_prelude_enum(XrVMRuntime *X, const char *name, const char **member_names,
                                      const int *member_values, int count, const int *payload_counts,
                                      bool is_adt) {
     char **names = (char **) xr_malloc(sizeof(char *) * (size_t) count);
@@ -148,7 +148,7 @@ static XrEnumType *make_prelude_enum(XrayIsolate *X, const char *name, const cha
     return et;
 }
 
-static void xr_prelude_register_builtin_enums(XrayIsolate *X) {
+static void xr_prelude_register_builtin_enums(XrVMRuntime *X) {
     if (!X)
         return;
 
@@ -199,7 +199,7 @@ static void xr_prelude_register_builtin_enums(XrayIsolate *X) {
         X->vm.builtin_count = XR_USER_GLOBALS_START;
 }
 
-void xr_prelude_register_all_native_types(XrayIsolate *isolate) {
+void xr_prelude_register_all_native_types(XrVMRuntime *isolate) {
     if (!isolate)
         return;
     /* Core types (int/float/bool/string/array/map/set/json/bigint/
@@ -237,7 +237,7 @@ void xr_prelude_register_all_native_types(XrayIsolate *isolate) {
 
 /* ========== Module loader ========== */
 
-XrModule *xr_load_module_prelude(XrayIsolate *isolate) {
+XrModule *xr_load_module_prelude(XrVMRuntime *isolate) {
     XR_DCHECK(isolate != NULL, "xr_load_module_prelude: NULL isolate");
 
     /* Wire isolate to the (process-wide const) symbol table. Idempotent
@@ -268,7 +268,7 @@ XrModule *xr_load_module_prelude(XrayIsolate *isolate) {
 
 /* ========== Public accessors (consumed by frontend / tests) ========== */
 
-const XrPreludeSymbols *xr_prelude_get_symbols(XrayIsolate *isolate) {
+const XrPreludeSymbols *xr_prelude_get_symbols(XrVMRuntime *isolate) {
     if (!isolate)
         return NULL;
     return (const XrPreludeSymbols *) isolate->prelude_symbols;

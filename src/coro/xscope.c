@@ -193,7 +193,7 @@ static void wake_waiter_notify_task(XrRuntime *runtime, XrCoroutine *coro) {
         xr_task_wake_waiter_runtime(runtime, coro->task);
 }
 
-void xr_coro_wake_scope_waiter(XrayIsolate *X, XrCoroutine *coro) {
+void xr_coro_wake_scope_waiter(XrVMRuntime *X, XrCoroutine *coro) {
     (void) X;
     if (!coro)
         return;
@@ -216,7 +216,7 @@ void xr_coro_wake_waiter_runtime(XrRuntime *runtime, XrCoroutine *coro) {
     wake_waiter_notify_task(runtime, coro);
 }
 
-void xr_coro_wake_waiter(XrayIsolate *X, XrCoroutine *coro) {
+void xr_coro_wake_waiter(XrVMRuntime *X, XrCoroutine *coro) {
     if (!X || !coro)
         return;
 

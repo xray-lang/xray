@@ -18,6 +18,6 @@
 // `api_name` (e.g. "Array.reduce", "Map.forEach") when the value is not a
 // function. VM native APIs that accept callbacks should use this helper
 // instead of blindly converting non-pointer payloads to closure pointers.
-XR_FUNC XrClosure *xr_vm_closure_from_arg(XrayIsolate *isolate, XrValue v, const char *api_name);
+XR_FUNC XrClosure *xr_vm_closure_from_arg(XrVMRuntime *isolate, XrValue v, const char *api_name);
 
 #endif  // XVM_CLOSURE_H

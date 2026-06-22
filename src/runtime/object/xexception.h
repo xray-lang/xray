@@ -35,7 +35,7 @@
  * core->exceptionClass. Returns false for non-instances and for
  * instances whose class chain doesn't reach Exception.
  */
-XR_FUNC bool xr_value_is_exception(XrayIsolate *X, XrValue v);
+XR_FUNC bool xr_value_is_exception(XrVMRuntime *X, XrValue v);
 
 /* ========== Exception Construction ========== */
 
@@ -43,19 +43,19 @@ XR_FUNC bool xr_value_is_exception(XrayIsolate *X, XrValue v);
 // as an empty Array<string>, cause = null, data = null. Used by VM error
 // paths (OOM, type mismatch, etc.) that must succeed without re-entering
 // closure dispatch.
-XR_FUNC XrValue xr_exception_new(XrayIsolate *X, XrErrorCode code, const char *message);
+XR_FUNC XrValue xr_exception_new(XrVMRuntime *X, XrErrorCode code, const char *message);
 
 // Same but accepts a printf-style format.
-XR_FUNC XrValue xr_exception_newf(XrayIsolate *X, XrErrorCode code, const char *fmt, ...);
+XR_FUNC XrValue xr_exception_newf(XrVMRuntime *X, XrErrorCode code, const char *fmt, ...);
 
 // Build an Exception from an XrError. message is moved; the original
 // XrError is not freed (caller's lifetime).
-XR_FUNC XrValue xr_exception_from_error(XrayIsolate *X, XrError *error);
+XR_FUNC XrValue xr_exception_from_error(XrVMRuntime *X, XrError *error);
 
 // If `value` is already an Exception (or subclass), returns it. If it's
 // an XrError, lifts it. Otherwise wraps `value` in a new Exception with
 // data field set to the original value so catch handlers can recover it.
-XR_FUNC XrValue xr_exception_from_value(XrayIsolate *X, XrValue value);
+XR_FUNC XrValue xr_exception_from_value(XrVMRuntime *X, XrValue value);
 
 /* ========== Exception Field Accessors ==========
  *
@@ -64,26 +64,26 @@ XR_FUNC XrValue xr_exception_from_value(XrayIsolate *X, XrValue value);
  * indexing because they keep the index constants encapsulated.
  */
 
-XR_FUNC XrErrorCode xr_exception_get_code(XrayIsolate *X, XrValue exception);
-XR_FUNC const char *xr_exception_get_message(XrayIsolate *X, XrValue exception);
-XR_FUNC XrValue xr_exception_get_stacktrace(XrayIsolate *X, XrValue exception);
-XR_FUNC XrValue xr_exception_get_data(XrayIsolate *X, XrValue exception);
+XR_FUNC XrErrorCode xr_exception_get_code(XrVMRuntime *X, XrValue exception);
+XR_FUNC const char *xr_exception_get_message(XrVMRuntime *X, XrValue exception);
+XR_FUNC XrValue xr_exception_get_stacktrace(XrVMRuntime *X, XrValue exception);
+XR_FUNC XrValue xr_exception_get_data(XrVMRuntime *X, XrValue exception);
 
 /* ========== Stack Trace ========== */
 
 // Append "at <funcName> (line <line>)" to the exception's stack array.
 // Lazily creates the stack array if it's null.
-XR_FUNC void xr_exception_add_frame(XrayIsolate *X, XrValue exception, const char *funcName,
+XR_FUNC void xr_exception_add_frame(XrVMRuntime *X, XrValue exception, const char *funcName,
                                     int line);
 
 /* ========== Output ========== */
 
-XR_FUNC void xr_exception_print(XrayIsolate *X, XrValue exception);
+XR_FUNC void xr_exception_print(XrVMRuntime *X, XrValue exception);
 
 /* ========== Class Registration ========== */
 
 // Build the Exception XrClass and store it in core->exceptionClass.
 // Must be called from xr_core_init after Object is registered.
-XR_FUNC void xr_register_exception_class(XrayIsolate *X);
+XR_FUNC void xr_register_exception_class(XrVMRuntime *X);
 
 #endif  // XEXCEPTION_H

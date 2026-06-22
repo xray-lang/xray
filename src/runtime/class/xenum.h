@@ -81,13 +81,13 @@ typedef struct XrEnumType {
 
 /* ========== Creation ========== */
 
-XR_FUNC XrEnumType *xr_enum_type_new(XrayIsolate *X, const char *name, int base_type,
+XR_FUNC XrEnumType *xr_enum_type_new(XrVMRuntime *X, const char *name, int base_type,
                                      char **member_names, XrValue *member_values, int count);
 XR_FUNC XrEnumType *xr_enum_type_new_core(struct XrRuntimeCore *core, const char *name,
                                           int base_type, char **member_names,
                                           XrValue *member_values, int count);
 
-XR_FUNC XrEnumValue *xr_enum_value_new(XrayIsolate *X, const char *enum_name,
+XR_FUNC XrEnumValue *xr_enum_value_new(XrVMRuntime *X, const char *enum_name,
                                        const char *member_name, XrValue raw_value, uint32_t index);
 XR_FUNC XrEnumValue *xr_enum_value_new_core(struct XrRuntimeCore *core, const char *enum_name,
                                             const char *member_name, XrValue raw_value,
@@ -114,7 +114,7 @@ XR_FUNC struct XrInstance *xr_enum_adt_construct_core(struct XrRuntimeCore *core
                                                       struct XrCoroutine *coro,
                                                       XrEnumType *enum_type, uint32_t member_index,
                                                       XrValue *args, int nargs);
-XR_FUNC struct XrInstance *xr_enum_adt_construct(struct XrayIsolate *X, XrEnumType *enum_type,
+XR_FUNC struct XrInstance *xr_enum_adt_construct(struct XrVMRuntime *X, XrEnumType *enum_type,
                                                  uint32_t member_index, XrValue *args, int nargs);
 
 /* ========== Symbol Mapping ========== */

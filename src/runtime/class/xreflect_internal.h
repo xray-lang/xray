@@ -107,11 +107,11 @@ static inline XrValue wrapper_to_value(void *wrapper) {
     return XR_FROM_PTR(wrapper);
 }
 
-XR_FUNC XrValue xr_create_type_object(XrayIsolate *X, XrTypeMetadata *meta);
-XR_FUNC XrValue xr_create_field_object(XrayIsolate *X, XrFieldMetadata *field);
-XR_FUNC XrValue xr_create_method_object(XrayIsolate *X, XrMethodMetadata *method);
-XR_FUNC XrValue xr_create_constructor_object(XrayIsolate *X, XrMethodMetadata *ctor);
-XR_FUNC XrValue xr_create_parameter_object(XrayIsolate *X, XrParameterMetadata *param);
+XR_FUNC XrValue xr_create_type_object(XrVMRuntime *X, XrTypeMetadata *meta);
+XR_FUNC XrValue xr_create_field_object(XrVMRuntime *X, XrFieldMetadata *field);
+XR_FUNC XrValue xr_create_method_object(XrVMRuntime *X, XrMethodMetadata *method);
+XR_FUNC XrValue xr_create_constructor_object(XrVMRuntime *X, XrMethodMetadata *ctor);
+XR_FUNC XrValue xr_create_parameter_object(XrVMRuntime *X, XrParameterMetadata *param);
 
 XR_FUNC XrTypeMetadata *xr_get_type_metadata(XrValue type_obj);
 XR_FUNC XrFieldMetadata *xr_get_field_metadata(XrValue field_obj);

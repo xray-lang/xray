@@ -9,7 +9,7 @@
  *
  * KEY CONCEPT:
  *   Instruction execution counter and timing statistics. The profiler is
- *   isolate-local: each XrayIsolate owns a VMProfiler in its `profiler`
+ *   isolate-local: each XrVMRuntime owns a VMProfiler in its `profiler`
  *   slot, allocated on isolate construction when the build was configured
  *   with -DXR_ENABLE_VM_PROFILER=ON. Concurrent isolates therefore never
  *   share counters, which is critical for embedding scenarios (LSP, DAP,

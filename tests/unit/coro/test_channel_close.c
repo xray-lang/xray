@@ -26,7 +26,7 @@
 #include <string.h>
 
 typedef struct CloseFixture {
-    XrayIsolate isolate_storage;
+    XrVMRuntime isolate_storage;
     XrRuntimeCore core;
     XrSystemHeap sys_heap;
     XrRuntime runtime;
@@ -41,7 +41,7 @@ typedef struct CloseFixture {
 #define WAKE_ROUTE_WORKERS 3
 
 typedef struct WakeRouteFixture {
-    XrayIsolate isolate_storage;
+    XrVMRuntime isolate_storage;
     XrRuntimeCore core;
     XrSystemHeap sys_heap;
     XrRuntime runtime;
@@ -144,7 +144,7 @@ static void wake_route_fixture_cleanup(WakeRouteFixture *f) {
     }
 }
 
-static void attach_test_coro_context(XrCoroutine *coro, XrayIsolate *isolate) {
+static void attach_test_coro_context(XrCoroutine *coro, XrVMRuntime *isolate) {
     if (!coro)
         return;
     coro->core = isolate ? isolate->core_rt : NULL;
@@ -190,7 +190,7 @@ static void destroy_task_array(XrArray *tasks) {
 }
 
 static void init_blocked_channel_coro(XrCoroutine *coro, XrCoroExt *ext, int id,
-                                      XrayIsolate *isolate, XrChannel *ch, bool wait_send) {
+                                      XrVMRuntime *isolate, XrChannel *ch, bool wait_send) {
     memset(coro, 0, sizeof(*coro));
     memset(ext, 0, sizeof(*ext));
     coro->id = id;
@@ -207,7 +207,7 @@ static void init_blocked_channel_coro(XrCoroutine *coro, XrCoroExt *ext, int id,
     ext->wait_bucket_owner = -1;
 }
 
-static void init_blocked_io_coro(XrCoroutine *coro, XrCoroExt *ext, int id, XrayIsolate *isolate,
+static void init_blocked_io_coro(XrCoroutine *coro, XrCoroExt *ext, int id, XrVMRuntime *isolate,
                                  int fd, int events, int64_t timeout_ms) {
     memset(coro, 0, sizeof(*coro));
     memset(ext, 0, sizeof(*ext));
@@ -221,7 +221,7 @@ static void init_blocked_io_coro(XrCoroutine *coro, XrCoroExt *ext, int id, Xray
     xr_io_wait_token_commit(&ext->wait.io_token);
 }
 
-static void init_select_recv_coro(XrCoroutine *coro, XrCoroExt *ext, int id, XrayIsolate *isolate,
+static void init_select_recv_coro(XrCoroutine *coro, XrCoroExt *ext, int id, XrVMRuntime *isolate,
                                   XrChannel *ch) {
     memset(coro, 0, sizeof(*coro));
     memset(ext, 0, sizeof(*ext));

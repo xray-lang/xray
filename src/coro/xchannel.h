@@ -69,7 +69,7 @@
 
 typedef struct XrCoroutine XrCoroutine;
 typedef struct XrCoroState XrCoroState;
-struct XrayIsolate;
+struct XrVMRuntime;
 struct XrRuntime;
 struct XrRuntimeCore;
 
@@ -130,7 +130,7 @@ typedef struct XrChannelDistHooks {
     void (*on_select_exit)(struct XrChannel *ch);
 } XrChannelDistHooks;
 
-// Hooks live on XrayIsolate (see XrayIsolate::channel_dist_hooks in
+// Hooks live on XrVMRuntime (see XrVMRuntime::channel_dist_hooks in
 // xisolate_internal.h). Install/uninstall via xr_cluster_channel_install_hooks.
 
 /* ========== Channel Structure ========== */
@@ -207,7 +207,7 @@ typedef struct XrChannel {
     struct XrRuntime *scheduler;
 
     /* Optional VM host binding for VM-only distributed-channel hooks. */
-    struct XrayIsolate *vm_host_isolate;
+    struct XrVMRuntime *vm_host_isolate;
 } XrChannel;
 
 static inline uint64_t xr_channel_worker_bit(int worker_id) {
@@ -310,10 +310,10 @@ XR_FUNC void xr_channel_record_ready_wake_retarget_metric(struct XrRuntime *runt
 
 XR_FUNC XrChannel *xr_channel_new(struct XrRuntimeCore *core, struct XrRuntime *scheduler,
                                   uint32_t buffer_size);
-XR_FUNC XrChannel *xr_channel_new_vm(struct XrayIsolate *X, uint32_t buffer_size);
+XR_FUNC XrChannel *xr_channel_new_vm(struct XrVMRuntime *X, uint32_t buffer_size);
 XR_FUNC XrChannel *xr_channel_new_timer(struct XrRuntimeCore *core, struct XrRuntime *scheduler,
                                         int64_t timeout_ms);
-XR_FUNC XrChannel *xr_channel_new_timer_vm(struct XrayIsolate *X, int64_t timeout_ms);
+XR_FUNC XrChannel *xr_channel_new_timer_vm(struct XrVMRuntime *X, int64_t timeout_ms);
 XR_FUNC void xr_channel_timer_arm(XrChannel *ch, XrTimerWheel *tw);
 // Release a select-owned timer channel (drops the select handle reference, and
 // cancels the still-armed wheel timer when on its owner worker). See design/885.

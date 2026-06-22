@@ -27,22 +27,22 @@
 
 /* Forward declarations: register functions live in *_methods.c files.
  * We call them here to unify core->xxxClass with native_type_classes[]. */
-extern void xr_array_register_native_type(XrayIsolate *);
-extern void xr_map_register_native_type(XrayIsolate *);
-extern void xr_set_register_native_type(XrayIsolate *);
-extern void xr_string_register_native_type(XrayIsolate *);
-extern void xr_int_register_native_type(XrayIsolate *);
-extern void xr_float_register_native_type(XrayIsolate *);
-extern void xr_bool_register_native_type(XrayIsolate *);
-extern void xr_bigint_register_class(XrayIsolate *);
-extern void xr_json_register_instance_methods(XrayIsolate *);
-extern void xr_atomic_register_native_type(XrayIsolate *);
-extern void xr_work_queue_register_native_type(XrayIsolate *);
-extern void xr_result_group_register_native_type(XrayIsolate *);
+extern void xr_array_register_native_type(XrVMRuntime *);
+extern void xr_map_register_native_type(XrVMRuntime *);
+extern void xr_set_register_native_type(XrVMRuntime *);
+extern void xr_string_register_native_type(XrVMRuntime *);
+extern void xr_int_register_native_type(XrVMRuntime *);
+extern void xr_float_register_native_type(XrVMRuntime *);
+extern void xr_bool_register_native_type(XrVMRuntime *);
+extern void xr_bigint_register_class(XrVMRuntime *);
+extern void xr_json_register_instance_methods(XrVMRuntime *);
+extern void xr_atomic_register_native_type(XrVMRuntime *);
+extern void xr_work_queue_register_native_type(XrVMRuntime *);
+extern void xr_result_group_register_native_type(XrVMRuntime *);
 #include <stdio.h>
 #include <string.h>
 
-void xr_core_init(XrayIsolate *X) {
+void xr_core_init(XrVMRuntime *X) {
     XR_DCHECK(X != NULL, "xr_core_init: NULL isolate");
     X->core = (XrayCoreClasses *) xr_malloc(sizeof(XrayCoreClasses));
     if (!X->core) {
@@ -142,7 +142,7 @@ void xr_core_init(XrayIsolate *X) {
     // construction time.
 }
 
-void xr_core_free(XrayIsolate *X) {
+void xr_core_free(XrVMRuntime *X) {
     if (!X || !X->core)
         return;
 

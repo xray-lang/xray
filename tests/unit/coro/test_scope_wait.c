@@ -19,7 +19,7 @@
 #include <string.h>
 
 typedef struct ScopeFixture {
-    XrayIsolate isolate_storage;
+    XrVMRuntime isolate_storage;
     XrRuntimeCore core;
     XrSystemHeap sys_heap;
     XrRuntime runtime;
@@ -76,7 +76,7 @@ static void scope_fixture_cleanup(ScopeFixture *f) {
 }
 
 static void init_running_scope_coro(XrCoroutine *coro, XrCoroExt *ext, int id,
-                                    XrayIsolate *isolate) {
+                                    XrVMRuntime *isolate) {
     memset(coro, 0, sizeof(*coro));
     memset(ext, 0, sizeof(*ext));
     coro->id = id;

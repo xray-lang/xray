@@ -80,7 +80,7 @@ echo
 # Anything used by the formatter must be available below L7.
 # --------------------------------------------------------------------
 echo "--- R4: format/ -> include/xray*.h ---"
-hits=$(grep -rnE '#include[[:space:]]+["<](xray|xray_isolate|xray_embedding)\.h' \
+hits=$(grep -rnE '#include[[:space:]]+["<](xray|xray_vm)\.h' \
        --include='*.c' --include='*.h' "$SRC_DIR/frontend/format/" 2>/dev/null || true)
 if [ -n "$hits" ]; then
     fail "format/ includes public API headers:"
@@ -91,12 +91,12 @@ fi
 echo
 
 # --------------------------------------------------------------------
-# Rule 5: frontend/** MUST NOT include xray.h / xray_isolate.h.
+# Rule 5: frontend/** MUST NOT include xray.h / xray_vm.h.
 # Internal frontend code must use runtime/* / vm/* internal headers,
 # not the L7 public API surface.
 # --------------------------------------------------------------------
-echo "--- R5: frontend/** -> include/xray.h or include/xray_isolate.h ---"
-hits=$(grep -rnE '#include[[:space:]]+["<](xray|xray_isolate)\.h' \
+echo "--- R5: frontend/** -> include/xray.h or include/xray_vm.h ---"
+hits=$(grep -rnE '#include[[:space:]]+["<](xray|xray_vm)\.h' \
        --include='*.c' --include='*.h' "$SRC_DIR/frontend/" 2>/dev/null || true)
 if [ -n "$hits" ]; then
     fail "frontend/** includes public API headers:"

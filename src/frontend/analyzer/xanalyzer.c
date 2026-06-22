@@ -164,7 +164,7 @@ static void xa_register_codegen_builtins(XaAnalyzer *analyzer) {
     register_builtin_module(analyzer, "Channel");
     register_builtin_module(analyzer, "Reflect");
 
-    // Runtime global variables (set by xray_isolate_set_script_info)
+    // Runtime global variables (set by xray_vm_set_script_info)
     register_builtin_var(analyzer, "process", p_any, true);
     register_builtin_var(analyzer, "__file__", t_string, true);
     register_builtin_var(analyzer, "__dir__", t_string, true);
@@ -276,7 +276,7 @@ XaAnalyzer *xa_analyzer_new(XrCompilerSession *session) {
     // Ensure process-level type singletons are initialized (idempotent)
     xr_type_global_init();
 
-    XrayIsolate *X = xr_compiler_session_vm_host(session);
+    XrVMRuntime *X = xr_compiler_session_vm_host(session);
 
     XaAnalyzer *analyzer = xr_calloc(1, sizeof(XaAnalyzer));
     if (!analyzer)

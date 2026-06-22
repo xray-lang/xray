@@ -20,7 +20,7 @@
 #include "../../src/runtime/object/xarray.h"
 
 // Forward declaration (defined in xjson.c)
-extern struct XrArray *xr_json_keys(XrayIsolate *X, struct XrJson *json);
+extern struct XrArray *xr_json_keys(XrVMRuntime *X, struct XrJson *json);
 #include "../../src/runtime/object/xmap.h"
 #include "../../src/runtime/object/xstring.h"
 #include "../../src/runtime/object/xjson.h"
@@ -50,7 +50,7 @@ typedef XrStdlibXmlKeys XmlKeys;
 // Returns a pointer to the shared cache entry. Costs one branch after
 // the first call; previously every binding did O(5) xr_string_intern()
 // hashing on every invocation.
-static XmlKeys *xml_keys_get(XrayIsolate *X) {
+static XmlKeys *xml_keys_get(XrVMRuntime *X) {
     XrStdlibCache *c = xr_stdlib_cache_get(X);
     XmlKeys *k = &c->xml_keys;
     if (k->ready)
@@ -72,7 +72,7 @@ static XmlKeys *xml_keys_get(XrayIsolate *X) {
 
 // ========== Helper functions ==========
 
-static void extract_config(XrayIsolate *X, XrValue config_val, XrXmlParseConfig *config) {
+static void extract_config(XrVMRuntime *X, XrValue config_val, XrXmlParseConfig *config) {
     xr_xml_parse_config_init(config);
     if (!xr_value_is_json(config_val))
         return;
@@ -83,7 +83,7 @@ static void extract_config(XrayIsolate *X, XrValue config_val, XrXmlParseConfig 
     xrs_cfg_get_bool(X, json, "validateEntities", &config->validate_entities);
 }
 
-static void extract_write_config(XrayIsolate *X, XrValue config_val, XrXmlWriteConfig *config) {
+static void extract_write_config(XrVMRuntime *X, XrValue config_val, XrXmlWriteConfig *config) {
     xr_xml_write_config_init(config);
     if (!xr_value_is_json(config_val))
         return;
@@ -101,7 +101,7 @@ static void extract_write_config(XrayIsolate *X, XrValue config_val, XrXmlWriteC
 
 #define NODE_TO_MAP_MAX_DEPTH XR_STDLIB_MAX_DEPTH
 
-static XrValue node_to_map_r(XrayIsolate *X, XrXmlNode *node, XmlKeys *k, int depth) {
+static XrValue node_to_map_r(XrVMRuntime *X, XrXmlNode *node, XmlKeys *k, int depth) {
     if (!node || depth > NODE_TO_MAP_MAX_DEPTH)
         return xr_null();
 
@@ -179,7 +179,7 @@ static XrValue node_to_map_r(XrayIsolate *X, XrXmlNode *node, XmlKeys *k, int de
     return xr_value_from_map(map);
 }
 
-static XrValue node_to_map(XrayIsolate *X, XrXmlNode *node) {
+static XrValue node_to_map(XrVMRuntime *X, XrXmlNode *node) {
     XmlKeys *k = xml_keys_get(X);
     return node_to_map_r(X, node, k, 0);
 }
@@ -268,7 +268,7 @@ static void xw_escape_attr(XmlWriter *w, const char *s, size_t len) {
 // round-tripping a freshly-parsed tree never fails at serialization.
 #define SERIALIZE_MAX_DEPTH XR_STDLIB_MAX_DEPTH
 
-static void serialize_map_node(XmlWriter *w, XrayIsolate *X, XrMap *map, XmlKeys *k, int depth) {
+static void serialize_map_node(XmlWriter *w, XrVMRuntime *X, XrMap *map, XmlKeys *k, int depth) {
     if (!map || depth > SERIALIZE_MAX_DEPTH)
         return;
 
@@ -388,7 +388,7 @@ static void serialize_map_node(XmlWriter *w, XrayIsolate *X, XrMap *map, XmlKeys
 
 // ========== Module functions ==========
 
-static XrValue xml_parse_fn(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue xml_parse_fn(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1 || !XR_IS_STRING(args[0]))
         return xr_null();
 
@@ -410,7 +410,7 @@ static XrValue xml_parse_fn(XrayIsolate *X, XrValue *args, int argc) {
     return ret;
 }
 
-static XrValue xml_parse_detailed(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue xml_parse_detailed(XrVMRuntime *X, XrValue *args, int argc) {
     XmlKeys *k = xml_keys_get(X);
 
     if (argc < 1 || !XR_IS_STRING(args[0])) {
@@ -453,7 +453,7 @@ static XrValue xml_parse_detailed(XrayIsolate *X, XrValue *args, int argc) {
 }
 
 // parseFile. Synchronous; see stdlib/common_io.h for the P9 async plan.
-static XrValue xml_parse_file(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue xml_parse_file(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1 || !XR_IS_STRING(args[0]))
         return xr_null();
 
@@ -482,7 +482,7 @@ static XrValue xml_parse_file(XrayIsolate *X, XrValue *args, int argc) {
     return ret;
 }
 
-static XrValue xml_stringify_fn(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue xml_stringify_fn(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1 || !XR_IS_MAP(args[0])) {
         return xr_string_value(xr_string_intern(X, "", 0, 0));
     }
@@ -514,7 +514,7 @@ static XrValue xml_stringify_fn(XrayIsolate *X, XrValue *args, int argc) {
 }
 
 // writeFile. Synchronous; see stdlib/common_io.h for the P9 async plan.
-static XrValue xml_write_file(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue xml_write_file(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 2 || !XR_IS_STRING(args[0]))
         return xr_bool(false);
 
@@ -531,7 +531,7 @@ static XrValue xml_write_file(XrayIsolate *X, XrValue *args, int argc) {
 }
 
 // document(): create empty document Map
-static XrValue xml_document_fn(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue xml_document_fn(XrVMRuntime *X, XrValue *args, int argc) {
     (void) args;
     (void) argc;
 
@@ -544,7 +544,7 @@ static XrValue xml_document_fn(XrayIsolate *X, XrValue *args, int argc) {
 }
 
 // element(tag) or element(tag, attrs)
-static XrValue xml_element_fn(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue xml_element_fn(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1 || !XR_IS_STRING(args[0]))
         return xr_null();
 
@@ -581,7 +581,7 @@ static XrValue xml_element_fn(XrayIsolate *X, XrValue *args, int argc) {
 }
 
 // text(content)
-static XrValue xml_text_fn(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue xml_text_fn(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1 || !XR_IS_STRING(args[0]))
         return xr_null();
 
@@ -594,7 +594,7 @@ static XrValue xml_text_fn(XrayIsolate *X, XrValue *args, int argc) {
 }
 
 // comment(content)
-static XrValue xml_comment_fn(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue xml_comment_fn(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1 || !XR_IS_STRING(args[0]))
         return xr_null();
 
@@ -607,7 +607,7 @@ static XrValue xml_comment_fn(XrayIsolate *X, XrValue *args, int argc) {
 }
 
 // cdata(content)
-static XrValue xml_cdata_fn(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue xml_cdata_fn(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1 || !XR_IS_STRING(args[0]))
         return xr_null();
 
@@ -641,7 +641,7 @@ XR_DEFINE_BUILTIN(xml_text_fn, "text", "(content: string): Json", "Create XML te
 XR_DEFINE_BUILTIN(xml_comment_fn, "comment", "(content: string): Json", "Create XML comment node")
 XR_DEFINE_BUILTIN(xml_cdata_fn, "cdata", "(content: string): Json", "Create XML CDATA node")
 
-XR_FUNC XrModule *xr_load_module_xml(XrayIsolate *isolate) {
+XR_FUNC XrModule *xr_load_module_xml(XrVMRuntime *isolate) {
     XrModule *mod = xr_module_create_native(isolate, "xml");
     if (!mod)
         return NULL;

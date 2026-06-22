@@ -23,8 +23,8 @@
 extern "C" {
 #endif
 
-struct XrayIsolate;
-XR_FUNC void xr_string_register_native_type(struct XrayIsolate *isolate);
+struct XrVMRuntime;
+XR_FUNC void xr_string_register_native_type(struct XrVMRuntime *isolate);
 
 #ifdef __cplusplus
 }

@@ -14,15 +14,15 @@
 
 #include "../runtime/xisolate_api.h"
 #include "../base/xchecks.h"
-#include "xray_isolate.h"
+#include "xray_vm.h"
 #include <string.h>
 
-void xray_isolate_params_init(XrayIsolateParams *params) {
+void xray_vm_config_init(XrVMConfig *params) {
     if (params == NULL)
         return;
-    memset(params, 0, sizeof(XrayIsolateParams));
+    memset(params, 0, sizeof(XrVMConfig));
 
-    params->backend_type = XRAY_BACKEND_BYTECODE;
+    params->backend_type = XR_VM_BACKEND_BYTECODE;
     params->initial_heap_size = 1024 * 1024;
     params->max_heap_size = 0;
 }

@@ -41,14 +41,14 @@
  * via simple pointer arithmetic. */
 static size_t g_datetime_body_offset = 0;
 
-static XrClass *datetime_class(XrayIsolate *X) {
+static XrClass *datetime_class(XrVMRuntime *X) {
     XrayCoreClasses *core = xr_isolate_get_core_classes(X);
     XR_DCHECK(core != NULL && core->dateTimeClass != NULL,
               "datetime: core->dateTimeClass not registered");
     return core->dateTimeClass;
 }
 
-static XrDateTime *datetime_alloc(XrayIsolate *isolate) {
+static XrDateTime *datetime_alloc(XrVMRuntime *isolate) {
     XR_DCHECK(isolate != NULL, "datetime_alloc: isolate must not be NULL");
     XrInstance *inst = xr_instance_new(isolate, datetime_class(isolate));
     if (!inst)
@@ -65,14 +65,14 @@ static XrDateTime *datetime_alloc(XrayIsolate *isolate) {
 
 /* ========== XrValue Conversion ========== */
 
-bool xr_value_is_datetime(XrayIsolate *X, XrValue v) {
+bool xr_value_is_datetime(XrVMRuntime *X, XrValue v) {
     if (!XR_IS_INSTANCE(v))
         return false;
     XrInstance *inst = (XrInstance *) XR_TO_PTR(v);
     return xr_class_instanceof(inst->klass, datetime_class(X));
 }
 
-XrDateTime *xr_value_get_datetime_body(XrayIsolate *X, XrValue v) {
+XrDateTime *xr_value_get_datetime_body(XrVMRuntime *X, XrValue v) {
     if (!xr_value_is_datetime(X, v))
         return NULL;
     XrInstance *inst = (XrInstance *) XR_TO_PTR(v);
@@ -242,7 +242,7 @@ int xr_datetime_local_offset(void) {
 
 /* ========== Creation API ========== */
 
-XrDateTime *xr_datetime_now(XrayIsolate *isolate) {
+XrDateTime *xr_datetime_now(XrVMRuntime *isolate) {
     XrDateTime *dt = datetime_alloc(isolate);
     int64_t millis = get_current_millis();
     dt->timestamp = millis / 1000;
@@ -252,7 +252,7 @@ XrDateTime *xr_datetime_now(XrayIsolate *isolate) {
     return dt;
 }
 
-XrDateTime *xr_datetime_utc(XrayIsolate *isolate) {
+XrDateTime *xr_datetime_utc(XrVMRuntime *isolate) {
     XrDateTime *dt = datetime_alloc(isolate);
     int64_t millis = get_current_millis();
     dt->timestamp = millis / 1000;
@@ -262,7 +262,7 @@ XrDateTime *xr_datetime_utc(XrayIsolate *isolate) {
     return dt;
 }
 
-XrDateTime *xr_datetime_create(XrayIsolate *isolate, int year, int month, int day, int hour,
+XrDateTime *xr_datetime_create(XrVMRuntime *isolate, int year, int month, int day, int hour,
                                int minute, int second, int is_utc) {
     struct tm tm = {0};
     tm.tm_year = year - 1900;
@@ -282,7 +282,7 @@ XrDateTime *xr_datetime_create(XrayIsolate *isolate, int year, int month, int da
     return dt;
 }
 
-XrDateTime *xr_datetime_from_timestamp(XrayIsolate *isolate, int64_t timestamp) {
+XrDateTime *xr_datetime_from_timestamp(XrVMRuntime *isolate, int64_t timestamp) {
     XrDateTime *dt = datetime_alloc(isolate);
     dt->timestamp = timestamp;
     dt->milliseconds = 0;
@@ -291,7 +291,7 @@ XrDateTime *xr_datetime_from_timestamp(XrayIsolate *isolate, int64_t timestamp) 
     return dt;
 }
 
-XrDateTime *xr_datetime_from_timestamp_ms(XrayIsolate *isolate, int64_t timestamp_ms) {
+XrDateTime *xr_datetime_from_timestamp_ms(XrVMRuntime *isolate, int64_t timestamp_ms) {
     XrDateTime *dt = datetime_alloc(isolate);
     // Floor division: milliseconds must be in [0, 999].
     // C truncation toward zero gives negative remainder for negative inputs.
@@ -310,7 +310,7 @@ XrDateTime *xr_datetime_from_timestamp_ms(XrayIsolate *isolate, int64_t timestam
 
 /* ========== Parse API ========== */
 
-XrDateTime *xr_datetime_parse(XrayIsolate *isolate, const char *str, const char *format) {
+XrDateTime *xr_datetime_parse(XrVMRuntime *isolate, const char *str, const char *format) {
     if (!str)
         return NULL;
 
@@ -598,7 +598,7 @@ int xr_datetime_days_in_month(XrDateTime *dt) {
 
 /* ========== Date Arithmetic API ========== */
 
-XrDateTime *xr_datetime_add(XrayIsolate *isolate, XrDateTime *dt, int64_t amount,
+XrDateTime *xr_datetime_add(XrVMRuntime *isolate, XrDateTime *dt, int64_t amount,
                             const char *unit) {
     int64_t seconds = 0;
 
@@ -710,7 +710,7 @@ static void datetime_copy_fields(XrDateTime *dst, const XrDateTime *src) {
     dst->is_utc = src->is_utc;
 }
 
-XrDateTime *xr_datetime_to_utc(XrayIsolate *isolate, XrDateTime *dt) {
+XrDateTime *xr_datetime_to_utc(XrVMRuntime *isolate, XrDateTime *dt) {
     XrDateTime *result = datetime_alloc(isolate);
     if (!result)
         return NULL;
@@ -725,7 +725,7 @@ XrDateTime *xr_datetime_to_utc(XrayIsolate *isolate, XrDateTime *dt) {
     return result;
 }
 
-XrDateTime *xr_datetime_to_local(XrayIsolate *isolate, XrDateTime *dt) {
+XrDateTime *xr_datetime_to_local(XrVMRuntime *isolate, XrDateTime *dt) {
     XrDateTime *result = datetime_alloc(isolate);
     if (!result)
         return NULL;
@@ -745,19 +745,19 @@ XrDateTime *xr_datetime_to_local(XrayIsolate *isolate, XrDateTime *dt) {
 // Module-level functions use XrCFunctionPtr (iso, args, argc) for XRS_EXPORT.
 // Instance methods use XrPrimitiveMethodFn (iso, self, args, argc) for native type table.
 
-static XrValue dt_now(XrayIsolate *isolate, XrValue *args, int nargs) {
+static XrValue dt_now(XrVMRuntime *isolate, XrValue *args, int nargs) {
     (void) args;
     (void) nargs;
     return xr_datetime_value(xr_datetime_now(isolate));
 }
 
-static XrValue dt_utc(XrayIsolate *isolate, XrValue *args, int nargs) {
+static XrValue dt_utc(XrVMRuntime *isolate, XrValue *args, int nargs) {
     (void) args;
     (void) nargs;
     return xr_datetime_value(xr_datetime_utc(isolate));
 }
 
-static XrValue dt_create(XrayIsolate *isolate, XrValue *args, int nargs) {
+static XrValue dt_create(XrVMRuntime *isolate, XrValue *args, int nargs) {
     int year = nargs > 0 && XR_IS_INT(args[0]) ? (int) XR_TO_INT(args[0]) : 1970;
     int month = nargs > 1 && XR_IS_INT(args[1]) ? (int) XR_TO_INT(args[1]) : 1;
     int day = nargs > 2 && XR_IS_INT(args[2]) ? (int) XR_TO_INT(args[2]) : 1;
@@ -768,7 +768,7 @@ static XrValue dt_create(XrayIsolate *isolate, XrValue *args, int nargs) {
         xr_datetime_create(isolate, year, month, day, hour, minute, second, 0));
 }
 
-static XrValue dt_create_utc(XrayIsolate *isolate, XrValue *args, int nargs) {
+static XrValue dt_create_utc(XrVMRuntime *isolate, XrValue *args, int nargs) {
     int year = nargs > 0 && XR_IS_INT(args[0]) ? (int) XR_TO_INT(args[0]) : 1970;
     int month = nargs > 1 && XR_IS_INT(args[1]) ? (int) XR_TO_INT(args[1]) : 1;
     int day = nargs > 2 && XR_IS_INT(args[2]) ? (int) XR_TO_INT(args[2]) : 1;
@@ -779,7 +779,7 @@ static XrValue dt_create_utc(XrayIsolate *isolate, XrValue *args, int nargs) {
         xr_datetime_create(isolate, year, month, day, hour, minute, second, 1));
 }
 
-static XrValue dt_from_timestamp(XrayIsolate *isolate, XrValue *args, int nargs) {
+static XrValue dt_from_timestamp(XrVMRuntime *isolate, XrValue *args, int nargs) {
     if (nargs < 1)
         return XR_NULL_VAL;
     int64_t ts = 0;
@@ -792,7 +792,7 @@ static XrValue dt_from_timestamp(XrayIsolate *isolate, XrValue *args, int nargs)
     return xr_datetime_value(xr_datetime_from_timestamp(isolate, ts));
 }
 
-static XrValue dt_from_timestamp_ms(XrayIsolate *isolate, XrValue *args, int nargs) {
+static XrValue dt_from_timestamp_ms(XrVMRuntime *isolate, XrValue *args, int nargs) {
     if (nargs < 1)
         return XR_NULL_VAL;
     int64_t ts = 0;
@@ -805,7 +805,7 @@ static XrValue dt_from_timestamp_ms(XrayIsolate *isolate, XrValue *args, int nar
     return xr_datetime_value(xr_datetime_from_timestamp_ms(isolate, ts));
 }
 
-static XrValue dt_parse(XrayIsolate *isolate, XrValue *args, int nargs) {
+static XrValue dt_parse(XrVMRuntime *isolate, XrValue *args, int nargs) {
     if (nargs < 1 || !XR_IS_STRING(args[0]))
         return XR_NULL_VAL;
     XrString *str = XR_TO_STRING(args[0]);
@@ -817,7 +817,7 @@ static XrValue dt_parse(XrayIsolate *isolate, XrValue *args, int nargs) {
     return dt ? xr_datetime_value(dt) : XR_NULL_VAL;
 }
 
-static XrValue dt_offset(XrayIsolate *isolate, XrValue *args, int nargs) {
+static XrValue dt_offset(XrVMRuntime *isolate, XrValue *args, int nargs) {
     (void) isolate;
     (void) args;
     (void) nargs;
@@ -826,7 +826,7 @@ static XrValue dt_offset(XrayIsolate *isolate, XrValue *args, int nargs) {
 
 // Method binding: self = DateTime instance
 
-static XrValue dt_to_string(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+static XrValue dt_to_string(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     (void) args;
     (void) nargs;
     if (!xr_value_is_datetime(isolate, self))
@@ -839,7 +839,7 @@ static XrValue dt_to_string(XrayIsolate *isolate, XrValue self, XrValue *args, i
     return xr_string_value(xr_string_new(isolate, buf, n));
 }
 
-static XrValue dt_format(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+static XrValue dt_format(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     if (!xr_value_is_datetime(isolate, self))
         return XR_NULL_VAL;
     XrDateTime *dt = xr_value_get_datetime_body(isolate, self);
@@ -885,7 +885,7 @@ static XrValue dt_format(XrayIsolate *isolate, XrValue self, XrValue *args, int 
     return v;
 }
 
-static XrValue dt_to_iso(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+static XrValue dt_to_iso(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     (void) args;
     (void) nargs;
     if (!xr_value_is_datetime(isolate, self))
@@ -896,7 +896,7 @@ static XrValue dt_to_iso(XrayIsolate *isolate, XrValue self, XrValue *args, int 
     return xr_string_value(xr_string_new(isolate, buf, len));
 }
 
-static XrValue dt_year(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+static XrValue dt_year(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
     (void) args;
     (void) nargs;
@@ -905,7 +905,7 @@ static XrValue dt_year(XrayIsolate *isolate, XrValue self, XrValue *args, int na
     return XR_INT(xr_datetime_year(xr_value_get_datetime_body(isolate, self)));
 }
 
-static XrValue dt_month(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+static XrValue dt_month(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
     (void) args;
     (void) nargs;
@@ -914,7 +914,7 @@ static XrValue dt_month(XrayIsolate *isolate, XrValue self, XrValue *args, int n
     return XR_INT(xr_datetime_month(xr_value_get_datetime_body(isolate, self)));
 }
 
-static XrValue dt_day(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+static XrValue dt_day(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
     (void) args;
     (void) nargs;
@@ -923,7 +923,7 @@ static XrValue dt_day(XrayIsolate *isolate, XrValue self, XrValue *args, int nar
     return XR_INT(xr_datetime_day(xr_value_get_datetime_body(isolate, self)));
 }
 
-static XrValue dt_hour(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+static XrValue dt_hour(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
     (void) args;
     (void) nargs;
@@ -932,7 +932,7 @@ static XrValue dt_hour(XrayIsolate *isolate, XrValue self, XrValue *args, int na
     return XR_INT(xr_datetime_hour(xr_value_get_datetime_body(isolate, self)));
 }
 
-static XrValue dt_minute(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+static XrValue dt_minute(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
     (void) args;
     (void) nargs;
@@ -941,7 +941,7 @@ static XrValue dt_minute(XrayIsolate *isolate, XrValue self, XrValue *args, int 
     return XR_INT(xr_datetime_minute(xr_value_get_datetime_body(isolate, self)));
 }
 
-static XrValue dt_second(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+static XrValue dt_second(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
     (void) args;
     (void) nargs;
@@ -950,7 +950,7 @@ static XrValue dt_second(XrayIsolate *isolate, XrValue self, XrValue *args, int 
     return XR_INT(xr_datetime_second(xr_value_get_datetime_body(isolate, self)));
 }
 
-static XrValue dt_millisecond(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+static XrValue dt_millisecond(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
     (void) args;
     (void) nargs;
@@ -959,7 +959,7 @@ static XrValue dt_millisecond(XrayIsolate *isolate, XrValue self, XrValue *args,
     return XR_INT(xr_datetime_millisecond(xr_value_get_datetime_body(isolate, self)));
 }
 
-static XrValue dt_weekday(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+static XrValue dt_weekday(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
     (void) args;
     (void) nargs;
@@ -968,7 +968,7 @@ static XrValue dt_weekday(XrayIsolate *isolate, XrValue self, XrValue *args, int
     return XR_INT(xr_datetime_weekday(xr_value_get_datetime_body(isolate, self)));
 }
 
-static XrValue dt_yearday(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+static XrValue dt_yearday(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
     (void) args;
     (void) nargs;
@@ -977,7 +977,7 @@ static XrValue dt_yearday(XrayIsolate *isolate, XrValue self, XrValue *args, int
     return XR_INT(xr_datetime_yearday(xr_value_get_datetime_body(isolate, self)));
 }
 
-static XrValue dt_timestamp(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+static XrValue dt_timestamp(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
     (void) args;
     (void) nargs;
@@ -986,7 +986,7 @@ static XrValue dt_timestamp(XrayIsolate *isolate, XrValue self, XrValue *args, i
     return XR_INT(xr_value_get_datetime_body(isolate, self)->timestamp);
 }
 
-static XrValue dt_add(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+static XrValue dt_add(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     if (!xr_value_is_datetime(isolate, self) || nargs < 2 || !XR_IS_STRING(args[1]))
         return XR_NULL_VAL;
     XrDateTime *dt = xr_value_get_datetime_body(isolate, self);
@@ -995,7 +995,7 @@ static XrValue dt_add(XrayIsolate *isolate, XrValue self, XrValue *args, int nar
     return xr_datetime_value(xr_datetime_add(isolate, dt, amount, unit));
 }
 
-static XrValue dt_diff(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+static XrValue dt_diff(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
     if (!xr_value_is_datetime(isolate, self) || nargs < 1 ||
         !xr_value_is_datetime(isolate, args[0]))
@@ -1009,7 +1009,7 @@ static XrValue dt_diff(XrayIsolate *isolate, XrValue self, XrValue *args, int na
     return XR_INT(xr_datetime_diff(dt1, dt2, unit));
 }
 
-static XrValue dt_to_utc(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+static XrValue dt_to_utc(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     (void) args;
     (void) nargs;
     if (!xr_value_is_datetime(isolate, self))
@@ -1018,7 +1018,7 @@ static XrValue dt_to_utc(XrayIsolate *isolate, XrValue self, XrValue *args, int 
         xr_datetime_to_utc(isolate, xr_value_get_datetime_body(isolate, self)));
 }
 
-static XrValue dt_to_local(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+static XrValue dt_to_local(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     (void) args;
     (void) nargs;
     if (!xr_value_is_datetime(isolate, self))
@@ -1027,7 +1027,7 @@ static XrValue dt_to_local(XrayIsolate *isolate, XrValue self, XrValue *args, in
         xr_datetime_to_local(isolate, xr_value_get_datetime_body(isolate, self)));
 }
 
-static XrValue dt_is_before(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+static XrValue dt_is_before(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
     if (!xr_value_is_datetime(isolate, self) || nargs < 1 ||
         !xr_value_is_datetime(isolate, args[0]))
@@ -1038,7 +1038,7 @@ static XrValue dt_is_before(XrayIsolate *isolate, XrValue self, XrValue *args, i
                : XR_FALSE_VAL;
 }
 
-static XrValue dt_is_after(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+static XrValue dt_is_after(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
     if (!xr_value_is_datetime(isolate, self) || nargs < 1 ||
         !xr_value_is_datetime(isolate, args[0]))
@@ -1049,7 +1049,7 @@ static XrValue dt_is_after(XrayIsolate *isolate, XrValue self, XrValue *args, in
                : XR_FALSE_VAL;
 }
 
-static XrValue dt_equals(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+static XrValue dt_equals(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
     if (!xr_value_is_datetime(isolate, self) || nargs < 1 ||
         !xr_value_is_datetime(isolate, args[0]))
@@ -1060,7 +1060,7 @@ static XrValue dt_equals(XrayIsolate *isolate, XrValue self, XrValue *args, int 
                : XR_FALSE_VAL;
 }
 
-static XrValue dt_is_leap_year(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+static XrValue dt_is_leap_year(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
     (void) args;
     (void) nargs;
@@ -1070,7 +1070,7 @@ static XrValue dt_is_leap_year(XrayIsolate *isolate, XrValue self, XrValue *args
                                                                                : XR_FALSE_VAL;
 }
 
-static XrValue dt_days_in_month(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+static XrValue dt_days_in_month(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
     (void) args;
     (void) nargs;
@@ -1189,7 +1189,7 @@ static XrNativeBodyDesc g_datetime_body_desc = {
 /* DateTime class registration is invoked unconditionally during isolate
  * init by xr_prelude_register_all_native_types, so the XrClass is
  * available even when user code never `import datetime`. */
-void xr_register_datetime_class(XrayIsolate *isolate) {
+void xr_register_datetime_class(XrVMRuntime *isolate) {
     XR_DCHECK(isolate != NULL, "register_datetime_class: NULL isolate");
     XrayCoreClasses *core = xr_isolate_get_core_classes(isolate);
     XR_DCHECK(core != NULL, "register_datetime_class: core not initialised");
@@ -1226,7 +1226,7 @@ void xr_register_datetime_class(XrayIsolate *isolate) {
     g_datetime_body_offset = xr_instance_body_offset(cls);
 }
 
-XrModule *xr_load_module_datetime(XrayIsolate *isolate) {
+XrModule *xr_load_module_datetime(XrVMRuntime *isolate) {
     XR_DCHECK(isolate != NULL, "xr_load_module_datetime: NULL isolate");
 
     // Create module — only factory functions exported (the DateTime

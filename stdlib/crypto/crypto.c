@@ -897,7 +897,7 @@ XR_FUNC int xr_hex_to_bytes(const char *hex, uint8_t *output, size_t max_len) {
 
 /* ========== Module Bindings ========== */
 
-static XrValue crypto_md5(XrayIsolate *isolate, XrValue *args, int nargs) {
+static XrValue crypto_md5(XrVMRuntime *isolate, XrValue *args, int nargs) {
     if (nargs < 1 || !XR_IS_STRING(args[0]))
         return xr_null();
     XrString *s = XR_TO_STRING(args[0]);
@@ -908,7 +908,7 @@ static XrValue crypto_md5(XrayIsolate *isolate, XrValue *args, int nargs) {
     return xr_string_value(xr_string_new(isolate, hex, 32));
 }
 
-static XrValue crypto_sha1(XrayIsolate *isolate, XrValue *args, int nargs) {
+static XrValue crypto_sha1(XrVMRuntime *isolate, XrValue *args, int nargs) {
     if (nargs < 1 || !XR_IS_STRING(args[0]))
         return xr_null();
     XrString *s = XR_TO_STRING(args[0]);
@@ -919,7 +919,7 @@ static XrValue crypto_sha1(XrayIsolate *isolate, XrValue *args, int nargs) {
     return xr_string_value(xr_string_new(isolate, hex, 40));
 }
 
-static XrValue crypto_sha256(XrayIsolate *isolate, XrValue *args, int nargs) {
+static XrValue crypto_sha256(XrVMRuntime *isolate, XrValue *args, int nargs) {
     if (nargs < 1 || !XR_IS_STRING(args[0]))
         return xr_null();
     XrString *s = XR_TO_STRING(args[0]);
@@ -930,7 +930,7 @@ static XrValue crypto_sha256(XrayIsolate *isolate, XrValue *args, int nargs) {
     return xr_string_value(xr_string_new(isolate, hex, 64));
 }
 
-static XrValue crypto_hmac(XrayIsolate *isolate, XrValue *args, int nargs) {
+static XrValue crypto_hmac(XrVMRuntime *isolate, XrValue *args, int nargs) {
     if (nargs < 3)
         return xr_null();
     if (!XR_IS_STRING(args[0]) || !XR_IS_STRING(args[1]) || !XR_IS_STRING(args[2]))
@@ -971,7 +971,7 @@ static XrValue crypto_hmac(XrayIsolate *isolate, XrValue *args, int nargs) {
     return xr_null();
 }
 
-static XrValue crypto_sha512(XrayIsolate *isolate, XrValue *args, int nargs) {
+static XrValue crypto_sha512(XrVMRuntime *isolate, XrValue *args, int nargs) {
     if (nargs < 1 || !XR_IS_STRING(args[0]))
         return xr_null();
     XrString *s = XR_TO_STRING(args[0]);
@@ -982,7 +982,7 @@ static XrValue crypto_sha512(XrayIsolate *isolate, XrValue *args, int nargs) {
     return xr_string_value(xr_string_new(isolate, hex, 128));
 }
 
-static XrValue crypto_random_bytes(XrayIsolate *isolate, XrValue *args, int nargs) {
+static XrValue crypto_random_bytes(XrVMRuntime *isolate, XrValue *args, int nargs) {
     if (nargs < 1 || !XR_IS_INT(args[0]))
         return xr_null();
     int len = (int) XR_TO_INT(args[0]);
@@ -995,7 +995,7 @@ static XrValue crypto_random_bytes(XrayIsolate *isolate, XrValue *args, int narg
     return xr_string_value(xr_string_new(isolate, hex, len * 2));
 }
 
-static XrValue crypto_uuid(XrayIsolate *isolate, XrValue *args, int nargs) {
+static XrValue crypto_uuid(XrVMRuntime *isolate, XrValue *args, int nargs) {
     (void) args;
     (void) nargs;
     uint8_t bytes[16];
@@ -1016,7 +1016,7 @@ static XrValue crypto_uuid(XrayIsolate *isolate, XrValue *args, int nargs) {
  * Key is SHA-256 hashed to 32 bytes. IV is randomly generated and
  * prepended to the ciphertext. Output is hex-encoded (iv + ciphertext).
  */
-static XrValue crypto_encrypt(XrayIsolate *isolate, XrValue *args, int nargs) {
+static XrValue crypto_encrypt(XrVMRuntime *isolate, XrValue *args, int nargs) {
     if (nargs < 2 || !XR_IS_STRING(args[0]) || !XR_IS_STRING(args[1]))
         return xr_null();
     XrString *key_str = XR_TO_STRING(args[0]);
@@ -1091,7 +1091,7 @@ static XrValue crypto_encrypt(XrayIsolate *isolate, XrValue *args, int nargs) {
  * Reverse of crypto.encrypt: hex decode, extract IV, AES-256-CBC decrypt,
  * remove PKCS7 padding.
  */
-static XrValue crypto_decrypt(XrayIsolate *isolate, XrValue *args, int nargs) {
+static XrValue crypto_decrypt(XrVMRuntime *isolate, XrValue *args, int nargs) {
     if (nargs < 2 || !XR_IS_STRING(args[0]) || !XR_IS_STRING(args[1]))
         return xr_null();
     XrString *key_str = XR_TO_STRING(args[0]);
@@ -1178,7 +1178,7 @@ static XrValue crypto_decrypt(XrayIsolate *isolate, XrValue *args, int nargs) {
 }
 
 // Constant-time comparison to prevent timing attacks
-static XrValue crypto_timing_safe_equal(XrayIsolate *isolate, XrValue *args, int nargs) {
+static XrValue crypto_timing_safe_equal(XrVMRuntime *isolate, XrValue *args, int nargs) {
     (void) isolate;
     if (nargs < 2 || !XR_IS_STRING(args[0]) || !XR_IS_STRING(args[1]))
         return xr_bool(false);
@@ -1210,7 +1210,7 @@ XR_DEFINE_BUILTIN(crypto_decrypt, "decrypt", "(key: string, ciphertext: string):
 XR_DEFINE_BUILTIN(crypto_timing_safe_equal, "timingSafeEqual", "(a: string, b: string): bool",
                   "Constant-time string comparison")
 
-XR_FUNC XrModule *xr_load_module_crypto(XrayIsolate *isolate) {
+XR_FUNC XrModule *xr_load_module_crypto(XrVMRuntime *isolate) {
     XrModule *mod = xr_module_create_native(isolate, "crypto");
     if (!mod)
         return NULL;

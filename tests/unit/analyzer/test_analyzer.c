@@ -15,7 +15,7 @@
 #include "xanalyzer_infer.h"
 #include "xanalyzer_visitor.h"
 #include "xtype_pool.h"
-#include "xray_isolate.h"
+#include "xray_vm.h"
 #include "toolchain/xcompiler_session.h"
 #include "../test_win_compat.h"
 
@@ -23,15 +23,15 @@ static int tests_passed = 0;
 static int tests_failed = 0;
 
 // Global isolate and analyzer for pool initialization
-static XrayIsolate *g_isolate = NULL;
+static XrVMRuntime *g_isolate = NULL;
 static XrCompilerSession *g_session = NULL;
 static XaAnalyzer *g_analyzer = NULL;
 
 static void setup_pool(void) {
     if (!g_isolate) {
-        XrayIsolateParams p;
-        xray_isolate_params_init(&p);
-        g_isolate = xray_isolate_new(&p);
+        XrVMConfig p;
+        xray_vm_config_init(&p);
+        g_isolate = xray_vm_new(&p);
         XrCompilerSessionConfig cfg = {.vm_host = g_isolate};
         g_session = xr_compiler_session_new(&cfg);
         xr_compiler_session_attach_isolate(g_isolate, g_session);
@@ -55,7 +55,7 @@ static void teardown_pool(void) {
             xr_compiler_session_delete(g_session);
             g_session = NULL;
         }
-        xray_isolate_delete(g_isolate);
+        xray_vm_delete(g_isolate);
         g_isolate = NULL;
     }
 }

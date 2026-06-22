@@ -48,6 +48,6 @@ XrCoroHeap *xr_current_coro_heap(void) {
     return NULL;
 }
 
-XrayIsolate *xr_coro_vm_owner(const struct XrCoroutine *coro) {
+XrVMRuntime *xr_coro_vm_owner(const struct XrCoroutine *coro) {
     return coro ? xr_runtime_core_vm_owner(coro->core) : NULL;
 }

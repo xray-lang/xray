@@ -42,7 +42,7 @@ static inline XrBigInt *xr_bigint_method_self(XrValue self) {
 }
 
 /* bigint.toString() -> decimal string. Allocates. */
-static inline XrValue xr_bigint_to_string_method(XrayIsolate *iso, XrValue self, XrValue *args,
+static inline XrValue xr_bigint_to_string_method(XrVMRuntime *iso, XrValue self, XrValue *args,
                                                  int argc) {
     (void) args;
     (void) argc;
@@ -57,7 +57,7 @@ static inline XrValue xr_bigint_to_string_method(XrayIsolate *iso, XrValue self,
 }
 
 /* bigint.abs() -> bigint. Allocates a new BigInt. */
-static inline XrValue xr_bigint_abs_method(XrayIsolate *iso, XrValue self, XrValue *args,
+static inline XrValue xr_bigint_abs_method(XrVMRuntime *iso, XrValue self, XrValue *args,
                                            int argc) {
     (void) args;
     (void) argc;
@@ -67,7 +67,7 @@ static inline XrValue xr_bigint_abs_method(XrayIsolate *iso, XrValue self, XrVal
 }
 
 /* bigint.sign() -> -1 / 0 / 1. Pure, no GC. */
-static inline XrValue xr_bigint_sign_method(XrayIsolate *iso, XrValue self, XrValue *args,
+static inline XrValue xr_bigint_sign_method(XrVMRuntime *iso, XrValue self, XrValue *args,
                                             int argc) {
     (void) iso;
     (void) args;
@@ -79,7 +79,7 @@ static inline XrValue xr_bigint_sign_method(XrayIsolate *iso, XrValue self, XrVa
 }
 
 /* bigint.isZero() -> bool. Pure, no GC. */
-static inline XrValue xr_bigint_is_zero_method(XrayIsolate *iso, XrValue self, XrValue *args,
+static inline XrValue xr_bigint_is_zero_method(XrVMRuntime *iso, XrValue self, XrValue *args,
                                                int argc) {
     (void) iso;
     (void) args;
@@ -88,7 +88,7 @@ static inline XrValue xr_bigint_is_zero_method(XrayIsolate *iso, XrValue self, X
 }
 
 /* bigint.isNegative() -> bool. Pure, no GC. */
-static inline XrValue xr_bigint_is_negative_method(XrayIsolate *iso, XrValue self, XrValue *args,
+static inline XrValue xr_bigint_is_negative_method(XrVMRuntime *iso, XrValue self, XrValue *args,
                                                    int argc) {
     (void) iso;
     (void) args;
@@ -98,7 +98,7 @@ static inline XrValue xr_bigint_is_negative_method(XrayIsolate *iso, XrValue sel
 }
 
 /* bigint.isPositive() -> bool. Pure, no GC. */
-static inline XrValue xr_bigint_is_positive_method(XrayIsolate *iso, XrValue self, XrValue *args,
+static inline XrValue xr_bigint_is_positive_method(XrVMRuntime *iso, XrValue self, XrValue *args,
                                                    int argc) {
     (void) iso;
     (void) args;
@@ -108,7 +108,7 @@ static inline XrValue xr_bigint_is_positive_method(XrayIsolate *iso, XrValue sel
 }
 
 /* bigint.toInt() -> int. Returns null on overflow. Pure, no GC. */
-static inline XrValue xr_bigint_to_int_method(XrayIsolate *iso, XrValue self, XrValue *args,
+static inline XrValue xr_bigint_to_int_method(XrVMRuntime *iso, XrValue self, XrValue *args,
                                               int argc) {
     (void) iso;
     (void) args;
@@ -121,7 +121,7 @@ static inline XrValue xr_bigint_to_int_method(XrayIsolate *iso, XrValue self, Xr
 }
 
 /* bigint.toFloat() -> float. May lose precision. Pure, no GC. */
-static inline XrValue xr_bigint_to_float_method(XrayIsolate *iso, XrValue self, XrValue *args,
+static inline XrValue xr_bigint_to_float_method(XrVMRuntime *iso, XrValue self, XrValue *args,
                                                 int argc) {
     (void) iso;
     (void) args;
@@ -129,8 +129,8 @@ static inline XrValue xr_bigint_to_float_method(XrayIsolate *iso, XrValue self, 
     return xr_float(xr_bigint_to_double(xr_bigint_method_self(self)));
 }
 
-struct XrayIsolate;
-XR_FUNC void xr_bigint_register_class(struct XrayIsolate *isolate);
+struct XrVMRuntime;
+XR_FUNC void xr_bigint_register_class(struct XrVMRuntime *isolate);
 
 #ifdef __cplusplus
 }

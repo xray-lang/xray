@@ -50,7 +50,7 @@ static void restore_test_env(const char *name, char *saved) {
 }
 
 typedef struct SchedulerFixture {
-    XrayIsolate isolate_storage;
+    XrVMRuntime isolate_storage;
     XrRuntimeCore core;
     XrSystemHeap sys_heap;
     XrRuntime runtime;
@@ -64,7 +64,7 @@ typedef struct SchedulerFixture {
     bool task_lock_initialized;
 } SchedulerFixture;
 
-static void fixture_init_runtime(XrRuntime *runtime, XrayIsolate *isolate, XrWorker *workers,
+static void fixture_init_runtime(XrRuntime *runtime, XrVMRuntime *isolate, XrWorker *workers,
                                  XrMachine *machines, int worker_count) {
     memset(runtime, 0, sizeof(*runtime));
     runtime->core = isolate ? isolate->core_rt : NULL;
@@ -135,7 +135,7 @@ static void scheduler_fixture_cleanup(SchedulerFixture *f) {
 }
 
 typedef struct StealFixture {
-    XrayIsolate isolate_storage;
+    XrVMRuntime isolate_storage;
     XrRuntimeCore core;
     XrSystemHeap sys_heap;
     XrRuntime runtime;
@@ -219,7 +219,7 @@ static void steal_fixture_enter_manual_threads(StealFixture *f) {
     f->manual_threads = true;
 }
 
-static void init_ready_coro(XrCoroutine *coro, int id, XrayIsolate *isolate) {
+static void init_ready_coro(XrCoroutine *coro, int id, XrVMRuntime *isolate) {
     memset(coro, 0, sizeof(*coro));
     coro->id = id;
     coro->core = isolate ? isolate->core_rt : NULL;
@@ -270,7 +270,7 @@ static const XrCoroBackendVTable spawn_probe_backend = {
     .resume = spawn_probe_resume,
 };
 
-static void init_spawn_probe_parent(XrCoroutine *parent, int id, XrayIsolate *isolate,
+static void init_spawn_probe_parent(XrCoroutine *parent, int id, XrVMRuntime *isolate,
                                     SpawnProbeState *state) {
     init_ready_coro(parent, id, isolate);
     parent->backend = &spawn_probe_backend;
@@ -279,7 +279,7 @@ static void init_spawn_probe_parent(XrCoroutine *parent, int id, XrayIsolate *is
 }
 
 static void init_spawn_probe_children(XrCoroutine *children, int count, int base_id,
-                                      XrayIsolate *isolate) {
+                                      XrVMRuntime *isolate) {
     for (int i = 0; i < count; i++) {
         init_ready_coro(&children[i], base_id + i, isolate);
         children[i].backend = &spawn_probe_backend;
@@ -440,7 +440,7 @@ TEST(deterministic_runtime_forces_single_worker_and_virtual_clock) {
     set_test_env("XRAY_WORKERS", "4");
     set_test_env("XRAY_CORO_SEED", "12345");
 
-    XrayIsolate isolate;
+    XrVMRuntime isolate;
     XrRuntimeCore core;
     XrSystemHeap sys_heap;
     memset(&isolate, 0, sizeof(isolate));

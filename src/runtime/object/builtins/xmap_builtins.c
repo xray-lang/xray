@@ -20,7 +20,7 @@
 #include "xheap.h"
 
 // Map() - create empty map
-XrValue xr_builtin_map_construct(XrayIsolate *isolate, XrValue self, XrValue *args, int argc) {
+XrValue xr_builtin_map_construct(XrVMRuntime *isolate, XrValue self, XrValue *args, int argc) {
     XR_DCHECK(isolate != NULL, "map_construct: NULL isolate");
     (void) self;
     (void) args;
@@ -31,7 +31,7 @@ XrValue xr_builtin_map_construct(XrayIsolate *isolate, XrValue self, XrValue *ar
 }
 
 // Map.from(entries) or Map.from(keys, values)
-XrValue xr_builtin_map_from(XrayIsolate *isolate, XrValue self, XrValue *args, int argc) {
+XrValue xr_builtin_map_from(XrVMRuntime *isolate, XrValue self, XrValue *args, int argc) {
     (void) self;
     if (argc == 1) {
         // Map.from(entries) - array of [key, value] pairs

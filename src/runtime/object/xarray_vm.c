@@ -22,11 +22,11 @@
 #include "../xvm_call.h"
 #include <string.h>
 
-XrArray *xr_array_new_shared(struct XrayIsolate *X, int capacity) {
+XrArray *xr_array_new_shared(struct XrVMRuntime *X, int capacity) {
     return xr_array_new_shared_core(xr_isolate_get_runtime_core(X), capacity);
 }
 
-void xr_array_foreach(struct XrayIsolate *iso, XrArray *arr, struct XrClosure *callback) {
+void xr_array_foreach(struct XrVMRuntime *iso, XrArray *arr, struct XrClosure *callback) {
     XR_DCHECK(arr != NULL, "xr_array_foreach: NULL arr");
     XR_DCHECK(callback != NULL, "xr_array_foreach: NULL callback");
     for (int i = 0; i < arr->length; i++) {
@@ -42,7 +42,7 @@ static uint8_t array_map_result_tid(struct XrClosure *callback) {
     return xr_type_to_tid(callback->proto->return_type_info);
 }
 
-XrArray *xr_array_map(struct XrayIsolate *iso, XrArray *arr, struct XrClosure *callback) {
+XrArray *xr_array_map(struct XrVMRuntime *iso, XrArray *arr, struct XrClosure *callback) {
     XR_DCHECK(arr != NULL, "xr_array_map: NULL arr");
     XR_DCHECK(callback != NULL, "xr_array_map: NULL callback");
     uint8_t elem_tid = array_map_result_tid(callback);
@@ -62,7 +62,7 @@ XrArray *xr_array_map(struct XrayIsolate *iso, XrArray *arr, struct XrClosure *c
     return result;
 }
 
-XrArray *xr_array_filter(struct XrayIsolate *iso, XrArray *arr, struct XrClosure *callback) {
+XrArray *xr_array_filter(struct XrVMRuntime *iso, XrArray *arr, struct XrClosure *callback) {
     XR_DCHECK(arr != NULL, "xr_array_filter: NULL arr");
     XR_DCHECK(callback != NULL, "xr_array_filter: NULL callback");
     XrArray *result = xr_array_with_capacity_typed(xr_current_coro(iso), arr->length,
@@ -83,7 +83,7 @@ XrArray *xr_array_filter(struct XrayIsolate *iso, XrArray *arr, struct XrClosure
     return result;
 }
 
-XrValue xr_array_reduce(struct XrayIsolate *iso, XrArray *arr, struct XrClosure *callback,
+XrValue xr_array_reduce(struct XrVMRuntime *iso, XrArray *arr, struct XrClosure *callback,
                         XrValue initial) {
     XR_DCHECK(arr != NULL, "xr_array_reduce: NULL arr");
     XR_DCHECK(callback != NULL, "xr_array_reduce: NULL callback");
@@ -99,7 +99,7 @@ XrValue xr_array_reduce(struct XrayIsolate *iso, XrArray *arr, struct XrClosure 
     return accumulator;
 }
 
-XrValue xr_array_find(struct XrayIsolate *iso, XrArray *arr, struct XrClosure *callback) {
+XrValue xr_array_find(struct XrVMRuntime *iso, XrArray *arr, struct XrClosure *callback) {
     XR_DCHECK(arr != NULL, "xr_array_find: NULL arr");
     XR_DCHECK(callback != NULL, "xr_array_find: NULL callback");
     for (int i = 0; i < arr->length; i++) {
@@ -113,7 +113,7 @@ XrValue xr_array_find(struct XrayIsolate *iso, XrArray *arr, struct XrClosure *c
     return xr_null();
 }
 
-int xr_array_find_index(struct XrayIsolate *iso, XrArray *arr, struct XrClosure *callback) {
+int xr_array_find_index(struct XrVMRuntime *iso, XrArray *arr, struct XrClosure *callback) {
     XR_DCHECK(arr != NULL, "xr_array_find_index: NULL arr");
     XR_DCHECK(callback != NULL, "xr_array_find_index: NULL callback");
     for (int i = 0; i < arr->length; i++) {
@@ -126,7 +126,7 @@ int xr_array_find_index(struct XrayIsolate *iso, XrArray *arr, struct XrClosure 
     return -1;
 }
 
-bool xr_array_every(struct XrayIsolate *iso, XrArray *arr, struct XrClosure *callback) {
+bool xr_array_every(struct XrVMRuntime *iso, XrArray *arr, struct XrClosure *callback) {
     XR_DCHECK(arr != NULL, "xr_array_every: NULL arr");
     XR_DCHECK(callback != NULL, "xr_array_every: NULL callback");
     for (int i = 0; i < arr->length; i++) {
@@ -139,7 +139,7 @@ bool xr_array_every(struct XrayIsolate *iso, XrArray *arr, struct XrClosure *cal
     return true;
 }
 
-bool xr_array_some(struct XrayIsolate *iso, XrArray *arr, struct XrClosure *callback) {
+bool xr_array_some(struct XrVMRuntime *iso, XrArray *arr, struct XrClosure *callback) {
     XR_DCHECK(arr != NULL, "xr_array_some: NULL arr");
     XR_DCHECK(callback != NULL, "xr_array_some: NULL callback");
     for (int i = 0; i < arr->length; i++) {
@@ -184,7 +184,7 @@ static int xr_value_compare_default(XrValue a, XrValue b) {
 }
 
 typedef struct {
-    struct XrayIsolate *iso;
+    struct XrVMRuntime *iso;
     struct XrClosure *comparator;
 } XrSortCtx;
 
@@ -331,7 +331,7 @@ static void xr_array_hybrid_sort(XrValue *data, int n, XrSortCtx *ctx) {
         }                                                                                          \
     } while (0)
 
-static void xr_array_typed_sort_with_comparator(struct XrayIsolate *iso, XrArray *arr,
+static void xr_array_typed_sort_with_comparator(struct XrVMRuntime *iso, XrArray *arr,
                                                 struct XrClosure *cmp) {
     int n = arr->length;
     XrValue *boxed = (XrValue *) xr_malloc((size_t) n * sizeof(XrValue));
@@ -346,7 +346,7 @@ static void xr_array_typed_sort_with_comparator(struct XrayIsolate *iso, XrArray
     xr_free(boxed);
 }
 
-void xr_array_sort(struct XrayIsolate *iso, XrArray *arr, struct XrClosure *comparator) {
+void xr_array_sort(struct XrVMRuntime *iso, XrArray *arr, struct XrClosure *comparator) {
     if (!arr || arr->length <= 1)
         return;
 
@@ -398,7 +398,7 @@ void xr_array_sort(struct XrayIsolate *iso, XrArray *arr, struct XrClosure *comp
     }
 }
 
-struct XrString *xr_array_join(struct XrayIsolate *iso, XrArray *arr, struct XrString *delimiter) {
+struct XrString *xr_array_join(struct XrVMRuntime *iso, XrArray *arr, struct XrString *delimiter) {
     if (arr == NULL || arr->length == 0)
         return xr_string_intern(iso, "", 0, 0);
 
@@ -429,7 +429,7 @@ struct XrString *xr_array_join(struct XrayIsolate *iso, XrArray *arr, struct XrS
     return xr_strbuf_to_string(sb);
 }
 
-struct XrString *xr_array_to_string(struct XrayIsolate *iso, XrArray *arr) {
+struct XrString *xr_array_to_string(struct XrVMRuntime *iso, XrArray *arr) {
     if (!arr || arr->length == 0)
         return xr_string_intern(iso, "", 0, 0);
     return xr_string_intern(iso, (const char *) arr->data, arr->length, 0);

@@ -171,7 +171,7 @@ int xr_proxy_parse_connect_response(const char *response, size_t len) {
 
 /* ========== Proxy Configuration (managed via XrHttpContext) ========== */
 
-void xr_set_proxy(XrayIsolate *X, const char *proxy_url) {
+void xr_set_proxy(XrVMRuntime *X, const char *proxy_url) {
     xr_clear_proxy(X);
 
     if (!proxy_url)
@@ -190,12 +190,12 @@ void xr_set_proxy(XrayIsolate *X, const char *proxy_url) {
     }
 }
 
-XrProxyConfig *xr_get_proxy(XrayIsolate *X) {
+XrProxyConfig *xr_get_proxy(XrVMRuntime *X) {
     XrHttpContext *ctx = xr_http_get_context(X);
     return ctx ? ctx->proxy : NULL;
 }
 
-void xr_clear_proxy(XrayIsolate *X) {
+void xr_clear_proxy(XrVMRuntime *X) {
     XrHttpContext *ctx = xr_http_get_context(X);
     if (!ctx)
         return;
@@ -215,7 +215,7 @@ void xr_clear_proxy(XrayIsolate *X) {
     ctx->no_proxy_count = 0;
 }
 
-bool xr_should_use_proxy(XrayIsolate *X, const char *host) {
+bool xr_should_use_proxy(XrVMRuntime *X, const char *host) {
     XrHttpContext *ctx = xr_http_get_context(X);
     if (!ctx || !ctx->proxy || !host)
         return false;
@@ -246,7 +246,7 @@ bool xr_should_use_proxy(XrayIsolate *X, const char *host) {
     return true;
 }
 
-void xr_add_no_proxy(XrayIsolate *X, const char *host) {
+void xr_add_no_proxy(XrVMRuntime *X, const char *host) {
     if (!host)
         return;
 

@@ -87,7 +87,7 @@ typedef struct {
 // ========== Parser Context ==========
 
 typedef struct {
-    XrayIsolate *isolate;
+    XrVMRuntime *isolate;
 
     // Input data
     const char *data;
@@ -132,10 +132,10 @@ typedef struct {
 XR_FUNC void toml_config_init(TomlConfig *config);
 
 // Extract configuration from Json object
-XR_FUNC void toml_config_from_json(XrayIsolate *X, TomlConfig *config, XrJson *json);
+XR_FUNC void toml_config_from_json(XrVMRuntime *X, TomlConfig *config, XrJson *json);
 
 // Initialize parser
-XR_FUNC void toml_parser_init(TomlParser *parser, XrayIsolate *isolate, const char *data,
+XR_FUNC void toml_parser_init(TomlParser *parser, XrVMRuntime *isolate, const char *data,
                               size_t len, TomlConfig *config);
 
 // Execute parsing

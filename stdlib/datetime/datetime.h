@@ -43,13 +43,13 @@ typedef struct XrDateTime {
 
 /* ========== Creation API ========== */
 
-XR_FUNC XrDateTime *xr_datetime_now(XrayIsolate *isolate);
-XR_FUNC XrDateTime *xr_datetime_utc(XrayIsolate *isolate);
-XR_FUNC XrDateTime *xr_datetime_create(XrayIsolate *isolate, int year, int month, int day, int hour,
+XR_FUNC XrDateTime *xr_datetime_now(XrVMRuntime *isolate);
+XR_FUNC XrDateTime *xr_datetime_utc(XrVMRuntime *isolate);
+XR_FUNC XrDateTime *xr_datetime_create(XrVMRuntime *isolate, int year, int month, int day, int hour,
                                        int minute, int second, int is_utc);
-XR_FUNC XrDateTime *xr_datetime_from_timestamp(XrayIsolate *isolate, int64_t timestamp);
-XR_FUNC XrDateTime *xr_datetime_from_timestamp_ms(XrayIsolate *isolate, int64_t timestamp_ms);
-XR_FUNC XrDateTime *xr_datetime_parse(XrayIsolate *isolate, const char *str, const char *format);
+XR_FUNC XrDateTime *xr_datetime_from_timestamp(XrVMRuntime *isolate, int64_t timestamp);
+XR_FUNC XrDateTime *xr_datetime_from_timestamp_ms(XrVMRuntime *isolate, int64_t timestamp_ms);
+XR_FUNC XrDateTime *xr_datetime_parse(XrVMRuntime *isolate, const char *str, const char *format);
 
 /* ========== Format API ========== */
 
@@ -81,14 +81,14 @@ XR_FUNC int xr_datetime_days_in_month(XrDateTime *dt);
 
 /* ========== Date Arithmetic API ========== */
 
-XR_FUNC XrDateTime *xr_datetime_add(XrayIsolate *isolate, XrDateTime *dt, int64_t amount,
+XR_FUNC XrDateTime *xr_datetime_add(XrVMRuntime *isolate, XrDateTime *dt, int64_t amount,
                                     const char *unit);
 XR_FUNC int64_t xr_datetime_diff(XrDateTime *dt1, XrDateTime *dt2, const char *unit);
 
 /* ========== Timezone API ========== */
 
-XR_FUNC XrDateTime *xr_datetime_to_utc(XrayIsolate *isolate, XrDateTime *dt);
-XR_FUNC XrDateTime *xr_datetime_to_local(XrayIsolate *isolate, XrDateTime *dt);
+XR_FUNC XrDateTime *xr_datetime_to_utc(XrVMRuntime *isolate, XrDateTime *dt);
+XR_FUNC XrDateTime *xr_datetime_to_local(XrVMRuntime *isolate, XrDateTime *dt);
 XR_FUNC int xr_datetime_local_offset(void);
 
 /* ========== Utility Functions ========== */
@@ -98,10 +98,10 @@ XR_FUNC void xr_datetime_to_tm(XrDateTime *dt, struct tm *tm);
 /* ========== XrValue Conversion ========== */
 
 // Returns true iff v is an instance of DateTime (or a subclass).
-XR_FUNC bool xr_value_is_datetime(XrayIsolate *X, XrValue v);
+XR_FUNC bool xr_value_is_datetime(XrVMRuntime *X, XrValue v);
 
 // Returns the native body pointer; NULL if v is not a DateTime.
-XR_FUNC XrDateTime *xr_value_get_datetime_body(XrayIsolate *X, XrValue v);
+XR_FUNC XrDateTime *xr_value_get_datetime_body(XrVMRuntime *X, XrValue v);
 
 // Wraps the body pointer back into a tagged XrValue (instance handle).
 // body must originate from a DateTime instance.
@@ -111,12 +111,12 @@ XR_FUNC XrValue xr_datetime_value(XrDateTime *body);
 
 // Build the DateTime XrClass (with native body) and store it in
 // core->dateTimeClass. Called from the prelude's native-type hook.
-XR_FUNC void xr_register_datetime_class(XrayIsolate *isolate);
+XR_FUNC void xr_register_datetime_class(XrVMRuntime *isolate);
 
 /* ========== Module Loading ========== */
 
 struct XrModule;
 
-XR_FUNC struct XrModule *xr_load_module_datetime(XrayIsolate *isolate);
+XR_FUNC struct XrModule *xr_load_module_datetime(XrVMRuntime *isolate);
 
 #endif  // XR_STDLIB_DATETIME_H

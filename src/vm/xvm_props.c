@@ -46,7 +46,7 @@
 #include "../runtime/class/xenum.h"
 #include "../base/xglobal_indices.h"
 
-static XrValue vm_task_status_property_value(XrayIsolate *isolate, uint8_t tstate) {
+static XrValue vm_task_status_property_value(XrVMRuntime *isolate, uint8_t tstate) {
     XrValue value = isolate->vm.builtins[XR_GLOBAL_VAR_TASK_STATUS];
     if (!XR_IS_PTR(value))
         return xr_null();
@@ -81,7 +81,7 @@ static XrValue vm_task_status_property_value(XrayIsolate *isolate, uint8_t tstat
  * Handles property set for non-instance types (Map error, Module, Class static, Json).
  * Returns XR_DISP_NEXT on success, XR_DISP_FALLTHROUGH for instance, XR_DISP_RAISE on error.
  */
-XR_FUNC XrDispatchAction vm_setprop_type_dispatch(XrayIsolate *isolate, XrVMContext *vm_ctx,
+XR_FUNC XrDispatchAction vm_setprop_type_dispatch(XrVMRuntime *isolate, XrVMContext *vm_ctx,
                                                   XrValue obj, int prop_symbol, XrValue value,
                                                   XrValue *base, int a, XrBcCallFrame *frame,
                                                   XrInstruction *pc) {
@@ -280,7 +280,7 @@ XR_FUNC XrDispatchAction vm_setprop_type_dispatch(XrayIsolate *isolate, XrVMCont
 
 /* ========== Dispatch: OP_SETPROP Instance Setter ========== */
 
-XR_FUNC XrDispatchAction vm_setprop_instance_setter(XrayIsolate *isolate, XrVMContext *vm_ctx,
+XR_FUNC XrDispatchAction vm_setprop_instance_setter(XrVMRuntime *isolate, XrVMContext *vm_ctx,
                                                     XrInstance *inst, XrValue obj, int prop_symbol,
                                                     XrValue value, XrValue *base, int c,
                                                     XrBcCallFrame *frame, XrInstruction *pc) {
@@ -332,7 +332,7 @@ XR_FUNC XrDispatchAction vm_setprop_instance_setter(XrayIsolate *isolate, XrVMCo
  * Returns XR_DISP_NEXT if property was resolved, XR_DISP_FALLTHROUGH for instance,
  * or XR_DISP_RAISE/XR_DISP_RESTART for error/getter paths.
  */
-XR_FUNC XrDispatchAction vm_getprop_type_dispatch(XrayIsolate *isolate, XrVMContext *vm_ctx,
+XR_FUNC XrDispatchAction vm_getprop_type_dispatch(XrVMRuntime *isolate, XrVMContext *vm_ctx,
                                                   XrValue obj, int prop_symbol, XrValue *base,
                                                   int a, int b, XrBcCallFrame *frame,
                                                   XrInstruction *pc) {
@@ -975,7 +975,7 @@ XR_FUNC XrDispatchAction vm_getprop_type_dispatch(XrayIsolate *isolate, XrVMCont
 
 /* ========== Dispatch: OP_GETPROP Instance Getter ========== */
 
-XR_FUNC XrDispatchAction vm_getprop_instance_getter(XrayIsolate *isolate, XrVMContext *vm_ctx,
+XR_FUNC XrDispatchAction vm_getprop_instance_getter(XrVMRuntime *isolate, XrVMContext *vm_ctx,
                                                     XrInstance *inst, XrValue obj, int prop_symbol,
                                                     XrValue *base, int a, XrBcCallFrame *frame,
                                                     XrInstruction *pc) {
@@ -1055,7 +1055,7 @@ XR_FUNC XrDispatchAction vm_getprop_instance_getter(XrayIsolate *isolate, XrVMCo
 
 /* ========== Dispatch: OP_INVOKE Module Methods ========== */
 
-XR_FUNC XrDispatchAction vm_invoke_module(XrayIsolate *isolate, XrVMContext *vm_ctx,
+XR_FUNC XrDispatchAction vm_invoke_module(XrVMRuntime *isolate, XrVMContext *vm_ctx,
                                           XrValue receiver, int method_symbol, int nargs,
                                           XrValue *base, int a, XrBcCallFrame *frame,
                                           XrInstruction *pc) {

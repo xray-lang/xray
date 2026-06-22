@@ -16,7 +16,7 @@
 #include "xbool_methods.h"
 #include "../object/xnative_type.h"
 
-void xr_bool_register_native_type(XrayIsolate *isolate) {
+void xr_bool_register_native_type(XrVMRuntime *isolate) {
     static const XrNativeMethod bool_methods[] = {
         {"toString", xr_bool_to_string, 0},
         {NULL, NULL, 0},

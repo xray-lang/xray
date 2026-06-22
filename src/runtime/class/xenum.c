@@ -26,7 +26,7 @@
 
 /* ========== Enum Creation ========== */
 
-XrEnumValue *xr_enum_value_new(XrayIsolate *X, const char *enum_name, const char *member_name,
+XrEnumValue *xr_enum_value_new(XrVMRuntime *X, const char *enum_name, const char *member_name,
                                XrValue raw_value, uint32_t index) {
     XR_DCHECK(X != NULL, "enum_value_new: NULL isolate");
     XR_DCHECK(enum_name != NULL, "enum_value_new: NULL enum_name");
@@ -80,7 +80,7 @@ static XrClass *xr_enum_minimal_adt_class_new(const char *name, uint16_t field_c
     return cls;
 }
 
-XrEnumType *xr_enum_type_new(XrayIsolate *X, const char *name, int base_type, char **member_names,
+XrEnumType *xr_enum_type_new(XrVMRuntime *X, const char *name, int base_type, char **member_names,
                              XrValue *member_values, int count) {
     XrayCoreClasses *core = xr_isolate_get_core_classes(X);
     XrEnumType *enum_type = (XrEnumType *) xr_fixed_heap_alloc(xr_isolate_get_fixed_heap(X),
@@ -308,7 +308,7 @@ bool xr_enum_type_set_adt_payloads(XrEnumType *enum_type, const int *payload_cou
 void xr_enum_type_init_symbols(XrEnumType *enum_type, void *isolate) {
     XR_DCHECK(enum_type != NULL, "enum_type_init_symbols: NULL enum_type");
     XR_DCHECK(isolate != NULL, "enum_type_init_symbols: NULL isolate");
-    XrayIsolate *X = (XrayIsolate *) isolate;
+    XrVMRuntime *X = (XrVMRuntime *) isolate;
     XrSymbolTable *sym_table = (XrSymbolTable *) xr_isolate_get_symbol_table(X);
     if (!sym_table)
         return;
@@ -457,7 +457,7 @@ XR_FUNC XrInstance *xr_enum_adt_construct_core(XrRuntimeCore *core, struct XrCor
     return inst;
 }
 
-XR_FUNC XrInstance *xr_enum_adt_construct(XrayIsolate *X, XrEnumType *enum_type,
+XR_FUNC XrInstance *xr_enum_adt_construct(XrVMRuntime *X, XrEnumType *enum_type,
                                           uint32_t member_index, XrValue *args, int nargs) {
     return xr_enum_adt_construct_core(xr_isolate_get_runtime_core(X), xr_current_coro(X), enum_type,
                                       member_index, args, nargs);

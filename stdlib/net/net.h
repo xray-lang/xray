@@ -24,7 +24,7 @@
 #include "xneterror.h"
 
 // Forward declarations
-struct XrayIsolate;
+struct XrVMRuntime;
 struct XrModule;
 
 /* ========== Network Address ========== */
@@ -54,6 +54,6 @@ XR_FUNC int xr_net_format_addr(const XrNetAddr *addr, char *buf, size_t buf_len)
 
 /* ========== Module Loader ========== */
 
-XR_FUNC struct XrModule *xr_load_module_net(struct XrayIsolate *isolate);
+XR_FUNC struct XrModule *xr_load_module_net(struct XrVMRuntime *isolate);
 
 #endif  // XR_STDLIB_NET_H

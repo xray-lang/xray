@@ -7,7 +7,7 @@
  */
 
 #include "module/xbytecode_io.h"
-#include "xray_isolate.h"
+#include "xray_vm.h"
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -24,20 +24,20 @@ static const uint8_t xr_embed_smoke[97] = {
 };
 
 int main(void) {
-    XrayIsolateParams params;
-    xray_isolate_params_init(&params);
+    XrVMConfig params;
+    xray_vm_config_init(&params);
 
-    XrayIsolate *iso = xray_isolate_new_runtime(&params);
+    XrVMRuntime *iso = xray_vm_new_runtime(&params);
     if (!iso) {
         return 2;
     }
 
     FILE *out = tmpfile();
     if (!out) {
-        xray_isolate_delete(iso);
+        xray_vm_delete(iso);
         return 3;
     }
-    xray_isolate_set_stdout(iso, out);
+    xray_vm_set_stdout(iso, out);
 
     int rc = xr_eval_bytecode(iso, xr_embed_smoke, xr_embed_smoke_size);
 
@@ -46,7 +46,7 @@ int main(void) {
     char buf[32] = {0};
     size_t n = fread(buf, 1, sizeof(buf) - 1, out);
     fclose(out);
-    xray_isolate_delete(iso);
+    xray_vm_delete(iso);
 
     if (rc != 0) {
         return 4;

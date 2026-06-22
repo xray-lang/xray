@@ -17,7 +17,7 @@
 
 /* ========== Core Types ========== */
 
-typedef struct XrayIsolate XrayIsolate;
+typedef struct XrVMRuntime XrVMRuntime;
 
 /* ========== Memory Management ========== */
 

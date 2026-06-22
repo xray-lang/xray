@@ -48,7 +48,7 @@ typedef struct XrProject {
 
 /* ========== Project API ========== */
 
-XR_FUNC XrProject *xr_project_load(XrayIsolate *isolate, const char *project_root);
+XR_FUNC XrProject *xr_project_load(XrVMRuntime *isolate, const char *project_root);
 XR_FUNC void xr_project_free(XrProject *project);
 
 // Returns local path (caller frees), or NULL for non-local dependencies

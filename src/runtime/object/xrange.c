@@ -21,7 +21,7 @@
 
 /* ========== Internal helpers ========== */
 
-static XrClass *range_class(XrayIsolate *X) {
+static XrClass *range_class(XrVMRuntime *X) {
     XrayCoreClasses *core = xr_isolate_get_core_classes(X);
     XR_DCHECK(core != NULL && core->rangeClass != NULL, "range: core->rangeClass not registered");
     return core->rangeClass;
@@ -29,14 +29,14 @@ static XrClass *range_class(XrayIsolate *X) {
 
 /* ========== Type Check ========== */
 
-bool xr_value_is_range(XrayIsolate *X, XrValue v) {
+bool xr_value_is_range(XrVMRuntime *X, XrValue v) {
     if (!XR_IS_INSTANCE(v))
         return false;
     XrInstance *inst = (XrInstance *) XR_TO_PTR(v);
     return xr_class_instanceof(inst->klass, range_class(X));
 }
 
-XrRange *xr_value_get_range_body(XrayIsolate *X, XrValue v) {
+XrRange *xr_value_get_range_body(XrVMRuntime *X, XrValue v) {
     if (!xr_value_is_range(X, v))
         return NULL;
     XrInstance *inst = (XrInstance *) XR_TO_PTR(v);
@@ -45,7 +45,7 @@ XrRange *xr_value_get_range_body(XrayIsolate *X, XrValue v) {
 
 /* ========== Creation ========== */
 
-XrValue xr_range_new(XrayIsolate *X, int64_t start, int64_t end) {
+XrValue xr_range_new(XrVMRuntime *X, int64_t start, int64_t end) {
     XR_DCHECK(X != NULL, "xr_range_new: NULL isolate");
     XrInstance *inst = xr_instance_new(X, range_class(X));
     if (!inst)
@@ -58,7 +58,7 @@ XrValue xr_range_new(XrayIsolate *X, int64_t start, int64_t end) {
     return XR_FROM_PTR(inst);
 }
 
-XrValue xr_range_new_with_step(XrayIsolate *X, int64_t start, int64_t end, int64_t step) {
+XrValue xr_range_new_with_step(XrVMRuntime *X, int64_t start, int64_t end, int64_t step) {
     XR_DCHECK(X != NULL, "xr_range_new_with_step: NULL isolate");
     XR_CHECK(step != 0, "xr_range_new_with_step: step must not be zero");
     XrInstance *inst = xr_instance_new(X, range_class(X));
@@ -109,7 +109,7 @@ XrValue xr_range_to_array(struct XrCoroutine *coro, XrRange *r) {
 #include <inttypes.h>
 #include <stdio.h>
 
-static XrValue m_range_to_string(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_range_to_string(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) args;
     (void) argc;
     XrRange *rng = xr_value_get_range_body(iso, self);
@@ -124,7 +124,7 @@ static XrValue m_range_to_string(XrayIsolate *iso, XrValue self, XrValue *args, 
     return xr_string_value(s);
 }
 
-static XrValue m_range_to_array(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_range_to_array(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) args;
     (void) argc;
     XrRange *rng = xr_value_get_range_body(iso, self);
@@ -133,7 +133,7 @@ static XrValue m_range_to_array(XrayIsolate *iso, XrValue self, XrValue *args, i
     return xr_range_to_array(xr_current_coro(iso), rng);
 }
 
-static XrValue m_range_contains(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_range_contains(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     XrRange *rng = xr_value_get_range_body(iso, self);
     if (!rng)
         return xr_bool(false);
@@ -146,7 +146,7 @@ static XrValue m_range_contains(XrayIsolate *iso, XrValue self, XrValue *args, i
 /* Property getters: invoked through OP_GETPROP on the `get:<name>`
  * symbol, so call sites use `r.start` / `r.end` / `r.length` without
  * parens.  All three are O(1). */
-static XrValue m_range_get_start(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_range_get_start(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) args;
     (void) argc;
     XrRange *rng = xr_value_get_range_body(iso, self);
@@ -155,7 +155,7 @@ static XrValue m_range_get_start(XrayIsolate *iso, XrValue self, XrValue *args, 
     return xr_int(rng->start);
 }
 
-static XrValue m_range_get_end(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_range_get_end(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) args;
     (void) argc;
     XrRange *rng = xr_value_get_range_body(iso, self);
@@ -164,7 +164,7 @@ static XrValue m_range_get_end(XrayIsolate *iso, XrValue self, XrValue *args, in
     return xr_int(rng->end);
 }
 
-static XrValue m_range_get_length(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_range_get_length(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) args;
     (void) argc;
     XrRange *rng = xr_value_get_range_body(iso, self);
@@ -195,7 +195,7 @@ static XrNativeBodyDesc g_range_body_desc = {
 
 /* ========== Class Registration ========== */
 
-void xr_register_range_class(XrayIsolate *X) {
+void xr_register_range_class(XrVMRuntime *X) {
     XR_DCHECK(X != NULL, "register_range_class: NULL isolate");
     XrayCoreClasses *core = xr_isolate_get_core_classes(X);
     XR_DCHECK(core != NULL, "register_range_class: core not initialised");

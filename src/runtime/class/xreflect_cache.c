@@ -23,7 +23,7 @@
 
 /* ========== Cache Creation ========== */
 
-XrReflectCache *xr_reflect_cache_create(XrayIsolate *X, XrClass *klass) {
+XrReflectCache *xr_reflect_cache_create(XrVMRuntime *X, XrClass *klass) {
     if (!X || !klass)
         return NULL;
 
@@ -144,7 +144,7 @@ XrValue xr_reflect_cache_get_method(XrReflectCache *cache, int method_index) {
     return cache->method_wrappers[method_index];
 }
 
-XrArray *xr_reflect_cache_get_all_fields(XrayIsolate *X, XrReflectCache *cache) {
+XrArray *xr_reflect_cache_get_all_fields(XrVMRuntime *X, XrReflectCache *cache) {
     XR_DCHECK(X != NULL, "reflect_cache_get_all_fields: NULL isolate");
     if (!cache || !cache->initialized)
         return NULL;
@@ -160,7 +160,7 @@ XrArray *xr_reflect_cache_get_all_fields(XrayIsolate *X, XrReflectCache *cache) 
     return array;
 }
 
-XrArray *xr_reflect_cache_get_all_methods(XrayIsolate *X, XrReflectCache *cache) {
+XrArray *xr_reflect_cache_get_all_methods(XrVMRuntime *X, XrReflectCache *cache) {
     XR_DCHECK(X != NULL, "reflect_cache_get_all_methods: NULL isolate");
     if (!cache || !cache->initialized)
         return NULL;

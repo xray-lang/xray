@@ -119,7 +119,7 @@ void xr_class_compute_operator_flags(XrClass *cls) {
 
 /* ========== Class Object Implementation ========== */
 
-XrClass *xr_class_new(XrayIsolate *X, const char *name, XrClass *super) {
+XrClass *xr_class_new(XrVMRuntime *X, const char *name, XrClass *super) {
     XR_DCHECK(name != NULL, "Class name must not be NULL");
 
     // xr_class_new used to allocate a raw XrClass by hand and then, when a
@@ -149,7 +149,7 @@ XrClass *xr_class_new(XrayIsolate *X, const char *name, XrClass *super) {
 // longer a supported API for patching a class's super link after the
 // class has been frozen.
 
-XrClass *xr_class_new_dynamic_root(XrayIsolate *X, const char *name, uint16_t capacity,
+XrClass *xr_class_new_dynamic_root(XrVMRuntime *X, const char *name, uint16_t capacity,
                                    bool sealed) {
     (void) X;
     XR_DCHECK(name != NULL, "dynamic_root: NULL name");
@@ -175,7 +175,7 @@ const XrFieldDescriptor *xr_class_get_field(const XrClass *cls, int index) {
     return &cls->fields[index];
 }
 
-int xr_class_lookup_field_by_name(XrayIsolate *X, XrClass *cls, const char *name) {
+int xr_class_lookup_field_by_name(XrVMRuntime *X, XrClass *cls, const char *name) {
     if (!X || !cls || !name)
         return -1;
 
@@ -258,7 +258,7 @@ XrMethod *xr_class_lookup_method(XrClass *cls, int symbol) {
 /* ========== Value Type Access ========== */
 
 // Get class for any value (unified object model)
-XrClass *xr_value_get_class(XrayIsolate *X, XrValue value) {
+XrClass *xr_value_get_class(XrVMRuntime *X, XrValue value) {
     XR_DCHECK(X != NULL, "value_get_class: NULL isolate");
 
     /* Resolve the XrObjType. Value types (int/float/bool/null) map to
@@ -353,7 +353,7 @@ void xr_class_print(XrClass *cls) {
 
 /* ========== Interface Support ========== */
 
-XrClass *xr_interface_new(XrayIsolate *X, const char *name) {
+XrClass *xr_interface_new(XrVMRuntime *X, const char *name) {
     XR_DCHECK(X != NULL, "interface_new: NULL isolate");
     XR_DCHECK(name != NULL, "Interface name must not be NULL");
 

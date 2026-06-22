@@ -33,7 +33,7 @@
 typedef struct XaAnalyzer XaAnalyzer;
 typedef struct AstNode XrAstNode;
 typedef struct XrCompilerSession XrCompilerSession;
-typedef struct XrayIsolate XrayIsolate;
+typedef struct XrVMRuntime XrVMRuntime;
 
 // Diagnostic severity (matches LSP XrLspDiagnosticSeverity values)
 typedef enum XrDiagSeverity {
@@ -68,7 +68,7 @@ struct XaAnalyzer {
     XrCompilerSession *compiler_session;
 
     // Borrowed VM host for the current bytecode/runtime type helpers.
-    XrayIsolate *isolate;
+    XrVMRuntime *isolate;
 
     // Type pool (per-analyzer, no global state)
     XrTypePool *type_pool;

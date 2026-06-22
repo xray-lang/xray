@@ -32,7 +32,7 @@ static char *get_toml_str(XrTomlValue *tbl, const char *key) {
 
 /* ========== Project Loading ========== */
 
-XrProject *xr_project_load(XrayIsolate *isolate, const char *project_root) {
+XrProject *xr_project_load(XrVMRuntime *isolate, const char *project_root) {
     (void) isolate; /* no longer needed — base xtoml parser is pure C */
     if (!project_root)
         return NULL;

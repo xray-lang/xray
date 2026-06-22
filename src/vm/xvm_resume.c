@@ -37,7 +37,7 @@
 //
 // Returns:
 //   XrVMResult: VM_OK (continue), VM_BLOCKED (blocked again), VM_ERROR (error)
-XrVMResult xr_vm_coro_resume_with_unroll(XrayIsolate *X, XrCoroutine *coro, int resume_status) {
+XrVMResult xr_vm_coro_resume_with_unroll(XrVMRuntime *X, XrCoroutine *coro, int resume_status) {
     if (!X || !coro) {
         return XR_VM_RUNTIME_ERROR;
     }

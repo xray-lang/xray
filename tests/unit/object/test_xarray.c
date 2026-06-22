@@ -19,13 +19,13 @@
 #define xr_is_bool(v) XR_IS_BOOL(v)
 #define xr_as_int(v) XR_TO_INT(v)
 
-static XrayIsolate *X = NULL;
+static XrVMRuntime *X = NULL;
 static XrCoroutine *main_coro = NULL;
 
 /* ========== Setup / Teardown ========== */
 
 static void setup(void) {
-    X = xray_isolate_new(NULL);
+    X = xray_vm_new(NULL);
     ASSERT_NOT_NULL(X);
     // Initialize test coroutine
     main_coro = xr_test_init_coro(X);
@@ -34,7 +34,7 @@ static void setup(void) {
 
 static void teardown(void) {
     if (X) {
-        xray_isolate_delete(X);
+        xray_vm_delete(X);
         X = NULL;
         main_coro = NULL;
     }

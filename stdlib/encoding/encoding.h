@@ -50,9 +50,9 @@ XR_FUNC int xr_utf16_to_utf8_len(const uint8_t *utf16, size_t utf16_len, XrUtf16
 
 /* ========== Module Loading ========== */
 
-struct XrayIsolate;
+struct XrVMRuntime;
 struct XrModule;
 
-XR_FUNC struct XrModule *xr_load_module_encoding(struct XrayIsolate *isolate);
+XR_FUNC struct XrModule *xr_load_module_encoding(struct XrVMRuntime *isolate);
 
 #endif  // XR_STDLIB_ENCODING_H

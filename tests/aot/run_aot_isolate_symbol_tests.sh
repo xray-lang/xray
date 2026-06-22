@@ -37,9 +37,10 @@ REQUESTED_JOBS="${XRAY_AOT_ISOLATE_JOBS:-${XRAY_TEST_JOBS:-auto}}"
 JOBS=1
 
 # Keep this intentionally broad. Pure AOT binaries should not expose any public
-# isolate API, VM init/cleanup, source compiler entry, analyzer, or module loader
-# symbol. Darwin nm prefixes C symbols with '_', so every alternative allows it.
-FORBIDDEN_SYMBOL_RE='(^|[^[:alnum:]_])_?(xray_isolate_|xr_vm_|xr_parse|xr_compile|xanalyzer_|xr_load_module_)'
+# VM runtime API, VM init/cleanup, source compiler entry, analyzer, or module
+# loader symbol. Darwin nm prefixes C symbols with '_', so every alternative
+# allows it.
+FORBIDDEN_SYMBOL_RE='(^|[^[:alnum:]_])_?(xray_vm_|xray_isolate_|xr_vm_|xr_parse|xr_compile|xanalyzer_|xr_load_module_)'
 EAGER_SCRIPT_BUILTIN_SYMBOL_RE='(^|[^[:alnum:]_])_?(xr_string_intern_core|xr_string_value)([^[:alnum:]_]|$)'
 PURE_TINY_AOT_MAX_BYTES=70000
 PURE_CRYPTO_AOT_MAX_BYTES=80000

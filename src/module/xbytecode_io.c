@@ -16,7 +16,7 @@
 #include "../base/xmalloc.h"
 #include "../base/xfileio.h"
 #include "../base/xlog.h"
-#include "xray_isolate.h"
+#include "xray_vm.h"
 #include "../runtime/xisolate_api.h"
 #include "xexec_state.h"
 #include "../runtime/value/xchunk.h"
@@ -37,11 +37,11 @@ typedef struct {
     uint8_t *buf;
     size_t size;
     size_t capacity;
-    XrayIsolate *X;
+    XrVMRuntime *X;
     int flags;
 } BcWriter;
 
-static void bc_writer_init(BcWriter *w, XrayIsolate *X, int flags) {
+static void bc_writer_init(BcWriter *w, XrVMRuntime *X, int flags) {
     XR_DCHECK(w != NULL, "bc_writer_init: NULL writer");
     w->buf = NULL;
     w->size = 0;
@@ -138,11 +138,11 @@ typedef struct {
     const uint8_t *buf;
     size_t size;
     size_t pos;
-    XrayIsolate *X;
+    XrVMRuntime *X;
     XrBcError error;
 } BcReader;
 
-static void bc_reader_init(BcReader *r, XrayIsolate *X, const uint8_t *buf, size_t size) {
+static void bc_reader_init(BcReader *r, XrVMRuntime *X, const uint8_t *buf, size_t size) {
     XR_DCHECK(r != NULL, "bc_reader_init: NULL reader");
     XR_DCHECK(buf != NULL, "bc_reader_init: NULL buf");
     XR_DCHECK(size > 0, "bc_reader_init: zero size");
@@ -750,7 +750,7 @@ fail:
 
 /* ========== Public API ========== */
 
-uint8_t *xr_bytecode_write(XrayIsolate *X, XrProto *proto, int flags, size_t *out_size) {
+uint8_t *xr_bytecode_write(XrVMRuntime *X, XrProto *proto, int flags, size_t *out_size) {
     if (!X || !proto || !out_size)
         return NULL;
 
@@ -797,7 +797,7 @@ fail:
     return NULL;
 }
 
-XrProto *xr_bytecode_read(XrayIsolate *X, const uint8_t *data, size_t size, XrBcError *error) {
+XrProto *xr_bytecode_read(XrVMRuntime *X, const uint8_t *data, size_t size, XrBcError *error) {
     if (!X || !data || size == 0) {
         if (error)
             *error = XR_BC_ERR_TRUNCATED;
@@ -894,7 +894,7 @@ XrProto *xr_bytecode_read(XrayIsolate *X, const uint8_t *data, size_t size, XrBc
     return proto;
 }
 
-int xr_eval_bytecode(XrayIsolate *X, const uint8_t *data, size_t size) {
+int xr_eval_bytecode(XrVMRuntime *X, const uint8_t *data, size_t size) {
     XR_DCHECK(X != NULL, "eval_bytecode: NULL isolate");
     XR_DCHECK(data != NULL, "eval_bytecode: NULL data");
     XrBcError error;
@@ -912,7 +912,7 @@ int xr_eval_bytecode(XrayIsolate *X, const uint8_t *data, size_t size) {
 
 /* ========== AOT Bytecode Load (decomposed API) ========== */
 
-XrProto *xr_bytecode_load(XrayIsolate *X, const uint8_t *data, size_t size) {
+XrProto *xr_bytecode_load(XrVMRuntime *X, const uint8_t *data, size_t size) {
     XR_DCHECK(X != NULL, "bytecode_load: NULL isolate");
     XR_DCHECK(data != NULL, "bytecode_load: NULL data");
     XrBcError error;
@@ -963,7 +963,7 @@ void xr_proto_set_param_types(XrProto *p, const uint8_t *ptypes, int nparams, ui
     }
 }
 
-int xr_run_bytecode_file(XrayIsolate *X, const char *bytecode_file) {
+int xr_run_bytecode_file(XrVMRuntime *X, const char *bytecode_file) {
     XR_DCHECK(X != NULL, "run_bytecode_file: NULL isolate");
     XR_DCHECK(bytecode_file != NULL, "run_bytecode_file: NULL bytecode_file");
 
@@ -1004,7 +1004,7 @@ XrOutputFormat xr_detect_output_format(const char *filename, XrOutputFormat expl
     return XR_OUTPUT_BYTECODE;
 }
 
-bool xr_output_c_source(XrayIsolate *X, XrProto *proto, const char *output_file,
+bool xr_output_c_source(XrVMRuntime *X, XrProto *proto, const char *output_file,
                         const char *var_name, int flags) {
     // Serialize
     size_t bc_size;

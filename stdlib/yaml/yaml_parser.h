@@ -64,7 +64,7 @@ typedef struct {
 // ========== Parser Context ==========
 
 typedef struct {
-    XrayIsolate *isolate;
+    XrVMRuntime *isolate;
 
     // Input data
     const char *data;
@@ -105,10 +105,10 @@ extern XrValue xr_value_from_map(XrMap *map);
 XR_FUNC void yaml_config_init(YamlConfig *config);
 
 // Extract config from Json object
-XR_FUNC void yaml_config_from_json(XrayIsolate *X, YamlConfig *config, XrJson *json);
+XR_FUNC void yaml_config_from_json(XrVMRuntime *X, YamlConfig *config, XrJson *json);
 
 // Initialize parser
-XR_FUNC void yaml_parser_init(YamlParser *parser, XrayIsolate *isolate, const char *data,
+XR_FUNC void yaml_parser_init(YamlParser *parser, XrVMRuntime *isolate, const char *data,
                               size_t len, YamlConfig *config);
 
 // Parse single document

@@ -15,11 +15,11 @@
 #include "../../coro/xcoroutine.h"
 #include "../xvm_call.h"
 
-struct XrIterator *xr_map_entries_iterator(struct XrayIsolate *iso, XrMap *map) {
+struct XrIterator *xr_map_entries_iterator(struct XrVMRuntime *iso, XrMap *map) {
     return xr_iterator_new_from_map(xr_current_coro(iso), map);
 }
 
-void xr_map_foreach(struct XrayIsolate *isolate, XrMap *map, struct XrClosure *callback) {
+void xr_map_foreach(struct XrVMRuntime *isolate, XrMap *map, struct XrClosure *callback) {
     XR_DCHECK(map != NULL, "xr_map_foreach: NULL map");
     XR_DCHECK(callback != NULL, "xr_map_foreach: NULL callback");
     if (xr_map_isdummy(map))

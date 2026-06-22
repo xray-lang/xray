@@ -24,7 +24,7 @@
  * tracing collector.
  */
 
-struct XrayIsolate;
+struct XrVMRuntime;
 typedef struct XrFixedHeap XrFixedHeap;
 
 typedef struct XrFixedHeapObjectNode {
@@ -35,13 +35,13 @@ typedef struct XrFixedHeapObjectNode {
 typedef struct XrFixedHeap {
     uint8_t state;
     uint8_t _pad[7];
-    struct XrayIsolate *isolate;
+    struct XrVMRuntime *isolate;
     int64_t totalbytes;
     XrFixedHeapObjectNode *objects;  // Fixed-lifetime objects
     size_t object_count;
 } XrFixedHeap;
 
-XR_FUNC void xr_fixed_heap_init(XrFixedHeap *heap, struct XrayIsolate *isolate);
+XR_FUNC void xr_fixed_heap_init(XrFixedHeap *heap, struct XrVMRuntime *isolate);
 XR_FUNC void xr_fixed_heap_cleanup(XrFixedHeap *heap);
 XR_FUNC void *xr_fixed_heap_alloc(XrFixedHeap *heap, size_t size, uint8_t type);
 XR_FUNC XrObjHeader *xr_fixed_heap_new_obj(XrFixedHeap *heap, uint8_t type, size_t size);

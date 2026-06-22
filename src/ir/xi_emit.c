@@ -725,7 +725,7 @@ XR_FUNC void emit_value(EmitCtx *ctx, XiValue *v) {
 
 /* ========== Public API ========== */
 
-XR_FUNC XiEmitStatus xi_emit(XiFunc *f, struct XrayIsolate *isolate, struct XrProto **out_proto) {
+XR_FUNC XiEmitStatus xi_emit(XiFunc *f, struct XrVMRuntime *isolate, struct XrProto **out_proto) {
     XR_DCHECK(f != NULL, "xi_emit: NULL func");
     XR_DCHECK(out_proto != NULL, "xi_emit: NULL out_proto");
     *out_proto = NULL;

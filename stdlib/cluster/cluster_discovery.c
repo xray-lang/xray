@@ -41,7 +41,7 @@
 // Forward-declare the xsocket entry points used here rather
 // than pulling xsocket.h directly; link-time signature checking
 // against xsocket.c keeps them in sync.
-extern int xr_socket_wait_readable(struct XrayIsolate *X, int fd, int timeout_ms);
+extern int xr_socket_wait_readable(struct XrVMRuntime *X, int fd, int timeout_ms);
 
 /* ========== Announce Packet ========== */
 

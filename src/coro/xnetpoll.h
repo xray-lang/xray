@@ -31,7 +31,7 @@
 
 // Forward declarations
 struct XrCoroutine;
-struct XrayIsolate;
+struct XrVMRuntime;
 struct XrCoroState;
 struct XrProc;
 
@@ -430,7 +430,7 @@ XR_FUNC void xr_netpoll_close(XrNetpoll *np, XrPollDesc *pd);
 // Current coroutine will be suspended until I/O ready or timeout
 // X: VM instance (for coroutine scheduling)
 // Returns error code
-XR_FUNC int xr_netpoll_wait(XrNetpoll *np, XrPollDesc *pd, int mode, struct XrayIsolate *X);
+XR_FUNC int xr_netpoll_wait(XrNetpoll *np, XrPollDesc *pd, int mode, struct XrVMRuntime *X);
 
 // Poll for ready events
 // delta_ns: < 0 wait forever, = 0 return immediately, > 0 wait at most delta_ns nanoseconds
@@ -489,7 +489,7 @@ XR_FUNC void xr_netpoll_ready(XrReadyList *list, XrPollDesc *pd, int mode);
  *
  * Returns true if I/O ready, false on timeout or fd close.
  */
-XR_FUNC bool xr_netpoll_block_sync(XrPollDesc *pd, int mode, struct XrayIsolate *X);
+XR_FUNC bool xr_netpoll_block_sync(XrPollDesc *pd, int mode, struct XrVMRuntime *X);
 XR_FUNC void xr_netpoll_arm_mode(XrPollDesc *pd, int mode);
 
 // Unblock, wake waiting coroutine

@@ -43,7 +43,7 @@
 
 #define VM_SELECT_RESULT_SLOT_STACK_CAP 256
 
-static inline XrDispatchAction vm_chan_ready_next_or_yield(XrayIsolate *isolate,
+static inline XrDispatchAction vm_chan_ready_next_or_yield(XrVMRuntime *isolate,
                                                            XrCoroutine *current,
                                                            XrBcCallFrame *frame,
                                                            XrInstruction *pc) {
@@ -51,7 +51,7 @@ static inline XrDispatchAction vm_chan_ready_next_or_yield(XrayIsolate *isolate,
                                             XR_VM_CHAN_READY_REDUCTION_COST);
 }
 
-static XrDispatchAction vm_time_after_impl(XrayIsolate *isolate, XrVMContext *vm_ctx,
+static XrDispatchAction vm_time_after_impl(XrVMRuntime *isolate, XrVMContext *vm_ctx,
                                            XrInstruction instr, XrValue *base, XrBcCallFrame *frame,
                                            XrInstruction *pc) {
     (void) vm_ctx;
@@ -83,7 +83,7 @@ static XrDispatchAction vm_time_after_impl(XrayIsolate *isolate, XrVMContext *vm
     return XR_DISP_NEXT;
 }
 
-static XrDispatchAction vm_sleep_impl(XrayIsolate *isolate, XrVMContext *vm_ctx,
+static XrDispatchAction vm_sleep_impl(XrVMRuntime *isolate, XrVMContext *vm_ctx,
                                       XrInstruction instr, XrValue *base, XrBcCallFrame *frame,
                                       XrInstruction *pc) {
     int a = GETARG_A(instr);
@@ -118,7 +118,7 @@ static XrDispatchAction vm_sleep_impl(XrayIsolate *isolate, XrVMContext *vm_ctx,
     return XR_DISP_NEXT;
 }
 
-XR_FUNC XrDispatchAction vm_time_dispatch(XrayIsolate *isolate, XrVMContext *vm_ctx,
+XR_FUNC XrDispatchAction vm_time_dispatch(XrVMRuntime *isolate, XrVMContext *vm_ctx,
                                           XrInstruction instr, XrValue *base, XrBcCallFrame *frame,
                                           XrInstruction *pc) {
     switch (GET_OPCODE(instr)) {
@@ -131,7 +131,7 @@ XR_FUNC XrDispatchAction vm_time_dispatch(XrayIsolate *isolate, XrVMContext *vm_
     }
 }
 
-XR_FUNC XrDispatchAction vm_select_block(XrayIsolate *isolate, XrVMContext *vm_ctx,
+XR_FUNC XrDispatchAction vm_select_block(XrVMRuntime *isolate, XrVMContext *vm_ctx,
                                          XrInstruction instr, XrValue *base, XrBcCallFrame *frame,
                                          XrInstruction *pc) {
     int base_reg = GETARG_A(instr);
@@ -172,7 +172,7 @@ XR_FUNC XrDispatchAction vm_select_block(XrayIsolate *isolate, XrVMContext *vm_c
     return XR_DISP_NEXT;
 }
 
-XR_FUNC XrDispatchAction vm_chan_send(XrayIsolate *isolate, XrVMContext *vm_ctx,
+XR_FUNC XrDispatchAction vm_chan_send(XrVMRuntime *isolate, XrVMContext *vm_ctx,
                                       XrInstruction instr, XrValue *base, XrBcCallFrame *frame,
                                       XrInstruction *pc) {
     int a = GETARG_A(instr);
@@ -218,7 +218,7 @@ XR_FUNC XrDispatchAction vm_chan_send(XrayIsolate *isolate, XrVMContext *vm_ctx,
     VM_THROW(frame, pc, XR_ERR_CORO_DEAD, "Channel send failed");
 }
 
-XR_FUNC XrDispatchAction vm_chan_recv(XrayIsolate *isolate, XrVMContext *vm_ctx,
+XR_FUNC XrDispatchAction vm_chan_recv(XrVMRuntime *isolate, XrVMContext *vm_ctx,
                                       XrInstruction instr, XrValue *base, XrBcCallFrame *frame,
                                       XrInstruction *pc) {
     int a = GETARG_A(instr);
@@ -270,7 +270,7 @@ XR_FUNC XrDispatchAction vm_chan_recv(XrayIsolate *isolate, XrVMContext *vm_ctx,
     VM_THROW(frame, pc, XR_ERR_CORO_DEAD, "recv: need to use blocking recv in coroutine");
 }
 
-XR_FUNC XrDispatchAction vm_chan_send_timeout(XrayIsolate *isolate, XrVMContext *vm_ctx,
+XR_FUNC XrDispatchAction vm_chan_send_timeout(XrVMRuntime *isolate, XrVMContext *vm_ctx,
                                               XrInstruction instr, XrValue *base,
                                               XrBcCallFrame *frame, XrInstruction *pc) {
     int a = GETARG_A(instr);
@@ -355,7 +355,7 @@ XR_FUNC XrDispatchAction vm_chan_send_timeout(XrayIsolate *isolate, XrVMContext 
     return XR_DISP_NEXT;
 }
 
-XR_FUNC XrDispatchAction vm_chan_recv_timeout(XrayIsolate *isolate, XrVMContext *vm_ctx,
+XR_FUNC XrDispatchAction vm_chan_recv_timeout(XrVMRuntime *isolate, XrVMContext *vm_ctx,
                                               XrInstruction instr, XrValue *base,
                                               XrBcCallFrame *frame, XrInstruction *pc) {
     int a = GETARG_A(instr);

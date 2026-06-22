@@ -18,7 +18,7 @@
  *   netpoll and async pool are owned directly by XrRuntime (already
  *   true today); xio_runtime is the home for everything else IO-related.
  *
- *   All public IO entry points take an XrayIsolate* and resolve the
+ *   All public IO entry points take an XrVMRuntime* and resolve the
  *   runtime via X->vm.scheduler, eliminating the thread-local fallback
  *   that hid concurrency bugs and pinned IO semantics to thread layout.
  *
@@ -40,7 +40,7 @@
 extern "C" {
 #endif
 
-struct XrayIsolate;
+struct XrVMRuntime;
 struct XrRuntime;
 
 /* ========== DNS cache ========== */
@@ -90,7 +90,7 @@ XR_FUNC void xr_io_runtime_free(XrIoRuntime *io);
 
 /* Resolve the IO runtime owning the IO state for an isolate.
  * Returns NULL if X has no attached runtime (bootstrap / tooling). */
-XR_FUNC XrIoRuntime *xr_io_runtime_from_isolate(struct XrayIsolate *X);
+XR_FUNC XrIoRuntime *xr_io_runtime_from_isolate(struct XrVMRuntime *X);
 
 /* Resolve the IO runtime from an XrRuntime directly. */
 XR_FUNC XrIoRuntime *xr_io_runtime_from_runtime(struct XrRuntime *rt);

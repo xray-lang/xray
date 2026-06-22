@@ -61,7 +61,7 @@ static void strbuf_grow(XrStrBuf *sb, size_t need) {
 
 /* ========== Create and Destroy ========== */
 
-XrStrBuf *xr_strbuf_new(XrayIsolate *X, size_t init_cap) {
+XrStrBuf *xr_strbuf_new(XrVMRuntime *X, size_t init_cap) {
     XR_DCHECK(X != NULL, "strbuf_new: NULL isolate");
     if (init_cap < XR_STRBUF_MIN_CAP) {
         init_cap = XR_STRBUF_MIN_CAP;

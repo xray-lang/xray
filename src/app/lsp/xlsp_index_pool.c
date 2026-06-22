@@ -10,7 +10,7 @@
 
 #include "xlsp_index_pool.h"
 #include "xlsp_server.h"
-#include "xray_isolate.h"
+#include "xray_vm.h"
 #include "../../runtime/xisolate_api.h"
 #include "../../frontend/parser/xparse.h"
 #include "../../frontend/parser/xast.h"
@@ -208,7 +208,7 @@ static void extract_symbols(XrLspIndexResult *result, AstNode *node, bool in_exp
 // File Parsing (in worker thread)
 // ============================================================================
 
-static XrLspIndexResult *parse_file(XrayIsolate *isolate, const char *path, const char *uri) {
+static XrLspIndexResult *parse_file(XrVMRuntime *isolate, const char *path, const char *uri) {
     XrLspIndexResult *result = xr_calloc(1, sizeof(XrLspIndexResult));
     if (!result)
         return NULL;
@@ -276,17 +276,17 @@ static void *worker_thread(void *arg) {
     lsp_log("[IndexPool] Worker %d started", worker->worker_id);
 
     // Create per-worker Isolate
-    XrayIsolateParams params;
-    xray_isolate_params_init(&params);
+    XrVMConfig params;
+    xray_vm_config_init(&params);
 
-    worker->isolate = xray_isolate_new_full(&params);
+    worker->isolate = xray_vm_new_full(&params);
     if (!worker->isolate) {
         lsp_log("[IndexPool] Worker %d: Failed to create Isolate", worker->worker_id);
         return NULL;
     }
 
     // Enter the isolate for this thread
-    xray_isolate_enter(worker->isolate);
+    xray_vm_enter(worker->isolate);
 
     while (atomic_load(&pool->running)) {
         // Wait for work
@@ -348,8 +348,8 @@ static void *worker_thread(void *arg) {
     }
 
     // Cleanup
-    xray_isolate_exit();
-    xray_isolate_delete(worker->isolate);
+    xray_vm_exit();
+    xray_vm_delete(worker->isolate);
     worker->isolate = NULL;
 
     lsp_log("[IndexPool] Worker %d stopped", worker->worker_id);

@@ -60,7 +60,7 @@ XR_FUNC void xr_pkg_client_set_config(const XrPkgClientConfig *config);
 #include "../base/xdefs.h"
 
 // Set isolate for HTTP requests (required before making any requests)
-XR_FUNC void xr_pkg_client_set_isolate(XrayIsolate *isolate);
+XR_FUNC void xr_pkg_client_set_isolate(XrVMRuntime *isolate);
 
 /* ========== Package Info API ========== */
 

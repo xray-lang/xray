@@ -7,7 +7,7 @@
  *
  * stdlib_cache.c - Per-isolate stdlib cache: create / get / free
  *
- * The cache pointer lives as an opaque `void *` on XrayIsolate so that
+ * The cache pointer lives as an opaque `void *` on XrVMRuntime so that
  * the core header never needs to include stdlib types. This translation
  * unit is the only place that casts between the opaque pointer and the
  * concrete XrStdlibCache struct, keeping the coupling local.
@@ -20,7 +20,7 @@
 #include "../src/base/xmalloc.h"
 #include "../src/runtime/xisolate_internal.h"
 
-XR_FUNC XrStdlibCache *xr_stdlib_cache_get(XrayIsolate *isolate) {
+XR_FUNC XrStdlibCache *xr_stdlib_cache_get(XrVMRuntime *isolate) {
     XrStdlibCache *c = (XrStdlibCache *) isolate->stdlib_cache;
     if (c)
         return c;
@@ -34,7 +34,7 @@ XR_FUNC XrStdlibCache *xr_stdlib_cache_get(XrayIsolate *isolate) {
     return c;
 }
 
-XR_FUNC void xr_stdlib_cache_free(XrayIsolate *isolate) {
+XR_FUNC void xr_stdlib_cache_free(XrVMRuntime *isolate) {
     if (!isolate || !isolate->stdlib_cache)
         return;
     XrStdlibCache *c = (XrStdlibCache *) isolate->stdlib_cache;

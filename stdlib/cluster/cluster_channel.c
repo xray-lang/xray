@@ -263,13 +263,13 @@ static XrChannelDistHooks cluster_dist_hooks = {
     .on_select_exit = dist_on_select_exit,
 };
 
-void xr_cluster_channel_install_hooks(XrayIsolate *X) {
+void xr_cluster_channel_install_hooks(XrVMRuntime *X) {
     if (!X)
         return;
     X->channel_dist_hooks = &cluster_dist_hooks;
 }
 
-void xr_cluster_channel_uninstall_hooks(XrayIsolate *X) {
+void xr_cluster_channel_uninstall_hooks(XrVMRuntime *X) {
     if (!X)
         return;
     X->channel_dist_hooks = NULL;

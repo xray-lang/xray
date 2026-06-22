@@ -37,7 +37,7 @@ static int64_t xr_now_ns(void) {
 #endif
 }
 
-struct XrCoroHeap *xr_isolate_get_heap(XrayIsolate *X) {
+struct XrCoroHeap *xr_isolate_get_heap(XrVMRuntime *X) {
     if (!X || !X->main_coro)
         return NULL;
     return ((XrCoroutine *) X->main_coro)->heap;
@@ -45,20 +45,20 @@ struct XrCoroHeap *xr_isolate_get_heap(XrayIsolate *X) {
 
 /* ========== Module Subsystem ========== */
 
-XrModuleRegistry *xr_isolate_get_module_registry(XrayIsolate *X) {
+XrModuleRegistry *xr_isolate_get_module_registry(XrVMRuntime *X) {
     return X ? X->module_registry : NULL;
 }
 
-void xr_isolate_set_module_registry(XrayIsolate *X, XrModuleRegistry *registry) {
+void xr_isolate_set_module_registry(XrVMRuntime *X, XrModuleRegistry *registry) {
     if (X)
         X->module_registry = registry;
 }
 
-XrModule *xr_isolate_get_current_module(XrayIsolate *X) {
+XrModule *xr_isolate_get_current_module(XrVMRuntime *X) {
     return X ? X->current_module : NULL;
 }
 
-void xr_isolate_set_current_module(XrayIsolate *X, XrModule *mod) {
+void xr_isolate_set_current_module(XrVMRuntime *X, XrModule *mod) {
     if (X) {
         X->current_module = mod;
     }
@@ -66,50 +66,50 @@ void xr_isolate_set_current_module(XrayIsolate *X, XrModule *mod) {
 
 /* ========== Globals ========== */
 
-XrGlobalsTable *xr_isolate_get_globals(XrayIsolate *X) {
+XrGlobalsTable *xr_isolate_get_globals(XrVMRuntime *X) {
     return X ? X->globals : NULL;
 }
 
-XrGlobalObject *xr_isolate_get_global_object(XrayIsolate *X) {
+XrGlobalObject *xr_isolate_get_global_object(XrVMRuntime *X) {
     return X ? X->global_object : NULL;
 }
 
-struct XrGlobalStringPool *xr_isolate_get_string_pool(XrayIsolate *X) {
+struct XrGlobalStringPool *xr_isolate_get_string_pool(XrVMRuntime *X) {
     return (X && X->core_rt) ? X->core_rt->global_string_pool : NULL;
 }
 
-struct XrStrBuf **xr_isolate_tmp_strbuf_slot(XrayIsolate *X) {
+struct XrStrBuf **xr_isolate_tmp_strbuf_slot(XrVMRuntime *X) {
     return (X && X->core_rt) ? &X->core_rt->tmp_strbuf : NULL;
 }
 
 /* ========== Coroutine ========== */
 
-XrCoroutine *xr_isolate_get_main_coro(XrayIsolate *X) {
+XrCoroutine *xr_isolate_get_main_coro(XrVMRuntime *X) {
     return X ? X->main_coro : NULL;
 }
 
-void xr_isolate_set_main_coro(XrayIsolate *X, XrCoroutine *coro) {
+void xr_isolate_set_main_coro(XrVMRuntime *X, XrCoroutine *coro) {
     if (X)
         X->main_coro = coro;
 }
 
 /* ========== VM State ========== */
 
-XrVMState *xr_isolate_get_vm_state(XrayIsolate *X) {
+XrVMState *xr_isolate_get_vm_state(XrVMRuntime *X) {
     return X ? &X->vm : NULL;
 }
 
-XrVMContext *xr_isolate_get_vm_ctx(XrayIsolate *X) {
+XrVMContext *xr_isolate_get_vm_ctx(XrVMRuntime *X) {
     return X ? &X->vm_ctx : NULL;
 }
 
 /* ========== Storage Mode ========== */
 
-uint8_t xr_isolate_get_storage_mode(XrayIsolate *X) {
+uint8_t xr_isolate_get_storage_mode(XrVMRuntime *X) {
     return X ? atomic_load_explicit(&X->current_storage_mode, memory_order_relaxed) : 0;
 }
 
-void xr_isolate_set_storage_mode(XrayIsolate *X, uint8_t mode) {
+void xr_isolate_set_storage_mode(XrVMRuntime *X, uint8_t mode) {
     if (X) {
         atomic_store_explicit(&X->current_storage_mode, mode, memory_order_relaxed);
     }
@@ -117,43 +117,43 @@ void xr_isolate_set_storage_mode(XrayIsolate *X, uint8_t mode) {
 
 /* ========== Config ========== */
 
-void *xr_isolate_get_userdata(XrayIsolate *X) {
+void *xr_isolate_get_userdata(XrVMRuntime *X) {
     return (X && X->core_rt) ? X->core_rt->userdata : NULL;
 }
 
-struct XrayConfig *xr_isolate_get_config(XrayIsolate *X) {
+struct XrayConfig *xr_isolate_get_config(XrVMRuntime *X) {
     return (X && X->core_rt) ? X->core_rt->config : NULL;
 }
 
-const char *xr_isolate_get_script_file(XrayIsolate *X) {
+const char *xr_isolate_get_script_file(XrVMRuntime *X) {
     return (X && X->core_rt) ? X->core_rt->script_info.file : NULL;
 }
 
-int xr_isolate_get_script_argc(XrayIsolate *X) {
+int xr_isolate_get_script_argc(XrVMRuntime *X) {
     return (X && X->core_rt) ? X->core_rt->script_info.argc : 0;
 }
 
-char **xr_isolate_get_script_argv(XrayIsolate *X) {
+char **xr_isolate_get_script_argv(XrVMRuntime *X) {
     return (X && X->core_rt) ? X->core_rt->script_info.argv : NULL;
 }
 
 /* ========== Debug ========== */
 
-void *xr_isolate_get_debug_state(XrayIsolate *X) {
+void *xr_isolate_get_debug_state(XrVMRuntime *X) {
     return X ? X->debug_state : NULL;
 }
 
-void xr_isolate_set_debug_state(XrayIsolate *X, void *state) {
+void xr_isolate_set_debug_state(XrVMRuntime *X, void *state) {
     if (X) {
         X->debug_state = state;
     }
 }
 
-void *xr_isolate_get_debug_hooks(XrayIsolate *X) {
+void *xr_isolate_get_debug_hooks(XrVMRuntime *X) {
     return X ? X->debug_hooks : NULL;
 }
 
-void xr_isolate_set_debug_hooks(XrayIsolate *X, void *hooks) {
+void xr_isolate_set_debug_hooks(XrVMRuntime *X, void *hooks) {
     if (X) {
         X->debug_hooks = hooks;
     }
@@ -161,11 +161,11 @@ void xr_isolate_set_debug_hooks(XrayIsolate *X, void *hooks) {
 
 /* ========== Exception Print Suppression ========== */
 
-bool xr_isolate_get_suppress_exception_print(XrayIsolate *X) {
+bool xr_isolate_get_suppress_exception_print(XrVMRuntime *X) {
     return X ? X->suppress_exception_print : false;
 }
 
-void xr_isolate_set_suppress_exception_print(XrayIsolate *X, bool suppress) {
+void xr_isolate_set_suppress_exception_print(XrVMRuntime *X, bool suppress) {
     if (X) {
         X->suppress_exception_print = suppress;
     }
@@ -173,18 +173,18 @@ void xr_isolate_set_suppress_exception_print(XrayIsolate *X, bool suppress) {
 
 /* ========== Embedded Execution Policy ========== */
 
-FILE *xr_isolate_stdout(XrayIsolate *X) {
+FILE *xr_isolate_stdout(XrVMRuntime *X) {
     if (X && X->user_stdout)
         return (FILE *) X->user_stdout;
     return stdout;
 }
 
-void xray_isolate_set_stdout(XrayIsolate *X, FILE *stream) {
+void xray_vm_set_stdout(XrVMRuntime *X, FILE *stream) {
     if (X)
         X->user_stdout = stream;
 }
 
-void xray_isolate_set_deadline_ms(XrayIsolate *X, int64_t timeout_ms) {
+void xray_vm_set_deadline_ms(XrVMRuntime *X, int64_t timeout_ms) {
     if (!X)
         return;
     X->deadline_exceeded = false;
@@ -198,7 +198,7 @@ void xray_isolate_set_deadline_ms(XrayIsolate *X, int64_t timeout_ms) {
     X->deadline_ns = now + timeout_ms * 1000000LL;
 }
 
-bool xr_isolate_check_deadline(XrayIsolate *X) {
+bool xr_isolate_check_deadline(XrVMRuntime *X) {
     if (!X || X->deadline_ns == 0)
         return false;
     if (X->deadline_exceeded)
@@ -211,15 +211,15 @@ bool xr_isolate_check_deadline(XrayIsolate *X) {
     return false;
 }
 
-bool xr_isolate_timed_out(XrayIsolate *X) {
+bool xr_isolate_timed_out(XrVMRuntime *X) {
     return X ? X->deadline_exceeded : false;
 }
 
-bool xray_isolate_timed_out(XrayIsolate *X) {
+bool xray_vm_timed_out(XrVMRuntime *X) {
     return xr_isolate_timed_out(X);
 }
 
-void xray_isolate_set_module_allowlist(XrayIsolate *X, const char *const *allowed, size_t count) {
+void xray_vm_set_module_allowlist(XrVMRuntime *X, const char *const *allowed, size_t count) {
     if (!X)
         return;
     if (!allowed || count == 0) {
@@ -231,7 +231,7 @@ void xray_isolate_set_module_allowlist(XrayIsolate *X, const char *const *allowe
     X->module_allowlist_count = count;
 }
 
-bool xr_isolate_module_allowed(XrayIsolate *X, const char *module_name) {
+bool xr_isolate_module_allowed(XrVMRuntime *X, const char *module_name) {
     if (!X || !module_name)
         return false;
     if (X->module_allowlist_count == 0)
@@ -246,7 +246,7 @@ bool xr_isolate_module_allowed(XrayIsolate *X, const char *module_name) {
 
 /* ========== Extension Type System ========== */
 
-uint8_t xr_alloc_extension_type(XrayIsolate *isolate, const char *name) {
+uint8_t xr_alloc_extension_type(XrVMRuntime *isolate, const char *name) {
     XrRuntimeCore *core = xr_isolate_get_runtime_core(isolate);
     if (!core)
         return 0;
@@ -260,7 +260,7 @@ uint8_t xr_alloc_extension_type(XrayIsolate *isolate, const char *name) {
     return id;
 }
 
-void xr_register_extension_destroy(XrayIsolate *isolate, uint8_t type_id,
+void xr_register_extension_destroy(XrVMRuntime *isolate, uint8_t type_id,
                                    XrExtDestroyFn destroy_fn) {
     XrRuntimeCore *core = xr_isolate_get_runtime_core(isolate);
     if (!core || type_id >= XR_OBJ_TYPE_MAX)
@@ -270,7 +270,7 @@ void xr_register_extension_destroy(XrayIsolate *isolate, uint8_t type_id,
     xr_runtime_core_set_destroy_op(core, type_id, (XrObjDestroyFn) destroy_fn);
 }
 
-void xr_register_extension_traverse(XrayIsolate *isolate, uint8_t type_id,
+void xr_register_extension_traverse(XrVMRuntime *isolate, uint8_t type_id,
                                     XrExtTraverseFn traverse_fn) {
     XrRuntimeCore *core = xr_isolate_get_runtime_core(isolate);
     if (!core || type_id >= XR_OBJ_TYPE_MAX)

@@ -49,7 +49,7 @@
 #include "../runtime/class/xenum.h"
 #include "../os/os_time.h"
 
-static XrEnumType *vm_builtin_enum_type(XrayIsolate *isolate, int builtin_index) {
+static XrEnumType *vm_builtin_enum_type(XrVMRuntime *isolate, int builtin_index) {
     if (!isolate || builtin_index < 0 || builtin_index >= XR_USER_GLOBALS_START)
         return NULL;
     XrValue value = isolate->vm.builtins[builtin_index];
@@ -58,7 +58,7 @@ static XrEnumType *vm_builtin_enum_type(XrayIsolate *isolate, int builtin_index)
     return (XrEnumType *) XR_TO_PTR(value);
 }
 
-static XrValue vm_builtin_enum_member(XrayIsolate *isolate, int builtin_index,
+static XrValue vm_builtin_enum_member(XrVMRuntime *isolate, int builtin_index,
                                       uint32_t member_index) {
     XrEnumType *type = vm_builtin_enum_type(isolate, builtin_index);
     if (!type || member_index >= type->member_count || !type->members[member_index].instance)
@@ -66,7 +66,7 @@ static XrValue vm_builtin_enum_member(XrayIsolate *isolate, int builtin_index,
     return XR_FROM_PTR(type->members[member_index].instance);
 }
 
-static XrValue vm_builtin_adt_value(XrayIsolate *isolate, int builtin_index, uint32_t member_index,
+static XrValue vm_builtin_adt_value(XrVMRuntime *isolate, int builtin_index, uint32_t member_index,
                                     XrValue *args, int nargs) {
     XrEnumType *type = vm_builtin_enum_type(isolate, builtin_index);
     if (!type || !type->is_adt)
@@ -75,28 +75,28 @@ static XrValue vm_builtin_adt_value(XrayIsolate *isolate, int builtin_index, uin
     return inst ? XR_FROM_PTR(inst) : xr_null();
 }
 
-static XrValue vm_recv_value(XrayIsolate *isolate, XrValue value) {
+static XrValue vm_recv_value(XrVMRuntime *isolate, XrValue value) {
     XrValue args[1] = {value};
     return vm_builtin_adt_value(isolate, XR_GLOBAL_VAR_RECV, 0, args, 1);
 }
 
-static XrValue vm_recv_empty(XrayIsolate *isolate) {
+static XrValue vm_recv_empty(XrVMRuntime *isolate) {
     return vm_builtin_enum_member(isolate, XR_GLOBAL_VAR_RECV, 1);
 }
 
-static XrValue vm_recv_timeout(XrayIsolate *isolate) {
+static XrValue vm_recv_timeout(XrVMRuntime *isolate) {
     return vm_builtin_enum_member(isolate, XR_GLOBAL_VAR_RECV, 2);
 }
 
-static XrValue vm_recv_closed(XrayIsolate *isolate) {
+static XrValue vm_recv_closed(XrVMRuntime *isolate) {
     return vm_builtin_enum_member(isolate, XR_GLOBAL_VAR_RECV, 3);
 }
 
-static XrValue vm_send_result(XrayIsolate *isolate, uint32_t member_index) {
+static XrValue vm_send_result(XrVMRuntime *isolate, uint32_t member_index) {
     return vm_builtin_enum_member(isolate, XR_GLOBAL_VAR_SEND_RESULT, member_index);
 }
 
-static XrValue vm_task_status_value(XrayIsolate *isolate, const XrTask *task) {
+static XrValue vm_task_status_value(XrVMRuntime *isolate, const XrTask *task) {
     uint8_t state = task ? atomic_load_explicit(&((XrTask *) task)->state, memory_order_acquire)
                          : XR_TASK_CANCELLED;
     uint32_t member_index = 0;
@@ -120,12 +120,12 @@ static XrValue vm_task_status_value(XrayIsolate *isolate, const XrTask *task) {
     return vm_builtin_enum_member(isolate, XR_GLOBAL_VAR_TASK_STATUS, member_index);
 }
 
-static XrValue vm_task_result_success(XrayIsolate *isolate, XrValue value) {
+static XrValue vm_task_result_success(XrVMRuntime *isolate, XrValue value) {
     XrValue args[1] = {value};
     return vm_builtin_adt_value(isolate, XR_GLOBAL_VAR_TASK_RESULT, 0, args, 1);
 }
 
-static XrValue vm_task_result_failed(XrayIsolate *isolate, XrTask *task, XrCoroutine *dst_coro) {
+static XrValue vm_task_result_failed(XrVMRuntime *isolate, XrTask *task, XrCoroutine *dst_coro) {
     XrValue error = task ? task->error : xr_null();
     if (XR_IS_NULL(error))
         error = xr_exception_new(isolate, XR_ERR_RUNTIME, "Task failed");
@@ -135,7 +135,7 @@ static XrValue vm_task_result_failed(XrayIsolate *isolate, XrTask *task, XrCorou
     return vm_builtin_adt_value(isolate, XR_GLOBAL_VAR_TASK_RESULT, 1, args, 1);
 }
 
-static XrValue vm_task_result_member(XrayIsolate *isolate, uint32_t member_index) {
+static XrValue vm_task_result_member(XrVMRuntime *isolate, uint32_t member_index) {
     return vm_builtin_enum_member(isolate, XR_GLOBAL_VAR_TASK_RESULT, member_index);
 }
 
@@ -172,7 +172,7 @@ static void vm_task_recycle_cancelled_executor(XrTask *task, XrCoroutine *coro,
     }
 }
 
-static XrValue vm_task_result_from_terminal(XrayIsolate *isolate, XrTask *task,
+static XrValue vm_task_result_from_terminal(XrVMRuntime *isolate, XrTask *task,
                                             XrCoroutine *dst_coro) {
     uint8_t state =
         task ? atomic_load_explicit(&task->state, memory_order_acquire) : XR_TASK_CANCELLED;
@@ -188,7 +188,7 @@ static XrValue vm_task_result_from_terminal(XrayIsolate *isolate, XrTask *task,
     return vm_task_result_member(isolate, 4);
 }
 
-static XrDispatchAction vm_task_raise_terminal(XrayIsolate *isolate, XrTask *task,
+static XrDispatchAction vm_task_raise_terminal(XrVMRuntime *isolate, XrTask *task,
                                                XrBcCallFrame *frame, XrInstruction *pc) {
     uint8_t state =
         task ? atomic_load_explicit(&task->state, memory_order_acquire) : XR_TASK_CANCELLED;
@@ -208,7 +208,7 @@ static XrDispatchAction vm_task_raise_terminal(XrayIsolate *isolate, XrTask *tas
     return XR_DISP_RAISE;
 }
 
-static XrValue vm_task_result_from_block(XrayIsolate *isolate, XrTask *task, XrCoroutine *dst_coro,
+static XrValue vm_task_result_from_block(XrVMRuntime *isolate, XrTask *task, XrCoroutine *dst_coro,
                                          XrCoroBlockResult block, XrValue raw_value,
                                          bool timeout_enabled) {
     if (block.kind == XR_CORO_BLOCK_READY)
@@ -222,7 +222,7 @@ static XrValue vm_task_result_from_block(XrayIsolate *isolate, XrTask *task, XrC
 }
 
 static XrDispatchAction
-vm_call_yieldable_primitive_method(XrayIsolate *isolate, XrVMContext *vm_ctx, XrMethod *method,
+vm_call_yieldable_primitive_method(XrVMRuntime *isolate, XrVMContext *vm_ctx, XrMethod *method,
                                    XrValue self, XrValue *args, int nargs, XrValue *base, int a,
                                    XrBcCallFrame **frame_io, XrInstruction *pc) {
     XrBcCallFrame *frame = frame_io ? *frame_io : NULL;
@@ -256,7 +256,7 @@ vm_call_yieldable_primitive_method(XrayIsolate *isolate, XrVMContext *vm_ctx, Xr
 
 /* ========== Dispatch: OP_INVOKE Channel Methods ========== */
 
-XR_FUNC XrDispatchAction vm_invoke_channel(XrayIsolate *isolate, XrVMContext *vm_ctx, XrChannel *ch,
+XR_FUNC XrDispatchAction vm_invoke_channel(XrVMRuntime *isolate, XrVMContext *vm_ctx, XrChannel *ch,
                                            int method_symbol, int nargs, XrValue *base, int a,
                                            XrBcCallFrame *frame, XrInstruction *pc) {
     XR_DCHECK(isolate != NULL, "vm_invoke_channel: NULL isolate");
@@ -465,7 +465,7 @@ XR_FUNC XrDispatchAction vm_invoke_channel(XrayIsolate *isolate, XrVMContext *vm
  * cancel(): if executor alive and task pending, cancel it; otherwise no-op.
  * toString(): returns string representation.
  */
-XR_FUNC XrDispatchAction vm_invoke_task_handle(XrayIsolate *isolate, XrVMContext *vm_ctx,
+XR_FUNC XrDispatchAction vm_invoke_task_handle(XrVMRuntime *isolate, XrVMContext *vm_ctx,
                                                XrValue receiver, int method_symbol, int nargs,
                                                XrValue *base, int a, XrBcCallFrame *frame,
                                                XrInstruction *pc) {
@@ -626,7 +626,7 @@ XR_FUNC XrDispatchAction vm_invoke_task_handle(XrayIsolate *isolate, XrVMContext
 
 /* ========== Dispatch: OP_INVOKE Coroutine Handle ========== */
 
-XR_FUNC XrDispatchAction vm_invoke_coro_handle(XrayIsolate *isolate, XrValue receiver,
+XR_FUNC XrDispatchAction vm_invoke_coro_handle(XrVMRuntime *isolate, XrValue receiver,
                                                int method_symbol, int nargs, XrValue *base, int a,
                                                XrBcCallFrame *frame, XrInstruction *pc) {
     XrCoroutine *handle = xr_value_to_coro(receiver);
@@ -648,7 +648,7 @@ XR_FUNC XrDispatchAction vm_invoke_coro_handle(XrayIsolate *isolate, XrValue rec
 
 /* ========== Dispatch: OP_INVOKE Enum Methods ========== */
 
-XR_FUNC XrDispatchAction vm_invoke_enum(XrayIsolate *isolate, XrValue receiver, int method_symbol,
+XR_FUNC XrDispatchAction vm_invoke_enum(XrVMRuntime *isolate, XrValue receiver, int method_symbol,
                                         int nargs, XrValue *base, int a, XrBcCallFrame *frame,
                                         XrInstruction *pc) {
     if (!XR_IS_PTR(receiver))
@@ -745,7 +745,7 @@ XR_FUNC XrDispatchAction vm_invoke_enum(XrayIsolate *isolate, XrValue receiver, 
  *
  * General ADT methods: name, toString.
  */
-XR_FUNC XrDispatchAction vm_invoke_adt_instance(XrayIsolate *isolate, XrValue receiver,
+XR_FUNC XrDispatchAction vm_invoke_adt_instance(XrVMRuntime *isolate, XrValue receiver,
                                                 int method_symbol, int nargs, XrValue *base, int a,
                                                 XrBcCallFrame *frame, XrInstruction *pc) {
     XR_DCHECK(isolate != NULL, "vm_invoke_adt_instance: NULL isolate");
@@ -790,7 +790,7 @@ XR_FUNC XrDispatchAction vm_invoke_adt_instance(XrayIsolate *isolate, XrValue re
  * Returns XR_DISP_NEXT on direct result, XR_DISP_RESTART for closure call,
  * or XR_DISP_RAISE on error.
  */
-XR_FUNC XrDispatchAction vm_invoke_class(XrayIsolate *isolate, XrVMContext *vm_ctx,
+XR_FUNC XrDispatchAction vm_invoke_class(XrVMRuntime *isolate, XrVMContext *vm_ctx,
                                          XrValue receiver, int method_symbol, int nargs,
                                          XrValue *base, int a, XrBcCallFrame *frame,
                                          XrInstruction *pc, int is_tail) {
@@ -927,7 +927,7 @@ XR_FUNC XrDispatchAction vm_invoke_class(XrayIsolate *isolate, XrVMContext *vm_c
  * Handles the entire OP_SUPERINVOKE: constructor :super() and super.method() calls.
  * Returns XR_DISP_RESTART on success, XR_DISP_RAISE on error.
  */
-XR_FUNC XrDispatchAction vm_superinvoke(XrayIsolate *isolate, XrVMContext *vm_ctx,
+XR_FUNC XrDispatchAction vm_superinvoke(XrVMRuntime *isolate, XrVMContext *vm_ctx,
                                         XrInstruction instr, XrValue *base, XrBcCallFrame *frame,
                                         XrInstruction *pc) {
     int a = GETARG_A(instr);

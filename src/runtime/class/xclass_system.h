@@ -99,7 +99,7 @@ typedef struct XrayCoreClasses {
  * XR_TUPLE_CLASS_PREALLOC-1 hit the inline cache slot directly; larger
  * arities allocate a fresh class each call (cold path, never measured
  * to matter in practice). */
-XR_FUNC struct XrClass *xr_get_or_create_tuple_class(XrayIsolate *X, uint16_t arity);
+XR_FUNC struct XrClass *xr_get_or_create_tuple_class(XrVMRuntime *X, uint16_t arity);
 
 /* Exception field indices — must match stdlib/types/exception.xr layout */
 #define EXCEPTION_FIELD_MESSAGE 0
@@ -115,7 +115,7 @@ XR_FUNC struct XrClass *xr_get_or_create_tuple_class(XrayIsolate *X, uint16_t ar
 
 /* ========== Lifecycle ========== */
 
-XR_FUNC void xr_core_init(XrayIsolate *X);
-XR_FUNC void xr_core_free(XrayIsolate *X);
+XR_FUNC void xr_core_init(XrVMRuntime *X);
+XR_FUNC void xr_core_free(XrVMRuntime *X);
 
 #endif  // XCLASS_SYSTEM_H

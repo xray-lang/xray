@@ -14,7 +14,7 @@
 #include "../coro/xcoroutine.h"
 #include "../runtime/xvm_call.h"
 
-XR_FUNC XrVMResult xr_vm_coro_resume_with_unroll(struct XrayIsolate *X, XrCoroutine *coro,
+XR_FUNC XrVMResult xr_vm_coro_resume_with_unroll(struct XrVMRuntime *X, XrCoroutine *coro,
                                                  int resume_status);
 
 #endif  // XVM_RESUME_H

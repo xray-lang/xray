@@ -12,12 +12,12 @@
 #include "../test_helper.h"
 #include "runtime/object/xstring.h"
 
-static XrayIsolate *X = NULL;
+static XrVMRuntime *X = NULL;
 
 /* ========== Setup / Teardown ========== */
 
 static void setup(void) {
-    X = xray_isolate_new(NULL);
+    X = xray_vm_new(NULL);
     ASSERT_NOT_NULL(X);
     // Initialize test coroutine (needed for some string operations)
     xr_test_init_coro(X);
@@ -25,7 +25,7 @@ static void setup(void) {
 
 static void teardown(void) {
     if (X) {
-        xray_isolate_delete(X);
+        xray_vm_delete(X);
         X = NULL;
     }
 }

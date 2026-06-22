@@ -44,10 +44,10 @@
 /* ========== External Declarations ========== */
 
 extern XrValue xr_string_value(XrString *str);
-extern XrString *xr_string_intern(XrayIsolate *X, const char *str, size_t len, uint32_t hash);
+extern XrString *xr_string_intern(XrVMRuntime *X, const char *str, size_t len, uint32_t hash);
 struct XrCoroutine;
-extern struct XrCoroutine *xr_current_coro(XrayIsolate *X);
-extern XrModule *xr_module_create_native(XrayIsolate *isolate, const char *name);
+extern struct XrCoroutine *xr_current_coro(XrVMRuntime *X);
+extern XrModule *xr_module_create_native(XrVMRuntime *isolate, const char *name);
 
 // Profiling counters (compile-time toggle)
 #define WS_PROFILE 0
@@ -94,7 +94,7 @@ static int ws_prof_registered = 0;
 /* ========== Helper Functions ========== */
 
 // Non-interned string for WS message data (avoids rwlock + hash table lookup)
-static XrValue ws_make_string(XrayIsolate *X, const char *str, size_t len) {
+static XrValue ws_make_string(XrVMRuntime *X, const char *str, size_t len) {
     if (!str)
         return xr_null();
     if (len == 0)
@@ -176,7 +176,7 @@ typedef struct XrWsContext {
 } XrWsContext;
 
 // Initialize per-isolate cached symbols and shapes
-static void ws_ctx_init_cache(XrayIsolate *X, XrWsContext *ctx) {
+static void ws_ctx_init_cache(XrVMRuntime *X, XrWsContext *ctx) {
     XrSymbolTable *table = (XrSymbolTable *) xr_isolate_get_symbol_table(X);
     if (!table)
         return;
@@ -190,7 +190,7 @@ static void ws_ctx_init_cache(XrayIsolate *X, XrWsContext *ctx) {
 }
 
 // Get or create per-isolate WebSocket context
-static XrWsContext *get_ws_context(XrayIsolate *X) {
+static XrWsContext *get_ws_context(XrVMRuntime *X) {
     if (!X || !X->module_registry)
         return NULL;
 
@@ -270,7 +270,7 @@ static bool ws_conn_array_grow(XrWsContext *ctx, int needed_id) {
     return true;
 }
 
-static int store_ws(XrayIsolate *X, XrWebSocket *ws) {
+static int store_ws(XrVMRuntime *X, XrWebSocket *ws) {
     XrWsContext *ctx = get_ws_context(X);
     if (!ctx)
         return -1;
@@ -347,7 +347,7 @@ typedef struct WsConnectState {
 } WsConnectState;
 
 // Build the success handle: { _wsId, url, state: "open" }.
-static XrCFuncResult ws_connect_finish_ok(XrayIsolate *X, WsConnectState *state, XrValue *result) {
+static XrCFuncResult ws_connect_finish_ok(XrVMRuntime *X, WsConnectState *state, XrValue *result) {
     XrWsContext *ctx = get_ws_context(X);
     int id = store_ws(X, state->ws);
     XrJson *r = xr_json_new(xr_current_coro(X));
@@ -363,7 +363,7 @@ static XrCFuncResult ws_connect_finish_ok(XrayIsolate *X, WsConnectState *state,
 }
 
 // Build the failure handle: { _wsId: -1, error, state: "closed" } and free ws.
-static XrCFuncResult ws_connect_finish_err(XrayIsolate *X, WsConnectState *state, XrWsError err,
+static XrCFuncResult ws_connect_finish_err(XrVMRuntime *X, WsConnectState *state, XrWsError err,
                                            XrValue *result) {
     XrWsContext *ctx = get_ws_context(X);
     XrJson *r = xr_json_new(xr_current_coro(X));
@@ -379,12 +379,12 @@ static XrCFuncResult ws_connect_finish_err(XrayIsolate *X, WsConnectState *state
     return XR_CFUNC_DONE;
 }
 
-static XrCFuncResult ws_connect_continue(XrayIsolate *X, int status, XrValue resume_value,
+static XrCFuncResult ws_connect_continue(XrVMRuntime *X, int status, XrValue resume_value,
                                          void *cbx, XrValue *result);
 
 // Advance the handshake; finish on success/error, otherwise yield for the next
 // I/O event the phase machine is waiting on.
-static XrCFuncResult ws_connect_drive(XrayIsolate *X, WsConnectState *state, XrValue *result) {
+static XrCFuncResult ws_connect_drive(XrVMRuntime *X, WsConnectState *state, XrValue *result) {
     int ev = xr_ws_connect_pump(state->ws);
     if (ev == 0)
         return ws_connect_finish_ok(X, state, result);
@@ -394,7 +394,7 @@ static XrCFuncResult ws_connect_drive(XrayIsolate *X, WsConnectState *state, XrV
                            result);
 }
 
-static XrCFuncResult ws_connect_continue(XrayIsolate *X, int status, XrValue resume_value,
+static XrCFuncResult ws_connect_continue(XrVMRuntime *X, int status, XrValue resume_value,
                                          void *cbx, XrValue *result) {
     (void) resume_value;
     WsConnectState *state = (WsConnectState *) cbx;
@@ -414,7 +414,7 @@ static XrCFuncResult ws_connect_continue(XrayIsolate *X, int status, XrValue res
  * pinned and no P is handed off for the handshake's duration, so there is no
  * cross-thread contention on the handed-off P's timer wheel.
  */
-static XrCFuncResult ws_connect_yieldable(XrayIsolate *X, XrValue *args, int argc,
+static XrCFuncResult ws_connect_yieldable(XrVMRuntime *X, XrValue *args, int argc,
                                           XrValue *result) {
     XrWsContext *ctx = get_ws_context(X);
     if (argc < 1 || !ctx) {
@@ -512,10 +512,10 @@ typedef struct WsSendState {
 } WsSendState;
 
 // Forward declaration
-static XrCFuncResult ws_send_step(XrayIsolate *X, WsSendState *state, XrValue *result);
+static XrCFuncResult ws_send_step(XrVMRuntime *X, WsSendState *state, XrValue *result);
 
 // Continuation for send
-static XrCFuncResult ws_send_continue(XrayIsolate *X, int status, XrValue resume_value, void *ctx,
+static XrCFuncResult ws_send_continue(XrVMRuntime *X, int status, XrValue resume_value, void *ctx,
                                       XrValue *result) {
     WsSendState *state = (WsSendState *) ctx;
 
@@ -532,7 +532,7 @@ static XrCFuncResult ws_send_continue(XrayIsolate *X, int status, XrValue resume
 }
 
 // Single step of send operation
-static XrCFuncResult ws_send_step(XrayIsolate *X, WsSendState *state, XrValue *result) {
+static XrCFuncResult ws_send_step(XrVMRuntime *X, WsSendState *state, XrValue *result) {
     XrWsContext *ctx = get_ws_context(X);
     XrWebSocket *ws = get_ws_from_ctx(ctx, state->ws_id);
     if (!ws || xr_ws_get_state(ws) != WS_STATE_OPEN) {
@@ -577,7 +577,7 @@ static XrCFuncResult ws_send_step(XrayIsolate *X, WsSendState *state, XrValue *r
  * ws._send yieldable version
  * Uses netpoll for non-blocking send with coroutine yield.
  */
-static XrCFuncResult ws_send_yieldable(XrayIsolate *X, XrValue *args, int argc, XrValue *result) {
+static XrCFuncResult ws_send_yieldable(XrVMRuntime *X, XrValue *args, int argc, XrValue *result) {
     if (argc < 2) {
         *result = xr_bool(false);
         return XR_CFUNC_DONE;
@@ -671,7 +671,7 @@ static XrCFuncResult ws_send_yieldable(XrayIsolate *X, XrValue *args, int argc, 
 /* ========== Yieldable recv implementation ========== */
 
 // Yieldable C function pointer type
-typedef XrCFuncResult (*XrYieldableCFunctionPtr)(XrayIsolate *, XrValue *, int, XrValue *);
+typedef XrCFuncResult (*XrYieldableCFunctionPtr)(XrVMRuntime *, XrValue *, int, XrValue *);
 
 // State for yieldable recv operation
 // Following the same pattern as NetReadState in net.c
@@ -683,7 +683,7 @@ typedef struct WsRecvState {
 
 // Helper to create result JSON from message
 // NOTE: No XrValue parameters - all values must be reconstructed to be GC-safe
-static XrValue make_recv_result(XrayIsolate *X, XrWsContext *ctx, XrWebSocket *ws,
+static XrValue make_recv_result(XrVMRuntime *X, XrWsContext *ctx, XrWebSocket *ws,
                                 XrWsMessage *msg) {
     XrCoroutine *coro = xr_current_coro(X);
     XrJson *result = xr_json_new(coro);
@@ -729,10 +729,10 @@ static XrValue make_recv_result(XrayIsolate *X, XrWsContext *ctx, XrWebSocket *w
 }
 
 // Forward declaration
-static XrCFuncResult ws_recv_step(XrayIsolate *X, WsRecvState *state, XrValue *result);
+static XrCFuncResult ws_recv_step(XrVMRuntime *X, WsRecvState *state, XrValue *result);
 
 // Continuation function for ws.recv (matches XrContinuation signature)
-static XrCFuncResult ws_recv_continue(XrayIsolate *X, int status, XrValue resume_value,
+static XrCFuncResult ws_recv_continue(XrVMRuntime *X, int status, XrValue resume_value,
                                       void *cont_ctx, XrValue *result) {
     WsRecvState *state = (WsRecvState *) cont_ctx;
 
@@ -749,7 +749,7 @@ static XrCFuncResult ws_recv_continue(XrayIsolate *X, int status, XrValue resume
 }
 
 // Single step of recv operation (following net_read_step pattern)
-static XrCFuncResult ws_recv_step(XrayIsolate *X, WsRecvState *state, XrValue *result) {
+static XrCFuncResult ws_recv_step(XrVMRuntime *X, WsRecvState *state, XrValue *result) {
     XrWsContext *ctx = get_ws_context(X);
     XrWebSocket *ws = get_ws_from_ctx(ctx, state->ws_id);
     if (!ws) {
@@ -799,7 +799,7 @@ static XrCFuncResult ws_recv_step(XrayIsolate *X, WsRecvState *state, XrValue *r
  *   args[0]: connection object (Json with _wsId)
  *   args[1]: timeout in milliseconds (optional, -1 = infinite)
  */
-static XrCFuncResult ws_recv_yieldable(XrayIsolate *X, XrValue *args, int argc, XrValue *result) {
+static XrCFuncResult ws_recv_yieldable(XrVMRuntime *X, XrValue *args, int argc, XrValue *result) {
     if (argc < 1 || !xr_value_is_json(args[0])) {
         *result = xr_null();
         return XR_CFUNC_ERROR;
@@ -886,7 +886,7 @@ static XrCFuncResult ws_recv_yieldable(XrayIsolate *X, XrValue *args, int argc, 
 /*
  * ws.recvData continuation: returns string directly (no Json wrapper).
  */
-static XrCFuncResult ws_recvdata_continue(XrayIsolate *X, int status, XrValue resume_value,
+static XrCFuncResult ws_recvdata_continue(XrVMRuntime *X, int status, XrValue resume_value,
                                           void *cont_ctx, XrValue *result) {
     WsRecvState *state = (WsRecvState *) cont_ctx;
 
@@ -938,7 +938,7 @@ static XrCFuncResult ws_recvdata_continue(XrayIsolate *X, int status, XrValue re
  * No Json wrapper allocation — eliminates the biggest per-message overhead.
  * Returns null on close/error/timeout.
  */
-static XrCFuncResult ws_recvdata(XrayIsolate *X, XrValue *args, int argc, XrValue *result) {
+static XrCFuncResult ws_recvdata(XrVMRuntime *X, XrValue *args, int argc, XrValue *result) {
     if (argc < 1 || !xr_value_is_json(args[0])) {
         *result = xr_null();
         return XR_CFUNC_DONE;
@@ -1002,7 +1002,7 @@ static XrCFuncResult ws_recvdata(XrayIsolate *X, XrValue *args, int argc, XrValu
  *
  * Close WebSocket connection.
  */
-static XrValue ws_close(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue ws_close(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1)
         return xr_bool(false);
 
@@ -1070,7 +1070,7 @@ static XrValue ws_close(XrayIsolate *X, XrValue *args, int argc) {
  *
  * Send ping frame.
  */
-static XrValue ws_ping(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue ws_ping(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1 || !xr_value_is_json(args[0])) {
         return xr_bool(false);
     }
@@ -1097,7 +1097,7 @@ static XrValue ws_ping(XrayIsolate *X, XrValue *args, int argc) {
  *
  * Get connection state: "connecting", "open", "closing", "closed"
  */
-static XrValue ws_state(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue ws_state(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1 || !xr_value_is_json(args[0])) {
         return xrs_string_value_c(X, "closed");
     }
@@ -1135,7 +1135,7 @@ static XrValue ws_state(XrayIsolate *X, XrValue *args, int argc) {
  *
  * Check if connection is open.
  */
-static XrValue ws_is_open(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue ws_is_open(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1 || !xr_value_is_json(args[0])) {
         return xr_bool(false);
     }
@@ -1165,7 +1165,7 @@ static XrValue ws_is_open(XrayIsolate *X, XrValue *args, int argc) {
  * can route on it; pass NULL/0 if no URL info is available.
  * Used by ws.serve() when a client connects.
  */
-static XrValue ws_wrap_server_conn(XrayIsolate *X, XrWebSocket *ws, const char *url_str,
+static XrValue ws_wrap_server_conn(XrVMRuntime *X, XrWebSocket *ws, const char *url_str,
                                    size_t url_len) {
     if (!ws)
         return xr_null();
@@ -1195,11 +1195,11 @@ static XrValue ws_wrap_server_conn(XrayIsolate *X, XrWebSocket *ws, const char *
 /* ========== Pure C Echo Server (ws.echoServe) — Stackless ========== */
 
 // Forward declarations for echo continuations
-static XrCFuncResult ws_echo_conn_upgrade_cont(XrayIsolate *X, int status, XrValue resume_value,
+static XrCFuncResult ws_echo_conn_upgrade_cont(XrVMRuntime *X, int status, XrValue resume_value,
                                                void *ctx, XrValue *result);
-static XrCFuncResult ws_echo_conn_loop(XrayIsolate *X, int status, XrValue resume_value, void *ctx,
+static XrCFuncResult ws_echo_conn_loop(XrVMRuntime *X, int status, XrValue resume_value, void *ctx,
                                        XrValue *result);
-static XrCFuncResult ws_echo_listen_cont(XrayIsolate *X, int status, XrValue resume_value,
+static XrCFuncResult ws_echo_listen_cont(XrVMRuntime *X, int status, XrValue resume_value,
                                          void *ctx, XrValue *result);
 
 /*
@@ -1207,7 +1207,7 @@ static XrCFuncResult ws_echo_listen_cont(XrayIsolate *X, int status, XrValue res
  * Replaces stack-local variables from the old stackful handler.
  */
 typedef struct {
-    XrayIsolate *X;
+    XrVMRuntime *X;
     int fd;
     XrWebSocket *ws;
     XrWsContext *ws_ctx;
@@ -1223,7 +1223,7 @@ typedef struct {
  * Zero VM dispatch, zero GC allocation in hot path.
  * args[0] = client fd (int).
  */
-static XrCFuncResult ws_echo_conn_init(XrayIsolate *X, XrValue *args, int argc, XrValue *result) {
+static XrCFuncResult ws_echo_conn_init(XrVMRuntime *X, XrValue *args, int argc, XrValue *result) {
     (void) result;
     if (argc < 1 || !XR_IS_INT(args[0]))
         return XR_CFUNC_DONE;
@@ -1255,7 +1255,7 @@ static XrCFuncResult ws_echo_conn_init(XrayIsolate *X, XrValue *args, int argc, 
  * Continuation: read HTTP upgrade headers, then upgrade to WebSocket.
  * On EAGAIN, yields for read and re-enters this function.
  */
-static XrCFuncResult ws_echo_conn_upgrade_cont(XrayIsolate *X, int status, XrValue resume_value,
+static XrCFuncResult ws_echo_conn_upgrade_cont(XrVMRuntime *X, int status, XrValue resume_value,
                                                void *user_ctx, XrValue *result) {
     WsEchoConnCtx *ctx = (WsEchoConnCtx *) user_ctx;
     if (status != XR_RESUME_IO_READY)
@@ -1331,7 +1331,7 @@ cleanup: {
  *   recv() → parse WS frame → unmask → send() WS frame
  *   No XrJson, no XrString, no bytecode, no context switch.
  */
-static XrCFuncResult ws_echo_conn_loop(XrayIsolate *X, int status, XrValue resume_value,
+static XrCFuncResult ws_echo_conn_loop(XrVMRuntime *X, int status, XrValue resume_value,
                                        void *user_ctx, XrValue *result) {
     WsEchoConnCtx *ctx = (WsEchoConnCtx *) user_ctx;
     if (status != XR_RESUME_IO_READY)
@@ -1404,11 +1404,11 @@ cleanup:
 /* ========== WebSocket Server (ws.serve) — Stackless ========== */
 
 // Forward declarations for conn handler continuations
-static XrCFuncResult ws_conn_upgrade_cont(XrayIsolate *X, int status, XrValue resume_value,
+static XrCFuncResult ws_conn_upgrade_cont(XrVMRuntime *X, int status, XrValue resume_value,
                                           void *ctx, XrValue *result);
-static XrCFuncResult ws_conn_handler_done(XrayIsolate *X, int status, XrValue resume_value,
+static XrCFuncResult ws_conn_handler_done(XrVMRuntime *X, int status, XrValue resume_value,
                                           void *ctx, XrValue *result);
-static XrCFuncResult ws_serve_listen_cont(XrayIsolate *X, int status, XrValue resume_value,
+static XrCFuncResult ws_serve_listen_cont(XrVMRuntime *X, int status, XrValue resume_value,
                                           void *ctx, XrValue *result);
 
 /*
@@ -1416,7 +1416,7 @@ static XrCFuncResult ws_serve_listen_cont(XrayIsolate *X, int status, XrValue re
  * Replaces stack-local variables from the old stackful handler.
  */
 typedef struct {
-    XrayIsolate *X;
+    XrVMRuntime *X;
     int fd;
     XrClosure *handler;
     XrRuntime *runtime;
@@ -1431,7 +1431,7 @@ typedef struct {
  * Stackless replacement for ws_conn_stackful.
  * args[0] = client fd (int), args[1] = handler closure (ptr).
  */
-static XrCFuncResult ws_conn_init(XrayIsolate *X, XrValue *args, int argc, XrValue *result) {
+static XrCFuncResult ws_conn_init(XrVMRuntime *X, XrValue *args, int argc, XrValue *result) {
     (void) result;
     if (argc < 2 || !XR_IS_INT(args[0]))
         return XR_CFUNC_DONE;
@@ -1472,7 +1472,7 @@ static XrCFuncResult ws_conn_init(XrayIsolate *X, XrValue *args, int argc, XrVal
  * Continuation: read HTTP upgrade headers, validate, upgrade to WS,
  * then call user handler closure via xr_call_closure.
  */
-static XrCFuncResult ws_conn_upgrade_cont(XrayIsolate *X, int status, XrValue resume_value,
+static XrCFuncResult ws_conn_upgrade_cont(XrVMRuntime *X, int status, XrValue resume_value,
                                           void *user_ctx, XrValue *result) {
     WsConnCtx *ctx = (WsConnCtx *) user_ctx;
     if (status != XR_RESUME_IO_READY)
@@ -1561,7 +1561,7 @@ cleanup: {
  * Continuation: called when user handler closure returns.
  * Cleans up WebSocket connection and frees context.
  */
-static XrCFuncResult ws_conn_handler_done(XrayIsolate *X, int status, XrValue resume_value,
+static XrCFuncResult ws_conn_handler_done(XrVMRuntime *X, int status, XrValue resume_value,
                                           void *user_ctx, XrValue *result) {
     (void) status;
     (void) result;
@@ -1596,7 +1596,7 @@ static XrCFuncResult ws_conn_handler_done(XrayIsolate *X, int status, XrValue re
  * WS serve listen context — persists across accept loop yields.
  */
 typedef struct {
-    XrayIsolate *X;
+    XrVMRuntime *X;
     int listen_fd;
     XrValue handler_val;  // closure XrValue (for passing to conn coroutines)
 } WsServeListenCtx;
@@ -1605,7 +1605,7 @@ typedef struct {
  * WS serve listen entry — cfunc coroutine entry point.
  * args[0] = listen fd (int), args[1] = handler closure (ptr).
  */
-static XrCFuncResult ws_serve_listen_init(XrayIsolate *X, XrValue *args, int argc,
+static XrCFuncResult ws_serve_listen_init(XrVMRuntime *X, XrValue *args, int argc,
                                           XrValue *result) {
     (void) result;
     if (argc < 2 || !XR_IS_INT(args[0]))
@@ -1627,7 +1627,7 @@ static XrCFuncResult ws_serve_listen_init(XrayIsolate *X, XrValue *args, int arg
  * WS serve accept loop continuation — accepts connections,
  * spawns a cfunc conn coroutine per client, then yields for next batch.
  */
-static XrCFuncResult ws_serve_listen_cont(XrayIsolate *X, int status, XrValue resume_value,
+static XrCFuncResult ws_serve_listen_cont(XrVMRuntime *X, int status, XrValue resume_value,
                                           void *user_ctx, XrValue *result) {
     WsServeListenCtx *ctx = (WsServeListenCtx *) user_ctx;
 
@@ -1673,7 +1673,7 @@ static XrCFuncResult ws_serve_listen_cont(XrayIsolate *X, int status, XrValue re
 }
 
 // Continuation: keep caller coroutine blocked while server is running
-static XrCFuncResult ws_serve_wait_cont(XrayIsolate *X, int status, XrValue resume_value,
+static XrCFuncResult ws_serve_wait_cont(XrVMRuntime *X, int status, XrValue resume_value,
                                         void *cont_ctx, XrValue *result) {
     (void) status;
     XrWsContext *ctx = (XrWsContext *) cont_ctx;
@@ -1688,7 +1688,7 @@ static XrCFuncResult ws_serve_wait_cont(XrayIsolate *X, int status, XrValue resu
  * Echo listen context — persists across accept loop yields.
  */
 typedef struct {
-    XrayIsolate *X;
+    XrVMRuntime *X;
     int listen_fd;
 } WsEchoListenCtx;
 
@@ -1696,7 +1696,7 @@ typedef struct {
  * Echo listen entry — cfunc coroutine entry point.
  * args[0] = listen fd (int).
  */
-static XrCFuncResult ws_echo_listen_init(XrayIsolate *X, XrValue *args, int argc, XrValue *result) {
+static XrCFuncResult ws_echo_listen_init(XrVMRuntime *X, XrValue *args, int argc, XrValue *result) {
     (void) result;
     if (argc < 1 || !XR_IS_INT(args[0]))
         return XR_CFUNC_DONE;
@@ -1716,7 +1716,7 @@ static XrCFuncResult ws_echo_listen_init(XrayIsolate *X, XrValue *args, int argc
  * Echo accept loop continuation — accepts all pending connections,
  * spawns a cfunc coroutine per connection, then yields for next batch.
  */
-static XrCFuncResult ws_echo_listen_cont(XrayIsolate *X, int status, XrValue resume_value,
+static XrCFuncResult ws_echo_listen_cont(XrVMRuntime *X, int status, XrValue resume_value,
                                          void *user_ctx, XrValue *result) {
     WsEchoListenCtx *ctx = (WsEchoListenCtx *) user_ctx;
 
@@ -1767,7 +1767,7 @@ static XrCFuncResult ws_echo_listen_cont(XrayIsolate *X, int status, XrValue res
  * Pure C echo server: zero VM dispatch, zero GC allocation per message.
  * Architecturally equivalent to HTTP's prebuilt route fast path.
  */
-static XrCFuncResult ws_echo_serve_yieldable(XrayIsolate *X, XrValue *args, int argc,
+static XrCFuncResult ws_echo_serve_yieldable(XrVMRuntime *X, XrValue *args, int argc,
                                              XrValue *result) {
     if (argc < 1 || !XR_IS_INT(args[0])) {
         *result = xr_bool(false);
@@ -1824,7 +1824,7 @@ static XrCFuncResult ws_echo_serve_yieldable(XrayIsolate *X, XrValue *args, int 
  * Start WebSocket server. Creates listen socket, spawns accept loop,
  * blocks caller until server stops.
  */
-static XrCFuncResult ws_serve_yieldable(XrayIsolate *X, XrValue *args, int argc, XrValue *result) {
+static XrCFuncResult ws_serve_yieldable(XrVMRuntime *X, XrValue *args, int argc, XrValue *result) {
     if (argc < 2) {
         *result = xr_bool(false);
         return XR_CFUNC_DONE;
@@ -1890,7 +1890,7 @@ static XrCFuncResult ws_serve_yieldable(XrayIsolate *X, XrValue *args, int argc,
 /*
  * ws.stopServer() -> void
  */
-static XrValue ws_stop_server(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue ws_stop_server(XrVMRuntime *X, XrValue *args, int argc) {
     (void) args;
     (void) argc;
     XrWsContext *ctx = get_ws_context(X);
@@ -1910,7 +1910,7 @@ static XrValue ws_stop_server(XrayIsolate *X, XrValue *args, int argc) {
 /*
  * ws.isServerRunning() -> bool
  */
-static XrValue ws_is_server_running(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue ws_is_server_running(XrVMRuntime *X, XrValue *args, int argc) {
     (void) args;
     (void) argc;
     XrWsContext *ctx = get_ws_context(X);
@@ -1927,7 +1927,7 @@ static XrValue ws_is_server_running(XrayIsolate *X, XrValue *args, int argc) {
  * Performs the full handshake (101 response) and returns a conn object
  * identical to what ws._acceptWs() returns.
  */
-XrValue xr_ws_upgrade_and_wrap(XrayIsolate *X, int fd, const char *request_headers) {
+XrValue xr_ws_upgrade_and_wrap(XrVMRuntime *X, int fd, const char *request_headers) {
     /* Extract request path from "METHOD /path HTTP/1.1" before the upgrade
      * consumes/mutates the buffer; pass through to wrap so conn.url exists
      * for handlers routed via http.route + ws upgrade. */
@@ -1976,7 +1976,7 @@ XR_DEFINE_BUILTIN(ws_recvdata, "recvData", "(conn: WsConn, timeout?: int): strin
 XR_DEFINE_BUILTIN(ws_echo_serve_yieldable, "echoServe", "(port: int): bool",
                   "Pure C echo server with zero VM/GC overhead per message")
 
-XR_FUNC XrModule *xr_load_module_ws(XrayIsolate *isolate) {
+XR_FUNC XrModule *xr_load_module_ws(XrVMRuntime *isolate) {
     // 1. Create Native module
     XrModule *mod = xr_module_create_native(isolate, "ws");
     if (!mod)

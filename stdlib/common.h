@@ -22,13 +22,13 @@
  * USAGE:
  *     #include "../common.h"
  *
- *     static XrValue my_fn(XrayIsolate *X, XrValue *args, int argc) {
+ *     static XrValue my_fn(XrVMRuntime *X, XrValue *args, int argc) {
  *         const char *s = xrs_string_arg(args[0], NULL);
  *         if (!s) return xr_null();
  *         return xrs_string_value_c(X, s);
  *     }
  *
- *     XrModule* xr_load_module_example(XrayIsolate *X) {
+ *     XrModule* xr_load_module_example(XrVMRuntime *X) {
  *         XrModule *m = xr_module_create_native(X, "example");
  *         XRS_EXPORT(m, X, "myFn", my_fn);
  *         m->loaded = true;
@@ -76,7 +76,7 @@ static inline const char *xrs_string_arg(XrValue v, size_t *out_len) {
  * Intern an (ptr, len) pair and wrap the resulting XrString into an XrValue.
  * Returns xr_null() if ptr is NULL.
  */
-static inline XrValue xrs_string_value_n(XrayIsolate *X, const char *s, size_t len) {
+static inline XrValue xrs_string_value_n(XrVMRuntime *X, const char *s, size_t len) {
     if (!s)
         return xr_null();
     XrString *str = xr_string_intern(X, s, len, 0);
@@ -87,7 +87,7 @@ static inline XrValue xrs_string_value_n(XrayIsolate *X, const char *s, size_t l
  * Intern a NUL-terminated C string and wrap the result into an XrValue.
  * Returns xr_null() if s is NULL.
  */
-static inline XrValue xrs_string_value_c(XrayIsolate *X, const char *s) {
+static inline XrValue xrs_string_value_c(XrVMRuntime *X, const char *s) {
     if (!s)
         return xr_null();
     return xrs_string_value_n(X, s, strlen(s));

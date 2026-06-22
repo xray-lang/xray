@@ -40,7 +40,7 @@
 // Isolates and caused cross-Isolate fd/TLS reuse. We now store the pool on
 // XrHttpContext so each Isolate has its own, and it is freed by
 // xr_http_module_context_free() during Isolate teardown.
-static XrConnPool *http_client_pool(XrayIsolate *X) {
+static XrConnPool *http_client_pool(XrVMRuntime *X) {
     XrHttpContext *ctx = xr_http_get_context(X);
     if (!ctx)
         return NULL;
@@ -322,7 +322,7 @@ void xr_http_result_free(XrHttpResult *result) {
 
 /* ========== Build Request ========== */
 
-static char *build_request(XrayIsolate *isolate, const XrHttpRequestConfig *config,
+static char *build_request(XrVMRuntime *isolate, const XrHttpRequestConfig *config,
                            const XrHttpUrl *url, size_t *out_len) {
     // Estimate buffer size
     size_t buf_size = 1024;
@@ -494,12 +494,12 @@ static bool is_redirect_status(int status) {
 }
 
 // Internal request function (single request, no redirect handling)
-static XrHttpResult xr_http_request_internal(XrayIsolate *X, const XrHttpRequestConfig *config,
+static XrHttpResult xr_http_request_internal(XrVMRuntime *X, const XrHttpRequestConfig *config,
                                              const char *url_str);
 
 /* ========== Main Request Function ========== */
 
-XrHttpResult xr_http_request(XrayIsolate *X, const XrHttpRequestConfig *config) {
+XrHttpResult xr_http_request(XrVMRuntime *X, const XrHttpRequestConfig *config) {
     XrHttpResult result;
     memset(&result, 0, sizeof(result));
 
@@ -578,7 +578,7 @@ XrHttpResult xr_http_request(XrayIsolate *X, const XrHttpRequestConfig *config) 
 }
 
 // Internal request function implementation
-static XrHttpResult xr_http_request_internal(XrayIsolate *X, const XrHttpRequestConfig *config,
+static XrHttpResult xr_http_request_internal(XrVMRuntime *X, const XrHttpRequestConfig *config,
                                              const char *url_str) {
     XrHttpResult result;
     memset(&result, 0, sizeof(result));
@@ -948,7 +948,7 @@ cleanup:
 
 /* ========== Convenience Functions ========== */
 
-XrHttpResult xr_http_get(XrayIsolate *X, const char *url) {
+XrHttpResult xr_http_get(XrVMRuntime *X, const char *url) {
     XrHttpRequestConfig config;
     xr_http_request_config_init(&config);
     config.url = url;
@@ -956,7 +956,7 @@ XrHttpResult xr_http_get(XrayIsolate *X, const char *url) {
     return xr_http_request(X, &config);
 }
 
-XrHttpResult xr_http_post(XrayIsolate *X, const char *url, const char *body, size_t body_len,
+XrHttpResult xr_http_post(XrVMRuntime *X, const char *url, const char *body, size_t body_len,
                           const char *content_type) {
     XrHttpRequestConfig config;
     xr_http_request_config_init(&config);
@@ -978,7 +978,7 @@ XrHttpResult xr_http_post(XrayIsolate *X, const char *url, const char *body, siz
     return xr_http_request(X, &config);
 }
 
-XrHttpResult xr_http_put(XrayIsolate *X, const char *url, const char *body, size_t body_len,
+XrHttpResult xr_http_put(XrVMRuntime *X, const char *url, const char *body, size_t body_len,
                          const char *content_type) {
     XrHttpRequestConfig config;
     xr_http_request_config_init(&config);
@@ -1000,7 +1000,7 @@ XrHttpResult xr_http_put(XrayIsolate *X, const char *url, const char *body, size
     return xr_http_request(X, &config);
 }
 
-XrHttpResult xr_http_delete(XrayIsolate *X, const char *url) {
+XrHttpResult xr_http_delete(XrVMRuntime *X, const char *url) {
     XrHttpRequestConfig config;
     xr_http_request_config_init(&config);
     config.url = url;
@@ -1035,7 +1035,7 @@ void xr_http_context_free(XrHttpReqContext *ctx) {
 
 /* ========== Streaming Response API ========== */
 
-int xr_http_stream_read(XrayIsolate *X, XrHttpResult *result, char *buf, int max_bytes) {
+int xr_http_stream_read(XrVMRuntime *X, XrHttpResult *result, char *buf, int max_bytes) {
     if (!result || !buf || max_bytes <= 0)
         return -1;
     if (!result->_stream_conn)
@@ -1077,7 +1077,7 @@ int xr_http_stream_read(XrayIsolate *X, XrHttpResult *result, char *buf, int max
     return n;
 }
 
-void xr_http_stream_close(XrayIsolate *X, XrHttpResult *result) {
+void xr_http_stream_close(XrVMRuntime *X, XrHttpResult *result) {
     if (!result)
         return;
 

@@ -35,7 +35,7 @@
 #include "xlsp_index_pool.h"
 #include "../../os/os_dir.h"
 
-static XrTypePool *workspace_compiler_analyzer_pool(XrayIsolate *isolate) {
+static XrTypePool *workspace_compiler_analyzer_pool(XrVMRuntime *isolate) {
     XrCompilerSession *session = xr_compiler_session_current_for_isolate(isolate);
     return xr_compiler_session_analyzer_pool(session);
 }

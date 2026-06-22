@@ -29,7 +29,7 @@
 
 /* ========== Forward Declarations ========== */
 
-struct XrayIsolate;
+struct XrVMRuntime;
 struct XrCoroutine;
 struct XrClosure;
 
@@ -61,7 +61,7 @@ typedef struct XrHttpResp {
 /* ========== HTTP Server ========== */
 
 struct XrWebSocket;
-typedef void (*XrWsConnectionHandler)(struct XrayIsolate *X, struct XrWebSocket *ws,
+typedef void (*XrWsConnectionHandler)(struct XrVMRuntime *X, struct XrWebSocket *ws,
                                       void *user_data);
 
 typedef struct XrHttpServer {
@@ -73,7 +73,7 @@ typedef struct XrHttpServer {
     XrRouter *router;
 
     // VM instance
-    struct XrayIsolate *isolate;
+    struct XrVMRuntime *isolate;
 
     // Connection handler closure (for creating connection coroutines)
     struct XrClosure *conn_handler_closure;
@@ -99,7 +99,7 @@ typedef struct XrHttpServer {
 /* ========== Server API ========== */
 
 // Create server
-XR_FUNC XrHttpServer *xr_http_server_new(struct XrayIsolate *isolate);
+XR_FUNC XrHttpServer *xr_http_server_new(struct XrVMRuntime *isolate);
 
 // Free server
 XR_FUNC void xr_http_server_free(XrHttpServer *server);
@@ -122,20 +122,20 @@ XR_FUNC void xr_http_server_set_ws_handler(XrHttpServer *server, XrWsConnectionH
 /* ========== Internal Functions ========== */
 
 // Read and parse HTTP request
-XR_FUNC int xr_http_read_request(struct XrayIsolate *X, int fd, XrHttpReq *req, char *buf,
+XR_FUNC int xr_http_read_request(struct XrVMRuntime *X, int fd, XrHttpReq *req, char *buf,
                                  size_t buf_size);
 
 // Send HTTP response
-XR_FUNC int xr_http_write_response(struct XrayIsolate *X, int fd, XrHttpResp *resp);
+XR_FUNC int xr_http_write_response(struct XrVMRuntime *X, int fd, XrHttpResp *resp);
 
 // Send simple text response
-XR_FUNC int xr_http_send_text(struct XrayIsolate *X, int fd, int status, const char *body);
+XR_FUNC int xr_http_send_text(struct XrVMRuntime *X, int fd, int status, const char *body);
 
 // Send error response
-XR_FUNC int xr_http_send_error(struct XrayIsolate *X, int fd, int status, const char *message);
+XR_FUNC int xr_http_send_error(struct XrVMRuntime *X, int fd, int status, const char *message);
 
 // Send redirect response (301/302)
-XR_FUNC int xr_http_send_redirect(struct XrayIsolate *X, int fd, int status, const char *location);
+XR_FUNC int xr_http_send_redirect(struct XrVMRuntime *X, int fd, int status, const char *location);
 
 /*
  * Try to find a prebuilt response for raw HTTP data.

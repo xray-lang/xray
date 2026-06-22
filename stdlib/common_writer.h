@@ -26,7 +26,7 @@
  * USAGE:
  *     typedef struct {
  *         XrSerWriter w;
- *         XrayIsolate *isolate;
+ *         XrVMRuntime *isolate;
  *         int          indent;
  *         int          depth;
  *     } JsonWriter;

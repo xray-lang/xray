@@ -86,7 +86,7 @@ static XrType *xa_function_type1(XaInferContext *ctx, XrType *p0, XrType *ret) {
 static XrType *xa_bytes_method_type(XaInferContext *ctx, XrType *receiver, const char *name) {
     if (!xa_type_is_bytes(receiver) || !name)
         return NULL;
-    XrayIsolate *X = ctx->analyzer->isolate;
+    XrVMRuntime *X = ctx->analyzer->isolate;
     XrType *t_int = xr_type_new_int(X);
     XrType *t_bytes = xr_type_new_bytes(X);
     if (strcmp(name, "loadU32LE") == 0)
@@ -120,7 +120,7 @@ static XrType *xa_pointer_method_type(XaInferContext *ctx, XrType *receiver, con
                                       AstNode *node) {
     if (!receiver || !XR_TYPE_IS_POINTER(receiver) || !name)
         return NULL;
-    XrayIsolate *X = ctx->analyzer->isolate;
+    XrVMRuntime *X = ctx->analyzer->isolate;
     XrType *pointee = receiver->container.element_type;
     if (!pointee)
         pointee = xr_type_new_unknown(X);
@@ -146,7 +146,7 @@ static XrType *xa_static_capacity_method_type(XaInferContext *ctx, AstNode *obje
     if (!object || object->type != AST_VARIABLE || !name || strcmp(name, "withCapacity") != 0)
         return NULL;
     const char *type_name = object->as.variable.name;
-    XrayIsolate *X = ctx->analyzer->isolate;
+    XrVMRuntime *X = ctx->analyzer->isolate;
     if (strcmp(type_name, "Bytes") == 0)
         return xa_function_type1(ctx, xr_type_new_int(X), xr_type_new_bytes(X));
     if (strcmp(type_name, "Array") == 0) {
@@ -212,7 +212,7 @@ XrType *xa_visit_variable(XaInferContext *ctx, AstNode *node) {
         /* Prelude type names used as constructors (e.g. Atomic(0)) are not
          * declared as variables but are valid call targets. Suppress the
          * undeclared-variable error; the call visitor infers the return type. */
-        XrayIsolate *X = ctx->analyzer->isolate;
+        XrVMRuntime *X = ctx->analyzer->isolate;
         if (X) {
             const XrPreludeSymbols *symbols = xr_prelude_get_symbols(X);
             if (symbols && xr_prelude_lookup_type(symbols, name, strlen(name)))
@@ -399,7 +399,7 @@ static XrType *binary_arith_distribute(XaInferContext *ctx, int op, XrType *left
     XrType *single_r = XR_TYPE_IS_UNION(right) ? NULL : right;
 
     XrType *acc = NULL;
-    XrayIsolate *X = ctx && ctx->analyzer ? ctx->analyzer->isolate : NULL;
+    XrVMRuntime *X = ctx && ctx->analyzer ? ctx->analyzer->isolate : NULL;
     for (int i = 0; i < lc; i++) {
         XrType *li = single_l ? single_l : left->union_type.members[i];
         for (int j = 0; j < rc; j++) {
@@ -1230,7 +1230,7 @@ XrType *xa_visit_new_expr(XaInferContext *ctx, AstNode *node) {
      * directly, bypassing class-symbol lookup. Supports explicit
      * type arguments: new Map<string, int>(), new Channel<int>(). */
     if (ne->class_name && !ne->module_name) {
-        XrayIsolate *X = ctx->analyzer->isolate;
+        XrVMRuntime *X = ctx->analyzer->isolate;
         const char *cn = ne->class_name;
         XrType *bt = NULL;
 

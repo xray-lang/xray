@@ -16,8 +16,8 @@
 #include "../runtime/xisolate_internal.h"
 #include "../base/xchecks.h"
 
-static XrayIsolate *vm_host_isolate(void *ctx) {
-    return (XrayIsolate *) ctx;
+static XrVMRuntime *vm_host_isolate(void *ctx) {
+    return (XrVMRuntime *) ctx;
 }
 
 static void *vm_host_backend_context(void *ctx) {
@@ -25,14 +25,14 @@ static void *vm_host_backend_context(void *ctx) {
 }
 
 static void vm_host_notify_coro(void *ctx, XrCoroutine *coro, const char *reason) {
-    XrayIsolate *X = vm_host_isolate(ctx);
+    XrVMRuntime *X = vm_host_isolate(ctx);
     if (!X || !coro)
         return;
     XrCoroState *state = (XrCoroState *) X->vm.coro_state;
     xr_coro_notify_monitors(X, state ? state->coro_registry : NULL, coro, reason);
 }
 
-static void vm_host_unregister_named_coro(XrayIsolate *X, XrCoroutine *coro) {
+static void vm_host_unregister_named_coro(XrVMRuntime *X, XrCoroutine *coro) {
     if (!X || !coro)
         return;
     const char *name = xr_coro_name(coro);
@@ -45,24 +45,24 @@ static void vm_host_unregister_named_coro(XrayIsolate *X, XrCoroutine *coro) {
 }
 
 static void vm_host_coro_on_exit(void *ctx, XrCoroutine *coro) {
-    XrayIsolate *X = vm_host_isolate(ctx);
+    XrVMRuntime *X = vm_host_isolate(ctx);
     vm_host_unregister_named_coro(X, coro);
 }
 
 static void vm_host_wake_scope_waiter(void *ctx, XrCoroutine *coro) {
-    XrayIsolate *X = vm_host_isolate(ctx);
+    XrVMRuntime *X = vm_host_isolate(ctx);
     if (X && coro)
         xr_coro_wake_scope_waiter(X, coro);
 }
 
 static void vm_host_wake_coro_waiter(void *ctx, XrCoroutine *coro) {
-    XrayIsolate *X = vm_host_isolate(ctx);
+    XrVMRuntime *X = vm_host_isolate(ctx);
     if (X && coro)
         xr_coro_wake_waiter(X, coro);
 }
 
 static void vm_host_wake_task_waiter(void *ctx, XrTask *task) {
-    XrayIsolate *X = vm_host_isolate(ctx);
+    XrVMRuntime *X = vm_host_isolate(ctx);
     if (X && task)
         xr_task_wake_waiter(X, task);
 }
@@ -81,7 +81,7 @@ static const XrSchedulerHostOps VM_SCHEDULER_HOST_OPS = {
     .adopt_deferred_tasks = vm_host_adopt_deferred_tasks,
 };
 
-void xr_scheduler_runtime_attach_isolate(XrSchedulerRuntime *runtime, XrayIsolate *isolate) {
+void xr_scheduler_runtime_attach_isolate(XrSchedulerRuntime *runtime, XrVMRuntime *isolate) {
     if (!runtime)
         return;
     if (isolate) {

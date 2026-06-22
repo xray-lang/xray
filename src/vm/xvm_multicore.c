@@ -15,7 +15,7 @@
 #include "../os/os_time.h"
 #include <stdio.h>
 
-void xr_multicore_init(XrayIsolate *X, int num_workers) {
+void xray_vm_multicore_init(XrVMRuntime *X, int num_workers) {
     if (!X)
         return;
 
@@ -34,7 +34,7 @@ void xr_multicore_init(XrayIsolate *X, int num_workers) {
     xr_runtime_start(runtime);
 }
 
-void xr_multicore_destroy(XrayIsolate *X) {
+void xray_vm_multicore_destroy(XrVMRuntime *X) {
     if (!X || !X->vm.scheduler)
         return;
 

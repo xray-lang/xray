@@ -168,85 +168,85 @@ typedef struct {
 } XrDebugFrameCtx;
 
 // Initialize/cleanup debug state
-XR_FUNC void xr_debug_init(XrayIsolate *isolate);
-XR_FUNC void xr_debug_free(XrayIsolate *isolate);
+XR_FUNC void xr_debug_init(XrVMRuntime *isolate);
+XR_FUNC void xr_debug_free(XrVMRuntime *isolate);
 
 // Hook management
-XR_FUNC void xr_debug_enable(XrayIsolate *isolate, bool enable);
+XR_FUNC void xr_debug_enable(XrVMRuntime *isolate, bool enable);
 
 // Internal helpers (shared between split files)
-XR_FUNC bool xr_debug_get_frame_ctx_ex(XrayIsolate *isolate, XrDebugFrameCtx *out);
-XR_FUNC bool xr_debug_eval_condition_truthy(XrayIsolate *isolate, const char *condition);
+XR_FUNC bool xr_debug_get_frame_ctx_ex(XrVMRuntime *isolate, XrDebugFrameCtx *out);
+XR_FUNC bool xr_debug_eval_condition_truthy(XrVMRuntime *isolate, const char *condition);
 XR_FUNC void xr_bp_hash_clear(XrBpHashTable *table);
 XR_FUNC void xr_bp_free_fields(struct XrBreakpoint *bp);
 XR_FUNC struct XrBreakpoint *xr_bp_hash_find(XrBpHashTable *table, const char *path, int line);
 
 // Breakpoint management
-XR_FUNC int xr_debug_add_breakpoint(XrayIsolate *isolate, const char *path, int line,
+XR_FUNC int xr_debug_add_breakpoint(XrVMRuntime *isolate, const char *path, int line,
                                     const char *condition);
-XR_FUNC int xr_debug_add_breakpoint_ex(XrayIsolate *isolate, const char *path, int line,
+XR_FUNC int xr_debug_add_breakpoint_ex(XrVMRuntime *isolate, const char *path, int line,
                                        const char *condition, const char *log_message,
                                        const char *hit_condition);
-XR_FUNC bool xr_debug_remove_breakpoint(XrayIsolate *isolate, int id);
-XR_FUNC void xr_debug_clear_breakpoints(XrayIsolate *isolate, const char *path);
+XR_FUNC bool xr_debug_remove_breakpoint(XrVMRuntime *isolate, int id);
+XR_FUNC void xr_debug_clear_breakpoints(XrVMRuntime *isolate, const char *path);
 
 // Returns: 0 = no breakpoint, 1 = should break, 2 = logpoint (message printed)
-XR_FUNC int xr_debug_check_breakpoint_ex(XrayIsolate *isolate, const char *path, int line,
+XR_FUNC int xr_debug_check_breakpoint_ex(XrVMRuntime *isolate, const char *path, int line,
                                          char **out_log_message);
-XR_FUNC bool xr_debug_check_breakpoint(XrayIsolate *isolate, const char *path, int line);
+XR_FUNC bool xr_debug_check_breakpoint(XrVMRuntime *isolate, const char *path, int line);
 
 // Watch expression management
-XR_FUNC int xr_debug_add_watch(XrayIsolate *isolate, const char *expression);
-XR_FUNC bool xr_debug_remove_watch(XrayIsolate *isolate, int id);
-XR_FUNC void xr_debug_clear_watches(XrayIsolate *isolate);
-XR_FUNC int xr_debug_get_watch_count(XrayIsolate *isolate);
-XR_FUNC bool xr_debug_get_watch(XrayIsolate *isolate, int idx, int *out_id, const char **out_expr);
+XR_FUNC int xr_debug_add_watch(XrVMRuntime *isolate, const char *expression);
+XR_FUNC bool xr_debug_remove_watch(XrVMRuntime *isolate, int id);
+XR_FUNC void xr_debug_clear_watches(XrVMRuntime *isolate);
+XR_FUNC int xr_debug_get_watch_count(XrVMRuntime *isolate);
+XR_FUNC bool xr_debug_get_watch(XrVMRuntime *isolate, int idx, int *out_id, const char **out_expr);
 
 // Execution control
-XR_FUNC void xr_debug_continue(XrayIsolate *isolate);
-XR_FUNC void xr_debug_step_in(XrayIsolate *isolate);
-XR_FUNC void xr_debug_step_out(XrayIsolate *isolate);
-XR_FUNC void xr_debug_step_over(XrayIsolate *isolate);
-XR_FUNC XdapResumeResult xr_debug_resume_execution(XrayIsolate *isolate);
+XR_FUNC void xr_debug_continue(XrVMRuntime *isolate);
+XR_FUNC void xr_debug_step_in(XrVMRuntime *isolate);
+XR_FUNC void xr_debug_step_out(XrVMRuntime *isolate);
+XR_FUNC void xr_debug_step_over(XrVMRuntime *isolate);
+XR_FUNC XdapResumeResult xr_debug_resume_execution(XrVMRuntime *isolate);
 
 // Stack inspection
-XR_FUNC int xr_debug_get_stack_depth(XrayIsolate *isolate);
-XR_FUNC bool xr_debug_get_frame_info(XrayIsolate *isolate, int frame_idx,
+XR_FUNC int xr_debug_get_stack_depth(XrVMRuntime *isolate);
+XR_FUNC bool xr_debug_get_frame_info(XrVMRuntime *isolate, int frame_idx,
                                      const char **out_func_name, const char **out_source,
                                      int *out_line);
 
 // Variable inspection
-XR_FUNC int xr_debug_get_local_count(XrayIsolate *isolate, int frame_idx);
-XR_FUNC bool xr_debug_get_local(XrayIsolate *isolate, int frame_idx, int local_idx,
+XR_FUNC int xr_debug_get_local_count(XrVMRuntime *isolate, int frame_idx);
+XR_FUNC bool xr_debug_get_local(XrVMRuntime *isolate, int frame_idx, int local_idx,
                                 const char **out_name, char **out_value, char **out_type);
 
 // Value formatting (shared with xdap_inspect and xdap_eval)
 XR_FUNC const char *xr_value_type_name(XrValue val);
-XR_FUNC char *xr_value_to_debug_string(XrayIsolate *isolate, XrValue val);
+XR_FUNC char *xr_value_to_debug_string(XrVMRuntime *isolate, XrValue val);
 
 // Get the debug coroutine (main coro for single-threaded debug)
-XR_FUNC XrCoroutine *xr_debug_get_coro(XrayIsolate *isolate);
+XR_FUNC XrCoroutine *xr_debug_get_coro(XrVMRuntime *isolate);
 
 // Expression evaluation
-XR_FUNC char *xr_debug_evaluate(XrayIsolate *isolate, const char *expression, int frame_idx);
+XR_FUNC char *xr_debug_evaluate(XrVMRuntime *isolate, const char *expression, int frame_idx);
 
 // Enhanced expression evaluation with expandable result support
 // Returns result string, sets out_var_ref if result is expandable (>0)
-XR_FUNC char *xr_debug_evaluate_ex(XrayIsolate *isolate, const char *expression, int frame_idx,
+XR_FUNC char *xr_debug_evaluate_ex(XrVMRuntime *isolate, const char *expression, int frame_idx,
                                    int *out_var_ref);
 
 // Exception breakpoints
-XR_FUNC void xr_debug_set_exception_breakpoints(XrayIsolate *isolate, bool uncaught, bool caught);
-XR_FUNC XrDebugAction xr_debug_on_exception(XrayIsolate *isolate, const char *message,
+XR_FUNC void xr_debug_set_exception_breakpoints(XrVMRuntime *isolate, bool uncaught, bool caught);
+XR_FUNC XrDebugAction xr_debug_on_exception(XrVMRuntime *isolate, const char *message,
                                             bool is_uncaught);
 
 // Coroutine debugging
-XR_FUNC int xr_debug_get_coro_count(XrayIsolate *isolate);
-XR_FUNC bool xr_debug_get_coro_info(XrayIsolate *isolate, int coro_idx, int *out_id,
+XR_FUNC int xr_debug_get_coro_count(XrVMRuntime *isolate);
+XR_FUNC bool xr_debug_get_coro_info(XrVMRuntime *isolate, int coro_idx, int *out_id,
                                     const char **out_name, const char **out_state);
 
 // Hot reload
-XR_FUNC bool xr_debug_hot_reload(XrayIsolate *isolate, const char *path);
+XR_FUNC bool xr_debug_hot_reload(XrVMRuntime *isolate, const char *path);
 
 // ============================================================================
 // Disassembly API
@@ -262,11 +262,11 @@ typedef struct XdapDisasmInstr {
 
 // Get disassembly for current frame
 // Returns array of instructions, caller must free with xr_debug_free_disasm()
-XR_FUNC int xr_debug_get_disassembly(XrayIsolate *isolate, int frame_idx,
+XR_FUNC int xr_debug_get_disassembly(XrVMRuntime *isolate, int frame_idx,
                                      XdapDisasmInstr **out_instrs, int *out_count);
 
 // Get current instruction offset (PC) for frame
-XR_FUNC int xr_debug_get_current_pc(XrayIsolate *isolate, int frame_idx);
+XR_FUNC int xr_debug_get_current_pc(XrVMRuntime *isolate, int frame_idx);
 
 // Free disassembly array
 XR_FUNC void xr_debug_free_disasm(XdapDisasmInstr *instrs, int count);
@@ -278,7 +278,7 @@ XR_FUNC void xr_debug_free_disasm(XdapDisasmInstr *instrs, int count);
 // Get async stack trace (spawn point of current coroutine)
 // Returns true if async stack is available
 // Caller must NOT free the returned arrays (they point to coroutine internal data)
-XR_FUNC bool xr_debug_get_async_stack(XrayIsolate *isolate, int *out_depth, const char ***out_names,
+XR_FUNC bool xr_debug_get_async_stack(XrVMRuntime *isolate, int *out_depth, const char ***out_names,
                                       const char ***out_files, int **out_lines);
 
 // ============================================================================
@@ -286,18 +286,18 @@ XR_FUNC bool xr_debug_get_async_stack(XrayIsolate *isolate, int *out_depth, cons
 // ============================================================================
 
 // Create a variable reference, returns ID for DAP client
-XR_FUNC int xr_debug_create_var_ref(XrayIsolate *isolate, XdapVarRefType type, int frame_idx,
+XR_FUNC int xr_debug_create_var_ref(XrVMRuntime *isolate, XdapVarRefType type, int frame_idx,
                                     XrValue value);
 
 // Get variable reference by ID
-XR_FUNC XrDebugVarRef *xr_debug_get_var_ref(XrayIsolate *isolate, int ref_id);
+XR_FUNC XrDebugVarRef *xr_debug_get_var_ref(XrVMRuntime *isolate, int ref_id);
 
 // Clear all variable references (call on continue/step)
-XR_FUNC void xr_debug_clear_var_refs(XrayIsolate *isolate);
+XR_FUNC void xr_debug_clear_var_refs(XrVMRuntime *isolate);
 
 // Get children of a variable reference
 // Returns count, caller must free each item and the array
-XR_FUNC int xr_debug_get_var_children(XrayIsolate *isolate, int ref_id, XdapVarInfo **out_vars);
+XR_FUNC int xr_debug_get_var_children(XrVMRuntime *isolate, int ref_id, XdapVarInfo **out_vars);
 
 // Free a single XdapVarInfo
 XR_FUNC void xr_debug_var_info_free(XdapVarInfo *info);
@@ -306,19 +306,19 @@ XR_FUNC void xr_debug_var_info_free(XdapVarInfo *info);
 XR_FUNC void xr_debug_var_info_array_free(XdapVarInfo *vars, int count);
 
 // Check if a value is expandable (has children)
-XR_FUNC bool xr_debug_value_is_expandable(XrayIsolate *isolate, XrValue value);
+XR_FUNC bool xr_debug_value_is_expandable(XrVMRuntime *isolate, XrValue value);
 
 // Get variable reference type for a value
 XR_FUNC XdapVarRefType xr_debug_get_ref_type(XrValue value);
 
 // Set variable value (returns new value string, caller must free)
-XR_FUNC char *xr_debug_set_variable(XrayIsolate *isolate, int var_ref, const char *name,
+XR_FUNC char *xr_debug_set_variable(XrVMRuntime *isolate, int var_ref, const char *name,
                                     const char *value);
 
 // Function breakpoints
-XR_FUNC int xr_debug_add_function_breakpoint(XrayIsolate *isolate, const char *func_name,
+XR_FUNC int xr_debug_add_function_breakpoint(XrVMRuntime *isolate, const char *func_name,
                                              const char *condition);
-XR_FUNC void xr_debug_clear_function_breakpoints(XrayIsolate *isolate);
-XR_FUNC bool xr_debug_check_function_breakpoint(XrayIsolate *isolate, const char *func_name);
+XR_FUNC void xr_debug_clear_function_breakpoints(XrVMRuntime *isolate);
+XR_FUNC bool xr_debug_check_function_breakpoint(XrVMRuntime *isolate, const char *func_name);
 
 #endif  // XDAP_DEBUG_H

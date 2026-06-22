@@ -37,7 +37,7 @@
 #include <stdbool.h>
 #include "../base/xdefs.h"
 
-struct XrayIsolate;
+struct XrVMRuntime;
 struct XrCompilerSession;
 struct XrProto;
 
@@ -60,15 +60,15 @@ typedef enum {
 /* ========== Serialization API ========== */
 
 // Serialize XrProto to byte array, caller must free
-XR_FUNC uint8_t *xr_bytecode_write(struct XrayIsolate *X, struct XrProto *proto, int flags,
+XR_FUNC uint8_t *xr_bytecode_write(struct XrVMRuntime *X, struct XrProto *proto, int flags,
                                    size_t *out_size);
 
 // Deserialize XrProto from byte array
-XR_FUNC struct XrProto *xr_bytecode_read(struct XrayIsolate *X, const uint8_t *data, size_t size,
+XR_FUNC struct XrProto *xr_bytecode_read(struct XrVMRuntime *X, const uint8_t *data, size_t size,
                                          XrBcError *error);
 
 // Execute bytecode directly, returns 0 on success
-XR_FUNC int xr_eval_bytecode(struct XrayIsolate *X, const uint8_t *data, size_t size);
+XR_FUNC int xr_eval_bytecode(struct XrVMRuntime *X, const uint8_t *data, size_t size);
 
 /* ========== File API ========== */
 
@@ -77,7 +77,7 @@ XR_FUNC bool xr_compile_to_file(struct XrCompilerSession *session, const char *s
                                 const char *output_file, int flags);
 
 // Load and execute bytecode file
-XR_FUNC int xr_run_bytecode_file(struct XrayIsolate *X, const char *bytecode_file);
+XR_FUNC int xr_run_bytecode_file(struct XrVMRuntime *X, const char *bytecode_file);
 
 /* ========== C Embedding Macros ========== */
 
@@ -99,7 +99,7 @@ typedef enum {
 XR_FUNC XrOutputFormat xr_detect_output_format(const char *filename, XrOutputFormat explicit_fmt);
 
 // Output as C source file
-XR_FUNC bool xr_output_c_source(struct XrayIsolate *X, struct XrProto *proto,
+XR_FUNC bool xr_output_c_source(struct XrVMRuntime *X, struct XrProto *proto,
                                 const char *output_file, const char *var_name, int flags);
 
 #endif  // XBYTECODE_IO_H

@@ -22,7 +22,7 @@
 #include <stdio.h>
 
 // Set() or Set(array) - create empty set or from array
-XrValue xr_builtin_set_construct(XrayIsolate *isolate, XrValue self, XrValue *args, int argc) {
+XrValue xr_builtin_set_construct(XrVMRuntime *isolate, XrValue self, XrValue *args, int argc) {
     (void) self;
     XR_DCHECK(isolate != NULL, "set_construct: NULL isolate");
     if (argc == 0) {
@@ -41,7 +41,7 @@ XrValue xr_builtin_set_construct(XrayIsolate *isolate, XrValue self, XrValue *ar
 }
 
 // Set.from(iterable) - create Set from array or string (auto dedup)
-XrValue xr_builtin_set_from(XrayIsolate *isolate, XrValue self, XrValue *args, int argc) {
+XrValue xr_builtin_set_from(XrVMRuntime *isolate, XrValue self, XrValue *args, int argc) {
     (void) self;
     if (argc != 1) {
         xr_runtime_error(isolate, "Set.from() expects 1 argument\n");
@@ -93,7 +93,7 @@ XrValue xr_builtin_set_from(XrayIsolate *isolate, XrValue self, XrValue *args, i
 }
 
 // Set.range(start, end) - create Set with integer range
-XrValue xr_builtin_set_range(XrayIsolate *isolate, XrValue self, XrValue *args, int argc) {
+XrValue xr_builtin_set_range(XrVMRuntime *isolate, XrValue self, XrValue *args, int argc) {
     (void) self;
     if (argc != 2) {
         xr_runtime_error(isolate, "Set.range() expects 2 arguments\n");

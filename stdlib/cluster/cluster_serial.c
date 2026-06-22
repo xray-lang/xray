@@ -108,7 +108,7 @@ static void buf_put_varint(XrSerialBuf *buf, uint64_t v) {
 
 /* ========== Internal Encode (recursive) ========== */
 
-static int encode_value(XrayIsolate *X, XrValue value, XrSerialBuf *buf, int depth) {
+static int encode_value(XrVMRuntime *X, XrValue value, XrSerialBuf *buf, int depth) {
     if (depth > XR_SERIAL_MAX_DEPTH || buf->error)
         return -1;
 
@@ -280,7 +280,7 @@ static int encode_value(XrayIsolate *X, XrValue value, XrSerialBuf *buf, int dep
 
 /* ========== Public Encode API ========== */
 
-int xr_cluster_encode(XrayIsolate *X, XrValue value, XrSerialBuf *buf) {
+int xr_cluster_encode(XrVMRuntime *X, XrValue value, XrSerialBuf *buf) {
     buf_put_u8(buf, XR_SERIAL_VERSION);
     int rc = encode_value(X, value, buf, 0);
     if (buf->error)
@@ -302,7 +302,7 @@ int xr_cluster_encode(XrayIsolate *X, XrValue value, XrSerialBuf *buf) {
 
 /* ========== Decode Helpers ========== */
 
-void xr_serial_reader_init(XrSerialReader *r, XrayIsolate *X, const uint8_t *data, size_t len) {
+void xr_serial_reader_init(XrSerialReader *r, XrVMRuntime *X, const uint8_t *data, size_t len) {
     r->data = data;
     r->len = len;
     r->pos = 0;

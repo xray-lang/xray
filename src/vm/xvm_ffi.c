@@ -157,7 +157,7 @@ typedef union XrFFISlot {
 } XrFFISlot;
 
 typedef struct XrFFICallbackBridge {
-    struct XrayIsolate *X;
+    struct XrVMRuntime *X;
     XrClosure *closure;
     const XrFFICallbackSig *sig;
     ffi_cif cif;
@@ -351,7 +351,7 @@ static void ffi_callback_bridges_free(XrFFICallbackBridge *bridges, int count) {
         ffi_callback_bridge_free(&bridges[i]);
 }
 
-static bool ffi_callback_bridge_prepare(struct XrayIsolate *X, const XrFFICallbackSig *sig,
+static bool ffi_callback_bridge_prepare(struct XrVMRuntime *X, const XrFFICallbackSig *sig,
                                         XrClosure *closure, XrFFICallbackBridge *bridge) {
     if (!sig || !closure || !bridge)
         return false;
@@ -395,7 +395,7 @@ static bool ffi_callback_bridge_prepare(struct XrayIsolate *X, const XrFFICallba
  * `dylib` is NULL). Returns NULL when the symbol cannot be found. When loading
  * the requested library itself fails, sets `library_error` so the caller does
  * not emit a misleading second "symbol not found" diagnostic. */
-static void *ffi_resolve_symbol(struct XrayIsolate *X, const char *symbol, const char *dylib,
+static void *ffi_resolve_symbol(struct XrVMRuntime *X, const char *symbol, const char *dylib,
                                 bool *library_error) {
     if (library_error)
         *library_error = false;
@@ -439,7 +439,7 @@ static void *ffi_resolve_symbol(struct XrayIsolate *X, const char *symbol, const
 #endif
 }
 
-XrValue xr_ffi_call_proto(struct XrayIsolate *X, struct XrProto *proto, XrValue *args, int nargs) {
+XrValue xr_ffi_call_proto(struct XrVMRuntime *X, struct XrProto *proto, XrValue *args, int nargs) {
     const XrFFISig *sig = proto ? proto->ffi_sig : NULL;
     if (!sig) {
         xr_runtime_error(X, "FFI: missing extern metadata for foreign call\n");
@@ -549,7 +549,7 @@ XrValue xr_ffi_call_proto(struct XrayIsolate *X, struct XrProto *proto, XrValue 
 
 #else /* !XRAY_HAVE_LIBFFI */
 
-XrValue xr_ffi_call_proto(struct XrayIsolate *X, struct XrProto *proto, XrValue *args, int nargs) {
+XrValue xr_ffi_call_proto(struct XrVMRuntime *X, struct XrProto *proto, XrValue *args, int nargs) {
     (void) proto;
     (void) args;
     (void) nargs;

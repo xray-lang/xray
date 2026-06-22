@@ -31,17 +31,17 @@
 /* ========== Dist Hook Implementation ========== */
 
 /*
- * Install cluster dist hooks into XrayIsolate::channel_dist_hooks.
+ * Install cluster dist hooks into XrVMRuntime::channel_dist_hooks.
  * Called once during cluster startup. Per-isolate — multiple isolates
  * can independently participate in distinct clusters.
  */
-XR_FUNC void xr_cluster_channel_install_hooks(struct XrayIsolate *X);
+XR_FUNC void xr_cluster_channel_install_hooks(struct XrVMRuntime *X);
 
 /*
  * Uninstall cluster dist hooks (restore NULL on the given isolate).
  * Called during cluster shutdown.
  */
-XR_FUNC void xr_cluster_channel_uninstall_hooks(struct XrayIsolate *X);
+XR_FUNC void xr_cluster_channel_uninstall_hooks(struct XrVMRuntime *X);
 
 /* ========== Named Channel Operations ========== */
 

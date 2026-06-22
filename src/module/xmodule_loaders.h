@@ -16,57 +16,57 @@
 #ifndef XMODULE_LOADERS_H
 #define XMODULE_LOADERS_H
 
-struct XrayIsolate;
+struct XrVMRuntime;
 struct XrModule;
 
 /* ========== Core Modules (always available) ========== */
 
-XR_FUNC struct XrModule *xr_load_module_prelude(struct XrayIsolate *isolate);
-XR_FUNC struct XrModule *xr_load_module_time(struct XrayIsolate *isolate);
-XR_FUNC struct XrModule *xr_load_module_math(struct XrayIsolate *isolate);
-XR_FUNC struct XrModule *xr_load_module_path(struct XrayIsolate *isolate);
-XR_FUNC struct XrModule *xr_load_module_base64(struct XrayIsolate *isolate);
-XR_FUNC struct XrModule *xr_load_module_regex(struct XrayIsolate *isolate);
-XR_FUNC struct XrModule *xr_load_module_mem(struct XrayIsolate *isolate);
-XR_FUNC struct XrModule *xr_load_module_url(struct XrayIsolate *isolate);
-XR_FUNC struct XrModule *xr_load_module_datetime(struct XrayIsolate *isolate);
-XR_FUNC struct XrModule *xr_load_module_log(struct XrayIsolate *isolate);
-XR_FUNC struct XrModule *xr_load_module_encoding(struct XrayIsolate *isolate);
+XR_FUNC struct XrModule *xr_load_module_prelude(struct XrVMRuntime *isolate);
+XR_FUNC struct XrModule *xr_load_module_time(struct XrVMRuntime *isolate);
+XR_FUNC struct XrModule *xr_load_module_math(struct XrVMRuntime *isolate);
+XR_FUNC struct XrModule *xr_load_module_path(struct XrVMRuntime *isolate);
+XR_FUNC struct XrModule *xr_load_module_base64(struct XrVMRuntime *isolate);
+XR_FUNC struct XrModule *xr_load_module_regex(struct XrVMRuntime *isolate);
+XR_FUNC struct XrModule *xr_load_module_mem(struct XrVMRuntime *isolate);
+XR_FUNC struct XrModule *xr_load_module_url(struct XrVMRuntime *isolate);
+XR_FUNC struct XrModule *xr_load_module_datetime(struct XrVMRuntime *isolate);
+XR_FUNC struct XrModule *xr_load_module_log(struct XrVMRuntime *isolate);
+XR_FUNC struct XrModule *xr_load_module_encoding(struct XrVMRuntime *isolate);
 
 /* ========== Filesystem Modules ========== */
 
 #if defined(XR_HAS_FILESYSTEM) || !defined(XR_STDLIB_MODULAR)
-XR_FUNC struct XrModule *xr_load_module_io(struct XrayIsolate *isolate);
-XR_FUNC struct XrModule *xr_load_module_os(struct XrayIsolate *isolate);
+XR_FUNC struct XrModule *xr_load_module_io(struct XrVMRuntime *isolate);
+XR_FUNC struct XrModule *xr_load_module_os(struct XrVMRuntime *isolate);
 #endif  // ========== Network Modules ==========
 
 #if defined(XR_HAS_TEST_MODULES)
-XR_FUNC struct XrModule *xr_load_module_test_yield(struct XrayIsolate *isolate);
+XR_FUNC struct XrModule *xr_load_module_test_yield(struct XrVMRuntime *isolate);
 #endif
 
 #if defined(XR_HAS_NETWORK) || !defined(XR_STDLIB_MODULAR)
-XR_FUNC struct XrModule *xr_load_module_net(struct XrayIsolate *isolate);
-XR_FUNC struct XrModule *xr_load_module_http(struct XrayIsolate *isolate);
-XR_FUNC struct XrModule *xr_load_module_ws(struct XrayIsolate *isolate);
+XR_FUNC struct XrModule *xr_load_module_net(struct XrVMRuntime *isolate);
+XR_FUNC struct XrModule *xr_load_module_http(struct XrVMRuntime *isolate);
+XR_FUNC struct XrModule *xr_load_module_ws(struct XrVMRuntime *isolate);
 #endif  // ========== Crypto Module ==========
 
 #if defined(XR_HAS_CRYPTO) || !defined(XR_STDLIB_MODULAR)
-XR_FUNC struct XrModule *xr_load_module_crypto(struct XrayIsolate *isolate);
+XR_FUNC struct XrModule *xr_load_module_crypto(struct XrVMRuntime *isolate);
 #endif  // ========== Compression Module ==========
 
 #if defined(XR_HAS_COMPRESS) || !defined(XR_STDLIB_MODULAR)
-XR_FUNC struct XrModule *xr_load_module_compress(struct XrayIsolate *isolate);
+XR_FUNC struct XrModule *xr_load_module_compress(struct XrVMRuntime *isolate);
 #endif  // ========== Cluster Module ==========
 
 #if defined(XR_HAS_CLUSTER) || !defined(XR_STDLIB_MODULAR)
-XR_FUNC struct XrModule *xr_load_module_cluster(struct XrayIsolate *isolate);
+XR_FUNC struct XrModule *xr_load_module_cluster(struct XrVMRuntime *isolate);
 #endif  // ========== Data Format Modules ==========
 
 #if defined(XR_HAS_DATA_FORMATS) || !defined(XR_STDLIB_MODULAR)
-XR_FUNC struct XrModule *xr_load_module_csv(struct XrayIsolate *isolate);
-XR_FUNC struct XrModule *xr_load_module_toml(struct XrayIsolate *isolate);
-XR_FUNC struct XrModule *xr_load_module_yaml(struct XrayIsolate *isolate);
-XR_FUNC struct XrModule *xr_load_module_xml(struct XrayIsolate *isolate);
+XR_FUNC struct XrModule *xr_load_module_csv(struct XrVMRuntime *isolate);
+XR_FUNC struct XrModule *xr_load_module_toml(struct XrVMRuntime *isolate);
+XR_FUNC struct XrModule *xr_load_module_yaml(struct XrVMRuntime *isolate);
+XR_FUNC struct XrModule *xr_load_module_xml(struct XrVMRuntime *isolate);
 #endif
 
 #endif  // XMODULE_LOADERS_H

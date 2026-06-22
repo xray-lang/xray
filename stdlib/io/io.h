@@ -20,7 +20,7 @@
 
 #include <stddef.h>
 
-struct XrayIsolate;
+struct XrVMRuntime;
 struct XrModule;
 
 /*
@@ -68,6 +68,6 @@ struct XrModule;
  *   - tempDir()                   Create temporary directory
  */
 XR_FUNC char *xr_io_read_stdin_all(size_t *out_len);
-XR_FUNC struct XrModule *xr_load_module_io(struct XrayIsolate *isolate);
+XR_FUNC struct XrModule *xr_load_module_io(struct XrVMRuntime *isolate);
 
 #endif  // XR_STDLIB_IO_H

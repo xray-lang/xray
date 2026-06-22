@@ -65,7 +65,7 @@
 // Populate the per-isolate err_keys cache on first access and return it.
 // Callers must not free or mutate the returned struct. The cache owns the
 // XrValue handles for the isolate's lifetime.
-static inline XrStdlibErrKeys *xrs_err_keys_get(XrayIsolate *X) {
+static inline XrStdlibErrKeys *xrs_err_keys_get(XrVMRuntime *X) {
     XrStdlibCache *c = xr_stdlib_cache_get(X);
     XrStdlibErrKeys *k = &c->err_keys;
     if (!k->ready) {
@@ -91,7 +91,7 @@ static inline XrStdlibErrKeys *xrs_err_keys_get(XrayIsolate *X) {
 //
 // The function never fails; on allocator OOM the underlying xr_map_new /
 // xr_array_push already abort consistently with the rest of stdlib.
-static inline void xrs_error_push(XrayIsolate *X, XrArray *errors, const char *type_literal,
+static inline void xrs_error_push(XrVMRuntime *X, XrArray *errors, const char *type_literal,
                                   int line, int row, int column, const char *msg) {
     XrStdlibErrKeys *keys = xrs_err_keys_get(X);
     XrMap *err = xr_map_new(xr_current_coro(X));
@@ -122,7 +122,7 @@ static inline void xrs_error_push(XrayIsolate *X, XrArray *errors, const char *t
 // Read a boolean-typed config field by key. If absent or wrong type, the
 // caller-supplied `*dst` is left untouched (preserving the default that
 // config_init() already stored).
-static inline void xrs_cfg_get_bool(XrayIsolate *X, XrJson *json, const char *key, bool *dst) {
+static inline void xrs_cfg_get_bool(XrVMRuntime *X, XrJson *json, const char *key, bool *dst) {
     if (!json || !dst)
         return;
     XrValue v = xr_json_get_by_key(X, json, key);
@@ -132,7 +132,7 @@ static inline void xrs_cfg_get_bool(XrayIsolate *X, XrJson *json, const char *ke
 
 // Read an int32-typed config field by key; silently ignores non-int
 // values. Truncates negative sentinel values (e.g. -1) unchanged.
-static inline void xrs_cfg_get_int(XrayIsolate *X, XrJson *json, const char *key, int *dst) {
+static inline void xrs_cfg_get_int(XrVMRuntime *X, XrJson *json, const char *key, int *dst) {
     if (!json || !dst)
         return;
     XrValue v = xr_json_get_by_key(X, json, key);
@@ -142,7 +142,7 @@ static inline void xrs_cfg_get_int(XrayIsolate *X, XrJson *json, const char *key
 
 // Read a single-char-typed config field (the first byte of the string
 // argument is taken). Empty strings leave *dst unchanged.
-static inline void xrs_cfg_get_char(XrayIsolate *X, XrJson *json, const char *key, char *dst) {
+static inline void xrs_cfg_get_char(XrVMRuntime *X, XrJson *json, const char *key, char *dst) {
     if (!json || !dst)
         return;
     XrValue v = xr_json_get_by_key(X, json, key);
@@ -158,7 +158,7 @@ static inline void xrs_cfg_get_char(XrayIsolate *X, XrJson *json, const char *ke
 // source is longer than `dst_cap - 1`, it is truncated. Returns the
 // number of bytes copied (not counting the trailing NUL); 0 means the
 // key was absent or not a string, in which case `dst` is untouched.
-static inline size_t xrs_cfg_get_fixed_str(XrayIsolate *X, XrJson *json, const char *key, char *dst,
+static inline size_t xrs_cfg_get_fixed_str(XrVMRuntime *X, XrJson *json, const char *key, char *dst,
                                            size_t dst_cap) {
     if (!json || !dst || dst_cap == 0)
         return 0;

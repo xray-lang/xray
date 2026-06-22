@@ -17,14 +17,14 @@
 
 #include "../../base/xdefs.h"
 
-struct XrayIsolate;
+struct XrVMRuntime;
 struct XrTypeRef;
 struct XrType;
 struct XaAnalyzer;
 
 /* Resolve a single XrTypeRef to its runtime XrType*.
  * Returns xr_type_new_unknown() on NULL input or unresolvable refs. */
-XR_FUNC struct XrType *xr_tref_resolve(struct XrayIsolate *X, const struct XrTypeRef *tref);
+XR_FUNC struct XrType *xr_tref_resolve(struct XrVMRuntime *X, const struct XrTypeRef *tref);
 
 /* Analyzer-aware variant.
  *

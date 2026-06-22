@@ -29,7 +29,7 @@ static const char TLS_UNAVAIL_MSG[] =
     "HTTPS requires TLS support. Xray was built without OpenSSL"
     " -- rebuild with: cmake -DENABLE_TLS=ON -DOPENSSL_ROOT_DIR=<path>";
 
-static void throw_tls_unavailable(XrayIsolate *X) {
+static void throw_tls_unavailable(XrVMRuntime *X) {
     XrValue exc = xr_exception_new(X, XR_ERR_TLS_UNAVAILABLE, TLS_UNAVAIL_MSG);
     xr_vm_unwind_with_trace(X, exc);
 }
@@ -37,17 +37,17 @@ static void throw_tls_unavailable(XrayIsolate *X) {
 
 // External declarations
 extern XrValue xr_string_value(XrString *str);
-extern XrString *xr_string_intern(XrayIsolate *X, const char *str, size_t len, uint32_t hash);
+extern XrString *xr_string_intern(XrVMRuntime *X, const char *str, size_t len, uint32_t hash);
 
 // Helper function: create string value
-static XrValue make_str(XrayIsolate *X, const char *s, size_t len) {
+static XrValue make_str(XrVMRuntime *X, const char *s, size_t len) {
     if (!s || len == 0)
         return xr_null();
     XrString *str = xr_string_intern(X, s, len, 0);
     return xr_string_value(str);
 }
 
-static XrValue make_cstr(XrayIsolate *X, const char *s) {
+static XrValue make_cstr(XrVMRuntime *X, const char *s) {
     if (!s)
         return xr_null();
     return make_str(X, s, strlen(s));
@@ -64,7 +64,7 @@ static const char *get_cstring(XrValue val, size_t *len) {
 }
 
 // Get string field from Json
-static const char *json_get_string(XrayIsolate *X, XrJson *json, const char *key, size_t *len) {
+static const char *json_get_string(XrVMRuntime *X, XrJson *json, const char *key, size_t *len) {
     XrValue val = xr_json_get_by_key(X, json, key);
     if (!XR_IS_STRING(val)) {
         if (len)
@@ -78,7 +78,7 @@ static const char *json_get_string(XrayIsolate *X, XrJson *json, const char *key
 }
 
 // Get integer field from Json
-static int64_t json_get_int(XrayIsolate *X, XrJson *json, const char *key, int64_t def) {
+static int64_t json_get_int(XrVMRuntime *X, XrJson *json, const char *key, int64_t def) {
     XrValue val = xr_json_get_by_key(X, json, key);
     if (XR_IS_INT(val))
         return XR_TO_INT(val);
@@ -98,7 +98,7 @@ static int64_t json_get_int(XrayIsolate *X, XrJson *json, const char *key, int64
  * Returns NULL on allocation failure or when no headers are present.
  * On success, *out_count holds the number of headers extracted.
  */
-static XrHttpHeader *extract_headers_from_options(XrayIsolate *X, XrJson *opts, int *out_count) {
+static XrHttpHeader *extract_headers_from_options(XrVMRuntime *X, XrJson *opts, int *out_count) {
     *out_count = 0;
     XrValue headers_val = xr_json_get_by_key(X, opts, "headers");
 
@@ -158,7 +158,7 @@ static XrHttpHeader *extract_headers_from_options(XrayIsolate *X, XrJson *opts, 
 /* ========== HTTP/2 Response Building ========== */
 
 // Convert HTTP/2 response to Json
-static XrValue h2_response_to_json(XrayIsolate *X, XrH2Response *resp) {
+static XrValue h2_response_to_json(XrVMRuntime *X, XrH2Response *resp) {
     XrJson *json = xr_json_new(xr_current_coro(X));
 
     // status
@@ -187,7 +187,7 @@ static XrValue h2_response_to_json(XrayIsolate *X, XrH2Response *resp) {
  *   timeout?: int  // currently informational; h2 client uses pool defaults
  * }
  */
-XrValue h2_get(XrayIsolate *X, XrValue *args, int argc) {
+XrValue h2_get(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1 || !XR_IS_STRING(args[0])) {
         return xr_null();
     }
@@ -228,7 +228,7 @@ XrValue h2_get(XrayIsolate *X, XrValue *args, int argc) {
 /*
  * http.h2Post(url: string, body: string, contentType?: string) -> Json
  */
-XrValue h2_post(XrayIsolate *X, XrValue *args, int argc) {
+XrValue h2_post(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 2 || !XR_IS_STRING(args[0])) {
         return xr_null();
     }
@@ -261,7 +261,7 @@ XrValue h2_post(XrayIsolate *X, XrValue *args, int argc) {
  *   headers?: Json
  * }
  */
-XrValue h2_request(XrayIsolate *X, XrValue *args, int argc) {
+XrValue h2_request(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1 || !xr_value_is_json(args[0])) {
         return xr_null();
     }
@@ -325,7 +325,7 @@ static void h2_request_callback(XrH2Context *ctx, void *user_data) {
  *   key?: string
  * }
  */
-XrValue h2_create_server(XrayIsolate *X, XrValue *args, int argc) {
+XrValue h2_create_server(XrVMRuntime *X, XrValue *args, int argc) {
     XrHttpContext *ctx = xr_http_get_context(X);
     if (!ctx)
         return xr_bool(false);
@@ -351,7 +351,7 @@ XrValue h2_create_server(XrayIsolate *X, XrValue *args, int argc) {
 /*
  * http.h2Listen() -> bool
  */
-XrValue h2_server_listen(XrayIsolate *X, XrValue *args, int argc) {
+XrValue h2_server_listen(XrVMRuntime *X, XrValue *args, int argc) {
     (void) args;
     (void) argc;
 
@@ -366,7 +366,7 @@ XrValue h2_server_listen(XrayIsolate *X, XrValue *args, int argc) {
 /*
  * http.h2Stop() -> void
  */
-XrValue h2_server_stop(XrayIsolate *X, XrValue *args, int argc) {
+XrValue h2_server_stop(XrVMRuntime *X, XrValue *args, int argc) {
     (void) args;
     (void) argc;
 
@@ -382,7 +382,7 @@ XrValue h2_server_stop(XrayIsolate *X, XrValue *args, int argc) {
 /*
  * http.h2Push(path: string, contentType: string, data: string) -> bool
  */
-XrValue h2_push(XrayIsolate *X, XrValue *args, int argc) {
+XrValue h2_push(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 3)
         return xr_bool(0);
 
