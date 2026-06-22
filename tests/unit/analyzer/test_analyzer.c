@@ -16,6 +16,7 @@
 #include "xanalyzer_visitor.h"
 #include "xtype_pool.h"
 #include "xray_isolate.h"
+#include "toolchain/xcompiler_session.h"
 #include "../test_win_compat.h"
 
 static int tests_passed = 0;
@@ -23,6 +24,7 @@ static int tests_failed = 0;
 
 // Global isolate and analyzer for pool initialization
 static XrayIsolate *g_isolate = NULL;
+static XrCompilerSession *g_session = NULL;
 static XaAnalyzer *g_analyzer = NULL;
 
 static void setup_pool(void) {
@@ -30,9 +32,12 @@ static void setup_pool(void) {
         XrayIsolateParams p;
         xray_isolate_params_init(&p);
         g_isolate = xray_isolate_new(&p);
+        XrCompilerSessionConfig cfg = {.vm_host = g_isolate};
+        g_session = xr_compiler_session_new(&cfg);
+        xr_compiler_session_attach_isolate(g_isolate, g_session);
     }
     if (!g_analyzer) {
-        g_analyzer = xa_analyzer_new(g_isolate);
+        g_analyzer = xa_analyzer_new(g_session);
     }
     // Ensure thread-local pool and symbol ID counter are set (even if g_analyzer
     // already exists, a test may have overwritten them with its own pool)
@@ -46,6 +51,10 @@ static void teardown_pool(void) {
         g_analyzer = NULL;
     }
     if (g_isolate) {
+        if (g_session) {
+            xr_compiler_session_delete(g_session);
+            g_session = NULL;
+        }
         xray_isolate_delete(g_isolate);
         g_isolate = NULL;
     }
@@ -267,7 +276,7 @@ TEST(scope_lookup) {
 // ============================================================================
 
 TEST(analyzer_create) {
-    XaAnalyzer *a = xa_analyzer_new(g_isolate);
+    XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
     ASSERT(a->global_scope != NULL);
     ASSERT(a->current_scope == a->global_scope);
@@ -277,7 +286,7 @@ TEST(analyzer_create) {
 }
 
 TEST(analyzer_diagnostics) {
-    XaAnalyzer *a = xa_analyzer_new(g_isolate);
+    XaAnalyzer *a = xa_analyzer_new(g_session);
 
     XrLocation loc = {.file = "test.xr", .line = 10, .column = 5};
     xa_analyzer_add_diagnostic(a, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_UNDEFINED_VAR, "Test error",
@@ -300,7 +309,7 @@ TEST(analyzer_diagnostics) {
 }
 
 TEST(analyzer_scope_management) {
-    XaAnalyzer *a = xa_analyzer_new(g_isolate);
+    XaAnalyzer *a = xa_analyzer_new(g_session);
     XaScope *global = a->current_scope;
 
     xa_analyzer_enter_scope(a, XA_SCOPE_FUNCTION, NULL);
@@ -533,7 +542,7 @@ TEST(type_function_copy_preserves_metadata) {
 // ============================================================================
 
 TEST(infer_context_create) {
-    XaAnalyzer *a = xa_analyzer_new(g_isolate);
+    XaAnalyzer *a = xa_analyzer_new(g_session);
     XaInferContext *ctx = xa_infer_context_new(a);
 
     ASSERT(ctx != NULL);
@@ -548,7 +557,7 @@ TEST(infer_context_create) {
 }
 
 TEST(infer_return_type_collection) {
-    XaAnalyzer *a = xa_analyzer_new(g_isolate);
+    XaAnalyzer *a = xa_analyzer_new(g_session);
     XaInferContext *ctx = xa_infer_context_new(a);
 
     // Add multiple return types
@@ -571,7 +580,7 @@ TEST(infer_return_type_collection) {
 }
 
 TEST(infer_single_return_type) {
-    XaAnalyzer *a = xa_analyzer_new(g_isolate);
+    XaAnalyzer *a = xa_analyzer_new(g_session);
     XaInferContext *ctx = xa_infer_context_new(a);
 
     xa_infer_add_return_type(ctx, xr_type_new_int(NULL));
@@ -585,7 +594,7 @@ TEST(infer_single_return_type) {
 }
 
 TEST(infer_no_return_type) {
-    XaAnalyzer *a = xa_analyzer_new(g_isolate);
+    XaAnalyzer *a = xa_analyzer_new(g_session);
     XaInferContext *ctx = xa_infer_context_new(a);
 
     // No return types added -> unit (0-arity tuple)
@@ -685,7 +694,7 @@ TEST(scope_null_handling) {
 }
 
 TEST(symbol_links_lifecycle) {
-    XaAnalyzer *a = xa_analyzer_new(g_isolate);
+    XaAnalyzer *a = xa_analyzer_new(g_session);
     XaSymbol *sym = xa_symbol_new("test", XA_SYM_VARIABLE);
     xa_scope_add_symbol(a->global_scope, sym);
 

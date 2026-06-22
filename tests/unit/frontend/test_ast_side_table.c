@@ -36,6 +36,7 @@
 #include "frontend/analyzer/xanalyzer.h"
 #include "frontend/parser/xast_nodes.h"
 #include "runtime/value/xtype.h"
+#include "toolchain/xcompiler_session.h"
 #include "xray_isolate.h"
 
 #include <stdint.h>
@@ -262,14 +263,22 @@ TEST(node_table_scope_symbol_bindings) {
 /* ====================================================================== */
 
 static XrayIsolate *g_iso = NULL;
+static XrCompilerSession *g_session = NULL;
 
 static void setup_isolate(void) {
     XrayIsolateParams p;
     xray_isolate_params_init(&p);
     g_iso = xray_isolate_new(&p);
+    XrCompilerSessionConfig cfg = {.vm_host = g_iso};
+    g_session = xr_compiler_session_new(&cfg);
+    xr_compiler_session_attach_isolate(g_iso, g_session);
 }
 
 static void teardown_isolate(void) {
+    if (g_session) {
+        xr_compiler_session_delete(g_session);
+        g_session = NULL;
+    }
     if (g_iso) {
         xray_isolate_delete(g_iso);
         g_iso = NULL;
@@ -283,7 +292,7 @@ TEST(analyzer_node_type_null_safe) {
     ASSERT_NULL(xa_analyzer_get_node_type(NULL, NULL));
 
     setup_isolate();
-    XaAnalyzer *a = xa_analyzer_new(g_iso);
+    XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT_NOT_NULL(a);
 
     // Live analyzer, NULL node: still a no-op / NULL.
@@ -296,7 +305,7 @@ TEST(analyzer_node_type_null_safe) {
 
 TEST(analyzer_set_then_get_round_trip) {
     setup_isolate();
-    XaAnalyzer *a = xa_analyzer_new(g_iso);
+    XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT_NOT_NULL(a);
 
     AstNode n = make_node(200);
@@ -323,8 +332,8 @@ TEST(analyzer_tables_are_independent_per_analyzer) {
     // must be per-analyzer -- writing through `a1` must NOT be visible
     // through `a2`.
     setup_isolate();
-    XaAnalyzer *a1 = xa_analyzer_new(g_iso);
-    XaAnalyzer *a2 = xa_analyzer_new(g_iso);
+    XaAnalyzer *a1 = xa_analyzer_new(g_session);
+    XaAnalyzer *a2 = xa_analyzer_new(g_session);
     ASSERT_NOT_NULL(a1);
     ASSERT_NOT_NULL(a2);
 

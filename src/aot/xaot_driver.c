@@ -717,12 +717,12 @@ XR_FUNC int xaot_build_ex(const char *input_path, bool emit_plan_dump, bool emit
         fprintf(stderr, "Error: failed to create isolate\n");
         return 1;
     }
+    XrCompilerSession *session = xr_compiler_session_current_for_isolate(X);
 
     xr_module_system_init_with_script(X, input_path);
     XrModuleRegistry *registry = xr_isolate_get_module_registry(X);
     XrModuleResolver *resolver = xr_module_registry_get_resolver(registry);
-    XrModuleGraph *graph =
-        xr_module_graph_new(xr_compiler_session_current_for_isolate(X), resolver);
+    XrModuleGraph *graph = xr_module_graph_new(session, resolver);
     if (!graph) {
         fprintf(stderr, "Error: failed to create module graph\n");
         xray_isolate_delete(X);
@@ -785,7 +785,7 @@ XR_FUNC int xaot_build_ex(const char *input_path, bool emit_plan_dump, bool emit
     }
 
     /* --- Analyze all modules with shared analyzer (cross-module types) --- */
-    XaAnalyzer *shared_analyzer = xa_analyzer_new(X);
+    XaAnalyzer *shared_analyzer = xa_analyzer_new(session);
     if (!shared_analyzer) {
         fprintf(stderr, "Error: failed to create shared analyzer\n");
         goto fail_free_graph;

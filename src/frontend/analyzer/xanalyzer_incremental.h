@@ -74,7 +74,7 @@ typedef struct XaBlockCache {
 
 // File-level cache
 typedef struct XaFileCache {
-    const char *path;
+    char *path;
     uint64_t file_hash;    // Hash of entire file content
     XaBlockCache *blocks;  // Cached blocks in this file
     int block_count;

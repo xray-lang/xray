@@ -61,7 +61,7 @@ static AnalysisResult analyze_source(const char *source) {
     r.program = xr_parse(xr_compiler_session_current_for_isolate(g_iso), source);
     assert(r.program != NULL && "parse must succeed");
 
-    r.analyzer = xa_analyzer_new(g_iso);
+    r.analyzer = xa_analyzer_new(g_session);
     assert(r.analyzer != NULL);
     xa_analyzer_analyze(r.analyzer, "scope_test.xr", r.program);
     return r;

@@ -50,6 +50,7 @@
 #include "frontend/analyzer/xanalyzer_symbol.h"
 #include "frontend/analyzer/xanalyzer_incremental.h"
 #include "base/xmalloc.h"
+#include "toolchain/xcompiler_session.h"
 #include "xray_isolate.h"
 
 #include <string.h>
@@ -59,14 +60,22 @@
 /* ====================================================================== */
 
 static XrayIsolate *g_iso = NULL;
+static XrCompilerSession *g_session = NULL;
 
 static void setup(void) {
     XrayIsolateParams p;
     xray_isolate_params_init(&p);
     g_iso = xray_isolate_new(&p);
+    XrCompilerSessionConfig cfg = {.vm_host = g_iso};
+    g_session = xr_compiler_session_new(&cfg);
+    xr_compiler_session_attach_isolate(g_iso, g_session);
 }
 
 static void teardown(void) {
+    if (g_session) {
+        xr_compiler_session_delete(g_session);
+        g_session = NULL;
+    }
     if (g_iso) {
         xray_isolate_delete(g_iso);
         g_iso = NULL;
@@ -102,7 +111,7 @@ TEST(invalidate_range_registers_untracked_file) {
     // register it (creates a XaFileEntry with dirty=true), so an
     // LSP edit issued before any save does not silently lose the
     // dirty signal.
-    XaAnalyzer *a = xa_analyzer_new(g_iso);
+    XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
 
     int file_count_before = a->file_count;
@@ -123,7 +132,7 @@ TEST(invalidate_range_marks_known_file_dirty) {
     // flag is true even if it was clean before. The analyzer
     // contract says the next refresh_file is responsible for
     // clearing it.
-    XaAnalyzer *a = xa_analyzer_new(g_iso);
+    XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
 
     // Register the file first.
@@ -149,7 +158,7 @@ TEST(invalidate_range_unused_lines_do_not_matter_yet) {
     // and the function still records the file as dirty. Verify by
     // calling with 0/0 and (UINT_MAX, UINT_MAX) and checking the
     // outcome is identical.
-    XaAnalyzer *a = xa_analyzer_new(g_iso);
+    XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
 
     xa_analyzer_invalidate_range(a, "edge.xr", 0, 0);
@@ -165,7 +174,7 @@ TEST(invalidate_range_unused_lines_do_not_matter_yet) {
 }
 
 TEST(get_dirty_files_returns_marked_files) {
-    XaAnalyzer *a = xa_analyzer_new(g_iso);
+    XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
 
     xa_analyzer_invalidate_range(a, "a.xr", 1, 10);
@@ -199,7 +208,7 @@ TEST(mark_file_dirty_propagation) {
     // After marking callee.xr dirty + propagating, caller.xr must
     // also become dirty (the LSP "find references" path depends on
     // this transitive invalidation).
-    XaAnalyzer *a = xa_analyzer_new(g_iso);
+    XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
 
     XaSymbol *caller_sym = add_symbol_in_file(a, "caller", "caller.xr");
@@ -260,7 +269,7 @@ TEST(api_is_null_safe) {
     xa_analyzer_refresh_file(NULL, "x.xr", NULL, 0);
     xa_analyzer_invalidate_range(NULL, "x.xr", 1, 2);
 
-    XaAnalyzer *a = xa_analyzer_new(g_iso);
+    XaAnalyzer *a = xa_analyzer_new(g_session);
     xa_analyzer_invalidate_range(a, NULL, 1, 2);
     xa_analyzer_refresh_file(a, NULL, NULL, 0);
 

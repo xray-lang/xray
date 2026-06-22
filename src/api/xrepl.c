@@ -101,7 +101,7 @@ XrReplSymbolTable *xr_repl_symbols_of(XrayIsolate *isolate) {
 }
 
 const char *xr_repl_symbol_cname(const XrReplSymbol *sym) {
-    if (!sym || !sym->name || !sym->name->data)
+    if (!sym || !sym->name)
         return NULL;
     return sym->name->data;
 }
@@ -535,11 +535,11 @@ typedef struct {
 
 static void print_vars_visitor(XrString *name, XrValue *value, void *ud) {
     ReplVarsCtx *ctx = (ReplVarsCtx *) ud;
-    const char *cname = (name && name->data) ? name->data : "<anon>";
+    const char *cname = name ? name->data : "<anon>";
     const char *type_name = xr_typeid_name(xr_value_typeid(*value));
 
     XrString *str = xr_value_to_string(ctx->isolate, *value);
-    const char *raw = (str && str->data) ? str->data : "<?>";
+    const char *raw = str ? str->data : "<?>";
     int raw_len = (int) strlen(raw);
 
     bool truncated = false;

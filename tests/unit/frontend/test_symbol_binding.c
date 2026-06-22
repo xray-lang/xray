@@ -368,7 +368,7 @@ static bool check_bindings(const char *source, const char *label) {
         return false;
     }
 
-    XaAnalyzer *analyzer = xa_analyzer_new(g_iso);
+    XaAnalyzer *analyzer = xa_analyzer_new(session);
     xa_analyzer_analyze(analyzer, "binding_test.xr", program);
 
     /* Spot-check: no AST_VARIABLE nodes should have symbol_id=0 */

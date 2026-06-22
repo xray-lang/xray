@@ -84,7 +84,7 @@ static int count_diagnostics(const char *source, int code, int *total_out) {
         return -1;
     }
 
-    XaAnalyzer *analyzer = xa_analyzer_new(g_iso);
+    XaAnalyzer *analyzer = xa_analyzer_new(g_session);
     xa_analyzer_analyze(analyzer, "iface_test.xr", program);
 
     int total = 0;

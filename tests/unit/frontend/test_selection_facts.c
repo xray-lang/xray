@@ -174,7 +174,7 @@ static AnalysisResult analyze(const char *source) {
         fprintf(stderr, "    parse error\n");
         return r;
     }
-    r.analyzer = xa_analyzer_new(g_iso);
+    r.analyzer = xa_analyzer_new(g_session);
     assert(r.analyzer != NULL);
     xa_analyzer_analyze(r.analyzer, "sel_test.xr", r.program);
     return r;

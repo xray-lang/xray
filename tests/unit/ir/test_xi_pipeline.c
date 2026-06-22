@@ -12,6 +12,7 @@
 #include "../../../src/frontend/parser/xparse.h"
 #include "../../../src/frontend/analyzer/xanalyzer.h"
 #include "../../../src/base/xmalloc.h"
+#include "../../../src/toolchain/xcompiler_session.h"
 #include "../../../include/xray_isolate.h"
 
 #include <stdio.h>
@@ -52,11 +53,12 @@ static XrProto *compile_source(const char *source, XiPipelineConfig *cfg) {
 
     /* Create analyzer first — its type pool must be active during parsing
      * so the parser can create type annotations (function types, etc.). */
-    XaAnalyzer *analyzer = xa_analyzer_new(g_iso);
+    XrCompilerSession *session = xr_compiler_session_current_for_isolate(g_iso);
+    XaAnalyzer *analyzer = xa_analyzer_new(session);
     if (!analyzer)
         return NULL;
 
-    AstNode *program = xr_parse(xr_compiler_session_current_for_isolate(g_iso), source);
+    AstNode *program = xr_parse(session, source);
     if (!program) {
         fprintf(stderr, "  PARSE FAILED for: %s\n", source);
         xa_analyzer_free(analyzer);
