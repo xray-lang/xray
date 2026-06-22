@@ -26,6 +26,7 @@
 #include "../object/xbigint.h"
 #include "../symbol/xsymbol_table.h"
 #include "../../coro/xcoroutine.h"
+#include "../../shared/xr_int_arith.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -57,7 +58,7 @@ static inline XrValue xr_int_abs_method(XrayIsolate *iso, XrValue self, XrValue 
     xr_Integer v = XR_TO_INT(self);
     if (v >= 0)
         return xr_int(v);
-    return xr_int((xr_Integer) (-(uint64_t) v));
+    return xr_int(xr_i64_abs_wrap(v));
 }
 
 /* int.toBigInt() -> BigInt. Allocates. */
@@ -125,7 +126,8 @@ static inline XrValue xr_int_to_hex_method(XrayIsolate *iso, XrValue self, XrVal
     char buffer[32];
     int len;
     if (v < 0) {
-        len = snprintf(buffer, sizeof(buffer), "-0x%llX", (unsigned long long) (-v));
+        len = snprintf(buffer, sizeof(buffer), "-0x%llX",
+                       (unsigned long long) xr_i64_abs_magnitude(v));
     } else {
         len = snprintf(buffer, sizeof(buffer), "0x%llX", (unsigned long long) v);
     }
@@ -148,6 +150,84 @@ static inline XrValue xr_int_pow_method(XrayIsolate *iso, XrValue self, XrValue 
         return xr_float(value);
     }
     return xr_float(pow(value, exponent));
+}
+
+static inline XrValue xr_int_checked_add_method(XrayIsolate *iso, XrValue self, XrValue *args,
+                                                int argc) {
+    (void) iso;
+    if (argc < 1 || !XR_IS_INT(args[0]))
+        return XR_NULL_VAL;
+    int64_t out;
+    return xr_i64_checked_add(XR_TO_INT(self), XR_TO_INT(args[0]), &out) ? xr_int(out)
+                                                                         : XR_NULL_VAL;
+}
+
+static inline XrValue xr_int_checked_sub_method(XrayIsolate *iso, XrValue self, XrValue *args,
+                                                int argc) {
+    (void) iso;
+    if (argc < 1 || !XR_IS_INT(args[0]))
+        return XR_NULL_VAL;
+    int64_t out;
+    return xr_i64_checked_sub(XR_TO_INT(self), XR_TO_INT(args[0]), &out) ? xr_int(out)
+                                                                         : XR_NULL_VAL;
+}
+
+static inline XrValue xr_int_checked_mul_method(XrayIsolate *iso, XrValue self, XrValue *args,
+                                                int argc) {
+    (void) iso;
+    if (argc < 1 || !XR_IS_INT(args[0]))
+        return XR_NULL_VAL;
+    int64_t out;
+    return xr_i64_checked_mul(XR_TO_INT(self), XR_TO_INT(args[0]), &out) ? xr_int(out)
+                                                                         : XR_NULL_VAL;
+}
+
+static inline XrValue xr_int_saturating_add_method(XrayIsolate *iso, XrValue self, XrValue *args,
+                                                   int argc) {
+    (void) iso;
+    if (argc < 1 || !XR_IS_INT(args[0]))
+        return self;
+    return xr_int(xr_i64_saturating_add(XR_TO_INT(self), XR_TO_INT(args[0])));
+}
+
+static inline XrValue xr_int_saturating_sub_method(XrayIsolate *iso, XrValue self, XrValue *args,
+                                                   int argc) {
+    (void) iso;
+    if (argc < 1 || !XR_IS_INT(args[0]))
+        return self;
+    return xr_int(xr_i64_saturating_sub(XR_TO_INT(self), XR_TO_INT(args[0])));
+}
+
+static inline XrValue xr_int_saturating_mul_method(XrayIsolate *iso, XrValue self, XrValue *args,
+                                                   int argc) {
+    (void) iso;
+    if (argc < 1 || !XR_IS_INT(args[0]))
+        return self;
+    return xr_int(xr_i64_saturating_mul(XR_TO_INT(self), XR_TO_INT(args[0])));
+}
+
+static inline XrValue xr_int_wrapping_add_method(XrayIsolate *iso, XrValue self, XrValue *args,
+                                                 int argc) {
+    (void) iso;
+    if (argc < 1 || !XR_IS_INT(args[0]))
+        return self;
+    return xr_int(xr_i64_add_wrap(XR_TO_INT(self), XR_TO_INT(args[0])));
+}
+
+static inline XrValue xr_int_wrapping_sub_method(XrayIsolate *iso, XrValue self, XrValue *args,
+                                                 int argc) {
+    (void) iso;
+    if (argc < 1 || !XR_IS_INT(args[0]))
+        return self;
+    return xr_int(xr_i64_sub_wrap(XR_TO_INT(self), XR_TO_INT(args[0])));
+}
+
+static inline XrValue xr_int_wrapping_mul_method(XrayIsolate *iso, XrValue self, XrValue *args,
+                                                 int argc) {
+    (void) iso;
+    if (argc < 1 || !XR_IS_INT(args[0]))
+        return self;
+    return xr_int(xr_i64_mul_wrap(XR_TO_INT(self), XR_TO_INT(args[0])));
 }
 
 struct XrayIsolate;

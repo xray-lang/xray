@@ -20,6 +20,7 @@
 #include "xrt_coll.h"  // xrt_array_t, xrt_map_t, xrt_strbuf_finish, xrt_array_push
 #include "xrt_array_hof.h"
 #include "xrt_range.h"
+#include "../shared/xr_int_arith.h"
 
 /* Builtin method symbol IDs. */
 #include "xrt_method_symbols.h"
@@ -56,10 +57,9 @@ static XrValue xrt_tostring(XrValue val, int slot_hint) {
         char tmp[32];
         int n = 0;
         int64_t v = val.i;
-        int64_t t = v;
-        if (t < 0) {
+        uint64_t t = xr_i64_abs_magnitude(v);
+        if (v < 0) {
             tmp[n++] = '-';
-            t = -t;
         }
         if (t == 0) {
             tmp[n++] = '0';
@@ -67,7 +67,7 @@ static XrValue xrt_tostring(XrValue val, int slot_hint) {
             char rev[20];
             int r = 0;
             while (t > 0) {
-                rev[r++] = '0' + (char) (t % 10);
+                rev[r++] = '0' + (char) (t % 10u);
                 t /= 10;
             }
             while (r > 0)
@@ -327,12 +327,15 @@ static inline XrValue xrt_method_0(XrValue recv, int sym) {
         return xrt_range_method_0(recv, sym);
     if (recv.tag == XR_TAG_I64) {
         if (sym == XRT_SYM_ABS)
-            return XR_FROM_INT(recv.i < 0 ? -recv.i : recv.i);
+            return XR_FROM_INT(xr_i64_abs_wrap(recv.i));
         if (sym == XRT_SYM_TOSTRING)
             return xrt_tostring(recv, 1);
         if (sym == XRT_SYM_TOHEX) {
             char buf[32];
-            snprintf(buf, sizeof(buf), "0x%02" PRIX64, (uint64_t) recv.i);
+            if (recv.i < 0)
+                snprintf(buf, sizeof(buf), "-0x%" PRIX64, xr_i64_abs_magnitude(recv.i));
+            else
+                snprintf(buf, sizeof(buf), "0x%" PRIX64, (uint64_t) recv.i);
             return xrt_str_from_cstr(buf);
         }
     }
@@ -672,6 +675,27 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
         char buf[64];
         snprintf(buf, sizeof(buf), "%.*f", (int) arg0.i, recv.f);
         return xrt_str_from_cstr(buf);
+    }
+    if (recv.tag == XR_TAG_I64 && arg0.tag == XR_TAG_I64) {
+        int64_t out;
+        if (sym == XRT_SYM_CHECKED_ADD)
+            return xr_i64_checked_add(recv.i, arg0.i, &out) ? XR_FROM_INT(out) : XR_NULL_VAL;
+        if (sym == XRT_SYM_CHECKED_SUB)
+            return xr_i64_checked_sub(recv.i, arg0.i, &out) ? XR_FROM_INT(out) : XR_NULL_VAL;
+        if (sym == XRT_SYM_CHECKED_MUL)
+            return xr_i64_checked_mul(recv.i, arg0.i, &out) ? XR_FROM_INT(out) : XR_NULL_VAL;
+        if (sym == XRT_SYM_SATURATING_ADD)
+            return XR_FROM_INT(xr_i64_saturating_add(recv.i, arg0.i));
+        if (sym == XRT_SYM_SATURATING_SUB)
+            return XR_FROM_INT(xr_i64_saturating_sub(recv.i, arg0.i));
+        if (sym == XRT_SYM_SATURATING_MUL)
+            return XR_FROM_INT(xr_i64_saturating_mul(recv.i, arg0.i));
+        if (sym == XRT_SYM_WRAPPING_ADD)
+            return XR_FROM_INT(xr_i64_add_wrap(recv.i, arg0.i));
+        if (sym == XRT_SYM_WRAPPING_SUB)
+            return XR_FROM_INT(xr_i64_sub_wrap(recv.i, arg0.i));
+        if (sym == XRT_SYM_WRAPPING_MUL)
+            return XR_FROM_INT(xr_i64_mul_wrap(recv.i, arg0.i));
     }
     /* max/min accept int or float operands. */
     if (sym == XRT_SYM_MAX) {

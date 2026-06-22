@@ -71,7 +71,11 @@ static const char xr_native_def_int[] =
     "int {\n    abs() -> int\n    toString() -> string\n    toBigInt() -> BigInt\n    toFloat() -> "
     "float\n    toHex() -> string\n    max(other: int) -> int\n    min(other: int) -> int\n    "
     "floor() -> int\n    ceil() -> int\n    round() -> int\n    sqrt() -> float\n    pow(exp: "
-    "float) -> float\n}\n";
+    "float) -> float\n    checkedAdd(other: int) -> int?\n    checkedSub(other: int) -> int?\n    "
+    "checkedMul(other: int) -> int?\n    saturatingAdd(other: int) -> int\n    "
+    "saturatingSub(other: int) -> int\n    saturatingMul(other: int) -> int\n    "
+    "wrappingAdd(other: int) -> int\n    wrappingSub(other: int) -> int\n    wrappingMul(other: "
+    "int) -> int\n}\n";
 
 static const char xr_native_def_json[] =
     "// Built-in Json type — implementation in "

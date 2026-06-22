@@ -371,7 +371,21 @@ XrType *xa_builtin_get_method_return_type(XrayIsolate *X, XrType *container_type
             case SYMBOL_FLOOR:
             case SYMBOL_CEIL:
             case SYMBOL_ROUND:
+            case SYMBOL_SATURATING_ADD:
+            case SYMBOL_SATURATING_SUB:
+            case SYMBOL_SATURATING_MUL:
+            case SYMBOL_WRAPPING_ADD:
+            case SYMBOL_WRAPPING_SUB:
+            case SYMBOL_WRAPPING_MUL:
                 return xr_type_new_int(NULL);
+            case SYMBOL_CHECKED_ADD:
+            case SYMBOL_CHECKED_SUB:
+            case SYMBOL_CHECKED_MUL: {
+                XrType *t = xr_type_new_int(NULL);
+                if (t)
+                    t->is_nullable = true;
+                return t;
+            }
             case SYMBOL_TOSTRING:
             case SYMBOL_TOHEX:
                 return xr_type_new_string(NULL);

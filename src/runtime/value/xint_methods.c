@@ -21,6 +21,15 @@ void xr_int_register_native_type(XrayIsolate *isolate) {
         {"toFloat", xr_int_to_float_method, 0},
         {"toHex", xr_int_to_hex_method, 0},
         {"pow", xr_int_pow_method, 0},
+        {"checkedAdd", xr_int_checked_add_method, 0},
+        {"checkedSub", xr_int_checked_sub_method, 0},
+        {"checkedMul", xr_int_checked_mul_method, 0},
+        {"saturatingAdd", xr_int_saturating_add_method, 0},
+        {"saturatingSub", xr_int_saturating_sub_method, 0},
+        {"saturatingMul", xr_int_saturating_mul_method, 0},
+        {"wrappingAdd", xr_int_wrapping_add_method, 0},
+        {"wrappingSub", xr_int_wrapping_sub_method, 0},
+        {"wrappingMul", xr_int_wrapping_mul_method, 0},
         {NULL, NULL, 0},
     };
     static const XrNativeTypeInfo int_info = {

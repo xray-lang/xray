@@ -38,6 +38,7 @@
 #include <math.h>
 #include "../../base/xdefs.h"
 #include "../../base/xchecks.h"
+#include "../../shared/xr_int_arith.h"
 
 // Internal base types
 typedef int64_t xr_Integer;
@@ -367,14 +368,10 @@ static inline XrValue xr_float(xr_Number n) {
  *   INT64_MIN % -1 = 0
  * Caller must have rejected divisor == 0 before calling these. */
 static inline xr_Integer xr_int_div_wrap(xr_Integer a, xr_Integer b) {
-    if (b == -1)
-        return (xr_Integer) (-(uint64_t) a);
-    return a / b;
+    return xr_i64_div_wrap(a, b);
 }
 static inline xr_Integer xr_int_mod_wrap(xr_Integer a, xr_Integer b) {
-    if (b == -1)
-        return 0;
-    return a % b;
+    return xr_i64_mod_wrap(a, b);
 }
 
 /* Shift helpers: the language defines the shift count as taken mod 64
@@ -386,10 +383,10 @@ static inline xr_Integer xr_int_mod_wrap(xr_Integer a, xr_Integer b) {
  * in C; right shift is arithmetic (sign-extending — implementation-defined
  * in C but guaranteed on every compiler xray supports). */
 static inline xr_Integer xr_int_shl_wrap(xr_Integer a, xr_Integer b) {
-    return (xr_Integer) ((uint64_t) a << ((uint64_t) b & 63));
+    return xr_i64_shl_wrap(a, b);
 }
 static inline xr_Integer xr_int_shr_wrap(xr_Integer a, xr_Integer b) {
-    return a >> ((uint64_t) b & 63);
+    return xr_i64_shr_wrap(a, b);
 }
 
 /* ========== Type Query ========== */
