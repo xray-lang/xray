@@ -141,6 +141,8 @@ typedef struct XrAotEnumValueView {
     void *klass;
     const char *enum_name;
     const char *member_name;
+    XrValue raw_value;
+    uint32_t member_index;
 } XrAotEnumValueView;
 
 static inline const char *xrt_enum_to_cstr(XrValue v, char *buf, size_t bufsz) {

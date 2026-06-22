@@ -456,6 +456,14 @@ static inline void xrt_strbuf_append(XrValue sbv, XrValue val) {
         memcpy(sb->buf + sb->len, "null", 4);
         sb->len += 4;
         sb->buf[sb->len] = 0;
+    } else {
+        char tmp[64];
+        const char *s = xr_to_cstr(val, tmp, sizeof(tmp));
+        int64_t slen = (int64_t) strlen(s);
+        xrt_strbuf_grow(sb, slen);
+        memcpy(sb->buf + sb->len, s, (size_t) slen);
+        sb->len += slen;
+        sb->buf[sb->len] = 0;
     }
 }
 
@@ -463,6 +471,114 @@ static inline XrValue xrt_strbuf_finish(XrValue sbv) {
     xrt_strbuf_t *sb = (xrt_strbuf_t *) sbv.ptr;
     XrValue v = xrt_str_alloc((size_t) sb->len);
     memcpy(xr_str_buf(v), sb->buf, (size_t) (sb->len + 1));
+    return v;
+}
+
+typedef struct {
+    const char *a;
+    const char *b;
+    size_t alen;
+    size_t blen;
+    char scratch[64];
+    uint8_t kind;
+} xrt_strpart_t;
+
+#define XRT_STRPART_SINGLE 0u
+#define XRT_STRPART_ENUM 1u
+
+static inline void xrt_strpart_init(xrt_strpart_t *part, XrValue val) {
+    part->a = "";
+    part->b = NULL;
+    part->alen = 0;
+    part->blen = 0;
+    part->kind = XRT_STRPART_SINGLE;
+
+    if (val.tag == XR_TAG_STR || val.tag == XR_TAG_STR_ARC) {
+        part->a = xr_str_data(val);
+        part->alen = (size_t) xr_str_len(val);
+    } else if (val.tag == XR_TAG_I64) {
+        int n = snprintf(part->scratch, sizeof(part->scratch), "%lld", (long long) val.i);
+        part->a = part->scratch;
+        part->alen = (size_t) (n < 0 ? 0 : n);
+    } else if (val.tag == XR_TAG_F64) {
+        int n = xr_format_float(part->scratch, sizeof(part->scratch), val.f);
+        part->a = part->scratch;
+        part->alen = (size_t) (n < 0 ? 0 : n);
+    } else if (val.tag == XR_TAG_BOOL) {
+        part->a = val.i ? "true" : "false";
+        part->alen = val.i ? 4u : 5u;
+    } else if (val.tag == XR_TAG_NULL) {
+        part->a = "null";
+        part->alen = 4u;
+    } else if (val.tag == XR_TAG_ENUM) {
+        const XrAotEnumValueView *ev = (const XrAotEnumValueView *) val.ptr;
+        if (ev && ev->enum_name && ev->member_name) {
+            part->a = ev->enum_name;
+            part->b = ev->member_name;
+            part->alen = strlen(ev->enum_name);
+            part->blen = strlen(ev->member_name);
+            part->kind = XRT_STRPART_ENUM;
+        } else {
+            int n = snprintf(part->scratch, sizeof(part->scratch), "<enum@%p>", val.ptr);
+            part->a = part->scratch;
+            part->alen = (size_t) (n < 0 ? 0 : n);
+        }
+    } else {
+        const char *s = xr_to_cstr(val, part->scratch, sizeof(part->scratch));
+        part->a = s;
+        part->alen = strlen(s);
+    }
+}
+
+static inline size_t xrt_strpart_len(const xrt_strpart_t *part) {
+    return part->kind == XRT_STRPART_ENUM ? part->alen + 1u + part->blen : part->alen;
+}
+
+static inline char *xrt_strpart_copy(char *dst, const xrt_strpart_t *part) {
+    memcpy(dst, part->a, part->alen);
+    dst += part->alen;
+    if (part->kind == XRT_STRPART_ENUM) {
+        *dst++ = '.';
+        memcpy(dst, part->b, part->blen);
+        dst += part->blen;
+    }
+    return dst;
+}
+
+static inline XrValue xrt_str_concat_parts(size_t count, xrt_strpart_t *parts) {
+    size_t total = 0;
+    for (size_t i = 0; i < count; i++) {
+        size_t len = xrt_strpart_len(&parts[i]);
+        if (XR_UNLIKELY(len > SIZE_MAX - total)) {
+            fprintf(stderr, "xrt_str_concat_parts: string length overflow\n");
+            abort();
+        }
+        total += len;
+    }
+    XrValue out = xrt_str_alloc(total);
+    char *dst = xr_str_buf(out);
+    for (size_t i = 0; i < count; i++)
+        dst = xrt_strpart_copy(dst, &parts[i]);
+    *dst = 0;
+    return out;
+}
+
+static inline XrValue xrt_enum_value_new(const char *enum_name, const char *member_name,
+                                         XrValue raw_value, uint32_t member_index) {
+    XrAotEnumValueView *ev = (XrAotEnumValueView *) XRT_CALLOC(1, sizeof(*ev));
+    if (XR_UNLIKELY(!ev)) {
+        fprintf(stderr, "xrt_enum_value_new: out of memory\n");
+        abort();
+    }
+    ev->enum_name = enum_name;
+    ev->member_name = member_name;
+    ev->raw_value = raw_value;
+    ev->member_index = member_index;
+
+    XrValue v = {0};
+    v.tag = XR_TAG_ENUM;
+    v.ext = member_index;
+    v.ptr = ev;
     return v;
 }
 
@@ -1635,6 +1751,17 @@ static inline XrValue xrt_json_set_name(XrValue obj, const char *name, XrValue v
 }
 
 static inline XrValue xrt_getprop_name(XrValue obj, const char *name) {
+    if (obj.tag == XR_TAG_ENUM) {
+        const XrAotEnumValueView *ev = (const XrAotEnumValueView *) obj.ptr;
+        if (!ev || !name)
+            return XR_NULL_VAL;
+        if (strcmp(name, "name") == 0)
+            return ev->member_name ? xr_box_str(ev->member_name) : XR_NULL_VAL;
+        if (strcmp(name, "value") == 0)
+            return ev->raw_value;
+        if (strcmp(name, "ordinal") == 0)
+            return XR_FROM_INT(ev->member_index);
+    }
     if (XR_IS_MAP(obj))
         return xrt_map_get((xrt_map_t *) obj.ptr, xr_box_str(name));
     if (obj.tag == XR_TAG_PTR && obj.ptr && obj.heap_type == 0)

@@ -1,0 +1,16 @@
+// anchor: string-multiconcat
+enum Mode {
+    Ready
+}
+
+fn part(n: int) -> string {
+    print("eval " + string(n))
+    return "p" + string(n)
+}
+
+let s = "a" + part(1) + "b" + part(2) + true + null + Mode.Ready
+print(s)
+
+print("${42}")
+print("${false}")
+print("${null}")

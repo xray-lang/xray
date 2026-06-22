@@ -614,6 +614,51 @@ TEST(cgen_string_literal) {
     xi_func_free(ir);
 }
 
+TEST(cgen_str_concat_uses_single_allocation_helper) {
+#define CHECK_CGEN_STR_CONCAT(cond, msg)                                                           \
+    do {                                                                                           \
+        if (!(cond)) {                                                                             \
+            fprintf(stderr, "  FAIL: %s\n", (msg));                                                \
+            abort();                                                                               \
+        }                                                                                          \
+    } while (0)
+
+    const char *src = "enum Kind { Ready }\n"
+                      "let s = \"a\" + string(1) + \"b\" + string(2) + true + null + Kind.Ready\n"
+                      "print(s)\n"
+                      "print(\"q\" + string(3))\n"
+                      "print(\"${42}\")\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    CHECK_CGEN_STR_CONCAT(ir != NULL, "IR compilation failed");
+
+    char *code = generate_c(ir, "test");
+    CHECK_CGEN_STR_CONCAT(code != NULL, "C code generation failed");
+
+    size_t code_len = strlen(code);
+    const char *code_end = code + code_len;
+    size_t add_calls = count_between(code, code_end, "xrt_add(");
+    size_t strbuf_new_calls = count_between(code, code_end, "xrt_strbuf_new()");
+    size_t part_init_calls = count_between(code, code_end, "xrt_strpart_init(");
+    size_t concat_parts_calls = count_between(code, code_end, "xrt_str_concat_parts(");
+    CHECK_CGEN_STR_CONCAT(add_calls == 0 && !contains(code, "xrt_add("),
+                          "AOT STR_CONCAT must not lower to nested binary xrt_add calls");
+    CHECK_CGEN_STR_CONCAT(strbuf_new_calls == 0,
+                          "multi-part concat sites should not allocate temporary StringBuilder");
+    CHECK_CGEN_STR_CONCAT(part_init_calls >= 8,
+                          "AOT STR_CONCAT should materialize every part exactly once");
+    CHECK_CGEN_STR_CONCAT(concat_parts_calls >= 2,
+                          "AOT STR_CONCAT should use the single-allocation concat helper");
+
+    printf("  Generated single-allocation string concat %zu bytes of C code "
+           "(add=%zu strbuf_new=%zu parts=%zu concat=%zu)\n",
+           code_len, add_calls, strbuf_new_calls, part_init_calls, concat_parts_calls);
+    xr_free(code);
+    xi_func_free(ir);
+
+#undef CHECK_CGEN_STR_CONCAT
+}
+
 TEST(cgen_function_call) {
     /* Function definition and call */
     const char *src = "fn add(a: int, b: int) -> int { return a + b }\n"
@@ -4896,6 +4941,7 @@ int main(void) {
     run_cgen_multi_print();
     run_cgen_while_loop();
     run_cgen_string_literal();
+    run_cgen_str_concat_uses_single_allocation_helper();
     run_cgen_function_call();
     run_cgen_c_export_emits_public_c_abi_wrapper();
     run_cgen_stats_tracks_native_abi();
