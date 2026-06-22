@@ -17,7 +17,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
-#include "xgc_header.h"
+#include "xobj_header.h"
 #include "xcoro_heap.h"
 
 /* ========== Forward Declarations ========== */

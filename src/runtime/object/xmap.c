@@ -33,7 +33,6 @@
 #include "xtuple.h"
 #include "../class/xclass_system.h"
 #include "../class/xclass.h"
-#include "../gc/xgc_internal.h"
 #include "../gc/xcoro_heap.h"
 #include "../../coro/xcoroutine.h"
 #include <string.h>
@@ -44,7 +43,7 @@
 
 /* ========== Memory Profiling (optional) ========== */
 #include "../../base/xmem_profiler.h"
-#include "../gc/xgc.h"
+#include "../gc/xheap.h"
 
 #ifdef XR_PROFILE_MAP_MEMORY
 XrProfileStats g_map_header_stats;

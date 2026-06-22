@@ -18,7 +18,7 @@
  *     objects never move, C extensions are naturally safe.
  *   - Large objects (>4 KB): individual xr_malloc / os_mmap.
  *
- * Tracing write barriers are retired: reference counting owns reclamation.
+ * Tracing barrier hooks are retired: reference counting owns reclamation.
  */
 
 #ifndef XCORO_HEAP_H
@@ -32,7 +32,7 @@
 #include "../../base/xmalloc.h"
 #include "../value/xvalue.h"
 #include "xregion.h"
-#include "xgc_internal.h"
+#include "xobj_ops.h"
 
 /* ========== Forward Declarations ========== */
 
@@ -250,9 +250,6 @@ XR_FUNC void xr_cycle_remove_root(XrCoroHeap *heap, XrObjHeader *obj);
 
 /* Free the cycle_roots array. Called at coroutine teardown. */
 XR_FUNC void xr_cycle_roots_destroy(XrCoroHeap *heap);
-
-/* Sentinel value for _rsv meaning "not in cycle_roots". */
-#define XR_CYCLE_NOT_IN_ROOTS 0xFFFFFFFFu
 
 /* Cycle-collector auto-trigger thresholds (root-count based, Nim ORC style).
  * The collector runs automatically once cycle_roots grows past the current

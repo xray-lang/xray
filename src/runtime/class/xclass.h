@@ -23,7 +23,7 @@
 #include "../value/xtype.h"
 #include "../../base/xhash.h"
 #include "../../base/xhashmap.h"
-#include "../gc/xgc_header.h"
+#include "../gc/xobj_header.h"
 #include <stdbool.h>
 
 #include "xmethod.h"

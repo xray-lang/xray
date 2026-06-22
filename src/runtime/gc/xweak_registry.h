@@ -12,7 +12,7 @@
 #define XWEAK_REGISTRY_H
 
 #include "../../base/xdefs.h"
-#include "xgc_header.h"
+#include "xobj_header.h"
 
 struct XrayIsolate;
 struct XrCoroHeap;

@@ -159,10 +159,6 @@ typedef struct XrVMState {
     struct XrGlobalDict *globals;  // name-keyed top-level binding dict (single source of truth
                                    // post-migration; coexists with `shared` until Phase 3)
 
-    // GC state
-    size_t bytes_allocated;  // total allocated bytes
-    size_t next_gc;          // threshold for next GC
-
     // Execution state
     bool trace_execution;  // debug: trace opcodes
     int last_nret;         // return count from last call

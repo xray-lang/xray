@@ -13,8 +13,8 @@
 #include "../runtime/xshared.h"
 #include "../runtime/value/xvalue.h"
 #include "../runtime/core/xr_runtime_core.h"
-#include "../runtime/gc/xgc.h"
-#include "../runtime/gc/xgc_internal.h"
+#include "../runtime/gc/xheap.h"
+#include "../runtime/gc/xfixed_heap.h"
 #include "../runtime/gc/xcoro_heap.h"
 #include "../runtime/gc/xalloc_unified.h"
 #include "../runtime/gc/xsystem_heap.h"
@@ -98,7 +98,7 @@ static void *copy_ctx_alloc_transit(XrCopyContext *ctx, size_t size, uint8_t typ
     return obj;
 }
 
-// Unified allocation: transit sysheap, Region heap, or fixed GC fallback
+// Unified allocation: transit sysheap, Region heap, or fixed heap fallback
 static inline void *copy_ctx_alloc(XrCopyContext *ctx, size_t size, uint8_t type) {
     if (ctx->to_transit) {
         return copy_ctx_alloc_transit(ctx, size, type);

@@ -35,7 +35,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdatomic.h>
-#include "gc/xgc_header.h"
+#include "gc/xobj_header.h"
 
 struct XrRuntimeCore;
 
@@ -44,7 +44,7 @@ struct XrRuntimeCore;
  * Shared (cross-coroutine) objects use the same sign-tagged refcount field
  * as the per-coroutine RC, in the atomic (negative) band: a live count of N
  * is stored as -N, so the compiler's hot-path sign test routes every shared
- * object to its cold/atomic path automatically (see xgc_header.h). These
+ * object to its cold/atomic path automatically (see xobj_header.h). These
  * helpers present a conventional positive count to the runtime while doing
  * the atomic arithmetic on the negative encoding. */
 

@@ -15,7 +15,7 @@
  *   Everything here except the module loader is an implementation detail
  *   living in log.c. The VM reaches the bindings through the module export
  *   table; the GC destroy callback is declared alongside the other per-type
- *   hooks in src/runtime/gc/xgc_internal.h.
+ *   hooks in src/runtime/gc/xfixed_heap.h.
  */
 
 #ifndef XR_STDLIB_LOG_H

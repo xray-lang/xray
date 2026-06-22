@@ -14,7 +14,7 @@
  * MEMORY LAYOUT (16 bytes, struct-of-union):
  *   [0]    tag       uint8_t   - XrValueTag, determines value interpretation
  *   [1]    flags     uint8_t   - XR_FLAG_* bits (weak/frozen/interned/cow)
- *   [2-3]  heap_type uint16_t  - GC object type (valid only when tag==PTR)
+ *   [2-3]  heap_type uint16_t  - heap object type (valid only when tag==PTR)
  *   [4-7]  ext       uint32_t  - reserved for future extensions (= 0 now)
  *   [8-15] payload   union     - int64 / double / pointer
  *
@@ -23,7 +23,7 @@
  *   - flags at byte 1: adjacent to tag, ldrb [reg, #1]
  *   - no _pad: all bytes used, natural alignment for all fields
  *   - [0-7] as uint64 descriptor: one ldr loads entire type metadata
- *   - heap_type uint16: xray GC types < 100, 16-bit sufficient
+ *   - heap_type uint16: xray heap object types < 100, 16-bit sufficient
  *   - ext uint32: future use without changing layout
  *   - payload at byte 8: 8-byte aligned, single ldr/str on all architectures
  */
@@ -47,7 +47,7 @@ typedef double xr_Number;
 #include "../../base/xforward_decl.h"
 
 // Object header
-#include "../gc/xgc_header.h"
+#include "../gc/xobj_header.h"
 
 /* ========== Platform Detection ========== */
 

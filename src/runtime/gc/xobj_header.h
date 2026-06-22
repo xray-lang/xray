@@ -5,7 +5,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xgc_header.h - Runtime object header flags and RC helpers
+ * xobj_header.h - Runtime object header flags and RC helpers
  *
  * KEY CONCEPT:
  *   - Unified object header for VM and AOT.
@@ -19,8 +19,8 @@
  *   [12-15] _rsv     (4B) - reserved (weak table slot / cycle-report id)
  */
 
-#ifndef XGC_HEADER_H
-#define XGC_HEADER_H
+#ifndef XOBJ_HEADER_H
+#define XOBJ_HEADER_H
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -55,17 +55,17 @@ typedef struct XrClass XrClass;
 
 /* ========== Access Macros ========== */
 
-#define XR_OBJ_GET_TYPE(gc) ((XrObjType) ((gc)->type))
-#define XR_OBJ_SET_TYPE(gc, t) ((gc)->type = (uint16_t) (t))
+#define XR_OBJ_GET_TYPE(obj) ((XrObjType) ((obj)->type))
+#define XR_OBJ_SET_TYPE(obj, t) ((obj)->type = (uint16_t) (t))
 
 /* ========== Shared Storage Mode (uses extra field bit 0) ========== */
 
 #define XR_OBJ_STORAGE_NORMAL 0
 #define XR_OBJ_STORAGE_SHARED 1
 
-#define XR_OBJ_GET_STORAGE(gc) ((gc)->extra & 0x01)
-#define XR_OBJ_SET_STORAGE(gc, m) ((gc)->extra = ((gc)->extra & ~0x01) | ((m) & 0x01))
-#define XR_OBJ_IS_SHARED(gc) (XR_OBJ_GET_STORAGE(gc) == XR_OBJ_STORAGE_SHARED)
+#define XR_OBJ_GET_STORAGE(obj) ((obj)->extra & 0x01)
+#define XR_OBJ_SET_STORAGE(obj, m) ((obj)->extra = ((obj)->extra & ~0x01) | ((m) & 0x01))
+#define XR_OBJ_IS_SHARED(obj) (XR_OBJ_GET_STORAGE(obj) == XR_OBJ_STORAGE_SHARED)
 
 /* ========== MMAP Flag (extra field bit 13) ========== */
 /*
@@ -74,8 +74,8 @@ typedef struct XrClass XrClass;
  * Bits 1-12 of extra are now spare (type args moved to XrClass.mono_type_arg_names).
  */
 #define XR_OBJ_FLAG_MMAP 0x2000
-#define XR_OBJ_IS_MMAP(gc) (((gc)->extra & XR_OBJ_FLAG_MMAP) != 0)
-#define XR_OBJ_SET_MMAP(gc) ((gc)->extra |= XR_OBJ_FLAG_MMAP)
+#define XR_OBJ_IS_MMAP(obj) (((obj)->extra & XR_OBJ_FLAG_MMAP) != 0)
+#define XR_OBJ_SET_MMAP(obj) ((obj)->extra |= XR_OBJ_FLAG_MMAP)
 
 /* ========== RC Memory-Model Flags (extra field bits 1-4) ==========
  *
@@ -116,6 +116,9 @@ typedef struct XrClass XrClass;
  * the collector runs on the coroutine's own worker. */
 #define XR_OBJ_CYCLE_COLOR_MASK 0x0300
 #define XR_OBJ_CYCLE_COLOR_SHIFT 8
+
+/* Sentinel value for XrObjHeader._rsv meaning "not in cycle_roots". */
+#define XR_CYCLE_NOT_IN_ROOTS 0xFFFFFFFFu
 
 #define XR_OBJ_TRANSIT                                                                             \
     0x0400 /* extra bit 10: channel-transit copy. The object graph is a                            \
@@ -310,4 +313,4 @@ static inline const char *xr_obj_type_name(XrObjType type) {
     return TYPE_NAME_UNKNOWN;
 }
 
-#endif  // XGC_HEADER_H
+#endif  // XOBJ_HEADER_H

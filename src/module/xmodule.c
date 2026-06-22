@@ -23,7 +23,7 @@
 #include "../base/xmalloc.h"
 #include "../base/xfileio.h"
 #include "../runtime/xerror.h"
-#include "../runtime/gc/xgc.h"
+#include "../runtime/gc/xheap.h"
 #include "../base/xhashmap.h"
 #include "../runtime/xray_debug.h"
 #include <stdio.h>

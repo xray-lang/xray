@@ -6,11 +6,11 @@
  * Licensed under the MIT License
  *
  * test_obj_header.c - Unit tests for the unified object header dup/drop
- * primitives (xgc_header.h). Verifies refcount arithmetic, region no-op,
+ * primitives (xobj_header.h). Verifies refcount arithmetic, region no-op,
  * atomic mode, and last-reference detection.
  */
 
-#include "../../../src/runtime/gc/xgc_header.h"
+#include "../../../src/runtime/gc/xobj_header.h"
 #include <stdio.h>
 
 static int g_passed = 0;

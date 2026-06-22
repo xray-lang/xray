@@ -10,7 +10,7 @@
  * KEY CONCEPT:
  *   All error codes are plain #define constants in xerror_codes.h.
  *   XrErrorCode is typedef'd to int (no enum).
- *   XrError is a legacy GC object used by exception conversion.
+ *   XrError is a legacy heap object used by exception conversion.
  */
 
 #ifndef XERROR_H

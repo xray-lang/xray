@@ -15,7 +15,7 @@
 #include "runtime/closure/xcell.h"
 #include "runtime/closure/xclosure.h"
 #include "runtime/gc/xalloc_unified.h"
-#include "runtime/gc/xgc.h"
+#include "runtime/gc/xheap.h"
 #include "runtime/gc/xcoro_heap.h"
 #include "runtime/object/xarray.h"
 #include "runtime/object/xmap.h"

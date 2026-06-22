@@ -17,7 +17,7 @@
 #include "xmap.h"
 #include "xvalue.h"
 #include "xisolate_api.h"
-#include "xgc.h"
+#include "xheap.h"
 
 // Map() - create empty map
 XrValue xr_builtin_map_construct(XrayIsolate *isolate, XrValue self, XrValue *args, int argc) {

@@ -12,7 +12,7 @@
  * dispatch switch in xvm.c; relies on locals (i, isolate, vm_ctx,
  * pc, ci, frame, base, k, R, savepc, vmcase, vmbreak,
  * VM_RUNTIME_ERROR, VM_DISPATCH, VM_FRAMES, VM_FRAME_COUNT,
- * VM_INC_FRAME_COUNT, VM_BARRIER_*, VM_STACK*, VM_CURRENT_CORO,
+ * VM_INC_FRAME_COUNT, VM_STACK*, VM_CURRENT_CORO,
  * checkGC, startfunc label, ...) provided by the surrounding
  * scope. CMake excludes *.inc.c from the VM_SRC glob.
  *
@@ -165,7 +165,6 @@ vmcase(OP_MAP_SETKS) {
         XrValue val = R(a + 1 + j);
         inst_obj->fields[j] = val;
     }
-    VM_BARRIER_BACK(inst_obj);
     vmbreak;
 }
 
@@ -191,7 +190,6 @@ vmcase(OP_SETFIELD) {
     XrInstance *inst_obj = xr_value_to_instance(inst_val);
     XrValue val = R(c);
     inst_obj->fields[field_idx] = val;
-    VM_BARRIER_VAL(inst_obj, val);
     vmbreak;
 }
 
@@ -315,7 +313,6 @@ vmcase(OP_JSON_SET) {
     XrJson *json = xr_value_to_json(R(a));
     XrValue val = R(c);
     xr_instance_set_dynamic_field(isolate, json, (uint16_t) b, val);
-    VM_BARRIER_VAL(json, val);
     vmbreak;
 }
 
@@ -339,7 +336,6 @@ vmcase(OP_JSON_SETK) {
     if (!xr_json_set(isolate, json, (SymbolId) PROTO_SYMBOL(cl->proto, b), val)) {
         VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_PROPERTY, "cannot add property to sealed Json object");
     }
-    VM_BARRIER_VAL(json, val);
     vmbreak;
 }
 
@@ -351,7 +347,6 @@ vmcase(OP_JSON_INIT) {
     XrJson *json = xr_value_to_json(R(a));
     XrValue val = R(c);
     xr_instance_set_dynamic_field(isolate, json, (uint16_t) b, val);
-    VM_BARRIER_VAL(json, val);
     vmbreak;
 }
 
@@ -707,7 +702,6 @@ vmcase(OP_SETPROP) {
         if (!xr_instance_set_dynamic_field(isolate, inst_s, (uint16_t) field_index_d, value)) {
             VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, "OP_SETPROP: dynamic overflow alloc failed");
         }
-        VM_BARRIER_VAL(inst_s, value);
         vmbreak;
     }
 
@@ -752,14 +746,12 @@ vmcase(OP_SETPROP) {
     // Fast path 1: Monomorphic IC hit (verify symbol match)
     if (cache && xr_ic_field_lookup_mono(cache, inst_class, prop_symbol, &field_index)) {
         inst_s->fields[field_index] = value;
-        VM_BARRIER_VAL(inst_s, value);
         vmbreak;
     }
 
     // Fast path 2: Polymorphic IC hit (verify symbol match)
     if (cache && xr_ic_field_lookup_poly(cache, inst_class, prop_symbol, &field_index)) {
         inst_s->fields[field_index] = value;
-        VM_BARRIER_VAL(inst_s, value);
         vmbreak;
     }
 
@@ -768,7 +760,6 @@ vmcase(OP_SETPROP) {
 
     if (field_index >= 0) {
         inst_s->fields[field_index] = value;
-        VM_BARRIER_VAL(inst_s, value);
 
         // Update IC cache (pass symbol)
         if (cache) {

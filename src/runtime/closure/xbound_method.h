@@ -18,7 +18,7 @@
 
 #include "../../base/xdefs.h"
 #include "../value/xvalue.h"
-#include "../gc/xgc_header.h"
+#include "../gc/xobj_header.h"
 
 struct XrayIsolate;
 

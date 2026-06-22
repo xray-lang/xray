@@ -9,7 +9,7 @@
  */
 
 #include "xobj_destroy_ops.h"
-#include "xgc_internal.h"
+#include "xobj_ops.h"
 #include "../core/xr_runtime_core.h"
 
 void xr_runtime_core_enable_task_destroy_ops(struct XrRuntimeCore *core) {

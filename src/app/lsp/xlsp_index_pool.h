@@ -19,7 +19,7 @@
  *                              Worker 3 (Isolate C) → Parse → Extract symbols
  *                                           │
  *                                           ▼
- *   Merge results ◀─────────  Lightweight symbol metadata (no GC objects)
+ *   Merge results ◀─────────  Lightweight symbol metadata (no runtime heap objects)
  */
 
 #ifndef XLSP_INDEX_POOL_H
@@ -36,7 +36,7 @@
 typedef struct XrLspServer XrLspServer;
 
 // ============================================================================
-// Index Result Structures (lightweight, no GC objects)
+// Index Result Structures (lightweight, no runtime heap objects)
 // ============================================================================
 
 // Lightweight symbol info (can be passed between threads)

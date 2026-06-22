@@ -29,7 +29,7 @@
 #include "../../base/xchecks.h"
 #include "../class/xclass_system.h"
 #include "../class/xclass.h"
-#include "../gc/xgc.h"
+#include "../gc/xheap.h"
 #include "../gc/xsystem_heap.h"
 #include "../xshared.h"
 #include <string.h>

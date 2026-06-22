@@ -12,7 +12,7 @@
  * pc, ci, frame, base, k, R, savepc, vmcase, vmbreak,
  * VM_RUNTIME_ERROR, VM_DISPATCH, VM_FRAMES, VM_FRAME_COUNT,
  * VM_INC_FRAME_COUNT, VM_DEC_FRAME_COUNT, VM_STACK, VM_STACK_TOP,
- * VM_STACK_CHECK, VM_BARRIER_*, TRACE_EXECUTION, checkGC,
+ * VM_STACK_CHECK, TRACE_EXECUTION, checkGC,
  * startfunc / handle_closure_pending labels, ...) provided by
  * the surrounding scope. CMake excludes *.inc.c from the
  * VM_SRC glob.

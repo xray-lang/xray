@@ -13,7 +13,7 @@
  */
 
 #include "xchecks.h"
-#include "xgc.h"
+#include "xheap.h"
 #include "xstringbuilder_builtins.h"
 #include "xstringbuilder.h"
 #include "xstring.h"

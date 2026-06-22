@@ -22,7 +22,7 @@
 #include "../../base/xmalloc.h"
 #include "../xisolate_api.h"
 #include "../symbol/xsymbol_table.h"
-#include "../gc/xgc_header.h"
+#include "../gc/xobj_header.h"
 #include "../gc/xsystem_heap.h"
 #include <stdio.h>
 #include <stdlib.h>

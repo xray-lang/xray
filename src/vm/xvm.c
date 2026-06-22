@@ -48,7 +48,7 @@
 #include "xvm_checks.h"
 #include "xdebug.h"
 #include "../runtime/xray_debug_hooks.h"
-#include "../runtime/gc/xgc.h"
+#include "../runtime/gc/xheap.h"
 #include "../runtime/xstdlib_bridge.h"
 #include "../runtime/xerror_codes.h"
 #include "../runtime/xshared.h"
@@ -517,18 +517,12 @@ XrVMResult run(XrayIsolate *isolate, XrVMContext *vm_ctx) {
         }                                                                                          \
     } while (0)
 
-/* Per-coroutine GC safepoint: retired. Tracing's incremental GC step used to
+/* Per-coroutine tracing safepoint: retired. Tracing's incremental step used to
 ** run here when gc_requested was set; reference counting reclaims inline
 ** (drop-to-zero) and at coroutine teardown, so there is no step to trigger. */
 #define VM_GC_SAFEPOINT() ((void) 0)
 
 #define checkGC(c) VM_GC_SAFEPOINT()
-
-/* ========== Write Barrier Macros ========== */
-// Forward barrier: retired (RC owns reclamation; no tri-color invariant).
-#define VM_BARRIER_VAL(parent_obj, val) ((void) 0)
-// Back barrier: retired.
-#define VM_BARRIER_BACK(container_obj) ((void) 0)
 
 /* ========== Debug Hook (Zero Overhead When No Debugger) ========== */
 /* All decision logic (breakpoints, stepping, pause, logpoints) lives in

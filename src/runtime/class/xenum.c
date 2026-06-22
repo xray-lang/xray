@@ -15,7 +15,7 @@
 #include "../../base/xmalloc.h"
 #include "../object/xstring.h"
 #include "../symbol/xsymbol_table.h"
-#include "../gc/xgc_internal.h"
+#include "../gc/xfixed_heap.h"
 #include "xclass.h"
 #include "xinstance.h"
 #include "xreflect_registry.h"

@@ -15,14 +15,14 @@
 
 #include "xsystem_heap.h"
 #include "../../base/xchecks.h"
-#include "xgc_internal.h"
+#include "xobj_ops.h"
 #include "xregion.h"  // xr_region_free_raw_block (drain pooled blocks)
 #include "../../base/xmalloc.h"
 #include "../core/xr_runtime_core.h"
 #include "../xshared.h"
 #include "../../coro/xcoro_pool.h"
 #include "../../coro/xcoroutine.h"
-#include "xgc_header.h"         // XR_TCOROUTINE
+#include "xobj_header.h"        // XR_TCOROUTINE
 #include "../object/xstring.h"  // STR_FLAG_GLOBAL
 #include <string.h>
 #include <stdio.h>
@@ -33,8 +33,8 @@
 
 /* ========== Lifecycle API ========== */
 
-static void sysheap_gc_pool_drain(XrSystemHeap *heap) {
-    XR_DCHECK(heap != NULL, "sysheap_gc_pool_drain: NULL heap");
+static void sysheap_coro_heap_pool_drain(XrSystemHeap *heap) {
+    XR_DCHECK(heap != NULL, "sysheap_coro_heap_pool_drain: NULL heap");
     xr_mutex_lock(&heap->coro_heap_pool_mu);
     struct XrCoroHeap *coro_heap = heap->coro_heap_pool_head;
     while (coro_heap) {
@@ -152,7 +152,7 @@ void xr_sysheap_destroy_coro_storage(XrSystemHeap *heap) {
     // Drain XrCoroHeap L2 pool after coroutine pool teardown. Coroutine
     // finalizers may recycle GC structs back into this pool while their
     // shells are being released.
-    sysheap_gc_pool_drain(heap);
+    sysheap_coro_heap_pool_drain(heap);
 
     // Drain the Region block L2 pool: coroutine heap teardown and worker exit
     // push recycled blocks here; return them to the OS now.

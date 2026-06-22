@@ -12,7 +12,7 @@
 #include "../../base/xchecks.h"
 #include "../class/xenum.h"
 #include "../class/xclass.h"
-#include "../gc/xgc.h"
+#include "../gc/xheap.h"
 #include "../object/xnative_type.h"
 #include "../symbol/xsymbol_table.h"
 #include "../value/xtype_names.h"

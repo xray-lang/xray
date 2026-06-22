@@ -45,7 +45,7 @@
 #include <stdatomic.h>
 #include <stdbool.h>
 #include <stddef.h>
-#include "../runtime/gc/xgc_header.h"
+#include "../runtime/gc/xobj_header.h"
 #include "../runtime/value/xvalue.h"
 #include "xwait_state.h"
 

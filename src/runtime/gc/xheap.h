@@ -5,7 +5,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xgc.h - Heap allocation and object lifecycle API
+ * xheap.h - Heap allocation and object lifecycle API
  *
  * KEY CONCEPT:
  *   - Per-coroutine Region bump heap (XrCoroHeap) is the primary heap for
@@ -26,8 +26,8 @@
  *   resolve a coroutine via xr_current_coro(X) and pass it explicitly.
  */
 
-#ifndef XGC_H
-#define XGC_H
+#ifndef XHEAP_H
+#define XHEAP_H
 
 #include <stddef.h>
 #include <stdint.h>
@@ -35,7 +35,7 @@
 #include <stdlib.h>
 
 // Heap implementation
-#include "xgc_internal.h"
+#include "xfixed_heap.h"
 #include "../value/xvalue.h"
 
 /* ========== Unified Allocation Interface ========== */
@@ -53,4 +53,4 @@ XR_FUNC struct XrCoroutine *xr_current_coro(struct XrayIsolate *X);
 
 XR_FUNC void xr_obj_header_print(XrObjHeader *obj);
 
-#endif  // XGC_H
+#endif  // XHEAP_H

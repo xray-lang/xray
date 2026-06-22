@@ -28,7 +28,7 @@
 #include <stdatomic.h>
 #include <string.h>
 
-#include "../gc/xgc_header.h"
+#include "../gc/xobj_header.h"
 #include "../value/xvalue.h"
 #include "../../base/xdefs.h"
 

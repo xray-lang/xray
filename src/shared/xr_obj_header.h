@@ -11,7 +11,7 @@
  * Self-contained: depends only on <stdint.h>/<stdatomic.h> so the AOT runtime
  * prelude can adopt the same header without pulling in any runtime translation
  * unit (a pure AOT program keeps its zero-runtime link contract). The runtime's
- * xgc_header.h includes this and layers its object-type enum, type-tag
+ * xobj_header.h includes this and layers its object-type enum, type-tag
  * accessors, the remaining collector/storage flag bits, and the signed-RC
  * dup/drop helpers on top.
  *
@@ -51,7 +51,7 @@ _Static_assert(sizeof(XrObjHeader) == 16, "XrObjHeader must be 16 bytes");
  * Only the bits the AOT runtime references live here so xrt_arc.h can adopt the
  * unified header standalone. The remaining `extra` bits (storage/mmap, REGION/
  * ATOMIC/WEAKABLE, DEAD/MANAGED, cycle-collector color, TRANSIT) are layered on
- * in src/runtime/gc/xgc_header.h and share this same bit space.
+ * in src/runtime/gc/xobj_header.h and share this same bit space.
  *
  *   bit 3  HAS_DTOR      - object's type has a destructor to run at rc==0.
  *   bit 11 STORAGE_BUMP  - AOT bump-allocated: RC dup/drop are no-ops (freed in

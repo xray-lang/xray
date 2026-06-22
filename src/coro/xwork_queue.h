@@ -17,7 +17,7 @@
 
 #include "../base/xdefs.h"
 #include "../base/xmutex.h"
-#include "../runtime/gc/xgc_header.h"
+#include "../runtime/gc/xobj_header.h"
 #include "../runtime/value/xvalue.h"
 
 #define XR_WORK_QUEUE_DEFAULT_SHARDS 1u

@@ -39,8 +39,7 @@
  */
 
 #include "xcoro_heap.h"
-#include "xgc_header.h"
-#include "xgc_internal.h"
+#include "xobj_header.h"
 #include "../class/xinstance.h"
 #include "../class/xclass.h"
 #include "../closure/xcell.h"
@@ -56,7 +55,7 @@
 /* Initial capacity for cycle_roots (lazy; NULL until first add). */
 #define XR_CYCLE_ROOTS_INIT_CAP 64
 
-/* Color encoding for trial deletion (extra bits 8-9, see xgc_header.h).
+/* Color encoding for trial deletion (extra bits 8-9, see xobj_header.h).
  * Every reachable object is recolored before its color is read in each
  * phase, so stale colors from a previous collect round are harmless. */
 #define COLOR_BLACK 0 /* definitely live */

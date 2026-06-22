@@ -10,7 +10,7 @@
  * KEY CONCEPT:
  *   Single-pass O(n) XML parser producing a malloc-based DOM tree.
  *   Node types, parse configuration, error reporting, and serialization
- *   config are all pure C — no XrayIsolate, no GC objects.
+ *   config are all pure C — no XrayIsolate, no runtime heap objects.
  *
  *   stdlib/xml bridges this to runtime XrValue objects via a thin
  *   dom_to_xrvalue converter, following the same pattern as xjson/xtoml.

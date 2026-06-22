@@ -18,7 +18,7 @@
 #include "xclass.h"
 #include "xmethod.h"
 #include "../../base/xmalloc.h"
-#include "../gc/xgc.h"
+#include "../gc/xheap.h"
 #include "../gc/xalloc_unified.h"
 #include "../core/xr_runtime_core.h"
 #include "../object/xstring.h"

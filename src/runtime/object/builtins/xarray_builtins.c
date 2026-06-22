@@ -14,7 +14,7 @@
 #include "xarray_builtins.h"
 #include "xchecks.h"
 #include "xisolate_api.h"
-#include "xgc.h"
+#include "xheap.h"
 #include "xarray.h"
 #include "xstring.h"
 #include "xset.h"

@@ -29,7 +29,7 @@
 #include "../value/xvalue.h"
 #include "../value/xvalue_format.h"
 #include "../gc/xalloc_unified.h"
-#include "../gc/xgc.h"
+#include "../gc/xheap.h"
 #include "../gc/xcoro_heap.h"
 #include "../xisolate_api.h"
 #include "../../coro/xcoroutine.h"

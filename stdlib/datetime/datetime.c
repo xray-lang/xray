@@ -19,7 +19,7 @@
 #include "../../src/base/xplatform.h"
 #include "../../src/runtime/xisolate_internal.h"
 #include "../../src/runtime/xisolate_api.h"
-#include "../../src/runtime/gc/xgc.h"
+#include "../../src/runtime/gc/xheap.h"
 #include "../../src/runtime/class/xclass.h"
 #include "../../src/runtime/class/xclass_builder.h"
 #include "../../src/runtime/class/xclass_system.h"
