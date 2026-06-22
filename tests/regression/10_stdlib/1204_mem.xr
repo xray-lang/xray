@@ -1,0 +1,53 @@
+// Test mem module - RC memory introspection and cycle collection control
+
+import mem
+
+// @test mem.isCycleCollectionEnabled returns bool
+@test
+fn test_mem_is_cycle_collection_enabled() {
+    let running = mem.isCycleCollectionEnabled()
+    assert_eq(typeof(running), "bool")
+}
+
+// @test mem.liveBytes returns non-negative
+@test
+fn test_mem_live_bytes() {
+    let bytes = mem.liveBytes()
+    assert(bytes >= 0)
+}
+
+// @test mem.liveObjects returns non-negative
+@test
+fn test_mem_live_objects() {
+    let objs = mem.liveObjects()
+    assert(objs >= 0)
+}
+
+// @test mem.collectCycles does not crash
+@test
+fn test_mem_collect_cycles() {
+    mem.collectCycles()
+    assert(true)
+}
+
+// @test mem.info()["cycleCollections"] returns non-negative
+@test
+fn test_mem_cycle_collections() {
+    let c = mem.info()["cycleCollections"]
+    assert(c >= 0)
+}
+
+// @test allocation increases memory
+@test
+fn test_alloc_increases_memory() {
+    mem.collectCycles()
+    let before = mem.liveBytes()
+    let arr: Array<string> = []
+    for (let i = 0; i < 100; i++) {
+        arr.push("item_" + string(i))
+    }
+    let after = mem.liveBytes()
+    assert(after >= before)
+}
+
+print("All mem tests passed")

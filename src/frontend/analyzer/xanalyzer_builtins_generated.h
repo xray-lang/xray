@@ -162,21 +162,6 @@ static const XaBuiltinMember g_gen_encoding_functions[] = {
 };
 #define GEN_ENCODING_FUNCTION_COUNT 11
 
-// gc module functions
-static const XaBuiltinMember g_gen_gc_functions[] = {
-    {"collect", "(): int", "Run cycle collection + whole-block reclaim, return cycle count", true,
-     false},
-    {"disable", "(): ()", "Pause the automatic cycle collector", true, false},
-    {"enable", "(): ()", "Resume the automatic cycle collector", true, false},
-    {"isrunning", "(): bool", "Check if automatic cycle collection is enabled", true, false},
-    {"count", "(): float", "Get live memory usage in KB", true, false},
-    {"countb", "(): int", "Get live memory usage in bytes", true, false},
-    {"objects", "(): int", "Get live GC object count", true, false},
-    {"cycles", "(): int", "Get number of cycle collections run", true, false},
-    {"info", "(): Map", "Get RC-native GC info as Map", true, false},
-};
-#define GEN_GC_FUNCTION_COUNT 9
-
 // http.HttpResponse handle fields
 static const XaBuiltinHandleField g_gen_http_httpresponse_fields[] = {
     {"status", "int", true},   {"statusText", "string", true}, {"headers", "Json", true},
@@ -374,6 +359,20 @@ static const XaBuiltinMember g_gen_math_functions[] = {
     {"NAN", ": float", "", false, false},
 };
 #define GEN_MATH_FUNCTION_COUNT 51
+
+// mem module functions
+static const XaBuiltinMember g_gen_mem_functions[] = {
+    {"collectCycles", "(): int",
+     "Run cycle collection + whole-block reclaim, return cycle collection count", true, false},
+    {"disableCycleCollection", "(): ()", "Pause the automatic cycle collector", true, false},
+    {"enableCycleCollection", "(): ()", "Resume the automatic cycle collector", true, false},
+    {"isCycleCollectionEnabled", "(): bool", "Check if automatic cycle collection is enabled", true,
+     false},
+    {"liveBytes", "(): int", "Get live memory usage in bytes", true, false},
+    {"liveObjects", "(): int", "Get live object count", true, false},
+    {"info", "(): Map", "Get memory-model runtime info as Map", true, false},
+};
+#define GEN_MEM_FUNCTION_COUNT 7
 
 // net.UdpPacket handle fields
 static const XaBuiltinHandleField g_gen_net_udppacket_fields[] = {
@@ -666,12 +665,12 @@ static const XaBuiltinModule g_gen_builtin_modules[] = {
     {"csv", g_gen_csv_functions, GEN_CSV_FUNCTION_COUNT, NULL, 0},
     {"datetime", g_gen_datetime_functions, GEN_DATETIME_FUNCTION_COUNT, NULL, 0},
     {"encoding", g_gen_encoding_functions, GEN_ENCODING_FUNCTION_COUNT, NULL, 0},
-    {"gc", g_gen_gc_functions, GEN_GC_FUNCTION_COUNT, NULL, 0},
     {"http", g_gen_http_functions, GEN_HTTP_FUNCTION_COUNT, g_gen_http_handles,
      GEN_HTTP_HANDLE_COUNT},
     {"io", g_gen_io_functions, GEN_IO_FUNCTION_COUNT, g_gen_io_handles, GEN_IO_HANDLE_COUNT},
     {"log", g_gen_log_functions, GEN_LOG_FUNCTION_COUNT, NULL, 0},
     {"math", g_gen_math_functions, GEN_MATH_FUNCTION_COUNT, NULL, 0},
+    {"mem", g_gen_mem_functions, GEN_MEM_FUNCTION_COUNT, NULL, 0},
     {"net", g_gen_net_functions, GEN_NET_FUNCTION_COUNT, g_gen_net_handles, GEN_NET_HANDLE_COUNT},
     {"os", g_gen_os_functions, GEN_OS_FUNCTION_COUNT, g_gen_os_handles, GEN_OS_HANDLE_COUNT},
     {"path", g_gen_path_functions, GEN_PATH_FUNCTION_COUNT, g_gen_path_handles,

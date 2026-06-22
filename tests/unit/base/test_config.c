@@ -25,15 +25,13 @@ TEST(config_default_values) {
     ASSERT_TRUE(cfg.debug);
     ASSERT_FALSE(cfg.verbose);
 
-    // GC defaults
-    ASSERT_EQ_UINT(cfg.gc.heap_initial, 4 * 1024 * 1024);
-    ASSERT_EQ_UINT(cfg.gc.heap_min, 1 * 1024 * 1024);
-    ASSERT_EQ_UINT(cfg.gc.heap_max, 1024UL * 1024 * 1024);
-    ASSERT_FLOAT_EQ(cfg.gc.heap_growth_factor, 2.0, 0.01);
-    ASSERT_TRUE(cfg.gc.debug);
-    ASSERT_TRUE(cfg.gc.enable_stats);
-    ASSERT_EQ_UINT(cfg.gc.step_size, 1000);
-    ASSERT_EQ_UINT(cfg.gc.pause_target_us, 2000);
+    // Memory defaults
+    ASSERT_EQ_UINT(cfg.memory.heap_initial, 4 * 1024 * 1024);
+    ASSERT_EQ_UINT(cfg.memory.heap_min, 1 * 1024 * 1024);
+    ASSERT_EQ_UINT(cfg.memory.heap_max, 1024UL * 1024 * 1024);
+    ASSERT_FLOAT_EQ(cfg.memory.heap_growth_factor, 2.0, 0.01);
+    ASSERT_TRUE(cfg.memory.debug);
+    ASSERT_TRUE(cfg.memory.enable_stats);
 
     // Compiler defaults
     ASSERT_TRUE(cfg.compiler.enable_optimization);
@@ -57,7 +55,7 @@ TEST(config_init) {
     // After init, should have default values
     ASSERT_NOT_NULL(cfg.version);
     ASSERT_TRUE(cfg.debug);
-    ASSERT_EQ_UINT(cfg.gc.heap_initial, 4 * 1024 * 1024);
+    ASSERT_EQ_UINT(cfg.memory.heap_initial, 4 * 1024 * 1024);
     ASSERT_TRUE(cfg.compiler.enable_optimization);
 }
 

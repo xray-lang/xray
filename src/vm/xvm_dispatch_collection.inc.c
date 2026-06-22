@@ -635,7 +635,7 @@ vmcase(OP_ARRAY_SET) {
         if ((unsigned) idx < (unsigned) arr->length) {
             if (arr->elem_type == XR_ELEM_ANY) {
                 ((XrValue *) arr->data)[idx] = _av;
-                XR_ARRAY_MARK_GC_PTRS(arr, _av);
+                XR_ARRAY_MARK_REFS(arr, _av);
             } else {
                 xr_array_set_element(arr, idx, _av);
             }
@@ -731,7 +731,7 @@ vmcase(OP_ARRAY_SETC) {
         if (b < arr->length) {
             if (arr->elem_type == XR_ELEM_ANY) {
                 ((XrValue *) arr->data)[b] = _acv;
-                XR_ARRAY_MARK_GC_PTRS(arr, _acv);
+                XR_ARRAY_MARK_REFS(arr, _acv);
             } else {
                 xr_array_set_element(arr, b, _acv);
             }
@@ -776,7 +776,7 @@ vmcase(OP_ARRAY_PUSH) {
         xr_array_grow(arr);
     if (arr->elem_type == XR_ELEM_ANY) {
         ((XrValue *) arr->data)[arr->length++] = val;
-        XR_ARRAY_MARK_GC_PTRS(arr, val);
+        XR_ARRAY_MARK_REFS(arr, val);
     } else {
         xr_array_set_element(arr, arr->length++, val);
     }
@@ -939,7 +939,7 @@ vmcase(OP_ARRAY_INIT) {
         XrValue *src = &R(a + 1);
         for (int j = 0; j < b; j++) {
             if (XR_VALUE_NEEDS_GC(src[j])) {
-                arr->has_gc_ptrs = 1;
+                arr->contains_refs = 1;
                 break;
             }
         }
@@ -1346,7 +1346,7 @@ vmcase(OP_INDEX_SET) {
         if ((unsigned) idx < (unsigned) arr->length) {
             if (arr->elem_type == XR_ELEM_ANY) {
                 ((XrValue *) arr->data)[idx] = val;
-                XR_ARRAY_MARK_GC_PTRS(arr, val);
+                XR_ARRAY_MARK_REFS(arr, val);
             } else {
                 xr_array_set_element(arr, idx, val);
             }

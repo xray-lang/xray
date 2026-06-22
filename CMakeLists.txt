@@ -568,7 +568,7 @@ file(GLOB STDLIB_CORE_SRC
     "stdlib/time/*.c"
     "stdlib/math/*.c"
     "stdlib/log/*.c"
-    "stdlib/gc/*.c"
+    "stdlib/mem/*.c"
     "stdlib/regex/*.c"
     "stdlib/path/*.c"
     "stdlib/datetime/*.c"
@@ -1287,7 +1287,7 @@ if(BUILD_TESTS)
     add_test(
         NAME regression_rc_closure_self_capture
         COMMAND $<TARGET_FILE:xray> test
-                ${CMAKE_CURRENT_SOURCE_DIR}/tests/regression/08_gc/0803_closure_self_capture_rc.xr
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/regression/08_mem/0803_closure_self_capture_rc.xr
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
     set_tests_properties(regression_rc_closure_self_capture PROPERTIES

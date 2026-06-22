@@ -182,7 +182,7 @@ static bool init_task_array(XrArray *tasks, int capacity) {
 }
 
 static void destroy_task_array(XrArray *tasks) {
-    if (tasks->data && !tasks->data_on_gc_heap) {
+    if (tasks->data && !tasks->data_on_region_heap) {
         xr_free(tasks->data);
     }
     memset(tasks, 0, sizeof(*tasks));

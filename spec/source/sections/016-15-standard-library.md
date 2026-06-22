@@ -14,7 +14,7 @@ order: 016
 
 > **真实 native 模块清单**（22 个，源码：`stdlib/<module>/*.c`）：
 >
-> `base64`、`cluster`、`compress`、`crypto`、`csv`、`datetime`、`encoding`、`gc`、`http`、`io`、`log`、`math`、`net`、`os`、`path`、`regex`、`time`、`toml`、`url`、`ws`、`xml`、`yaml`。
+> `base64`、`cluster`、`compress`、`crypto`、`csv`、`datetime`、`encoding`、`mem`、`http`、`io`、`log`、`math`、`net`、`os`、`path`、`regex`、`time`、`toml`、`url`、`ws`、`xml`、`yaml`。
 >
 > 不需要 import 的内置类型由 prelude 注册（`Array` `Map` `Set` `Json` `Channel` `Bytes` `BigInt` `StringBuilder` `Exception` `Regex` `Logger` `NetConn` `NetListener` 等）。详见 §1.5.6 / §2.2。
 
@@ -109,7 +109,7 @@ TLS client 路径通过 `dialTLS(host, port, timeout?)` 和 `upgradeTLS(conn, ho
 | 模块 | 关键 API |
 |--|--|
 | `log` | `debug` / `info` / `warn` / `error` / `fatal` / `child()`、source 位置开关、异步写入模式 |
-| `gc` | `collect()` `isrunning()` `count()` `state()` `stats()` |
+| `mem` | `collectCycles()` `isCycleCollectionEnabled()` `liveBytes()` `liveObjects()` `info()` |
 
 ### 15.10 分布式
 
@@ -143,7 +143,7 @@ TLS client 路径通过 `dialTLS(host, port, timeout?)` 和 `upgradeTLS(conn, ho
 
 > **Authoritative native module list** (22 modules; source: `stdlib/<module>/*.c`):
 >
-> `base64`, `cluster`, `compress`, `crypto`, `csv`, `datetime`, `encoding`, `gc`, `http`, `io`, `log`, `math`, `net`, `os`, `path`, `regex`, `time`, `toml`, `url`, `ws`, `xml`, `yaml`.
+> `base64`, `cluster`, `compress`, `crypto`, `csv`, `datetime`, `encoding`, `mem`, `http`, `io`, `log`, `math`, `net`, `os`, `path`, `regex`, `time`, `toml`, `url`, `ws`, `xml`, `yaml`.
 >
 > Built-in types that need no import are registered by the prelude (`Array`, `Map`, `Set`, `Json`, `Channel`, `Bytes`, `BigInt`, `StringBuilder`, `Exception`, `Regex`, `Logger`, `NetConn`, `NetListener`, etc.). See §1.5.6 / §2.2.
 
@@ -238,7 +238,7 @@ The TLS client path is provided by `dialTLS(host, port, timeout?)` and `upgradeT
 | Module | Key APIs |
 |--|--|
 | `log` | `debug` / `info` / `warn` / `error` / `fatal` / `child()`, source-position toggles, async write mode |
-| `gc` | `collect()` `isrunning()` `count()` `state()` `stats()` |
+| `mem` | `collectCycles()` `isCycleCollectionEnabled()` `liveBytes()` `liveObjects()` `info()` |
 
 ### 15.10 Distributed
 

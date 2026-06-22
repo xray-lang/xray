@@ -501,28 +501,21 @@ static const XlspSymbolInfo encoding_symbols[] = {
 };
 
 // ============================================================================
-// gc module
+// mem module
 // ============================================================================
 
-static const XlspSymbolInfo gc_symbols[] = {
-    // Control
-    {"collect", XLSP_SYM_FUNCTION, "fn()", "Forces a full GC cycle on current coroutine", NULL, 0},
-    {"step", XLSP_SYM_FUNCTION, "fn()", "Performs one incremental GC step", NULL, 0},
-    {"disable", XLSP_SYM_FUNCTION, "fn()", "Disables automatic GC (can be nested)", NULL, 0},
-    {"enable", XLSP_SYM_FUNCTION, "fn()", "Enables automatic GC (decrements disable counter)", NULL,
-     0},
-    {"isrunning", XLSP_SYM_FUNCTION, "fn(): bool", "Returns true if GC is enabled", NULL, 0},
-    // Statistics
-    {"count", XLSP_SYM_FUNCTION, "fn(): float", "Returns memory usage in KB", NULL, 0},
-    {"countb", XLSP_SYM_FUNCTION, "fn(): int", "Returns memory usage in bytes", NULL, 0},
-    {"objects", XLSP_SYM_FUNCTION, "fn(): int", "Returns approximate object count", NULL, 0},
-    {"gccount", XLSP_SYM_FUNCTION, "fn(): int", "Returns number of completed GC cycles", NULL, 0},
-    {"debt", XLSP_SYM_FUNCTION, "fn(): int", "Returns current GC debt (triggers GC when positive)",
-     NULL, 0},
-    {"state", XLSP_SYM_FUNCTION, "fn(): string",
-     "Returns GC state: PAUSE, PROPAGATE, ATOMIC, SWEEP, or FINALIZE", NULL, 0},
-    {"info", XLSP_SYM_FUNCTION, "fn(): Map",
-     "Returns comprehensive GC info including generational stats", NULL, 0},
+static const XlspSymbolInfo mem_symbols[] = {
+    {"collectCycles", XLSP_SYM_FUNCTION, "fn(): int",
+     "Runs cycle collection and returns the cumulative cycle collection count", NULL, 0},
+    {"disableCycleCollection", XLSP_SYM_FUNCTION, "fn()",
+     "Pauses automatic cycle collection for the current coroutine heap", NULL, 0},
+    {"enableCycleCollection", XLSP_SYM_FUNCTION, "fn()",
+     "Resumes automatic cycle collection for the current coroutine heap", NULL, 0},
+    {"isCycleCollectionEnabled", XLSP_SYM_FUNCTION, "fn(): bool",
+     "Returns true when automatic cycle collection is enabled", NULL, 0},
+    {"liveBytes", XLSP_SYM_FUNCTION, "fn(): int", "Returns live memory usage in bytes", NULL, 0},
+    {"liveObjects", XLSP_SYM_FUNCTION, "fn(): int", "Returns live object count", NULL, 0},
+    {"info", XLSP_SYM_FUNCTION, "fn(): Map", "Returns memory-model runtime info", NULL, 0},
 };
 
 // ============================================================================
@@ -680,7 +673,8 @@ static const XlspModuleInfo stdlib_modules[] = {
      sizeof(compress_symbols) / sizeof(compress_symbols[0])},
     {"encoding", "Character encoding utilities", encoding_symbols,
      sizeof(encoding_symbols) / sizeof(encoding_symbols[0])},
-    {"gc", "Garbage collection control", gc_symbols, sizeof(gc_symbols) / sizeof(gc_symbols[0])},
+    {"mem", "Memory and cycle-collection introspection", mem_symbols,
+     sizeof(mem_symbols) / sizeof(mem_symbols[0])},
     {"toml", "TOML parsing and generation", toml_symbols,
      sizeof(toml_symbols) / sizeof(toml_symbols[0])},
     {"url", "URL parsing and encoding", url_symbols, sizeof(url_symbols) / sizeof(url_symbols[0])},

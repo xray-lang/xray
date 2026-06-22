@@ -25,7 +25,7 @@ XrayConfig xray_config_default(void) {
         .debug = true,
         .verbose = false,
 
-        .gc =
+        .memory =
             {
                 .heap_initial = 4 * 1024 * 1024,  // 4MB
                 .heap_min = 1 * 1024 * 1024,      // 1MB
@@ -33,8 +33,6 @@ XrayConfig xray_config_default(void) {
                 .heap_growth_factor = 2.0,
                 .debug = true,
                 .enable_stats = true,
-                .step_size = 1000,
-                .pause_target_us = 2000,
             },
 
         .compiler =

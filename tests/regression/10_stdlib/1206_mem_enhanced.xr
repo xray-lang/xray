@@ -1,9 +1,9 @@
-// Test enhanced gc module - RC-native API and edge cases
+// Test enhanced mem module - RC-native API and edge cases
 //
 // REGRESSION: Bugs #8 / #10 / #11 - GC chain corruption under
 //             --jit-force (commits 5f7a535 + 2e1dacc).
 // FAIL_AT:    pre-5f7a535 / pre-2e1dacc on x64 with --jit-force,
-//             >50% rate on the 1205+1206+1207 GC-stress combo
+//             >50% rate on the 1205+1206+1207 mem-stress combo
 //             -> Bug #8 (5f7a535): sweep_block rebuilt
 //                block->alloc_marks without first flushing the
 //                deferred JIT-inline-allocator marks; lines actually
@@ -13,7 +13,7 @@
 //                local_allgc list and crashed on a garbage curr ptr
 //                (e.g. 0x0000_0004_0000_0005).
 //             -> Bug #10 (2e1dacc): mark_coro_roots scanned the JIT
-//                GC stack map using ARM64 frame layout constants on
+//                runtime stack map using ARM64 frame layout constants on
 //                x64; the "pointers" so obtained were garbage that
 //                reallymarkobject dereferenced and stamped 0x04 over
 //                neighbouring live chain links.
@@ -26,7 +26,7 @@
 // PASS_AT:    5f7a535+ (xr_immix_flush_marks at sweep_block entry,
 //             idempotent so steady-state cost is negligible) AND
 //             2e1dacc+ (ARM64-only guard around the stack-map scan,
-//             plus four-shape GCHeader validate at markobject entry).
+//             plus four-shape object header validate at markobject entry).
 //             1206 under --jit-force: 30/30 burn-in green on
 //             Windows x64.
 // REQUIRES_JIT_FORCE  (for Bugs #10 / #11; Bug #8 also surfaces
@@ -35,49 +35,50 @@
 //                     historical reproducer under JIT-force).
 //
 // Triggering combination: 1206 alone gives partial coverage;
-// `scripts/run_gc_stress.sh 10` exercises 1205/1206/1207 in
+// `scripts/run_mem_stress.sh 10` exercises 1205/1206/1207 in
 // rotation, which is the exact sequence that surfaced all three
 // bugs during the May 2026 burn-in.
 
-import gc
+import mem
 
-// @test gc.disable/enable pairing toggles the automatic cycle collector
+// @test mem.disableCycleCollection/enableCycleCollection pairing toggles the automatic cycle collector
 @test
-fn test_gc_disable_enable() {
-    assert_eq(gc.isrunning(), true)
-    gc.disable()
-    assert_eq(gc.isrunning(), false)
-    gc.enable()
-    assert_eq(gc.isrunning(), true)
+fn test_mem_disable_enable() {
+    assert_eq(mem.isCycleCollectionEnabled(), true)
+    mem.disableCycleCollection()
+    assert_eq(mem.isCycleCollectionEnabled(), false)
+    mem.enableCycleCollection()
+    assert_eq(mem.isCycleCollectionEnabled(), true)
 }
 
-// @test gc.disable pauses the automatic cycle collector
+// @test mem.disableCycleCollection pauses the automatic cycle collector
 @test
-fn test_gc_disable_prevents_gc() {
-    gc.disable()
-    let before_count = gc.cycles()
+fn test_mem_disable_prevents_gc() {
+    mem.disableCycleCollection()
+    let before_count = mem.info()["cycleCollections"]
     // Allocate a bunch of objects
     let arr: Array<Json> = []
     for (let i = 0; i < 500; i++) {
         arr.push(#{"idx": i, "data": "item_" + string(i)})
     }
     // Automatic cycle collection must not have run while disabled
-    let after_count = gc.cycles()
+    let after_count = mem.info()["cycleCollections"]
     assert_eq(before_count, after_count)
     assert(arr.length == 500)
-    gc.enable()
+    mem.enableCycleCollection()
 }
 
-// @test gc.info contains the RC-native keys
+// @test mem.info contains the RC-native keys
 @test
-fn test_gc_info_keys() {
-    let info = gc.info()
+fn test_mem_info_keys() {
+    let info = mem.info()
     // Live memory + object stats
-    assert(info["totalBytes"] >= 0)
-    assert(info["totalKB"] >= 0.0)
-    assert(info["objects"] >= 0)
+    assert(info["liveBytes"] >= 0)
+    assert(info["liveKB"] >= 0.0)
+    assert(info["liveObjects"] >= 0)
     // Automatic cycle collector state
-    assert(info["cycles"] >= 0)
+    assert(info["cycleCollections"] >= 0)
+    assert_eq(typeof(info["cycleCollectionEnabled"]), "bool")
     assert(info["finalizerCount"] >= 0)
     // Region block stats
     assert(info["blocks"] >= 0)
@@ -85,21 +86,21 @@ fn test_gc_info_keys() {
     assert(info["fullBlocks"] >= 0)
 }
 
-// @test gc.collect returns a monotonic cycle count
+// @test mem.collectCycles returns a monotonic cycle count
 @test
-fn test_gc_collect_returns_count() {
+fn test_mem_collect_returns_count() {
     // Under RC the cycle counter never decreases. A cycle-free program may
     // report the same count across collects — assert monotonicity, not growth.
-    let count1 = gc.collect()
-    let count2 = gc.collect()
+    let count1 = mem.collectCycles()
+    let count2 = mem.collectCycles()
     assert(count2 >= count1)
 }
 
-// @test gc.countb decreases after collect with dead objects
+// @test mem.liveBytes decreases after collect with dead objects
 @test
-fn test_gc_countb_decreases_after_collect() {
-    gc.collect()
-    let baseline = gc.countb()
+fn test_mem_live_bytes_decreases_after_collect() {
+    mem.collectCycles()
+    let baseline = mem.liveBytes()
     // Create objects in a scope that makes them collectable
     fn make_garbage() {
         let temp: Array<Json> = []
@@ -108,18 +109,18 @@ fn test_gc_countb_decreases_after_collect() {
         }
     }
     make_garbage()
-    let after_alloc = gc.countb()
+    let after_alloc = mem.liveBytes()
     assert(after_alloc >= baseline)
-    gc.collect()
-    let after_gc = gc.countb()
+    mem.collectCycles()
+    let after_collect = mem.liveBytes()
     // Memory should not grow after collecting the garbage
-    assert(after_gc <= after_alloc)
+    assert(after_collect <= after_alloc)
 }
 
-// @test gc.objects tracks allocations
+// @test mem.liveObjects tracks allocations
 @test
-fn test_gc_objects_tracks_alloc() {
-    let before = gc.objects()
+fn test_mem_live_objects_tracks_alloc() {
+    let before = mem.liveObjects()
     let arr: Array<Json> = []
     for (let i = 0; i < 10; i++) {
         arr.push(#{"k": i})
@@ -130,9 +131,9 @@ fn test_gc_objects_tracks_alloc() {
     // (and its 10 elements) by this line and the live-object count would read
     // back as `before`. The touch below extends arr's lifetime across the
     // measurement so the just-allocated objects are still counted.
-    let after = gc.objects()
+    let after = mem.liveObjects()
     assert(arr.length == 10)
     assert(after > before)
 }
 
-print("All enhanced gc tests passed")
+print("All enhanced mem tests passed")

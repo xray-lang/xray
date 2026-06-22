@@ -1,0 +1,5 @@
+{
+  "module": "mem",
+  "summary": "Memory and cycle-collection introspection",
+  "lead": "Memory and cycle-collection introspection for the current coroutine heap."
+}

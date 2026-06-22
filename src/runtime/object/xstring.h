@@ -57,13 +57,13 @@ _Static_assert(sizeof(XrString) == 24, "XrString must be 24 bytes (16B header + 
 /*
  * Short strings (≤64B): interned, pointer comparison O(1)
  * Long strings (>64B): not interned, content comparison O(n)
- * Flag stored in gc.extra lowest bit
+ * Flag stored in hdr.extra lowest bit
  */
 
 // Short string max length
 #define XR_SHORT_STR_MAX 64
 
-// Long string flag (stored in gc.extra bit 4; bit 0 is reserved for GC storage mode)
+// Long string flag (stored in hdr.extra bit 4; bit 0 is reserved for object storage mode)
 #define XR_STR_LONG_FLAG 0x10
 
 // Check if long string
@@ -90,7 +90,7 @@ typedef struct XrStringPool {
 
 /* ========== Tiered String Pool (Thread-safe) ========== */
 
-// String flags (stored in gc.extra)
+// String flags (stored in hdr.extra)
 #define STR_FLAG_INTERNED 0x02
 #define STR_FLAG_GLOBAL 0x04
 #define STR_FLAG_LOCAL 0x08

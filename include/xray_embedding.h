@@ -357,17 +357,6 @@ void xray_traceback(XrayVM *vm, XrayVM *vm1, const char *msg, int level);
 int xray_ref(XrayVM *vm, int t);
 void xray_unref(XrayVM *vm, int t, int ref);
 
-/*
-** GC control
-*/
-int xray_gc(XrayVM *vm, int what, int data);
-
-#define XRAY_GCSTOP 0
-#define XRAY_GCRESTART 1
-#define XRAY_GCCOLLECT 2
-#define XRAY_GCCOUNT 3
-#define XRAY_GCSTEP 4
-
 /* ========== Backend Control ========== */
 
 /*

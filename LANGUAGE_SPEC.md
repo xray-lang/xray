@@ -2948,17 +2948,16 @@ Xray uses a layered memory management strategy:
 | Storage | Mechanism | Reclamation |
 |--|--|--|
 | Global heap (`shared const`) | refcount | when refcount reaches 0 |
-| Local heap (general objects) | Mark-Sweep GC | when unreachable |
+| Local heap (general objects) | reference counting + cycle collection | when the last reference is released; strong cycles are reclaimed by the cycle collector |
 | Stack (`struct` values, locals) | RAII | when scope exits |
 | Arena (low-level temporary allocations) | bulk free | at arena end |
 
-**GC observation points**:
-- Default: incremental Mark-Sweep.
-- Mark phase traverses from the root set (globals, stack, registers).
-- Sweep phase reclaims unmarked objects.
-- The GC requires GC-safepoints; safepoints in the instruction stream include function calls, backward branches, and explicit `gc.collect()`.
+**Memory observation points**:
+- Default reclamation is reference-counted.
+- Strong reference cycles are handled by the cycle collector at safepoints or explicit `mem.collectCycles()`.
+- Memory safepoints in the instruction stream include function calls, backward branches, and explicit `mem.collectCycles()`.
 
-**Write barriers** and **generational GC** design: see `docs/rules/gc-memory.md`.
+Cycle collection and heap-layout design: see `src/runtime/mem/`.
 
 ---
 
@@ -4532,7 +4531,7 @@ The `ord?` parameter accepts an `Ordering` enum; defaults to `Ordering.SeqCst`. 
 
 > **Authoritative native module list** (22 modules; source: `stdlib/<module>/*.c`):
 >
-> `base64`, `cluster`, `compress`, `crypto`, `csv`, `datetime`, `encoding`, `gc`, `http`, `io`, `log`, `math`, `net`, `os`, `path`, `regex`, `time`, `toml`, `url`, `ws`, `xml`, `yaml`.
+> `base64`, `cluster`, `compress`, `crypto`, `csv`, `datetime`, `encoding`, `mem`, `http`, `io`, `log`, `math`, `net`, `os`, `path`, `regex`, `time`, `toml`, `url`, `ws`, `xml`, `yaml`.
 >
 > Built-in types that need no import are registered by the prelude (`Array`, `Map`, `Set`, `Json`, `Channel`, `Bytes`, `BigInt`, `StringBuilder`, `Exception`, `Regex`, `Logger`, `NetConn`, `NetListener`, etc.). See §1.5.6 / §2.2.
 
@@ -4627,7 +4626,7 @@ The TLS client path is provided by `dialTLS(host, port, timeout?)` and `upgradeT
 | Module | Key APIs |
 |--|--|
 | `log` | `debug` / `info` / `warn` / `error` / `fatal` / `child()`, source-position toggles, async write mode |
-| `gc` | `collect()` `isrunning()` `count()` `state()` `stats()` |
+| `mem` | `collectCycles()` `isCycleCollectionEnabled()` `liveBytes()` `liveObjects()` `info()` |
 
 ### 15.10 Distributed
 
@@ -4653,7 +4652,7 @@ Their functionality has either moved into other modules (see the per-section not
 
 ## 16. Runtime Model
 
-> Source of truth: `src/runtime/`, `src/vm/`, `docs/rules/gc-memory.md`, `docs/rules/architecture.md`.
+> Source of truth: `src/runtime/`, `src/vm/`, `src/runtime/mem/`, `docs/rules/architecture.md`.
 
 ### 16.1 Value Representation
 
@@ -4661,7 +4660,7 @@ Xray values are uniformly represented as `xray_value_t`. Layout strategy:
 
 - **NaN-boxing** (on 64-bit platforms): unused IEEE-754 NaN bit space encodes small integers, booleans, and pointer tags.
 - **Pointer tagging**: low-bit tags distinguish object kinds.
-- **Object references**: heap objects are referenced via tagged pointers; the current GC does not move objects.
+- **Object references**: heap objects are referenced via tagged pointers; the current memory model does not move objects.
 
 | Value type | Internal representation |
 |--|--|
@@ -4678,19 +4677,19 @@ Xray values are uniformly represented as `xray_value_t`. Layout strategy:
 | Region | Use |
 |--|--|
 | **System heap** | C `malloc/free`, used for native data structures |
-| **Global heap** | `shared const` / `shared let`, refcount GC |
-| **Coroutine heap** | per-coroutine independent Mark-Sweep GC heap |
+| **Global heap** | `shared const` / `shared let`, reference counting |
+| **Coroutine heap** | per-coroutine RC object heap; strong cycles are reclaimed by the cycle collector |
 | **Stack** | `struct` values, local immediates, function frames |
 | **Arena** | parser temporary allocation, frame allocation |
 
-### 16.3 GC Model
+### 16.3 Memory Model
 
-- Default **per-coroutine Mark-Sweep / Immix Mark-Region**.
-- **Tri-color marking**: white (unvisited) / gray (pending) / black (scanned).
-- **Write barriers**: triggered when writing GC values into object fields, module fields, static fields, and containers; Sticky Immix uses a backward barrier to maintain young/old relationships.
-- **GC-safepoints**: function calls, backward branches, explicit `gc.collect()`.
+- Default reclamation is **per-coroutine reference counting**. When the last strong reference is released, the object enters its release path immediately.
+- **Cycle collection** handles strong reference cycles; the explicit user entrypoint is `mem.collectCycles()`.
+- **Memory safepoints**: function calls, backward branches, explicit `mem.collectCycles()`.
+- **User-visible introspection**: `mem.liveBytes()` / `mem.liveObjects()` / `mem.info()` report the current coroutine heap's live-memory view.
 
-See `docs/rules/gc-memory.md` for details.
+See `src/runtime/mem/` for details.
 
 ### 16.4 Coroutine Scheduling
 
@@ -5429,7 +5428,7 @@ The full set of 22 native modules is documented in [§15](#15-standard-library-o
 | `csv` | CSV parsing/serialization |
 | `datetime` | date and time |
 | `encoding` | character encoding conversion |
-| `gc` | GC control |
+| `mem` | memory and cycle-collection introspection |
 | `http` | HTTP/REST |
 | `io` | file I/O |
 | `log` | structured logging |

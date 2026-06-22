@@ -2,14 +2,14 @@
 // Verifies dual-bitmap design: alloc_marks stable during GC mark phase,
 // preventing live child objects from being overwritten by hole scanning.
 
-import gc
+import mem
 
 // --- Test 1: Nested objects survive incremental GC ---
 // Parent objects reference child objects. During incremental GC,
 // child lines must not be treated as free holes.
 @test
 fn test_nested_object_survival() {
-    gc.disable()
+    mem.disableCycleCollection()
     let containers: Array<Json> = []
     for (let i = 0; i < 200; i++) {
         let inner_map = #{"key": "value_" + string(i), "idx": i}
@@ -19,8 +19,8 @@ fn test_nested_object_survival() {
             "name": "container_" + string(i)})
     }
 
-    // Force GC to run
-    gc.collect()
+    // Force cycle collection to run
+    mem.collectCycles()
 
     // Verify all nested data is intact
     for (let i = 0; i < 200; i++) {
@@ -31,25 +31,25 @@ fn test_nested_object_survival() {
     }
 }
 
-// --- Test 2: Allocate during GC cycle ---
+// --- Test 2: Allocate during cycle-collection round ---
 // Create objects, trigger GC, then create more objects.
 // The new objects must not overwrite old live objects.
 @test
 fn test_alloc_interleaved_with_gc() {
-    gc.disable()
+    mem.disableCycleCollection()
     let phase1: Array<Json> = []
     for (let i = 0; i < 100; i++) {
         phase1.push(#{"id": i, "data": "phase1_" + string(i)})
     }
 
-    gc.collect()
+    mem.collectCycles()
 
     let phase2: Array<Json> = []
     for (let i = 0; i < 100; i++) {
         phase2.push(#{"id": i + 100, "data": "phase2_" + string(i)})
     }
 
-    gc.collect()
+    mem.collectCycles()
 
     // Verify both phases intact
     for (let i = 0; i < 100; i++) {
@@ -59,11 +59,11 @@ fn test_alloc_interleaved_with_gc() {
 }
 
 // --- Test 3: Deep reference chains ---
-// Build a linked-list-like structure. GC must traverse the full chain
+// Build a linked-list-like structure. cycle collector must traverse the full chain
 // and mark all lines before hole scanning can reclaim anything.
 @test
 fn test_deep_reference_chain() {
-    gc.disable()
+    mem.disableCycleCollection()
     let head: Json = {"value": 0, "next": null}
     let current: Json = head
     for (let i = 1; i < 50; i++) {
@@ -72,7 +72,7 @@ fn test_deep_reference_chain() {
         current = node
     }
 
-    gc.collect()
+    mem.collectCycles()
 
     // Walk the chain and verify
     current = head
@@ -90,7 +90,7 @@ fn test_deep_reference_chain() {
 // Exercises hole scanning after GC reclaims dead temp objects.
 @test
 fn test_high_churn_with_live_roots() {
-    gc.disable()
+    mem.disableCycleCollection()
     let live: Array<string> = []
     for (let i = 0; i < 50; i++) {
         live.push("persistent_" + string(i))
@@ -104,7 +104,7 @@ fn test_high_churn_with_live_roots() {
         // temp goes out of scope
     }
 
-    gc.collect()
+    mem.collectCycles()
 
     // Live roots must survive all the churn
     for (let i = 0; i < 50; i++) {
@@ -112,21 +112,21 @@ fn test_high_churn_with_live_roots() {
     }
 }
 
-// --- Test 5: Multiple GC cycles ---
-// Run several full GC cycles with allocation in between.
+// --- Test 5: Multiple cycle-collection rounds ---
+// Run several full cycle-collection rounds with allocation in between.
 @test
 fn test_multiple_gc_cycles() {
-    gc.disable()
+    mem.disableCycleCollection()
     for (let cycle = 0; cycle < 10; cycle++) {
         let data: Array<Json> = []
         for (let i = 0; i < 100; i++) {
             data.push(#{"cycle": cycle, "idx": i})
         }
-        gc.collect()
+        mem.collectCycles()
         // Verify last batch
         assert_eq(data[99]["cycle"], cycle)
         assert_eq(data[99]["idx"], 99)
     }
 }
 
-print("All incremental GC pressure tests passed")
+print("All incremental memory pressure tests passed")

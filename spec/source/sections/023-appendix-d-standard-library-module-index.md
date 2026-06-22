@@ -19,7 +19,7 @@ order: 023
 | `csv` | CSV 解析/序列化 |
 | `datetime` | 日期时间 |
 | `encoding` | 字符编码转换 |
-| `gc` | GC 控制 |
+| `mem` | 内存与循环引用回收 |
 | `http` | HTTP/REST |
 | `io` | 文件 I/O |
 | `log` | 结构化日志 |
@@ -52,7 +52,7 @@ The full set of 22 native modules is documented in [§15](#15-standard-library-o
 | `csv` | CSV parsing/serialization |
 | `datetime` | date and time |
 | `encoding` | character encoding conversion |
-| `gc` | GC control |
+| `mem` | memory and cycle-collection introspection |
 | `http` | HTTP/REST |
 | `io` | file I/O |
 | `log` | structured logging |

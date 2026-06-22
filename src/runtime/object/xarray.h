@@ -36,14 +36,14 @@
 /* ====== Convenience Macros ====== */
 
 #define XR_ARRAY_DATA_AS(arr, type) ((type *) ((arr)->data))
-#define XR_ARRAY_IS_GC_TRACED(arr) ((arr)->elem_type == XR_ELEM_ANY)
+#define XR_ARRAY_MAY_CONTAIN_REFS(arr) ((arr)->elem_type == XR_ELEM_ANY)
 
-/* Set monotonic flag when storing a GC pointer into an ANY array.
- * Once set, never cleared — GC must scan this array's elements. */
-#define XR_ARRAY_MARK_GC_PTRS(arr, val)                                                            \
+/* Set monotonic flag when storing an object reference into an ANY array.
+ * Once set, never cleared: cycle collection and deep-copy paths must scan it. */
+#define XR_ARRAY_MARK_REFS(arr, val)                                                               \
     do {                                                                                           \
-        if (!(arr)->has_gc_ptrs && XR_VALUE_NEEDS_GC(val))                                         \
-            (arr)->has_gc_ptrs = 1;                                                                \
+        if (!(arr)->contains_refs && XR_VALUE_NEEDS_GC(val))                                       \
+            (arr)->contains_refs = 1;                                                              \
     } while (0)
 
 // Initialize array in-place (for system heap allocation)
@@ -60,18 +60,18 @@ XR_FUNC void xr_array_init_inplace(struct XrArray *arr, int capacity, uint8_t el
  * XR_ARRAY_ABI_FIELDS so the VM and AOT array layouts stay in lockstep.
  *
  * elem_type determines storage layout:
- *   XR_ELEM_ANY  → data is XrValue[], GC-traced
- *   XR_ELEM_I8   → data is int8_t[], no GC
- *   XR_ELEM_U8   → data is uint8_t[], no GC (replaces Bytes)
- *   XR_ELEM_I64  → data is int64_t[], no GC (Array<int>)
- *   XR_ELEM_F64  → data is double[], no GC (Array<float>)
+ *   XR_ELEM_ANY  -> data is XrValue[], may contain object references
+ *   XR_ELEM_I8   -> data is int8_t[], no object references
+ *   XR_ELEM_U8   -> data is uint8_t[], no object references (replaces Bytes)
+ *   XR_ELEM_I64  -> data is int64_t[], no object references (Array<int>)
+ *   XR_ELEM_F64  -> data is double[], no object references (Array<float>)
  *   etc.
  */
 struct XrArray {
     XrObjHeader hdr;
     XR_ARRAY_ABI_FIELDS;
-    uint8_t data_on_gc_heap;  // VM-only: 1 if data buffer is on Region GC heap (no free needed)
-    uint8_t _pad[2];          // Alignment / reserved
+    uint8_t data_on_region_heap;  // VM-only: 1 if data buffer is on owner Region heap
+    uint8_t _pad[2];              // Alignment / reserved
 };
 typedef struct XrArray XrArray;
 
@@ -144,7 +144,7 @@ static inline XrValue xr_array_get_element(XrArray *arr, int32_t index) {
 // Write element at index from XrValue (delegates to shared xr_typed_set)
 static inline void xr_array_set_element(XrArray *arr, int32_t index, XrValue value) {
     if (xr_typed_set(arr->data, index, value, arr->elem_type)) {
-        XR_ARRAY_MARK_GC_PTRS(arr, value);
+        XR_ARRAY_MARK_REFS(arr, value);
     }
 }
 

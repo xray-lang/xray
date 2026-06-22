@@ -19,7 +19,7 @@
  *   Level 3 (WARNING): Problems that need attention
  *
  * USAGE:
- *   xr_log_debug("gc", "sweep phase: %d blocks freed", count);
+ *   xr_log_debug("mem", "cycle collection reclaimed %d blocks", count);
  *   xr_log_notice("module", "loaded '%s' in %dms", name, ms);
  *   xr_log_warning("vm", "stack near limit: %d/%d", used, max);
  *

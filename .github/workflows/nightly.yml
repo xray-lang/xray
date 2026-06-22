@@ -2,7 +2,7 @@ name: Nightly
 
 # Nightly runs cover slow / platform-specific configurations that
 # would inflate PR latency if gated synchronously:
-#   - gc-stress           : repeated GC-heavy regressions
+#   - mem-stress           : repeated memory-heavy regressions
 #   - linux-msan          : MemorySanitizer (track-origins=2)
 #   - windows-msvc-release: MSVC Release CRT with the four Win11
 #                           coroutine scenarios that exposed
@@ -24,9 +24,9 @@ env:
 
 jobs:
   # ---------------------------------------------------------------------------
-  # 1. GC stress on Linux + macOS arm64
+  # 1. Memory stress on Linux + macOS arm64
   # ---------------------------------------------------------------------------
-  gc-stress:
+  mem-stress:
     strategy:
       fail-fast: false
       matrix:
@@ -37,7 +37,7 @@ jobs:
             short_name: macos-arm64
 
     runs-on: ${{ matrix.os }}
-    name: GC Stress (${{ matrix.short_name }})
+    name: Memory Stress (${{ matrix.short_name }})
     timeout-minutes: 30
 
     env:
@@ -69,16 +69,16 @@ jobs:
       - name: Build
         run: cmake --build build -j
 
-      - name: Run GC-heavy regression tests 10 times
+      - name: Run memory-heavy regression tests 10 times
         env:
           XRAY_BIN: ./build/xray
-        # run_gc_stress.sh selects the GC-heavy regression set (1205 /
+        # run_mem_stress.sh selects the memory-heavy regression set (1205 /
         # 1206 / 1207). Failure tails for any crashed iteration land in
-        # tests/tmp/gc_stress_failures.log which the artifact upload
+        # tests/tmp/mem_stress_failures.log which the artifact upload
         # below would pick up if added in a follow-up.
         run: |
-          chmod +x ./scripts/run_gc_stress.sh
-          bash ./scripts/run_gc_stress.sh 10
+          chmod +x ./scripts/run_mem_stress.sh
+          bash ./scripts/run_mem_stress.sh 10
 
   # ---------------------------------------------------------------------------
   # 2. Linux MSan

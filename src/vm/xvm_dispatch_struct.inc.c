@@ -64,7 +64,7 @@ vmcase(OP_TARRAY_SET) {
                          idx, arr->length);
     }
     if (xr_typed_set(arr->data, idx, R(c), arr->elem_type)) {
-        XR_ARRAY_MARK_GC_PTRS(arr, R(c));
+        XR_ARRAY_MARK_REFS(arr, R(c));
     }
     vmbreak;
 }
@@ -82,7 +82,7 @@ vmcase(OP_TARRAY_PUSH) {
     }
     int32_t idx = arr->length++;
     if (xr_typed_set(arr->data, idx, R(b), arr->elem_type)) {
-        XR_ARRAY_MARK_GC_PTRS(arr, R(b));
+        XR_ARRAY_MARK_REFS(arr, R(b));
     }
     vmbreak;
 }

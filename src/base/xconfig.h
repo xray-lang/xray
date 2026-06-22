@@ -20,9 +20,9 @@
 #include <stdbool.h>
 #include "xdefs.h"
 
-/* ========== GC Config ========== */
+/* ========== Memory Config ========== */
 
-typedef struct XrayGCConfig {
+typedef struct XrayMemoryConfig {
     // Heap config
     size_t heap_initial;
     size_t heap_min;
@@ -33,11 +33,7 @@ typedef struct XrayGCConfig {
     bool debug;
     bool enable_stats;
 
-    // Incremental GC
-    size_t step_size;
-    uint64_t pause_target_us;
-
-} XrayGCConfig;
+} XrayMemoryConfig;
 
 /* ========== Compiler Config ========== */
 
@@ -64,7 +60,7 @@ typedef struct XrayConfig {
     bool verbose;
 
     // Module configs
-    XrayGCConfig gc;
+    XrayMemoryConfig memory;
     XrayCompilerConfig compiler;
     XrayVMConfig vm;
 

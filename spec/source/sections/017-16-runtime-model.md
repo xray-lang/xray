@@ -8,7 +8,7 @@ order: 017
 
 ## 16. 运行时模型 (Runtime Model)
 
-> 真值源：`src/runtime/`、`src/vm/`、`docs/rules/gc-memory.md`、`docs/rules/architecture.md`。
+> 真值源：`src/runtime/`、`src/vm/`、`src/runtime/mem/`、`docs/rules/architecture.md`。
 
 ### 16.1 值表示
 
@@ -16,7 +16,7 @@ xray 值统一用 `xray_value_t` 表示。布局策略：
 
 - **NaN-boxing**（在 64 位平台）：double 编码用未使用的 NaN 表示空间存放小整数、bool、指针标记。
 - **指针标记**：低位 tag 区分对象类型。
-- **对象引用**：堆对象通过 tagged pointer 引用；当前 GC 不移动对象。
+- **对象引用**：堆对象通过 tagged pointer 引用；当前内存模型不移动对象。
 
 | 值类型 | 内部表示 |
 |--|--|
@@ -33,19 +33,19 @@ xray 值统一用 `xray_value_t` 表示。布局策略：
 | 区域 | 用途 |
 |--|--|
 | **系统堆** | C `malloc/free`，用于 native 数据结构 |
-| **全局堆** | `shared const` / `shared let`，refcount GC |
-| **协程堆** | 每协程独立的 Mark-Sweep GC 堆 |
+| **全局堆** | `shared const` / `shared let`，引用计数 |
+| **协程堆** | 每协程独立的 RC 对象堆，强引用环由 cycle collector 回收 |
 | **栈** | `struct` 值、局部 immediate、函数帧 |
 | **Arena** | parser 临时分配、frame allocation |
 
-### 16.3 GC 模型
+### 16.3 内存模型
 
-- 默认 **per-coroutine Mark-Sweep / Immix Mark-Region**。
-- **三色标记**：white（未访问）/ gray（待扫）/ black（已扫）。
-- **写屏障**：对象字段、模块字段、静态字段、容器写入 GC 值时触发；Sticky Immix 使用后向屏障维护 young/old 关系。
-- **GC-safepoint**：函数调用、后向跳转、显式 `gc.collect()`。
+- 默认 **per-coroutine reference counting**。最后一个强引用释放时，对象立即进入释放路径。
+- **循环引用回收**：强引用环由 cycle collector 处理；显式入口是 `mem.collectCycles()`。
+- **内存安全点**：函数调用、后向跳转、显式 `mem.collectCycles()`。
+- **用户可见 introspection**：`mem.liveBytes()` / `mem.liveObjects()` / `mem.info()` 只报告当前协程堆的 live memory 视图。
 
-详见 `docs/rules/gc-memory.md`。
+详见 `src/runtime/mem/`。
 
 ### 16.4 协程调度
 
@@ -131,7 +131,7 @@ xray **当前不提供用户可见的确定性析构（destructor / finalizer / 
 
 ## 16. Runtime Model
 
-> Source of truth: `src/runtime/`, `src/vm/`, `docs/rules/gc-memory.md`, `docs/rules/architecture.md`.
+> Source of truth: `src/runtime/`, `src/vm/`, `src/runtime/mem/`, `docs/rules/architecture.md`.
 
 ### 16.1 Value Representation
 
@@ -139,7 +139,7 @@ Xray values are uniformly represented as `xray_value_t`. Layout strategy:
 
 - **NaN-boxing** (on 64-bit platforms): unused IEEE-754 NaN bit space encodes small integers, booleans, and pointer tags.
 - **Pointer tagging**: low-bit tags distinguish object kinds.
-- **Object references**: heap objects are referenced via tagged pointers; the current GC does not move objects.
+- **Object references**: heap objects are referenced via tagged pointers; the current memory model does not move objects.
 
 | Value type | Internal representation |
 |--|--|
@@ -156,19 +156,19 @@ Xray values are uniformly represented as `xray_value_t`. Layout strategy:
 | Region | Use |
 |--|--|
 | **System heap** | C `malloc/free`, used for native data structures |
-| **Global heap** | `shared const` / `shared let`, refcount GC |
-| **Coroutine heap** | per-coroutine independent Mark-Sweep GC heap |
+| **Global heap** | `shared const` / `shared let`, reference counting |
+| **Coroutine heap** | per-coroutine RC object heap; strong cycles are reclaimed by the cycle collector |
 | **Stack** | `struct` values, local immediates, function frames |
 | **Arena** | parser temporary allocation, frame allocation |
 
-### 16.3 GC Model
+### 16.3 Memory Model
 
-- Default **per-coroutine Mark-Sweep / Immix Mark-Region**.
-- **Tri-color marking**: white (unvisited) / gray (pending) / black (scanned).
-- **Write barriers**: triggered when writing GC values into object fields, module fields, static fields, and containers; Sticky Immix uses a backward barrier to maintain young/old relationships.
-- **GC-safepoints**: function calls, backward branches, explicit `gc.collect()`.
+- Default reclamation is **per-coroutine reference counting**. When the last strong reference is released, the object enters its release path immediately.
+- **Cycle collection** handles strong reference cycles; the explicit user entrypoint is `mem.collectCycles()`.
+- **Memory safepoints**: function calls, backward branches, explicit `mem.collectCycles()`.
+- **User-visible introspection**: `mem.liveBytes()` / `mem.liveObjects()` / `mem.info()` report the current coroutine heap's live-memory view.
 
-See `docs/rules/gc-memory.md` for details.
+See `src/runtime/mem/` for details.
 
 ### 16.4 Coroutine Scheduling
 

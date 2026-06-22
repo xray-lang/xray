@@ -1,12 +1,12 @@
-// GC stress tests: cover all historical bug patterns and audit findings
+// Memory stress tests: cover all historical bug patterns and audit findings
 // Pattern A: cross-subsystem liveness disagreement (string pool, alloc_marks)
 // Pattern B: incremental/generational time window issues
 // Pattern C: special paths skipping common logic (large objects, JIT alloc)
 
-import gc
+import mem
 
-// --- Test 1: String pool survival under GC pressure ---
-// Bug #4 pattern: interned strings must survive gc.collect()
+// --- Test 1: String pool survival under memory pressure ---
+// Bug #4 pattern: interned strings must survive mem.collectCycles()
 // Exercises: global string pool ACCESSED flag + markobject path
 @test
 fn test_string_pool_survival() {
@@ -15,9 +15,9 @@ fn test_string_pool_survival() {
         strings.push("interned_str_" + string(i))
     }
 
-    // Multiple GC cycles to trigger string pool sweep
+    // Multiple cycle-collection rounds to trigger string pool sweep
     for (let cycle = 0; cycle < 5; cycle++) {
-        gc.collect()
+        mem.collectCycles()
         // Create garbage between cycles
         for (let j = 0; j < 100; j++) {
             let tmp = "temp_garbage_" + string(j) + "_" + string(cycle)
@@ -41,14 +41,14 @@ fn test_nested_string_key_survival() {
         data.push(m)
     }
 
-    gc.collect()
+    mem.collectCycles()
 
     // Create churn to stress hole scanning
     for (let j = 0; j < 500; j++) {
         let tmp = [j, j + 1, j + 2]
     }
 
-    gc.collect()
+    mem.collectCycles()
 
     for (let i = 0; i < 200; i++) {
         assert_eq(data[i]["val"], i * 3)
@@ -69,14 +69,14 @@ fn test_closure_upvalue_gc() {
         })
     }
 
-    gc.collect()
+    mem.collectCycles()
 
     // Create garbage to push GC
     for (let j = 0; j < 300; j++) {
         let tmp = #{"garbage": j}
     }
 
-    gc.collect()
+    mem.collectCycles()
 
     for (let i = 0; i < 100; i++) {
         assert_eq(closures[i](), "captured_" + string(i) + "_" + string(i * 2))
@@ -84,7 +84,7 @@ fn test_closure_upvalue_gc() {
 }
 
 // --- Test 4: Rapid alloc-collect cycles ---
-// Bug #1 pattern: allocations interleaved with GC must not overwrite each other
+// Bug #1 pattern: allocations interleaved with cycle collector must not overwrite each other
 // Exercises: alloc_marks stability during mark phase
 @test
 fn test_rapid_alloc_collect() {
@@ -94,7 +94,7 @@ fn test_rapid_alloc_collect() {
         for (let i = 0; i < 50; i++) {
             batch.push(#{"c": cycle, "i": i, "s": "v" + string(cycle) + "_" + string(i)})
         }
-        gc.collect()
+        mem.collectCycles()
         // Keep last batch alive
         if (cycle >= 15) {
             survivors.push(batch)
@@ -126,14 +126,14 @@ fn test_mixed_container_gc() {
         data.push(#{"arr": arr[i], "map_key": "k" + string(i)})
     }
 
-    gc.collect()
+    mem.collectCycles()
 
     // Create garbage
     for (let j = 0; j < 500; j++) {
         let tmp = [j, j]
     }
 
-    gc.collect()
+    mem.collectCycles()
 
     // Verify all containers intact
     for (let i = 0; i < 100; i++) {
@@ -155,7 +155,7 @@ fn test_generational_cross_reference() {
         long_lived.push(#{"id": i, "children": []})
     }
 
-    gc.collect()
+    mem.collectCycles()
 
     // Now add young objects as children of old objects
     for (let round = 0; round < 10; round++) {
@@ -168,7 +168,7 @@ fn test_generational_cross_reference() {
             let tmp = #{"temp": j}
         }
 
-        gc.collect()
+        mem.collectCycles()
     }
 
     // Verify all children survived
@@ -192,7 +192,7 @@ fn test_string_concat_churn() {
         results.push(s)
 
         if (i % 20 == 0) {
-            gc.collect()
+            mem.collectCycles()
         }
     }
 
@@ -227,14 +227,14 @@ fn test_instance_field_gc() {
         nodes.push(n)
     }
 
-    gc.collect()
+    mem.collectCycles()
 
     // Garbage storm
     for (let j = 0; j < 500; j++) {
         let tmp = new Node(j + 1000, "garbage")
     }
 
-    gc.collect()
+    mem.collectCycles()
 
     // Verify
     for (let i = 0; i < 100; i++) {
@@ -245,4 +245,4 @@ fn test_instance_field_gc() {
     assert_eq(nodes[0].children[0].value, 1)
 }
 
-print("All GC stress tests passed")
+print("All memory stress tests passed")

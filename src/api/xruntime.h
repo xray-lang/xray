@@ -9,7 +9,7 @@
  *
  * KEY CONCEPT:
  *   This header defines the public runtime API shared by all execution backends.
- *   It provides memory allocation, object creation, type checking, and GC control.
+ *   It provides memory allocation, object creation, and type checking.
  *
  * WHY THIS DESIGN:
  *   - Backend-agnostic: works with the VM and AOT backends
@@ -59,22 +59,11 @@ XRAY_API const char *xray_runtime_version(void);
 
 /* ========== Memory Allocation ========== */
 
-// Allocate GC-managed memory. type_info is optional but recommended.
+// Allocate runtime-managed memory.
 XRAY_API void *xray_alloc(XrayIsolate *X, size_t size);
 
 // Reallocate memory (for non-GC-managed memory only)
 XRAY_API void *xray_realloc(XrayIsolate *X, void *ptr, size_t old_size, size_t new_size);
-
-/* ========== GC Control ========== */
-
-// Trigger garbage collection
-XRAY_API void xray_gc_collect(XrayIsolate *X);
-
-// Get GC statistics (allocated bytes and threshold)
-XRAY_API void xray_gc_stats(XrayIsolate *X, size_t *allocated, size_t *gc_threshold);
-
-// Set GC threshold in bytes
-XRAY_API void xray_gc_set_threshold(XrayIsolate *X, size_t threshold);
 
 /* ========== Object Creation ========== */
 

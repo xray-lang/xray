@@ -2947,17 +2947,16 @@ Xray 采用多层内存管理：
 | 存储 | 机制 | 释放时机 |
 |--|--|--|
 | 全局堆（`shared const`） | refcount | refcount 变 0 |
-| 局部堆（一般对象） | Mark-Sweep GC | 不可达时 |
+| 局部堆（一般对象） | 引用计数 + 循环引用回收 | 最后引用释放；强引用环由 cycle collector 回收 |
 | 栈（`struct` 值、本地） | RAII | 作用域退出 |
 | Arena（底层临时分配） | 批量释放 | arena 结束 |
 
-**GC 观察点**：
-- 默认 incremental Mark-Sweep。
-- Mark 阶段从根集（全局、栈、寄存器）遍历。
-- Sweep 阶段释放未标记对象。
-- GC 需要 GC-safepoint；指令列表中成为 safepoint 的点包括函数调用、后向跳转、显式 `gc.collect()`。
+**内存观察点**：
+- 默认以引用计数立即释放对象。
+- 强引用环由 cycle collector 在安全点或显式 `mem.collectCycles()` 时处理。
+- 指令列表中成为内存安全点的点包括函数调用、后向跳转、显式 `mem.collectCycles()`。
 
-**写屏障**与**代际 GC** 设计：见 `docs/rules/gc-memory.md`。
+循环引用回收与堆布局设计：见 `src/runtime/mem/`。
 
 ---
 
@@ -4531,7 +4530,7 @@ BigInt 使用 `123n` 字面量或 `int.toBigInt()`；Json 使用 `Json.parse` / 
 
 > **真实 native 模块清单**（22 个，源码：`stdlib/<module>/*.c`）：
 >
-> `base64`、`cluster`、`compress`、`crypto`、`csv`、`datetime`、`encoding`、`gc`、`http`、`io`、`log`、`math`、`net`、`os`、`path`、`regex`、`time`、`toml`、`url`、`ws`、`xml`、`yaml`。
+> `base64`、`cluster`、`compress`、`crypto`、`csv`、`datetime`、`encoding`、`mem`、`http`、`io`、`log`、`math`、`net`、`os`、`path`、`regex`、`time`、`toml`、`url`、`ws`、`xml`、`yaml`。
 >
 > 不需要 import 的内置类型由 prelude 注册（`Array` `Map` `Set` `Json` `Channel` `Bytes` `BigInt` `StringBuilder` `Exception` `Regex` `Logger` `NetConn` `NetListener` 等）。详见 §1.5.6 / §2.2。
 
@@ -4626,7 +4625,7 @@ TLS client 路径通过 `dialTLS(host, port, timeout?)` 和 `upgradeTLS(conn, ho
 | 模块 | 关键 API |
 |--|--|
 | `log` | `debug` / `info` / `warn` / `error` / `fatal` / `child()`、source 位置开关、异步写入模式 |
-| `gc` | `collect()` `isrunning()` `count()` `state()` `stats()` |
+| `mem` | `collectCycles()` `isCycleCollectionEnabled()` `liveBytes()` `liveObjects()` `info()` |
 
 ### 15.10 分布式
 
@@ -4652,7 +4651,7 @@ TLS client 路径通过 `dialTLS(host, port, timeout?)` 和 `upgradeTLS(conn, ho
 
 ## 16. 运行时模型 (Runtime Model)
 
-> 真值源：`src/runtime/`、`src/vm/`、`docs/rules/gc-memory.md`、`docs/rules/architecture.md`。
+> 真值源：`src/runtime/`、`src/vm/`、`src/runtime/mem/`、`docs/rules/architecture.md`。
 
 ### 16.1 值表示
 
@@ -4660,7 +4659,7 @@ xray 值统一用 `xray_value_t` 表示。布局策略：
 
 - **NaN-boxing**（在 64 位平台）：double 编码用未使用的 NaN 表示空间存放小整数、bool、指针标记。
 - **指针标记**：低位 tag 区分对象类型。
-- **对象引用**：堆对象通过 tagged pointer 引用；当前 GC 不移动对象。
+- **对象引用**：堆对象通过 tagged pointer 引用；当前内存模型不移动对象。
 
 | 值类型 | 内部表示 |
 |--|--|
@@ -4677,19 +4676,19 @@ xray 值统一用 `xray_value_t` 表示。布局策略：
 | 区域 | 用途 |
 |--|--|
 | **系统堆** | C `malloc/free`，用于 native 数据结构 |
-| **全局堆** | `shared const` / `shared let`，refcount GC |
-| **协程堆** | 每协程独立的 Mark-Sweep GC 堆 |
+| **全局堆** | `shared const` / `shared let`，引用计数 |
+| **协程堆** | 每协程独立的 RC 对象堆，强引用环由 cycle collector 回收 |
 | **栈** | `struct` 值、局部 immediate、函数帧 |
 | **Arena** | parser 临时分配、frame allocation |
 
-### 16.3 GC 模型
+### 16.3 内存模型
 
-- 默认 **per-coroutine Mark-Sweep / Immix Mark-Region**。
-- **三色标记**：white（未访问）/ gray（待扫）/ black（已扫）。
-- **写屏障**：对象字段、模块字段、静态字段、容器写入 GC 值时触发；Sticky Immix 使用后向屏障维护 young/old 关系。
-- **GC-safepoint**：函数调用、后向跳转、显式 `gc.collect()`。
+- 默认 **per-coroutine reference counting**。最后一个强引用释放时，对象立即进入释放路径。
+- **循环引用回收**：强引用环由 cycle collector 处理；显式入口是 `mem.collectCycles()`。
+- **内存安全点**：函数调用、后向跳转、显式 `mem.collectCycles()`。
+- **用户可见 introspection**：`mem.liveBytes()` / `mem.liveObjects()` / `mem.info()` 只报告当前协程堆的 live memory 视图。
 
-详见 `docs/rules/gc-memory.md`。
+详见 `src/runtime/mem/`。
 
 ### 16.4 协程调度
 
@@ -5428,7 +5427,7 @@ OperatorToken ::= '+' | '-' | '*' | '/' | '%'
 | `csv` | CSV 解析/序列化 |
 | `datetime` | 日期时间 |
 | `encoding` | 字符编码转换 |
-| `gc` | GC 控制 |
+| `mem` | 内存与循环引用回收 |
 | `http` | HTTP/REST |
 | `io` | 文件 I/O |
 | `log` | 结构化日志 |

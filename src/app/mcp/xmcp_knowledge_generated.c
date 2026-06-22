@@ -365,54 +365,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_encoding[] = {
     },
 };
 
-static const XmcpGeneratedStdlibSymbol _symbols_gc[] = {
-    {
-        .name = "collect",
-        .signature = "(): int",
-        .summary = "Run cycle collection + whole-block reclaim, return cycle count",
-    },
-    {
-        .name = "count",
-        .signature = "(): float",
-        .summary = "Get live memory usage in KB",
-    },
-    {
-        .name = "countb",
-        .signature = "(): int",
-        .summary = "Get live memory usage in bytes",
-    },
-    {
-        .name = "cycles",
-        .signature = "(): int",
-        .summary = "Get number of cycle collections run",
-    },
-    {
-        .name = "disable",
-        .signature = "(): ()",
-        .summary = "Pause the automatic cycle collector",
-    },
-    {
-        .name = "enable",
-        .signature = "(): ()",
-        .summary = "Resume the automatic cycle collector",
-    },
-    {
-        .name = "info",
-        .signature = "(): Map",
-        .summary = "Get RC-native GC info as Map",
-    },
-    {
-        .name = "isrunning",
-        .signature = "(): bool",
-        .summary = "Check if automatic cycle collection is enabled",
-    },
-    {
-        .name = "objects",
-        .signature = "(): int",
-        .summary = "Get live GC object count",
-    },
-};
-
 static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     {
         .name = "DownloadResult",
@@ -1192,6 +1144,44 @@ static const XmcpGeneratedStdlibSymbol _symbols_math[] = {
         .name = "trunc",
         .signature = "(x: float): int",
         .summary = "Truncate toward zero",
+    },
+};
+
+static const XmcpGeneratedStdlibSymbol _symbols_mem[] = {
+    {
+        .name = "collectCycles",
+        .signature = "(): int",
+        .summary = "Run cycle collection + whole-block reclaim, return cycle collection count",
+    },
+    {
+        .name = "disableCycleCollection",
+        .signature = "(): ()",
+        .summary = "Pause the automatic cycle collector",
+    },
+    {
+        .name = "enableCycleCollection",
+        .signature = "(): ()",
+        .summary = "Resume the automatic cycle collector",
+    },
+    {
+        .name = "info",
+        .signature = "(): Map",
+        .summary = "Get memory-model runtime info as Map",
+    },
+    {
+        .name = "isCycleCollectionEnabled",
+        .signature = "(): bool",
+        .summary = "Check if automatic cycle collection is enabled",
+    },
+    {
+        .name = "liveBytes",
+        .signature = "(): int",
+        .summary = "Get live memory usage in bytes",
+    },
+    {
+        .name = "liveObjects",
+        .signature = "(): int",
+        .summary = "Get live object count",
     },
 };
 
@@ -3546,33 +3536,6 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
         .symbol_count = (int)(sizeof(_symbols_encoding) / sizeof(_symbols_encoding[0])),
     },
     {
-        .module = "gc",
-        .summary = "Garbage collector control interface",
-        .body =
-            "# gc module\n"
-            "\n"
-            "Garbage collector control interface.\n"
-            "\n"
-            "Usage: `import gc` then call `gc.function()`.\n"
-            "\n"
-            "## API\n"
-            "\n"
-            "| Symbol | Signature | Summary |\n"
-            "|--|--|--|\n"
-            "| `gc.collect` | `(): int` | Run cycle collection + whole-block reclaim, return cycle count |\n"
-            "| `gc.count` | `(): float` | Get live memory usage in KB |\n"
-            "| `gc.countb` | `(): int` | Get live memory usage in bytes |\n"
-            "| `gc.cycles` | `(): int` | Get number of cycle collections run |\n"
-            "| `gc.disable` | `(): ()` | Pause the automatic cycle collector |\n"
-            "| `gc.enable` | `(): ()` | Resume the automatic cycle collector |\n"
-            "| `gc.info` | `(): Map` | Get RC-native GC info as Map |\n"
-            "| `gc.isrunning` | `(): bool` | Check if automatic cycle collection is enabled |\n"
-            "| `gc.objects` | `(): int` | Get live GC object count |\n"
-            "",
-        .symbols = _symbols_gc,
-        .symbol_count = (int)(sizeof(_symbols_gc) / sizeof(_symbols_gc[0])),
-    },
-    {
         .module = "http",
         .summary = "HTTP client and server (REST API, routing, middleware)",
         .body =
@@ -3818,6 +3781,31 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "",
         .symbols = _symbols_math,
         .symbol_count = (int)(sizeof(_symbols_math) / sizeof(_symbols_math[0])),
+    },
+    {
+        .module = "mem",
+        .summary = "Memory and cycle-collection introspection",
+        .body =
+            "# mem module\n"
+            "\n"
+            "Memory and cycle-collection introspection for the current coroutine heap.\n"
+            "\n"
+            "Usage: `import mem` then call `mem.function()`.\n"
+            "\n"
+            "## API\n"
+            "\n"
+            "| Symbol | Signature | Summary |\n"
+            "|--|--|--|\n"
+            "| `mem.collectCycles` | `(): int` | Run cycle collection + whole-block reclaim, return cycle collection count |\n"
+            "| `mem.disableCycleCollection` | `(): ()` | Pause the automatic cycle collector |\n"
+            "| `mem.enableCycleCollection` | `(): ()` | Resume the automatic cycle collector |\n"
+            "| `mem.info` | `(): Map` | Get memory-model runtime info as Map |\n"
+            "| `mem.isCycleCollectionEnabled` | `(): bool` | Check if automatic cycle collection is enabled |\n"
+            "| `mem.liveBytes` | `(): int` | Get live memory usage in bytes |\n"
+            "| `mem.liveObjects` | `(): int` | Get live object count |\n"
+            "",
+        .symbols = _symbols_mem,
+        .symbol_count = (int)(sizeof(_symbols_mem) / sizeof(_symbols_mem[0])),
     },
     {
         .module = "net",
@@ -4690,7 +4678,7 @@ XR_DATADEF const char xmcp_generated_stdlib_list[] =
     "| `csv` | CSV parsing and generation |\n"
     "| `datetime` | Date and time manipulation |\n"
     "| `encoding` | Character encoding conversion |\n"
-    "| `gc` | Garbage collector control interface |\n"
+    "| `mem` | Memory and cycle-collection introspection |\n"
     "| `http` | HTTP client/server, REST API, routing |\n"
     "| `io` | File I/O operations |\n"
     "| `log` | Structured logging system |\n"
