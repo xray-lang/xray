@@ -1,0 +1,8 @@
+// 0211_public_identifier.xr
+// D13: `public` is no longer a reserved keyword; it can be used as an ordinary identifier.
+
+@test
+fn test_public_identifier_name() {
+    let public = 11
+    assert_eq(public, 11)
+}

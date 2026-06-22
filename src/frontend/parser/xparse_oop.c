@@ -39,6 +39,17 @@ static char *token_to_string(Parser *parser, Token *token) {
     return str;
 }
 
+static bool current_is_removed_public_modifier(Parser *parser) {
+    if (!xr_parser_check_name(parser, "public"))
+        return false;
+
+    Scanner saved = parser->scanner;
+    Token peek = xr_scanner_scan(&saved);
+    return peek.type == TK_NAME || peek.type == TK_STATIC || peek.type == TK_PRIVATE ||
+           peek.type == TK_CONSTRUCTOR || peek.type == TK_OPERATOR || peek.type == TK_ABSTRACT ||
+           peek.type == TK_OVERRIDE || peek.type == TK_FINAL;
+}
+
 /* ========== Local Cleanup Helpers ========== */
 
 // All parser allocations now go through the parse arena; individual frees
@@ -217,10 +228,9 @@ AstNode *xr_parse_class_declaration(Parser *parser) {
 
         // Skip unknown tokens to avoid infinite loop
         if (!xr_parser_check(parser, TK_NAME) && !xr_parser_check(parser, TK_PRIVATE) &&
-            !xr_parser_check(parser, TK_PUBLIC) && !xr_parser_check(parser, TK_STATIC) &&
-            !xr_parser_check(parser, TK_CONSTRUCTOR) && !xr_parser_check(parser, TK_ABSTRACT) &&
-            !xr_parser_check(parser, TK_OVERRIDE) && !xr_parser_check(parser, TK_FINAL) &&
-            !xr_parser_check(parser, TK_OPERATOR)) {
+            !xr_parser_check(parser, TK_STATIC) && !xr_parser_check(parser, TK_CONSTRUCTOR) &&
+            !xr_parser_check(parser, TK_ABSTRACT) && !xr_parser_check(parser, TK_OVERRIDE) &&
+            !xr_parser_check(parser, TK_FINAL) && !xr_parser_check(parser, TK_OPERATOR)) {
             xr_parser_error_expected_name(parser, "expected field or method name");
             xr_parser_advance(parser);
             continue;
@@ -428,8 +438,7 @@ AstNode *xr_parse_struct_declaration(Parser *parser) {
 
         // Skip unknown tokens
         if (!xr_parser_check(parser, TK_NAME) && !xr_parser_check(parser, TK_PRIVATE) &&
-            !xr_parser_check(parser, TK_PUBLIC) && !xr_parser_check(parser, TK_STATIC) &&
-            !xr_parser_check(parser, TK_OPERATOR)) {
+            !xr_parser_check(parser, TK_STATIC) && !xr_parser_check(parser, TK_OPERATOR)) {
             xr_parser_error_expected_name(parser, "expected field or method name in struct");
             xr_parser_advance(parser);
             continue;
@@ -500,6 +509,12 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
     bool is_override = false;
     bool is_final = false;
 
+    if (current_is_removed_public_modifier(parser)) {
+        xr_parser_error_at_current(
+            parser, "'public' modifier was removed; members are public by default, delete it");
+        xr_parser_advance(parser);
+    }
+
     if (xr_parser_match(parser, TK_OVERRIDE)) {
         is_override = true;
     }
@@ -510,8 +525,6 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
 
     if (xr_parser_match(parser, TK_PRIVATE)) {
         is_private = true;
-    } else if (xr_parser_match(parser, TK_PUBLIC)) {
-        is_private = false;  // explicit public
     }
 
     if (xr_parser_match(parser, TK_STATIC)) {

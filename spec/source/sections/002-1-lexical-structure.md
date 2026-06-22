@@ -8,7 +8,7 @@ order: 002
 
 ## 1. 词法结构 (Lexical Structure)
 
-> 真值源：`src/frontend/lexer/xlex.h`（token 枚举）、`src/frontend/lexer/xkeywords.def`（关键字表，62 条）、`src/frontend/lexer/xlex.c`（扫描器实现）。
+> 真值源：`src/frontend/lexer/xlex.h`（token 枚举）、`src/frontend/lexer/xkeywords.def`（关键字表，61 条）、`src/frontend/lexer/xlex.c`（扫描器实现）。
 
 ### 1.1 字符编码
 
@@ -59,7 +59,7 @@ IdentCont  ::= IdentStart | '0'..'9'
 
 ### 1.5 关键字
 
-xray 共 **62 个保留关键字**，源码真值表见 `src/frontend/lexer/xkeywords.def`。关键字按用途分组：
+xray 共 **61 个保留关键字**，源码真值表见 `src/frontend/lexer/xkeywords.def`。关键字按用途分组：
 
 #### 1.5.1 声明与流程控制
 
@@ -89,7 +89,7 @@ xray 共 **62 个保留关键字**，源码真值表见 `src/frontend/lexer/xkey
 | `new` | 实例化 |
 | `this` `super` | 自我/父类引用 |
 | `constructor` | 构造器 |
-| `static` `private` `public` | 可见性修饰符（`public` 是**默认**，几乎从不显式写出） |
+| `static` `private` | 类/成员修饰符；公开是默认语义，没有 `public` 关键字 |
 | `abstract` `final` `override` | 类/方法修饰符（`override` 是**可选**——重写父类方法不要求显式标注） |
 | `operator` | 运算符重载 |
 | `is` `as` | 运行时类型检查 / 转换 |
@@ -371,7 +371,7 @@ let primes = #[2, 3, 5, 7]
 
 ## 1. Lexical Structure
 
-> Source of truth: `src/frontend/lexer/xlex.h` (token enum), `src/frontend/lexer/xkeywords.def` (keyword table, 62 entries), `src/frontend/lexer/xlex.c` (scanner implementation).
+> Source of truth: `src/frontend/lexer/xlex.h` (token enum), `src/frontend/lexer/xkeywords.def` (keyword table, 61 entries), `src/frontend/lexer/xlex.c` (scanner implementation).
 
 ### 1.1 Character Encoding
 
@@ -422,7 +422,7 @@ The character `_` is a **dedicated wildcard token**, not an ordinary identifier:
 
 ### 1.5 Keywords
 
-Xray has **62 reserved keywords** in total; the authoritative source-of-truth table is in `src/frontend/lexer/xkeywords.def`. Keywords are grouped by purpose:
+Xray has **61 reserved keywords** in total; the authoritative source-of-truth table is in `src/frontend/lexer/xkeywords.def`. Keywords are grouped by purpose:
 
 #### 1.5.1 Declarations and Control Flow
 
@@ -452,7 +452,7 @@ Xray has **62 reserved keywords** in total; the authoritative source-of-truth ta
 | `new` | instantiation |
 | `this` `super` | self / parent reference |
 | `constructor` | constructor |
-| `static` `private` `public` | visibility modifiers (`public` is the **default** and is almost never written explicitly) |
+| `static` `private` | class/member modifiers; public visibility is the default and has no `public` keyword |
 | `abstract` `final` `override` | class/method modifiers (`override` is **optional** — overriding a parent method does not require an explicit annotation) |
 | `operator` | operator overloading |
 | `is` `as` | runtime type check / cast |

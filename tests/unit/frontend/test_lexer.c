@@ -501,7 +501,6 @@ TEST(lexer_keyword_table_completeness) {
         {"operator", TK_OPERATOR},
         {"override", TK_OVERRIDE},
         {"private", TK_PRIVATE},
-        {"public", TK_PUBLIC},
         {"return", TK_RETURN},
         {"scope", TK_SCOPE},
         {"select", TK_SELECT},
@@ -537,6 +536,7 @@ TEST(lexer_keyword_table_completeness) {
     }
 
     assert_token(scan_single("unknown"), TK_NAME, "unknown");
+    assert_token(scan_single("public"), TK_NAME, "public");
 }
 
 // `r` alone is an identifier; only `r` followed by a quote is a raw string.
