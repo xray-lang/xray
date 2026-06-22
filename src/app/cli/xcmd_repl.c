@@ -434,7 +434,7 @@ static void reset_buffer(ReplState *state) {
 
 // Incremental execution: compile only new code, execute on persistent isolate+runtime.
 // Definitions survive across inputs via REPL symbol table + shared array.
-// Runtime stays alive across inputs (GC objects like closures must not be freed).
+// Runtime stays alive across inputs (heap objects like closures must not be freed).
 // Free all tracked protos
 static void repl_free_protos(ReplState *state) {
     for (int i = 0; i < state->proto_count; i++) {

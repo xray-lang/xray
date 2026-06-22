@@ -13,7 +13,7 @@
  * dispatch switch in xvm.c; relies on locals (i, isolate, vm_ctx,
  * pc, frame, ci, base, R, k, savepc, vmcase, vmbreak,
  * VM_RUNTIME_ERROR, VM_STACK, VM_FRAMES, VM_FRAME_COUNT,
- * VM_INC_FRAME_COUNT, VM_BARRIER_BACK, VM_BARRIER_VAL,
+ * VM_INC_FRAME_COUNT,
  * VM_CURRENT_CORO, checkGC, startfunc label, ...) provided by
  * the surrounding scope. CMake excludes *.inc.c from the
  * VM_SRC glob.
@@ -636,7 +636,6 @@ vmcase(OP_ARRAY_SET) {
             if (arr->elem_type == XR_ELEM_ANY) {
                 ((XrValue *) arr->data)[idx] = _av;
                 XR_ARRAY_MARK_GC_PTRS(arr, _av);
-                VM_BARRIER_VAL(arr, _av);
             } else {
                 xr_array_set_element(arr, idx, _av);
             }
@@ -733,7 +732,6 @@ vmcase(OP_ARRAY_SETC) {
             if (arr->elem_type == XR_ELEM_ANY) {
                 ((XrValue *) arr->data)[b] = _acv;
                 XR_ARRAY_MARK_GC_PTRS(arr, _acv);
-                VM_BARRIER_VAL(arr, _acv);
             } else {
                 xr_array_set_element(arr, b, _acv);
             }
@@ -1014,7 +1012,6 @@ vmcase(OP_MAP_SET) {
     if (XR_IS_MAP(map_val)) {
         XrMap *map = XR_TO_MAP(map_val);
         xr_map_set(map, R(b), R(c));
-        VM_BARRIER_BACK(map);
         vmbreak;
     }
     VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_INDEX, "Map.set requires Map type");
@@ -1032,7 +1029,6 @@ vmcase(OP_MAP_SETK) {
         XrValue key_val = k[b];
         XrString *key_str = XR_TO_STRING(key_val);
         XR_MAP_SET_STRING_FAST(map, key_str, key_val, R(c));
-        VM_BARRIER_BACK(map);
         vmbreak;
     }
     // Json object support
@@ -1043,7 +1039,6 @@ vmcase(OP_MAP_SETK) {
         if (!xr_json_set_by_key(isolate, json, key_str->data, R(c))) {
             VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_PROPERTY, "cannot add property to sealed Json object");
         }
-        VM_BARRIER_BACK(json);
         vmbreak;
     }
     VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_INDEX, "index assignment requires Map or Json type");
@@ -1071,7 +1066,6 @@ vmcase(OP_MAP_INCREMENT) {
             // Doesn't exist or not integer, set to 1
             xr_map_set(map, key, xr_int(1));
         }
-        VM_BARRIER_BACK(map);
         vmbreak;
     }
     VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_INDEX, "Map increment requires Map type");
@@ -1353,7 +1347,6 @@ vmcase(OP_INDEX_SET) {
             if (arr->elem_type == XR_ELEM_ANY) {
                 ((XrValue *) arr->data)[idx] = val;
                 XR_ARRAY_MARK_GC_PTRS(arr, val);
-                VM_BARRIER_VAL(arr, val);
             } else {
                 xr_array_set_element(arr, idx, val);
             }
@@ -1370,7 +1363,6 @@ vmcase(OP_INDEX_SET) {
     if (XR_IS_MAP(obj_val)) {
         XrMap *map = XR_TO_MAP(obj_val);
         xr_map_set(map, key_val, val);
-        VM_BARRIER_BACK(map);
         vmbreak;
     }
     // Fast path: Json object (string keys only)
@@ -1382,7 +1374,6 @@ vmcase(OP_INDEX_SET) {
                 VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_PROPERTY,
                                  "cannot add property to sealed Json object");
             }
-            VM_BARRIER_BACK(json);
             vmbreak;
         }
         VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_INDEX, "Json object only supports string keys");

@@ -9,7 +9,6 @@
  */
 
 #include "xcoro_heap.h"
-#include "xgc_internal.h"
 #include "xweak_registry.h"
 #include "../../coro/xcoroutine.h"
 #include "../../coro/xworker.h"
@@ -45,7 +44,7 @@
  * L1 full → L2 → xr_free if L2 full.
  * Worker exit flushes L1 → L2 (xr_coro_heap_flush_pool).
  *
- * The L2 pool was previously a process-wide static (g_gc_pool_*), which
+ * The L2 pool was previously a process-wide static coroutine-heap pool, which
  * crossed isolate boundaries and made teardown ordering observable
  * across unrelated isolates. It is now scoped to XrSystemHeap so each
  * isolate owns its recycle stack and xr_sysheap_destroy reclaims the

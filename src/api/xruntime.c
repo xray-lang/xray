@@ -16,7 +16,7 @@
 #include "../runtime/value/xvalue.h"
 #include "../runtime/xisolate_api.h"
 #include "../runtime/value/xtype.h"
-#include "../runtime/gc/xgc.h"
+#include "../runtime/gc/xheap.h"
 #include "xruntime.h"
 
 /* ========== Memory Allocation (currently unused) ========== */

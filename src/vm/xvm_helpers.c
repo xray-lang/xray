@@ -14,7 +14,7 @@
 #include "xvm_internal.h"
 #include "../base/xchecks.h"
 #include "../coro/xworker.h"
-#include "../runtime/gc/xgc.h"
+#include "../runtime/gc/xheap.h"
 #include "../runtime/gc/xcoro_heap.h"
 #include "../runtime/xerror_codes.h"
 #include "../runtime/value/xstruct_layout.h"
@@ -413,11 +413,6 @@ void xr_vm_vm_init(XrayIsolate *isolate) {
     // Initialize string interning table
     isolate->vm.strings_map = xr_hashmap_new();
 
-    // GC initialization
-    // isolate->vm.objects removed - objects automatically managed by GC system
-    isolate->vm.bytes_allocated = 0;
-    isolate->vm.next_gc = 1024 * 1024;  // 1MB
-
     // Debug options
     isolate->vm.trace_execution = false;
 }
@@ -439,10 +434,6 @@ void xr_vm_vm_free(XrayIsolate *isolate) {
     isolate->vm.struct_layouts = NULL;
     isolate->vm.struct_layout_count = 0;
     isolate->vm.struct_layout_capacity = 0;
-
-    // Free all GC objects
-    // NOTE: XrObject has been removed, object freeing handled automatically by GC system
-    // isolate->vm.objects removed - objects automatically managed by GC system
 }
 
 // ========== Value Operation Helpers ==========

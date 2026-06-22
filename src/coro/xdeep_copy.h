@@ -167,7 +167,7 @@ XR_FUNC XrValue xr_to_shared(struct XrayIsolate *X, XrValue value);
  * type without a hook is simply not deep-copyable / not shareable
  * across coroutines and the dispatcher returns the value unchanged. */
 
-#include "../runtime/gc/xgc_header.h"
+#include "../runtime/gc/xobj_header.h"
 
 XR_FUNC XrValue xr_deep_copy_array_with_ctx(struct XrCopyContext *ctx, struct XrObjHeader *obj);
 XR_FUNC XrValue xr_deep_copy_map_with_ctx(struct XrCopyContext *ctx, struct XrObjHeader *obj);

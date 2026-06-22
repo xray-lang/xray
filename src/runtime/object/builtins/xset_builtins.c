@@ -12,7 +12,7 @@
  */
 
 #include "xchecks.h"
-#include "xgc.h"
+#include "xheap.h"
 #include "xset_builtins.h"
 #include "xisolate_api.h"
 #include "xset.h"

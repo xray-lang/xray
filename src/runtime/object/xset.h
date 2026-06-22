@@ -23,7 +23,7 @@
 #define XSET_H
 
 #include "../value/xvalue.h"
-#include "../gc/xgc_header.h"
+#include "../gc/xobj_header.h"
 #include "xarray.h"
 #include "../../shared/xr_map_set_abi.h"
 #include <stdint.h>

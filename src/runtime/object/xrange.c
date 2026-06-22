@@ -10,7 +10,7 @@
 
 #include "xrange.h"
 #include "xarray.h"
-#include "../gc/xgc.h"
+#include "../gc/xheap.h"
 #include "../class/xclass.h"
 #include "../class/xclass_builder.h"
 #include "../class/xclass_system.h"

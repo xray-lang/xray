@@ -15,7 +15,7 @@
 #include "../coro/xnetpoll.h"
 #include "../coro/xworker.h"
 #include "../os/os_net.h"
-#include "../runtime/gc/xgc.h"
+#include "../runtime/gc/xheap.h"
 #include "../runtime/class/xclass.h"
 #include "../runtime/class/xclass_system.h"
 #include "../runtime/xisolate_api.h"

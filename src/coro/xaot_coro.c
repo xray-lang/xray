@@ -25,7 +25,7 @@
 #include "../runtime/class/xclass_system.h"
 #include "../runtime/class/xenum.h"
 #include "../runtime/class/xinstance.h"
-#include "../runtime/gc/xgc.h"
+#include "../runtime/gc/xheap.h"
 #include "../runtime/gc/xcoro_heap.h"
 #include "../runtime/gc/xsystem_heap.h"
 #include "../runtime/object/xarray.h"

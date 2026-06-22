@@ -23,7 +23,7 @@
 #include "../value/xvalue.h"
 #include "../object/xstring.h"
 #include "../value/xchunk.h"
-#include "../gc/xgc.h"
+#include "../gc/xheap.h"
 #include "../gc/xcoro_heap.h"
 #include "../../coro/xcoroutine.h"
 #include "../xexec_frame.h"  // XrVMContext

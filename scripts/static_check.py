@@ -8,7 +8,7 @@ static checks on the xray codebase to detect known bug patterns.
 Usage:
     python3 scripts/static_check.py [--verbose] [--category CATEGORY]
 
-Categories: all, vm, ic, gc, frame, compiler, type, naming, tls
+Categories: all, vm, ic, memory-model, frame, compiler, type, naming, tls
 """
 
 import os
@@ -25,9 +25,9 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 XVM_C = os.path.join(PROJECT_ROOT, "src/vm/xvm.c")
 XVM_API_C = os.path.join(PROJECT_ROOT, "src/vm/xvm_api.c")
 XVM_OPS_C = os.path.join(PROJECT_ROOT, "src/vm/xvm_ops.c")
-XCORO_GC_C = os.path.join(PROJECT_ROOT, "src/runtime/gc/xcoro_gc.c")
+XCORO_HEAP_C = os.path.join(PROJECT_ROOT, "src/runtime/gc/xcoro_heap.c")
 XTYPE_NAMES_H = os.path.join(PROJECT_ROOT, "src/runtime/value/xtype_names.h")
-XGC_HEADER_H = os.path.join(PROJECT_ROOT, "src/runtime/gc/xgc_header.h")
+XOBJ_HEADER_H = os.path.join(PROJECT_ROOT, "src/runtime/gc/xobj_header.h")
 YAML_PARSER_C = os.path.join(PROJECT_ROOT, "stdlib/yaml/yaml_parser.c")
 ANALYZER_DIR = os.path.join(PROJECT_ROOT, "src/frontend/analyzer")
 CLASS_REGISTRY_C = os.path.join(PROJECT_ROOT, "src/runtime/class/xclass_builder_finalize.c")
@@ -228,76 +228,36 @@ class StaticChecker:
         ))
 
     # ================================================================
-    # 3.1 P0: Write Barrier coverage in VM instructions
+    # 3.1 (RETIRED): tracing barrier coverage in VM instructions
+    # Tracing collector retired; RC owns reclamation. The old VM barrier macros no longer exist.
     # ================================================================
-    def check_write_barrier_coverage(self):
-        """Object reference writes in VM must have write barriers."""
-        content = self.read_file(XVM_C)
-        if not content:
-            self.add_result(CheckResult("3.1", "Write Barrier coverage", "P0", False, "xvm.c not found"))
-            return
-
-        # Check that SET operations have barriers
-        vmcase_pattern = re.compile(r'vmcase\((OP_\w+)\)\s*\{')
-        matches = list(vmcase_pattern.finditer(content))
-
-        def get_vmcase_block(op_name):
-            for m in matches:
-                if m.group(1) == op_name:
-                    brace_count = 0
-                    block_start = content.index('{', m.start())
-                    for pos in range(block_start, len(content)):
-                        if content[pos] == '{':
-                            brace_count += 1
-                        elif content[pos] == '}':
-                            brace_count -= 1
-                            if brace_count == 0:
-                                return content[block_start:pos + 1]
-            return ""
-
-        # Instructions that write object references and need barriers
-        set_ops = [
-            "OP_SETUPVAL", "OP_SETFIELD_DIRECT", "OP_SETFIELD_FAST",
-            "OP_SETFIELD_IC", "OP_SETFIELD_STATIC", "OP_INDEX_SET",
-            "OP_MAP_SET", "OP_MAP_SET_K",
-        ]
-
-        issues = []
-        for op in set_ops:
-            block = get_vmcase_block(op)
-            if not block:
-                continue
-            has_barrier = ("VM_BARRIER_VAL" in block or "VM_BARRIER_BACK" in block)
-            if not has_barrier:
-                issues.append(f"{op}: no write barrier (VM_BARRIER_VAL/VM_BARRIER_BACK)")
-
-        passed = len(issues) == 0
+    def check_tracing_barrier_retired(self):
+        """RETIRED: tracing barriers removed, RC owns reclamation."""
         self.add_result(CheckResult(
-            "3.1", "Write Barrier coverage", "P0", passed,
-            f"Found {len(issues)} SET ops without write barrier" if issues else "All SET ops have write barriers",
-            issues
+            "3.1", "Tracing barrier (retired)", "P0", True,
+            "Tracing barriers retired; RC owns reclamation — check no longer applicable"
         ))
 
     # ================================================================
-    # 3.2 (RETIRED): GC atomic phase re-marks coroutine stack
-    # Tracing GC retired; RC owns reclamation. atomic() no longer exists.
+    # 3.2 (RETIRED): tracing atomic phase re-marks coroutine stack
+    # Tracing collector retired; RC owns reclamation. atomic() no longer exists.
     # ================================================================
-    def check_gc_atomic_remark(self):
-        """RETIRED: tracing GC removed, RC owns reclamation."""
+    def check_tracing_atomic_remark(self):
+        """RETIRED: tracing collector removed, RC owns reclamation."""
         self.add_result(CheckResult(
-            "3.2", "GC atomic re-mark (retired)", "P0", True,
-            "Tracing GC retired; RC owns reclamation — check no longer applicable"
+            "3.2", "Tracing atomic re-mark (retired)", "P0", True,
+            "Tracing collector retired; RC owns reclamation — check no longer applicable"
         ))
 
     # ================================================================
     # 3.4 (RETIRED): Immix mark_lines unconditional in newobj
-    # Tracing GC retired; Immix allocator no longer does tri-color marking.
+    # Tracing collector retired; Immix allocator no longer does tri-color marking.
     # ================================================================
     def check_immix_mark_unconditional(self):
-        """RETIRED: tracing GC removed, mark_lines no longer applicable."""
+        """RETIRED: tracing collector removed, mark_lines no longer applicable."""
         self.add_result(CheckResult(
             "3.4", "Immix mark_lines (retired)", "P0", True,
-            "Tracing GC retired; mark_lines during allocation no longer applicable"
+            "Tracing collector retired; mark_lines during allocation no longer applicable"
         ))
 
     # ================================================================
@@ -599,13 +559,13 @@ class StaticChecker:
         ))
 
     # ================================================================
-    # 13.1 P2: TLS holding GC object references
+    # 13.1 P2: TLS holding heap object references
     # ================================================================
     def check_tls_gc_references(self):
-        """TLS variables must not hold GC object references without registration."""
+        """TLS variables must not hold heap object references without registration."""
         issues = []
 
-        # Search for TLS variables that might hold GC objects
+        # Search for TLS variables that might hold heap objects
         tls_patterns = [
             r'_Thread_local\s+.*Xr\w+',
             r'__thread\s+.*Xr\w+',
@@ -629,18 +589,18 @@ class StaticChecker:
                     for i, line in enumerate(lines, 1):
                         for pat in tls_patterns:
                             if re.search(pat, line):
-                                # Check if it's a GC-managed type
-                                gc_types = ['XrValue', 'XrMap', 'XrArray', 'XrString',
-                                           'XrJson', 'XrInstance', 'XrClosure', 'XrClass']
-                                for gt in gc_types:
-                                    if gt in line:
-                                        issues.append(f"{rel_path}:{i}: TLS holds {gt}: {line.strip()}")
+                                heap_types = ['XrValue', 'XrMap', 'XrArray', 'XrString',
+                                              'XrJson', 'XrInstance', 'XrClosure', 'XrClass']
+                                for heap_type in heap_types:
+                                    if heap_type in line:
+                                        issues.append(
+                                            f"{rel_path}:{i}: TLS holds {heap_type}: {line.strip()}")
                                         break
 
         passed = len(issues) == 0
         self.add_result(CheckResult(
-            "13.1", "TLS GC references", "P2", passed,
-            "No TLS GC reference issues" if passed else f"Found {len(issues)} TLS GC references",
+            "13.1", "TLS heap references", "P2", passed,
+            "No TLS heap reference issues" if passed else f"Found {len(issues)} TLS heap references",
             issues
         ))
 
@@ -1230,9 +1190,9 @@ class StaticChecker:
                 self.check_ic_cache_index,
                 self.check_ic_debug_bind,
             ],
-            'gc': [
-                self.check_write_barrier_coverage,
-                self.check_gc_atomic_remark,
+            'memory-model': [
+                self.check_tracing_barrier_retired,
+                self.check_tracing_atomic_remark,
                 self.check_immix_mark_unconditional,
             ],
             'frame': [
@@ -1332,7 +1292,7 @@ def main():
     parser = argparse.ArgumentParser(description='Xray Static Analysis Checker')
     parser.add_argument('--verbose', '-v', action='store_true', help='Show detailed output')
     parser.add_argument('--category', '-c', default='all',
-                       help='Check category: all, vm, ic, gc, frame, compiler, type, naming, comment, tls, yaml, memory, style')
+                       help='Check category: all, vm, ic, memory-model, frame, compiler, type, naming, comment, tls, yaml, memory, style')
     args = parser.parse_args()
 
     checker = StaticChecker(verbose=args.verbose)

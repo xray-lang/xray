@@ -11,7 +11,7 @@
 #include "xinstance.h"
 #include "../core/xr_runtime_core.h"
 #include "../gc/xalloc_unified.h"
-#include "../gc/xgc.h"
+#include "../gc/xheap.h"
 #include "../xisolate_api.h"
 #include "../xisolate_internal.h"
 #include "../../base/xchecks.h"

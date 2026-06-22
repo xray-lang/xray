@@ -14,7 +14,7 @@
  */
 
 #include "../../base/xchecks.h"
-#include "../gc/xgc.h"
+#include "../gc/xheap.h"
 #include "xreflect_cache.h"
 #include "xreflect_internal.h"
 #include "../xisolate_api.h"

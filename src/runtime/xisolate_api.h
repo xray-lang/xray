@@ -154,7 +154,7 @@ XR_FUNC void xr_runtime_error(XrayIsolate *isolate, const char *fmt, ...);
 
 /* ========== Extension Type System (for dlopen packages) ========== */
 
-struct XrObjHeader;  // forward declaration (full definition in xgc_header.h)
+struct XrObjHeader;  // forward declaration (full definition in xobj_header.h)
 
 // Callback typedefs (distinct from GC-internal types to avoid conflicts)
 typedef void (*XrExtDestroyFn)(struct XrObjHeader *obj, void *gc);

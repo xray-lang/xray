@@ -11,7 +11,7 @@
  * dispatch switch in xvm.c; relies on locals (i, isolate, vm_ctx,
  * pc, ci, frame, base, k, R, savepc, vmcase, vmbreak,
  * VM_RUNTIME_ERROR, VM_DISPATCH, VM_FRAMES, VM_FRAME_COUNT,
- * VM_INC_FRAME_COUNT, VM_BARRIER_*, VM_STACK*, VM_CURRENT_CORO,
+ * VM_INC_FRAME_COUNT, VM_STACK*, VM_CURRENT_CORO,
  * checkGC, startfunc label, ...) provided by the surrounding
  * scope. CMake excludes *.inc.c from the VM_SRC glob.
  *

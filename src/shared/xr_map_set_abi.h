@@ -30,9 +30,9 @@
  *
  * NOT shared, by design, are the mutating operator bodies (add/set/delete/
  * clear). Their remaining differences are entirely backend *policy*, not
- * algorithm: table allocation (VM Region-GC blobs or malloc with external-byte
+ * algorithm: table allocation (VM Region blobs or malloc with external-byte
  * accounting; AOT bump/calloc), reference counting (VM xr_rc_retain/release),
- * the weak-key/value registry, and GC write barriers — AOT has none of these.
+ * the weak-key/value registry. AOT has none of those VM policies.
  * Routing those bodies through shared callbacks would put indirection on the
  * hot mutation/resize path for negligible dedup (the resize step also mutates
  * the table pointers, which fights the raw-fields contract the shared cores

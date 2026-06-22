@@ -19,7 +19,7 @@
 #include "../core/xr_runtime_core.h"
 #include "../../base/xchecks.h"
 #include "../gc/xalloc_unified.h"
-#include "../gc/xgc.h"
+#include "../gc/xheap.h"
 #include "../gc/xsystem_heap.h"
 #include "../xshared.h"
 #include "../../base/xmalloc.h"

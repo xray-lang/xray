@@ -9,7 +9,7 @@
  *
  * KEY CONCEPT:
  *   Manages objects that outlive individual coroutines.
- *   These objects are NOT subject to per-coroutine GC.
+ *   These objects are NOT owned by the per-coroutine heap.
  *
  * VS xcoro_heap (coroutine heap):
  *   - xcoro_heap: Per-coroutine Region bump + reference counting, freed when coro ends
@@ -121,7 +121,7 @@ XR_FUNC bool xr_sysheap_init(XrSystemHeap *heap, const XrSysHeapConfig *config);
 // Destroy system heap and release all memory
 XR_FUNC void xr_sysheap_destroy(XrSystemHeap *heap);
 
-// Destroy coroutine-owned system resources before fixed-GC finalization.
+// Destroy coroutine-owned system resources before fixed-heap finalization.
 XR_FUNC void xr_sysheap_destroy_coro_storage(XrSystemHeap *heap);
 
 /* ========== Coroutine Allocation ========== */
@@ -170,7 +170,7 @@ XR_FUNC bool xr_sysheap_coro_heap_pool_push(XrSystemHeap *heap, struct XrCoroHea
 XR_FUNC void *xr_sysheap_block_pool_pop(XrSystemHeap *heap);
 XR_FUNC bool xr_sysheap_block_pool_push(XrSystemHeap *heap, void *block);
 
-// XR_OBJ_FLAG_MMAP now defined in xgc_header.h (extra bit 13, shared by both
+// XR_OBJ_FLAG_MMAP now defined in xobj_header.h (extra bit 13, shared by both
 // system heap and per-coro heap large objects).
 
 /* ========== Statistics ========== */

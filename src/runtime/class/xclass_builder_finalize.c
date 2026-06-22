@@ -35,7 +35,7 @@
 #include "../../base/xlog.h"
 #include "../../base/xchecks.h"
 #include "../../base/xhash.h"
-#include "../gc/xgc_header.h"
+#include "../gc/xobj_header.h"
 #include "../gc/xsystem_heap.h"
 #include <string.h>
 

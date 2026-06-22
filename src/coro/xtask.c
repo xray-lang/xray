@@ -31,7 +31,7 @@
 #include "xworker.h"
 #include "xchannel.h"
 #include "../runtime/xshared.h"
-#include "../runtime/gc/xgc.h"
+#include "../runtime/gc/xheap.h"
 #include "../runtime/gc/xcoro_heap.h"
 #include "../runtime/xisolate_internal.h"
 #include "../runtime/object/xarray.h"

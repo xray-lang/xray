@@ -41,7 +41,7 @@
 #include "../../src/runtime/object/xarray.h"
 #include "../../src/runtime/object/xjson.h"
 #include "../../src/runtime/closure/xclosure.h"
-#include "../../src/runtime/gc/xgc_internal.h"
+#include "../../src/runtime/gc/xfixed_heap.h"
 #include "../../src/base/xmalloc.h"
 #include <stdio.h>
 #include <stdlib.h>

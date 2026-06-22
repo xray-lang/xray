@@ -9,14 +9,14 @@
  *
  * NOT a standalone translation unit. Included from inside the
  * dispatch switch in xvm.c; relies on locals (i, vm_ctx, R,
- * vmcase, vmbreak, VM_RUNTIME_ERROR, VM_BARRIER_VAL,
+ * vmcase, vmbreak, VM_RUNTIME_ERROR,
  * VM_FRAME_COUNT, TRACE_EXECUTION, ...) provided by the
  * surrounding scope. CMake excludes *.inc.c from the VM_SRC
  * glob.
  *
  * Owns:
  *   - OP_TARRAY_GET / GETC / SET / PUSH  — typed compact array R/W
- *   - OP_TFIELD_GET / SET                — typed json field R/W with barrier
+ *   - OP_TFIELD_GET / SET                — typed json field R/W
  *   - OP_NEW_STRUCT / STRUCT_GET / SET / COPY  — stack struct lifecycle
  *
  * Placeholder OP_NOP is kept inline in xvm.c next to the
@@ -99,7 +99,6 @@ vmcase(OP_TFIELD_SET) {
     XrJson *json = (XrJson *) XR_TO_PTR(R(GETARG_A(i)));
     XrValue _tfv = R(GETARG_C(i));
     json->fields[GETARG_B(i)] = _tfv;
-    VM_BARRIER_VAL(json, _tfv);
     vmbreak;
 }
 

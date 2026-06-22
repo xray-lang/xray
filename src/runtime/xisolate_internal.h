@@ -15,7 +15,7 @@
  * WHY THIS DESIGN:
  *   - Single-Isolate model: All state in one place, no Context abstraction
  *   - Direct access: Backend code accesses fields directly for performance
- *   - Per-coroutine GC: Independent heaps with bulk deallocation
+ *   - Per-coroutine heap: Independent heaps with bulk deallocation
  *
  * RELATED MODULES:
  *   - xray_isolate.h: Public API for Isolate lifecycle
@@ -30,7 +30,7 @@
 #include "../base/xforward_decl.h"  // Forward declarations
 #include "value/xvalue.h"
 #include "class/xclass.h"
-#include "gc/xgc.h"  // GC core definitions
+#include "gc/xheap.h"  // heap allocation definitions
 // Instance/Json pools removed, using per-coroutine heap
 #include "../runtime/xexec_frame.h"  // VM state types (XrBcCallFrame, etc.)
 #include "../runtime/xexec_state.h"  // XrVMState - VM execution state

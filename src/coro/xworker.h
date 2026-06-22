@@ -25,7 +25,6 @@
 #include <stdatomic.h>
 #include <stdbool.h>
 #include <stddef.h>
-#include "../runtime/gc/xgc_internal.h"  // XrLocalAlloc
 #include "../runtime/gc/xsystem_heap.h"  // XrSystemHeap
 #include "../runtime/core/xr_runtime_core.h"
 #include "xnetpoll.h"   // XrNetpoll

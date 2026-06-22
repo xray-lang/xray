@@ -12,7 +12,7 @@
 #include "../../base/xchecks.h"
 #include "../../coro/xcoroutine.h"
 #include "../gc/xcoro_heap.h"
-#include "../gc/xgc.h"
+#include "../gc/xheap.h"
 #include "../xisolate_api.h"
 #include "../xisolate_internal.h"
 

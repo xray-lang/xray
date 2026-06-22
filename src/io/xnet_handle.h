@@ -9,7 +9,7 @@
  *
  * KEY CONCEPT:
  *   Replaces the old XrJson-based "{fd, type, tls}" handles that scripts
- *   could read by name. XrNetConn / XrNetListener are opaque GC objects
+ *   could read by name. XrNetConn / XrNetListener are opaque heap objects
  *   carrying the underlying fd plus type-specific state. Scripts can
  *   only operate on them via the net.read / net.write / net.close
  *   entry points (eventually via instance methods on the registered
@@ -17,7 +17,7 @@
  *
  * WHY THIS DESIGN:
  *   - Type safety: a TLS conn is never confused with a UDP socket; net
- *     APIs validate the GC type tag instead of trusting a script-set
+ *     APIs validate the heap type tag instead of trusting a script-set
  *     "type" field.
  *   - Lifecycle safety: close is idempotent and goes through a single
  *     destroy hook; scripts cannot reach in and clobber state.
@@ -30,7 +30,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
-#include "../runtime/gc/xgc_header.h"
+#include "../runtime/gc/xobj_header.h"
 
 #ifdef __cplusplus
 extern "C" {

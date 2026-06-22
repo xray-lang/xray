@@ -80,7 +80,7 @@ bool xr_value_eq(XrValue a, XrValue b) {
             return false;
         return memcmp(s1->data, s2->data, s1->length) == 0;
     }
-    // GC objects: pointer (reference) equality
+    // Heap objects: pointer (reference) equality
     if (XR_IS_PTR(a) && XR_IS_PTR(b)) {
         return XR_TO_PTR(a) == XR_TO_PTR(b);
     }

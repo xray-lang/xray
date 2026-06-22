@@ -23,7 +23,7 @@
 
 #include "../../../src/runtime/gc/xcoro_heap.h"
 #include "../../../src/runtime/gc/xregion.h"
-#include "../../../src/runtime/gc/xgc_header.h"
+#include "../../../src/runtime/gc/xobj_header.h"
 #include "../../../src/runtime/value/xvalue.h"
 #include "../../../src/runtime/xisolate_api.h"
 #include "../../../src/runtime/xisolate_internal.h"
@@ -317,7 +317,7 @@ int main(void) {
     test_teardown_finalizer_registry();
     test_rc_destroy_unregisters_finalizer();
     test_large_object_rc_free_unregisters_node();
-    /* Tracing collector (fullgc / incremental step / sweep / write barriers)
+    /* Tracing collector (full collection / incremental step / sweep / barriers)
      * has been removed: reference counting owns reclamation. The tests that
      * asserted tracing-cycle behavior (cycle_count increment, PROPAGATE state
      * walk, sweep-driven totalbytes decrease, tri-color barriers) are gone

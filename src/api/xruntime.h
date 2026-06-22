@@ -19,7 +19,7 @@
  * RELATED MODULES:
  *   - xray_isolate.h: Isolate lifecycle management
  *   - xvalue.h: Value representation (tagged union)
- *   - xgc.h: Garbage collection internals
+ *   - xheap.h: heap allocation internals
  */
 
 #ifndef XRUNTIME_H
