@@ -18,7 +18,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_base64[] = {
     {
         .name = "decodeToBytes",
         .signature = "(data: string): Array<uint8>?",
-        .summary = "Decode Base64 to byte array",
+        .summary = "Base64 decode to bytes",
     },
     {
         .name = "decodeUrl",
@@ -33,7 +33,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_base64[] = {
     {
         .name = "encodeBytes",
         .signature = "(data: Array<uint8>): string",
-        .summary = "Encode byte array to Base64",
+        .summary = "Base64 encode bytes",
     },
     {
         .name = "encodeUrl",
@@ -1575,12 +1575,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_path[] = {
     {
         .name = "normalize",
         .signature = "(path: string): string",
-        .summary = "Normalize path separators",
+        .summary = "Normalize path",
     },
     {
         .name = "parse",
         .signature = "(path: string): PathInfo",
-        .summary = "Parse path into components (root, dir, base, name, ext)",
+        .summary = "Parse path into components",
     },
     {
         .name = "relative",
@@ -1603,7 +1603,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_regex[] = {
     {
         .name = "compile",
         .signature = "(pattern: string, flags?: string): Regex",
-        .summary = "Compile a regex pattern",
+        .summary = "Compile regex pattern",
     },
     {
         .name = "count",
@@ -1628,17 +1628,17 @@ static const XmcpGeneratedStdlibSymbol _symbols_regex[] = {
     {
         .name = "findGroup",
         .signature = "(pattern: Regex, s: string, index: int): string?",
-        .summary = "Find first match, return single capture group (zero-alloc)",
+        .summary = "Find capture group",
     },
     {
         .name = "findText",
         .signature = "(pattern: Regex, s: string): string?",
-        .summary = "Find first match, return matched text only (zero-alloc)",
+        .summary = "Find first matching text",
     },
     {
         .name = "fullFind",
         .signature = "(pattern: Regex, s: string): RegexMatch?",
-        .summary = "Full match with captures",
+        .summary = "Find full match",
     },
     {
         .name = "isValid",
@@ -1647,23 +1647,23 @@ static const XmcpGeneratedStdlibSymbol _symbols_regex[] = {
     },
     {
         .name = "replace",
-        .signature = "(pattern: Regex, s: string, replacement: string): string",
+        .signature = "(pattern: Regex, s: string, repl: string): string",
         .summary = "Replace first match",
     },
     {
         .name = "replaceAll",
-        .signature = "(pattern: Regex, s: string, replacement: string): string",
+        .signature = "(pattern: Regex, s: string, repl: string): string",
         .summary = "Replace all matches",
     },
     {
         .name = "split",
         .signature = "(pattern: Regex, s: string, limit?: int): Array<string>",
-        .summary = "Split by pattern",
+        .summary = "Split string by regex",
     },
     {
         .name = "test",
         .signature = "(pattern: Regex, s: string): bool",
-        .summary = "Test if pattern matches string",
+        .summary = "Test if regex matches",
     },
 };
 
@@ -3357,10 +3357,10 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
             "| `base64.decode` | `(data: string): string?` | Base64 decode |\n"
-            "| `base64.decodeToBytes` | `(data: string): Array<uint8>?` | Decode Base64 to byte array |\n"
+            "| `base64.decodeToBytes` | `(data: string): Array<uint8>?` | Base64 decode to bytes |\n"
             "| `base64.decodeUrl` | `(data: string): string?` | URL-safe base64 decode |\n"
             "| `base64.encode` | `(data: string): string` | Base64 encode |\n"
-            "| `base64.encodeBytes` | `(data: Array<uint8>): string` | Encode byte array to Base64 |\n"
+            "| `base64.encodeBytes` | `(data: Array<uint8>): string` | Base64 encode bytes |\n"
             "| `base64.encodeUrl` | `(data: string): string` | URL-safe base64 encode |\n"
             "| `base64.isValid` | `(data: string): bool` | Check if valid base64 |\n"
             "",
@@ -3966,8 +3966,8 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `path.format` | `(obj: PathInfo): string` | Format path from components |\n"
             "| `path.isAbsolute` | `(path: string): bool` | Check if path is absolute |\n"
             "| `path.join` | `(...parts: string): string` | Join path segments |\n"
-            "| `path.normalize` | `(path: string): string` | Normalize path separators |\n"
-            "| `path.parse` | `(path: string): PathInfo` | Parse path into components (root, dir, base, name, ext) |\n"
+            "| `path.normalize` | `(path: string): string` | Normalize path |\n"
+            "| `path.parse` | `(path: string): PathInfo` | Parse path into components |\n"
             "| `path.relative` | `(from: string, to: string): string` | Get relative path |\n"
             "| `path.resolve` | `(...parts: string): string` | Resolve to absolute path |\n"
             "| `path.sep` | `: string` |  |\n"
@@ -3989,19 +3989,19 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
-            "| `regex.compile` | `(pattern: string, flags?: string): Regex` | Compile a regex pattern |\n"
+            "| `regex.compile` | `(pattern: string, flags?: string): Regex` | Compile regex pattern |\n"
             "| `regex.count` | `(pattern: Regex, s: string): int` | Count matches |\n"
             "| `regex.escape` | `(s: string): string` | Escape regex special chars |\n"
             "| `regex.find` | `(pattern: Regex, s: string, offset?: int): RegexMatch?` | Find first match |\n"
             "| `regex.findAll` | `(pattern: Regex, s: string, limit?: int): Array<RegexMatch>` | Find all matches |\n"
-            "| `regex.findGroup` | `(pattern: Regex, s: string, index: int): string?` | Find first match, return single capture group (zero-alloc) |\n"
-            "| `regex.findText` | `(pattern: Regex, s: string): string?` | Find first match, return matched text only (zero-alloc) |\n"
-            "| `regex.fullFind` | `(pattern: Regex, s: string): RegexMatch?` | Full match with captures |\n"
+            "| `regex.findGroup` | `(pattern: Regex, s: string, index: int): string?` | Find capture group |\n"
+            "| `regex.findText` | `(pattern: Regex, s: string): string?` | Find first matching text |\n"
+            "| `regex.fullFind` | `(pattern: Regex, s: string): RegexMatch?` | Find full match |\n"
             "| `regex.isValid` | `(pattern: string): bool` | Check if pattern is valid |\n"
-            "| `regex.replace` | `(pattern: Regex, s: string, replacement: string): string` | Replace first match |\n"
-            "| `regex.replaceAll` | `(pattern: Regex, s: string, replacement: string): string` | Replace all matches |\n"
-            "| `regex.split` | `(pattern: Regex, s: string, limit?: int): Array<string>` | Split by pattern |\n"
-            "| `regex.test` | `(pattern: Regex, s: string): bool` | Test if pattern matches string |\n"
+            "| `regex.replace` | `(pattern: Regex, s: string, repl: string): string` | Replace first match |\n"
+            "| `regex.replaceAll` | `(pattern: Regex, s: string, repl: string): string` | Replace all matches |\n"
+            "| `regex.split` | `(pattern: Regex, s: string, limit?: int): Array<string>` | Split string by regex |\n"
+            "| `regex.test` | `(pattern: Regex, s: string): bool` | Test if regex matches |\n"
             "",
         .symbols = _symbols_regex,
         .symbol_count = (int)(sizeof(_symbols_regex) / sizeof(_symbols_regex[0])),
