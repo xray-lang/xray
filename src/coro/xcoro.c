@@ -437,7 +437,6 @@ static bool xr_coro_init_shell_owner(XrCoroutine *coro, XrayIsolate *X, XrRuntim
     coro->spawn_burst_count = 0;
     coro->core = core;
     coro->scheduler = runtime;
-    coro->isolate = X;
     if (!xr_coro_set_name(coro, name))
         return false;
     if (!is_clean) {

@@ -68,7 +68,7 @@ static inline XrSystemHeap *coro_heap_pool_from_heap(XrCoroHeap *heap) {
 // Per-type destroy capability lookups from the runtime core.
 
 static inline XrayIsolate *coro_heap_isolate(XrCoroHeap *heap) {
-    return (heap && heap->owner) ? heap->owner->isolate : NULL;
+    return (heap && heap->owner) ? xr_coro_vm_owner(heap->owner) : NULL;
 }
 
 static inline XrRuntimeCore *coro_heap_core(XrCoroHeap *heap) {
@@ -380,7 +380,8 @@ void xr_coro_heap_reset(XrCoroHeap *heap, struct XrCoroutine *new_owner) {
     coro_heap_init_runtime_state(heap);
     heap->owner = new_owner;
     // Re-wire the per-isolate L2 block cache (region reset cleared it).
-    heap->region.sys_heap = new_owner->isolate ? xr_isolate_get_sys_heap(new_owner->isolate) : NULL;
+    XrayIsolate *vm_owner = xr_coro_vm_owner(new_owner);
+    heap->region.sys_heap = vm_owner ? xr_isolate_get_sys_heap(vm_owner) : NULL;
 }
 
 /* ========== Allocation Helpers ========== */

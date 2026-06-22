@@ -38,7 +38,7 @@ static inline XrClass *json_root_class(XrayIsolate *X) {
 
 XrJson *xr_json_new(struct XrCoroutine *coro) {
     XR_DCHECK(coro != NULL, "json_new: NULL coro");
-    XrayIsolate *X = xr_coro_get_isolate(coro);
+    XrayIsolate *X = xr_coro_vm_owner(coro);
     XrClass *cls = json_root_class(X);
     return xr_json_new_with_class(coro, cls);
 }
@@ -47,7 +47,6 @@ XrJson *xr_json_new_with_class(struct XrCoroutine *coro, XrClass *cls) {
     XR_DCHECK(coro != NULL, "json_new_with_class: NULL coro");
     XR_DCHECK(cls != NULL, "json_new_with_class: NULL class");
     XR_DCHECK(cls->flags & XR_CLASS_DYNAMIC_LAYOUT, "json_new_with_class: not dynamic-layout");
-    XrayIsolate *X = xr_coro_get_isolate(coro);
 
     // Json objects are XR_TINSTANCE with a dynamic-layout class carrying
     // builtin_kind == XR_BK_JSON; xr_value_is_json checks this field.
@@ -60,7 +59,6 @@ XrJson *xr_json_new_with_class(struct XrCoroutine *coro, XrClass *cls) {
     uint16_t cap = cls->in_object_capacity;
     for (uint16_t i = 0; i < cap; i++)
         json->fields[i] = xr_null();
-    (void) X;
     return json;
 }
 

@@ -45,7 +45,7 @@ static XrBigInt *bigint_alloc(struct XrCoroutine *coro, uint32_t cap) {
     size_t size = sizeof(XrBigInt) + cap * sizeof(uint32_t);
     XrBigInt *b = (XrBigInt *) xr_alloc(coro, size, XR_TINSTANCE);
     if (b) {
-        XrayCoreClasses *core = xr_isolate_get_core_classes(xr_coro_get_isolate(coro));
+        XrayCoreClasses *core = xr_isolate_get_core_classes(xr_coro_vm_owner(coro));
         b->klass = core ? core->bigintClass : NULL;
         b->sign = 1;
         b->len = 0;

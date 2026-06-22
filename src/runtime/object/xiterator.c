@@ -35,7 +35,7 @@
 
 /* Internal helper: allocate iterator instance with klass set. */
 static XrIterator *iterator_alloc(struct XrCoroutine *coro) {
-    XrayIsolate *X = xr_coro_get_isolate(coro);
+    XrayIsolate *X = xr_coro_vm_owner(coro);
     XrClass *cls = xr_isolate_get_core_classes(X)->iteratorClass;
     XR_DCHECK(cls != NULL, "iterator_alloc: iteratorClass not registered");
     XrIterator *iter = (XrIterator *) xr_alloc(coro, sizeof(XrIterator), XR_TINSTANCE);

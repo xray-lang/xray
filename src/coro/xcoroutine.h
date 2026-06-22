@@ -187,7 +187,6 @@ struct XrCoroutine {
     struct XrCoroHeap *heap;      // GC safepoint: checked every loop back-edge
     struct XrRuntimeCore *core;   // VM-neutral runtime resources for this coroutine
     struct XrRuntime *scheduler;  // owning scheduler runtime, NULL before multicore attach
-    struct XrayIsolate *isolate;  // VM/AOT bridge while backend APIs still need isolate
     XrValue result;
     XrValue error;
     /* true: `error` came from the value-return channel (user `throw <enum>`);

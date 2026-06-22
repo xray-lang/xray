@@ -135,7 +135,7 @@ static inline XrCoroHeap *map_current_or_owner_heap(XrMap *map) {
 
 static XrayIsolate *map_owning_isolate(XrCoroHeap *heap) {
     if (heap && heap->owner)
-        return heap->owner->isolate;
+        return xr_coro_vm_owner(heap->owner);
     return NULL;
 }
 

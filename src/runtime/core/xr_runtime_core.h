@@ -40,6 +40,7 @@ typedef struct XrRuntimeCore {
     struct XrGlobalStringPool *global_string_pool;
     struct XrStrBuf *tmp_strbuf;
     void *weak_registry;
+    struct XrayIsolate *vm_owner;
 
     XrTypeRegistry *type_registry;
     XrSymbolTable *symbol_table;
@@ -65,6 +66,7 @@ XR_FUNC void xr_runtime_core_delete(XrRuntimeCore *core);
 XR_FUNC void xr_runtime_core_free_tmp_strbuf(XrRuntimeCore *core);
 XR_FUNC void xr_runtime_core_destroy_coro_storage(XrRuntimeCore *core);
 XR_FUNC void xr_runtime_core_cleanup_fixed_heap(XrRuntimeCore *core);
+XR_FUNC struct XrayIsolate *xr_runtime_core_vm_owner(const XrRuntimeCore *core);
 XR_FUNC void xr_runtime_core_set_destroy_op(XrRuntimeCore *core, uint8_t type,
                                             XrObjDestroyFn destroy);
 XR_FUNC XrObjDestroyFn xr_runtime_core_destroy_op(const XrRuntimeCore *core, uint8_t type);

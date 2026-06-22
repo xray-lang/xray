@@ -33,6 +33,7 @@
 #include "../../api/xtest_runner.h"
 #include "../../runtime/xisolate_api.h"
 #include "../../runtime/xexec_state.h"
+#include "../../runtime/core/xr_runtime_core.h"
 #include "../../module/xmodule.h"
 #include "../../vm/xvm_internal.h"
 #include "../../coro/xcoroutine.h"
@@ -147,10 +148,12 @@ static const char *extract_coro_error(XrCoroutine *coro) {
         XrString *s = (XrString *) XR_TO_PTR(err);
         if (s && s->data[0] != '\0')
             return s->data;
-    } else if (coro->isolate && xr_value_is_exception(coro->isolate, err)) {
+    }
+    XrayIsolate *vm_owner = xr_runtime_core_vm_owner(coro->core);
+    if (vm_owner && xr_value_is_exception(vm_owner, err)) {
         // Coroutine errors now preserve the original Exception instance
         // (so linked-scope rethrow surfaces the right object — see F026).
-        const char *m = xr_exception_get_message(coro->isolate, err);
+        const char *m = xr_exception_get_message(vm_owner, err);
         if (m && m[0] != '\0')
             return m;
     }
