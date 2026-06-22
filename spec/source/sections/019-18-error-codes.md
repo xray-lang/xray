@@ -87,6 +87,7 @@ order: 019
 | `XR_ERR_ANALYZE_INTERFACE_NOT_IMPLEMENTED` | 类未实现声明的接口 |
 | `XR_ERR_ANALYZE_TUPLE_FIELD_NAME` | 用非数字 key 访问 tuple |
 | `XR_ERR_ANALYZE_TUPLE_FIELD_RANGE` | tuple 字段下标越界 |
+| `XR_ERR_ANALYZE_OVERRIDE_MISMATCH` | `override` 未匹配父类链中的同名同签实例方法 |
 
 ### 18.4 运行时错误 (Runtime)
 
@@ -292,6 +293,7 @@ Analyzer enum codes (`XrErrorCode`, defined in the 350+ section of `xerror.h`):
 | `XR_ERR_ANALYZE_INTERFACE_NOT_IMPLEMENTED` | class does not implement a declared interface |
 | `XR_ERR_ANALYZE_TUPLE_FIELD_NAME` | tuple accessed with a non-numeric key |
 | `XR_ERR_ANALYZE_TUPLE_FIELD_RANGE` | tuple field index out of range |
+| `XR_ERR_ANALYZE_OVERRIDE_MISMATCH` | `override` did not match a same-name, same-signature instance method in the parent chain |
 
 ### 18.4 Runtime Errors
 

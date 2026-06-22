@@ -991,6 +991,7 @@ AstNode *xr_ast_method_decl(XrayIsolate *X, const char *name, char **parameters,
     node->as.method_decl.is_getter = is_getter;
     node->as.method_decl.is_setter = is_setter;
     node->as.method_decl.is_abstract = false;
+    node->as.method_decl.is_override = false;
     node->as.method_decl.is_static_constructor = false;  // Not a static constructor by default
 
     // Initialize base() call fields

@@ -2064,6 +2064,7 @@ Modifier ::= 'private' | 'static' | 'final' | 'abstract' | 'override'
 >
 > - 公开是**默认可见性**——所有未带 `private` 的字段/方法都是公开的；语言没有 `public` 修饰符。
 > - `override` 是**可选**——重写父类方法只要同名同参就自动覆盖，不要求显式 `override` 标注。
+> - 但一旦写出 `override`，分析器必须验证父类链存在同名同签实例方法；否则编译错误 `E0374`。
 >
 > 标准库和回归测试一致采用"省略默认修饰符"风格。
 
@@ -2109,7 +2110,7 @@ class Dog extends Animal {
 **约束**：
 - 派生类构造器**第一行**必须是 `super(...)`（除非未声明构造器）；否则编译错误。
 - 不能在 `super(...)` 之前访问 `this`。
-- **重写父类方法不需要任何关键字**——只要子类出现同名同参的方法即自动重写（`override` 修饰符存在但**可选**）。
+- **重写父类方法不需要任何关键字**——只要子类出现同名同参的方法即自动重写（`override` 修饰符存在但**可选**，写出时必须通过父链同签校验）。
 - 父类标 `final class` 则不可继承。
 - 父类方法标 `final` 则不可重写。
 - 父类方法标 `abstract` 则子类**必须**实现（除非子类也是 `abstract`）。
@@ -2124,7 +2125,7 @@ class Dog extends Animal {
 | `static` | 字段/方法 | 类级别，不属于实例；调用为 `ClassName.method()` |
 | `final` | 类/方法/字段 | 类：禁止继承；方法：禁止重写；字段：初始化后不可修改 |
 | `abstract` | 类/方法 | 不可实例化 / 必须由子类实现 |
-| `override` | 方法 | **可选**——重写不要求显式标注；写了仅作文档作用 |
+| `override` | 方法 | **可选但受检**——重写不要求显式标注；写了必须覆盖父类链中同名同签实例方法 |
 
 **修饰符可组合**：`private final secret: string = "key123"`、`static final pi() -> float`、`private static counter: int = 0`。
 
@@ -4926,6 +4927,7 @@ Bytecode  →  AOT (machine code)
 | `XR_ERR_ANALYZE_INTERFACE_NOT_IMPLEMENTED` | 类未实现声明的接口 |
 | `XR_ERR_ANALYZE_TUPLE_FIELD_NAME` | 用非数字 key 访问 tuple |
 | `XR_ERR_ANALYZE_TUPLE_FIELD_RANGE` | tuple 字段下标越界 |
+| `XR_ERR_ANALYZE_OVERRIDE_MISMATCH` | `override` 未匹配父类链中的同名同签实例方法 |
 
 ### 18.4 运行时错误 (Runtime)
 

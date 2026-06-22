@@ -2065,6 +2065,7 @@ Modifier ::= 'private' | 'static' | 'final' | 'abstract' | 'override'
 >
 > - Public is the **default visibility**—every field/method without `private` is public; the language has no `public` modifier.
 > - `override` is **optional**—an override happens automatically when the derived class declares a method with the same signature; an explicit `override` annotation is not required.
+> - Once written, `override` is checked: the analyzer must find a same-name, same-signature instance method in the parent chain, or report compile error `E0374`.
 >
 > The standard library and the regression tests consistently use the "omit the default modifier" style.
 
@@ -2110,7 +2111,7 @@ class Dog extends Animal {
 **Constraints**:
 - A derived class constructor's **first statement** must be `super(...)` (unless no constructor is declared); otherwise it is a compile error.
 - `this` must not be accessed before `super(...)`.
-- **Overriding requires no keyword**—any subclass method with the same name and signature automatically overrides the parent (the `override` modifier exists but is **optional**).
+- **Overriding requires no keyword**—any subclass method with the same name and signature automatically overrides the parent (the `override` modifier is **optional**, but when present it must pass parent-chain signature checking).
 - A `final class` cannot be inherited.
 - A `final` method cannot be overridden.
 - An `abstract` method **must** be implemented by subclasses (unless the subclass is also `abstract`).
@@ -2125,7 +2126,7 @@ class Dog extends Animal {
 | `static` | field/method | Class-level, not part of an instance; called as `ClassName.method()` |
 | `final` | class/method/field | Class: cannot be inherited. Method: cannot be overridden. Field: cannot be reassigned after initialization |
 | `abstract` | class/method | Cannot be instantiated / must be implemented by subclasses |
-| `override` | method | **Optional**—overrides do not require explicit annotation; documenting only |
+| `override` | method | **Optional but checked**—overrides do not require explicit annotation; when present, it must match a same-name, same-signature instance method in the parent chain |
 
 **Modifiers may combine**: `private final secret: string = "key123"`, `static final pi() -> float`, `private static counter: int = 0`.
 
@@ -4929,6 +4930,7 @@ Analyzer enum codes (`XrErrorCode`, defined in the 350+ section of `xerror.h`):
 | `XR_ERR_ANALYZE_INTERFACE_NOT_IMPLEMENTED` | class does not implement a declared interface |
 | `XR_ERR_ANALYZE_TUPLE_FIELD_NAME` | tuple accessed with a non-numeric key |
 | `XR_ERR_ANALYZE_TUPLE_FIELD_RANGE` | tuple field index out of range |
+| `XR_ERR_ANALYZE_OVERRIDE_MISMATCH` | `override` did not match a same-name, same-signature instance method in the parent chain |
 
 ### 18.4 Runtime Errors
 

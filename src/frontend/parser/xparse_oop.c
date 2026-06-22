@@ -534,7 +534,10 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
         if (xr_parser_check(parser, TK_CONSTRUCTOR)) {
             *is_method_out = true;
             xr_parser_advance(parser);  // consume 'constructor'
-            return xr_parse_static_constructor(parser, is_private);
+            AstNode *method = xr_parse_static_constructor(parser, is_private);
+            if (method)
+                method->as.method_decl.is_override = is_override;
+            return method;
         }
     }
 
@@ -544,7 +547,10 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
 
     if (xr_parser_match(parser, TK_OPERATOR)) {
         *is_method_out = true;
-        return xr_parse_operator_method(parser, is_private, is_static);
+        AstNode *method = xr_parse_operator_method(parser, is_private, is_static);
+        if (method)
+            method->as.method_decl.is_override = is_override;
+        return method;
     }
 
     // Parse member name (may be 'constructor' keyword)
@@ -579,8 +585,10 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
         *is_method_out = true;
         AstNode *method = xr_parse_method_declaration(parser, name, name_line, name_column,
                                                       is_private, is_static, is_abstract);
-        if (method)
+        if (method) {
+            method->as.method_decl.is_override = is_override;
             method->as.method_decl.is_final = is_final;
+        }
         return method;
     } else {
         // Field: has type annotation or initializer

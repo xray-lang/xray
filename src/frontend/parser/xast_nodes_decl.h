@@ -147,6 +147,7 @@ typedef struct MethodDeclNode {
     bool is_getter;
     bool is_setter;
     bool is_abstract;
+    bool is_override;
     bool is_final;
     bool is_static_constructor;
     AstNode **base_args;

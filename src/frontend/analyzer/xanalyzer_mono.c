@@ -756,6 +756,7 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
             dst->is_getter = src->is_getter;
             dst->is_setter = src->is_setter;
             dst->is_abstract = src->is_abstract;
+            dst->is_override = src->is_override;
             dst->is_final = src->is_final;
             dst->is_static_constructor = src->is_static_constructor;
             dst->is_operator = src->is_operator;

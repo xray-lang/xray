@@ -53,7 +53,7 @@ XR_FUNC XrProto *xr_compile(XrCompilerContext *ctx, AstNode *ast) {
 
     /* Type inference pass */
     if (ctx->analyzer) {
-        xa_analyzer_analyze(ctx->analyzer, NULL, ast);
+        xa_analyzer_analyze(ctx->analyzer, ctx->source_file, ast);
 
         int diag_count = 0;
         XaDiagnostic *diagnostics = xa_analyzer_get_diagnostics(ctx->analyzer, &diag_count);
@@ -96,7 +96,7 @@ XR_FUNC XrProto *xr_compile(XrCompilerContext *ctx, AstNode *ast) {
 
     /* Post-mono: re-analyze monomorphized declarations for struct layouts */
     if (ctx->analyzer) {
-        xa_analyzer_analyze(ctx->analyzer, NULL, ast);
+        xa_analyzer_analyze(ctx->analyzer, ctx->source_file, ast);
     }
 
     /* Mark all diagnostics as reported before escape analysis */

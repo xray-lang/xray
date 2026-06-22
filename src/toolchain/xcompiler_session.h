@@ -20,6 +20,7 @@ struct XrReplSymbolTable;
 struct XrSourceCache;
 struct XrTypePool;
 struct XaAnalyzer;
+struct XrModuleGraph;
 
 typedef struct XrCompilerSession XrCompilerSession;
 
@@ -74,6 +75,10 @@ XR_FUNC struct XrReplSymbolTable *
 xr_compiler_session_repl_symbols(const XrCompilerSession *session);
 XR_FUNC struct XaAnalyzer *xr_compiler_session_ensure_repl_analyzer(XrCompilerSession *session);
 XR_FUNC struct XaAnalyzer *xr_compiler_session_repl_analyzer(const XrCompilerSession *session);
+
+XR_FUNC void xr_compiler_session_set_module_graph(XrCompilerSession *session,
+                                                  struct XrModuleGraph *graph);
+XR_FUNC struct XrModuleGraph *xr_compiler_session_module_graph(const XrCompilerSession *session);
 
 XR_FUNC bool xr_compiler_session_push_arena(XrCompilerSession *session, struct XrArena *arena,
                                             const char *source_file, XrCompilerSessionScope *scope);
