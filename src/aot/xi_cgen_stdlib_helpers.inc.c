@@ -46,22 +46,6 @@ typedef struct CgAotStdlibMethod {
 #include "xstdlib_aot_methods_generated.inc.c"
 
 static const CgAotStdlibMethod g_aot_stdlib_manual_methods[] = {
-    {"encoding", "hexEncode", 1, "xrt_encoding_hex_encode", "s", CG_AOT_RET_VALUE, NULL},
-    {"encoding", "hexDecode", 1, "xrt_encoding_hex_decode", "s", CG_AOT_RET_VALUE, NULL},
-    {"encoding", "hexDecodeString", 1, "xrt_encoding_hex_decode_string", "s", CG_AOT_RET_VALUE,
-     NULL},
-    {"encoding", "hexValid", 1, "xrt_encoding_hex_valid", "s", CG_AOT_RET_VALUE, NULL},
-    {"encoding", "utf8Valid", 1, "xrt_encoding_utf8_valid", "s", CG_AOT_RET_VALUE, NULL},
-    {"encoding", "utf8Count", 1, "xrt_encoding_utf8_count", "s", CG_AOT_RET_VALUE, NULL},
-    {"encoding", "utf8ByteLength", 1, "xrt_encoding_utf8_byte_length", "s", CG_AOT_RET_VALUE, NULL},
-    {"encoding", "utf16Encode", 1, "xrt_encoding_utf16_encode", "s", CG_AOT_RET_VALUE, NULL},
-    {"encoding", "utf16Encode", 2, "xrt_encoding_utf16_encode_endian", "sv", CG_AOT_RET_VALUE,
-     NULL},
-    {"encoding", "utf16Decode", 1, "xrt_encoding_utf16_decode", "v", CG_AOT_RET_VALUE, NULL},
-    {"encoding", "utf16Decode", 2, "xrt_encoding_utf16_decode_endian", "vv", CG_AOT_RET_VALUE,
-     NULL},
-    {"encoding", "utf16Decode", 3, "xrt_encoding_utf16_decode_endian_strip", "vvv",
-     CG_AOT_RET_VALUE, NULL},
     {"url", "encode", 1, "xrt_url_encode", "s", CG_AOT_RET_VALUE, NULL},
     {"url", "decode", 1, "xrt_url_decode", "s", CG_AOT_RET_VALUE, NULL},
     {"url", "encodeForm", 1, "xrt_url_encode_form", "s", CG_AOT_RET_VALUE, NULL},
