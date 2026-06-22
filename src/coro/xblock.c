@@ -192,7 +192,7 @@ XrCoroBlockResult xr_coro_chan_send(XrCoroutine *coro, XrChannel *ch, XrValue va
             xr_slot_store_value(result_slot, xr_bool(true));
             return block_result(XR_CORO_BLOCK_READY, xr_null(), true);
         }
-        xr_chan_abandon_send(value);
+        xr_chan_abandon_send_core(core, value);
         if (xr_channel_is_closed(ch)) {
             xr_slot_store_value(result_slot, xr_bool(false));
             return block_result(XR_CORO_BLOCK_CLOSED, xr_null(), false);
@@ -217,7 +217,7 @@ XrCoroBlockResult xr_coro_chan_send(XrCoroutine *coro, XrChannel *ch, XrValue va
         return block_result(XR_CORO_BLOCK_BLOCKED, xr_null(), false);
     }
     /* CLOSED / NO_CORO / error: the value never entered the channel. */
-    xr_chan_abandon_send(value);
+    xr_chan_abandon_send_core(core, value);
     if (chan_result == XR_CHAN_CLOSED) {
         xr_slot_store_value(result_slot, xr_bool(false));
         return block_result(XR_CORO_BLOCK_CLOSED, xr_null(), false);

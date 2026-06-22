@@ -121,7 +121,7 @@ XR_FUNC XrValue xr_deep_copy_to_coro_counted_core(struct XrRuntimeCore *core, Xr
 
 XR_FUNC XrValue xr_deep_copy_to_transit_core(struct XrRuntimeCore *core, XrValue value);
 XR_FUNC XrValue xr_deep_copy_to_transit(struct XrayIsolate *X, XrValue value);
-XR_FUNC void xr_chan_transit_release(XrValue value);
+XR_FUNC void xr_chan_transit_release_core(struct XrRuntimeCore *core, XrValue value);
 
 /* ========== Zero-copy buffer move for self-contained scalar arrays ==========
  *

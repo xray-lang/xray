@@ -37,6 +37,8 @@ struct XrRuntimeCore;
 struct XrTask;
 
 typedef struct XrAotRuntime XrAotRuntime;
+typedef void (*XrAotRuntimeConfigureCoreFn)(struct XrRuntimeCore *core, uint32_t caps,
+                                            void *userdata);
 
 typedef enum {
     XR_AOT_CAP_NONE = 0,
@@ -47,6 +49,8 @@ typedef enum {
     XR_AOT_CAP_RESULT_GROUP = 1u << 4,
     XR_AOT_CAP_PROCESS = 1u << 5,
     XR_AOT_CAP_TRANSFER = 1u << 6,
+    XR_AOT_CAP_TASK = 1u << 7,
+    XR_AOT_CAP_OBJECTS = 1u << 8,
 } XrAotRuntimeCap;
 
 typedef struct XrAotRuntimeConfig {
@@ -56,6 +60,7 @@ typedef struct XrAotRuntimeConfig {
     char **argv;
     const char *file;
     void *userdata;
+    XrAotRuntimeConfigureCoreFn configure_core;
 } XrAotRuntimeConfig;
 
 typedef enum {

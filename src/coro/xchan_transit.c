@@ -9,9 +9,10 @@
  */
 
 #include "xdeep_copy.h"
+#include "../runtime/core/xr_runtime_core.h"
 #include "../runtime/xshared.h"
 
-void xr_chan_transit_release(XrValue value) {
+void xr_chan_transit_release_core(XrRuntimeCore *core, XrValue value) {
     if (!XR_IS_PTR(value))
         return;
     XrGCHeader *obj = XR_VALUE_GCPTR(value);
@@ -21,5 +22,5 @@ void xr_chan_transit_release(XrValue value) {
      * one reference each from their parent container, so destroying the
      * root cascades through the regular shared-destroy path. */
     if (xr_obj_drop_is_last(obj))
-        xr_shared_destroy(obj);
+        xr_shared_destroy_core(core, obj);
 }

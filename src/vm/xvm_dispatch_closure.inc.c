@@ -61,7 +61,7 @@ vmcase(OP_SETSHARED) {
         if (old_obj && XR_GC_IS_SHARED(old_obj)) {
             int new_refc = xr_shared_decref(old_obj);
             if (new_refc == 0) {
-                xr_shared_destroy(old_obj);
+                xr_shared_destroy_core(xr_isolate_get_runtime_core(isolate), old_obj);
             }
         }
     }

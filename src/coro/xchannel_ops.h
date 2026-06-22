@@ -95,21 +95,21 @@ static inline XrValue xr_chan_prepare_send(struct XrayIsolate *isolate, XrValue 
  *
  * Coro-heap values that pass through prepare untouched (e.g. strings)
  * are left alone: their reference balance is owner-thread business. */
-static inline void xr_chan_abandon_send(XrValue prepared) {
+static inline void xr_chan_abandon_send_core(XrRuntimeCore *core, XrValue prepared) {
     if (!XR_IS_PTR(prepared))
         return;
     XrGCHeader *obj = XR_VALUE_GCPTR(prepared);
     if (!obj)
         return;
     if (XR_OBJ_GET_FLAG(obj, XR_OBJ_TRANSIT)) {
-        xr_chan_transit_release(prepared);
+        xr_chan_transit_release_core(core, prepared);
         return;
     }
     if (XR_GC_IS_SHARED(obj)) {
         /* Atomic refcount: safe from any thread. Managed objects
          * (channels) make drop_is_last a no-op by design. */
         if (xr_obj_drop_is_last((XrObjHeader *) obj))
-            xr_shared_destroy(obj);
+            xr_shared_destroy_core(core, obj);
     }
 }
 
@@ -132,7 +132,7 @@ static inline XrValue xr_chan_copy_recv_core(XrRuntimeCore *core, XrValue value,
     if (xr_chan_try_adopt_array_from_transit_core(value, recv_coro, &adopted))
         return adopted;
     XrValue copied = xr_deep_copy_to_coro_core(core, value, recv_coro);
-    xr_chan_transit_release(value);
+    xr_chan_transit_release_core(core, value);
     return copied;
 }
 
@@ -187,7 +187,7 @@ static inline bool xr_chan_try_send_core(XrRuntimeCore *core, XrChannel *ch, XrV
     value = xr_chan_prepare_send_core(core, value);
     if (xr_channel_try_send(ch, value))
         return true;
-    xr_chan_abandon_send(value);
+    xr_chan_abandon_send_core(core, value);
     return false;
 }
 

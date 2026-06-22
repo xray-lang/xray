@@ -16,6 +16,7 @@
 #include "../runtime/core/xr_runtime_core.h"
 #include "../runtime/core/xr_script_info.h"
 #include "../runtime/gc/xcoro_gc.h"
+#include "../runtime/gc/xgc_destroy_ops.h"
 #include "xblock.h"
 #include "xcoroutine.h"
 #include "xworker.h"
@@ -92,6 +93,14 @@ static void *aot_host_backend_context(void *ctx) {
 static const XrSchedulerHostOps AOT_SCHEDULER_HOST_OPS = {
     .backend_context = aot_host_backend_context,
 };
+
+static void aot_runtime_configure_core(XrAotRuntime *runtime, const XrAotRuntimeConfig *cfg) {
+    if (!runtime || !runtime->core)
+        return;
+    xr_runtime_core_enable_basic_destroy_ops(runtime->core);
+    if (cfg && cfg->configure_core)
+        cfg->configure_core(runtime->core, runtime->caps, cfg->userdata);
+}
 
 static bool aot_coro_cancelled(const XrCoroutine *coro) {
     return coro && xr_coro_flags_has((XrCoroutine *) coro,
@@ -220,6 +229,7 @@ XrAotRuntime *xr_aot_runtime_new(const XrAotRuntimeConfig *cfg) {
     runtime->core = xr_runtime_core_new(&core_cfg);
     if (!runtime->core)
         goto fail;
+    aot_runtime_configure_core(runtime, &local_cfg);
     xr_script_info_set(&runtime->core->script_info, local_cfg.file, local_cfg.argc, local_cfg.argv);
 
     if (aot_caps_need_scheduler(runtime->caps)) {

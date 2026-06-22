@@ -71,9 +71,8 @@ typedef struct XrGCObjectNode {
  * runtime from pulling deep-copy/share code merely because it can destroy an
  * object.
  *
- * Extension types (registered via xr_register_extension_destroy) live in
- * per-isolate/runtime-core tables and are consulted as a fallback when the
- * compile-time destroy slot is empty. */
+ * Extension types (registered via xr_register_extension_destroy) live in the
+ * same runtime-core destroy table as built-in types. */
 
 typedef struct XrGC {
     uint8_t gcstate;
@@ -98,9 +97,6 @@ XR_FUNC bool xr_gc_type_may_need_finalize(uint8_t type);
 
 /* ========== Compile-Time Type Function Tables ========== */
 
-// Destroy table: defined in xgc.c, referenced by RC/fixedgc cleanup.
-extern const XrGCDestroyFn g_type_destroy_ops[XGC_MAX_TYPES];
-
 // Transfer tables: defined in xdeep_copy.c and only pulled when transfer
 // logic is linked.
 extern const XrGCDeepCopyFn g_type_deep_copy_ops[XGC_MAX_TYPES];
@@ -116,6 +112,7 @@ XR_FUNC void xr_gc_destroy_cell(XrGCHeader *obj, XrCoroGC *owning_gc);
 XR_FUNC void xr_gc_destroy_coroutine(XrGCHeader *obj, XrCoroGC *owning_gc);
 XR_FUNC void xr_gc_destroy_instance(XrGCHeader *obj, XrCoroGC *owning_gc);
 XR_FUNC void xr_gc_destroy_task(XrGCHeader *obj, XrCoroGC *owning_gc);
+XR_FUNC void xr_gc_destroy_work_queue(XrGCHeader *obj, XrCoroGC *owning_gc);
 XR_FUNC void xr_gc_destroy_result_group(XrGCHeader *obj, XrCoroGC *owning_gc);
 // NetConn / NetListener destroy handled by native body descriptors.
 

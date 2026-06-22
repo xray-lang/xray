@@ -32,63 +32,11 @@
 #include "../xisolate_api.h"
 #include "../xisolate_internal.h"
 #include "../../coro/xcoroutine.h"
-#include "../../coro/xresult_group.h"
-#include "../../coro/xwork_queue.h"
 #include "../../coro/xworker.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
 #include "../../base/xmalloc.h"
-
-/* ========== Compile-Time Per-Type Destroy Table (.rodata) ==========
- *
- * One optional destroy callback per GC type:
- *
- *   destroy   — release malloc-backed side resources (RC / fixedgc cleanup)
- *
- * NULL means "this capability does not apply to this type": RC/fixedgc
- * cleanup skips destroy. There is intentionally no traverse slot:
- * tracing/mark-sweep was removed and RC owns reclamation. Deep-copy and
- * to-shared transfer tables live in xdeep_copy.c so cleanup does not
- * pull transfer logic.
- *
- * Adding a new compile-time GC type is a one-liner here. */
-
-const XrGCDestroyFn g_type_destroy_ops[XGC_MAX_TYPES] = {
-    [XR_TARRAY] = xr_gc_destroy_array,
-    [XR_TMAP] = xr_gc_destroy_map,
-    [XR_TSET] = xr_gc_destroy_set,
-    [XR_TINSTANCE] = xr_gc_destroy_instance,
-    [XR_TFUNCTION] = xr_gc_destroy_closure,
-
-    // Channels — already shared at construction; pass-through across coro.
-    [XR_TCHANNEL] = xr_gc_destroy_channel,
-
-    // Atomic — system-heap shared object (refcounted). No side resources.
-    [XR_TATOMIC] = NULL,
-
-    // WorkQueue — system-heap shared object with per-shard buffers.
-    [XR_TWORKQUEUE] = xr_gc_destroy_work_queue,
-
-    // ResultGroup — system-heap shared object with queued reduction batches.
-    [XR_TRESULTGROUP] = xr_gc_destroy_result_group,
-
-    // Other GC types: have destroy responsibilities, but are deliberately
-    // not transferable across coroutines (the dispatchers return the raw
-    // value, matching the pre-table default).
-    [XR_TCOROUTINE] = xr_gc_destroy_coroutine,
-    [XR_TTASK] = xr_gc_destroy_task,
-    [XR_TCELL] = xr_gc_destroy_cell,
-    [XR_TBOUND_METHOD] = NULL,
-    [XR_TMODULE] = NULL,
-    [XR_TERROR] = NULL,
-
-    // NetConn / NetListener are now XR_TINSTANCE with native body
-    // descriptors — destroy is handled by xr_gc_destroy_instance.
-
-    // XR_TBLOB / XR_TSTRING are pure leaves with no
-    // capabilities; their slots are zero-initialised by default.
-};
 
 /* ========== GC State ========== */
 
@@ -270,12 +218,8 @@ void xr_weak_registry_destroy(XrayIsolate *isolate) {
     core->weak_registry = NULL;
 }
 
-static XrGCDestroyFn get_destroy_func(uint8_t type) {
-    return (type < XGC_MAX_TYPES) ? g_type_destroy_ops[type] : NULL;
-}
-
 XR_FUNC bool xr_gc_type_may_need_finalize(uint8_t type) {
-    return type < XGC_MAX_TYPES && (g_type_destroy_ops[type] != NULL || type > XR_TATOMIC);
+    return type < XGC_MAX_TYPES && type > XR_TATOMIC;
 }
 
 /* ========== Init/Cleanup ========== */
@@ -295,10 +239,8 @@ void xr_gc_cleanup(XrGC *gc) {
         XrGCObjectNode *next = node->next;
         XrGCHeader *obj = node->obj;
         uint8_t type = xr_gc_gettype(obj);
-        XrGCDestroyFn destroy = get_destroy_func(type);
-        if (!destroy && gc->isolate) {
-            destroy = (XrGCDestroyFn) xr_isolate_get_ext_destroy(gc->isolate, type);
-        }
+        XrRuntimeCore *core = gc->isolate ? xr_isolate_get_runtime_core(gc->isolate) : NULL;
+        XrGCDestroyFn destroy = xr_runtime_core_destroy_op(core, type);
         if (destroy != NULL) {
             destroy(obj, NULL);
         }

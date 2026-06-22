@@ -18,6 +18,7 @@
 #include "xgc_internal.h"
 #include "xregion.h"  // xr_region_free_raw_block (drain pooled blocks)
 #include "../../base/xmalloc.h"
+#include "../core/xr_runtime_core.h"
 #include "../xshared.h"
 #include "../../coro/xcoro_pool.h"
 #include "../../coro/xcoroutine.h"
@@ -360,9 +361,7 @@ void xr_sysheap_print_stats(XrSystemHeap *heap) {
 
 /* ========== Shared Object Destruction ========== */
 
-// g_type_destroy_ops declared in xgc_internal.h as extern const
-
-void xr_shared_destroy(XrGCHeader *obj) {
+void xr_shared_destroy_core(XrRuntimeCore *core, XrGCHeader *obj) {
     if (!obj)
         return;
 
@@ -375,9 +374,9 @@ void xr_shared_destroy(XrGCHeader *obj) {
     uint8_t type = XR_GC_GET_TYPE(obj);
 
     // Call destructor if registered (to free internal resources like buffers)
-    if (type < XGC_MAX_TYPES && g_type_destroy_ops[type]) {
-        g_type_destroy_ops[type](obj, NULL);
-    }
+    XrGCDestroyFn destroy = xr_runtime_core_destroy_op(core, type);
+    if (destroy)
+        destroy(obj, NULL);
 
     // Free the object itself
     if (XR_GC_IS_MMAP(obj)) {

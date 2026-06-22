@@ -29,6 +29,7 @@
 #include "../runtime/xisolate_internal.h"
 #include "../base/xchecks.h"
 #include "../runtime/core/xr_runtime_core.h"
+#include "../runtime/gc/xgc_destroy_ops.h"
 #include "../runtime/gc/xsystem_heap.h"
 #include "../base/xmalloc.h"
 #include "../runtime/xglobals_table.h"
@@ -85,6 +86,7 @@ XrayIsolate *xray_isolate_new(const XrayIsolateParams *params) {
     isolate->core_rt = xr_runtime_core_new(&core_cfg);
     if (!isolate->core_rt)
         goto fail;
+    xr_runtime_core_enable_basic_destroy_ops(isolate->core_rt);
     xr_script_info_set(&isolate->core_rt->script_info, isolate->params.script_file,
                        isolate->params.script_argc, isolate->params.script_argv);
 

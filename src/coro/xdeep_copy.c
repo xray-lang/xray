@@ -679,7 +679,7 @@ bool xr_chan_try_adopt_array_from_transit_core(XrValue value, struct XrCoroutine
     t->data = NULL;
     t->capacity = 0;
     t->length = 0;
-    xr_chan_transit_release(value);
+    xr_chan_transit_release_core(recv_coro ? recv_coro->core : NULL, value);
 
     *out = XR_FROM_PTR(r);
     return true;
