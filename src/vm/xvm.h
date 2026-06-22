@@ -80,6 +80,7 @@ XR_FUNC void xr_vm_vm_free(XrVMRuntime *isolate);
 XR_FUNC XrVMResult xr_vm_interpret(const char *source);
 XR_FUNC XrVMResult xr_vm_interpret_proto(XrVMRuntime *isolate, XrProto *proto);
 XR_FUNC XrVMResult xr_vm_execute_module(XrVMRuntime *isolate, XrProto *proto);
+XR_FUNC bool xr_vm_bind_proto_shared_slots(XrVMRuntime *isolate, XrProto *proto);
 
 struct XrVMRuntime;
 XR_FUNC XrVMResult xr_vm_interpret_proto_isolate(struct XrVMRuntime *isolate, XrProto *proto);

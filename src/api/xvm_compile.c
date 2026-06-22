@@ -41,17 +41,16 @@ static void restore_session_type_pool(XrCompilerSession *session) {
         xr_compiler_session_install_analyzer_pool(session);
 }
 
-static XrVMRuntime *compile_session_vm_host(XrCompilerSession *session, const char *who) {
+static bool compile_session_available(XrCompilerSession *session, const char *who) {
     if (!session) {
         xr_log_warning("vm", "%s: compiler session is required", who);
-        return NULL;
+        return false;
     }
-    XrVMRuntime *isolate = xr_compiler_session_vm_host(session);
-    if (!isolate) {
+    if (!xr_compiler_session_vm_host(session)) {
         xr_log_warning("vm", "%s: compiler session has no VM host", who);
-        return NULL;
+        return false;
     }
-    return isolate;
+    return true;
 }
 
 // Compile AST to bytecode (internal)
@@ -61,8 +60,7 @@ static XrVMRuntime *compile_session_vm_host(XrCompilerSession *session, const ch
 // synthetic nodes share the AST lifetime without mutating VM isolate state.
 static XrProto *compile_ast_internal(XrCompilerSession *session, AstNode *ast,
                                      const char *source_file) {
-    XrVMRuntime *isolate = compile_session_vm_host(session, "compile_ast_internal");
-    if (!isolate)
+    if (!compile_session_available(session, "compile_ast_internal"))
         return NULL;
     XR_DCHECK(ast != NULL, "compile_ast_internal: NULL ast");
     ensure_compiler_proto_hooks();
@@ -82,16 +80,7 @@ static XrProto *compile_ast_internal(XrCompilerSession *session, AstNode *ast,
 
     ctx->source_file = source_file;
 
-    ctx->shared_offset = isolate->vm.shared.count;
-
     XrProto *proto = xr_compile(ctx, ast);
-
-    // Sync shared variable count back to isolate (offset-adjusted)
-    int total_shared = ctx->shared_offset + ctx->shared_var_count;
-    if (total_shared > isolate->vm.shared.count) {
-        isolate->vm.shared.count = total_shared;
-        xr_shared_array_ensure(&isolate->vm.shared, total_shared - 1);
-    }
 
     xr_compiler_context_free(ctx);
 
@@ -112,8 +101,7 @@ XrProto *xr_compile_ast_with_source(XrCompilerSession *session, AstNode *ast,
 
 XrProto *xr_compile_source_with_path(XrCompilerSession *session, const char *source,
                                      const char *source_file) {
-    XrVMRuntime *isolate = compile_session_vm_host(session, "compile_source_with_path");
-    if (!isolate)
+    if (!compile_session_available(session, "compile_source_with_path"))
         return NULL;
     XR_DCHECK(source != NULL, "compile_source_with_path: NULL source");
     ensure_compiler_proto_hooks();
@@ -125,7 +113,6 @@ XrProto *xr_compile_source_with_path(XrCompilerSession *session, const char *sou
     }
 
     ctx->source_file = source_file;
-    ctx->shared_offset = isolate->vm.shared.count;
 
     // Now parse with valid type pool
     AstNode *ast = xr_parse_with_source(session, source, source_file);
@@ -136,11 +123,6 @@ XrProto *xr_compile_source_with_path(XrCompilerSession *session, const char *sou
 
     // Compile
     XrProto *proto = xr_compile(ctx, ast);
-    int total_shared = ctx->shared_offset + ctx->shared_var_count;
-    if (total_shared > isolate->vm.shared.count) {
-        isolate->vm.shared.count = total_shared;
-        xr_shared_array_ensure(&isolate->vm.shared, total_shared - 1);
-    }
 
     xr_compiler_context_free(ctx);
 

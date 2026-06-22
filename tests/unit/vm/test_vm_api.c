@@ -17,6 +17,7 @@
 
 #include "../test_framework.h"
 #include "xray_vm.h"
+#include "vm/xvm.h"
 #include "../test_helper.h"
 
 #include <stddef.h>
@@ -145,6 +146,30 @@ TEST(vm_interpret_proto_null_proto_returns_error) {
 }
 #endif
 
+TEST(vm_bind_proto_shared_slots_is_vm_owned) {
+    XrVMConfig params;
+    xray_vm_config_init(&params);
+    XrVMRuntime *iso1 = xray_vm_new_full(&params);
+    XrVMRuntime *iso2 = xray_vm_new_full(&params);
+    ASSERT_NOT_NULL(iso1);
+    ASSERT_NOT_NULL(iso2);
+
+    XrProto *proto = xr_vm_proto_new();
+    ASSERT_NOT_NULL(proto);
+    proto->shared_count = 2;
+
+    ASSERT_TRUE(xr_vm_bind_proto_shared_slots(iso1, proto));
+    ASSERT_TRUE(proto->shared_slots_bound);
+    ASSERT_EQ_PTR(proto->shared_slots_owner, iso1);
+    ASSERT_EQ_INT(proto->shared_offset, 0);
+    ASSERT_TRUE(xr_vm_bind_proto_shared_slots(iso1, proto));
+    ASSERT_FALSE(xr_vm_bind_proto_shared_slots(iso2, proto));
+
+    xr_vm_proto_free(proto);
+    xray_vm_delete(iso2);
+    xray_vm_delete(iso1);
+}
+
 /* ========== End-to-end: deep recursion exercises grow path ========== */
 
 TEST(vm_deep_recursion_via_dostring) {
@@ -263,6 +288,7 @@ RUN_TEST(vm_call_closure_null_closure_returns_null);
 #ifdef NDEBUG
 RUN_TEST(vm_interpret_proto_null_proto_returns_error);
 #endif
+RUN_TEST(vm_bind_proto_shared_slots_is_vm_owned);
 
 RUN_TEST_SUITE("End-to-end entry path");
 RUN_TEST(vm_deep_recursion_via_dostring);

@@ -57,7 +57,6 @@ struct XrCompilerContext {
     XrSharedVar *shared_vars;
     int shared_var_count;
     int shared_var_capacity;
-    int shared_offset;  // base offset for this compilation unit in isolate->vm.shared
 
     bool had_error;
     bool panic_mode;

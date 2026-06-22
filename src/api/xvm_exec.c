@@ -39,6 +39,8 @@ int xr_execute(XrVMRuntime *isolate, XrProto *proto) {
         xr_log_warning("vm", "invalid bytecode");
         return -1;
     }
+    if (!xr_vm_bind_proto_shared_slots(isolate, proto))
+        return -1;
 
     XrRuntime *runtime = (XrRuntime *) isolate->vm.scheduler;
     if (!runtime) {

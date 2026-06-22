@@ -123,6 +123,31 @@ TEST(bytecode_roundtrips_u16_upvalue_index) {
     xray_vm_delete(iso);
 }
 
+TEST(bytecode_roundtrips_declared_shared_count) {
+    XrVMRuntime *iso = new_test_isolate();
+    ASSERT_NOT_NULL(iso);
+
+    XrProto *proto = make_minimal_proto();
+    ASSERT_NOT_NULL(proto);
+    proto->shared_count = 4;
+
+    size_t size = 0;
+    uint8_t *bytes = xr_bytecode_write(iso, proto, 0, &size);
+    ASSERT_NOT_NULL(bytes);
+
+    XrBcError error = XR_BC_OK;
+    XrProto *roundtrip = xr_bytecode_read(iso, bytes, size, &error);
+    ASSERT_NOT_NULL(roundtrip);
+    ASSERT_EQ_INT(error, XR_BC_OK);
+    ASSERT_EQ_INT(roundtrip->shared_count, 4);
+    ASSERT_FALSE(roundtrip->shared_slots_bound);
+
+    xr_vm_proto_free(roundtrip);
+    xr_free(bytes);
+    xr_vm_proto_free(proto);
+    xray_vm_delete(iso);
+}
+
 TEST(bytecode_roundtrips_symbol_index_above_255) {
     XrVMRuntime *iso = new_test_isolate();
     ASSERT_NOT_NULL(iso);
@@ -292,6 +317,7 @@ static void run_all_tests(void) {
     RUN_TEST(bytecode_write_emits_v6_header_and_roundtrips_u64_instruction);
     RUN_TEST(bytecode_reader_rejects_previous_layout_version);
     RUN_TEST(bytecode_roundtrips_u16_upvalue_index);
+    RUN_TEST(bytecode_roundtrips_declared_shared_count);
     RUN_TEST(bytecode_roundtrips_symbol_index_above_255);
     RUN_TEST(bytecode_roundtrips_extern_ffi_signature);
     RUN_TEST(bytecode_roundtrips_extern_default_library);

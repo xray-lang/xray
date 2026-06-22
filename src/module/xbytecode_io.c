@@ -18,7 +18,6 @@
 #include "../base/xlog.h"
 #include "xray_vm.h"
 #include "../runtime/xisolate_api.h"
-#include "xexec_state.h"
 #include "../runtime/value/xchunk.h"
 #include "../runtime/value/xslot_type.h"
 #include "../runtime/value/xffi_sig.h"
@@ -26,6 +25,7 @@
 #include "../runtime/object/xstring.h"
 #include "../runtime/value/xvalue.h"
 #include "../base/xdynarray.h"
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -372,20 +372,6 @@ static int collect_shared_from_proto(XrProto *proto, int max_shared) {
     }
 
     return max_shared;
-}
-
-// Set shared_offset on proto and all nested protos (no instruction rewriting needed)
-static void set_shared_offset_recursive(XrProto *proto, int offset) {
-    if (!proto)
-        return;
-
-    proto->shared_offset = offset;
-
-    uint32_t sub_count = (uint32_t) PROTO_PROTO_COUNT(proto);
-    for (uint32_t i = 0; i < sub_count; i++) {
-        XrProto *sub = PROTO_PROTO(proto, i);
-        set_shared_offset_recursive(sub, offset);
-    }
 }
 
 /* ========== Proto Serialization ========== */
@@ -760,8 +746,9 @@ uint8_t *xr_bytecode_write(XrVMRuntime *X, XrProto *proto, int flags, size_t *ou
     // Collect symbols (symbol ID starts from 1, returns max ID + 1)
     int max_symbol_id = collect_symbols_from_proto(proto, 0);
 
-    // Collect shared variable count
-    int shared_count = collect_shared_from_proto(proto, 0);
+    int used_shared_count = collect_shared_from_proto(proto, 0);
+    int shared_count =
+        proto->shared_count > used_shared_count ? proto->shared_count : used_shared_count;
 
     // Write header
     if (!bc_put_u32(&w, XR_BC_MAGIC))
@@ -833,11 +820,11 @@ XrProto *xr_bytecode_read(XrVMRuntime *X, const uint8_t *data, size_t size, XrBc
         return NULL;
     }
 
-    // Calculate shared index offset (based on current shared count)
-    XrVMState *vm = xr_isolate_get_vm_state(X);
-    int shared_offset = vm->shared.count;
-
-    (void) shared_count;
+    if (shared_count > (uint32_t) INT_MAX) {
+        if (error)
+            *error = XR_BC_ERR_CORRUPT;
+        return NULL;
+    }
 
     // Read symbol table and build mapping (symbol ID starts from 1)
     int *id_map = NULL;
@@ -876,17 +863,8 @@ XrProto *xr_bytecode_read(XrVMRuntime *X, const uint8_t *data, size_t size, XrBc
     if (proto && id_map) {
         remap_symbols_in_proto(proto, id_map, map_size);
     }
-
-    // Set per-module shared_offset (VM applies offset at runtime, no instruction rewriting)
-    if (proto && shared_offset > 0) {
-        set_shared_offset_recursive(proto, shared_offset);
-    }
-
-    // Update global shared.count
-    if (shared_count > 0) {
-        vm->shared.count += (int) shared_count;
-        xr_shared_array_ensure(&vm->shared, vm->shared.count - 1);
-    }
+    if (proto)
+        proto->shared_count = (int) shared_count;
 
     xr_free(id_map);
     if (error)
