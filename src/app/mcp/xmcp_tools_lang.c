@@ -25,6 +25,7 @@
 #include "../../frontend/parser/xast.h"
 #include "../../frontend/analyzer/xanalyzer.h"
 #include "../../frontend/format/xfmt.h"
+#include "../../toolchain/xcompiler_session.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -153,6 +154,13 @@ XR_FUNC XrJsonValue *xmcp_tool_xray_analyze(XmcpServer *server, const XmcpCallCo
     if (ptok)
         xmcp_send_progress_notification(server, ptok, 0, 2);
 
+    XrCompilerSessionScope parse_scope;
+    if (!xr_compiler_session_push_arena(server->isolate, arena, filename, &parse_scope)) {
+        xr_arena_destroy(arena);
+        xr_free(arena);
+        return xmcp_make_error_result("Error: failed to enter compiler session");
+    }
+
     ErrorCapture cap = {.count = 0};
     Parser parser;
     xr_parser_init(&parser, server->isolate, code, filename, arena);
@@ -168,6 +176,7 @@ XR_FUNC XrJsonValue *xmcp_tool_xray_analyze(XmcpServer *server, const XmcpCallCo
     if (ast && cap.count == 0 && run_analyzer) {
         analyzer = xa_analyzer_new(server->isolate);
         if (!analyzer) {
+            xr_compiler_session_pop_arena(&parse_scope);
             xr_arena_destroy(arena);
             xr_free(arena);
             return xmcp_make_error_result("Error: out of memory");
@@ -221,6 +230,7 @@ XR_FUNC XrJsonValue *xmcp_tool_xray_analyze(XmcpServer *server, const XmcpCallCo
 
     if (analyzer)
         xa_analyzer_free(analyzer);
+    xr_compiler_session_pop_arena(&parse_scope);
     xr_arena_destroy(arena);
     xr_free(arena);
     return result;
@@ -251,6 +261,13 @@ XR_FUNC XrJsonValue *xmcp_tool_xray_format(XmcpServer *server, const XmcpCallCon
         return xmcp_make_error_result("Error: out of memory");
     xr_arena_init(arena, 0);
 
+    XrCompilerSessionScope syntax_scope;
+    if (!xr_compiler_session_push_arena(server->isolate, arena, "<mcp-format>", &syntax_scope)) {
+        xr_arena_destroy(arena);
+        xr_free(arena);
+        return xmcp_make_error_result("Error: failed to enter compiler session");
+    }
+
     ErrorCapture cap = {.count = 0};
     Parser parser;
     xr_parser_init(&parser, server->isolate, code, "<mcp-format>", arena);
@@ -268,10 +285,12 @@ XR_FUNC XrJsonValue *xmcp_tool_xray_format(XmcpServer *server, const XmcpCallCon
         snprintf(text, sizeof(text), "Cannot format code with %d syntax diagnostic(s).",
                  diagnostic_count);
         XrJsonValue *result = xmcp_make_text_structured_result(text, structured, true);
+        xr_compiler_session_pop_arena(&syntax_scope);
         xr_arena_destroy(arena);
         xr_free(arena);
         return result;
     }
+    xr_compiler_session_pop_arena(&syntax_scope);
     xr_arena_destroy(arena);
     xr_free(arena);
 

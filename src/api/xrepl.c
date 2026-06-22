@@ -488,7 +488,7 @@ XrProto *xr_repl_compile(XrayIsolate *isolate, const char *source) {
     /* Keep the persistent REPL analyzer's pool installed as the current
      * type pool so subsequent parses / analyses in the same REPL session
      * continue allocating into it.  A script-mode compile would restore
-     * isolate->analyzer_pool here, but REPL never uses that pool. */
+     * session-owned analyzer_pool here, but REPL never uses that pool. */
     isolate->current_type_pool = repl_analyzer->type_pool;
 
     xr_program_destroy(ast);

@@ -58,8 +58,6 @@ void xr_compiler_session_delete(XrCompilerSession *session) {
     if (!session)
         return;
     if (session->vm_host) {
-        if (session->vm_host->analyzer_pool == session->analyzer_pool)
-            session->vm_host->analyzer_pool = NULL;
         if (session->vm_host->current_type_pool == session->analyzer_pool)
             session->vm_host->current_type_pool = NULL;
         if (session->vm_host->source_cache == session->source_cache)
@@ -155,10 +153,8 @@ void xr_compiler_session_install_analyzer_pool(XrCompilerSession *session) {
     XrTypePool *pool = xr_compiler_session_ensure_analyzer_pool(session);
     if (!session || !pool)
         return;
-    if (session->vm_host) {
-        session->vm_host->analyzer_pool = pool;
+    if (session->vm_host)
         session->vm_host->current_type_pool = pool;
-    }
     xr_type_set_current_pool(pool, &pool->next_type_id);
 }
 

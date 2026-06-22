@@ -15,6 +15,7 @@
 #include "../../frontend/parser/xparse.h"
 #include "../../frontend/parser/xast.h"
 #include "../../frontend/parser/xast_nodes.h"
+#include "../../toolchain/xcompiler_session.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -41,6 +42,7 @@ static inline void xr_pipe_set_nonblocking(int fd) {
     fcntl(fd, F_SETFL, flags | O_NONBLOCK);
 }
 #endif
+#include "../../base/xarena.h"
 #include "../../base/xfileio.h"
 #include "../../base/xmalloc.h"
 
@@ -223,9 +225,20 @@ static XrLspIndexResult *parse_file(XrayIsolate *isolate, const char *path, cons
     }
 
     // Parse with recoverable parser (tolerates errors)
+    XrArena arena;
+    xr_arena_init(&arena, 64 * 1024);
+    XrCompilerSessionScope parse_scope;
+    if (!xr_compiler_session_push_arena(isolate, &arena, uri, &parse_scope)) {
+        result->error_message = xr_strdup("Cannot enter compiler session");
+        xr_arena_destroy(&arena);
+        xr_free(content);
+        return result;
+    }
+
     Parser parser;
-    xr_parser_init(&parser, isolate, content, uri, NULL);
+    xr_parser_init(&parser, isolate, content, uri, &arena);
     AstNode *ast = xr_parse_recoverable(&parser);
+    xr_compiler_session_pop_arena(&parse_scope);
 
     if (ast) {
         // Extract symbols from AST
@@ -236,12 +249,11 @@ static XrLspIndexResult *parse_file(XrayIsolate *isolate, const char *path, cons
             result->error_message = xr_strdup("Parse errors");
         }
 
-        // Free AST (we've extracted what we need)
-        xr_program_destroy(ast);
     } else {
         result->error_message = xr_strdup("Parse failed");
     }
 
+    xr_arena_destroy(&arena);
     xr_free(content);
     return result;
 }
