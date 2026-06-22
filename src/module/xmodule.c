@@ -168,8 +168,8 @@ static void module_init_exports(XrModule *module) {
 XrModule *xr_module_create_native(XrayIsolate *isolate, const char *name) {
     XR_DCHECK(isolate != NULL, "module_create_native: NULL isolate");
     XR_DCHECK(name != NULL, "module_create_native: NULL name");
-    XrModule *module =
-        (XrModule *) xr_gc_alloc(xr_isolate_get_gc(isolate), sizeof(XrModule), XR_TMODULE);
+    XrModule *module = (XrModule *) xr_fixed_heap_alloc(xr_isolate_get_fixed_heap(isolate),
+                                                        sizeof(XrModule), XR_TMODULE);
     xr_obj_header_init_type(&module->hdr, XR_TMODULE);
 
     module->name = xr_strdup(name);
@@ -193,8 +193,8 @@ XrModule *xr_module_create_native(XrayIsolate *isolate, const char *name) {
 XrModule *xr_module_create_script(XrayIsolate *isolate, const char *name, const char *path) {
     XR_DCHECK(isolate != NULL, "module_create_script: NULL isolate");
     XR_DCHECK(name != NULL, "module_create_script: NULL name");
-    XrModule *module =
-        (XrModule *) xr_gc_alloc(xr_isolate_get_gc(isolate), sizeof(XrModule), XR_TMODULE);
+    XrModule *module = (XrModule *) xr_fixed_heap_alloc(xr_isolate_get_fixed_heap(isolate),
+                                                        sizeof(XrModule), XR_TMODULE);
     xr_obj_header_init_type(&module->hdr, XR_TMODULE);
 
     module->name = xr_strdup(name);

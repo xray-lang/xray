@@ -35,7 +35,7 @@ typedef struct XrRuntimeCoreConfig {
 } XrRuntimeCoreConfig;
 
 typedef struct XrRuntimeCore {
-    XrGC gc;
+    XrFixedHeap fixed_heap;
     struct XrSystemHeap *sys_heap;
     struct XrGlobalStringPool *global_string_pool;
     struct XrStrBuf *tmp_strbuf;
@@ -64,7 +64,7 @@ XR_FUNC XrRuntimeCore *xr_runtime_core_new(const XrRuntimeCoreConfig *cfg);
 XR_FUNC void xr_runtime_core_delete(XrRuntimeCore *core);
 XR_FUNC void xr_runtime_core_free_tmp_strbuf(XrRuntimeCore *core);
 XR_FUNC void xr_runtime_core_destroy_coro_storage(XrRuntimeCore *core);
-XR_FUNC void xr_runtime_core_cleanup_gc(XrRuntimeCore *core);
+XR_FUNC void xr_runtime_core_cleanup_fixed_heap(XrRuntimeCore *core);
 XR_FUNC void xr_runtime_core_set_destroy_op(XrRuntimeCore *core, uint8_t type,
                                             XrGCDestroyFn destroy);
 XR_FUNC XrGCDestroyFn xr_runtime_core_destroy_op(const XrRuntimeCore *core, uint8_t type);

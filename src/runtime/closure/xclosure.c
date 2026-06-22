@@ -31,7 +31,8 @@ XrClosure *xr_closure_new(XrayIsolate *isolate, XrProto *proto, struct XrCorouti
     if (coro && coro->heap) {
         closure = (XrClosure *) xr_coro_heap_new_obj(coro->heap, XR_TFUNCTION, size);
     } else {
-        closure = (XrClosure *) xr_gc_alloc(xr_isolate_get_gc(isolate), size, XR_TFUNCTION);
+        closure = (XrClosure *) xr_fixed_heap_alloc(xr_isolate_get_fixed_heap(isolate), size,
+                                                    XR_TFUNCTION);
     }
     if (closure == NULL) {
         return NULL;

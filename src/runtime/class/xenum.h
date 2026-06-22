@@ -122,8 +122,8 @@ XR_FUNC struct XrInstance *xr_enum_adt_construct(struct XrayIsolate *X, XrEnumTy
 XR_FUNC void xr_enum_type_init_symbols(XrEnumType *enum_type, void *isolate);
 
 /* ========== Destroy Hooks ==========
- * Both objects live on the isolate fixedgc list. The hooks below are
- * registered in the per-type destroy table so xr_gc_cleanup releases their
+ * Both objects live on the isolate fixed_heap list. The hooks below are
+ * registered in the per-type destroy table so xr_fixed_heap_cleanup releases their
  * malloc-backed side resources before freeing the body. Callers never
  * free enum objects manually. */
 

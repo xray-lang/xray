@@ -21,8 +21,8 @@
 
 XrBoundMethod *xr_bound_method_new(XrayIsolate *isolate, XrValue receiver, MethodHandler handler) {
     XR_DCHECK(isolate != NULL, "bound_method_new: NULL isolate");
-    XrBoundMethod *bm = (XrBoundMethod *) xr_gc_alloc(xr_isolate_get_gc(isolate),
-                                                      sizeof(XrBoundMethod), XR_TBOUND_METHOD);
+    XrBoundMethod *bm = (XrBoundMethod *) xr_fixed_heap_alloc(
+        xr_isolate_get_fixed_heap(isolate), sizeof(XrBoundMethod), XR_TBOUND_METHOD);
     if (bm == NULL) {
         return NULL;
     }

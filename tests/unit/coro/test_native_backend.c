@@ -320,7 +320,7 @@ TEST(aot_runtime_owns_core_without_isolate) {
     ASSERT_EQ_INT((int) xr_aot_runtime_caps(runtime), XR_AOT_CAP_NONE);
     ASSERT_NOT_NULL(xr_aot_runtime_core(runtime));
     ASSERT_NULL(xr_aot_runtime_scheduler(runtime));
-    ASSERT_NULL(xr_aot_runtime_core(runtime)->gc.isolate);
+    ASSERT_NULL(xr_aot_runtime_core(runtime)->fixed_heap.isolate);
     ASSERT_EQ_PTR(xr_aot_runtime_core(runtime)->userdata, &userdata);
     ASSERT_STR_EQ(xr_aot_runtime_core(runtime)->script_info.file, "main.xr");
     ASSERT_EQ_INT(xr_aot_runtime_core(runtime)->script_info.argc, 2);
@@ -425,7 +425,7 @@ TEST(aot_runtime_registers_prelude_enums_without_isolate) {
 
     XrAotRuntime *runtime = xr_aot_runtime_new(&cfg);
     ASSERT_NOT_NULL(runtime);
-    ASSERT_NULL(xr_aot_runtime_core(runtime)->gc.isolate);
+    ASSERT_NULL(xr_aot_runtime_core(runtime)->fixed_heap.isolate);
 
     XrAotContext ctx;
     memset(&ctx, 0, sizeof(ctx));
@@ -469,7 +469,7 @@ TEST(aot_runtime_copy_context_uses_core_without_isolate) {
     ASSERT_NOT_NULL(runtime);
     XrRuntimeCore *core = xr_aot_runtime_core(runtime);
     ASSERT_NOT_NULL(core);
-    ASSERT_NULL(core->gc.isolate);
+    ASSERT_NULL(core->fixed_heap.isolate);
 
     XrCoroutine *owner = xr_coro_create_runtime_empty(core, NULL, "copy_owner");
     ASSERT_NOT_NULL(owner);

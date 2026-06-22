@@ -223,24 +223,23 @@ XR_FUNC bool xr_gc_type_may_need_finalize(uint8_t type) {
     return type < XGC_MAX_TYPES && type > XR_TATOMIC;
 }
 
-/* ========== Init/Cleanup ========== */
+/* ========== Fixed Heap Init/Cleanup ========== */
 
-void xr_gc_init(XrGC *gc, struct XrayIsolate *isolate) {
-    XR_DCHECK(gc != NULL, "gc_init: NULL gc");
-    memset(gc, 0, sizeof(XrGC));
-    gc->isolate = isolate;
-    gc->gcstate = XGC_IDLE;
+void xr_fixed_heap_init(XrFixedHeap *heap, struct XrayIsolate *isolate) {
+    XR_DCHECK(heap != NULL, "fixed_heap_init: NULL heap");
+    memset(heap, 0, sizeof(XrFixedHeap));
+    heap->isolate = isolate;
+    heap->state = XFIXED_HEAP_IDLE;
 }
 
-void xr_gc_cleanup(XrGC *gc) {
-    XR_DCHECK(gc != NULL, "gc_cleanup: NULL gc");
-    // Free fixed GC objects
-    XrGCObjectNode *node = gc->fixedgc;
+void xr_fixed_heap_cleanup(XrFixedHeap *heap) {
+    XR_DCHECK(heap != NULL, "fixed_heap_cleanup: NULL heap");
+    XrFixedHeapObjectNode *node = heap->objects;
     while (node != NULL) {
-        XrGCObjectNode *next = node->next;
+        XrFixedHeapObjectNode *next = node->next;
         XrObjHeader *obj = node->obj;
         uint8_t type = xr_gc_gettype(obj);
-        XrRuntimeCore *core = gc->isolate ? xr_isolate_get_runtime_core(gc->isolate) : NULL;
+        XrRuntimeCore *core = heap->isolate ? xr_isolate_get_runtime_core(heap->isolate) : NULL;
         XrGCDestroyFn destroy = xr_runtime_core_destroy_op(core, type);
         if (destroy != NULL) {
             destroy(obj, NULL);
@@ -249,21 +248,20 @@ void xr_gc_cleanup(XrGC *gc) {
         xr_free(node);
         node = next;
     }
-    gc->fixedgc = NULL;
+    heap->objects = NULL;
 
-    gc->object_count = 0;
-    gc->totalbytes = 0;
+    heap->object_count = 0;
+    heap->totalbytes = 0;
 }
 
 /* ========== Allocation (Only for fixed objects during initialization) ========== */
 
-void *xr_gc_alloc(XrGC *gc, size_t size, uint8_t type) {
-    XR_DCHECK(gc != NULL, "gc_alloc: NULL gc");
-    XR_DCHECK(size >= sizeof(XrObjHeader), "gc_alloc: size too small");
-    XR_DCHECK(type < XGC_MAX_TYPES, "gc_alloc: invalid GC type");
-    // Global GC: Allocate fixed objects using malloc
-    // Note: Runtime objects should use xr_alloc() or xr_coro_heap_alloc()
-    XrGCObjectNode *node = (XrGCObjectNode *) xr_malloc(sizeof(XrGCObjectNode));
+void *xr_fixed_heap_alloc(XrFixedHeap *heap, size_t size, uint8_t type) {
+    XR_DCHECK(heap != NULL, "fixed_heap_alloc: NULL heap");
+    XR_DCHECK(size >= sizeof(XrObjHeader), "fixed_heap_alloc: size too small");
+    XR_DCHECK(type < XGC_MAX_TYPES, "fixed_heap_alloc: invalid object type");
+    XrFixedHeapObjectNode *node =
+        (XrFixedHeapObjectNode *) xr_malloc(sizeof(XrFixedHeapObjectNode));
     if (!node)
         return NULL;
     XrObjHeader *obj = (XrObjHeader *) xr_malloc(size);
@@ -277,19 +275,19 @@ void *xr_gc_alloc(XrGC *gc, size_t size, uint8_t type) {
         obj->objsize = (uint32_t) size;
         obj->_rsv = XR_CYCLE_NOT_IN_ROOTS;
         node->obj = obj;
-        node->next = gc->fixedgc;
-        gc->fixedgc = node;
-        gc->totalbytes += (int64_t) size;
-        gc->object_count++;
+        node->next = heap->objects;
+        heap->objects = node;
+        heap->totalbytes += (int64_t) size;
+        heap->object_count++;
     } else {
         xr_free(node);
     }
     return obj;
 }
 
-XrObjHeader *xr_gc_newobj(XrGC *gc, uint8_t type, size_t size) {
-    XR_DCHECK(gc != NULL, "gc_newobj: NULL gc");
-    return (XrObjHeader *) xr_gc_alloc(gc, size, type);
+XrObjHeader *xr_fixed_heap_new_obj(XrFixedHeap *heap, uint8_t type, size_t size) {
+    XR_DCHECK(heap != NULL, "fixed_heap_new_obj: NULL heap");
+    return (XrObjHeader *) xr_fixed_heap_alloc(heap, size, type);
 }
 
 /* The compile-time RC dup/drop primitives (xr_rc_retain_value /
@@ -299,11 +297,11 @@ XrObjHeader *xr_gc_newobj(XrGC *gc, uint8_t type, size_t size) {
 
 /* ========== Debug ========== */
 
-void xr_gc_printstats(XrGC *gc) {
-    XR_DCHECK(gc != NULL, "gc_printstats: NULL gc");
-    printf("=== XrGC Stats (Global/Fixed) ===\n");
-    printf("Objects: %zu\n", gc->object_count);
-    printf("Total bytes: %lld\n", (long long) gc->totalbytes);
+void xr_fixed_heap_print_stats(XrFixedHeap *heap) {
+    XR_DCHECK(heap != NULL, "fixed_heap_print_stats: NULL heap");
+    printf("=== XrFixedHeap Stats ===\n");
+    printf("Objects: %zu\n", heap->object_count);
+    printf("Total bytes: %lld\n", (long long) heap->totalbytes);
     printf("=================================\n");
 }
 
@@ -334,14 +332,15 @@ void *xr_alloc(struct XrCoroutine *coro, size_t size, uint8_t type) {
         XrObjHeader *obj = xr_coro_heap_new_obj(heap, type, size);
         if (obj)
             return obj;
-        xr_log_warning("gc", "xr_alloc: heap allocation failed for type=%d size=%zu", type, size);
+        xr_log_warning("heap", "xr_alloc: coroutine heap allocation failed for type=%d size=%zu",
+                       type, size);
         return NULL;
     }
 
-    // Fallback: use runtime core's global GC (needed during early init
+    // Fallback: use runtime core's fixed heap (needed during early init
     // when heap creation fails due to missing worker/machine).
     if (coro->core) {
-        return xr_gc_alloc(&coro->core->gc, size, type);
+        return xr_fixed_heap_alloc(&coro->core->fixed_heap, size, type);
     }
     return NULL;
 }

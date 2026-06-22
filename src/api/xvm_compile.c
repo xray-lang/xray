@@ -305,7 +305,7 @@ void xr_vm_cleanup(XrayIsolate *isolate) {
     }
 
     /* Globals dict struct is xr_malloc'd; the underlying XrMap nodes
-     * are GC-owned and reclaimed by xr_gc_cleanup later. */
+     * are fixed heap-owned and reclaimed by xr_fixed_heap_cleanup later. */
     if (isolate->vm.globals != NULL) {
         xr_global_dict_destroy(isolate->vm.globals);
         xr_free(isolate->vm.globals);

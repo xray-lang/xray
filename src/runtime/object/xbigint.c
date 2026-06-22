@@ -55,12 +55,12 @@ static XrBigInt *bigint_alloc(struct XrCoroutine *coro, uint32_t cap) {
     return b;
 }
 
-// Allocate BigInt on global GC (compile-time path, no coroutine needed)
-static XrBigInt *bigint_alloc_on_gc(struct XrGC *gc, uint32_t cap) {
+// Allocate BigInt on the fixed heap (compile-time path, no coroutine needed)
+static XrBigInt *bigint_alloc_on_fixed_heap(struct XrFixedHeap *fixed_heap, uint32_t cap) {
     if (cap == 0)
         cap = 1;
     size_t size = sizeof(XrBigInt) + cap * sizeof(uint32_t);
-    XrBigInt *b = (XrBigInt *) xr_gc_alloc(gc, size, XR_TINSTANCE);
+    XrBigInt *b = (XrBigInt *) xr_fixed_heap_alloc(fixed_heap, size, XR_TINSTANCE);
     if (b) {
         b->klass = NULL;  // no isolate in compile-time path
         b->sign = 1;
@@ -96,10 +96,11 @@ static XrBigInt *bigint_ensure_cap(struct XrCoroutine *coro, XrBigInt *a, uint32
     return b;
 }
 
-static XrBigInt *bigint_ensure_cap_on_gc(struct XrGC *gc, XrBigInt *a, uint32_t cap) {
+static XrBigInt *bigint_ensure_cap_on_fixed_heap(struct XrFixedHeap *fixed_heap, XrBigInt *a,
+                                                 uint32_t cap) {
     if (a->cap >= cap)
         return a;
-    XrBigInt *b = bigint_alloc_on_gc(gc, cap);
+    XrBigInt *b = bigint_alloc_on_fixed_heap(fixed_heap, cap);
     if (b) {
         b->sign = a->sign;
         b->len = a->len;
@@ -264,9 +265,9 @@ XrBigInt *xr_bigint_from_string(struct XrCoroutine *coro, const char *str) {
     return result;
 }
 
-// Compile-time BigInt creation (global GC, no coroutine needed)
-XrBigInt *xr_bigint_new_on_gc(struct XrGC *gc, int64_t value) {
-    XrBigInt *b = bigint_alloc_on_gc(gc, 2);
+// Compile-time BigInt creation (fixed heap, no coroutine needed)
+XrBigInt *xr_bigint_new_on_fixed_heap(struct XrFixedHeap *fixed_heap, int64_t value) {
+    XrBigInt *b = bigint_alloc_on_fixed_heap(fixed_heap, 2);
     if (!b)
         return NULL;
     if (value < 0) {
@@ -295,7 +296,7 @@ XrBigInt *xr_bigint_new_on_gc(struct XrGC *gc, int64_t value) {
     return b;
 }
 
-XrBigInt *xr_bigint_from_string_on_gc(struct XrGC *gc, const char *str) {
+XrBigInt *xr_bigint_from_string_on_fixed_heap(struct XrFixedHeap *fixed_heap, const char *str) {
     if (!str || !*str)
         return NULL;
     int sign = 1;
@@ -322,11 +323,11 @@ XrBigInt *xr_bigint_from_string_on_gc(struct XrGC *gc, const char *str) {
         str++;
     size_t slen = strlen(str);
     if (slen == 0)
-        return xr_bigint_new_on_gc(gc, 0);
+        return xr_bigint_new_on_fixed_heap(fixed_heap, 0);
     uint32_t cap = (base == 16)  ? (uint32_t) (slen / 8) + 2
                    : (base == 2) ? (uint32_t) (slen / 32) + 2
                                  : (uint32_t) (slen / 9) + 2;
-    XrBigInt *result = bigint_alloc_on_gc(gc, cap);
+    XrBigInt *result = bigint_alloc_on_fixed_heap(fixed_heap, cap);
     if (!result)
         return NULL;
     result->limbs[0] = 0;
@@ -354,7 +355,7 @@ XrBigInt *xr_bigint_from_string_on_gc(struct XrGC *gc, const char *str) {
         }
         if (carry > 0) {
             if (result->len >= result->cap) {
-                result = bigint_ensure_cap_on_gc(gc, result, result->cap * 2);
+                result = bigint_ensure_cap_on_fixed_heap(fixed_heap, result, result->cap * 2);
                 if (!result)
                     return NULL;
             }

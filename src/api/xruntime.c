@@ -26,7 +26,7 @@
 void *xray_alloc(XrayIsolate *X, size_t size) {
     xray_api_checkr(X != NULL, "xray_alloc: NULL isolate", NULL);
     xray_api_checkr(size > 0, "xray_alloc: zero size", NULL);
-    return xr_gc_alloc(xr_isolate_get_gc(X), size, 0);
+    return xr_fixed_heap_alloc(xr_isolate_get_fixed_heap(X), size, 0);
 }
 
 // Reallocate memory.

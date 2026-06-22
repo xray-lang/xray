@@ -29,7 +29,7 @@ XrInstance *xr_instance_new_core(XrRuntimeCore *core, XrCoroutine *coro, XrClass
     if (coro) {
         inst = (XrInstance *) xr_alloc(coro, size, XR_TINSTANCE);
     } else if (core) {
-        inst = (XrInstance *) xr_gc_alloc(&core->gc, size, XR_TINSTANCE);
+        inst = (XrInstance *) xr_fixed_heap_alloc(&core->fixed_heap, size, XR_TINSTANCE);
     }
 
     if (!inst) {
@@ -119,7 +119,7 @@ XrInstance *xr_instance_clone(XrayIsolate *X, XrInstance *src) {
     if (coro) {
         dst = (XrInstance *) xr_alloc(coro, size, XR_TINSTANCE);
     } else {
-        dst = (XrInstance *) xr_gc_alloc(xr_isolate_get_gc(X), size, XR_TINSTANCE);
+        dst = (XrInstance *) xr_fixed_heap_alloc(xr_isolate_get_fixed_heap(X), size, XR_TINSTANCE);
     }
     if (!dst)
         return NULL;

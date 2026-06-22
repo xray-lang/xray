@@ -42,7 +42,7 @@ static void *alloc_handle(struct XrayIsolate *X, size_t size) {
     if (coro) {
         obj = xr_alloc(coro, size, (uint8_t) XR_TINSTANCE);
     } else {
-        obj = xr_gc_alloc(xr_isolate_get_gc(X), size, (uint8_t) XR_TINSTANCE);
+        obj = xr_fixed_heap_alloc(xr_isolate_get_fixed_heap(X), size, (uint8_t) XR_TINSTANCE);
     }
     return obj;
 }

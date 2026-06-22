@@ -30,8 +30,8 @@ XrValue xr_create_type_object(XrayIsolate *X, XrTypeMetadata *meta) {
     if (!meta)
         return xr_null();
 
-    TypeWrapper *wrapper =
-        (TypeWrapper *) xr_gc_alloc(xr_isolate_get_gc(X), sizeof(TypeWrapper), XR_TINSTANCE);
+    TypeWrapper *wrapper = (TypeWrapper *) xr_fixed_heap_alloc(xr_isolate_get_fixed_heap(X),
+                                                               sizeof(TypeWrapper), XR_TINSTANCE);
     if (!wrapper)
         return xr_null();
 
@@ -49,8 +49,8 @@ XrValue xr_create_field_object(XrayIsolate *X, XrFieldMetadata *field) {
     if (!field)
         return xr_null();
 
-    FieldWrapper *wrapper =
-        (FieldWrapper *) xr_gc_alloc(xr_isolate_get_gc(X), sizeof(FieldWrapper), XR_TINSTANCE);
+    FieldWrapper *wrapper = (FieldWrapper *) xr_fixed_heap_alloc(
+        xr_isolate_get_fixed_heap(X), sizeof(FieldWrapper), XR_TINSTANCE);
     if (!wrapper)
         return xr_null();
 
@@ -68,8 +68,8 @@ XrValue xr_create_method_object(XrayIsolate *X, XrMethodMetadata *method) {
     if (!method)
         return xr_null();
 
-    MethodWrapper *wrapper =
-        (MethodWrapper *) xr_gc_alloc(xr_isolate_get_gc(X), sizeof(MethodWrapper), XR_TINSTANCE);
+    MethodWrapper *wrapper = (MethodWrapper *) xr_fixed_heap_alloc(
+        xr_isolate_get_fixed_heap(X), sizeof(MethodWrapper), XR_TINSTANCE);
     if (!wrapper)
         return xr_null();
 
@@ -91,8 +91,8 @@ XrValue xr_create_parameter_object(XrayIsolate *X, XrParameterMetadata *param) {
     if (!param)
         return xr_null();
 
-    ParameterWrapper *wrapper = (ParameterWrapper *) xr_gc_alloc(
-        xr_isolate_get_gc(X), sizeof(ParameterWrapper), XR_TINSTANCE);
+    ParameterWrapper *wrapper = (ParameterWrapper *) xr_fixed_heap_alloc(
+        xr_isolate_get_fixed_heap(X), sizeof(ParameterWrapper), XR_TINSTANCE);
     if (!wrapper)
         return xr_null();
 

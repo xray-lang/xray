@@ -211,10 +211,10 @@ void xray_isolate_delete(XrayIsolate *isolate) {
     xr_runtime_core_free_tmp_strbuf(isolate->core_rt);
     tmp_strbuf_ms = isolate_teardown_elapsed_ms(stage_start_ns);
 
-    // The globals table stores XrValue entries that reference fixedgc
+    // The globals table stores XrValue entries that reference fixed heap
     // bodies (enum types and the like). Drop the table BEFORE
-    // xr_gc_cleanup so any post-VM hook that scans globals during
-    // teardown still sees consistent pointers, and so xr_gc_cleanup is
+    // xr_fixed_heap_cleanup so any post-VM hook that scans globals during
+    // teardown still sees consistent pointers, and so xr_fixed_heap_cleanup is
     // the single authoritative free path for those bodies.
     stage_start_ns = xr_time_monotonic_ns();
     if (isolate->globals) {
@@ -231,7 +231,7 @@ void xray_isolate_delete(XrayIsolate *isolate) {
     coro_storage_ms = isolate_teardown_elapsed_ms(stage_start_ns);
 
     stage_start_ns = xr_time_monotonic_ns();
-    xr_runtime_core_cleanup_gc(isolate->core_rt);
+    xr_runtime_core_cleanup_fixed_heap(isolate->core_rt);
     gc_cleanup_ms = isolate_teardown_elapsed_ms(stage_start_ns);
 
     stage_start_ns = xr_time_monotonic_ns();
@@ -314,7 +314,8 @@ void *xray_isolate_get_userdata(XrayIsolate *isolate) {
 void xray_isolate_get_stats(XrayIsolate *isolate, size_t *bytes_allocated, int *cycle_count) {
     xray_api_check(isolate != NULL, "xray_isolate_get_stats: NULL isolate");
     if (bytes_allocated)
-        *bytes_allocated = isolate->core_rt ? (size_t) isolate->core_rt->gc.totalbytes : (size_t) 0;
+        *bytes_allocated =
+            isolate->core_rt ? (size_t) isolate->core_rt->fixed_heap.totalbytes : (size_t) 0;
     if (cycle_count) {
         XrCoroHeap *heap = xr_isolate_get_heap(isolate);
         *cycle_count = heap ? (int) heap->cycle_count : 0;
