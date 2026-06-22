@@ -1188,6 +1188,18 @@ if(BUILD_TESTS)
     )
 
     add_test(
+        NAME stdlib_lsp_stdlib_sync
+        COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/gen_stdlib_types.py
+                --check
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(stdlib_lsp_stdlib_sync PROPERTIES
+        LABELS "stdlib;metadata;generated;lsp"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
         NAME aot_filetests
         COMMAND ${CMAKE_COMMAND} -E env
                 XRAY_AOT_FILETEST_JOBS=${XRAY_CTEST_AOT_FILETEST_JOBS}

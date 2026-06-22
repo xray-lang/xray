@@ -298,6 +298,16 @@ if(XR_BUILD_LSP)
     )
     add_test(NAME test_lsp_json COMMAND test_lsp_json)
 
+    add_executable(test_lsp_stdlib
+        lsp/test_lsp_stdlib.c
+        ${CMAKE_SOURCE_DIR}/src/app/lsp/xlsp_stdlib.c
+    )
+    target_include_directories(test_lsp_stdlib PRIVATE
+        ${XRAY_COMMON_INCLUDES}
+        ${CMAKE_SOURCE_DIR}/src/app/lsp
+    )
+    add_test(NAME test_lsp_stdlib COMMAND test_lsp_stdlib)
+
     file(GLOB LSP_SOURCES ${CMAKE_SOURCE_DIR}/src/app/lsp/*.c)
     list(REMOVE_ITEM LSP_SOURCES ${CMAKE_SOURCE_DIR}/src/app/lsp/xlsp_main.c)
 
