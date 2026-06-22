@@ -15,9 +15,9 @@
 #                          persistent native binary cache for warm symbol-gate
 #                          reruns (default: build/.xray-test-cache/aot-isolate-bin/<toolchain-key>)
 #
-# The runtime-time-sleep case is also a hard size gate. It must stay below
-# 200000 bytes so the optimized timer/coroutine AOT path cannot silently regress
-# back toward a VM/toolchain-shaped binary.
+# Pure tiny AOT cases and runtime-time-sleep are also hard size gates. They keep
+# optimized paths from silently drifting back toward VM/toolchain-shaped
+# binaries while still allowing crypto/regex-style core archives their own caps.
 
 set -u
 
@@ -41,6 +41,8 @@ JOBS=1
 # symbol. Darwin nm prefixes C symbols with '_', so every alternative allows it.
 FORBIDDEN_SYMBOL_RE='(^|[^[:alnum:]_])_?(xray_isolate_|xr_vm_|xr_parse|xr_compile|xanalyzer_|xr_load_module_)'
 EAGER_SCRIPT_BUILTIN_SYMBOL_RE='(^|[^[:alnum:]_])_?(xr_string_intern_core|xr_string_value)([^[:alnum:]_]|$)'
+PURE_TINY_AOT_MAX_BYTES=70000
+PURE_CRYPTO_AOT_MAX_BYTES=80000
 RUNTIME_TIME_SLEEP_MAX_BYTES=200000
 
 cleanup() {
@@ -253,13 +255,19 @@ run_freestanding_case() {
     local name="$2"
     local src="$3"
     local want_output="$4"
+    local max_size="${5:-}"
     local bin="$WORK/$slug"
     local log="$WORK/$slug.log"
+    local size
 
     echo ""
     echo "-- $name"
     if build_native "$src" "$bin" "$log"; then
-        echo "  size: $(binary_size "$bin") bytes"
+        size="$(binary_size "$bin")"
+        echo "  size: $size bytes"
+        if [ -n "$max_size" ]; then
+            check_binary_max_size "$size" "$max_size" "$name"
+        fi
         expect_log_not_contains "$log" "-lxray_core" "$name: does not link xray_core"
         check_no_forbidden_symbols "$bin" "$slug" "$name"
         if [ -n "$want_output" ]; then
@@ -311,21 +319,24 @@ run_case_by_id() {
                 "core_math_single_symbol" \
                 "core-math-single-symbol" \
                 "$PROJECT_DIR/tests/aot/filetests/link/core_math_single_symbol.xr" \
-                "9.0"
+                "9.0" \
+                "$PURE_TINY_AOT_MAX_BYTES"
             ;;
         system_time_queries)
             run_freestanding_case \
                 "system_time_queries" \
                 "system-time-queries" \
                 "$PROJECT_DIR/tests/aot/filetests/link/system_time_queries.xr" \
-                ""
+                "" \
+                "$PURE_TINY_AOT_MAX_BYTES"
             ;;
         core_crypto)
             run_freestanding_case \
                 "core_crypto" \
                 "core-crypto" \
                 "$PROJECT_DIR/tests/aot/filetests/link/core_crypto.xr" \
-                ""
+                "" \
+                "$PURE_CRYPTO_AOT_MAX_BYTES"
             ;;
         runtime_time_sleep)
             run_runtime_case \
