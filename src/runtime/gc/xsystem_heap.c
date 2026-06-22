@@ -236,13 +236,13 @@ void *xr_sysheap_alloc_shared(XrSystemHeap *heap, size_t size, uint8_t type) {
     if (!heap || !heap->initialized)
         return NULL;
 
-    XrGCHeader *obj = NULL;
+    XrObjHeader *obj = NULL;
     bool use_mmap = (size >= XR_SHARED_MMAP_THRESHOLD);
 
     if (use_mmap) {
         // Large objects use anonymous mmap (xr_mem_map) to avoid
         // heap fragmentation.
-        obj = (XrGCHeader *) xr_mem_map(size, XR_MEM_PROT_READ | XR_MEM_PROT_WRITE);
+        obj = (XrObjHeader *) xr_mem_map(size, XR_MEM_PROT_READ | XR_MEM_PROT_WRITE);
         if (!obj) {
             return NULL;
         }
@@ -255,7 +255,7 @@ void *xr_sysheap_alloc_shared(XrSystemHeap *heap, size_t size, uint8_t type) {
         atomic_fetch_add(&heap->stats.shared_mmap_count, 1);
     } else {
         // Small objects use regular malloc
-        obj = (XrGCHeader *) xr_malloc(size);
+        obj = (XrObjHeader *) xr_malloc(size);
         if (obj) {
             memset(obj, 0, size);
             obj->type = type;
@@ -281,7 +281,7 @@ void xr_sysheap_free_shared(void *ptr, size_t size) {
     if (!ptr)
         return;
 
-    XrGCHeader *obj = (XrGCHeader *) ptr;
+    XrObjHeader *obj = (XrObjHeader *) ptr;
     if (XR_GC_IS_MMAP(obj)) {
         xr_mem_unmap(ptr, size);
     } else {
@@ -361,17 +361,17 @@ void xr_sysheap_print_stats(XrSystemHeap *heap) {
 
 /* ========== Shared Object Destruction ========== */
 
-void xr_shared_destroy_core(XrRuntimeCore *core, XrGCHeader *obj) {
+void xr_shared_destroy_core(XrRuntimeCore *core, XrObjHeader *obj) {
     if (!obj)
         return;
 
     /* Global pool strings are owned by XrGlobalStringPool, not by coroutine GC.
      * They are freed in xr_global_pool_free during isolate shutdown. */
-    if (XR_GC_GET_TYPE(obj) == XR_TSTRING && (obj->extra & STR_FLAG_GLOBAL)) {
+    if (XR_OBJ_GET_TYPE(obj) == XR_TSTRING && (obj->extra & STR_FLAG_GLOBAL)) {
         return;
     }
 
-    uint8_t type = XR_GC_GET_TYPE(obj);
+    uint8_t type = XR_OBJ_GET_TYPE(obj);
 
     // Call destructor if registered (to free internal resources like buffers)
     XrGCDestroyFn destroy = xr_runtime_core_destroy_op(core, type);

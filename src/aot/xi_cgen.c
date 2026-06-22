@@ -155,7 +155,7 @@ static const XiValue *cg_unwrap_identity_value(const XiValue *v) {
 }
 
 static bool cg_type_has_no_aot_arc_header(const XrType *type) {
-    /* Arrays/maps/sets carry an embedded unified XrGCHeader and are reclaimed by
+    /* Arrays/maps/sets carry an embedded unified XrObjHeader and are reclaimed by
      * xrt_retain/xrt_release. Fixed arrays are by-value aggregates with no
      * standalone ARC header. */
     return type && type->kind == XR_KIND_FIXED_ARRAY;

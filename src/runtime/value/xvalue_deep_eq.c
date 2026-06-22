@@ -57,30 +57,30 @@ bool xr_value_deep_eq(XrValue a, XrValue b) {
     }
 
 deep_compare: {
-    XrGCHeader *gc_a = (XrGCHeader *) a.ptr;
-    XrGCHeader *gc_b = (XrGCHeader *) b.ptr;
+    XrObjHeader *gc_a = (XrObjHeader *) a.ptr;
+    XrObjHeader *gc_b = (XrObjHeader *) b.ptr;
     if (gc_a == gc_b)
         return true;
     if (!gc_a || !gc_b)
         return false;
-    if (XR_GC_GET_TYPE(gc_a) != XR_GC_GET_TYPE(gc_b))
+    if (XR_OBJ_GET_TYPE(gc_a) != XR_OBJ_GET_TYPE(gc_b))
         return false;
 
-    if (XR_GC_GET_TYPE(gc_a) == XR_TSTRING) {
+    if (XR_OBJ_GET_TYPE(gc_a) == XR_TSTRING) {
         XrString *str_a = (XrString *) gc_a;
         XrString *str_b = (XrString *) gc_b;
         if (str_a->length != str_b->length)
             return false;
         return memcmp(str_a->data, str_b->data, str_a->length) == 0;
     }
-    if (XR_GC_GET_TYPE(gc_a) == XR_TINSTANCE) {
+    if (XR_OBJ_GET_TYPE(gc_a) == XR_TINSTANCE) {
         XrInstance *ia = (XrInstance *) gc_a;
         if (ia->klass && ia->klass->builtin_kind == XR_BK_JSON)
             return xr_json_equals_deep(a, b);
     }
-    if (XR_GC_GET_TYPE(gc_a) == XR_TARRAY)
+    if (XR_OBJ_GET_TYPE(gc_a) == XR_TARRAY)
         return xr_array_equals_deep(a, b);
-    if (XR_GC_GET_TYPE(gc_a) == XR_TMAP)
+    if (XR_OBJ_GET_TYPE(gc_a) == XR_TMAP)
         return xr_map_equals_deep(a, b);
     return gc_a == gc_b;
 }

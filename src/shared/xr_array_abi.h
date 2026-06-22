@@ -11,7 +11,7 @@
  * header pulls <stdint.h>). It keeps the array field set identical across the
  * VM runtime and the standalone AOT runtime without forcing either side to
  * include the other's headers. Each side wraps these fields with its own
- * object header (VM: XrGCHeader; AOT: none) plus side-specific extras
+ * object header (VM: XrObjHeader; AOT: none) plus side-specific extras
  * (VM: data_on_gc_heap; AOT: adt_*).
  */
 

@@ -118,7 +118,7 @@ static inline XrValue xr_make_ptr_val(void *p) {
     XrValue v = {0};
     v.tag = XR_TAG_PTR;
     v.ptr = p;
-    v.heap_type = p ? (uint16_t) XR_GC_GET_TYPE((XrGCHeader *) p) : 0;
+    v.heap_type = p ? (uint16_t) XR_OBJ_GET_TYPE((XrObjHeader *) p) : 0;
     return v;
 }
 
@@ -322,7 +322,7 @@ static inline bool xr_value_same(XrValue a, XrValue b) {
 /* ========== GC Traversal Macros ========== */
 
 #define XR_VALUE_NEEDS_GC(v) ((v).tag == XR_TAG_PTR)
-#define XR_VALUE_GCPTR(v) ((XrGCHeader *) (v).ptr)
+#define XR_VALUE_GCPTR(v) ((XrObjHeader *) (v).ptr)
 
 /* ========== String Data Access (always heap, no SSO) ========== */
 

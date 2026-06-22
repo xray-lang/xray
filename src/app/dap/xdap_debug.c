@@ -260,7 +260,7 @@ const char *xr_value_type_name(XrValue val) {
     if (XR_IS_SET(val))
         return TYPE_NAME_SET;
     if (XR_IS_PTR(val)) {
-        XrGCHeader *hdr = XR_TO_PTR(val);
+        XrObjHeader *hdr = XR_TO_PTR(val);
         if (hdr->type == XR_TFUNCTION)
             return TYPE_NAME_FUNCTION;
         if (hdr->type == XR_TCFUNCTION)
@@ -300,7 +300,7 @@ char *xr_value_to_debug_string(XrayIsolate *isolate, XrValue val) {
         int count = xr_json_field_count(isolate, json);
         snprintf(buf, sizeof(buf), "Object(%d) @%p", count, (void *) json);
     } else if (XR_IS_PTR(val)) {
-        XrGCHeader *hdr = XR_TO_PTR(val);
+        XrObjHeader *hdr = XR_TO_PTR(val);
         switch (hdr->type) {
             case XR_TFUNCTION: {
                 XrClosure *cl = (XrClosure *) hdr;

@@ -40,7 +40,7 @@ typedef struct XrWorkQueueShard {
 } XrWorkQueueShard;
 
 typedef struct XrWorkQueue {
-    XrGCHeader gc;
+    XrObjHeader gc;
     uint32_t shard_count;
     uint32_t initial_capacity;
     _Atomic(uint32_t) next_shard;
@@ -90,7 +90,7 @@ XR_FUNC void xr_work_queue_cancel_waiter(struct XrCoroutine *coro);
 XR_FUNC void xr_work_queue_close(XrWorkQueue *q);
 XR_FUNC bool xr_work_queue_is_closed(XrWorkQueue *q);
 XR_FUNC uint64_t xr_work_queue_length(XrWorkQueue *q);
-XR_FUNC void xr_gc_destroy_work_queue(XrGCHeader *obj, struct XrCoroGC *owning_gc);
+XR_FUNC void xr_gc_destroy_work_queue(XrObjHeader *obj, struct XrCoroGC *owning_gc);
 XR_FUNC void xr_work_queue_register_native_type(struct XrayIsolate *X);
 
 static inline bool xr_value_is_work_queue(XrValue v) {

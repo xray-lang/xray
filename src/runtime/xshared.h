@@ -48,35 +48,35 @@ struct XrRuntimeCore;
  * helpers present a conventional positive count to the runtime while doing
  * the atomic arithmetic on the negative encoding. */
 
-static inline _Atomic(int32_t) *xr_shared_refc_ptr(XrGCHeader *gc) {
+static inline _Atomic(int32_t) *xr_shared_refc_ptr(XrObjHeader *gc) {
     /* refcount is declared _Atomic in the header; no cast needed. */
     return &gc->refcount;
 }
 
-static inline int xr_shared_get_refc(XrGCHeader *gc) {
+static inline int xr_shared_get_refc(XrObjHeader *gc) {
     return (int) (-atomic_load(xr_shared_refc_ptr(gc)));
 }
 
-static inline void xr_shared_set_refc(XrGCHeader *gc, int refc) {
+static inline void xr_shared_set_refc(XrObjHeader *gc, int refc) {
     XR_OBJ_SET_FLAG(gc, XR_OBJ_ATOMIC);
     /* Negative encoding: references = -rc, so N refs are stored as -N. */
     atomic_store(xr_shared_refc_ptr(gc), (int32_t) (-refc));
 }
 
-static inline int xr_shared_incref(XrGCHeader *gc) {
+static inline int xr_shared_incref(XrObjHeader *gc) {
     /* More references = more negative. Returns the new (positive) count. */
     int32_t old = atomic_fetch_sub(xr_shared_refc_ptr(gc), 1);
     return (int) (-(old - 1));
 }
 
-static inline int xr_shared_decref(XrGCHeader *gc) {
+static inline int xr_shared_decref(XrObjHeader *gc) {
     /* Releasing moves toward zero. old == -1 means this was the last
      * reference (count drops to 0). Returns the new (positive) count. */
     int32_t old = atomic_fetch_add(xr_shared_refc_ptr(gc), 1);
     return (old == -1) ? 0 : (int) (-(old + 1));
 }
 
-static inline void xr_shared_init(XrGCHeader *gc) {
+static inline void xr_shared_init(XrObjHeader *gc) {
     XR_GC_SET_STORAGE(gc, XR_GC_STORAGE_SHARED);
     xr_shared_set_refc(gc, 1);
 }
@@ -86,6 +86,6 @@ static inline void xr_shared_init(XrGCHeader *gc) {
 // Destroy shared object: call destructor then free memory.
 // Must be called when refcount reaches 0. The runtime core owns the destroy
 // capability table for the object type.
-XR_FUNC void xr_shared_destroy_core(struct XrRuntimeCore *core, XrGCHeader *obj);
+XR_FUNC void xr_shared_destroy_core(struct XrRuntimeCore *core, XrObjHeader *obj);
 
 #endif  // XSHARED_H

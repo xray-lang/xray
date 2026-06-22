@@ -40,7 +40,7 @@ struct XrRuntimeCore;
  *   [24+]   data[] (flexible array)
  */
 typedef struct XrString {
-    XrGCHeader gc;
+    XrObjHeader gc;
     uint32_t length;
     uint32_t hash;
     char data[];

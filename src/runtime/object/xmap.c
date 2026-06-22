@@ -151,7 +151,7 @@ static void xr_map_release_entry_values(XrMap *map, XrMapEntry *e, XrCoroGC *gc)
 static void xr_map_prepare_weak_key(XrMap *map, XrValue key, XrCoroGC *gc) {
     if (!map_is_weak(map) || !XR_IS_PTR(key))
         return;
-    XrGCHeader *target = XR_VALUE_GCPTR(key);
+    XrObjHeader *target = XR_VALUE_GCPTR(key);
     XR_OBJ_SET_FLAG(target, XR_OBJ_WEAKABLE);
     xr_weak_registry_register_map(map_owning_isolate(gc), map);
 }
@@ -332,7 +332,7 @@ XrMap *xr_map_new(struct XrCoroutine *coro) {
     if (!map)
         return NULL;
 
-    xr_gc_header_init_type(&map->gc, XR_TMAP);
+    xr_obj_header_init_type(&map->gc, XR_TMAP);
     map->owner_gc = xr_coro_get_coro_gc(coro);
 
     map->count = 0;
@@ -387,7 +387,7 @@ void xr_map_init_inplace(XrMap *map, uint32_t capacity_hint) {
 
 void xr_map_set(XrMap *map, XrValue key, XrValue value) {
     XR_DCHECK(map != NULL, "map_set: NULL map");
-    XR_DCHECK(XR_GC_GET_TYPE(&map->gc) == XR_TMAP, "map_set: object is not a map");
+    XR_DCHECK(XR_OBJ_GET_TYPE(&map->gc) == XR_TMAP, "map_set: object is not a map");
     XR_DCHECK(!XR_IS_NULL(key), "map_set: NULL key");
 
     uint8_t key_tt = get_key_tt(key);
@@ -430,7 +430,7 @@ void xr_map_set(XrMap *map, XrValue key, XrValue value) {
 
 XrValue xr_map_get(XrMap *map, XrValue key, bool *found) {
     XR_DCHECK(map != NULL, "map_get: NULL map");
-    XR_DCHECK(XR_GC_GET_TYPE(&map->gc) == XR_TMAP, "map_get: object is not a map");
+    XR_DCHECK(XR_OBJ_GET_TYPE(&map->gc) == XR_TMAP, "map_get: object is not a map");
 
     uint8_t key_tt = get_key_tt(key);
     uint32_t hash = hash_value(key);
@@ -447,7 +447,7 @@ XrValue xr_map_get(XrMap *map, XrValue key, bool *found) {
 
 bool xr_map_has(XrMap *map, XrValue key) {
     XR_DCHECK(map != NULL, "map_has: NULL map");
-    XR_DCHECK(XR_GC_GET_TYPE(&map->gc) == XR_TMAP, "map_has: object is not a map");
+    XR_DCHECK(XR_OBJ_GET_TYPE(&map->gc) == XR_TMAP, "map_has: object is not a map");
     uint8_t key_tt = get_key_tt(key);
     uint32_t hash = hash_value(key);
     return map_lookup(map, key, hash, key_tt) >= 0;
@@ -455,7 +455,7 @@ bool xr_map_has(XrMap *map, XrValue key) {
 
 bool xr_map_delete(XrMap *map, XrValue key) {
     XR_DCHECK(map != NULL, "map_delete: NULL map");
-    XR_DCHECK(XR_GC_GET_TYPE(&map->gc) == XR_TMAP, "map_delete: object is not a map");
+    XR_DCHECK(XR_OBJ_GET_TYPE(&map->gc) == XR_TMAP, "map_delete: object is not a map");
     if (xr_map_isdummy(map))
         return false;
 
@@ -603,7 +603,7 @@ void xr_map_debug_print(XrMap *map) {
 
 /* ========== GC Integration ========== */
 
-void xr_gc_destroy_map(XrGCHeader *obj, struct XrCoroGC *owning_gc) {
+void xr_gc_destroy_map(XrObjHeader *obj, struct XrCoroGC *owning_gc) {
     XrMap *map = (XrMap *) obj;
     if (map->flags & XR_MAP_FLAG_WEAK_REGISTERED)
         xr_weak_registry_unregister_map(map_owning_isolate(owning_gc), map);

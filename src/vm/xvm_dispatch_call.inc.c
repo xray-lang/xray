@@ -63,7 +63,7 @@ op_call_entry:;
     // Enum conversion: Status(200) -> Status.Success
     // Check if this is a call on enum type object
     if (XR_IS_PTR(func_val)) {
-        XrGCHeader *gc = (XrGCHeader *) XR_TO_PTR(func_val);
+        XrObjHeader *gc = (XrObjHeader *) XR_TO_PTR(func_val);
 
         // Check enum type via class flag
         if (XR_IS_ENUM_TYPE(func_val) && nargs == 1) {
@@ -100,7 +100,7 @@ op_call_entry:;
         }
 
         // Class call: Array() or User() -> invoke constructor
-        if (XR_GC_GET_TYPE(gc) == XR_TCLASS) {
+        if (XR_OBJ_GET_TYPE(gc) == XR_TCLASS) {
             XrClass *klass = (XrClass *) gc;
             XrSymbolTable *sym_table = (XrSymbolTable *) isolate->core_rt->symbol_table;
             XrMethod *constructor = NULL;

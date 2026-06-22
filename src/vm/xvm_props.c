@@ -456,7 +456,7 @@ XR_FUNC XrDispatchAction vm_getprop_type_dispatch(XrayIsolate *isolate, XrVMCont
 
     // Enum property access
     if (XR_IS_PTR(obj)) {
-        XrGCHeader *gc = (XrGCHeader *) XR_TO_PTR(obj);
+        XrObjHeader *gc = (XrObjHeader *) XR_TO_PTR(obj);
 
         if (XR_IS_ENUM_VALUE(obj)) {
             XrEnumValue *enum_val = (XrEnumValue *) gc;

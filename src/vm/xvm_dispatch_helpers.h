@@ -296,8 +296,8 @@ static inline XrClass *invoke_resolve_class(XrayIsolate *isolate, XrValue receiv
     if (!XR_IS_PTR(receiver))
         return NULL;
 
-    XrGCHeader *gc = (XrGCHeader *) XR_TO_PTR(receiver);
-    XrObjType type = XR_GC_GET_TYPE(gc);
+    XrObjHeader *gc = (XrObjHeader *) XR_TO_PTR(receiver);
+    XrObjType type = XR_OBJ_GET_TYPE(gc);
 
     if (type == XR_TINSTANCE) {
         XrInstance *inst = (XrInstance *) gc;

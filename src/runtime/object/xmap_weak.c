@@ -30,7 +30,7 @@ static void weak_map_tombstone_entry(XrMap *map, uint32_t eidx, XrCoroGC *gc) {
         map->count--;
 }
 
-uint32_t xr_map_purge_weak_target(XrMap *map, XrGCHeader *target, XrCoroGC *owning_gc) {
+uint32_t xr_map_purge_weak_target(XrMap *map, XrObjHeader *target, XrCoroGC *owning_gc) {
     if (!map || !target || !(map->flags & XR_MAP_FLAG_WEAK) || xr_map_isdummy(map) ||
         !map->entries || (map->gc.extra & XR_OBJ_DEAD))
         return 0;

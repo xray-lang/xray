@@ -48,7 +48,7 @@ typedef enum {
 #define XR_EXPORT_CONST 0x01
 
 typedef struct XrModule {
-    XrGCHeader gc;
+    XrObjHeader gc;
 
     char *name;  // Module name (e.g. "time")
     char *path;  // Module path (e.g. "std/time/time.xr")

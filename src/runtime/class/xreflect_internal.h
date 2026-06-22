@@ -73,19 +73,19 @@ struct XrMethodMetadata {
 /* ========== Wrapper Objects ========== */
 
 struct TypeWrapper {
-    XrGCHeader gc;
+    XrObjHeader gc;
     struct XrClass *klass;  // Mirrors XrInstance layout: must precede metadata.
     XrTypeMetadata metadata;
 };
 
 struct FieldWrapper {
-    XrGCHeader gc;
+    XrObjHeader gc;
     struct XrClass *klass;  // Mirrors XrInstance layout.
     XrFieldMetadata metadata;
 };
 
 struct MethodWrapper {
-    XrGCHeader gc;
+    XrObjHeader gc;
     struct XrClass *klass;  // Mirrors XrInstance layout.
     XrMethodMetadata metadata;
 };
@@ -96,7 +96,7 @@ struct XrParameterMetadata {
 };
 
 struct ParameterWrapper {
-    XrGCHeader gc;
+    XrObjHeader gc;
     struct XrClass *klass;  // Mirrors XrInstance layout.
     XrParameterMetadata metadata;
 };

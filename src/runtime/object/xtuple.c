@@ -96,7 +96,7 @@ XrTuple *xr_tuple_new(struct XrCoroutine *coro, uint16_t element_count) {
     if (!t)
         return NULL;
 
-    xr_gc_header_init_type(&t->gc, XR_TINSTANCE);
+    xr_obj_header_init_type(&t->gc, XR_TINSTANCE);
     t->klass = cls;
 
     XrValue null_v = {0};

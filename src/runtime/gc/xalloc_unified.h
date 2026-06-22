@@ -46,7 +46,7 @@ XR_FUNC XrCoroGC *xr_current_coro_gc(void);
 static inline void *xr_coro_alloc_blob(XrCoroGC *gc, size_t data_size) {
     if (!gc)
         return NULL;
-    XrGCHeader *obj = xr_coro_gc_newobj(gc, XR_TBLOB, sizeof(XrGCHeader) + data_size);
+    XrObjHeader *obj = xr_coro_gc_newobj(gc, XR_TBLOB, sizeof(XrObjHeader) + data_size);
     return obj ? (obj + 1) : NULL;
 }
 
@@ -58,15 +58,16 @@ static inline void *xr_coro_alloc_blob(XrCoroGC *gc, size_t data_size) {
 static inline void xr_coro_free_blob(XrCoroGC *gc, void *data) {
     if (!gc || !data)
         return;
-    XrGCHeader *obj = ((XrGCHeader *) data) - 1;
-    XR_DCHECK(XR_GC_GET_TYPE(obj) == XR_TBLOB, "free_blob: not a blob");
+    XrObjHeader *obj = ((XrObjHeader *) data) - 1;
+    XR_DCHECK(XR_OBJ_GET_TYPE(obj) == XR_TBLOB, "free_blob: not a blob");
     xr_coro_gc_rc_destroy(gc, obj);
 }
 
 // Write barrier for container modifications
-XR_FUNC void xr_coro_write_barrier(struct XrCoroutine *coro, XrGCHeader *parent, XrGCHeader *child);
+XR_FUNC void xr_coro_write_barrier(struct XrCoroutine *coro, XrObjHeader *parent,
+                                   XrObjHeader *child);
 
 // Back barrier for container bulk modifications
-XR_FUNC void xr_coro_write_barrier_back(struct XrCoroutine *coro, XrGCHeader *obj);
+XR_FUNC void xr_coro_write_barrier_back(struct XrCoroutine *coro, XrObjHeader *obj);
 
 #endif  // XALLOC_UNIFIED_H

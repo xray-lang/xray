@@ -142,7 +142,7 @@ static int encode_value(XrayIsolate *X, XrValue value, XrSerialBuf *buf, int dep
                 buf_put_u8(buf, XR_STAG_NULL);
                 return 0;
             }
-            int heap_type = XR_GC_GET_TYPE((XrGCHeader *) value.ptr);
+            int heap_type = XR_OBJ_GET_TYPE((XrObjHeader *) value.ptr);
 
             switch (heap_type) {
                 case XR_TSTRING: {

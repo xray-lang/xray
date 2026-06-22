@@ -57,7 +57,7 @@ vmcase(OP_SETSHARED) {
     // Decref old value if it's a shared object
     XrValue old_val = xr_shared_array_get(&isolate->vm.shared, shared_index);
     if (XR_IS_PTR(old_val)) {
-        XrGCHeader *old_obj = XR_VALUE_GCPTR(old_val);
+        XrObjHeader *old_obj = XR_VALUE_GCPTR(old_val);
         if (old_obj && XR_GC_IS_SHARED(old_obj)) {
             int new_refc = xr_shared_decref(old_obj);
             if (new_refc == 0) {

@@ -14,7 +14,7 @@
 #include "../../base/xmalloc.h"
 #include "../gc/xcoro_gc.h"
 
-void xr_gc_destroy_instance(XrGCHeader *obj, struct XrCoroGC *owning_gc) {
+void xr_gc_destroy_instance(XrObjHeader *obj, struct XrCoroGC *owning_gc) {
     if (!obj)
         return;
     XrInstance *inst = (XrInstance *) obj;

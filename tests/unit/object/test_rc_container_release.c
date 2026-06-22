@@ -49,7 +49,7 @@ static XrCoroGC *test_gc(void) {
     return gc;
 }
 
-static bool is_dead(XrGCHeader *obj) {
+static bool is_dead(XrObjHeader *obj) {
     return obj && (obj->extra & XR_OBJ_DEAD);
 }
 
@@ -317,7 +317,7 @@ TEST(whole_block_reclaim_returns_empty_blocks) {
         N = 256,
         SZ = 256
     };
-    XrGCHeader *objs[N];
+    XrObjHeader *objs[N];
     for (int i = 0; i < N; i++) {
         objs[i] = xr_coro_gc_newobj(gc, XR_TBLOB, SZ);
         ASSERT_NOT_NULL(objs[i]);
@@ -344,7 +344,7 @@ TEST(whole_block_reclaim_returns_empty_blocks) {
     /* A later allocation of a DIFFERENT size class reuses the reclaimed
      * blocks without growing the heap. */
     size_t total_after = after.total_blocks;
-    XrGCHeader *reuse = xr_coro_gc_newobj(gc, XR_TBLOB, 512);
+    XrObjHeader *reuse = xr_coro_gc_newobj(gc, XR_TBLOB, 512);
     ASSERT_NOT_NULL(reuse);
     XrRegionStats reused;
     xr_region_get_stats(&gc->region, &reused);

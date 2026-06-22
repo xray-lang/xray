@@ -109,7 +109,7 @@ static bool lookup_in_upvalues(XrClosure *closure, const char *name, XrValue *ou
                     XrValue val = closure->upvals[i];
                     // If value is a cell, dereference it
                     if (XR_IS_PTR(val)) {
-                        XrGCHeader *hdr = XR_TO_PTR(val);
+                        XrObjHeader *hdr = XR_TO_PTR(val);
                         if (hdr->type == XR_TCELL) {
                             val = ((XrCell *) hdr)->value;
                         }
@@ -164,7 +164,7 @@ static XrValue eval_member_access(XrEvalContext *ctx, XrValue obj, const char *n
 
     // Instance (including Json dynamic-layout objects)
     if (XR_IS_PTR(obj)) {
-        XrGCHeader *hdr = XR_TO_PTR(obj);
+        XrObjHeader *hdr = XR_TO_PTR(obj);
         if (hdr->type == XR_TINSTANCE) {
             XrInstance *inst = (XrInstance *) hdr;
             if (inst->klass && inst->klass->builtin_kind == XR_BK_JSON) {
@@ -204,7 +204,7 @@ static XrValue eval_index_access(XrEvalContext *ctx, XrValue obj, XrValue idx) {
     }
 
     if (XR_IS_PTR(obj)) {
-        XrGCHeader *hdr = XR_TO_PTR(obj);
+        XrObjHeader *hdr = XR_TO_PTR(obj);
 
         // Array
         if (hdr->type == XR_TARRAY && XR_IS_INT(idx)) {

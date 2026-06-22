@@ -127,8 +127,8 @@ XrValue xr_exception_from_value(XrayIsolate *X, XrValue value) {
         return value;
 
     if (XR_IS_PTR(value)) {
-        XrGCHeader *gc = (XrGCHeader *) XR_TO_PTR(value);
-        if (XR_GC_GET_TYPE(gc) == XR_TERROR) {
+        XrObjHeader *gc = (XrObjHeader *) XR_TO_PTR(value);
+        if (XR_OBJ_GET_TYPE(gc) == XR_TERROR) {
             return xr_exception_from_error(X, (XrError *) gc);
         }
     }

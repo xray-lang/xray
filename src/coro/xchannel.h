@@ -145,7 +145,7 @@ typedef enum {
 } XrChannelKind;
 
 typedef struct XrChannel {
-    XrGCHeader gc_header;
+    XrObjHeader gc_header;
 
     /* === Buffer (ring buffer for buffered channels) === */
     XrValue *buffer;     // NULL for unbuffered
@@ -373,7 +373,7 @@ static inline XrValue xr_value_from_channel(XrChannel *ch) {
 static inline bool xr_value_is_channel(XrValue v) {
     if (!XR_IS_PTR(v))
         return false;
-    return XR_GC_GET_TYPE((XrGCHeader *) XR_TO_PTR(v)) == XR_TCHANNEL;
+    return XR_OBJ_GET_TYPE((XrObjHeader *) XR_TO_PTR(v)) == XR_TCHANNEL;
 }
 
 static inline XrChannel *xr_value_to_channel(XrValue v) {

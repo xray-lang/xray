@@ -24,7 +24,7 @@ struct XrRuntimeCore;
 // Layout-compatible with XrInstance + native body (0 fields).
 // GC tag is XR_TINSTANCE; class has builtin_kind == XR_BK_ENUM_VALUE.
 typedef struct XrEnumValue {
-    XrGCHeader gc;
+    XrObjHeader gc;
     struct XrClass *klass;  // Points to enumValueClass
     // Both names are interned in the isolate's symbol table; not owned.
     const char *enum_name;
@@ -38,7 +38,7 @@ typedef struct XrEnumValue {
 // Layout-compatible with XrInstance + native body (0 fields).
 // GC tag is XR_TINSTANCE; class has builtin_kind == XR_BK_ENUM_TYPE.
 typedef struct XrEnumType {
-    XrGCHeader gc;
+    XrObjHeader gc;
     struct XrClass *klass;  // Points to enumTypeClass
     const char *name;       // Interned in symbol table; not owned.
     int base_type;
@@ -127,11 +127,11 @@ XR_FUNC void xr_enum_type_init_symbols(XrEnumType *enum_type, void *isolate);
  * malloc-backed side resources before freeing the body. Callers never
  * free enum objects manually. */
 
-struct XrGCHeader;
+struct XrObjHeader;
 struct XrCoroGC;
 
-XR_FUNC void xr_gc_destroy_enum_type(struct XrGCHeader *obj, struct XrCoroGC *owning_gc);
-XR_FUNC void xr_gc_destroy_enum_value(struct XrGCHeader *obj, struct XrCoroGC *owning_gc);
+XR_FUNC void xr_gc_destroy_enum_type(struct XrObjHeader *obj, struct XrCoroGC *owning_gc);
+XR_FUNC void xr_gc_destroy_enum_value(struct XrObjHeader *obj, struct XrCoroGC *owning_gc);
 
 /* ========== Type Conversion ========== */
 

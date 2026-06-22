@@ -96,7 +96,7 @@ static void xr_set_release_stored_entry(XrSet *set, XrSetEntry *e, XrCoroGC *gc)
 static void xr_set_prepare_weak_value(XrSet *set, XrValue value, XrCoroGC *gc) {
     if (!set_is_weak(set) || !XR_IS_PTR(value))
         return;
-    XrGCHeader *target = XR_VALUE_GCPTR(value);
+    XrObjHeader *target = XR_VALUE_GCPTR(value);
     XR_OBJ_SET_FLAG(target, XR_OBJ_WEAKABLE);
     xr_weak_registry_register_set(set_owning_isolate(gc), set);
 }
@@ -234,7 +234,7 @@ XrSet *xr_set_new(struct XrCoroutine *coro) {
     if (!set)
         return NULL;
 
-    xr_gc_header_init_type(&set->gc, XR_TSET);
+    xr_obj_header_init_type(&set->gc, XR_TSET);
     set->owner_gc = xr_coro_get_coro_gc(coro);
 
     set->count = 0;
@@ -282,7 +282,7 @@ void xr_set_init_inplace(XrSet *set) {
 
 bool xr_set_add(XrSet *set, XrValue value) {
     XR_DCHECK(set != NULL, "set_add: NULL set");
-    XR_DCHECK(XR_GC_GET_TYPE(&set->gc) == XR_TSET, "set_add: object is not a set");
+    XR_DCHECK(XR_OBJ_GET_TYPE(&set->gc) == XR_TSET, "set_add: object is not a set");
 
     uint32_t hash = hash_value(value);
     XrCoroGC *gc = set_current_or_owner_gc(set);
@@ -321,7 +321,7 @@ bool xr_set_add(XrSet *set, XrValue value) {
 
 bool xr_set_has(XrSet *set, XrValue value) {
     XR_DCHECK(set != NULL, "set_has: NULL set");
-    XR_DCHECK(XR_GC_GET_TYPE(&set->gc) == XR_TSET, "set_has: object is not a set");
+    XR_DCHECK(XR_OBJ_GET_TYPE(&set->gc) == XR_TSET, "set_has: object is not a set");
     if (set->count == 0)
         return false;
     return set_lookup(set, value, hash_value(value)) >= 0;
@@ -329,7 +329,7 @@ bool xr_set_has(XrSet *set, XrValue value) {
 
 bool xr_set_delete(XrSet *set, XrValue value) {
     XR_DCHECK(set != NULL, "set_delete: NULL set");
-    XR_DCHECK(XR_GC_GET_TYPE(&set->gc) == XR_TSET, "set_delete: object is not a set");
+    XR_DCHECK(XR_OBJ_GET_TYPE(&set->gc) == XR_TSET, "set_delete: object is not a set");
     if (xr_set_isdummy(set) || set->count == 0)
         return false;
 
@@ -531,7 +531,7 @@ bool xr_set_is_superset(XrSet *set1, XrSet *set2) {
 
 /* ========== GC Integration ========== */
 
-void xr_gc_destroy_set(XrGCHeader *obj, struct XrCoroGC *owning_gc) {
+void xr_gc_destroy_set(XrObjHeader *obj, struct XrCoroGC *owning_gc) {
     XrSet *set = (XrSet *) obj;
     if (set->flags & XR_SET_FLAG_WEAK_REGISTERED)
         xr_weak_registry_unregister_set(set_owning_isolate(owning_gc), set);

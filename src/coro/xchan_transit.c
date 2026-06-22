@@ -15,7 +15,7 @@
 void xr_chan_transit_release_core(XrRuntimeCore *core, XrValue value) {
     if (!XR_IS_PTR(value))
         return;
-    XrGCHeader *obj = XR_VALUE_GCPTR(value);
+    XrObjHeader *obj = XR_VALUE_GCPTR(value);
     if (!obj || !XR_OBJ_GET_FLAG(obj, XR_OBJ_TRANSIT))
         return;
     /* Drop the channel-buffer reference. The graph's interior nodes hold

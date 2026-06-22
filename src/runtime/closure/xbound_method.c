@@ -26,7 +26,7 @@ XrBoundMethod *xr_bound_method_new(XrayIsolate *isolate, XrValue receiver, Metho
     if (bm == NULL) {
         return NULL;
     }
-    xr_gc_header_init_type(&bm->gc, XR_TBOUND_METHOD);
+    xr_obj_header_init_type(&bm->gc, XR_TBOUND_METHOD);
     bm->receiver = receiver;
     bm->handler = handler;
     return bm;

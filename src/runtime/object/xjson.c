@@ -55,7 +55,7 @@ XrJson *xr_json_new_with_class(struct XrCoroutine *coro, XrClass *cls) {
     XrJson *json = (XrJson *) xr_alloc(coro, size, XR_TINSTANCE);
     if (!json)
         return NULL;
-    xr_gc_header_init_type(&json->gc, XR_TINSTANCE);
+    xr_obj_header_init_type(&json->gc, XR_TINSTANCE);
     json->klass = cls;
     uint16_t cap = cls->in_object_capacity;
     for (uint16_t i = 0; i < cap; i++)

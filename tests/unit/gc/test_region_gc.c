@@ -39,13 +39,13 @@ static XrRuntimeCore g_test_core;
 
 static int g_destroy_count = 0;
 
-static void test_ext_destroy(XrGCHeader *obj, XrCoroGC *owning_gc) {
+static void test_ext_destroy(XrObjHeader *obj, XrCoroGC *owning_gc) {
     (void) obj;
     (void) owning_gc;
     g_destroy_count++;
 }
 
-static void test_ext_destroy_api(XrGCHeader *obj, void *owning_gc) {
+static void test_ext_destroy_api(XrObjHeader *obj, void *owning_gc) {
     test_ext_destroy(obj, (XrCoroGC *) owning_gc);
 }
 
@@ -153,8 +153,8 @@ static void test_region_block_accounting(void) {
     XrCoroGC *gc = xr_coro_gc_create(&dummy_coro);
     ASSERT(gc != NULL, "create failed");
 
-    XrGCHeader *a = xr_coro_gc_newobj(gc, XR_TBLOB, 64);
-    XrGCHeader *b = xr_coro_gc_newobj(gc, XR_TBLOB, 64);
+    XrObjHeader *a = xr_coro_gc_newobj(gc, XR_TBLOB, 64);
+    XrObjHeader *b = xr_coro_gc_newobj(gc, XR_TBLOB, 64);
     ASSERT(a != NULL && b != NULL, "alloc failed");
 
     XrRegionBlock *block = XR_REGION_BLOCK_FROM_PTR(a);
@@ -184,7 +184,7 @@ static void test_large_object(void) {
     XrCoroGC *gc = xr_coro_gc_create(&dummy_coro);
     ASSERT(gc != NULL, "create failed");
 
-    XrGCHeader *large = xr_coro_gc_newobj(gc, XR_TSTRING, 8 * 1024);
+    XrObjHeader *large = xr_coro_gc_newobj(gc, XR_TSTRING, 8 * 1024);
     ASSERT(large != NULL, "large alloc failed");
     ASSERT(gc->large_set.count == 1, "should have large object registered");
 
@@ -201,7 +201,7 @@ static void test_teardown_finalizer_registry(void) {
     XrCoroGC *gc = xr_coro_gc_create(&dummy_coro);
     ASSERT(gc != NULL, "create failed");
 
-    XrGCHeader *obj = xr_coro_gc_newobj(gc, XR_TEST_EXT_TYPE, 64);
+    XrObjHeader *obj = xr_coro_gc_newobj(gc, XR_TEST_EXT_TYPE, 64);
     ASSERT(obj != NULL, "alloc failed");
     ASSERT(XR_OBJ_HAS_DESTRUCTOR(obj), "object should carry destructor flag");
 
@@ -219,7 +219,7 @@ static void test_rc_destroy_unregisters_finalizer(void) {
     XrCoroGC *gc = xr_coro_gc_create(&dummy_coro);
     ASSERT(gc != NULL, "create failed");
 
-    XrGCHeader *obj = xr_coro_gc_newobj(gc, XR_TEST_EXT_TYPE, 64);
+    XrObjHeader *obj = xr_coro_gc_newobj(gc, XR_TEST_EXT_TYPE, 64);
     ASSERT(obj != NULL, "alloc failed");
 
     xr_coro_gc_rc_destroy(gc, obj);
@@ -237,7 +237,7 @@ static void test_large_object_rc_free_unregisters_node(void) {
     XrCoroGC *gc = xr_coro_gc_create(&dummy_coro);
     ASSERT(gc != NULL, "create failed");
 
-    XrGCHeader *large = xr_coro_gc_newobj(gc, XR_TSTRING, 8 * 1024);
+    XrObjHeader *large = xr_coro_gc_newobj(gc, XR_TSTRING, 8 * 1024);
     ASSERT(large != NULL, "large alloc failed");
     ASSERT(gc->large_set.count == 1, "large registration missing");
 

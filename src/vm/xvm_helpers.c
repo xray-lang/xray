@@ -267,7 +267,7 @@ XrCFunction *xr_vm_cfunction_new(XrayIsolate *isolate, XrCFunctionPtr func, cons
 
     // Fully initialize GC header. xr_malloc returns uninitialized memory,
     // so the fields not set below must be cleared explicitly.
-    memset(&cfunc->gc, 0, sizeof(XrGCHeader));
+    memset(&cfunc->gc, 0, sizeof(XrObjHeader));
     cfunc->gc.type = XR_TCFUNCTION;
     cfunc->gc.objsize = (uint32_t) sizeof(XrCFunction);
     cfunc->as.func = func;
@@ -291,7 +291,7 @@ XrCFunction *xr_vm_yieldable_cfunction_new(XrayIsolate *isolate, XrYieldableCFun
     }
 
     // Fully initialize GC header — see xr_vm_cfunction_new for rationale.
-    memset(&cfunc->gc, 0, sizeof(XrGCHeader));
+    memset(&cfunc->gc, 0, sizeof(XrObjHeader));
     cfunc->gc.type = XR_TCFUNCTION;
     cfunc->gc.objsize = (uint32_t) sizeof(XrCFunction);
     cfunc->as.yieldable = func;

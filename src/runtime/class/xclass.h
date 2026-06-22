@@ -145,7 +145,7 @@ typedef enum {
  * 5. Shareable across multiple Contexts
  */
 struct XrClass {
-    XrGCHeader gc;
+    XrObjHeader gc;
 
     /* === Memory Management === */
     struct XrArena *arena;

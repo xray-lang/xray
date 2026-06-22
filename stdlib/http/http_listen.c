@@ -355,7 +355,7 @@ static HttpRawResponse process_handler_result_raw(XrayIsolate *X, XrValue result
     //   - 3 elements: status + content-type + body (existing behaviour)
     //   - 4 elements: 4th is Map<string, string> of extra response headers
     //     (used for redirects via "Location", CORS, custom auth, etc.)
-    if (XR_IS_PTR(result) && XR_GC_GET_TYPE((XrGCHeader *) XR_TO_PTR(result)) == XR_TARRAY) {
+    if (XR_IS_PTR(result) && XR_OBJ_GET_TYPE((XrObjHeader *) XR_TO_PTR(result)) == XR_TARRAY) {
         XrArray *arr = (XrArray *) XR_TO_PTR(result);
         int arr_len = arr->length;
         XrValue *data = (XrValue *) arr->data;

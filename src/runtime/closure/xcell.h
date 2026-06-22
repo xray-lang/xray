@@ -29,14 +29,14 @@
 
 /*
  * MEMORY LAYOUT:
- *   [XrGCHeader 16B][value 16B]
+ *   [XrObjHeader 16B][value 16B]
  *   Total = 32 bytes
  *
  * The post-header field set (XR_CELL_ABI_FIELDS) is shared with the AOT
  * runtime's xrt_cell_t so both backends keep an identical cell layout.
  */
 typedef struct XrCell {
-    XrGCHeader gc;  // GC header, type = XR_TCELL
+    XrObjHeader gc;  // GC header, type = XR_TCELL
     XR_CELL_ABI_FIELDS;
 } XrCell;
 

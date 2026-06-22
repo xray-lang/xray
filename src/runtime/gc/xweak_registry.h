@@ -23,7 +23,7 @@ XR_FUNC void xr_weak_registry_register_map(struct XrayIsolate *isolate, struct X
 XR_FUNC void xr_weak_registry_unregister_map(struct XrayIsolate *isolate, struct XrMap *map);
 XR_FUNC void xr_weak_registry_register_set(struct XrayIsolate *isolate, struct XrSet *set);
 XR_FUNC void xr_weak_registry_unregister_set(struct XrayIsolate *isolate, struct XrSet *set);
-XR_FUNC void xr_weak_registry_target_dying(struct XrayIsolate *isolate, XrGCHeader *target,
+XR_FUNC void xr_weak_registry_target_dying(struct XrayIsolate *isolate, XrObjHeader *target,
                                            struct XrCoroGC *owning_gc);
 XR_FUNC void xr_weak_registry_destroy(struct XrayIsolate *isolate);
 

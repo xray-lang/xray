@@ -27,7 +27,7 @@ typedef XrValue (*MethodHandler)(struct XrayIsolate *isolate, XrValue receiver, 
                                  int argc);
 
 typedef struct XrBoundMethod {
-    XrGCHeader gc;
+    XrObjHeader gc;
     XrValue receiver;
     MethodHandler handler;  // direct function pointer, zero-dispatch call
 } XrBoundMethod;

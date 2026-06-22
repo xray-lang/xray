@@ -51,6 +51,6 @@ XR_FUNC struct XrCoroutine *xr_current_coro(struct XrayIsolate *X);
 
 #define xr_gc_stats(gc) xr_gc_printstats(gc)
 
-XR_FUNC void xr_gc_header_print(XrGCHeader *obj);
+XR_FUNC void xr_obj_header_print(XrObjHeader *obj);
 
 #endif  // XGC_H

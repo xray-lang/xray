@@ -33,7 +33,7 @@ XrCell *xr_cell_new(XrayIsolate *isolate, struct XrCoroutine *coro) {
         return NULL;
     }
 
-    xr_gc_header_init_type(&cell->gc, XR_TCELL);
+    xr_obj_header_init_type(&cell->gc, XR_TCELL);
     if (coro && coro->coro_gc) {
         XR_OBJ_SET_FLAG(&cell->gc, XR_OBJ_CYCLE_CANDIDATE);
     }
@@ -41,7 +41,7 @@ XrCell *xr_cell_new(XrayIsolate *isolate, struct XrCoroutine *coro) {
     return cell;
 }
 
-XR_FUNC void xr_gc_destroy_cell(XrGCHeader *obj, XrCoroGC *owning_gc) {
+XR_FUNC void xr_gc_destroy_cell(XrObjHeader *obj, XrCoroGC *owning_gc) {
     if (!obj)
         return;
     XrCell *cell = (XrCell *) obj;

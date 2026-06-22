@@ -83,7 +83,7 @@ XrArray *xr_array_with_capacity_typed(struct XrCoroutine *coro, int capacity,
         return NULL;
     }
 
-    xr_gc_header_init_type(&arr->gc, XR_TARRAY);
+    xr_obj_header_init_type(&arr->gc, XR_TARRAY);
 
     uint8_t esz = (elem_type < XR_ELEM_COUNT) ? XR_ELEM_SIZES[elem_type] : 8;
     arr->data = NULL;
@@ -189,7 +189,7 @@ XrArray *xr_array_from_values(struct XrCoroutine *coro, XrValue *elements, int c
 
 XrValue xr_array_get(XrArray *arr, int index) {
     XR_DCHECK(arr != NULL, "array_get: NULL array");
-    XR_DCHECK(XR_GC_GET_TYPE(&arr->gc) == XR_TARRAY, "array_get: object is not an array");
+    XR_DCHECK(XR_OBJ_GET_TYPE(&arr->gc) == XR_TARRAY, "array_get: object is not an array");
     // Bounds check
     if (index < 0 || index >= arr->length) {
         return xr_null();
@@ -217,7 +217,7 @@ void xr_array_set_direct(XrArray *arr, int index, XrValue value) {
 
 void xr_array_set(XrArray *arr, int index, XrValue value) {
     XR_DCHECK(arr != NULL, "array_set: NULL array");
-    XR_DCHECK(XR_GC_GET_TYPE(&arr->gc) == XR_TARRAY, "array_set: object is not an array");
+    XR_DCHECK(XR_OBJ_GET_TYPE(&arr->gc) == XR_TARRAY, "array_set: object is not an array");
     int old_length = arr->length;
     // Negative index check
     if (index < 0) {
@@ -268,7 +268,7 @@ int xr_array_size(XrArray *arr) {
 
 void xr_array_push(XrArray *arr, XrValue value) {
     XR_DCHECK(arr != NULL, "array_push: NULL array");
-    XR_DCHECK(XR_GC_GET_TYPE(&arr->gc) == XR_TARRAY, "array_push: object is not an array");
+    XR_DCHECK(XR_OBJ_GET_TYPE(&arr->gc) == XR_TARRAY, "array_push: object is not an array");
     // Slices cannot push
     if (xr_array_is_slice(arr)) {
         return;
@@ -749,7 +749,7 @@ XrArray *xr_array_slice_to_array(struct XrCoroutine *coro, XrArray *slice) {
 
 /* ========== GC Integration ========== */
 
-void xr_gc_destroy_array(XrGCHeader *obj, struct XrCoroGC *owning_gc) {
+void xr_gc_destroy_array(XrObjHeader *obj, struct XrCoroGC *owning_gc) {
     XrArray *arr = (XrArray *) obj;
     xr_array_release_elements(arr, owning_gc);
     // Only free data if this array owns its buffer (slices borrow it)

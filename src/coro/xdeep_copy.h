@@ -165,17 +165,17 @@ XR_FUNC XrValue xr_to_shared(struct XrayIsolate *X, XrValue value);
 
 #include "../runtime/gc/xgc_header.h"
 
-XR_FUNC XrValue xr_deep_copy_array_with_ctx(struct XrCopyContext *ctx, struct XrGCHeader *obj);
-XR_FUNC XrValue xr_deep_copy_map_with_ctx(struct XrCopyContext *ctx, struct XrGCHeader *obj);
-XR_FUNC XrValue xr_deep_copy_set_with_ctx(struct XrCopyContext *ctx, struct XrGCHeader *obj);
-XR_FUNC XrValue xr_deep_copy_instance_with_ctx(struct XrCopyContext *ctx, struct XrGCHeader *obj);
-XR_FUNC XrValue xr_deep_copy_closure_with_ctx(struct XrCopyContext *ctx, struct XrGCHeader *obj);
-XR_FUNC XrValue xr_deep_copy_cell_with_ctx(struct XrCopyContext *ctx, struct XrGCHeader *obj);
+XR_FUNC XrValue xr_deep_copy_array_with_ctx(struct XrCopyContext *ctx, struct XrObjHeader *obj);
+XR_FUNC XrValue xr_deep_copy_map_with_ctx(struct XrCopyContext *ctx, struct XrObjHeader *obj);
+XR_FUNC XrValue xr_deep_copy_set_with_ctx(struct XrCopyContext *ctx, struct XrObjHeader *obj);
+XR_FUNC XrValue xr_deep_copy_instance_with_ctx(struct XrCopyContext *ctx, struct XrObjHeader *obj);
+XR_FUNC XrValue xr_deep_copy_closure_with_ctx(struct XrCopyContext *ctx, struct XrObjHeader *obj);
+XR_FUNC XrValue xr_deep_copy_cell_with_ctx(struct XrCopyContext *ctx, struct XrObjHeader *obj);
 
-XR_FUNC XrValue xr_to_shared_array(struct XrayIsolate *X, struct XrGCHeader *obj);
-XR_FUNC XrValue xr_to_shared_map(struct XrayIsolate *X, struct XrGCHeader *obj);
-XR_FUNC XrValue xr_to_shared_set(struct XrayIsolate *X, struct XrGCHeader *obj);
-XR_FUNC XrValue xr_to_shared_instance(struct XrayIsolate *X, struct XrGCHeader *obj);
-XR_FUNC XrValue xr_to_shared_closure(struct XrayIsolate *X, struct XrGCHeader *obj);
+XR_FUNC XrValue xr_to_shared_array(struct XrayIsolate *X, struct XrObjHeader *obj);
+XR_FUNC XrValue xr_to_shared_map(struct XrayIsolate *X, struct XrObjHeader *obj);
+XR_FUNC XrValue xr_to_shared_set(struct XrayIsolate *X, struct XrObjHeader *obj);
+XR_FUNC XrValue xr_to_shared_instance(struct XrayIsolate *X, struct XrObjHeader *obj);
+XR_FUNC XrValue xr_to_shared_closure(struct XrayIsolate *X, struct XrObjHeader *obj);
 
 #endif  // XDEEP_COPY_H

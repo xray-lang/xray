@@ -12,7 +12,7 @@
  *
  * MEMORY LAYOUT (unified class model):
  *   XrInstance header + 0 fields + native body:
- *     XrGCHeader gc          (16B, type = XR_TINSTANCE)
+ *     XrObjHeader gc          (16B, type = XR_TINSTANCE)
  *     XrClass *klass         (8B,  iteratorClass)
  *     XrIteratorType type    (4B)  ─┐
  *     mode/pad               (4B)   │ native body (40B)
@@ -73,7 +73,7 @@ struct XrClass;
  * XrIterator pointer; native_body offset lands directly on `type`.
  */
 typedef struct XrIterator {
-    XrGCHeader gc;          // GC header (type = XR_TINSTANCE)
+    XrObjHeader gc;         // GC header (type = XR_TINSTANCE)
     struct XrClass *klass;  // Points to iteratorClass
     // === Native body (40 bytes, traversed by iterator_body_traverse) ===
     XrIteratorType type;  // iterator kind

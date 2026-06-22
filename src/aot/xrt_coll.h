@@ -40,8 +40,8 @@
  * runtime keeps `source` NULL (slices borrow via arena lifetime) and does not
  * consult the GC-tracking fields. */
 typedef struct {
-    XrGCHeader gc; /* embedded-at-0 header: same placement as the VM XrArray so
-                    * the two layouts line up (C0 object-header unification) */
+    XrObjHeader gc; /* embedded-at-0 header: same placement as the VM XrArray so
+                     * the two layouts line up (C0 object-header unification) */
     XR_ARRAY_ABI_FIELDS;
     const char *adt_enum_name;
     const char *adt_member_name;
@@ -64,7 +64,7 @@ static inline size_t xrt_array_data_bytes_or_abort(int64_t cap, uint8_t elem_siz
  * are shared by stack and heap constructors. Under the default deterministic
  * policy, heap containers become normal RC objects; under XRAY_AOT_ARENA=1 they
  * keep bump lifetime and release at process exit. */
-static inline void xrt_coll_make_deterministic(XrGCHeader *h) {
+static inline void xrt_coll_make_deterministic(XrObjHeader *h) {
     if (xrt_bump_enabled)
         return;
     h->extra &= (uint16_t) ~(uint16_t) XR_OBJ_STORAGE_BUMP;
@@ -643,8 +643,8 @@ static inline int64_t xrt_swiss_find_empty(const uint8_t *ctrl, int64_t slots, u
  * ========================================================================= */
 
 typedef struct xrt_map_t {
-    XrGCHeader gc; /* embedded-at-0 header: same placement as the VM XrMap (C0
-                    * object-header unification) */
+    XrObjHeader gc; /* embedded-at-0 header: same placement as the VM XrMap (C0
+                     * object-header unification) */
     XR_MAP_ABI_FIELDS;
 
     /* Typed scalar storage (key_type/value_type != XR_ELEM_ANY). */
@@ -952,8 +952,8 @@ static inline void xrt_map_set(xrt_map_t *m, XrValue key, XrValue val) {
  * ========================================================================= */
 
 typedef struct xrt_set_t {
-    XrGCHeader gc; /* embedded-at-0 header: same placement as the VM XrSet (C0
-                    * object-header unification) */
+    XrObjHeader gc; /* embedded-at-0 header: same placement as the VM XrSet (C0
+                     * object-header unification) */
     XR_SET_ABI_FIELDS;
 
     /* Typed scalar storage (elem_type != XR_ELEM_ANY). */
@@ -1162,14 +1162,14 @@ static inline void xrt_set_destroy(xrt_set_t *s) {
 }
 
 static inline void xrt_coll_retain(XrValue v) {
-    XrGCHeader *h = (XrGCHeader *) v.ptr;
+    XrObjHeader *h = (XrObjHeader *) v.ptr;
     if (!h || (h->extra & XR_OBJ_STORAGE_BUMP))
         return;
     atomic_fetch_add_explicit(&h->refcount, 1, memory_order_relaxed);
 }
 
 static inline void xrt_coll_release(XrValue v) {
-    XrGCHeader *h = (XrGCHeader *) v.ptr;
+    XrObjHeader *h = (XrObjHeader *) v.ptr;
     if (!h || (h->extra & XR_OBJ_STORAGE_BUMP))
         return;
     int32_t rc = atomic_load_explicit(&h->refcount, memory_order_relaxed);
@@ -1724,10 +1724,10 @@ static inline XrValue xrt_closure_new(void *fn, int nupvals) {
         if (_nupvals < 0)                                                                          \
             _nupvals = 0;                                                                          \
         size_t _obj_size = xrt_closure_object_size(_nupvals);                                      \
-        XrGCHeader *_hdr = (XrGCHeader *) __builtin_alloca(sizeof(XrGCHeader) + _obj_size);        \
-        memset(_hdr, 0, sizeof(XrGCHeader) + _obj_size);                                           \
+        XrObjHeader *_hdr = (XrObjHeader *) __builtin_alloca(sizeof(XrObjHeader) + _obj_size);     \
+        memset(_hdr, 0, sizeof(XrObjHeader) + _obj_size);                                          \
         _hdr->extra = XR_OBJ_STORAGE_STACK;                                                        \
-        xrt_closure_t *_c = (xrt_closure_t *) ((char *) _hdr + sizeof(XrGCHeader));                \
+        xrt_closure_t *_c = (xrt_closure_t *) ((char *) _hdr + sizeof(XrObjHeader));               \
         xrt_closure_init(_c, (fn_expr), _nupvals);                                                 \
         xr_mkptr(_c, XR_TAG_CLOSURE);                                                              \
     })

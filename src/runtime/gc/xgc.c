@@ -40,7 +40,7 @@
 
 /* ========== GC State ========== */
 
-#define xr_gc_gettype(o) XR_GC_GET_TYPE(o)
+#define xr_gc_gettype(o) XR_OBJ_GET_TYPE(o)
 
 /* ========== Weak Container Registry ========== */
 
@@ -165,7 +165,7 @@ void xr_weak_registry_unregister_set(XrayIsolate *isolate, XrSet *set) {
     xr_amutex_unlock(&registry->lock);
 }
 
-void xr_weak_registry_target_dying(XrayIsolate *isolate, XrGCHeader *target, XrCoroGC *owning_gc) {
+void xr_weak_registry_target_dying(XrayIsolate *isolate, XrObjHeader *target, XrCoroGC *owning_gc) {
     if (!isolate || !target || !(target->extra & XR_OBJ_WEAKABLE))
         return;
     XrWeakContainerRegistry *registry = weak_registry_get(isolate, false);
@@ -237,7 +237,7 @@ void xr_gc_cleanup(XrGC *gc) {
     XrGCObjectNode *node = gc->fixedgc;
     while (node != NULL) {
         XrGCObjectNode *next = node->next;
-        XrGCHeader *obj = node->obj;
+        XrObjHeader *obj = node->obj;
         uint8_t type = xr_gc_gettype(obj);
         XrRuntimeCore *core = gc->isolate ? xr_isolate_get_runtime_core(gc->isolate) : NULL;
         XrGCDestroyFn destroy = xr_runtime_core_destroy_op(core, type);
@@ -258,14 +258,14 @@ void xr_gc_cleanup(XrGC *gc) {
 
 void *xr_gc_alloc(XrGC *gc, size_t size, uint8_t type) {
     XR_DCHECK(gc != NULL, "gc_alloc: NULL gc");
-    XR_DCHECK(size >= sizeof(XrGCHeader), "gc_alloc: size too small");
+    XR_DCHECK(size >= sizeof(XrObjHeader), "gc_alloc: size too small");
     XR_DCHECK(type < XGC_MAX_TYPES, "gc_alloc: invalid GC type");
     // Global GC: Allocate fixed objects using malloc
     // Note: Runtime objects should use xr_alloc() or xr_coro_gc_alloc()
     XrGCObjectNode *node = (XrGCObjectNode *) xr_malloc(sizeof(XrGCObjectNode));
     if (!node)
         return NULL;
-    XrGCHeader *obj = (XrGCHeader *) xr_malloc(size);
+    XrObjHeader *obj = (XrObjHeader *) xr_malloc(size);
     if (obj) {
         obj->type = type;
         obj->extra = XR_OBJ_MANAGED;
@@ -286,9 +286,9 @@ void *xr_gc_alloc(XrGC *gc, size_t size, uint8_t type) {
     return obj;
 }
 
-XrGCHeader *xr_gc_newobj(XrGC *gc, uint8_t type, size_t size) {
+XrObjHeader *xr_gc_newobj(XrGC *gc, uint8_t type, size_t size) {
     XR_DCHECK(gc != NULL, "gc_newobj: NULL gc");
-    return (XrGCHeader *) xr_gc_alloc(gc, size, type);
+    return (XrObjHeader *) xr_gc_alloc(gc, size, type);
 }
 
 /* The compile-time RC dup/drop primitives (xr_rc_retain_value /
@@ -307,7 +307,7 @@ void xr_gc_printstats(XrGC *gc) {
 }
 
 // GC Header Debug Print
-void xr_gc_header_print(XrGCHeader *obj) {
+void xr_obj_header_print(XrObjHeader *obj) {
     if (!obj) {
         printf("GC Header: NULL\n");
         return;
@@ -322,7 +322,7 @@ void xr_gc_header_print(XrGCHeader *obj) {
 
 void *xr_alloc(struct XrCoroutine *coro, size_t size, uint8_t type) {
     XR_DCHECK(coro != NULL, "xr_alloc: coro must not be NULL");
-    XR_DCHECK(((XrGCHeader *) coro)->type == XR_TCOROUTINE,
+    XR_DCHECK(((XrObjHeader *) coro)->type == XR_TCOROUTINE,
               "xr_alloc: coro is not XrCoroutine (caller passed wrong type)");
     if (!coro)
         return NULL;
@@ -330,7 +330,7 @@ void *xr_alloc(struct XrCoroutine *coro, size_t size, uint8_t type) {
     // Lazy coro_gc creation on first heap allocation
     XrCoroGC *gc = xr_coro_ensure_gc(coro);
     if (gc) {
-        XrGCHeader *obj = xr_coro_gc_newobj(gc, type, size);
+        XrObjHeader *obj = xr_coro_gc_newobj(gc, type, size);
         if (obj)
             return obj;
         xr_log_warning("gc", "xr_alloc: coro_gc allocation failed for type=%d size=%zu", type,
