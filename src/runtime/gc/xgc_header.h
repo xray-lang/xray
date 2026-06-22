@@ -30,26 +30,10 @@
 #include "../../os/os_time.h"
 #include "../../shared/xr_obj_header.h" /* unified XrObjHeader + HAS_DTOR/STORAGE_BUMP */
 
-/* ========== Memory Debug Options ========== */
+/* ========== Heap Utility Macros ========== */
 
-#ifndef XR_GC_DEBUG
-#define XR_GC_DEBUG 0
-#endif
-
-#ifndef XR_GC_STRESS
-#define XR_GC_STRESS 0
-#endif
-
-#if XR_GC_DEBUG
-#define XGC_LOG(fmt, ...) fprintf(stderr, "[XGC] " fmt "\n", ##__VA_ARGS__)
-#define XGC_ASSERT(expr) XR_DCHECK(expr, #expr)
-#else
-#define XGC_LOG(fmt, ...) ((void) 0)
-#define XGC_ASSERT(expr) ((void) 0)
-#endif  // ========== GC Utility Macros ==========
-
-#define XGC_ALIGN_SIZE 8
-#define XGC_ALIGN(size) (((size) + XGC_ALIGN_SIZE - 1) & ~(XGC_ALIGN_SIZE - 1))
+#define XR_HEAP_ALIGN_SIZE 8
+#define XR_HEAP_ALIGN(size) (((size) + XR_HEAP_ALIGN_SIZE - 1) & ~(XR_HEAP_ALIGN_SIZE - 1))
 
 // Get current time (nanoseconds) for collection statistics.
 static inline uint64_t xr_cycle_time_ns(void) {

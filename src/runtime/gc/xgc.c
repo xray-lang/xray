@@ -38,10 +38,6 @@
 #include <stdio.h>
 #include "../../base/xmalloc.h"
 
-/* ========== GC State ========== */
-
-#define xr_gc_gettype(o) XR_OBJ_GET_TYPE(o)
-
 /* ========== Weak Container Registry ========== */
 
 typedef struct XrWeakContainerRegistry {
@@ -238,7 +234,7 @@ void xr_fixed_heap_cleanup(XrFixedHeap *heap) {
     while (node != NULL) {
         XrFixedHeapObjectNode *next = node->next;
         XrObjHeader *obj = node->obj;
-        uint8_t type = xr_gc_gettype(obj);
+        uint8_t type = XR_OBJ_GET_TYPE(obj);
         XrRuntimeCore *core = heap->isolate ? xr_isolate_get_runtime_core(heap->isolate) : NULL;
         XrObjDestroyFn destroy = xr_runtime_core_destroy_op(core, type);
         if (destroy != NULL) {

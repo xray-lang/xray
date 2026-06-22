@@ -55,6 +55,7 @@ static void setup_test_ext_finalizer(void) {
     g_test_iso.core_rt = &g_test_core;
     xr_register_extension_destroy(&g_test_iso, XR_TEST_EXT_TYPE, test_ext_destroy_api);
     dummy_coro.isolate = &g_test_iso;
+    dummy_coro.core = &g_test_core;
 }
 
 /* ========== Test Framework ========== */

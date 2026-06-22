@@ -243,7 +243,6 @@ endif()
 # Project Configuration Options
 # ============================================================================
 
-option(XR_USE_GC "Enable garbage collector" ON)
 option(ENABLE_LLVM_BACKEND "Enable LLVM backend" OFF)
 option(BUILD_TESTS "Build unit tests" ON)
 option(ENABLE_ASAN "Enable AddressSanitizer memory detection" OFF)
@@ -375,18 +374,6 @@ endif()
 option(XR_DEBUG_REGS "Enable register bounds checking (for development)" OFF)
 option(XR_DEBUG_COMPILER "Enable compiler debug assertions (for development)" OFF)
 option(XR_DEBUG_REGALLOC "Enable register allocator statistics output" OFF)
-
-# GC configuration
-if(XR_USE_GC)
-    add_compile_definitions(XR_USE_GC=1)
-endif()
-
-# GC stress testing (every alloc triggers gc_step, exposes barrier bugs)
-option(XRAY_GC_STRESS "Enable GC stress mode (every alloc triggers GC step)" OFF)
-if(XRAY_GC_STRESS)
-    add_compile_definitions(XR_GC_STRESS=1)
-    message(STATUS "GC stress mode: enabled")
-endif()
 
 # Stdlib loading mode (file vs embedded bytecode)
 if(XR_STDLIB_FROM_FILE)
@@ -1341,7 +1328,6 @@ message(STATUS "Xray Build Configuration:")
 message(STATUS "  Version: ${PROJECT_VERSION}")
 message(STATUS "  Build Type: ${CMAKE_BUILD_TYPE}")
 message(STATUS "  C Compiler: ${CMAKE_C_COMPILER_ID} ${CMAKE_C_COMPILER_VERSION}")
-message(STATUS "  GC: ${XR_USE_GC}")
 message(STATUS "  Build Tests: ${BUILD_TESTS}")
 message(STATUS "  Bundle Zig: ${XRAY_BUNDLE_ZIG}")
 message(STATUS "  Sanitizers:")

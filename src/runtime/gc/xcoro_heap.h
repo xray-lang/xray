@@ -69,7 +69,7 @@ struct XrFixedHeap;
  * clobbering the adjacent object. Such objects are not freelisted — they are
  * reclaimed in bulk at coroutine teardown.
  */
-#define XR_RC_FREE_GRANULARITY 8 /* must equal XGC_ALIGN_SIZE (allocator alignment) */
+#define XR_RC_FREE_GRANULARITY 8 /* must equal XR_HEAP_ALIGN_SIZE (allocator alignment) */
 #define XR_RC_FREE_MIN_SIZE (sizeof(XrObjHeader) + sizeof(void *)) /* room for the free link */
 #define XR_RC_FREECLASSES (XR_LARGE_OBJECT_THRESHOLD / XR_RC_FREE_GRANULARITY)  // 512
 
@@ -77,8 +77,8 @@ struct XrFixedHeap;
  * every object in a class then has the identical aligned footprint, so a
  * reused slot fits the new request byte-for-byte. If these diverge, a larger
  * allocation could pop a smaller freed slot and overflow the neighbor. */
-_Static_assert(XR_RC_FREE_GRANULARITY == XGC_ALIGN_SIZE,
-               "RC freelist granularity must equal the GC allocator alignment");
+_Static_assert(XR_RC_FREE_GRANULARITY == XR_HEAP_ALIGN_SIZE,
+               "RC freelist granularity must equal the heap allocator alignment");
 
 /* Map an aligned allocation size to its freelist class index, or -1 if the
  * size is out of range: too small to hold the free link, or larger than the
@@ -98,22 +98,22 @@ static inline int xr_rc_size_class(size_t aligned_size) {
  *
  * Open addressing with tombstones; capacity is a power of two and grows
  * when (live + tombstones) exceeds 3/4 of capacity. Insert never fails
- * after a successful xr_gc_ptrset_reserve (no allocation on insert), which
+ * after a successful heap_ptrset_reserve (no allocation on insert), which
  * preserves the allocator's "reserve bookkeeping before object alloc"
  * OOM contract.
  */
 
-typedef struct XrGCPtrSet {
-    XrObjHeader **slots;  // NULL slot = empty; XR_GC_PTRSET_TOMBSTONE = deleted
+typedef struct XrHeapPtrSet {
+    XrObjHeader **slots;  // NULL slot = empty; XR_HEAP_PTRSET_TOMBSTONE = deleted
     uint32_t cap;         // power of two (0 until first reserve)
     uint32_t count;       // live entries
     uint32_t tombstones;  // deleted slots awaiting rehash
-} XrGCPtrSet;
+} XrHeapPtrSet;
 
-#define XR_GC_PTRSET_TOMBSTONE ((XrObjHeader *) (uintptr_t) 1)
+#define XR_HEAP_PTRSET_TOMBSTONE ((XrObjHeader *) (uintptr_t) 1)
 
-static inline bool xr_gc_ptrset_slot_live(XrObjHeader *slot) {
-    return slot != NULL && slot != XR_GC_PTRSET_TOMBSTONE;
+static inline bool xr_heap_ptrset_slot_live(XrObjHeader *slot) {
+    return slot != NULL && slot != XR_HEAP_PTRSET_TOMBSTONE;
 }
 
 /* ========== Coroutine Heap Structure (Region bump + RC reclamation) ========== */
@@ -132,8 +132,8 @@ typedef struct XrCoroHeap {
     uint8_t _pad1[5];                   // alignment
 
     // === Large objects (malloc/mmap-backed; freed individually at teardown) ===
-    XrGCPtrSet large_set;  // All large objects (O(1) insert/remove)
-    int64_t large_bytes;   // Total bytes registered in large_set
+    XrHeapPtrSet large_set;  // All large objects (O(1) insert/remove)
+    int64_t large_bytes;     // Total bytes registered in large_set
 
     // Ownership
     struct XrCoroutine *owner;
@@ -142,7 +142,7 @@ typedef struct XrCoroHeap {
     // O(1) remove here is load-bearing: every drop-to-zero of an object
     // with a destructor unregisters it, so a linked list would make RC
     // reclamation O(live objects) and teardown O(n^2).
-    XrGCPtrSet finalize_set;
+    XrHeapPtrSet finalize_set;
 
     // Statistics (cold; surfaced by memory/collection introspection builtins)
     uint32_t cycle_collect_count;  // Number of cycle collector runs
