@@ -214,18 +214,6 @@ void xr_isolate_set_source_cache(XrayIsolate *X, struct XrSourceCache *cache) {
     }
 }
 
-/* ========== REPL ========== */
-
-struct XrReplSymbolTable *xr_isolate_get_repl_symbols(XrayIsolate *X) {
-    return X ? X->repl_symbols : NULL;
-}
-
-void xr_isolate_set_repl_symbols(XrayIsolate *X, struct XrReplSymbolTable *syms) {
-    if (X) {
-        X->repl_symbols = syms;
-    }
-}
-
 /* ========== Exception Print Suppression ========== */
 
 bool xr_isolate_get_suppress_exception_print(XrayIsolate *X) {

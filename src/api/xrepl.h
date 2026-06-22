@@ -83,7 +83,7 @@ XR_FUNC XrInputStatus xr_repl_check_input(const char *source);
 
 /*
  * Compile source for REPL incremental execution.
- * - Seeds compiler context from isolate->repl_symbols (name metadata)
+ * - Seeds compiler context from session-owned repl_symbols (name metadata)
  * - Emits OP_GETGLOBAL/OP_SETGLOBAL for top-level variable access
  * - Updates repl_symbols with new definitions
  * Returns compiled proto, or NULL on error.
@@ -95,7 +95,7 @@ XR_FUNC XrProto *xr_repl_compile(XrayIsolate *isolate, const char *source);
 /*
  * Pretty-print every top-level binding currently visible to the REPL.
  * One line per symbol: "name : typeName = formatted value".  Reads
- * names from isolate->repl_symbols, values from the globals dict.
+ * names from session-owned repl_symbols, values from the globals dict.
  * Cheap, no compilation or execution side effects.  Safe to call
  * before the first compile (prints nothing).
  */

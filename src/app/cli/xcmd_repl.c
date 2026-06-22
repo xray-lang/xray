@@ -101,7 +101,7 @@ static const char *const k_repl_keywords[] = {
 };
 
 /* Set during repl_run() so the readline generator can reach the
- * current ReplState (and through it, the isolate's repl_symbols).
+ * current ReplState (and through it, the active session's repl_symbols).
  * Readline's generator signature has no userdata pointer, so a
  * file-scope static is the conventional approach.  Cleared at exit. */
 static ReplState *g_completion_state = NULL;

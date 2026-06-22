@@ -28,6 +28,7 @@
 #include "../runtime/symbol/xsymbol_table.h"
 #include "../runtime/xisolate_api.h"
 #include "../api/xrepl.h"
+#include "../toolchain/xcompiler_session.h"
 
 #include <string.h>
 #include <stdio.h>
@@ -1217,10 +1218,11 @@ XR_FUNC XiFunc *xi_lower_program_ex(AstNode *program_node, struct XaAnalyzer *an
      * current input's references resolve by name.  Each seeded name
      * gets a sentinel shared_map entry (>= 0) so the lowerer knows
      * it is a top-level variable and emits OP_GETGLOBAL/OP_SETGLOBAL.
-     * isolate->repl_symbols is NULL outside REPL mode, so this is a
-     * no-op for ordinary script compilation. */
+     * A session-owned repl_symbols table exists only in REPL mode, so
+     * this is a no-op for ordinary script compilation. */
     uint16_t next_shared_start = 0;
-    XrReplSymbolTable *repl_syms = xr_isolate_get_repl_symbols(isolate);
+    XrCompilerSession *session = xr_compiler_session_current_for_isolate(isolate);
+    XrReplSymbolTable *repl_syms = xr_compiler_session_repl_symbols(session);
     if (repl_syms) {
         for (int i = 0; i < repl_syms->count; i++) {
             XrReplSymbol *s = &repl_syms->symbols[i];
