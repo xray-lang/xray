@@ -81,7 +81,7 @@ static inline XrCoroHeap *set_current_or_owner_heap(XrSet *set) {
 
 static XrayIsolate *set_owning_isolate(XrCoroHeap *heap) {
     if (heap && heap->owner)
-        return heap->owner->isolate;
+        return xr_coro_vm_owner(heap->owner);
     return NULL;
 }
 

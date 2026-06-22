@@ -25,9 +25,9 @@
 struct XrCoroutine;
 struct XrayIsolate;
 
-/* ========== Coroutine Accessor (avoids coro/ include) ========== */
+/* ========== Coroutine VM-owner Accessor (avoids coro/ include) ========== */
 
-XR_FUNC struct XrayIsolate *xr_coro_get_isolate(struct XrCoroutine *coro);
+XR_FUNC struct XrayIsolate *xr_coro_vm_owner(const struct XrCoroutine *coro);
 
 /* ========== Unified Allocation API ========== */
 

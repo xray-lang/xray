@@ -79,8 +79,8 @@ XrClass *xr_get_or_create_tuple_class(XrayIsolate *X, uint16_t arity) {
 
 XrTuple *xr_tuple_new(struct XrCoroutine *coro, uint16_t element_count) {
     XR_DCHECK(coro != NULL, "xr_tuple_new: NULL coro");
-    XrayIsolate *X = coro->isolate;
-    XR_DCHECK(X != NULL, "xr_tuple_new: coro->isolate is NULL");
+    XrayIsolate *X = xr_coro_vm_owner(coro);
+    XR_DCHECK(X != NULL, "xr_tuple_new: coroutine has no VM owner");
 
     XrClass *cls = xr_get_or_create_tuple_class(X, element_count);
     if (!cls)

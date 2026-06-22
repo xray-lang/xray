@@ -26,7 +26,7 @@
 
 XrStringBuilder *xr_stringbuilder_new(struct XrCoroutine *coro) {
     XR_DCHECK(coro != NULL, "stringbuilder_new: NULL coro");
-    XrayIsolate *X = xr_coro_get_isolate(coro);
+    XrayIsolate *X = xr_coro_vm_owner(coro);
     XrClass *cls = xr_isolate_get_core_classes(X)->stringBuilderClass;
     XR_DCHECK(cls != NULL, "stringbuilder_new: NULL stringBuilderClass");
 

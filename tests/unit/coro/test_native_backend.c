@@ -21,6 +21,7 @@
 #include "coro/xwork_queue.h"
 #include "coro/xyieldable.h"
 #include "runtime/class/xenum.h"
+#include "runtime/mem/xalloc_unified.h"
 #include "runtime/mem/xobj_destroy_ops.h"
 #include "runtime/object/xarray.h"
 #include "runtime/xisolate_internal.h"
@@ -179,7 +180,7 @@ TEST(aot_coroutine_uses_aot_backend_without_vm_state_and_maps_done) {
     ASSERT_NOT_NULL(coro->backend);
     ASSERT_EQ_INT(coro->backend->kind, XR_CORO_BACKEND_AOT);
     ASSERT_FALSE(xr_coro_backend_is_vm(coro));
-    ASSERT_NULL(coro->isolate);
+    ASSERT_NULL(xr_coro_vm_owner(coro));
     ASSERT_TRUE((coro->gc_flags & XR_CORO_GC_LIGHTWEIGHT) != 0);
 
     XrCoroDebugSnapshot snapshot;
@@ -224,7 +225,7 @@ TEST(aot_coroutine_maps_block_error_and_cancel_to_common_run_results) {
 
     XrCoroutine *blocked = xr_coro_create_aot(runtime, &aot_test_desc, block_frame, "aot_block");
     ASSERT_NOT_NULL(blocked);
-    ASSERT_NULL(blocked->isolate);
+    ASSERT_NULL(xr_coro_vm_owner(blocked));
 
     XrCoroRunContext run_ctx = {
         .worker = NULL,
@@ -246,7 +247,7 @@ TEST(aot_coroutine_maps_block_error_and_cancel_to_common_run_results) {
 
     XrCoroutine *errored = xr_coro_create_aot(runtime, &aot_test_desc, error_frame, "aot_error");
     ASSERT_NOT_NULL(errored);
-    ASSERT_NULL(errored->isolate);
+    ASSERT_NULL(xr_coro_vm_owner(errored));
     XrCoroRunResult error_result = errored->backend->resume(errored, NULL, &run_ctx);
     ASSERT_EQ_INT(error_result.kind, XR_CORO_RUN_ERROR);
     ASSERT_TRUE(error_result.error_is_value);
@@ -264,7 +265,7 @@ TEST(aot_coroutine_maps_block_error_and_cancel_to_common_run_results) {
     XrCoroutine *cancelled =
         xr_coro_create_aot(runtime, &aot_test_desc, cancel_frame, "aot_cancel");
     ASSERT_NOT_NULL(cancelled);
-    ASSERT_NULL(cancelled->isolate);
+    ASSERT_NULL(xr_coro_vm_owner(cancelled));
     XrCoroEvent cancel_event = {
         .kind = XR_CORO_EVENT_CANCEL,
         .value = XR_NULL_VAL,
@@ -361,7 +362,7 @@ TEST(aot_runtime_creates_isolate_free_aot_coroutine) {
 
     XrCoroutine *coro = xr_coro_create_aot(runtime, &aot_test_desc, frame, "aot_runtime");
     ASSERT_NOT_NULL(coro);
-    ASSERT_NULL(coro->isolate);
+    ASSERT_NULL(xr_coro_vm_owner(coro));
     ASSERT_EQ_PTR(coro->core, xr_aot_runtime_core(runtime));
     ASSERT_EQ_PTR(coro->scheduler, xr_aot_runtime_scheduler(runtime));
 
@@ -682,7 +683,7 @@ TEST(coroutine_recycle_hooks_are_backend_abi_contract) {
     ASSERT_NOT_NULL(runtime);
     XrCoroutine *aot = xr_coro_create_aot(runtime, &aot_test_desc, frame, "aot_no_pool");
     ASSERT_NOT_NULL(aot);
-    ASSERT_NULL(aot->isolate);
+    ASSERT_NULL(xr_coro_vm_owner(aot));
     ASSERT_FALSE(xr_coro_backend_prepare_recycle(aot, NULL));
     ASSERT_FALSE(xr_coro_backend_reset_reusable(aot));
     ASSERT_FALSE(xr_coro_has_continuation(aot));

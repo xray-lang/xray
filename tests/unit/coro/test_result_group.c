@@ -33,6 +33,7 @@ static bool result_group_fixture_init(ResultGroupFixture *f) {
     f->sys_heap_initialized = true;
     f->core.sys_heap = &f->sys_heap;
     f->isolate_storage.core_rt = &f->core;
+    f->core.vm_owner = &f->isolate_storage;
     f->runtime.core = &f->core;
     xr_scheduler_runtime_attach_isolate(&f->runtime, &f->isolate_storage);
     f->isolate_storage.scheduler_runtime = &f->runtime;
@@ -51,7 +52,6 @@ static void init_blocked_result_group_coro(XrCoroutine *coro, XrCoroExt *ext, Xr
     memset(coro, 0, sizeof(*coro));
     memset(ext, 0, sizeof(*ext));
     coro->id = 710;
-    coro->isolate = isolate;
     coro->core = isolate ? isolate->core_rt : NULL;
     coro->scheduler =
         (isolate && isolate->scheduler_runtime) ? (XrRuntime *) isolate->scheduler_runtime : NULL;

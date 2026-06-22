@@ -21,6 +21,7 @@ XrRuntimeCore *xr_runtime_core_new(const XrRuntimeCoreConfig *cfg) {
     if (!core)
         return NULL;
 
+    core->vm_owner = cfg ? cfg->owner_isolate : NULL;
     core->userdata = cfg ? cfg->userdata : NULL;
     core->ext_type_next = XR_TTASK + 1;
     xr_script_info_init(&core->script_info);
@@ -70,6 +71,10 @@ void xr_runtime_core_cleanup_fixed_heap(XrRuntimeCore *core) {
     xr_fixed_heap_cleanup(&core->fixed_heap);
     if (core->fixed_heap.isolate)
         xr_weak_registry_destroy(core->fixed_heap.isolate);
+}
+
+struct XrayIsolate *xr_runtime_core_vm_owner(const XrRuntimeCore *core) {
+    return core ? core->vm_owner : NULL;
 }
 
 void xr_runtime_core_set_destroy_op(XrRuntimeCore *core, uint8_t type, XrObjDestroyFn destroy) {

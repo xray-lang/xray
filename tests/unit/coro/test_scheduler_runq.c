@@ -92,6 +92,7 @@ static bool scheduler_fixture_init(SchedulerFixture *f) {
     f->sys_heap_initialized = true;
     f->core.sys_heap = &f->sys_heap;
     f->isolate_storage.core_rt = &f->core;
+    f->core.vm_owner = &f->isolate_storage;
 
     f->saved_worker = tls_current_worker;
     f->saved_machine = tls_current_machine;
@@ -157,6 +158,7 @@ static bool steal_fixture_init(StealFixture *f) {
     f->sys_heap_initialized = true;
     f->core.sys_heap = &f->sys_heap;
     f->isolate_storage.core_rt = &f->core;
+    f->core.vm_owner = &f->isolate_storage;
 
     f->saved_worker = tls_current_worker;
     f->saved_machine = tls_current_machine;
@@ -220,7 +222,6 @@ static void steal_fixture_enter_manual_threads(StealFixture *f) {
 static void init_ready_coro(XrCoroutine *coro, int id, XrayIsolate *isolate) {
     memset(coro, 0, sizeof(*coro));
     coro->id = id;
-    coro->isolate = isolate;
     coro->core = isolate ? isolate->core_rt : NULL;
     coro->scheduler =
         (isolate && isolate->scheduler_runtime) ? (XrRuntime *) isolate->scheduler_runtime : NULL;
@@ -447,6 +448,7 @@ TEST(deterministic_runtime_forces_single_worker_and_virtual_clock) {
     ASSERT_TRUE(xr_sysheap_init(&sys_heap, NULL));
     core.sys_heap = &sys_heap;
     isolate.core_rt = &core;
+    core.vm_owner = &isolate;
 
     XrRuntime *runtime = xr_scheduler_runtime_new(&core, 0);
     ASSERT_NOT_NULL(runtime);

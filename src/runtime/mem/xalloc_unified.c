@@ -17,6 +17,7 @@
 #include "../../base/xchecks.h"
 #include "../../coro/xcoroutine.h"
 #include "../../coro/xworker.h"
+#include "../core/xr_runtime_core.h"
 #include "xcoro_heap.h"
 
 XrCoroHeap *xr_coro_ensure_heap(struct XrCoroutine *coro) {
@@ -47,6 +48,6 @@ XrCoroHeap *xr_current_coro_heap(void) {
     return NULL;
 }
 
-XrayIsolate *xr_coro_get_isolate(struct XrCoroutine *coro) {
-    return coro ? coro->isolate : NULL;
+XrayIsolate *xr_coro_vm_owner(const struct XrCoroutine *coro) {
+    return coro ? xr_runtime_core_vm_owner(coro->core) : NULL;
 }

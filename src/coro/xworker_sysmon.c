@@ -18,6 +18,7 @@
 #include "../os/os_time.h"
 #include "../base/xlog.h"
 #include "xblock.h"
+#include "../runtime/core/xr_runtime_core.h"
 
 static void sysmon_check(XrRuntime *runtime) {
     XR_DCHECK(runtime != NULL, "sysmon_check: NULL runtime");
@@ -654,7 +655,8 @@ void xr_worker_unblock_select(XrWorker *worker, XrCoroutine *coro) {
         return;
 
     // Notify dist channels about exiting select (unsubscribe from push model)
-    XrChannelDistHooks *dhooks = coro->isolate ? coro->isolate->channel_dist_hooks : NULL;
+    XrayIsolate *vm_owner = xr_runtime_core_vm_owner(coro->core);
+    XrChannelDistHooks *dhooks = vm_owner ? vm_owner->channel_dist_hooks : NULL;
     if (dhooks && dhooks->on_select_exit) {
         for (int i = 0; i < sw->case_count; i++) {
             XrChannel *ch = (XrChannel *) sw->cases[i].channel;

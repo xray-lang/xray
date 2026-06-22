@@ -47,7 +47,7 @@ static bool scope_transfer_record_child_error_locked(XrCoroutine *coro, XrScopeC
     } else if (scope->mode == XR_SCOPE_SUPERVISOR) {
         if (scope->errors) {
             XrValue msg = err;
-            XrayIsolate *iso = coro->isolate;
+            XrayIsolate *iso = xr_runtime_core_vm_owner(coro->core);
             if (iso && xr_value_is_exception(iso, err)) {
                 const char *m = xr_exception_get_message(iso, err);
                 if (!m)

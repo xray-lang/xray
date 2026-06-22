@@ -40,6 +40,7 @@ static bool scope_fixture_init(ScopeFixture *f) {
     f->sys_heap_initialized = true;
     f->core.sys_heap = &f->sys_heap;
     f->isolate_storage.core_rt = &f->core;
+    f->core.vm_owner = &f->isolate_storage;
 
     f->saved_worker = tls_current_worker;
     f->saved_machine = tls_current_machine;
@@ -79,7 +80,6 @@ static void init_running_scope_coro(XrCoroutine *coro, XrCoroExt *ext, int id,
     memset(coro, 0, sizeof(*coro));
     memset(ext, 0, sizeof(*ext));
     coro->id = id;
-    coro->isolate = isolate;
     coro->core = isolate ? isolate->core_rt : NULL;
     coro->scheduler =
         (isolate && isolate->scheduler_runtime) ? (XrRuntime *) isolate->scheduler_runtime : NULL;
