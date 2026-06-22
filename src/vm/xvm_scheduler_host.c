@@ -32,10 +32,21 @@ static void vm_host_notify_coro(void *ctx, XrCoroutine *coro, const char *reason
     xr_coro_notify_monitors(X, state ? state->coro_registry : NULL, coro, reason);
 }
 
+static void vm_host_unregister_named_coro(XrayIsolate *X, XrCoroutine *coro) {
+    if (!X || !coro)
+        return;
+    const char *name = xr_coro_name(coro);
+    if (!name)
+        return;
+
+    XrCoroState *state = (XrCoroState *) X->vm.coro_state;
+    if (state && state->coro_registry)
+        xr_coro_registry_unregister(state->coro_registry, name);
+}
+
 static void vm_host_coro_on_exit(void *ctx, XrCoroutine *coro) {
     XrayIsolate *X = vm_host_isolate(ctx);
-    if (X && coro)
-        xr_coro_on_exit(X, coro);
+    vm_host_unregister_named_coro(X, coro);
 }
 
 static void vm_host_wake_scope_waiter(void *ctx, XrCoroutine *coro) {
