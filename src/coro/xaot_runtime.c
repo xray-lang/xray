@@ -15,7 +15,7 @@
 #include "../base/xmalloc.h"
 #include "../runtime/core/xr_runtime_core.h"
 #include "../runtime/core/xr_script_info.h"
-#include "../runtime/gc/xcoro_gc.h"
+#include "../runtime/gc/xcoro_heap.h"
 #include "../runtime/gc/xgc_destroy_ops.h"
 #include "xblock.h"
 #include "xcoroutine.h"
@@ -33,7 +33,7 @@ static XrAotCoroState *aot_state_from_coro(XrCoroutine *coro) {
     return (XrAotCoroState *) coro->backend_state;
 }
 
-static void aot_release_frame(const XrAotCoroDesc *desc, void *frame, XrCoroGC *gc) {
+static void aot_release_frame(const XrAotCoroDesc *desc, void *frame, XrCoroHeap *gc) {
     if (!frame)
         return;
     if (desc && desc->release_frame) {
@@ -48,7 +48,7 @@ static void aot_release_state(XrCoroutine *coro) {
     if (!state)
         return;
 
-    aot_release_frame(state->desc, state->frame, coro ? coro->coro_gc : NULL);
+    aot_release_frame(state->desc, state->frame, coro ? coro->heap : NULL);
     xr_free(state);
     coro->backend_state = NULL;
     coro->backend = NULL;

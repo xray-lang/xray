@@ -40,7 +40,7 @@
  *   the target Worker for waking a blocked coroutine.
  *
  *   INVARIANT 6 (GC isolation): Each coroutine has its own GC heap
- *   (XrCoroGC). Cross-coroutine object transfer requires deep copy
+ *   (XrCoroHeap). Cross-coroutine object transfer requires deep copy
  *   or shared storage (reference counted). A coroutine's GC never
  *   touches another coroutine's heap objects.
  *
@@ -72,7 +72,7 @@
 
 /* ========== Forward Declarations ========== */
 
-struct XrCoroGC;
+struct XrCoroHeap;
 struct XrCoroMonitor;
 struct XrCoroRegistry;
 struct XrRuntime;
@@ -184,7 +184,7 @@ struct XrCoroutine {
     /* ================================================================
      * WARM ZONE — GC/result hot fields and backend-owned cold state
      * ================================================================ */
-    struct XrCoroGC *coro_gc;     // GC safepoint: checked every loop back-edge
+    struct XrCoroHeap *heap;      // GC safepoint: checked every loop back-edge
     struct XrRuntimeCore *core;   // VM-neutral runtime resources for this coroutine
     struct XrRuntime *scheduler;  // owning scheduler runtime, NULL before multicore attach
     struct XrayIsolate *isolate;  // VM/AOT bridge while backend APIs still need isolate

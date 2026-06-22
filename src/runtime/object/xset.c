@@ -32,7 +32,7 @@
 #include "../class/xclass_system.h"
 #include "../class/xclass.h"
 #include "../gc/xgc.h"
-#include "../gc/xcoro_gc.h"
+#include "../gc/xcoro_heap.h"
 #include "../../coro/xcoroutine.h"
 #include "../../shared/xr_swiss_index.h"
 #include <stdlib.h>
@@ -66,7 +66,7 @@ static uint32_t calc_indices_size(uint32_t needed) {
     return size;
 }
 
-static inline void xr_set_release_entry(XrSetEntry *e, XrCoroGC *gc) {
+static inline void xr_set_release_entry(XrSetEntry *e, XrCoroHeap *gc) {
     xr_rc_release_value(gc, e->value);
     e->value = xr_null();
 }
@@ -75,25 +75,25 @@ static inline bool set_is_weak(const XrSet *set) {
     return (set->flags & XR_SET_FLAG_WEAK) != 0;
 }
 
-static inline XrCoroGC *set_current_or_owner_gc(XrSet *set) {
-    XrCoroGC *gc = xr_current_coro_gc();
+static inline XrCoroHeap *set_current_or_owner_gc(XrSet *set) {
+    XrCoroHeap *gc = xr_current_coro_heap();
     return gc ? gc : (set ? set->owner_gc : NULL);
 }
 
-static XrayIsolate *set_owning_isolate(XrCoroGC *gc) {
+static XrayIsolate *set_owning_isolate(XrCoroHeap *gc) {
     if (gc && gc->owner)
         return gc->owner->isolate;
     return NULL;
 }
 
-static void xr_set_release_stored_entry(XrSet *set, XrSetEntry *e, XrCoroGC *gc) {
+static void xr_set_release_stored_entry(XrSet *set, XrSetEntry *e, XrCoroHeap *gc) {
     if (!set_is_weak(set))
         xr_set_release_entry(e, gc);
     else
         e->value = xr_null();
 }
 
-static void xr_set_prepare_weak_value(XrSet *set, XrValue value, XrCoroGC *gc) {
+static void xr_set_prepare_weak_value(XrSet *set, XrValue value, XrCoroHeap *gc) {
     if (!set_is_weak(set) || !XR_IS_PTR(value))
         return;
     XrObjHeader *target = XR_VALUE_GCPTR(value);
@@ -127,7 +127,7 @@ static int32_t set_lookup(XrSet *set, XrValue value, uint32_t hash) {
 // Grow (and compact away tombstones) to hold at least `min_needed` live entries.
 // Handles the dummy -> first-allocation case too. Returns false on OOM.
 static bool set_resize(XrSet *set, uint32_t min_needed) {
-    XrCoroGC *gc = set_current_or_owner_gc(set);
+    XrCoroHeap *gc = set_current_or_owner_gc(set);
     bool was_dummy = xr_set_isdummy(set);
     XrSetEntry *old_entries = was_dummy ? NULL : set->entries;
     uint8_t *old_ctrl = was_dummy ? NULL : set->ctrl;
@@ -235,7 +235,7 @@ XrSet *xr_set_new(struct XrCoroutine *coro) {
         return NULL;
 
     xr_obj_header_init_type(&set->hdr, XR_TSET);
-    set->owner_gc = xr_coro_get_coro_gc(coro);
+    set->owner_gc = xr_coro_get_heap(coro);
 
     set->count = 0;
     set->nentries = 0;
@@ -285,7 +285,7 @@ bool xr_set_add(XrSet *set, XrValue value) {
     XR_DCHECK(XR_OBJ_GET_TYPE(&set->hdr) == XR_TSET, "set_add: object is not a set");
 
     uint32_t hash = hash_value(value);
-    XrCoroGC *gc = set_current_or_owner_gc(set);
+    XrCoroHeap *gc = set_current_or_owner_gc(set);
 
     int32_t ix = set_lookup(set, value, hash);
     if (ix >= 0) {
@@ -355,7 +355,7 @@ void xr_set_clear(XrSet *set) {
     if (xr_set_isdummy(set))
         return;
 
-    XrCoroGC *gc = set_current_or_owner_gc(set);
+    XrCoroHeap *gc = set_current_or_owner_gc(set);
     for (uint32_t i = 0; i < set->nentries; i++) {
         XrSetEntry *e = &set->entries[i];
         if (e->val_tt != XR_SET_ENTRY_NIL) {
@@ -531,7 +531,7 @@ bool xr_set_is_superset(XrSet *set1, XrSet *set2) {
 
 /* ========== GC Integration ========== */
 
-void xr_gc_destroy_set(XrObjHeader *obj, struct XrCoroGC *owning_gc) {
+void xr_gc_destroy_set(XrObjHeader *obj, struct XrCoroHeap *owning_gc) {
     XrSet *set = (XrSet *) obj;
     if (set->flags & XR_SET_FLAG_WEAK_REGISTERED)
         xr_weak_registry_unregister_set(set_owning_isolate(owning_gc), set);

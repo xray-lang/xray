@@ -34,7 +34,7 @@
 #include "../class/xclass_system.h"
 #include "../class/xclass.h"
 #include "../gc/xgc_internal.h"
-#include "../gc/xcoro_gc.h"
+#include "../gc/xcoro_heap.h"
 #include "../../coro/xcoroutine.h"
 #include <string.h>
 #include <stdio.h>
@@ -129,18 +129,18 @@ static inline bool map_is_weak(const XrMap *map) {
     return (map->flags & XR_MAP_FLAG_WEAK) != 0;
 }
 
-static inline XrCoroGC *map_current_or_owner_gc(XrMap *map) {
-    XrCoroGC *gc = xr_current_coro_gc();
+static inline XrCoroHeap *map_current_or_owner_gc(XrMap *map) {
+    XrCoroHeap *gc = xr_current_coro_heap();
     return gc ? gc : (map ? map->owner_gc : NULL);
 }
 
-static XrayIsolate *map_owning_isolate(XrCoroGC *gc) {
+static XrayIsolate *map_owning_isolate(XrCoroHeap *gc) {
     if (gc && gc->owner)
         return gc->owner->isolate;
     return NULL;
 }
 
-static void xr_map_release_entry_values(XrMap *map, XrMapEntry *e, XrCoroGC *gc) {
+static void xr_map_release_entry_values(XrMap *map, XrMapEntry *e, XrCoroHeap *gc) {
     if (!map_is_weak(map))
         xr_rc_release_value(gc, e->key);
     xr_rc_release_value(gc, e->value);
@@ -148,7 +148,7 @@ static void xr_map_release_entry_values(XrMap *map, XrMapEntry *e, XrCoroGC *gc)
     e->value = xr_null();
 }
 
-static void xr_map_prepare_weak_key(XrMap *map, XrValue key, XrCoroGC *gc) {
+static void xr_map_prepare_weak_key(XrMap *map, XrValue key, XrCoroHeap *gc) {
     if (!map_is_weak(map) || !XR_IS_PTR(key))
         return;
     XrObjHeader *target = XR_VALUE_GCPTR(key);
@@ -178,7 +178,7 @@ static int32_t map_lookup(XrMap *map, XrValue key, uint32_t hash, uint8_t key_tt
 // Grow (and compact away tombstones) to hold at least `min_needed` live entries.
 // Handles the dummy -> first-allocation case too. Returns false on OOM.
 static bool map_resize(XrMap *map, uint32_t min_needed) {
-    XrCoroGC *gc = map_current_or_owner_gc(map);
+    XrCoroHeap *gc = map_current_or_owner_gc(map);
     bool was_dummy = xr_map_isdummy(map);
     XrMapEntry *old_entries = was_dummy ? NULL : map->entries;
     uint8_t *old_ctrl = was_dummy ? NULL : map->ctrl;
@@ -283,7 +283,7 @@ static bool map_resize(XrMap *map, uint32_t min_needed) {
 // byte-counter underflow that a current-coro accounting would cause. The map
 // must be freshly dummy. After this, inserting up to `count` entries via
 // xr_map_set will not trigger a resize.
-bool xr_map_reserve_external(XrMap *map, uint32_t count, struct XrCoroGC *gc) {
+bool xr_map_reserve_external(XrMap *map, uint32_t count, struct XrCoroHeap *gc) {
     if (count == 0)
         return true;  // Stays dummy; first insert will allocate.
 
@@ -333,7 +333,7 @@ XrMap *xr_map_new(struct XrCoroutine *coro) {
         return NULL;
 
     xr_obj_header_init_type(&map->hdr, XR_TMAP);
-    map->owner_gc = xr_coro_get_coro_gc(coro);
+    map->owner_gc = xr_coro_get_heap(coro);
 
     map->count = 0;
     map->nentries = 0;
@@ -392,7 +392,7 @@ void xr_map_set(XrMap *map, XrValue key, XrValue value) {
 
     uint8_t key_tt = get_key_tt(key);
     uint32_t hash = hash_value(key);
-    XrCoroGC *gc = map_current_or_owner_gc(map);
+    XrCoroHeap *gc = map_current_or_owner_gc(map);
 
     int32_t ix = map_lookup(map, key, hash, key_tt);
     if (ix >= 0) {
@@ -482,7 +482,7 @@ void xr_map_clear(XrMap *map) {
     if (xr_map_isdummy(map))
         return;
 
-    XrCoroGC *gc = map_current_or_owner_gc(map);
+    XrCoroHeap *gc = map_current_or_owner_gc(map);
     for (uint32_t i = 0; i < map->nentries; i++) {
         XrMapEntry *e = &map->entries[i];
         if (e->key_tt != XR_MAP_ENTRY_NIL_KEY) {
@@ -603,7 +603,7 @@ void xr_map_debug_print(XrMap *map) {
 
 /* ========== GC Integration ========== */
 
-void xr_gc_destroy_map(XrObjHeader *obj, struct XrCoroGC *owning_gc) {
+void xr_gc_destroy_map(XrObjHeader *obj, struct XrCoroHeap *owning_gc) {
     XrMap *map = (XrMap *) obj;
     if (map->flags & XR_MAP_FLAG_WEAK_REGISTERED)
         xr_weak_registry_unregister_map(map_owning_isolate(owning_gc), map);

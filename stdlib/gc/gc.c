@@ -26,7 +26,7 @@
 #include "gc.h"
 #include "../common.h"
 #include "../../src/runtime/xisolate_internal.h"
-#include "../../src/runtime/gc/xcoro_gc.h"
+#include "../../src/runtime/gc/xcoro_heap.h"
 #include "../../src/runtime/object/xmap.h"
 #include "../../src/runtime/xexec_frame.h"
 #include "../../src/coro/xcoroutine.h"
@@ -36,17 +36,17 @@
 
 /* ========== Helper ========== */
 
-static XrCoroGC *get_coro_gc(XrayIsolate *isolate) {
-    XR_DCHECK(isolate != NULL, "get_coro_gc: isolate must not be NULL");
-    // Try current coroutine first (ensure coro_gc exists via lazy init)
+static XrCoroHeap *get_heap(XrayIsolate *isolate) {
+    XR_DCHECK(isolate != NULL, "get_heap: isolate must not be NULL");
+    // Try current coroutine first (ensure heap exists via lazy init)
     XrCoroutine *coro = xr_current_coro(isolate);
     if (coro) {
-        return xr_coro_ensure_gc(coro);
+        return xr_coro_ensure_heap(coro);
     }
     // Fallback to main coroutine
     coro = xr_isolate_get_main_coro(isolate);
     if (coro) {
-        return xr_coro_ensure_gc(coro);
+        return xr_coro_ensure_heap(coro);
     }
     return NULL;
 }
@@ -59,9 +59,9 @@ static XrCoroGC *get_coro_gc(XrayIsolate *isolate) {
 static XrValue gc_collect(XrayIsolate *isolate, XrValue *args, int argc) {
     (void) argc;
     (void) args;
-    XrCoroGC *gc = get_coro_gc(isolate);
+    XrCoroHeap *gc = get_heap(isolate);
     if (gc) {
-        xr_coro_gc_fullgc(gc);
+        xr_coro_heap_collect_cycles(gc);
         return xr_int((int64_t) gc->gc_count);
     }
     return xr_int(0);
@@ -73,7 +73,7 @@ static XrValue gc_collect(XrayIsolate *isolate, XrValue *args, int argc) {
 static XrValue gc_count(XrayIsolate *isolate, XrValue *args, int argc) {
     (void) argc;
     (void) args;
-    XrCoroGC *gc = get_coro_gc(isolate);
+    XrCoroHeap *gc = get_heap(isolate);
     if (gc) {
         double kb = (double) gc->totalbytes / 1024.0;
         return xr_float(kb);
@@ -87,7 +87,7 @@ static XrValue gc_count(XrayIsolate *isolate, XrValue *args, int argc) {
 static XrValue gc_countb(XrayIsolate *isolate, XrValue *args, int argc) {
     (void) argc;
     (void) args;
-    XrCoroGC *gc = get_coro_gc(isolate);
+    XrCoroHeap *gc = get_heap(isolate);
     return gc ? xr_int(gc->totalbytes) : xr_int(0);
 }
 
@@ -99,7 +99,7 @@ static XrValue gc_countb(XrayIsolate *isolate, XrValue *args, int argc) {
 static XrValue gc_disable(XrayIsolate *isolate, XrValue *args, int argc) {
     (void) argc;
     (void) args;
-    XrCoroGC *gc = get_coro_gc(isolate);
+    XrCoroHeap *gc = get_heap(isolate);
     if (gc && gc->gc_disabled < 255) {
         gc->gc_disabled++;
     }
@@ -110,7 +110,7 @@ static XrValue gc_disable(XrayIsolate *isolate, XrValue *args, int argc) {
 static XrValue gc_enable(XrayIsolate *isolate, XrValue *args, int argc) {
     (void) argc;
     (void) args;
-    XrCoroGC *gc = get_coro_gc(isolate);
+    XrCoroHeap *gc = get_heap(isolate);
     if (gc && gc->gc_disabled > 0) {
         gc->gc_disabled--;
     }
@@ -123,7 +123,7 @@ static XrValue gc_enable(XrayIsolate *isolate, XrValue *args, int argc) {
 static XrValue gc_isrunning(XrayIsolate *isolate, XrValue *args, int argc) {
     (void) argc;
     (void) args;
-    XrCoroGC *gc = get_coro_gc(isolate);
+    XrCoroHeap *gc = get_heap(isolate);
     return xr_bool(gc && gc->gc_disabled == 0);
 }
 
@@ -133,7 +133,7 @@ static XrValue gc_isrunning(XrayIsolate *isolate, XrValue *args, int argc) {
 static XrValue gc_cycles(XrayIsolate *isolate, XrValue *args, int argc) {
     (void) argc;
     (void) args;
-    XrCoroGC *gc = get_coro_gc(isolate);
+    XrCoroHeap *gc = get_heap(isolate);
     return gc ? xr_int(gc->gc_count) : xr_int(0);
 }
 
@@ -143,7 +143,7 @@ static XrValue gc_cycles(XrayIsolate *isolate, XrValue *args, int argc) {
 static XrValue gc_objects(XrayIsolate *isolate, XrValue *args, int argc) {
     (void) argc;
     (void) args;
-    XrCoroGC *gc = get_coro_gc(isolate);
+    XrCoroHeap *gc = get_heap(isolate);
     return gc ? xr_int((int64_t) gc->object_count) : xr_int(0);
 }
 
@@ -157,7 +157,7 @@ static XrValue gc_info(XrayIsolate *isolate, XrValue *args, int argc) {
     (void) argc;
     (void) args;
 
-    XrCoroGC *gc = get_coro_gc(isolate);
+    XrCoroHeap *gc = get_heap(isolate);
     XrMap *map = xr_map_new(xr_current_coro(isolate));
 
     if (!gc) {

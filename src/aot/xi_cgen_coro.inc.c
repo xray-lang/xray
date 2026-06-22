@@ -1003,8 +1003,8 @@ static void emit_sync_go_wrapper(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
 
     fprintf(out, "%svoid ", cg_linkage(ctx));
     emit_fname_suffix(ctx, out, prefix, f, "_aot_release");
-    fprintf(out, "(void *frame, struct XrCoroGC *gc) {\n");
-    fprintf(out, "    (void)gc;\n");
+    fprintf(out, "(void *frame, struct XrCoroHeap *heap) {\n");
+    fprintf(out, "    (void)heap;\n");
     fprintf(out, "    ");
     emit_fname_suffix(ctx, out, prefix, f, "_aot_frame");
     fprintf(out, " *f = (");
@@ -3178,13 +3178,13 @@ static void xi_cgen_coro_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *
 
     fprintf(out, "%svoid ", cg_linkage(ctx));
     emit_fname_suffix(ctx, out, prefix, f, "_aot_release");
-    fprintf(out, "(void *frame, struct XrCoroGC *gc) {\n");
+    fprintf(out, "(void *frame, struct XrCoroHeap *heap) {\n");
     fprintf(out, "    ");
     emit_fname_suffix(ctx, out, prefix, f, "_aot_frame");
     fprintf(out, " *f = (");
     emit_fname_suffix(ctx, out, prefix, f, "_aot_frame");
     fprintf(out, " *)frame;\n");
-    fprintf(out, "    (void)gc;\n");
+    fprintf(out, "    (void)heap;\n");
     fprintf(out, "    if (!f)\n        return;\n");
     /* Run any defers still pending when the frame is released (e.g. a coroutine
      * cancelled mid-flight before reaching its return). Idempotent: a normal

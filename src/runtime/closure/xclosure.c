@@ -12,7 +12,7 @@
 #include "../../base/xchecks.h"
 #include "../../coro/xcoroutine.h"
 #include "../gc/xgc.h"
-#include "../gc/xcoro_gc.h"
+#include "../gc/xcoro_heap.h"
 #include "../value/xvalue.h"
 #include "../xisolate_api.h"
 
@@ -28,8 +28,8 @@ XrClosure *xr_closure_new(XrayIsolate *isolate, XrProto *proto, struct XrCorouti
     size_t size = sizeof(XrClosure) + (size_t) nuv * sizeof(XrValue);
 
     XrClosure *closure;
-    if (coro && coro->coro_gc) {
-        closure = (XrClosure *) xr_coro_gc_newobj(coro->coro_gc, XR_TFUNCTION, size);
+    if (coro && coro->heap) {
+        closure = (XrClosure *) xr_coro_heap_new_obj(coro->heap, XR_TFUNCTION, size);
     } else {
         closure = (XrClosure *) xr_gc_alloc(xr_isolate_get_gc(isolate), size, XR_TFUNCTION);
     }
@@ -38,7 +38,7 @@ XrClosure *xr_closure_new(XrayIsolate *isolate, XrProto *proto, struct XrCorouti
     }
 
     xr_obj_header_init_type(&closure->hdr, XR_TFUNCTION);
-    if (coro && coro->coro_gc) {
+    if (coro && coro->heap) {
         XR_OBJ_SET_FLAG(&closure->hdr, XR_OBJ_CYCLE_CANDIDATE);
     }
     closure->proto = proto;
@@ -51,7 +51,7 @@ XrClosure *xr_closure_new(XrayIsolate *isolate, XrProto *proto, struct XrCorouti
     return closure;
 }
 
-XR_FUNC void xr_gc_destroy_closure(XrObjHeader *obj, XrCoroGC *owning_gc) {
+XR_FUNC void xr_gc_destroy_closure(XrObjHeader *obj, XrCoroHeap *owning_gc) {
     if (!obj)
         return;
     XrClosure *closure = (XrClosure *) obj;

@@ -49,7 +49,7 @@
 #include "../src/runtime/gc/xgc.h"
 
 /* ========== Per-Coroutine GC (mark API for traverse callbacks) ========== */
-#include "../src/runtime/gc/xcoro_gc.h"
+#include "../src/runtime/gc/xcoro_heap.h"
 
 /* ========== Error Reporting ========== */
 /* Forward-declare only the error function to avoid header conflicts

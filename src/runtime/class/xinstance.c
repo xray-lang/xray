@@ -79,9 +79,9 @@ void xr_instance_set_field(XrayIsolate *X, XrInstance *inst, const char *name, X
         return;
     }
 
-    xr_rc_release_value(xr_current_coro_gc(), inst->fields[index]);
+    xr_rc_release_value(xr_current_coro_heap(), inst->fields[index]);
     inst->fields[index] = value;
-    XR_GC_BARRIER_BACK_SAFE(xr_current_coro_gc(), inst);
+    XR_GC_BARRIER_BACK_SAFE(xr_current_coro_heap(), inst);
 }
 
 XrValue xr_instance_get_field_by_index(XrInstance *inst, int index) {
@@ -97,9 +97,9 @@ void xr_instance_set_field_by_index(XrInstance *inst, int index, XrValue value) 
     XrClass *klass = xr_instance_get_class(inst);
     XR_DCHECK_BOUNDS(index, klass->field_count, "field index out of bounds");
     (void) klass;
-    xr_rc_release_value(xr_current_coro_gc(), inst->fields[index]);
+    xr_rc_release_value(xr_current_coro_heap(), inst->fields[index]);
     inst->fields[index] = value;
-    XR_GC_BARRIER_BACK_SAFE(xr_current_coro_gc(), inst);
+    XR_GC_BARRIER_BACK_SAFE(xr_current_coro_heap(), inst);
 }
 
 XrValue xr_instance_call_method(XrayIsolate *X, XrInstance *inst, const char *name, XrValue *args,

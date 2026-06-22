@@ -21,7 +21,7 @@
 #include "xchannel.h"
 #include "xcoro_pool.h"
 #include "xcoro_tuning.h"
-#include "../runtime/gc/xcoro_gc.h"
+#include "../runtime/gc/xcoro_heap.h"
 #include "../runtime/gc/xsystem_heap.h"
 #include "xasync.h"
 #include "xbalance.h"

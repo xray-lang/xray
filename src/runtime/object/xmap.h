@@ -37,7 +37,7 @@
 
 typedef struct XrMap {
     XrObjHeader hdr;
-    struct XrCoroGC *owner_gc;
+    struct XrCoroHeap *owner_gc;
     XR_MAP_ABI_FIELDS;
 } XrMap;
 
@@ -103,7 +103,7 @@ static inline XrMapEntry *xr_map_find_string_fast(XrMap *map, XrString *key_str)
     do {                                                                                           \
         XrMapEntry *_e = xr_map_find_string_fast(map, key_str);                                    \
         if (_e) {                                                                                  \
-            xr_rc_release_value(xr_current_coro_gc(), _e->value);                                  \
+            xr_rc_release_value(xr_current_coro_heap(), _e->value);                                \
             _e->value = (_val);                                                                    \
         } else {                                                                                   \
             xr_map_set(map, key_val, _val);                                                        \
@@ -115,12 +115,12 @@ static inline XrMapEntry *xr_map_find_string_fast(XrMap *map, XrString *key_str)
 XR_FUNC XrMap *xr_map_new(struct XrCoroutine *coro);
 XR_FUNC XrMap *xr_map_with_capacity(struct XrCoroutine *coro, uint32_t capacity_hint);
 XR_FUNC uint32_t xr_map_purge_weak_target(XrMap *map, XrObjHeader *target,
-                                          struct XrCoroGC *owning_gc);
+                                          struct XrCoroHeap *owning_gc);
 
-struct XrCoroGC;
+struct XrCoroHeap;
 // Pre-size entries[]/indices[] for `count` entries, charging external-byte
 // accounting to `gc` (used by deep-copy, which runs off the destination coro).
-XR_FUNC bool xr_map_reserve_external(XrMap *map, uint32_t count, struct XrCoroGC *gc);
+XR_FUNC bool xr_map_reserve_external(XrMap *map, uint32_t count, struct XrCoroHeap *gc);
 
 XR_FUNC void xr_map_set(XrMap *map, XrValue key, XrValue value);
 XR_FUNC XrValue xr_map_get(XrMap *map, XrValue key, bool *found);

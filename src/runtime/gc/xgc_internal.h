@@ -8,7 +8,7 @@
  * xgc_internal.h - Global GC interface (minimal)
  *
  * KEY CONCEPT:
- *   - Runtime objects allocated in coroutine heaps (xcoro_gc.c)
+ *   - Runtime objects allocated in coroutine heaps (xcoro_heap.c)
  *   - This file manages: fixedgc list, type function registration
  */
 
@@ -33,7 +33,7 @@ typedef struct XrValue XrValue;
 #define XGC_IDLE 0
 
 /*
- * Color bit definitions are ONLY in xcoro_gc.h (dual-white).
+ * Color bit definitions are ONLY in xcoro_heap.h (dual-white).
  * Global GC manages fixedgc objects that live forever and never
  * participate in mark-sweep, so they don't need color marking.
  */
@@ -42,7 +42,7 @@ typedef struct XrValue XrValue;
 
 struct XrayIsolate;
 typedef struct XrGC XrGC;
-typedef struct XrCoroGC XrCoroGC;
+typedef struct XrCoroHeap XrCoroHeap;
 
 // Maximum GC type ID
 #define XGC_MAX_TYPES 64
@@ -53,7 +53,7 @@ struct XrGC;  // Forward declaration
 struct XrayIsolate;
 struct XrCopyContext;
 
-typedef void (*XrGCDestroyFn)(XrObjHeader *obj, XrCoroGC *owning_gc);
+typedef void (*XrGCDestroyFn)(XrObjHeader *obj, XrCoroHeap *owning_gc);
 typedef XrValue (*XrGCDeepCopyFn)(struct XrCopyContext *ctx, XrObjHeader *obj);
 typedef XrValue (*XrGCToSharedFn)(struct XrayIsolate *X, XrObjHeader *obj);
 typedef struct XrObjHeader **(*XrGCGetGCListFn)(XrObjHeader *obj);
@@ -91,7 +91,7 @@ XR_FUNC void *xr_gc_alloc(XrGC *gc, size_t size, uint8_t type);
 XR_FUNC XrObjHeader *xr_gc_newobj(XrGC *gc, uint8_t type, size_t size);
 XR_FUNC bool xr_gc_type_may_need_finalize(uint8_t type);
 
-/* Compile-time RC dup/drop primitives are inline in xcoro_gc.h
+/* Compile-time RC dup/drop primitives are inline in xcoro_heap.h
  * (xr_rc_retain_value / xr_rc_release_value): one shared implementation
  * for the VM and container runtime. */
 
@@ -103,17 +103,17 @@ extern const XrGCDeepCopyFn g_type_deep_copy_ops[XGC_MAX_TYPES];
 extern const XrGCToSharedFn g_type_to_shared_ops[XGC_MAX_TYPES];
 
 // Destroy functions (non-static, referenced by const tables)
-XR_FUNC void xr_gc_destroy_array(XrObjHeader *obj, XrCoroGC *owning_gc);
-XR_FUNC void xr_gc_destroy_map(XrObjHeader *obj, XrCoroGC *owning_gc);
-XR_FUNC void xr_gc_destroy_set(XrObjHeader *obj, XrCoroGC *owning_gc);
-XR_FUNC void xr_gc_destroy_channel(XrObjHeader *obj, XrCoroGC *owning_gc);
-XR_FUNC void xr_gc_destroy_closure(XrObjHeader *obj, XrCoroGC *owning_gc);
-XR_FUNC void xr_gc_destroy_cell(XrObjHeader *obj, XrCoroGC *owning_gc);
-XR_FUNC void xr_gc_destroy_coroutine(XrObjHeader *obj, XrCoroGC *owning_gc);
-XR_FUNC void xr_gc_destroy_instance(XrObjHeader *obj, XrCoroGC *owning_gc);
-XR_FUNC void xr_gc_destroy_task(XrObjHeader *obj, XrCoroGC *owning_gc);
-XR_FUNC void xr_gc_destroy_work_queue(XrObjHeader *obj, XrCoroGC *owning_gc);
-XR_FUNC void xr_gc_destroy_result_group(XrObjHeader *obj, XrCoroGC *owning_gc);
+XR_FUNC void xr_gc_destroy_array(XrObjHeader *obj, XrCoroHeap *owning_gc);
+XR_FUNC void xr_gc_destroy_map(XrObjHeader *obj, XrCoroHeap *owning_gc);
+XR_FUNC void xr_gc_destroy_set(XrObjHeader *obj, XrCoroHeap *owning_gc);
+XR_FUNC void xr_gc_destroy_channel(XrObjHeader *obj, XrCoroHeap *owning_gc);
+XR_FUNC void xr_gc_destroy_closure(XrObjHeader *obj, XrCoroHeap *owning_gc);
+XR_FUNC void xr_gc_destroy_cell(XrObjHeader *obj, XrCoroHeap *owning_gc);
+XR_FUNC void xr_gc_destroy_coroutine(XrObjHeader *obj, XrCoroHeap *owning_gc);
+XR_FUNC void xr_gc_destroy_instance(XrObjHeader *obj, XrCoroHeap *owning_gc);
+XR_FUNC void xr_gc_destroy_task(XrObjHeader *obj, XrCoroHeap *owning_gc);
+XR_FUNC void xr_gc_destroy_work_queue(XrObjHeader *obj, XrCoroHeap *owning_gc);
+XR_FUNC void xr_gc_destroy_result_group(XrObjHeader *obj, XrCoroHeap *owning_gc);
 // NetConn / NetListener destroy handled by native body descriptors.
 
 /* ========== Debug API ========== */

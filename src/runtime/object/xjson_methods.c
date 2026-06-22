@@ -15,7 +15,7 @@
 #include "xstring.h"
 #include "../class/xinstance.h"
 #include "../gc/xgc.h"
-#include "../gc/xcoro_gc.h"  // xr_rc_retain_value (unified RC primitive)
+#include "../gc/xcoro_heap.h"  // xr_rc_retain_value (unified RC primitive)
 #include "../value/xvalue.h"
 #include "../value/xvalue_format.h"
 #include "../symbol/xsymbol_table.h"

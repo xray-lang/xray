@@ -33,7 +33,7 @@
 #include "../base/xchecks.h"
 #include "../base/xlog.h"
 #include "../runtime/gc/xregion.h"
-#include "../runtime/gc/xcoro_gc.h"
+#include "../runtime/gc/xcoro_heap.h"
 #include "../io/xio_runtime.h"  // xr_io_runtime_new / xr_io_runtime_free
 #include <stdlib.h>
 #include <string.h>
@@ -302,7 +302,7 @@ void xr_worker_destroy(XrWorker *worker) {
     xr_region_flush_block_cache(gc_heap, worker->p.block_cache, &worker->p.block_cache_count);
 
     // Flush Per-Worker CoroGC free list L1 → L2 (runtime-core pool)
-    xr_coro_gc_flush_pool(gc_heap, &worker->p.gc_free_list, &worker->p.gc_free_count);
+    xr_coro_heap_flush_pool(gc_heap, &worker->p.heap_free_list, &worker->p.heap_free_count);
 }
 
 // ========== Runtime Construction / Destruction ==========

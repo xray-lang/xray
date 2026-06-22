@@ -66,11 +66,11 @@ static inline XrValue xr_chan_prepare_send_core(XrRuntimeCore *core, XrValue val
          * scalar arrays, else deep-copy. Either way free the source struct. */
         XrValue moved;
         if (xr_chan_try_move_array_to_transit_core(core, value, &moved)) {
-            xr_coro_gc_rc_destroy(xr_current_coro_gc(), obj); /* free emptied source struct */
+            xr_coro_heap_destroy_obj(xr_current_coro_heap(), obj); /* free emptied source struct */
             return moved;
         }
         XrValue copied = xr_deep_copy_to_transit_core(core, value);
-        xr_coro_gc_rc_destroy(xr_current_coro_gc(), obj);
+        xr_coro_heap_destroy_obj(xr_current_coro_heap(), obj);
         return copied;
     }
     if (coro_local) {
@@ -80,7 +80,7 @@ static inline XrValue xr_chan_prepare_send_core(XrRuntimeCore *core, XrValue val
     /* Shared / pointer-shared values: original copy-then-drop order. */
     XrValue copied = xr_deep_copy_to_transit_core(core, value);
     if (obj && xr_obj_drop_is_last((XrObjHeader *) obj))
-        xr_coro_gc_rc_destroy(xr_current_coro_gc(), obj);
+        xr_coro_heap_destroy_obj(xr_current_coro_heap(), obj);
     return copied;
 }
 

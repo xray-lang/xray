@@ -32,7 +32,7 @@ typedef struct XrClass XrClass;
 typedef struct XrInstance XrInstance;
 typedef struct XrArena XrArena;
 typedef struct XrReflectCache XrReflectCache;
-typedef struct XrCoroGC XrCoroGC;
+typedef struct XrCoroHeap XrCoroHeap;
 typedef struct XrCopyContext XrCopyContext;
 
 /* ========== Native Body Descriptor ========== */

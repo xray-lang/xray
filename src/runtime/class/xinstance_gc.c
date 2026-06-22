@@ -12,9 +12,9 @@
 
 #include "../../base/xchecks.h"
 #include "../../base/xmalloc.h"
-#include "../gc/xcoro_gc.h"
+#include "../gc/xcoro_heap.h"
 
-void xr_gc_destroy_instance(XrObjHeader *obj, struct XrCoroGC *owning_gc) {
+void xr_gc_destroy_instance(XrObjHeader *obj, struct XrCoroHeap *owning_gc) {
     if (!obj)
         return;
     XrInstance *inst = (XrInstance *) obj;

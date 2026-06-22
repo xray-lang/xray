@@ -25,7 +25,7 @@
 #include "xchannel.h"
 #include "xchannel_ops.h"
 #include "xtimer_wheel.h"
-#include "../runtime/gc/xcoro_gc.h"
+#include "../runtime/gc/xcoro_heap.h"
 #include "../runtime/object/xexception.h"
 #include "xcoro_registry.h"
 #include "xtask.h"
@@ -42,7 +42,7 @@
 
 // GC safepoint: runs a GC step and checks for cancellation.
 // Returns 0 to continue, non-zero to request the coroutine to stop.
-int xr_coro_gc_safepoint(XrCoroutine *coro) {
+int xr_coro_heap_safepoint(XrCoroutine *coro) {
     if (!coro)
         return 0;
 
@@ -190,9 +190,9 @@ static const XrCoroBackendVTable native_backend_vtable = {
 };
 
 // Common coroutine initialization after object allocation.
-// Handles: flags, coro_gc, backend execution storage, timer, GC fields, ID.
+// Handles: flags, heap, backend execution storage, timer, GC fields, ID.
 // need_stack: true for closure/cfunc coroutines, false for native callbacks.
-// Returns false on allocation failure (coro_gc/stack/frames cleaned up).
+// Returns false on allocation failure (heap/stack/frames cleaned up).
 //
 // Optimization: bulk memset instead of 47 individual field resets.
 // XR_TAG_NULL == 0, so memset(0) automatically produces xr_null() for XrValue fields.
@@ -378,7 +378,7 @@ static bool xr_coro_init_shell_owner(XrCoroutine *coro, XrayIsolate *X, XrRuntim
         // Save fields set by pool_get, memset the rest, then restore.
         const XrCoroBackendVTable *saved_backend = coro->backend;
         void *saved_backend_state = coro->backend_state;
-        struct XrCoroGC *saved_coro_gc = coro->coro_gc;
+        struct XrCoroHeap *saved_heap = coro->heap;
         uint16_t saved_pool_bits =
             coro->gc_flags &
             (XR_CORO_GC_FROM_POOL | XR_CORO_GC_BACKEND_STATE_OWNED | XR_CORO_GC_LIGHTWEIGHT);
@@ -389,7 +389,7 @@ static bool xr_coro_init_shell_owner(XrCoroutine *coro, XrayIsolate *X, XrRuntim
 
         coro->backend = saved_backend;
         coro->backend_state = saved_backend_state;
-        coro->coro_gc = saved_coro_gc;
+        coro->heap = saved_heap;
         coro->gc_flags = saved_pool_bits;
         coro->ext = saved_ext;
         // Reset ext fields that must not persist across lifetimes
@@ -583,10 +583,10 @@ void xr_coro_free(XrCoroutine *coro) {
 
     // Free GC context — atomic exchange to prevent double-free race
     {
-        XrCoroGC *gc = atomic_exchange_explicit((_Atomic(XrCoroGC *) *) &coro->coro_gc, NULL,
-                                                memory_order_acq_rel);
+        XrCoroHeap *gc = atomic_exchange_explicit((_Atomic(XrCoroHeap *) *) &coro->heap, NULL,
+                                                  memory_order_acq_rel);
         if (gc)
-            xr_coro_gc_destroy(gc);
+            xr_coro_heap_destroy(gc);
     }
 
     // Cold extension (io_buf, locals, watched_by)
@@ -617,7 +617,7 @@ void xr_coro_recycle_local(XrWorker *worker, XrCoroutine *coro) {
     if (!worker || !coro)
         return;
     XR_DCHECK(xr_coro_flags_has(coro, XR_CORO_FLG_DONE), "recycle_local: coro not done");
-    XR_DCHECK(!coro->coro_gc || !coro->coro_gc->in_gc, "recycle_local: GC active during recycle");
+    XR_DCHECK(!coro->heap || !coro->heap->in_gc, "recycle_local: GC active during recycle");
 
     // Timer nodes are intrusive wheel entries. Reuse is safe only after the
     // owner wheel has physically unlinked any active/zombie node.
@@ -630,10 +630,10 @@ void xr_coro_recycle_local(XrWorker *worker, XrCoroutine *coro) {
         xr_io_wait_token_cancel(&coro->ext->wait.io_token);
 
     // Reset GC context: finalize objects, bulk free Region blocks, reset state.
-    // Uses xr_coro_gc_reset which handles large objects and finalizers
+    // Uses xr_coro_heap_reset which handles large objects and finalizers
     // correctly (the previous partial reset skipped those).
-    if (coro->coro_gc) {
-        xr_coro_gc_reset(coro->coro_gc, coro);
+    if (coro->heap) {
+        xr_coro_heap_reset(coro->heap, coro);
     }
     if (!xr_coro_backend_prepare_recycle(coro, worker)) {
         xr_coro_destroy(coro);
@@ -660,7 +660,7 @@ void xr_coro_recycle_local(XrWorker *worker, XrCoroutine *coro) {
     // Recycled shells take the clean path in xr_coro_init_shell, which skips
     // the dirty-path ext resets — so the per-lifetime ext fields must be
     // dropped here. locals lives in this coroutine's heap, which
-    // xr_coro_gc_reset above just released: a stale pointer would be a UAF
+    // xr_coro_heap_reset above just released: a stale pointer would be a UAF
     // for the next lifetime's Coro.setLocal.
     if (coro->ext) {
         coro->ext->locals = NULL;
@@ -839,7 +839,7 @@ void xr_runtime_wake_channel_all(XrRuntime *runtime, void *channel) {
 // ========== GC Integration ==========
 
 // GC destructor: free coroutine internal resources
-void xr_gc_destroy_coroutine(XrObjHeader *obj, struct XrCoroGC *owning_gc) {
+void xr_gc_destroy_coroutine(XrObjHeader *obj, struct XrCoroHeap *owning_gc) {
     (void) owning_gc;
     xr_coro_free((XrCoroutine *) obj);
 }

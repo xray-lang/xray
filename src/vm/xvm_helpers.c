@@ -15,7 +15,7 @@
 #include "../base/xchecks.h"
 #include "../coro/xworker.h"
 #include "../runtime/gc/xgc.h"
-#include "../runtime/gc/xcoro_gc.h"
+#include "../runtime/gc/xcoro_heap.h"
 #include "../runtime/xerror_codes.h"
 #include "../runtime/value/xstruct_layout.h"
 #include "../base/xsource_cache.h"

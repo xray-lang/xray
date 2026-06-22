@@ -274,8 +274,8 @@ typedef struct XrProc {
     int block_cache_count;                     // Number of cached blocks
 
     /* === CoroGC Free List (avoids malloc/free per coroutine that needs heap) === */
-    struct XrCoroGC *gc_free_list;  // Free list of XrCoroGC structs (320B each)
-    int gc_free_count;              // Number of XrCoroGC in free list
+    struct XrCoroHeap *heap_free_list;  // Free list of XrCoroHeap structs (320B each)
+    int heap_free_count;                // Number of XrCoroHeap in free list
 
     /* === Per-P Coroutine ID Cache (avoids atomic_fetch_add per spawn) === */
     int id_cache;      // Next available coroutine ID

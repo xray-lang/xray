@@ -35,16 +35,16 @@
 
 static void sysheap_gc_pool_drain(XrSystemHeap *heap) {
     XR_DCHECK(heap != NULL, "sysheap_gc_pool_drain: NULL heap");
-    xr_mutex_lock(&heap->gc_pool_mu);
-    struct XrCoroGC *gc = heap->gc_pool_head;
+    xr_mutex_lock(&heap->coro_heap_pool_mu);
+    struct XrCoroHeap *gc = heap->coro_heap_pool_head;
     while (gc) {
-        struct XrCoroGC *next = *(struct XrCoroGC **) gc;
+        struct XrCoroHeap *next = *(struct XrCoroHeap **) gc;
         xr_free(gc);
         gc = next;
     }
-    heap->gc_pool_head = NULL;
-    heap->gc_pool_count = 0;
-    xr_mutex_unlock(&heap->gc_pool_mu);
+    heap->coro_heap_pool_head = NULL;
+    heap->coro_heap_pool_count = 0;
+    xr_mutex_unlock(&heap->coro_heap_pool_mu);
 }
 
 static void sysheap_block_pool_drain(XrSystemHeap *heap) {
@@ -125,10 +125,10 @@ bool xr_sysheap_init(XrSystemHeap *heap, const XrSysHeapConfig *config) {
     // Initialize class arena
     xr_arena_init(&heap->class_arena, class_arena_size);
 
-    // Initialize XrCoroGC L2 pool
-    xr_mutex_init(&heap->gc_pool_mu);
-    heap->gc_pool_head = NULL;
-    heap->gc_pool_count = 0;
+    // Initialize XrCoroHeap L2 pool
+    xr_mutex_init(&heap->coro_heap_pool_mu);
+    heap->coro_heap_pool_head = NULL;
+    heap->coro_heap_pool_count = 0;
 
     // Initialize Region block L2 pool
     xr_mutex_init(&heap->block_pool_mu);
@@ -149,7 +149,7 @@ void xr_sysheap_destroy_coro_storage(XrSystemHeap *heap) {
         heap->coro_pool = NULL;
     }
 
-    // Drain XrCoroGC L2 pool after coroutine pool teardown. Coroutine
+    // Drain XrCoroHeap L2 pool after coroutine pool teardown. Coroutine
     // finalizers may recycle GC structs back into this pool while their
     // shells are being released.
     sysheap_gc_pool_drain(heap);
@@ -164,7 +164,7 @@ void xr_sysheap_destroy(XrSystemHeap *heap) {
         return;
 
     xr_sysheap_destroy_coro_storage(heap);
-    xr_mutex_destroy(&heap->gc_pool_mu);
+    xr_mutex_destroy(&heap->coro_heap_pool_mu);
     xr_mutex_destroy(&heap->block_pool_mu);
 
     // Destroy class arena
@@ -173,33 +173,33 @@ void xr_sysheap_destroy(XrSystemHeap *heap) {
     heap->initialized = false;
 }
 
-/* ========== XrCoroGC Struct Pool (L2) ========== */
+/* ========== XrCoroHeap Struct Pool (L2) ========== */
 
-struct XrCoroGC *xr_sysheap_gc_pool_pop(XrSystemHeap *heap) {
+struct XrCoroHeap *xr_sysheap_coro_heap_pool_pop(XrSystemHeap *heap) {
     if (!heap || !heap->initialized)
         return NULL;
-    xr_mutex_lock(&heap->gc_pool_mu);
-    struct XrCoroGC *gc = heap->gc_pool_head;
+    xr_mutex_lock(&heap->coro_heap_pool_mu);
+    struct XrCoroHeap *gc = heap->coro_heap_pool_head;
     if (gc) {
-        heap->gc_pool_head = *(struct XrCoroGC **) gc;
-        heap->gc_pool_count--;
+        heap->coro_heap_pool_head = *(struct XrCoroHeap **) gc;
+        heap->coro_heap_pool_count--;
     }
-    xr_mutex_unlock(&heap->gc_pool_mu);
+    xr_mutex_unlock(&heap->coro_heap_pool_mu);
     return gc;
 }
 
-bool xr_sysheap_gc_pool_push(XrSystemHeap *heap, struct XrCoroGC *gc) {
+bool xr_sysheap_coro_heap_pool_push(XrSystemHeap *heap, struct XrCoroHeap *gc) {
     if (!heap || !heap->initialized || !gc)
         return false;
-    xr_mutex_lock(&heap->gc_pool_mu);
-    if (heap->gc_pool_count >= XR_SYSHEAP_GC_POOL_MAX) {
-        xr_mutex_unlock(&heap->gc_pool_mu);
+    xr_mutex_lock(&heap->coro_heap_pool_mu);
+    if (heap->coro_heap_pool_count >= XR_SYSHEAP_CORO_HEAP_POOL_MAX) {
+        xr_mutex_unlock(&heap->coro_heap_pool_mu);
         return false;
     }
-    *(struct XrCoroGC **) gc = heap->gc_pool_head;
-    heap->gc_pool_head = gc;
-    heap->gc_pool_count++;
-    xr_mutex_unlock(&heap->gc_pool_mu);
+    *(struct XrCoroHeap **) gc = heap->coro_heap_pool_head;
+    heap->coro_heap_pool_head = gc;
+    heap->coro_heap_pool_count++;
+    xr_mutex_unlock(&heap->coro_heap_pool_mu);
     return true;
 }
 

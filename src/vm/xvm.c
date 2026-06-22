@@ -18,7 +18,7 @@
  *
  * RELATED MODULES:
  *   - xworker.c: Coroutine scheduling and execution
- *   - xcoro_gc.c: Per-coroutine garbage collection
+ *   - xcoro_heap.c: Per-coroutine garbage collection
  *   - xmodule.c: Module loading and symbol resolution
  */
 
@@ -55,7 +55,7 @@
 #include "../runtime/xglobal_dict.h"
 #include "../runtime/gc/xsystem_heap.h"
 
-#include "../runtime/gc/xcoro_gc.h"
+#include "../runtime/gc/xcoro_heap.h"
 #include "../runtime/gc/xalloc_unified.h"
 #include "../ir/xi_ffi.h"
 

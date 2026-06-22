@@ -21,7 +21,7 @@
 #include "../runtime/value/xvalue.h"
 
 struct XrayIsolate;
-struct XrCoroGC;
+struct XrCoroHeap;
 struct XrCoroutine;
 struct XrRuntime;
 struct XrRuntimeCore;
@@ -74,7 +74,7 @@ XR_FUNC void xr_result_group_close(XrResultGroup *g);
 XR_FUNC bool xr_result_group_is_closed(XrResultGroup *g);
 XR_FUNC uint64_t xr_result_group_length(XrResultGroup *g);
 XR_FUNC uint64_t xr_result_group_pending_count(XrResultGroup *g);
-XR_FUNC void xr_gc_destroy_result_group(XrObjHeader *obj, struct XrCoroGC *owning_gc);
+XR_FUNC void xr_gc_destroy_result_group(XrObjHeader *obj, struct XrCoroHeap *owning_gc);
 XR_FUNC void xr_result_group_register_native_type(struct XrayIsolate *X);
 
 static inline bool xr_value_is_result_group(XrValue v) {

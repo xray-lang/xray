@@ -28,7 +28,7 @@
 #include "../../base/xdefs.h"
 
 struct XrCoroutine;
-struct XrCoroGC;
+struct XrCoroHeap;
 struct XrayIsolate;
 
 /* ========== Object Layout ==========

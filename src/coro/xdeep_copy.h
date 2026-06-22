@@ -83,13 +83,13 @@ typedef struct XrSeenArena {
     XrSeenEntry entries[XR_SEEN_ARENA_BLOCK_SIZE];
 } XrSeenArena;
 
-struct XrCoroGC;
+struct XrCoroHeap;
 
 typedef struct XrCopyContext {
     struct XrRuntimeCore *core;
-    struct XrGC *dst_gc;           // fixed GC fallback
-    struct XrCoroGC *dst_coro_gc;  // Region heap (preferred when non-NULL)
-    bool to_transit;               // channel-transit copy: sysheap + XR_OBJ_TRANSIT
+    struct XrGC *dst_gc;          // fixed GC fallback
+    struct XrCoroHeap *dst_heap;  // Region heap (preferred when non-NULL)
+    bool to_transit;              // channel-transit copy: sysheap + XR_OBJ_TRANSIT
     XrSeenEntry **buckets;
     int bucket_count;
     int objects_copied;

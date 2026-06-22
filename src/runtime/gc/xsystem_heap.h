@@ -11,8 +11,8 @@
  *   Manages objects that outlive individual coroutines.
  *   These objects are NOT subject to per-coroutine GC.
  *
- * VS xcoro_gc (Per-Coroutine GC):
- *   - xcoro_gc: Per-coroutine Region bump + reference counting, freed when coro ends
+ * VS xcoro_heap (Per-Coroutine GC):
+ *   - xcoro_heap: Per-coroutine Region bump + reference counting, freed when coro ends
  *   - xsystem_heap: Global, Arena-allocated (never freed) or ref-counted
  *
  * OBJECT TYPES:
@@ -46,7 +46,7 @@ struct XrCoroutine;
 struct XrClass;
 struct XrModule;
 struct XrCoroStructPool;
-struct XrCoroGC;
+struct XrCoroHeap;
 
 /* ========== Configuration ========== */
 
@@ -89,14 +89,14 @@ typedef struct XrSystemHeap {
     XrArena class_arena;                 // Class/module arena
     XrSysHeapStats stats;
 
-    /* Per-isolate L2 pool for recycled XrCoroGC structs. The L1 cache
-     * lives on each worker (XrProc.gc_free_list); on overflow or worker
+    /* Per-isolate L2 pool for recycled XrCoroHeap structs. The L1 cache
+     * lives on each worker (XrProc.heap_free_list); on overflow or worker
      * teardown structs are pushed here, and L1 misses pop from here
      * before falling back to xr_malloc. Lock guards the linked stack
      * using the first sizeof(void*) bytes of each free struct. */
-    xr_mutex_t gc_pool_mu;
-    struct XrCoroGC *gc_pool_head;
-    int gc_pool_count;
+    xr_mutex_t coro_heap_pool_mu;
+    struct XrCoroHeap *coro_heap_pool_head;
+    int coro_heap_pool_count;
 
     /* Per-isolate L2 cache of recycled 16KB Region blocks. The L1 cache lives
      * on each worker (XrProc.block_cache); on overflow or worker teardown
@@ -149,16 +149,16 @@ XR_FUNC void *xr_sysheap_alloc_shared(XrSystemHeap *heap, size_t size, uint8_t t
 // Free shared object (handles both malloc and mmap)
 XR_FUNC void xr_sysheap_free_shared(void *ptr, size_t size);
 
-/* ========== XrCoroGC Struct Pool (L2) ==========
+/* ========== XrCoroHeap Struct Pool (L2) ==========
  *
- * Recycled XrCoroGC structs land here when the per-worker L1 cache is
+ * Recycled XrCoroHeap structs land here when the per-worker L1 cache is
  * full or a worker is destroyed. Pool capacity is bounded; structs that
  * don't fit are returned to malloc/free. */
 
-#define XR_SYSHEAP_GC_POOL_MAX 256
+#define XR_SYSHEAP_CORO_HEAP_POOL_MAX 256
 
-XR_FUNC struct XrCoroGC *xr_sysheap_gc_pool_pop(XrSystemHeap *heap);
-XR_FUNC bool xr_sysheap_gc_pool_push(XrSystemHeap *heap, struct XrCoroGC *gc);
+XR_FUNC struct XrCoroHeap *xr_sysheap_coro_heap_pool_pop(XrSystemHeap *heap);
+XR_FUNC bool xr_sysheap_coro_heap_pool_push(XrSystemHeap *heap, struct XrCoroHeap *gc);
 
 /* ========== Region Block Pool (L2) ==========
  *

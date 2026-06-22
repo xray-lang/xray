@@ -17,7 +17,7 @@
 #include "../value/xvalue_hash.h"
 #include "../gc/xgc.h"
 #include "../gc/xalloc_unified.h"
-#include "../gc/xcoro_gc.h"
+#include "../gc/xcoro_heap.h"
 #include "../class/xclass.h"
 #include "../class/xclass_builder.h"
 #include "../class/xclass_system.h"
@@ -138,7 +138,7 @@ void xr_tuple_set(XrTuple *t, uint16_t index, XrValue value) {
     XR_DCHECK(index < arity, "xr_tuple_set: index out of range");
     if (!t || index >= arity)
         return;
-    xr_rc_release_value(xr_current_coro_gc(), t->elements[index]);
+    xr_rc_release_value(xr_current_coro_heap(), t->elements[index]);
     t->elements[index] = value;
 }
 

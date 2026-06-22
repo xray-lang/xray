@@ -526,8 +526,8 @@ static void worker_sleep_timeout_callback(void *arg) {
         return;
     }
 
-    // Note: coro_gc may be NULL legitimately (lazy allocation).
-    // Do NOT check coro_gc here — it's not a valid recycle indicator.
+    // Note: heap may be NULL legitimately (lazy allocation).
+    // Do NOT check heap here — it's not a valid recycle indicator.
 
     // Check if coroutine already done (avoid waking completed coroutine)
     if (xr_coro_flags_has(coro, XR_CORO_FLG_DONE)) {

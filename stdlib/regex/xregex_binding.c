@@ -32,7 +32,7 @@
 #include "../../src/runtime/xisolate_internal.h"
 #include "../../src/runtime/xisolate_api.h"
 #include "../../src/coro/xcoroutine.h"
-#include "../../src/runtime/gc/xcoro_gc.h"
+#include "../../src/runtime/gc/xcoro_heap.h"
 
 /* ========================================================================
  * Helper Functions
@@ -100,7 +100,7 @@ XrValue xr_regex_make_match_object(XrayIsolate *isolate, const char *text, XrMat
     /* Temporarily disable GC: multiple allocations below (Instance,
      * String, Array) are not rooted from the VM stack. */
     XrCoroutine *coro = xr_current_coro(isolate);
-    XrCoroGC *gc = coro ? coro->coro_gc : NULL;
+    XrCoroHeap *gc = coro ? coro->heap : NULL;
     if (gc)
         gc->gc_disabled++;
 

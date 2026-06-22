@@ -25,7 +25,7 @@
 #include "../gc/xgc_header.h"
 #include "../gc/xgc.h"
 #include "../gc/xalloc_unified.h"
-#include "../gc/xcoro_gc.h"
+#include "../gc/xcoro_heap.h"
 #include "../class/xclass.h"
 #include "../class/xclass_builder.h"
 #include "../class/xclass_system.h"
@@ -409,7 +409,7 @@ static void iterator_body_destroy(void *body) {
             break;
     }
     if (src)
-        xr_rc_release(xr_coro_get_coro_gc(iter->coro), src);
+        xr_rc_release(xr_coro_get_heap(iter->coro), src);
 }
 
 static XrNativeBodyDesc g_iterator_body_desc = {

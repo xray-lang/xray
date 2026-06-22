@@ -173,7 +173,7 @@ vmcase(OP_CELL_SET) {
         XrValue old = cell->value;
         cell->value = R(b);
         XrCoroutine *_co = (XrCoroutine *) VM_CURRENT_CORO;
-        xr_rc_release_value(_co ? _co->coro_gc : NULL, old);
+        xr_rc_release_value(_co ? _co->heap : NULL, old);
     }
     vmbreak;
 }

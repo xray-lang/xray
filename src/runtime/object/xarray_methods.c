@@ -30,7 +30,7 @@
 #include "../value/xvalue_format.h"
 #include "../gc/xalloc_unified.h"
 #include "../gc/xgc.h"
-#include "../gc/xcoro_gc.h"
+#include "../gc/xcoro_heap.h"
 #include "../xisolate_api.h"
 #include "../../coro/xcoroutine.h"
 #include "../../base/xchecks.h"
@@ -68,7 +68,7 @@ static XrValue m_push(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
             ((XrValue *) arr->data)[arr->length++] = args[0];
             XR_ARRAY_MARK_GC_PTRS(arr, args[0]);
             /* Notify incremental GC the (possibly black) container was mutated. */
-            XR_GC_BARRIER_BACK_SAFE(xr_current_coro_gc(), arr);
+            XR_GC_BARRIER_BACK_SAFE(xr_current_coro_heap(), arr);
         } else {
             xr_array_set_element(arr, arr->length++, args[0]);
         }

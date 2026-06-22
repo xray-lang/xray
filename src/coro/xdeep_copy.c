@@ -15,7 +15,7 @@
 #include "../runtime/core/xr_runtime_core.h"
 #include "../runtime/gc/xgc.h"
 #include "../runtime/gc/xgc_internal.h"
-#include "../runtime/gc/xcoro_gc.h"
+#include "../runtime/gc/xcoro_heap.h"
 #include "../runtime/gc/xalloc_unified.h"
 #include "../runtime/gc/xsystem_heap.h"
 #include "../runtime/object/xarray.h"
@@ -61,7 +61,7 @@ static void copy_context_init_common(XrCopyContext *ctx, XrRuntimeCore *core, Xr
     XR_DCHECK(core != NULL, "copy_context_init: NULL runtime core");
     ctx->core = core;
     ctx->dst_gc = dst_gc ? dst_gc : &core->gc;
-    ctx->dst_coro_gc = NULL;
+    ctx->dst_heap = NULL;
     ctx->to_transit = false;
     ctx->buckets = NULL;
     ctx->bucket_count = 0;
@@ -100,8 +100,8 @@ static inline void *copy_ctx_alloc(XrCopyContext *ctx, size_t size, uint8_t type
     if (ctx->to_transit) {
         return copy_ctx_alloc_transit(ctx, size, type);
     }
-    if (ctx->dst_coro_gc) {
-        return xr_coro_gc_newobj(ctx->dst_coro_gc, type, size);
+    if (ctx->dst_heap) {
+        return xr_coro_heap_new_obj(ctx->dst_heap, type, size);
     }
     return xr_gc_alloc(ctx->dst_gc, size, type);
 }
@@ -244,8 +244,8 @@ XrValue xr_deep_copy_array_with_ctx(XrCopyContext *ctx, XrObjHeader *obj) {
         memset(new_arr->data, 0, alloc_size);
         /* Notify destination GC about the external malloc'd data buffer
          * so sweep's sub_external (via xr_gc_destroy_array) balances. */
-        if (ctx->dst_coro_gc) {
-            xr_gc_add_external(ctx->dst_coro_gc, (int64_t) alloc_size);
+        if (ctx->dst_heap) {
+            xr_gc_add_external(ctx->dst_heap, (int64_t) alloc_size);
         }
     } else {
         new_arr->data = NULL;
@@ -288,7 +288,7 @@ XrValue xr_deep_copy_map_with_ctx(XrCopyContext *ctx, XrObjHeader *obj) {
     new_map->ctrl = NULL;
     new_map->indices = NULL;
     new_map->entries = NULL;
-    new_map->owner_gc = ctx->dst_coro_gc;
+    new_map->owner_gc = ctx->dst_heap;
     new_map->flags = XR_MAP_FLAG_DUMMY;
     if (map->flags & XR_MAP_FLAG_WEAK)
         new_map->flags |= XR_MAP_FLAG_WEAK;
@@ -312,7 +312,7 @@ XrValue xr_deep_copy_map_with_ctx(XrCopyContext *ctx, XrObjHeader *obj) {
      * without this the awaiting coroutine underflows when it frees a
      * deep-copied map (e.g. a Json result handed back from `await all`).
      * Pre-sizing also means the xr_map_set fill loop never resizes. */
-    if (!xr_map_reserve_external(new_map, map->count, ctx->dst_coro_gc))
+    if (!xr_map_reserve_external(new_map, map->count, ctx->dst_heap))
         return XR_NULL_VAL;
 
     xr_copy_context_record(ctx, map, result);
@@ -343,7 +343,7 @@ XrValue xr_deep_copy_closure_with_ctx(XrCopyContext *ctx, XrObjHeader *obj) {
 
     new_closure->proto = closure->proto;
     new_closure->upval_count = closure->upval_count;
-    if (ctx->dst_coro_gc)
+    if (ctx->dst_heap)
         XR_OBJ_SET_FLAG(&new_closure->hdr, XR_OBJ_CYCLE_CANDIDATE);
     for (uint16_t i = 0; i < new_closure->upval_count; i++)
         new_closure->upvals[i] = XR_NULL_VAL;
@@ -370,7 +370,7 @@ XrValue xr_deep_copy_cell_with_ctx(XrCopyContext *ctx, XrObjHeader *obj) {
     XrCell *new_cell = (XrCell *) copy_ctx_alloc(ctx, sizeof(XrCell), XR_TCELL);
     if (!new_cell)
         return XR_NULL_VAL;
-    if (ctx->dst_coro_gc)
+    if (ctx->dst_heap)
         XR_OBJ_SET_FLAG(&new_cell->hdr, XR_OBJ_CYCLE_CANDIDATE);
     new_cell->value = XR_NULL_VAL;
 
@@ -394,7 +394,7 @@ XrValue xr_deep_copy_set_with_ctx(XrCopyContext *ctx, XrObjHeader *obj) {
     if (!new_set)
         return XR_NULL_VAL;
     xr_set_init_inplace(new_set);
-    new_set->owner_gc = ctx->dst_coro_gc;
+    new_set->owner_gc = ctx->dst_heap;
     if (set->flags & XR_SET_FLAG_WEAK)
         new_set->flags |= XR_SET_FLAG_WEAK;
     new_set->elem_tid = set->elem_tid;
@@ -624,7 +624,7 @@ bool xr_chan_try_move_array_to_transit_core(XrRuntimeCore *core, XrValue value, 
     src->data = NULL;
     src->capacity = 0;
     src->length = 0;
-    xr_gc_sub_external(xr_current_coro_gc(), (int64_t) data_bytes);
+    xr_gc_sub_external(xr_current_coro_heap(), (int64_t) data_bytes);
 
     *out = XR_FROM_PTR(t);
     return true;
@@ -651,10 +651,10 @@ bool xr_chan_try_adopt_array_from_transit_core(XrValue value, struct XrCoroutine
     if (!array_is_movable_scalar(t))
         return false;
 
-    XrCoroGC *dst_gc = xr_coro_ensure_gc(recv_coro);
+    XrCoroHeap *dst_gc = xr_coro_ensure_heap(recv_coro);
     if (!dst_gc)
         return false;
-    XrObjHeader *rh = xr_coro_gc_newobj(dst_gc, XR_TARRAY, sizeof(XrArray));
+    XrObjHeader *rh = xr_coro_heap_new_obj(dst_gc, XR_TARRAY, sizeof(XrArray));
     if (!rh)
         return false; /* OOM: caller falls back to the deep-copy path */
 
@@ -734,16 +734,16 @@ XrValue xr_deep_copy_to_coro_core(XrRuntimeCore *core, XrValue value,
     if (xr_value_copy_kind(value) != XR_COPY_DEEP)
         return value;
     /* The value must land in the RECEIVER's private coro heap so the
-     * receiver's own dup/drop (which resolve the gc via xr_current_coro_gc =
-     * current_coro->coro_gc) reclaim it. A spawned coroutine that only ever
-     * receives never triggers lazy gc creation, leaving coro_gc NULL; keying
+     * receiver's own dup/drop (which resolve the gc via xr_current_coro_heap =
+     * current_coro->heap) reclaim it. A spawned coroutine that only ever
+     * receives never triggers lazy gc creation, leaving heap NULL; keying
      * on the field would fall back to the shared isolate heap while the
      * receiver's drop targets its own (now NULL) gc — leaking the object and
-     * its data buffer. xr_coro_ensure_gc creates the heap on demand. */
+     * its data buffer. xr_coro_ensure_heap creates the heap on demand. */
     if (dst_coro) {
         XrCopyContext ctx;
         xr_copy_context_init_core(&ctx, core, &core->gc);
-        ctx.dst_coro_gc = xr_coro_ensure_gc(dst_coro);
+        ctx.dst_heap = xr_coro_ensure_heap(dst_coro);
         XrValue result = xr_deep_copy_with_ctx(&ctx, value);
         xr_copy_context_cleanup(&ctx);
         return result;
@@ -769,7 +769,7 @@ XrValue xr_deep_copy_to_coro_counted_core(XrRuntimeCore *core, XrValue value,
     if (dst_coro) {
         XrCopyContext ctx;
         xr_copy_context_init_core(&ctx, core, &core->gc);
-        ctx.dst_coro_gc = xr_coro_ensure_gc(dst_coro);
+        ctx.dst_heap = xr_coro_ensure_heap(dst_coro);
         XrValue result = xr_deep_copy_with_ctx(&ctx, value);
         if (out_count)
             *out_count = ctx.objects_copied;

@@ -5,10 +5,10 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xcoro_gc.c - Per-Coroutine Memory Manager (Region bump + RC reclamation)
+ * xcoro_heap.c - Per-Coroutine Memory Manager (Region bump + RC reclamation)
  */
 
-#include "xcoro_gc.h"
+#include "xcoro_heap.h"
 #include "xgc_internal.h"
 #include "xweak_registry.h"
 #include "../../coro/xcoroutine.h"
@@ -38,12 +38,12 @@
 
 /* ========== GC Struct Two-Level Pool ========== */
 /*
- * L1: per-Worker gc_free_list (lock-free, max 32).
+ * L1: per-Worker heap_free_list (lock-free, max 32).
  * L2: per-isolate stack on XrSystemHeap (mutex protected).
  *
  * L1 miss → L2 → xr_malloc.
  * L1 full → L2 → xr_free if L2 full.
- * Worker exit flushes L1 → L2 (xr_coro_gc_flush_pool).
+ * Worker exit flushes L1 → L2 (xr_coro_heap_flush_pool).
  *
  * The L2 pool was previously a process-wide static (g_gc_pool_*), which
  * crossed isolate boundaries and made teardown ordering observable
@@ -60,7 +60,7 @@ static inline XrSystemHeap *gc_pool_heap_from_coro(struct XrCoroutine *coro) {
     return (coro && coro->core) ? coro->core->sys_heap : NULL;
 }
 
-static inline XrSystemHeap *gc_pool_heap_from_gc(XrCoroGC *gc) {
+static inline XrSystemHeap *gc_pool_heap_from_gc(XrCoroHeap *gc) {
     return (gc && gc->owner) ? gc_pool_heap_from_coro(gc->owner) : NULL;
 }
 
@@ -68,15 +68,15 @@ static inline XrSystemHeap *gc_pool_heap_from_gc(XrCoroGC *gc) {
 
 // Per-type GC capability lookups from the runtime core.
 
-static inline XrayIsolate *gc_get_isolate(XrCoroGC *gc) {
+static inline XrayIsolate *gc_get_isolate(XrCoroHeap *gc) {
     return (gc && gc->owner) ? gc->owner->isolate : NULL;
 }
 
-static inline XrRuntimeCore *gc_get_core(XrCoroGC *gc) {
+static inline XrRuntimeCore *gc_get_core(XrCoroHeap *gc) {
     return (gc && gc->owner) ? gc->owner->core : NULL;
 }
 
-static inline bool coro_gc_value_to_header(XrValue value, XrObjHeader **out) {
+static inline bool coro_heap_value_to_header(XrValue value, XrObjHeader **out) {
     if (!XR_VALUE_NEEDS_GC(value))
         return false;
     XrObjHeader *obj = XR_VALUE_GCPTR(value);
@@ -87,25 +87,25 @@ static inline bool coro_gc_value_to_header(XrValue value, XrObjHeader **out) {
     return true;
 }
 
-static inline bool coro_gc_header_is_heap_value(XrObjHeader *obj) {
+static inline bool coro_heap_header_is_heap_value(XrObjHeader *obj) {
     XrObjHeader *roundtrip = NULL;
-    return obj && coro_gc_value_to_header(XR_FROM_PTR(obj), &roundtrip) && roundtrip == obj;
+    return obj && coro_heap_value_to_header(XR_FROM_PTR(obj), &roundtrip) && roundtrip == obj;
 }
 
-static inline bool xr_gc_needs_finalize_ext(XrCoroGC *gc, uint8_t type) {
+static inline bool xr_gc_needs_finalize_ext(XrCoroHeap *gc, uint8_t type) {
     return xr_runtime_core_type_needs_destroy(gc_get_core(gc), type);
 }
 
-static inline XrGCDestroyFn get_destroy_func_ext(XrCoroGC *gc, uint8_t type) {
+static inline XrGCDestroyFn get_destroy_func_ext(XrCoroHeap *gc, uint8_t type) {
     return xr_runtime_core_destroy_op(gc_get_core(gc), type);
 }
 
 /*
  * Reset GC runtime state fields to initial values.
- * Shared by xr_coro_gc_create and xr_coro_gc_reset.
+ * Shared by xr_coro_heap_create and xr_coro_heap_reset.
  * Does NOT touch: region heap or owner pointer.
  */
-static void gc_init_runtime_state(XrCoroGC *gc) {
+static void gc_init_runtime_state(XrCoroHeap *gc) {
     gc->totalbytes = 0;
     gc->large_bytes = 0;
     gc->in_gc = 0;
@@ -121,29 +121,29 @@ static void gc_init_runtime_state(XrCoroGC *gc) {
 
 /* ========== Coroutine GC Lifecycle ========== */
 
-XrCoroGC *xr_coro_gc_create(struct XrCoroutine *coro) {
+XrCoroHeap *xr_coro_heap_create(struct XrCoroutine *coro) {
     XR_DCHECK(coro != NULL, "gc_create: NULL coroutine");
-    XrCoroGC *gc = NULL;
+    XrCoroHeap *gc = NULL;
 
     // Fast path: L1 per-Worker free list (no lock)
     XrWorker *w = xr_current_worker();
-    if (w && w->p.gc_free_list) {
-        gc = w->p.gc_free_list;
-        w->p.gc_free_list = *(XrCoroGC **) gc;
-        w->p.gc_free_count--;
+    if (w && w->p.heap_free_list) {
+        gc = w->p.heap_free_list;
+        w->p.heap_free_list = *(XrCoroHeap **) gc;
+        w->p.heap_free_count--;
     } else {
         // L2 per-isolate pool (mutex). Bootstrap before sys_heap exists
         // is rare and falls straight through to malloc.
         XrSystemHeap *heap = gc_pool_heap_from_coro(coro);
-        gc = heap ? xr_sysheap_gc_pool_pop(heap) : NULL;
+        gc = heap ? xr_sysheap_coro_heap_pool_pop(heap) : NULL;
         if (!gc) {
-            gc = (XrCoroGC *) xr_malloc(sizeof(XrCoroGC));
+            gc = (XrCoroHeap *) xr_malloc(sizeof(XrCoroHeap));
         }
     }
     if (!gc)
         return NULL;
 
-    memset(gc, 0, sizeof(XrCoroGC));
+    memset(gc, 0, sizeof(XrCoroHeap));
 
     // Initialize Region heap
     xr_region_init(&gc->region);
@@ -250,7 +250,7 @@ static void gc_ptrset_destroy(XrGCPtrSet *set) {
 
 /* ========== Common Helpers for Destroy/Reset ========== */
 
-static void gc_finalize_registered_objects(XrCoroGC *gc) {
+static void gc_finalize_registered_objects(XrCoroHeap *gc) {
     XrGCPtrSet set = gc_ptrset_take(&gc->finalize_set);
     for (uint32_t i = 0; i < set.cap; i++) {
         XrObjHeader *obj = set.slots[i];
@@ -267,7 +267,7 @@ static void gc_finalize_registered_objects(XrCoroGC *gc) {
 }
 
 // Finalize and free all large objects
-static void gc_free_large_objects(XrCoroGC *gc) {
+static void gc_free_large_objects(XrCoroHeap *gc) {
     XrGCPtrSet set = gc_ptrset_take(&gc->large_set);
     for (uint32_t i = 0; i < set.cap; i++) {
         XrObjHeader *lo = set.slots[i];
@@ -286,8 +286,8 @@ static void gc_free_large_objects(XrCoroGC *gc) {
 
 // Reserve registration capacity BEFORE allocating the object, so a
 // successful allocation can always be registered (OOM-safe ordering).
-static bool gc_prepare_registration(XrCoroGC *gc, uint8_t type, size_t total, bool *needs_finalize,
-                                    bool *is_large) {
+static bool gc_prepare_registration(XrCoroHeap *gc, uint8_t type, size_t total,
+                                    bool *needs_finalize, bool *is_large) {
     *needs_finalize = xr_gc_needs_finalize_ext(gc, type);
     *is_large = total > XR_LARGE_OBJECT_THRESHOLD;
     if (*needs_finalize && !gc_ptrset_reserve(&gc->finalize_set, 1))
@@ -297,7 +297,8 @@ static bool gc_prepare_registration(XrCoroGC *gc, uint8_t type, size_t total, bo
     return true;
 }
 
-static void gc_register_object(XrCoroGC *gc, XrObjHeader *obj, bool needs_finalize, bool is_large) {
+static void gc_register_object(XrCoroHeap *gc, XrObjHeader *obj, bool needs_finalize,
+                               bool is_large) {
     if (is_large) {
         gc_ptrset_insert(&gc->large_set, obj);
         gc->large_bytes += (int64_t) obj->objsize;
@@ -307,7 +308,7 @@ static void gc_register_object(XrCoroGC *gc, XrObjHeader *obj, bool needs_finali
     }
 }
 
-static bool gc_register_finalizer_after_inline_alloc(XrCoroGC *gc, XrObjHeader *obj) {
+static bool gc_register_finalizer_after_inline_alloc(XrCoroHeap *gc, XrObjHeader *obj) {
     if (!xr_gc_needs_finalize_ext(gc, obj->type))
         return true;
     if (!gc_ptrset_reserve(&gc->finalize_set, 1))
@@ -317,19 +318,19 @@ static bool gc_register_finalizer_after_inline_alloc(XrCoroGC *gc, XrObjHeader *
     return true;
 }
 
-static void gc_unregister_finalizer(XrCoroGC *gc, XrObjHeader *obj) {
+static void gc_unregister_finalizer(XrCoroHeap *gc, XrObjHeader *obj) {
     if (gc)
         (void) gc_ptrset_remove(&gc->finalize_set, obj);
 }
 
-static void gc_unregister_large_object(XrCoroGC *gc, XrObjHeader *obj) {
+static void gc_unregister_large_object(XrCoroHeap *gc, XrObjHeader *obj) {
     if (gc)
         (void) gc_ptrset_remove(&gc->large_set, obj);
 }
 
 /* ========== Lifecycle ========== */
 
-void xr_coro_gc_destroy(XrCoroGC *gc) {
+void xr_coro_heap_destroy(XrCoroHeap *gc) {
     if (!gc)
         return;
     XR_DCHECK(!gc->in_gc, "gc_destroy called during GC");
@@ -337,18 +338,18 @@ void xr_coro_gc_destroy(XrCoroGC *gc) {
     gc_finalize_registered_objects(gc);
     xr_region_destroy(&gc->region);
     gc_free_large_objects(gc);
-    xr_coro_gc_rc_freelist_destroy(gc);
+    xr_coro_heap_recycler_destroy(gc);
     xr_cycle_roots_destroy(gc);
 
     // Recycle: try L1 (per-Worker), then L2 (per-isolate), then free
     XrWorker *w = xr_current_worker();
-    if (w && w->p.gc_free_count < XR_GC_POOL_L1_MAX) {
-        *(XrCoroGC **) gc = w->p.gc_free_list;
-        w->p.gc_free_list = gc;
-        w->p.gc_free_count++;
+    if (w && w->p.heap_free_count < XR_GC_POOL_L1_MAX) {
+        *(XrCoroHeap **) gc = w->p.heap_free_list;
+        w->p.heap_free_list = gc;
+        w->p.heap_free_count++;
     } else {
         XrSystemHeap *heap = gc_pool_heap_from_gc(gc);
-        if (!heap || !xr_sysheap_gc_pool_push(heap, gc)) {
+        if (!heap || !xr_sysheap_coro_heap_pool_push(heap, gc)) {
             xr_free(gc);
         }
     }
@@ -357,13 +358,13 @@ void xr_coro_gc_destroy(XrCoroGC *gc) {
 // Flush a per-worker GC struct free list (L1) to the per-isolate
 // pool (L2). Structs that don't fit in L2 are freed immediately.
 // `heap` is the L2 owner; passing NULL forces every struct to malloc/free.
-void xr_coro_gc_flush_pool(XrSystemHeap *heap, XrCoroGC **free_list, int *count) {
+void xr_coro_heap_flush_pool(XrSystemHeap *heap, XrCoroHeap **free_list, int *count) {
     XR_DCHECK(free_list != NULL, "flush_pool: NULL free_list");
     XR_DCHECK(count != NULL, "flush_pool: NULL count");
     while (*free_list) {
-        XrCoroGC *gc = *free_list;
-        *free_list = *(XrCoroGC **) gc;
-        if (!heap || !xr_sysheap_gc_pool_push(heap, gc)) {
+        XrCoroHeap *gc = *free_list;
+        *free_list = *(XrCoroHeap **) gc;
+        if (!heap || !xr_sysheap_coro_heap_pool_push(heap, gc)) {
             xr_free(gc);
         }
     }
@@ -372,10 +373,10 @@ void xr_coro_gc_flush_pool(XrSystemHeap *heap, XrCoroGC **free_list, int *count)
 
 /*
  * Reset GC state for coroutine pool reuse.
- * Releases all objects but keeps the XrCoroGC struct and gray list buffers.
+ * Releases all objects but keeps the XrCoroHeap struct and gray list buffers.
  * Much cheaper than destroy+create cycle.
  */
-void xr_coro_gc_reset(XrCoroGC *gc, struct XrCoroutine *new_owner) {
+void xr_coro_heap_reset(XrCoroHeap *gc, struct XrCoroutine *new_owner) {
     if (!gc)
         return;
     XR_DCHECK(new_owner != NULL, "gc_reset: NULL new_owner");
@@ -384,7 +385,7 @@ void xr_coro_gc_reset(XrCoroGC *gc, struct XrCoroutine *new_owner) {
     gc_finalize_registered_objects(gc);
     xr_region_reset(&gc->region);
     gc_free_large_objects(gc);
-    xr_coro_gc_rc_freelist_destroy(gc);
+    xr_coro_heap_recycler_destroy(gc);
     xr_cycle_roots_destroy(gc);
 
     gc_init_runtime_state(gc);
@@ -395,7 +396,7 @@ void xr_coro_gc_reset(XrCoroGC *gc, struct XrCoroutine *new_owner) {
 
 /* ========== Allocation Helpers ========== */
 
-static inline void gc_post_region_alloc(XrCoroGC *gc, XrObjHeader *obj, uint8_t type,
+static inline void gc_post_region_alloc(XrCoroHeap *gc, XrObjHeader *obj, uint8_t type,
                                         uint32_t total) {
     (void) gc;
     (void) type;
@@ -409,11 +410,11 @@ static inline void gc_post_region_alloc(XrCoroGC *gc, XrObjHeader *obj, uint8_t 
 
 /*
  * Update allocation statistics after object creation.
- * Called by xr_coro_gc_newobj. Tracing's debt-driven collection trigger is gone
+ * Called by xr_coro_heap_new_obj. Tracing's debt-driven collection trigger is gone
  * (RC owns reclamation); only the byte and object counters are kept for the
  * gc.* introspection builtins.
  */
-static inline void gc_update_alloc_stats(XrCoroGC *gc, uint32_t total) {
+static inline void gc_update_alloc_stats(XrCoroHeap *gc, uint32_t total) {
     gc->totalbytes += (int64_t) total;
     gc->object_count++;
     XR_DCHECK(gc->totalbytes >= 0, "totalbytes underflow");
@@ -423,7 +424,7 @@ static inline void gc_update_alloc_stats(XrCoroGC *gc, uint32_t total) {
 
 /* ========== RC Per-Object Freelist ========== */
 
-XR_FUNC void xr_coro_gc_rc_free(XrCoroGC *gc, XrObjHeader *obj) {
+XR_FUNC void xr_coro_heap_recycle_obj(XrCoroHeap *gc, XrObjHeader *obj) {
     if (!gc || !obj)
         return;
 
@@ -450,7 +451,7 @@ XR_FUNC void xr_coro_gc_rc_free(XrCoroGC *gc, XrObjHeader *obj) {
     if (cls < 0)
         return; /* too small for the free link (header-only) or oversized:
                  * not freelisted — reclaimed in bulk at coroutine teardown.
-                 * XR_OBJ_DEAD was already set by xr_coro_gc_rc_destroy so the
+                 * XR_OBJ_DEAD was already set by xr_coro_heap_destroy_obj so the
                  * teardown finalize walk will not re-run the destructor. */
 
     /* Lazily allocate the freelist array on first free. */
@@ -468,7 +469,7 @@ XR_FUNC void xr_coro_gc_rc_free(XrCoroGC *gc, XrObjHeader *obj) {
     gc->rc_freelist[cls] = obj;
 }
 
-XR_FUNC void xr_coro_gc_rc_freelist_destroy(XrCoroGC *gc) {
+XR_FUNC void xr_coro_heap_recycler_destroy(XrCoroHeap *gc) {
     if (!gc || !gc->rc_freelist)
         return;
     /* The blocks themselves live in Region and are released in bulk when the
@@ -482,7 +483,7 @@ XR_FUNC void xr_coro_gc_rc_freelist_destroy(XrCoroGC *gc) {
  * it after the per-block dead-slot tally has been consumed. */
 #define XR_BLOCK_RECLAIM_MARK 0xFFFFFFFFu
 
-XR_FUNC void xr_coro_gc_reclaim_blocks(XrCoroGC *gc) {
+XR_FUNC void xr_coro_heap_reclaim_empty_blocks(XrCoroHeap *gc) {
     if (!gc || !gc->rc_freelist)
         return; /* nothing has been RC-freed yet → no dead slots to reclaim */
     XrRegionHeap *h = &gc->region;
@@ -559,7 +560,7 @@ XR_FUNC void xr_coro_gc_reclaim_blocks(XrCoroGC *gc) {
 #define XR_DESTROY_DEPTH_LIMIT 64
 
 /* Core destroy logic (shared by top-level and deferred-drain paths). */
-static void rc_destroy_one(XrCoroGC *gc, XrObjHeader *obj) {
+static void rc_destroy_one(XrCoroHeap *gc, XrObjHeader *obj) {
     XR_DCHECK(obj != NULL, "rc_destroy_one: NULL obj");
     if (gc && (obj->extra & XR_OBJ_WEAKABLE))
         xr_weak_registry_target_dying(gc_get_isolate(gc), obj, gc);
@@ -591,20 +592,20 @@ static void rc_destroy_one(XrCoroGC *gc, XrObjHeader *obj) {
 
     /* Return memory to the freelist (or free large/mmap directly). */
     if (gc)
-        xr_coro_gc_rc_free(gc, obj);
+        xr_coro_heap_recycle_obj(gc, obj);
 }
 
 /* Push an object onto the deferred-drop list for iterative draining.
  * Uses the first pointer-sized region past the header as a next-link
  * (safe because the object is already logically dead / RC == 0). */
-static void deferred_push(XrCoroGC *gc, XrObjHeader *obj) {
+static void deferred_push(XrCoroHeap *gc, XrObjHeader *obj) {
     /* Encode the linked list via a cast to void** at header+1. */
     void **link = (void **) (obj + 1);
     *link = gc->deferred_drops;
     gc->deferred_drops = obj;
 }
 
-static XrObjHeader *deferred_pop(XrCoroGC *gc) {
+static XrObjHeader *deferred_pop(XrCoroHeap *gc) {
     XrObjHeader *obj = gc->deferred_drops;
     if (!obj)
         return NULL;
@@ -621,10 +622,10 @@ static XrObjHeader *deferred_pop(XrCoroGC *gc) {
  * Implements depth-bounded recursion: when destroy_depth exceeds the limit,
  * child objects are deferred and drained iteratively by the outermost call.
  * This prevents stack overflow on pathological inputs (Koka-inspired). */
-XR_FUNC void xr_coro_gc_rc_destroy(XrCoroGC *gc, XrObjHeader *obj) {
+XR_FUNC void xr_coro_heap_destroy_obj(XrCoroHeap *gc, XrObjHeader *obj) {
     if (!obj)
         return;
-    if (!coro_gc_header_is_heap_value(obj))
+    if (!coro_heap_header_is_heap_value(obj))
         return;
     if (obj->extra & XR_OBJ_DEAD)
         return;
@@ -662,7 +663,7 @@ XR_FUNC void xr_coro_gc_rc_destroy(XrCoroGC *gc, XrObjHeader *obj) {
     }
 }
 
-XrObjHeader *xr_coro_gc_newobj(XrCoroGC *gc, uint8_t type, size_t size) {
+XrObjHeader *xr_coro_heap_new_obj(XrCoroHeap *gc, uint8_t type, size_t size) {
     if (!gc)
         return NULL;
     XR_DCHECK(type < XGC_MAX_TYPES, "invalid object type");
@@ -737,13 +738,13 @@ XrObjHeader *xr_coro_gc_newobj(XrCoroGC *gc, uint8_t type, size_t size) {
 
 /* ========== Debug ========== */
 
-void xr_coro_gc_print_stats(XrCoroGC *gc) {
+void xr_coro_heap_print_stats(XrCoroHeap *gc) {
     if (!gc) {
-        printf("XrCoroGC: NULL\n");
+        printf("XrCoroHeap: NULL\n");
         return;
     }
 
-    printf("=== XrCoroGC (Region bump + RC) ===\n");
+    printf("=== XrCoroHeap (Region bump + RC) ===\n");
     printf("Total bytes:  %lld\n", (long long) gc->totalbytes);
     printf("GC count:     %u\n", gc->gc_count);
 

@@ -84,7 +84,7 @@ struct XrayIsolate {
     struct XrRuntime *scheduler_runtime;
 
     // Main coroutine (unified GC architecture)
-    // - All coroutines (including main) use XrCoroGC + XrCoroHeap
+    // - All coroutines (including main) use XrCoroHeap + XrCoroHeap
     // - Main coroutine: large heap (4MB), deferred GC (max_gen_gcs=100)
     // - O(1) heap release on program exit
     struct XrCoroutine *main_coro;  // Main coroutine (owns large heap GC)

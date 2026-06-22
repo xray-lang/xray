@@ -180,7 +180,7 @@ typedef struct XrTask {
     // xr_task_fire_completion. Use atomic ops (Treiber stack push +
     // atomic_exchange drain) so that no node is registered after the
     // list has been drained without being fired. The non-atomic uses
-    // (xr_gc_destroy_task, xcoro_gc_traverse) run while the GC has
+    // (xr_gc_destroy_task, xcoro_heap_traverse) run while the GC has
     // halted mutators and are therefore safe with plain relaxed loads.
     _Atomic(struct XrCompletionNode *) on_completion;  //  8B
 
