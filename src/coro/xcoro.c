@@ -21,7 +21,6 @@
 #include "../base/xchecks.h"
 #include "../runtime/xray_debug.h"
 #include <string.h>
-#include <stdio.h>
 #include "xworker.h"
 #include "xchannel.h"
 #include "xchannel_ops.h"
@@ -36,7 +35,6 @@
 #include "xwork_queue.h"
 #include "../runtime/object/xarray.h"
 #include "../runtime/object/xstring.h"
-#include "../os/os_time.h"
 
 // Note: blocked queue moved to XrRuntime, see xworker.c
 
@@ -1055,67 +1053,6 @@ void xr_scope_add_coro(XrCoroState *sched, XrCoroutine *coro, XrCoroutine *paren
     if (!xr_coro_set_parent_scope(coro, scope))
         return;
     atomic_fetch_add(&scope->count, 1);
-}
-
-// ========== Multi-core Runtime Initialization ==========
-
-// Initialize multi-core runtime
-// @param X          Isolate instance
-// @param num_workers Worker count (0 means auto-detect CPU cores)
-//
-// Multi-core parallel execution:
-// - Each Worker thread executes backend-neutral coroutines
-// - Work stealing for load balancing across Workers
-// - VM backend coroutines have independent VM stacks/frames, no global VM lock
-void xr_multicore_init(XrayIsolate *X, int num_workers) {
-    if (!X)
-        return;
-
-    XrRuntime *runtime = xr_scheduler_runtime_new(xr_isolate_get_runtime_core(X), num_workers);
-    if (runtime) {
-        xr_scheduler_runtime_attach_isolate(runtime, X);
-        X->scheduler_runtime = runtime;
-        if (X->main_coro) {
-            X->main_coro->core = xr_isolate_get_runtime_core(X);
-            X->main_coro->scheduler = runtime;
-        }
-
-        // Start Worker threads
-        xr_runtime_start(runtime);
-    }
-}
-
-// Destroy multi-core runtime
-void xr_multicore_destroy(XrayIsolate *X) {
-    if (!X || !X->scheduler_runtime)
-        return;
-
-    XrRuntime *runtime = (XrRuntime *) X->scheduler_runtime;
-    bool stats_enabled = xr_sched_stats_enabled(runtime);
-    uint64_t total_start_ns = xr_time_monotonic_ns();
-    uint64_t stage_start_ns = total_start_ns;
-
-    if (X->main_coro && X->main_coro->scheduler == runtime) {
-        X->main_coro->scheduler = NULL;
-    }
-
-    // Stop Runtime (if started)
-    xr_runtime_stop(runtime);
-    uint64_t stop_ms = (xr_time_monotonic_ns() - stage_start_ns) / 1000000ULL;
-
-    // Free resources
-    stage_start_ns = xr_time_monotonic_ns();
-    xr_scheduler_runtime_delete(runtime);
-    uint64_t destroy_ms = (xr_time_monotonic_ns() - stage_start_ns) / 1000000ULL;
-
-    if (stats_enabled) {
-        uint64_t total_ms = (xr_time_monotonic_ns() - total_start_ns) / 1000000ULL;
-        fprintf(stderr, "Multicore teardown: stop_ms=%llu destroy_ms=%llu total_ms=%llu\n",
-                (unsigned long long) stop_ms, (unsigned long long) destroy_ms,
-                (unsigned long long) total_ms);
-    }
-
-    X->scheduler_runtime = NULL;
 }
 
 // xr_current_coro - Get current coroutine

@@ -21,7 +21,6 @@
 #include "../runtime/value/xvalue.h"
 #include "../runtime/object/xstring.h"
 #include "../runtime/xisolate_api.h"
-#include "xexec_state.h"
 #include <string.h>
 
 /* ========== Hash Table Internals ========== */
@@ -285,18 +284,5 @@ void xr_coro_notify_monitors(XrayIsolate *X, XrCoroRegistry *reg, XrCoroutine *c
         xr_channel_notify_send(mon->channel, reason_val);
         xr_free(mon);
         mon = next;
-    }
-}
-
-void xr_coro_on_exit(XrayIsolate *X, XrCoroutine *coro) {
-    if (!X || !coro)
-        return;
-    const char *name = xr_coro_name(coro);
-    if (!name)
-        return;  // fast path: anonymous coroutines
-
-    XrCoroState *sched = (XrCoroState *) xr_isolate_get_vm_state(X)->coro_state;
-    if (sched && sched->coro_registry) {
-        xr_coro_registry_unregister(sched->coro_registry, name);
     }
 }

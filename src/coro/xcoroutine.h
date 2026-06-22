@@ -490,10 +490,6 @@ XR_FUNC XrCoroutine *xr_coro_take_pending_spawn(XrCoroutine *coro);
 XR_FUNC void xr_coro_state_init(XrCoroState *state);
 XR_FUNC void xr_coro_state_destroy(XrCoroState *state);
 
-// Multicore runtime
-XR_FUNC void xr_multicore_init(struct XrayIsolate *X, int num_workers);
-XR_FUNC void xr_multicore_destroy(struct XrayIsolate *X);
-
 // Wake mechanism
 XR_FUNC void xr_scheduler_ready(struct XrRuntime *runtime, XrCoroutine *gp, bool next);
 XR_FUNC void xr_coro_ready(struct XrayIsolate *X, XrCoroutine *gp, bool next);

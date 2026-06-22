@@ -94,8 +94,4 @@ XR_FUNC void xr_coro_demonitor(XrCoroRegistry *reg, XrCoroutine *coro, XrChannel
 XR_FUNC void xr_coro_notify_monitors(XrayIsolate *X, XrCoroRegistry *reg, XrCoroutine *coro,
                                      const char *reason);
 
-// Auto-unregister named coroutine on exit.
-// Called from exit path in xworker.c after notify_monitors.
-XR_FUNC void xr_coro_on_exit(XrayIsolate *X, XrCoroutine *coro);
-
 #endif  // XCORO_REGISTRY_H
