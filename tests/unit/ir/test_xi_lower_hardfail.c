@@ -60,7 +60,7 @@ static XiFunc *try_lower(const char *source) {
     if (!program)
         return NULL;
 
-    XaAnalyzer *analyzer = xa_analyzer_new(g_iso);
+    XaAnalyzer *analyzer = xa_analyzer_new(g_session);
     if (!analyzer) {
         xr_program_destroy(program);
         return NULL;

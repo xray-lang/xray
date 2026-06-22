@@ -60,7 +60,7 @@ static XiFunc *lower_source(const char *source) {
     }
 
     /* Analyze */
-    XaAnalyzer *analyzer = xa_analyzer_new(g_iso);
+    XaAnalyzer *analyzer = xa_analyzer_new(session);
     if (!analyzer) {
         fprintf(stderr, "  ANALYZER ALLOC FAILED\n");
         xr_program_destroy(program);

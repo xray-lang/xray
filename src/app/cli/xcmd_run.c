@@ -127,9 +127,9 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
     {
         XrModuleRegistry *registry = xr_isolate_get_module_registry(iso);
         XrModuleResolver *resolver = xr_module_registry_get_resolver(registry);
+        XrCompilerSession *session = xr_compiler_session_current_for_isolate(iso);
         if (resolver) {
-            XrModuleGraph *graph =
-                xr_module_graph_new(xr_compiler_session_current_for_isolate(iso), resolver);
+            XrModuleGraph *graph = xr_module_graph_new(session, resolver);
             if (graph) {
                 char *err = NULL;
                 if (xr_module_graph_build(graph, file, &err) == 0) {
@@ -149,7 +149,7 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
                      * to concrete signatures.  Diagnostics are reported as
                      * warnings; execution proceeds regardless. */
                     if (graph->topo_count > 1) {
-                        XaAnalyzer *analyzer = xa_analyzer_new(iso);
+                        XaAnalyzer *analyzer = xa_analyzer_new(session);
                         if (analyzer) {
                             xa_analyzer_set_graph(analyzer, graph);
                             for (int ti = 0; ti < graph->topo_count; ti++) {

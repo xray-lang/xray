@@ -509,7 +509,7 @@ void xa_incremental_free(XaIncrementalCtx *ctx) {
             xr_free(bc);
             bc = bc_next;
         }
-        xr_free((void *) fc->path);
+        xr_free(fc->path);
         xr_free(fc);
         fc = next;
     }

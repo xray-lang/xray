@@ -226,6 +226,7 @@ XR_FUNC int cmd_check(const XrCliInvocation *inv) {
         xr_cli_error("check", "failed to create isolate");
         return XR_CLI_EXIT_INTERNAL;
     }
+    XrCompilerSession *session = xr_compiler_session_current_for_isolate(X);
 
     /* Default: run the analyzer so semantic errors (e.g. throw on a
      * non-Exception value, type mismatches) are caught alongside syntax
@@ -233,7 +234,7 @@ XR_FUNC int cmd_check(const XrCliInvocation *inv) {
      * additionally enables stricter analyzer modes. */
     XaAnalyzer *analyzer = NULL;
     if (!syntax_only) {
-        analyzer = xa_analyzer_new(X);
+        analyzer = xa_analyzer_new(session);
         if (strict)
             xa_analyzer_set_strict_mode(analyzer, true);
     }

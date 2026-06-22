@@ -154,9 +154,15 @@ XR_FUNC XrJsonValue *xmcp_tool_xray_analyze(XmcpServer *server, const XmcpCallCo
     if (ptok)
         xmcp_send_progress_notification(server, ptok, 0, 2);
 
+    XrCompilerSession *session = xr_compiler_session_current_for_isolate(server->isolate);
+    if (!session) {
+        xr_arena_destroy(arena);
+        xr_free(arena);
+        return xmcp_make_error_result("Error: compiler session is required");
+    }
+
     XrCompilerSessionScope parse_scope;
-    if (!xr_compiler_session_push_arena(xr_compiler_session_current_for_isolate(server->isolate),
-                                        arena, filename, &parse_scope)) {
+    if (!xr_compiler_session_push_arena(session, arena, filename, &parse_scope)) {
         xr_arena_destroy(arena);
         xr_free(arena);
         return xmcp_make_error_result("Error: failed to enter compiler session");
@@ -164,8 +170,7 @@ XR_FUNC XrJsonValue *xmcp_tool_xray_analyze(XmcpServer *server, const XmcpCallCo
 
     ErrorCapture cap = {.count = 0};
     Parser parser;
-    xr_parser_init(&parser, xr_compiler_session_current_for_isolate(server->isolate), code,
-                   filename, arena);
+    xr_parser_init(&parser, session, code, filename, arena);
     xr_parser_set_error_callback(&parser, check_error_callback, &cap, XMCP_TOOLS_MAX_CHECK_ERRORS);
     AstNode *ast = xr_parse_recoverable(&parser);
 
@@ -176,7 +181,7 @@ XR_FUNC XrJsonValue *xmcp_tool_xray_analyze(XmcpServer *server, const XmcpCallCo
     XaDiagnostic *analyzer_diags = NULL;
     int analyzer_count = 0;
     if (ast && cap.count == 0 && run_analyzer) {
-        analyzer = xa_analyzer_new(server->isolate);
+        analyzer = xa_analyzer_new(session);
         if (!analyzer) {
             xr_compiler_session_pop_arena(&parse_scope);
             xr_arena_destroy(arena);

@@ -9,7 +9,6 @@
  */
 
 #include "xanalyzer.h"
-#include "../../runtime/xisolate_internal.h"
 #include "xanalyzer_visitor.h"
 #include "../../base/xchecks.h"
 #include "xanalyzer_infer.h"
@@ -269,15 +268,22 @@ static void xa_register_prelude_enums(XaAnalyzer *analyzer) {
 }
 
 // Create analyzer
-XaAnalyzer *xa_analyzer_new(XrayIsolate *X) {
+XaAnalyzer *xa_analyzer_new(XrCompilerSession *session) {
+    XR_DCHECK(session != NULL, "xa_analyzer_new: NULL compiler session");
+    if (!session)
+        return NULL;
+
     // Ensure process-level type singletons are initialized (idempotent)
     xr_type_global_init();
+
+    XrayIsolate *X = xr_compiler_session_vm_host(session);
 
     XaAnalyzer *analyzer = xr_calloc(1, sizeof(XaAnalyzer));
     if (!analyzer)
         return NULL;
 
-    // Store owning isolate (explicit, no TLS)
+    // Store owning compiler session and borrowed VM host (explicit, no TLS)
+    analyzer->compiler_session = session;
     analyzer->isolate = X;
 
     // Initialize type pool (per-analyzer, no global state)
@@ -361,11 +367,11 @@ void xa_analyzer_free(XaAnalyzer *analyzer) {
     }
 
     // Detach active pool owners before freeing the analyzer-owned pool.
-    // Temporary analyzers may share an isolate with a longer-lived analyzer;
-    // leaving TLS pointing here turns the next type allocation into a use-after-free.
+    // Temporary analyzers may share a compiler session with a longer-lived
+    // analyzer; leaving TLS pointing here turns the next type allocation into
+    // a use-after-free.
     if (analyzer->type_pool) {
-        XrCompilerSession *session = xr_compiler_session_current_for_isolate(analyzer->isolate);
-        XrTypePool *fallback = xr_compiler_session_analyzer_pool(session);
+        XrTypePool *fallback = xr_compiler_session_analyzer_pool(analyzer->compiler_session);
         if (fallback == analyzer->type_pool)
             fallback = NULL;
         if (xr_type_get_current_pool() == analyzer->type_pool)
@@ -1350,7 +1356,7 @@ void xa_analyzer_remove_file(XaAnalyzer *analyzer, const char *file) {
         if ((*pp)->path && strcmp((*pp)->path, file) == 0) {
             XaFileEntry *to_free = *pp;
             *pp = to_free->next;
-            xr_free((void *) to_free->path);
+            xr_free(to_free->path);
             xr_free(to_free);
             analyzer->file_count--;
             break;

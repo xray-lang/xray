@@ -112,13 +112,14 @@ static XrProto *compile_legacy(const char *source) {
 static XrProto *compile_xi(const char *source) {
     XR_DCHECK(g_iso != NULL, "isolate must be initialized");
 
-    /* Create analyzer first — it installs a type pool on the isolate,
-     * which the parser needs for creating type annotations. */
-    XaAnalyzer *analyzer = xa_analyzer_new(g_iso);
+    /* Create analyzer first — it installs the current type pool for this
+     * compiler session before parsing type annotations. */
+    XrCompilerSession *session = xr_compiler_session_current_for_isolate(g_iso);
+    XaAnalyzer *analyzer = xa_analyzer_new(session);
     if (!analyzer)
         return NULL;
 
-    AstNode *program = xr_parse(xr_compiler_session_current_for_isolate(g_iso), source);
+    AstNode *program = xr_parse(session, source);
     if (!program) {
         xa_analyzer_free(analyzer);
         return NULL;

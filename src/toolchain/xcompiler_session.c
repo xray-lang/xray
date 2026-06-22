@@ -181,7 +181,7 @@ struct XaAnalyzer *xr_compiler_session_ensure_repl_analyzer(XrCompilerSession *s
     if (!session || !session->vm_host)
         return NULL;
     if (!session->repl_analyzer)
-        session->repl_analyzer = xa_analyzer_new(session->vm_host);
+        session->repl_analyzer = xa_analyzer_new(session);
     return session->repl_analyzer;
 }
 

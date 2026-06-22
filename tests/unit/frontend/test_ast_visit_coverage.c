@@ -552,7 +552,7 @@ static bool assert_all_typed(const char *source, const char *label) {
         return false;
     }
 
-    XaAnalyzer *analyzer = xa_analyzer_new(g_iso);
+    XaAnalyzer *analyzer = xa_analyzer_new(g_session);
     assert(analyzer != NULL);
     xa_analyzer_analyze(analyzer, "coverage_test.xr", program);
 

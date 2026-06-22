@@ -32,6 +32,7 @@
 // Forward declarations
 typedef struct XaAnalyzer XaAnalyzer;
 typedef struct AstNode XrAstNode;
+typedef struct XrCompilerSession XrCompilerSession;
 typedef struct XrayIsolate XrayIsolate;
 
 // Diagnostic severity (matches LSP XrLspDiagnosticSeverity values)
@@ -54,7 +55,7 @@ typedef struct XaDiagnostic {
 
 // File entry for multi-file support
 typedef struct XaFileEntry {
-    const char *path;       // File path
+    char *path;             // Owned file path
     XaScope *file_scope;    // File's top-level scope
     uint64_t content_hash;  // Hash for change detection
     bool dirty;             // Needs re-analysis
@@ -63,7 +64,10 @@ typedef struct XaFileEntry {
 
 // Analyzer context
 struct XaAnalyzer {
-    // Owning isolate (explicit, no TLS)
+    // Owning compiler session (explicit, no TLS)
+    XrCompilerSession *compiler_session;
+
+    // Borrowed VM host for the current bytecode/runtime type helpers.
     XrayIsolate *isolate;
 
     // Type pool (per-analyzer, no global state)
@@ -128,7 +132,7 @@ struct XaAnalyzer {
 };
 
 // API: Analyzer lifecycle
-XR_FUNC XaAnalyzer *xa_analyzer_new(XrayIsolate *X);
+XR_FUNC XaAnalyzer *xa_analyzer_new(XrCompilerSession *session);
 XR_FUNC void xa_analyzer_free(XaAnalyzer *analyzer);
 
 // API: Configuration

@@ -16,6 +16,7 @@
 #include "../../base/xjson.h"
 #include "xlsp_cache.h"
 #include "../../frontend/analyzer/xanalyzer.h"
+#include "../../toolchain/xcompiler_session.h"
 #include "xlsp_semantic_tokens.h"
 #include "xlsp_inlay_hints.h"
 #include "xlsp_imports.h"
@@ -355,7 +356,8 @@ XrLspServer *xlsp_server_new(void) {
     }
 
     // Create workspace-level analyzer (unified index for all cross-file features)
-    server->workspace_analyzer = xa_analyzer_new(server->isolate);
+    XrCompilerSession *session = xr_compiler_session_current_for_isolate(server->isolate);
+    server->workspace_analyzer = xa_analyzer_new(session);
     if (!server->workspace_analyzer) {
         lsp_log("Warning: Failed to create workspace analyzer");
     }

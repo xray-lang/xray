@@ -94,7 +94,7 @@ static XrCompilerContext *xr_compiler_context_new_impl(XrCompilerSession *sessio
         if (analyzer->type_pool)
             xr_type_set_current_pool(analyzer->type_pool, &analyzer->type_pool->next_type_id);
     } else {
-        ctx->analyzer = xa_analyzer_new(ctx->X);
+        ctx->analyzer = xa_analyzer_new(ctx->compiler_session);
         ctx->owns_analyzer = true;
     }
 

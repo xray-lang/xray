@@ -28,6 +28,7 @@
 #include "frontend/analyzer/xanalyzer_symbol.h"
 #include "frontend/analyzer/xanalyzer_incremental.h"
 #include "runtime/value/xtype_pool.h"
+#include "toolchain/xcompiler_session.h"
 #include "xray_isolate.h"
 
 /* ---------------------------------------------------------------------- */
@@ -35,14 +36,22 @@
 /* ---------------------------------------------------------------------- */
 
 static XrayIsolate *g_iso = NULL;
+static XrCompilerSession *g_session = NULL;
 
 static void setup(void) {
     XrayIsolateParams p;
     xray_isolate_params_init(&p);
     g_iso = xray_isolate_new(&p);
+    XrCompilerSessionConfig cfg = {.vm_host = g_iso};
+    g_session = xr_compiler_session_new(&cfg);
+    xr_compiler_session_attach_isolate(g_iso, g_session);
 }
 
 static void teardown(void) {
+    if (g_session) {
+        xr_compiler_session_delete(g_session);
+        g_session = NULL;
+    }
     if (g_iso) {
         xray_isolate_delete(g_iso);
         g_iso = NULL;
@@ -69,7 +78,7 @@ static XaSymbol *add_symbol_in_file(XaAnalyzer *a, const char *name, const char 
 // implicit -- the test runs under ASan in CI, and ASan reports any leak
 // of the reverse-chain nodes.
 TEST(dep_graph_free_no_leak) {
-    XaAnalyzer *a = xa_analyzer_new(g_iso);
+    XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
 
     // Create two symbols and a dependency edge between them. xa_dep_add()
@@ -91,7 +100,7 @@ TEST(dep_graph_free_no_leak) {
 // Removing a file drops every edge that touches a symbol owned by that
 // file, and the file_count invariant holds.
 TEST(remove_file_drops_dep_edges) {
-    XaAnalyzer *a = xa_analyzer_new(g_iso);
+    XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
 
     // Two files, two symbols each. Edges A1 -> B1 and B2 -> A2 cross the
@@ -133,7 +142,7 @@ TEST(remove_file_drops_dep_edges) {
 // Removing a non-tracked file is a no-op (file_count unchanged,
 // edge_count unchanged). The DCHECK invariants must still hold.
 TEST(remove_file_unknown_path_is_noop) {
-    XaAnalyzer *a = xa_analyzer_new(g_iso);
+    XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
 
     int file_count_before = a->file_count;
