@@ -185,7 +185,7 @@ TEST(rotates_header_value_from_generated_speculation_policy) {
 TEST(rejects_zero_effect_condition_without_safe_speculation) {
     LoopFixture fx = {0};
     ASSERT(make_counted_loop(&fx));
-    fx.cond->op = XI_EQ_STRICT;
+    fx.cond->op = XI_IS;
     fx.cond->flags = 0;
     ASSERT(verify_func(fx.f));
 

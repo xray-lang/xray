@@ -50,8 +50,6 @@
     X(SHR, "xi.shr", xicgen_shr) \
     X(EQ, "xi.eq", xicgen_eq) \
     X(NE, "xi.ne", xicgen_ne) \
-    X(EQ_STRICT, "xi.eq.strict", xicgen_eq_strict) \
-    X(NE_STRICT, "xi.ne.strict", xicgen_ne_strict) \
     X(LT, "xi.lt", xicgen_lt) \
     X(LE, "xi.le", xicgen_le) \
     X(GT, "xi.gt", xicgen_gt) \
@@ -139,11 +137,6 @@
     X(LE, xicgen_le) \
     X(GT, xicgen_gt) \
     X(GE, xicgen_ge)
-
-
-#define XI_TO_C_TEMPLATE_STRICT_COMPARE_DRIVERS(X) \
-    X(EQ_STRICT, xicgen_eq_strict) \
-    X(NE_STRICT, xicgen_ne_strict)
 
 
 #define XI_TO_C_TEMPLATE_WIDTH_DRIVERS(X) \
@@ -282,16 +275,6 @@ static inline bool xi_to_c_template_compare_swaps_tagged_args(uint16_t op) {
         default: return false;
     }
     return false;
-}
-
-static inline const char *xi_to_c_template_strict_compare_op(uint16_t op) {
-    switch ((XiOp) op) {
-        case XI_EQ_STRICT: return "==";
-        case XI_NE_STRICT: return "!=";
-        case XI_OP_COUNT: return "";
-        default: return "";
-    }
-    return "";
 }
 
 typedef enum {

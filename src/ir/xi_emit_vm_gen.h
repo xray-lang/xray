@@ -61,8 +61,6 @@
     X(SHR, xi_emit_arith) \
     X(EQ, xi_emit_cmp) \
     X(NE, xi_emit_cmp) \
-    X(EQ_STRICT, xi_emit_cmp) \
-    X(NE_STRICT, xi_emit_cmp) \
     X(LT, xi_emit_cmp) \
     X(LE, xi_emit_cmp) \
     X(GT, xi_emit_cmp) \
@@ -154,8 +152,6 @@ static inline OpCode xi_emit_vm_template_opcode(uint16_t op) {
         case XI_SHR: return OP_SHR;
         case XI_EQ: return OP_CMP_EQ;
         case XI_NE: return OP_CMP_NE;
-        case XI_EQ_STRICT: return OP_CMP_EQ_STRICT;
-        case XI_NE_STRICT: return OP_CMP_NE_STRICT;
         case XI_LT: return OP_CMP_LT;
         case XI_LE: return OP_CMP_LE;
         case XI_GT: return OP_CMP_LT;

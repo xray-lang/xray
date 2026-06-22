@@ -13,7 +13,7 @@
 #define XI_VERIFY_CHECK_OBSOLETE (1u << 1)
 #define XI_VERIFY_CHECK_SELECT_CONTRACT (1u << 2)
 
-enum { XI_VERIFY_RULE_COUNT = 15 };
+enum { XI_VERIFY_RULE_COUNT = 13 };
 
 #define XI_VERIFY_RULES(X) \
     X(EXTRACT, "xi.extract", XI_VERIFY_CHECK_OBSOLETE) \
@@ -24,8 +24,6 @@ enum { XI_VERIFY_RULE_COUNT = 15 };
     X(LE, "xi.le", XI_VERIFY_CHECK_BOOL_RESULT) \
     X(GT, "xi.gt", XI_VERIFY_CHECK_BOOL_RESULT) \
     X(GE, "xi.ge", XI_VERIFY_CHECK_BOOL_RESULT) \
-    X(EQ_STRICT, "xi.eq.strict", XI_VERIFY_CHECK_BOOL_RESULT) \
-    X(NE_STRICT, "xi.ne.strict", XI_VERIFY_CHECK_BOOL_RESULT) \
     X(NOT, "xi.not", XI_VERIFY_CHECK_BOOL_RESULT) \
     X(IS, "xi.is", XI_VERIFY_CHECK_BOOL_RESULT) \
     X(ISNULL, "xi.isnull", XI_VERIFY_CHECK_BOOL_RESULT) \
@@ -43,8 +41,6 @@ static inline uint32_t xi_verify_generated_op_checks(uint16_t op) {
         case XI_LE: return XI_VERIFY_CHECK_BOOL_RESULT;
         case XI_GT: return XI_VERIFY_CHECK_BOOL_RESULT;
         case XI_GE: return XI_VERIFY_CHECK_BOOL_RESULT;
-        case XI_EQ_STRICT: return XI_VERIFY_CHECK_BOOL_RESULT;
-        case XI_NE_STRICT: return XI_VERIFY_CHECK_BOOL_RESULT;
         case XI_NOT: return XI_VERIFY_CHECK_BOOL_RESULT;
         case XI_IS: return XI_VERIFY_CHECK_BOOL_RESULT;
         case XI_ISNULL: return XI_VERIFY_CHECK_BOOL_RESULT;

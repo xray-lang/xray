@@ -67,14 +67,12 @@ typedef enum {
     AST_BINARY_RSHIFT,  // a >> b
 
     // Binary - comparison
-    AST_BINARY_EQ,         // a == b
-    AST_BINARY_NE,         // a != b
-    AST_BINARY_EQ_STRICT,  // a === b
-    AST_BINARY_NE_STRICT,  // a !== b
-    AST_BINARY_LT,         // a < b
-    AST_BINARY_LE,         // a <= b
-    AST_BINARY_GT,         // a > b
-    AST_BINARY_GE,         // a >= b
+    AST_BINARY_EQ,  // a == b
+    AST_BINARY_NE,  // a != b
+    AST_BINARY_LT,  // a < b
+    AST_BINARY_LE,  // a <= b
+    AST_BINARY_GT,  // a > b
+    AST_BINARY_GE,  // a >= b
 
     // Binary - logical
     AST_BINARY_AND,  // a && b

@@ -172,7 +172,7 @@ typedef enum {
 #define XI_GEN_ALGEBRAIC_ASSOCIATIVE (1u << 0)
 #define XI_GEN_ALGEBRAIC_COMMUTATIVE (1u << 1)
 
-enum { XI_GEN_OP_COUNT = 135 };
+enum { XI_GEN_OP_COUNT = 133 };
 typedef char xi_generated_op_count_must_match_XiOp[
     ((int) XI_OP_COUNT == (int) XI_GEN_OP_COUNT) ? 1 : -1];
 
@@ -226,8 +226,6 @@ typedef struct {
     X(LE, "xi.le", XI_GEN_CLASS_COMPARISON, 2, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_OWNED, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_SAFE, XI_GEN_VN_PURE, XI_GEN_TBAA_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_BORROW, XI_GEN_IC_SITE_NONE, XI_GT, 0, 0, 0, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, NULL) \
     X(GT, "xi.gt", XI_GEN_CLASS_COMPARISON, 2, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_OWNED, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_SAFE, XI_GEN_VN_PURE, XI_GEN_TBAA_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_BORROW, XI_GEN_IC_SITE_NONE, XI_LE, 0, 0, 0, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, NULL) \
     X(GE, "xi.ge", XI_GEN_CLASS_COMPARISON, 2, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_OWNED, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_SAFE, XI_GEN_VN_PURE, XI_GEN_TBAA_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_BORROW, XI_GEN_IC_SITE_NONE, XI_LT, 0, 0, 0, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, NULL) \
-    X(EQ_STRICT, "xi.eq.strict", XI_GEN_CLASS_COMPARISON, 2, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_OWNED, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_NEVER, XI_GEN_VN_NONE, XI_GEN_TBAA_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_BORROW, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, 0, 0, 0, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, NULL) \
-    X(NE_STRICT, "xi.ne.strict", XI_GEN_CLASS_COMPARISON, 2, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_OWNED, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_NEVER, XI_GEN_VN_NONE, XI_GEN_TBAA_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_BORROW, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, 0, 0, 0, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, NULL) \
     X(NOT, "xi.not", XI_GEN_CLASS_TYPE, 1, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_OWNED, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_SAFE, XI_GEN_VN_PURE, XI_GEN_TBAA_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_BORROW, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, 0, 0, 0, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, NULL) \
     X(CONVERT, "xi.convert", XI_GEN_CLASS_CONVERSION, 1, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_OWNED, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_SAFE, XI_GEN_VN_PURE, XI_GEN_TBAA_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_BORROW, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, 0, 0, 0, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, NULL) \
     X(BOX, "xi.box", XI_GEN_CLASS_CONVERSION, 1, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_OWNED, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_SAFE, XI_GEN_VN_NONE, XI_GEN_TBAA_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_BORROW, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, 0, 0, 0, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, NULL) \
@@ -365,8 +363,6 @@ static inline const char *xi_generated_op_name(uint16_t op) {
         case XI_LE: return "LE";
         case XI_GT: return "GT";
         case XI_GE: return "GE";
-        case XI_EQ_STRICT: return "EQ_STRICT";
-        case XI_NE_STRICT: return "NE_STRICT";
         case XI_NOT: return "NOT";
         case XI_CONVERT: return "CONVERT";
         case XI_BOX: return "BOX";
@@ -507,8 +503,6 @@ static inline uint8_t xi_generated_op_arity(uint16_t op) {
         case XI_LE: return 2;
         case XI_GT: return 2;
         case XI_GE: return 2;
-        case XI_EQ_STRICT: return 2;
-        case XI_NE_STRICT: return 2;
         case XI_NOT: return 1;
         case XI_CONVERT: return 1;
         case XI_BOX: return 1;
@@ -649,8 +643,6 @@ static inline uint8_t xi_generated_op_class(uint16_t op) {
         case XI_LE: return XI_GEN_CLASS_COMPARISON;
         case XI_GT: return XI_GEN_CLASS_COMPARISON;
         case XI_GE: return XI_GEN_CLASS_COMPARISON;
-        case XI_EQ_STRICT: return XI_GEN_CLASS_COMPARISON;
-        case XI_NE_STRICT: return XI_GEN_CLASS_COMPARISON;
         case XI_NOT: return XI_GEN_CLASS_TYPE;
         case XI_CONVERT: return XI_GEN_CLASS_CONVERSION;
         case XI_BOX: return XI_GEN_CLASS_CONVERSION;
@@ -791,8 +783,6 @@ static inline uint8_t xi_generated_op_result_kind(uint16_t op) {
         case XI_LE: return XI_GEN_RESULT_VALUE;
         case XI_GT: return XI_GEN_RESULT_VALUE;
         case XI_GE: return XI_GEN_RESULT_VALUE;
-        case XI_EQ_STRICT: return XI_GEN_RESULT_VALUE;
-        case XI_NE_STRICT: return XI_GEN_RESULT_VALUE;
         case XI_NOT: return XI_GEN_RESULT_VALUE;
         case XI_CONVERT: return XI_GEN_RESULT_VALUE;
         case XI_BOX: return XI_GEN_RESULT_VALUE;
@@ -933,8 +923,6 @@ static inline uint8_t xi_generated_op_result_ownership(uint16_t op) {
         case XI_LE: return XI_GEN_RESULT_OWNERSHIP_OWNED;
         case XI_GT: return XI_GEN_RESULT_OWNERSHIP_OWNED;
         case XI_GE: return XI_GEN_RESULT_OWNERSHIP_OWNED;
-        case XI_EQ_STRICT: return XI_GEN_RESULT_OWNERSHIP_OWNED;
-        case XI_NE_STRICT: return XI_GEN_RESULT_OWNERSHIP_OWNED;
         case XI_NOT: return XI_GEN_RESULT_OWNERSHIP_OWNED;
         case XI_CONVERT: return XI_GEN_RESULT_OWNERSHIP_OWNED;
         case XI_BOX: return XI_GEN_RESULT_OWNERSHIP_OWNED;
@@ -1075,8 +1063,6 @@ static inline const char *xi_generated_op_result_native_type(uint16_t op) {
         case XI_LE: return NULL;
         case XI_GT: return NULL;
         case XI_GE: return NULL;
-        case XI_EQ_STRICT: return NULL;
-        case XI_NE_STRICT: return NULL;
         case XI_NOT: return NULL;
         case XI_CONVERT: return NULL;
         case XI_BOX: return NULL;
@@ -1217,8 +1203,6 @@ static inline uint8_t xi_generated_op_lowering_policy(uint16_t op) {
         case XI_LE: return XI_GEN_LOWERING_GENERATED;
         case XI_GT: return XI_GEN_LOWERING_GENERATED;
         case XI_GE: return XI_GEN_LOWERING_GENERATED;
-        case XI_EQ_STRICT: return XI_GEN_LOWERING_GENERATED;
-        case XI_NE_STRICT: return XI_GEN_LOWERING_GENERATED;
         case XI_NOT: return XI_GEN_LOWERING_GENERATED;
         case XI_CONVERT: return XI_GEN_LOWERING_GENERATED;
         case XI_BOX: return XI_GEN_LOWERING_GENERATED;
@@ -1359,8 +1343,6 @@ static inline uint8_t xi_generated_op_speculation(uint16_t op) {
         case XI_LE: return XI_GEN_SPECULATION_SAFE;
         case XI_GT: return XI_GEN_SPECULATION_SAFE;
         case XI_GE: return XI_GEN_SPECULATION_SAFE;
-        case XI_EQ_STRICT: return XI_GEN_SPECULATION_NEVER;
-        case XI_NE_STRICT: return XI_GEN_SPECULATION_NEVER;
         case XI_NOT: return XI_GEN_SPECULATION_SAFE;
         case XI_CONVERT: return XI_GEN_SPECULATION_SAFE;
         case XI_BOX: return XI_GEN_SPECULATION_SAFE;
@@ -1501,8 +1483,6 @@ static inline uint8_t xi_generated_op_value_numbering(uint16_t op) {
         case XI_LE: return XI_GEN_VN_PURE;
         case XI_GT: return XI_GEN_VN_PURE;
         case XI_GE: return XI_GEN_VN_PURE;
-        case XI_EQ_STRICT: return XI_GEN_VN_NONE;
-        case XI_NE_STRICT: return XI_GEN_VN_NONE;
         case XI_NOT: return XI_GEN_VN_PURE;
         case XI_CONVERT: return XI_GEN_VN_PURE;
         case XI_BOX: return XI_GEN_VN_NONE;
@@ -1643,8 +1623,6 @@ static inline uint8_t xi_generated_op_tbaa_group(uint16_t op) {
         case XI_LE: return XI_GEN_TBAA_NONE;
         case XI_GT: return XI_GEN_TBAA_NONE;
         case XI_GE: return XI_GEN_TBAA_NONE;
-        case XI_EQ_STRICT: return XI_GEN_TBAA_NONE;
-        case XI_NE_STRICT: return XI_GEN_TBAA_NONE;
         case XI_NOT: return XI_GEN_TBAA_NONE;
         case XI_CONVERT: return XI_GEN_TBAA_NONE;
         case XI_BOX: return XI_GEN_TBAA_NONE;
@@ -1785,8 +1763,6 @@ static inline uint8_t xi_generated_op_backend_rewrite(uint16_t op) {
         case XI_LE: return XI_GEN_BACKEND_REWRITE_NONE;
         case XI_GT: return XI_GEN_BACKEND_REWRITE_NONE;
         case XI_GE: return XI_GEN_BACKEND_REWRITE_NONE;
-        case XI_EQ_STRICT: return XI_GEN_BACKEND_REWRITE_NONE;
-        case XI_NE_STRICT: return XI_GEN_BACKEND_REWRITE_NONE;
         case XI_NOT: return XI_GEN_BACKEND_REWRITE_NONE;
         case XI_CONVERT: return XI_GEN_BACKEND_REWRITE_NONE;
         case XI_BOX: return XI_GEN_BACKEND_REWRITE_NONE;
@@ -1927,8 +1903,6 @@ static inline const char *xi_generated_op_backend_rewrite_name(uint16_t op) {
         case XI_LE: return NULL;
         case XI_GT: return NULL;
         case XI_GE: return NULL;
-        case XI_EQ_STRICT: return NULL;
-        case XI_NE_STRICT: return NULL;
         case XI_NOT: return NULL;
         case XI_CONVERT: return NULL;
         case XI_BOX: return NULL;
@@ -2074,8 +2048,6 @@ static inline uint8_t xi_generated_op_escape_use(uint16_t op) {
         case XI_LE: return XI_GEN_ESCAPE_USE_NONE;
         case XI_GT: return XI_GEN_ESCAPE_USE_NONE;
         case XI_GE: return XI_GEN_ESCAPE_USE_NONE;
-        case XI_EQ_STRICT: return XI_GEN_ESCAPE_USE_NONE;
-        case XI_NE_STRICT: return XI_GEN_ESCAPE_USE_NONE;
         case XI_NOT: return XI_GEN_ESCAPE_USE_NONE;
         case XI_CONVERT: return XI_GEN_ESCAPE_USE_NONE;
         case XI_BOX: return XI_GEN_ESCAPE_USE_NONE;
@@ -2216,8 +2188,6 @@ static inline uint8_t xi_generated_op_escape_alloc(uint16_t op) {
         case XI_LE: return XI_GEN_ESCAPE_ALLOC_NONE;
         case XI_GT: return XI_GEN_ESCAPE_ALLOC_NONE;
         case XI_GE: return XI_GEN_ESCAPE_ALLOC_NONE;
-        case XI_EQ_STRICT: return XI_GEN_ESCAPE_ALLOC_NONE;
-        case XI_NE_STRICT: return XI_GEN_ESCAPE_ALLOC_NONE;
         case XI_NOT: return XI_GEN_ESCAPE_ALLOC_NONE;
         case XI_CONVERT: return XI_GEN_ESCAPE_ALLOC_NONE;
         case XI_BOX: return XI_GEN_ESCAPE_ALLOC_NONE;
@@ -2358,8 +2328,6 @@ static inline uint8_t xi_generated_op_own_use(uint16_t op) {
         case XI_LE: return XI_GEN_OWN_USE_BORROW;
         case XI_GT: return XI_GEN_OWN_USE_BORROW;
         case XI_GE: return XI_GEN_OWN_USE_BORROW;
-        case XI_EQ_STRICT: return XI_GEN_OWN_USE_BORROW;
-        case XI_NE_STRICT: return XI_GEN_OWN_USE_BORROW;
         case XI_NOT: return XI_GEN_OWN_USE_BORROW;
         case XI_CONVERT: return XI_GEN_OWN_USE_BORROW;
         case XI_BOX: return XI_GEN_OWN_USE_BORROW;
@@ -2500,8 +2468,6 @@ static inline uint8_t xi_generated_op_ic_site(uint16_t op) {
         case XI_LE: return XI_GEN_IC_SITE_NONE;
         case XI_GT: return XI_GEN_IC_SITE_NONE;
         case XI_GE: return XI_GEN_IC_SITE_NONE;
-        case XI_EQ_STRICT: return XI_GEN_IC_SITE_NONE;
-        case XI_NE_STRICT: return XI_GEN_IC_SITE_NONE;
         case XI_NOT: return XI_GEN_IC_SITE_NONE;
         case XI_CONVERT: return XI_GEN_IC_SITE_NONE;
         case XI_BOX: return XI_GEN_IC_SITE_NONE;
@@ -2642,8 +2608,6 @@ static inline XiOp xi_generated_op_negates_to(uint16_t op) {
         case XI_LE: return XI_GT;
         case XI_GT: return XI_LE;
         case XI_GE: return XI_LT;
-        case XI_EQ_STRICT: return XI_OP_COUNT;
-        case XI_NE_STRICT: return XI_OP_COUNT;
         case XI_NOT: return XI_OP_COUNT;
         case XI_CONVERT: return XI_OP_COUNT;
         case XI_BOX: return XI_OP_COUNT;
@@ -2784,8 +2748,6 @@ static inline uint32_t xi_generated_op_algebraic_traits(uint16_t op) {
         case XI_LE: return 0;
         case XI_GT: return 0;
         case XI_GE: return 0;
-        case XI_EQ_STRICT: return 0;
-        case XI_NE_STRICT: return 0;
         case XI_NOT: return 0;
         case XI_CONVERT: return 0;
         case XI_BOX: return 0;
@@ -2926,8 +2888,6 @@ static inline uint8_t xi_generated_op_default_flags(uint16_t op) {
         case XI_LE: return 0;
         case XI_GT: return 0;
         case XI_GE: return 0;
-        case XI_EQ_STRICT: return 0;
-        case XI_NE_STRICT: return 0;
         case XI_NOT: return 0;
         case XI_CONVERT: return 0;
         case XI_BOX: return 0;
@@ -3068,8 +3028,6 @@ static inline uint32_t xi_generated_op_effects(uint16_t op) {
         case XI_LE: return 0;
         case XI_GT: return 0;
         case XI_GE: return 0;
-        case XI_EQ_STRICT: return 0;
-        case XI_NE_STRICT: return 0;
         case XI_NOT: return 0;
         case XI_CONVERT: return 0;
         case XI_BOX: return 0;

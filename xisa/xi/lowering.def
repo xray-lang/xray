@@ -308,18 +308,6 @@
   :vm-bytecode (driver xi_emit_cmp)
   :aot-c (driver xicgen_ne))
 
-(lower xi.eq.strict
-  :match (compare)
-  :required-targets (vm-bytecode aot-c)
-  :vm-bytecode (driver xi_emit_cmp)
-  :aot-c (driver xicgen_eq_strict))
-
-(lower xi.ne.strict
-  :match (compare)
-  :required-targets (vm-bytecode aot-c)
-  :vm-bytecode (driver xi_emit_cmp)
-  :aot-c (driver xicgen_ne_strict))
-
 (lower xi.lt
   :match (compare)
   :required-targets (vm-bytecode aot-c)

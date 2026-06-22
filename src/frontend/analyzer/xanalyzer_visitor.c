@@ -1248,8 +1248,6 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
         case AST_BINARY_GE:
         case AST_BINARY_AND:
         case AST_BINARY_OR:
-        case AST_BINARY_EQ_STRICT:
-        case AST_BINARY_NE_STRICT:
         case AST_BINARY_BAND:
         case AST_BINARY_BOR:
         case AST_BINARY_BXOR:

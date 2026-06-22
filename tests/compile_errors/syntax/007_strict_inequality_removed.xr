@@ -1,0 +1,3 @@
+fn main() {
+    let different = 1 !== 2
+}

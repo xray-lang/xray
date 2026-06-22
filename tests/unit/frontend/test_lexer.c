@@ -27,6 +27,12 @@ static void assert_token(Token t, XrTokenType expected_type, const char *expecte
     }
 }
 
+static void assert_error_token(Token t, const char *expected_text, const char *expected_message) {
+    assert_token(t, TK_ERROR, expected_text);
+    ASSERT_TRUE(t.error_message != NULL);
+    ASSERT_TRUE(strcmp(t.error_message, expected_message) == 0);
+}
+
 /* ========== Single Character Token Tests ========== */
 
 TEST(lexer_single_chars) {
@@ -51,8 +57,10 @@ TEST(lexer_single_chars) {
 TEST(lexer_comparison_ops) {
     assert_token(scan_single("=="), TK_EQ, "==");
     assert_token(scan_single("!="), TK_NE, "!=");
-    assert_token(scan_single("==="), TK_EQ_STRICT, "===");
-    assert_token(scan_single("!=="), TK_NE_STRICT, "!==");
+    assert_error_token(scan_single("==="),
+                       "===", "strict equality operator '===' was removed; use '=='");
+    assert_error_token(scan_single("!=="),
+                       "!==", "strict inequality operator '!==' was removed; use '!='");
     assert_token(scan_single("<"), TK_LT, "<");
     assert_token(scan_single("<="), TK_LE, "<=");
     assert_token(scan_single(">"), TK_GT, ">");

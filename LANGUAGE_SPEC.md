@@ -406,10 +406,9 @@ Full token table (by category):
 
 #### 1.7.4 Comparison
 
-`==` `!=` `===` `!==` `<` `<=` `>` `>=`
+`==` `!=` `<` `<=` `>` `>=`
 
 - `==` `!=`: value equality (with implicit numeric promotion: int→float).
-- `===` `!==`: strict equality (type + value; no promotion).
 - `<` etc.: supported by numbers and strings; not supported by other types.
 
 #### 1.7.5 Logical
@@ -945,7 +944,7 @@ Full precedence table (highest → lowest; operators at the same level share ass
 | 13 | `+` `-` | left | addition / subtraction |
 | 12 | `<<` `>>` | left | shifts |
 | 11 | `<` `<=` `>` `>=` | left | relational |
-| 10 | `==` `!=` `===` `!==` | left | equality |
+| 10 | `==` `!=` | left | equality |
 | 9 | `&` | left | bitwise AND |
 | 8 | `^` | left | bitwise XOR |
 | 7 | `\|` | left | bitwise OR (also union types) |
@@ -1011,7 +1010,7 @@ BinaryExpr ::= UnaryExpr (BinOp UnaryExpr)*
 BinOp ::= '+' | '-' | '*' | '/' | '%'
        | '&' | '|' | '^' | '<<' | '>>'
        | '<' | '<=' | '>' | '>='
-       | '==' | '!=' | '===' | '!=='
+       | '==' | '!='
        | '&&' | '||'
        | '??'
 ```
@@ -1049,8 +1048,6 @@ BinOp ::= '+' | '-' | '*' | '/' | '%'
 |--|--|
 | `==` | value equality. `int` and `float` are comparable (with int→float implicit promotion). Strings compare by content. class/struct uses `==` overload or default identity. |
 | `!=` | inverse of `==` |
-| `===` | **strict** equality: both type and value must match; no implicit conversion. |
-| `!==` | inverse of `===` |
 | `<` `<=` `>` `>=` | supported by numbers and strings; other types are unsupported by default (enable via `operator<` overload). |
 
 **Difference vs. JS**: xray's `==` **does not** do string↔number conversion; only the numeric int↔float promotion.
@@ -5126,7 +5123,7 @@ NullCoalesce ::= LogicAndExpr ('??' LogicAndExpr)*
 BitOrExpr   ::= BitXorExpr ('|' BitXorExpr)*
 BitXorExpr  ::= BitAndExpr ('^' BitAndExpr)*
 BitAndExpr  ::= EqualityExpr ('&' EqualityExpr)*
-EqualityExpr ::= RelationalExpr (('==' | '!=' | '===' | '!==') RelationalExpr)*
+EqualityExpr ::= RelationalExpr (('==' | '!=') RelationalExpr)*
 RelationalExpr ::= ShiftExpr (('<' | '<=' | '>' | '>=') ShiftExpr)*
 ShiftExpr   ::= AdditiveExpr (('<<' | '>>') AdditiveExpr)*
 AdditiveExpr ::= MultiplicativeExpr (('+' | '-') MultiplicativeExpr)*
@@ -5415,7 +5412,7 @@ The complete operator listing organized by purpose is in [§1.7](#17-operators-a
 |--|--|
 | Arithmetic | `+` `-` `*` `/` `%` |
 | Bitwise | `&` `\|` `^` `~` `<<` `>>` |
-| Comparison | `==` `!=` `===` `!==` `<` `<=` `>` `>=` |
+| Comparison | `==` `!=` `<` `<=` `>` `>=` |
 | Logical | `&&` `\|\|` `!` |
 | Assignment | `=` `+=` `-=` `*=` `/=` `%=` `&=` `\|=` `^=` `<<=` `>>=` |
 | Other | `..` `??` `?.` `?[` `!` `->` |
@@ -5464,7 +5461,7 @@ Xray draws inspiration from many existing languages but has notable differences 
 | Static typing | Optional in TS | **Mandatory** (`Json` is the only dynamic type) |
 | Numerics | Single `number` (double) | `int`, `float`, `BigInt` strictly distinguished |
 | Truthiness | truthy / falsy | truthy / falsy (similar to JS), but `bool` itself rejects implicit assignment from int/null |
-| `===` vs `==` | `===` strict, `==` weak (string↔number coercion) | `==`/`!=` is value equality (only int↔float promotion); `===`/`!==` requires both type and value to be strictly equal |
+| Equality | `===` is strict, `==` is weak (string↔number coercion) | Only `==`/`!=`; value equality only promotes numeric int↔float, and `===`/`!==` are not operators |
 | Closure capture | by reference | by reference (default); `go` closures are strictly restricted |
 | Objects | dynamic fields | dynamic by default; sealed once annotated `type T = {...}` |
 | import | ES Modules | xray-specific syntax (stdlib uses unquoted form) |

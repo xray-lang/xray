@@ -10,21 +10,21 @@
 #include <string.h>
 
 int main(void) {
-    assert(XI_LOWERING_ENTRY_COUNT == 126);
-    assert(XI_LOWERING_PATTERNED_ENTRY_COUNT == 35);
+    assert(XI_LOWERING_ENTRY_COUNT == 124);
+    assert(XI_LOWERING_PATTERNED_ENTRY_COUNT == 33);
     assert(XI_LOWERING_CUSTOM_ENTRY_COUNT == 91);
-    assert(XI_LOWERING_MAIN_BACKEND_ENTRY_COUNT == 94);
-    assert(XI_LOWERING_MAIN_BACKEND_PATTERNED_ENTRY_COUNT == 35);
+    assert(XI_LOWERING_MAIN_BACKEND_ENTRY_COUNT == 92);
+    assert(XI_LOWERING_MAIN_BACKEND_PATTERNED_ENTRY_COUNT == 33);
     assert(XI_LOWERING_REJECTED_TARGET_COUNT == 1);
     assert(XI_LOWERING_REJECTED_ENTRY_COUNT == 1);
-    assert(XI_LOWERING_AOT_C_ENTRY_COUNT == 95);
-    assert(XI_LOWERING_AOT_C_PATTERNED_ENTRY_COUNT == 35);
+    assert(XI_LOWERING_AOT_C_ENTRY_COUNT == 93);
+    assert(XI_LOWERING_AOT_C_PATTERNED_ENTRY_COUNT == 33);
     assert(XI_LOWERING_AOT_C_STMT_ENTRY_COUNT == 8);
     assert(XI_LOWERING_AOT_C_STMT_PATTERNED_ENTRY_COUNT == 0);
     assert(XI_LOWERING_AOT_VERIFY_ENTRY_COUNT == 0);
     assert(XI_LOWERING_AOT_VERIFY_PATTERNED_ENTRY_COUNT == 0);
-    assert(XI_LOWERING_VM_BYTECODE_ENTRY_COUNT == 125);
-    assert(XI_LOWERING_VM_BYTECODE_PATTERNED_ENTRY_COUNT == 35);
+    assert(XI_LOWERING_VM_BYTECODE_ENTRY_COUNT == 123);
+    assert(XI_LOWERING_VM_BYTECODE_PATTERNED_ENTRY_COUNT == 33);
     assert(xi_lowering_generated_targets(XI_CONST) == (XI_LOWER_TARGET_AOT_C | XI_LOWER_TARGET_VM_BYTECODE));
     assert(xi_lowering_required_targets(XI_CONST) == (XI_LOWER_TARGET_VM_BYTECODE | XI_LOWER_TARGET_AOT_C));
     assert(xi_lowering_rejected_targets(XI_CONST) == (0));
@@ -496,28 +496,6 @@ int main(void) {
     assert(xi_emit_vm_requires_fresh_dst(XI_NE) == false);
     assert(xi_emit_vm_uses_raw_cell_args(XI_NE) == false);
     assert(xi_emit_vm_handles_cell_dst(XI_NE) == false);
-    assert(xi_lowering_generated_targets(XI_EQ_STRICT) == (XI_LOWER_TARGET_AOT_C | XI_LOWER_TARGET_VM_BYTECODE));
-    assert(xi_lowering_required_targets(XI_EQ_STRICT) == (XI_LOWER_TARGET_VM_BYTECODE | XI_LOWER_TARGET_AOT_C));
-    assert(xi_lowering_rejected_targets(XI_EQ_STRICT) == (0));
-    assert(xi_lowering_template_kind(XI_EQ_STRICT) == XI_LOWER_TEMPLATE_COMPARE);
-    assert(xi_lowering_is_patterned(XI_EQ_STRICT) == true);
-    assert(xi_emit_vm_template_opcode(XI_EQ_STRICT) == OP_CMP_EQ_STRICT);
-    assert(xi_emit_vm_template_swaps_args(XI_EQ_STRICT) == false);
-    assert(strcmp(xi_to_c_template_strict_compare_op(XI_EQ_STRICT), "==") == 0);
-    assert(xi_emit_vm_requires_fresh_dst(XI_EQ_STRICT) == false);
-    assert(xi_emit_vm_uses_raw_cell_args(XI_EQ_STRICT) == false);
-    assert(xi_emit_vm_handles_cell_dst(XI_EQ_STRICT) == false);
-    assert(xi_lowering_generated_targets(XI_NE_STRICT) == (XI_LOWER_TARGET_AOT_C | XI_LOWER_TARGET_VM_BYTECODE));
-    assert(xi_lowering_required_targets(XI_NE_STRICT) == (XI_LOWER_TARGET_VM_BYTECODE | XI_LOWER_TARGET_AOT_C));
-    assert(xi_lowering_rejected_targets(XI_NE_STRICT) == (0));
-    assert(xi_lowering_template_kind(XI_NE_STRICT) == XI_LOWER_TEMPLATE_COMPARE);
-    assert(xi_lowering_is_patterned(XI_NE_STRICT) == true);
-    assert(xi_emit_vm_template_opcode(XI_NE_STRICT) == OP_CMP_NE_STRICT);
-    assert(xi_emit_vm_template_swaps_args(XI_NE_STRICT) == false);
-    assert(strcmp(xi_to_c_template_strict_compare_op(XI_NE_STRICT), "!=") == 0);
-    assert(xi_emit_vm_requires_fresh_dst(XI_NE_STRICT) == false);
-    assert(xi_emit_vm_uses_raw_cell_args(XI_NE_STRICT) == false);
-    assert(xi_emit_vm_handles_cell_dst(XI_NE_STRICT) == false);
     assert(xi_lowering_generated_targets(XI_LT) == (XI_LOWER_TARGET_AOT_C | XI_LOWER_TARGET_VM_BYTECODE));
     assert(xi_lowering_required_targets(XI_LT) == (XI_LOWER_TARGET_VM_BYTECODE | XI_LOWER_TARGET_AOT_C));
     assert(xi_lowering_rejected_targets(XI_LT) == (0));

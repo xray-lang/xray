@@ -1255,17 +1255,17 @@ TEST(const_same_value_not_gvnd) {
 }
 
 TEST(zero_effect_op_without_vn_policy_not_eliminated) {
-    XiFunc *f = make_func("strict_not_vn", &stub_bool);
+    XiFunc *f = make_func("is_not_vn", &stub_bool);
     XiBlock *entry = f->entry;
     XiValue *x = xi_param(f, entry, 0, &stub_int);
     XiValue *y = xi_param(f, entry, 1, &stub_int);
-    XiValue *e1 = xi_binary(f, entry, XI_EQ_STRICT, &stub_bool, x, y);
-    XiValue *e2 = xi_binary(f, entry, XI_EQ_STRICT, &stub_bool, x, y);
+    XiValue *e1 = xi_binary(f, entry, XI_IS, &stub_bool, x, y);
+    XiValue *e2 = xi_binary(f, entry, XI_IS, &stub_bool, x, y);
     xi_block_set_return(entry, e2);
 
     xi_opt_gvn_pre(f);
-    assert(e1->op == XI_EQ_STRICT && "first strict compare should remain");
-    assert(e2->op == XI_EQ_STRICT && "strict compare needs explicit VN policy");
+    assert(e1->op == XI_IS && "first type check should remain");
+    assert(e2->op == XI_IS && "type check needs explicit VN policy");
     xi_func_free(f);
 }
 

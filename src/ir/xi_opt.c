@@ -1314,8 +1314,6 @@ static XrRep sr_use_rep(const XiValue *user, uint16_t arg_idx, const XiRepPolicy
         case XI_LE:
         case XI_GT:
         case XI_GE:
-        case XI_EQ_STRICT:
-        case XI_NE_STRICT:
             if (sr_compare_uses_null(user))
                 return XR_REP_TAGGED;
             if (arg_idx < user->nargs && user->args[arg_idx] && user->args[arg_idx]->type) {

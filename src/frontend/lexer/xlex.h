@@ -64,8 +64,6 @@ typedef enum {
     // Multi-character tokens (start from 256 to avoid ASCII collision)
     TK_EQ = 256,       // ==
     TK_NE,             // !=
-    TK_EQ_STRICT,      // ===
-    TK_NE_STRICT,      // !==
     TK_LT,             // <
     TK_LE,             // <=
     TK_GT,             // >

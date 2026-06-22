@@ -23,7 +23,7 @@ order: 004
 | 13 | `+` `-` | 左 | 加减 |
 | 12 | `<<` `>>` | 左 | 移位 |
 | 11 | `<` `<=` `>` `>=` | 左 | 关系比较 |
-| 10 | `==` `!=` `===` `!==` | 左 | 相等比较 |
+| 10 | `==` `!=` | 左 | 相等比较 |
 | 9 | `&` | 左 | 位与 |
 | 8 | `^` | 左 | 位异或 |
 | 7 | `\|` | 左 | 位或（亦用于 union 类型） |
@@ -89,7 +89,7 @@ BinaryExpr ::= UnaryExpr (BinOp UnaryExpr)*
 BinOp ::= '+' | '-' | '*' | '/' | '%'
        | '&' | '|' | '^' | '<<' | '>>'
        | '<' | '<=' | '>' | '>='
-       | '==' | '!=' | '===' | '!=='
+       | '==' | '!='
        | '&&' | '||'
        | '??'
 ```
@@ -127,8 +127,6 @@ BinOp ::= '+' | '-' | '*' | '/' | '%'
 |--|--|
 | `==` | 值相等。`int` 与 `float` 可比较（int→float 隐式）。字符串按内容比较。class/struct 使用 `==` 重载或默认 identity。 |
 | `!=` | `==` 的反 |
-| `===` | **严格**相等：类型与值都必须相等；无任何隐式转换。 |
-| `!==` | `===` 的反 |
 | `<` `<=` `>` `>=` | 数值与字符串支持；其他类型默认不支持（可通过 `operator<` 重载启用）。 |
 
 **与 JS 的区别**：xray 的 `==` **不**做 string↔number 转换；只做数值之间的 int↔float 提升。
@@ -564,7 +562,7 @@ Full precedence table (highest → lowest; operators at the same level share ass
 | 13 | `+` `-` | left | addition / subtraction |
 | 12 | `<<` `>>` | left | shifts |
 | 11 | `<` `<=` `>` `>=` | left | relational |
-| 10 | `==` `!=` `===` `!==` | left | equality |
+| 10 | `==` `!=` | left | equality |
 | 9 | `&` | left | bitwise AND |
 | 8 | `^` | left | bitwise XOR |
 | 7 | `\|` | left | bitwise OR (also union types) |
@@ -630,7 +628,7 @@ BinaryExpr ::= UnaryExpr (BinOp UnaryExpr)*
 BinOp ::= '+' | '-' | '*' | '/' | '%'
        | '&' | '|' | '^' | '<<' | '>>'
        | '<' | '<=' | '>' | '>='
-       | '==' | '!=' | '===' | '!=='
+       | '==' | '!='
        | '&&' | '||'
        | '??'
 ```
@@ -668,8 +666,6 @@ BinOp ::= '+' | '-' | '*' | '/' | '%'
 |--|--|
 | `==` | value equality. `int` and `float` are comparable (with int→float implicit promotion). Strings compare by content. class/struct uses `==` overload or default identity. |
 | `!=` | inverse of `==` |
-| `===` | **strict** equality: both type and value must match; no implicit conversion. |
-| `!==` | inverse of `===` |
 | `<` `<=` `>` `>=` | supported by numbers and strings; other types are unsupported by default (enable via `operator<` overload). |
 
 **Difference vs. JS**: xray's `==` **does not** do string↔number conversion; only the numeric int↔float promotion.

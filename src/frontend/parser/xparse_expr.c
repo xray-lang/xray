@@ -795,26 +795,12 @@ AstNode *xr_parse_lt_or_generic(Parser *parser, AstNode *left) {
 
 // XrTokenType -> AstNodeType mapping for binary operators
 static const AstNodeType binary_op_map[] = {
-    [TK_PLUS] = AST_BINARY_ADD,
-    [TK_MINUS] = AST_BINARY_SUB,
-    [TK_STAR] = AST_BINARY_MUL,
-    [TK_SLASH] = AST_BINARY_DIV,
-    [TK_PERCENT] = AST_BINARY_MOD,
-    [TK_AMP] = AST_BINARY_BAND,
-    [TK_PIPE] = AST_BINARY_BOR,
-    [TK_CARET] = AST_BINARY_BXOR,
-    [TK_LSHIFT] = AST_BINARY_LSHIFT,
-    [TK_RSHIFT] = AST_BINARY_RSHIFT,
-    [TK_EQ] = AST_BINARY_EQ,
-    [TK_NE] = AST_BINARY_NE,
-    [TK_EQ_STRICT] = AST_BINARY_EQ_STRICT,
-    [TK_NE_STRICT] = AST_BINARY_NE_STRICT,
-    [TK_LT] = AST_BINARY_LT,
-    [TK_LE] = AST_BINARY_LE,
-    [TK_GT] = AST_BINARY_GT,
-    [TK_GE] = AST_BINARY_GE,
-    [TK_AND] = AST_BINARY_AND,
-    [TK_OR] = AST_BINARY_OR,
+    [TK_PLUS] = AST_BINARY_ADD,      [TK_MINUS] = AST_BINARY_SUB,   [TK_STAR] = AST_BINARY_MUL,
+    [TK_SLASH] = AST_BINARY_DIV,     [TK_PERCENT] = AST_BINARY_MOD, [TK_AMP] = AST_BINARY_BAND,
+    [TK_PIPE] = AST_BINARY_BOR,      [TK_CARET] = AST_BINARY_BXOR,  [TK_LSHIFT] = AST_BINARY_LSHIFT,
+    [TK_RSHIFT] = AST_BINARY_RSHIFT, [TK_EQ] = AST_BINARY_EQ,       [TK_NE] = AST_BINARY_NE,
+    [TK_LT] = AST_BINARY_LT,         [TK_LE] = AST_BINARY_LE,       [TK_GT] = AST_BINARY_GT,
+    [TK_GE] = AST_BINARY_GE,         [TK_AND] = AST_BINARY_AND,     [TK_OR] = AST_BINARY_OR,
 };
 
 // Parse binary operators: left op right

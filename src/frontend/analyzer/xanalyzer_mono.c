@@ -314,8 +314,6 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
         case AST_BINARY_RSHIFT:
         case AST_BINARY_EQ:
         case AST_BINARY_NE:
-        case AST_BINARY_EQ_STRICT:
-        case AST_BINARY_NE_STRICT:
         case AST_BINARY_LT:
         case AST_BINARY_LE:
         case AST_BINARY_GT:
@@ -1168,8 +1166,6 @@ static void collect_instantiation_sites(AstNode *node, XaGenericRegistry *regist
         case AST_BINARY_BXOR:
         case AST_BINARY_LSHIFT:
         case AST_BINARY_RSHIFT:
-        case AST_BINARY_EQ_STRICT:
-        case AST_BINARY_NE_STRICT:
         case AST_NULLISH_COALESCE:
             collect_instantiation_sites(node->as.binary.left, registry, collector);
             collect_instantiation_sites(node->as.binary.right, registry, collector);
@@ -1408,8 +1404,6 @@ static void rewrite_call_sites(AstNode *node, XaGenericRegistry *registry,
         case AST_BINARY_BXOR:
         case AST_BINARY_LSHIFT:
         case AST_BINARY_RSHIFT:
-        case AST_BINARY_EQ_STRICT:
-        case AST_BINARY_NE_STRICT:
         case AST_NULLISH_COALESCE:
             rewrite_call_sites(node->as.binary.left, registry, collector);
             rewrite_call_sites(node->as.binary.right, registry, collector);

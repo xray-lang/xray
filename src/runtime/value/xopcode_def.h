@@ -134,8 +134,6 @@
     _(LEI, FMT_AsB_C, KOP_AB_TEST_S, "if (R[A] <= sB) != k then PC++")                             \
     _(CMP_EQ, FMT_ABC, KOP_ABC_BIN, "R[A] = (R[B] == R[C])")                                       \
     _(CMP_NE, FMT_ABC, KOP_ABC_BIN, "R[A] = (R[B] != R[C])")                                       \
-    _(CMP_EQ_STRICT, FMT_ABC, KOP_ABC_BIN, "R[A] = (R[B] === R[C])")                               \
-    _(CMP_NE_STRICT, FMT_ABC, KOP_ABC_BIN, "R[A] = (R[B] !== R[C])")                               \
     _(CMP_LT, FMT_ABC, KOP_ABC_BIN, "R[A] = (R[B] < R[C])")                                        \
     _(CMP_LE, FMT_ABC, KOP_ABC_BIN, "R[A] = (R[B] <= R[C])")                                       \
     _(IS, FMT_ABC, KOP_ABC_BIN, "R[A] = (R[B] is R[C])")                                           \
