@@ -25,6 +25,7 @@
 
 #include "../../src/base/xchecks.h"
 #include "../../src/module/xmodule.h"
+#include "../../src/runtime/xisolate_api.h"
 
 #include <stddef.h>
 #include <string.h>
@@ -221,15 +222,16 @@ void xr_prelude_register_all_native_types(XrayIsolate *isolate) {
         bind_class_global(isolate, XR_GLOBAL_VAR_DATETIME, core->dateTimeClass);
     }
     /* Atomic native type class (registered by xr_core_init). */
-    if (isolate->native_type_classes[XR_TATOMIC])
-        bind_class_global(isolate, XR_GLOBAL_VAR_ATOMIC, isolate->native_type_classes[XR_TATOMIC]);
-    if (isolate->native_type_classes[XR_TWORKQUEUE]) {
-        bind_class_global(isolate, XR_GLOBAL_VAR_WORKQUEUE,
-                          isolate->native_type_classes[XR_TWORKQUEUE]);
+    XrClass *atomic_cls = xr_isolate_get_native_type_class(isolate, XR_TATOMIC);
+    XrClass *work_queue_cls = xr_isolate_get_native_type_class(isolate, XR_TWORKQUEUE);
+    XrClass *result_group_cls = xr_isolate_get_native_type_class(isolate, XR_TRESULTGROUP);
+    if (atomic_cls)
+        bind_class_global(isolate, XR_GLOBAL_VAR_ATOMIC, atomic_cls);
+    if (work_queue_cls) {
+        bind_class_global(isolate, XR_GLOBAL_VAR_WORKQUEUE, work_queue_cls);
     }
-    if (isolate->native_type_classes[XR_TRESULTGROUP]) {
-        bind_class_global(isolate, XR_GLOBAL_VAR_RESULTGROUP,
-                          isolate->native_type_classes[XR_TRESULTGROUP]);
+    if (result_group_cls) {
+        bind_class_global(isolate, XR_GLOBAL_VAR_RESULTGROUP, result_group_cls);
     }
 }
 

@@ -72,7 +72,7 @@ static MethodHandler resolve_native_handler(XrayIsolate *isolate, XrObjType gc_t
     XR_DCHECK(isolate != NULL, "resolve_native_handler: NULL isolate");
     if ((int) gc_type >= XR_NATIVE_TYPE_MAX)
         return NULL;
-    XrClass *cls = isolate->native_type_classes[gc_type];
+    XrClass *cls = isolate->core_rt->native_type_classes[gc_type];
     if (!cls)
         return NULL;
     XrMethod *m = xr_class_lookup_method(cls, symbol);

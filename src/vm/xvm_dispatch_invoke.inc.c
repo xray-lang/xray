@@ -202,7 +202,7 @@ invoke_dispatch:;
                 R(a) = xr_string_value(xr_value_to_string(isolate, receiver));
                 vmbreak;
             }
-            XrSymbolTable *_st = (XrSymbolTable *) isolate->symbol_table;
+            XrSymbolTable *_st = (XrSymbolTable *) isolate->core_rt->symbol_table;
             const char *_mn = xr_symbol_get_name_in_table(_st, method_symbol);
             VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_METHOD, "method '%s' called on unsupported type",
                              _mn ? _mn : "?");
@@ -298,7 +298,7 @@ invoke_dispatch:;
             XrProto *proto = closure->proto;
 
             if (nargs + 1 != proto->numparams) {
-                XrSymbolTable *_st = (XrSymbolTable *) isolate->symbol_table;
+                XrSymbolTable *_st = (XrSymbolTable *) isolate->core_rt->symbol_table;
                 const char *_mn = xr_symbol_get_name_in_table(_st, method_symbol);
                 VM_RUNTIME_ERROR(XR_ERR_WRONG_ARG_COUNT,
                                  "method '%s' expects %d arguments but got %d", _mn ? _mn : "?",
@@ -344,7 +344,7 @@ invoke_dispatch:;
         }
 
         /* Method not found */
-        XrSymbolTable *_st = (XrSymbolTable *) isolate->symbol_table;
+        XrSymbolTable *_st = (XrSymbolTable *) isolate->core_rt->symbol_table;
         const char *_mn = xr_symbol_get_name_in_table(_st, method_symbol);
         VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_METHOD, "method '%s' not found on type '%s'",
                          _mn ? _mn : "?", xr_typeid_name(xr_value_typeid(receiver)));

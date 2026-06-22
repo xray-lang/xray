@@ -450,7 +450,7 @@ XR_FUNC XrDispatchAction vm_invoke_channel(XrayIsolate *isolate, XrVMContext *vm
     }
 
     // Unknown method
-    XrSymbolTable *sym_table = (XrSymbolTable *) isolate->symbol_table;
+    XrSymbolTable *sym_table = (XrSymbolTable *) isolate->core_rt->symbol_table;
     const char *method_name = xr_symbol_get_name_in_table(sym_table, method_symbol);
     VM_THROW(frame, pc, XR_ERR_TYPE_NO_METHOD,
              "Channel has no method '%s', available: send(), recv(), trySend(), tryRecv(), "
@@ -797,7 +797,7 @@ XR_FUNC XrDispatchAction vm_invoke_class(XrayIsolate *isolate, XrVMContext *vm_c
     XR_DCHECK(isolate != NULL, "vm_invoke_class: NULL isolate");
     XR_DCHECK(base != NULL, "vm_invoke_class: NULL base");
     XrClass *cls = xr_value_to_class(receiver);
-    XrSymbolTable *_st = (XrSymbolTable *) isolate->symbol_table;
+    XrSymbolTable *_st = (XrSymbolTable *) isolate->core_rt->symbol_table;
     const char *method_name_chars = xr_symbol_get_name_in_table(_st, method_symbol);
 
     if (strcmp(method_name_chars, XR_KEYWORD_CONSTRUCTOR) == 0) {
@@ -969,7 +969,7 @@ XR_FUNC XrDispatchAction vm_superinvoke(XrayIsolate *isolate, XrVMContext *vm_ct
 
     const char *method_name = xr_value_str_data(&method_name_val);
 
-    XrSymbolTable *sym_table = (XrSymbolTable *) isolate->symbol_table;
+    XrSymbolTable *sym_table = (XrSymbolTable *) isolate->core_rt->symbol_table;
     int method_symbol = xr_symbol_register_in_table(sym_table, method_name);
 
     XrMethod *method = xr_class_lookup_method(super_class, method_symbol);

@@ -13,6 +13,7 @@
 
 #include "yaml_parser.h"
 #include "../../src/runtime/symbol/xsymbol_table.h"
+#include "../../src/runtime/xisolate_api.h"
 #include "../../src/base/xmalloc.h"
 #include "../common_writer.h"
 #include "../common_parser.h"
@@ -437,7 +438,7 @@ static void emit_map(YamlEmitter *e, XrMap *map, int level, bool flow_mode) {
 // ========== Json Output ==========
 
 static void emit_json(YamlEmitter *e, XrJson *json, int level, bool flow_mode) {
-    XrSymbolTable *symtab = (XrSymbolTable *) e->isolate->symbol_table;
+    XrSymbolTable *symtab = (XrSymbolTable *) xr_isolate_get_symbol_table(e->isolate);
     uint16_t count = xr_json_field_count(e->isolate, json);
 
     if (count == 0) {

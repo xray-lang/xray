@@ -627,7 +627,7 @@ getprop_instance:;
             R(a) = XR_FROM_PTR(_m->as.closure);
         } else {
             const char *class_name = inst_class->name ? inst_class->name : "?";
-            XrSymbolTable *_st2 = (XrSymbolTable *) isolate->symbol_table;
+            XrSymbolTable *_st2 = (XrSymbolTable *) isolate->core_rt->symbol_table;
             const char *_pn = xr_symbol_get_name_in_table(_st2, prop_symbol);
             VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_PROPERTY, "field '%s' not declared in class '%s'",
                              _pn ? _pn : "?", class_name);
@@ -687,7 +687,7 @@ vmcase(OP_SETPROP) {
                 VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_PROPERTY,
                                  "cannot add field to shared dynamic object");
             }
-            XrSymbolTable *_st_sd = (XrSymbolTable *) isolate->symbol_table;
+            XrSymbolTable *_st_sd = (XrSymbolTable *) isolate->core_rt->symbol_table;
             const char *fname = xr_symbol_get_name_in_table(_st_sd, prop_symbol);
             // Sealed dynamic objects reject new fields with a clear error
             if (inst_s->klass->flags & XR_CLASS_DYNAMIC_SEALED) {
@@ -776,7 +776,7 @@ vmcase(OP_SETPROP) {
         }
     } else {
         // Field not found: generate error message
-        XrSymbolTable *_st2 = (XrSymbolTable *) isolate->symbol_table;
+        XrSymbolTable *_st2 = (XrSymbolTable *) isolate->core_rt->symbol_table;
         const char *_pn = xr_symbol_get_name_in_table(_st2, prop_symbol);
         VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_PROPERTY, "field '%s' not declared in class '%s'",
                          _pn ? _pn : "?", inst_class->name);

@@ -12,7 +12,9 @@
 #define XR_RUNTIME_CORE_H
 
 #include "../../base/xconfig.h"
+#include "../../base/xforward_decl.h"
 #include "../gc/xgc.h"
+#include "../object/xnative_type.h"
 #include "xr_script_info.h"
 
 struct XrayIsolate;
@@ -31,6 +33,10 @@ typedef struct XrRuntimeCore {
     struct XrGlobalStringPool *global_string_pool;
     struct XrStrBuf *tmp_strbuf;
     void *weak_registry;
+
+    XrTypeRegistry *type_registry;
+    XrSymbolTable *symbol_table;
+    XrClass *native_type_classes[XR_NATIVE_TYPE_MAX];
 
     void *userdata;
     XrayConfig *config;

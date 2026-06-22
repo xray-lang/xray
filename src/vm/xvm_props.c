@@ -89,7 +89,7 @@ XR_FUNC XrDispatchAction vm_setprop_type_dispatch(XrayIsolate *isolate, XrVMCont
     (void) a;
     // Map dot assignment: forbidden
     if (XR_IS_MAP(obj)) {
-        XrSymbolTable *sym_table = (XrSymbolTable *) isolate->symbol_table;
+        XrSymbolTable *sym_table = (XrSymbolTable *) isolate->core_rt->symbol_table;
         const char *name = xr_symbol_get_name_in_table(sym_table, prop_symbol);
         VM_THROW(frame, pc, XR_ERR_TYPE_NO_PROPERTY,
                  "Map does not support dot syntax assignment '%s', use map[\"%s\"] = value or "
@@ -102,7 +102,7 @@ XR_FUNC XrDispatchAction vm_setprop_type_dispatch(XrayIsolate *isolate, XrVMCont
         XrModule *module = xr_value_to_module(obj);
         if (module && xr_module_has_sym(module, prop_symbol)) {
             if (xr_module_is_const_sym(module, prop_symbol)) {
-                XrSymbolTable *_st = (XrSymbolTable *) isolate->symbol_table;
+                XrSymbolTable *_st = (XrSymbolTable *) isolate->core_rt->symbol_table;
                 const char *_name = xr_symbol_get_name_in_table(_st, prop_symbol);
                 VM_THROW(frame, pc, XR_ERR_CMP_CONST_ASSIGN,
                          "cannot modify module constant '%s.%s'", module->name ? module->name : "?",
@@ -114,7 +114,7 @@ XR_FUNC XrDispatchAction vm_setprop_type_dispatch(XrayIsolate *isolate, XrVMCont
                 XR_GC_BARRIER_VAL(_bc->coro_gc, module, value);
             return XR_DISP_NEXT;
         }
-        XrSymbolTable *_st = (XrSymbolTable *) isolate->symbol_table;
+        XrSymbolTable *_st = (XrSymbolTable *) isolate->core_rt->symbol_table;
         const char *_name = xr_symbol_get_name_in_table(_st, prop_symbol);
         VM_THROW(frame, pc, XR_ERR_MOD_NO_EXPORT, "module '%s' has no export variable '%s'",
                  module && module->name ? module->name : "?", _name ? _name : "?");
@@ -125,7 +125,7 @@ XR_FUNC XrDispatchAction vm_setprop_type_dispatch(XrayIsolate *isolate, XrVMCont
         XrClass *cls = xr_value_to_class(obj);
         int field_index = xr_class_lookup_field(cls, prop_symbol);
         if (field_index < 0) {
-            XrSymbolTable *sym_table = (XrSymbolTable *) isolate->symbol_table;
+            XrSymbolTable *sym_table = (XrSymbolTable *) isolate->core_rt->symbol_table;
             const char *pname = xr_symbol_get_name_in_table(sym_table, prop_symbol);
             VM_THROW(frame, pc, XR_ERR_TYPE_NO_PROPERTY,
                      "static field '%s' not found in class '%s'", pname ? pname : "?", cls->name);
@@ -135,13 +135,13 @@ XR_FUNC XrDispatchAction vm_setprop_type_dispatch(XrayIsolate *isolate, XrVMCont
             VM_THROW(frame, pc, XR_ERR_TYPE_MISMATCH, "internal error: field descriptor not found");
         }
         if (!(field->flags & XR_FIELD_STATIC)) {
-            XrSymbolTable *sym_table = (XrSymbolTable *) isolate->symbol_table;
+            XrSymbolTable *sym_table = (XrSymbolTable *) isolate->core_rt->symbol_table;
             const char *pname = xr_symbol_get_name_in_table(sym_table, prop_symbol);
             VM_THROW(frame, pc, XR_ERR_TYPE_NO_PROPERTY, "field '%s' is not a static field",
                      pname ? pname : "?");
         }
         if (field->flags & XR_FIELD_FINAL) {
-            XrSymbolTable *sym_table = (XrSymbolTable *) isolate->symbol_table;
+            XrSymbolTable *sym_table = (XrSymbolTable *) isolate->core_rt->symbol_table;
             const char *pname = xr_symbol_get_name_in_table(sym_table, prop_symbol);
             VM_THROW(frame, pc, XR_ERR_CMP_CONST_ASSIGN, "cannot modify const static field '%s'",
                      pname ? pname : "?");
@@ -232,7 +232,7 @@ XR_FUNC XrDispatchAction vm_setprop_type_dispatch(XrayIsolate *isolate, XrVMCont
         }
 
         // Try setter method: set:<prop_name>
-        XrSymbolTable *sym_table = (XrSymbolTable *) isolate->symbol_table;
+        XrSymbolTable *sym_table = (XrSymbolTable *) isolate->core_rt->symbol_table;
         const char *prop_name = xr_symbol_get_name_in_table(sym_table, prop_symbol);
         if (prop_name && scls) {
             char setter_name[256];
@@ -290,7 +290,7 @@ XR_FUNC XrDispatchAction vm_setprop_instance_setter(XrayIsolate *isolate, XrVMCo
                                                     XrInstance *inst, XrValue obj, int prop_symbol,
                                                     XrValue value, XrValue *base, int c,
                                                     XrBcCallFrame *frame, XrInstruction *pc) {
-    XrSymbolTable *sym_table = (XrSymbolTable *) isolate->symbol_table;
+    XrSymbolTable *sym_table = (XrSymbolTable *) isolate->core_rt->symbol_table;
     const char *prop_name = xr_symbol_get_name_in_table(sym_table, prop_symbol);
     if (!prop_name)
         return XR_DISP_FALLTHROUGH;
@@ -422,7 +422,7 @@ XR_FUNC XrDispatchAction vm_getprop_type_dispatch(XrayIsolate *isolate, XrVMCont
 
     if (xr_value_is_work_queue(obj)) {
         XrWorkQueue *q = xr_value_to_work_queue(obj);
-        XrSymbolTable *sym_table = (XrSymbolTable *) isolate->symbol_table;
+        XrSymbolTable *sym_table = (XrSymbolTable *) isolate->core_rt->symbol_table;
         const char *prop_name = xr_symbol_get_name_in_table(sym_table, prop_symbol);
         if (prop_symbol == SYMBOL_LENGTH) {
             base[a] = xr_int((xr_Integer) xr_work_queue_length(q));
@@ -438,7 +438,7 @@ XR_FUNC XrDispatchAction vm_getprop_type_dispatch(XrayIsolate *isolate, XrVMCont
 
     if (xr_value_is_result_group(obj)) {
         XrResultGroup *g = xr_value_to_result_group(obj);
-        XrSymbolTable *sym_table = (XrSymbolTable *) isolate->symbol_table;
+        XrSymbolTable *sym_table = (XrSymbolTable *) isolate->core_rt->symbol_table;
         const char *prop_name = xr_symbol_get_name_in_table(sym_table, prop_symbol);
         if (prop_symbol == SYMBOL_LENGTH) {
             base[a] = xr_int((xr_Integer) xr_result_group_length(g));
@@ -532,7 +532,7 @@ XR_FUNC XrDispatchAction vm_getprop_type_dispatch(XrayIsolate *isolate, XrVMCont
                 xr_bound_method_new(isolate, obj, xr_map_get_handler(isolate, SYMBOL_FOREACH));
             base[a] = xr_value_from_bound_method(bm);
         } else {
-            XrSymbolTable *sym_table = (XrSymbolTable *) isolate->symbol_table;
+            XrSymbolTable *sym_table = (XrSymbolTable *) isolate->core_rt->symbol_table;
             const char *name = xr_symbol_get_name_in_table(sym_table, prop_symbol);
             VM_THROW(
                 frame, pc, XR_ERR_TYPE_NO_PROPERTY,
@@ -689,7 +689,7 @@ XR_FUNC XrDispatchAction vm_getprop_type_dispatch(XrayIsolate *isolate, XrVMCont
                 isolate, obj, xr_string_get_handler(isolate, SYMBOL_CODEPOINT_AT));
             base[a] = xr_value_from_bound_method(bm);
         } else {
-            XrSymbolTable *sym_table = (XrSymbolTable *) isolate->symbol_table;
+            XrSymbolTable *sym_table = (XrSymbolTable *) isolate->core_rt->symbol_table;
             const char *name = xr_symbol_get_name_in_table(sym_table, prop_symbol);
             VM_THROW(frame, pc, XR_ERR_TYPE_NO_PROPERTY, "string has no property '%s'",
                      name ? name : "?");
@@ -703,7 +703,7 @@ XR_FUNC XrDispatchAction vm_getprop_type_dispatch(XrayIsolate *isolate, XrVMCont
     if (xr_value_is_tuple(obj)) {
         XrTuple *tup = (XrTuple *) XR_TO_PTR(obj);
         uint16_t arity = xr_tuple_arity(tup);
-        XrSymbolTable *sym_table = (XrSymbolTable *) isolate->symbol_table;
+        XrSymbolTable *sym_table = (XrSymbolTable *) isolate->core_rt->symbol_table;
         const char *name = xr_symbol_get_name_in_table(sym_table, prop_symbol);
         if (prop_symbol == SYMBOL_LENGTH) {
             base[a] = xr_int((xr_Integer) arity);
@@ -842,7 +842,7 @@ XR_FUNC XrDispatchAction vm_getprop_type_dispatch(XrayIsolate *isolate, XrVMCont
         XrClass *cls = xr_value_to_class(obj);
         int field_index = xr_class_lookup_field(cls, prop_symbol);
         if (field_index < 0) {
-            XrSymbolTable *sym_table = (XrSymbolTable *) isolate->symbol_table;
+            XrSymbolTable *sym_table = (XrSymbolTable *) isolate->core_rt->symbol_table;
             const char *pname = xr_symbol_get_name_in_table(sym_table, prop_symbol);
             VM_THROW(frame, pc, XR_ERR_TYPE_NO_PROPERTY,
                      "static field '%s' not found in class '%s'", pname ? pname : "?", cls->name);
@@ -852,7 +852,7 @@ XR_FUNC XrDispatchAction vm_getprop_type_dispatch(XrayIsolate *isolate, XrVMCont
             VM_THROW(frame, pc, XR_ERR_TYPE_MISMATCH, "internal error: field descriptor not found");
         }
         if (!(field->flags & XR_FIELD_STATIC)) {
-            XrSymbolTable *sym_table = (XrSymbolTable *) isolate->symbol_table;
+            XrSymbolTable *sym_table = (XrSymbolTable *) isolate->core_rt->symbol_table;
             const char *pname = xr_symbol_get_name_in_table(sym_table, prop_symbol);
             VM_THROW(frame, pc, XR_ERR_TYPE_NO_PROPERTY, "field '%s' is not a static field",
                      pname ? pname : "?");
@@ -882,7 +882,7 @@ XR_FUNC XrDispatchAction vm_getprop_type_dispatch(XrayIsolate *isolate, XrVMCont
 
     // Channel property access error
     if (xr_value_is_channel(obj)) {
-        XrSymbolTable *sym_table = (XrSymbolTable *) isolate->symbol_table;
+        XrSymbolTable *sym_table = (XrSymbolTable *) isolate->core_rt->symbol_table;
         const char *name = xr_symbol_get_name_in_table(sym_table, prop_symbol);
         VM_THROW(frame, pc, XR_ERR_TYPE_NO_PROPERTY,
                  "Channel has no '.%s' property, available methods: send(), recv(), "
@@ -896,7 +896,7 @@ XR_FUNC XrDispatchAction vm_getprop_type_dispatch(XrayIsolate *isolate, XrVMCont
         XrStructLayout *slayout = xr_vm_struct_ref_layout(isolate, obj);
         XrClass *scls =
             (slayout && !xr_struct_layout_is_headerless(slayout)) ? *(XrClass **) sptr : NULL;
-        XrSymbolTable *sym_table = (XrSymbolTable *) isolate->symbol_table;
+        XrSymbolTable *sym_table = (XrSymbolTable *) isolate->core_rt->symbol_table;
         const char *prop_name = xr_symbol_get_name_in_table(sym_table, prop_symbol);
         if (prop_name && scls) {
             // Try getter method: get:<prop_name>
@@ -947,7 +947,7 @@ XR_FUNC XrDispatchAction vm_getprop_type_dispatch(XrayIsolate *isolate, XrVMCont
 
     // Non-instance type error
     if (!xr_value_is_instance(obj)) {
-        XrSymbolTable *sym_table = (XrSymbolTable *) isolate->symbol_table;
+        XrSymbolTable *sym_table = (XrSymbolTable *) isolate->core_rt->symbol_table;
         const char *pname = xr_symbol_get_name_in_table(sym_table, prop_symbol);
         const char *type_name = xr_typeid_name(xr_value_typeid(obj));
         int error_code = XR_IS_NULL(obj) ? XR_ERR_NULL_PROPERTY : XR_ERR_TYPE_NO_PROPERTY;
@@ -985,7 +985,7 @@ XR_FUNC XrDispatchAction vm_getprop_instance_getter(XrayIsolate *isolate, XrVMCo
                                                     XrInstance *inst, XrValue obj, int prop_symbol,
                                                     XrValue *base, int a, XrBcCallFrame *frame,
                                                     XrInstruction *pc) {
-    XrSymbolTable *sym_table = (XrSymbolTable *) isolate->symbol_table;
+    XrSymbolTable *sym_table = (XrSymbolTable *) isolate->core_rt->symbol_table;
     const char *prop_name = xr_symbol_get_name_in_table(sym_table, prop_symbol);
     if (!prop_name)
         return XR_DISP_FALLTHROUGH;
@@ -1071,7 +1071,7 @@ XR_FUNC XrDispatchAction vm_invoke_module(XrayIsolate *isolate, XrVMContext *vm_
 
     XrValue fn_val = xr_module_get_sym(module, method_symbol);
     if (XR_IS_NULL(fn_val)) {
-        XrSymbolTable *_st = (XrSymbolTable *) isolate->symbol_table;
+        XrSymbolTable *_st = (XrSymbolTable *) isolate->core_rt->symbol_table;
         const char *_name = xr_symbol_get_name_in_table(_st, method_symbol);
         VM_THROW(frame, pc, XR_ERR_MOD_NO_EXPORT, "module '%s' has no export '%s'",
                  module->name ? module->name : "?", _name ? _name : "?");
@@ -1144,7 +1144,7 @@ XR_FUNC XrDispatchAction vm_invoke_module(XrayIsolate *isolate, XrVMContext *vm_
         XrClass *klass = xr_value_to_class(fn_val);
 
         // Find constructor
-        XrSymbolTable *sym_table = (XrSymbolTable *) isolate->symbol_table;
+        XrSymbolTable *sym_table = (XrSymbolTable *) isolate->core_rt->symbol_table;
         int ctor_symbol = xr_symbol_lookup_in_table(sym_table, XR_KEYWORD_CONSTRUCTOR);
         XrMethod *constructor = NULL;
         if (ctor_symbol >= 0) {
@@ -1194,7 +1194,7 @@ XR_FUNC XrDispatchAction vm_invoke_module(XrayIsolate *isolate, XrVMContext *vm_
         base[a] = inst_val;
         return XR_DISP_NEXT;
     } else {
-        XrSymbolTable *_st = (XrSymbolTable *) isolate->symbol_table;
+        XrSymbolTable *_st = (XrSymbolTable *) isolate->core_rt->symbol_table;
         const char *_name = xr_symbol_get_name_in_table(_st, method_symbol);
         VM_THROW(frame, pc, XR_ERR_MOD_NO_EXPORT, "module export '%s' is not callable",
                  _name ? _name : "?");

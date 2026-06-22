@@ -32,6 +32,30 @@ struct XrayCoreClasses *xr_isolate_get_core_classes(XrayIsolate *X) {
     return X ? X->core : NULL;
 }
 
+XrTypeRegistry *xr_isolate_get_type_registry(XrayIsolate *X) {
+    return (X && X->core_rt) ? X->core_rt->type_registry : NULL;
+}
+
+void xr_isolate_set_type_registry(XrayIsolate *X, XrTypeRegistry *registry) {
+    if (X && X->core_rt)
+        X->core_rt->type_registry = registry;
+}
+
+void *xr_isolate_get_symbol_table(XrayIsolate *isolate) {
+    return (isolate && isolate->core_rt) ? isolate->core_rt->symbol_table : NULL;
+}
+
+XrClass *xr_isolate_get_native_type_class(XrayIsolate *X, uint8_t type_id) {
+    if (!X || !X->core_rt || type_id >= XR_NATIVE_TYPE_MAX)
+        return NULL;
+    return X->core_rt->native_type_classes[type_id];
+}
+
+void xr_isolate_set_native_type_class(XrayIsolate *X, uint8_t type_id, XrClass *cls) {
+    if (X && X->core_rt && type_id < XR_NATIVE_TYPE_MAX)
+        X->core_rt->native_type_classes[type_id] = cls;
+}
+
 uint64_t xr_isolate_get_ext_finalize_bitmap(XrayIsolate *isolate) {
     XrRuntimeCore *core = xr_isolate_get_runtime_core(isolate);
     return core ? core->ext_finalize_bitmap : 0;
