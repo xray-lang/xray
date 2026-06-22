@@ -138,8 +138,8 @@ op_call_entry:;
                                                                   size, XR_TINSTANCE);
                 if (instance) {
                     xr_instance_init_inplace(instance, klass);
-                    XR_GC_SET_STORAGE(&instance->gc, storage_mode);
-                    if (storage_mode == XR_GC_STORAGE_SHARED) {
+                    XR_OBJ_SET_STORAGE(&instance->gc, storage_mode);
+                    if (storage_mode == XR_OBJ_STORAGE_SHARED) {
                         xr_shared_set_refc(&instance->gc, 1);
                     }
                 }

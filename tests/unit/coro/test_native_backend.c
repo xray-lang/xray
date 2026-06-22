@@ -486,7 +486,7 @@ TEST(aot_runtime_copy_context_uses_core_without_isolate) {
     ASSERT_NOT_NULL(copied);
     ASSERT_TRUE(copied != source);
     ASSERT_TRUE(XR_OBJ_GET_FLAG(&copied->gc, XR_OBJ_TRANSIT));
-    ASSERT_TRUE(XR_GC_IS_SHARED(&copied->gc));
+    ASSERT_TRUE(XR_OBJ_IS_SHARED(&copied->gc));
     ASSERT_EQ_INT((int) copied->length, 3);
     ASSERT_EQ_INT((int) xr_array_get_i64(copied, 0), 11);
     ASSERT_EQ_INT((int) xr_array_get_i64(copied, 1), 22);

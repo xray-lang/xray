@@ -79,7 +79,7 @@ static inline uint8_t get_color(const XrObjHeader *obj) {
 static inline bool cycle_child_eligible(const XrObjHeader *obj) {
     if (obj->extra & (XR_OBJ_REGION | XR_OBJ_MANAGED | XR_OBJ_ATOMIC | XR_OBJ_STORAGE_BUMP))
         return false;
-    if (XR_GC_IS_SHARED(obj))
+    if (XR_OBJ_IS_SHARED(obj))
         return false;
     return true;
 }

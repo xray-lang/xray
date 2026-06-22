@@ -128,7 +128,7 @@ XrString *xr_global_pool_insert_locked(XrGlobalStringPool *pool, const char *cha
             str->data[len] = '\0';
 
             XR_STR_SET_GLOBAL(str);
-            XR_GC_SET_STORAGE(&str->gc, XR_GC_STORAGE_SHARED);
+            XR_OBJ_SET_STORAGE(&str->gc, XR_OBJ_STORAGE_SHARED);
 
             pool->entries[index] = str;
             pool->count++;

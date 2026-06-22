@@ -77,7 +77,7 @@ static inline int xr_shared_decref(XrObjHeader *gc) {
 }
 
 static inline void xr_shared_init(XrObjHeader *gc) {
-    XR_GC_SET_STORAGE(gc, XR_GC_STORAGE_SHARED);
+    XR_OBJ_SET_STORAGE(gc, XR_OBJ_STORAGE_SHARED);
     xr_shared_set_refc(gc, 1);
 }
 

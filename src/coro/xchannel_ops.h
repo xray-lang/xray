@@ -60,7 +60,7 @@ static inline XrValue xr_chan_prepare_send_core(XrRuntimeCore *core, XrValue val
      * pointer, and the drop rebalances — dropping first then rc_destroy would
      * free a shared const value the receiver still aliases. drop_is_last is
      * mutating, so it is evaluated exactly once on each path. */
-    bool coro_local = obj && !XR_GC_IS_SHARED(obj);
+    bool coro_local = obj && !XR_OBJ_IS_SHARED(obj);
     if (coro_local && xr_obj_drop_is_last((XrObjHeader *) obj)) {
         /* Unique owner (move semantics): steal the buffer for self-contained
          * scalar arrays, else deep-copy. Either way free the source struct. */
@@ -105,7 +105,7 @@ static inline void xr_chan_abandon_send_core(XrRuntimeCore *core, XrValue prepar
         xr_chan_transit_release_core(core, prepared);
         return;
     }
-    if (XR_GC_IS_SHARED(obj)) {
+    if (XR_OBJ_IS_SHARED(obj)) {
         /* Atomic refcount: safe from any thread. Managed objects
          * (channels) make drop_is_last a no-op by design. */
         if (xr_obj_drop_is_last((XrObjHeader *) obj))

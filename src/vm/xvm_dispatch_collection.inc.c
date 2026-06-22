@@ -62,8 +62,8 @@ vmcase(OP_NEWARRAY) {
         if (array) {
             xr_array_init_inplace(array, b > 0 ? b : 4, elem_type);
             // Set storage mode
-            XR_GC_SET_STORAGE(&array->gc, storage_mode);
-            if (storage_mode == XR_GC_STORAGE_SHARED) {
+            XR_OBJ_SET_STORAGE(&array->gc, storage_mode);
+            if (storage_mode == XR_OBJ_STORAGE_SHARED) {
                 xr_shared_set_refc(&array->gc, 1);
             }
         }
@@ -120,8 +120,8 @@ vmcase(OP_ARRAY_NEW_CAP) {
                                                     sizeof(XrArray), XR_TARRAY);
         if (array) {
             xr_array_init_inplace(array, cap, elem_type);
-            XR_GC_SET_STORAGE(&array->gc, storage_mode);
-            if (storage_mode == XR_GC_STORAGE_SHARED)
+            XR_OBJ_SET_STORAGE(&array->gc, storage_mode);
+            if (storage_mode == XR_OBJ_STORAGE_SHARED)
                 xr_shared_set_refc(&array->gc, 1);
         }
     } else {
@@ -208,8 +208,8 @@ vmcase(OP_NEWMAP) {
         if (map) {
             xr_map_init_inplace(map, b > 0 ? b : 8);
             // Set storage mode
-            XR_GC_SET_STORAGE(&map->gc, storage_mode);
-            if (storage_mode == XR_GC_STORAGE_SHARED) {
+            XR_OBJ_SET_STORAGE(&map->gc, storage_mode);
+            if (storage_mode == XR_OBJ_STORAGE_SHARED) {
                 xr_shared_set_refc(&map->gc, 1);
             }
         }
@@ -254,7 +254,7 @@ vmcase(OP_NEWSET) {
                                                 XR_TSET);
         if (set) {
             xr_set_init_inplace(set);
-            XR_GC_SET_STORAGE(&set->gc, storage_mode);
+            XR_OBJ_SET_STORAGE(&set->gc, storage_mode);
             xr_shared_set_refc(&set->gc, 1);
             XrArray *arr = XR_TO_ARRAY(R(a + 1));
             int32_t len = arr->length;
@@ -272,8 +272,8 @@ vmcase(OP_NEWSET) {
                                                 XR_TSET);
         if (set) {
             xr_set_init_inplace(set);
-            XR_GC_SET_STORAGE(&set->gc, storage_mode);
-            if (storage_mode == XR_GC_STORAGE_SHARED) {
+            XR_OBJ_SET_STORAGE(&set->gc, storage_mode);
+            if (storage_mode == XR_OBJ_STORAGE_SHARED) {
                 xr_shared_set_refc(&set->gc, 1);
             }
         }
@@ -345,8 +345,8 @@ vmcase(OP_NEWSTRINGBUILDER) {
         if (sb) {
             sb->klass = isolate->core->stringBuilderClass;
             xr_stringbuilder_init_inplace(sb);
-            XR_GC_SET_STORAGE(&sb->gc, storage_mode);
-            if (storage_mode == XR_GC_STORAGE_SHARED) {
+            XR_OBJ_SET_STORAGE(&sb->gc, storage_mode);
+            if (storage_mode == XR_OBJ_STORAGE_SHARED) {
                 xr_shared_set_refc(&sb->gc, 1);
             }
         }

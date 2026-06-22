@@ -76,22 +76,22 @@ typedef struct XrClass XrClass;
 
 /* ========== Shared Storage Mode (uses extra field bit 0) ========== */
 
-#define XR_GC_STORAGE_NORMAL 0
-#define XR_GC_STORAGE_SHARED 1
+#define XR_OBJ_STORAGE_NORMAL 0
+#define XR_OBJ_STORAGE_SHARED 1
 
-#define XR_GC_GET_STORAGE(gc) ((gc)->extra & 0x01)
-#define XR_GC_SET_STORAGE(gc, m) ((gc)->extra = ((gc)->extra & ~0x01) | ((m) & 0x01))
-#define XR_GC_IS_SHARED(gc) (XR_GC_GET_STORAGE(gc) == XR_GC_STORAGE_SHARED)
+#define XR_OBJ_GET_STORAGE(gc) ((gc)->extra & 0x01)
+#define XR_OBJ_SET_STORAGE(gc, m) ((gc)->extra = ((gc)->extra & ~0x01) | ((m) & 0x01))
+#define XR_OBJ_IS_SHARED(gc) (XR_OBJ_GET_STORAGE(gc) == XR_OBJ_STORAGE_SHARED)
 
 /* ========== MMAP Flag (extra field bit 13) ========== */
 /*
  * Marks objects allocated via mmap (vs xr_malloc).
- * Used by both system heap (shared objects) and per-coro GC (large objects).
+ * Used by both system heap (shared objects) and per-coro heap (large objects).
  * Bits 1-12 of extra are now spare (type args moved to XrClass.mono_type_arg_names).
  */
-#define XR_GC_FLAG_MMAP 0x2000
-#define XR_GC_IS_MMAP(gc) (((gc)->extra & XR_GC_FLAG_MMAP) != 0)
-#define XR_GC_SET_MMAP(gc) ((gc)->extra |= XR_GC_FLAG_MMAP)
+#define XR_OBJ_FLAG_MMAP 0x2000
+#define XR_OBJ_IS_MMAP(gc) (((gc)->extra & XR_OBJ_FLAG_MMAP) != 0)
+#define XR_OBJ_SET_MMAP(gc) ((gc)->extra |= XR_OBJ_FLAG_MMAP)
 
 /* ========== RC Memory-Model Flags (extra field bits 1-4) ==========
  *

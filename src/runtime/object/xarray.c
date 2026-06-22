@@ -161,7 +161,7 @@ XrArray *xr_array_new_shared_core(XrRuntimeCore *core, int capacity) {
     if (!arr)
         return NULL;
     xr_array_init_inplace(arr, capacity > 0 ? capacity : 4, XR_ELEM_ANY);
-    XR_GC_SET_STORAGE(&arr->gc, XR_GC_STORAGE_SHARED);
+    XR_OBJ_SET_STORAGE(&arr->gc, XR_OBJ_STORAGE_SHARED);
     xr_shared_set_refc(&arr->gc, 1);
     return arr;
 }
@@ -616,7 +616,7 @@ void xr_array_grow(XrArray *arr) {
          * via xr_shared_destroy with a NULL gc, so accounting growth to the
          * pushing coroutine's gc would skew that counter (and underflow the
          * owner on a cross-coro collection point). */
-        if (!XR_GC_IS_SHARED(&arr->gc))
+        if (!XR_OBJ_IS_SHARED(&arr->gc))
             xr_gc_add_external(xr_current_coro_gc(), (int64_t) (new_bytes - old_bytes));
     }
 }
@@ -671,7 +671,7 @@ void xr_array_ensure_capacity(XrArray *arr, int min_capacity) {
          * via xr_shared_destroy with a NULL gc, so accounting growth to the
          * pushing coroutine's gc would skew that counter (and underflow the
          * owner on a cross-coro collection point). */
-        if (!XR_GC_IS_SHARED(&arr->gc))
+        if (!XR_OBJ_IS_SHARED(&arr->gc))
             xr_gc_add_external(xr_current_coro_gc(), (int64_t) (new_bytes - old_bytes));
     }
 }

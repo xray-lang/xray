@@ -250,7 +250,7 @@ void *xr_sysheap_alloc_shared(XrSystemHeap *heap, size_t size, uint8_t type) {
         obj->type = type;
         obj->objsize = (uint32_t) size;
         // Mark as shared and mmap-allocated (in extra bit 13)
-        obj->extra = XR_GC_STORAGE_SHARED | XR_GC_FLAG_MMAP;
+        obj->extra = XR_OBJ_STORAGE_SHARED | XR_OBJ_FLAG_MMAP;
         obj->_rsv = 0;
         atomic_fetch_add(&heap->stats.shared_mmap_count, 1);
     } else {
@@ -259,7 +259,7 @@ void *xr_sysheap_alloc_shared(XrSystemHeap *heap, size_t size, uint8_t type) {
         if (obj) {
             memset(obj, 0, size);
             obj->type = type;
-            obj->extra = XR_GC_STORAGE_SHARED;
+            obj->extra = XR_OBJ_STORAGE_SHARED;
         }
     }
 
@@ -282,7 +282,7 @@ void xr_sysheap_free_shared(void *ptr, size_t size) {
         return;
 
     XrObjHeader *obj = (XrObjHeader *) ptr;
-    if (XR_GC_IS_MMAP(obj)) {
+    if (XR_OBJ_IS_MMAP(obj)) {
         xr_mem_unmap(ptr, size);
     } else {
         xr_free(ptr);
@@ -379,7 +379,7 @@ void xr_shared_destroy_core(XrRuntimeCore *core, XrObjHeader *obj) {
         destroy(obj, NULL);
 
     // Free the object itself
-    if (XR_GC_IS_MMAP(obj)) {
+    if (XR_OBJ_IS_MMAP(obj)) {
         xr_mem_unmap(obj, obj->objsize);
     } else {
         xr_free(obj);

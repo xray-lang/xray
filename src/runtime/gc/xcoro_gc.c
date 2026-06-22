@@ -274,7 +274,7 @@ static void gc_free_large_objects(XrCoroGC *gc) {
         if (!xr_gc_ptrset_slot_live(lo))
             continue;
         gc->large_bytes -= lo->objsize;
-        if (XR_GC_IS_MMAP(lo)) {
+        if (XR_OBJ_IS_MMAP(lo)) {
             xr_mem_unmap(lo, lo->objsize);
         } else {
             xr_free(lo);
@@ -439,7 +439,7 @@ XR_FUNC void xr_coro_gc_rc_free(XrCoroGC *gc, XrObjHeader *obj) {
     if (obj->objsize > XR_LARGE_OBJECT_THRESHOLD) {
         gc_unregister_large_object(gc, obj);
         gc->large_bytes -= (int64_t) obj->objsize;
-        if (XR_GC_IS_MMAP(obj))
+        if (XR_OBJ_IS_MMAP(obj))
             xr_mem_unmap(obj, obj->objsize);
         else
             xr_free(obj);
@@ -630,7 +630,7 @@ XR_FUNC void xr_coro_gc_rc_destroy(XrCoroGC *gc, XrObjHeader *obj) {
         return;
 
     /* Shared objects: atomic refcount + shared destroy (not coro-local). */
-    if (XR_GC_IS_SHARED(obj)) {
+    if (XR_OBJ_IS_SHARED(obj)) {
         xr_shared_destroy_core(gc_get_core(gc), obj);
         return;
     }
@@ -724,7 +724,7 @@ XrObjHeader *xr_coro_gc_newobj(XrCoroGC *gc, uint8_t type, size_t size) {
      * across threads, so no ordering is needed. */
     atomic_store_explicit(&obj->refcount, XR_RC_INIT, memory_order_relaxed);
     if (use_mmap)
-        XR_GC_SET_MMAP(obj);
+        XR_OBJ_SET_MMAP(obj);
     if (needs_finalize)
         XR_OBJ_SET_FLAG(obj, XR_OBJ_HAS_DTOR);
 
