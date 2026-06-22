@@ -163,16 +163,6 @@ void xr_isolate_set_debug_hooks(XrayIsolate *X, void *hooks) {
     }
 }
 
-struct XrSourceCache *xr_isolate_get_source_cache(XrayIsolate *X) {
-    return X ? X->source_cache : NULL;
-}
-
-void xr_isolate_set_source_cache(XrayIsolate *X, struct XrSourceCache *cache) {
-    if (X) {
-        X->source_cache = cache;
-    }
-}
-
 /* ========== Exception Print Suppression ========== */
 
 bool xr_isolate_get_suppress_exception_print(XrayIsolate *X) {

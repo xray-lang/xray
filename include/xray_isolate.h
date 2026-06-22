@@ -45,7 +45,6 @@ typedef enum {
 #define XR_INIT_SYMBOLS (1 << 8)
 #define XR_INIT_CONFIG (1 << 9)
 #define XR_INIT_ANALYZER (1 << 10)
-#define XR_INIT_SOURCE_CACHE (1 << 11)
 
 #define XR_INIT_RUNTIME (XR_INIT_VM | XR_INIT_GC)
 #define XR_INIT_FULL (0xFFFF)

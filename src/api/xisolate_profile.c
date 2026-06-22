@@ -37,15 +37,15 @@ void xr_isolate_profile_params(XrIsolateProfile profile, XrayIsolateParams *out)
             break;
 
         case XR_ISOLATE_PROFILE_PARSE:
-            /* Minimal: just compiler + source cache */
-            out->init_flags = XR_INIT_VM | XR_INIT_GC | XR_INIT_COMPILER | XR_INIT_SOURCE_CACHE;
+            /* Minimal: just compiler; source cache is compiler-session owned. */
+            out->init_flags = XR_INIT_VM | XR_INIT_GC | XR_INIT_COMPILER;
             xray_isolate_setup_full(out);
             break;
 
         case XR_ISOLATE_PROFILE_ANALYZE:
-            /* Compiler + analyzer + source cache */
+            /* Compiler + analyzer; source cache is compiler-session owned. */
             out->init_flags = XR_INIT_VM | XR_INIT_GC | XR_INIT_COMPILER | XR_INIT_ANALYZER |
-                              XR_INIT_SOURCE_CACHE | XR_INIT_CLASSES | XR_INIT_SYMBOLS;
+                              XR_INIT_CLASSES | XR_INIT_SYMBOLS;
             xray_isolate_setup_full(out);
             break;
     }

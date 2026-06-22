@@ -175,6 +175,10 @@ typedef struct XrVMState {
     // XrAotRuntime instead; this slot is only for bytecode VM execution.
     struct XrRuntime *scheduler;
 
+    // Borrowed from the active compiler session for runtime error source-line display.
+    // The compiler session owns and clears this cache; VM execution treats it as read-only.
+    struct XrSourceCache *debug_source_cache;
+
     // Isolate-wide value-struct layout registry. STRUCT_REF.heap_type stores
     // this 16-bit id when the payload has no XrClass* header.
     struct XrStructLayout **struct_layouts;

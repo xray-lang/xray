@@ -90,8 +90,6 @@ XR_FUNC void *xr_isolate_get_debug_state(XrayIsolate *X);
 XR_FUNC void xr_isolate_set_debug_state(XrayIsolate *X, void *state);
 XR_FUNC void *xr_isolate_get_debug_hooks(XrayIsolate *X);
 XR_FUNC void xr_isolate_set_debug_hooks(XrayIsolate *X, void *hooks);
-XR_FUNC struct XrSourceCache *xr_isolate_get_source_cache(XrayIsolate *X);
-XR_FUNC void xr_isolate_set_source_cache(XrayIsolate *X, struct XrSourceCache *cache);
 
 // Exception print suppression
 XR_FUNC bool xr_isolate_get_suppress_exception_print(XrayIsolate *X);

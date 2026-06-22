@@ -33,7 +33,6 @@
 #include "../frontend/parser/xast.h"
 #include "../runtime/class/xreflect_registry.h"
 #include "../module/xmodule.h"
-#include "../base/xsource_cache.h"
 #include "../runtime/xstdlib_bridge.h"
 #include "../runtime/class/xreflect_api.h"
 #include "../runtime/object/builtins/xjson_builtins.h"
@@ -125,9 +124,8 @@ static int isolate_init_full(XrayIsolate *isolate) {
     // write `let dt: DateTime = ...` and `r.test(...)` without a
     // separate stdlib import.
 
-    // Source cache
-    isolate->source_cache = xr_compiler_session_ensure_source_cache(isolate->compiler_session);
-    if (!isolate->source_cache)
+    // Source cache is owned by the compiler session and only borrowed by VM error display.
+    if (!xr_compiler_session_ensure_source_cache(isolate->compiler_session))
         return -1;
 
     // Register core classes to VM builtins array (must be after all classes created)

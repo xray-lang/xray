@@ -17,7 +17,6 @@
 #include "../runtime/mem/xheap.h"
 #include "../runtime/mem/xcoro_heap.h"
 #include "../runtime/xerror_codes.h"
-#include "../runtime/xisolate_api.h"
 #include "../runtime/value/xstruct_layout.h"
 #include "../base/xsource_cache.h"
 
@@ -156,7 +155,7 @@ void xr_runtime_error(XrayIsolate *isolate, const char *format, ...) {
     XrBcCallFrame *frames = ctx ? ctx->frames : NULL;
 
     // Show source code context (only top frame)
-    XrSourceCache *source_cache = isolate ? xr_isolate_get_source_cache(isolate) : NULL;
+    XrSourceCache *source_cache = isolate ? isolate->vm.debug_source_cache : NULL;
     if (frame_count > 0 && source_cache) {
         XrBcCallFrame *top_frame = &frames[frame_count - 1];
         if (top_frame->closure && top_frame->closure->proto) {
