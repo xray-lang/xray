@@ -43,6 +43,22 @@ static const char *xaot_stdlib_generated_object_for_symbol(const char *symbol) {
         return "math.random";
     if (strcmp(symbol, "math.randomInt") == 0)
         return "math.randomInt";
+    if (strcmp(symbol, "compress.gzip") == 0)
+        return "compress.gzip";
+    if (strcmp(symbol, "compress.gunzip") == 0)
+        return "compress.gunzip";
+    if (strcmp(symbol, "compress.deflate") == 0)
+        return "compress.deflate";
+    if (strcmp(symbol, "compress.inflate") == 0)
+        return "compress.inflate";
+    if (strcmp(symbol, "compress.zlibCompress") == 0)
+        return "compress.zlibCompress";
+    if (strcmp(symbol, "compress.zlibDecompress") == 0)
+        return "compress.zlibDecompress";
+    if (strcmp(symbol, "compress.isGzip") == 0)
+        return "compress.isGzip";
+    if (strcmp(symbol, "compress.isZlib") == 0)
+        return "compress.isZlib";
     if (strcmp(symbol, "crypto.md5") == 0)
         return "crypto.md5";
     if (strcmp(symbol, "crypto.sha1") == 0)

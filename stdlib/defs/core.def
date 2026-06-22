@@ -869,6 +869,164 @@ module url {
   }
 }
 
+module compress {
+  fn crc32 {
+    signature: "(data: string): int"
+    doc: "Compute CRC-32 checksum"
+    vm: "compress_crc32"
+    aot: "xrt_compress_crc32"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: false
+    layer: "core"
+  }
+
+  fn adler32 {
+    signature: "(data: string): int"
+    doc: "Compute Adler-32 checksum"
+    vm: "compress_adler32"
+    aot: "xrt_compress_adler32"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: false
+    layer: "core"
+  }
+
+  fn gzip {
+    signature: "(data: string, level?: int): string?"
+    doc: "Gzip compress"
+    vm: "compress_gzip"
+    aot: "xrt_compress_gzip_default"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: true
+    layer: "alloc"
+  }
+
+  fn gzip {
+    signature: "(data: string, level?: int): string?"
+    doc: "Gzip compress"
+    vm: "compress_gzip"
+    aot: "xrt_compress_gzip"
+    argc: 2
+    arg_spec: "sv"
+    aot_direct: true
+    link_object: true
+    layer: "alloc"
+  }
+
+  fn gunzip {
+    signature: "(data: string): string?"
+    doc: "Gzip decompress"
+    vm: "compress_gunzip"
+    aot: "xrt_compress_gunzip"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: true
+    layer: "alloc"
+  }
+
+  fn deflate {
+    signature: "(data: string, level?: int): string?"
+    doc: "Deflate compress"
+    vm: "compress_deflate"
+    aot: "xrt_compress_deflate_default"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: true
+    layer: "alloc"
+  }
+
+  fn deflate {
+    signature: "(data: string, level?: int): string?"
+    doc: "Deflate compress"
+    vm: "compress_deflate"
+    aot: "xrt_compress_deflate"
+    argc: 2
+    arg_spec: "sv"
+    aot_direct: true
+    link_object: true
+    layer: "alloc"
+  }
+
+  fn inflate {
+    signature: "(data: string): string?"
+    doc: "Inflate decompress"
+    vm: "compress_inflate"
+    aot: "xrt_compress_inflate"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: true
+    layer: "alloc"
+  }
+
+  fn zlibCompress {
+    signature: "(data: string, level?: int): string?"
+    doc: "Zlib compress"
+    vm: "compress_zlib_compress"
+    aot: "xrt_compress_zlib_compress_default"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: true
+    layer: "alloc"
+  }
+
+  fn zlibCompress {
+    signature: "(data: string, level?: int): string?"
+    doc: "Zlib compress"
+    vm: "compress_zlib_compress"
+    aot: "xrt_compress_zlib_compress"
+    argc: 2
+    arg_spec: "sv"
+    aot_direct: true
+    link_object: true
+    layer: "alloc"
+  }
+
+  fn zlibDecompress {
+    signature: "(data: string): string?"
+    doc: "Zlib decompress"
+    vm: "compress_zlib_decompress"
+    aot: "xrt_compress_zlib_decompress"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: true
+    layer: "alloc"
+  }
+
+  fn isGzip {
+    signature: "(data: string): bool"
+    doc: "Check if gzip data"
+    vm: "compress_is_gzip"
+    aot: "xrt_compress_is_gzip"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: true
+    layer: "alloc"
+  }
+
+  fn isZlib {
+    signature: "(data: string): bool"
+    doc: "Check if zlib data"
+    vm: "compress_is_zlib"
+    aot: "xrt_compress_is_zlib"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: true
+    layer: "alloc"
+  }
+}
+
 module encoding {
   const LE {
     signature: ": int"
