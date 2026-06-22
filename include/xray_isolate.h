@@ -126,7 +126,8 @@ XRAY_API void *xray_isolate_get_userdata(XrayIsolate *isolate);
 
 /* ========== Statistics and Debugging ========== */
 
-XRAY_API void xray_isolate_get_stats(XrayIsolate *isolate, size_t *bytes_allocated, int *gc_count);
+XRAY_API void xray_isolate_get_stats(XrayIsolate *isolate, size_t *bytes_allocated,
+                                     int *cycle_count);
 
 XRAY_API void xray_isolate_collect_garbage(XrayIsolate *isolate);
 

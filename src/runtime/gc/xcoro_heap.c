@@ -108,11 +108,11 @@ static inline XrGCDestroyFn get_destroy_func_ext(XrCoroHeap *gc, uint8_t type) {
 static void gc_init_runtime_state(XrCoroHeap *gc) {
     gc->totalbytes = 0;
     gc->large_bytes = 0;
-    gc->in_gc = 0;
-    gc->gc_disabled = 0;
+    gc->is_collecting = 0;
+    gc->cycle_collection_disabled = 0;
     gc->cycle_collecting = 0;
     gc->cycle_collect_threshold = XR_CYCLE_COLLECT_THRESHOLD_INIT;
-    gc->gc_count = 0;
+    gc->cycle_count = 0;
     gc->object_count = 0;
     gc->gc_time_ns = 0;
     gc->last_gc_time_ns = 0;
@@ -333,7 +333,7 @@ static void gc_unregister_large_object(XrCoroHeap *gc, XrObjHeader *obj) {
 void xr_coro_heap_destroy(XrCoroHeap *gc) {
     if (!gc)
         return;
-    XR_DCHECK(!gc->in_gc, "gc_destroy called during GC");
+    XR_DCHECK(!gc->is_collecting, "gc_destroy called during GC");
 
     gc_finalize_registered_objects(gc);
     xr_region_destroy(&gc->region);
@@ -380,7 +380,7 @@ void xr_coro_heap_reset(XrCoroHeap *gc, struct XrCoroutine *new_owner) {
     if (!gc)
         return;
     XR_DCHECK(new_owner != NULL, "gc_reset: NULL new_owner");
-    XR_DCHECK(!gc->in_gc, "gc_reset called during GC");
+    XR_DCHECK(!gc->is_collecting, "gc_reset called during GC");
 
     gc_finalize_registered_objects(gc);
     xr_region_reset(&gc->region);
@@ -746,7 +746,7 @@ void xr_coro_heap_print_stats(XrCoroHeap *gc) {
 
     printf("=== XrCoroHeap (Region bump + RC) ===\n");
     printf("Total bytes:  %lld\n", (long long) gc->totalbytes);
-    printf("GC count:     %u\n", gc->gc_count);
+    printf("Cycle count:     %u\n", gc->cycle_count);
 
     XrRegionStats istats;
     xr_region_get_stats(&gc->region, &istats);

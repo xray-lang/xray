@@ -126,12 +126,12 @@ typedef struct XrCoroHeap {
     XrRegionHeap region;
 
     // === Allocation accounting ===
-    int64_t totalbytes;        // Total allocated bytes (gc.count / gc.info stats)
-    uint8_t in_gc;             // Re-entry guard (teardown / reset)
-    uint8_t gc_disabled;       // gc.disable/enable counter: gates the automatic
-                               // cycle collector (xr_cycle_add_root auto-trigger)
-    uint8_t cycle_collecting;  // Re-entry guard for the auto-triggered cycle collector
-    uint8_t _pad1[5];          // alignment
+    int64_t totalbytes;                 // Total allocated bytes (gc.count / gc.info stats)
+    uint8_t is_collecting;              // Re-entry guard (teardown / reset)
+    uint8_t cycle_collection_disabled;  // gc.disable/enable counter: gates the automatic
+                                        // cycle collector (xr_cycle_add_root auto-trigger)
+    uint8_t cycle_collecting;           // Re-entry guard for the auto-triggered cycle collector
+    uint8_t _pad1[5];                   // alignment
 
     // === Large objects (malloc/mmap-backed; freed individually at teardown) ===
     XrGCPtrSet large_set;  // All large objects (O(1) insert/remove)
@@ -147,7 +147,7 @@ typedef struct XrCoroHeap {
     XrGCPtrSet finalize_set;
 
     // Statistics (cold; surfaced by the gc.* builtins)
-    uint32_t gc_count;         // Number of explicit gc.collect() calls (no-op cycles)
+    uint32_t cycle_count;      // Number of explicit gc.collect() calls (no-op cycles)
     uint32_t object_count;     // Live GC object count (incremental counter)
     uint64_t gc_time_ns;       // Cumulative GC time (0 under RC)
     uint64_t last_gc_time_ns;  // Duration of last cycle (0 under RC)
@@ -335,13 +335,13 @@ static inline void xr_rc_release_value(XrCoroHeap *gc, XrValue value) {
  * collection (RC owns reclamation); it keeps gc.count()/gc.info() byte stats
  * accurate so abandoned large buffers are reflected in reported usage.
  */
-static inline void xr_gc_add_external(XrCoroHeap *gc, int64_t bytes) {
+static inline void xr_coro_heap_add_external(XrCoroHeap *gc, int64_t bytes) {
     if (!gc)
         return;
     gc->totalbytes += bytes;
 }
 
-static inline void xr_gc_sub_external(XrCoroHeap *gc, int64_t bytes) {
+static inline void xr_coro_heap_sub_external(XrCoroHeap *gc, int64_t bytes) {
     if (!gc)
         return;
     gc->totalbytes -= bytes;
@@ -354,7 +354,7 @@ static inline size_t xr_coro_heap_total_bytes(XrCoroHeap *gc) {
 }
 
 static inline bool xr_coro_heap_is_collecting(XrCoroHeap *gc) {
-    return gc && gc->in_gc;
+    return gc && gc->is_collecting;
 }
 
 /* ========== Debug API ========== */

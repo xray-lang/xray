@@ -37,7 +37,7 @@
 
 typedef struct XrMap {
     XrObjHeader hdr;
-    struct XrCoroHeap *owner_gc;
+    struct XrCoroHeap *owner_heap;
     XR_MAP_ABI_FIELDS;
 } XrMap;
 
@@ -115,7 +115,7 @@ static inline XrMapEntry *xr_map_find_string_fast(XrMap *map, XrString *key_str)
 XR_FUNC XrMap *xr_map_new(struct XrCoroutine *coro);
 XR_FUNC XrMap *xr_map_with_capacity(struct XrCoroutine *coro, uint32_t capacity_hint);
 XR_FUNC uint32_t xr_map_purge_weak_target(XrMap *map, XrObjHeader *target,
-                                          struct XrCoroHeap *owning_gc);
+                                          struct XrCoroHeap *owner_heap);
 
 struct XrCoroHeap;
 // Pre-size entries[]/indices[] for `count` entries, charging external-byte

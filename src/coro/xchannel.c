@@ -686,8 +686,8 @@ static inline bool channel_buffer_is_inline(XrChannel *ch) {
 }
 
 // GC destroy: free buffer only if separately allocated
-void xr_gc_destroy_channel(XrObjHeader *obj, struct XrCoroHeap *owning_gc) {
-    (void) owning_gc;
+void xr_gc_destroy_channel(XrObjHeader *obj, struct XrCoroHeap *owner_heap) {
+    (void) owner_heap;
     XrChannel *ch = (XrChannel *) obj;
     if (ch->buffer) {
         // Release transit graphs of values never consumed by a receiver.

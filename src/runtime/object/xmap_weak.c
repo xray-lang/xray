@@ -30,7 +30,7 @@ static void weak_map_tombstone_entry(XrMap *map, uint32_t eidx, XrCoroHeap *gc) 
         map->count--;
 }
 
-uint32_t xr_map_purge_weak_target(XrMap *map, XrObjHeader *target, XrCoroHeap *owning_gc) {
+uint32_t xr_map_purge_weak_target(XrMap *map, XrObjHeader *target, XrCoroHeap *owner_heap) {
     if (!map || !target || !(map->flags & XR_MAP_FLAG_WEAK) || xr_map_isdummy(map) ||
         !map->entries || (map->hdr.extra & XR_OBJ_DEAD))
         return 0;
@@ -41,7 +41,7 @@ uint32_t xr_map_purge_weak_target(XrMap *map, XrObjHeader *target, XrCoroHeap *o
         if (e->key_tt == XR_MAP_ENTRY_NIL_KEY || !XR_IS_PTR(e->key) ||
             XR_VALUE_GCPTR(e->key) != target)
             continue;
-        weak_map_tombstone_entry(map, i, owning_gc);
+        weak_map_tombstone_entry(map, i, owner_heap);
         removed++;
     }
     return removed;

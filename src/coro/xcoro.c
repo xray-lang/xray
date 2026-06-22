@@ -617,7 +617,8 @@ void xr_coro_recycle_local(XrWorker *worker, XrCoroutine *coro) {
     if (!worker || !coro)
         return;
     XR_DCHECK(xr_coro_flags_has(coro, XR_CORO_FLG_DONE), "recycle_local: coro not done");
-    XR_DCHECK(!coro->heap || !coro->heap->in_gc, "recycle_local: GC active during recycle");
+    XR_DCHECK(!coro->heap || !coro->heap->is_collecting,
+              "recycle_local: collector active during recycle");
 
     // Timer nodes are intrusive wheel entries. Reuse is safe only after the
     // owner wheel has physically unlinked any active/zombie node.
@@ -839,8 +840,8 @@ void xr_runtime_wake_channel_all(XrRuntime *runtime, void *channel) {
 // ========== GC Integration ==========
 
 // GC destructor: free coroutine internal resources
-void xr_gc_destroy_coroutine(XrObjHeader *obj, struct XrCoroHeap *owning_gc) {
-    (void) owning_gc;
+void xr_gc_destroy_coroutine(XrObjHeader *obj, struct XrCoroHeap *owner_heap) {
+    (void) owner_heap;
     xr_coro_free((XrCoroutine *) obj);
 }
 

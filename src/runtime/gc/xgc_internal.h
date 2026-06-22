@@ -53,7 +53,7 @@ struct XrGC;  // Forward declaration
 struct XrayIsolate;
 struct XrCopyContext;
 
-typedef void (*XrGCDestroyFn)(XrObjHeader *obj, XrCoroHeap *owning_gc);
+typedef void (*XrGCDestroyFn)(XrObjHeader *obj, XrCoroHeap *owner_heap);
 typedef XrValue (*XrGCDeepCopyFn)(struct XrCopyContext *ctx, XrObjHeader *obj);
 typedef XrValue (*XrGCToSharedFn)(struct XrayIsolate *X, XrObjHeader *obj);
 typedef struct XrObjHeader **(*XrGCGetGCListFn)(XrObjHeader *obj);
@@ -103,17 +103,17 @@ extern const XrGCDeepCopyFn g_type_deep_copy_ops[XGC_MAX_TYPES];
 extern const XrGCToSharedFn g_type_to_shared_ops[XGC_MAX_TYPES];
 
 // Destroy functions (non-static, referenced by const tables)
-XR_FUNC void xr_gc_destroy_array(XrObjHeader *obj, XrCoroHeap *owning_gc);
-XR_FUNC void xr_gc_destroy_map(XrObjHeader *obj, XrCoroHeap *owning_gc);
-XR_FUNC void xr_gc_destroy_set(XrObjHeader *obj, XrCoroHeap *owning_gc);
-XR_FUNC void xr_gc_destroy_channel(XrObjHeader *obj, XrCoroHeap *owning_gc);
-XR_FUNC void xr_gc_destroy_closure(XrObjHeader *obj, XrCoroHeap *owning_gc);
-XR_FUNC void xr_gc_destroy_cell(XrObjHeader *obj, XrCoroHeap *owning_gc);
-XR_FUNC void xr_gc_destroy_coroutine(XrObjHeader *obj, XrCoroHeap *owning_gc);
-XR_FUNC void xr_gc_destroy_instance(XrObjHeader *obj, XrCoroHeap *owning_gc);
-XR_FUNC void xr_gc_destroy_task(XrObjHeader *obj, XrCoroHeap *owning_gc);
-XR_FUNC void xr_gc_destroy_work_queue(XrObjHeader *obj, XrCoroHeap *owning_gc);
-XR_FUNC void xr_gc_destroy_result_group(XrObjHeader *obj, XrCoroHeap *owning_gc);
+XR_FUNC void xr_gc_destroy_array(XrObjHeader *obj, XrCoroHeap *owner_heap);
+XR_FUNC void xr_gc_destroy_map(XrObjHeader *obj, XrCoroHeap *owner_heap);
+XR_FUNC void xr_gc_destroy_set(XrObjHeader *obj, XrCoroHeap *owner_heap);
+XR_FUNC void xr_gc_destroy_channel(XrObjHeader *obj, XrCoroHeap *owner_heap);
+XR_FUNC void xr_gc_destroy_closure(XrObjHeader *obj, XrCoroHeap *owner_heap);
+XR_FUNC void xr_gc_destroy_cell(XrObjHeader *obj, XrCoroHeap *owner_heap);
+XR_FUNC void xr_gc_destroy_coroutine(XrObjHeader *obj, XrCoroHeap *owner_heap);
+XR_FUNC void xr_gc_destroy_instance(XrObjHeader *obj, XrCoroHeap *owner_heap);
+XR_FUNC void xr_gc_destroy_task(XrObjHeader *obj, XrCoroHeap *owner_heap);
+XR_FUNC void xr_gc_destroy_work_queue(XrObjHeader *obj, XrCoroHeap *owner_heap);
+XR_FUNC void xr_gc_destroy_result_group(XrObjHeader *obj, XrCoroHeap *owner_heap);
 // NetConn / NetListener destroy handled by native body descriptors.
 
 /* ========== Debug API ========== */

@@ -12,7 +12,7 @@
  *   1. Fixed objects: lifetime equals program runtime (e.g. main coroutine)
  *   2. Type functions: traverse/destroy/getgclist
  *
- * Note: Runtime objects allocated on coroutine heap (Per-Coroutine GC arch)
+ * Note: Runtime objects allocated on coroutine heap (coroutine heap arch)
  *
  * RELATED MODULES:
  *   - xcoro_heap.c: Per-coroutine GC implementation
@@ -166,7 +166,7 @@ void xr_weak_registry_unregister_set(XrayIsolate *isolate, XrSet *set) {
 }
 
 void xr_weak_registry_target_dying(XrayIsolate *isolate, XrObjHeader *target,
-                                   XrCoroHeap *owning_gc) {
+                                   XrCoroHeap *owner_heap) {
     if (!isolate || !target || !(target->extra & XR_OBJ_WEAKABLE))
         return;
     XrWeakContainerRegistry *registry = weak_registry_get(isolate, false);
@@ -198,7 +198,7 @@ void xr_weak_registry_target_dying(XrayIsolate *isolate, XrObjHeader *target,
     xr_amutex_unlock(&registry->lock);
 
     for (uint32_t i = 0; i < map_count; i++)
-        xr_map_purge_weak_target(maps[i], target, owning_gc);
+        xr_map_purge_weak_target(maps[i], target, owner_heap);
     for (uint32_t i = 0; i < set_count; i++)
         xr_set_purge_weak_target(sets[i], target);
 
@@ -307,13 +307,13 @@ void xr_gc_printstats(XrGC *gc) {
     printf("=================================\n");
 }
 
-// GC Header Debug Print
+// Object Header Debug Print
 void xr_obj_header_print(XrObjHeader *obj) {
     if (!obj) {
-        printf("GC Header: NULL\n");
+        printf("Object Header: NULL\n");
         return;
     }
-    printf("GC Header:\n");
+    printf("Object Header:\n");
     printf("  type: %d\n", obj->type);
     printf("  refcount: %d\n", obj->refcount);
     printf("  objsize: %u\n", obj->objsize);

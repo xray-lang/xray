@@ -20,8 +20,8 @@ static void result_group_batch_free_all(XrResultGroupBatch *batch) {
     }
 }
 
-void xr_gc_destroy_result_group(XrObjHeader *obj, struct XrCoroHeap *owning_gc) {
-    (void) owning_gc;
+void xr_gc_destroy_result_group(XrObjHeader *obj, struct XrCoroHeap *owner_heap) {
+    (void) owner_heap;
     if (!obj)
         return;
     XrResultGroup *g = (XrResultGroup *) obj;
