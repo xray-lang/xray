@@ -413,7 +413,7 @@ str[0:5]                // 字符串切片
 ```
 
 - 半开区间 `[start, end)`。
-- `string` 切片支持负索引，负数从末尾计数；`Array` 切片中负 `start` 夹到 `0`，负 `end` 视为数组长度。
+- `Array` 与 `string` 切片统一支持负索引：负数先按 `length + index` 从末尾计数，再夹到 `[0, length]`。
 - 切片返回新对象，不修改原数组。
 
 ### 3.12 匿名函数与 Lambda
@@ -945,7 +945,7 @@ str[0:5]                // string slice
 ```
 
 - Half-open interval `[start, end)`.
-- `string` slicing supports negative indexes (counting from the end); for `Array`, a negative `start` is clamped to `0` and a negative `end` is treated as the array length.
+- `Array` and `string` slicing share the same negative-index rule: a negative index is first converted as `length + index`, then clamped into `[0, length]`.
 - Slicing returns a new object; the original array is not modified.
 
 ### 3.12 Anonymous Functions and Lambdas

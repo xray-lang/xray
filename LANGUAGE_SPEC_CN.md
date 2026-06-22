@@ -1335,7 +1335,7 @@ str[0:5]                // 字符串切片
 ```
 
 - 半开区间 `[start, end)`。
-- `string` 切片支持负索引，负数从末尾计数；`Array` 切片中负 `start` 夹到 `0`，负 `end` 视为数组长度。
+- `Array` 与 `string` 切片统一支持负索引：负数先按 `length + index` 从末尾计数，再夹到 `[0, length]`。
 - 切片返回新对象，不修改原数组。
 
 ### 3.12 匿名函数与 Lambda
@@ -4371,6 +4371,8 @@ BigInt 使用 `123n` 字面量或 `int.toBigInt()`；Json 使用 `Json.parse` / 
 | `match(pattern)` | 正则匹配 |
 | `iterator()` / `entriesIterator()` / `entries()` | 迭代协议 |
 
+`slice(start, end?)` 使用与切片表达式相同的半开区间和负索引规则：负索引先按 `length + index` 从末尾计数，再夹到 `[0, length]`。
+
 ### 14.6 `Bytes`
 
 `Bytes` 是 prelude 类型，构造由 `Bytes(n)` / `Bytes(n, fill)` 等内置路径处理。字符串转换和编码类操作优先使用 `encoding` / `base64` 模块。当前没有单独的 `stdlib/types/bytes.xr` 声明；工具不要假设存在完整 Array 同构 API。
@@ -4393,6 +4395,8 @@ BigInt 使用 `123n` 字面量或 `int.toBigInt()`；Json 使用 `Json.parse` / 
 | `forEach(fn)` / `find(fn)` / `findIndex(fn)` / `every(fn)` / `some(fn)` | 遍历与谓词 |
 | `flat(depth?)` / `fill(v, start?, end?)` / `copyWithin(target, start, end?)` | 数组工具 |
 | `iterator()` / `entriesIterator()` / `entries()` | 迭代协议 |
+
+`slice(start?, end?)` 使用与切片表达式相同的半开区间和负索引规则；返回独立数组，原数组不变。
 
 ### 14.8 `Map<K, V>` 方法
 

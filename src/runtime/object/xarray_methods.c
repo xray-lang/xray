@@ -240,26 +240,14 @@ static XrValue m_repeat_from(XrayIsolate *iso, XrValue self, XrValue *args, int 
 
 static XrValue m_slice(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
     XrArray *arr = array_self(self);
-    int len = (int) arr->length;
-    int start = 0, end = len;
-    if (argc >= 1 && XR_IS_INT(args[0])) {
-        start = (int) XR_TO_INT(args[0]);
-        if (start < 0)
-            start = len + start;
-        if (start < 0)
-            start = 0;
-    }
-    if (argc >= 2 && XR_IS_INT(args[1])) {
-        end = (int) XR_TO_INT(args[1]);
-        if (end < 0)
-            end = len + end;
-        if (end > len)
-            end = len;
-    }
+    int64_t len = arr->length;
+    int64_t start = (argc >= 1 && XR_IS_INT(args[0])) ? XR_TO_INT(args[0]) : 0;
+    int64_t end = (argc >= 2 && XR_IS_INT(args[1])) ? XR_TO_INT(args[1]) : len;
+    xr_array_normalize_slice(len, &start, &end);
     if (start >= end || start >= len) {
         return xr_value_from_array(xr_array_new(xr_current_coro(iso)));
     }
-    int count = end - start;
+    int count = (int) (end - start);
     XrArray *result;
     if (arr->elem_type != XR_ELEM_ANY) {
         result = xr_array_with_capacity_typed(xr_current_coro(iso), count,

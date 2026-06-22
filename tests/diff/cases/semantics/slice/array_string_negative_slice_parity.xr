@@ -1,0 +1,10 @@
+// anchor: slice-array-string-negative-parity
+let arr = [1, 2, 3, 4]
+let str = "abcd"
+
+print(arr[-2:])
+print(str[-2:])
+print(arr[:-1])
+print(str[:-1])
+print(arr[-3:-1])
+print(str[-3:-1])

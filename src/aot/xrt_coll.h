@@ -245,18 +245,28 @@ static inline int64_t xrt_array_len(XrValue arr) {
     return ((xrt_array_t *) arr.ptr)->length;
 }
 
+static inline void xrt_array_normalize_slice(int64_t len, int64_t *start, int64_t *end) {
+    if (*start < 0)
+        *start += len;
+    if (*end < 0)
+        *end += len;
+    if (*start < 0)
+        *start = 0;
+    if (*end < 0)
+        *end = 0;
+    if (*start > len)
+        *start = len;
+    if (*end > len)
+        *end = len;
+    if (*start > *end)
+        *start = *end;
+}
+
 static inline XrValue xrt_array_slice_view(XrValue arr, int64_t start, int64_t end) {
     if (!XR_IS_ARRAY(arr) || !arr.ptr)
         return XR_NULL_VAL;
     xrt_array_t *src = (xrt_array_t *) arr.ptr;
-    if (start < 0)
-        start = 0;
-    if (end < 0 || end > src->length)
-        end = src->length;
-    if (start > src->length)
-        start = src->length;
-    if (start > end)
-        start = end;
+    xrt_array_normalize_slice(src->length, &start, &end);
 
     xrt_array_t *slice = (xrt_array_t *) XRT_MALLOC(sizeof(xrt_array_t));
     if (XR_UNLIKELY(!slice)) {
