@@ -36,11 +36,11 @@
 static void sysheap_gc_pool_drain(XrSystemHeap *heap) {
     XR_DCHECK(heap != NULL, "sysheap_gc_pool_drain: NULL heap");
     xr_mutex_lock(&heap->coro_heap_pool_mu);
-    struct XrCoroHeap *gc = heap->coro_heap_pool_head;
-    while (gc) {
-        struct XrCoroHeap *next = *(struct XrCoroHeap **) gc;
-        xr_free(gc);
-        gc = next;
+    struct XrCoroHeap *coro_heap = heap->coro_heap_pool_head;
+    while (coro_heap) {
+        struct XrCoroHeap *next = *(struct XrCoroHeap **) coro_heap;
+        xr_free(coro_heap);
+        coro_heap = next;
     }
     heap->coro_heap_pool_head = NULL;
     heap->coro_heap_pool_count = 0;
@@ -179,25 +179,25 @@ struct XrCoroHeap *xr_sysheap_coro_heap_pool_pop(XrSystemHeap *heap) {
     if (!heap || !heap->initialized)
         return NULL;
     xr_mutex_lock(&heap->coro_heap_pool_mu);
-    struct XrCoroHeap *gc = heap->coro_heap_pool_head;
-    if (gc) {
-        heap->coro_heap_pool_head = *(struct XrCoroHeap **) gc;
+    struct XrCoroHeap *coro_heap = heap->coro_heap_pool_head;
+    if (coro_heap) {
+        heap->coro_heap_pool_head = *(struct XrCoroHeap **) coro_heap;
         heap->coro_heap_pool_count--;
     }
     xr_mutex_unlock(&heap->coro_heap_pool_mu);
-    return gc;
+    return coro_heap;
 }
 
-bool xr_sysheap_coro_heap_pool_push(XrSystemHeap *heap, struct XrCoroHeap *gc) {
-    if (!heap || !heap->initialized || !gc)
+bool xr_sysheap_coro_heap_pool_push(XrSystemHeap *heap, struct XrCoroHeap *coro_heap) {
+    if (!heap || !heap->initialized || !coro_heap)
         return false;
     xr_mutex_lock(&heap->coro_heap_pool_mu);
     if (heap->coro_heap_pool_count >= XR_SYSHEAP_CORO_HEAP_POOL_MAX) {
         xr_mutex_unlock(&heap->coro_heap_pool_mu);
         return false;
     }
-    *(struct XrCoroHeap **) gc = heap->coro_heap_pool_head;
-    heap->coro_heap_pool_head = gc;
+    *(struct XrCoroHeap **) coro_heap = heap->coro_heap_pool_head;
+    heap->coro_heap_pool_head = coro_heap;
     heap->coro_heap_pool_count++;
     xr_mutex_unlock(&heap->coro_heap_pool_mu);
     return true;

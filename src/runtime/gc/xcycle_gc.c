@@ -194,8 +194,8 @@ static void visit_children(XrObjHeader *obj, ChildVisitor visitor, void *ctx) {
 
 /* ========== Cycle Roots Management ========== */
 
-XR_FUNC void xr_cycle_add_root(XrCoroHeap *gc, XrObjHeader *obj) {
-    if (!gc || !obj)
+XR_FUNC void xr_cycle_add_root(XrCoroHeap *heap, XrObjHeader *obj) {
+    if (!heap || !obj)
         return;
     if (!(obj->extra & XR_OBJ_CYCLE_CANDIDATE))
         return;
@@ -204,28 +204,28 @@ XR_FUNC void xr_cycle_add_root(XrCoroHeap *gc, XrObjHeader *obj) {
         return;
 
     /* Lazy allocation. */
-    if (!gc->cycle_roots) {
-        gc->cycle_roots =
+    if (!heap->cycle_roots) {
+        heap->cycle_roots =
             (XrObjHeader **) xr_malloc(sizeof(XrObjHeader *) * XR_CYCLE_ROOTS_INIT_CAP);
-        if (!gc->cycle_roots)
+        if (!heap->cycle_roots)
             return; /* OOM: skip cycle tracking (safe, just leaks) */
-        gc->cycle_root_cap = XR_CYCLE_ROOTS_INIT_CAP;
-        gc->cycle_root_count = 0;
+        heap->cycle_root_cap = XR_CYCLE_ROOTS_INIT_CAP;
+        heap->cycle_root_count = 0;
     }
 
     /* Grow if needed. */
-    if (gc->cycle_root_count >= gc->cycle_root_cap) {
-        uint32_t new_cap = gc->cycle_root_cap * 2;
+    if (heap->cycle_root_count >= heap->cycle_root_cap) {
+        uint32_t new_cap = heap->cycle_root_cap * 2;
         XrObjHeader **tmp =
-            (XrObjHeader **) xr_realloc(gc->cycle_roots, sizeof(XrObjHeader *) * new_cap);
+            (XrObjHeader **) xr_realloc(heap->cycle_roots, sizeof(XrObjHeader *) * new_cap);
         if (!tmp)
             return; /* OOM: skip */
-        gc->cycle_roots = tmp;
-        gc->cycle_root_cap = new_cap;
+        heap->cycle_roots = tmp;
+        heap->cycle_root_cap = new_cap;
     }
 
-    uint32_t idx = gc->cycle_root_count++;
-    gc->cycle_roots[idx] = obj;
+    uint32_t idx = heap->cycle_root_count++;
+    heap->cycle_roots[idx] = obj;
     obj->_rsv = idx;
 
     /* Auto-trigger: once the root set reaches the adaptive threshold, run the
@@ -233,36 +233,36 @@ XR_FUNC void xr_cycle_add_root(XrCoroHeap *gc, XrObjHeader *obj) {
      * releases child references, which can call back here; cycle_collecting
      * suppresses a nested collection (and the threshold check) until the
      * current one finishes. */
-    if (!gc->cycle_collecting && !gc->cycle_collection_disabled &&
-        gc->cycle_root_count >= gc->cycle_collect_threshold)
-        xr_coro_heap_collect_cycles(gc);
+    if (!heap->cycle_collecting && !heap->cycle_collection_disabled &&
+        heap->cycle_root_count >= heap->cycle_collect_threshold)
+        xr_coro_heap_collect_cycles(heap);
 }
 
-XR_FUNC void xr_cycle_remove_root(XrCoroHeap *gc, XrObjHeader *obj) {
-    if (!gc || !obj)
+XR_FUNC void xr_cycle_remove_root(XrCoroHeap *heap, XrObjHeader *obj) {
+    if (!heap || !obj)
         return;
     uint32_t idx = obj->_rsv;
-    if (idx == XR_CYCLE_NOT_IN_ROOTS || idx >= gc->cycle_root_count)
+    if (idx == XR_CYCLE_NOT_IN_ROOTS || idx >= heap->cycle_root_count)
         return;
 
     /* Swap with last for O(1) removal. */
-    uint32_t last = gc->cycle_root_count - 1;
+    uint32_t last = heap->cycle_root_count - 1;
     if (idx != last) {
-        XrObjHeader *moved = gc->cycle_roots[last];
-        gc->cycle_roots[idx] = moved;
+        XrObjHeader *moved = heap->cycle_roots[last];
+        heap->cycle_roots[idx] = moved;
         moved->_rsv = idx;
     }
-    gc->cycle_root_count--;
+    heap->cycle_root_count--;
     obj->_rsv = XR_CYCLE_NOT_IN_ROOTS;
 }
 
-XR_FUNC void xr_cycle_roots_destroy(XrCoroHeap *gc) {
-    if (!gc || !gc->cycle_roots)
+XR_FUNC void xr_cycle_roots_destroy(XrCoroHeap *heap) {
+    if (!heap || !heap->cycle_roots)
         return;
-    xr_free(gc->cycle_roots);
-    gc->cycle_roots = NULL;
-    gc->cycle_root_count = 0;
-    gc->cycle_root_cap = 0;
+    xr_free(heap->cycle_roots);
+    heap->cycle_roots = NULL;
+    heap->cycle_root_count = 0;
+    heap->cycle_root_cap = 0;
 }
 
 /* ========== Bacon-Rajan Trial Deletion (iterative, OOM-safe) ==========
@@ -361,24 +361,24 @@ static void restore_edge_visitor(XrObjHeader *child, void *ctx) {
 
 /* Main entry: run the Bacon-Rajan cycle collector on accumulated roots.
  * Called by gc.collect(). Runs unconditionally when there are roots. */
-XR_FUNC void xr_coro_heap_collect_cycles(XrCoroHeap *gc) {
-    if (!gc)
+XR_FUNC void xr_coro_heap_collect_cycles(XrCoroHeap *heap) {
+    if (!heap)
         return;
     /* Re-entry guard: a destroy cascade started below can call add_root,
      * whose auto-trigger would otherwise recurse into the collector. */
-    if (gc->cycle_collecting)
+    if (heap->cycle_collecting)
         return;
-    if (!gc->cycle_roots || gc->cycle_root_count == 0) {
+    if (!heap->cycle_roots || heap->cycle_root_count == 0) {
         /* No potential cycle roots, but a gc.collect() should still return
          * fully-dead blocks: pure-RC programs free without forming cycles. */
-        xr_coro_heap_reclaim_empty_blocks(gc);
+        xr_coro_heap_reclaim_empty_blocks(heap);
         return;
     }
 
-    gc->cycle_collecting = 1;
-    gc->cycle_count++;
+    heap->cycle_collecting = 1;
+    heap->cycle_count++;
 
-    uint32_t n = gc->cycle_root_count;
+    uint32_t n = heap->cycle_root_count;
     CycleVec R = {0};
     CycleVec work = {0};
     uint32_t freed = 0;
@@ -386,7 +386,7 @@ XR_FUNC void xr_coro_heap_collect_cycles(XrCoroHeap *gc) {
     /* Pass A: collect the reachable eligible set (colors members GRAY). */
     bool ok = true;
     for (uint32_t i = 0; i < n; i++) {
-        XrObjHeader *o = gc->cycle_roots[i];
+        XrObjHeader *o = heap->cycle_roots[i];
         if (o && !(o->extra & XR_OBJ_DEAD) && cycle_child_eligible(o) &&
             get_color(o) != COLOR_GRAY) {
             set_color(o, COLOR_GRAY);
@@ -444,7 +444,7 @@ XR_FUNC void xr_coro_heap_collect_cycles(XrCoroHeap *gc) {
             XrObjHeader *obj = R.items[i];
             if (get_color(obj) == COLOR_WHITE && !(obj->extra & XR_OBJ_DEAD)) {
                 freed++;
-                xr_coro_heap_destroy_obj(gc, obj);
+                xr_coro_heap_destroy_obj(heap, obj);
             }
         }
 
@@ -465,27 +465,27 @@ XR_FUNC void xr_coro_heap_collect_cycles(XrCoroHeap *gc) {
      * this, add_root would refuse them forever and remove_root could
      * corrupt the next roots array through a stale index. Iterate the
      * CURRENT count: destructors run above may have added/removed roots. */
-    for (uint32_t i = 0; i < gc->cycle_root_count; i++) {
-        XrObjHeader *obj = gc->cycle_roots[i];
+    for (uint32_t i = 0; i < heap->cycle_root_count; i++) {
+        XrObjHeader *obj = heap->cycle_roots[i];
         if (obj && !(obj->extra & XR_OBJ_DEAD))
             obj->_rsv = XR_CYCLE_NOT_IN_ROOTS;
     }
-    gc->cycle_root_count = 0;
+    heap->cycle_root_count = 0;
 
     /* Adaptive threshold (Nim ORC feedback): a productive collect (reclaimed
      * at least half the scanned roots) lowers the threshold so we collect more
      * eagerly; an unproductive one raises it to avoid churn. Bounded below. */
     if (freed * 2u >= n) {
-        uint32_t lowered = gc->cycle_collect_threshold * 2u / 3u;
-        gc->cycle_collect_threshold =
+        uint32_t lowered = heap->cycle_collect_threshold * 2u / 3u;
+        heap->cycle_collect_threshold =
             lowered < XR_CYCLE_COLLECT_THRESHOLD_MIN ? XR_CYCLE_COLLECT_THRESHOLD_MIN : lowered;
     } else {
-        gc->cycle_collect_threshold += gc->cycle_collect_threshold / 2u;
+        heap->cycle_collect_threshold += heap->cycle_collect_threshold / 2u;
     }
 
-    gc->cycle_collecting = 0;
+    heap->cycle_collecting = 0;
 
     /* Cycle collection just freed dead cycles; reclaim any blocks that became
      * fully dead so their memory can be reused by any size class. */
-    xr_coro_heap_reclaim_empty_blocks(gc);
+    xr_coro_heap_reclaim_empty_blocks(heap);
 }

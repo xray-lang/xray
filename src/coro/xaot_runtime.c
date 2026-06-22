@@ -33,11 +33,11 @@ static XrAotCoroState *aot_state_from_coro(XrCoroutine *coro) {
     return (XrAotCoroState *) coro->backend_state;
 }
 
-static void aot_release_frame(const XrAotCoroDesc *desc, void *frame, XrCoroHeap *gc) {
+static void aot_release_frame(const XrAotCoroDesc *desc, void *frame, XrCoroHeap *heap) {
     if (!frame)
         return;
     if (desc && desc->release_frame) {
-        desc->release_frame(frame, gc);
+        desc->release_frame(frame, heap);
         return;
     }
     xr_aot_frame_free(frame);

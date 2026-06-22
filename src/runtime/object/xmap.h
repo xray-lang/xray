@@ -119,8 +119,8 @@ XR_FUNC uint32_t xr_map_purge_weak_target(XrMap *map, XrObjHeader *target,
 
 struct XrCoroHeap;
 // Pre-size entries[]/indices[] for `count` entries, charging external-byte
-// accounting to `gc` (used by deep-copy, which runs off the destination coro).
-XR_FUNC bool xr_map_reserve_external(XrMap *map, uint32_t count, struct XrCoroHeap *gc);
+// accounting to `heap` (used by deep-copy, which runs off the destination coro).
+XR_FUNC bool xr_map_reserve_external(XrMap *map, uint32_t count, struct XrCoroHeap *heap);
 
 XR_FUNC void xr_map_set(XrMap *map, XrValue key, XrValue value);
 XR_FUNC XrValue xr_map_get(XrMap *map, XrValue key, bool *found);

@@ -36,18 +36,18 @@ static void xr_array_retain_elements(XrArray *arr) {
         xr_rc_retain_value(data[i]);
 }
 
-static void xr_array_release_elements(XrArray *arr, XrCoroHeap *gc) {
+static void xr_array_release_elements(XrArray *arr, XrCoroHeap *heap) {
     if (!arr)
         return;
     if (xr_array_is_slice(arr)) {
-        xr_rc_release_value(gc, XR_FROM_PTR(arr->source));
+        xr_rc_release_value(heap, XR_FROM_PTR(arr->source));
         return;
     }
     if (arr->elem_type != XR_ELEM_ANY || arr->length <= 0)
         return;
     XrValue *data = (XrValue *) arr->data;
     for (int32_t i = 0; i < arr->length; i++) {
-        xr_rc_release_value(gc, data[i]);
+        xr_rc_release_value(heap, data[i]);
         data[i] = xr_null();
     }
 }
@@ -101,9 +101,9 @@ XrArray *xr_array_with_capacity_typed(struct XrCoroutine *coro, int capacity,
     // Allocate data as GC blob on Region heap (no free needed, GC reclaims)
     if (capacity > 0) {
         size_t data_bytes = (size_t) esz * capacity;
-        XrCoroHeap *gc = xr_coro_get_heap(coro);
-        if (gc) {
-            arr->data = xr_coro_alloc_blob(gc, data_bytes);
+        XrCoroHeap *heap = xr_coro_get_heap(coro);
+        if (heap) {
+            arr->data = xr_coro_alloc_blob(heap, data_bytes);
             if (arr->data) {
                 arr->data_on_gc_heap = 1;
             }
@@ -149,8 +149,8 @@ void xr_array_init_inplace(XrArray *arr, int capacity, uint8_t elem_type) {
  *
  * Concurrency collection points — e.g. a supervisor scope's errors[] that the
  * owner creates but many child coroutines push into across workers — must not
- * be per-coroutine arrays: growth is accounted to the pushing child's gc while
- * the array is freed by the owner's gc, underflowing the owner's byte counter
+ * be per-coroutine arrays: growth is accounted to the pushing child's heap while
+ * the array is freed by the owner's heap, underflowing the owner's byte counter
  * (and the data buffer would be reclaimed against the wrong heap). A shared
  * array carries no per-coro accounting and is reclaimed via xr_shared_destroy. */
 XrArray *xr_array_new_shared_core(XrRuntimeCore *core, int capacity) {
@@ -399,16 +399,16 @@ void xr_array_fill(XrArray *arr, XrValue value, int start, int end) {
             }
             xr_array_retain_extra_fill_refs(value, changed_slots);
         }
-        XrCoroHeap *gc = xr_current_coro_heap();
+        XrCoroHeap *heap = xr_current_coro_heap();
         for (int i = start; i < end; i++) {
             XrValue old = data[i];
             if (xr_array_same_gc_object(old, value))
                 continue;
             data[i] = value;
-            xr_rc_release_value(gc, old);
+            xr_rc_release_value(heap, old);
         }
         XR_ARRAY_MARK_GC_PTRS(arr, value);
-        XR_GC_BARRIER_BACK_SAFE(gc, arr);
+        XR_GC_BARRIER_BACK_SAFE(heap, arr);
         return;
     }
 
@@ -501,9 +501,9 @@ bool xr_array_resize(XrArray *arr, int32_t length, XrValue fill) {
     if (length < old_length) {
         if (arr->elem_type == XR_ELEM_ANY) {
             XrValue *data = (XrValue *) arr->data;
-            XrCoroHeap *gc = xr_current_coro_heap();
+            XrCoroHeap *heap = xr_current_coro_heap();
             for (int32_t i = length; i < old_length; i++) {
-                xr_rc_release_value(gc, data[i]);
+                xr_rc_release_value(heap, data[i]);
                 data[i] = xr_null();
             }
         }
@@ -613,8 +613,8 @@ void xr_array_grow(XrArray *arr) {
         arr->data = new_data;
         arr->capacity = new_capacity;
         /* Shared arrays carry no per-coroutine accounting: their buffer is freed
-         * via xr_shared_destroy with a NULL gc, so accounting growth to the
-         * pushing coroutine's gc would skew that counter (and underflow the
+         * via xr_shared_destroy with a NULL heap, so accounting growth to the
+         * pushing coroutine's heap would skew that counter (and underflow the
          * owner on a cross-coro collection point). */
         if (!XR_OBJ_IS_SHARED(&arr->hdr))
             xr_coro_heap_add_external(xr_current_coro_heap(), (int64_t) (new_bytes - old_bytes));
@@ -668,8 +668,8 @@ void xr_array_ensure_capacity(XrArray *arr, int min_capacity) {
         arr->data = new_data;
         arr->capacity = new_capacity;
         /* Shared arrays carry no per-coroutine accounting: their buffer is freed
-         * via xr_shared_destroy with a NULL gc, so accounting growth to the
-         * pushing coroutine's gc would skew that counter (and underflow the
+         * via xr_shared_destroy with a NULL heap, so accounting growth to the
+         * pushing coroutine's heap would skew that counter (and underflow the
          * owner on a cross-coro collection point). */
         if (!XR_OBJ_IS_SHARED(&arr->hdr))
             xr_coro_heap_add_external(xr_current_coro_heap(), (int64_t) (new_bytes - old_bytes));

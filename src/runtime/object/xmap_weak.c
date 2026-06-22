@@ -12,9 +12,9 @@
 #include "../gc/xcoro_heap.h"
 #include "../../shared/xr_swiss_index.h"
 
-static void weak_map_tombstone_entry(XrMap *map, uint32_t eidx, XrCoroHeap *gc) {
+static void weak_map_tombstone_entry(XrMap *map, uint32_t eidx, XrCoroHeap *heap) {
     XrMapEntry *e = &map->entries[eidx];
-    xr_rc_release_value(gc, e->value);
+    xr_rc_release_value(heap, e->value);
     e->key = xr_null();
     e->value = xr_null();
     e->key_tt = XR_MAP_ENTRY_NIL_KEY;

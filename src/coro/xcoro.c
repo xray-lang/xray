@@ -581,12 +581,12 @@ void xr_coro_free(XrCoroutine *coro) {
         xr_io_wait_token_cancel(&coro->ext->wait.io_token);
     coro_release_backend_state(coro, true);
 
-    // Free GC context — atomic exchange to prevent double-free race
+    // Free coroutine heap — atomic exchange to prevent double-free race
     {
-        XrCoroHeap *gc = atomic_exchange_explicit((_Atomic(XrCoroHeap *) *) &coro->heap, NULL,
-                                                  memory_order_acq_rel);
-        if (gc)
-            xr_coro_heap_destroy(gc);
+        XrCoroHeap *heap = atomic_exchange_explicit((_Atomic(XrCoroHeap *) *) &coro->heap, NULL,
+                                                    memory_order_acq_rel);
+        if (heap)
+            xr_coro_heap_destroy(heap);
     }
 
     // Cold extension (io_buf, locals, watched_by)
@@ -630,7 +630,7 @@ void xr_coro_recycle_local(XrWorker *worker, XrCoroutine *coro) {
     if (coro->ext)
         xr_io_wait_token_cancel(&coro->ext->wait.io_token);
 
-    // Reset GC context: finalize objects, bulk free Region blocks, reset state.
+    // Reset coroutine heap: finalize objects, bulk free Region blocks, reset state.
     // Uses xr_coro_heap_reset which handles large objects and finalizers
     // correctly (the previous partial reset skipped those).
     if (coro->heap) {

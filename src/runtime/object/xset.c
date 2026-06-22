@@ -66,8 +66,8 @@ static uint32_t calc_indices_size(uint32_t needed) {
     return size;
 }
 
-static inline void xr_set_release_entry(XrSetEntry *e, XrCoroHeap *gc) {
-    xr_rc_release_value(gc, e->value);
+static inline void xr_set_release_entry(XrSetEntry *e, XrCoroHeap *heap) {
+    xr_rc_release_value(heap, e->value);
     e->value = xr_null();
 }
 
@@ -76,29 +76,29 @@ static inline bool set_is_weak(const XrSet *set) {
 }
 
 static inline XrCoroHeap *set_current_or_owner_heap(XrSet *set) {
-    XrCoroHeap *gc = xr_current_coro_heap();
-    return gc ? gc : (set ? set->owner_heap : NULL);
+    XrCoroHeap *heap = xr_current_coro_heap();
+    return heap ? heap : (set ? set->owner_heap : NULL);
 }
 
-static XrayIsolate *set_owning_isolate(XrCoroHeap *gc) {
-    if (gc && gc->owner)
-        return gc->owner->isolate;
+static XrayIsolate *set_owning_isolate(XrCoroHeap *heap) {
+    if (heap && heap->owner)
+        return heap->owner->isolate;
     return NULL;
 }
 
-static void xr_set_release_stored_entry(XrSet *set, XrSetEntry *e, XrCoroHeap *gc) {
+static void xr_set_release_stored_entry(XrSet *set, XrSetEntry *e, XrCoroHeap *heap) {
     if (!set_is_weak(set))
-        xr_set_release_entry(e, gc);
+        xr_set_release_entry(e, heap);
     else
         e->value = xr_null();
 }
 
-static void xr_set_prepare_weak_value(XrSet *set, XrValue value, XrCoroHeap *gc) {
+static void xr_set_prepare_weak_value(XrSet *set, XrValue value, XrCoroHeap *heap) {
     if (!set_is_weak(set) || !XR_IS_PTR(value))
         return;
     XrObjHeader *target = XR_VALUE_GCPTR(value);
     XR_OBJ_SET_FLAG(target, XR_OBJ_WEAKABLE);
-    xr_weak_registry_register_set(set_owning_isolate(gc), set);
+    xr_weak_registry_register_set(set_owning_isolate(heap), set);
 }
 
 /* ========== Swiss Index Lookup ========== */
@@ -127,7 +127,7 @@ static int32_t set_lookup(XrSet *set, XrValue value, uint32_t hash) {
 // Grow (and compact away tombstones) to hold at least `min_needed` live entries.
 // Handles the dummy -> first-allocation case too. Returns false on OOM.
 static bool set_resize(XrSet *set, uint32_t min_needed) {
-    XrCoroHeap *gc = set_current_or_owner_heap(set);
+    XrCoroHeap *heap = set_current_or_owner_heap(set);
     bool was_dummy = xr_set_isdummy(set);
     XrSetEntry *old_entries = was_dummy ? NULL : set->entries;
     uint8_t *old_ctrl = was_dummy ? NULL : set->ctrl;
@@ -135,7 +135,7 @@ static bool set_resize(XrSet *set, uint32_t min_needed) {
     uint32_t old_nentries = was_dummy ? 0 : set->nentries;
     uint32_t old_isize = was_dummy ? 0 : set->indices_size;
     uint32_t old_ecap = was_dummy ? 0 : set->entries_cap;
-    bool old_on_gc = (set->flags & XR_SET_FLAG_NODES_ON_GC) != 0;
+    bool old_on_heap = (set->flags & XR_SET_FLAG_NODES_ON_GC) != 0;
 
     uint32_t needed = set->count > min_needed ? set->count : min_needed;
     if (needed < 1)
@@ -148,7 +148,7 @@ static bool set_resize(XrSet *set, uint32_t min_needed) {
     // First allocation from dummy may use the Region GC blob heap; subsequent
     // resizes force malloc (region recycling could overlap the old blob while
     // we copy live entries out of it).
-    bool new_on_gc = was_dummy && old_on_gc;
+    bool new_on_heap = was_dummy && old_on_heap;
 
     size_t cbytes = (size_t) new_isize + XR_SWISS_GROUP;
     size_t ibytes = sizeof(int32_t) * (size_t) new_isize;
@@ -157,35 +157,35 @@ static bool set_resize(XrSet *set, uint32_t min_needed) {
     int32_t *new_indices = NULL;
     XrSetEntry *new_entries = NULL;
 
-    if (new_on_gc && gc) {
-        new_ctrl = (uint8_t *) xr_coro_alloc_blob(gc, cbytes);
-        new_indices = (int32_t *) xr_coro_alloc_blob(gc, ibytes);
-        new_entries = (XrSetEntry *) xr_coro_alloc_blob(gc, ebytes);
+    if (new_on_heap && heap) {
+        new_ctrl = (uint8_t *) xr_coro_alloc_blob(heap, cbytes);
+        new_indices = (int32_t *) xr_coro_alloc_blob(heap, ibytes);
+        new_entries = (XrSetEntry *) xr_coro_alloc_blob(heap, ebytes);
         if (!new_ctrl || !new_indices || !new_entries) {
-            xr_coro_free_blob(gc, new_ctrl);
-            xr_coro_free_blob(gc, new_indices);
-            xr_coro_free_blob(gc, new_entries);
-            new_on_gc = false;
+            xr_coro_free_blob(heap, new_ctrl);
+            xr_coro_free_blob(heap, new_indices);
+            xr_coro_free_blob(heap, new_entries);
+            new_on_heap = false;
             new_ctrl = (uint8_t *) xr_malloc(cbytes);
             new_indices = (int32_t *) xr_malloc(ibytes);
             new_entries = (XrSetEntry *) xr_malloc(ebytes);
         }
     } else {
-        new_on_gc = false;
+        new_on_heap = false;
         new_ctrl = (uint8_t *) xr_malloc(cbytes);
         new_indices = (int32_t *) xr_malloc(ibytes);
         new_entries = (XrSetEntry *) xr_malloc(ebytes);
     }
     if (!new_ctrl || !new_indices || !new_entries) {
-        if (!new_on_gc) {
+        if (!new_on_heap) {
             xr_free(new_ctrl);
             xr_free(new_indices);
             xr_free(new_entries);
         }
         return false;
     }
-    if (!new_on_gc)
-        xr_coro_heap_add_external(gc, (int64_t) (cbytes + ibytes + ebytes));
+    if (!new_on_heap)
+        xr_coro_heap_add_external(heap, (int64_t) (cbytes + ibytes + ebytes));
 
     memset(new_ctrl, (int) XR_SWISS_CTRL_EMPTY, cbytes);
     for (uint32_t i = 0; i < new_isize; i++)
@@ -203,24 +203,24 @@ static bool set_resize(XrSet *set, uint32_t min_needed) {
     set->entries_cap = new_ecap;
     set->nentries = w;
     set->flags &= ~XR_SET_FLAG_DUMMY;
-    set->owner_heap = gc;
-    if (new_on_gc)
+    set->owner_heap = heap;
+    if (new_on_heap)
         set->flags |= XR_SET_FLAG_NODES_ON_GC;
     else
         set->flags &= ~XR_SET_FLAG_NODES_ON_GC;
 
     if (old_entries) {
-        if (old_on_gc) {
-            xr_coro_free_blob(gc, old_ctrl);
-            xr_coro_free_blob(gc, old_indices);
-            xr_coro_free_blob(gc, old_entries);
+        if (old_on_heap) {
+            xr_coro_free_blob(heap, old_ctrl);
+            xr_coro_free_blob(heap, old_indices);
+            xr_coro_free_blob(heap, old_entries);
         } else {
             xr_free(old_ctrl);
             xr_free(old_indices);
             xr_free(old_entries);
-            xr_coro_heap_sub_external(gc, (int64_t) ((size_t) old_isize + XR_SWISS_GROUP +
-                                                     sizeof(int32_t) * (size_t) old_isize +
-                                                     sizeof(XrSetEntry) * (size_t) old_ecap));
+            xr_coro_heap_sub_external(heap, (int64_t) ((size_t) old_isize + XR_SWISS_GROUP +
+                                                       sizeof(int32_t) * (size_t) old_isize +
+                                                       sizeof(XrSetEntry) * (size_t) old_ecap));
         }
     }
     return true;
@@ -285,19 +285,19 @@ bool xr_set_add(XrSet *set, XrValue value) {
     XR_DCHECK(XR_OBJ_GET_TYPE(&set->hdr) == XR_TSET, "set_add: object is not a set");
 
     uint32_t hash = hash_value(value);
-    XrCoroHeap *gc = set_current_or_owner_heap(set);
+    XrCoroHeap *heap = set_current_or_owner_heap(set);
 
     int32_t ix = set_lookup(set, value, hash);
     if (ix >= 0) {
         // Already present: drop the incoming reference, keep the stored one.
-        xr_rc_release_value(gc, value);
+        xr_rc_release_value(heap, value);
         return false;
     }
 
     // New value: ensure entries[] has room (also compacts away tombstones).
     if (set->nentries >= set->entries_cap) {
         if (!set_resize(set, set->count + 1)) {
-            xr_rc_release_value(gc, value);
+            xr_rc_release_value(heap, value);
             return false;  // OOM
         }
     }
@@ -312,10 +312,10 @@ bool xr_set_add(XrSet *set, XrValue value) {
 
     xr_swiss_indices_put(set->ctrl, set->indices, set->indices_size, hash, (int32_t) eidx);
     if (set_is_weak(set)) {
-        xr_set_prepare_weak_value(set, value, gc);
-        xr_rc_release_value(gc, value);
+        xr_set_prepare_weak_value(set, value, heap);
+        xr_rc_release_value(heap, value);
     }
-    XR_GC_BARRIER_BACK_SAFE(gc, set);
+    XR_GC_BARRIER_BACK_SAFE(heap, set);
     return true;
 }
 
@@ -355,11 +355,11 @@ void xr_set_clear(XrSet *set) {
     if (xr_set_isdummy(set))
         return;
 
-    XrCoroHeap *gc = set_current_or_owner_heap(set);
+    XrCoroHeap *heap = set_current_or_owner_heap(set);
     for (uint32_t i = 0; i < set->nentries; i++) {
         XrSetEntry *e = &set->entries[i];
         if (e->val_tt != XR_SET_ENTRY_NIL) {
-            xr_set_release_stored_entry(set, e, gc);
+            xr_set_release_stored_entry(set, e, heap);
             e->val_tt = XR_SET_ENTRY_NIL;
         }
     }

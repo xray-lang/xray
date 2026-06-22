@@ -59,10 +59,10 @@ static XrCoroHeap *get_heap(XrayIsolate *isolate) {
 static XrValue gc_collect(XrayIsolate *isolate, XrValue *args, int argc) {
     (void) argc;
     (void) args;
-    XrCoroHeap *gc = get_heap(isolate);
-    if (gc) {
-        xr_coro_heap_collect_cycles(gc);
-        return xr_int((int64_t) gc->cycle_count);
+    XrCoroHeap *heap = get_heap(isolate);
+    if (heap) {
+        xr_coro_heap_collect_cycles(heap);
+        return xr_int((int64_t) heap->cycle_count);
     }
     return xr_int(0);
 }
@@ -73,9 +73,9 @@ static XrValue gc_collect(XrayIsolate *isolate, XrValue *args, int argc) {
 static XrValue cycle_count(XrayIsolate *isolate, XrValue *args, int argc) {
     (void) argc;
     (void) args;
-    XrCoroHeap *gc = get_heap(isolate);
-    if (gc) {
-        double kb = (double) gc->totalbytes / 1024.0;
+    XrCoroHeap *heap = get_heap(isolate);
+    if (heap) {
+        double kb = (double) heap->totalbytes / 1024.0;
         return xr_float(kb);
     }
     return xr_float(0.0);
@@ -87,8 +87,8 @@ static XrValue cycle_count(XrayIsolate *isolate, XrValue *args, int argc) {
 static XrValue cycle_count_bytes(XrayIsolate *isolate, XrValue *args, int argc) {
     (void) argc;
     (void) args;
-    XrCoroHeap *gc = get_heap(isolate);
-    return gc ? xr_int(gc->totalbytes) : xr_int(0);
+    XrCoroHeap *heap = get_heap(isolate);
+    return heap ? xr_int(heap->totalbytes) : xr_int(0);
 }
 
 /* ========== gc.disable() / gc.enable() ========== */
@@ -99,9 +99,9 @@ static XrValue cycle_count_bytes(XrayIsolate *isolate, XrValue *args, int argc) 
 static XrValue gc_disable(XrayIsolate *isolate, XrValue *args, int argc) {
     (void) argc;
     (void) args;
-    XrCoroHeap *gc = get_heap(isolate);
-    if (gc && gc->cycle_collection_disabled < 255) {
-        gc->cycle_collection_disabled++;
+    XrCoroHeap *heap = get_heap(isolate);
+    if (heap && heap->cycle_collection_disabled < 255) {
+        heap->cycle_collection_disabled++;
     }
     return xr_null();
 }
@@ -110,9 +110,9 @@ static XrValue gc_disable(XrayIsolate *isolate, XrValue *args, int argc) {
 static XrValue gc_enable(XrayIsolate *isolate, XrValue *args, int argc) {
     (void) argc;
     (void) args;
-    XrCoroHeap *gc = get_heap(isolate);
-    if (gc && gc->cycle_collection_disabled > 0) {
-        gc->cycle_collection_disabled--;
+    XrCoroHeap *heap = get_heap(isolate);
+    if (heap && heap->cycle_collection_disabled > 0) {
+        heap->cycle_collection_disabled--;
     }
     return xr_null();
 }
@@ -123,8 +123,8 @@ static XrValue gc_enable(XrayIsolate *isolate, XrValue *args, int argc) {
 static XrValue gc_isrunning(XrayIsolate *isolate, XrValue *args, int argc) {
     (void) argc;
     (void) args;
-    XrCoroHeap *gc = get_heap(isolate);
-    return xr_bool(gc && gc->cycle_collection_disabled == 0);
+    XrCoroHeap *heap = get_heap(isolate);
+    return xr_bool(heap && heap->cycle_collection_disabled == 0);
 }
 
 /* ========== gc.cycles() ========== */
@@ -133,8 +133,8 @@ static XrValue gc_isrunning(XrayIsolate *isolate, XrValue *args, int argc) {
 static XrValue gc_cycles(XrayIsolate *isolate, XrValue *args, int argc) {
     (void) argc;
     (void) args;
-    XrCoroHeap *gc = get_heap(isolate);
-    return gc ? xr_int(gc->cycle_count) : xr_int(0);
+    XrCoroHeap *heap = get_heap(isolate);
+    return heap ? xr_int(heap->cycle_count) : xr_int(0);
 }
 
 /* ========== gc.objects() ========== */
@@ -143,8 +143,8 @@ static XrValue gc_cycles(XrayIsolate *isolate, XrValue *args, int argc) {
 static XrValue gc_objects(XrayIsolate *isolate, XrValue *args, int argc) {
     (void) argc;
     (void) args;
-    XrCoroHeap *gc = get_heap(isolate);
-    return gc ? xr_int((int64_t) gc->object_count) : xr_int(0);
+    XrCoroHeap *heap = get_heap(isolate);
+    return heap ? xr_int((int64_t) heap->object_count) : xr_int(0);
 }
 
 /* ========== gc.info() ========== */
@@ -157,27 +157,27 @@ static XrValue gc_info(XrayIsolate *isolate, XrValue *args, int argc) {
     (void) argc;
     (void) args;
 
-    XrCoroHeap *gc = get_heap(isolate);
+    XrCoroHeap *heap = get_heap(isolate);
     XrMap *map = xr_map_new(xr_current_coro(isolate));
 
-    if (!gc) {
+    if (!heap) {
         MAP_SET(map, "error", xrs_string_value_c(isolate, "no gc"));
         return xr_value_from_map(map);
     }
 
     // Live memory + object stats
-    MAP_SET(map, "totalBytes", xr_int(gc->totalbytes));
-    MAP_SET(map, "totalKB", xr_float((double) gc->totalbytes / 1024.0));
-    MAP_SET(map, "objects", xr_int((int64_t) gc->object_count));
+    MAP_SET(map, "totalBytes", xr_int(heap->totalbytes));
+    MAP_SET(map, "totalKB", xr_float((double) heap->totalbytes / 1024.0));
+    MAP_SET(map, "objects", xr_int((int64_t) heap->object_count));
 
     // Automatic cycle collector state
-    MAP_SET(map, "running", xr_bool(gc->cycle_collection_disabled == 0));
-    MAP_SET(map, "cycles", xr_int(gc->cycle_count));
-    MAP_SET(map, "finalizerCount", xr_int((int64_t) gc->finalizer_count));
+    MAP_SET(map, "running", xr_bool(heap->cycle_collection_disabled == 0));
+    MAP_SET(map, "cycles", xr_int(heap->cycle_count));
+    MAP_SET(map, "finalizerCount", xr_int((int64_t) heap->finalizer_count));
 
     // Region block stats
     XrRegionStats istats;
-    xr_region_get_stats(&gc->region, &istats);
+    xr_region_get_stats(&heap->region, &istats);
     MAP_SET(map, "blocks", xr_int((int64_t) istats.total_blocks));
     MAP_SET(map, "freeBlocks", xr_int((int64_t) istats.free_blocks));
     MAP_SET(map, "fullBlocks", xr_int((int64_t) istats.full_blocks));
