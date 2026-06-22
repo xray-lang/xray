@@ -1,4 +1,5 @@
 import encoding
+import { LE as directLE, BE as directBE } from "encoding"
 
 print(encoding.hexEncode("Hello"))
 let decoded = encoding.hexDecode("48656c6c6f")
@@ -21,6 +22,8 @@ print(encoding.utf8Count("你好"))
 print(encoding.utf8ByteLength("你好"))
 print(encoding.LE)
 print(encoding.BE)
+print(directLE)
+print(directBE)
 
 let u16le = encoding.utf16Encode("AB")
 print(u16le.length)

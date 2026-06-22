@@ -371,6 +371,9 @@ static bool xicgen_emit_stdlib_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f
 static bool cg_module_has_aot_direct_calls(const char *module);
 static bool cg_module_has_aot_generated_constants(const char *module);
 static bool cg_aot_stdlib_generated_has_builtin_direct_call(const char *module, const char *name);
+static bool cg_emit_aot_stdlib_generated_constant_import_ref(XiCgenCtx *ctx, FILE *out,
+                                                             const XiValue *v,
+                                                             const XiImportRef *ref);
 static bool cg_emit_aot_stdlib_generated_constant_field(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                                         const XiValue *v);
 
@@ -423,6 +426,8 @@ static void xicgen_import_ref(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
                     cg_module_has_aot_direct_calls(ref->module_path) ||
                     cg_module_has_aot_generated_constants(ref->module_path))) {
             fprintf(out, "XR_NULL_VAL /* builtin module: %s */", ref->module_path);
+        } else if (cg_emit_aot_stdlib_generated_constant_import_ref(ctx, out, v, ref)) {
+            return;
         } else if (xicgen_import_ref_is_generated_builtin_direct_member(ref)) {
             fprintf(out, "XR_NULL_VAL /* builtin %s.%s */", ref->module_path, ref->member_name);
         } else {

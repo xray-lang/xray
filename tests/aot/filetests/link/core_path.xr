@@ -1,7 +1,10 @@
 import path
+import { sep as directSep, delimiter as directDelimiter } from "path"
 
 print(path.sep == "/")
 print(path.delimiter.length == 1)
+print(directSep == path.sep)
+print(directDelimiter.length == path.delimiter.length)
 print(path.isAbsolute("/usr/local/bin"))
 print(path.basename("/usr/local/bin/xray"))
 print(path.dirname("/usr/local/bin/xray"))
