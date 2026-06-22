@@ -56,7 +56,7 @@ static bool scope_fixture_init(ScopeFixture *f) {
     xr_worker_init(&f->worker, 0, &f->runtime);
     f->worker_initialized = true;
 
-    f->isolate_storage.scheduler_runtime = &f->runtime;
+    f->isolate_storage.vm.scheduler = &f->runtime;
     tls_current_worker = &f->worker;
     tls_current_machine = &f->machine;
     return true;
@@ -82,7 +82,7 @@ static void init_running_scope_coro(XrCoroutine *coro, XrCoroExt *ext, int id,
     coro->id = id;
     coro->core = isolate ? isolate->core_rt : NULL;
     coro->scheduler =
-        (isolate && isolate->scheduler_runtime) ? (XrRuntime *) isolate->scheduler_runtime : NULL;
+        (isolate && isolate->vm.scheduler) ? (XrRuntime *) isolate->vm.scheduler : NULL;
     coro->ext = ext;
     atomic_store(&coro->flags, XR_CORO_FLG_RUNNING);
     atomic_store(&coro->resume_status, XR_RESUME_OK);

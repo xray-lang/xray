@@ -78,7 +78,7 @@ extern void xr_socket_close(struct XrayIsolate *X, int fd);
 static void net_close_fd(XrayIsolate *X, int fd) {
     if (fd < 0)
         return;
-    XrRuntime *runtime = X ? (XrRuntime *) X->scheduler_runtime : NULL;
+    XrRuntime *runtime = X ? (XrRuntime *) X->vm.scheduler : NULL;
     if (runtime) {
         XrPollDesc *pd = xr_fdmap_get(&runtime->netpoll, fd);
         if (pd && !atomic_load(&pd->closing))
@@ -545,7 +545,7 @@ static XrCFuncResult net_dial_yieldable(XrayIsolate *X, XrValue *args, int nargs
 
 #if defined(XR_OS_LINUX) && defined(XR_HAS_IO_URING)
     // Completion mode: submit a connect op; its CQE is the connect verdict.
-    XrRuntime *rt = (XrRuntime *) X->scheduler_runtime;
+    XrRuntime *rt = (XrRuntime *) X->vm.scheduler;
     if (rt && xr_netpoll_uring_active(&rt->netpoll)) {
         XrPollDesc *pd = xr_netpoll_open(&rt->netpoll, fd);
         if (pd) {
@@ -653,7 +653,7 @@ static XrCFuncResult net_accept_step(XrayIsolate *X, NetAcceptState *state, XrVa
 #if defined(XR_OS_LINUX) && defined(XR_HAS_IO_URING)
     // Completion mode: submit an accept op; the CQE carries the new fd directly
     // (no second accept() after readiness).
-    XrRuntime *rt = (XrRuntime *) X->scheduler_runtime;
+    XrRuntime *rt = (XrRuntime *) X->vm.scheduler;
     if (rt && xr_netpoll_uring_active(&rt->netpoll)) {
         XrPollDesc *pd = xr_netpoll_open(&rt->netpoll, state->listen_fd);
         if (pd) {
@@ -861,7 +861,7 @@ static XrCFuncResult net_read_handle_step(XrayIsolate *X, NetReadHandleState *st
         // Completion mode: submit a recv op and park; the CQE carries the byte
         // count back directly (no second read() after readiness). Falls back to
         // the readiness path below if io_uring is not the active backend.
-        XrRuntime *rt = (XrRuntime *) X->scheduler_runtime;
+        XrRuntime *rt = (XrRuntime *) X->vm.scheduler;
         if (rt && xr_netpoll_uring_active(&rt->netpoll)) {
             XrPollDesc *pd = xr_netpoll_open(&rt->netpoll, state->fd);
             if (pd) {
@@ -1053,7 +1053,7 @@ static XrCFuncResult net_read_into_step(XrayIsolate *X, NetReadIntoState *state,
     if (errno == EAGAIN || errno == EWOULDBLOCK) {
         int64_t timeout_ms = net_timeout_until(state->conn ? state->conn->read_deadline_ms : 0);
 #if defined(XR_OS_LINUX) && defined(XR_HAS_IO_URING)
-        XrRuntime *rt = (XrRuntime *) X->scheduler_runtime;
+        XrRuntime *rt = (XrRuntime *) X->vm.scheduler;
         if (rt && xr_netpoll_uring_active(&rt->netpoll)) {
             XrPollDesc *pd = xr_netpoll_open(&rt->netpoll, state->fd);
             if (pd) {
@@ -1281,7 +1281,7 @@ static XrCFuncResult net_write_handle_step(XrayIsolate *X, NetWriteHandleState *
             int64_t timeout_ms =
                 net_timeout_until(state->conn ? state->conn->write_deadline_ms : 0);
 #if defined(XR_OS_LINUX) && defined(XR_HAS_IO_URING)
-            XrRuntime *rt = (XrRuntime *) X->scheduler_runtime;
+            XrRuntime *rt = (XrRuntime *) X->vm.scheduler;
             if (rt && xr_netpoll_uring_active(&rt->netpoll)) {
                 XrPollDesc *pd = xr_netpoll_open(&rt->netpoll, state->fd);
                 if (pd) {

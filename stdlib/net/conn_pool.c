@@ -20,7 +20,7 @@
 #include "../../src/base/xhash.h"
 #include "../../src/coro/xnetpoll.h"
 #include "../../src/coro/xworker.h"     // For XrRuntime
-#include "../../src/vm/xvm_internal.h"  // For XrayIsolate->scheduler_runtime
+#include "../../src/vm/xvm_internal.h"  // For XrayIsolate->vm.scheduler
 #include "../../src/os/os_net.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -68,7 +68,7 @@ static int coro_tcp_connect(int fd, const struct sockaddr *sa, socklen_t sa_len,
     // Caller expected us to be on a coroutine but we have no runtime: fall
     // back to a blocking poll loop on SO_ERROR. This keeps the pool usable
     // from non-VM contexts (tests, CLI tools) without crashing.
-    XrRuntime *runtime = X ? (XrRuntime *) X->scheduler_runtime : NULL;
+    XrRuntime *runtime = X ? (XrRuntime *) X->vm.scheduler : NULL;
     if (!runtime) {
         // 30 s upper bound so a black-holed peer can't hang the
         // caller forever in non-VM contexts (CLI, unit tests).
@@ -158,8 +158,8 @@ static XrPooledConn *create_connection(struct XrayIsolate *X, XrConnPool *pool, 
         }
         // Failed: close this fd (also releases its netpoll pd since
         // coro_tcp_connect registered one) and try the next address.
-        if (X && X->scheduler_runtime) {
-            XrRuntime *runtime = (XrRuntime *) X->scheduler_runtime;
+        if (X && X->vm.scheduler) {
+            XrRuntime *runtime = (XrRuntime *) X->vm.scheduler;
             XrPollDesc *pd = xr_fdmap_get(&runtime->netpoll, try_fd);
             if (pd && !atomic_load(&pd->closing)) {
                 xr_netpoll_close(&runtime->netpoll, pd);
@@ -221,7 +221,7 @@ static XrPooledConn *create_connection(struct XrayIsolate *X, XrConnPool *pool, 
 
                     // hs == 1 → WANT_READ, hs == 2 → WANT_WRITE
                     XrPollMode mode = (hs == 1) ? XR_POLL_READ : XR_POLL_WRITE;
-                    XrRuntime *rt = X ? (XrRuntime *) X->scheduler_runtime : NULL;
+                    XrRuntime *rt = X ? (XrRuntime *) X->vm.scheduler : NULL;
                     if (rt) {
                         XrPollDesc *pd = xr_netpoll_open(&rt->netpoll, fd);
                         if (!pd || !xr_netpoll_block_sync(pd, mode, X)) {
@@ -270,7 +270,7 @@ static void close_connection(struct XrayIsolate *X, XrPooledConn *conn) {
         // Detach from netpoll before close() so we don't leak a
         // pollDesc keyed on a reused fd. xr_fdmap_get is O(1) and
         // returns NULL if the fd was never registered.
-        XrRuntime *runtime = X ? (XrRuntime *) X->scheduler_runtime : NULL;
+        XrRuntime *runtime = X ? (XrRuntime *) X->vm.scheduler : NULL;
         if (runtime) {
             XrPollDesc *pd = xr_fdmap_get(&runtime->netpoll, conn->fd);
             if (pd && !atomic_load(&pd->closing)) {

@@ -79,10 +79,6 @@ struct XrayIsolate {
     // script metadata, weak registry, and extension type registry.
     XrRuntimeCore *core_rt;
 
-    // VM-neutral scheduler runtime. VM, AOT, and host APIs may attach a
-    // scheduler, but ownership is not part of XrVMState.
-    struct XrRuntime *scheduler_runtime;
-
     // Main coroutine (unified GC architecture)
     // - All coroutines (including main) use XrCoroHeap + XrCoroHeap
     // - Main coroutine: large heap (4MB), deferred GC (max_gen_gcs=100)

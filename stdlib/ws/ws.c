@@ -847,7 +847,7 @@ void xr_ws_set_isolate(XrWebSocket *ws, struct XrayIsolate *X) {
 static void ws_netpoll_release_fd(XrWebSocket *ws) {
     if (!ws || ws->fd < 0 || !ws->isolate)
         return;
-    XrRuntime *rt = (XrRuntime *) ws->isolate->scheduler_runtime;
+    XrRuntime *rt = (XrRuntime *) ws->isolate->vm.scheduler;
     if (!rt)
         return;
     XrPollDesc *pd = xr_fdmap_get(&rt->netpoll, ws->fd);

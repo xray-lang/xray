@@ -36,7 +36,7 @@ static bool result_group_fixture_init(ResultGroupFixture *f) {
     f->core.vm_owner = &f->isolate_storage;
     f->runtime.core = &f->core;
     xr_scheduler_runtime_attach_isolate(&f->runtime, &f->isolate_storage);
-    f->isolate_storage.scheduler_runtime = &f->runtime;
+    f->isolate_storage.vm.scheduler = &f->runtime;
     return true;
 }
 
@@ -54,7 +54,7 @@ static void init_blocked_result_group_coro(XrCoroutine *coro, XrCoroExt *ext, Xr
     coro->id = 710;
     coro->core = isolate ? isolate->core_rt : NULL;
     coro->scheduler =
-        (isolate && isolate->scheduler_runtime) ? (XrRuntime *) isolate->scheduler_runtime : NULL;
+        (isolate && isolate->vm.scheduler) ? (XrRuntime *) isolate->vm.scheduler : NULL;
     coro->ext = ext;
     atomic_store(&coro->flags, XR_CORO_FLG_BLOCKED | XR_CORO_WAIT_RESULTGROUP);
     atomic_store(&coro->affinity_p, 0);

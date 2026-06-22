@@ -19,7 +19,7 @@
  *   true today); xio_runtime is the home for everything else IO-related.
  *
  *   All public IO entry points take an XrayIsolate* and resolve the
- *   runtime via X->scheduler_runtime, eliminating the thread-local fallback
+ *   runtime via X->vm.scheduler, eliminating the thread-local fallback
  *   that hid concurrency bugs and pinned IO semantics to thread layout.
  *
  *   Today the runtime owns the DNS cache. Future stages will fold in

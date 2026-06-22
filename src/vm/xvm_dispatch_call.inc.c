@@ -501,7 +501,7 @@ vmcase(OP_LOOP_BACK) {
              * scheduler we must not yield, otherwise the no-runtime
              * fallback in xr_vm_interpret_proto_isolate would abandon
              * execution on the first reductions exhaustion. */
-            if (XR_LIKELY(isolate->scheduler_runtime != NULL)) {
+            if (XR_LIKELY(isolate->vm.scheduler != NULL)) {
                 frame->pc = pc;
                 return XR_VM_YIELD;
             }

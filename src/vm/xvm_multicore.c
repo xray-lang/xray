@@ -24,7 +24,7 @@ void xr_multicore_init(XrayIsolate *X, int num_workers) {
         return;
 
     xr_scheduler_runtime_attach_isolate(runtime, X);
-    X->scheduler_runtime = runtime;
+    X->vm.scheduler = runtime;
 
     if (X->main_coro) {
         X->main_coro->core = xr_isolate_get_runtime_core(X);
@@ -35,10 +35,10 @@ void xr_multicore_init(XrayIsolate *X, int num_workers) {
 }
 
 void xr_multicore_destroy(XrayIsolate *X) {
-    if (!X || !X->scheduler_runtime)
+    if (!X || !X->vm.scheduler)
         return;
 
-    XrRuntime *runtime = (XrRuntime *) X->scheduler_runtime;
+    XrRuntime *runtime = (XrRuntime *) X->vm.scheduler;
     bool stats_enabled = xr_sched_stats_enabled(runtime);
     uint64_t total_start_ns = xr_time_monotonic_ns();
     uint64_t stage_start_ns = total_start_ns;
@@ -60,5 +60,5 @@ void xr_multicore_destroy(XrayIsolate *X) {
                 (unsigned long long) total_ms);
     }
 
-    X->scheduler_runtime = NULL;
+    X->vm.scheduler = NULL;
 }

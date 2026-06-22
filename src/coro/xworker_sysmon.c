@@ -336,7 +336,7 @@ int xr_runtime_main_thread_run(XrRuntime *runtime, XrCoroutine *main_coro) {
 int xr_main_thread_run(XrayIsolate *X, XrCoroutine *main_coro) {
     if (!X)
         return -1;
-    int rc = xr_runtime_main_thread_run((XrRuntime *) X->scheduler_runtime, main_coro);
+    int rc = xr_runtime_main_thread_run((XrRuntime *) X->vm.scheduler, main_coro);
     if (rc != 0)
         return rc;
     /* Value-return error channel: uncaught throw propagates via
@@ -354,7 +354,7 @@ int xr_debug_resume_coro(XrayIsolate *X, XrCoroutine *coro) {
     if (!X || !coro)
         return -1;
 
-    XrRuntime *runtime = (XrRuntime *) X->scheduler_runtime;
+    XrRuntime *runtime = (XrRuntime *) X->vm.scheduler;
     if (!runtime)
         return -1;
 

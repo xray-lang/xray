@@ -62,7 +62,7 @@ vmcase(OP_JMP) {
              * mode just refill the budget and keep running; the deadline
              * check above is the only thing that bounds tight loops, and
              * it is sufficient because it is checked on every back-edge. */
-            if (XR_LIKELY(isolate->scheduler_runtime != NULL)) {
+            if (XR_LIKELY(isolate->vm.scheduler != NULL)) {
                 frame->pc = pc - 1;
                 return XR_VM_YIELD;
             }

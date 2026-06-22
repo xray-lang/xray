@@ -105,7 +105,7 @@ static bool scheduler_fixture_init(SchedulerFixture *f) {
     xr_worker_init(&f->worker, 0, &f->runtime);
     f->worker_initialized = true;
 
-    f->isolate_storage.scheduler_runtime = &f->runtime;
+    f->isolate_storage.vm.scheduler = &f->runtime;
     tls_current_worker = &f->worker;
     tls_current_machine = &f->machine;
     return true;
@@ -174,7 +174,7 @@ static bool steal_fixture_init(StealFixture *f) {
         f->workers[i].p.rng_state = (uint32_t) (0x12345678u + (uint32_t) i);
     }
 
-    f->isolate_storage.scheduler_runtime = &f->runtime;
+    f->isolate_storage.vm.scheduler = &f->runtime;
     tls_current_worker = NULL;
     tls_current_machine = NULL;
     return true;
@@ -224,7 +224,7 @@ static void init_ready_coro(XrCoroutine *coro, int id, XrayIsolate *isolate) {
     coro->id = id;
     coro->core = isolate ? isolate->core_rt : NULL;
     coro->scheduler =
-        (isolate && isolate->scheduler_runtime) ? (XrRuntime *) isolate->scheduler_runtime : NULL;
+        (isolate && isolate->vm.scheduler) ? (XrRuntime *) isolate->vm.scheduler : NULL;
     atomic_store(&coro->flags, XR_CORO_FLG_READY);
     atomic_store(&coro->resume_status, XR_RESUME_OK);
     atomic_store(&coro->affinity_p, 0);
@@ -453,7 +453,7 @@ TEST(deterministic_runtime_forces_single_worker_and_virtual_clock) {
     XrRuntime *runtime = xr_scheduler_runtime_new(&core, 0);
     ASSERT_NOT_NULL(runtime);
     xr_scheduler_runtime_attach_isolate(runtime, &isolate);
-    isolate.scheduler_runtime = runtime;
+    isolate.vm.scheduler = runtime;
 
     ASSERT_TRUE(xr_runtime_deterministic_mode(runtime));
     ASSERT_EQ_PTR(runtime->core, &core);
