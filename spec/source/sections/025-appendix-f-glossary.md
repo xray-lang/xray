@@ -27,7 +27,7 @@ order: 025
 | **interface** | 接口（见 §5.5） |
 | **JIT** | Just-In-Time 编译：运行时编译热路径 |
 | **lvalue / rvalue** | 左值（可赋值）/ 右值（仅值） |
-| **monomorphization** | 单态化：泛型实例化为多个具体类型版本（xray 不做） |
+| **monomorphization** | 单态化：泛型在构建期按具体类型/表示生成专门版本；函数泛型可按 I64 / F64 / PTR / BOOL 表示共享，class / struct 泛型按具体类型完整单态化 |
 | **move** | 所有权转移：跨协程时强制（见 §7.3） |
 | **NaN-boxing** | 用 IEEE-754 NaN 的位空间存放标记值 |
 | **nullable** | 可空类型 `T?`：值可以为 null |
@@ -70,7 +70,7 @@ order: 025
 | **interface** | Interface type (see §5.5) |
 | **JIT** | Just-In-Time compilation: compiles hot paths at runtime |
 | **lvalue / rvalue** | Assignable left-hand-side value vs. value-only right-hand-side |
-| **monomorphization** | Specializing generics into concrete-type versions (xray does not do this) |
+| **monomorphization** | Build-time specialization of generics into concrete type/representation versions; generic functions may share I64 / F64 / PTR / BOOL representation versions, while generic classes / structs are fully specialized by concrete type |
 | **move** | Ownership transfer: enforced when crossing coroutine boundaries (see §7.3) |
 | **NaN-boxing** | Storing tagged values inside the unused bits of an IEEE-754 NaN |
 | **nullable** | A nullable type `T?` whose value may be `null` |
