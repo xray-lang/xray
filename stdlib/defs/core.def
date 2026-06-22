@@ -1570,6 +1570,294 @@ module os {
     aot: "xrt_os_eol"
     layer: "system"
   }
+
+  fn getenv {
+    signature: "(name: string): string?"
+    doc: "Get environment variable"
+    vm: "os_getenv"
+    aot: "xrt_os_getenv"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn setenv {
+    signature: "(name: string, value: string): bool"
+    doc: "Set environment variable"
+    vm: "os_setenv"
+    aot: "xrt_os_setenv"
+    argc: 2
+    arg_spec: "ss"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn unsetenv {
+    signature: "(name: string): bool"
+    doc: "Unset environment variable"
+    vm: "os_unsetenv"
+    aot: "xrt_os_unsetenv"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn environ {
+    signature: "(): Map<string, string>"
+    doc: "Get all environment variables"
+    vm: "os_environ"
+    aot: "xrt_os_environ"
+    argc: 0
+    arg_spec: ""
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn getpid {
+    signature: "(): int"
+    doc: "Get process ID"
+    vm: "os_getpid"
+    aot: "xrt_os_getpid"
+    argc: 0
+    arg_spec: ""
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn getcwd {
+    signature: "(): string"
+    doc: "Get current working directory"
+    vm: "os_getcwd"
+    aot: "xrt_os_getcwd"
+    argc: 0
+    arg_spec: ""
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn chdir {
+    signature: "(path: string): bool"
+    doc: "Change working directory"
+    vm: "os_chdir"
+    aot: "xrt_os_chdir"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn hostname {
+    signature: "(): string"
+    doc: "Get hostname"
+    vm: "os_hostname"
+    aot: "xrt_os_hostname"
+    argc: 0
+    arg_spec: ""
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn tmpdir {
+    signature: "(): string"
+    doc: "Get temporary directory path"
+    vm: "os_tmpdir"
+    aot: "xrt_os_tmpdir"
+    argc: 0
+    arg_spec: ""
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn username {
+    signature: "(): string?"
+    doc: "Get current user name"
+    vm: "os_username"
+    aot: "xrt_os_username"
+    argc: 0
+    arg_spec: ""
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn homedir {
+    signature: "(): string?"
+    doc: "Get user home directory"
+    vm: "os_homedir"
+    aot: "xrt_os_homedir"
+    argc: 0
+    arg_spec: ""
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn uid {
+    signature: "(): int"
+    doc: "Get user ID"
+    vm: "os_uid"
+    aot: "xrt_os_uid"
+    argc: 0
+    arg_spec: ""
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn gid {
+    signature: "(): int"
+    doc: "Get group ID"
+    vm: "os_gid"
+    aot: "xrt_os_gid"
+    argc: 0
+    arg_spec: ""
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn cpuCount {
+    signature: "(): int"
+    doc: "Get number of CPU cores"
+    vm: "os_cpuCount"
+    aot: "xrt_os_cpu_count"
+    argc: 0
+    arg_spec: ""
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn ppid {
+    signature: "(): int"
+    doc: "Get parent process ID"
+    vm: "os_ppid"
+    aot: "xrt_os_ppid"
+    argc: 0
+    arg_spec: ""
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn kill {
+    signature: "(pid: int, signal?: int): bool"
+    doc: "Send signal to process"
+    vm: "os_kill"
+    aot: "xrt_os_kill"
+    argc: 1
+    arg_spec: "v"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn kill {
+    signature: "(pid: int, signal?: int): bool"
+    doc: "Send signal to process"
+    vm: "os_kill"
+    aot: "xrt_os_kill_signal"
+    argc: 2
+    arg_spec: "vv"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn totalMemory {
+    signature: "(): int"
+    doc: "Get total system memory in bytes"
+    vm: "os_totalMemory"
+    aot: "xrt_os_total_memory"
+    argc: 0
+    arg_spec: ""
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn freeMemory {
+    signature: "(): int"
+    doc: "Get available system memory in bytes"
+    vm: "os_freeMemory"
+    aot: "xrt_os_free_memory"
+    argc: 0
+    arg_spec: ""
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn uptime {
+    signature: "(): float"
+    doc: "Get system uptime in seconds"
+    vm: "os_uptime"
+    aot: "xrt_os_uptime"
+    argc: 0
+    arg_spec: ""
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn loadavg {
+    signature: "(): Array<float>"
+    doc: "Get system load averages (1, 5, 15 min)"
+    vm: "os_loadavg"
+    aot: "xrt_os_loadavg"
+    argc: 0
+    arg_spec: ""
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn clock {
+    signature: "(): float"
+    doc: "Get process CPU time in seconds"
+    vm: "os_clock"
+    aot: "xrt_os_clock"
+    argc: 0
+    arg_spec: ""
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn sleep {
+    signature: "(ms: int): ()"
+    doc: "Sleep for milliseconds"
+    vm: "os_sleep"
+    aot: "xrt_os_sleep"
+    argc: 1
+    arg_spec: "v"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn exec {
+    signature: "(cmd: string): ExecResult?"
+    doc: "Execute shell command"
+    vm: "os_exec"
+    aot: "xrt_os_exec"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
 }
 
 module log {
