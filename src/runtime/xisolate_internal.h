@@ -91,9 +91,10 @@ struct XrayIsolate {
     XrGlobalsTable *globals;  // Dynamic global variables table
 
     // Type system
-    XrTypeInferContext *type_infer_context;  // Type inference context
-    XrTypeTable *type_table;                 // Compiler type table
-    struct XrTypePool *analyzer_pool;        // Static analyzer type pool (multi-instance safe)
+    XrTypeInferContext *type_infer_context;      // Type inference context
+    XrTypeTable *type_table;                     // Compiler type table
+    struct XrTypePool *analyzer_pool;            // Static analyzer type pool (multi-instance safe)
+    struct XrCompilerSession *compiler_session;  // Active toolchain session bridge.
 
     // Configuration
     XrayIsolateParams params;  // Creation parameters

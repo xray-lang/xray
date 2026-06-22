@@ -51,6 +51,7 @@ typedef struct XrProto XrProto;
 typedef struct AstNode AstNode;
 typedef struct XrCompiler XrCompiler;
 typedef struct XrCompilerContext XrCompilerContext;
+typedef struct XrCompilerSession XrCompilerSession;
 
 /* ========== Runtime Objects ========== */
 

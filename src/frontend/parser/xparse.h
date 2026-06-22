@@ -47,7 +47,8 @@
 
 typedef struct Parser Parser;
 typedef struct XrTypeScope XrTypeScope;  // Defined in xtype_scope.h
-struct XrArena;                          // Defined in base/xarena.h
+typedef struct XrCompilerSession XrCompilerSession;
+struct XrArena;  // Defined in base/xarena.h
 
 // Error callback for LSP integration: each lexer/parser diagnostic is
 // reported by invoking this on `user_data`. `end_line`/`end_column`
@@ -66,12 +67,15 @@ typedef void (*XrParseErrorCallback)(void *user_data, int line, int column, int 
  * Every other field is parser-internal and should not be touched.
  */
 struct Parser {
-    Scanner scanner;          // Lexical scanner
-    Token current;            // Current token
-    Token previous;           // Previous token
-    int had_error;            // Whether there was a syntax error
-    int panic_mode;           // Whether in panic mode (error recovery)
-    XrayIsolate *X;           // Xray isolate
+    Scanner scanner;                      // Lexical scanner
+    Token current;                        // Current token
+    Token previous;                       // Previous token
+    int had_error;                        // Whether there was a syntax error
+    int panic_mode;                       // Whether in panic mode (error recovery)
+    XrayIsolate *X;                       // Xray isolate
+    XrCompilerSession *compiler_session;  // Active toolchain session for AST allocation.
+    XrCompilerSession *saved_compiler_session;
+    bool owns_compiler_session;
     struct XrArena *arena;    // Optional arena for AST allocation (NULL = use malloc)
     XrTypeScope *type_scope;  // Parser-owned scope for type aliases / generic params
     const char *source_file;  // Source file path (for error reporting)
@@ -132,9 +136,8 @@ XR_FUNC AstNode *xr_parse_expression_string(XrayIsolate *X, const char *source,
  */
 
 // Initialise a stack-allocated Parser. `arena` is the arena to use for
-// AST allocation; it MUST already be installed on the isolate via
-// xr_isolate_set_current_arena. Pass NULL to leave the isolate's current
-// arena in place (caller manages lifetime).
+// AST allocation. The parser installs it on the active compiler session;
+// when no session is active, it creates a short-lived one for this parser.
 XR_FUNC void xr_parser_init(Parser *parser, XrayIsolate *X, const char *source,
                             const char *source_file, struct XrArena *arena);
 

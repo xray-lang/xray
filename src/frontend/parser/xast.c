@@ -21,12 +21,20 @@
 #include "../../base/xarena.h"
 #include "../../runtime/xisolate_api.h"
 #include "../../runtime/value/xtype.h"
+#include "../../toolchain/xcompiler_session.h"
 #include "xstring_pool.h"
 
 #define INITIAL_CAPACITY 8
 
-// Get arena from Isolate (explicit, no TLS)
+static inline XrCompilerSession *get_compiler_session(XrayIsolate *X) {
+    return xr_compiler_session_current_for_isolate(X);
+}
+
+// Get the parser arena from the active compiler session.
 static inline XrArena *get_arena(XrayIsolate *X) {
+    XrCompilerSession *session = get_compiler_session(X);
+    if (session)
+        return xr_compiler_session_current_arena(session);
     return xr_isolate_get_current_arena(X);
 }
 
@@ -38,8 +46,7 @@ XR_FUNC void *ast_alloc(XrayIsolate *X, size_t size) {
     XR_DCHECK(X != NULL, "ast_alloc: NULL isolate");
     XrArena *arena = get_arena(X);
     XR_CHECK(arena != NULL, "ast_alloc: parser requires an arena to be set "
-                            "on the Isolate (call xr_isolate_set_current_arena "
-                            "before parsing)");
+                            "on the compiler session before parsing)");
     void *p = xr_arena_alloc(arena, size);
     XR_CHECK(p != NULL, "ast_alloc: arena allocation failed (out of memory)");
     return p;
@@ -56,7 +63,9 @@ XR_FUNC char *ast_strdup(XrayIsolate *X, const char *s) {
     if (!s)
         return NULL;
     /* Deduplicate via compile-time pool when available. */
-    XrCompileStringPool *pool = xr_isolate_get_string_pool_compile(X);
+    XrCompilerSession *session = get_compiler_session(X);
+    XrCompileStringPool *pool =
+        session ? xr_compiler_session_string_pool(session) : xr_isolate_get_string_pool_compile(X);
     if (pool) {
         return (char *) xr_string_pool_intern(pool, s);
     }
@@ -75,7 +84,9 @@ static AstNode *alloc_node(XrayIsolate *X, AstNodeType type, int line) {
     memset(node, 0, sizeof(AstNode));
     node->type = type;
     node->line = line;
-    node->node_id = xr_isolate_next_ast_node_id(X);
+    XrCompilerSession *session = get_compiler_session(X);
+    node->node_id =
+        session ? xr_compiler_session_next_ast_node_id(session) : xr_isolate_next_ast_node_id(X);
     return node;
 }
 AstNode *xr_ast_literal_int(XrayIsolate *X, xr_Integer value, int line) {
