@@ -29,7 +29,7 @@
 #include "../runtime/xisolate_internal.h"
 #include "../base/xchecks.h"
 #include "../runtime/core/xr_runtime_core.h"
-#include "../runtime/gc/xgc_destroy_ops.h"
+#include "../runtime/gc/xobj_destroy_ops.h"
 #include "../runtime/gc/xsystem_heap.h"
 #include "../base/xmalloc.h"
 #include "../runtime/xglobals_table.h"
@@ -225,8 +225,8 @@ void xray_isolate_delete(XrayIsolate *isolate) {
 
     stage_start_ns = xr_time_monotonic_ns();
     /* Coroutine shells must release their per-coroutine heaps before
-     * fixed GC finalization. Class/module metadata remains alive until
-     * fixed GC destroy hooks finish reading instance layouts. */
+     * fixed heap finalization. Class/module metadata remains alive until
+     * fixed object destroy hooks finish reading instance layouts. */
     xr_runtime_core_destroy_coro_storage(isolate->core_rt);
     coro_storage_ms = isolate_teardown_elapsed_ms(stage_start_ns);
 

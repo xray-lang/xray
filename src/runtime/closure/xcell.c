@@ -42,7 +42,7 @@ XrCell *xr_cell_new(XrayIsolate *isolate, struct XrCoroutine *coro) {
     return cell;
 }
 
-XR_FUNC void xr_gc_destroy_cell(XrObjHeader *obj, XrCoroHeap *owner_heap) {
+XR_FUNC void xr_obj_destroy_cell(XrObjHeader *obj, XrCoroHeap *owner_heap) {
     if (!obj)
         return;
     XrCell *cell = (XrCell *) obj;

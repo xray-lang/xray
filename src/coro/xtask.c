@@ -207,7 +207,7 @@ bool xr_task_runtime_try_destroy_detached(XrRuntime *runtime, XrTask *task) {
         return false;
     }
 
-    xr_gc_destroy_task(&task->hdr, NULL);
+    xr_obj_destroy_task(&task->hdr, NULL);
     xr_free(task);
     xr_sched_metric_inc(runtime, &runtime->sched_stats.task_one_shot_destroy_success_count);
     return true;
@@ -217,7 +217,7 @@ void xr_task_destroy_list(XrTask *task) {
     while (task) {
         XrTask *next = task->runtime_next;
         task->runtime_next = NULL;
-        xr_gc_destroy_task(&task->hdr, NULL);
+        xr_obj_destroy_task(&task->hdr, NULL);
         xr_free(task);
         task = next;
     }
@@ -851,7 +851,7 @@ void xr_task_fire_completion(XrTask *task) {
 
 /* ========== GC Destroy (called by sweep when Task is reclaimed) ========== */
 
-void xr_gc_destroy_task(XrObjHeader *obj, struct XrCoroHeap *owner_heap) {
+void xr_obj_destroy_task(XrObjHeader *obj, struct XrCoroHeap *owner_heap) {
     (void) owner_heap;
     XrTask *task = (XrTask *) obj;
 

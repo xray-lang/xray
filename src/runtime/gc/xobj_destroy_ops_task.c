@@ -5,13 +5,13 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xgc_destroy_ops_channel.c - Channel RC destroy capability registration.
+ * xobj_destroy_ops_task.c - Task RC destroy capability registration.
  */
 
-#include "xgc_destroy_ops.h"
+#include "xobj_destroy_ops.h"
 #include "xgc_internal.h"
 #include "../core/xr_runtime_core.h"
 
-void xr_runtime_core_enable_channel_destroy_ops(struct XrRuntimeCore *core) {
-    xr_runtime_core_set_destroy_op(core, XR_TCHANNEL, xr_gc_destroy_channel);
+void xr_runtime_core_enable_task_destroy_ops(struct XrRuntimeCore *core) {
+    xr_runtime_core_set_destroy_op(core, XR_TTASK, xr_obj_destroy_task);
 }

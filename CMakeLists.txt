@@ -540,7 +540,7 @@ file(GLOB RUNTIME_CLASS_SRC "src/runtime/class/*.c")
 list(APPEND RUNTIME_CLASS_SRC
     "src/runtime/class/xinstance_core.c"
     "src/runtime/class/xinstance_dynamic.c"
-    "src/runtime/class/xinstance_gc.c"
+    "src/runtime/class/xinstance_destroy.c"
 )
 list(REMOVE_DUPLICATES RUNTIME_CLASS_SRC)
 file(GLOB RUNTIME_CLOSURE_SRC "src/runtime/closure/*.c")
@@ -548,10 +548,10 @@ file(GLOB RUNTIME_SYMBOL_SRC "src/runtime/symbol/*.c")
 file(GLOB CORO_SRC "src/coro/*.c")
 list(APPEND CORO_SRC
     "src/coro/xaot_runtime.c"
-    "src/coro/xresult_group_gc.c"
+    "src/coro/xresult_group_destroy.c"
     "src/coro/xresult_group_native.c"
     "src/coro/xresult_group_wait.c"
-    "src/coro/xwork_queue_gc.c"
+    "src/coro/xwork_queue_destroy.c"
     "src/coro/xwork_queue_native.c"
     "src/coro/xwork_queue_wait.c"
 )

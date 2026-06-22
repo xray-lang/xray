@@ -749,7 +749,7 @@ XrArray *xr_array_slice_to_array(struct XrCoroutine *coro, XrArray *slice) {
 
 /* ========== GC Integration ========== */
 
-void xr_gc_destroy_array(XrObjHeader *obj, struct XrCoroHeap *owner_heap) {
+void xr_obj_destroy_array(XrObjHeader *obj, struct XrCoroHeap *owner_heap) {
     XrArray *arr = (XrArray *) obj;
     xr_array_release_elements(arr, owner_heap);
     // Only free data if this array owns its buffer (slices borrow it)

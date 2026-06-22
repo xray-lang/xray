@@ -21,7 +21,7 @@
 #include "coro/xwork_queue.h"
 #include "coro/xyieldable.h"
 #include "runtime/class/xenum.h"
-#include "runtime/gc/xgc_destroy_ops.h"
+#include "runtime/gc/xobj_destroy_ops.h"
 #include "runtime/object/xarray.h"
 #include "runtime/xisolate_internal.h"
 #include <stdatomic.h>
@@ -524,7 +524,7 @@ TEST(aot_result_group_uses_runtime_without_isolate) {
     ASSERT_EQ_INT(XR_TO_INT(received), 12);
     ASSERT_FALSE(xr_aot_result_group_try_recv(&ctx, group_value, &received));
 
-    xr_gc_destroy_result_group(&group->hdr, NULL);
+    xr_obj_destroy_result_group(&group->hdr, NULL);
     xr_aot_runtime_delete(runtime);
 }
 
@@ -558,7 +558,7 @@ TEST(aot_work_queue_uses_runtime_owner_without_isolate) {
     xr_aot_work_queue_close_sync(queue_value);
     ASSERT_TRUE(XR_TO_BOOL(xr_aot_work_queue_is_closed_sync(queue_value)));
 
-    xr_gc_destroy_work_queue(&queue->hdr, NULL);
+    xr_obj_destroy_work_queue(&queue->hdr, NULL);
     xr_aot_runtime_delete(runtime);
 }
 
@@ -602,7 +602,7 @@ TEST(aot_channel_uses_runtime_owner_without_isolate) {
     ASSERT_TRUE(XR_TO_BOOL(xr_aot_chan_is_closed(&ctx, channel_value)));
 
     xr_coro_destroy(ctx.coro);
-    xr_gc_destroy_channel(&channel->gc_header, NULL);
+    xr_obj_destroy_channel(&channel->gc_header, NULL);
     xr_aot_runtime_delete(runtime);
 }
 

@@ -5,7 +5,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xresult_group_gc.c - ResultGroup GC cleanup entrypoint
+ * xresult_group_destroy.c - ResultGroup object destroy entrypoint
  */
 
 #include "xresult_group.h"
@@ -20,7 +20,7 @@ static void result_group_batch_free_all(XrResultGroupBatch *batch) {
     }
 }
 
-void xr_gc_destroy_result_group(XrObjHeader *obj, struct XrCoroHeap *owner_heap) {
+void xr_obj_destroy_result_group(XrObjHeader *obj, struct XrCoroHeap *owner_heap) {
     (void) owner_heap;
     if (!obj)
         return;

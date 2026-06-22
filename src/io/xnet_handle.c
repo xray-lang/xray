@@ -129,7 +129,7 @@ void xr_net_conn_set_tls(XrNetConn *c, void *tls_state) {
 /* ========== Close paths ==========
  *
  * Centralises the "deregister from netpoll, close fd" sequence so the
- * GC destroy hook and explicit close() call go through the same code
+ * object destroy hook and explicit close() call go through the same code
  * path. tls_state is freed first so the TLS layer can drain its own
  * buffers before the underlying fd vanishes.
  */
@@ -175,7 +175,7 @@ void xr_net_listener_close(XrNetListener *l) {
 
 /* ========== Native body destroy hooks ==========
  *
- * Called by xr_gc_destroy_instance via XrNativeBodyDesc.destroy.
+ * Called by xr_obj_destroy_instance via XrNativeBodyDesc.destroy.
  * The body pointer points to the first field after klass (i.e. fd),
  * so we recover the enclosing struct by subtracting the body offset.
  */

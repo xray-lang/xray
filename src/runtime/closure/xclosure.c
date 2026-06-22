@@ -52,7 +52,7 @@ XrClosure *xr_closure_new(XrayIsolate *isolate, XrProto *proto, struct XrCorouti
     return closure;
 }
 
-XR_FUNC void xr_gc_destroy_closure(XrObjHeader *obj, XrCoroHeap *owner_heap) {
+XR_FUNC void xr_obj_destroy_closure(XrObjHeader *obj, XrCoroHeap *owner_heap) {
     if (!obj)
         return;
     XrClosure *closure = (XrClosure *) obj;

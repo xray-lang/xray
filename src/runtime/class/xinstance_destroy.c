@@ -5,7 +5,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xinstance_gc.c - Instance GC cleanup
+ * xinstance_destroy.c - Instance object destroy cleanup
  */
 
 #include "xinstance.h"
@@ -14,7 +14,7 @@
 #include "../../base/xmalloc.h"
 #include "../gc/xcoro_heap.h"
 
-void xr_gc_destroy_instance(XrObjHeader *obj, struct XrCoroHeap *owner_heap) {
+void xr_obj_destroy_instance(XrObjHeader *obj, struct XrCoroHeap *owner_heap) {
     if (!obj)
         return;
     XrInstance *inst = (XrInstance *) obj;

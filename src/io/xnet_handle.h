@@ -94,7 +94,7 @@ typedef struct XrNetListener {
 /*
  * Allocate an XrNetConn on the calling coroutine's GC heap. fd takes
  * ownership: callers must NOT close it directly after this returns.
- * Use xr_net_conn_close (or let the GC destroy hook fire).
+ * Use xr_net_conn_close (or let the object destroy hook fire).
  */
 XR_FUNC XrNetConn *xr_net_conn_new(struct XrayIsolate *X, int fd, XrNetConnKind kind);
 

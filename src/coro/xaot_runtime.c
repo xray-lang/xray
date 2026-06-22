@@ -16,7 +16,7 @@
 #include "../runtime/core/xr_runtime_core.h"
 #include "../runtime/core/xr_script_info.h"
 #include "../runtime/gc/xcoro_heap.h"
-#include "../runtime/gc/xgc_destroy_ops.h"
+#include "../runtime/gc/xobj_destroy_ops.h"
 #include "xblock.h"
 #include "xcoroutine.h"
 #include "xworker.h"
