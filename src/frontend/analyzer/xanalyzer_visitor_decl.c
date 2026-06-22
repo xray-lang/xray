@@ -2627,6 +2627,7 @@ skip_layout:
             method_sym->location.line = method->line;
             method_sym->is_static = md->is_static;
             method_sym->is_private = md->is_private;
+            method_sym->is_override = md->is_override;
             method_sym->mutates_receiver =
                 !md->is_static && xa_method_body_mutates_receiver(md->body, info);
             xa_visit_add_symbol_checked(ctx, method_sym, 0);
@@ -2919,6 +2920,121 @@ void xa_visit_collect_var_decl(XaInferContext *ctx, AstNode *node) {
  * by resolving base class names to actual XrClassInfo pointers.
  * ========================================================================== */
 
+static bool method_types_equal_for_override(XaSymbol *method, XaSymbol *parent_method) {
+    if (!method || !parent_method)
+        return false;
+    XrType *method_type = method->links.type;
+    XrType *parent_type = parent_method->links.type;
+    if (!method_type || !parent_type)
+        return false;
+    if (method_type->kind != XR_KIND_FUNCTION || parent_type->kind != XR_KIND_FUNCTION)
+        return false;
+    return xr_type_equals(method_type, parent_type);
+}
+
+static XaSymbol *find_parent_override_target(XrClassInfo *info, XaSymbol *method,
+                                             bool *out_name_match) {
+    if (out_name_match)
+        *out_name_match = false;
+    if (!info || !method || !method->name)
+        return NULL;
+
+    for (XrClassInfo *base = info->base; base; base = base->base) {
+        for (int i = 0; i < base->method_count; i++) {
+            XaSymbol *candidate = base->methods[i];
+            if (!candidate || !candidate->name || candidate->is_static || candidate->is_private)
+                continue;
+            if (strcmp(candidate->name, method->name) != 0)
+                continue;
+            if (out_name_match)
+                *out_name_match = true;
+            if (method_types_equal_for_override(method, candidate))
+                return candidate;
+        }
+    }
+    return NULL;
+}
+
+static XrClassInfo *class_info_from_type(XrType *type) {
+    if (!type)
+        return NULL;
+    if (type->kind != XR_KIND_CLASS && type->kind != XR_KIND_INSTANCE)
+        return NULL;
+    return type->instance.class_ref;
+}
+
+static XrClassInfo *resolve_base_class_info(XaAnalyzer *analyzer, const char *base_name,
+                                            XrType **out_base_type) {
+    if (out_base_type)
+        *out_base_type = NULL;
+    if (!analyzer || !analyzer->global_scope || !base_name)
+        return NULL;
+
+    XaSymbol *base_sym = xa_scope_lookup(analyzer->global_scope, base_name);
+    if (!base_sym)
+        return NULL;
+
+    XaSymbolLinks *base_links = xa_analyzer_get_links(analyzer, base_sym);
+    if (!base_links)
+        return NULL;
+
+    if (out_base_type)
+        *out_base_type = base_links->type;
+
+    if (base_sym->kind == XA_SYM_CLASS && base_links->class_info)
+        return base_links->class_info;
+
+    return class_info_from_type(base_links->type);
+}
+
+static void report_override_mismatch(XaAnalyzer *analyzer, XrClassInfo *info, XaSymbol *method,
+                                     const char *reason) {
+    if (!analyzer || !method)
+        return;
+    char msg[384];
+    snprintf(msg, sizeof(msg), "Method '%s.%s' is marked override but %s",
+             info && info->name ? info->name : "?", method->name ? method->name : "?", reason);
+    XrLocation loc = method->location;
+    if (!loc.file)
+        loc.file = analyzer->current_file;
+    xa_analyzer_add_diagnostic(analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_OVERRIDE_MISMATCH, msg,
+                               &loc);
+}
+
+static void validate_explicit_overrides(XaAnalyzer *analyzer, XrClassInfo *info) {
+    if (!analyzer || !info)
+        return;
+
+    for (int i = 0; i < info->static_method_count; i++) {
+        XaSymbol *method = info->static_methods[i];
+        if (method && method->is_override) {
+            report_override_mismatch(analyzer, info, method,
+                                     "static methods cannot override parent instance methods");
+        }
+    }
+
+    for (int i = 0; i < info->method_count; i++) {
+        XaSymbol *method = info->methods[i];
+        if (!method || !method->is_override)
+            continue;
+        if (strcmp(method->name, "constructor") == 0) {
+            report_override_mismatch(analyzer, info, method, "constructors cannot be overridden");
+            continue;
+        }
+        if (!info->base) {
+            report_override_mismatch(analyzer, info, method, "the class has no parent class");
+            continue;
+        }
+        bool name_match = false;
+        XaSymbol *target = find_parent_override_target(info, method, &name_match);
+        if (!target) {
+            report_override_mismatch(analyzer, info, method,
+                                     name_match ? "no parent method has the same signature"
+                                                : "no matching parent method exists");
+        }
+    }
+}
+
 // Build virtual method table for a class (inherits base vtable + own methods)
 static void build_class_vtable(XaAnalyzer *analyzer, XrClassInfo *info) {
     if (!info || info->vtable)
@@ -3021,23 +3137,34 @@ void xa_link_class_inheritance(XaAnalyzer *analyzer) {
         if (!info->base_name)
             continue;
 
-        XaSymbol *base_sym = xa_scope_lookup(analyzer->global_scope, info->base_name);
-        if (base_sym && base_sym->kind == XA_SYM_CLASS) {
-            XaSymbolLinks *base_links = xa_analyzer_get_links(analyzer, base_sym);
-            if (base_links && base_links->class_info) {
-                info->base = base_links->class_info;
-                base_links->class_info->has_subclass = true;
-                // Link XrType inheritance chain for xr_type_is_subclass_of()
-                if (links->type && base_links->type) {
-                    links->type->instance.superclass = base_links->type;
-                }
+        XrType *base_type = NULL;
+        XrClassInfo *base_info = resolve_base_class_info(analyzer, info->base_name, &base_type);
+        if (base_info) {
+            info->base = base_info;
+            base_info->has_subclass = true;
+            // Link XrType inheritance chain for xr_type_is_subclass_of().
+            if (links->type && base_type) {
+                links->type->instance.superclass = base_type;
             }
         } else {
             info->base = NULL;
         }
     }
 
-    // Pass 2: Build virtual method tables (after all inheritance is linked)
+    // Pass 2: Validate explicit override contracts now that parent links exist.
+    for (int i = 0; i < count; i++) {
+        XaSymbol *sym = symbols[i];
+        if (!sym || sym->kind != XA_SYM_CLASS)
+            continue;
+
+        XaSymbolLinks *links = xa_analyzer_get_links(analyzer, sym);
+        if (!links || !links->class_info)
+            continue;
+
+        validate_explicit_overrides(analyzer, links->class_info);
+    }
+
+    // Pass 3: Build virtual method tables (after all inheritance is linked)
     for (int i = 0; i < count; i++) {
         XaSymbol *sym = symbols[i];
         if (!sym || sym->kind != XA_SYM_CLASS)
@@ -3050,7 +3177,7 @@ void xa_link_class_inheritance(XaAnalyzer *analyzer) {
         build_class_vtable(analyzer, links->class_info);
     }
 
-    // Pass 3: Mark methods as non-final if class has subclass
+    // Pass 4: Mark methods as non-final if class has subclass
     // (A method is only truly final if no subclass exists)
     for (int i = 0; i < count; i++) {
         XaSymbol *sym = symbols[i];

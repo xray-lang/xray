@@ -2146,7 +2146,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "### Features\n"
             "- `constructor()` is called through `new ClassName(...)`\n"
             "- `extends` enables single inheritance\n"
-            "- `override` is optional but recommended when overriding methods\n"
+            "- `override` is optional but checked when present: it must match a parent-chain method signature\n"
             "- `static` declares class-level methods or fields\n"
             "- `private` restricts access to the declaring class\n"
             "- `this` is the current instance; `super` refers to the parent class\n"

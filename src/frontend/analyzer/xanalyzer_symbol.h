@@ -145,6 +145,7 @@ struct XaSymbol {
     bool is_exported;       // export modifier
     bool is_static;         // static member
     bool is_private;        // private member (starts with _)
+    bool is_override;       // explicit override modifier on a method
     bool is_shared;         // shared variable
     bool is_builtin;        // built-in type member (Array.push, etc.)
     bool mutates_receiver;  // method body writes through `this`

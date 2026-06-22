@@ -315,6 +315,7 @@ Modifier ::= 'private' | 'static' | 'final' | 'abstract' | 'override'
 >
 > - 公开是**默认可见性**——所有未带 `private` 的字段/方法都是公开的；语言没有 `public` 修饰符。
 > - `override` 是**可选**——重写父类方法只要同名同参就自动覆盖，不要求显式 `override` 标注。
+> - 但一旦写出 `override`，分析器必须验证父类链存在同名同签实例方法；否则编译错误 `E0374`。
 >
 > 标准库和回归测试一致采用"省略默认修饰符"风格。
 
@@ -360,7 +361,7 @@ class Dog extends Animal {
 **约束**：
 - 派生类构造器**第一行**必须是 `super(...)`（除非未声明构造器）；否则编译错误。
 - 不能在 `super(...)` 之前访问 `this`。
-- **重写父类方法不需要任何关键字**——只要子类出现同名同参的方法即自动重写（`override` 修饰符存在但**可选**）。
+- **重写父类方法不需要任何关键字**——只要子类出现同名同参的方法即自动重写（`override` 修饰符存在但**可选**，写出时必须通过父链同签校验）。
 - 父类标 `final class` 则不可继承。
 - 父类方法标 `final` 则不可重写。
 - 父类方法标 `abstract` 则子类**必须**实现（除非子类也是 `abstract`）。
@@ -375,7 +376,7 @@ class Dog extends Animal {
 | `static` | 字段/方法 | 类级别，不属于实例；调用为 `ClassName.method()` |
 | `final` | 类/方法/字段 | 类：禁止继承；方法：禁止重写；字段：初始化后不可修改 |
 | `abstract` | 类/方法 | 不可实例化 / 必须由子类实现 |
-| `override` | 方法 | **可选**——重写不要求显式标注；写了仅作文档作用 |
+| `override` | 方法 | **可选但受检**——重写不要求显式标注；写了必须覆盖父类链中同名同签实例方法 |
 
 **修饰符可组合**：`private final secret: string = "key123"`、`static final pi() -> float`、`private static counter: int = 0`。
 
@@ -1159,6 +1160,7 @@ Modifier ::= 'private' | 'static' | 'final' | 'abstract' | 'override'
 >
 > - Public is the **default visibility**—every field/method without `private` is public; the language has no `public` modifier.
 > - `override` is **optional**—an override happens automatically when the derived class declares a method with the same signature; an explicit `override` annotation is not required.
+> - Once written, `override` is checked: the analyzer must find a same-name, same-signature instance method in the parent chain, or report compile error `E0374`.
 >
 > The standard library and the regression tests consistently use the "omit the default modifier" style.
 
@@ -1204,7 +1206,7 @@ class Dog extends Animal {
 **Constraints**:
 - A derived class constructor's **first statement** must be `super(...)` (unless no constructor is declared); otherwise it is a compile error.
 - `this` must not be accessed before `super(...)`.
-- **Overriding requires no keyword**—any subclass method with the same name and signature automatically overrides the parent (the `override` modifier exists but is **optional**).
+- **Overriding requires no keyword**—any subclass method with the same name and signature automatically overrides the parent (the `override` modifier is **optional**, but when present it must pass parent-chain signature checking).
 - A `final class` cannot be inherited.
 - A `final` method cannot be overridden.
 - An `abstract` method **must** be implemented by subclasses (unless the subclass is also `abstract`).
@@ -1219,7 +1221,7 @@ class Dog extends Animal {
 | `static` | field/method | Class-level, not part of an instance; called as `ClassName.method()` |
 | `final` | class/method/field | Class: cannot be inherited. Method: cannot be overridden. Field: cannot be reassigned after initialization |
 | `abstract` | class/method | Cannot be instantiated / must be implemented by subclasses |
-| `override` | method | **Optional**—overrides do not require explicit annotation; documenting only |
+| `override` | method | **Optional but checked**—overrides do not require explicit annotation; when present, it must match a same-name, same-signature instance method in the parent chain |
 
 **Modifiers may combine**: `private final secret: string = "key123"`, `static final pi() -> float`, `private static counter: int = 0`.
 

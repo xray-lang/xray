@@ -123,6 +123,11 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
     /* Re-initialize module system (with script path) */
     xr_module_system_init_with_script(iso, file);
 
+    XrCompilerSession *session = xr_compiler_session_current_for_isolate(iso);
+    // Graph exports point at analyzer-owned XrType/XrClassInfo objects.
+    XrModuleGraph *active_graph = NULL;
+    XaAnalyzer *active_graph_analyzer = NULL;
+
     /* Pre-flight: build module graph, detect cycles, analyze cross-module types */
     {
         XrModuleRegistry *registry = xr_isolate_get_module_registry(iso);
@@ -146,10 +151,19 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
 
                     /* Cross-module type analysis (multi-module projects only).
                      * Analyze all modules in topo order so import types resolve
-                     * to concrete signatures.  Diagnostics are reported as
-                     * warnings; execution proceeds regardless. */
+                     * to concrete signatures.  Errors are fatal: the VM must
+                     * not run a program that the graph-aware type system
+                     * rejected. */
                     if (graph->topo_count > 1) {
                         XaAnalyzer *analyzer = xa_analyzer_new(iso);
+                        int graph_errors = 0;
+                        if (!analyzer) {
+                            fprintf(stderr, "Error: cannot create analyzer for module graph\n");
+                            xr_module_graph_free(graph);
+                            xr_multicore_destroy(iso);
+                            xray_isolate_delete(iso);
+                            return XR_CLI_EXIT_FAIL;
+                        }
                         if (analyzer) {
                             xa_analyzer_set_graph(analyzer, graph);
                             for (int ti = 0; ti < graph->topo_count; ti++) {
@@ -167,15 +181,26 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
                                     xa_analyzer_get_diagnostics(analyzer, &diag_count);
                                 for (XaDiagnostic *d = diags; d; d = d->next) {
                                     if (d->severity == XR_DIAG_SEV_ERROR) {
+                                        graph_errors++;
                                         fprintf(stderr, "%s:%d:%d: error: %s\n", spec->source_path,
                                                 d->location.line, d->location.column, d->message);
                                     }
                                 }
                                 xa_analyzer_clear_diagnostics(analyzer);
                             }
-                            xa_analyzer_set_graph(analyzer, NULL);
-                            xa_analyzer_free(analyzer);
+                            if (graph_errors > 0) {
+                                xa_analyzer_set_graph(analyzer, NULL);
+                                xa_analyzer_free(analyzer);
+                                xr_module_graph_free(graph);
+                                xr_multicore_destroy(iso);
+                                xray_isolate_delete(iso);
+                                return XR_CLI_EXIT_FAIL;
+                            }
+                            active_graph_analyzer = analyzer;
                         }
+
+                        xr_compiler_session_set_module_graph(session, graph);
+                        active_graph = graph;
 
                         /* Pre-load dependency modules in topo order.
                          * Ensures correct initialization order and populates
@@ -199,10 +224,12 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
                             registry->module_table = mod_table;
                             registry->module_table_count = nmod;
                         }
+                        graph = NULL;
                     }
                 }
                 xr_free(err);
-                xr_module_graph_free(graph);
+                if (graph)
+                    xr_module_graph_free(graph);
             }
         }
     }
@@ -214,6 +241,14 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
 
     /* Execute file */
     int result = xray_isolate_dofile(iso, file);
+
+    xr_compiler_session_set_module_graph(session, NULL);
+    if (active_graph_analyzer) {
+        xa_analyzer_set_graph(active_graph_analyzer, NULL);
+        xa_analyzer_free(active_graph_analyzer);
+    }
+    if (active_graph)
+        xr_module_graph_free(active_graph);
 
     xr_multicore_destroy(iso);
     xray_isolate_delete(iso);

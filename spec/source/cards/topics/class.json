@@ -28,7 +28,7 @@
       "bullets": [
         "`constructor()` is called through `new ClassName(...)`",
         "`extends` enables single inheritance",
-        "`override` is optional but recommended when overriding methods",
+        "`override` is optional but checked when present: it must match a parent-chain method signature",
         "`static` declares class-level methods or fields",
         "`private` restricts access to the declaring class",
         "`this` is the current instance; `super` refers to the parent class"

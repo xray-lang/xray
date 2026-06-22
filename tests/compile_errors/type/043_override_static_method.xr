@@ -1,0 +1,12 @@
+class Base {
+    run() -> int {
+        return 1
+    }
+}
+
+class Child extends Base {
+    override static run() -> int {
+        return 2
+    }
+}
+
