@@ -16,8 +16,10 @@
 
 struct XrArena;
 struct XrCompileStringPool;
+struct XrReplSymbolTable;
 struct XrSourceCache;
 struct XrTypePool;
+struct XaAnalyzer;
 
 typedef struct XrCompilerSession XrCompilerSession;
 
@@ -67,6 +69,13 @@ XR_FUNC void xr_compiler_session_install_analyzer_pool(XrCompilerSession *sessio
 
 XR_FUNC struct XrSourceCache *xr_compiler_session_ensure_source_cache(XrCompilerSession *session);
 XR_FUNC struct XrSourceCache *xr_compiler_session_source_cache(const XrCompilerSession *session);
+
+XR_FUNC struct XrReplSymbolTable *
+xr_compiler_session_ensure_repl_symbols(XrCompilerSession *session);
+XR_FUNC struct XrReplSymbolTable *
+xr_compiler_session_repl_symbols(const XrCompilerSession *session);
+XR_FUNC struct XaAnalyzer *xr_compiler_session_ensure_repl_analyzer(XrCompilerSession *session);
+XR_FUNC struct XaAnalyzer *xr_compiler_session_repl_analyzer(const XrCompilerSession *session);
 
 XR_FUNC bool xr_compiler_session_push_arena(XrayIsolate *isolate, struct XrArena *arena,
                                             const char *source_file, XrCompilerSessionScope *scope);

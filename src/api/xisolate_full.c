@@ -35,7 +35,6 @@
 #include "../module/xmodule.h"
 #include "../base/xsource_cache.h"
 #include "../runtime/xstdlib_bridge.h"
-#include "xrepl.h"
 #include "../runtime/class/xreflect_api.h"
 #include "../runtime/object/builtins/xjson_builtins.h"
 #include "../runtime/symbol/xsymbol_table.h"
@@ -44,7 +43,6 @@
 #include "../base/xmalloc.h"
 #include "../../stdlib/stdlib_cache.h"
 #include "../base/xglobal_indices.h"
-#include "../frontend/analyzer/xanalyzer.h"
 #include "../frontend/analyzer/xanalyzer_native_types.h"
 #include "../toolchain/xcompiler_session.h"
 #include <stdio.h>
@@ -199,22 +197,6 @@ static void isolate_cleanup_full(XrayIsolate *isolate) {
     if (isolate->core_rt->symbol_table) {
         xr_symbol_table_destroy((XrSymbolTable *) isolate->core_rt->symbol_table);
         isolate->core_rt->symbol_table = NULL;
-    }
-
-    /* Persistent REPL analyzer owns its own type pool (separate from
-     * isolate->analyzer_pool) and its symbol/type references are
-     * self-contained, so free order vs. analyzer_pool is irrelevant.
-     * Do it before repl_symbols so the analyzer can not observe a
-     * half-torn-down REPL state if a future hook reads both. */
-    if (isolate->repl_analyzer) {
-        xa_analyzer_free(isolate->repl_analyzer);
-        isolate->repl_analyzer = NULL;
-    }
-
-    // Free REPL symbol table
-    if (isolate->repl_symbols) {
-        xr_repl_symbols_free(isolate->repl_symbols);
-        isolate->repl_symbols = NULL;
     }
 
     if (isolate->compiler_session) {

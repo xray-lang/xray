@@ -45,6 +45,23 @@
 
 #define REPL_SYMBOLS_INITIAL_CAPACITY 32
 
+static XrCompilerSession *repl_compiler_session_for_isolate(XrayIsolate *isolate) {
+    XrCompilerSession *session = xr_compiler_session_current_for_isolate(isolate);
+    if (session)
+        return session;
+
+    XrCompilerSessionConfig cfg = {
+        .vm_host = isolate,
+        .source_file = "<repl>",
+        .repl_mode = true,
+    };
+    session = xr_compiler_session_new(&cfg);
+    if (!session)
+        return NULL;
+    xr_compiler_session_attach_isolate(isolate, session);
+    return session;
+}
+
 XrReplSymbolTable *xr_repl_symbols_new(void) {
     XrReplSymbolTable *table = (XrReplSymbolTable *) xr_malloc(sizeof(XrReplSymbolTable));
     if (!table)
@@ -80,7 +97,7 @@ void xr_repl_symbols_clear(XrReplSymbolTable *table) {
 XrReplSymbolTable *xr_repl_symbols_of(XrayIsolate *isolate) {
     if (!isolate)
         return NULL;
-    return isolate->repl_symbols;
+    return xr_compiler_session_repl_symbols(xr_compiler_session_current_for_isolate(isolate));
 }
 
 const char *xr_repl_symbol_cname(const XrReplSymbol *sym) {
@@ -412,12 +429,13 @@ XrProto *xr_repl_compile(XrayIsolate *isolate, const char *source) {
     if (!isolate || !source)
         return NULL;
 
-    // Ensure REPL symbol table exists
-    if (!isolate->repl_symbols) {
-        isolate->repl_symbols = xr_repl_symbols_new();
-        if (!isolate->repl_symbols)
-            return NULL;
-    }
+    XrCompilerSession *session = repl_compiler_session_for_isolate(isolate);
+    if (!session)
+        return NULL;
+
+    XrReplSymbolTable *repl_symbols = xr_compiler_session_ensure_repl_symbols(session);
+    if (!repl_symbols)
+        return NULL;
 
     // Parse
     AstNode *ast = xr_parse(isolate, source);
@@ -432,22 +450,20 @@ XrProto *xr_repl_compile(XrayIsolate *isolate, const char *source) {
      * type pool survive across inputs, so variables, functions, and
      * classes declared in earlier inputs keep their full XaSymbol +
      * inferred type and need no re-seeding from the REPL symbol table. */
-    if (!isolate->repl_analyzer) {
-        isolate->repl_analyzer = xa_analyzer_new(isolate);
-        if (!isolate->repl_analyzer) {
-            xr_program_destroy(ast);
-            return NULL;
-        }
+    XaAnalyzer *repl_analyzer = xr_compiler_session_ensure_repl_analyzer(session);
+    if (!repl_analyzer) {
+        xr_program_destroy(ast);
+        return NULL;
     }
 
     /* Per-input state reset on the persistent analyzer.  Diagnostics and
      * per-AST side tables must not leak across inputs because prior AST
      * nodes were freed with their owning program arena; their pointers
      * are stale keys in the analyzer's node_table / selection_table. */
-    xa_analyzer_clear_diagnostics(isolate->repl_analyzer);
+    xa_analyzer_clear_diagnostics(repl_analyzer);
 
     /* Create compiler context that borrows the persistent analyzer. */
-    XrCompilerContext *ctx = xr_compiler_context_new_with_analyzer(isolate, isolate->repl_analyzer);
+    XrCompilerContext *ctx = xr_compiler_context_new_with_analyzer(isolate, repl_analyzer);
     if (!ctx) {
         xr_program_destroy(ast);
         return NULL;
@@ -457,14 +473,14 @@ XrProto *xr_repl_compile(XrayIsolate *isolate, const char *source) {
 
     /* Seed compiler-side shared_vars from the REPL symbol table so
      * the analyzer can resolve names from prior inputs. */
-    xr_repl_symbols_seed_context(isolate->repl_symbols, ctx);
+    xr_repl_symbols_seed_context(repl_symbols, ctx);
 
     XrProto *proto = xr_compile(ctx, ast);
 
     if (proto && !ctx->had_error) {
         /* Collect new declarations from the Xi IR output so the REPL
          * symbol table stays current for .vars display and peek. */
-        repl_symbols_collect_from_xi(isolate->repl_symbols, isolate, proto);
+        repl_symbols_collect_from_xi(repl_symbols, isolate, proto);
     }
 
     xr_compiler_context_free(ctx);
@@ -473,7 +489,7 @@ XrProto *xr_repl_compile(XrayIsolate *isolate, const char *source) {
      * type pool so subsequent parses / analyses in the same REPL session
      * continue allocating into it.  A script-mode compile would restore
      * isolate->analyzer_pool here, but REPL never uses that pool. */
-    isolate->current_type_pool = isolate->repl_analyzer->type_pool;
+    isolate->current_type_pool = repl_analyzer->type_pool;
 
     xr_program_destroy(ast);
 
@@ -549,7 +565,7 @@ void xr_repl_print_vars(XrayIsolate *isolate) {
         return;
     }
 
-    ReplVarsCtx ctx = {.isolate = isolate, .table = isolate->repl_symbols};
+    ReplVarsCtx ctx = {.isolate = isolate, .table = xr_repl_symbols_of(isolate)};
     xr_global_dict_iter(isolate->vm.globals, print_vars_visitor, &ctx);
 }
 

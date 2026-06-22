@@ -10,9 +10,11 @@
 
 #include "xcompiler_session.h"
 
+#include "../api/xrepl.h"
 #include "../base/xarena.h"
 #include "../base/xsource_cache.h"
 #include "../base/xmalloc.h"
+#include "../frontend/analyzer/xanalyzer.h"
 #include "../frontend/parser/xstring_pool.h"
 #include "../runtime/xisolate_internal.h"
 #include "../runtime/value/xtype.h"
@@ -33,6 +35,9 @@ struct XrCompilerSession {
 
     struct XrTypePool *analyzer_pool;
     struct XrSourceCache *source_cache;
+
+    struct XrReplSymbolTable *repl_symbols;
+    struct XaAnalyzer *repl_analyzer;
 };
 
 XrCompilerSession *xr_compiler_session_new(const XrCompilerSessionConfig *cfg) {
@@ -63,7 +68,17 @@ void xr_compiler_session_delete(XrCompilerSession *session) {
             session->vm_host->source_cache = NULL;
         if (session->vm_host->compiler_session == session)
             session->vm_host->compiler_session = NULL;
+        if (session->repl_analyzer &&
+            session->vm_host->current_type_pool == session->repl_analyzer->type_pool)
+            session->vm_host->current_type_pool = NULL;
     }
+    if (session->repl_analyzer) {
+        if (xr_type_get_current_pool() == session->repl_analyzer->type_pool)
+            xr_type_set_current_pool(NULL, NULL);
+        xa_analyzer_free(session->repl_analyzer);
+    }
+    if (session->repl_symbols)
+        xr_repl_symbols_free(session->repl_symbols);
     if (xr_type_get_current_pool() == session->analyzer_pool)
         xr_type_set_current_pool(NULL, NULL);
     if (session->source_cache)
@@ -168,6 +183,30 @@ struct XrSourceCache *xr_compiler_session_ensure_source_cache(XrCompilerSession 
 
 struct XrSourceCache *xr_compiler_session_source_cache(const XrCompilerSession *session) {
     return session ? session->source_cache : NULL;
+}
+
+struct XrReplSymbolTable *xr_compiler_session_ensure_repl_symbols(XrCompilerSession *session) {
+    if (!session)
+        return NULL;
+    if (!session->repl_symbols)
+        session->repl_symbols = xr_repl_symbols_new();
+    return session->repl_symbols;
+}
+
+struct XrReplSymbolTable *xr_compiler_session_repl_symbols(const XrCompilerSession *session) {
+    return session ? session->repl_symbols : NULL;
+}
+
+struct XaAnalyzer *xr_compiler_session_ensure_repl_analyzer(XrCompilerSession *session) {
+    if (!session || !session->vm_host)
+        return NULL;
+    if (!session->repl_analyzer)
+        session->repl_analyzer = xa_analyzer_new(session->vm_host);
+    return session->repl_analyzer;
+}
+
+struct XaAnalyzer *xr_compiler_session_repl_analyzer(const XrCompilerSession *session) {
+    return session ? session->repl_analyzer : NULL;
 }
 
 bool xr_compiler_session_push_arena(XrayIsolate *isolate, struct XrArena *arena,
