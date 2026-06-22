@@ -27,7 +27,8 @@ XrCell *xr_cell_new(XrayIsolate *isolate, struct XrCoroutine *coro) {
     if (coro && coro->heap) {
         cell = (XrCell *) xr_coro_heap_new_obj(coro->heap, XR_TCELL, XR_CELL_SIZE);
     } else {
-        cell = (XrCell *) xr_gc_alloc(xr_isolate_get_gc(isolate), XR_CELL_SIZE, XR_TCELL);
+        cell = (XrCell *) xr_fixed_heap_alloc(xr_isolate_get_fixed_heap(isolate), XR_CELL_SIZE,
+                                              XR_TCELL);
     }
     if (cell == NULL) {
         return NULL;

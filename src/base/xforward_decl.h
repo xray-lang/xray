@@ -21,7 +21,7 @@ typedef struct XrayIsolate XrayIsolate;
 
 /* ========== Memory Management ========== */
 
-typedef struct XrGC XrGC;
+typedef struct XrFixedHeap XrFixedHeap;
 
 /* ========== Symbols and Globals ========== */
 

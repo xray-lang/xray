@@ -42,7 +42,7 @@
 typedef struct XrValue XrValue;
 #endif
 struct XrCoroutine;
-struct XrGC;
+struct XrFixedHeap;
 
 /* ========== Large Object Threshold ========== */
 

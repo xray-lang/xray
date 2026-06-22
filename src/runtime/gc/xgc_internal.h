@@ -5,11 +5,11 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xgc_internal.h - Global GC interface (minimal)
+ * xgc_internal.h - Fixed heap and object lifecycle interfaces
  *
  * KEY CONCEPT:
  *   - Runtime objects allocated in coroutine heaps (xcoro_heap.c)
- *   - This file manages: fixedgc list, type function registration
+ *   - This file manages: fixed heap list, type function registration
  */
 
 #ifndef XGC_INTERNAL_H
@@ -28,28 +28,28 @@ typedef struct XrValue XrValue;
 // XR_THREAD_LOCAL is provided by base/xdefs.h via xgc_header.h.
 #include "xgc_header.h"
 
-/* ========== GC State ========== */
+/* ========== Fixed Heap State ========== */
 
-#define XGC_IDLE 0
+#define XFIXED_HEAP_IDLE 0
 
 /*
  * Color bit definitions are ONLY in xcoro_heap.h (dual-white).
- * Global GC manages fixedgc objects that live forever and never
+ * The fixed heap manages objects that live until runtime teardown and never
  * participate in mark-sweep, so they don't need color marking.
  */
 
-/* ========== GC Main Structure ========== */
+/* ========== Fixed Heap Main Structure ========== */
 
 struct XrayIsolate;
-typedef struct XrGC XrGC;
+typedef struct XrFixedHeap XrFixedHeap;
 typedef struct XrCoroHeap XrCoroHeap;
 
 // Maximum GC type ID
 #define XGC_MAX_TYPES 64
 
-/* ========== Type Function Types (must be before XrGC) ========== */
+/* ========== Type Function Types ========== */
 
-struct XrGC;  // Forward declaration
+struct XrFixedHeap;
 struct XrayIsolate;
 struct XrCopyContext;
 
@@ -58,14 +58,14 @@ typedef XrValue (*XrGCDeepCopyFn)(struct XrCopyContext *ctx, XrObjHeader *obj);
 typedef XrValue (*XrGCToSharedFn)(struct XrayIsolate *X, XrObjHeader *obj);
 typedef struct XrObjHeader **(*XrGCGetGCListFn)(XrObjHeader *obj);
 
-typedef struct XrGCObjectNode {
+typedef struct XrFixedHeapObjectNode {
     XrObjHeader *obj;
-    struct XrGCObjectNode *next;
-} XrGCObjectNode;
+    struct XrFixedHeapObjectNode *next;
+} XrFixedHeapObjectNode;
 
 /* ========== Per-Type Capability Tables ==========
  *
- * Each capability is intentionally stored in its own table. RC/fixedgc cleanup
+ * Each capability is intentionally stored in its own table. RC/fixed heap cleanup
  * only needs destroy callbacks, while cross-coroutine transfer needs deep-copy
  * and to-shared callbacks. Keeping the tables split prevents the minimal AOT
  * runtime from pulling deep-copy/share code merely because it can destroy an
@@ -74,21 +74,21 @@ typedef struct XrGCObjectNode {
  * Extension types (registered via xr_register_extension_destroy) live in the
  * same runtime-core destroy table as built-in types. */
 
-typedef struct XrGC {
-    uint8_t gcstate;
+typedef struct XrFixedHeap {
+    uint8_t state;
     uint8_t _pad[7];
     struct XrayIsolate *isolate;
     int64_t totalbytes;
-    XrGCObjectNode *fixedgc;  // Fixed objects (compile-time)
+    XrFixedHeapObjectNode *objects;  // Fixed-lifetime objects
     size_t object_count;
-} XrGC;
+} XrFixedHeap;
 
 /* ========== Core API ========== */
 
-XR_FUNC void xr_gc_init(XrGC *gc, struct XrayIsolate *isolate);
-XR_FUNC void xr_gc_cleanup(XrGC *gc);
-XR_FUNC void *xr_gc_alloc(XrGC *gc, size_t size, uint8_t type);
-XR_FUNC XrObjHeader *xr_gc_newobj(XrGC *gc, uint8_t type, size_t size);
+XR_FUNC void xr_fixed_heap_init(XrFixedHeap *heap, struct XrayIsolate *isolate);
+XR_FUNC void xr_fixed_heap_cleanup(XrFixedHeap *heap);
+XR_FUNC void *xr_fixed_heap_alloc(XrFixedHeap *heap, size_t size, uint8_t type);
+XR_FUNC XrObjHeader *xr_fixed_heap_new_obj(XrFixedHeap *heap, uint8_t type, size_t size);
 XR_FUNC bool xr_gc_type_may_need_finalize(uint8_t type);
 
 /* Compile-time RC dup/drop primitives are inline in xcoro_heap.h
@@ -118,6 +118,6 @@ XR_FUNC void xr_gc_destroy_result_group(XrObjHeader *obj, XrCoroHeap *owner_heap
 
 /* ========== Debug API ========== */
 
-XR_FUNC void xr_gc_printstats(XrGC *gc);
+XR_FUNC void xr_fixed_heap_print_stats(XrFixedHeap *heap);
 
 #endif  // XGC_INTERNAL_H

@@ -36,7 +36,7 @@ XrRuntimeCore *xr_runtime_core_new(const XrRuntimeCoreConfig *cfg) {
     memset(core->global_string_pool, 0, sizeof(struct XrGlobalStringPool));
     xr_global_pool_init(core->global_string_pool);
 
-    xr_gc_init(&core->gc, cfg ? cfg->owner_isolate : NULL);
+    xr_fixed_heap_init(&core->fixed_heap, cfg ? cfg->owner_isolate : NULL);
 
     core->sys_heap = xr_malloc(sizeof(struct XrSystemHeap));
     if (!core->sys_heap)
@@ -64,12 +64,12 @@ void xr_runtime_core_destroy_coro_storage(XrRuntimeCore *core) {
     xr_sysheap_destroy_coro_storage(core->sys_heap);
 }
 
-void xr_runtime_core_cleanup_gc(XrRuntimeCore *core) {
+void xr_runtime_core_cleanup_fixed_heap(XrRuntimeCore *core) {
     if (!core)
         return;
-    xr_gc_cleanup(&core->gc);
-    if (core->gc.isolate)
-        xr_weak_registry_destroy(core->gc.isolate);
+    xr_fixed_heap_cleanup(&core->fixed_heap);
+    if (core->fixed_heap.isolate)
+        xr_weak_registry_destroy(core->fixed_heap.isolate);
 }
 
 void xr_runtime_core_set_destroy_op(XrRuntimeCore *core, uint8_t type, XrGCDestroyFn destroy) {
@@ -109,7 +109,7 @@ void xr_runtime_core_delete(XrRuntimeCore *core) {
     xr_runtime_core_free_tmp_strbuf(core);
 
     xr_runtime_core_destroy_coro_storage(core);
-    xr_runtime_core_cleanup_gc(core);
+    xr_runtime_core_cleanup_fixed_heap(core);
 
     if (core->global_string_pool) {
         xr_global_pool_free(core->global_string_pool);

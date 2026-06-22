@@ -31,8 +31,8 @@ XrEnumValue *xr_enum_value_new(XrayIsolate *X, const char *enum_name, const char
     XR_DCHECK(X != NULL, "enum_value_new: NULL isolate");
     XR_DCHECK(enum_name != NULL, "enum_value_new: NULL enum_name");
     XrayCoreClasses *core = xr_isolate_get_core_classes(X);
-    XrEnumValue *enum_val =
-        (XrEnumValue *) xr_gc_alloc(xr_isolate_get_gc(X), sizeof(XrEnumValue), XR_TINSTANCE);
+    XrEnumValue *enum_val = (XrEnumValue *) xr_fixed_heap_alloc(xr_isolate_get_fixed_heap(X),
+                                                                sizeof(XrEnumValue), XR_TINSTANCE);
     if (!enum_val)
         return NULL;
     enum_val->klass = (core && core->enumValueClass) ? core->enumValueClass : NULL;
@@ -55,7 +55,7 @@ XrEnumValue *xr_enum_value_new_core(XrRuntimeCore *core, const char *enum_name,
     XR_DCHECK(member_name != NULL, "enum_value_new_core: NULL member_name");
 
     XrEnumValue *enum_val =
-        (XrEnumValue *) xr_gc_alloc(&core->gc, sizeof(XrEnumValue), XR_TINSTANCE);
+        (XrEnumValue *) xr_fixed_heap_alloc(&core->fixed_heap, sizeof(XrEnumValue), XR_TINSTANCE);
     if (!enum_val)
         return NULL;
     enum_val->klass = NULL;
@@ -83,8 +83,8 @@ static XrClass *xr_enum_minimal_adt_class_new(const char *name, uint16_t field_c
 XrEnumType *xr_enum_type_new(XrayIsolate *X, const char *name, int base_type, char **member_names,
                              XrValue *member_values, int count) {
     XrayCoreClasses *core = xr_isolate_get_core_classes(X);
-    XrEnumType *enum_type =
-        (XrEnumType *) xr_gc_alloc(xr_isolate_get_gc(X), sizeof(XrEnumType), XR_TINSTANCE);
+    XrEnumType *enum_type = (XrEnumType *) xr_fixed_heap_alloc(xr_isolate_get_fixed_heap(X),
+                                                               sizeof(XrEnumType), XR_TINSTANCE);
     if (!enum_type)
         return NULL;
     enum_type->klass = (core && core->enumTypeClass) ? core->enumTypeClass : NULL;
@@ -186,7 +186,8 @@ XrEnumType *xr_enum_type_new_core(XrRuntimeCore *core, const char *name, int bas
     if (!core || !name || !member_names || !member_values || count <= 0)
         return NULL;
 
-    XrEnumType *enum_type = (XrEnumType *) xr_gc_alloc(&core->gc, sizeof(XrEnumType), XR_TINSTANCE);
+    XrEnumType *enum_type =
+        (XrEnumType *) xr_fixed_heap_alloc(&core->fixed_heap, sizeof(XrEnumType), XR_TINSTANCE);
     if (!enum_type)
         return NULL;
     enum_type->klass = NULL;
@@ -463,8 +464,8 @@ XR_FUNC XrInstance *xr_enum_adt_construct(XrayIsolate *X, XrEnumType *enum_type,
 }
 
 /* Release malloc-backed side resources owned by the enum value.
- * The body itself lives on the isolate fixedgc list and is freed by
- * xr_gc_cleanup; this hook must NOT call xr_free(obj). */
+ * The body itself lives on the isolate fixed_heap list and is freed by
+ * xr_fixed_heap_cleanup; this hook must NOT call xr_free(obj). */
 void xr_gc_destroy_enum_value(XrObjHeader *obj, XrCoroHeap *owner_heap) {
     (void) owner_heap;
     if (!obj)
@@ -475,7 +476,7 @@ void xr_gc_destroy_enum_value(XrObjHeader *obj, XrCoroHeap *owner_heap) {
 }
 
 /* Release malloc-backed side resources owned by the enum type. The
- * member instances are individually owned by the fixedgc list, so this
+ * member instances are individually owned by the fixed_heap list, so this
  * hook only frees the type's own side arrays and the members[] table. */
 void xr_gc_destroy_enum_type(XrObjHeader *obj, XrCoroHeap *owner_heap) {
     (void) owner_heap;
@@ -483,7 +484,7 @@ void xr_gc_destroy_enum_type(XrObjHeader *obj, XrCoroHeap *owner_heap) {
         return;
     XrEnumType *enum_type = (XrEnumType *) obj;
     if (enum_type->members) {
-        // members[].instance bodies are freed by fixedgc cleanup; this
+        // members[].instance bodies are freed by fixed_heap cleanup; this
         // table only stores pointers, so freeing the table is enough.
         xr_free(enum_type->members);
         enum_type->members = NULL;

@@ -54,7 +54,7 @@ typedef struct XrBigInt {
     uint32_t limbs[];       // flexible array, little-endian
 } XrBigInt;
 
-struct XrGC;
+struct XrFixedHeap;
 
 /* ========== Create ========== */
 
@@ -64,9 +64,10 @@ XR_FUNC XrBigInt *xr_bigint_new(struct XrCoroutine *coro, int64_t value);
 // Create from decimal string ("-123", "+456", "789")
 XR_FUNC XrBigInt *xr_bigint_from_string(struct XrCoroutine *coro, const char *str);
 
-// Compile-time variants: allocate on global GC (no coroutine needed)
-XR_FUNC XrBigInt *xr_bigint_new_on_gc(struct XrGC *gc, int64_t value);
-XR_FUNC XrBigInt *xr_bigint_from_string_on_gc(struct XrGC *gc, const char *str);
+// Compile-time variants: allocate on the fixed heap (no coroutine needed)
+XR_FUNC XrBigInt *xr_bigint_new_on_fixed_heap(struct XrFixedHeap *fixed_heap, int64_t value);
+XR_FUNC XrBigInt *xr_bigint_from_string_on_fixed_heap(struct XrFixedHeap *fixed_heap,
+                                                      const char *str);
 
 // Deep copy
 XR_FUNC XrBigInt *xr_bigint_copy(struct XrCoroutine *coro, XrBigInt *a);

@@ -300,9 +300,9 @@ vmcase(OP_COPY) {
             uint32_t _fc = xr_class_instance_field_count(_cls);
             size_t _sz = xr_instance_size(_cls);
             XrCoroutine *_coro = (XrCoroutine *) vm_ctx->current_coro;
-            XrInstance *_new =
-                _coro ? (XrInstance *) xr_alloc(_coro, _sz, XR_TINSTANCE)
-                      : (XrInstance *) xr_gc_alloc(xr_isolate_get_gc(isolate), _sz, XR_TINSTANCE);
+            XrInstance *_new = _coro ? (XrInstance *) xr_alloc(_coro, _sz, XR_TINSTANCE)
+                                     : (XrInstance *) xr_fixed_heap_alloc(
+                                           xr_isolate_get_fixed_heap(isolate), _sz, XR_TINSTANCE);
             if (_new) {
                 xr_obj_header_init_type(&_new->hdr, XR_TINSTANCE);
                 _new->klass = _cls;
