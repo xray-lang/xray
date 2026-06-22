@@ -583,6 +583,26 @@ XR_FUNC void xi_emit_str_concat(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         }
     }
 
+    /* Static uint values share the raw i64 slot representation with signed
+     * integers. Convert them before dynamic StringBuilder append loses the
+     * unsigned type view. */
+    for (uint16_t a = 0; a < n; a++) {
+        int hint = xi_emit_tostring_hint_for_type(v->args[a] ? v->args[a]->type : NULL);
+        if (hint != 3)
+            continue;
+        if (ctx->next_reg >= MAX_REGS) {
+            emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
+            if (parts != stack_parts)
+                xr_free(parts);
+            return;
+        }
+        XiEmitReg tmp = (XiEmitReg) ctx->next_reg++;
+        if (ctx->next_reg > ctx->max_reg)
+            ctx->max_reg = ctx->next_reg;
+        emit_inst(ctx, CREATE_ABC(OP_TOSTRING, tmp, parts[a], hint));
+        parts[a] = tmp;
+    }
+
     emit_inst(ctx, CREATE_ABC(OP_STRBUF_NEW, dst, 0, 0));
     for (uint16_t a = 0; a < n; a++) {
         emit_inst(ctx, CREATE_ABC(OP_STRBUF_APPEND, dst, parts[a], 0));

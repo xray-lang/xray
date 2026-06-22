@@ -141,6 +141,30 @@ static void xi_lower_mark_value_clone_copy(XiValue *v) {
         v->aux_int = XI_COPY_KIND_VALUE_CLONE;
 }
 
+static XiValue *xi_lower_apply_primitive_type_view(XiLower *l, AstNode *node, XiValue *val,
+                                                   struct XrType *target_type) {
+    if (!l || !node || !val || !val->type || !target_type || xr_type_equals(val->type, target_type))
+        return val;
+    if (XR_TYPE_IS_FLOAT(val->type) && XR_TYPE_IS_FLOAT(target_type) &&
+        target_type->native_width == XR_NATIVE_F32) {
+        XiValue *n = xi_value_new(l->func, l->cur_block, XI_NARROW_F32, target_type, 1);
+        if (!n)
+            return val;
+        n->args[0] = val;
+        n->line = (uint32_t) node->line;
+        return n;
+    }
+    if (!((XR_TYPE_IS_INT(val->type) && XR_TYPE_IS_INT(target_type)) ||
+          (XR_TYPE_IS_FLOAT(val->type) && XR_TYPE_IS_FLOAT(target_type))))
+        return val;
+    XiValue *copy = xi_value_new(l->func, l->cur_block, XI_COPY, target_type, 1);
+    if (!copy)
+        return val;
+    copy->args[0] = val;
+    copy->line = (uint32_t) node->line;
+    return copy;
+}
+
 static XiFunc *lower_resolve_static_callee_func_in_scope(XiFunc *scope, XiValue *callee) {
     while (callee && callee->op == XI_COPY && !xi_copy_is_value_clone(callee) && callee->nargs >= 1)
         callee = callee->args[0];
@@ -690,6 +714,7 @@ static XiValue *lower_assignment(XiLower *l, AstNode *node) {
                 }
             }
         }
+        val = xi_lower_apply_primitive_type_view(l, node, val, var_type);
         /* When assigning from a different variable (e.g. x = i), insert
          * an explicit copy so the target gets its own SSA value.  Without
          * this, braun_write stores the source variable's value directly,
@@ -758,6 +783,7 @@ static XiValue *lower_assignment(XiLower *l, AstNode *node) {
                 }
             }
         }
+        val = xi_lower_apply_primitive_type_view(l, node, val, tb.type);
         xi_lower_emit_top_store(l, tb, val);
         return val;
     }
@@ -778,6 +804,7 @@ static XiValue *lower_assignment(XiLower *l, AstNode *node) {
                 }
             }
         }
+        val = xi_lower_apply_primitive_type_view(l, node, val, upval_type);
         /* Mark the capture as needing cell indirection because the child
          * mutates the captured variable.  The emit stage uses this to
          * emit CELL_NEW in the parent and CELL_GET/CELL_SET in the child. */

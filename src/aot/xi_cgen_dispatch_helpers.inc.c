@@ -816,6 +816,35 @@ static const XiValue *xicgen_native_int_print_source(XiCgenCtx *ctx, const XiVal
     return arg;
 }
 
+static bool xicgen_type_is_unsigned_int(const XrType *type) {
+    if (!type || type->kind != XR_KIND_INT || type->is_nullable)
+        return false;
+    switch (type->native_width) {
+        case XR_NATIVE_U8:
+        case XR_NATIVE_U16:
+        case XR_NATIVE_U32:
+        case XR_NATIVE_U64:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static bool xicgen_type_is_int_like(const XrType *type) {
+    return type && type->kind == XR_KIND_INT && !type->is_nullable;
+}
+
+static bool xicgen_compare_uses_unsigned(const XiValue *v) {
+    if (!v || v->nargs < 2)
+        return false;
+    if (v->op != XI_LT && v->op != XI_LE && v->op != XI_GT && v->op != XI_GE)
+        return false;
+    const XrType *left = v->args[0] ? v->args[0]->type : NULL;
+    const XrType *right = v->args[1] ? v->args[1]->type : NULL;
+    return xicgen_type_is_int_like(left) && xicgen_type_is_int_like(right) &&
+           (xicgen_type_is_unsigned_int(left) || xicgen_type_is_unsigned_int(right));
+}
+
 static bool xicgen_box_only_feeds_native_int_print(XiCgenCtx *ctx, const XiFunc *f,
                                                    const XiValue *box) {
     if (!ctx || !f || !box || box->op != XI_BOX)
@@ -862,9 +891,15 @@ static void xicgen_emit_print_expr(XiCgenCtx *ctx, FILE *out, const XiValue *v) 
     if (add_space)
         fprintf(out, "(putchar(' '), ");
     if (native_int) {
-        fprintf(out, "printf(\"%%lld\", (long long)");
-        emit_value_as_rep_ctx(ctx, out, native_int, XR_REP_I64);
-        fprintf(out, ")");
+        if (xicgen_type_is_unsigned_int(native_int->type)) {
+            fprintf(out, "printf(\"%%llu\", (unsigned long long)(uint64_t)");
+            emit_value_as_rep_ctx(ctx, out, native_int, XR_REP_I64);
+            fprintf(out, ")");
+        } else {
+            fprintf(out, "printf(\"%%lld\", (long long)");
+            emit_value_as_rep_ctx(ctx, out, native_int, XR_REP_I64);
+            fprintf(out, ")");
+        }
         if (newline)
             fprintf(out, ", putchar('\\n')");
     } else {
@@ -1070,9 +1105,15 @@ static void xicgen_as(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue 
                 fprintf(out, ")");
                 return;
             case 12:
-                fprintf(out, "xrt_to_string(");
-                emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
-                fprintf(out, ")");
+                if (xicgen_type_is_unsigned_int(v->args[0] ? v->args[0]->type : NULL)) {
+                    fprintf(out, "xrt_uint64_to_string((uint64_t)");
+                    emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
+                    fprintf(out, ")");
+                } else {
+                    fprintf(out, "xrt_to_string(");
+                    emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
+                    fprintf(out, ")");
+                }
                 return;
             case 1:
                 fprintf(out, "xrt_to_bool(");
@@ -2354,9 +2395,16 @@ XI_TO_C_TEMPLATE_SHIFT_DRIVERS(XICGEN_DEFINE_TEMPLATE_SHIFT_DRIVER)
 
 static void xicgen_compare(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                            const char *prefix) {
-    (void) ctx;
     (void) f;
     (void) prefix;
+    if (xicgen_compare_uses_unsigned(v)) {
+        fprintf(out, "((uint64_t)");
+        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
+        fprintf(out, " %s (uint64_t)", xi_to_c_template_compare_native_op(v->op));
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
+        fprintf(out, ")");
+        return;
+    }
     XrRep a0_rep = cg_rep(v->args[0]);
     XrRep a1_rep = cg_rep(v->args[1]);
     XrRep arg_rep = (a0_rep == XR_REP_TAGGED || a1_rep == XR_REP_TAGGED) ? XR_REP_TAGGED : a0_rep;
@@ -2854,9 +2902,15 @@ static void xicgen_convert(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
             emit_vref(out, v->args[0]);
         }
     } else if (v->type->kind == XR_KIND_STRING) {
-        fprintf(out, "xrt_to_string(");
-        emit_boxed_value_ref(out, v->args[0]);
-        fprintf(out, ")");
+        if (xicgen_type_is_unsigned_int(v->args[0] ? v->args[0]->type : NULL)) {
+            fprintf(out, "xrt_uint64_to_string((uint64_t)");
+            emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
+            fprintf(out, ")");
+        } else {
+            fprintf(out, "xrt_to_string(");
+            emit_boxed_value_ref(out, v->args[0]);
+            fprintf(out, ")");
+        }
     } else if (v->type->kind == XR_KIND_BOOL) {
         if (dst_rep == XR_REP_TAGGED) {
             fprintf(out, "xrt_to_bool(");

@@ -521,8 +521,10 @@ Xray is statically typed; every expression has a determined type at compile time
 
 - Literals default to `int`; the type may be narrowed by context (e.g., assigned to an `int32` variable), but a direct literal must fit the target range (`let x: int8 = 200` is rejected at compile time).
 - Arithmetic uses two's-complement wrap-around semantics (no debug/release distinction). Same-width narrow integer operations keep that width and wrap at that width (`uint8 + uint8 -> uint8`); mixed narrow widths collapse back to `int`; shift results take the left operand's width.
+- Values with static type `uint8`..`uint64` are interpreted as unsigned by `print`, `string(x)`, template strings, string concatenation, and ordering comparisons; for example, a static `uint64` bit pattern of `0xffff_ffff_ffff_ffff` formats as `18446744073709551615` and compares greater than `0`.
 - `int.checkedAdd` / `checkedSub` / `checkedMul` return `null` on overflow; `saturating*` clamps to the `int` boundary; `wrapping*` explicitly performs the default two's-complement wrap.
 - Non-literal expressions written into narrow integer targets are narrowed with target-type wrap-around, so `let x: uint8 = 255 + 1` evaluates to `0`.
+- After dynamic erasure, `XrValue` stores only the integer payload, not signedness or width. Across `any` / Json / dynamic-container boundaries, `uint64` values above the positive `int64` range are not guaranteed to keep unsigned formatting or ordering semantics. Keep the value statically typed as `uintN` when unsigned semantics are required.
 
 #### 2.3.2 Floating-Point Types
 

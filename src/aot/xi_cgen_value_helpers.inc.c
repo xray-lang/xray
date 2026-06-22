@@ -24,6 +24,20 @@ static void emit_c_float_literal(FILE *out, double value) {
     fprintf(out, "%a", value);
 }
 
+static bool cg_value_type_is_unsigned_int(const XiValue *v) {
+    if (!v || !v->type || v->type->kind != XR_KIND_INT || v->type->is_nullable)
+        return false;
+    switch (v->type->native_width) {
+        case XR_NATIVE_U8:
+        case XR_NATIVE_U16:
+        case XR_NATIVE_U32:
+        case XR_NATIVE_U64:
+            return true;
+        default:
+            return false;
+    }
+}
+
 static void emit_boxed_value_ref(FILE *out, const XiValue *v) {
     if (v && v->type && v->type->kind == XR_KIND_NULL) {
         fprintf(out, "XR_NULL_VAL");
@@ -498,17 +512,29 @@ static void emit_str_concat_expr(XiCgenCtx *ctx, FILE *out, const XiValue *v) {
         return;
     }
     if (v->nargs == 1) {
-        fprintf(out, "xrt_to_string(");
-        emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
-        fprintf(out, ")");
+        if (cg_value_type_is_unsigned_int(v->args[0])) {
+            fprintf(out, "xrt_uint64_to_string((uint64_t)");
+            emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
+            fprintf(out, ")");
+        } else {
+            fprintf(out, "xrt_to_string(");
+            emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
+            fprintf(out, ")");
+        }
         return;
     }
 
     fprintf(out, "({ xrt_strpart_t _scp_%u[%u]; ", v->id, (unsigned) v->nargs);
     for (uint16_t i = 0; i < v->nargs; i++) {
-        fprintf(out, "xrt_strpart_init(&_scp_%u[%u], ", v->id, (unsigned) i);
-        emit_value_as_rep(out, v->args[i], XR_REP_TAGGED);
-        fprintf(out, "); ");
+        if (cg_value_type_is_unsigned_int(v->args[i])) {
+            fprintf(out, "xrt_strpart_init_u64(&_scp_%u[%u], (uint64_t)", v->id, (unsigned) i);
+            emit_value_as_rep_ctx(ctx, out, v->args[i], XR_REP_I64);
+            fprintf(out, "); ");
+        } else {
+            fprintf(out, "xrt_strpart_init(&_scp_%u[%u], ", v->id, (unsigned) i);
+            emit_value_as_rep(out, v->args[i], XR_REP_TAGGED);
+            fprintf(out, "); ");
+        }
     }
     fprintf(out, "xrt_str_concat_parts(%u, _scp_%u); })", (unsigned) v->nargs, v->id);
 }

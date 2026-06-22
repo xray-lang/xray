@@ -37,10 +37,33 @@ const char *xr_type_to_string(XrType *type) {
         return TYPE_NAME_NEVER;
     if (XR_TYPE_IS_UNIT(type))
         return TYPE_NAME_UNIT;
-    if (XR_TYPE_IS_INT(type) && !type->is_nullable)
-        return TYPE_NAME_INT;
-    if (XR_TYPE_IS_FLOAT(type) && !type->is_nullable)
+    if (XR_TYPE_IS_INT(type) && !type->is_nullable) {
+        switch (type->native_width) {
+            case XR_NATIVE_I8:
+                return TYPE_NAME_INT8;
+            case XR_NATIVE_U8:
+                return TYPE_NAME_UINT8;
+            case XR_NATIVE_I16:
+                return TYPE_NAME_INT16;
+            case XR_NATIVE_U16:
+                return TYPE_NAME_UINT16;
+            case XR_NATIVE_I32:
+                return TYPE_NAME_INT32;
+            case XR_NATIVE_U32:
+                return TYPE_NAME_UINT32;
+            case XR_NATIVE_U64:
+                return TYPE_NAME_UINT64;
+            default:
+                return TYPE_NAME_INT;
+        }
+    }
+    if (XR_TYPE_IS_FLOAT(type) && !type->is_nullable) {
+        if (type->native_width == XR_NATIVE_F32)
+            return TYPE_NAME_FLOAT32;
+        if (type->native_width == XR_NATIVE_F64)
+            return TYPE_NAME_FLOAT64;
         return TYPE_NAME_FLOAT;
+    }
     if (XR_TYPE_IS_STRING(type) && !type->is_nullable)
         return TYPE_NAME_STRING;
     if (XR_TYPE_IS_BOOL(type) && !type->is_nullable)

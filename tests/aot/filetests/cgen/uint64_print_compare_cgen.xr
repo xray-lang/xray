@@ -1,0 +1,13 @@
+let max: uint64 = 9223372036854775807
+let high: uint64 = max + 1
+let all: uint64 = 0 - 1
+
+fn gt_zero(x: uint64) -> bool {
+    return x > 0
+}
+
+print(high)
+print(string(high))
+print(high as string)
+print("u=" + high + ":" + all)
+print(gt_zero(high))

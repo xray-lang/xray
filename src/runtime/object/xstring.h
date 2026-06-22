@@ -160,6 +160,7 @@ XR_FUNC XrString *xr_string_new(XrayIsolate *iso, const char *chars, size_t leng
 
 XR_FUNC XrString *xr_string_concat(XrayIsolate *iso, XrString *a, XrString *b);
 XR_FUNC XrString *xr_string_from_int(XrayIsolate *iso, xr_Integer i);
+XR_FUNC XrString *xr_string_from_uint64(XrayIsolate *iso, uint64_t i);
 XR_FUNC XrString *xr_string_from_float(XrayIsolate *iso, xr_Number n);
 
 /* ========== String Interning ========== */

@@ -496,6 +496,33 @@ typedef struct {
 #define XRT_STRPART_SINGLE 0u
 #define XRT_STRPART_ENUM 1u
 
+static inline size_t xrt_format_uint64(char *buf, size_t cap, uint64_t value) {
+    int n = snprintf(buf, cap, "%llu", (unsigned long long) value);
+    if (n < 0)
+        return 0;
+    if ((size_t) n >= cap)
+        return cap ? cap - 1u : 0u;
+    return (size_t) n;
+}
+
+static inline XrValue xrt_uint64_to_string(uint64_t value) {
+    char scratch[32];
+    size_t len = xrt_format_uint64(scratch, sizeof(scratch), value);
+    XrValue out = xrt_str_alloc(len);
+    memcpy(xr_str_buf(out), scratch, len);
+    return out;
+}
+
+static inline void xrt_strpart_init_u64(xrt_strpart_t *part, uint64_t value) {
+    part->a = "";
+    part->b = NULL;
+    part->alen = 0;
+    part->blen = 0;
+    part->kind = XRT_STRPART_SINGLE;
+    part->alen = xrt_format_uint64(part->scratch, sizeof(part->scratch), value);
+    part->a = part->scratch;
+}
+
 static inline void xrt_strpart_init(xrt_strpart_t *part, XrValue val) {
     part->a = "";
     part->b = NULL;

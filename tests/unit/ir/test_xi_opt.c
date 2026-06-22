@@ -31,6 +31,8 @@ static XrType stub_task = {
     .kind = XR_KIND_INSTANCE, .id = 10, .frozen = true, .instance = {.class_name = "Task"}};
 static XrType stub_u8 = {
     .kind = XR_KIND_INT, .id = 8, .frozen = true, .native_width = XR_NATIVE_U8};
+static XrType stub_uint64 = {
+    .kind = XR_KIND_INT, .id = 11, .frozen = true, .native_width = XR_NATIVE_U64};
 static XrType stub_u8_array = {
     .kind = XR_KIND_ARRAY,
     .id = 9,
@@ -151,6 +153,40 @@ TEST(const_fold_int_compare) {
     xi_opt_const_fold(f);
 
     assert(lt->op == XI_CONST && lt->aux_int == 1 && "3 < 5 should be true");
+    xi_func_free(f);
+}
+
+TEST(const_fold_uint64_compare) {
+    XiFunc *f = make_func("test", &stub_bool);
+    XiBlock *blk = f->entry;
+
+    XiValue *high = xi_const_int(f, blk, INT64_MIN, &stub_uint64);
+    XiValue *zero = xi_const_int(f, blk, 0, &stub_int);
+    XiValue *gt = xi_binary(f, blk, XI_GT, &stub_bool, high, zero);
+
+    xi_opt_const_fold(f);
+
+    assert(gt->op == XI_CONST && gt->aux_int == 1 &&
+           "uint64 high-bit value should fold as greater than zero");
+    xi_func_free(f);
+}
+
+TEST(const_fold_uint64_type_view_copy) {
+    XiFunc *f = make_func("test", &stub_uint64);
+    XiBlock *blk = f->entry;
+
+    XiValue *base = xi_const_int(f, blk, INT64_MAX, &stub_int);
+    XiValue *view = xi_value_new(f, blk, XI_COPY, &stub_uint64, 1);
+    assert(view != NULL);
+    view->args[0] = base;
+    XiValue *one = xi_const_int(f, blk, 1, &stub_int);
+    XiValue *sum = xi_binary(f, blk, XI_ADD, &stub_uint64, view, one);
+
+    xi_opt_const_fold(f);
+
+    assert(sum->op == XI_CONST && sum->aux_int == INT64_MIN &&
+           "uint64 type-view copy should not block constant folding");
+    assert(sum->type == &stub_uint64 && "folded value should keep uint64 static type");
     xi_func_free(f);
 }
 
@@ -1406,6 +1442,8 @@ int main(void) {
     run_const_fold_int_div();
     run_const_fold_div_by_zero();
     run_const_fold_int_compare();
+    run_const_fold_uint64_compare();
+    run_const_fold_uint64_type_view_copy();
     run_const_fold_neg();
     run_const_fold_not();
     run_const_fold_float_add();

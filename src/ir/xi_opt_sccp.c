@@ -237,6 +237,42 @@ static bool both_int(SccpCell a, SccpCell b) {
     return a.kind == SCCP_CONST_INT && b.kind == SCCP_CONST_INT;
 }
 
+static bool sccp_type_is_unsigned_int(const XrType *type) {
+    if (!type || type->kind != XR_KIND_INT || type->is_nullable)
+        return false;
+    switch (type->native_width) {
+        case XR_NATIVE_U8:
+        case XR_NATIVE_U16:
+        case XR_NATIVE_U32:
+        case XR_NATIVE_U64:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static bool sccp_type_is_int_like(const XrType *type) {
+    return type && type->kind == XR_KIND_INT && !type->is_nullable;
+}
+
+static bool sccp_compare_uses_unsigned(const XiValue *v) {
+    if (!v || v->nargs < 2)
+        return false;
+    switch ((XiOp) v->op) {
+        case XI_LT:
+        case XI_LE:
+        case XI_GT:
+        case XI_GE:
+            break;
+        default:
+            return false;
+    }
+    const XrType *left = v->args[0] ? v->args[0]->type : NULL;
+    const XrType *right = v->args[1] ? v->args[1]->type : NULL;
+    return sccp_type_is_int_like(left) && sccp_type_is_int_like(right) &&
+           (sccp_type_is_unsigned_int(left) || sccp_type_is_unsigned_int(right));
+}
+
 /* True if the cell carries integer range info (const or range). */
 static bool has_int_bounds(SccpCell c) {
     return c.kind == SCCP_CONST_INT || c.kind == SCCP_RANGE_INT;
@@ -396,31 +432,41 @@ static SccpCell range_compare(uint16_t op, SccpCell a, SccpCell b, SccpCell fall
 }
 
 /* Comparison ops produce a boolean cell, with range-aware fallback. */
-static SccpCell eval_compare(uint16_t op, SccpCell a, SccpCell b) {
+static SccpCell eval_compare(uint16_t op, SccpCell a, SccpCell b, bool use_unsigned) {
+    uint64_t ua = (uint64_t) a.ival;
+    uint64_t ub = (uint64_t) b.ival;
     switch (op) {
         case XI_LT:
             if (both_int(a, b))
-                return sccp_bool(a.ival < b.ival);
+                return sccp_bool(use_unsigned ? ua < ub : a.ival < b.ival);
             if (both_float(a, b))
                 return sccp_bool(a.fval < b.fval);
+            if (use_unsigned)
+                return sccp_bot();
             return range_compare(op, a, b, sccp_bot());
         case XI_LE:
             if (both_int(a, b))
-                return sccp_bool(a.ival <= b.ival);
+                return sccp_bool(use_unsigned ? ua <= ub : a.ival <= b.ival);
             if (both_float(a, b))
                 return sccp_bool(a.fval <= b.fval);
+            if (use_unsigned)
+                return sccp_bot();
             return range_compare(op, a, b, sccp_bot());
         case XI_GT:
             if (both_int(a, b))
-                return sccp_bool(a.ival > b.ival);
+                return sccp_bool(use_unsigned ? ua > ub : a.ival > b.ival);
             if (both_float(a, b))
                 return sccp_bool(a.fval > b.fval);
+            if (use_unsigned)
+                return sccp_bot();
             return range_compare(op, a, b, sccp_bot());
         case XI_GE:
             if (both_int(a, b))
-                return sccp_bool(a.ival >= b.ival);
+                return sccp_bool(use_unsigned ? ua >= ub : a.ival >= b.ival);
             if (both_float(a, b))
                 return sccp_bool(a.fval >= b.fval);
+            if (use_unsigned)
+                return sccp_bot();
             return range_compare(op, a, b, sccp_bot());
         case XI_EQ:
             if (both_int(a, b))
@@ -483,7 +529,7 @@ static SccpCell eval_value(SccpCtx *ctx, const XiValue *v) {
         if (a.kind == SCCP_TOP || b.kind == SCCP_TOP)
             return sccp_top();
         if (is_compare_op(v->op))
-            return eval_compare(v->op, a, b);
+            return eval_compare(v->op, a, b, sccp_compare_uses_unsigned(v));
         if (is_bitwise_op(v->op))
             return eval_bitwise(v->op, a, b);
         /* float32 arithmetic folds at single precision (operands and result
