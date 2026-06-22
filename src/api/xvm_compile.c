@@ -72,7 +72,7 @@ static XrProto *compile_ast_internal(XrCompilerSession *session, AstNode *ast,
         ast->type == AST_PROGRAM && ast->as.program.arena &&
         xr_compiler_session_push_arena(session, ast->as.program.arena, source_file, &ast_scope);
 
-    XrCompilerContext *ctx = xr_compiler_context_new(isolate);
+    XrCompilerContext *ctx = xr_compiler_context_new(session);
     if (ctx == NULL) {
         xr_log_warning("vm", "failed to create compiler context");
         if (has_ast_scope)
@@ -138,7 +138,7 @@ XrProto *xr_compile_source_with_path_session(XrCompilerSession *session, const c
     XR_DCHECK(source != NULL, "compile_source_with_path: NULL source");
     ensure_compiler_proto_hooks();
     // Create compiler context FIRST to ensure type pool is valid during parsing
-    XrCompilerContext *ctx = xr_compiler_context_new(isolate);
+    XrCompilerContext *ctx = xr_compiler_context_new(session);
     if (!ctx) {
         xr_log_warning("vm", "failed to create compiler context");
         return NULL;

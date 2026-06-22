@@ -10,9 +10,9 @@
 
 #include "xcompiler_context.h"
 #include "../../base/xchecks.h"
-#include "../../runtime/xisolate_internal.h"
 #include "../../runtime/value/xtype_internal.h"
 #include "../../base/xmalloc.h"
+#include "../../toolchain/xcompiler_session.h"
 #include "../xdiag_fmt.h"
 #include <string.h>
 #include <stdio.h>
@@ -21,7 +21,13 @@
 /* Shared initializer for both public constructors.  When `analyzer` is
  * NULL a fresh owned analyzer is created; otherwise the provided one is
  * borrowed (ownership stays with the caller). */
-static XrCompilerContext *xr_compiler_context_new_impl(XrayIsolate *X, XaAnalyzer *analyzer) {
+static XrCompilerContext *xr_compiler_context_new_impl(XrCompilerSession *session,
+                                                       XaAnalyzer *analyzer) {
+    XrayIsolate *X = xr_compiler_session_vm_host(session);
+    if (!session || !X) {
+        return NULL;
+    }
+
     XrCompilerContext *ctx = (XrCompilerContext *) xr_malloc(sizeof(XrCompilerContext));
     if (!ctx) {
         return NULL;
@@ -51,6 +57,7 @@ static XrCompilerContext *xr_compiler_context_new_impl(XrayIsolate *X, XaAnalyze
         ctx->shared_vars[i].moved_column = 0;
     }
 
+    ctx->compiler_session = session;
     ctx->X = X;
     ctx->current_line = 1;
     ctx->current_column = 0;
@@ -94,12 +101,13 @@ static XrCompilerContext *xr_compiler_context_new_impl(XrayIsolate *X, XaAnalyze
     return ctx;
 }
 
-XrCompilerContext *xr_compiler_context_new(XrayIsolate *X) {
-    return xr_compiler_context_new_impl(X, NULL);
+XrCompilerContext *xr_compiler_context_new(XrCompilerSession *session) {
+    return xr_compiler_context_new_impl(session, NULL);
 }
 
-XrCompilerContext *xr_compiler_context_new_with_analyzer(XrayIsolate *X, XaAnalyzer *analyzer) {
-    return xr_compiler_context_new_impl(X, analyzer);
+XrCompilerContext *xr_compiler_context_new_with_analyzer(XrCompilerSession *session,
+                                                         XaAnalyzer *analyzer) {
+    return xr_compiler_context_new_impl(session, analyzer);
 }
 
 void xr_compiler_context_free(XrCompilerContext *ctx) {

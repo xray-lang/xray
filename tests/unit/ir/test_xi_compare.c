@@ -76,13 +76,14 @@ static void teardown(void) {
 static XrProto *compile_legacy(const char *source) {
     XR_DCHECK(g_iso != NULL, "isolate must be initialized");
 
-    /* Create context first — its analyzer installs a type pool on the
-     * isolate, which the parser needs for creating type annotations. */
-    XrCompilerContext *ctx = xr_compiler_context_new(g_iso);
+    /* Create context first — its analyzer installs the current type pool
+     * that the parser needs for creating type annotations. */
+    XrCompilerSession *session = xr_compiler_session_current_for_isolate(g_iso);
+    XrCompilerContext *ctx = xr_compiler_context_new(session);
     if (!ctx)
         return NULL;
 
-    AstNode *program = xr_parse(xr_compiler_session_current_for_isolate(g_iso), source);
+    AstNode *program = xr_parse(session, source);
     if (!program) {
         xr_compiler_context_free(ctx);
         return NULL;
@@ -94,10 +95,9 @@ static XrProto *compile_legacy(const char *source) {
     /* Re-enter the parse arena: legacy codegen desugars some AST nodes
      * (e.g. for-in, match) which calls ast_alloc and needs the arena. */
     XrCompilerSessionScope ast_scope;
-    bool has_ast_scope =
-        program->type == AST_PROGRAM && program->as.program.arena &&
-        xr_compiler_session_push_arena(xr_compiler_session_current_for_isolate(g_iso),
-                                       program->as.program.arena, "compare.xr", &ast_scope);
+    bool has_ast_scope = program->type == AST_PROGRAM && program->as.program.arena &&
+                         xr_compiler_session_push_arena(session, program->as.program.arena,
+                                                        "compare.xr", &ast_scope);
 
     XrProto *proto = xr_compile(ctx, program);
 

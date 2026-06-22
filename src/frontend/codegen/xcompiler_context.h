@@ -44,7 +44,8 @@ typedef struct ConstEntry {
 #include "../../base/xdefs.h"
 
 struct XrCompilerContext {
-    XrayIsolate *X;
+    struct XrCompilerSession *compiler_session;
+    XrayIsolate *X;  // Borrowed VM host, for bytecode VM shared/global state.
 
     int current_line;
     int current_column;
@@ -87,19 +88,19 @@ struct XrCompilerContext {
 
     /* Analyzer ownership.  When true, context_free destroys the analyzer
      * and its type pool; when false the analyzer outlives the context
-     * (REPL uses an isolate-scoped analyzer so type and symbol state
+     * (REPL uses a session-owned analyzer so type and symbol state
      * persists across compilation units). */
     bool owns_analyzer;
 };
 
 /* Create a compiler context with a fresh, owned analyzer. */
-XR_FUNC XrCompilerContext *xr_compiler_context_new(XrayIsolate *X);
+XR_FUNC XrCompilerContext *xr_compiler_context_new(struct XrCompilerSession *session);
 
 /* Create a compiler context that borrows an externally-owned analyzer.
  * The caller retains ownership; context_free leaves the analyzer alone.
  * Intended for REPL/LSP where analyzer state must survive per-input
  * compilation units. */
-XR_FUNC XrCompilerContext *xr_compiler_context_new_with_analyzer(XrayIsolate *X,
+XR_FUNC XrCompilerContext *xr_compiler_context_new_with_analyzer(struct XrCompilerSession *session,
                                                                  XaAnalyzer *analyzer);
 XR_FUNC void xr_compiler_context_free(XrCompilerContext *ctx);
 XR_FUNC void xr_compiler_context_reset(XrCompilerContext *ctx);
