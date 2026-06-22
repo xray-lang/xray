@@ -35,13 +35,20 @@ def detect_cores() -> int:
 def configure_jobs(requested: str) -> int:
     if requested in ("", "auto"):
         jobs = detect_cores()
-        max_auto = os.environ.get("XRAY_DIFF_MAX_AUTO_JOBS", "8")
+        max_auto = os.environ.get("XRAY_DIFF_MAX_AUTO_JOBS", "16")
         if is_uint(max_auto) and int(max_auto) > 0:
             jobs = min(jobs, int(max_auto))
         return max(1, jobs)
     if is_uint(requested) and int(requested) > 0:
         return int(requested)
     return 1
+
+
+def configure_hot_jobs(current: int, env_name: str, default_cap: int) -> int:
+    cap_raw = os.environ.get(env_name, str(default_cap))
+    if is_uint(cap_raw) and int(cap_raw) > 0:
+        return max(1, min(current, int(cap_raw)))
+    return current
 
 
 def run_cksum(args: list[str], data: bytes | None = None) -> tuple[str, str]:
@@ -366,6 +373,22 @@ def collect_cases(base_cases_file: str, extra_cases_file: str) -> list[Path]:
     return cases
 
 
+def aot_binary_cache_hot(config: RunnerConfig, selected: list[tuple[int, Path]]) -> bool:
+    if "aot" not in config.backends:
+        return True
+    for _order, case in selected:
+        case_backends_raw = read_first_directive(case, "// diff-backends: ", 5)
+        case_backends = [b.strip() for b in case_backends_raw.split(",") if b.strip()]
+        if case_backends and "aot" not in case_backends:
+            continue
+        rel = rel_path(case)
+        key = case_dir_key(case)
+        binary = config.aot_bin_cache / f"{safe_name(rel)}-{key}" / "aot"
+        if not (binary.is_file() and os.access(binary, os.X_OK)):
+            return False
+    return True
+
+
 def validate_shard(total: str, index: str) -> tuple[int, int]:
     if not is_uint(total) or not is_uint(index):
         raise ValueError(f"shard config must be numeric: total={total} index={index}")
@@ -386,7 +409,9 @@ def main(argv: list[str]) -> int:
     xray = Path(xray_raw)
 
     backends = [b.strip() for b in os.environ.get("XRAY_DIFF_BACKENDS", "vm,aot").split(",") if b.strip()]
-    jobs = configure_jobs(os.environ.get("XRAY_DIFF_JOBS", os.environ.get("XRAY_TEST_JOBS", "auto")))
+    requested_jobs = os.environ.get("XRAY_DIFF_JOBS", os.environ.get("XRAY_TEST_JOBS", "auto"))
+    auto_jobs = requested_jobs in ("", "auto")
+    jobs = configure_jobs(requested_jobs)
     aot_opt = os.environ.get("XRAY_AOT_TEST_OPT", "0")
     aot_cache = Path(os.environ.get("XRAY_DIFF_CACHE_DIR", str(shared_cache_dir("aot-objects"))))
     aot_bin_cache = Path(
@@ -419,18 +444,6 @@ def main(argv: list[str]) -> int:
         print(result.output)
         return 0 if result.status != "fail" else 1
 
-    print("=== Backend Differential (VM / AOT) ===")
-    print(f"Binary:   {xray_raw}")
-    print(f"Backends: {','.join(backends)}")
-    print(f"Jobs:     {jobs}")
-    print(f"AOT opt:  -O{aot_opt}")
-    print(f"Cache:    {aot_cache}")
-    print(f"BinCache: {aot_bin_cache}")
-    print("RunCache: disabled")
-    if shard_total > 1:
-        print(f"Shard:    {shard_index} / {shard_total}")
-    print("")
-
     if not (xray.is_file() and os.access(xray, os.X_OK)) and shutil.which(str(xray)) is None:
         print(f"SKIP: xray binary not found: {xray_raw}")
         print("=== Results: 0 passed, 0 failed, 0 skipped ===")
@@ -462,6 +475,24 @@ def main(argv: list[str]) -> int:
         if case_index % shard_total == shard_index:
             selected.append((case_index, case))
         case_index += 1
+
+    cache_state = "hot" if aot_binary_cache_hot(config, selected) else "cold"
+    if auto_jobs and cache_state == "hot":
+        jobs = configure_hot_jobs(jobs, "XRAY_DIFF_HOT_MAX_AUTO_JOBS", 8)
+        config.jobs = jobs
+
+    print("=== Backend Differential (VM / AOT) ===")
+    print(f"Binary:   {xray_raw}")
+    print(f"Backends: {','.join(backends)}")
+    print(f"Jobs:     {jobs}")
+    print(f"CacheState: {cache_state}")
+    print(f"AOT opt:  -O{aot_opt}")
+    print(f"Cache:    {aot_cache}")
+    print(f"BinCache: {aot_bin_cache}")
+    print("RunCache: disabled")
+    if shard_total > 1:
+        print(f"Shard:    {shard_index} / {shard_total}")
+    print("")
 
     if shard_total > 1:
         print(f"Cases:    {len(selected)} / {case_index}")

@@ -75,6 +75,11 @@ static inline bool set_is_weak(const XrSet *set) {
     return (set->flags & XR_SET_FLAG_WEAK) != 0;
 }
 
+static inline XrCoroGC *set_current_or_owner_gc(XrSet *set) {
+    XrCoroGC *gc = xr_current_coro_gc();
+    return gc ? gc : (set ? set->owner_gc : NULL);
+}
+
 static XrayIsolate *set_owning_isolate(XrCoroGC *gc) {
     if (gc && gc->owner)
         return gc->owner->isolate;
@@ -137,7 +142,7 @@ static int32_t set_lookup(XrSet *set, XrValue value, uint32_t hash) {
 // Grow (and compact away tombstones) to hold at least `min_needed` live entries.
 // Handles the dummy -> first-allocation case too. Returns false on OOM.
 static bool set_resize(XrSet *set, uint32_t min_needed) {
-    XrCoroGC *gc = xr_current_coro_gc();
+    XrCoroGC *gc = set_current_or_owner_gc(set);
     bool was_dummy = xr_set_isdummy(set);
     XrSetEntry *old_entries = was_dummy ? NULL : set->entries;
     uint8_t *old_ctrl = was_dummy ? NULL : set->ctrl;
@@ -213,6 +218,7 @@ static bool set_resize(XrSet *set, uint32_t min_needed) {
     set->entries_cap = new_ecap;
     set->nentries = w;
     set->flags &= ~XR_SET_FLAG_DUMMY;
+    set->owner_gc = gc;
     if (new_on_gc)
         set->flags |= XR_SET_FLAG_NODES_ON_GC;
     else
@@ -244,6 +250,7 @@ XrSet *xr_set_new(struct XrCoroutine *coro) {
         return NULL;
 
     xr_gc_header_init_type(&set->gc, XR_TSET);
+    set->owner_gc = xr_coro_get_coro_gc(coro);
 
     set->count = 0;
     set->nentries = 0;
@@ -280,6 +287,7 @@ void xr_set_init_inplace(XrSet *set) {
     set->ctrl = NULL;
     set->indices = NULL;
     set->entries = NULL;
+    set->owner_gc = NULL;
     set->flags = XR_SET_FLAG_DUMMY;  // system-heap: arrays via malloc
     set->elem_tid = 0;
     memset(set->_pad, 0, sizeof(set->_pad));
@@ -292,7 +300,7 @@ bool xr_set_add(XrSet *set, XrValue value) {
     XR_DCHECK(XR_GC_GET_TYPE(&set->gc) == XR_TSET, "set_add: object is not a set");
 
     uint32_t hash = hash_value(value);
-    XrCoroGC *gc = xr_current_coro_gc();
+    XrCoroGC *gc = set_current_or_owner_gc(set);
 
     int32_t ix = set_lookup(set, value, hash);
     if (ix >= 0) {
@@ -349,7 +357,7 @@ bool xr_set_delete(XrSet *set, XrValue value) {
     // Tombstone the entry (keeps its slot so order is preserved) and mark the
     // ctrl slot DELETED so probing skips past it.
     XrSetEntry *e = &set->entries[ix];
-    xr_set_release_stored_entry(set, e, xr_current_coro_gc());
+    xr_set_release_stored_entry(set, e, set_current_or_owner_gc(set));
     e->val_tt = XR_SET_ENTRY_NIL;
     set->indices[slot] = XR_SET_IX_EMPTY;
     xr_swiss_ctrl_set(set->ctrl, set->indices_size, slot, XR_SWISS_CTRL_DELETED);
@@ -378,7 +386,7 @@ void xr_set_clear(XrSet *set) {
     if (xr_set_isdummy(set))
         return;
 
-    XrCoroGC *gc = xr_current_coro_gc();
+    XrCoroGC *gc = set_current_or_owner_gc(set);
     for (uint32_t i = 0; i < set->nentries; i++) {
         XrSetEntry *e = &set->entries[i];
         if (e->val_tt != XR_SET_ENTRY_NIL) {

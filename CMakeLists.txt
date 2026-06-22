@@ -533,9 +533,16 @@ file(GLOB RUNTIME_OBJECT_BUILTINS_SRC "src/runtime/object/builtins/*.c")
 list(APPEND RUNTIME_OBJECT_SRC
     ${RUNTIME_OBJECT_BUILTINS_SRC}
     "src/runtime/object/xarray_vm.c"
+    "src/runtime/object/xmap_vm.c"
 )
 list(REMOVE_DUPLICATES RUNTIME_OBJECT_SRC)
 file(GLOB RUNTIME_CLASS_SRC "src/runtime/class/*.c")
+list(APPEND RUNTIME_CLASS_SRC
+    "src/runtime/class/xinstance_core.c"
+    "src/runtime/class/xinstance_dynamic.c"
+    "src/runtime/class/xinstance_gc.c"
+)
+list(REMOVE_DUPLICATES RUNTIME_CLASS_SRC)
 file(GLOB RUNTIME_CLOSURE_SRC "src/runtime/closure/*.c")
 file(GLOB RUNTIME_SYMBOL_SRC "src/runtime/symbol/*.c")
 file(GLOB CORO_SRC "src/coro/*.c")
@@ -1026,7 +1033,7 @@ if(BUILD_TESTS)
     if(NOT XRAY_HOST_PROCESSOR_COUNT OR XRAY_HOST_PROCESSOR_COUNT LESS 1)
         set(XRAY_HOST_PROCESSOR_COUNT 8)
     endif()
-    set(XRAY_CTEST_DIFF_JOBS 8)
+    set(XRAY_CTEST_DIFF_JOBS 16)
     if(XRAY_HOST_PROCESSOR_COUNT LESS XRAY_CTEST_DIFF_JOBS)
         set(XRAY_CTEST_DIFF_JOBS ${XRAY_HOST_PROCESSOR_COUNT})
     endif()
@@ -1260,7 +1267,8 @@ if(BUILD_TESTS)
     add_test(
         NAME backend_diff
         COMMAND ${CMAKE_COMMAND} -E env
-                XRAY_DIFF_JOBS=${XRAY_CTEST_DIFF_JOBS}
+                XRAY_DIFF_MAX_AUTO_JOBS=${XRAY_CTEST_DIFF_JOBS}
+                XRAY_DIFF_HOT_MAX_AUTO_JOBS=8
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/diff/run_backend_diff.sh
                 $<TARGET_FILE:xray>
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}

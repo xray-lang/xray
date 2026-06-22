@@ -33,6 +33,7 @@
 
 typedef struct XrSet {
     XrGCHeader gc;
+    struct XrCoroGC *owner_gc;
     XR_SET_ABI_FIELDS;
 } XrSet;
 
@@ -42,6 +43,7 @@ typedef struct XrSet {
 /* ========== Basic Operations ========== */
 
 struct XrCoroutine;
+struct XrCoroGC;
 XR_FUNC XrSet *xr_set_new(struct XrCoroutine *coro);
 XR_FUNC XrSet *xr_set_new_with_capacity(struct XrCoroutine *coro, uint32_t capacity);
 XR_FUNC void xr_set_init_inplace(XrSet *set);

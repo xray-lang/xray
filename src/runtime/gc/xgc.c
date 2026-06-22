@@ -45,15 +45,14 @@
  *
  * One entry per GC type. Each callback is optional:
  *
- *   destroy   — release malloc-backed side resources (sweep / fixedgc cleanup)
- *   traverse  — mark GC-traced children at the mark phase
+ *   destroy   — release malloc-backed side resources (RC / fixedgc cleanup)
  *   deep_copy — produce a per-coroutine deep clone (cross-coro send)
  *   to_shared — produce a sysheap shared/refcounted copy (shared store)
  *
- * NULL means "this capability does not apply to this type": it skips
- * the corresponding GC fast path (destroy/traverse) or makes the
- * cross-coroutine dispatcher pass the value through unchanged
- * (deep_copy/to_shared).
+ * NULL means "this capability does not apply to this type": RC/fixedgc
+ * cleanup skips destroy, or the cross-coroutine dispatcher passes the
+ * value through unchanged (deep_copy/to_shared). There is intentionally no
+ * traverse slot: tracing/mark-sweep was removed and RC owns reclamation.
  *
  * Adding a new compile-time GC type is a one-liner here. */
 

@@ -10,6 +10,7 @@
 
 #include "xmap_methods.h"
 #include "xmap.h"
+#include "xmap_vm.h"
 #include "xarray.h"
 #include "xiterator.h"
 #include "xexception.h"

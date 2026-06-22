@@ -31,7 +31,6 @@
 #include "../../base/xmalloc.h"
 #include "xarray.h"
 #include "xtuple.h"
-#include "xiterator.h"
 #include "../class/xclass_system.h"
 #include "../class/xclass.h"
 #include "../gc/xgc_internal.h"
@@ -42,8 +41,6 @@
 #include <stdlib.h>
 #include <math.h>
 #include <stddef.h>
-
-#include "../xvm_call.h"
 
 /* ========== Memory Profiling (optional) ========== */
 #include "../../base/xmem_profiler.h"
@@ -132,6 +129,11 @@ static inline bool map_is_weak(const XrMap *map) {
     return (map->flags & XR_MAP_FLAG_WEAK) != 0;
 }
 
+static inline XrCoroGC *map_current_or_owner_gc(XrMap *map) {
+    XrCoroGC *gc = xr_current_coro_gc();
+    return gc ? gc : (map ? map->owner_gc : NULL);
+}
+
 static XrayIsolate *map_owning_isolate(XrCoroGC *gc) {
     if (gc && gc->owner)
         return gc->owner->isolate;
@@ -191,7 +193,7 @@ static int32_t map_lookup(XrMap *map, XrValue key, uint32_t hash, uint8_t key_tt
 // Grow (and compact away tombstones) to hold at least `min_needed` live entries.
 // Handles the dummy -> first-allocation case too. Returns false on OOM.
 static bool map_resize(XrMap *map, uint32_t min_needed) {
-    XrCoroGC *gc = xr_current_coro_gc();
+    XrCoroGC *gc = map_current_or_owner_gc(map);
     bool was_dummy = xr_map_isdummy(map);
     XrMapEntry *old_entries = was_dummy ? NULL : map->entries;
     uint8_t *old_ctrl = was_dummy ? NULL : map->ctrl;
@@ -333,6 +335,7 @@ bool xr_map_reserve_external(XrMap *map, uint32_t count, struct XrCoroGC *gc) {
     map->nentries = 0;
     map->flags &= ~XR_MAP_FLAG_DUMMY;
     map->flags &= ~XR_MAP_FLAG_NODES_ON_GC;  // malloc-backed
+    map->owner_gc = gc;
     return true;
 }
 
@@ -345,6 +348,7 @@ XrMap *xr_map_new(struct XrCoroutine *coro) {
         return NULL;
 
     xr_gc_header_init_type(&map->gc, XR_TMAP);
+    map->owner_gc = xr_coro_get_coro_gc(coro);
 
     map->count = 0;
     map->nentries = 0;
@@ -385,6 +389,7 @@ void xr_map_init_inplace(XrMap *map, uint32_t capacity_hint) {
     map->ctrl = NULL;
     map->indices = NULL;
     map->entries = NULL;
+    map->owner_gc = NULL;
     map->flags = XR_MAP_FLAG_DUMMY;  // system-heap: arrays via malloc
     map->key_tid = 0;
     map->value_tid = 0;
@@ -402,7 +407,7 @@ void xr_map_set(XrMap *map, XrValue key, XrValue value) {
 
     uint8_t key_tt = get_key_tt(key);
     uint32_t hash = hash_value(key);
-    XrCoroGC *gc = xr_current_coro_gc();
+    XrCoroGC *gc = map_current_or_owner_gc(map);
 
     int32_t ix = map_lookup(map, key, hash, key_tt);
     if (ix >= 0) {
@@ -479,7 +484,7 @@ bool xr_map_delete(XrMap *map, XrValue key) {
     // Tombstone the entry (keeps its slot so order is preserved) and mark the
     // ctrl slot DELETED so probing skips past it.
     XrMapEntry *e = &map->entries[ix];
-    xr_map_release_entry_values(map, e, xr_current_coro_gc());
+    xr_map_release_entry_values(map, e, map_current_or_owner_gc(map));
     e->key_tt = XR_MAP_ENTRY_NIL_KEY;
     map->indices[slot] = XR_MAP_IX_EMPTY;
     xr_swiss_ctrl_set(map->ctrl, map->indices_size, slot, XR_SWISS_CTRL_DELETED);
@@ -508,7 +513,7 @@ void xr_map_clear(XrMap *map) {
     if (xr_map_isdummy(map))
         return;
 
-    XrCoroGC *gc = xr_current_coro_gc();
+    XrCoroGC *gc = map_current_or_owner_gc(map);
     for (uint32_t i = 0; i < map->nentries; i++) {
         XrMapEntry *e = &map->entries[i];
         if (e->key_tt != XR_MAP_ENTRY_NIL_KEY) {
@@ -609,27 +614,6 @@ bool xr_map_has_value(XrMap *map, XrValue value) {
         }
     }
     return false;
-}
-
-void xr_map_foreach(XrayIsolate *isolate, XrMap *map, struct XrClosure *callback) {
-    XR_DCHECK(map != NULL, "xr_map_foreach: NULL map");
-    XR_DCHECK(callback != NULL, "xr_map_foreach: NULL callback");
-    if (xr_map_isdummy(map))
-        return;
-
-    XrValue args[2];
-    for (uint32_t i = 0; i < map->nentries; i++) {
-        XrMapEntry *e = &map->entries[i];
-        if (e->key_tt != XR_MAP_ENTRY_NIL_KEY) {
-            args[0] = e->key;
-            args[1] = e->value;
-            xr_vm_call_closure(isolate, callback, args, 2);
-        }
-    }
-}
-
-XrIterator *xr_map_entries_iterator(XrayIsolate *iso, XrMap *map) {
-    return xr_iterator_new_from_map(xr_current_coro(iso), map);
 }
 
 /* ========== Debug ========== */

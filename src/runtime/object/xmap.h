@@ -37,6 +37,7 @@
 
 typedef struct XrMap {
     XrGCHeader gc;
+    struct XrCoroGC *owner_gc;
     XR_MAP_ABI_FIELDS;
 } XrMap;
 
@@ -111,7 +112,6 @@ static inline XrMapEntry *xr_map_find_string_fast(XrMap *map, XrString *key_str)
 
 /* ========== Basic Operations ========== */
 
-struct XrCoroGC;
 XR_FUNC XrMap *xr_map_new(struct XrCoroutine *coro);
 XR_FUNC XrMap *xr_map_with_capacity(struct XrCoroutine *coro, uint32_t capacity_hint);
 XR_FUNC uint32_t xr_map_purge_weak_target(XrMap *map, XrGCHeader *target,
@@ -137,12 +137,6 @@ XR_FUNC bool xr_map_has_value(XrMap *map, XrValue value);
 XR_FUNC XrArray *xr_map_keys(struct XrCoroutine *coro, XrMap *map);
 XR_FUNC XrArray *xr_map_values(struct XrCoroutine *coro, XrMap *map);
 XR_FUNC XrArray *xr_map_entries(struct XrCoroutine *coro, XrMap *map);
-
-struct XrIterator;
-XR_FUNC struct XrIterator *xr_map_entries_iterator(XrayIsolate *iso, XrMap *map);
-
-struct XrClosure;
-XR_FUNC void xr_map_foreach(XrayIsolate *iso, XrMap *map, struct XrClosure *callback);
 
 /* ========== Debug ========== */
 
