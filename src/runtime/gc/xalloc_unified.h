@@ -64,11 +64,4 @@ static inline void xr_coro_free_blob(XrCoroHeap *heap, void *data) {
     xr_coro_heap_destroy_obj(heap, obj);
 }
 
-// Write barrier for container modifications
-XR_FUNC void xr_coro_write_barrier(struct XrCoroutine *coro, XrObjHeader *parent,
-                                   XrObjHeader *child);
-
-// Back barrier for container bulk modifications
-XR_FUNC void xr_coro_write_barrier_back(struct XrCoroutine *coro, XrObjHeader *obj);
-
 #endif  // XALLOC_UNIFIED_H

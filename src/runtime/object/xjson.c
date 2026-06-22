@@ -109,7 +109,6 @@ bool xr_json_set(XrayIsolate *X, XrJson *json, SymbolId symbol, XrValue value) {
     }
     if (!xr_instance_set_dynamic_field(X, json, (uint16_t) idx, value))
         return false;
-    XR_GC_BARRIER_BACK_SAFE(xr_current_coro_heap(), json);
     return true;
 }
 

@@ -211,8 +211,6 @@ void xr_array_set_direct(XrArray *arr, int index, XrValue value) {
     xr_array_set_element(arr, index, value);
     if (replacing)
         xr_rc_release_value(xr_current_coro_heap(), old);
-    if (XR_ARRAY_IS_GC_TRACED(arr))
-        XR_GC_BARRIER_BACK_SAFE(xr_current_coro_heap(), arr);
 }
 
 void xr_array_set(XrArray *arr, int index, XrValue value) {
@@ -255,8 +253,6 @@ void xr_array_set(XrArray *arr, int index, XrValue value) {
     xr_array_set_element(arr, index, value);
     if (replacing)
         xr_rc_release_value(xr_current_coro_heap(), old);
-    if (XR_ARRAY_IS_GC_TRACED(arr))
-        XR_GC_BARRIER_BACK_SAFE(xr_current_coro_heap(), arr);
 }
 
 int xr_array_size(XrArray *arr) {
@@ -280,8 +276,6 @@ void xr_array_push(XrArray *arr, XrValue value) {
 
     xr_array_set_element(arr, arr->length++, value);
     XR_DCHECK(arr->length <= arr->capacity, "array_push: length > capacity after push");
-    if (XR_ARRAY_IS_GC_TRACED(arr))
-        XR_GC_BARRIER_BACK_SAFE(xr_current_coro_heap(), arr);
 }
 
 XrValue xr_array_pop(XrArray *arr) {
@@ -408,7 +402,6 @@ void xr_array_fill(XrArray *arr, XrValue value, int start, int end) {
             xr_rc_release_value(heap, old);
         }
         XR_ARRAY_MARK_GC_PTRS(arr, value);
-        XR_GC_BARRIER_BACK_SAFE(heap, arr);
         return;
     }
 
@@ -525,7 +518,6 @@ bool xr_array_resize(XrArray *arr, int32_t length, XrValue fill) {
     arr->length = length;
     if (XR_ARRAY_IS_GC_TRACED(arr)) {
         XR_ARRAY_MARK_GC_PTRS(arr, fill);
-        XR_GC_BARRIER_BACK_SAFE(xr_current_coro_heap(), arr);
     }
     return true;
 }

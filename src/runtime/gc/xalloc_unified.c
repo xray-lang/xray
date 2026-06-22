@@ -47,19 +47,6 @@ XrCoroHeap *xr_current_coro_heap(void) {
     return NULL;
 }
 
-void xr_coro_write_barrier(struct XrCoroutine *coro, XrObjHeader *parent, XrObjHeader *child) {
-    /* Retired: RC owns reclamation, no tri-color invariant to maintain. */
-    (void) coro;
-    (void) parent;
-    (void) child;
-}
-
-void xr_coro_write_barrier_back(struct XrCoroutine *coro, XrObjHeader *obj) {
-    /* Retired: RC owns reclamation, no tri-color invariant to maintain. */
-    (void) coro;
-    (void) obj;
-}
-
 XrayIsolate *xr_coro_get_isolate(struct XrCoroutine *coro) {
     return coro ? coro->isolate : NULL;
 }

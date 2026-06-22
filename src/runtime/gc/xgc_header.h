@@ -51,8 +51,8 @@
 #define XGC_ALIGN_SIZE 8
 #define XGC_ALIGN(size) (((size) + XGC_ALIGN_SIZE - 1) & ~(XGC_ALIGN_SIZE - 1))
 
-// Get current time (nanoseconds)
-static inline uint64_t xr_gc_time_ns(void) {
+// Get current time (nanoseconds) for collection statistics.
+static inline uint64_t xr_cycle_time_ns(void) {
     return xr_time_monotonic_ns();
 }
 
@@ -127,7 +127,7 @@ typedef struct XrClass XrClass;
             * object is added to per-coroutine cycle_roots for trial deletion. */
 
 /* extra bits 8-9: trial-deletion color used by the cycle collector
- * (xcycle_gc.c). Living here instead of _rsv so the collector never
+ * (xcycle_collector.c). Living here instead of _rsv so the collector never
  * disturbs the _rsv root-index/sentinel invariant. Owner-thread only:
  * the collector runs on the coroutine's own worker. */
 #define XR_OBJ_CYCLE_COLOR_MASK 0x0300

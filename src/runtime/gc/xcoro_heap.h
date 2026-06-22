@@ -18,9 +18,7 @@
  *     objects never move, C extensions are naturally safe.
  *   - Large objects (>4 KB): individual xr_malloc / os_mmap.
  *
- * Write barriers: retired (no tri-color invariant to maintain).
- * The XR_GC_BARRIER* macros expand to no-ops; kept so container store
- * sites compile unchanged.
+ * Tracing write barriers are retired: reference counting owns reclamation.
  */
 
 #ifndef XCORO_HEAP_H
@@ -58,7 +56,7 @@ struct XrFixedHeap;
  * which itself never frees individual objects.
  *
  * Size classes use EXACT 8-byte granularity — the same alignment the
- * allocator rounds every object up to (XGC_ALIGN_SIZE). Exact classes are
+ * allocator rounds every object up to the heap allocation alignment. Exact classes are
  * mandatory: a freed slot's physical footprint is fixed at its first
  * allocation, and newobj overwrites objsize with the new request on reuse.
  * A coarser granularity would let a larger request pop a smaller freed slot
@@ -91,7 +89,7 @@ static inline int xr_rc_size_class(size_t aligned_size) {
     return (int) (aligned_size / XR_RC_FREE_GRANULARITY) - 1;
 }
 
-/* ========== GC Pointer Set (open-addressing hash set) ========== */
+/* ========== Heap Pointer Set (open-addressing hash set) ========== */
 /*
  * Tracks per-coroutine object registrations that must support O(1)
  * insert/remove on the RC hot path:
@@ -146,11 +144,11 @@ typedef struct XrCoroHeap {
     // reclamation O(live objects) and teardown O(n^2).
     XrGCPtrSet finalize_set;
 
-    // Statistics (cold; surfaced by the gc.* builtins)
-    uint32_t cycle_count;      // Number of explicit gc.collect() calls (no-op cycles)
-    uint32_t object_count;     // Live GC object count (incremental counter)
-    uint64_t gc_time_ns;       // Cumulative GC time (0 under RC)
-    uint64_t last_gc_time_ns;  // Duration of last cycle (0 under RC)
+    // Statistics (cold; surfaced by memory/collection introspection builtins)
+    uint32_t cycle_collect_count;  // Number of cycle collector runs
+    uint32_t object_count;         // Live heap object count (incremental counter)
+    uint64_t cycle_collect_time_ns;
+    uint64_t last_cycle_collect_time_ns;
     uint32_t finalizer_count;  // Total finalizers called
 
     // === RC per-object freelist (RC reclaims small objects) ===
@@ -228,7 +226,7 @@ XR_FUNC void xr_coro_heap_recycler_destroy(XrCoroHeap *heap);
 #define xr_coro_heap_new_typed(heap, type, Type)                                                   \
     ((Type *) ((XrObjHeader *) xr_coro_heap_new_obj((heap), (type), sizeof(Type)) + 1))
 
-// Full GC cycle: runs the Bacon-Rajan trial deletion cycle collector on
+// Cycle collection: runs the Bacon-Rajan trial deletion collector on
 // accumulated cycle_roots, then clears the roots list. Called by gc.collect().
 XR_FUNC void xr_coro_heap_collect_cycles(XrCoroHeap *heap);
 
@@ -236,7 +234,7 @@ XR_FUNC void xr_coro_heap_collect_cycles(XrCoroHeap *heap);
  * so a later allocation of ANY size class can reuse them. Bounds peak
  * retention of long-lived coroutines under shifting size-class loads, where a
  * per-size-class RC freelist alone never lets size B reuse size A's memory.
- * Not on the alloc/free hot path — called from xr_coro_heap_collect_cycles (gc.collect). */
+ * Not on the alloc/free hot path — called from xr_coro_heap_collect_cycles. */
 XR_FUNC void xr_coro_heap_reclaim_empty_blocks(XrCoroHeap *heap);
 
 /* === Cycle collector API === */
@@ -275,7 +273,7 @@ XR_FUNC void xr_cycle_roots_destroy(XrCoroHeap *heap);
  * path performed, so local-variable cycles leaked and stale freelist
  * entries could alias back into cycle_roots).
  *
- * Cycle-root contract (see xcycle_gc.c):
+ * Cycle-root contract (see xcycle_collector.c):
  *   - release that reaches RC==0 destroys the object; rc_destroy_one()
  *     unlinks it from cycle_roots, so no stale pointer survives into the
  *     freelist.
@@ -310,22 +308,6 @@ static inline void xr_rc_release_value(XrCoroHeap *heap, XrValue value) {
         return;
     xr_rc_release(heap, (XrObjHeader *) XR_VALUE_GCPTR(value));
 }
-
-/* ========== Write Barrier API (retired) ==========
- *
- * Tracing is retired: reference counting owns reclamation, so there is no
- * tri-color invariant to maintain on stores. The write-barrier macros are
- * kept as no-ops so the (numerous) container/instance store sites compile
- * unchanged; ownership of stored values is handled by the compiler-inserted
- * dup/drop (xi_arc) and by container-element drop at destruction. */
-
-// GCHeader from object pointer (GCHeader is first field in all xray objects)
-#define XR_OBJ2GC(obj) ((XrObjHeader *) (obj))
-
-#define XR_GC_BARRIER(heap, parent, child) ((void) 0)
-#define XR_GC_BARRIER_BACK(heap, obj) ((void) 0)
-#define XR_GC_BARRIER_VAL(heap, parent_obj, val) ((void) 0)
-#define XR_GC_BARRIER_BACK_SAFE(heap, container_obj) ((void) 0)
 
 /* ========== External Memory Accounting ========== */
 

@@ -315,7 +315,6 @@ bool xr_set_add(XrSet *set, XrValue value) {
         xr_set_prepare_weak_value(set, value, heap);
         xr_rc_release_value(heap, value);
     }
-    XR_GC_BARRIER_BACK_SAFE(heap, set);
     return true;
 }
 

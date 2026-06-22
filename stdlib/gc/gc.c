@@ -62,7 +62,7 @@ static XrValue gc_collect(XrayIsolate *isolate, XrValue *args, int argc) {
     XrCoroHeap *heap = get_heap(isolate);
     if (heap) {
         xr_coro_heap_collect_cycles(heap);
-        return xr_int((int64_t) heap->cycle_count);
+        return xr_int((int64_t) heap->cycle_collect_count);
     }
     return xr_int(0);
 }
@@ -70,7 +70,7 @@ static XrValue gc_collect(XrayIsolate *isolate, XrValue *args, int argc) {
 /* ========== gc.count() ========== */
 
 // Return live memory usage in KB
-static XrValue cycle_count(XrayIsolate *isolate, XrValue *args, int argc) {
+static XrValue gc_live_kb(XrayIsolate *isolate, XrValue *args, int argc) {
     (void) argc;
     (void) args;
     XrCoroHeap *heap = get_heap(isolate);
@@ -84,7 +84,7 @@ static XrValue cycle_count(XrayIsolate *isolate, XrValue *args, int argc) {
 /* ========== gc.countb() ========== */
 
 // Return live memory usage in bytes
-static XrValue cycle_count_bytes(XrayIsolate *isolate, XrValue *args, int argc) {
+static XrValue gc_live_bytes(XrayIsolate *isolate, XrValue *args, int argc) {
     (void) argc;
     (void) args;
     XrCoroHeap *heap = get_heap(isolate);
@@ -134,7 +134,7 @@ static XrValue gc_cycles(XrayIsolate *isolate, XrValue *args, int argc) {
     (void) argc;
     (void) args;
     XrCoroHeap *heap = get_heap(isolate);
-    return heap ? xr_int(heap->cycle_count) : xr_int(0);
+    return heap ? xr_int(heap->cycle_collect_count) : xr_int(0);
 }
 
 /* ========== gc.objects() ========== */
@@ -172,7 +172,7 @@ static XrValue gc_info(XrayIsolate *isolate, XrValue *args, int argc) {
 
     // Automatic cycle collector state
     MAP_SET(map, "running", xr_bool(heap->cycle_collection_disabled == 0));
-    MAP_SET(map, "cycles", xr_int(heap->cycle_count));
+    MAP_SET(map, "cycles", xr_int(heap->cycle_collect_count));
     MAP_SET(map, "finalizerCount", xr_int((int64_t) heap->finalizer_count));
 
     // Region block stats
@@ -201,8 +201,8 @@ XR_DEFINE_BUILTIN(gc_disable, "disable", "(): ()", "Pause the automatic cycle co
 XR_DEFINE_BUILTIN(gc_enable, "enable", "(): ()", "Resume the automatic cycle collector")
 XR_DEFINE_BUILTIN(gc_isrunning, "isrunning", "(): bool",
                   "Check if automatic cycle collection is enabled")
-XR_DEFINE_BUILTIN(cycle_count, "count", "(): float", "Get live memory usage in KB")
-XR_DEFINE_BUILTIN(cycle_count_bytes, "countb", "(): int", "Get live memory usage in bytes")
+XR_DEFINE_BUILTIN(gc_live_kb, "count", "(): float", "Get live memory usage in KB")
+XR_DEFINE_BUILTIN(gc_live_bytes, "countb", "(): int", "Get live memory usage in bytes")
 XR_DEFINE_BUILTIN(gc_objects, "objects", "(): int", "Get live GC object count")
 XR_DEFINE_BUILTIN(gc_cycles, "cycles", "(): int", "Get number of cycle collections run")
 XR_DEFINE_BUILTIN(gc_info, "info", "(): Map", "Get RC-native GC info as Map")
@@ -221,8 +221,8 @@ XR_FUNC XrModule *xr_load_module_gc(XrayIsolate *isolate) {
     XRS_EXPORT(module, isolate, "isrunning", gc_isrunning);
 
     // Statistics
-    XRS_EXPORT(module, isolate, "count", cycle_count);
-    XRS_EXPORT(module, isolate, "countb", cycle_count_bytes);
+    XRS_EXPORT(module, isolate, "count", gc_live_kb);
+    XRS_EXPORT(module, isolate, "countb", gc_live_bytes);
     XRS_EXPORT(module, isolate, "objects", gc_objects);
     XRS_EXPORT(module, isolate, "cycles", gc_cycles);
     XRS_EXPORT(module, isolate, "info", gc_info);

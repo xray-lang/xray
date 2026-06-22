@@ -318,7 +318,7 @@ void xray_isolate_get_stats(XrayIsolate *isolate, size_t *bytes_allocated, int *
             isolate->core_rt ? (size_t) isolate->core_rt->fixed_heap.totalbytes : (size_t) 0;
     if (cycle_count) {
         XrCoroHeap *heap = xr_isolate_get_heap(isolate);
-        *cycle_count = heap ? (int) heap->cycle_count : 0;
+        *cycle_count = heap ? (int) heap->cycle_collect_count : 0;
     }
 }
 
