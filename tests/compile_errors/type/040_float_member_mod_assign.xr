@@ -1,0 +1,14 @@
+class Box {
+    value: float
+
+    constructor() {
+        this.value = 5.0
+    }
+
+    reduce() {
+        this.value %= 2
+    }
+}
+
+let box = new Box()
+box.reduce()

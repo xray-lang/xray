@@ -166,6 +166,32 @@ static void add_index_type_error(XaInferContext *ctx, AstNode *node, XrType *ind
                                &loc);
 }
 
+XR_FUNC bool xa_type_contains_float(XrType *type) {
+    if (!type || XR_TYPE_IS_UNKNOWN(type))
+        return false;
+    if (XR_TYPE_IS_FLOAT(type))
+        return true;
+    if (XR_TYPE_IS_UNION(type)) {
+        for (int i = 0; i < type->union_type.member_count; i++) {
+            if (xa_type_contains_float(type->union_type.members[i]))
+                return true;
+        }
+    }
+    return false;
+}
+
+XR_FUNC void xa_report_float_modulo_error(XaInferContext *ctx, AstNode *node, XrType *left,
+                                          XrType *right) {
+    if (!ctx || !ctx->analyzer || !node)
+        return;
+    XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+    char msg[256];
+    snprintf(msg, sizeof(msg), "modulo operator '%%' requires integer operands, got '%s' and '%s'",
+             xr_type_to_string(left), xr_type_to_string(right));
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH, msg,
+                               &loc);
+}
+
 /* ============================================================================
  * Pass 2: Expression Visitors
  * ============================================================================
@@ -329,6 +355,9 @@ static XrType *binary_arith_pair(int op, XrType *left, XrType *right) {
             return xr_type_new_string(NULL);
     }
 
+    if (op == AST_BINARY_MOD && (XR_TYPE_IS_FLOAT(left) || XR_TYPE_IS_FLOAT(right)))
+        return NULL;
+
     if (XR_TYPE_IS_FLOAT(left) || XR_TYPE_IS_FLOAT(right)) {
         if ((XR_TYPE_IS_FLOAT(left) || XR_TYPE_IS_INT(left)) &&
             (XR_TYPE_IS_FLOAT(right) || XR_TYPE_IS_INT(right))) {
@@ -483,6 +512,12 @@ XrType *xa_visit_binary(XaInferContext *ctx, AstNode *node) {
 
     // Arithmetic: result depends on operand types
     if (XR_TYPE_IS_UNKNOWN(left) || XR_TYPE_IS_UNKNOWN(right)) {
+        return xr_type_new_unknown(NULL);
+    }
+
+    if (node->type == AST_BINARY_MOD &&
+        (xa_type_contains_float(left) || xa_type_contains_float(right))) {
+        xa_report_float_modulo_error(ctx, node, left, right);
         return xr_type_new_unknown(NULL);
     }
 

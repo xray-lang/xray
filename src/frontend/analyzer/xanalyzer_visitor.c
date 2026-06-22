@@ -1558,8 +1558,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
         case AST_COMPOUND_ASSIGNMENT: {
             // Infer value expression so its type is recorded in the side table
             CompoundAssignmentNode *ca = &node->as.compound_assignment;
-            if (ca->value)
-                xa_visit_infer_expr(ctx, ca->value);
+            XrType *ca_value_type = ca->value ? xa_visit_infer_expr(ctx, ca->value) : NULL;
             // Visit object expression for member compound assign (obj.field += ...)
             XrType *ca_obj_type = NULL;
             if (ca->object)
@@ -1577,9 +1576,31 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                 break;
             }
             // Check const/in-param immutability
-            XaSymbol *ca_sym = xa_scope_lookup(ctx->analyzer->current_scope, ca->name);
+            XaSymbol *ca_sym =
+                ca->object ? NULL : xa_scope_lookup(ctx->analyzer->current_scope, ca->name);
             if (ca_sym)
                 ca->symbol_id = ca_sym->id;
+            XrType *ca_target_type = NULL;
+            if (!ca->object && ca_sym)
+                ca_target_type = xa_analyzer_get_type(ctx->analyzer, ca_sym);
+            if (ca->object && ca_obj_type && ca->name) {
+                XaSymbolLinks *class_links = NULL;
+                XrClassInfo *class_info = member_set_class_info(ctx, ca_obj_type, &class_links);
+                if (class_info) {
+                    XaSymbol *field = xa_class_info_lookup_member(class_info, ca->name);
+                    if (field) {
+                        XaSymbolLinks *fl = xa_analyzer_get_links(ctx->analyzer, field);
+                        if (fl && fl->type && !XR_TYPE_IS_UNKNOWN(fl->type))
+                            ca_target_type = member_set_substitute_field_type(
+                                ctx, ca_obj_type, class_links, fl->type);
+                    }
+                }
+            }
+            if (ca->op == TK_MOD_ASSIGN && ca_target_type && ca_value_type &&
+                !XR_TYPE_IS_UNKNOWN(ca_target_type) && !XR_TYPE_IS_UNKNOWN(ca_value_type) &&
+                (xa_type_contains_float(ca_target_type) || xa_type_contains_float(ca_value_type))) {
+                xa_report_float_modulo_error(ctx, node, ca_target_type, ca_value_type);
+            }
             if (ca_sym && ca_sym->is_const) {
                 XrLocation loc = {
                     .file = ctx->file_path, .line = node->line, .column = node->column};
