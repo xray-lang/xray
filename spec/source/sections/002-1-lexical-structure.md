@@ -152,6 +152,7 @@ BinLit ::= '0b' BinDigit (BinDigit | '_')*
 - 千位分隔符 `_` 仅用于可读性，可出现在数字之间任意位置。
 - 字面量默认类型为 `int`（= `int64`）。后缀 `n` 转为 `BigInt`（见 §1.6.3）。
 - 范围：`int64` 表示范围 `[-(2^63), 2^63 - 1]`；溢出在编译期检测。
+- 当整数字面量直接出现在窄整数上下文（变量初始化、赋值、参数、返回值、集合元素等）时，字面量值必须落在目标类型范围内；例如 `let x: int8 = 200` 是编译错误。非字面量表达式在写入窄整数目标时仍按目标宽度窄化并环绕，见 §2.3.1。
 
 ```xray
 42
@@ -514,6 +515,7 @@ BinLit ::= '0b' BinDigit (BinDigit | '_')*
 - Digit separators `_` exist purely for readability and may appear anywhere between digits.
 - Default literal type is `int` (= `int64`). The `n` suffix promotes to `BigInt` (see §1.6.3).
 - Range: `int64` covers `[-(2^63), 2^63 - 1]`; overflow is detected at compile time.
+- When an integer literal appears directly in a narrow-integer context (variable initialization, assignment, argument, return value, collection element, and similar sites), its value must fit the target type; for example, `let x: int8 = 200` is a compile-time error. Non-literal expressions written into narrow integer targets are still narrowed with target-width wrap-around; see §2.3.1.
 
 ```xray
 42

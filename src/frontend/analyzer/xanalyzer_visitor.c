@@ -29,6 +29,123 @@ static const char *json_type_label_local(XrType *type) {
     return xr_type_to_string(type);
 }
 
+static AstNode *unwrap_grouping(AstNode *node) {
+    while (node && node->type == AST_GROUPING)
+        node = node->as.grouping;
+    return node;
+}
+
+static bool extract_contextual_int_literal(AstNode *node, int64_t *out_value) {
+    node = unwrap_grouping(node);
+    if (!node || !out_value)
+        return false;
+
+    if (node->type == AST_LITERAL_INT) {
+        *out_value = node->as.literal.raw_value.int_val;
+        return true;
+    }
+
+    if (node->type != AST_UNARY_NEG)
+        return false;
+
+    AstNode *operand = unwrap_grouping(node->as.unary.operand);
+    if (!operand || operand->type != AST_LITERAL_INT)
+        return false;
+
+    int64_t raw = operand->as.literal.raw_value.int_val;
+    if (raw == INT64_MIN)
+        return false;
+    *out_value = -raw;
+    return true;
+}
+
+static const char *int_range_label(uint8_t native_width) {
+    switch (native_width) {
+        case XR_NATIVE_I8:
+            return "-128..127";
+        case XR_NATIVE_U8:
+            return "0..255";
+        case XR_NATIVE_I16:
+            return "-32768..32767";
+        case XR_NATIVE_U16:
+            return "0..65535";
+        case XR_NATIVE_I32:
+            return "-2147483648..2147483647";
+        case XR_NATIVE_U32:
+            return "0..4294967295";
+        case XR_NATIVE_U64:
+            return "0..18446744073709551615";
+        default:
+            return NULL;
+    }
+}
+
+static const char *int_native_width_label(uint8_t native_width) {
+    switch (native_width) {
+        case XR_NATIVE_I8:
+            return "int8";
+        case XR_NATIVE_U8:
+            return "uint8";
+        case XR_NATIVE_I16:
+            return "int16";
+        case XR_NATIVE_U16:
+            return "uint16";
+        case XR_NATIVE_I32:
+            return "int32";
+        case XR_NATIVE_U32:
+            return "uint32";
+        case XR_NATIVE_U64:
+            return "uint64";
+        default:
+            return "int";
+    }
+}
+
+static bool int_literal_fits_native_width(int64_t value, uint8_t native_width) {
+    switch (native_width) {
+        case XR_NATIVE_I8:
+            return value >= INT8_MIN && value <= INT8_MAX;
+        case XR_NATIVE_U8:
+            return value >= 0 && (uint64_t) value <= UINT8_MAX;
+        case XR_NATIVE_I16:
+            return value >= INT16_MIN && value <= INT16_MAX;
+        case XR_NATIVE_U16:
+            return value >= 0 && (uint64_t) value <= UINT16_MAX;
+        case XR_NATIVE_I32:
+            return value >= INT32_MIN && value <= INT32_MAX;
+        case XR_NATIVE_U32:
+            return value >= 0 && (uint64_t) value <= UINT32_MAX;
+        case XR_NATIVE_U64:
+            return value >= 0;
+        default:
+            return true;
+    }
+}
+
+static void check_contextual_int_literal_range(XaInferContext *ctx, AstNode *node,
+                                               XrType *target_type) {
+    if (!ctx || !ctx->analyzer || !node || !target_type || !XR_TYPE_IS_INT(target_type))
+        return;
+
+    uint8_t native_width = target_type->native_width;
+    const char *range = int_range_label(native_width);
+    if (!range)
+        return;
+
+    int64_t value = 0;
+    if (!extract_contextual_int_literal(node, &value))
+        return;
+    if (int_literal_fits_native_width(value, native_width))
+        return;
+
+    XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+    char msg[256];
+    snprintf(msg, sizeof(msg), "Integer literal %lld is out of range for type '%s' (expected %s)",
+             (long long) value, int_native_width_label(native_width), range);
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH, msg,
+                               &loc);
+}
+
 static int json_field_index_local(XrType *type, const char *name) {
     if (!type || !XR_TYPE_IS_JSON(type) || !name || !type->object.field_names)
         return -1;
@@ -1339,13 +1456,16 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
                 elem = ctx->expected_type->container.element_type;
             }
             /* Visit ALL elements to resolve symbol_ids; infer elem type from first. */
+            XrType *saved_expected = ctx->expected_type;
             for (int si = 0; si < node->as.set_literal.count; si++) {
                 if (node->as.set_literal.elements[si]) {
+                    ctx->expected_type = elem;
                     XrType *et = xa_visit_infer_expr(ctx, node->as.set_literal.elements[si]);
                     if (!elem && si == 0)
                         elem = et;
                 }
             }
+            ctx->expected_type = saved_expected;
             if (!elem)
                 elem = xr_type_new_unknown(NULL);
             result = xr_type_new_set(ctx->analyzer->isolate, elem);
@@ -1482,6 +1602,8 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
     if (result && XR_TYPE_IS_UNKNOWN(result)) {
         ctx->analyzer->unknown_type_count++;
     }
+
+    check_contextual_int_literal_range(ctx, node, ctx->expected_type);
 
     // Cache inferred type in the analyzer side table for codegen.
     xa_analyzer_set_node_type(ctx->analyzer, node, result);
