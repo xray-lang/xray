@@ -46,16 +46,6 @@ typedef struct CgAotStdlibMethod {
 #include "xstdlib_aot_methods_generated.inc.c"
 
 static const CgAotStdlibMethod g_aot_stdlib_manual_methods[] = {
-    {"url", "encode", 1, "xrt_url_encode", "s", CG_AOT_RET_VALUE, NULL},
-    {"url", "decode", 1, "xrt_url_decode", "s", CG_AOT_RET_VALUE, NULL},
-    {"url", "encodeForm", 1, "xrt_url_encode_form", "s", CG_AOT_RET_VALUE, NULL},
-    {"url", "decodeForm", 1, "xrt_url_decode_form", "s", CG_AOT_RET_VALUE, NULL},
-    {"url", "parse", 1, "xrt_url_parse", "s", CG_AOT_RET_VALUE, NULL},
-    {"url", "format", 1, "xrt_url_format", "v", CG_AOT_RET_VALUE, NULL},
-    {"url", "parseQuery", 1, "xrt_url_parse_query", "s", CG_AOT_RET_VALUE, NULL},
-    {"url", "buildQuery", 1, "xrt_url_build_query", "v", CG_AOT_RET_VALUE, NULL},
-    {"url", "resolve", 2, "xrt_url_resolve", "ss", CG_AOT_RET_VALUE, NULL},
-    {"url", "join", CG_AOT_STDLIB_VARIADIC, "xrt_url_join", "*", CG_AOT_RET_VALUE, NULL},
     {"os", "getenv", 1, "xrt_os_getenv", "s", CG_AOT_RET_VALUE, NULL},
     {"os", "setenv", 2, "xrt_os_setenv", "ss", CG_AOT_RET_VALUE, NULL},
     {"os", "unsetenv", 1, "xrt_os_unsetenv", "s", CG_AOT_RET_VALUE, NULL},
