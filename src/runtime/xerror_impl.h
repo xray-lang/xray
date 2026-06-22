@@ -20,7 +20,7 @@
 
 // XrError is a GC-managed object (can be passed as XrValue)
 struct XrError {
-    XrObjHeader gc;
+    XrObjHeader hdr;
     XrErrorCode code;
     XrString *message;
     int line;

@@ -87,7 +87,7 @@ TEST(batch_add_flush_and_recv_tracks_counts) {
     ASSERT_EQ_INT((int) xr_result_group_length(g), 0);
     ASSERT_EQ_INT((int) xr_result_group_pending_count(g), 0);
 
-    xr_gc_destroy_result_group(&g->gc, NULL);
+    xr_gc_destroy_result_group(&g->hdr, NULL);
     result_group_fixture_cleanup(&f);
 }
 
@@ -109,7 +109,7 @@ TEST(close_flushes_partial_batch) {
     ASSERT_EQ_INT((int) value, 17);
     ASSERT_FALSE(xr_result_group_try_recv(g, &value));
 
-    xr_gc_destroy_result_group(&g->gc, NULL);
+    xr_gc_destroy_result_group(&g->hdr, NULL);
     result_group_fixture_cleanup(&f);
 }
 
@@ -145,7 +145,7 @@ TEST(sched_stats_track_batch_lifecycle) {
     ASSERT_EQ_UINT(xr_sched_metric_load(&f.runtime.sched_stats.result_group_close_count), 1);
     ASSERT_EQ_UINT(xr_sched_metric_load(&f.runtime.sched_stats.result_group_close_wake_count), 0);
 
-    xr_gc_destroy_result_group(&g->gc, NULL);
+    xr_gc_destroy_result_group(&g->hdr, NULL);
     result_group_fixture_cleanup(&f);
 }
 
@@ -173,7 +173,7 @@ TEST(cancel_waiter_unlinks_coroutine_from_result_group) {
     ASSERT_EQ_INT((int) atomic_load(&g->waiter_count), 0);
     ASSERT_EQ_INT(atomic_load(&ext.wait.result_group_token.state), XR_RESULT_GROUP_WAIT_CANCELLED);
 
-    xr_gc_destroy_result_group(&g->gc, NULL);
+    xr_gc_destroy_result_group(&g->hdr, NULL);
     result_group_fixture_cleanup(&f);
 }
 
@@ -208,7 +208,7 @@ TEST(close_without_workers_keeps_waiter_blocked) {
     g->wait_first = NULL;
     g->wait_last = NULL;
     atomic_store(&g->waiter_count, 0);
-    xr_gc_destroy_result_group(&g->gc, NULL);
+    xr_gc_destroy_result_group(&g->hdr, NULL);
     result_group_fixture_cleanup(&f);
 }
 

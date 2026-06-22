@@ -40,8 +40,8 @@
  * runtime keeps `source` NULL (slices borrow via arena lifetime) and does not
  * consult the GC-tracking fields. */
 typedef struct {
-    XrObjHeader gc; /* embedded-at-0 header: same placement as the VM XrArray so
-                     * the two layouts line up (C0 object-header unification) */
+    XrObjHeader hdr; /* embedded-at-0 header: same placement as the VM XrArray so
+                      * the two layouts line up (C0 object-header unification) */
     XR_ARRAY_ABI_FIELDS;
     const char *adt_enum_name;
     const char *adt_member_name;
@@ -73,7 +73,7 @@ static inline void xrt_coll_make_deterministic(XrObjHeader *h) {
 
 static inline void xrt_array_init_header(xrt_array_t *a, int64_t cap, uint8_t etype,
                                          uint8_t elem_size) {
-    xrt_bump_header_init(&a->gc, XR_TARRAY);
+    xrt_bump_header_init(&a->hdr, XR_TARRAY);
     a->length = 0;
     a->capacity = cap;
     a->source = NULL;
@@ -104,7 +104,7 @@ static inline xrt_array_t *xrt_array_alloc_inline(int64_t cap, uint8_t etype, in
         abort();
     }
     xrt_array_init_header(a, cap, etype, elem_size);
-    xrt_coll_make_deterministic(&a->gc);
+    xrt_coll_make_deterministic(&a->hdr);
     if (data_bytes) {
         a->data =
             (void *) (((uintptr_t) ((char *) a + sizeof(xrt_array_t)) + (XRT_DATA_ALIGN - 1)) &
@@ -263,7 +263,7 @@ static inline XrValue xrt_array_slice_view(XrValue arr, int64_t start, int64_t e
         fprintf(stderr, "xrt_array_slice_view: out of memory\n");
         abort();
     }
-    xrt_bump_header_init(&slice->gc, XR_TARRAY);
+    xrt_bump_header_init(&slice->hdr, XR_TARRAY);
     slice->length = end - start;
     slice->capacity = end - start;
     slice->source = NULL;
@@ -362,7 +362,7 @@ static inline XrValue xrt_slice(XrValue source, XrValue start_value, XrValue end
             _cap = 4;                                                                              \
         xrt_array_t *_a = (xrt_array_t *) __builtin_alloca(                                        \
             sizeof(xrt_array_t) + (size_t) _cap * sizeof(XrValue) + (XRT_DATA_ALIGN - 1));         \
-        xrt_bump_header_init(&_a->gc, XR_TARRAY);                                                  \
+        xrt_bump_header_init(&_a->hdr, XR_TARRAY);                                                 \
         _a->length = 0;                                                                            \
         _a->capacity = _cap;                                                                       \
         _a->source = NULL;                                                                         \
@@ -643,8 +643,8 @@ static inline int64_t xrt_swiss_find_empty(const uint8_t *ctrl, int64_t slots, u
  * ========================================================================= */
 
 typedef struct xrt_map_t {
-    XrObjHeader gc; /* embedded-at-0 header: same placement as the VM XrMap (C0
-                     * object-header unification) */
+    XrObjHeader hdr; /* embedded-at-0 header: same placement as the VM XrMap (C0
+                      * object-header unification) */
     XR_MAP_ABI_FIELDS;
 
     /* Typed scalar storage (key_type/value_type != XR_ELEM_ANY). */
@@ -681,7 +681,7 @@ static inline uint32_t xrt_ordered_indices_size_for(uint32_t needed, uint32_t ma
 }
 
 static inline void xrt_map_init_header(xrt_map_t *m) {
-    xrt_bump_header_init(&m->gc, XR_TMAP);
+    xrt_bump_header_init(&m->hdr, XR_TMAP);
     m->count = 0;
     m->nentries = 0;
     m->entries_cap = 0;
@@ -819,7 +819,7 @@ static inline XrValue xrt_map_new_flags(int64_t cap, uint8_t flags) {
         abort();
     }
     xrt_map_init_header(m);
-    xrt_coll_make_deterministic(&m->gc);
+    xrt_coll_make_deterministic(&m->hdr);
     m->flags |= (uint8_t) (flags & XR_MAP_FLAG_WEAK);
     if (cap > 0)
         xrt_map_resize_tagged(m, (uint32_t) cap);
@@ -952,8 +952,8 @@ static inline void xrt_map_set(xrt_map_t *m, XrValue key, XrValue val) {
  * ========================================================================= */
 
 typedef struct xrt_set_t {
-    XrObjHeader gc; /* embedded-at-0 header: same placement as the VM XrSet (C0
-                     * object-header unification) */
+    XrObjHeader hdr; /* embedded-at-0 header: same placement as the VM XrSet (C0
+                      * object-header unification) */
     XR_SET_ABI_FIELDS;
 
     /* Typed scalar storage (elem_type != XR_ELEM_ANY). */
@@ -969,7 +969,7 @@ typedef struct xrt_set_t {
 } xrt_set_t;
 
 static inline void xrt_set_init_header(xrt_set_t *s, uint8_t elem_type) {
-    xrt_bump_header_init(&s->gc, XR_TSET);
+    xrt_bump_header_init(&s->hdr, XR_TSET);
     s->count = 0;
     s->nentries = 0;
     s->entries_cap = 0;
@@ -1089,7 +1089,7 @@ static inline XrValue xrt_set_new_typed(int64_t cap, uint8_t elem_type) {
         abort();
     }
     xrt_set_init_header(s, elem_type);
-    xrt_coll_make_deterministic(&s->gc);
+    xrt_coll_make_deterministic(&s->hdr);
     if (elem_type == XR_ELEM_ANY) {
         if (cap > 0)
             xrt_set_resize_tagged(s, (uint32_t) cap);

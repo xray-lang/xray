@@ -163,7 +163,7 @@ static bool wake_queue_has_pending(XrWorker *worker) {
 
 static void init_stack_task(XrTask *task, uint8_t state, XrValue result, XrValue error) {
     memset(task, 0, sizeof(*task));
-    xr_obj_header_init_type(&task->gc, XR_TTASK);
+    xr_obj_header_init_type(&task->hdr, XR_TTASK);
     task->result = result;
     task->error = error;
     atomic_store_explicit(&task->state, state, memory_order_relaxed);
@@ -176,7 +176,7 @@ static void init_stack_task(XrTask *task, uint8_t state, XrValue result, XrValue
 
 static bool init_task_array(XrArray *tasks, int capacity) {
     memset(tasks, 0, sizeof(*tasks));
-    xr_obj_header_init_type(&tasks->gc, XR_TARRAY);
+    xr_obj_header_init_type(&tasks->hdr, XR_TARRAY);
     xr_array_init_inplace(tasks, capacity, XR_ELEM_ANY);
     return tasks->data != NULL;
 }

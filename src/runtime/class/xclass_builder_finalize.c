@@ -161,7 +161,7 @@ XrClass *xr_class_builder_finalize(XrClassBuilder *builder) {
         return NULL;
     }
     memset(cls, 0, sizeof(XrClass));
-    xr_obj_header_init_type(&cls->gc, XR_TCLASS);
+    xr_obj_header_init_type(&cls->hdr, XR_TCLASS);
 
     finalize_basic_and_supers(builder, cls);
 

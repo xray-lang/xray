@@ -98,7 +98,7 @@ static XrCoroutine *coro_alloc_lightweight_shell(void) {
     XrCoroutine *coro = (XrCoroutine *) xr_calloc(1, sizeof(XrCoroutine));
     if (!coro)
         return NULL;
-    coro->gc.type = XR_TCOROUTINE;
+    coro->hdr.type = XR_TCOROUTINE;
     coro->gc_flags = XR_CORO_GC_LIGHTWEIGHT;
     return coro;
 }
@@ -432,7 +432,7 @@ static bool xr_coro_init_shell_owner(XrCoroutine *coro, XrayIsolate *X, XrRuntim
     // not the compiler's per-coroutine RC. Mark here (covers every alloc path:
     // pool slab init resets the gc header, so set the flag centrally). dup/drop
     // become no-ops for coroutine handles. See docs/design/706.
-    XR_OBJ_SET_FLAG(&coro->gc, XR_OBJ_MANAGED);
+    XR_OBJ_SET_FLAG(&coro->hdr, XR_OBJ_MANAGED);
     coro->schedule_count = 1;
     coro->spawn_burst_count = 0;
     coro->core = core;

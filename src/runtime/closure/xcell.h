@@ -36,7 +36,7 @@
  * runtime's xrt_cell_t so both backends keep an identical cell layout.
  */
 typedef struct XrCell {
-    XrObjHeader gc;  // GC header, type = XR_TCELL
+    XrObjHeader hdr;  // object header, type = XR_TCELL
     XR_CELL_ABI_FIELDS;
 } XrCell;
 

@@ -380,7 +380,7 @@ XrWorkQueue *xr_work_queue_new(XrRuntimeCore *core, XrRuntime *scheduler, uint32
 
     /* Atomic shared-RC like `shared const`: the compiler tracks the handle and
      * the last drop frees. NOT XR_OBJ_MANAGED (that no-ops drop -> leak). */
-    xr_shared_set_refc(&q->gc, 1);
+    xr_shared_set_refc(&q->hdr, 1);
     q->shard_count = shard_count;
     q->initial_capacity = shard_capacity;
     atomic_store_explicit(&q->next_shard, 0, memory_order_relaxed);

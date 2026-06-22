@@ -344,7 +344,7 @@ XrValue xr_deep_copy_closure_with_ctx(XrCopyContext *ctx, XrObjHeader *obj) {
     new_closure->proto = closure->proto;
     new_closure->upval_count = closure->upval_count;
     if (ctx->dst_coro_gc)
-        XR_OBJ_SET_FLAG(&new_closure->gc, XR_OBJ_CYCLE_CANDIDATE);
+        XR_OBJ_SET_FLAG(&new_closure->hdr, XR_OBJ_CYCLE_CANDIDATE);
     for (uint16_t i = 0; i < new_closure->upval_count; i++)
         new_closure->upvals[i] = XR_NULL_VAL;
 
@@ -371,7 +371,7 @@ XrValue xr_deep_copy_cell_with_ctx(XrCopyContext *ctx, XrObjHeader *obj) {
     if (!new_cell)
         return XR_NULL_VAL;
     if (ctx->dst_coro_gc)
-        XR_OBJ_SET_FLAG(&new_cell->gc, XR_OBJ_CYCLE_CANDIDATE);
+        XR_OBJ_SET_FLAG(&new_cell->hdr, XR_OBJ_CYCLE_CANDIDATE);
     new_cell->value = XR_NULL_VAL;
 
     XrValue result = XR_FROM_PTR(new_cell);
@@ -852,8 +852,8 @@ XrValue xr_to_shared_array(struct XrayIsolate *X, XrObjHeader *obj) {
     if (!new_arr)
         return XR_NULL_VAL;
     xr_array_init_inplace(new_arr, length > 0 ? length : 4, array->elem_type);
-    XR_OBJ_SET_STORAGE(&new_arr->gc, XR_OBJ_STORAGE_SHARED);
-    xr_shared_set_refc(&new_arr->gc, 1);
+    XR_OBJ_SET_STORAGE(&new_arr->hdr, XR_OBJ_STORAGE_SHARED);
+    xr_shared_set_refc(&new_arr->hdr, 1);
     if (array->elem_type == XR_ELEM_ANY) {
         XrValue *src = (XrValue *) array->data;
         for (int32_t i = 0; i < length; i++)
@@ -882,8 +882,8 @@ XrValue xr_to_shared_map(struct XrayIsolate *X, XrObjHeader *obj) {
         new_map->flags |= XR_MAP_FLAG_WEAK;
     new_map->key_tid = map->key_tid;
     new_map->value_tid = map->value_tid;
-    XR_OBJ_SET_STORAGE(&new_map->gc, XR_OBJ_STORAGE_SHARED);
-    xr_shared_set_refc(&new_map->gc, 1);
+    XR_OBJ_SET_STORAGE(&new_map->hdr, XR_OBJ_STORAGE_SHARED);
+    xr_shared_set_refc(&new_map->hdr, 1);
     if (!(map->flags & XR_MAP_FLAG_WEAK) && !xr_map_isdummy(map)) {
         for (uint32_t i = 0; i < map->nentries; i++) {
             XrMapEntry *node = &map->entries[i];
@@ -906,8 +906,8 @@ XrValue xr_to_shared_set(struct XrayIsolate *X, XrObjHeader *obj) {
     if (set->flags & XR_SET_FLAG_WEAK)
         new_set->flags |= XR_SET_FLAG_WEAK;
     new_set->elem_tid = set->elem_tid;
-    XR_OBJ_SET_STORAGE(&new_set->gc, XR_OBJ_STORAGE_SHARED);
-    xr_shared_set_refc(&new_set->gc, 1);
+    XR_OBJ_SET_STORAGE(&new_set->hdr, XR_OBJ_STORAGE_SHARED);
+    xr_shared_set_refc(&new_set->hdr, 1);
     if (set->flags & XR_SET_FLAG_WEAK)
         return XR_FROM_PTR(new_set);
     for (uint32_t i = 0; i < set->nentries; i++) {
@@ -928,8 +928,8 @@ XrValue xr_to_shared_instance(struct XrayIsolate *X, XrObjHeader *obj) {
     if (!new_inst)
         return XR_NULL_VAL;
     xr_instance_init_inplace(new_inst, cls);
-    XR_OBJ_SET_STORAGE(&new_inst->gc, XR_OBJ_STORAGE_SHARED);
-    xr_shared_set_refc(&new_inst->gc, 1);
+    XR_OBJ_SET_STORAGE(&new_inst->hdr, XR_OBJ_STORAGE_SHARED);
+    xr_shared_set_refc(&new_inst->hdr, 1);
     uint32_t field_count = xr_class_instance_field_count(cls);
     if (cls->flags & XR_CLASS_DYNAMIC_LAYOUT) {
         uint16_t cap = cls->in_object_capacity;
@@ -983,8 +983,8 @@ XrValue xr_to_shared_closure(struct XrayIsolate *X, XrObjHeader *obj) {
         return XR_NULL_VAL;
     new_cl->proto = closure->proto;
     new_cl->upval_count = 0;  // shared closures don't carry upvals (captured via shared_array)
-    XR_OBJ_SET_STORAGE(&new_cl->gc, XR_OBJ_STORAGE_SHARED);
-    xr_shared_set_refc(&new_cl->gc, 1);
+    XR_OBJ_SET_STORAGE(&new_cl->hdr, XR_OBJ_STORAGE_SHARED);
+    xr_shared_set_refc(&new_cl->hdr, 1);
     return XR_FROM_PTR(new_cl);
 }
 

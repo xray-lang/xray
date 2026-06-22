@@ -83,13 +83,13 @@ TEST(array_destroy_releases_child_array) {
     xr_array_push(parent, xr_value_from_array(child));
     /* 0-based RC: a uniquely-owned child reads 0 (push transfers ownership,
      * it does not retain). */
-    ASSERT_EQ_INT(child->gc.refcount, 0);
+    ASSERT_EQ_INT(child->hdr.refcount, 0);
 
     XrCoroGC *gc = test_gc();
     ASSERT_NOT_NULL(gc);
     xr_rc_release_value(gc, xr_value_from_array(parent));
-    ASSERT_TRUE(is_dead(&parent->gc));
-    ASSERT_TRUE(is_dead(&child->gc));
+    ASSERT_TRUE(is_dead(&parent->hdr));
+    ASSERT_TRUE(is_dead(&child->hdr));
     teardown();
 }
 
@@ -100,15 +100,15 @@ TEST(map_destroy_releases_key_and_value) {
     XrArray *value = xr_array_new(main_coro);
 
     xr_map_set(map, xr_value_from_array(key), xr_value_from_array(value));
-    ASSERT_EQ_INT(key->gc.refcount, 0);
-    ASSERT_EQ_INT(value->gc.refcount, 0);
+    ASSERT_EQ_INT(key->hdr.refcount, 0);
+    ASSERT_EQ_INT(value->hdr.refcount, 0);
 
     XrCoroGC *gc = test_gc();
     ASSERT_NOT_NULL(gc);
     xr_rc_release_value(gc, xr_value_from_map(map));
-    ASSERT_TRUE(is_dead(&map->gc));
-    ASSERT_TRUE(is_dead(&key->gc));
-    ASSERT_TRUE(is_dead(&value->gc));
+    ASSERT_TRUE(is_dead(&map->hdr));
+    ASSERT_TRUE(is_dead(&key->hdr));
+    ASSERT_TRUE(is_dead(&value->hdr));
     teardown();
 }
 
@@ -118,13 +118,13 @@ TEST(set_destroy_releases_value) {
     XrArray *child = xr_array_new(main_coro);
 
     ASSERT_TRUE(xr_set_add(set, xr_value_from_array(child)));
-    ASSERT_EQ_INT(child->gc.refcount, 0);
+    ASSERT_EQ_INT(child->hdr.refcount, 0);
 
     XrCoroGC *gc = test_gc();
     ASSERT_NOT_NULL(gc);
     xr_rc_release_value(gc, xr_value_from_set(set));
-    ASSERT_TRUE(is_dead(&set->gc));
-    ASSERT_TRUE(is_dead(&child->gc));
+    ASSERT_TRUE(is_dead(&set->hdr));
+    ASSERT_TRUE(is_dead(&child->hdr));
     teardown();
 }
 
@@ -140,20 +140,20 @@ TEST(weak_map_does_not_retain_key_and_purges_value) {
      * that duplicate without keeping the key alive. */
     xr_rc_retain_value(xr_value_from_array(key));
     xr_map_set(map, xr_value_from_array(key), xr_value_from_array(value));
-    ASSERT_EQ_INT(key->gc.refcount, 0);
+    ASSERT_EQ_INT(key->hdr.refcount, 0);
     ASSERT_EQ_INT(map->count, 1);
-    ASSERT_FALSE(is_dead(&key->gc));
-    ASSERT_FALSE(is_dead(&value->gc));
+    ASSERT_FALSE(is_dead(&key->hdr));
+    ASSERT_FALSE(is_dead(&value->hdr));
 
     XrCoroGC *gc = test_gc();
     ASSERT_NOT_NULL(gc);
     xr_rc_release_value(gc, xr_value_from_array(key));
-    ASSERT_TRUE(is_dead(&key->gc));
-    ASSERT_TRUE(is_dead(&value->gc));
+    ASSERT_TRUE(is_dead(&key->hdr));
+    ASSERT_TRUE(is_dead(&value->hdr));
     ASSERT_EQ_INT(map->count, 0);
 
     xr_rc_release_value(gc, xr_value_from_map(map));
-    ASSERT_TRUE(is_dead(&map->gc));
+    ASSERT_TRUE(is_dead(&map->hdr));
     teardown();
 }
 
@@ -165,18 +165,18 @@ TEST(weak_set_does_not_retain_element) {
 
     xr_rc_retain_value(xr_value_from_array(elem));
     ASSERT_TRUE(xr_set_add(set, xr_value_from_array(elem)));
-    ASSERT_EQ_INT(elem->gc.refcount, 0);
+    ASSERT_EQ_INT(elem->hdr.refcount, 0);
     ASSERT_EQ_INT(set->count, 1);
-    ASSERT_FALSE(is_dead(&elem->gc));
+    ASSERT_FALSE(is_dead(&elem->hdr));
 
     XrCoroGC *gc = test_gc();
     ASSERT_NOT_NULL(gc);
     xr_rc_release_value(gc, xr_value_from_array(elem));
-    ASSERT_TRUE(is_dead(&elem->gc));
+    ASSERT_TRUE(is_dead(&elem->hdr));
     ASSERT_EQ_INT(set->count, 0);
 
     xr_rc_release_value(gc, xr_value_from_set(set));
-    ASSERT_TRUE(is_dead(&set->gc));
+    ASSERT_TRUE(is_dead(&set->hdr));
     teardown();
 }
 
@@ -192,9 +192,9 @@ TEST(tuple_instance_destroy_releases_elements) {
     XrCoroGC *gc = test_gc();
     ASSERT_NOT_NULL(gc);
     xr_rc_release_value(gc, xr_value_from_tuple(tuple));
-    ASSERT_TRUE(is_dead(&tuple->gc));
-    ASSERT_TRUE(is_dead(&left->gc));
-    ASSERT_TRUE(is_dead(&right->gc));
+    ASSERT_TRUE(is_dead(&tuple->hdr));
+    ASSERT_TRUE(is_dead(&left->hdr));
+    ASSERT_TRUE(is_dead(&right->hdr));
     teardown();
 }
 
@@ -216,10 +216,10 @@ TEST(dynamic_instance_destroy_releases_overflow_fields) {
     XrCoroGC *gc = test_gc();
     ASSERT_NOT_NULL(gc);
     xr_rc_release_value(gc, XR_FROM_PTR(inst));
-    ASSERT_TRUE(is_dead(&inst->gc));
-    ASSERT_TRUE(is_dead(&a->gc));
-    ASSERT_TRUE(is_dead(&b->gc));
-    ASSERT_TRUE(is_dead(&c->gc));
+    ASSERT_TRUE(is_dead(&inst->hdr));
+    ASSERT_TRUE(is_dead(&a->hdr));
+    ASSERT_TRUE(is_dead(&b->hdr));
+    ASSERT_TRUE(is_dead(&c->hdr));
     teardown();
 }
 
@@ -237,8 +237,8 @@ TEST(closure_destroy_releases_upvals) {
     XrCoroGC *gc = test_gc();
     ASSERT_NOT_NULL(gc);
     xr_rc_release_value(gc, xr_value_from_closure(closure));
-    ASSERT_TRUE(is_dead(&closure->gc));
-    ASSERT_TRUE(is_dead(&child->gc));
+    ASSERT_TRUE(is_dead(&closure->hdr));
+    ASSERT_TRUE(is_dead(&child->hdr));
 
     xr_vm_proto_free(proto);
     teardown();
@@ -260,12 +260,12 @@ TEST(cell_destroy_and_replace_release_values) {
     XrValue old = cell->value;
     cell->value = xr_value_from_array(second);
     xr_rc_release_value(gc, old);
-    ASSERT_TRUE(is_dead(&first->gc));
-    ASSERT_FALSE(is_dead(&second->gc));
+    ASSERT_TRUE(is_dead(&first->hdr));
+    ASSERT_FALSE(is_dead(&second->hdr));
 
     xr_rc_release_value(gc, XR_FROM_PTR(cell));
-    ASSERT_TRUE(is_dead(&cell->gc));
-    ASSERT_TRUE(is_dead(&second->gc));
+    ASSERT_TRUE(is_dead(&cell->hdr));
+    ASSERT_TRUE(is_dead(&second->hdr));
     teardown();
 }
 
@@ -287,20 +287,20 @@ TEST(closure_cell_cycle_is_collected) {
 
     XrCoroGC *gc = test_gc();
     ASSERT_NOT_NULL(gc);
-    ASSERT_EQ_INT(closure->gc.refcount, 1);
-    ASSERT_EQ_INT(cell->gc.refcount, 1);
+    ASSERT_EQ_INT(closure->hdr.refcount, 1);
+    ASSERT_EQ_INT(cell->hdr.refcount, 1);
 
     xr_rc_release_value(gc, closure_value);
     xr_rc_release_value(gc, cell_value);
-    ASSERT_FALSE(is_dead(&closure->gc));
-    ASSERT_FALSE(is_dead(&cell->gc));
-    ASSERT_EQ_INT(closure->gc.refcount, 0);
-    ASSERT_EQ_INT(cell->gc.refcount, 0);
+    ASSERT_FALSE(is_dead(&closure->hdr));
+    ASSERT_FALSE(is_dead(&cell->hdr));
+    ASSERT_EQ_INT(closure->hdr.refcount, 0);
+    ASSERT_EQ_INT(cell->hdr.refcount, 0);
     ASSERT_TRUE(gc->cycle_root_count >= 2);
 
     xr_coro_gc_fullgc(gc);
-    ASSERT_TRUE(is_dead(&closure->gc));
-    ASSERT_TRUE(is_dead(&cell->gc));
+    ASSERT_TRUE(is_dead(&closure->hdr));
+    ASSERT_TRUE(is_dead(&cell->hdr));
 
     xr_vm_proto_free(proto);
     teardown();

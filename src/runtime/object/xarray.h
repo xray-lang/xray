@@ -68,7 +68,7 @@ XR_FUNC void xr_array_init_inplace(struct XrArray *arr, int capacity, uint8_t el
  *   etc.
  */
 struct XrArray {
-    XrObjHeader gc;
+    XrObjHeader hdr;
     XR_ARRAY_ABI_FIELDS;
     uint8_t data_on_gc_heap;  // VM-only: 1 if data buffer is on Region GC heap (no free needed)
     uint8_t _pad[2];          // Alignment / reserved

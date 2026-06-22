@@ -102,7 +102,7 @@ typedef enum {
 } XrCFuncClass;
 
 typedef struct XrCFunction {
-    XrObjHeader gc;
+    XrObjHeader hdr;
     union {
         XrCFunctionPtr func;
         XrYieldableCFunctionPtr yieldable;

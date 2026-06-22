@@ -262,7 +262,7 @@ XrClass *xr_value_get_class(XrayIsolate *X, XrValue value) {
     XR_DCHECK(X != NULL, "value_get_class: NULL isolate");
 
     /* Resolve the XrObjType. Value types (int/float/bool/null) map to
-     * the enum directly; heap objects read the GC header type tag. */
+     * the enum directly; heap objects read the object header type tag. */
     XrObjType type;
     if (XR_IS_INT(value))
         type = XR_TINT;

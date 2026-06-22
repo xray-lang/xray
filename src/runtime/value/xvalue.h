@@ -46,7 +46,7 @@ typedef double xr_Number;
 // Forward declarations
 #include "../../base/xforward_decl.h"
 
-// GC header
+// Object header
 #include "../gc/xgc_header.h"
 
 /* ========== Platform Detection ========== */

@@ -120,8 +120,8 @@ vmcase(OP_BYTES_NEW) {
                                                   XR_TARRAY);
         if (arr) {
             xr_array_init_inplace(arr, len > 0 ? len : 4, XR_ELEM_U8);
-            XR_OBJ_SET_STORAGE(&arr->gc, XR_OBJ_STORAGE_SHARED);
-            xr_shared_set_refc(&arr->gc, 1);
+            XR_OBJ_SET_STORAGE(&arr->hdr, XR_OBJ_STORAGE_SHARED);
+            xr_shared_set_refc(&arr->hdr, 1);
         }
     } else {
         arr = xr_array_with_capacity_typed(VM_CURRENT_CORO, len > 0 ? len : 0, XR_ELEM_U8);

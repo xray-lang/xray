@@ -42,7 +42,7 @@ typedef struct XrResultGroupBatch {
 } XrResultGroupBatch;
 
 typedef struct XrResultGroup {
-    XrObjHeader gc;
+    XrObjHeader hdr;
     XrAdaptiveMutex lock;
     _Atomic(uint64_t) length;
     _Atomic(uint64_t) pending_count;

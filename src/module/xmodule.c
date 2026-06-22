@@ -170,7 +170,7 @@ XrModule *xr_module_create_native(XrayIsolate *isolate, const char *name) {
     XR_DCHECK(name != NULL, "module_create_native: NULL name");
     XrModule *module =
         (XrModule *) xr_gc_alloc(xr_isolate_get_gc(isolate), sizeof(XrModule), XR_TMODULE);
-    xr_obj_header_init_type(&module->gc, XR_TMODULE);
+    xr_obj_header_init_type(&module->hdr, XR_TMODULE);
 
     module->name = xr_strdup(name);
     module->path = NULL;
@@ -195,7 +195,7 @@ XrModule *xr_module_create_script(XrayIsolate *isolate, const char *name, const 
     XR_DCHECK(name != NULL, "module_create_script: NULL name");
     XrModule *module =
         (XrModule *) xr_gc_alloc(xr_isolate_get_gc(isolate), sizeof(XrModule), XR_TMODULE);
-    xr_obj_header_init_type(&module->gc, XR_TMODULE);
+    xr_obj_header_init_type(&module->hdr, XR_TMODULE);
 
     module->name = xr_strdup(name);
     module->path = xr_strdup(path);

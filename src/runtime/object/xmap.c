@@ -332,7 +332,7 @@ XrMap *xr_map_new(struct XrCoroutine *coro) {
     if (!map)
         return NULL;
 
-    xr_obj_header_init_type(&map->gc, XR_TMAP);
+    xr_obj_header_init_type(&map->hdr, XR_TMAP);
     map->owner_gc = xr_coro_get_coro_gc(coro);
 
     map->count = 0;
@@ -387,7 +387,7 @@ void xr_map_init_inplace(XrMap *map, uint32_t capacity_hint) {
 
 void xr_map_set(XrMap *map, XrValue key, XrValue value) {
     XR_DCHECK(map != NULL, "map_set: NULL map");
-    XR_DCHECK(XR_OBJ_GET_TYPE(&map->gc) == XR_TMAP, "map_set: object is not a map");
+    XR_DCHECK(XR_OBJ_GET_TYPE(&map->hdr) == XR_TMAP, "map_set: object is not a map");
     XR_DCHECK(!XR_IS_NULL(key), "map_set: NULL key");
 
     uint8_t key_tt = get_key_tt(key);
@@ -430,7 +430,7 @@ void xr_map_set(XrMap *map, XrValue key, XrValue value) {
 
 XrValue xr_map_get(XrMap *map, XrValue key, bool *found) {
     XR_DCHECK(map != NULL, "map_get: NULL map");
-    XR_DCHECK(XR_OBJ_GET_TYPE(&map->gc) == XR_TMAP, "map_get: object is not a map");
+    XR_DCHECK(XR_OBJ_GET_TYPE(&map->hdr) == XR_TMAP, "map_get: object is not a map");
 
     uint8_t key_tt = get_key_tt(key);
     uint32_t hash = hash_value(key);
@@ -447,7 +447,7 @@ XrValue xr_map_get(XrMap *map, XrValue key, bool *found) {
 
 bool xr_map_has(XrMap *map, XrValue key) {
     XR_DCHECK(map != NULL, "map_has: NULL map");
-    XR_DCHECK(XR_OBJ_GET_TYPE(&map->gc) == XR_TMAP, "map_has: object is not a map");
+    XR_DCHECK(XR_OBJ_GET_TYPE(&map->hdr) == XR_TMAP, "map_has: object is not a map");
     uint8_t key_tt = get_key_tt(key);
     uint32_t hash = hash_value(key);
     return map_lookup(map, key, hash, key_tt) >= 0;
@@ -455,7 +455,7 @@ bool xr_map_has(XrMap *map, XrValue key) {
 
 bool xr_map_delete(XrMap *map, XrValue key) {
     XR_DCHECK(map != NULL, "map_delete: NULL map");
-    XR_DCHECK(XR_OBJ_GET_TYPE(&map->gc) == XR_TMAP, "map_delete: object is not a map");
+    XR_DCHECK(XR_OBJ_GET_TYPE(&map->hdr) == XR_TMAP, "map_delete: object is not a map");
     if (xr_map_isdummy(map))
         return false;
 

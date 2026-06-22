@@ -103,7 +103,7 @@ typedef enum {
     XR_TRESULTGROUP, /* ResultGroup shared scalar reducer (system heap) */
     XR_TBOOLMAP,     /* AOT-only Map<bool,scalar> 2-slot direct store; boxes as
                       * XR_TAG_MAP (value heap_type stays XR_TMAP) and is
-                      * discriminated from a generic map by this gc.type */
+                      * discriminated from a generic map by this hdr.type */
 } XrObjType;
 
 #endif  // XR_OBJ_HEADER_H

@@ -47,7 +47,7 @@ XrAtomic *xr_atomic_new(XrayIsolate *X, XrAtomicKind kind, int64_t initial) {
     /* Atomic shared-RC: pure cross-coroutine shared data, no executor owner, so
      * the compiler tracks it like `shared const` (dup = atomic incref, last drop
      * frees). NOT XR_OBJ_MANAGED — that would leak the handle (drop no-op). */
-    xr_shared_set_refc(&a->gc, 1);
+    xr_shared_set_refc(&a->hdr, 1);
     a->kind = (uint8_t) kind;
     atomic_store(&a->value, initial);
 

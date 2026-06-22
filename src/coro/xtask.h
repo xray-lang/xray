@@ -136,8 +136,8 @@ typedef struct XrTaskLink {
 /* ========== XrTask - runtime-managed coroutine handle ========== */
 
 typedef struct XrTask {
-    // GC header (must be first field)
-    XrObjHeader gc;  // 16B
+    // Object header (must be first field)
+    XrObjHeader hdr;  // 16B
 
     // Cached result — survives executor recycling
     XrValue result;  // 16B

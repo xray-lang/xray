@@ -8,9 +8,9 @@
  * xarray.c - Dynamic array implementation
  *
  * KEY CONCEPT:
- *   Array objects and element storage both live on Region GC heap.
- *   Element data uses XR_TBLOB (GC header + raw bytes), so GC sweep
- *   preserves the lines. Old data buffers are reclaimed automatically.
+ *   Array objects and element storage both live on the per-coroutine heap.
+ *   Element data uses XR_TBLOB (object header + raw bytes), so release paths
+ *   can account for buffers. Old data buffers are reclaimed automatically.
  *   System heap arrays (shared) still use malloc for element storage.
  *   Slices share backing store with source array (zero-copy).
  */
@@ -83,7 +83,7 @@ XrArray *xr_array_with_capacity_typed(struct XrCoroutine *coro, int capacity,
         return NULL;
     }
 
-    xr_obj_header_init_type(&arr->gc, XR_TARRAY);
+    xr_obj_header_init_type(&arr->hdr, XR_TARRAY);
 
     uint8_t esz = (elem_type < XR_ELEM_COUNT) ? XR_ELEM_SIZES[elem_type] : 8;
     arr->data = NULL;
@@ -119,7 +119,7 @@ XrArray *xr_array_with_capacity_typed(struct XrCoroutine *coro, int capacity,
 }
 
 // Initialize array in-place (for shared arrays on system heap)
-// GC header must be set by caller
+// Object header must be set by caller
 void xr_array_init_inplace(XrArray *arr, int capacity, uint8_t elem_type) {
     if (!arr)
         return;
@@ -161,8 +161,8 @@ XrArray *xr_array_new_shared_core(XrRuntimeCore *core, int capacity) {
     if (!arr)
         return NULL;
     xr_array_init_inplace(arr, capacity > 0 ? capacity : 4, XR_ELEM_ANY);
-    XR_OBJ_SET_STORAGE(&arr->gc, XR_OBJ_STORAGE_SHARED);
-    xr_shared_set_refc(&arr->gc, 1);
+    XR_OBJ_SET_STORAGE(&arr->hdr, XR_OBJ_STORAGE_SHARED);
+    xr_shared_set_refc(&arr->hdr, 1);
     return arr;
 }
 
@@ -189,7 +189,7 @@ XrArray *xr_array_from_values(struct XrCoroutine *coro, XrValue *elements, int c
 
 XrValue xr_array_get(XrArray *arr, int index) {
     XR_DCHECK(arr != NULL, "array_get: NULL array");
-    XR_DCHECK(XR_OBJ_GET_TYPE(&arr->gc) == XR_TARRAY, "array_get: object is not an array");
+    XR_DCHECK(XR_OBJ_GET_TYPE(&arr->hdr) == XR_TARRAY, "array_get: object is not an array");
     // Bounds check
     if (index < 0 || index >= arr->length) {
         return xr_null();
@@ -217,7 +217,7 @@ void xr_array_set_direct(XrArray *arr, int index, XrValue value) {
 
 void xr_array_set(XrArray *arr, int index, XrValue value) {
     XR_DCHECK(arr != NULL, "array_set: NULL array");
-    XR_DCHECK(XR_OBJ_GET_TYPE(&arr->gc) == XR_TARRAY, "array_set: object is not an array");
+    XR_DCHECK(XR_OBJ_GET_TYPE(&arr->hdr) == XR_TARRAY, "array_set: object is not an array");
     int old_length = arr->length;
     // Negative index check
     if (index < 0) {
@@ -268,7 +268,7 @@ int xr_array_size(XrArray *arr) {
 
 void xr_array_push(XrArray *arr, XrValue value) {
     XR_DCHECK(arr != NULL, "array_push: NULL array");
-    XR_DCHECK(XR_OBJ_GET_TYPE(&arr->gc) == XR_TARRAY, "array_push: object is not an array");
+    XR_DCHECK(XR_OBJ_GET_TYPE(&arr->hdr) == XR_TARRAY, "array_push: object is not an array");
     // Slices cannot push
     if (xr_array_is_slice(arr)) {
         return;
@@ -616,7 +616,7 @@ void xr_array_grow(XrArray *arr) {
          * via xr_shared_destroy with a NULL gc, so accounting growth to the
          * pushing coroutine's gc would skew that counter (and underflow the
          * owner on a cross-coro collection point). */
-        if (!XR_OBJ_IS_SHARED(&arr->gc))
+        if (!XR_OBJ_IS_SHARED(&arr->hdr))
             xr_gc_add_external(xr_current_coro_gc(), (int64_t) (new_bytes - old_bytes));
     }
 }
@@ -671,7 +671,7 @@ void xr_array_ensure_capacity(XrArray *arr, int min_capacity) {
          * via xr_shared_destroy with a NULL gc, so accounting growth to the
          * pushing coroutine's gc would skew that counter (and underflow the
          * owner on a cross-coro collection point). */
-        if (!XR_OBJ_IS_SHARED(&arr->gc))
+        if (!XR_OBJ_IS_SHARED(&arr->hdr))
             xr_gc_add_external(xr_current_coro_gc(), (int64_t) (new_bytes - old_bytes));
     }
 }

@@ -33,9 +33,9 @@ XrCell *xr_cell_new(XrayIsolate *isolate, struct XrCoroutine *coro) {
         return NULL;
     }
 
-    xr_obj_header_init_type(&cell->gc, XR_TCELL);
+    xr_obj_header_init_type(&cell->hdr, XR_TCELL);
     if (coro && coro->coro_gc) {
-        XR_OBJ_SET_FLAG(&cell->gc, XR_OBJ_CYCLE_CANDIDATE);
+        XR_OBJ_SET_FLAG(&cell->hdr, XR_OBJ_CYCLE_CANDIDATE);
     }
     cell->value = xr_null();
     return cell;

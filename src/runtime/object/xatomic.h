@@ -53,7 +53,7 @@ typedef enum {
 /* ========== XrAtomic Object Layout ========== */
 
 typedef struct XrAtomic {
-    XrObjHeader gc;         /* type = XR_TATOMIC, storage = SHARED */
+    XrObjHeader hdr;        /* type = XR_TATOMIC, storage = SHARED */
     _Atomic(int64_t) value; /* 64-bit: int64 direct, float64 bit-cast, bool 0/1 */
     uint8_t kind;           /* XrAtomicKind */
 } XrAtomic;

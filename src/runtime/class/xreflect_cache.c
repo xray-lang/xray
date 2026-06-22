@@ -35,7 +35,7 @@ XrReflectCache *xr_reflect_cache_create(XrayIsolate *X, XrClass *klass) {
     // reached yet; xr_reflect_cache_free likewise tolerates NULLs.
     memset(cache, 0, sizeof(*cache));
 
-    xr_obj_header_init_type(&cache->gc, XR_TBLOB);
+    xr_obj_header_init_type(&cache->hdr, XR_TBLOB);
     cache->owner = klass;
     cache->field_count = klass->field_count;
     cache->method_count = klass->method_count;
@@ -59,7 +59,7 @@ XrReflectCache *xr_reflect_cache_create(XrayIsolate *X, XrClass *klass) {
                 xr_isolate_get_gc(X), sizeof(FieldWrapper), XR_TINSTANCE);
             if (!wrapper)
                 goto fail;
-            xr_obj_header_init_type(&wrapper->gc, XR_TINSTANCE);
+            xr_obj_header_init_type(&wrapper->hdr, XR_TINSTANCE);
             wrapper->klass = fieldClass;
             wrapper->metadata.owner = klass;
             wrapper->metadata.field_index = i;
@@ -84,7 +84,7 @@ XrReflectCache *xr_reflect_cache_create(XrayIsolate *X, XrClass *klass) {
                 xr_isolate_get_gc(X), sizeof(MethodWrapper), XR_TINSTANCE);
             if (!wrapper)
                 goto fail;
-            xr_obj_header_init_type(&wrapper->gc, XR_TINSTANCE);
+            xr_obj_header_init_type(&wrapper->hdr, XR_TINSTANCE);
             wrapper->klass = methodClass;
             wrapper->metadata.owner = klass;
             wrapper->metadata.method_index = i;

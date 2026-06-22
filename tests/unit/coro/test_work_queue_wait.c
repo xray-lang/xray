@@ -88,7 +88,7 @@ TEST(cancel_waiter_unlinks_coroutine_from_work_queue) {
     ASSERT_EQ_INT((int) atomic_load(&q->waiter_count), 0);
     ASSERT_EQ_INT(atomic_load(&ext.wait.work_queue_token.state), XR_WORK_QUEUE_WAIT_CANCELLED);
 
-    xr_gc_destroy_work_queue(&q->gc, NULL);
+    xr_gc_destroy_work_queue(&q->hdr, NULL);
     work_queue_fixture_cleanup(&f);
 }
 
@@ -123,7 +123,7 @@ TEST(close_without_workers_keeps_waiter_blocked) {
     q->wait_first = NULL;
     q->wait_last = NULL;
     atomic_store(&q->waiter_count, 0);
-    xr_gc_destroy_work_queue(&q->gc, NULL);
+    xr_gc_destroy_work_queue(&q->hdr, NULL);
     work_queue_fixture_cleanup(&f);
 }
 

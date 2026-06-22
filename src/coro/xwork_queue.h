@@ -40,7 +40,7 @@ typedef struct XrWorkQueueShard {
 } XrWorkQueueShard;
 
 typedef struct XrWorkQueue {
-    XrObjHeader gc;
+    XrObjHeader hdr;
     uint32_t shard_count;
     uint32_t initial_capacity;
     _Atomic(uint32_t) next_shard;

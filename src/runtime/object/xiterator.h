@@ -12,7 +12,7 @@
  *
  * MEMORY LAYOUT (unified class model):
  *   XrInstance header + 0 fields + native body:
- *     XrObjHeader gc          (16B, type = XR_TINSTANCE)
+ *     XrObjHeader hdr          (16B, type = XR_TINSTANCE)
  *     XrClass *klass         (8B,  iteratorClass)
  *     XrIteratorType type    (4B)  ─┐
  *     mode/pad               (4B)   │ native body (40B)
@@ -68,12 +68,12 @@ struct XrClass;
  * compiler always invokes `coll.entriesIterator()` and pulls pairs one by
  * one with hasNext()/next().
  *
- * Layout matches XrInstance (gc + klass + 0 fields) plus a 40-byte native
+ * Layout matches XrInstance (hdr + klass + 0 fields) plus a 40-byte native
  * body holding the iteration state. The runtime instance pointer IS the
  * XrIterator pointer; native_body offset lands directly on `type`.
  */
 typedef struct XrIterator {
-    XrObjHeader gc;         // GC header (type = XR_TINSTANCE)
+    XrObjHeader hdr;        // object header (type = XR_TINSTANCE)
     struct XrClass *klass;  // Points to iteratorClass
     // === Native body (40 bytes, traversed by iterator_body_traverse) ===
     XrIteratorType type;  // iterator kind

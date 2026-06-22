@@ -281,9 +281,9 @@ vmcase(OP_NEWJSON) {
                                                   XR_TINSTANCE);
         if (json) {
             xr_json_init_inplace(json, cls);
-            XR_OBJ_SET_STORAGE(&json->gc, storage_mode);
+            XR_OBJ_SET_STORAGE(&json->hdr, storage_mode);
             if (storage_mode == XR_OBJ_STORAGE_SHARED) {
-                xr_shared_set_refc(&json->gc, 1);
+                xr_shared_set_refc(&json->hdr, 1);
             }
         }
     } else {
@@ -683,7 +683,7 @@ vmcase(OP_SETPROP) {
         int field_index_d = xr_class_lookup_field(inst_s->klass, prop_symbol);
         if (field_index_d < 0) {
             // Adding a new field: forbid on shared objects
-            if (XR_OBJ_GET_STORAGE(&inst_s->gc) == XR_OBJ_STORAGE_SHARED) {
+            if (XR_OBJ_GET_STORAGE(&inst_s->hdr) == XR_OBJ_STORAGE_SHARED) {
                 VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_PROPERTY,
                                  "cannot add field to shared dynamic object");
             }

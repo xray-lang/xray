@@ -213,7 +213,7 @@ struct XrCoroutine *xr_sysheap_alloc_coro(XrSystemHeap *heap) {
     struct XrCoroutine *coro = xr_coro_pool_alloc(heap->coro_pool);
     if (coro) {
         // Set GC type (coroutine objects need correct type identifier)
-        coro->gc.type = XR_TCOROUTINE;
+        coro->hdr.type = XR_TCOROUTINE;
         heap->stats.coro_alloc_count++;
     }
 

@@ -485,8 +485,8 @@ TEST(aot_runtime_copy_context_uses_core_without_isolate) {
     XrArray *copied = xr_value_to_array(transit);
     ASSERT_NOT_NULL(copied);
     ASSERT_TRUE(copied != source);
-    ASSERT_TRUE(XR_OBJ_GET_FLAG(&copied->gc, XR_OBJ_TRANSIT));
-    ASSERT_TRUE(XR_OBJ_IS_SHARED(&copied->gc));
+    ASSERT_TRUE(XR_OBJ_GET_FLAG(&copied->hdr, XR_OBJ_TRANSIT));
+    ASSERT_TRUE(XR_OBJ_IS_SHARED(&copied->hdr));
     ASSERT_EQ_INT((int) copied->length, 3);
     ASSERT_EQ_INT((int) xr_array_get_i64(copied, 0), 11);
     ASSERT_EQ_INT((int) xr_array_get_i64(copied, 1), 22);
@@ -524,7 +524,7 @@ TEST(aot_result_group_uses_runtime_without_isolate) {
     ASSERT_EQ_INT(XR_TO_INT(received), 12);
     ASSERT_FALSE(xr_aot_result_group_try_recv(&ctx, group_value, &received));
 
-    xr_gc_destroy_result_group(&group->gc, NULL);
+    xr_gc_destroy_result_group(&group->hdr, NULL);
     xr_aot_runtime_delete(runtime);
 }
 
@@ -558,7 +558,7 @@ TEST(aot_work_queue_uses_runtime_owner_without_isolate) {
     xr_aot_work_queue_close_sync(queue_value);
     ASSERT_TRUE(XR_TO_BOOL(xr_aot_work_queue_is_closed_sync(queue_value)));
 
-    xr_gc_destroy_work_queue(&queue->gc, NULL);
+    xr_gc_destroy_work_queue(&queue->hdr, NULL);
     xr_aot_runtime_delete(runtime);
 }
 

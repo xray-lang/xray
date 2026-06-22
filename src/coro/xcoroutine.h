@@ -156,7 +156,7 @@ struct XrCoroutine {
     /* ================================================================
      * HOT ZONE (first 64 bytes) — accessed every schedule/yield cycle
      * ================================================================ */
-    XrObjHeader gc;          // 16 bytes: GC header (must be first)
+    XrObjHeader hdr;         // 16 bytes: object header (must be first)
     _Atomic uint32_t flags;  //  4 bytes: state flags (every dispatch)
     /* Relaxed atomic: owner decrements on back-edges; preempt/cancel pokes
      * it to 0 cross-thread (xr_coro_request_yield). A lost poke is benign —

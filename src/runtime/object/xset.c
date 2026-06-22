@@ -234,7 +234,7 @@ XrSet *xr_set_new(struct XrCoroutine *coro) {
     if (!set)
         return NULL;
 
-    xr_obj_header_init_type(&set->gc, XR_TSET);
+    xr_obj_header_init_type(&set->hdr, XR_TSET);
     set->owner_gc = xr_coro_get_coro_gc(coro);
 
     set->count = 0;
@@ -282,7 +282,7 @@ void xr_set_init_inplace(XrSet *set) {
 
 bool xr_set_add(XrSet *set, XrValue value) {
     XR_DCHECK(set != NULL, "set_add: NULL set");
-    XR_DCHECK(XR_OBJ_GET_TYPE(&set->gc) == XR_TSET, "set_add: object is not a set");
+    XR_DCHECK(XR_OBJ_GET_TYPE(&set->hdr) == XR_TSET, "set_add: object is not a set");
 
     uint32_t hash = hash_value(value);
     XrCoroGC *gc = set_current_or_owner_gc(set);
@@ -321,7 +321,7 @@ bool xr_set_add(XrSet *set, XrValue value) {
 
 bool xr_set_has(XrSet *set, XrValue value) {
     XR_DCHECK(set != NULL, "set_has: NULL set");
-    XR_DCHECK(XR_OBJ_GET_TYPE(&set->gc) == XR_TSET, "set_has: object is not a set");
+    XR_DCHECK(XR_OBJ_GET_TYPE(&set->hdr) == XR_TSET, "set_has: object is not a set");
     if (set->count == 0)
         return false;
     return set_lookup(set, value, hash_value(value)) >= 0;
@@ -329,7 +329,7 @@ bool xr_set_has(XrSet *set, XrValue value) {
 
 bool xr_set_delete(XrSet *set, XrValue value) {
     XR_DCHECK(set != NULL, "set_delete: NULL set");
-    XR_DCHECK(XR_OBJ_GET_TYPE(&set->gc) == XR_TSET, "set_delete: object is not a set");
+    XR_DCHECK(XR_OBJ_GET_TYPE(&set->hdr) == XR_TSET, "set_delete: object is not a set");
     if (xr_set_isdummy(set) || set->count == 0)
         return false;
 

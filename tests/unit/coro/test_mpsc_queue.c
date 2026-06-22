@@ -34,7 +34,7 @@ struct XrObjHeader {
 };
 
 struct XrCoroutine {
-    struct XrObjHeader gc;
+    struct XrObjHeader hdr;
     _Atomic uint32_t flags;
     int32_t reductions;
     struct XrCoroutine *sched_link;

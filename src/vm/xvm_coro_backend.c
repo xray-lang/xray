@@ -241,7 +241,7 @@ static XrCoroutine *vm_backend_alloc_shell(XrayIsolate *X, bool use_runtime_pool
             if (!coro)
                 return NULL;
             memset(coro, 0, sizeof(XrCoroutine));
-            coro->gc.type = XR_TCOROUTINE;
+            coro->hdr.type = XR_TCOROUTINE;
             coro->coro_gc = NULL;
         }
     }
