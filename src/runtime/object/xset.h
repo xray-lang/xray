@@ -33,7 +33,7 @@
 
 typedef struct XrSet {
     XrObjHeader hdr;
-    struct XrCoroHeap *owner_gc;
+    struct XrCoroHeap *owner_heap;
     XR_SET_ABI_FIELDS;
 } XrSet;
 

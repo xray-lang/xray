@@ -130,8 +130,8 @@ XR_FUNC void xr_enum_type_init_symbols(XrEnumType *enum_type, void *isolate);
 struct XrObjHeader;
 struct XrCoroHeap;
 
-XR_FUNC void xr_gc_destroy_enum_type(struct XrObjHeader *obj, struct XrCoroHeap *owning_gc);
-XR_FUNC void xr_gc_destroy_enum_value(struct XrObjHeader *obj, struct XrCoroHeap *owning_gc);
+XR_FUNC void xr_gc_destroy_enum_type(struct XrObjHeader *obj, struct XrCoroHeap *owner_heap);
+XR_FUNC void xr_gc_destroy_enum_value(struct XrObjHeader *obj, struct XrCoroHeap *owner_heap);
 
 /* ========== Type Conversion ========== */
 

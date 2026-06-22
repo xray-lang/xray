@@ -311,13 +311,13 @@ void *xray_isolate_get_userdata(XrayIsolate *isolate) {
 
 /* ========== Statistics and Debugging ========== */
 
-void xray_isolate_get_stats(XrayIsolate *isolate, size_t *bytes_allocated, int *gc_count) {
+void xray_isolate_get_stats(XrayIsolate *isolate, size_t *bytes_allocated, int *cycle_count) {
     xray_api_check(isolate != NULL, "xray_isolate_get_stats: NULL isolate");
     if (bytes_allocated)
         *bytes_allocated = isolate->core_rt ? (size_t) isolate->core_rt->gc.totalbytes : (size_t) 0;
-    if (gc_count) {
+    if (cycle_count) {
         XrCoroHeap *heap = xr_isolate_get_heap(isolate);
-        *gc_count = heap ? (int) heap->gc_count : 0;
+        *cycle_count = heap ? (int) heap->cycle_count : 0;
     }
 }
 

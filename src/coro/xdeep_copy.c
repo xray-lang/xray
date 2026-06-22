@@ -56,11 +56,12 @@ static inline int seen_hash_n(void *ptr, int bucket_count) {
     return (int) (xr_hash_int((int) (uintptr_t) ptr) % (unsigned int) bucket_count);
 }
 
-static void copy_context_init_common(XrCopyContext *ctx, XrRuntimeCore *core, XrGC *dst_gc) {
+static void copy_context_init_common(XrCopyContext *ctx, XrRuntimeCore *core,
+                                     XrGC *dst_fixed_heap) {
     XR_DCHECK(ctx != NULL, "copy_context_init: NULL ctx");
     XR_DCHECK(core != NULL, "copy_context_init: NULL runtime core");
     ctx->core = core;
-    ctx->dst_gc = dst_gc ? dst_gc : &core->gc;
+    ctx->dst_fixed_heap = dst_fixed_heap ? dst_fixed_heap : &core->gc;
     ctx->dst_heap = NULL;
     ctx->to_transit = false;
     ctx->buckets = NULL;
@@ -69,14 +70,14 @@ static void copy_context_init_common(XrCopyContext *ctx, XrRuntimeCore *core, Xr
     ctx->arena_head = NULL;
 }
 
-void xr_copy_context_init_core(XrCopyContext *ctx, XrRuntimeCore *core, XrGC *dst_gc) {
-    copy_context_init_common(ctx, core, dst_gc);
+void xr_copy_context_init_core(XrCopyContext *ctx, XrRuntimeCore *core, XrGC *dst_fixed_heap) {
+    copy_context_init_common(ctx, core, dst_fixed_heap);
 }
 
-void xr_copy_context_init(XrCopyContext *ctx, struct XrayIsolate *X, struct XrGC *dst_gc) {
+void xr_copy_context_init(XrCopyContext *ctx, struct XrayIsolate *X, struct XrGC *dst_fixed_heap) {
     XR_DCHECK(X != NULL, "copy_context_init: NULL isolate");
     copy_context_init_common(ctx, xr_isolate_get_runtime_core(X),
-                             dst_gc ? dst_gc : xr_isolate_get_gc(X));
+                             dst_fixed_heap ? dst_fixed_heap : xr_isolate_get_gc(X));
 }
 
 // Channel-transit allocation: coroutine-independent shared object with
@@ -103,7 +104,7 @@ static inline void *copy_ctx_alloc(XrCopyContext *ctx, size_t size, uint8_t type
     if (ctx->dst_heap) {
         return xr_coro_heap_new_obj(ctx->dst_heap, type, size);
     }
-    return xr_gc_alloc(ctx->dst_gc, size, type);
+    return xr_gc_alloc(ctx->dst_fixed_heap, size, type);
 }
 
 void xr_copy_context_cleanup(XrCopyContext *ctx) {
@@ -213,7 +214,7 @@ static void xr_copy_context_record(XrCopyContext *ctx, void *src, XrValue dst) {
 
 XrValue xr_deep_copy_array_with_ctx(XrCopyContext *ctx, XrObjHeader *obj) {
     XrArray *array = (XrArray *) obj;
-    if (!array || !ctx->dst_gc)
+    if (!array || !ctx->dst_fixed_heap)
         return XR_NULL_VAL;
     XrValue cached = xr_copy_context_lookup(ctx, array);
     if (!XR_IS_NULL(cached))
@@ -245,7 +246,7 @@ XrValue xr_deep_copy_array_with_ctx(XrCopyContext *ctx, XrObjHeader *obj) {
         /* Notify destination GC about the external malloc'd data buffer
          * so sweep's sub_external (via xr_gc_destroy_array) balances. */
         if (ctx->dst_heap) {
-            xr_gc_add_external(ctx->dst_heap, (int64_t) alloc_size);
+            xr_coro_heap_add_external(ctx->dst_heap, (int64_t) alloc_size);
         }
     } else {
         new_arr->data = NULL;
@@ -271,7 +272,7 @@ XrValue xr_deep_copy_array_with_ctx(XrCopyContext *ctx, XrObjHeader *obj) {
 
 XrValue xr_deep_copy_map_with_ctx(XrCopyContext *ctx, XrObjHeader *obj) {
     XrMap *map = (XrMap *) obj;
-    if (!map || !ctx->dst_gc)
+    if (!map || !ctx->dst_fixed_heap)
         return XR_NULL_VAL;
     XrValue cached = xr_copy_context_lookup(ctx, map);
     if (!XR_IS_NULL(cached))
@@ -288,7 +289,7 @@ XrValue xr_deep_copy_map_with_ctx(XrCopyContext *ctx, XrObjHeader *obj) {
     new_map->ctrl = NULL;
     new_map->indices = NULL;
     new_map->entries = NULL;
-    new_map->owner_gc = ctx->dst_heap;
+    new_map->owner_heap = ctx->dst_heap;
     new_map->flags = XR_MAP_FLAG_DUMMY;
     if (map->flags & XR_MAP_FLAG_WEAK)
         new_map->flags |= XR_MAP_FLAG_WEAK;
@@ -330,7 +331,7 @@ XrValue xr_deep_copy_map_with_ctx(XrCopyContext *ctx, XrObjHeader *obj) {
 
 XrValue xr_deep_copy_closure_with_ctx(XrCopyContext *ctx, XrObjHeader *obj) {
     XrClosure *closure = (XrClosure *) obj;
-    if (!closure || !ctx->dst_gc)
+    if (!closure || !ctx->dst_fixed_heap)
         return XR_NULL_VAL;
     XrValue cached = xr_copy_context_lookup(ctx, closure);
     if (!XR_IS_NULL(cached))
@@ -361,7 +362,7 @@ XrValue xr_deep_copy_closure_with_ctx(XrCopyContext *ctx, XrObjHeader *obj) {
 
 XrValue xr_deep_copy_cell_with_ctx(XrCopyContext *ctx, XrObjHeader *obj) {
     XrCell *cell = (XrCell *) obj;
-    if (!cell || !ctx->dst_gc)
+    if (!cell || !ctx->dst_fixed_heap)
         return XR_NULL_VAL;
     XrValue cached = xr_copy_context_lookup(ctx, cell);
     if (!XR_IS_NULL(cached))
@@ -384,7 +385,7 @@ XrValue xr_deep_copy_cell_with_ctx(XrCopyContext *ctx, XrObjHeader *obj) {
 
 XrValue xr_deep_copy_set_with_ctx(XrCopyContext *ctx, XrObjHeader *obj) {
     XrSet *set = (XrSet *) obj;
-    if (!set || !ctx->dst_gc)
+    if (!set || !ctx->dst_fixed_heap)
         return XR_NULL_VAL;
     XrValue cached = xr_copy_context_lookup(ctx, set);
     if (!XR_IS_NULL(cached))
@@ -394,7 +395,7 @@ XrValue xr_deep_copy_set_with_ctx(XrCopyContext *ctx, XrObjHeader *obj) {
     if (!new_set)
         return XR_NULL_VAL;
     xr_set_init_inplace(new_set);
-    new_set->owner_gc = ctx->dst_heap;
+    new_set->owner_heap = ctx->dst_heap;
     if (set->flags & XR_SET_FLAG_WEAK)
         new_set->flags |= XR_SET_FLAG_WEAK;
     new_set->elem_tid = set->elem_tid;
@@ -414,7 +415,7 @@ XrValue xr_deep_copy_set_with_ctx(XrCopyContext *ctx, XrObjHeader *obj) {
 
 XrValue xr_deep_copy_instance_with_ctx(XrCopyContext *ctx, XrObjHeader *obj) {
     XrInstance *inst = (XrInstance *) obj;
-    if (!inst || !ctx->dst_gc)
+    if (!inst || !ctx->dst_fixed_heap)
         return XR_NULL_VAL;
     XrValue cached = xr_copy_context_lookup(ctx, inst);
     if (!XR_IS_NULL(cached))
@@ -527,23 +528,23 @@ XrValue xr_deep_copy_with_ctx(XrCopyContext *ctx, XrValue value) {
     return fn ? fn(ctx, obj) : value;
 }
 
-XrValue xr_deep_copy_core(XrRuntimeCore *core, XrValue value, XrGC *dst_gc) {
+XrValue xr_deep_copy_core(XrRuntimeCore *core, XrValue value, XrGC *dst_fixed_heap) {
     XR_DCHECK(core != NULL, "deep_copy_core: NULL runtime core");
     if (xr_value_copy_kind(value) != XR_COPY_DEEP)
         return value;
-    if (!dst_gc)
-        dst_gc = &core->gc;
+    if (!dst_fixed_heap)
+        dst_fixed_heap = &core->gc;
     XrCopyContext ctx;
-    xr_copy_context_init_core(&ctx, core, dst_gc);
+    xr_copy_context_init_core(&ctx, core, dst_fixed_heap);
     XrValue result = xr_deep_copy_with_ctx(&ctx, value);
     xr_copy_context_cleanup(&ctx);
     return result;
 }
 
-XrValue xr_deep_copy(struct XrayIsolate *X, XrValue value, struct XrGC *dst_gc) {
+XrValue xr_deep_copy(struct XrayIsolate *X, XrValue value, struct XrGC *dst_fixed_heap) {
     XR_DCHECK(X != NULL, "deep_copy: NULL isolate");
     return xr_deep_copy_core(xr_isolate_get_runtime_core(X), value,
-                             dst_gc ? dst_gc : xr_isolate_get_gc(X));
+                             dst_fixed_heap ? dst_fixed_heap : xr_isolate_get_gc(X));
 }
 
 XrValue xr_deep_copy_to_transit_core(XrRuntimeCore *core, XrValue value) {
@@ -624,7 +625,7 @@ bool xr_chan_try_move_array_to_transit_core(XrRuntimeCore *core, XrValue value, 
     src->data = NULL;
     src->capacity = 0;
     src->length = 0;
-    xr_gc_sub_external(xr_current_coro_heap(), (int64_t) data_bytes);
+    xr_coro_heap_sub_external(xr_current_coro_heap(), (int64_t) data_bytes);
 
     *out = XR_FROM_PTR(t);
     return true;
@@ -651,10 +652,10 @@ bool xr_chan_try_adopt_array_from_transit_core(XrValue value, struct XrCoroutine
     if (!array_is_movable_scalar(t))
         return false;
 
-    XrCoroHeap *dst_gc = xr_coro_ensure_heap(recv_coro);
-    if (!dst_gc)
+    XrCoroHeap *dst_heap = xr_coro_ensure_heap(recv_coro);
+    if (!dst_heap)
         return false;
-    XrObjHeader *rh = xr_coro_heap_new_obj(dst_gc, XR_TARRAY, sizeof(XrArray));
+    XrObjHeader *rh = xr_coro_heap_new_obj(dst_heap, XR_TARRAY, sizeof(XrArray));
     if (!rh)
         return false; /* OOM: caller falls back to the deep-copy path */
 
@@ -672,7 +673,7 @@ bool xr_chan_try_adopt_array_from_transit_core(XrValue value, struct XrCoroutine
     memset(r->_pad, 0, sizeof(r->_pad));
 
     size_t data_bytes = (size_t) t->elem_size * (size_t) t->capacity;
-    xr_gc_add_external(dst_gc, (int64_t) data_bytes);
+    xr_coro_heap_add_external(dst_heap, (int64_t) data_bytes);
 
     /* Detach the buffer from the transit struct so releasing the last channel
      * reference frees only the now-empty struct, not the adopted buffer. */
@@ -691,7 +692,7 @@ bool xr_chan_try_adopt_array_from_transit(struct XrayIsolate *X, XrValue value,
     return xr_chan_try_adopt_array_from_transit_core(value, recv_coro, out);
 }
 
-XrValue xr_deep_copy_counted_core(XrRuntimeCore *core, XrValue value, XrGC *dst_gc,
+XrValue xr_deep_copy_counted_core(XrRuntimeCore *core, XrValue value, XrGC *dst_fixed_heap,
                                   int *out_count) {
     XR_DCHECK(core != NULL, "deep_copy_counted_core: NULL runtime core");
     if (xr_value_copy_kind(value) != XR_COPY_DEEP) {
@@ -699,10 +700,10 @@ XrValue xr_deep_copy_counted_core(XrRuntimeCore *core, XrValue value, XrGC *dst_
             *out_count = 0;
         return value;
     }
-    if (!dst_gc)
-        dst_gc = &core->gc;
+    if (!dst_fixed_heap)
+        dst_fixed_heap = &core->gc;
     XrCopyContext ctx;
-    xr_copy_context_init_core(&ctx, core, dst_gc);
+    xr_copy_context_init_core(&ctx, core, dst_fixed_heap);
     XrValue result = xr_deep_copy_with_ctx(&ctx, value);
     if (out_count)
         *out_count = ctx.objects_copied;
@@ -710,11 +711,12 @@ XrValue xr_deep_copy_counted_core(XrRuntimeCore *core, XrValue value, XrGC *dst_
     return result;
 }
 
-XrValue xr_deep_copy_counted(struct XrayIsolate *X, XrValue value, struct XrGC *dst_gc,
+XrValue xr_deep_copy_counted(struct XrayIsolate *X, XrValue value, struct XrGC *dst_fixed_heap,
                              int *out_count) {
     XR_DCHECK(X != NULL, "deep_copy_counted: NULL isolate");
     return xr_deep_copy_counted_core(xr_isolate_get_runtime_core(X), value,
-                                     dst_gc ? dst_gc : xr_isolate_get_gc(X), out_count);
+                                     dst_fixed_heap ? dst_fixed_heap : xr_isolate_get_gc(X),
+                                     out_count);
 }
 
 XrValue xr_deep_copy_to_coro_core(XrRuntimeCore *core, XrValue value,
@@ -786,41 +788,42 @@ XrValue xr_deep_copy_to_coro_counted(struct XrayIsolate *X, XrValue value,
                                              out_count);
 }
 
-XrValue xr_deep_copy_array(struct XrayIsolate *X, struct XrArray *array, struct XrGC *dst_gc) {
+XrValue xr_deep_copy_array(struct XrayIsolate *X, struct XrArray *array,
+                           struct XrGC *dst_fixed_heap) {
     XR_DCHECK(X != NULL, "deep_copy_array: NULL isolate");
     if (!array)
         return XR_NULL_VAL;
-    if (!dst_gc)
-        dst_gc = xr_isolate_get_gc(X);
+    if (!dst_fixed_heap)
+        dst_fixed_heap = xr_isolate_get_gc(X);
     XrCopyContext ctx;
-    xr_copy_context_init(&ctx, X, dst_gc);
+    xr_copy_context_init(&ctx, X, dst_fixed_heap);
     XrValue result = xr_deep_copy_array_with_ctx(&ctx, (XrObjHeader *) array);
     xr_copy_context_cleanup(&ctx);
     return result;
 }
 
-XrValue xr_deep_copy_map(struct XrayIsolate *X, struct XrMap *map, struct XrGC *dst_gc) {
+XrValue xr_deep_copy_map(struct XrayIsolate *X, struct XrMap *map, struct XrGC *dst_fixed_heap) {
     XR_DCHECK(X != NULL, "deep_copy_map: NULL isolate");
     if (!map)
         return XR_NULL_VAL;
-    if (!dst_gc)
-        dst_gc = xr_isolate_get_gc(X);
+    if (!dst_fixed_heap)
+        dst_fixed_heap = xr_isolate_get_gc(X);
     XrCopyContext ctx;
-    xr_copy_context_init(&ctx, X, dst_gc);
+    xr_copy_context_init(&ctx, X, dst_fixed_heap);
     XrValue result = xr_deep_copy_map_with_ctx(&ctx, (XrObjHeader *) map);
     xr_copy_context_cleanup(&ctx);
     return result;
 }
 
 XrValue xr_deep_copy_closure(struct XrayIsolate *X, struct XrClosure *closure,
-                             struct XrGC *dst_gc) {
+                             struct XrGC *dst_fixed_heap) {
     XR_DCHECK(X != NULL, "deep_copy_closure: NULL isolate");
     if (!closure)
         return XR_NULL_VAL;
-    if (!dst_gc)
-        dst_gc = xr_isolate_get_gc(X);
+    if (!dst_fixed_heap)
+        dst_fixed_heap = xr_isolate_get_gc(X);
     XrCopyContext ctx;
-    xr_copy_context_init(&ctx, X, dst_gc);
+    xr_copy_context_init(&ctx, X, dst_fixed_heap);
     XrValue result = xr_deep_copy_closure_with_ctx(&ctx, (XrObjHeader *) closure);
     xr_copy_context_cleanup(&ctx);
     return result;

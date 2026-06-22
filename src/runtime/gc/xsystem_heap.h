@@ -11,7 +11,7 @@
  *   Manages objects that outlive individual coroutines.
  *   These objects are NOT subject to per-coroutine GC.
  *
- * VS xcoro_heap (Per-Coroutine GC):
+ * VS xcoro_heap (coroutine heap):
  *   - xcoro_heap: Per-coroutine Region bump + reference counting, freed when coro ends
  *   - xsystem_heap: Global, Arena-allocated (never freed) or ref-counted
  *

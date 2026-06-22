@@ -11,7 +11,7 @@
  * KEY CONCEPT:
  *   XrVMState is the isolate's VM storage host: it embeds the fixed-size
  *   value stack, frame array, exception-handler array, builtin globals,
- *   shared variables, GC counters, defer stack, and VM bookkeeping. Scheduler
+ *   shared variables, Cycle counters, defer stack, and VM bookkeeping. Scheduler
  *   runtime ownership lives on XrayIsolate, not in XrVMState.
  *
  *   IMPORTANT: XrVMState and XrVMContext (xexec_frame.h) are

@@ -14,7 +14,7 @@
 #include "../../base/xmalloc.h"
 #include "../gc/xcoro_heap.h"
 
-void xr_gc_destroy_instance(XrObjHeader *obj, struct XrCoroHeap *owning_gc) {
+void xr_gc_destroy_instance(XrObjHeader *obj, struct XrCoroHeap *owner_heap) {
     if (!obj)
         return;
     XrInstance *inst = (XrInstance *) obj;
@@ -28,13 +28,13 @@ void xr_gc_destroy_instance(XrObjHeader *obj, struct XrCoroHeap *owning_gc) {
             uint32_t field_count = xr_class_instance_field_count(klass);
             uint32_t in_object_count = field_count < cap - 1 ? field_count : cap - 1;
             for (uint32_t i = 0; i < in_object_count; i++)
-                xr_rc_release_value(owning_gc, inst->fields[i]);
+                xr_rc_release_value(owner_heap, inst->fields[i]);
             if (field_count > cap - 1) {
                 XrValue *overflow = (XrValue *) inst->fields[cap - 1].ptr;
                 if (overflow) {
                     uint32_t overflow_count = field_count - (cap - 1);
                     for (uint32_t i = 0; i < overflow_count; i++)
-                        xr_rc_release_value(owning_gc, overflow[i]);
+                        xr_rc_release_value(owner_heap, overflow[i]);
                     int64_t *raw = ((int64_t *) overflow) - 1;
                     xr_free(raw);
                 }
@@ -43,7 +43,7 @@ void xr_gc_destroy_instance(XrObjHeader *obj, struct XrCoroHeap *owning_gc) {
     } else {
         uint32_t field_count = xr_class_instance_field_count(klass);
         for (uint32_t i = 0; i < field_count; i++)
-            xr_rc_release_value(owning_gc, inst->fields[i]);
+            xr_rc_release_value(owner_heap, inst->fields[i]);
     }
 
     XrNativeBodyDesc *desc = klass->native_body;

@@ -44,7 +44,7 @@ static void teardown(void) {
     }
 }
 
-static XrCoroHeap *test_gc(void) {
+static XrCoroHeap *test_heap(void) {
     XrCoroHeap *gc = xr_coro_get_heap(main_coro);
     return gc;
 }
@@ -85,7 +85,7 @@ TEST(array_destroy_releases_child_array) {
      * it does not retain). */
     ASSERT_EQ_INT(child->hdr.refcount, 0);
 
-    XrCoroHeap *gc = test_gc();
+    XrCoroHeap *gc = test_heap();
     ASSERT_NOT_NULL(gc);
     xr_rc_release_value(gc, xr_value_from_array(parent));
     ASSERT_TRUE(is_dead(&parent->hdr));
@@ -103,7 +103,7 @@ TEST(map_destroy_releases_key_and_value) {
     ASSERT_EQ_INT(key->hdr.refcount, 0);
     ASSERT_EQ_INT(value->hdr.refcount, 0);
 
-    XrCoroHeap *gc = test_gc();
+    XrCoroHeap *gc = test_heap();
     ASSERT_NOT_NULL(gc);
     xr_rc_release_value(gc, xr_value_from_map(map));
     ASSERT_TRUE(is_dead(&map->hdr));
@@ -120,7 +120,7 @@ TEST(set_destroy_releases_value) {
     ASSERT_TRUE(xr_set_add(set, xr_value_from_array(child)));
     ASSERT_EQ_INT(child->hdr.refcount, 0);
 
-    XrCoroHeap *gc = test_gc();
+    XrCoroHeap *gc = test_heap();
     ASSERT_NOT_NULL(gc);
     xr_rc_release_value(gc, xr_value_from_set(set));
     ASSERT_TRUE(is_dead(&set->hdr));
@@ -145,7 +145,7 @@ TEST(weak_map_does_not_retain_key_and_purges_value) {
     ASSERT_FALSE(is_dead(&key->hdr));
     ASSERT_FALSE(is_dead(&value->hdr));
 
-    XrCoroHeap *gc = test_gc();
+    XrCoroHeap *gc = test_heap();
     ASSERT_NOT_NULL(gc);
     xr_rc_release_value(gc, xr_value_from_array(key));
     ASSERT_TRUE(is_dead(&key->hdr));
@@ -169,7 +169,7 @@ TEST(weak_set_does_not_retain_element) {
     ASSERT_EQ_INT(set->count, 1);
     ASSERT_FALSE(is_dead(&elem->hdr));
 
-    XrCoroHeap *gc = test_gc();
+    XrCoroHeap *gc = test_heap();
     ASSERT_NOT_NULL(gc);
     xr_rc_release_value(gc, xr_value_from_array(elem));
     ASSERT_TRUE(is_dead(&elem->hdr));
@@ -189,7 +189,7 @@ TEST(tuple_instance_destroy_releases_elements) {
     xr_tuple_set(tuple, 0, xr_value_from_array(left));
     xr_tuple_set(tuple, 1, xr_value_from_array(right));
 
-    XrCoroHeap *gc = test_gc();
+    XrCoroHeap *gc = test_heap();
     ASSERT_NOT_NULL(gc);
     xr_rc_release_value(gc, xr_value_from_tuple(tuple));
     ASSERT_TRUE(is_dead(&tuple->hdr));
@@ -213,7 +213,7 @@ TEST(dynamic_instance_destroy_releases_overflow_fields) {
     ASSERT_TRUE(xr_instance_set_dynamic_field(X, inst, 1, xr_value_from_array(b)));
     ASSERT_TRUE(xr_instance_set_dynamic_field(X, inst, 2, xr_value_from_array(c)));
 
-    XrCoroHeap *gc = test_gc();
+    XrCoroHeap *gc = test_heap();
     ASSERT_NOT_NULL(gc);
     xr_rc_release_value(gc, XR_FROM_PTR(inst));
     ASSERT_TRUE(is_dead(&inst->hdr));
@@ -234,7 +234,7 @@ TEST(closure_destroy_releases_upvals) {
 
     closure->upvals[0] = xr_value_from_array(child);
 
-    XrCoroHeap *gc = test_gc();
+    XrCoroHeap *gc = test_heap();
     ASSERT_NOT_NULL(gc);
     xr_rc_release_value(gc, xr_value_from_closure(closure));
     ASSERT_TRUE(is_dead(&closure->hdr));
@@ -254,7 +254,7 @@ TEST(cell_destroy_and_replace_release_values) {
     ASSERT_NOT_NULL(second);
 
     cell->value = xr_value_from_array(first);
-    XrCoroHeap *gc = test_gc();
+    XrCoroHeap *gc = test_heap();
     ASSERT_NOT_NULL(gc);
 
     XrValue old = cell->value;
@@ -285,7 +285,7 @@ TEST(closure_cell_cycle_is_collected) {
     xr_rc_retain_value(closure_value);
     cell->value = closure_value;
 
-    XrCoroHeap *gc = test_gc();
+    XrCoroHeap *gc = test_heap();
     ASSERT_NOT_NULL(gc);
     ASSERT_EQ_INT(closure->hdr.refcount, 1);
     ASSERT_EQ_INT(cell->hdr.refcount, 1);
@@ -308,7 +308,7 @@ TEST(closure_cell_cycle_is_collected) {
 
 TEST(whole_block_reclaim_returns_empty_blocks) {
     setup();
-    XrCoroHeap *gc = test_gc();
+    XrCoroHeap *gc = test_heap();
     ASSERT_NOT_NULL(gc);
 
     /* Fill several Region blocks with freelistable blobs (256B → ~63 per 16KB

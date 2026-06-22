@@ -41,10 +41,10 @@ XrCell *xr_cell_new(XrayIsolate *isolate, struct XrCoroutine *coro) {
     return cell;
 }
 
-XR_FUNC void xr_gc_destroy_cell(XrObjHeader *obj, XrCoroHeap *owning_gc) {
+XR_FUNC void xr_gc_destroy_cell(XrObjHeader *obj, XrCoroHeap *owner_heap) {
     if (!obj)
         return;
     XrCell *cell = (XrCell *) obj;
-    xr_rc_release_value(owning_gc, cell->value);
+    xr_rc_release_value(owner_heap, cell->value);
     cell->value = xr_null();
 }

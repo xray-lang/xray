@@ -51,12 +51,12 @@ XrClosure *xr_closure_new(XrayIsolate *isolate, XrProto *proto, struct XrCorouti
     return closure;
 }
 
-XR_FUNC void xr_gc_destroy_closure(XrObjHeader *obj, XrCoroHeap *owning_gc) {
+XR_FUNC void xr_gc_destroy_closure(XrObjHeader *obj, XrCoroHeap *owner_heap) {
     if (!obj)
         return;
     XrClosure *closure = (XrClosure *) obj;
     for (uint16_t i = 0; i < closure->upval_count; i++) {
-        xr_rc_release_value(owning_gc, closure->upvals[i]);
+        xr_rc_release_value(owner_heap, closure->upvals[i]);
         closure->upvals[i] = xr_null();
     }
 }

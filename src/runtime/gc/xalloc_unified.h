@@ -5,7 +5,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xalloc_unified.h - Unified allocation API for Per-Coroutine GC
+ * xalloc_unified.h - Unified allocation API for coroutine heap
  *
  * KEY CONCEPT:
  *   Provides unified allocation interface for Arena Mark-Sweep GC.

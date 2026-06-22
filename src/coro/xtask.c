@@ -851,8 +851,8 @@ void xr_task_fire_completion(XrTask *task) {
 
 /* ========== GC Destroy (called by sweep when Task is reclaimed) ========== */
 
-void xr_gc_destroy_task(XrObjHeader *obj, struct XrCoroHeap *owning_gc) {
-    (void) owning_gc;
+void xr_gc_destroy_task(XrObjHeader *obj, struct XrCoroHeap *owner_heap) {
+    (void) owner_heap;
     XrTask *task = (XrTask *) obj;
 
     // Free xr_calloc'd bidirectional link entries

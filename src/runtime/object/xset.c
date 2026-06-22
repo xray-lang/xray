@@ -75,9 +75,9 @@ static inline bool set_is_weak(const XrSet *set) {
     return (set->flags & XR_SET_FLAG_WEAK) != 0;
 }
 
-static inline XrCoroHeap *set_current_or_owner_gc(XrSet *set) {
+static inline XrCoroHeap *set_current_or_owner_heap(XrSet *set) {
     XrCoroHeap *gc = xr_current_coro_heap();
-    return gc ? gc : (set ? set->owner_gc : NULL);
+    return gc ? gc : (set ? set->owner_heap : NULL);
 }
 
 static XrayIsolate *set_owning_isolate(XrCoroHeap *gc) {
@@ -127,7 +127,7 @@ static int32_t set_lookup(XrSet *set, XrValue value, uint32_t hash) {
 // Grow (and compact away tombstones) to hold at least `min_needed` live entries.
 // Handles the dummy -> first-allocation case too. Returns false on OOM.
 static bool set_resize(XrSet *set, uint32_t min_needed) {
-    XrCoroHeap *gc = set_current_or_owner_gc(set);
+    XrCoroHeap *gc = set_current_or_owner_heap(set);
     bool was_dummy = xr_set_isdummy(set);
     XrSetEntry *old_entries = was_dummy ? NULL : set->entries;
     uint8_t *old_ctrl = was_dummy ? NULL : set->ctrl;
@@ -185,7 +185,7 @@ static bool set_resize(XrSet *set, uint32_t min_needed) {
         return false;
     }
     if (!new_on_gc)
-        xr_gc_add_external(gc, (int64_t) (cbytes + ibytes + ebytes));
+        xr_coro_heap_add_external(gc, (int64_t) (cbytes + ibytes + ebytes));
 
     memset(new_ctrl, (int) XR_SWISS_CTRL_EMPTY, cbytes);
     for (uint32_t i = 0; i < new_isize; i++)
@@ -203,7 +203,7 @@ static bool set_resize(XrSet *set, uint32_t min_needed) {
     set->entries_cap = new_ecap;
     set->nentries = w;
     set->flags &= ~XR_SET_FLAG_DUMMY;
-    set->owner_gc = gc;
+    set->owner_heap = gc;
     if (new_on_gc)
         set->flags |= XR_SET_FLAG_NODES_ON_GC;
     else
@@ -218,9 +218,9 @@ static bool set_resize(XrSet *set, uint32_t min_needed) {
             xr_free(old_ctrl);
             xr_free(old_indices);
             xr_free(old_entries);
-            xr_gc_sub_external(gc, (int64_t) ((size_t) old_isize + XR_SWISS_GROUP +
-                                              sizeof(int32_t) * (size_t) old_isize +
-                                              sizeof(XrSetEntry) * (size_t) old_ecap));
+            xr_coro_heap_sub_external(gc, (int64_t) ((size_t) old_isize + XR_SWISS_GROUP +
+                                                     sizeof(int32_t) * (size_t) old_isize +
+                                                     sizeof(XrSetEntry) * (size_t) old_ecap));
         }
     }
     return true;
@@ -235,7 +235,7 @@ XrSet *xr_set_new(struct XrCoroutine *coro) {
         return NULL;
 
     xr_obj_header_init_type(&set->hdr, XR_TSET);
-    set->owner_gc = xr_coro_get_heap(coro);
+    set->owner_heap = xr_coro_get_heap(coro);
 
     set->count = 0;
     set->nentries = 0;
@@ -272,7 +272,7 @@ void xr_set_init_inplace(XrSet *set) {
     set->ctrl = NULL;
     set->indices = NULL;
     set->entries = NULL;
-    set->owner_gc = NULL;
+    set->owner_heap = NULL;
     set->flags = XR_SET_FLAG_DUMMY;  // system-heap: arrays via malloc
     set->elem_tid = 0;
     memset(set->_pad, 0, sizeof(set->_pad));
@@ -285,7 +285,7 @@ bool xr_set_add(XrSet *set, XrValue value) {
     XR_DCHECK(XR_OBJ_GET_TYPE(&set->hdr) == XR_TSET, "set_add: object is not a set");
 
     uint32_t hash = hash_value(value);
-    XrCoroHeap *gc = set_current_or_owner_gc(set);
+    XrCoroHeap *gc = set_current_or_owner_heap(set);
 
     int32_t ix = set_lookup(set, value, hash);
     if (ix >= 0) {
@@ -342,7 +342,7 @@ bool xr_set_delete(XrSet *set, XrValue value) {
     // Tombstone the entry (keeps its slot so order is preserved) and mark the
     // ctrl slot DELETED so probing skips past it.
     XrSetEntry *e = &set->entries[ix];
-    xr_set_release_stored_entry(set, e, set_current_or_owner_gc(set));
+    xr_set_release_stored_entry(set, e, set_current_or_owner_heap(set));
     e->val_tt = XR_SET_ENTRY_NIL;
     set->indices[slot] = XR_SET_IX_EMPTY;
     xr_swiss_ctrl_set(set->ctrl, set->indices_size, slot, XR_SWISS_CTRL_DELETED);
@@ -355,7 +355,7 @@ void xr_set_clear(XrSet *set) {
     if (xr_set_isdummy(set))
         return;
 
-    XrCoroHeap *gc = set_current_or_owner_gc(set);
+    XrCoroHeap *gc = set_current_or_owner_heap(set);
     for (uint32_t i = 0; i < set->nentries; i++) {
         XrSetEntry *e = &set->entries[i];
         if (e->val_tt != XR_SET_ENTRY_NIL) {
@@ -531,28 +531,28 @@ bool xr_set_is_superset(XrSet *set1, XrSet *set2) {
 
 /* ========== GC Integration ========== */
 
-void xr_gc_destroy_set(XrObjHeader *obj, struct XrCoroHeap *owning_gc) {
+void xr_gc_destroy_set(XrObjHeader *obj, struct XrCoroHeap *owner_heap) {
     XrSet *set = (XrSet *) obj;
     if (set->flags & XR_SET_FLAG_WEAK_REGISTERED)
-        xr_weak_registry_unregister_set(set_owning_isolate(owning_gc), set);
+        xr_weak_registry_unregister_set(set_owning_isolate(owner_heap), set);
     if (!xr_set_isdummy(set) && set->entries) {
         for (uint32_t i = 0; i < set->nentries; i++) {
             XrSetEntry *e = &set->entries[i];
             if (e->val_tt != XR_SET_ENTRY_NIL)
-                xr_set_release_stored_entry(set, e, owning_gc);
+                xr_set_release_stored_entry(set, e, owner_heap);
         }
         size_t bytes = (size_t) set->indices_size + XR_SWISS_GROUP +
                        sizeof(int32_t) * (size_t) set->indices_size +
                        sizeof(XrSetEntry) * (size_t) set->entries_cap;
         if (set->flags & XR_SET_FLAG_NODES_ON_GC) {
-            xr_coro_free_blob(owning_gc, set->ctrl);
-            xr_coro_free_blob(owning_gc, set->indices);
-            xr_coro_free_blob(owning_gc, set->entries);
+            xr_coro_free_blob(owner_heap, set->ctrl);
+            xr_coro_free_blob(owner_heap, set->indices);
+            xr_coro_free_blob(owner_heap, set->entries);
         } else {
             xr_free(set->ctrl);
             xr_free(set->indices);
             xr_free(set->entries);
-            xr_gc_sub_external(owning_gc, (int64_t) bytes);
+            xr_coro_heap_sub_external(owner_heap, (int64_t) bytes);
         }
         set->ctrl = NULL;
         set->indices = NULL;

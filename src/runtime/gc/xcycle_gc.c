@@ -233,7 +233,7 @@ XR_FUNC void xr_cycle_add_root(XrCoroHeap *gc, XrObjHeader *obj) {
      * releases child references, which can call back here; cycle_collecting
      * suppresses a nested collection (and the threshold check) until the
      * current one finishes. */
-    if (!gc->cycle_collecting && !gc->gc_disabled &&
+    if (!gc->cycle_collecting && !gc->cycle_collection_disabled &&
         gc->cycle_root_count >= gc->cycle_collect_threshold)
         xr_coro_heap_collect_cycles(gc);
 }
@@ -376,7 +376,7 @@ XR_FUNC void xr_coro_heap_collect_cycles(XrCoroHeap *gc) {
     }
 
     gc->cycle_collecting = 1;
-    gc->gc_count++;
+    gc->cycle_count++;
 
     uint32_t n = gc->cycle_root_count;
     CycleVec R = {0};

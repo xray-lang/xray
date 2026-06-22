@@ -48,7 +48,7 @@
 /* ========== GC Allocation ========== */
 #include "../src/runtime/gc/xgc.h"
 
-/* ========== Per-Coroutine GC (mark API for traverse callbacks) ========== */
+/* ========== coroutine heap (mark API for traverse callbacks) ========== */
 #include "../src/runtime/gc/xcoro_heap.h"
 
 /* ========== Error Reporting ========== */

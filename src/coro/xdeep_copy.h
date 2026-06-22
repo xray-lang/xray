@@ -56,18 +56,19 @@ static inline bool xr_value_needs_copy(XrValue value) {
     return xr_value_copy_kind(value) == XR_COPY_DEEP;
 }
 
-XR_FUNC XrValue xr_deep_copy(struct XrayIsolate *X, XrValue value, struct XrGC *dst_gc);
-XR_FUNC XrValue xr_deep_copy_counted(struct XrayIsolate *X, XrValue value, struct XrGC *dst_gc,
-                                     int *out_count);
+XR_FUNC XrValue xr_deep_copy(struct XrayIsolate *X, XrValue value, struct XrGC *dst_fixed_heap);
+XR_FUNC XrValue xr_deep_copy_counted(struct XrayIsolate *X, XrValue value,
+                                     struct XrGC *dst_fixed_heap, int *out_count);
 XR_FUNC XrValue xr_deep_copy_to_coro(struct XrayIsolate *X, XrValue value,
                                      struct XrCoroutine *dst_coro);
 XR_FUNC XrValue xr_deep_copy_to_coro_counted(struct XrayIsolate *X, XrValue value,
                                              struct XrCoroutine *dst_coro, int *out_count);
 XR_FUNC XrValue xr_deep_copy_array(struct XrayIsolate *X, struct XrArray *array,
-                                   struct XrGC *dst_gc);
-XR_FUNC XrValue xr_deep_copy_map(struct XrayIsolate *X, struct XrMap *map, struct XrGC *dst_gc);
+                                   struct XrGC *dst_fixed_heap);
+XR_FUNC XrValue xr_deep_copy_map(struct XrayIsolate *X, struct XrMap *map,
+                                 struct XrGC *dst_fixed_heap);
 XR_FUNC XrValue xr_deep_copy_closure(struct XrayIsolate *X, struct XrClosure *closure,
-                                     struct XrGC *dst_gc);
+                                     struct XrGC *dst_fixed_heap);
 
 typedef struct XrSeenEntry {
     void *src;
@@ -87,7 +88,7 @@ struct XrCoroHeap;
 
 typedef struct XrCopyContext {
     struct XrRuntimeCore *core;
-    struct XrGC *dst_gc;          // fixed GC fallback
+    struct XrGC *dst_fixed_heap;  // fixed heap fallback
     struct XrCoroHeap *dst_heap;  // Region heap (preferred when non-NULL)
     bool to_transit;              // channel-transit copy: sysheap + XR_OBJ_TRANSIT
     XrSeenEntry **buckets;
@@ -97,14 +98,16 @@ typedef struct XrCopyContext {
 } XrCopyContext;
 
 XR_FUNC void xr_copy_context_init_core(XrCopyContext *ctx, struct XrRuntimeCore *core,
-                                       struct XrGC *dst_gc);
-XR_FUNC void xr_copy_context_init(XrCopyContext *ctx, struct XrayIsolate *X, struct XrGC *dst_gc);
+                                       struct XrGC *dst_fixed_heap);
+XR_FUNC void xr_copy_context_init(XrCopyContext *ctx, struct XrayIsolate *X,
+                                  struct XrGC *dst_fixed_heap);
 XR_FUNC void xr_copy_context_cleanup(XrCopyContext *ctx);
 XR_FUNC XrValue xr_deep_copy_with_ctx(XrCopyContext *ctx, XrValue value);
 
-XR_FUNC XrValue xr_deep_copy_core(struct XrRuntimeCore *core, XrValue value, struct XrGC *dst_gc);
+XR_FUNC XrValue xr_deep_copy_core(struct XrRuntimeCore *core, XrValue value,
+                                  struct XrGC *dst_fixed_heap);
 XR_FUNC XrValue xr_deep_copy_counted_core(struct XrRuntimeCore *core, XrValue value,
-                                          struct XrGC *dst_gc, int *out_count);
+                                          struct XrGC *dst_fixed_heap, int *out_count);
 XR_FUNC XrValue xr_deep_copy_to_coro_core(struct XrRuntimeCore *core, XrValue value,
                                           struct XrCoroutine *dst_coro);
 XR_FUNC XrValue xr_deep_copy_to_coro_counted_core(struct XrRuntimeCore *core, XrValue value,

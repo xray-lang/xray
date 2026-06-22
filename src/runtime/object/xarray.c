@@ -604,7 +604,7 @@ void xr_array_grow(XrArray *arr) {
         arr->data = new_data;
         arr->data_on_gc_heap = 0;
         arr->capacity = new_capacity;
-        xr_gc_add_external(xr_current_coro_heap(), (int64_t) new_bytes);
+        xr_coro_heap_add_external(xr_current_coro_heap(), (int64_t) new_bytes);
     } else {
         // System heap path: realloc + external memory accounting
         void *new_data = xr_realloc(arr->data, new_bytes);
@@ -617,7 +617,7 @@ void xr_array_grow(XrArray *arr) {
          * pushing coroutine's gc would skew that counter (and underflow the
          * owner on a cross-coro collection point). */
         if (!XR_OBJ_IS_SHARED(&arr->hdr))
-            xr_gc_add_external(xr_current_coro_heap(), (int64_t) (new_bytes - old_bytes));
+            xr_coro_heap_add_external(xr_current_coro_heap(), (int64_t) (new_bytes - old_bytes));
     }
 }
 
@@ -659,7 +659,7 @@ void xr_array_ensure_capacity(XrArray *arr, int min_capacity) {
         arr->data = new_data;
         arr->data_on_gc_heap = 0;
         arr->capacity = new_capacity;
-        xr_gc_add_external(xr_current_coro_heap(), (int64_t) new_bytes);
+        xr_coro_heap_add_external(xr_current_coro_heap(), (int64_t) new_bytes);
     } else {
         // System heap path: realloc + external memory accounting
         void *new_data = xr_realloc(arr->data, new_bytes);
@@ -672,7 +672,7 @@ void xr_array_ensure_capacity(XrArray *arr, int min_capacity) {
          * pushing coroutine's gc would skew that counter (and underflow the
          * owner on a cross-coro collection point). */
         if (!XR_OBJ_IS_SHARED(&arr->hdr))
-            xr_gc_add_external(xr_current_coro_heap(), (int64_t) (new_bytes - old_bytes));
+            xr_coro_heap_add_external(xr_current_coro_heap(), (int64_t) (new_bytes - old_bytes));
     }
 }
 
@@ -749,21 +749,21 @@ XrArray *xr_array_slice_to_array(struct XrCoroutine *coro, XrArray *slice) {
 
 /* ========== GC Integration ========== */
 
-void xr_gc_destroy_array(XrObjHeader *obj, struct XrCoroHeap *owning_gc) {
+void xr_gc_destroy_array(XrObjHeader *obj, struct XrCoroHeap *owner_heap) {
     XrArray *arr = (XrArray *) obj;
-    xr_array_release_elements(arr, owning_gc);
+    xr_array_release_elements(arr, owner_heap);
     // Only free data if this array owns its buffer (slices borrow it)
     if (arr->data && !xr_array_is_slice(arr)) {
         if (arr->data_on_gc_heap) {
             // GC blob: RC owns reclamation (no sweep), release it explicitly
-            xr_coro_free_blob(owning_gc, arr->data);
+            xr_coro_free_blob(owner_heap, arr->data);
             arr->data = NULL;
         } else {
             // System heap: free and update external memory accounting
             size_t data_bytes = (size_t) arr->elem_size * arr->capacity;
             xr_free(arr->data);
             arr->data = NULL;
-            xr_gc_sub_external(owning_gc, (int64_t) data_bytes);
+            xr_coro_heap_sub_external(owner_heap, (int64_t) data_bytes);
         }
     }
 }

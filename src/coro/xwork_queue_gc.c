@@ -22,8 +22,8 @@ static void work_queue_shard_destroy(XrWorkQueueShard *shard) {
     shard->count = 0;
 }
 
-void xr_gc_destroy_work_queue(XrObjHeader *obj, struct XrCoroHeap *owning_gc) {
-    (void) owning_gc;
+void xr_gc_destroy_work_queue(XrObjHeader *obj, struct XrCoroHeap *owner_heap) {
+    (void) owner_heap;
     if (!obj)
         return;
     XrWorkQueue *q = (XrWorkQueue *) obj;

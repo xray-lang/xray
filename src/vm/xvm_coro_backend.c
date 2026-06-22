@@ -296,7 +296,7 @@ void xr_coro_reset_for_call(XrCoroutine *coro, XrayIsolate *X, XrClosure *closur
     XR_DCHECK(closure != NULL, "coro_reset_for_call: NULL closure");
 
     if (coro->heap) {
-        coro->heap->gc_disabled = 0;
+        coro->heap->cycle_collection_disabled = 0;
     }
 
     vm_backend_reset_execution_state(coro, X);

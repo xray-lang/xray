@@ -39,14 +39,14 @@ static XrRuntimeCore g_test_core;
 
 static int g_destroy_count = 0;
 
-static void test_ext_destroy(XrObjHeader *obj, XrCoroHeap *owning_gc) {
+static void test_ext_destroy(XrObjHeader *obj, XrCoroHeap *owner_heap) {
     (void) obj;
-    (void) owning_gc;
+    (void) owner_heap;
     g_destroy_count++;
 }
 
-static void test_ext_destroy_api(XrObjHeader *obj, void *owning_gc) {
-    test_ext_destroy(obj, (XrCoroHeap *) owning_gc);
+static void test_ext_destroy_api(XrObjHeader *obj, void *owner_heap) {
+    test_ext_destroy(obj, (XrCoroHeap *) owner_heap);
 }
 
 static void setup_test_ext_finalizer(void) {
@@ -255,7 +255,7 @@ static void perf_allocation_throughput(void) {
     TEST("perf: allocation throughput");
 
     XrCoroHeap *gc = xr_coro_heap_create(&dummy_coro);
-    gc->gc_disabled++;
+    gc->cycle_collection_disabled++;
 
     const int COUNT = 100000;
     uint64_t start = time_ns();
@@ -268,7 +268,7 @@ static void perf_allocation_throughput(void) {
     double ms = elapsed / 1e6;
     double mps = COUNT / (ms / 1000.0) / 1e6;
 
-    gc->gc_disabled--;
+    gc->cycle_collection_disabled--;
     printf("%.1fM/s (%.1fms) ", mps, ms);
     xr_coro_heap_destroy(gc);
     PASS();
@@ -278,13 +278,13 @@ static void perf_bulk_destroy(void) {
     TEST("perf: bulk destroy (coroutine exit)");
 
     XrCoroHeap *gc = xr_coro_heap_create(&dummy_coro);
-    gc->gc_disabled++;
+    gc->cycle_collection_disabled++;
 
     const int COUNT = 100000;
     for (int i = 0; i < COUNT; i++) {
         xr_coro_heap_new_obj(gc, XR_TSTRING, 64);
     }
-    gc->gc_disabled--;
+    gc->cycle_collection_disabled--;
 
     XrRegionStats stats;
     xr_region_get_stats(&gc->region, &stats);
@@ -318,7 +318,7 @@ int main(void) {
     test_large_object_rc_free_unregisters_node();
     /* Tracing collector (fullgc / incremental step / sweep / write barriers)
      * has been removed: reference counting owns reclamation. The tests that
-     * asserted tracing-cycle behavior (gc_count increment, PROPAGATE state
+     * asserted tracing-cycle behavior (cycle_count increment, PROPAGATE state
      * walk, sweep-driven totalbytes decrease, tri-color barriers) are gone
      * with it. What remains here covers the Region bump allocator + alloc-mark
      * bookkeeping, which RC still relies on for region allocation. */
