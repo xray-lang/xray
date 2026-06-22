@@ -10,7 +10,7 @@
  * KEY CONCEPT:
  *   Atomic<T> wraps a single primitive value (int, float, bool) with
  *   hardware atomic operations. Lives on the system heap with atomic
- *   refcount (XR_GC_STORAGE_SHARED), same as Channel.
+ *   refcount (XR_OBJ_STORAGE_SHARED), same as Channel.
  *
  * INVARIANTS:
  *   - T must be int, float, or bool (compiler-enforced)

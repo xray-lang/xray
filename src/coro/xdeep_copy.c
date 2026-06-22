@@ -505,7 +505,7 @@ XrValue xr_deep_copy_with_ctx(XrCopyContext *ctx, XrValue value) {
     if (XR_OBJ_GET_FLAG(obj, XR_OBJ_MANAGED) &&
         xr_rc_is_sticky(atomic_load_explicit(&obj->refcount, memory_order_relaxed)))
         return value;
-    if (XR_GC_IS_SHARED(obj)) {
+    if (XR_OBJ_IS_SHARED(obj)) {
         /* TRANSIT graphs are never pointer-shared: the receive side must
          * materialize a private copy, so fall through to the per-type copy. */
         if (!XR_OBJ_GET_FLAG(obj, XR_OBJ_TRANSIT)) {
@@ -587,7 +587,7 @@ bool xr_chan_try_move_array_to_transit_core(XrRuntimeCore *core, XrValue value, 
     if (!core || !out || !XR_IS_PTR(value))
         return false;
     XrObjHeader *obj = XR_VALUE_GCPTR(value);
-    if (!obj || XR_OBJ_GET_TYPE(obj) != XR_TARRAY || XR_GC_IS_SHARED(obj))
+    if (!obj || XR_OBJ_GET_TYPE(obj) != XR_TARRAY || XR_OBJ_IS_SHARED(obj))
         return false; /* not a coroutine-local array source */
     XrArray *src = (XrArray *) obj;
     if (!array_is_movable_scalar(src))
@@ -727,7 +727,7 @@ XrValue xr_deep_copy_to_coro_core(XrRuntimeCore *core, XrValue value,
     // Shared objects (channel, etc): just increment refcount, no copy needed.
     // TRANSIT graphs are the exception: they must be materialized privately.
     XrObjHeader *obj = XR_VALUE_GCPTR(value);
-    if (obj && XR_GC_IS_SHARED(obj) && !XR_OBJ_GET_FLAG(obj, XR_OBJ_TRANSIT)) {
+    if (obj && XR_OBJ_IS_SHARED(obj) && !XR_OBJ_GET_FLAG(obj, XR_OBJ_TRANSIT)) {
         xr_shared_incref(obj);
         return value;
     }
@@ -835,7 +835,7 @@ bool xr_can_relocate(XrValue value) {
     XrObjHeader *obj = XR_VALUE_GCPTR(value);
     if (!obj)
         return false;
-    if (XR_GC_IS_SHARED(obj))
+    if (XR_OBJ_IS_SHARED(obj))
         return false;
     if (XR_OBJ_GET_TYPE(obj) == XR_TSTRING)
         return false;
@@ -852,7 +852,7 @@ XrValue xr_to_shared_array(struct XrayIsolate *X, XrObjHeader *obj) {
     if (!new_arr)
         return XR_NULL_VAL;
     xr_array_init_inplace(new_arr, length > 0 ? length : 4, array->elem_type);
-    XR_GC_SET_STORAGE(&new_arr->gc, XR_GC_STORAGE_SHARED);
+    XR_OBJ_SET_STORAGE(&new_arr->gc, XR_OBJ_STORAGE_SHARED);
     xr_shared_set_refc(&new_arr->gc, 1);
     if (array->elem_type == XR_ELEM_ANY) {
         XrValue *src = (XrValue *) array->data;
@@ -882,7 +882,7 @@ XrValue xr_to_shared_map(struct XrayIsolate *X, XrObjHeader *obj) {
         new_map->flags |= XR_MAP_FLAG_WEAK;
     new_map->key_tid = map->key_tid;
     new_map->value_tid = map->value_tid;
-    XR_GC_SET_STORAGE(&new_map->gc, XR_GC_STORAGE_SHARED);
+    XR_OBJ_SET_STORAGE(&new_map->gc, XR_OBJ_STORAGE_SHARED);
     xr_shared_set_refc(&new_map->gc, 1);
     if (!(map->flags & XR_MAP_FLAG_WEAK) && !xr_map_isdummy(map)) {
         for (uint32_t i = 0; i < map->nentries; i++) {
@@ -906,7 +906,7 @@ XrValue xr_to_shared_set(struct XrayIsolate *X, XrObjHeader *obj) {
     if (set->flags & XR_SET_FLAG_WEAK)
         new_set->flags |= XR_SET_FLAG_WEAK;
     new_set->elem_tid = set->elem_tid;
-    XR_GC_SET_STORAGE(&new_set->gc, XR_GC_STORAGE_SHARED);
+    XR_OBJ_SET_STORAGE(&new_set->gc, XR_OBJ_STORAGE_SHARED);
     xr_shared_set_refc(&new_set->gc, 1);
     if (set->flags & XR_SET_FLAG_WEAK)
         return XR_FROM_PTR(new_set);
@@ -928,7 +928,7 @@ XrValue xr_to_shared_instance(struct XrayIsolate *X, XrObjHeader *obj) {
     if (!new_inst)
         return XR_NULL_VAL;
     xr_instance_init_inplace(new_inst, cls);
-    XR_GC_SET_STORAGE(&new_inst->gc, XR_GC_STORAGE_SHARED);
+    XR_OBJ_SET_STORAGE(&new_inst->gc, XR_OBJ_STORAGE_SHARED);
     xr_shared_set_refc(&new_inst->gc, 1);
     uint32_t field_count = xr_class_instance_field_count(cls);
     if (cls->flags & XR_CLASS_DYNAMIC_LAYOUT) {
@@ -983,7 +983,7 @@ XrValue xr_to_shared_closure(struct XrayIsolate *X, XrObjHeader *obj) {
         return XR_NULL_VAL;
     new_cl->proto = closure->proto;
     new_cl->upval_count = 0;  // shared closures don't carry upvals (captured via shared_array)
-    XR_GC_SET_STORAGE(&new_cl->gc, XR_GC_STORAGE_SHARED);
+    XR_OBJ_SET_STORAGE(&new_cl->gc, XR_OBJ_STORAGE_SHARED);
     xr_shared_set_refc(&new_cl->gc, 1);
     return XR_FROM_PTR(new_cl);
 }
@@ -1001,7 +1001,7 @@ XrValue xr_to_shared(struct XrayIsolate *X, XrValue value) {
         xr_rc_is_sticky(atomic_load_explicit(&obj->refcount, memory_order_relaxed)))
         return value;
     // Already shared: no-op (do NOT incref — caller already owns the reference)
-    if (XR_GC_IS_SHARED(obj))
+    if (XR_OBJ_IS_SHARED(obj))
         return value;
     // Strings are interned: pointer-shareable as-is, no copy required.
     if (XR_OBJ_GET_TYPE(obj) == XR_TSTRING)

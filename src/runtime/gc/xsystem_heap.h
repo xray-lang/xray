@@ -170,8 +170,8 @@ XR_FUNC bool xr_sysheap_gc_pool_push(XrSystemHeap *heap, struct XrCoroGC *gc);
 XR_FUNC void *xr_sysheap_block_pool_pop(XrSystemHeap *heap);
 XR_FUNC bool xr_sysheap_block_pool_push(XrSystemHeap *heap, void *block);
 
-// XR_GC_FLAG_MMAP now defined in xgc_header.h (extra bit 13, shared by both
-// system heap and per-coro GC large objects).
+// XR_OBJ_FLAG_MMAP now defined in xgc_header.h (extra bit 13, shared by both
+// system heap and per-coro heap large objects).
 
 /* ========== Statistics ========== */
 
