@@ -35,7 +35,7 @@ def detect_cores() -> int:
 def configure_jobs(requested: str) -> int:
     if requested in ("", "auto"):
         jobs = detect_cores()
-        max_auto = os.environ.get("XRAY_DIFF_MAX_AUTO_JOBS", "4")
+        max_auto = os.environ.get("XRAY_DIFF_MAX_AUTO_JOBS", "8")
         if is_uint(max_auto) and int(max_auto) > 0:
             jobs = min(jobs, int(max_auto))
         return max(1, jobs)

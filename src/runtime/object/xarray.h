@@ -81,10 +81,8 @@ XR_FUNC XrArray *xr_array_new(struct XrCoroutine *coro);
 XR_FUNC XrArray *xr_array_with_capacity(struct XrCoroutine *coro, int capacity);
 /* Empty ANY array on the shared (system) heap, for cross-coroutine collection
  * points pushed into by children across workers (see definition). */
-struct XrayIsolate;
 struct XrRuntimeCore;
 XR_FUNC XrArray *xr_array_new_shared_core(struct XrRuntimeCore *core, int capacity);
-XR_FUNC XrArray *xr_array_new_shared(struct XrayIsolate *X, int capacity);
 XR_FUNC XrArray *xr_array_with_capacity_typed(struct XrCoroutine *coro, int capacity,
                                               XrArrayElemType elem_type);
 XR_FUNC XrArray *xr_array_from_values(struct XrCoroutine *coro, XrValue *elements, int count);
@@ -113,20 +111,7 @@ XR_FUNC int xr_array_index_of(XrArray *arr, XrValue value);
 XR_FUNC bool xr_array_has(XrArray *arr, XrValue value);
 XR_FUNC bool xr_array_is_empty(XrArray *arr);
 
-/* ====== Higher-Order Methods ====== */
-
-XR_FUNC void xr_array_foreach(XrayIsolate *iso, XrArray *arr, struct XrClosure *callback);
-XR_FUNC XrArray *xr_array_map(XrayIsolate *iso, XrArray *arr, struct XrClosure *callback);
-XR_FUNC XrArray *xr_array_filter(XrayIsolate *iso, XrArray *arr, struct XrClosure *callback);
-XR_FUNC XrValue xr_array_reduce(XrayIsolate *iso, XrArray *arr, struct XrClosure *callback,
-                                XrValue initial);
-XR_FUNC XrValue xr_array_find(XrayIsolate *iso, XrArray *arr, struct XrClosure *callback);
-XR_FUNC int xr_array_find_index(XrayIsolate *iso, XrArray *arr, struct XrClosure *callback);
-XR_FUNC bool xr_array_every(XrayIsolate *iso, XrArray *arr, struct XrClosure *callback);
-XR_FUNC bool xr_array_some(XrayIsolate *iso, XrArray *arr, struct XrClosure *callback);
 XR_FUNC void xr_array_fill(XrArray *arr, XrValue value, int start, int end);
-XR_FUNC void xr_array_sort(XrayIsolate *iso, XrArray *arr, struct XrClosure *comparator);
-XR_FUNC struct XrString *xr_array_join(XrayIsolate *iso, XrArray *arr, struct XrString *delimiter);
 XR_FUNC bool xr_array_reserve(XrArray *arr, int32_t capacity);
 XR_FUNC bool xr_array_resize(XrArray *arr, int32_t length, XrValue fill);
 
@@ -192,7 +177,6 @@ static inline uint8_t *xr_array_raw_u8(XrArray *arr) {
 }
 
 XR_FUNC void xr_array_append_data(XrArray *arr, const uint8_t *data, int32_t len);
-XR_FUNC struct XrString *xr_array_to_string(struct XrayIsolate *iso, XrArray *arr);
 XR_FUNC uint32_t xr_array_load_u32_le(XrArray *arr, int32_t offset, bool *ok);
 XR_FUNC uint64_t xr_array_load_u64_le(XrArray *arr, int32_t offset, bool *ok);
 XR_FUNC bool xr_array_bytes_copy_within(XrArray *arr, int32_t dst_offset, int32_t src_offset,
