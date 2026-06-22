@@ -241,6 +241,16 @@ static const char *xr_builtin_symbol_names[] = {
     "size",
     // Float predicates
     "isNaN",
+    // Int overflow-control methods
+    "checkedAdd",
+    "checkedSub",
+    "checkedMul",
+    "saturatingAdd",
+    "saturatingSub",
+    "saturatingMul",
+    "wrappingAdd",
+    "wrappingSub",
+    "wrappingMul",
 };
 
 #define BUILTIN_NAME_COUNT                                                                         \

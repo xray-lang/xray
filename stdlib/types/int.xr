@@ -14,4 +14,13 @@ class int {
     round() -> int
     sqrt() -> float
     pow(exp: float) -> float
+    checkedAdd(other: int) -> int?
+    checkedSub(other: int) -> int?
+    checkedMul(other: int) -> int?
+    saturatingAdd(other: int) -> int
+    saturatingSub(other: int) -> int
+    saturatingMul(other: int) -> int
+    wrappingAdd(other: int) -> int
+    wrappingSub(other: int) -> int
+    wrappingMul(other: int) -> int
 }

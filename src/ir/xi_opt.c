@@ -38,6 +38,7 @@
 #include "xi_opt_call_specialize.h"
 #include "xi_opt_comptime.h"
 #include "xi_range.h"
+#include "../shared/xr_int_arith.h"
 #include "xi_analysis.h"
 #include "xi_pass.h"
 #include "xi_verify.h"
@@ -123,31 +124,23 @@ static void block_remove_value(XiBlock *blk, uint32_t idx) {
 static bool fold_int_binary(uint16_t op, int64_t a, int64_t b, int64_t *result) {
     switch (op) {
         case XI_ADD:
-            *result = (int64_t) ((uint64_t) a + (uint64_t) b);
+            *result = xr_i64_add_wrap(a, b);
             return true;
         case XI_SUB:
-            *result = (int64_t) ((uint64_t) a - (uint64_t) b);
+            *result = xr_i64_sub_wrap(a, b);
             return true;
         case XI_MUL:
-            *result = (int64_t) ((uint64_t) a * (uint64_t) b);
+            *result = xr_i64_mul_wrap(a, b);
             return true;
         case XI_DIV:
             if (b == 0)
                 return false;
-            if (a == INT64_MIN && b == -1) {
-                *result = INT64_MIN;
-                return true;
-            }
-            *result = a / b;
+            *result = xr_i64_div_wrap(a, b);
             return true;
         case XI_MOD:
             if (b == 0)
                 return false;
-            if (a == INT64_MIN && b == -1) {
-                *result = 0;
-                return true;
-            }
-            *result = a % b;
+            *result = xr_i64_mod_wrap(a, b);
             return true;
         case XI_BAND:
             *result = a & b;
@@ -162,13 +155,13 @@ static bool fold_int_binary(uint16_t op, int64_t a, int64_t b, int64_t *result) 
             /* Left shift of a negative or shift that overflows the sign bit
              * is UB on signed; do it on uint64_t and cast back. Shift amount
              * is masked to 6 bits to match runtime semantics. */
-            *result = (int64_t) ((uint64_t) a << (b & 63));
+            *result = xr_i64_shl_wrap(a, b);
             return true;
         case XI_SHR:
             /* Arithmetic right shift on negative values is
              * implementation-defined in C99/C11 but well-defined on every
              * compiler xray supports (GCC, Clang, MSVC all sign-extend). */
-            *result = a >> (b & 63);
+            *result = xr_i64_shr_wrap(a, b);
             return true;
         default:
             return false;

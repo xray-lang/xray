@@ -16,6 +16,7 @@
 #include "xrt_exception.h"  // xrt_throw_exc for div/mod by zero
 #include "xrt_range.h"
 #include "xrt_coll.h"
+#include "../shared/xr_int_arith.h"
 
 /* =========================================================================
  * Tagged arithmetic — all inline, no extern dependency
@@ -27,13 +28,13 @@
  * the VM (uint64 wrap in xvm_dispatch_arith) and xi_opt constant folding so
  * INT64_MAX + 1, INT64_MIN - 1, etc. produce identical results across tiers. */
 static inline int64_t xrt_i64_add(int64_t a, int64_t b) {
-    return (int64_t) ((uint64_t) a + (uint64_t) b);
+    return xr_i64_add_wrap(a, b);
 }
 static inline int64_t xrt_i64_sub(int64_t a, int64_t b) {
-    return (int64_t) ((uint64_t) a - (uint64_t) b);
+    return xr_i64_sub_wrap(a, b);
 }
 static inline int64_t xrt_i64_mul(int64_t a, int64_t b) {
-    return (int64_t) ((uint64_t) a * (uint64_t) b);
+    return xr_i64_mul_wrap(a, b);
 }
 
 static inline XrValue xrt_add(XrValue a, XrValue b) {
@@ -75,16 +76,12 @@ static inline XrValue xrt_mul(XrValue a, XrValue b) {
 static inline int64_t xrt_int_div(int64_t a, int64_t b) {
     if (XR_UNLIKELY(b == 0))
         xrt_throw_exc(xr_box_str("E0420: division by zero"));
-    if (XR_UNLIKELY(b == -1))
-        return (int64_t) (-(uint64_t) a);
-    return a / b;
+    return xr_i64_div_wrap(a, b);
 }
 static inline int64_t xrt_int_mod(int64_t a, int64_t b) {
     if (XR_UNLIKELY(b == 0))
         xrt_throw_exc(xr_box_str("E0421: modulo by zero"));
-    if (XR_UNLIKELY(b == -1))
-        return 0;
-    return a % b;
+    return xr_i64_mod_wrap(a, b);
 }
 
 /* Shifts: the language defines the count as taken mod 64 (spec: "shift count
@@ -93,10 +90,10 @@ static inline int64_t xrt_int_mod(int64_t a, int64_t b) {
  * ARM64 LSL/ASR, RISC-V SLL/SRA all mask to 6 bits). Left shift goes through
  * uint64_t because shifting into/past the sign bit is UB on signed in C. */
 static inline int64_t xrt_i64_shl(int64_t a, int64_t b) {
-    return (int64_t) ((uint64_t) a << ((uint64_t) b & 63));
+    return xr_i64_shl_wrap(a, b);
 }
 static inline int64_t xrt_i64_shr(int64_t a, int64_t b) {
-    return a >> ((uint64_t) b & 63);
+    return xr_i64_shr_wrap(a, b);
 }
 
 static inline XrValue xrt_div(XrValue a, XrValue b) {
@@ -115,7 +112,7 @@ static inline XrValue xrt_mod(XrValue a, XrValue b) {
 
 static inline XrValue xrt_neg(XrValue a) {
     if (a.tag == XR_TAG_I64)
-        return XR_FROM_INT((int64_t) (-(uint64_t) a.i));
+        return XR_FROM_INT(xr_i64_neg_wrap(a.i));
     if (a.tag == XR_TAG_F64)
         return XR_FROM_FLOAT(-a.f);
     return XR_FROM_INT(0);

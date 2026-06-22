@@ -273,6 +273,17 @@ enum {
     // Float predicates
     SYMBOL_ISNAN,
 
+    // Int overflow-control methods
+    SYMBOL_CHECKED_ADD,
+    SYMBOL_CHECKED_SUB,
+    SYMBOL_CHECKED_MUL,
+    SYMBOL_SATURATING_ADD,
+    SYMBOL_SATURATING_SUB,
+    SYMBOL_SATURATING_MUL,
+    SYMBOL_WRAPPING_ADD,
+    SYMBOL_WRAPPING_SUB,
+    SYMBOL_WRAPPING_MUL,
+
     SYMBOL_BUILTIN_COUNT  // sentinel
 };
 

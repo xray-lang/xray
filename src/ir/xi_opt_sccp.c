@@ -28,6 +28,7 @@
 #include "xi_range.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
+#include "../shared/xr_int_arith.h"
 #include "../runtime/value/xtype.h"
 #include <string.h>
 #include <stdio.h>
@@ -288,36 +289,32 @@ static SccpCell eval_arith(uint16_t op, SccpCell a, SccpCell b) {
     switch (op) {
         case XI_ADD:
             if (both_int(a, b))
-                return sccp_int((int64_t) ((uint64_t) a.ival + (uint64_t) b.ival));
+                return sccp_int(xr_i64_add_wrap(a.ival, b.ival));
             if (both_float(a, b))
                 return sccp_float(a.fval + b.fval);
             return sccp_bot();
         case XI_SUB:
             if (both_int(a, b))
-                return sccp_int((int64_t) ((uint64_t) a.ival - (uint64_t) b.ival));
+                return sccp_int(xr_i64_sub_wrap(a.ival, b.ival));
             if (both_float(a, b))
                 return sccp_float(a.fval - b.fval);
             return sccp_bot();
         case XI_MUL:
             if (both_int(a, b))
-                return sccp_int((int64_t) ((uint64_t) a.ival * (uint64_t) b.ival));
+                return sccp_int(xr_i64_mul_wrap(a.ival, b.ival));
             if (both_float(a, b))
                 return sccp_float(a.fval * b.fval);
             return sccp_bot();
         case XI_DIV:
             if (both_int(a, b) && b.ival != 0) {
-                if (b.ival == -1)  // INT64_MIN / -1 wraps to INT64_MIN
-                    return sccp_int((int64_t) (-(uint64_t) a.ival));
-                return sccp_int(a.ival / b.ival);
+                return sccp_int(xr_i64_div_wrap(a.ival, b.ival));
             }
             if (both_float(a, b) && b.fval != 0.0)
                 return sccp_float(a.fval / b.fval);
             return sccp_bot();
         case XI_MOD:
             if (both_int(a, b) && b.ival != 0) {
-                if (b.ival == -1)  // INT64_MIN % -1 is defined as 0
-                    return sccp_int(0);
-                return sccp_int(a.ival % b.ival);
+                return sccp_int(xr_i64_mod_wrap(a.ival, b.ival));
             }
             return sccp_bot();
         default:
