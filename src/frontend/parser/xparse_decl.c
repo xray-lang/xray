@@ -31,8 +31,8 @@ static inline void free_generic_params(XrGenericParam **type_params, int count) 
     (void) count;
 }
 
-static inline void free_param_nodes(XrayIsolate *X, XrParamNode **params, int count) {
-    (void) X;
+static inline void free_param_nodes(XrCompilerSession *session, XrParamNode **params, int count) {
+    (void) session;
     (void) params;
     (void) count;
 }
@@ -45,7 +45,7 @@ static inline void free_param_nodes(XrayIsolate *X, XrParamNode **params, int co
 static const char *xr_attr_string_arg(Parser *parser) {
     Token t = parser->previous;
     size_t len = t.length >= 2 ? (size_t) (t.length - 2) : 0;
-    char *s = (char *) ast_alloc(parser->X, len + 1);
+    char *s = (char *) ast_alloc(parser->compiler_session, len + 1);
     if (len > 0)
         memcpy(s, t.start + 1, len);
     s[len] = '\0';
@@ -60,7 +60,7 @@ static XrAttribute *xr_parse_single_attribute(Parser *parser) {
     xr_parser_consume(parser, TK_NAME, "expected attribute name");
     Token name_token = parser->previous;
 
-    XrAttribute *attr = (XrAttribute *) ast_alloc(parser->X, sizeof(XrAttribute));
+    XrAttribute *attr = (XrAttribute *) ast_alloc(parser->compiler_session, sizeof(XrAttribute));
     attr->kind = ATTR_NONE;
     attr->timeout = 0;
     attr->str_arg = NULL;
@@ -289,7 +289,7 @@ AstNode *xr_parse_function_declaration(Parser *parser) {
     Token name_token = parser->previous;
     int name_column = name_token.column;
 
-    char *func_name = (char *) ast_alloc(parser->X, (size_t) name_token.length + 1);
+    char *func_name = (char *) ast_alloc(parser->compiler_session, (size_t) name_token.length + 1);
     memcpy(func_name, name_token.start, name_token.length);
     func_name[name_token.length] = '\0';
 
@@ -303,7 +303,8 @@ AstNode *xr_parse_function_declaration(Parser *parser) {
             xr_parser_consume(parser, TK_NAME, "expected type parameter name");
             Token param_token = parser->previous;
 
-            char *param_name = (char *) ast_alloc(parser->X, (size_t) param_token.length + 1);
+            char *param_name =
+                (char *) ast_alloc(parser->compiler_session, (size_t) param_token.length + 1);
             memcpy(param_name, param_token.start, param_token.length);
             param_name[param_token.length] = '\0';
 
@@ -314,7 +315,8 @@ AstNode *xr_parse_function_declaration(Parser *parser) {
                 constraints = xr_parse_constraint_list(parser, &constraint_count);
             }
 
-            XrGenericParam *gp = (XrGenericParam *) ast_alloc(parser->X, sizeof(XrGenericParam));
+            XrGenericParam *gp =
+                (XrGenericParam *) ast_alloc(parser->compiler_session, sizeof(XrGenericParam));
             gp->name = param_name;
             gp->constraints = constraints;
             gp->constraint_count = constraint_count;
@@ -331,7 +333,8 @@ AstNode *xr_parse_function_declaration(Parser *parser) {
     if (type_param_count > 0) {
         XrTypeScope *generic_scope = xr_type_scope_new(parser->type_scope);
         for (int i = 0; i < type_param_count; i++) {
-            XrTypeRef *type_param = xr_tref_type_param(parser->X, type_params[i]->name);
+            XrTypeRef *type_param =
+                xr_tref_type_param(parser->compiler_session, type_params[i]->name);
             xr_type_scope_define(generic_scope, type_params[i]->name, type_param);
         }
         parser->type_scope = generic_scope;
@@ -351,7 +354,7 @@ AstNode *xr_parse_function_declaration(Parser *parser) {
                 int _old_cap_param_capacity = (int) param_capacity;
                 param_capacity = _old_cap_param_capacity == 0 ? 4 : _old_cap_param_capacity * 2;
                 XrParamNode **_new_params = (XrParamNode **) ast_alloc_array(
-                    parser->X, sizeof(XrParamNode *), (size_t) param_capacity);
+                    parser->compiler_session, sizeof(XrParamNode *), (size_t) param_capacity);
                 if (_old_cap_param_capacity > 0 && params)
                     memcpy(_new_params, params,
                            sizeof(XrParamNode *) * (size_t) _old_cap_param_capacity);
@@ -366,8 +369,8 @@ AstNode *xr_parse_function_declaration(Parser *parser) {
                 char temp_name[64];
                 snprintf(temp_name, sizeof(temp_name), "%.*s", rest_token.length, rest_token.start);
 
-                XrParamNode *rest_param =
-                    xr_param_node_new(parser->X, temp_name, rest_token.line, rest_token.column);
+                XrParamNode *rest_param = xr_param_node_new(parser->compiler_session, temp_name,
+                                                            rest_token.line, rest_token.column);
                 rest_param->is_rest = true;
 
                 /* Optional element type annotation: ...args: int */
@@ -396,7 +399,8 @@ AstNode *xr_parse_function_declaration(Parser *parser) {
                 char temp_name[32];
                 snprintf(temp_name, sizeof(temp_name), "__param%d", param_count);
 
-                XrParamNode *param = xr_param_node_new(parser->X, temp_name, line, 0);
+                XrParamNode *param =
+                    xr_param_node_new(parser->compiler_session, temp_name, line, 0);
                 param->pattern = pattern;
 
                 /* A destructured parameter still needs a type annotation
@@ -419,8 +423,8 @@ AstNode *xr_parse_function_declaration(Parser *parser) {
                 snprintf(param_name, sizeof(param_name), "%.*s", param_token.length,
                          param_token.start);
 
-                XrParamNode *param =
-                    xr_param_node_new(parser->X, param_name, param_token.line, param_token.column);
+                XrParamNode *param = xr_param_node_new(parser->compiler_session, param_name,
+                                                       param_token.line, param_token.column);
 
                 // Parse optional type annotation with in/ref modifier
                 if (xr_parser_match(parser, TK_COLON)) {
@@ -442,30 +446,30 @@ AstNode *xr_parse_function_declaration(Parser *parser) {
                         AstNode *dv = param->default_value;
                         switch (dv->type) {
                             case AST_LITERAL_INT:
-                                param->type = xr_tref_int(parser->X);
+                                param->type = xr_tref_int(parser->compiler_session);
                                 break;
                             case AST_LITERAL_FLOAT:
-                                param->type = xr_tref_float(parser->X);
+                                param->type = xr_tref_float(parser->compiler_session);
                                 break;
                             case AST_LITERAL_STRING:
                             case AST_TEMPLATE_STRING:
-                                param->type = xr_tref_string(parser->X);
+                                param->type = xr_tref_string(parser->compiler_session);
                                 break;
                             case AST_LITERAL_TRUE:
                             case AST_LITERAL_FALSE:
-                                param->type = xr_tref_bool(parser->X);
+                                param->type = xr_tref_bool(parser->compiler_session);
                                 break;
                             case AST_ARRAY_LITERAL:
-                                param->type = xr_tref_named(parser->X, "Array");
+                                param->type = xr_tref_named(parser->compiler_session, "Array");
                                 break;
                             case AST_MAP_LITERAL:
-                                param->type = xr_tref_named(parser->X, "Map");
+                                param->type = xr_tref_named(parser->compiler_session, "Map");
                                 break;
                             case AST_SET_LITERAL:
-                                param->type = xr_tref_named(parser->X, "Set");
+                                param->type = xr_tref_named(parser->compiler_session, "Set");
                                 break;
                             case AST_OBJECT_LITERAL:
-                                param->type = xr_tref_named(parser->X, "Json");
+                                param->type = xr_tref_named(parser->compiler_session, "Json");
                                 break;
                             default:
                                 break;
@@ -519,11 +523,11 @@ AstNode *xr_parse_function_declaration(Parser *parser) {
     // If has destructure params, insert destructure code at function body start
     for (int i = 0; body && i < param_count; i++) {
         if (params[i] && params[i]->pattern != NULL) {
-            AstNode *param_var = xr_ast_variable(parser->X, params[i]->name, line);
+            AstNode *param_var = xr_ast_variable(parser->compiler_session, params[i]->name, line);
 
             // Create destructure decl: let [x, y] = __param0
-            AstNode *destructure_decl =
-                xr_ast_destructure_decl(parser->X, params[i]->pattern, param_var, false, line);
+            AstNode *destructure_decl = xr_ast_destructure_decl(
+                parser->compiler_session, params[i]->pattern, param_var, false, line);
             // Don't free pattern here, it's now owned by destructure_decl
             params[i]->pattern = NULL;
 
@@ -532,7 +536,7 @@ AstNode *xr_parse_function_declaration(Parser *parser) {
                 int _old_cap_block__capacity = (int) block->capacity;
                 block->capacity = _old_cap_block__capacity == 0 ? 4 : _old_cap_block__capacity * 2;
                 AstNode **_new_block_statements = (AstNode **) ast_alloc_array(
-                    parser->X, sizeof(AstNode *), (size_t) block->capacity);
+                    parser->compiler_session, sizeof(AstNode *), (size_t) block->capacity);
                 if (_old_cap_block__capacity > 0 && block->statements)
                     memcpy(_new_block_statements, block->statements,
                            sizeof(AstNode *) * (size_t) _old_cap_block__capacity);
@@ -550,7 +554,7 @@ AstNode *xr_parse_function_declaration(Parser *parser) {
     }
 
     AstNode *func_decl =
-        xr_ast_function_decl(parser->X, func_name, params, param_count, body, line);
+        xr_ast_function_decl(parser->compiler_session, func_name, params, param_count, body, line);
     func_decl->column = name_column;
     if (body) {
         func_decl->end_line = body->end_line;
@@ -579,7 +583,7 @@ fail:
         parser->type_scope = saved_scope;
     }
     free_generic_params(type_params, type_param_count);
-    free_param_nodes(parser->X, params, param_count);
+    free_param_nodes(parser->compiler_session, params, param_count);
     return NULL;
 }
 
@@ -596,10 +600,10 @@ AstNode *xr_parse_call_argument(Parser *parser) {
         AstNode *inner = xr_parse_expression(parser);
         if (!inner)
             return NULL;
-        return xr_ast_spread_expr(parser->X, inner, line);
+        return xr_ast_spread_expr(parser->compiler_session, inner, line);
     }
     if (xr_parser_match(parser, TK_UNDERSCORE)) {
-        return xr_ast_variable(parser->X, "_", line);
+        return xr_ast_variable(parser->compiler_session, "_", line);
     }
     /* Bare lambda: `name -> expr` as a call argument. Unambiguous here
      * because call arguments are delimited by '(' and ')'. The analyzer
@@ -611,13 +615,15 @@ AstNode *xr_parse_call_argument(Parser *parser) {
         xr_parser_advance(parser);
         if (xr_parser_check(parser, TK_ARROW)) {
             Token name_tok = parser->previous;
-            char *pname = (char *) ast_alloc(parser->X, (size_t) name_tok.length + 1);
+            char *pname =
+                (char *) ast_alloc(parser->compiler_session, (size_t) name_tok.length + 1);
             memcpy(pname, name_tok.start, name_tok.length);
             pname[name_tok.length] = '\0';
             xr_parser_advance(parser); /* consume '->' */
-            XrParamNode **params =
-                (XrParamNode **) ast_alloc_array(parser->X, sizeof(XrParamNode *), 1);
-            params[0] = xr_param_node_new(parser->X, pname, name_tok.line, name_tok.column);
+            XrParamNode **params = (XrParamNode **) ast_alloc_array(parser->compiler_session,
+                                                                    sizeof(XrParamNode *), 1);
+            params[0] =
+                xr_param_node_new(parser->compiler_session, pname, name_tok.line, name_tok.column);
             return xr_parse_arrow_function_body(parser, params, 1, name_tok.line);
         }
         /* Not a bare lambda — restore and fall through to normal parsing. */
@@ -646,7 +652,7 @@ AstNode *xr_parse_call_expr(Parser *parser, AstNode *callee) {
 
     xr_parser_consume(parser, TK_RPAREN, "expected ')' after argument list");
 
-    return xr_ast_call_expr(parser->X, callee, arguments, arg_count, line);
+    return xr_ast_call_expr(parser->compiler_session, callee, arguments, arg_count, line);
 }
 
 /* ========== Array Parsing ========== */
@@ -658,7 +664,7 @@ AstNode *xr_parse_array_literal(Parser *parser) {
     int line = parser->previous.line;
 
     if (xr_parser_match(parser, TK_RBRACKET)) {
-        return xr_ast_array_literal(parser->X, NULL, 0, line);
+        return xr_ast_array_literal(parser->compiler_session, NULL, 0, line);
     }
 
     // Parse first expression, then check ':' for Map or ',' for array
@@ -670,8 +676,10 @@ AstNode *xr_parse_array_literal(Parser *parser) {
         int count = 0;
         int capacity = 4;
 
-        keys = (AstNode **) ast_alloc_array(parser->X, sizeof(AstNode *), (size_t) capacity);
-        values = (AstNode **) ast_alloc_array(parser->X, sizeof(AstNode *), (size_t) capacity);
+        keys = (AstNode **) ast_alloc_array(parser->compiler_session, sizeof(AstNode *),
+                                            (size_t) capacity);
+        values = (AstNode **) ast_alloc_array(parser->compiler_session, sizeof(AstNode *),
+                                              (size_t) capacity);
 
         keys[0] = first_expr;
         values[0] = xr_parse_expression(parser);
@@ -682,14 +690,14 @@ AstNode *xr_parse_array_literal(Parser *parser) {
                 int old_capacity = capacity;
                 capacity *= 2;
 
-                AstNode **_new_keys =
-                    (AstNode **) ast_alloc_array(parser->X, sizeof(AstNode *), (size_t) capacity);
+                AstNode **_new_keys = (AstNode **) ast_alloc_array(
+                    parser->compiler_session, sizeof(AstNode *), (size_t) capacity);
                 if (old_capacity > 0 && keys)
                     memcpy(_new_keys, keys, sizeof(AstNode *) * (size_t) old_capacity);
                 keys = _new_keys;
 
-                AstNode **_new_values =
-                    (AstNode **) ast_alloc_array(parser->X, sizeof(AstNode *), (size_t) capacity);
+                AstNode **_new_values = (AstNode **) ast_alloc_array(
+                    parser->compiler_session, sizeof(AstNode *), (size_t) capacity);
                 if (old_capacity > 0 && values)
                     memcpy(_new_values, values, sizeof(AstNode *) * (size_t) old_capacity);
                 values = _new_values;
@@ -699,7 +707,7 @@ AstNode *xr_parse_array_literal(Parser *parser) {
 
             if (!xr_parser_match(parser, TK_COLON)) {
                 xr_parser_error(parser, "expected ':' after Map key");
-                return xr_ast_map_literal(parser->X, NULL, NULL, 0, line);
+                return xr_ast_map_literal(parser->compiler_session, NULL, NULL, 0, line);
             }
 
             values[count] = xr_parse_expression(parser);
@@ -708,7 +716,7 @@ AstNode *xr_parse_array_literal(Parser *parser) {
 
         xr_parser_consume(parser, TK_RBRACKET, "expected ']' at end of Map literal");
 
-        return xr_ast_map_literal(parser->X, keys, values, count, line);
+        return xr_ast_map_literal(parser->compiler_session, keys, values, count, line);
 
     } else {
         // Array: [1, 2, 3]
@@ -716,7 +724,8 @@ AstNode *xr_parse_array_literal(Parser *parser) {
         int count = 0;
         int capacity = 4;
 
-        elements = (AstNode **) ast_alloc_array(parser->X, sizeof(AstNode *), (size_t) capacity);
+        elements = (AstNode **) ast_alloc_array(parser->compiler_session, sizeof(AstNode *),
+                                                (size_t) capacity);
 
         elements[0] = first_expr;
         count = 1;
@@ -731,7 +740,7 @@ AstNode *xr_parse_array_literal(Parser *parser) {
 
         xr_parser_consume(parser, TK_RBRACKET, "expected ']' at end of array");
 
-        return xr_ast_array_literal(parser->X, elements, count, line);
+        return xr_ast_array_literal(parser->compiler_session, elements, count, line);
     }
 }
 
@@ -748,7 +757,7 @@ AstNode *xr_parse_object_literal(Parser *parser) {
 
     // Empty object {} -> Json
     if (xr_parser_match(parser, TK_RBRACE)) {
-        return xr_ast_object_literal(parser->X, NULL, NULL, NULL, 0, line);
+        return xr_ast_object_literal(parser->compiler_session, NULL, NULL, NULL, 0, line);
     }
 
     // Collect key-value pairs
@@ -766,20 +775,20 @@ AstNode *xr_parse_object_literal(Parser *parser) {
         if (count >= capacity) {
             int _old_cap_capacity = (int) capacity;
             capacity = _old_cap_capacity == 0 ? 4 : _old_cap_capacity * 2;
-            AstNode **_new_keys =
-                (AstNode **) ast_alloc_array(parser->X, sizeof(AstNode *), (size_t) capacity);
+            AstNode **_new_keys = (AstNode **) ast_alloc_array(
+                parser->compiler_session, sizeof(AstNode *), (size_t) capacity);
             if (_old_cap_capacity > 0 && keys)
                 memcpy(_new_keys, keys, sizeof(AstNode *) * (size_t) _old_cap_capacity);
             keys = _new_keys;
 
-            AstNode **_new_values =
-                (AstNode **) ast_alloc_array(parser->X, sizeof(AstNode *), (size_t) capacity);
+            AstNode **_new_values = (AstNode **) ast_alloc_array(
+                parser->compiler_session, sizeof(AstNode *), (size_t) capacity);
             if (_old_cap_capacity > 0 && values)
                 memcpy(_new_values, values, sizeof(AstNode *) * (size_t) _old_cap_capacity);
             values = _new_values;
 
             bool *_new_computed =
-                (bool *) ast_alloc_array(parser->X, sizeof(bool), (size_t) capacity);
+                (bool *) ast_alloc_array(parser->compiler_session, sizeof(bool), (size_t) capacity);
             if (_old_cap_capacity > 0 && computed)
                 memcpy(_new_computed, computed, sizeof(bool) * (size_t) _old_cap_capacity);
             computed = _new_computed;
@@ -802,10 +811,11 @@ AstNode *xr_parse_object_literal(Parser *parser) {
             Token key_token = parser->current;
             xr_parser_advance(parser);
 
-            char *key_str = (char *) ast_alloc(parser->X, (size_t) key_token.length - 1);
+            char *key_str =
+                (char *) ast_alloc(parser->compiler_session, (size_t) key_token.length - 1);
             memcpy(key_str, key_token.start + 1, key_token.length - 2);
             key_str[key_token.length - 2] = '\0';
-            key = xr_ast_literal_string(parser->X, key_str, line);
+            key = xr_ast_literal_string(parser->compiler_session, key_str, line);
             is_computed = false;
         }
         // Numeric literal as key: only Map allows this, and Map literals must
@@ -814,7 +824,7 @@ AstNode *xr_parse_object_literal(Parser *parser) {
                  xr_parser_check(parser, TK_LITERAL_FLOAT)) {
             xr_parser_error(
                 parser, "Json object does not support numeric keys; use `#{ key: value }` for Map");
-            return xr_ast_literal_null(parser->X, line);
+            return xr_ast_literal_null(parser->compiler_session, line);
         }
         // Identifier or keyword as key (allow keywords like 'type', 'int', etc.)
         else if (xr_parser_check(parser, TK_NAME) ||
@@ -829,10 +839,11 @@ AstNode *xr_parse_object_literal(Parser *parser) {
             Token key_token = parser->current;
             xr_parser_advance(parser);
 
-            char *key_str = (char *) ast_alloc(parser->X, (size_t) key_token.length + 1);
+            char *key_str =
+                (char *) ast_alloc(parser->compiler_session, (size_t) key_token.length + 1);
             memcpy(key_str, key_token.start, key_token.length);
             key_str[key_token.length] = '\0';
-            key = xr_ast_literal_string(parser->X, key_str, line);
+            key = xr_ast_literal_string(parser->compiler_session, key_str, line);
             is_computed = false;
             if (key_token.type == TK_NAME)
                 shorthand_name = key_str;
@@ -840,7 +851,7 @@ AstNode *xr_parse_object_literal(Parser *parser) {
             xr_parser_error(
                 parser,
                 "literal key must be identifier, string, number or [expr] computed property");
-            return xr_ast_literal_null(parser->X, line);
+            return xr_ast_literal_null(parser->compiler_session, line);
         }
 
         keys[count] = key;
@@ -856,16 +867,16 @@ AstNode *xr_parse_object_literal(Parser *parser) {
             xr_parser_error(
                 parser,
                 "`->` is not a valid separator in Json literal; use `#{ key: value }` for Map");
-            return xr_ast_literal_null(parser->X, line);
+            return xr_ast_literal_null(parser->compiler_session, line);
         } else if (shorthand_name &&
                    (xr_parser_check(parser, TK_COMMA) || xr_parser_check(parser, TK_RBRACE))) {
             separator_determined = true;
-            values[count] = xr_ast_variable(parser->X, shorthand_name, line);
+            values[count] = xr_ast_variable(parser->compiler_session, shorthand_name, line);
             count++;
             continue;
         } else {
             xr_parser_error(parser, "expected ':' after key in Json literal");
-            return xr_ast_literal_null(parser->X, line);
+            return xr_ast_literal_null(parser->compiler_session, line);
         }
 
         // Parse value expression
@@ -881,8 +892,8 @@ AstNode *xr_parse_object_literal(Parser *parser) {
     // the legacy `is_map` branch is unreachable but the local is kept to
     // minimise diff churn against historical compiles.
     (void) is_map;
-    AstNode *result =
-        xr_ast_object_literal(parser->X, keys, values, has_computed ? computed : NULL, count, line);
+    AstNode *result = xr_ast_object_literal(parser->compiler_session, keys, values,
+                                            has_computed ? computed : NULL, count, line);
 
     // Free temporary array
 
@@ -900,7 +911,7 @@ AstNode *xr_parse_empty_map_literal(Parser *parser) {
 
     // Empty Map: #{}
     if (xr_parser_match(parser, TK_RBRACE)) {
-        return xr_ast_map_literal(parser->X, NULL, NULL, 0, line);
+        return xr_ast_map_literal(parser->compiler_session, NULL, NULL, 0, line);
     }
 
     // Non-empty Map: #{"key": value, ...}
@@ -914,14 +925,14 @@ AstNode *xr_parse_empty_map_literal(Parser *parser) {
         if (count >= capacity) {
             int _old_cap_capacity = (int) capacity;
             capacity = _old_cap_capacity == 0 ? 4 : _old_cap_capacity * 2;
-            AstNode **_new_keys =
-                (AstNode **) ast_alloc_array(parser->X, sizeof(AstNode *), (size_t) capacity);
+            AstNode **_new_keys = (AstNode **) ast_alloc_array(
+                parser->compiler_session, sizeof(AstNode *), (size_t) capacity);
             if (_old_cap_capacity > 0 && keys)
                 memcpy(_new_keys, keys, sizeof(AstNode *) * (size_t) _old_cap_capacity);
             keys = _new_keys;
 
-            AstNode **_new_values =
-                (AstNode **) ast_alloc_array(parser->X, sizeof(AstNode *), (size_t) capacity);
+            AstNode **_new_values = (AstNode **) ast_alloc_array(
+                parser->compiler_session, sizeof(AstNode *), (size_t) capacity);
             if (_old_cap_capacity > 0 && values)
                 memcpy(_new_values, values, sizeof(AstNode *) * (size_t) _old_cap_capacity);
             values = _new_values;
@@ -944,7 +955,7 @@ AstNode *xr_parse_empty_map_literal(Parser *parser) {
     xr_parser_consume(parser, TK_RBRACE, "expected '}' at end of Map literal");
 
     // Create Map literal node
-    return xr_ast_map_literal(parser->X, keys, values, count, line);
+    return xr_ast_map_literal(parser->compiler_session, keys, values, count, line);
 }
 
 /*
@@ -959,7 +970,7 @@ AstNode *xr_parse_set_literal_new(Parser *parser) {
     // Empty Set: #[]
     if (xr_parser_match(parser, TK_RBRACKET)) {
         // Create empty Set literal
-        return xr_ast_set_literal(parser->X, NULL, 0, line);
+        return xr_ast_set_literal(parser->compiler_session, NULL, 0, line);
     }
 
     // Collect elements
@@ -972,8 +983,8 @@ AstNode *xr_parse_set_literal_new(Parser *parser) {
         if (count >= capacity) {
             int _old_cap_capacity = (int) capacity;
             capacity = _old_cap_capacity == 0 ? 4 : _old_cap_capacity * 2;
-            AstNode **_new_elements =
-                (AstNode **) ast_alloc_array(parser->X, sizeof(AstNode *), (size_t) capacity);
+            AstNode **_new_elements = (AstNode **) ast_alloc_array(
+                parser->compiler_session, sizeof(AstNode *), (size_t) capacity);
             if (_old_cap_capacity > 0 && elements)
                 memcpy(_new_elements, elements, sizeof(AstNode *) * (size_t) _old_cap_capacity);
             elements = _new_elements;
@@ -988,7 +999,7 @@ AstNode *xr_parse_set_literal_new(Parser *parser) {
     xr_parser_consume(parser, TK_RBRACKET, "expected ']' at end of Set literal");
 
     // Create Set literal node
-    return xr_ast_set_literal(parser->X, elements, count, line);
+    return xr_ast_set_literal(parser->compiler_session, elements, count, line);
 }
 
 /*
@@ -1036,10 +1047,10 @@ AstNode *xr_parse_index_access(Parser *parser, AstNode *array) {
 
     if (is_slice) {
         // Create slice expression node
-        return xr_ast_slice_expr(parser->X, array, start, end, line);
+        return xr_ast_slice_expr(parser->compiler_session, array, start, end, line);
     } else {
         // Create index access node
-        return xr_ast_index_get(parser->X, array, start, line);
+        return xr_ast_index_get(parser->compiler_session, array, start, line);
     }
 }
 
@@ -1076,11 +1087,11 @@ AstNode *xr_parse_member_access(Parser *parser, AstNode *object) {
     }
 
     // Copy member name (xr_ast_member_access deep-copies, so release our copy)
-    char *member_name = (char *) ast_alloc(parser->X, (size_t) name_len + 1);
+    char *member_name = (char *) ast_alloc(parser->compiler_session, (size_t) name_len + 1);
     strncpy(member_name, name, name_len);
     member_name[name_len] = '\0';
 
-    AstNode *node = xr_ast_member_access(parser->X, object, member_name, line);
+    AstNode *node = xr_ast_member_access(parser->compiler_session, object, member_name, line);
     return node;
 }
 
@@ -1098,7 +1109,7 @@ AstNode *xr_parse_return_statement(Parser *parser) {
     // Bare `return` or `return` followed by block-close: void return.
     if (parser->current.type == TK_RBRACE ||  // Block end
         parser->current.type == TK_EOF) {     // File end
-        return xr_ast_return_stmt(parser->X, NULL, 0, line);
+        return xr_ast_return_stmt(parser->compiler_session, NULL, 0, line);
     }
 
     AstNode *value = xr_parse_expression(parser);
@@ -1111,9 +1122,9 @@ AstNode *xr_parse_return_statement(Parser *parser) {
         return NULL;
     }
 
-    AstNode **values = (AstNode **) ast_alloc_array(parser->X, sizeof(AstNode *), 1);
+    AstNode **values = (AstNode **) ast_alloc_array(parser->compiler_session, sizeof(AstNode *), 1);
     values[0] = value;
-    return xr_ast_return_stmt(parser->X, values, 1, line);
+    return xr_ast_return_stmt(parser->compiler_session, values, 1, line);
 }
 
 /*
@@ -1156,7 +1167,7 @@ AstNode *xr_parse_type_alias_declaration(Parser *parser) {
     // Patch the placeholder with the actual type definition.
     alias_entry->type_ref = type_definition;
     if (type_definition->kind == XR_TREF_OBJECT) {
-        char *type_name = (char *) ast_alloc(parser->X, strlen(alias_name) + 1);
+        char *type_name = (char *) ast_alloc(parser->compiler_session, strlen(alias_name) + 1);
         strcpy(type_name, alias_name);
         type_definition->name = type_name;
     }
@@ -1165,7 +1176,8 @@ AstNode *xr_parse_type_alias_declaration(Parser *parser) {
     // Stash the resolved type in TypeAliasNode::resolved_type so that
     // the analyzer can read it without going through any backchannel
     // on AstNode itself.
-    AstNode *node = xr_ast_type_alias(parser->X, alias_name, NULL, NULL, NULL, 0, line);
+    AstNode *node =
+        xr_ast_type_alias(parser->compiler_session, alias_name, NULL, NULL, NULL, 0, line);
     xr_free(alias_name);  // xr_ast_type_alias copies the name, so we can free the original
     if (!node) {
         return NULL;
@@ -1254,7 +1266,7 @@ AstNode *xr_parse_declaration(Parser *parser) {
     // yield statement: cooperatively yield execution to the scheduler
     if (xr_parser_match(parser, TK_YIELD)) {
         int line = parser->previous.line;
-        return xr_ast_yield_stmt(parser->X, line);
+        return xr_ast_yield_stmt(parser->compiler_session, line);
     }
 
     // Attributed declaration: @test fn ..., @native class ..., etc.
@@ -1424,7 +1436,8 @@ AstNode *xr_parse_declaration(Parser *parser) {
             int saved_column = parser->current.column;
 
             // Copy first identifier name
-            char *first_name = (char *) ast_alloc(parser->X, (size_t) parser->current.length + 1);
+            char *first_name =
+                (char *) ast_alloc(parser->compiler_session, (size_t) parser->current.length + 1);
             memcpy(first_name, parser->current.start, parser->current.length);
             first_name[parser->current.length] = '\0';
             xr_parser_advance(parser);
@@ -1451,8 +1464,8 @@ AstNode *xr_parse_declaration(Parser *parser) {
                     initializer = xr_parse_expression(parser);
                 }
 
-                AstNode *decl =
-                    xr_ast_var_decl(parser->X, first_name, initializer, false, saved_line);
+                AstNode *decl = xr_ast_var_decl(parser->compiler_session, first_name, initializer,
+                                                false, saved_line);
                 decl->column = saved_column;
                 if (initializer && initializer->end_line > 0) {
                     decl->end_line = initializer->end_line;
@@ -1487,7 +1500,7 @@ AstNode *xr_parse_declaration(Parser *parser) {
 
         // Multiple declarations, create sequence node
         AstNode **declarations =
-            (AstNode **) ast_alloc_array(parser->X, sizeof(AstNode *), (size_t) 16);
+            (AstNode **) ast_alloc_array(parser->compiler_session, sizeof(AstNode *), (size_t) 16);
         int decl_count = 0;
         int decl_capacity = 16;
         declarations[decl_count++] = first_decl;
@@ -1498,9 +1511,9 @@ AstNode *xr_parse_declaration(Parser *parser) {
         }
 
         // Create sequence node
-        AstNode *seq = xr_ast_program(parser->X);
+        AstNode *seq = xr_ast_program(parser->compiler_session);
         for (int i = 0; i < decl_count; i++) {
-            xr_ast_program_add(parser->X, seq, declarations[i]);
+            xr_ast_program_add(parser->compiler_session, seq, declarations[i]);
         }
         return seq;
     }
@@ -1522,7 +1535,8 @@ AstNode *xr_parse_declaration(Parser *parser) {
 
         // Parse variable name
         xr_parser_consume(parser, TK_NAME, "expected variable name");
-        char *name = (char *) ast_alloc(parser->X, (size_t) parser->previous.length + 1);
+        char *name =
+            (char *) ast_alloc(parser->compiler_session, (size_t) parser->previous.length + 1);
         memcpy(name, parser->previous.start, parser->previous.length);
         name[parser->previous.length] = '\0';
         int line = parser->previous.line;
@@ -1539,8 +1553,8 @@ AstNode *xr_parse_declaration(Parser *parser) {
         xr_parser_consume(parser, TK_ASSIGN, "shared variable must have initializer");
         AstNode *initializer = xr_parse_precedence(parser, PREC_TERNARY);
 
-        AstNode *decl = xr_ast_var_decl_with_mode(parser->X, name, initializer, is_const,
-                                                  XR_STORAGE_SHARED, line);
+        AstNode *decl = xr_ast_var_decl_with_mode(parser->compiler_session, name, initializer,
+                                                  is_const, XR_STORAGE_SHARED, line);
         decl->column = column;
         if (initializer && initializer->end_line > 0) {
             decl->end_line = initializer->end_line;
@@ -1610,7 +1624,8 @@ AstNode *xr_parse_try_statement(Parser *parser) {
         }
 
         // Save variable name and position
-        char *var_name = (char *) ast_alloc(parser->X, (size_t) parser->current.length + 1);
+        char *var_name =
+            (char *) ast_alloc(parser->compiler_session, (size_t) parser->current.length + 1);
         memcpy(var_name, parser->current.start, parser->current.length);
         var_name[parser->current.length] = '\0';
         int var_line = parser->current.line;
@@ -1629,8 +1644,8 @@ AstNode *xr_parse_try_statement(Parser *parser) {
         xr_parser_consume(parser, TK_LBRACE, "expected '{' after catch");
         AstNode *body = xr_parse_block(parser);
 
-        XrCatchClause *clause =
-            xr_ast_catch_clause(parser->X, var_name, var_line, var_column, type_ann, body);
+        XrCatchClause *clause = xr_ast_catch_clause(parser->compiler_session, var_name, var_line,
+                                                    var_column, type_ann, body);
         clause->is_panic = is_panic;
         XR_PARSE_PUSH(parser, clauses, catch_count, catch_cap, clause);
     }
@@ -1641,7 +1656,8 @@ AstNode *xr_parse_try_statement(Parser *parser) {
         return NULL;
     }
 
-    AstNode *node = xr_ast_try_catch(parser->X, try_body, clauses, catch_count, line);
+    AstNode *node =
+        xr_ast_try_catch(parser->compiler_session, try_body, clauses, catch_count, line);
     // Span ends at the last block present (last catch > try).
     AstNode *last_block = clauses[catch_count - 1]->body;
     if (!last_block)
@@ -1672,7 +1688,7 @@ AstNode *xr_parse_throw_statement(Parser *parser) {
         return NULL;
     }
 
-    return xr_ast_throw_stmt(parser->X, expression, line);
+    return xr_ast_throw_stmt(parser->compiler_session, expression, line);
 }
 
 // ========== Destructuring assignment helpers ==========
@@ -1682,14 +1698,15 @@ AstNode *xr_parse_throw_statement(Parser *parser) {
  * [a, b, c] -> destructure pattern
  * Can only convert when all elements are variable references
  */
-XrDestructurePattern *convert_array_literal_to_pattern(XrayIsolate *X, AstNode *array_literal) {
+XrDestructurePattern *convert_array_literal_to_pattern(XrCompilerSession *session,
+                                                       AstNode *array_literal) {
     if (array_literal->type != AST_ARRAY_LITERAL) {
         return NULL;
     }
 
     int count = array_literal->as.array_literal.count;
     XrDestructurePattern **elements = (XrDestructurePattern **) ast_alloc_array(
-        X, sizeof(XrDestructurePattern *), (size_t) count);
+        session, sizeof(XrDestructurePattern *), (size_t) count);
 
     for (int i = 0; i < count; i++) {
         AstNode *element = array_literal->as.array_literal.elements[i];
@@ -1697,14 +1714,14 @@ XrDestructurePattern *convert_array_literal_to_pattern(XrayIsolate *X, AstNode *
         // Check if element is variable reference
         if (element->type == AST_VARIABLE) {
             // Create identifier pattern
-            elements[i] = xr_pattern_identifier(X, element->as.variable.name, NULL);
+            elements[i] = xr_pattern_identifier(session, element->as.variable.name, NULL);
         } else {
             // Not a variable reference, cannot convert to destructure pattern
             return NULL;
         }
     }
 
-    return xr_pattern_array(X, elements, count);
+    return xr_pattern_array(session, elements, count);
 }
 
 /*
@@ -1714,25 +1731,26 @@ XrDestructurePattern *convert_array_literal_to_pattern(XrayIsolate *X, AstNode *
  * is a bare variable reference, since assignment targets cannot evaluate
  * sub-expressions.
  */
-XrDestructurePattern *convert_tuple_literal_to_pattern(XrayIsolate *X, AstNode *tuple_literal) {
+XrDestructurePattern *convert_tuple_literal_to_pattern(XrCompilerSession *session,
+                                                       AstNode *tuple_literal) {
     if (tuple_literal->type != AST_TUPLE_LITERAL) {
         return NULL;
     }
 
     int count = tuple_literal->as.tuple_literal.count;
     XrDestructurePattern **elements = (XrDestructurePattern **) ast_alloc_array(
-        X, sizeof(XrDestructurePattern *), (size_t) count);
+        session, sizeof(XrDestructurePattern *), (size_t) count);
 
     for (int i = 0; i < count; i++) {
         AstNode *element = tuple_literal->as.tuple_literal.elements[i];
         if (element->type == AST_VARIABLE) {
-            elements[i] = xr_pattern_identifier(X, element->as.variable.name, NULL);
+            elements[i] = xr_pattern_identifier(session, element->as.variable.name, NULL);
         } else {
             return NULL;
         }
     }
 
-    return xr_pattern_tuple(X, elements, count);
+    return xr_pattern_tuple(session, elements, count);
 }
 
 /*
@@ -1741,15 +1759,16 @@ XrDestructurePattern *convert_tuple_literal_to_pattern(XrayIsolate *X, AstNode *
  * Can only convert when all field keys and values are variable references and key name equals
  * variable name
  */
-XrDestructurePattern *convert_object_literal_to_pattern(XrayIsolate *X, AstNode *object_literal) {
+XrDestructurePattern *convert_object_literal_to_pattern(XrCompilerSession *session,
+                                                        AstNode *object_literal) {
     if (object_literal->type != AST_OBJECT_LITERAL) {
         return NULL;
     }
 
     int count = object_literal->as.object_literal.count;
-    char **field_names = (char **) ast_alloc_array(X, sizeof(char *), (size_t) count);
+    char **field_names = (char **) ast_alloc_array(session, sizeof(char *), (size_t) count);
     XrDestructurePattern **patterns = (XrDestructurePattern **) ast_alloc_array(
-        X, sizeof(XrDestructurePattern *), (size_t) count);
+        session, sizeof(XrDestructurePattern *), (size_t) count);
 
     for (int i = 0; i < count; i++) {
         AstNode *key_node = object_literal->as.object_literal.keys[i];
@@ -1759,10 +1778,10 @@ XrDestructurePattern *convert_object_literal_to_pattern(XrayIsolate *X, AstNode 
         char *field_name = NULL;
         if (key_node->type == AST_LITERAL_STRING) {
             // Key is string literal
-            field_name = ast_strdup(X, key_node->as.literal.raw_value.string_val);
+            field_name = ast_strdup(session, key_node->as.literal.raw_value.string_val);
         } else if (key_node->type == AST_VARIABLE) {
             // Key is variable reference (shorthand syntax: {x, y})
-            field_name = ast_strdup(X, key_node->as.variable.name);
+            field_name = ast_strdup(session, key_node->as.variable.name);
         } else {
             // Key is not string or variable, cannot convert
             return NULL;
@@ -1779,14 +1798,14 @@ XrDestructurePattern *convert_object_literal_to_pattern(XrayIsolate *X, AstNode 
 
             field_names[i] = field_name;
             // Create identifier pattern
-            patterns[i] = xr_pattern_identifier(X, value_node->as.variable.name, NULL);
+            patterns[i] = xr_pattern_identifier(session, value_node->as.variable.name, NULL);
         } else {
             // Value is not variable reference, cannot convert to destructure pattern
             return NULL;
         }
     }
 
-    return xr_pattern_object(X, field_names, patterns, count, true);
+    return xr_pattern_object(session, field_names, patterns, count, true);
 }
 
 // Destructuring declaration/pattern parsing moved to xparse_destructure.c

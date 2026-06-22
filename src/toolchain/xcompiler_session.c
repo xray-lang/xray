@@ -198,17 +198,9 @@ bool xr_compiler_session_push_arena(XrCompilerSession *session, struct XrArena *
     if (!session || !arena)
         return false;
 
-    XrayIsolate *vm_host = xr_compiler_session_vm_host(session);
-    if (!vm_host)
-        return false;
-
-    scope->vm_host = vm_host;
     scope->session = session;
-    scope->saved_session = xr_compiler_session_current_for_isolate(vm_host);
     scope->saved_arena = xr_compiler_session_current_arena(session);
     scope->saved_pool = xr_compiler_session_string_pool(session);
-    if (scope->saved_session != session)
-        xr_compiler_session_attach_isolate(vm_host, session);
 
     xr_compiler_session_set_current_arena(session, arena);
     if (!xr_compiler_session_string_pool(session) || scope->saved_arena != arena) {
@@ -225,8 +217,6 @@ void xr_compiler_session_pop_arena(XrCompilerSessionScope *scope) {
 
     xr_compiler_session_set_current_arena(scope->session, scope->saved_arena);
     xr_compiler_session_set_string_pool(scope->session, scope->saved_pool);
-    if (scope->saved_session != scope->session)
-        xr_compiler_session_attach_isolate(scope->vm_host, scope->saved_session);
 
     memset(scope, 0, sizeof(*scope));
 }

@@ -46,7 +46,8 @@ AstNode *xr_parse_if_statement(Parser *parser) {
     if (xr_parser_check(parser, TK_NAME) && parser->current.length == 4 &&
         memcmp(parser->current.start, "elif", 4) == 0) {
         xr_parser_error_at_current(parser, "unknown keyword 'elif'. Use 'else if' in Xray");
-        AstNode *stmt = xr_ast_if_stmt(parser->X, condition, then_branch, NULL, line);
+        AstNode *stmt =
+            xr_ast_if_stmt(parser->compiler_session, condition, then_branch, NULL, line);
         inherit_block_end(stmt, then_branch);
         return stmt;
     }
@@ -63,7 +64,8 @@ AstNode *xr_parse_if_statement(Parser *parser) {
         }
     }
 
-    AstNode *stmt = xr_ast_if_stmt(parser->X, condition, then_branch, else_branch, line);
+    AstNode *stmt =
+        xr_ast_if_stmt(parser->compiler_session, condition, then_branch, else_branch, line);
     // End span = end of else branch if present, otherwise end of then branch.
     inherit_block_end(stmt, else_branch ? else_branch : then_branch);
     return stmt;
@@ -85,7 +87,7 @@ AstNode *xr_parse_while_statement(Parser *parser) {
     xr_parser_advance(parser);
     AstNode *body = xr_parse_block(parser);
 
-    AstNode *stmt = xr_ast_while_stmt(parser->X, condition, body, line);
+    AstNode *stmt = xr_ast_while_stmt(parser->compiler_session, condition, body, line);
     inherit_block_end(stmt, body);
     return stmt;
 }
@@ -127,7 +129,8 @@ AstNode *xr_parse_for_statement(Parser *parser) {
     xr_parser_advance(parser);
     AstNode *body = xr_parse_block(parser);
 
-    AstNode *stmt = xr_ast_for_stmt(parser->X, initializer, condition, increment, body, line);
+    AstNode *stmt =
+        xr_ast_for_stmt(parser->compiler_session, initializer, condition, increment, body, line);
     inherit_block_end(stmt, body);
     return stmt;
 }
@@ -155,7 +158,7 @@ AstNode *xr_parse_for_in_statement(Parser *parser) {
         /* Line-derived suffix keeps the synthesised name stable across
          * re-parses while still being unique within a single function. */
         snprintf(buf, sizeof(buf), "__for_in_tuple_%d", line);
-        tuple_tmp_name = (char *) ast_alloc(parser->X, strlen(buf) + 1);
+        tuple_tmp_name = (char *) ast_alloc(parser->compiler_session, strlen(buf) + 1);
         memcpy(tuple_tmp_name, buf, strlen(buf) + 1);
     }
 
@@ -169,7 +172,8 @@ AstNode *xr_parse_for_in_statement(Parser *parser) {
             return NULL;
         }
         xr_parser_advance(parser);
-        first_name = (char *) ast_alloc(parser->X, (size_t) parser->previous.length + 1);
+        first_name =
+            (char *) ast_alloc(parser->compiler_session, (size_t) parser->previous.length + 1);
         memcpy(first_name, parser->previous.start, parser->previous.length);
         first_name[parser->previous.length] = '\0';
     }
@@ -188,7 +192,8 @@ AstNode *xr_parse_for_in_statement(Parser *parser) {
         }
         xr_parser_advance(parser);
 
-        second_name = (char *) ast_alloc(parser->X, (size_t) parser->previous.length + 1);
+        second_name =
+            (char *) ast_alloc(parser->compiler_session, (size_t) parser->previous.length + 1);
         memcpy(second_name, parser->previous.start, parser->previous.length);
         second_name[parser->previous.length] = '\0';
     }
@@ -219,15 +224,15 @@ AstNode *xr_parse_for_in_statement(Parser *parser) {
      * holds destructure_decl followed by the original statements,
      * preserving program order. */
     if (tuple_pattern && body && body->type == AST_BLOCK) {
-        AstNode *iter_var = xr_ast_variable(parser->X, tuple_tmp_name, line);
+        AstNode *iter_var = xr_ast_variable(parser->compiler_session, tuple_tmp_name, line);
         AstNode *destructure_decl =
-            xr_ast_destructure_decl(parser->X, tuple_pattern, iter_var, false, line);
+            xr_ast_destructure_decl(parser->compiler_session, tuple_pattern, iter_var, false, line);
 
         int old_count = body->as.block.count;
         int new_capacity =
             (old_count + 1 > body->as.block.capacity) ? old_count + 1 : body->as.block.capacity;
-        AstNode **new_stmts =
-            (AstNode **) ast_alloc_array(parser->X, sizeof(AstNode *), (size_t) new_capacity);
+        AstNode **new_stmts = (AstNode **) ast_alloc_array(
+            parser->compiler_session, sizeof(AstNode *), (size_t) new_capacity);
         new_stmts[0] = destructure_decl;
         for (int i = 0; i < old_count; i++)
             new_stmts[i + 1] = body->as.block.statements[i];
@@ -237,9 +242,10 @@ AstNode *xr_parse_for_in_statement(Parser *parser) {
     }
 
     AstNode *stmt =
-        is_keyvalue ? xr_ast_for_in_keyvalue_stmt(parser->X, first_name, second_name, item_type,
-                                                  collection, body, line)
-                    : xr_ast_for_in_stmt(parser->X, first_name, item_type, collection, body, line);
+        is_keyvalue ? xr_ast_for_in_keyvalue_stmt(parser->compiler_session, first_name, second_name,
+                                                  item_type, collection, body, line)
+                    : xr_ast_for_in_stmt(parser->compiler_session, first_name, item_type,
+                                         collection, body, line);
     inherit_block_end(stmt, body);
     return stmt;
 }
@@ -248,12 +254,12 @@ AstNode *xr_parse_for_in_statement(Parser *parser) {
 AstNode *xr_parse_break_statement(Parser *parser) {
     int line = parser->previous.line;
     xr_parser_advance(parser);
-    return xr_ast_break_stmt(parser->X, line);
+    return xr_ast_break_stmt(parser->compiler_session, line);
 }
 
 // Parse continue statement
 AstNode *xr_parse_continue_statement(Parser *parser) {
     int line = parser->previous.line;
     xr_parser_advance(parser);
-    return xr_ast_continue_stmt(parser->X, line);
+    return xr_ast_continue_stmt(parser->compiler_session, line);
 }

@@ -46,8 +46,8 @@ static AstNode *parse_tuple_pattern(Parser *parser) {
         if (count >= capacity) {
             int old_capacity = capacity;
             capacity = (capacity == 0) ? 4 : capacity * 2;
-            AstNode **_new =
-                (AstNode **) ast_alloc_array(parser->X, sizeof(AstNode *), (size_t) capacity);
+            AstNode **_new = (AstNode **) ast_alloc_array(parser->compiler_session,
+                                                          sizeof(AstNode *), (size_t) capacity);
             if (old_capacity > 0 && patterns)
                 memcpy(_new, patterns, sizeof(AstNode *) * (size_t) old_capacity);
             patterns = _new;
@@ -67,7 +67,7 @@ static AstNode *parse_tuple_pattern(Parser *parser) {
     }
 
     xr_parser_consume(parser, TK_RPAREN, "expected ')' to close tuple pattern");
-    return xr_ast_pattern_tuple(parser->X, patterns, count, line);
+    return xr_ast_pattern_tuple(parser->compiler_session, patterns, count, line);
 }
 
 static AstNode *expr_to_adt_pattern(Parser *parser, AstNode *expr) {
@@ -81,11 +81,12 @@ static AstNode *expr_to_adt_pattern(Parser *parser, AstNode *expr) {
     int argc = expr->as.call_expr.arg_count;
     AstNode **sub_pats = NULL;
     if (argc > 0) {
-        sub_pats = (AstNode **) ast_alloc_array(parser->X, sizeof(AstNode *), (size_t) argc);
+        sub_pats = (AstNode **) ast_alloc_array(parser->compiler_session, sizeof(AstNode *),
+                                                (size_t) argc);
         for (int i = 0; i < argc; i++)
             sub_pats[i] = expr_to_pattern(parser, expr->as.call_expr.arguments[i]);
     }
-    return xr_ast_pattern_adt(parser->X, callee, sub_pats, argc, expr->line);
+    return xr_ast_pattern_adt(parser->compiler_session, callee, sub_pats, argc, expr->line);
 }
 
 static AstNode *expr_to_pattern(Parser *parser, AstNode *expr) {
@@ -94,26 +95,27 @@ static AstNode *expr_to_pattern(Parser *parser, AstNode *expr) {
 
     if (expr->type == AST_VARIABLE) {
         if (strcmp(expr->as.variable.name, "_") == 0)
-            return xr_ast_pattern_wildcard(parser->X, expr->line);
-        return xr_ast_pattern_literal(parser->X, expr, expr->line);
+            return xr_ast_pattern_wildcard(parser->compiler_session, expr->line);
+        return xr_ast_pattern_literal(parser->compiler_session, expr, expr->line);
     }
 
     if (expr->type == AST_TUPLE_LITERAL) {
         int count = expr->as.tuple_literal.count;
         AstNode **patterns = NULL;
         if (count > 0) {
-            patterns = (AstNode **) ast_alloc_array(parser->X, sizeof(AstNode *), (size_t) count);
+            patterns = (AstNode **) ast_alloc_array(parser->compiler_session, sizeof(AstNode *),
+                                                    (size_t) count);
             for (int i = 0; i < count; i++)
                 patterns[i] = expr_to_pattern(parser, expr->as.tuple_literal.elements[i]);
         }
-        return xr_ast_pattern_tuple(parser->X, patterns, count, expr->line);
+        return xr_ast_pattern_tuple(parser->compiler_session, patterns, count, expr->line);
     }
 
     AstNode *adt = expr_to_adt_pattern(parser, expr);
     if (adt)
         return adt;
 
-    return xr_ast_pattern_literal(parser->X, expr, expr->line);
+    return xr_ast_pattern_literal(parser->compiler_session, expr, expr->line);
 }
 
 /* Parse exactly one pattern atom — wildcard, tuple destructure,
@@ -126,7 +128,7 @@ static AstNode *parse_pattern_single(Parser *parser) {
     int line = parser->current.line;
 
     if (xr_parser_match(parser, TK_UNDERSCORE)) {
-        return xr_ast_pattern_wildcard(parser->X, line);
+        return xr_ast_pattern_wildcard(parser->compiler_session, line);
     }
 
     if (xr_parser_check(parser, TK_LPAREN)) {
@@ -147,14 +149,14 @@ static AstNode *parse_pattern_single(Parser *parser) {
         if (xr_parser_check(parser, TK_NAME)) {
             Token name_tok = parser->current;
             xr_parser_advance(parser);
-            char *buf = (char *) ast_alloc(parser->X, (size_t) name_tok.length + 1);
+            char *buf = (char *) ast_alloc(parser->compiler_session, (size_t) name_tok.length + 1);
             if (!buf)
                 return NULL;
             memcpy(buf, name_tok.start, name_tok.length);
             buf[name_tok.length] = '\0';
             binding_name = buf;
         }
-        return xr_ast_pattern_type(parser->X, type, binding_name, line);
+        return xr_ast_pattern_type(parser->compiler_session, type, binding_name, line);
     }
 
     AstNode *first = xr_parse_precedence(parser, PREC_CALL);
@@ -169,7 +171,7 @@ static AstNode *parse_pattern_single(Parser *parser) {
             xr_parser_error(parser, "expected range end value");
             return NULL;
         }
-        return xr_ast_pattern_range(parser->X, first, end, line);
+        return xr_ast_pattern_range(parser->compiler_session, first, end, line);
     }
 
     /* ADT variant destructure: Shape.Circle(r, ...)
@@ -182,16 +184,16 @@ static AstNode *parse_pattern_single(Parser *parser) {
             int argc = first->as.call_expr.arg_count;
             AstNode **sub_pats = NULL;
             if (argc > 0) {
-                sub_pats =
-                    (AstNode **) ast_alloc_array(parser->X, sizeof(AstNode *), (size_t) argc);
+                sub_pats = (AstNode **) ast_alloc_array(parser->compiler_session, sizeof(AstNode *),
+                                                        (size_t) argc);
                 for (int i = 0; i < argc; i++)
                     sub_pats[i] = expr_to_pattern(parser, first->as.call_expr.arguments[i]);
             }
-            return xr_ast_pattern_adt(parser->X, callee, sub_pats, argc, line);
+            return xr_ast_pattern_adt(parser->compiler_session, callee, sub_pats, argc, line);
         }
     }
 
-    return xr_ast_pattern_literal(parser->X, first, line);
+    return xr_ast_pattern_literal(parser->compiler_session, first, line);
 }
 
 /* Top-level match-arm pattern: parse one atom, then optionally fold
@@ -211,7 +213,8 @@ static AstNode *parse_pattern(Parser *parser) {
 
     /* Alternation: `p1, p2, p3 -> ...` — gather until the arrow.
      * The first atom may itself be a tuple/range/wildcard pattern. */
-    AstNode **patterns = (AstNode **) ast_alloc_array(parser->X, sizeof(AstNode *), 16);
+    AstNode **patterns =
+        (AstNode **) ast_alloc_array(parser->compiler_session, sizeof(AstNode *), 16);
     int count = 0;
     int capacity = 16;
     patterns[count++] = first;
@@ -221,8 +224,8 @@ static AstNode *parse_pattern(Parser *parser) {
         if (count >= capacity) {
             int old_capacity = capacity;
             capacity *= 2;
-            AstNode **_new_patterns =
-                (AstNode **) ast_alloc_array(parser->X, sizeof(AstNode *), (size_t) capacity);
+            AstNode **_new_patterns = (AstNode **) ast_alloc_array(
+                parser->compiler_session, sizeof(AstNode *), (size_t) capacity);
             if (old_capacity > 0 && patterns)
                 memcpy(_new_patterns, patterns, sizeof(AstNode *) * (size_t) old_capacity);
             patterns = _new_patterns;
@@ -236,7 +239,7 @@ static AstNode *parse_pattern(Parser *parser) {
         patterns[count++] = next;
     }
 
-    return xr_ast_pattern_multi(parser->X, patterns, count, line);
+    return xr_ast_pattern_multi(parser->compiler_session, patterns, count, line);
 }
 
 /*
@@ -290,7 +293,7 @@ static AstNode *parse_match_arm(Parser *parser) {
         return NULL;
     }
 
-    return xr_ast_match_arm(parser->X, pattern, guard, body, line);
+    return xr_ast_match_arm(parser->compiler_session, pattern, guard, body, line);
 }
 
 /*
@@ -320,7 +323,7 @@ AstNode *xr_parse_match_expr(Parser *parser) {
     xr_parser_consume(parser, TK_LBRACE, "expected '{' after match scrutinee");
 
     // Parse all arms
-    AstNode **arms = (AstNode **) ast_alloc_array(parser->X, sizeof(AstNode *), 16);
+    AstNode **arms = (AstNode **) ast_alloc_array(parser->compiler_session, sizeof(AstNode *), 16);
     int arm_count = 0;
     int capacity = 16;
 
@@ -329,8 +332,8 @@ AstNode *xr_parse_match_expr(Parser *parser) {
         if (arm_count >= capacity) {
             int old_capacity = capacity;
             capacity *= 2;
-            AstNode **_new_arms =
-                (AstNode **) ast_alloc_array(parser->X, sizeof(AstNode *), (size_t) capacity);
+            AstNode **_new_arms = (AstNode **) ast_alloc_array(
+                parser->compiler_session, sizeof(AstNode *), (size_t) capacity);
             if (old_capacity > 0 && arms)
                 memcpy(_new_arms, arms, sizeof(AstNode *) * (size_t) old_capacity);
             arms = _new_arms;
@@ -369,7 +372,7 @@ AstNode *xr_parse_match_expr(Parser *parser) {
         return NULL;
     }
 
-    AstNode *node = xr_ast_match_expr(parser->X, expr, arms, arm_count, line);
+    AstNode *node = xr_ast_match_expr(parser->compiler_session, expr, arms, arm_count, line);
     node->end_line = match_end_line;
     node->end_column = match_end_column;
     return node;

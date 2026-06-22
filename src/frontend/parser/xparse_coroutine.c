@@ -67,7 +67,7 @@ static AstNode *parse_go_body(Parser *parser, uint8_t link_mode) {
                 // simply overwrite the pointer (old buffers are bulk-released
                 // with the arena).
                 int str_len = str_token.length - 2;  // Remove quotes
-                char *str_copy = (char *) ast_alloc(parser->X, (size_t) str_len + 1);
+                char *str_copy = (char *) ast_alloc(parser->compiler_session, (size_t) str_len + 1);
                 memcpy(str_copy, str_token.start + 1, str_len);
                 str_copy[str_len] = '\0';
                 name = str_copy;
@@ -90,9 +90,9 @@ static AstNode *parse_go_body(Parser *parser, uint8_t link_mode) {
         AstNode *body = xr_parse_block(parser);
 
         // Create anonymous function expression to wrap block
-        AstNode *fn_expr = xr_ast_function_decl(parser->X, "", NULL, 0, body, line);
+        AstNode *fn_expr = xr_ast_function_decl(parser->compiler_session, "", NULL, 0, body, line);
         fn_expr->type = AST_FUNCTION_EXPR;  // Mark as expression not declaration
-        return xr_ast_go_expr(parser->X, fn_expr, name, link_mode, line);
+        return xr_ast_go_expr(parser->compiler_session, fn_expr, name, link_mode, line);
     }
 
     // go expr - parse function call expression
@@ -102,7 +102,7 @@ static AstNode *parse_go_body(Parser *parser, uint8_t link_mode) {
         goto fail;
     }
 
-    return xr_ast_go_expr(parser->X, expr, name, link_mode, line);
+    return xr_ast_go_expr(parser->compiler_session, expr, name, link_mode, line);
 
 fail:
     return NULL;
@@ -189,7 +189,8 @@ AstNode *xr_parse_await_expr(Parser *parser) {
         return NULL;
     }
 
-    return xr_ast_await_expr(parser->X, expr, timeout, is_any, is_all, is_any_success, line);
+    return xr_ast_await_expr(parser->compiler_session, expr, timeout, is_any, is_all,
+                             is_any_success, line);
 }
 
 /*
@@ -228,7 +229,7 @@ AstNode *xr_parse_channel_new(Parser *parser) {
         return NULL;
     }
 
-    return xr_ast_channel_new(parser->X, buffer_size, line);
+    return xr_ast_channel_new(parser->compiler_session, buffer_size, line);
 }
 
 /*
@@ -248,7 +249,7 @@ AstNode *xr_parse_cancelled_expr(Parser *parser) {
         return NULL;
     }
 
-    return xr_ast_cancelled_expr(parser->X, line);
+    return xr_ast_cancelled_expr(parser->compiler_session, line);
 }
 
 /* Wrap an expression in a zero-arg anonymous closure: `{ <expr>; }`.
@@ -256,10 +257,11 @@ AstNode *xr_parse_cancelled_expr(Parser *parser) {
  * calls (whose receiver is not a first-class callee value) and builtin calls
  * (print/dump/...) deferrable through the same closure path as `defer { ... }`. */
 static AstNode *defer_wrap_in_closure(Parser *parser, AstNode *call_expr, int line) {
-    AstNode *body = xr_ast_block(parser->X, line);
-    xr_ast_block_add(parser->X, body, xr_ast_expr_stmt(parser->X, call_expr, line));
-    AstNode *fn_expr = xr_ast_function_expr(parser->X, NULL, 0, body, line);
-    return xr_ast_defer_stmt(parser->X, fn_expr, line);
+    AstNode *body = xr_ast_block(parser->compiler_session, line);
+    xr_ast_block_add(parser->compiler_session, body,
+                     xr_ast_expr_stmt(parser->compiler_session, call_expr, line));
+    AstNode *fn_expr = xr_ast_function_expr(parser->compiler_session, NULL, 0, body, line);
+    return xr_ast_defer_stmt(parser->compiler_session, fn_expr, line);
 }
 
 /* Desugar `defer callee(a0, a1, ...)` into eager argument capture plus a
@@ -277,7 +279,7 @@ static AstNode *defer_wrap_in_closure(Parser *parser, AstNode *call_expr, int li
  * Each desugared defer gets its own block scope, so the fixed temp names never
  * collide across sibling defers. */
 static AstNode *defer_desugar_call(Parser *parser, AstNode *call_node, int line) {
-    XrayIsolate *X = parser->X;
+    XrCompilerSession *session = parser->compiler_session;
     CallExprNode *call = &call_node->as.call_expr;
     int n = call->arg_count;
 
@@ -285,22 +287,23 @@ static AstNode *defer_desugar_call(Parser *parser, AstNode *call_node, int line)
         return defer_wrap_in_closure(parser, call_node, line);
 
     /* Build temp references and the rewritten call that uses them. */
-    AstNode **temp_refs = (AstNode **) ast_alloc_array(X, sizeof(AstNode *), (size_t) n);
+    AstNode **temp_refs = (AstNode **) ast_alloc_array(session, sizeof(AstNode *), (size_t) n);
     char name[24];
     for (int k = 0; k < n; k++) {
         snprintf(name, sizeof(name), "__xr_dtmp_%d", k);
-        temp_refs[k] = xr_ast_variable(X, name, line);
+        temp_refs[k] = xr_ast_variable(session, name, line);
     }
-    AstNode *new_call = xr_ast_call_expr_generic(X, call->callee, temp_refs, n, call->type_args,
-                                                 call->type_arg_count, line);
+    AstNode *new_call = xr_ast_call_expr_generic(session, call->callee, temp_refs, n,
+                                                 call->type_args, call->type_arg_count, line);
 
     /* Outer block: snapshot args into temps, then defer the rewritten call. */
-    AstNode *outer = xr_ast_block(X, line);
+    AstNode *outer = xr_ast_block(session, line);
     for (int k = 0; k < n; k++) {
         snprintf(name, sizeof(name), "__xr_dtmp_%d", k);
-        xr_ast_block_add(X, outer, xr_ast_var_decl(X, name, call->arguments[k], false, line));
+        xr_ast_block_add(session, outer,
+                         xr_ast_var_decl(session, name, call->arguments[k], false, line));
     }
-    xr_ast_block_add(X, outer, defer_wrap_in_closure(parser, new_call, line));
+    xr_ast_block_add(session, outer, defer_wrap_in_closure(parser, new_call, line));
     return outer;
 }
 
@@ -324,8 +327,8 @@ AstNode *xr_parse_defer_statement(Parser *parser) {
         AstNode *body = xr_parse_block(parser);
 
         // Create anonymous function expression to wrap block
-        AstNode *fn_expr = xr_ast_function_expr(parser->X, NULL, 0, body, line);
-        return xr_ast_defer_stmt(parser->X, fn_expr, line);
+        AstNode *fn_expr = xr_ast_function_expr(parser->compiler_session, NULL, 0, body, line);
+        return xr_ast_defer_stmt(parser->compiler_session, fn_expr, line);
     }
 
     // defer expr - parse function call expression
@@ -338,7 +341,7 @@ AstNode *xr_parse_defer_statement(Parser *parser) {
     if (expr->type == AST_CALL_EXPR)
         return defer_desugar_call(parser, expr, line);
 
-    return xr_ast_defer_stmt(parser->X, expr, line);
+    return xr_ast_defer_stmt(parser->compiler_session, expr, line);
 }
 
 /*
@@ -359,7 +362,8 @@ AstNode *xr_parse_select_statement(Parser *parser) {
     AstNode **cases = NULL;
     int case_count = 0;
     int case_capacity = 8;
-    cases = (AstNode **) ast_alloc_array(parser->X, sizeof(AstNode *), (size_t) case_capacity);
+    cases = (AstNode **) ast_alloc_array(parser->compiler_session, sizeof(AstNode *),
+                                         (size_t) case_capacity);
 
     while (!xr_parser_check(parser, TK_RBRACE) && !xr_parser_check(parser, TK_EOF)) {
         AstNode *case_node = NULL;
@@ -381,8 +385,8 @@ AstNode *xr_parse_select_statement(Parser *parser) {
             } else {
                 body = xr_parse_expression(parser);
             }
-            case_node = xr_ast_select_case(parser->X, NULL, NULL, NULL, body, false, true, false,
-                                           case_line);
+            case_node = xr_ast_select_case(parser->compiler_session, NULL, NULL, NULL, body, false,
+                                           true, false, case_line);
         } else {
             // Parse expression, then check if from or to
             // var from ch -> ... (recv) or val to ch -> ... (send)
@@ -424,8 +428,8 @@ AstNode *xr_parse_select_statement(Parser *parser) {
                 } else {
                     body = xr_parse_expression(parser);
                 }
-                case_node = xr_ast_select_case(parser->X, var_name, channel, NULL, body, false,
-                                               false, false, case_line);
+                case_node = xr_ast_select_case(parser->compiler_session, var_name, channel, NULL,
+                                               body, false, false, false, case_line);
 
             } else if (xr_parser_check_name(parser, "to")) {
                 // send case: val to ch -> ...
@@ -454,8 +458,8 @@ AstNode *xr_parse_select_statement(Parser *parser) {
                 } else {
                     body = xr_parse_expression(parser);
                 }
-                case_node = xr_ast_select_case(parser->X, NULL, channel, value, body, true, false,
-                                               false, case_line);
+                case_node = xr_ast_select_case(parser->compiler_session, NULL, channel, value, body,
+                                               true, false, false, case_line);
 
             } else if (xr_parser_check(parser, TK_ARROW)) {
                 // Check if after case: after ms -> ...
@@ -494,8 +498,8 @@ AstNode *xr_parse_select_statement(Parser *parser) {
                     body = xr_parse_expression(parser);
                 }
                 // is_timeout = true, value = timeout_expr
-                case_node = xr_ast_select_case(parser->X, NULL, NULL, timeout_expr, body, false,
-                                               false, true, case_line);
+                case_node = xr_ast_select_case(parser->compiler_session, NULL, NULL, timeout_expr,
+                                               body, false, false, true, case_line);
 
             } else {
                 xr_parser_error(parser, "expected 'from', 'to' or 'after' in select case");
@@ -517,7 +521,7 @@ AstNode *xr_parse_select_statement(Parser *parser) {
         return NULL;
     }
 
-    AstNode *result = xr_ast_select_stmt(parser->X, cases, case_count, line);
+    AstNode *result = xr_ast_select_stmt(parser->compiler_session, cases, case_count, line);
     return result;
 }
 
@@ -540,7 +544,7 @@ static AstNode *parse_scope_body(Parser *parser, uint8_t scope_mode) {
     // Parse block content
     AstNode *body = xr_parse_block(parser);
 
-    AstNode *node = xr_ast_scope_block(parser->X, body, scope_mode, line);
+    AstNode *node = xr_ast_scope_block(parser->compiler_session, body, scope_mode, line);
     if (body) {
         node->end_line = body->end_line;
         node->end_column = body->end_column;
@@ -577,7 +581,7 @@ AstNode *xr_parse_move_expr(Parser *parser) {
         return NULL;
     }
 
-    return xr_ast_move_expr(parser->X, expr, line, column);
+    return xr_ast_move_expr(parser->compiler_session, expr, line, column);
 }
 
 /*
@@ -606,5 +610,5 @@ AstNode *xr_parse_unsafe_expr(Parser *parser) {
         return NULL;
     }
 
-    return xr_ast_unsafe_expr(parser->X, body, line, column);
+    return xr_ast_unsafe_expr(parser->compiler_session, body, line, column);
 }

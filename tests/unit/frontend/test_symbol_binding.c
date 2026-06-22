@@ -361,7 +361,8 @@ static int count_unresolved_vars(AstNode *node) {
 /* Parse + analyze + lower; check binding invariant.
  * Returns true if all bindings resolved and lowering succeeded. */
 static bool check_bindings(const char *source, const char *label) {
-    AstNode *program = xr_parse(xr_compiler_session_current_for_isolate(g_iso), source);
+    XrCompilerSession *session = xr_compiler_session_current_for_isolate(g_iso);
+    AstNode *program = xr_parse(session, source);
     if (!program) {
         fprintf(stderr, "  [%s] PARSE FAILED\n", label);
         return false;
@@ -384,11 +385,10 @@ static bool check_bindings(const char *source, const char *label) {
     freopen("/dev/null", "w", stderr);
 #endif
     XrCompilerSessionScope canon_scope;
-    bool has_canon_scope =
-        program->type == AST_PROGRAM && program->as.program.arena &&
-        xr_compiler_session_push_arena(xr_compiler_session_current_for_isolate(g_iso),
-                                       program->as.program.arena, "binding_test.xr", &canon_scope);
-    xr_canon_program(program, analyzer, g_iso);
+    bool has_canon_scope = program->type == AST_PROGRAM && program->as.program.arena &&
+                           xr_compiler_session_push_arena(session, program->as.program.arena,
+                                                          "binding_test.xr", &canon_scope);
+    xr_canon_program(program, analyzer, session);
     if (has_canon_scope)
         xr_compiler_session_pop_arena(&canon_scope);
     XiFunc *func = xi_lower_program(program, analyzer, g_iso);

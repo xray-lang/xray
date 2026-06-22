@@ -56,7 +56,7 @@ static bool validate_import_specifier(Parser *parser, const char *path) {
  */
 static char *extract_quoted_path(Parser *parser) {
     int len = parser->previous.length - 2;  // Remove two quotes
-    char *path = (char *) ast_alloc(parser->X, (size_t) len + 1);
+    char *path = (char *) ast_alloc(parser->compiler_session, (size_t) len + 1);
     memcpy(path, parser->previous.start + 1, len);
     path[len] = '\0';
     return path;
@@ -77,10 +77,10 @@ static void parse_bare_module_name(Parser *parser, char **out_name) {
     if (xr_parser_check(parser, TK_SLASH)) {
         xr_parser_error(parser, "bare 'import owner/name' is not supported; "
                                 "use 'import \"owner/name\"' with quotes");
-        *out_name = ast_strdup(parser->X, first_part);
+        *out_name = ast_strdup(parser->compiler_session, first_part);
         return;
     }
-    *out_name = ast_strdup(parser->X, first_part);
+    *out_name = ast_strdup(parser->compiler_session, first_part);
 }
 
 /*
@@ -118,7 +118,7 @@ static char *extract_default_alias(Parser *parser, const char *module_name) {
         return NULL;
     }
 
-    char *alias = (char *) ast_alloc(parser->X, (size_t) name_len + 1);
+    char *alias = (char *) ast_alloc(parser->compiler_session, (size_t) name_len + 1);
     memcpy(alias, name_start, name_len);
     alias[name_len] = '\0';
 
@@ -161,8 +161,8 @@ static void free_reexport_members(ReexportMember *members, int count) {
 static bool parse_import_members(Parser *parser, ImportMember **out_members, int *out_count) {
     XR_DCHECK(parser != NULL, "parse_import_members: NULL parser");
     int capacity = 8;
-    ImportMember *members =
-        (ImportMember *) ast_alloc_array(parser->X, sizeof(ImportMember), (size_t) capacity);
+    ImportMember *members = (ImportMember *) ast_alloc_array(
+        parser->compiler_session, sizeof(ImportMember), (size_t) capacity);
     int count = 0;
 
     do {
@@ -173,7 +173,7 @@ static bool parse_import_members(Parser *parser, ImportMember **out_members, int
         if (count >= capacity) {
             capacity *= 2;
             ImportMember *_new_members = (ImportMember *) ast_alloc_array(
-                parser->X, sizeof(ImportMember), (size_t) capacity);
+                parser->compiler_session, sizeof(ImportMember), (size_t) capacity);
             memcpy(_new_members, members, sizeof(ImportMember) * (size_t) count);
             members = _new_members;
         }
@@ -181,7 +181,7 @@ static bool parse_import_members(Parser *parser, ImportMember **out_members, int
         // Parse member name
         xr_parser_consume(parser, TK_NAME, "expected import member name");
         int name_len = parser->previous.length;
-        members[count].name = (char *) ast_alloc(parser->X, (size_t) name_len + 1);
+        members[count].name = (char *) ast_alloc(parser->compiler_session, (size_t) name_len + 1);
         memcpy(members[count].name, parser->previous.start, name_len);
         members[count].name[name_len] = '\0';
         members[count].alias = NULL;
@@ -190,7 +190,8 @@ static bool parse_import_members(Parser *parser, ImportMember **out_members, int
         if (xr_parser_match(parser, TK_AS)) {
             xr_parser_consume(parser, TK_NAME, "expected alias");
             int alias_len = parser->previous.length;
-            members[count].alias = (char *) ast_alloc(parser->X, (size_t) alias_len + 1);
+            members[count].alias =
+                (char *) ast_alloc(parser->compiler_session, (size_t) alias_len + 1);
             memcpy(members[count].alias, parser->previous.start, alias_len);
             members[count].alias[alias_len] = '\0';
         }
@@ -286,7 +287,8 @@ AstNode *xr_parse_import_declaration(Parser *parser) {
         if (xr_parser_match(parser, TK_AS)) {
             // Explicit alias: import xxx as alias
             xr_parser_consume(parser, TK_NAME, "expected alias");
-            alias = (char *) ast_alloc(parser->X, (size_t) parser->previous.length + 1);
+            alias =
+                (char *) ast_alloc(parser->compiler_session, (size_t) parser->previous.length + 1);
             memcpy(alias, parser->previous.start, parser->previous.length);
             alias[parser->previous.length] = '\0';
         } else {
@@ -303,8 +305,8 @@ AstNode *xr_parse_import_declaration(Parser *parser) {
     }
 
     // ========== Create AST node ==========
-    AstNode *node = xr_ast_import_stmt_ex(parser->X, module_name, alias, is_quoted, members,
-                                          member_count, line);
+    AstNode *node = xr_ast_import_stmt_ex(parser->compiler_session, module_name, alias, is_quoted,
+                                          members, member_count, line);
 
     // Clean up temporary memory (members are taken over by AST node)
 
@@ -338,12 +340,13 @@ AstNode *xr_parse_export_declaration(Parser *parser) {
 
         // Extract path
         size_t len = parser->previous.length - 2;  // Remove quotes
-        char *from_path = (char *) ast_alloc(parser->X, (size_t) len + 1);
+        char *from_path = (char *) ast_alloc(parser->compiler_session, (size_t) len + 1);
         memcpy(from_path, parser->previous.start + 1, len);
         from_path[len] = '\0';
 
         // xr_ast_export_reexport strdups from_path; release our copy.
-        AstNode *node = xr_ast_export_reexport(parser->X, from_path, NULL, 0, true, line);
+        AstNode *node =
+            xr_ast_export_reexport(parser->compiler_session, from_path, NULL, 0, true, line);
         return node;
     }
 
@@ -353,7 +356,7 @@ AstNode *xr_parse_export_declaration(Parser *parser) {
         int capacity = 4;
         int count = 0;
         ReexportMember *members = (ReexportMember *) ast_alloc_array(
-            parser->X, sizeof(ReexportMember), (size_t) capacity);
+            parser->compiler_session, sizeof(ReexportMember), (size_t) capacity);
 
         do {
             if (xr_parser_check(parser, TK_RBRACE))
@@ -368,14 +371,14 @@ AstNode *xr_parse_export_declaration(Parser *parser) {
             if (count >= capacity) {
                 capacity *= 2;
                 ReexportMember *new_members = (ReexportMember *) ast_alloc_array(
-                    parser->X, sizeof(ReexportMember), (size_t) capacity);
+                    parser->compiler_session, sizeof(ReexportMember), (size_t) capacity);
                 memcpy(new_members, members, count * sizeof(ReexportMember));
                 members = new_members;
             }
 
             // Copy member name
             size_t len = parser->previous.length;
-            char *name = (char *) ast_alloc(parser->X, (size_t) len + 1);
+            char *name = (char *) ast_alloc(parser->compiler_session, (size_t) len + 1);
             memcpy(name, parser->previous.start, len);
             name[len] = '\0';
             members[count].name = name;
@@ -389,7 +392,7 @@ AstNode *xr_parse_export_declaration(Parser *parser) {
                     return NULL;
                 }
                 len = parser->previous.length;
-                char *alias = (char *) ast_alloc(parser->X, (size_t) len + 1);
+                char *alias = (char *) ast_alloc(parser->compiler_session, (size_t) len + 1);
                 memcpy(alias, parser->previous.start, len);
                 alias[len] = '\0';
                 members[count].alias = alias;
@@ -414,11 +417,11 @@ AstNode *xr_parse_export_declaration(Parser *parser) {
                 return NULL;
             }
             size_t path_len = parser->previous.length - 2;
-            char *from_path = (char *) ast_alloc(parser->X, (size_t) path_len + 1);
+            char *from_path = (char *) ast_alloc(parser->compiler_session, (size_t) path_len + 1);
             memcpy(from_path, parser->previous.start + 1, path_len);
             from_path[path_len] = '\0';
-            AstNode *node =
-                xr_ast_export_reexport(parser->X, from_path, members, count, false, line);
+            AstNode *node = xr_ast_export_reexport(parser->compiler_session, from_path, members,
+                                                   count, false, line);
             return node;
         }
 
@@ -431,10 +434,11 @@ AstNode *xr_parse_export_declaration(Parser *parser) {
                 return NULL;
             }
         }
-        char **names = (char **) ast_alloc_array(parser->X, sizeof(char *), (size_t) count);
+        char **names =
+            (char **) ast_alloc_array(parser->compiler_session, sizeof(char *), (size_t) count);
         for (int i = 0; i < count; i++)
             names[i] = members[i].name;
-        return xr_ast_export_list(parser->X, names, count, line);
+        return xr_ast_export_list(parser->compiler_session, names, count, line);
     }
 
     // Parse exported declaration
@@ -497,5 +501,5 @@ AstNode *xr_parse_export_declaration(Parser *parser) {
         return NULL;
     }
 
-    return xr_ast_export_stmt(parser->X, declaration, export_name, line);
+    return xr_ast_export_stmt(parser->compiler_session, declaration, export_name, line);
 }

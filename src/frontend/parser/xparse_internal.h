@@ -61,12 +61,12 @@ XR_FUNC const ParseRule *xr_get_rule(XrTokenType type);
 
 /* ========== Arena-backed AST Allocation ==========
  *
- * The current arena must be installed on the Isolate before parsing.
+ * The current arena must be installed on the compiler session before parsing.
  * A missing arena is a programming error and aborts via XR_CHECK.
  */
-XR_FUNC void *ast_alloc(XrayIsolate *X, size_t size);
-XR_FUNC void *ast_alloc_array(XrayIsolate *X, size_t elem_size, size_t count);
-XR_FUNC char *ast_strdup(XrayIsolate *X, const char *s);
+XR_FUNC void *ast_alloc(XrCompilerSession *session, size_t size);
+XR_FUNC void *ast_alloc_array(XrCompilerSession *session, size_t elem_size, size_t count);
+XR_FUNC char *ast_strdup(XrCompilerSession *session, const char *s);
 
 // Arena-based dynamic-array push: doubles capacity by reallocating into the
 // arena. Original buffer is leaked into the arena and reclaimed in bulk.
@@ -74,7 +74,8 @@ XR_FUNC char *ast_strdup(XrayIsolate *X, const char *s);
     do {                                                                                           \
         if ((count) >= (cap)) {                                                                    \
             int _new_cap = (cap) == 0 ? 4 : (cap) * 2;                                             \
-            void *_new_arr = ast_alloc_array((parser)->X, sizeof(*(arr)), (size_t) _new_cap);      \
+            void *_new_arr =                                                                       \
+                ast_alloc_array((parser)->compiler_session, sizeof(*(arr)), (size_t) _new_cap);    \
             if ((arr) != NULL && (count) > 0) {                                                    \
                 memcpy(_new_arr, (arr), sizeof(*(arr)) * (size_t) (count));                        \
             }                                                                                      \
@@ -216,11 +217,11 @@ XR_FUNC XrDestructurePattern *xr_parse_object_pattern(Parser *parser);
 XR_FUNC XrDestructurePattern *xr_parse_destructure_pattern(Parser *parser);
 XR_FUNC AstNode *xr_parse_destructure_declaration(Parser *parser, bool is_const);
 
-XR_FUNC XrDestructurePattern *convert_array_literal_to_pattern(XrayIsolate *X,
+XR_FUNC XrDestructurePattern *convert_array_literal_to_pattern(XrCompilerSession *session,
                                                                AstNode *array_literal);
-XR_FUNC XrDestructurePattern *convert_tuple_literal_to_pattern(XrayIsolate *X,
+XR_FUNC XrDestructurePattern *convert_tuple_literal_to_pattern(XrCompilerSession *session,
                                                                AstNode *tuple_literal);
-XR_FUNC XrDestructurePattern *convert_object_literal_to_pattern(XrayIsolate *X,
+XR_FUNC XrDestructurePattern *convert_object_literal_to_pattern(XrCompilerSession *session,
                                                                 AstNode *object_literal);
 
 /* ========== Coroutine Parsing ========== */

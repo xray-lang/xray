@@ -58,7 +58,7 @@ XR_FUNC XrTypeRef *xr_parse_type_annotation(Parser *parser) {
 
     /* Optional type suffix: T? */
     if (xr_parser_match(parser, TK_QUESTION))
-        base = xr_tref_optional(parser->X, base);
+        base = xr_tref_optional(parser->compiler_session, base);
 
     /* Union type: T | U | ... */
     if (xr_parser_check(parser, TK_PIPE)) {
@@ -69,17 +69,17 @@ XR_FUNC XrTypeRef *xr_parse_type_annotation(Parser *parser) {
         while (xr_parser_match(parser, TK_PIPE) && count < XR_TREF_UNION_MAX + 1) {
             XrTypeRef *next = parse_type_annotation_base(parser);
             if (xr_parser_match(parser, TK_QUESTION))
-                next = xr_tref_optional(parser->X, next);
+                next = xr_tref_optional(parser->compiler_session, next);
             if (count < XR_TREF_UNION_MAX + 1)
                 members[count++] = next;
         }
 
         if (count > XR_TREF_UNION_MAX) {
             xr_parser_error(parser, "union type exceeds maximum of 6 members");
-            return xr_tref_unknown(parser->X);
+            return xr_tref_unknown(parser->compiler_session);
         }
 
-        return xr_tref_union(parser->X, members, count);
+        return xr_tref_union(parser->compiler_session, members, count);
     }
 
     return base;
@@ -100,7 +100,7 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
             xr_parser_advance(parser);
             if (xr_parser_match(parser, TK_RBRACKET)) {
                 XrTypeRef *elem = parse_type_annotation_base(parser);
-                return xr_tref_fixed_array(parser->X, elem, length);
+                return xr_tref_fixed_array(parser->compiler_session, elem, length);
             }
         }
         parser->scanner = saved;
@@ -109,39 +109,39 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
 
     /* Primitive type keywords */
     if (xr_parser_match(parser, TK_INT))
-        return xr_tref_int(parser->X);
+        return xr_tref_int(parser->compiler_session);
     if (xr_parser_match(parser, TK_FLOAT))
-        return xr_tref_float(parser->X);
+        return xr_tref_float(parser->compiler_session);
     if (xr_parser_match(parser, TK_STRING))
-        return xr_tref_string(parser->X);
+        return xr_tref_string(parser->compiler_session);
     if (xr_parser_match(parser, TK_BOOL))
-        return xr_tref_bool(parser->X);
+        return xr_tref_bool(parser->compiler_session);
     if (xr_parser_match(parser, TK_NULL))
-        return xr_tref_null(parser->X);
+        return xr_tref_null(parser->compiler_session);
 
     /* Native-width integer types */
     if (xr_parser_match(parser, TK_INT8))
-        return xr_tref_int_width(parser->X, XR_TREF_NW_I8);
+        return xr_tref_int_width(parser->compiler_session, XR_TREF_NW_I8);
     if (xr_parser_match(parser, TK_INT16))
-        return xr_tref_int_width(parser->X, XR_TREF_NW_I16);
+        return xr_tref_int_width(parser->compiler_session, XR_TREF_NW_I16);
     if (xr_parser_match(parser, TK_INT32))
-        return xr_tref_int_width(parser->X, XR_TREF_NW_I32);
+        return xr_tref_int_width(parser->compiler_session, XR_TREF_NW_I32);
     if (xr_parser_match(parser, TK_INT64))
-        return xr_tref_int_width(parser->X, XR_TREF_NW_I64);
+        return xr_tref_int_width(parser->compiler_session, XR_TREF_NW_I64);
     if (xr_parser_match(parser, TK_UINT8))
-        return xr_tref_int_width(parser->X, XR_TREF_NW_U8);
+        return xr_tref_int_width(parser->compiler_session, XR_TREF_NW_U8);
     if (xr_parser_match(parser, TK_UINT16))
-        return xr_tref_int_width(parser->X, XR_TREF_NW_U16);
+        return xr_tref_int_width(parser->compiler_session, XR_TREF_NW_U16);
     if (xr_parser_match(parser, TK_UINT32))
-        return xr_tref_int_width(parser->X, XR_TREF_NW_U32);
+        return xr_tref_int_width(parser->compiler_session, XR_TREF_NW_U32);
     if (xr_parser_match(parser, TK_UINT64))
-        return xr_tref_int_width(parser->X, XR_TREF_NW_U64);
+        return xr_tref_int_width(parser->compiler_session, XR_TREF_NW_U64);
 
     /* Native-width float types */
     if (xr_parser_match(parser, TK_FLOAT32))
-        return xr_tref_float_width(parser->X, XR_TREF_NW_F32);
+        return xr_tref_float_width(parser->compiler_session, XR_TREF_NW_F32);
     if (xr_parser_match(parser, TK_FLOAT64))
-        return xr_tref_float_width(parser->X, XR_TREF_NW_F64);
+        return xr_tref_float_width(parser->compiler_session, XR_TREF_NW_F64);
 
     /* Struct type literal: { x: float, y: float } or { x: float, ... } */
     if (xr_parser_match(parser, TK_LBRACE)) {
@@ -179,7 +179,7 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
             xr_parser_consume(parser, TK_COLON, "expected ':'");
             XrTypeRef *ftype = xr_parse_type_annotation(parser);
             if (is_optional)
-                ftype = xr_tref_optional(parser->X, ftype);
+                ftype = xr_tref_optional(parser->compiler_session, ftype);
             ftypes[field_count] = ftype;
             freadonly[field_count] = is_const;
             field_count++;
@@ -187,8 +187,8 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
         }
         xr_parser_consume(parser, TK_RBRACE, "expected '}'");
 
-        XrTypeRef *result =
-            xr_tref_object(parser->X, fnames, ftypes, freadonly, field_count, allow_extension);
+        XrTypeRef *result = xr_tref_object(parser->compiler_session, fnames, ftypes, freadonly,
+                                           field_count, allow_extension);
         for (int i = 0; i < field_count; i++)
             xr_free((void *) fnames[i]);
         xr_free(fnames);
@@ -224,15 +224,15 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
             // `() -> R` is a zero-arity function type; bare `()` is unit.
             if (xr_parser_match(parser, TK_ARROW)) {
                 XrTypeRef *ret = xr_parse_type_annotation(parser);
-                return xr_tref_function(parser->X, NULL, 0, ret);
+                return xr_tref_function(parser->compiler_session, NULL, 0, ret);
             }
-            return xr_tref_unit(parser->X);
+            return xr_tref_unit(parser->compiler_session);
         }
         int cap = 8;
         XrTypeRef **elems = (XrTypeRef **) xr_malloc((size_t) cap * sizeof(XrTypeRef *));
         if (!elems) {
             xr_parser_error(parser, "out of memory while parsing type list");
-            return xr_tref_unknown(parser->X);
+            return xr_tref_unknown(parser->compiler_session);
         }
         int count = 0;
         while (!xr_parser_check(parser, TK_RPAREN) && !xr_parser_check(parser, TK_EOF)) {
@@ -245,7 +245,7 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
                 if (!resized) {
                     xr_free(elems);
                     xr_parser_error(parser, "out of memory while growing type list");
-                    return xr_tref_unknown(parser->X);
+                    return xr_tref_unknown(parser->compiler_session);
                 }
                 elems = resized;
                 cap = new_cap;
@@ -255,16 +255,16 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
         xr_parser_consume(parser, TK_RPAREN, "expected ')'");
         if (xr_parser_match(parser, TK_ARROW)) {
             XrTypeRef *ret = xr_parse_type_annotation(parser);
-            XrTypeRef *result = xr_tref_function(parser->X, elems, count, ret);
+            XrTypeRef *result = xr_tref_function(parser->compiler_session, elems, count, ret);
             xr_free(elems);
             return result;
         }
         // `()` with no trailing `->` is the unit type, not an empty tuple.
         if (count == 0) {
             xr_free(elems);
-            return xr_tref_unit(parser->X);
+            return xr_tref_unit(parser->compiler_session);
         }
-        XrTypeRef *result = xr_tref_tuple(parser->X, elems, count);
+        XrTypeRef *result = xr_tref_tuple(parser->compiler_session, elems, count);
         xr_free(elems);
         return result;
     }
@@ -280,50 +280,50 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
         /* Misspelling detection (purely syntactic, kept in parser) */
         if (strcmp(temp_name, "JsonValue") == 0) {
             xr_parser_error(parser, "Type 'JsonValue' has been removed. Use 'Json' instead.");
-            return xr_tref_named(parser->X, "Json");
+            return xr_tref_named(parser->compiler_session, "Json");
         }
         if (strcmp(temp_name, "any") == 0) {
             xr_parser_error(parser, "'any' type is not supported. "
                                     "Use a concrete type or 'Json' for dynamic values.");
-            return xr_tref_unknown(parser->X);
+            return xr_tref_unknown(parser->compiler_session);
         }
         if (strcmp(temp_name, "String") == 0 || strcmp(temp_name, "str") == 0) {
             xr_parser_error(parser, "type 'string' must be lowercase in Xray");
-            return xr_tref_string(parser->X);
+            return xr_tref_string(parser->compiler_session);
         }
         if (strcmp(temp_name, "Int") == 0 || strcmp(temp_name, "Integer") == 0 ||
             strcmp(temp_name, "integer") == 0) {
             xr_parser_error(parser, "use 'int' (lowercase) for integer type in Xray");
-            return xr_tref_int(parser->X);
+            return xr_tref_int(parser->compiler_session);
         }
         if (strcmp(temp_name, "Float") == 0 || strcmp(temp_name, "Double") == 0 ||
             strcmp(temp_name, "double") == 0) {
             xr_parser_error(parser, "use 'float' (lowercase) for floating-point type in Xray");
-            return xr_tref_float(parser->X);
+            return xr_tref_float(parser->compiler_session);
         }
         if (strcmp(temp_name, "Bool") == 0 || strcmp(temp_name, "Boolean") == 0 ||
             strcmp(temp_name, "boolean") == 0) {
             xr_parser_error(parser, "use 'bool' (lowercase) for boolean type in Xray");
-            return xr_tref_bool(parser->X);
+            return xr_tref_bool(parser->compiler_session);
         }
         if (strcmp(temp_name, "char") == 0 || strcmp(temp_name, "Char") == 0) {
             xr_parser_error(parser, "there is no 'char' type in Xray. Use 'string' for characters");
-            return xr_tref_string(parser->X);
+            return xr_tref_string(parser->compiler_session);
         }
         if (strcmp(temp_name, "void") == 0) {
             xr_parser_emit_removed_syntax(
                 parser, &name_token, XR_ERR_SYN_VOID_REMOVED, "`void` keyword was removed",
                 "use Unit type `()` instead - xray uses 0-arity tuple as Unit");
-            return xr_tref_unit(parser->X);
+            return xr_tref_unit(parser->compiler_session);
         }
 
         /* Platform-width integers (FFI: C size_t / ptrdiff_t). On the supported
          * 64-bit targets these alias uint64 / int64. Contextual type names (not
          * lexer keywords) to avoid reserving common identifiers. */
         if (strcmp(temp_name, "uintsize") == 0)
-            return xr_tref_int_width(parser->X, XR_TREF_NW_U64);
+            return xr_tref_int_width(parser->compiler_session, XR_TREF_NW_U64);
         if (strcmp(temp_name, "intsize") == 0)
-            return xr_tref_int_width(parser->X, XR_TREF_NW_I64);
+            return xr_tref_int_width(parser->compiler_session, XR_TREF_NW_I64);
 
         /* Generic type arguments: Name<T1, T2, ...> */
         if (xr_parser_match(parser, TK_LT)) {
@@ -334,7 +334,7 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
                     type_args[type_arg_count++] = xr_parse_type_annotation(parser);
             } while (xr_parser_match(parser, TK_COMMA));
             consume_gt_in_generic(parser);
-            return xr_tref_generic(parser->X, temp_name, type_args, type_arg_count);
+            return xr_tref_generic(parser->compiler_session, temp_name, type_args, type_arg_count);
         }
 
         /* Check parser's type scope for aliases and generic params */
@@ -345,12 +345,12 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
         }
 
         /* Plain named type (class, enum, prelude — resolved in analyzer) */
-        return xr_tref_named(parser->X, temp_name);
+        return xr_tref_named(parser->compiler_session, temp_name);
     }
 
     /* Error recovery */
     xr_parser_error_expected_name(parser, "expected type name");
-    return xr_tref_unknown(parser->X);
+    return xr_tref_unknown(parser->compiler_session);
 }
 
 /* Parse one or more interface constraints joined by '&'.

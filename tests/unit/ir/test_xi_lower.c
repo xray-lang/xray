@@ -50,9 +50,10 @@ static void teardown(void) {
  * Caller must call xi_func_free() on the result. */
 static XiFunc *lower_source(const char *source) {
     assert(g_iso != NULL);
+    XrCompilerSession *session = xr_compiler_session_current_for_isolate(g_iso);
 
     /* Parse */
-    AstNode *program = xr_parse(xr_compiler_session_current_for_isolate(g_iso), source);
+    AstNode *program = xr_parse(session, source);
     if (!program) {
         fprintf(stderr, "  PARSE FAILED for: %s\n", source);
         return NULL;
@@ -71,11 +72,10 @@ static XiFunc *lower_source(const char *source) {
     XrCompilerSessionScope canon_scope;
     bool has_canon_scope =
         program->type == AST_PROGRAM && program->as.program.arena &&
-        xr_compiler_session_push_arena(xr_compiler_session_current_for_isolate(g_iso),
-                                       program->as.program.arena, "test.xr", &canon_scope);
+        xr_compiler_session_push_arena(session, program->as.program.arena, "test.xr", &canon_scope);
 
     /* Canonicalize + Lower */
-    xr_canon_program(program, analyzer, g_iso);
+    xr_canon_program(program, analyzer, session);
     if (has_canon_scope)
         xr_compiler_session_pop_arena(&canon_scope);
     XiFunc *func = xi_lower_program(program, analyzer, g_iso);

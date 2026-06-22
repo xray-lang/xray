@@ -314,16 +314,16 @@ static void repl_maybe_echo_last_expr(XrayIsolate *isolate, AstNode *program) {
      * would fire for repeated `let it = ...`. */
     AstNode *bind = NULL;
     if (repl_has_it_binding(isolate)) {
-        bind = xr_ast_assignment(isolate, REPL_IT_NAME, expr, expr->line);
+        bind = xr_ast_assignment(session, REPL_IT_NAME, expr, expr->line);
     } else {
-        bind = xr_ast_var_decl(isolate, REPL_IT_NAME, expr, /*is_const=*/false, expr->line);
+        bind = xr_ast_var_decl(session, REPL_IT_NAME, expr, /*is_const=*/false, expr->line);
     }
 
     /* Print uses a fresh variable reference (not the original expr),
      * so side effects in `expr` happen exactly once via `bind`. */
-    AstNode *it_ref = xr_ast_variable(isolate, REPL_IT_NAME, expr->line);
+    AstNode *it_ref = xr_ast_variable(session, REPL_IT_NAME, expr->line);
     AstNode *print_args[1] = {it_ref};
-    AstNode *synth = (it_ref) ? xr_ast_print_stmt(isolate, print_args, 1, expr->line) : NULL;
+    AstNode *synth = (it_ref) ? xr_ast_print_stmt(session, print_args, 1, expr->line) : NULL;
 
     if (has_synth_scope)
         xr_compiler_session_pop_arena(&synth_scope);
@@ -336,7 +336,7 @@ static void repl_maybe_echo_last_expr(XrayIsolate *isolate, AstNode *program) {
         bool has_fallback_scope = xr_compiler_session_push_arena(session, program->as.program.arena,
                                                                  "<repl>", &fallback_scope);
         AstNode *args[1] = {expr};
-        AstNode *fb = xr_ast_print_stmt(isolate, args, 1, expr->line);
+        AstNode *fb = xr_ast_print_stmt(session, args, 1, expr->line);
         if (has_fallback_scope)
             xr_compiler_session_pop_arena(&fallback_scope);
         if (fb) {
@@ -356,7 +356,7 @@ static void repl_maybe_echo_last_expr(XrayIsolate *isolate, AstNode *program) {
      * append the print as a new statement.  xr_ast_program_add grows
      * the program's statements array as needed. */
     stmts[count - 1] = bind;
-    xr_ast_program_add(isolate, program, synth);
+    xr_ast_program_add(session, program, synth);
 }
 
 /* ========== REPL Input Completeness Check ========== */
