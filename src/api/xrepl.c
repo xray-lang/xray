@@ -464,7 +464,7 @@ XrProto *xr_repl_compile(XrayIsolate *isolate, const char *source) {
     xa_analyzer_clear_diagnostics(repl_analyzer);
 
     /* Create compiler context that borrows the persistent analyzer. */
-    XrCompilerContext *ctx = xr_compiler_context_new_with_analyzer(isolate, repl_analyzer);
+    XrCompilerContext *ctx = xr_compiler_context_new_with_analyzer(session, repl_analyzer);
     if (!ctx) {
         xr_program_destroy(ast);
         return NULL;
