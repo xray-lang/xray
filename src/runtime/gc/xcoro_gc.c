@@ -66,15 +66,14 @@ static inline XrSystemHeap *gc_pool_heap_from_gc(XrCoroGC *gc) {
 
 /* ========== Helper Functions ========== */
 
-// Per-type GC capability lookups derived from the destroy table.
-//
-// Compile-time types: ops table slot is NULL when the type is a leaf
-// (no traverse) or resource-less (no destroy). Extension types
-// registered via xr_register_extension_destroy / _traverse fall through
-// to the per-isolate tables on XrayIsolate.
+// Per-type GC capability lookups from the runtime core.
 
 static inline XrayIsolate *gc_get_isolate(XrCoroGC *gc) {
     return (gc && gc->owner) ? gc->owner->isolate : NULL;
+}
+
+static inline XrRuntimeCore *gc_get_core(XrCoroGC *gc) {
+    return (gc && gc->owner) ? gc->owner->core : NULL;
 }
 
 static inline bool coro_gc_value_to_header(XrValue value, XrGCHeader **out) {
@@ -94,22 +93,11 @@ static inline bool coro_gc_header_is_heap_value(XrGCHeader *obj) {
 }
 
 static inline bool xr_gc_needs_finalize_ext(XrCoroGC *gc, uint8_t type) {
-    if (type >= XR_NATIVE_TYPE_MAX)
-        return false;
-    if (g_type_destroy_ops[type])
-        return true;
-    XrayIsolate *iso = gc_get_isolate(gc);
-    return iso && (xr_isolate_get_ext_finalize_bitmap(iso) & (1ULL << type));
+    return xr_runtime_core_type_needs_destroy(gc_get_core(gc), type);
 }
 
 static inline XrGCDestroyFn get_destroy_func_ext(XrCoroGC *gc, uint8_t type) {
-    if (type >= XGC_MAX_TYPES)
-        return NULL;
-    XrGCDestroyFn fn = g_type_destroy_ops[type];
-    if (fn)
-        return fn;
-    XrayIsolate *iso = gc_get_isolate(gc);
-    return iso ? (XrGCDestroyFn) xr_isolate_get_ext_destroy(iso, type) : NULL;
+    return xr_runtime_core_destroy_op(gc_get_core(gc), type);
 }
 
 /*
@@ -643,7 +631,7 @@ XR_FUNC void xr_coro_gc_rc_destroy(XrCoroGC *gc, XrGCHeader *obj) {
 
     /* Shared objects: atomic refcount + shared destroy (not coro-local). */
     if (XR_GC_IS_SHARED(obj)) {
-        xr_shared_destroy(obj);
+        xr_shared_destroy_core(gc_get_core(gc), obj);
         return;
     }
 

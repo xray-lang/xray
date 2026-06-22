@@ -670,7 +670,7 @@ bool xr_channel_remove_waiter(XrChannel *ch, XrCoroutine *coro) {
     // An unlinked sender's parked value never reaches a receiver:
     // release the channel-side reference before the timeout/cancel resume.
     if (removed_from_sendq) {
-        xr_chan_abandon_send(coro->ext->send_value);
+        xr_chan_abandon_send_core(channel_core(ch), coro->ext->send_value);
         coro->ext->send_value = xr_null();
     }
 
@@ -695,7 +695,7 @@ void xr_gc_destroy_channel(XrGCHeader *obj, struct XrCoroGC *owning_gc) {
             uint32_t idx = ch->recv_idx + i;
             if (ch->buf_size > 0 && idx >= ch->buf_size)
                 idx -= ch->buf_size;
-            xr_chan_transit_release(ch->buffer[idx]);
+            xr_chan_transit_release_core(channel_core(ch), ch->buffer[idx]);
         }
         if (!channel_buffer_is_inline(ch)) {
             xr_free(ch->buffer);
@@ -812,7 +812,7 @@ static void timer_channel_fire_cb(void *arg) {
         return;
     timer_channel_deliver(ch);
     if (xr_obj_drop_is_last(&ch->gc_header))
-        xr_shared_destroy(&ch->gc_header);
+        xr_shared_destroy_core(channel_core(ch), &ch->gc_header);
 }
 
 // Create Timer Channel
@@ -918,7 +918,7 @@ void xr_channel_timer_arm(XrChannel *ch, XrTimerWheel *tw) {
         // timeout still resolves, then release the wheel reference we took.
         timer_channel_deliver(ch);
         if (xr_obj_drop_is_last(&ch->gc_header))
-            xr_shared_destroy(&ch->gc_header);
+            xr_shared_destroy_core(channel_core(ch), &ch->gc_header);
     }
 }
 
@@ -967,13 +967,13 @@ void xr_channel_timer_dispose(XrChannel *ch) {
         // drop here — the select handle reference below still holds one).
         xr_twheel_cancel_timer(worker->p.timer_wheel, &ch->tw_timer);
         if (xr_obj_drop_is_last(&ch->gc_header))
-            xr_shared_destroy(&ch->gc_header);
+            xr_shared_destroy_core(core, &ch->gc_header);
     }
 
     // Drop the select handle reference. Frees the channel once the wheel is also
     // done with it (fire/cancel released the wheel reference).
     if (xr_obj_drop_is_last(&ch->gc_header))
-        xr_shared_destroy(&ch->gc_header);
+        xr_shared_destroy_core(core, &ch->gc_header);
 }
 
 // Check if Timer Channel has fired (thin atomic check, no polling).
@@ -1101,7 +1101,7 @@ static inline bool chan_direct_recv(XrChannel *ch, XrValue *out, XrCoroutine *co
         }
         if (channel_claim_dequeued_waiter(sender))
             break;
-        xr_chan_abandon_send(sender->ext->send_value);
+        xr_chan_abandon_send_core(channel_core(ch), sender->ext->send_value);
         sender->ext->send_value = xr_null();
     }
     if (!sender)
@@ -1481,7 +1481,7 @@ void xr_channel_close(XrChannel *ch) {
     // receiver: release the channel-side reference (transit graph or
     // shared +1) before resuming them with the closed status.
     while ((coro = xr_waitq_dequeue(&ch->sendq)) != NULL) {
-        xr_chan_abandon_send(coro->ext->send_value);
+        xr_chan_abandon_send_core(channel_core(ch), coro->ext->send_value);
         coro->ext->send_value = xr_null();
         coro->ext->chan_wait_next = send_list;
         send_list = coro;

@@ -20,6 +20,7 @@
 #include "../runtime/class/xclass.h"
 #include "../runtime/class/xclass_system.h"
 #include "../runtime/class/xenum.h"
+#include "../runtime/gc/xgc_destroy_ops.h"
 #include "../base/xconfig.h"
 #include "../runtime/class/xreflect_registry.h"
 #include "../runtime/symbol/xsymbol_table.h"
@@ -136,6 +137,7 @@ static int isolate_init_runtime(XrayIsolate *isolate) {
         return -1;
     xr_symbol_table_init_builtins((XrSymbolTable *) isolate->core_rt->symbol_table);
     xr_registry_init(isolate);
+    xr_runtime_core_enable_full_destroy_ops(isolate->core_rt);
     xr_core_init(isolate);
     xr_scope_transfer_enable_core(isolate->core_rt);
 

@@ -344,6 +344,7 @@ void xr_register_extension_destroy(XrayIsolate *isolate, uint8_t type_id,
         return;
     core->ext_destroy_funcs[type_id] = (XrGCDestroyFn) destroy_fn;
     core->ext_finalize_bitmap |= (1ULL << type_id);
+    xr_runtime_core_set_destroy_op(core, type_id, (XrGCDestroyFn) destroy_fn);
 }
 
 void xr_register_extension_traverse(XrayIsolate *isolate, uint8_t type_id,

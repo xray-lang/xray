@@ -250,7 +250,7 @@ static void coro_recv_slot_reset(XrCoroExt *ext) {
     ext->chan_resume_delivered = false;
 }
 
-static void coro_channel_wait_links_reset(XrCoroExt *ext) {
+static void coro_channel_wait_links_reset(XrRuntimeCore *core, XrCoroExt *ext) {
     if (!ext)
         return;
     atomic_store_explicit(&ext->wait_channel, NULL, memory_order_relaxed);
@@ -266,16 +266,16 @@ static void coro_channel_wait_links_reset(XrCoroExt *ext) {
     /* Safety net for cancel/kill while blocked on send: a still-parked
      * value never reached a receiver, so release the channel-side
      * reference instead of orphaning the transit graph. */
-    xr_chan_abandon_send(ext->send_value);
+    xr_chan_abandon_send_core(core, ext->send_value);
     ext->send_value = xr_null();
     ext->pending_spawn = NULL;
 }
 
-static void coro_channel_wait_reset(XrCoroExt *ext) {
+static void coro_channel_wait_reset(XrRuntimeCore *core, XrCoroExt *ext) {
     if (!ext)
         return;
     xr_channel_wait_token_reset(&ext->chan_wait_token);
-    coro_channel_wait_links_reset(ext);
+    coro_channel_wait_links_reset(core, ext);
 }
 
 static void coro_timer_state_reset(XrCoroExt *ext) {
@@ -401,7 +401,7 @@ static bool xr_coro_init_shell_owner(XrCoroutine *coro, XrayIsolate *X, XrRuntim
             atomic_store_explicit(&coro->ext->lock_count, 0, memory_order_relaxed);
             coro->ext->locked_worker = -1;
             coro_timer_state_reset(coro->ext);
-            coro_channel_wait_reset(coro->ext);
+            coro_channel_wait_reset(coro->core, coro->ext);
             coro_recv_slot_reset(coro->ext);
             coro_wait_state_reset(coro->ext);
             coro_select_storage_reset(coro->ext);
@@ -650,7 +650,7 @@ void xr_coro_recycle_local(XrWorker *worker, XrCoroutine *coro) {
     coro->next = NULL;
     coro->prev = NULL;
     coro->spawn_burst_count = 0;
-    coro_channel_wait_reset(coro->ext);
+    coro_channel_wait_reset(coro->core, coro->ext);
     coro_recv_slot_reset(coro->ext);
     coro_wait_state_reset(coro->ext);
     coro_select_storage_reset(coro->ext);
@@ -971,7 +971,7 @@ void xr_coro_cancel(XrCoroutine *coro) {
          * the blocked-side cleanup and touching the links here would race
          * its inbox drain. */
         if (channel_owned && select_owned)
-            coro_channel_wait_links_reset(cancel_ext);
+            coro_channel_wait_links_reset(coro->core, cancel_ext);
     }
     /* No result write here: a cooperatively cancelled coro may still be
      * running on its owner worker, and nothing consumes a cancelled

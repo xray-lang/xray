@@ -37,6 +37,8 @@
 #include <stdatomic.h>
 #include "gc/xgc_header.h"
 
+struct XrRuntimeCore;
+
 /* ========== Shared Reference Count Operations ==========
  *
  * Shared (cross-coroutine) objects use the same sign-tagged refcount field
@@ -81,8 +83,9 @@ static inline void xr_shared_init(XrGCHeader *gc) {
 
 /* ========== Shared Object Destruction ========== */
 
-// Destroy shared object: call destructor then free memory
-// Must be called when refcount reaches 0
-XR_FUNC void xr_shared_destroy(XrGCHeader *obj);
+// Destroy shared object: call destructor then free memory.
+// Must be called when refcount reaches 0. The runtime core owns the destroy
+// capability table for the object type.
+XR_FUNC void xr_shared_destroy_core(struct XrRuntimeCore *core, XrGCHeader *obj);
 
 #endif  // XSHARED_H

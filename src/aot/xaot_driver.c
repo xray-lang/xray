@@ -265,7 +265,15 @@ static void scan_func_features(XiFunc *f, XaotFeatureSet *fs) {
                     break;
                 case XI_GO:
                     fs->need_coro = true;
+                    fs->need_task = true;
                     fs->need_netpoll = true;
+                    break;
+                case XI_ARRAY_NEW:
+                case XI_MAP_NEW:
+                case XI_SET_NEW:
+                case XI_CLASS_CREATE:
+                case XI_CLOSURE_NEW:
+                    fs->need_objects = true;
                     break;
                 case XI_CHAN_NEW:
                 case XI_CHAN_SEND:
@@ -278,6 +286,7 @@ static void scan_func_features(XiFunc *f, XaotFeatureSet *fs) {
                 case XI_SELECT_BLOCK:
                     fs->need_channel = true;
                     fs->need_coro = true;
+                    fs->need_objects = true;
                     if (v->op == XI_TIME_AFTER || v->op == XI_CHAN_TIMER_DISPOSE)
                         fs->need_timer = true;
                     break;
@@ -285,6 +294,7 @@ static void scan_func_features(XiFunc *f, XaotFeatureSet *fs) {
                 case XI_SCOPE_EXIT:
                     fs->need_scope = true;
                     fs->need_coro = true;
+                    fs->need_objects = true;
                     break;
                 case XI_AWAIT:
                     fs->need_coro = true;
@@ -295,9 +305,15 @@ static void scan_func_features(XiFunc *f, XaotFeatureSet *fs) {
                      * be detected here. Any WorkQueue use pulls in the isolate /
                      * scheduler runtime that codegen's xray_isolate_setup_full
                      * (emitted for WorkQueue-bearing entries) depends on. */
-                    if (v->aux_int == XR_GLOBAL_VAR_WORKQUEUE ||
-                        v->aux_int == XR_GLOBAL_VAR_RESULTGROUP)
+                    if (v->aux_int == XR_GLOBAL_VAR_WORKQUEUE) {
+                        fs->need_work_queue = true;
                         fs->need_coro = true;
+                        fs->need_objects = true;
+                    } else if (v->aux_int == XR_GLOBAL_VAR_RESULTGROUP) {
+                        fs->need_result_group = true;
+                        fs->need_coro = true;
+                        fs->need_objects = true;
+                    }
                     break;
                 case XI_CALL_METHOD:
                     /* Module-form call (e.g. `time.now()`): the receiver is an
@@ -517,6 +533,21 @@ static bool add_runtime_cap_manifest_entries(const XaotFeatureSet *features,
             return false;
         needs_aot_runtime = true;
     }
+    if (features->need_task) {
+        if (!add_runtime_cap(manifest, "task"))
+            return false;
+        needs_aot_runtime = true;
+    }
+    if (features->need_work_queue) {
+        if (!add_runtime_cap(manifest, "work_queue"))
+            return false;
+        needs_aot_runtime = true;
+    }
+    if (features->need_result_group) {
+        if (!add_runtime_cap(manifest, "result_group"))
+            return false;
+        needs_aot_runtime = true;
+    }
     if (features->need_deep_copy) {
         if (!add_runtime_cap(manifest, "deep_copy"))
             return false;
@@ -543,6 +574,10 @@ static bool add_runtime_cap_manifest_entries(const XaotFeatureSet *features,
         needs_aot_runtime = true;
     }
 
+    if (features->need_objects && needs_aot_runtime) {
+        if (!add_runtime_cap(manifest, "objects"))
+            return false;
+    }
     if (needs_aot_runtime && !add_aot_runtime_archive(manifest))
         return false;
     if (needs_aot_runtime &&
@@ -559,6 +594,7 @@ static bool xaot_fast_test_build_enabled(void) {
 static bool xaot_fast_test_can_skip_size_link_flags(const XaotFeatureSet *features) {
     return features && !features->need_coro && !features->need_channel && !features->need_scope &&
            !features->need_timer && !features->need_netpoll && !features->need_deep_copy &&
+           !features->need_task && !features->need_work_queue && !features->need_result_group &&
            !features->need_reflection && !features->need_stacktrace && !features->need_instanceof &&
            features->stdlib == 0 && features->n_stdlib_symbols == 0 &&
            features->n_extern_dylibs == 0;

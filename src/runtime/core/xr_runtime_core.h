@@ -51,6 +51,8 @@ typedef struct XrRuntimeCore {
 
     uint8_t ext_type_next;
     const char *ext_type_names[XGC_MAX_TYPES];
+    uint64_t destroy_bitmap;
+    XrGCDestroyFn destroy_ops[XGC_MAX_TYPES];
     uint64_t ext_finalize_bitmap;
     uint64_t ext_has_refs_bitmap;
     XrGCDestroyFn ext_destroy_funcs[XGC_MAX_TYPES];
@@ -63,6 +65,10 @@ XR_FUNC void xr_runtime_core_delete(XrRuntimeCore *core);
 XR_FUNC void xr_runtime_core_free_tmp_strbuf(XrRuntimeCore *core);
 XR_FUNC void xr_runtime_core_destroy_coro_storage(XrRuntimeCore *core);
 XR_FUNC void xr_runtime_core_cleanup_gc(XrRuntimeCore *core);
+XR_FUNC void xr_runtime_core_set_destroy_op(XrRuntimeCore *core, uint8_t type,
+                                            XrGCDestroyFn destroy);
+XR_FUNC XrGCDestroyFn xr_runtime_core_destroy_op(const XrRuntimeCore *core, uint8_t type);
+XR_FUNC bool xr_runtime_core_type_needs_destroy(const XrRuntimeCore *core, uint8_t type);
 XR_FUNC void xr_runtime_core_set_scope_transfer_ops(XrRuntimeCore *core,
                                                     const XrScopeTransferOps *ops);
 XR_FUNC const XrScopeTransferOps *xr_runtime_core_scope_transfer_ops(const XrRuntimeCore *core);

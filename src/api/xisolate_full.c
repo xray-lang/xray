@@ -22,6 +22,7 @@
 
 #include "../runtime/xisolate_internal.h"
 #include "../base/xchecks.h"
+#include "../runtime/gc/xgc_destroy_ops.h"
 #include "../runtime/value/xtype_pool.h"
 #include "../runtime/value/xtype.h"
 #include "../runtime/value/xtype_names.h"
@@ -73,6 +74,7 @@ static int isolate_init_full(XrayIsolate *isolate) {
 
     // Type registry (must be before core_init, which registers classes)
     xr_registry_init(isolate);
+    xr_runtime_core_enable_full_destroy_ops(isolate->core_rt);
 
     // Core class system (creates Object, String, Array, etc.)
     xr_core_init(isolate);

@@ -96,13 +96,22 @@ static void cg_builtin_init_scan_value(CgBuiltinInitPlan *plan, const XiValue *v
 
     switch (v->op) {
         case XI_YIELD:
-        case XI_GO:
         case XI_AWAIT:
             plan->runtime_caps |= XR_AOT_CAP_CORO;
             break;
+        case XI_GO:
+            plan->runtime_caps |= XR_AOT_CAP_CORO | XR_AOT_CAP_TASK;
+            break;
         case XI_SCOPE_ENTER:
         case XI_SCOPE_EXIT:
-            plan->runtime_caps |= XR_AOT_CAP_CORO | XR_AOT_CAP_TRANSFER;
+            plan->runtime_caps |= XR_AOT_CAP_CORO | XR_AOT_CAP_TRANSFER | XR_AOT_CAP_OBJECTS;
+            break;
+        case XI_ARRAY_NEW:
+        case XI_MAP_NEW:
+        case XI_SET_NEW:
+        case XI_CLASS_CREATE:
+        case XI_CLOSURE_NEW:
+            plan->runtime_caps |= XR_AOT_CAP_OBJECTS;
             break;
         case XI_CHAN_NEW:
         case XI_CHAN_SEND:
@@ -112,11 +121,12 @@ static void cg_builtin_init_scan_value(CgBuiltinInitPlan *plan, const XiValue *v
         case XI_CHAN_RECV_STATUS:
         case XI_CHAN_IS_CLOSED:
         case XI_SELECT_BLOCK:
-            plan->runtime_caps |= XR_AOT_CAP_CORO | XR_AOT_CAP_CHANNEL;
+            plan->runtime_caps |= XR_AOT_CAP_CORO | XR_AOT_CAP_CHANNEL | XR_AOT_CAP_OBJECTS;
             break;
         case XI_TIME_AFTER:
         case XI_CHAN_TIMER_DISPOSE:
-            plan->runtime_caps |= XR_AOT_CAP_CORO | XR_AOT_CAP_CHANNEL | XR_AOT_CAP_TIMER;
+            plan->runtime_caps |=
+                XR_AOT_CAP_CORO | XR_AOT_CAP_CHANNEL | XR_AOT_CAP_TIMER | XR_AOT_CAP_OBJECTS;
             break;
         case XI_GET_BUILTIN:
             if (v->aux_int == XR_GLOBAL_VAR_PROCESS) {
@@ -126,9 +136,10 @@ static void cg_builtin_init_scan_value(CgBuiltinInitPlan *plan, const XiValue *v
             } else if (v->aux_int == XR_GLOBAL_VAR_DIR) {
                 plan->dir = true;
             } else if (v->aux_int == XR_GLOBAL_VAR_WORKQUEUE) {
-                plan->runtime_caps |= XR_AOT_CAP_WORK_QUEUE;
+                plan->runtime_caps |= XR_AOT_CAP_CORO | XR_AOT_CAP_WORK_QUEUE | XR_AOT_CAP_OBJECTS;
             } else if (v->aux_int == XR_GLOBAL_VAR_RESULTGROUP) {
-                plan->runtime_caps |= XR_AOT_CAP_RESULT_GROUP;
+                plan->runtime_caps |=
+                    XR_AOT_CAP_CORO | XR_AOT_CAP_RESULT_GROUP | XR_AOT_CAP_OBJECTS;
             }
             break;
         default:
@@ -241,6 +252,8 @@ static void emit_xrt_runtime_caps_expr(FILE *out, uint32_t caps) {
         {XR_AOT_CAP_RESULT_GROUP, "XR_AOT_CAP_RESULT_GROUP"},
         {XR_AOT_CAP_PROCESS, "XR_AOT_CAP_PROCESS"},
         {XR_AOT_CAP_TRANSFER, "XR_AOT_CAP_TRANSFER"},
+        {XR_AOT_CAP_TASK, "XR_AOT_CAP_TASK"},
+        {XR_AOT_CAP_OBJECTS, "XR_AOT_CAP_OBJECTS"},
     };
 
     if (caps == XR_AOT_CAP_NONE) {
@@ -259,6 +272,32 @@ static void emit_xrt_runtime_caps_expr(FILE *out, uint32_t caps) {
     }
 }
 
+static bool cg_runtime_caps_need_destroy_config(uint32_t caps) {
+    return (caps & (XR_AOT_CAP_OBJECTS | XR_AOT_CAP_TASK | XR_AOT_CAP_CHANNEL |
+                    XR_AOT_CAP_WORK_QUEUE | XR_AOT_CAP_RESULT_GROUP)) != 0;
+}
+
+static void emit_xrt_runtime_core_configure_fn(FILE *out, uint32_t caps) {
+    if (!cg_runtime_caps_need_destroy_config(caps))
+        return;
+    fprintf(out,
+            "static void xrt_configure_runtime_core(struct XrRuntimeCore *core, uint32_t caps, "
+            "void *userdata) {\n");
+    fprintf(out, "    (void) caps;\n");
+    fprintf(out, "    (void) userdata;\n");
+    if ((caps & XR_AOT_CAP_OBJECTS) != 0)
+        fprintf(out, "    xr_runtime_core_enable_object_destroy_ops(core);\n");
+    if ((caps & XR_AOT_CAP_TASK) != 0)
+        fprintf(out, "    xr_runtime_core_enable_task_destroy_ops(core);\n");
+    if ((caps & XR_AOT_CAP_CHANNEL) != 0)
+        fprintf(out, "    xr_runtime_core_enable_channel_destroy_ops(core);\n");
+    if ((caps & XR_AOT_CAP_WORK_QUEUE) != 0)
+        fprintf(out, "    xr_runtime_core_enable_work_queue_destroy_ops(core);\n");
+    if ((caps & XR_AOT_CAP_RESULT_GROUP) != 0)
+        fprintf(out, "    xr_runtime_core_enable_result_group_destroy_ops(core);\n");
+    fprintf(out, "}\n\n");
+}
+
 static void emit_xrt_runtime_builtin_sync(FILE *out, const CgBuiltinInitPlan *plan,
                                           const char *runtime_var) {
     if (!plan)
@@ -273,6 +312,8 @@ static void emit_xrt_runtime_init(FILE *out, const CgBuiltinInitPlan *plan, uint
                                   const char *source_path) {
     fprintf(out, "    XrAotRuntimeConfig runtime_cfg;\n");
     fprintf(out, "    xr_aot_runtime_config_init(&runtime_cfg);\n");
+    if (cg_runtime_caps_need_destroy_config(runtime_caps))
+        fprintf(out, "    runtime_cfg.configure_core = xrt_configure_runtime_core;\n");
     fprintf(out, "    runtime_cfg.caps = ");
     emit_xrt_runtime_caps_expr(out, runtime_caps);
     fprintf(out, ";\n");
@@ -293,6 +334,10 @@ static void emit_xrt_runtime_init(FILE *out, const CgBuiltinInitPlan *plan, uint
     fprintf(out, "    xrt_global_ctx.worker = NULL;\n");
 }
 
+static bool cg_runtime_caps_need_runtime(uint32_t caps) {
+    return (caps & ~XR_AOT_CAP_OBJECTS) != XR_AOT_CAP_NONE;
+}
+
 XR_FUNC void xi_cgen_main(XiCgenCtx *ctx, FILE *out, XiModule **modules, int n, int entry_index) {
     XR_DCHECK(ctx != NULL, "xi_cgen_main: NULL ctx");
     XR_DCHECK(out != NULL, "xi_cgen_main: NULL output");
@@ -305,8 +350,11 @@ XR_FUNC void xi_cgen_main(XiCgenCtx *ctx, FILE *out, XiModule **modules, int n, 
     uint32_t runtime_caps = builtin_plan.runtime_caps;
     if (entry_is_coro)
         runtime_caps |= XR_AOT_CAP_CORO;
-    bool entry_needs_runtime = runtime_caps != XR_AOT_CAP_NONE;
+    bool entry_needs_runtime = cg_runtime_caps_need_runtime(runtime_caps);
     const char *entry_source_path = cg_entry_source_path(ctx, modules, n, entry_index);
+
+    if (entry_needs_runtime)
+        emit_xrt_runtime_core_configure_fn(out, runtime_caps);
 
     fprintf(out, "int main(int argc, char **argv) {\n");
     fprintf(out, "    xrt_arc_init();\n");
@@ -406,16 +454,19 @@ XR_FUNC void xi_cgen_program(XiCgenCtx *ctx, FILE *out, XiModule *module) {
     xi_cgen_func(ctx, body, main_func, prefix);
 
     if (ctx->emit_main) {
-        fprintf(body, "int main(int argc, char **argv) {\n");
-        fprintf(body, "    xrt_arc_init();\n");
         CgBuiltinInitPlan builtin_plan = cg_builtin_init_plan_for_func(main_func);
         const char *entry_source_path = cg_entry_source_path(ctx, single_module, 1, 0);
-        emit_xrt_builtin_init(body, &builtin_plan, entry_source_path);
         bool entry_is_coro = cg_func_needs_aot_coro_ctx(ctx, main_func);
         uint32_t runtime_caps = builtin_plan.runtime_caps;
         if (entry_is_coro)
             runtime_caps |= XR_AOT_CAP_CORO;
-        bool entry_needs_runtime = runtime_caps != XR_AOT_CAP_NONE;
+        bool entry_needs_runtime = cg_runtime_caps_need_runtime(runtime_caps);
+        if (entry_needs_runtime)
+            emit_xrt_runtime_core_configure_fn(body, runtime_caps);
+
+        fprintf(body, "int main(int argc, char **argv) {\n");
+        fprintf(body, "    xrt_arc_init();\n");
+        emit_xrt_builtin_init(body, &builtin_plan, entry_source_path);
         if (entry_needs_runtime) {
             emit_xrt_runtime_init(body, &builtin_plan, runtime_caps, entry_source_path);
         }

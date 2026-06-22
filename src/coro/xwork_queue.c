@@ -440,7 +440,7 @@ bool xr_work_queue_push_core(XrRuntimeCore *core, XrWorkQueue *q, XrValue value,
         work_queue_wake_one(q, shard_idx);
     } else {
         // Closed or push failure: the prepared value never entered the queue.
-        xr_chan_abandon_send(value);
+        xr_chan_abandon_send_core(core, value);
     }
     return ok;
 }

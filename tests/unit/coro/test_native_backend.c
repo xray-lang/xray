@@ -21,6 +21,7 @@
 #include "coro/xwork_queue.h"
 #include "coro/xyieldable.h"
 #include "runtime/class/xenum.h"
+#include "runtime/gc/xgc_destroy_ops.h"
 #include "runtime/object/xarray.h"
 #include "runtime/xisolate_internal.h"
 #include <stdatomic.h>
@@ -46,6 +47,26 @@ typedef struct AotTestFrame {
     XrValue value;
     XrValue error;
 } AotTestFrame;
+
+static void aot_test_configure_runtime_core(struct XrRuntimeCore *core, uint32_t caps,
+                                            void *userdata) {
+    (void) userdata;
+    if ((caps & XR_AOT_CAP_OBJECTS) != 0)
+        xr_runtime_core_enable_object_destroy_ops(core);
+    if ((caps & XR_AOT_CAP_TASK) != 0)
+        xr_runtime_core_enable_task_destroy_ops(core);
+    if ((caps & XR_AOT_CAP_CHANNEL) != 0)
+        xr_runtime_core_enable_channel_destroy_ops(core);
+    if ((caps & XR_AOT_CAP_WORK_QUEUE) != 0)
+        xr_runtime_core_enable_work_queue_destroy_ops(core);
+    if ((caps & XR_AOT_CAP_RESULT_GROUP) != 0)
+        xr_runtime_core_enable_result_group_destroy_ops(core);
+}
+
+static void aot_test_runtime_config_init(XrAotRuntimeConfig *cfg) {
+    xr_aot_runtime_config_init(cfg);
+    cfg->configure_core = aot_test_configure_runtime_core;
+}
 
 static XrAotResult aot_test_resume(void *raw_frame, const XrAotContext *ctx) {
     AotTestFrame *frame = (AotTestFrame *) raw_frame;
@@ -107,7 +128,7 @@ static AotTestFrame *aot_test_frame_new(AotTestMode mode, XrValue value, XrValue
 
 static XrAotRuntime *aot_test_runtime_new(void) {
     XrAotRuntimeConfig cfg;
-    xr_aot_runtime_config_init(&cfg);
+    aot_test_runtime_config_init(&cfg);
     cfg.caps = XR_AOT_CAP_CORO;
     cfg.scheduler_workers = 0;
     return xr_aot_runtime_new(&cfg);
@@ -287,7 +308,7 @@ TEST(aot_runtime_owns_core_without_isolate) {
     int userdata = 123;
 
     XrAotRuntimeConfig cfg;
-    xr_aot_runtime_config_init(&cfg);
+    aot_test_runtime_config_init(&cfg);
     cfg.caps = XR_AOT_CAP_NONE;
     cfg.argc = 2;
     cfg.argv = argv;
@@ -310,7 +331,7 @@ TEST(aot_runtime_owns_core_without_isolate) {
 
 TEST(aot_runtime_creates_scheduler_for_runtime_caps) {
     XrAotRuntimeConfig cfg;
-    xr_aot_runtime_config_init(&cfg);
+    aot_test_runtime_config_init(&cfg);
     cfg.caps = XR_AOT_CAP_CORO | XR_AOT_CAP_TIMER | XR_AOT_CAP_CHANNEL;
     cfg.scheduler_workers = 0;
 
@@ -326,7 +347,7 @@ TEST(aot_runtime_creates_scheduler_for_runtime_caps) {
 
 TEST(aot_runtime_creates_isolate_free_aot_coroutine) {
     XrAotRuntimeConfig cfg;
-    xr_aot_runtime_config_init(&cfg);
+    aot_test_runtime_config_init(&cfg);
     cfg.caps = XR_AOT_CAP_CORO;
     cfg.scheduler_workers = 0;
 
@@ -360,7 +381,7 @@ TEST(aot_runtime_creates_isolate_free_aot_coroutine) {
 
 TEST(aot_run_main_uses_runtime_without_isolate) {
     XrAotRuntimeConfig cfg;
-    xr_aot_runtime_config_init(&cfg);
+    aot_test_runtime_config_init(&cfg);
     cfg.caps = XR_AOT_CAP_CORO;
     cfg.scheduler_workers = 0;
 
@@ -381,7 +402,7 @@ TEST(aot_run_main_uses_runtime_without_isolate) {
 
 TEST(aot_context_builtin_prefers_runtime_table) {
     XrAotRuntimeConfig cfg;
-    xr_aot_runtime_config_init(&cfg);
+    aot_test_runtime_config_init(&cfg);
 
     XrAotRuntime *runtime = xr_aot_runtime_new(&cfg);
     ASSERT_NOT_NULL(runtime);
@@ -399,7 +420,8 @@ TEST(aot_context_builtin_prefers_runtime_table) {
 
 TEST(aot_runtime_registers_prelude_enums_without_isolate) {
     XrAotRuntimeConfig cfg;
-    xr_aot_runtime_config_init(&cfg);
+    aot_test_runtime_config_init(&cfg);
+    cfg.caps = XR_AOT_CAP_OBJECTS;
 
     XrAotRuntime *runtime = xr_aot_runtime_new(&cfg);
     ASSERT_NOT_NULL(runtime);
@@ -440,7 +462,8 @@ TEST(aot_runtime_registers_prelude_enums_without_isolate) {
 
 TEST(aot_runtime_copy_context_uses_core_without_isolate) {
     XrAotRuntimeConfig cfg;
-    xr_aot_runtime_config_init(&cfg);
+    aot_test_runtime_config_init(&cfg);
+    cfg.caps = XR_AOT_CAP_OBJECTS;
 
     XrAotRuntime *runtime = xr_aot_runtime_new(&cfg);
     ASSERT_NOT_NULL(runtime);
@@ -469,15 +492,15 @@ TEST(aot_runtime_copy_context_uses_core_without_isolate) {
     ASSERT_EQ_INT((int) xr_array_get_i64(copied, 1), 22);
     ASSERT_EQ_INT((int) xr_array_get_i64(copied, 2), 33);
 
-    xr_chan_transit_release(transit);
+    xr_chan_transit_release_core(core, transit);
     xr_coro_destroy(owner);
     xr_aot_runtime_delete(runtime);
 }
 
 TEST(aot_result_group_uses_runtime_without_isolate) {
     XrAotRuntimeConfig cfg;
-    xr_aot_runtime_config_init(&cfg);
-    cfg.caps = XR_AOT_CAP_RESULT_GROUP;
+    aot_test_runtime_config_init(&cfg);
+    cfg.caps = XR_AOT_CAP_CORO | XR_AOT_CAP_RESULT_GROUP | XR_AOT_CAP_OBJECTS;
     cfg.scheduler_workers = 0;
 
     XrAotRuntime *runtime = xr_aot_runtime_new(&cfg);
@@ -507,8 +530,8 @@ TEST(aot_result_group_uses_runtime_without_isolate) {
 
 TEST(aot_work_queue_uses_runtime_owner_without_isolate) {
     XrAotRuntimeConfig cfg;
-    xr_aot_runtime_config_init(&cfg);
-    cfg.caps = XR_AOT_CAP_WORK_QUEUE;
+    aot_test_runtime_config_init(&cfg);
+    cfg.caps = XR_AOT_CAP_CORO | XR_AOT_CAP_WORK_QUEUE | XR_AOT_CAP_OBJECTS;
     cfg.scheduler_workers = 0;
 
     XrAotRuntime *runtime = xr_aot_runtime_new(&cfg);
@@ -541,8 +564,8 @@ TEST(aot_work_queue_uses_runtime_owner_without_isolate) {
 
 TEST(aot_channel_uses_runtime_owner_without_isolate) {
     XrAotRuntimeConfig cfg;
-    xr_aot_runtime_config_init(&cfg);
-    cfg.caps = XR_AOT_CAP_CHANNEL;
+    aot_test_runtime_config_init(&cfg);
+    cfg.caps = XR_AOT_CAP_CORO | XR_AOT_CAP_CHANNEL | XR_AOT_CAP_OBJECTS;
     cfg.scheduler_workers = 0;
 
     XrAotRuntime *runtime = xr_aot_runtime_new(&cfg);
@@ -585,8 +608,8 @@ TEST(aot_channel_uses_runtime_owner_without_isolate) {
 
 TEST(aot_task_await_uses_runtime_owner_without_isolate) {
     XrAotRuntimeConfig cfg;
-    xr_aot_runtime_config_init(&cfg);
-    cfg.caps = XR_AOT_CAP_CORO;
+    aot_test_runtime_config_init(&cfg);
+    cfg.caps = XR_AOT_CAP_CORO | XR_AOT_CAP_TASK;
     cfg.scheduler_workers = 0;
 
     XrAotRuntime *runtime = xr_aot_runtime_new(&cfg);

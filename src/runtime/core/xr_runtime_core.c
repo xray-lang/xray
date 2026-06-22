@@ -72,6 +72,26 @@ void xr_runtime_core_cleanup_gc(XrRuntimeCore *core) {
         xr_weak_registry_destroy(core->gc.isolate);
 }
 
+void xr_runtime_core_set_destroy_op(XrRuntimeCore *core, uint8_t type, XrGCDestroyFn destroy) {
+    if (!core || type >= XGC_MAX_TYPES)
+        return;
+    core->destroy_ops[type] = destroy;
+    if (destroy)
+        core->destroy_bitmap |= (1ULL << type);
+    else
+        core->destroy_bitmap &= ~(1ULL << type);
+}
+
+XrGCDestroyFn xr_runtime_core_destroy_op(const XrRuntimeCore *core, uint8_t type) {
+    if (!core || type >= XGC_MAX_TYPES)
+        return NULL;
+    return core->destroy_ops[type];
+}
+
+bool xr_runtime_core_type_needs_destroy(const XrRuntimeCore *core, uint8_t type) {
+    return core && type < XGC_MAX_TYPES && (core->destroy_bitmap & (1ULL << type)) != 0;
+}
+
 void xr_runtime_core_set_scope_transfer_ops(XrRuntimeCore *core, const XrScopeTransferOps *ops) {
     if (!core)
         return;
