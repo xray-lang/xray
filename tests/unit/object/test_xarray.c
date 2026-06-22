@@ -378,6 +378,36 @@ TEST(array_slice_empty) {
     teardown();
 }
 
+TEST(array_slice_negative_indices) {
+    setup();
+    XrArray *arr = xr_array_new(main_coro);
+    for (int i = 0; i < 5; i++) {
+        xr_array_push(arr, xr_int(i));
+    }
+
+    XrArray *tail = xr_array_slice(main_coro, arr, -2, 5);
+    ASSERT_NOT_NULL(tail);
+    ASSERT_EQ_INT(xr_array_size(tail), 2);
+    ASSERT_EQ_INT(xr_as_int(xr_array_get(tail, 0)), 3);
+    ASSERT_EQ_INT(xr_as_int(xr_array_get(tail, 1)), 4);
+
+    XrArray *prefix = xr_array_slice(main_coro, arr, 0, -1);
+    ASSERT_NOT_NULL(prefix);
+    ASSERT_EQ_INT(xr_array_size(prefix), 4);
+    ASSERT_EQ_INT(xr_as_int(xr_array_get(prefix, 3)), 3);
+
+    XrArray *wide = xr_array_slice(main_coro, arr, -999, -1);
+    ASSERT_NOT_NULL(wide);
+    ASSERT_EQ_INT(xr_array_size(wide), 4);
+    ASSERT_EQ_INT(xr_as_int(xr_array_get(wide, 0)), 0);
+    ASSERT_EQ_INT(xr_as_int(xr_array_get(wide, 3)), 3);
+
+    XrArray *empty = xr_array_slice(main_coro, arr, -1, -999);
+    ASSERT_NOT_NULL(empty);
+    ASSERT_EQ_INT(xr_array_size(empty), 0);
+    teardown();
+}
+
 /* ========== Mixed Types Tests ========== */
 
 TEST(array_mixed_types) {
@@ -460,6 +490,7 @@ static void run_all_tests(void) {
     RUN_TEST(array_slice_basic);
     RUN_TEST(array_slice_full);
     RUN_TEST(array_slice_empty);
+    RUN_TEST(array_slice_negative_indices);
 
     RUN_TEST_SUITE("Array Mixed Types");
     RUN_TEST(array_mixed_types);

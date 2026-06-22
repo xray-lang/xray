@@ -77,6 +77,8 @@ order: 015
 | `match(pattern)` | 正则匹配 |
 | `iterator()` / `entriesIterator()` / `entries()` | 迭代协议 |
 
+`slice(start, end?)` 使用与切片表达式相同的半开区间和负索引规则：负索引先按 `length + index` 从末尾计数，再夹到 `[0, length]`。
+
 ### 14.6 `Bytes`
 
 `Bytes` 是 prelude 类型，构造由 `Bytes(n)` / `Bytes(n, fill)` 等内置路径处理。字符串转换和编码类操作优先使用 `encoding` / `base64` 模块。当前没有单独的 `stdlib/types/bytes.xr` 声明；工具不要假设存在完整 Array 同构 API。
@@ -99,6 +101,8 @@ order: 015
 | `forEach(fn)` / `find(fn)` / `findIndex(fn)` / `every(fn)` / `some(fn)` | 遍历与谓词 |
 | `flat(depth?)` / `fill(v, start?, end?)` / `copyWithin(target, start, end?)` | 数组工具 |
 | `iterator()` / `entriesIterator()` / `entries()` | 迭代协议 |
+
+`slice(start?, end?)` 使用与切片表达式相同的半开区间和负索引规则；返回独立数组，原数组不变。
 
 ### 14.8 `Map<K, V>` 方法
 
@@ -302,6 +306,8 @@ This section is a **method index** for each type (grouped by topic). Concrete si
 | `match(pattern)` | regex match |
 | `iterator()` / `entriesIterator()` / `entries()` | iteration protocol |
 
+`slice(start, end?)` uses the same half-open range and negative-index rules as slice expressions: a negative index is first converted as `length + index`, then clamped into `[0, length]`.
+
 ### 14.6 `Bytes`
 
 `Bytes` is a prelude type; construction is handled via builtin paths such as `Bytes(n)` / `Bytes(n, fill)`. String conversion and encoding-related operations should prefer the `encoding` / `base64` modules. There is currently no separate `stdlib/types/bytes.xr` declaration; tooling should not assume a complete Array-isomorphic API.
@@ -324,6 +330,8 @@ This section is a **method index** for each type (grouped by topic). Concrete si
 | `forEach(fn)` / `find(fn)` / `findIndex(fn)` / `every(fn)` / `some(fn)` | traversal and predicates |
 | `flat(depth?)` / `fill(v, start?, end?)` / `copyWithin(target, start, end?)` | array utilities |
 | `iterator()` / `entriesIterator()` / `entries()` | iteration protocol |
+
+`slice(start?, end?)` uses the same half-open range and negative-index rules as slice expressions; it returns an independent array and leaves the original array unchanged.
 
 ### 14.8 `Map<K, V>` Methods
 

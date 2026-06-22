@@ -672,19 +672,12 @@ void xr_array_ensure_capacity(XrArray *arr, int min_capacity) {
 
 // Create array slice with direct data pointer offset
 // data_storage == XR_ARRAY_DATA_BORROWED marks the slice as non-resizable
-XrArray *xr_array_slice(struct XrCoroutine *coro, XrArray *arr, int32_t start, int32_t end) {
+XrArray *xr_array_slice(struct XrCoroutine *coro, XrArray *arr, int64_t start, int64_t end) {
     if (!coro || !arr)
         return NULL;
 
     int64_t len = arr->length;
-
-    // Normalize indices
-    if (start < 0)
-        start = 0;
-    if (end < 0 || end > len)
-        end = (int32_t) len;
-    if (start > end)
-        start = end;
+    xr_array_normalize_slice(len, &start, &end);
 
     // Allocate slice as XR_TARRAY — slices share Array layout, distinguished by
     // data_storage == XR_ARRAY_DATA_BORROWED.

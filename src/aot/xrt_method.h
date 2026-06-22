@@ -615,12 +615,7 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
             return result;
         }
         if (sym == XRT_SYM_SLICE && arg0.tag == XR_TAG_I64) {
-            int64_t start = arg0.i;
-            if (start < 0)
-                start += a->length;
-            if (start < 0)
-                start = 0;
-            return xrt_array_slice_view(recv, start, a->length);
+            return xrt_array_slice_view(recv, arg0.i, a->length);
         }
         /* Higher-order callbacks are AOT closures. */
         if (arg0.tag == XR_TAG_CLOSURE) {
@@ -799,14 +794,6 @@ static inline XrValue xrt_method_2(XrValue recv, int sym, XrValue arg0, XrValue 
         xrt_array_t *a = (xrt_array_t *) recv.ptr;
         int64_t start = (arg0.tag == XR_TAG_I64) ? arg0.i : 0;
         int64_t end = (arg1.tag == XR_TAG_I64) ? arg1.i : a->length;
-        if (start < 0)
-            start += a->length;
-        if (end < 0)
-            end += a->length;
-        if (start < 0)
-            start = 0;
-        if (end > a->length)
-            end = a->length;
         return xrt_array_slice_view(recv, start, end);
     }
     if (XR_IS_ARRAY(recv) && sym == XRT_SYM_REDUCE && arg0.tag == XR_TAG_CLOSURE)

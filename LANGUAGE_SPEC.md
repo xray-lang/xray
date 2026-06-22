@@ -1334,7 +1334,7 @@ str[0:5]                // string slice
 ```
 
 - Half-open interval `[start, end)`.
-- `string` slicing supports negative indexes (counting from the end); for `Array`, a negative `start` is clamped to `0` and a negative `end` is treated as the array length.
+- `Array` and `string` slicing share the same negative-index rule: a negative index is first converted as `length + index`, then clamped into `[0, length]`.
 - Slicing returns a new object; the original array is not modified.
 
 ### 3.12 Anonymous Functions and Lambdas
@@ -4374,6 +4374,8 @@ This section is a **method index** for each type (grouped by topic). Concrete si
 | `match(pattern)` | regex match |
 | `iterator()` / `entriesIterator()` / `entries()` | iteration protocol |
 
+`slice(start, end?)` uses the same half-open range and negative-index rules as slice expressions: a negative index is first converted as `length + index`, then clamped into `[0, length]`.
+
 ### 14.6 `Bytes`
 
 `Bytes` is a prelude type; construction is handled via builtin paths such as `Bytes(n)` / `Bytes(n, fill)`. String conversion and encoding-related operations should prefer the `encoding` / `base64` modules. There is currently no separate `stdlib/types/bytes.xr` declaration; tooling should not assume a complete Array-isomorphic API.
@@ -4396,6 +4398,8 @@ This section is a **method index** for each type (grouped by topic). Concrete si
 | `forEach(fn)` / `find(fn)` / `findIndex(fn)` / `every(fn)` / `some(fn)` | traversal and predicates |
 | `flat(depth?)` / `fill(v, start?, end?)` / `copyWithin(target, start, end?)` | array utilities |
 | `iterator()` / `entriesIterator()` / `entries()` | iteration protocol |
+
+`slice(start?, end?)` uses the same half-open range and negative-index rules as slice expressions; it returns an independent array and leaves the original array unchanged.
 
 ### 14.8 `Map<K, V>` Methods
 

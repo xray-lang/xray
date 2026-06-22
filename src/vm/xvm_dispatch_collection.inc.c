@@ -1423,7 +1423,7 @@ vmcase(OP_SLICE) {
     // Array slice: zero-copy, shared data
     if (XR_IS_ARRAY(source)) {
         XrArray *arr = XR_TO_ARRAY(source);
-        XrArray *slice = xr_array_slice(VM_CURRENT_CORO, arr, (int32_t) start, (int32_t) end);
+        XrArray *slice = xr_array_slice(VM_CURRENT_CORO, arr, start, end);
         R(a) = slice ? XR_FROM_PTR(slice) : xr_null();
         vmbreak;
     }
