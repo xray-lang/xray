@@ -118,9 +118,37 @@ static bool aot_builtin_index_is_prelude_enum(int32_t index) {
            index == XR_GLOBAL_VAR_TASK_STATUS;
 }
 
+static XrValue aot_runtime_script_builtin_lazy(XrAotRuntime *runtime, int32_t index) {
+    XrRuntimeCore *core = xr_aot_runtime_core(runtime);
+    if (!core)
+        return XR_NULL_VAL;
+
+    const char *text = NULL;
+    size_t text_len = 0;
+    if (index == XR_GLOBAL_VAR_FILE) {
+        text = core->script_info.file;
+        text_len = text ? strlen(text) : 0;
+    } else if (index == XR_GLOBAL_VAR_DIR) {
+        text = aot_script_dir_bounds(core->script_info.file, &text_len);
+    } else {
+        return XR_NULL_VAL;
+    }
+    if (!text || text_len == 0)
+        return XR_NULL_VAL;
+
+    XrString *s = xr_string_intern_core(core, text, text_len, 0);
+    XrValue value = s ? xr_string_value(s) : XR_NULL_VAL;
+    xr_aot_runtime_set_builtin(runtime, index, value);
+    return value;
+}
+
 static XrValue aot_runtime_builtin_lazy(XrAotRuntime *runtime, int32_t index) {
     XrValue value = xr_aot_runtime_builtin(runtime, index);
-    if (!XR_IS_NULL(value) || !aot_builtin_index_is_prelude_enum(index))
+    if (!XR_IS_NULL(value))
+        return value;
+    if (index == XR_GLOBAL_VAR_FILE || index == XR_GLOBAL_VAR_DIR)
+        return aot_runtime_script_builtin_lazy(runtime, index);
+    if (!aot_builtin_index_is_prelude_enum(index))
         return value;
     if (!aot_runtime_register_prelude_enums(runtime))
         return XR_NULL_VAL;

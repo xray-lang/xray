@@ -16,7 +16,6 @@
 #include "../runtime/core/xr_runtime_core.h"
 #include "../runtime/core/xr_script_info.h"
 #include "../runtime/gc/xcoro_gc.h"
-#include "../runtime/object/xstring.h"
 #include "xblock.h"
 #include "xcoroutine.h"
 #include "xworker.h"
@@ -199,46 +198,6 @@ void xr_aot_runtime_config_init(XrAotRuntimeConfig *cfg) {
     memset(cfg, 0, sizeof(*cfg));
 }
 
-static const char *aot_script_dir_bounds(const char *file, size_t *out_len) {
-    if (out_len)
-        *out_len = 0;
-    if (!file || !file[0])
-        return NULL;
-    const char *last_slash = strrchr(file, '/');
-    if (!last_slash)
-        return NULL;
-    size_t len = (size_t) (last_slash - file);
-    if (len == 0)
-        len = 1;
-    if (out_len)
-        *out_len = len;
-    return file;
-}
-
-static bool aot_runtime_init_script_builtins(XrAotRuntime *runtime) {
-    if (!runtime || !runtime->core)
-        return false;
-
-    const char *file = runtime->core->script_info.file;
-    if (file && file[0]) {
-        XrString *file_str = xr_string_intern_core(runtime->core, file, strlen(file), 0);
-        if (!file_str)
-            return false;
-        runtime->builtins[XR_GLOBAL_VAR_FILE] = xr_string_value(file_str);
-    }
-
-    size_t dir_len = 0;
-    const char *dir = aot_script_dir_bounds(file, &dir_len);
-    if (dir && dir_len > 0) {
-        XrString *dir_str = xr_string_intern_core(runtime->core, dir, dir_len, 0);
-        if (!dir_str)
-            return false;
-        runtime->builtins[XR_GLOBAL_VAR_DIR] = xr_string_value(dir_str);
-    }
-
-    return true;
-}
-
 XrAotRuntime *xr_aot_runtime_new(const XrAotRuntimeConfig *cfg) {
     XrAotRuntimeConfig local_cfg;
     if (cfg) {
@@ -262,8 +221,6 @@ XrAotRuntime *xr_aot_runtime_new(const XrAotRuntimeConfig *cfg) {
     if (!runtime->core)
         goto fail;
     xr_script_info_set(&runtime->core->script_info, local_cfg.file, local_cfg.argc, local_cfg.argv);
-    if (!aot_runtime_init_script_builtins(runtime))
-        goto fail;
 
     if (aot_caps_need_scheduler(runtime->caps)) {
         runtime->scheduler = xr_scheduler_runtime_new(runtime->core, local_cfg.scheduler_workers);
