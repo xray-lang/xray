@@ -46,6 +46,7 @@ typedef enum {
     XR_AOT_CAP_WORK_QUEUE = 1u << 3,
     XR_AOT_CAP_RESULT_GROUP = 1u << 4,
     XR_AOT_CAP_PROCESS = 1u << 5,
+    XR_AOT_CAP_TRANSFER = 1u << 6,
 } XrAotRuntimeCap;
 
 typedef struct XrAotRuntimeConfig {
@@ -173,6 +174,7 @@ XR_FUNC void xr_aot_runtime_delete(XrAotRuntime *runtime);
 XR_FUNC uint32_t xr_aot_runtime_caps(const XrAotRuntime *runtime);
 XR_FUNC struct XrRuntimeCore *xr_aot_runtime_core(XrAotRuntime *runtime);
 XR_FUNC struct XrRuntime *xr_aot_runtime_scheduler(XrAotRuntime *runtime);
+XR_FUNC void xr_aot_runtime_enable_transfer(XrAotRuntime *runtime);
 XR_FUNC XrValue xr_aot_runtime_builtin(const XrAotRuntime *runtime, int32_t index);
 XR_FUNC void xr_aot_runtime_set_builtin(XrAotRuntime *runtime, int32_t index, XrValue value);
 XR_FUNC void xr_aot_trace_frame_value(void *visitor, XrValue value);

@@ -38,6 +38,7 @@
 #include "../runtime/class/xreflect_api.h"
 #include "../runtime/object/builtins/xjson_builtins.h"
 #include "../runtime/symbol/xsymbol_table.h"
+#include "../coro/xscope_transfer.h"
 
 #include "../base/xmalloc.h"
 #include "../../stdlib/stdlib_cache.h"
@@ -75,6 +76,7 @@ static int isolate_init_full(XrayIsolate *isolate) {
 
     // Core class system (creates Object, String, Array, etc.)
     xr_core_init(isolate);
+    xr_scope_transfer_enable_core(isolate->core_rt);
 
     // Reflection API (needs core->objectClass, so must be after core_init)
     xr_reflect_api_init(isolate);

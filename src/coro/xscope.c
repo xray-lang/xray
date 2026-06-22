@@ -9,14 +9,10 @@
  */
 
 #include "xcoroutine.h"
-#include "xdeep_copy.h"
 #include "xtask.h"
 #include "xworker.h"
+#include "../runtime/core/xr_runtime_core.h"
 #include "../runtime/xisolate_internal.h"
-#include "../runtime/object/xarray.h"
-#include "../runtime/object/xexception.h"
-#include "../runtime/object/xstring.h"
-#include <string.h>
 
 XrScopeContext *xr_coro_parent_scope(const XrCoroutine *coro) {
     return (coro && coro->ext) ? coro->ext->parent_scope : NULL;
@@ -115,29 +111,13 @@ static bool wake_waiter_record_child_error_locked(XrCoroutine *coro, XrScopeCont
     if (XR_IS_NULL(err))
         return false;
 
-    if (scope->mode == XR_SCOPE_LINKED) {
-        if (XR_IS_NULL(scope->first_error)) {
-            /* err lives in the failing child's per-coroutine heap; the scope
-             * owner re-throws and releases it later through its gc. */
-            XrayIsolate *iso2 = coro->isolate;
-            if (scope->owner && iso2 && xr_value_needs_copy(err))
-                err = xr_deep_copy_to_coro(iso2, err, scope->owner);
-            scope->first_error = err;
-            scope->first_error_is_value = coro->error_is_value;
-        }
-    } else if (scope->mode == XR_SCOPE_SUPERVISOR) {
-        if (scope->errors) {
-            XrValue msg = err;
-            XrayIsolate *iso = coro->isolate;
-            if (iso && xr_value_is_exception(iso, err)) {
-                const char *m = xr_exception_get_message(iso, err);
-                if (!m)
-                    m = "";
-                XrString *s = xr_string_intern(iso, m, strlen(m), 0);
-                msg = xr_string_value(s);
-            }
-            xr_array_push(scope->errors, msg);
-        }
+    const XrScopeTransferOps *ops = xr_runtime_core_scope_transfer_ops(coro->core);
+    if (ops && ops->record_child_error_locked)
+        return ops->record_child_error_locked(coro, scope);
+
+    if (scope->mode == XR_SCOPE_LINKED && XR_IS_NULL(scope->first_error)) {
+        scope->first_error = err;
+        scope->first_error_is_value = coro->error_is_value;
     }
     return true;
 }
