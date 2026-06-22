@@ -22,6 +22,7 @@
 #include "../../src/base/xmalloc.h"
 #include "../../src/module/xmodule.h"
 #include "../../src/vm/xvm.h"
+#include "../../src/vm/xvm_closure.h"
 #include "../../src/vm/xvm_coro_api.h"
 #include "../../src/runtime/object/xstring.h"
 #include "../../src/runtime/object/xjson.h"
@@ -1439,7 +1440,7 @@ static XrCFuncResult ws_conn_init(XrayIsolate *X, XrValue *args, int argc, XrVal
     // entry runs per accepted connection and ws_serve passes the same value
     // through unchanged. Re-check here so a corrupted dispatch path still
     // fails loudly instead of casting a non-closure to XrClosure*.
-    XrClosure *handler = xr_closure_from_arg(X, args[1], "ws.serve handler");
+    XrClosure *handler = xr_vm_closure_from_arg(X, args[1], "ws.serve handler");
     if (!handler)
         return XR_CFUNC_DONE;
 
@@ -1838,7 +1839,7 @@ static XrCFuncResult ws_serve_yieldable(XrayIsolate *X, XrValue *args, int argc,
     // The handler arg must be a real closure -- XR_IS_PTR would also accept
     // any other heap object (string, array, json, ...) and the connection
     // path would later call xr_vm_call_closure on a garbage pointer.
-    if (!xr_closure_from_arg(X, args[1], "ws.serve")) {
+    if (!xr_vm_closure_from_arg(X, args[1], "ws.serve")) {
         *result = xr_bool(false);
         return XR_CFUNC_DONE;
     }

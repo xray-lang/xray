@@ -10,12 +10,11 @@
 
 #include "xclosure.h"
 #include "../../base/xchecks.h"
+#include "../../coro/xcoroutine.h"
 #include "../gc/xgc.h"
 #include "../gc/xcoro_gc.h"
 #include "../value/xvalue.h"
 #include "../xisolate_api.h"
-#include "../xisolate_internal.h"
-#include "../../coro/xcoroutine.h"
 
 /*
  * Create a closure with a flat upvalue array sized from proto->upvalues.
@@ -60,13 +59,4 @@ XR_FUNC void xr_gc_destroy_closure(XrGCHeader *obj, XrCoroGC *owning_gc) {
         xr_rc_release_value(owning_gc, closure->upvals[i]);
         closure->upvals[i] = xr_null();
     }
-}
-
-XrClosure *xr_closure_from_arg(XrayIsolate *isolate, XrValue v, const char *api_name) {
-    XrClosure *closure = xr_value_to_closure(v);
-    if (!closure) {
-        xr_runtime_error(isolate, "%s: callback must be a function\n",
-                         api_name ? api_name : "callback");
-    }
-    return closure;
 }

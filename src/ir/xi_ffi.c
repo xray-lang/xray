@@ -14,6 +14,7 @@
 #include "../runtime/closure/xclosure.h"
 #include "../runtime/xvm_call.h"
 #include "../runtime/xisolate_api.h"
+#include "../vm/xvm_closure.h"
 #include "../os/os_dylib.h"
 
 #include <string.h>
@@ -482,7 +483,7 @@ XrValue xr_ffi_call_proto(struct XrayIsolate *X, struct XrProto *proto, XrValue 
         const XrFFICallbackSig *cb_sig =
             (sig->param_cbacks && code == XR_FFI_T_PTR) ? sig->param_cbacks[i] : NULL;
         if (cb_sig) {
-            XrClosure *closure = xr_closure_from_arg(X, a, "FFI CFn callback");
+            XrClosure *closure = xr_vm_closure_from_arg(X, a, "FFI CFn callback");
             if (!closure) {
                 ffi_callback_bridges_free(callbacks, np);
                 return xr_null();
