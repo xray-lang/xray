@@ -1860,6 +1860,368 @@ module os {
   }
 }
 
+module io {
+  fn appendFile {
+    signature: "(path: string, data: string): bool"
+    doc: "Append string to file"
+    vm: "io_appendFile"
+    aot: "xrt_io_append_file"
+    argc: 2
+    arg_spec: "ss"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn chmod {
+    signature: "(path: string, mode: int): bool"
+    doc: "Change file permissions"
+    vm: "io_chmod"
+    aot: "xrt_io_chmod_value"
+    argc: 2
+    arg_spec: "sv"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn chdir {
+    signature: "(path: string): bool"
+    doc: "Change working directory"
+    vm: "io_chdir"
+    aot: "xrt_io_chdir"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn copyFile {
+    signature: "(src: string, dst: string): bool"
+    doc: "Copy a file"
+    vm: "io_copyFile"
+    aot: "xrt_io_copy_file"
+    argc: 2
+    arg_spec: "ss"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn cwd {
+    signature: "(): string"
+    doc: "Get current working directory"
+    vm: "io_cwd"
+    aot: "xrt_io_cwd"
+    argc: 0
+    arg_spec: ""
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn exists {
+    signature: "(path: string): bool"
+    doc: "Check if path exists"
+    vm: "io_exists"
+    aot: "xrt_io_exists"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn fileSize {
+    signature: "(path: string): int"
+    doc: "Get file size in bytes"
+    vm: "io_fileSize"
+    aot: "xrt_io_file_size"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn isDir {
+    signature: "(path: string): bool"
+    doc: "Check if path is a directory"
+    vm: "io_isDir"
+    aot: "xrt_io_is_dir"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn isFile {
+    signature: "(path: string): bool"
+    doc: "Check if path is a file"
+    vm: "io_isFile"
+    aot: "xrt_io_is_file"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn isSymlink {
+    signature: "(path: string): bool"
+    doc: "Check if path is a symlink"
+    vm: "io_isSymlink"
+    aot: "xrt_io_is_symlink"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn mkdir {
+    signature: "(path: string): bool"
+    doc: "Create directory"
+    vm: "io_mkdir"
+    aot: "xrt_io_mkdir"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn mkdirp {
+    signature: "(path: string): bool"
+    doc: "Create directory recursively"
+    vm: "io_mkdirp"
+    aot: "xrt_io_mkdirp"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn readDir {
+    signature: "(path: string): Array<string>"
+    doc: "List directory entries"
+    vm: "io_readDir"
+    aot: "xrt_io_read_dir"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn readDirRecursive {
+    signature: "(path: string): Array<string>"
+    doc: "List directory entries recursively"
+    vm: "io_readDirRecursive"
+    aot: "xrt_io_read_dir_recursive"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn readFile {
+    signature: "(path: string): string?"
+    doc: "Read entire file as string"
+    vm: "io_readFile"
+    aot: "xrt_io_read_file"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn readFileBytes {
+    signature: "(path: string): Array<uint8>?"
+    doc: "Read entire file as byte array"
+    vm: "io_readFileBytes"
+    aot: "xrt_io_read_file_bytes"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn readLines {
+    signature: "(path: string): Array<string>"
+    doc: "Read file as lines"
+    vm: "io_readLines"
+    aot: "xrt_io_read_lines"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn readStdin {
+    signature: "(): string?"
+    doc: "Read all data from standard input"
+    vm: "io_readStdin"
+    aot: "xrt_io_read_stdin"
+    argc: 0
+    arg_spec: ""
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn readlink {
+    signature: "(path: string): string?"
+    doc: "Read symlink target"
+    vm: "io_readlink"
+    aot: "xrt_io_readlink"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn realpath {
+    signature: "(path: string): string?"
+    doc: "Resolve to absolute path"
+    vm: "io_realpath"
+    aot: "xrt_io_realpath"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn remove {
+    signature: "(path: string): bool"
+    doc: "Remove a file"
+    vm: "io_remove"
+    aot: "xrt_io_remove"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn removeAll {
+    signature: "(path: string): bool"
+    doc: "Remove directory recursively"
+    vm: "io_removeAll"
+    aot: "xrt_io_remove_all"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn rename {
+    signature: "(old: string, new: string): bool"
+    doc: "Rename a file"
+    vm: "io_rename"
+    aot: "xrt_io_rename"
+    argc: 2
+    arg_spec: "ss"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn stat {
+    signature: "(path: string): FileStat?"
+    doc: "Get file stat info"
+    vm: "io_stat"
+    aot: "xrt_io_stat"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn symlink {
+    signature: "(target: string, link: string): bool"
+    doc: "Create symbolic link"
+    vm: "io_symlink"
+    aot: "xrt_io_symlink"
+    argc: 2
+    arg_spec: "ss"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn tempDir {
+    signature: "(): string?"
+    doc: "Create temporary directory"
+    vm: "io_tempDir"
+    aot: "xrt_io_temp_dir"
+    argc: 0
+    arg_spec: ""
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn tempFile {
+    signature: "(): string?"
+    doc: "Create temporary file"
+    vm: "io_tempFile"
+    aot: "xrt_io_temp_file"
+    argc: 0
+    arg_spec: ""
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn touch {
+    signature: "(path: string): bool"
+    doc: "Create or update file timestamp"
+    vm: "io_touch"
+    aot: "xrt_io_touch"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn writeFile {
+    signature: "(path: string, data: string): bool"
+    doc: "Write string to file"
+    vm: "io_writeFile"
+    aot: "xrt_io_write_file"
+    argc: 2
+    arg_spec: "ss"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn writeFileBytes {
+    signature: "(path: string, data: Array<uint8>): bool"
+    doc: "Write byte array to file"
+    vm: "io_writeFileBytes"
+    aot: "xrt_io_write_file_bytes"
+    argc: 2
+    arg_spec: "sv"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+}
+
 module log {
   const DEBUG {
     signature: ": int"
