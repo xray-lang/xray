@@ -24,8 +24,8 @@
 
 // Bundled module entry
 typedef struct {
-    const char *path;
-    const uint8_t *bc;
+    char *path;
+    uint8_t *bc;
     size_t bc_size;
 } XrBundleEntry;
 

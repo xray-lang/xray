@@ -152,7 +152,7 @@ order: 019
 | `E0501` | `XR_ERR_MOD_NOT_FOUND` | 找不到模块 |
 | `E0502` | `XR_ERR_MOD_LOAD_FAILED` | 模块加载失败（IO / 解析错误） |
 | `E0503` | `XR_ERR_MOD_NO_EXPORT` | import 的名字未被 export |
-| `E0504` | `XR_ERR_MOD_CIRCULAR` | 循环依赖 |
+| `E0504` | `XR_ERR_MOD_CIRCULAR` | 模块依赖图包含循环依赖 |
 
 ### 18.6 禁止写法 (Rejected Syntax)
 
@@ -357,7 +357,7 @@ Analyzer enum codes (`XrErrorCode`, defined in the 350+ section of `xerror.h`):
 | `E0501` | `XR_ERR_MOD_NOT_FOUND` | module not found |
 | `E0502` | `XR_ERR_MOD_LOAD_FAILED` | module load failed (I/O / parsing error) |
 | `E0503` | `XR_ERR_MOD_NO_EXPORT` | imported name is not exported |
-| `E0504` | `XR_ERR_MOD_CIRCULAR` | circular dependency |
+| `E0504` | `XR_ERR_MOD_CIRCULAR` | module dependency graph contains a circular dependency |
 
 ### 18.6 Rejected Syntax
 
