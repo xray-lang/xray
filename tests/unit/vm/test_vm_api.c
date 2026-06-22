@@ -29,8 +29,7 @@
 TEST(vm_current_ctx_returns_main_coro_ctx) {
     XrayIsolateParams params;
     xray_isolate_params_init(&params);
-    xray_isolate_setup_full(&params);
-    XrayIsolate *iso = xray_isolate_new(&params);
+    XrayIsolate *iso = xray_isolate_new_full(&params);
     ASSERT_NOT_NULL(iso);
 
     /* On a fresh isolate the main coroutine owns the canonical vm_ctx. */
@@ -56,8 +55,7 @@ TEST(vm_current_ctx_returns_main_coro_ctx) {
 TEST(vm_prepare_entry_within_capacity_is_noop) {
     XrayIsolateParams params;
     xray_isolate_params_init(&params);
-    xray_isolate_setup_full(&params);
-    XrayIsolate *iso = xray_isolate_new(&params);
+    XrayIsolate *iso = xray_isolate_new_full(&params);
     ASSERT_NOT_NULL(iso);
 
     XrVMContext *ctx = xr_vm_current_ctx(iso);
@@ -77,8 +75,7 @@ TEST(vm_prepare_entry_within_capacity_is_noop) {
 TEST(vm_prepare_entry_grows_for_large_window) {
     XrayIsolateParams params;
     xray_isolate_params_init(&params);
-    xray_isolate_setup_full(&params);
-    XrayIsolate *iso = xray_isolate_new(&params);
+    XrayIsolate *iso = xray_isolate_new_full(&params);
     ASSERT_NOT_NULL(iso);
 
     XrVMContext *ctx = xr_vm_current_ctx(iso);
@@ -104,8 +101,7 @@ TEST(vm_prepare_entry_grows_for_large_window) {
 TEST(vm_prepare_entry_zero_extra_succeeds) {
     XrayIsolateParams params;
     xray_isolate_params_init(&params);
-    xray_isolate_setup_full(&params);
-    XrayIsolate *iso = xray_isolate_new(&params);
+    XrayIsolate *iso = xray_isolate_new_full(&params);
     ASSERT_NOT_NULL(iso);
 
     XrVMContext *ctx = xr_vm_current_ctx(iso);
@@ -121,8 +117,7 @@ TEST(vm_prepare_entry_zero_extra_succeeds) {
 TEST(vm_call_closure_null_closure_returns_null) {
     XrayIsolateParams params;
     xray_isolate_params_init(&params);
-    xray_isolate_setup_full(&params);
-    XrayIsolate *iso = xray_isolate_new(&params);
+    XrayIsolate *iso = xray_isolate_new_full(&params);
     ASSERT_NOT_NULL(iso);
 
     /* NULL closure must short-circuit to xr_null without crashing. */
@@ -138,8 +133,7 @@ TEST(vm_call_closure_null_closure_returns_null) {
 TEST(vm_interpret_proto_null_proto_returns_error) {
     XrayIsolateParams params;
     xray_isolate_params_init(&params);
-    xray_isolate_setup_full(&params);
-    XrayIsolate *iso = xray_isolate_new(&params);
+    XrayIsolate *iso = xray_isolate_new_full(&params);
     ASSERT_NOT_NULL(iso);
 
     /* In Release the DCHECK is a no-op; entry must still surface an error
@@ -156,8 +150,7 @@ TEST(vm_interpret_proto_null_proto_returns_error) {
 TEST(vm_deep_recursion_via_dostring) {
     XrayIsolateParams params;
     xray_isolate_params_init(&params);
-    xray_isolate_setup_full(&params);
-    XrayIsolate *iso = xray_isolate_new(&params);
+    XrayIsolate *iso = xray_isolate_new_full(&params);
     ASSERT_NOT_NULL(iso);
 
     /* 200 levels of recursion: well below stack overflow threshold but
@@ -181,8 +174,7 @@ TEST(vm_deep_recursion_via_dostring) {
 TEST(vm_large_maxstacksize_entry) {
     XrayIsolateParams params;
     xray_isolate_params_init(&params);
-    xray_isolate_setup_full(&params);
-    XrayIsolate *iso = xray_isolate_new(&params);
+    XrayIsolate *iso = xray_isolate_new_full(&params);
     ASSERT_NOT_NULL(iso);
 
     /* Many local variables push proto->maxstacksize past the 128-slot
@@ -213,8 +205,7 @@ TEST(vm_large_maxstacksize_entry) {
 TEST(vm_vararg_entry) {
     XrayIsolateParams params;
     xray_isolate_params_init(&params);
-    xray_isolate_setup_full(&params);
-    XrayIsolate *iso = xray_isolate_new(&params);
+    XrayIsolate *iso = xray_isolate_new_full(&params);
     ASSERT_NOT_NULL(iso);
 
     /* Xray rest-param syntax: ...nums (no type annotation on rest param).
@@ -246,8 +237,7 @@ TEST(vm_dofile_debug_null_out_proto_releases_proto) {
 
     XrayIsolateParams params;
     xray_isolate_params_init(&params);
-    xray_isolate_setup_full(&params);
-    XrayIsolate *iso = xray_isolate_new(&params);
+    XrayIsolate *iso = xray_isolate_new_full(&params);
     ASSERT_NOT_NULL(iso);
 
     int rc = xray_isolate_dofile_debug(iso, path, NULL);

@@ -113,10 +113,9 @@ bool xdap_controller_launch(XdapController *ctrl, const char *program, char **ar
     // Create isolate
     XrayIsolateParams params;
     xray_isolate_params_init(&params);
-    xray_isolate_setup_full(&params);
     params.trace_execution = false;
 
-    ctrl->isolate = xray_isolate_new(&params);
+    ctrl->isolate = xray_isolate_new_full(&params);
     if (!ctrl->isolate) {
         return false;
     }

@@ -23,8 +23,7 @@
 static XrayIsolate *new_test_isolate(void) {
     XrayIsolateParams params;
     xray_isolate_params_init(&params);
-    xray_isolate_setup_full(&params);
-    return xray_isolate_new(&params);
+    return xray_isolate_new_full(&params);
 }
 
 static XrProto *make_zero_comparator_proto(void) {

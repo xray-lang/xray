@@ -22,6 +22,7 @@
 #include "xray_isolate.h"
 #include "../../api/xrepl.h"
 #include "../../runtime/xisolate_api.h"
+#include "../../toolchain/xcompiler_session.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
 #include "../../os/os_fd.h"
@@ -445,7 +446,8 @@ static void repl_free_protos(ReplState *state) {
 
 static void execute_code(ReplState *state, const char *code) {
     // Incremental compile (seeds compiler context from repl_symbols)
-    XrProto *proto = xr_repl_compile(state->isolate, code);
+    XrCompilerSession *session = xr_compiler_session_current_for_isolate(state->isolate);
+    XrProto *proto = xr_repl_compile(session, state->isolate, code);
     if (!proto) {
         return;  // compile error already reported
     }

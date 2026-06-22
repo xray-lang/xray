@@ -50,8 +50,7 @@ static XiFunc *make_func(const char *name, XrType *ret) {
 static XrayIsolate *new_test_isolate(void) {
     XrayIsolateParams p;
     xray_isolate_params_init(&p);
-    xray_isolate_setup_full(&p);
-    return xray_isolate_new(&p);
+    return xray_isolate_new_full(&p);
 }
 
 /* ========== Basic Emission Tests ========== */

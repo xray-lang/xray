@@ -329,9 +329,7 @@ XrLspServer *xlsp_server_new(void) {
     // Create isolate for parsing
     XrayIsolateParams params;
     xray_isolate_params_init(&params);
-    xray_isolate_setup_full(&params);
-    params.enable_gc = false;  // No need for GC in LSP
-    server->isolate = xray_isolate_new(&params);
+    server->isolate = xray_isolate_new_full(&params);
     if (!server->isolate) {
         lsp_log("Warning: Failed to create isolate, parser features limited");
     }

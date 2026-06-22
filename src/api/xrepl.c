@@ -424,14 +424,15 @@ XrInputStatus xr_repl_check_input(const char *source) {
 
 /* ========== REPL Compilation ========== */
 
-XrProto *xr_repl_compile(XrayIsolate *isolate, const char *source) {
-    XR_DCHECK(isolate != NULL, "xr_repl_compile: NULL isolate");
+XrProto *xr_repl_compile(XrCompilerSession *session, XrayIsolate *vm_host, const char *source) {
+    XR_DCHECK(session != NULL, "xr_repl_compile: NULL compiler session");
+    XR_DCHECK(vm_host != NULL, "xr_repl_compile: NULL VM host");
     XR_DCHECK(source != NULL, "xr_repl_compile: NULL source");
-    if (!isolate || !source)
+    if (!session || !vm_host || !source)
         return NULL;
-
-    XrCompilerSession *session = repl_compiler_session_for_isolate(isolate);
-    if (!session)
+    XR_DCHECK(xr_compiler_session_vm_host(session) == vm_host,
+              "xr_repl_compile: compiler session VM host mismatch");
+    if (xr_compiler_session_vm_host(session) != vm_host)
         return NULL;
 
     XrReplSymbolTable *repl_symbols = xr_compiler_session_ensure_repl_symbols(session);
@@ -445,7 +446,7 @@ XrProto *xr_repl_compile(XrayIsolate *isolate, const char *source) {
 
     /* REPL auto-echo: convert a trailing bare expression into a print
      * so the value shows up without the user typing print() explicitly. */
-    repl_maybe_echo_last_expr(isolate, ast);
+    repl_maybe_echo_last_expr(vm_host, ast);
 
     /* Lazy-create the persistent REPL analyzer.  Its global_scope and
      * type pool survive across inputs, so variables, functions, and
@@ -481,7 +482,7 @@ XrProto *xr_repl_compile(XrayIsolate *isolate, const char *source) {
     if (proto && !ctx->had_error) {
         /* Collect new declarations from the Xi IR output so the REPL
          * symbol table stays current for .vars display and peek. */
-        repl_symbols_collect_from_xi(repl_symbols, isolate, proto);
+        repl_symbols_collect_from_xi(repl_symbols, vm_host, proto);
     }
 
     xr_compiler_context_free(ctx);
@@ -593,7 +594,8 @@ void xr_repl_print_type(XrayIsolate *isolate, const char *expr) {
         return;
     snprintf(src, src_size, "print(typeof(%s))\n", expr);
 
-    XrProto *proto = xr_repl_compile(isolate, src);
+    XrCompilerSession *session = repl_compiler_session_for_isolate(isolate);
+    XrProto *proto = xr_repl_compile(session, isolate, src);
     xr_free(src);
 
     if (!proto)

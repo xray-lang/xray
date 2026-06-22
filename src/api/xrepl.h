@@ -25,6 +25,7 @@
 // Forward declarations
 typedef struct XrayIsolate XrayIsolate;
 typedef struct XrCompilerContext XrCompilerContext;
+typedef struct XrCompilerSession XrCompilerSession;
 typedef struct XrString XrString;
 typedef struct XrProto XrProto;
 
@@ -88,7 +89,8 @@ XR_FUNC XrInputStatus xr_repl_check_input(const char *source);
  * - Updates repl_symbols with new definitions
  * Returns compiled proto, or NULL on error.
  */
-XR_FUNC XrProto *xr_repl_compile(XrayIsolate *isolate, const char *source);
+XR_FUNC XrProto *xr_repl_compile(XrCompilerSession *session, XrayIsolate *vm_host,
+                                 const char *source);
 
 /* ========== Interactive Inspection ========== */
 

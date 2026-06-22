@@ -26,9 +26,8 @@ static const uint8_t xr_embed_smoke[97] = {
 int main(void) {
     XrayIsolateParams params;
     xray_isolate_params_init(&params);
-    xray_isolate_setup_runtime(&params);
 
-    XrayIsolate *iso = xray_isolate_new(&params);
+    XrayIsolate *iso = xray_isolate_new_runtime(&params);
     if (!iso) {
         return 2;
     }

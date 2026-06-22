@@ -171,8 +171,7 @@ XR_FUNC XrJsonValue *xmcp_tool_xray_run(XmcpServer *server, const XmcpCallContex
 
     XrayIsolateParams params;
     xray_isolate_params_init(&params);
-    xray_isolate_setup_full(&params);
-    XrayIsolate *iso = xray_isolate_new(&params);
+    XrayIsolate *iso = xray_isolate_new_full(&params);
     if (!iso) {
         int dummy_size = 0;
         bool dummy_trunc = false;

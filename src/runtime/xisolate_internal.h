@@ -79,11 +79,11 @@ struct XrayIsolate {
     // script metadata, weak registry, and extension type registry.
     XrRuntimeCore *core_rt;
 
-    // Main coroutine (unified GC architecture)
+    // Main coroutine (RC heap architecture)
     // - All coroutines (including main) use XrCoroHeap + XrCoroHeap
-    // - Main coroutine: large heap (4MB), deferred GC (max_gen_gcs=100)
+    // - Main coroutine: large heap (4MB), deferred cycle collection
     // - O(1) heap release on program exit
-    struct XrCoroutine *main_coro;  // Main coroutine (owns large heap GC)
+    struct XrCoroutine *main_coro;  // Main coroutine (owns large RC heap)
     struct XrTask *deferred_tasks;  // Runtime-owned Task shells awaiting isolate teardown
     size_t deferred_task_count;
 
@@ -95,7 +95,7 @@ struct XrayIsolate {
 
     // Configuration
     XrayIsolateParams params;  // Creation parameters
-    uint32_t init_flags;       // Which subsystems were initialized (XR_INIT_*)
+    void (*lifecycle_cleanup)(struct XrayIsolate *isolate);
 
     // Global object (simplified: embedded directly in Isolate)
     XrGlobalObject *global_object;  // Global object

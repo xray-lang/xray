@@ -5,12 +5,10 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xisolate_runtime.c - Coroutine-only runtime initialization for AOT programs
+ * xisolate_runtime.c - Runtime-ABI VM construction for bytecode embedders
  *
- * Initializes GC, core classes, and the scheduler substrate without pulling
+ * Initializes core runtime ABI classes and scheduler substrate without pulling
  * in the compiler frontend, module loader table, or prelude import graph.
- * AOT-generated main() calls xray_isolate_setup_runtime() instead of
- * xray_isolate_setup_full() when coroutines or runtime-backed stdlib are needed.
  */
 
 #include "../base/xlog.h"
@@ -160,9 +158,16 @@ static void isolate_cleanup_runtime(XrayIsolate *isolate) {
     }
 }
 
-XRAY_API void xray_isolate_setup_runtime(XrayIsolateParams *params) {
-    if (!params)
-        return;
-    params->init_extra = isolate_init_runtime;
-    params->cleanup_extra = isolate_cleanup_runtime;
+XRAY_API XrayIsolate *xray_isolate_new_runtime(const XrayIsolateParams *params) {
+    XrayIsolate *isolate = xray_isolate_new(params);
+    if (!isolate)
+        return NULL;
+
+    if (isolate_init_runtime(isolate) != 0) {
+        isolate_cleanup_runtime(isolate);
+        xray_isolate_delete(isolate);
+        return NULL;
+    }
+    isolate->lifecycle_cleanup = isolate_cleanup_runtime;
+    return isolate;
 }

@@ -8,8 +8,8 @@
  * xisolate_params.c - Isolate parameter initialization
  *
  * WHY THIS DESIGN:
- *   Separate .o with zero heavy dependencies. Caller must explicitly
- *   call xray_isolate_setup_full() to enable compiler/classes/etc.
+ *   Separate .o with zero heavy dependencies. Full/runtime variants use
+ *   explicit constructors in their own translation units.
  */
 
 #include "../runtime/xisolate_api.h"
@@ -25,7 +25,4 @@ void xray_isolate_params_init(XrayIsolateParams *params) {
     params->backend_type = XRAY_BACKEND_BYTECODE;
     params->initial_heap_size = 1024 * 1024;
     params->max_heap_size = 0;
-    params->enable_gc = true;
-    params->gc_threshold = 1024 * 1024;
-    // init_extra / cleanup_extra left NULL — set by xray_isolate_setup_full()
 }

@@ -47,9 +47,8 @@ XR_FUNC int cmd_eval(const XrCliInvocation *inv) {
     /* Create isolate and execute */
     XrayIsolateParams params;
     xray_isolate_params_init(&params);
-    xray_isolate_setup_full(&params);
 
-    XrayIsolate *iso = xray_isolate_new(&params);
+    XrayIsolate *iso = xray_isolate_new_full(&params);
     if (!iso) {
         xr_cli_error("eval", "failed to create isolate");
         xr_free(stdin_code);

@@ -80,7 +80,6 @@ XR_FUNC void xr_isolate_set_storage_mode(XrayIsolate *X, uint8_t mode);
 // Config
 XR_FUNC void *xr_isolate_get_userdata(XrayIsolate *X);
 XR_FUNC struct XrayConfig *xr_isolate_get_config(XrayIsolate *X);
-XR_FUNC uint32_t xr_isolate_get_init_flags(XrayIsolate *X);
 XR_FUNC const char *xr_isolate_get_script_file(XrayIsolate *X);
 XR_FUNC int xr_isolate_get_script_argc(XrayIsolate *X);
 XR_FUNC char **xr_isolate_get_script_argv(XrayIsolate *X);

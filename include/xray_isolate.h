@@ -8,8 +8,8 @@
  * xray_isolate.h - Isolate: independent VM execution environment
  *
  * KEY CONCEPT:
- *   An Isolate is a complete, isolated instance of the Xray VM.
- *   Each Isolate has its own heap, GC, stack, globals, and type registry.
+ *   An Isolate is a complete, isolated instance of the Xray bytecode VM.
+ *   Each Isolate has its own VM state, RC heap, stack, globals, and type registry.
  *   One Isolate per thread is the typical usage pattern.
  */
 
@@ -22,37 +22,15 @@
 #include <stdio.h>
 #include "xray_export.h"
 
-// An Isolate is a complete instance of the Xray VM with its own
-// heap, GC, stack, globals, type registry, and execution backend.
+// An Isolate is a complete instance of the Xray bytecode VM with its own
+// VM state, RC heap, stack, globals, type registry, and execution backend.
 typedef struct XrayIsolate XrayIsolate;
 
 typedef enum {
     XRAY_BACKEND_BYTECODE,  // Bytecode interpreter (default, fast startup)
 } XrayBackendType;
 
-/* ========== Init Flags ========== */
-
-// Subsystem init flags for XrayIsolateParams.init_flags.
-// Combine with bitwise OR. 0 means XR_INIT_FULL (all subsystems).
-#define XR_INIT_VM (1 << 0)
-#define XR_INIT_GC (1 << 1)
-#define XR_INIT_COMPILER (1 << 2)
-#define XR_INIT_MODULES (1 << 3)
-#define XR_INIT_STDLIB (1 << 4)
-#define XR_INIT_REFLECTION (1 << 5)
-#define XR_INIT_CLASSES (1 << 6)
-#define XR_INIT_REGEX (1 << 7)
-#define XR_INIT_SYMBOLS (1 << 8)
-#define XR_INIT_CONFIG (1 << 9)
-#define XR_INIT_ANALYZER (1 << 10)
-
-#define XR_INIT_RUNTIME (XR_INIT_VM | XR_INIT_GC)
-#define XR_INIT_FULL (0xFFFF)
-
 typedef struct {
-    /* === Init Flags === */
-    unsigned int init_flags;  // 0 = XR_INIT_FULL (all subsystems)
-
     /* === Backend === */
     XrayBackendType backend_type;
 
@@ -60,13 +38,8 @@ typedef struct {
     size_t initial_heap_size;  // 0 = use default
     size_t max_heap_size;      // 0 = unlimited
 
-    /* === GC === */
-    bool enable_gc;  // Default: true
-    size_t gc_threshold;
-
     /* === Debug === */
     bool trace_execution;
-    bool trace_gc;
     bool dump_bytecode;
     bool dump_ic_feedback;  // Dump IC type feedback after execution
 
@@ -77,29 +50,23 @@ typedef struct {
     const char *script_file;  // Script path (for __file__)
     int script_argc;
     char **script_argv;
-
-    /* === Extension callbacks (set by xray_isolate_setup_full) === */
-    int (*init_extra)(struct XrayIsolate *isolate);      // Heavy subsystem init
-    void (*cleanup_extra)(struct XrayIsolate *isolate);  // Heavy subsystem cleanup
 } XrayIsolateParams;
 
 /* ========== Core API ========== */
 
-// Create a new Isolate. Pass NULL for default params.
+// Create a minimal bytecode VM isolate. Pass NULL for default params.
 // Returns NULL on failure.
 XRAY_API XrayIsolate *xray_isolate_new(const XrayIsolateParams *params);
 
-// Initialize params with defaults: Bytecode backend, GC enabled
+// Create a bytecode VM isolate with runtime ABI classes but no compiler/module loader.
+// Used by bytecode-embedded runtimes that need coroutine/runtime-backed values.
+XRAY_API XrayIsolate *xray_isolate_new_runtime(const XrayIsolateParams *params);
+
+// Create a full bytecode VM isolate with compiler, classes, modules, reflection, etc.
+XRAY_API XrayIsolate *xray_isolate_new_full(const XrayIsolateParams *params);
+
+// Initialize params with bytecode VM defaults.
 XRAY_API void xray_isolate_params_init(XrayIsolateParams *params);
-
-// Setup full runtime (compiler, classes, modules, reflection, regex, etc.)
-// Call after params_init, before xray_isolate_new.
-// Bytecode-bundled executables skip this for minimal binary size.
-XRAY_API void xray_isolate_setup_full(XrayIsolateParams *params);
-
-// Setup coroutine runtime only (core classes + runtime ABI enums, no compiler/modules/prelude
-// import). Used by AOT-generated main() when coroutines or runtime-backed stdlib are needed.
-XRAY_API void xray_isolate_setup_runtime(XrayIsolateParams *params);
 
 // Destroy Isolate and free all resources. Safe to pass NULL.
 XRAY_API void xray_isolate_delete(XrayIsolate *isolate);

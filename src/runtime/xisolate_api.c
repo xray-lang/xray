@@ -125,10 +125,6 @@ struct XrayConfig *xr_isolate_get_config(XrayIsolate *X) {
     return (X && X->core_rt) ? X->core_rt->config : NULL;
 }
 
-uint32_t xr_isolate_get_init_flags(XrayIsolate *X) {
-    return X ? X->init_flags : 0;
-}
-
 const char *xr_isolate_get_script_file(XrayIsolate *X) {
     return (X && X->core_rt) ? X->core_rt->script_info.file : NULL;
 }
