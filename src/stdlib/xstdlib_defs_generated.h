@@ -30,6 +30,20 @@ typedef struct XrStdlibDefEntry {
     bool aot_direct;
 } XrStdlibDefEntry;
 
+typedef struct XrStdlibConstDefEntry {
+    const char *module;
+    const char *name;
+    const char *signature;
+    const char *doc;
+    const char *vm;
+    const char *aot;
+    const char *aot_const_kind;
+    const char *link_object;
+    const char *define;
+    const char *layer;
+    int64_t value;
+} XrStdlibConstDefEntry;
+
 static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"time", "now", "(): int", "Current time in milliseconds since epoch", "xr_time_now", "xrt_time_now", "", "value", "time.now", "", "system", "", 0, false},
     {"time", "clock", "(): int", "CPU clock time in milliseconds", "xr_time_clock", "xrt_time_clock", "", "value", "time.clock", "", "system", "", 0, false},
@@ -133,6 +147,23 @@ static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"datetime", "offset", "(): int", "Get UTC offset in minutes", "dt_offset", "xrt_datetime_offset", "", "value", "", "", "system", "method", 0, true},
 };
 #define XR_STDLIB_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_def_entries) / sizeof(xr_stdlib_def_entries[0])))
+
+static const XrStdlibConstDefEntry xr_stdlib_const_def_entries[] = {
+    {"path", "sep", ": string", "Platform path separator", "path.sep", "xrt_path_sep", "helper_value", "", "", "core", INT64_C(0)},
+    {"path", "delimiter", ": string", "Platform path-list delimiter", "path.delimiter", "xrt_path_delimiter", "helper_value", "", "", "core", INT64_C(0)},
+    {"encoding", "LE", ": int", "Little-endian UTF-16 byte order", "XR_UTF16_LE", "", "int64", "", "", "core", INT64_C(0)},
+    {"encoding", "BE", ": int", "Big-endian UTF-16 byte order", "XR_UTF16_BE", "", "int64", "", "", "core", INT64_C(1)},
+    {"os", "platform", ": string", "Current operating system name", "os.platform", "xrt_os_platform", "helper_value", "", "", "system", INT64_C(0)},
+    {"os", "arch", ": string", "Current CPU architecture name", "os.arch", "xrt_os_arch", "helper_value", "", "", "system", INT64_C(0)},
+    {"os", "sep", ": string", "Platform path separator", "os.sep", "xrt_os_sep", "helper_value", "", "", "system", INT64_C(0)},
+    {"os", "eol", ": string", "Platform end-of-line string", "os.eol", "xrt_os_eol", "helper_value", "", "", "system", INT64_C(0)},
+    {"log", "DEBUG", ": int", "Debug log level", "XR_LOG_DEBUG", "", "int64", "", "", "core", INT64_C(10)},
+    {"log", "INFO", ": int", "Info log level", "XR_LOG_INFO", "", "int64", "", "", "core", INT64_C(20)},
+    {"log", "WARN", ": int", "Warning log level", "XR_LOG_WARN", "", "int64", "", "", "core", INT64_C(30)},
+    {"log", "ERROR", ": int", "Error log level", "XR_LOG_ERROR", "", "int64", "", "", "core", INT64_C(40)},
+    {"log", "FATAL", ": int", "Fatal log level", "XR_LOG_FATAL", "", "int64", "", "", "core", INT64_C(50)},
+};
+#define XR_STDLIB_CONST_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_const_def_entries) / sizeof(xr_stdlib_const_def_entries[0])))
 
 #endif  /* XSTDLIB_DEFS_GENERATED_H */
 

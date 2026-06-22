@@ -369,7 +369,10 @@ static void xicgen_set_shared(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
 /* Both defined in xi_cgen_stdlib_helpers.inc.c (included later in this TU). */
 static bool xicgen_emit_stdlib_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v);
 static bool cg_module_has_aot_direct_calls(const char *module);
+static bool cg_module_has_aot_generated_constants(const char *module);
 static bool cg_aot_stdlib_generated_has_builtin_direct_call(const char *module, const char *name);
+static bool cg_emit_aot_stdlib_generated_constant_field(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                                        const XiValue *v);
 
 static bool xicgen_import_ref_is_generated_builtin_direct_member(const XiImportRef *ref) {
     if (!ref || !ref->module_path || !ref->member_name)
@@ -416,8 +419,9 @@ static void xicgen_import_ref(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
             fprintf(out, "XR_NULL_VAL /* module import: %s */", ref->module_path);
         } else if (ref && ref->module_path && !ref->member_name &&
                    (strcmp(ref->module_path, "time") == 0 ||
-                    strcmp(ref->module_path, "math") == 0 || strcmp(ref->module_path, "log") == 0 ||
-                    cg_module_has_aot_direct_calls(ref->module_path))) {
+                    strcmp(ref->module_path, "math") == 0 ||
+                    cg_module_has_aot_direct_calls(ref->module_path) ||
+                    cg_module_has_aot_generated_constants(ref->module_path))) {
             fprintf(out, "XR_NULL_VAL /* builtin module: %s */", ref->module_path);
         } else if (xicgen_import_ref_is_generated_builtin_direct_member(ref)) {
             fprintf(out, "XR_NULL_VAL /* builtin %s.%s */", ref->module_path, ref->member_name);
@@ -2580,55 +2584,8 @@ static void xicgen_load_field(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
         return;
     const char *field = (const char *) v->aux;
     if (field) {
-        const char *helper = NULL;
-        int64_t int_const = 0;
-        bool has_int_const = false;
-        if (cg_value_is_module_import_ctx(ctx, f, v->args[0], "path")) {
-            if (strcmp(field, "sep") == 0)
-                helper = "xrt_path_sep";
-            else if (strcmp(field, "delimiter") == 0)
-                helper = "xrt_path_delimiter";
-        } else if (cg_value_is_module_import_ctx(ctx, f, v->args[0], "os")) {
-            if (strcmp(field, "platform") == 0)
-                helper = "xrt_os_platform";
-            else if (strcmp(field, "arch") == 0)
-                helper = "xrt_os_arch";
-            else if (strcmp(field, "sep") == 0)
-                helper = "xrt_os_sep";
-            else if (strcmp(field, "eol") == 0)
-                helper = "xrt_os_eol";
-        } else if (cg_value_is_module_import_ctx(ctx, f, v->args[0], "log")) {
-            if (strcmp(field, "DEBUG") == 0) {
-                int_const = 10;
-                has_int_const = true;
-            } else if (strcmp(field, "INFO") == 0) {
-                int_const = 20;
-                has_int_const = true;
-            } else if (strcmp(field, "WARN") == 0) {
-                int_const = 30;
-                has_int_const = true;
-            } else if (strcmp(field, "ERROR") == 0) {
-                int_const = 40;
-                has_int_const = true;
-            } else if (strcmp(field, "FATAL") == 0) {
-                int_const = 50;
-                has_int_const = true;
-            }
-        }
-        if (has_int_const) {
-            const char *conv_suffix =
-                emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
-            fprintf(out, "INT64_C(%" PRId64 ")", int_const);
-            emit_conversion_suffix(out, conv_suffix);
+        if (cg_emit_aot_stdlib_generated_constant_field(ctx, out, f, v))
             return;
-        }
-        if (helper) {
-            const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED,
-                                                             cg_value_plan_storage_rep(ctx, v));
-            fprintf(out, "%s()", helper);
-            emit_conversion_suffix(out, conv_suffix);
-            return;
-        }
     }
     if (!field && v->aux_int >= 0) {
         const char *conv_suffix =

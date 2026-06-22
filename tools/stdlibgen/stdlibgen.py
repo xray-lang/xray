@@ -2,10 +2,10 @@
 """
 Generate stdlib metadata from declarative .def files.
 
-The .def files are the source of truth for AOT direct-call and link-manifest
-metadata. The parser intentionally stays small: module/function blocks with
-key: value properties, no embedded code, and generated C artifacts that are
-checked into the repository.
+The .def files are the source of truth for AOT direct-call, module-constant,
+and link-manifest metadata. The parser intentionally stays small:
+module/function/constant blocks with key: value properties, no embedded code,
+and generated C artifacts that are checked into the repository.
 """
 
 from __future__ import annotations
@@ -60,6 +60,26 @@ class StdlibEntry:
         return f"{self.module}.{self.name}"
 
 
+@dataclasses.dataclass(frozen=True)
+class StdlibConstEntry:
+    module: str
+    name: str
+    signature: str
+    doc: str
+    vm: str
+    aot: str
+    aot_const_kind: str
+    value: int
+    link_object: str
+    define: str
+    layer: str
+    caps: tuple[str, ...]
+
+    @property
+    def symbol(self) -> str:
+        return f"{self.module}.{self.name}"
+
+
 def strip_comment(line: str) -> str:
     in_string = False
     escaped = False
@@ -96,60 +116,104 @@ def parse_scalar(raw: str):
     return raw
 
 
-def parse_defs(root: Path) -> list[StdlibEntry]:
+def parse_def_metadata(root: Path) -> tuple[list[StdlibEntry], list[StdlibConstEntry]]:
     defs_dir = root / "stdlib" / "defs"
     entries: list[StdlibEntry] = []
+    constants: list[StdlibConstEntry] = []
     if not defs_dir.exists():
         raise SystemExit(f"missing stdlib defs directory: {defs_dir}")
 
     current_module: str | None = None
-    current_fn: str | None = None
+    current_kind: str | None = None
+    current_name: str | None = None
     props: dict[str, object] = {}
 
     def finish_entry(path: Path, line_no: int) -> None:
-        nonlocal current_fn, props
-        if current_module is None or current_fn is None:
+        nonlocal current_kind, current_name, props
+        if current_module is None or current_kind is None or current_name is None:
             return
-        missing = [k for k in ("signature", "doc", "vm", "argc") if k not in props]
-        if missing:
-            names = ", ".join(missing)
-            raise SystemExit(f"{path}:{line_no}: {current_module}.{current_fn} missing {names}")
         caps_raw = str(props.get("caps", ""))
         caps = tuple(c for c in (s.strip() for s in caps_raw.split(",")) if c)
         link_raw = props.get("link_object", False)
         if link_raw is True:
-            link_object = f"{current_module}.{current_fn}"
+            link_object = f"{current_module}.{current_name}"
         elif link_raw is False:
             link_object = ""
         else:
             link_object = str(link_raw)
-        aot_direct = bool(props.get("aot_direct", False))
-        aot_kind = str(props.get("aot_kind", "method" if aot_direct else ""))
-        if aot_kind and aot_kind not in {"method", "builtin"}:
-            raise SystemExit(f"{path}:{line_no}: unsupported aot_kind for {current_module}.{current_fn}: {aot_kind}")
-        if aot_kind and not aot_direct:
-            raise SystemExit(f"{path}:{line_no}: {current_module}.{current_fn} aot_kind requires aot_direct: true")
 
-        entries.append(
-            StdlibEntry(
-                module=current_module,
-                name=current_fn,
-                signature=str(props["signature"]),
-                doc=str(props["doc"]),
-                vm=str(props["vm"]),
-                aot=str(props.get("aot", "")),
-                argc=str(props["argc"]),
-                arg_spec=str(props.get("arg_spec", "")),
-                ret=str(props.get("ret", "value")),
-                aot_direct=aot_direct,
-                aot_kind=aot_kind,
-                link_object=link_object,
-                define=str(props.get("define", "")),
-                layer=str(props.get("layer", "")),
-                caps=caps,
+        if current_kind == "fn":
+            missing = [k for k in ("signature", "doc", "vm", "argc") if k not in props]
+            if missing:
+                names = ", ".join(missing)
+                raise SystemExit(f"{path}:{line_no}: {current_module}.{current_name} missing {names}")
+            aot_direct = bool(props.get("aot_direct", False))
+            aot_kind = str(props.get("aot_kind", "method" if aot_direct else ""))
+            if aot_kind and aot_kind not in {"method", "builtin"}:
+                raise SystemExit(
+                    f"{path}:{line_no}: unsupported aot_kind for {current_module}.{current_name}: {aot_kind}"
+                )
+            if aot_kind and not aot_direct:
+                raise SystemExit(
+                    f"{path}:{line_no}: {current_module}.{current_name} aot_kind requires aot_direct: true"
+                )
+
+            entries.append(
+                StdlibEntry(
+                    module=current_module,
+                    name=current_name,
+                    signature=str(props["signature"]),
+                    doc=str(props["doc"]),
+                    vm=str(props["vm"]),
+                    aot=str(props.get("aot", "")),
+                    argc=str(props["argc"]),
+                    arg_spec=str(props.get("arg_spec", "")),
+                    ret=str(props.get("ret", "value")),
+                    aot_direct=aot_direct,
+                    aot_kind=aot_kind,
+                    link_object=link_object,
+                    define=str(props.get("define", "")),
+                    layer=str(props.get("layer", "")),
+                    caps=caps,
+                )
             )
-        )
-        current_fn = None
+        else:
+            missing = [k for k in ("signature", "doc", "vm", "aot_const") if k not in props]
+            if missing:
+                names = ", ".join(missing)
+                raise SystemExit(f"{path}:{line_no}: {current_module}.{current_name} missing {names}")
+            aot_const_kind = str(props["aot_const"])
+            if aot_const_kind not in {"helper_value", "int64"}:
+                raise SystemExit(
+                    f"{path}:{line_no}: unsupported aot_const for {current_module}.{current_name}: {aot_const_kind}"
+                )
+            if aot_const_kind == "helper_value" and not str(props.get("aot", "")):
+                raise SystemExit(
+                    f"{path}:{line_no}: {current_module}.{current_name} helper_value requires aot"
+                )
+            value = props.get("value", 0)
+            if aot_const_kind == "int64" and not isinstance(value, int):
+                raise SystemExit(
+                    f"{path}:{line_no}: {current_module}.{current_name} int64 constant requires integer value"
+                )
+            constants.append(
+                StdlibConstEntry(
+                    module=current_module,
+                    name=current_name,
+                    signature=str(props["signature"]),
+                    doc=str(props["doc"]),
+                    vm=str(props["vm"]),
+                    aot=str(props.get("aot", "")),
+                    aot_const_kind=aot_const_kind,
+                    value=int(value),
+                    link_object=link_object,
+                    define=str(props.get("define", "")),
+                    layer=str(props.get("layer", "")),
+                    caps=caps,
+                )
+            )
+        current_kind = None
+        current_name = None
         props = {}
 
     for path in sorted(defs_dir.glob("*.def")):
@@ -159,35 +223,54 @@ def parse_defs(root: Path) -> list[StdlibEntry]:
                 continue
             m = re.fullmatch(r"module\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{", line)
             if m:
-                if current_module is not None or current_fn is not None:
+                if current_module is not None or current_kind is not None:
                     raise SystemExit(f"{path}:{line_no}: nested module block")
                 current_module = m.group(1)
                 continue
             m = re.fullmatch(r"fn\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{", line)
             if m:
-                if current_module is None or current_fn is not None:
+                if current_module is None or current_kind is not None:
                     raise SystemExit(f"{path}:{line_no}: fn outside module or nested fn")
-                current_fn = m.group(1)
+                current_kind = "fn"
+                current_name = m.group(1)
+                props = {}
+                continue
+            m = re.fullmatch(r"const\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{", line)
+            if m:
+                if current_module is None or current_kind is not None:
+                    raise SystemExit(f"{path}:{line_no}: const outside module or nested const")
+                current_kind = "const"
+                current_name = m.group(1)
                 props = {}
                 continue
             if line == "}":
-                if current_fn is not None:
+                if current_kind is not None:
                     finish_entry(path, line_no)
                 elif current_module is not None:
                     current_module = None
                 else:
                     raise SystemExit(f"{path}:{line_no}: stray closing brace")
                 continue
-            if current_fn is None:
-                raise SystemExit(f"{path}:{line_no}: property outside function block")
+            if current_kind is None:
+                raise SystemExit(f"{path}:{line_no}: property outside function/constant block")
             if ":" not in line:
                 raise SystemExit(f"{path}:{line_no}: expected key: value")
             key, value = line.split(":", 1)
             props[key.strip()] = parse_scalar(value)
 
-    if current_module is not None or current_fn is not None:
+    if current_module is not None or current_kind is not None:
         raise SystemExit("unterminated stdlib .def block")
+    return entries, constants
+
+
+def parse_defs(root: Path) -> list[StdlibEntry]:
+    entries, _ = parse_def_metadata(root)
     return entries
+
+
+def parse_constants(root: Path) -> list[StdlibConstEntry]:
+    _, constants = parse_def_metadata(root)
+    return constants
 
 
 def c_string(value: str) -> str:
@@ -220,9 +303,18 @@ def ret_expr(entry: StdlibEntry) -> str:
     raise SystemExit(f"unsupported ret kind for {entry.symbol}: {entry.ret}")
 
 
-def emit_aot_methods(entries: list[StdlibEntry]) -> str:
+def const_kind_expr(entry: StdlibConstEntry) -> str:
+    if entry.aot_const_kind == "helper_value":
+        return "CG_AOT_STDLIB_CONST_HELPER_VALUE"
+    if entry.aot_const_kind == "int64":
+        return "CG_AOT_STDLIB_CONST_I64"
+    raise SystemExit(f"unsupported aot_const kind for {entry.symbol}: {entry.aot_const_kind}")
+
+
+def emit_aot_methods(entries: list[StdlibEntry], constants: list[StdlibConstEntry]) -> str:
     rows = [e for e in entries if e.aot_direct and e.aot_kind == "method"]
     builtin_rows = [e for e in entries if e.aot_direct and e.aot_kind == "builtin"]
+    const_rows = [c for c in constants if c.aot_const_kind]
     lines = generated_header("xstdlib_aot_methods_generated.inc.c - AOT stdlib direct-call table")
     lines.append("static const CgAotStdlibMethod g_aot_stdlib_generated_methods[] = {")
     for e in rows:
@@ -240,6 +332,55 @@ def emit_aot_methods(entries: list[StdlibEntry]) -> str:
         "((int) (sizeof(g_aot_stdlib_generated_methods) / "
         "sizeof(g_aot_stdlib_generated_methods[0])))"
     )
+    lines.append("")
+    lines.extend(
+        [
+            "typedef enum CgAotStdlibConstKind {",
+            "    CG_AOT_STDLIB_CONST_I64,",
+            "    CG_AOT_STDLIB_CONST_HELPER_VALUE,",
+            "} CgAotStdlibConstKind;",
+            "",
+            "typedef struct CgAotStdlibConst {",
+            "    const char *module;",
+            "    const char *name;",
+            "    CgAotStdlibConstKind kind;",
+            "    const char *helper;",
+            "    int64_t i64_value;",
+            "} CgAotStdlibConst;",
+            "",
+            "static const CgAotStdlibConst g_aot_stdlib_generated_consts[] = {",
+        ]
+    )
+    for c in const_rows:
+        lines.append(
+            "    {"
+            f"{c_string(c.module)}, {c_string(c.name)}, {const_kind_expr(c)}, "
+            f"{c_string(c.aot)}, INT64_C({c.value})"
+            "},"
+        )
+    lines.append("};")
+    lines.append(
+        "#define CG_AOT_STDLIB_GENERATED_CONST_COUNT "
+        "((int) (sizeof(g_aot_stdlib_generated_consts) / "
+        "sizeof(g_aot_stdlib_generated_consts[0])))"
+    )
+    lines.append("")
+    lines.append("static const CgAotStdlibConst *cg_aot_stdlib_generated_const_at(int index) {")
+    lines.append("    if (index < 0 || index >= CG_AOT_STDLIB_GENERATED_CONST_COUNT)")
+    lines.append("        return NULL;")
+    lines.append("    return &g_aot_stdlib_generated_consts[index];")
+    lines.append("}")
+    lines.append("")
+    lines.append("static bool cg_aot_stdlib_generated_module_has_constants(const char *module) {")
+    lines.append("    if (!module)")
+    lines.append("        return false;")
+    lines.append("    for (int i = 0; i < CG_AOT_STDLIB_GENERATED_CONST_COUNT; i++) {")
+    lines.append("        const CgAotStdlibConst *c = &g_aot_stdlib_generated_consts[i];")
+    lines.append("        if (strcmp(module, c->module) == 0)")
+    lines.append("            return true;")
+    lines.append("    }")
+    lines.append("    return false;")
+    lines.append("}")
     lines.append("")
     lines.append(
         "static bool cg_aot_stdlib_generated_has_builtin_direct_call(const char *module, "
@@ -261,10 +402,11 @@ def emit_aot_methods(entries: list[StdlibEntry]) -> str:
     return "\n".join(lines)
 
 
-def emit_driver_metadata(entries: list[StdlibEntry]) -> str:
-    object_rows = list({e.symbol: e for e in entries if e.link_object}.values())
-    define_rows = list({e.symbol: e for e in entries if e.define}.values())
-    cap_rows = list({e.symbol: e for e in entries if e.caps}.values())
+def emit_driver_metadata(entries: list[StdlibEntry], constants: list[StdlibConstEntry]) -> str:
+    symbol_entries = [*entries, *constants]
+    object_rows = list({e.symbol: e for e in symbol_entries if e.link_object}.values())
+    define_rows = list({e.symbol: e for e in symbol_entries if e.define}.values())
+    cap_rows = list({e.symbol: e for e in symbol_entries if e.caps}.values())
     builtin_rows = list(
         {e.symbol: e for e in entries if e.aot_direct and e.aot_kind == "builtin"}.values()
     )
@@ -337,7 +479,7 @@ def emit_driver_metadata(entries: list[StdlibEntry]) -> str:
     return "\n".join(lines)
 
 
-def emit_defs_header(entries: list[StdlibEntry]) -> str:
+def emit_defs_header(entries: list[StdlibEntry], constants: list[StdlibConstEntry]) -> str:
     lines = generated_header("xstdlib_defs_generated.h - stdlib declarative metadata")
     lines.extend(
         [
@@ -364,6 +506,20 @@ def emit_defs_header(entries: list[StdlibEntry]) -> str:
             "    bool aot_direct;",
             "} XrStdlibDefEntry;",
             "",
+            "typedef struct XrStdlibConstDefEntry {",
+            "    const char *module;",
+            "    const char *name;",
+            "    const char *signature;",
+            "    const char *doc;",
+            "    const char *vm;",
+            "    const char *aot;",
+            "    const char *aot_const_kind;",
+            "    const char *link_object;",
+            "    const char *define;",
+            "    const char *layer;",
+            "    int64_t value;",
+            "} XrStdlibConstDefEntry;",
+            "",
             "static const XrStdlibDefEntry xr_stdlib_def_entries[] = {",
         ]
     )
@@ -387,6 +543,25 @@ def emit_defs_header(entries: list[StdlibEntry]) -> str:
             "#define XR_STDLIB_DEF_ENTRY_COUNT "
             "((uint32_t) (sizeof(xr_stdlib_def_entries) / sizeof(xr_stdlib_def_entries[0])))",
             "",
+            "static const XrStdlibConstDefEntry xr_stdlib_const_def_entries[] = {",
+        ]
+    )
+    for c in constants:
+        lines.append(
+            "    {"
+            f"{c_string(c.module)}, {c_string(c.name)}, {c_string(c.signature)}, "
+            f"{c_string(c.doc)}, {c_string(c.vm)}, {c_string(c.aot)}, "
+            f"{c_string(c.aot_const_kind)}, {c_string(c.link_object)}, "
+            f"{c_string(c.define)}, {c_string(c.layer)}, INT64_C({c.value})"
+            "},"
+        )
+    lines.extend(
+        [
+            "};",
+            "#define XR_STDLIB_CONST_DEF_ENTRY_COUNT "
+            "((uint32_t) (sizeof(xr_stdlib_const_def_entries) / "
+            "sizeof(xr_stdlib_const_def_entries[0])))",
+            "",
             "#endif  /* XSTDLIB_DEFS_GENERATED_H */",
             "",
             "/* clang-format on */",
@@ -397,11 +572,17 @@ def emit_defs_header(entries: list[StdlibEntry]) -> str:
 
 
 def output_paths(root: Path) -> dict[Path, str]:
-    entries = parse_defs(root)
+    entries, constants = parse_def_metadata(root)
     return {
-        root / "src" / "aot" / "xstdlib_aot_methods_generated.inc.c": emit_aot_methods(entries),
-        root / "src" / "aot" / "xaot_stdlib_generated.inc.c": emit_driver_metadata(entries),
-        root / "src" / "stdlib" / "xstdlib_defs_generated.h": emit_defs_header(entries),
+        root / "src" / "aot" / "xstdlib_aot_methods_generated.inc.c": emit_aot_methods(
+            entries, constants
+        ),
+        root / "src" / "aot" / "xaot_stdlib_generated.inc.c": emit_driver_metadata(
+            entries, constants
+        ),
+        root / "src" / "stdlib" / "xstdlib_defs_generated.h": emit_defs_header(
+            entries, constants
+        ),
     }
 
 

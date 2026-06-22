@@ -70,6 +70,53 @@ static const CgAotStdlibMethod g_aot_stdlib_generated_methods[] = {
 };
 #define CG_AOT_STDLIB_GENERATED_METHOD_COUNT ((int) (sizeof(g_aot_stdlib_generated_methods) / sizeof(g_aot_stdlib_generated_methods[0])))
 
+typedef enum CgAotStdlibConstKind {
+    CG_AOT_STDLIB_CONST_I64,
+    CG_AOT_STDLIB_CONST_HELPER_VALUE,
+} CgAotStdlibConstKind;
+
+typedef struct CgAotStdlibConst {
+    const char *module;
+    const char *name;
+    CgAotStdlibConstKind kind;
+    const char *helper;
+    int64_t i64_value;
+} CgAotStdlibConst;
+
+static const CgAotStdlibConst g_aot_stdlib_generated_consts[] = {
+    {"path", "sep", CG_AOT_STDLIB_CONST_HELPER_VALUE, "xrt_path_sep", INT64_C(0)},
+    {"path", "delimiter", CG_AOT_STDLIB_CONST_HELPER_VALUE, "xrt_path_delimiter", INT64_C(0)},
+    {"encoding", "LE", CG_AOT_STDLIB_CONST_I64, "", INT64_C(0)},
+    {"encoding", "BE", CG_AOT_STDLIB_CONST_I64, "", INT64_C(1)},
+    {"os", "platform", CG_AOT_STDLIB_CONST_HELPER_VALUE, "xrt_os_platform", INT64_C(0)},
+    {"os", "arch", CG_AOT_STDLIB_CONST_HELPER_VALUE, "xrt_os_arch", INT64_C(0)},
+    {"os", "sep", CG_AOT_STDLIB_CONST_HELPER_VALUE, "xrt_os_sep", INT64_C(0)},
+    {"os", "eol", CG_AOT_STDLIB_CONST_HELPER_VALUE, "xrt_os_eol", INT64_C(0)},
+    {"log", "DEBUG", CG_AOT_STDLIB_CONST_I64, "", INT64_C(10)},
+    {"log", "INFO", CG_AOT_STDLIB_CONST_I64, "", INT64_C(20)},
+    {"log", "WARN", CG_AOT_STDLIB_CONST_I64, "", INT64_C(30)},
+    {"log", "ERROR", CG_AOT_STDLIB_CONST_I64, "", INT64_C(40)},
+    {"log", "FATAL", CG_AOT_STDLIB_CONST_I64, "", INT64_C(50)},
+};
+#define CG_AOT_STDLIB_GENERATED_CONST_COUNT ((int) (sizeof(g_aot_stdlib_generated_consts) / sizeof(g_aot_stdlib_generated_consts[0])))
+
+static const CgAotStdlibConst *cg_aot_stdlib_generated_const_at(int index) {
+    if (index < 0 || index >= CG_AOT_STDLIB_GENERATED_CONST_COUNT)
+        return NULL;
+    return &g_aot_stdlib_generated_consts[index];
+}
+
+static bool cg_aot_stdlib_generated_module_has_constants(const char *module) {
+    if (!module)
+        return false;
+    for (int i = 0; i < CG_AOT_STDLIB_GENERATED_CONST_COUNT; i++) {
+        const CgAotStdlibConst *c = &g_aot_stdlib_generated_consts[i];
+        if (strcmp(module, c->module) == 0)
+            return true;
+    }
+    return false;
+}
+
 static bool cg_aot_stdlib_generated_has_builtin_direct_call(const char *module, const char *name) {
     if (!module || !name)
         return false;

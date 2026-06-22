@@ -141,8 +141,8 @@ static const XaBuiltinMember g_gen_encoding_functions[] = {
     {"utf16Encode", "(data: string, endian?: int): Array<uint8>", "UTF-16 encode to bytes", true, false},
     {"utf16Decode", "(data: string | Array<uint8>, endian?: int, stripBom?: bool): string?", "UTF-16 decode to string (auto-detects BOM)", true, false},
     // Module constants (is_method=false)
-    {"LE", ": int", "", false, false},
-    {"BE", ": int", "", false, false},
+    {"LE", ": int", "Little-endian UTF-16 byte order", false, false},
+    {"BE", ": int", "Big-endian UTF-16 byte order", false, false},
 };
 #define GEN_ENCODING_FUNCTION_COUNT 11
 
@@ -281,11 +281,11 @@ static const XaBuiltinMember g_gen_log_functions[] = {
     {"flush", "(): ()", "Flush log buffer", true, false},
     {"child", "(...fields: unknown): Logger", "Create child logger", true, false},
     // Module constants (is_method=false)
-    {"DEBUG", ": int", "", false, false},
-    {"INFO", ": int", "", false, false},
-    {"WARN", ": int", "", false, false},
-    {"ERROR", ": int", "", false, false},
-    {"FATAL", ": int", "", false, false},
+    {"DEBUG", ": int", "Debug log level", false, false},
+    {"INFO", ": int", "Info log level", false, false},
+    {"WARN", ": int", "Warning log level", false, false},
+    {"ERROR", ": int", "Error log level", false, false},
+    {"FATAL", ": int", "Fatal log level", false, false},
 };
 #define GEN_LOG_FUNCTION_COUNT 18
 
@@ -441,10 +441,10 @@ static const XaBuiltinMember g_gen_os_functions[] = {
     {"clock", "(): float", "Get process CPU time in seconds", true, false},
     {"exec", "(cmd: string): ExecResult?", "Execute shell command", true, false},
     // Module constants (is_method=false)
-    {"platform", ": string", "", false, false},
-    {"arch", ": string", "", false, false},
-    {"sep", ": string", "", false, false},
-    {"eol", ": string", "", false, false},
+    {"platform", ": string", "Current operating system name", false, false},
+    {"arch", ": string", "Current CPU architecture name", false, false},
+    {"sep", ": string", "Platform path separator", false, false},
+    {"eol", ": string", "Platform end-of-line string", false, false},
 };
 #define GEN_OS_FUNCTION_COUNT 28
 
@@ -475,8 +475,8 @@ static const XaBuiltinMember g_gen_path_functions[] = {
     {"parse", "(path: string): PathInfo", "Parse path into components", true, false},
     {"format", "(obj: PathInfo): string", "Format path from components", true, false},
     // Module constants (is_method=false)
-    {"sep", ": string", "", false, false},
-    {"delimiter", ": string", "", false, false},
+    {"sep", ": string", "Platform path separator", false, false},
+    {"delimiter", ": string", "Platform path-list delimiter", false, false},
 };
 #define GEN_PATH_FUNCTION_COUNT 12
 

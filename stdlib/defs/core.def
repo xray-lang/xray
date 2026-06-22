@@ -519,6 +519,24 @@ module math {
 }
 
 module path {
+  const sep {
+    signature: ": string"
+    doc: "Platform path separator"
+    vm: "path.sep"
+    aot_const: "helper_value"
+    aot: "xrt_path_sep"
+    layer: "core"
+  }
+
+  const delimiter {
+    signature: ": string"
+    doc: "Platform path-list delimiter"
+    vm: "path.delimiter"
+    aot_const: "helper_value"
+    aot: "xrt_path_delimiter"
+    layer: "core"
+  }
+
   fn join {
     signature: "(...parts: string): string"
     doc: "Join path segments"
@@ -730,6 +748,24 @@ module base64 {
 }
 
 module encoding {
+  const LE {
+    signature: ": int"
+    doc: "Little-endian UTF-16 byte order"
+    vm: "XR_UTF16_LE"
+    aot_const: "int64"
+    value: 0
+    layer: "core"
+  }
+
+  const BE {
+    signature: ": int"
+    doc: "Big-endian UTF-16 byte order"
+    vm: "XR_UTF16_BE"
+    aot_const: "int64"
+    value: 1
+    layer: "core"
+  }
+
   fn hexEncode {
     signature: "(data: string): string"
     doc: "Hex encode string to hex"
@@ -1214,6 +1250,91 @@ module regex {
     arg_spec: "s"
     aot_direct: true
     link_object: true
+    layer: "core"
+  }
+}
+
+module os {
+  const platform {
+    signature: ": string"
+    doc: "Current operating system name"
+    vm: "os.platform"
+    aot_const: "helper_value"
+    aot: "xrt_os_platform"
+    layer: "system"
+  }
+
+  const arch {
+    signature: ": string"
+    doc: "Current CPU architecture name"
+    vm: "os.arch"
+    aot_const: "helper_value"
+    aot: "xrt_os_arch"
+    layer: "system"
+  }
+
+  const sep {
+    signature: ": string"
+    doc: "Platform path separator"
+    vm: "os.sep"
+    aot_const: "helper_value"
+    aot: "xrt_os_sep"
+    layer: "system"
+  }
+
+  const eol {
+    signature: ": string"
+    doc: "Platform end-of-line string"
+    vm: "os.eol"
+    aot_const: "helper_value"
+    aot: "xrt_os_eol"
+    layer: "system"
+  }
+}
+
+module log {
+  const DEBUG {
+    signature: ": int"
+    doc: "Debug log level"
+    vm: "XR_LOG_DEBUG"
+    aot_const: "int64"
+    value: 10
+    layer: "core"
+  }
+
+  const INFO {
+    signature: ": int"
+    doc: "Info log level"
+    vm: "XR_LOG_INFO"
+    aot_const: "int64"
+    value: 20
+    layer: "core"
+  }
+
+  const WARN {
+    signature: ": int"
+    doc: "Warning log level"
+    vm: "XR_LOG_WARN"
+    aot_const: "int64"
+    value: 30
+    layer: "core"
+  }
+
+  const ERROR {
+    signature: ": int"
+    doc: "Error log level"
+    vm: "XR_LOG_ERROR"
+    aot_const: "int64"
+    value: 40
+    layer: "core"
+  }
+
+  const FATAL {
+    signature: ": int"
+    doc: "Fatal log level"
+    vm: "XR_LOG_FATAL"
+    aot_const: "int64"
+    value: 50
     layer: "core"
   }
 }

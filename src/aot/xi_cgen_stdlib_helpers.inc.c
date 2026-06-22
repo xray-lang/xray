@@ -166,6 +166,40 @@ static bool cg_module_has_aot_direct_calls(const char *module) {
     return false;
 }
 
+static bool cg_module_has_aot_generated_constants(const char *module) {
+    return cg_aot_stdlib_generated_module_has_constants(module);
+}
+
+static bool cg_emit_aot_stdlib_generated_constant_field(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                                        const XiValue *v) {
+    if (!ctx || !out || !f || !v || v->nargs < 1 || !v->aux)
+        return false;
+
+    const char *field = (const char *) v->aux;
+    for (int i = 0; i < CG_AOT_STDLIB_GENERATED_CONST_COUNT; i++) {
+        const CgAotStdlibConst *c = cg_aot_stdlib_generated_const_at(i);
+        if (!c || strcmp(field, c->name) != 0 ||
+            !cg_value_is_module_import_ctx(ctx, f, v->args[0], c->module))
+            continue;
+
+        if (c->kind == CG_AOT_STDLIB_CONST_I64) {
+            const char *conv_suffix =
+                emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
+            fprintf(out, "INT64_C(%" PRId64 ")", c->i64_value);
+            emit_conversion_suffix(out, conv_suffix);
+            return true;
+        }
+        if (c->kind == CG_AOT_STDLIB_CONST_HELPER_VALUE && c->helper && c->helper[0]) {
+            const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED,
+                                                             cg_value_plan_storage_rep(ctx, v));
+            fprintf(out, "%s()", c->helper);
+            emit_conversion_suffix(out, conv_suffix);
+            return true;
+        }
+    }
+    return false;
+}
+
 static const CgAotStdlibMethod *cg_find_aot_stdlib_method(const char *module, const char *method,
                                                           uint16_t argc) {
     if (!module || !method)
