@@ -124,4 +124,80 @@ static uint32_t xaot_stdlib_generated_caps_for_symbol(const char *symbol) {
     return 0;
 }
 
+static bool xaot_stdlib_generated_symbol_is_builtin_direct(const char *symbol) {
+    if (!symbol)
+        return false;
+    if (strcmp(symbol, "math.abs") == 0)
+        return true;
+    if (strcmp(symbol, "math.floor") == 0)
+        return true;
+    if (strcmp(symbol, "math.ceil") == 0)
+        return true;
+    if (strcmp(symbol, "math.round") == 0)
+        return true;
+    if (strcmp(symbol, "math.sqrt") == 0)
+        return true;
+    if (strcmp(symbol, "math.pow") == 0)
+        return true;
+    if (strcmp(symbol, "math.sin") == 0)
+        return true;
+    if (strcmp(symbol, "math.cos") == 0)
+        return true;
+    if (strcmp(symbol, "math.tan") == 0)
+        return true;
+    if (strcmp(symbol, "math.asin") == 0)
+        return true;
+    if (strcmp(symbol, "math.acos") == 0)
+        return true;
+    if (strcmp(symbol, "math.atan") == 0)
+        return true;
+    if (strcmp(symbol, "math.atan2") == 0)
+        return true;
+    if (strcmp(symbol, "math.log") == 0)
+        return true;
+    if (strcmp(symbol, "math.log10") == 0)
+        return true;
+    if (strcmp(symbol, "math.log2") == 0)
+        return true;
+    if (strcmp(symbol, "math.exp") == 0)
+        return true;
+    if (strcmp(symbol, "math.min") == 0)
+        return true;
+    if (strcmp(symbol, "math.max") == 0)
+        return true;
+    if (strcmp(symbol, "math.clamp") == 0)
+        return true;
+    if (strcmp(symbol, "math.sign") == 0)
+        return true;
+    if (strcmp(symbol, "math.sinh") == 0)
+        return true;
+    if (strcmp(symbol, "math.cosh") == 0)
+        return true;
+    if (strcmp(symbol, "math.tanh") == 0)
+        return true;
+    if (strcmp(symbol, "math.hypot") == 0)
+        return true;
+    if (strcmp(symbol, "math.cbrt") == 0)
+        return true;
+    if (strcmp(symbol, "math.trunc") == 0)
+        return true;
+    if (strcmp(symbol, "math.fmod") == 0)
+        return true;
+    if (strcmp(symbol, "math.log1p") == 0)
+        return true;
+    if (strcmp(symbol, "math.expm1") == 0)
+        return true;
+    if (strcmp(symbol, "math.lerp") == 0)
+        return true;
+    if (strcmp(symbol, "math.degToRad") == 0)
+        return true;
+    if (strcmp(symbol, "math.radToDeg") == 0)
+        return true;
+    if (strcmp(symbol, "math.isNaN") == 0)
+        return true;
+    if (strcmp(symbol, "math.isFinite") == 0)
+        return true;
+    return false;
+}
+
 /* clang-format on */

@@ -366,25 +366,16 @@ static void xicgen_set_shared(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
     fprintf(out, ")");
 }
 
-static bool xicgen_import_ref_is_core_math_member(const XiImportRef *ref) {
-    if (!ref || !ref->module_path || strcmp(ref->module_path, "math") != 0 || !ref->member_name)
-        return false;
-    static const char *members[] = {
-        "abs",  "floor", "ceil",  "round",    "sqrt",     "pow",   "sin",   "cos",      "tan",
-        "asin", "acos",  "atan",  "atan2",    "log",      "log10", "log2",  "exp",      "sinh",
-        "cosh", "tanh",  "hypot", "cbrt",     "trunc",    "fmod",  "log1p", "expm1",    "min",
-        "max",  "clamp", "lerp",  "degToRad", "radToDeg", "sign",  "isNaN", "isFinite",
-    };
-    for (int i = 0; i < (int) (sizeof(members) / sizeof(members[0])); i++) {
-        if (strcmp(ref->member_name, members[i]) == 0)
-            return true;
-    }
-    return false;
-}
-
 /* Both defined in xi_cgen_stdlib_helpers.inc.c (included later in this TU). */
 static bool xicgen_emit_stdlib_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v);
 static bool cg_module_has_aot_direct_calls(const char *module);
+static bool cg_aot_stdlib_generated_has_builtin_direct_call(const char *module, const char *name);
+
+static bool xicgen_import_ref_is_generated_builtin_direct_member(const XiImportRef *ref) {
+    if (!ref || !ref->module_path || !ref->member_name)
+        return false;
+    return cg_aot_stdlib_generated_has_builtin_direct_call(ref->module_path, ref->member_name);
+}
 
 static void xicgen_import_ref(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                               const char *prefix) {
@@ -428,8 +419,8 @@ static void xicgen_import_ref(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
                     strcmp(ref->module_path, "math") == 0 || strcmp(ref->module_path, "log") == 0 ||
                     cg_module_has_aot_direct_calls(ref->module_path))) {
             fprintf(out, "XR_NULL_VAL /* builtin module: %s */", ref->module_path);
-        } else if (xicgen_import_ref_is_core_math_member(ref)) {
-            fprintf(out, "XR_NULL_VAL /* builtin math.%s */", ref->member_name);
+        } else if (xicgen_import_ref_is_generated_builtin_direct_member(ref)) {
+            fprintf(out, "XR_NULL_VAL /* builtin %s.%s */", ref->module_path, ref->member_name);
         } else {
             ctx->error = true;
             fprintf(stderr, "[xi_cgen] ERROR: unresolved AOT import '%s.%s'\n",

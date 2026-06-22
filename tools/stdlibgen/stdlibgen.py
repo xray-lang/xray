@@ -49,6 +49,7 @@ class StdlibEntry:
     arg_spec: str
     ret: str
     aot_direct: bool
+    aot_kind: str
     link_object: str
     define: str
     layer: str
@@ -122,6 +123,13 @@ def parse_defs(root: Path) -> list[StdlibEntry]:
             link_object = ""
         else:
             link_object = str(link_raw)
+        aot_direct = bool(props.get("aot_direct", False))
+        aot_kind = str(props.get("aot_kind", "method" if aot_direct else ""))
+        if aot_kind and aot_kind not in {"method", "builtin"}:
+            raise SystemExit(f"{path}:{line_no}: unsupported aot_kind for {current_module}.{current_fn}: {aot_kind}")
+        if aot_kind and not aot_direct:
+            raise SystemExit(f"{path}:{line_no}: {current_module}.{current_fn} aot_kind requires aot_direct: true")
+
         entries.append(
             StdlibEntry(
                 module=current_module,
@@ -133,7 +141,8 @@ def parse_defs(root: Path) -> list[StdlibEntry]:
                 argc=str(props["argc"]),
                 arg_spec=str(props.get("arg_spec", "")),
                 ret=str(props.get("ret", "value")),
-                aot_direct=bool(props.get("aot_direct", False)),
+                aot_direct=aot_direct,
+                aot_kind=aot_kind,
                 link_object=link_object,
                 define=str(props.get("define", "")),
                 layer=str(props.get("layer", "")),
@@ -212,7 +221,8 @@ def ret_expr(entry: StdlibEntry) -> str:
 
 
 def emit_aot_methods(entries: list[StdlibEntry]) -> str:
-    rows = [e for e in entries if e.aot_direct]
+    rows = [e for e in entries if e.aot_direct and e.aot_kind == "method"]
+    builtin_rows = [e for e in entries if e.aot_direct and e.aot_kind == "builtin"]
     lines = generated_header("xstdlib_aot_methods_generated.inc.c - AOT stdlib direct-call table")
     lines.append("static const CgAotStdlibMethod g_aot_stdlib_generated_methods[] = {")
     for e in rows:
@@ -231,6 +241,21 @@ def emit_aot_methods(entries: list[StdlibEntry]) -> str:
         "sizeof(g_aot_stdlib_generated_methods[0])))"
     )
     lines.append("")
+    lines.append(
+        "static bool cg_aot_stdlib_generated_has_builtin_direct_call(const char *module, "
+        "const char *name) {"
+    )
+    lines.append("    if (!module || !name)")
+    lines.append("        return false;")
+    for e in builtin_rows:
+        lines.append(
+            f"    if (strcmp(module, {c_string(e.module)}) == 0 && "
+            f"strcmp(name, {c_string(e.name)}) == 0)\n"
+            "        return true;"
+        )
+    lines.append("    return false;")
+    lines.append("}")
+    lines.append("")
     lines.append("/* clang-format on */")
     lines.append("")
     return "\n".join(lines)
@@ -240,6 +265,9 @@ def emit_driver_metadata(entries: list[StdlibEntry]) -> str:
     object_rows = list({e.symbol: e for e in entries if e.link_object}.values())
     define_rows = list({e.symbol: e for e in entries if e.define}.values())
     cap_rows = list({e.symbol: e for e in entries if e.caps}.values())
+    builtin_rows = list(
+        {e.symbol: e for e in entries if e.aot_direct and e.aot_kind == "builtin"}.values()
+    )
     lines = generated_header("xaot_stdlib_generated.inc.c - AOT stdlib driver metadata")
     lines.extend(
         [
@@ -296,6 +324,14 @@ def emit_driver_metadata(entries: list[StdlibEntry]) -> str:
     lines.append("    return 0;")
     lines.append("}")
     lines.append("")
+    lines.append("static bool xaot_stdlib_generated_symbol_is_builtin_direct(const char *symbol) {")
+    lines.append("    if (!symbol)")
+    lines.append("        return false;")
+    for e in builtin_rows:
+        lines.append(f"    if (strcmp(symbol, {c_string(e.symbol)}) == 0)\n        return true;")
+    lines.append("    return false;")
+    lines.append("}")
+    lines.append("")
     lines.append("/* clang-format on */")
     lines.append("")
     return "\n".join(lines)
@@ -323,6 +359,7 @@ def emit_defs_header(entries: list[StdlibEntry]) -> str:
             "    const char *link_object;",
             "    const char *define;",
             "    const char *layer;",
+            "    const char *aot_kind;",
             "    uint16_t argc;",
             "    bool aot_direct;",
             "} XrStdlibDefEntry;",
@@ -340,7 +377,7 @@ def emit_defs_header(entries: list[StdlibEntry]) -> str:
             f"{c_string(e.module)}, {c_string(e.name)}, {c_string(e.signature)}, "
             f"{c_string(e.doc)}, {c_string(e.vm)}, {c_string(e.aot)}, "
             f"{c_string(e.arg_spec)}, {c_string(e.ret)}, {c_string(e.link_object)}, "
-            f"{c_string(e.define)}, {c_string(e.layer)}, {argc}, "
+            f"{c_string(e.define)}, {c_string(e.layer)}, {c_string(e.aot_kind)}, {argc}, "
             f"{'true' if e.aot_direct else 'false'}"
             "},"
         )

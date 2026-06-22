@@ -194,6 +194,35 @@ static void features_add_stdlib_member(XaotFeatureSet *fs, const char *module, c
     features_add_stdlib_symbol(fs, symbol);
 }
 
+static bool stdlib_member_is_generated_builtin_direct(const char *module, const char *member) {
+    if (!module || !module[0] || !member || !member[0])
+        return false;
+    char symbol[XAOT_STDLIB_SYMBOL_NAME_MAX];
+    int n = snprintf(symbol, sizeof(symbol), "%s.%s", module, member);
+    if (n <= 0 || n >= (int) sizeof(symbol))
+        return false;
+    return xaot_stdlib_generated_symbol_is_builtin_direct(symbol);
+}
+
+static bool features_add_generated_builtin_stdlib_symbol(XaotFeatureSet *fs, const char *symbol) {
+    if (!fs || !symbol || !xaot_stdlib_generated_symbol_is_builtin_direct(symbol))
+        return false;
+    const char *dot = strchr(symbol, '.');
+    if (!dot || dot == symbol)
+        return false;
+    char module[XAOT_STDLIB_SYMBOL_NAME_MAX];
+    size_t module_len = (size_t) (dot - symbol);
+    if (module_len >= sizeof(module))
+        return false;
+    memcpy(module, symbol, module_len);
+    module[module_len] = '\0';
+    XaotStdlibSet flag = stdlib_flag_for_import(module);
+    if (flag)
+        fs->stdlib |= flag;
+    features_add_stdlib_symbol(fs, symbol);
+    return true;
+}
+
 static bool stdlib_symbol_is_compress_core_object(const char *symbol) {
     return symbol &&
            (strcmp(symbol, "compress.deflate") == 0 || strcmp(symbol, "compress.gunzip") == 0 ||
@@ -370,10 +399,8 @@ static void scan_func_features(XiFunc *f, XaotFeatureSet *fs) {
                     break;
                 case XI_CALL_BUILTIN: {
                     const char *name = (const char *) v->aux;
-                    if (name && strncmp(name, "math.", 5) == 0) {
-                        fs->stdlib |= XAOT_STDLIB_MATH;
-                        features_add_stdlib_symbol(fs, name);
-                    }
+                    if (name)
+                        features_add_generated_builtin_stdlib_symbol(fs, name);
                     break;
                 }
                 case XI_COPY:
@@ -399,9 +426,11 @@ static void scan_func_features(XiFunc *f, XaotFeatureSet *fs) {
                         /* Member-import form (e.g. `import { now } from "time"`):
                          * the import-ref carries the member name directly, then
                          * generated metadata adds any runtime caps for that
-                         * concrete member. Core math is excluded; it is tracked
-                         * via XI_CALL_BUILTIN. */
-                        if (flag && flag != XAOT_STDLIB_MATH && ref->member_name)
+                         * concrete member. Builtin-direct fast paths are tracked
+                         * through the XI_CALL_BUILTIN that consumes the import. */
+                        if (flag && ref->member_name &&
+                            !stdlib_member_is_generated_builtin_direct(ref->module_path,
+                                                                       ref->member_name))
                             features_add_stdlib_member(fs, ref->module_path, ref->member_name);
                     }
                     break;

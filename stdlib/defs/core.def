@@ -73,6 +73,246 @@ module time {
 }
 
 module math {
+  fn abs {
+    signature: "(x: float): float"
+    doc: "Absolute value (preserves int)"
+    vm: "math_abs"
+    aot: "builtin"
+    argc: 1
+    aot_direct: true
+    aot_kind: "builtin"
+    link_object: false
+    layer: "core"
+  }
+
+  fn floor {
+    signature: "(x: float): int"
+    doc: "Floor to integer"
+    vm: "math_floor"
+    aot: "builtin"
+    argc: 1
+    aot_direct: true
+    aot_kind: "builtin"
+    link_object: false
+    layer: "core"
+  }
+
+  fn ceil {
+    signature: "(x: float): int"
+    doc: "Ceiling to integer"
+    vm: "math_ceil"
+    aot: "builtin"
+    argc: 1
+    aot_direct: true
+    aot_kind: "builtin"
+    link_object: false
+    layer: "core"
+  }
+
+  fn round {
+    signature: "(x: float): int"
+    doc: "Round to nearest integer"
+    vm: "math_round"
+    aot: "builtin"
+    argc: 1
+    aot_direct: true
+    aot_kind: "builtin"
+    link_object: false
+    layer: "core"
+  }
+
+  fn sqrt {
+    signature: "(x: float): float"
+    doc: "Square root"
+    vm: "math_sqrt"
+    aot: "builtin"
+    argc: 1
+    aot_direct: true
+    aot_kind: "builtin"
+    link_object: false
+    layer: "core"
+  }
+
+  fn pow {
+    signature: "(base: float, exp: float): float"
+    doc: "Power"
+    vm: "math_pow"
+    aot: "builtin"
+    argc: 2
+    aot_direct: true
+    aot_kind: "builtin"
+    link_object: false
+    layer: "core"
+  }
+
+  fn sin {
+    signature: "(x: float): float"
+    doc: "Sine"
+    vm: "math_sin"
+    aot: "builtin"
+    argc: 1
+    aot_direct: true
+    aot_kind: "builtin"
+    link_object: false
+    layer: "core"
+  }
+
+  fn cos {
+    signature: "(x: float): float"
+    doc: "Cosine"
+    vm: "math_cos"
+    aot: "builtin"
+    argc: 1
+    aot_direct: true
+    aot_kind: "builtin"
+    link_object: false
+    layer: "core"
+  }
+
+  fn tan {
+    signature: "(x: float): float"
+    doc: "Tangent"
+    vm: "math_tan"
+    aot: "builtin"
+    argc: 1
+    aot_direct: true
+    aot_kind: "builtin"
+    link_object: false
+    layer: "core"
+  }
+
+  fn asin {
+    signature: "(x: float): float"
+    doc: "Arc sine"
+    vm: "math_asin"
+    aot: "builtin"
+    argc: 1
+    aot_direct: true
+    aot_kind: "builtin"
+    link_object: false
+    layer: "core"
+  }
+
+  fn acos {
+    signature: "(x: float): float"
+    doc: "Arc cosine"
+    vm: "math_acos"
+    aot: "builtin"
+    argc: 1
+    aot_direct: true
+    aot_kind: "builtin"
+    link_object: false
+    layer: "core"
+  }
+
+  fn atan {
+    signature: "(x: float): float"
+    doc: "Arc tangent"
+    vm: "math_atan"
+    aot: "builtin"
+    argc: 1
+    aot_direct: true
+    aot_kind: "builtin"
+    link_object: false
+    layer: "core"
+  }
+
+  fn atan2 {
+    signature: "(y: float, x: float): float"
+    doc: "Arc tangent of y/x"
+    vm: "math_atan2"
+    aot: "builtin"
+    argc: 2
+    aot_direct: true
+    aot_kind: "builtin"
+    link_object: false
+    layer: "core"
+  }
+
+  fn log {
+    signature: "(x: float): float"
+    doc: "Natural logarithm"
+    vm: "math_log"
+    aot: "builtin"
+    argc: 1
+    aot_direct: true
+    aot_kind: "builtin"
+    link_object: false
+    layer: "core"
+  }
+
+  fn log10 {
+    signature: "(x: float): float"
+    doc: "Base-10 logarithm"
+    vm: "math_log10"
+    aot: "builtin"
+    argc: 1
+    aot_direct: true
+    aot_kind: "builtin"
+    link_object: false
+    layer: "core"
+  }
+
+  fn log2 {
+    signature: "(x: float): float"
+    doc: "Base-2 logarithm"
+    vm: "math_log2"
+    aot: "builtin"
+    argc: 1
+    aot_direct: true
+    aot_kind: "builtin"
+    link_object: false
+    layer: "core"
+  }
+
+  fn exp {
+    signature: "(x: float): float"
+    doc: "Exponential e^x"
+    vm: "math_exp"
+    aot: "builtin"
+    argc: 1
+    aot_direct: true
+    aot_kind: "builtin"
+    link_object: false
+    layer: "core"
+  }
+
+  fn min {
+    signature: "(...args: float): float"
+    doc: "Minimum (preserves int)"
+    vm: "math_min"
+    aot: "builtin"
+    argc: variadic
+    aot_direct: true
+    aot_kind: "builtin"
+    link_object: false
+    layer: "core"
+  }
+
+  fn max {
+    signature: "(...args: float): float"
+    doc: "Maximum (preserves int)"
+    vm: "math_max"
+    aot: "builtin"
+    argc: variadic
+    aot_direct: true
+    aot_kind: "builtin"
+    link_object: false
+    layer: "core"
+  }
+
+  fn clamp {
+    signature: "(x: float, min: float, max: float): float"
+    doc: "Clamp (preserves int)"
+    vm: "math_clamp"
+    aot: "builtin"
+    argc: 3
+    aot_direct: true
+    aot_kind: "builtin"
+    link_object: false
+    layer: "core"
+  }
+
   fn random {
     signature: "(): float"
     doc: "Random float in [0, 1)"
@@ -95,6 +335,186 @@ module math {
     aot_direct: true
     link_object: true
     layer: "system"
+  }
+
+  fn sign {
+    signature: "(x: float): int"
+    doc: "Sign of value (-1, 0, 1)"
+    vm: "math_sign"
+    aot: "builtin"
+    argc: 1
+    aot_direct: true
+    aot_kind: "builtin"
+    link_object: false
+    layer: "core"
+  }
+
+  fn sinh {
+    signature: "(x: float): float"
+    doc: "Hyperbolic sine"
+    vm: "math_sinh"
+    aot: "builtin"
+    argc: 1
+    aot_direct: true
+    aot_kind: "builtin"
+    link_object: false
+    layer: "core"
+  }
+
+  fn cosh {
+    signature: "(x: float): float"
+    doc: "Hyperbolic cosine"
+    vm: "math_cosh"
+    aot: "builtin"
+    argc: 1
+    aot_direct: true
+    aot_kind: "builtin"
+    link_object: false
+    layer: "core"
+  }
+
+  fn tanh {
+    signature: "(x: float): float"
+    doc: "Hyperbolic tangent"
+    vm: "math_tanh"
+    aot: "builtin"
+    argc: 1
+    aot_direct: true
+    aot_kind: "builtin"
+    link_object: false
+    layer: "core"
+  }
+
+  fn hypot {
+    signature: "(x: float, y: float): float"
+    doc: "Hypotenuse sqrt(x*x+y*y)"
+    vm: "math_hypot"
+    aot: "builtin"
+    argc: 2
+    aot_direct: true
+    aot_kind: "builtin"
+    link_object: false
+    layer: "core"
+  }
+
+  fn cbrt {
+    signature: "(x: float): float"
+    doc: "Cube root"
+    vm: "math_cbrt"
+    aot: "builtin"
+    argc: 1
+    aot_direct: true
+    aot_kind: "builtin"
+    link_object: false
+    layer: "core"
+  }
+
+  fn trunc {
+    signature: "(x: float): int"
+    doc: "Truncate toward zero"
+    vm: "math_trunc"
+    aot: "builtin"
+    argc: 1
+    aot_direct: true
+    aot_kind: "builtin"
+    link_object: false
+    layer: "core"
+  }
+
+  fn fmod {
+    signature: "(x: float, y: float): float"
+    doc: "Floating-point remainder"
+    vm: "math_fmod"
+    aot: "builtin"
+    argc: 2
+    aot_direct: true
+    aot_kind: "builtin"
+    link_object: false
+    layer: "core"
+  }
+
+  fn log1p {
+    signature: "(x: float): float"
+    doc: "log(1+x) accurate for small x"
+    vm: "math_log1p"
+    aot: "builtin"
+    argc: 1
+    aot_direct: true
+    aot_kind: "builtin"
+    link_object: false
+    layer: "core"
+  }
+
+  fn expm1 {
+    signature: "(x: float): float"
+    doc: "exp(x)-1 accurate for small x"
+    vm: "math_expm1"
+    aot: "builtin"
+    argc: 1
+    aot_direct: true
+    aot_kind: "builtin"
+    link_object: false
+    layer: "core"
+  }
+
+  fn lerp {
+    signature: "(a: float, b: float, t: float): float"
+    doc: "Linear interpolation"
+    vm: "math_lerp"
+    aot: "builtin"
+    argc: 3
+    aot_direct: true
+    aot_kind: "builtin"
+    link_object: false
+    layer: "core"
+  }
+
+  fn degToRad {
+    signature: "(deg: float): float"
+    doc: "Degrees to radians"
+    vm: "math_degToRad"
+    aot: "builtin"
+    argc: 1
+    aot_direct: true
+    aot_kind: "builtin"
+    link_object: false
+    layer: "core"
+  }
+
+  fn radToDeg {
+    signature: "(rad: float): float"
+    doc: "Radians to degrees"
+    vm: "math_radToDeg"
+    aot: "builtin"
+    argc: 1
+    aot_direct: true
+    aot_kind: "builtin"
+    link_object: false
+    layer: "core"
+  }
+
+  fn isNaN {
+    signature: "(x: float): bool"
+    doc: "Check if NaN"
+    vm: "math_isNaN"
+    aot: "builtin"
+    argc: 1
+    aot_direct: true
+    aot_kind: "builtin"
+    link_object: false
+    layer: "core"
+  }
+
+  fn isFinite {
+    signature: "(x: float): bool"
+    doc: "Check if finite"
+    vm: "math_isFinite"
+    aot: "builtin"
+    argc: 1
+    aot_direct: true
+    aot_kind: "builtin"
+    link_object: false
+    layer: "core"
   }
 }
 
