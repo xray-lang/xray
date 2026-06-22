@@ -257,6 +257,7 @@ BinLit ::= '0b' BinDigit (BinDigit | '_')*
 - Digit separators `_` exist purely for readability and may appear anywhere between digits.
 - Default literal type is `int` (= `int64`). The `n` suffix promotes to `BigInt` (see §1.6.3).
 - Range: `int64` covers `[-(2^63), 2^63 - 1]`; overflow is detected at compile time.
+- When an integer literal appears directly in a narrow-integer context (variable initialization, assignment, argument, return value, collection element, and similar sites), its value must fit the target type; for example, `let x: int8 = 200` is a compile-time error. Non-literal expressions written into narrow integer targets are still narrowed with target-width wrap-around; see §2.3.1.
 
 ```xray
 42
@@ -518,8 +519,9 @@ Xray is statically typed; every expression has a determined type at compile time
 | `int64` | `[-2⁶³, 2⁶³-1]` | `int` (default integer type) |
 | `uint8`..`uint64` | unsigned counterparts | — |
 
-- Literals default to `int`; the type may be narrowed by context (e.g., assigned to an `int32` variable).
-- Arithmetic: two's-complement wrap-around semantics (no debug/release distinction).
+- Literals default to `int`; the type may be narrowed by context (e.g., assigned to an `int32` variable), but a direct literal must fit the target range (`let x: int8 = 200` is rejected at compile time).
+- Arithmetic uses two's-complement wrap-around semantics (no debug/release distinction). Same-width narrow integer operations keep that width and wrap at that width (`uint8 + uint8 -> uint8`); mixed narrow widths collapse back to `int`; shift results take the left operand's width.
+- Non-literal expressions written into narrow integer targets are narrowed with target-type wrap-around, so `let x: uint8 = 255 + 1` evaluates to `0`.
 
 #### 2.3.2 Floating-Point Types
 

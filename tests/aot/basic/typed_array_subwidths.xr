@@ -5,13 +5,13 @@ fn run() -> int {
     let u32s: Array<uint32> = []
 
     i8s.push(127)
-    i8s.push(128)
+    i8s.push(127 + 1)
     i16s.push(32767)
-    i16s.push(32768)
+    i16s.push(32767 + 1)
     u16s.push(65535)
-    u16s.push(65536)
+    u16s.push(65535 + 1)
     u32s.push(4294967295)
-    u32s.push(4294967296)
+    u32s.push(4294967295 + 1)
 
     return i8s[0] + i8s[1] + i16s[0] + i16s[1] +
         u16s[0] + u16s[1] + u32s[0] + u32s[1]

@@ -64,8 +64,8 @@ fn test_array_filled_constructor_and_integer_wrap() {
     let wrapped = u + 1
     assert_eq(wrapped, 0)
 
-    let assigned: uint32 = 4294967296
-    assert_eq(assigned, 0)
+    let assigned_expr: uint32 = 4294967295 + 1
+    assert_eq(assigned_expr, 0)
 
     let byte: uint8 = 255
     let byte_wrapped = byte + 1

@@ -475,8 +475,11 @@ XrType *xa_visit_binary(XaInferContext *ctx, AstNode *node) {
     if (!ctx || !node)
         return xr_type_new_unknown(NULL);
 
+    XrType *saved_expected = ctx->expected_type;
+    ctx->expected_type = NULL;
     XrType *left = xa_visit_infer_expr(ctx, node->as.binary.left);
     XrType *right = xa_visit_infer_expr(ctx, node->as.binary.right);
+    ctx->expected_type = saved_expected;
 
     // Deterministic result types: language rules independent of operand types
     switch (node->type) {
@@ -535,7 +538,10 @@ XrType *xa_visit_unary(XaInferContext *ctx, AstNode *node) {
     if (!ctx || !node)
         return xr_type_new_unknown(NULL);
 
+    XrType *saved_expected = ctx->expected_type;
+    ctx->expected_type = NULL;
     XrType *operand = xa_visit_infer_expr(ctx, node->as.unary.operand);
+    ctx->expected_type = saved_expected;
 
     switch (node->type) {
         case AST_UNARY_NEG:
@@ -1164,22 +1170,26 @@ XrType *xa_visit_map_literal(XaInferContext *ctx, AstNode *node) {
                                xr_type_new_unknown(NULL));
     }
 
-    // Propagate expected value type to children
+    // Propagate expected key/value types to children
     XrType *saved_expected = ctx->expected_type;
-    if (ctx->expected_type && XR_TYPE_IS_MAP(ctx->expected_type) &&
-        ctx->expected_type->map.value_type) {
-        ctx->expected_type = ctx->expected_type->map.value_type;
-    } else {
-        ctx->expected_type = NULL;
+    XrType *target_key_type = NULL;
+    XrType *target_value_type = NULL;
+    if (ctx->expected_type && XR_TYPE_IS_MAP(ctx->expected_type)) {
+        target_key_type = ctx->expected_type->map.key_type;
+        target_value_type = ctx->expected_type->map.value_type;
     }
 
     // Infer key/value types from first element
+    ctx->expected_type = target_key_type;
     XrType *key_type = xa_visit_infer_expr(ctx, map->keys[0]);
+    ctx->expected_type = target_value_type;
     XrType *val_type = xa_visit_infer_expr(ctx, map->values[0]);
 
     // Union with remaining elements (same pattern as array_literal)
     for (int i = 1; i < map->count; i++) {
+        ctx->expected_type = target_key_type;
         XrType *k = xa_visit_infer_expr(ctx, map->keys[i]);
+        ctx->expected_type = target_value_type;
         XrType *v = xa_visit_infer_expr(ctx, map->values[i]);
         if (!xr_type_equals(key_type, k)) {
             key_type = xr_type_union(ctx->analyzer->isolate, key_type, k);

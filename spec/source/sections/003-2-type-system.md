@@ -53,8 +53,9 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 | `int64` | `[-2⁶³, 2⁶³-1]` | `int`（默认整数类型）|
 | `uint8`..`uint64` | 无符号对应 | — |
 
-- 字面量默认 `int`；可被上下文窄化（如赋给 `int32` 变量）。
-- 算术：二补码环绕语义（wrap on overflow），不区分 debug / release 构建。
+- 字面量默认 `int`；可被上下文窄化（如赋给 `int32` 变量），但直接字面量必须落在目标范围内（`let x: int8 = 200` 编译拒绝）。
+- 算术：二补码环绕语义（wrap on overflow），不区分 debug / release 构建。同宽窄整数运算保留该宽度并按该宽度环绕（`uint8 + uint8 -> uint8`）；异宽窄整数运算塌回 `int`；移位运算结果取左操作数宽度。
+- 非字面量表达式写入窄整数目标时按目标类型窄化并环绕，例如 `let x: uint8 = 255 + 1` 得到 `0`。
 
 #### 2.3.2 浮点类型
 
@@ -511,8 +512,9 @@ Xray is statically typed; every expression has a determined type at compile time
 | `int64` | `[-2⁶³, 2⁶³-1]` | `int` (default integer type) |
 | `uint8`..`uint64` | unsigned counterparts | — |
 
-- Literals default to `int`; the type may be narrowed by context (e.g., assigned to an `int32` variable).
-- Arithmetic: two's-complement wrap-around semantics (no debug/release distinction).
+- Literals default to `int`; the type may be narrowed by context (e.g., assigned to an `int32` variable), but a direct literal must fit the target range (`let x: int8 = 200` is rejected at compile time).
+- Arithmetic uses two's-complement wrap-around semantics (no debug/release distinction). Same-width narrow integer operations keep that width and wrap at that width (`uint8 + uint8 -> uint8`); mixed narrow widths collapse back to `int`; shift results take the left operand's width.
+- Non-literal expressions written into narrow integer targets are narrowed with target-type wrap-around, so `let x: uint8 = 255 + 1` evaluates to `0`.
 
 #### 2.3.2 Floating-Point Types
 

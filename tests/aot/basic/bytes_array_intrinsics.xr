@@ -53,7 +53,7 @@ let u: uint32 = 4294967295
 let wrapped = u + 1
 print(wrapped)
 
-let assigned: uint32 = 4294967296
+let assigned: uint32 = 4294967295 + 1
 print(assigned)
 
 let byte: uint8 = 255

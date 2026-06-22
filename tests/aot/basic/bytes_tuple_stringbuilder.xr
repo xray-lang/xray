@@ -9,14 +9,14 @@ print(empty.length)
 
 let sized = new Bytes(3)
 sized[0] = 65
-sized[1] = 300
-sized[2] = -1
+sized[1] = 255 + 45
+sized[2] = 0 - 1
 print(sized.length)
 print(sized[0])
 print(sized[1])
 print(sized[2])
 
-let filled = new Bytes(2, 257)
+let filled = new Bytes(2, 256 + 1)
 print(filled[0])
 print(filled[1])
 
@@ -29,7 +29,7 @@ print(copied[2])
 
 let grown = new Bytes()
 grown.push(88)
-grown.push(300)
+grown.push(255 + 45)
 print(grown.length)
 print(grown[0])
 print(grown[1])

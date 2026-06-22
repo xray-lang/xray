@@ -28,6 +28,8 @@ fn mulu32(a: uint32, b: uint32) -> uint32 { return a * b }
 fn addi32(a: int32, b: int32) -> int32 { return a + b }
 fn subi32(a: int32, b: int32) -> int32 { return a - b }
 fn muli32(a: int32, b: int32) -> int32 { return a * b }
+fn shlu8(a: uint8, b: int16) -> uint8 { return a << b }
+fn shru8(a: uint8, b: int16) -> uint8 { return a >> b }
 
 print(add8(127, 1))          // -128
 print(sub8(-128, 1))         // 127
@@ -58,3 +60,6 @@ print(mulu32(100000, 100000))          // 1410065408
 print(addi32(2147483647, 1))           // -2147483648
 print(subi32(-2147483648, 1))          // 2147483647
 print(muli32(100000, 100000))          // 1410065408
+
+print(shlu8(128, 1))                   // 0
+print(shru8(128, 1))                   // 64
