@@ -223,6 +223,92 @@ module path {
   }
 }
 
+module base64 {
+  fn encode {
+    signature: "(data: string): string"
+    doc: "Base64 encode"
+    vm: "base64_encode"
+    aot: "xrt_base64_encode"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn decode {
+    signature: "(data: string): string?"
+    doc: "Base64 decode"
+    vm: "base64_decode"
+    aot: "xrt_base64_decode"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn encodeUrl {
+    signature: "(data: string): string"
+    doc: "URL-safe base64 encode"
+    vm: "base64_encodeUrl"
+    aot: "xrt_base64_encode_url"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn decodeUrl {
+    signature: "(data: string): string?"
+    doc: "URL-safe base64 decode"
+    vm: "base64_decodeUrl"
+    aot: "xrt_base64_decode_url"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn encodeBytes {
+    signature: "(data: Array<uint8>): string"
+    doc: "Base64 encode bytes"
+    vm: "base64_encodeBytes"
+    aot: "xrt_base64_encode_bytes"
+    argc: 1
+    arg_spec: "v"
+    aot_direct: true
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn decodeToBytes {
+    signature: "(data: string): Array<uint8>?"
+    doc: "Base64 decode to bytes"
+    vm: "base64_decodeToBytes"
+    aot: "xrt_base64_decode_to_bytes"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn isValid {
+    signature: "(data: string): bool"
+    doc: "Check if valid base64"
+    vm: "base64_isValid"
+    aot: "xrt_base64_is_valid"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: false
+    layer: "core"
+  }
+}
+
 module crypto {
   fn md5 {
     signature: "(data: string): string"
