@@ -36,6 +36,7 @@ JOBS=1
 # isolate API, VM init/cleanup, source compiler entry, analyzer, or module loader
 # symbol. Darwin nm prefixes C symbols with '_', so every alternative allows it.
 FORBIDDEN_SYMBOL_RE='(^|[^[:alnum:]_])_?(xray_isolate_|xr_vm_|xr_parse|xr_compile|xanalyzer_|xr_load_module_)'
+EAGER_SCRIPT_BUILTIN_SYMBOL_RE='(^|[^[:alnum:]_])_?(xr_string_intern_core|xr_string_value)([^[:alnum:]_]|$)'
 
 cleanup() {
     rm -rf "$WORK"
@@ -209,6 +210,27 @@ check_no_forbidden_symbols() {
     fi
 }
 
+check_no_eager_script_builtin_symbols() {
+    local bin="$1"
+    local slug="$2"
+    local name="$3"
+    local symbols="$WORK/$slug.symbols"
+    local hits="$WORK/$slug.eager-script-builtin"
+
+    if ! dump_symbols "$bin" "$symbols"; then
+        record_fail "$name: nm failed"
+        print_log_tail "$symbols.err"
+        return
+    fi
+
+    if grep -E "$EAGER_SCRIPT_BUILTIN_SYMBOL_RE" "$symbols" >"$hits"; then
+        record_fail "$name: eager script builtin string symbols present"
+        sed 's/^/      /' "$hits" | sed -n '1,60p'
+    else
+        record_pass "$name: no eager script builtin string symbols"
+    fi
+}
+
 run_freestanding_case() {
     local slug="$1"
     local name="$2"
@@ -237,6 +259,7 @@ run_runtime_case() {
     local name="$2"
     local src="$3"
     local want_output="$4"
+    local symbol_profile="${5:-}"
     local bin="$WORK/$slug"
     local log="$WORK/$slug.log"
 
@@ -246,6 +269,9 @@ run_runtime_case() {
         echo "  size: $(binary_size "$bin") bytes"
         expect_log_not_contains "$log" "-lxray_core" "$name: does not link xray_core"
         check_no_forbidden_symbols "$bin" "$slug" "$name"
+        if [ "$symbol_profile" = "no_eager_script_builtins" ]; then
+            check_no_eager_script_builtin_symbols "$bin" "$slug" "$name"
+        fi
         if [ -n "$want_output" ]; then
             expect_output "$bin" "$want_output" "$name: binary output"
         fi
@@ -283,7 +309,8 @@ run_case_by_id() {
                 "runtime_time_sleep" \
                 "runtime-time-sleep" \
                 "$PROJECT_DIR/tests/aot/filetests/link/runtime_time.xr" \
-                "7"
+                "7" \
+                "no_eager_script_builtins"
             ;;
         runtime_coro_minimal)
             run_runtime_case \
