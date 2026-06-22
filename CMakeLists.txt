@@ -42,6 +42,10 @@ configure_file(
 # Generated headers are checked into git, so this only runs when .def changes.
 
 set(XISAGEN ${CMAKE_SOURCE_DIR}/tools/xisagen/xisagen.py)
+set(STDLIBGEN ${CMAKE_SOURCE_DIR}/tools/stdlibgen/stdlibgen.py)
+file(GLOB XRAY_STDLIB_DEF_FILES CONFIGURE_DEPENDS
+    "${CMAKE_SOURCE_DIR}/stdlib/defs/*.def"
+)
 
 set(XRAY_GEN_XI_OPS_DEPS
     ${CMAKE_SOURCE_DIR}/src/ir/xi_ops_gen.h
@@ -69,6 +73,12 @@ set(XRAY_GEN_AOT_METADATA_DEPS
     ${CMAKE_SOURCE_DIR}/src/aot/xaot_rep_gen.h
     ${CMAKE_SOURCE_DIR}/src/aot/xaot_abi_gen.h
     ${CMAKE_SOURCE_DIR}/src/aot/xaot_layout_gen.h
+)
+
+set(XRAY_GEN_STDLIB_METADATA_DEPS
+    ${CMAKE_SOURCE_DIR}/src/aot/xstdlib_aot_methods_generated.inc.c
+    ${CMAKE_SOURCE_DIR}/src/aot/xaot_stdlib_generated.inc.c
+    ${CMAKE_SOURCE_DIR}/src/stdlib/xstdlib_defs_generated.h
 )
 
 add_custom_command(
@@ -137,6 +147,15 @@ add_custom_command(
     COMMENT "xisagen: generating xaot_layout_gen.h from layout.def"
 )
 
+add_custom_command(
+    OUTPUT  ${XRAY_GEN_STDLIB_METADATA_DEPS}
+    COMMAND ${XRAY_PYTHON} ${STDLIBGEN}
+            --root ${CMAKE_SOURCE_DIR}
+    DEPENDS ${STDLIBGEN}
+            ${XRAY_STDLIB_DEF_FILES}
+    COMMENT "stdlibgen: generating stdlib metadata from stdlib/defs/*.def"
+)
+
 add_custom_target(gen-xi-ops DEPENDS
     ${XRAY_GEN_XI_OPS_DEPS}
 )
@@ -151,6 +170,10 @@ add_custom_target(gen-xi-lowering DEPENDS
 
 add_custom_target(gen-aot-metadata DEPENDS
     ${XRAY_GEN_AOT_METADATA_DEPS}
+)
+
+add_custom_target(gen-stdlib-metadata DEPENDS
+    ${XRAY_GEN_STDLIB_METADATA_DEPS}
 )
 
 # Linux: expose POSIX/GNU extensions (CLOCK_MONOTONIC, CPU_SET, pthread_setaffinity_np, etc.)
@@ -716,7 +739,7 @@ set(CORE_ALL_SOURCES
 )
 
 add_library(xray_core STATIC ${CORE_ALL_SOURCES})
-add_dependencies(xray_core gen-xi-ops gen-xi-verify gen-xi-lowering gen-aot-metadata)
+add_dependencies(xray_core gen-xi-ops gen-xi-verify gen-xi-lowering gen-aot-metadata gen-stdlib-metadata)
 
 add_library(xray_aot_core STATIC
     src/aot/xrt_regex_core.c
@@ -1135,6 +1158,19 @@ if(BUILD_TESTS)
     )
     set_tests_properties(bytecode_embed_symbol_gate PROPERTIES
         LABELS "vm;bytecode;embed;link;smoke"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
+        NAME stdlib_metadata_sync
+        COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/tools/stdlibgen/stdlibgen.py
+                --root ${CMAKE_CURRENT_SOURCE_DIR}
+                --check
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(stdlib_metadata_sync PROPERTIES
+        LABELS "stdlib;metadata;generated"
         PROCESSORS 1
         TIMEOUT 30
     )

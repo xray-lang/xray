@@ -58,6 +58,8 @@
 #define realpath(path, resolved) _fullpath((resolved), (path), PATH_MAX)
 #endif
 
+#include "xaot_stdlib_generated.inc.c"
+
 /* Create a full-runtime isolate for AOT compilation.
  * Equivalent to XR_ISOLATE_PROFILE_RUN without depending on the
  * isolate-profile factory in src/api/. */
@@ -120,9 +122,44 @@ static XaotStdlibSet stdlib_flag_for_import(const char *name) {
     return 0;
 }
 
+static void features_apply_generated_stdlib_caps(XaotFeatureSet *fs, const char *symbol) {
+    uint32_t caps = xaot_stdlib_generated_caps_for_symbol(symbol);
+    if (!fs || caps == 0)
+        return;
+    if (caps & XAOT_STDLIB_CAP_CORO)
+        fs->need_coro = true;
+    if (caps & XAOT_STDLIB_CAP_TIMER)
+        fs->need_timer = true;
+    if (caps & XAOT_STDLIB_CAP_CHANNEL)
+        fs->need_channel = true;
+    if (caps & XAOT_STDLIB_CAP_NETPOLL)
+        fs->need_netpoll = true;
+    if (caps & XAOT_STDLIB_CAP_TASK)
+        fs->need_task = true;
+    if (caps & XAOT_STDLIB_CAP_WORK_QUEUE)
+        fs->need_work_queue = true;
+    if (caps & XAOT_STDLIB_CAP_RESULT_GROUP)
+        fs->need_result_group = true;
+    if (caps & XAOT_STDLIB_CAP_OBJECTS)
+        fs->need_objects = true;
+    if (caps & XAOT_STDLIB_CAP_DEEP_COPY)
+        fs->need_deep_copy = true;
+    if (caps & XAOT_STDLIB_CAP_EXCEPTION)
+        fs->need_exception = true;
+    if (caps & XAOT_STDLIB_CAP_REFLECTION)
+        fs->need_reflection = true;
+    if (caps & XAOT_STDLIB_CAP_STACKTRACE)
+        fs->need_stacktrace = true;
+    if (caps & XAOT_STDLIB_CAP_INSTANCEOF)
+        fs->need_instanceof = true;
+    if (caps & XAOT_STDLIB_CAP_SCOPE)
+        fs->need_scope = true;
+}
+
 static void features_add_stdlib_symbol(XaotFeatureSet *fs, const char *symbol) {
     if (!fs || !symbol || !symbol[0] || strlen(symbol) >= XAOT_STDLIB_SYMBOL_NAME_MAX)
         return;
+    features_apply_generated_stdlib_caps(fs, symbol);
     for (uint16_t i = 0; i < fs->n_stdlib_symbols; i++) {
         if (strcmp(fs->stdlib_symbols[i], symbol) == 0)
             return;
@@ -155,12 +192,6 @@ static void features_add_stdlib_member(XaotFeatureSet *fs, const char *module, c
     if (n <= 0 || n >= (int) sizeof(symbol))
         return;
     features_add_stdlib_symbol(fs, symbol);
-}
-
-static bool stdlib_symbol_is_time_query(const char *symbol) {
-    return symbol && (strcmp(symbol, "time.now") == 0 || strcmp(symbol, "time.monotonic") == 0 ||
-                      strcmp(symbol, "time.nanos") == 0 || strcmp(symbol, "time.micros") == 0 ||
-                      strcmp(symbol, "time.clock") == 0);
 }
 
 static bool stdlib_symbol_is_compress_core_object(const char *symbol) {
@@ -324,11 +355,6 @@ static void scan_func_features(XiFunc *f, XaotFeatureSet *fs) {
                         const char *method = (const char *) v->aux;
                         if (mod) {
                             features_add_stdlib_member(fs, mod, method);
-                            if (strcmp(mod, "time") == 0 && strcmp(method, "sleep") == 0 &&
-                                v->nargs == 2) {
-                                fs->need_coro = true;
-                                fs->need_timer = true;
-                            }
                         }
                     }
                     break;
@@ -370,12 +396,11 @@ static void scan_func_features(XiFunc *f, XaotFeatureSet *fs) {
                         /* net/http imply netpoll runtime */
                         if (flag & (XAOT_STDLIB_NET | XAOT_STDLIB_HTTP))
                             fs->need_netpoll = true;
-                        /* time.sleep / select-after mark timer use precisely;
-                         * importing time for pure query helpers stays
-                         * freestanding. */
                         /* Member-import form (e.g. `import { now } from "time"`):
-                         * the import-ref carries the member name directly. Core
-                         * math is excluded; it is tracked via XI_CALL_BUILTIN. */
+                         * the import-ref carries the member name directly, then
+                         * generated metadata adds any runtime caps for that
+                         * concrete member. Core math is excluded; it is tracked
+                         * via XI_CALL_BUILTIN. */
                         if (flag && flag != XAOT_STDLIB_MATH && ref->member_name)
                             features_add_stdlib_member(fs, ref->module_path, ref->member_name);
                     }
@@ -424,16 +449,6 @@ static bool add_stdlib_manifest_entries(XaotLinkManifest *manifest, XaotStdlibSe
     return true;
 }
 
-static bool add_runtime_time_manifest_entries(XaotLinkManifest *manifest,
-                                              const XaotFeatureSet *features) {
-    for (uint16_t i = 0; i < features->n_stdlib_symbols; i++) {
-        if (strcmp(features->stdlib_symbols[i], "time.sleep") == 0 &&
-            !xaot_link_manifest_add_unique(manifest, XAOT_LINK_STDLIB_OBJECT, "time"))
-            return false;
-    }
-    return true;
-}
-
 static bool add_stdlib_symbol_manifest_entries(XaotLinkManifest *manifest,
                                                const XaotFeatureSet *features) {
     for (uint16_t i = 0; i < features->n_stdlib_symbols; i++) {
@@ -469,20 +484,24 @@ static bool add_stdlib_core_object_manifest_entries(XaotLinkManifest *manifest,
                                                     const XaotFeatureSet *features) {
     for (uint16_t i = 0; i < features->n_stdlib_symbols; i++) {
         const char *symbol = features->stdlib_symbols[i];
-        if ((strcmp(symbol, "crypto.decrypt") == 0 || strcmp(symbol, "crypto.encrypt") == 0 ||
-             strcmp(symbol, "crypto.hmac") == 0 || strcmp(symbol, "crypto.md5") == 0 ||
-             strcmp(symbol, "crypto.randomBytes") == 0 || strcmp(symbol, "crypto.sha1") == 0 ||
-             strcmp(symbol, "crypto.sha256") == 0 || strcmp(symbol, "crypto.sha512") == 0 ||
-             strcmp(symbol, "crypto.uuid") == 0 || strcmp(symbol, "math.random") == 0 ||
-             strcmp(symbol, "math.randomInt") == 0 || strcmp(symbol, "regex.compile") == 0 ||
-             stdlib_symbol_is_compress_core_object(symbol) || stdlib_symbol_is_time_query(symbol) ||
-             strcmp(symbol, "regex.count") == 0 || strcmp(symbol, "regex.find") == 0 ||
-             strcmp(symbol, "regex.findAll") == 0 || strcmp(symbol, "regex.findGroup") == 0 ||
-             strcmp(symbol, "regex.findText") == 0 || strcmp(symbol, "regex.fullFind") == 0 ||
-             strcmp(symbol, "regex.isValid") == 0 || strcmp(symbol, "regex.replace") == 0 ||
-             strcmp(symbol, "regex.replaceAll") == 0 || strcmp(symbol, "regex.split") == 0 ||
-             strcmp(symbol, "regex.test") == 0) &&
+        const char *generated_object = xaot_stdlib_generated_object_for_symbol(symbol);
+        if (generated_object) {
+            if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_STDLIB_OBJECT, generated_object))
+                return false;
+            continue;
+        }
+        if (stdlib_symbol_is_compress_core_object(symbol) &&
             !xaot_link_manifest_add_unique(manifest, XAOT_LINK_STDLIB_OBJECT, symbol))
+            return false;
+    }
+    return true;
+}
+
+static bool add_stdlib_generated_define_manifest_entries(XaotLinkManifest *manifest,
+                                                         const XaotFeatureSet *features) {
+    for (uint16_t i = 0; i < features->n_stdlib_symbols; i++) {
+        const char *define = xaot_stdlib_generated_define_for_symbol(features->stdlib_symbols[i]);
+        if (define && !xaot_link_manifest_add_unique(manifest, XAOT_LINK_DEFINE, define))
             return false;
     }
     return true;
@@ -645,26 +664,12 @@ static bool build_link_manifest(const XaotFeatureSet *features, XaotLinkManifest
 
     if (!add_stdlib_manifest_entries(manifest, features->stdlib))
         goto done;
-    if (!add_runtime_time_manifest_entries(manifest, features))
-        goto done;
     if (!add_extern_dylib_manifest_entries(manifest, features))
         goto done;
     if (!add_stdlib_core_object_manifest_entries(manifest, features))
         goto done;
-    if (xaot_link_manifest_contains(manifest, XAOT_LINK_STDLIB_OBJECT, "regex.compile") ||
-        xaot_link_manifest_contains(manifest, XAOT_LINK_STDLIB_OBJECT, "regex.count") ||
-        xaot_link_manifest_contains(manifest, XAOT_LINK_STDLIB_OBJECT, "regex.find") ||
-        xaot_link_manifest_contains(manifest, XAOT_LINK_STDLIB_OBJECT, "regex.findAll") ||
-        xaot_link_manifest_contains(manifest, XAOT_LINK_STDLIB_OBJECT, "regex.findGroup") ||
-        xaot_link_manifest_contains(manifest, XAOT_LINK_STDLIB_OBJECT, "regex.findText") ||
-        xaot_link_manifest_contains(manifest, XAOT_LINK_STDLIB_OBJECT, "regex.fullFind") ||
-        xaot_link_manifest_contains(manifest, XAOT_LINK_STDLIB_OBJECT, "regex.replace") ||
-        xaot_link_manifest_contains(manifest, XAOT_LINK_STDLIB_OBJECT, "regex.replaceAll") ||
-        xaot_link_manifest_contains(manifest, XAOT_LINK_STDLIB_OBJECT, "regex.split") ||
-        xaot_link_manifest_contains(manifest, XAOT_LINK_STDLIB_OBJECT, "regex.test")) {
-        if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_DEFINE, "XRT_ENABLE_REGEX"))
-            goto done;
-    }
+    if (!add_stdlib_generated_define_manifest_entries(manifest, features))
+        goto done;
     if (!add_stdlib_symbol_manifest_entries(manifest, features))
         goto done;
     ok = true;

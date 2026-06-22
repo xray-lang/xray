@@ -1,0 +1,456 @@
+module time {
+  fn now {
+    signature: "(): int"
+    doc: "Current time in milliseconds since epoch"
+    vm: "xr_time_now"
+    aot: "xrt_time_now"
+    argc: 0
+    arg_spec: ""
+    aot_direct: false
+    link_object: true
+    layer: "system"
+  }
+
+  fn clock {
+    signature: "(): int"
+    doc: "CPU clock time in milliseconds"
+    vm: "xr_time_clock"
+    aot: "xrt_time_clock"
+    argc: 0
+    arg_spec: ""
+    aot_direct: false
+    link_object: true
+    layer: "system"
+  }
+
+  fn monotonic {
+    signature: "(): int"
+    doc: "Monotonic time in milliseconds"
+    vm: "xr_time_monotonic"
+    aot: "xrt_time_monotonic"
+    argc: 0
+    arg_spec: ""
+    aot_direct: false
+    link_object: true
+    layer: "system"
+  }
+
+  fn nanos {
+    signature: "(): int"
+    doc: "Monotonic time in nanoseconds"
+    vm: "xr_time_nanos"
+    aot: "xrt_time_nanos"
+    argc: 0
+    arg_spec: ""
+    aot_direct: false
+    link_object: true
+    layer: "system"
+  }
+
+  fn micros {
+    signature: "(): int"
+    doc: "Monotonic time in microseconds"
+    vm: "xr_time_micros"
+    aot: "xrt_time_micros"
+    argc: 0
+    arg_spec: ""
+    aot_direct: false
+    link_object: true
+    layer: "system"
+  }
+
+  fn sleep {
+    signature: "(ms: int): ()"
+    doc: "Sleep for milliseconds"
+    vm: "xr_time_sleep"
+    argc: 1
+    arg_spec: "v"
+    aot_direct: false
+    link_object: "time"
+    layer: "runtime"
+    caps: "coro,timer"
+  }
+}
+
+module math {
+  fn random {
+    signature: "(): float"
+    doc: "Random float in [0, 1)"
+    vm: "math_random"
+    aot: "xrt_math_random"
+    argc: 0
+    arg_spec: ""
+    aot_direct: true
+    link_object: true
+    layer: "system"
+  }
+
+  fn randomInt {
+    signature: "(min: int, max: int): int"
+    doc: "Random integer in [min, max]"
+    vm: "math_randomInt"
+    aot: "xrt_math_random_int"
+    argc: 2
+    arg_spec: "vv"
+    aot_direct: true
+    link_object: true
+    layer: "system"
+  }
+}
+
+module crypto {
+  fn md5 {
+    signature: "(data: string): string"
+    doc: "Compute MD5 hash"
+    vm: "crypto_md5"
+    aot: "xrt_crypto_md5"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: true
+    layer: "core"
+  }
+
+  fn sha1 {
+    signature: "(data: string): string"
+    doc: "Compute SHA-1 hash"
+    vm: "crypto_sha1"
+    aot: "xrt_crypto_sha1"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: true
+    layer: "core"
+  }
+
+  fn sha256 {
+    signature: "(data: string): string"
+    doc: "Compute SHA-256 hash"
+    vm: "crypto_sha256"
+    aot: "xrt_crypto_sha256"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: true
+    layer: "core"
+  }
+
+  fn sha512 {
+    signature: "(data: string): string"
+    doc: "Compute SHA-512 hash"
+    vm: "crypto_sha512"
+    aot: "xrt_crypto_sha512"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: true
+    layer: "core"
+  }
+
+  fn hmac {
+    signature: "(algo: string, key: string, data: string): string?"
+    doc: "Compute HMAC"
+    vm: "crypto_hmac"
+    aot: "xrt_crypto_hmac"
+    argc: 3
+    arg_spec: "sss"
+    aot_direct: true
+    link_object: true
+    layer: "core"
+  }
+
+  fn randomBytes {
+    signature: "(n: int): string"
+    doc: "Generate random bytes"
+    vm: "crypto_random_bytes"
+    aot: "xrt_crypto_random_bytes"
+    argc: 1
+    arg_spec: "v"
+    aot_direct: true
+    link_object: true
+    layer: "system"
+  }
+
+  fn uuid {
+    signature: "(): string"
+    doc: "Generate UUID v4"
+    vm: "crypto_uuid"
+    aot: "xrt_crypto_uuid"
+    argc: 0
+    arg_spec: ""
+    aot_direct: true
+    link_object: true
+    layer: "system"
+  }
+
+  fn encrypt {
+    signature: "(key: string, plaintext: string): string"
+    doc: "AES-256-CBC encrypt"
+    vm: "crypto_encrypt"
+    aot: "xrt_crypto_encrypt"
+    argc: 2
+    arg_spec: "ss"
+    aot_direct: true
+    link_object: true
+    layer: "core"
+  }
+
+  fn decrypt {
+    signature: "(key: string, ciphertext: string): string?"
+    doc: "AES-256-CBC decrypt"
+    vm: "crypto_decrypt"
+    aot: "xrt_crypto_decrypt"
+    argc: 2
+    arg_spec: "ss"
+    aot_direct: true
+    link_object: true
+    layer: "core"
+  }
+
+  fn timingSafeEqual {
+    signature: "(a: string, b: string): bool"
+    doc: "Constant-time string comparison"
+    vm: "crypto_timing_safe_equal"
+    aot: "xrt_crypto_timing_safe_equal"
+    argc: 2
+    arg_spec: "ss"
+    aot_direct: true
+    link_object: false
+    layer: "core"
+  }
+}
+
+module regex {
+  fn compile {
+    signature: "(pattern: string, flags?: string): Regex"
+    doc: "Compile regex pattern"
+    vm: "regex_compile"
+    aot: "xrt_regex_compile_default"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: true
+    define: "XRT_ENABLE_REGEX"
+    layer: "alloc"
+  }
+
+  fn compile {
+    signature: "(pattern: string, flags?: string): Regex"
+    doc: "Compile regex pattern"
+    vm: "regex_compile"
+    aot: "xrt_regex_compile_with_flags"
+    argc: 2
+    arg_spec: "ss"
+    aot_direct: true
+    link_object: true
+    define: "XRT_ENABLE_REGEX"
+    layer: "alloc"
+  }
+
+  fn test {
+    signature: "(pattern: Regex, s: string): bool"
+    doc: "Test if regex matches"
+    vm: "regex_test"
+    aot: "xrt_regex_test"
+    argc: 2
+    arg_spec: "vs"
+    aot_direct: true
+    link_object: true
+    define: "XRT_ENABLE_REGEX"
+    layer: "alloc"
+  }
+
+  fn count {
+    signature: "(pattern: Regex, s: string): int"
+    doc: "Count matches"
+    vm: "regex_count"
+    aot: "xrt_regex_count"
+    argc: 2
+    arg_spec: "vs"
+    aot_direct: true
+    link_object: true
+    define: "XRT_ENABLE_REGEX"
+    layer: "alloc"
+  }
+
+  fn findText {
+    signature: "(pattern: Regex, s: string): string?"
+    doc: "Find first matching text"
+    vm: "regex_find_text"
+    aot: "xrt_regex_find_text"
+    argc: 2
+    arg_spec: "vs"
+    aot_direct: true
+    link_object: true
+    define: "XRT_ENABLE_REGEX"
+    layer: "alloc"
+  }
+
+  fn findGroup {
+    signature: "(pattern: Regex, s: string, index: int): string?"
+    doc: "Find capture group"
+    vm: "regex_find_group"
+    aot: "xrt_regex_find_group"
+    argc: 3
+    arg_spec: "vsv"
+    aot_direct: true
+    link_object: true
+    define: "XRT_ENABLE_REGEX"
+    layer: "alloc"
+  }
+
+  fn find {
+    signature: "(pattern: Regex, s: string, offset?: int): RegexMatch?"
+    doc: "Find first match"
+    vm: "regex_find"
+    aot: "xrt_regex_find"
+    argc: 2
+    arg_spec: "vs"
+    aot_direct: true
+    link_object: true
+    define: "XRT_ENABLE_REGEX"
+    layer: "alloc"
+  }
+
+  fn find {
+    signature: "(pattern: Regex, s: string, offset?: int): RegexMatch?"
+    doc: "Find first match"
+    vm: "regex_find"
+    aot: "xrt_regex_find_offset"
+    argc: 3
+    arg_spec: "vsv"
+    aot_direct: true
+    link_object: true
+    define: "XRT_ENABLE_REGEX"
+    layer: "alloc"
+  }
+
+  fn fullFind {
+    signature: "(pattern: Regex, s: string): RegexMatch?"
+    doc: "Find full match"
+    vm: "regex_full_match"
+    aot: "xrt_regex_full_find"
+    argc: 2
+    arg_spec: "vs"
+    aot_direct: true
+    link_object: true
+    define: "XRT_ENABLE_REGEX"
+    layer: "alloc"
+  }
+
+  fn findAll {
+    signature: "(pattern: Regex, s: string, limit?: int): Array<RegexMatch>"
+    doc: "Find all matches"
+    vm: "regex_find_all"
+    aot: "xrt_regex_find_all"
+    argc: 2
+    arg_spec: "vs"
+    aot_direct: true
+    link_object: true
+    define: "XRT_ENABLE_REGEX"
+    layer: "alloc"
+  }
+
+  fn findAll {
+    signature: "(pattern: Regex, s: string, limit?: int): Array<RegexMatch>"
+    doc: "Find all matches"
+    vm: "regex_find_all"
+    aot: "xrt_regex_find_all_limit"
+    argc: 3
+    arg_spec: "vsv"
+    aot_direct: true
+    link_object: true
+    define: "XRT_ENABLE_REGEX"
+    layer: "alloc"
+  }
+
+  fn replace {
+    signature: "(pattern: Regex, s: string, repl: string): string"
+    doc: "Replace first match"
+    vm: "regex_replace"
+    aot: "xrt_regex_replace"
+    argc: 3
+    arg_spec: "vss"
+    aot_direct: true
+    link_object: true
+    define: "XRT_ENABLE_REGEX"
+    layer: "alloc"
+  }
+
+  fn replaceAll {
+    signature: "(pattern: Regex, s: string, repl: string): string"
+    doc: "Replace all matches"
+    vm: "regex_replace_all"
+    aot: "xrt_regex_replace_all"
+    argc: 3
+    arg_spec: "vss"
+    aot_direct: true
+    link_object: true
+    define: "XRT_ENABLE_REGEX"
+    layer: "alloc"
+  }
+
+  fn split {
+    signature: "(pattern: Regex, s: string, limit?: int): Array<string>"
+    doc: "Split string by regex"
+    vm: "regex_split"
+    aot: "xrt_regex_split"
+    argc: 2
+    arg_spec: "vs"
+    aot_direct: true
+    link_object: true
+    define: "XRT_ENABLE_REGEX"
+    layer: "alloc"
+  }
+
+  fn split {
+    signature: "(pattern: Regex, s: string, limit?: int): Array<string>"
+    doc: "Split string by regex"
+    vm: "regex_split"
+    aot: "xrt_regex_split_limit"
+    argc: 3
+    arg_spec: "vsv"
+    aot_direct: true
+    link_object: true
+    define: "XRT_ENABLE_REGEX"
+    layer: "alloc"
+  }
+
+  fn escape {
+    signature: "(s: string): string"
+    doc: "Escape regex special chars"
+    vm: "regex_escape"
+    aot: "xrt_regex_escape"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: false
+    layer: "core"
+  }
+
+  fn isValid {
+    signature: "(pattern: string): bool"
+    doc: "Check if pattern is valid"
+    vm: "regex_is_valid"
+    aot: "xrt_regex_is_valid"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: true
+    layer: "core"
+  }
+}
+
+module datetime {
+  fn offset {
+    signature: "(): int"
+    doc: "Get UTC offset in minutes"
+    vm: "dt_offset"
+    aot: "xrt_datetime_offset"
+    argc: 0
+    arg_spec: ""
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+}

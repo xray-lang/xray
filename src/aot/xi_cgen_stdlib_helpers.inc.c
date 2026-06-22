@@ -43,10 +43,9 @@ typedef struct CgAotStdlibMethod {
     const char *extern_decl; /* forward declaration emitted into generated C */
 } CgAotStdlibMethod;
 
-static const CgAotStdlibMethod g_aot_stdlib_methods[] = {
-    {"math", "random", 0, "xrt_math_random", "", CG_AOT_RET_VALUE, NULL},
-    {"math", "randomInt", 2, "xrt_math_random_int", "vv", CG_AOT_RET_VALUE, NULL},
-    {"datetime", "offset", 0, "xrt_datetime_offset", "", CG_AOT_RET_VALUE, NULL},
+#include "xstdlib_aot_methods_generated.inc.c"
+
+static const CgAotStdlibMethod g_aot_stdlib_manual_methods[] = {
     {"path", "join", CG_AOT_STDLIB_VARIADIC, "xrt_path_join", "*", CG_AOT_RET_VALUE, NULL},
     {"path", "isAbsolute", 1, "xrt_path_is_absolute", "s", CG_AOT_RET_VALUE, NULL},
     {"path", "dirname", 1, "xrt_path_dirname", "s", CG_AOT_RET_STR_BORROWED, NULL},
@@ -128,33 +127,6 @@ static const CgAotStdlibMethod g_aot_stdlib_methods[] = {
     {"compress", "zlibDecompress", 1, "xrt_compress_zlib_decompress", "s", CG_AOT_RET_VALUE, NULL},
     {"compress", "isGzip", 1, "xrt_compress_is_gzip", "s", CG_AOT_RET_VALUE, NULL},
     {"compress", "isZlib", 1, "xrt_compress_is_zlib", "s", CG_AOT_RET_VALUE, NULL},
-    {"crypto", "decrypt", 2, "xrt_crypto_decrypt", "ss", CG_AOT_RET_VALUE, NULL},
-    {"crypto", "encrypt", 2, "xrt_crypto_encrypt", "ss", CG_AOT_RET_VALUE, NULL},
-    {"crypto", "hmac", 3, "xrt_crypto_hmac", "sss", CG_AOT_RET_VALUE, NULL},
-    {"crypto", "md5", 1, "xrt_crypto_md5", "s", CG_AOT_RET_VALUE, NULL},
-    {"crypto", "randomBytes", 1, "xrt_crypto_random_bytes", "v", CG_AOT_RET_VALUE, NULL},
-    {"crypto", "sha1", 1, "xrt_crypto_sha1", "s", CG_AOT_RET_VALUE, NULL},
-    {"crypto", "sha256", 1, "xrt_crypto_sha256", "s", CG_AOT_RET_VALUE, NULL},
-    {"crypto", "sha512", 1, "xrt_crypto_sha512", "s", CG_AOT_RET_VALUE, NULL},
-    {"crypto", "timingSafeEqual", 2, "xrt_crypto_timing_safe_equal", "ss", CG_AOT_RET_VALUE, NULL},
-    {"crypto", "uuid", 0, "xrt_crypto_uuid", "", CG_AOT_RET_VALUE, NULL},
-    {"regex", "compile", 1, "xrt_regex_compile_default", "s", CG_AOT_RET_VALUE, NULL},
-    {"regex", "compile", 2, "xrt_regex_compile_with_flags", "ss", CG_AOT_RET_VALUE, NULL},
-    {"regex", "count", 2, "xrt_regex_count", "vs", CG_AOT_RET_VALUE, NULL},
-    {"regex", "escape", 1, "xrt_regex_escape", "s", CG_AOT_RET_VALUE, NULL},
-    {"regex", "find", 2, "xrt_regex_find", "vs", CG_AOT_RET_VALUE, NULL},
-    {"regex", "find", 3, "xrt_regex_find_offset", "vsv", CG_AOT_RET_VALUE, NULL},
-    {"regex", "findAll", 2, "xrt_regex_find_all", "vs", CG_AOT_RET_VALUE, NULL},
-    {"regex", "findAll", 3, "xrt_regex_find_all_limit", "vsv", CG_AOT_RET_VALUE, NULL},
-    {"regex", "findGroup", 3, "xrt_regex_find_group", "vsv", CG_AOT_RET_VALUE, NULL},
-    {"regex", "findText", 2, "xrt_regex_find_text", "vs", CG_AOT_RET_VALUE, NULL},
-    {"regex", "fullFind", 2, "xrt_regex_full_find", "vs", CG_AOT_RET_VALUE, NULL},
-    {"regex", "isValid", 1, "xrt_regex_is_valid", "s", CG_AOT_RET_VALUE, NULL},
-    {"regex", "replace", 3, "xrt_regex_replace", "vss", CG_AOT_RET_VALUE, NULL},
-    {"regex", "replaceAll", 3, "xrt_regex_replace_all", "vss", CG_AOT_RET_VALUE, NULL},
-    {"regex", "split", 2, "xrt_regex_split", "vs", CG_AOT_RET_VALUE, NULL},
-    {"regex", "split", 3, "xrt_regex_split_limit", "vsv", CG_AOT_RET_VALUE, NULL},
-    {"regex", "test", 2, "xrt_regex_test", "vs", CG_AOT_RET_VALUE, NULL},
     {"io", "appendFile", 2, "xrt_io_append_file", "ss", CG_AOT_RET_VALUE, NULL},
     {"io", "chmod", 2, "xrt_io_chmod_value", "sv", CG_AOT_RET_VALUE, NULL},
     {"io", "chdir", 1, "xrt_io_chdir", "s", CG_AOT_RET_VALUE, NULL},
@@ -187,8 +159,31 @@ static const CgAotStdlibMethod g_aot_stdlib_methods[] = {
     {"io", "writeFileBytes", 2, "xrt_io_write_file_bytes", "sv", CG_AOT_RET_VALUE, NULL},
 };
 
-#define CG_AOT_STDLIB_METHOD_COUNT                                                                 \
-    ((int) (sizeof(g_aot_stdlib_methods) / sizeof(g_aot_stdlib_methods[0])))
+#define CG_AOT_STDLIB_MANUAL_METHOD_COUNT                                                          \
+    ((int) (sizeof(g_aot_stdlib_manual_methods) / sizeof(g_aot_stdlib_manual_methods[0])))
+
+static const CgAotStdlibMethod *cg_aot_stdlib_generated_method_at(int index) {
+    if (index < 0 || index >= CG_AOT_STDLIB_GENERATED_METHOD_COUNT)
+        return NULL;
+    return &g_aot_stdlib_generated_methods[index];
+}
+
+static const CgAotStdlibMethod *cg_aot_stdlib_manual_method_at(int index) {
+    if (index < 0 || index >= CG_AOT_STDLIB_MANUAL_METHOD_COUNT)
+        return NULL;
+    return &g_aot_stdlib_manual_methods[index];
+}
+
+static const CgAotStdlibMethod *cg_aot_stdlib_method_at(int index) {
+    const CgAotStdlibMethod *m = cg_aot_stdlib_generated_method_at(index);
+    if (m)
+        return m;
+    return cg_aot_stdlib_manual_method_at(index - CG_AOT_STDLIB_GENERATED_METHOD_COUNT);
+}
+
+static int cg_aot_stdlib_method_count(void) {
+    return CG_AOT_STDLIB_GENERATED_METHOD_COUNT + CG_AOT_STDLIB_MANUAL_METHOD_COUNT;
+}
 
 /* Whether `module` is a stdlib module with AOT direct-call support. The
  * import-ref emitter uses this to materialize the module object as an
@@ -196,8 +191,9 @@ static const CgAotStdlibMethod g_aot_stdlib_methods[] = {
 static bool cg_module_has_aot_direct_calls(const char *module) {
     if (!module)
         return false;
-    for (int i = 0; i < CG_AOT_STDLIB_METHOD_COUNT; i++) {
-        if (strcmp(module, g_aot_stdlib_methods[i].module) == 0)
+    for (int i = 0; i < cg_aot_stdlib_method_count(); i++) {
+        const CgAotStdlibMethod *m = cg_aot_stdlib_method_at(i);
+        if (m && strcmp(module, m->module) == 0)
             return true;
     }
     return false;
@@ -207,8 +203,10 @@ static const CgAotStdlibMethod *cg_find_aot_stdlib_method(const char *module, co
                                                           uint16_t argc) {
     if (!module || !method)
         return NULL;
-    for (int i = 0; i < CG_AOT_STDLIB_METHOD_COUNT; i++) {
-        const CgAotStdlibMethod *m = &g_aot_stdlib_methods[i];
+    for (int i = 0; i < cg_aot_stdlib_method_count(); i++) {
+        const CgAotStdlibMethod *m = cg_aot_stdlib_method_at(i);
+        if (!m)
+            continue;
         if ((m->argc == argc || m->argc == CG_AOT_STDLIB_VARIADIC) &&
             strcmp(module, m->module) == 0 && strcmp(method, m->method) == 0)
             return m;
@@ -219,9 +217,10 @@ static const CgAotStdlibMethod *cg_find_aot_stdlib_method(const char *module, co
 /* Resolve the AOT-managed stdlib module that a method-call receiver names. */
 static const char *cg_aot_stdlib_module_of_receiver(const XiCgenCtx *ctx, const XiFunc *f,
                                                     const XiValue *recv) {
-    for (int i = 0; i < CG_AOT_STDLIB_METHOD_COUNT; i++) {
-        const char *module = g_aot_stdlib_methods[i].module;
-        if (cg_value_is_module_import_ctx(ctx, f, recv, module))
+    for (int i = 0; i < cg_aot_stdlib_method_count(); i++) {
+        const CgAotStdlibMethod *m = cg_aot_stdlib_method_at(i);
+        const char *module = m ? m->module : NULL;
+        if (module && cg_value_is_module_import_ctx(ctx, f, recv, module))
             return module;
     }
     return NULL;
