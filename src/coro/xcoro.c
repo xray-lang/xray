@@ -492,8 +492,7 @@ bool xr_coro_init_shell(XrCoroutine *coro, XrayIsolate *X, const char *name, boo
     if (!X)
         return false;
     return xr_coro_init_shell_owner(coro, X, xr_isolate_get_runtime_core(X),
-                                    X->scheduler_runtime ? (XrRuntime *) X->scheduler_runtime
-                                                         : NULL,
+                                    X->vm.scheduler ? (XrRuntime *) X->vm.scheduler : NULL,
                                     (XrCoroState *) X->vm.coro_state, name, need_storage);
 }
 
@@ -563,7 +562,7 @@ void xr_coro_spawn(XrayIsolate *X, XrCoroutine *coro) {
         return;
 
     // Use multi-core Runtime
-    XrRuntime *runtime = (XrRuntime *) X->scheduler_runtime;
+    XrRuntime *runtime = (XrRuntime *) X->vm.scheduler;
     if (runtime) {
         xr_runtime_spawn(runtime, coro);
     }
@@ -1048,5 +1047,5 @@ void xr_scheduler_ready(XrRuntime *runtime, XrCoroutine *gp, bool next) {
 void xr_coro_ready(XrayIsolate *X, XrCoroutine *gp, bool next) {
     if (!X)
         return;
-    xr_scheduler_ready((XrRuntime *) X->scheduler_runtime, gp, next);
+    xr_scheduler_ready((XrRuntime *) X->vm.scheduler, gp, next);
 }

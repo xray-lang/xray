@@ -225,7 +225,7 @@ static bool vm_backend_ensure_state(XrCoroutine *coro) {
 static XrCoroutine *vm_backend_alloc_shell(XrayIsolate *X, bool use_runtime_pool) {
     XrCoroutine *coro = NULL;
     if (use_runtime_pool) {
-        XrRuntime *runtime = (XrRuntime *) X->scheduler_runtime;
+        XrRuntime *runtime = (XrRuntime *) X->vm.scheduler;
         if (runtime) {
             coro = xr_coro_pool_get(runtime);
         }

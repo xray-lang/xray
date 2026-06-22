@@ -78,7 +78,7 @@ static bool close_fixture_init(CloseFixture *f) {
     xr_worker_init(&f->worker, 0, &f->runtime);
     f->worker_initialized = true;
 
-    f->isolate_storage.scheduler_runtime = &f->runtime;
+    f->isolate_storage.vm.scheduler = &f->runtime;
     tls_current_worker = &f->worker;
     tls_current_machine = &f->machine;
     return true;
@@ -125,7 +125,7 @@ static bool wake_route_fixture_init(WakeRouteFixture *f) {
         f->initialized_workers++;
     }
 
-    f->isolate_storage.scheduler_runtime = &f->runtime;
+    f->isolate_storage.vm.scheduler = &f->runtime;
     tls_current_worker = &f->workers[0];
     tls_current_machine = &f->machines[0];
     return true;
@@ -149,7 +149,7 @@ static void attach_test_coro_context(XrCoroutine *coro, XrayIsolate *isolate) {
         return;
     coro->core = isolate ? isolate->core_rt : NULL;
     coro->scheduler =
-        (isolate && isolate->scheduler_runtime) ? (XrRuntime *) isolate->scheduler_runtime : NULL;
+        (isolate && isolate->vm.scheduler) ? (XrRuntime *) isolate->vm.scheduler : NULL;
 }
 
 static bool wake_queue_has_pending(XrWorker *worker) {

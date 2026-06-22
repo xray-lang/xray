@@ -220,5 +220,5 @@ void xr_coro_wake_waiter(XrayIsolate *X, XrCoroutine *coro) {
     if (!X || !coro)
         return;
 
-    xr_coro_wake_waiter_runtime((XrRuntime *) X->scheduler_runtime, coro);
+    xr_coro_wake_waiter_runtime((XrRuntime *) X->vm.scheduler, coro);
 }

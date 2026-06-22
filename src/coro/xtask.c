@@ -799,7 +799,7 @@ void xr_task_wake_waiter_runtime(XrRuntime *runtime, XrTask *task) {
 }
 
 void xr_task_wake_waiter(XrayIsolate *X, XrTask *task) {
-    xr_task_wake_waiter_runtime(X ? (XrRuntime *) X->scheduler_runtime : NULL, task);
+    xr_task_wake_waiter_runtime(X ? (XrRuntime *) X->vm.scheduler : NULL, task);
 }
 
 void xr_task_fire_completion(XrTask *task) {

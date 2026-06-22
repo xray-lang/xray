@@ -178,7 +178,7 @@ void xray_isolate_delete(XrayIsolate *isolate) {
      * so workers and pools are drained, but defer the Task shell free until
      * after all isolate GC roots have released their XrValue references. */
     stage_start_ns = xr_time_monotonic_ns();
-    if (isolate->scheduler_runtime) {
+    if (isolate->vm.scheduler) {
         xr_multicore_destroy(isolate);
     }
     runtime_ms = isolate_teardown_elapsed_ms(stage_start_ns);

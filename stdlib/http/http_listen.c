@@ -1115,7 +1115,7 @@ static XrCFuncResult http_conn_init(XrayIsolate *X, XrValue *args, int argc, XrV
     ctx->fd = fd;
     ctx->http_ctx = hctx;
     ctx->router = hctx->server ? hctx->server->router : NULL;
-    ctx->runtime = (XrRuntime *) X->scheduler_runtime;
+    ctx->runtime = (XrRuntime *) X->vm.scheduler;
     ctx->max_requests = atomic_load(&hctx->max_requests_per_conn);
     ctx->read_timeout_ms = atomic_load(&hctx->read_timeout_ms);
 

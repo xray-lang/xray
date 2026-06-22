@@ -11,8 +11,8 @@
  * KEY CONCEPT:
  *   XrVMState is the isolate's VM storage host: it embeds the fixed-size
  *   value stack, frame array, exception-handler array, builtin globals,
- *   shared variables, Cycle counters, defer stack, and VM bookkeeping. Scheduler
- *   runtime ownership lives on XrayIsolate, not in XrVMState.
+ *   shared variables, Cycle counters, defer stack, scheduler mount, and VM
+ *   bookkeeping.
  *
  *   IMPORTANT: XrVMState and XrVMContext (xexec_frame.h) are
  *   complementary, not redundant:
@@ -28,10 +28,9 @@
  *       access; per-coroutine mode has each XrCoroutine carrying its
  *       own XrVMContext with independently allocated buffers.
  *
- *   Code accessing VM-wide configuration (builtins, shared, coro_state) goes
- *   through isolate->vm.*. Code accessing scheduler runtime uses the
- *   isolate-level scheduler owner.
- *   directly. Code accessing per-execution-entity state (current
+ *   Code accessing VM-wide configuration (builtins, shared, coro_state,
+ *   scheduler) goes through isolate->vm.* or the narrow isolate accessors.
+ *   Code accessing per-execution-entity state (current
  *   stack/frames/handlers/IC tables) MUST go through a XrVMContext --
  *   either xr_vm_current_ctx(isolate) or one threaded through the
  *   helper signature. Only init / teardown paths in xvm_helpers.c and
@@ -171,6 +170,10 @@ typedef struct XrVMState {
     void *coro_state;           // XrCoroState* (single-thread scheduler + bookkeeping)
     void *current_coro;         // currently running coroutine
     struct XrMap *main_locals;  // REPL local variables
+
+    // Optional VM scheduler mount. Pure AOT owns its scheduler through
+    // XrAotRuntime instead; this slot is only for bytecode VM execution.
+    struct XrRuntime *scheduler;
 
     // Isolate-wide value-struct layout registry. STRUCT_REF.heap_type stores
     // this 16-bit id when the payload has no XrClass* header.

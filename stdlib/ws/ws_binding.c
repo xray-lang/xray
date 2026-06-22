@@ -1045,7 +1045,7 @@ static XrValue ws_close(XrayIsolate *X, XrValue *args, int argc) {
     // NOTE: xr_ws_recv_try may have already set state to CLOSED but leaves fd open
     // for us to clean up here.
     if (ws->fd >= 0) {
-        XrRuntime *runtime = X ? (XrRuntime *) X->scheduler_runtime : NULL;
+        XrRuntime *runtime = X ? (XrRuntime *) X->vm.scheduler : NULL;
         if (runtime) {
             XrPollDesc *pd = xr_fdmap_get(&runtime->netpoll, ws->fd);
             if (pd) {
@@ -1238,7 +1238,7 @@ static XrCFuncResult ws_echo_conn_init(XrayIsolate *X, XrValue *args, int argc, 
 
     ctx->X = X;
     ctx->fd = fd;
-    ctx->runtime = (XrRuntime *) X->scheduler_runtime;
+    ctx->runtime = (XrRuntime *) X->vm.scheduler;
     ctx->upgrade_buf = (char *) xr_malloc(WS_UPGRADE_BUF_SIZE);
     if (!ctx->upgrade_buf) {
         xr_closesocket(fd);
@@ -1311,7 +1311,7 @@ static XrCFuncResult ws_echo_conn_upgrade_cont(XrayIsolate *X, int status, XrVal
 fail:
     xr_free(ctx->upgrade_buf);
 cleanup: {
-    XrRuntime *rt = (XrRuntime *) X->scheduler_runtime;
+    XrRuntime *rt = (XrRuntime *) X->vm.scheduler;
     if (rt) {
         XrPollDesc *pd = xr_netpoll_open(&rt->netpoll, ctx->fd);
         if (pd)
@@ -1455,7 +1455,7 @@ static XrCFuncResult ws_conn_init(XrayIsolate *X, XrValue *args, int argc, XrVal
     ctx->X = X;
     ctx->fd = fd;
     ctx->handler = handler;
-    ctx->runtime = (XrRuntime *) X->scheduler_runtime;
+    ctx->runtime = (XrRuntime *) X->vm.scheduler;
     ctx->upgrade_buf = (char *) xr_malloc(WS_UPGRADE_BUF_SIZE);
     if (!ctx->upgrade_buf) {
         xr_closesocket(fd);
@@ -1545,7 +1545,7 @@ static XrCFuncResult ws_conn_upgrade_cont(XrayIsolate *X, int status, XrValue re
 fail:
     xr_free(ctx->upgrade_buf);
 cleanup: {
-    XrRuntime *rt = (XrRuntime *) X->scheduler_runtime;
+    XrRuntime *rt = (XrRuntime *) X->vm.scheduler;
     if (rt) {
         XrPollDesc *pd = xr_netpoll_open(&rt->netpoll, ctx->fd);
         if (pd)

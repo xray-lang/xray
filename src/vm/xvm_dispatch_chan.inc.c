@@ -131,7 +131,7 @@ vmcase(OP_CHAN_SEND) {
         if (_ch->buf_size == 0 || _ch->dist ||
             atomic_load_explicit(&_ch->is_timer, memory_order_relaxed))
             break;
-        XrRuntime *_rt = (XrRuntime *) isolate->scheduler_runtime;
+        XrRuntime *_rt = (XrRuntime *) isolate->vm.scheduler;
         if (XR_UNLIKELY(_rt && _rt->sched_stats_enabled))
             break;
         XrValue _v = base[GETARG_C(i)];
@@ -175,7 +175,7 @@ vmcase(OP_CHAN_RECV) {
         if (_ch->buf_size == 0 || _ch->dist ||
             atomic_load_explicit(&_ch->is_timer, memory_order_relaxed))
             break;
-        XrRuntime *_rt = (XrRuntime *) isolate->scheduler_runtime;
+        XrRuntime *_rt = (XrRuntime *) isolate->vm.scheduler;
         if (XR_UNLIKELY(_rt && _rt->sched_stats_enabled))
             break;
         if (!xr_amutex_trylock(&_ch->lock))

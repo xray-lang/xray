@@ -17,7 +17,7 @@ XrRuntimeCore *xr_isolate_get_runtime_core(XrayIsolate *X) {
 }
 
 XrRuntime *xr_isolate_get_scheduler_runtime(XrayIsolate *X) {
-    return X ? X->scheduler_runtime : NULL;
+    return X ? X->vm.scheduler : NULL;
 }
 
 XrFixedHeap *xr_isolate_get_fixed_heap(XrayIsolate *X) {
