@@ -24,13 +24,13 @@ xray 源文件**必须**是 UTF-8 编码。所有源码处理（包括字符串�
 
 ### 1.3 注释
 
-xray 支持两种注释，**均不嵌套**：
+xray 支持两种注释：行注释不嵌套，块注释支持嵌套：
 
 ```xray
 // 行注释，从 // 到行尾
 /* 块注释，
    可跨行；
-   不支持嵌套：内部出现 /* 不开启新层级 */
+   支持 /* 嵌套 */ 到任意合理深度 */
 ```
 
 注释可出现在任何空白能出现的地方。注释会被收集为 **trivia**，供 formatter 与 LSP 使用（见 `src/frontend/parser/xtrivia.*`），但不参与语法分析。
@@ -385,13 +385,13 @@ Line endings recognize `\n` (Unix) and `\r\n` (Windows). A standalone `\r` is tr
 
 ### 1.3 Comments
 
-Xray supports two kinds of comments, **neither of which nests**:
+Xray supports two kinds of comments: line comments do not nest; block comments nest:
 
 ```xray
 // line comment, from // to end-of-line
 /* block comment,
    may span lines;
-   does not nest: an inner /* does not start a new layer */
+   supports /* nested */ layers to any reasonable depth */
 ```
 
 Comments may appear wherever whitespace is allowed. They are collected as **trivia** for formatters and LSP (see `src/frontend/parser/xtrivia.*`), but do not participate in syntactic analysis.

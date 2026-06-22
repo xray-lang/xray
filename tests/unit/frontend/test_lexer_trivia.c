@@ -158,12 +158,43 @@ TEST(trailing_inline_block_comment_same_line) {
     free_token_trivia(&b);
 }
 
+TEST(trailing_nested_inline_block_comment_same_line) {
+    Token a, b;
+    scan_pair("let /* outer /* inner */ done */;\n", &a, &b);
+
+    ASSERT_EQ_INT(a.type, TK_LET);
+    ASSERT_NOT_NULL(a.trailing_trivia);
+    ASSERT_EQ_INT(a.trailing_trivia->type, TRIVIA_BLOCK_COMMENT);
+    ASSERT_TRUE(trivia_text_eq(a.trailing_trivia, " outer /* inner */ done "));
+
+    ASSERT_EQ_INT(b.type, TK_SEMICOLON);
+    ASSERT_NULL(b.leading_trivia);
+
+    free_token_trivia(&a);
+    free_token_trivia(&b);
+}
+
 TEST(multiline_block_comment_is_leading_of_next) {
     // /* ... */ that spans newlines must NOT attach as trailing to
     // the preceding token. It belongs to the following token's
     // leading trivia, exactly like a line comment after `\n`.
     Token a, b;
     scan_pair("let /* first\n   second */ ;\n", &a, &b);
+
+    ASSERT_EQ_INT(a.type, TK_LET);
+    ASSERT_NULL(a.trailing_trivia);
+
+    ASSERT_EQ_INT(b.type, TK_SEMICOLON);
+    ASSERT_NOT_NULL(b.leading_trivia);
+    ASSERT_EQ_INT(b.leading_trivia->type, TRIVIA_BLOCK_COMMENT);
+
+    free_token_trivia(&a);
+    free_token_trivia(&b);
+}
+
+TEST(multiline_nested_block_comment_is_leading_of_next) {
+    Token a, b;
+    scan_pair("let /* outer\n  /* inner */\n  done */ ;\n", &a, &b);
 
     ASSERT_EQ_INT(a.type, TK_LET);
     ASSERT_NULL(a.trailing_trivia);
@@ -237,7 +268,9 @@ RUN_TEST(trailing_line_comment_same_line);
 RUN_TEST(trailing_line_comment_after_horizontal_whitespace);
 RUN_TEST(comment_after_newline_is_leading_of_next);
 RUN_TEST(trailing_inline_block_comment_same_line);
+RUN_TEST(trailing_nested_inline_block_comment_same_line);
 RUN_TEST(multiline_block_comment_is_leading_of_next);
+RUN_TEST(multiline_nested_block_comment_is_leading_of_next);
 RUN_TEST(eof_token_never_has_trailing);
 RUN_TEST(no_trailing_means_no_state_leak);
 RUN_TEST(collect_trivia_off_disables_trailing);

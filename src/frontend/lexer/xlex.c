@@ -124,6 +124,55 @@ static int match(Scanner *scanner, char expected) {
     return 1;
 }
 
+static bool scan_nested_block_comment(Scanner *scanner, const char **content_start,
+                                      const char **content_end, int *comment_line,
+                                      bool *spans_newline) {
+    if (!scanner || scanner->current + 1 >= scanner->end || scanner->current[0] != '/' ||
+        scanner->current[1] != '*')
+        return false;
+
+    if (comment_line)
+        *comment_line = scanner->line;
+    if (spans_newline)
+        *spans_newline = false;
+
+    scanner->current += 2;  // /*
+    const char *body_start = scanner->current;
+    int depth = 1;
+
+    while (scanner->current < scanner->end) {
+        if (scanner->current + 1 < scanner->end && scanner->current[0] == '/' &&
+            scanner->current[1] == '*') {
+            depth++;
+            scanner->current += 2;
+            continue;
+        }
+        if (scanner->current + 1 < scanner->end && scanner->current[0] == '*' &&
+            scanner->current[1] == '/') {
+            depth--;
+            if (depth == 0) {
+                if (content_start)
+                    *content_start = body_start;
+                if (content_end)
+                    *content_end = scanner->current;
+                scanner->current += 2;  // */
+                return true;
+            }
+            scanner->current += 2;
+            continue;
+        }
+        if (*scanner->current == '\n') {
+            scanner->line++;
+            scanner->line_start = scanner->current + 1;
+            if (spans_newline)
+                *spans_newline = true;
+        }
+        scanner->current++;
+    }
+
+    return false;
+}
+
 // L-06: After producing a token, scan ahead for an inline same-line
 // comment and return it as that token's trailing trivia. The caller
 // MUST attach the returned chain (or NULL) to token.trailing_trivia.
@@ -176,31 +225,20 @@ static XrTrivia *scan_inline_trailing_trivia(Scanner *scanner) {
     }
 
     if (c == '/' && n == '*') {
-        // Look ahead: only attach if `*/` appears before the next '\n'.
-        const char *p = scanner->current + 2;
-        bool same_line_terminator = false;
-        while (p + 1 < scanner->end) {
-            if (*p == '\n')
-                break;
-            if (p[0] == '*' && p[1] == '/') {
-                same_line_terminator = true;
-                break;
-            }
-            p++;
-        }
-        if (!same_line_terminator) {
+        Scanner probe = *scanner;
+        const char *cs = NULL;
+        const char *ce = NULL;
+        int comment_line = probe.line;
+        bool spans_newline = false;
+        if (!scan_nested_block_comment(&probe, &cs, &ce, &comment_line, &spans_newline) ||
+            spans_newline) {
             scanner->current = save_current;
             return NULL;
         }
-        int comment_line = scanner->line;
-        scanner->current += 2;  // /*
-        const char *cs = scanner->current;
-        while (scanner->current + 1 < scanner->end &&
-               !(scanner->current[0] == '*' && scanner->current[1] == '/')) {
-            scanner->current++;
-        }
-        int len = (int) (scanner->current - cs);
-        scanner->current += 2;  // */
+        scanner->current = probe.current;
+        scanner->line = probe.line;
+        scanner->line_start = probe.line_start;
+        int len = (int) (ce - cs);
         return xr_trivia_new(TRIVIA_BLOCK_COMMENT, cs, len, comment_line);
     }
 
@@ -309,37 +347,20 @@ static bool skip_whitespace(Scanner *scanner) {
                         trivia_append(scanner, trivia);
                     }
                 } else if (peek_next(scanner) == '*') {
-                    // Multi-line comment
                     skipped = true;
+                    const char *comment_start = NULL;
+                    const char *comment_end = NULL;
                     int comment_line = scanner->line;
-                    advance(scanner);  // /
-                    advance(scanner);  // *
-                    const char *comment_start = scanner->current;
-                    while (!is_at_end(scanner)) {
-                        if (peek(scanner) == '*' && peek_next(scanner) == '/') {
-                            // Collect trivia before consuming */
-                            if (scanner->collect_trivia) {
-                                int comment_len = (int) (scanner->current - comment_start);
-                                XrTrivia *trivia = xr_trivia_new(
-                                    TRIVIA_BLOCK_COMMENT, comment_start, comment_len, comment_line);
-                                trivia_append(scanner, trivia);
-                            }
-                            advance(scanner);  // *
-                            advance(scanner);  // /
-                            break;
-                        }
-                        if (peek(scanner) == '\n') {
-                            scanner->line++;
-                            scanner->line_start = scanner->current + 1;
-                        }
-                        advance(scanner);
-                    }
-                    // Unterminated block comment
-                    if (is_at_end(scanner) &&
-                        !(scanner->current >= comment_start + 2 && scanner->current[-2] == '*' &&
-                          scanner->current[-1] == '/')) {
+                    if (!scan_nested_block_comment(scanner, &comment_start, &comment_end,
+                                                   &comment_line, NULL)) {
                         scanner->pending_error = "unterminated block comment";
                         return skipped;
+                    }
+                    if (scanner->collect_trivia) {
+                        int comment_len = (int) (comment_end - comment_start);
+                        XrTrivia *trivia = xr_trivia_new(TRIVIA_BLOCK_COMMENT, comment_start,
+                                                         comment_len, comment_line);
+                        trivia_append(scanner, trivia);
                     }
                 } else {
                     return skipped;

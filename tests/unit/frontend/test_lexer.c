@@ -276,6 +276,15 @@ TEST(lexer_skip_block_comment) {
     assert_token(t, TK_LITERAL_INT, "99");
 }
 
+TEST(lexer_skip_nested_block_comment) {
+    Scanner scanner;
+    Token t;
+
+    xr_scanner_init(&scanner, "/* outer /* inner */ still outer */ 99");
+    t = xr_scanner_scan(&scanner);
+    assert_token(t, TK_LITERAL_INT, "99");
+}
+
 /* ========== Token Sequence Tests ========== */
 
 TEST(lexer_token_sequence) {
@@ -564,6 +573,17 @@ TEST(lexer_error_token_unterminated_block_comment) {
     ASSERT_TRUE(strstr(t.error_message, "unterminated") != NULL);
 }
 
+TEST(lexer_error_token_unterminated_nested_block_comment) {
+    Scanner scanner;
+    Token t;
+
+    xr_scanner_init(&scanner, "/* outer /* inner */");
+    t = xr_scanner_scan(&scanner);
+    ASSERT_EQ_INT(t.type, TK_ERROR);
+    ASSERT_TRUE(t.error_message != NULL);
+    ASSERT_TRUE(strstr(t.error_message, "unterminated") != NULL);
+}
+
 // Successful tokens MUST have error_message == NULL so callers can branch
 // on the field without inspecting the type tag.
 TEST(lexer_normal_token_no_error_message) {
@@ -628,6 +648,7 @@ static void run_all_tests(void) {
     RUN_TEST(lexer_skip_whitespace);
     RUN_TEST(lexer_skip_line_comment);
     RUN_TEST(lexer_skip_block_comment);
+    RUN_TEST(lexer_skip_nested_block_comment);
 
     RUN_TEST_SUITE("Token Sequences");
     RUN_TEST(lexer_token_sequence);
@@ -653,6 +674,7 @@ static void run_all_tests(void) {
     RUN_TEST_SUITE("Error Token Contract (L-03)");
     RUN_TEST(lexer_error_token_message_field);
     RUN_TEST(lexer_error_token_unterminated_block_comment);
+    RUN_TEST(lexer_error_token_unterminated_nested_block_comment);
     RUN_TEST(lexer_normal_token_no_error_message);
 }
 
