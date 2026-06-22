@@ -747,6 +747,128 @@ module base64 {
   }
 }
 
+module url {
+  fn encode {
+    signature: "(s: string): string"
+    doc: "RFC 3986 percent-encode"
+    vm: "url_encode_fn"
+    aot: "xrt_url_encode"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: false
+    layer: "core"
+  }
+
+  fn decode {
+    signature: "(s: string): string"
+    doc: "RFC 3986 percent-decode"
+    vm: "url_decode_fn"
+    aot: "xrt_url_decode"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: false
+    layer: "core"
+  }
+
+  fn encodeForm {
+    signature: "(s: string): string"
+    doc: "Form URL encode (space as +)"
+    vm: "url_encode_form_fn"
+    aot: "xrt_url_encode_form"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: false
+    layer: "core"
+  }
+
+  fn decodeForm {
+    signature: "(s: string): string"
+    doc: "Form URL decode (+ as space)"
+    vm: "url_decode_form_fn"
+    aot: "xrt_url_decode_form"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: false
+    layer: "core"
+  }
+
+  fn parse {
+    signature: "(url: string): URL"
+    doc: "Parse URL into a URL handle (protocol, hostname, port, pathname, search, hash, username, password, host, origin, href)"
+    vm: "url_parse_fn"
+    aot: "xrt_url_parse"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn format {
+    signature: "(obj: URL): string"
+    doc: "Build URL string from URL components"
+    vm: "url_format_fn"
+    aot: "xrt_url_format"
+    argc: 1
+    arg_spec: "v"
+    aot_direct: true
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn parseQuery {
+    signature: "(qs: string): Json"
+    doc: "Parse query string to Json"
+    vm: "url_parse_query_fn"
+    aot: "xrt_url_parse_query"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn buildQuery {
+    signature: "(obj: Json): string"
+    doc: "Build query string from Json"
+    vm: "url_build_query_fn"
+    aot: "xrt_url_build_query"
+    argc: 1
+    arg_spec: "v"
+    aot_direct: true
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn resolve {
+    signature: "(base: string, relative: string): string"
+    doc: "Resolve relative URL"
+    vm: "url_resolve_fn"
+    aot: "xrt_url_resolve"
+    argc: 2
+    arg_spec: "ss"
+    aot_direct: true
+    link_object: false
+    layer: "core"
+  }
+
+  fn join {
+    signature: "(...parts: string): string"
+    doc: "Join URL path segments"
+    vm: "url_join_fn"
+    aot: "xrt_url_join"
+    argc: variadic
+    arg_spec: "*"
+    aot_direct: true
+    link_object: false
+    layer: "core"
+  }
+}
+
 module encoding {
   const LE {
     signature: ": int"
