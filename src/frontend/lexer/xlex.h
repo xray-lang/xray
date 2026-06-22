@@ -168,8 +168,7 @@ typedef enum {
     // stdlib/prelude/prelude.h. Channel additionally gets a contextual
     // intercept in xr_parse_variable so that `Channel(...)` still
     // produces a dedicated AST_CHANNEL_NEW node.
-    TK_UNKNOWN,  // unknown
-    TK_LAST_KEYWORD = TK_UNKNOWN,
+    TK_LAST_KEYWORD = TK_FLOAT64,
 
     // Contextual keywords (NOT in keyword range — can be used as identifiers)
     // These are recognized by the parser via string comparison, not by the lexer.

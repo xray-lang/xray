@@ -1062,11 +1062,11 @@ AstNode *xr_parse_member_access(Parser *parser, AstNode *object) {
 
     XrTokenType t = parser->current.type;
 
-    // Accept identifier, any keyword (keyword range TK_AND..TK_UNKNOWN),
+    // Accept identifier, any keyword (keyword range TK_FIRST_KEYWORD..TK_LAST_KEYWORD),
     // or an integer literal for tuple field access (`tuple.0`, `tuple.1`).
     // The integer text is stored verbatim as the member name; the analyzer
     // recognises digit-only names on tuple-typed receivers.
-    if (t == TK_NAME || t == TK_LITERAL_INT || (t >= TK_AND && t <= TK_UNKNOWN)) {
+    if (t == TK_NAME || t == TK_LITERAL_INT || (t >= TK_FIRST_KEYWORD && t <= TK_LAST_KEYWORD)) {
         xr_parser_advance(parser);
         name = parser->previous.start;
         name_len = parser->previous.length;

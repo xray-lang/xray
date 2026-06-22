@@ -519,7 +519,6 @@ TEST(lexer_keyword_table_completeness) {
         {"uint16", TK_UINT16},
         {"uint32", TK_UINT32},
         {"uint64", TK_UINT64},
-        {"unknown", TK_UNKNOWN},
         {"while", TK_WHILE},
         {"yield", TK_YIELD},
         // None of the uppercase native type names are lexer keywords:
@@ -536,6 +535,8 @@ TEST(lexer_keyword_table_completeness) {
         }
         ASSERT_EQ_INT(t.type, cases[i].expected);
     }
+
+    assert_token(scan_single("unknown"), TK_NAME, "unknown");
 }
 
 // `r` alone is an identifier; only `r` followed by a quote is a raw string.

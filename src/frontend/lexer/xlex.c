@@ -1022,7 +1022,6 @@ static const char *token_names[] = {
     [TK_UINT64] = "uint64",
     [TK_FLOAT32] = "float32",
     [TK_FLOAT64] = "float64",
-    [TK_UNKNOWN] = "unknown",
 
     // Type operators / special
     [TK_QUESTION] = "?",

@@ -1,0 +1,8 @@
+// 0210_unknown_identifier.xr
+// D16: `unknown` is no longer a reserved keyword; it can be used as an ordinary identifier.
+
+@test
+fn test_unknown_identifier_name() {
+    let unknown = 7
+    assert_eq(unknown, 7)
+}
