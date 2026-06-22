@@ -16,8 +16,8 @@
 #include "../../../src/frontend/parser/xparse.h"
 #include "../../../src/frontend/analyzer/xanalyzer.h"
 #include "../../../src/base/xmalloc.h"
+#include "../../../src/toolchain/xcompiler_session.h"
 #include "../../../include/xray_isolate.h"
-#include "../../../src/runtime/xisolate_api.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -68,12 +68,15 @@ static XiFunc *lower_source(const char *source) {
     xa_analyzer_analyze(analyzer, "test.xr", program);
 
     /* Re-install parse arena for canonicalizer allocations */
-    if (program->type == AST_PROGRAM && program->as.program.arena)
-        xr_isolate_set_current_arena(g_iso, program->as.program.arena);
+    XrCompilerSessionScope canon_scope;
+    bool has_canon_scope =
+        program->type == AST_PROGRAM && program->as.program.arena &&
+        xr_compiler_session_push_arena(g_iso, program->as.program.arena, "test.xr", &canon_scope);
 
     /* Canonicalize + Lower */
     xr_canon_program(program, analyzer, g_iso);
-    xr_isolate_set_current_arena(g_iso, NULL);
+    if (has_canon_scope)
+        xr_compiler_session_pop_arena(&canon_scope);
     XiFunc *func = xi_lower_program(program, analyzer, g_iso);
     if (!func) {
         fprintf(stderr, "  LOWER FAILED for: %s\n", source);

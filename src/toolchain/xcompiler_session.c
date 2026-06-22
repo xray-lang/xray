@@ -50,8 +50,6 @@ XrCompilerSession *xr_compiler_session_new(const XrCompilerSessionConfig *cfg) {
         session->source_file = cfg->source_file;
         session->repl_mode = cfg->repl_mode;
         session->emit_aot = cfg->emit_aot;
-        if (cfg->vm_host)
-            session->next_ast_node_id = cfg->vm_host->next_ast_node_id;
     }
     return session;
 }
@@ -129,13 +127,6 @@ uint32_t xr_compiler_session_ast_node_id(const XrCompilerSession *session) {
 void xr_compiler_session_set_ast_node_id(XrCompilerSession *session, uint32_t next_id) {
     if (session)
         session->next_ast_node_id = next_id;
-}
-
-void xr_compiler_session_commit_legacy_isolate_state(const XrCompilerSession *session) {
-    if (!session || !session->vm_host)
-        return;
-    if (session->vm_host->next_ast_node_id < session->next_ast_node_id)
-        session->vm_host->next_ast_node_id = session->next_ast_node_id;
 }
 
 struct XrCompileStringPool *xr_compiler_session_string_pool(const XrCompilerSession *session) {
@@ -246,8 +237,6 @@ bool xr_compiler_session_push_arena(XrayIsolate *isolate, struct XrArena *arena,
 void xr_compiler_session_pop_arena(XrCompilerSessionScope *scope) {
     if (!scope || !scope->active)
         return;
-
-    xr_compiler_session_commit_legacy_isolate_state(scope->session);
 
     if (scope->owns_session) {
         if (scope->saved_session && xr_compiler_session_ast_node_id(scope->saved_session) <

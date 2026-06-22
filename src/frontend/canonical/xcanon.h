@@ -48,7 +48,7 @@ typedef enum {
  * analyzer has populated the typed node table.
  *
  * Returns XR_CANON_OK on success.  The AST is modified in-place;
- * newly synthesized nodes get fresh node_id values from the isolate. */
+ * newly synthesized nodes get fresh node_id values from the active compiler session. */
 XR_FUNC XrCanonStatus xr_canon_program(struct AstNode *program, struct XaAnalyzer *analyzer,
                                        struct XrayIsolate *isolate);
 
