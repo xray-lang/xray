@@ -104,8 +104,6 @@ static inline XrValue xrt_div(XrValue a, XrValue b) {
         return XR_FROM_INT(xrt_int_div(a.i, b.i));
     double fa = (a.tag == XR_TAG_I64) ? (double) a.i : a.f;
     double fb = (b.tag == XR_TAG_I64) ? (double) b.i : b.f;
-    if (XR_UNLIKELY(fb == 0.0))
-        xrt_throw_exc(xr_box_str("E0420: division by zero"));
     return XR_FROM_FLOAT(fa / fb);
 }
 

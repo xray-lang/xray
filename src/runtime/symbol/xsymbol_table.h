@@ -270,6 +270,9 @@ enum {
     // Collection property aliases
     SYMBOL_SIZE,
 
+    // Float predicates
+    SYMBOL_ISNAN,
+
     SYMBOL_BUILTIN_COUNT  // sentinel
 };
 

@@ -166,9 +166,6 @@
         if ((XR_IS_INT(vb) || XR_IS_FLOAT(vb)) && (XR_IS_INT(vc) || XR_IS_FLOAT(vc))) {            \
             double nb = XR_IS_INT(vb) ? (double) XR_TO_INT(vb) : XR_TO_FLOAT(vb);                  \
             double nc = XR_IS_INT(vc) ? (double) XR_TO_INT(vc) : XR_TO_FLOAT(vc);                  \
-            if (nc == 0.0) {                                                                       \
-                VM_RUNTIME_ERROR(XR_ERR_DIV_BY_ZERO, "division by zero");                          \
-            }                                                                                      \
             R(a) = xr_float(nb / nc);                                                              \
             vmbreak;                                                                               \
         }                                                                                          \
@@ -238,14 +235,10 @@ vmcase(OP_DIV_F32) {
     int b = GETARG_B(i);
     int c = GETARG_C(i);
     /* Narrow operands to float, divide in double, then narrow the quotient
-     * back to float — mirrors AOT, which routes f32 division through xrt_div
-     * on the float-narrowed operands and stores the result into a `float`
-     * temp. Divisor zero throws. */
+     * back to float so VM / AOT agree on IEEE f32 division, including
+     * infinities and NaN. */
     double nb = (double) (float) XR_TO_FLOAT(R(b));
     double nc = (double) (float) XR_TO_FLOAT(R(c));
-    if (nc == 0.0) {
-        VM_RUNTIME_ERROR(XR_ERR_DIV_BY_ZERO, "division by zero");
-    }
     XR_SET_FLOAT(R(a), (double) (float) (nb / nc));
     vmbreak;
 }
@@ -439,9 +432,6 @@ vmcase(OP_DIVK) {
         // Mixed or float: promote to float
         double nb = XR_IS_INT(vb) ? (double) XR_TO_INT(vb) : XR_TO_FLOAT(vb);
         double nc = XR_IS_INT(vc) ? (double) XR_TO_INT(vc) : XR_TO_FLOAT(vc);
-        if (nc == 0.0) {
-            VM_RUNTIME_ERROR(XR_ERR_DIV_BY_ZERO, "division by zero");
-        }
         R(a) = xr_float(nb / nc);
     } else {
         // Operator overload

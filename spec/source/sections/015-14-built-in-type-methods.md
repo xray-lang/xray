@@ -38,6 +38,7 @@ order: 015
 | `floor()` / `ceil()` / `round()` | `() -> int` | 取整 |
 | `sqrt()` | `() -> float` | 平方根 |
 | `pow(exp)` | `(float) -> float` | 幂运算 |
+| `isNaN()` | `() -> bool` | 是否为 IEEE NaN |
 
 ### 14.3 `BigInt` 方法
 
@@ -267,6 +268,7 @@ This section is a **method index** for each type (grouped by topic). Concrete si
 | `floor()` / `ceil()` / `round()` | `() -> int` | rounding |
 | `sqrt()` | `() -> float` | square root |
 | `pow(exp)` | `(float) -> float` | power |
+| `isNaN()` | `() -> bool` | whether the value is IEEE NaN |
 
 ### 14.3 `BigInt` Methods
 

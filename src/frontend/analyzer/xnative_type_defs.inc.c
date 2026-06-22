@@ -64,7 +64,7 @@ static const char xr_native_def_float[] =
     "src/runtime/value/xfloat_methods.c\n\n@native\nclass float {\n    abs() -> float\n    "
     "toString() -> string\n    toFixed(decimals?: int) -> string\n    toInt() -> int\n    floor() "
     "-> int\n    ceil() -> int\n    round() -> int\n    sqrt() -> float\n    pow(exp: float) -> "
-    "float\n}\n";
+    "float\n    isNaN() -> bool\n}\n";
 
 static const char xr_native_def_int[] =
     "// Built-in int type — implementation in src/runtime/value/xint_methods.c\n\n@native\nclass "

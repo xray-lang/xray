@@ -1,8 +1,7 @@
 // anchor: float-special-values
-// xray produces no IEEE inf/NaN from arithmetic (division by zero throws; see
-// the exception/div_by_zero case), so the float "special values" that must
-// render identically on every backend are the signed zeros: -0.0 keeps its sign
-// through formatting and arithmetic, and +0.0 compares equal to -0.0.
+// Signed zeros must render identically on every backend: -0.0 keeps its sign
+// through formatting and arithmetic, and +0.0 compares equal to -0.0. IEEE
+// infinities and NaN from arithmetic are covered by float_fmt/ieee_arithmetic.
 print(-0.0)
 print(0.0)
 print(0.0 == -0.0)
