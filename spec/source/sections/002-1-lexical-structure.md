@@ -320,7 +320,7 @@ RegexFlag ::= 'g' | 'i' | 'm' | 's'
 
 `++` `--`
 
-仅支持**后缀**形式 `x++` / `x--`；前缀 `++x` / `--x` 编译报错。详见 §3.2。
+仅支持**语句级后缀**形式 `x++` / `x--`；前缀 `++x` / `--x`、以及表达式位置的 `x++` / `x--` 均编译报错。详见 §4.1。
 
 #### 1.7.8 类型相关
 
@@ -682,7 +682,7 @@ Short-circuit evaluation.
 
 `++` `--`
 
-Only the **postfix** form `x++` / `x--` is supported; the prefix form `++x` / `--x` is a compile error. See §3.2.
+Only the **statement-level postfix** form `x++` / `x--` is supported; prefix `++x` / `--x` and expression-position `x++` / `x--` are compile errors. See §4.1.
 
 #### 1.7.8 Type-related
 

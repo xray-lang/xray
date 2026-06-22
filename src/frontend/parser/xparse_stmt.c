@@ -116,7 +116,9 @@ AstNode *xr_parse_for_statement(Parser *parser) {
 
     AstNode *increment = NULL;
     if (!xr_parser_check(parser, TK_RPAREN)) {
-        increment = xr_parse_expression(parser);
+        increment = xr_parse_standalone_inc_dec(parser, true);
+        if (!increment)
+            increment = xr_parse_expression(parser);
     }
     xr_parser_consume(parser, TK_RPAREN, "expected ')' after for header");
 

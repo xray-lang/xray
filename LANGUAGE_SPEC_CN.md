@@ -426,7 +426,7 @@ RegexFlag ::= 'g' | 'i' | 'm' | 's'
 
 `++` `--`
 
-仅支持**后缀**形式 `x++` / `x--`；前缀 `++x` / `--x` 编译报错。详见 §3.2。
+仅支持**语句级后缀**形式 `x++` / `x--`；前缀 `++x` / `--x`、以及表达式位置的 `x++` / `x--` 均编译报错。详见 §4.1。
 
 #### 1.7.8 类型相关
 
@@ -939,7 +939,7 @@ Reflect.getAllTypes()       // 所有已注册类型
 | 级 | 运算符 | 结合性 | 说明 |
 |--|--|--|--|
 | 17 | `(...)` `[...]` `.x` `?.x` `?[...]` `f()` `e!` | 左 | 后缀：分组、索引、成员、可选链、调用、强制解包 |
-| 16 | 前缀 `-` `+` `!` `~` `new` `move` `await` `go` `unsafe` | 右 | 一元前缀 + 协程/FFI 边界操作（`++` / `--` 仅后缀） |
+| 16 | 前缀 `-` `+` `!` `~` `new` `move` `await` `go` `unsafe` | 右 | 一元前缀 + 协程/FFI 边界操作 |
 | 15 | `as` `is` | 左 | 类型转换 / 检查（`as T?` 安全形式靠目标类型可空，非独立 `as?` 运算符） |
 | 14 | `*` `/` `%` | 左 | 乘除取模 |
 | 13 | `+` `-` | 左 | 加减 |
@@ -977,14 +977,7 @@ UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
 | `+x` | 数值 | 同 | 标识，几乎无用 |
 | `!x` | `bool` | `bool` | 逻辑非；**不接受非 bool**（不像 JS） |
 | `~x` | 整数 | 同 | 按位取反 |
-| `x++` `x--` | 整数 | 同 | 后缀自增/减；返回**修改后**的值（与 C/Java 不同，本质上是 `x = x + 1` 的赋值结果） |
-
-**自增/减语义**：
-- xray **只提供后缀** `x++` / `x--`，不支持前缀 `++x` / `--x`（编译错误："prefix ++/-- not supported, use postfix form"）。
-- 等价于赋值 `x = x + 1` / `x = x - 1`；表达式值即赋值后的新值。
-- 不能内联在二元表达式中（如 `a + x++`、`f(x++)`、`x++ + 1`）；解析器会报"++/-- must be standalone statement"。允许 `let y = x++`（赋值左侧紧邻），此时 `y` 取到的是修改后的值。
-- 仅作用于左值（变量、字段、索引）。
-- 浮点数**不支持** `++`/`--`（编译错误）。
+`++` / `--` **不是表达式**：`let y = x++`、`f(x++)`、`a[i++]`、`return x++` 等表达式位置均编译报错。语句级自增/自减见 §4.1。
 
 #### `unsafe { }`
 
@@ -1474,18 +1467,22 @@ Xray 语句以 `\n` 或 `;` 分隔；语句末尾的 `;` 在大多数位置可�
 ### 4.1 表达式语句与块
 
 ```ebnf
-ExprStmt ::= Expression (';' | LineBreak)
-Block    ::= '{' Statement* '}'
+ExprStmt   ::= Expression (';' | LineBreak)
+IncDecStmt ::= Identifier ('++' | '--') (';' | LineBreak)
+Block      ::= '{' Statement* '}'
 ```
 
 ```xray
 foo()                  // 表达式语句
 x = 1                  // 赋值表达式作为语句
+x++                    // 自增语句；不产生表达式值
 {                      // 块
     let y = 2
     y + 1              // 表达式但结果被丢弃
 }
 ```
+
+`++` / `--` 是纯语句或 `for` 步进项，只能写作 `name++` / `name--`。它们等价于 `name = name + 1` / `name = name - 1`，没有返回值；`let y = x++`、`f(x++)`、`a[i++]`、`return x++` 等表达式位置均编译失败。
 
 **注**：块**不是表达式**——它没有值。如果需要从块求值，用 `match` 或包装成立即调用函数。
 
@@ -1536,7 +1533,7 @@ while (i < 10) {
 ```ebnf
 ForStmt ::= 'for' '(' ForInit? ';' Expression? ';' ForStep? ')' Block
 ForInit ::= VarDecl | ExprStmt
-ForStep ::= Expression (',' Expression)*
+ForStep ::= Expression | Identifier ('++' | '--')
 ```
 
 ```xray
@@ -1549,6 +1546,7 @@ for (let j = 100; j > 90; j--) {
 ```
 
 - `ForInit` 中声明的变量作用域限于循环体。
+- 步进项里的 `i++` / `i--` 必须是整个 step；若要多个更新，写在循环体末尾。
 - 三个部分都可省略：`for (;;)` 是无限循环。
 
 #### `for-in` 单变量
@@ -5128,7 +5126,7 @@ MultiplicativeExpr ::= TypeOpExpr (('*' | '/' | '%') TypeOpExpr)*
 TypeOpExpr  ::= UnaryExpr (('as' | 'is') Type)*           // 安全转换写为 `x as T?`，T? 是可空类型
 RangeExpr   ::= AdditiveExpr ('..' AdditiveExpr)?
 
-UnaryExpr ::= ('-' | '+' | '!' | '~' | '++' | '--') UnaryExpr
+UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
            |  'new' QualifiedIdent TypeArgs? '(' ArgList? ')'
            |  'move' UnaryExpr
            |  'await' ('all' | 'any' | 'anySuccess')? UnaryExpr
@@ -5145,7 +5143,6 @@ PostfixOp   ::= '(' ArgList? ')'              // call
              |  '[' Expression ']'             // index
              |  '[' Expression? ':' Expression? ']'  // slice
              |  '!'                            // force unwrap
-             |  '++' | '--'                    // postfix inc/dec
 
 Primary ::= IntLiteral | FloatLiteral | BigIntLiteral
          |  StringLiteral | RawStringLiteral | RegexLiteral
@@ -5203,6 +5200,7 @@ MultiPattern    ::= Pattern (',' Pattern)+
 
 ```ebnf
 Statement ::= ExprStmt
+           |  IncDecStmt
            |  VarDecl
            |  FnDecl
            |  ClassDecl
@@ -5231,11 +5229,12 @@ Statement ::= ExprStmt
            // \u6ce8\uff1aprint/dump \u4f5c\u4e3a\u51fd\u6570\u8c03\u7528\u5305\u542b\u5728 ExprStmt \u4e2d\uff1bgo \u662f\u8868\u8fbe\u5f0f\uff08GoExpr\uff09
 
 ExprStmt ::= Expression (';' | LineBreak)
+IncDecStmt ::= Identifier ('++' | '--') (';' | LineBreak)
 Block    ::= '{' Statement* '}'
 
 IfStmt    ::= 'if' '(' Expression ')' Block ('else' 'if' '(' Expression ')' Block)* ('else' Block)?
 WhileStmt ::= 'while' '(' Expression ')' Block
-ForStmt   ::= 'for' '(' VarDecl? ';' Expression? ';' Expression (',' Expression)* ? ')' Block
+ForStmt   ::= 'for' '(' VarDecl? ';' Expression? ';' (Expression | Identifier ('++' | '--'))? ')' Block
 ForInStmt ::= 'for' '(' Identifier 'in' Expression ')' Block
 ForInPairStmt ::= 'for' '(' Identifier ',' Identifier 'in' Expression ')' Block
              |  'for' '(' '(' Identifier ',' Identifier ')' 'in' Expression ')' Block
@@ -5412,6 +5411,7 @@ OperatorToken ::= '+' | '-' | '*' | '/' | '%'
 | 比较 | `==` `!=` `<` `<=` `>` `>=` |
 | 逻辑 | `&&` `\|\|` `!` |
 | 赋值 | `=` `+=` `-=` `*=` `/=` `%=` `&=` `\|=` `^=` `<<=` `>>=` |
+| 语句 | `++` `--` |
 | 其他 | `..` `??` `?.` `?[` `!` `->` |
 
 ---
