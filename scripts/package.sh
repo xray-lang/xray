@@ -186,7 +186,8 @@ xray build --native --target x86_64-windows-gnu app.xr -o myapp.exe
 \`\`\`
 xray/
 ├── bin/xray              # 解释器
-├── lib/libxray_core.a    # 运行时库（用于 xray build）
+├── lib/libxray_aot_core.a # AOT core/direct-call runtime
+├── lib/libxray_rt_coro.a  # AOT coroutine/timer runtime
 ├── lib/xray/stdlib/      # 标准库
 ├── libexec/xray/zig/     # 可选 bundled Zig toolchain
 └── include/xray/         # 头文件（用于 xray build）

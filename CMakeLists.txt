@@ -1159,6 +1159,20 @@ if(BUILD_TESTS)
         TIMEOUT 180
     )
 
+    # Public install surface: xray_core is an internal development aggregate,
+    # not a library users or installed AOT builds should link against.
+    add_test(
+        NAME install_public_surface
+        COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tests/install/run_install_public_surface_tests.sh
+                ${CMAKE_BINARY_DIR}
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(install_public_surface PROPERTIES
+        LABELS "install;aot;link;smoke"
+        PROCESSORS 2
+        TIMEOUT 120
+    )
+
     # FFI runtime/link diagnostics: missing libraries and symbols must fail
     # with stable, user-facing messages instead of cascading or opaque errors.
     add_test(
@@ -1439,8 +1453,9 @@ install(TARGETS xray
     RUNTIME DESTINATION bin
 )
 
-# Install static library (for xray build)
-install(TARGETS xray_core xray_aot_core xray_rt_coro
+# Install public AOT runtime libraries. xray_core remains a build-tree-only
+# aggregate for the CLI and tests; it must not become a public install target.
+install(TARGETS xray_aot_core xray_rt_coro
     ARCHIVE DESTINATION lib
 )
 
