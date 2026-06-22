@@ -536,6 +536,15 @@ add_test(
 )
 
 add_test(
+    NAME check_rc_naming
+    COMMAND bash ${CMAKE_SOURCE_DIR}/scripts/check_rc_naming.sh
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+set_tests_properties(check_rc_naming PROPERTIES
+    LABELS "memory;rc;naming"
+)
+
+add_test(
     NAME check_xi_template_lowering
     COMMAND ${XRAY_PYTHON}
         ${CMAKE_SOURCE_DIR}/scripts/check_xi_template_lowering.py
