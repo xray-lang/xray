@@ -141,6 +141,12 @@ XR_FUNC void xi_emit_arith(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         return;
 
     OpCode op = xi_emit_vm_template_opcode(v->op);
+    if (xi_emit_compare_uses_unsigned(v)) {
+        if (v->op == XI_LT || v->op == XI_GT)
+            op = OP_CMP_LTU;
+        else if (v->op == XI_LE || v->op == XI_GE)
+            op = OP_CMP_LEU;
+    }
     if (op == OP_NOP) {
         emit_error(ctx, XI_EMIT_ERR_UNSUPPORTED_OP);
         return;
@@ -211,6 +217,12 @@ XR_FUNC void xi_emit_cmp(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         return;
 
     OpCode op = xi_emit_vm_template_opcode(v->op);
+    if (xi_emit_compare_uses_unsigned(v)) {
+        if (v->op == XI_LT || v->op == XI_GT)
+            op = OP_CMP_LTU;
+        else if (v->op == XI_LE || v->op == XI_GE)
+            op = OP_CMP_LEU;
+    }
     if (op == OP_NOP) {
         emit_error(ctx, XI_EMIT_ERR_UNSUPPORTED_OP);
         return;
@@ -243,7 +255,8 @@ XR_FUNC void xi_emit_convert(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
             emit_inst(ctx, CREATE_ABC(OP_TOFLOAT, dst, src, 0));
             break;
         case XR_KIND_STRING:
-            emit_inst(ctx, CREATE_ABC(OP_TOSTRING, dst, src, 0));
+            emit_inst(ctx, CREATE_ABC(OP_TOSTRING, dst, src,
+                                      xi_emit_tostring_hint_for_type(v->args[0]->type)));
             break;
         case XR_KIND_BOOL:
             emit_inst(ctx, CREATE_ABC(OP_TOBOOL, dst, src, 0));
@@ -387,7 +400,8 @@ XR_FUNC void xi_emit_as(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
             return;
         }
         if (tid == 12 /* XR_TID_STRING */) {
-            emit_inst(ctx, CREATE_ABC(OP_TOSTRING, dst, src, 0));
+            emit_inst(ctx, CREATE_ABC(OP_TOSTRING, dst, src,
+                                      xi_emit_tostring_hint_for_type(v->args[0]->type)));
             return;
         }
         if (tid == 1 /* XR_TID_BOOL */) {

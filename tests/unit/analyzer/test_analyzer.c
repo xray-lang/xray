@@ -187,6 +187,7 @@ TEST(analyzer_check_assignment_rejects_unknown_source) {
 
 TEST(type_to_string) {
     XrType *t_int = xr_type_new_int(NULL);
+    XrType *t_u64 = xr_type_new_int_width(NULL, XR_NATIVE_U64);
     XrType *t_arr = xr_type_new_array(g_isolate, xr_type_new_string(NULL));
     XrType *fn_params[] = {xr_type_new_int_width(NULL, XR_NATIVE_I32)};
     XrType *t_cfn = xr_type_new_function(g_isolate, fn_params, 1,
@@ -194,8 +195,9 @@ TEST(type_to_string) {
     t_cfn->function.is_c_abi = true;
 
     ASSERT(strcmp(xr_type_to_string(t_int), "int") == 0);
+    ASSERT(strcmp(xr_type_to_string(t_u64), "uint64") == 0);
     ASSERT(strcmp(xr_type_to_string(t_arr), "Array<string>") == 0);
-    ASSERT(strcmp(xr_type_to_string(t_cfn), "CFn<fn(int): int>") == 0);
+    ASSERT(strcmp(xr_type_to_string(t_cfn), "CFn<fn(int32): int32>") == 0);
 }
 
 TEST(type_narrowing) {

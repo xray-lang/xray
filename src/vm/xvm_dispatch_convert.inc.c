@@ -44,25 +44,35 @@ vmcase(OP_PRINT) {
     int slot_hint = (c_field >> 1) & 3;
     int skip_null = (c_field >> 3) & 1;
 
-    // Reconstruct tagged value from raw slot if hint provided
-    XrValue val;
+    // Reconstruct tagged value from raw slot if hint provided.
+    XrValue val = XR_NULL_VAL;
     if (slot_hint == 1) {
         val = XR_FROM_INT(R(a).i);
     } else if (slot_hint == 2) {
         val = XR_FROM_FLOAT(R(a).f);
-    } else {
+    } else if (slot_hint != 3) {
         val = R(a);
+    } else {
+        /* slot_hint=3 is uint64: the register stores raw bits in i64 form,
+         * but formatting must interpret them as unsigned. */
     }
 
     /* REPL auto-echo suppression: bare expressions that evaluate to
      * null are silently dropped so the prompt stays clean.  Explicit
      * `print(null)` does not set skip_null and still prints "null". */
-    if (skip_null && XR_IS_NULL(val))
+    if (slot_hint != 3 && skip_null && XR_IS_NULL(val))
         vmbreak;
 
     FILE *print_stream = xr_isolate_stdout(isolate);
     if (add_space)
         fputc(' ', print_stream);
+
+    if (slot_hint == 3) {
+        fprintf(print_stream, "%llu", (unsigned long long) (uint64_t) R(a).i);
+        if (newline)
+            fputc('\n', print_stream);
+        vmbreak;
+    }
 
     // Check if instance has toString method
     if (xr_value_is_instance(val)) {
@@ -243,6 +253,10 @@ vmcase(OP_TOSTRING) {
         // Raw F64: format directly
         val = XR_FROM_FLOAT(R(b).f);
         R(a) = xr_string_value(xr_value_to_string(isolate, val));
+        vmbreak;
+    } else if (slot_hint == 3) {
+        // Raw U64: same bits as I64, formatted through the static uint view.
+        R(a) = xr_string_value(xr_string_from_uint64(isolate, (uint64_t) R(b).i));
         vmbreak;
     }
 

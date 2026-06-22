@@ -1168,6 +1168,14 @@ bool xr_type_assignable(XrType *target, XrType *source) {
     if (xr_type_equals(target, source))
         return true;
 
+    // Integer storage assignment: native-width integer types are distinct
+    // static views, but values can move between integer slots. Lowering
+    // inserts explicit truncation or type-view copies at typed write points.
+    if (XR_TYPE_IS_INT(target) && XR_TYPE_IS_INT(source))
+        return true;
+    if (XR_TYPE_IS_FLOAT(target) && XR_TYPE_IS_FLOAT(source))
+        return true;
+
     // Enum / class-name alias: the parser cannot distinguish an enum
     // type annotation `Color` from a class annotation, so it produces
     // XR_KIND_CLASS (or XR_KIND_INSTANCE for generic forms like
@@ -1537,6 +1545,8 @@ bool xr_type_equals(XrType *a, XrType *b) {
     if (a->kind != b->kind)
         return false;
     if (a->is_nullable != b->is_nullable)
+        return false;
+    if ((a->kind == XR_KIND_INT || a->kind == XR_KIND_FLOAT) && a->native_width != b->native_width)
         return false;
 
     // Check type-specific data

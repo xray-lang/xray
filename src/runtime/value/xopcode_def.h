@@ -132,10 +132,14 @@
     _(LTI, FMT_AsB_C, KOP_AB_TEST_S, "if (R[A] < sB) != k then PC++")                              \
     _(LE, FMT_AB_IMM, KOP_AB_TEST, "if (R[A] <= R[B]) != k then PC++")                             \
     _(LEI, FMT_AsB_C, KOP_AB_TEST_S, "if (R[A] <= sB) != k then PC++")                             \
+    _(LTU, FMT_AB_IMM, KOP_AB_TEST, "if ((uint64)R[A] < (uint64)R[B]) != k then PC++")             \
+    _(LEU, FMT_AB_IMM, KOP_AB_TEST, "if ((uint64)R[A] <= (uint64)R[B]) != k then PC++")            \
     _(CMP_EQ, FMT_ABC, KOP_ABC_BIN, "R[A] = (R[B] == R[C])")                                       \
     _(CMP_NE, FMT_ABC, KOP_ABC_BIN, "R[A] = (R[B] != R[C])")                                       \
     _(CMP_LT, FMT_ABC, KOP_ABC_BIN, "R[A] = (R[B] < R[C])")                                        \
     _(CMP_LE, FMT_ABC, KOP_ABC_BIN, "R[A] = (R[B] <= R[C])")                                       \
+    _(CMP_LTU, FMT_ABC, KOP_ABC_BIN, "R[A] = ((uint64)R[B] < (uint64)R[C])")                       \
+    _(CMP_LEU, FMT_ABC, KOP_ABC_BIN, "R[A] = ((uint64)R[B] <= (uint64)R[C])")                      \
     _(IS, FMT_ABC, KOP_ABC_BIN, "R[A] = (R[B] is R[C])")                                           \
     _(CHECKTYPE, FMT_AB, KOP_AB_K, "assert R[A] is Type[K(B)]")                                    \
     _(ISNULL, FMT_AB_IMM, KOP_AB_FLAG, "if (R[A]==null) != k then PC++")                           \

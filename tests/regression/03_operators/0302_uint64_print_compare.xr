@@ -1,0 +1,17 @@
+@test
+fn test_uint64_unsigned_format_and_compare() {
+    let max: uint64 = 9223372036854775807
+    let high: uint64 = max + 1
+    let all: uint64 = 0 - 1
+    let zero: uint64 = 0
+
+    assert_eq(string(high), "9223372036854775808")
+    assert_eq(high as string, "9223372036854775808")
+    assert_eq("u=" + high + ":" + all, "u=9223372036854775808:18446744073709551615")
+
+    assert_eq(high > zero, true)
+    assert_eq(zero < high, true)
+    assert_eq(all > high, true)
+    assert_eq(high <= all, true)
+    assert_eq(high < zero, false)
+}

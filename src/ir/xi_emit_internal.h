@@ -22,6 +22,7 @@
 #include "../base/xmalloc.h"
 #include "../runtime/value/xchunk.h"
 #include "../runtime/value/xvalue.h"
+#include "../runtime/value/xtype.h"
 #include <string.h>
 
 struct XrStructLayout;
@@ -42,6 +43,47 @@ static inline XiValue *xi_emit_trace_struct_origin(XiValue *v) {
            v->nargs >= 1)
         v = v->args[0];
     return v;
+}
+
+static inline bool xi_emit_type_is_unsigned_int(const XrType *type) {
+    if (!type || type->kind != XR_KIND_INT || type->is_nullable)
+        return false;
+    switch (type->native_width) {
+        case XR_NATIVE_U8:
+        case XR_NATIVE_U16:
+        case XR_NATIVE_U32:
+        case XR_NATIVE_U64:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static inline bool xi_emit_type_is_int_like(const XrType *type) {
+    return type && type->kind == XR_KIND_INT && !type->is_nullable;
+}
+
+static inline int xi_emit_tostring_hint_for_type(const XrType *type) {
+    if (!type || type->is_nullable)
+        return 0;
+    if (xi_emit_type_is_unsigned_int(type))
+        return 3;
+    if (type->kind == XR_KIND_INT)
+        return 1;
+    if (type->kind == XR_KIND_FLOAT)
+        return 2;
+    return 0;
+}
+
+static inline bool xi_emit_compare_uses_unsigned(const XiValue *v) {
+    if (!v || v->nargs < 2)
+        return false;
+    if (v->op != XI_LT && v->op != XI_LE && v->op != XI_GT && v->op != XI_GE)
+        return false;
+    const XrType *left = v->args[0] ? v->args[0]->type : NULL;
+    const XrType *right = v->args[1] ? v->args[1]->type : NULL;
+    return xi_emit_type_is_int_like(left) && xi_emit_type_is_int_like(right) &&
+           (xi_emit_type_is_unsigned_int(left) || xi_emit_type_is_unsigned_int(right));
 }
 
 /* ========== Emit Context ========== */

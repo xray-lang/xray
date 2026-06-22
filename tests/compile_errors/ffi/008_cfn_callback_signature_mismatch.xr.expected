@@ -1,1 +1,1 @@
-Argument 1: CFn callback type 'fn(int, int): int' requires top-level function with exact signature 'CFn<fn(int): int>'
+Argument 1: CFn callback type 'fn(int32, int32): int32' requires top-level function with exact signature 'CFn<fn(int32): int32>'

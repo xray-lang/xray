@@ -58,6 +58,32 @@ static uint16_t stmt_narrow_op_for_type(struct XrType *type) {
     }
 }
 
+static bool stmt_type_is_unsigned_int(struct XrType *type) {
+    if (!type || type->kind != XR_KIND_INT || type->is_nullable)
+        return false;
+    switch (type->native_width) {
+        case XR_NATIVE_U8:
+        case XR_NATIVE_U16:
+        case XR_NATIVE_U32:
+        case XR_NATIVE_U64:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static int stmt_print_slot_hint_for_value(XiValue *v) {
+    if (!v || !v->type)
+        return 0;
+    if (v->type->kind == XR_KIND_FLOAT)
+        return 2;
+    if (stmt_type_is_unsigned_int(v->type))
+        return 3;
+    if (v->type->kind == XR_KIND_INT)
+        return 1;
+    return 0;
+}
+
 static bool stmt_value_is_fresh_value_struct(XiValue *v) {
     return v && v->op == XI_STRUCT_NEW && !xi_var_id_is_valid(v->var_id);
 }
@@ -69,11 +95,40 @@ static void stmt_mark_value_clone_copy(XiValue *v) {
 
 static XiValue *stmt_narrow_for_target_type(XiLower *l, AstNode *node, XiValue *val,
                                             struct XrType *target_type) {
-    if (!val || !val->type || !XR_TYPE_IS_INT(val->type))
+    if (!val || !val->type || !target_type)
+        return val;
+    if (XR_TYPE_IS_FLOAT(val->type) && XR_TYPE_IS_FLOAT(target_type)) {
+        if (xr_type_equals(target_type, val->type))
+            return val;
+        if (target_type->native_width == XR_NATIVE_F32) {
+            XiValue *n = xi_value_new(l->func, l->cur_block, XI_NARROW_F32, target_type, 1);
+            if (!n)
+                return val;
+            n->args[0] = val;
+            n->line = (uint32_t) node->line;
+            return n;
+        }
+        XiValue *copy = xi_value_new(l->func, l->cur_block, XI_COPY, target_type, 1);
+        if (!copy)
+            return val;
+        copy->args[0] = val;
+        copy->line = (uint32_t) node->line;
+        return copy;
+    }
+    if (!XR_TYPE_IS_INT(val->type))
         return val;
     uint16_t narrow_op = stmt_narrow_op_for_type(target_type);
-    if (!narrow_op)
+    if (!narrow_op) {
+        if (target_type && XR_TYPE_IS_INT(target_type) && !xr_type_equals(target_type, val->type)) {
+            XiValue *copy = xi_value_new(l->func, l->cur_block, XI_COPY, target_type, 1);
+            if (!copy)
+                return val;
+            copy->args[0] = val;
+            copy->line = (uint32_t) node->line;
+            return copy;
+        }
         return val;
+    }
     XiValue *n = xi_value_new(l->func, l->cur_block, narrow_op, target_type, 1);
     if (!n)
         return val;
@@ -2210,6 +2265,7 @@ static void lower_var_decl(XiLower *l, AstNode *node) {
             init_val = xi_const_bool(l->func, l->cur_block, false, l->type_bool);
         else
             init_val = xi_const_null(l->func, l->cur_block, l->type_null);
+        init_val = stmt_narrow_for_target_type(l, node, init_val, type);
     }
     stmt_set_missing_line(init_val, node->line);
 
@@ -2320,7 +2376,8 @@ static void lower_print(XiLower *l, AstNode *node) {
 
         int add_space = (i > 0) ? 1 : 0;
         int newline = (i == nargs - 1) ? 1 : 0;
-        v->aux_int = add_space | (newline << 1) | (skip_null << 4);
+        int slot_hint = stmt_print_slot_hint_for_value(arg_vals[i]);
+        v->aux_int = add_space | (newline << 1) | (slot_hint << 2) | (skip_null << 4);
 
         v->flags = xi_op_default_effects(XI_PRINT);
         v->line = (uint32_t) node->line;

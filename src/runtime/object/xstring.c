@@ -250,6 +250,16 @@ XrString *xr_string_from_int(XrayIsolate *iso, xr_Integer i) {
     return xr_string_intern(iso, buffer, len, 0);
 }
 
+// Create string from unsigned 64-bit integer
+XrString *xr_string_from_uint64(XrayIsolate *iso, uint64_t i) {
+    XR_DCHECK(iso != NULL, "string_from_uint64: NULL isolate");
+    char buffer[32];
+    int len = snprintf(buffer, sizeof(buffer), "%llu", (unsigned long long) i);
+    if (len < 0)
+        len = 0;
+    return xr_string_intern(iso, buffer, (size_t) len, 0);
+}
+
 // Create string from float
 // Guarantees a decimal point so 0.0 prints as "0.0", not "0".
 XrString *xr_string_from_float(XrayIsolate *iso, xr_Number n) {

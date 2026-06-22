@@ -1,0 +1,55 @@
+// anchor: uint64-print-compare
+// Static uint64 print/format/compare must interpret the stored bits as unsigned.
+
+let max: uint64 = 9223372036854775807
+let high: uint64 = max + 1
+let all: uint64 = 0 - 1
+let zero: uint64 = 0
+let one: uint64 = 1
+
+fn gt_zero(x: uint64) -> bool {
+    return x > 0
+}
+
+fn zero_lt(x: uint64) -> bool {
+    return 0 < x
+}
+
+fn all_gt(x: uint64, y: uint64) -> bool {
+    return x > y
+}
+
+fn branch_gt(x: uint64) -> string {
+    if (x > 0) {
+        return "branch-gt"
+    }
+    return "branch-miss"
+}
+
+fn branch_le(x: uint64, y: uint64) -> string {
+    if (x <= y) {
+        return "branch-le"
+    }
+    return "branch-miss"
+}
+
+print(high)
+print(all)
+print(string(high))
+print(high as string)
+print("concat:" + high + ":" + all)
+print("tmpl:${high}:${all}")
+
+print(high > zero)
+print(zero < high)
+print(all > high)
+print(high <= all)
+print(all >= high)
+print(high < zero)
+print(high > one)
+
+print(gt_zero(high))
+print(zero_lt(high))
+print(all_gt(all, high))
+print(branch_gt(high))
+print(branch_le(high, all))

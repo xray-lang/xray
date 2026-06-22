@@ -25,6 +25,8 @@ static XrType stub_bool = {.kind = XR_KIND_BOOL, .id = 3, .frozen = true};
 static XrType stub_null = {.kind = XR_KIND_NULL, .id = 4, .frozen = true};
 static XrType stub_void = {.kind = XR_KIND_UNIT, .id = 6, .frozen = true};
 static XrType stub_string = {.kind = XR_KIND_STRING, .id = 5, .frozen = true};
+static XrType stub_uint64 = {
+    .kind = XR_KIND_INT, .id = 8, .frozen = true, .native_width = XR_NATIVE_U64};
 
 static int tests_passed = 0;
 static int tests_failed = 0;
@@ -293,6 +295,34 @@ TEST(emit_cmp_gt) {
         }
     }
     assert(found && "should emit CMP_LT for GT");
+
+    xr_vm_proto_free(proto);
+    xi_func_free(f);
+}
+
+TEST(emit_uint64_cmp_uses_unsigned_opcode) {
+    XiFunc *f = make_func("test", &stub_bool);
+    XiBlock *entry = f->entry;
+
+    XiValue *a = xi_param(f, entry, 0, &stub_uint64);
+    XiValue *zero = xi_const_int(f, entry, 0, &stub_int);
+    XiValue *gt = xi_binary(f, entry, XI_GT, &stub_bool, a, zero);
+    xi_block_set_return(entry, gt);
+
+    XrProto *proto = NULL;
+    XiEmitStatus s = xi_emit(f, NULL, &proto);
+    assert(s == XI_EMIT_OK && proto != NULL);
+
+    bool found = false;
+    for (int i = 0; i < PROTO_CODE_COUNT(proto); i++) {
+        XrInstruction inst = PROTO_CODE(proto, i);
+        if (GET_OPCODE(inst) == OP_CMP_LTU) {
+            found = true;
+            assert(GETARG_C(inst) == 0 && "uint64 GT should compare 0 < param with unsigned op");
+            break;
+        }
+    }
+    assert(found && "uint64 compare should emit CMP_LTU");
 
     xr_vm_proto_free(proto);
     xi_func_free(f);
@@ -907,6 +937,38 @@ TEST(emit_str_concat) {
     xi_func_free(f);
 }
 
+TEST(emit_str_concat_uint64_formats_before_append) {
+    XiFunc *f = make_func("concat_u64", &stub_string);
+    XiBlock *entry = f->entry;
+
+    XiValue *prefix = xi_const_str(f, entry, "u=", &stub_string);
+    XiValue *u = xi_param(f, entry, 0, &stub_uint64);
+    XiValue *v = xi_value_new(f, entry, XI_STR_CONCAT, &stub_string, 2);
+    assert(v != NULL);
+    v->args[0] = prefix;
+    v->args[1] = u;
+    xi_block_set_return(entry, v);
+
+    XrProto *proto = NULL;
+    XiEmitStatus s = xi_emit(f, NULL, &proto);
+    assert(s == XI_EMIT_OK && proto != NULL);
+
+    bool found_tostring_u64 = false;
+    bool found_append = false;
+    for (int i = 0; i < PROTO_CODE_COUNT(proto); i++) {
+        XrInstruction inst = PROTO_CODE(proto, i);
+        if (GET_OPCODE(inst) == OP_TOSTRING && GETARG_C(inst) == 3)
+            found_tostring_u64 = true;
+        if (GET_OPCODE(inst) == OP_STRBUF_APPEND)
+            found_append = true;
+    }
+    assert(found_tostring_u64 && "uint64 concat part should be formatted before append");
+    assert(found_append && "concat should still use StringBuilder append sequence");
+
+    xr_vm_proto_free(proto);
+    xi_func_free(f);
+}
+
 TEST(emit_closure_new) {
     /* CLOSURE_NEW -> OP_CLOSURE with recursive child emit */
     XiFunc *f = make_func("parent", &stub_int);
@@ -1076,6 +1138,7 @@ int main(void) {
     /* Comparison */
     run_emit_cmp_eq();
     run_emit_cmp_gt();
+    run_emit_uint64_cmp_uses_unsigned_opcode();
 
     /* Control flow */
     run_emit_if_then_else();
@@ -1112,6 +1175,7 @@ int main(void) {
 
     /* New op coverage */
     run_emit_str_concat();
+    run_emit_str_concat_uint64_formats_before_append();
     run_emit_closure_new();
     run_emit_set_new();
     run_emit_is_check();

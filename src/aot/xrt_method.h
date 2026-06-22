@@ -53,6 +53,8 @@ static inline int xrt_weak_value_is_heap_object(XrValue v) {
 /* toString helper. */
 
 static XrValue xrt_tostring(XrValue val, int slot_hint) {
+    if (slot_hint == 3)
+        return xrt_uint64_to_string((uint64_t) val.i);
     if (slot_hint == 1 || val.tag == XR_TAG_I64) {
         char tmp[32];
         int n = 0;
