@@ -64,8 +64,7 @@
 static XrayIsolate *create_isolate(void) {
     XrayIsolateParams params;
     xray_isolate_params_init(&params);
-    xray_isolate_setup_full(&params);
-    return xray_isolate_new(&params);
+    return xray_isolate_new_full(&params);
 }
 
 /* ========== Module Name Helpers ========== */
@@ -304,7 +303,7 @@ static void scan_func_features(XiFunc *f, XaotFeatureSet *fs) {
                     /* WorkQueue lowers through a generic builtin constructor call
                      * rather than a dedicated XI op (unlike channels), so it must
                      * be detected here. Any WorkQueue use pulls in the isolate /
-                     * scheduler runtime that codegen's xray_isolate_setup_full
+                     * scheduler runtime that the full VM constructor
                      * (emitted for WorkQueue-bearing entries) depends on. */
                     if (v->aux_int == XR_GLOBAL_VAR_WORKQUEUE) {
                         fs->need_work_queue = true;

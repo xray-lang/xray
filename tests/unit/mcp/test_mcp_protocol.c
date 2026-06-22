@@ -885,8 +885,7 @@ TEST(tools_call_analyze_returns_structured_diagnostics) {
     XmcpServer server = test_server();
     XrayIsolateParams iso_params;
     xray_isolate_params_init(&iso_params);
-    xray_isolate_setup_full(&iso_params);
-    server.isolate = xray_isolate_new(&iso_params);
+    server.isolate = xray_isolate_new_full(&iso_params);
     ASSERT_NOT_NULL(server.isolate);
 
     XrJsonValue *params = xjson_new_object();

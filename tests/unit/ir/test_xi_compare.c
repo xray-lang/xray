@@ -54,8 +54,7 @@ static void setup(void) {
     if (!g_iso) {
         XrayIsolateParams p;
         xray_isolate_params_init(&p);
-        xray_isolate_setup_full(&p);
-        g_iso = xray_isolate_new(&p);
+        g_iso = xray_isolate_new_full(&p);
     }
 }
 

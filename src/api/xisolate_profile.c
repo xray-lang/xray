@@ -8,8 +8,9 @@
  * xisolate_profile.c - Profile-based isolate creation
  *
  * KEY CONCEPT:
- *   Each profile selects appropriate init_flags; callers override only what
- *   they need (trace, workers, etc.).  This eliminates the repeated
+ *   Each profile starts from bytecode VM defaults; callers override only what
+ *   they need (trace, workers, etc.).  Creation uses the explicit full VM
+ *   constructor. This eliminates the repeated
  *   XrayIsolateParams boilerplate across run/repl/test/check/fmt/compile/
  *   deps/eval and the MCP analyzer isolate.
  */
@@ -27,28 +28,7 @@ void xr_isolate_profile_params(XrIsolateProfile profile, XrayIsolateParams *out)
     /* Start with defaults */
     xray_isolate_params_init(out);
 
-    switch (profile) {
-        case XR_ISOLATE_PROFILE_RUN:
-        case XR_ISOLATE_PROFILE_EVAL:
-        case XR_ISOLATE_PROFILE_TEST:
-        case XR_ISOLATE_PROFILE_REPL:
-            /* Full runtime: all subsystems */
-            xray_isolate_setup_full(out);
-            break;
-
-        case XR_ISOLATE_PROFILE_PARSE:
-            /* Minimal: just compiler; source cache is compiler-session owned. */
-            out->init_flags = XR_INIT_VM | XR_INIT_GC | XR_INIT_COMPILER;
-            xray_isolate_setup_full(out);
-            break;
-
-        case XR_ISOLATE_PROFILE_ANALYZE:
-            /* Compiler + analyzer; source cache is compiler-session owned. */
-            out->init_flags = XR_INIT_VM | XR_INIT_GC | XR_INIT_COMPILER | XR_INIT_ANALYZER |
-                              XR_INIT_CLASSES | XR_INIT_SYMBOLS;
-            xray_isolate_setup_full(out);
-            break;
-    }
+    (void) profile;
 }
 
 /* ========== Create ========== */
@@ -56,7 +36,7 @@ void xr_isolate_profile_params(XrIsolateProfile profile, XrayIsolateParams *out)
 XrayIsolate *xr_isolate_profile_create(const XrayIsolateParams *params) {
     XR_DCHECK(params != NULL, "params must not be NULL");
 
-    XrayIsolate *iso = xray_isolate_new(params);
+    XrayIsolate *iso = xray_isolate_new_full(params);
     if (!iso) {
         fprintf(stderr, "xray: failed to create isolate\n");
     }

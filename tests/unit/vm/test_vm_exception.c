@@ -36,8 +36,7 @@
 static XrayIsolate *make_quiet_isolate(void) {
     XrayIsolateParams params;
     xray_isolate_params_init(&params);
-    xray_isolate_setup_full(&params);
-    XrayIsolate *iso = xray_isolate_new(&params);
+    XrayIsolate *iso = xray_isolate_new_full(&params);
     if (!iso)
         return NULL;
     xr_isolate_set_suppress_exception_print(iso, true);

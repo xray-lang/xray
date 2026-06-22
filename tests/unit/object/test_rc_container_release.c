@@ -29,8 +29,7 @@ static XrCoroutine *main_coro = NULL;
 static void setup(void) {
     XrayIsolateParams params;
     xray_isolate_params_init(&params);
-    xray_isolate_setup_full(&params);
-    X = xray_isolate_new(&params);
+    X = xray_isolate_new_full(&params);
     ASSERT_NOT_NULL(X);
     main_coro = xr_test_init_coro(X);
     ASSERT_NOT_NULL(main_coro);

@@ -5,17 +5,15 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xisolate_full.c - Full runtime initialization (heavy subsystems)
+ * xisolate_full.c - Full VM construction (heavy subsystems)
  *
  * KEY CONCEPT:
- *   Implements init_extra/cleanup_extra callbacks that initialize
- *   compiler, analyzer, classes, modules, reflection, regex, etc.
- *   xray_isolate_setup_full() sets these callbacks on params.
+ *   Implements the explicit full VM constructor that initializes compiler,
+ *   analyzer, classes, modules, reflection, regex, etc.
  *
  * WHY THIS DESIGN:
- *   This is a separate .o so that bytecode-bundled executables
- *   (which use XR_INIT_RUNTIME) never link this file, keeping
- *   the binary small (~600KB vs ~2MB).
+ *   This is a separate .o so that bytecode-bundled executables never link
+ *   the full compiler/frontend path.
  */
 
 #include "../base/xlog.h"
@@ -123,8 +121,8 @@ static int isolate_init_full(XrayIsolate *isolate) {
     if (!xr_compiler_session_ensure_source_cache(isolate->compiler_session))
         return -1;
 
-    // Register core classes to VM builtins array (must be after all classes created)
-    // init_globals() in xr_vm_init ran before init_extra, so isolate->core was NULL.
+    // Register core classes to VM builtins array (must be after all classes created).
+    // init_globals() in xr_vm_init ran before full VM initialization.
     if (isolate->core) {
         if (isolate->core->reflectClass)
             isolate->vm.builtins[XR_GLOBAL_VAR_REFLECT] =
@@ -198,11 +196,18 @@ static void isolate_cleanup_full(XrayIsolate *isolate) {
     }
 }
 
-/* ========== Public: Setup Full Runtime ========== */
+/* ========== Public: Create Full VM Runtime ========== */
 
-void xray_isolate_setup_full(XrayIsolateParams *params) {
-    if (!params)
-        return;
-    params->init_extra = isolate_init_full;
-    params->cleanup_extra = isolate_cleanup_full;
+XrayIsolate *xray_isolate_new_full(const XrayIsolateParams *params) {
+    XrayIsolate *isolate = xray_isolate_new(params);
+    if (!isolate)
+        return NULL;
+
+    if (isolate_init_full(isolate) != 0) {
+        isolate_cleanup_full(isolate);
+        xray_isolate_delete(isolate);
+        return NULL;
+    }
+    isolate->lifecycle_cleanup = isolate_cleanup_full;
+    return isolate;
 }

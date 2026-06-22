@@ -94,7 +94,7 @@ static void init_globals(XrayIsolate *isolate) {
     xr_global_dict_init(isolate->vm.globals, isolate->main_coro);
 
     // Core class registration is done in isolate_init_full() (xisolate_full.c)
-    // because isolate->core is NULL at this point (before init_extra callback).
+    // because isolate->core is NULL at this point.
 
     // User globals start from index XR_USER_GLOBALS_START
     if (isolate->vm.builtin_count < XR_USER_GLOBALS_START) {

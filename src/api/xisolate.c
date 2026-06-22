@@ -8,18 +8,19 @@
  * xisolate.c - Core Isolate lifecycle (new/delete)
  *
  * KEY CONCEPT:
- *   xray_isolate_new() creates a minimal runtime (VM + GC + string pool).
- *   Heavy subsystems are initialized via an optional callback (init_extra).
- *   This ensures the linker only pulls in heavy code when init_extra is set.
+ *   xray_isolate_new() creates a minimal bytecode VM runtime.
+ *   Heavy variants use explicit constructors in separate translation units so
+ *   bytecode-only embedders do not pull in compiler/frontend code.
  *
  * WHY THIS DESIGN:
  *   The linker resolves symbols at the .o level. If xray_isolate.c directly
  *   calls xr_core_init / xr_module_system_init etc., those .o files get
- *   linked even if the call is behind an if-branch. Using a function pointer
- *   (init_extra) keeps this file free of heavy dependencies.
+ *   linked even if the call is behind an if-branch. Keep heavy constructors
+ *   in their own files and let them install a private cleanup hook.
  *
  * RELATED MODULES:
- *   - xray_isolate_full.c: sets init_extra to pull in compiler/classes/etc
+ *   - xray_isolate_full.c: explicit full VM constructor
+ *   - xray_isolate_runtime.c: explicit runtime-ABI VM constructor
  *   - xray_isolate_tls.c: g_current_isolate + enter/exit
  *   - xray_isolate_params.c: params_init
  *   - xray_isolate_scripting.c: dostring/dofile (compiler-dependent)
@@ -77,8 +78,6 @@ XrayIsolate *xray_isolate_new(const XrayIsolateParams *params) {
         // Minimal init — no full-runtime callbacks unless caller sets them
         xray_isolate_params_init(&isolate->params);
     }
-    isolate->init_flags = isolate->params.init_flags;
-
     XrRuntimeCoreConfig core_cfg = {
         .owner_isolate = isolate,
         .userdata = isolate->params.userdata,
@@ -114,15 +113,6 @@ XrayIsolate *xray_isolate_new(const XrayIsolateParams *params) {
         goto fail_after_vm;
 #endif
 
-    // --- Optional: heavy subsystems via callback ---
-    // init_extra is set by xray_isolate_full.c constructor (auto-registered).
-    // For XR_INIT_RUNTIME mode, init_extra stays NULL → no heavy deps linked.
-    if (isolate->params.init_extra) {
-        if (isolate->params.init_extra(isolate) != 0) {
-            goto fail_after_vm;
-        }
-    }
-
     xray_isolate_enter(isolate);
     return isolate;
 
@@ -149,7 +139,7 @@ void xray_isolate_delete(XrayIsolate *isolate) {
     uint64_t runtime_ms = 0;
     uint64_t tls_exit_ms = 0;
     uint64_t main_coro_ms = 0;
-    uint64_t cleanup_extra_ms = 0;
+    uint64_t lifecycle_cleanup_ms = 0;
     uint64_t vm_cleanup_ms = 0;
     uint64_t tmp_strbuf_ms = 0;
     uint64_t globals_ms = 0;
@@ -196,12 +186,13 @@ void xray_isolate_delete(XrayIsolate *isolate) {
     }
     main_coro_ms = isolate_teardown_elapsed_ms(stage_start_ns);
 
-    // Cleanup via callback (mirrors init_extra)
+    // Cleanup private lifecycle state installed by explicit heavy constructors.
     stage_start_ns = xr_time_monotonic_ns();
-    if (isolate->params.cleanup_extra) {
-        isolate->params.cleanup_extra(isolate);
+    if (isolate->lifecycle_cleanup) {
+        isolate->lifecycle_cleanup(isolate);
+        isolate->lifecycle_cleanup = NULL;
     }
-    cleanup_extra_ms = isolate_teardown_elapsed_ms(stage_start_ns);
+    lifecycle_cleanup_ms = isolate_teardown_elapsed_ms(stage_start_ns);
 
     stage_start_ns = xr_time_monotonic_ns();
     xr_vm_cleanup(isolate);
@@ -273,13 +264,13 @@ void xray_isolate_delete(XrayIsolate *isolate) {
     if (teardown_stats) {
         fprintf(stderr,
                 "Isolate teardown: profiler_ms=%llu runtime_ms=%llu tls_exit_ms=%llu "
-                "main_coro_ms=%llu cleanup_extra_ms=%llu vm_cleanup_ms=%llu "
+                "main_coro_ms=%llu lifecycle_cleanup_ms=%llu vm_cleanup_ms=%llu "
                 "tmp_strbuf_ms=%llu globals_ms=%llu coro_storage_ms=%llu "
                 "gc_cleanup_ms=%llu deferred_tasks_ms=%llu sys_heap_ms=%llu "
                 "string_pool_ms=%llu stdlib_cache_ms=%llu config_ms=%llu total_ms=%llu\n",
                 (unsigned long long) profiler_ms, (unsigned long long) runtime_ms,
                 (unsigned long long) tls_exit_ms, (unsigned long long) main_coro_ms,
-                (unsigned long long) cleanup_extra_ms, (unsigned long long) vm_cleanup_ms,
+                (unsigned long long) lifecycle_cleanup_ms, (unsigned long long) vm_cleanup_ms,
                 (unsigned long long) tmp_strbuf_ms, (unsigned long long) globals_ms,
                 (unsigned long long) coro_storage_ms, (unsigned long long) gc_cleanup_ms,
                 (unsigned long long) deferred_tasks_ms, (unsigned long long) sys_heap_ms,

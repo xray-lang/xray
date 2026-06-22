@@ -278,10 +278,8 @@ static void *worker_thread(void *arg) {
     // Create per-worker Isolate
     XrayIsolateParams params;
     xray_isolate_params_init(&params);
-    xray_isolate_setup_full(&params);
-    params.enable_gc = false;  // Minimal Isolate for parsing only
 
-    worker->isolate = xray_isolate_new(&params);
+    worker->isolate = xray_isolate_new_full(&params);
     if (!worker->isolate) {
         lsp_log("[IndexPool] Worker %d: Failed to create Isolate", worker->worker_id);
         return NULL;

@@ -26,6 +26,7 @@
 #include "../../../src/runtime/xglobal_dict.h"
 #include "../../../src/runtime/xexec_state.h"
 #include "../../../src/runtime/xisolate_internal.h"
+#include "../../../src/toolchain/xcompiler_session.h"
 #include "xrepl.h"
 #include "xisolate_profile.h"
 #include <stdio.h>
@@ -166,7 +167,8 @@ TEST(repl_compile_let_registers_symbol) {
     XrayIsolate *iso = make_repl_iso();
     ASSERT_NOT_NULL(iso);
 
-    XrProto *proto = xr_repl_compile(iso, "let x = 42\n");
+    XrProto *proto =
+        xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, "let x = 42\n");
     ASSERT_NOT_NULL(proto);
 
     XrReplSymbolTable *t = xr_repl_symbols_of(iso);
@@ -186,7 +188,8 @@ TEST(repl_compile_const_marks_is_const) {
     XrayIsolate *iso = make_repl_iso();
     ASSERT_NOT_NULL(iso);
 
-    XrProto *proto = xr_repl_compile(iso, "const PI = 3.14\n");
+    XrProto *proto =
+        xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, "const PI = 3.14\n");
     ASSERT_NOT_NULL(proto);
 
     XrReplSymbolTable *t = xr_repl_symbols_of(iso);
@@ -203,7 +206,8 @@ TEST(repl_compile_function_registers_symbol) {
     XrayIsolate *iso = make_repl_iso();
     ASSERT_NOT_NULL(iso);
 
-    XrProto *proto = xr_repl_compile(iso, "fn double(n) { return n * 2 }\n");
+    XrProto *proto = xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso,
+                                     "fn double(n) { return n * 2 }\n");
     ASSERT_NOT_NULL(proto);
 
     XrReplSymbolTable *t = xr_repl_symbols_of(iso);
@@ -223,7 +227,8 @@ TEST(repl_compile_let_and_const_round_trip) {
     XrayIsolate *iso = make_repl_iso();
     ASSERT_NOT_NULL(iso);
 
-    XrProto *proto = xr_repl_compile(iso, "let x = 1\nconst Y = 2\n");
+    XrProto *proto = xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso,
+                                     "let x = 1\nconst Y = 2\n");
     ASSERT_NOT_NULL(proto);
 
     XrReplSymbolTable *t = xr_repl_symbols_of(iso);
@@ -249,11 +254,13 @@ TEST(repl_cross_input_symbol_resolves) {
     XrayIsolate *iso = make_repl_iso();
     ASSERT_NOT_NULL(iso);
 
-    XrProto *p1 = xr_repl_compile(iso, "let x = 42\n");
+    XrProto *p1 =
+        xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, "let x = 42\n");
     ASSERT_NOT_NULL(p1);
     xr_execute(iso, p1);
 
-    XrProto *p2 = xr_repl_compile(iso, "let y = x + 1\n");
+    XrProto *p2 =
+        xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, "let y = x + 1\n");
     ASSERT_NOT_NULL(p2);
     xr_execute(iso, p2);
 
@@ -277,11 +284,13 @@ TEST(repl_cross_input_function_call) {
     XrayIsolate *iso = make_repl_iso();
     ASSERT_NOT_NULL(iso);
 
-    XrProto *p1 = xr_repl_compile(iso, "fn inc(n: int) -> int { return n + 1 }\n");
+    XrProto *p1 = xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso,
+                                  "fn inc(n: int) -> int { return n + 1 }\n");
     ASSERT_NOT_NULL(p1);
     xr_execute(iso, p1);
 
-    XrProto *p2 = xr_repl_compile(iso, "let r = inc(10)\n");
+    XrProto *p2 =
+        xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, "let r = inc(10)\n");
     ASSERT_NOT_NULL(p2);
     xr_execute(iso, p2);
 
@@ -309,15 +318,18 @@ TEST(repl_cross_input_function_reads_shared) {
     XrayIsolate *iso = make_repl_iso();
     ASSERT_NOT_NULL(iso);
 
-    XrProto *p1 = xr_repl_compile(iso, "let x = 10\n");
+    XrProto *p1 =
+        xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, "let x = 10\n");
     ASSERT_NOT_NULL(p1);
     xr_execute(iso, p1);
 
-    XrProto *p2 = xr_repl_compile(iso, "fn getx() -> int { return x }\n");
+    XrProto *p2 = xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso,
+                                  "fn getx() -> int { return x }\n");
     ASSERT_NOT_NULL(p2);
     xr_execute(iso, p2);
 
-    XrProto *p3 = xr_repl_compile(iso, "let r = getx()\n");
+    XrProto *p3 =
+        xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, "let r = getx()\n");
     ASSERT_NOT_NULL(p3);
     xr_execute(iso, p3);
 
@@ -341,20 +353,23 @@ TEST(repl_cross_input_function_mutates_shared) {
     XrayIsolate *iso = make_repl_iso();
     ASSERT_NOT_NULL(iso);
 
-    XrProto *p1 = xr_repl_compile(iso, "let counter = 0\n");
+    XrProto *p1 =
+        xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, "let counter = 0\n");
     ASSERT_NOT_NULL(p1);
     xr_execute(iso, p1);
 
-    XrProto *p2 =
-        xr_repl_compile(iso, "fn bump() -> int { counter = counter + 1; return counter }\n");
+    XrProto *p2 = xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso,
+                                  "fn bump() -> int { counter = counter + 1; return counter }\n");
     ASSERT_NOT_NULL(p2);
     xr_execute(iso, p2);
 
-    XrProto *p3 = xr_repl_compile(iso, "let r1 = bump()\n");
+    XrProto *p3 =
+        xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, "let r1 = bump()\n");
     ASSERT_NOT_NULL(p3);
     xr_execute(iso, p3);
 
-    XrProto *p4 = xr_repl_compile(iso, "let r2 = bump()\n");
+    XrProto *p4 =
+        xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, "let r2 = bump()\n");
     ASSERT_NOT_NULL(p4);
     xr_execute(iso, p4);
 
@@ -382,10 +397,10 @@ TEST(repl_redefinition_reuses_slot) {
     XrayIsolate *iso = make_repl_iso();
     ASSERT_NOT_NULL(iso);
 
-    XrProto *p1 = xr_repl_compile(iso, "let x = 1\n");
+    XrProto *p1 = xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, "let x = 1\n");
     ASSERT_NOT_NULL(p1);
     xr_execute(iso, p1);
-    XrProto *p2 = xr_repl_compile(iso, "let x = 2\n");
+    XrProto *p2 = xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, "let x = 2\n");
     ASSERT_NOT_NULL(p2);
     xr_execute(iso, p2);
 
@@ -415,15 +430,18 @@ TEST(repl_function_calls_function_cross_input) {
     XrayIsolate *iso = make_repl_iso();
     ASSERT_NOT_NULL(iso);
 
-    XrProto *p1 = xr_repl_compile(iso, "fn b() -> int { return 100 }\n");
+    XrProto *p1 = xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso,
+                                  "fn b() -> int { return 100 }\n");
     ASSERT_NOT_NULL(p1);
     xr_execute(iso, p1);
 
-    XrProto *p2 = xr_repl_compile(iso, "fn a() -> int { return b() + 1 }\n");
+    XrProto *p2 = xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso,
+                                  "fn a() -> int { return b() + 1 }\n");
     ASSERT_NOT_NULL(p2);
     xr_execute(iso, p2);
 
-    XrProto *p3 = xr_repl_compile(iso, "let r = a()\n");
+    XrProto *p3 =
+        xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, "let r = a()\n");
     ASSERT_NOT_NULL(p3);
     xr_execute(iso, p3);
 
@@ -449,11 +467,12 @@ TEST(repl_function_recursive_self_reference) {
                       "  if (n <= 1) { return 1 }\n"
                       "  return n * fact(n - 1)\n"
                       "}\n";
-    XrProto *p1 = xr_repl_compile(iso, src);
+    XrProto *p1 = xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, src);
     ASSERT_NOT_NULL(p1);
     xr_execute(iso, p1);
 
-    XrProto *p2 = xr_repl_compile(iso, "let r = fact(5)\n");
+    XrProto *p2 =
+        xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, "let r = fact(5)\n");
     ASSERT_NOT_NULL(p2);
     xr_execute(iso, p2);
 
@@ -475,19 +494,23 @@ TEST(repl_function_mutates_array_cross_input) {
     XrayIsolate *iso = make_repl_iso();
     ASSERT_NOT_NULL(iso);
 
-    XrProto *p1 = xr_repl_compile(iso, "let arr: array<int> = []\n");
+    XrProto *p1 = xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso,
+                                  "let arr: array<int> = []\n");
     ASSERT_NOT_NULL(p1);
     xr_execute(iso, p1);
 
-    XrProto *p2 = xr_repl_compile(iso, "fn push_one() { arr.push(1) }\n");
+    XrProto *p2 = xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso,
+                                  "fn push_one() { arr.push(1) }\n");
     ASSERT_NOT_NULL(p2);
     xr_execute(iso, p2);
 
-    XrProto *p3 = xr_repl_compile(iso, "push_one(); push_one()\n");
+    XrProto *p3 = xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso,
+                                  "push_one(); push_one()\n");
     ASSERT_NOT_NULL(p3);
     xr_execute(iso, p3);
 
-    XrProto *p4 = xr_repl_compile(iso, "let n = arr.length\n");
+    XrProto *p4 =
+        xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, "let n = arr.length\n");
     ASSERT_NOT_NULL(p4);
     xr_execute(iso, p4);
 
@@ -522,11 +545,11 @@ TEST(repl_class_instantiation_cross_input) {
         "  let x: int; let y: int\n"
         "  constructor(x: int, y: int) { this.x = x; this.y = y }\n"
         "}\n";
-    XrProto *p1 = xr_repl_compile(iso, cls);
+    XrProto *p1 = xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, cls);
     ASSERT_NOT_NULL(p1);
     xr_execute(iso, p1);
 
-    XrProto *p2 = xr_repl_compile(iso, "let px = Point(7, 8).x\n");
+    XrProto *p2 = xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, "let px = Point(7, 8).x\n");
     ASSERT_NOT_NULL(p2);
     xr_execute(iso, p2);
 
@@ -549,7 +572,7 @@ TEST(repl_auto_echo_compiles_bare_expression) {
     XrayIsolate *iso = make_repl_iso();
     ASSERT_NOT_NULL(iso);
 
-    XrProto *p = xr_repl_compile(iso, "1 + 1\n");
+    XrProto *p = xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, "1 + 1\n");
     ASSERT_NOT_NULL(p);
     int rc = xr_execute(iso, p);
     (void) rc; /* execution itself just needs to not abort */
@@ -567,7 +590,7 @@ TEST(repl_auto_echo_creates_it_binding) {
     XrayIsolate *iso = make_repl_iso();
     ASSERT_NOT_NULL(iso);
 
-    XrProto *p = xr_repl_compile(iso, "null\n");
+    XrProto *p = xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, "null\n");
     ASSERT_NOT_NULL(p);
     xr_execute(iso, p);
 
@@ -586,14 +609,14 @@ TEST(repl_auto_echo_it_chaining) {
     XrayIsolate *iso = make_repl_iso();
     ASSERT_NOT_NULL(iso);
 
-    XrProto *p1 = xr_repl_compile(iso, "1 + 2\n");
+    XrProto *p1 = xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, "1 + 2\n");
     ASSERT_NOT_NULL(p1);
     xr_execute(iso, p1);
 
     /* Subsequent compile must use AST_ASSIGNMENT for `it` (not a
      * re-declaration), so it must succeed without analyzer
      * "redeclared name" errors. */
-    XrProto *p2 = xr_repl_compile(iso, "it * 10\n");
+    XrProto *p2 = xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, "it * 10\n");
     ASSERT_NOT_NULL(p2);
     xr_execute(iso, p2);
 
@@ -630,7 +653,8 @@ TEST(repl_print_vars_after_compile_no_crash) {
     XrayIsolate *iso = make_repl_iso();
     ASSERT_NOT_NULL(iso);
 
-    XrProto *p = xr_repl_compile(iso, "let x = 1\nconst Y = 2\n");
+    XrProto *p = xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso,
+                                 "let x = 1\nconst Y = 2\n");
     ASSERT_NOT_NULL(p);
     xr_execute(iso, p);
 
