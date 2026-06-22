@@ -11,7 +11,7 @@ gen_stdlib_types.py - Generate analyzer builtin type declarations
 KEY CONCEPT:
   Uses stdlib/defs/*.def as the primary declaration source for migrated module
   functions, then falls back to C annotations for handles, constants, builtin
-  types, and modules not yet migrated to declarative metadata.
+  types, and module members not yet migrated to declarative metadata.
 
   Supports two output modes:
     --embed (default): Generate xanalyzer_builtins_generated.h (for stdlib)
@@ -254,10 +254,33 @@ def load_def_module_methods():
     return modules
 
 
+def load_def_module_constants():
+    """Load migrated module constants from stdlib/defs/*.def."""
+    sys.path.insert(0, str(STDLIBGEN_TOOL_DIR))
+    try:
+        from stdlibgen import parse_constants
+    except Exception as e:
+        raise SystemExit(f"Error: cannot import stdlibgen parser: {e}") from e
+    finally:
+        try:
+            sys.path.remove(str(STDLIBGEN_TOOL_DIR))
+        except ValueError:
+            pass
+
+    modules = {}
+    for entry in parse_constants(PROJECT_ROOT):
+        modules.setdefault(entry.module, []).append({
+            'name': entry.name,
+            'signature': entry.signature,
+            'doc': entry.doc,
+        })
+    return modules
+
+
 def merge_def_module_methods(module_results, def_methods):
     """Overlay .def methods onto C-scanned module declarations.
 
-    C annotations still own handles, constants, and modules not yet migrated.
+    C annotations still own handles and modules not yet migrated.
     For migrated functions, .def metadata is the primary source of signature
     and documentation used by analyzer/LSP/MCP-facing builtin tables.
     """
@@ -281,6 +304,32 @@ def merge_def_module_methods(module_results, def_methods):
                 added += 1
             else:
                 mod_data['methods'][idx] = method
+                replaced += 1
+    return replaced, added
+
+
+def merge_def_module_constants(module_results, def_constants):
+    """Overlay .def constants onto C-scanned module declarations."""
+    replaced = 0
+    added = 0
+    for mod_name, constants in sorted(def_constants.items()):
+        mod_data = module_results.setdefault(mod_name, {
+            'handles': [],
+            'methods': [],
+            'handle_methods': {},
+            'constants': [],
+        })
+        by_name = {}
+        for idx, const in enumerate(mod_data.get('constants', [])):
+            by_name.setdefault(const['name'], idx)
+        for const in constants:
+            idx = by_name.get(const['name'])
+            if idx is None:
+                mod_data.setdefault('constants', []).append(const)
+                by_name[const['name']] = len(mod_data['constants']) - 1
+                added += 1
+            else:
+                mod_data['constants'][idx] = const
                 replaced += 1
     return replaced, added
 
@@ -545,6 +594,8 @@ def main():
 
     def_methods = load_def_module_methods()
     replaced, added = merge_def_module_methods(module_results, def_methods)
+    def_constants = load_def_module_constants()
+    const_replaced, const_added = merge_def_module_constants(module_results, def_constants)
 
     total_types = len(type_results)
     total_modules = len(module_results)
@@ -557,6 +608,8 @@ def main():
           f"across {total_modules} modules", file=sys.stderr)
     print(f"Def overlay: {replaced} functions replaced, {added} functions added "
           f"from stdlib/defs/*.def", file=sys.stderr)
+    print(f"Def constants overlay: {const_replaced} constants replaced, "
+          f"{const_added} constants added from stdlib/defs/*.def", file=sys.stderr)
 
     # Generate header
     content = generate_header(type_results, module_results)

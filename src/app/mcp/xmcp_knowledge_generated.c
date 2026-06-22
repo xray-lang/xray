@@ -311,12 +311,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_encoding[] = {
     {
         .name = "BE",
         .signature = ": int",
-        .summary = "",
+        .summary = "Big-endian UTF-16 byte order",
     },
     {
         .name = "LE",
         .signature = ": int",
-        .summary = "",
+        .summary = "Little-endian UTF-16 byte order",
     },
     {
         .name = "hexDecode",
@@ -800,27 +800,27 @@ static const XmcpGeneratedStdlibSymbol _symbols_log[] = {
     {
         .name = "DEBUG",
         .signature = ": int",
-        .summary = "",
+        .summary = "Debug log level",
     },
     {
         .name = "ERROR",
         .signature = ": int",
-        .summary = "",
+        .summary = "Error log level",
     },
     {
         .name = "FATAL",
         .signature = ": int",
-        .summary = "",
+        .summary = "Fatal log level",
     },
     {
         .name = "INFO",
         .signature = ": int",
-        .summary = "",
+        .summary = "Info log level",
     },
     {
         .name = "WARN",
         .signature = ": int",
-        .summary = "",
+        .summary = "Warning log level",
     },
     {
         .name = "child",
@@ -1367,7 +1367,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_os[] = {
     {
         .name = "arch",
         .signature = ": string",
-        .summary = "",
+        .summary = "Current CPU architecture name",
     },
     {
         .name = "chdir",
@@ -1392,7 +1392,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_os[] = {
     {
         .name = "eol",
         .signature = ": string",
-        .summary = "",
+        .summary = "Platform end-of-line string",
     },
     {
         .name = "exec",
@@ -1452,7 +1452,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_os[] = {
     {
         .name = "platform",
         .signature = ": string",
-        .summary = "",
+        .summary = "Current operating system name",
     },
     {
         .name = "ppid",
@@ -1462,7 +1462,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_os[] = {
     {
         .name = "sep",
         .signature = ": string",
-        .summary = "",
+        .summary = "Platform path separator",
     },
     {
         .name = "setenv",
@@ -1545,7 +1545,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_path[] = {
     {
         .name = "delimiter",
         .signature = ": string",
-        .summary = "",
+        .summary = "Platform path-list delimiter",
     },
     {
         .name = "dirname",
@@ -1595,7 +1595,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_path[] = {
     {
         .name = "sep",
         .signature = ": string",
-        .summary = "",
+        .summary = "Platform path separator",
     },
 };
 
@@ -3520,8 +3520,8 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
-            "| `encoding.BE` | `: int` |  |\n"
-            "| `encoding.LE` | `: int` |  |\n"
+            "| `encoding.BE` | `: int` | Big-endian UTF-16 byte order |\n"
+            "| `encoding.LE` | `: int` | Little-endian UTF-16 byte order |\n"
             "| `encoding.hexDecode` | `(hex: string): Array<uint8>?` | Hex decode to bytes |\n"
             "| `encoding.hexDecodeString` | `(hex: string): string?` | Hex decode to string |\n"
             "| `encoding.hexEncode` | `(data: string): string` | Hex encode string to hex |\n"
@@ -3691,11 +3691,11 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
-            "| `log.DEBUG` | `: int` |  |\n"
-            "| `log.ERROR` | `: int` |  |\n"
-            "| `log.FATAL` | `: int` |  |\n"
-            "| `log.INFO` | `: int` |  |\n"
-            "| `log.WARN` | `: int` |  |\n"
+            "| `log.DEBUG` | `: int` | Debug log level |\n"
+            "| `log.ERROR` | `: int` | Error log level |\n"
+            "| `log.FATAL` | `: int` | Fatal log level |\n"
+            "| `log.INFO` | `: int` | Info log level |\n"
+            "| `log.WARN` | `: int` | Warning log level |\n"
             "| `log.child` | `(...fields: unknown): Logger` | Create child logger |\n"
             "| `log.debug` | `(...args: unknown): ()` | Log debug message |\n"
             "| `log.enableAsync` | `(enabled: bool): ()` | Enable async logging |\n"
@@ -3907,12 +3907,12 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `ExecResult.exitCode` | `const int` | Handle field |\n"
             "| `ExecResult.stderr` | `const string` | Handle field |\n"
             "| `ExecResult.stdout` | `const string` | Handle field |\n"
-            "| `os.arch` | `: string` |  |\n"
+            "| `os.arch` | `: string` | Current CPU architecture name |\n"
             "| `os.chdir` | `(path: string): bool` | Change working directory |\n"
             "| `os.clock` | `(): float` | Get process CPU time in seconds |\n"
             "| `os.cpuCount` | `(): int` | Get number of CPU cores |\n"
             "| `os.environ` | `(): Map<string, string>` | Get all environment variables |\n"
-            "| `os.eol` | `: string` |  |\n"
+            "| `os.eol` | `: string` | Platform end-of-line string |\n"
             "| `os.exec` | `(cmd: string): ExecResult?` | Execute shell command |\n"
             "| `os.exit` | `(code?: int): ()` | Exit process |\n"
             "| `os.freeMemory` | `(): int` | Get available system memory in bytes |\n"
@@ -3924,9 +3924,9 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `os.hostname` | `(): string` | Get hostname |\n"
             "| `os.kill` | `(pid: int, signal?: int): bool` | Send signal to process |\n"
             "| `os.loadavg` | `(): Array<float>` | Get system load averages (1, 5, 15 min) |\n"
-            "| `os.platform` | `: string` |  |\n"
+            "| `os.platform` | `: string` | Current operating system name |\n"
             "| `os.ppid` | `(): int` | Get parent process ID |\n"
-            "| `os.sep` | `: string` |  |\n"
+            "| `os.sep` | `: string` | Platform path separator |\n"
             "| `os.setenv` | `(name: string, value: string): bool` | Set environment variable |\n"
             "| `os.sleep` | `(ms: int): ()` | Sleep for milliseconds |\n"
             "| `os.tmpdir` | `(): string` | Get temporary directory path |\n"
@@ -3960,7 +3960,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `PathInfo.name` | `const string` | Handle field |\n"
             "| `PathInfo.root` | `const string` | Handle field |\n"
             "| `path.basename` | `(path: string): string` | Get base name |\n"
-            "| `path.delimiter` | `: string` |  |\n"
+            "| `path.delimiter` | `: string` | Platform path-list delimiter |\n"
             "| `path.dirname` | `(path: string): string` | Get directory name |\n"
             "| `path.extname` | `(path: string): string` | Get file extension |\n"
             "| `path.format` | `(obj: PathInfo): string` | Format path from components |\n"
@@ -3970,7 +3970,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `path.parse` | `(path: string): PathInfo` | Parse path into components |\n"
             "| `path.relative` | `(from: string, to: string): string` | Get relative path |\n"
             "| `path.resolve` | `(...parts: string): string` | Resolve to absolute path |\n"
-            "| `path.sep` | `: string` |  |\n"
+            "| `path.sep` | `: string` | Platform path separator |\n"
             "",
         .symbols = _symbols_path,
         .symbol_count = (int)(sizeof(_symbols_path) / sizeof(_symbols_path[0])),
