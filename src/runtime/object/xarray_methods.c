@@ -20,6 +20,7 @@
 
 #include "xarray_methods.h"
 #include "xarray.h"
+#include "xarray_vm.h"
 #include "xstring.h"
 #include "xtuple.h"
 #include "xiterator.h"

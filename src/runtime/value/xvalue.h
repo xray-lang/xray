@@ -347,6 +347,7 @@ XR_FUNC uint32_t xr_value_str_len(const XrValue *v);
 
 XR_FUNC XrValue xr_null(void);
 XR_FUNC XrValue xr_bool(int b);
+XR_FUNC bool xr_value_is_truthy(XrValue value);
 static inline XrValue xr_int(xr_Integer i) {
     return XR_FROM_INT(i);
 }
