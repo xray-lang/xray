@@ -21,6 +21,7 @@
 #include "../frontend/parser/xast.h"
 #include "../frontend/parser/xparse.h"
 #include "../runtime/value/xchunk.h"
+#include "../toolchain/xcompiler_session.h"
 
 /* ========== Compilation API ========== */
 
@@ -37,27 +38,24 @@ static void ensure_compiler_proto_hooks(void) {
 
 // Compile AST to bytecode (internal)
 //
-// The compiler's for-in desugaring (xstmt_forin.c) creates new AST nodes
-// via xr_ast_* helpers which allocate from the Isolate's current arena.
-// After xr_parse_with_source returns, the arena is transferred to the
-// ProgramNode and the Isolate's pointer is restored to NULL.  We must
-// re-install the program's arena for the duration of compilation so the
-// desugaring allocations succeed, then restore the previous value.
+// The compiler's for-in desugaring creates AST nodes via xr_ast_* helpers.
+// Re-enter the program arena through the active compiler session so these
+// synthetic nodes share the AST lifetime without mutating VM isolate state.
 static XrProto *compile_ast_internal(XrayIsolate *isolate, AstNode *ast, const char *source_file) {
     XR_DCHECK(isolate != NULL, "compile_ast_internal: NULL isolate");
     XR_DCHECK(ast != NULL, "compile_ast_internal: NULL ast");
     ensure_compiler_proto_hooks();
 
-    // Re-install the parse arena so compiler desugaring can allocate nodes.
-    struct XrArena *saved_arena = xr_isolate_get_current_arena(isolate);
-    if (ast->type == AST_PROGRAM && ast->as.program.arena) {
-        xr_isolate_set_current_arena(isolate, ast->as.program.arena);
-    }
+    XrCompilerSessionScope ast_scope;
+    bool has_ast_scope =
+        ast->type == AST_PROGRAM && ast->as.program.arena &&
+        xr_compiler_session_push_arena(isolate, ast->as.program.arena, source_file, &ast_scope);
 
     XrCompilerContext *ctx = xr_compiler_context_new(isolate);
     if (ctx == NULL) {
         xr_log_warning("vm", "failed to create compiler context");
-        xr_isolate_set_current_arena(isolate, saved_arena);
+        if (has_ast_scope)
+            xr_compiler_session_pop_arena(&ast_scope);
         return NULL;
     }
 
@@ -84,8 +82,8 @@ static XrProto *compile_ast_internal(XrayIsolate *isolate, AstNode *ast, const c
         isolate->current_type_pool = isolate->analyzer_pool;
     }
 
-    // Restore previous arena.
-    xr_isolate_set_current_arena(isolate, saved_arena);
+    if (has_ast_scope)
+        xr_compiler_session_pop_arena(&ast_scope);
 
     return proto;
 }
