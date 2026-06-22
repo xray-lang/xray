@@ -157,25 +157,25 @@ XrCoroHeap *xr_coro_heap_create(struct XrCoroutine *coro) {
     return heap;
 }
 
-/* ========== GC Pointer Set (open addressing, tombstones) ========== */
+/* ========== Heap Pointer Set (open addressing, tombstones) ========== */
 
 // Fibonacci hash on the pointer; objects are >= 8-byte aligned so the
 // low bits carry no entropy.
-static inline uint32_t gc_ptrset_hash(const XrObjHeader *obj, uint32_t cap) {
+static inline uint32_t heap_ptrset_hash(const XrObjHeader *obj, uint32_t cap) {
     uint64_t h = ((uint64_t) (uintptr_t) obj >> 4) * 0x9E3779B97F4A7C15ull;
     return (uint32_t) (h >> 32) & (cap - 1);
 }
 
 // Rehash into a table of `new_cap` slots (power of two). Drops tombstones.
-static bool gc_ptrset_rehash(XrGCPtrSet *set, uint32_t new_cap) {
+static bool heap_ptrset_rehash(XrHeapPtrSet *set, uint32_t new_cap) {
     XrObjHeader **slots = (XrObjHeader **) xr_calloc(new_cap, sizeof(XrObjHeader *));
     if (!slots)
         return false;
     for (uint32_t i = 0; i < set->cap; i++) {
         XrObjHeader *obj = set->slots[i];
-        if (!xr_gc_ptrset_slot_live(obj))
+        if (!xr_heap_ptrset_slot_live(obj))
             continue;
-        uint32_t idx = gc_ptrset_hash(obj, new_cap);
+        uint32_t idx = heap_ptrset_hash(obj, new_cap);
         while (slots[idx])
             idx = (idx + 1) & (new_cap - 1);
         slots[idx] = obj;
@@ -191,39 +191,39 @@ static bool gc_ptrset_rehash(XrGCPtrSet *set, uint32_t new_cap) {
 // Ensure capacity for one more insert. Called BEFORE the object is
 // allocated so registration after a successful alloc cannot fail (OOM
 // surfaces here, mirroring the old prepare-node contract).
-static bool gc_ptrset_reserve(XrGCPtrSet *set, uint32_t extra) {
+static bool heap_ptrset_reserve(XrHeapPtrSet *set, uint32_t extra) {
     uint32_t needed = set->count + set->tombstones + extra;
     if (set->cap == 0)
-        return gc_ptrset_rehash(set, 16);
+        return heap_ptrset_rehash(set, 16);
     if (needed * 4 < set->cap * 3)
         return true;
     uint32_t new_cap = set->cap;
     while ((set->count + extra) * 4 >= new_cap * 3)
         new_cap <<= 1;
-    return gc_ptrset_rehash(set, new_cap);
+    return heap_ptrset_rehash(set, new_cap);
 }
 
 // Insert without allocation. Caller must have reserved capacity.
-static void gc_ptrset_insert(XrGCPtrSet *set, XrObjHeader *obj) {
+static void heap_ptrset_insert(XrHeapPtrSet *set, XrObjHeader *obj) {
     XR_DCHECK(set->cap > 0, "ptrset_insert: no capacity reserved");
-    uint32_t idx = gc_ptrset_hash(obj, set->cap);
-    while (xr_gc_ptrset_slot_live(set->slots[idx])) {
+    uint32_t idx = heap_ptrset_hash(obj, set->cap);
+    while (xr_heap_ptrset_slot_live(set->slots[idx])) {
         XR_DCHECK(set->slots[idx] != obj, "ptrset_insert: duplicate");
         idx = (idx + 1) & (set->cap - 1);
     }
-    if (set->slots[idx] == XR_GC_PTRSET_TOMBSTONE)
+    if (set->slots[idx] == XR_HEAP_PTRSET_TOMBSTONE)
         set->tombstones--;
     set->slots[idx] = obj;
     set->count++;
 }
 
-static bool gc_ptrset_remove(XrGCPtrSet *set, XrObjHeader *obj) {
+static bool heap_ptrset_remove(XrHeapPtrSet *set, XrObjHeader *obj) {
     if (set->cap == 0 || set->count == 0)
         return false;
-    uint32_t idx = gc_ptrset_hash(obj, set->cap);
+    uint32_t idx = heap_ptrset_hash(obj, set->cap);
     while (set->slots[idx]) {
         if (set->slots[idx] == obj) {
-            set->slots[idx] = XR_GC_PTRSET_TOMBSTONE;
+            set->slots[idx] = XR_HEAP_PTRSET_TOMBSTONE;
             set->count--;
             set->tombstones++;
             return true;
@@ -236,13 +236,13 @@ static bool gc_ptrset_remove(XrGCPtrSet *set, XrObjHeader *obj) {
 // Take ownership of the set contents, leaving it empty. Used by the
 // teardown walks so cascading unregisters from destructors operate on
 // the (now empty) live set instead of invalidating the iteration.
-static XrGCPtrSet gc_ptrset_take(XrGCPtrSet *set) {
-    XrGCPtrSet taken = *set;
+static XrHeapPtrSet heap_ptrset_take(XrHeapPtrSet *set) {
+    XrHeapPtrSet taken = *set;
     memset(set, 0, sizeof(*set));
     return taken;
 }
 
-static void gc_ptrset_destroy(XrGCPtrSet *set) {
+static void heap_ptrset_destroy(XrHeapPtrSet *set) {
     if (set->slots)
         xr_free(set->slots);
     memset(set, 0, sizeof(*set));
@@ -251,10 +251,10 @@ static void gc_ptrset_destroy(XrGCPtrSet *set) {
 /* ========== Common Helpers for Destroy/Reset ========== */
 
 static void coro_heap_finalize_registered_objects(XrCoroHeap *heap) {
-    XrGCPtrSet set = gc_ptrset_take(&heap->finalize_set);
+    XrHeapPtrSet set = heap_ptrset_take(&heap->finalize_set);
     for (uint32_t i = 0; i < set.cap; i++) {
         XrObjHeader *obj = set.slots[i];
-        if (!xr_gc_ptrset_slot_live(obj) || (obj->extra & XR_OBJ_DEAD))
+        if (!xr_heap_ptrset_slot_live(obj) || (obj->extra & XR_OBJ_DEAD))
             continue;
         obj->extra |= XR_OBJ_DEAD;
         XrObjDestroyFn destroy = coro_heap_destroy_func(heap, obj->type);
@@ -263,15 +263,15 @@ static void coro_heap_finalize_registered_objects(XrCoroHeap *heap) {
             heap->finalizer_count++;
         }
     }
-    gc_ptrset_destroy(&set);
+    heap_ptrset_destroy(&set);
 }
 
 // Finalize and free all large objects
 static void coro_heap_free_large_objects(XrCoroHeap *heap) {
-    XrGCPtrSet set = gc_ptrset_take(&heap->large_set);
+    XrHeapPtrSet set = heap_ptrset_take(&heap->large_set);
     for (uint32_t i = 0; i < set.cap; i++) {
         XrObjHeader *lo = set.slots[i];
-        if (!xr_gc_ptrset_slot_live(lo))
+        if (!xr_heap_ptrset_slot_live(lo))
             continue;
         heap->large_bytes -= lo->objsize;
         if (XR_OBJ_IS_MMAP(lo)) {
@@ -280,7 +280,7 @@ static void coro_heap_free_large_objects(XrCoroHeap *heap) {
             xr_free(lo);
         }
     }
-    gc_ptrset_destroy(&set);
+    heap_ptrset_destroy(&set);
     heap->large_bytes = 0;
 }
 
@@ -290,9 +290,9 @@ static bool coro_heap_prepare_registration(XrCoroHeap *heap, uint8_t type, size_
                                            bool *needs_finalize, bool *is_large) {
     *needs_finalize = coro_heap_type_needs_destroy(heap, type);
     *is_large = total > XR_LARGE_OBJECT_THRESHOLD;
-    if (*needs_finalize && !gc_ptrset_reserve(&heap->finalize_set, 1))
+    if (*needs_finalize && !heap_ptrset_reserve(&heap->finalize_set, 1))
         return false;
-    if (*is_large && !gc_ptrset_reserve(&heap->large_set, 1))
+    if (*is_large && !heap_ptrset_reserve(&heap->large_set, 1))
         return false;
     return true;
 }
@@ -300,22 +300,22 @@ static bool coro_heap_prepare_registration(XrCoroHeap *heap, uint8_t type, size_
 static void coro_heap_register_object(XrCoroHeap *heap, XrObjHeader *obj, bool needs_finalize,
                                       bool is_large) {
     if (is_large) {
-        gc_ptrset_insert(&heap->large_set, obj);
+        heap_ptrset_insert(&heap->large_set, obj);
         heap->large_bytes += (int64_t) obj->objsize;
     }
     if (needs_finalize) {
-        gc_ptrset_insert(&heap->finalize_set, obj);
+        heap_ptrset_insert(&heap->finalize_set, obj);
     }
 }
 
 static void coro_heap_unregister_finalizer(XrCoroHeap *heap, XrObjHeader *obj) {
     if (heap)
-        (void) gc_ptrset_remove(&heap->finalize_set, obj);
+        (void) heap_ptrset_remove(&heap->finalize_set, obj);
 }
 
 static void coro_heap_unregister_large_object(XrCoroHeap *heap, XrObjHeader *obj) {
     if (heap)
-        (void) gc_ptrset_remove(&heap->large_set, obj);
+        (void) heap_ptrset_remove(&heap->large_set, obj);
 }
 
 /* ========== Lifecycle ========== */
@@ -660,7 +660,7 @@ XrObjHeader *xr_coro_heap_new_obj(XrCoroHeap *heap, uint8_t type, size_t size) {
     XR_DCHECK(size >= sizeof(XrObjHeader), "alloc size too small for object header");
     XR_DCHECK(heap->owner != NULL, "coroutine heap has no owner coroutine");
 
-    size_t total = XGC_ALIGN(size);
+    size_t total = XR_HEAP_ALIGN(size);
     XrObjHeader *obj;
     bool needs_finalize = false;
     bool is_large = false;
