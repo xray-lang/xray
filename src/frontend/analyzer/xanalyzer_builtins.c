@@ -397,6 +397,8 @@ XrType *xa_builtin_get_method_return_type(XrayIsolate *X, XrType *container_type
             case SYMBOL_TOSTRING:
             case SYMBOL_TOFIXED:
                 return xr_type_new_string(NULL);
+            case SYMBOL_ISNAN:
+                return xr_type_new_bool(NULL);
             case SYMBOL_TOINT:
             case SYMBOL_FLOOR:
             case SYMBOL_CEIL:

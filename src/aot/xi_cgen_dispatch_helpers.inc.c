@@ -14,7 +14,7 @@ static void xicgen_const(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiVal
     } else if (v->type->kind == XR_KIND_FLOAT) {
         double d;
         memcpy(&d, &v->aux_int, sizeof(double));
-        fprintf(out, "%a", d);
+        emit_c_float_literal(out, d);
     } else if (v->type->kind == XR_KIND_BOOL)
         fprintf(out, "%" PRId64, v->aux_int);
     else if (v->type->kind == XR_KIND_NULL)

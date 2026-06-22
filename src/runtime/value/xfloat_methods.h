@@ -107,6 +107,15 @@ static inline XrValue xr_float_sqrt_method(XrayIsolate *iso, XrValue self, XrVal
     return xr_float(sqrt(value));
 }
 
+/* float.isNaN() -> bool. Pure, no GC. */
+static inline XrValue xr_float_is_nan_method(XrayIsolate *iso, XrValue self, XrValue *args,
+                                             int argc) {
+    (void) iso;
+    (void) args;
+    (void) argc;
+    return xr_bool(isnan(XR_TO_FLOAT(self)));
+}
+
 /* float.toInt() -> int (truncation). Pure, no GC. */
 static inline XrValue xr_float_to_int_method(XrayIsolate *iso, XrValue self, XrValue *args,
                                              int argc) {

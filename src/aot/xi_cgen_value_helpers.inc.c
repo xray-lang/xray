@@ -12,6 +12,18 @@ static void emit_cell_ref(FILE *out, XiVarId var_id) {
     fprintf(out, "cell_%u", (unsigned) var_id);
 }
 
+static void emit_c_float_literal(FILE *out, double value) {
+    if (isnan(value)) {
+        fprintf(out, "NAN");
+        return;
+    }
+    if (isinf(value)) {
+        fprintf(out, signbit(value) ? "(-INFINITY)" : "INFINITY");
+        return;
+    }
+    fprintf(out, "%a", value);
+}
+
 static void emit_boxed_value_ref(FILE *out, const XiValue *v) {
     if (v && v->type && v->type->kind == XR_KIND_NULL) {
         fprintf(out, "XR_NULL_VAL");
@@ -285,7 +297,9 @@ static void emit_enum_member_value_expr(XiCgenCtx *ctx, FILE *out, const XiEnumM
             fprintf(out, "XR_FROM_INT(%" PRId64 ")", member->int_value);
             break;
         case XI_ENUM_LITERAL_FLOAT:
-            fprintf(out, "XR_FROM_FLOAT(%a)", member->float_value);
+            fprintf(out, "XR_FROM_FLOAT(");
+            emit_c_float_literal(out, member->float_value);
+            fprintf(out, ")");
             break;
         case XI_ENUM_LITERAL_BOOL:
             fprintf(out, "XR_FROM_BOOL(%d)", member->bool_value ? 1 : 0);

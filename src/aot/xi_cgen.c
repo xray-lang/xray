@@ -49,6 +49,7 @@
 #include "../frontend/parser/xast_nodes.h"
 #include <string.h>
 #include <inttypes.h>
+#include <math.h>
 /* ========== Representation Helpers ========== */
 /* Read the stored representation set by select_rep.
  * select_rep always runs in the AOT pipeline before code generation. */

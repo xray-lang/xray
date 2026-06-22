@@ -1022,7 +1022,7 @@ BinOp ::= '+' | '-' | '*' | '/' | '%'
 **特殊语义**：
 - `int / 0` → 运行时抛 `XR_ERR_DIV_BY_ZERO` (E0420)。
 - `int % 0` → 运行时抛 `XR_ERR_MOD_BY_ZERO` (E0421)。
-- `float / 0.0`（及任何结果为 float 的除以零）→ 同样运行时抛 `XR_ERR_DIV_BY_ZERO` (E0420)；xray 算术**不产生** IEEE inf/NaN。
+- 结果类型为 `float`/`float32` 的除法遵循 IEEE-754：`1.0 / 0.0` 产生 `+inf`，`-1.0 / 0.0` 产生 `-inf`，`0.0 / 0.0` 产生 `NaN`；可用 `x.isNaN()` 或 `math.isNaN(x)` 检测 NaN。
 - `%` 仅接受整数操作数；静态类型包含 float 的求模（如 `5.0 % 2.0`）在分析期编译错误。运行时 `XR_ERR_TYPE_MISMATCH` (E0404) 仅作为动态兜底。
 - 整数溢出：见 §2.3.1。
 - 字符串 `+ string` 是 O(n) 拼接；密集拼接请用 `StringBuilder`。
@@ -4333,6 +4333,7 @@ BigInt 使用 `123n` 字面量或 `int.toBigInt()`；Json 使用 `Json.parse` / 
 | `floor()` / `ceil()` / `round()` | `() -> int` | 取整 |
 | `sqrt()` | `() -> float` | 平方根 |
 | `pow(exp)` | `(float) -> float` | 幂运算 |
+| `isNaN()` | `() -> bool` | 是否为 IEEE NaN |
 
 ### 14.3 `BigInt` 方法
 

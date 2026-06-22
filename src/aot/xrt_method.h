@@ -350,6 +350,8 @@ static inline XrValue xrt_method_0(XrValue recv, int sym) {
             return XR_FROM_FLOAT(fabs(v));
         if (sym == XRT_SYM_SQRT)
             return XR_FROM_FLOAT(sqrt(v));
+        if (sym == XRT_SYM_ISNAN)
+            return XR_FROM_BOOL(isnan(v));
     }
     if (recv.tag == XR_TAG_BOOL && sym == XRT_SYM_TOSTRING)
         return xrt_tostring(recv, 0);

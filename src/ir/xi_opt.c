@@ -221,10 +221,8 @@ static bool fold_float_binary(uint16_t op, double a, double b, bool is_f32, doub
                 *result = (double) (float) (fa * fb);
                 return true;
             case XI_DIV:
-                if (fb == 0.0f)
-                    return false;
                 /* f32 division: narrowed operands, divide in double, narrow the
-                 * quotient back to float (matches OP_DIV_F32 / AOT xrt_div). */
+                 * quotient back to float (matches OP_DIV_F32 / AOT). */
                 *result = (double) (float) ((double) fa / (double) fb);
                 return true;
             default:
@@ -242,8 +240,6 @@ static bool fold_float_binary(uint16_t op, double a, double b, bool is_f32, doub
             *result = a * b;
             return true;
         case XI_DIV:
-            if (b == 0.0)
-                return false;
             *result = a / b;
             return true;
         default:

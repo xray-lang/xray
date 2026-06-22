@@ -1021,7 +1021,7 @@ BinOp ::= '+' | '-' | '*' | '/' | '%'
 **Special semantics**:
 - `int / 0` → throws `XR_ERR_DIV_BY_ZERO` (E0420) at runtime.
 - `int % 0` → throws `XR_ERR_MOD_BY_ZERO` (E0421) at runtime.
-- `float / 0.0` (and any float-result division by zero) → also throws `XR_ERR_DIV_BY_ZERO` (E0420) at runtime; xray arithmetic produces **no** IEEE inf/NaN.
+- Division whose result type is `float`/`float32` follows IEEE-754: `1.0 / 0.0` produces `+inf`, `-1.0 / 0.0` produces `-inf`, and `0.0 / 0.0` produces `NaN`; use `x.isNaN()` or `math.isNaN(x)` to test NaN.
 - `%` accepts integer operands only; modulo with a static type that contains float (e.g. `5.0 % 2.0`) is a compile-time analyzer error. Runtime `XR_ERR_TYPE_MISMATCH` (E0404) remains only as a dynamic fallback.
 - Integer overflow: see §2.3.1.
 - `string + string` is O(n) concatenation; for heavy concatenation use `StringBuilder`.
@@ -4336,6 +4336,7 @@ This section is a **method index** for each type (grouped by topic). Concrete si
 | `floor()` / `ceil()` / `round()` | `() -> int` | rounding |
 | `sqrt()` | `() -> float` | square root |
 | `pow(exp)` | `(float) -> float` | power |
+| `isNaN()` | `() -> bool` | whether the value is IEEE NaN |
 
 ### 14.3 `BigInt` Methods
 
@@ -4957,7 +4958,7 @@ Analyzer enum codes (`XrErrorCode`, defined in the 350+ section of `xerror.h`):
 
 | Code | Name | Description |
 |--|--|--|
-| `E0420` | `XR_ERR_DIV_BY_ZERO` | division by zero (integer or float) |
+| `E0420` | `XR_ERR_DIV_BY_ZERO` | integer division by zero |
 | `E0421` | `XR_ERR_MOD_BY_ZERO` | integer modulo by zero |
 | `E0422` | `XR_ERR_OVERFLOW` | integer overflow |
 
