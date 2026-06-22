@@ -19,7 +19,6 @@
 #include "xast.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xarena.h"
-#include "../../runtime/xisolate_api.h"
 #include "../../runtime/value/xtype.h"
 #include "../../toolchain/xcompiler_session.h"
 #include "xstring_pool.h"
@@ -33,9 +32,7 @@ static inline XrCompilerSession *get_compiler_session(XrayIsolate *X) {
 // Get the parser arena from the active compiler session.
 static inline XrArena *get_arena(XrayIsolate *X) {
     XrCompilerSession *session = get_compiler_session(X);
-    if (session)
-        return xr_compiler_session_current_arena(session);
-    return xr_isolate_get_current_arena(X);
+    return session ? xr_compiler_session_current_arena(session) : NULL;
 }
 
 // Arena-mandatory allocation helpers.
@@ -64,8 +61,7 @@ XR_FUNC char *ast_strdup(XrayIsolate *X, const char *s) {
         return NULL;
     /* Deduplicate via compile-time pool when available. */
     XrCompilerSession *session = get_compiler_session(X);
-    XrCompileStringPool *pool =
-        session ? xr_compiler_session_string_pool(session) : xr_isolate_get_string_pool_compile(X);
+    XrCompileStringPool *pool = xr_compiler_session_string_pool(session);
     if (pool) {
         return (char *) xr_string_pool_intern(pool, s);
     }
@@ -85,8 +81,8 @@ static AstNode *alloc_node(XrayIsolate *X, AstNodeType type, int line) {
     node->type = type;
     node->line = line;
     XrCompilerSession *session = get_compiler_session(X);
-    node->node_id =
-        session ? xr_compiler_session_next_ast_node_id(session) : xr_isolate_next_ast_node_id(X);
+    XR_CHECK(session != NULL, "alloc_node: AST node allocation requires a compiler session");
+    node->node_id = xr_compiler_session_next_ast_node_id(session);
     return node;
 }
 AstNode *xr_ast_literal_int(XrayIsolate *X, xr_Integer value, int line) {

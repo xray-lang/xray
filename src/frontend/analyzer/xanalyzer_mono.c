@@ -22,7 +22,7 @@
 #include "../../base/xlog.h"
 #include "../../base/xchecks.h"
 #include "../../runtime/value/xtype.h"
-#include "../../runtime/xisolate_api.h"
+#include "../../toolchain/xcompiler_session.h"
 #include "../parser/xast_nodes.h"
 #include "../parser/xtype_ref.h"
 #include "xtype_ref_resolve.h"
@@ -193,15 +193,15 @@ static char *clone_str(const char *s) {
 }
 
 typedef struct {
-    XrayIsolate *isolate;
+    XrCompilerSession *session;
 } XrAstCloneCtx;
 
 static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
                                  XrAstCloneCtx *clone_ctx);
 
 static uint32_t clone_node_id(const AstNode *node, XrAstCloneCtx *clone_ctx) {
-    if (clone_ctx && clone_ctx->isolate)
-        return xr_isolate_next_ast_node_id(clone_ctx->isolate);
+    if (clone_ctx && clone_ctx->session)
+        return xr_compiler_session_next_ast_node_id(clone_ctx->session);
     return node ? node->node_id : 0;
 }
 
@@ -1514,7 +1514,7 @@ static void inject_mono_decls(AstNode *root, XaGenericRegistry *registry,
         return;
 
     ProgramNode *prog = &root->as.program;
-    XrAstCloneCtx clone_ctx = {.isolate = isolate};
+    XrAstCloneCtx clone_ctx = {.session = xr_compiler_session_current_for_isolate(isolate)};
 
     // prog->statements starts as arena-allocated (from xr_ast_program_add).
     // Once we copy it to the heap for growth, heap_owned becomes true and

@@ -18,8 +18,8 @@
 #include "../../../src/frontend/parser/xast_nodes.h"
 #include "../../../src/frontend/parser/xast_types.h"
 #include "../../../src/frontend/analyzer/xanalyzer.h"
+#include "../../../src/toolchain/xcompiler_session.h"
 #include "../../../include/xray_isolate.h"
-#include "../../../src/runtime/xisolate_api.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -383,10 +383,13 @@ static bool check_bindings(const char *source, const char *label) {
     int saved_fd = dup(STDERR_FILENO);
     freopen("/dev/null", "w", stderr);
 #endif
-    if (program->type == AST_PROGRAM && program->as.program.arena)
-        xr_isolate_set_current_arena(g_iso, program->as.program.arena);
+    XrCompilerSessionScope canon_scope;
+    bool has_canon_scope = program->type == AST_PROGRAM && program->as.program.arena &&
+                           xr_compiler_session_push_arena(g_iso, program->as.program.arena,
+                                                          "binding_test.xr", &canon_scope);
     xr_canon_program(program, analyzer, g_iso);
-    xr_isolate_set_current_arena(g_iso, NULL);
+    if (has_canon_scope)
+        xr_compiler_session_pop_arena(&canon_scope);
     XiFunc *func = xi_lower_program(program, analyzer, g_iso);
 #ifdef _WIN32
     freopen("CON", "w", stderr);

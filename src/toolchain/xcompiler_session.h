@@ -56,7 +56,6 @@ XR_FUNC void xr_compiler_session_set_current_arena(XrCompilerSession *session,
 XR_FUNC uint32_t xr_compiler_session_next_ast_node_id(XrCompilerSession *session);
 XR_FUNC uint32_t xr_compiler_session_ast_node_id(const XrCompilerSession *session);
 XR_FUNC void xr_compiler_session_set_ast_node_id(XrCompilerSession *session, uint32_t next_id);
-XR_FUNC void xr_compiler_session_commit_legacy_isolate_state(const XrCompilerSession *session);
 
 XR_FUNC struct XrCompileStringPool *
 xr_compiler_session_string_pool(const XrCompilerSession *session);

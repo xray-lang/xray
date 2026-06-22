@@ -16,6 +16,7 @@
 #include "../../../src/runtime/value/xchunk.h"
 #include "../../../src/runtime/value/xtype.h"
 #include "../../../src/base/xmalloc.h"
+#include "../../../src/toolchain/xcompiler_session.h"
 #include "../../../include/xray_isolate.h"
 
 #include <stdio.h>
@@ -90,15 +91,17 @@ static XrProto *compile_legacy(const char *source) {
     /* Use the context's built-in analyzer */
     xa_analyzer_analyze(ctx->analyzer, "compare.xr", program);
 
-    /* Re-install the parse arena: legacy codegen desugars some AST nodes
+    /* Re-enter the parse arena: legacy codegen desugars some AST nodes
      * (e.g. for-in, match) which calls ast_alloc and needs the arena. */
-    struct XrArena *saved_arena = xr_isolate_get_current_arena(g_iso);
-    if (program->type == AST_PROGRAM && program->as.program.arena)
-        xr_isolate_set_current_arena(g_iso, program->as.program.arena);
+    XrCompilerSessionScope ast_scope;
+    bool has_ast_scope =
+        program->type == AST_PROGRAM && program->as.program.arena &&
+        xr_compiler_session_push_arena(g_iso, program->as.program.arena, "compare.xr", &ast_scope);
 
     XrProto *proto = xr_compile(ctx, program);
 
-    xr_isolate_set_current_arena(g_iso, saved_arena);
+    if (has_ast_scope)
+        xr_compiler_session_pop_arena(&ast_scope);
     xr_compiler_context_free(ctx);
     xr_program_destroy(program);
     return proto;
