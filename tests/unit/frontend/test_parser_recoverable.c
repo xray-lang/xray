@@ -55,16 +55,26 @@
 /* ====================================================================== */
 
 static XrayIsolate *g_iso = NULL;
+static XrCompilerSession *g_session = NULL;
 
 static void setup(void) {
     if (!g_iso) {
         XrayIsolateParams p;
         xray_isolate_params_init(&p);
         g_iso = xray_isolate_new(&p);
+        ASSERT_NOT_NULL(g_iso);
+        XrCompilerSessionConfig cfg = {.vm_host = g_iso};
+        g_session = xr_compiler_session_new(&cfg);
+        ASSERT_NOT_NULL(g_session);
+        xr_compiler_session_attach_isolate(g_iso, g_session);
     }
 }
 
 static void teardown(void) {
+    if (g_session) {
+        xr_compiler_session_delete(g_session);
+        g_session = NULL;
+    }
     if (g_iso) {
         xray_isolate_delete(g_iso);
         g_iso = NULL;
@@ -125,13 +135,15 @@ static AstNode *parse_recoverable(const char *source, Parser *out_parser, DiagSi
     *out_arena = arena;
 
     XrCompilerSessionScope parse_scope;
-    if (!xr_compiler_session_push_arena(g_iso, arena, "<test>", &parse_scope)) {
+    if (!xr_compiler_session_push_arena(xr_compiler_session_current_for_isolate(g_iso), arena,
+                                        "<test>", &parse_scope)) {
         xr_arena_destroy(arena);
         xr_free(arena);
         *out_arena = NULL;
         return NULL;
     }
-    xr_parser_init(out_parser, g_iso, source, "<test>", arena);
+    xr_parser_init(out_parser, xr_compiler_session_current_for_isolate(g_iso), source, "<test>",
+                   arena);
     xr_parser_set_error_callback(out_parser, diag_callback, sink, max_errors);
     AstNode *ast = xr_parse_recoverable(out_parser);
     xr_compiler_session_pop_arena(&parse_scope);

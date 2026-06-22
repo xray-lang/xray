@@ -339,8 +339,9 @@ XR_FUNC XiPipelineResult xi_pipeline_compile_program(struct AstNode *program_nod
 
     XrCompilerSessionScope canon_scope;
     bool has_canon_scope = program_node->type == AST_PROGRAM && program_node->as.program.arena &&
-                           xr_compiler_session_push_arena(isolate, program_node->as.program.arena,
-                                                          cfg->source_file, &canon_scope);
+                           xr_compiler_session_push_arena(
+                               xr_compiler_session_current_for_isolate(isolate),
+                               program_node->as.program.arena, cfg->source_file, &canon_scope);
 
     /* Canonicalize AST before lowering */
     xr_canon_program(program_node, analyzer, isolate);

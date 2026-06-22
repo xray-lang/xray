@@ -23,6 +23,7 @@
 #include "../base/xmalloc.h"
 #include "../frontend/parser/xast.h"
 #include "../frontend/parser/xparse.h"
+#include "../toolchain/xcompiler_session.h"
 #include "../base/xhashmap.h"
 #include <stdio.h>
 #include <stdarg.h>
@@ -39,6 +40,7 @@
 
 typedef struct {
     XrayIsolate *X;
+    XrCompilerSession *session;
     XrBundle *bundle;
     XrHashMap *visited;
     char *base_dir;
@@ -144,12 +146,13 @@ static void visit_node(BundleContext *ctx, AstNode *node, const char *current_di
                         }
                         char *source = xr_file_read_all(mid.source_path, "r", NULL);
                         if (source) {
-                            AstNode *ast = xr_parse_with_source(ctx->X, source, mid.source_path);
+                            AstNode *ast =
+                                xr_parse_with_source(ctx->session, source, mid.source_path);
                             if (ast) {
                                 char *pkg_dir = xr_path_dirname(mid.source_path);
                                 collect_imports_from_ast(ctx, ast, pkg_dir);
-                                XrProto *proto =
-                                    xr_compile_ast_with_source(ctx->X, ast, mid.source_path);
+                                XrProto *proto = xr_compile_ast_with_source_session(
+                                    ctx->session, ast, mid.source_path);
                                 if (proto) {
                                     size_t bc_size;
                                     uint8_t *bc = xr_bytecode_write(ctx->X, proto, 0, &bc_size);
@@ -183,12 +186,12 @@ static void visit_node(BundleContext *ctx, AstNode *node, const char *current_di
                     }
                     char *source = xr_file_read_all(mid.source_path, "r", NULL);
                     if (source) {
-                        AstNode *ast = xr_parse_with_source(ctx->X, source, mid.source_path);
+                        AstNode *ast = xr_parse_with_source(ctx->session, source, mid.source_path);
                         if (ast) {
                             char *module_dir = xr_path_dirname(mid.source_path);
                             collect_imports_from_ast(ctx, ast, module_dir);
-                            XrProto *proto =
-                                xr_compile_ast_with_source(ctx->X, ast, mid.source_path);
+                            XrProto *proto = xr_compile_ast_with_source_session(ctx->session, ast,
+                                                                                mid.source_path);
                             if (proto) {
                                 size_t bc_size;
                                 uint8_t *bc = xr_bytecode_write(ctx->X, proto, 0, &bc_size);
@@ -358,6 +361,12 @@ XrBundle *xr_bundle_create_ex(XrayIsolate *X, const char *entry_file, XrBundleFl
     if (!X || !entry_file)
         return NULL;
 
+    XrCompilerSession *session = xr_compiler_session_current_for_isolate(X);
+    if (!session) {
+        xr_log_warning("bundle", "compiler session is required");
+        return NULL;
+    }
+
     // Read entry file
     char *source = xr_file_read_all(entry_file, "r", NULL);
     if (!source) {
@@ -386,6 +395,7 @@ XrBundle *xr_bundle_create_ex(XrayIsolate *X, const char *entry_file, XrBundleFl
 
     // Create context
     BundleContext ctx = {.X = X,
+                         .session = session,
                          .bundle = bundle,
                          .visited = xr_hashmap_new(),
                          .base_dir = xr_path_dirname(abs_path),
@@ -406,7 +416,7 @@ XrBundle *xr_bundle_create_ex(XrayIsolate *X, const char *entry_file, XrBundleFl
     }
 
     // Parse entry file
-    AstNode *ast = xr_parse_with_source(X, source, abs_path);
+    AstNode *ast = xr_parse_with_source(session, source, abs_path);
     xr_free(source);
 
     if (!ast) {
@@ -423,7 +433,7 @@ XrBundle *xr_bundle_create_ex(XrayIsolate *X, const char *entry_file, XrBundleFl
     collect_imports_from_ast(&ctx, ast, ctx.base_dir);
 
     // Compile entry file and add to bundle (placed last to ensure dependencies come first)
-    XrProto *proto = xr_compile_ast_with_source(X, ast, abs_path);
+    XrProto *proto = xr_compile_ast_with_source_session(session, ast, abs_path);
     if (proto) {
         size_t bc_size;
         uint8_t *bc = xr_bytecode_write(X, proto, 0, &bc_size);

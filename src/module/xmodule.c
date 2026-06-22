@@ -41,17 +41,17 @@
 
 // xr_vm_execute_module declared in vm/xvm.h (included via xisolate_internal.h → xvm_state.h → ...)
 
-void xr_module_set_compiler_hooks(XrayIsolate *isolate,
-                                  void *(*parse_fn)(void *, const char *, const char *),
-                                  void *(*compile_ast_fn)(void *, void *, const char *),
-                                  void *(*compile_src_fn)(void *, const char *, const char *),
-                                  void (*ast_free_fn)(void *)) {
+void xr_module_set_compiler_hooks(XrayIsolate *isolate, XrCompilerSession *compiler_session,
+                                  XrModuleParseHook parse_fn, XrModuleCompileAstHook compile_ast_fn,
+                                  XrModuleCompileSourceHook compile_src_fn,
+                                  XrModuleAstFreeHook ast_free_fn) {
     XrModuleRegistry *registry = (XrModuleRegistry *) xr_isolate_get_module_registry(isolate);
     /* Module system may legitimately not be initialised on isolates that
      * do not import code (e.g. transient analyzer-only isolates), so this
      * is a graceful no-op rather than an assertion. */
     if (!registry)
         return;
+    registry->compiler_session = compiler_session;
     registry->fn_parse = parse_fn;
     registry->fn_compile_ast = compile_ast_fn;
     registry->fn_compile_src = compile_src_fn;
@@ -648,7 +648,7 @@ static bool load_script_extension(XrayIsolate *isolate, XrModule *module, const 
     XrModule *prev_module = xr_isolate_get_current_module(isolate);
     xr_isolate_set_current_module(isolate, module);
 
-    void *code = NULL;
+    XrProto *code = NULL;
     char path[XR_PATH_MAX];
     char *source = NULL;
 
@@ -675,13 +675,13 @@ static bool load_script_extension(XrayIsolate *isolate, XrModule *module, const 
         return true;
     }
 
-    if (!registry->fn_compile_src) {
+    if (!registry->compiler_session || !registry->fn_compile_src) {
         xr_isolate_set_current_module(isolate, prev_module);
         xr_free(source);
         xr_log_warning("module", "compiler not available (lite runtime)");
         return false;
     }
-    code = registry->fn_compile_src(isolate, source, path);
+    code = registry->fn_compile_src(registry->compiler_session, source, path);
     if (!code) {
         xr_isolate_set_current_module(isolate, prev_module);
         xr_free(source);
@@ -837,14 +837,15 @@ static XrModule *load_script_module(XrayIsolate *isolate, XrModule *module, cons
     char *clean_path = normalize_path(path);
 
     XrModuleRegistry *registry = (XrModuleRegistry *) xr_isolate_get_module_registry(isolate);
-    if (!registry || !registry->fn_parse || !registry->fn_compile_ast) {
+    if (!registry || !registry->compiler_session || !registry->fn_parse ||
+        !registry->fn_compile_ast) {
         xr_isolate_set_current_module(isolate, prev_module);
         xr_free(source);
         xr_free(clean_path);
         xr_log_warning("module", "compiler not available (lite runtime)");
         return NULL;
     }
-    AstNode *ast = registry->fn_parse(isolate, source, clean_path);
+    AstNode *ast = registry->fn_parse(registry->compiler_session, source, clean_path);
     if (!ast) {
         xr_isolate_set_current_module(isolate, prev_module);
         xr_free(source);
@@ -852,7 +853,7 @@ static XrModule *load_script_module(XrayIsolate *isolate, XrModule *module, cons
         return NULL;
     }
 
-    void *code = registry->fn_compile_ast(isolate, ast, clean_path);
+    XrProto *code = registry->fn_compile_ast(registry->compiler_session, ast, clean_path);
     if (!code) {
         if (registry->fn_ast_free)
             registry->fn_ast_free(ast);

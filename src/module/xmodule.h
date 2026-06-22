@@ -17,6 +17,7 @@
 #ifndef XMODULE_H
 #define XMODULE_H
 
+#include "../base/xforward_decl.h"
 #include "../runtime/value/xvalue.h"
 #include "../base/xhashmap.h"
 #include "../runtime/symbol/xsymbol_table.h"
@@ -142,6 +143,14 @@ typedef XrModule *(*NativeModuleLoader)(struct XrayIsolate *isolate);
 
 struct XrModuleResolver;
 
+typedef AstNode *(*XrModuleParseHook)(XrCompilerSession *session, const char *source,
+                                      const char *source_file);
+typedef XrProto *(*XrModuleCompileAstHook)(XrCompilerSession *session, AstNode *ast,
+                                           const char *source_file);
+typedef XrProto *(*XrModuleCompileSourceHook)(XrCompilerSession *session, const char *source,
+                                              const char *source_file);
+typedef void (*XrModuleAstFreeHook)(AstNode *ast);
+
 typedef struct XrModuleRegistry {
     XrHashMap *native_loaders;  // Module name → NativeModuleLoader
     XrHashMap *loaded_modules;  // Module path → XrModule*
@@ -160,11 +169,13 @@ typedef struct XrModuleRegistry {
     int module_table_count;
 
     // Compiler hooks — per-Isolate, NULL in lite/bytecode-only mode.
-    // Using void* function pointers avoids pulling in parser/compiler headers.
-    void *(*fn_parse)(void *, const char *, const char *);
-    void *(*fn_compile_ast)(void *, void *, const char *);
-    void *(*fn_compile_src)(void *, const char *, const char *);
-    void (*fn_ast_free)(void *);
+    // The module runtime stores an opaque compiler session pointer and only
+    // passes it back into toolchain-owned hook functions.
+    XrCompilerSession *compiler_session;
+    XrModuleParseHook fn_parse;
+    XrModuleCompileAstHook fn_compile_ast;
+    XrModuleCompileSourceHook fn_compile_src;
+    XrModuleAstFreeHook fn_ast_free;
 } XrModuleRegistry;
 
 /* ========== Module System API ========== */
@@ -258,11 +269,13 @@ XR_FUNC void xr_module_register_stdlib(struct XrayIsolate *isolate);
 
 /* ========== Compiler Hook Registration ========== */
 
-// Set compiler hooks for module loading (per-Isolate, called during isolate init).
-// Uses void* function pointers to avoid pulling in parser/compiler headers.
-XR_FUNC void xr_module_set_compiler_hooks(
-    struct XrayIsolate *isolate, void *(*parse_fn)(void *, const char *, const char *),
-    void *(*compile_ast_fn)(void *, void *, const char *),
-    void *(*compile_src_fn)(void *, const char *, const char *), void (*ast_free_fn)(void *));
+// Set compiler hooks for module loading (per-Isolate, called during full isolate init).
+// The module runtime borrows `compiler_session`; it does not own or free it.
+XR_FUNC void xr_module_set_compiler_hooks(struct XrayIsolate *isolate,
+                                          XrCompilerSession *compiler_session,
+                                          XrModuleParseHook parse_fn,
+                                          XrModuleCompileAstHook compile_ast_fn,
+                                          XrModuleCompileSourceHook compile_src_fn,
+                                          XrModuleAstFreeHook ast_free_fn);
 
 #endif  // XMODULE_H

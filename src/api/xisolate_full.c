@@ -109,14 +109,9 @@ static int isolate_init_full(XrayIsolate *isolate) {
     (void) xr_module_import(isolate, "prelude");
 
     // Compiler hooks for import
-    {
-        typedef void *(*GenFn3)(void *, const char *, const char *);
-        typedef void *(*GenFn3b)(void *, void *, const char *);
-        typedef void (*GenFn1)(void *);
-        xr_module_set_compiler_hooks(
-            isolate, (GenFn3) xr_parse_with_source, (GenFn3b) xr_compile_ast_with_source,
-            (GenFn3) xr_compile_source_with_path, (GenFn1) xr_program_destroy);
-    }
+    xr_module_set_compiler_hooks(isolate, isolate->compiler_session, xr_parse_with_source,
+                                 xr_compile_ast_with_source_session,
+                                 xr_compile_source_with_path_session, xr_program_destroy);
 
     // Native XrClasses for Logger / DateTime / Regex / NetConn /
     // NetListener are registered up front inside the prelude module

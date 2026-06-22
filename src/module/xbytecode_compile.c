@@ -16,6 +16,7 @@
 #include "../frontend/parser/xparse.h"
 #include "../runtime/xisolate_api.h"
 #include "../runtime/value/xchunk.h"
+#include "../toolchain/xcompiler_session.h"
 #include "xray_isolate.h"
 #include <stdio.h>
 
@@ -29,7 +30,13 @@ bool xr_compile_to_file(XrayIsolate *X, const char *source_file, const char *out
     }
 
     // Parse
-    AstNode *ast = xr_parse_with_source(X, source, source_file);
+    XrCompilerSession *session = xr_compiler_session_current_for_isolate(X);
+    if (!session) {
+        xr_log_warning("compile", "compiler session is required");
+        xr_free(source);
+        return false;
+    }
+    AstNode *ast = xr_parse_with_source(session, source, source_file);
     xr_free(source);
 
     if (!ast) {
@@ -38,7 +45,7 @@ bool xr_compile_to_file(XrayIsolate *X, const char *source_file, const char *out
     }
 
     // Compile
-    XrProto *proto = xr_compile_ast_with_source(X, ast, source_file);
+    XrProto *proto = xr_compile_ast_with_source_session(session, ast, source_file);
     xr_program_destroy(ast);
 
     if (!proto) {

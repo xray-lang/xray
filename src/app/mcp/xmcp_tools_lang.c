@@ -155,7 +155,8 @@ XR_FUNC XrJsonValue *xmcp_tool_xray_analyze(XmcpServer *server, const XmcpCallCo
         xmcp_send_progress_notification(server, ptok, 0, 2);
 
     XrCompilerSessionScope parse_scope;
-    if (!xr_compiler_session_push_arena(server->isolate, arena, filename, &parse_scope)) {
+    if (!xr_compiler_session_push_arena(xr_compiler_session_current_for_isolate(server->isolate),
+                                        arena, filename, &parse_scope)) {
         xr_arena_destroy(arena);
         xr_free(arena);
         return xmcp_make_error_result("Error: failed to enter compiler session");
@@ -163,7 +164,8 @@ XR_FUNC XrJsonValue *xmcp_tool_xray_analyze(XmcpServer *server, const XmcpCallCo
 
     ErrorCapture cap = {.count = 0};
     Parser parser;
-    xr_parser_init(&parser, server->isolate, code, filename, arena);
+    xr_parser_init(&parser, xr_compiler_session_current_for_isolate(server->isolate), code,
+                   filename, arena);
     xr_parser_set_error_callback(&parser, check_error_callback, &cap, XMCP_TOOLS_MAX_CHECK_ERRORS);
     AstNode *ast = xr_parse_recoverable(&parser);
 
@@ -256,13 +258,17 @@ XR_FUNC XrJsonValue *xmcp_tool_xray_format(XmcpServer *server, const XmcpCallCon
     if (xjson_get_bool(arguments, "useTabs"))
         config.use_tabs = 1;
 
+    XrCompilerSession *session = xr_compiler_session_current_for_isolate(server->isolate);
+    if (!session)
+        return xmcp_make_error_result("Error: compiler session is required");
+
     XrArena *arena = xr_malloc(sizeof(XrArena));
     if (!arena)
         return xmcp_make_error_result("Error: out of memory");
     xr_arena_init(arena, 0);
 
     XrCompilerSessionScope syntax_scope;
-    if (!xr_compiler_session_push_arena(server->isolate, arena, "<mcp-format>", &syntax_scope)) {
+    if (!xr_compiler_session_push_arena(session, arena, "<mcp-format>", &syntax_scope)) {
         xr_arena_destroy(arena);
         xr_free(arena);
         return xmcp_make_error_result("Error: failed to enter compiler session");
@@ -270,7 +276,7 @@ XR_FUNC XrJsonValue *xmcp_tool_xray_format(XmcpServer *server, const XmcpCallCon
 
     ErrorCapture cap = {.count = 0};
     Parser parser;
-    xr_parser_init(&parser, server->isolate, code, "<mcp-format>", arena);
+    xr_parser_init(&parser, session, code, "<mcp-format>", arena);
     xr_parser_set_error_callback(&parser, check_error_callback, &cap, XMCP_TOOLS_MAX_CHECK_ERRORS);
     AstNode *syntax_ast = xr_parse_recoverable(&parser);
     (void) syntax_ast;
@@ -294,7 +300,7 @@ XR_FUNC XrJsonValue *xmcp_tool_xray_format(XmcpServer *server, const XmcpCallCon
     xr_arena_destroy(arena);
     xr_free(arena);
 
-    AstNode *ast = xr_parse_with_trivia(server->isolate, code, "<mcp-format>");
+    AstNode *ast = xr_parse_with_trivia(session, code, "<mcp-format>");
     if (!ast) {
         XrJsonValue *diagnostics = xjson_new_array();
         XrJsonValue *structured = make_format_result_content(

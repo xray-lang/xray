@@ -118,10 +118,15 @@ XR_FUNC bool xr_isolate_module_allowed(XrayIsolate *X, const char *module_name);
 
 struct XrProto;
 struct AstNode;
+struct XrCompilerSession;
 XR_FUNC XrProto *xr_compile_ast_with_source(XrayIsolate *isolate, struct AstNode *ast,
                                             const char *source_file);
 XR_FUNC XrProto *xr_compile_source_with_path(XrayIsolate *isolate, const char *source,
                                              const char *source_file);
+XR_FUNC XrProto *xr_compile_ast_with_source_session(struct XrCompilerSession *session,
+                                                    struct AstNode *ast, const char *source_file);
+XR_FUNC XrProto *xr_compile_source_with_path_session(struct XrCompilerSession *session,
+                                                     const char *source, const char *source_file);
 XR_FUNC int xr_execute(XrayIsolate *isolate, struct XrProto *code);
 XR_FUNC void xr_free_code(XrayIsolate *isolate, struct XrProto *proto);
 

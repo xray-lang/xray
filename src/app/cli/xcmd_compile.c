@@ -23,6 +23,7 @@
 #include "../../frontend/parser/xast_api.h"
 #include "../../module/xbytecode_io.h"
 #include "../../runtime/value/xchunk.h"
+#include "../../toolchain/xcompiler_session.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
 #include <stdio.h>
@@ -137,14 +138,15 @@ XR_FUNC int cmd_compile(const XrCliInvocation *inv) {
     }
 
     /* Parse */
-    ast = xr_parse_with_source(X, source, input_file);
+    XrCompilerSession *session = xr_compiler_session_current_for_isolate(X);
+    ast = xr_parse_with_source(session, source, input_file);
     if (!ast) {
         xr_cli_error("compile", "parsing failed");
         goto cleanup;
     }
 
     /* Compile */
-    XrProto *proto = xr_compile_ast_with_source(X, ast, input_file);
+    XrProto *proto = xr_compile_ast_with_source_session(session, ast, input_file);
     if (!proto) {
         xr_cli_error("compile", "compilation failed");
         goto cleanup;

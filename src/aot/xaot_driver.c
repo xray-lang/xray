@@ -42,6 +42,7 @@
 #include "xaot_prepare.h"
 #include "xaot_verify.h"
 #include "../frontend/analyzer/xanalyzer.h"
+#include "../toolchain/xcompiler_session.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -720,7 +721,8 @@ XR_FUNC int xaot_build_ex(const char *input_path, bool emit_plan_dump, bool emit
     xr_module_system_init_with_script(X, input_path);
     XrModuleRegistry *registry = xr_isolate_get_module_registry(X);
     XrModuleResolver *resolver = xr_module_registry_get_resolver(registry);
-    XrModuleGraph *graph = xr_module_graph_new(X, resolver);
+    XrModuleGraph *graph =
+        xr_module_graph_new(xr_compiler_session_current_for_isolate(X), resolver);
     if (!graph) {
         fprintf(stderr, "Error: failed to create module graph\n");
         xray_isolate_delete(X);

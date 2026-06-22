@@ -27,11 +27,9 @@
 /* ========== Forward Declarations ========== */
 
 // Internal parser init with trivia collection option
-static void xr_parser_init_internal(Parser *parser, XrayIsolate *X, const char *source,
+static void xr_parser_init_internal(Parser *parser, XrCompilerSession *session, const char *source,
                                     const char *source_file, struct XrArena *arena,
                                     bool collect_trivia);
-
-static void xr_parser_cleanup_owned_session(Parser *parser);
 
 // Declarations now in xparse_internal.h; definitions in xparse_expr.c and xparse_decl.c
 
@@ -814,32 +812,22 @@ AstNode *xr_parse_statement(Parser *parser) {
 
 // Initialize parser
 // arena: optional arena for AST allocation (NULL = use malloc)
-void xr_parser_init(Parser *parser, XrayIsolate *X, const char *source, const char *source_file,
-                    XrArena *arena) {
+void xr_parser_init(Parser *parser, XrCompilerSession *session, const char *source,
+                    const char *source_file, XrArena *arena) {
     XR_DCHECK(parser != NULL, "parser_init: NULL parser");
+    XR_DCHECK(session != NULL, "parser_init: NULL compiler session");
     XR_DCHECK(source != NULL, "parser_init: NULL source");
-    xr_parser_init_internal(parser, X, source, source_file, arena, false);
+    xr_parser_init_internal(parser, session, source, source_file, arena, false);
 }
 
 // Internal init with trivia collection option
-static void xr_parser_init_internal(Parser *parser, XrayIsolate *X, const char *source,
+static void xr_parser_init_internal(Parser *parser, XrCompilerSession *session, const char *source,
                                     const char *source_file, XrArena *arena, bool collect_trivia) {
+    XR_CHECK(session != NULL, "xr_parser_init: NULL compiler session");
+    XrayIsolate *X = xr_compiler_session_vm_host(session);
+    XR_CHECK(X != NULL, "xr_parser_init: compiler session has no VM host");
     parser->X = X;
-    parser->compiler_session = xr_compiler_session_current_for_isolate(X);
-    parser->saved_compiler_session = NULL;
-    parser->owns_compiler_session = false;
-    if (!parser->compiler_session && arena) {
-        XrCompilerSessionConfig cfg = {
-            .vm_host = X,
-            .source_file = source_file,
-        };
-        parser->compiler_session = xr_compiler_session_new(&cfg);
-        XR_CHECK(parser->compiler_session != NULL,
-                 "xr_parser_init: failed to allocate compiler session");
-        parser->saved_compiler_session =
-            xr_compiler_session_attach_isolate(X, parser->compiler_session);
-        parser->owns_compiler_session = true;
-    }
+    parser->compiler_session = session;
     if (parser->compiler_session && arena) {
         xr_compiler_session_set_current_arena(parser->compiler_session, arena);
         if (!xr_compiler_session_string_pool(parser->compiler_session)) {
@@ -873,27 +861,15 @@ static void xr_parser_init_internal(Parser *parser, XrayIsolate *X, const char *
     parser->scope_depth = 0;
 }
 
-static void xr_parser_cleanup_owned_session(Parser *parser) {
-    if (!parser || !parser->owns_compiler_session)
-        return;
-    xr_compiler_session_set_string_pool(parser->compiler_session, NULL);
-    xr_compiler_session_set_current_arena(parser->compiler_session, NULL);
-    xr_compiler_session_attach_isolate(parser->X, parser->saved_compiler_session);
-    xr_compiler_session_delete(parser->compiler_session);
-    parser->compiler_session = NULL;
-    parser->saved_compiler_session = NULL;
-    parser->owns_compiler_session = false;
-}
-
 // Allocate and install a new arena on a toolchain compiler session.
 // The returned arena pointer is heap-allocated (xr_malloc) so it outlives
 // the stack frame; its memory is reclaimed by xr_program_destroy.
-static XrArena *xr_parse_setup_arena(XrayIsolate *X, const char *source_file,
+static XrArena *xr_parse_setup_arena(XrCompilerSession *session, const char *source_file,
                                      XrCompilerSessionScope *scope) {
     XrArena *arena = (XrArena *) xr_malloc(sizeof(XrArena));
     XR_CHECK(arena != NULL, "xr_parse: failed to allocate parse arena");
     xr_arena_init(arena, XR_ARENA_SEGMENT_SIZE);
-    XR_CHECK(xr_compiler_session_push_arena(X, arena, source_file, scope),
+    XR_CHECK(xr_compiler_session_push_arena(session, arena, source_file, scope),
              "xr_parse: failed to enter compiler session arena");
     return arena;
 }
@@ -910,22 +886,26 @@ static void xr_parse_discard_arena(XrArena *owned, XrCompilerSessionScope *scope
 }
 
 // Parse source code, return AST (main entry)
-AstNode *xr_parse(XrayIsolate *X, const char *source) {
+AstNode *xr_parse(XrCompilerSession *session, const char *source) {
     XR_DCHECK(source != NULL, "xr_parse: NULL source");
-    return xr_parse_with_source(X, source, NULL);
+    return xr_parse_with_source(session, source, NULL);
 }
 
 // Parse source code with filename, return AST.
 // Creates and owns a dedicated arena; ownership is transferred to the returned
 // program node. xr_program_destroy on the returned node releases all memory.
-AstNode *xr_parse_with_source(XrayIsolate *X, const char *source, const char *source_file) {
+AstNode *xr_parse_with_source(XrCompilerSession *session, const char *source,
+                              const char *source_file) {
+    XR_DCHECK(session != NULL, "xr_parse_with_source: NULL compiler session");
+    XrayIsolate *X = xr_compiler_session_vm_host(session);
+    XR_DCHECK(X != NULL, "xr_parse_with_source: compiler session has no VM host");
     XR_DCHECK(source != NULL, "xr_parse_with_source: NULL source");
 
     XrCompilerSessionScope parse_scope;
-    XrArena *arena = xr_parse_setup_arena(X, source_file, &parse_scope);
+    XrArena *arena = xr_parse_setup_arena(session, source_file, &parse_scope);
 
     Parser parser;
-    xr_parser_init(&parser, X, source, source_file, arena);
+    xr_parser_init(&parser, session, source, source_file, arena);
 
 // Default max errors for normal compilation
 #define XR_PARSE_MAX_ERRORS 20
@@ -991,12 +971,16 @@ AstNode *xr_parse_with_source(XrayIsolate *X, const char *source, const char *so
 }
 
 // Parse source code with trivia collection (for formatter)
-AstNode *xr_parse_with_trivia(XrayIsolate *X, const char *source, const char *source_file) {
+AstNode *xr_parse_with_trivia(XrCompilerSession *session, const char *source,
+                              const char *source_file) {
+    XR_DCHECK(session != NULL, "xr_parse_with_trivia: NULL compiler session");
+    XrayIsolate *X = xr_compiler_session_vm_host(session);
+    XR_DCHECK(X != NULL, "xr_parse_with_trivia: compiler session has no VM host");
     XrCompilerSessionScope parse_scope;
-    XrArena *arena = xr_parse_setup_arena(X, source_file, &parse_scope);
+    XrArena *arena = xr_parse_setup_arena(session, source_file, &parse_scope);
 
     Parser parser;
-    xr_parser_init_internal(&parser, X, source, source_file, arena, true);
+    xr_parser_init_internal(&parser, session, source, source_file, arena, true);
 
     AstNode *program = xr_ast_program(X);
 
@@ -1086,19 +1070,23 @@ AstNode *xr_parse_with_trivia(XrayIsolate *X, const char *source, const char *so
 // Returns NULL on parse error (arena is auto-discarded).
 //
 // Example:
-//   AstNode *prog = xr_parse_expression_string(X, "a + b * 2", "<eval>");
+//   AstNode *prog = xr_parse_expression_string(session, "a + b * 2", "<eval>");
 //   if (!prog) { /* report error */ return; }
 //   AstNode *expr = prog->as.program.statements[0];
 //   ... evaluate expr ...
 //   xr_program_destroy(prog);
-AstNode *xr_parse_expression_string(XrayIsolate *X, const char *source, const char *source_file) {
+AstNode *xr_parse_expression_string(XrCompilerSession *session, const char *source,
+                                    const char *source_file) {
+    XR_DCHECK(session != NULL, "xr_parse_expression_string: NULL compiler session");
+    XrayIsolate *X = xr_compiler_session_vm_host(session);
+    XR_DCHECK(X != NULL, "xr_parse_expression_string: compiler session has no VM host");
     XR_DCHECK(source != NULL, "xr_parse_expression_string: NULL source");
 
     XrCompilerSessionScope parse_scope;
-    XrArena *arena = xr_parse_setup_arena(X, source_file, &parse_scope);
+    XrArena *arena = xr_parse_setup_arena(session, source_file, &parse_scope);
 
     Parser parser;
-    xr_parser_init(&parser, X, source, source_file, arena);
+    xr_parser_init(&parser, session, source, source_file, arena);
 
     AstNode *program = xr_ast_program(X);
 
@@ -1139,7 +1127,6 @@ AstNode *xr_parse_recoverable(Parser *parser) {
     AstNode *program = xr_ast_program(parser->X);
     if (!program) {
         xr_log_warning("parser", "parse_recoverable: failed to create program node");
-        xr_parser_cleanup_owned_session(parser);
         return NULL;
     }
 
@@ -1188,8 +1175,6 @@ AstNode *xr_parse_recoverable(Parser *parser) {
 
     xr_type_scope_free(parser->type_scope);
     parser->type_scope = NULL;
-
-    xr_parser_cleanup_owned_session(parser);
 
     // Return partial AST even if there were errors
     return program;

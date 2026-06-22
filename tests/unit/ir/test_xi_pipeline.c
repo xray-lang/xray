@@ -56,7 +56,7 @@ static XrProto *compile_source(const char *source, XiPipelineConfig *cfg) {
     if (!analyzer)
         return NULL;
 
-    AstNode *program = xr_parse(g_iso, source);
+    AstNode *program = xr_parse(xr_compiler_session_current_for_isolate(g_iso), source);
     if (!program) {
         fprintf(stderr, "  PARSE FAILED for: %s\n", source);
         xa_analyzer_free(analyzer);

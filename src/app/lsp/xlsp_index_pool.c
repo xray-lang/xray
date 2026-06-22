@@ -228,7 +228,8 @@ static XrLspIndexResult *parse_file(XrayIsolate *isolate, const char *path, cons
     XrArena arena;
     xr_arena_init(&arena, 64 * 1024);
     XrCompilerSessionScope parse_scope;
-    if (!xr_compiler_session_push_arena(isolate, &arena, uri, &parse_scope)) {
+    if (!xr_compiler_session_push_arena(xr_compiler_session_current_for_isolate(isolate), &arena,
+                                        uri, &parse_scope)) {
         result->error_message = xr_strdup("Cannot enter compiler session");
         xr_arena_destroy(&arena);
         xr_free(content);
@@ -236,7 +237,7 @@ static XrLspIndexResult *parse_file(XrayIsolate *isolate, const char *path, cons
     }
 
     Parser parser;
-    xr_parser_init(&parser, isolate, content, uri, &arena);
+    xr_parser_init(&parser, xr_compiler_session_current_for_isolate(isolate), content, uri, &arena);
     AstNode *ast = xr_parse_recoverable(&parser);
     xr_compiler_session_pop_arena(&parse_scope);
 

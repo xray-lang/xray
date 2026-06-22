@@ -25,6 +25,7 @@
 
 /* Forward declarations */
 struct AstNode;
+struct XrCompilerSession;
 struct XrayIsolate;
 
 /* ========== Module Spec Status ========== */
@@ -85,7 +86,10 @@ typedef struct XrModuleGraph {
     /* The resolver used during build */
     XrModuleResolver *resolver;
 
-    /* Isolate for parsing */
+    /* Compiler session used for parsing graph sources. */
+    struct XrCompilerSession *compiler_session;
+
+    /* VM host for AST factories while parser/analyzer migration is in progress. */
     struct XrayIsolate *X;
 
     /* Entry module index */
@@ -95,8 +99,9 @@ typedef struct XrModuleGraph {
 /* ========== API ========== */
 
 /* Create a new empty module graph.  The resolver is borrowed (not freed).
- * The isolate is needed for parsing source files. */
-XR_FUNC XrModuleGraph *xr_module_graph_new(struct XrayIsolate *X, XrModuleResolver *resolver);
+ * The compiler session is borrowed and used for parsing source files. */
+XR_FUNC XrModuleGraph *xr_module_graph_new(struct XrCompilerSession *compiler_session,
+                                           XrModuleResolver *resolver);
 
 /* Free the graph and all owned specs/ASTs. */
 XR_FUNC void xr_module_graph_free(XrModuleGraph *g);

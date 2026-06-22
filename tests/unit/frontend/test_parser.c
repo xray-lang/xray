@@ -28,13 +28,22 @@
 /* ========== Test Infrastructure ========== */
 
 static XrayIsolate *X = NULL;
+static XrCompilerSession *X_session = NULL;
 
 static void setup(void) {
     X = xray_isolate_new(NULL);
     ASSERT_NOT_NULL(X);
+    XrCompilerSessionConfig cfg = {.vm_host = X};
+    X_session = xr_compiler_session_new(&cfg);
+    ASSERT_NOT_NULL(X_session);
+    xr_compiler_session_attach_isolate(X, X_session);
 }
 
 static void teardown(void) {
+    if (X_session) {
+        xr_compiler_session_delete(X_session);
+        X_session = NULL;
+    }
     if (X) {
         xray_isolate_delete(X);
         X = NULL;
@@ -43,7 +52,7 @@ static void teardown(void) {
 
 /* Helper: parse source and assert success */
 static AstNode *parse_ok(const char *source) {
-    AstNode *ast = xr_parse(X, source);
+    AstNode *ast = xr_parse(xr_compiler_session_current_for_isolate(X), source);
     assert(ast != NULL && "parse_ok: parse failed");
     assert(ast->type == AST_PROGRAM);
     return ast;
@@ -261,7 +270,8 @@ TEST(parser_select_wildcard_default_arm) {
 
 TEST(parser_select_default_keyword_rejected) {
     setup();
-    AstNode *ast = xr_parse(X, "select {\n  default -> { print(\"idle\") }\n}");
+    AstNode *ast = xr_parse(xr_compiler_session_current_for_isolate(X),
+                            "select {\n  default -> { print(\"idle\") }\n}");
     ASSERT_NULL(ast);
     teardown();
 }
@@ -355,14 +365,14 @@ TEST(parser_class_decl) {
 TEST(parser_error_returns_null) {
     setup();
     // Unclosed brace should cause parse error
-    AstNode *ast = xr_parse(X, "fn f() {");
+    AstNode *ast = xr_parse(xr_compiler_session_current_for_isolate(X), "fn f() {");
     ASSERT_TRUE(ast == NULL);
     teardown();
 }
 
 TEST(parser_empty_source) {
     setup();
-    AstNode *ast = xr_parse(X, "");
+    AstNode *ast = xr_parse(xr_compiler_session_current_for_isolate(X), "");
     ASSERT_NOT_NULL(ast);
     ASSERT_EQ_INT(ast->type, AST_PROGRAM);
     ASSERT_EQ_INT(ast->as.program.count, 0);

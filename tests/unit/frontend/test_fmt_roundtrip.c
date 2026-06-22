@@ -25,6 +25,7 @@
 #include "frontend/parser/xast_nodes.h"
 #include "xray_isolate.h"
 #include "base/xmalloc.h"
+#include "toolchain/xcompiler_session.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -37,14 +38,24 @@
 /* ====================================================================== */
 
 static XrayIsolate *g_iso = NULL;
+static XrCompilerSession *g_session = NULL;
 
 static void setup(void) {
     XrayIsolateParams p;
     xray_isolate_params_init(&p);
     g_iso = xray_isolate_new(&p);
+    ASSERT_NOT_NULL(g_iso);
+    XrCompilerSessionConfig cfg = {.vm_host = g_iso};
+    g_session = xr_compiler_session_new(&cfg);
+    ASSERT_NOT_NULL(g_session);
+    xr_compiler_session_attach_isolate(g_iso, g_session);
 }
 
 static void teardown(void) {
+    if (g_session) {
+        xr_compiler_session_delete(g_session);
+        g_session = NULL;
+    }
     if (g_iso) {
         xray_isolate_delete(g_iso);
         g_iso = NULL;
@@ -53,7 +64,8 @@ static void teardown(void) {
 
 /* Parse with trivia and format to a heap string. Returns NULL on error. */
 static char *parse_and_format(const char *source, const char *filename) {
-    AstNode *ast = xr_parse_with_trivia(g_iso, source, filename);
+    AstNode *ast =
+        xr_parse_with_trivia(xr_compiler_session_current_for_isolate(g_iso), source, filename);
     if (!ast)
         return NULL;
     char *out = xfmt_format_ast(ast, NULL, g_iso);
@@ -335,7 +347,8 @@ TEST(arrow_return_type_emitted) {
 /* ====================================================================== */
 
 static char *format_with_config(const char *source, XrFmtConfig *cfg) {
-    AstNode *ast = xr_parse_with_trivia(g_iso, source, "<test>");
+    AstNode *ast =
+        xr_parse_with_trivia(xr_compiler_session_current_for_isolate(g_iso), source, "<test>");
     if (!ast)
         return NULL;
     char *out = xfmt_format_ast(ast, cfg, g_iso);
@@ -405,7 +418,8 @@ TEST(match_arms_aligned_idempotent) {
     char *fmt1 = format_with_config(src, &cfg);
     ASSERT_NOT_NULL(fmt1);
     /* fmt(fmt(src)) == fmt(src) — alignment must not drift on re-format. */
-    AstNode *ast2 = xr_parse_with_trivia(g_iso, fmt1, "<test>");
+    AstNode *ast2 =
+        xr_parse_with_trivia(xr_compiler_session_current_for_isolate(g_iso), fmt1, "<test>");
     ASSERT_NOT_NULL(ast2);
     char *fmt2 = xfmt_format_ast(ast2, &cfg, g_iso);
     xr_program_destroy(ast2);
@@ -640,7 +654,8 @@ TEST(trailing_comments_idempotent) {
     cfg.align_trailing_comments = 1;
     char *fmt1 = format_with_config(src, &cfg);
     ASSERT_NOT_NULL(fmt1);
-    AstNode *ast2 = xr_parse_with_trivia(g_iso, fmt1, "<test>");
+    AstNode *ast2 =
+        xr_parse_with_trivia(xr_compiler_session_current_for_isolate(g_iso), fmt1, "<test>");
     ASSERT_NOT_NULL(ast2);
     char *fmt2 = xfmt_format_ast(ast2, &cfg, g_iso);
     xr_program_destroy(ast2);

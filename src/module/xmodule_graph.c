@@ -22,6 +22,7 @@
 #include "../frontend/parser/xast.h"
 #include "../frontend/parser/xparse.h"
 #include "../os/os_fs.h"
+#include "../toolchain/xcompiler_session.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -36,8 +37,16 @@ extern void xr_program_destroy(struct AstNode *ast);
 
 /* ========== Lifecycle ========== */
 
-XR_FUNC XrModuleGraph *xr_module_graph_new(XrayIsolate *X, XrModuleResolver *resolver) {
+XR_FUNC XrModuleGraph *xr_module_graph_new(XrCompilerSession *compiler_session,
+                                           XrModuleResolver *resolver) {
+    XR_DCHECK(compiler_session != NULL, "xr_module_graph_new: NULL compiler session");
     XR_DCHECK(resolver != NULL, "xr_module_graph_new: NULL resolver");
+    if (!compiler_session || !resolver)
+        return NULL;
+    XrayIsolate *X = xr_compiler_session_vm_host(compiler_session);
+    XR_DCHECK(X != NULL, "xr_module_graph_new: compiler session has no VM host");
+    if (!X)
+        return NULL;
     XrModuleGraph *g = xr_calloc(1, sizeof(XrModuleGraph));
     if (!g)
         return NULL;
@@ -50,6 +59,7 @@ XR_FUNC XrModuleGraph *xr_module_graph_new(XrayIsolate *X, XrModuleResolver *res
     g->spec_capacity = GRAPH_INITIAL_CAP;
     g->id_index = xr_hashmap_new();
     g->resolver = resolver;
+    g->compiler_session = compiler_session;
     g->X = X;
     g->entry_index = -1;
     return g;
@@ -261,7 +271,7 @@ XR_FUNC int xr_module_graph_build(XrModuleGraph *g, const char *entry_path, char
             continue;
         }
 
-        struct AstNode *ast = xr_parse_with_source(g->X, source, spec->source_path);
+        struct AstNode *ast = xr_parse_with_source(g->compiler_session, source, spec->source_path);
         xr_free(source);
 
         if (!ast) {
