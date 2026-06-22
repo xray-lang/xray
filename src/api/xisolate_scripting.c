@@ -142,13 +142,18 @@ int xray_isolate_dostring(XrayIsolate *isolate, const char *source) {
     xray_api_checkr(isolate != NULL, "xray_isolate_dostring: NULL isolate", -1);
     xray_api_checkr(source != NULL, "xray_isolate_dostring: NULL source", -1);
 
-    AstNode *ast = xr_parse(isolate, source);
+    XrCompilerSession *session = xr_compiler_session_current_for_isolate(isolate);
+    if (!session) {
+        fprintf(stderr, "Compiler unavailable: source execution requires a compiler session\n");
+        return -1;
+    }
+    AstNode *ast = xr_parse(session, source);
     if (ast == NULL) {
         fprintf(stderr, "Parse error\n");
         return -1;
     }
 
-    XrProto *code = xr_compile_ast(isolate, ast);
+    XrProto *code = xr_compile_ast_with_source_session(session, ast, NULL);
     if (code == NULL) {
         fprintf(stderr, "Compilation error\n");
         xr_program_destroy(ast);
@@ -178,13 +183,19 @@ int xray_isolate_dofile(XrayIsolate *isolate, const char *filename) {
         xr_source_cache_add(source_cache, filename, source);
     }
 
-    AstNode *ast = xr_parse_with_source(isolate, source, filename);
+    XrCompilerSession *session = xr_compiler_session_current_for_isolate(isolate);
+    if (!session) {
+        fprintf(stderr, "Compiler unavailable: source execution requires a compiler session\n");
+        xr_free(source);
+        return -1;
+    }
+    AstNode *ast = xr_parse_with_source(session, source, filename);
     if (ast == NULL) {
         xr_free(source);
         return -1;
     }
 
-    XrProto *code = xr_compile_ast_with_source(isolate, ast, filename);
+    XrProto *code = xr_compile_ast_with_source_session(session, ast, filename);
     if (code == NULL) {
         xr_program_destroy(ast);
         xr_free(source);
@@ -217,13 +228,19 @@ int xray_isolate_dofile_debug(XrayIsolate *isolate, const char *filename, void *
         xr_source_cache_add(source_cache, filename, source);
     }
 
-    AstNode *ast = xr_parse_with_source(isolate, source, filename);
+    XrCompilerSession *session = xr_compiler_session_current_for_isolate(isolate);
+    if (!session) {
+        fprintf(stderr, "Compiler unavailable: source execution requires a compiler session\n");
+        xr_free(source);
+        return -1;
+    }
+    AstNode *ast = xr_parse_with_source(session, source, filename);
     if (ast == NULL) {
         xr_free(source);
         return -1;
     }
 
-    XrProto *code = xr_compile_ast_with_source(isolate, ast, filename);
+    XrProto *code = xr_compile_ast_with_source_session(session, ast, filename);
     if (code == NULL) {
         xr_program_destroy(ast);
         xr_free(source);

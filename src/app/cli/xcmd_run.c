@@ -24,6 +24,7 @@
 #include "../../module/xmodule_resolver.h"
 #include "../../runtime/xisolate_api.h"
 #include "../../frontend/analyzer/xanalyzer.h"
+#include "../../toolchain/xcompiler_session.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
 #include <stdio.h>
@@ -127,7 +128,8 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
         XrModuleRegistry *registry = xr_isolate_get_module_registry(iso);
         XrModuleResolver *resolver = xr_module_registry_get_resolver(registry);
         if (resolver) {
-            XrModuleGraph *graph = xr_module_graph_new(iso, resolver);
+            XrModuleGraph *graph =
+                xr_module_graph_new(xr_compiler_session_current_for_isolate(iso), resolver);
             if (graph) {
                 char *err = NULL;
                 if (xr_module_graph_build(graph, file, &err) == 0) {

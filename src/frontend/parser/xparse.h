@@ -41,14 +41,14 @@
 #include "../lexer/xlex.h"
 #include "xast.h"
 #include "../../runtime/value/xtype.h"
+#include "../../toolchain/xcompiler_session.h"
 #include "../../base/xdefs.h"
 
 /* ========== Public Forward Declarations ========== */
 
 typedef struct Parser Parser;
 typedef struct XrTypeScope XrTypeScope;  // Defined in xtype_scope.h
-typedef struct XrCompilerSession XrCompilerSession;
-struct XrArena;  // Defined in base/xarena.h
+struct XrArena;                          // Defined in base/xarena.h
 
 // Error callback for LSP integration: each lexer/parser diagnostic is
 // reported by invoking this on `user_data`. `end_line`/`end_column`
@@ -72,13 +72,11 @@ struct Parser {
     Token previous;                       // Previous token
     int had_error;                        // Whether there was a syntax error
     int panic_mode;                       // Whether in panic mode (error recovery)
-    XrayIsolate *X;                       // Xray isolate
+    XrayIsolate *X;                       // VM host while AST factories still require it.
     XrCompilerSession *compiler_session;  // Active toolchain session for AST allocation.
-    XrCompilerSession *saved_compiler_session;
-    bool owns_compiler_session;
-    struct XrArena *arena;    // Optional arena for AST allocation (NULL = use malloc)
-    XrTypeScope *type_scope;  // Parser-owned scope for type aliases / generic params
-    const char *source_file;  // Source file path (for error reporting)
+    struct XrArena *arena;                // Optional arena for AST allocation (NULL = use malloc)
+    XrTypeScope *type_scope;              // Parser-owned scope for type aliases / generic params
+    const char *source_file;              // Source file path (for error reporting)
 
     // Error callback (for LSP)
     XrParseErrorCallback error_callback;
@@ -107,20 +105,22 @@ struct Parser {
 
 // Parse a complete program. Returns AST_PROGRAM node owning its arena;
 // release with xr_program_destroy(). Returns NULL on parse error.
-XR_FUNC AstNode *xr_parse(XrayIsolate *X, const char *source);
+XR_FUNC AstNode *xr_parse(XrCompilerSession *session, const char *source);
 
 // Same as xr_parse but tags diagnostics with the given file path.
-XR_FUNC AstNode *xr_parse_with_source(XrayIsolate *X, const char *source, const char *source_file);
+XR_FUNC AstNode *xr_parse_with_source(XrCompilerSession *session, const char *source,
+                                      const char *source_file);
 
 // Parse a program AND collect comments as trivia attached to AST nodes.
 // Used by the formatter; otherwise prefer xr_parse_with_source.
-XR_FUNC AstNode *xr_parse_with_trivia(XrayIsolate *X, const char *source, const char *source_file);
+XR_FUNC AstNode *xr_parse_with_trivia(XrCompilerSession *session, const char *source,
+                                      const char *source_file);
 
 // Parse a single expression as a self-contained translation unit.
 // Returns an AST_PROGRAM node whose first declaration is the expression
 // (so xr_program_destroy() releases everything uniformly). Returns NULL
 // on parse error. Used by REPL completeness check and DAP eval.
-XR_FUNC AstNode *xr_parse_expression_string(XrayIsolate *X, const char *source,
+XR_FUNC AstNode *xr_parse_expression_string(XrCompilerSession *session, const char *source,
                                             const char *source_file);
 
 /* ========== LSP Recoverable Parsing ==========
@@ -129,16 +129,15 @@ XR_FUNC AstNode *xr_parse_expression_string(XrayIsolate *X, const char *source,
  * receive structured diagnostics via callback. Sequence:
  *
  *   Parser parser;
- *   xr_parser_init(&parser, X, source, source_file, arena);
+ *   xr_parser_init(&parser, session, source, source_file, arena);
  *   xr_parser_set_error_callback(&parser, cb, user_data, max_errors);
  *   AstNode *program = xr_parse_recoverable(&parser);
  *   ... inspect program / parser.had_error ...
  */
 
 // Initialise a stack-allocated Parser. `arena` is the arena to use for
-// AST allocation. The parser installs it on the active compiler session;
-// when no session is active, it creates a short-lived one for this parser.
-XR_FUNC void xr_parser_init(Parser *parser, XrayIsolate *X, const char *source,
+// AST allocation. The caller must pass an explicit compiler session.
+XR_FUNC void xr_parser_init(Parser *parser, XrCompilerSession *session, const char *source,
                             const char *source_file, struct XrArena *arena);
 
 // Install a diagnostic callback. Pass NULL to disable. `max_errors == 0`

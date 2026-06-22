@@ -36,6 +36,12 @@ static XrayIsolate *fuzz_isolate(void) {
         XrayIsolateParams params;
         xray_isolate_params_init(&params);
         iso = xray_isolate_new(&params);
+        if (iso) {
+            XrCompilerSessionConfig cfg = {.vm_host = iso};
+            XrCompilerSession *session = xr_compiler_session_new(&cfg);
+            if (session)
+                xr_compiler_session_attach_isolate(iso, session);
+        }
     }
     return iso;
 }
@@ -72,7 +78,8 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
     XrArena arena;
     xr_arena_init(&arena, XR_ARENA_SEGMENT_SIZE);
     XrCompilerSessionScope parse_scope;
-    if (!xr_compiler_session_push_arena(iso, &arena, "<fuzz>", &parse_scope)) {
+    if (!xr_compiler_session_push_arena(xr_compiler_session_current_for_isolate(iso), &arena,
+                                        "<fuzz>", &parse_scope)) {
         xr_arena_destroy(&arena);
         free(input);
         return 0;
@@ -80,7 +87,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
 
     /* Initialize parser with an explicit compiler-session arena. */
     Parser parser;
-    xr_parser_init(&parser, iso, input, "<fuzz>", &arena);
+    xr_parser_init(&parser, xr_compiler_session_current_for_isolate(iso), input, "<fuzz>", &arena);
 
     /* Parse the input using recoverable mode - errors are expected */
     AstNode *ast = xr_parse_recoverable(&parser);

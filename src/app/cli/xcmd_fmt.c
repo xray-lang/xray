@@ -58,7 +58,7 @@ static FmtConfig default_config = {.indent_size = 4,
 static char *format_source(XrayIsolate *X, const char *source, const char *path,
                            FmtConfig *config) {
     // Parse source to AST with trivia collection (preserves comments)
-    AstNode *ast = xr_parse_with_trivia(X, source, path);
+    AstNode *ast = xr_parse_with_trivia(xr_compiler_session_current_for_isolate(X), source, path);
     if (!ast) {
         // Parse failed - return NULL to indicate error
         return NULL;

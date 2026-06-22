@@ -36,10 +36,22 @@ static void ensure_compiler_proto_hooks(void) {
     xr_vm_proto_set_ir_free_fn(free_xi_func_opaque);
 }
 
-static void restore_session_type_pool(XrayIsolate *isolate) {
-    XrCompilerSession *session = xr_compiler_session_current_for_isolate(isolate);
+static void restore_session_type_pool(XrCompilerSession *session) {
     if (xr_compiler_session_analyzer_pool(session))
         xr_compiler_session_install_analyzer_pool(session);
+}
+
+static XrayIsolate *compile_session_vm_host(XrCompilerSession *session, const char *who) {
+    if (!session) {
+        xr_log_warning("vm", "%s: compiler session is required", who);
+        return NULL;
+    }
+    XrayIsolate *isolate = xr_compiler_session_vm_host(session);
+    if (!isolate) {
+        xr_log_warning("vm", "%s: compiler session has no VM host", who);
+        return NULL;
+    }
+    return isolate;
 }
 
 // Compile AST to bytecode (internal)
@@ -47,15 +59,18 @@ static void restore_session_type_pool(XrayIsolate *isolate) {
 // The compiler's for-in desugaring creates AST nodes via xr_ast_* helpers.
 // Re-enter the program arena through the active compiler session so these
 // synthetic nodes share the AST lifetime without mutating VM isolate state.
-static XrProto *compile_ast_internal(XrayIsolate *isolate, AstNode *ast, const char *source_file) {
-    XR_DCHECK(isolate != NULL, "compile_ast_internal: NULL isolate");
+static XrProto *compile_ast_internal(XrCompilerSession *session, AstNode *ast,
+                                     const char *source_file) {
+    XrayIsolate *isolate = compile_session_vm_host(session, "compile_ast_internal");
+    if (!isolate)
+        return NULL;
     XR_DCHECK(ast != NULL, "compile_ast_internal: NULL ast");
     ensure_compiler_proto_hooks();
 
     XrCompilerSessionScope ast_scope;
     bool has_ast_scope =
         ast->type == AST_PROGRAM && ast->as.program.arena &&
-        xr_compiler_session_push_arena(isolate, ast->as.program.arena, source_file, &ast_scope);
+        xr_compiler_session_push_arena(session, ast->as.program.arena, source_file, &ast_scope);
 
     XrCompilerContext *ctx = xr_compiler_context_new(isolate);
     if (ctx == NULL) {
@@ -82,7 +97,7 @@ static XrProto *compile_ast_internal(XrayIsolate *isolate, AstNode *ast, const c
 
     // Restore type pool: compiler context freed its analyzer-owned pool, so
     // TLS must fall back to the session-owned long-lived analyzer pool.
-    restore_session_type_pool(isolate);
+    restore_session_type_pool(session);
 
     if (has_ast_scope)
         xr_compiler_session_pop_arena(&ast_scope);
@@ -92,19 +107,34 @@ static XrProto *compile_ast_internal(XrayIsolate *isolate, AstNode *ast, const c
 
 // Compile AST to bytecode
 XrProto *xr_compile_ast(XrayIsolate *isolate, AstNode *ast) {
-    return compile_ast_internal(isolate, ast, NULL);
+    return xr_compile_ast_with_source_session(xr_compiler_session_current_for_isolate(isolate), ast,
+                                              NULL);
 }
 
 // Compile AST to bytecode (with source file path)
 XrProto *xr_compile_ast_with_source(XrayIsolate *isolate, AstNode *ast, const char *source_file) {
-    return compile_ast_internal(isolate, ast, source_file);
+    return xr_compile_ast_with_source_session(xr_compiler_session_current_for_isolate(isolate), ast,
+                                              source_file);
+}
+
+XrProto *xr_compile_ast_with_source_session(XrCompilerSession *session, AstNode *ast,
+                                            const char *source_file) {
+    return compile_ast_internal(session, ast, source_file);
 }
 
 // Compile source code to bytecode (creates compiler context before parsing)
 // This ensures type pool is valid during parsing for type annotations
 XrProto *xr_compile_source_with_path(XrayIsolate *isolate, const char *source,
                                      const char *source_file) {
-    XR_DCHECK(isolate != NULL, "compile_source_with_path: NULL isolate");
+    return xr_compile_source_with_path_session(xr_compiler_session_current_for_isolate(isolate),
+                                               source, source_file);
+}
+
+XrProto *xr_compile_source_with_path_session(XrCompilerSession *session, const char *source,
+                                             const char *source_file) {
+    XrayIsolate *isolate = compile_session_vm_host(session, "compile_source_with_path");
+    if (!isolate)
+        return NULL;
     XR_DCHECK(source != NULL, "compile_source_with_path: NULL source");
     ensure_compiler_proto_hooks();
     // Create compiler context FIRST to ensure type pool is valid during parsing
@@ -118,7 +148,7 @@ XrProto *xr_compile_source_with_path(XrayIsolate *isolate, const char *source,
     ctx->shared_offset = isolate->vm.shared.count;
 
     // Now parse with valid type pool
-    AstNode *ast = xr_parse_with_source(isolate, source, source_file);
+    AstNode *ast = xr_parse_with_source(session, source, source_file);
     if (!ast) {
         xr_compiler_context_free(ctx);
         return NULL;
@@ -137,7 +167,7 @@ XrProto *xr_compile_source_with_path(XrayIsolate *isolate, const char *source,
     // Restore type pool: compiler context freed its analyzer-owned pool, so
     // TLS falls back to the session-owned long-lived analyzer pool for
     // post-compile allocations.
-    restore_session_type_pool(isolate);
+    restore_session_type_pool(session);
 
     // Free AST (not needed after compilation)
     xr_program_destroy(ast);

@@ -25,6 +25,7 @@
 #include "../../module/xmodule_graph.h"
 #include "../../module/xmodule_resolver.h"
 #include "../../runtime/xisolate_api.h"
+#include "../../toolchain/xcompiler_session.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
 #include "../../os/os_dir.h"
@@ -41,7 +42,7 @@ static int check_file(XrayIsolate *X, XaAnalyzer *analyzer, const char *path, in
     }
 
     // Parse source code - NULL result means syntax error
-    AstNode *ast = xr_parse_with_source(X, source, path);
+    AstNode *ast = xr_parse_with_source(xr_compiler_session_current_for_isolate(X), source, path);
 
     int has_error = (ast == NULL);
     if (has_error) {
@@ -127,7 +128,8 @@ static int check_with_graph(XrayIsolate *X, XaAnalyzer *analyzer, const char *en
         return 1;
     }
 
-    XrModuleGraph *graph = xr_module_graph_new(X, resolver);
+    XrModuleGraph *graph =
+        xr_module_graph_new(xr_compiler_session_current_for_isolate(X), resolver);
     if (!graph) {
         fprintf(stderr, "Error: cannot create module graph\n");
         return 1;

@@ -82,7 +82,7 @@ static XrProto *compile_legacy(const char *source) {
     if (!ctx)
         return NULL;
 
-    AstNode *program = xr_parse(g_iso, source);
+    AstNode *program = xr_parse(xr_compiler_session_current_for_isolate(g_iso), source);
     if (!program) {
         xr_compiler_context_free(ctx);
         return NULL;
@@ -96,7 +96,8 @@ static XrProto *compile_legacy(const char *source) {
     XrCompilerSessionScope ast_scope;
     bool has_ast_scope =
         program->type == AST_PROGRAM && program->as.program.arena &&
-        xr_compiler_session_push_arena(g_iso, program->as.program.arena, "compare.xr", &ast_scope);
+        xr_compiler_session_push_arena(xr_compiler_session_current_for_isolate(g_iso),
+                                       program->as.program.arena, "compare.xr", &ast_scope);
 
     XrProto *proto = xr_compile(ctx, program);
 
@@ -117,7 +118,7 @@ static XrProto *compile_xi(const char *source) {
     if (!analyzer)
         return NULL;
 
-    AstNode *program = xr_parse(g_iso, source);
+    AstNode *program = xr_parse(xr_compiler_session_current_for_isolate(g_iso), source);
     if (!program) {
         xa_analyzer_free(analyzer);
         return NULL;

@@ -13,6 +13,7 @@
 #include "module/xmodule_resolver.h"
 #include "base/xhashmap.h"
 #include "base/xmalloc.h"
+#include "toolchain/xcompiler_session.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -22,7 +23,7 @@
 
 /* ========== Isolate Stub ========== */
 
-/* The graph builder needs an isolate for parsing. */
+/* The graph builder needs a compiler session for parsing. */
 #include "xray.h"
 #include "xray_isolate.h"
 
@@ -30,6 +31,7 @@
 
 static char g_tmpdir[512];
 static XrayIsolate *g_iso;
+static XrCompilerSession *g_session;
 
 static void setup(void) {
     snprintf(g_tmpdir, sizeof(g_tmpdir), "/tmp/xray_test_graph_XXXXXX");
@@ -76,7 +78,7 @@ static char *abs_path(const char *rel) {
 TEST(graph_new_free) {
     XrModuleResolverConfig cfg = {0};
     XrModuleResolver *r = xr_module_resolver_new(&cfg);
-    XrModuleGraph *g = xr_module_graph_new(g_iso, r);
+    XrModuleGraph *g = xr_module_graph_new(g_session, r);
     ASSERT_NOT_NULL(g);
     ASSERT_EQ_INT(g->spec_count, 0);
     ASSERT_EQ_INT(g->entry_index, -1);
@@ -90,7 +92,7 @@ TEST(graph_single_file_no_imports) {
 
     XrModuleResolverConfig cfg = {0};
     XrModuleResolver *r = xr_module_resolver_new(&cfg);
-    XrModuleGraph *g = xr_module_graph_new(g_iso, r);
+    XrModuleGraph *g = xr_module_graph_new(g_session, r);
 
     char *err = NULL;
     int rc = xr_module_graph_build(g, abs_path("main.xr"), &err);
@@ -120,7 +122,7 @@ TEST(graph_linear_deps) {
 
     XrModuleResolverConfig cfg = {0};
     XrModuleResolver *r = xr_module_resolver_new(&cfg);
-    XrModuleGraph *g = xr_module_graph_new(g_iso, r);
+    XrModuleGraph *g = xr_module_graph_new(g_session, r);
 
     char *err = NULL;
     int rc = xr_module_graph_build(g, abs_path("a.xr"), &err);
@@ -152,7 +154,7 @@ TEST(graph_diamond_deps) {
 
     XrModuleResolverConfig cfg = {0};
     XrModuleResolver *r = xr_module_resolver_new(&cfg);
-    XrModuleGraph *g = xr_module_graph_new(g_iso, r);
+    XrModuleGraph *g = xr_module_graph_new(g_session, r);
 
     char *err = NULL;
     int rc = xr_module_graph_build(g, abs_path("main.xr"), &err);
@@ -184,7 +186,7 @@ TEST(graph_cycle_self) {
 
     XrModuleResolverConfig cfg = {0};
     XrModuleResolver *r = xr_module_resolver_new(&cfg);
-    XrModuleGraph *g = xr_module_graph_new(g_iso, r);
+    XrModuleGraph *g = xr_module_graph_new(g_session, r);
 
     char *err = NULL;
     int rc = xr_module_graph_build(g, abs_path("self.xr"), &err);
@@ -206,7 +208,7 @@ TEST(graph_cycle_two) {
 
     XrModuleResolverConfig cfg = {0};
     XrModuleResolver *r = xr_module_resolver_new(&cfg);
-    XrModuleGraph *g = xr_module_graph_new(g_iso, r);
+    XrModuleGraph *g = xr_module_graph_new(g_session, r);
 
     char *err = NULL;
     int rc = xr_module_graph_build(g, abs_path("a.xr"), &err);
@@ -231,7 +233,7 @@ TEST(graph_cycle_three) {
 
     XrModuleResolverConfig cfg = {0};
     XrModuleResolver *r = xr_module_resolver_new(&cfg);
-    XrModuleGraph *g = xr_module_graph_new(g_iso, r);
+    XrModuleGraph *g = xr_module_graph_new(g_session, r);
 
     char *err = NULL;
     int rc = xr_module_graph_build(g, abs_path("a.xr"), &err);
@@ -254,7 +256,7 @@ TEST(graph_find_by_canonical) {
 
     XrModuleResolverConfig cfg = {0};
     XrModuleResolver *r = xr_module_resolver_new(&cfg);
-    XrModuleGraph *g = xr_module_graph_new(g_iso, r);
+    XrModuleGraph *g = xr_module_graph_new(g_session, r);
 
     char *err = NULL;
     xr_module_graph_build(g, abs_path("main.xr"), &err);
@@ -274,7 +276,7 @@ TEST(graph_find_by_canonical) {
 TEST(graph_entry_not_found) {
     XrModuleResolverConfig cfg = {0};
     XrModuleResolver *r = xr_module_resolver_new(&cfg);
-    XrModuleGraph *g = xr_module_graph_new(g_iso, r);
+    XrModuleGraph *g = xr_module_graph_new(g_session, r);
 
     char *err = NULL;
     int rc = xr_module_graph_build(g, "/tmp/nonexistent_xray_file_9999.xr", &err);
@@ -292,6 +294,9 @@ TEST_MAIN_BEGIN()
 
 /* Global isolate for all tests */
 g_iso = xray_isolate_new(NULL);
+XrCompilerSessionConfig compiler_cfg = {.vm_host = g_iso};
+g_session = xr_compiler_session_new(&compiler_cfg);
+xr_compiler_session_attach_isolate(g_iso, g_session);
 
 RUN_TEST_SUITE("Lifecycle");
 RUN_TEST(graph_new_free);
@@ -310,6 +315,10 @@ RUN_TEST_SUITE("Lookup");
 RUN_TEST(graph_find_by_canonical);
 RUN_TEST(graph_entry_not_found);
 
+if (g_session) {
+    xr_compiler_session_delete(g_session);
+    g_session = NULL;
+}
 xray_isolate_delete(g_iso);
 g_iso = NULL;
 

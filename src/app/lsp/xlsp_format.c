@@ -37,7 +37,8 @@ XrJsonValue *xlsp_analyze_format(XrLspDocument *doc) {
     }
 
     // Parse with trivia collection (preserves comments)
-    AstNode *ast = xr_parse_with_trivia(X, doc->content, doc->uri);
+    AstNode *ast =
+        xr_parse_with_trivia(xr_compiler_session_current_for_isolate(X), doc->content, doc->uri);
     if (!ast) {
         // Parse failed, return empty edits
         return edits;

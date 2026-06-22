@@ -136,13 +136,16 @@ static void index_single_file(XrLspServer *server, const char *path) {
         XrArena arena;
         xr_arena_init(&arena, 64 * 1024);
         XrCompilerSessionScope parse_scope;
-        if (!xr_compiler_session_push_arena(server->isolate, &arena, uri, &parse_scope)) {
+        if (!xr_compiler_session_push_arena(
+                xr_compiler_session_current_for_isolate(server->isolate), &arena, uri,
+                &parse_scope)) {
             xr_arena_destroy(&arena);
             xr_free(content);
             return;
         }
         Parser parser;
-        xr_parser_init(&parser, server->isolate, content, uri, &arena);
+        xr_parser_init(&parser, xr_compiler_session_current_for_isolate(server->isolate), content,
+                       uri, &arena);
         AstNode *ast = xr_parse_recoverable(&parser);
         xr_compiler_session_pop_arena(&parse_scope);
 
@@ -280,13 +283,15 @@ void xlsp_workspace_index_file(XrLspServer *server, const char *uri, const char 
     XrArena arena;
     xr_arena_init(&arena, 64 * 1024);
     XrCompilerSessionScope parse_scope;
-    if (!xr_compiler_session_push_arena(server->isolate, &arena, uri, &parse_scope)) {
+    if (!xr_compiler_session_push_arena(xr_compiler_session_current_for_isolate(server->isolate),
+                                        &arena, uri, &parse_scope)) {
         xr_arena_destroy(&arena);
         xr_free(content);
         return;
     }
     Parser parser;
-    xr_parser_init(&parser, server->isolate, content, uri, &arena);
+    xr_parser_init(&parser, xr_compiler_session_current_for_isolate(server->isolate), content, uri,
+                   &arena);
     AstNode *ast = xr_parse_recoverable(&parser);
     xr_compiler_session_pop_arena(&parse_scope);
 

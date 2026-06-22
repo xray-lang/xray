@@ -31,17 +31,27 @@
 #include "xray.h"
 #include "xray_isolate.h"
 #include "base/xmalloc.h"
+#include "toolchain/xcompiler_session.h"
 
 /* ========== Test infrastructure ========== */
 
 static XrayIsolate *X = NULL;
+static XrCompilerSession *X_session = NULL;
 
 static void setup(void) {
     X = xray_isolate_new(NULL);
     ASSERT_NOT_NULL(X);
+    XrCompilerSessionConfig cfg = {.vm_host = X};
+    X_session = xr_compiler_session_new(&cfg);
+    ASSERT_NOT_NULL(X_session);
+    xr_compiler_session_attach_isolate(X, X_session);
 }
 
 static void teardown(void) {
+    if (X_session) {
+        xr_compiler_session_delete(X_session);
+        X_session = NULL;
+    }
     if (X) {
         xray_isolate_delete(X);
         X = NULL;
@@ -67,7 +77,7 @@ static AstNode *format_and_reparse(AstNode *program) {
     char *formatted = xfmt_format_ast(program, &xfmt_default_config, X);
     if (!formatted)
         return NULL;
-    AstNode *reparsed = xr_parse(X, formatted);
+    AstNode *reparsed = xr_parse(xr_compiler_session_current_for_isolate(X), formatted);
     xr_free(formatted);
     return reparsed;
 }
@@ -81,7 +91,8 @@ static char *format_only(AstNode *program) {
 
 TEST(xfmt_string_simple_ascii) {
     setup();
-    AstNode *prog = xr_parse(X, "let s = \"hello world\"\n");
+    AstNode *prog =
+        xr_parse(xr_compiler_session_current_for_isolate(X), "let s = \"hello world\"\n");
     ASSERT_NOT_NULL(prog);
     AstNode *r = format_and_reparse(prog);
     AstNode *init = first_initializer(r);
@@ -97,7 +108,8 @@ TEST(xfmt_string_simple_ascii) {
 
 TEST(xfmt_string_embedded_quote) {
     setup();
-    AstNode *prog = xr_parse(X, "let s = \"a\\\"b\"\n");  // source: "a\"b"
+    AstNode *prog = xr_parse(xr_compiler_session_current_for_isolate(X),
+                             "let s = \"a\\\"b\"\n");  // source: "a\"b"
     ASSERT_NOT_NULL(prog);
     AstNode *init0 = first_initializer(prog);
     ASSERT_STR_EQ(init0->as.literal.raw_value.string_val, "a\"b");
@@ -124,7 +136,8 @@ TEST(xfmt_string_embedded_quote) {
 TEST(xfmt_string_backslash_and_newline) {
     setup();
     // source string contains \\ and \n
-    AstNode *prog = xr_parse(X, "let s = \"line1\\nline2\\\\end\"\n");
+    AstNode *prog =
+        xr_parse(xr_compiler_session_current_for_isolate(X), "let s = \"line1\\nline2\\\\end\"\n");
     ASSERT_NOT_NULL(prog);
     AstNode *init0 = first_initializer(prog);
     ASSERT_STR_EQ(init0->as.literal.raw_value.string_val, "line1\nline2\\end");
@@ -149,7 +162,8 @@ TEST(xfmt_string_backslash_and_newline) {
 
 TEST(xfmt_template_no_backticks) {
     setup();
-    AstNode *prog = xr_parse(X, "let s = \"hi ${name}!\"\n");
+    AstNode *prog =
+        xr_parse(xr_compiler_session_current_for_isolate(X), "let s = \"hi ${name}!\"\n");
     ASSERT_NOT_NULL(prog);
     AstNode *init0 = first_initializer(prog);
     ASSERT_EQ_INT(init0->type, AST_TEMPLATE_STRING);
@@ -184,7 +198,8 @@ TEST(xfmt_template_dollar_escaped) {
     // literal part: parse-time sees "$" between two halves, and one
     // ${name} interpolation. After format+reparse, the literal part
     // must still be a literal `$`, NOT a second interpolation.
-    AstNode *prog = xr_parse(X, "let s = \"price=\\$${amount}\"\n");
+    AstNode *prog =
+        xr_parse(xr_compiler_session_current_for_isolate(X), "let s = \"price=\\$${amount}\"\n");
     ASSERT_NOT_NULL(prog);
     AstNode *init0 = first_initializer(prog);
     ASSERT_EQ_INT(init0->type, AST_TEMPLATE_STRING);
@@ -216,7 +231,7 @@ TEST(xfmt_string_control_byte_hex_escape) {
     // non-empty (or at least non-error) translation. We assert two
     // things: (a) the output contains `\x01` (case-insensitive hex),
     // (b) the re-parse succeeds.
-    AstNode *prog = xr_parse(X, "let s = \"\\x01end\"\n");
+    AstNode *prog = xr_parse(xr_compiler_session_current_for_isolate(X), "let s = \"\\x01end\"\n");
     if (!prog) {
         // If the parser rejects \x escapes today this test simply
         // verifies the formatter does not crash on control bytes by

@@ -282,8 +282,9 @@ static void index_imports_on_demand(XrLspServer *server, AstNode *ast, const cha
         xr_arena_init(&temp_arena, 64 * 1024);  // 64KB initial size
 
         XrCompilerSessionScope parse_scope;
-        if (!xr_compiler_session_push_arena(server->isolate, &temp_arena, import_uri,
-                                            &parse_scope)) {
+        if (!xr_compiler_session_push_arena(
+                xr_compiler_session_current_for_isolate(server->isolate), &temp_arena, import_uri,
+                &parse_scope)) {
             lsp_log("import: failed to enter compiler session for %s", full_path);
             xr_arena_destroy(&temp_arena);
             xr_free(content);
@@ -291,7 +292,8 @@ static void index_imports_on_demand(XrLspServer *server, AstNode *ast, const cha
         }
 
         Parser parser;
-        xr_parser_init(&parser, server->isolate, content, import_uri, &temp_arena);
+        xr_parser_init(&parser, xr_compiler_session_current_for_isolate(server->isolate), content,
+                       import_uri, &temp_arena);
 
         // Set max errors to avoid getting stuck on very broken files
         parser.max_errors = 50;
@@ -368,11 +370,13 @@ void xlsp_parse_document(XrLspDocument *doc, XrLspServer *server) {
     }
     Parser parser;
     XrCompilerSessionScope parse_scope;
-    if (!xr_compiler_session_push_arena(isolate, &doc->arena, doc->uri, &parse_scope)) {
+    if (!xr_compiler_session_push_arena(xr_compiler_session_current_for_isolate(isolate),
+                                        &doc->arena, doc->uri, &parse_scope)) {
         lsp_log("parse_document: failed to enter compiler session");
         return;
     }
-    xr_parser_init(&parser, isolate, doc->content, doc->uri, &doc->arena);
+    xr_parser_init(&parser, xr_compiler_session_current_for_isolate(isolate), doc->content,
+                   doc->uri, &doc->arena);
 
     // Set up error collection
     LspErrorContext error_ctx = {.diagnostics = xjson_new_array()};

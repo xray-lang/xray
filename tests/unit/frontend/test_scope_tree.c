@@ -13,6 +13,7 @@
 #include "../../../src/frontend/parser/xast_nodes.h"
 #include "../../../src/frontend/parser/xast_types.h"
 #include "../../../src/frontend/analyzer/xanalyzer.h"
+#include "../../../src/toolchain/xcompiler_session.h"
 #include "../../../include/xray_isolate.h"
 
 #include <stdio.h>
@@ -23,6 +24,7 @@
 /* ========== Infrastructure ========== */
 
 static XrayIsolate *g_iso = NULL;
+static XrCompilerSession *g_session = NULL;
 static int tests_passed = 0;
 static int tests_failed = 0;
 
@@ -31,10 +33,17 @@ static void setup(void) {
         XrayIsolateParams p;
         xray_isolate_params_init(&p);
         g_iso = xray_isolate_new(&p);
+        XrCompilerSessionConfig cfg = {.vm_host = g_iso};
+        g_session = xr_compiler_session_new(&cfg);
+        xr_compiler_session_attach_isolate(g_iso, g_session);
     }
 }
 
 static void teardown(void) {
+    if (g_session) {
+        xr_compiler_session_delete(g_session);
+        g_session = NULL;
+    }
     if (g_iso) {
         xray_isolate_delete(g_iso);
         g_iso = NULL;
@@ -49,7 +58,7 @@ typedef struct {
 
 static AnalysisResult analyze_source(const char *source) {
     AnalysisResult r = {NULL, NULL};
-    r.program = xr_parse(g_iso, source);
+    r.program = xr_parse(xr_compiler_session_current_for_isolate(g_iso), source);
     assert(r.program != NULL && "parse must succeed");
 
     r.analyzer = xa_analyzer_new(g_iso);

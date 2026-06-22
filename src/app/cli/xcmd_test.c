@@ -39,6 +39,7 @@
 #include "../../coro/xcoroutine.h"
 #include "../../coro/xworker.h"
 #include "../../frontend/parser/xparse.h"
+#include "../../toolchain/xcompiler_session.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
 #include "../../runtime/object/xexception.h"
@@ -271,7 +272,8 @@ static void run_test_file(const char *filepath, XrTestConfig *config, XrTestFile
         goto cleanup_isolate;
     }
 
-    AstNode *ast = xr_parse_with_source(X, source, filepath);
+    XrCompilerSession *session = xr_compiler_session_current_for_isolate(X);
+    AstNode *ast = xr_parse_with_source(session, source, filepath);
     if (!ast) {
         result->has_error = true;
         snprintf(result->error_msg, sizeof(result->error_msg), "parse failed");
@@ -279,7 +281,7 @@ static void run_test_file(const char *filepath, XrTestConfig *config, XrTestFile
         goto cleanup_source;
     }
 
-    XrProto *proto = xr_compile_ast_with_source(X, ast, filepath);
+    XrProto *proto = xr_compile_ast_with_source_session(session, ast, filepath);
     if (!proto) {
         result->has_error = true;
         snprintf(result->error_msg, sizeof(result->error_msg), "compile failed");

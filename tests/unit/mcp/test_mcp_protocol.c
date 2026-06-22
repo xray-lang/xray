@@ -21,6 +21,7 @@
 #include "../../../src/app/mcp/xmcp_knowledge.h"
 #include "../../../src/base/xjson.h"
 #include "../../../src/base/xmalloc.h"
+#include "../../../src/toolchain/xcompiler_session.h"
 #include "../../../include/xray_isolate.h"
 #include "../test_win_compat.h"
 
@@ -99,6 +100,14 @@ static XmcpServer test_server_with_runner(bool enable_runner) {
 
 static XmcpServer test_server(void) {
     return test_server_with_runner(false);
+}
+
+static XrCompilerSession *attach_test_compiler_session(XrayIsolate *isolate) {
+    XrCompilerSessionConfig cfg = {.vm_host = isolate};
+    XrCompilerSession *session = xr_compiler_session_new(&cfg);
+    if (session)
+        xr_compiler_session_attach_isolate(isolate, session);
+    return session;
 }
 
 static void test_server_load_knowledge(XmcpServer *server) {
@@ -768,6 +777,8 @@ TEST(tools_call_format_returns_structured_content) {
     xray_isolate_params_init(&iso_params);
     server.isolate = xray_isolate_new(&iso_params);
     ASSERT_NOT_NULL(server.isolate);
+    XrCompilerSession *session = attach_test_compiler_session(server.isolate);
+    ASSERT_NOT_NULL(session);
 
     XrJsonValue *params = xjson_new_object();
     XJSON_SET_STRING(params, "name", "xray_format");
@@ -795,6 +806,7 @@ TEST(tools_call_format_returns_structured_content) {
 
     xjson_free(params);
     xjson_free(result);
+    xr_compiler_session_delete(session);
     xray_isolate_delete(server.isolate);
 }
 
@@ -804,6 +816,8 @@ TEST(tools_call_format_syntax_errors_are_structured) {
     xray_isolate_params_init(&iso_params);
     server.isolate = xray_isolate_new(&iso_params);
     ASSERT_NOT_NULL(server.isolate);
+    XrCompilerSession *session = attach_test_compiler_session(server.isolate);
+    ASSERT_NOT_NULL(session);
 
     XrJsonValue *params = xjson_new_object();
     XJSON_SET_STRING(params, "name", "xray_format");
@@ -827,6 +841,7 @@ TEST(tools_call_format_syntax_errors_are_structured) {
 
     xjson_free(params);
     xjson_free(result);
+    xr_compiler_session_delete(session);
     xray_isolate_delete(server.isolate);
 }
 

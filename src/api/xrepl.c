@@ -303,9 +303,10 @@ static void repl_maybe_echo_last_expr(XrayIsolate *isolate, AstNode *program) {
             break;
     }
 
+    XrCompilerSession *session = xr_compiler_session_current_for_isolate(isolate);
     XrCompilerSessionScope synth_scope;
     bool has_synth_scope =
-        xr_compiler_session_push_arena(isolate, program->as.program.arena, "<repl>", &synth_scope);
+        xr_compiler_session_push_arena(session, program->as.program.arena, "<repl>", &synth_scope);
 
     /* Build `it = <expr>` or `let it = <expr>` depending on whether
      * the binding already exists.  Using assignment on subsequent
@@ -332,7 +333,7 @@ static void repl_maybe_echo_last_expr(XrayIsolate *isolate, AstNode *program) {
          * so a node-allocation failure does not regress to silent
          * dropping of the trailing expression. */
         XrCompilerSessionScope fallback_scope;
-        bool has_fallback_scope = xr_compiler_session_push_arena(isolate, program->as.program.arena,
+        bool has_fallback_scope = xr_compiler_session_push_arena(session, program->as.program.arena,
                                                                  "<repl>", &fallback_scope);
         AstNode *args[1] = {expr};
         AstNode *fb = xr_ast_print_stmt(isolate, args, 1, expr->line);
@@ -438,7 +439,7 @@ XrProto *xr_repl_compile(XrayIsolate *isolate, const char *source) {
         return NULL;
 
     // Parse
-    AstNode *ast = xr_parse(isolate, source);
+    AstNode *ast = xr_parse(session, source);
     if (!ast)
         return NULL;
 

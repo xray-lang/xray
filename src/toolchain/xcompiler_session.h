@@ -24,12 +24,11 @@ struct XaAnalyzer;
 typedef struct XrCompilerSession XrCompilerSession;
 
 typedef struct XrCompilerSessionScope {
-    XrayIsolate *isolate;
+    XrayIsolate *vm_host;
     XrCompilerSession *session;
     XrCompilerSession *saved_session;
     struct XrArena *saved_arena;
     struct XrCompileStringPool *saved_pool;
-    bool owns_session;
     bool active;
 } XrCompilerSessionScope;
 
@@ -76,7 +75,7 @@ xr_compiler_session_repl_symbols(const XrCompilerSession *session);
 XR_FUNC struct XaAnalyzer *xr_compiler_session_ensure_repl_analyzer(XrCompilerSession *session);
 XR_FUNC struct XaAnalyzer *xr_compiler_session_repl_analyzer(const XrCompilerSession *session);
 
-XR_FUNC bool xr_compiler_session_push_arena(XrayIsolate *isolate, struct XrArena *arena,
+XR_FUNC bool xr_compiler_session_push_arena(XrCompilerSession *session, struct XrArena *arena,
                                             const char *source_file, XrCompilerSessionScope *scope);
 XR_FUNC void xr_compiler_session_pop_arena(XrCompilerSessionScope *scope);
 

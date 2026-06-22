@@ -98,7 +98,7 @@ static XiFunc *compile_to_ir(const char *source) {
     if (!analyzer)
         return NULL;
 
-    AstNode *program = xr_parse(g_iso, source);
+    AstNode *program = xr_parse(xr_compiler_session_current_for_isolate(g_iso), source);
     if (!program) {
         fprintf(stderr, "  PARSE FAILED for: %.60s...\n", source);
         xa_analyzer_free(analyzer);

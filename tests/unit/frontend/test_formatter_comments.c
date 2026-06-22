@@ -36,6 +36,7 @@
 #include "frontend/format/xfmt.h"
 #include "frontend/parser/xparse.h"
 #include "frontend/parser/xast.h"
+#include "toolchain/xcompiler_session.h"
 #include "xray_isolate.h"
 
 #include <stdlib.h>
@@ -46,14 +47,24 @@
 /* ====================================================================== */
 
 static XrayIsolate *g_iso = NULL;
+static XrCompilerSession *g_session = NULL;
 
 static void setup(void) {
     XrayIsolateParams p;
     xray_isolate_params_init(&p);
     g_iso = xray_isolate_new(&p);
+    ASSERT_NOT_NULL(g_iso);
+    XrCompilerSessionConfig cfg = {.vm_host = g_iso};
+    g_session = xr_compiler_session_new(&cfg);
+    ASSERT_NOT_NULL(g_session);
+    xr_compiler_session_attach_isolate(g_iso, g_session);
 }
 
 static void teardown(void) {
+    if (g_session) {
+        xr_compiler_session_delete(g_session);
+        g_session = NULL;
+    }
     if (g_iso) {
         xray_isolate_delete(g_iso);
         g_iso = NULL;
@@ -64,7 +75,8 @@ static void teardown(void) {
 // On parse failure returns NULL so the test fails fast with a clear
 // message via ASSERT_NOT_NULL().
 static char *parse_and_format(const char *source) {
-    AstNode *ast = xr_parse_with_trivia(g_iso, source, "<test>");
+    AstNode *ast =
+        xr_parse_with_trivia(xr_compiler_session_current_for_isolate(g_iso), source, "<test>");
     if (!ast)
         return NULL;
     char *out = xfmt_format_ast(ast, NULL, g_iso);
