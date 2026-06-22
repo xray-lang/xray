@@ -834,12 +834,20 @@ Token xr_scanner_scan(Scanner *scanner) {
             return make_token(scanner, TK_HASH);
         case '!':
             if (match(scanner, '=')) {
-                return make_token(scanner, match(scanner, '=') ? TK_NE_STRICT : TK_NE);
+                if (match(scanner, '=')) {
+                    return error_token(scanner,
+                                       "strict inequality operator '!==' was removed; use '!='");
+                }
+                return make_token(scanner, TK_NE);
             }
             return make_token(scanner, TK_NOT);
         case '=':
             if (match(scanner, '=')) {
-                return make_token(scanner, match(scanner, '=') ? TK_EQ_STRICT : TK_EQ);
+                if (match(scanner, '=')) {
+                    return error_token(scanner,
+                                       "strict equality operator '===' was removed; use '=='");
+                }
+                return make_token(scanner, TK_EQ);
             }
             return make_token(scanner, TK_ASSIGN);
             // Note: `=>` is no longer a token; the unified arrow is `->`. Parser
@@ -919,8 +927,6 @@ static const char *token_names[] = {
     // Multi-character tokens (>= 256)
     [TK_EQ] = "==",
     [TK_NE] = "!=",
-    [TK_EQ_STRICT] = "===",
-    [TK_NE_STRICT] = "!==",
     [TK_LT] = "<",
     [TK_LE] = "<=",
     [TK_GT] = ">",

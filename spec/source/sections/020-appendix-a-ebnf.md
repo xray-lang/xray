@@ -80,7 +80,7 @@ NullCoalesce ::= LogicAndExpr ('??' LogicAndExpr)*
 BitOrExpr   ::= BitXorExpr ('|' BitXorExpr)*
 BitXorExpr  ::= BitAndExpr ('^' BitAndExpr)*
 BitAndExpr  ::= EqualityExpr ('&' EqualityExpr)*
-EqualityExpr ::= RelationalExpr (('==' | '!=' | '===' | '!==') RelationalExpr)*
+EqualityExpr ::= RelationalExpr (('==' | '!=') RelationalExpr)*
 RelationalExpr ::= ShiftExpr (('<' | '<=' | '>' | '>=') ShiftExpr)*
 ShiftExpr   ::= AdditiveExpr (('<<' | '>>') AdditiveExpr)*
 AdditiveExpr ::= MultiplicativeExpr (('+' | '-') MultiplicativeExpr)*
@@ -377,7 +377,7 @@ NullCoalesce ::= LogicAndExpr ('??' LogicAndExpr)*
 BitOrExpr   ::= BitXorExpr ('|' BitXorExpr)*
 BitXorExpr  ::= BitAndExpr ('^' BitAndExpr)*
 BitAndExpr  ::= EqualityExpr ('&' EqualityExpr)*
-EqualityExpr ::= RelationalExpr (('==' | '!=' | '===' | '!==') RelationalExpr)*
+EqualityExpr ::= RelationalExpr (('==' | '!=') RelationalExpr)*
 RelationalExpr ::= ShiftExpr (('<' | '<=' | '>' | '>=') ShiftExpr)*
 ShiftExpr   ::= AdditiveExpr (('<<' | '>>') AdditiveExpr)*
 AdditiveExpr ::= MultiplicativeExpr (('+' | '-') MultiplicativeExpr)*

@@ -301,10 +301,9 @@ RegexFlag ::= 'g' | 'i' | 'm' | 's'
 
 #### 1.7.4 比较
 
-`==` `!=` `===` `!==` `<` `<=` `>` `>=`
+`==` `!=` `<` `<=` `>` `>=`
 
 - `==` `!=`：值相等（隐式数值转换：int→float）
-- `===` `!==`：严格相等（类型+值；无转换）
 - `<` 等：数字、字符串支持；其他类型不支持
 
 #### 1.7.5 逻辑
@@ -664,10 +663,9 @@ Full token table (by category):
 
 #### 1.7.4 Comparison
 
-`==` `!=` `===` `!==` `<` `<=` `>` `>=`
+`==` `!=` `<` `<=` `>` `>=`
 
 - `==` `!=`: value equality (with implicit numeric promotion: int→float).
-- `===` `!==`: strict equality (type + value; no promotion).
 - `<` etc.: supported by numbers and strings; not supported by other types.
 
 #### 1.7.5 Logical

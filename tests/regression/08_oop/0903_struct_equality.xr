@@ -10,7 +10,7 @@ struct Vec2 {
     y: float
 
     operator ==(other: Vec2) -> bool {
-        return this.x === other.x && this.y === other.y
+        return this.x == other.x && this.y == other.y
     }
 }
 
@@ -42,4 +42,3 @@ fn test_struct_equality() {
     assert(v1 == v2)
     assert(!(v1 == v3))
 }
-

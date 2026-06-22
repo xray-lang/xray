@@ -221,7 +221,7 @@ TEST(rejects_unspeculatable_zero_effect_arm) {
     XiValue *cond, *tv, *ev;
     build_diamond(f, &entry, &then_b, &else_b, &join, &phi, &cond, &tv, &ev);
 
-    tv->op = XI_EQ_STRICT;
+    tv->op = XI_IS;
 
     XiPassChange chg = xi_opt_ifconv(f);
     ASSERT(!chg.cfg_changed);

@@ -55,14 +55,13 @@ static XrType *apply_condition_narrowing(XrAstNode *expr, const char *var_name, 
         return base_type;
     }
 
-    // Pattern: x == null, x != null, x === null, x !== null
-    // Pattern: typeof x == "type", typeof x === "type"
-    if (type == AST_BINARY_EQ || type == AST_BINARY_NE || type == AST_BINARY_EQ_STRICT ||
-        type == AST_BINARY_NE_STRICT) {
+    // Pattern: x == null, x != null
+    // Pattern: typeof x == "type"
+    if (type == AST_BINARY_EQ || type == AST_BINARY_NE) {
         AstNode *left = node->as.binary.left;
         AstNode *right = node->as.binary.right;
 
-        bool is_equal = (type == AST_BINARY_EQ || type == AST_BINARY_EQ_STRICT);
+        bool is_equal = (type == AST_BINARY_EQ);
 
         // Check if comparing variable to null
         bool var_on_left = (left && left->type == AST_VARIABLE && left->as.variable.name &&

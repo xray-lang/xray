@@ -483,8 +483,6 @@ XrType *xa_visit_binary(XaInferContext *ctx, AstNode *node) {
         // Comparison → always bool
         case AST_BINARY_EQ:
         case AST_BINARY_NE:
-        case AST_BINARY_EQ_STRICT:
-        case AST_BINARY_NE_STRICT:
             xa_check_null_comparison(ctx, node, left, right);
             return xr_type_new_bool(NULL);
         case AST_BINARY_LT:

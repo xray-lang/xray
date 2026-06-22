@@ -223,24 +223,6 @@
   :observable ()
   :targets (vm-bytecode aot-c aot-verify))
 
-(define-xi-op xi.eq.strict
-  :class comparison
-  :arity 2
-  :own-use borrow
-  :effects ()
-  :requires ()
-  :observable ()
-  :targets (vm-bytecode aot-c aot-verify))
-
-(define-xi-op xi.ne.strict
-  :class comparison
-  :arity 2
-  :own-use borrow
-  :effects ()
-  :requires ()
-  :observable ()
-  :targets (vm-bytecode aot-c aot-verify))
-
 (define-xi-op xi.not
   :class type
   :arity 1

@@ -76,8 +76,6 @@ static ParseRule rules[] = {
     // Comparison operators
     [TK_EQ] = {NULL, xr_parse_binary, PREC_EQUALITY},
     [TK_NE] = {NULL, xr_parse_binary, PREC_EQUALITY},
-    [TK_EQ_STRICT] = {NULL, xr_parse_binary, PREC_EQUALITY},
-    [TK_NE_STRICT] = {NULL, xr_parse_binary, PREC_EQUALITY},
     [TK_LT] = {NULL, xr_parse_lt_or_generic, PREC_COMPARISON},
     [TK_LE] = {NULL, xr_parse_binary, PREC_COMPARISON},
     [TK_GT] = {NULL, xr_parse_binary, PREC_COMPARISON},

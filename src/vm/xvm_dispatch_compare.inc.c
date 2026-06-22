@@ -21,7 +21,7 @@
  *     and used by OP_LE / OP_LEI right after.
  *
  *   Producing comparisons (write-bool):
- *     OP_CMP_EQ / CMP_NE / CMP_EQ_STRICT / CMP_NE_STRICT
+ *     OP_CMP_EQ / CMP_NE
  *     OP_CMP_LT / CMP_LE
  *
  *   Type predicates:
@@ -184,16 +184,6 @@ VM_CMP_RI(OP_LEI, <=, <=)
         vmbreak;                                                                                   \
     }
 
-#define XVM_TEMPLATE_COMPARE_STRICT_CASE(op, negate)                                               \
-    vmcase(op) {                                                                                   \
-        int dest = GETARG_A(i);                                                                    \
-        int left = GETARG_B(i);                                                                    \
-        int right = GETARG_C(i);                                                                   \
-        bool equal = vm_values_strict_equal(R(left), R(right));                                    \
-        R(dest) = xr_bool((negate) ? !equal : equal);                                              \
-        vmbreak;                                                                                   \
-    }
-
 #define XVM_TEMPLATE_COMPARE_ORDER_CASE(op, op_flag, op_symbol, op_name, compare_fn)               \
     vmcase(op) {                                                                                   \
         int dest = GETARG_A(i);                                                                    \
@@ -209,7 +199,6 @@ VM_CMP_RI(OP_LEI, <=, <=)
 #include "xvm_template_compare_gen.inc.c"
 
 #undef XVM_TEMPLATE_COMPARE_ORDER_CASE
-#undef XVM_TEMPLATE_COMPARE_STRICT_CASE
 #undef XVM_TEMPLATE_COMPARE_DEEP_CASE
 #undef XVM_COMPARE_IS_PRIMITIVE
 

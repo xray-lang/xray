@@ -48,10 +48,6 @@ const char *xfmt_binary_op(AstNodeType type) {
             return "==";
         case AST_BINARY_NE:
             return "!=";
-        case AST_BINARY_EQ_STRICT:
-            return "===";
-        case AST_BINARY_NE_STRICT:
-            return "!==";
         case AST_BINARY_LT:
             return "<";
         case AST_BINARY_LE:

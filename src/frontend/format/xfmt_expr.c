@@ -324,8 +324,6 @@ void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
         case AST_BINARY_RSHIFT:
         case AST_BINARY_EQ:
         case AST_BINARY_NE:
-        case AST_BINARY_EQ_STRICT:
-        case AST_BINARY_NE_STRICT:
         case AST_BINARY_LT:
         case AST_BINARY_LE:
         case AST_BINARY_GT:

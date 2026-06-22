@@ -793,8 +793,6 @@ static void canon_node(XrCanonCtx *ctx, AstNode *node) {
         case AST_BINARY_BXOR:
         case AST_BINARY_LSHIFT:
         case AST_BINARY_RSHIFT:
-        case AST_BINARY_EQ_STRICT:
-        case AST_BINARY_NE_STRICT:
         case AST_NULLISH_COALESCE:
         case AST_RANGE:
             canon_node(ctx, node->as.binary.left);

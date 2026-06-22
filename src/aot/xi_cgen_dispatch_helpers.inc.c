@@ -2387,28 +2387,6 @@ XI_TO_C_TEMPLATE_COMPARE_DRIVERS(XICGEN_DEFINE_TEMPLATE_COMPARE_DRIVER)
 
 #undef XICGEN_DEFINE_TEMPLATE_COMPARE_DRIVER
 
-static void xicgen_strict_compare(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
-                                  const char *prefix) {
-    (void) ctx;
-    (void) f;
-    (void) prefix;
-    fprintf(out, "(");
-    emit_vref(out, v->args[0]);
-    fprintf(out, ".i %s ", xi_to_c_template_strict_compare_op(v->op));
-    emit_vref(out, v->args[1]);
-    fprintf(out, ".i)");
-}
-
-#define XICGEN_DEFINE_TEMPLATE_STRICT_COMPARE_DRIVER(ident, driver)                                \
-    static void driver(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,               \
-                       const char *prefix) {                                                       \
-        xicgen_strict_compare(ctx, out, f, v, prefix);                                             \
-    }
-
-XI_TO_C_TEMPLATE_STRICT_COMPARE_DRIVERS(XICGEN_DEFINE_TEMPLATE_STRICT_COMPARE_DRIVER)
-
-#undef XICGEN_DEFINE_TEMPLATE_STRICT_COMPARE_DRIVER
-
 static void xicgen_cast_i64_arg(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                 const char *ctype) {
     const XiValue *arg = v->nargs > 0 ? v->args[0] : NULL;
