@@ -753,6 +753,43 @@ list(FILTER XRAY_RT_CORO_SOURCES EXCLUDE REGEX ".*/src/runtime/value/xopcode_inf
 add_library(xray_rt_coro STATIC ${XRAY_RT_CORO_SOURCES})
 add_dependencies(xray_rt_coro gen-xi-ops gen-xi-verify gen-xi-lowering gen-aot-metadata)
 
+set(XRAY_VM_RUNTIME_CORO_SOURCES ${CORO_SRC})
+list(FILTER XRAY_VM_RUNTIME_CORO_SOURCES EXCLUDE REGEX "xaot_.*\\.c$")
+
+set(XRAY_VM_RUNTIME_SOURCES
+    ${BASE_SRC}
+    ${OS_SRC}
+    ${RUNTIME_TOP_SRC}
+    ${RUNTIME_CORE_SRC}
+    ${RUNTIME_VALUE_SRC}
+    ${RUNTIME_MEM_SRC}
+    ${RUNTIME_OBJECT_SRC}
+    ${RUNTIME_CLASS_SRC}
+    ${RUNTIME_CLOSURE_SRC}
+    ${RUNTIME_SYMBOL_SRC}
+    ${XRAY_VM_RUNTIME_CORO_SOURCES}
+    ${IO_SRC}
+    ${VM_SRC}
+    src/api/xisolate.c
+    src/api/xisolate_params.c
+    src/api/xisolate_runtime.c
+    src/api/xisolate_tls.c
+    src/api/xruntime.c
+    src/api/xvm_exec.c
+    src/module/stdlib_embedded.c
+    src/module/xbytecode_io.c
+    src/module/xlockfile.c
+    src/module/xmodule.c
+    src/module/xmodule_resolver.c
+    src/module/xproject.c
+    src/module/xsemver.c
+    ${STDLIB_SRC}
+)
+list(REMOVE_DUPLICATES XRAY_VM_RUNTIME_SOURCES)
+
+add_library(xray_vm_runtime STATIC ${XRAY_VM_RUNTIME_SOURCES})
+add_dependencies(xray_vm_runtime gen-xi-ops gen-xi-verify gen-xi-lowering gen-aot-metadata)
+
 if(CMAKE_BUILD_TYPE STREQUAL "Release" AND MSVC)
     set_source_files_properties(
         src/vm/xvm.c
@@ -785,19 +822,31 @@ target_include_directories(xray_rt_coro PRIVATE
     ${XRAY_COMMON_INCLUDES}
 )
 
+target_include_directories(xray_vm_runtime PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+
+target_include_directories(xray_vm_runtime PRIVATE
+    ${XRAY_COMMON_INCLUDES}
+)
+
 # Link libraries
 if(WIN32)
     # Math library is part of the MSVC runtime; ws2_32 for sockets,
     # synchronization for WaitOnAddress/WakeByAddressSingle
     target_link_libraries(xray_core PUBLIC ws2_32 synchronization)
     target_link_libraries(xray_rt_coro PUBLIC ws2_32 synchronization)
+    target_link_libraries(xray_vm_runtime PUBLIC ws2_32 synchronization)
 else()
     target_link_libraries(xray_core PUBLIC m pthread)
     target_link_libraries(xray_rt_coro PUBLIC m pthread)
+    target_link_libraries(xray_vm_runtime PUBLIC m pthread)
 endif()
 if(ZLIB_FOUND)
     target_link_libraries(xray_core PUBLIC ZLIB::ZLIB)
+    target_link_libraries(xray_vm_runtime PUBLIC ZLIB::ZLIB)
     target_compile_definitions(xray_core PRIVATE XR_HAS_ZLIB=1)
+    target_compile_definitions(xray_vm_runtime PRIVATE XR_HAS_ZLIB=1)
 endif()
 
 # libffi: FFI / C interop. The bytecode VM marshals @extern calls through
@@ -818,16 +867,20 @@ endif()
 if(LIBFFI_FOUND)
     message(STATUS "libffi: found (VM FFI enabled)")
     target_include_directories(xray_core PRIVATE ${LIBFFI_INCLUDE_DIRS})
+    target_include_directories(xray_vm_runtime PRIVATE ${LIBFFI_INCLUDE_DIRS})
     target_link_libraries(xray_core PUBLIC ${LIBFFI_LIBRARIES})
+    target_link_libraries(xray_vm_runtime PUBLIC ${LIBFFI_LIBRARIES})
     # PUBLIC: the CLI target builds AOT link commands by hand (invoke_cc) and
     # must know xray_core embeds the libffi-based @extern invoker, so a runtime
     # program links -lffi too.
     target_compile_definitions(xray_core PUBLIC XRAY_HAVE_LIBFFI=1)
+    target_compile_definitions(xray_vm_runtime PUBLIC XRAY_HAVE_LIBFFI=1)
 else()
     message(STATUS "libffi: not found (@extern calls limited to the AOT backend)")
 endif()
 if(NOT WIN32)
     target_link_libraries(xray_core PUBLIC ${CMAKE_DL_LIBS})
+    target_link_libraries(xray_vm_runtime PUBLIC ${CMAKE_DL_LIBS})
 endif()
 
 # OpenSSL support
@@ -840,11 +893,15 @@ find_package(OpenSSL QUIET)
 if(OpenSSL_FOUND)
     message(STATUS "OpenSSL version: ${OPENSSL_VERSION}")
     target_include_directories(xray_core PRIVATE ${OPENSSL_INCLUDE_DIR})
+    target_include_directories(xray_vm_runtime PRIVATE ${OPENSSL_INCLUDE_DIR})
     # Always link libcrypto (needed by ws module for SHA1)
     target_link_libraries(xray_core PUBLIC OpenSSL::Crypto)
+    target_link_libraries(xray_vm_runtime PUBLIC OpenSSL::Crypto)
     if(ENABLE_TLS)
         target_link_libraries(xray_core PUBLIC OpenSSL::SSL)
+        target_link_libraries(xray_vm_runtime PUBLIC OpenSSL::SSL)
         target_compile_definitions(xray_core PUBLIC XR_ENABLE_TLS=1)
+        target_compile_definitions(xray_vm_runtime PUBLIC XR_ENABLE_TLS=1)
     endif()
 else()
     message(STATUS "OpenSSL: not found (ws/crypto modules may be limited)")
@@ -974,7 +1031,7 @@ else()
 endif()
 
 add_executable(xray ${XRAY_CLI_SOURCES})
-add_dependencies(xray xray_aot_core xray_rt_coro)
+add_dependencies(xray xray_aot_core xray_rt_coro xray_vm_runtime)
 
 target_link_libraries(xray PRIVATE xray_core)
 if(READLINE_LIB)
@@ -1044,6 +1101,39 @@ if(BUILD_TESTS)
 
     # All unit tests are managed by tests/unit/CMakeLists.txt
     add_subdirectory(tests/unit)
+
+    add_executable(bytecode_embed_runner
+        tests/vm/bytecode_embed_runner.c
+    )
+    target_include_directories(bytecode_embed_runner PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+    )
+    target_link_libraries(bytecode_embed_runner PRIVATE xray_vm_runtime)
+
+    add_test(
+        NAME bytecode_embed_runtime
+        COMMAND $<TARGET_FILE:bytecode_embed_runner>
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(bytecode_embed_runtime PROPERTIES
+        LABELS "vm;bytecode;embed;smoke"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
+        NAME bytecode_embed_symbol_gate
+        COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tests/vm/run_bytecode_embed_symbol_tests.sh
+                $<TARGET_FILE:bytecode_embed_runner>
+                $<TARGET_FILE:xray_vm_runtime>
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(bytecode_embed_symbol_gate PROPERTIES
+        LABELS "vm;bytecode;embed;link;smoke"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
 
     add_test(
         NAME aot_filetests
@@ -1455,7 +1545,7 @@ install(TARGETS xray
 
 # Install public AOT runtime libraries. xray_core remains a build-tree-only
 # aggregate for the CLI and tests; it must not become a public install target.
-install(TARGETS xray_aot_core xray_rt_coro
+install(TARGETS xray_aot_core xray_rt_coro xray_vm_runtime
     ARCHIVE DESTINATION lib
 )
 

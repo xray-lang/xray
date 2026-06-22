@@ -11,7 +11,7 @@
 #include "../test_framework.h"
 
 #include "base/xmalloc.h"
-#include "ir/xi_ffi.h"
+#include "vm/xvm_ffi.h"
 #include "runtime/closure/xclosure.h"
 #include "runtime/value/xchunk.h"
 #include "runtime/value/xffi_sig.h"

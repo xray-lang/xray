@@ -13,10 +13,8 @@
 
 #include "../base/xconfig.h"
 
-struct XrAotRuntime;
 struct XrRuntimeCore;
 
 XR_FUNC void xr_scope_transfer_enable_core(struct XrRuntimeCore *core);
-XR_FUNC void xr_aot_runtime_enable_transfer(struct XrAotRuntime *runtime);
 
 #endif  // XSCOPE_TRANSFER_H

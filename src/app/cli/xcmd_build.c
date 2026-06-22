@@ -104,7 +104,7 @@ static int invoke_cc(const char *cc, const char *opt_flag, const char *output_fi
     spawn_argv[ai++] = lib_flag;
     spawn_argv[ai++] = "-lxray_core";
 #ifdef XRAY_HAVE_LIBFFI
-    /* xray_core embeds the VM's libffi-based @extern invoker (xi_ffi.c), so a
+    /* xray_core embeds the VM's libffi-based @extern invoker (xvm_ffi.c), so a
      * program that links the runtime must resolve libffi too. Must follow
      * -lxray_core: the archive pulls in ffi_* only on demand. */
     spawn_argv[ai++] = "-lffi";

@@ -5,7 +5,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xi_ffi.h - VM-side foreign function (FFI) invocation.
+ * xvm_ffi.h - VM-side foreign function (FFI) invocation.
  *
  * The AOT backend emits direct C calls for @extern functions. The bytecode
  * VM cannot emit C, so it marshals arguments and invokes the foreign symbol
@@ -13,8 +13,8 @@
  * XiFunc holds the C symbol name, optional @dylib, and the typed signature.
  */
 
-#ifndef XI_FFI_H
-#define XI_FFI_H
+#ifndef XVM_FFI_H
+#define XVM_FFI_H
 
 #include <stdint.h>
 
@@ -37,4 +37,4 @@ XR_FUNC XrValue xr_ffi_call_proto(struct XrayIsolate *X, struct XrProto *proto, 
 XR_FUNC XrValue xr_ffi_ptr_load(uintptr_t addr, uint8_t ffi_type);
 XR_FUNC void xr_ffi_ptr_store(uintptr_t addr, uint8_t ffi_type, XrValue val);
 
-#endif  // XI_FFI_H
+#endif  // XVM_FFI_H

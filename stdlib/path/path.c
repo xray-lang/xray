@@ -102,9 +102,8 @@ static XrValue path_join(XrayIsolate *X, XrValue *args, int argc) {
     return ret;
 }
 
-// dirname core - returns a slice of `path` (or a static literal). Shared by the
-// VM binding and the AOT shim (115 single-definition). Borrows: the returned
-// pointer aliases `path` or static storage; the caller copies it.
+// dirname core - returns a slice of `path` (or a static literal). Borrows: the
+// returned pointer aliases `path` or static storage; the caller copies it.
 static const char *path_dirname_core(const char *path, size_t len, size_t *out_len) {
     return xr_path_core_dirname(path, len, out_len);
 }
@@ -122,16 +121,7 @@ static XrValue path_dirname(XrayIsolate *X, XrValue *args, int argc) {
     return make_string_n(X, r, rl);
 }
 
-// AOT direct-call shim: returns the dirname slice (borrowed) as (data, length);
-// generated C copies it into an AOT string.
-XR_FUNC const char *xr_aot_path_dirname(const char *path, int64_t len, int64_t *out_len) {
-    size_t rl = 0;
-    const char *r = path_dirname_core(path, len < 0 ? 0 : (size_t) len, &rl);
-    *out_len = (int64_t) rl;
-    return r;
-}
-
-// basename core - returns a slice of `path`. Shared by VM binding + AOT shim.
+// basename core - returns a slice of `path`.
 static const char *path_basename_core(const char *path, size_t len, size_t *out_len) {
     return xr_path_core_basename(path, len, out_len);
 }
@@ -149,17 +139,9 @@ static XrValue path_basename(XrayIsolate *X, XrValue *args, int argc) {
     return make_string_n(X, r, rl);
 }
 
-// AOT direct-call shim for path.basename (borrowed slice).
-XR_FUNC const char *xr_aot_path_basename(const char *path, int64_t len, int64_t *out_len) {
-    size_t rl = 0;
-    const char *r = path_basename_core(path, len < 0 ? 0 : (size_t) len, &rl);
-    *out_len = (int64_t) rl;
-    return r;
-}
-
 // extname core - returns a slice of `path` from the last dot to the end, or "".
 // The slice runs to the input end (matches the historical NUL-terminated
-// return), so `plen` must be the full string length. Shared by VM + AOT.
+// return), so `plen` must be the full string length.
 static const char *path_extname_core(const char *path, size_t plen, size_t *out_len) {
     return xr_path_core_extname(path, plen, out_len);
 }
@@ -177,17 +159,7 @@ static XrValue path_extname(XrayIsolate *X, XrValue *args, int argc) {
     return make_string_n(X, r, rl);
 }
 
-// AOT direct-call shim for path.extname (borrowed slice).
-XR_FUNC const char *xr_aot_path_extname(const char *path, int64_t len, int64_t *out_len) {
-    size_t rl = 0;
-    const char *r = path_extname_core(path, len < 0 ? 0 : (size_t) len, &rl);
-    *out_len = (int64_t) rl;
-    return r;
-}
-
-// Core absolute-path test, shared by the tagged stdlib binding and the AOT
-// direct-call shim so the two signatures can never drift (115 single-definition
-// principle). Pure: no isolate, no allocation.
+// Core absolute-path test. Pure: no isolate, no allocation.
 static bool path_is_absolute_raw(const char *path, size_t len) {
     return xr_path_core_is_absolute(path, len);
 }
@@ -200,15 +172,6 @@ static XrValue path_isAbsolute(XrayIsolate *X, XrValue *args, int argc) {
     size_t len = 0;
     const char *path = xrs_string_arg(args[0], &len);
     return xr_bool(path_is_absolute_raw(path, len));
-}
-
-// AOT direct-call shim for `path.isAbsolute(s)`. Specialized signature: takes
-// the raw string data/length (no tagged XrString marshalling, ABI-neutral
-// across VM/AOT string representations) and returns a tagged bool. Generated
-// AOT C calls this symbol directly (resolved from xray_core via dead-strip)
-// instead of dispatching through the runtime module table.
-XR_FUNC XrValue xr_aot_path_isAbsolute(const char *path, int64_t len) {
-    return xr_bool(path_is_absolute_raw(path, len < 0 ? 0 : (size_t) len));
 }
 
 static bool path_normalize_alloc(const char *path, size_t len, char **out, size_t *out_len) {

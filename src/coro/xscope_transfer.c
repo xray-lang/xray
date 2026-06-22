@@ -10,7 +10,6 @@
 
 #include "xscope_transfer.h"
 
-#include "xaot_coro.h"
 #include "xcoroutine.h"
 #include "xdeep_copy.h"
 #include "xtask.h"
@@ -68,8 +67,4 @@ static const XrScopeTransferOps SCOPE_TRANSFER_OPS = {
 
 void xr_scope_transfer_enable_core(XrRuntimeCore *core) {
     xr_runtime_core_set_scope_transfer_ops(core, &SCOPE_TRANSFER_OPS);
-}
-
-void xr_aot_runtime_enable_transfer(XrAotRuntime *runtime) {
-    xr_scope_transfer_enable_core(xr_aot_runtime_core(runtime));
 }

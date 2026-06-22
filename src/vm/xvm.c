@@ -57,7 +57,7 @@
 
 #include "../runtime/mem/xcoro_heap.h"
 #include "../runtime/mem/xalloc_unified.h"
-#include "../ir/xi_ffi.h"
+#include "xvm_ffi.h"
 
 #include <math.h>
 #include <inttypes.h>

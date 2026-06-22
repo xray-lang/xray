@@ -5,10 +5,10 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xi_ffi.c - VM-side foreign function invocation via libffi.
+ * xvm_ffi.c - VM-side foreign function invocation via libffi.
  */
 
-#include "xi_ffi.h"
+#include "xvm_ffi.h"
 #include "../runtime/value/xchunk.h"
 #include "../runtime/value/xffi_sig.h"
 #include "../runtime/closure/xclosure.h"

@@ -2,7 +2,8 @@
 # Public install surface gate for task 132/M8.
 #
 # The installed product must not expose libxray_core.a. Installed AOT builds
-# should use the precise runtime archives chosen by the link manifest.
+# should use the precise runtime archives chosen by the link manifest, while
+# bytecode embedders use the dedicated VM runtime archive.
 
 set -u
 
@@ -75,6 +76,7 @@ fi
 expect_executable "$PREFIX/bin/xray" "installed xray executable"
 expect_file "$PREFIX/lib/libxray_aot_core.a" "installed xray_aot_core archive"
 expect_file "$PREFIX/lib/libxray_rt_coro.a" "installed xray_rt_coro archive"
+expect_file "$PREFIX/lib/libxray_vm_runtime.a" "installed xray_vm_runtime archive"
 
 if find "$PREFIX/lib" -name 'libxray_core.a' -print -quit | grep -q .; then
     record_fail "does not install libxray_core.a"
