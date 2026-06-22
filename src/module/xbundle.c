@@ -33,7 +33,7 @@
 #include "../os/os_fs.h"
 
 // xr_parse_with_source declared in xparse.h (included above)
-// xr_compile_ast_with_source declared in xisolate_internal.h (included above)
+// xr_compile_ast_with_source declared in xisolate_internal.h (included above).
 // xr_program_destroy declared in xast.h (included via xast.h)
 
 /* ========== Internal Structures ========== */
@@ -151,8 +151,8 @@ static void visit_node(BundleContext *ctx, AstNode *node, const char *current_di
                             if (ast) {
                                 char *pkg_dir = xr_path_dirname(mid.source_path);
                                 collect_imports_from_ast(ctx, ast, pkg_dir);
-                                XrProto *proto = xr_compile_ast_with_source_session(
-                                    ctx->session, ast, mid.source_path);
+                                XrProto *proto =
+                                    xr_compile_ast_with_source(ctx->session, ast, mid.source_path);
                                 if (proto) {
                                     size_t bc_size;
                                     uint8_t *bc = xr_bytecode_write(ctx->X, proto, 0, &bc_size);
@@ -190,8 +190,8 @@ static void visit_node(BundleContext *ctx, AstNode *node, const char *current_di
                         if (ast) {
                             char *module_dir = xr_path_dirname(mid.source_path);
                             collect_imports_from_ast(ctx, ast, module_dir);
-                            XrProto *proto = xr_compile_ast_with_source_session(ctx->session, ast,
-                                                                                mid.source_path);
+                            XrProto *proto =
+                                xr_compile_ast_with_source(ctx->session, ast, mid.source_path);
                             if (proto) {
                                 size_t bc_size;
                                 uint8_t *bc = xr_bytecode_write(ctx->X, proto, 0, &bc_size);
@@ -433,7 +433,7 @@ XrBundle *xr_bundle_create_ex(XrayIsolate *X, const char *entry_file, XrBundleFl
     collect_imports_from_ast(&ctx, ast, ctx.base_dir);
 
     // Compile entry file and add to bundle (placed last to ensure dependencies come first)
-    XrProto *proto = xr_compile_ast_with_source_session(session, ast, abs_path);
+    XrProto *proto = xr_compile_ast_with_source(session, ast, abs_path);
     if (proto) {
         size_t bc_size;
         uint8_t *bc = xr_bytecode_write(X, proto, 0, &bc_size);

@@ -20,6 +20,9 @@
 #include "../test_helper.h"
 
 #include <stddef.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
 
 /* ========== xr_vm_current_ctx contract ========== */
 
@@ -232,6 +235,28 @@ TEST(vm_vararg_entry) {
     xray_isolate_delete(iso);
 }
 
+TEST(vm_dofile_debug_null_out_proto_releases_proto) {
+    char path[] = "/tmp/xray_vm_debug_null_XXXXXX";
+    int fd = mkstemp(path);
+    ASSERT_TRUE(fd >= 0);
+    FILE *f = fdopen(fd, "w");
+    ASSERT_NOT_NULL(f);
+    fputs("let answer = 40 + 2\nif (answer != 42) { throw new Exception(\"bad\") }\n", f);
+    fclose(f);
+
+    XrayIsolateParams params;
+    xray_isolate_params_init(&params);
+    xray_isolate_setup_full(&params);
+    XrayIsolate *iso = xray_isolate_new(&params);
+    ASSERT_NOT_NULL(iso);
+
+    int rc = xray_isolate_dofile_debug(iso, path, NULL);
+    ASSERT_EQ_INT(rc, 0);
+
+    xray_isolate_delete(iso);
+    unlink(path);
+}
+
 /* ========== Main ========== */
 
 TEST_MAIN_BEGIN()
@@ -253,4 +278,5 @@ RUN_TEST_SUITE("End-to-end entry path");
 RUN_TEST(vm_deep_recursion_via_dostring);
 RUN_TEST(vm_large_maxstacksize_entry);
 RUN_TEST(vm_vararg_entry);
+RUN_TEST(vm_dofile_debug_null_out_proto_releases_proto);
 TEST_MAIN_END()

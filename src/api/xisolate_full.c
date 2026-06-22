@@ -110,8 +110,8 @@ static int isolate_init_full(XrayIsolate *isolate) {
 
     // Compiler hooks for import
     xr_module_set_compiler_hooks(isolate, isolate->compiler_session, xr_parse_with_source,
-                                 xr_compile_ast_with_source_session,
-                                 xr_compile_source_with_path_session, xr_program_destroy);
+                                 xr_compile_ast_with_source, xr_compile_source_with_path,
+                                 xr_program_destroy);
 
     // Native XrClasses for Logger / DateTime / Regex / NetConn /
     // NetListener are registered up front inside the prelude module

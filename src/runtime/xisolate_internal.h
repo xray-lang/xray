@@ -225,15 +225,12 @@ struct XrayIsolate {
 //
 // ========== Compilation and Execution API ==========
 
-// Compile AST to bytecode (no source file info)
-XR_FUNC XrProto *xr_compile_ast(XrayIsolate *isolate, AstNode *ast);
-XR_FUNC XrProto *xr_compile_ast_with_source_session(XrCompilerSession *session, AstNode *ast,
-                                                    const char *source_file);
-XR_FUNC XrProto *xr_compile_source_with_path_session(XrCompilerSession *session, const char *source,
-                                                     const char *source_file);
+XR_FUNC XrProto *xr_compile_ast_with_source(XrCompilerSession *session, AstNode *ast,
+                                            const char *source_file);
+XR_FUNC XrProto *xr_compile_source_with_path(XrCompilerSession *session, const char *source,
+                                             const char *source_file);
 
-// xr_compile_ast_with_source, xr_execute, xr_free_code, xr_compile_source_with_path
-// declared in xisolate_api.h
+// xr_execute and xr_free_code are declared in xisolate_api.h.
 
 // ========== Internal Helper Functions ==========
 

@@ -281,7 +281,7 @@ static void run_test_file(const char *filepath, XrTestConfig *config, XrTestFile
         goto cleanup_source;
     }
 
-    XrProto *proto = xr_compile_ast_with_source_session(session, ast, filepath);
+    XrProto *proto = xr_compile_ast_with_source(session, ast, filepath);
     if (!proto) {
         result->has_error = true;
         snprintf(result->error_msg, sizeof(result->error_msg), "compile failed");
