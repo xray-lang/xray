@@ -102,7 +102,7 @@ op_call_entry:;
         // Class call: Array() or User() -> invoke constructor
         if (XR_GC_GET_TYPE(gc) == XR_TCLASS) {
             XrClass *klass = (XrClass *) gc;
-            XrSymbolTable *sym_table = (XrSymbolTable *) isolate->symbol_table;
+            XrSymbolTable *sym_table = (XrSymbolTable *) isolate->core_rt->symbol_table;
             XrMethod *constructor = NULL;
 
             // First look for "call" static method (native class)

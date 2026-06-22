@@ -475,7 +475,7 @@ vmcase(OP_MODK) {
         if (xr_value_is_instance(value)) {                                                         \
             XrInstance *inst_obj = xr_value_to_instance(value);                                    \
             XrClass *cls = xr_instance_get_class(inst_obj);                                        \
-            XrSymbolTable *sym_table = (XrSymbolTable *) isolate->symbol_table;                    \
+            XrSymbolTable *sym_table = (XrSymbolTable *) isolate->core_rt->symbol_table;           \
             int op_sym = xr_symbol_register_in_table(sym_table, op_name);                          \
             XrMethod *op_method = xr_class_lookup_method(cls, op_sym);                             \
             if (op_method != NULL && op_method->type == XMETHOD_OPERATOR &&                        \

@@ -118,7 +118,7 @@ int xr_vm_struct_layout_field_index(XrayIsolate *isolate, const XrStructLayout *
                                     int prop_symbol) {
     if (!isolate || !layout || !layout->field_names)
         return -1;
-    XrSymbolTable *sym_table = (XrSymbolTable *) isolate->symbol_table;
+    XrSymbolTable *sym_table = (XrSymbolTable *) isolate->core_rt->symbol_table;
     const char *prop_name = xr_symbol_get_name_in_table(sym_table, prop_symbol);
     if (!prop_name)
         return -1;
@@ -332,8 +332,8 @@ void xr_vm_vm_init(XrayIsolate *isolate) {
     isolate->vm.pending_error = xr_null();
 
     // Symbol table already initialized when XrayIsolate created (per-isolate)
-    if (isolate && isolate->symbol_table) {
-        XrSymbolTable *symtab = (XrSymbolTable *) isolate->symbol_table;
+    if (isolate && isolate->core_rt->symbol_table) {
+        XrSymbolTable *symtab = (XrSymbolTable *) isolate->core_rt->symbol_table;
         (void) symtab;  // Avoid warning in non-DEBUG mode
         VM_DEBUG_PRINT("Using isolate symbol table with %d builtin symbols\n",
                        symtab->builtin_count);
@@ -389,13 +389,13 @@ void xr_vm_vm_init(XrayIsolate *isolate) {
                 xr_value_from_class(isolate->core->jsonClass);
         }
 
-        if (isolate->native_type_classes[XR_TWORKQUEUE]) {
+        if (isolate->core_rt->native_type_classes[XR_TWORKQUEUE]) {
             isolate->vm.builtins[XR_GLOBAL_VAR_WORKQUEUE] =
-                xr_value_from_class(isolate->native_type_classes[XR_TWORKQUEUE]);
+                xr_value_from_class(isolate->core_rt->native_type_classes[XR_TWORKQUEUE]);
         }
-        if (isolate->native_type_classes[XR_TRESULTGROUP]) {
+        if (isolate->core_rt->native_type_classes[XR_TRESULTGROUP]) {
             isolate->vm.builtins[XR_GLOBAL_VAR_RESULTGROUP] =
-                xr_value_from_class(isolate->native_type_classes[XR_TRESULTGROUP]);
+                xr_value_from_class(isolate->core_rt->native_type_classes[XR_TRESULTGROUP]);
         }
 
         // process/__file__/__dir__ indices 5/6/7, user global variables start from

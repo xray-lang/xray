@@ -65,10 +65,10 @@ static int isolate_init_full(XrayIsolate *isolate) {
     xr_type_set_current_pool(isolate->analyzer_pool, &isolate->analyzer_pool->next_type_id);
 
     // Symbol table
-    isolate->symbol_table = xr_symbol_table_create();
-    if (!isolate->symbol_table)
+    isolate->core_rt->symbol_table = xr_symbol_table_create();
+    if (!isolate->core_rt->symbol_table)
         return -1;
-    xr_symbol_table_init_builtins((XrSymbolTable *) isolate->symbol_table);
+    xr_symbol_table_init_builtins((XrSymbolTable *) isolate->core_rt->symbol_table);
 
     // Type registry (must be before core_init, which registers classes)
     xr_registry_init(isolate);
@@ -143,12 +143,12 @@ static int isolate_init_full(XrayIsolate *isolate) {
         if (isolate->core->jsonClass)
             isolate->vm.builtins[XR_GLOBAL_VAR_JSON] =
                 xr_value_from_class(isolate->core->jsonClass);
-        if (isolate->native_type_classes[XR_TWORKQUEUE])
+        if (isolate->core_rt->native_type_classes[XR_TWORKQUEUE])
             isolate->vm.builtins[XR_GLOBAL_VAR_WORKQUEUE] =
-                xr_value_from_class(isolate->native_type_classes[XR_TWORKQUEUE]);
-        if (isolate->native_type_classes[XR_TRESULTGROUP])
+                xr_value_from_class(isolate->core_rt->native_type_classes[XR_TWORKQUEUE]);
+        if (isolate->core_rt->native_type_classes[XR_TRESULTGROUP])
             isolate->vm.builtins[XR_GLOBAL_VAR_RESULTGROUP] =
-                xr_value_from_class(isolate->native_type_classes[XR_TRESULTGROUP]);
+                xr_value_from_class(isolate->core_rt->native_type_classes[XR_TRESULTGROUP]);
         if (isolate->vm.builtin_count < XR_USER_GLOBALS_START)
             isolate->vm.builtin_count = XR_USER_GLOBALS_START;
     }
@@ -188,14 +188,14 @@ static void isolate_cleanup_full(XrayIsolate *isolate) {
         isolate->core = NULL;
     }
 
-    if (isolate->type_registry) {
+    if (isolate->core_rt->type_registry) {
         xr_registry_free(isolate);
-        isolate->type_registry = NULL;
+        isolate->core_rt->type_registry = NULL;
     }
 
-    if (isolate->symbol_table) {
-        xr_symbol_table_destroy((XrSymbolTable *) isolate->symbol_table);
-        isolate->symbol_table = NULL;
+    if (isolate->core_rt->symbol_table) {
+        xr_symbol_table_destroy((XrSymbolTable *) isolate->core_rt->symbol_table);
+        isolate->core_rt->symbol_table = NULL;
     }
 
     /* Persistent REPL analyzer owns its own type pool (separate from

@@ -43,35 +43,6 @@ struct XrCoroGC *xr_isolate_get_coro_gc(XrayIsolate *X) {
     return ((XrCoroutine *) X->main_coro)->coro_gc;
 }
 
-/* ========== Type Subsystem ========== */
-
-// xr_isolate_get_type_pool removed - now using XrType directly
-
-XrTypeRegistry *xr_isolate_get_type_registry(XrayIsolate *X) {
-    return X ? X->type_registry : NULL;
-}
-
-void xr_isolate_set_type_registry(XrayIsolate *X, XrTypeRegistry *registry) {
-    if (X)
-        X->type_registry = registry;
-}
-
-// xr_isolate_get_symbol_table defined in api/xisolate.c
-
-/* ========== Class Subsystem ========== */
-
-XrClass *xr_isolate_get_native_type_class(XrayIsolate *X, uint8_t type_id) {
-    if (!X || type_id >= XR_NATIVE_TYPE_MAX)
-        return NULL;
-    return X->native_type_classes[type_id];
-}
-
-void xr_isolate_set_native_type_class(XrayIsolate *X, uint8_t type_id, XrClass *cls) {
-    if (X && type_id < XR_NATIVE_TYPE_MAX) {
-        X->native_type_classes[type_id] = cls;
-    }
-}
-
 /* ========== Module Subsystem ========== */
 
 XrModuleRegistry *xr_isolate_get_module_registry(XrayIsolate *X) {

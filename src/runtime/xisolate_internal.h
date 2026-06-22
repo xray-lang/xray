@@ -73,8 +73,7 @@ struct XrayIsolate {
     /* ========== Common State ========== */
 
     // Core object system
-    XrayCoreClasses *core;          // Core classes (Object, Class, String, etc.)
-    XrTypeRegistry *type_registry;  // Type registry for reflection
+    XrayCoreClasses *core;  // Core classes (Object, Class, String, etc.)
 
     // VM-neutral runtime core: GC, system heap, string pool, config,
     // script metadata, weak registry, and extension type registry.
@@ -99,9 +98,6 @@ struct XrayIsolate {
     XrTypeInferContext *type_infer_context;  // Type inference context
     XrTypeTable *type_table;                 // Compiler type table
     struct XrTypePool *analyzer_pool;        // Static analyzer type pool (multi-instance safe)
-
-    // Symbol system
-    XrSymbolTable *symbol_table;  // Per-Isolate symbol table
 
     // Configuration
     XrayIsolateParams params;  // Creation parameters
@@ -164,9 +160,6 @@ struct XrayIsolate {
     // Compile-time string pool for deduplication during parsing.
     // Lifetime matches current_arena — set/cleared together.
     struct XrCompileStringPool *compile_string_pool;
-
-    // Native type mapping table
-    XrClass *native_type_classes[XR_NATIVE_TYPE_MAX];  // GC type ID -> XrClass mapping
 
     // Per-isolate active type pool (replaces XR_THREAD_LOCAL g_current_pool)
     struct XrTypePool *current_type_pool;

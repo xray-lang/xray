@@ -281,11 +281,11 @@ typedef XrCoroSnapshotEntry VmCoroEntry;
  * Returns NULL for types that need special handling (module, null). */
 static inline XrClass *invoke_resolve_class(XrayIsolate *isolate, XrValue receiver) {
     if (XR_IS_INT(receiver))
-        return isolate->native_type_classes[XR_TINT];
+        return isolate->core_rt->native_type_classes[XR_TINT];
     if (XR_IS_FLOAT(receiver))
-        return isolate->native_type_classes[XR_TFLOAT];
+        return isolate->core_rt->native_type_classes[XR_TFLOAT];
     if (XR_IS_BOOL(receiver))
-        return isolate->native_type_classes[XR_TBOOL];
+        return isolate->core_rt->native_type_classes[XR_TBOOL];
     if (XR_IS_STRUCT_REF(receiver)) {
         XrStructLayout *layout = xr_vm_struct_ref_layout(isolate, receiver);
         if (layout && xr_struct_layout_is_headerless(layout))
@@ -308,7 +308,7 @@ static inline XrClass *invoke_resolve_class(XrayIsolate *isolate, XrValue receiv
 
     /* All native types (string, array, map, set, json, bigint, etc.) */
     if ((int) type < XR_NATIVE_TYPE_MAX)
-        return isolate->native_type_classes[type];
+        return isolate->core_rt->native_type_classes[type];
 
     return NULL;
 }
