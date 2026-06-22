@@ -68,14 +68,14 @@ uint64_t xr_isolate_get_ext_has_refs_bitmap(XrayIsolate *isolate) {
 
 XrExtDestroyFn xr_isolate_get_ext_destroy(XrayIsolate *isolate, uint8_t type_id) {
     XrRuntimeCore *core = xr_isolate_get_runtime_core(isolate);
-    if (!core || type_id >= XGC_MAX_TYPES)
+    if (!core || type_id >= XR_OBJ_TYPE_MAX)
         return NULL;
     return (XrExtDestroyFn) core->ext_destroy_funcs[type_id];
 }
 
 XrExtTraverseFn xr_isolate_get_ext_traverse(XrayIsolate *isolate, uint8_t type_id) {
     XrRuntimeCore *core = xr_isolate_get_runtime_core(isolate);
-    if (!core || type_id >= XGC_MAX_TYPES)
+    if (!core || type_id >= XR_OBJ_TYPE_MAX)
         return NULL;
     return (XrExtTraverseFn) core->ext_traverse_funcs[type_id];
 }

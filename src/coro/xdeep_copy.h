@@ -161,9 +161,9 @@ XR_FUNC XrValue xr_to_shared(struct XrayIsolate *X, XrValue value);
 /* ========== Per-Type Transfer Hooks ==========
  *
  * One pair of callbacks per deep-copyable / shareable type, all sharing
- * the XrGCDeepCopyFn / XrGCToSharedFn signatures so the split transfer
+ * the XrObjDeepCopyFn / XrObjToSharedFn signatures so the split transfer
  * tables can dispatch directly without casts. The dispatchers above
- * (xr_deep_copy_with_ctx, xr_to_shared) consult these slots; any GC
+ * (xr_deep_copy_with_ctx, xr_to_shared) consult these slots; any object
  * type without a hook is simply not deep-copyable / not shareable
  * across coroutines and the dispatcher returns the value unchanged. */
 

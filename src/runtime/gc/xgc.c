@@ -219,8 +219,8 @@ void xr_weak_registry_destroy(XrayIsolate *isolate) {
     core->weak_registry = NULL;
 }
 
-XR_FUNC bool xr_gc_type_may_need_finalize(uint8_t type) {
-    return type < XGC_MAX_TYPES && type > XR_TATOMIC;
+XR_FUNC bool xr_obj_type_may_need_finalize(uint8_t type) {
+    return type < XR_OBJ_TYPE_MAX && type > XR_TATOMIC;
 }
 
 /* ========== Fixed Heap Init/Cleanup ========== */
@@ -240,7 +240,7 @@ void xr_fixed_heap_cleanup(XrFixedHeap *heap) {
         XrObjHeader *obj = node->obj;
         uint8_t type = xr_gc_gettype(obj);
         XrRuntimeCore *core = heap->isolate ? xr_isolate_get_runtime_core(heap->isolate) : NULL;
-        XrGCDestroyFn destroy = xr_runtime_core_destroy_op(core, type);
+        XrObjDestroyFn destroy = xr_runtime_core_destroy_op(core, type);
         if (destroy != NULL) {
             destroy(obj, NULL);
         }
@@ -259,7 +259,7 @@ void xr_fixed_heap_cleanup(XrFixedHeap *heap) {
 void *xr_fixed_heap_alloc(XrFixedHeap *heap, size_t size, uint8_t type) {
     XR_DCHECK(heap != NULL, "fixed_heap_alloc: NULL heap");
     XR_DCHECK(size >= sizeof(XrObjHeader), "fixed_heap_alloc: size too small");
-    XR_DCHECK(type < XGC_MAX_TYPES, "fixed_heap_alloc: invalid object type");
+    XR_DCHECK(type < XR_OBJ_TYPE_MAX, "fixed_heap_alloc: invalid object type");
     XrFixedHeapObjectNode *node =
         (XrFixedHeapObjectNode *) xr_malloc(sizeof(XrFixedHeapObjectNode));
     if (!node)

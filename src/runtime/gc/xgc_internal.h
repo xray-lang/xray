@@ -44,19 +44,19 @@ struct XrayIsolate;
 typedef struct XrFixedHeap XrFixedHeap;
 typedef struct XrCoroHeap XrCoroHeap;
 
-// Maximum GC type ID
-#define XGC_MAX_TYPES 64
+// Object type table capacity
+#define XR_OBJ_TYPE_MAX 64
 
-/* ========== Type Function Types ========== */
+/* ========== Object Type Capability Function Types ========== */
 
 struct XrFixedHeap;
 struct XrayIsolate;
 struct XrCopyContext;
 
-typedef void (*XrGCDestroyFn)(XrObjHeader *obj, XrCoroHeap *owner_heap);
-typedef XrValue (*XrGCDeepCopyFn)(struct XrCopyContext *ctx, XrObjHeader *obj);
-typedef XrValue (*XrGCToSharedFn)(struct XrayIsolate *X, XrObjHeader *obj);
-typedef struct XrObjHeader **(*XrGCGetGCListFn)(XrObjHeader *obj);
+typedef void (*XrObjDestroyFn)(XrObjHeader *obj, XrCoroHeap *owner_heap);
+typedef XrValue (*XrObjDeepCopyFn)(struct XrCopyContext *ctx, XrObjHeader *obj);
+typedef XrValue (*XrObjToSharedFn)(struct XrayIsolate *X, XrObjHeader *obj);
+typedef struct XrObjHeader **(*XrObjGetRefListFn)(XrObjHeader *obj);
 
 typedef struct XrFixedHeapObjectNode {
     XrObjHeader *obj;
@@ -89,18 +89,18 @@ XR_FUNC void xr_fixed_heap_init(XrFixedHeap *heap, struct XrayIsolate *isolate);
 XR_FUNC void xr_fixed_heap_cleanup(XrFixedHeap *heap);
 XR_FUNC void *xr_fixed_heap_alloc(XrFixedHeap *heap, size_t size, uint8_t type);
 XR_FUNC XrObjHeader *xr_fixed_heap_new_obj(XrFixedHeap *heap, uint8_t type, size_t size);
-XR_FUNC bool xr_gc_type_may_need_finalize(uint8_t type);
+XR_FUNC bool xr_obj_type_may_need_finalize(uint8_t type);
 
 /* Compile-time RC dup/drop primitives are inline in xcoro_heap.h
  * (xr_rc_retain_value / xr_rc_release_value): one shared implementation
  * for the VM and container runtime. */
 
-/* ========== Compile-Time Type Function Tables ========== */
+/* ========== Object Type Transfer Tables ========== */
 
 // Transfer tables: defined in xdeep_copy.c and only pulled when transfer
 // logic is linked.
-extern const XrGCDeepCopyFn g_type_deep_copy_ops[XGC_MAX_TYPES];
-extern const XrGCToSharedFn g_type_to_shared_ops[XGC_MAX_TYPES];
+extern const XrObjDeepCopyFn xr_obj_deep_copy_ops[XR_OBJ_TYPE_MAX];
+extern const XrObjToSharedFn xr_obj_to_shared_ops[XR_OBJ_TYPE_MAX];
 
 // Destroy functions (non-static, referenced by const tables)
 XR_FUNC void xr_gc_destroy_array(XrObjHeader *obj, XrCoroHeap *owner_heap);

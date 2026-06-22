@@ -374,7 +374,7 @@ void xr_shared_destroy_core(XrRuntimeCore *core, XrObjHeader *obj) {
     uint8_t type = XR_OBJ_GET_TYPE(obj);
 
     // Call destructor if registered (to free internal resources like buffers)
-    XrGCDestroyFn destroy = xr_runtime_core_destroy_op(core, type);
+    XrObjDestroyFn destroy = xr_runtime_core_destroy_op(core, type);
     if (destroy)
         destroy(obj, NULL);
 

@@ -29,7 +29,7 @@ XrCoroHeap *xr_coro_ensure_heap(struct XrCoroutine *coro) {
 
 void *xr_coro_alloc(struct XrCoroutine *coro, size_t size, uint8_t type) {
     XR_DCHECK(size > 0, "coro_alloc: zero size");
-    XR_DCHECK(type < XGC_MAX_TYPES, "coro_alloc: invalid GC type");
+    XR_DCHECK(type < XR_OBJ_TYPE_MAX, "coro_alloc: invalid object type");
     if (!coro || !coro->heap)
         return NULL;
     XrObjHeader *obj = xr_coro_heap_new_obj(coro->heap, type, size);
