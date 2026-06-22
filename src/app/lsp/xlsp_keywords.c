@@ -19,8 +19,8 @@ const char *xr_keywords[] = {
     "if", "else", "while", "for", "in", "is", "to", "break", "continue", "return", "match",
     "default",
     // Class
-    "extends", "implements", "constructor", "this", "super", "new", "static", "private", "public",
-    "abstract", "override", "operator",
+    "extends", "implements", "constructor", "this", "super", "new", "static", "private", "abstract",
+    "override", "operator",
     // Exception
     "try", "catch", "throw",
     // Module

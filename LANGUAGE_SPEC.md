@@ -113,7 +113,7 @@ Error codes use the `E0xxx` format (e.g., `E0101`); the full list is in [Chapter
 
 ## 1. Lexical Structure
 
-> Source of truth: `src/frontend/lexer/xlex.h` (token enum), `src/frontend/lexer/xkeywords.def` (keyword table, 62 entries), `src/frontend/lexer/xlex.c` (scanner implementation).
+> Source of truth: `src/frontend/lexer/xlex.h` (token enum), `src/frontend/lexer/xkeywords.def` (keyword table, 61 entries), `src/frontend/lexer/xlex.c` (scanner implementation).
 
 ### 1.1 Character Encoding
 
@@ -164,7 +164,7 @@ The character `_` is a **dedicated wildcard token**, not an ordinary identifier:
 
 ### 1.5 Keywords
 
-Xray has **62 reserved keywords** in total; the authoritative source-of-truth table is in `src/frontend/lexer/xkeywords.def`. Keywords are grouped by purpose:
+Xray has **61 reserved keywords** in total; the authoritative source-of-truth table is in `src/frontend/lexer/xkeywords.def`. Keywords are grouped by purpose:
 
 #### 1.5.1 Declarations and Control Flow
 
@@ -194,7 +194,7 @@ Xray has **62 reserved keywords** in total; the authoritative source-of-truth ta
 | `new` | instantiation |
 | `this` `super` | self / parent reference |
 | `constructor` | constructor |
-| `static` `private` `public` | visibility modifiers (`public` is the **default** and is almost never written explicitly) |
+| `static` `private` | class/member modifiers; public visibility is the default and has no `public` keyword |
 | `abstract` `final` `override` | class/method modifiers (`override` is **optional** — overriding a parent method does not require an explicit annotation) |
 | `operator` | operator overloading |
 | `is` `as` | runtime type check / cast |
@@ -2063,12 +2063,12 @@ FieldDecl ::= Modifier* Identifier ':' Type ('=' Expression)?
 MethodDecl ::= Modifier* Identifier '(' ParamList? ')' ReturnType? Block
             |  Modifier* 'operator' OpToken '(' ParamList? ')' ReturnType? Block
 ConstructorDecl ::= 'constructor' '(' ParamList? ')' Block          // parameter types may be omitted
-Modifier ::= 'private' | 'public' | 'static' | 'final' | 'abstract' | 'override'
+Modifier ::= 'private' | 'static' | 'final' | 'abstract' | 'override'
 ```
 
-> **About `public` and `override`**: both modifiers **are valid keywords lexically**, but in practice they **are almost never written**:
+> **About default public visibility and `override`**:
 >
-> - `public` is the **default visibility**—every field/method without `private` is public, so writing `public` explicitly is redundant.
+> - Public is the **default visibility**—every field/method without `private` is public; the language has no `public` modifier.
 > - `override` is **optional**—an override happens automatically when the derived class declares a method with the same signature; an explicit `override` annotation is not required.
 >
 > The standard library and the regression tests consistently use the "omit the default modifier" style.
@@ -2126,7 +2126,6 @@ class Dog extends Animal {
 | Modifier | Applies to | Semantics |
 |--|--|--|
 | (none) | field/method | Default public—externally visible |
-| `public` | field/method | **Redundant**—same as default; never written in practice |
 | `private` | field/method | Class-internal access only; subclasses cannot access directly but may go through public parent methods |
 | `static` | field/method | Class-level, not part of an instance; called as `ClassName.method()` |
 | `final` | class/method/field | Class: cannot be inherited. Method: cannot be overridden. Field: cannot be reassigned after initialization |
@@ -5289,8 +5288,8 @@ ParamList ::= Param (',' Param)* ','?
 Param     ::= Modifier* Identifier ':' Type ('=' Expression)?
            |  '...' Identifier ':' Type
 ReturnType ::= '->' Type | '->' '(' Type (',' Type)+ ')'
-Modifier  ::= 'in' | 'ref' | 'private' | 'public' | 'static' | 'final' | 'abstract' | 'override'
-              // public/override are accepted but never required (default/implicit behavior)
+Modifier  ::= 'in' | 'ref' | 'private' | 'static' | 'final' | 'abstract' | 'override'
+              // public visibility is the default; override is optional
 
 TypeParams ::= '<' TypeParam (',' TypeParam)* ','? '>'
 TypeParam  ::= Identifier (':' Type ('&' Type)*)?         // constraints use ':', multiple use '&'
@@ -5350,7 +5349,7 @@ OperatorToken ::= '+' | '-' | '*' | '/' | '%'
 
 ## Appendix B. Keyword Index
 
-The full set of 62 reserved keywords sorted alphabetically; see [§1.5](#15-keywords) for the authoritative list.
+The full set of 61 reserved keywords sorted alphabetically; see [§1.5](#15-keywords) for the authoritative list.
 
 | Keyword | Section |
 |--|--|
@@ -5388,7 +5387,7 @@ The full set of 62 reserved keywords sorted alphabetically; see [§1.5](#15-keyw
 | `null` | §1.6.4 |
 | `operator` | §5.3 |
 | `override` | §5.3 |
-| `private` `public` | §5.3 |
+| `private` | §5.3 |
 | `return` | §4.7 |
 | `scope` | §10.7 |
 | `select` | §10.6 |

@@ -121,7 +121,6 @@ static const KwExpect kKnownKeywords[] = {
     {"operator", TK_OPERATOR},
     {"override", TK_OVERRIDE},
     {"private", TK_PRIVATE},
-    {"public", TK_PUBLIC},
     {"return", TK_RETURN},
     {"scope", TK_SCOPE},
     {"select", TK_SELECT},
@@ -242,6 +241,8 @@ static const char *kPrefixIdentifiers[] = {
     "float64x",
     "uint8x",
     "uint16x",
+    "public",
+    "publicValue",
     "unknown",
     "unknownValue",
     // Single-char `r` reserved in xkeywords.def comment as a raw-

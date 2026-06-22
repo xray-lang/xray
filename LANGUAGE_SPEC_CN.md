@@ -114,7 +114,7 @@ Xray 是一个**轻量级静态类型脚本语言，原生支持并发**。设�
 
 ## 1. 词法结构 (Lexical Structure)
 
-> 真值源：`src/frontend/lexer/xlex.h`（token 枚举）、`src/frontend/lexer/xkeywords.def`（关键字表，62 条）、`src/frontend/lexer/xlex.c`（扫描器实现）。
+> 真值源：`src/frontend/lexer/xlex.h`（token 枚举）、`src/frontend/lexer/xkeywords.def`（关键字表，61 条）、`src/frontend/lexer/xlex.c`（扫描器实现）。
 
 ### 1.1 字符编码
 
@@ -165,7 +165,7 @@ IdentCont  ::= IdentStart | '0'..'9'
 
 ### 1.5 关键字
 
-xray 共 **62 个保留关键字**，源码真值表见 `src/frontend/lexer/xkeywords.def`。关键字按用途分组：
+xray 共 **61 个保留关键字**，源码真值表见 `src/frontend/lexer/xkeywords.def`。关键字按用途分组：
 
 #### 1.5.1 声明与流程控制
 
@@ -195,7 +195,7 @@ xray 共 **62 个保留关键字**，源码真值表见 `src/frontend/lexer/xkey
 | `new` | 实例化 |
 | `this` `super` | 自我/父类引用 |
 | `constructor` | 构造器 |
-| `static` `private` `public` | 可见性修饰符（`public` 是**默认**，几乎从不显式写出） |
+| `static` `private` | 类/成员修饰符；公开是默认语义，没有 `public` 关键字 |
 | `abstract` `final` `override` | 类/方法修饰符（`override` 是**可选**——重写父类方法不要求显式标注） |
 | `operator` | 运算符重载 |
 | `is` `as` | 运行时类型检查 / 转换 |
@@ -2062,12 +2062,12 @@ FieldDecl ::= Modifier* Identifier ':' Type ('=' Expression)?
 MethodDecl ::= Modifier* Identifier '(' ParamList? ')' ReturnType? Block
             |  Modifier* 'operator' OpToken '(' ParamList? ')' ReturnType? Block
 ConstructorDecl ::= 'constructor' '(' ParamList? ')' Block          // 参数类型可省
-Modifier ::= 'private' | 'public' | 'static' | 'final' | 'abstract' | 'override'
+Modifier ::= 'private' | 'static' | 'final' | 'abstract' | 'override'
 ```
 
-> **关于 `public` 和 `override`**：这两个修饰符**在词法层是合法关键字**，但实际编码风格中**几乎从不使用**：
+> **关于默认公开可见性和 `override`**：
 >
-> - `public` 是**默认可见性**——所有未带 `private` 的字段/方法都是公开的，因此显式写 `public` 是冗余的。
+> - 公开是**默认可见性**——所有未带 `private` 的字段/方法都是公开的；语言没有 `public` 修饰符。
 > - `override` 是**可选**——重写父类方法只要同名同参就自动覆盖，不要求显式 `override` 标注。
 >
 > 标准库和回归测试一致采用"省略默认修饰符"风格。
@@ -2125,7 +2125,6 @@ class Dog extends Animal {
 | 修饰符 | 适用 | 语义 |
 |--|--|--|
 | （无） | 字段/方法 | 默认 public——公开可见 |
-| `public` | 字段/方法 | **冗余**——与默认相同；实际从不写出 |
 | `private` | 字段/方法 | 仅类内部可访问；子类不能直接访问，但可通过父类公开方法间接访问 |
 | `static` | 字段/方法 | 类级别，不属于实例；调用为 `ClassName.method()` |
 | `final` | 类/方法/字段 | 类：禁止继承；方法：禁止重写；字段：初始化后不可修改 |
@@ -5286,8 +5285,8 @@ ParamList ::= Param (',' Param)* ','?
 Param     ::= Modifier* Identifier ':' Type ('=' Expression)?
            |  '...' Identifier ':' Type
 ReturnType ::= '->' Type | '->' '(' Type (',' Type)+ ')'
-Modifier  ::= 'in' | 'ref' | 'private' | 'public' | 'static' | 'final' | 'abstract' | 'override'
-              // public/override 合法但实际从不使用（默认/隐式行为）
+Modifier  ::= 'in' | 'ref' | 'private' | 'static' | 'final' | 'abstract' | 'override'
+              // 公开可见性是默认语义；override 可选
 
 TypeParams ::= '<' TypeParam (',' TypeParam)* ','? '>'
 TypeParam  ::= Identifier (':' Type ('&' Type)*)?         // 约束用 ':' ，多约束用 '&'
@@ -5347,7 +5346,7 @@ OperatorToken ::= '+' | '-' | '*' | '/' | '%'
 
 ## 附录 B. 关键字索引
 
-完整 62 个关键字按字母排序见 [§1.5](#15-关键字)。
+完整 61 个关键字按字母排序见 [§1.5](#15-关键字)。
 
 | 关键字 | 节 |
 |--|--|
@@ -5385,7 +5384,7 @@ OperatorToken ::= '+' | '-' | '*' | '/' | '%'
 | `null` | §1.6.4 |
 | `operator` | §5.3 |
 | `override` | §5.3 |
-| `private` `public` | §5.3 |
+| `private` | §5.3 |
 | `return` | §4.7 |
 | `scope` | §10.7 |
 | `select` | §10.6 |

@@ -134,7 +134,6 @@ static ParseRule rules[] = {
     [TK_CONSTRUCTOR] = {NULL, NULL, PREC_NONE},
     [TK_STATIC] = {NULL, NULL, PREC_NONE},
     [TK_PRIVATE] = {NULL, NULL, PREC_NONE},
-    [TK_PUBLIC] = {NULL, NULL, PREC_NONE},
     [TK_MATCH] = {xr_parse_match_expr, NULL, PREC_NONE},  // match expression
     [TK_TRY] = {NULL, NULL, PREC_NONE},
     [TK_CATCH] = {NULL, NULL, PREC_NONE},

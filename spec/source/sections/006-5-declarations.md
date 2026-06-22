@@ -308,12 +308,12 @@ FieldDecl ::= Modifier* Identifier ':' Type ('=' Expression)?
 MethodDecl ::= Modifier* Identifier '(' ParamList? ')' ReturnType? Block
             |  Modifier* 'operator' OpToken '(' ParamList? ')' ReturnType? Block
 ConstructorDecl ::= 'constructor' '(' ParamList? ')' Block          // 参数类型可省
-Modifier ::= 'private' | 'public' | 'static' | 'final' | 'abstract' | 'override'
+Modifier ::= 'private' | 'static' | 'final' | 'abstract' | 'override'
 ```
 
-> **关于 `public` 和 `override`**：这两个修饰符**在词法层是合法关键字**，但实际编码风格中**几乎从不使用**：
+> **关于默认公开可见性和 `override`**：
 >
-> - `public` 是**默认可见性**——所有未带 `private` 的字段/方法都是公开的，因此显式写 `public` 是冗余的。
+> - 公开是**默认可见性**——所有未带 `private` 的字段/方法都是公开的；语言没有 `public` 修饰符。
 > - `override` 是**可选**——重写父类方法只要同名同参就自动覆盖，不要求显式 `override` 标注。
 >
 > 标准库和回归测试一致采用"省略默认修饰符"风格。
@@ -371,7 +371,6 @@ class Dog extends Animal {
 | 修饰符 | 适用 | 语义 |
 |--|--|--|
 | （无） | 字段/方法 | 默认 public——公开可见 |
-| `public` | 字段/方法 | **冗余**——与默认相同；实际从不写出 |
 | `private` | 字段/方法 | 仅类内部可访问；子类不能直接访问，但可通过父类公开方法间接访问 |
 | `static` | 字段/方法 | 类级别，不属于实例；调用为 `ClassName.method()` |
 | `final` | 类/方法/字段 | 类：禁止继承；方法：禁止重写；字段：初始化后不可修改 |
@@ -1153,12 +1152,12 @@ FieldDecl ::= Modifier* Identifier ':' Type ('=' Expression)?
 MethodDecl ::= Modifier* Identifier '(' ParamList? ')' ReturnType? Block
             |  Modifier* 'operator' OpToken '(' ParamList? ')' ReturnType? Block
 ConstructorDecl ::= 'constructor' '(' ParamList? ')' Block          // parameter types may be omitted
-Modifier ::= 'private' | 'public' | 'static' | 'final' | 'abstract' | 'override'
+Modifier ::= 'private' | 'static' | 'final' | 'abstract' | 'override'
 ```
 
-> **About `public` and `override`**: both modifiers **are valid keywords lexically**, but in practice they **are almost never written**:
+> **About default public visibility and `override`**:
 >
-> - `public` is the **default visibility**—every field/method without `private` is public, so writing `public` explicitly is redundant.
+> - Public is the **default visibility**—every field/method without `private` is public; the language has no `public` modifier.
 > - `override` is **optional**—an override happens automatically when the derived class declares a method with the same signature; an explicit `override` annotation is not required.
 >
 > The standard library and the regression tests consistently use the "omit the default modifier" style.
@@ -1216,7 +1215,6 @@ class Dog extends Animal {
 | Modifier | Applies to | Semantics |
 |--|--|--|
 | (none) | field/method | Default public—externally visible |
-| `public` | field/method | **Redundant**—same as default; never written in practice |
 | `private` | field/method | Class-internal access only; subclasses cannot access directly but may go through public parent methods |
 | `static` | field/method | Class-level, not part of an instance; called as `ClassName.method()` |
 | `final` | class/method/field | Class: cannot be inherited. Method: cannot be overridden. Field: cannot be reassigned after initialization |

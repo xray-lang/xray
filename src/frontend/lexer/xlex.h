@@ -119,7 +119,6 @@ typedef enum {
     TK_CONSTRUCTOR,  // constructor
     TK_STATIC,       // static
     TK_PRIVATE,      // private
-    TK_PUBLIC,       // public
     TK_OPERATOR,     // operator
     TK_ABSTRACT,     // abstract
     TK_OVERRIDE,     // override
