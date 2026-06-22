@@ -25,14 +25,14 @@
 #include "../vm/xvm_internal.h"
 #include <string.h>
 
-XrVMResult xr_vm_interpret_proto_isolate(XrayIsolate *isolate, XrProto *proto);
+XrVMResult xr_vm_interpret_proto_isolate(XrVMRuntime *isolate, XrProto *proto);
 
 /* ========== Execution API ========== */
 
 // Execute bytecode
 // main_coro already exists (created as bootstrap during isolate init),
 // just upgrade it with the compiled closure.
-int xr_execute(XrayIsolate *isolate, XrProto *proto) {
+int xr_execute(XrVMRuntime *isolate, XrProto *proto) {
     XR_DCHECK(isolate != NULL, "xr_execute: NULL isolate");
     XR_DCHECK(proto != NULL, "xr_execute: NULL proto");
     if (proto == NULL) {
@@ -67,7 +67,7 @@ int xr_execute(XrayIsolate *isolate, XrProto *proto) {
 }
 
 // Free bytecode
-void xr_free_code(XrayIsolate *isolate, XrProto *proto) {
+void xr_free_code(XrVMRuntime *isolate, XrProto *proto) {
     (void) isolate;
     if (proto != NULL) {
         xr_vm_proto_free(proto);
@@ -77,7 +77,7 @@ void xr_free_code(XrayIsolate *isolate, XrProto *proto) {
 /* ========== VM Lifecycle ========== */
 
 // Initialize global variables table
-static void init_globals(XrayIsolate *isolate) {
+static void init_globals(XrVMRuntime *isolate) {
     isolate->vm.builtin_count = 0;
     for (int i = 0; i < 256; i++) {
         isolate->vm.builtins[i] = xr_null();
@@ -87,7 +87,7 @@ static void init_globals(XrayIsolate *isolate) {
 
     /* Name-keyed top-level binding dict.  XrMap allocation lives on
      * the fixed heap, so the main coroutine — already constructed in
-     * xray_isolate_new before xr_vm_init — must exist here. */
+     * xray_vm_new before xr_vm_init — must exist here. */
     XR_DCHECK(isolate->main_coro != NULL, "init_globals: main_coro must precede globals dict");
     isolate->vm.globals = (XrGlobalDict *) xr_malloc(sizeof(XrGlobalDict));
     XR_CHECK(isolate->vm.globals != NULL, "init_globals: dict allocation failed");
@@ -103,7 +103,7 @@ static void init_globals(XrayIsolate *isolate) {
 }
 
 // Initialize coroutine state
-static void init_coro_state(XrayIsolate *isolate) {
+static void init_coro_state(XrVMRuntime *isolate) {
     XrCoroState *sched = (XrCoroState *) xr_malloc(sizeof(XrCoroState));
     if (sched) {
         xr_coro_state_init(sched);
@@ -113,7 +113,7 @@ static void init_coro_state(XrayIsolate *isolate) {
 }
 
 // Initialize unified VM context
-static void init_vm_context(XrayIsolate *isolate) {
+static void init_vm_context(XrVMRuntime *isolate) {
     XrVMContext *ctx = &isolate->vm_ctx;
     ctx->stack = isolate->vm.stack;
     ctx->stack_top = isolate->vm.stack_top;
@@ -138,7 +138,7 @@ static void init_vm_context(XrayIsolate *isolate) {
 }
 
 // Initialize VM execution engine
-int xr_vm_init(XrayIsolate *isolate) {
+int xr_vm_init(XrVMRuntime *isolate) {
     XR_DCHECK(isolate != NULL, "vm_init: NULL isolate");
     isolate->vm.stack_top = isolate->vm.stack;
     for (int i = 0; i < XR_STACK_MAX; i++) {
@@ -172,7 +172,7 @@ int xr_vm_init(XrayIsolate *isolate) {
 }
 
 // Cleanup VM execution engine
-void xr_vm_cleanup(XrayIsolate *isolate) {
+void xr_vm_cleanup(XrVMRuntime *isolate) {
     if (isolate->vm.strings_map != NULL) {
         xr_hashmap_free(isolate->vm.strings_map);
         isolate->vm.strings_map = NULL;

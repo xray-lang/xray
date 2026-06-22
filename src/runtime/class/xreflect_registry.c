@@ -37,7 +37,7 @@
 /* ========== Zero-copy Helper ========== */
 
 // Create metadata with pointer to XrClass (no copy)
-static inline XrTypeMetadata *xr_metadata_create_type_zerocopy(XrayIsolate *X, XrClass *klass) {
+static inline XrTypeMetadata *xr_metadata_create_type_zerocopy(XrVMRuntime *X, XrClass *klass) {
     (void) X;
     XrTypeMetadata *meta = (XrTypeMetadata *) xr_malloc(sizeof(XrTypeMetadata));
     if (!meta)
@@ -50,7 +50,7 @@ static inline XrTypeMetadata *xr_metadata_create_type_zerocopy(XrayIsolate *X, X
 
 /* ========== Lifecycle ========== */
 
-void xr_registry_init(XrayIsolate *X) {
+void xr_registry_init(XrVMRuntime *X) {
     XR_DCHECK(X != NULL, "registry_init: NULL isolate");
     XrTypeRegistry *registry = (XrTypeRegistry *) xr_malloc(sizeof(XrTypeRegistry));
     if (!registry) {
@@ -79,7 +79,7 @@ void xr_registry_init(XrayIsolate *X) {
     xr_isolate_set_type_registry(X, registry);
 }
 
-void xr_registry_free(XrayIsolate *X) {
+void xr_registry_free(XrVMRuntime *X) {
     XrTypeRegistry *registry = xr_isolate_get_type_registry(X);
     if (!registry)
         return;
@@ -146,7 +146,7 @@ static int registry_find_index(XrTypeRegistry *registry, const char *name) {
 
 /* ========== Registration ========== */
 
-bool xr_registry_register_type(XrayIsolate *X, XrTypeMetadata *meta) {
+bool xr_registry_register_type(XrVMRuntime *X, XrTypeMetadata *meta) {
     XR_DCHECK(X != NULL, "registry_register_type: NULL isolate");
     XR_DCHECK(meta != NULL, "registry_register_type: NULL meta");
     XrTypeRegistry *registry = xr_isolate_get_type_registry(X);
@@ -212,7 +212,7 @@ bool xr_registry_register_type(XrayIsolate *X, XrTypeMetadata *meta) {
 }
 
 // Lazy initialization: metadata created at registration, initialized on first access
-XrTypeMetadata *xr_registry_register_class(XrayIsolate *X, XrClass *klass) {
+XrTypeMetadata *xr_registry_register_class(XrVMRuntime *X, XrClass *klass) {
     XR_DCHECK(X != NULL, "registry_register_class: NULL isolate");
     if (!klass)
         return NULL;
@@ -233,7 +233,7 @@ XrTypeMetadata *xr_registry_register_class(XrayIsolate *X, XrClass *klass) {
     return meta;
 }
 
-bool xr_registry_unregister_type(XrayIsolate *X, const char *name) {
+bool xr_registry_unregister_type(XrVMRuntime *X, const char *name) {
     XR_DCHECK(X != NULL, "registry_unregister_type: NULL isolate");
     XrTypeRegistry *registry = xr_isolate_get_type_registry(X);
     if (!registry || !name)
@@ -262,10 +262,10 @@ bool xr_registry_unregister_type(XrayIsolate *X, const char *name) {
 
 /* ========== Lookup ========== */
 
-static XrTypeMetadata *resolve_type_by_name(XrayIsolate *X, const char *type_name);
+static XrTypeMetadata *resolve_type_by_name(XrVMRuntime *X, const char *type_name);
 
 // Supports lazy registration
-XrTypeMetadata *xr_registry_find_type(XrayIsolate *X, const char *name) {
+XrTypeMetadata *xr_registry_find_type(XrVMRuntime *X, const char *name) {
     XR_DCHECK(X != NULL, "registry_find_type: NULL isolate");
     XrTypeRegistry *registry = xr_isolate_get_type_registry(X);
     if (!registry || !name)
@@ -280,7 +280,7 @@ XrTypeMetadata *xr_registry_find_type(XrayIsolate *X, const char *name) {
     return resolve_type_by_name(X, name);
 }
 
-XrTypeMetadata *xr_registry_find_type_by_class(XrayIsolate *X, XrClass *klass) {
+XrTypeMetadata *xr_registry_find_type_by_class(XrVMRuntime *X, XrClass *klass) {
     XR_DCHECK(X != NULL, "registry_find_type_by_class: NULL isolate");
     if (!klass)
         return NULL;
@@ -313,7 +313,7 @@ XrTypeMetadata *xr_registry_find_type_by_class(XrayIsolate *X, XrClass *klass) {
 // time anyone queries it. The only name that has no XrClass and must
 // be minted on first access is "void" (signature-returning-nothing);
 // keep that tiny slow path and let everything else fall through.
-static XrTypeMetadata *resolve_type_by_name(XrayIsolate *X, const char *type_name) {
+static XrTypeMetadata *resolve_type_by_name(XrVMRuntime *X, const char *type_name) {
     if (!X || !type_name)
         return NULL;
 
@@ -333,7 +333,7 @@ static XrTypeMetadata *resolve_type_by_name(XrayIsolate *X, const char *type_nam
     return meta;
 }
 
-XrTypeMetadata **xr_registry_get_all_types(XrayIsolate *X, int *count) {
+XrTypeMetadata **xr_registry_get_all_types(XrVMRuntime *X, int *count) {
     XR_DCHECK(X != NULL, "registry_get_all_types: NULL isolate");
     XrTypeRegistry *registry = xr_isolate_get_type_registry(X);
     if (!registry || !count)
@@ -353,42 +353,42 @@ XrTypeMetadata **xr_registry_get_all_types(XrayIsolate *X, int *count) {
 
 /* ========== Builtin Type Accessors ========== */
 
-XrTypeMetadata *xr_registry_get_int_type(XrayIsolate *X) {
+XrTypeMetadata *xr_registry_get_int_type(XrVMRuntime *X) {
     XrTypeRegistry *r = xr_isolate_get_type_registry(X);
     return r ? r->int_type : NULL;
 }
 
-XrTypeMetadata *xr_registry_get_float_type(XrayIsolate *X) {
+XrTypeMetadata *xr_registry_get_float_type(XrVMRuntime *X) {
     XrTypeRegistry *r = xr_isolate_get_type_registry(X);
     return r ? r->float_type : NULL;
 }
 
-XrTypeMetadata *xr_registry_get_bool_type(XrayIsolate *X) {
+XrTypeMetadata *xr_registry_get_bool_type(XrVMRuntime *X) {
     XrTypeRegistry *r = xr_isolate_get_type_registry(X);
     return r ? r->bool_type : NULL;
 }
 
-XrTypeMetadata *xr_registry_get_string_type(XrayIsolate *X) {
+XrTypeMetadata *xr_registry_get_string_type(XrVMRuntime *X) {
     XrTypeRegistry *r = xr_isolate_get_type_registry(X);
     return r ? r->string_type : NULL;
 }
 
-XrTypeMetadata *xr_registry_get_array_type(XrayIsolate *X) {
+XrTypeMetadata *xr_registry_get_array_type(XrVMRuntime *X) {
     XrTypeRegistry *r = xr_isolate_get_type_registry(X);
     return r ? r->array_type : NULL;
 }
 
-XrTypeMetadata *xr_registry_get_map_type(XrayIsolate *X) {
+XrTypeMetadata *xr_registry_get_map_type(XrVMRuntime *X) {
     XrTypeRegistry *r = xr_isolate_get_type_registry(X);
     return r ? r->map_type : NULL;
 }
 
-XrTypeMetadata *xr_registry_get_object_type(XrayIsolate *X) {
+XrTypeMetadata *xr_registry_get_object_type(XrVMRuntime *X) {
     XrTypeRegistry *r = xr_isolate_get_type_registry(X);
     return r ? r->object_type : NULL;
 }
 
-XrTypeMetadata *xr_registry_get_null_type(XrayIsolate *X) {
+XrTypeMetadata *xr_registry_get_null_type(XrVMRuntime *X) {
     XrTypeRegistry *r = xr_isolate_get_type_registry(X);
     return r ? r->null_type : NULL;
 }
@@ -396,14 +396,14 @@ XrTypeMetadata *xr_registry_get_null_type(XrayIsolate *X) {
 /* ========== Metadata ========== */
 
 // Zero-copy: all data accessed directly from XrClass
-void xr_registry_initialize_metadata(XrayIsolate *X, XrTypeMetadata *meta) {
+void xr_registry_initialize_metadata(XrVMRuntime *X, XrTypeMetadata *meta) {
     (void) X;
     (void) meta;
 }
 
 /* ========== Debug ========== */
 
-void xr_registry_print(XrayIsolate *X) {
+void xr_registry_print(XrVMRuntime *X) {
     XrTypeRegistry *registry = xr_isolate_get_type_registry(X);
     if (!registry) {
         printf("XrTypeRegistry: NULL\n");
@@ -421,7 +421,7 @@ void xr_registry_print(XrayIsolate *X) {
     }
 }
 
-void xr_registry_get_stats(XrayIsolate *X, int *total, int *classes, int *interfaces,
+void xr_registry_get_stats(XrVMRuntime *X, int *total, int *classes, int *interfaces,
                            int *builtins) {
     XrTypeRegistry *registry = xr_isolate_get_type_registry(X);
     if (!registry) {
@@ -484,7 +484,7 @@ const char *xr_xr_type_kind_name(struct XrType *xa_type) {
     return "object";
 }
 
-XrTypeMetadata *xr_registry_from_xa_type(XrayIsolate *X, struct XrType *xa_type) {
+XrTypeMetadata *xr_registry_from_xa_type(XrVMRuntime *X, struct XrType *xa_type) {
     if (!X || !xa_type)
         return NULL;
 

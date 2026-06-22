@@ -91,12 +91,12 @@ void xr_bp_free_fields(struct XrBreakpoint *bp) {
 // Line Breakpoint Management
 // ============================================================================
 
-int xr_debug_add_breakpoint(XrayIsolate *isolate, const char *path, int line,
+int xr_debug_add_breakpoint(XrVMRuntime *isolate, const char *path, int line,
                             const char *condition) {
     return xr_debug_add_breakpoint_ex(isolate, path, line, condition, NULL, NULL);
 }
 
-int xr_debug_add_breakpoint_ex(XrayIsolate *isolate, const char *path, int line,
+int xr_debug_add_breakpoint_ex(XrVMRuntime *isolate, const char *path, int line,
                                const char *condition, const char *log_message,
                                const char *hit_condition) {
     XrDebugState *dbg = (XrDebugState *) xr_isolate_get_debug_state(isolate);
@@ -152,7 +152,7 @@ cleanup:
     return -1;
 }
 
-bool xr_debug_remove_breakpoint(XrayIsolate *isolate, int id) {
+bool xr_debug_remove_breakpoint(XrVMRuntime *isolate, int id) {
     XrDebugState *dbg = (XrDebugState *) xr_isolate_get_debug_state(isolate);
     if (!dbg)
         return false;
@@ -175,7 +175,7 @@ bool xr_debug_remove_breakpoint(XrayIsolate *isolate, int id) {
     return false;
 }
 
-void xr_debug_clear_breakpoints(XrayIsolate *isolate, const char *path) {
+void xr_debug_clear_breakpoints(XrVMRuntime *isolate, const char *path) {
     XrDebugState *dbg = (XrDebugState *) xr_isolate_get_debug_state(isolate);
     if (!dbg)
         return;
@@ -233,7 +233,7 @@ static bool check_hit_condition(const char *hit_condition, int hit_count) {
 }
 
 // Helper: expand log message with {expr} placeholders
-static char *expand_log_message(XrayIsolate *isolate, const char *msg) {
+static char *expand_log_message(XrVMRuntime *isolate, const char *msg) {
     if (!msg)
         return NULL;
 
@@ -305,7 +305,7 @@ static char *expand_log_message(XrayIsolate *isolate, const char *msg) {
     return result;
 }
 
-int xr_debug_check_breakpoint_ex(XrayIsolate *isolate, const char *path, int line,
+int xr_debug_check_breakpoint_ex(XrVMRuntime *isolate, const char *path, int line,
                                  char **out_log_message) {
     XrDebugState *dbg = (XrDebugState *) xr_isolate_get_debug_state(isolate);
     if (!dbg || !path)
@@ -344,7 +344,7 @@ int xr_debug_check_breakpoint_ex(XrayIsolate *isolate, const char *path, int lin
     return 1;  // Normal breakpoint
 }
 
-bool xr_debug_check_breakpoint(XrayIsolate *isolate, const char *path, int line) {
+bool xr_debug_check_breakpoint(XrVMRuntime *isolate, const char *path, int line) {
     return xr_debug_check_breakpoint_ex(isolate, path, line, NULL) == 1;
 }
 
@@ -352,7 +352,7 @@ bool xr_debug_check_breakpoint(XrayIsolate *isolate, const char *path, int line)
 // Watch Expression Management
 // ============================================================================
 
-int xr_debug_add_watch(XrayIsolate *isolate, const char *expression) {
+int xr_debug_add_watch(XrVMRuntime *isolate, const char *expression) {
     XrDebugState *dbg = (XrDebugState *) xr_isolate_get_debug_state(isolate);
     if (!dbg || !expression)
         return -1;
@@ -370,7 +370,7 @@ int xr_debug_add_watch(XrayIsolate *isolate, const char *expression) {
     return watch->id;
 }
 
-bool xr_debug_remove_watch(XrayIsolate *isolate, int id) {
+bool xr_debug_remove_watch(XrVMRuntime *isolate, int id) {
     XrDebugState *dbg = (XrDebugState *) xr_isolate_get_debug_state(isolate);
     if (!dbg)
         return false;
@@ -389,7 +389,7 @@ bool xr_debug_remove_watch(XrayIsolate *isolate, int id) {
     return false;
 }
 
-void xr_debug_clear_watches(XrayIsolate *isolate) {
+void xr_debug_clear_watches(XrVMRuntime *isolate) {
     XrDebugState *dbg = (XrDebugState *) xr_isolate_get_debug_state(isolate);
     if (!dbg)
         return;
@@ -404,7 +404,7 @@ void xr_debug_clear_watches(XrayIsolate *isolate) {
     dbg->watches = NULL;
 }
 
-int xr_debug_get_watch_count(XrayIsolate *isolate) {
+int xr_debug_get_watch_count(XrVMRuntime *isolate) {
     XrDebugState *dbg = (XrDebugState *) xr_isolate_get_debug_state(isolate);
     if (!dbg)
         return 0;
@@ -416,7 +416,7 @@ int xr_debug_get_watch_count(XrayIsolate *isolate) {
     return count;
 }
 
-bool xr_debug_get_watch(XrayIsolate *isolate, int idx, int *out_id, const char **out_expr) {
+bool xr_debug_get_watch(XrVMRuntime *isolate, int idx, int *out_id, const char **out_expr) {
     XrDebugState *dbg = (XrDebugState *) xr_isolate_get_debug_state(isolate);
     if (!dbg)
         return false;
@@ -438,7 +438,7 @@ bool xr_debug_get_watch(XrayIsolate *isolate, int idx, int *out_id, const char *
 // Exception Breakpoints
 // ============================================================================
 
-void xr_debug_set_exception_breakpoints(XrayIsolate *isolate, bool uncaught, bool caught) {
+void xr_debug_set_exception_breakpoints(XrVMRuntime *isolate, bool uncaught, bool caught) {
     XrDebugState *dbg = (XrDebugState *) xr_isolate_get_debug_state(isolate);
     if (!dbg)
         return;
@@ -451,7 +451,7 @@ void xr_debug_set_exception_breakpoints(XrayIsolate *isolate, bool uncaught, boo
 // Function Breakpoints
 // ============================================================================
 
-int xr_debug_add_function_breakpoint(XrayIsolate *isolate, const char *func_name,
+int xr_debug_add_function_breakpoint(XrVMRuntime *isolate, const char *func_name,
                                      const char *condition) {
     XrDebugState *dbg = (XrDebugState *) xr_isolate_get_debug_state(isolate);
     if (!dbg || !func_name)
@@ -471,7 +471,7 @@ int xr_debug_add_function_breakpoint(XrayIsolate *isolate, const char *func_name
     return bp->id;
 }
 
-void xr_debug_clear_function_breakpoints(XrayIsolate *isolate) {
+void xr_debug_clear_function_breakpoints(XrVMRuntime *isolate) {
     XrDebugState *dbg = (XrDebugState *) xr_isolate_get_debug_state(isolate);
     if (!dbg)
         return;
@@ -487,7 +487,7 @@ void xr_debug_clear_function_breakpoints(XrayIsolate *isolate) {
     dbg->func_breakpoints = NULL;
 }
 
-bool xr_debug_check_function_breakpoint(XrayIsolate *isolate, const char *func_name) {
+bool xr_debug_check_function_breakpoint(XrVMRuntime *isolate, const char *func_name) {
     XrDebugState *dbg = (XrDebugState *) xr_isolate_get_debug_state(isolate);
     if (!dbg || !func_name)
         return false;

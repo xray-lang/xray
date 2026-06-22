@@ -39,13 +39,13 @@ typedef enum {
 
 /* ========== VM Call Interface ========== */
 
-struct XrayIsolate;
+struct XrVMRuntime;
 struct XrClosure;
 
 // Call a script closure from C code.
 // Used by higher-order container methods (map/filter/reduce/forEach).
 // Implementation in vm/xvm.c.
-XR_FUNC XrValue xr_vm_call_closure(struct XrayIsolate *isolate, struct XrClosure *closure,
+XR_FUNC XrValue xr_vm_call_closure(struct XrVMRuntime *isolate, struct XrClosure *closure,
                                    XrValue *args, int nargs);
 
 // Truthy check for higher-order filter methods.
@@ -59,6 +59,6 @@ struct XrVMContext;
 // Execute bytecode from current frame.  Implementation in vm/xvm.c.
 // Declared here so coro/ (L3) can call the interpreter without
 // including vm/xvm_internal.h (L5).
-XR_FUNC XrVMResult run(struct XrayIsolate *isolate, struct XrVMContext *vm_ctx);
+XR_FUNC XrVMResult run(struct XrVMRuntime *isolate, struct XrVMContext *vm_ctx);
 
 #endif  // XVM_CALL_H

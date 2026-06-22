@@ -35,21 +35,21 @@ static inline bool map_is_weak(const XrMap *m) {
     return (m->flags & XR_MAP_FLAG_WEAK) != 0;
 }
 
-static XrValue xr_map_method_is_empty(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue xr_map_method_is_empty(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) iso;
     (void) args;
     (void) argc;
     return xr_bool(xr_map_is_empty(map_self(self)));
 }
 
-static XrValue xr_map_method_has(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue xr_map_method_has(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) iso;
     if (argc < 1)
         return xr_bool(0);
     return xr_bool(xr_map_has(map_self(self), args[0]));
 }
 
-static XrValue xr_map_method_get(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue xr_map_method_get(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) iso;
     if (argc < 1)
         return xr_null();
@@ -58,7 +58,7 @@ static XrValue xr_map_method_get(XrayIsolate *iso, XrValue self, XrValue *args, 
     return found ? result : xr_null();
 }
 
-static XrValue xr_map_method_set(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue xr_map_method_set(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     XrMap *m = map_self(self);
     /* WeakMap contract: key must be a heap object. */
     if (map_is_weak(m) && argc >= 1 && !XR_VALUE_NEEDS_GC(args[0])) {
@@ -74,14 +74,14 @@ static XrValue xr_map_method_set(XrayIsolate *iso, XrValue self, XrValue *args, 
     return xr_null();
 }
 
-static XrValue xr_map_method_delete(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue xr_map_method_delete(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) iso;
     if (argc < 1)
         return xr_bool(0);
     return xr_bool(xr_map_delete(map_self(self), args[0]));
 }
 
-static XrValue xr_map_method_clear(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue xr_map_method_clear(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) iso;
     (void) args;
     (void) argc;
@@ -92,7 +92,7 @@ static XrValue xr_map_method_clear(XrayIsolate *iso, XrValue self, XrValue *args
     return xr_null();
 }
 
-static XrValue xr_map_method_keys(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue xr_map_method_keys(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) args;
     (void) argc;
     XrMap *m = map_self(self);
@@ -101,7 +101,7 @@ static XrValue xr_map_method_keys(XrayIsolate *iso, XrValue self, XrValue *args,
     return xr_value_from_array(xr_map_keys(xr_current_coro(iso), m));
 }
 
-static XrValue xr_map_method_values(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue xr_map_method_values(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) args;
     (void) argc;
     XrMap *m = map_self(self);
@@ -110,7 +110,7 @@ static XrValue xr_map_method_values(XrayIsolate *iso, XrValue self, XrValue *arg
     return xr_value_from_array(xr_map_values(xr_current_coro(iso), m));
 }
 
-static XrValue xr_map_method_entries(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue xr_map_method_entries(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) args;
     (void) argc;
     XrMap *m = map_self(self);
@@ -119,7 +119,7 @@ static XrValue xr_map_method_entries(XrayIsolate *iso, XrValue self, XrValue *ar
     return xr_value_from_array(xr_map_entries(xr_current_coro(iso), m));
 }
 
-static XrValue xr_map_method_iterator(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue xr_map_method_iterator(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) args;
     (void) argc;
     XrMap *m = map_self(self);
@@ -133,7 +133,7 @@ static XrValue xr_map_method_iterator(XrayIsolate *iso, XrValue self, XrValue *a
     return iter ? xr_value_from_iterator(iter) : xr_null();
 }
 
-static XrValue xr_map_method_entries_iterator(XrayIsolate *iso, XrValue self, XrValue *args,
+static XrValue xr_map_method_entries_iterator(XrVMRuntime *iso, XrValue self, XrValue *args,
                                               int argc) {
     (void) args;
     (void) argc;
@@ -144,13 +144,13 @@ static XrValue xr_map_method_entries_iterator(XrayIsolate *iso, XrValue self, Xr
     return iter ? xr_value_from_iterator(iter) : xr_null();
 }
 
-static XrValue xr_map_method_to_string(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue xr_map_method_to_string(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) args;
     (void) argc;
     return xr_string_value(xr_value_to_string(iso, self));
 }
 
-static XrValue xr_map_method_foreach(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue xr_map_method_foreach(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     if (argc < 1)
         return xr_null();
     struct XrClosure *cb = xr_vm_closure_from_arg(iso, args[0], "Map.forEach");
@@ -170,7 +170,7 @@ static XrValue xr_map_method_foreach(XrayIsolate *iso, XrValue self, XrValue *ar
 #include "xnative_type.h"
 #include "builtins/xmap_builtins.h"
 
-void xr_map_register_native_type(XrayIsolate *isolate) {
+void xr_map_register_native_type(XrVMRuntime *isolate) {
     static const XrNativeMethod map_methods[] = {
         {"isEmpty", xr_map_method_is_empty, 0},
         {"has", xr_map_method_has, 1},

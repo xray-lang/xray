@@ -20,6 +20,6 @@
 #include "xvalue.h"
 #include "xdefs.h"
 
-XR_FUNC void xr_json_api_init(XrayIsolate *X);
+XR_FUNC void xr_json_api_init(XrVMRuntime *X);
 
 #endif  // XJSON_BUILTINS_H

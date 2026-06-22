@@ -26,7 +26,7 @@
 /* Forward declarations */
 struct AstNode;
 struct XrCompilerSession;
-struct XrayIsolate;
+struct XrVMRuntime;
 
 /* ========== Module Spec Status ========== */
 
@@ -90,7 +90,7 @@ typedef struct XrModuleGraph {
     struct XrCompilerSession *compiler_session;
 
     /* VM host for AST factories while parser/analyzer migration is in progress. */
-    struct XrayIsolate *X;
+    struct XrVMRuntime *X;
 
     /* Entry module index */
     int entry_index;

@@ -104,12 +104,12 @@ static bool include_hits_subtree(const char *inc, const char *bad_subdir) {
 }
 
 // Returns true if the include is one of the public-API headers that
-// frontend internals must never reach for (xray.h, xray_isolate.h).
+// frontend internals must never reach for (xray.h, xray_vm.h).
 static bool include_is_public_api(const char *inc) {
     // Match by basename: /include/xray.h or just xray.h.
     const char *base = strrchr(inc, '/');
     base = base ? base + 1 : inc;
-    return strcmp(base, "xray.h") == 0 || strcmp(base, "xray_isolate.h") == 0;
+    return strcmp(base, "xray.h") == 0 || strcmp(base, "xray_vm.h") == 0;
 }
 
 /* ========== filesystem walker ========== */

@@ -29,7 +29,7 @@ static int64_t get_monotonic_ns(void) {
 // ========== Module-private function bindings ==========
 
 // time.now() -> int (milliseconds)
-static XrValue xr_time_now(XrayIsolate *isolate, XrValue *args, int nargs) {
+static XrValue xr_time_now(XrVMRuntime *isolate, XrValue *args, int nargs) {
     (void) isolate;
     (void) args;
     (void) nargs;
@@ -37,7 +37,7 @@ static XrValue xr_time_now(XrayIsolate *isolate, XrValue *args, int nargs) {
 }
 
 // time.clock() -> int (milliseconds of process CPU time)
-static XrValue xr_time_clock(XrayIsolate *isolate, XrValue *args, int nargs) {
+static XrValue xr_time_clock(XrVMRuntime *isolate, XrValue *args, int nargs) {
     (void) isolate;
     (void) args;
     (void) nargs;
@@ -45,7 +45,7 @@ static XrValue xr_time_clock(XrayIsolate *isolate, XrValue *args, int nargs) {
 }
 
 // time.monotonic() -> int (milliseconds)
-static XrValue xr_time_monotonic(XrayIsolate *isolate, XrValue *args, int nargs) {
+static XrValue xr_time_monotonic(XrVMRuntime *isolate, XrValue *args, int nargs) {
     (void) isolate;
     (void) args;
     (void) nargs;
@@ -53,7 +53,7 @@ static XrValue xr_time_monotonic(XrayIsolate *isolate, XrValue *args, int nargs)
 }
 
 // time.nanos() -> int (nanoseconds, monotonic)
-static XrValue xr_time_nanos(XrayIsolate *isolate, XrValue *args, int nargs) {
+static XrValue xr_time_nanos(XrVMRuntime *isolate, XrValue *args, int nargs) {
     (void) isolate;
     (void) args;
     (void) nargs;
@@ -61,7 +61,7 @@ static XrValue xr_time_nanos(XrayIsolate *isolate, XrValue *args, int nargs) {
 }
 
 // time.micros() -> int (microseconds, monotonic)
-static XrValue xr_time_micros(XrayIsolate *isolate, XrValue *args, int nargs) {
+static XrValue xr_time_micros(XrVMRuntime *isolate, XrValue *args, int nargs) {
     (void) isolate;
     (void) args;
     (void) nargs;
@@ -71,7 +71,7 @@ static XrValue xr_time_micros(XrayIsolate *isolate, XrValue *args, int nargs) {
 /*
  * Continuation for time.sleep — the timer has fired, just return null.
  */
-static XrCFuncResult time_sleep_done(XrayIsolate *X, int status, XrValue resume_value, void *ctx,
+static XrCFuncResult time_sleep_done(XrVMRuntime *X, int status, XrValue resume_value, void *ctx,
                                      XrValue *result) {
     (void) X;
     (void) status;
@@ -90,7 +90,7 @@ static XrCFuncResult time_sleep_done(XrayIsolate *X, int status, XrValue resume_
  * This yieldable C function is the dynamic-dispatch fallback that
  * was previously a blocking nanosleep.
  */
-static XrCFuncResult xr_time_sleep(XrayIsolate *X, XrValue *args, int nargs, XrValue *result) {
+static XrCFuncResult xr_time_sleep(XrVMRuntime *X, XrValue *args, int nargs, XrValue *result) {
     if (nargs < 1 || (!XR_IS_INT(args[0]) && !XR_IS_FLOAT(args[0]))) {
         *result = xr_null();
         return XR_CFUNC_DONE;
@@ -126,7 +126,7 @@ XR_DEFINE_BUILTIN(xr_time_nanos, "nanos", "(): int", "Monotonic time in nanoseco
 XR_DEFINE_BUILTIN(xr_time_micros, "micros", "(): int", "Monotonic time in microseconds")
 XR_DEFINE_BUILTIN(xr_time_sleep, "sleep", "(ms: int): ()", "Sleep for milliseconds")
 
-XR_FUNC XrModule *xr_load_module_time(XrayIsolate *isolate) {
+XR_FUNC XrModule *xr_load_module_time(XrVMRuntime *isolate) {
     XR_DCHECK(isolate != NULL, "xr_load_module_time: NULL isolate");
 
     XrModule *module = xr_module_create_native(isolate, "time");

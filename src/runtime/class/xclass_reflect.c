@@ -20,7 +20,7 @@
 
 /* ========== Reflect Class ========== */
 
-static XrClass *create_reflect_class(XrayIsolate *X) {
+static XrClass *create_reflect_class(XrVMRuntime *X) {
     XR_DCHECK(X != NULL, "create_reflect_class: NULL isolate");
     XrClassBuilder *builder =
         xr_class_builder_new(X, "Reflect", xr_isolate_get_core_classes(X)->objectClass);
@@ -43,7 +43,7 @@ static XrClass *create_reflect_class(XrayIsolate *X) {
 
 /* ========== Type Class ========== */
 
-static XrClass *create_type_class(XrayIsolate *X) {
+static XrClass *create_type_class(XrVMRuntime *X) {
     XrClassBuilder *builder =
         xr_class_builder_new(X, "Type", xr_isolate_get_core_classes(X)->objectClass);
     if (!builder)
@@ -75,7 +75,7 @@ static XrClass *create_type_class(XrayIsolate *X) {
 
 /* ========== Field Class ========== */
 
-static XrClass *create_field_class(XrayIsolate *X) {
+static XrClass *create_field_class(XrVMRuntime *X) {
     XrClassBuilder *builder =
         xr_class_builder_new(X, "Field", xr_isolate_get_core_classes(X)->objectClass);
     if (!builder)
@@ -98,7 +98,7 @@ static XrClass *create_field_class(XrayIsolate *X) {
 
 /* ========== Method Class ========== */
 
-static XrClass *create_method_class(XrayIsolate *X) {
+static XrClass *create_method_class(XrVMRuntime *X) {
     XrClassBuilder *builder =
         xr_class_builder_new(X, "Method", xr_isolate_get_core_classes(X)->objectClass);
     if (!builder)
@@ -125,7 +125,7 @@ static XrClass *create_method_class(XrayIsolate *X) {
 
 /* ========== Constructor Class ========== */
 
-static XrClass *create_constructor_class(XrayIsolate *X) {
+static XrClass *create_constructor_class(XrVMRuntime *X) {
     XrClassBuilder *builder =
         xr_class_builder_new(X, "Constructor", xr_isolate_get_core_classes(X)->objectClass);
     if (!builder)
@@ -138,7 +138,7 @@ static XrClass *create_constructor_class(XrayIsolate *X) {
 
 /* ========== Main Initialization ========== */
 
-void xr_reflect_api_init(XrayIsolate *X) {
+void xr_reflect_api_init(XrVMRuntime *X) {
     XR_DCHECK(X != NULL, "xr_reflect_api_init: NULL isolate");
     // Each create_*_class call funnels through xr_class_builder_finalize,
     // which registers the resulting class with the reflection type

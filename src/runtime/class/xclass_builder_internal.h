@@ -70,7 +70,7 @@ typedef struct XrStaticFieldBuildItem {
  */
 struct XrClassBuilder {
     // Basic info
-    XrayIsolate *isolate;
+    XrVMRuntime *isolate;
     const char *name;  // Interned in symbol table; not owned.
     XrClass *super;
 

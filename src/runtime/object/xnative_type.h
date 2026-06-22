@@ -60,12 +60,12 @@ typedef struct XrNativeTypeInfo {
 /* ========== Registration API ========== */
 
 // Register native type, generate corresponding XrClass
-XR_FUNC XrClass *xr_register_native_type(XrayIsolate *isolate, const XrNativeTypeInfo *info);
+XR_FUNC XrClass *xr_register_native_type(XrVMRuntime *isolate, const XrNativeTypeInfo *info);
 
 // Get XrClass for native type (NULL if not registered)
-XR_FUNC XrClass *xr_get_native_type_class(XrayIsolate *isolate, XrObjType gc_type);
+XR_FUNC XrClass *xr_get_native_type_class(XrVMRuntime *isolate, XrObjType gc_type);
 
 // Check if type is registered
-XR_FUNC bool xr_is_native_type_registered(XrayIsolate *isolate, XrObjType gc_type);
+XR_FUNC bool xr_is_native_type_registered(XrVMRuntime *isolate, XrObjType gc_type);
 
 #endif  // XNATIVE_TYPE_H

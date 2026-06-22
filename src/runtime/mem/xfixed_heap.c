@@ -16,7 +16,7 @@
 #include <stdio.h>
 #include <string.h>
 
-void xr_fixed_heap_init(XrFixedHeap *heap, struct XrayIsolate *isolate) {
+void xr_fixed_heap_init(XrFixedHeap *heap, struct XrVMRuntime *isolate) {
     XR_DCHECK(heap != NULL, "fixed_heap_init: NULL heap");
     memset(heap, 0, sizeof(XrFixedHeap));
     heap->isolate = isolate;

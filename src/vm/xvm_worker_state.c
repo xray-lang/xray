@@ -23,7 +23,7 @@ typedef struct XrVmMachineStorage {
     XrVMContext ctx;
 } XrVmMachineStorage;
 
-static void vm_machine_ctx_init(XrVmMachineStorage *storage, XrayIsolate *isolate) {
+static void vm_machine_ctx_init(XrVmMachineStorage *storage, XrVMRuntime *isolate) {
     XR_DCHECK(storage != NULL, "vm_machine_ctx_init: NULL storage");
 
     XrVMContext *ctx = &storage->ctx;
@@ -92,7 +92,7 @@ static void vm_machine_storage_destroy(void *ptr) {
     xr_free(storage);
 }
 
-XrVMContext *xr_vm_machine_ctx(struct XrMachine *machine, XrayIsolate *isolate) {
+XrVMContext *xr_vm_machine_ctx(struct XrMachine *machine, XrVMRuntime *isolate) {
     if (!machine)
         return NULL;
 
@@ -113,7 +113,7 @@ XrVMContext *xr_vm_machine_ctx(struct XrMachine *machine, XrayIsolate *isolate) 
     return &storage->ctx;
 }
 
-void xr_vm_machine_ctx_set_isolate(struct XrMachine *machine, XrayIsolate *isolate) {
+void xr_vm_machine_ctx_set_isolate(struct XrMachine *machine, XrVMRuntime *isolate) {
     XrVMContext *ctx = xr_vm_machine_ctx(machine, isolate);
     if (ctx)
         ctx->isolate = isolate;

@@ -29,7 +29,7 @@
 #include "../../api/xisolate_profile.h"
 #include "xcli_output.h"
 #include "xray.h"
-#include "xray_isolate.h"
+#include "xray_vm.h"
 #include "../../api/xtest_runner.h"
 #include "../../runtime/xisolate_api.h"
 #include "../../runtime/xexec_state.h"
@@ -117,7 +117,7 @@ static void get_display_name(const char *filepath, char *buf, size_t bufsz) {
 // After top-level execution, closures with upvalue bindings are stored
 // in the shared array via OP_SETSHARED. This lets us recover the live
 // closure (with proper upvalue pointers) for each @test function.
-static XrClosure *find_closure_for_proto(XrayIsolate *X, XrProto *target_proto) {
+static XrClosure *find_closure_for_proto(XrVMRuntime *X, XrProto *target_proto) {
     XrVMState *vm = xr_isolate_get_vm_state(X);
     XrSharedArray *shared = &vm->shared;
     for (int i = 0; i < shared->count; i++) {
@@ -132,7 +132,7 @@ static XrClosure *find_closure_for_proto(XrayIsolate *X, XrProto *target_proto) 
 }
 
 // Get or create closure for a test/hook proto
-static XrClosure *get_test_closure(XrayIsolate *X, XrProto *proto) {
+static XrClosure *get_test_closure(XrVMRuntime *X, XrProto *proto) {
     XrClosure *closure = find_closure_for_proto(X, proto);
     if (!closure)
         closure = xr_closure_new(X, proto, xr_isolate_get_main_coro(X));
@@ -150,7 +150,7 @@ static const char *extract_coro_error(XrCoroutine *coro) {
         if (s && s->data[0] != '\0')
             return s->data;
     }
-    XrayIsolate *vm_owner = xr_runtime_core_vm_owner(coro->core);
+    XrVMRuntime *vm_owner = xr_runtime_core_vm_owner(coro->core);
     if (vm_owner && xr_value_is_exception(vm_owner, err)) {
         // Coroutine errors now preserve the original Exception instance
         // (so linked-scope rethrow surfaces the right object — see F026).
@@ -164,7 +164,7 @@ static const char *extract_coro_error(XrCoroutine *coro) {
 /* ========== File-Level Watchdog ========== */
 
 typedef struct {
-    XrayIsolate *X;
+    XrVMRuntime *X;
     xr_mutex_t mutex;
     xr_cond_t cond;
     bool done;
@@ -194,7 +194,7 @@ static void *file_watchdog_thread(void *arg) {
     return NULL;
 }
 
-static void watchdog_start(FileWatchdog *wd, XrayIsolate *X, int timeout_sec, xr_thread_t *tid) {
+static void watchdog_start(FileWatchdog *wd, XrVMRuntime *X, int timeout_sec, xr_thread_t *tid) {
     wd->X = X;
     wd->done = false;
     wd->timeout_sec = timeout_sec;
@@ -217,7 +217,7 @@ static void watchdog_stop(FileWatchdog *wd, xr_thread_t tid) {
 
 // Run a closure on main_coro (identical semantics to xr_execute).
 // Returns 0 on success, -1 on failure.
-static int run_inline(XrayIsolate *X, XrClosure *closure) {
+static int run_inline(XrVMRuntime *X, XrClosure *closure) {
     XrCoroutine *main_coro = xr_isolate_get_main_coro(X);
     xr_coro_reset_for_call(main_coro, X, closure);
     xr_main_thread_run(X, main_coro);
@@ -231,7 +231,7 @@ static int run_inline(XrayIsolate *X, XrClosure *closure) {
 
 // Run hook functions (before_all, after_all, before_each, after_each).
 // Returns 0 if all hooks succeeded, -1 on first failure.
-static int run_hooks(XrayIsolate *X, XrTestFunc *hooks, int count) {
+static int run_hooks(XrVMRuntime *X, XrTestFunc *hooks, int count) {
     for (int i = 0; i < count; i++) {
         XrClosure *closure = get_test_closure(X, hooks[i].proto);
         if (!closure)
@@ -249,9 +249,9 @@ static void run_test_file(const char *filepath, XrTestConfig *config, XrTestFile
     strncpy(result->filepath, filepath, sizeof(result->filepath) - 1);
 
     // Create fresh isolate via profile factory
-    XrayIsolateParams params;
+    XrVMConfig params;
     xr_isolate_profile_params(XR_ISOLATE_PROFILE_TEST, &params);
-    XrayIsolate *X = xr_isolate_profile_create(&params);
+    XrVMRuntime *X = xr_isolate_profile_create(&params);
     if (!X) {
         result->has_error = true;
         snprintf(result->error_msg, sizeof(result->error_msg), "failed to create isolate");
@@ -259,8 +259,8 @@ static void run_test_file(const char *filepath, XrTestConfig *config, XrTestFile
         return;
     }
     xr_isolate_set_suppress_exception_print(X, true);
-    xr_multicore_init(X, 0);
-    xray_isolate_set_script_info(X, filepath, 0, NULL);
+    xray_vm_multicore_init(X, 0);
+    xray_vm_set_script_info(X, filepath, 0, NULL);
     xr_module_system_init_with_script(X, filepath);
 
     // Read + Parse + Compile
@@ -408,8 +408,8 @@ cleanup_ast:
 cleanup_source:
     xr_free(source);
 cleanup_isolate:
-    xr_multicore_destroy(X);
-    xray_isolate_delete(X);
+    xray_vm_multicore_destroy(X);
+    xray_vm_delete(X);
 }
 
 /* ========== File Collection ========== */

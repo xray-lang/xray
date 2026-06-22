@@ -45,7 +45,7 @@
 
 #define REPL_SYMBOLS_INITIAL_CAPACITY 32
 
-static XrCompilerSession *repl_compiler_session_for_isolate(XrayIsolate *isolate) {
+static XrCompilerSession *repl_compiler_session_for_isolate(XrVMRuntime *isolate) {
     XrCompilerSession *session = xr_compiler_session_current_for_isolate(isolate);
     if (session)
         return session;
@@ -94,7 +94,7 @@ void xr_repl_symbols_clear(XrReplSymbolTable *table) {
     table->count = 0;
 }
 
-XrReplSymbolTable *xr_repl_symbols_of(XrayIsolate *isolate) {
+XrReplSymbolTable *xr_repl_symbols_of(XrVMRuntime *isolate) {
     if (!isolate)
         return NULL;
     return xr_compiler_session_repl_symbols(xr_compiler_session_current_for_isolate(isolate));
@@ -106,7 +106,7 @@ const char *xr_repl_symbol_cname(const XrReplSymbol *sym) {
     return sym->name->data;
 }
 
-bool xr_repl_peek_int(XrayIsolate *isolate, const char *name, int64_t *out) {
+bool xr_repl_peek_int(XrVMRuntime *isolate, const char *name, int64_t *out) {
     if (!isolate || !name || !out)
         return false;
 
@@ -208,7 +208,7 @@ void xr_repl_symbols_seed_context(XrReplSymbolTable *table, XrCompilerContext *c
  * declared by this compilation unit; REPL-seeded prior slots are
  * NULL.  Names from the arena are interned so they outlive the
  * XiFunc. */
-static void repl_symbols_collect_from_xi(XrReplSymbolTable *table, XrayIsolate *isolate,
+static void repl_symbols_collect_from_xi(XrReplSymbolTable *table, XrVMRuntime *isolate,
                                          XrProto *proto) {
     if (!table || !proto || !proto->xi_func)
         return;
@@ -259,7 +259,7 @@ static bool is_imperative_call_name(const char *name) {
  * to decide between AST_VAR_DECL (first time) and AST_ASSIGNMENT
  * (subsequent times).  Avoids re-declaration errors.  Uses the globals
  * dict as the authoritative source. */
-static bool repl_has_it_binding(XrayIsolate *isolate) {
+static bool repl_has_it_binding(XrVMRuntime *isolate) {
     if (!isolate || !isolate->vm.globals)
         return false;
     uint32_t len = (uint32_t) strlen(REPL_IT_NAME);
@@ -270,7 +270,7 @@ static bool repl_has_it_binding(XrayIsolate *isolate) {
     return xr_global_dict_has(isolate->vm.globals, key);
 }
 
-static void repl_maybe_echo_last_expr(XrayIsolate *isolate, AstNode *program) {
+static void repl_maybe_echo_last_expr(XrVMRuntime *isolate, AstNode *program) {
     if (!program || program->type != AST_PROGRAM)
         return;
     AstNode **stmts = program->as.program.statements;
@@ -424,7 +424,7 @@ XrInputStatus xr_repl_check_input(const char *source) {
 
 /* ========== REPL Compilation ========== */
 
-XrProto *xr_repl_compile(XrCompilerSession *session, XrayIsolate *vm_host, const char *source) {
+XrProto *xr_repl_compile(XrCompilerSession *session, XrVMRuntime *vm_host, const char *source) {
     XR_DCHECK(session != NULL, "xr_repl_compile: NULL compiler session");
     XR_DCHECK(vm_host != NULL, "xr_repl_compile: NULL VM host");
     XR_DCHECK(source != NULL, "xr_repl_compile: NULL source");
@@ -530,7 +530,7 @@ static bool repl_symbol_is_const(XrReplSymbolTable *table, XrString *name) {
 
 /* Visitor callback for xr_global_dict_iter.  Prints one `.vars` row. */
 typedef struct {
-    XrayIsolate *isolate;
+    XrVMRuntime *isolate;
     XrReplSymbolTable *table;
 } ReplVarsCtx;
 
@@ -560,7 +560,7 @@ static void print_vars_visitor(XrString *name, XrValue *value, void *ud) {
     }
 }
 
-void xr_repl_print_vars(XrayIsolate *isolate) {
+void xr_repl_print_vars(XrVMRuntime *isolate) {
     XR_DCHECK(isolate != NULL, "xr_repl_print_vars: NULL isolate");
     if (!isolate || !isolate->vm.globals || xr_global_dict_count(isolate->vm.globals) == 0) {
         printf("  (no bindings)\n");
@@ -571,7 +571,7 @@ void xr_repl_print_vars(XrayIsolate *isolate) {
     xr_global_dict_iter(isolate->vm.globals, print_vars_visitor, &ctx);
 }
 
-void xr_repl_print_type(XrayIsolate *isolate, const char *expr) {
+void xr_repl_print_type(XrVMRuntime *isolate, const char *expr) {
     XR_DCHECK(isolate != NULL, "xr_repl_print_type: NULL isolate");
 
     if (!expr)

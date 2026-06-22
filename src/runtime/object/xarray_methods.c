@@ -44,7 +44,7 @@ static inline XrArray *array_self(XrValue self) {
 // Build the diagnostic tag "Array.<method>" for xr_vm_closure_from_arg.
 // The composed name lives on the stack; xr_runtime_error copies it into
 // the isolate's error buffer before returning, so a stack address is safe.
-static struct XrClosure *array_callback(XrayIsolate *iso, XrValue v, const char *method) {
+static struct XrClosure *array_callback(XrVMRuntime *iso, XrValue v, const char *method) {
     char tag[32];
     snprintf(tag, sizeof(tag), "Array.%s", method);
     return xr_vm_closure_from_arg(iso, v, tag);
@@ -52,7 +52,7 @@ static struct XrClosure *array_callback(XrayIsolate *iso, XrValue v, const char 
 
 /* === Mutation === */
 
-static XrValue m_push(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_push(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) iso;
     XrArray *arr = array_self(self);
     if (argc >= 1) {
@@ -74,7 +74,7 @@ static XrValue m_push(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
     return self;
 }
 
-static XrValue m_pop(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_pop(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) iso;
     (void) args;
     (void) argc;
@@ -82,14 +82,14 @@ static XrValue m_pop(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
     return arr->length > 0 ? xr_array_pop(arr) : xr_null();
 }
 
-static XrValue m_shift(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_shift(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) iso;
     (void) args;
     (void) argc;
     return xr_array_shift(array_self(self));
 }
 
-static XrValue m_unshift(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_unshift(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) iso;
     if (argc < 1)
         return xr_int(0);
@@ -98,7 +98,7 @@ static XrValue m_unshift(XrayIsolate *iso, XrValue self, XrValue *args, int argc
     return xr_int((xr_Integer) xr_array_size(arr));
 }
 
-static XrValue m_clear(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_clear(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) iso;
     (void) args;
     (void) argc;
@@ -106,7 +106,7 @@ static XrValue m_clear(XrayIsolate *iso, XrValue self, XrValue *args, int argc) 
     return xr_null();
 }
 
-static XrValue m_reverse(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_reverse(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) iso;
     (void) args;
     (void) argc;
@@ -115,7 +115,7 @@ static XrValue m_reverse(XrayIsolate *iso, XrValue self, XrValue *args, int argc
     return self;
 }
 
-static XrValue m_fill(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_fill(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) iso;
     if (argc < 1)
         return self;
@@ -130,7 +130,7 @@ static XrValue m_fill(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
     return self;
 }
 
-static XrValue m_reserve(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_reserve(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) iso;
     if (argc < 1 || !XR_IS_INT(args[0]))
         return self;
@@ -138,7 +138,7 @@ static XrValue m_reserve(XrayIsolate *iso, XrValue self, XrValue *args, int argc
     return self;
 }
 
-static XrValue m_resize(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_resize(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) iso;
     if (argc < 1 || !XR_IS_INT(args[0]))
         return self;
@@ -150,7 +150,7 @@ static XrValue m_resize(XrayIsolate *iso, XrValue self, XrValue *args, int argc)
     return self;
 }
 
-static XrValue m_sort(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_sort(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     XrArray *arr = array_self(self);
     // sort's compareFn is optional. When absent we fall back to the
     // default comparator; when present we require it to actually be a
@@ -169,28 +169,28 @@ static XrValue m_sort(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
 
 /* === Query === */
 
-static XrValue m_is_empty(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_is_empty(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) iso;
     (void) args;
     (void) argc;
     return xr_bool(xr_array_is_empty(array_self(self)));
 }
 
-static XrValue m_includes(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_includes(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) iso;
     if (argc < 1)
         return xr_bool(false);
     return xr_bool(xr_array_has(array_self(self), args[0]));
 }
 
-static XrValue m_index_of(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_index_of(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) iso;
     if (argc < 1)
         return xr_int(-1);
     return xr_int((xr_Integer) xr_array_index_of(array_self(self), args[0]));
 }
 
-static XrValue m_load_u32_le(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_load_u32_le(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) iso;
     if (argc < 1 || !XR_IS_INT(args[0]))
         return xr_int(0);
@@ -199,7 +199,7 @@ static XrValue m_load_u32_le(XrayIsolate *iso, XrValue self, XrValue *args, int 
     return ok ? xr_int((xr_Integer) value) : xr_int(0);
 }
 
-static XrValue m_load_u64_le(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_load_u64_le(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) iso;
     if (argc < 1 || !XR_IS_INT(args[0]))
         return xr_int(0);
@@ -208,7 +208,7 @@ static XrValue m_load_u64_le(XrayIsolate *iso, XrValue self, XrValue *args, int 
     return ok ? xr_int((xr_Integer) value) : xr_int(0);
 }
 
-static XrValue m_copy_within(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_copy_within(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) iso;
     if (argc < 3 || !XR_IS_INT(args[0]) || !XR_IS_INT(args[1]) || !XR_IS_INT(args[2]))
         return self;
@@ -217,7 +217,7 @@ static XrValue m_copy_within(XrayIsolate *iso, XrValue self, XrValue *args, int 
     return self;
 }
 
-static XrValue m_copy_from(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_copy_from(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) iso;
     if (argc < 4 || !XR_IS_ARRAY(args[0]) || !XR_IS_INT(args[1]) || !XR_IS_INT(args[2]) ||
         !XR_IS_INT(args[3]))
@@ -227,7 +227,7 @@ static XrValue m_copy_from(XrayIsolate *iso, XrValue self, XrValue *args, int ar
     return self;
 }
 
-static XrValue m_repeat_from(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_repeat_from(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) iso;
     if (argc < 3 || !XR_IS_INT(args[0]) || !XR_IS_INT(args[1]) || !XR_IS_INT(args[2]))
         return self;
@@ -238,7 +238,7 @@ static XrValue m_repeat_from(XrayIsolate *iso, XrValue self, XrValue *args, int 
 
 /* === Construction (returns new array) === */
 
-static XrValue m_slice(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_slice(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     XrArray *arr = array_self(self);
     int len = (int) arr->length;
     int start = 0, end = len;
@@ -284,7 +284,7 @@ static XrValue m_slice(XrayIsolate *iso, XrValue self, XrValue *args, int argc) 
     return xr_value_from_array(result ? result : xr_array_new(xr_current_coro(iso)));
 }
 
-static XrValue m_concat(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_concat(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     XrArray *arr = array_self(self);
     int total = (int) arr->length;
     for (int i = 0; i < argc; i++) {
@@ -313,7 +313,7 @@ static XrValue m_concat(XrayIsolate *iso, XrValue self, XrValue *args, int argc)
     return xr_value_from_array(result);
 }
 
-static XrValue m_join(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_join(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     XrArray *arr = array_self(self);
     if (argc < 1 || !XR_IS_STRING(args[0])) {
         return xr_string_value(xr_string_intern(iso, "", 0, 0));
@@ -325,7 +325,7 @@ static XrValue m_join(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
 
 /* === Higher-order callbacks === */
 
-static XrValue m_foreach(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_foreach(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     if (argc < 1)
         return xr_null();
     struct XrClosure *cb = array_callback(iso, args[0], "forEach");
@@ -335,7 +335,7 @@ static XrValue m_foreach(XrayIsolate *iso, XrValue self, XrValue *args, int argc
     return xr_null();
 }
 
-static XrValue m_filter(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_filter(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     if (argc < 1)
         return xr_value_from_array(xr_array_new(xr_current_coro(iso)));
     struct XrClosure *cb = array_callback(iso, args[0], "filter");
@@ -344,7 +344,7 @@ static XrValue m_filter(XrayIsolate *iso, XrValue self, XrValue *args, int argc)
     return xr_value_from_array(xr_array_filter(iso, array_self(self), cb));
 }
 
-static XrValue m_map(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_map(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     if (argc < 1)
         return xr_value_from_array(xr_array_new(xr_current_coro(iso)));
     struct XrClosure *cb = array_callback(iso, args[0], "map");
@@ -353,7 +353,7 @@ static XrValue m_map(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
     return xr_value_from_array(xr_array_map(iso, array_self(self), cb));
 }
 
-static XrValue m_reduce(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_reduce(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     if (argc < 2)
         return xr_null();
     struct XrClosure *cb = array_callback(iso, args[0], "reduce");
@@ -362,7 +362,7 @@ static XrValue m_reduce(XrayIsolate *iso, XrValue self, XrValue *args, int argc)
     return xr_array_reduce(iso, array_self(self), cb, args[1]);
 }
 
-static XrValue m_find(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_find(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     if (argc < 1)
         return xr_null();
     struct XrClosure *cb = array_callback(iso, args[0], "find");
@@ -371,7 +371,7 @@ static XrValue m_find(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
     return xr_array_find(iso, array_self(self), cb);
 }
 
-static XrValue m_find_index(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_find_index(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     if (argc < 1)
         return xr_int(-1);
     struct XrClosure *cb = array_callback(iso, args[0], "findIndex");
@@ -380,7 +380,7 @@ static XrValue m_find_index(XrayIsolate *iso, XrValue self, XrValue *args, int a
     return xr_int(xr_array_find_index(iso, array_self(self), cb));
 }
 
-static XrValue m_every(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_every(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     if (argc < 1)
         return xr_bool(true);
     struct XrClosure *cb = array_callback(iso, args[0], "every");
@@ -389,7 +389,7 @@ static XrValue m_every(XrayIsolate *iso, XrValue self, XrValue *args, int argc) 
     return xr_bool(xr_array_every(iso, array_self(self), cb));
 }
 
-static XrValue m_some(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_some(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     if (argc < 1)
         return xr_bool(false);
     struct XrClosure *cb = array_callback(iso, args[0], "some");
@@ -405,7 +405,7 @@ static XrValue m_some(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
  * text — symmetric with String.toBytes(). Binary blobs that are not
  * valid UTF-8 still pass through verbatim; callers needing strict
  * validation should layer their own decoder on top. */
-static XrValue m_to_string(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_to_string(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) args;
     (void) argc;
     XrArray *arr = array_self(self);
@@ -422,7 +422,7 @@ static XrValue m_to_string(XrayIsolate *iso, XrValue self, XrValue *args, int ar
 /* Element iterator: yields each T directly. Mostly redundant with the
  * fast index-based for-in path, but exposed so users can drive
  * iteration manually (Iterator<T> is part of the public protocol). */
-static XrValue m_iterator(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_iterator(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) args;
     (void) argc;
     XrArray *arr = array_self(self);
@@ -434,7 +434,7 @@ static XrValue m_iterator(XrayIsolate *iso, XrValue self, XrValue *args, int arg
 
 /* Lazy entries iterator used by `for (i, e in arr)` lowering.
  * Yields (index, element) tuples one at a time. */
-static XrValue m_entries_iterator(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_entries_iterator(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) args;
     (void) argc;
     XrArray *arr = array_self(self);
@@ -446,7 +446,7 @@ static XrValue m_entries_iterator(XrayIsolate *iso, XrValue self, XrValue *args,
  * each element is a real (index, value) tuple, so callers can use
  * `.0` / `.1` access and `for ((i, e) in arr.entries())` destructures
  * via XI_TUPLE_GET, exactly as the static signature implies. */
-static XrValue m_entries(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_entries(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) args;
     (void) argc;
     XrArray *arr = array_self(self);
@@ -474,7 +474,7 @@ static XrValue m_entries(XrayIsolate *iso, XrValue self, XrValue *args, int argc
 #include "xnative_type.h"
 #include "builtins/xarray_builtins.h"
 
-void xr_array_register_native_type(XrayIsolate *isolate) {
+void xr_array_register_native_type(XrVMRuntime *isolate) {
     static const XrNativeMethod array_methods[] = {
         /* Mutation */
         {"push", m_push, 1},

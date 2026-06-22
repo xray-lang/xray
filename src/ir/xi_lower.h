@@ -36,7 +36,7 @@
 struct AstNode;
 struct XaAnalyzer;
 struct XrType;
-struct XrayIsolate;
+struct XrVMRuntime;
 
 /* ========== Variable Tracking for Braun SSA ========== */
 
@@ -87,7 +87,7 @@ typedef struct XiLower {
 
     /* Semantic analysis context (type queries) */
     struct XaAnalyzer *analyzer;
-    struct XrayIsolate *isolate;
+    struct XrVMRuntime *isolate;
 
     /* Braun SSA variable tracking.
      * Each entry is keyed by symbol_id from the analyzer.  Scope resolution
@@ -191,7 +191,7 @@ typedef struct XiLower {
  * Returns NULL on failure.
  */
 XR_FUNC XiFunc *xi_lower_func(struct AstNode *func_node, struct XaAnalyzer *analyzer,
-                              struct XrayIsolate *isolate);
+                              struct XrVMRuntime *isolate);
 
 /*
  * Lower a top-level program (sequence of statements) into a
@@ -199,13 +199,13 @@ XR_FUNC XiFunc *xi_lower_func(struct AstNode *func_node, struct XaAnalyzer *anal
  * The AST must be canonicalized (xr_canon_program) before lowering.
  */
 XR_FUNC XiFunc *xi_lower_program(struct AstNode *program_node, struct XaAnalyzer *analyzer,
-                                 struct XrayIsolate *isolate);
+                                 struct XrVMRuntime *isolate);
 
 /* Same as xi_lower_program but enables REPL incremental compilation.
  * When repl_mode is true, top-level name resolution / store goes
  * through the name-keyed XrGlobalDict instead of the slot-indexed
  * XrSharedArray; cross-input bindings resolve at runtime by name. */
 XR_FUNC XiFunc *xi_lower_program_ex(struct AstNode *program_node, struct XaAnalyzer *analyzer,
-                                    struct XrayIsolate *isolate, bool repl_mode);
+                                    struct XrVMRuntime *isolate, bool repl_mode);
 
 #endif  // XI_LOWER_H

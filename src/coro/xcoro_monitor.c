@@ -11,6 +11,7 @@
  * Supports --coro-watch and --coro-http command line arguments.
  */
 
+#include "xcoro_monitor.h"
 #include "xcoroutine.h"
 #include "../base/xchecks.h"
 #include "../os/os_time.h"
@@ -26,7 +27,7 @@
 
 // ========== Thread-Local State (per-Isolate monitor support) ==========
 
-static XR_THREAD_LOCAL XrayIsolate *tls_monitor_isolate = NULL;
+static XR_THREAD_LOCAL XrVMRuntime *tls_monitor_isolate = NULL;
 static XR_THREAD_LOCAL int tls_watch_interval_ms = 0;
 static XR_THREAD_LOCAL int tls_http_port = 0;
 static XR_THREAD_LOCAL volatile bool tls_monitor_running = false;
@@ -63,7 +64,7 @@ static void print_header(int interval_ms) {
     fflush(stdout);
 }
 
-static void print_stats(XrayIsolate *X) {
+static void print_stats(XrVMRuntime *X) {
     XrRuntime *runtime = (XrRuntime *) xr_isolate_get_scheduler_runtime(X);
     if (!runtime) {
         printf("║ Runtime not initialized                                                ║\n");
@@ -86,7 +87,7 @@ static void print_stats(XrayIsolate *X) {
            total, active_count, ready_count, blocked_count);
 }
 
-static void print_top_coros(XrayIsolate *X, int limit) {
+static void print_top_coros(XrVMRuntime *X, int limit) {
     XrRuntime *runtime = (XrRuntime *) xr_isolate_get_scheduler_runtime(X);
     if (!runtime)
         return;
@@ -130,7 +131,7 @@ static void print_top_coros(XrayIsolate *X, int limit) {
     }
 }
 
-static void print_blocked_coros(XrayIsolate *X) {
+static void print_blocked_coros(XrVMRuntime *X) {
     (void) X;
     printf("╠══════════════════════════════════════════════════════════════════════════╣\n");
     printf("║ Blocked queue managed by Runtime                                         ║\n");
@@ -145,7 +146,7 @@ static void print_footer(void) {
 
 // Monitor thread context (passed to thread)
 typedef struct {
-    XrayIsolate *isolate;
+    XrVMRuntime *isolate;
     int interval_ms;
     volatile bool *running;
 } MonitorThreadCtx;
@@ -181,7 +182,7 @@ static void *watch_thread_func(void *arg) {
 
 // ========== Public API ==========
 
-void xr_coro_monitor_start(XrayIsolate *X, int watch_interval_ms, int http_port) {
+void xray_vm_coro_monitor_start(XrVMRuntime *X, int watch_interval_ms, int http_port) {
     XR_DCHECK(X != NULL, "coro_monitor_start: NULL isolate");
     tls_monitor_isolate = X;
     tls_watch_interval_ms = watch_interval_ms;

@@ -537,7 +537,7 @@ bool xa_builtin_type_implements(XrType *type, XaBuiltinInterface iface) {
     }
 }
 
-void xa_register_builtin_interfaces(XrayIsolate *X, XaScope *global_scope) {
+void xa_register_builtin_interfaces(XrVMRuntime *X, XaScope *global_scope) {
     if (!global_scope)
         return;
 

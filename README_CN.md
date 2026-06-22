@@ -3,7 +3,7 @@
 # Xray
 
 > 静态类型脚本语言，原生并发。
-> TypeScript 风格语法，Go 风格协程，支持 VM / JIT / AOT 执行。
+> TypeScript 风格语法，Go 风格协程，支持 VM / AOT 执行。
 
 ```xray
 fn count(xs: Array<int>) -> int {
@@ -29,8 +29,8 @@ Xray 面向需要静态类型、快速启动、安全并发，并且未来可编
 - **静态类型，没有 `any`**：类型推断、可空类型 (`T?`)、Union、泛型、Tuple、sealed object、类型收窄。
 - **原生并发**：`go`、`await`、`Channel<T>`、`select`、结构化 `scope` 是语言内置能力。
 - **现代语言结构**：`class`、`struct`、`interface`、ADT 风格 `enum`、`match`、异常、`Result`、模块、`defer`。
-- **多执行模式**：VM 直接运行，JIT 加速热点，AOT 构建原生二进制。
-- **C 实现与嵌入 API**：stdlib native 模块，以及 `include/xray_embedding.h` 宿主嵌入接口。
+- **VM + AOT 执行**：VM 用于开发调试，AOT 构建高性能原生二进制。
+- **C 实现与 VM API**：stdlib native 模块，以及 `include/xray_vm.h` 宿主嵌入接口。
 
 ---
 
@@ -100,7 +100,7 @@ Native 模块包括：
 
 ## 状态
 
-Xray 仍处于 pre-1.0 阶段，正在快速迭代。仓库中已包含 VM、parser/analyzer、runtime、标准库、测试、LSP/DAP/MCP 工具、JIT 与 AOT 管线，但语言和 API 仍可能调整。
+Xray 仍处于 pre-1.0 阶段，正在快速迭代。仓库中已包含 VM、parser/analyzer、runtime、标准库、测试、LSP/DAP/MCP 工具与 AOT 管线，但语言和 API 仍可能调整。
 
 当前语言规范以以下文件为准：
 

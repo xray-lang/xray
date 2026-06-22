@@ -32,7 +32,7 @@
 typedef struct XrHttpContext {
     /* === Server === */
     struct XrHttpServer *server;
-    XrayIsolate *server_isolate;
+    XrVMRuntime *server_isolate;
 
     /* === Server Config (per-isolate) === */
     _Atomic int max_conns;              // Max connections (0 = unlimited)
@@ -72,29 +72,29 @@ typedef struct XrHttpContext {
 } XrHttpContext;
 
 // Get or create HTTP context for this Isolate
-XR_FUNC XrHttpContext *xr_http_get_context(XrayIsolate *X);
+XR_FUNC XrHttpContext *xr_http_get_context(XrVMRuntime *X);
 
 // Free HTTP module context
 XR_FUNC void xr_http_module_context_free(XrHttpContext *ctx);
 
 // Load HTTP module
-XR_FUNC XrModule *xr_load_module_http(XrayIsolate *isolate);
+XR_FUNC XrModule *xr_load_module_http(XrVMRuntime *isolate);
 
 /* ========== Pure C Listen + Connection Handler (http_listen.c) ========== */
 
 #include "../../src/coro/xyieldable.h"
 
 // http.listen(port) -> bool (yieldable, accept loop + conn handler spawn)
-XR_FUNC XrCFuncResult xr_http_listen_impl(XrayIsolate *X, XrValue *args, int nargs,
+XR_FUNC XrCFuncResult xr_http_listen_impl(XrVMRuntime *X, XrValue *args, int nargs,
                                           XrValue *result);
 
 // http.config(opts) -> void
-XR_FUNC XrValue xr_http_config_impl(XrayIsolate *X, XrValue *args, int argc);
+XR_FUNC XrValue xr_http_config_impl(XrVMRuntime *X, XrValue *args, int argc);
 
 // http.response(status, body?, headers?) -> string
-XR_FUNC XrValue xr_http_response_impl(XrayIsolate *X, XrValue *args, int argc);
+XR_FUNC XrValue xr_http_response_impl(XrVMRuntime *X, XrValue *args, int argc);
 
 // http.serverStats() -> Json { currentConns, totalRequests, totalConns }
-XR_FUNC XrValue xr_http_server_stats(XrayIsolate *X, XrValue *args, int argc);
+XR_FUNC XrValue xr_http_server_stats(XrVMRuntime *X, XrValue *args, int argc);
 
 #endif  // XR_STDLIB_HTTP_H

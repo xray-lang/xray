@@ -14,17 +14,17 @@
 #include "../../base/xdefs.h"
 #include "xobj_header.h"
 
-struct XrayIsolate;
+struct XrVMRuntime;
 struct XrCoroHeap;
 struct XrMap;
 struct XrSet;
 
-XR_FUNC void xr_weak_registry_register_map(struct XrayIsolate *isolate, struct XrMap *map);
-XR_FUNC void xr_weak_registry_unregister_map(struct XrayIsolate *isolate, struct XrMap *map);
-XR_FUNC void xr_weak_registry_register_set(struct XrayIsolate *isolate, struct XrSet *set);
-XR_FUNC void xr_weak_registry_unregister_set(struct XrayIsolate *isolate, struct XrSet *set);
-XR_FUNC void xr_weak_registry_target_dying(struct XrayIsolate *isolate, XrObjHeader *target,
+XR_FUNC void xr_weak_registry_register_map(struct XrVMRuntime *isolate, struct XrMap *map);
+XR_FUNC void xr_weak_registry_unregister_map(struct XrVMRuntime *isolate, struct XrMap *map);
+XR_FUNC void xr_weak_registry_register_set(struct XrVMRuntime *isolate, struct XrSet *set);
+XR_FUNC void xr_weak_registry_unregister_set(struct XrVMRuntime *isolate, struct XrSet *set);
+XR_FUNC void xr_weak_registry_target_dying(struct XrVMRuntime *isolate, XrObjHeader *target,
                                            struct XrCoroHeap *owner_heap);
-XR_FUNC void xr_weak_registry_destroy(struct XrayIsolate *isolate);
+XR_FUNC void xr_weak_registry_destroy(struct XrVMRuntime *isolate);
 
 #endif  // XWEAK_REGISTRY_H

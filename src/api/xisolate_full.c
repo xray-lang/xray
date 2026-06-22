@@ -47,7 +47,7 @@
 
 /* ========== Full Init Callback ========== */
 
-static int isolate_init_full(XrayIsolate *isolate) {
+static int isolate_init_full(XrVMRuntime *isolate) {
     XR_DCHECK(isolate != NULL, "isolate_init_full: NULL isolate");
 
     // Process-level type singletons (idempotent, safe to call multiple times)
@@ -160,7 +160,7 @@ static int isolate_init_full(XrayIsolate *isolate) {
 
 /* ========== Full Cleanup Callback ========== */
 
-static void isolate_cleanup_full(XrayIsolate *isolate) {
+static void isolate_cleanup_full(XrVMRuntime *isolate) {
     // Stdlib per-isolate cache. Must be freed before the module registry so
     // any dynamic-layout class it holds is released while the owning
     // isolate state is still intact.
@@ -198,14 +198,14 @@ static void isolate_cleanup_full(XrayIsolate *isolate) {
 
 /* ========== Public: Create Full VM Runtime ========== */
 
-XrayIsolate *xray_isolate_new_full(const XrayIsolateParams *params) {
-    XrayIsolate *isolate = xray_isolate_new(params);
+XrVMRuntime *xray_vm_new_full(const XrVMConfig *params) {
+    XrVMRuntime *isolate = xray_vm_new(params);
     if (!isolate)
         return NULL;
 
     if (isolate_init_full(isolate) != 0) {
         isolate_cleanup_full(isolate);
-        xray_isolate_delete(isolate);
+        xray_vm_delete(isolate);
         return NULL;
     }
     isolate->lifecycle_cleanup = isolate_cleanup_full;

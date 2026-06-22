@@ -82,7 +82,7 @@ static void *resize_array(void *array, int *capacity, size_t elem_size) {
 
 /* ========== Builder Creation ========== */
 
-XrClassBuilder *xr_class_builder_new(XrayIsolate *isolate, const char *name, XrClass *super) {
+XrClassBuilder *xr_class_builder_new(XrVMRuntime *isolate, const char *name, XrClass *super) {
     XR_DCHECK(isolate != NULL, "class_builder_new: NULL isolate");
     XR_DCHECK(name != NULL, "class_builder_new: NULL name");
     if (isolate == NULL || name == NULL) {

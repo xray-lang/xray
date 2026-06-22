@@ -33,7 +33,7 @@
 // Substitute type parameters with actual types
 // e.g., substitute(T, ["T"], [int]) = int
 //       substitute(Array<T>, ["T"], [int]) = Array<int>
-XrType *xr_type_substitute(XrayIsolate *X, XrType *type, const char **param_names,
+XrType *xr_type_substitute(XrVMRuntime *X, XrType *type, const char **param_names,
                            XrType **actual_types, int count) {
     if (!type || count == 0)
         return type;

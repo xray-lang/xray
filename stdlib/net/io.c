@@ -9,12 +9,12 @@
  *
  * KEY CONCEPT:
  *   netpoll, async pool and DNS cache are owned by XrRuntime
- *   (resolved via the captured XrayIsolate at create time). This file
+ *   (resolved via the captured XrVMRuntime at create time). This file
  *   only manages the per-connection state (fd, poll desc, TLS, last
  *   error) and routes read/write/connect/accept through xsocket and
  *   the TLS layer.
  *
- *   Every public entry point either takes an XrayIsolate* directly or
+ *   Every public entry point either takes an XrVMRuntime* directly or
  *   reads it from the conn it operates on. There is no thread-local
  *   fallback — that ambiguity used to hide concurrency bugs and
  *   pinned IO semantics to thread layout.
@@ -33,9 +33,9 @@
 
 /* ========== External: coroutine-safe socket API ========== */
 
-extern int xr_socket_read(struct XrayIsolate *X, int fd, char *buf, size_t len);
-extern int xr_socket_write(struct XrayIsolate *X, int fd, const char *buf, size_t len);
-extern int xr_socket_accept(struct XrayIsolate *X, int listen_fd);
+extern int xr_socket_read(struct XrVMRuntime *X, int fd, char *buf, size_t len);
+extern int xr_socket_write(struct XrVMRuntime *X, int fd, const char *buf, size_t len);
+extern int xr_socket_accept(struct XrVMRuntime *X, int listen_fd);
 
 /* ========== Utilities ========== */
 
@@ -60,7 +60,7 @@ static int64_t get_deadline_ns(int timeout_ms) {
     return (int64_t) xr_time_monotonic_ns() + (int64_t) timeout_ms * 1000000LL;
 }
 
-static XrNetpoll *netpoll_for(struct XrayIsolate *X) {
+static XrNetpoll *netpoll_for(struct XrVMRuntime *X) {
     if (!X || !X->vm.scheduler)
         return NULL;
     return &((XrRuntime *) X->vm.scheduler)->netpoll;
@@ -68,7 +68,7 @@ static XrNetpoll *netpoll_for(struct XrayIsolate *X) {
 
 /* ========== Connection API ========== */
 
-XrIOConn *xr_io_connect(struct XrayIsolate *X, const char *host, int port, int timeout_ms) {
+XrIOConn *xr_io_connect(struct XrVMRuntime *X, const char *host, int port, int timeout_ms) {
     XR_DCHECK(X != NULL, "io_connect: NULL isolate");
     XrNetpoll *np = netpoll_for(X);
     if (!np)
@@ -147,7 +147,7 @@ XrIOConn *xr_io_connect(struct XrayIsolate *X, const char *host, int port, int t
     return conn;
 }
 
-XrIOConn *xr_io_connect_tls_with_ctx(struct XrayIsolate *X, XrTlsContext *ctx, const char *host,
+XrIOConn *xr_io_connect_tls_with_ctx(struct XrVMRuntime *X, XrTlsContext *ctx, const char *host,
                                      int port, int timeout_ms) {
     if (!ctx)
         return NULL;
@@ -399,7 +399,7 @@ int xr_io_listen(const char *addr, int port, int backlog) {
     return fd;
 }
 
-XrIOConn *xr_io_accept(struct XrayIsolate *X, int listen_fd) {
+XrIOConn *xr_io_accept(struct XrVMRuntime *X, int listen_fd) {
     XR_DCHECK(X != NULL, "io_accept: NULL isolate");
     int client_fd = xr_socket_accept(X, listen_fd);
     if (client_fd < 0)
@@ -419,7 +419,7 @@ XrIOConn *xr_io_accept(struct XrayIsolate *X, int listen_fd) {
     return conn;
 }
 
-XrIOConn *xr_io_accept_tls_with_ctx(struct XrayIsolate *X, int listen_fd, XrTlsContext *ctx) {
+XrIOConn *xr_io_accept_tls_with_ctx(struct XrVMRuntime *X, int listen_fd, XrTlsContext *ctx) {
     if (!ctx)
         return NULL;
 
@@ -446,7 +446,7 @@ XrIOConn *xr_io_accept_tls_with_ctx(struct XrayIsolate *X, int listen_fd, XrTlsC
     return conn;
 }
 
-XrIOConn *xr_io_conn_from_fd(struct XrayIsolate *X, int fd, int timeout_ms) {
+XrIOConn *xr_io_conn_from_fd(struct XrVMRuntime *X, int fd, int timeout_ms) {
     if (fd < 0)
         return NULL;
 

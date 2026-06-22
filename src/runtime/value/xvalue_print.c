@@ -43,7 +43,7 @@
 
 // Print value to file stream
 // Delegates to xr_value_to_string for consistent output across print/toString/string+
-void xr_value_fprint_with_isolate(FILE *stream, XrayIsolate *isolate, XrValue value) {
+void xr_value_fprint_with_isolate(FILE *stream, XrVMRuntime *isolate, XrValue value) {
     if (isolate) {
         XrString *str = xr_value_to_string(isolate, value);
         fprintf(stream, "%s", str->data);
@@ -71,7 +71,7 @@ void xr_value_fprint(FILE *stream, XrValue value) {
 }
 
 // Print value to stdout
-void xr_value_print_with_isolate(XrayIsolate *isolate, XrValue value) {
+void xr_value_print_with_isolate(XrVMRuntime *isolate, XrValue value) {
     xr_value_fprint_with_isolate(stdout, isolate, value);
 }
 
@@ -80,7 +80,7 @@ void xr_value_print(XrValue value) {
 }
 
 // Print value with newline
-void xr_value_println_with_isolate(XrayIsolate *isolate, XrValue value) {
+void xr_value_println_with_isolate(XrVMRuntime *isolate, XrValue value) {
     xr_value_print_with_isolate(isolate, value);
     printf("\n");
 }
@@ -93,7 +93,7 @@ void xr_value_println(XrValue value) {
 
 // Dump context
 typedef struct {
-    XrayIsolate *isolate;
+    XrVMRuntime *isolate;
     int indent;
     int depth;
 } DumpContext;
@@ -372,7 +372,7 @@ static void dump_value_internal(XrValue value, DumpContext *ctx) {
 
 // Formatted print value (with indentation)
 // Maintains xray native syntax format
-void xr_value_dump_with_isolate(XrayIsolate *isolate, XrValue value, int indent) {
+void xr_value_dump_with_isolate(XrVMRuntime *isolate, XrValue value, int indent) {
     if (indent < 0)
         indent = 0;
     if (indent > 8)

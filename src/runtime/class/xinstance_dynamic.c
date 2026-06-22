@@ -78,7 +78,7 @@ bool xr_instance_set_dynamic_field_direct(XrInstance *inst, uint16_t index, XrVa
     return true;
 }
 
-bool xr_instance_set_dynamic_field(XrayIsolate *X, XrInstance *inst, uint16_t index,
+bool xr_instance_set_dynamic_field(XrVMRuntime *X, XrInstance *inst, uint16_t index,
                                    XrValue value) {
     XR_DCHECK(X != NULL, "set_dynamic_field: NULL isolate");
     (void) X;

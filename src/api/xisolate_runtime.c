@@ -26,9 +26,9 @@
 #include "../runtime/value/xvalue.h"
 #include "../coro/xscope_transfer.h"
 #include "../base/xglobal_indices.h"
-#include "../../include/xray_isolate.h"
+#include "../../include/xray_vm.h"
 
-static XrEnumType *runtime_register_prelude_enum(XrayIsolate *isolate, const char *name,
+static XrEnumType *runtime_register_prelude_enum(XrVMRuntime *isolate, const char *name,
                                                  char **members, int member_count,
                                                  const int *payload_counts) {
     if (!isolate || !name || !members || member_count <= 0)
@@ -63,7 +63,7 @@ static XrEnumType *runtime_register_prelude_enum(XrayIsolate *isolate, const cha
     return type;
 }
 
-static void isolate_register_runtime_prelude_enums(XrayIsolate *isolate) {
+static void isolate_register_runtime_prelude_enums(XrVMRuntime *isolate) {
     if (!isolate)
         return;
 
@@ -98,7 +98,7 @@ static void isolate_register_runtime_prelude_enums(XrayIsolate *isolate) {
         isolate->vm.builtins[XR_GLOBAL_VAR_TASK_STATUS] = XR_FROM_PTR(task_status);
 }
 
-static void isolate_register_vm_builtins(XrayIsolate *isolate) {
+static void isolate_register_vm_builtins(XrVMRuntime *isolate) {
     if (!isolate || !isolate->core)
         return;
     if (isolate->core->reflectClass)
@@ -126,7 +126,7 @@ static void isolate_register_vm_builtins(XrayIsolate *isolate) {
         isolate->vm.builtin_count = XR_USER_GLOBALS_START;
 }
 
-static int isolate_init_runtime(XrayIsolate *isolate) {
+static int isolate_init_runtime(XrVMRuntime *isolate) {
     XR_DCHECK(isolate != NULL, "isolate_init_runtime: NULL isolate");
 
     xr_type_global_init();
@@ -143,7 +143,7 @@ static int isolate_init_runtime(XrayIsolate *isolate) {
     return 0;
 }
 
-static void isolate_cleanup_runtime(XrayIsolate *isolate) {
+static void isolate_cleanup_runtime(XrVMRuntime *isolate) {
     if (isolate->core) {
         xr_core_free(isolate);
         isolate->core = NULL;
@@ -158,14 +158,14 @@ static void isolate_cleanup_runtime(XrayIsolate *isolate) {
     }
 }
 
-XRAY_API XrayIsolate *xray_isolate_new_runtime(const XrayIsolateParams *params) {
-    XrayIsolate *isolate = xray_isolate_new(params);
+XRAY_API XrVMRuntime *xray_vm_new_runtime(const XrVMConfig *params) {
+    XrVMRuntime *isolate = xray_vm_new(params);
     if (!isolate)
         return NULL;
 
     if (isolate_init_runtime(isolate) != 0) {
         isolate_cleanup_runtime(isolate);
-        xray_isolate_delete(isolate);
+        xray_vm_delete(isolate);
         return NULL;
     }
     isolate->lifecycle_cleanup = isolate_cleanup_runtime;

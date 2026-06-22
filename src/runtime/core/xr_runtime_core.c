@@ -73,7 +73,7 @@ void xr_runtime_core_cleanup_fixed_heap(XrRuntimeCore *core) {
         xr_weak_registry_destroy(core->fixed_heap.isolate);
 }
 
-struct XrayIsolate *xr_runtime_core_vm_owner(const XrRuntimeCore *core) {
+struct XrVMRuntime *xr_runtime_core_vm_owner(const XrRuntimeCore *core) {
     return core ? core->vm_owner : NULL;
 }
 

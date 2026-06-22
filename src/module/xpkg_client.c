@@ -177,7 +177,7 @@ static char **json_get_string_array(const char *json, const char *key, int *coun
 /* ========== Client API Implementation ========== */
 
 // Thread-local Isolate pointer for multi-Isolate support
-static XR_THREAD_LOCAL XrayIsolate *tls_isolate = NULL;
+static XR_THREAD_LOCAL XrVMRuntime *tls_isolate = NULL;
 
 bool xr_pkg_client_init(void) {
     // Connection pool is now per-isolate, no global init needed
@@ -195,7 +195,7 @@ void xr_pkg_client_set_config(const XrPkgClientConfig *config) {
     }
 }
 
-void xr_pkg_client_set_isolate(XrayIsolate *isolate) {
+void xr_pkg_client_set_isolate(XrVMRuntime *isolate) {
     XR_DCHECK(isolate != NULL, "pkg_client_set_isolate: NULL isolate");
     tls_isolate = isolate;
 }
@@ -832,7 +832,7 @@ void xr_pkg_client_cleanup(void) {
 void xr_pkg_client_set_config(const XrPkgClientConfig *config) {
     (void) config;
 }
-void xr_pkg_client_set_isolate(XrayIsolate *isolate) {
+void xr_pkg_client_set_isolate(XrVMRuntime *isolate) {
     (void) isolate;
 }
 

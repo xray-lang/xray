@@ -60,7 +60,7 @@
 /* ========== External Declarations ========== */
 
 struct XrCoroutine;
-extern struct XrCoroutine *xr_current_coro(XrayIsolate *X);
+extern struct XrCoroutine *xr_current_coro(XrVMRuntime *X);
 
 /* ========== File Read/Write ========== */
 
@@ -118,7 +118,7 @@ XR_FUNC char *xr_io_read_stdin_all(size_t *out_len) {
     return buf;
 }
 
-static XrValue io_readStdin(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue io_readStdin(XrVMRuntime *X, XrValue *args, int argc) {
     (void) args;
     (void) argc;
 
@@ -159,9 +159,9 @@ typedef struct {
     FileIoKind kind;
 } FileIoState;
 
-static XrCFuncResult file_io_step(XrayIsolate *X, FileIoState *st, XrValue *result);
+static XrCFuncResult file_io_step(XrVMRuntime *X, FileIoState *st, XrValue *result);
 
-static XrCFuncResult file_io_finish(XrayIsolate *X, FileIoState *st, bool ok, XrValue *result) {
+static XrCFuncResult file_io_finish(XrVMRuntime *X, FileIoState *st, bool ok, XrValue *result) {
     XrValue r;
     if (!ok) {
         r = (st->kind == FILE_IO_WRITE) ? xr_bool(false) : xr_null();
@@ -192,7 +192,7 @@ static XrCFuncResult file_io_finish(XrayIsolate *X, FileIoState *st, bool ok, Xr
 
 // Fallback used when an SQE cannot be queued (submission queue momentarily full):
 // finish the remaining transfer synchronously with pread/pwrite at the offset.
-static XrCFuncResult file_io_sync_rest(XrayIsolate *X, FileIoState *st, XrValue *result) {
+static XrCFuncResult file_io_sync_rest(XrVMRuntime *X, FileIoState *st, XrValue *result) {
     bool is_write = (st->kind == FILE_IO_WRITE);
     while (st->off < st->len) {
         ssize_t n = is_write ? pwrite(st->fd, st->wbuf + st->off, st->len - st->off, st->off)
@@ -210,7 +210,7 @@ static XrCFuncResult file_io_sync_rest(XrayIsolate *X, FileIoState *st, XrValue 
     return file_io_finish(X, st, true, result);
 }
 
-static XrCFuncResult file_io_complete(XrayIsolate *X, int status, XrValue resume_value, void *ctx,
+static XrCFuncResult file_io_complete(XrVMRuntime *X, int status, XrValue resume_value, void *ctx,
                                       XrValue *result) {
     (void) status;
     (void) resume_value;
@@ -227,7 +227,7 @@ static XrCFuncResult file_io_complete(XrayIsolate *X, int status, XrValue resume
     return file_io_finish(X, st, true, result);
 }
 
-static XrCFuncResult file_io_step(XrayIsolate *X, FileIoState *st, XrValue *result) {
+static XrCFuncResult file_io_step(XrVMRuntime *X, FileIoState *st, XrValue *result) {
     bool is_write = (st->kind == FILE_IO_WRITE);
     XrUringReq req = {
         .kind = is_write ? XR_URING_OP_FILE_WRITE : XR_URING_OP_FILE_READ,
@@ -245,7 +245,7 @@ static XrCFuncResult file_io_step(XrayIsolate *X, FileIoState *st, XrValue *resu
 // Try the io_uring completion path. Returns true (and sets *out) if taken;
 // false if the caller should run the synchronous fopen/fread path. `rbuf` is an
 // owned buffer for reads (adopted by the state); `wbuf` is a borrowed source.
-static bool file_io_try_uring(XrayIsolate *X, int fd, FileIoKind kind, char *rbuf, const char *wbuf,
+static bool file_io_try_uring(XrVMRuntime *X, int fd, FileIoKind kind, char *rbuf, const char *wbuf,
                               size_t len, XrValue *result, XrCFuncResult *out) {
     XrRuntime *rt = (XrRuntime *) X->vm.scheduler;
     if (!rt || !xr_current_coro(X) || !xr_netpoll_uring_active(&rt->netpoll))
@@ -270,7 +270,7 @@ static bool file_io_try_uring(XrayIsolate *X, int fd, FileIoKind kind, char *rbu
 #endif  // XR_OS_LINUX && XR_HAS_IO_URING
 
 // readFile(path) - Read file content (yieldable; io_uring async when available)
-static XrCFuncResult io_readFile(XrayIsolate *X, XrValue *args, int argc, XrValue *result) {
+static XrCFuncResult io_readFile(XrVMRuntime *X, XrValue *args, int argc, XrValue *result) {
     *result = xr_null();
     if (argc < 1)
         return XR_CFUNC_DONE;
@@ -323,7 +323,7 @@ static XrCFuncResult io_readFile(XrayIsolate *X, XrValue *args, int argc, XrValu
 }
 
 // readFileBytes(path) - Read file as byte array (yieldable; io_uring async when available)
-static XrCFuncResult io_readFileBytes(XrayIsolate *X, XrValue *args, int argc, XrValue *result) {
+static XrCFuncResult io_readFileBytes(XrVMRuntime *X, XrValue *args, int argc, XrValue *result) {
     *result = xr_null();
     if (argc < 1)
         return XR_CFUNC_DONE;
@@ -375,7 +375,7 @@ static XrCFuncResult io_readFileBytes(XrayIsolate *X, XrValue *args, int argc, X
 }
 
 // writeFileBytes(path, bytes) - Write byte array (yieldable; io_uring async when available)
-static XrCFuncResult io_writeFileBytes(XrayIsolate *X, XrValue *args, int argc, XrValue *result) {
+static XrCFuncResult io_writeFileBytes(XrVMRuntime *X, XrValue *args, int argc, XrValue *result) {
     *result = xr_bool(false);
     if (argc < 2)
         return XR_CFUNC_DONE;
@@ -411,7 +411,7 @@ static XrCFuncResult io_writeFileBytes(XrayIsolate *X, XrValue *args, int argc, 
 }
 
 // writeFile(path, content) - Write string (yieldable; io_uring async when available)
-static XrCFuncResult io_writeFile(XrayIsolate *X, XrValue *args, int argc, XrValue *result) {
+static XrCFuncResult io_writeFile(XrVMRuntime *X, XrValue *args, int argc, XrValue *result) {
     *result = xr_bool(false);
     if (argc < 2)
         return XR_CFUNC_DONE;
@@ -442,7 +442,7 @@ static XrCFuncResult io_writeFile(XrayIsolate *X, XrValue *args, int argc, XrVal
 }
 
 // appendFile(path, content) - Append to file
-static XrValue io_appendFile(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue io_appendFile(XrVMRuntime *X, XrValue *args, int argc) {
     (void) X;
     if (argc < 2)
         return xr_bool(false);
@@ -465,7 +465,7 @@ static XrValue io_appendFile(XrayIsolate *X, XrValue *args, int argc) {
 /* ========== File Checks ========== */
 
 // exists(path) - Check if path exists
-static XrValue io_exists(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue io_exists(XrVMRuntime *X, XrValue *args, int argc) {
     (void) X;
     if (argc < 1)
         return xr_bool(false);
@@ -477,7 +477,7 @@ static XrValue io_exists(XrayIsolate *X, XrValue *args, int argc) {
 }
 
 // isFile(path) - Check if path is a file
-static XrValue io_isFile(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue io_isFile(XrVMRuntime *X, XrValue *args, int argc) {
     (void) X;
     if (argc < 1)
         return xr_bool(false);
@@ -489,7 +489,7 @@ static XrValue io_isFile(XrayIsolate *X, XrValue *args, int argc) {
 }
 
 // isDir(path) - Check if path is a directory
-static XrValue io_isDir(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue io_isDir(XrVMRuntime *X, XrValue *args, int argc) {
     (void) X;
     if (argc < 1)
         return xr_bool(false);
@@ -501,7 +501,7 @@ static XrValue io_isDir(XrayIsolate *X, XrValue *args, int argc) {
 }
 
 // fileSize(path) - Get file size
-static XrValue io_fileSize(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue io_fileSize(XrVMRuntime *X, XrValue *args, int argc) {
     (void) X;
     if (argc < 1)
         return xr_int(-1);
@@ -518,7 +518,7 @@ static XrValue io_fileSize(XrayIsolate *X, XrValue *args, int argc) {
 /* ========== File Operations ========== */
 
 // remove(path) - Remove file
-static XrValue io_remove(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue io_remove(XrVMRuntime *X, XrValue *args, int argc) {
     (void) X;
     if (argc < 1)
         return xr_bool(false);
@@ -530,7 +530,7 @@ static XrValue io_remove(XrayIsolate *X, XrValue *args, int argc) {
 }
 
 // rename(old, new) - Rename file
-static XrValue io_rename(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue io_rename(XrVMRuntime *X, XrValue *args, int argc) {
     (void) X;
     if (argc < 2)
         return xr_bool(false);
@@ -544,7 +544,7 @@ static XrValue io_rename(XrayIsolate *X, XrValue *args, int argc) {
 }
 
 // mkdir(path) - Create directory
-static XrValue io_mkdir(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue io_mkdir(XrVMRuntime *X, XrValue *args, int argc) {
     (void) X;
     if (argc < 1)
         return xr_bool(false);
@@ -556,7 +556,7 @@ static XrValue io_mkdir(XrayIsolate *X, XrValue *args, int argc) {
 }
 
 // readDir(path) - Read directory contents
-static XrValue io_readDir(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue io_readDir(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1)
         return xr_null();
     const char *path = xrs_string_arg(args[0], NULL);
@@ -584,7 +584,7 @@ static XrValue io_readDir(XrayIsolate *X, XrValue *args, int argc) {
 }
 
 // cwd() - Get current working directory
-static XrValue io_cwd(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue io_cwd(XrVMRuntime *X, XrValue *args, int argc) {
     (void) args;
     (void) argc;
 
@@ -598,7 +598,7 @@ static XrValue io_cwd(XrayIsolate *X, XrValue *args, int argc) {
 /* ========== Extended Functions ========== */
 
 // chdir(path) - Change working directory
-static XrValue io_chdir(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue io_chdir(XrVMRuntime *X, XrValue *args, int argc) {
     (void) X;
     if (argc < 1)
         return xr_bool(false);
@@ -610,7 +610,7 @@ static XrValue io_chdir(XrayIsolate *X, XrValue *args, int argc) {
 }
 
 // copyFile(src, dst) - Copy file
-static XrValue io_copyFile(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue io_copyFile(XrVMRuntime *X, XrValue *args, int argc) {
     (void) X;
     if (argc < 2)
         return xr_bool(false);
@@ -699,7 +699,7 @@ static XrValue io_copyFile(XrayIsolate *X, XrValue *args, int argc) {
 }
 
 // readLines(path) - Read file by lines
-static XrValue io_readLines(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue io_readLines(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1)
         return xr_null();
     const char *path = xrs_string_arg(args[0], NULL);
@@ -737,7 +737,7 @@ static XrValue io_readLines(XrayIsolate *X, XrValue *args, int argc) {
 }
 
 // isSymlink(path) - Check if path is a symlink
-static XrValue io_isSymlink(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue io_isSymlink(XrVMRuntime *X, XrValue *args, int argc) {
     (void) X;
     if (argc < 1)
         return xr_bool(false);
@@ -778,7 +778,7 @@ enum {
 
 // Lazily construct the stat() result class chain for the given isolate
 // and stash it in the per-isolate stdlib cache. Returns NULL on OOM.
-static XrClass *io_get_stat_class(XrayIsolate *X) {
+static XrClass *io_get_stat_class(XrVMRuntime *X) {
     XrStdlibCache *cache = xr_stdlib_cache_get(X);
     if (!cache)
         return NULL;
@@ -796,7 +796,7 @@ static XrClass *io_get_stat_class(XrayIsolate *X) {
 
 // stat(path) - Get file stat info
 // Uses stat() for regular info + lstat() to detect symlinks
-static XrValue io_stat(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue io_stat(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1)
         return xr_null();
     const char *path = xrs_string_arg(args[0], NULL);
@@ -849,7 +849,7 @@ static XrValue io_stat(XrayIsolate *X, XrValue *args, int argc) {
 // mkdirp(path) - Recursively create directory.
 // Reject empty paths up-front: the previous implementation wrote to
 // tmp[-1] when handed "".
-static XrValue io_mkdirp(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue io_mkdirp(XrVMRuntime *X, XrValue *args, int argc) {
     (void) X;
     if (argc < 1)
         return xr_bool(false);
@@ -930,7 +930,7 @@ static int remove_callback(const char *fpath, const struct stat *sb, int typefla
 #endif
 
 // removeAll(path) - Recursively remove directory
-static XrValue io_removeAll(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue io_removeAll(XrVMRuntime *X, XrValue *args, int argc) {
     (void) X;
     if (argc < 1)
         return xr_bool(false);
@@ -947,7 +947,7 @@ static XrValue io_removeAll(XrayIsolate *X, XrValue *args, int argc) {
 }
 
 // chmod(path, mode) - Change file permissions
-static XrValue io_chmod(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue io_chmod(XrVMRuntime *X, XrValue *args, int argc) {
     (void) X;
     if (argc < 2)
         return xr_bool(false);
@@ -966,7 +966,7 @@ static XrValue io_chmod(XrayIsolate *X, XrValue *args, int argc) {
 }
 
 // touch(path) - Create empty file or update timestamp
-static XrValue io_touch(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue io_touch(XrVMRuntime *X, XrValue *args, int argc) {
     (void) X;
     if (argc < 1)
         return xr_bool(false);
@@ -991,7 +991,7 @@ static XrValue io_touch(XrayIsolate *X, XrValue *args, int argc) {
 }
 
 // symlink(target, path) - Create symbolic link
-static XrValue io_symlink(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue io_symlink(XrVMRuntime *X, XrValue *args, int argc) {
     (void) X;
     if (argc < 2)
         return xr_bool(false);
@@ -1013,7 +1013,7 @@ static XrValue io_symlink(XrayIsolate *X, XrValue *args, int argc) {
 }
 
 // readlink(path) - Read symbolic link target
-static XrValue io_readlink(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue io_readlink(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1)
         return xr_null();
     const char *path = xrs_string_arg(args[0], NULL);
@@ -1045,7 +1045,7 @@ static XrValue io_readlink(XrayIsolate *X, XrValue *args, int argc) {
 }
 
 // realpath(path) - Get resolved absolute path
-static XrValue io_realpath(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue io_realpath(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1)
         return xr_null();
     const char *path = xrs_string_arg(args[0], NULL);
@@ -1077,7 +1077,7 @@ static const char *io_tempdir_root(void) {
 }
 
 // tempFile() - Create temporary file, return path
-static XrValue io_tempFile(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue io_tempFile(XrVMRuntime *X, XrValue *args, int argc) {
     (void) args;
     (void) argc;
 
@@ -1103,7 +1103,7 @@ static XrValue io_tempFile(XrayIsolate *X, XrValue *args, int argc) {
 }
 
 // tempDir() - Create temporary directory, return path
-static XrValue io_tempDir(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue io_tempDir(XrVMRuntime *X, XrValue *args, int argc) {
     (void) args;
     (void) argc;
 
@@ -1134,7 +1134,7 @@ static XrValue io_tempDir(XrayIsolate *X, XrValue *args, int argc) {
 #define READ_DIR_MAX_DEPTH 64
 
 typedef struct {
-    XrayIsolate *X;
+    XrVMRuntime *X;
     XrArray *arr;
     const char *base;
     size_t base_len;
@@ -1188,7 +1188,7 @@ static void read_dir_recursive_impl(ReadDirCtx *ctx, const char *path, int depth
 }
 
 // readDirRecursive(path) - Recursively read directory
-static XrValue io_readDirRecursive(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue io_readDirRecursive(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1)
         return xr_null();
     const char *path = xrs_string_arg(args[0], NULL);
@@ -1254,7 +1254,7 @@ XR_DEFINE_BUILTIN(io_tempDir, "tempDir", "(): string?", "Create temporary direct
 XR_DEFINE_BUILTIN(io_readDirRecursive, "readDirRecursive", "(path: string): Array<string>",
                   "List directory entries recursively")
 
-XR_FUNC XrModule *xr_load_module_io(XrayIsolate *isolate) {
+XR_FUNC XrModule *xr_load_module_io(XrVMRuntime *isolate) {
     XR_DCHECK(isolate != NULL, "xr_load_module_io: NULL isolate");
 
     XrModule *mod = xr_module_create_native(isolate, "io");

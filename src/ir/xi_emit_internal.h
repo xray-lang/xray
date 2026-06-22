@@ -49,7 +49,7 @@ static inline XiValue *xi_emit_trace_struct_origin(XiValue *v) {
 typedef struct {
     XiFunc *func;
     XrProto *proto;
-    struct XrayIsolate *isolate; /* for string interning; may be NULL */
+    struct XrVMRuntime *isolate; /* for string interning; may be NULL */
     XiEmitStatus status;
 
     /* Register allocation: value_id -> register number */

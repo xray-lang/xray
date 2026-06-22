@@ -15,11 +15,11 @@
 #include "xdefs.h"
 
 // Global Set constructor (self = class value, ignored)
-XR_FUNC XrValue xr_builtin_set_construct(XrayIsolate *isolate, XrValue self, XrValue *args,
+XR_FUNC XrValue xr_builtin_set_construct(XrVMRuntime *isolate, XrValue self, XrValue *args,
                                          int argc);
 
 // Static methods (self = class value, ignored)
-XR_FUNC XrValue xr_builtin_set_from(XrayIsolate *isolate, XrValue self, XrValue *args, int argc);
-XR_FUNC XrValue xr_builtin_set_range(XrayIsolate *isolate, XrValue self, XrValue *args, int argc);
+XR_FUNC XrValue xr_builtin_set_from(XrVMRuntime *isolate, XrValue self, XrValue *args, int argc);
+XR_FUNC XrValue xr_builtin_set_range(XrVMRuntime *isolate, XrValue self, XrValue *args, int argc);
 
 #endif  // XSET_BUILTINS_H

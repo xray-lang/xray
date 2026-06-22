@@ -162,7 +162,7 @@ bool xfmt_fits_on_line(XrFmtContext *ctx, const XfmtSnapshot *snap) {
 // Initialize / Free
 // ============================================================================
 
-void xfmt_init(XrFmtContext *ctx, XrFmtConfig *config, XrayIsolate *X) {
+void xfmt_init(XrFmtContext *ctx, XrFmtConfig *config, XrVMRuntime *X) {
     ctx->capacity = 4096;
     ctx->output = (char *) xr_malloc(ctx->capacity);
     XR_DCHECK(ctx->output != NULL, "xfmt: output buffer allocation failed");
@@ -366,7 +366,7 @@ void xfmt_type(XrFmtContext *ctx, XrTypeRef *tref) {
     xfmt_emit_type(ctx, tref);
 }
 
-char *xfmt_format_ast(AstNode *ast, XrFmtConfig *config, XrayIsolate *X) {
+char *xfmt_format_ast(AstNode *ast, XrFmtConfig *config, XrVMRuntime *X) {
     XrFmtContext ctx;
     xfmt_init(&ctx, config, X);
 

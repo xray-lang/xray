@@ -21,7 +21,7 @@
 #include <stdbool.h>
 #include "../../src/os/os_thread.h"
 
-struct XrayIsolate;
+struct XrVMRuntime;
 
 /* ========== Constants ========== */
 
@@ -82,20 +82,20 @@ XR_FUNC void xr_conn_pool_destroy(XrConnPool *pool);
 // Get connection from pool, creates new one if none available. Requires
 // the calling isolate so DNS resolution and netpoll suspension can be
 // scheduled on the right runtime.
-XR_FUNC XrPooledConn *xr_conn_pool_get(struct XrayIsolate *X, XrConnPool *pool, const char *host,
+XR_FUNC XrPooledConn *xr_conn_pool_get(struct XrVMRuntime *X, XrConnPool *pool, const char *host,
                                        uint16_t port, bool is_https);
 
 // Return connection to pool (closes if keep_alive=false).
-XR_FUNC void xr_conn_pool_put(struct XrayIsolate *X, XrConnPool *pool, XrPooledConn *conn,
+XR_FUNC void xr_conn_pool_put(struct XrVMRuntime *X, XrConnPool *pool, XrPooledConn *conn,
                               const char *host, uint16_t port, bool is_https, bool keep_alive);
 
-XR_FUNC void xr_conn_pool_close(struct XrayIsolate *X, XrConnPool *pool, XrPooledConn *conn);
+XR_FUNC void xr_conn_pool_close(struct XrVMRuntime *X, XrConnPool *pool, XrPooledConn *conn);
 
 /* Evict idle connections older than pool->idle_timeout_ms.
  * Designed to be called from a timer wheel callback. */
-XR_FUNC int xr_conn_pool_evict_idle(struct XrayIsolate *X, XrConnPool *pool);
+XR_FUNC int xr_conn_pool_evict_idle(struct XrVMRuntime *X, XrConnPool *pool);
 
-XR_FUNC void xr_conn_pool_cleanup(struct XrayIsolate *X, XrConnPool *pool);
+XR_FUNC void xr_conn_pool_cleanup(struct XrVMRuntime *X, XrConnPool *pool);
 XR_FUNC void xr_conn_pool_stats(XrConnPool *pool, int *total, int *idle);
 
 /* ========== Per-Isolate Pool Creation ========== */
@@ -106,8 +106,8 @@ XR_FUNC XrConnPool *xr_conn_pool_new(void);
 // Connection read/write helpers. X is required to drive coroutine
 // suspension on EAGAIN; passing NULL falls back to a non-blocking
 // recv/send (used by CLI / tests outside any runtime).
-XR_FUNC int xr_pooled_conn_read(struct XrayIsolate *X, XrPooledConn *conn, void *buf, size_t len);
-XR_FUNC int xr_pooled_conn_write(struct XrayIsolate *X, XrPooledConn *conn, const void *buf,
+XR_FUNC int xr_pooled_conn_read(struct XrVMRuntime *X, XrPooledConn *conn, void *buf, size_t len);
+XR_FUNC int xr_pooled_conn_write(struct XrVMRuntime *X, XrPooledConn *conn, const void *buf,
                                  size_t len);
 
 #endif  // XR_STDLIB_CONN_POOL_H

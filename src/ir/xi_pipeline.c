@@ -135,7 +135,7 @@ XR_FUNC XiPipelineConfig xi_pipeline_aot_config(void) {
 
 /* ========== Internal Pipeline ========== */
 
-static XiPipelineResult run_pipeline(XiFunc *ir, struct XrayIsolate *X,
+static XiPipelineResult run_pipeline(XiFunc *ir, struct XrVMRuntime *X,
                                      const XiPipelineConfig *cfg) {
     XiPipelineResult res;
     memset(&res, 0, sizeof(res));
@@ -300,7 +300,7 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrayIsolate *X,
 
 XR_FUNC XiPipelineResult xi_pipeline_compile_func(struct AstNode *func_node,
                                                   struct XaAnalyzer *analyzer,
-                                                  struct XrayIsolate *isolate,
+                                                  struct XrVMRuntime *isolate,
                                                   const XiPipelineConfig *cfg) {
     XR_DCHECK(func_node != NULL, "xi_pipeline_compile_func: NULL func_node");
     XrCompilerSession *session = xr_compiler_session_current_for_isolate(isolate);
@@ -328,7 +328,7 @@ XR_FUNC XiPipelineResult xi_pipeline_compile_func(struct AstNode *func_node,
 
 XR_FUNC XiPipelineResult xi_pipeline_compile_program(struct AstNode *program_node,
                                                      struct XaAnalyzer *analyzer,
-                                                     struct XrayIsolate *isolate,
+                                                     struct XrVMRuntime *isolate,
                                                      const XiPipelineConfig *cfg) {
     XR_DCHECK(program_node != NULL, "xi_pipeline_compile_program: NULL program_node");
 
@@ -362,7 +362,7 @@ XR_FUNC XiPipelineResult xi_pipeline_compile_program(struct AstNode *program_nod
     return run_pipeline(ir, isolate, cfg);
 }
 
-XR_FUNC struct XrProto *xi_pipeline_emit_ir(XiFunc *ir, struct XrayIsolate *isolate) {
+XR_FUNC struct XrProto *xi_pipeline_emit_ir(XiFunc *ir, struct XrVMRuntime *isolate) {
     XR_DCHECK(ir != NULL, "xi_pipeline_emit_ir: NULL ir");
     XR_DCHECK(isolate != NULL, "xi_pipeline_emit_ir: NULL isolate");
 

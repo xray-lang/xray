@@ -15,15 +15,15 @@
 #include "runtime/closure/xclosure.h"
 #include "runtime/value/xchunk.h"
 #include "runtime/value/xffi_sig.h"
-#include "xray_isolate.h"
+#include "xray_vm.h"
 
 #include <stdint.h>
 #include <stdlib.h>
 
-static XrayIsolate *new_test_isolate(void) {
-    XrayIsolateParams params;
-    xray_isolate_params_init(&params);
-    return xray_isolate_new_full(&params);
+static XrVMRuntime *new_test_isolate(void) {
+    XrVMConfig params;
+    xray_vm_config_init(&params);
+    return xray_vm_new_full(&params);
 }
 
 static XrProto *make_zero_comparator_proto(void) {
@@ -73,7 +73,7 @@ TEST(vm_ffi_bsearch_invokes_xray_cfn_callback) {
 #ifndef XRAY_HAVE_LIBFFI
     return;
 #else
-    XrayIsolate *iso = new_test_isolate();
+    XrVMRuntime *iso = new_test_isolate();
     ASSERT_NOT_NULL(iso);
 
     XrProto *callback_proto = make_zero_comparator_proto();
@@ -102,7 +102,7 @@ TEST(vm_ffi_bsearch_invokes_xray_cfn_callback) {
 
     xr_vm_proto_free(bsearch_proto);
     xr_vm_proto_free(callback_proto);
-    xray_isolate_delete(iso);
+    xray_vm_delete(iso);
 #endif
 }
 

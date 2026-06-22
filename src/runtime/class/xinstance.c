@@ -32,7 +32,7 @@
 /* ========== Instance Operations ========== */
 
 // Access control handled by compiler/interpreter
-XrValue xr_instance_get_field(XrayIsolate *X, XrInstance *inst, const char *name) {
+XrValue xr_instance_get_field(XrVMRuntime *X, XrInstance *inst, const char *name) {
     if (!X || !inst || !name)
         return xr_null();
 
@@ -57,7 +57,7 @@ XrValue xr_instance_get_field(XrayIsolate *X, XrInstance *inst, const char *name
     return inst->fields[index];
 }
 
-void xr_instance_set_field(XrayIsolate *X, XrInstance *inst, const char *name, XrValue value) {
+void xr_instance_set_field(XrVMRuntime *X, XrInstance *inst, const char *name, XrValue value) {
     if (!X || !inst || !name)
         return;
 
@@ -100,7 +100,7 @@ void xr_instance_set_field_by_index(XrInstance *inst, int index, XrValue value) 
     inst->fields[index] = value;
 }
 
-XrValue xr_instance_call_method(XrayIsolate *X, XrInstance *inst, const char *name, XrValue *args,
+XrValue xr_instance_call_method(XrVMRuntime *X, XrInstance *inst, const char *name, XrValue *args,
                                 int argc) {
     if (!X || !inst || !name)
         return xr_null();
@@ -213,7 +213,7 @@ bool xr_instance_is_a(XrInstance *inst, XrClass *cls) {
 
 /* ========== Class Transition ========== */
 
-XrClass *xr_class_transition_get_or_create(XrayIsolate *X, XrClass *klass, int symbol,
+XrClass *xr_class_transition_get_or_create(XrVMRuntime *X, XrClass *klass, int symbol,
                                            const char *field_name) {
     XR_DCHECK(X != NULL, "transition: NULL isolate");
     XR_DCHECK(klass != NULL, "transition: NULL klass");
@@ -306,7 +306,7 @@ XrClass *xr_class_transition_get_or_create(XrayIsolate *X, XrClass *klass, int s
     return child;
 }
 
-XrClass *xr_class_build_json_chain(XrayIsolate *X, const char *const *names, int count,
+XrClass *xr_class_build_json_chain(XrVMRuntime *X, const char *const *names, int count,
                                    bool sealed) {
     XR_DCHECK(X != NULL, "build_json_chain: NULL isolate");
     XR_DCHECK(X->core != NULL && X->core->jsonRootClass != NULL,

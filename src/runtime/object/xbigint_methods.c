@@ -19,7 +19,7 @@
 #include "../xisolate_api.h"
 #include "../../base/xchecks.h"
 
-void xr_bigint_register_class(XrayIsolate *isolate) {
+void xr_bigint_register_class(XrVMRuntime *isolate) {
     XR_DCHECK(isolate != NULL, "bigint_register_class: NULL isolate");
     XrayCoreClasses *core = xr_isolate_get_core_classes(isolate);
     XR_DCHECK(core != NULL, "bigint_register_class: NULL core");

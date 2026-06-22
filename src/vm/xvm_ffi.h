@@ -21,14 +21,14 @@
 #include "../base/xdefs.h"
 #include "../runtime/value/xvalue.h"
 
-struct XrayIsolate;
+struct XrVMRuntime;
 struct XrProto;
 
 /* Invoke the @extern function backing `proto` with `nargs` arguments (in
  * XrValue form) and return the result as an XrValue. On failure (missing
  * symbol, unsupported signature, libffi unavailable) a runtime error is
  * raised on the isolate and XR_NULL is returned. */
-XR_FUNC XrValue xr_ffi_call_proto(struct XrayIsolate *X, struct XrProto *proto, XrValue *args,
+XR_FUNC XrValue xr_ffi_call_proto(struct XrVMRuntime *X, struct XrProto *proto, XrValue *args,
                                   int nargs);
 
 /* FFI raw-pointer scalar load/store backing the VM's OP_PTR_LOAD / OP_PTR_STORE.

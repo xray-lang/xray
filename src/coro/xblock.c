@@ -670,7 +670,7 @@ static void coro_select_notify_enter(XrSelectWait *sw) {
 
     for (int ci = 0; ci < sw->case_count; ci++) {
         XrChannel *ch = (XrChannel *) sw->cases[ci].channel;
-        XrayIsolate *host = ch ? ch->vm_host_isolate : NULL;
+        XrVMRuntime *host = ch ? ch->vm_host_isolate : NULL;
         XrChannelDistHooks *dhooks = host ? (XrChannelDistHooks *) host->channel_dist_hooks : NULL;
         if (ch && ch->dist && dhooks && dhooks->on_select_enter) {
             dhooks->on_select_enter(ch);

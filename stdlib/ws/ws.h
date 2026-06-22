@@ -117,14 +117,14 @@ typedef struct XrWsConfig {
 /* ========== WebSocket Connection ========== */
 
 // Forward declaration
-struct XrayIsolate;
+struct XrVMRuntime;
 
 typedef struct XrWebSocket {
     // Connection state
     XrWsState state;
     int fd;                       // Socket file descriptor
     bool is_server;               // true if server-side connection (no masking on send)
-    struct XrayIsolate *isolate;  // Isolate for coroutine-aware I/O
+    struct XrVMRuntime *isolate;  // Isolate for coroutine-aware I/O
 
     // URL info
     char *host;
@@ -233,12 +233,12 @@ XR_FUNC XrWebSocket *xr_ws_new(const XrWsConfig *config);
 XR_FUNC void xr_ws_free(XrWebSocket *ws);
 
 /*
- * Bind the WebSocket to a XrayIsolate for coroutine-aware I/O.
+ * Bind the WebSocket to a XrVMRuntime for coroutine-aware I/O.
  * MUST be called before xr_ws_connect / xr_ws_send / xr_ws_recv.
  * Server-side connections are bound automatically in xr_ws_upgrade.
  * Passing NULL is a programming error — all WS I/O requires an isolate.
  */
-XR_FUNC void xr_ws_set_isolate(XrWebSocket *ws, struct XrayIsolate *X);
+XR_FUNC void xr_ws_set_isolate(XrWebSocket *ws, struct XrVMRuntime *X);
 
 // Connect to server
 XR_FUNC XrWsError xr_ws_connect(XrWebSocket *ws);
@@ -314,9 +314,9 @@ XR_FUNC const char *xr_ws_error_string(XrWsError err);
 // Upgrade from HTTP request to WebSocket (server side)
 // fd: client socket
 // request_headers: HTTP request headers (containing Upgrade, Sec-WebSocket-Key, etc.)
-// isolate: XrayIsolate for coroutine-aware I/O (required, must not be NULL)
+// isolate: XrVMRuntime for coroutine-aware I/O (required, must not be NULL)
 // Returns: upgraded WebSocket connection, NULL on failure
-XR_FUNC XrWebSocket *xr_ws_upgrade(struct XrayIsolate *isolate, int fd,
+XR_FUNC XrWebSocket *xr_ws_upgrade(struct XrVMRuntime *isolate, int fd,
                                    const char *request_headers);
 
 /*
@@ -353,7 +353,7 @@ typedef struct XrWsUpgradeOptions {
  * on any other failure it also returns NULL but no response is sent
  * (the socket is left untouched for the caller to close).
  */
-XR_FUNC XrWebSocket *xr_ws_upgrade_ex(struct XrayIsolate *isolate, int fd,
+XR_FUNC XrWebSocket *xr_ws_upgrade_ex(struct XrVMRuntime *isolate, int fd,
                                       const char *request_headers, const XrWsUpgradeOptions *opts);
 
 // Check if HTTP request is a WebSocket upgrade request
@@ -385,14 +385,14 @@ XR_FUNC int xr_ws_send_upgrade_response(int fd, const char *sec_key, const char 
  * Used by HTTP server to upgrade in-place when a WS route matches.
  * Returns xr_null() on failure.
  */
-XR_FUNC XrValue xr_ws_upgrade_and_wrap(struct XrayIsolate *X, int fd, const char *request_headers);
+XR_FUNC XrValue xr_ws_upgrade_and_wrap(struct XrVMRuntime *X, int fd, const char *request_headers);
 
 /* ========== Module API ========== */
 
-struct XrayIsolate;
+struct XrVMRuntime;
 struct XrModule;
 
 // Load WebSocket module
-XR_FUNC struct XrModule *xr_load_module_ws(struct XrayIsolate *isolate);
+XR_FUNC struct XrModule *xr_load_module_ws(struct XrVMRuntime *isolate);
 
 #endif

@@ -23,7 +23,7 @@
 #include "xclass.h"
 #include "xreflect_registry.h"
 
-XrClass *xr_class_lookup_by_name(XrayIsolate *X, const char *class_name) {
+XrClass *xr_class_lookup_by_name(XrVMRuntime *X, const char *class_name) {
     if (!X || !class_name)
         return NULL;
 

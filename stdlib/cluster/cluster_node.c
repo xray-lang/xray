@@ -31,9 +31,9 @@
 // Forward-declare the single xsocket entry point used here
 // rather than pulling xsocket.h. Link-time signature checking
 // against xsocket.c keeps the two in sync.
-extern int xr_socket_read(struct XrayIsolate *X, int fd, char *buf, size_t len);
-extern void xr_socket_set_read_timeout(struct XrayIsolate *X, int fd, int timeout_ms);
-extern void xr_socket_set_write_timeout(struct XrayIsolate *X, int fd, int timeout_ms);
+extern int xr_socket_read(struct XrVMRuntime *X, int fd, char *buf, size_t len);
+extern void xr_socket_set_read_timeout(struct XrVMRuntime *X, int fd, int timeout_ms);
+extern void xr_socket_set_write_timeout(struct XrVMRuntime *X, int fd, int timeout_ms);
 
 /* ========== Time Utility ========== */
 
@@ -645,7 +645,7 @@ void xr_cluster_node_writer_loop(void *arg) {
     atomic_store(&node->writer_exited, true);
 }
 
-void xr_cluster_node_start_writer(XrClusterNode *node, XrayIsolate *X) {
+void xr_cluster_node_start_writer(XrClusterNode *node, XrVMRuntime *X) {
     if (!node || !X)
         return;
     if (atomic_load(&node->writer_running))
@@ -1014,7 +1014,7 @@ XrClusterNode *xr_cluster_node_accept(XrCluster *cluster, XrIOConn *conn) {
 
 /* ========== Pending Request API ========== */
 
-XrChannel *xr_cluster_node_add_pending(XrClusterNode *node, uint64_t request_id, XrayIsolate *X,
+XrChannel *xr_cluster_node_add_pending(XrClusterNode *node, uint64_t request_id, XrVMRuntime *X,
                                        int max_pending) {
     XR_DCHECK(node != NULL, "node must not be NULL");
     XR_DCHECK(X != NULL, "isolate must not be NULL");

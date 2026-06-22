@@ -25,7 +25,7 @@
 #include "../base/xdefs.h"
 #include "../os/os_net.h"
 
-struct XrayIsolate;
+struct XrVMRuntime;
 
 // ========== Connection Management ==========
 
@@ -36,35 +36,35 @@ XR_FUNC int xr_socket_listen(const char *host, int port, int backlog);
 // Blocking accept (coroutine-safe)
 // Coroutine suspends until new connection arrives
 // Returns client_fd, -1 on failure
-XR_FUNC int xr_socket_accept(struct XrayIsolate *X, int listen_fd);
+XR_FUNC int xr_socket_accept(struct XrVMRuntime *X, int listen_fd);
 
 // Close socket
-XR_FUNC void xr_socket_close(struct XrayIsolate *X, int fd);
+XR_FUNC void xr_socket_close(struct XrVMRuntime *X, int fd);
 
 // ========== Data Read/Write ==========
 
 // Blocking read (coroutine-safe)
 // Coroutine suspends until data readable
 // Returns bytes read, 0 = EOF, -1 = error
-XR_FUNC int xr_socket_read(struct XrayIsolate *X, int fd, char *buf, size_t len);
+XR_FUNC int xr_socket_read(struct XrVMRuntime *X, int fd, char *buf, size_t len);
 
 // Blocking write (coroutine-safe)
 // Coroutine suspends until data writable
 // Returns bytes written, -1 = error
-XR_FUNC int xr_socket_write(struct XrayIsolate *X, int fd, const char *buf, size_t len);
+XR_FUNC int xr_socket_write(struct XrVMRuntime *X, int fd, const char *buf, size_t len);
 
 // Blocking readline (coroutine-safe)
 // Reads one line (ending with \n or \r\n)
 // Returns bytes read (excluding newline), -1 = error
-XR_FUNC int xr_socket_readline(struct XrayIsolate *X, int fd, char *buf, size_t maxlen);
+XR_FUNC int xr_socket_readline(struct XrVMRuntime *X, int fd, char *buf, size_t maxlen);
 
 // ========== Timeout Settings ==========
 
 // Set read timeout (milliseconds, 0 = no timeout)
-XR_FUNC void xr_socket_set_read_timeout(struct XrayIsolate *X, int fd, int timeout_ms);
+XR_FUNC void xr_socket_set_read_timeout(struct XrVMRuntime *X, int fd, int timeout_ms);
 
 // Set write timeout (milliseconds, 0 = no timeout)
-XR_FUNC void xr_socket_set_write_timeout(struct XrayIsolate *X, int fd, int timeout_ms);
+XR_FUNC void xr_socket_set_write_timeout(struct XrVMRuntime *X, int fd, int timeout_ms);
 
 /*
  * Wait until fd is readable or the deadline fires, without consuming
@@ -81,7 +81,7 @@ XR_FUNC void xr_socket_set_write_timeout(struct XrayIsolate *X, int fd, int time
  *     0 — deadline fired without data
  *   < 0 — error (e.g. fd closed during wait, netpoll registration failure)
  */
-XR_FUNC int xr_socket_wait_readable(struct XrayIsolate *X, int fd, int timeout_ms);
+XR_FUNC int xr_socket_wait_readable(struct XrVMRuntime *X, int fd, int timeout_ms);
 
 /*
  * Wait until fd is writable or the deadline fires, without writing
@@ -99,7 +99,7 @@ XR_FUNC int xr_socket_wait_readable(struct XrayIsolate *X, int fd, int timeout_m
  *     0 — deadline fired
  *   < 0 — error (fd closed during wait, netpoll registration failed)
  */
-XR_FUNC int xr_socket_wait_writable(struct XrayIsolate *X, int fd, int timeout_ms);
+XR_FUNC int xr_socket_wait_writable(struct XrVMRuntime *X, int fd, int timeout_ms);
 
 // ========== Utility Functions ==========
 
@@ -136,10 +136,10 @@ typedef struct XrAcceptState {
 //   XR_CFUNC_DONE: success, result in state->result_fd
 //   XR_CFUNC_BLOCKED: need to wait, coroutine should yield
 //   XR_CFUNC_ERROR: error
-XR_FUNC XrCFuncResult xr_socket_accept_yieldable(struct XrayIsolate *X, XrAcceptState *state);
+XR_FUNC XrCFuncResult xr_socket_accept_yieldable(struct XrVMRuntime *X, XrAcceptState *state);
 
 // Accept continuation
-XR_FUNC XrCFuncResult xr_socket_accept_continue(struct XrayIsolate *X, int status,
+XR_FUNC XrCFuncResult xr_socket_accept_continue(struct XrVMRuntime *X, int status,
                                                 XrValue resume_value, void *ctx, XrValue *result);
 
 // ========== Non-blocking Try API (hybrid: C-level try + xray yield) ==========
@@ -154,19 +154,19 @@ typedef struct XrIOTryResult {
 
 // Non-blocking accept try
 // Returns immediately, no blocking. If no connection, returns ready=false
-XR_FUNC XrIOTryResult xr_socket_accept_try(struct XrayIsolate *X, int listen_fd);
+XR_FUNC XrIOTryResult xr_socket_accept_try(struct XrVMRuntime *X, int listen_fd);
 
 // Non-blocking read try
 // Returns immediately, no blocking. If no data, returns ready=false
-XR_FUNC XrIOTryResult xr_socket_read_try(struct XrayIsolate *X, int fd, char *buf, size_t len);
+XR_FUNC XrIOTryResult xr_socket_read_try(struct XrVMRuntime *X, int fd, char *buf, size_t len);
 
 // Non-blocking write try
 // Returns immediately, no blocking. If buffer full, returns ready=false
-XR_FUNC XrIOTryResult xr_socket_write_try(struct XrayIsolate *X, int fd, const char *buf,
+XR_FUNC XrIOTryResult xr_socket_write_try(struct XrVMRuntime *X, int fd, const char *buf,
                                           size_t len);
 
 // Register I/O wait (called before xray layer yield)
 // Register fd with netpoll, coroutine can retry after resume
-XR_FUNC void xr_socket_register_wait(struct XrayIsolate *X, int fd, int mode);
+XR_FUNC void xr_socket_register_wait(struct XrVMRuntime *X, int fd, int mode);
 
 #endif  // XSOCKET_H

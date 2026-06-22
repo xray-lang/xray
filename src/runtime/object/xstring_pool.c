@@ -146,7 +146,7 @@ XrString *xr_global_pool_insert_locked(XrGlobalStringPool *pool, const char *cha
     }
 }
 
-XrString *xr_global_pool_insert(XrGlobalStringPool *pool, XrayIsolate *iso, const char *chars,
+XrString *xr_global_pool_insert(XrGlobalStringPool *pool, XrVMRuntime *iso, const char *chars,
                                 size_t len, uint32_t hash) {
     XR_DCHECK(pool != NULL, "global_pool_insert: NULL pool");
     XR_DCHECK(chars != NULL, "global_pool_insert: NULL chars");

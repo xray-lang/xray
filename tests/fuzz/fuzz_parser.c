@@ -28,14 +28,14 @@
 #include "frontend/parser/xast_api.h"
 #include "base/xarena.h"
 #include "toolchain/xcompiler_session.h"
-#include "xray_isolate.h"
+#include "xray_vm.h"
 
-static XrayIsolate *fuzz_isolate(void) {
-    static XrayIsolate *iso = NULL;
+static XrVMRuntime *fuzz_isolate(void) {
+    static XrVMRuntime *iso = NULL;
     if (!iso) {
-        XrayIsolateParams params;
-        xray_isolate_params_init(&params);
-        iso = xray_isolate_new(&params);
+        XrVMConfig params;
+        xray_vm_config_init(&params);
+        iso = xray_vm_new(&params);
         if (iso) {
             XrCompilerSessionConfig cfg = {.vm_host = iso};
             XrCompilerSession *session = xr_compiler_session_new(&cfg);
@@ -69,7 +69,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
     memcpy(input, data, size);
     input[size] = '\0';
 
-    XrayIsolate *iso = fuzz_isolate();
+    XrVMRuntime *iso = fuzz_isolate();
     if (!iso) {
         free(input);
         return 0;

@@ -37,7 +37,7 @@
 
 /* ========== Forward Declarations ========== */
 
-struct XrayIsolate;
+struct XrVMRuntime;
 struct XrChannel;
 typedef struct XrCluster XrCluster;
 
@@ -88,7 +88,7 @@ typedef struct XrCluster {
     uint16_t listen_port;
     char secret[64];
     int listen_fd;
-    struct XrayIsolate *isolate;
+    struct XrVMRuntime *isolate;
 
     // Connected nodes (linked list, protected by nodes_lock)
     XrClusterNode *nodes;
@@ -233,7 +233,7 @@ typedef struct XrCluster {
 
 // Initialize and start the cluster node
 // config contains: name, port, secret
-XR_FUNC int xr_cluster_start(struct XrayIsolate *X, const char *name, uint16_t port,
+XR_FUNC int xr_cluster_start(struct XrVMRuntime *X, const char *name, uint16_t port,
                              const char *secret);
 
 /*
@@ -277,7 +277,7 @@ typedef struct XrClusterTlsOptions {
  * Start a cluster with explicit TLS options. Passing `tls == NULL` is
  * equivalent to xr_cluster_start (plain TCP, legacy behaviour).
  */
-XR_FUNC int xr_cluster_start_ex(struct XrayIsolate *X, const char *name, uint16_t port,
+XR_FUNC int xr_cluster_start_ex(struct XrVMRuntime *X, const char *name, uint16_t port,
                                 const char *secret, const XrClusterTlsOptions *tls);
 
 // Connect to a remote node (host:port)
@@ -343,7 +343,7 @@ XR_FUNC void xr_cluster_unregister_channel(XrCluster *c, const char *name);
 /* ========== Service Registry ========== */
 
 // Register a service (returns request channel)
-XR_FUNC struct XrChannel *xr_cluster_register_service(struct XrayIsolate *X, const char *name);
+XR_FUNC struct XrChannel *xr_cluster_register_service(struct XrVMRuntime *X, const char *name);
 
 // Find a service by name
 XR_FUNC XrServiceEntry *xr_cluster_find_service(XrCluster *c, const char *name);
@@ -391,7 +391,7 @@ typedef struct XrNodeMonitor {
 
 // Monitor a specific node. Returns a Channel that receives the node name
 // as a string when that node disconnects. Use "*" to monitor all nodes.
-XR_FUNC struct XrChannel *xr_cluster_monitor_node(struct XrayIsolate *X, const char *node_name);
+XR_FUNC struct XrChannel *xr_cluster_monitor_node(struct XrVMRuntime *X, const char *node_name);
 
 // Fire monitors for a disconnected node (called internally)
 XR_FUNC void xr_cluster_fire_monitors(XrCluster *c, const char *node_name);
@@ -408,14 +408,14 @@ typedef struct XrTopicSubscription {
 // Supports wildcard: "*" matches one segment, ">" matches remaining segments.
 // Example: "events.*" matches "events.user" but not "events.user.login"
 //          "events.>" matches "events.user" and "events.user.login"
-XR_FUNC struct XrChannel *xr_cluster_topic_subscribe(struct XrayIsolate *X, const char *pattern);
+XR_FUNC struct XrChannel *xr_cluster_topic_subscribe(struct XrVMRuntime *X, const char *pattern);
 
 // Unsubscribe from a topic pattern
 XR_FUNC void xr_cluster_topic_unsubscribe(XrCluster *c, const char *pattern);
 
 // Publish a value to a topic. Delivers to all matching local subscriptions
 // and forwards to all connected nodes.
-XR_FUNC int xr_cluster_topic_publish(struct XrayIsolate *X, const char *topic, XrValue value);
+XR_FUNC int xr_cluster_topic_publish(struct XrVMRuntime *X, const char *topic, XrValue value);
 
 /*
  * Handle incoming TOPIC_PUBLISH frame from a remote node.
@@ -466,7 +466,7 @@ typedef struct XrRemoteCoroMonitor {
 // Monitor a coroutine on a remote node. Returns a Channel that receives
 // exit reason string when the remote coroutine terminates.
 // cluster.monitor("node_name", "coro_name")
-XR_FUNC struct XrChannel *xr_cluster_monitor_coro(struct XrayIsolate *X, const char *node_name,
+XR_FUNC struct XrChannel *xr_cluster_monitor_coro(struct XrVMRuntime *X, const char *node_name,
                                                   const char *coro_name);
 
 // Handle incoming CORO_EXIT frame from a remote node
@@ -485,7 +485,7 @@ XR_FUNC void xr_cluster_remove_all_subscribers_for_node(XrCluster *c, XrClusterN
 
 /* ========== Module Registration ========== */
 
-XR_FUNC XrModule *xr_load_module_cluster(struct XrayIsolate *isolate);
+XR_FUNC XrModule *xr_load_module_cluster(struct XrVMRuntime *isolate);
 
 /* ========== Cluster Info API ========== */
 

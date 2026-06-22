@@ -370,10 +370,10 @@ void xr_tls_context_set_alpn_callback(XrTlsContext *ctx, XrAlpnSelectCallback cb
 }
 
 // External: coroutine-safe socket API
-extern int xr_socket_read(struct XrayIsolate *X, int fd, char *buf, size_t len);
-extern int xr_socket_write(struct XrayIsolate *X, int fd, const char *buf, size_t len);
+extern int xr_socket_read(struct XrVMRuntime *X, int fd, char *buf, size_t len);
+extern int xr_socket_write(struct XrVMRuntime *X, int fd, const char *buf, size_t len);
 
-XrTlsError xr_tls_conn_handshake_client(struct XrayIsolate *X, XrTlsConn *conn) {
+XrTlsError xr_tls_conn_handshake_client(struct XrVMRuntime *X, XrTlsConn *conn) {
     if (!conn || !conn->ssl)
         return XR_TLS_ERR_INIT;
 
@@ -413,7 +413,7 @@ XrTlsError xr_tls_conn_handshake_client(struct XrayIsolate *X, XrTlsConn *conn) 
     }
 }
 
-XrTlsError xr_tls_conn_handshake_server(struct XrayIsolate *X, XrTlsConn *conn) {
+XrTlsError xr_tls_conn_handshake_server(struct XrVMRuntime *X, XrTlsConn *conn) {
     if (!conn || !conn->ssl)
         return XR_TLS_ERR_INIT;
 
@@ -447,7 +447,7 @@ XrTlsError xr_tls_conn_handshake_server(struct XrayIsolate *X, XrTlsConn *conn) 
     }
 }
 
-int xr_tls_conn_read(struct XrayIsolate *X, XrTlsConn *conn, void *buf, size_t len) {
+int xr_tls_conn_read(struct XrVMRuntime *X, XrTlsConn *conn, void *buf, size_t len) {
     if (!conn || !conn->ssl)
         return -1;
 
@@ -488,7 +488,7 @@ int xr_tls_conn_read(struct XrayIsolate *X, XrTlsConn *conn, void *buf, size_t l
     }
 }
 
-int xr_tls_conn_write(struct XrayIsolate *X, XrTlsConn *conn, const void *buf, size_t len) {
+int xr_tls_conn_write(struct XrVMRuntime *X, XrTlsConn *conn, const void *buf, size_t len) {
     if (!conn || !conn->ssl)
         return -1;
 
@@ -759,12 +759,12 @@ const char *xr_tls_conn_get_alpn(XrTlsConn *conn) {
     (void) conn;
     return NULL;
 }
-XrTlsError xr_tls_conn_handshake_client(struct XrayIsolate *X, XrTlsConn *conn) {
+XrTlsError xr_tls_conn_handshake_client(struct XrVMRuntime *X, XrTlsConn *conn) {
     (void) X;
     (void) conn;
     return XR_TLS_ERR_INIT;
 }
-XrTlsError xr_tls_conn_handshake_server(struct XrayIsolate *X, XrTlsConn *conn) {
+XrTlsError xr_tls_conn_handshake_server(struct XrVMRuntime *X, XrTlsConn *conn) {
     (void) X;
     (void) conn;
     return XR_TLS_ERR_INIT;
@@ -773,7 +773,7 @@ int xr_tls_conn_handshake_try(XrTlsConn *conn) {
     (void) conn;
     return -1;
 }
-int xr_tls_conn_read(struct XrayIsolate *X, XrTlsConn *conn, void *buf, size_t len) {
+int xr_tls_conn_read(struct XrVMRuntime *X, XrTlsConn *conn, void *buf, size_t len) {
     (void) X;
     (void) conn;
     (void) buf;
@@ -786,7 +786,7 @@ int xr_tls_conn_read_try(XrTlsConn *conn, void *buf, size_t len) {
     (void) len;
     return -3;
 }
-int xr_tls_conn_write(struct XrayIsolate *X, XrTlsConn *conn, const void *buf, size_t len) {
+int xr_tls_conn_write(struct XrVMRuntime *X, XrTlsConn *conn, const void *buf, size_t len) {
     (void) X;
     (void) conn;
     (void) buf;

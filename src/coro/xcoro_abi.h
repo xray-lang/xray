@@ -37,7 +37,7 @@ typedef enum {
 #define XR_CFUNC_RESULT_DEFINED
 #endif
 
-typedef XrCFuncResult (*XrCoroCFuncEntry)(XrayIsolate *isolate, XrValue *args, int nargs,
+typedef XrCFuncResult (*XrCoroCFuncEntry)(XrVMRuntime *isolate, XrValue *args, int nargs,
                                           XrValue *result);
 
 /* ========== Backend Identity ========== */
@@ -110,19 +110,19 @@ typedef struct XrCoroBackendVTable {
     void (*trace_roots)(XrCoroutine *coro, void *visitor);
     bool (*prepare_recycle)(XrCoroutine *coro, XrWorker *worker);
     void (*reset_reusable)(XrCoroutine *coro);
-    bool (*setup_yield_continuation)(XrayIsolate *isolate, XrCoroutine *coro, void *continuation,
+    bool (*setup_yield_continuation)(XrVMRuntime *isolate, XrCoroutine *coro, void *continuation,
                                      void *user_data);
     bool (*has_continuation)(const XrCoroutine *coro);
-    XrCFuncResult (*call_closure)(XrayIsolate *isolate, XrCoroutine *coro, XrClosure *closure,
+    XrCFuncResult (*call_closure)(XrVMRuntime *isolate, XrCoroutine *coro, XrClosure *closure,
                                   XrValue *args, int nargs, void *continuation, void *user_ctx,
                                   XrValue *result);
     bool (*ensure_state)(XrCoroutine *coro);
-    bool (*prepare_execution_state)(XrCoroutine *coro, XrayIsolate *isolate, XrWorker *worker,
+    bool (*prepare_execution_state)(XrCoroutine *coro, XrVMRuntime *isolate, XrWorker *worker,
                                     bool need_storage, bool is_clean);
-    void (*reset_execution_state)(XrCoroutine *coro, XrayIsolate *isolate);
+    void (*reset_execution_state)(XrCoroutine *coro, XrVMRuntime *isolate);
     void (*clear_entry_state)(XrCoroutine *coro);
     void (*reset_entry_state_no_free)(XrCoroutine *coro);
-    bool (*bind_closure_entry)(XrCoroutine *coro, XrayIsolate *isolate, XrClosure *closure,
+    bool (*bind_closure_entry)(XrCoroutine *coro, XrVMRuntime *isolate, XrClosure *closure,
                                XrValue *args, int arg_count, bool copy_args);
     bool (*bind_cfunc_entry)(XrCoroutine *coro, XrCoroCFuncEntry cfunc, XrValue *args,
                              int arg_count);

@@ -13,6 +13,6 @@
 
 #include "../runtime/xstrbuf.h"
 
-XR_FUNC XrStrBuf *xr_strbuf_tmp(XrayIsolate *X);
+XR_FUNC XrStrBuf *xr_strbuf_tmp(XrVMRuntime *X);
 
 #endif  // XVM_STRING_H

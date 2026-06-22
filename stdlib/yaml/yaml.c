@@ -24,11 +24,11 @@
 // attribute/ABI matches the definition; previously it was a bare
 // `extern` which works on every current platform but would diverge from
 // the definition on a hypothetical amalgamated build.
-XR_FUNC XrValue yaml_emit(XrayIsolate *isolate, XrValue value, int indent, int flow_level);
+XR_FUNC XrValue yaml_emit(XrVMRuntime *isolate, XrValue value, int indent, int flow_level);
 
 // ========== Public API ==========
 
-XrValue xr_yaml_parse(XrayIsolate *isolate, const char *data, size_t len) {
+XrValue xr_yaml_parse(XrVMRuntime *isolate, const char *data, size_t len) {
     YamlConfig config;
     yaml_config_init(&config);
 
@@ -40,7 +40,7 @@ XrValue xr_yaml_parse(XrayIsolate *isolate, const char *data, size_t len) {
     return result;
 }
 
-XrValue xr_yaml_parse_all(XrayIsolate *isolate, const char *data, size_t len) {
+XrValue xr_yaml_parse_all(XrVMRuntime *isolate, const char *data, size_t len) {
     YamlConfig config;
     yaml_config_init(&config);
 
@@ -52,14 +52,14 @@ XrValue xr_yaml_parse_all(XrayIsolate *isolate, const char *data, size_t len) {
     return xr_value_from_array(docs);
 }
 
-XrValue xr_yaml_stringify(XrayIsolate *isolate, XrValue value, int indent) {
+XrValue xr_yaml_stringify(XrVMRuntime *isolate, XrValue value, int indent) {
     return yaml_emit(isolate, value, indent, -1);
 }
 
 // ========== Module Functions ==========
 
 // parse(str, config?)
-static XrValue yaml_parse(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue yaml_parse(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1 || !XR_IS_STRING(args[0])) {
         return xr_null();
     }
@@ -82,7 +82,7 @@ static XrValue yaml_parse(XrayIsolate *X, XrValue *args, int argc) {
 }
 
 // parseStrict(str)
-static XrValue yaml_parse_strict(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue yaml_parse_strict(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1 || !XR_IS_STRING(args[0])) {
         XrMap *result = xr_map_new(xr_current_coro(X));
         xr_map_set(result, xr_string_value(xr_string_intern(X, "data", 4, 0)), xr_null());
@@ -119,7 +119,7 @@ static XrValue yaml_parse_strict(XrayIsolate *X, XrValue *args, int argc) {
 }
 
 // parseAll(str)
-static XrValue yaml_parse_all(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue yaml_parse_all(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1 || !XR_IS_STRING(args[0])) {
         return xr_value_from_array(xr_array_new(xr_current_coro(X)));
     }
@@ -128,7 +128,7 @@ static XrValue yaml_parse_all(XrayIsolate *X, XrValue *args, int argc) {
 }
 
 // stringify(value, config?)
-static XrValue yaml_stringify(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue yaml_stringify(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1) {
         return xr_string_value(xr_string_intern(X, "", 0, 0));
     }
@@ -150,7 +150,7 @@ static XrValue yaml_stringify(XrayIsolate *X, XrValue *args, int argc) {
 // parseFile(path). Currently synchronous — see stdlib/common_io.h for
 // the P9 async-migration plan; this binding will switch to yieldable
 // semantics once the shared file helper gains an async variant.
-static XrValue yaml_parse_file(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue yaml_parse_file(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1 || !XR_IS_STRING(args[0])) {
         return xr_null();
     }
@@ -168,7 +168,7 @@ static XrValue yaml_parse_file(XrayIsolate *X, XrValue *args, int argc) {
 }
 
 // writeFile(path, value). Synchronous; see parseFile note above.
-static XrValue yaml_write_file(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue yaml_write_file(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 2 || !XR_IS_STRING(args[0])) {
         return xr_bool(false);
     }
@@ -199,7 +199,7 @@ XR_DEFINE_BUILTIN(yaml_parse_file, "parseFile", "(path: string): Json", "Parse Y
 XR_DEFINE_BUILTIN(yaml_write_file, "writeFile", "(path: string, value: Json): bool",
                   "Write YAML file")
 
-XR_FUNC XrModule *xr_load_module_yaml(XrayIsolate *isolate) {
+XR_FUNC XrModule *xr_load_module_yaml(XrVMRuntime *isolate) {
     XrModule *mod = xr_module_create_native(isolate, "yaml");
     if (!mod)
         return NULL;

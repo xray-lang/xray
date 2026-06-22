@@ -75,7 +75,7 @@ void xr_copy_context_init_core(XrCopyContext *ctx, XrRuntimeCore *core,
     copy_context_init_common(ctx, core, dst_fixed_heap);
 }
 
-void xr_copy_context_init(XrCopyContext *ctx, struct XrayIsolate *X,
+void xr_copy_context_init(XrCopyContext *ctx, struct XrVMRuntime *X,
                           struct XrFixedHeap *dst_fixed_heap) {
     XR_DCHECK(X != NULL, "copy_context_init: NULL isolate");
     copy_context_init_common(ctx, xr_isolate_get_runtime_core(X),
@@ -543,7 +543,7 @@ XrValue xr_deep_copy_core(XrRuntimeCore *core, XrValue value, XrFixedHeap *dst_f
     return result;
 }
 
-XrValue xr_deep_copy(struct XrayIsolate *X, XrValue value, struct XrFixedHeap *dst_fixed_heap) {
+XrValue xr_deep_copy(struct XrVMRuntime *X, XrValue value, struct XrFixedHeap *dst_fixed_heap) {
     XR_DCHECK(X != NULL, "deep_copy: NULL isolate");
     return xr_deep_copy_core(xr_isolate_get_runtime_core(X), value,
                              dst_fixed_heap ? dst_fixed_heap : xr_isolate_get_fixed_heap(X));
@@ -561,7 +561,7 @@ XrValue xr_deep_copy_to_transit_core(XrRuntimeCore *core, XrValue value) {
     return result;
 }
 
-XrValue xr_deep_copy_to_transit(struct XrayIsolate *X, XrValue value) {
+XrValue xr_deep_copy_to_transit(struct XrVMRuntime *X, XrValue value) {
     XR_DCHECK(X != NULL, "deep_copy_to_transit: NULL isolate");
     return xr_deep_copy_to_transit_core(xr_isolate_get_runtime_core(X), value);
 }
@@ -633,7 +633,7 @@ bool xr_chan_try_move_array_to_transit_core(XrRuntimeCore *core, XrValue value, 
     return true;
 }
 
-bool xr_chan_try_move_array_to_transit(struct XrayIsolate *X, XrValue value, XrValue *out) {
+bool xr_chan_try_move_array_to_transit(struct XrVMRuntime *X, XrValue value, XrValue *out) {
     if (!X)
         return false;
     return xr_chan_try_move_array_to_transit_core(xr_isolate_get_runtime_core(X), value, out);
@@ -688,7 +688,7 @@ bool xr_chan_try_adopt_array_from_transit_core(XrValue value, struct XrCoroutine
     return true;
 }
 
-bool xr_chan_try_adopt_array_from_transit(struct XrayIsolate *X, XrValue value,
+bool xr_chan_try_adopt_array_from_transit(struct XrVMRuntime *X, XrValue value,
                                           struct XrCoroutine *recv_coro, XrValue *out) {
     (void) X;
     return xr_chan_try_adopt_array_from_transit_core(value, recv_coro, out);
@@ -713,7 +713,7 @@ XrValue xr_deep_copy_counted_core(XrRuntimeCore *core, XrValue value, XrFixedHea
     return result;
 }
 
-XrValue xr_deep_copy_counted(struct XrayIsolate *X, XrValue value,
+XrValue xr_deep_copy_counted(struct XrVMRuntime *X, XrValue value,
                              struct XrFixedHeap *dst_fixed_heap, int *out_count) {
     XR_DCHECK(X != NULL, "deep_copy_counted: NULL isolate");
     return xr_deep_copy_counted_core(xr_isolate_get_runtime_core(X), value,
@@ -755,7 +755,7 @@ XrValue xr_deep_copy_to_coro_core(XrRuntimeCore *core, XrValue value,
     return xr_deep_copy_core(core, value, &core->fixed_heap);
 }
 
-XrValue xr_deep_copy_to_coro(struct XrayIsolate *X, XrValue value, struct XrCoroutine *dst_coro) {
+XrValue xr_deep_copy_to_coro(struct XrVMRuntime *X, XrValue value, struct XrCoroutine *dst_coro) {
     XR_DCHECK(X != NULL, "deep_copy_to_coro: NULL isolate");
     return xr_deep_copy_to_coro_core(xr_isolate_get_runtime_core(X), value, dst_coro);
 }
@@ -783,14 +783,14 @@ XrValue xr_deep_copy_to_coro_counted_core(XrRuntimeCore *core, XrValue value,
     return xr_deep_copy_counted_core(core, value, &core->fixed_heap, out_count);
 }
 
-XrValue xr_deep_copy_to_coro_counted(struct XrayIsolate *X, XrValue value,
+XrValue xr_deep_copy_to_coro_counted(struct XrVMRuntime *X, XrValue value,
                                      struct XrCoroutine *dst_coro, int *out_count) {
     XR_DCHECK(X != NULL, "deep_copy_to_coro_counted: NULL isolate");
     return xr_deep_copy_to_coro_counted_core(xr_isolate_get_runtime_core(X), value, dst_coro,
                                              out_count);
 }
 
-XrValue xr_deep_copy_array(struct XrayIsolate *X, struct XrArray *array,
+XrValue xr_deep_copy_array(struct XrVMRuntime *X, struct XrArray *array,
                            struct XrFixedHeap *dst_fixed_heap) {
     XR_DCHECK(X != NULL, "deep_copy_array: NULL isolate");
     if (!array)
@@ -804,7 +804,7 @@ XrValue xr_deep_copy_array(struct XrayIsolate *X, struct XrArray *array,
     return result;
 }
 
-XrValue xr_deep_copy_map(struct XrayIsolate *X, struct XrMap *map,
+XrValue xr_deep_copy_map(struct XrVMRuntime *X, struct XrMap *map,
                          struct XrFixedHeap *dst_fixed_heap) {
     XR_DCHECK(X != NULL, "deep_copy_map: NULL isolate");
     if (!map)
@@ -818,7 +818,7 @@ XrValue xr_deep_copy_map(struct XrayIsolate *X, struct XrMap *map,
     return result;
 }
 
-XrValue xr_deep_copy_closure(struct XrayIsolate *X, struct XrClosure *closure,
+XrValue xr_deep_copy_closure(struct XrVMRuntime *X, struct XrClosure *closure,
                              struct XrFixedHeap *dst_fixed_heap) {
     XR_DCHECK(X != NULL, "deep_copy_closure: NULL isolate");
     if (!closure)
@@ -848,7 +848,7 @@ bool xr_can_relocate(XrValue value) {
     return true;
 }
 
-XrValue xr_to_shared_array(struct XrayIsolate *X, XrObjHeader *obj) {
+XrValue xr_to_shared_array(struct XrVMRuntime *X, XrObjHeader *obj) {
     XrArray *array = (XrArray *) obj;
     if (!array || !xr_isolate_get_sys_heap(X))
         return XR_NULL_VAL;
@@ -875,7 +875,7 @@ XrValue xr_to_shared_array(struct XrayIsolate *X, XrObjHeader *obj) {
     return XR_FROM_PTR(new_arr);
 }
 
-XrValue xr_to_shared_map(struct XrayIsolate *X, XrObjHeader *obj) {
+XrValue xr_to_shared_map(struct XrVMRuntime *X, XrObjHeader *obj) {
     XrMap *map = (XrMap *) obj;
     if (!map || !xr_isolate_get_sys_heap(X))
         return XR_NULL_VAL;
@@ -900,7 +900,7 @@ XrValue xr_to_shared_map(struct XrayIsolate *X, XrObjHeader *obj) {
     return XR_FROM_PTR(new_map);
 }
 
-XrValue xr_to_shared_set(struct XrayIsolate *X, XrObjHeader *obj) {
+XrValue xr_to_shared_set(struct XrVMRuntime *X, XrObjHeader *obj) {
     XrSet *set = (XrSet *) obj;
     if (!set || !xr_isolate_get_sys_heap(X))
         return XR_NULL_VAL;
@@ -924,7 +924,7 @@ XrValue xr_to_shared_set(struct XrayIsolate *X, XrObjHeader *obj) {
     return XR_FROM_PTR(new_set);
 }
 
-XrValue xr_to_shared_instance(struct XrayIsolate *X, XrObjHeader *obj) {
+XrValue xr_to_shared_instance(struct XrVMRuntime *X, XrObjHeader *obj) {
     XrInstance *inst = (XrInstance *) obj;
     if (!inst || !xr_isolate_get_sys_heap(X))
         return XR_NULL_VAL;
@@ -979,7 +979,7 @@ XrValue xr_to_shared_instance(struct XrayIsolate *X, XrObjHeader *obj) {
     return XR_FROM_PTR(new_inst);
 }
 
-XrValue xr_to_shared_closure(struct XrayIsolate *X, XrObjHeader *obj) {
+XrValue xr_to_shared_closure(struct XrVMRuntime *X, XrObjHeader *obj) {
     XrClosure *closure = (XrClosure *) obj;
     if (!closure || !xr_isolate_get_sys_heap(X))
         return XR_NULL_VAL;
@@ -994,7 +994,7 @@ XrValue xr_to_shared_closure(struct XrayIsolate *X, XrObjHeader *obj) {
     return XR_FROM_PTR(new_cl);
 }
 
-XrValue xr_to_shared(struct XrayIsolate *X, XrValue value) {
+XrValue xr_to_shared(struct XrVMRuntime *X, XrValue value) {
     if (!XR_IS_PTR(value))
         return value;
     XrObjHeader *obj = XR_VALUE_GCPTR(value);

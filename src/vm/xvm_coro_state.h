@@ -32,7 +32,7 @@ typedef union {
         void (*func)(void *);
         void *arg;
     } native;
-    XrCFuncResult (*cfunc)(struct XrayIsolate *, XrValue *, int, XrValue *);
+    XrCFuncResult (*cfunc)(struct XrVMRuntime *, XrValue *, int, XrValue *);
 } XrCoroEntry;
 
 struct XrVmCoroState {

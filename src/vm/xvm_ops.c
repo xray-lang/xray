@@ -61,7 +61,7 @@ typedef struct {
 } VisitedSet;
 
 typedef struct {
-    XrayIsolate *isolate;
+    XrVMRuntime *isolate;
     VisitedSet visiting;
 } CompareContext;
 
@@ -226,7 +226,7 @@ static void pop_visiting(CompareContext *ctx, void *a, void *b) {
  * VM callers use xr_value_to_string / xr_value_to_strbuf directly. */
 
 // String concatenation
-static inline XrValue vm_string_concat_values(XrayIsolate *isolate, XrValue left, XrValue right) {
+static inline XrValue vm_string_concat_values(XrVMRuntime *isolate, XrValue left, XrValue right) {
     XR_DCHECK(isolate != NULL, "string_concat_values: NULL isolate");
     XrString *str_left = xr_value_to_string(isolate, left);
     XrString *str_right = xr_value_to_string(isolate, right);
@@ -249,7 +249,7 @@ static inline XrValue vm_numeric_add(XrValue left, XrValue right) {
 /* ========== Arithmetic Operation Helpers ========== */
 
 // Generic add operation (numeric or string+string, no implicit conversion)
-XrValue vm_add_operation(XrayIsolate *isolate, XrValue left, XrValue right) {
+XrValue vm_add_operation(XrVMRuntime *isolate, XrValue left, XrValue right) {
     XR_DCHECK(isolate != NULL, "vm_add_operation: NULL isolate");
     if ((XR_IS_INT(left) || XR_IS_FLOAT(left)) && (XR_IS_INT(right) || XR_IS_FLOAT(right))) {
         return vm_numeric_add(left, right);
@@ -285,7 +285,7 @@ XrValue vm_numeric_mul(XrValue left, XrValue right) {
 }
 
 // Division
-XrValue vm_numeric_div(XrayIsolate *isolate, XrValue left, XrValue right) {
+XrValue vm_numeric_div(XrVMRuntime *isolate, XrValue left, XrValue right) {
     XR_DCHECK(isolate != NULL, "vm_numeric_div: NULL isolate");
     if ((XR_IS_INT(left) || XR_IS_FLOAT(left)) && (XR_IS_INT(right) || XR_IS_FLOAT(right))) {
         double nl = XR_IS_INT(left) ? (double) XR_TO_INT(left) : XR_TO_FLOAT(left);
@@ -302,7 +302,7 @@ XrValue vm_numeric_div(XrayIsolate *isolate, XrValue left, XrValue right) {
 }
 
 // Modulo
-XrValue vm_numeric_mod(XrayIsolate *isolate, XrValue left, XrValue right) {
+XrValue vm_numeric_mod(XrVMRuntime *isolate, XrValue left, XrValue right) {
     XR_DCHECK(isolate != NULL, "vm_numeric_mod: NULL isolate");
     if (XR_IS_INT(left) && XR_IS_INT(right)) {
         xr_Integer r = XR_TO_INT(right);
@@ -457,7 +457,7 @@ static bool deep_compare(CompareContext *ctx, XrValue a, XrValue b) {
 /* ========== Comparison Operation Helpers ========== */
 
 // Deep equality comparison (with isolate, supports Array/Map/Set)
-bool vm_values_equal_deep(XrayIsolate *isolate, XrValue a, XrValue b) {
+bool vm_values_equal_deep(XrVMRuntime *isolate, XrValue a, XrValue b) {
     if (xr_value_same(a, b))
         return true;
 

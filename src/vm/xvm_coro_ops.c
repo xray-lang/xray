@@ -50,7 +50,7 @@
 
 // VmCoroEntry and VM_CORO_COLLECT_MAX defined in xvm_dispatch_helpers.h
 
-static XrValue vm_coro_name_value(XrayIsolate *isolate, const XrCoroutine *coro) {
+static XrValue vm_coro_name_value(XrVMRuntime *isolate, const XrCoroutine *coro) {
     const char *name = xr_coro_name(coro);
     if (!name)
         return xr_null();
@@ -89,7 +89,7 @@ static void vm_go_detach_scope_child(XrCoroutine *coro) {
     (void) xr_coro_set_parent_scope(coro, NULL);
 }
 
-static void vm_coro_set_source_field(XrayIsolate *isolate, XrMap *info, const XrCoroutine *coro) {
+static void vm_coro_set_source_field(XrVMRuntime *isolate, XrMap *info, const XrCoroutine *coro) {
     const char *source_file = xr_coro_source_file(coro);
     if (!source_file)
         return;
@@ -102,7 +102,7 @@ static void vm_coro_set_source_field(XrayIsolate *isolate, XrMap *info, const Xr
 
 // Collect coroutines from runtime queues into a flat array for diagnostic sub-ops.
 // Returns the number of entries written. Best-effort snapshot (not atomic).
-int vm_collect_all_coros(XrayIsolate *isolate, VmCoroEntry *out, int max_out) {
+int vm_collect_all_coros(XrVMRuntime *isolate, VmCoroEntry *out, int max_out) {
     XR_DCHECK(isolate != NULL, "vm_collect_all_coros: NULL isolate");
     XrRuntime *runtime = (XrRuntime *) isolate->vm.scheduler;
     if (!runtime)
@@ -112,7 +112,7 @@ int vm_collect_all_coros(XrayIsolate *isolate, VmCoroEntry *out, int max_out) {
 
 /* ========== Dispatch: OP_CORO_CTRL Sub-operations ========== */
 
-XR_FUNC XrDispatchAction vm_coro_ctrl(XrayIsolate *isolate, XrVMContext *vm_ctx,
+XR_FUNC XrDispatchAction vm_coro_ctrl(XrVMRuntime *isolate, XrVMContext *vm_ctx,
                                       XrInstruction instr, XrValue *base) {
     XR_DCHECK(isolate != NULL, "vm_coro_ctrl: NULL isolate");
     XR_DCHECK(base != NULL, "vm_coro_ctrl: NULL base");
@@ -604,7 +604,7 @@ XR_FUNC XrDispatchAction vm_coro_ctrl(XrayIsolate *isolate, XrVMContext *vm_ctx,
 // props / chan-ops TUs can call it without an owning .c
 // file having to re-export it.
 
-XR_FUNC XrDispatchAction vm_go(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstruction instr,
+XR_FUNC XrDispatchAction vm_go(XrVMRuntime *isolate, XrVMContext *vm_ctx, XrInstruction instr,
                                XrValue *base, XrBcCallFrame *frame) {
     int a = GETARG_A(instr);
     int b = GETARG_B(instr);
@@ -759,14 +759,14 @@ XR_FUNC XrDispatchAction vm_go(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInst
 #define AWAIT_TIMEOUT_SPINS 100000000
 
 /* Read task->result with deep copy to dst_coro's heap. */
-static inline XrValue vm_task_consume_result(XrayIsolate *isolate, XrTask *task,
+static inline XrValue vm_task_consume_result(XrVMRuntime *isolate, XrTask *task,
                                              XrCoroutine *dst_coro, bool discard_result) {
     XrValue res = xr_coro_await_result_value(xr_isolate_get_runtime_core(isolate), dst_coro, task,
                                              discard_result);
     return discard_result ? xr_null() : res;
 }
 
-static XrDispatchAction vm_task_raise_await_terminal(XrayIsolate *isolate, XrTask *task,
+static XrDispatchAction vm_task_raise_await_terminal(XrVMRuntime *isolate, XrTask *task,
                                                      XrBcCallFrame *frame, XrInstruction *pc) {
     uint8_t tstate =
         task ? atomic_load_explicit(&task->state, memory_order_acquire) : XR_TASK_CANCELLED;
@@ -822,7 +822,7 @@ static inline void vm_task_finish_completed_executor(XrTask *task, bool one_shot
     }
 }
 
-static inline void vm_task_destroy_one_shot_success(XrayIsolate *isolate, XrTask *task,
+static inline void vm_task_destroy_one_shot_success(XrVMRuntime *isolate, XrTask *task,
                                                     bool one_shot) {
     if (!one_shot || !isolate || !task)
         return;
@@ -839,7 +839,7 @@ static inline void vm_task_detach_completed_executor(XrTask *task) {
     vm_task_finish_completed_executor(task, false);
 }
 
-XR_FUNC XrDispatchAction vm_await(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstruction instr,
+XR_FUNC XrDispatchAction vm_await(XrVMRuntime *isolate, XrVMContext *vm_ctx, XrInstruction instr,
                                   XrValue *base, XrBcCallFrame *frame, XrInstruction *pc) {
     int a = GETARG_A(instr);
     int b = GETARG_B(instr);
@@ -980,7 +980,7 @@ XR_FUNC XrDispatchAction vm_await(XrayIsolate *isolate, XrVMContext *vm_ctx, XrI
     VM_THROW(frame, pc, XR_ERR_TYPE_MISMATCH, "await: expected task");
 }
 
-XR_FUNC XrDispatchAction vm_await_timeout(XrayIsolate *isolate, XrVMContext *vm_ctx,
+XR_FUNC XrDispatchAction vm_await_timeout(XrVMRuntime *isolate, XrVMContext *vm_ctx,
                                           XrInstruction instr, XrValue *base, XrBcCallFrame *frame,
                                           XrInstruction *pc) {
     int a = GETARG_A(instr);
@@ -1077,7 +1077,7 @@ XR_FUNC XrDispatchAction vm_await_timeout(XrayIsolate *isolate, XrVMContext *vm_
     VM_THROW(frame, pc, XR_ERR_TYPE_MISMATCH, "await: expected task");
 }
 
-XR_FUNC XrDispatchAction vm_await_all(XrayIsolate *isolate, XrVMContext *vm_ctx,
+XR_FUNC XrDispatchAction vm_await_all(XrVMRuntime *isolate, XrVMContext *vm_ctx,
                                       XrInstruction instr, XrValue *base, XrBcCallFrame *frame,
                                       XrInstruction *pc) {
     int a = GETARG_A(instr);
@@ -1169,7 +1169,7 @@ XR_FUNC XrDispatchAction vm_await_all(XrayIsolate *isolate, XrVMContext *vm_ctx,
     return XR_DISP_RESTART;
 }
 
-XR_FUNC XrDispatchAction vm_await_any(XrayIsolate *isolate, XrVMContext *vm_ctx,
+XR_FUNC XrDispatchAction vm_await_any(XrVMRuntime *isolate, XrVMContext *vm_ctx,
                                       XrInstruction instr, XrValue *base, XrBcCallFrame *frame,
                                       XrInstruction *pc) {
     int a = GETARG_A(instr);

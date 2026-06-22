@@ -56,7 +56,7 @@ static inline bool eval_is_truthy(XrValue v) {
 // ============================================================================
 
 typedef struct {
-    XrayIsolate *isolate;
+    XrVMRuntime *isolate;
     int frame_idx;
     XrBcCallFrame *frame;
     XrProto *proto;
@@ -486,7 +486,7 @@ static XrValue eval_ast(XrEvalContext *ctx, AstNode *node) {
 // ============================================================================
 
 // Internal evaluate function that returns both string and value
-static char *debug_evaluate_internal(XrayIsolate *isolate, const char *expression, int frame_idx,
+static char *debug_evaluate_internal(XrVMRuntime *isolate, const char *expression, int frame_idx,
                                      XrValue *out_value) {
     if (!expression || !isolate) {
         if (out_value)
@@ -554,11 +554,11 @@ static char *debug_evaluate_internal(XrayIsolate *isolate, const char *expressio
     return xr_value_to_debug_string(isolate, result);
 }
 
-char *xr_debug_evaluate(XrayIsolate *isolate, const char *expression, int frame_idx) {
+char *xr_debug_evaluate(XrVMRuntime *isolate, const char *expression, int frame_idx) {
     return debug_evaluate_internal(isolate, expression, frame_idx, NULL);
 }
 
-char *xr_debug_evaluate_ex(XrayIsolate *isolate, const char *expression, int frame_idx,
+char *xr_debug_evaluate_ex(XrVMRuntime *isolate, const char *expression, int frame_idx,
                            int *out_var_ref) {
     XrValue result;
     char *str = debug_evaluate_internal(isolate, expression, frame_idx, &result);

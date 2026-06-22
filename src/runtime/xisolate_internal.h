@@ -5,10 +5,10 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xisolate_internal.h - Internal structure definition for XrayIsolate
+ * xisolate_internal.h - Internal structure definition for XrVMRuntime
  *
  * KEY CONCEPT:
- *   XrayIsolate is the complete execution environment.
+ *   XrVMRuntime is the complete execution environment.
  *   It contains all runtime state: GC, type system, VM state, globals, etc.
  *   This header exposes internal structure for backend implementations only.
  *
@@ -18,7 +18,7 @@
  *   - Per-coroutine heap: Independent heaps with bulk deallocation
  *
  * RELATED MODULES:
- *   - xray_isolate.h: Public API for Isolate lifecycle
+ *   - xray_vm.h: Public API for VM lifecycle
  *   - xr_vm_state.h: VM execution state (stack, frames, globals)
  *   - xcoro_memory.h: Per-coroutine memory management
  */
@@ -26,7 +26,7 @@
 #ifndef XISOLATE_INTERNAL_H
 #define XISOLATE_INTERNAL_H
 
-#include "xray_isolate.h"
+#include "xray_vm.h"
 #include "../base/xforward_decl.h"  // Forward declarations
 #include "value/xvalue.h"
 #include "class/xclass.h"
@@ -53,23 +53,23 @@ typedef struct XrGlobalStringPool XrGlobalStringPool;
 /* ========== VM Engine API (compile-time static linking) ========== */
 
 // VM initialization and cleanup
-XR_FUNC int xr_vm_init(XrayIsolate *isolate);
-XR_FUNC void xr_vm_cleanup(XrayIsolate *isolate);
+XR_FUNC int xr_vm_init(XrVMRuntime *isolate);
+XR_FUNC void xr_vm_cleanup(XrVMRuntime *isolate);
 
 /* ========== Fast Macros ========== */
 
 // Simplified design: Use Isolate directly, no ThreadLocalTop
 // Isolate contains all execution state
 
-/* ========== XrayIsolate Internal Structure ========== */
+/* ========== XrVMRuntime Internal Structure ========== */
 
-// XrayIsolate - Complete execution environment
+// XrVMRuntime - Complete execution environment
 //
 // Simplified design: single Isolate model
 // - Contains all runtime state
 // - Independent heap, GC, global objects
 // - No Context abstraction layer needed
-struct XrayIsolate {
+struct XrVMRuntime {
     /* ========== Common State ========== */
 
     // Core object system
@@ -94,8 +94,8 @@ struct XrayIsolate {
     struct XrCompilerSession *compiler_session;  // Active toolchain session bridge.
 
     // Configuration
-    XrayIsolateParams params;  // Creation parameters
-    void (*lifecycle_cleanup)(struct XrayIsolate *isolate);
+    XrVMConfig params;  // Creation parameters
+    void (*lifecycle_cleanup)(struct XrVMRuntime *isolate);
 
     // Global object (simplified: embedded directly in Isolate)
     XrGlobalObject *global_object;  // Global object
@@ -123,13 +123,13 @@ struct XrayIsolate {
      *
      * `user_stdout` — alternative FILE* for `print()` / `OP_PRINT`
      *   output. NULL = use the process `stdout`. Set via
-     *   xray_isolate_set_stdout(). Must outlive the isolate.
+     *   xray_vm_set_stdout(). Must outlive the isolate.
      *
      * `deadline_ns` — wall-clock deadline (CLOCK_MONOTONIC, ns). When
      *   non-zero, the VM checks at backward branches whether we have
      *   passed the deadline; if so it sets `deadline_exceeded` and
      *   aborts the running coroutine with a runtime error so the
-     *   host can recover. Set via xray_isolate_set_deadline_ms().
+     *   host can recover. Set via xray_vm_set_deadline_ms().
      *
      * `deadline_exceeded` — sticky flag observed after a timed
      *   execution returns; cleared each time a new deadline is set.
@@ -232,28 +232,12 @@ XR_FUNC XrProto *xr_compile_source_with_path(XrCompilerSession *session, const c
 
 // xr_execute and xr_free_code are declared in xisolate_api.h.
 
-// ========== Internal Helper Functions ==========
-
-// Initialize common state (called by xray_isolate_new)
-// Returns 0 on success, -1 on failure
-XR_FUNC int xray_isolate_init_common(XrayIsolate *isolate);
-
-// Cleanup common state (called by xray_isolate_delete)
-XR_FUNC void xray_isolate_cleanup_common(XrayIsolate *isolate);
-
 /* ========== Thread Local Storage API ========== */
 
 // Global thread-local Isolate pointer
 // Each thread has its own Isolate instance
-extern XR_THREAD_LOCAL XrayIsolate *g_current_isolate;
+extern XR_THREAD_LOCAL XrVMRuntime *g_current_isolate;
 
-// Get current thread's Isolate (fast inline version)
-// Returns NULL if not set
-// Performance: ~2ns (direct TLS access)
-static inline XrayIsolate *xray_isolate_get_current(void) {
-    return g_current_isolate;
-}
-
-// xray_isolate_enter/xray_isolate_exit declared in xisolate_api.h
+// xray_vm_enter/xray_vm_exit declared in xisolate_api.h
 
 #endif  // XISOLATE_INTERNAL_H

@@ -11,7 +11,7 @@
 #include "xint_methods.h"
 #include "../object/xnative_type.h"
 
-void xr_int_register_native_type(XrayIsolate *isolate) {
+void xr_int_register_native_type(XrVMRuntime *isolate) {
     static const XrNativeMethod int_methods[] = {
         {"toString", xr_int_to_string_method, 0},
         {"abs", xr_int_abs_method, 0},

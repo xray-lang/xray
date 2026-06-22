@@ -69,28 +69,28 @@ struct XrCoroutine;
 struct XrRuntimeCore;
 XR_FUNC XrInstance *xr_instance_new_core(struct XrRuntimeCore *core, struct XrCoroutine *coro,
                                          XrClass *cls);
-XR_FUNC XrInstance *xr_instance_new(XrayIsolate *X, XrClass *cls);
+XR_FUNC XrInstance *xr_instance_new(XrVMRuntime *X, XrClass *cls);
 
 XR_FUNC void xr_instance_init_inplace(XrInstance *inst, XrClass *cls);
 XR_FUNC size_t xr_instance_size(XrClass *cls);
 XR_FUNC void xr_instance_free(XrInstance *inst);
 
-XR_FUNC XrValue xr_instance_get_field(XrayIsolate *X, XrInstance *inst, const char *name);
-XR_FUNC void xr_instance_set_field(XrayIsolate *X, XrInstance *inst, const char *name,
+XR_FUNC XrValue xr_instance_get_field(XrVMRuntime *X, XrInstance *inst, const char *name);
+XR_FUNC void xr_instance_set_field(XrVMRuntime *X, XrInstance *inst, const char *name,
                                    XrValue value);
 
 // Fast path by index
 XR_FUNC XrValue xr_instance_get_field_by_index(XrInstance *inst, int index);
 XR_FUNC void xr_instance_set_field_by_index(XrInstance *inst, int index, XrValue value);
 
-XR_FUNC XrValue xr_instance_call_method(XrayIsolate *X, XrInstance *inst, const char *name,
+XR_FUNC XrValue xr_instance_call_method(XrVMRuntime *X, XrInstance *inst, const char *name,
                                         XrValue *args, int argc);
 
 // Allocate + init fields + call constructor
-XR_FUNC XrValue xr_instance_construct(XrayIsolate *X, XrClass *cls, XrValue *args, int argc);
+XR_FUNC XrValue xr_instance_construct(XrVMRuntime *X, XrClass *cls, XrValue *args, int argc);
 
 // Shallow clone: allocate new instance, copy all field values
-XR_FUNC XrInstance *xr_instance_clone(XrayIsolate *X, XrInstance *src);
+XR_FUNC XrInstance *xr_instance_clone(XrVMRuntime *X, XrInstance *src);
 
 /* ========== Debug ========== */
 
@@ -148,12 +148,12 @@ XR_FUNC XrValue xr_instance_get_dynamic_field(XrInstance *inst, uint16_t index);
 // Write a logical field on a dynamic-layout instance.
 // Returns false if overflow allocation fails.
 XR_FUNC bool xr_instance_set_dynamic_field_direct(XrInstance *inst, uint16_t index, XrValue value);
-XR_FUNC bool xr_instance_set_dynamic_field(struct XrayIsolate *X, XrInstance *inst, uint16_t index,
+XR_FUNC bool xr_instance_set_dynamic_field(struct XrVMRuntime *X, XrInstance *inst, uint16_t index,
                                            XrValue value);
 
 // Look up or create a class transition for the given field symbol.
 // Returns the target class (with field_count = current + 1), or NULL on OOM.
-XR_FUNC struct XrClass *xr_class_transition_get_or_create(struct XrayIsolate *X,
+XR_FUNC struct XrClass *xr_class_transition_get_or_create(struct XrVMRuntime *X,
                                                           struct XrClass *klass, int symbol,
                                                           const char *field_name);
 
@@ -161,7 +161,7 @@ XR_FUNC struct XrClass *xr_class_transition_get_or_create(struct XrayIsolate *X,
 // the given field names in order. If sealed is true, marks the leaf class
 // as XR_CLASS_DYNAMIC_SEALED so further transitions are rejected.
 // Returns the leaf class (or NULL on OOM).
-XR_FUNC struct XrClass *xr_class_build_json_chain(struct XrayIsolate *X, const char *const *names,
+XR_FUNC struct XrClass *xr_class_build_json_chain(struct XrVMRuntime *X, const char *const *names,
                                                   int count, bool sealed);
 
 #endif  // XINSTANCE_H

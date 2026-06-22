@@ -20,10 +20,10 @@
 #include "../value/xvalue.h"
 #include "../mem/xobj_header.h"
 
-struct XrayIsolate;
+struct XrVMRuntime;
 
 // Builtin method dispatch signature.
-typedef XrValue (*MethodHandler)(struct XrayIsolate *isolate, XrValue receiver, XrValue *args,
+typedef XrValue (*MethodHandler)(struct XrVMRuntime *isolate, XrValue receiver, XrValue *args,
                                  int argc);
 
 typedef struct XrBoundMethod {
@@ -32,7 +32,7 @@ typedef struct XrBoundMethod {
     MethodHandler handler;  // direct function pointer, zero-dispatch call
 } XrBoundMethod;
 
-XR_FUNC XrBoundMethod *xr_bound_method_new(struct XrayIsolate *isolate, XrValue receiver,
+XR_FUNC XrBoundMethod *xr_bound_method_new(struct XrVMRuntime *isolate, XrValue receiver,
                                            MethodHandler handler);
 XR_FUNC XrValue xr_value_from_bound_method(XrBoundMethod *bm);
 XR_FUNC XrBoundMethod *xr_value_to_bound_method(XrValue v);
@@ -53,14 +53,14 @@ XR_FUNC bool xr_value_is_bound_method(XrValue v);
  *
  * Enum getMember takes an integer index, so it gets its own thin
  * wrapper here. */
-XR_FUNC MethodHandler xr_map_get_handler(struct XrayIsolate *isolate, int symbol);
-XR_FUNC MethodHandler xr_array_get_handler(struct XrayIsolate *isolate, int symbol);
-XR_FUNC MethodHandler xr_set_get_handler(struct XrayIsolate *isolate, int symbol);
-XR_FUNC MethodHandler xr_string_get_handler(struct XrayIsolate *isolate, int symbol);
+XR_FUNC MethodHandler xr_map_get_handler(struct XrVMRuntime *isolate, int symbol);
+XR_FUNC MethodHandler xr_array_get_handler(struct XrVMRuntime *isolate, int symbol);
+XR_FUNC MethodHandler xr_set_get_handler(struct XrVMRuntime *isolate, int symbol);
+XR_FUNC MethodHandler xr_string_get_handler(struct XrVMRuntime *isolate, int symbol);
 
 /* Enum.getMember(int) -> XrEnumValue. Exported as a MethodHandler so
  * GETPROP can wrap it in a bound method without a special opcode. */
-XR_FUNC XrValue xr_enum_get_member_handler(struct XrayIsolate *isolate, XrValue receiver,
+XR_FUNC XrValue xr_enum_get_member_handler(struct XrVMRuntime *isolate, XrValue receiver,
                                            XrValue *args, int argc);
 
 #endif  // XBOUND_METHOD_H

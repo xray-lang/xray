@@ -145,26 +145,26 @@ XR_FUNC void xr_global_pool_init(XrGlobalStringPool *pool);
 XR_FUNC void xr_global_pool_free(XrGlobalStringPool *pool);
 XR_FUNC XrString *xr_global_pool_insert_locked(XrGlobalStringPool *pool, const char *chars,
                                                size_t len, uint32_t hash);
-XR_FUNC XrString *xr_global_pool_insert(XrGlobalStringPool *pool, XrayIsolate *iso,
+XR_FUNC XrString *xr_global_pool_insert(XrGlobalStringPool *pool, XrVMRuntime *iso,
                                         const char *chars, size_t len, uint32_t hash);
 XR_FUNC void xr_global_pool_freeze(XrGlobalStringPool *pool);
 XR_FUNC XrString *xr_global_pool_lookup(XrGlobalStringPool *pool, const char *chars, size_t len,
                                         uint32_t hash);
-XR_FUNC XrString *xr_compile_time_intern(XrayIsolate *iso, const char *chars, size_t len);
+XR_FUNC XrString *xr_compile_time_intern(XrVMRuntime *iso, const char *chars, size_t len);
 XR_FUNC size_t xr_global_pool_sweep(XrGlobalStringPool *pool);
 
 /* ========== String Creation ========== */
 
 // Create non-interned string (for large or one-shot data like HTTP body, WS message)
-XR_FUNC XrString *xr_string_new(XrayIsolate *iso, const char *chars, size_t length);
+XR_FUNC XrString *xr_string_new(XrVMRuntime *iso, const char *chars, size_t length);
 
-XR_FUNC XrString *xr_string_concat(XrayIsolate *iso, XrString *a, XrString *b);
-XR_FUNC XrString *xr_string_from_int(XrayIsolate *iso, xr_Integer i);
-XR_FUNC XrString *xr_string_from_float(XrayIsolate *iso, xr_Number n);
+XR_FUNC XrString *xr_string_concat(XrVMRuntime *iso, XrString *a, XrString *b);
+XR_FUNC XrString *xr_string_from_int(XrVMRuntime *iso, xr_Integer i);
+XR_FUNC XrString *xr_string_from_float(XrVMRuntime *iso, xr_Number n);
 
 /* ========== String Interning ========== */
 
-XR_FUNC XrString *xr_string_intern(XrayIsolate *iso, const char *chars, size_t length,
+XR_FUNC XrString *xr_string_intern(XrVMRuntime *iso, const char *chars, size_t length,
                                    uint32_t hash);
 XR_FUNC XrString *xr_string_intern_core(struct XrRuntimeCore *core, const char *chars,
                                         size_t length, uint32_t hash);
@@ -191,39 +191,39 @@ XR_FUNC uint32_t xr_string_hash(const char *chars, size_t length);
 
 /* ========== String Methods ========== */
 
-XR_FUNC XrString *xr_string_char_at(XrayIsolate *iso, XrString *str, xr_Integer index);
-XR_FUNC XrString *xr_string_substring(XrayIsolate *iso, XrString *str, xr_Integer start,
+XR_FUNC XrString *xr_string_char_at(XrVMRuntime *iso, XrString *str, xr_Integer index);
+XR_FUNC XrString *xr_string_substring(XrVMRuntime *iso, XrString *str, xr_Integer start,
                                       xr_Integer end);
-XR_FUNC XrString *xr_string_slice(XrayIsolate *iso, XrString *str, xr_Integer start,
+XR_FUNC XrString *xr_string_slice(XrVMRuntime *iso, XrString *str, xr_Integer start,
                                   xr_Integer end);
-XR_FUNC xr_Integer xr_string_index_of(XrayIsolate *iso, XrString *str, XrString *substr);
-XR_FUNC int xr_string_size(XrayIsolate *iso, XrString *str);
-XR_FUNC bool xr_string_is_empty(XrayIsolate *iso, XrString *str);
-XR_FUNC bool xr_string_has(XrayIsolate *iso, XrString *str, XrString *substr);
-XR_FUNC bool xr_string_starts_with(XrayIsolate *iso, XrString *str, XrString *prefix);
-XR_FUNC bool xr_string_ends_with(XrayIsolate *iso, XrString *str, XrString *suffix);
-XR_FUNC XrString *xr_string_to_lower_case(XrayIsolate *iso, XrString *str);
-XR_FUNC XrString *xr_string_to_upper_case(XrayIsolate *iso, XrString *str);
-XR_FUNC XrString *xr_string_trim(XrayIsolate *iso, XrString *str);
-XR_FUNC XrString *xr_string_trim_start(XrayIsolate *iso, XrString *str);
-XR_FUNC XrString *xr_string_trim_end(XrayIsolate *iso, XrString *str);
-XR_FUNC XrString *xr_string_pad_start(XrayIsolate *iso, XrString *str, size_t target_len,
+XR_FUNC xr_Integer xr_string_index_of(XrVMRuntime *iso, XrString *str, XrString *substr);
+XR_FUNC int xr_string_size(XrVMRuntime *iso, XrString *str);
+XR_FUNC bool xr_string_is_empty(XrVMRuntime *iso, XrString *str);
+XR_FUNC bool xr_string_has(XrVMRuntime *iso, XrString *str, XrString *substr);
+XR_FUNC bool xr_string_starts_with(XrVMRuntime *iso, XrString *str, XrString *prefix);
+XR_FUNC bool xr_string_ends_with(XrVMRuntime *iso, XrString *str, XrString *suffix);
+XR_FUNC XrString *xr_string_to_lower_case(XrVMRuntime *iso, XrString *str);
+XR_FUNC XrString *xr_string_to_upper_case(XrVMRuntime *iso, XrString *str);
+XR_FUNC XrString *xr_string_trim(XrVMRuntime *iso, XrString *str);
+XR_FUNC XrString *xr_string_trim_start(XrVMRuntime *iso, XrString *str);
+XR_FUNC XrString *xr_string_trim_end(XrVMRuntime *iso, XrString *str);
+XR_FUNC XrString *xr_string_pad_start(XrVMRuntime *iso, XrString *str, size_t target_len,
                                       XrString *pad_str);
-XR_FUNC XrString *xr_string_pad_end(XrayIsolate *iso, XrString *str, size_t target_len,
+XR_FUNC XrString *xr_string_pad_end(XrVMRuntime *iso, XrString *str, size_t target_len,
                                     XrString *pad_str);
-XR_FUNC xr_Integer xr_string_last_index_of(XrayIsolate *iso, XrString *str, XrString *substr);
+XR_FUNC xr_Integer xr_string_last_index_of(XrVMRuntime *iso, XrString *str, XrString *substr);
 
 /* ========== Advanced String Methods ========== */
 
-XR_FUNC XrArray *xr_string_split(XrayIsolate *iso, XrString *str, XrString *delimiter);
-XR_FUNC XrString *xr_string_replace(XrayIsolate *iso, XrString *str, XrString *old_str,
+XR_FUNC XrArray *xr_string_split(XrVMRuntime *iso, XrString *str, XrString *delimiter);
+XR_FUNC XrString *xr_string_replace(XrVMRuntime *iso, XrString *str, XrString *old_str,
                                     XrString *new_str);
-XR_FUNC XrString *xr_string_replace_all(XrayIsolate *iso, XrString *str, XrString *old_str,
+XR_FUNC XrString *xr_string_replace_all(XrVMRuntime *iso, XrString *str, XrString *old_str,
                                         XrString *new_str);
-XR_FUNC XrString *xr_string_repeat(XrayIsolate *iso, XrString *str, xr_Integer count);
-XR_FUNC XrString *xr_string_reverse(XrayIsolate *iso, XrString *str);
-XR_FUNC XrString *xr_string_byte_at(XrayIsolate *iso, XrString *str, xr_Integer index);
-XR_FUNC XrString *xr_string_translate(XrayIsolate *iso, XrString *str, struct XrMap *table);
+XR_FUNC XrString *xr_string_repeat(XrVMRuntime *iso, XrString *str, xr_Integer count);
+XR_FUNC XrString *xr_string_reverse(XrVMRuntime *iso, XrString *str);
+XR_FUNC XrString *xr_string_byte_at(XrVMRuntime *iso, XrString *str, xr_Integer index);
+XR_FUNC XrString *xr_string_translate(XrVMRuntime *iso, XrString *str, struct XrMap *table);
 
 // Note: join method is in xarray.h/c (array.join(","))
 
@@ -232,10 +232,10 @@ XR_FUNC XrString *xr_string_translate(XrayIsolate *iso, XrString *str, struct Xr
 XR_FUNC size_t xr_string_char_length(XrString *str);
 
 XR_FUNC int32_t xr_string_char_code_at(XrString *str, size_t index);
-XR_FUNC XrString *xr_string_char_at_unicode(XrayIsolate *iso, XrString *str, size_t index);
-XR_FUNC XrString *xr_string_substring_by_char(XrayIsolate *iso, XrString *str, size_t start,
+XR_FUNC XrString *xr_string_char_at_unicode(XrVMRuntime *iso, XrString *str, size_t index);
+XR_FUNC XrString *xr_string_substring_by_char(XrVMRuntime *iso, XrString *str, size_t start,
                                               size_t end);
-XR_FUNC XrString *xr_string_from_codepoint(XrayIsolate *iso, uint32_t codepoint);
+XR_FUNC XrString *xr_string_from_codepoint(XrVMRuntime *iso, uint32_t codepoint);
 
 /* ========== Character Classification ========== */
 

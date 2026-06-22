@@ -9,9 +9,9 @@
  *
  * KEY CONCEPT:
  *   Several stdlib bindings need to memoise values that are cheap to build
- *   but only valid inside a single XrayIsolate (e.g. dynamic-layout XrClass
+ *   but only valid inside a single XrVMRuntime (e.g. dynamic-layout XrClass
  *   instances that reference symbol IDs drawn from the isolate's symbol
- *   table). Storing the cache on XrayIsolate itself would leak stdlib types
+ *   table). Storing the cache on XrVMRuntime itself would leak stdlib types
  *   into the core header; instead we attach an opaque pointer to the
  *   isolate and keep the concrete fields private to stdlib.
  *
@@ -109,10 +109,10 @@ typedef struct XrStdlibCache {
 // Retrieve (and lazily allocate) the per-isolate stdlib cache.
 // Never returns NULL in practice; on allocator OOM it returns NULL,
 // matching the xmalloc OOM policy used elsewhere by stdlib.
-XR_FUNC XrStdlibCache *xr_stdlib_cache_get(struct XrayIsolate *isolate);
+XR_FUNC XrStdlibCache *xr_stdlib_cache_get(struct XrVMRuntime *isolate);
 
 // Release the cache and every lazily-populated object it owns. Safe to
 // call with a NULL isolate or with the cache already freed.
-XR_FUNC void xr_stdlib_cache_free(struct XrayIsolate *isolate);
+XR_FUNC void xr_stdlib_cache_free(struct XrVMRuntime *isolate);
 
 #endif  // XR_STDLIB_CACHE_H

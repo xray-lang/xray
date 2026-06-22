@@ -43,7 +43,7 @@ XR_FUNC XrModuleGraph *xr_module_graph_new(XrCompilerSession *compiler_session,
     XR_DCHECK(resolver != NULL, "xr_module_graph_new: NULL resolver");
     if (!compiler_session || !resolver)
         return NULL;
-    XrayIsolate *X = xr_compiler_session_vm_host(compiler_session);
+    XrVMRuntime *X = xr_compiler_session_vm_host(compiler_session);
     XR_DCHECK(X != NULL, "xr_module_graph_new: compiler session has no VM host");
     if (!X)
         return NULL;

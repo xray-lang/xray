@@ -18,7 +18,7 @@
 #include "xchannel.h"
 #include "xslot_ref.h"
 
-struct XrayIsolate;
+struct XrVMRuntime;
 struct XrArray;
 struct XrCoroutine;
 struct XrRuntimeCore;

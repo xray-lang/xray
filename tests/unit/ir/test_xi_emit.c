@@ -11,7 +11,7 @@
 #include "../../../src/runtime/value/xchunk.h"
 #include "../../../src/runtime/value/xtype.h"
 #include "../../../src/base/xmalloc.h"
-#include "../../../include/xray_isolate.h"
+#include "../../../include/xray_vm.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -47,10 +47,10 @@ static XiFunc *make_func(const char *name, XrType *ret) {
     return f;
 }
 
-static XrayIsolate *new_test_isolate(void) {
-    XrayIsolateParams p;
-    xray_isolate_params_init(&p);
-    return xray_isolate_new_full(&p);
+static XrVMRuntime *new_test_isolate(void) {
+    XrVMConfig p;
+    xray_vm_config_init(&p);
+    return xray_vm_new_full(&p);
 }
 
 /* ========== Basic Emission Tests ========== */
@@ -672,7 +672,7 @@ TEST(emit_select_preserves_param_slot_alias) {
 }
 
 TEST(emit_symbol_index_above_255) {
-    XrayIsolate *iso = new_test_isolate();
+    XrVMRuntime *iso = new_test_isolate();
     assert(iso != NULL);
 
     XiFunc *f = make_func("wide_symbols", &stub_int);
@@ -718,7 +718,7 @@ TEST(emit_symbol_index_above_255) {
 
     xr_vm_proto_free(proto);
     xi_func_free(f);
-    xray_isolate_delete(iso);
+    xray_vm_delete(iso);
 }
 
 /* ========== Instruction Fusion ========== */

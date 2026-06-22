@@ -27,7 +27,7 @@ static uint32_t sanitize_batch_size(int64_t value) {
     return (uint32_t) value;
 }
 
-static XrValue m_add(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+static XrValue m_add(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
     (void) nargs;
     XrResultGroup *g = xr_value_to_result_group(self);
@@ -38,7 +38,7 @@ static XrValue m_add(XrayIsolate *isolate, XrValue self, XrValue *args, int narg
     return xr_bool(xr_result_group_add(g, XR_TO_INT(args[0])));
 }
 
-static XrValue m_flush(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+static XrValue m_flush(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
     (void) args;
     (void) nargs;
@@ -46,7 +46,7 @@ static XrValue m_flush(XrayIsolate *isolate, XrValue self, XrValue *args, int na
     return xr_null();
 }
 
-static XrValue m_try_recv(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+static XrValue m_try_recv(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     (void) args;
     (void) nargs;
     XrResultGroup *g = xr_value_to_result_group(self);
@@ -61,7 +61,7 @@ static XrValue m_try_recv(XrayIsolate *isolate, XrValue self, XrValue *args, int
     return xr_value_from_tuple(tuple);
 }
 
-static XrCFuncResult ym_recv(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs,
+static XrCFuncResult ym_recv(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs,
                              XrValue *result) {
     (void) args;
     (void) nargs;
@@ -80,7 +80,7 @@ static XrCFuncResult ym_recv(XrayIsolate *isolate, XrValue self, XrValue *args, 
     }
 }
 
-static XrValue m_close(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+static XrValue m_close(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
     (void) args;
     (void) nargs;
@@ -88,21 +88,21 @@ static XrValue m_close(XrayIsolate *isolate, XrValue self, XrValue *args, int na
     return xr_null();
 }
 
-static XrValue g_length(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+static XrValue g_length(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
     (void) args;
     (void) nargs;
     return xr_int((int64_t) xr_result_group_length(xr_value_to_result_group(self)));
 }
 
-static XrValue g_pending_count(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+static XrValue g_pending_count(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
     (void) args;
     (void) nargs;
     return xr_int((int64_t) xr_result_group_pending_count(xr_value_to_result_group(self)));
 }
 
-static XrValue g_batch_size(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+static XrValue g_batch_size(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
     (void) args;
     (void) nargs;
@@ -110,14 +110,14 @@ static XrValue g_batch_size(XrayIsolate *isolate, XrValue self, XrValue *args, i
     return xr_int(g ? (int64_t) g->batch_size : 0);
 }
 
-static XrValue g_is_closed(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+static XrValue g_is_closed(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
     (void) args;
     (void) nargs;
     return xr_bool(xr_result_group_is_closed(xr_value_to_result_group(self)));
 }
 
-static XrValue result_group_construct(XrayIsolate *isolate, XrValue receiver, XrValue *args,
+static XrValue result_group_construct(XrVMRuntime *isolate, XrValue receiver, XrValue *args,
                                       int nargs) {
     (void) receiver;
     uint32_t batch_size = XR_RESULT_GROUP_DEFAULT_BATCH;
@@ -135,7 +135,7 @@ static XrValue result_group_construct(XrayIsolate *isolate, XrValue receiver, Xr
     return xr_value_from_result_group(g);
 }
 
-void xr_result_group_register_native_type(XrayIsolate *isolate) {
+void xr_result_group_register_native_type(XrVMRuntime *isolate) {
     static const XrNativeMethod result_group_methods[] = {
         {"add", m_add, 1},     {"flush", m_flush, 0}, {"tryRecv", m_try_recv, 0},
         {"close", m_close, 0}, {NULL, NULL, 0},

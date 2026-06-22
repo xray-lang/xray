@@ -36,7 +36,7 @@
 // ========== DOM-to-XrValue Bridge ==========
 
 // Convert xtoml DOM tree to runtime XrValue, analogous to the JSON bridge.
-static XrValue dom_to_xrvalue(XrayIsolate *X, XrTomlValue *v) {
+static XrValue dom_to_xrvalue(XrVMRuntime *X, XrTomlValue *v) {
     if (!v)
         return xr_null();
     switch (v->type) {
@@ -83,7 +83,7 @@ static XrValue dom_to_xrvalue(XrayIsolate *X, XrTomlValue *v) {
 
 // ========== Parser Wrapper ==========
 
-XrValue xr_toml_parse(XrayIsolate *X, const char *data, size_t len) {
+XrValue xr_toml_parse(XrVMRuntime *X, const char *data, size_t len) {
     XrTomlValue *root = xtoml_parse(data, len);
     if (!root) {
         // Fallback: return empty map on parse failure
@@ -98,7 +98,7 @@ XrValue xr_toml_parse(XrayIsolate *X, const char *data, size_t len) {
 
 typedef struct {
     XrSerWriter sw;  // shared buffer: sw.data / sw.len / sw.cap
-    XrayIsolate *isolate;
+    XrVMRuntime *isolate;
     int depth;  // nesting depth for stringify cycle guard
 } TomlWriter;
 
@@ -107,7 +107,7 @@ typedef struct {
 // without hitting this ceiling.
 #define TOML_STRINGIFY_MAX_DEPTH XR_STDLIB_MAX_DEPTH
 
-static inline void tw_init(TomlWriter *w, XrayIsolate *isolate) {
+static inline void tw_init(TomlWriter *w, XrVMRuntime *isolate) {
     xr_serw_init(&w->sw, 256);
     w->isolate = isolate;
     w->depth = 0;
@@ -445,7 +445,7 @@ static void write_table(TomlWriter *w, XrMap *map, const char *prefix) {
     }
 }
 
-XrValue xr_toml_stringify(XrayIsolate *isolate, XrValue value) {
+XrValue xr_toml_stringify(XrVMRuntime *isolate, XrValue value) {
     if (!XR_IS_MAP(value)) {
         return xr_string_value(xr_string_intern(isolate, "", 0, 0));
     }
@@ -462,7 +462,7 @@ XrValue xr_toml_stringify(XrayIsolate *isolate, XrValue value) {
 
 // ========== Module Functions ==========
 
-static XrValue toml_parse(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue toml_parse(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1 || !XR_IS_STRING(args[0])) {
         return xr_value_from_map(xr_map_new(xr_current_coro(X)));
     }
@@ -470,7 +470,7 @@ static XrValue toml_parse(XrayIsolate *X, XrValue *args, int argc) {
     return xr_toml_parse(X, str->data, str->length);
 }
 
-static XrValue toml_parse_strict(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue toml_parse_strict(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1 || !XR_IS_STRING(args[0])) {
         XrMap *result = xr_map_new(xr_current_coro(X));
         xr_map_set(result, xr_string_value(xr_string_intern(X, "data", 4, 0)),
@@ -506,7 +506,7 @@ static XrValue toml_parse_strict(XrayIsolate *X, XrValue *args, int argc) {
     return xr_value_from_map(result);
 }
 
-static XrValue toml_stringify(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue toml_stringify(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1) {
         return xr_string_value(xr_string_intern(X, "", 0, 0));
     }
@@ -514,7 +514,7 @@ static XrValue toml_stringify(XrayIsolate *X, XrValue *args, int argc) {
 }
 
 // parseFile. Synchronous; see stdlib/common_io.h for the P9 async plan.
-static XrValue toml_parse_file(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue toml_parse_file(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1 || !XR_IS_STRING(args[0])) {
         return xr_value_from_map(xr_map_new(xr_current_coro(X)));
     }
@@ -532,7 +532,7 @@ static XrValue toml_parse_file(XrayIsolate *X, XrValue *args, int argc) {
 }
 
 // writeFile. Synchronous; see stdlib/common_io.h for the P9 async plan.
-static XrValue toml_write_file(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue toml_write_file(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 2 || !XR_IS_STRING(args[0])) {
         return xr_bool(false);
     }
@@ -562,7 +562,7 @@ XR_DEFINE_BUILTIN(toml_parse_file, "parseFile", "(path: string): Json", "Parse T
 XR_DEFINE_BUILTIN(toml_write_file, "writeFile", "(path: string, value: Json): bool",
                   "Write TOML file")
 
-XR_FUNC XrModule *xr_load_module_toml(XrayIsolate *isolate) {
+XR_FUNC XrModule *xr_load_module_toml(XrVMRuntime *isolate) {
     XrModule *mod = xr_module_create_native(isolate, "toml");
     if (!mod)
         return NULL;

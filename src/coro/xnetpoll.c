@@ -170,7 +170,7 @@ static void ready_list_push(XrReadyList *list, struct XrCoroutine *coro) {
 // The condition variable is signaled by xr_netpoll_unblock when I/O is ready.
 //
 // Returns true if I/O ready, false if closed
-bool xr_netpoll_block_sync(XrPollDesc *pd, int mode, XrayIsolate *X) {
+bool xr_netpoll_block_sync(XrPollDesc *pd, int mode, XrVMRuntime *X) {
     (void) X;
     _Atomic uintptr_t *gpp = (mode == XR_POLL_READ) ? &pd->rg : &pd->wg;
 
@@ -1052,7 +1052,7 @@ static bool netpoll_pd_reclaimable(const XrPollDesc *pd) {
 
 // Wait for I/O ready
 // X: VM instance (for coroutine scheduling, NULL downgrades to busy-wait)
-int xr_netpoll_wait(XrNetpoll *np, XrPollDesc *pd, int mode, XrayIsolate *X) {
+int xr_netpoll_wait(XrNetpoll *np, XrPollDesc *pd, int mode, XrVMRuntime *X) {
     XR_DCHECK(np != NULL, "netpoll_wait: NULL netpoll");
     XR_DCHECK(pd != NULL, "netpoll_wait: NULL poll desc");
     // Check if already closed

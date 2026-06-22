@@ -23,7 +23,7 @@
  * borrowed (ownership stays with the caller). */
 static XrCompilerContext *xr_compiler_context_new_impl(XrCompilerSession *session,
                                                        XaAnalyzer *analyzer) {
-    XrayIsolate *X = xr_compiler_session_vm_host(session);
+    XrVMRuntime *X = xr_compiler_session_vm_host(session);
     if (!session || !X) {
         return NULL;
     }

@@ -18,7 +18,7 @@
 #include <stdio.h>
 
 /* ========== Enum.name ========== */
-XrValue xr_enum_get_name(XrayIsolate *isolate, XrValue *args, int nargs) {
+XrValue xr_enum_get_name(XrVMRuntime *isolate, XrValue *args, int nargs) {
     if (nargs < 1)
         return xr_null();
     XrValue self = args[0];
@@ -36,7 +36,7 @@ XrValue xr_enum_get_name(XrayIsolate *isolate, XrValue *args, int nargs) {
 }
 
 /* ========== Enum.value ========== */
-XrValue xr_enum_get_value(XrayIsolate *isolate, XrValue *args, int nargs) {
+XrValue xr_enum_get_value(XrVMRuntime *isolate, XrValue *args, int nargs) {
     (void) isolate;
     if (nargs < 1)
         return xr_null();
@@ -53,7 +53,7 @@ XrValue xr_enum_get_value(XrayIsolate *isolate, XrValue *args, int nargs) {
 }
 
 /* ========== Enum.ordinal ========== */
-XrValue xr_enum_get_ordinal(XrayIsolate *isolate, XrValue *args, int nargs) {
+XrValue xr_enum_get_ordinal(XrVMRuntime *isolate, XrValue *args, int nargs) {
     (void) isolate;
     if (nargs < 1)
         return xr_null();
@@ -70,7 +70,7 @@ XrValue xr_enum_get_ordinal(XrayIsolate *isolate, XrValue *args, int nargs) {
 }
 
 /* ========== Enum.toString ========== */
-XrValue xr_enum_toString(XrayIsolate *isolate, XrValue *args, int nargs) {
+XrValue xr_enum_toString(XrVMRuntime *isolate, XrValue *args, int nargs) {
     XR_DCHECK(isolate != NULL, "enum_toString: NULL isolate");
     if (nargs < 1)
         return xr_null();
@@ -93,7 +93,7 @@ XrValue xr_enum_toString(XrayIsolate *isolate, XrValue *args, int nargs) {
 }
 
 /* ========== EnumType.memberCount ========== */
-XrValue xr_enum_type_get_member_count(XrayIsolate *isolate, XrValue *args, int nargs) {
+XrValue xr_enum_type_get_member_count(XrVMRuntime *isolate, XrValue *args, int nargs) {
     (void) isolate;
     if (nargs < 1)
         return xr_null();
@@ -110,7 +110,7 @@ XrValue xr_enum_type_get_member_count(XrayIsolate *isolate, XrValue *args, int n
 }
 
 /* ========== EnumType.getMember ========== */
-XrValue xr_enum_type_get_member(XrayIsolate *isolate, XrValue *args, int nargs) {
+XrValue xr_enum_type_get_member(XrVMRuntime *isolate, XrValue *args, int nargs) {
     (void) isolate;
     if (nargs < 2)
         return xr_null();

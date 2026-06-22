@@ -28,7 +28,7 @@
 
 typedef struct XrType XrType;
 typedef struct XrTypePool XrTypePool;
-typedef struct XrayIsolate XrayIsolate;
+typedef struct XrVMRuntime XrVMRuntime;
 
 /*
  * A single entry: one enum type and which of its cases appear.

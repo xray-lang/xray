@@ -36,7 +36,7 @@
 #include <string.h>
 
 // Create method closure (Context model: inherit enclosing context)
-static XrClosure *create_method_closure_with_context(XrayIsolate *isolate, XrVMContext *ctx,
+static XrClosure *create_method_closure_with_context(XrVMRuntime *isolate, XrVMContext *ctx,
                                                      XrProto *method_proto, XrClosure *enclosing_cl,
                                                      XrValue *base) {
     XR_DCHECK(isolate != NULL, "create_method_closure: NULL isolate");
@@ -65,7 +65,7 @@ static XrMethodType determine_method_type(const XrMethodDescriptorEntry *method)
     return XMETHOD_CLOSURE;
 }
 
-XrClass *xr_class_from_descriptor(XrayIsolate *isolate, const XrClassDescriptor *desc,
+XrClass *xr_class_from_descriptor(XrVMRuntime *isolate, const XrClassDescriptor *desc,
                                   XrProto *proto, XrClosure *cl, XrValue *base, XrVMContext *vm_ctx,
                                   XrClass *super_override) {
     if (!isolate || !desc) {

@@ -46,47 +46,47 @@ struct XrTypeRegistry {
 
 /* ========== Lifecycle ========== */
 
-XR_FUNC void xr_registry_init(XrayIsolate *X);
-XR_FUNC void xr_registry_free(XrayIsolate *X);
+XR_FUNC void xr_registry_init(XrVMRuntime *X);
+XR_FUNC void xr_registry_free(XrVMRuntime *X);
 
 /* ========== Registration ========== */
 
 // Returns false if type already exists
-XR_FUNC bool xr_registry_register_type(XrayIsolate *X, XrTypeMetadata *meta);
+XR_FUNC bool xr_registry_register_type(XrVMRuntime *X, XrTypeMetadata *meta);
 
 // Auto-creates metadata from XrClass
-XR_FUNC XrTypeMetadata *xr_registry_register_class(XrayIsolate *X, XrClass *klass);
+XR_FUNC XrTypeMetadata *xr_registry_register_class(XrVMRuntime *X, XrClass *klass);
 
-XR_FUNC bool xr_registry_unregister_type(XrayIsolate *X, const char *name);
+XR_FUNC bool xr_registry_unregister_type(XrVMRuntime *X, const char *name);
 
 /* ========== Lookup ========== */
 
-XR_FUNC XrTypeMetadata *xr_registry_find_type(XrayIsolate *X, const char *name);
-XR_FUNC XrTypeMetadata *xr_registry_find_type_by_class(XrayIsolate *X, XrClass *klass);
+XR_FUNC XrTypeMetadata *xr_registry_find_type(XrVMRuntime *X, const char *name);
+XR_FUNC XrTypeMetadata *xr_registry_find_type_by_class(XrVMRuntime *X, XrClass *klass);
 
 // Caller must free the returned array
-XR_FUNC XrTypeMetadata **xr_registry_get_all_types(XrayIsolate *X, int *count);
+XR_FUNC XrTypeMetadata **xr_registry_get_all_types(XrVMRuntime *X, int *count);
 
 /* ========== Builtin Type Accessors ========== */
 
-XR_FUNC XrTypeMetadata *xr_registry_get_int_type(XrayIsolate *X);
-XR_FUNC XrTypeMetadata *xr_registry_get_float_type(XrayIsolate *X);
-XR_FUNC XrTypeMetadata *xr_registry_get_bool_type(XrayIsolate *X);
-XR_FUNC XrTypeMetadata *xr_registry_get_string_type(XrayIsolate *X);
-XR_FUNC XrTypeMetadata *xr_registry_get_array_type(XrayIsolate *X);
-XR_FUNC XrTypeMetadata *xr_registry_get_map_type(XrayIsolate *X);
-XR_FUNC XrTypeMetadata *xr_registry_get_object_type(XrayIsolate *X);
-XR_FUNC XrTypeMetadata *xr_registry_get_null_type(XrayIsolate *X);
+XR_FUNC XrTypeMetadata *xr_registry_get_int_type(XrVMRuntime *X);
+XR_FUNC XrTypeMetadata *xr_registry_get_float_type(XrVMRuntime *X);
+XR_FUNC XrTypeMetadata *xr_registry_get_bool_type(XrVMRuntime *X);
+XR_FUNC XrTypeMetadata *xr_registry_get_string_type(XrVMRuntime *X);
+XR_FUNC XrTypeMetadata *xr_registry_get_array_type(XrVMRuntime *X);
+XR_FUNC XrTypeMetadata *xr_registry_get_map_type(XrVMRuntime *X);
+XR_FUNC XrTypeMetadata *xr_registry_get_object_type(XrVMRuntime *X);
+XR_FUNC XrTypeMetadata *xr_registry_get_null_type(XrVMRuntime *X);
 
 /* ========== Metadata ========== */
 
 // Collect fields/methods metadata, handle inheritance
-XR_FUNC void xr_registry_initialize_metadata(XrayIsolate *X, XrTypeMetadata *meta);
+XR_FUNC void xr_registry_initialize_metadata(XrVMRuntime *X, XrTypeMetadata *meta);
 
 /* ========== Debug ========== */
 
-XR_FUNC void xr_registry_print(XrayIsolate *X);
-XR_FUNC void xr_registry_get_stats(XrayIsolate *X, int *total, int *classes, int *interfaces,
+XR_FUNC void xr_registry_print(XrVMRuntime *X);
+XR_FUNC void xr_registry_get_stats(XrVMRuntime *X, int *total, int *classes, int *interfaces,
                                    int *builtins);
 
 /* ========== Static Analyzer Type Integration ========== */
@@ -96,7 +96,7 @@ struct XrType;
 
 // Convert static XrType to runtime TypeMetadata
 // Creates metadata if not already registered
-XR_FUNC XrTypeMetadata *xr_registry_from_xa_type(XrayIsolate *X, struct XrType *xa_type);
+XR_FUNC XrTypeMetadata *xr_registry_from_xa_type(XrVMRuntime *X, struct XrType *xa_type);
 
 // Get XrType flags as runtime type kind string (for debugging)
 XR_FUNC const char *xr_xr_type_kind_name(struct XrType *xa_type);

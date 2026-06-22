@@ -29,7 +29,7 @@ static inline XrJson *json_self(XrValue self) {
 }
 
 /* Internal protocol used by `for (k, v in obj)` lowering. */
-static XrValue xr_json_method_entries_iterator(XrayIsolate *iso, XrValue self, XrValue *args,
+static XrValue xr_json_method_entries_iterator(XrVMRuntime *iso, XrValue self, XrValue *args,
                                                int argc) {
     (void) args;
     (void) argc;
@@ -41,7 +41,7 @@ static XrValue xr_json_method_entries_iterator(XrayIsolate *iso, XrValue self, X
 /* Single-variable `for (k in jsonObj)` lowering: yields each key string,
  * mirroring Map.iterator() so the two key-value containers behave the
  * same way. */
-static XrValue xr_json_method_iterator(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue xr_json_method_iterator(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) args;
     (void) argc;
     XrCoroutine *coro = xr_current_coro(iso);
@@ -49,14 +49,14 @@ static XrValue xr_json_method_iterator(XrayIsolate *iso, XrValue self, XrValue *
     return iter ? xr_value_from_iterator(iter) : xr_null();
 }
 
-static XrValue xr_json_method_to_string(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue xr_json_method_to_string(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) args;
     (void) argc;
     return xr_string_value(xr_value_to_string(iso, self));
 }
 
 /* keys() → Array<string>: return all field names as string array. */
-static XrValue xr_json_method_keys(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue xr_json_method_keys(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) args;
     (void) argc;
     XrCoroutine *coro = xr_current_coro(iso);
@@ -79,7 +79,7 @@ static XrValue xr_json_method_keys(XrayIsolate *iso, XrValue self, XrValue *args
 }
 
 /* values() → Array<Json>: return all field values. */
-static XrValue xr_json_method_values(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue xr_json_method_values(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) args;
     (void) argc;
     XrCoroutine *coro = xr_current_coro(iso);
@@ -100,7 +100,7 @@ static XrValue xr_json_method_values(XrayIsolate *iso, XrValue self, XrValue *ar
 }
 
 /* has(key: string) → bool: check if field exists. */
-static XrValue xr_json_method_has(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue xr_json_method_has(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     if (argc < 1 || !XR_IS_STRING(args[0]))
         return xr_bool(false);
 
@@ -122,49 +122,49 @@ static XrValue xr_json_method_has(XrayIsolate *iso, XrValue self, XrValue *args,
  * "what JSON value type am I?" which is useful when a Json variable holds
  * a primitive (int, string, etc.) that was coerced into a Json context. */
 
-static XrValue xr_json_method_is_null(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue xr_json_method_is_null(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) iso;
     (void) args;
     (void) argc;
     return xr_bool(XR_IS_NULL(self));
 }
 
-static XrValue xr_json_method_is_int(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue xr_json_method_is_int(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) iso;
     (void) args;
     (void) argc;
     return xr_bool(XR_IS_INT(self));
 }
 
-static XrValue xr_json_method_is_float(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue xr_json_method_is_float(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) iso;
     (void) args;
     (void) argc;
     return xr_bool(XR_IS_FLOAT(self));
 }
 
-static XrValue xr_json_method_is_string(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue xr_json_method_is_string(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) iso;
     (void) args;
     (void) argc;
     return xr_bool(XR_IS_STRING(self));
 }
 
-static XrValue xr_json_method_is_bool(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue xr_json_method_is_bool(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) iso;
     (void) args;
     (void) argc;
     return xr_bool(XR_IS_BOOL(self));
 }
 
-static XrValue xr_json_method_is_array(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue xr_json_method_is_array(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) iso;
     (void) args;
     (void) argc;
     return xr_bool(XR_IS_ARRAY(self));
 }
 
-static XrValue xr_json_method_is_object(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue xr_json_method_is_object(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) iso;
     (void) args;
     (void) argc;
@@ -175,7 +175,7 @@ static XrValue xr_json_method_is_object(XrayIsolate *iso, XrValue self, XrValue 
 
 #include "../class/xclass_builder.h"
 
-void xr_json_register_instance_methods(XrayIsolate *isolate) {
+void xr_json_register_instance_methods(XrVMRuntime *isolate) {
     XR_DCHECK(isolate != NULL, "json_register_instance_methods: NULL isolate");
     XrayCoreClasses *core = xr_isolate_get_core_classes(isolate);
     XR_DCHECK(core != NULL, "json_register_instance_methods: no core classes");

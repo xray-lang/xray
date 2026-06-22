@@ -60,7 +60,7 @@ extern char **environ;
 /* ========== External Declarations ========== */
 
 struct XrCoroutine;
-extern struct XrCoroutine *xr_current_coro(XrayIsolate *X);
+extern struct XrCoroutine *xr_current_coro(XrVMRuntime *X);
 extern XrMap *xr_map_new(struct XrCoroutine *coro);
 extern void xr_map_set(XrMap *map, XrValue key, XrValue value);
 extern XrValue xr_value_from_map(XrMap *map);
@@ -83,7 +83,7 @@ extern XrValue xr_value_from_array(XrArray *arr);
 /* ========== Environment Variables ========== */
 
 // getenv(name) - Get environment variable
-static XrValue os_getenv(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue os_getenv(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1)
         return xr_null();
     const char *name = xrs_string_arg(args[0], NULL);
@@ -98,7 +98,7 @@ static XrValue os_getenv(XrayIsolate *X, XrValue *args, int argc) {
 }
 
 // setenv(name, value) - Set environment variable
-static XrValue os_setenv(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue os_setenv(XrVMRuntime *X, XrValue *args, int argc) {
     (void) X;
     if (argc < 2)
         return xr_bool(false);
@@ -113,7 +113,7 @@ static XrValue os_setenv(XrayIsolate *X, XrValue *args, int argc) {
 }
 
 // unsetenv(name) - Delete environment variable
-static XrValue os_unsetenv(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue os_unsetenv(XrVMRuntime *X, XrValue *args, int argc) {
     (void) X;
     if (argc < 1)
         return xr_bool(false);
@@ -127,7 +127,7 @@ static XrValue os_unsetenv(XrayIsolate *X, XrValue *args, int argc) {
 }
 
 // environ() - Get all environment variables
-static XrValue os_environ(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue os_environ(XrVMRuntime *X, XrValue *args, int argc) {
     (void) args;
     (void) argc;
 
@@ -174,7 +174,7 @@ static XrValue os_environ(XrayIsolate *X, XrValue *args, int argc) {
 /* ========== Process Control ========== */
 
 // exit(code) - Exit program
-static XrValue os_exit(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue os_exit(XrVMRuntime *X, XrValue *args, int argc) {
     (void) X;
 
     int code = 0;
@@ -187,7 +187,7 @@ static XrValue os_exit(XrayIsolate *X, XrValue *args, int argc) {
 }
 
 // getpid() - Get process ID
-static XrValue os_getpid(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue os_getpid(XrVMRuntime *X, XrValue *args, int argc) {
     (void) X;
     (void) args;
     (void) argc;
@@ -195,7 +195,7 @@ static XrValue os_getpid(XrayIsolate *X, XrValue *args, int argc) {
 }
 
 // getcwd() - Get current working directory
-static XrValue os_getcwd(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue os_getcwd(XrVMRuntime *X, XrValue *args, int argc) {
     (void) args;
     (void) argc;
 
@@ -207,7 +207,7 @@ static XrValue os_getcwd(XrayIsolate *X, XrValue *args, int argc) {
 }
 
 // chdir(path) - Change working directory
-static XrValue os_chdir(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue os_chdir(XrVMRuntime *X, XrValue *args, int argc) {
     (void) X;
     if (argc < 1)
         return xr_bool(false);
@@ -220,7 +220,7 @@ static XrValue os_chdir(XrayIsolate *X, XrValue *args, int argc) {
 }
 
 // hostname() - Get hostname
-static XrValue os_hostname(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue os_hostname(XrVMRuntime *X, XrValue *args, int argc) {
     (void) args;
     (void) argc;
 
@@ -246,7 +246,7 @@ static XrValue os_hostname(XrayIsolate *X, XrValue *args, int argc) {
 }
 
 // tmpdir() - Get temporary directory
-static XrValue os_tmpdir(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue os_tmpdir(XrVMRuntime *X, XrValue *args, int argc) {
     (void) args;
     (void) argc;
 
@@ -270,7 +270,7 @@ static XrValue os_tmpdir(XrayIsolate *X, XrValue *args, int argc) {
 /* ========== User Information (P1) ========== */
 
 // username() - Get current user name
-static XrValue os_username(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue os_username(XrVMRuntime *X, XrValue *args, int argc) {
     (void) args;
     (void) argc;
 
@@ -289,7 +289,7 @@ static XrValue os_username(XrayIsolate *X, XrValue *args, int argc) {
 }
 
 // homedir() - Get user home directory
-static XrValue os_homedir(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue os_homedir(XrVMRuntime *X, XrValue *args, int argc) {
     (void) args;
     (void) argc;
 
@@ -311,7 +311,7 @@ static XrValue os_homedir(XrayIsolate *X, XrValue *args, int argc) {
 }
 
 // uid() - Get user ID
-static XrValue os_uid(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue os_uid(XrVMRuntime *X, XrValue *args, int argc) {
     (void) X;
     (void) args;
     (void) argc;
@@ -323,7 +323,7 @@ static XrValue os_uid(XrayIsolate *X, XrValue *args, int argc) {
 }
 
 // gid() - Get group ID
-static XrValue os_gid(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue os_gid(XrVMRuntime *X, XrValue *args, int argc) {
     (void) X;
     (void) args;
     (void) argc;
@@ -337,7 +337,7 @@ static XrValue os_gid(XrayIsolate *X, XrValue *args, int argc) {
 /* ========== System Information (P2) ========== */
 
 // cpuCount() - Get number of CPU cores
-static XrValue os_cpuCount(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue os_cpuCount(XrVMRuntime *X, XrValue *args, int argc) {
     (void) X;
     (void) args;
     (void) argc;
@@ -353,7 +353,7 @@ static XrValue os_cpuCount(XrayIsolate *X, XrValue *args, int argc) {
 }
 
 // totalMemory() - Get total system memory in bytes
-static XrValue os_totalMemory(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue os_totalMemory(XrVMRuntime *X, XrValue *args, int argc) {
     (void) X;
     (void) args;
     (void) argc;
@@ -380,7 +380,7 @@ static XrValue os_totalMemory(XrayIsolate *X, XrValue *args, int argc) {
 }
 
 // freeMemory() - Get available system memory in bytes
-static XrValue os_freeMemory(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue os_freeMemory(XrVMRuntime *X, XrValue *args, int argc) {
     (void) X;
     (void) args;
     (void) argc;
@@ -411,7 +411,7 @@ static XrValue os_freeMemory(XrayIsolate *X, XrValue *args, int argc) {
 }
 
 // uptime() - Get system uptime in seconds
-static XrValue os_uptime(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue os_uptime(XrVMRuntime *X, XrValue *args, int argc) {
     (void) X;
     (void) args;
     (void) argc;
@@ -437,7 +437,7 @@ static XrValue os_uptime(XrayIsolate *X, XrValue *args, int argc) {
 }
 
 // loadavg() - Get system load averages (1, 5, 15 min)
-static XrValue os_loadavg(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue os_loadavg(XrVMRuntime *X, XrValue *args, int argc) {
     (void) args;
     (void) argc;
 
@@ -463,7 +463,7 @@ static XrValue os_loadavg(XrayIsolate *X, XrValue *args, int argc) {
 /* ========== Process & Signal (P3) ========== */
 
 // ppid() - Get parent process ID
-static XrValue os_ppid(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue os_ppid(XrVMRuntime *X, XrValue *args, int argc) {
     (void) X;
     (void) args;
     (void) argc;
@@ -491,7 +491,7 @@ static XrValue os_ppid(XrayIsolate *X, XrValue *args, int argc) {
 }
 
 // kill(pid, signal) - Send signal to process
-static XrValue os_kill(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue os_kill(XrVMRuntime *X, XrValue *args, int argc) {
     (void) X;
     if (argc < 1)
         return xr_bool(false);
@@ -512,7 +512,7 @@ static XrValue os_kill(XrayIsolate *X, XrValue *args, int argc) {
 }
 
 // Continuation for os.sleep — timer fired, return null.
-static XrCFuncResult os_sleep_done(XrayIsolate *X, int status, XrValue resume_value, void *ctx,
+static XrCFuncResult os_sleep_done(XrVMRuntime *X, int status, XrValue resume_value, void *ctx,
                                    XrValue *result) {
     (void) X;
     (void) status;
@@ -524,7 +524,7 @@ static XrCFuncResult os_sleep_done(XrayIsolate *X, int status, XrValue resume_va
 // sleep(ms) - Coroutine-friendly sleep for milliseconds.
 // Yields the coroutine via the timer wheel so the worker thread can
 // service other coroutines during the wait.
-static XrCFuncResult os_sleep(XrayIsolate *X, XrValue *args, int argc, XrValue *result) {
+static XrCFuncResult os_sleep(XrVMRuntime *X, XrValue *args, int argc, XrValue *result) {
     if (argc < 1 || !XR_IS_INT(args[0])) {
         *result = xr_null();
         return XR_CFUNC_DONE;
@@ -540,7 +540,7 @@ static XrCFuncResult os_sleep(XrayIsolate *X, XrValue *args, int argc, XrValue *
 }
 
 // clock() - Get process CPU time in seconds
-static XrValue os_clock(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue os_clock(XrVMRuntime *X, XrValue *args, int argc) {
     (void) X;
     (void) args;
     (void) argc;
@@ -680,7 +680,7 @@ fail:
 
 // exec(cmd) - Execute shell command, return ExecResult handle
 // (Json with fixed shape: stdout, stderr, exitCode).
-static XrValue os_exec(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue os_exec(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1)
         return xr_null();
     const char *cmd = xrs_string_arg(args[0], NULL);
@@ -882,7 +882,7 @@ XR_DEFINE_BUILTIN(os_clock, "clock", "(): float", "Get process CPU time in secon
 // Process execution
 XR_DEFINE_BUILTIN(os_exec, "exec", "(cmd: string): ExecResult?", "Execute shell command")
 
-XR_FUNC XrModule *xr_load_module_os(XrayIsolate *isolate) {
+XR_FUNC XrModule *xr_load_module_os(XrVMRuntime *isolate) {
     XR_DCHECK(isolate != NULL, "xr_load_module_os: NULL isolate");
 
     // 1. Create native module

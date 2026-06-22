@@ -41,7 +41,7 @@
 struct XrCoroutine;
 struct XrFixedHeap;
 struct XrRuntimeCore;
-struct XrayIsolate;
+struct XrVMRuntime;
 
 typedef enum {
     XR_COPY_IMMEDIATE = 0,
@@ -56,19 +56,19 @@ static inline bool xr_value_needs_copy(XrValue value) {
     return xr_value_copy_kind(value) == XR_COPY_DEEP;
 }
 
-XR_FUNC XrValue xr_deep_copy(struct XrayIsolate *X, XrValue value,
+XR_FUNC XrValue xr_deep_copy(struct XrVMRuntime *X, XrValue value,
                              struct XrFixedHeap *dst_fixed_heap);
-XR_FUNC XrValue xr_deep_copy_counted(struct XrayIsolate *X, XrValue value,
+XR_FUNC XrValue xr_deep_copy_counted(struct XrVMRuntime *X, XrValue value,
                                      struct XrFixedHeap *dst_fixed_heap, int *out_count);
-XR_FUNC XrValue xr_deep_copy_to_coro(struct XrayIsolate *X, XrValue value,
+XR_FUNC XrValue xr_deep_copy_to_coro(struct XrVMRuntime *X, XrValue value,
                                      struct XrCoroutine *dst_coro);
-XR_FUNC XrValue xr_deep_copy_to_coro_counted(struct XrayIsolate *X, XrValue value,
+XR_FUNC XrValue xr_deep_copy_to_coro_counted(struct XrVMRuntime *X, XrValue value,
                                              struct XrCoroutine *dst_coro, int *out_count);
-XR_FUNC XrValue xr_deep_copy_array(struct XrayIsolate *X, struct XrArray *array,
+XR_FUNC XrValue xr_deep_copy_array(struct XrVMRuntime *X, struct XrArray *array,
                                    struct XrFixedHeap *dst_fixed_heap);
-XR_FUNC XrValue xr_deep_copy_map(struct XrayIsolate *X, struct XrMap *map,
+XR_FUNC XrValue xr_deep_copy_map(struct XrVMRuntime *X, struct XrMap *map,
                                  struct XrFixedHeap *dst_fixed_heap);
-XR_FUNC XrValue xr_deep_copy_closure(struct XrayIsolate *X, struct XrClosure *closure,
+XR_FUNC XrValue xr_deep_copy_closure(struct XrVMRuntime *X, struct XrClosure *closure,
                                      struct XrFixedHeap *dst_fixed_heap);
 
 typedef struct XrSeenEntry {
@@ -100,7 +100,7 @@ typedef struct XrCopyContext {
 
 XR_FUNC void xr_copy_context_init_core(XrCopyContext *ctx, struct XrRuntimeCore *core,
                                        struct XrFixedHeap *dst_fixed_heap);
-XR_FUNC void xr_copy_context_init(XrCopyContext *ctx, struct XrayIsolate *X,
+XR_FUNC void xr_copy_context_init(XrCopyContext *ctx, struct XrVMRuntime *X,
                                   struct XrFixedHeap *dst_fixed_heap);
 XR_FUNC void xr_copy_context_cleanup(XrCopyContext *ctx);
 XR_FUNC XrValue xr_deep_copy_with_ctx(XrCopyContext *ctx, XrValue value);
@@ -124,7 +124,7 @@ XR_FUNC XrValue xr_deep_copy_to_coro_counted_core(struct XrRuntimeCore *core, Xr
  * whole transit graph through the regular shared-destroy path. */
 
 XR_FUNC XrValue xr_deep_copy_to_transit_core(struct XrRuntimeCore *core, XrValue value);
-XR_FUNC XrValue xr_deep_copy_to_transit(struct XrayIsolate *X, XrValue value);
+XR_FUNC XrValue xr_deep_copy_to_transit(struct XrVMRuntime *X, XrValue value);
 XR_FUNC void xr_chan_transit_release_core(struct XrRuntimeCore *core, XrValue value);
 
 /* ========== Zero-copy buffer move for self-contained scalar arrays ==========
@@ -149,14 +149,14 @@ XR_FUNC void xr_chan_transit_release_core(struct XrRuntimeCore *core, XrValue va
  *   struct has been released. */
 XR_FUNC bool xr_chan_try_move_array_to_transit_core(struct XrRuntimeCore *core, XrValue value,
                                                     XrValue *out);
-XR_FUNC bool xr_chan_try_move_array_to_transit(struct XrayIsolate *X, XrValue value, XrValue *out);
+XR_FUNC bool xr_chan_try_move_array_to_transit(struct XrVMRuntime *X, XrValue value, XrValue *out);
 XR_FUNC bool xr_chan_try_adopt_array_from_transit_core(XrValue value, struct XrCoroutine *recv_coro,
                                                        XrValue *out);
-XR_FUNC bool xr_chan_try_adopt_array_from_transit(struct XrayIsolate *X, XrValue value,
+XR_FUNC bool xr_chan_try_adopt_array_from_transit(struct XrVMRuntime *X, XrValue value,
                                                   struct XrCoroutine *recv_coro, XrValue *out);
 
 XR_FUNC bool xr_can_relocate(XrValue value);
-XR_FUNC XrValue xr_to_shared(struct XrayIsolate *X, XrValue value);
+XR_FUNC XrValue xr_to_shared(struct XrVMRuntime *X, XrValue value);
 
 /* ========== Per-Type Transfer Hooks ==========
  *
@@ -176,10 +176,10 @@ XR_FUNC XrValue xr_deep_copy_instance_with_ctx(struct XrCopyContext *ctx, struct
 XR_FUNC XrValue xr_deep_copy_closure_with_ctx(struct XrCopyContext *ctx, struct XrObjHeader *obj);
 XR_FUNC XrValue xr_deep_copy_cell_with_ctx(struct XrCopyContext *ctx, struct XrObjHeader *obj);
 
-XR_FUNC XrValue xr_to_shared_array(struct XrayIsolate *X, struct XrObjHeader *obj);
-XR_FUNC XrValue xr_to_shared_map(struct XrayIsolate *X, struct XrObjHeader *obj);
-XR_FUNC XrValue xr_to_shared_set(struct XrayIsolate *X, struct XrObjHeader *obj);
-XR_FUNC XrValue xr_to_shared_instance(struct XrayIsolate *X, struct XrObjHeader *obj);
-XR_FUNC XrValue xr_to_shared_closure(struct XrayIsolate *X, struct XrObjHeader *obj);
+XR_FUNC XrValue xr_to_shared_array(struct XrVMRuntime *X, struct XrObjHeader *obj);
+XR_FUNC XrValue xr_to_shared_map(struct XrVMRuntime *X, struct XrObjHeader *obj);
+XR_FUNC XrValue xr_to_shared_set(struct XrVMRuntime *X, struct XrObjHeader *obj);
+XR_FUNC XrValue xr_to_shared_instance(struct XrVMRuntime *X, struct XrObjHeader *obj);
+XR_FUNC XrValue xr_to_shared_closure(struct XrVMRuntime *X, struct XrObjHeader *obj);
 
 #endif  // XDEEP_COPY_H

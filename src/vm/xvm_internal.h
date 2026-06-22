@@ -47,10 +47,10 @@
 #include <stdint.h>
 #include "../base/xdefs.h"
 
-XR_FUNC XrStructLayout *xr_vm_struct_ref_layout(XrayIsolate *isolate, XrValue ref);
-XR_FUNC uint8_t *xr_vm_struct_ref_payload(XrayIsolate *isolate, XrValue ref,
+XR_FUNC XrStructLayout *xr_vm_struct_ref_layout(XrVMRuntime *isolate, XrValue ref);
+XR_FUNC uint8_t *xr_vm_struct_ref_payload(XrVMRuntime *isolate, XrValue ref,
                                           XrStructLayout **layout_out);
-XR_FUNC int xr_vm_struct_layout_field_index(XrayIsolate *isolate, const XrStructLayout *layout,
+XR_FUNC int xr_vm_struct_layout_field_index(XrVMRuntime *isolate, const XrStructLayout *layout,
                                             int prop_symbol);
 
 /* ========== Inline Helper Functions ========== */
@@ -208,7 +208,7 @@ static inline bool vm_is_truthy(XrValue value) {
  * and implemented under runtime/closure. */
 
 /* ========== Helper Functions (in xvm_helpers.c) ========== */
-XR_FUNC void xr_runtime_error(XrayIsolate *isolate, const char *format, ...);
+XR_FUNC void xr_runtime_error(XrVMRuntime *isolate, const char *format, ...);
 
 // Debug info: find local variable name by register and PC
 XR_FUNC const char *xr_vm_get_local_name(XrProto *proto, int reg, int pc);
@@ -219,8 +219,8 @@ XR_FUNC void xr_vm_cfunction_free(XrCFunction *cfunc);
 // Closure operations: see runtime/closure/xclosure.h
 
 // VM initialization and cleanup
-XR_FUNC void xr_vm_vm_init(XrayIsolate *isolate);
-XR_FUNC void xr_vm_vm_free(XrayIsolate *isolate);
+XR_FUNC void xr_vm_vm_init(XrVMRuntime *isolate);
+XR_FUNC void xr_vm_vm_free(XrVMRuntime *isolate);
 
 // Value operation helpers
 XR_FUNC bool xr_vm_is_truthy(XrValue value);
@@ -240,7 +240,7 @@ XR_FUNC bool xr_vm_is_truthy(XrValue value);
 ** the VM module. Internal helpers must accept ctx as a parameter; they MUST
 ** NOT re-resolve via isolate->vm.* fields.
 */
-XR_FUNC XrVMContext *xr_vm_current_ctx(XrayIsolate *isolate);
+XR_FUNC XrVMContext *xr_vm_current_ctx(XrVMRuntime *isolate);
 
 /*
 ** Ensure the context can host a new entry frame with the given prototype.
@@ -259,17 +259,17 @@ XR_FUNC XrVMContext *xr_vm_current_ctx(XrayIsolate *isolate);
 XR_FUNC bool xr_vm_prepare_entry(XrVMContext *ctx, int extra_stack);
 
 // Call closure from C code (coroutine-aware, unified implementation)
-XR_FUNC XrValue xr_vm_call_closure(XrayIsolate *isolate, XrClosure *closure, XrValue *args,
+XR_FUNC XrValue xr_vm_call_closure(XrVMRuntime *isolate, XrClosure *closure, XrValue *args,
                                    int nargs);
 
 // VM execution
-XR_FUNC XrVMResult xr_vm_interpret_proto(XrayIsolate *isolate, XrProto *proto);
+XR_FUNC XrVMResult xr_vm_interpret_proto(XrVMRuntime *isolate, XrProto *proto);
 XR_FUNC XrVMResult xr_vm_interpret(const char *source);
-XR_FUNC XrVMResult xr_vm_interpret_proto_isolate(XrayIsolate *isolate, XrProto *proto);
+XR_FUNC XrVMResult xr_vm_interpret_proto_isolate(XrVMRuntime *isolate, XrProto *proto);
 
 // Exception handling
-XR_FUNC void xr_vm_add_stacktrace(XrayIsolate *isolate, XrValue exception);
-XR_FUNC void xr_vm_throw_exception(XrayIsolate *isolate, XrValue exception);
+XR_FUNC void xr_vm_add_stacktrace(XrVMRuntime *isolate, XrValue exception);
+XR_FUNC void xr_vm_throw_exception(XrVMRuntime *isolate, XrValue exception);
 
 /*
  * Single-call throw helper: records the full call chain into
@@ -277,7 +277,7 @@ XR_FUNC void xr_vm_throw_exception(XrayIsolate *isolate, XrValue exception);
  * this over the add_stacktrace + throw_exception pair so the
  * trace mechanism stays in one place. Defined in xvm_exception.c.
  */
-XR_FUNC void xr_vm_unwind_with_trace(XrayIsolate *isolate, XrValue exception);
+XR_FUNC void xr_vm_unwind_with_trace(XrVMRuntime *isolate, XrValue exception);
 
 /* ========== Per-coroutine Inline Caches (in xvm_ic.c) ========== */
 
@@ -336,11 +336,11 @@ XR_FUNC void xr_vm_ctx_free_ic_tables(XrVMContext *ctx);
 // Type conversion: xr_value_to_string declared in runtime/value/xvalue_format.h.
 
 // Arithmetic operations
-XR_FUNC XrValue vm_add_operation(XrayIsolate *isolate, XrValue left, XrValue right);
+XR_FUNC XrValue vm_add_operation(XrVMRuntime *isolate, XrValue left, XrValue right);
 XR_FUNC XrValue vm_numeric_sub(XrValue left, XrValue right);
 XR_FUNC XrValue vm_numeric_mul(XrValue left, XrValue right);
-XR_FUNC XrValue vm_numeric_div(XrayIsolate *isolate, XrValue left, XrValue right);
-XR_FUNC XrValue vm_numeric_mod(XrayIsolate *isolate, XrValue left, XrValue right);
+XR_FUNC XrValue vm_numeric_div(XrVMRuntime *isolate, XrValue left, XrValue right);
+XR_FUNC XrValue vm_numeric_mod(XrVMRuntime *isolate, XrValue left, XrValue right);
 
 /* ========== BigInt Mixed Operations Helper ========== */
 
@@ -358,14 +358,14 @@ static inline bool vm_is_bigint_mixed(XrValue left, XrValue right) {
 // Comparison operations
 XR_FUNC bool vm_values_equal(XrValue a, XrValue b);
 XR_FUNC bool vm_values_strict_equal(XrValue a, XrValue b);
-XR_FUNC bool vm_values_equal_deep(XrayIsolate *isolate, XrValue a, XrValue b);
+XR_FUNC bool vm_values_equal_deep(XrVMRuntime *isolate, XrValue a, XrValue b);
 XR_FUNC bool vm_numeric_less(XrValue left, XrValue right);
 XR_FUNC bool vm_numeric_less_equal(XrValue left, XrValue right);
 XR_FUNC bool vm_numeric_greater(XrValue left, XrValue right);
 XR_FUNC bool vm_numeric_greater_equal(XrValue left, XrValue right);
 
 /* ========== VM Execution Loop (in xvm.c) ========== */
-XR_FUNC XrVMResult run(XrayIsolate *isolate, XrVMContext *vm_ctx);
+XR_FUNC XrVMResult run(XrVMRuntime *isolate, XrVMContext *vm_ctx);
 
 /* In-dispatch direct coroutine switch (in xvm_coro_backend.c).
  * Called from the dispatch loop when a coroutine blocks on a channel/await
@@ -373,24 +373,24 @@ XR_FUNC XrVMResult run(XrayIsolate *isolate, XrVMContext *vm_ctx);
  * LIFO partner — the caller swaps vm_ctx and jumps to startfunc — or NULL,
  * in which case the caller must return XR_VM_BLOCKED (ordinary slow path).
  * On success this owns ALL worker bookkeeping for both coroutines. */
-XR_FUNC XrVMContext *xr_vm_try_direct_switch(XrayIsolate *isolate, XrVMContext *cur_ctx);
+XR_FUNC XrVMContext *xr_vm_try_direct_switch(XrVMRuntime *isolate, XrVMContext *cur_ctx);
 
 /* ========== Coroutine Scheduler ========== */
 XR_FUNC void xr_coro_free(XrCoroutine *coro);
-XR_FUNC void xr_coro_spawn(XrayIsolate *X, XrCoroutine *coro);
+XR_FUNC void xr_coro_spawn(XrVMRuntime *X, XrCoroutine *coro);
 // Coroutine bookkeeping initialization
 XR_FUNC void xr_coro_state_init(XrCoroState *state);
 XR_FUNC void xr_coro_state_destroy(XrCoroState *state);
 
 // Multicore runtime
-XR_FUNC void xr_multicore_init(XrayIsolate *X, int num_workers);
-XR_FUNC void xr_multicore_destroy(XrayIsolate *X);
+XR_FUNC void xray_vm_multicore_init(XrVMRuntime *X, int num_workers);
+XR_FUNC void xray_vm_multicore_destroy(XrVMRuntime *X);
 
 // Wake mechanism
-XR_FUNC void xr_coro_ready(XrayIsolate *X, XrCoroutine *gp, bool next);
-XR_FUNC XrCoroutine *xr_current_coro(XrayIsolate *X);
+XR_FUNC void xr_coro_ready(XrVMRuntime *X, XrCoroutine *gp, bool next);
+XR_FUNC XrCoroutine *xr_current_coro(XrVMRuntime *X);
 XR_FUNC void xr_coro_wake_waiter_runtime(XrRuntime *runtime, XrCoroutine *coro);
-XR_FUNC void xr_coro_wake_waiter(XrayIsolate *X, XrCoroutine *coro);
+XR_FUNC void xr_coro_wake_waiter(XrVMRuntime *X, XrCoroutine *coro);
 
 // Multicore runtime channel wake (auto fallback to single-thread mode)
 XR_FUNC XrCoroutine *xr_runtime_wake_channel(XrRuntime *runtime, void *channel, bool wake_sender);

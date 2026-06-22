@@ -61,7 +61,7 @@
  * and the outermost frame last — matching the convention of every
  * mainstream runtime (Python, Java, JavaScript).
  */
-static void record_full_trace(XrayIsolate *isolate, XrValue exception) {
+static void record_full_trace(XrVMRuntime *isolate, XrValue exception) {
     if (!xr_value_is_exception(isolate, exception))
         return;
 
@@ -127,7 +127,7 @@ static void record_full_trace(XrayIsolate *isolate, XrValue exception) {
  *
  * and let this function decide what gets recorded.
  */
-void xr_vm_unwind_with_trace(XrayIsolate *isolate, XrValue exception) {
+void xr_vm_unwind_with_trace(XrVMRuntime *isolate, XrValue exception) {
     XR_DCHECK(isolate != NULL, "vm_unwind_with_trace: NULL isolate");
     record_full_trace(isolate, exception);
     xr_vm_throw_exception(isolate, exception);

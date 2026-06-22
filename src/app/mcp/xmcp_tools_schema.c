@@ -157,8 +157,7 @@ XR_FUNC XrJsonValue *xmcp_schema_run_output(void) {
     XJSON_SET_STRING(s, "type", "object");
     XrJsonValue *p = xjson_new_object();
     schema_add_prop(p, "ok", "boolean", "True iff exitCode==0 and timedOut==false.");
-    schema_add_prop(p, "exitCode", "integer",
-                    "Return value from xray_isolate_dostring (0 on success).");
+    schema_add_prop(p, "exitCode", "integer", "Return value from xray_vm_dostring (0 on success).");
     schema_add_prop(p, "stdout", "string", "Captured print() output, truncated to outputLimit.");
     schema_add_prop(p, "timedOut", "boolean", "True if execution exceeded timeoutMs.");
     schema_add_prop(p, "truncated", "boolean", "True if stdout was clipped to outputLimit.");

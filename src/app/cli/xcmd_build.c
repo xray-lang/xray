@@ -23,7 +23,7 @@
 #include "xcli_toolchain.h"
 #include "../../api/xisolate_profile.h"
 #include "xray.h"
-#include "xray_isolate.h"
+#include "xray_vm.h"
 #include "../../module/xbundle.h"
 #include "../../aot/xaot_driver.h"
 #include "../../base/xmalloc.h"
@@ -766,25 +766,23 @@ static void write_bytecode_main(FILE *f, const char *bundle_source) {
 
     // Main: default bytecode bundles run with full runtime support so imports
     // and runtime exception objects behave like `xray run`.
-    fprintf(f, "#include \"xray_isolate.h\"\n"
-               "extern int xr_eval_bytecode(void*, const uint8_t*, size_t);\n"
-               "extern void xr_multicore_init(void*, int);\n"
-               "extern void xr_multicore_destroy(void*);\n"
+    fprintf(f, "#include \"xray_vm.h\"\n"
+               "extern int xr_eval_bytecode(XrVMRuntime*, const uint8_t*, size_t);\n"
                "\n"
                "int main(int argc, char **argv) {\n"
-               "    XrayIsolateParams params;\n"
-               "    xray_isolate_params_init(&params);\n"
+               "    XrVMConfig params;\n"
+               "    xray_vm_config_init(&params);\n"
                "    params.script_argc = argc > 1 ? argc - 1 : 0;\n"
                "    params.script_argv = argc > 1 ? argv + 1 : NULL;\n"
-               "    XrayIsolate *X = xray_isolate_new_full(&params);\n"
+               "    XrVMRuntime *X = xray_vm_new_full(&params);\n"
                "    if (!X) { fprintf(stderr, \"Failed to create runtime\\n\"); return 1; }\n"
-               "    xr_multicore_init(X, 0);\n"
+               "    xray_vm_multicore_init(X, 0);\n"
                "    const XrEmbeddedModule *entry = &xr_app_modules[xr_app_entry_index];\n"
-               "    xray_isolate_set_script_info(X, entry->path, params.script_argc, "
+               "    xray_vm_set_script_info(X, entry->path, params.script_argc, "
                "params.script_argv);\n"
                "    int result = xr_eval_bytecode(X, entry->bc, entry->size);\n"
-               "    xr_multicore_destroy(X);\n"
-               "    xray_isolate_delete(X);\n"
+               "    xray_vm_multicore_destroy(X);\n"
+               "    xray_vm_delete(X);\n"
                "    return result;\n"
                "}\n");
 }
@@ -985,7 +983,7 @@ static int cmd_build_bytecode(const char *input, const char *output, const char 
                               const char *sysroot) {
     printf("[bytecode] Building: %s\n", input);
 
-    XrayIsolate *X = xr_isolate_profile_new(XR_ISOLATE_PROFILE_RUN);
+    XrVMRuntime *X = xr_isolate_profile_new(XR_ISOLATE_PROFILE_RUN);
     if (!X) {
         fprintf(stderr, "Error: failed to create isolate\n");
         return 1;
@@ -994,10 +992,10 @@ static int cmd_build_bytecode(const char *input, const char *output, const char 
     XrBundle *bundle = xr_bundle_create_ex(X, input, XR_BUNDLE_DEFAULT);
     if (!bundle) {
         fprintf(stderr, "Error: bytecode bundling failed\n");
-        xray_isolate_delete(X);
+        xray_vm_delete(X);
         return 1;
     }
-    xray_isolate_delete(X);
+    xray_vm_delete(X);
 
     printf("Modules: %d\n", bundle->count);
     for (int i = 0; i < bundle->count; i++)

@@ -24,7 +24,7 @@
 
 #include "xaot_driver.h"
 #include "../../include/xray.h"
-#include "../../include/xray_isolate.h"
+#include "../../include/xray_vm.h"
 #include "../runtime/xisolate_api.h"
 #include "../module/xmodule_graph.h"
 #include "../module/xmodule_resolver.h"
@@ -61,10 +61,10 @@
 /* Create a full-runtime isolate for AOT compilation.
  * Equivalent to XR_ISOLATE_PROFILE_RUN without depending on the
  * isolate-profile factory in src/api/. */
-static XrayIsolate *create_isolate(void) {
-    XrayIsolateParams params;
-    xray_isolate_params_init(&params);
-    return xray_isolate_new_full(&params);
+static XrVMRuntime *create_isolate(void) {
+    XrVMConfig params;
+    xray_vm_config_init(&params);
+    return xray_vm_new_full(&params);
 }
 
 /* ========== Module Name Helpers ========== */
@@ -711,7 +711,7 @@ XR_FUNC int xaot_build_ex(const char *input_path, bool emit_plan_dump, bool emit
     printf("[xi-native] Building: %s\n", input_path);
 
     /* --- Build module graph (topo order, entry last) --- */
-    XrayIsolate *X = create_isolate();
+    XrVMRuntime *X = create_isolate();
     if (!X) {
         fprintf(stderr, "Error: failed to create isolate\n");
         return 1;
@@ -724,7 +724,7 @@ XR_FUNC int xaot_build_ex(const char *input_path, bool emit_plan_dump, bool emit
     XrModuleGraph *graph = xr_module_graph_new(session, resolver);
     if (!graph) {
         fprintf(stderr, "Error: failed to create module graph\n");
-        xray_isolate_delete(X);
+        xray_vm_delete(X);
         return 1;
     }
 
@@ -733,7 +733,7 @@ XR_FUNC int xaot_build_ex(const char *input_path, bool emit_plan_dump, bool emit
         fprintf(stderr, "Error: module graph build failed: %s\n", build_err ? build_err : "?");
         xr_free(build_err);
         xr_module_graph_free(graph);
-        xray_isolate_delete(X);
+        xray_vm_delete(X);
         return 1;
     }
     xr_free(build_err);
@@ -743,7 +743,7 @@ XR_FUNC int xaot_build_ex(const char *input_path, bool emit_plan_dump, bool emit
         fprintf(stderr, "Error: %s\n",
                 graph->cycle_desc ? graph->cycle_desc : "circular dependency detected");
         xr_module_graph_free(graph);
-        xray_isolate_delete(X);
+        xray_vm_delete(X);
         return 1;
     }
 
@@ -757,7 +757,7 @@ XR_FUNC int xaot_build_ex(const char *input_path, bool emit_plan_dump, bool emit
         xr_free(paths);
         xr_free(mod_names);
         xr_module_graph_free(graph);
-        xray_isolate_delete(X);
+        xray_vm_delete(X);
         return 1;
     }
     /* Resolve input_path to canonical form (handles symlinks like /tmp -> /private/tmp) */
@@ -909,7 +909,7 @@ XR_FUNC int xaot_build_ex(const char *input_path, bool emit_plan_dump, bool emit
      * Now that pipeline is complete, free the graph (frees ASTs too). */
     xr_module_graph_free(graph);
     graph = NULL;
-    xray_isolate_delete(X);
+    xray_vm_delete(X);
     X = NULL;
 
     /* --- Create codegen context (no global state) --- */
@@ -1087,7 +1087,7 @@ fail_free_graph:
     if (graph)
         xr_module_graph_free(graph);
     if (X)
-        xray_isolate_delete(X);
+        xray_vm_delete(X);
     for (int i = 0; i < nmodules; i++) {
         xr_free(paths[i]);
         xr_free(mod_names[i]);

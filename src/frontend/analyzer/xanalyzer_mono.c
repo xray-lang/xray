@@ -1509,7 +1509,7 @@ static void rewrite_call_sites(AstNode *node, XaGenericRegistry *registry,
 
 // Inject monomorphized function declarations into the program AST
 static void inject_mono_decls(AstNode *root, XaGenericRegistry *registry,
-                              XaMonoCollector *collector, XrayIsolate *isolate) {
+                              XaMonoCollector *collector, XrVMRuntime *isolate) {
     if (!root || root->type != AST_PROGRAM || collector->count == 0)
         return;
 
@@ -1644,7 +1644,7 @@ static void inject_mono_decls(AstNode *root, XaGenericRegistry *registry,
 
 /* ========== Public API ========== */
 
-void xa_mono_pass(AstNode *root, XrayIsolate *isolate) {
+void xa_mono_pass(AstNode *root, XrVMRuntime *isolate) {
     if (!root || root->type != AST_PROGRAM)
         return;
 

@@ -256,7 +256,7 @@ XrJsonValue *xdap_inspect_globals(XdapController *ctrl) {
 }
 
 // Convert XdapVarInfo array from debug API to JSON array for DAP protocol
-static XrJsonValue *var_info_to_json(XrayIsolate *isolate, int var_ref_id) {
+static XrJsonValue *var_info_to_json(XrVMRuntime *isolate, int var_ref_id) {
     XdapVarInfo *vars = NULL;
     int count = xr_debug_get_var_children(isolate, var_ref_id, &vars);
     if (count <= 0 || !vars)

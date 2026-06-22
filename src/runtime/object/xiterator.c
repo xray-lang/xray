@@ -35,7 +35,7 @@
 
 /* Internal helper: allocate iterator instance with klass set. */
 static XrIterator *iterator_alloc(struct XrCoroutine *coro) {
-    XrayIsolate *X = xr_coro_vm_owner(coro);
+    XrVMRuntime *X = xr_coro_vm_owner(coro);
     XrClass *cls = xr_isolate_get_core_classes(X)->iteratorClass;
     XR_DCHECK(cls != NULL, "iterator_alloc: iteratorClass not registered");
     XrIterator *iter = (XrIterator *) xr_alloc(coro, sizeof(XrIterator), XR_TINSTANCE);
@@ -112,7 +112,7 @@ XrIterator *xr_iterator_new_from_array(struct XrCoroutine *coro, struct XrArray 
 // Create iterator from string (lazy, yields [index, char] pairs).
 // The index is the UTF-8 character index, matching string.charAt() semantics.
 XrIterator *xr_iterator_new_from_string(struct XrCoroutine *coro, struct XrString *s,
-                                        struct XrayIsolate *isolate) {
+                                        struct XrVMRuntime *isolate) {
     XR_DCHECK(coro != NULL, "iterator_new_from_string: NULL coro");
     XR_DCHECK(s != NULL, "iterator_new_from_string: NULL string");
     XrIterator *iter = iterator_alloc(coro);
@@ -131,7 +131,7 @@ XrIterator *xr_iterator_new_from_string(struct XrCoroutine *coro, struct XrStrin
 
 // Create iterator from Json (lazy, converts SymbolId keys to strings)
 XrIterator *xr_iterator_new_from_json(struct XrCoroutine *coro, XrJson *json,
-                                      struct XrayIsolate *isolate) {
+                                      struct XrVMRuntime *isolate) {
     XR_DCHECK(coro != NULL, "iterator_new_from_json: NULL coro");
     XR_DCHECK(json != NULL, "iterator_new_from_json: NULL json");
     XrIterator *iter = iterator_alloc(coro);
@@ -155,7 +155,7 @@ XrIterator *xr_iterator_new_from_json(struct XrCoroutine *coro, XrJson *json,
 // (a string) instead of a (key, value) tuple. Used by single-variable
 // `for (k in jsonObj)`.
 XrIterator *xr_iterator_keys_from_json(struct XrCoroutine *coro, XrJson *json,
-                                       struct XrayIsolate *isolate) {
+                                       struct XrVMRuntime *isolate) {
     XrIterator *iter = xr_iterator_new_from_json(coro, json, isolate);
     if (iter)
         iter->mode = XR_ITER_MODE_KEYS;
@@ -288,7 +288,7 @@ XrValue xr_iterator_next(XrIterator *iter) {
         XrJson *json = iter->source.json;
         if (!json || !json->klass)
             return xr_null();
-        XrayIsolate *X = (XrayIsolate *) iter->context;
+        XrVMRuntime *X = (XrVMRuntime *) iter->context;
 
         {
             XrClass *cls = json->klass;
@@ -342,7 +342,7 @@ XrValue xr_iterator_next(XrIterator *iter) {
         XrString *s = iter->source.string;
         if (!s || iter->scan_index >= iter->total_count)
             return xr_null();
-        XrayIsolate *X = (XrayIsolate *) iter->context;
+        XrVMRuntime *X = (XrVMRuntime *) iter->context;
         uint32_t idx = iter->scan_index++;
         XrString *ch = xr_string_char_at_unicode(X, s, (size_t) idx);
         if (iter->mode == XR_ITER_MODE_VALUES) {
@@ -430,7 +430,7 @@ XrNativeBodyDesc *xr_iterator_native_body_desc(void) {
 
 #include "../value/xvalue_format.h"
 
-static XrValue m_iter_has_next(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_iter_has_next(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) iso;
     (void) args;
     (void) argc;
@@ -439,7 +439,7 @@ static XrValue m_iter_has_next(XrayIsolate *iso, XrValue self, XrValue *args, in
     return xr_bool(xr_iterator_has_next(iter));
 }
 
-static XrValue m_iter_next(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_iter_next(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) iso;
     (void) args;
     (void) argc;
@@ -448,13 +448,13 @@ static XrValue m_iter_next(XrayIsolate *iso, XrValue self, XrValue *args, int ar
     return xr_iterator_next(iter);
 }
 
-static XrValue m_iter_to_string(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_iter_to_string(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) args;
     (void) argc;
     return xr_string_value(xr_value_to_string(iso, self));
 }
 
-void xr_iterator_register_class(XrayIsolate *X) {
+void xr_iterator_register_class(XrVMRuntime *X) {
     XR_DCHECK(X != NULL, "iterator_register_class: NULL isolate");
     XrayCoreClasses *core = xr_isolate_get_core_classes(X);
     XR_DCHECK(core != NULL, "iterator_register_class: core not initialised");

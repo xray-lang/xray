@@ -41,7 +41,7 @@ void xr_io_runtime_free(XrIoRuntime *io) {
     xr_free(io);
 }
 
-XrIoRuntime *xr_io_runtime_from_isolate(struct XrayIsolate *X) {
+XrIoRuntime *xr_io_runtime_from_isolate(struct XrVMRuntime *X) {
     if (!X || !X->vm.scheduler)
         return NULL;
     return ((XrRuntime *) X->vm.scheduler)->io;

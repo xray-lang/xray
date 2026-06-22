@@ -93,7 +93,7 @@ static XrRegexFlags parse_flags(const char *flags_str) {
  *   slot 2: text   (string)
  *   slot 3: groups (Array<string>)
  */
-XrValue xr_regex_make_match_object(XrayIsolate *isolate, const char *text, XrMatch *match) {
+XrValue xr_regex_make_match_object(XrVMRuntime *isolate, const char *text, XrMatch *match) {
     XrayCoreClasses *core = xr_isolate_get_core_classes(isolate);
     XR_DCHECK(core && core->regexMatchClass, "make_match_object: regexMatchClass not registered");
 
@@ -167,10 +167,10 @@ static inline bool is_regex_instance(XrValue v) {
 }
 
 /* Create a Regex XrInstance wrapping a compiled XrRegex */
-static XrValue wrap_regex(XrayIsolate *isolate, XrRegex *re) {
+static XrValue wrap_regex(XrVMRuntime *isolate, XrRegex *re) {
     XrayCoreClasses *core = xr_isolate_get_core_classes(isolate);
     XR_DCHECK(core && core->regexClass, "wrap_regex: regexClass not registered");
-    /* xr_instance_new takes XrayIsolate*, not XrCoroutine*; passing coro
+    /* xr_instance_new takes XrVMRuntime*, not XrCoroutine*; passing coro
      * here was type-confusion that caused module-init regex.compile to
      * dereference garbage when no coroutine was running yet (multi-module
      * preload phase before VM start). xr_instance_new internally resolves
@@ -184,7 +184,7 @@ static XrValue wrap_regex(XrayIsolate *isolate, XrRegex *re) {
 }
 
 /* Unwrap XrRegex* from an XrValue */
-static XrRegex *unwrap_regex(XrayIsolate *isolate, XrValue v) {
+static XrRegex *unwrap_regex(XrVMRuntime *isolate, XrValue v) {
     (void) isolate;
     if (!is_regex_instance(v))
         return NULL;
@@ -193,7 +193,7 @@ static XrRegex *unwrap_regex(XrayIsolate *isolate, XrValue v) {
 }
 
 /* Public API: wrap XrRegex as XrValue */
-XrValue xr_regex_wrap(XrayIsolate *isolate, XrRegex *re) {
+XrValue xr_regex_wrap(XrVMRuntime *isolate, XrRegex *re) {
     return wrap_regex(isolate, re);
 }
 
@@ -202,7 +202,7 @@ XrValue xr_regex_wrap(XrayIsolate *isolate, XrRegex *re) {
 // XR_RE_IGNORECASE / MULTILINE / DOTALL, anything else is silently
 // ignored to preserve the inline-parser behavior the VM dispatch had
 // before the bridge existed.
-XrValue xr_regex_compile_literal(XrayIsolate *isolate, XrValue pattern_val, XrValue flags_val) {
+XrValue xr_regex_compile_literal(XrVMRuntime *isolate, XrValue pattern_val, XrValue flags_val) {
     XrString *pattern_str = xr_value_to_string(isolate, pattern_val);
     XrString *flags_str = xr_value_to_string(isolate, flags_val);
     if (!pattern_str || !flags_str) {
@@ -249,7 +249,7 @@ XrRegex *xr_value_to_regex(XrValue v) {
  * ======================================================================== */
 
 // compile(pattern [, flags]) - Compile regex
-static XrValue regex_compile(XrayIsolate *isolate, XrValue *args, int argc) {
+static XrValue regex_compile(XrVMRuntime *isolate, XrValue *args, int argc) {
     if (argc < 1)
         return xr_null();
 
@@ -276,7 +276,7 @@ static XrValue regex_compile(XrayIsolate *isolate, XrValue *args, int argc) {
 }
 
 // test(re, text) - Test if matches
-static XrValue regex_test(XrayIsolate *isolate, XrValue *args, int argc) {
+static XrValue regex_test(XrVMRuntime *isolate, XrValue *args, int argc) {
     if (argc < 2)
         return xr_bool(false);
 
@@ -294,7 +294,7 @@ static XrValue regex_test(XrayIsolate *isolate, XrValue *args, int argc) {
 }
 
 // fullMatch(re, text) - Full match
-static XrValue regex_full_match(XrayIsolate *isolate, XrValue *args, int argc) {
+static XrValue regex_full_match(XrVMRuntime *isolate, XrValue *args, int argc) {
     if (argc < 2)
         return xr_null();
 
@@ -316,7 +316,7 @@ static XrValue regex_full_match(XrayIsolate *isolate, XrValue *args, int argc) {
 }
 
 // count(re, text) - Count matches
-static XrValue regex_count(XrayIsolate *isolate, XrValue *args, int argc) {
+static XrValue regex_count(XrVMRuntime *isolate, XrValue *args, int argc) {
     if (argc < 2)
         return xr_int(0);
 
@@ -334,7 +334,7 @@ static XrValue regex_count(XrayIsolate *isolate, XrValue *args, int argc) {
 }
 
 // findText(re, text) - Find match, return only matched text (zero-alloc)
-static XrValue regex_find_text(XrayIsolate *isolate, XrValue *args, int argc) {
+static XrValue regex_find_text(XrVMRuntime *isolate, XrValue *args, int argc) {
     if (argc < 2)
         return xr_null();
 
@@ -358,7 +358,7 @@ static XrValue regex_find_text(XrayIsolate *isolate, XrValue *args, int argc) {
 }
 
 // findGroup(re, text, index) - Find match, return single capture group (zero-alloc)
-static XrValue regex_find_group(XrayIsolate *isolate, XrValue *args, int argc) {
+static XrValue regex_find_group(XrVMRuntime *isolate, XrValue *args, int argc) {
     if (argc < 3)
         return xr_null();
 
@@ -389,7 +389,7 @@ static XrValue regex_find_group(XrayIsolate *isolate, XrValue *args, int argc) {
 }
 
 // find(re, text [, offset]) - Find match from specified position
-static XrValue regex_find(XrayIsolate *isolate, XrValue *args, int argc) {
+static XrValue regex_find(XrVMRuntime *isolate, XrValue *args, int argc) {
     if (argc < 2)
         return xr_null();
 
@@ -416,7 +416,7 @@ static XrValue regex_find(XrayIsolate *isolate, XrValue *args, int argc) {
 }
 
 // findAll(re, text [, limit]) - Find all matches
-static XrValue regex_find_all(XrayIsolate *isolate, XrValue *args, int argc) {
+static XrValue regex_find_all(XrVMRuntime *isolate, XrValue *args, int argc) {
     if (argc < 2)
         return xr_value_from_array(xr_array_new(xr_current_coro(isolate)));
 
@@ -450,7 +450,7 @@ static XrValue regex_find_all(XrayIsolate *isolate, XrValue *args, int argc) {
 }
 
 // replace(re, text, replacement) - Replace first match
-static XrValue regex_replace(XrayIsolate *isolate, XrValue *args, int argc) {
+static XrValue regex_replace(XrVMRuntime *isolate, XrValue *args, int argc) {
     if (argc < 3)
         return xr_null();
 
@@ -479,7 +479,7 @@ static XrValue regex_replace(XrayIsolate *isolate, XrValue *args, int argc) {
 }
 
 // replaceAll(re, text, replacement) - Replace all matches
-static XrValue regex_replace_all(XrayIsolate *isolate, XrValue *args, int argc) {
+static XrValue regex_replace_all(XrVMRuntime *isolate, XrValue *args, int argc) {
     if (argc < 3)
         return xr_null();
 
@@ -508,7 +508,7 @@ static XrValue regex_replace_all(XrayIsolate *isolate, XrValue *args, int argc) 
 }
 
 // split(re, text) - Split by pattern
-static XrValue regex_split(XrayIsolate *isolate, XrValue *args, int argc) {
+static XrValue regex_split(XrVMRuntime *isolate, XrValue *args, int argc) {
     if (argc < 2)
         return xr_value_from_array(xr_array_new(xr_current_coro(isolate)));
 
@@ -542,7 +542,7 @@ static XrValue regex_split(XrayIsolate *isolate, XrValue *args, int argc) {
 }
 
 // escape(text) - Escape special characters
-static XrValue regex_escape(XrayIsolate *isolate, XrValue *args, int argc) {
+static XrValue regex_escape(XrVMRuntime *isolate, XrValue *args, int argc) {
     if (argc < 1)
         return xr_null();
 
@@ -570,7 +570,7 @@ static XrValue regex_escape(XrayIsolate *isolate, XrValue *args, int argc) {
 }
 
 // isValid(pattern) - Check if pattern is valid
-static XrValue regex_is_valid(XrayIsolate *isolate, XrValue *args, int argc) {
+static XrValue regex_is_valid(XrVMRuntime *isolate, XrValue *args, int argc) {
     if (argc < 1)
         return xr_bool(false);
 
@@ -588,7 +588,7 @@ static XrValue regex_is_valid(XrayIsolate *isolate, XrValue *args, int argc) {
  * ======================================================================== */
 
 // re.pattern getter
-static XrValue re_method_pattern(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+static XrValue re_method_pattern(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     (void) args;
     (void) nargs;
 
@@ -606,34 +606,34 @@ static XrValue re_method_pattern(XrayIsolate *isolate, XrValue self, XrValue *ar
 // Thin wrappers: prepend self into a temporary args array so the module
 // functions (which expect args[0]=regex) can be reused unchanged.
 
-static XrValue re_m_test(XrayIsolate *X, XrValue self, XrValue *a, int n) {
+static XrValue re_m_test(XrVMRuntime *X, XrValue self, XrValue *a, int n) {
     XrValue tmp[3] = {self, n > 0 ? a[0] : xr_null(), n > 1 ? a[1] : xr_null()};
     return regex_test(X, tmp, n + 1);
 }
-static XrValue re_m_find(XrayIsolate *X, XrValue self, XrValue *a, int n) {
+static XrValue re_m_find(XrVMRuntime *X, XrValue self, XrValue *a, int n) {
     XrValue tmp[4] = {self, n > 0 ? a[0] : xr_null(), n > 1 ? a[1] : xr_null()};
     return regex_find(X, tmp, n + 1);
 }
-static XrValue re_m_find_all(XrayIsolate *X, XrValue self, XrValue *a, int n) {
+static XrValue re_m_find_all(XrVMRuntime *X, XrValue self, XrValue *a, int n) {
     XrValue tmp[4] = {self, n > 0 ? a[0] : xr_null(), n > 1 ? a[1] : xr_null()};
     return regex_find_all(X, tmp, n + 1);
 }
-static XrValue re_m_replace(XrayIsolate *X, XrValue self, XrValue *a, int n) {
+static XrValue re_m_replace(XrVMRuntime *X, XrValue self, XrValue *a, int n) {
     XrValue tmp[4] = {self, n > 0 ? a[0] : xr_null(), n > 1 ? a[1] : xr_null()};
     return regex_replace(X, tmp, n + 1);
 }
-static XrValue re_m_replace_all(XrayIsolate *X, XrValue self, XrValue *a, int n) {
+static XrValue re_m_replace_all(XrVMRuntime *X, XrValue self, XrValue *a, int n) {
     XrValue tmp[4] = {self, n > 0 ? a[0] : xr_null(), n > 1 ? a[1] : xr_null()};
     return regex_replace_all(X, tmp, n + 1);
 }
-static XrValue re_m_split(XrayIsolate *X, XrValue self, XrValue *a, int n) {
+static XrValue re_m_split(XrVMRuntime *X, XrValue self, XrValue *a, int n) {
     XrValue tmp[4] = {self, n > 0 ? a[0] : xr_null(), n > 1 ? a[1] : xr_null()};
     return regex_split(X, tmp, n + 1);
 }
 
 /* findText: zero-allocation path — return only the matched text (string?).
  * No RegexMatch object, no groups array allocated. */
-static XrValue re_m_find_text(XrayIsolate *X, XrValue self, XrValue *a, int n) {
+static XrValue re_m_find_text(XrVMRuntime *X, XrValue self, XrValue *a, int n) {
     if (n < 1)
         return xr_null();
     XrRegex *re = unwrap_regex(X, self);
@@ -657,7 +657,7 @@ static XrValue re_m_find_text(XrayIsolate *X, XrValue self, XrValue *a, int n) {
 
 /* findGroup: zero-allocation path — return a single capture group (string?).
  * args: (text: string, index: int). index 0 = whole match, 1+ = groups. */
-static XrValue re_m_find_group(XrayIsolate *X, XrValue self, XrValue *a, int n) {
+static XrValue re_m_find_group(XrVMRuntime *X, XrValue self, XrValue *a, int n) {
     if (n < 2)
         return xr_null();
     XrRegex *re = unwrap_regex(X, self);
@@ -714,13 +714,13 @@ static XrNativeBodyDesc g_regex_body_desc = {
  * through the unified XrClass dispatch.
  * ======================================================================== */
 
-static XrValue re_m_to_string(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue re_m_to_string(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) args;
     (void) argc;
     return xr_string_value(xr_value_to_string(iso, self));
 }
 
-void xr_regex_register_class(XrayIsolate *isolate) {
+void xr_regex_register_class(XrVMRuntime *isolate) {
     XR_DCHECK(isolate != NULL, "regex_register_class: NULL isolate");
     XrayCoreClasses *core = xr_isolate_get_core_classes(isolate);
     XR_DCHECK(core != NULL, "regex_register_class: core not initialised");
@@ -802,7 +802,7 @@ XR_DEFINE_BUILTIN(regex_split, "split", "(pattern: Regex, s: string, limit?: int
 XR_DEFINE_BUILTIN(regex_escape, "escape", "(s: string): string", "Escape regex special chars")
 XR_DEFINE_BUILTIN(regex_is_valid, "isValid", "(pattern: string): bool", "Check if pattern is valid")
 
-XR_FUNC XrModule *xr_load_module_regex(XrayIsolate *isolate) {
+XR_FUNC XrModule *xr_load_module_regex(XrVMRuntime *isolate) {
     // 1. Create native module
     XrModule *mod = xr_module_create_native(isolate, "regex");
     if (!mod)

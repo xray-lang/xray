@@ -302,14 +302,14 @@ XR_FUNC const char *xr_symbol_get_name_in_table(XrSymbolTable *table, SymbolId i
 XR_FUNC SymbolId xr_builtin_symbol_from_name(const char *name);
 
 // Resolve symbol name by ID via isolate's symbol table.
-// Takes void* to avoid circular header dependency with XrayIsolate.
+// Takes void* to avoid circular header dependency with XrVMRuntime.
 XR_FUNC const char *xr_symbol_get_name_by_id(void *isolate, int symbol_id);
 
 // Intern a name through the isolate's symbol table.
 // Returns a stable pointer to the interned string, owned by the symbol
 // table for the lifetime of the isolate. Callers must not free it.
 // Returns NULL if isolate/name is NULL or allocation fails.
-// Takes void* to avoid circular header dependency with XrayIsolate.
+// Takes void* to avoid circular header dependency with XrVMRuntime.
 XR_FUNC const char *xr_symbol_intern(void *isolate, const char *name);
 
 /* ========== Compile-time Checks ========== */

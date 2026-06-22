@@ -21,7 +21,7 @@
 #include "xnetpoll.h"
 #include "xworker.h"
 #include "xcoroutine.h"                    // XrCoroutine
-#include "../runtime/xisolate_internal.h"  // XrayIsolate definition
+#include "../runtime/xisolate_internal.h"  // XrVMRuntime definition
 #include "../runtime/xray_debug.h"
 
 #include <stdio.h>
@@ -85,7 +85,7 @@ int xr_socket_listen(const char *host, int port, int backlog) {
 //
 // Note: This function truly blocks until a connection arrives.
 // In coroutine context, the coroutine is suspended, not the thread.
-int xr_socket_accept(XrayIsolate *X, int listen_fd) {
+int xr_socket_accept(XrVMRuntime *X, int listen_fd) {
     if (!X)
         return -1;
 
@@ -138,7 +138,7 @@ int xr_socket_accept(XrayIsolate *X, int listen_fd) {
 // - Data fully sent to peer
 // - No RST packet from close
 // - curl and other clients receive response correctly
-void xr_socket_close(XrayIsolate *X, int fd) {
+void xr_socket_close(XrVMRuntime *X, int fd) {
     (void) X;
     if (fd < 0)
         return;
@@ -170,7 +170,7 @@ void xr_socket_close(XrayIsolate *X, int fd) {
 // ========== Data Read/Write ==========
 
 // Blocking read (coroutine-safe, uses yieldable protocol internally)
-int xr_socket_read(XrayIsolate *X, int fd, char *buf, size_t len) {
+int xr_socket_read(XrVMRuntime *X, int fd, char *buf, size_t len) {
     if (!X || fd < 0 || !buf || len == 0)
         return -1;
 
@@ -209,7 +209,7 @@ int xr_socket_read(XrayIsolate *X, int fd, char *buf, size_t len) {
 }
 
 // Blocking write (coroutine-safe, uses yieldable protocol internally)
-int xr_socket_write(XrayIsolate *X, int fd, const char *buf, size_t len) {
+int xr_socket_write(XrVMRuntime *X, int fd, const char *buf, size_t len) {
     if (!X || fd < 0 || !buf || len == 0)
         return -1;
 
@@ -255,7 +255,7 @@ int xr_socket_write(XrayIsolate *X, int fd, const char *buf, size_t len) {
 }
 
 // Blocking readline (coroutine-safe)
-int xr_socket_readline(XrayIsolate *X, int fd, char *buf, size_t maxlen) {
+int xr_socket_readline(XrVMRuntime *X, int fd, char *buf, size_t maxlen) {
     if (!buf || maxlen == 0)
         return -1;
 
@@ -295,7 +295,7 @@ int xr_socket_readline(XrayIsolate *X, int fd, char *buf, size_t maxlen) {
 // ========== Timeout Settings ==========
 
 // Set read timeout
-void xr_socket_set_read_timeout(XrayIsolate *X, int fd, int timeout_ms) {
+void xr_socket_set_read_timeout(XrVMRuntime *X, int fd, int timeout_ms) {
     if (!X || fd < 0)
         return;
 
@@ -332,7 +332,7 @@ void xr_socket_set_read_timeout(XrayIsolate *X, int fd, int timeout_ms) {
  * fresh timeouts. Return codes mirror the comment on the header:
  *   > 0 readable, 0 timeout, < 0 error.
  */
-int xr_socket_wait_readable(XrayIsolate *X, int fd, int timeout_ms) {
+int xr_socket_wait_readable(XrVMRuntime *X, int fd, int timeout_ms) {
     if (!X || fd < 0)
         return -1;
 
@@ -372,7 +372,7 @@ int xr_socket_wait_readable(XrayIsolate *X, int fd, int timeout_ms) {
  * deadline arm/clear does not disturb any concurrent read wait on
  * the same fd.
  */
-int xr_socket_wait_writable(XrayIsolate *X, int fd, int timeout_ms) {
+int xr_socket_wait_writable(XrVMRuntime *X, int fd, int timeout_ms) {
     if (!X || fd < 0)
         return -1;
 
@@ -403,7 +403,7 @@ int xr_socket_wait_writable(XrayIsolate *X, int fd, int timeout_ms) {
 }
 
 // Set write timeout
-void xr_socket_set_write_timeout(XrayIsolate *X, int fd, int timeout_ms) {
+void xr_socket_set_write_timeout(XrVMRuntime *X, int fd, int timeout_ms) {
     if (!X || fd < 0)
         return;
 
@@ -435,7 +435,7 @@ void xr_socket_set_write_timeout(XrayIsolate *X, int fd, int timeout_ms) {
 // Forward declaration (already declared in header)
 
 // Yieldable accept (supports coroutine yield)
-XrCFuncResult xr_socket_accept_yieldable(XrayIsolate *X, XrAcceptState *state) {
+XrCFuncResult xr_socket_accept_yieldable(XrVMRuntime *X, XrAcceptState *state) {
     if (!X || !state)
         return XR_CFUNC_ERROR;
 
@@ -482,7 +482,7 @@ XrCFuncResult xr_socket_accept_yieldable(XrayIsolate *X, XrAcceptState *state) {
 }
 
 // Accept continuation
-XrCFuncResult xr_socket_accept_continue(XrayIsolate *X, int status, XrValue resume_value, void *ctx,
+XrCFuncResult xr_socket_accept_continue(XrVMRuntime *X, int status, XrValue resume_value, void *ctx,
                                         XrValue *result) {
     (void) resume_value;  // accept resume carries no value
     (void) result;        // accept returns result via state->result_fd
@@ -503,7 +503,7 @@ XrCFuncResult xr_socket_accept_continue(XrayIsolate *X, int status, XrValue resu
 // ========== Non-blocking Try API Implementation ==========
 
 // Non-blocking accept try
-XrIOTryResult xr_socket_accept_try(XrayIsolate *X, int listen_fd) {
+XrIOTryResult xr_socket_accept_try(XrVMRuntime *X, int listen_fd) {
     (void) X;
     XrIOTryResult result = {false, -1, 0};
 
@@ -536,7 +536,7 @@ XrIOTryResult xr_socket_accept_try(XrayIsolate *X, int listen_fd) {
 }
 
 // Non-blocking read try
-XrIOTryResult xr_socket_read_try(XrayIsolate *X, int fd, char *buf, size_t len) {
+XrIOTryResult xr_socket_read_try(XrVMRuntime *X, int fd, char *buf, size_t len) {
     (void) X;
     XrIOTryResult result = {false, 0, 0};
 
@@ -570,7 +570,7 @@ XrIOTryResult xr_socket_read_try(XrayIsolate *X, int fd, char *buf, size_t len) 
 }
 
 // Non-blocking write try
-XrIOTryResult xr_socket_write_try(XrayIsolate *X, int fd, const char *buf, size_t len) {
+XrIOTryResult xr_socket_write_try(XrVMRuntime *X, int fd, const char *buf, size_t len) {
     (void) X;
     XrIOTryResult result = {false, 0, 0};
 

@@ -82,7 +82,7 @@ void xr_io_dns_cache_destroy(struct XrIoDnsCache *cache) {
 
 /* ========== Cache resolution ========== */
 
-static struct XrIoDnsCache *cache_for(struct XrayIsolate *X) {
+static struct XrIoDnsCache *cache_for(struct XrVMRuntime *X) {
     if (!X)
         return NULL;
     XrRuntime *rt = (XrRuntime *) X->vm.scheduler;
@@ -377,7 +377,7 @@ static bool do_resolve(struct XrIoDnsCache *cache, const char *hostname, XrSockA
 
 /* ========== Public API ========== */
 
-bool xr_dns_resolve(struct XrayIsolate *X, const char *hostname, XrSockAddr *addr,
+bool xr_dns_resolve(struct XrVMRuntime *X, const char *hostname, XrSockAddr *addr,
                     XrAddrFamily family) {
     if (!hostname || !hostname[0] || !addr)
         return false;
@@ -392,7 +392,7 @@ bool xr_dns_resolve(struct XrayIsolate *X, const char *hostname, XrSockAddr *add
     return do_resolve(cache, hostname, addr, family);
 }
 
-int xr_dns_resolve_all(struct XrayIsolate *X, const char *hostname, XrSockAddr *addrs,
+int xr_dns_resolve_all(struct XrVMRuntime *X, const char *hostname, XrSockAddr *addrs,
                        int max_addrs, XrAddrFamily family) {
     if (!hostname || !hostname[0] || !addrs || max_addrs <= 0)
         return 0;
@@ -425,7 +425,7 @@ static void dns_async_data_destroy(void *data) {
     xr_free(data);
 }
 
-bool xr_dns_resolve_async(struct XrayIsolate *X, struct XrCoroutine *coro, int worker_id,
+bool xr_dns_resolve_async(struct XrVMRuntime *X, struct XrCoroutine *coro, int worker_id,
                           const char *hostname, XrSockAddr *addr, XrAddrFamily family) {
     if (!hostname || !hostname[0] || !addr)
         return false;
@@ -469,7 +469,7 @@ bool xr_dns_resolve_async(struct XrayIsolate *X, struct XrCoroutine *coro, int w
 
 /* ========== Cache control ========== */
 
-void xr_dns_cache_clear(struct XrayIsolate *X) {
+void xr_dns_cache_clear(struct XrVMRuntime *X) {
     struct XrIoDnsCache *cache = cache_for(X);
     if (!cache || !cache->inited)
         return;
@@ -489,7 +489,7 @@ void xr_dns_cache_clear(struct XrayIsolate *X) {
     xr_mutex_unlock(&cache->mu);
 }
 
-void xr_dns_prefetch(struct XrayIsolate *X, const char *hostname) {
+void xr_dns_prefetch(struct XrVMRuntime *X, const char *hostname) {
     if (!hostname || !hostname[0])
         return;
     XrSockAddr tmp;

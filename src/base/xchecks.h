@@ -130,7 +130,7 @@
 // With this macro, microsecond-level scheduling with zero handoff overhead.
 //
 // Usage:
-//   static XrCFuncResult my_func(XrayIsolate *X, ...) {
+//   static XrCFuncResult my_func(XrVMRuntime *X, ...) {
 //       for (int i = 0; i < n; i++) {
 //           do_work(i);
 //           XR_CHECK_REDS(X, 1);
@@ -205,12 +205,12 @@
 // Release: graceful early return prevents undefined behavior.
 //
 // Usage:
-//   void xray_foo(XrayIsolate *X, int n) {
+//   void xray_foo(XrVMRuntime *X, int n) {
 //       xray_api_check(X != NULL, "xray_foo: NULL isolate");
 //       xray_api_check(n >= 0, "xray_foo: negative n");
 //       ...
 //   }
-//   XrArray* xray_bar(XrayIsolate *X) {
+//   XrArray* xray_bar(XrVMRuntime *X) {
 //       xray_api_checkr(X != NULL, "xray_bar: NULL isolate", NULL);
 //       ...
 //   }

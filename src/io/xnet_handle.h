@@ -36,7 +36,7 @@
 extern "C" {
 #endif
 
-struct XrayIsolate;
+struct XrVMRuntime;
 struct XrCoroHeap;
 
 /* ========== Connection kind ========== */
@@ -68,7 +68,7 @@ typedef struct XrNetConn {
     uint8_t kind;                /* XrNetConnKind                                  */
     bool closed;                 /* idempotency guard for close                     */
     void *tls_state;             /* XrTlsConn* when kind == TLS, NULL otherwise     */
-    struct XrayIsolate *isolate; /* owning isolate (for netpoll cleanup) */
+    struct XrVMRuntime *isolate; /* owning isolate (for netpoll cleanup) */
     int64_t read_deadline_ms;    /* absolute time.monotonic() ms, 0 = no deadline   */
     int64_t write_deadline_ms;   /* absolute time.monotonic() ms, 0 = no deadline   */
     int last_errno;              /* errno captured for the last failed operation    */
@@ -83,7 +83,7 @@ typedef struct XrNetListener {
     int fd;                /* -1 once closed                                 */
     int port;              /* listening port                                  */
     bool closed;
-    struct XrayIsolate *isolate;
+    struct XrVMRuntime *isolate;
     int64_t accept_deadline_ms; /* absolute time.monotonic() ms, 0 = no deadline */
     int last_errno;
     uint8_t last_error;
@@ -96,12 +96,12 @@ typedef struct XrNetListener {
  * ownership: callers must NOT close it directly after this returns.
  * Use xr_net_conn_close (or let the object destroy hook fire).
  */
-XR_FUNC XrNetConn *xr_net_conn_new(struct XrayIsolate *X, int fd, XrNetConnKind kind);
+XR_FUNC XrNetConn *xr_net_conn_new(struct XrVMRuntime *X, int fd, XrNetConnKind kind);
 
 /*
  * Listener variant. port is informational (queryable by scripts).
  */
-XR_FUNC XrNetListener *xr_net_listener_new(struct XrayIsolate *X, int fd, int port);
+XR_FUNC XrNetListener *xr_net_listener_new(struct XrVMRuntime *X, int fd, int port);
 
 /* ========== Accessors ========== */
 

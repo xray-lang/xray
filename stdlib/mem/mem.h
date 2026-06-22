@@ -17,9 +17,9 @@
 
 #include "../../src/base/xdefs.h"
 
-struct XrayIsolate;
+struct XrVMRuntime;
 struct XrModule;
 
-XR_FUNC struct XrModule *xr_load_module_mem(struct XrayIsolate *isolate);
+XR_FUNC struct XrModule *xr_load_module_mem(struct XrVMRuntime *isolate);
 
 #endif  // XR_STDLIB_MEM_H

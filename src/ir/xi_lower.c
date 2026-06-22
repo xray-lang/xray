@@ -531,7 +531,7 @@ XR_FUNC struct XrType *xi_lower_node_type(XiLower *l, AstNode *node) {
 
 /* ========== Context Initialization ========== */
 
-XR_FUNC void xi_lower_init(XiLower *l, struct XaAnalyzer *analyzer, struct XrayIsolate *isolate) {
+XR_FUNC void xi_lower_init(XiLower *l, struct XaAnalyzer *analyzer, struct XrVMRuntime *isolate) {
     memset(l, 0, sizeof(XiLower));
     l->analyzer = analyzer;
     l->isolate = isolate;
@@ -648,7 +648,7 @@ static inline void xi_lower_assert_var_ids(const XiLower *l, const XiFunc *f) {
  * from enclosing scopes via the upvalue capture mechanism.
  */
 XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyzer,
-                                   struct XrayIsolate *isolate, XiLower *parent_ctx) {
+                                   struct XrVMRuntime *isolate, XiLower *parent_ctx) {
     XR_DCHECK(func_node != NULL, "lower_func_impl: func_node is NULL");
     FunctionDeclNode *fdecl = &func_node->as.function_decl;
 
@@ -841,7 +841,7 @@ XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyz
 /* ========== Public API ========== */
 
 XR_FUNC XiFunc *xi_lower_func(AstNode *func_node, struct XaAnalyzer *analyzer,
-                              struct XrayIsolate *isolate) {
+                              struct XrVMRuntime *isolate) {
     XR_CHECK(func_node != NULL, "xi_lower_func: func_node is NULL");
     XR_CHECK(analyzer != NULL, "xi_lower_func: analyzer is NULL");
     XR_CHECK(func_node->type == AST_FUNCTION_DECL || func_node->type == AST_FUNCTION_EXPR,
@@ -1187,12 +1187,12 @@ static void build_module_metadata(XiLower *l) {
 }
 
 XR_FUNC XiFunc *xi_lower_program(AstNode *program_node, struct XaAnalyzer *analyzer,
-                                 struct XrayIsolate *isolate) {
+                                 struct XrVMRuntime *isolate) {
     return xi_lower_program_ex(program_node, analyzer, isolate, false);
 }
 
 XR_FUNC XiFunc *xi_lower_program_ex(AstNode *program_node, struct XaAnalyzer *analyzer,
-                                    struct XrayIsolate *isolate, bool repl_mode) {
+                                    struct XrVMRuntime *isolate, bool repl_mode) {
     XR_CHECK(program_node != NULL, "xi_lower_program: node is NULL");
     XR_CHECK(analyzer != NULL, "xi_lower_program: analyzer is NULL");
 

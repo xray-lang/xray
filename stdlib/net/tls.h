@@ -18,7 +18,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 
-struct XrayIsolate;
+struct XrVMRuntime;
 
 /* ========== TLS Context ========== */
 
@@ -105,24 +105,24 @@ XR_FUNC void xr_tls_context_set_alpn_callback(XrTlsContext *ctx, XrAlpnSelectCal
 // Perform a TLS handshake (client) - yields the calling coroutine on
 // SSL_ERROR_WANT_READ/WRITE via the supplied isolate. X may be NULL
 // only on bootstrap / tooling paths that intentionally spin.
-XR_FUNC XrTlsError xr_tls_conn_handshake_client(struct XrayIsolate *X, XrTlsConn *conn);
+XR_FUNC XrTlsError xr_tls_conn_handshake_client(struct XrVMRuntime *X, XrTlsConn *conn);
 
 // Perform a TLS handshake (server) - same yield semantics as above.
-XR_FUNC XrTlsError xr_tls_conn_handshake_server(struct XrayIsolate *X, XrTlsConn *conn);
+XR_FUNC XrTlsError xr_tls_conn_handshake_server(struct XrVMRuntime *X, XrTlsConn *conn);
 
 // Non-blocking handshake try (single SSL_connect attempt)
 // Returns: 0=done, 1=WANT_READ, 2=WANT_WRITE, -1=error
 XR_FUNC int xr_tls_conn_handshake_try(XrTlsConn *conn);
 
 // Read data (yields on SSL_ERROR_WANT_READ/WRITE via X).
-XR_FUNC int xr_tls_conn_read(struct XrayIsolate *X, XrTlsConn *conn, void *buf, size_t len);
+XR_FUNC int xr_tls_conn_read(struct XrVMRuntime *X, XrTlsConn *conn, void *buf, size_t len);
 
 // Non-blocking read try (single SSL_read attempt)
 // Returns: >0=bytes, 0=EOF, -1=WANT_READ, -2=WANT_WRITE, -3=error
 XR_FUNC int xr_tls_conn_read_try(XrTlsConn *conn, void *buf, size_t len);
 
 // Write data (yields on SSL_ERROR_WANT_READ/WRITE via X).
-XR_FUNC int xr_tls_conn_write(struct XrayIsolate *X, XrTlsConn *conn, const void *buf, size_t len);
+XR_FUNC int xr_tls_conn_write(struct XrVMRuntime *X, XrTlsConn *conn, const void *buf, size_t len);
 
 // Non-blocking write try (single SSL_write attempt)
 // Returns: >0=bytes, -1=WANT_WRITE, -2=WANT_READ, -3=error

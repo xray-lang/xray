@@ -21,7 +21,7 @@
 
 #include "../test_framework.h"
 #include "xray.h"
-#include "xray_isolate.h"
+#include "xray_vm.h"
 #include "../../../src/runtime/xisolate_api.h"
 #include "../../../src/runtime/xglobal_dict.h"
 #include "../../../src/runtime/xexec_state.h"
@@ -34,7 +34,7 @@
 
 /* ========== Helpers ========== */
 
-static XrayIsolate *make_repl_iso(void) {
+static XrVMRuntime *make_repl_iso(void) {
     return xr_isolate_profile_new(XR_ISOLATE_PROFILE_REPL);
 }
 
@@ -61,18 +61,18 @@ TEST(globals_dict_initialized_with_isolate) {
     /* Every isolate constructed through the standard path must have
      * a non-NULL globals dict ready for use right after init.  This
      * is the structural invariant the new opcodes rely on. */
-    XrayIsolate *iso = make_repl_iso();
+    XrVMRuntime *iso = make_repl_iso();
     ASSERT_NOT_NULL(iso);
     ASSERT_NOT_NULL(iso->vm.globals);
     ASSERT_EQ_INT((int) xr_global_dict_count(iso->vm.globals), 0);
-    xray_isolate_delete(iso);
+    xray_vm_delete(iso);
 }
 
 TEST(globals_dict_set_get_round_trip) {
     /* Set a binding under a name; get returns the same XrValue.
      * Uses xr_compile_time_intern so the key is a real interned
      * XrString, mirroring the runtime contract for OP_SETGLOBAL. */
-    XrayIsolate *iso = make_repl_iso();
+    XrVMRuntime *iso = make_repl_iso();
     ASSERT_NOT_NULL(iso);
 
     XrString *name = xr_compile_time_intern(iso, "answer", 6);
@@ -87,14 +87,14 @@ TEST(globals_dict_set_get_round_trip) {
     XrValue out = xr_global_dict_get(iso->vm.globals, name);
     ASSERT_EQ_INT((int) out.i, 42);
 
-    xray_isolate_delete(iso);
+    xray_vm_delete(iso);
 }
 
 TEST(globals_dict_overwrite_keeps_count) {
     /* Reassigning the same name must not grow the dict — the binding
      * is identified by name, the integer count is the # of distinct
      * names. */
-    XrayIsolate *iso = make_repl_iso();
+    XrVMRuntime *iso = make_repl_iso();
     ASSERT_NOT_NULL(iso);
 
     XrString *name = xr_compile_time_intern(iso, "x", 1);
@@ -107,11 +107,11 @@ TEST(globals_dict_overwrite_keeps_count) {
     XrValue out = xr_global_dict_get(iso->vm.globals, name);
     ASSERT_EQ_INT((int) out.i, 2);
 
-    xray_isolate_delete(iso);
+    xray_vm_delete(iso);
 }
 
 TEST(globals_dict_missing_key_returns_null) {
-    XrayIsolate *iso = make_repl_iso();
+    XrVMRuntime *iso = make_repl_iso();
     ASSERT_NOT_NULL(iso);
 
     XrString *name = xr_compile_time_intern(iso, "ghost", 5);
@@ -119,7 +119,7 @@ TEST(globals_dict_missing_key_returns_null) {
     XrValue out = xr_global_dict_get(iso->vm.globals, name);
     ASSERT_TRUE(XR_IS_NULL(out));
 
-    xray_isolate_delete(iso);
+    xray_vm_delete(iso);
 }
 
 /* ========== Profile Invariants ========== */
@@ -129,7 +129,7 @@ TEST(repl_profile_clears_each_call) {
      * struct — leftover bits from a prior call on the same struct
      * must not bleed through.  Set a sentinel before the second call
      * to catch any field that depends on prior content. */
-    XrayIsolateParams p;
+    XrVMConfig p;
     xr_isolate_profile_params(XR_ISOLATE_PROFILE_RUN, &p);
     p.trace_execution = true; /* sentinel */
     xr_isolate_profile_params(XR_ISOLATE_PROFILE_REPL, &p);
@@ -164,7 +164,7 @@ TEST(repl_symbol_cname_null_safety) {
 /* ========== Incremental Compile: Symbol Registration ========== */
 
 TEST(repl_compile_let_registers_symbol) {
-    XrayIsolate *iso = make_repl_iso();
+    XrVMRuntime *iso = make_repl_iso();
     ASSERT_NOT_NULL(iso);
 
     XrProto *proto =
@@ -178,14 +178,14 @@ TEST(repl_compile_let_registers_symbol) {
     ASSERT_FALSE(t->symbols[i].is_const);
 
     xr_free_code(iso, proto);
-    xray_isolate_delete(iso);
+    xray_vm_delete(iso);
 }
 
 TEST(repl_compile_const_marks_is_const) {
     /* `const PI = ...` must round-trip the const bit through
      * XiFunc.slot_owned_consts so .vars can distinguish let from
      * const without re-parsing. */
-    XrayIsolate *iso = make_repl_iso();
+    XrVMRuntime *iso = make_repl_iso();
     ASSERT_NOT_NULL(iso);
 
     XrProto *proto =
@@ -199,11 +199,11 @@ TEST(repl_compile_const_marks_is_const) {
     ASSERT_TRUE(t->symbols[i].is_const);
 
     xr_free_code(iso, proto);
-    xray_isolate_delete(iso);
+    xray_vm_delete(iso);
 }
 
 TEST(repl_compile_function_registers_symbol) {
-    XrayIsolate *iso = make_repl_iso();
+    XrVMRuntime *iso = make_repl_iso();
     ASSERT_NOT_NULL(iso);
 
     XrProto *proto = xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso,
@@ -218,13 +218,13 @@ TEST(repl_compile_function_registers_symbol) {
     ASSERT_FALSE(t->symbols[i].is_const);
 
     xr_free_code(iso, proto);
-    xray_isolate_delete(iso);
+    xray_vm_delete(iso);
 }
 
 TEST(repl_compile_let_and_const_round_trip) {
     /* Mixed declarations within a single input must each carry the
      * correct is_const flag. */
-    XrayIsolate *iso = make_repl_iso();
+    XrVMRuntime *iso = make_repl_iso();
     ASSERT_NOT_NULL(iso);
 
     XrProto *proto = xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso,
@@ -243,7 +243,7 @@ TEST(repl_compile_let_and_const_round_trip) {
     ASSERT_TRUE(t->symbols[iy].is_const);
 
     xr_free_code(iso, proto);
-    xray_isolate_delete(iso);
+    xray_vm_delete(iso);
 }
 
 /* ========== Cross-Input Persistence ========== */
@@ -251,7 +251,7 @@ TEST(repl_compile_let_and_const_round_trip) {
 TEST(repl_cross_input_symbol_resolves) {
     /* Verifies the persistent analyzer + symbol table: the second
      * compile must resolve `x` to the first compile's shared slot. */
-    XrayIsolate *iso = make_repl_iso();
+    XrVMRuntime *iso = make_repl_iso();
     ASSERT_NOT_NULL(iso);
 
     XrProto *p1 =
@@ -271,7 +271,7 @@ TEST(repl_cross_input_symbol_resolves) {
 
     xr_free_code(iso, p2);
     xr_free_code(iso, p1);
-    xray_isolate_delete(iso);
+    xray_vm_delete(iso);
 }
 
 TEST(repl_cross_input_function_call) {
@@ -281,7 +281,7 @@ TEST(repl_cross_input_function_call) {
      * the closure itself — earlier versions of the REPL emit pipeline
      * left a stale shared_offset on nested protos, so cross-input
      * calls returned the closure value instead of invoking it. */
-    XrayIsolate *iso = make_repl_iso();
+    XrVMRuntime *iso = make_repl_iso();
     ASSERT_NOT_NULL(iso);
 
     XrProto *p1 = xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso,
@@ -304,7 +304,7 @@ TEST(repl_cross_input_function_call) {
 
     xr_free_code(iso, p2);
     xr_free_code(iso, p1);
-    xray_isolate_delete(iso);
+    xray_vm_delete(iso);
 }
 
 TEST(repl_cross_input_function_reads_shared) {
@@ -315,7 +315,7 @@ TEST(repl_cross_input_function_reads_shared) {
      * indices on the top-level proto only; nested protos kept the
      * stale offset and read the wrong slot.  Symptom: `let r =
      * getx()` bound `r` to the closure itself instead of x's value. */
-    XrayIsolate *iso = make_repl_iso();
+    XrVMRuntime *iso = make_repl_iso();
     ASSERT_NOT_NULL(iso);
 
     XrProto *p1 =
@@ -340,7 +340,7 @@ TEST(repl_cross_input_function_reads_shared) {
     xr_free_code(iso, p3);
     xr_free_code(iso, p2);
     xr_free_code(iso, p1);
-    xray_isolate_delete(iso);
+    xray_vm_delete(iso);
 }
 
 TEST(repl_cross_input_function_mutates_shared) {
@@ -350,7 +350,7 @@ TEST(repl_cross_input_function_mutates_shared) {
      * test would observe counter==0 forever because SETSHARED in the
      * nested proto wrote to the wrong slot, leaving the real counter
      * untouched. */
-    XrayIsolate *iso = make_repl_iso();
+    XrVMRuntime *iso = make_repl_iso();
     ASSERT_NOT_NULL(iso);
 
     XrProto *p1 =
@@ -385,7 +385,7 @@ TEST(repl_cross_input_function_mutates_shared) {
     xr_free_code(iso, p3);
     xr_free_code(iso, p2);
     xr_free_code(iso, p1);
-    xray_isolate_delete(iso);
+    xray_vm_delete(iso);
 }
 
 TEST(repl_redefinition_reuses_slot) {
@@ -394,7 +394,7 @@ TEST(repl_redefinition_reuses_slot) {
      * promises this contract).  Also asserts the second value
      * actually replaces the first — without value verification the
      * test passes even with a slot-collision bug. */
-    XrayIsolate *iso = make_repl_iso();
+    XrVMRuntime *iso = make_repl_iso();
     ASSERT_NOT_NULL(iso);
 
     XrProto *p1 = xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, "let x = 1\n");
@@ -419,7 +419,7 @@ TEST(repl_redefinition_reuses_slot) {
 
     xr_free_code(iso, p2);
     xr_free_code(iso, p1);
-    xray_isolate_delete(iso);
+    xray_vm_delete(iso);
 }
 
 TEST(repl_function_calls_function_cross_input) {
@@ -427,7 +427,7 @@ TEST(repl_function_calls_function_cross_input) {
      * a() executed in input 3.  Verifies that cross-input function
      * resolution chains transitively: a's body must resolve b through
      * the same persistent global table. */
-    XrayIsolate *iso = make_repl_iso();
+    XrVMRuntime *iso = make_repl_iso();
     ASSERT_NOT_NULL(iso);
 
     XrProto *p1 = xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso,
@@ -452,7 +452,7 @@ TEST(repl_function_calls_function_cross_input) {
     xr_free_code(iso, p3);
     xr_free_code(iso, p2);
     xr_free_code(iso, p1);
-    xray_isolate_delete(iso);
+    xray_vm_delete(iso);
 }
 
 TEST(repl_function_recursive_self_reference) {
@@ -460,7 +460,7 @@ TEST(repl_function_recursive_self_reference) {
      * resolve to its own slot during its own body lowering.  Locks
      * down the forward-reference contract for self-recursive top-level
      * functions in REPL mode. */
-    XrayIsolate *iso = make_repl_iso();
+    XrVMRuntime *iso = make_repl_iso();
     ASSERT_NOT_NULL(iso);
 
     const char *src = "fn fact(n: int) -> int {\n"
@@ -482,7 +482,7 @@ TEST(repl_function_recursive_self_reference) {
 
     xr_free_code(iso, p2);
     xr_free_code(iso, p1);
-    xray_isolate_delete(iso);
+    xray_vm_delete(iso);
 }
 
 TEST(repl_function_mutates_array_cross_input) {
@@ -491,7 +491,7 @@ TEST(repl_function_mutates_array_cross_input) {
      * be visible to any later lookup of the same name.  The bound
      * value in the globals table is the array reference, not a slot
      * snapshot. */
-    XrayIsolate *iso = make_repl_iso();
+    XrVMRuntime *iso = make_repl_iso();
     ASSERT_NOT_NULL(iso);
 
     XrProto *p1 = xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso,
@@ -522,7 +522,7 @@ TEST(repl_function_mutates_array_cross_input) {
     xr_free_code(iso, p3);
     xr_free_code(iso, p2);
     xr_free_code(iso, p1);
-    xray_isolate_delete(iso);
+    xray_vm_delete(iso);
 }
 
 #if 0
@@ -537,7 +537,7 @@ TEST(repl_function_mutates_array_cross_input) {
  * the globals dict by name like any other top-level binding, and
  * this test must turn green.  Enable then. */
 TEST(repl_class_instantiation_cross_input) {
-    XrayIsolate *iso = make_repl_iso();
+    XrVMRuntime *iso = make_repl_iso();
     ASSERT_NOT_NULL(iso);
 
     const char *cls =
@@ -559,7 +559,7 @@ TEST(repl_class_instantiation_cross_input) {
 
     xr_free_code(iso, p2);
     xr_free_code(iso, p1);
-    xray_isolate_delete(iso);
+    xray_vm_delete(iso);
 }
 #endif
 
@@ -569,7 +569,7 @@ TEST(repl_auto_echo_compiles_bare_expression) {
     /* A bare trailing expression must compile (rewritten internally
      * into a print).  We do not capture stdout here; just verify
      * compilation succeeds and produces a runnable proto. */
-    XrayIsolate *iso = make_repl_iso();
+    XrVMRuntime *iso = make_repl_iso();
     ASSERT_NOT_NULL(iso);
 
     XrProto *p = xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, "1 + 1\n");
@@ -578,7 +578,7 @@ TEST(repl_auto_echo_compiles_bare_expression) {
     (void) rc; /* execution itself just needs to not abort */
 
     xr_free_code(iso, p);
-    xray_isolate_delete(iso);
+    xray_vm_delete(iso);
 }
 
 TEST(repl_auto_echo_creates_it_binding) {
@@ -587,7 +587,7 @@ TEST(repl_auto_echo_creates_it_binding) {
      * value.  A bare `null` echo therefore creates exactly one
      * symbol: `it`, with value null.  The print itself is
      * suppressed via skip_null. */
-    XrayIsolate *iso = make_repl_iso();
+    XrVMRuntime *iso = make_repl_iso();
     ASSERT_NOT_NULL(iso);
 
     XrProto *p = xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, "null\n");
@@ -600,13 +600,13 @@ TEST(repl_auto_echo_creates_it_binding) {
     ASSERT_STR_EQ(xr_repl_symbol_cname(&t->symbols[0]), "it");
 
     xr_free_code(iso, p);
-    xray_isolate_delete(iso);
+    xray_vm_delete(iso);
 }
 
 TEST(repl_auto_echo_it_chaining) {
     /* `it` carries across REPL inputs, so `1 + 2` followed by
      * `it * 10` evaluates `it` against the prior result (3). */
-    XrayIsolate *iso = make_repl_iso();
+    XrVMRuntime *iso = make_repl_iso();
     ASSERT_NOT_NULL(iso);
 
     XrProto *p1 = xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso, "1 + 2\n");
@@ -634,7 +634,7 @@ TEST(repl_auto_echo_it_chaining) {
 
     xr_free_code(iso, p2);
     xr_free_code(iso, p1);
-    xray_isolate_delete(iso);
+    xray_vm_delete(iso);
 }
 
 /* ========== Introspection: .vars / .type ========== */
@@ -642,15 +642,15 @@ TEST(repl_auto_echo_it_chaining) {
 TEST(repl_print_vars_empty_is_safe) {
     /* Calling before any compile must not crash; prints "(no
      * bindings)". */
-    XrayIsolate *iso = make_repl_iso();
+    XrVMRuntime *iso = make_repl_iso();
     ASSERT_NOT_NULL(iso);
     xr_repl_print_vars(iso);
-    xray_isolate_delete(iso);
+    xray_vm_delete(iso);
     ASSERT_TRUE(1);
 }
 
 TEST(repl_print_vars_after_compile_no_crash) {
-    XrayIsolate *iso = make_repl_iso();
+    XrVMRuntime *iso = make_repl_iso();
     ASSERT_NOT_NULL(iso);
 
     XrProto *p = xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso,
@@ -661,21 +661,21 @@ TEST(repl_print_vars_after_compile_no_crash) {
     xr_repl_print_vars(iso);
 
     xr_free_code(iso, p);
-    xray_isolate_delete(iso);
+    xray_vm_delete(iso);
     ASSERT_TRUE(1);
 }
 
 TEST(repl_print_type_null_and_empty_safe) {
     /* xr_repl_print_type tolerates NULL / "" / whitespace-only input
      * without invoking the compiler. */
-    XrayIsolate *iso = make_repl_iso();
+    XrVMRuntime *iso = make_repl_iso();
     ASSERT_NOT_NULL(iso);
 
     xr_repl_print_type(iso, NULL);
     xr_repl_print_type(iso, "");
     xr_repl_print_type(iso, "   \t  ");
 
-    xray_isolate_delete(iso);
+    xray_vm_delete(iso);
     ASSERT_TRUE(1);
 }
 
@@ -684,12 +684,12 @@ TEST(repl_print_type_simple_expression) {
      * synthesize source → xr_repl_compile → xr_execute.  We just
      * verify it does not crash; stdout content is checked in manual
      * REPL session tests. */
-    XrayIsolate *iso = make_repl_iso();
+    XrVMRuntime *iso = make_repl_iso();
     ASSERT_NOT_NULL(iso);
 
     xr_repl_print_type(iso, "1 + 2");
 
-    xray_isolate_delete(iso);
+    xray_vm_delete(iso);
     ASSERT_TRUE(1);
 }
 

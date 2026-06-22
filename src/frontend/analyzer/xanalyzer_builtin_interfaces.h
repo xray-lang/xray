@@ -70,6 +70,6 @@ XR_FUNC bool xa_is_builtin_interface_name(const char *name);
 XR_FUNC bool xa_builtin_type_implements(XrType *type, XaBuiltinInterface iface);
 
 // Register built-in interfaces to a scope (for name resolution)
-XR_FUNC void xa_register_builtin_interfaces(XrayIsolate *X, XaScope *global_scope);
+XR_FUNC void xa_register_builtin_interfaces(XrVMRuntime *X, XaScope *global_scope);
 
 #endif  // XANALYZER_BUILTIN_INTERFACES_H

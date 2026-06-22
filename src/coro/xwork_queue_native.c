@@ -35,29 +35,29 @@ static uint32_t sanitize_capacity(int64_t value) {
     return (uint32_t) value;
 }
 
-bool xr_work_queue_push(XrayIsolate *X, XrWorkQueue *q, XrValue value, int64_t shard_hint) {
+bool xr_work_queue_push(XrVMRuntime *X, XrWorkQueue *q, XrValue value, int64_t shard_hint) {
     return xr_work_queue_push_core(X ? xr_isolate_get_runtime_core(X) : NULL, q, value, shard_hint);
 }
 
-XrValue xr_work_queue_try_pop(XrayIsolate *X, XrWorkQueue *q, int64_t worker_hint, bool *ok) {
+XrValue xr_work_queue_try_pop(XrVMRuntime *X, XrWorkQueue *q, int64_t worker_hint, bool *ok) {
     return xr_work_queue_try_pop_for_coro_core(X ? xr_isolate_get_runtime_core(X) : NULL, q,
                                                worker_hint, X ? xr_current_coro(X) : NULL, ok);
 }
 
-XrWorkQueuePopStatus xr_work_queue_pop_for_coro(XrayIsolate *isolate, XrWorkQueue *q,
+XrWorkQueuePopStatus xr_work_queue_pop_for_coro(XrVMRuntime *isolate, XrWorkQueue *q,
                                                 XrCoroutine *coro, int64_t worker,
                                                 XrValue *result) {
     return xr_work_queue_pop_for_coro_core(isolate ? xr_isolate_get_runtime_core(isolate) : NULL, q,
                                            coro, worker, result);
 }
 
-XrWorkQueuePopStatus xr_work_queue_pop_resume_for_coro(XrayIsolate *isolate, XrCoroutine *coro,
+XrWorkQueuePopStatus xr_work_queue_pop_resume_for_coro(XrVMRuntime *isolate, XrCoroutine *coro,
                                                        XrValue *result) {
     return xr_work_queue_pop_resume_for_coro_core(
         isolate ? xr_isolate_get_runtime_core(isolate) : NULL, coro, result);
 }
 
-static XrValue m_push(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+static XrValue m_push(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     XrWorkQueue *q = xr_value_to_work_queue(self);
     XR_DCHECK(q != NULL, "WorkQueue.push: NULL queue");
     XR_DCHECK(nargs >= 1, "WorkQueue.push: missing value");
@@ -67,7 +67,7 @@ static XrValue m_push(XrayIsolate *isolate, XrValue self, XrValue *args, int nar
     return xr_bool(xr_work_queue_push(isolate, q, args[0], shard));
 }
 
-static XrValue m_try_pop(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+static XrValue m_try_pop(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     XrWorkQueue *q = xr_value_to_work_queue(self);
     XR_DCHECK(q != NULL, "WorkQueue.tryPop: NULL queue");
     int64_t worker = -1;
@@ -84,7 +84,7 @@ static XrValue m_try_pop(XrayIsolate *isolate, XrValue self, XrValue *args, int 
     return xr_value_from_tuple(tuple);
 }
 
-static XrCFuncResult ym_pop(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs,
+static XrCFuncResult ym_pop(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs,
                             XrValue *result) {
     XrWorkQueue *q = xr_value_to_work_queue(self);
     XR_DCHECK(q != NULL, "WorkQueue.pop: NULL queue");
@@ -106,7 +106,7 @@ static XrCFuncResult ym_pop(XrayIsolate *isolate, XrValue self, XrValue *args, i
     }
 }
 
-static XrValue m_close(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+static XrValue m_close(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
     (void) args;
     (void) nargs;
@@ -114,14 +114,14 @@ static XrValue m_close(XrayIsolate *isolate, XrValue self, XrValue *args, int na
     return xr_null();
 }
 
-static XrValue g_length(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+static XrValue g_length(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
     (void) args;
     (void) nargs;
     return xr_int((int64_t) xr_work_queue_length(xr_value_to_work_queue(self)));
 }
 
-static XrValue g_shard_count(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+static XrValue g_shard_count(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
     (void) args;
     (void) nargs;
@@ -129,14 +129,14 @@ static XrValue g_shard_count(XrayIsolate *isolate, XrValue self, XrValue *args, 
     return xr_int(q ? (int64_t) q->shard_count : 0);
 }
 
-static XrValue g_is_closed(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+static XrValue g_is_closed(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
     (void) args;
     (void) nargs;
     return xr_bool(xr_work_queue_is_closed(xr_value_to_work_queue(self)));
 }
 
-static XrValue work_queue_construct(XrayIsolate *isolate, XrValue receiver, XrValue *args,
+static XrValue work_queue_construct(XrVMRuntime *isolate, XrValue receiver, XrValue *args,
                                     int nargs) {
     (void) receiver;
     uint32_t shards = XR_WORK_QUEUE_DEFAULT_SHARDS;
@@ -157,7 +157,7 @@ static XrValue work_queue_construct(XrayIsolate *isolate, XrValue receiver, XrVa
     return xr_value_from_work_queue(q);
 }
 
-void xr_work_queue_register_native_type(XrayIsolate *isolate) {
+void xr_work_queue_register_native_type(XrVMRuntime *isolate) {
     static const XrNativeMethod work_queue_methods[] = {
         {"push", m_push, 1},
         {"tryPop", m_try_pop, 0},

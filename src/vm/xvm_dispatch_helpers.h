@@ -131,7 +131,7 @@ static inline XrDispatchAction vm_suspend_yield_replay_yielded(XrBcCallFrame *fr
 #define XR_VM_CHAN_READY_REDUCTION_COST 64
 
 static inline XrDispatchAction
-vm_ready_operation_next_or_yield(XrayIsolate *isolate, XrCoroutine *current, XrBcCallFrame *frame,
+vm_ready_operation_next_or_yield(XrVMRuntime *isolate, XrCoroutine *current, XrBcCallFrame *frame,
                                  XrInstruction *pc, int reduction_cost) {
     if (!current || !frame || reduction_cost <= 0)
         return XR_DISP_NEXT;
@@ -260,11 +260,11 @@ static inline XrBcCallFrame *vm_push_bc_frame(XrVMContext *vm_ctx, XrClosure *cl
 #include "../coro/xblock.h"
 #include "../coro/xchannel_ops.h"
 
-static inline XrValue vm_chan_copy_send(XrayIsolate *isolate, XrValue value) {
+static inline XrValue vm_chan_copy_send(XrVMRuntime *isolate, XrValue value) {
     return xr_chan_prepare_send(isolate, value);
 }
 
-static inline XrValue vm_chan_copy_recv(XrayIsolate *isolate, XrValue value, XrVMContext *vm_ctx) {
+static inline XrValue vm_chan_copy_recv(XrVMRuntime *isolate, XrValue value, XrVMContext *vm_ctx) {
     XrCoroutine *coro = vm_ctx ? (XrCoroutine *) vm_ctx->current_coro : NULL;
     return xr_chan_copy_recv(isolate, value, coro);
 }
@@ -279,7 +279,7 @@ typedef XrCoroSnapshotEntry VmCoroEntry;
 
 /* Resolve the receiver's XrClass for method dispatch.
  * Returns NULL for types that need special handling (module, null). */
-static inline XrClass *invoke_resolve_class(XrayIsolate *isolate, XrValue receiver) {
+static inline XrClass *invoke_resolve_class(XrVMRuntime *isolate, XrValue receiver) {
     if (XR_IS_INT(receiver))
         return isolate->core_rt->native_type_classes[XR_TINT];
     if (XR_IS_FLOAT(receiver))
@@ -315,81 +315,81 @@ static inline XrClass *invoke_resolve_class(XrayIsolate *isolate, XrValue receiv
 
 /* ========== Dispatch Helper Declarations ========== */
 
-XR_FUNC XrDispatchAction vm_invoke_channel(XrayIsolate *isolate, XrVMContext *vm_ctx, XrChannel *ch,
+XR_FUNC XrDispatchAction vm_invoke_channel(XrVMRuntime *isolate, XrVMContext *vm_ctx, XrChannel *ch,
                                            int method_symbol, int nargs, XrValue *base, int a,
                                            XrBcCallFrame *frame, XrInstruction *pc);
-XR_FUNC XrDispatchAction vm_invoke_task_handle(XrayIsolate *isolate, XrVMContext *vm_ctx,
+XR_FUNC XrDispatchAction vm_invoke_task_handle(XrVMRuntime *isolate, XrVMContext *vm_ctx,
                                                XrValue receiver, int method_symbol, int nargs,
                                                XrValue *base, int a, XrBcCallFrame *frame,
                                                XrInstruction *pc);
-XR_FUNC XrDispatchAction vm_invoke_coro_handle(XrayIsolate *isolate, XrValue receiver,
+XR_FUNC XrDispatchAction vm_invoke_coro_handle(XrVMRuntime *isolate, XrValue receiver,
                                                int method_symbol, int nargs, XrValue *base, int a,
                                                XrBcCallFrame *frame, XrInstruction *pc);
-XR_FUNC XrDispatchAction vm_invoke_enum(XrayIsolate *isolate, XrValue receiver, int method_symbol,
+XR_FUNC XrDispatchAction vm_invoke_enum(XrVMRuntime *isolate, XrValue receiver, int method_symbol,
                                         int nargs, XrValue *base, int a, XrBcCallFrame *frame,
                                         XrInstruction *pc);
-XR_FUNC XrDispatchAction vm_invoke_adt_instance(XrayIsolate *isolate, XrValue receiver,
+XR_FUNC XrDispatchAction vm_invoke_adt_instance(XrVMRuntime *isolate, XrValue receiver,
                                                 int method_symbol, int nargs, XrValue *base, int a,
                                                 XrBcCallFrame *frame, XrInstruction *pc);
-XR_FUNC XrDispatchAction vm_invoke_class(XrayIsolate *isolate, XrVMContext *vm_ctx,
+XR_FUNC XrDispatchAction vm_invoke_class(XrVMRuntime *isolate, XrVMContext *vm_ctx,
                                          XrValue receiver, int method_symbol, int nargs,
                                          XrValue *base, int a, XrBcCallFrame *frame,
                                          XrInstruction *pc, int is_tail);
-XR_FUNC XrDispatchAction vm_superinvoke(XrayIsolate *isolate, XrVMContext *vm_ctx,
+XR_FUNC XrDispatchAction vm_superinvoke(XrVMRuntime *isolate, XrVMContext *vm_ctx,
                                         XrInstruction instr, XrValue *base, XrBcCallFrame *frame,
                                         XrInstruction *pc);
-XR_FUNC XrDispatchAction vm_setprop_type_dispatch(XrayIsolate *isolate, XrVMContext *vm_ctx,
+XR_FUNC XrDispatchAction vm_setprop_type_dispatch(XrVMRuntime *isolate, XrVMContext *vm_ctx,
                                                   XrValue obj, int prop_symbol, XrValue value,
                                                   XrValue *base, int a, XrBcCallFrame *frame,
                                                   XrInstruction *pc);
-XR_FUNC XrDispatchAction vm_setprop_instance_setter(XrayIsolate *isolate, XrVMContext *vm_ctx,
+XR_FUNC XrDispatchAction vm_setprop_instance_setter(XrVMRuntime *isolate, XrVMContext *vm_ctx,
                                                     XrInstance *inst, XrValue obj, int prop_symbol,
                                                     XrValue value, XrValue *base, int c,
                                                     XrBcCallFrame *frame, XrInstruction *pc);
-XR_FUNC int vm_collect_all_coros(XrayIsolate *isolate, VmCoroEntry *out, int max_out);
-XR_FUNC XrDispatchAction vm_coro_ctrl(XrayIsolate *isolate, XrVMContext *vm_ctx,
+XR_FUNC int vm_collect_all_coros(XrVMRuntime *isolate, VmCoroEntry *out, int max_out);
+XR_FUNC XrDispatchAction vm_coro_ctrl(XrVMRuntime *isolate, XrVMContext *vm_ctx,
                                       XrInstruction instr, XrValue *base);
-XR_FUNC XrDispatchAction vm_getprop_type_dispatch(XrayIsolate *isolate, XrVMContext *vm_ctx,
+XR_FUNC XrDispatchAction vm_getprop_type_dispatch(XrVMRuntime *isolate, XrVMContext *vm_ctx,
                                                   XrValue obj, int prop_symbol, XrValue *base,
                                                   int a, int b, XrBcCallFrame *frame,
                                                   XrInstruction *pc);
-XR_FUNC XrDispatchAction vm_getprop_instance_getter(XrayIsolate *isolate, XrVMContext *vm_ctx,
+XR_FUNC XrDispatchAction vm_getprop_instance_getter(XrVMRuntime *isolate, XrVMContext *vm_ctx,
                                                     XrInstance *inst, XrValue obj, int prop_symbol,
                                                     XrValue *base, int a, XrBcCallFrame *frame,
                                                     XrInstruction *pc);
-XR_FUNC XrDispatchAction vm_invoke_module(XrayIsolate *isolate, XrVMContext *vm_ctx,
+XR_FUNC XrDispatchAction vm_invoke_module(XrVMRuntime *isolate, XrVMContext *vm_ctx,
                                           XrValue receiver, int method_symbol, int nargs,
                                           XrValue *base, int a, XrBcCallFrame *frame,
                                           XrInstruction *pc);
-XR_FUNC XrDispatchAction vm_go(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstruction instr,
+XR_FUNC XrDispatchAction vm_go(XrVMRuntime *isolate, XrVMContext *vm_ctx, XrInstruction instr,
                                XrValue *base, XrBcCallFrame *frame);
-XR_FUNC XrDispatchAction vm_await(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstruction instr,
+XR_FUNC XrDispatchAction vm_await(XrVMRuntime *isolate, XrVMContext *vm_ctx, XrInstruction instr,
                                   XrValue *base, XrBcCallFrame *frame, XrInstruction *pc);
-XR_FUNC XrDispatchAction vm_await_timeout(XrayIsolate *isolate, XrVMContext *vm_ctx,
+XR_FUNC XrDispatchAction vm_await_timeout(XrVMRuntime *isolate, XrVMContext *vm_ctx,
                                           XrInstruction instr, XrValue *base, XrBcCallFrame *frame,
                                           XrInstruction *pc);
-XR_FUNC XrDispatchAction vm_await_all(XrayIsolate *isolate, XrVMContext *vm_ctx,
+XR_FUNC XrDispatchAction vm_await_all(XrVMRuntime *isolate, XrVMContext *vm_ctx,
                                       XrInstruction instr, XrValue *base, XrBcCallFrame *frame,
                                       XrInstruction *pc);
-XR_FUNC XrDispatchAction vm_await_any(XrayIsolate *isolate, XrVMContext *vm_ctx,
+XR_FUNC XrDispatchAction vm_await_any(XrVMRuntime *isolate, XrVMContext *vm_ctx,
                                       XrInstruction instr, XrValue *base, XrBcCallFrame *frame,
                                       XrInstruction *pc);
-XR_FUNC XrDispatchAction vm_time_dispatch(XrayIsolate *isolate, XrVMContext *vm_ctx,
+XR_FUNC XrDispatchAction vm_time_dispatch(XrVMRuntime *isolate, XrVMContext *vm_ctx,
                                           XrInstruction instr, XrValue *base, XrBcCallFrame *frame,
                                           XrInstruction *pc);
-XR_FUNC XrDispatchAction vm_select_block(XrayIsolate *isolate, XrVMContext *vm_ctx,
+XR_FUNC XrDispatchAction vm_select_block(XrVMRuntime *isolate, XrVMContext *vm_ctx,
                                          XrInstruction instr, XrValue *base, XrBcCallFrame *frame,
                                          XrInstruction *pc);
-XR_FUNC XrDispatchAction vm_chan_send(XrayIsolate *isolate, XrVMContext *vm_ctx,
+XR_FUNC XrDispatchAction vm_chan_send(XrVMRuntime *isolate, XrVMContext *vm_ctx,
                                       XrInstruction instr, XrValue *base, XrBcCallFrame *frame,
                                       XrInstruction *pc);
-XR_FUNC XrDispatchAction vm_chan_recv(XrayIsolate *isolate, XrVMContext *vm_ctx,
+XR_FUNC XrDispatchAction vm_chan_recv(XrVMRuntime *isolate, XrVMContext *vm_ctx,
                                       XrInstruction instr, XrValue *base, XrBcCallFrame *frame,
                                       XrInstruction *pc);
-XR_FUNC XrDispatchAction vm_chan_send_timeout(XrayIsolate *isolate, XrVMContext *vm_ctx,
+XR_FUNC XrDispatchAction vm_chan_send_timeout(XrVMRuntime *isolate, XrVMContext *vm_ctx,
                                               XrInstruction instr, XrValue *base,
                                               XrBcCallFrame *frame, XrInstruction *pc);
-XR_FUNC XrDispatchAction vm_chan_recv_timeout(XrayIsolate *isolate, XrVMContext *vm_ctx,
+XR_FUNC XrDispatchAction vm_chan_recv_timeout(XrVMRuntime *isolate, XrVMContext *vm_ctx,
                                               XrInstruction instr, XrValue *base,
                                               XrBcCallFrame *frame, XrInstruction *pc);
 

@@ -28,7 +28,7 @@
 #include "../base/xhashmap.h"
 
 /* Forward declarations */
-struct XrayIsolate;
+struct XrVMRuntime;
 struct XrProject;
 struct XrLockfile;
 

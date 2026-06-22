@@ -830,7 +830,7 @@ XrWebSocket *xr_ws_new(const XrWsConfig *config) {
     return ws;
 }
 
-void xr_ws_set_isolate(XrWebSocket *ws, struct XrayIsolate *X) {
+void xr_ws_set_isolate(XrWebSocket *ws, struct XrVMRuntime *X) {
     // Bind the WS connection to the caller's coroutine scheduler so
     // every plain-TCP / TLS I/O path that needs to suspend can resolve
     // the runtime via ws->isolate and yield.
@@ -2391,7 +2391,7 @@ char *xr_ws_pick_subprotocol(const char *request_headers, const char **server_pr
     return NULL;
 }
 
-XrWebSocket *xr_ws_upgrade_ex(struct XrayIsolate *isolate, int fd, const char *request_headers,
+XrWebSocket *xr_ws_upgrade_ex(struct XrVMRuntime *isolate, int fd, const char *request_headers,
                               const XrWsUpgradeOptions *opts) {
     if (fd < 0 || !request_headers)
         return NULL;
@@ -2503,7 +2503,7 @@ XrWebSocket *xr_ws_upgrade_ex(struct XrayIsolate *isolate, int fd, const char *r
     return ws;
 }
 
-XrWebSocket *xr_ws_upgrade(struct XrayIsolate *isolate, int fd, const char *request_headers) {
+XrWebSocket *xr_ws_upgrade(struct XrVMRuntime *isolate, int fd, const char *request_headers) {
     // Thin wrapper preserving the legacy "no Origin / no subprotocol"
     // behaviour; new callers should use xr_ws_upgrade_ex directly.
     return xr_ws_upgrade_ex(isolate, fd, request_headers, NULL);

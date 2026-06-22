@@ -87,7 +87,7 @@ typedef struct XdapController {
     XdapTransport *transport;
 
     // VM target
-    XrayIsolate *isolate;
+    XrVMRuntime *isolate;
     char *program_path;
     char **program_args;
     int arg_count;

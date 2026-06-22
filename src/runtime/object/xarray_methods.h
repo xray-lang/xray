@@ -24,8 +24,8 @@ extern "C" {
 
 /* Register Array methods on an XrClass via native_type_classes[XR_TARRAY].
  * Called once during isolate init. */
-struct XrayIsolate;
-XR_FUNC void xr_array_register_native_type(struct XrayIsolate *isolate);
+struct XrVMRuntime;
+XR_FUNC void xr_array_register_native_type(struct XrVMRuntime *isolate);
 
 #ifdef __cplusplus
 }

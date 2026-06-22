@@ -30,7 +30,7 @@
 
 struct AstNode;
 struct XaAnalyzer;
-struct XrayIsolate;
+struct XrVMRuntime;
 struct XrProto;
 
 /* ========== Pipeline Status ========== */
@@ -110,20 +110,20 @@ XR_FUNC XiPipelineConfig xi_pipeline_aot_config(void);
  * Returns pipeline result; caller must call xi_pipeline_result_free. */
 XR_FUNC XiPipelineResult xi_pipeline_compile_func(struct AstNode *func_node,
                                                   struct XaAnalyzer *analyzer,
-                                                  struct XrayIsolate *isolate,
+                                                  struct XrVMRuntime *isolate,
                                                   const XiPipelineConfig *cfg);
 
 /* Compile a top-level program AST through the full pipeline. */
 XR_FUNC XiPipelineResult xi_pipeline_compile_program(struct AstNode *program_node,
                                                      struct XaAnalyzer *analyzer,
-                                                     struct XrayIsolate *isolate,
+                                                     struct XrVMRuntime *isolate,
                                                      const XiPipelineConfig *cfg);
 
 /* Emit bytecode from a pre-lowered XiFunc* (for split compilation).
  * The IR must have been lowered and optimized (via compile_program with
  * run_emit=false, or the AOT pipeline).  Returns XrProto on success, NULL
  * on emission failure.  Attaches the IR to the proto for AOT reuse. */
-XR_FUNC struct XrProto *xi_pipeline_emit_ir(XiFunc *ir, struct XrayIsolate *isolate);
+XR_FUNC struct XrProto *xi_pipeline_emit_ir(XiFunc *ir, struct XrVMRuntime *isolate);
 
 /* Free pipeline result (frees IR, does NOT free proto). */
 XR_FUNC void xi_pipeline_result_free(XiPipelineResult *res);

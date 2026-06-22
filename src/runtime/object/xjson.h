@@ -57,21 +57,21 @@ XR_FUNC size_t xr_json_size(XrClass *cls);
 
 /* ========== Field Access API ========== */
 
-XR_FUNC XrValue xr_json_get(XrayIsolate *X, XrJson *json, SymbolId symbol);
-XR_FUNC bool xr_json_set(XrayIsolate *X, XrJson *json, SymbolId symbol, XrValue value);
-XR_FUNC XrValue xr_json_get_by_key(XrayIsolate *X, XrJson *json, const char *key);
-XR_FUNC bool xr_json_set_by_key(XrayIsolate *X, XrJson *json, const char *key, XrValue value);
+XR_FUNC XrValue xr_json_get(XrVMRuntime *X, XrJson *json, SymbolId symbol);
+XR_FUNC bool xr_json_set(XrVMRuntime *X, XrJson *json, SymbolId symbol, XrValue value);
+XR_FUNC XrValue xr_json_get_by_key(XrVMRuntime *X, XrJson *json, const char *key);
+XR_FUNC bool xr_json_set_by_key(XrVMRuntime *X, XrJson *json, const char *key, XrValue value);
 
 /* ========== Query API ========== */
 
-static inline uint16_t xr_json_field_count(XrayIsolate *X, XrJson *json) {
+static inline uint16_t xr_json_field_count(XrVMRuntime *X, XrJson *json) {
     (void) X;
     if (!json || !json->klass)
         return 0;
     return json->klass->field_count;
 }
 
-static inline bool xr_json_has_field(XrayIsolate *X, XrJson *json, SymbolId symbol) {
+static inline bool xr_json_has_field(XrVMRuntime *X, XrJson *json, SymbolId symbol) {
     (void) X;
     if (!json || !json->klass)
         return false;

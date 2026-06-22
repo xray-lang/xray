@@ -76,15 +76,15 @@ typedef struct XrPreludeSymbols {
  * `import prelude` works as a no-op alias; auto-invoked from
  * xisolate_full.c::isolate_init_full() so users do not need it.
  */
-XR_FUNC struct XrModule *xr_load_module_prelude(XrayIsolate *isolate);
+XR_FUNC struct XrModule *xr_load_module_prelude(XrVMRuntime *isolate);
 
 /*
  * Accessor used by the frontend (parser type-context branch) to retrieve
  * the table without depending on stdlib internals. Returns NULL when the
  * isolate has not loaded the prelude (e.g. minimal-runtime isolates that
- * skipped xray_isolate_setup_full).
+ * skipped full VM setup).
  */
-XR_FUNC const XrPreludeSymbols *xr_prelude_get_symbols(XrayIsolate *isolate);
+XR_FUNC const XrPreludeSymbols *xr_prelude_get_symbols(XrVMRuntime *isolate);
 
 /*
  * Lookup a name (length-bounded, not NUL-terminated) in the prelude
@@ -110,6 +110,6 @@ XR_FUNC const XrPreludeTypeEntry *xr_prelude_lookup_type(const XrPreludeSymbols 
  * call. Each stdlib module exports a `xr_<type>_register_native_type`
  * function that this routine forwards to.
  */
-XR_FUNC void xr_prelude_register_all_native_types(XrayIsolate *isolate);
+XR_FUNC void xr_prelude_register_all_native_types(XrVMRuntime *isolate);
 
 #endif  // XR_STDLIB_PRELUDE_H

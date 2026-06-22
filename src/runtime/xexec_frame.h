@@ -87,12 +87,12 @@ typedef enum {
 #endif
 
 #ifndef XR_CFUNCTION_PTR_DEFINED
-typedef XrValue (*XrCFunctionPtr)(XrayIsolate *isolate, XrValue *args, int nargs);
+typedef XrValue (*XrCFunctionPtr)(XrVMRuntime *isolate, XrValue *args, int nargs);
 #define XR_CFUNCTION_PTR_DEFINED
 #endif
 
 #ifndef XR_YIELDABLE_CFUNCTION_PTR_DEFINED
-typedef XrCFuncResult (*XrYieldableCFunctionPtr)(XrayIsolate *isolate, XrValue *args, int nargs,
+typedef XrCFuncResult (*XrYieldableCFunctionPtr)(XrVMRuntime *isolate, XrValue *args, int nargs,
                                                  XrValue *result);
 #define XR_YIELDABLE_CFUNCTION_PTR_DEFINED
 #endif  // C function scheduling classification
@@ -148,7 +148,7 @@ typedef struct XrVMContext {
     bool preempt_pending;        // yield at next safe point
     int last_nret;               // return value count from last call
     bool trace_execution;        // debug: trace opcodes
-    XrayIsolate *isolate;        // parent isolate
+    XrVMRuntime *isolate;        // parent isolate
 
     // Per-frame struct storage (lazy-allocated, grows with frame depth)
     uint8_t **struct_areas;      // struct data pointers per frame

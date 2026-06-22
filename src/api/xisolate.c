@@ -8,7 +8,7 @@
  * xisolate.c - Core Isolate lifecycle (new/delete)
  *
  * KEY CONCEPT:
- *   xray_isolate_new() creates a minimal bytecode VM runtime.
+ *   xray_vm_new() creates a minimal bytecode VM runtime.
  *   Heavy variants use explicit constructors in separate translation units so
  *   bytecode-only embedders do not pull in compiler/frontend code.
  *
@@ -19,11 +19,11 @@
  *   in their own files and let them install a private cleanup hook.
  *
  * RELATED MODULES:
- *   - xray_isolate_full.c: explicit full VM constructor
- *   - xray_isolate_runtime.c: explicit runtime-ABI VM constructor
- *   - xray_isolate_tls.c: g_current_isolate + enter/exit
- *   - xray_isolate_params.c: params_init
- *   - xray_isolate_scripting.c: dostring/dofile (compiler-dependent)
+ *   - xisolate_full.c: explicit full VM constructor
+ *   - xisolate_runtime.c: explicit runtime-ABI VM constructor
+ *   - xisolate_tls.c: g_current_isolate + enter/exit
+ *   - xisolate_params.c: config_init
+ *   - xisolate_scripting.c: dostring/dofile (compiler-dependent)
  */
 
 #include "../base/xlog.h"
@@ -64,19 +64,19 @@ static uint64_t isolate_teardown_elapsed_ms(uint64_t start_ns) {
 
 /* ========== Isolate Creation ========== */
 
-XrayIsolate *xray_isolate_new(const XrayIsolateParams *params) {
-    XrayIsolate *isolate = (XrayIsolate *) xr_malloc(sizeof(XrayIsolate));
+XrVMRuntime *xray_vm_new(const XrVMConfig *params) {
+    XrVMRuntime *isolate = (XrVMRuntime *) xr_malloc(sizeof(XrVMRuntime));
     if (!isolate) {
         xr_log_warning("isolate", "failed to allocate isolate");
         return NULL;
     }
-    memset(isolate, 0, sizeof(XrayIsolate));
+    memset(isolate, 0, sizeof(XrVMRuntime));
 
     if (params) {
         isolate->params = *params;
     } else {
         // Minimal init — no full-runtime callbacks unless caller sets them
-        xray_isolate_params_init(&isolate->params);
+        xray_vm_config_init(&isolate->params);
     }
     XrRuntimeCoreConfig core_cfg = {
         .owner_isolate = isolate,
@@ -113,7 +113,7 @@ XrayIsolate *xray_isolate_new(const XrayIsolateParams *params) {
         goto fail_after_vm;
 #endif
 
-    xray_isolate_enter(isolate);
+    xray_vm_enter(isolate);
     return isolate;
 
 fail_after_vm:
@@ -128,7 +128,7 @@ fail:
 
 /* ========== Isolate Deletion ========== */
 
-void xray_isolate_delete(XrayIsolate *isolate) {
+void xray_vm_delete(XrVMRuntime *isolate) {
     if (!isolate)
         return;
 
@@ -169,13 +169,13 @@ void xray_isolate_delete(XrayIsolate *isolate) {
      * after all isolate GC roots have released their XrValue references. */
     stage_start_ns = xr_time_monotonic_ns();
     if (isolate->vm.scheduler) {
-        xr_multicore_destroy(isolate);
+        xray_vm_multicore_destroy(isolate);
     }
     runtime_ms = isolate_teardown_elapsed_ms(stage_start_ns);
 
     stage_start_ns = xr_time_monotonic_ns();
     if (g_current_isolate == isolate) {
-        xray_isolate_exit();
+        xray_vm_exit();
     }
     tls_exit_ms = isolate_teardown_elapsed_ms(stage_start_ns);
 
@@ -284,26 +284,26 @@ void xray_isolate_delete(XrayIsolate *isolate) {
 
 /* ========== Advanced API ========== */
 
-XrayBackendType xray_isolate_get_backend(XrayIsolate *isolate) {
-    xray_api_checkr(isolate != NULL, "xray_isolate_get_backend: NULL isolate", 0);
+XrVMBackendType xray_vm_get_backend(XrVMRuntime *isolate) {
+    xray_api_checkr(isolate != NULL, "xray_vm_get_backend: NULL isolate", 0);
     return isolate->params.backend_type;
 }
 
-void xray_isolate_set_userdata(XrayIsolate *isolate, void *userdata) {
-    xray_api_check(isolate != NULL, "xray_isolate_set_userdata: NULL isolate");
+void xray_vm_set_userdata(XrVMRuntime *isolate, void *userdata) {
+    xray_api_check(isolate != NULL, "xray_vm_set_userdata: NULL isolate");
     if (isolate->core_rt)
         isolate->core_rt->userdata = userdata;
 }
 
-void *xray_isolate_get_userdata(XrayIsolate *isolate) {
-    xray_api_checkr(isolate != NULL, "xray_isolate_get_userdata: NULL isolate", NULL);
+void *xray_vm_get_userdata(XrVMRuntime *isolate) {
+    xray_api_checkr(isolate != NULL, "xray_vm_get_userdata: NULL isolate", NULL);
     return isolate->core_rt ? isolate->core_rt->userdata : NULL;
 }
 
 /* ========== Statistics and Debugging ========== */
 
-void xray_isolate_get_stats(XrayIsolate *isolate, size_t *bytes_allocated, int *cycle_count) {
-    xray_api_check(isolate != NULL, "xray_isolate_get_stats: NULL isolate");
+void xray_vm_get_stats(XrVMRuntime *isolate, size_t *bytes_allocated, int *cycle_count) {
+    xray_api_check(isolate != NULL, "xray_vm_get_stats: NULL isolate");
     if (bytes_allocated)
         *bytes_allocated =
             isolate->core_rt ? (size_t) isolate->core_rt->fixed_heap.totalbytes : (size_t) 0;
@@ -313,20 +313,20 @@ void xray_isolate_get_stats(XrayIsolate *isolate, size_t *bytes_allocated, int *
     }
 }
 
-void xray_isolate_collect_garbage(XrayIsolate *isolate) {
-    xray_api_check(isolate != NULL, "xray_isolate_collect_garbage: NULL isolate");
+void xray_vm_collect_cycles(XrVMRuntime *isolate) {
+    xray_api_check(isolate != NULL, "xray_vm_collect_cycles: NULL isolate");
     XrCoroHeap *heap = xr_isolate_get_heap(isolate);
     if (heap)
         xr_coro_heap_collect_cycles(heap);
 }
 
-void xray_isolate_set_trace(XrayIsolate *isolate, bool enable) {
-    xray_api_check(isolate != NULL, "xray_isolate_set_trace: NULL isolate");
+void xray_vm_set_trace(XrVMRuntime *isolate, bool enable) {
+    xray_api_check(isolate != NULL, "xray_vm_set_trace: NULL isolate");
     isolate->params.trace_execution = enable;
     isolate->vm.trace_execution = enable;
 }
 
-void xray_isolate_set_dump_bytecode(XrayIsolate *isolate, bool enable) {
-    xray_api_check(isolate != NULL, "xray_isolate_set_dump_bytecode: NULL isolate");
+void xray_vm_set_dump_bytecode(XrVMRuntime *isolate, bool enable) {
+    xray_api_check(isolate != NULL, "xray_vm_set_dump_bytecode: NULL isolate");
     isolate->params.dump_bytecode = enable;
 }

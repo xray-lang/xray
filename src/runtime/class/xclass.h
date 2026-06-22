@@ -57,7 +57,7 @@ typedef struct XrNativeBodyDesc {
     void (*init)(XrInstance *inst, void *body);
     void (*destroy)(void *body);
     bool (*deep_copy)(XrCopyContext *ctx, XrInstance *src, XrInstance *dst);
-    bool (*to_shared)(XrayIsolate *X, XrInstance *src, XrInstance *dst);
+    bool (*to_shared)(XrVMRuntime *X, XrInstance *src, XrInstance *dst);
 } XrNativeBodyDesc;
 
 /* ========== Field Access Kind ========== */
@@ -348,7 +348,7 @@ XR_FUNC const XrFieldDescriptor *xr_class_get_field(const XrClass *cls, int inde
 // Lookup field index by name, returns -1 if not found.
 // Name is resolved via the isolate's symbol table, so the lookup is
 // O(1) whenever the name has been interned. `X` is required.
-XR_FUNC int xr_class_lookup_field_by_name(XrayIsolate *X, XrClass *cls, const char *name);
+XR_FUNC int xr_class_lookup_field_by_name(XrVMRuntime *X, XrClass *cls, const char *name);
 
 // Lookup field index by symbol, returns -1 if not found
 XR_FUNC int xr_class_lookup_field(XrClass *cls, int symbol);
@@ -376,17 +376,17 @@ XR_FUNC XrMethod *xr_class_lookup_method(XrClass *cls, int symbol);
 // this is a thin wrapper over XrClassBuilder; the returned object is
 // already finalised and immutable. Use the builder directly when members
 // need to be installed.
-XR_FUNC XrClass *xr_class_new(XrayIsolate *X, const char *name, XrClass *super);
+XR_FUNC XrClass *xr_class_new(XrVMRuntime *X, const char *name, XrClass *super);
 XR_FUNC void xr_class_mark_abstract(XrClass *cls);
 
 // Create a dynamic-layout root class: zero declared fields, ready to accept
 // hidden-class transitions via xr_class_transition_get_or_create. If sealed
 // is true, transitions are rejected (used for sealed Json types).
-XR_FUNC XrClass *xr_class_new_dynamic_root(XrayIsolate *X, const char *name, uint16_t capacity,
+XR_FUNC XrClass *xr_class_new_dynamic_root(XrVMRuntime *X, const char *name, uint16_t capacity,
                                            bool sealed);
 
 // Get class for any value (instance, class, or primitive)
-XR_FUNC XrClass *xr_value_get_class(XrayIsolate *X, XrValue value);
+XR_FUNC XrClass *xr_value_get_class(XrVMRuntime *X, XrValue value);
 
 /* ========== Access Control ========== */
 
@@ -467,7 +467,7 @@ XR_FUNC void xr_class_print(XrClass *cls);
 
 /* ========== Interface Support ========== */
 
-XR_FUNC XrClass *xr_interface_new(XrayIsolate *X, const char *name);
+XR_FUNC XrClass *xr_interface_new(XrVMRuntime *X, const char *name);
 
 // Pointer-identity interface check that walks cls's inheritance chain
 // and scans cls->interfaces[] for `iface`. No string compares -- every

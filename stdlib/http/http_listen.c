@@ -49,9 +49,9 @@
 
 /* ========== External Declarations ========== */
 
-extern struct XrCoroutine *xr_current_coro(XrayIsolate *X);
+extern struct XrCoroutine *xr_current_coro(XrVMRuntime *X);
 extern XrValue xr_string_value(XrString *str);
-extern XrString *xr_string_intern(XrayIsolate *X, const char *str, size_t len, uint32_t hash);
+extern XrString *xr_string_intern(XrVMRuntime *X, const char *str, size_t len, uint32_t hash);
 
 /* ========== Pre-built Error Responses ========== */
 
@@ -130,13 +130,13 @@ static const char hdr_conn_ka[] = HDR_CONN_KA;
 
 /* ========== Helper Functions ========== */
 
-static XrValue make_string_val(XrayIsolate *X, const char *s, size_t len) {
+static XrValue make_string_val(XrVMRuntime *X, const char *s, size_t len) {
     if (!s || len == 0)
         return xr_null();
     return xr_string_value(xr_string_intern(X, s, len, 0));
 }
 
-static XrValue make_cstring_val(XrayIsolate *X, const char *s) {
+static XrValue make_cstring_val(XrVMRuntime *X, const char *s) {
     if (!s)
         return xr_null();
     return make_string_val(X, s, strlen(s));
@@ -324,7 +324,7 @@ static HttpRawResponse format_response_arena(XrArena *arena, int status, const c
 }
 
 // GC-based format_response for module API (http.response)
-static XrValue format_response(XrayIsolate *X, int status, const char *content_type,
+static XrValue format_response(XrVMRuntime *X, int status, const char *content_type,
                                const char *body, size_t body_len) {
     HttpRawResponse raw = format_response_raw(status, content_type, body, body_len);
     if (!raw.data)
@@ -339,7 +339,7 @@ static XrValue format_response(XrayIsolate *X, int status, const char *content_t
  * C equivalent of http.xr _processResult().
  * Returns malloc'd buffer — caller must free.
  */
-static HttpRawResponse process_handler_result_raw(XrayIsolate *X, XrValue result) {
+static HttpRawResponse process_handler_result_raw(XrVMRuntime *X, XrValue result) {
     // null -> 204 No Content
     if (XR_IS_NULL(result)) {
         return format_response_raw(204, NULL, "", 0);
@@ -449,23 +449,23 @@ static HttpRawResponse process_handler_result_raw(XrayIsolate *X, XrValue result
  * ====================================================================== */
 
 // Forward declarations
-static XrCFuncResult http_conn_loop(XrayIsolate *X, int status, XrValue resume_value, void *ctx,
+static XrCFuncResult http_conn_loop(XrVMRuntime *X, int status, XrValue resume_value, void *ctx,
                                     XrValue *result);
-static XrCFuncResult http_conn_read_request(XrayIsolate *X, int status, XrValue resume_value,
+static XrCFuncResult http_conn_read_request(XrVMRuntime *X, int status, XrValue resume_value,
                                             void *ctx, XrValue *result);
-static XrCFuncResult http_conn_write_cont(XrayIsolate *X, int status, XrValue resume_value,
+static XrCFuncResult http_conn_write_cont(XrVMRuntime *X, int status, XrValue resume_value,
                                           void *ctx, XrValue *result);
-static XrCFuncResult http_conn_handler_done(XrayIsolate *X, int status, XrValue resume_value,
+static XrCFuncResult http_conn_handler_done(XrVMRuntime *X, int status, XrValue resume_value,
                                             void *ctx, XrValue *result);
-static XrCFuncResult http_conn_ws_handler_done(XrayIsolate *X, int status, XrValue resume_value,
+static XrCFuncResult http_conn_ws_handler_done(XrVMRuntime *X, int status, XrValue resume_value,
                                                void *ctx, XrValue *result);
-static XrCFuncResult http_conn_read_body(XrayIsolate *X, int status, XrValue resume_value,
+static XrCFuncResult http_conn_read_body(XrVMRuntime *X, int status, XrValue resume_value,
                                          void *ctx, XrValue *result);
-static XrCFuncResult http_conn_read_chunked(XrayIsolate *X, int status, XrValue resume_value,
+static XrCFuncResult http_conn_read_chunked(XrVMRuntime *X, int status, XrValue resume_value,
                                             void *ctx, XrValue *result);
-static XrCFuncResult http_conn_read_large_body(XrayIsolate *X, int status, XrValue resume_value,
+static XrCFuncResult http_conn_read_large_body(XrVMRuntime *X, int status, XrValue resume_value,
                                                void *ctx, XrValue *result);
-static XrCFuncResult http_listen_cont(XrayIsolate *X, int status, XrValue resume_value, void *ctx,
+static XrCFuncResult http_listen_cont(XrVMRuntime *X, int status, XrValue resume_value, void *ctx,
                                       XrValue *result);
 
 /*
@@ -473,7 +473,7 @@ static XrCFuncResult http_listen_cont(XrayIsolate *X, int status, XrValue resume
  * Replaces stack-local variables from the old stackful handler.
  */
 typedef struct HttpConnCtx {
-    XrayIsolate *X;
+    XrVMRuntime *X;
     int fd;
     XrRouter *router;
     XrHttpContext *http_ctx;
@@ -557,7 +557,7 @@ static XrCFuncResult http_conn_cleanup(HttpConnCtx *ctx) {
 }
 
 /* XrContinuation-shaped wrapper for use as a write_done_cont. */
-static XrCFuncResult http_conn_cleanup_cont(XrayIsolate *X, int status, XrValue resume_value,
+static XrCFuncResult http_conn_cleanup_cont(XrVMRuntime *X, int status, XrValue resume_value,
                                             void *user_ctx, XrValue *result) {
     (void) X;
     (void) status;
@@ -569,7 +569,7 @@ static XrCFuncResult http_conn_cleanup_cont(XrayIsolate *X, int status, XrValue 
  * Generic async write helper. Writes ctx->write_ptr / write_remaining,
  * yields for EAGAIN, then calls ctx->write_done_cont when complete.
  */
-static XrCFuncResult http_conn_write_cont(XrayIsolate *X, int status, XrValue resume_value,
+static XrCFuncResult http_conn_write_cont(XrVMRuntime *X, int status, XrValue resume_value,
                                           void *user_ctx, XrValue *result) {
     HttpConnCtx *ctx = (HttpConnCtx *) user_ctx;
     if (status != XR_RESUME_IO_READY)
@@ -595,7 +595,7 @@ static XrCFuncResult http_conn_write_cont(XrayIsolate *X, int status, XrValue re
 }
 
 // Start an async write, calling done_cont when finished
-static XrCFuncResult http_conn_start_write(XrayIsolate *X, HttpConnCtx *ctx, const char *data,
+static XrCFuncResult http_conn_start_write(XrVMRuntime *X, HttpConnCtx *ctx, const char *data,
                                            size_t len, XrContinuation done_cont, XrValue *result) {
     ctx->write_ptr = data;
     ctx->write_remaining = len;
@@ -608,7 +608,7 @@ static XrCFuncResult http_conn_start_write(XrayIsolate *X, HttpConnCtx *ctx, con
  * Parses request, reads body if needed, then calls handler closure.
  * May yield for body read or closure execution.
  */
-static XrCFuncResult handle_dynamic_route(XrayIsolate *X, HttpConnCtx *ctx, XrValue *result) {
+static XrCFuncResult handle_dynamic_route(XrVMRuntime *X, HttpConnCtx *ctx, XrValue *result) {
     const char *method_str = NULL, *path_str = NULL;
     size_t method_len = 0, path_len = 0;
     int minor_ver = 1;
@@ -897,7 +897,7 @@ static XrCFuncResult handle_dynamic_route(XrayIsolate *X, HttpConnCtx *ctx, XrVa
 /*
  * Continuation: read content-length body into read_buf.
  */
-static XrCFuncResult http_conn_read_body(XrayIsolate *X, int status, XrValue resume_value,
+static XrCFuncResult http_conn_read_body(XrVMRuntime *X, int status, XrValue resume_value,
                                          void *user_ctx, XrValue *result) {
     HttpConnCtx *ctx = (HttpConnCtx *) user_ctx;
     if (status != XR_RESUME_IO_READY)
@@ -932,7 +932,7 @@ static XrCFuncResult http_conn_read_body(XrayIsolate *X, int status, XrValue res
 /*
  * Continuation: read chunked transfer-encoded body.
  */
-static XrCFuncResult http_conn_read_chunked(XrayIsolate *X, int status, XrValue resume_value,
+static XrCFuncResult http_conn_read_chunked(XrVMRuntime *X, int status, XrValue resume_value,
                                             void *user_ctx, XrValue *result) {
     HttpConnCtx *ctx = (HttpConnCtx *) user_ctx;
     if (status != XR_RESUME_IO_READY)
@@ -992,7 +992,7 @@ chunk_error:
 /*
  * Continuation: read large body (> read_buf size) into arena buffer.
  */
-static XrCFuncResult http_conn_read_large_body(XrayIsolate *X, int status, XrValue resume_value,
+static XrCFuncResult http_conn_read_large_body(XrVMRuntime *X, int status, XrValue resume_value,
                                                void *user_ctx, XrValue *result) {
     HttpConnCtx *ctx = (HttpConnCtx *) user_ctx;
     if (status != XR_RESUME_IO_READY)
@@ -1026,7 +1026,7 @@ static XrCFuncResult http_conn_read_large_body(XrayIsolate *X, int status, XrVal
  * Continuation: called when user handler closure returns.
  * Process result and write HTTP response.
  */
-static XrCFuncResult http_conn_handler_done(XrayIsolate *X, int status, XrValue resume_value,
+static XrCFuncResult http_conn_handler_done(XrVMRuntime *X, int status, XrValue resume_value,
                                             void *user_ctx, XrValue *result) {
     HttpConnCtx *ctx = (HttpConnCtx *) user_ctx;
     xr_free(ctx->response_data);
@@ -1068,7 +1068,7 @@ static XrCFuncResult http_conn_handler_done(XrayIsolate *X, int status, XrValue 
  * Continuation: called when WS handler closure returns.
  * Connection lifecycle is over — cleanup.
  */
-static XrCFuncResult http_conn_ws_handler_done(XrayIsolate *X, int status, XrValue resume_value,
+static XrCFuncResult http_conn_ws_handler_done(XrVMRuntime *X, int status, XrValue resume_value,
                                                void *user_ctx, XrValue *result) {
     (void) X;
     (void) status;
@@ -1097,7 +1097,7 @@ static int find_request_end(const char *buf, int len, int scan_from) {
  * Connection entry — cfunc coroutine entry point.
  * args[0] = client fd (int), args[1] = XrHttpContext* (ptr).
  */
-static XrCFuncResult http_conn_init(XrayIsolate *X, XrValue *args, int argc, XrValue *result) {
+static XrCFuncResult http_conn_init(XrVMRuntime *X, XrValue *args, int argc, XrValue *result) {
     (void) result;
     if (argc < 2 || !XR_IS_INT(args[0]))
         return XR_CFUNC_DONE;
@@ -1140,7 +1140,7 @@ static XrCFuncResult http_conn_init(XrayIsolate *X, XrValue *args, int argc, XrV
  * Reads headers, dispatches to prebuilt or dynamic route.
  * Called after: init, write complete (keep-alive), batch yield.
  */
-static XrCFuncResult http_conn_loop(XrayIsolate *X, int status, XrValue resume_value,
+static XrCFuncResult http_conn_loop(XrVMRuntime *X, int status, XrValue resume_value,
                                     void *user_ctx, XrValue *result) {
     HttpConnCtx *ctx = (HttpConnCtx *) user_ctx;
     if (status != XR_RESUME_IO_READY && status != XR_RESUME_OK)
@@ -1176,7 +1176,7 @@ static XrCFuncResult http_conn_loop(XrayIsolate *X, int status, XrValue resume_v
     return http_conn_read_request(X, XR_RESUME_IO_READY, xr_null(), ctx, result);
 }
 
-static XrCFuncResult http_conn_read_request(XrayIsolate *X, int status, XrValue resume_value,
+static XrCFuncResult http_conn_read_request(XrVMRuntime *X, int status, XrValue resume_value,
                                             void *user_ctx, XrValue *result) {
     HttpConnCtx *ctx = (HttpConnCtx *) user_ctx;
     if (status != XR_RESUME_IO_READY && status != XR_RESUME_OK)
@@ -1238,7 +1238,7 @@ dispatch:
  * ====================================================================== */
 
 typedef struct {
-    XrayIsolate *X;
+    XrVMRuntime *X;
     int listen_fd;
     XrHttpContext *ctx;
 } HttpListenCtx;
@@ -1247,7 +1247,7 @@ typedef struct {
  * HTTP listen entry — cfunc coroutine entry point.
  * args[0] = listen fd (int), args[1] = XrHttpContext* (ptr).
  */
-static XrCFuncResult http_listen_init(XrayIsolate *X, XrValue *args, int argc, XrValue *result) {
+static XrCFuncResult http_listen_init(XrVMRuntime *X, XrValue *args, int argc, XrValue *result) {
     (void) result;
     if (argc < 2 || !XR_IS_INT(args[0]))
         return XR_CFUNC_DONE;
@@ -1267,7 +1267,7 @@ static XrCFuncResult http_listen_init(XrayIsolate *X, XrValue *args, int argc, X
  * Accept loop continuation — accepts connections,
  * spawns cfunc conn coroutine per client, then yields for next batch.
  */
-static XrCFuncResult http_listen_cont(XrayIsolate *X, int status, XrValue resume_value,
+static XrCFuncResult http_listen_cont(XrVMRuntime *X, int status, XrValue resume_value,
                                       void *user_ctx, XrValue *result) {
     HttpListenCtx *lctx = (HttpListenCtx *) user_ctx;
     XrHttpContext *ctx = lctx->ctx;
@@ -1335,7 +1335,7 @@ static XrCFuncResult http_listen_cont(XrayIsolate *X, int status, XrValue resume
 
 /* Continuation: keep caller coroutine blocked while server is running.
  * Polls every second — acceptable for a server lifetime check. */
-static XrCFuncResult http_listen_wait_cont(XrayIsolate *X, int status, XrValue resume_value,
+static XrCFuncResult http_listen_wait_cont(XrVMRuntime *X, int status, XrValue resume_value,
                                            void *ctx, XrValue *result) {
     (void) status;
     XrHttpContext *hctx = (XrHttpContext *) ctx;
@@ -1348,7 +1348,7 @@ static XrCFuncResult http_listen_wait_cont(XrayIsolate *X, int status, XrValue r
 }
 
 // http.listen(port) -> bool (yieldable)
-XrCFuncResult xr_http_listen_impl(XrayIsolate *X, XrValue *args, int nargs, XrValue *result) {
+XrCFuncResult xr_http_listen_impl(XrVMRuntime *X, XrValue *args, int nargs, XrValue *result) {
     if (nargs < 1 || !XR_IS_INT(args[0])) {
         *result = xr_bool(false);
         return XR_CFUNC_DONE;
@@ -1408,7 +1408,7 @@ XrCFuncResult xr_http_listen_impl(XrayIsolate *X, XrValue *args, int nargs, XrVa
  * ====================================================================== */
 
 // http.config(opts) -> void
-XrValue xr_http_config_impl(XrayIsolate *X, XrValue *args, int argc) {
+XrValue xr_http_config_impl(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1)
         return xr_null();
 
@@ -1442,7 +1442,7 @@ XrValue xr_http_config_impl(XrayIsolate *X, XrValue *args, int argc) {
 }
 
 // http.serverStats() -> Json { currentConns, totalRequests, totalConns }
-XrValue xr_http_server_stats(XrayIsolate *X, XrValue *args, int argc) {
+XrValue xr_http_server_stats(XrVMRuntime *X, XrValue *args, int argc) {
     (void) args;
     (void) argc;
     XrHttpContext *ctx = xr_http_get_context(X);
@@ -1459,7 +1459,7 @@ XrValue xr_http_server_stats(XrayIsolate *X, XrValue *args, int argc) {
 }
 
 // http.response(status, body?, headers?) -> string
-XrValue xr_http_response_impl(XrayIsolate *X, XrValue *args, int argc) {
+XrValue xr_http_response_impl(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1)
         return xr_null();
 

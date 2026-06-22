@@ -41,7 +41,7 @@
 
 // xr_vm_execute_module declared in vm/xvm.h (included via xisolate_internal.h → xvm_state.h → ...)
 
-void xr_module_set_compiler_hooks(XrayIsolate *isolate, XrCompilerSession *compiler_session,
+void xr_module_set_compiler_hooks(XrVMRuntime *isolate, XrCompilerSession *compiler_session,
                                   XrModuleParseHook parse_fn, XrModuleCompileAstHook compile_ast_fn,
                                   XrModuleCompileSourceHook compile_src_fn,
                                   XrModuleAstFreeHook ast_free_fn) {
@@ -165,7 +165,7 @@ static void module_init_exports(XrModule *module) {
 /*
 ** Create Native module
 */
-XrModule *xr_module_create_native(XrayIsolate *isolate, const char *name) {
+XrModule *xr_module_create_native(XrVMRuntime *isolate, const char *name) {
     XR_DCHECK(isolate != NULL, "module_create_native: NULL isolate");
     XR_DCHECK(name != NULL, "module_create_native: NULL name");
     XrModule *module = (XrModule *) xr_fixed_heap_alloc(xr_isolate_get_fixed_heap(isolate),
@@ -190,7 +190,7 @@ XrModule *xr_module_create_native(XrayIsolate *isolate, const char *name) {
 /*
 ** Create Script module
 */
-XrModule *xr_module_create_script(XrayIsolate *isolate, const char *name, const char *path) {
+XrModule *xr_module_create_script(XrVMRuntime *isolate, const char *name, const char *path) {
     XR_DCHECK(isolate != NULL, "module_create_script: NULL isolate");
     XR_DCHECK(name != NULL, "module_create_script: NULL name");
     XrModule *module = (XrModule *) xr_fixed_heap_alloc(xr_isolate_get_fixed_heap(isolate),
@@ -215,7 +215,7 @@ XrModule *xr_module_create_script(XrayIsolate *isolate, const char *name, const 
 /*
 ** Add export by SymbolId (core function)
 */
-void xr_module_add_export_sym(XrayIsolate *isolate, XrModule *module, SymbolId sym, XrValue value,
+void xr_module_add_export_sym(XrVMRuntime *isolate, XrModule *module, SymbolId sym, XrValue value,
                               bool is_const) {
     (void) isolate;
     if (!module)
@@ -261,7 +261,7 @@ void xr_module_add_export_sym(XrayIsolate *isolate, XrModule *module, SymbolId s
 ** Add module export (string-based convenience wrapper)
 ** Resolves name to SymbolId internally — stdlib modules use this unchanged
 */
-void xr_module_add_export(XrayIsolate *isolate, XrModule *module, const char *name, XrValue value) {
+void xr_module_add_export(XrVMRuntime *isolate, XrModule *module, const char *name, XrValue value) {
     if (!isolate || !module || !name)
         return;
 
@@ -273,7 +273,7 @@ void xr_module_add_export(XrayIsolate *isolate, XrModule *module, const char *na
 /*
 ** Get module export (string-based)
 */
-XrValue xr_module_get_export(XrayIsolate *isolate, XrModule *module, const char *name) {
+XrValue xr_module_get_export(XrVMRuntime *isolate, XrModule *module, const char *name) {
     if (!isolate || !module || !name)
         return xr_null();
 
@@ -416,7 +416,7 @@ static void destroy_registry(XrModuleRegistry *registry) {
 /*
 ** Initialize module system
 */
-void xr_module_system_init(XrayIsolate *isolate) {
+void xr_module_system_init(XrVMRuntime *isolate) {
     if (!isolate)
         return;
 
@@ -436,7 +436,7 @@ void xr_module_system_init(XrayIsolate *isolate) {
 ** Initialize module system (with script path)
 ** Load project config (if xray.toml exists)
 */
-void xr_module_system_init_with_script(XrayIsolate *isolate, const char *script_path) {
+void xr_module_system_init_with_script(XrVMRuntime *isolate, const char *script_path) {
     if (!isolate)
         return;
 
@@ -464,7 +464,7 @@ void xr_module_system_init_with_script(XrayIsolate *isolate, const char *script_
 /*
 ** Free module system
 */
-void xr_module_system_free(XrayIsolate *isolate) {
+void xr_module_system_free(XrVMRuntime *isolate) {
     if (!isolate || !xr_isolate_get_module_registry(isolate))
         return;
 
@@ -477,7 +477,7 @@ void xr_module_system_free(XrayIsolate *isolate) {
 /*
 ** Register Native module loader
 */
-void xr_module_register_native(XrayIsolate *isolate, const char *name, NativeModuleLoader loader) {
+void xr_module_register_native(XrVMRuntime *isolate, const char *name, NativeModuleLoader loader) {
     if (!isolate || !name || !loader) {
         xr_log_warning("module", "invalid arguments to register_native");
         return;
@@ -524,7 +524,7 @@ XR_FUNC XrModuleResolver *xr_module_registry_get_resolver(XrModuleRegistry *regi
  * Get the importer path from the isolate (current module path, or
  * entry script path). Returns NULL if neither is available.
  */
-static const char *get_importer_path(XrayIsolate *isolate) {
+static const char *get_importer_path(XrVMRuntime *isolate) {
     XrModule *cur = xr_isolate_get_current_module(isolate);
     if (cur && cur->path)
         return cur->path;
@@ -537,7 +537,7 @@ static const char *get_importer_path(XrayIsolate *isolate) {
 ** Delegates to XrModuleResolver for script path resolution.
 ** Returns xr_malloc'd absolute path or NULL.
 */
-char *xr_module_resolve_path(XrayIsolate *isolate, const char *module_name) {
+char *xr_module_resolve_path(XrVMRuntime *isolate, const char *module_name) {
     if (!module_name || !isolate)
         return NULL;
 
@@ -625,7 +625,7 @@ ModuleType xr_module_detect_type(const char *path) {
 ** After Native module is loaded, find and execute stdlib/<name>/<name>.xr script extension.
 ** Exports in the script will be added to the module's export table, can override C module exports.
 */
-static bool load_script_extension(XrayIsolate *isolate, XrModule *module, const char *module_name) {
+static bool load_script_extension(XrVMRuntime *isolate, XrModule *module, const char *module_name) {
     XrModuleRegistry *registry = (XrModuleRegistry *) xr_isolate_get_module_registry(isolate);
     if (!registry) {
         XR_DBG_MODULE("load_script_extension: no registry");
@@ -722,7 +722,7 @@ static bool load_script_extension(XrayIsolate *isolate, XrModule *module, const 
 ** 2. Find and execute same-named xray script extension (stdlib/<name>/<name>.xr)
 ** 3. Script extension can access C module exports and add/override exports
 */
-static XrModule *load_native_module(XrayIsolate *isolate, const char *module_name) {
+static XrModule *load_native_module(XrVMRuntime *isolate, const char *module_name) {
     XrModuleRegistry *registry = (XrModuleRegistry *) xr_isolate_get_module_registry(isolate);
     if (!registry)
         return NULL;
@@ -755,7 +755,7 @@ static XrModule *load_native_module(XrayIsolate *isolate, const char *module_nam
         const char *short_name = strrchr(module_name, '/');
         short_name = short_name ? short_name + 1 : module_name;
 
-        // Look for xr_load_module_<name>(XrayIsolate*) symbol
+        // Look for xr_load_module_<name>(XrVMRuntime*) symbol
         char sym[128];
         snprintf(sym, sizeof(sym), "xr_load_module_%s", short_name);
         NativeModuleLoader dyn_loader = (NativeModuleLoader) xr_dylib_sym(handle, sym);
@@ -813,7 +813,7 @@ static XrModule *load_native_module(XrayIsolate *isolate, const char *module_nam
 **
 ** Note: module parameter is an already created module object (for circular dependency detection)
 */
-static XrModule *load_script_module(XrayIsolate *isolate, XrModule *module, const char *path) {
+static XrModule *load_script_module(XrVMRuntime *isolate, XrModule *module, const char *path) {
     if (!isolate || !module || !path) {
         return NULL;
     }
@@ -831,7 +831,7 @@ static XrModule *load_script_module(XrayIsolate *isolate, XrModule *module, cons
     XrModule *prev_module = xr_isolate_get_current_module(isolate);
     xr_isolate_set_current_module(isolate, module);
 
-    // 5. Parse and compile (API declared in xast.h and xray_isolate_internal.h)
+    // 5. Parse and compile (API declared in xast.h and xisolate_internal.h)
 
     // Normalize path, remove redundant "./"
     char *clean_path = normalize_path(path);
@@ -915,7 +915,7 @@ static XrModule *load_script_module(XrayIsolate *isolate, XrModule *module, cons
 ** Expects module_name in "owner/name" format (e.g. "xray/sqlite").
 ** Returns loaded XrModule* or NULL if not a native package.
 */
-static XrModule *try_load_native_package(XrayIsolate *isolate, const char *module_name) {
+static XrModule *try_load_native_package(XrVMRuntime *isolate, const char *module_name) {
     if (!isolate || !module_name)
         return NULL;
 
@@ -1039,7 +1039,7 @@ static XrModule *try_load_native_package(XrayIsolate *isolate, const char *modul
 ** - Native module: use module name as cache key
 ** - Script module: use resolved absolute path as cache key (ensures module singleton)
 */
-XrValue xr_module_import(XrayIsolate *isolate, const char *module_name) {
+XrValue xr_module_import(XrVMRuntime *isolate, const char *module_name) {
     if (!isolate || !module_name) {
         return xr_null();
     }
@@ -1173,7 +1173,7 @@ XrValue xr_module_import(XrayIsolate *isolate, const char *module_name) {
 /*
 ** Import module member
 */
-XrValue xr_module_import_member(XrayIsolate *isolate, const char *module_name,
+XrValue xr_module_import_member(XrVMRuntime *isolate, const char *module_name,
                                 const char *member_name) {
     if (!isolate || !module_name || !member_name) {
         return xr_null();
@@ -1198,7 +1198,7 @@ XrValue xr_module_import_member(XrayIsolate *isolate, const char *module_name,
 ** Add current module's export by name (string-based convenience).
 ** Used by native module registration and legacy paths.
 */
-void xr_module_add_current_export(XrayIsolate *isolate, const char *name, XrValue value,
+void xr_module_add_current_export(XrVMRuntime *isolate, const char *name, XrValue value,
                                   bool is_const) {
     if (!isolate || !name)
         return;
@@ -1219,7 +1219,7 @@ void xr_module_add_current_export(XrayIsolate *isolate, const char *name, XrValu
 /*
 ** Check if export is a constant (string-based)
 */
-bool xr_module_is_export_const(XrayIsolate *isolate, XrModule *module, const char *name) {
+bool xr_module_is_export_const(XrVMRuntime *isolate, XrModule *module, const char *name) {
     if (!isolate || !module || !name)
         return false;
 
@@ -1307,7 +1307,7 @@ static const StdlibEntry stdlib_data_formats[] = {
 ** Register all standard library modules
 ** Called after VM initialization
 */
-void xr_module_register_stdlib(XrayIsolate *isolate) {
+void xr_module_register_stdlib(XrVMRuntime *isolate) {
     if (!isolate)
         return;
 

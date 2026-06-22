@@ -74,21 +74,21 @@
 
 /* ========== VM API ========== */
 
-XR_FUNC void xr_vm_vm_init(XrayIsolate *isolate);
-XR_FUNC void xr_vm_vm_free(XrayIsolate *isolate);
+XR_FUNC void xr_vm_vm_init(XrVMRuntime *isolate);
+XR_FUNC void xr_vm_vm_free(XrVMRuntime *isolate);
 
 XR_FUNC XrVMResult xr_vm_interpret(const char *source);
-XR_FUNC XrVMResult xr_vm_interpret_proto(XrayIsolate *isolate, XrProto *proto);
-XR_FUNC XrVMResult xr_vm_execute_module(XrayIsolate *isolate, XrProto *proto);
+XR_FUNC XrVMResult xr_vm_interpret_proto(XrVMRuntime *isolate, XrProto *proto);
+XR_FUNC XrVMResult xr_vm_execute_module(XrVMRuntime *isolate, XrProto *proto);
 
-struct XrayIsolate;
-XR_FUNC XrVMResult xr_vm_interpret_proto_isolate(struct XrayIsolate *isolate, XrProto *proto);
+struct XrVMRuntime;
+XR_FUNC XrVMResult xr_vm_interpret_proto_isolate(struct XrVMRuntime *isolate, XrProto *proto);
 
 /* ========== C Function API ========== */
 
-XR_FUNC XrCFunction *xr_vm_cfunction_new(XrayIsolate *isolate, XrCFunctionPtr func,
+XR_FUNC XrCFunction *xr_vm_cfunction_new(XrVMRuntime *isolate, XrCFunctionPtr func,
                                          const char *name);
-XR_FUNC XrCFunction *xr_vm_yieldable_cfunction_new(XrayIsolate *isolate,
+XR_FUNC XrCFunction *xr_vm_yieldable_cfunction_new(XrVMRuntime *isolate,
                                                    XrYieldableCFunctionPtr func, const char *name);
 XR_FUNC void xr_vm_cfunction_free(XrCFunction *cfunc);
 
@@ -97,20 +97,20 @@ XR_FUNC void xr_vm_cfunction_free(XrCFunction *cfunc);
 
 /* ========== Runtime Error ========== */
 
-XR_FUNC void xr_runtime_error(XrayIsolate *isolate, const char *format, ...);
+XR_FUNC void xr_runtime_error(XrVMRuntime *isolate, const char *format, ...);
 
 /* ========== Exception Handling API ========== */
 
-XR_FUNC void xr_vm_throw_exception(XrayIsolate *isolate, XrValue exception);
-XR_FUNC void xr_vm_add_stacktrace(XrayIsolate *isolate, XrValue exception);
+XR_FUNC void xr_vm_throw_exception(XrVMRuntime *isolate, XrValue exception);
+XR_FUNC void xr_vm_add_stacktrace(XrVMRuntime *isolate, XrValue exception);
 /* Unified throw: records the full stack trace and performs the
  * unwind in one call. See xvm_exception.c for rationale. */
-XR_FUNC void xr_vm_unwind_with_trace(XrayIsolate *isolate, XrValue exception);
+XR_FUNC void xr_vm_unwind_with_trace(XrVMRuntime *isolate, XrValue exception);
 /* True if a catch handler reachable from the current VM invocation
  * survived the last unwind. Returns false when the VM should abort the
  * current dispatch loop and let an outer caller observe the exception
  * (e.g. xr_vm_call_closure returning XR_VM_RUNTIME_ERROR). */
-XR_FUNC bool xr_vm_is_catch_reachable(XrayIsolate *isolate);
+XR_FUNC bool xr_vm_is_catch_reachable(XrVMRuntime *isolate);
 
 /* ========== Helper Functions ========== */
 

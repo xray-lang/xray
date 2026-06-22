@@ -333,7 +333,7 @@ int xr_runtime_main_thread_run(XrRuntime *runtime, XrCoroutine *main_coro) {
     return 0;
 }
 
-int xr_main_thread_run(XrayIsolate *X, XrCoroutine *main_coro) {
+int xr_main_thread_run(XrVMRuntime *X, XrCoroutine *main_coro) {
     if (!X)
         return -1;
     int rc = xr_runtime_main_thread_run((XrRuntime *) X->vm.scheduler, main_coro);
@@ -350,7 +350,7 @@ int xr_main_thread_run(XrayIsolate *X, XrCoroutine *main_coro) {
 //
 // Called by DAP server to resume execution after hitting a breakpoint.
 // Returns 0 if stopped again (breakpoint/step), 1 if program ended.
-int xr_debug_resume_coro(XrayIsolate *X, XrCoroutine *coro) {
+int xr_debug_resume_coro(XrVMRuntime *X, XrCoroutine *coro) {
     if (!X || !coro)
         return -1;
 
@@ -655,7 +655,7 @@ void xr_worker_unblock_select(XrWorker *worker, XrCoroutine *coro) {
         return;
 
     // Notify dist channels about exiting select (unsubscribe from push model)
-    XrayIsolate *vm_owner = xr_runtime_core_vm_owner(coro->core);
+    XrVMRuntime *vm_owner = xr_runtime_core_vm_owner(coro->core);
     XrChannelDistHooks *dhooks = vm_owner ? vm_owner->channel_dist_hooks : NULL;
     if (dhooks && dhooks->on_select_exit) {
         for (int i = 0; i < sw->case_count; i++) {

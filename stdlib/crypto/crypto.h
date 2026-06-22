@@ -163,9 +163,9 @@ XR_FUNC void xr_secure_wipe(void *ptr, size_t len);
 
 /* ========== Module Loading ========== */
 
-struct XrayIsolate;
+struct XrVMRuntime;
 struct XrModule;
 
-XR_FUNC struct XrModule *xr_load_module_crypto(struct XrayIsolate *isolate);
+XR_FUNC struct XrModule *xr_load_module_crypto(struct XrVMRuntime *isolate);
 
 #endif  // XR_STDLIB_CRYPTO_H

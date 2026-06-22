@@ -27,7 +27,7 @@
  *
  * Returns: main_coro pointer, or NULL on failure
  */
-static inline XrCoroutine *xr_test_init_coro(XrayIsolate *X) {
+static inline XrCoroutine *xr_test_init_coro(XrVMRuntime *X) {
     if (!X)
         return NULL;
 
@@ -76,7 +76,7 @@ static inline XrCoroutine *xr_test_init_coro(XrayIsolate *X) {
 /*
  * Get or create main coroutine for testing
  */
-static inline XrCoroutine *xr_test_get_coro(XrayIsolate *X) {
+static inline XrCoroutine *xr_test_get_coro(XrVMRuntime *X) {
     XrCoroutine *coro = xr_isolate_get_main_coro(X);
     if (!coro) {
         coro = xr_test_init_coro(X);

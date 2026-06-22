@@ -48,13 +48,13 @@ struct XrModule;
 
 // Parse TOML string
 // Returns: Map object
-XR_FUNC XrValue xr_toml_parse(XrayIsolate *isolate, const char *data, size_t len);
+XR_FUNC XrValue xr_toml_parse(XrVMRuntime *isolate, const char *data, size_t len);
 
 // Serialize to TOML string
 // value: Map object
-XR_FUNC XrValue xr_toml_stringify(XrayIsolate *isolate, XrValue value);
+XR_FUNC XrValue xr_toml_stringify(XrVMRuntime *isolate, XrValue value);
 
 // Load toml module
-XR_FUNC struct XrModule *xr_load_module_toml(XrayIsolate *isolate);
+XR_FUNC struct XrModule *xr_load_module_toml(XrVMRuntime *isolate);
 
 #endif  // XR_STDLIB_TOML_H

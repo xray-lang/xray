@@ -40,8 +40,8 @@
 // the cluster transport. Pulling xsocket.h directly would expand
 // the translation unit unnecessarily; the link-time signature
 // check against xsocket.c is sufficient.
-extern int xr_socket_read(struct XrayIsolate *X, int fd, char *buf, size_t len);
-extern void xr_socket_set_read_timeout(struct XrayIsolate *X, int fd, int timeout_ms);
+extern int xr_socket_read(struct XrVMRuntime *X, int fd, char *buf, size_t len);
+extern void xr_socket_set_read_timeout(struct XrVMRuntime *X, int fd, int timeout_ms);
 
 static inline uint32_t str_hash(const char *s) {
     return xr_hash_bytes(s, strlen(s));
@@ -207,7 +207,7 @@ static void cluster_accept_loop(void *arg) {
 
 /* ========== Cluster Lifecycle ========== */
 
-int xr_cluster_start(XrayIsolate *X, const char *name, uint16_t port, const char *secret) {
+int xr_cluster_start(XrVMRuntime *X, const char *name, uint16_t port, const char *secret) {
     // Legacy entry point: plain TCP, no TLS. Forwards to the extended
     // implementation so both paths share one code flow.
     return xr_cluster_start_ex(X, name, port, secret, NULL);
@@ -268,7 +268,7 @@ static int build_cluster_tls(XrCluster *c, const XrClusterTlsOptions *opts) {
     return 0;
 }
 
-int xr_cluster_start_ex(XrayIsolate *X, const char *name, uint16_t port, const char *secret,
+int xr_cluster_start_ex(XrVMRuntime *X, const char *name, uint16_t port, const char *secret,
                         const XrClusterTlsOptions *tls) {
     if (X->cluster)
         return -1;  // already running
@@ -740,7 +740,7 @@ void xr_cluster_unregister_channel(XrCluster *c, const char *name) {
 
 /* ========== Service Registry ========== */
 
-XrChannel *xr_cluster_register_service(XrayIsolate *X, const char *name) {
+XrChannel *xr_cluster_register_service(XrVMRuntime *X, const char *name) {
     XrCluster *c = (XrCluster *) X->cluster;
     if (!c || !name)
         return NULL;
@@ -885,7 +885,7 @@ void xr_cluster_remove_all_subscribers_for_node(XrCluster *c, XrClusterNode *nod
 // NULL). The strings stay borrowed from the Json for the duration of this
 // call — cluster_start_ex copies them into OpenSSL contexts before it
 // returns, so no lifetime surprise.
-static XrValue cluster_start(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue cluster_start(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1 || !xr_value_is_json(args[0]))
         return xr_null();
 
@@ -945,7 +945,7 @@ static XrValue cluster_start(XrayIsolate *X, XrValue *args, int argc) {
 }
 
 // cluster.join(addr) - addr is "host:port" string
-static XrValue cluster_join(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue cluster_join(XrVMRuntime *X, XrValue *args, int argc) {
     XrCluster *c = (XrCluster *) X->cluster;
     if (!c || argc < 1 || !XR_IS_STRING(args[0]))
         return xr_bool(0);
@@ -971,7 +971,7 @@ static XrValue cluster_join(XrayIsolate *X, XrValue *args, int argc) {
 }
 
 // cluster.self() - returns node name
-static XrValue cluster_self(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue cluster_self(XrVMRuntime *X, XrValue *args, int argc) {
     (void) args;
     (void) argc;
     XrCluster *c = (XrCluster *) X->cluster;
@@ -981,7 +981,7 @@ static XrValue cluster_self(XrayIsolate *X, XrValue *args, int argc) {
 }
 
 // cluster.nodes() - returns array of connected node names
-static XrValue cluster_nodes(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue cluster_nodes(XrVMRuntime *X, XrValue *args, int argc) {
     (void) args;
     (void) argc;
     XrCluster *c = (XrCluster *) X->cluster;
@@ -1005,7 +1005,7 @@ static XrValue cluster_nodes(XrayIsolate *X, XrValue *args, int argc) {
 }
 
 // cluster.channel(name, size) - create or get Named Channel
-static XrValue cluster_channel_fn(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue cluster_channel_fn(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1 || !XR_IS_STRING(args[0]))
         return xr_null();
 
@@ -1037,7 +1037,7 @@ static XrValue cluster_channel_fn(XrayIsolate *X, XrValue *args, int argc) {
 }
 
 // cluster.serve(name) - register service + return request Channel
-static XrValue cluster_serve_fn(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue cluster_serve_fn(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1 || !XR_IS_STRING(args[0]))
         return xr_null();
 
@@ -1051,7 +1051,7 @@ static XrValue cluster_serve_fn(XrayIsolate *X, XrValue *args, int argc) {
 
 // cluster.reply(req, result) - simplified: auto-extract id/from from req Json
 // Also supports legacy: cluster.reply(id, from, result)
-static XrValue cluster_reply_fn(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue cluster_reply_fn(XrVMRuntime *X, XrValue *args, int argc) {
     XrCluster *c = (XrCluster *) X->cluster;
     if (!c)
         return xr_bool(0);
@@ -1143,7 +1143,7 @@ static XrValue cluster_reply_fn(XrayIsolate *X, XrValue *args, int argc) {
 // cluster.call(name, args, timeout) - remote service call
 // Uses pending request table: sends SERVICE_CALL, then blocks on a temp Channel
 // that process_node will deliver the result to. No direct socket read.
-static XrValue cluster_call_fn(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue cluster_call_fn(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 2 || !XR_IS_STRING(args[0]))
         return xr_null();
 
@@ -1250,7 +1250,7 @@ static XrValue cluster_call_fn(XrayIsolate *X, XrValue *args, int argc) {
 
 // cluster.monitor(node_name) - returns Channel that receives notification on disconnect
 // Use "*" to monitor all nodes
-static __attribute__((unused)) XrValue cluster_monitor_fn(XrayIsolate *X, XrValue *args, int argc) {
+static __attribute__((unused)) XrValue cluster_monitor_fn(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1 || !XR_IS_STRING(args[0]))
         return xr_null();
 
@@ -1263,7 +1263,7 @@ static __attribute__((unused)) XrValue cluster_monitor_fn(XrayIsolate *X, XrValu
 }
 
 // cluster.discover() - start LAN auto-discovery via UDP multicast
-static XrValue cluster_discover_fn(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue cluster_discover_fn(XrVMRuntime *X, XrValue *args, int argc) {
     (void) args;
     (void) argc;
     XrCluster *c = (XrCluster *) X->cluster;
@@ -1275,7 +1275,7 @@ static XrValue cluster_discover_fn(XrayIsolate *X, XrValue *args, int argc) {
 }
 
 // cluster.stop()
-static XrValue cluster_stop_fn(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue cluster_stop_fn(XrVMRuntime *X, XrValue *args, int argc) {
     (void) args;
     (void) argc;
     xr_cluster_stop((XrCluster *) X->cluster);
@@ -1676,7 +1676,7 @@ void xr_cluster_on_node_removed(XrCluster *c, void (*cb)(const char *name)) {
 }
 
 // xray binding: cluster.publish(topic, value)
-static XrValue cluster_publish_fn(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue cluster_publish_fn(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 2 || !XR_IS_STRING(args[0]))
         return xr_bool(false);
 
@@ -1686,7 +1686,7 @@ static XrValue cluster_publish_fn(XrayIsolate *X, XrValue *args, int argc) {
 }
 
 // xray binding: cluster.subscribe(pattern)
-static XrValue cluster_subscribe_fn(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue cluster_subscribe_fn(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1 || !XR_IS_STRING(args[0]))
         return xr_null();
 
@@ -1699,7 +1699,7 @@ static XrValue cluster_subscribe_fn(XrayIsolate *X, XrValue *args, int argc) {
 
 /* ========== Cluster Info API ========== */
 
-static XrValue cluster_info_fn(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue cluster_info_fn(XrVMRuntime *X, XrValue *args, int argc) {
     (void) args;
     (void) argc;
     XrCluster *c = (XrCluster *) X->cluster;
@@ -1842,7 +1842,7 @@ static XrValue cluster_info_fn(XrayIsolate *X, XrValue *args, int argc) {
 }
 
 // Extended cluster.monitor: 1 arg = node monitor, 2 args = remote coro monitor
-static XrValue cluster_monitor_coro_fn(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue cluster_monitor_coro_fn(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1 || !XR_IS_STRING(args[0]))
         return xr_null();
 
@@ -1897,7 +1897,7 @@ XR_DEFINE_BUILTIN(cluster_subscribe_fn, "subscribe", "(pattern: string): Channel
 
 /* ========== Module Registration ========== */
 
-XR_FUNC XrModule *xr_load_module_cluster(XrayIsolate *isolate) {
+XR_FUNC XrModule *xr_load_module_cluster(XrVMRuntime *isolate) {
     XrModule *mod = xr_module_create_native(isolate, "cluster");
 
     XRS_EXPORT(mod, isolate, "start", cluster_start);

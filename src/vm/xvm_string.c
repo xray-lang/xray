@@ -14,14 +14,14 @@
 #include "../runtime/xisolate_api.h"
 #include <stdio.h>
 
-static inline XrStrBuf **vm_tmp_strbuf_slot(XrayIsolate *X) {
+static inline XrStrBuf **vm_tmp_strbuf_slot(XrVMRuntime *X) {
     XrWorker *worker = xr_current_worker();
     if (worker && worker->m)
         return &worker->m->tmp_strbuf;
     return xr_isolate_tmp_strbuf_slot(X);
 }
 
-XrStrBuf *xr_strbuf_tmp(XrayIsolate *X) {
+XrStrBuf *xr_strbuf_tmp(XrVMRuntime *X) {
     XR_DCHECK(X != NULL, "strbuf_tmp: NULL isolate");
     XrStrBuf **slot = vm_tmp_strbuf_slot(X);
     if (!slot)

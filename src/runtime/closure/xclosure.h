@@ -24,7 +24,7 @@
 #include "../value/xchunk.h"
 #include "../mem/xobj_header.h"
 
-struct XrayIsolate;
+struct XrVMRuntime;
 struct XrCoroutine;
 
 // Function + captured environment (flat upvalue model).
@@ -40,7 +40,7 @@ typedef struct XrClosure {
 // Create a closure and allocate its upvalue array.
 // `coro` selects the owning coroutine's heap (pass NULL to allocate on the
 // isolate's GC heap for bootstrap paths).
-XR_FUNC XrClosure *xr_closure_new(struct XrayIsolate *isolate, XrProto *proto,
+XR_FUNC XrClosure *xr_closure_new(struct XrVMRuntime *isolate, XrProto *proto,
                                   struct XrCoroutine *coro);
 
 #endif  // XCLOSURE_H

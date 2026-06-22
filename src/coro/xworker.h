@@ -498,7 +498,7 @@ XR_FUNC XrSchedulerRuntime *xr_scheduler_runtime_new(XrRuntimeCore *core, int nu
 XR_FUNC void xr_scheduler_runtime_attach_host(XrSchedulerRuntime *runtime,
                                               const XrSchedulerHost *host);
 XR_FUNC void xr_scheduler_runtime_clear_host(XrSchedulerRuntime *runtime);
-XR_FUNC void xr_scheduler_runtime_attach_isolate(XrSchedulerRuntime *runtime, XrayIsolate *isolate);
+XR_FUNC void xr_scheduler_runtime_attach_isolate(XrSchedulerRuntime *runtime, XrVMRuntime *isolate);
 XR_FUNC void xr_scheduler_runtime_delete(XrSchedulerRuntime *runtime);
 XR_FUNC void xr_runtime_start(XrRuntime *runtime);
 XR_FUNC void xr_runtime_ensure_workers(XrRuntime *runtime);
@@ -666,12 +666,12 @@ XR_FUNC void xr_runtime_print_stats(XrRuntime *runtime);
 /* ========== Main Thread Entry ========== */
 
 // Run main coroutine on calling thread using unified scheduling loop
-XR_FUNC int xr_main_thread_run(XrayIsolate *X, XrCoroutine *main_coro);
+XR_FUNC int xr_main_thread_run(XrVMRuntime *X, XrCoroutine *main_coro);
 XR_FUNC int xr_runtime_main_thread_run(XrRuntime *runtime, XrCoroutine *main_coro);
 
 /* ========== Debug Support ========== */
 
 // Resume coroutine execution after debug break, returns when next breakpoint hit or program ends
-XR_FUNC int xr_debug_resume_coro(XrayIsolate *isolate, XrCoroutine *coro);
+XR_FUNC int xr_debug_resume_coro(XrVMRuntime *isolate, XrCoroutine *coro);
 
 #endif  // XWORKER_H

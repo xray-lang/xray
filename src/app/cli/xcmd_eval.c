@@ -17,7 +17,7 @@
 #include "xcli_spec.h"
 #include "xcli_fs.h"
 #include "xray.h"
-#include "xray_isolate.h"
+#include "xray_vm.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
 #include "../../vm/xvm_internal.h"
@@ -45,21 +45,21 @@ XR_FUNC int cmd_eval(const XrCliInvocation *inv) {
     }
 
     /* Create isolate and execute */
-    XrayIsolateParams params;
-    xray_isolate_params_init(&params);
+    XrVMConfig params;
+    xray_vm_config_init(&params);
 
-    XrayIsolate *iso = xray_isolate_new_full(&params);
+    XrVMRuntime *iso = xray_vm_new_full(&params);
     if (!iso) {
         xr_cli_error("eval", "failed to create isolate");
         xr_free(stdin_code);
         return XR_CLI_EXIT_INTERNAL;
     }
-    xr_multicore_init(iso, 0);
+    xray_vm_multicore_init(iso, 0);
 
-    int result = xray_isolate_dostring(iso, code);
+    int result = xray_vm_dostring(iso, code);
 
-    xr_multicore_destroy(iso);
-    xray_isolate_delete(iso);
+    xray_vm_multicore_destroy(iso);
+    xray_vm_delete(iso);
     xr_free(stdin_code);
 
     return (result != 0) ? XR_CLI_EXIT_FAIL : XR_CLI_EXIT_OK;

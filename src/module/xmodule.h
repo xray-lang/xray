@@ -137,7 +137,7 @@ static inline bool xr_module_has_sym(XrModule *m, SymbolId sym) {
 
 /* ========== Native Module Loader Type ========== */
 
-typedef XrModule *(*NativeModuleLoader)(struct XrayIsolate *isolate);
+typedef XrModule *(*NativeModuleLoader)(struct XrVMRuntime *isolate);
 
 /* ========== Module Registry ========== */
 
@@ -180,7 +180,7 @@ typedef struct XrModuleRegistry {
 
 /* ========== Module System API ========== */
 
-XR_FUNC void xr_module_system_init(struct XrayIsolate *isolate);
+XR_FUNC void xr_module_system_init(struct XrVMRuntime *isolate);
 
 /*
 ** Initialize module system (with script path)
@@ -189,9 +189,9 @@ XR_FUNC void xr_module_system_init(struct XrayIsolate *isolate);
 ** @param isolate     Isolate instance
 ** @param script_path Entry script path
 */
-XR_FUNC void xr_module_system_init_with_script(struct XrayIsolate *isolate,
+XR_FUNC void xr_module_system_init_with_script(struct XrVMRuntime *isolate,
                                                const char *script_path);
-XR_FUNC void xr_module_system_free(struct XrayIsolate *isolate);
+XR_FUNC void xr_module_system_free(struct XrVMRuntime *isolate);
 
 /*
 ** Register Native module loader
@@ -203,7 +203,7 @@ XR_FUNC void xr_module_system_free(struct XrayIsolate *isolate);
 ** Example:
 **   xr_module_register_native(isolate, "time", xr_load_module_time);
 */
-XR_FUNC void xr_module_register_native(struct XrayIsolate *isolate, const char *name,
+XR_FUNC void xr_module_register_native(struct XrVMRuntime *isolate, const char *name,
                                        NativeModuleLoader loader);
 
 /*
@@ -220,24 +220,24 @@ XR_FUNC void xr_module_register_native(struct XrayIsolate *isolate, const char *
 ** 4. Execute initialization
 ** 5. Cache and return
 */
-XR_FUNC XrValue xr_module_import(struct XrayIsolate *isolate, const char *module_name);
-XR_FUNC XrValue xr_module_import_member(struct XrayIsolate *isolate, const char *module_name,
+XR_FUNC XrValue xr_module_import(struct XrVMRuntime *isolate, const char *module_name);
+XR_FUNC XrValue xr_module_import_member(struct XrVMRuntime *isolate, const char *module_name,
                                         const char *member_name);
-XR_FUNC void xr_module_add_current_export(struct XrayIsolate *isolate, const char *name,
+XR_FUNC void xr_module_add_current_export(struct XrVMRuntime *isolate, const char *name,
                                           XrValue value, bool is_const);
-XR_FUNC bool xr_module_is_export_const(struct XrayIsolate *isolate, struct XrModule *module,
+XR_FUNC bool xr_module_is_export_const(struct XrVMRuntime *isolate, struct XrModule *module,
                                        const char *name);
 
 /* ========== Module Object Operations ========== */
 
-XR_FUNC XrModule *xr_module_create_native(struct XrayIsolate *isolate, const char *name);
-XR_FUNC XrModule *xr_module_create_script(struct XrayIsolate *isolate, const char *name,
+XR_FUNC XrModule *xr_module_create_native(struct XrVMRuntime *isolate, const char *name);
+XR_FUNC XrModule *xr_module_create_script(struct XrVMRuntime *isolate, const char *name,
                                           const char *path);
-XR_FUNC void xr_module_add_export(struct XrayIsolate *isolate, XrModule *module, const char *name,
+XR_FUNC void xr_module_add_export(struct XrVMRuntime *isolate, XrModule *module, const char *name,
                                   XrValue value);
-XR_FUNC void xr_module_add_export_sym(struct XrayIsolate *isolate, XrModule *module, SymbolId sym,
+XR_FUNC void xr_module_add_export_sym(struct XrVMRuntime *isolate, XrModule *module, SymbolId sym,
                                       XrValue value, bool is_const);
-XR_FUNC XrValue xr_module_get_export(struct XrayIsolate *isolate, XrModule *module,
+XR_FUNC XrValue xr_module_get_export(struct XrVMRuntime *isolate, XrModule *module,
                                      const char *name);
 XR_FUNC void xr_module_build_export_index(XrModule *module);
 XR_FUNC void xr_module_free(XrModule *module);
@@ -263,15 +263,15 @@ XR_FUNC struct XrModuleResolver *xr_module_registry_get_resolver(XrModuleRegistr
 ** - "./mylib.xr"     → Relative path
 ** - "/path/to/lib.xr" → Absolute path
 */
-XR_FUNC char *xr_module_resolve_path(struct XrayIsolate *isolate, const char *module_name);
+XR_FUNC char *xr_module_resolve_path(struct XrVMRuntime *isolate, const char *module_name);
 XR_FUNC ModuleType xr_module_detect_type(const char *path);
-XR_FUNC void xr_module_register_stdlib(struct XrayIsolate *isolate);
+XR_FUNC void xr_module_register_stdlib(struct XrVMRuntime *isolate);
 
 /* ========== Compiler Hook Registration ========== */
 
 // Set compiler hooks for module loading (per-Isolate, called during full isolate init).
 // The module runtime borrows `compiler_session`; it does not own or free it.
-XR_FUNC void xr_module_set_compiler_hooks(struct XrayIsolate *isolate,
+XR_FUNC void xr_module_set_compiler_hooks(struct XrVMRuntime *isolate,
                                           XrCompilerSession *compiler_session,
                                           XrModuleParseHook parse_fn,
                                           XrModuleCompileAstHook compile_ast_fn,

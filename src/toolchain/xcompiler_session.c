@@ -23,7 +23,7 @@
 #include <string.h>
 
 struct XrCompilerSession {
-    XrayIsolate *vm_host;
+    XrVMRuntime *vm_host;
     const char *project_root;
     const char *source_file;
     bool repl_mode;
@@ -79,15 +79,15 @@ void xr_compiler_session_delete(XrCompilerSession *session) {
     xr_free(session);
 }
 
-XrayIsolate *xr_compiler_session_vm_host(const XrCompilerSession *session) {
+XrVMRuntime *xr_compiler_session_vm_host(const XrCompilerSession *session) {
     return session ? session->vm_host : NULL;
 }
 
-XrCompilerSession *xr_compiler_session_current_for_isolate(XrayIsolate *isolate) {
+XrCompilerSession *xr_compiler_session_current_for_isolate(XrVMRuntime *isolate) {
     return isolate ? isolate->compiler_session : NULL;
 }
 
-XrCompilerSession *xr_compiler_session_attach_isolate(XrayIsolate *isolate,
+XrCompilerSession *xr_compiler_session_attach_isolate(XrVMRuntime *isolate,
                                                       XrCompilerSession *session) {
     if (!isolate)
         return NULL;

@@ -34,12 +34,12 @@ typedef struct {
 
 typedef struct {
     XrSerWriter sw;  // shared byte buffer (sw.data / sw.len / sw.cap)
-    XrayIsolate *isolate;
+    XrVMRuntime *isolate;
     YamlEmitConfig config;
     int current_line_len;
 } YamlEmitter;
 
-static inline void emit_init(YamlEmitter *e, XrayIsolate *isolate, YamlEmitConfig *config) {
+static inline void emit_init(YamlEmitter *e, XrVMRuntime *isolate, YamlEmitConfig *config) {
     xr_serw_init(&e->sw, 256);
     e->isolate = isolate;
     e->current_line_len = 0;
@@ -537,7 +537,7 @@ static void emit_value(YamlEmitter *e, XrValue val, int level, bool flow_mode) {
 
 // ========== Public API ===========
 
-XR_FUNCDEF XrValue yaml_emit(XrayIsolate *isolate, XrValue value, int indent, int flow_level) {
+XR_FUNCDEF XrValue yaml_emit(XrVMRuntime *isolate, XrValue value, int indent, int flow_level) {
     YamlEmitConfig config = {.indent = indent > 0 ? indent : 2, .flow_level = flow_level};
 
     YamlEmitter emitter;

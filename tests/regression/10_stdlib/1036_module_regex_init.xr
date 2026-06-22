@@ -2,7 +2,7 @@
 // module must succeed.
 //
 // Before fix: stdlib/regex/xregex_binding.c wrap_regex passed an
-// XrCoroutine* where xr_instance_new expects XrayIsolate*. During
+// XrCoroutine* where xr_instance_new expects XrVMRuntime*. During
 // multi-module preload (no worker thread running yet), this caused
 // xr_current_coro to dereference garbage and xr_alloc to FATAL on
 // the coroutine type check.

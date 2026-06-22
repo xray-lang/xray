@@ -23,13 +23,13 @@
 #include "runtime/object/xtuple.h"
 #include "runtime/value/xchunk.h"
 
-static XrayIsolate *X = NULL;
+static XrVMRuntime *X = NULL;
 static XrCoroutine *main_coro = NULL;
 
 static void setup(void) {
-    XrayIsolateParams params;
-    xray_isolate_params_init(&params);
-    X = xray_isolate_new_full(&params);
+    XrVMConfig params;
+    xray_vm_config_init(&params);
+    X = xray_vm_new_full(&params);
     ASSERT_NOT_NULL(X);
     main_coro = xr_test_init_coro(X);
     ASSERT_NOT_NULL(main_coro);
@@ -37,7 +37,7 @@ static void setup(void) {
 
 static void teardown(void) {
     if (X) {
-        xray_isolate_delete(X);
+        xray_vm_delete(X);
         X = NULL;
         main_coro = NULL;
     }

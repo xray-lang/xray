@@ -18,7 +18,7 @@
 #include "xcli_fs.h"
 #include "../../api/xisolate_profile.h"
 #include "xray.h"
-#include "xray_isolate.h"
+#include "xray_vm.h"
 #include "../../frontend/format/xfmt.h"
 #include "../../frontend/parser/xparse.h"
 #include "../../frontend/parser/xast.h"
@@ -55,7 +55,7 @@ static FmtConfig default_config = {.indent_size = 4,
                                    .multiline_trailing_comma = 1};
 
 // Format source code using AST
-static char *format_source(XrayIsolate *X, const char *source, const char *path,
+static char *format_source(XrVMRuntime *X, const char *source, const char *path,
                            FmtConfig *config) {
     // Parse source to AST with trivia collection (preserves comments)
     AstNode *ast = xr_parse_with_trivia(xr_compiler_session_current_for_isolate(X), source, path);
@@ -88,7 +88,7 @@ static char *format_source(XrayIsolate *X, const char *source, const char *path,
 
 // Format single file
 // Returns: 0 = no change, 1 = formatted, -1 = error
-static int format_file(XrayIsolate *X, const char *path, FmtConfig *config, int check_only,
+static int format_file(XrVMRuntime *X, const char *path, FmtConfig *config, int check_only,
                        int verbose) {
     char *source = xr_cli_read_file(path);
     if (!source) {
@@ -131,7 +131,7 @@ static int format_file(XrayIsolate *X, const char *path, FmtConfig *config, int 
 }
 
 // Recursively format directory
-static int format_directory(XrayIsolate *X, const char *path, FmtConfig *config, int check_only,
+static int format_directory(XrVMRuntime *X, const char *path, FmtConfig *config, int check_only,
                             int verbose, int *total, int *changed) {
     XrDirIter *it = xr_dir_open(path);
     if (!it) {
@@ -214,7 +214,7 @@ XR_FUNC int cmd_fmt(const XrCliInvocation *inv) {
     }
 
     /* Create isolate for parsing */
-    XrayIsolate *X = xr_isolate_profile_new(XR_ISOLATE_PROFILE_ANALYZE);
+    XrVMRuntime *X = xr_isolate_profile_new(XR_ISOLATE_PROFILE_ANALYZE);
     if (!X) {
         xr_cli_error("fmt", "failed to create isolate");
         return XR_CLI_EXIT_INTERNAL;
@@ -250,7 +250,7 @@ XR_FUNC int cmd_fmt(const XrCliInvocation *inv) {
         }
     }
 
-    xray_isolate_delete(X);
+    xray_vm_delete(X);
 
     /* Output statistics */
     if (total > 0) {

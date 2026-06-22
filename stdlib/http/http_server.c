@@ -177,7 +177,7 @@ static bool check_keep_alive(const char *headers) {
 /*
  * Create server
  */
-XrHttpServer *xr_http_server_new(XrayIsolate *isolate) {
+XrHttpServer *xr_http_server_new(XrVMRuntime *isolate) {
     XrHttpServer *server = (XrHttpServer *) xr_calloc(1, sizeof(XrHttpServer));
     if (!server)
         return NULL;
@@ -252,7 +252,7 @@ void xr_http_server_static(XrHttpServer *server, XrHttpMethod method, const char
 /*
  * Read and parse HTTP request
  */
-int xr_http_read_request(XrayIsolate *X, int fd, XrHttpReq *req, char *buf, size_t buf_size) {
+int xr_http_read_request(XrVMRuntime *X, int fd, XrHttpReq *req, char *buf, size_t buf_size) {
     if (!req || !buf || buf_size == 0)
         return -1;
 
@@ -383,7 +383,7 @@ static void detect_content_type(const char *body, size_t body_len, const char **
  * writev zero-copy send response
  * Uses pre-generated header + Content-Length + CRLF + body
  */
-static int xr_http_writev_response(XrayIsolate *X, int fd, const char *body, size_t body_len) {
+static int xr_http_writev_response(XrVMRuntime *X, int fd, const char *body, size_t body_len) {
     // Auto-detect Content-Type
     const char *header;
     size_t header_len;
@@ -453,7 +453,7 @@ static int xr_http_writev_response(XrayIsolate *X, int fd, const char *body, siz
 /*
  * Send HTTP response (compatible with old interface)
  */
-int xr_http_write_response(XrayIsolate *X, int fd, XrHttpResp *resp) {
+int xr_http_write_response(XrVMRuntime *X, int fd, XrHttpResp *resp) {
     if (!resp)
         return -1;
 
@@ -488,7 +488,7 @@ int xr_http_write_response(XrayIsolate *X, int fd, XrHttpResp *resp) {
 /*
  * Send simple text response (writev zero-copy + auto-detect Content-Type)
  */
-int xr_http_send_text(XrayIsolate *X, int fd, int status, const char *body) {
+int xr_http_send_text(XrVMRuntime *X, int fd, int status, const char *body) {
     (void) status;  // Currently only 200 pre-generated header supported
     size_t body_len = body ? strlen(body) : 0;
     return xr_http_writev_response(X, fd, body, body_len);
@@ -497,7 +497,7 @@ int xr_http_send_text(XrayIsolate *X, int fd, int status, const char *body) {
 /*
  * Send error response
  */
-int xr_http_send_error(XrayIsolate *X, int fd, int status, const char *message) {
+int xr_http_send_error(XrVMRuntime *X, int fd, int status, const char *message) {
     // 404 uses pre-defined response (single send)
     if (status == 404 && (message == NULL || strcmp(message, "Not Found") == 0)) {
         return xr_socket_write(X, fd, HTTP_404_RESPONSE, sizeof(HTTP_404_RESPONSE) - 1);
@@ -519,7 +519,7 @@ int xr_http_send_error(XrayIsolate *X, int fd, int status, const char *message) 
 /*
  * Send redirect response
  */
-int xr_http_send_redirect(XrayIsolate *X, int fd, int status, const char *location) {
+int xr_http_send_redirect(XrVMRuntime *X, int fd, int status, const char *location) {
     if (!location)
         return -1;
 

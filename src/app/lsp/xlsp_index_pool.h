@@ -8,7 +8,7 @@
  * xlsp_index_pool.h - Multi-isolate parallel indexing pool
  *
  * DESIGN:
- *   Each worker thread has its own XrayIsolate, allowing true parallel parsing.
+ *   Each worker thread has its own XrVMRuntime, allowing true parallel parsing.
  *   Results are lightweight metadata (symbols, types, locations) that can be
  *   safely transferred to the main thread for merging.
  *
@@ -80,7 +80,7 @@ typedef struct XrLspIndexWork {
 // Worker thread state
 typedef struct XrLspIndexWorker {
     xr_thread_t thread;           // Thread handle
-    XrayIsolate *isolate;         // Per-worker Isolate
+    XrVMRuntime *isolate;         // Per-worker Isolate
     int worker_id;                // Worker ID (0 to N-1)
     struct XrLspIndexPool *pool;  // Back-pointer to pool
 } XrLspIndexWorker;

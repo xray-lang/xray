@@ -34,12 +34,12 @@ static uint32_t monitor_find_slot(XrCoroRegistry *reg, const char *name, uint32_
     return idx;
 }
 
-static void monitor_send_noproc(XrayIsolate *X, XrChannel *ch) {
+static void monitor_send_noproc(XrVMRuntime *X, XrChannel *ch) {
     XrString *s = xr_string_new(X, "noproc", 6);
     xr_channel_try_send(ch, s ? xr_string_value(s) : xr_null());
 }
 
-XrChannel *xr_coro_monitor(XrayIsolate *X, XrCoroRegistry *reg, const char *name) {
+XrChannel *xr_coro_monitor(XrVMRuntime *X, XrCoroRegistry *reg, const char *name) {
     if (!X || !reg || !name)
         return NULL;
 
@@ -101,7 +101,7 @@ void xr_coro_demonitor(XrCoroRegistry *reg, XrCoroutine *coro, XrChannel *ch) {
     xr_amutex_unlock(&reg->lock);
 }
 
-void xr_coro_notify_monitors(XrayIsolate *X, XrCoroRegistry *reg, XrCoroutine *coro,
+void xr_coro_notify_monitors(XrVMRuntime *X, XrCoroRegistry *reg, XrCoroutine *coro,
                              const char *reason) {
     if (!coro)
         return;

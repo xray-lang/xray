@@ -25,11 +25,11 @@
 #include <string.h>
 #include <stdio.h>
 
-static inline XrSymbolTable *get_symbol_table(XrayIsolate *isolate) {
+static inline XrSymbolTable *get_symbol_table(XrVMRuntime *isolate) {
     return (XrSymbolTable *) xr_isolate_get_symbol_table(isolate);
 }
 
-static inline XrClass *json_root_class(XrayIsolate *X) {
+static inline XrClass *json_root_class(XrVMRuntime *X) {
     XR_DCHECK(X && X->core && X->core->jsonRootClass, "json: root class not initialized");
     return X->core->jsonRootClass;
 }
@@ -38,7 +38,7 @@ static inline XrClass *json_root_class(XrayIsolate *X) {
 
 XrJson *xr_json_new(struct XrCoroutine *coro) {
     XR_DCHECK(coro != NULL, "json_new: NULL coro");
-    XrayIsolate *X = xr_coro_vm_owner(coro);
+    XrVMRuntime *X = xr_coro_vm_owner(coro);
     XrClass *cls = json_root_class(X);
     return xr_json_new_with_class(coro, cls);
 }
@@ -78,7 +78,7 @@ size_t xr_json_size(XrClass *cls) {
 
 /* ========== Field Access API ========== */
 
-XrValue xr_json_get(XrayIsolate *X, XrJson *json, SymbolId symbol) {
+XrValue xr_json_get(XrVMRuntime *X, XrJson *json, SymbolId symbol) {
     (void) X;
     if (!json || !json->klass)
         return xr_null();
@@ -88,7 +88,7 @@ XrValue xr_json_get(XrayIsolate *X, XrJson *json, SymbolId symbol) {
     return xr_instance_get_dynamic_field(json, (uint16_t) idx);
 }
 
-bool xr_json_set(XrayIsolate *X, XrJson *json, SymbolId symbol, XrValue value) {
+bool xr_json_set(XrVMRuntime *X, XrJson *json, SymbolId symbol, XrValue value) {
     XR_DCHECK(X != NULL, "json_set: NULL isolate");
     if (!json || !json->klass)
         return false;
@@ -110,7 +110,7 @@ bool xr_json_set(XrayIsolate *X, XrJson *json, SymbolId symbol, XrValue value) {
     return true;
 }
 
-XrValue xr_json_get_by_key(XrayIsolate *X, XrJson *json, const char *key) {
+XrValue xr_json_get_by_key(XrVMRuntime *X, XrJson *json, const char *key) {
     XR_DCHECK(X != NULL, "json_get_by_key: NULL isolate");
     if (!json || !key)
         return xr_null();
@@ -119,7 +119,7 @@ XrValue xr_json_get_by_key(XrayIsolate *X, XrJson *json, const char *key) {
     return xr_json_get(X, json, symbol);
 }
 
-bool xr_json_set_by_key(XrayIsolate *X, XrJson *json, const char *key, XrValue value) {
+bool xr_json_set_by_key(XrVMRuntime *X, XrJson *json, const char *key, XrValue value) {
     XR_DCHECK(X != NULL, "json_set_by_key: NULL isolate");
     if (!json || !key)
         return false;

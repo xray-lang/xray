@@ -20,23 +20,23 @@
 /* ========== Enum Instance Methods ========== */
 
 // Status.Success.name -> "Success"
-XR_FUNC XrValue xr_enum_get_name(XrayIsolate *isolate, XrValue *args, int nargs);
+XR_FUNC XrValue xr_enum_get_name(XrVMRuntime *isolate, XrValue *args, int nargs);
 
 // Status.Success.value -> 200
-XR_FUNC XrValue xr_enum_get_value(XrayIsolate *isolate, XrValue *args, int nargs);
+XR_FUNC XrValue xr_enum_get_value(XrVMRuntime *isolate, XrValue *args, int nargs);
 
 // Status.Success.ordinal -> 0
-XR_FUNC XrValue xr_enum_get_ordinal(XrayIsolate *isolate, XrValue *args, int nargs);
+XR_FUNC XrValue xr_enum_get_ordinal(XrVMRuntime *isolate, XrValue *args, int nargs);
 
 // Status.Success.toString() -> "Status.Success"
-XR_FUNC XrValue xr_enum_toString(XrayIsolate *isolate, XrValue *args, int nargs);
+XR_FUNC XrValue xr_enum_toString(XrVMRuntime *isolate, XrValue *args, int nargs);
 
 /* ========== EnumType Class Methods ========== */
 
 // Status.memberCount -> 3
-XR_FUNC XrValue xr_enum_type_get_member_count(XrayIsolate *isolate, XrValue *args, int nargs);
+XR_FUNC XrValue xr_enum_type_get_member_count(XrVMRuntime *isolate, XrValue *args, int nargs);
 
 // Status.getMember(0) -> Status.OK
-XR_FUNC XrValue xr_enum_type_get_member(XrayIsolate *isolate, XrValue *args, int nargs);
+XR_FUNC XrValue xr_enum_type_get_member(XrVMRuntime *isolate, XrValue *args, int nargs);
 
 #endif  // XENUM_BUILTINS_H

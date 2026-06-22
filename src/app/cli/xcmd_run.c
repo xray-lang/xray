@@ -18,11 +18,13 @@
 #include "../../api/xisolate_profile.h"
 
 #include "xray.h"
-#include "xray_isolate.h"
+#include "xray_vm.h"
 #include "../../module/xmodule.h"
 #include "../../module/xmodule_graph.h"
 #include "../../module/xmodule_resolver.h"
 #include "../../runtime/xisolate_api.h"
+#include "../../vm/xvm_internal.h"
+#include "../../coro/xcoro_monitor.h"
 #include "../../frontend/analyzer/xanalyzer.h"
 #include "../../toolchain/xcompiler_session.h"
 #include "../../base/xmalloc.h"
@@ -42,29 +44,29 @@ typedef struct {
 } RunOptions;
 
 /* Create isolate via profile factory, then apply run-specific overrides */
-static XrayIsolate *create_run_isolate(const RunOptions *opts) {
-    XrayIsolateParams params;
+static XrVMRuntime *create_run_isolate(const RunOptions *opts) {
+    XrVMConfig params;
     xr_isolate_profile_params(XR_ISOLATE_PROFILE_RUN, &params);
     params.trace_execution = opts->trace;
     params.dump_bytecode = opts->dump_bytecode;
     params.dump_ic_feedback = opts->dump_ic;
 
-    XrayIsolate *iso = xr_isolate_profile_create(&params);
+    XrVMRuntime *iso = xr_isolate_profile_create(&params);
     if (!iso)
         return NULL;
-    xr_multicore_init(iso, opts->num_workers);
+    xray_vm_multicore_init(iso, opts->num_workers);
     return iso;
 }
 
 // Execute code string and cleanup isolate
 static int run_string(const RunOptions *opts, const char *code) {
-    XrayIsolate *iso = create_run_isolate(opts);
+    XrVMRuntime *iso = create_run_isolate(opts);
     if (!iso)
         return 1;
 
-    int result = xray_isolate_dostring(iso, code);
-    xr_multicore_destroy(iso);
-    xray_isolate_delete(iso);
+    int result = xray_vm_dostring(iso, code);
+    xray_vm_multicore_destroy(iso);
+    xray_vm_delete(iso);
     return (result != 0) ? 1 : 0;
 }
 
@@ -113,12 +115,12 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
     char **script_argv = inv->passthrough_argv;
 
     /* Create isolate with runtime */
-    XrayIsolate *iso = create_run_isolate(&opts);
+    XrVMRuntime *iso = create_run_isolate(&opts);
     if (!iso)
         return XR_CLI_EXIT_INTERNAL;
 
     /* Set script info (for args/__file__/__dir__) */
-    xray_isolate_set_script_info(iso, file, script_argc, script_argv);
+    xray_vm_set_script_info(iso, file, script_argc, script_argv);
 
     /* Re-initialize module system (with script path) */
     xr_module_system_init_with_script(iso, file);
@@ -139,8 +141,8 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
                                 graph->cycle_desc ? graph->cycle_desc
                                                   : "circular dependency detected");
                         xr_module_graph_free(graph);
-                        xr_multicore_destroy(iso);
-                        xray_isolate_delete(iso);
+                        xray_vm_multicore_destroy(iso);
+                        xray_vm_delete(iso);
                         return XR_CLI_EXIT_FAIL;
                     }
 
@@ -209,14 +211,14 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
 
     /* Start coroutine monitor (if enabled) */
     if (opts.coro_watch_interval > 0 || opts.coro_http_port > 0) {
-        xr_coro_monitor_start(iso, opts.coro_watch_interval, opts.coro_http_port);
+        xray_vm_coro_monitor_start(iso, opts.coro_watch_interval, opts.coro_http_port);
     }
 
     /* Execute file */
-    int result = xray_isolate_dofile(iso, file);
+    int result = xray_vm_dofile(iso, file);
 
-    xr_multicore_destroy(iso);
-    xray_isolate_delete(iso);
+    xray_vm_multicore_destroy(iso);
+    xray_vm_delete(iso);
 
     return (result != 0) ? XR_CLI_EXIT_FAIL : XR_CLI_EXIT_OK;
 }

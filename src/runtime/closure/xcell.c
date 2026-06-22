@@ -20,7 +20,7 @@
  * Allocate a lightweight Cell (32 bytes) for single mutable capture.
  * Value initialized to null.
  */
-XrCell *xr_cell_new(XrayIsolate *isolate, struct XrCoroutine *coro) {
+XrCell *xr_cell_new(XrVMRuntime *isolate, struct XrCoroutine *coro) {
     XR_DCHECK(isolate != NULL, "cell_new: NULL isolate");
 
     XrCell *cell;

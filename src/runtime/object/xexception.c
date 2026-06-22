@@ -33,13 +33,13 @@
 
 /* ========== Local helpers ========== */
 
-static XrInstance *exception_instance(XrayIsolate *X, XrValue v) {
+static XrInstance *exception_instance(XrVMRuntime *X, XrValue v) {
     if (!xr_value_is_exception(X, v))
         return NULL;
     return (XrInstance *) XR_TO_PTR(v);
 }
 
-static XrClass *exception_class(XrayIsolate *X) {
+static XrClass *exception_class(XrVMRuntime *X) {
     XR_DCHECK(X != NULL, "exception: NULL isolate");
     XrayCoreClasses *core = xr_isolate_get_core_classes(X);
     XR_DCHECK(core != NULL, "exception: core not initialised");
@@ -50,7 +50,7 @@ static XrClass *exception_class(XrayIsolate *X) {
 
 /* ========== Type Check ========== */
 
-bool xr_value_is_exception(XrayIsolate *X, XrValue v) {
+bool xr_value_is_exception(XrVMRuntime *X, XrValue v) {
     XR_DCHECK(X != NULL, "xr_value_is_exception: NULL isolate");
     if (!XR_IS_INSTANCE(v))
         return false;
@@ -63,7 +63,7 @@ bool xr_value_is_exception(XrayIsolate *X, XrValue v) {
 
 /* ========== Construction ========== */
 
-XrValue xr_exception_new(XrayIsolate *X, XrErrorCode code, const char *message) {
+XrValue xr_exception_new(XrVMRuntime *X, XrErrorCode code, const char *message) {
     XR_DCHECK(X != NULL, "exception_new: NULL isolate");
     XrClass *cls = exception_class(X);
     XrInstance *inst = xr_instance_new(X, cls);
@@ -86,7 +86,7 @@ XrValue xr_exception_new(XrayIsolate *X, XrErrorCode code, const char *message) 
     return xr_value_from_instance(inst);
 }
 
-XrValue xr_exception_newf(XrayIsolate *X, XrErrorCode code, const char *fmt, ...) {
+XrValue xr_exception_newf(XrVMRuntime *X, XrErrorCode code, const char *fmt, ...) {
     XR_DCHECK(X != NULL, "exception_newf: NULL isolate");
     XR_DCHECK(fmt != NULL, "exception_newf: NULL fmt");
     char buffer[512];
@@ -97,7 +97,7 @@ XrValue xr_exception_newf(XrayIsolate *X, XrErrorCode code, const char *fmt, ...
     return xr_exception_new(X, code, buffer);
 }
 
-XrValue xr_exception_from_error(XrayIsolate *X, XrError *error) {
+XrValue xr_exception_from_error(XrVMRuntime *X, XrError *error) {
     XR_DCHECK(X != NULL, "exception_from_error: NULL isolate");
     if (!error) {
         return xr_exception_new(X, XR_ERR_UNKNOWN, "Unknown error");
@@ -121,7 +121,7 @@ XrValue xr_exception_from_error(XrayIsolate *X, XrError *error) {
     return xr_value_from_instance(inst);
 }
 
-XrValue xr_exception_from_value(XrayIsolate *X, XrValue value) {
+XrValue xr_exception_from_value(XrVMRuntime *X, XrValue value) {
     XR_DCHECK(X != NULL, "exception_from_value: NULL isolate");
     if (xr_value_is_exception(X, value))
         return value;
@@ -143,7 +143,7 @@ XrValue xr_exception_from_value(XrayIsolate *X, XrValue value) {
 
 /* ========== Field Accessors ========== */
 
-XrErrorCode xr_exception_get_code(XrayIsolate *X, XrValue exception) {
+XrErrorCode xr_exception_get_code(XrVMRuntime *X, XrValue exception) {
     XrInstance *inst = exception_instance(X, exception);
     if (!inst)
         return XR_ERR_UNKNOWN;
@@ -151,7 +151,7 @@ XrErrorCode xr_exception_get_code(XrayIsolate *X, XrValue exception) {
     return XR_IS_INT(v) ? (XrErrorCode) XR_TO_INT(v) : XR_ERR_UNKNOWN;
 }
 
-const char *xr_exception_get_message(XrayIsolate *X, XrValue exception) {
+const char *xr_exception_get_message(XrVMRuntime *X, XrValue exception) {
     XrInstance *inst = exception_instance(X, exception);
     if (!inst)
         return "Not an exception";
@@ -162,7 +162,7 @@ const char *xr_exception_get_message(XrayIsolate *X, XrValue exception) {
     return s->data;
 }
 
-XrValue xr_exception_get_stacktrace(XrayIsolate *X, XrValue exception) {
+XrValue xr_exception_get_stacktrace(XrVMRuntime *X, XrValue exception) {
     XrInstance *inst = exception_instance(X, exception);
     if (!inst)
         return xr_null();
@@ -178,7 +178,7 @@ XrValue xr_exception_get_stacktrace(XrayIsolate *X, XrValue exception) {
     return av;
 }
 
-XrValue xr_exception_get_data(XrayIsolate *X, XrValue exception) {
+XrValue xr_exception_get_data(XrVMRuntime *X, XrValue exception) {
     XrInstance *inst = exception_instance(X, exception);
     if (!inst)
         return xr_null();
@@ -187,7 +187,7 @@ XrValue xr_exception_get_data(XrayIsolate *X, XrValue exception) {
 
 /* ========== Stack Trace ========== */
 
-void xr_exception_add_frame(XrayIsolate *X, XrValue exception, const char *funcName, int line) {
+void xr_exception_add_frame(XrVMRuntime *X, XrValue exception, const char *funcName, int line) {
     XR_DCHECK(funcName != NULL, "exception_add_frame: NULL funcName");
     XrInstance *inst = exception_instance(X, exception);
     if (!inst)
@@ -221,7 +221,7 @@ void xr_exception_add_frame(XrayIsolate *X, XrValue exception, const char *funcN
  * and return the same value back so the caller's base[a] points at it.
  */
 
-static XrValue exception_primitive_constructor(XrayIsolate *X, XrValue self, XrValue *args,
+static XrValue exception_primitive_constructor(XrVMRuntime *X, XrValue self, XrValue *args,
                                                int argc) {
     XR_DCHECK(X != NULL, "Exception.ctor: NULL isolate");
     if (!XR_IS_INSTANCE(self))
@@ -270,7 +270,7 @@ static XrValue exception_primitive_constructor(XrayIsolate *X, XrValue self, XrV
     return self;
 }
 
-static XrValue exception_primitive_to_string(XrayIsolate *X, XrValue self, XrValue *args,
+static XrValue exception_primitive_to_string(XrVMRuntime *X, XrValue self, XrValue *args,
                                              int argc) {
     (void) args;
     (void) argc;
@@ -303,7 +303,7 @@ static XrValue exception_primitive_to_string(XrayIsolate *X, XrValue self, XrVal
  * builder ordering and the constants would silently corrupt every throw.
  */
 
-void xr_register_exception_class(XrayIsolate *X) {
+void xr_register_exception_class(XrVMRuntime *X) {
     XR_DCHECK(X != NULL, "register_exception_class: NULL isolate");
     XrayCoreClasses *core = xr_isolate_get_core_classes(X);
     XR_DCHECK(core != NULL, "register_exception_class: core not initialised");
@@ -349,7 +349,7 @@ void xr_register_exception_class(XrayIsolate *X) {
 
 /* ========== Output ========== */
 
-void xr_exception_print(XrayIsolate *X, XrValue exception) {
+void xr_exception_print(XrVMRuntime *X, XrValue exception) {
     XrInstance *inst = exception_instance(X, exception);
     if (!inst) {
         fprintf(stderr, "Error: Not an exception object\n");

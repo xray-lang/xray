@@ -86,7 +86,7 @@ XR_FUNC int xr_utf16_to_utf8_len(const uint8_t *utf16, size_t utf16_len, XrUtf16
 
 /* ========== Helper Functions ========== */
 
-static XrValue make_bytes(XrayIsolate *X, const uint8_t *data, int len) {
+static XrValue make_bytes(XrVMRuntime *X, const uint8_t *data, int len) {
     XrCoroutine *coro = xr_current_coro(X);
     if (!coro)
         return xr_null();
@@ -103,7 +103,7 @@ static XrValue make_bytes(XrayIsolate *X, const uint8_t *data, int len) {
 /* ========== xray Binding Functions ========== */
 
 // encoding.hexEncode(str) -> string
-static XrValue encoding_hex_encode(XrayIsolate *X, XrValue *args, int nargs) {
+static XrValue encoding_hex_encode(XrVMRuntime *X, XrValue *args, int nargs) {
     if (nargs < 1)
         return xr_null();
 
@@ -123,7 +123,7 @@ static XrValue encoding_hex_encode(XrayIsolate *X, XrValue *args, int nargs) {
 }
 
 // encoding.hexDecode(hex) -> Array<uint8>
-static XrValue encoding_hex_decode(XrayIsolate *X, XrValue *args, int nargs) {
+static XrValue encoding_hex_decode(XrVMRuntime *X, XrValue *args, int nargs) {
     if (nargs < 1)
         return xr_null();
 
@@ -148,7 +148,7 @@ static XrValue encoding_hex_decode(XrayIsolate *X, XrValue *args, int nargs) {
 }
 
 // encoding.hexDecodeString(hex) -> string?
-static XrValue encoding_hex_decode_string(XrayIsolate *X, XrValue *args, int nargs) {
+static XrValue encoding_hex_decode_string(XrVMRuntime *X, XrValue *args, int nargs) {
     if (nargs < 1)
         return xr_null();
 
@@ -173,7 +173,7 @@ static XrValue encoding_hex_decode_string(XrayIsolate *X, XrValue *args, int nar
 }
 
 // encoding.hexValid(hex) -> bool
-static XrValue encoding_hex_valid(XrayIsolate *X, XrValue *args, int nargs) {
+static XrValue encoding_hex_valid(XrVMRuntime *X, XrValue *args, int nargs) {
     (void) X;
     if (nargs < 1)
         return xr_bool(false);
@@ -187,7 +187,7 @@ static XrValue encoding_hex_valid(XrayIsolate *X, XrValue *args, int nargs) {
 }
 
 // encoding.utf8Valid(str) -> bool
-static XrValue encoding_utf8_valid(XrayIsolate *X, XrValue *args, int nargs) {
+static XrValue encoding_utf8_valid(XrVMRuntime *X, XrValue *args, int nargs) {
     (void) X;
     if (nargs < 1)
         return xr_bool(false);
@@ -201,7 +201,7 @@ static XrValue encoding_utf8_valid(XrayIsolate *X, XrValue *args, int nargs) {
 }
 
 // encoding.utf8Count(str) -> int
-static XrValue encoding_utf8_count(XrayIsolate *X, XrValue *args, int nargs) {
+static XrValue encoding_utf8_count(XrVMRuntime *X, XrValue *args, int nargs) {
     (void) X;
     if (nargs < 1)
         return xr_int(0);
@@ -215,7 +215,7 @@ static XrValue encoding_utf8_count(XrayIsolate *X, XrValue *args, int nargs) {
 }
 
 // encoding.utf8ByteLength(str) -> int
-static XrValue encoding_utf8_byte_length(XrayIsolate *X, XrValue *args, int nargs) {
+static XrValue encoding_utf8_byte_length(XrVMRuntime *X, XrValue *args, int nargs) {
     (void) X;
     if (nargs < 1)
         return xr_int(0);
@@ -236,7 +236,7 @@ static XrUtf16Endian parse_endian_arg(XrValue *args, int nargs) {
 }
 
 // encoding.utf16Encode(str, endian?) -> Array<uint8>
-static XrValue encoding_utf16_encode(XrayIsolate *X, XrValue *args, int nargs) {
+static XrValue encoding_utf16_encode(XrVMRuntime *X, XrValue *args, int nargs) {
     if (nargs < 1)
         return xr_null();
 
@@ -273,7 +273,7 @@ static XrValue encoding_utf16_encode(XrayIsolate *X, XrValue *args, int nargs) {
 // and, if the caller did not pass an explicit endian, the BOM drives the
 // endian selection (FE FF = BE, FF FE = LE). Callers that wish to observe
 // the BOM as a literal character can pass stripBom=false.
-static XrValue encoding_utf16_decode(XrayIsolate *X, XrValue *args, int nargs) {
+static XrValue encoding_utf16_decode(XrVMRuntime *X, XrValue *args, int nargs) {
     if (nargs < 1)
         return xr_null();
 
@@ -367,7 +367,7 @@ XR_DEFINE_BUILTIN(encoding_utf16_decode, "utf16Decode",
                   "(data: string | Array<uint8>, endian?: int, stripBom?: bool): string?",
                   "UTF-16 decode to string (auto-detects BOM)")
 
-XR_FUNC XrModule *xr_load_module_encoding(XrayIsolate *isolate) {
+XR_FUNC XrModule *xr_load_module_encoding(XrVMRuntime *isolate) {
     XR_DCHECK(isolate != NULL, "xr_load_module_encoding: NULL isolate");
 
     XrModule *module = xr_module_create_native(isolate, "encoding");

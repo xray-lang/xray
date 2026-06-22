@@ -17,7 +17,7 @@
 #include "xcli_fs.h"
 #include "../../api/xisolate_profile.h"
 #include "xray.h"
-#include "xray_isolate.h"
+#include "xray_vm.h"
 #include "../../frontend/parser/xparse.h"
 #include "../../frontend/parser/xast.h"
 #include "../../frontend/analyzer/xanalyzer.h"
@@ -34,7 +34,7 @@
 #include "../../os/os_fs.h"
 
 // Check single file, returns: 0 = no error, 1 = has error
-static int check_file(XrayIsolate *X, XaAnalyzer *analyzer, const char *path, int verbose) {
+static int check_file(XrVMRuntime *X, XaAnalyzer *analyzer, const char *path, int verbose) {
     char *source = xr_cli_read_file(path);
     if (!source) {
         fprintf(stderr, "Error: cannot read file '%s'\n", path);
@@ -84,7 +84,7 @@ static int check_file(XrayIsolate *X, XaAnalyzer *analyzer, const char *path, in
 }
 
 // Recursively check directory, returns: error file count
-static int check_directory(XrayIsolate *X, XaAnalyzer *analyzer, const char *path, int verbose,
+static int check_directory(XrVMRuntime *X, XaAnalyzer *analyzer, const char *path, int verbose,
                            int *total, int *passed) {
     XrDirIter *it = xr_dir_open(path);
     if (!it) {
@@ -119,7 +119,7 @@ static int check_directory(XrayIsolate *X, XaAnalyzer *analyzer, const char *pat
 
 /* Graph-based check: build module graph from entry file, then analyze
  * all reachable modules in topological order.  Returns error count. */
-static int check_with_graph(XrayIsolate *X, XaAnalyzer *analyzer, const char *entry_path,
+static int check_with_graph(XrVMRuntime *X, XaAnalyzer *analyzer, const char *entry_path,
                             int verbose) {
     XrModuleRegistry *registry = xr_isolate_get_module_registry(X);
     XrModuleResolver *resolver = xr_module_registry_get_resolver(registry);
@@ -221,7 +221,7 @@ XR_FUNC int cmd_check(const XrCliInvocation *inv) {
     bool strict = xr_cli_opt_bool(&inv->options, "strict");
 
     /* Create shared isolate for all checks */
-    XrayIsolate *X = xr_isolate_profile_new(XR_ISOLATE_PROFILE_ANALYZE);
+    XrVMRuntime *X = xr_isolate_profile_new(XR_ISOLATE_PROFILE_ANALYZE);
     if (!X) {
         xr_cli_error("check", "failed to create isolate");
         return XR_CLI_EXIT_INTERNAL;
@@ -287,6 +287,6 @@ XR_FUNC int cmd_check(const XrCliInvocation *inv) {
 
     if (analyzer)
         xa_analyzer_free(analyzer);
-    xray_isolate_delete(X);
+    xray_vm_delete(X);
     return total_errors > 0 ? XR_CLI_EXIT_FAIL : XR_CLI_EXIT_OK;
 }

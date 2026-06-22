@@ -32,7 +32,7 @@
 
 /* Dummy coroutine for heap tests (xr_coro_heap_create only stores heap->owner, no dereference) */
 static XrCoroutine dummy_coro;
-static XrayIsolate g_test_iso;
+static XrVMRuntime g_test_iso;
 static XrRuntimeCore g_test_core;
 
 #define XR_TEST_EXT_TYPE 63

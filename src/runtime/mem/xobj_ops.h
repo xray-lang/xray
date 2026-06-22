@@ -20,7 +20,7 @@ typedef struct XrValue XrValue;
 #endif
 
 struct XrCoroHeap;
-struct XrayIsolate;
+struct XrVMRuntime;
 struct XrCopyContext;
 
 // Object type table capacity.
@@ -28,7 +28,7 @@ struct XrCopyContext;
 
 typedef void (*XrObjDestroyFn)(XrObjHeader *obj, struct XrCoroHeap *owner_heap);
 typedef XrValue (*XrObjDeepCopyFn)(struct XrCopyContext *ctx, XrObjHeader *obj);
-typedef XrValue (*XrObjToSharedFn)(struct XrayIsolate *X, XrObjHeader *obj);
+typedef XrValue (*XrObjToSharedFn)(struct XrVMRuntime *X, XrObjHeader *obj);
 typedef struct XrObjHeader **(*XrObjGetRefListFn)(XrObjHeader *obj);
 
 /* Per-type capability tables.

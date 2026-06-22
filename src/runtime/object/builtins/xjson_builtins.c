@@ -42,7 +42,7 @@
 /* ========== Static Method Implementations ========== */
 
 // Json.keys(obj) -> Array<string>
-static XrValue xr_json_static_keys(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+static XrValue xr_json_static_keys(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     (void) self;
     if (nargs < 1 || !xr_value_is_json(args[0]))
         return xr_value_from_array(xr_array_new(xr_current_coro(isolate)));
@@ -64,7 +64,7 @@ static XrValue xr_json_static_keys(XrayIsolate *isolate, XrValue self, XrValue *
 }
 
 // Json.values(obj) -> Array
-static XrValue xr_json_static_values(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+static XrValue xr_json_static_values(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     (void) self;
     if (nargs < 1 || !xr_value_is_json(args[0]))
         return xr_value_from_array(xr_array_new(xr_current_coro(isolate)));
@@ -83,7 +83,7 @@ static XrValue xr_json_static_values(XrayIsolate *isolate, XrValue self, XrValue
 }
 
 // Json.entries(obj) -> Array<(string, Json)>
-static XrValue xr_json_static_entries(XrayIsolate *isolate, XrValue self, XrValue *args,
+static XrValue xr_json_static_entries(XrVMRuntime *isolate, XrValue self, XrValue *args,
                                       int nargs) {
     (void) self;
     if (nargs < 1 || !xr_value_is_json(args[0]))
@@ -115,7 +115,7 @@ static XrValue xr_json_static_entries(XrayIsolate *isolate, XrValue self, XrValu
 }
 
 // Json.has(obj, key) -> bool
-static XrValue xr_json_static_has(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+static XrValue xr_json_static_has(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     (void) self;
     if (nargs < 2 || !xr_value_is_json(args[0]))
         return xr_bool(false);
@@ -136,7 +136,7 @@ static XrValue xr_json_static_has(XrayIsolate *isolate, XrValue self, XrValue *a
 }
 
 // Json.get(obj, key, default?) -> any
-static XrValue xr_json_static_get(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+static XrValue xr_json_static_get(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     (void) self;
     if (nargs < 2)
         return xr_null();
@@ -161,7 +161,7 @@ static XrValue xr_json_static_get(XrayIsolate *isolate, XrValue self, XrValue *a
 }
 
 // Json.size(obj) -> int
-static XrValue xr_json_static_size(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+static XrValue xr_json_static_size(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     (void) self;
     if (nargs < 1 || !xr_value_is_json(args[0]))
         return xr_int(0);
@@ -174,7 +174,7 @@ static XrValue xr_json_static_size(XrayIsolate *isolate, XrValue self, XrValue *
 }
 
 // Json.isEmpty(obj) -> bool
-static XrValue xr_json_static_isEmpty(XrayIsolate *isolate, XrValue self, XrValue *args,
+static XrValue xr_json_static_isEmpty(XrVMRuntime *isolate, XrValue self, XrValue *args,
                                       int nargs) {
     (void) self;
     if (nargs < 1 || !xr_value_is_json(args[0]))
@@ -189,7 +189,7 @@ static XrValue xr_json_static_isEmpty(XrayIsolate *isolate, XrValue self, XrValu
 
 // Json.stringify(value, indent?) — thin wrapper that calls the core
 // stringify engine and throws a TypeError on non-serializable types.
-static XrValue xr_json_builtin_stringify(XrayIsolate *X, XrValue self, XrValue *args, int argc) {
+static XrValue xr_json_builtin_stringify(XrVMRuntime *X, XrValue self, XrValue *args, int argc) {
     (void) self;
     if (argc < 1)
         return xr_null();
@@ -210,7 +210,7 @@ static XrValue xr_json_builtin_stringify(XrayIsolate *X, XrValue self, XrValue *
 
 /* ========== Class Creation ========== */
 
-static XrClass *create_json_utility_class(XrayIsolate *X) {
+static XrClass *create_json_utility_class(XrVMRuntime *X) {
     XR_DCHECK(X != NULL, "create_json_utility_class: NULL isolate");
     XrClassBuilder *builder =
         xr_class_builder_new(X, "Json", xr_isolate_get_core_classes(X)->objectClass);
@@ -236,7 +236,7 @@ static XrClass *create_json_utility_class(XrayIsolate *X) {
 
 /* ========== Initialization ========== */
 
-void xr_json_api_init(XrayIsolate *X) {
+void xr_json_api_init(XrVMRuntime *X) {
     XR_DCHECK(X != NULL, "xr_json_api_init: NULL isolate");
     // create_json_utility_class goes through xr_class_builder_finalize,
     // which already registers the resulting class with the reflection

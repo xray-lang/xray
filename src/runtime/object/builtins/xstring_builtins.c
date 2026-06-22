@@ -21,7 +21,7 @@
 #include <string.h>
 
 // Helper: convert any value to string
-static XrString *value_to_string(XrayIsolate *isolate, XrValue value) {
+static XrString *value_to_string(XrVMRuntime *isolate, XrValue value) {
     if (XR_IS_STRING(value)) {
         return XR_TO_STRING(value);
     }
@@ -60,7 +60,7 @@ static XrString *value_to_string(XrayIsolate *isolate, XrValue value) {
 }
 
 // String() or String(value)
-XrValue xr_builtin_string_construct(XrayIsolate *isolate, XrValue *args, int nargs) {
+XrValue xr_builtin_string_construct(XrVMRuntime *isolate, XrValue *args, int nargs) {
     XR_DCHECK(isolate != NULL, "string_construct: NULL isolate");
     if (nargs == 0) {
         // String() - empty string

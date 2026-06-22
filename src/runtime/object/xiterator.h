@@ -109,11 +109,11 @@ XR_FUNC XrIterator *xr_iterator_new_from_set(struct XrCoroutine *coro, struct Xr
 // Create iterator from Json (lazy, converts SymbolId keys to strings).
 // Default mode is PAIRS — yields (string_key, value) tuples.
 XR_FUNC XrIterator *xr_iterator_new_from_json(struct XrCoroutine *coro, struct XrInstance *json,
-                                              struct XrayIsolate *isolate);
+                                              struct XrVMRuntime *isolate);
 
 // Same source, KEYS mode — yields each key string.
 XR_FUNC XrIterator *xr_iterator_keys_from_json(struct XrCoroutine *coro, struct XrInstance *json,
-                                               struct XrayIsolate *isolate);
+                                               struct XrVMRuntime *isolate);
 
 // Create iterator from Array (lazy, yields [index, element] pairs)
 XR_FUNC XrIterator *xr_iterator_new_from_array(struct XrCoroutine *coro, struct XrArray *arr);
@@ -121,7 +121,7 @@ XR_FUNC XrIterator *xr_iterator_new_from_array(struct XrCoroutine *coro, struct 
 // Create iterator from string (lazy, yields [index, char] pairs).
 // `isolate` is needed so we can intern the per-rune single-character strings.
 XR_FUNC XrIterator *xr_iterator_new_from_string(struct XrCoroutine *coro, struct XrString *s,
-                                                struct XrayIsolate *isolate);
+                                                struct XrVMRuntime *isolate);
 
 // Check if more elements available
 XR_FUNC bool xr_iterator_has_next(XrIterator *iter);
@@ -139,8 +139,8 @@ static inline bool xr_is_iterator(XrValue value) {
 }
 
 /* Register Iterator core class with native body descriptor. */
-struct XrayIsolate;
-XR_FUNC void xr_iterator_register_class(struct XrayIsolate *isolate);
+struct XrVMRuntime;
+XR_FUNC void xr_iterator_register_class(struct XrVMRuntime *isolate);
 
 /* Native body descriptor (shared singleton). */
 struct XrNativeBodyDesc;

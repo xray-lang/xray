@@ -18,10 +18,10 @@
 
 #include "../parser/xast.h"
 
-// Forward declaration: the formatter only stores an XrayIsolate pointer
-// in XrFmtContext (used by xtype printing). Pulling in xray_isolate.h
+// Forward declaration: the formatter only stores an XrVMRuntime pointer
+// in XrFmtContext (used by xtype printing). Pulling in xray_vm.h
 // here would couple the frontend to the public API header.
-typedef struct XrayIsolate XrayIsolate;
+typedef struct XrVMRuntime XrVMRuntime;
 
 // Format configuration
 typedef struct XrFmtConfig {
@@ -60,18 +60,18 @@ typedef struct XrFmtContext {
     int column;            // Current column (for line length tracking)
     int in_template_expr;  // Inside ${...} interpolation — use single quotes
     XrFmtConfig *config;   // Configuration
-    XrayIsolate *X;        // Isolate for type printing
+    XrVMRuntime *X;        // Isolate for type printing
 } XrFmtContext;
 
 // Initialize formatter context
-XR_FUNC void xfmt_init(XrFmtContext *ctx, XrFmtConfig *config, XrayIsolate *X);
+XR_FUNC void xfmt_init(XrFmtContext *ctx, XrFmtConfig *config, XrVMRuntime *X);
 
 // Free formatter context
 XR_FUNC void xfmt_free(XrFmtContext *ctx);
 
 // Format AST to string
 // Returns newly allocated string (caller must free)
-XR_FUNC char *xfmt_format_ast(AstNode *ast, XrFmtConfig *config, XrayIsolate *X);
+XR_FUNC char *xfmt_format_ast(AstNode *ast, XrFmtConfig *config, XrVMRuntime *X);
 
 // Format a single AST node
 XR_FUNC void xfmt_node(XrFmtContext *ctx, AstNode *node);

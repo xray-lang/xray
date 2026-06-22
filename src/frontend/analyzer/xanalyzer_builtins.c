@@ -160,7 +160,7 @@ bool xa_builtin_is_method(XrType *type, const char *member_name) {
 }
 
 // Get method return type with generic substitution
-XrType *xa_builtin_get_method_return_type(XrayIsolate *X, XrType *container_type,
+XrType *xa_builtin_get_method_return_type(XrVMRuntime *X, XrType *container_type,
                                           const char *method_name) {
     if (!container_type || !method_name)
         return NULL;
@@ -707,7 +707,7 @@ const char *xa_builtin_get_type_name(XrType *type) {
 }
 
 // Parse a type string (e.g., "int", "string?", "Array<int>") to XrType
-static XrType *parse_type_str(XrayIsolate *X, const char *s, size_t len);
+static XrType *parse_type_str(XrVMRuntime *X, const char *s, size_t len);
 
 // Helper for parse_type_str: when s starts with '(' return the byte index
 // just past the matching ')' at depth 0; otherwise len. If the slice past
@@ -758,10 +758,10 @@ static inline bool has_arrow_after_paren(const char *s, size_t len) {
 // of a NUL-terminated string, so it composes safely inside nested type
 // expressions (e.g. the first parameter of Array<T>.reduce, which is
 // itself a function type "fn(acc: U, item: T): U").
-static XrType *parse_fn_type_str(XrayIsolate *X, const char *s, size_t len);
+static XrType *parse_fn_type_str(XrVMRuntime *X, const char *s, size_t len);
 
 // Public wrapper with NUL-terminated string.
-XrType *xa_builtin_parse_type_string(XrayIsolate *X, const char *s) {
+XrType *xa_builtin_parse_type_string(XrVMRuntime *X, const char *s) {
     if (!s)
         return xr_type_new_unknown(NULL);
     return parse_type_str(X, s, strlen(s));
@@ -801,7 +801,7 @@ static size_t parse_type_find_top_pipe(const char *s, size_t len, size_t from) {
     return len;
 }
 
-static XrType *parse_type_str(XrayIsolate *X, const char *s, size_t len) {
+static XrType *parse_type_str(XrVMRuntime *X, const char *s, size_t len) {
     if (!s || len == 0)
         return xr_type_new_unknown(NULL);
 
@@ -1124,7 +1124,7 @@ static XrType *parse_type_str(XrayIsolate *X, const char *s, size_t len) {
 // Parse a "fn(p: T, ...): R" function type literal from a bounded slice.
 // Operates on [s, s+len) so it can be used recursively inside larger type
 // expressions where the inner fn is not NUL-terminated.
-static XrType *parse_fn_type_str(XrayIsolate *X, const char *s, size_t len) {
+static XrType *parse_fn_type_str(XrVMRuntime *X, const char *s, size_t len) {
     XR_DCHECK(s != NULL, "parse_fn_type_str: NULL s");
     // Skip "fn" prefix and any spaces before '('.
     size_t i = 2;
@@ -1265,7 +1265,7 @@ static XrType *parse_fn_type_str(XrayIsolate *X, const char *s, size_t len) {
 
 // Parse full function signature: "(param: type, param2: type): ReturnType"
 // Returns a complete function type with parameter types
-XrType *xa_builtin_parse_full_signature(XrayIsolate *X, const char *sig) {
+XrType *xa_builtin_parse_full_signature(XrVMRuntime *X, const char *sig) {
     if (!sig)
         return xr_type_new_function(X, NULL, 0, xr_type_new_unknown(NULL), false);
 
@@ -1418,7 +1418,7 @@ XrType *xa_builtin_parse_full_signature(XrayIsolate *X, const char *sig) {
 //   "(param: type): ReturnType"        (legacy colon syntax, still present in
 //                                       some hand-authored builtin tables)
 // Returns an XrType based on the return type portion after the separator.
-XrType *xa_builtin_parse_return_type_from_sig(XrayIsolate *X, const char *sig) {
+XrType *xa_builtin_parse_return_type_from_sig(XrVMRuntime *X, const char *sig) {
     if (!sig)
         return NULL;
 

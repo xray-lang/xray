@@ -25,8 +25,8 @@
 extern "C" {
 #endif
 
-struct XrayIsolate;
-XR_FUNC void xr_json_register_instance_methods(struct XrayIsolate *isolate);
+struct XrVMRuntime;
+XR_FUNC void xr_json_register_instance_methods(struct XrVMRuntime *isolate);
 
 #ifdef __cplusplus
 }

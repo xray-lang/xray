@@ -14,7 +14,7 @@
 #include "../../../src/frontend/parser/xast_types.h"
 #include "../../../src/frontend/analyzer/xanalyzer.h"
 #include "../../../src/toolchain/xcompiler_session.h"
-#include "../../../include/xray_isolate.h"
+#include "../../../include/xray_vm.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -23,16 +23,16 @@
 
 /* ========== Infrastructure ========== */
 
-static XrayIsolate *g_iso = NULL;
+static XrVMRuntime *g_iso = NULL;
 static XrCompilerSession *g_session = NULL;
 static int tests_passed = 0;
 static int tests_failed = 0;
 
 static void setup(void) {
     if (!g_iso) {
-        XrayIsolateParams p;
-        xray_isolate_params_init(&p);
-        g_iso = xray_isolate_new(&p);
+        XrVMConfig p;
+        xray_vm_config_init(&p);
+        g_iso = xray_vm_new(&p);
         XrCompilerSessionConfig cfg = {.vm_host = g_iso};
         g_session = xr_compiler_session_new(&cfg);
         xr_compiler_session_attach_isolate(g_iso, g_session);
@@ -45,7 +45,7 @@ static void teardown(void) {
         g_session = NULL;
     }
     if (g_iso) {
-        xray_isolate_delete(g_iso);
+        xray_vm_delete(g_iso);
         g_iso = NULL;
     }
 }

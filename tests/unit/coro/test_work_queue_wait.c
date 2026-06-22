@@ -18,7 +18,7 @@
 #include <string.h>
 
 typedef struct WorkQueueFixture {
-    XrayIsolate isolate_storage;
+    XrVMRuntime isolate_storage;
     XrRuntimeCore core;
     XrRuntime runtime;
     XrSystemHeap sys_heap;
@@ -46,7 +46,7 @@ static void work_queue_fixture_cleanup(WorkQueueFixture *f) {
     }
 }
 
-static void init_blocked_work_queue_coro(XrCoroutine *coro, XrCoroExt *ext, XrayIsolate *isolate,
+static void init_blocked_work_queue_coro(XrCoroutine *coro, XrCoroExt *ext, XrVMRuntime *isolate,
                                          XrWorkQueue *q) {
     memset(coro, 0, sizeof(*coro));
     memset(ext, 0, sizeof(*ext));

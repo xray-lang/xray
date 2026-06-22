@@ -35,7 +35,7 @@ extern "C" {
 #endif
 
 /* int.toString() -> decimal string. Allocates. */
-static inline XrValue xr_int_to_string_method(XrayIsolate *iso, XrValue self, XrValue *args,
+static inline XrValue xr_int_to_string_method(XrVMRuntime *iso, XrValue self, XrValue *args,
                                               int argc) {
     (void) args;
     (void) argc;
@@ -50,7 +50,7 @@ static inline XrValue xr_int_to_string_method(XrayIsolate *iso, XrValue self, Xr
  * INT64_MIN.abs() wraps to INT64_MIN: (-INT64_MIN) is signed-overflow UB,
  * so route the negate through unsigned to match wrap-on-overflow semantics
  * elsewhere in the language (see OP_UNM). */
-static inline XrValue xr_int_abs_method(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static inline XrValue xr_int_abs_method(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) iso;
     (void) args;
     (void) argc;
@@ -61,7 +61,7 @@ static inline XrValue xr_int_abs_method(XrayIsolate *iso, XrValue self, XrValue 
 }
 
 /* int.toBigInt() -> BigInt. Allocates. */
-static inline XrValue xr_int_to_bigint_method(XrayIsolate *iso, XrValue self, XrValue *args,
+static inline XrValue xr_int_to_bigint_method(XrVMRuntime *iso, XrValue self, XrValue *args,
                                               int argc) {
     (void) args;
     (void) argc;
@@ -71,7 +71,7 @@ static inline XrValue xr_int_to_bigint_method(XrayIsolate *iso, XrValue self, Xr
 }
 
 /* int.max(other) -> larger of self and other. Polymorphic on arg type. */
-static inline XrValue xr_int_max_method(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static inline XrValue xr_int_max_method(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) iso;
     xr_Integer v = XR_TO_INT(self);
     if (argc < 1)
@@ -89,7 +89,7 @@ static inline XrValue xr_int_max_method(XrayIsolate *iso, XrValue self, XrValue 
 }
 
 /* int.min(other) -> smaller of self and other. Polymorphic on arg type. */
-static inline XrValue xr_int_min_method(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static inline XrValue xr_int_min_method(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) iso;
     xr_Integer v = XR_TO_INT(self);
     if (argc < 1)
@@ -107,7 +107,7 @@ static inline XrValue xr_int_min_method(XrayIsolate *iso, XrValue self, XrValue 
 }
 
 /* int.toFloat() -> float. Pure, no GC. */
-static inline XrValue xr_int_to_float_method(XrayIsolate *iso, XrValue self, XrValue *args,
+static inline XrValue xr_int_to_float_method(XrVMRuntime *iso, XrValue self, XrValue *args,
                                              int argc) {
     (void) iso;
     (void) args;
@@ -116,7 +116,7 @@ static inline XrValue xr_int_to_float_method(XrayIsolate *iso, XrValue self, XrV
 }
 
 /* int.toHex() -> hex string. Allocates. */
-static inline XrValue xr_int_to_hex_method(XrayIsolate *iso, XrValue self, XrValue *args,
+static inline XrValue xr_int_to_hex_method(XrVMRuntime *iso, XrValue self, XrValue *args,
                                            int argc) {
     (void) args;
     (void) argc;
@@ -134,7 +134,7 @@ static inline XrValue xr_int_to_hex_method(XrayIsolate *iso, XrValue self, XrVal
 }
 
 /* int.pow(exponent) -> float. Pure, no GC. */
-static inline XrValue xr_int_pow_method(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static inline XrValue xr_int_pow_method(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) iso;
     xr_Number value = (xr_Number) XR_TO_INT(self);
     if (argc < 1)
@@ -150,8 +150,8 @@ static inline XrValue xr_int_pow_method(XrayIsolate *iso, XrValue self, XrValue 
     return xr_float(pow(value, exponent));
 }
 
-struct XrayIsolate;
-XR_FUNC void xr_int_register_native_type(struct XrayIsolate *isolate);
+struct XrVMRuntime;
+XR_FUNC void xr_int_register_native_type(struct XrVMRuntime *isolate);
 
 #ifdef __cplusplus
 }

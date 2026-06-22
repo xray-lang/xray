@@ -29,7 +29,7 @@
 
 struct XrCoroutine;
 struct XrCoroHeap;
-struct XrayIsolate;
+struct XrVMRuntime;
 
 /* ========== Object Layout ==========
  *

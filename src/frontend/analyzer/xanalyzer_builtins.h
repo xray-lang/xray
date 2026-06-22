@@ -82,7 +82,7 @@ XR_FUNC const char *xa_builtin_get_member_doc(XrType *type, const char *member_n
 // Get method return type (for type inference)
 // Returns the return type of a built-in method, with generic substitution
 // e.g., Array<int>.pop() returns int?, Array<int>.map(fn) returns Array<U>
-XR_FUNC XrType *xa_builtin_get_method_return_type(XrayIsolate *X, XrType *container_type,
+XR_FUNC XrType *xa_builtin_get_method_return_type(XrVMRuntime *X, XrType *container_type,
                                                   const char *method_name);
 
 // Check if member is a method
@@ -127,13 +127,13 @@ XR_FUNC const XaBuiltinHandle *xa_builtin_find_handle_by_name(const char *handle
 XR_FUNC void xa_builtin_set_script_dir(const char *dir);
 
 // Parse a type string (e.g., "float", "int?", "Array<string>") into XrType
-XR_FUNC XrType *xa_builtin_parse_type_string(XrayIsolate *X, const char *s);
+XR_FUNC XrType *xa_builtin_parse_type_string(XrVMRuntime *X, const char *s);
 
 // Parse return type from signature string (e.g., "(x: int): string" -> string type)
-XR_FUNC XrType *xa_builtin_parse_return_type_from_sig(XrayIsolate *X, const char *sig);
+XR_FUNC XrType *xa_builtin_parse_return_type_from_sig(XrVMRuntime *X, const char *sig);
 
 // Parse full function signature including parameter types
 // e.g., "(data: string, level?: int): string?" -> fn(string, int): string?
-XR_FUNC XrType *xa_builtin_parse_full_signature(XrayIsolate *X, const char *sig);
+XR_FUNC XrType *xa_builtin_parse_full_signature(XrVMRuntime *X, const char *sig);
 
 #endif  // XANALYZER_BUILTINS_H

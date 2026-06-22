@@ -154,7 +154,7 @@ typedef struct XrClusterNode {
      * worker in a raw read(2). NULL until writer start-up; never
      * re-bound thereafter.
      */
-    struct XrayIsolate *isolate;
+    struct XrVMRuntime *isolate;
 
     // Output queue (async writes via dedicated writer coroutine)
     XrOutputQueue outq;
@@ -229,7 +229,7 @@ XR_FUNC void xr_cluster_node_close(XrClusterNode *node);
 
 // Start the dedicated writer coroutine for a connected node.
 // Must be called after handshake completes.
-XR_FUNC void xr_cluster_node_start_writer(XrClusterNode *node, struct XrayIsolate *X);
+XR_FUNC void xr_cluster_node_start_writer(XrClusterNode *node, struct XrVMRuntime *X);
 
 // Writer loop function (runs as native coroutine)
 XR_FUNC void xr_cluster_node_writer_loop(void *arg);
@@ -280,7 +280,7 @@ XR_FUNC bool xr_cluster_node_is_slow(XrClusterNode *node);
 // or NULL if the node has reached `max_pending` in-flight requests.
 // Caller must recv from the returned Channel to get the response payload.
 XR_FUNC struct XrChannel *xr_cluster_node_add_pending(XrClusterNode *node, uint64_t request_id,
-                                                      struct XrayIsolate *X, int max_pending);
+                                                      struct XrVMRuntime *X, int max_pending);
 
 // Find and remove a pending request by request_id.
 // Returns the response Channel, or NULL if not found.

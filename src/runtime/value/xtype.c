@@ -94,18 +94,18 @@ XrTypePool *xr_type_get_current_pool(void) {
     return g_current_type_pool;
 }
 
-static inline XrayIsolate *resolve_isolate(XrayIsolate *X) {
+static inline XrVMRuntime *resolve_isolate(XrVMRuntime *X) {
     return X;
 }
 
-static inline XrTypePool *resolve_type_pool(XrayIsolate *X) {
+static inline XrTypePool *resolve_type_pool(XrVMRuntime *X) {
     (void) X;
     return g_current_type_pool;
 }
 
 // Helper: allocate and initialize a type (for non-singleton types)
 // Uses pool arena for allocation - memory freed when pool is reset/destroyed
-static XrType *type_alloc(XrayIsolate *X, XrTypeKind kind) {
+static XrType *type_alloc(XrVMRuntime *X, XrTypeKind kind) {
     X = resolve_isolate(X);
     XrTypePool *pool = resolve_type_pool(X);
     XR_CHECK(pool != NULL, "Type pool not set - call xr_type_set_current_pool first");
@@ -125,48 +125,48 @@ static void *type_alloc_array(XrTypePool *pool, size_t elem_size, int count, siz
     return ptr;
 }
 
-XrType *xr_type_new(XrayIsolate *X, XrTypeKind kind) {
+XrType *xr_type_new(XrVMRuntime *X, XrTypeKind kind) {
     return type_alloc(X, kind);
 }
 
 // Primitive type constructors (return process-level singletons)
-XrType *xr_type_new_int(XrayIsolate *X) {
+XrType *xr_type_new_int(XrVMRuntime *X) {
     (void) X;
     return &g_type_int;
 }
-XrType *xr_type_new_float(XrayIsolate *X) {
+XrType *xr_type_new_float(XrVMRuntime *X) {
     (void) X;
     return &g_type_float;
 }
-XrType *xr_type_new_string(XrayIsolate *X) {
+XrType *xr_type_new_string(XrVMRuntime *X) {
     (void) X;
     return &g_type_string;
 }
-XrType *xr_type_new_bool(XrayIsolate *X) {
+XrType *xr_type_new_bool(XrVMRuntime *X) {
     (void) X;
     return &g_type_bool;
 }
-XrType *xr_type_new_null(XrayIsolate *X) {
+XrType *xr_type_new_null(XrVMRuntime *X) {
     (void) X;
     return &g_type_null;
 }
-XrType *xr_type_new_unknown(XrayIsolate *X) {
+XrType *xr_type_new_unknown(XrVMRuntime *X) {
     (void) X;
     return &g_type_unknown;
 }
-XrType *xr_type_new_never(XrayIsolate *X) {
+XrType *xr_type_new_never(XrVMRuntime *X) {
     (void) X;
     return &g_type_never;
 }
 // Unit type singleton (XR_KIND_UNIT, spelled `()` in user syntax). Returns
 // the same singleton regardless of isolate to enable pointer equality.
-XrType *xr_type_new_unit(XrayIsolate *X) {
+XrType *xr_type_new_unit(XrVMRuntime *X) {
     (void) X;
     return &g_type_unit;
 }
 
 // Native-width integer type (int8/16/32/64, uint8/16/32/64)
-XrType *xr_type_new_int_width(XrayIsolate *X, int width) {
+XrType *xr_type_new_int_width(XrVMRuntime *X, int width) {
     XrType *type = type_alloc(X, XR_KIND_INT);
     if (!type)
         return NULL;
@@ -175,7 +175,7 @@ XrType *xr_type_new_int_width(XrayIsolate *X, int width) {
 }
 
 // Native-width float type (float32/64)
-XrType *xr_type_new_float_width(XrayIsolate *X, int width) {
+XrType *xr_type_new_float_width(XrVMRuntime *X, int width) {
     XrType *type = type_alloc(X, XR_KIND_FLOAT);
     if (!type)
         return NULL;
@@ -184,7 +184,7 @@ XrType *xr_type_new_float_width(XrayIsolate *X, int width) {
 }
 
 // Container type constructors
-XrType *xr_type_new_array(XrayIsolate *X, XrType *element_type) {
+XrType *xr_type_new_array(XrVMRuntime *X, XrType *element_type) {
     XR_DCHECK(element_type != NULL, "type_new_array: NULL element_type");
     XrType *type = type_alloc(X, XR_KIND_ARRAY);
     if (!type)
@@ -193,7 +193,7 @@ XrType *xr_type_new_array(XrayIsolate *X, XrType *element_type) {
     return type;
 }
 
-XrType *xr_type_new_map(XrayIsolate *X, XrType *key_type, XrType *value_type) {
+XrType *xr_type_new_map(XrVMRuntime *X, XrType *key_type, XrType *value_type) {
     XR_DCHECK(key_type != NULL, "type_new_map: NULL key_type");
     XR_DCHECK(value_type != NULL, "type_new_map: NULL value_type");
     XrType *type = type_alloc(X, XR_KIND_MAP);
@@ -204,7 +204,7 @@ XrType *xr_type_new_map(XrayIsolate *X, XrType *key_type, XrType *value_type) {
     return type;
 }
 
-XrType *xr_type_new_set(XrayIsolate *X, XrType *element_type) {
+XrType *xr_type_new_set(XrVMRuntime *X, XrType *element_type) {
     XrType *type = type_alloc(X, XR_KIND_SET);
     if (!type)
         return NULL;
@@ -212,7 +212,7 @@ XrType *xr_type_new_set(XrayIsolate *X, XrType *element_type) {
     return type;
 }
 
-XrType *xr_type_new_channel(XrayIsolate *X, XrType *element_type) {
+XrType *xr_type_new_channel(XrVMRuntime *X, XrType *element_type) {
     XrType *type = type_alloc(X, XR_KIND_CHANNEL);
     if (!type)
         return NULL;
@@ -220,7 +220,7 @@ XrType *xr_type_new_channel(XrayIsolate *X, XrType *element_type) {
     return type;
 }
 
-XrType *xr_type_new_pointer(XrayIsolate *X, XrType *element_type, bool is_mut) {
+XrType *xr_type_new_pointer(XrVMRuntime *X, XrType *element_type, bool is_mut) {
     XrType *type = type_alloc(X, XR_KIND_POINTER);
     if (!type)
         return NULL;
@@ -229,7 +229,7 @@ XrType *xr_type_new_pointer(XrayIsolate *X, XrType *element_type, bool is_mut) {
     return type;
 }
 
-XrType *xr_type_new_task(XrayIsolate *X, XrType *result_type) {
+XrType *xr_type_new_task(XrVMRuntime *X, XrType *result_type) {
     X = resolve_isolate(X);
     XrType *type = type_alloc(X, XR_KIND_INSTANCE);
     if (!type)
@@ -248,11 +248,11 @@ XrType *xr_type_new_task(XrayIsolate *X, XrType *result_type) {
 }
 
 // Object types
-XrType *xr_type_new_json(XrayIsolate *X) {
+XrType *xr_type_new_json(XrVMRuntime *X) {
     return &g_type_json;  // Process-level singleton (plain Json without fields)
 }
 
-XrType *xr_type_new_json_with_fields(XrayIsolate *X, const char **names, XrType **types, int count,
+XrType *xr_type_new_json_with_fields(XrVMRuntime *X, const char **names, XrType **types, int count,
                                      bool is_sealed) {
     if (count < 0)
         return NULL;
@@ -281,7 +281,7 @@ XrType *xr_type_new_json_with_fields(XrayIsolate *X, const char **names, XrType 
     return type;
 }
 
-XR_FUNC void xr_type_set_json_field_readonly(XrayIsolate *X, XrType *type, const bool *readonly,
+XR_FUNC void xr_type_set_json_field_readonly(XrVMRuntime *X, XrType *type, const bool *readonly,
                                              int count) {
     if (!type || type->kind != XR_KIND_JSON || !readonly || count <= 0 ||
         count != type->object.field_count)
@@ -296,7 +296,7 @@ XR_FUNC void xr_type_set_json_field_readonly(XrayIsolate *X, XrType *type, const
     memcpy(type->object.field_readonly, readonly, sizeof(bool) * (size_t) count);
 }
 
-XR_FUNC void xr_type_set_json_type_name(XrayIsolate *X, XrType *type, const char *name) {
+XR_FUNC void xr_type_set_json_type_name(XrVMRuntime *X, XrType *type, const char *name) {
     if (!type || type->kind != XR_KIND_JSON || !name)
         return;
     X = resolve_isolate(X);
@@ -307,7 +307,7 @@ XR_FUNC void xr_type_set_json_type_name(XrayIsolate *X, XrType *type, const char
 }
 
 // Optional type (T?) - unified: uses is_nullable on the base type itself
-XrType *xr_type_new_optional(XrayIsolate *X, XrType *base_type) {
+XrType *xr_type_new_optional(XrVMRuntime *X, XrType *base_type) {
     return xr_type_make_nullable(X, base_type);
 }
 
@@ -316,7 +316,7 @@ XrType *xr_type_get_base(XrType *optional_type) {
 }
 
 // Type parameter (for generics)
-XrType *xr_type_new_type_param(XrayIsolate *X, const char *name, int id) {
+XrType *xr_type_new_type_param(XrVMRuntime *X, const char *name, int id) {
     X = resolve_isolate(X);
     XrType *type = type_alloc(X, XR_KIND_TYPE_PARAM);
     if (!type)
@@ -328,7 +328,7 @@ XrType *xr_type_new_type_param(XrayIsolate *X, const char *name, int id) {
     return type;
 }
 
-XrType *xr_type_new_type_param_constrained(XrayIsolate *X, const char *name, int id,
+XrType *xr_type_new_type_param_constrained(XrVMRuntime *X, const char *name, int id,
                                            XrType *constraint) {
     XrType *type = xr_type_new_type_param(X, name, id);
     if (type) {
@@ -337,7 +337,7 @@ XrType *xr_type_new_type_param_constrained(XrayIsolate *X, const char *name, int
     return type;
 }
 
-XrType *xr_type_new_class(XrayIsolate *X, const char *class_name) {
+XrType *xr_type_new_class(XrVMRuntime *X, const char *class_name) {
     X = resolve_isolate(X);
     XrType *type = type_alloc(X, XR_KIND_CLASS);
     if (type && class_name) {
@@ -347,7 +347,7 @@ XrType *xr_type_new_class(XrayIsolate *X, const char *class_name) {
     return type;
 }
 
-XrType *xr_type_new_interface(XrayIsolate *X, const char *interface_name) {
+XrType *xr_type_new_interface(XrVMRuntime *X, const char *interface_name) {
     X = resolve_isolate(X);
     XrType *type = type_alloc(X, XR_KIND_INTERFACE);
     if (type && interface_name) {
@@ -361,7 +361,7 @@ XrType *xr_type_new_interface(XrayIsolate *X, const char *interface_name) {
 // Mirrors xr_type_new_generic_instance: stores resolved type arguments
 // alongside the interface name so constraint checks can compare them
 // structurally instead of falling back to bare-name matching.
-XrType *xr_type_new_generic_interface(XrayIsolate *X, const char *interface_name,
+XrType *xr_type_new_generic_interface(XrVMRuntime *X, const char *interface_name,
                                       XrType **type_args, int type_arg_count) {
     if (type_arg_count < 0)
         return NULL;
@@ -394,49 +394,49 @@ XrType *xr_type_new_generic_interface(XrayIsolate *X, const char *interface_name
     return type;
 }
 
-XrType *xr_type_new_bigint(XrayIsolate *X) {
+XrType *xr_type_new_bigint(XrVMRuntime *X) {
     XrType *type = type_alloc(X, XR_KIND_INSTANCE);
     if (type)
         type->instance.class_name = "BigInt";
     return type;
 }
 
-XrType *xr_type_new_datetime(XrayIsolate *X) {
+XrType *xr_type_new_datetime(XrVMRuntime *X) {
     XrType *type = type_alloc(X, XR_KIND_INSTANCE);
     if (type)
         type->instance.class_name = "DateTime";
     return type;
 }
 
-XrType *xr_type_new_bytes(XrayIsolate *X) {
+XrType *xr_type_new_bytes(XrVMRuntime *X) {
     XrType *elem = xr_type_new_int_width(X, XR_NATIVE_U8);
     if (!elem)
         return NULL;
     return xr_type_new_array(X, elem);
 }
 
-XrType *xr_type_new_regex(XrayIsolate *X) {
+XrType *xr_type_new_regex(XrVMRuntime *X) {
     XrType *type = type_alloc(X, XR_KIND_INSTANCE);
     if (type)
         type->instance.class_name = "Regex";
     return type;
 }
 
-XrType *xr_type_new_stringbuilder(XrayIsolate *X) {
+XrType *xr_type_new_stringbuilder(XrVMRuntime *X) {
     XrType *type = type_alloc(X, XR_KIND_INSTANCE);
     if (type)
         type->instance.class_name = "StringBuilder";
     return type;
 }
 
-XrType *xr_type_new_named_instance(XrayIsolate *X, const char *name) {
+XrType *xr_type_new_named_instance(XrVMRuntime *X, const char *name) {
     XrType *type = type_alloc(X, XR_KIND_INSTANCE);
     if (type)
         type->instance.class_name = name;
     return type;
 }
 
-XrType *xr_type_new_enum(XrayIsolate *X, const char *enum_name) {
+XrType *xr_type_new_enum(XrVMRuntime *X, const char *enum_name) {
     XrType *type = type_alloc(X, XR_KIND_ENUM);
     if (type && enum_name) {
         type->enum_type.enum_name = enum_name;
@@ -444,7 +444,7 @@ XrType *xr_type_new_enum(XrayIsolate *X, const char *enum_name) {
     return type;
 }
 
-XrType *xr_type_new_instance(XrayIsolate *X, XrClassInfo *class_info) {
+XrType *xr_type_new_instance(XrVMRuntime *X, XrClassInfo *class_info) {
     X = resolve_isolate(X);
     XrType *type = type_alloc(X, XR_KIND_INSTANCE);
     if (!type)
@@ -460,7 +460,7 @@ XrType *xr_type_new_instance(XrayIsolate *X, XrClassInfo *class_info) {
     return type;
 }
 
-XrType *xr_type_new_generic_instance(XrayIsolate *X, const char *class_name,
+XrType *xr_type_new_generic_instance(XrVMRuntime *X, const char *class_name,
                                      XrClassInfo *class_info, XrType **type_args,
                                      int type_arg_count) {
     if (type_arg_count < 0)
@@ -495,7 +495,7 @@ XrType *xr_type_new_generic_instance(XrayIsolate *X, const char *class_name,
 }
 
 // Function type
-XrType *xr_type_new_function(XrayIsolate *X, XrType **param_types, int param_count,
+XrType *xr_type_new_function(XrVMRuntime *X, XrType **param_types, int param_count,
                              XrType *return_type, bool is_variadic) {
     if (param_count < 0)
         return NULL;
@@ -522,7 +522,7 @@ XrType *xr_type_new_function(XrayIsolate *X, XrType **param_types, int param_cou
     return type;
 }
 
-XR_FUNC void xr_type_set_function_type_params(XrayIsolate *X, XrType *type, const char **names,
+XR_FUNC void xr_type_set_function_type_params(XrVMRuntime *X, XrType *type, const char **names,
                                               XrType ***constraint_lists,
                                               const int *constraint_counts, int count) {
     if (!type || type->kind != XR_KIND_FUNCTION || count <= 0 || !names)
@@ -586,7 +586,7 @@ bool xr_type_is_fallible(const XrType *func_type) {
 }
 
 // Tuple type (for multi-value return, compile-time only)
-XrType *xr_type_new_tuple(XrayIsolate *X, XrType **element_types, int count) {
+XrType *xr_type_new_tuple(XrVMRuntime *X, XrType **element_types, int count) {
     X = resolve_isolate(X);
     if (count < 0)
         return NULL;
@@ -700,7 +700,7 @@ static int union_normalize(XrType **in, int in_count, XrType **out, bool *out_nu
 // Construct a union type from an array of member types.
 // Applies: flatten existing unions, dedup, sort, special rules.
 // Union aliases as members are flattened (from xr_type_union merge path).
-XrType *xr_type_new_union(XrayIsolate *X, XrType **members, int count) {
+XrType *xr_type_new_union(XrVMRuntime *X, XrType **members, int count) {
     X = resolve_isolate(X);
     XR_DCHECK(count >= 0, "type_new_union: negative count");
     XR_DCHECK(count == 0 || members != NULL, "type_new_union: NULL members with count > 0");
@@ -772,7 +772,7 @@ XrType *xr_type_new_union(XrayIsolate *X, XrType **members, int count) {
 
 // Merge two types into a union (or apply special rules).
 // Type union rules: int|float->float, T|null->T?
-XrType *xr_type_union(XrayIsolate *X, XrType *a, XrType *b) {
+XrType *xr_type_union(XrVMRuntime *X, XrType *a, XrType *b) {
     if (!a)
         return b;
     if (!b)
@@ -835,7 +835,7 @@ bool xr_type_union_contains(XrType *type, XrTypeKind kind) {
 }
 
 // Remove all members with given kind from union; return simplified type
-XrType *xr_type_union_remove(XrayIsolate *X, XrType *type, XrTypeKind kind) {
+XrType *xr_type_union_remove(XrVMRuntime *X, XrType *type, XrTypeKind kind) {
     if (!type)
         return NULL;
     if (!XR_TYPE_IS_UNION(type)) {
@@ -876,7 +876,7 @@ static XrType *xr_type_union_filter(XrType *type, XrTypeKind kind) {
 }
 
 // Fixed-length array ([N]T - compile-time length, runtime Array<T>)
-XrType *xr_type_new_fixed_array(XrayIsolate *X, XrType *element_type, int length) {
+XrType *xr_type_new_fixed_array(XrVMRuntime *X, XrType *element_type, int length) {
     XrType *type = type_alloc(X, XR_KIND_FIXED_ARRAY);
     if (!type)
         return NULL;
@@ -886,7 +886,7 @@ XrType *xr_type_new_fixed_array(XrayIsolate *X, XrType *element_type, int length
 }
 
 // Copy a type
-XrType *xr_type_copy(XrayIsolate *X, XrType *type) {
+XrType *xr_type_copy(XrVMRuntime *X, XrType *type) {
     if (!type)
         return NULL;
     XR_DCHECK(type->kind < XR_KIND_COUNT, "type_copy: invalid kind");
@@ -1060,7 +1060,7 @@ XrType *xr_type_copy(XrayIsolate *X, XrType *type) {
 }
 
 // Make a type nullable (returns cached singleton for primitive types)
-XrType *xr_type_make_nullable(XrayIsolate *X, XrType *type) {
+XrType *xr_type_make_nullable(XrVMRuntime *X, XrType *type) {
     if (!type)
         return NULL;
     if (type->is_nullable)
@@ -1672,7 +1672,7 @@ bool xr_type_equals(XrType *a, XrType *b) {
 }
 
 // Type narrowing: keep type only if it matches given kind
-XrType *xr_type_filter(XrayIsolate *X, XrType *type, XrTypeKind kind) {
+XrType *xr_type_filter(XrVMRuntime *X, XrType *type, XrTypeKind kind) {
     if (!type)
         return NULL;
     if (XR_TYPE_IS_UNION(type))
@@ -1683,7 +1683,7 @@ XrType *xr_type_filter(XrayIsolate *X, XrType *type, XrTypeKind kind) {
 }
 
 // Type narrowing: exclude type if it matches given kind
-XrType *xr_type_exclude(XrayIsolate *X, XrType *type, XrTypeKind kind) {
+XrType *xr_type_exclude(XrVMRuntime *X, XrType *type, XrTypeKind kind) {
     if (!type)
         return NULL;
     if (XR_TYPE_IS_UNION(type))
@@ -1694,7 +1694,7 @@ XrType *xr_type_exclude(XrayIsolate *X, XrType *type, XrTypeKind kind) {
 }
 
 // Remove null from type
-XrType *xr_type_non_nullable(XrayIsolate *X, XrType *type) {
+XrType *xr_type_non_nullable(XrVMRuntime *X, XrType *type) {
     if (!type)
         return NULL;
 

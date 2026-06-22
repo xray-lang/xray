@@ -35,7 +35,7 @@
 #include "xi.h"
 
 struct XrProto;
-struct XrayIsolate;
+struct XrVMRuntime;
 
 /* Emit result status */
 typedef enum {
@@ -51,7 +51,7 @@ typedef enum {
  * and the status indicates the error kind.
  * Caller owns the returned XrProto (free with xr_vm_proto_free). */
 /* isolate is needed for string constant interning (may be NULL for no-string funcs) */
-XR_FUNC XiEmitStatus xi_emit(XiFunc *f, struct XrayIsolate *isolate, struct XrProto **out_proto);
+XR_FUNC XiEmitStatus xi_emit(XiFunc *f, struct XrVMRuntime *isolate, struct XrProto **out_proto);
 
 /* Human-readable error string for emit status. */
 XR_FUNC const char *xi_emit_status_str(XiEmitStatus s);

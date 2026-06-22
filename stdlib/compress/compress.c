@@ -29,7 +29,7 @@
 /* ========== External Declarations ========== */
 
 extern XrValue xr_string_value(XrString *str);
-extern XrString *xr_string_intern(XrayIsolate *X, const char *str, size_t len, uint32_t hash);
+extern XrString *xr_string_intern(XrVMRuntime *X, const char *str, size_t len, uint32_t hash);
 #endif
 
 /* ========== CRC32 Implementation ========== */
@@ -1068,7 +1068,7 @@ XR_FUNC const char *xr_compress_error_str(XrCompressError err) {
 
 #ifndef XR_COMPRESS_CORE_ONLY
 
-static XrValue make_string_n(XrayIsolate *X, const char *s, size_t len) {
+static XrValue make_string_n(XrVMRuntime *X, const char *s, size_t len) {
     if (!s)
         return xr_null();
     return xrs_string_value_n(X, s, len);
@@ -1077,7 +1077,7 @@ static XrValue make_string_n(XrayIsolate *X, const char *s, size_t len) {
 /* ========== xray Binding Functions ========== */
 
 // compress.gzip(data, level?) -> string
-static XrValue compress_gzip(XrayIsolate *X, XrValue *args, int nargs) {
+static XrValue compress_gzip(XrVMRuntime *X, XrValue *args, int nargs) {
     if (nargs < 1)
         return xr_null();
 
@@ -1106,7 +1106,7 @@ static XrValue compress_gzip(XrayIsolate *X, XrValue *args, int nargs) {
 }
 
 // compress.gunzip(data) -> string
-static XrValue compress_gunzip(XrayIsolate *X, XrValue *args, int nargs) {
+static XrValue compress_gunzip(XrVMRuntime *X, XrValue *args, int nargs) {
     if (nargs < 1)
         return xr_null();
 
@@ -1126,7 +1126,7 @@ static XrValue compress_gunzip(XrayIsolate *X, XrValue *args, int nargs) {
 }
 
 // compress.deflate(data, level?) -> string
-static XrValue compress_deflate(XrayIsolate *X, XrValue *args, int nargs) {
+static XrValue compress_deflate(XrVMRuntime *X, XrValue *args, int nargs) {
     if (nargs < 1)
         return xr_null();
 
@@ -1162,7 +1162,7 @@ static XrValue compress_deflate(XrayIsolate *X, XrValue *args, int nargs) {
 }
 
 // compress.inflate(data) -> string
-static XrValue compress_inflate(XrayIsolate *X, XrValue *args, int nargs) {
+static XrValue compress_inflate(XrVMRuntime *X, XrValue *args, int nargs) {
     if (nargs < 1)
         return xr_null();
 
@@ -1197,7 +1197,7 @@ static XrValue compress_inflate(XrayIsolate *X, XrValue *args, int nargs) {
 }
 
 // compress.zlibCompress(data, level?) -> string
-static XrValue compress_zlib_compress(XrayIsolate *X, XrValue *args, int nargs) {
+static XrValue compress_zlib_compress(XrVMRuntime *X, XrValue *args, int nargs) {
     if (nargs < 1)
         return xr_null();
 
@@ -1234,7 +1234,7 @@ static XrValue compress_zlib_compress(XrayIsolate *X, XrValue *args, int nargs) 
 }
 
 // compress.zlibDecompress(data) -> string
-static XrValue compress_zlib_decompress(XrayIsolate *X, XrValue *args, int nargs) {
+static XrValue compress_zlib_decompress(XrVMRuntime *X, XrValue *args, int nargs) {
     if (nargs < 1)
         return xr_null();
 
@@ -1269,7 +1269,7 @@ static XrValue compress_zlib_decompress(XrayIsolate *X, XrValue *args, int nargs
 }
 
 // compress.isGzip(data) -> bool
-static XrValue compress_is_gzip(XrayIsolate *X, XrValue *args, int nargs) {
+static XrValue compress_is_gzip(XrVMRuntime *X, XrValue *args, int nargs) {
     (void) X;
     if (nargs < 1)
         return xr_bool(false);
@@ -1283,7 +1283,7 @@ static XrValue compress_is_gzip(XrayIsolate *X, XrValue *args, int nargs) {
 }
 
 // compress.isZlib(data) -> bool
-static XrValue compress_is_zlib(XrayIsolate *X, XrValue *args, int nargs) {
+static XrValue compress_is_zlib(XrVMRuntime *X, XrValue *args, int nargs) {
     (void) X;
     if (nargs < 1)
         return xr_bool(false);
@@ -1297,7 +1297,7 @@ static XrValue compress_is_zlib(XrayIsolate *X, XrValue *args, int nargs) {
 }
 
 // compress.crc32(data) -> int
-static XrValue compress_crc32(XrayIsolate *X, XrValue *args, int nargs) {
+static XrValue compress_crc32(XrVMRuntime *X, XrValue *args, int nargs) {
     (void) X;
     if (nargs < 1)
         return xr_int(0);
@@ -1311,7 +1311,7 @@ static XrValue compress_crc32(XrayIsolate *X, XrValue *args, int nargs) {
 }
 
 // compress.adler32(data) -> int
-static XrValue compress_adler32(XrayIsolate *X, XrValue *args, int nargs) {
+static XrValue compress_adler32(XrVMRuntime *X, XrValue *args, int nargs) {
     (void) X;
     if (nargs < 1)
         return xr_int(1);
@@ -1346,7 +1346,7 @@ XR_DEFINE_BUILTIN(compress_is_zlib, "isZlib", "(data: string): bool", "Check if 
 XR_DEFINE_BUILTIN(compress_crc32, "crc32", "(data: string): int", "Compute CRC-32 checksum")
 XR_DEFINE_BUILTIN(compress_adler32, "adler32", "(data: string): int", "Compute Adler-32 checksum")
 
-XR_FUNC XrModule *xr_load_module_compress(XrayIsolate *isolate) {
+XR_FUNC XrModule *xr_load_module_compress(XrVMRuntime *isolate) {
     XrModule *module = xr_module_create_native(isolate, "compress");
     if (!module)
         return NULL;

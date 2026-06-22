@@ -26,14 +26,14 @@
 #include "xvalue.h"
 #include "../xstrbuf.h"
 
-struct XrayIsolate;
+struct XrVMRuntime;
 
 // Produce a newly allocated XrString representing `val`.
 // Fast paths for primitives; containers/objects delegate to xr_value_to_strbuf.
-XR_FUNC XrString *xr_value_to_string(struct XrayIsolate *isolate, XrValue val);
+XR_FUNC XrString *xr_value_to_string(struct XrVMRuntime *isolate, XrValue val);
 
 // Append `val`'s formatted form onto `sb`. `depth` tracks recursion to
 // break cycles and truncate deep structures.
-XR_FUNC void xr_value_to_strbuf(struct XrayIsolate *isolate, XrStrBuf *sb, XrValue val, int depth);
+XR_FUNC void xr_value_to_strbuf(struct XrVMRuntime *isolate, XrStrBuf *sb, XrValue val, int depth);
 
 #endif  // XVALUE_FORMAT_H

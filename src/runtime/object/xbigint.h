@@ -35,7 +35,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-struct XrayIsolate;
+struct XrVMRuntime;
 struct XrCoroutine;
 
 /* ========== BigInt Structure ========== */

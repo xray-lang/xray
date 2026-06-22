@@ -45,7 +45,7 @@ void csv_config_init(CsvConfig *config) {
     config->linebreak[1] = '\0';
 }
 
-void csv_config_from_json(XrayIsolate *X, CsvConfig *config, XrJson *json) {
+void csv_config_from_json(XrVMRuntime *X, CsvConfig *config, XrJson *json) {
     csv_config_init(config);
     if (!json)
         return;
@@ -99,7 +99,7 @@ void csv_config_from_json(XrayIsolate *X, CsvConfig *config, XrJson *json) {
     }
 }
 
-void csv_parser_init(CsvParser *parser, XrayIsolate *isolate, const char *data, size_t len,
+void csv_parser_init(CsvParser *parser, XrVMRuntime *isolate, const char *data, size_t len,
                      CsvConfig *config) {
     memset(parser, 0, sizeof(CsvParser));
 
@@ -295,7 +295,7 @@ static bool fast_parse_float(const char *s, size_t len, double *result) {
 
 /* ========== Auto Type Conversion ========== */
 
-XrValue csv_convert_value(XrayIsolate *isolate, const char *field, size_t len) {
+XrValue csv_convert_value(XrVMRuntime *isolate, const char *field, size_t len) {
     if (len == 0) {
         return xr_null();
     }

@@ -31,7 +31,7 @@ XrJsonValue *xlsp_analyze_format(XrLspDocument *doc) {
     }
 
     // Get isolate from server
-    XrayIsolate *X = doc->server ? doc->server->isolate : NULL;
+    XrVMRuntime *X = doc->server ? doc->server->isolate : NULL;
     if (!X) {
         return edits;
     }

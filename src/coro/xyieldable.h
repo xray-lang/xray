@@ -30,7 +30,7 @@
 #include "../runtime/value/xvalue.h"
 
 // Forward declarations
-struct XrayIsolate;
+struct XrVMRuntime;
 struct XrCoroutine;
 
 // ========== C Function Execution Result ==========
@@ -98,7 +98,7 @@ typedef enum XrResumeStatus {
 // fields) keeps the protocol stateless: a continuation receives everything it
 // needs via its arguments, which is what an AOT-compiled runtime can deliver
 // without a VM coroutine object.
-typedef XrCFuncResult (*XrContinuation)(struct XrayIsolate *X, int status, XrValue resume_value,
+typedef XrCFuncResult (*XrContinuation)(struct XrVMRuntime *X, int status, XrValue resume_value,
                                         void *ctx, XrValue *result);
 
 // ========== Wait Event Constants ==========
@@ -125,7 +125,7 @@ typedef XrCFuncResult (*XrContinuation)(struct XrayIsolate *X, int status, XrVal
 //   user_data: user data
 //
 // Returns: XR_CFUNC_BLOCKED
-XR_FUNC XrCFuncResult xr_yield_for_io(struct XrayIsolate *X, int fd, int events, int64_t timeout_ms,
+XR_FUNC XrCFuncResult xr_yield_for_io(struct XrVMRuntime *X, int fd, int events, int64_t timeout_ms,
                                       XrContinuation cont, void *user_data, XrValue *result);
 
 #if defined(XR_OS_LINUX) && defined(XR_HAS_IO_URING)
@@ -146,7 +146,7 @@ struct XrUringReq;
 // coroutine state changed) when completion is not usable — backend is not
 // io_uring or the submission queue is momentarily exhausted — so the caller
 // falls back to the readiness path (xr_yield_for_io).
-XR_FUNC bool xr_yield_for_uring_io(struct XrayIsolate *X, struct XrPollDesc *pd, int mode,
+XR_FUNC bool xr_yield_for_uring_io(struct XrVMRuntime *X, struct XrPollDesc *pd, int mode,
                                    const struct XrUringReq *req, XrContinuation cont,
                                    void *user_data, XrValue *result, XrCFuncResult *out);
 #endif
@@ -162,7 +162,7 @@ XR_FUNC bool xr_yield_for_uring_io(struct XrayIsolate *X, struct XrPollDesc *pd,
 //   user_data: user data
 //
 // Returns: XR_CFUNC_BLOCKED
-XR_FUNC XrCFuncResult xr_yield_for_timeout(struct XrayIsolate *X, int64_t timeout_ms,
+XR_FUNC XrCFuncResult xr_yield_for_timeout(struct XrVMRuntime *X, int64_t timeout_ms,
                                            XrContinuation cont, void *user_data, XrValue *result);
 
 // xr_yield - Voluntarily yield (no wait condition)
@@ -176,7 +176,7 @@ XR_FUNC XrCFuncResult xr_yield_for_timeout(struct XrayIsolate *X, int64_t timeou
 //   user_data: user data
 //
 // Returns: XR_CFUNC_YIELD
-XR_FUNC XrCFuncResult xr_yield(struct XrayIsolate *X, XrContinuation cont, void *user_data);
+XR_FUNC XrCFuncResult xr_yield(struct XrVMRuntime *X, XrContinuation cont, void *user_data);
 
 // ========== Coroutine Helper Functions ==========
 
@@ -201,8 +201,8 @@ XR_FUNC bool xr_coro_has_continuation(struct XrCoroutine *coro);
 //       XrPollDesc *pd;
 //   } HttpListenerState;
 //
-//   static XrCFuncResult state_accept(XrayIsolate *X, void *ctx);
-//   static XrCFuncResult state_process(XrayIsolate *X, void *ctx);
+//   static XrCFuncResult state_accept(XrVMRuntime *X, void *ctx);
+//   static XrCFuncResult state_process(XrVMRuntime *X, void *ctx);
 //
 //   static XrStateFunc http_listener_states[] = {
 //       [0] = state_accept,
@@ -216,7 +216,7 @@ XR_FUNC bool xr_coro_has_continuation(struct XrCoroutine *coro);
 //   - XR_CFUNC_BLOCKED: current state blocked, retry after wake
 //   - XR_CFUNC_YIELD: transition to next state
 //   - XR_CFUNC_ERROR: error
-typedef XrCFuncResult (*XrStateFunc)(struct XrayIsolate *X, void *state);
+typedef XrCFuncResult (*XrStateFunc)(struct XrVMRuntime *X, void *state);
 
 // XrStateMachine - State machine base structure
 //
@@ -285,7 +285,7 @@ static inline void xr_sm_error(XrStateMachine *sm, int error_code) {
 //
 // Returns:
 //   Final execution result
-static inline XrCFuncResult xr_sm_run(struct XrayIsolate *X, void *state) {
+static inline XrCFuncResult xr_sm_run(struct XrVMRuntime *X, void *state) {
     XrStateMachine *sm = (XrStateMachine *) state;
 
     while (!sm->done && sm->current_state < sm->state_count) {
@@ -330,7 +330,7 @@ static inline XrCFuncResult xr_sm_run(struct XrayIsolate *X, void *state) {
 //
 // Generic continuation function, for resuming state machine execution from blocked state.
 // Can be passed directly to xr_yield_for_io etc.
-static inline XrCFuncResult xr_sm_continuation(struct XrayIsolate *X, int status,
+static inline XrCFuncResult xr_sm_continuation(struct XrVMRuntime *X, int status,
                                                XrValue resume_value, void *state, XrValue *result) {
     (void) status;        // State machine routes via its own state field
     (void) resume_value;  // SM resumes do not carry a value
@@ -384,7 +384,7 @@ static inline XrCFuncResult xr_sm_continuation(struct XrayIsolate *X, int status
 //
 // Must be called from a yieldable C function or continuation.
 // Always returns XR_CFUNC_CALL_CLOSURE.
-XR_FUNC XrCFuncResult xr_call_closure(struct XrayIsolate *X, struct XrClosure *closure,
+XR_FUNC XrCFuncResult xr_call_closure(struct XrVMRuntime *X, struct XrClosure *closure,
                                       XrValue *args, int nargs, XrContinuation on_complete,
                                       void *user_ctx, XrValue *result);
 

@@ -16,7 +16,7 @@
 #define XCLASS_BUILDER_H
 
 #include "xclass.h"
-#include <xray_isolate.h>
+#include <xray_vm.h>
 #include <stdbool.h>
 
 /*
@@ -34,7 +34,7 @@
 
 /* ========== Builder API ========== */
 
-XR_FUNC XrClassBuilder *xr_class_builder_new(XrayIsolate *isolate, const char *name,
+XR_FUNC XrClassBuilder *xr_class_builder_new(XrVMRuntime *isolate, const char *name,
                                              XrClass *super);
 
 // Returns 0 on success, -1 on failure (e.g., duplicate field)

@@ -64,7 +64,7 @@ typedef struct {
 
 /* ========== Per-Isolate Log State ========== */
 
-// All mutable log state lives here; one instance per XrayIsolate, stored
+// All mutable log state lives here; one instance per XrVMRuntime, stored
 // in XrStdlibCache::log_state. This eliminates the former process-global
 // g_default_logger / g_async_queue / g_default_logger_mutex.
 typedef struct XrLogState {
@@ -78,7 +78,7 @@ typedef struct XrLogState {
 static void log_state_destroy(void *opaque);
 
 // Retrieve (and lazily create) the per-isolate log state.
-static XrLogState *log_state_get(XrayIsolate *X) {
+static XrLogState *log_state_get(XrVMRuntime *X) {
     XR_DCHECK(X != NULL, "log_state_get: isolate must not be NULL");
     XrStdlibCache *cache = xr_stdlib_cache_get(X);
     if (cache->log_state)
@@ -100,7 +100,7 @@ static XrLogState *log_state_get(XrayIsolate *X) {
 }
 
 // Convenience: return the isolate's default logger.
-static XrLogger *log_default(XrayIsolate *X) {
+static XrLogger *log_default(XrVMRuntime *X) {
     XrLogState *s = log_state_get(X);
     return s ? &s->default_logger : NULL;
 }
@@ -605,7 +605,7 @@ static void extract_log_args(XrValue *args, int nargs, const char **msg, XrValue
 }
 
 // Get current source file and line number from VM frame stack
-static void get_source_location(XrayIsolate *isolate, const char **out_file, int *out_line) {
+static void get_source_location(XrVMRuntime *isolate, const char **out_file, int *out_line) {
     *out_file = NULL;
     *out_line = 0;
     if (!isolate || isolate->vm.frame_count == 0)
@@ -635,7 +635,7 @@ static void get_source_location(XrayIsolate *isolate, const char **out_file, int
 }
 
 // Log output with source location
-static void log_with_source(XrayIsolate *isolate, XrLogLevel level, const char *msg, XrValue *attrs,
+static void log_with_source(XrVMRuntime *isolate, XrLogLevel level, const char *msg, XrValue *attrs,
                             int nattrs) {
     XrLogState *ls = log_state_get(isolate);
     XrLogger *logger = &ls->default_logger;
@@ -649,7 +649,7 @@ static void log_with_source(XrayIsolate *isolate, XrLogLevel level, const char *
     xr_log_write_ex(ls, logger, level, msg, attrs, nattrs, file, line);
 }
 
-static XrValue xr_log_debug(XrayIsolate *isolate, XrValue *args, int nargs) {
+static XrValue xr_log_debug(XrVMRuntime *isolate, XrValue *args, int nargs) {
     const char *msg;
     XrValue *attrs;
     int nattrs;
@@ -658,7 +658,7 @@ static XrValue xr_log_debug(XrayIsolate *isolate, XrValue *args, int nargs) {
     return xr_null();
 }
 
-static XrValue xr_log_info(XrayIsolate *isolate, XrValue *args, int nargs) {
+static XrValue xr_log_info(XrVMRuntime *isolate, XrValue *args, int nargs) {
     const char *msg;
     XrValue *attrs;
     int nattrs;
@@ -667,7 +667,7 @@ static XrValue xr_log_info(XrayIsolate *isolate, XrValue *args, int nargs) {
     return xr_null();
 }
 
-static XrValue xr_log_warn(XrayIsolate *isolate, XrValue *args, int nargs) {
+static XrValue xr_log_warn(XrVMRuntime *isolate, XrValue *args, int nargs) {
     const char *msg;
     XrValue *attrs;
     int nattrs;
@@ -676,7 +676,7 @@ static XrValue xr_log_warn(XrayIsolate *isolate, XrValue *args, int nargs) {
     return xr_null();
 }
 
-static XrValue xr_log_error(XrayIsolate *isolate, XrValue *args, int nargs) {
+static XrValue xr_log_error(XrVMRuntime *isolate, XrValue *args, int nargs) {
     const char *msg;
     XrValue *attrs;
     int nattrs;
@@ -685,7 +685,7 @@ static XrValue xr_log_error(XrayIsolate *isolate, XrValue *args, int nargs) {
     return xr_null();
 }
 
-static XrValue xr_log_fatal(XrayIsolate *isolate, XrValue *args, int nargs) {
+static XrValue xr_log_fatal(XrVMRuntime *isolate, XrValue *args, int nargs) {
     const char *msg;
     XrValue *attrs;
     int nattrs;
@@ -701,7 +701,7 @@ static XrValue xr_log_fatal(XrayIsolate *isolate, XrValue *args, int nargs) {
     return xr_null();  // Unreachable
 }
 
-static XrValue xr_log_enable_source(XrayIsolate *isolate, XrValue *args, int nargs) {
+static XrValue xr_log_enable_source(XrVMRuntime *isolate, XrValue *args, int nargs) {
     XrLogState *ls = log_state_get(isolate);
     XrLogger *logger = &ls->default_logger;
 
@@ -716,7 +716,7 @@ static XrValue xr_log_enable_source(XrayIsolate *isolate, XrValue *args, int nar
     return xr_null();
 }
 
-static XrValue xr_log_enable_async(XrayIsolate *isolate, XrValue *args, int nargs) {
+static XrValue xr_log_enable_async(XrVMRuntime *isolate, XrValue *args, int nargs) {
     XrLogState *ls = log_state_get(isolate);
     XrLogger *logger = &ls->default_logger;
 
@@ -741,7 +741,7 @@ static XrValue xr_log_enable_async(XrayIsolate *isolate, XrValue *args, int narg
     return xr_null();
 }
 
-static XrValue xr_log_flush(XrayIsolate *isolate, XrValue *args, int nargs) {
+static XrValue xr_log_flush(XrVMRuntime *isolate, XrValue *args, int nargs) {
     (void) args;
     (void) nargs;
 
@@ -756,7 +756,7 @@ static XrValue xr_log_flush(XrayIsolate *isolate, XrValue *args, int nargs) {
     return xr_null();
 }
 
-static XrValue xr_log_set_level(XrayIsolate *isolate, XrValue *args, int nargs) {
+static XrValue xr_log_set_level(XrVMRuntime *isolate, XrValue *args, int nargs) {
     if (nargs < 1) {
         fprintf(stderr, "log.setLevel() requires 1 argument\n");
         return xr_null();
@@ -774,7 +774,7 @@ static XrValue xr_log_set_level(XrayIsolate *isolate, XrValue *args, int nargs) 
     return xr_null();
 }
 
-static XrValue xr_log_set_format(XrayIsolate *isolate, XrValue *args, int nargs) {
+static XrValue xr_log_set_format(XrVMRuntime *isolate, XrValue *args, int nargs) {
     if (nargs < 1 || !XR_IS_STRING(args[0])) {
         fprintf(stderr, "log.setFormat() requires a string argument\n");
         return xr_null();
@@ -796,7 +796,7 @@ static XrValue xr_log_set_format(XrayIsolate *isolate, XrValue *args, int nargs)
     return xr_null();
 }
 
-static XrValue xr_log_set_output(XrayIsolate *isolate, XrValue *args, int nargs) {
+static XrValue xr_log_set_output(XrVMRuntime *isolate, XrValue *args, int nargs) {
     if (nargs < 1 || !XR_IS_STRING(args[0])) {
         fprintf(stderr, "log.setOutput() requires a string argument\n");
         return xr_null();
@@ -850,7 +850,7 @@ static XrValue xr_log_set_output(XrayIsolate *isolate, XrValue *args, int nargs)
     return xr_null();
 }
 
-static XrValue xr_log_is_enabled(XrayIsolate *isolate, XrValue *args, int nargs) {
+static XrValue xr_log_is_enabled(XrVMRuntime *isolate, XrValue *args, int nargs) {
     if (nargs < 1 || !XR_IS_INT(args[0])) {
         return xr_bool(false);
     }
@@ -863,21 +863,21 @@ static XrValue xr_log_is_enabled(XrayIsolate *isolate, XrValue *args, int nargs)
 
 /* ========== Child Logger Implementation ========== */
 
-static XrClass *logger_class(XrayIsolate *X) {
+static XrClass *logger_class(XrVMRuntime *X) {
     XrayCoreClasses *core = xr_isolate_get_core_classes(X);
     XR_DCHECK(core != NULL && core->loggerClass != NULL,
               "logger: core->loggerClass not registered");
     return core->loggerClass;
 }
 
-bool xr_value_is_logger(XrayIsolate *X, XrValue v) {
+bool xr_value_is_logger(XrVMRuntime *X, XrValue v) {
     if (!XR_IS_INSTANCE(v))
         return false;
     XrInstance *inst = (XrInstance *) XR_TO_PTR(v);
     return xr_class_instanceof(inst->klass, logger_class(X));
 }
 
-XrLogger *xr_value_get_logger(XrayIsolate *X, XrValue v) {
+XrLogger *xr_value_get_logger(XrVMRuntime *X, XrValue v) {
     if (!xr_value_is_logger(X, v))
         return NULL;
     XrInstance *inst = (XrInstance *) XR_TO_PTR(v);
@@ -885,7 +885,7 @@ XrLogger *xr_value_get_logger(XrayIsolate *X, XrValue v) {
     return body ? body->logger : NULL;
 }
 
-static XrValue wrap_logger(XrayIsolate *X, XrLogger *logger) {
+static XrValue wrap_logger(XrVMRuntime *X, XrLogger *logger) {
     XrInstance *inst = xr_instance_new(X, logger_class(X));
     if (!inst)
         return xr_null();
@@ -895,7 +895,7 @@ static XrValue wrap_logger(XrayIsolate *X, XrLogger *logger) {
     return XR_FROM_PTR(inst);
 }
 
-static XrLogger *unwrap_logger(XrayIsolate *X, XrValue v) {
+static XrLogger *unwrap_logger(XrVMRuntime *X, XrValue v) {
     return xr_value_get_logger(X, v);
 }
 
@@ -995,7 +995,7 @@ static XrLogger *create_child_logger(XrLogger *parent, XrValue *attrs, int nattr
     return child;
 }
 
-static XrValue xr_log_child(XrayIsolate *isolate, XrValue *args, int nargs) {
+static XrValue xr_log_child(XrVMRuntime *isolate, XrValue *args, int nargs) {
     XrLogger *parent = log_default(isolate);
     XrLogger *child = create_child_logger(parent, args, nargs / 2);
     if (!child)
@@ -1004,7 +1004,7 @@ static XrValue xr_log_child(XrayIsolate *isolate, XrValue *args, int nargs) {
 }
 
 // Common implementation for child logger methods
-static XrValue logger_log_at(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs,
+static XrValue logger_log_at(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs,
                              XrLogLevel level) {
     XrLogger *logger = unwrap_logger(isolate, self);
     if (!logger)
@@ -1023,20 +1023,20 @@ static XrValue logger_log_at(XrayIsolate *isolate, XrValue self, XrValue *args, 
     return xr_null();
 }
 
-static XrValue xr_logger_debug(XrayIsolate *X, XrValue self, XrValue *args, int n) {
+static XrValue xr_logger_debug(XrVMRuntime *X, XrValue self, XrValue *args, int n) {
     return logger_log_at(X, self, args, n, XR_LOG_DEBUG);
 }
-static XrValue xr_logger_info(XrayIsolate *X, XrValue self, XrValue *args, int n) {
+static XrValue xr_logger_info(XrVMRuntime *X, XrValue self, XrValue *args, int n) {
     return logger_log_at(X, self, args, n, XR_LOG_INFO);
 }
-static XrValue xr_logger_warn(XrayIsolate *X, XrValue self, XrValue *args, int n) {
+static XrValue xr_logger_warn(XrVMRuntime *X, XrValue self, XrValue *args, int n) {
     return logger_log_at(X, self, args, n, XR_LOG_WARN);
 }
-static XrValue xr_logger_error(XrayIsolate *X, XrValue self, XrValue *args, int n) {
+static XrValue xr_logger_error(XrVMRuntime *X, XrValue self, XrValue *args, int n) {
     return logger_log_at(X, self, args, n, XR_LOG_ERROR);
 }
 
-static XrValue xr_logger_fatal(XrayIsolate *X, XrValue self, XrValue *args, int n) {
+static XrValue xr_logger_fatal(XrVMRuntime *X, XrValue self, XrValue *args, int n) {
     logger_log_at(X, self, args, n, XR_LOG_FATAL);
     // Flush async queue before exit
     XrLogState *ls = log_state_get(X);
@@ -1048,7 +1048,7 @@ static XrValue xr_logger_fatal(XrayIsolate *X, XrValue self, XrValue *args, int 
     return xr_null();
 }
 
-static XrValue xr_logger_child(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+static XrValue xr_logger_child(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     XrLogger *parent = unwrap_logger(isolate, self);
     if (!parent)
         return xr_null();
@@ -1150,7 +1150,7 @@ XR_DEFINE_BUILTIN(xr_log_child, "child", "(...fields: unknown): Logger", "Create
 /* Class registration is invoked unconditionally during isolate init by
  * xr_prelude_register_all_native_types, so core->loggerClass is
  * available even when user code never `import log`. */
-void xr_register_logger_class(XrayIsolate *X) {
+void xr_register_logger_class(XrVMRuntime *X) {
     XR_DCHECK(X != NULL, "register_logger_class: NULL isolate");
     XrayCoreClasses *core = xr_isolate_get_core_classes(X);
     XR_DCHECK(core != NULL, "register_logger_class: core not initialised");
@@ -1176,7 +1176,7 @@ void xr_register_logger_class(XrayIsolate *X) {
     core->loggerClass = cls;
 }
 
-XR_FUNC XrModule *xr_load_module_log(XrayIsolate *isolate) {
+XR_FUNC XrModule *xr_load_module_log(XrVMRuntime *isolate) {
     XR_DCHECK(isolate != NULL, "xr_load_module_log: NULL isolate");
 
     XrModule *module = xr_module_create_native(isolate, "log");

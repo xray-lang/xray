@@ -31,7 +31,7 @@
 #include <stdbool.h>
 
 struct XrCoroutine;
-struct XrayIsolate;
+struct XrVMRuntime;
 struct XrInstance;
 
 /* ========== Range Native Body ========== */
@@ -45,19 +45,19 @@ typedef struct XrRange {
 /* ========== Creation ========== */
 
 // Create Range [start, end] with step=1
-XR_FUNC XrValue xr_range_new(struct XrayIsolate *X, int64_t start, int64_t end);
+XR_FUNC XrValue xr_range_new(struct XrVMRuntime *X, int64_t start, int64_t end);
 
 // Create Range [start, end] with explicit step
-XR_FUNC XrValue xr_range_new_with_step(struct XrayIsolate *X, int64_t start, int64_t end,
+XR_FUNC XrValue xr_range_new_with_step(struct XrVMRuntime *X, int64_t start, int64_t end,
                                        int64_t step);
 
 /* ========== Type Check ========== */
 
 // Check if value is a Range instance (instanceof core->rangeClass)
-XR_FUNC bool xr_value_is_range(struct XrayIsolate *X, XrValue v);
+XR_FUNC bool xr_value_is_range(struct XrVMRuntime *X, XrValue v);
 
 // Extract native body pointer from a Range value (NULL if not range)
-XR_FUNC XrRange *xr_value_get_range_body(struct XrayIsolate *X, XrValue v);
+XR_FUNC XrRange *xr_value_get_range_body(struct XrVMRuntime *X, XrValue v);
 
 /* ========== Properties ========== */
 
@@ -114,6 +114,6 @@ static inline XrRange *xr_value_to_range(XrValue v) {
 XR_FUNC XrValue xr_range_to_array(struct XrCoroutine *coro, XrRange *r);
 
 /* Register Range class into core->rangeClass with native body. */
-XR_FUNC void xr_register_range_class(struct XrayIsolate *X);
+XR_FUNC void xr_register_range_class(struct XrVMRuntime *X);
 
 #endif  // XRANGE_H

@@ -86,7 +86,7 @@ XrStructLayout *xr_vm_struct_layout_lookup(XrVMState *vm, uint16_t layout_id) {
     return vm->struct_layouts[layout_id];
 }
 
-XrStructLayout *xr_vm_struct_ref_layout(XrayIsolate *isolate, XrValue ref) {
+XrStructLayout *xr_vm_struct_ref_layout(XrVMRuntime *isolate, XrValue ref) {
     if (!XR_IS_STRUCT_REF(ref) || XR_IS_ARRAY_REF(ref) || !ref.ptr)
         return NULL;
 
@@ -105,7 +105,7 @@ XrStructLayout *xr_vm_struct_ref_layout(XrayIsolate *isolate, XrValue ref) {
     return cls->struct_layout;
 }
 
-uint8_t *xr_vm_struct_ref_payload(XrayIsolate *isolate, XrValue ref, XrStructLayout **layout_out) {
+uint8_t *xr_vm_struct_ref_payload(XrVMRuntime *isolate, XrValue ref, XrStructLayout **layout_out) {
     XrStructLayout *layout = xr_vm_struct_ref_layout(isolate, ref);
     if (layout_out)
         *layout_out = layout;
@@ -114,7 +114,7 @@ uint8_t *xr_vm_struct_ref_payload(XrayIsolate *isolate, XrValue ref, XrStructLay
     return (uint8_t *) ref.ptr + xr_struct_layout_header_size(layout);
 }
 
-int xr_vm_struct_layout_field_index(XrayIsolate *isolate, const XrStructLayout *layout,
+int xr_vm_struct_layout_field_index(XrVMRuntime *isolate, const XrStructLayout *layout,
                                     int prop_symbol) {
     if (!isolate || !layout || !layout->field_names)
         return -1;
@@ -138,7 +138,7 @@ int xr_vm_struct_layout_field_index(XrayIsolate *isolate, const XrStructLayout *
  * Does NOT modify VM state (no flag setting, no stack reset).
  * For catchable errors, use VM_RUNTIME_ERROR macro instead.
  */
-void xr_runtime_error(XrayIsolate *isolate, const char *format, ...) {
+void xr_runtime_error(XrVMRuntime *isolate, const char *format, ...) {
     // Single authoritative ctx resolver — no bespoke fallback chain.
     XrVMContext *ctx = isolate ? xr_vm_current_ctx(isolate) : NULL;
 
@@ -259,7 +259,7 @@ const char *xr_vm_get_local_name(XrProto *proto, int reg, int pc) {
 /*
  * Create regular C function object
  */
-XrCFunction *xr_vm_cfunction_new(XrayIsolate *isolate, XrCFunctionPtr func, const char *name) {
+XrCFunction *xr_vm_cfunction_new(XrVMRuntime *isolate, XrCFunctionPtr func, const char *name) {
     XR_DCHECK(func != NULL, "cfunction_new: NULL func");
     XrCFunction *cfunc = (XrCFunction *) xr_malloc(sizeof(XrCFunction));
     if (cfunc == NULL) {
@@ -283,7 +283,7 @@ XrCFunction *xr_vm_cfunction_new(XrayIsolate *isolate, XrCFunctionPtr func, cons
 /*
  * Create yieldable C function object
  */
-XrCFunction *xr_vm_yieldable_cfunction_new(XrayIsolate *isolate, XrYieldableCFunctionPtr func,
+XrCFunction *xr_vm_yieldable_cfunction_new(XrVMRuntime *isolate, XrYieldableCFunctionPtr func,
                                            const char *name) {
     XR_DCHECK(func != NULL, "yieldable_cfunction_new: NULL func");
     XrCFunction *cfunc = (XrCFunction *) xr_malloc(sizeof(XrCFunction));
@@ -318,9 +318,9 @@ void xr_vm_cfunction_free(XrCFunction *cfunc) {
 // ========== VM Initialization and Cleanup ==========
 
 /*
- * Initialize virtual machine - accepts XrayIsolate parameter
+ * Initialize virtual machine - accepts XrVMRuntime parameter
  */
-void xr_vm_vm_init(XrayIsolate *isolate) {
+void xr_vm_vm_init(XrVMRuntime *isolate) {
     XR_DCHECK(isolate != NULL, "vm_init: NULL isolate");
     // Isolate already passed in, directly initialize VM state
 
@@ -332,7 +332,7 @@ void xr_vm_vm_init(XrayIsolate *isolate) {
     isolate->vm.current_exception = xr_null();
     isolate->vm.pending_error = xr_null();
 
-    // Symbol table already initialized when XrayIsolate created (per-isolate)
+    // Symbol table already initialized when XrVMRuntime created (per-isolate)
     if (isolate && isolate->core_rt->symbol_table) {
         XrSymbolTable *symtab = (XrSymbolTable *) isolate->core_rt->symbol_table;
         (void) symtab;  // Avoid warning in non-DEBUG mode
@@ -421,7 +421,7 @@ void xr_vm_vm_init(XrayIsolate *isolate) {
 /*
  * Free virtual machine
  */
-void xr_vm_vm_free(XrayIsolate *isolate) {
+void xr_vm_vm_free(XrVMRuntime *isolate) {
     XR_DCHECK(isolate != NULL, "vm_free: NULL isolate");
     // Global variables use array, no hash table to free
 

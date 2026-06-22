@@ -21,7 +21,7 @@
 struct XrClosure;
 
 #ifndef XR_CFUNCTION_PTR_DEFINED
-typedef XrValue (*XrCFunctionPtr)(XrayIsolate *isolate, XrValue *args, int nargs);
+typedef XrValue (*XrCFunctionPtr)(XrVMRuntime *isolate, XrValue *args, int nargs);
 #define XR_CFUNCTION_PTR_DEFINED
 #endif
 
@@ -49,12 +49,12 @@ typedef enum {
  * Static methods receive the class as self and may ignore it.
  */
 #ifndef XR_PRIMITIVE_METHOD_FN_DEFINED
-typedef XrValue (*XrPrimitiveMethodFn)(XrayIsolate *isolate, XrValue self, XrValue *args, int argc);
+typedef XrValue (*XrPrimitiveMethodFn)(XrVMRuntime *isolate, XrValue self, XrValue *args, int argc);
 #define XR_PRIMITIVE_METHOD_FN_DEFINED
 #endif
 
 #ifndef XR_YIELDABLE_PRIMITIVE_METHOD_FN_DEFINED
-typedef XrCFuncResult (*XrYieldablePrimitiveMethodFn)(XrayIsolate *isolate, XrValue self,
+typedef XrCFuncResult (*XrYieldablePrimitiveMethodFn)(XrVMRuntime *isolate, XrValue self,
                                                       XrValue *args, int argc, XrValue *result);
 #define XR_YIELDABLE_PRIMITIVE_METHOD_FN_DEFINED
 #endif

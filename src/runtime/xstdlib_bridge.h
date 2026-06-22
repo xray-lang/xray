@@ -25,7 +25,7 @@
 #include <stddef.h>
 #include "value/xvalue.h"
 
-struct XrayIsolate;
+struct XrVMRuntime;
 struct XrRegex;
 struct XrChannel;
 
@@ -37,7 +37,7 @@ XR_FUNC int xr_datetime_format(void *dt, const char *pattern, char *buf, size_t 
 // Returns true iff v is a DateTime instance. Implemented in
 // stdlib/datetime/datetime.c; declared here so the VM and the runtime
 // formatter can probe without including stdlib headers.
-XR_FUNC bool xr_value_is_datetime(struct XrayIsolate *X, XrValue v);
+XR_FUNC bool xr_value_is_datetime(struct XrVMRuntime *X, XrValue v);
 
 /* ========== Regex Bridge ========== */
 
@@ -49,7 +49,7 @@ XR_FUNC struct XrRegex *xr_value_to_regex(XrValue v);
 
 // Register the Regex XrClass with native body descriptor. Called from
 // xr_prelude_register_all_native_types during isolate init.
-XR_FUNC void xr_regex_register_class(struct XrayIsolate *isolate);
+XR_FUNC void xr_regex_register_class(struct XrVMRuntime *isolate);
 
 /*
  * Compile a regex literal (the OP_REGEX_COMPILE bytecode helper).
@@ -63,7 +63,7 @@ XR_FUNC void xr_regex_register_class(struct XrayIsolate *isolate);
  * src/vm — the same pattern xr_datetime_format / xr_value_to_regex
  * already use.
  */
-XR_FUNC XrValue xr_regex_compile_literal(struct XrayIsolate *isolate, XrValue pattern,
+XR_FUNC XrValue xr_regex_compile_literal(struct XrVMRuntime *isolate, XrValue pattern,
                                          XrValue flags);
 
 /* ========== Cluster Bridge ========== */

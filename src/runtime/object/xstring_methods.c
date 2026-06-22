@@ -40,7 +40,7 @@ static inline XrString *str_self(XrValue self) {
 
 /* === Indexing / extraction === */
 
-static XrValue m_char_at(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_char_at(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     if (argc < 1)
         return xr_null();
     XrString *str = str_self(self);
@@ -55,7 +55,7 @@ static XrValue m_char_at(XrayIsolate *iso, XrValue self, XrValue *args, int argc
     return result ? xr_string_value(result) : xr_null();
 }
 
-static XrValue m_codepoint_at(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_codepoint_at(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) iso;
     if (argc < 1)
         return xr_int(-1);
@@ -64,7 +64,7 @@ static XrValue m_codepoint_at(XrayIsolate *iso, XrValue self, XrValue *args, int
     return xr_int(xr_string_char_code_at(str, index));
 }
 
-static XrValue m_substring(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_substring(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     XrString *str = str_self(self);
     if (argc < 1)
         return xr_string_value(str);
@@ -74,7 +74,7 @@ static XrValue m_substring(XrayIsolate *iso, XrValue self, XrValue *args, int ar
     return result ? xr_string_value(result) : xr_null();
 }
 
-static XrValue m_slice(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_slice(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     XrString *str = str_self(self);
     if (argc < 1)
         return xr_string_value(str);
@@ -84,7 +84,7 @@ static XrValue m_slice(XrayIsolate *iso, XrValue self, XrValue *args, int argc) 
     return result ? xr_string_value(result) : xr_null();
 }
 
-static XrValue m_byte_at(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_byte_at(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     if (argc < 1)
         return xr_null();
     XrString *str = str_self(self);
@@ -95,7 +95,7 @@ static XrValue m_byte_at(XrayIsolate *iso, XrValue self, XrValue *args, int argc
 
 /* === Search === */
 
-static XrValue m_index_of(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_index_of(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     if (argc < 1 || !XR_IS_STRING(args[0]))
         return xr_int(-1);
     XrString *str = str_self(self);
@@ -103,7 +103,7 @@ static XrValue m_index_of(XrayIsolate *iso, XrValue self, XrValue *args, int arg
     return xr_int(xr_string_index_of(iso, str, substr));
 }
 
-static XrValue m_last_index_of(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_last_index_of(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     XrString *str = str_self(self);
     if (argc < 1 || !XR_IS_STRING(args[0]))
         return xr_int(-1);
@@ -111,7 +111,7 @@ static XrValue m_last_index_of(XrayIsolate *iso, XrValue self, XrValue *args, in
     return xr_int(xr_string_last_index_of(iso, str, substr));
 }
 
-static XrValue m_includes(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_includes(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     if (argc < 1 || !XR_IS_STRING(args[0]))
         return xr_bool(0);
     XrString *str = str_self(self);
@@ -119,7 +119,7 @@ static XrValue m_includes(XrayIsolate *iso, XrValue self, XrValue *args, int arg
     return xr_bool(xr_string_has(iso, str, substr));
 }
 
-static XrValue m_starts_with(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_starts_with(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     if (argc < 1 || !XR_IS_STRING(args[0]))
         return xr_bool(0);
     XrString *str = str_self(self);
@@ -127,7 +127,7 @@ static XrValue m_starts_with(XrayIsolate *iso, XrValue self, XrValue *args, int 
     return xr_bool(xr_string_starts_with(iso, str, prefix));
 }
 
-static XrValue m_ends_with(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_ends_with(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     if (argc < 1 || !XR_IS_STRING(args[0]))
         return xr_bool(0);
     XrString *str = str_self(self);
@@ -137,7 +137,7 @@ static XrValue m_ends_with(XrayIsolate *iso, XrValue self, XrValue *args, int ar
 
 /* === Case / whitespace transforms === */
 
-static XrValue m_to_lower(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_to_lower(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) args;
     (void) argc;
     XrString *str = str_self(self);
@@ -145,7 +145,7 @@ static XrValue m_to_lower(XrayIsolate *iso, XrValue self, XrValue *args, int arg
     return result ? xr_string_value(result) : xr_string_value(str);
 }
 
-static XrValue m_to_upper(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_to_upper(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) args;
     (void) argc;
     XrString *str = str_self(self);
@@ -153,7 +153,7 @@ static XrValue m_to_upper(XrayIsolate *iso, XrValue self, XrValue *args, int arg
     return result ? xr_string_value(result) : xr_string_value(str);
 }
 
-static XrValue m_trim(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_trim(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) args;
     (void) argc;
     XrString *str = str_self(self);
@@ -161,7 +161,7 @@ static XrValue m_trim(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
     return result ? xr_string_value(result) : xr_string_value(str);
 }
 
-static XrValue m_trim_start(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_trim_start(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) args;
     (void) argc;
     XrString *str = str_self(self);
@@ -169,7 +169,7 @@ static XrValue m_trim_start(XrayIsolate *iso, XrValue self, XrValue *args, int a
     return result ? xr_string_value(result) : xr_string_value(str);
 }
 
-static XrValue m_trim_end(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_trim_end(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) args;
     (void) argc;
     XrString *str = str_self(self);
@@ -177,7 +177,7 @@ static XrValue m_trim_end(XrayIsolate *iso, XrValue self, XrValue *args, int arg
     return result ? xr_string_value(result) : xr_string_value(str);
 }
 
-static XrValue m_pad_start(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_pad_start(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     XrString *str = str_self(self);
     if (argc < 1)
         return xr_string_value(str);
@@ -187,7 +187,7 @@ static XrValue m_pad_start(XrayIsolate *iso, XrValue self, XrValue *args, int ar
     return result ? xr_string_value(result) : xr_string_value(str);
 }
 
-static XrValue m_pad_end(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_pad_end(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     XrString *str = str_self(self);
     if (argc < 1)
         return xr_string_value(str);
@@ -199,7 +199,7 @@ static XrValue m_pad_end(XrayIsolate *iso, XrValue self, XrValue *args, int argc
 
 /* === Replacement / construction === */
 
-static XrValue m_split(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_split(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     XrString *str = str_self(self);
     if (argc < 1) {
         XrArray *arr = xr_array_new(xr_current_coro(iso));
@@ -213,7 +213,7 @@ static XrValue m_split(XrayIsolate *iso, XrValue self, XrValue *args, int argc) 
     return result ? xr_value_from_array(result) : xr_null();
 }
 
-static XrValue m_replace(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_replace(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     XrString *str = str_self(self);
     if (argc < 2 || !XR_IS_STRING(args[0]) || !XR_IS_STRING(args[1])) {
         return xr_string_value(str);
@@ -224,7 +224,7 @@ static XrValue m_replace(XrayIsolate *iso, XrValue self, XrValue *args, int argc
     return result ? xr_string_value(result) : xr_string_value(str);
 }
 
-static XrValue m_replace_all(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_replace_all(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     XrString *str = str_self(self);
     if (argc < 2 || !XR_IS_STRING(args[0]) || !XR_IS_STRING(args[1])) {
         return xr_string_value(str);
@@ -235,7 +235,7 @@ static XrValue m_replace_all(XrayIsolate *iso, XrValue self, XrValue *args, int 
     return result ? xr_string_value(result) : xr_string_value(str);
 }
 
-static XrValue m_repeat(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_repeat(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     XrString *str = str_self(self);
     if (argc < 1)
         return xr_string_value(str);
@@ -246,7 +246,7 @@ static XrValue m_repeat(XrayIsolate *iso, XrValue self, XrValue *args, int argc)
     return result ? xr_string_value(result) : xr_null();
 }
 
-static XrValue m_concat(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_concat(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     XrString *str = str_self(self);
     if (argc < 1)
         return xr_string_value(str);
@@ -264,7 +264,7 @@ static XrValue m_concat(XrayIsolate *iso, XrValue self, XrValue *args, int argc)
 
 /* === Reverse / translate === */
 
-static XrValue m_reverse(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_reverse(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) args;
     (void) argc;
     XrString *str = str_self(self);
@@ -275,7 +275,7 @@ static XrValue m_reverse(XrayIsolate *iso, XrValue self, XrValue *args, int argc
 /* str.toBytes() -> Bytes (Array<uint8>). UTF-8 encoded; round-trips with
  * Bytes.toString(). The receiver remains immutable; the result owns its
  * own backing storage. */
-static XrValue m_to_bytes(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_to_bytes(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) args;
     (void) argc;
     XrString *str = str_self(self);
@@ -289,7 +289,7 @@ static XrValue m_to_bytes(XrayIsolate *iso, XrValue self, XrValue *args, int arg
     return xr_value_from_array(bytes);
 }
 
-static XrValue m_translate(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_translate(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     if (argc < 1 || !XR_IS_MAP(args[0]))
         return self;
     XrString *str = str_self(self);
@@ -300,34 +300,34 @@ static XrValue m_translate(XrayIsolate *iso, XrValue self, XrValue *args, int ar
 
 /* === Predicates / classification === */
 
-static XrValue m_is_empty(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_is_empty(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) args;
     (void) argc;
     return xr_bool(xr_string_is_empty(iso, str_self(self)));
 }
 
-static XrValue m_is_letter(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_is_letter(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) iso;
     (void) args;
     (void) argc;
     return xr_bool(xr_string_is_letter(str_self(self)));
 }
 
-static XrValue m_is_number(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_is_number(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) iso;
     (void) args;
     (void) argc;
     return xr_bool(xr_string_is_number(str_self(self)));
 }
 
-static XrValue m_is_alnum(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_is_alnum(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) iso;
     (void) args;
     (void) argc;
     return xr_bool(xr_string_is_alnum(str_self(self)));
 }
 
-static XrValue m_is_whitespace(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_is_whitespace(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) iso;
     (void) args;
     (void) argc;
@@ -336,7 +336,7 @@ static XrValue m_is_whitespace(XrayIsolate *iso, XrValue self, XrValue *args, in
 
 /* === Conversion / Unicode === */
 
-static XrValue m_to_int(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_to_int(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) iso;
     (void) args;
     (void) argc;
@@ -351,7 +351,7 @@ static XrValue m_to_int(XrayIsolate *iso, XrValue self, XrValue *args, int argc)
     return xr_int((xr_Integer) value);
 }
 
-static XrValue m_to_float(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_to_float(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) iso;
     (void) args;
     (void) argc;
@@ -366,7 +366,7 @@ static XrValue m_to_float(XrayIsolate *iso, XrValue self, XrValue *args, int arg
     return xr_float(value);
 }
 
-static XrValue m_ord(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_ord(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) iso;
     (void) args;
     (void) argc;
@@ -376,7 +376,7 @@ static XrValue m_ord(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
 
 /* === Regex bridge === */
 
-static XrValue m_match(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_match(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     if (argc < 1)
         return xr_null();
     XrString *str = str_self(self);
@@ -405,7 +405,7 @@ static XrValue m_match(XrayIsolate *iso, XrValue self, XrValue *args, int argc) 
 
 /* === toString === */
 
-static XrValue m_to_string(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_to_string(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) iso;
     (void) args;
     (void) argc;
@@ -415,7 +415,7 @@ static XrValue m_to_string(XrayIsolate *iso, XrValue self, XrValue *args, int ar
 /* === Iteration === */
 
 /* Character iterator: yields each character (length-1 string). */
-static XrValue m_iterator(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_iterator(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) args;
     (void) argc;
     XrString *s = str_self(self);
@@ -427,7 +427,7 @@ static XrValue m_iterator(XrayIsolate *iso, XrValue self, XrValue *args, int arg
 
 /* Lazy entries iterator used by `for (i, c in s)` lowering.
  * Yields (index, char) tuples by UTF-8 character index. */
-static XrValue m_entries_iterator(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_entries_iterator(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) args;
     (void) argc;
     XrString *s = str_self(self);
@@ -438,7 +438,7 @@ static XrValue m_entries_iterator(XrayIsolate *iso, XrValue self, XrValue *args,
 /* Eager entries() returning Array<(int, string)>. Each element is a
  * real (index, char) tuple, matching the static signature and the
  * XI_TUPLE_GET destructuring used by `for ((i, c) in s.entries())`. */
-static XrValue m_entries(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_entries(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) args;
     (void) argc;
     XrString *s = str_self(self);
@@ -464,7 +464,7 @@ static XrValue m_entries(XrayIsolate *iso, XrValue self, XrValue *args, int argc
 
 #include "xnative_type.h"
 
-void xr_string_register_native_type(XrayIsolate *isolate) {
+void xr_string_register_native_type(XrVMRuntime *isolate) {
     static const XrNativeMethod string_methods[] = {
         /* Indexing / extraction */
         {"charAt", m_char_at, 1},

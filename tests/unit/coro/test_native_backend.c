@@ -136,7 +136,7 @@ static XrAotRuntime *aot_test_runtime_new(void) {
 }
 
 TEST(native_coroutine_uses_native_backend_without_vm_state) {
-    XrayIsolate isolate;
+    XrVMRuntime isolate;
     memset(&isolate, 0, sizeof(isolate));
 
     int counter = 0;
@@ -660,7 +660,7 @@ TEST(coroutine_recycle_hooks_are_backend_abi_contract) {
     ASSERT_NOT_NULL(vm_backend->bind_closure_entry);
     ASSERT_NOT_NULL(vm_backend->bind_cfunc_entry);
 
-    XrayIsolate isolate;
+    XrVMRuntime isolate;
     memset(&isolate, 0, sizeof(isolate));
 
     int counter = 0;

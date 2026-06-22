@@ -1158,7 +1158,7 @@ int xdap_run(XdapController *ctrl) {
                 XdapStdoutCapture out_cap;
                 xdap_stdout_capture_begin(&out_cap);
                 int result =
-                    xray_isolate_dofile_debug(ctrl->isolate, ctrl->program_path, (void **) &proto);
+                    xray_vm_dofile_debug(ctrl->isolate, ctrl->program_path, (void **) &proto);
                 xdap_stdout_capture_end(ctrl, &out_cap);
                 ctrl->debug_proto = proto;
 

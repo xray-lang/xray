@@ -27,7 +27,7 @@
 ** Single authoritative VM context resolver.
 ** See xvm_internal.h for the documented resolution order and contract.
 */
-XrVMContext *xr_vm_current_ctx(XrayIsolate *isolate) {
+XrVMContext *xr_vm_current_ctx(XrVMRuntime *isolate) {
     XR_DCHECK(isolate != NULL, "vm_current_ctx: NULL isolate");
     XrWorker *worker = xr_current_worker();
     if (worker && worker->m) {
@@ -99,7 +99,7 @@ bool xr_vm_prepare_entry(XrVMContext *ctx, int extra_stack) {
 **                   If NULL, errors are logged via xr_log_warning.
 ** @return Return value (xr_null() on failure or when *out_result != XR_VM_OK)
 */
-XrValue xr_vm_call_closure(XrayIsolate *isolate, XrClosure *closure, XrValue *args, int nargs) {
+XrValue xr_vm_call_closure(XrVMRuntime *isolate, XrClosure *closure, XrValue *args, int nargs) {
     XR_DCHECK(isolate != NULL, "vm_call_closure: NULL isolate");
     XR_DCHECK(nargs >= 0, "vm_call_closure: negative nargs");
 
@@ -266,7 +266,7 @@ XrValue xr_vm_call_closure(XrayIsolate *isolate, XrClosure *closure, XrValue *ar
 ** Execute function prototype
 ** Uses main coroutine's vm_ctx uniformly
 */
-XrVMResult xr_vm_interpret_proto(XrayIsolate *isolate, XrProto *proto) {
+XrVMResult xr_vm_interpret_proto(XrVMRuntime *isolate, XrProto *proto) {
     XR_DCHECK(isolate != NULL, "vm_interpret_proto: NULL isolate");
     // proto NULL is an expected hardening case (mirrors the closure NULL
     // handling in xr_vm_call_closure): DCHECK would abort in Debug but is
@@ -316,7 +316,7 @@ XrVMResult xr_vm_interpret_proto(XrayIsolate *isolate, XrProto *proto) {
 **
 ** Under coroutine architecture: uses Worker's vm_ctx to access coroutine stack and frames
 */
-XrVMResult xr_vm_execute_module(XrayIsolate *isolate, XrProto *proto) {
+XrVMResult xr_vm_execute_module(XrVMRuntime *isolate, XrProto *proto) {
     XR_DCHECK(isolate != NULL, "vm_execute_module: NULL isolate");
     XR_DCHECK(proto != NULL, "vm_execute_module: NULL proto");
 
@@ -399,7 +399,7 @@ XrVMResult xr_vm_interpret(const char *source) {
 **
 ** Under coroutine architecture: uses Worker's vm_ctx to access frames
 */
-void xr_vm_add_stacktrace(XrayIsolate *isolate, XrValue exception) {
+void xr_vm_add_stacktrace(XrVMRuntime *isolate, XrValue exception) {
     XR_DCHECK(isolate != NULL, "vm_add_stacktrace: NULL isolate");
     if (!xr_value_is_exception(isolate, exception)) {
         return;
@@ -448,7 +448,7 @@ void xr_vm_add_stacktrace(XrayIsolate *isolate, XrValue exception) {
 ** topmost frame; on unwind we run it here for every frame between the
 ** throw site and the catch handler.
 */
-static void run_defers_for_frame(XrayIsolate *isolate, XrVMContext *ctx, int frame_index) {
+static void run_defers_for_frame(XrVMRuntime *isolate, XrVMContext *ctx, int frame_index) {
     if (!ctx->defer_stack || !ctx->defer_frame_marks || frame_index < 0)
         return;
     int frame_defer_start = ctx->defer_frame_marks[frame_index];
@@ -490,7 +490,7 @@ static void run_defers_for_frame(XrayIsolate *isolate, XrVMContext *ctx, int fra
 ** Uses current coroutine's vm_ctx to access exception handlers.
 ** Iterative approach avoids stack overflow on deeply nested try/catch.
 */
-void xr_vm_throw_exception(XrayIsolate *isolate, XrValue exception) {
+void xr_vm_throw_exception(XrVMRuntime *isolate, XrValue exception) {
     XR_DCHECK(isolate != NULL, "vm_throw_exception: NULL isolate");
     XrVMContext *ctx = xr_vm_current_ctx(isolate);
 
@@ -549,7 +549,7 @@ void xr_vm_throw_exception(XrayIsolate *isolate, XrValue exception) {
     }
 }
 
-bool xr_vm_is_catch_reachable(XrayIsolate *isolate) {
+bool xr_vm_is_catch_reachable(XrVMRuntime *isolate) {
     if (!isolate)
         return false;
     XrVMContext *ctx = xr_vm_current_ctx(isolate);
@@ -565,7 +565,7 @@ bool xr_vm_is_catch_reachable(XrayIsolate *isolate) {
 ** Execute bytecode on Isolate
 ** Thin wrapper: delegates to xr_vm_interpret_proto which operates on isolate directly.
 */
-XrVMResult xr_vm_interpret_proto_isolate(XrayIsolate *isolate, XrProto *proto) {
+XrVMResult xr_vm_interpret_proto_isolate(XrVMRuntime *isolate, XrProto *proto) {
     if (isolate == NULL || proto == NULL) {
         return XR_VM_RUNTIME_ERROR;
     }

@@ -92,7 +92,7 @@ XR_FUNC bool xr_base64_is_valid(const char *data, size_t len) {
 /* ========== xray module exported functions ========== */
 
 // encode(str)
-static XrValue base64_encode(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue base64_encode(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1)
         return xr_null();
 
@@ -113,7 +113,7 @@ static XrValue base64_encode(XrayIsolate *X, XrValue *args, int argc) {
 }
 
 // decode(str)
-static XrValue base64_decode(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue base64_decode(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1)
         return xr_null();
 
@@ -133,7 +133,7 @@ static XrValue base64_decode(XrayIsolate *X, XrValue *args, int argc) {
 }
 
 // encodeUrl(str)
-static XrValue base64_encodeUrl(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue base64_encodeUrl(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1)
         return xr_null();
 
@@ -154,12 +154,12 @@ static XrValue base64_encodeUrl(XrayIsolate *X, XrValue *args, int argc) {
 }
 
 // decodeUrl(str)
-static XrValue base64_decodeUrl(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue base64_decodeUrl(XrVMRuntime *X, XrValue *args, int argc) {
     return base64_decode(X, args, argc);
 }
 
 // encodeBytes(bytes: Array<uint8>)
-static XrValue base64_encodeBytes(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue base64_encodeBytes(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1 || !XR_IS_ARRAY(args[0]))
         return xr_null();
 
@@ -203,7 +203,7 @@ static XrValue base64_encodeBytes(XrayIsolate *X, XrValue *args, int argc) {
 }
 
 // decodeToBytes(str)
-static XrValue base64_decodeToBytes(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue base64_decodeToBytes(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1)
         return xr_null();
 
@@ -236,7 +236,7 @@ static XrValue base64_decodeToBytes(XrayIsolate *X, XrValue *args, int argc) {
 }
 
 // isValid(str)
-static XrValue base64_isValid(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue base64_isValid(XrVMRuntime *X, XrValue *args, int argc) {
     (void) X;
     if (argc < 1)
         return xr_bool(false);
@@ -268,7 +268,7 @@ XR_DEFINE_BUILTIN(base64_decodeToBytes, "decodeToBytes", "(data: string): Array<
                   "Decode Base64 to byte array")
 XR_DEFINE_BUILTIN(base64_isValid, "isValid", "(data: string): bool", "Check if valid base64")
 
-XR_FUNC XrModule *xr_load_module_base64(XrayIsolate *isolate) {
+XR_FUNC XrModule *xr_load_module_base64(XrVMRuntime *isolate) {
     // Create native module
     XrModule *mod = xr_module_create_native(isolate, "base64");
     if (!mod)

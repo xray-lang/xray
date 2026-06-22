@@ -33,7 +33,7 @@
 /* Build a tuple class for the given arity. Each class declares N
  * untyped fields named "0".."N-1" so field IO uses the same field
  * lookup as regular user classes (digit symbols are well-defined). */
-static XrClass *build_tuple_class(XrayIsolate *X, uint16_t arity) {
+static XrClass *build_tuple_class(XrVMRuntime *X, uint16_t arity) {
     XR_DCHECK(X != NULL, "build_tuple_class: NULL isolate");
     XrayCoreClasses *core = xr_isolate_get_core_classes(X);
     XR_DCHECK(core != NULL && core->objectClass != NULL,
@@ -58,7 +58,7 @@ static XrClass *build_tuple_class(XrayIsolate *X, uint16_t arity) {
     return cls;
 }
 
-XrClass *xr_get_or_create_tuple_class(XrayIsolate *X, uint16_t arity) {
+XrClass *xr_get_or_create_tuple_class(XrVMRuntime *X, uint16_t arity) {
     XR_DCHECK(X != NULL, "tuple_class: NULL isolate");
     XrayCoreClasses *core = xr_isolate_get_core_classes(X);
     XR_DCHECK(core != NULL, "tuple_class: core not initialised");
@@ -79,7 +79,7 @@ XrClass *xr_get_or_create_tuple_class(XrayIsolate *X, uint16_t arity) {
 
 XrTuple *xr_tuple_new(struct XrCoroutine *coro, uint16_t element_count) {
     XR_DCHECK(coro != NULL, "xr_tuple_new: NULL coro");
-    XrayIsolate *X = xr_coro_vm_owner(coro);
+    XrVMRuntime *X = xr_coro_vm_owner(coro);
     XR_DCHECK(X != NULL, "xr_tuple_new: coroutine has no VM owner");
 
     XrClass *cls = xr_get_or_create_tuple_class(X, element_count);

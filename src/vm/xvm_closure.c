@@ -11,7 +11,7 @@
 #include "xvm_closure.h"
 #include "../runtime/xisolate_api.h"
 
-XrClosure *xr_vm_closure_from_arg(XrayIsolate *isolate, XrValue v, const char *api_name) {
+XrClosure *xr_vm_closure_from_arg(XrVMRuntime *isolate, XrValue v, const char *api_name) {
     XrClosure *closure = xr_value_to_closure(v);
     if (!closure) {
         xr_runtime_error(isolate, "%s: callback must be a function\n",

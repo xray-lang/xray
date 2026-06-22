@@ -33,9 +33,9 @@
 #include "../../src/base/xdefs.h"
 #include "../../src/runtime/value/xvalue.h"
 
-struct XrayIsolate;
+struct XrVMRuntime;
 struct XrModule;
 
-XR_FUNC struct XrModule *xr_load_module_path(struct XrayIsolate *isolate);
+XR_FUNC struct XrModule *xr_load_module_path(struct XrVMRuntime *isolate);
 
 #endif  // XR_STDLIB_PATH_H

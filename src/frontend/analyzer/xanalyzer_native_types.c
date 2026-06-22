@@ -37,7 +37,7 @@
  *
  * We do NOT use the full Xray parser here — the .xr files have a strict,
  * controlled format.  A line-by-line text parser is simpler, faster, and
- * avoids bootstrapping issues (the full parser needs an XrayIsolate).
+ * avoids bootstrapping issues (the full parser needs an XrVMRuntime).
  * ===================================================================== */
 
 #define MAX_MEMBERS_PER_TYPE 64
@@ -425,7 +425,7 @@ static const TidObjMapping tid_obj_map[] = {
 
 #define NUM_TID_OBJ_MAPPINGS (int) (sizeof(tid_obj_map) / sizeof(tid_obj_map[0]))
 
-XR_FUNC int xa_native_verify_protocol(XrayIsolate *X) {
+XR_FUNC int xa_native_verify_protocol(XrVMRuntime *X) {
     if (!X)
         return -1;
     if (!native_types_initialized)

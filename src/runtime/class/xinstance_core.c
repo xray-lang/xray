@@ -55,7 +55,7 @@ XrInstance *xr_instance_new_core(XrRuntimeCore *core, XrCoroutine *coro, XrClass
     return inst;
 }
 
-XrInstance *xr_instance_new(XrayIsolate *X, XrClass *cls) {
+XrInstance *xr_instance_new(XrVMRuntime *X, XrClass *cls) {
     return xr_instance_new_core(xr_isolate_get_runtime_core(X), xr_current_coro(X), cls);
 }
 
@@ -107,7 +107,7 @@ void xr_instance_free(XrInstance *inst) {
     (void) inst;
 }
 
-XrInstance *xr_instance_clone(XrayIsolate *X, XrInstance *src) {
+XrInstance *xr_instance_clone(XrVMRuntime *X, XrInstance *src) {
     XR_DCHECK(src != NULL, "instance_clone: NULL src");
     XrClass *cls = src->klass;
     XR_DCHECK(cls != NULL, "instance_clone: NULL klass");

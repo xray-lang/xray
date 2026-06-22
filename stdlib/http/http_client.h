@@ -21,7 +21,7 @@
 #include <stdbool.h>
 
 // Forward declaration
-typedef struct XrayIsolate XrayIsolate;
+typedef struct XrVMRuntime XrVMRuntime;
 
 /* ========== Constants ========== */
 
@@ -125,29 +125,29 @@ XR_FUNC void xr_http_request_config_init(XrHttpRequestConfig *config);
  * @param config  Request config
  * @return        XrHttpResult (caller must call xr_http_result_free to free)
  */
-XR_FUNC XrHttpResult xr_http_request(XrayIsolate *X, const XrHttpRequestConfig *config);
+XR_FUNC XrHttpResult xr_http_request(XrVMRuntime *X, const XrHttpRequestConfig *config);
 
 /*
  * Convenience function: GET request
  */
-XR_FUNC XrHttpResult xr_http_get(XrayIsolate *X, const char *url);
+XR_FUNC XrHttpResult xr_http_get(XrVMRuntime *X, const char *url);
 
 /*
  * Convenience function: POST request
  */
-XR_FUNC XrHttpResult xr_http_post(XrayIsolate *X, const char *url, const char *body,
+XR_FUNC XrHttpResult xr_http_post(XrVMRuntime *X, const char *url, const char *body,
                                   size_t body_len, const char *content_type);
 
 /*
  * Convenience function: PUT request
  */
-XR_FUNC XrHttpResult xr_http_put(XrayIsolate *X, const char *url, const char *body, size_t body_len,
+XR_FUNC XrHttpResult xr_http_put(XrVMRuntime *X, const char *url, const char *body, size_t body_len,
                                  const char *content_type);
 
 /*
  * Convenience function: DELETE request
  */
-XR_FUNC XrHttpResult xr_http_delete(XrayIsolate *X, const char *url);
+XR_FUNC XrHttpResult xr_http_delete(XrVMRuntime *X, const char *url);
 
 /*
  * Free response result
@@ -159,13 +159,13 @@ XR_FUNC void xr_http_result_free(XrHttpResult *result);
  * Returns bytes read (>0), 0 on EOF, -1 on error.
  * buf must be at least max_bytes in size.
  */
-XR_FUNC int xr_http_stream_read(XrayIsolate *X, XrHttpResult *result, char *buf, int max_bytes);
+XR_FUNC int xr_http_stream_read(XrVMRuntime *X, XrHttpResult *result, char *buf, int max_bytes);
 
 /*
  * Close a streaming response and return connection to pool.
  * Must be called after stream reading is complete.
  */
-XR_FUNC void xr_http_stream_close(XrayIsolate *X, XrHttpResult *result);
+XR_FUNC void xr_http_stream_close(XrVMRuntime *X, XrHttpResult *result);
 
 /*
  * Get error description

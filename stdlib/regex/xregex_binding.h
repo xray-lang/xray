@@ -76,7 +76,7 @@ struct XrModule;
  *   - findText(re, text)         Return matched text only (string?)
  *   - findGroup(re, text, i)     Return capture group i only (string?)
  */
-XR_FUNC struct XrModule *xr_load_module_regex(XrayIsolate *isolate);
+XR_FUNC struct XrModule *xr_load_module_regex(XrVMRuntime *isolate);
 
 /*
  * Wrap XrRegex as XrValue (XrInstance with native body)
@@ -84,7 +84,7 @@ XR_FUNC struct XrModule *xr_load_module_regex(XrayIsolate *isolate);
  * @param re Regex object pointer
  * @return Wrapped XrValue
  */
-XR_FUNC XrValue xr_regex_wrap(XrayIsolate *X, XrRegex *re);
+XR_FUNC XrValue xr_regex_wrap(XrVMRuntime *X, XrRegex *re);
 
 /*
  * Register the Regex XrClass with native body descriptor so regex
@@ -92,7 +92,7 @@ XR_FUNC XrValue xr_regex_wrap(XrayIsolate *X, XrRegex *re);
  * Called unconditionally from xr_prelude_register_all_native_types
  * during isolate init.
  */
-XR_FUNC void xr_regex_register_class(XrayIsolate *isolate);
+XR_FUNC void xr_regex_register_class(XrVMRuntime *isolate);
 
 // Check if value is a Regex object
 XR_FUNC bool xr_value_is_regex(XrValue v);
@@ -105,6 +105,6 @@ XR_FUNC XrRegex *xr_value_to_regex(XrValue v);
  * Replaces the former Json { start, end, text, groups } approach —
  * field access is now a direct slot load, not a hash lookup.
  */
-XR_FUNC XrValue xr_regex_make_match_object(XrayIsolate *isolate, const char *text, XrMatch *match);
+XR_FUNC XrValue xr_regex_make_match_object(XrVMRuntime *isolate, const char *text, XrMatch *match);
 
 #endif  // XREGEX_BINDING_H

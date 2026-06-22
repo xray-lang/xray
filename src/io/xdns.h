@@ -36,7 +36,7 @@
 extern "C" {
 #endif
 
-struct XrayIsolate;
+struct XrVMRuntime;
 struct XrCoroutine;
 struct XrAsyncPool;
 struct XrIoDnsCache;
@@ -70,14 +70,14 @@ typedef struct XrSockAddr {
  *
  * X is required: it is the only path to reach the runtime-owned cache.
  * Returns true and fills *addr on success, false otherwise. */
-XR_FUNC bool xr_dns_resolve(struct XrayIsolate *X, const char *hostname, XrSockAddr *addr,
+XR_FUNC bool xr_dns_resolve(struct XrVMRuntime *X, const char *hostname, XrSockAddr *addr,
                             XrAddrFamily family);
 
 /* Resolve every known address for a hostname (returned in IPv6/IPv4
  * interleaved order — see file header). Used by failover paths in
  * conn_pool.c and Happy Eyeballs callers. Returns the count written
  * into addrs[] (0 on resolution failure). */
-XR_FUNC int xr_dns_resolve_all(struct XrayIsolate *X, const char *hostname, XrSockAddr *addrs,
+XR_FUNC int xr_dns_resolve_all(struct XrVMRuntime *X, const char *hostname, XrSockAddr *addrs,
                                int max_addrs, XrAddrFamily family);
 
 /* Coroutine-friendly resolve. Cache hit returns immediately; cache
@@ -85,16 +85,16 @@ XR_FUNC int xr_dns_resolve_all(struct XrayIsolate *X, const char *hostname, XrSo
  * is expected to suspend and retry after the cache is warmed. Without
  * an async pool, this falls back to synchronous resolution for
  * bootstrap callers. Queue saturation returns false as backpressure. */
-XR_FUNC bool xr_dns_resolve_async(struct XrayIsolate *X, struct XrCoroutine *coro, int worker_id,
+XR_FUNC bool xr_dns_resolve_async(struct XrVMRuntime *X, struct XrCoroutine *coro, int worker_id,
                                   const char *hostname, XrSockAddr *addr, XrAddrFamily family);
 
 /* Discard all cached entries on this runtime. Used by tests and by
  * xr_io_runtime_destroy. */
-XR_FUNC void xr_dns_cache_clear(struct XrayIsolate *X);
+XR_FUNC void xr_dns_cache_clear(struct XrVMRuntime *X);
 
 /* Warm the cache by performing a synchronous resolve and discarding
  * the result. */
-XR_FUNC void xr_dns_prefetch(struct XrayIsolate *X, const char *hostname);
+XR_FUNC void xr_dns_prefetch(struct XrVMRuntime *X, const char *hostname);
 
 /* ========== Internal: cache lifecycle ========== */
 

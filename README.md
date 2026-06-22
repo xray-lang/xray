@@ -3,7 +3,7 @@
 # Xray
 
 > A statically typed scripting language with native concurrency.
-> TypeScript-like syntax, Go-style coroutines, VM/JIT/AOT execution.
+> TypeScript-like syntax, Go-style coroutines, VM/AOT execution.
 
 ```xray
 fn count(xs: Array<int>) -> int {
@@ -29,8 +29,8 @@ Xray is designed for scripts and services that need static types, fast startup, 
 - **Static typing without `any`** — inference, nullable types (`T?`), unions, generics, tuples, sealed object types, and type narrowing.
 - **Native concurrency** — `go`, `await`, `Channel<T>`, `select`, and structured `scope` are built into the language.
 - **Modern language features** — `class`, `struct`, `interface`, ADT-style `enum`, `match`, exceptions, `Result`, modules, and `defer`.
-- **Multiple execution modes** — run with the VM, accelerate hot paths with JIT, or build native binaries through AOT.
-- **C implementation and embedding API** — native stdlib modules and `include/xray_embedding.h` for host applications.
+- **VM + AOT execution** — use the VM for development/debugging and AOT for high-performance native binaries.
+- **C implementation and VM API** — native stdlib modules and `include/xray_vm.h` for host applications.
 
 ---
 
@@ -100,7 +100,7 @@ Native modules include:
 
 ## Status
 
-Xray is pre-1.0 and under active development. The VM, parser/analyzer, runtime, standard library, tests, LSP/DAP/MCP tooling, JIT, and AOT pipeline are all in the repository, but language and API details may still change.
+Xray is pre-1.0 and under active development. The VM, parser/analyzer, runtime, standard library, tests, LSP/DAP/MCP tooling, and AOT pipeline are all in the repository, but language and API details may still change.
 
 Use the language specs as the current source of truth:
 
