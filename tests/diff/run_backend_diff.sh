@@ -13,7 +13,7 @@
 #   XRAY_BIN            xray binary (default: build/xray; also XRAY_BUILD_DIR)
 #   XRAY_DIFF_BACKENDS  comma list subset of vm,aot (default: vm,aot)
 #   XRAY_DIFF_JOBS      parallel case workers (default: auto, capped by
-#                       XRAY_DIFF_MAX_AUTO_JOBS=8; XRAY_TEST_JOBS also works)
+#                       XRAY_DIFF_MAX_AUTO_JOBS=16; XRAY_TEST_JOBS also works)
 #   XRAY_DIFF_SHARD_TOTAL / XRAY_DIFF_SHARD_INDEX
 #                       run only one stable 0-based shard of the case list
 #   XRAY_DIFF_EXTRA_CASES_FILE
@@ -144,7 +144,7 @@ configure_jobs() {
     case "$requested" in
         ""|auto)
             JOBS="$(detect_cores)"
-            max_auto="${XRAY_DIFF_MAX_AUTO_JOBS:-8}"
+            max_auto="${XRAY_DIFF_MAX_AUTO_JOBS:-16}"
             if is_uint "$max_auto" && [ "$max_auto" -gt 0 ] && [ "$JOBS" -gt "$max_auto" ]; then
                 JOBS="$max_auto"
             fi

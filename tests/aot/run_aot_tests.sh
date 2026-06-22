@@ -14,9 +14,12 @@
 #                       (default: build/.xray-test-cache/aot-bin/<xray-key>/O<opt>)
 #   XRAY_AOT_TEST_OPT   native C compiler optimization level for correctness
 #                       gates (default: 0; set to 3 for optimized smoke/CI)
+#   XRAY_AOT_SHARD_TOTAL / XRAY_AOT_SHARD_INDEX
+#                       run only one stable 0-based shard of the case list
 #   XRAY_AOT_FAST_TEST_BUILD
 #                       use correctness-test AOT link flags (default: 1);
 #                       set to 0 to exercise product size/link flags
+#   XRAY_AOT_RUNNER     python (default) or bash
 #   XRAY_TEST_DISABLE_RUN_CACHE
 #                       set to 1 to force executing cached native binaries and
 #                       VM runs even when a previous identical run passed
@@ -28,6 +31,18 @@ XRAY="${1:-./build/xray}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 . "$PROJECT_DIR/tests/test_common.sh"
+
+if [ "${XRAY_AOT_RUNNER:-python}" != "bash" ]; then
+    PYTHON_BIN="${PYTHON:-python3}"
+    if command -v "$PYTHON_BIN" >/dev/null 2>&1; then
+        exec "$PYTHON_BIN" "$SCRIPT_DIR/run_aot_tests_fast.py" "$@"
+    fi
+    if [ "${XRAY_AOT_RUNNER:-python}" = "python" ]; then
+        echo "error: python3 is required for XRAY_AOT_RUNNER=python; set XRAY_AOT_RUNNER=bash to use the legacy runner" >&2
+        exit 2
+    fi
+fi
+
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/aot_test.XXXXXX")" || {
     echo "error: cannot create temp dir" >&2
     exit 1
@@ -45,12 +60,16 @@ REQUESTED_JOBS="${XRAY_AOT_JOBS:-${XRAY_TEST_JOBS:-auto}}"
 AOT_OPT_LEVEL="${XRAY_AOT_TEST_OPT:-0}"
 AOT_CACHE="${XRAY_AOT_CACHE_DIR:-$(xray_test_shared_cache_dir "$PROJECT_DIR" "aot-objects")}"
 AOT_BIN_CACHE="${XRAY_AOT_BIN_CACHE_DIR:-$(xray_test_stable_cache_dir "$PROJECT_DIR" "aot-bin" "$XRAY")/O$AOT_OPT_LEVEL}"
+SHARD_TOTAL="${XRAY_AOT_SHARD_TOTAL:-1}"
+SHARD_INDEX="${XRAY_AOT_SHARD_INDEX:-0}"
 : "${XRAY_AOT_FAST_TEST_BUILD:=1}"
 export XRAY_AOT_FAST_TEST_BUILD
 JOBS=1
 PASS=0
 FAIL=0
 SKIP=0
+CASE_INDEX=0
+SELECTED_CASES=0
 
 echo "=== AOT VM-AOT Diff Tests ==="
 echo "Binary: $XRAY"
@@ -96,6 +115,21 @@ configure_jobs() {
     esac
 }
 
+validate_shard_config() {
+    if ! is_uint "$SHARD_TOTAL" || ! is_uint "$SHARD_INDEX"; then
+        echo "error: shard config must be numeric: total=$SHARD_TOTAL index=$SHARD_INDEX" >&2
+        exit 2
+    fi
+    if [ "$SHARD_TOTAL" -lt 1 ]; then
+        echo "error: XRAY_AOT_SHARD_TOTAL must be >= 1" >&2
+        exit 2
+    fi
+    if [ "$SHARD_INDEX" -ge "$SHARD_TOTAL" ]; then
+        echo "error: XRAY_AOT_SHARD_INDEX must be in [0,total): index=$SHARD_INDEX total=$SHARD_TOTAL" >&2
+        exit 2
+    fi
+}
+
 rel_case_name() {
     case "$1" in
         "$SCRIPT_DIR"/*) printf '%s' "${1#"$SCRIPT_DIR"/}" ;;
@@ -108,10 +142,14 @@ safe_case_name() {
 }
 
 configure_jobs "$REQUESTED_JOBS"
+validate_shard_config
 echo "Jobs:   $JOBS"
 echo "Cache:  $AOT_CACHE"
 echo "BinCache: $AOT_BIN_CACHE"
 echo "AOT opt: -O$AOT_OPT_LEVEL"
+if [ "$SHARD_TOTAL" -gt 1 ]; then
+    echo "Shard: $SHARD_INDEX / $SHARD_TOTAL"
+fi
 echo ""
 
 run_test() {
@@ -372,7 +410,12 @@ run_section() {
         echo "--- $title ---"
         : >"$list"
         for f in "$dir"/*.xr; do
-            [ -f "$f" ] && printf '%s\n' "$f" >>"$list"
+            [ -f "$f" ] || continue
+            if [ $((CASE_INDEX % SHARD_TOTAL)) -eq "$SHARD_INDEX" ]; then
+                printf '%s\n' "$f" >>"$list"
+                SELECTED_CASES=$((SELECTED_CASES + 1))
+            fi
+            CASE_INDEX=$((CASE_INDEX + 1))
         done
         if [ "$JOBS" -le 1 ]; then
             while IFS= read -r f; do
@@ -392,7 +435,12 @@ append_section() {
     local f
     [ -d "$dir" ] || return 0
     for f in "$dir"/*.xr; do
-        [ -f "$f" ] && printf '%s\n' "$f" >>"$list"
+        [ -f "$f" ] || continue
+        if [ $((CASE_INDEX % SHARD_TOTAL)) -eq "$SHARD_INDEX" ]; then
+            printf '%s\n' "$f" >>"$list"
+            SELECTED_CASES=$((SELECTED_CASES + 1))
+        fi
+        CASE_INDEX=$((CASE_INDEX + 1))
     done
 }
 
@@ -422,6 +470,11 @@ run_positive_sections() {
 # Run all .xr files in test directories
 run_positive_sections
 run_section "negative" "negative" "$SCRIPT_DIR/negative"
+
+if [ "$SHARD_TOTAL" -gt 1 ]; then
+    echo "Shard cases: $SELECTED_CASES / $CASE_INDEX"
+    echo ""
+fi
 
 echo "=== Results: $PASS passed, $FAIL failed, $SKIP skipped ==="
 [ "$FAIL" -eq 0 ] && exit 0 || exit 1

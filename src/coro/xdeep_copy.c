@@ -300,6 +300,7 @@ XrValue xr_deep_copy_map_with_ctx(XrCopyContext *ctx, XrGCHeader *obj) {
     new_map->ctrl = NULL;
     new_map->indices = NULL;
     new_map->entries = NULL;
+    new_map->owner_gc = ctx->dst_coro_gc;
     new_map->flags = XR_MAP_FLAG_DUMMY;
     if (map->flags & XR_MAP_FLAG_WEAK)
         new_map->flags |= XR_MAP_FLAG_WEAK;
@@ -405,6 +406,7 @@ XrValue xr_deep_copy_set_with_ctx(XrCopyContext *ctx, XrGCHeader *obj) {
     if (!new_set)
         return XR_NULL_VAL;
     xr_set_init_inplace(new_set);
+    new_set->owner_gc = ctx->dst_coro_gc;
     if (set->flags & XR_SET_FLAG_WEAK)
         new_set->flags |= XR_SET_FLAG_WEAK;
     new_set->elem_tid = set->elem_tid;
