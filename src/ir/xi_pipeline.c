@@ -23,6 +23,7 @@
 #include "../frontend/canonical/xcanon.h"
 #include "../frontend/parser/xast.h"
 #include "../runtime/xisolate_api.h"
+#include "../toolchain/xcompiler_session.h"
 #include "../base/xdefs.h"
 #include "../base/xchecks.h"
 
@@ -309,20 +310,8 @@ XR_FUNC XiPipelineResult xi_pipeline_compile_func(struct AstNode *func_node,
         cfg = &default_cfg;
     }
 
-    /* Re-install the parse arena so canonicalizer can allocate new AST nodes. */
-    struct XrArena *saved_arena = xr_isolate_get_current_arena(isolate);
-    if (func_node->as.function_decl.body && func_node->as.function_decl.body->type == AST_BLOCK) {
-        /* Function bodies don't own arenas directly; the arena lives on
-         * the enclosing program node.  The caller (xvm_compile.c) already
-         * re-installs the program arena before entering the pipeline, so
-         * the arena should already be set. */
-    }
-
     /* Canonicalize AST before lowering */
     xr_canon_func(func_node, analyzer, isolate);
-
-    /* Restore previous arena */
-    xr_isolate_set_current_arena(isolate, saved_arena);
 
     XiFunc *ir = xi_lower_func(func_node, analyzer, isolate);
 
@@ -348,18 +337,16 @@ XR_FUNC XiPipelineResult xi_pipeline_compile_program(struct AstNode *program_nod
         cfg = &default_cfg;
     }
 
-    /* Re-install the parse arena so canonicalizer can allocate new AST nodes
-     * (temp variables, desugared expressions, synthetic blocks). */
-    struct XrArena *saved_arena = xr_isolate_get_current_arena(isolate);
-    if (program_node->type == AST_PROGRAM && program_node->as.program.arena) {
-        xr_isolate_set_current_arena(isolate, program_node->as.program.arena);
-    }
+    XrCompilerSessionScope canon_scope;
+    bool has_canon_scope = program_node->type == AST_PROGRAM && program_node->as.program.arena &&
+                           xr_compiler_session_push_arena(isolate, program_node->as.program.arena,
+                                                          cfg->source_file, &canon_scope);
 
     /* Canonicalize AST before lowering */
     xr_canon_program(program_node, analyzer, isolate);
 
-    /* Restore previous arena */
-    xr_isolate_set_current_arena(isolate, saved_arena);
+    if (has_canon_scope)
+        xr_compiler_session_pop_arena(&canon_scope);
 
     XiFunc *ir = xi_lower_program_ex(program_node, analyzer, isolate, cfg->repl_mode);
 

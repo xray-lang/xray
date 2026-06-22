@@ -10,7 +10,9 @@
 
 #include "xcompiler_session.h"
 
+#include "../base/xarena.h"
 #include "../base/xmalloc.h"
+#include "../frontend/parser/xstring_pool.h"
 #include "../runtime/xisolate_internal.h"
 #include <string.h>
 
@@ -104,4 +106,62 @@ void xr_compiler_session_set_string_pool(XrCompilerSession *session,
                                          struct XrCompileStringPool *pool) {
     if (session)
         session->compile_string_pool = pool;
+}
+
+bool xr_compiler_session_push_arena(XrayIsolate *isolate, struct XrArena *arena,
+                                    const char *source_file, XrCompilerSessionScope *scope) {
+    if (!scope)
+        return false;
+    memset(scope, 0, sizeof(*scope));
+    if (!isolate || !arena)
+        return false;
+
+    scope->isolate = isolate;
+    scope->session = xr_compiler_session_current_for_isolate(isolate);
+    if (scope->session) {
+        scope->saved_arena = xr_compiler_session_current_arena(scope->session);
+        scope->saved_pool = xr_compiler_session_string_pool(scope->session);
+    } else {
+        XrCompilerSessionConfig cfg = {
+            .vm_host = isolate,
+            .source_file = source_file,
+        };
+        scope->session = xr_compiler_session_new(&cfg);
+        if (!scope->session)
+            return false;
+        scope->saved_session = xr_compiler_session_attach_isolate(isolate, scope->session);
+        scope->owns_session = true;
+    }
+
+    xr_compiler_session_set_current_arena(scope->session, arena);
+    if (!xr_compiler_session_string_pool(scope->session) || scope->saved_arena != arena) {
+        XrCompileStringPool *pool = xr_string_pool_new(arena);
+        xr_compiler_session_set_string_pool(scope->session, pool);
+    }
+    scope->active = true;
+    return true;
+}
+
+void xr_compiler_session_pop_arena(XrCompilerSessionScope *scope) {
+    if (!scope || !scope->active)
+        return;
+
+    xr_compiler_session_commit_legacy_isolate_state(scope->session);
+
+    if (scope->owns_session) {
+        if (scope->saved_session && xr_compiler_session_ast_node_id(scope->saved_session) <
+                                        xr_compiler_session_ast_node_id(scope->session)) {
+            xr_compiler_session_set_ast_node_id(scope->saved_session,
+                                                xr_compiler_session_ast_node_id(scope->session));
+        }
+        xr_compiler_session_set_string_pool(scope->session, NULL);
+        xr_compiler_session_set_current_arena(scope->session, NULL);
+        xr_compiler_session_attach_isolate(scope->isolate, scope->saved_session);
+        xr_compiler_session_delete(scope->session);
+    } else {
+        xr_compiler_session_set_current_arena(scope->session, scope->saved_arena);
+        xr_compiler_session_set_string_pool(scope->session, scope->saved_pool);
+    }
+
+    memset(scope, 0, sizeof(*scope));
 }

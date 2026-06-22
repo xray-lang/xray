@@ -33,6 +33,7 @@
 #include "../runtime/xisolate_api.h"
 #include "../runtime/value/xvalue_format.h"
 #include "../runtime/value/xtype_names.h"
+#include "../toolchain/xcompiler_session.h"
 #include "../base/xmalloc.h"
 #include "../base/xdynarray.h"
 #include <stdio.h>
@@ -285,11 +286,9 @@ static void repl_maybe_echo_last_expr(XrayIsolate *isolate, AstNode *program) {
             break;
     }
 
-    /* Re-install the program arena so the new node allocations share
-     * the AST lifetime.  Restored before returning regardless of
-     * partial-failure path. */
-    struct XrArena *saved = xr_isolate_get_current_arena(isolate);
-    xr_isolate_set_current_arena(isolate, program->as.program.arena);
+    XrCompilerSessionScope synth_scope;
+    bool has_synth_scope =
+        xr_compiler_session_push_arena(isolate, program->as.program.arena, "<repl>", &synth_scope);
 
     /* Build `it = <expr>` or `let it = <expr>` depending on whether
      * the binding already exists.  Using assignment on subsequent
@@ -308,16 +307,20 @@ static void repl_maybe_echo_last_expr(XrayIsolate *isolate, AstNode *program) {
     AstNode *print_args[1] = {it_ref};
     AstNode *synth = (it_ref) ? xr_ast_print_stmt(isolate, print_args, 1, expr->line) : NULL;
 
-    xr_isolate_set_current_arena(isolate, saved);
+    if (has_synth_scope)
+        xr_compiler_session_pop_arena(&synth_scope);
 
     if (!bind || !synth) {
         /* Fallback to legacy behaviour (print the expression directly)
          * so a node-allocation failure does not regress to silent
          * dropping of the trailing expression. */
-        xr_isolate_set_current_arena(isolate, program->as.program.arena);
+        XrCompilerSessionScope fallback_scope;
+        bool has_fallback_scope = xr_compiler_session_push_arena(isolate, program->as.program.arena,
+                                                                 "<repl>", &fallback_scope);
         AstNode *args[1] = {expr};
         AstNode *fb = xr_ast_print_stmt(isolate, args, 1, expr->line);
-        xr_isolate_set_current_arena(isolate, saved);
+        if (has_fallback_scope)
+            xr_compiler_session_pop_arena(&fallback_scope);
         if (fb) {
             fb->as.print_stmt.skip_null = true;
             stmts[count - 1] = fb;
