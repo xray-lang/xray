@@ -14,6 +14,7 @@
 
 #include "xbundle.h"
 #include "xmodule.h"
+#include "xmodule_graph.h"
 #include "xmodule_resolver.h"
 #include "../base/xlog.h"
 #include "../base/xchecks.h"
@@ -69,7 +70,7 @@ static void bundle_add_entry(XrBundle *bundle, const char *path, const uint8_t *
         xr_free(entry->path);
         return;
     }
-    memcpy((void *) entry->bc, bc, bc_size);
+    memcpy(entry->bc, bc, bc_size);
     entry->bc_size = bc_size;
 }
 
@@ -93,6 +94,36 @@ static void add_external_dep(XrExternalDeps *deps, const char *name) {
         deps->capacity = new_cap;
     }
     deps->deps[deps->count++] = xr_strdup(name);
+}
+
+static bool bundle_validate_acyclic(XrCompilerSession *session, XrModuleResolver *resolver,
+                                    const char *entry_path) {
+    XrModuleGraph *graph = xr_module_graph_new(session, resolver);
+    if (!graph) {
+        xr_log_warning("bundle", "failed to create module graph");
+        return false;
+    }
+
+    char *err = NULL;
+    if (xr_module_graph_build(graph, entry_path, &err) != 0) {
+        xr_log_warning("bundle", "module graph build failed: %s", err ? err : "?");
+        xr_free(err);
+        xr_module_graph_free(graph);
+        return false;
+    }
+    xr_free(err);
+
+    xr_module_graph_topological_sort(graph);
+    if (graph->has_cycle) {
+        xr_log_warning("bundle", "%s",
+                       graph->cycle_desc ? graph->cycle_desc
+                                         : "E0504: circular dependency detected");
+        xr_module_graph_free(graph);
+        return false;
+    }
+
+    xr_module_graph_free(graph);
+    return true;
 }
 
 static void visit_node(BundleContext *ctx, AstNode *node, const char *current_dir) {
@@ -135,9 +166,8 @@ static void visit_node(BundleContext *ctx, AstNode *node, const char *current_di
                 if (mid.source_path && (ctx->flags & XR_BUNDLE_STATIC_PACKAGES)) {
                     /* Static bundle: compile the package */
                     if (!xr_hashmap_has(ctx->visited, mid.source_path)) {
-                        /* The visited mark is the cycle breaker; never descend
-                         * into a module that could not be marked, or circular
-                         * imports would recurse forever. */
+                        /* The graph preflight rejects cycles; visited is only
+                         * the per-bundle dedupe set for already compiled deps. */
                         if (!xr_hashmap_set(ctx->visited, mid.source_path, (void *) 1)) {
                             xr_log_warning("bundle", "out of memory tracking visited: %s",
                                            mid.source_path);
@@ -177,7 +207,7 @@ static void visit_node(BundleContext *ctx, AstNode *node, const char *current_di
             case XR_MOD_FILE: {
                 XR_DCHECK(mid.source_path != NULL, "visit_node: FILE module without source_path");
                 if (!xr_hashmap_has(ctx->visited, mid.source_path)) {
-                    /* See XR_MOD_PACKAGE above: do not descend unmarked. */
+                    /* See XR_MOD_PACKAGE above: this is dedupe, not cycle handling. */
                     if (!xr_hashmap_set(ctx->visited, mid.source_path, (void *) 1)) {
                         xr_log_warning("bundle", "out of memory tracking visited: %s",
                                        mid.source_path);
@@ -392,6 +422,13 @@ XrBundle *xr_bundle_create_ex(XrayIsolate *X, const char *entry_file, XrBundleFl
         .lockfile = NULL,
     };
     XrModuleResolver *resolver = xr_module_resolver_new(&rcfg);
+    if (!resolver || !bundle_validate_acyclic(session, resolver, abs_path)) {
+        xr_free(source);
+        xr_module_resolver_free(resolver);
+        xr_free(abs_path);
+        xr_bundle_free(bundle);
+        return NULL;
+    }
 
     // Create context
     BundleContext ctx = {.X = X,
@@ -402,8 +439,7 @@ XrBundle *xr_bundle_create_ex(XrayIsolate *X, const char *entry_file, XrBundleFl
                          .flags = flags,
                          .resolver = resolver};
 
-    // Mark entry file as visited. Without the mark a circular import back
-    // into the entry would recurse forever, so treat failure as fatal.
+    // Mark entry file as visited for dependency de-duplication.
     if (!ctx.visited || !xr_hashmap_set(ctx.visited, abs_path, (void *) 1)) {
         xr_log_warning("bundle", "out of memory creating visited set");
         xr_free(source);
@@ -467,8 +503,8 @@ void xr_bundle_free(XrBundle *bundle) {
         return;
 
     for (int i = 0; i < bundle->count; i++) {
-        xr_free((void *) bundle->entries[i].path);
-        xr_free((void *) bundle->entries[i].bc);
+        xr_free(bundle->entries[i].path);
+        xr_free(bundle->entries[i].bc);
     }
     xr_free(bundle->entries);
     xr_free((void *) bundle->entry_path);

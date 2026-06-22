@@ -1,0 +1,7 @@
+// Expected: E0504 circular dependency across source modules
+
+import "./circular_dependency_peer" as peer
+
+let value = peer.value + 1
+
+export { value }

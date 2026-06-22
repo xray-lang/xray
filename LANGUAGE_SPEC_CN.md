@@ -4991,7 +4991,7 @@ Bytecode  →  AOT (machine code)
 | `E0501` | `XR_ERR_MOD_NOT_FOUND` | 找不到模块 |
 | `E0502` | `XR_ERR_MOD_LOAD_FAILED` | 模块加载失败（IO / 解析错误） |
 | `E0503` | `XR_ERR_MOD_NO_EXPORT` | import 的名字未被 export |
-| `E0504` | `XR_ERR_MOD_CIRCULAR` | 循环依赖 |
+| `E0504` | `XR_ERR_MOD_CIRCULAR` | 模块依赖图包含循环依赖 |
 
 ### 18.6 禁止写法 (Rejected Syntax)
 

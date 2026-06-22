@@ -4089,10 +4089,12 @@ Xray builds a complete **module dependency graph** (DAG) at compile time:
 
 1. Starting from the entry file, all `import` declarations are recursively resolved to build the dependency graph.
 2. The graph is topologically sorted to determine module initialization order.
-3. If a **circular dependency** is detected (SCC size > 1 or self-loop), a compile error is emitted.
+3. If a **circular dependency** is detected (SCC size > 1 or self-loop), compilation fails with `E0504` and reports a concrete cycle path such as `a.xr -> b.xr -> a.xr`.
 4. Modules are initialized in topological order, from leaf modules (no dependencies) to the entry module.
 
 Selective imports (`import { foo } from "./m"`) are resolved at compile time to fixed module indices and export slots, resulting in O(1) indexed access at runtime with no string lookup.
+
+Xray does not use partial module initialization or cache-based cycle breaking. A module that is still loading is not observable through `import`; mutual dependencies must be refactored into a DAG.
 
 ### 11.7 Native Modules
 
@@ -4992,7 +4994,7 @@ Analyzer enum codes (`XrErrorCode`, defined in the 350+ section of `xerror.h`):
 | `E0501` | `XR_ERR_MOD_NOT_FOUND` | module not found |
 | `E0502` | `XR_ERR_MOD_LOAD_FAILED` | module load failed (I/O / parsing error) |
 | `E0503` | `XR_ERR_MOD_NO_EXPORT` | imported name is not exported |
-| `E0504` | `XR_ERR_MOD_CIRCULAR` | circular dependency |
+| `E0504` | `XR_ERR_MOD_CIRCULAR` | module dependency graph contains a circular dependency |
 
 ### 18.6 Rejected Syntax
 
