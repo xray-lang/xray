@@ -31,6 +31,7 @@
 // NOTE: WebSocket moved to separate 'ws' module
 #include "../../src/module/xmodule.h"
 #include "../../src/vm/xvm.h"
+#include "../../src/vm/xvm_closure.h"
 #include "../../src/vm/xvm_coro_api.h"
 #include "../../src/coro/xyieldable.h"
 #include "../../src/coro/xworker.h"
@@ -926,7 +927,7 @@ static XrValue http_ws_route(XrayIsolate *X, XrValue *args, int argc) {
     if (!path)
         return xr_null();
 
-    XrClosure *closure = xr_closure_from_arg(X, args[1], "http.websocket");
+    XrClosure *closure = xr_vm_closure_from_arg(X, args[1], "http.websocket");
     if (!closure)
         return xr_null();
 
@@ -972,7 +973,7 @@ static XrValue http_set_conn_handler(XrayIsolate *X, XrValue *args, int argc) {
         }
     }
 
-    XrClosure *closure = xr_closure_from_arg(X, args[0], "http.setConnHandler");
+    XrClosure *closure = xr_vm_closure_from_arg(X, args[0], "http.setConnHandler");
     if (closure) {
         /*
          * Check if closure has upvalues.

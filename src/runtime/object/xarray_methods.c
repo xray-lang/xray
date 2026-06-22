@@ -25,6 +25,7 @@
 #include "xtuple.h"
 #include "xiterator.h"
 #include "../closure/xclosure.h"
+#include "../../vm/xvm_closure.h"
 #include "../value/xvalue.h"
 #include "../value/xvalue_format.h"
 #include "../gc/xalloc_unified.h"
@@ -40,13 +41,13 @@ static inline XrArray *array_self(XrValue self) {
     return XR_TO_ARRAY(self);
 }
 
-// Build the diagnostic tag "Array.<method>" for xr_closure_from_arg.
+// Build the diagnostic tag "Array.<method>" for xr_vm_closure_from_arg.
 // The composed name lives on the stack; xr_runtime_error copies it into
 // the isolate's error buffer before returning, so a stack address is safe.
 static struct XrClosure *array_callback(XrayIsolate *iso, XrValue v, const char *method) {
     char tag[32];
     snprintf(tag, sizeof(tag), "Array.%s", method);
-    return xr_closure_from_arg(iso, v, tag);
+    return xr_vm_closure_from_arg(iso, v, tag);
 }
 
 /* === Mutation === */
