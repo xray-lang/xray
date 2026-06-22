@@ -11,9 +11,13 @@
 #include "xcompiler_session.h"
 
 #include "../base/xarena.h"
+#include "../base/xsource_cache.h"
 #include "../base/xmalloc.h"
 #include "../frontend/parser/xstring_pool.h"
 #include "../runtime/xisolate_internal.h"
+#include "../runtime/value/xtype.h"
+#include "../runtime/value/xtype_internal.h"
+#include "../runtime/value/xtype_pool.h"
 #include <string.h>
 
 struct XrCompilerSession {
@@ -26,6 +30,9 @@ struct XrCompilerSession {
     struct XrArena *current_arena;
     struct XrCompileStringPool *compile_string_pool;
     uint32_t next_ast_node_id;
+
+    struct XrTypePool *analyzer_pool;
+    struct XrSourceCache *source_cache;
 };
 
 XrCompilerSession *xr_compiler_session_new(const XrCompilerSessionConfig *cfg) {
@@ -45,6 +52,24 @@ XrCompilerSession *xr_compiler_session_new(const XrCompilerSessionConfig *cfg) {
 }
 
 void xr_compiler_session_delete(XrCompilerSession *session) {
+    if (!session)
+        return;
+    if (session->vm_host) {
+        if (session->vm_host->analyzer_pool == session->analyzer_pool)
+            session->vm_host->analyzer_pool = NULL;
+        if (session->vm_host->current_type_pool == session->analyzer_pool)
+            session->vm_host->current_type_pool = NULL;
+        if (session->vm_host->source_cache == session->source_cache)
+            session->vm_host->source_cache = NULL;
+        if (session->vm_host->compiler_session == session)
+            session->vm_host->compiler_session = NULL;
+    }
+    if (xr_type_get_current_pool() == session->analyzer_pool)
+        xr_type_set_current_pool(NULL, NULL);
+    if (session->source_cache)
+        xr_source_cache_free(session->source_cache);
+    if (session->analyzer_pool)
+        xr_type_pool_free(session->analyzer_pool);
     xr_free(session);
 }
 
@@ -106,6 +131,43 @@ void xr_compiler_session_set_string_pool(XrCompilerSession *session,
                                          struct XrCompileStringPool *pool) {
     if (session)
         session->compile_string_pool = pool;
+}
+
+struct XrTypePool *xr_compiler_session_ensure_analyzer_pool(XrCompilerSession *session) {
+    if (!session)
+        return NULL;
+    if (!session->analyzer_pool)
+        session->analyzer_pool = xr_type_pool_new();
+    return session->analyzer_pool;
+}
+
+struct XrTypePool *xr_compiler_session_analyzer_pool(const XrCompilerSession *session) {
+    return session ? session->analyzer_pool : NULL;
+}
+
+void xr_compiler_session_install_analyzer_pool(XrCompilerSession *session) {
+    XrTypePool *pool = xr_compiler_session_ensure_analyzer_pool(session);
+    if (!session || !pool)
+        return;
+    if (session->vm_host) {
+        session->vm_host->analyzer_pool = pool;
+        session->vm_host->current_type_pool = pool;
+    }
+    xr_type_set_current_pool(pool, &pool->next_type_id);
+}
+
+struct XrSourceCache *xr_compiler_session_ensure_source_cache(XrCompilerSession *session) {
+    if (!session)
+        return NULL;
+    if (!session->source_cache)
+        session->source_cache = xr_source_cache_new();
+    if (session->vm_host)
+        session->vm_host->source_cache = session->source_cache;
+    return session->source_cache;
+}
+
+struct XrSourceCache *xr_compiler_session_source_cache(const XrCompilerSession *session) {
+    return session ? session->source_cache : NULL;
 }
 
 bool xr_compiler_session_push_arena(XrayIsolate *isolate, struct XrArena *arena,

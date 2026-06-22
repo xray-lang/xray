@@ -16,6 +16,8 @@
 
 struct XrArena;
 struct XrCompileStringPool;
+struct XrSourceCache;
+struct XrTypePool;
 
 typedef struct XrCompilerSession XrCompilerSession;
 
@@ -58,6 +60,13 @@ XR_FUNC struct XrCompileStringPool *
 xr_compiler_session_string_pool(const XrCompilerSession *session);
 XR_FUNC void xr_compiler_session_set_string_pool(XrCompilerSession *session,
                                                  struct XrCompileStringPool *pool);
+
+XR_FUNC struct XrTypePool *xr_compiler_session_ensure_analyzer_pool(XrCompilerSession *session);
+XR_FUNC struct XrTypePool *xr_compiler_session_analyzer_pool(const XrCompilerSession *session);
+XR_FUNC void xr_compiler_session_install_analyzer_pool(XrCompilerSession *session);
+
+XR_FUNC struct XrSourceCache *xr_compiler_session_ensure_source_cache(XrCompilerSession *session);
+XR_FUNC struct XrSourceCache *xr_compiler_session_source_cache(const XrCompilerSession *session);
 
 XR_FUNC bool xr_compiler_session_push_arena(XrayIsolate *isolate, struct XrArena *arena,
                                             const char *source_file, XrCompilerSessionScope *scope);
