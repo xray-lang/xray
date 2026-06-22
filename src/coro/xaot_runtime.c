@@ -19,6 +19,7 @@
 #include "../runtime/mem/xobj_destroy_ops.h"
 #include "xblock.h"
 #include "xcoroutine.h"
+#include "xscope_transfer.h"
 #include "xworker.h"
 
 typedef struct XrAotCoroState {
@@ -100,6 +101,10 @@ static void aot_runtime_configure_core(XrAotRuntime *runtime, const XrAotRuntime
     xr_runtime_core_enable_basic_destroy_ops(runtime->core);
     if (cfg && cfg->configure_core)
         cfg->configure_core(runtime->core, runtime->caps, cfg->userdata);
+}
+
+void xr_aot_runtime_enable_transfer(XrAotRuntime *runtime) {
+    xr_scope_transfer_enable_core(xr_aot_runtime_core(runtime));
 }
 
 static bool aot_coro_cancelled(const XrCoroutine *coro) {

@@ -23,9 +23,6 @@
 #include "xopcode_info.h"
 #include "../../base/xchecks.h"
 
-struct XiFunc;
-void xi_func_free(struct XiFunc *f);
-
 /*
  * Monotonic proto-id allocator. Each XrProto gets a fresh, never-reused
  * identifier assigned at creation. The id is used as an index into the
@@ -34,6 +31,7 @@ void xi_func_free(struct XiFunc *f);
  * workers. 32 bits is more than sufficient for any sane program.
  */
 static _Atomic uint32_t s_proto_id_counter = 0;
+static XrProtoOpaqueFreeFn s_ir_free_fn = NULL;
 
 // xr_opcode_name is implemented in runtime/value/xopcode_info.c.
 
@@ -109,6 +107,10 @@ XrProto *xr_vm_proto_new(void) {
     return proto;
 }
 
+void xr_vm_proto_set_ir_free_fn(XrProtoOpaqueFreeFn free_fn) {
+    s_ir_free_fn = free_fn;
+}
+
 // Free function prototype
 void xr_vm_proto_free(XrProto *proto) {
     if (proto == NULL) {
@@ -159,7 +161,9 @@ void xr_vm_proto_free(XrProto *proto) {
 
     // Free retained Xi SSA IR (consumed by AOT/REPL lowering)
     if (proto->xi_func != NULL) {
-        xi_func_free((struct XiFunc *) proto->xi_func);
+        if (s_ir_free_fn != NULL) {
+            s_ir_free_fn(proto->xi_func);
+        }
         proto->xi_func = NULL;
     }
 

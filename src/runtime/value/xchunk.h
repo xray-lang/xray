@@ -49,6 +49,8 @@ typedef struct XrString XrString;
 struct XrICMethodTable;
 struct XrICFieldTable;
 
+typedef void (*XrProtoOpaqueFreeFn)(void *ptr);
+
 /* ========== 64-bit Instruction Type ========== */
 
 typedef uint64_t XrInstruction;
@@ -341,6 +343,7 @@ typedef struct XrProto {
 // XrProto Operations
 XR_FUNC XrProto *xr_vm_proto_new(void);
 XR_FUNC void xr_vm_proto_free(XrProto *proto);
+XR_FUNC void xr_vm_proto_set_ir_free_fn(XrProtoOpaqueFreeFn free_fn);
 
 // Bytecode Operations
 XR_FUNC void xr_vm_proto_write(XrProto *proto, XrInstruction inst, int line);
