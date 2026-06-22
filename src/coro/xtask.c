@@ -83,7 +83,7 @@ XrTask *xr_task_create(XrRuntime *runtime, XrCoroutine *parent_coro, XrCoroutine
      * The MANAGED no-op only takes effect on the cold RC path (rc < 0); a
      * zero-initialized (calloc) refcount is thread-local "unique", so the
      * compiler's hot-path drop would route a Task to xr_coro_heap_recycle_obj —
-     * subtracting bytes the per-coro gc never accounted (the Task lives on the
+     * subtracting bytes the per-coro heap never accounted (the Task lives on the
      * system heap via xr_calloc), underflowing its byte counter. Seat the
      * count in the atomic band so every dup/drop is the intended no-op (same
      * contract as Channel). */

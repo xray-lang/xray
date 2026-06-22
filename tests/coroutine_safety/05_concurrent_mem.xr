@@ -1,21 +1,21 @@
-// 测试5：并发 GC 压力测试
+// 测试5：并发 memory 压力测试
 // 作者：xingleixu@gmail.com
-// 
-// 验证：多协程并发执行时 GC 正确工作，无段错误
-print("========== 测试5：并发 GC 压力测试 ==========")
+//
+// 验证：多协程并发执行时内存管理正确工作，无段错误
+print("========== 测试5：并发 memory 压力测试 ==========")
 
 fn test_many_short_lived_coros() {
-    // 创建大量短期协程，触发 GC
+    // 创建大量短期协程，触发内存分配/释放压力
     let count = 50
-    fn worker(id) {
+    fn worker(id: int) -> int {
         // 分配一些内存
-        let arr = []
+        let arr: Array<string> = []
         for (let i = 0; i < 10; i++) {
-            arr.push("item_" + id + "_" + i)
+            arr.push("item_" + string(id) + "_" + string(i))
         }
         return arr.length
     }
-    let tasks = []
+    let tasks: Array<Task> = []
     for (let i = 0; i < count; i++) {
         tasks.push(go worker(i))
     }
@@ -33,11 +33,11 @@ fn test_many_short_lived_coros() {
 }
 
 fn test_nested_allocations() {
-    fn worker() {
+    fn worker() -> int {
         // 创建嵌套数据结构
-        let data = []
+        let data: Array<Json> = []
         for (let i = 0; i < 50; i++) {
-            let item = { "id" => i, "values" => [i * 1, i * 2, i * 3], "name" => "item_" + i }
+            let item = #{"id": i, "values": [i * 1, i * 2, i * 3], "name": "item_" + string(i)}
             data.push(item)
         }
         return data.length
@@ -76,5 +76,4 @@ test_many_short_lived_coros()
 test_nested_allocations()
 // 注意：并行 Channel 压力测试暂时禁用
 // 原因：多线程 Channel 调度需要进一步优化
-print("
-🎉 测试5全部通过：并发 GC 正确！")
+print("测试5全部通过：并发 memory 正确！")

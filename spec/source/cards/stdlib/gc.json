@@ -1,5 +1,0 @@
-{
-  "module": "gc",
-  "summary": "Garbage collector control interface",
-  "lead": "Garbage collector control interface."
-}

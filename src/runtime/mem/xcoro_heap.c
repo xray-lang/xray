@@ -401,7 +401,7 @@ static inline void coro_heap_post_region_alloc(XrCoroHeap *heap, XrObjHeader *ob
  * Update allocation statistics after object creation.
  * Called by xr_coro_heap_new_obj. Tracing's debt-driven collection trigger is gone
  * (RC owns reclamation); only the byte and object counters are kept for the
- * gc.* introspection builtins.
+ * mem.* introspection builtins.
  */
 static inline void coro_heap_update_alloc_stats(XrCoroHeap *heap, uint32_t total) {
     heap->totalbytes += (int64_t) total;
@@ -421,7 +421,7 @@ XR_FUNC void xr_coro_heap_recycle_obj(XrCoroHeap *heap, XrObjHeader *obj) {
      * coro_heap_update_alloc_stats add done at allocation. Small blocks return to the
      * size-class freelist (a later same-class alloc re-adds via
      * coro_heap_update_alloc_stats); large/mmap blocks are returned to the OS. Without
-     * this, totalbytes (gc.count/countb/info) accumulated every small-object
+     * this, totalbytes (mem.liveBytes/info) accumulated every small-object
      * allocation instead of tracking the live set. */
     heap->totalbytes -= (int64_t) obj->objsize;
 

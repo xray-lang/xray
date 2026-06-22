@@ -27,7 +27,7 @@ XR_FUNC struct XrModule *xr_load_module_math(struct XrayIsolate *isolate);
 XR_FUNC struct XrModule *xr_load_module_path(struct XrayIsolate *isolate);
 XR_FUNC struct XrModule *xr_load_module_base64(struct XrayIsolate *isolate);
 XR_FUNC struct XrModule *xr_load_module_regex(struct XrayIsolate *isolate);
-XR_FUNC struct XrModule *xr_load_module_gc(struct XrayIsolate *isolate);
+XR_FUNC struct XrModule *xr_load_module_mem(struct XrayIsolate *isolate);
 XR_FUNC struct XrModule *xr_load_module_url(struct XrayIsolate *isolate);
 XR_FUNC struct XrModule *xr_load_module_datetime(struct XrayIsolate *isolate);
 XR_FUNC struct XrModule *xr_load_module_log(struct XrayIsolate *isolate);

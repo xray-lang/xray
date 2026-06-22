@@ -369,7 +369,7 @@ XR_FUNC void xr_coro_heap_collect_cycles(XrCoroHeap *heap) {
     if (heap->cycle_collecting)
         return;
     if (!heap->cycle_roots || heap->cycle_root_count == 0) {
-        /* No potential cycle roots, but a gc.collect() should still return
+        /* No potential cycle roots, but a mem.collectCycles() should still return
          * fully-dead blocks: pure-RC programs free without forming cycles. */
         xr_coro_heap_reclaim_empty_blocks(heap);
         return;

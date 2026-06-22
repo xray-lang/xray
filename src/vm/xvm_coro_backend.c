@@ -190,7 +190,7 @@ static void vm_entry_reset_no_free(XrVmCoroState *state) {
      * even when the spawning loop has already dropped its own reference. The
      * field is nulled immediately below, so a repeated reset is a safe no-op
      * (shared closures route through the atomic shared-destroy path, so the
-     * exact owning gc does not matter). */
+     * exact owning heap does not matter). */
     if (state->entry_type == XR_CORO_ENTRY_CLOSURE && state->entry.closure) {
         XrCoroHeap *owner =
             state->entry_closure_owner ? state->entry_closure_owner : xr_current_coro_heap();

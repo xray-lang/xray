@@ -1,22 +1,21 @@
 #!/usr/bin/env bash
 #
-# run_gc_stress.sh - GC-heavy regression burn-in for nightly CI
+# run_mem_stress.sh - memory-heavy regression burn-in for nightly CI
 #
-# Usage: scripts/run_gc_stress.sh [rounds]
+# Usage: scripts/run_mem_stress.sh [rounds]
 #
-# Cycles through the GC-heavy regression files N times. Returns 0 only
+# Cycles through the memory-heavy regression files N times. Returns 0 only
 # if every round of every test passed.
 #
-# Note on `mode` parameter from 082 plan:
-#   The original plan listed sticky/gen/inc/atomic GC modes, but the
-#   xray CLI does not expose a `--gc-mode` switch — GC strategy is
-#   driven by allocator state at runtime, not by CLI selection. The
-#   pragmatic substitute is round-count: ASan/MSan + N rounds is the
-#   amplification mechanism that surfaced Bug #8 / #11 in May 2026.
+# Note on the old `mode` parameter from the 082 plan:
+#   Xray now exposes reference counting plus explicit cycle collection,
+#   not user-selectable collector modes. The pragmatic stress amplifier is
+#   round-count: ASan/MSan + N rounds is the mechanism that surfaced Bug #8
+#   / #11 in May 2026.
 #
 # Environment:
 #   XRAY_BIN          - xray binary path (default: ./build/xray)
-#   GC_STRESS_ROUNDS  - default for the rounds argument (default: 10)
+#   MEM_STRESS_ROUNDS - default for the rounds argument (default: 10)
 #
 
 set -uo pipefail
@@ -24,7 +23,7 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-ROUNDS="${1:-${GC_STRESS_ROUNDS:-10}}"
+ROUNDS="${1:-${MEM_STRESS_ROUNDS:-10}}"
 case "$ROUNDS" in
     ''|*[!0-9]*) echo "FAIL: rounds must be integer, got: $ROUNDS" >&2; exit 2 ;;
 esac
@@ -46,16 +45,16 @@ if [ -z "${XRAY_BIN:-}" ]; then
     fi
 fi
 
-# GC-heavy regression files (interpreter is the canonical baseline).
-gc_tests=(
-    "${PROJECT_ROOT}/tests/regression/10_stdlib/1205_gc_incremental_pressure.xr"
-    "${PROJECT_ROOT}/tests/regression/10_stdlib/1206_gc_enhanced.xr"
-    "${PROJECT_ROOT}/tests/regression/10_stdlib/1207_gc_stress.xr"
+# memory-heavy regression files (interpreter is the canonical baseline).
+mem_tests=(
+    "${PROJECT_ROOT}/tests/regression/10_stdlib/1205_mem_cycle_pressure.xr"
+    "${PROJECT_ROOT}/tests/regression/10_stdlib/1206_mem_enhanced.xr"
+    "${PROJECT_ROOT}/tests/regression/10_stdlib/1207_mem_stress.xr"
 )
 
 PASS=0
 FAIL=0
-FAIL_LOG="${PROJECT_ROOT}/tests/tmp/gc_stress_failures.log"
+FAIL_LOG="${PROJECT_ROOT}/tests/tmp/mem_stress_failures.log"
 mkdir -p "$(dirname "$FAIL_LOG")"
 : >"$FAIL_LOG"
 
@@ -82,20 +81,20 @@ run_one() {
     return 1
 }
 
-echo "gc-stress: rounds=${ROUNDS} bin=${XRAY_BIN}"
-echo "gc-stress: tests=${#gc_tests[@]}"
+echo "mem-stress: rounds=${ROUNDS} bin=${XRAY_BIN}"
+echo "mem-stress: tests=${#mem_tests[@]}"
 
 for r in $(seq 1 "$ROUNDS"); do
     echo "==== round ${r}/${ROUNDS} ===="
-    for t in "${gc_tests[@]}"; do
+    for t in "${mem_tests[@]}"; do
         run_one "$t" "$r" || true
     done
 done
 
 echo
-echo "gc-stress: pass=${PASS} fail=${FAIL}"
+echo "mem-stress: pass=${PASS} fail=${FAIL}"
 if [ "$FAIL" -gt 0 ]; then
-    echo "gc-stress: failure tails -> ${FAIL_LOG}"
+    echo "mem-stress: failure tails -> ${FAIL_LOG}"
     exit 1
 fi
 exit 0

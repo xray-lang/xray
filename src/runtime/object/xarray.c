@@ -94,8 +94,8 @@ XrArray *xr_array_with_capacity_typed(struct XrCoroutine *coro, int capacity,
     arr->elem_type = (uint8_t) elem_type;
     arr->elem_size = esz;
     arr->elem_tid = 0;
-    arr->has_gc_ptrs = 0;
-    arr->data_on_gc_heap = 0;
+    arr->contains_refs = 0;
+    arr->data_on_region_heap = 0;
     memset(arr->_pad, 0, sizeof(arr->_pad));
 
     // Allocate data as GC blob on Region heap (no free needed, GC reclaims)
@@ -105,7 +105,7 @@ XrArray *xr_array_with_capacity_typed(struct XrCoroutine *coro, int capacity,
         if (heap) {
             arr->data = xr_coro_alloc_blob(heap, data_bytes);
             if (arr->data) {
-                arr->data_on_gc_heap = 1;
+                arr->data_on_region_heap = 1;
             }
         } else {
             // Fallback: no heap available, use malloc
@@ -133,8 +133,8 @@ void xr_array_init_inplace(XrArray *arr, int capacity, uint8_t elem_type) {
     arr->elem_type = elem_type;
     arr->elem_size = esz;
     arr->elem_tid = 0;
-    arr->has_gc_ptrs = 0;
-    arr->data_on_gc_heap = 0;  // always 0 for inplace arrays
+    arr->contains_refs = 0;
+    arr->data_on_region_heap = 0;  // always 0 for inplace arrays
     memset(arr->_pad, 0, sizeof(arr->_pad));
 
     // Allocate data (no GC accounting for system heap arrays)
@@ -178,7 +178,7 @@ XrArray *xr_array_from_values(struct XrCoroutine *coro, XrValue *elements, int c
     XrValue *data = (XrValue *) arr->data;
     for (int i = 0; i < count; i++) {
         data[i] = elements[i];
-        XR_ARRAY_MARK_GC_PTRS(arr, elements[i]);
+        XR_ARRAY_MARK_REFS(arr, elements[i]);
     }
     arr->length = count;
 
@@ -401,7 +401,7 @@ void xr_array_fill(XrArray *arr, XrValue value, int start, int end) {
             data[i] = value;
             xr_rc_release_value(heap, old);
         }
-        XR_ARRAY_MARK_GC_PTRS(arr, value);
+        XR_ARRAY_MARK_REFS(arr, value);
         return;
     }
 
@@ -516,8 +516,8 @@ bool xr_array_resize(XrArray *arr, int32_t length, XrValue fill) {
     for (int32_t i = old_length; i < length; i++)
         xr_array_set_element(arr, i, fill);
     arr->length = length;
-    if (XR_ARRAY_IS_GC_TRACED(arr)) {
-        XR_ARRAY_MARK_GC_PTRS(arr, fill);
+    if (XR_ARRAY_MAY_CONTAIN_REFS(arr)) {
+        XR_ARRAY_MARK_REFS(arr, fill);
     }
     return true;
 }
@@ -580,7 +580,7 @@ void xr_array_grow(XrArray *arr) {
     size_t old_bytes = (size_t) arr->elem_size * old_capacity;
     size_t new_bytes = (size_t) arr->elem_size * new_capacity;
 
-    if (arr->data_on_gc_heap) {
+    if (arr->data_on_region_heap) {
         /* Force malloc during grow to avoid Region blob overlap.
          * GC blob allocation may return memory overlapping with
          * the old data array, making memcpy undefined behavior. */
@@ -594,7 +594,7 @@ void xr_array_grow(XrArray *arr) {
         // owning coroutine's freelist now that the copy is done.
         xr_coro_free_blob(xr_current_coro_heap(), arr->data);
         arr->data = new_data;
-        arr->data_on_gc_heap = 0;
+        arr->data_on_region_heap = 0;
         arr->capacity = new_capacity;
         xr_coro_heap_add_external(xr_current_coro_heap(), (int64_t) new_bytes);
     } else {
@@ -638,7 +638,7 @@ void xr_array_ensure_capacity(XrArray *arr, int min_capacity) {
     size_t old_bytes = (size_t) arr->elem_size * old_capacity;
     size_t new_bytes = (size_t) arr->elem_size * new_capacity;
 
-    if (arr->data_on_gc_heap) {
+    if (arr->data_on_region_heap) {
         // Force malloc during ensure_capacity to avoid Region blob overlap.
         void *new_data = xr_malloc(new_bytes);
         if (!new_data)
@@ -649,7 +649,7 @@ void xr_array_ensure_capacity(XrArray *arr, int min_capacity) {
         // The old blob is not swept by anything: release it explicitly.
         xr_coro_free_blob(xr_current_coro_heap(), arr->data);
         arr->data = new_data;
-        arr->data_on_gc_heap = 0;
+        arr->data_on_region_heap = 0;
         arr->capacity = new_capacity;
         xr_coro_heap_add_external(xr_current_coro_heap(), (int64_t) new_bytes);
     } else {
@@ -702,12 +702,12 @@ XrArray *xr_array_slice(struct XrCoroutine *coro, XrArray *arr, int32_t start, i
     slice->source = arr->source ? arr->source : (void *) arr;
     xr_rc_retain_value(XR_FROM_PTR(slice->source));
 
-    // Inherit elem_type, elem_tid, and has_gc_ptrs from source
+    // Inherit elem_type, elem_tid, and contains_refs from source
     slice->elem_type = arr->elem_type;
     slice->elem_size = arr->elem_size;
     slice->elem_tid = arr->elem_tid;
-    slice->has_gc_ptrs = arr->has_gc_ptrs;
-    slice->data_on_gc_heap = 0;  // Slice doesn't own the blob; source array marks it
+    slice->contains_refs = arr->contains_refs;
+    slice->data_on_region_heap = 0;  // Slice doesn't own the blob; source array marks it
     memset(slice->_pad, 0, sizeof(slice->_pad));
 
     return slice;
@@ -746,7 +746,7 @@ void xr_obj_destroy_array(XrObjHeader *obj, struct XrCoroHeap *owner_heap) {
     xr_array_release_elements(arr, owner_heap);
     // Only free data if this array owns its buffer (slices borrow it)
     if (arr->data && !xr_array_is_slice(arr)) {
-        if (arr->data_on_gc_heap) {
+        if (arr->data_on_region_heap) {
             // GC blob: RC owns reclamation (no sweep), release it explicitly
             xr_coro_free_blob(owner_heap, arr->data);
             arr->data = NULL;

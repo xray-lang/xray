@@ -124,10 +124,11 @@ typedef struct XrCoroHeap {
     XrRegionHeap region;
 
     // === Allocation accounting ===
-    int64_t totalbytes;                 // Total allocated bytes (gc.count / gc.info stats)
+    int64_t totalbytes;                 // Total allocated bytes (mem.liveBytes / mem.info stats)
     uint8_t is_collecting;              // Re-entry guard (teardown / reset)
-    uint8_t cycle_collection_disabled;  // gc.disable/enable counter: gates the automatic
-                                        // cycle collector (xr_cycle_add_root auto-trigger)
+    uint8_t cycle_collection_disabled;  // mem.disableCycleCollection/enableCycleCollection counter:
+                                        // gates the automatic cycle collector (xr_cycle_add_root
+                                        // auto-trigger)
     uint8_t cycle_collecting;           // Re-entry guard for the auto-triggered cycle collector
     uint8_t _pad1[5];                   // alignment
 
@@ -165,12 +166,12 @@ typedef struct XrCoroHeap {
     // iteratively before returning.
     uint16_t destroy_depth;       // current recursion depth of rc_destroy
     uint16_t _pad_drop[3];        // alignment
-    XrObjHeader *deferred_drops;  // singly-linked list via GCHeader (reuse a field)
+    XrObjHeader *deferred_drops;  // singly-linked list via object header (reuse a field)
 
     // === Cycle collector (Bacon-Rajan trial deletion) ===
     // Potential cycle roots: objects whose type is XR_OBJ_CYCLE_CANDIDATE and
     // whose RC was decremented but did not reach zero. The collector runs on
-    // gc.collect() and frees dead cycles that pure RC cannot reclaim.
+    // mem.collectCycles() and frees dead cycles that pure RC cannot reclaim.
     XrObjHeader **cycle_roots;         // growable array of potential roots (NULL until first add)
     uint32_t cycle_root_count;         // number of entries in cycle_roots
     uint32_t cycle_root_cap;           // capacity of cycle_roots array
@@ -227,7 +228,7 @@ XR_FUNC void xr_coro_heap_recycler_destroy(XrCoroHeap *heap);
     ((Type *) ((XrObjHeader *) xr_coro_heap_new_obj((heap), (type), sizeof(Type)) + 1))
 
 // Cycle collection: runs the Bacon-Rajan trial deletion collector on
-// accumulated cycle_roots, then clears the roots list. Called by gc.collect().
+// accumulated cycle_roots, then clears the roots list. Called by mem.collectCycles().
 XR_FUNC void xr_coro_heap_collect_cycles(XrCoroHeap *heap);
 
 /* Whole-block reclaim: return fully-dead Region blocks to the heap's free pool
@@ -311,7 +312,7 @@ static inline void xr_rc_release_value(XrCoroHeap *heap, XrValue value) {
 /*
  * Track non-GC malloc'd memory (e.g., array/map/set data buffers) in the
  * coroutine's byte counter. Under reference counting this no longer drives
- * collection (RC owns reclamation); it keeps gc.count()/gc.info() byte stats
+ * collection (RC owns reclamation); it keeps mem.liveBytes()/mem.info() byte stats
  * accurate so abandoned large buffers are reflected in reported usage.
  */
 static inline void xr_coro_heap_add_external(XrCoroHeap *heap, int64_t bytes) {

@@ -66,7 +66,7 @@ static XrValue m_push(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
         }
         if (arr->elem_type == XR_ELEM_ANY) {
             ((XrValue *) arr->data)[arr->length++] = args[0];
-            XR_ARRAY_MARK_GC_PTRS(arr, args[0]);
+            XR_ARRAY_MARK_REFS(arr, args[0]);
         } else {
             xr_array_set_element(arr, arr->length++, args[0]);
         }
@@ -275,7 +275,7 @@ static XrValue m_slice(XrayIsolate *iso, XrValue self, XrValue *args, int argc) 
         if (result) {
             memcpy(result->data, (XrValue *) arr->data + start, (size_t) count * sizeof(XrValue));
             result->length = count;
-            result->has_gc_ptrs = arr->has_gc_ptrs;
+            result->contains_refs = arr->contains_refs;
             XrValue *data = (XrValue *) result->data;
             for (int i = 0; i < count; i++)
                 xr_rc_retain_value(data[i]);

@@ -235,8 +235,8 @@ XrValue xr_deep_copy_array_with_ctx(XrCopyContext *ctx, XrObjHeader *obj) {
     new_arr->elem_type = array->elem_type;
     new_arr->elem_size = array->elem_size;
     new_arr->elem_tid = array->elem_tid;
-    new_arr->has_gc_ptrs = array->has_gc_ptrs;
-    new_arr->data_on_gc_heap = 0;  // data allocated via xr_malloc (system heap)
+    new_arr->contains_refs = array->contains_refs;
+    new_arr->data_on_region_heap = 0;  // data allocated via xr_malloc (system heap)
     memset(new_arr->_pad, 0, sizeof(new_arr->_pad));
 
     size_t alloc_size = (size_t) new_arr->elem_size * new_arr->capacity;
@@ -574,16 +574,16 @@ XrValue xr_deep_copy_to_transit(struct XrayIsolate *X, XrValue value) {
  * of allocating + memcpy'ing it twice. The small XrArray struct is still
  * allocated per side; only the (potentially large) data buffer moves. Every
  * unsafe shape falls back (returns false) to the normal deep-copy path:
- *   - ANY arrays / has_gc_ptrs : interior pointers, not self-contained.
+ *   - ANY arrays / contains_refs : interior pointers, not self-contained.
  *   - slices (data_storage == BORROWED) : share a backing store.
- *   - data_on_gc_heap : Region-blob data is bound to its owner heap and is
+ *   - data_on_region_heap : Region-blob data is bound to its owner heap and is
  *     freed on heap teardown — it must never escape to another heap.
  *   - aliased transit (refc != 1) : another holder needs the live buffer.
  */
 static bool array_is_movable_scalar(const XrArray *a) {
-    return a && a->elem_type != XR_ELEM_ANY && !a->has_gc_ptrs &&
+    return a && a->elem_type != XR_ELEM_ANY && !a->contains_refs &&
            a->data_storage == XR_ARRAY_DATA_HEAP && a->source == NULL && a->capacity > 0 &&
-           !a->data_on_gc_heap && a->data != NULL && a->length > 0;
+           !a->data_on_region_heap && a->data != NULL && a->length > 0;
 }
 
 bool xr_chan_try_move_array_to_transit_core(XrRuntimeCore *core, XrValue value, XrValue *out) {
@@ -615,8 +615,8 @@ bool xr_chan_try_move_array_to_transit_core(XrRuntimeCore *core, XrValue value, 
     t->elem_type = src->elem_type;
     t->elem_size = src->elem_size;
     t->elem_tid = src->elem_tid;
-    t->has_gc_ptrs = 0;
-    t->data_on_gc_heap = 0;
+    t->contains_refs = 0;
+    t->data_on_region_heap = 0;
     memset(t->_pad, 0, sizeof(t->_pad));
 
     /* Detach the buffer from the source so the caller's subsequent destruction
@@ -670,8 +670,8 @@ bool xr_chan_try_adopt_array_from_transit_core(XrValue value, struct XrCoroutine
     r->elem_type = t->elem_type;
     r->elem_size = t->elem_size;
     r->elem_tid = t->elem_tid;
-    r->has_gc_ptrs = 0;
-    r->data_on_gc_heap = 0; /* malloc-backed buffer, freed by the array dtor */
+    r->contains_refs = 0;
+    r->data_on_region_heap = 0; /* malloc-backed buffer, freed by the array dtor */
     memset(r->_pad, 0, sizeof(r->_pad));
 
     size_t data_bytes = (size_t) t->elem_size * (size_t) t->capacity;

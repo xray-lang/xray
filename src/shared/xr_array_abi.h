@@ -12,7 +12,7 @@
  * VM runtime and the standalone AOT runtime without forcing either side to
  * include the other's headers. Each side wraps these fields with its own
  * object header (VM: XrObjHeader; AOT: none) plus side-specific extras
- * (VM: data_on_gc_heap; AOT: adt_*).
+ * (VM: data_on_region_heap; AOT: adt_*).
  */
 
 #ifndef XR_ARRAY_ABI_H
@@ -44,7 +44,7 @@
     uint8_t elem_type;    /* XrArrayElemType storage layout (XR_ELEM_*) */                         \
     uint8_t elem_size;    /* cached bytes per element */                                           \
     uint8_t elem_tid;     /* XrTypeId for reified generics (0 = any) */                            \
-    uint8_t has_gc_ptrs   /* monotonic: 1 once any GC pointer was stored */
+    uint8_t contains_refs /* monotonic: 1 once any object reference was stored */
 
 typedef struct XrArrayCore {
     XR_ARRAY_ABI_FIELDS;

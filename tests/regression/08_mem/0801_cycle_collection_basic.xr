@@ -1,7 +1,7 @@
 // Test: cycle collector reclaims mutual reference cycles
-// The gc.collect() call triggers trial deletion on cycle candidates.
+// The mem.collectCycles() call triggers trial deletion on cycle candidates.
 
-import gc
+import mem
 
 class Node {
     name: string
@@ -19,8 +19,8 @@ fn test_cycle_mutual_reference() {
     // Create cycle: A -> B -> A
     a.next = b
     b.next = a
-    // gc.collect() should detect and free the dead cycle
-    gc.collect()
+    // mem.collectCycles() should detect and free the dead cycle
+    mem.collectCycles()
     assert(true) // if we get here without leak/crash, pass
 }
 
@@ -30,7 +30,7 @@ fn test_non_cyclic_not_affected() {
     let b = new Node("chain")
     b.next = a
     // b -> a is NOT a cycle (a.next == null)
-    gc.collect()
+    mem.collectCycles()
     // b is still live
     assert(b.next != null)
     assert(b.name == "chain")
@@ -40,6 +40,6 @@ fn test_non_cyclic_not_affected() {
 fn test_self_referencing_cycle() {
     let s = new Node("self")
     s.next = s  // self-cycle
-    gc.collect()
+    mem.collectCycles()
     assert(true) // reclaimed or still live — no crash
 }

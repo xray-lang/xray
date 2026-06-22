@@ -1,7 +1,7 @@
 // 0681_gc_container_write.xr
 // Regression: Array push/set must mark pointer-bearing ANY arrays.
 // Bug: XR_ELEM_ANY fast path in Array.push stored raw value without
-// calling XR_ARRAY_MARK_GC_PTRS, so RC/cycle bookkeeping missed live objects.
+// calling XR_ARRAY_MARK_REFS, so RC/cycle bookkeeping missed live objects.
 
 @test
 fn test_array_push_json_objects() {

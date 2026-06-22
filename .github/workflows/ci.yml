@@ -187,9 +187,9 @@ jobs:
 
     - name: Run clang-tidy on core modules
       run: |
-        # Run clang-tidy on critical modules (lexer, parser, vm, gc)
+        # Run clang-tidy on critical modules (lexer, parser, vm, memory)
         # Using find + xargs for parallel execution
-        find src/frontend src/vm src/runtime/gc src/runtime/value src/runtime/object \
+        find src/frontend src/vm src/runtime/mem src/runtime/value src/runtime/object \
           -name '*.c' ! -name '*.inc.c' -type f | \
         xargs -P$(nproc) -I{} \
           clang-tidy-14 -p build {} \

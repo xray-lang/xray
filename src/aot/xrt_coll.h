@@ -36,7 +36,7 @@
  * views alias a sub-range of another array's storage at an arbitrary element
  * offset — no alignment promise.
  *
- * `source` and `has_gc_ptrs`/`elem_tid` are part of the shared ABI; the AOT
+ * `source` and `contains_refs`/`elem_tid` are part of the shared ABI; the AOT
  * runtime keeps `source` NULL (slices borrow via arena lifetime) and does not
  * consult the GC-tracking fields. */
 typedef struct {
@@ -80,7 +80,7 @@ static inline void xrt_array_init_header(xrt_array_t *a, int64_t cap, uint8_t et
     a->elem_type = etype;
     a->elem_size = elem_size;
     a->elem_tid = 0;
-    a->has_gc_ptrs = 0;
+    a->contains_refs = 0;
     a->data_storage = XR_ARRAY_DATA_INLINE;
     a->adt_enum_name = NULL;
     a->adt_member_name = NULL;
@@ -270,7 +270,7 @@ static inline XrValue xrt_array_slice_view(XrValue arr, int64_t start, int64_t e
     slice->elem_type = src->elem_type;
     slice->elem_size = src->elem_size;
     slice->elem_tid = src->elem_tid;
-    slice->has_gc_ptrs = src->has_gc_ptrs;
+    slice->contains_refs = src->contains_refs;
     slice->data_storage = XR_ARRAY_DATA_BORROWED;
     slice->adt_enum_name = NULL;
     slice->adt_member_name = NULL;
@@ -369,7 +369,7 @@ static inline XrValue xrt_slice(XrValue source, XrValue start_value, XrValue end
         _a->elem_type = XR_ELEM_ANY;                                                               \
         _a->elem_size = (uint8_t) sizeof(XrValue);                                                 \
         _a->elem_tid = 0;                                                                          \
-        _a->has_gc_ptrs = 0;                                                                       \
+        _a->contains_refs = 0;                                                                     \
         _a->data_storage = XR_ARRAY_DATA_STACK;                                                    \
         _a->adt_enum_name = NULL;                                                                  \
         _a->adt_member_name = NULL;                                                                \

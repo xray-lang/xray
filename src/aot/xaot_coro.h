@@ -27,11 +27,11 @@ typedef struct XrAotRuntimeStringView {
 
 /* Byte-compatible mirror of VM XrArray (see src/runtime/object/xarray.h): the
  * bridge reads VM-layout arrays through this view, so it must embed the exact
- * same shared field macro plus the VM-only data_on_gc_heap tail. */
+ * same shared field macro plus the VM-only data_on_region_heap tail. */
 typedef struct XrAotRuntimeArrayView {
     XrObjHeader hdr;
     XR_ARRAY_ABI_FIELDS;
-    uint8_t data_on_gc_heap;
+    uint8_t data_on_region_heap;
     uint8_t pad[2];
 } XrAotRuntimeArrayView;
 
