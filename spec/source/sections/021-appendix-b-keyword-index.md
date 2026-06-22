@@ -8,7 +8,7 @@ order: 021
 
 ## 附录 B. 关键字索引
 
-完整 63 个关键字按字母排序见 [§1.5](#15-关键字)。
+完整 62 个关键字按字母排序见 [§1.5](#15-关键字)。
 
 | 关键字 | 节 |
 |--|--|
@@ -61,7 +61,6 @@ order: 021
 | `try` | §8 |
 | `type` | §5.7 |
 | `uint8`..`uint64` | §2.3.1 |
-| `unknown` | §2.2（编译器内部）|
 | `while` | §4.3 |
 | `yield` | §3.16 / §10.10 |
 <!-- /xr-spec:cn -->
@@ -71,7 +70,7 @@ order: 021
 
 ## Appendix B. Keyword Index
 
-The full set of 63 reserved keywords sorted alphabetically; see [§1.5](#15-keywords) for the authoritative list.
+The full set of 62 reserved keywords sorted alphabetically; see [§1.5](#15-keywords) for the authoritative list.
 
 | Keyword | Section |
 |--|--|
@@ -124,7 +123,6 @@ The full set of 63 reserved keywords sorted alphabetically; see [§1.5](#15-keyw
 | `try` | §8 |
 | `type` | §5.7 |
 | `uint8`..`uint64` | §2.3.1 |
-| `unknown` | §2.2 (compiler-internal) |
 | `while` | §4.3 |
 | `yield` | §3.16 / §10.10 |
 <!-- /xr-spec:en -->

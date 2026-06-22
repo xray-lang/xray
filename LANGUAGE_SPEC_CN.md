@@ -114,7 +114,7 @@ Xray 是一个**轻量级静态类型脚本语言，原生支持并发**。设�
 
 ## 1. 词法结构 (Lexical Structure)
 
-> 真值源：`src/frontend/lexer/xlex.h`（token 枚举）、`src/frontend/lexer/xkeywords.def`（关键字表，63 条）、`src/frontend/lexer/xlex.c`（扫描器实现）。
+> 真值源：`src/frontend/lexer/xlex.h`（token 枚举）、`src/frontend/lexer/xkeywords.def`（关键字表，62 条）、`src/frontend/lexer/xlex.c`（扫描器实现）。
 
 ### 1.1 字符编码
 
@@ -165,7 +165,7 @@ IdentCont  ::= IdentStart | '0'..'9'
 
 ### 1.5 关键字
 
-xray 共 **63 个保留关键字**，源码真值表见 `src/frontend/lexer/xkeywords.def`。关键字按用途分组：
+xray 共 **62 个保留关键字**，源码真值表见 `src/frontend/lexer/xkeywords.def`。关键字按用途分组：
 
 #### 1.5.1 声明与流程控制
 
@@ -215,7 +215,9 @@ xray 共 **63 个保留关键字**，源码真值表见 `src/frontend/lexer/xkey
 #### 1.5.6 类型名（保留）
 
 `int` `int8` `int16` `int32` `int64` `uint8` `uint16` `uint32` `uint64`
-`float` `float32` `float64` `bool` `string` `unknown`
+`float` `float32` `float64` `bool` `string`
+
+`unknown` 是编译器内部类型格子的显示名，不是词法关键字；用户代码中可作为普通标识符使用。
 
 > **注意**：以下名字**不是**词法关键字，而是 `prelude` 自动引入的内置类型符号：
 > `Array` · `BigInt` · `Bytes` · `Channel` · `DateTime` · `Exception` · `Json` · `Logger` · `Map` · `NetConn` · `NetListener` · `Range` · `Regex` · `Set` · `StringBuilder`。
@@ -5345,7 +5347,7 @@ OperatorToken ::= '+' | '-' | '*' | '/' | '%'
 
 ## 附录 B. 关键字索引
 
-完整 63 个关键字按字母排序见 [§1.5](#15-关键字)。
+完整 62 个关键字按字母排序见 [§1.5](#15-关键字)。
 
 | 关键字 | 节 |
 |--|--|
@@ -5398,7 +5400,6 @@ OperatorToken ::= '+' | '-' | '*' | '/' | '%'
 | `try` | §8 |
 | `type` | §5.7 |
 | `uint8`..`uint64` | §2.3.1 |
-| `unknown` | §2.2（编译器内部）|
 | `while` | §4.3 |
 | `yield` | §3.16 / §10.10 |
 

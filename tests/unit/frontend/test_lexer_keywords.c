@@ -139,7 +139,6 @@ static const KwExpect kKnownKeywords[] = {
     {"uint16", TK_UINT16},
     {"uint32", TK_UINT32},
     {"uint64", TK_UINT64},
-    {"unknown", TK_UNKNOWN},
     {"while", TK_WHILE},
     {"yield", TK_YIELD},
 };
@@ -243,6 +242,8 @@ static const char *kPrefixIdentifiers[] = {
     "float64x",
     "uint8x",
     "uint16x",
+    "unknown",
+    "unknownValue",
     // Single-char `r` reserved in xkeywords.def comment as a raw-
     // string contextual prefix; here it must remain TK_NAME.
     "r",
