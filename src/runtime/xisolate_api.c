@@ -178,16 +178,6 @@ void xr_isolate_set_string_pool_compile(XrayIsolate *X, struct XrCompileStringPo
     }
 }
 
-/* ========== Type System (Compiler) ========== */
-
-XrTypeInferContext *xr_isolate_get_type_infer_context(XrayIsolate *X) {
-    return X ? X->type_infer_context : NULL;
-}
-
-XrTypeTable *xr_isolate_get_type_table(XrayIsolate *X) {
-    return X ? X->type_table : NULL;
-}
-
 struct XrTypePool *xr_isolate_get_analyzer_pool(XrayIsolate *X) {
     return X ? X->analyzer_pool : NULL;
 }

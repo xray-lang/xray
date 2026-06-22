@@ -32,9 +32,6 @@ typedef struct XrGlobalObject XrGlobalObject;
 /* ========== Type System ========== */
 
 typedef struct XrTypeRegistry XrTypeRegistry;
-typedef struct XrTypeInferContext XrTypeInferContext;
-typedef struct XrTypeTable XrTypeTable;
-
 /* ========== Module System ========== */
 
 typedef struct XrModule XrModule;

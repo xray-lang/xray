@@ -97,9 +97,6 @@ XR_FUNC void xr_isolate_reset_ast_node_ids(XrayIsolate *X);
 XR_FUNC struct XrCompileStringPool *xr_isolate_get_string_pool_compile(XrayIsolate *X);
 XR_FUNC void xr_isolate_set_string_pool_compile(XrayIsolate *X, struct XrCompileStringPool *pool);
 
-// Type system (compiler)
-XR_FUNC XrTypeInferContext *xr_isolate_get_type_infer_context(XrayIsolate *X);
-XR_FUNC XrTypeTable *xr_isolate_get_type_table(XrayIsolate *X);
 XR_FUNC struct XrTypePool *xr_isolate_get_analyzer_pool(XrayIsolate *X);
 
 // Debug
