@@ -37,10 +37,10 @@ static int64_t xr_now_ns(void) {
 #endif
 }
 
-struct XrCoroGC *xr_isolate_get_coro_gc(XrayIsolate *X) {
+struct XrCoroHeap *xr_isolate_get_heap(XrayIsolate *X) {
     if (!X || !X->main_coro)
         return NULL;
-    return ((XrCoroutine *) X->main_coro)->coro_gc;
+    return ((XrCoroutine *) X->main_coro)->heap;
 }
 
 /* ========== Module Subsystem ========== */

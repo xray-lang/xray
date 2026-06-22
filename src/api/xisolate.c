@@ -35,7 +35,7 @@
 #include "../runtime/xglobals_table.h"
 #include "../coro/xcoroutine.h"
 #include "../coro/xtask.h"
-#include "../runtime/gc/xcoro_gc.h"
+#include "../runtime/gc/xcoro_heap.h"
 #include "../runtime/xisolate_api.h"
 #include "../vm/xvm_profiler.h"
 #include "../vm/xvm_internal.h"
@@ -316,16 +316,16 @@ void xray_isolate_get_stats(XrayIsolate *isolate, size_t *bytes_allocated, int *
     if (bytes_allocated)
         *bytes_allocated = isolate->core_rt ? (size_t) isolate->core_rt->gc.totalbytes : (size_t) 0;
     if (gc_count) {
-        XrCoroGC *coro_gc = xr_isolate_get_coro_gc(isolate);
-        *gc_count = coro_gc ? (int) coro_gc->gc_count : 0;
+        XrCoroHeap *heap = xr_isolate_get_heap(isolate);
+        *gc_count = heap ? (int) heap->gc_count : 0;
     }
 }
 
 void xray_isolate_collect_garbage(XrayIsolate *isolate) {
     xray_api_check(isolate != NULL, "xray_isolate_collect_garbage: NULL isolate");
-    XrCoroGC *coro_gc = xr_isolate_get_coro_gc(isolate);
-    if (coro_gc)
-        xr_coro_gc_fullgc(coro_gc);
+    XrCoroHeap *heap = xr_isolate_get_heap(isolate);
+    if (heap)
+        xr_coro_heap_collect_cycles(heap);
 }
 
 void xray_isolate_set_trace(XrayIsolate *isolate, bool enable) {

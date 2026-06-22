@@ -26,7 +26,7 @@
 #include "../runtime/class/xenum.h"
 #include "../runtime/class/xinstance.h"
 #include "../runtime/gc/xgc.h"
-#include "../runtime/gc/xcoro_gc.h"
+#include "../runtime/gc/xcoro_heap.h"
 #include "../runtime/gc/xsystem_heap.h"
 #include "../runtime/object/xarray.h"
 #include "../runtime/object/xexception.h"
@@ -200,10 +200,10 @@ void xr_aot_trace_frame_value(void *visitor, XrValue value) {
         root_visitor->visit(value, root_visitor->ctx);
 }
 
-void xr_aot_release_frame_value(XrCoroGC *gc, XrValue value) {
-    if (!gc || !XR_IS_PTR(value))
+void xr_aot_release_frame_value(XrCoroHeap *heap, XrValue value) {
+    if (!heap || !XR_IS_PTR(value))
         return;
-    xr_rc_release_value(gc, value);
+    xr_rc_release_value(heap, value);
 }
 
 XrValue xr_aot_get_builtin(const XrAotContext *ctx, int32_t index) {

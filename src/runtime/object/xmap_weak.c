@@ -9,10 +9,10 @@
  */
 
 #include "xmap.h"
-#include "../gc/xcoro_gc.h"
+#include "../gc/xcoro_heap.h"
 #include "../../shared/xr_swiss_index.h"
 
-static void weak_map_tombstone_entry(XrMap *map, uint32_t eidx, XrCoroGC *gc) {
+static void weak_map_tombstone_entry(XrMap *map, uint32_t eidx, XrCoroHeap *gc) {
     XrMapEntry *e = &map->entries[eidx];
     xr_rc_release_value(gc, e->value);
     e->key = xr_null();
@@ -30,7 +30,7 @@ static void weak_map_tombstone_entry(XrMap *map, uint32_t eidx, XrCoroGC *gc) {
         map->count--;
 }
 
-uint32_t xr_map_purge_weak_target(XrMap *map, XrObjHeader *target, XrCoroGC *owning_gc) {
+uint32_t xr_map_purge_weak_target(XrMap *map, XrObjHeader *target, XrCoroHeap *owning_gc) {
     if (!map || !target || !(map->flags & XR_MAP_FLAG_WEAK) || xr_map_isdummy(map) ||
         !map->entries || (map->hdr.extra & XR_OBJ_DEAD))
         return 0;

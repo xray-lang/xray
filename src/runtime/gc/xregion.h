@@ -65,7 +65,7 @@ typedef struct XrRegionBlock {
     uint32_t alloc_count;         // 4B  @8  - distinct slots bump-allocated in this block
     int64_t alloc_bytes;          // 8B  @16 - total allocated bytes in the block
     uint32_t reclaim_dead_count;  // 4B  @24 - transient: dead-slot tally during whole-block
-                                  //      reclaim (see xr_coro_gc_reclaim_blocks).
+                                  //      reclaim (see xr_coro_heap_reclaim_empty_blocks).
     // Keep this layout within Line 0 (128B).
 } XrRegionBlock;
 
@@ -82,7 +82,7 @@ _Static_assert(sizeof(XrRegionBlock) <= XR_REGION_LINE_SIZE, "XrRegionBlock must
  * Under pure RC there is no line-level reclamation: dead small objects return
  * to the per-coroutine size-class freelist, and a block re-enters free_blocks
  * only when whole-block reclaim finds every slot dead (see
- * xr_coro_gc_reclaim_blocks). There is therefore no "partially free / recycle"
+ * xr_coro_heap_reclaim_empty_blocks). There is therefore no "partially free / recycle"
  * list to maintain.
  */
 typedef struct XrRegionHeap {

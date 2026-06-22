@@ -22,7 +22,7 @@
 #include "../runtime/xvm_call.h"
 #include "../runtime/xisolate_api.h"
 #include "../runtime/xray_debug_hooks.h"
-#include "../runtime/gc/xcoro_gc.h"
+#include "../runtime/gc/xcoro_heap.h"
 #include "../runtime/gc/xsystem_heap.h"
 #include "../runtime/value/xtype.h"
 #include "../runtime/value/xvalue_format.h"
@@ -192,8 +192,8 @@ static void vm_entry_reset_no_free(XrVmCoroState *state) {
      * (shared closures route through the atomic shared-destroy path, so the
      * exact owning gc does not matter). */
     if (state->entry_type == XR_CORO_ENTRY_CLOSURE && state->entry.closure) {
-        XrCoroGC *owner =
-            state->entry_closure_owner ? state->entry_closure_owner : xr_current_coro_gc();
+        XrCoroHeap *owner =
+            state->entry_closure_owner ? state->entry_closure_owner : xr_current_coro_heap();
         xr_rc_release(owner, (XrObjHeader *) state->entry.closure);
     }
     state->entry_type = XR_CORO_ENTRY_CLOSURE;
@@ -235,14 +235,14 @@ static XrCoroutine *vm_backend_alloc_shell(XrayIsolate *X, bool use_runtime_pool
             coro = xr_sysheap_alloc_coro(xr_isolate_get_sys_heap(X));
             if (!coro)
                 return NULL;
-            coro->coro_gc = NULL;
+            coro->heap = NULL;
         } else {
             coro = (XrCoroutine *) xr_malloc(sizeof(XrCoroutine));
             if (!coro)
                 return NULL;
             memset(coro, 0, sizeof(XrCoroutine));
             coro->hdr.type = XR_TCOROUTINE;
-            coro->coro_gc = NULL;
+            coro->heap = NULL;
         }
     }
     if (!vm_backend_ensure_state(coro)) {
@@ -265,9 +265,9 @@ XrCoroutine *xr_coro_create_bootstrap(XrayIsolate *X) {
         return NULL;
     }
 
-    if (!coro->coro_gc) {
-        coro->coro_gc = xr_coro_gc_create(coro);
-        if (!coro->coro_gc) {
+    if (!coro->heap) {
+        coro->heap = xr_coro_heap_create(coro);
+        if (!coro->heap) {
             xr_coro_free(coro);
             xr_coro_discard_uninitialized(coro);
             return NULL;
@@ -295,8 +295,8 @@ void xr_coro_reset_for_call(XrCoroutine *coro, XrayIsolate *X, XrClosure *closur
     XR_DCHECK(X != NULL, "coro_reset_for_call: NULL isolate");
     XR_DCHECK(closure != NULL, "coro_reset_for_call: NULL closure");
 
-    if (coro->coro_gc) {
-        coro->coro_gc->gc_disabled = 0;
+    if (coro->heap) {
+        coro->heap->gc_disabled = 0;
     }
 
     vm_backend_reset_execution_state(coro, X);
@@ -453,7 +453,7 @@ static bool vm_backend_bind_closure_entry(XrCoroutine *coro, XrayIsolate *X, XrC
      * vm_entry_reset_no_free (the last coroutine to drop the shared closure must
      * return it to the owner's heap, not its own). */
     xr_rc_retain((XrObjHeader *) closure);
-    state->entry_closure_owner = xr_current_coro_gc();
+    state->entry_closure_owner = xr_current_coro_heap();
     if (!vm_entry_copy_args(coro, X, state, args, arg_count, copy_args)) {
         vm_backend_clear_entry_state(coro);
         return false;

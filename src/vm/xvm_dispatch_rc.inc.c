@@ -41,7 +41,7 @@ vmcase(OP_DROP) {
     XrValue v = R(a);
     if (XR_IS_PTR(v)) {
         XrCoroutine *_co = (XrCoroutine *) VM_CURRENT_CORO;
-        xr_rc_release(_co ? _co->coro_gc : NULL, (XrObjHeader *) XR_VALUE_GCPTR(v));
+        xr_rc_release(_co ? _co->heap : NULL, (XrObjHeader *) XR_VALUE_GCPTR(v));
     }
     vmbreak;
 }

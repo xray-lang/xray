@@ -8,11 +8,11 @@
  * xgc.h - Garbage Collector public API
  *
  * KEY CONCEPT:
- *   - Per-coroutine Region bump heap (XrCoroGC) is the primary heap for
+ *   - Per-coroutine Region bump heap (XrCoroHeap) is the primary heap for
  *     runtime objects. Reclamation is compile-time reference counting: a
  *     per-size-class freelist reuses dropped blocks, whole-block reclaim
  *     returns emptied blocks, and a Bacon-Rajan cycle collector handles
- *     cycles. There is no tracing/mark-sweep. See xcoro_gc.h.
+ *     cycles. There is no tracing/mark-sweep. See xcoro_heap.h.
  *   - Isolate-level fixedgc (XrGC) is a malloc-backed linked list used
  *     for bootstrap, fallback, and a small set of fixed-lifetime objects
  *     (e.g. enum metadata, bound methods). Destroy hooks are invoked once
@@ -21,7 +21,7 @@
  *     objects (channels, deep-copied shared values). These are not GC'd.
  *
  * ALLOCATION PATH:
- *   xr_alloc(coro, size, type) routes to coro->coro_gc when available,
+ *   xr_alloc(coro, size, type) routes to coro->heap when available,
  *   otherwise falls back to the isolate fixedgc. Most callers should
  *   resolve a coroutine via xr_current_coro(X) and pass it explicitly.
  */

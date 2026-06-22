@@ -17,7 +17,7 @@
 #include "xvm_worker_state.h"
 #include "../coro/xworker.h"
 #include "../coro/xcoroutine.h"
-#include "../runtime/gc/xcoro_gc.h"
+#include "../runtime/gc/xcoro_heap.h"
 #include "../base/xchecks.h"
 #include "../base/xlog.h"
 

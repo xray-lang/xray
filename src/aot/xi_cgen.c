@@ -3738,7 +3738,7 @@ static void emit_one_forward_decl(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
         fprintf(out, "(void *frame, void *visitor);\n");
         fprintf(out, "%svoid ", cg_linkage(ctx));
         emit_fname_suffix(ctx, out, prefix, f, "_aot_release");
-        fprintf(out, "(void *frame, struct XrCoroGC *gc);\n");
+        fprintf(out, "(void *frame, struct XrCoroHeap *heap);\n");
         fprintf(out, "%sconst XrAotCoroDesc ", ctx->extern_linkage ? "extern " : "static ");
         emit_fname_suffix(ctx, out, prefix, f, "_aot_desc");
         fprintf(out, ";\n");

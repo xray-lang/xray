@@ -39,7 +39,7 @@ bool xr_instance_set_dynamic_field_direct(XrInstance *inst, uint16_t index, XrVa
     XR_DCHECK(cap > 0, "set_dynamic_field: zero capacity");
 
     if (index < cap - 1) {
-        xr_rc_release_value(xr_current_coro_gc(), inst->fields[index]);
+        xr_rc_release_value(xr_current_coro_heap(), inst->fields[index]);
         inst->fields[index] = value;
         return true;
     }
@@ -73,7 +73,7 @@ bool xr_instance_set_dynamic_field_direct(XrInstance *inst, uint16_t index, XrVa
         inst->fields[cap - 1].ptr = (void *) overflow;
     }
 
-    xr_rc_release_value(xr_current_coro_gc(), overflow[overflow_idx]);
+    xr_rc_release_value(xr_current_coro_heap(), overflow[overflow_idx]);
     overflow[overflow_idx] = value;
     return true;
 }

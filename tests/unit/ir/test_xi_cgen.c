@@ -3701,8 +3701,8 @@ TEST(cgen_coro_frame_release_uses_aot_arc) {
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "AOT coroutine with ARC values should generate");
-    assert(contains(code, "_aot_release(void *frame, struct XrCoroGC *gc)") &&
-           "frame release must receive coroutine GC context");
+    assert(contains(code, "_aot_release(void *frame, struct XrCoroHeap *heap)") &&
+           "frame release must receive coroutine heap context");
     assert(contains(code, "xrt_release(xr_str_value_from_ptr(f->v") &&
            "AOT ARC string ptr slot should be released after restoring XrValue tag");
     assert(contains(code, "xr_aot_trace_frame_value(visitor, xr_str_value_from_ptr(f->v") &&

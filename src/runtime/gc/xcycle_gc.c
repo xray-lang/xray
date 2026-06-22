@@ -37,7 +37,7 @@
  * are bulk-freed at termination, so cycles cannot leak from them).
  */
 
-#include "xcoro_gc.h"
+#include "xcoro_heap.h"
 #include "xgc_header.h"
 #include "xgc_internal.h"
 #include "../class/xinstance.h"
@@ -194,7 +194,7 @@ static void visit_children(XrObjHeader *obj, ChildVisitor visitor, void *ctx) {
 
 /* ========== Cycle Roots Management ========== */
 
-XR_FUNC void xr_cycle_add_root(XrCoroGC *gc, XrObjHeader *obj) {
+XR_FUNC void xr_cycle_add_root(XrCoroHeap *gc, XrObjHeader *obj) {
     if (!gc || !obj)
         return;
     if (!(obj->extra & XR_OBJ_CYCLE_CANDIDATE))
@@ -235,10 +235,10 @@ XR_FUNC void xr_cycle_add_root(XrCoroGC *gc, XrObjHeader *obj) {
      * current one finishes. */
     if (!gc->cycle_collecting && !gc->gc_disabled &&
         gc->cycle_root_count >= gc->cycle_collect_threshold)
-        xr_coro_gc_fullgc(gc);
+        xr_coro_heap_collect_cycles(gc);
 }
 
-XR_FUNC void xr_cycle_remove_root(XrCoroGC *gc, XrObjHeader *obj) {
+XR_FUNC void xr_cycle_remove_root(XrCoroHeap *gc, XrObjHeader *obj) {
     if (!gc || !obj)
         return;
     uint32_t idx = obj->_rsv;
@@ -256,7 +256,7 @@ XR_FUNC void xr_cycle_remove_root(XrCoroGC *gc, XrObjHeader *obj) {
     obj->_rsv = XR_CYCLE_NOT_IN_ROOTS;
 }
 
-XR_FUNC void xr_cycle_roots_destroy(XrCoroGC *gc) {
+XR_FUNC void xr_cycle_roots_destroy(XrCoroHeap *gc) {
     if (!gc || !gc->cycle_roots)
         return;
     xr_free(gc->cycle_roots);
@@ -361,7 +361,7 @@ static void restore_edge_visitor(XrObjHeader *child, void *ctx) {
 
 /* Main entry: run the Bacon-Rajan cycle collector on accumulated roots.
  * Called by gc.collect(). Runs unconditionally when there are roots. */
-XR_FUNC void xr_coro_gc_fullgc(XrCoroGC *gc) {
+XR_FUNC void xr_coro_heap_collect_cycles(XrCoroHeap *gc) {
     if (!gc)
         return;
     /* Re-entry guard: a destroy cascade started below can call add_root,
@@ -371,7 +371,7 @@ XR_FUNC void xr_coro_gc_fullgc(XrCoroGC *gc) {
     if (!gc->cycle_roots || gc->cycle_root_count == 0) {
         /* No potential cycle roots, but a gc.collect() should still return
          * fully-dead blocks: pure-RC programs free without forming cycles. */
-        xr_coro_gc_reclaim_blocks(gc);
+        xr_coro_heap_reclaim_empty_blocks(gc);
         return;
     }
 
@@ -435,7 +435,7 @@ XR_FUNC void xr_coro_gc_fullgc(XrCoroGC *gc) {
 
         /* Pass D: restore WHITE out-edges so the destroy cascade drops each
          * edge exactly once, then destroy. The XR_OBJ_DEAD guard in
-         * xr_coro_gc_rc_destroy makes the cascade idempotent across edges. */
+         * xr_coro_heap_destroy_obj makes the cascade idempotent across edges. */
         for (uint32_t i = 0; i < R.count; i++) {
             if (get_color(R.items[i]) == COLOR_WHITE)
                 visit_children(R.items[i], restore_edge_visitor, NULL);
@@ -444,7 +444,7 @@ XR_FUNC void xr_coro_gc_fullgc(XrCoroGC *gc) {
             XrObjHeader *obj = R.items[i];
             if (get_color(obj) == COLOR_WHITE && !(obj->extra & XR_OBJ_DEAD)) {
                 freed++;
-                xr_coro_gc_rc_destroy(gc, obj);
+                xr_coro_heap_destroy_obj(gc, obj);
             }
         }
 
@@ -487,5 +487,5 @@ XR_FUNC void xr_coro_gc_fullgc(XrCoroGC *gc) {
 
     /* Cycle collection just freed dead cycles; reclaim any blocks that became
      * fully dead so their memory can be reused by any size class. */
-    xr_coro_gc_reclaim_blocks(gc);
+    xr_coro_heap_reclaim_empty_blocks(gc);
 }

@@ -26,7 +26,7 @@
 #endif
 
 struct XrCoroutine;
-struct XrCoroGC;
+struct XrCoroHeap;
 struct XrCoroRegistry;
 struct XrCoroState;
 struct XrArray;
@@ -111,7 +111,7 @@ typedef struct XrAotContext {
 typedef XrAotResult (*XrAotResumeFn)(void *frame, const XrAotContext *ctx);
 typedef void (*XrAotFrameTraceFn)(void *frame, void *visitor);
 /* Optional hook; when present, it releases owned fields and frees the frame. */
-typedef void (*XrAotFrameReleaseFn)(void *frame, struct XrCoroGC *gc);
+typedef void (*XrAotFrameReleaseFn)(void *frame, struct XrCoroHeap *heap);
 typedef void (*XrAotRootVisitFn)(XrValue value, void *ctx);
 
 typedef struct XrAotRootVisitor {
@@ -183,7 +183,7 @@ XR_FUNC void xr_aot_runtime_enable_transfer(XrAotRuntime *runtime);
 XR_FUNC XrValue xr_aot_runtime_builtin(const XrAotRuntime *runtime, int32_t index);
 XR_FUNC void xr_aot_runtime_set_builtin(XrAotRuntime *runtime, int32_t index, XrValue value);
 XR_FUNC void xr_aot_trace_frame_value(void *visitor, XrValue value);
-XR_FUNC void xr_aot_release_frame_value(struct XrCoroGC *gc, XrValue value);
+XR_FUNC void xr_aot_release_frame_value(struct XrCoroHeap *heap, XrValue value);
 XR_FUNC XrValue xr_aot_get_builtin(const XrAotContext *ctx, int32_t index);
 XR_FUNC XrValue xr_aot_load_builtin_field(const XrAotContext *ctx, int32_t index,
                                           const char *field);

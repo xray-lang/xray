@@ -110,8 +110,8 @@ XR_FUNC XrDispatchAction vm_setprop_type_dispatch(XrayIsolate *isolate, XrVMCont
             }
             xr_module_set_sym(module, prop_symbol, value);
             XrCoroutine *_bc = vm_ctx->current_coro;
-            if (_bc && _bc->coro_gc)
-                XR_GC_BARRIER_VAL(_bc->coro_gc, module, value);
+            if (_bc && _bc->heap)
+                XR_GC_BARRIER_VAL(_bc->heap, module, value);
             return XR_DISP_NEXT;
         }
         XrSymbolTable *_st = (XrSymbolTable *) isolate->core_rt->symbol_table;
@@ -153,8 +153,8 @@ XR_FUNC XrDispatchAction vm_setprop_type_dispatch(XrayIsolate *isolate, XrVMCont
         }
         cls->static_field_values[static_field_idx] = value;
         XrCoroutine *_bc = vm_ctx->current_coro;
-        if (_bc && _bc->coro_gc)
-            XR_GC_BARRIER_VAL(_bc->coro_gc, cls, value);
+        if (_bc && _bc->heap)
+            XR_GC_BARRIER_VAL(_bc->heap, cls, value);
         return XR_DISP_NEXT;
     }
 

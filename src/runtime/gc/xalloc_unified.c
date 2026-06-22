@@ -17,33 +17,33 @@
 #include "../../base/xchecks.h"
 #include "../../coro/xcoroutine.h"
 #include "../../coro/xworker.h"
-#include "xcoro_gc.h"
+#include "xcoro_heap.h"
 
-XrCoroGC *xr_coro_ensure_gc(struct XrCoroutine *coro) {
+XrCoroHeap *xr_coro_ensure_heap(struct XrCoroutine *coro) {
     XR_DCHECK(coro != NULL, "coro_ensure_gc: NULL coro");
-    if (coro->coro_gc)
-        return coro->coro_gc;
-    coro->coro_gc = xr_coro_gc_create(coro);
-    return coro->coro_gc;
+    if (coro->heap)
+        return coro->heap;
+    coro->heap = xr_coro_heap_create(coro);
+    return coro->heap;
 }
 
 void *xr_coro_alloc(struct XrCoroutine *coro, size_t size, uint8_t type) {
     XR_DCHECK(size > 0, "coro_alloc: zero size");
     XR_DCHECK(type < XGC_MAX_TYPES, "coro_alloc: invalid GC type");
-    if (!coro || !coro->coro_gc)
+    if (!coro || !coro->heap)
         return NULL;
-    XrObjHeader *obj = xr_coro_gc_newobj(coro->coro_gc, type, size);
+    XrObjHeader *obj = xr_coro_heap_new_obj(coro->heap, type, size);
     return obj ? (obj + 1) : NULL;
 }
 
-XrCoroGC *xr_coro_get_coro_gc(struct XrCoroutine *coro) {
-    return coro ? coro->coro_gc : NULL;
+XrCoroHeap *xr_coro_get_heap(struct XrCoroutine *coro) {
+    return coro ? coro->heap : NULL;
 }
 
-XrCoroGC *xr_current_coro_gc(void) {
+XrCoroHeap *xr_current_coro_heap(void) {
     XrWorker *w = xr_current_worker();
     if (w && w->m && w->m->current_coro)
-        return w->m->current_coro->coro_gc;
+        return w->m->current_coro->heap;
     return NULL;
 }
 

@@ -15,11 +15,11 @@
  * Note: Runtime objects allocated on coroutine heap (Per-Coroutine GC arch)
  *
  * RELATED MODULES:
- *   - xcoro_gc.c: Per-coroutine GC implementation
+ *   - xcoro_heap.c: Per-coroutine GC implementation
  */
 
 #include "xgc_internal.h"
-#include "xcoro_gc.h"
+#include "xcoro_heap.h"
 #include "xalloc_unified.h"
 #include "xweak_registry.h"
 #include "../object/xmap.h"
@@ -165,7 +165,8 @@ void xr_weak_registry_unregister_set(XrayIsolate *isolate, XrSet *set) {
     xr_amutex_unlock(&registry->lock);
 }
 
-void xr_weak_registry_target_dying(XrayIsolate *isolate, XrObjHeader *target, XrCoroGC *owning_gc) {
+void xr_weak_registry_target_dying(XrayIsolate *isolate, XrObjHeader *target,
+                                   XrCoroHeap *owning_gc) {
     if (!isolate || !target || !(target->extra & XR_OBJ_WEAKABLE))
         return;
     XrWeakContainerRegistry *registry = weak_registry_get(isolate, false);
@@ -261,7 +262,7 @@ void *xr_gc_alloc(XrGC *gc, size_t size, uint8_t type) {
     XR_DCHECK(size >= sizeof(XrObjHeader), "gc_alloc: size too small");
     XR_DCHECK(type < XGC_MAX_TYPES, "gc_alloc: invalid GC type");
     // Global GC: Allocate fixed objects using malloc
-    // Note: Runtime objects should use xr_alloc() or xr_coro_gc_alloc()
+    // Note: Runtime objects should use xr_alloc() or xr_coro_heap_alloc()
     XrGCObjectNode *node = (XrGCObjectNode *) xr_malloc(sizeof(XrGCObjectNode));
     if (!node)
         return NULL;
@@ -292,7 +293,7 @@ XrObjHeader *xr_gc_newobj(XrGC *gc, uint8_t type, size_t size) {
 }
 
 /* The compile-time RC dup/drop primitives (xr_rc_retain_value /
- * xr_rc_release_value) are inline in xcoro_gc.h: a single implementation
+ * xr_rc_release_value) are inline in xcoro_heap.h: a single implementation
  * shared by the VM and container runtime so the DEAD guard and
  * cycle-root bookkeeping cannot drift between paths. */
 
@@ -327,19 +328,18 @@ void *xr_alloc(struct XrCoroutine *coro, size_t size, uint8_t type) {
     if (!coro)
         return NULL;
 
-    // Lazy coro_gc creation on first heap allocation
-    XrCoroGC *gc = xr_coro_ensure_gc(coro);
+    // Lazy heap creation on first heap allocation
+    XrCoroHeap *gc = xr_coro_ensure_heap(coro);
     if (gc) {
-        XrObjHeader *obj = xr_coro_gc_newobj(gc, type, size);
+        XrObjHeader *obj = xr_coro_heap_new_obj(gc, type, size);
         if (obj)
             return obj;
-        xr_log_warning("gc", "xr_alloc: coro_gc allocation failed for type=%d size=%zu", type,
-                       size);
+        xr_log_warning("gc", "xr_alloc: heap allocation failed for type=%d size=%zu", type, size);
         return NULL;
     }
 
     // Fallback: use runtime core's global GC (needed during early init
-    // when coro_gc creation fails due to missing worker/machine).
+    // when heap creation fails due to missing worker/machine).
     if (coro->core) {
         return xr_gc_alloc(&coro->core->gc, size, type);
     }

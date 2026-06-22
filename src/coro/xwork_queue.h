@@ -26,7 +26,7 @@
 #define XR_WORK_QUEUE_MAX_CAPACITY (1u << 30)
 
 struct XrayIsolate;
-struct XrCoroGC;
+struct XrCoroHeap;
 struct XrCoroutine;
 struct XrRuntime;
 struct XrRuntimeCore;
@@ -90,7 +90,7 @@ XR_FUNC void xr_work_queue_cancel_waiter(struct XrCoroutine *coro);
 XR_FUNC void xr_work_queue_close(XrWorkQueue *q);
 XR_FUNC bool xr_work_queue_is_closed(XrWorkQueue *q);
 XR_FUNC uint64_t xr_work_queue_length(XrWorkQueue *q);
-XR_FUNC void xr_gc_destroy_work_queue(XrObjHeader *obj, struct XrCoroGC *owning_gc);
+XR_FUNC void xr_gc_destroy_work_queue(XrObjHeader *obj, struct XrCoroHeap *owning_gc);
 XR_FUNC void xr_work_queue_register_native_type(struct XrayIsolate *X);
 
 static inline bool xr_value_is_work_queue(XrValue v) {

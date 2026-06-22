@@ -37,7 +37,7 @@ extern "C" {
 #endif
 
 struct XrayIsolate;
-struct XrCoroGC;
+struct XrCoroHeap;
 
 /* ========== Connection kind ========== */
 

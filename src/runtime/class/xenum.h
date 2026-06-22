@@ -128,10 +128,10 @@ XR_FUNC void xr_enum_type_init_symbols(XrEnumType *enum_type, void *isolate);
  * free enum objects manually. */
 
 struct XrObjHeader;
-struct XrCoroGC;
+struct XrCoroHeap;
 
-XR_FUNC void xr_gc_destroy_enum_type(struct XrObjHeader *obj, struct XrCoroGC *owning_gc);
-XR_FUNC void xr_gc_destroy_enum_value(struct XrObjHeader *obj, struct XrCoroGC *owning_gc);
+XR_FUNC void xr_gc_destroy_enum_type(struct XrObjHeader *obj, struct XrCoroHeap *owning_gc);
+XR_FUNC void xr_gc_destroy_enum_value(struct XrObjHeader *obj, struct XrCoroHeap *owning_gc);
 
 /* ========== Type Conversion ========== */
 

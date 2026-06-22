@@ -27,7 +27,7 @@
 #include "../coro/xcoro_registry.h"
 #include "../module/xmodule.h"
 #include "../runtime/gc/xgc.h"
-#include "../runtime/gc/xcoro_gc.h"
+#include "../runtime/gc/xcoro_heap.h"
 #include "../runtime/gc/xalloc_unified.h"
 #include "../runtime/gc/xsystem_heap.h"
 #include "../runtime/xerror_codes.h"
