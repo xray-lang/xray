@@ -3458,19 +3458,24 @@ let result = identity<float>(0)            // 0 默认 int，强制 float
 
 ### 9.4 特化与 monomorphization
 
-**实现策略**：编译期 monomorphization（单态化）。
+**实现策略**：构建期 monomorphization（单态化），按泛型种类采用不同表示策略。
 
-- 编译器收集所有泛型函数/类的具体类型实例化点，为每个类型组合生成专用 AST 克隆并编译为独立字节码。
+- **函数泛型**：编译器收集具体调用点，按运行时表示做 rep-sharing。当前表示组为 I64 / F64 / PTR / BOOL，同一函数最多生成 4 个表示版本；同为 PTR 表示的引用类型共享一份函数体，避免因引用类型数量导致代码体积爆炸。
+- **class / struct 泛型**：逐具体类型组合完整单态化，按 mangled name 去重，不按 PTR 表示合并。`Box<string>` 与 `Box<MyClass>` 即使同为 PTR 表示也保留不同类型身份，以保证字段布局、反射与名义类型语义精确。
 - 名字修饰（name mangling）：`identity<int>` → `identity$i64`，`Pair<string, int>` → `Pair$str$i64`。
-- 按表示分组共享（rep-sharing）：同为指针表示的类型共用同一份特化（最多 3 版本：I64 / F64 / PTR）。
+- 单态化实例总数受 `XR_MONO_MAX_INSTANCES = 256` 保护，防止递归/组合爆炸。
 - 编译期严格类型检查保证安全；运行时保留具体类型参数信息供 `Reflect.typeOf` 使用。
 
 > 真值源：`src/frontend/analyzer/xanalyzer_mono.c`（单态化 pass）、`xanalyzer_mono.h`（API）。
 
 **性能影响**：
-- 单态化的泛型函数可被 JIT / AOT 直接优化为原生类型操作（无装箱）。
+- 函数泛型 rep-sharing 让 AOT 在 I64 / F64 / BOOL 等值表示上生成无装箱 fast path，同时让引用类型共享 PTR 版本。
+- class / struct 泛型不做 rep-sharing 会增加代码和元数据体积（大致按“类型组合数 × 类体积”增长），但换来精确布局、反射保真和按类型特化；未来体积敏感场景可考虑对纯 PTR class 泛型增加显式 opt-in rep-sharing。
 - 内置特化容器（`Array<int>`、`Bytes`）进一步避免装箱开销。
-- 编译体积随实例化组合数线性增长；上限 `XR_MONO_MAX_INSTANCES` 防止爆炸。
+- 跨模块泛型在构建期 whole-program / LTO 阶段展开；提供泛型定义的库必须保留可分析的 IR/AST 形态，不能只发布不透明预编译产物。
+
+**当前缓项**：
+- 声明点方差标注（`out T` / `in T`）、默认类型参数和 `where` 子句本轮不提供；容器默认保持不变性，这是 AOT 友好且安全的基线。
 
 ### 9.5 协议（duck typing）与名义类型
 
@@ -4813,7 +4818,7 @@ Bytecode  →  AOT (machine code)
 - 真值源：`src/frontend/analyzer/xanalyzer_*.c`（按主题拆分）。
 - **作用域**：嵌套符号表、变量解析、shadowing 检查。
 - **类型检查**：双向类型推断、union 收窄、Json 结构匹配。
-- **泛型**：monomorphization、约束检查、调用点重写。
+- **泛型**：构建期 monomorphization、约束检查、调用点重写；跨模块泛型在 whole-program / LTO 阶段展开，泛型库必须提供可分析 IR/AST。
 - **闭包分析**：upvalue 标记、`go` 闭包捕获禁令。
 - **错误码**：`XR_ERR_ANALYZE_*` 系列。
 
@@ -5532,7 +5537,7 @@ xray 在开发过程中借鉴了现有语言的许多优秀设计，但还是有
 | **interface** | 接口（见 §5.5） |
 | **JIT** | Just-In-Time 编译：运行时编译热路径 |
 | **lvalue / rvalue** | 左值（可赋值）/ 右值（仅值） |
-| **monomorphization** | 单态化：泛型实例化为多个具体类型版本（xray 不做） |
+| **monomorphization** | 单态化：泛型在构建期按具体类型/表示生成专门版本；函数泛型可按 I64 / F64 / PTR / BOOL 表示共享，class / struct 泛型按具体类型完整单态化 |
 | **move** | 所有权转移：跨协程时强制（见 §7.3） |
 | **NaN-boxing** | 用 IEEE-754 NaN 的位空间存放标记值 |
 | **nullable** | 可空类型 `T?`：值可以为 null |

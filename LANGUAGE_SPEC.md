@@ -3459,19 +3459,24 @@ let result = identity<float>(0)            // 0 defaults to int; force float
 
 ### 9.4 Specialization and Monomorphization
 
-**Implementation strategy**: compile-time monomorphization.
+**Implementation strategy**: build-time monomorphization, with different representation policies for different generic kinds.
 
-- The compiler collects all concrete instantiation sites of generic functions/classes, generates a dedicated AST clone for each type combination, and compiles each into independent bytecode.
+- **Generic functions**: the compiler collects concrete call sites and applies rep-sharing by runtime representation. The current representation groups are I64 / F64 / PTR / BOOL, so one generic function produces at most four representation versions. Reference types that share the PTR representation reuse one function body, avoiding code-size growth proportional to the number of reference types.
+- **Generic classes / structs**: each concrete type-argument combination is fully monomorphized and deduplicated by mangled name, not by PTR representation. `Box<string>` and `Box<MyClass>` remain distinct even though both use PTR representation, preserving exact type identity, field layout, and reflection semantics.
 - Name mangling: `identity<int>` → `identity$i64`, `Pair<string, int>` → `Pair$str$i64`.
-- Sharing by representation (rep-sharing): types with the same pointer representation share a single specialization (at most three versions: I64 / F64 / PTR).
+- The total number of monomorphization instances is capped by `XR_MONO_MAX_INSTANCES = 256` to prevent recursive or combinatorial explosion.
 - Strict compile-time type checking ensures safety; concrete type-parameter information is retained at runtime for `Reflect.typeOf`.
 
 > Source of truth: `src/frontend/analyzer/xanalyzer_mono.c` (monomorphization pass), `xanalyzer_mono.h` (API).
 
 **Performance impact**:
-- Monomorphized generic functions can be optimized directly by JIT / AOT into native-typed operations (no boxing).
+- Function-level rep-sharing lets AOT generate unboxed fast paths for I64 / F64 / BOOL value representations while sharing one PTR version for reference types.
+- Generic classes / structs do not use rep-sharing, so code and metadata size grow roughly with "type combinations x class body size"; this buys exact layout, faithful reflection, and per-type specialization. A future size-sensitive mode may add explicit opt-in rep-sharing for pure-PTR class generics.
 - Built-in specialized containers (`Array<int>`, `Bytes`) further avoid boxing overhead.
-- Compiled binary size grows linearly with the number of instantiation combinations; the ceiling `XR_MONO_MAX_INSTANCES` prevents explosion.
+- Cross-module generics are expanded during build-time whole-program / LTO analysis. Libraries that expose generic definitions must ship analyzable IR/AST form rather than only opaque precompiled artifacts.
+
+**Deferred features**:
+- Declaration-site variance annotations (`out T` / `in T`), default type parameters, and `where` clauses are not provided in this round; invariant containers remain the safe, AOT-friendly baseline.
 
 ### 9.5 Protocols (Duck Typing) vs. Nominal Typing
 
@@ -4814,7 +4819,7 @@ Execution
 - Source of truth: `src/frontend/analyzer/xanalyzer_*.c` (split by topic).
 - **Scoping**: nested symbol tables, name resolution, shadowing checks.
 - **Type checking**: bidirectional type inference, union narrowing, Json structural matching.
-- **Generics**: monomorphization, constraint checking, call-site rewriting.
+- **Generics**: build-time monomorphization, constraint checking, call-site rewriting; cross-module generics are expanded during whole-program / LTO analysis, so generic libraries must provide analyzable IR/AST.
 - **Closure analysis**: upvalue tagging, `go` closure capture restrictions.
 - **Error codes**: the `XR_ERR_ANALYZE_*` family.
 
@@ -5533,7 +5538,7 @@ Xray draws inspiration from many existing languages but has notable differences 
 | **interface** | Interface type (see §5.5) |
 | **JIT** | Just-In-Time compilation: compiles hot paths at runtime |
 | **lvalue / rvalue** | Assignable left-hand-side value vs. value-only right-hand-side |
-| **monomorphization** | Specializing generics into concrete-type versions (xray does not do this) |
+| **monomorphization** | Build-time specialization of generics into concrete type/representation versions; generic functions may share I64 / F64 / PTR / BOOL representation versions, while generic classes / structs are fully specialized by concrete type |
 | **move** | Ownership transfer: enforced when crossing coroutine boundaries (see §7.3) |
 | **NaN-boxing** | Storing tagged values inside the unused bits of an IEEE-754 NaN |
 | **nullable** | A nullable type `T?` whose value may be `null` |
