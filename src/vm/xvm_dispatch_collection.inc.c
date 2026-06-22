@@ -779,7 +779,6 @@ vmcase(OP_ARRAY_PUSH) {
     if (arr->elem_type == XR_ELEM_ANY) {
         ((XrValue *) arr->data)[arr->length++] = val;
         XR_ARRAY_MARK_GC_PTRS(arr, val);
-        XR_GC_BARRIER_BACK_SAFE(xr_current_coro_heap(), arr);
     } else {
         xr_array_set_element(arr, arr->length++, val);
     }
@@ -946,8 +945,6 @@ vmcase(OP_ARRAY_INIT) {
                 break;
             }
         }
-        if (arr->has_gc_ptrs)
-            XR_GC_BARRIER_BACK_SAFE(xr_current_coro_heap(), arr);
     } else {
         // Slow path: typed arrays need per-element unboxing
         for (int j = 1; j <= b; j++) {

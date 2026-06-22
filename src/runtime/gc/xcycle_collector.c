@@ -5,7 +5,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xcycle_gc.c - Bacon-Rajan trial deletion cycle collector
+ * xcycle_collector.c - Bacon-Rajan trial deletion cycle collector
  *
  * Pure reference counting cannot reclaim cyclic garbage. This collector
  * supplements the RC system by detecting and freeing dead cycles among
@@ -33,8 +33,9 @@
  * runtime-managed / region children are skipped entirely (their refcount
  * is atomic or meaningless, and they cannot form coro-local cycles).
  *
- * Triggered by gc.collect() on the main coroutine (short-lived coroutines
- * are bulk-freed at termination, so cycles cannot leak from them).
+ * Triggered by explicit or automatic cycle collection on the main coroutine
+ * (short-lived coroutines are bulk-freed at termination, so cycles cannot
+ * leak from them).
  */
 
 #include "xcoro_heap.h"
@@ -360,7 +361,7 @@ static void restore_edge_visitor(XrObjHeader *child, void *ctx) {
 }
 
 /* Main entry: run the Bacon-Rajan cycle collector on accumulated roots.
- * Called by gc.collect(). Runs unconditionally when there are roots. */
+ * Runs unconditionally when there are roots. */
 XR_FUNC void xr_coro_heap_collect_cycles(XrCoroHeap *heap) {
     if (!heap)
         return;
@@ -376,7 +377,8 @@ XR_FUNC void xr_coro_heap_collect_cycles(XrCoroHeap *heap) {
     }
 
     heap->cycle_collecting = 1;
-    heap->cycle_count++;
+    heap->cycle_collect_count++;
+    uint64_t start_ns = xr_cycle_time_ns();
 
     uint32_t n = heap->cycle_root_count;
     CycleVec R = {0};
@@ -484,6 +486,9 @@ XR_FUNC void xr_coro_heap_collect_cycles(XrCoroHeap *heap) {
     }
 
     heap->cycle_collecting = 0;
+    uint64_t elapsed_ns = xr_cycle_time_ns() - start_ns;
+    heap->last_cycle_collect_time_ns = elapsed_ns;
+    heap->cycle_collect_time_ns += elapsed_ns;
 
     /* Cycle collection just freed dead cycles; reclaim any blocks that became
      * fully dead so their memory can be reused by any size class. */

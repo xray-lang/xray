@@ -401,7 +401,6 @@ void xr_map_set(XrMap *map, XrValue key, XrValue value) {
         xr_rc_release_value(heap, key);
         xr_rc_release_value(heap, e->value);
         e->value = value;
-        XR_GC_BARRIER_BACK_SAFE(heap, map);
         return;
     }
 
@@ -425,7 +424,6 @@ void xr_map_set(XrMap *map, XrValue key, XrValue value) {
         xr_map_prepare_weak_key(map, key, heap);
         xr_rc_release_value(heap, key);
     }
-    XR_GC_BARRIER_BACK_SAFE(heap, map);
 }
 
 XrValue xr_map_get(XrMap *map, XrValue key, bool *found) {

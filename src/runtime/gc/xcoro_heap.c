@@ -112,10 +112,10 @@ static void coro_heap_init_runtime_state(XrCoroHeap *heap) {
     heap->cycle_collection_disabled = 0;
     heap->cycle_collecting = 0;
     heap->cycle_collect_threshold = XR_CYCLE_COLLECT_THRESHOLD_INIT;
-    heap->cycle_count = 0;
+    heap->cycle_collect_count = 0;
     heap->object_count = 0;
-    heap->gc_time_ns = 0;
-    heap->last_gc_time_ns = 0;
+    heap->cycle_collect_time_ns = 0;
+    heap->last_cycle_collect_time_ns = 0;
     heap->finalizer_count = 0;
 }
 
@@ -736,7 +736,7 @@ void xr_coro_heap_print_stats(XrCoroHeap *heap) {
 
     printf("=== XrCoroHeap (Region bump + RC) ===\n");
     printf("Total bytes:  %lld\n", (long long) heap->totalbytes);
-    printf("Cycle count:     %u\n", heap->cycle_count);
+    printf("Cycle collections: %u\n", heap->cycle_collect_count);
 
     XrRegionStats istats;
     xr_region_get_stats(&heap->region, &istats);
