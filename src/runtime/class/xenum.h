@@ -123,7 +123,7 @@ XR_FUNC void xr_enum_type_init_symbols(XrEnumType *enum_type, void *isolate);
 
 /* ========== Destroy Hooks ==========
  * Both objects live on the isolate fixedgc list. The hooks below are
- * registered in g_type_ops[] so xr_gc_cleanup releases their
+ * registered in the per-type destroy table so xr_gc_cleanup releases their
  * malloc-backed side resources before freeing the body. Callers never
  * free enum objects manually. */
 

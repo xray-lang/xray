@@ -35,66 +35,53 @@
 #include "../../coro/xresult_group.h"
 #include "../../coro/xwork_queue.h"
 #include "../../coro/xworker.h"
-#include "../../coro/xdeep_copy.h"  // Per-type deep_copy / to_shared hooks
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
 #include "../../base/xmalloc.h"
 
-/* ========== Compile-Time Per-Type Operations Table (.rodata) ==========
+/* ========== Compile-Time Per-Type Destroy Table (.rodata) ==========
  *
- * One entry per GC type. Each callback is optional:
+ * One optional destroy callback per GC type:
  *
  *   destroy   — release malloc-backed side resources (RC / fixedgc cleanup)
- *   deep_copy — produce a per-coroutine deep clone (cross-coro send)
- *   to_shared — produce a sysheap shared/refcounted copy (shared store)
  *
  * NULL means "this capability does not apply to this type": RC/fixedgc
- * cleanup skips destroy, or the cross-coroutine dispatcher passes the
- * value through unchanged (deep_copy/to_shared). There is intentionally no
- * traverse slot: tracing/mark-sweep was removed and RC owns reclamation.
+ * cleanup skips destroy. There is intentionally no traverse slot:
+ * tracing/mark-sweep was removed and RC owns reclamation. Deep-copy and
+ * to-shared transfer tables live in xdeep_copy.c so cleanup does not
+ * pull transfer logic.
  *
  * Adding a new compile-time GC type is a one-liner here. */
 
-const XrTypeOps g_type_ops[XGC_MAX_TYPES] = {
-    // Containers — destroy + deep_copy + to_shared (cross-coroutine).
-    [XR_TARRAY] = {.destroy = xr_gc_destroy_array,
-                   .deep_copy = xr_deep_copy_array_with_ctx,
-                   .to_shared = xr_to_shared_array},
-    [XR_TMAP] = {.destroy = xr_gc_destroy_map,
-                 .deep_copy = xr_deep_copy_map_with_ctx,
-                 .to_shared = xr_to_shared_map},
-    [XR_TSET] = {.destroy = xr_gc_destroy_set,
-                 .deep_copy = xr_deep_copy_set_with_ctx,
-                 .to_shared = xr_to_shared_set},
-    [XR_TINSTANCE] = {.destroy = xr_gc_destroy_instance,
-                      .deep_copy = xr_deep_copy_instance_with_ctx,
-                      .to_shared = xr_to_shared_instance},
-    [XR_TFUNCTION] = {.destroy = xr_gc_destroy_closure,
-                      .deep_copy = xr_deep_copy_closure_with_ctx,
-                      .to_shared = xr_to_shared_closure},
+const XrGCDestroyFn g_type_destroy_ops[XGC_MAX_TYPES] = {
+    [XR_TARRAY] = xr_gc_destroy_array,
+    [XR_TMAP] = xr_gc_destroy_map,
+    [XR_TSET] = xr_gc_destroy_set,
+    [XR_TINSTANCE] = xr_gc_destroy_instance,
+    [XR_TFUNCTION] = xr_gc_destroy_closure,
 
     // Channels — already shared at construction; pass-through across coro.
-    [XR_TCHANNEL] = {.destroy = xr_gc_destroy_channel},
+    [XR_TCHANNEL] = xr_gc_destroy_channel,
 
     // Atomic — system-heap shared object (refcounted). No side resources.
-    [XR_TATOMIC] = {0},
+    [XR_TATOMIC] = NULL,
 
     // WorkQueue — system-heap shared object with per-shard buffers.
-    [XR_TWORKQUEUE] = {.destroy = xr_gc_destroy_work_queue},
+    [XR_TWORKQUEUE] = xr_gc_destroy_work_queue,
 
     // ResultGroup — system-heap shared object with queued reduction batches.
-    [XR_TRESULTGROUP] = {.destroy = xr_gc_destroy_result_group},
+    [XR_TRESULTGROUP] = xr_gc_destroy_result_group,
 
     // Other GC types: have destroy responsibilities, but are deliberately
     // not transferable across coroutines (the dispatchers return the raw
     // value, matching the pre-table default).
-    [XR_TCOROUTINE] = {.destroy = xr_gc_destroy_coroutine},
-    [XR_TTASK] = {.destroy = xr_gc_destroy_task},
-    [XR_TCELL] = {.destroy = xr_gc_destroy_cell, .deep_copy = xr_deep_copy_cell_with_ctx},
-    [XR_TBOUND_METHOD] = {0},
-    [XR_TMODULE] = {0},
-    [XR_TERROR] = {0},
+    [XR_TCOROUTINE] = xr_gc_destroy_coroutine,
+    [XR_TTASK] = xr_gc_destroy_task,
+    [XR_TCELL] = xr_gc_destroy_cell,
+    [XR_TBOUND_METHOD] = NULL,
+    [XR_TMODULE] = NULL,
+    [XR_TERROR] = NULL,
 
     // NetConn / NetListener are now XR_TINSTANCE with native body
     // descriptors — destroy is handled by xr_gc_destroy_instance.
@@ -284,11 +271,11 @@ void xr_weak_registry_destroy(XrayIsolate *isolate) {
 }
 
 static XrGCDestroyFn get_destroy_func(uint8_t type) {
-    return (type < XGC_MAX_TYPES) ? g_type_ops[type].destroy : NULL;
+    return (type < XGC_MAX_TYPES) ? g_type_destroy_ops[type] : NULL;
 }
 
 XR_FUNC bool xr_gc_type_may_need_finalize(uint8_t type) {
-    return type < XGC_MAX_TYPES && (g_type_ops[type].destroy != NULL || type > XR_TATOMIC);
+    return type < XGC_MAX_TYPES && (g_type_destroy_ops[type] != NULL || type > XR_TATOMIC);
 }
 
 /* ========== Init/Cleanup ========== */
