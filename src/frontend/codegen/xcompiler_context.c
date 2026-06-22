@@ -64,7 +64,6 @@ static XrCompilerContext *xr_compiler_context_new_impl(XrCompilerSession *sessio
     ctx->source_file = NULL;
     ctx->global_var_count = 0;
     ctx->shared_var_count = 0;
-    ctx->shared_offset = 0;
     ctx->had_error = false;
     ctx->panic_mode = false;
     ctx->repl_mode = false;

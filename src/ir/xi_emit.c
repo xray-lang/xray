@@ -27,7 +27,6 @@
 #include "../runtime/xisolate_internal.h"
 #include "../runtime/xisolate_api.h"
 #include "../runtime/symbol/xsymbol_table.h"
-#include "../runtime/xexec_state.h"
 
 #include <math.h>
 
@@ -804,17 +803,11 @@ XR_FUNC XiEmitStatus xi_emit(XiFunc *f, struct XrVMRuntime *isolate, struct XrPr
         ctx.proto->source_file = xr_strdup(f->source_file);
 
     /* Top-level variables are stored in the name-keyed globals dict
-     * via OP_GETGLOBAL / OP_SETGLOBAL.  The legacy shared array is
-     * still allocated here for module export metadata: the module
-     * system reads exported values from shared slots at import time.
-     * Once the module system migrates to globals dict, this block
-     * can be removed entirely. */
-    if (isolate && f->nshared > 0) {
-        ctx.proto->shared_offset = isolate->vm.shared.count;
-        int total = isolate->vm.shared.count + f->nshared;
-        isolate->vm.shared.count = total;
-        xr_shared_array_ensure(&isolate->vm.shared, total - 1);
-    }
+     * via OP_GETGLOBAL / OP_SETGLOBAL.  The legacy shared array is still
+     * needed for module export metadata, but allocation belongs to the VM
+     * load/execute boundary.  Emit only records the proto tree's local slot
+     * count so source compile does not mutate VM execution state. */
+    ctx.proto->shared_count = f->nshared;
 
     ctx.rpo_order = rpo_order;
     ctx.rpo_count = rpo_count;

@@ -770,8 +770,10 @@ typedef struct XiFunc {
 
     /* Shared (module-level) variable count.  Top-level program functions
      * use shared_array for variables that must be visible across closures
-     * and support forward references.  The proto's shared_offset is set
-     * at emit time; shared indices are 0-based local to this func. */
+     * and support forward references.  Emit records this count on the
+     * proto; the VM assigns shared_offset once when the proto is first
+     * executed/loaded into a VM.  Shared indices are 0-based local to
+     * this func. */
     uint16_t nshared;
 
     /* Export table: maps shared slot → exported name.  Populated during

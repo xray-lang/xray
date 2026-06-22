@@ -45,6 +45,7 @@
 #include "../../base/xdefs.h"
 
 typedef struct XrString XrString;
+typedef struct XrVMRuntime XrVMRuntime;
 
 struct XrICMethodTable;
 struct XrICFieldTable;
@@ -256,8 +257,11 @@ typedef struct XrProto {
     int num_globals;            // global variable count
     uint16_t struct_area_size;  // bytes needed for struct_area in stack frame (0 = none)
 
-    int shared_offset;  // per-module shared variable offset into isolate->vm.shared
-    bool is_vararg;     // is variadic function
+    int shared_offset;                // per-module shared variable offset into isolate->vm.shared
+    int shared_count;                 // top-level shared slots required by this proto tree
+    bool shared_slots_bound;          // true after a VM has assigned shared_offset
+    XrVMRuntime *shared_slots_owner;  // VM that owns the assigned shared_offset
+    bool is_vararg;                   // is variadic function
 
     // Entry type: controls VM function setup (skips irrelevant init code)
     // 0=normal, 1=has_defaults (fill missing params), 2=generator (yield support)

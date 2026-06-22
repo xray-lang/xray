@@ -45,6 +45,43 @@ XrVMContext *xr_vm_current_ctx(XrVMRuntime *isolate) {
     return &isolate->vm_ctx;
 }
 
+static void bind_shared_offset_recursive(XrProto *proto, XrVMRuntime *owner, int offset) {
+    if (!proto)
+        return;
+    proto->shared_offset = offset;
+    proto->shared_slots_bound = true;
+    proto->shared_slots_owner = owner;
+    int child_count = PROTO_PROTO_COUNT(proto);
+    for (int i = 0; i < child_count; i++) {
+        XrProto *child = PROTO_PROTO(proto, i);
+        bind_shared_offset_recursive(child, owner, offset);
+    }
+}
+
+bool xr_vm_bind_proto_shared_slots(XrVMRuntime *isolate, XrProto *proto) {
+    if (!isolate || !proto || proto->shared_count <= 0)
+        return true;
+    if (proto->shared_slots_bound) {
+        if (proto->shared_slots_owner == isolate)
+            return true;
+        xr_log_warning("vm", "bytecode proto shared slots already belong to another VM");
+        return false;
+    }
+
+    XrVMState *vm = xr_isolate_get_vm_state(isolate);
+    int offset = vm->shared.count;
+    int total = offset + proto->shared_count;
+    if (total < offset) {
+        xr_log_warning("vm", "shared slot count overflow");
+        return false;
+    }
+
+    xr_shared_array_ensure(&vm->shared, total - 1);
+    vm->shared.count = total;
+    bind_shared_offset_recursive(proto, isolate, offset);
+    return true;
+}
+
 /*
 ** Ensure ctx has room for one new entry frame plus extra_stack slots.
 ** See xvm_internal.h for contract.
@@ -275,6 +312,8 @@ XrVMResult xr_vm_interpret_proto(XrVMRuntime *isolate, XrProto *proto) {
     if (proto == NULL) {
         return XR_VM_RUNTIME_ERROR;
     }
+    if (!xr_vm_bind_proto_shared_slots(isolate, proto))
+        return XR_VM_RUNTIME_ERROR;
     XrCoroutine *main_coro = (XrCoroutine *) isolate->main_coro;
     XrClosure *closure = xr_closure_new(isolate, proto, main_coro);
     if (closure == NULL) {
@@ -319,6 +358,8 @@ XrVMResult xr_vm_interpret_proto(XrVMRuntime *isolate, XrProto *proto) {
 XrVMResult xr_vm_execute_module(XrVMRuntime *isolate, XrProto *proto) {
     XR_DCHECK(isolate != NULL, "vm_execute_module: NULL isolate");
     XR_DCHECK(proto != NULL, "vm_execute_module: NULL proto");
+    if (!xr_vm_bind_proto_shared_slots(isolate, proto))
+        return XR_VM_RUNTIME_ERROR;
 
     // Single authoritative ctx resolver.
     XrVMContext *ctx = xr_vm_current_ctx(isolate);
