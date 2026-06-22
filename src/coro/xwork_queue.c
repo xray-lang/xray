@@ -21,6 +21,7 @@
 #include "xchannel_ops.h"
 #include "xcoroutine.h"
 #include "xworker.h"
+#include "xwork_queue_wait.h"
 #include "xyieldable.h"
 
 static bool shard_init(XrWorkQueueShard *shard, uint32_t capacity) {
@@ -40,7 +41,7 @@ static bool shard_init(XrWorkQueueShard *shard, uint32_t capacity) {
     return true;
 }
 
-static void shard_destroy(XrWorkQueueShard *shard) {
+static void shard_reset(XrWorkQueueShard *shard) {
     if (!shard)
         return;
     xr_free(shard->items);
@@ -157,29 +158,6 @@ static bool work_queue_waiter_enqueue_locked(XrWorkQueue *q, XrCoroutine *coro,
 static bool work_queue_pop_from_shard(XrWorkQueue *q, uint32_t shard_idx, bool own_shard,
                                       XrValue *out);
 
-static void work_queue_waiter_unlink_locked(XrWorkQueue *q, XrCoroutine *coro) {
-    XR_DCHECK(q != NULL, "work_queue_waiter_unlink_locked: NULL queue");
-    XR_DCHECK(coro != NULL, "work_queue_waiter_unlink_locked: NULL coro");
-    XR_DCHECK(coro->ext != NULL, "work_queue_waiter_unlink_locked: NULL ext");
-
-    XrCoroutine *prev = coro->ext->wait_prev;
-    XrCoroutine *next = coro->ext->wait_link;
-    if (prev) {
-        prev->ext->wait_link = next;
-    } else {
-        q->wait_first = next;
-    }
-    if (next) {
-        next->ext->wait_prev = prev;
-    } else {
-        q->wait_last = prev;
-    }
-    coro->ext->wait_link = NULL;
-    coro->ext->wait_prev = NULL;
-    coro->ext->work_queue_hint = -1;
-    atomic_fetch_sub_explicit(&q->waiter_count, 1, memory_order_relaxed);
-}
-
 static bool work_queue_waiter_matches_shard(XrWorkQueue *q, XrCoroutine *coro, uint32_t shard_idx) {
     if (!q || !coro || !coro->ext || coro->ext->work_queue_hint < 0)
         return false;
@@ -193,7 +171,7 @@ static XrCoroutine *work_queue_waiter_pop_locked(XrWorkQueue *q) {
     if (!coro)
         return NULL;
 
-    work_queue_waiter_unlink_locked(q, coro);
+    xr_work_queue_waiter_unlink_locked(q, coro);
     return coro;
 }
 
@@ -203,25 +181,12 @@ static XrCoroutine *work_queue_waiter_pop_for_shard_locked(XrWorkQueue *q, uint3
     while (coro) {
         XrCoroutine *next = coro->ext ? coro->ext->wait_link : NULL;
         if (work_queue_waiter_matches_shard(q, coro, shard_idx)) {
-            work_queue_waiter_unlink_locked(q, coro);
+            xr_work_queue_waiter_unlink_locked(q, coro);
             return coro;
         }
         coro = next;
     }
     return work_queue_waiter_pop_locked(q);
-}
-
-static bool work_queue_waiter_remove_locked(XrWorkQueue *q, XrCoroutine *coro) {
-    XR_DCHECK(q != NULL, "work_queue_waiter_remove_locked: NULL queue");
-    XR_DCHECK(coro != NULL, "work_queue_waiter_remove_locked: NULL coro");
-    if (!coro->ext)
-        return false;
-
-    if (!coro->ext->wait_prev && q->wait_first != coro)
-        return false;
-
-    work_queue_waiter_unlink_locked(q, coro);
-    return true;
 }
 
 typedef struct XrWorkQueueWakeBatch {
@@ -431,7 +396,7 @@ XrWorkQueue *xr_work_queue_new(XrRuntimeCore *core, XrRuntime *scheduler, uint32
     for (uint32_t i = 0; i < shard_count; i++) {
         if (!shard_init(&q->shards[i], shard_capacity)) {
             for (uint32_t j = 0; j < i; j++)
-                shard_destroy(&q->shards[j]);
+                shard_reset(&q->shards[j]);
             xr_sysheap_free_shared(q, alloc_size);
             return NULL;
         }
@@ -515,24 +480,6 @@ XrValue xr_work_queue_try_pop_for_coro_core(XrRuntimeCore *core, XrWorkQueue *q,
     return xr_null();
 }
 
-void xr_work_queue_cancel_waiter(XrCoroutine *coro) {
-    XrCoroWaitState *wait = xr_coro_wait_state(coro);
-    if (!wait)
-        return;
-    XrWorkQueue *q =
-        (XrWorkQueue *) atomic_load_explicit(&wait->work_queue_token.queue, memory_order_acquire);
-    if (!q) {
-        xr_work_queue_wait_token_cancel(&wait->work_queue_token);
-        return;
-    }
-
-    xr_amutex_lock(&q->wait_lock);
-    bool removed = work_queue_waiter_remove_locked(q, coro);
-    xr_amutex_unlock(&q->wait_lock);
-    if (removed)
-        xr_work_queue_wait_token_cancel(&wait->work_queue_token);
-}
-
 void xr_work_queue_close(XrWorkQueue *q) {
     if (!q)
         return;
@@ -547,15 +494,6 @@ bool xr_work_queue_is_closed(XrWorkQueue *q) {
 
 uint64_t xr_work_queue_length(XrWorkQueue *q) {
     return q ? atomic_load_explicit(&q->length, memory_order_acquire) : 0;
-}
-
-void xr_gc_destroy_work_queue(XrGCHeader *obj, XrCoroGC *owning_gc) {
-    (void) owning_gc;
-    if (!obj)
-        return;
-    XrWorkQueue *q = (XrWorkQueue *) obj;
-    for (uint32_t i = 0; i < q->shard_count; i++)
-        shard_destroy(&q->shards[i]);
 }
 
 static void work_queue_finish_wait_if_current(XrCoroutine *coro, XrWorkQueue *q) {

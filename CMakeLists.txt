@@ -537,8 +537,12 @@ file(GLOB RUNTIME_SYMBOL_SRC "src/runtime/symbol/*.c")
 file(GLOB CORO_SRC "src/coro/*.c")
 list(APPEND CORO_SRC
     "src/coro/xaot_runtime.c"
+    "src/coro/xresult_group_gc.c"
     "src/coro/xresult_group_native.c"
+    "src/coro/xresult_group_wait.c"
+    "src/coro/xwork_queue_gc.c"
     "src/coro/xwork_queue_native.c"
+    "src/coro/xwork_queue_wait.c"
 )
 list(REMOVE_DUPLICATES CORO_SRC)
 file(GLOB IO_SRC "src/io/*.c")
