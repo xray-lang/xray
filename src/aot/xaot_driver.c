@@ -233,15 +233,6 @@ static bool features_add_generated_builtin_stdlib_symbol(XaotFeatureSet *fs, con
     return true;
 }
 
-static bool stdlib_symbol_is_compress_core_object(const char *symbol) {
-    return symbol &&
-           (strcmp(symbol, "compress.deflate") == 0 || strcmp(symbol, "compress.gunzip") == 0 ||
-            strcmp(symbol, "compress.gzip") == 0 || strcmp(symbol, "compress.inflate") == 0 ||
-            strcmp(symbol, "compress.isGzip") == 0 || strcmp(symbol, "compress.isZlib") == 0 ||
-            strcmp(symbol, "compress.zlibCompress") == 0 ||
-            strcmp(symbol, "compress.zlibDecompress") == 0);
-}
-
 /* Unwrap value-identity ops (box/unbox/copy/move) to the underlying value,
  * mirroring cg_unwrap_identity_value so feature inference sees the same module
  * identity the emitter resolves at the call site. */
@@ -530,9 +521,6 @@ static bool add_stdlib_core_object_manifest_entries(XaotLinkManifest *manifest,
                 return false;
             continue;
         }
-        if (stdlib_symbol_is_compress_core_object(symbol) &&
-            !xaot_link_manifest_add_unique(manifest, XAOT_LINK_STDLIB_OBJECT, symbol))
-            return false;
     }
     return true;
 }
