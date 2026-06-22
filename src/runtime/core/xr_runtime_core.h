@@ -16,11 +16,18 @@
 #include "../gc/xgc.h"
 #include "../object/xnative_type.h"
 #include "xr_script_info.h"
+#include <stdbool.h>
 
+struct XrCoroutine;
 struct XrayIsolate;
 struct XrGlobalStringPool;
 struct XrStrBuf;
 struct XrSystemHeap;
+struct XrScopeContext;
+
+typedef struct XrScopeTransferOps {
+    bool (*record_child_error_locked)(struct XrCoroutine *coro, struct XrScopeContext *scope);
+} XrScopeTransferOps;
 
 typedef struct XrRuntimeCoreConfig {
     struct XrayIsolate *owner_isolate;
@@ -48,6 +55,7 @@ typedef struct XrRuntimeCore {
     uint64_t ext_has_refs_bitmap;
     XrGCDestroyFn ext_destroy_funcs[XGC_MAX_TYPES];
     void *ext_traverse_funcs[XGC_MAX_TYPES];
+    const XrScopeTransferOps *scope_transfer_ops;
 } XrRuntimeCore;
 
 XR_FUNC XrRuntimeCore *xr_runtime_core_new(const XrRuntimeCoreConfig *cfg);
@@ -55,5 +63,8 @@ XR_FUNC void xr_runtime_core_delete(XrRuntimeCore *core);
 XR_FUNC void xr_runtime_core_free_tmp_strbuf(XrRuntimeCore *core);
 XR_FUNC void xr_runtime_core_destroy_coro_storage(XrRuntimeCore *core);
 XR_FUNC void xr_runtime_core_cleanup_gc(XrRuntimeCore *core);
+XR_FUNC void xr_runtime_core_set_scope_transfer_ops(XrRuntimeCore *core,
+                                                    const XrScopeTransferOps *ops);
+XR_FUNC const XrScopeTransferOps *xr_runtime_core_scope_transfer_ops(const XrRuntimeCore *core);
 
 #endif  // XR_RUNTIME_CORE_H

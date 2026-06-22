@@ -98,9 +98,11 @@ static void cg_builtin_init_scan_value(CgBuiltinInitPlan *plan, const XiValue *v
         case XI_YIELD:
         case XI_GO:
         case XI_AWAIT:
+            plan->runtime_caps |= XR_AOT_CAP_CORO;
+            break;
         case XI_SCOPE_ENTER:
         case XI_SCOPE_EXIT:
-            plan->runtime_caps |= XR_AOT_CAP_CORO;
+            plan->runtime_caps |= XR_AOT_CAP_CORO | XR_AOT_CAP_TRANSFER;
             break;
         case XI_CHAN_NEW:
         case XI_CHAN_SEND:
@@ -238,6 +240,7 @@ static void emit_xrt_runtime_caps_expr(FILE *out, uint32_t caps) {
         {XR_AOT_CAP_WORK_QUEUE, "XR_AOT_CAP_WORK_QUEUE"},
         {XR_AOT_CAP_RESULT_GROUP, "XR_AOT_CAP_RESULT_GROUP"},
         {XR_AOT_CAP_PROCESS, "XR_AOT_CAP_PROCESS"},
+        {XR_AOT_CAP_TRANSFER, "XR_AOT_CAP_TRANSFER"},
     };
 
     if (caps == XR_AOT_CAP_NONE) {
@@ -280,6 +283,8 @@ static void emit_xrt_runtime_init(FILE *out, const CgBuiltinInitPlan *plan, uint
     fprintf(out, ";\n");
     fprintf(out, "    XrAotRuntime *rt = xr_aot_runtime_new(&runtime_cfg);\n");
     fprintf(out, "    if (!rt) { xrt_bump_destroy(); return 1; }\n");
+    if ((runtime_caps & XR_AOT_CAP_TRANSFER) != 0)
+        fprintf(out, "    xr_aot_runtime_enable_transfer(rt);\n");
     emit_xrt_runtime_builtin_sync(out, plan, "rt");
     fprintf(out, "    xrt_global_ctx.runtime = rt;\n");
     fprintf(out, "    xrt_global_ctx.coro = NULL;\n");

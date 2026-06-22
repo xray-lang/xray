@@ -25,6 +25,7 @@
 #include "../runtime/symbol/xsymbol_table.h"
 #include "../runtime/value/xtype.h"
 #include "../runtime/value/xvalue.h"
+#include "../coro/xscope_transfer.h"
 #include "../base/xglobal_indices.h"
 #include "../../include/xray_isolate.h"
 
@@ -136,6 +137,7 @@ static int isolate_init_runtime(XrayIsolate *isolate) {
     xr_symbol_table_init_builtins((XrSymbolTable *) isolate->core_rt->symbol_table);
     xr_registry_init(isolate);
     xr_core_init(isolate);
+    xr_scope_transfer_enable_core(isolate->core_rt);
 
     isolate_register_vm_builtins(isolate);
     return 0;

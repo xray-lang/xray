@@ -72,6 +72,16 @@ void xr_runtime_core_cleanup_gc(XrRuntimeCore *core) {
         xr_weak_registry_destroy(core->gc.isolate);
 }
 
+void xr_runtime_core_set_scope_transfer_ops(XrRuntimeCore *core, const XrScopeTransferOps *ops) {
+    if (!core)
+        return;
+    core->scope_transfer_ops = ops;
+}
+
+const XrScopeTransferOps *xr_runtime_core_scope_transfer_ops(const XrRuntimeCore *core) {
+    return core ? core->scope_transfer_ops : NULL;
+}
+
 void xr_runtime_core_delete(XrRuntimeCore *core) {
     if (!core)
         return;

@@ -497,6 +497,11 @@ static bool add_runtime_cap_manifest_entries(const XaotFeatureSet *features,
             return false;
         needs_aot_runtime = true;
     }
+    if (features->need_scope) {
+        if (!add_runtime_cap(manifest, "transfer"))
+            return false;
+        needs_aot_runtime = true;
+    }
     if (features->need_channel) {
         if (!add_runtime_cap(manifest, "coro") || !add_runtime_cap(manifest, "channel"))
             return false;
