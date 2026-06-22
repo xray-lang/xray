@@ -5,7 +5,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xgc_header.h - GC object header definition
+ * xgc_header.h - Runtime object header flags and RC helpers
  *
  * KEY CONCEPT:
  *   - Unified object header for VM and AOT.
@@ -28,9 +28,9 @@
 #include "../value/xtype_names.h"
 #include "../../base/xchecks.h"
 #include "../../os/os_time.h"
-#include "../../shared/xr_obj_header.h" /* unified XrGCHeader/XrObjHeader + HAS_DTOR/STORAGE_BUMP */
+#include "../../shared/xr_obj_header.h" /* unified XrObjHeader + HAS_DTOR/STORAGE_BUMP */
 
-/* ========== GC Debug Options ========== */
+/* ========== Memory Debug Options ========== */
 
 #ifndef XR_GC_DEBUG
 #define XR_GC_DEBUG 0
@@ -64,15 +64,15 @@ typedef struct XrClass XrClass;
  * XrObjType (header.type ids) now lives in src/shared/xr_obj_header.h (included
  * above) so the VM and the AOT runtime share one numbering. */
 
-/* Unified object header (XrGCHeader / XrObjHeader, 16 bytes) +
- * XR_OBJ_HAS_DTOR / XR_OBJ_STORAGE_BUMP now live in the self-contained
+/* Unified object header (XrObjHeader, 16 bytes) + XR_OBJ_HAS_DTOR /
+ * XR_OBJ_STORAGE_BUMP now live in the self-contained
  * src/shared/xr_obj_header.h (included above) so the AOT runtime can adopt the
  * same layout. The remaining flag bits and accessors below share its bit space. */
 
 /* ========== Access Macros ========== */
 
-#define XR_GC_GET_TYPE(gc) ((XrObjType) ((gc)->type))
-#define XR_GC_SET_TYPE(gc, t) ((gc)->type = (uint16_t) (t))
+#define XR_OBJ_GET_TYPE(gc) ((XrObjType) ((gc)->type))
+#define XR_OBJ_SET_TYPE(gc, t) ((gc)->type = (uint16_t) (t))
 
 /* ========== Shared Storage Mode (uses extra field bit 0) ========== */
 
@@ -279,14 +279,14 @@ static inline bool xr_obj_is_unique(const XrObjHeader *o) {
 
 /* ========== Initialization Functions ========== */
 
-static inline void xr_gc_header_init_type(XrGCHeader *gc, XrObjType type) {
-    gc->type = (uint16_t) type;
+static inline void xr_obj_header_init_type(XrObjHeader *hdr, XrObjType type) {
+    hdr->type = (uint16_t) type;
 }
 
 /* ========== Helper Functions ========== */
 
-static inline size_t xr_gc_header_size(void) {
-    return sizeof(XrGCHeader);
+static inline size_t xr_obj_header_size(void) {
+    return sizeof(XrObjHeader);
 }
 static inline const char *xr_obj_type_name(XrObjType type) {
     static const char *names[] = {TYPE_NAME_NULL,

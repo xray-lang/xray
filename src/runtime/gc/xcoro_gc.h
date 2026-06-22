@@ -65,14 +65,14 @@ struct XrGC;
  * and overflow it into the adjacent object. With 8-byte classes every member
  * of a class has the identical aligned size, so reuse is byte-exact.
  *
- * Minimum freelisted size is sizeof(XrGCHeader) + one pointer: the free link
+ * Minimum freelisted size is sizeof(XrObjHeader) + one pointer: the free link
  * is stored in the object's first payload word (header+sizeof(header)), so an
  * object with no payload (header-only, 24 bytes) has nowhere to put it without
  * clobbering the adjacent object. Such objects are not freelisted — they are
  * reclaimed in bulk at coroutine teardown.
  */
 #define XR_RC_FREE_GRANULARITY 8 /* must equal XGC_ALIGN_SIZE (allocator alignment) */
-#define XR_RC_FREE_MIN_SIZE (sizeof(XrGCHeader) + sizeof(void *)) /* room for the free link */
+#define XR_RC_FREE_MIN_SIZE (sizeof(XrObjHeader) + sizeof(void *)) /* room for the free link */
 #define XR_RC_FREECLASSES (XR_LARGE_OBJECT_THRESHOLD / XR_RC_FREE_GRANULARITY)  // 512
 
 /* The freelist size-class step must match the allocator's alignment exactly:
@@ -106,15 +106,15 @@ static inline int xr_rc_size_class(size_t aligned_size) {
  */
 
 typedef struct XrGCPtrSet {
-    XrGCHeader **slots;   // NULL slot = empty; XR_GC_PTRSET_TOMBSTONE = deleted
+    XrObjHeader **slots;  // NULL slot = empty; XR_GC_PTRSET_TOMBSTONE = deleted
     uint32_t cap;         // power of two (0 until first reserve)
     uint32_t count;       // live entries
     uint32_t tombstones;  // deleted slots awaiting rehash
 } XrGCPtrSet;
 
-#define XR_GC_PTRSET_TOMBSTONE ((XrGCHeader *) (uintptr_t) 1)
+#define XR_GC_PTRSET_TOMBSTONE ((XrObjHeader *) (uintptr_t) 1)
 
-static inline bool xr_gc_ptrset_slot_live(XrGCHeader *slot) {
+static inline bool xr_gc_ptrset_slot_live(XrObjHeader *slot) {
     return slot != NULL && slot != XR_GC_PTRSET_TOMBSTONE;
 }
 
@@ -157,7 +157,7 @@ typedef struct XrCoroGC {
     // Segregated free lists by size class, lazily allocated; on drop-to-zero a
     // small object's memory is pushed here and reused by a later same-class
     // allocation before falling back to Region bump. NULL until the first free.
-    XrGCHeader **rc_freelist;  // array[XR_RC_FREECLASSES] of list heads
+    XrObjHeader **rc_freelist;  // array[XR_RC_FREECLASSES] of list heads
 
     // === Stackless recursive free ===
     // Prevents stack overflow when destroying deep data structures (linked
@@ -165,15 +165,15 @@ typedef struct XrCoroGC {
     // the threshold, objects are pushed onto deferred_drops instead of being
     // destroyed recursively. The top-level destroy call drains the queue
     // iteratively before returning.
-    uint16_t destroy_depth;      // current recursion depth of rc_destroy
-    uint16_t _pad_drop[3];       // alignment
-    XrGCHeader *deferred_drops;  // singly-linked list via GCHeader (reuse a field)
+    uint16_t destroy_depth;       // current recursion depth of rc_destroy
+    uint16_t _pad_drop[3];        // alignment
+    XrObjHeader *deferred_drops;  // singly-linked list via GCHeader (reuse a field)
 
     // === Cycle collector (Bacon-Rajan trial deletion) ===
     // Potential cycle roots: objects whose type is XR_OBJ_CYCLE_CANDIDATE and
     // whose RC was decremented but did not reach zero. The collector runs on
     // gc.collect() and frees dead cycles that pure RC cannot reclaim.
-    XrGCHeader **cycle_roots;          // growable array of potential roots (NULL until first add)
+    XrObjHeader **cycle_roots;         // growable array of potential roots (NULL until first add)
     uint32_t cycle_root_count;         // number of entries in cycle_roots
     uint32_t cycle_root_cap;           // capacity of cycle_roots array
     uint32_t cycle_collect_threshold;  // auto-trigger fullgc when root count reaches this
@@ -200,18 +200,18 @@ XR_FUNC void xr_coro_gc_flush_pool(struct XrSystemHeap *heap, struct XrCoroGC **
  * 2. Link to allgc list
  * 3. Update GCdebt, trigger incremental GC
  */
-XR_FUNC XrGCHeader *xr_coro_gc_newobj(XrCoroGC *gc, uint8_t type, size_t size);
+XR_FUNC XrObjHeader *xr_coro_gc_newobj(XrCoroGC *gc, uint8_t type, size_t size);
 
 /* ========== RC Freelist API ========== */
 
 /* Push a small object's memory onto the RC freelist for its size class.
  * Called by drop-to-zero AFTER the destructor has run. The object's
  * `objsize` must still be valid. No-op for large/region/atomic objects. */
-XR_FUNC void xr_coro_gc_rc_free(XrCoroGC *gc, XrGCHeader *obj);
+XR_FUNC void xr_coro_gc_rc_free(XrCoroGC *gc, XrObjHeader *obj);
 
 /* drop-to-zero reclamation: run the type destructor (if any) then return
  * the block to the freelist. Routes shared objects to xr_shared_destroy. */
-XR_FUNC void xr_coro_gc_rc_destroy(XrCoroGC *gc, XrGCHeader *obj);
+XR_FUNC void xr_coro_gc_rc_destroy(XrCoroGC *gc, XrObjHeader *obj);
 
 /* Release the freelist array itself (block memory is owned by Region and
  * freed in bulk at coroutine teardown). Called from gc destroy/reset. */
@@ -226,7 +226,7 @@ XR_FUNC void xr_coro_gc_rc_freelist_destroy(XrCoroGC *gc);
 
 // Convenience macros
 #define xr_coro_gc_new_typed(gc, type, Type)                                                       \
-    ((Type *) ((XrGCHeader *) xr_coro_gc_newobj((gc), (type), sizeof(Type)) + 1))
+    ((Type *) ((XrObjHeader *) xr_coro_gc_newobj((gc), (type), sizeof(Type)) + 1))
 
 // Full GC cycle: runs the Bacon-Rajan trial deletion cycle collector on
 // accumulated cycle_roots, then clears the roots list. Called by gc.collect().
@@ -244,11 +244,11 @@ XR_FUNC void xr_coro_gc_reclaim_blocks(XrCoroGC *gc);
 /* Add a cycle-candidate object to the cycle_roots set after its RC was
  * decremented but stayed > 0. Uses _rsv as root_idx for O(1) removal.
  * No-op if the object is already in the set or is not a cycle candidate. */
-XR_FUNC void xr_cycle_add_root(XrCoroGC *gc, XrGCHeader *obj);
+XR_FUNC void xr_cycle_add_root(XrCoroGC *gc, XrObjHeader *obj);
 
 /* Remove an object from cycle_roots (e.g. when it reaches RC==0 via normal
  * drop before a collect cycle runs). O(1) via swap-with-last. */
-XR_FUNC void xr_cycle_remove_root(XrCoroGC *gc, XrGCHeader *obj);
+XR_FUNC void xr_cycle_remove_root(XrCoroGC *gc, XrObjHeader *obj);
 
 /* Free the cycle_roots array. Called at coroutine teardown. */
 XR_FUNC void xr_cycle_roots_destroy(XrCoroGC *gc);
@@ -320,7 +320,7 @@ static inline void xr_rc_release_value(XrCoroGC *gc, XrValue value) {
  * dup/drop (xi_arc) and by container-element drop at destruction. */
 
 // GCHeader from object pointer (GCHeader is first field in all xray objects)
-#define XR_OBJ2GC(obj) ((XrGCHeader *) (obj))
+#define XR_OBJ2GC(obj) ((XrObjHeader *) (obj))
 
 #define XR_GC_BARRIER(gc, parent, child) ((void) 0)
 #define XR_GC_BARRIER_BACK(gc, obj) ((void) 0)

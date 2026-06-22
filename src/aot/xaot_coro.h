@@ -19,7 +19,7 @@
 #include "../coro/xaot_task.h"
 
 typedef struct XrAotRuntimeStringView {
-    XrGCHeader gc;
+    XrObjHeader gc;
     uint32_t length;
     uint32_t hash;
     char data[];
@@ -29,7 +29,7 @@ typedef struct XrAotRuntimeStringView {
  * bridge reads VM-layout arrays through this view, so it must embed the exact
  * same shared field macro plus the VM-only data_on_gc_heap tail. */
 typedef struct XrAotRuntimeArrayView {
-    XrGCHeader gc;
+    XrObjHeader gc;
     XR_ARRAY_ABI_FIELDS;
     uint8_t data_on_gc_heap;
     uint8_t pad[2];
@@ -128,11 +128,11 @@ static inline XrValue xr_aot_bridge_value_to_xrt(XrValue value) {
     if (value.heap_type == XR_TSTRING)
         return xr_aot_bridge_string_to_xrt(value);
     /* Only VM-layout arrays need representation conversion. AOT arrays carry the
-     * same byte layout (a shared XrGCHeader at offset 0) and are bump-tagged, so
+     * same byte layout (a shared XrObjHeader at offset 0) and are bump-tagged, so
      * they pass through; the per-coroutine isolation deep-copy is handled
      * separately by xrt_value_clone_for_coro. */
     if (value.heap_type == XR_TARRAY && value.ptr &&
-        !(((const XrGCHeader *) value.ptr)->extra & XR_OBJ_STORAGE_BUMP))
+        !(((const XrObjHeader *) value.ptr)->extra & XR_OBJ_STORAGE_BUMP))
         return xr_aot_bridge_array_to_xrt(value);
     return value;
 }

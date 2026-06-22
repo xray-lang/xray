@@ -57,7 +57,7 @@
  * Block metadata lives in Line 0 (first 128B) of the 16KB aligned block.
  * No separate malloc needed — block pointer IS the data pointer.
  */
-struct XrGCHeader;
+struct XrObjHeader;
 struct XrSystemHeap;
 
 typedef struct XrRegionBlock {

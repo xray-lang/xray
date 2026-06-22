@@ -465,7 +465,7 @@ XR_FUNC XrInstance *xr_enum_adt_construct(XrayIsolate *X, XrEnumType *enum_type,
 /* Release malloc-backed side resources owned by the enum value.
  * The body itself lives on the isolate fixedgc list and is freed by
  * xr_gc_cleanup; this hook must NOT call xr_free(obj). */
-void xr_gc_destroy_enum_value(XrGCHeader *obj, XrCoroGC *owning_gc) {
+void xr_gc_destroy_enum_value(XrObjHeader *obj, XrCoroGC *owning_gc) {
     (void) owning_gc;
     if (!obj)
         return;
@@ -477,7 +477,7 @@ void xr_gc_destroy_enum_value(XrGCHeader *obj, XrCoroGC *owning_gc) {
 /* Release malloc-backed side resources owned by the enum type. The
  * member instances are individually owned by the fixedgc list, so this
  * hook only frees the type's own side arrays and the members[] table. */
-void xr_gc_destroy_enum_type(XrGCHeader *obj, XrCoroGC *owning_gc) {
+void xr_gc_destroy_enum_type(XrObjHeader *obj, XrCoroGC *owning_gc) {
     (void) owning_gc;
     if (!obj)
         return;
@@ -512,7 +512,7 @@ void xr_gc_destroy_enum_type(XrGCHeader *obj, XrCoroGC *owning_gc) {
 
 // EnumValue body: everything after klass pointer.
 // body_size = offsetof(XrEnumValue, member_index) + sizeof(uint32_t) - offsetof(XrEnumValue,
-// enum_name) Simpler: sizeof(XrEnumValue) - sizeof(XrGCHeader) - sizeof(XrClass*)
+// enum_name) Simpler: sizeof(XrEnumValue) - sizeof(XrObjHeader) - sizeof(XrClass*)
 
 static void enum_value_body_destroy(void *body) {
     (void) body;
@@ -520,7 +520,7 @@ static void enum_value_body_destroy(void *body) {
 }
 
 static XrNativeBodyDesc enum_value_body_desc = {
-    .body_size = sizeof(XrEnumValue) - sizeof(XrGCHeader) - sizeof(XrClass *),
+    .body_size = sizeof(XrEnumValue) - sizeof(XrObjHeader) - sizeof(XrClass *),
     .body_align = _Alignof(const char *),
     .copy_policy = XR_NATIVE_BODY_COPY_FORBID,
     .destroy = enum_value_body_destroy,
@@ -547,7 +547,7 @@ static void enum_type_body_destroy(void *body) {
 }
 
 static XrNativeBodyDesc enum_type_body_desc = {
-    .body_size = sizeof(XrEnumType) - sizeof(XrGCHeader) - sizeof(XrClass *),
+    .body_size = sizeof(XrEnumType) - sizeof(XrObjHeader) - sizeof(XrClass *),
     .body_align = _Alignof(const char *),
     .copy_policy = XR_NATIVE_BODY_COPY_FORBID,
     .destroy = enum_type_body_destroy,

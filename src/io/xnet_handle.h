@@ -62,7 +62,7 @@ typedef enum {
 /* ========== Connection handle ========== */
 
 typedef struct XrNetConn {
-    XrGCHeader gc_header;
+    XrObjHeader gc_header;
     struct XrClass *klass;       /* unified class (builtin_kind == XR_BK_NETCONN)   */
     int fd;                      /* -1 once closed                                 */
     uint8_t kind;                /* XrNetConnKind                                  */
@@ -78,7 +78,7 @@ typedef struct XrNetConn {
 /* ========== Listener handle ========== */
 
 typedef struct XrNetListener {
-    XrGCHeader gc_header;
+    XrObjHeader gc_header;
     struct XrClass *klass; /* unified class (builtin_kind == XR_BK_NETLISTENER) */
     int fd;                /* -1 once closed                                 */
     int port;              /* listening port                                  */

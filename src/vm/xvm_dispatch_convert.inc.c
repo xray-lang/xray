@@ -304,7 +304,7 @@ vmcase(OP_COPY) {
                 _coro ? (XrInstance *) xr_alloc(_coro, _sz, XR_TINSTANCE)
                       : (XrInstance *) xr_gc_alloc(xr_isolate_get_gc(isolate), _sz, XR_TINSTANCE);
             if (_new) {
-                xr_gc_header_init_type(&_new->gc, XR_TINSTANCE);
+                xr_obj_header_init_type(&_new->gc, XR_TINSTANCE);
                 _new->klass = _cls;
                 memcpy(_new->fields, _inst->fields, sizeof(XrValue) * _fc);
                 for (uint32_t _i = 0; _i < _fc; _i++)

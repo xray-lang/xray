@@ -16,7 +16,7 @@
  *
  *   XrInstance (variable size)
  *   +------------------+
- *   | XrGCHeader gc    |  8 bytes (type tag + flags + classObj)
+ *   | XrObjHeader gc    |  8 bytes (type tag + flags + classObj)
  *   +------------------+
  *   | klass            |  8 bytes (-> XrClass)
  *   +------------------+
@@ -57,7 +57,7 @@
 #include "../gc/xgc_header.h"
 
 struct XrInstance {
-    XrGCHeader gc;
+    XrObjHeader gc;
     struct XrClass *klass;
     XrValue fields[];  // Flexible array member
 };

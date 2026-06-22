@@ -111,7 +111,7 @@ bool xr_debug_value_is_expandable(XrayIsolate *isolate, XrValue value) {
     if (xr_value_is_json(value))
         return true;
     if (XR_IS_PTR(value)) {
-        XrGCHeader *hdr = XR_TO_PTR(value);
+        XrObjHeader *hdr = XR_TO_PTR(value);
         if (hdr->type == XR_TINSTANCE)
             return true;
     }
@@ -126,7 +126,7 @@ XdapVarRefType xr_debug_get_ref_type(XrValue value) {
     if (xr_value_is_json(value))
         return XDAP_REF_OBJECT;
     if (XR_IS_PTR(value)) {
-        XrGCHeader *hdr = XR_TO_PTR(value);
+        XrObjHeader *hdr = XR_TO_PTR(value);
         if (hdr->type == XR_TINSTANCE)
             return XDAP_REF_INSTANCE;
     }
@@ -341,7 +341,7 @@ int xr_debug_get_var_children(XrayIsolate *isolate, int ref_id, XdapVarInfo **ou
 
         case XDAP_REF_OBJECT:
             if (XR_IS_PTR(ref->value)) {
-                XrGCHeader *hdr = XR_TO_PTR(ref->value);
+                XrObjHeader *hdr = XR_TO_PTR(ref->value);
                 if (hdr->type == XR_TINSTANCE) {
                     XrInstance *_inst = (XrInstance *) hdr;
                     if (_inst->klass && _inst->klass->builtin_kind == XR_BK_JSON)
@@ -352,7 +352,7 @@ int xr_debug_get_var_children(XrayIsolate *isolate, int ref_id, XdapVarInfo **ou
 
         case XDAP_REF_INSTANCE:
             if (XR_IS_PTR(ref->value)) {
-                XrGCHeader *hdr = XR_TO_PTR(ref->value);
+                XrObjHeader *hdr = XR_TO_PTR(ref->value);
                 if (hdr->type == XR_TINSTANCE) {
                     return get_instance_children(isolate, (XrInstance *) hdr, out_vars);
                 }

@@ -62,12 +62,12 @@
 #define COLOR_GRAY 1  /* in the reachable set / trial-decremented */
 #define COLOR_WHITE 2 /* presumed dead (cycle garbage) */
 
-static inline void set_color(XrGCHeader *obj, uint8_t color) {
+static inline void set_color(XrObjHeader *obj, uint8_t color) {
     obj->extra = (uint16_t) ((obj->extra & ~(uint16_t) XR_OBJ_CYCLE_COLOR_MASK) |
                              ((uint16_t) color << XR_OBJ_CYCLE_COLOR_SHIFT));
 }
 
-static inline uint8_t get_color(const XrGCHeader *obj) {
+static inline uint8_t get_color(const XrObjHeader *obj) {
     return (uint8_t) ((obj->extra & XR_OBJ_CYCLE_COLOR_MASK) >> XR_OBJ_CYCLE_COLOR_SHIFT);
 }
 
@@ -76,7 +76,7 @@ static inline uint8_t get_color(const XrGCHeader *obj) {
  * are runtime-owned, and region objects ignore RC entirely. None of them
  * can be a member of a coro-local cycle, so skip the edge altogether
  * (consistently in EVERY phase, or the trial bookkeeping breaks). */
-static inline bool cycle_child_eligible(const XrGCHeader *obj) {
+static inline bool cycle_child_eligible(const XrObjHeader *obj) {
     if (obj->extra & (XR_OBJ_REGION | XR_OBJ_MANAGED | XR_OBJ_ATOMIC | XR_OBJ_STORAGE_BUMP))
         return false;
     if (XR_GC_IS_SHARED(obj))
@@ -87,10 +87,10 @@ static inline bool cycle_child_eligible(const XrGCHeader *obj) {
 /* ========== Child Scanning ========== */
 
 /* Callback type for iterating GC-managed children of an object. */
-typedef void (*ChildVisitor)(XrGCHeader *child, void *ctx);
+typedef void (*ChildVisitor)(XrObjHeader *child, void *ctx);
 
 /* Visit all GC pointer children of an object (type-specific traversal). */
-static void visit_children(XrGCHeader *obj, ChildVisitor visitor, void *ctx) {
+static void visit_children(XrObjHeader *obj, ChildVisitor visitor, void *ctx) {
     XR_DCHECK(obj != NULL, "visit_children: NULL obj");
     switch (obj->type) {
         case XR_TINSTANCE: {
@@ -102,7 +102,7 @@ static void visit_children(XrGCHeader *obj, ChildVisitor visitor, void *ctx) {
             for (uint32_t i = 0; i < fc; i++) {
                 XrValue v = inst->fields[i];
                 if (XR_IS_PTR(v)) {
-                    XrGCHeader *child = XR_VALUE_GCPTR(v);
+                    XrObjHeader *child = XR_VALUE_GCPTR(v);
                     if (child)
                         visitor(child, ctx);
                 }
@@ -116,7 +116,7 @@ static void visit_children(XrGCHeader *obj, ChildVisitor visitor, void *ctx) {
             XrValue *data = (XrValue *) arr->data;
             for (int32_t i = 0; i < arr->length; i++) {
                 if (XR_IS_PTR(data[i])) {
-                    XrGCHeader *child = XR_VALUE_GCPTR(data[i]);
+                    XrObjHeader *child = XR_VALUE_GCPTR(data[i]);
                     if (child)
                         visitor(child, ctx);
                 }
@@ -134,12 +134,12 @@ static void visit_children(XrGCHeader *obj, ChildVisitor visitor, void *ctx) {
                 if (XR_MAP_ENTRY_EMPTY(node))
                     continue;
                 if (!is_weak && XR_IS_PTR(node->key)) {
-                    XrGCHeader *child = XR_VALUE_GCPTR(node->key);
+                    XrObjHeader *child = XR_VALUE_GCPTR(node->key);
                     if (child)
                         visitor(child, ctx);
                 }
                 if (XR_IS_PTR(node->value)) {
-                    XrGCHeader *child = XR_VALUE_GCPTR(node->value);
+                    XrObjHeader *child = XR_VALUE_GCPTR(node->value);
                     if (child)
                         visitor(child, ctx);
                 }
@@ -157,7 +157,7 @@ static void visit_children(XrGCHeader *obj, ChildVisitor visitor, void *ctx) {
                 if (XR_SET_ENTRY_EMPTY(e))
                     continue;
                 if (XR_IS_PTR(e->value)) {
-                    XrGCHeader *child = XR_VALUE_GCPTR(e->value);
+                    XrObjHeader *child = XR_VALUE_GCPTR(e->value);
                     if (child)
                         visitor(child, ctx);
                 }
@@ -169,7 +169,7 @@ static void visit_children(XrGCHeader *obj, ChildVisitor visitor, void *ctx) {
             for (uint16_t i = 0; i < closure->upval_count; i++) {
                 XrValue v = closure->upvals[i];
                 if (XR_IS_PTR(v)) {
-                    XrGCHeader *child = XR_VALUE_GCPTR(v);
+                    XrObjHeader *child = XR_VALUE_GCPTR(v);
                     if (child)
                         visitor(child, ctx);
                 }
@@ -180,7 +180,7 @@ static void visit_children(XrGCHeader *obj, ChildVisitor visitor, void *ctx) {
             XrCell *cell = (XrCell *) obj;
             XrValue v = cell->value;
             if (XR_IS_PTR(v)) {
-                XrGCHeader *child = XR_VALUE_GCPTR(v);
+                XrObjHeader *child = XR_VALUE_GCPTR(v);
                 if (child)
                     visitor(child, ctx);
             }
@@ -194,7 +194,7 @@ static void visit_children(XrGCHeader *obj, ChildVisitor visitor, void *ctx) {
 
 /* ========== Cycle Roots Management ========== */
 
-XR_FUNC void xr_cycle_add_root(XrCoroGC *gc, XrGCHeader *obj) {
+XR_FUNC void xr_cycle_add_root(XrCoroGC *gc, XrObjHeader *obj) {
     if (!gc || !obj)
         return;
     if (!(obj->extra & XR_OBJ_CYCLE_CANDIDATE))
@@ -205,7 +205,8 @@ XR_FUNC void xr_cycle_add_root(XrCoroGC *gc, XrGCHeader *obj) {
 
     /* Lazy allocation. */
     if (!gc->cycle_roots) {
-        gc->cycle_roots = (XrGCHeader **) xr_malloc(sizeof(XrGCHeader *) * XR_CYCLE_ROOTS_INIT_CAP);
+        gc->cycle_roots =
+            (XrObjHeader **) xr_malloc(sizeof(XrObjHeader *) * XR_CYCLE_ROOTS_INIT_CAP);
         if (!gc->cycle_roots)
             return; /* OOM: skip cycle tracking (safe, just leaks) */
         gc->cycle_root_cap = XR_CYCLE_ROOTS_INIT_CAP;
@@ -215,8 +216,8 @@ XR_FUNC void xr_cycle_add_root(XrCoroGC *gc, XrGCHeader *obj) {
     /* Grow if needed. */
     if (gc->cycle_root_count >= gc->cycle_root_cap) {
         uint32_t new_cap = gc->cycle_root_cap * 2;
-        XrGCHeader **tmp =
-            (XrGCHeader **) xr_realloc(gc->cycle_roots, sizeof(XrGCHeader *) * new_cap);
+        XrObjHeader **tmp =
+            (XrObjHeader **) xr_realloc(gc->cycle_roots, sizeof(XrObjHeader *) * new_cap);
         if (!tmp)
             return; /* OOM: skip */
         gc->cycle_roots = tmp;
@@ -237,7 +238,7 @@ XR_FUNC void xr_cycle_add_root(XrCoroGC *gc, XrGCHeader *obj) {
         xr_coro_gc_fullgc(gc);
 }
 
-XR_FUNC void xr_cycle_remove_root(XrCoroGC *gc, XrGCHeader *obj) {
+XR_FUNC void xr_cycle_remove_root(XrCoroGC *gc, XrObjHeader *obj) {
     if (!gc || !obj)
         return;
     uint32_t idx = obj->_rsv;
@@ -247,7 +248,7 @@ XR_FUNC void xr_cycle_remove_root(XrCoroGC *gc, XrGCHeader *obj) {
     /* Swap with last for O(1) removal. */
     uint32_t last = gc->cycle_root_count - 1;
     if (idx != last) {
-        XrGCHeader *moved = gc->cycle_roots[last];
+        XrObjHeader *moved = gc->cycle_roots[last];
         gc->cycle_roots[idx] = moved;
         moved->_rsv = idx;
     }
@@ -285,16 +286,16 @@ XR_FUNC void xr_cycle_roots_destroy(XrCoroGC *gc) {
  */
 
 typedef struct {
-    XrGCHeader **items;
+    XrObjHeader **items;
     uint32_t count;
     uint32_t cap;
     bool oom;
 } CycleVec;
 
-static bool cvec_push(CycleVec *v, XrGCHeader *o) {
+static bool cvec_push(CycleVec *v, XrObjHeader *o) {
     if (v->count == v->cap) {
         uint32_t nc = v->cap ? v->cap * 2 : 64;
-        XrGCHeader **t = (XrGCHeader **) xr_realloc(v->items, (size_t) nc * sizeof(*t));
+        XrObjHeader **t = (XrObjHeader **) xr_realloc(v->items, (size_t) nc * sizeof(*t));
         if (!t) {
             v->oom = true;
             return false;
@@ -307,7 +308,7 @@ static bool cvec_push(CycleVec *v, XrGCHeader *o) {
 }
 
 /* Pass A visitor: add an eligible, not-yet-seen child to the reachable set. */
-static void cycle_reach_visitor(XrGCHeader *child, void *ctx) {
+static void cycle_reach_visitor(XrObjHeader *child, void *ctx) {
     CycleVec *R = (CycleVec *) ctx;
     if (!child || (child->extra & XR_OBJ_DEAD) || !cycle_child_eligible(child))
         return;
@@ -318,7 +319,7 @@ static void cycle_reach_visitor(XrGCHeader *child, void *ctx) {
 }
 
 /* Pass B visitor: trial-decrement one internal edge. */
-static void mark_gray_dec_visitor(XrGCHeader *child, void *ctx) {
+static void mark_gray_dec_visitor(XrObjHeader *child, void *ctx) {
     (void) ctx;
     if (!child || (child->extra & XR_OBJ_DEAD) || !cycle_child_eligible(child))
         return;
@@ -328,7 +329,7 @@ static void mark_gray_dec_visitor(XrGCHeader *child, void *ctx) {
 /* Pass C visitor: restore one edge of a live node and queue newly-black
  * children. `work` is pre-sized to |R| and every pushed node is a distinct
  * member of R, so the push never exceeds capacity. */
-static void scan_black_inc_visitor(XrGCHeader *child, void *ctx) {
+static void scan_black_inc_visitor(XrObjHeader *child, void *ctx) {
     CycleVec *work = (CycleVec *) ctx;
     if (!child || (child->extra & XR_OBJ_DEAD) || !cycle_child_eligible(child))
         return;
@@ -339,19 +340,19 @@ static void scan_black_inc_visitor(XrGCHeader *child, void *ctx) {
     }
 }
 
-static void scan_black_flat(XrGCHeader *root, CycleVec *work) {
+static void scan_black_flat(XrObjHeader *root, CycleVec *work) {
     set_color(root, COLOR_BLACK);
     work->count = 0;
     work->items[work->count++] = root;
     while (work->count) {
-        XrGCHeader *obj = work->items[--work->count];
+        XrObjHeader *obj = work->items[--work->count];
         visit_children(obj, scan_black_inc_visitor, work);
     }
 }
 
 /* Restore one out-edge of a white object (undo its markGray decrement).
  * Edges to ineligible children were never decremented, so skip them. */
-static void restore_edge_visitor(XrGCHeader *child, void *ctx) {
+static void restore_edge_visitor(XrObjHeader *child, void *ctx) {
     (void) ctx;
     if (!child || (child->extra & XR_OBJ_DEAD) || !cycle_child_eligible(child))
         return;
@@ -385,7 +386,7 @@ XR_FUNC void xr_coro_gc_fullgc(XrCoroGC *gc) {
     /* Pass A: collect the reachable eligible set (colors members GRAY). */
     bool ok = true;
     for (uint32_t i = 0; i < n; i++) {
-        XrGCHeader *o = gc->cycle_roots[i];
+        XrObjHeader *o = gc->cycle_roots[i];
         if (o && !(o->extra & XR_OBJ_DEAD) && cycle_child_eligible(o) &&
             get_color(o) != COLOR_GRAY) {
             set_color(o, COLOR_GRAY);
@@ -404,7 +405,7 @@ XR_FUNC void xr_coro_gc_fullgc(XrCoroGC *gc) {
     }
     /* Pre-size the scanBlack frontier to |R| so passes B-D never allocate. */
     if (ok && R.count > 0) {
-        work.items = (XrGCHeader **) xr_malloc((size_t) R.count * sizeof(XrGCHeader *));
+        work.items = (XrObjHeader **) xr_malloc((size_t) R.count * sizeof(XrObjHeader *));
         if (!work.items)
             ok = false;
         else
@@ -423,7 +424,7 @@ XR_FUNC void xr_coro_gc_fullgc(XrCoroGC *gc) {
 
         /* Pass C: nodes with a surviving external reference are live. */
         for (uint32_t i = 0; i < R.count; i++) {
-            XrGCHeader *obj = R.items[i];
+            XrObjHeader *obj = R.items[i];
             if (get_color(obj) == COLOR_GRAY && obj->refcount >= 0)
                 scan_black_flat(obj, &work);
         }
@@ -440,7 +441,7 @@ XR_FUNC void xr_coro_gc_fullgc(XrCoroGC *gc) {
                 visit_children(R.items[i], restore_edge_visitor, NULL);
         }
         for (uint32_t i = 0; i < R.count; i++) {
-            XrGCHeader *obj = R.items[i];
+            XrObjHeader *obj = R.items[i];
             if (get_color(obj) == COLOR_WHITE && !(obj->extra & XR_OBJ_DEAD)) {
                 freed++;
                 xr_coro_gc_rc_destroy(gc, obj);
@@ -450,7 +451,7 @@ XR_FUNC void xr_coro_gc_fullgc(XrCoroGC *gc) {
         /* Reset colors on survivors so a stale GRAY/WHITE cannot mislead the
          * next collection's "in R" test. */
         for (uint32_t i = 0; i < R.count; i++) {
-            XrGCHeader *obj = R.items[i];
+            XrObjHeader *obj = R.items[i];
             if (!(obj->extra & XR_OBJ_DEAD))
                 set_color(obj, COLOR_BLACK);
         }
@@ -465,7 +466,7 @@ XR_FUNC void xr_coro_gc_fullgc(XrCoroGC *gc) {
      * corrupt the next roots array through a stale index. Iterate the
      * CURRENT count: destructors run above may have added/removed roots. */
     for (uint32_t i = 0; i < gc->cycle_root_count; i++) {
-        XrGCHeader *obj = gc->cycle_roots[i];
+        XrObjHeader *obj = gc->cycle_roots[i];
         if (obj && !(obj->extra & XR_OBJ_DEAD))
             obj->_rsv = XR_CYCLE_NOT_IN_ROOTS;
     }

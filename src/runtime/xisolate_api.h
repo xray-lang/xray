@@ -154,11 +154,11 @@ XR_FUNC void xr_runtime_error(XrayIsolate *isolate, const char *fmt, ...);
 
 /* ========== Extension Type System (for dlopen packages) ========== */
 
-struct XrGCHeader;  // forward declaration (full definition in xgc_header.h)
+struct XrObjHeader;  // forward declaration (full definition in xgc_header.h)
 
 // Callback typedefs (distinct from GC-internal types to avoid conflicts)
-typedef void (*XrExtDestroyFn)(struct XrGCHeader *obj, void *gc);
-typedef void (*XrExtTraverseFn)(void *gc, struct XrGCHeader *obj);
+typedef void (*XrExtDestroyFn)(struct XrObjHeader *obj, void *gc);
+typedef void (*XrExtTraverseFn)(void *gc, struct XrObjHeader *obj);
 
 // Allocate a dynamic GC type ID for an extension type.
 // Returns 0 on failure (all slots exhausted).

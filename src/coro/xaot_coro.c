@@ -232,8 +232,8 @@ XrValue xr_aot_load_builtin_field(const XrAotContext *ctx, int32_t index, const 
     }
 
     if (aot_value_is_runtime_instance(builtin)) {
-        XrGCHeader *gc = (XrGCHeader *) builtin.ptr;
-        if (XR_GC_GET_TYPE(gc) == XR_TINSTANCE) {
+        XrObjHeader *gc = (XrObjHeader *) builtin.ptr;
+        if (XR_OBJ_GET_TYPE(gc) == XR_TINSTANCE) {
             XrInstance *inst = xr_value_to_instance(builtin);
             XrEnumType *enum_type = (XrEnumType *) inst;
             bool is_enum_type =
@@ -288,8 +288,8 @@ XrValue xr_aot_load_builtin_field(const XrAotContext *ctx, int32_t index, const 
 static bool aot_value_is_runtime_instance(XrValue value) {
     if (!XR_IS_PTR(value) || !value.ptr)
         return false;
-    XrGCHeader *gc = (XrGCHeader *) value.ptr;
-    return XR_GC_GET_TYPE(gc) == XR_TINSTANCE;
+    XrObjHeader *gc = (XrObjHeader *) value.ptr;
+    return XR_OBJ_GET_TYPE(gc) == XR_TINSTANCE;
 }
 
 bool xr_aot_runtime_enum_value_info(XrValue value, const char **enum_name, const char **member_name,
@@ -1327,7 +1327,7 @@ static XrArray *aot_tasks_array_from_value(const XrAotContext *ctx, XrValue task
     if (tasks_value.tag != XR_AOT_VALUE_TAG_ARRAY || !tasks_value.ptr)
         return NULL;
 
-    /* An AOT array embeds the unified XrGCHeader and the shared
+    /* An AOT array embeds the unified XrObjHeader and the shared
      * XR_ARRAY_ABI_FIELDS, so it is layout-compatible with the VM XrArray and is
      * read through it directly. Elements are copied into a coroutine-owned VM
      * array because the source is bump storage owned by the generated frame. */

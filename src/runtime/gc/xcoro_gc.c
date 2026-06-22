@@ -76,10 +76,10 @@ static inline XrRuntimeCore *gc_get_core(XrCoroGC *gc) {
     return (gc && gc->owner) ? gc->owner->core : NULL;
 }
 
-static inline bool coro_gc_value_to_header(XrValue value, XrGCHeader **out) {
+static inline bool coro_gc_value_to_header(XrValue value, XrObjHeader **out) {
     if (!XR_VALUE_NEEDS_GC(value))
         return false;
-    XrGCHeader *obj = XR_VALUE_GCPTR(value);
+    XrObjHeader *obj = XR_VALUE_GCPTR(value);
     if (!obj)
         return false;
     if (out)
@@ -87,8 +87,8 @@ static inline bool coro_gc_value_to_header(XrValue value, XrGCHeader **out) {
     return true;
 }
 
-static inline bool coro_gc_header_is_heap_value(XrGCHeader *obj) {
-    XrGCHeader *roundtrip = NULL;
+static inline bool coro_gc_header_is_heap_value(XrObjHeader *obj) {
+    XrObjHeader *roundtrip = NULL;
     return obj && coro_gc_value_to_header(XR_FROM_PTR(obj), &roundtrip) && roundtrip == obj;
 }
 
@@ -161,18 +161,18 @@ XrCoroGC *xr_coro_gc_create(struct XrCoroutine *coro) {
 
 // Fibonacci hash on the pointer; objects are >= 8-byte aligned so the
 // low bits carry no entropy.
-static inline uint32_t gc_ptrset_hash(const XrGCHeader *obj, uint32_t cap) {
+static inline uint32_t gc_ptrset_hash(const XrObjHeader *obj, uint32_t cap) {
     uint64_t h = ((uint64_t) (uintptr_t) obj >> 4) * 0x9E3779B97F4A7C15ull;
     return (uint32_t) (h >> 32) & (cap - 1);
 }
 
 // Rehash into a table of `new_cap` slots (power of two). Drops tombstones.
 static bool gc_ptrset_rehash(XrGCPtrSet *set, uint32_t new_cap) {
-    XrGCHeader **slots = (XrGCHeader **) xr_calloc(new_cap, sizeof(XrGCHeader *));
+    XrObjHeader **slots = (XrObjHeader **) xr_calloc(new_cap, sizeof(XrObjHeader *));
     if (!slots)
         return false;
     for (uint32_t i = 0; i < set->cap; i++) {
-        XrGCHeader *obj = set->slots[i];
+        XrObjHeader *obj = set->slots[i];
         if (!xr_gc_ptrset_slot_live(obj))
             continue;
         uint32_t idx = gc_ptrset_hash(obj, new_cap);
@@ -204,7 +204,7 @@ static bool gc_ptrset_reserve(XrGCPtrSet *set, uint32_t extra) {
 }
 
 // Insert without allocation. Caller must have reserved capacity.
-static void gc_ptrset_insert(XrGCPtrSet *set, XrGCHeader *obj) {
+static void gc_ptrset_insert(XrGCPtrSet *set, XrObjHeader *obj) {
     XR_DCHECK(set->cap > 0, "ptrset_insert: no capacity reserved");
     uint32_t idx = gc_ptrset_hash(obj, set->cap);
     while (xr_gc_ptrset_slot_live(set->slots[idx])) {
@@ -217,7 +217,7 @@ static void gc_ptrset_insert(XrGCPtrSet *set, XrGCHeader *obj) {
     set->count++;
 }
 
-static bool gc_ptrset_remove(XrGCPtrSet *set, XrGCHeader *obj) {
+static bool gc_ptrset_remove(XrGCPtrSet *set, XrObjHeader *obj) {
     if (set->cap == 0 || set->count == 0)
         return false;
     uint32_t idx = gc_ptrset_hash(obj, set->cap);
@@ -253,7 +253,7 @@ static void gc_ptrset_destroy(XrGCPtrSet *set) {
 static void gc_finalize_registered_objects(XrCoroGC *gc) {
     XrGCPtrSet set = gc_ptrset_take(&gc->finalize_set);
     for (uint32_t i = 0; i < set.cap; i++) {
-        XrGCHeader *obj = set.slots[i];
+        XrObjHeader *obj = set.slots[i];
         if (!xr_gc_ptrset_slot_live(obj) || (obj->extra & XR_OBJ_DEAD))
             continue;
         obj->extra |= XR_OBJ_DEAD;
@@ -270,7 +270,7 @@ static void gc_finalize_registered_objects(XrCoroGC *gc) {
 static void gc_free_large_objects(XrCoroGC *gc) {
     XrGCPtrSet set = gc_ptrset_take(&gc->large_set);
     for (uint32_t i = 0; i < set.cap; i++) {
-        XrGCHeader *lo = set.slots[i];
+        XrObjHeader *lo = set.slots[i];
         if (!xr_gc_ptrset_slot_live(lo))
             continue;
         gc->large_bytes -= lo->objsize;
@@ -297,7 +297,7 @@ static bool gc_prepare_registration(XrCoroGC *gc, uint8_t type, size_t total, bo
     return true;
 }
 
-static void gc_register_object(XrCoroGC *gc, XrGCHeader *obj, bool needs_finalize, bool is_large) {
+static void gc_register_object(XrCoroGC *gc, XrObjHeader *obj, bool needs_finalize, bool is_large) {
     if (is_large) {
         gc_ptrset_insert(&gc->large_set, obj);
         gc->large_bytes += (int64_t) obj->objsize;
@@ -307,7 +307,7 @@ static void gc_register_object(XrCoroGC *gc, XrGCHeader *obj, bool needs_finaliz
     }
 }
 
-static bool gc_register_finalizer_after_inline_alloc(XrCoroGC *gc, XrGCHeader *obj) {
+static bool gc_register_finalizer_after_inline_alloc(XrCoroGC *gc, XrObjHeader *obj) {
     if (!xr_gc_needs_finalize_ext(gc, obj->type))
         return true;
     if (!gc_ptrset_reserve(&gc->finalize_set, 1))
@@ -317,12 +317,12 @@ static bool gc_register_finalizer_after_inline_alloc(XrCoroGC *gc, XrGCHeader *o
     return true;
 }
 
-static void gc_unregister_finalizer(XrCoroGC *gc, XrGCHeader *obj) {
+static void gc_unregister_finalizer(XrCoroGC *gc, XrObjHeader *obj) {
     if (gc)
         (void) gc_ptrset_remove(&gc->finalize_set, obj);
 }
 
-static void gc_unregister_large_object(XrCoroGC *gc, XrGCHeader *obj) {
+static void gc_unregister_large_object(XrCoroGC *gc, XrObjHeader *obj) {
     if (gc)
         (void) gc_ptrset_remove(&gc->large_set, obj);
 }
@@ -395,7 +395,7 @@ void xr_coro_gc_reset(XrCoroGC *gc, struct XrCoroutine *new_owner) {
 
 /* ========== Allocation Helpers ========== */
 
-static inline void gc_post_region_alloc(XrCoroGC *gc, XrGCHeader *obj, uint8_t type,
+static inline void gc_post_region_alloc(XrCoroGC *gc, XrObjHeader *obj, uint8_t type,
                                         uint32_t total) {
     (void) gc;
     (void) type;
@@ -423,7 +423,7 @@ static inline void gc_update_alloc_stats(XrCoroGC *gc, uint32_t total) {
 
 /* ========== RC Per-Object Freelist ========== */
 
-XR_FUNC void xr_coro_gc_rc_free(XrCoroGC *gc, XrGCHeader *obj) {
+XR_FUNC void xr_coro_gc_rc_free(XrCoroGC *gc, XrObjHeader *obj) {
     if (!gc || !obj)
         return;
 
@@ -455,15 +455,15 @@ XR_FUNC void xr_coro_gc_rc_free(XrCoroGC *gc, XrGCHeader *obj) {
 
     /* Lazily allocate the freelist array on first free. */
     if (!gc->rc_freelist) {
-        gc->rc_freelist = (XrGCHeader **) xr_calloc(XR_RC_FREECLASSES, sizeof(XrGCHeader *));
+        gc->rc_freelist = (XrObjHeader **) xr_calloc(XR_RC_FREECLASSES, sizeof(XrObjHeader *));
         if (!gc->rc_freelist)
             return; /* OOM: drop the block on the floor (bulk-freed at coro end) */
     }
 
     /* The freelist is linked through the object's first PAYLOAD word. The
-     * size class guarantees objsize >= sizeof(XrGCHeader) + sizeof(void*),
+     * size class guarantees objsize >= sizeof(XrObjHeader) + sizeof(void*),
      * so this write stays inside the object's footprint. */
-    void **link = (void **) ((char *) obj + sizeof(XrGCHeader));
+    void **link = (void **) ((char *) obj + sizeof(XrObjHeader));
     *link = gc->rc_freelist[cls];
     gc->rc_freelist[cls] = obj;
 }
@@ -502,9 +502,9 @@ XR_FUNC void xr_coro_gc_reclaim_blocks(XrCoroGC *gc) {
      * block bump-allocated is either live or on a freelist, so a block whose
      * tally equals alloc_count has no live object left. */
     for (int cls = 0; cls < XR_RC_FREECLASSES; cls++) {
-        for (XrGCHeader *o = gc->rc_freelist[cls]; o;) {
-            void **link = (void **) ((char *) o + sizeof(XrGCHeader));
-            XrGCHeader *next = (XrGCHeader *) *link;
+        for (XrObjHeader *o = gc->rc_freelist[cls]; o;) {
+            void **link = (void **) ((char *) o + sizeof(XrObjHeader));
+            XrObjHeader *next = (XrObjHeader *) *link;
             XR_REGION_BLOCK_FROM_PTR(o)->reclaim_dead_count++;
             o = next;
         }
@@ -522,10 +522,10 @@ XR_FUNC void xr_coro_gc_reclaim_blocks(XrCoroGC *gc) {
      * about to be reclaimed (their backing memory becomes reusable, so the
      * stale link words must not survive). Done BEFORE any block is reused. */
     for (int cls = 0; cls < XR_RC_FREECLASSES; cls++) {
-        XrGCHeader *kept = NULL;
-        for (XrGCHeader *o = gc->rc_freelist[cls]; o;) {
-            void **link = (void **) ((char *) o + sizeof(XrGCHeader));
-            XrGCHeader *next = (XrGCHeader *) *link;
+        XrObjHeader *kept = NULL;
+        for (XrObjHeader *o = gc->rc_freelist[cls]; o;) {
+            void **link = (void **) ((char *) o + sizeof(XrObjHeader));
+            XrObjHeader *next = (XrObjHeader *) *link;
             if (XR_REGION_BLOCK_FROM_PTR(o)->reclaim_dead_count != XR_BLOCK_RECLAIM_MARK) {
                 *link = kept;
                 kept = o;
@@ -559,7 +559,7 @@ XR_FUNC void xr_coro_gc_reclaim_blocks(XrCoroGC *gc) {
 #define XR_DESTROY_DEPTH_LIMIT 64
 
 /* Core destroy logic (shared by top-level and deferred-drain paths). */
-static void rc_destroy_one(XrCoroGC *gc, XrGCHeader *obj) {
+static void rc_destroy_one(XrCoroGC *gc, XrObjHeader *obj) {
     XR_DCHECK(obj != NULL, "rc_destroy_one: NULL obj");
     if (gc && (obj->extra & XR_OBJ_WEAKABLE))
         xr_weak_registry_target_dying(gc_get_isolate(gc), obj, gc);
@@ -597,19 +597,19 @@ static void rc_destroy_one(XrCoroGC *gc, XrGCHeader *obj) {
 /* Push an object onto the deferred-drop list for iterative draining.
  * Uses the first pointer-sized region past the header as a next-link
  * (safe because the object is already logically dead / RC == 0). */
-static void deferred_push(XrCoroGC *gc, XrGCHeader *obj) {
+static void deferred_push(XrCoroGC *gc, XrObjHeader *obj) {
     /* Encode the linked list via a cast to void** at header+1. */
     void **link = (void **) (obj + 1);
     *link = gc->deferred_drops;
     gc->deferred_drops = obj;
 }
 
-static XrGCHeader *deferred_pop(XrCoroGC *gc) {
-    XrGCHeader *obj = gc->deferred_drops;
+static XrObjHeader *deferred_pop(XrCoroGC *gc) {
+    XrObjHeader *obj = gc->deferred_drops;
     if (!obj)
         return NULL;
     void **link = (void **) (obj + 1);
-    gc->deferred_drops = (XrGCHeader *) *link;
+    gc->deferred_drops = (XrObjHeader *) *link;
     return obj;
 }
 
@@ -621,7 +621,7 @@ static XrGCHeader *deferred_pop(XrCoroGC *gc) {
  * Implements depth-bounded recursion: when destroy_depth exceeds the limit,
  * child objects are deferred and drained iteratively by the outermost call.
  * This prevents stack overflow on pathological inputs (Koka-inspired). */
-XR_FUNC void xr_coro_gc_rc_destroy(XrCoroGC *gc, XrGCHeader *obj) {
+XR_FUNC void xr_coro_gc_rc_destroy(XrCoroGC *gc, XrObjHeader *obj) {
     if (!obj)
         return;
     if (!coro_gc_header_is_heap_value(obj))
@@ -654,7 +654,7 @@ XR_FUNC void xr_coro_gc_rc_destroy(XrCoroGC *gc, XrGCHeader *obj) {
         gc->destroy_depth--;
         if (gc->destroy_depth == 0) {
             while (gc->deferred_drops) {
-                XrGCHeader *deferred = deferred_pop(gc);
+                XrObjHeader *deferred = deferred_pop(gc);
                 if (deferred && !(deferred->extra & XR_OBJ_DEAD))
                     rc_destroy_one(gc, deferred);
             }
@@ -662,15 +662,15 @@ XR_FUNC void xr_coro_gc_rc_destroy(XrCoroGC *gc, XrGCHeader *obj) {
     }
 }
 
-XrGCHeader *xr_coro_gc_newobj(XrCoroGC *gc, uint8_t type, size_t size) {
+XrObjHeader *xr_coro_gc_newobj(XrCoroGC *gc, uint8_t type, size_t size) {
     if (!gc)
         return NULL;
     XR_DCHECK(type < XGC_MAX_TYPES, "invalid GC type");
-    XR_DCHECK(size >= sizeof(XrGCHeader), "alloc size too small for GC header");
+    XR_DCHECK(size >= sizeof(XrObjHeader), "alloc size too small for GC header");
     XR_DCHECK(gc->owner != NULL, "GC has no owner coroutine");
 
     size_t total = XGC_ALIGN(size);
-    XrGCHeader *obj;
+    XrObjHeader *obj;
     bool needs_finalize = false;
     bool is_large = false;
 
@@ -682,13 +682,13 @@ XrGCHeader *xr_coro_gc_newobj(XrCoroGC *gc, uint8_t type, size_t size) {
         if (total >= XR_MMAP_THRESHOLD) {
             // Tier 2: very large — use anonymous mmap (xr_mem_map)
             // to avoid libc heap fragmentation.
-            obj = (XrGCHeader *) xr_mem_map(total, XR_MEM_PROT_READ | XR_MEM_PROT_WRITE);
+            obj = (XrObjHeader *) xr_mem_map(total, XR_MEM_PROT_READ | XR_MEM_PROT_WRITE);
             if (!obj)
                 return NULL;
             use_mmap = true;
         } else {
             // Tier 1: medium large — use xr_malloc
-            obj = (XrGCHeader *) xr_malloc(total);
+            obj = (XrObjHeader *) xr_malloc(total);
             if (!obj)
                 return NULL;
         }
@@ -698,12 +698,12 @@ XrGCHeader *xr_coro_gc_newobj(XrCoroGC *gc, uint8_t type, size_t size) {
         int cls = xr_rc_size_class(total);
         if (cls >= 0 && gc->rc_freelist && gc->rc_freelist[cls]) {
             obj = gc->rc_freelist[cls];
-            void **link = (void **) ((char *) obj + sizeof(XrGCHeader));
-            gc->rc_freelist[cls] = (XrGCHeader *) *link;
+            void **link = (void **) ((char *) obj + sizeof(XrObjHeader));
+            gc->rc_freelist[cls] = (XrObjHeader *) *link;
             /* Reused block: its allocation line is still occupied. type/refcount/extra
              * are reset below; XR_OBJ_DEAD is cleared by extra = 0. */
         } else {
-            obj = (XrGCHeader *) xr_region_alloc(&gc->region, total);
+            obj = (XrObjHeader *) xr_region_alloc(&gc->region, total);
             if (!obj)
                 return NULL;
             gc_post_region_alloc(gc, obj, type, (uint32_t) total);

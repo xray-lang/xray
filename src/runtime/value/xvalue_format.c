@@ -201,8 +201,8 @@ void xr_value_to_strbuf(XrayIsolate *isolate, XrStrBuf *sb, XrValue val, int dep
         return;
     }
 
-    XrGCHeader *gc = (XrGCHeader *) XR_TO_PTR(val);
-    XrObjType type = XR_GC_GET_TYPE(gc);
+    XrObjHeader *gc = (XrObjHeader *) XR_TO_PTR(val);
+    XrObjType type = XR_OBJ_GET_TYPE(gc);
 
     switch (type) {
         case XR_TARRAY:

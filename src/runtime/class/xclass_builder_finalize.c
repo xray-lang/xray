@@ -161,7 +161,7 @@ XrClass *xr_class_builder_finalize(XrClassBuilder *builder) {
         return NULL;
     }
     memset(cls, 0, sizeof(XrClass));
-    xr_gc_header_init_type(&cls->gc, XR_TCLASS);
+    xr_obj_header_init_type(&cls->gc, XR_TCLASS);
 
     finalize_basic_and_supers(builder, cls);
 
@@ -332,7 +332,7 @@ static bool finalize_fields(const XrClassBuilder *b, XrClass *cls, int parent_in
         cls->field_default_values = NULL;
         cls->field_count = parent_instance_field_count;
         cls->own_field_count = 0;
-        cls->instance_size = (b->super != NULL) ? b->super->instance_size : sizeof(XrGCHeader);
+        cls->instance_size = (b->super != NULL) ? b->super->instance_size : sizeof(XrObjHeader);
         return true;
     }
 
@@ -342,7 +342,7 @@ static bool finalize_fields(const XrClassBuilder *b, XrClass *cls, int parent_in
 
     // Instance fields go first, at offsets that continue the parent's
     // instance layout so inherited accesses stay a plain offset read.
-    uint16_t offset = (b->super != NULL) ? b->super->instance_size : (uint16_t) sizeof(XrGCHeader);
+    uint16_t offset = (b->super != NULL) ? b->super->instance_size : (uint16_t) sizeof(XrObjHeader);
     for (int i = 0; i < b->field_count; i++) {
         XrFieldBuildItem *item = &b->fields[i];
         XrFieldDescriptor *desc = &cls->fields[i];

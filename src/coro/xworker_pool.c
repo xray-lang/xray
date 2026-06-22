@@ -103,7 +103,7 @@ XrCoroutine *xr_coro_pool_get(XrRuntime *runtime) {
             if (cached_block && worker->p.arena_cache_start < worker->p.arena_cache_end) {
                 uint32_t idx = worker->p.arena_cache_start++;
                 XrCoroutine *coro = &cached_block->coros[idx];
-                coro->gc = (XrGCHeader) {.type = XR_TCOROUTINE};
+                coro->gc = (XrObjHeader) {.type = XR_TCOROUTINE};
                 xr_coro_init_from_pool_slot(coro, cached_block, idx);
                 worker->p.stats.pool_arena_cache_get_count++;
                 return coro;
@@ -124,7 +124,7 @@ XrCoroutine *xr_coro_pool_get(XrRuntime *runtime) {
                     worker->p.arena_cache_end = local_end;
 
                     XrCoroutine *coro = &block->coros[local_base];
-                    coro->gc = (XrGCHeader) {.type = XR_TCOROUTINE};
+                    coro->gc = (XrObjHeader) {.type = XR_TCOROUTINE};
                     xr_coro_init_from_pool_slot(coro, block, local_base);
                     worker->p.stats.pool_arena_batch_get_count++;
                     return coro;

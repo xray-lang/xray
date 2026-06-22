@@ -50,7 +50,7 @@ XrTypeId xr_value_typeid(XrValue v) {
     if (v.tag <= XR_TAG_F64)
         return tag_to_typeid[v.tag];
     if (v.tag == XR_TAG_PTR && v.ptr) {
-        uint8_t gctype = XR_GC_GET_TYPE((XrGCHeader *) v.ptr);
+        uint8_t gctype = XR_OBJ_GET_TYPE((XrObjHeader *) v.ptr);
         if (gctype < sizeof(gctype_to_typeid) / sizeof(gctype_to_typeid[0])) {
             XrTypeId tid = gctype_to_typeid[gctype];
             if (tid == XR_TID_INSTANCE) {

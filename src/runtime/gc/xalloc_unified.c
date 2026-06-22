@@ -32,7 +32,7 @@ void *xr_coro_alloc(struct XrCoroutine *coro, size_t size, uint8_t type) {
     XR_DCHECK(type < XGC_MAX_TYPES, "coro_alloc: invalid GC type");
     if (!coro || !coro->coro_gc)
         return NULL;
-    XrGCHeader *obj = xr_coro_gc_newobj(coro->coro_gc, type, size);
+    XrObjHeader *obj = xr_coro_gc_newobj(coro->coro_gc, type, size);
     return obj ? (obj + 1) : NULL;
 }
 
@@ -47,14 +47,14 @@ XrCoroGC *xr_current_coro_gc(void) {
     return NULL;
 }
 
-void xr_coro_write_barrier(struct XrCoroutine *coro, XrGCHeader *parent, XrGCHeader *child) {
+void xr_coro_write_barrier(struct XrCoroutine *coro, XrObjHeader *parent, XrObjHeader *child) {
     /* Retired: RC owns reclamation, no tri-color invariant to maintain. */
     (void) coro;
     (void) parent;
     (void) child;
 }
 
-void xr_coro_write_barrier_back(struct XrCoroutine *coro, XrGCHeader *obj) {
+void xr_coro_write_barrier_back(struct XrCoroutine *coro, XrObjHeader *obj) {
     /* Retired: RC owns reclamation, no tri-color invariant to maintain. */
     (void) coro;
     (void) obj;

@@ -13,7 +13,7 @@
  *
  * MEMORY LAYOUT:
  *   ┌─────────────────────┐
- *   │ XrGCHeader (16B)    │ GC header (type = XR_TINSTANCE)
+ *   │ XrObjHeader (16B)    │ GC header (type = XR_TINSTANCE)
  *   ├─────────────────────┤
  *   │ klass (8B)          │ XrClass* with builtin_kind == XR_BK_BIGINT
  *   ├─────────────────────┤
@@ -44,7 +44,7 @@ struct XrCoroutine;
 // Base 2^32 storage, ~10x more efficient than base 10
 // Sign: 1 = positive/zero, -1 = negative
 typedef struct XrBigInt {
-    XrGCHeader gc;          // GC header (must be first)
+    XrObjHeader gc;         // GC header (must be first)
     struct XrClass *klass;  // unified class (builtin_kind == XR_BK_BIGINT)
     int8_t sign;            // sign: 1 or -1
     uint8_t _pad1[3];       // alignment padding

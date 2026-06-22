@@ -9,7 +9,7 @@
  *
  * KEY CONCEPT:
  *   Self-contained memory management for AOT-generated code.
- *   Objects carry an XrGCHeader before user data for type tracking.
+ *   Objects carry an XrObjHeader before user data for type tracking.
  *   The bump allocator provides a fast allocation path; all objects
  *   are freed in bulk by xrt_bump_destroy() at program exit.
  */
@@ -18,7 +18,7 @@
 #define XRT_ARC_H
 
 #include "xrt_value.h"
-#include "../shared/xr_obj_header.h" /* unified XrGCHeader + storage/dtor flags */
+#include "../shared/xr_obj_header.h" /* unified XrObjHeader + storage/dtor flags */
 
 /* =========================================================================
  * AOT allocator adapter
@@ -78,17 +78,17 @@ static inline void *xrt_alloc_aligned_impl(size_t size) {
 /* =========================================================================
  * Object header — precedes every bump-allocated object.
  *
- * Layout: [XrGCHeader][  user data  ]
+ * Layout: [XrObjHeader][  user data  ]
  *          ^--- hdr pointer (via XRT_ARC_HDR macro)
  *
- * AOT objects carry the unified XrGCHeader (src/shared/xr_obj_header.h), the
+ * AOT objects carry the unified XrObjHeader (src/shared/xr_obj_header.h), the
  * same 16-byte header the VM/AOT runtime uses, so a value crossing the
  * coroutine boundary needs no re-shelling. `type` is the type-table tag for
  * destructor dispatch; `extra` carries XR_OBJ_STORAGE_BUMP (bump vs heap) and
  * XR_OBJ_HAS_DTOR; `refcount` is the 0-based RC (rc == N means N+1 live refs).
  * ========================================================================= */
 
-#define XRT_ARC_HDR(p) ((XrGCHeader *) ((char *) (p) - sizeof(XrGCHeader)))
+#define XRT_ARC_HDR(p) ((XrObjHeader *) ((char *) (p) - sizeof(XrObjHeader)))
 
 /* Type-specific destructor dispatch. Defined in xrt_class.h (which owns the
  * type table), forward-declared here because xrt_release (L1) runs before
@@ -97,7 +97,7 @@ static inline void *xrt_alloc_aligned_impl(size_t size) {
 static inline void xrt_dispatch_destructor(uint16_t type_id, void *obj);
 static inline void xrt_dispatch_builtin_destructor(uint32_t kind, void *obj);
 
-/* Container RC dispatch. Arrays/maps/sets carry an embedded-at-0 XrGCHeader and
+/* Container RC dispatch. Arrays/maps/sets carry an embedded-at-0 XrObjHeader and
  * per-type backing storage, so xrt_retain/xrt_release route container tags here
  * instead of through the generic prepended-header path. Defined in xrt_coll.h. */
 static inline void xrt_coll_retain(XrValue v);
@@ -113,7 +113,7 @@ static inline void xrt_coll_release(XrValue v);
  *
  * Primary allocation path for AOT-generated code. Objects are never
  * individually freed — the entire arena is released at program exit
- * via xrt_bump_destroy(). Each object carries an XrGCHeader for type
+ * via xrt_bump_destroy(). Each object carries an XrObjHeader for type
  * tracking. When xrt_bump_enabled is 0, falls back to calloc/free.
  * ========================================================================= */
 
@@ -195,37 +195,37 @@ static void xrt_bump_destroy(void) {
  * on 64-bit). XR_ASSUME_ALIGNED hints in generated code rely on this. */
 static inline void *xrt_arc_alloc(size_t obj_size) {
     obj_size = (obj_size + 15u) & ~(size_t) 15u;
-    size_t total = sizeof(XrGCHeader) + obj_size;
-    XrGCHeader *hdr;
+    size_t total = sizeof(XrObjHeader) + obj_size;
+    XrObjHeader *hdr;
     if (XR_LIKELY(xrt_bump_enabled)) {
-        hdr = (XrGCHeader *) xrt_bump_alloc(total);
+        hdr = (XrObjHeader *) xrt_bump_alloc(total);
         memset(hdr, 0, total);
         hdr->extra = XR_OBJ_STORAGE_BUMP;  // mark as bump-allocated
         atomic_store_explicit(&hdr->refcount, XR_RC_STICKY, memory_order_relaxed);
     } else {
-        hdr = (XrGCHeader *) XRT_CALLOC(1, total);
+        hdr = (XrObjHeader *) XRT_CALLOC(1, total);
         if (XR_UNLIKELY(!hdr)) {
             fprintf(stderr, "xrt_arc_alloc: out of memory\n");
             abort();
         }
     }
-    return (char *) hdr + sizeof(XrGCHeader);
+    return (char *) hdr + sizeof(XrObjHeader);
 }
 
 static inline void xrt_arc_mark_builtin(void *obj, uint32_t kind) {
-    XrGCHeader *hdr = XRT_ARC_HDR(obj);
+    XrObjHeader *hdr = XRT_ARC_HDR(obj);
     hdr->_rsv = kind;
     hdr->extra |= XR_OBJ_HAS_DTOR;
 }
 
 /* Initialize an embedded object header for an AOT bump-allocated object (one
- * whose XrGCHeader is the struct's first field rather than a prepended block).
+ * whose XrObjHeader is the struct's first field rather than a prepended block).
  * Mirrors the xrt_arc_alloc bump init: STORAGE_BUMP makes RC dup/drop no-ops
  * and the GC skip the object, and a sticky RC keeps the unified fast paths from
  * mistaking it for a unique thread-local owner. The XrObjType id makes the
  * object self-describing with the same numeric type the VM stores, so a boxed
  * value can carry heap_type and be type-checked identically on both backends. */
-static inline void xrt_bump_header_init(XrGCHeader *h, uint16_t type) {
+static inline void xrt_bump_header_init(XrObjHeader *h, uint16_t type) {
     h->type = type;
     h->extra = XR_OBJ_STORAGE_BUMP;
     atomic_store_explicit(&h->refcount, XR_RC_STICKY, memory_order_relaxed);
@@ -244,7 +244,7 @@ static inline int xrt_arc_value_has_header(XrValue v) {
 
 /* ARC retain: acquire a new owning reference (0-based: rc++ adds one ref).
  * Called by generated code for values with escape > NO_ESCAPE.
- * No-op for values that do not carry an XrGCHeader. */
+ * No-op for values that do not carry an XrObjHeader. */
 static inline void xrt_retain(XrValue v) {
     if (XR_IS_ARRAY(v) || XR_IS_MAP(v) || XR_IS_SET(v)) {
         xrt_coll_retain(v);
@@ -252,7 +252,7 @@ static inline void xrt_retain(XrValue v) {
     }
     if (!xrt_arc_value_has_header(v))
         return;
-    XrGCHeader *hdr = XRT_ARC_HDR(v.ptr);
+    XrObjHeader *hdr = XRT_ARC_HDR(v.ptr);
     if (hdr->extra & XR_OBJ_STORAGE_BUMP)
         return; /* bump objects: freed in bulk */
     atomic_fetch_add_explicit(&hdr->refcount, 1, memory_order_relaxed);
@@ -263,12 +263,12 @@ static inline void xrt_retain(XrValue v) {
  * owner, so a release at rc == 0 frees; otherwise it just decrements. The
  * old `--rc <= 0` form freed one reference too early for multi-owner objects
  * (rc == 1 means two owners, but `--rc == 0 <= 0` would have freed it).
- * No-op for values that do not carry an XrGCHeader. */
+ * No-op for values that do not carry an XrObjHeader. */
 /* Finalize one dead object (run its destructor, free its block). The
  * destructor releases child references, which may recurse back into
  * xrt_release. */
-static inline void xrt_finalize_one(XrGCHeader *hdr) {
-    void *obj = (char *) hdr + sizeof(XrGCHeader);
+static inline void xrt_finalize_one(XrObjHeader *hdr) {
+    void *obj = (char *) hdr + sizeof(XrObjHeader);
     if (hdr->extra & XR_OBJ_HAS_DTOR) {
         if (hdr->_rsv != XRT_ARC_KIND_NONE)
             xrt_dispatch_builtin_destructor(hdr->_rsv, obj);
@@ -286,7 +286,7 @@ static inline void xrt_release(XrValue v) {
     }
     if (!xrt_arc_value_has_header(v))
         return;
-    XrGCHeader *hdr = XRT_ARC_HDR(v.ptr);
+    XrObjHeader *hdr = XRT_ARC_HDR(v.ptr);
     if (hdr->extra & XR_OBJ_STORAGE_BUMP)
         return;
     int32_t rc = atomic_load_explicit(&hdr->refcount, memory_order_relaxed);
@@ -312,8 +312,8 @@ static inline void xrt_release(XrValue v) {
 
     if (xrt_release_depth == 0) {
         while (xrt_deferred_head) {
-            XrGCHeader *d = (XrGCHeader *) xrt_deferred_head;
-            xrt_deferred_head = *(void **) ((char *) d + sizeof(XrGCHeader));
+            XrObjHeader *d = (XrObjHeader *) xrt_deferred_head;
+            xrt_deferred_head = *(void **) ((char *) d + sizeof(XrObjHeader));
             xrt_finalize_one(d);
         }
     }
@@ -326,7 +326,7 @@ static inline void xrt_arc_init(void) {
 
 /* =========================================================================
  * String constructors — header + bytes in one bump block.
- * Layout: [XrGCHeader][xrt_str_t][len+1 bytes]; data points at the tail.
+ * Layout: [XrObjHeader][xrt_str_t][len+1 bytes]; data points at the tail.
  * Callers fill the bytes via xr_str_buf() after xrt_str_alloc().
  * ========================================================================= */
 

@@ -31,7 +31,7 @@
 
 /* ========== Unified Object Header (16 bytes) ========== */
 
-typedef struct XrGCHeader {
+typedef struct XrObjHeader {
     uint16_t type;            /* [0-1] object type tag */
     uint16_t extra;           /* [2-3] flags word: storage/mmap + XR_OBJ_* */
     _Atomic int32_t refcount; /* [4-7] 0-based sign-tagged RC. Atomic so the
@@ -42,13 +42,9 @@ typedef struct XrGCHeader {
                                * shared band uses stronger orders. */
     uint32_t objsize;         /* [8-11] allocation size */
     uint32_t _rsv;            /* [12-15] reserved (weak slot / cycle-report id) */
-} XrGCHeader;
+} XrObjHeader;
 
-_Static_assert(sizeof(XrGCHeader) == 16, "XrGCHeader must be 16 bytes");
-
-/* Unified alias: the RC memory model refers to the object header as
- * XrObjHeader. */
-typedef struct XrGCHeader XrObjHeader;
+_Static_assert(sizeof(XrObjHeader) == 16, "XrObjHeader must be 16 bytes");
 
 /* ========== Object-Model Flags shared with the AOT runtime ==========
  *
@@ -59,7 +55,7 @@ typedef struct XrGCHeader XrObjHeader;
  *
  *   bit 3  HAS_DTOR      - object's type has a destructor to run at rc==0.
  *   bit 11 STORAGE_BUMP  - AOT bump-allocated: RC dup/drop are no-ops (freed in
- *                          bulk with the bump arena) and the GC never scans it.
+ *                          bulk with the bump arena) and no collector scans it.
  *   bit 12 STORAGE_STACK - AOT stack-allocated object with a real destructor
  *                          but no heap block to free.
  */
@@ -75,7 +71,7 @@ typedef struct XrGCHeader XrObjHeader;
 
 /* ========== Object Type (header.type) ==========
  *
- * The object-type tag stored in XrGCHeader.type. Shared so the AOT runtime and
+ * The object-type tag stored in XrObjHeader.type. Shared so the AOT runtime and
  * the VM agree on the numeric ids: a header-bearing AOT object (array/map/set)
  * stores the same id the VM uses, which lets a boxed value carry heap_type and
  * be type-checked / dispatched identically on both sides. The numeric order is

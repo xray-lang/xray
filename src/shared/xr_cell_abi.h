@@ -14,7 +14,7 @@
  *
  * A capture cell is one mutable slot wrapping a single captured variable. The
  * VM (XrCell) and the AOT runtime (xrt_cell_t) each prepend their own 16-byte
- * XrGCHeader and then carry an identical post-header field set, so both embed
+ * XrObjHeader and then carry an identical post-header field set, so both embed
  * XR_CELL_ABI_FIELDS to stay in lockstep — a cell crossing the coroutine
  * boundary needs no re-shelling.
  */

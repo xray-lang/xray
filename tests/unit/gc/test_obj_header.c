@@ -39,7 +39,6 @@ static int g_failed = 0;
 
 static void test_header_size(void) {
     ASSERT_EQ(sizeof(XrObjHeader), 16, "XrObjHeader is 16 bytes");
-    ASSERT_EQ(sizeof(XrGCHeader), sizeof(XrObjHeader), "XrGCHeader aliases XrObjHeader");
 }
 
 /* Plain thread-local dup/drop: 0-based refcount (rc == 0 means one owner). */

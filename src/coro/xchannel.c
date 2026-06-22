@@ -686,7 +686,7 @@ static inline bool channel_buffer_is_inline(XrChannel *ch) {
 }
 
 // GC destroy: free buffer only if separately allocated
-void xr_gc_destroy_channel(XrGCHeader *obj, struct XrCoroGC *owning_gc) {
+void xr_gc_destroy_channel(XrObjHeader *obj, struct XrCoroGC *owning_gc) {
     (void) owning_gc;
     XrChannel *ch = (XrChannel *) obj;
     if (ch->buffer) {

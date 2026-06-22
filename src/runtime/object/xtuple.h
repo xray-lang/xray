@@ -46,7 +46,7 @@ struct XrayIsolate;
  * Arity is read from klass->field_count, never stored separately.
  */
 typedef struct XrTuple {
-    XrGCHeader gc;
+    XrObjHeader gc;
     struct XrClass *klass;
     XrValue elements[];
 } XrTuple;

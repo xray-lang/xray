@@ -39,7 +39,7 @@ typedef union {
 } xrt_boolmap_slot;
 
 typedef struct xrt_boolmap_t {
-    XrGCHeader gc;         /* embedded-at-0 header; gc.type == XR_TBOOLMAP */
+    XrObjHeader gc;        /* embedded-at-0 header; gc.type == XR_TBOOLMAP */
     uint8_t value_type;    /* XR_ELEM_I64 or XR_ELEM_F32 */
     uint8_t present;       /* bit0: key false present, bit1: key true present */
     uint8_t order[2];      /* insertion order; order[n] is the key (0|1) inserted n-th */
@@ -48,10 +48,10 @@ typedef struct xrt_boolmap_t {
 } xrt_boolmap_t;
 
 /* A boxed map value points at either an xrt_map_t or an xrt_boolmap_t; the two
- * share the XrGCHeader prefix, so gc.type is the safe discriminator before any
+ * share the XrObjHeader prefix, so gc.type is the safe discriminator before any
  * map-specific field is touched. */
 static inline int xrt_map_is_boolmap(const xrt_map_t *m) {
-    return m && ((const XrGCHeader *) m)->type == XR_TBOOLMAP;
+    return m && ((const XrObjHeader *) m)->type == XR_TBOOLMAP;
 }
 
 static inline int xrt_boolmap_index(int64_t key) {

@@ -73,7 +73,7 @@ XrTask *xr_task_create(XrRuntime *runtime, XrCoroutine *parent_coro, XrCoroutine
     if (!task)
         return NULL;
 
-    xr_gc_header_init_type(&task->gc, XR_TTASK);
+    xr_obj_header_init_type(&task->gc, XR_TTASK);
     task->gc.objsize = (uint32_t) sizeof(XrTask);
 
     /* Runtime-managed: Task handles can be observed by scheduler, awaiters,
@@ -851,7 +851,7 @@ void xr_task_fire_completion(XrTask *task) {
 
 /* ========== GC Destroy (called by sweep when Task is reclaimed) ========== */
 
-void xr_gc_destroy_task(XrGCHeader *obj, struct XrCoroGC *owning_gc) {
+void xr_gc_destroy_task(XrObjHeader *obj, struct XrCoroGC *owning_gc) {
     (void) owning_gc;
     XrTask *task = (XrTask *) obj;
 

@@ -21,7 +21,7 @@
 #define XRAY_MODULE_SDK_H
 
 /* ========== ABI Version Check ========== */
-/* Increment when XrGCHeader, XrValue, or XrModule layout changes.
+/* Increment when XrObjHeader, XrValue, or XrModule layout changes.
  * Third-party packages compiled against a different ABI version will
  * fail to load at runtime with a clear error message. */
 #define XRAY_MODULE_ABI_VERSION 1

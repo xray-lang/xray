@@ -25,7 +25,7 @@
 // Forward declarations via xforward_decl.h
 
 typedef struct XrReflectCache {
-    XrGCHeader gc;
+    XrObjHeader gc;
     XrClass *owner;
 
     XrValue *field_wrappers;

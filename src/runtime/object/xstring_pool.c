@@ -118,7 +118,7 @@ XrString *xr_global_pool_insert_locked(XrGlobalStringPool *pool, const char *cha
             if (!str)
                 return NULL;
 
-            memset(&str->gc, 0, sizeof(XrGCHeader));
+            memset(&str->gc, 0, sizeof(XrObjHeader));
             str->gc.type = XR_TSTRING;
             str->gc.objsize = (uint32_t) total_size;
 

@@ -19,13 +19,13 @@
 
 /*
  * Mock XrCoroutine with matching layout for sched_link field.
- * Real layout: XrGCHeader(16) + flags(4) + reductions(4) +
+ * Real layout: XrObjHeader(16) + flags(4) + reductions(4) +
  *              sched_link(8)  → sched_link at offset 24.
- * The mock header must mirror the real XrGCHeader exactly so the
+ * The mock header must mirror the real XrObjHeader exactly so the
  * sched_link offset matches what xray_core (compiled with the real struct)
  * reads and writes.
  */
-struct XrGCHeader {
+struct XrObjHeader {
     uint16_t type;
     uint16_t extra;
     int32_t refcount;
@@ -34,7 +34,7 @@ struct XrGCHeader {
 };
 
 struct XrCoroutine {
-    struct XrGCHeader gc;
+    struct XrObjHeader gc;
     _Atomic uint32_t flags;
     int32_t reductions;
     struct XrCoroutine *sched_link;

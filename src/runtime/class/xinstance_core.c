@@ -37,7 +37,7 @@ XrInstance *xr_instance_new_core(XrRuntimeCore *core, XrCoroutine *coro, XrClass
         return NULL;
     }
 
-    xr_gc_header_init_type(&inst->gc, XR_TINSTANCE);
+    xr_obj_header_init_type(&inst->gc, XR_TINSTANCE);
     xr_instance_init_inplace(inst, cls);
 
     if (cls->flags & XR_CLASS_CYCLE_CANDIDATE) {
@@ -124,7 +124,7 @@ XrInstance *xr_instance_clone(XrayIsolate *X, XrInstance *src) {
     if (!dst)
         return NULL;
 
-    xr_gc_header_init_type(&dst->gc, XR_TINSTANCE);
+    xr_obj_header_init_type(&dst->gc, XR_TINSTANCE);
     xr_instance_init_inplace(dst, cls);
     if (cls->flags & XR_CLASS_DYNAMIC_LAYOUT) {
         uint16_t cap = cls->in_object_capacity;

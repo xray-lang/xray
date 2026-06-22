@@ -137,7 +137,7 @@ typedef struct XrTaskLink {
 
 typedef struct XrTask {
     // GC header (must be first field)
-    XrGCHeader gc;  // 16B
+    XrObjHeader gc;  // 16B
 
     // Cached result — survives executor recycling
     XrValue result;  // 16B

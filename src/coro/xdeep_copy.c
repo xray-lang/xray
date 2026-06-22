@@ -86,7 +86,7 @@ static void *copy_ctx_alloc_transit(XrCopyContext *ctx, size_t size, uint8_t typ
     XrSystemHeap *heap = ctx->core ? ctx->core->sys_heap : NULL;
     if (!heap)
         return NULL;
-    XrGCHeader *obj = (XrGCHeader *) xr_sysheap_alloc_shared(heap, size, type);
+    XrObjHeader *obj = (XrObjHeader *) xr_sysheap_alloc_shared(heap, size, type);
     if (!obj)
         return NULL;
     obj->objsize = (uint32_t) size;
@@ -132,7 +132,7 @@ static XrValue xr_copy_context_lookup(XrCopyContext *ctx, void *src) {
              * second parent referencing the same copy must own its own
              * reference. */
             if (ctx->to_transit && XR_IS_PTR(e->dst)) {
-                XrGCHeader *dst_obj = XR_VALUE_GCPTR(e->dst);
+                XrObjHeader *dst_obj = XR_VALUE_GCPTR(e->dst);
                 if (dst_obj)
                     xr_shared_incref(dst_obj);
             }
@@ -211,7 +211,7 @@ static void xr_copy_context_record(XrCopyContext *ctx, void *src, XrValue dst) {
     ctx->buckets[idx] = entry;
 }
 
-XrValue xr_deep_copy_array_with_ctx(XrCopyContext *ctx, XrGCHeader *obj) {
+XrValue xr_deep_copy_array_with_ctx(XrCopyContext *ctx, XrObjHeader *obj) {
     XrArray *array = (XrArray *) obj;
     if (!array || !ctx->dst_gc)
         return XR_NULL_VAL;
@@ -269,7 +269,7 @@ XrValue xr_deep_copy_array_with_ctx(XrCopyContext *ctx, XrGCHeader *obj) {
     return result;
 }
 
-XrValue xr_deep_copy_map_with_ctx(XrCopyContext *ctx, XrGCHeader *obj) {
+XrValue xr_deep_copy_map_with_ctx(XrCopyContext *ctx, XrObjHeader *obj) {
     XrMap *map = (XrMap *) obj;
     if (!map || !ctx->dst_gc)
         return XR_NULL_VAL;
@@ -328,7 +328,7 @@ XrValue xr_deep_copy_map_with_ctx(XrCopyContext *ctx, XrGCHeader *obj) {
     return result;
 }
 
-XrValue xr_deep_copy_closure_with_ctx(XrCopyContext *ctx, XrGCHeader *obj) {
+XrValue xr_deep_copy_closure_with_ctx(XrCopyContext *ctx, XrObjHeader *obj) {
     XrClosure *closure = (XrClosure *) obj;
     if (!closure || !ctx->dst_gc)
         return XR_NULL_VAL;
@@ -359,7 +359,7 @@ XrValue xr_deep_copy_closure_with_ctx(XrCopyContext *ctx, XrGCHeader *obj) {
     return result;
 }
 
-XrValue xr_deep_copy_cell_with_ctx(XrCopyContext *ctx, XrGCHeader *obj) {
+XrValue xr_deep_copy_cell_with_ctx(XrCopyContext *ctx, XrObjHeader *obj) {
     XrCell *cell = (XrCell *) obj;
     if (!cell || !ctx->dst_gc)
         return XR_NULL_VAL;
@@ -382,7 +382,7 @@ XrValue xr_deep_copy_cell_with_ctx(XrCopyContext *ctx, XrGCHeader *obj) {
     return result;
 }
 
-XrValue xr_deep_copy_set_with_ctx(XrCopyContext *ctx, XrGCHeader *obj) {
+XrValue xr_deep_copy_set_with_ctx(XrCopyContext *ctx, XrObjHeader *obj) {
     XrSet *set = (XrSet *) obj;
     if (!set || !ctx->dst_gc)
         return XR_NULL_VAL;
@@ -412,7 +412,7 @@ XrValue xr_deep_copy_set_with_ctx(XrCopyContext *ctx, XrGCHeader *obj) {
     return result;
 }
 
-XrValue xr_deep_copy_instance_with_ctx(XrCopyContext *ctx, XrGCHeader *obj) {
+XrValue xr_deep_copy_instance_with_ctx(XrCopyContext *ctx, XrObjHeader *obj) {
     XrInstance *inst = (XrInstance *) obj;
     if (!inst || !ctx->dst_gc)
         return XR_NULL_VAL;
@@ -493,7 +493,7 @@ XrValue xr_deep_copy_with_ctx(XrCopyContext *ctx, XrValue value) {
     XR_DCHECK(ctx != NULL, "deep_copy_with_ctx: NULL context");
     if (!XR_IS_PTR(value))
         return value;
-    XrGCHeader *obj = XR_VALUE_GCPTR(value);
+    XrObjHeader *obj = XR_VALUE_GCPTR(value);
     if (!obj)
         return value;
     /* Immortal fixed-heap singletons (enum value & type descriptors, classes —
@@ -514,7 +514,7 @@ XrValue xr_deep_copy_with_ctx(XrCopyContext *ctx, XrValue value) {
         }
     }
 
-    uint8_t type = XR_GC_GET_TYPE(obj);
+    uint8_t type = XR_OBJ_GET_TYPE(obj);
     if (type >= XGC_MAX_TYPES)
         return value;
 
@@ -586,8 +586,8 @@ static bool array_is_movable_scalar(const XrArray *a) {
 bool xr_chan_try_move_array_to_transit_core(XrRuntimeCore *core, XrValue value, XrValue *out) {
     if (!core || !out || !XR_IS_PTR(value))
         return false;
-    XrGCHeader *obj = XR_VALUE_GCPTR(value);
-    if (!obj || XR_GC_GET_TYPE(obj) != XR_TARRAY || XR_GC_IS_SHARED(obj))
+    XrObjHeader *obj = XR_VALUE_GCPTR(value);
+    if (!obj || XR_OBJ_GET_TYPE(obj) != XR_TARRAY || XR_GC_IS_SHARED(obj))
         return false; /* not a coroutine-local array source */
     XrArray *src = (XrArray *) obj;
     if (!array_is_movable_scalar(src))
@@ -596,7 +596,7 @@ bool xr_chan_try_move_array_to_transit_core(XrRuntimeCore *core, XrValue value, 
     XrSystemHeap *heap = core->sys_heap;
     if (!heap)
         return false;
-    XrGCHeader *th = (XrGCHeader *) xr_sysheap_alloc_shared(heap, sizeof(XrArray), XR_TARRAY);
+    XrObjHeader *th = (XrObjHeader *) xr_sysheap_alloc_shared(heap, sizeof(XrArray), XR_TARRAY);
     if (!th)
         return false;
     th->objsize = (uint32_t) sizeof(XrArray);
@@ -640,8 +640,8 @@ bool xr_chan_try_adopt_array_from_transit_core(XrValue value, struct XrCoroutine
                                                XrValue *out) {
     if (!out || !recv_coro || !XR_IS_PTR(value))
         return false;
-    XrGCHeader *obj = XR_VALUE_GCPTR(value);
-    if (!obj || XR_GC_GET_TYPE(obj) != XR_TARRAY || !XR_OBJ_GET_FLAG(obj, XR_OBJ_TRANSIT))
+    XrObjHeader *obj = XR_VALUE_GCPTR(value);
+    if (!obj || XR_OBJ_GET_TYPE(obj) != XR_TARRAY || !XR_OBJ_GET_FLAG(obj, XR_OBJ_TRANSIT))
         return false;
     /* Only the channel may reference this transit graph; an aliased graph must
      * be deep-copied so the other holders keep a live buffer. */
@@ -654,7 +654,7 @@ bool xr_chan_try_adopt_array_from_transit_core(XrValue value, struct XrCoroutine
     XrCoroGC *dst_gc = xr_coro_ensure_gc(recv_coro);
     if (!dst_gc)
         return false;
-    XrGCHeader *rh = xr_coro_gc_newobj(dst_gc, XR_TARRAY, sizeof(XrArray));
+    XrObjHeader *rh = xr_coro_gc_newobj(dst_gc, XR_TARRAY, sizeof(XrArray));
     if (!rh)
         return false; /* OOM: caller falls back to the deep-copy path */
 
@@ -726,7 +726,7 @@ XrValue xr_deep_copy_to_coro_core(XrRuntimeCore *core, XrValue value,
         return value;
     // Shared objects (channel, etc): just increment refcount, no copy needed.
     // TRANSIT graphs are the exception: they must be materialized privately.
-    XrGCHeader *obj = XR_VALUE_GCPTR(value);
+    XrObjHeader *obj = XR_VALUE_GCPTR(value);
     if (obj && XR_GC_IS_SHARED(obj) && !XR_OBJ_GET_FLAG(obj, XR_OBJ_TRANSIT)) {
         xr_shared_incref(obj);
         return value;
@@ -794,7 +794,7 @@ XrValue xr_deep_copy_array(struct XrayIsolate *X, struct XrArray *array, struct 
         dst_gc = xr_isolate_get_gc(X);
     XrCopyContext ctx;
     xr_copy_context_init(&ctx, X, dst_gc);
-    XrValue result = xr_deep_copy_array_with_ctx(&ctx, (XrGCHeader *) array);
+    XrValue result = xr_deep_copy_array_with_ctx(&ctx, (XrObjHeader *) array);
     xr_copy_context_cleanup(&ctx);
     return result;
 }
@@ -807,7 +807,7 @@ XrValue xr_deep_copy_map(struct XrayIsolate *X, struct XrMap *map, struct XrGC *
         dst_gc = xr_isolate_get_gc(X);
     XrCopyContext ctx;
     xr_copy_context_init(&ctx, X, dst_gc);
-    XrValue result = xr_deep_copy_map_with_ctx(&ctx, (XrGCHeader *) map);
+    XrValue result = xr_deep_copy_map_with_ctx(&ctx, (XrObjHeader *) map);
     xr_copy_context_cleanup(&ctx);
     return result;
 }
@@ -821,7 +821,7 @@ XrValue xr_deep_copy_closure(struct XrayIsolate *X, struct XrClosure *closure,
         dst_gc = xr_isolate_get_gc(X);
     XrCopyContext ctx;
     xr_copy_context_init(&ctx, X, dst_gc);
-    XrValue result = xr_deep_copy_closure_with_ctx(&ctx, (XrGCHeader *) closure);
+    XrValue result = xr_deep_copy_closure_with_ctx(&ctx, (XrObjHeader *) closure);
     xr_copy_context_cleanup(&ctx);
     return result;
 }
@@ -832,17 +832,17 @@ XrValue xr_deep_copy_closure(struct XrayIsolate *X, struct XrClosure *closure,
 bool xr_can_relocate(XrValue value) {
     if (!XR_IS_PTR(value))
         return false;
-    XrGCHeader *obj = XR_VALUE_GCPTR(value);
+    XrObjHeader *obj = XR_VALUE_GCPTR(value);
     if (!obj)
         return false;
     if (XR_GC_IS_SHARED(obj))
         return false;
-    if (XR_GC_GET_TYPE(obj) == XR_TSTRING)
+    if (XR_OBJ_GET_TYPE(obj) == XR_TSTRING)
         return false;
     return true;
 }
 
-XrValue xr_to_shared_array(struct XrayIsolate *X, XrGCHeader *obj) {
+XrValue xr_to_shared_array(struct XrayIsolate *X, XrObjHeader *obj) {
     XrArray *array = (XrArray *) obj;
     if (!array || !xr_isolate_get_sys_heap(X))
         return XR_NULL_VAL;
@@ -869,7 +869,7 @@ XrValue xr_to_shared_array(struct XrayIsolate *X, XrGCHeader *obj) {
     return XR_FROM_PTR(new_arr);
 }
 
-XrValue xr_to_shared_map(struct XrayIsolate *X, XrGCHeader *obj) {
+XrValue xr_to_shared_map(struct XrayIsolate *X, XrObjHeader *obj) {
     XrMap *map = (XrMap *) obj;
     if (!map || !xr_isolate_get_sys_heap(X))
         return XR_NULL_VAL;
@@ -894,7 +894,7 @@ XrValue xr_to_shared_map(struct XrayIsolate *X, XrGCHeader *obj) {
     return XR_FROM_PTR(new_map);
 }
 
-XrValue xr_to_shared_set(struct XrayIsolate *X, XrGCHeader *obj) {
+XrValue xr_to_shared_set(struct XrayIsolate *X, XrObjHeader *obj) {
     XrSet *set = (XrSet *) obj;
     if (!set || !xr_isolate_get_sys_heap(X))
         return XR_NULL_VAL;
@@ -918,7 +918,7 @@ XrValue xr_to_shared_set(struct XrayIsolate *X, XrGCHeader *obj) {
     return XR_FROM_PTR(new_set);
 }
 
-XrValue xr_to_shared_instance(struct XrayIsolate *X, XrGCHeader *obj) {
+XrValue xr_to_shared_instance(struct XrayIsolate *X, XrObjHeader *obj) {
     XrInstance *inst = (XrInstance *) obj;
     if (!inst || !xr_isolate_get_sys_heap(X))
         return XR_NULL_VAL;
@@ -973,7 +973,7 @@ XrValue xr_to_shared_instance(struct XrayIsolate *X, XrGCHeader *obj) {
     return XR_FROM_PTR(new_inst);
 }
 
-XrValue xr_to_shared_closure(struct XrayIsolate *X, XrGCHeader *obj) {
+XrValue xr_to_shared_closure(struct XrayIsolate *X, XrObjHeader *obj) {
     XrClosure *closure = (XrClosure *) obj;
     if (!closure || !xr_isolate_get_sys_heap(X))
         return XR_NULL_VAL;
@@ -991,7 +991,7 @@ XrValue xr_to_shared_closure(struct XrayIsolate *X, XrGCHeader *obj) {
 XrValue xr_to_shared(struct XrayIsolate *X, XrValue value) {
     if (!XR_IS_PTR(value))
         return value;
-    XrGCHeader *obj = XR_VALUE_GCPTR(value);
+    XrObjHeader *obj = XR_VALUE_GCPTR(value);
     if (!obj)
         return value;
     /* Immortal fixed-heap singletons (enum descriptors, classes) are global
@@ -1004,10 +1004,10 @@ XrValue xr_to_shared(struct XrayIsolate *X, XrValue value) {
     if (XR_GC_IS_SHARED(obj))
         return value;
     // Strings are interned: pointer-shareable as-is, no copy required.
-    if (XR_GC_GET_TYPE(obj) == XR_TSTRING)
+    if (XR_OBJ_GET_TYPE(obj) == XR_TSTRING)
         return value;
 
-    uint8_t type = XR_GC_GET_TYPE(obj);
+    uint8_t type = XR_OBJ_GET_TYPE(obj);
     if (type >= XGC_MAX_TYPES)
         return value;
 

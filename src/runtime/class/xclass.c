@@ -273,7 +273,7 @@ XrClass *xr_value_get_class(XrayIsolate *X, XrValue value) {
     else if (XR_IS_NULL(value))
         type = XR_TNULL;
     else if (XR_IS_PTR(value))
-        type = XR_GC_GET_TYPE((XrGCHeader *) XR_TO_PTR(value));
+        type = XR_OBJ_GET_TYPE((XrObjHeader *) XR_TO_PTR(value));
     else
         return NULL;
 
@@ -592,8 +592,8 @@ bool xr_instance_of(void *obj, const XrClass *target) {
         return false;
     }
 
-    XrGCHeader *gc = (XrGCHeader *) obj;
-    XrObjType type = XR_GC_GET_TYPE(gc);
+    XrObjHeader *gc = (XrObjHeader *) obj;
+    XrObjType type = XR_OBJ_GET_TYPE(gc);
 
     if (type != XR_TINSTANCE) {
         return false;

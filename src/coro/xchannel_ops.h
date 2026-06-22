@@ -49,7 +49,7 @@ struct XrayIsolate;
 static inline XrValue xr_chan_prepare_send_core(XrRuntimeCore *core, XrValue value) {
     if (!XR_IS_PTR(value))
         return value;
-    XrGCHeader *obj = XR_VALUE_GCPTR(value);
+    XrObjHeader *obj = XR_VALUE_GCPTR(value);
     if (obj && XR_OBJ_GET_FLAG(obj, XR_OBJ_TRANSIT))
         return value; /* already prepared (blocked-send retry path) */
     if (!xr_value_needs_copy(value))
@@ -98,7 +98,7 @@ static inline XrValue xr_chan_prepare_send(struct XrayIsolate *isolate, XrValue 
 static inline void xr_chan_abandon_send_core(XrRuntimeCore *core, XrValue prepared) {
     if (!XR_IS_PTR(prepared))
         return;
-    XrGCHeader *obj = XR_VALUE_GCPTR(prepared);
+    XrObjHeader *obj = XR_VALUE_GCPTR(prepared);
     if (!obj)
         return;
     if (XR_OBJ_GET_FLAG(obj, XR_OBJ_TRANSIT)) {
