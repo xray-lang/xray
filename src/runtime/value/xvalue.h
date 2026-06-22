@@ -345,8 +345,12 @@ XR_FUNC uint32_t xr_value_str_len(const XrValue *v);
 
 /* ========== Value Creation Functions ========== */
 
-XR_FUNC XrValue xr_null(void);
-XR_FUNC XrValue xr_bool(int b);
+static inline XrValue xr_null(void) {
+    return XR_NULL_VAL;
+}
+static inline XrValue xr_bool(int b) {
+    return b ? XR_TRUE_VAL : XR_FALSE_VAL;
+}
 XR_FUNC bool xr_value_is_truthy(XrValue value);
 static inline XrValue xr_int(xr_Integer i) {
     return XR_FROM_INT(i);
@@ -444,14 +448,26 @@ XR_FUNC bool xr_value_is_module(XrValue v);
 XR_FUNC struct XrModule *xr_value_to_module(XrValue v);
 
 struct XrCoroutine;
-XR_FUNC XrValue xr_value_from_coro(struct XrCoroutine *coro);
-XR_FUNC bool xr_value_is_coro(XrValue v);
-XR_FUNC struct XrCoroutine *xr_value_to_coro(XrValue v);
+static inline XrValue xr_value_from_coro(struct XrCoroutine *coro) {
+    return XR_FROM_PTR(coro);
+}
+static inline bool xr_value_is_coro(XrValue v) {
+    return XR_IS_PTR(v) && v.heap_type == XR_TCOROUTINE;
+}
+static inline struct XrCoroutine *xr_value_to_coro(XrValue v) {
+    return xr_value_is_coro(v) ? (struct XrCoroutine *) XR_TO_PTR(v) : NULL;
+}
 
 struct XrTask;
-XR_FUNC XrValue xr_value_from_task(struct XrTask *task);
-XR_FUNC bool xr_value_is_task(XrValue v);
-XR_FUNC struct XrTask *xr_value_to_task(XrValue v);
+static inline XrValue xr_value_from_task(struct XrTask *task) {
+    return XR_FROM_PTR(task);
+}
+static inline bool xr_value_is_task(XrValue v) {
+    return XR_IS_PTR(v) && v.heap_type == XR_TTASK;
+}
+static inline struct XrTask *xr_value_to_task(XrValue v) {
+    return xr_value_is_task(v) ? (struct XrTask *) XR_TO_PTR(v) : NULL;
+}
 
 /* DateTime: use xr_value_is_datetime / xr_value_get_datetime_body from
  * stdlib/datetime/datetime.h — they walk the class super-chain. */
