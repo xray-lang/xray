@@ -77,6 +77,9 @@ XR_FUNC XaSymbol *xa_in_param_symbol_for_expr(XaInferContext *ctx, AstNode *expr
 XR_FUNC bool xa_type_needs_borrow_escape_guard(XrType *type);
 XR_FUNC XaSymbol *xa_borrowed_param_root_symbol(XaInferContext *ctx, AstNode *expr);
 XR_FUNC bool xa_method_name_mutates_receiver(const char *name);
+XR_FUNC bool xa_type_contains_float(XrType *type);
+XR_FUNC void xa_report_float_modulo_error(XaInferContext *ctx, AstNode *node, XrType *left,
+                                          XrType *right);
 
 // Module graph exports lookup (defined in xanalyzer_visitor.c).
 // Resolves an import specifier to the target module's exports hashmap.

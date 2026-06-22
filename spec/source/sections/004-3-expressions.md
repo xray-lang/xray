@@ -108,7 +108,7 @@ BinOp ::= '+' | '-' | '*' | '/' | '%'
 - `int / 0` → 运行时抛 `XR_ERR_DIV_BY_ZERO` (E0420)。
 - `int % 0` → 运行时抛 `XR_ERR_MOD_BY_ZERO` (E0421)。
 - `float / 0.0`（及任何结果为 float 的除以零）→ 同样运行时抛 `XR_ERR_DIV_BY_ZERO` (E0420)；xray 算术**不产生** IEEE inf/NaN。
-- `%` 仅接受整数操作数；浮点求模（如 `5.0 % 2.0`）运行时抛 `XR_ERR_TYPE_MISMATCH` (E0404)。
+- `%` 仅接受整数操作数；静态类型包含 float 的求模（如 `5.0 % 2.0`）在分析期编译错误。运行时 `XR_ERR_TYPE_MISMATCH` (E0404) 仅作为动态兜底。
 - 整数溢出：见 §2.3.1。
 - 字符串 `+ string` 是 O(n) 拼接；密集拼接请用 `StringBuilder`。
 
@@ -649,7 +649,7 @@ BinOp ::= '+' | '-' | '*' | '/' | '%'
 - `int / 0` → throws `XR_ERR_DIV_BY_ZERO` (E0420) at runtime.
 - `int % 0` → throws `XR_ERR_MOD_BY_ZERO` (E0421) at runtime.
 - `float / 0.0` (and any float-result division by zero) → also throws `XR_ERR_DIV_BY_ZERO` (E0420) at runtime; xray arithmetic produces **no** IEEE inf/NaN.
-- `%` accepts integer operands only; float modulo (e.g. `5.0 % 2.0`) throws `XR_ERR_TYPE_MISMATCH` (E0404) at runtime.
+- `%` accepts integer operands only; modulo with a static type that contains float (e.g. `5.0 % 2.0`) is a compile-time analyzer error. Runtime `XR_ERR_TYPE_MISMATCH` (E0404) remains only as a dynamic fallback.
 - Integer overflow: see §2.3.1.
 - `string + string` is O(n) concatenation; for heavy concatenation use `StringBuilder`.
 
