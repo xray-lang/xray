@@ -14,6 +14,10 @@
 #   XRAY_AOT_ISOLATE_BIN_CACHE_DIR
 #                          persistent native binary cache for warm symbol-gate
 #                          reruns (default: build/.xray-test-cache/aot-isolate-bin/<toolchain-key>)
+#
+# The runtime-time-sleep case is also a hard size gate. It must stay below
+# 200000 bytes so the optimized timer/coroutine AOT path cannot silently regress
+# back toward a VM/toolchain-shaped binary.
 
 set -u
 
@@ -37,6 +41,7 @@ JOBS=1
 # symbol. Darwin nm prefixes C symbols with '_', so every alternative allows it.
 FORBIDDEN_SYMBOL_RE='(^|[^[:alnum:]_])_?(xray_isolate_|xr_vm_|xr_parse|xr_compile|xanalyzer_|xr_load_module_)'
 EAGER_SCRIPT_BUILTIN_SYMBOL_RE='(^|[^[:alnum:]_])_?(xr_string_intern_core|xr_string_value)([^[:alnum:]_]|$)'
+RUNTIME_TIME_SLEEP_MAX_BYTES=200000
 
 cleanup() {
     rm -rf "$WORK"
@@ -189,6 +194,18 @@ expect_output() {
     fi
 }
 
+check_binary_max_size() {
+    local actual="$1"
+    local max="$2"
+    local name="$3"
+
+    if [ "$actual" -le "$max" ]; then
+        record_pass "$name: size ${actual} <= ${max} bytes"
+    else
+        record_fail "$name: size ${actual} > ${max} bytes"
+    fi
+}
+
 check_no_forbidden_symbols() {
     local bin="$1"
     local slug="$2"
@@ -260,13 +277,19 @@ run_runtime_case() {
     local src="$3"
     local want_output="$4"
     local symbol_profile="${5:-}"
+    local max_size="${6:-}"
     local bin="$WORK/$slug"
     local log="$WORK/$slug.log"
+    local size
 
     echo ""
     echo "-- $name"
     if build_native "$src" "$bin" "$log"; then
-        echo "  size: $(binary_size "$bin") bytes"
+        size="$(binary_size "$bin")"
+        echo "  size: $size bytes"
+        if [ -n "$max_size" ]; then
+            check_binary_max_size "$size" "$max_size" "$name"
+        fi
         expect_log_not_contains "$log" "-lxray_core" "$name: does not link xray_core"
         check_no_forbidden_symbols "$bin" "$slug" "$name"
         if [ "$symbol_profile" = "no_eager_script_builtins" ]; then
@@ -310,7 +333,8 @@ run_case_by_id() {
                 "runtime-time-sleep" \
                 "$PROJECT_DIR/tests/aot/filetests/link/runtime_time.xr" \
                 "7" \
-                "no_eager_script_builtins"
+                "no_eager_script_builtins" \
+                "$RUNTIME_TIME_SLEEP_MAX_BYTES"
             ;;
         runtime_coro_minimal)
             run_runtime_case \
