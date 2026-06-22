@@ -287,11 +287,7 @@ XaAnalyzer *xa_analyzer_new(XrayIsolate *X) {
         return NULL;
     }
 
-    // Set pool on isolate so type_alloc can reach it via X
-    if (X)
-        X->current_type_pool = analyzer->type_pool;
-
-    // Legacy TLS path (will be removed once all callers pass X)
+    // Install the analyzer-owned pool for type allocation in this compiler pass.
     xr_type_set_current_pool(analyzer->type_pool, &analyzer->type_pool->next_type_id);
     xa_symbol_set_id_counter(&analyzer->next_symbol_id);
 
@@ -366,15 +362,12 @@ void xa_analyzer_free(XaAnalyzer *analyzer) {
 
     // Detach active pool owners before freeing the analyzer-owned pool.
     // Temporary analyzers may share an isolate with a longer-lived analyzer;
-    // leaving isolate->current_type_pool or TLS pointing here turns the next
-    // type allocation into a use-after-free.
+    // leaving TLS pointing here turns the next type allocation into a use-after-free.
     if (analyzer->type_pool) {
         XrCompilerSession *session = xr_compiler_session_current_for_isolate(analyzer->isolate);
         XrTypePool *fallback = xr_compiler_session_analyzer_pool(session);
         if (fallback == analyzer->type_pool)
             fallback = NULL;
-        if (analyzer->isolate && analyzer->isolate->current_type_pool == analyzer->type_pool)
-            analyzer->isolate->current_type_pool = fallback;
         if (xr_type_get_current_pool() == analyzer->type_pool)
             xr_type_set_current_pool(fallback, fallback ? &fallback->next_type_id : NULL);
     }

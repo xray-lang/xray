@@ -80,9 +80,8 @@ static XrProto *compile_ast_internal(XrayIsolate *isolate, AstNode *ast, const c
 
     xr_compiler_context_free(ctx);
 
-    // Restore type pool: compiler context freed its analyzer's pool, leaving
-    // current_type_pool as a dangling pointer. Fall back to the session-owned
-    // long-lived analyzer pool.
+    // Restore type pool: compiler context freed its analyzer-owned pool, so
+    // TLS must fall back to the session-owned long-lived analyzer pool.
     restore_session_type_pool(isolate);
 
     if (has_ast_scope)
@@ -135,9 +134,9 @@ XrProto *xr_compile_source_with_path(XrayIsolate *isolate, const char *source,
 
     xr_compiler_context_free(ctx);
 
-    // Restore type pool: compiler context freed its own pool, leaving
-    // current_type_pool as a dangling pointer. Fall back to the session-owned
-    // long-lived analyzer pool so post-compile callers can allocate safely.
+    // Restore type pool: compiler context freed its analyzer-owned pool, so
+    // TLS falls back to the session-owned long-lived analyzer pool for
+    // post-compile allocations.
     restore_session_type_pool(isolate);
 
     // Free AST (not needed after compilation)
