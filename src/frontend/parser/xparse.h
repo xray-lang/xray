@@ -72,7 +72,6 @@ struct Parser {
     Token previous;                       // Previous token
     int had_error;                        // Whether there was a syntax error
     int panic_mode;                       // Whether in panic mode (error recovery)
-    XrayIsolate *X;                       // VM host while AST factories still require it.
     XrCompilerSession *compiler_session;  // Active toolchain session for AST allocation.
     struct XrArena *arena;                // Optional arena for AST allocation (NULL = use malloc)
     XrTypeScope *type_scope;              // Parser-owned scope for type aliases / generic params

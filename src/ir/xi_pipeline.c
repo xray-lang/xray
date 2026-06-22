@@ -303,6 +303,7 @@ XR_FUNC XiPipelineResult xi_pipeline_compile_func(struct AstNode *func_node,
                                                   struct XrayIsolate *isolate,
                                                   const XiPipelineConfig *cfg) {
     XR_DCHECK(func_node != NULL, "xi_pipeline_compile_func: NULL func_node");
+    XrCompilerSession *session = xr_compiler_session_current_for_isolate(isolate);
 
     XiPipelineConfig default_cfg;
     if (!cfg) {
@@ -311,7 +312,7 @@ XR_FUNC XiPipelineResult xi_pipeline_compile_func(struct AstNode *func_node,
     }
 
     /* Canonicalize AST before lowering */
-    xr_canon_func(func_node, analyzer, isolate);
+    xr_canon_func(func_node, analyzer, session);
 
     XiFunc *ir = xi_lower_func(func_node, analyzer, isolate);
 
@@ -337,14 +338,14 @@ XR_FUNC XiPipelineResult xi_pipeline_compile_program(struct AstNode *program_nod
         cfg = &default_cfg;
     }
 
+    XrCompilerSession *session = xr_compiler_session_current_for_isolate(isolate);
     XrCompilerSessionScope canon_scope;
     bool has_canon_scope = program_node->type == AST_PROGRAM && program_node->as.program.arena &&
-                           xr_compiler_session_push_arena(
-                               xr_compiler_session_current_for_isolate(isolate),
-                               program_node->as.program.arena, cfg->source_file, &canon_scope);
+                           xr_compiler_session_push_arena(session, program_node->as.program.arena,
+                                                          cfg->source_file, &canon_scope);
 
     /* Canonicalize AST before lowering */
-    xr_canon_program(program_node, analyzer, isolate);
+    xr_canon_program(program_node, analyzer, session);
 
     if (has_canon_scope)
         xr_compiler_session_pop_arena(&canon_scope);

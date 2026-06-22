@@ -653,7 +653,7 @@ AstNode *xr_parse_expr_statement(Parser *parser) {
         return first_expr;
     }
 
-    return xr_ast_expr_stmt(parser->X, first_expr, parser->previous.line);
+    return xr_ast_expr_stmt(parser->compiler_session, first_expr, parser->previous.line);
 }
 
 // Parse print statement: print(expr1, expr2, ...)
@@ -661,12 +661,13 @@ AstNode *xr_parse_print_statement(Parser *parser) {
     int line = parser->previous.line;
 
     if (xr_parser_check(parser, TK_RPAREN)) {
-        return xr_ast_print_stmt(parser->X, NULL, 0, line);
+        return xr_ast_print_stmt(parser->compiler_session, NULL, 0, line);
     }
 
     int capacity = 8;
     int count = 0;
-    AstNode **exprs = (AstNode **) ast_alloc_array(parser->X, sizeof(AstNode *), (size_t) capacity);
+    AstNode **exprs = (AstNode **) ast_alloc_array(parser->compiler_session, sizeof(AstNode *),
+                                                   (size_t) capacity);
 
     exprs[count++] = xr_parse_expression(parser);
 
@@ -675,7 +676,7 @@ AstNode *xr_parse_print_statement(Parser *parser) {
         XR_PARSE_PUSH(parser, exprs, count, capacity, xr_parse_expression(parser));
     }
 
-    AstNode *node = xr_ast_print_stmt(parser->X, exprs, count, line);
+    AstNode *node = xr_ast_print_stmt(parser->compiler_session, exprs, count, line);
     return node;
 }
 
@@ -824,9 +825,6 @@ void xr_parser_init(Parser *parser, XrCompilerSession *session, const char *sour
 static void xr_parser_init_internal(Parser *parser, XrCompilerSession *session, const char *source,
                                     const char *source_file, XrArena *arena, bool collect_trivia) {
     XR_CHECK(session != NULL, "xr_parser_init: NULL compiler session");
-    XrayIsolate *X = xr_compiler_session_vm_host(session);
-    XR_CHECK(X != NULL, "xr_parser_init: compiler session has no VM host");
-    parser->X = X;
     parser->compiler_session = session;
     if (parser->compiler_session && arena) {
         xr_compiler_session_set_current_arena(parser->compiler_session, arena);
@@ -897,8 +895,6 @@ AstNode *xr_parse(XrCompilerSession *session, const char *source) {
 AstNode *xr_parse_with_source(XrCompilerSession *session, const char *source,
                               const char *source_file) {
     XR_DCHECK(session != NULL, "xr_parse_with_source: NULL compiler session");
-    XrayIsolate *X = xr_compiler_session_vm_host(session);
-    XR_DCHECK(X != NULL, "xr_parse_with_source: compiler session has no VM host");
     XR_DCHECK(source != NULL, "xr_parse_with_source: NULL source");
 
     XrCompilerSessionScope parse_scope;
@@ -910,7 +906,7 @@ AstNode *xr_parse_with_source(XrCompilerSession *session, const char *source,
 // Default max errors for normal compilation
 #define XR_PARSE_MAX_ERRORS 20
 
-    AstNode *program = xr_ast_program(X);
+    AstNode *program = xr_ast_program(session);
 
     xr_parser_advance(&parser);
 
@@ -932,7 +928,7 @@ AstNode *xr_parse_with_source(XrCompilerSession *session, const char *source,
 
         AstNode *decl = xr_parse_declaration(&parser);
         if (decl != NULL) {
-            xr_ast_program_add(X, program, decl);
+            xr_ast_program_add(session, program, decl);
         }
 
         // Smart semicolon handling
@@ -974,15 +970,13 @@ AstNode *xr_parse_with_source(XrCompilerSession *session, const char *source,
 AstNode *xr_parse_with_trivia(XrCompilerSession *session, const char *source,
                               const char *source_file) {
     XR_DCHECK(session != NULL, "xr_parse_with_trivia: NULL compiler session");
-    XrayIsolate *X = xr_compiler_session_vm_host(session);
-    XR_DCHECK(X != NULL, "xr_parse_with_trivia: compiler session has no VM host");
     XrCompilerSessionScope parse_scope;
     XrArena *arena = xr_parse_setup_arena(session, source_file, &parse_scope);
 
     Parser parser;
     xr_parser_init_internal(&parser, session, source, source_file, arena, true);
 
-    AstNode *program = xr_ast_program(X);
+    AstNode *program = xr_ast_program(session);
 
     xr_parser_advance(&parser);
 
@@ -1045,7 +1039,7 @@ AstNode *xr_parse_with_trivia(XrCompilerSession *session, const char *source,
             parser.previous.trailing_trivia = NULL;
         }
         if (decl != NULL) {
-            xr_ast_program_add(X, program, decl);
+            xr_ast_program_add(session, program, decl);
         }
     }
 
@@ -1078,8 +1072,6 @@ AstNode *xr_parse_with_trivia(XrCompilerSession *session, const char *source,
 AstNode *xr_parse_expression_string(XrCompilerSession *session, const char *source,
                                     const char *source_file) {
     XR_DCHECK(session != NULL, "xr_parse_expression_string: NULL compiler session");
-    XrayIsolate *X = xr_compiler_session_vm_host(session);
-    XR_DCHECK(X != NULL, "xr_parse_expression_string: compiler session has no VM host");
     XR_DCHECK(source != NULL, "xr_parse_expression_string: NULL source");
 
     XrCompilerSessionScope parse_scope;
@@ -1088,13 +1080,13 @@ AstNode *xr_parse_expression_string(XrCompilerSession *session, const char *sour
     Parser parser;
     xr_parser_init(&parser, session, source, source_file, arena);
 
-    AstNode *program = xr_ast_program(X);
+    AstNode *program = xr_ast_program(session);
 
     xr_parser_advance(&parser);
 
     AstNode *expr = xr_parse_expression(&parser);
     if (expr != NULL) {
-        xr_ast_program_add(X, program, expr);
+        xr_ast_program_add(session, program, expr);
     }
 
     xr_type_scope_free(parser.type_scope);
@@ -1116,7 +1108,7 @@ AstNode *xr_parse_expression_string(XrCompilerSession *session, const char *sour
 // Returns partial AST even if there are errors
 // Errors are reported via callback
 AstNode *xr_parse_recoverable(Parser *parser) {
-    if (!parser || !parser->X) {
+    if (!parser || !parser->compiler_session) {
         xr_log_warning("parser", "parse_recoverable: invalid parser");
         return NULL;
     }
@@ -1124,7 +1116,7 @@ AstNode *xr_parse_recoverable(Parser *parser) {
     if (parser->compiler_session && parser->arena)
         xr_compiler_session_set_current_arena(parser->compiler_session, parser->arena);
 
-    AstNode *program = xr_ast_program(parser->X);
+    AstNode *program = xr_ast_program(parser->compiler_session);
     if (!program) {
         xr_log_warning("parser", "parse_recoverable: failed to create program node");
         return NULL;
@@ -1153,7 +1145,7 @@ AstNode *xr_parse_recoverable(Parser *parser) {
 
         AstNode *decl = xr_parse_declaration(parser);
         if (decl != NULL) {
-            xr_ast_program_add(parser->X, program, decl);
+            xr_ast_program_add(parser->compiler_session, program, decl);
         }
 
         // Smart semicolon handling
@@ -1306,7 +1298,7 @@ AstNode *xr_parse_variable(Parser *parser) {
         }
     }
 
-    char *name = (char *) ast_alloc(parser->X, (size_t) parser->previous.length + 1);
+    char *name = (char *) ast_alloc(parser->compiler_session, (size_t) parser->previous.length + 1);
     memcpy(name, parser->previous.start, parser->previous.length);
     name[parser->previous.length] = '\0';
     int line = parser->previous.line;
@@ -1332,8 +1324,8 @@ AstNode *xr_parse_variable(Parser *parser) {
                         int old_field_capacity = field_capacity;
                         field_capacity = field_capacity == 0 ? 4 : field_capacity * 2;
 
-                        char **new_names = (char **) ast_alloc_array(parser->X, sizeof(char *),
-                                                                     (size_t) field_capacity);
+                        char **new_names = (char **) ast_alloc_array(
+                            parser->compiler_session, sizeof(char *), (size_t) field_capacity);
                         if (old_field_capacity > 0 && field_names) {
                             memcpy(new_names, field_names,
                                    sizeof(char *) * (size_t) old_field_capacity);
@@ -1341,7 +1333,7 @@ AstNode *xr_parse_variable(Parser *parser) {
                         field_names = new_names;
 
                         AstNode **new_values = (AstNode **) ast_alloc_array(
-                            parser->X, sizeof(AstNode *), (size_t) field_capacity);
+                            parser->compiler_session, sizeof(AstNode *), (size_t) field_capacity);
                         if (old_field_capacity > 0 && field_values) {
                             memcpy(new_values, field_values,
                                    sizeof(AstNode *) * (size_t) old_field_capacity);
@@ -1350,8 +1342,8 @@ AstNode *xr_parse_variable(Parser *parser) {
                     }
 
                     xr_parser_consume(parser, TK_NAME, "expected field name in struct literal");
-                    char *fname =
-                        (char *) ast_alloc(parser->X, (size_t) parser->previous.length + 1);
+                    char *fname = (char *) ast_alloc(parser->compiler_session,
+                                                     (size_t) parser->previous.length + 1);
                     memcpy(fname, parser->previous.start, parser->previous.length);
                     fname[parser->previous.length] = '\0';
                     field_names[field_count] = fname;
@@ -1364,12 +1356,12 @@ AstNode *xr_parse_variable(Parser *parser) {
 
             xr_parser_consume(parser, TK_RBRACE, "expected '}' to end struct literal");
 
-            AstNode *node = xr_ast_struct_literal(parser->X, name, field_names, field_values,
-                                                  field_count, line);
+            AstNode *node = xr_ast_struct_literal(parser->compiler_session, name, field_names,
+                                                  field_values, field_count, line);
             node->column = column;
             // Attach generic type arguments for monomorphization
-            XrType **ta =
-                (XrType **) ast_alloc_array(parser->X, sizeof(XrType *), (size_t) type_arg_count);
+            XrType **ta = (XrType **) ast_alloc_array(parser->compiler_session, sizeof(XrType *),
+                                                      (size_t) type_arg_count);
             memcpy(ta, type_args, sizeof(XrType *) * type_arg_count);
             node->as.struct_literal.type_args = ta;
             node->as.struct_literal.type_arg_count = type_arg_count;
@@ -1377,7 +1369,7 @@ AstNode *xr_parse_variable(Parser *parser) {
         }
 
         // Generic call detected: identifier<T1, T2>(args)
-        AstNode *callee = xr_ast_variable(parser->X, name, line);
+        AstNode *callee = xr_ast_variable(parser->compiler_session, name, line);
         callee->column = column;
 
         xr_parser_advance(parser);  // Consume (
@@ -1396,8 +1388,8 @@ AstNode *xr_parse_variable(Parser *parser) {
 
         xr_parser_consume(parser, TK_RPAREN, "expected ')' after argument list");
 
-        return xr_ast_call_expr_generic(parser->X, callee, arguments, arg_count, type_args,
-                                        type_arg_count, line);
+        return xr_ast_call_expr_generic(parser->compiler_session, callee, arguments, arg_count,
+                                        type_args, type_arg_count, line);
     }
 
     // Check for struct literal: Name{field: value, ...}
@@ -1448,8 +1440,8 @@ AstNode *xr_parse_variable(Parser *parser) {
                         int old_field_capacity = field_capacity;
                         field_capacity = field_capacity == 0 ? 4 : field_capacity * 2;
 
-                        char **new_names = (char **) ast_alloc_array(parser->X, sizeof(char *),
-                                                                     (size_t) field_capacity);
+                        char **new_names = (char **) ast_alloc_array(
+                            parser->compiler_session, sizeof(char *), (size_t) field_capacity);
                         if (old_field_capacity > 0 && field_names) {
                             memcpy(new_names, field_names,
                                    sizeof(char *) * (size_t) old_field_capacity);
@@ -1457,7 +1449,7 @@ AstNode *xr_parse_variable(Parser *parser) {
                         field_names = new_names;
 
                         AstNode **new_values = (AstNode **) ast_alloc_array(
-                            parser->X, sizeof(AstNode *), (size_t) field_capacity);
+                            parser->compiler_session, sizeof(AstNode *), (size_t) field_capacity);
                         if (old_field_capacity > 0 && field_values) {
                             memcpy(new_values, field_values,
                                    sizeof(AstNode *) * (size_t) old_field_capacity);
@@ -1466,8 +1458,8 @@ AstNode *xr_parse_variable(Parser *parser) {
                     }
 
                     xr_parser_consume(parser, TK_NAME, "expected field name in struct literal");
-                    char *fname =
-                        (char *) ast_alloc(parser->X, (size_t) parser->previous.length + 1);
+                    char *fname = (char *) ast_alloc(parser->compiler_session,
+                                                     (size_t) parser->previous.length + 1);
                     memcpy(fname, parser->previous.start, parser->previous.length);
                     fname[parser->previous.length] = '\0';
                     field_names[field_count] = fname;
@@ -1480,15 +1472,15 @@ AstNode *xr_parse_variable(Parser *parser) {
 
             xr_parser_consume(parser, TK_RBRACE, "expected '}' to end struct literal");
 
-            AstNode *node = xr_ast_struct_literal(parser->X, name, field_names, field_values,
-                                                  field_count, line);
+            AstNode *node = xr_ast_struct_literal(parser->compiler_session, name, field_names,
+                                                  field_values, field_count, line);
             node->column = column;
             return node;
         }
     }
 
     // Regular variable reference
-    AstNode *node = xr_ast_variable(parser->X, name, line);
+    AstNode *node = xr_ast_variable(parser->compiler_session, name, line);
     node->column = column;
     return node;
 }
@@ -1500,10 +1492,10 @@ AstNode *xr_parse_assignment(Parser *parser, AstNode *left) {
 
     // Variable assignment: x = 10
     if (left->type == AST_VARIABLE) {
-        char *name = ast_strdup(parser->X, left->as.variable.name);
+        char *name = ast_strdup(parser->compiler_session, left->as.variable.name);
         AstNode *value = xr_parse_expression(parser);
 
-        AstNode *node = xr_ast_assignment(parser->X, name, value, line);
+        AstNode *node = xr_ast_assignment(parser->compiler_session, name, value, line);
         node->column = column;  // Preserve column for rename
         return node;
     }
@@ -1513,7 +1505,7 @@ AstNode *xr_parse_assignment(Parser *parser, AstNode *left) {
         AstNode *index = left->as.index_get.index;
 
         AstNode *value = xr_parse_expression(parser);
-        AstNode *node = xr_ast_index_set(parser->X, array, index, value, line);
+        AstNode *node = xr_ast_index_set(parser->compiler_session, array, index, value, line);
 
         // Don't free left - arena handles it, or reused in node
         return node;
@@ -1521,41 +1513,44 @@ AstNode *xr_parse_assignment(Parser *parser, AstNode *left) {
     // Member assignment: obj.field = value
     else if (left->type == AST_MEMBER_ACCESS) {
         AstNode *object = left->as.member_access.object;
-        char *member = ast_strdup(parser->X, left->as.member_access.name);
+        char *member = ast_strdup(parser->compiler_session, left->as.member_access.name);
 
         AstNode *value = xr_parse_expression(parser);
-        AstNode *node = xr_ast_member_set(parser->X, object, member, value, line);
+        AstNode *node = xr_ast_member_set(parser->compiler_session, object, member, value, line);
 
         // Arena bulk-frees left/member; no individual free needed.
         return node;
     }
     // Destructure assignment: [a, b] = arr or (a, b) = pair or {x, y} = obj
     else if (left->type == AST_ARRAY_LITERAL) {
-        XrDestructurePattern *pattern = convert_array_literal_to_pattern(parser->X, left);
+        XrDestructurePattern *pattern =
+            convert_array_literal_to_pattern(parser->compiler_session, left);
         if (!pattern) {
             xr_parser_error(parser, "destructure target must be variable list, e.g. [a, b]");
             return NULL;
         }
 
         AstNode *value = xr_parse_expression(parser);
-        return xr_ast_destructure_assign(parser->X, pattern, value, line);
+        return xr_ast_destructure_assign(parser->compiler_session, pattern, value, line);
     } else if (left->type == AST_TUPLE_LITERAL) {
-        XrDestructurePattern *pattern = convert_tuple_literal_to_pattern(parser->X, left);
+        XrDestructurePattern *pattern =
+            convert_tuple_literal_to_pattern(parser->compiler_session, left);
         if (!pattern) {
             xr_parser_error(parser, "destructure target must be variable list, e.g. (a, b)");
             return NULL;
         }
         AstNode *value = xr_parse_expression(parser);
-        return xr_ast_destructure_assign(parser->X, pattern, value, line);
+        return xr_ast_destructure_assign(parser->compiler_session, pattern, value, line);
     } else if (left->type == AST_OBJECT_LITERAL) {
-        XrDestructurePattern *pattern = convert_object_literal_to_pattern(parser->X, left);
+        XrDestructurePattern *pattern =
+            convert_object_literal_to_pattern(parser->compiler_session, left);
         if (!pattern) {
             xr_parser_error(parser, "destructure target must be variable list, e.g. {x, y}");
             return NULL;
         }
 
         AstNode *value = xr_parse_expression(parser);
-        return xr_ast_destructure_assign(parser->X, pattern, value, line);
+        return xr_ast_destructure_assign(parser->compiler_session, pattern, value, line);
     }
     // Invalid assignment target
     else {
@@ -1572,19 +1567,19 @@ AstNode *xr_parse_compound_assignment(Parser *parser, AstNode *left) {
 
     if (left->type == AST_VARIABLE) {
         // Variable compound assignment: x += 10
-        char *var_name = ast_strdup(parser->X, left->as.variable.name);
+        char *var_name = ast_strdup(parser->compiler_session, left->as.variable.name);
         AstNode *right = xr_parse_expression(parser);
         AstNode *compound_assignment =
-            xr_ast_compound_assignment(parser->X, var_name, op_token, right, line);
+            xr_ast_compound_assignment(parser->compiler_session, var_name, op_token, right, line);
         return compound_assignment;
     } else if (left->type == AST_MEMBER_ACCESS) {
         // Member compound assignment: this.field += 10
         AstNode *object = left->as.member_access.object;
-        char *member_name = ast_strdup(parser->X, left->as.member_access.name);
+        char *member_name = ast_strdup(parser->compiler_session, left->as.member_access.name);
 
         AstNode *right = xr_parse_expression(parser);
         AstNode *compound_assignment = xr_ast_member_compound_assignment(
-            parser->X, object, member_name, op_token, right, line);
+            parser->compiler_session, object, member_name, op_token, right, line);
         return compound_assignment;
     } else {
         xr_parser_error(parser, "compound assignment only for variables or member access");
@@ -1648,12 +1643,12 @@ AstNode *xr_parse_postfix_inc_dec(Parser *parser, AstNode *left) {
         return NULL;
     }
 
-    char *var_name = ast_strdup(parser->X, left->as.variable.name);
+    char *var_name = ast_strdup(parser->compiler_session, left->as.variable.name);
     AstNode *node;
     if (op_token == TK_INC) {
-        node = xr_ast_inc(parser->X, var_name, line);
+        node = xr_ast_inc(parser->compiler_session, var_name, line);
     } else {
-        node = xr_ast_dec(parser->X, var_name, line);
+        node = xr_ast_dec(parser->compiler_session, var_name, line);
     }
 
     return node;
@@ -1662,7 +1657,7 @@ AstNode *xr_parse_postfix_inc_dec(Parser *parser, AstNode *left) {
 // Parse single variable declaration: let x = 10 or const PI = 3.14
 AstNode *xr_parse_single_var_declaration(Parser *parser, int is_const) {
     xr_parser_consume(parser, TK_NAME, "expected variable name");
-    char *name = (char *) ast_alloc(parser->X, (size_t) parser->previous.length + 1);
+    char *name = (char *) ast_alloc(parser->compiler_session, (size_t) parser->previous.length + 1);
     memcpy(name, parser->previous.start, parser->previous.length);
     name[parser->previous.length] = '\0';
     int line = parser->previous.line;
@@ -1684,7 +1679,7 @@ AstNode *xr_parse_single_var_declaration(Parser *parser, int is_const) {
         return NULL;
     }
     // let variables can be uninitialized
-    AstNode *node = xr_ast_var_decl(parser->X, name, initializer, is_const, line);
+    AstNode *node = xr_ast_var_decl(parser->compiler_session, name, initializer, is_const, line);
     node->column = column;
     // End span extends to the initializer when present; otherwise just the name.
     if (initializer && initializer->end_line > 0) {
@@ -1701,7 +1696,7 @@ AstNode *xr_parse_single_var_declaration(Parser *parser, int is_const) {
 // Parse block: { ... }
 AstNode *xr_parse_block(Parser *parser) {
     int line = parser->previous.line;
-    AstNode *block = xr_ast_block(parser->X, line);
+    AstNode *block = xr_ast_block(parser->compiler_session, line);
 
     while (!xr_parser_check(parser, TK_RBRACE) && !xr_parser_check(parser, TK_EOF)) {
         // Error recovery to avoid infinite loop
@@ -1755,7 +1750,7 @@ AstNode *xr_parse_block(Parser *parser) {
                 decl->trailing_comments = parser->previous.trailing_trivia;
                 parser->previous.trailing_trivia = NULL;
             }
-            xr_ast_block_add(parser->X, block, decl);
+            xr_ast_block_add(parser->compiler_session, block, decl);
         }
 
         if (parser->had_error)

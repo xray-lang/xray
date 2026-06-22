@@ -20,25 +20,26 @@
 /* ========== Internal Helpers ========== */
 
 /* Allocate a zeroed XrTypeRef from the parse arena. */
-static XrTypeRef *tref_alloc(struct XrayIsolate *X) {
-    XR_DCHECK(X != NULL, "tref_alloc: NULL isolate");
-    XrTypeRef *t = (XrTypeRef *) ast_alloc(X, sizeof(XrTypeRef));
+static XrTypeRef *tref_alloc(struct XrCompilerSession *session) {
+    XR_DCHECK(session != NULL, "tref_alloc: NULL isolate");
+    XrTypeRef *t = (XrTypeRef *) ast_alloc(session, sizeof(XrTypeRef));
     memset(t, 0, sizeof(XrTypeRef));
     return t;
 }
 
 /* Clone a NUL-terminated string into the parse arena. */
-static const char *tref_strdup(struct XrayIsolate *X, const char *s) {
+static const char *tref_strdup(struct XrCompilerSession *session, const char *s) {
     if (!s)
         return NULL;
-    return ast_strdup(X, s);
+    return ast_strdup(session, s);
 }
 
 /* Allocate a children array in the arena and copy |src| into it. */
-static XrTypeRef **tref_copy_children(struct XrayIsolate *X, XrTypeRef **src, int count) {
+static XrTypeRef **tref_copy_children(struct XrCompilerSession *session, XrTypeRef **src,
+                                      int count) {
     if (count <= 0 || !src)
         return NULL;
-    XrTypeRef **arr = (XrTypeRef **) ast_alloc_array(X, sizeof(XrTypeRef *), (size_t) count);
+    XrTypeRef **arr = (XrTypeRef **) ast_alloc_array(session, sizeof(XrTypeRef *), (size_t) count);
     for (int i = 0; i < count; i++)
         arr[i] = src[i];
     return arr;
@@ -46,59 +47,59 @@ static XrTypeRef **tref_copy_children(struct XrayIsolate *X, XrTypeRef **src, in
 
 /* ========== Primitive Constructors ========== */
 
-XR_FUNC XrTypeRef *xr_tref_int(struct XrayIsolate *X) {
-    XrTypeRef *t = tref_alloc(X);
+XR_FUNC XrTypeRef *xr_tref_int(struct XrCompilerSession *session) {
+    XrTypeRef *t = tref_alloc(session);
     t->kind = XR_TREF_INT;
     return t;
 }
 
-XR_FUNC XrTypeRef *xr_tref_float(struct XrayIsolate *X) {
-    XrTypeRef *t = tref_alloc(X);
+XR_FUNC XrTypeRef *xr_tref_float(struct XrCompilerSession *session) {
+    XrTypeRef *t = tref_alloc(session);
     t->kind = XR_TREF_FLOAT;
     return t;
 }
 
-XR_FUNC XrTypeRef *xr_tref_string(struct XrayIsolate *X) {
-    XrTypeRef *t = tref_alloc(X);
+XR_FUNC XrTypeRef *xr_tref_string(struct XrCompilerSession *session) {
+    XrTypeRef *t = tref_alloc(session);
     t->kind = XR_TREF_STRING;
     return t;
 }
 
-XR_FUNC XrTypeRef *xr_tref_bool(struct XrayIsolate *X) {
-    XrTypeRef *t = tref_alloc(X);
+XR_FUNC XrTypeRef *xr_tref_bool(struct XrCompilerSession *session) {
+    XrTypeRef *t = tref_alloc(session);
     t->kind = XR_TREF_BOOL;
     return t;
 }
 
-XR_FUNC XrTypeRef *xr_tref_unit(struct XrayIsolate *X) {
-    XrTypeRef *t = tref_alloc(X);
+XR_FUNC XrTypeRef *xr_tref_unit(struct XrCompilerSession *session) {
+    XrTypeRef *t = tref_alloc(session);
     t->kind = XR_TREF_UNIT;
     return t;
 }
 
-XR_FUNC XrTypeRef *xr_tref_null(struct XrayIsolate *X) {
-    XrTypeRef *t = tref_alloc(X);
+XR_FUNC XrTypeRef *xr_tref_null(struct XrCompilerSession *session) {
+    XrTypeRef *t = tref_alloc(session);
     t->kind = XR_TREF_NULL;
     return t;
 }
 
-XR_FUNC XrTypeRef *xr_tref_unknown(struct XrayIsolate *X) {
-    XrTypeRef *t = tref_alloc(X);
+XR_FUNC XrTypeRef *xr_tref_unknown(struct XrCompilerSession *session) {
+    XrTypeRef *t = tref_alloc(session);
     t->kind = XR_TREF_UNKNOWN;
     return t;
 }
 
 /* ========== Native-Width Scalars ========== */
 
-XR_FUNC XrTypeRef *xr_tref_int_width(struct XrayIsolate *X, uint8_t nw) {
-    XrTypeRef *t = tref_alloc(X);
+XR_FUNC XrTypeRef *xr_tref_int_width(struct XrCompilerSession *session, uint8_t nw) {
+    XrTypeRef *t = tref_alloc(session);
     t->kind = XR_TREF_INT_WIDTH;
     t->native_width = nw;
     return t;
 }
 
-XR_FUNC XrTypeRef *xr_tref_float_width(struct XrayIsolate *X, uint8_t nw) {
-    XrTypeRef *t = tref_alloc(X);
+XR_FUNC XrTypeRef *xr_tref_float_width(struct XrCompilerSession *session, uint8_t nw) {
+    XrTypeRef *t = tref_alloc(session);
     t->kind = XR_TREF_FLOAT_WIDTH;
     t->native_width = nw;
     return t;
@@ -106,82 +107,84 @@ XR_FUNC XrTypeRef *xr_tref_float_width(struct XrayIsolate *X, uint8_t nw) {
 
 /* ========== Composite Constructors ========== */
 
-XR_FUNC XrTypeRef *xr_tref_named(struct XrayIsolate *X, const char *name) {
+XR_FUNC XrTypeRef *xr_tref_named(struct XrCompilerSession *session, const char *name) {
     XR_DCHECK(name != NULL, "xr_tref_named: NULL name");
-    XrTypeRef *t = tref_alloc(X);
+    XrTypeRef *t = tref_alloc(session);
     t->kind = XR_TREF_NAMED;
-    t->name = tref_strdup(X, name);
+    t->name = tref_strdup(session, name);
     return t;
 }
 
-XR_FUNC XrTypeRef *xr_tref_generic(struct XrayIsolate *X, const char *name, XrTypeRef **args,
-                                   int nargs) {
+XR_FUNC XrTypeRef *xr_tref_generic(struct XrCompilerSession *session, const char *name,
+                                   XrTypeRef **args, int nargs) {
     XR_DCHECK(name != NULL, "xr_tref_generic: NULL name");
     XR_DCHECK(nargs > 0, "xr_tref_generic: zero args — use xr_tref_named");
-    XrTypeRef *t = tref_alloc(X);
+    XrTypeRef *t = tref_alloc(session);
     t->kind = XR_TREF_GENERIC;
-    t->name = tref_strdup(X, name);
+    t->name = tref_strdup(session, name);
     t->nchildren = (uint8_t) nargs;
-    t->children = tref_copy_children(X, args, nargs);
+    t->children = tref_copy_children(session, args, nargs);
     return t;
 }
 
-XR_FUNC XrTypeRef *xr_tref_optional(struct XrayIsolate *X, XrTypeRef *inner) {
+XR_FUNC XrTypeRef *xr_tref_optional(struct XrCompilerSession *session, XrTypeRef *inner) {
     XR_DCHECK(inner != NULL, "xr_tref_optional: NULL inner");
-    XrTypeRef *t = tref_alloc(X);
+    XrTypeRef *t = tref_alloc(session);
     t->kind = XR_TREF_OPTIONAL;
     t->nchildren = 1;
-    t->children = (XrTypeRef **) ast_alloc_array(X, sizeof(XrTypeRef *), 1);
+    t->children = (XrTypeRef **) ast_alloc_array(session, sizeof(XrTypeRef *), 1);
     t->children[0] = inner;
     return t;
 }
 
-XR_FUNC XrTypeRef *xr_tref_union(struct XrayIsolate *X, XrTypeRef **members, int count) {
+XR_FUNC XrTypeRef *xr_tref_union(struct XrCompilerSession *session, XrTypeRef **members,
+                                 int count) {
     XR_DCHECK(count >= 2, "xr_tref_union: need at least 2 members");
-    XrTypeRef *t = tref_alloc(X);
+    XrTypeRef *t = tref_alloc(session);
     t->kind = XR_TREF_UNION;
     t->nchildren = (uint8_t) count;
-    t->children = tref_copy_children(X, members, count);
+    t->children = tref_copy_children(session, members, count);
     return t;
 }
 
-XR_FUNC XrTypeRef *xr_tref_function(struct XrayIsolate *X, XrTypeRef **params, int nparam,
-                                    XrTypeRef *ret) {
+XR_FUNC XrTypeRef *xr_tref_function(struct XrCompilerSession *session, XrTypeRef **params,
+                                    int nparam, XrTypeRef *ret) {
     XR_DCHECK(ret != NULL, "xr_tref_function: NULL return type");
     int total = nparam + 1; /* params + return type at the end */
-    XrTypeRef *t = tref_alloc(X);
+    XrTypeRef *t = tref_alloc(session);
     t->kind = XR_TREF_FUNCTION;
     t->nchildren = (uint8_t) total;
-    t->children = (XrTypeRef **) ast_alloc_array(X, sizeof(XrTypeRef *), (size_t) total);
+    t->children = (XrTypeRef **) ast_alloc_array(session, sizeof(XrTypeRef *), (size_t) total);
     for (int i = 0; i < nparam; i++)
         t->children[i] = params[i];
     t->children[nparam] = ret;
     return t;
 }
 
-XR_FUNC XrTypeRef *xr_tref_tuple(struct XrayIsolate *X, XrTypeRef **elems, int count) {
+XR_FUNC XrTypeRef *xr_tref_tuple(struct XrCompilerSession *session, XrTypeRef **elems, int count) {
     XR_DCHECK(count > 0, "xr_tref_tuple: empty tuple");
-    XrTypeRef *t = tref_alloc(X);
+    XrTypeRef *t = tref_alloc(session);
     t->kind = XR_TREF_TUPLE;
     t->nchildren = (uint8_t) count;
-    t->children = tref_copy_children(X, elems, count);
+    t->children = tref_copy_children(session, elems, count);
     return t;
 }
 
-XR_FUNC XrTypeRef *xr_tref_object(struct XrayIsolate *X, const char **field_names_src,
+XR_FUNC XrTypeRef *xr_tref_object(struct XrCompilerSession *session, const char **field_names_src,
                                   XrTypeRef **field_types, const bool *field_readonly, int count,
                                   bool extensible) {
-    XrTypeRef *t = tref_alloc(X);
+    XrTypeRef *t = tref_alloc(session);
     t->kind = XR_TREF_OBJECT;
     t->nchildren = (uint8_t) count;
     t->extensible = extensible;
     if (count > 0) {
-        t->children = tref_copy_children(X, field_types, count);
-        t->field_names = (const char **) ast_alloc_array(X, sizeof(const char *), (size_t) count);
+        t->children = tref_copy_children(session, field_types, count);
+        t->field_names =
+            (const char **) ast_alloc_array(session, sizeof(const char *), (size_t) count);
         for (int i = 0; i < count; i++)
-            t->field_names[i] = tref_strdup(X, field_names_src[i]);
+            t->field_names[i] = tref_strdup(session, field_names_src[i]);
         if (field_readonly) {
-            t->field_readonly = (bool *) ast_alloc_array(X, sizeof(bool), (size_t) count);
+            t->field_readonly = (bool *) ast_alloc_array(session, sizeof(bool), (size_t) count);
             for (int i = 0; i < count; i++)
                 t->field_readonly[i] = field_readonly[i];
         }
@@ -189,23 +192,24 @@ XR_FUNC XrTypeRef *xr_tref_object(struct XrayIsolate *X, const char **field_name
     return t;
 }
 
-XR_FUNC XrTypeRef *xr_tref_fixed_array(struct XrayIsolate *X, XrTypeRef *elem, int length) {
+XR_FUNC XrTypeRef *xr_tref_fixed_array(struct XrCompilerSession *session, XrTypeRef *elem,
+                                       int length) {
     XR_DCHECK(elem != NULL, "xr_tref_fixed_array: NULL element type");
     XR_DCHECK(length > 0, "xr_tref_fixed_array: non-positive length");
-    XrTypeRef *t = tref_alloc(X);
+    XrTypeRef *t = tref_alloc(session);
     t->kind = XR_TREF_FIXED_ARRAY;
     t->fixed_length = (int16_t) length;
     t->nchildren = 1;
-    t->children = (XrTypeRef **) ast_alloc_array(X, sizeof(XrTypeRef *), 1);
+    t->children = (XrTypeRef **) ast_alloc_array(session, sizeof(XrTypeRef *), 1);
     t->children[0] = elem;
     return t;
 }
 
-XR_FUNC XrTypeRef *xr_tref_type_param(struct XrayIsolate *X, const char *name) {
+XR_FUNC XrTypeRef *xr_tref_type_param(struct XrCompilerSession *session, const char *name) {
     XR_DCHECK(name != NULL, "xr_tref_type_param: NULL name");
-    XrTypeRef *t = tref_alloc(X);
+    XrTypeRef *t = tref_alloc(session);
     t->kind = XR_TREF_TYPE_PARAM;
-    t->name = ast_strdup(X, name);
+    t->name = ast_strdup(session, name);
     return t;
 }
 
@@ -358,15 +362,15 @@ static void tref_to_str_impl(const XrTypeRef *t, char *buf, int *pos, int cap) {
     }
 }
 
-XR_FUNC const char *xr_tref_to_string(struct XrayIsolate *X, const XrTypeRef *t) {
-    XR_DCHECK(X != NULL, "xr_tref_to_string: NULL isolate");
+XR_FUNC const char *xr_tref_to_string(struct XrCompilerSession *session, const XrTypeRef *t) {
+    XR_DCHECK(session != NULL, "xr_tref_to_string: NULL isolate");
     if (!t)
         return "?";
     char buf[TREF_STR_BUF];
     int pos = 0;
     tref_to_str_impl(t, buf, &pos, TREF_STR_BUF);
     buf[pos] = '\0';
-    return ast_strdup(X, buf);
+    return ast_strdup(session, buf);
 }
 
 XR_FUNC int xr_tref_to_string_buf(const XrTypeRef *t, char *buf, int cap) {

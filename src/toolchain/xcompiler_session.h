@@ -24,9 +24,7 @@ struct XaAnalyzer;
 typedef struct XrCompilerSession XrCompilerSession;
 
 typedef struct XrCompilerSessionScope {
-    XrayIsolate *vm_host;
     XrCompilerSession *session;
-    XrCompilerSession *saved_session;
     struct XrArena *saved_arena;
     struct XrCompileStringPool *saved_pool;
     bool active;

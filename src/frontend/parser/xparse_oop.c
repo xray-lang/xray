@@ -33,7 +33,7 @@ static char *token_to_string(Parser *parser, Token *token) {
     if (!token || token->length == 0)
         return NULL;
 
-    char *str = (char *) ast_alloc(parser->X, (size_t) token->length + 1);
+    char *str = (char *) ast_alloc(parser->compiler_session, (size_t) token->length + 1);
     memcpy(str, token->start, token->length);
     str[token->length] = '\0';
     return str;
@@ -87,7 +87,8 @@ AstNode *xr_parse_class_declaration(Parser *parser) {
                 constraints = xr_parse_constraint_list(parser, &constraint_count);
             }
 
-            XrGenericParam *gp = (XrGenericParam *) ast_alloc(parser->X, sizeof(XrGenericParam));
+            XrGenericParam *gp =
+                (XrGenericParam *) ast_alloc(parser->compiler_session, sizeof(XrGenericParam));
             gp->name = param_name;
             gp->constraints = constraints;
             gp->constraint_count = constraint_count;
@@ -103,7 +104,8 @@ AstNode *xr_parse_class_declaration(Parser *parser) {
     if (type_param_count > 0) {
         XrTypeScope *generic_scope = xr_type_scope_new(parser->type_scope);
         for (int i = 0; i < type_param_count; i++) {
-            XrTypeRef *type_param = xr_tref_type_param(parser->X, type_params[i]->name);
+            XrTypeRef *type_param =
+                xr_tref_type_param(parser->compiler_session, type_params[i]->name);
             xr_type_scope_define(generic_scope, type_params[i]->name, type_param);
         }
         parser->type_scope = generic_scope;
@@ -261,8 +263,8 @@ AstNode *xr_parse_class_declaration(Parser *parser) {
     }
 
     // Create class declaration AST node
-    AstNode *class_node = xr_ast_class_decl(parser->X, class_name, super_name, fields, field_count,
-                                            methods, method_count, line);
+    AstNode *class_node = xr_ast_class_decl(parser->compiler_session, class_name, super_name,
+                                            fields, field_count, methods, method_count, line);
     class_node->column = name_column;
     class_node->end_line = end_line;
     class_node->end_column = end_column;
@@ -321,7 +323,8 @@ AstNode *xr_parse_struct_declaration(Parser *parser) {
                 constraints = xr_parse_constraint_list(parser, &constraint_count);
             }
 
-            XrGenericParam *gp = (XrGenericParam *) ast_alloc(parser->X, sizeof(XrGenericParam));
+            XrGenericParam *gp =
+                (XrGenericParam *) ast_alloc(parser->compiler_session, sizeof(XrGenericParam));
             gp->name = param_name;
             gp->constraints = constraints;
             gp->constraint_count = constraint_count;
@@ -337,7 +340,7 @@ AstNode *xr_parse_struct_declaration(Parser *parser) {
     if (type_param_count > 0) {
         XrTypeScope *generic_scope = xr_type_scope_new(parser->type_scope);
         for (int i = 0; i < type_param_count; i++) {
-            XrTypeRef *tp = xr_tref_type_param(parser->X, type_params[i]->name);
+            XrTypeRef *tp = xr_tref_type_param(parser->compiler_session, type_params[i]->name);
             xr_type_scope_define(generic_scope, type_params[i]->name, tp);
         }
         parser->type_scope = generic_scope;
@@ -465,8 +468,8 @@ AstNode *xr_parse_struct_declaration(Parser *parser) {
     }
 
     // Create struct declaration AST node
-    AstNode *struct_node = xr_ast_struct_decl(parser->X, struct_name, fields, field_count, methods,
-                                              method_count, line);
+    AstNode *struct_node = xr_ast_struct_decl(parser->compiler_session, struct_name, fields,
+                                              field_count, methods, method_count, line);
     struct_node->column = name_column;
     struct_node->end_line = struct_end_line;
     struct_node->end_column = struct_end_column;
@@ -545,7 +548,7 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
     if (xr_parser_match(parser, TK_CONSTRUCTOR)) {
         // 'constructor' keyword
         is_constructor = true;
-        name = (char *) ast_alloc(parser->X, sizeof(XR_KEYWORD_CONSTRUCTOR));
+        name = (char *) ast_alloc(parser->compiler_session, sizeof(XR_KEYWORD_CONSTRUCTOR));
         strcpy(name, XR_KEYWORD_CONSTRUCTOR);
         name_line = parser->previous.line;
         name_column = parser->previous.column;
@@ -601,8 +604,8 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
 
         // Field declaration doesn't need semicolon (Xray doesn't use semicolons)
 
-        AstNode *field = xr_ast_field_decl(parser->X, name, field_type, is_private, is_static,
-                                           initializer, name_line);
+        AstNode *field = xr_ast_field_decl(parser->compiler_session, name, field_type, is_private,
+                                           is_static, initializer, name_line);
         if (field) {
             field->as.field_decl.is_final = is_final;
             field->column = name_column;
@@ -680,23 +683,23 @@ AstNode *xr_parse_method_declaration(Parser *parser, const char *name, int name_
                 int old_capacity = param_capacity;
                 param_capacity = param_capacity == 0 ? 4 : param_capacity * 2;
 
-                char **_new_parameters =
-                    (char **) ast_alloc_array(parser->X, sizeof(char *), (size_t) param_capacity);
+                char **_new_parameters = (char **) ast_alloc_array(
+                    parser->compiler_session, sizeof(char *), (size_t) param_capacity);
                 if (old_capacity > 0 && parameters) {
                     memcpy(_new_parameters, parameters, sizeof(char *) * (size_t) old_capacity);
                 }
                 parameters = _new_parameters;
 
                 XrTypeRef **_new_param_types = (XrTypeRef **) ast_alloc_array(
-                    parser->X, sizeof(XrTypeRef *), (size_t) param_capacity);
+                    parser->compiler_session, sizeof(XrTypeRef *), (size_t) param_capacity);
                 if (old_capacity > 0 && param_types) {
                     memcpy(_new_param_types, param_types,
                            sizeof(XrTypeRef *) * (size_t) old_capacity);
                 }
                 param_types = _new_param_types;
 
-                uint8_t *_new_modes = (uint8_t *) ast_alloc_array(parser->X, sizeof(uint8_t),
-                                                                  (size_t) param_capacity);
+                uint8_t *_new_modes = (uint8_t *) ast_alloc_array(
+                    parser->compiler_session, sizeof(uint8_t), (size_t) param_capacity);
                 if (old_capacity > 0 && param_passing_modes) {
                     memcpy(_new_modes, param_passing_modes,
                            sizeof(uint8_t) * (size_t) old_capacity);
@@ -750,8 +753,8 @@ AstNode *xr_parse_method_declaration(Parser *parser, const char *name, int name_
 
     // Create method declaration node
     AstNode *method_node = xr_ast_method_decl(
-        parser->X, name, parameters, param_types, param_count, return_type, body, is_constructor,
-        is_static, is_private, false, false, line);  // is_getter, is_setter
+        parser->compiler_session, name, parameters, param_types, param_count, return_type, body,
+        is_constructor, is_static, is_private, false, false, line);  // is_getter, is_setter
 
     method_node->column = name_column;
     if (body && body->end_line > 0) {
@@ -820,7 +823,7 @@ AstNode *xr_parse_new_expression(Parser *parser) {
                 class_name = token_to_string(parser, &parser->previous);
             } else {
                 xr_parser_error_expected_name(parser, "expected class name");
-                class_name = ast_strdup(parser->X, TYPE_NAME_NULL);
+                class_name = ast_strdup(parser->compiler_session, TYPE_NAME_NULL);
             }
         } else {
             // Just a normal class name
@@ -829,7 +832,7 @@ AstNode *xr_parse_new_expression(Parser *parser) {
     } else {
         // Support other built-in type names as new target
         xr_parser_error_expected_name(parser, "expected class name or type name");
-        class_name = ast_strdup(parser->X, TYPE_NAME_NULL);
+        class_name = ast_strdup(parser->compiler_session, TYPE_NAME_NULL);
     }
 
     // Parse optional generic type parameters: new Box<int>(...)
@@ -885,8 +888,8 @@ AstNode *xr_parse_new_expression(Parser *parser) {
     // Create new expression node. xr_ast_new_expr takes ownership of
     // class_name / arguments / type_args, but deep-copies module_name,
     // so release our copy of module_name here.
-    AstNode *node = xr_ast_new_expr(parser->X, module_name, class_name, arguments, arg_count,
-                                    type_args, type_arg_count, line);
+    AstNode *node = xr_ast_new_expr(parser->compiler_session, module_name, class_name, arguments,
+                                    arg_count, type_args, type_arg_count, line);
     return node;
 }
 
@@ -900,7 +903,7 @@ AstNode *xr_parse_this_expression(Parser *parser) {
     // 'this' keyword already consumed
 
     // Create this expression node
-    return xr_ast_this_expr(parser->X, line);
+    return xr_ast_this_expr(parser->compiler_session, line);
 }
 
 /* ========== Super Expression Parsing ========== */
@@ -946,7 +949,7 @@ AstNode *xr_parse_super_expression(Parser *parser) {
     xr_parser_consume(parser, TK_RPAREN, "expected ')' to end argument list");
 
     // Create super call node
-    return xr_ast_super_call(parser->X, method_name, arguments, arg_count, line);
+    return xr_ast_super_call(parser->compiler_session, method_name, arguments, arg_count, line);
 }
 
 /* ========== Operator Method Parsing ========== */
@@ -974,71 +977,71 @@ AstNode *xr_parse_operator_method(Parser *parser, bool is_private, bool is_stati
     switch (op_token) {
         // Arithmetic operators
         case TK_PLUS:
-            name = ast_strdup(parser->X, "+");
+            name = ast_strdup(parser->compiler_session, "+");
             op_type_val = OPTYPE_ADD;
             break;
         case TK_MINUS:
-            name = ast_strdup(parser->X, "-");
+            name = ast_strdup(parser->compiler_session, "-");
             op_type_val = OPTYPE_SUB;  // default to binary, adjusted later based on param count
             break;
         case TK_STAR:
-            name = ast_strdup(parser->X, "*");
+            name = ast_strdup(parser->compiler_session, "*");
             op_type_val = OPTYPE_MUL;
             break;
         case TK_SLASH:
-            name = ast_strdup(parser->X, "/");
+            name = ast_strdup(parser->compiler_session, "/");
             op_type_val = OPTYPE_DIV;
             break;
         case TK_PERCENT:
-            name = ast_strdup(parser->X, "%");
+            name = ast_strdup(parser->compiler_session, "%");
             op_type_val = OPTYPE_MOD;
             break;
         // Bitwise operators
         case TK_AMP:
-            name = ast_strdup(parser->X, "&");
+            name = ast_strdup(parser->compiler_session, "&");
             op_type_val = OPTYPE_BAND;
             break;
         case TK_PIPE:
-            name = ast_strdup(parser->X, "|");
+            name = ast_strdup(parser->compiler_session, "|");
             op_type_val = OPTYPE_BOR;
             break;
         case TK_CARET:
-            name = ast_strdup(parser->X, "^");
+            name = ast_strdup(parser->compiler_session, "^");
             op_type_val = OPTYPE_BXOR;
             break;
         case TK_TILDE:
-            name = ast_strdup(parser->X, "~");
+            name = ast_strdup(parser->compiler_session, "~");
             op_type_val = OPTYPE_UNARY;  // unary operator
             expected_params = 0;         // unary operator needs no extra params
             break;
         case TK_NOT:
-            name = ast_strdup(parser->X, "!");
+            name = ast_strdup(parser->compiler_session, "!");
             op_type_val = OPTYPE_UNARY;  // unary operator
             expected_params = 0;         // unary operator needs no extra params
             break;
         // Comparison operators
         case TK_EQ:
-            name = ast_strdup(parser->X, "==");
+            name = ast_strdup(parser->compiler_session, "==");
             op_type_val = OPTYPE_EQ;
             break;
         case TK_NE:
-            name = ast_strdup(parser->X, "!=");
+            name = ast_strdup(parser->compiler_session, "!=");
             op_type_val = OPTYPE_NE;
             break;
         case TK_LT:
-            name = ast_strdup(parser->X, "<");
+            name = ast_strdup(parser->compiler_session, "<");
             op_type_val = OPTYPE_LT;
             break;
         case TK_LE:
-            name = ast_strdup(parser->X, "<=");
+            name = ast_strdup(parser->compiler_session, "<=");
             op_type_val = OPTYPE_LE;
             break;
         case TK_GT:
-            name = ast_strdup(parser->X, ">");
+            name = ast_strdup(parser->compiler_session, ">");
             op_type_val = OPTYPE_GT;
             break;
         case TK_GE:
-            name = ast_strdup(parser->X, ">=");
+            name = ast_strdup(parser->compiler_session, ">=");
             op_type_val = OPTYPE_GE;
             break;
 
@@ -1051,11 +1054,11 @@ AstNode *xr_parse_operator_method(Parser *parser, bool is_private, bool is_stati
             }
             // Check for = sign (operator []=)
             if (xr_parser_match(parser, TK_ASSIGN)) {
-                name = ast_strdup(parser->X, "[]=");
+                name = ast_strdup(parser->compiler_session, "[]=");
                 expected_params = 2;  // []= needs 2 params: index + value
                 op_type_val = OPTYPE_SUBSCRIPT_SET;
             } else {
-                name = ast_strdup(parser->X, "[]");
+                name = ast_strdup(parser->compiler_session, "[]");
                 expected_params = 1;  // [] needs 1 param: index
                 op_type_val = OPTYPE_SUBSCRIPT;
             }
@@ -1063,63 +1066,63 @@ AstNode *xr_parse_operator_method(Parser *parser, bool is_private, bool is_stati
 
         // Shift operators
         case TK_LSHIFT:
-            name = ast_strdup(parser->X, "<<");
+            name = ast_strdup(parser->compiler_session, "<<");
             op_type_val = OPTYPE_BAND;  // reuse bitwise type
             break;
         case TK_RSHIFT:
-            name = ast_strdup(parser->X, ">>");
+            name = ast_strdup(parser->compiler_session, ">>");
             op_type_val = OPTYPE_BAND;  // reuse bitwise type
             break;
 
         // Compound assignment operators
         case TK_PLUS_ASSIGN:
-            name = ast_strdup(parser->X, "+=");
+            name = ast_strdup(parser->compiler_session, "+=");
             op_type_val = OPTYPE_ADD;  // reuse add type
             break;
         case TK_MINUS_ASSIGN:
-            name = ast_strdup(parser->X, "-=");
+            name = ast_strdup(parser->compiler_session, "-=");
             op_type_val = OPTYPE_SUB;  // reuse sub type
             break;
         case TK_MUL_ASSIGN:
-            name = ast_strdup(parser->X, "*=");
+            name = ast_strdup(parser->compiler_session, "*=");
             op_type_val = OPTYPE_MUL;  // reuse mul type
             break;
         case TK_DIV_ASSIGN:
-            name = ast_strdup(parser->X, "/=");
+            name = ast_strdup(parser->compiler_session, "/=");
             op_type_val = OPTYPE_DIV;  // reuse div type
             break;
         case TK_MOD_ASSIGN:
-            name = ast_strdup(parser->X, "%=");
+            name = ast_strdup(parser->compiler_session, "%=");
             op_type_val = OPTYPE_MOD;  // reuse mod type
             break;
         case TK_AND_ASSIGN:
-            name = ast_strdup(parser->X, "&=");
+            name = ast_strdup(parser->compiler_session, "&=");
             op_type_val = OPTYPE_BAND;  // reuse bitwise and type
             break;
         case TK_OR_ASSIGN:
-            name = ast_strdup(parser->X, "|=");
+            name = ast_strdup(parser->compiler_session, "|=");
             op_type_val = OPTYPE_BOR;  // reuse bitwise or type
             break;
         case TK_XOR_ASSIGN:
-            name = ast_strdup(parser->X, "^=");
+            name = ast_strdup(parser->compiler_session, "^=");
             op_type_val = OPTYPE_BXOR;  // reuse bitwise xor type
             break;
         case TK_LSHIFT_ASSIGN:
-            name = ast_strdup(parser->X, "<<=");
+            name = ast_strdup(parser->compiler_session, "<<=");
             op_type_val = OPTYPE_BAND;  // reuse bitwise type
             break;
         case TK_RSHIFT_ASSIGN:
-            name = ast_strdup(parser->X, ">>=");
+            name = ast_strdup(parser->compiler_session, ">>=");
             op_type_val = OPTYPE_BAND;  // reuse bitwise type
             break;
 
         // Increment/decrement operators
         case TK_INC:
-            name = ast_strdup(parser->X, "++");
+            name = ast_strdup(parser->compiler_session, "++");
             op_type_val = OPTYPE_UNARY;  // treat as unary operator
             break;
         case TK_DEC:
-            name = ast_strdup(parser->X, "--");
+            name = ast_strdup(parser->compiler_session, "--");
             op_type_val = OPTYPE_UNARY;  // treat as unary operator
             break;
 
@@ -1155,8 +1158,9 @@ AstNode *xr_parse_operator_method(Parser *parser, bool is_private, bool is_stati
         // Go directly to return type parsing, no goto needed
     } else {
         // Allocate parameter arrays in the parse arena
-        parameters = (char **) ast_alloc_array(parser->X, sizeof(char *), (size_t) expected_params);
-        param_types = (XrTypeRef **) ast_alloc_array(parser->X, sizeof(XrTypeRef *),
+        parameters = (char **) ast_alloc_array(parser->compiler_session, sizeof(char *),
+                                               (size_t) expected_params);
+        param_types = (XrTypeRef **) ast_alloc_array(parser->compiler_session, sizeof(XrTypeRef *),
                                                      (size_t) expected_params);
 
         // Parse first parameter
@@ -1226,13 +1230,13 @@ AstNode *xr_parse_operator_method(Parser *parser, bool is_private, bool is_stati
     AstNode *body = xr_parse_block(parser);
 
     // Create method node
-    AstNode *method =
-        xr_ast_method_decl(parser->X, name, parameters, param_types, param_count, return_type, body,
-                           false,  // is_constructor
-                           is_static, is_private,
-                           false,  // is_getter
-                           false,  // is_setter
-                           line);
+    AstNode *method = xr_ast_method_decl(parser->compiler_session, name, parameters, param_types,
+                                         param_count, return_type, body,
+                                         false,  // is_constructor
+                                         is_static, is_private,
+                                         false,  // is_getter
+                                         false,  // is_setter
+                                         line);
 
     method->column = name_column;
     if (body && body->end_line > 0) {
@@ -1296,8 +1300,8 @@ static AstNode *xr_parse_property_accessors(Parser *parser, const char *name, Xr
 
         if (!xr_parser_check(parser, TK_RPAREN)) {
             // Has parameters = setter
-            parameters = (char **) ast_alloc(parser->X, sizeof(char *));
-            param_types = (XrTypeRef **) ast_alloc(parser->X, sizeof(XrTypeRef *));
+            parameters = (char **) ast_alloc(parser->compiler_session, sizeof(char *));
+            param_types = (XrTypeRef **) ast_alloc(parser->compiler_session, sizeof(XrTypeRef *));
 
             xr_parser_consume(parser, TK_NAME, "expected parameter name");
             parameters[0] = token_to_string(parser, &parser->previous);
@@ -1339,13 +1343,13 @@ static AstNode *xr_parse_property_accessors(Parser *parser, const char *name, Xr
         // Construct method name: get:xxx or set:xxx
         bool is_getter = (param_count == 0);
         size_t name_len = strlen(name) + 5;
-        char *method_name = (char *) ast_alloc(parser->X, name_len);
+        char *method_name = (char *) ast_alloc(parser->compiler_session, name_len);
         snprintf(method_name, name_len, "%s:%s", is_getter ? "get" : "set", name);
 
         // Create method declaration node
-        AstNode *method_node = xr_ast_method_decl(parser->X, method_name, parameters, param_types,
-                                                  param_count, return_type, body, false, is_static,
-                                                  is_private, is_getter, !is_getter, line);
+        AstNode *method_node = xr_ast_method_decl(
+            parser->compiler_session, method_name, parameters, param_types, param_count,
+            return_type, body, false, is_static, is_private, is_getter, !is_getter, line);
 
         method_node->column = 1;  // property accessors are synthetic — column
                                   //   mirrors the declaration line (safe 1)
@@ -1423,7 +1427,8 @@ AstNode *xr_parse_interface_declaration(Parser *parser) {
             xr_parser_consume(parser, TK_NAME, "expected type parameter name");
             Token param_token = parser->previous;
 
-            char *param_name = (char *) ast_alloc(parser->X, (size_t) param_token.length + 1);
+            char *param_name =
+                (char *) ast_alloc(parser->compiler_session, (size_t) param_token.length + 1);
             memcpy(param_name, param_token.start, param_token.length);
             param_name[param_token.length] = '\0';
 
@@ -1433,7 +1438,8 @@ AstNode *xr_parse_interface_declaration(Parser *parser) {
                 constraints = xr_parse_constraint_list(parser, &constraint_count);
             }
 
-            XrGenericParam *gp = (XrGenericParam *) ast_alloc(parser->X, sizeof(XrGenericParam));
+            XrGenericParam *gp =
+                (XrGenericParam *) ast_alloc(parser->compiler_session, sizeof(XrGenericParam));
             gp->name = param_name;
             gp->constraints = constraints;
             gp->constraint_count = constraint_count;
@@ -1450,7 +1456,7 @@ AstNode *xr_parse_interface_declaration(Parser *parser) {
     if (type_param_count > 0) {
         XrTypeScope *generic_scope = xr_type_scope_new(parser->type_scope);
         for (int i = 0; i < type_param_count; i++) {
-            XrTypeRef *tp = xr_tref_type_param(parser->X, type_params[i]->name);
+            XrTypeRef *tp = xr_tref_type_param(parser->compiler_session, type_params[i]->name);
             xr_type_scope_define(generic_scope, type_params[i]->name, tp);
         }
         parser->type_scope = generic_scope;
@@ -1519,9 +1525,9 @@ AstNode *xr_parse_interface_declaration(Parser *parser) {
     }
 
     // Create interface declaration AST node
-    AstNode *node = xr_ast_interface_decl(parser->X, interface_name, extends, extends_count,
-                                          methods, method_count, properties, property_count,
-                                          type_params, type_param_count, line);
+    AstNode *node = xr_ast_interface_decl(parser->compiler_session, interface_name, extends,
+                                          extends_count, methods, method_count, properties,
+                                          property_count, type_params, type_param_count, line);
     node->column = name_column;
     node->end_line = if_end_line;
     node->end_column = if_end_column;
@@ -1549,8 +1555,8 @@ AstNode *xr_parse_interface_member(Parser *parser) {
         xr_parser_advance(parser);  // consume ':'
         XrTypeRef *prop_type = xr_parse_type_annotation(parser);
         xr_parser_match(parser, TK_SEMICOLON);  // optional terminator
-        return xr_ast_interface_property(parser->X, member_name, prop_type, is_readonly,
-                                         member_line);
+        return xr_ast_interface_property(parser->compiler_session, member_name, prop_type,
+                                         is_readonly, member_line);
     }
 
     if (is_readonly) {
@@ -1581,15 +1587,15 @@ AstNode *xr_parse_interface_member(Parser *parser) {
                 int old_capacity = param_capacity;
                 param_capacity = param_capacity == 0 ? 4 : param_capacity * 2;
 
-                char **_new_parameters =
-                    (char **) ast_alloc_array(parser->X, sizeof(char *), (size_t) param_capacity);
+                char **_new_parameters = (char **) ast_alloc_array(
+                    parser->compiler_session, sizeof(char *), (size_t) param_capacity);
                 if (old_capacity > 0 && parameters) {
                     memcpy(_new_parameters, parameters, sizeof(char *) * (size_t) old_capacity);
                 }
                 parameters = _new_parameters;
 
                 XrTypeRef **_new_param_types = (XrTypeRef **) ast_alloc_array(
-                    parser->X, sizeof(XrTypeRef *), (size_t) param_capacity);
+                    parser->compiler_session, sizeof(XrTypeRef *), (size_t) param_capacity);
                 if (old_capacity > 0 && param_types) {
                     memcpy(_new_param_types, param_types,
                            sizeof(XrTypeRef *) * (size_t) old_capacity);
@@ -1621,8 +1627,8 @@ AstNode *xr_parse_interface_member(Parser *parser) {
 
     // Create interface method signature node. xr_ast_interface_method
     // takes ownership of member_name, parameters[] and param_types[].
-    return xr_ast_interface_method(parser->X, member_name, parameters, param_types, param_count,
-                                   return_type, member_line);
+    return xr_ast_interface_method(parser->compiler_session, member_name, parameters, param_types,
+                                   param_count, return_type, member_line);
 
 fail:
     // On OOM we still own member_name and any accumulated parameter names.
@@ -1654,17 +1660,17 @@ static XrTypeRef *build_type_from_consumed_name(Parser *parser, Token *name_tok)
                 type_args[type_arg_count++] = xr_parse_type_annotation(parser);
         } while (xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_GT));
         xr_parser_consume(parser, TK_GT, "expected '>' in generic type");
-        result = xr_tref_generic(parser->X, temp_name, type_args, type_arg_count);
+        result = xr_tref_generic(parser->compiler_session, temp_name, type_args, type_arg_count);
     } else if (parser->type_scope) {
         XrTypeRef *alias = xr_type_scope_resolve(parser->type_scope, temp_name);
-        result = alias ? alias : xr_tref_named(parser->X, temp_name);
+        result = alias ? alias : xr_tref_named(parser->compiler_session, temp_name);
     } else {
-        result = xr_tref_named(parser->X, temp_name);
+        result = xr_tref_named(parser->compiler_session, temp_name);
     }
 
     /* Handle trailing '?' for optional */
     if (result && xr_parser_match(parser, TK_QUESTION)) {
-        result = xr_tref_optional(parser->X, result);
+        result = xr_tref_optional(parser->compiler_session, result);
     }
     return result;
 }
@@ -1718,8 +1724,9 @@ static void parse_enum_variant_payload(Parser *parser, char ***out_names, XrType
         /* Grow name and type arrays in lockstep. */
         XR_PARSE_PUSH(parser, names, count, name_capacity, field_name);
         {
-            XrTypeRef **new_types = (XrTypeRef **) ast_alloc_array(
-                parser->X, sizeof(XrTypeRef *), (size_t) (count > 4 ? count * 2 : 8));
+            XrTypeRef **new_types =
+                (XrTypeRef **) ast_alloc_array(parser->compiler_session, sizeof(XrTypeRef *),
+                                               (size_t) (count > 4 ? count * 2 : 8));
             if (types) {
                 for (int i = 0; i < count - 1; i++)
                     new_types[i] = types[i];
@@ -1784,7 +1791,8 @@ AstNode *xr_parse_enum_declaration(Parser *parser) {
                 constraints = xr_parse_constraint_list(parser, &constraint_count);
             }
 
-            XrGenericParam *gp = (XrGenericParam *) ast_alloc(parser->X, sizeof(XrGenericParam));
+            XrGenericParam *gp =
+                (XrGenericParam *) ast_alloc(parser->compiler_session, sizeof(XrGenericParam));
             gp->name = param_name;
             gp->constraints = constraints;
             gp->constraint_count = constraint_count;
@@ -1800,7 +1808,7 @@ AstNode *xr_parse_enum_declaration(Parser *parser) {
     if (type_param_count > 0) {
         XrTypeScope *generic_scope = xr_type_scope_new(parser->type_scope);
         for (int i = 0; i < type_param_count; i++) {
-            XrTypeRef *tp = xr_tref_type_param(parser->X, type_params[i]->name);
+            XrTypeRef *tp = xr_tref_type_param(parser->compiler_session, type_params[i]->name);
             xr_type_scope_define(generic_scope, type_params[i]->name, tp);
         }
         parser->type_scope = generic_scope;
@@ -1815,23 +1823,23 @@ AstNode *xr_parse_enum_declaration(Parser *parser) {
                             "ADT enum with type parameters cannot have a backing type hint");
         }
         if (xr_parser_match(parser, TK_INT)) {
-            type_hint = ast_strdup(parser->X, TYPE_NAME_INT);
+            type_hint = ast_strdup(parser->compiler_session, TYPE_NAME_INT);
         } else if (xr_parser_match(parser, TK_STRING)) {
-            type_hint = ast_strdup(parser->X, TYPE_NAME_STRING);
+            type_hint = ast_strdup(parser->compiler_session, TYPE_NAME_STRING);
         } else if (xr_parser_match(parser, TK_FLOAT)) {
-            type_hint = ast_strdup(parser->X, TYPE_NAME_FLOAT);
+            type_hint = ast_strdup(parser->compiler_session, TYPE_NAME_FLOAT);
         } else if (xr_parser_match(parser, TK_BOOL)) {
-            type_hint = ast_strdup(parser->X, TYPE_NAME_BOOL);
+            type_hint = ast_strdup(parser->compiler_session, TYPE_NAME_BOOL);
         } else if (xr_parser_match(parser, TK_NAME)) {
             Token t = parser->previous;
             if (t.length == 3 && memcmp(t.start, "int", 3) == 0) {
-                type_hint = ast_strdup(parser->X, TYPE_NAME_INT);
+                type_hint = ast_strdup(parser->compiler_session, TYPE_NAME_INT);
             } else if (t.length == 6 && memcmp(t.start, "string", 6) == 0) {
-                type_hint = ast_strdup(parser->X, TYPE_NAME_STRING);
+                type_hint = ast_strdup(parser->compiler_session, TYPE_NAME_STRING);
             } else if (t.length == 5 && memcmp(t.start, "float", 5) == 0) {
-                type_hint = ast_strdup(parser->X, TYPE_NAME_FLOAT);
+                type_hint = ast_strdup(parser->compiler_session, TYPE_NAME_FLOAT);
             } else if (t.length == 4 && memcmp(t.start, "bool", 4) == 0) {
-                type_hint = ast_strdup(parser->X, TYPE_NAME_BOOL);
+                type_hint = ast_strdup(parser->compiler_session, TYPE_NAME_BOOL);
             } else {
                 xr_parser_error(parser, "enum type must be int, string, float or bool");
             }
@@ -1907,8 +1915,9 @@ AstNode *xr_parse_enum_declaration(Parser *parser) {
             member_value = xr_parse_expression(parser);
         }
 
-        AstNode *member = xr_ast_enum_member(parser->X, member_name, member_value, payload_names,
-                                             payload_types, payload_count, member_line);
+        AstNode *member =
+            xr_ast_enum_member(parser->compiler_session, member_name, member_value, payload_names,
+                               payload_types, payload_count, member_line);
         member->column = member_col;
         if (member_value && member_value->end_line > 0) {
             member->end_line = member_value->end_line;
@@ -1957,9 +1966,9 @@ AstNode *xr_parse_enum_declaration(Parser *parser) {
         parser->type_scope = saved_scope;
     }
 
-    AstNode *node = xr_ast_enum_decl(parser->X, enum_name, type_hint, members, member_count,
-                                     methods, method_count, type_params, type_param_count,
-                                     interfaces, interface_count, line);
+    AstNode *node = xr_ast_enum_decl(parser->compiler_session, enum_name, type_hint, members,
+                                     member_count, methods, method_count, type_params,
+                                     type_param_count, interfaces, interface_count, line);
     node->column = name_column;
     node->end_line = enum_end_line;
     node->end_column = enum_end_column;
@@ -2010,8 +2019,8 @@ AstNode *xr_parse_static_constructor(Parser *parser, bool is_private) {
 
     // Create method declaration node
     AstNode *method_node =
-        xr_ast_method_decl(parser->X, "<clinit>", NULL, NULL, 0,  // no parameters
-                           NULL,                                  // no return type
+        xr_ast_method_decl(parser->compiler_session, "<clinit>", NULL, NULL, 0,  // no parameters
+                           NULL,                                                 // no return type
                            body,
                            false,  // not a regular constructor
                            true,   // is static

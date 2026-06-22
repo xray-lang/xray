@@ -22,9 +22,9 @@
  *     - defer (maps to XI_DEFER IR opcode)
  *
  *   The canonicalizer operates on AST nodes in-place (mutating),
- *   allocating new nodes through the isolate's arena.  It reads type
- *   and symbol info from the analyzer's node table and preserves
- *   node_id stability for existing nodes.
+ *   allocating new nodes through the active compiler session arena.
+ *   It reads type and symbol info from the analyzer's node table and
+ *   preserves node_id stability for existing nodes.
  */
 
 #ifndef XCANON_H
@@ -35,7 +35,7 @@
 
 struct AstNode;
 struct XaAnalyzer;
-struct XrayIsolate;
+struct XrCompilerSession;
 
 /* Canonicalization status codes. */
 typedef enum {
@@ -50,11 +50,11 @@ typedef enum {
  * Returns XR_CANON_OK on success.  The AST is modified in-place;
  * newly synthesized nodes get fresh node_id values from the active compiler session. */
 XR_FUNC XrCanonStatus xr_canon_program(struct AstNode *program, struct XaAnalyzer *analyzer,
-                                       struct XrayIsolate *isolate);
+                                       struct XrCompilerSession *session);
 
 /* Canonicalize a single function body. Used by the pipeline when
  * compiling individual functions rather than full programs. */
 XR_FUNC XrCanonStatus xr_canon_func(struct AstNode *func_node, struct XaAnalyzer *analyzer,
-                                    struct XrayIsolate *isolate);
+                                    struct XrCompilerSession *session);
 
 #endif  // XCANON_H

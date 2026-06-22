@@ -20,7 +20,7 @@
 #include <string.h>
 
 static char *copy_token_string(Parser *parser, Token *token) {
-    char *str = (char *) ast_alloc(parser->X, (size_t) token->length + 1);
+    char *str = (char *) ast_alloc(parser->compiler_session, (size_t) token->length + 1);
     memcpy(str, token->start, token->length);
     str[token->length] = '\0';
     return str;
@@ -39,7 +39,7 @@ XrDestructurePattern *xr_parse_array_pattern(Parser *parser) {
             int old_capacity = capacity;
             capacity = (capacity == 0) ? 4 : capacity * 2;
             XrDestructurePattern **_new_elements = (XrDestructurePattern **) ast_alloc_array(
-                parser->X, sizeof(XrDestructurePattern *), (size_t) capacity);
+                parser->compiler_session, sizeof(XrDestructurePattern *), (size_t) capacity);
             if (old_capacity > 0 && elements)
                 memcpy(_new_elements, elements,
                        sizeof(XrDestructurePattern *) * (size_t) old_capacity);
@@ -48,19 +48,19 @@ XrDestructurePattern *xr_parse_array_pattern(Parser *parser) {
 
         // Skip element: comma without identifier
         if (xr_parser_check(parser, TK_COMMA)) {
-            elements[count++] = xr_pattern_skip(parser->X);
+            elements[count++] = xr_pattern_skip(parser->compiler_session);
             xr_parser_advance(parser);
             continue;
         }
 
         // Wildcard: _
         if (xr_parser_match(parser, TK_UNDERSCORE)) {
-            elements[count++] = xr_pattern_skip(parser->X);
+            elements[count++] = xr_pattern_skip(parser->compiler_session);
         }
         // Identifier
         else if (xr_parser_match(parser, TK_NAME)) {
             char *name = copy_token_string(parser, &parser->previous);
-            elements[count++] = xr_pattern_identifier(parser->X, name, NULL);
+            elements[count++] = xr_pattern_identifier(parser->compiler_session, name, NULL);
         } else {
             xr_parser_error_expected_name(parser,
                                           "expected identifier or '_' in array destructuring");
@@ -76,7 +76,7 @@ XrDestructurePattern *xr_parse_array_pattern(Parser *parser) {
     }
 
     xr_parser_consume(parser, TK_RBRACKET, "expected ']'");
-    return xr_pattern_array(parser->X, elements, count);
+    return xr_pattern_array(parser->compiler_session, elements, count);
 }
 
 // Parse flat tuple destructuring pattern: `()`, `(x,)`, `(a, b, ...)`.
@@ -99,7 +99,7 @@ XrDestructurePattern *xr_parse_tuple_pattern(Parser *parser) {
             int old_capacity = capacity;
             capacity = (capacity == 0) ? 4 : capacity * 2;
             XrDestructurePattern **_new_elements = (XrDestructurePattern **) ast_alloc_array(
-                parser->X, sizeof(XrDestructurePattern *), (size_t) capacity);
+                parser->compiler_session, sizeof(XrDestructurePattern *), (size_t) capacity);
             if (old_capacity > 0 && elements)
                 memcpy(_new_elements, elements,
                        sizeof(XrDestructurePattern *) * (size_t) old_capacity);
@@ -107,10 +107,10 @@ XrDestructurePattern *xr_parse_tuple_pattern(Parser *parser) {
         }
 
         if (xr_parser_match(parser, TK_UNDERSCORE)) {
-            elements[count++] = xr_pattern_skip(parser->X);
+            elements[count++] = xr_pattern_skip(parser->compiler_session);
         } else if (xr_parser_match(parser, TK_NAME)) {
             char *name = copy_token_string(parser, &parser->previous);
-            elements[count++] = xr_pattern_identifier(parser->X, name, NULL);
+            elements[count++] = xr_pattern_identifier(parser->compiler_session, name, NULL);
         } else {
             xr_parser_error_expected_name(parser,
                                           "expected identifier or '_' in tuple destructuring");
@@ -128,7 +128,7 @@ XrDestructurePattern *xr_parse_tuple_pattern(Parser *parser) {
     }
 
     xr_parser_consume(parser, TK_RPAREN, "expected ')'");
-    return xr_pattern_tuple(parser->X, elements, count);
+    return xr_pattern_tuple(parser->compiler_session, elements, count);
 }
 
 // Parse flat object destructuring: {name, age}
@@ -145,14 +145,14 @@ XrDestructurePattern *xr_parse_object_pattern(Parser *parser) {
         if (count >= capacity) {
             int old_capacity = capacity;
             capacity = (capacity == 0) ? 4 : capacity * 2;
-            char **_new_field_names =
-                (char **) ast_alloc_array(parser->X, sizeof(char *), (size_t) capacity);
+            char **_new_field_names = (char **) ast_alloc_array(parser->compiler_session,
+                                                                sizeof(char *), (size_t) capacity);
             if (old_capacity > 0 && field_names)
                 memcpy(_new_field_names, field_names, sizeof(char *) * (size_t) old_capacity);
             field_names = _new_field_names;
 
             XrDestructurePattern **_new_patterns = (XrDestructurePattern **) ast_alloc_array(
-                parser->X, sizeof(XrDestructurePattern *), (size_t) capacity);
+                parser->compiler_session, sizeof(XrDestructurePattern *), (size_t) capacity);
             if (old_capacity > 0 && patterns)
                 memcpy(_new_patterns, patterns,
                        sizeof(XrDestructurePattern *) * (size_t) old_capacity);
@@ -174,7 +174,7 @@ XrDestructurePattern *xr_parse_object_pattern(Parser *parser) {
         }
 
         field_names[count] = field;
-        patterns[count] = xr_pattern_identifier(parser->X, field, NULL);
+        patterns[count] = xr_pattern_identifier(parser->compiler_session, field, NULL);
         count++;
 
         if (!xr_parser_check(parser, TK_RBRACE)) {
@@ -186,7 +186,7 @@ XrDestructurePattern *xr_parse_object_pattern(Parser *parser) {
     }
 
     xr_parser_consume(parser, TK_RBRACE, "expected '}'");
-    return xr_pattern_object(parser->X, field_names, patterns, count, true);
+    return xr_pattern_object(parser->compiler_session, field_names, patterns, count, true);
 }
 
 // Unified entry point
@@ -224,5 +224,5 @@ AstNode *xr_parse_destructure_declaration(Parser *parser, bool is_const) {
         return NULL;
     }
 
-    return xr_ast_destructure_decl(parser->X, pattern, initializer, is_const, line);
+    return xr_ast_destructure_decl(parser->compiler_session, pattern, initializer, is_const, line);
 }

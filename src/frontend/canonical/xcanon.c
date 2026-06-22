@@ -32,7 +32,7 @@
 
 typedef struct XrCanonCtx {
     struct XaAnalyzer *analyzer;
-    struct XrayIsolate *isolate;
+    struct XrCompilerSession *session;
     uint32_t temp_counter; /* monotonic counter for generating unique temp names */
     int error_count;
 } XrCanonCtx;
@@ -48,7 +48,8 @@ static char *canon_temp_name(XrCanonCtx *ctx) {
     char buf[CANON_TEMP_BUFSZ];
     int n = snprintf(buf, sizeof(buf), CANON_TEMP_PREFIX "%u", ctx->temp_counter++);
     XR_DCHECK(n > 0 && n < (int) sizeof(buf), "canon_temp_name: snprintf overflow");
-    return ast_strdup(ctx->isolate, buf);
+    (void) n;
+    return ast_strdup(ctx->session, buf);
 }
 
 /* ========== Expression classification ========== */
@@ -124,13 +125,13 @@ static void canon_compound_var(XrCanonCtx *ctx, AstNode *node) {
     int line = node->line;
 
     /* Build: variable(name) */
-    AstNode *lhs_read = xr_ast_variable(ctx->isolate, name, line);
+    AstNode *lhs_read = xr_ast_variable(ctx->session, name, line);
     XR_DCHECK(lhs_read != NULL, "canon_compound_var: failed to create variable ref");
     lhs_read->as.variable.symbol_id = sid;
 
     /* Build: variable(name) op rhs */
     AstNodeType bin_type = compound_op_to_binary(op);
-    AstNode *bin = xr_ast_binary(ctx->isolate, bin_type, lhs_read, rhs, line);
+    AstNode *bin = xr_ast_binary(ctx->session, bin_type, lhs_read, rhs, line);
     XR_DCHECK(bin != NULL, "canon_compound_var: failed to create binary");
 
     /* Mutate in-place: AST_COMPOUND_ASSIGNMENT → AST_ASSIGNMENT */
@@ -165,9 +166,9 @@ static void canon_compound_member(XrCanonCtx *ctx, AstNode *node) {
     if (is_simple_expr(obj)) {
         /* obj is cheap — safe to reference it twice.
          * Build: obj.field = obj.field + rhs */
-        AstNode *load = xr_ast_member_access(ctx->isolate, obj, field, line);
+        AstNode *load = xr_ast_member_access(ctx->session, obj, field, line);
         XR_DCHECK(load != NULL, "canon_compound_member: member_access alloc");
-        AstNode *bin = xr_ast_binary(ctx->isolate, bin_type, load, rhs, line);
+        AstNode *bin = xr_ast_binary(ctx->session, bin_type, load, rhs, line);
         XR_DCHECK(bin != NULL, "canon_compound_member: binary alloc");
 
         /* Mutate in-place → AST_MEMBER_SET */
@@ -182,22 +183,22 @@ static void canon_compound_member(XrCanonCtx *ctx, AstNode *node) {
         XR_DCHECK(tmp != NULL, "canon_compound_member: temp name alloc");
 
         /* let __canon_N = obj */
-        AstNode *decl = xr_ast_var_decl(ctx->isolate, tmp, obj, false, line);
+        AstNode *decl = xr_ast_var_decl(ctx->session, tmp, obj, false, line);
         XR_DCHECK(decl != NULL, "canon_compound_member: var_decl alloc");
 
         /* __canon_N.field = __canon_N.field + rhs */
-        AstNode *ref1 = xr_ast_variable(ctx->isolate, tmp, line);
-        AstNode *ref2 = xr_ast_variable(ctx->isolate, tmp, line);
-        AstNode *load = xr_ast_member_access(ctx->isolate, ref1, field, line);
-        AstNode *bin = xr_ast_binary(ctx->isolate, bin_type, load, rhs, line);
-        AstNode *store = xr_ast_member_set(ctx->isolate, ref2, field, bin, line);
+        AstNode *ref1 = xr_ast_variable(ctx->session, tmp, line);
+        AstNode *ref2 = xr_ast_variable(ctx->session, tmp, line);
+        AstNode *load = xr_ast_member_access(ctx->session, ref1, field, line);
+        AstNode *bin = xr_ast_binary(ctx->session, bin_type, load, rhs, line);
+        AstNode *store = xr_ast_member_set(ctx->session, ref2, field, bin, line);
         XR_DCHECK(store != NULL, "canon_compound_member: member_set alloc");
 
         /* Wrap in block: { decl; store } */
-        AstNode *blk = xr_ast_block(ctx->isolate, line);
+        AstNode *blk = xr_ast_block(ctx->session, line);
         XR_DCHECK(blk != NULL, "canon_compound_member: block alloc");
-        xr_ast_block_add(ctx->isolate, blk, decl);
-        xr_ast_block_add(ctx->isolate, blk, store);
+        xr_ast_block_add(ctx->session, blk, decl);
+        xr_ast_block_add(ctx->session, blk, store);
 
         /* Mutate the original node in-place → AST_BLOCK */
         uint32_t saved_id = node->node_id;
@@ -232,7 +233,7 @@ static void canon_inc_dec(XrCanonCtx *ctx, AstNode *node) {
     bool is_inc = (node->type == AST_INC);
 
     /* Build literal 1 */
-    AstNode *one = xr_ast_literal_int(ctx->isolate, 1, line);
+    AstNode *one = xr_ast_literal_int(ctx->session, 1, line);
     XR_DCHECK(one != NULL, "canon_inc_dec: literal alloc");
 
     /* Mutate in-place → AST_COMPOUND_ASSIGNMENT(name, +=/-=, 1) */
@@ -266,7 +267,7 @@ static void canon_index_set(XrCanonCtx *ctx, AstNode *node) {
         return;
 
     int line = node->line;
-    AstNode *blk = xr_ast_block(ctx->isolate, line);
+    AstNode *blk = xr_ast_block(ctx->session, line);
     XR_DCHECK(blk != NULL, "canon_index_set: block alloc");
 
     AstNode *new_arr = arr;
@@ -274,25 +275,25 @@ static void canon_index_set(XrCanonCtx *ctx, AstNode *node) {
 
     if (arr_complex) {
         char *tmp_arr = canon_temp_name(ctx);
-        AstNode *decl_arr = xr_ast_var_decl(ctx->isolate, tmp_arr, arr, false, line);
+        AstNode *decl_arr = xr_ast_var_decl(ctx->session, tmp_arr, arr, false, line);
         XR_DCHECK(decl_arr != NULL, "canon_index_set: var_decl alloc");
-        xr_ast_block_add(ctx->isolate, blk, decl_arr);
-        new_arr = xr_ast_variable(ctx->isolate, tmp_arr, line);
+        xr_ast_block_add(ctx->session, blk, decl_arr);
+        new_arr = xr_ast_variable(ctx->session, tmp_arr, line);
     }
 
     if (idx_complex) {
         char *tmp_idx = canon_temp_name(ctx);
-        AstNode *decl_idx = xr_ast_var_decl(ctx->isolate, tmp_idx, idx, false, line);
+        AstNode *decl_idx = xr_ast_var_decl(ctx->session, tmp_idx, idx, false, line);
         XR_DCHECK(decl_idx != NULL, "canon_index_set: var_decl alloc");
-        xr_ast_block_add(ctx->isolate, blk, decl_idx);
-        new_idx = xr_ast_variable(ctx->isolate, tmp_idx, line);
+        xr_ast_block_add(ctx->session, blk, decl_idx);
+        new_idx = xr_ast_variable(ctx->session, tmp_idx, line);
     }
 
     /* Build simplified index_set with simple operands */
     AstNode *store =
-        xr_ast_index_set(ctx->isolate, new_arr, new_idx, node->as.index_set.value, line);
+        xr_ast_index_set(ctx->session, new_arr, new_idx, node->as.index_set.value, line);
     XR_DCHECK(store != NULL, "canon_index_set: index_set alloc");
-    xr_ast_block_add(ctx->isolate, blk, store);
+    xr_ast_block_add(ctx->session, blk, store);
 
     /* Mutate in-place → AST_BLOCK */
     uint32_t saved_id = node->node_id;
@@ -310,9 +311,9 @@ static AstNode *make_bool_coerce(XrCanonCtx *ctx, AstNode *expr) {
     if (expr->type == AST_LITERAL_TRUE || expr->type == AST_LITERAL_FALSE)
         return expr;
     int line = expr->line;
-    AstNode *not1 = xr_ast_unary(ctx->isolate, AST_UNARY_NOT, expr, line);
+    AstNode *not1 = xr_ast_unary(ctx->session, AST_UNARY_NOT, expr, line);
     XR_DCHECK(not1 != NULL, "make_bool_coerce: not1 alloc");
-    AstNode *not2 = xr_ast_unary(ctx->isolate, AST_UNARY_NOT, not1, line);
+    AstNode *not2 = xr_ast_unary(ctx->session, AST_UNARY_NOT, not1, line);
     XR_DCHECK(not2 != NULL, "make_bool_coerce: not2 alloc");
     return not2;
 }
@@ -338,15 +339,15 @@ static void canon_short_circuit(XrCanonCtx *ctx, AstNode *node) {
     if (is_and) {
         /* a && b → a ? !!b : false */
         true_expr = make_bool_coerce(ctx, rhs);
-        false_expr = xr_ast_literal_bool(ctx->isolate, 0, line);
+        false_expr = xr_ast_literal_bool(ctx->session, 0, line);
     } else {
         /* a || b → a ? true : !!b */
-        true_expr = xr_ast_literal_bool(ctx->isolate, 1, line);
+        true_expr = xr_ast_literal_bool(ctx->session, 1, line);
         false_expr = make_bool_coerce(ctx, rhs);
     }
     XR_DCHECK(true_expr != NULL && false_expr != NULL, "canon_short_circuit: branch alloc");
 
-    AstNode *ternary = xr_ast_ternary(ctx->isolate, lhs, true_expr, false_expr, line);
+    AstNode *ternary = xr_ast_ternary(ctx->session, lhs, true_expr, false_expr, line);
     XR_DCHECK(ternary != NULL, "canon_short_circuit: ternary alloc");
 
     /* Mutate in-place → AST_TERNARY */
@@ -388,15 +389,15 @@ static void canon_nullish_coalesce(XrCanonCtx *ctx, AstNode *node, bool in_stmt_
     }
 
     /* Build: lhs == null ? rhs : lhs */
-    AstNode *null_lit = xr_ast_literal_null(ctx->isolate, line);
+    AstNode *null_lit = xr_ast_literal_null(ctx->session, line);
     XR_DCHECK(null_lit != NULL, "canon_nullish_coalesce: null alloc");
 
-    AstNode *eq_check = xr_ast_binary(ctx->isolate, AST_BINARY_EQ, test_lhs, null_lit, line);
+    AstNode *eq_check = xr_ast_binary(ctx->session, AST_BINARY_EQ, test_lhs, null_lit, line);
     XR_DCHECK(eq_check != NULL, "canon_nullish_coalesce: eq alloc");
 
     /* Duplicate the LHS reference for the false branch.
      * Since lhs is simple (variable/literal), safe to reuse pointer. */
-    AstNode *ternary = xr_ast_ternary(ctx->isolate, eq_check, rhs, test_lhs, line);
+    AstNode *ternary = xr_ast_ternary(ctx->session, eq_check, rhs, test_lhs, line);
     XR_DCHECK(ternary != NULL, "canon_nullish_coalesce: ternary alloc");
 
     uint32_t saved_id = node->node_id;
@@ -843,8 +844,8 @@ static void canon_node(XrCanonCtx *ctx, AstNode *node) {
 /* ========== Public API ========== */
 
 XR_FUNC XrCanonStatus xr_canon_program(struct AstNode *program, struct XaAnalyzer *analyzer,
-                                       struct XrayIsolate *isolate) {
-    if (!program || !analyzer || !isolate)
+                                       struct XrCompilerSession *session) {
+    if (!program || !analyzer || !session)
         return XR_CANON_ERR_NULL_INPUT;
 
     XR_DCHECK(program->type == AST_PROGRAM || program->type == AST_BLOCK,
@@ -853,7 +854,7 @@ XR_FUNC XrCanonStatus xr_canon_program(struct AstNode *program, struct XaAnalyze
     XrCanonCtx ctx;
     memset(&ctx, 0, sizeof(ctx));
     ctx.analyzer = analyzer;
-    ctx.isolate = isolate;
+    ctx.session = session;
 
     canon_node(&ctx, program);
 
@@ -861,8 +862,8 @@ XR_FUNC XrCanonStatus xr_canon_program(struct AstNode *program, struct XaAnalyze
 }
 
 XR_FUNC XrCanonStatus xr_canon_func(struct AstNode *func_node, struct XaAnalyzer *analyzer,
-                                    struct XrayIsolate *isolate) {
-    if (!func_node || !analyzer || !isolate)
+                                    struct XrCompilerSession *session) {
+    if (!func_node || !analyzer || !session)
         return XR_CANON_ERR_NULL_INPUT;
 
     XR_DCHECK(func_node->type == AST_FUNCTION_DECL || func_node->type == AST_FUNCTION_EXPR,
@@ -871,7 +872,7 @@ XR_FUNC XrCanonStatus xr_canon_func(struct AstNode *func_node, struct XaAnalyzer
     XrCanonCtx ctx;
     memset(&ctx, 0, sizeof(ctx));
     ctx.analyzer = analyzer;
-    ctx.isolate = isolate;
+    ctx.session = session;
 
     canon_node(&ctx, func_node);
 

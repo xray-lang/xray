@@ -25,7 +25,7 @@
 #include <stddef.h>
 #include "../../base/xdefs.h"
 
-struct XrayIsolate;
+struct XrCompilerSession;
 
 /* ========== Kind Enum ========== */
 
@@ -94,55 +94,56 @@ typedef struct XrTypeRef {
 
 /* ========== Arena Constructors ========================================
  *
- * All allocate from the parse arena via the isolate.  The returned
+ * All allocate from the parse arena via the compiler session.  The returned
  * pointers are valid for the lifetime of the current parse.
  * ===================================================================== */
 
 /* Primitives (singletons — safe to share across an arena lifetime) */
-XR_FUNC XrTypeRef *xr_tref_int(struct XrayIsolate *X);
-XR_FUNC XrTypeRef *xr_tref_float(struct XrayIsolate *X);
-XR_FUNC XrTypeRef *xr_tref_string(struct XrayIsolate *X);
-XR_FUNC XrTypeRef *xr_tref_bool(struct XrayIsolate *X);
-XR_FUNC XrTypeRef *xr_tref_unit(struct XrayIsolate *X);
-XR_FUNC XrTypeRef *xr_tref_null(struct XrayIsolate *X);
-XR_FUNC XrTypeRef *xr_tref_unknown(struct XrayIsolate *X);
+XR_FUNC XrTypeRef *xr_tref_int(struct XrCompilerSession *session);
+XR_FUNC XrTypeRef *xr_tref_float(struct XrCompilerSession *session);
+XR_FUNC XrTypeRef *xr_tref_string(struct XrCompilerSession *session);
+XR_FUNC XrTypeRef *xr_tref_bool(struct XrCompilerSession *session);
+XR_FUNC XrTypeRef *xr_tref_unit(struct XrCompilerSession *session);
+XR_FUNC XrTypeRef *xr_tref_null(struct XrCompilerSession *session);
+XR_FUNC XrTypeRef *xr_tref_unknown(struct XrCompilerSession *session);
 
 /* Native-width scalars */
-XR_FUNC XrTypeRef *xr_tref_int_width(struct XrayIsolate *X, uint8_t nw);
-XR_FUNC XrTypeRef *xr_tref_float_width(struct XrayIsolate *X, uint8_t nw);
+XR_FUNC XrTypeRef *xr_tref_int_width(struct XrCompilerSession *session, uint8_t nw);
+XR_FUNC XrTypeRef *xr_tref_float_width(struct XrCompilerSession *session, uint8_t nw);
 
 /* Named type (class / enum / prelude name, no generic args) */
-XR_FUNC XrTypeRef *xr_tref_named(struct XrayIsolate *X, const char *name);
+XR_FUNC XrTypeRef *xr_tref_named(struct XrCompilerSession *session, const char *name);
 
 /* Generic instance: Name<T1, T2, ...> */
-XR_FUNC XrTypeRef *xr_tref_generic(struct XrayIsolate *X, const char *name, XrTypeRef **args,
-                                   int nargs);
+XR_FUNC XrTypeRef *xr_tref_generic(struct XrCompilerSession *session, const char *name,
+                                   XrTypeRef **args, int nargs);
 
 /* Optional: T? */
-XR_FUNC XrTypeRef *xr_tref_optional(struct XrayIsolate *X, XrTypeRef *inner);
+XR_FUNC XrTypeRef *xr_tref_optional(struct XrCompilerSession *session, XrTypeRef *inner);
 
 /* Union: T | U | ... */
-XR_FUNC XrTypeRef *xr_tref_union(struct XrayIsolate *X, XrTypeRef **members, int count);
+XR_FUNC XrTypeRef *xr_tref_union(struct XrCompilerSession *session, XrTypeRef **members, int count);
 
 /* Function type: fn(P1, ...): R
  * |params| has |nparam| entries; |ret| is the return type. */
-XR_FUNC XrTypeRef *xr_tref_function(struct XrayIsolate *X, XrTypeRef **params, int nparam,
-                                    XrTypeRef *ret);
+XR_FUNC XrTypeRef *xr_tref_function(struct XrCompilerSession *session, XrTypeRef **params,
+                                    int nparam, XrTypeRef *ret);
 
 /* Tuple: (T1, T2, ...) */
-XR_FUNC XrTypeRef *xr_tref_tuple(struct XrayIsolate *X, XrTypeRef **elems, int count);
+XR_FUNC XrTypeRef *xr_tref_tuple(struct XrCompilerSession *session, XrTypeRef **elems, int count);
 
 /* Object / struct type literal: { f1: T1, f2: T2 } or { f1: T1, ... }
  * |extensible| indicates trailing ... marker. */
-XR_FUNC XrTypeRef *xr_tref_object(struct XrayIsolate *X, const char **field_names,
+XR_FUNC XrTypeRef *xr_tref_object(struct XrCompilerSession *session, const char **field_names,
                                   XrTypeRef **field_types, const bool *field_readonly, int count,
                                   bool extensible);
 
 /* Fixed-length array: [N]T */
-XR_FUNC XrTypeRef *xr_tref_fixed_array(struct XrayIsolate *X, XrTypeRef *elem, int length);
+XR_FUNC XrTypeRef *xr_tref_fixed_array(struct XrCompilerSession *session, XrTypeRef *elem,
+                                       int length);
 
 /* Generic type parameter: T, U, V, ... */
-XR_FUNC XrTypeRef *xr_tref_type_param(struct XrayIsolate *X, const char *name);
+XR_FUNC XrTypeRef *xr_tref_type_param(struct XrCompilerSession *session, const char *name);
 
 /* ========== Queries ========== */
 
@@ -166,7 +167,7 @@ static inline const char *xr_tref_head_name(const XrTypeRef *t) {
 
 /* Return a human-readable string for a type ref (e.g. "Array<int>").
  * The string is arena-allocated and valid for the current parse. */
-XR_FUNC const char *xr_tref_to_string(struct XrayIsolate *X, const XrTypeRef *t);
+XR_FUNC const char *xr_tref_to_string(struct XrCompilerSession *session, const XrTypeRef *t);
 
 /* Write type ref into caller-supplied buffer (no arena needed).
  * Returns number of characters written (excluding NUL). */
