@@ -35,7 +35,7 @@
 #include "../../src/runtime/object/xjson.h"
 #include "../../src/runtime/object/xjson_serde.h"
 #include "../../src/runtime/object/xmap.h"
-#include "../../src/runtime/gc/xfixed_heap.h"
+#include "../../src/runtime/mem/xfixed_heap.h"
 #include "../../src/runtime/object/xexception.h"
 #include "../../src/base/xchecks.h"
 #include "../../src/base/xarena.h"

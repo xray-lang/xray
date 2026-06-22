@@ -18,7 +18,7 @@
 #include "coro/xworker_internal.h"
 #include "coro/xyieldable.h"
 #include "runtime/object/xarray.h"
-#include "runtime/gc/xsystem_heap.h"
+#include "runtime/mem/xsystem_heap.h"
 #include "runtime/xisolate_internal.h"
 #include "base/xmalloc.h"
 #include <stddef.h>

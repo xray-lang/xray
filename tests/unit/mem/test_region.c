@@ -5,7 +5,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * test_region_gc.c - Unit tests for the Region bump allocator (pure RC)
+ * test_region.c - Unit tests for the Region bump allocator (pure RC)
  *
  * KEY CONCEPT:
  *   Region is a bump allocator (no per-line bitmap under RC): objects start
@@ -21,9 +21,9 @@
 #include <windows.h>
 #endif
 
-#include "../../../src/runtime/gc/xcoro_heap.h"
-#include "../../../src/runtime/gc/xregion.h"
-#include "../../../src/runtime/gc/xobj_header.h"
+#include "../../../src/runtime/mem/xcoro_heap.h"
+#include "../../../src/runtime/mem/xregion.h"
+#include "../../../src/runtime/mem/xobj_header.h"
 #include "../../../src/runtime/value/xvalue.h"
 #include "../../../src/runtime/xisolate_api.h"
 #include "../../../src/runtime/xisolate_internal.h"

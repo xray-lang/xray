@@ -13,7 +13,7 @@
 #include "coro/xcoroutine.h"
 #include "coro/xresult_group.h"
 #include "coro/xworker.h"
-#include "runtime/gc/xsystem_heap.h"
+#include "runtime/mem/xsystem_heap.h"
 #include "runtime/xisolate_internal.h"
 #include <stdatomic.h>
 #include <string.h>

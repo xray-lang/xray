@@ -30,7 +30,7 @@
 #ifndef XBIGINT_H
 #define XBIGINT_H
 
-#include "../gc/xobj_header.h"
+#include "../mem/xobj_header.h"
 #include "../../base/xdefs.h"
 #include <stdint.h>
 #include <stdbool.h>

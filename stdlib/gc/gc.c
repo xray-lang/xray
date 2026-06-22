@@ -26,12 +26,12 @@
 #include "gc.h"
 #include "../common.h"
 #include "../../src/runtime/xisolate_internal.h"
-#include "../../src/runtime/gc/xcoro_heap.h"
+#include "../../src/runtime/mem/xcoro_heap.h"
 #include "../../src/runtime/object/xmap.h"
 #include "../../src/runtime/xexec_frame.h"
 #include "../../src/coro/xcoroutine.h"
 #include "../../src/runtime/xisolate_api.h"
-#include "../../src/runtime/gc/xalloc_unified.h"
+#include "../../src/runtime/mem/xalloc_unified.h"
 #include "../../src/base/xchecks.h"
 
 /* ========== Helper ========== */

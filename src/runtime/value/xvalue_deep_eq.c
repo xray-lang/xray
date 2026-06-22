@@ -11,7 +11,7 @@
 #include "xvalue.h"
 #include "../class/xclass.h"
 #include "../class/xinstance.h"
-#include "../gc/xobj_header.h"
+#include "../mem/xobj_header.h"
 #include "../object/xarray.h"
 #include "../object/xjson.h"
 #include "../object/xmap.h"

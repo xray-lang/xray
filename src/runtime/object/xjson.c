@@ -14,8 +14,8 @@
 
 #include "xjson.h"
 #include "../../base/xchecks.h"
-#include "../gc/xheap.h"
-#include "../gc/xalloc_unified.h"
+#include "../mem/xheap.h"
+#include "../mem/xalloc_unified.h"
 #include "../../base/xmalloc.h"
 #include "../class/xinstance.h"
 #include "../coro/xcoroutine.h"

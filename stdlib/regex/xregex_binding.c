@@ -32,7 +32,7 @@
 #include "../../src/runtime/xisolate_internal.h"
 #include "../../src/runtime/xisolate_api.h"
 #include "../../src/coro/xcoroutine.h"
-#include "../../src/runtime/gc/xcoro_heap.h"
+#include "../../src/runtime/mem/xcoro_heap.h"
 
 /* ========================================================================
  * Helper Functions

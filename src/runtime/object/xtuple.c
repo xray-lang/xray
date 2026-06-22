@@ -15,9 +15,9 @@
 
 #include "../value/xvalue.h"
 #include "../value/xvalue_hash.h"
-#include "../gc/xheap.h"
-#include "../gc/xalloc_unified.h"
-#include "../gc/xcoro_heap.h"
+#include "../mem/xheap.h"
+#include "../mem/xalloc_unified.h"
+#include "../mem/xcoro_heap.h"
 #include "../class/xclass.h"
 #include "../class/xclass_builder.h"
 #include "../class/xclass_system.h"

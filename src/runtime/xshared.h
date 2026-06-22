@@ -35,7 +35,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdatomic.h>
-#include "gc/xobj_header.h"
+#include "mem/xobj_header.h"
 
 struct XrRuntimeCore;
 

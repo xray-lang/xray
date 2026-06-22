@@ -29,8 +29,8 @@
 #include "../../base/xchecks.h"
 #include "../class/xclass_system.h"
 #include "../class/xclass.h"
-#include "../gc/xheap.h"
-#include "../gc/xsystem_heap.h"
+#include "../mem/xheap.h"
+#include "../mem/xsystem_heap.h"
 #include "../xshared.h"
 #include <string.h>
 #include <stdio.h>

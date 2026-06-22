@@ -10,7 +10,7 @@
 
 #include "../../base/xchecks.h"
 #include "../../base/xlog.h"
-#include "../gc/xheap.h"
+#include "../mem/xheap.h"
 #include "xreflect_internal.h"
 #include "xreflect_registry.h"
 #include "../xisolate_api.h"

@@ -15,7 +15,7 @@
 #include "../../base/xmalloc.h"
 #include "../../coro/xcoroutine.h"
 #include "../closure/xclosure.h"
-#include "../gc/xalloc_unified.h"
+#include "../mem/xalloc_unified.h"
 #include "../value/xtype_names.h"
 #include "../xisolate_api.h"
 #include "../../vm/xvm_string.h"

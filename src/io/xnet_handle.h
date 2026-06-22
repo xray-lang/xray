@@ -30,7 +30,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
-#include "../runtime/gc/xobj_header.h"
+#include "../runtime/mem/xobj_header.h"
 
 #ifdef __cplusplus
 extern "C" {

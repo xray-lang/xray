@@ -21,7 +21,7 @@
 
 #include "../class/xclass.h"
 #include "../class/xmethod.h"
-#include "../gc/xobj_header.h"
+#include "../mem/xobj_header.h"
 
 /* ========== Native Method Definition ========== */
 

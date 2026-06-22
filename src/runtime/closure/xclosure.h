@@ -22,7 +22,7 @@
 #include "../../base/xdefs.h"
 #include "../value/xvalue.h"
 #include "../value/xchunk.h"
-#include "../gc/xobj_header.h"
+#include "../mem/xobj_header.h"
 
 struct XrayIsolate;
 struct XrCoroutine;

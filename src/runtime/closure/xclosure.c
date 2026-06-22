@@ -11,8 +11,8 @@
 #include "xclosure.h"
 #include "../../base/xchecks.h"
 #include "../../coro/xcoroutine.h"
-#include "../gc/xheap.h"
-#include "../gc/xcoro_heap.h"
+#include "../mem/xheap.h"
+#include "../mem/xcoro_heap.h"
 #include "../value/xvalue.h"
 #include "../xisolate_api.h"
 

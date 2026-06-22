@@ -25,8 +25,8 @@
 
 #include "../value/xvalue.h"
 #include "xstring.h"
-#include "../gc/xobj_header.h"
-#include "../gc/xalloc_unified.h"
+#include "../mem/xobj_header.h"
+#include "../mem/xalloc_unified.h"
 #include "xarray.h"
 #include "../../shared/xr_map_set_abi.h"
 #include <stdint.h>

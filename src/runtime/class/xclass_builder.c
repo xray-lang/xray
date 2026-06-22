@@ -22,8 +22,8 @@
 #include "../../base/xmalloc.h"
 #include "../xisolate_api.h"
 #include "../symbol/xsymbol_table.h"
-#include "../gc/xobj_header.h"
-#include "../gc/xsystem_heap.h"
+#include "../mem/xobj_header.h"
+#include "../mem/xsystem_heap.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

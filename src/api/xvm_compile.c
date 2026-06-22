@@ -30,7 +30,7 @@
 #include "../vm/xvm_internal.h"
 #include "../coro/xchannel.h"
 #include "../coro/xworker.h"
-#include "../runtime/gc/xheap.h"
+#include "../runtime/mem/xheap.h"
 #include "../runtime/object/xstring.h"
 #include "../runtime/xglobal_dict.h"
 #include <stdio.h>

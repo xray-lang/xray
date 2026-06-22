@@ -18,7 +18,7 @@
 #define XSTRING_H
 
 #include "../value/xvalue.h"
-#include "../gc/xobj_header.h"
+#include "../mem/xobj_header.h"
 #include "xarray.h"
 #include <stdint.h>
 #include <stdbool.h>

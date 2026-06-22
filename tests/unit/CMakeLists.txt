@@ -12,7 +12,7 @@ macro(add_xray_unit_test name source)
         ${CMAKE_CURRENT_SOURCE_DIR}
     )
     target_link_libraries(${name} PRIVATE xray_core)
-    add_test(NAME ${name} COMMAND ${name})
+    add_test(NAME ${name} COMMAND $<TARGET_FILE:${name}>)
 endmacro()
 
 # ============================================================================
@@ -32,11 +32,11 @@ add_xray_unit_test(test_hashmap util/test_hashmap.c)
 add_xray_unit_test(test_arena util/test_arena.c)
 
 # ============================================================================
-# gc/ — Garbage collector
+# mem/ — RC memory model
 # ============================================================================
 
-add_xray_unit_test(test_region_gc gc/test_region_gc.c)
-add_xray_unit_test(test_obj_header gc/test_obj_header.c)
+add_xray_unit_test(test_region mem/test_region.c)
+add_xray_unit_test(test_obj_header mem/test_obj_header.c)
 
 # ============================================================================
 # object/ — Runtime objects (string, array, utf8)

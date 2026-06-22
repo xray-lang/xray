@@ -30,7 +30,7 @@
 #include "../base/xforward_decl.h"  // Forward declarations
 #include "value/xvalue.h"
 #include "class/xclass.h"
-#include "gc/xheap.h"  // heap allocation definitions
+#include "mem/xheap.h"  // heap allocation definitions
 // Instance/Json pools removed, using per-coroutine heap
 #include "../runtime/xexec_frame.h"  // VM state types (XrBcCallFrame, etc.)
 #include "../runtime/xexec_state.h"  // XrVMState - VM execution state

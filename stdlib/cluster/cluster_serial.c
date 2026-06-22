@@ -24,7 +24,7 @@
 #include "../../src/runtime/object/xmap.h"
 #include "../../src/runtime/object/xset.h"
 #include "../../src/runtime/object/xjson.h"
-#include "../../src/runtime/gc/xobj_header.h"
+#include "../../src/runtime/mem/xobj_header.h"
 #include "../../src/runtime/xisolate_internal.h"
 #include "../../src/runtime/symbol/xsymbol_table.h"
 

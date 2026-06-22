@@ -17,7 +17,7 @@
 #include "../../src/runtime/object/xarray.h"
 #include "../../src/base/xmalloc.h"
 #include "../../src/base/xchecks.h"
-#include "../../src/runtime/gc/xheap.h"
+#include "../../src/runtime/mem/xheap.h"
 #include "../../src/shared/xr_encoding_core.h"
 #include <limits.h>
 #include <string.h>

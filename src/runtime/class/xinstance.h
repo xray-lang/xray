@@ -54,7 +54,7 @@
 
 #include "../value/xvalue.h"
 #include "xclass.h"
-#include "../gc/xobj_header.h"
+#include "../mem/xobj_header.h"
 
 struct XrInstance {
     XrObjHeader hdr;

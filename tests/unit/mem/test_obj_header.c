@@ -10,7 +10,7 @@
  * atomic mode, and last-reference detection.
  */
 
-#include "../../../src/runtime/gc/xobj_header.h"
+#include "../../../src/runtime/mem/xobj_header.h"
 #include <stdio.h>
 
 static int g_passed = 0;

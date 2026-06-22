@@ -26,7 +26,7 @@
 #include "../runtime/core/xr_runtime_core.h"
 #include "../runtime/xisolate_api.h"
 #include "../runtime/xshared.h"
-#include "../runtime/gc/xalloc_unified.h"
+#include "../runtime/mem/xalloc_unified.h"
 
 struct XrCoroutine;
 struct XrayIsolate;

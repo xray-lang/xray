@@ -21,7 +21,7 @@
 #include "../../src/base/xutf8.h"
 #include "../../src/runtime/xisolate_internal.h"
 #include "../../src/runtime/xisolate_api.h"
-#include "../../src/runtime/gc/xalloc_unified.h"
+#include "../../src/runtime/mem/xalloc_unified.h"
 #include "../../src/runtime/object/xnative_type.h"
 #include "../../src/runtime/class/xclass.h"
 #include "../../src/runtime/class/xclass_builder.h"

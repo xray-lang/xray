@@ -12,7 +12,7 @@
 
 #include "../../base/xchecks.h"
 #include "../../base/xmalloc.h"
-#include "../gc/xalloc_unified.h"
+#include "../mem/xalloc_unified.h"
 
 XrValue xr_instance_get_dynamic_field(XrInstance *inst, uint16_t index) {
     XR_DCHECK(inst != NULL, "get_dynamic_field: NULL inst");
