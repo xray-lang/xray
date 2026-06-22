@@ -13,14 +13,9 @@
  */
 
 #include "xcoro_registry.h"
-#include "xcoroutine.h"
-#include "xchannel.h"
 #include "../base/xhash.h"
 #include "../base/xmalloc.h"
 #include "../base/xchecks.h"
-#include "../runtime/value/xvalue.h"
-#include "../runtime/object/xstring.h"
-#include "../runtime/xisolate_api.h"
 #include <string.h>
 
 /* ========== Hash Table Internals ========== */
@@ -182,107 +177,4 @@ XrCoroutine *xr_coro_registry_whereis(XrCoroRegistry *reg, const char *name) {
 
     xr_amutex_unlock(&reg->lock);
     return result;
-}
-
-/* ========== Monitor API ========== */
-
-XrChannel *xr_coro_monitor(XrayIsolate *X, XrCoroRegistry *reg, const char *name) {
-    if (!X || !reg || !name)
-        return NULL;
-
-    // Create notification channel (buffered=1 so send never blocks)
-    XrChannel *ch = xr_channel_new_vm(X, 1);
-    if (!ch)
-        return NULL;
-
-    xr_amutex_lock(&reg->lock);
-
-    uint32_t h = hash_name(name);
-    uint32_t idx = registry_find_slot(reg, name, h);
-
-    if (reg->entries[idx].hash == 0) {
-        // Coroutine not found — send immediate "noproc" notification
-        xr_amutex_unlock(&reg->lock);
-        XrString *s = xr_string_new(X, "noproc", 6);
-        xr_channel_try_send(ch, s ? xr_string_value(s) : xr_null());
-        return ch;
-    }
-
-    XrCoroutine *coro = reg->entries[idx].coro;
-
-    // Check if already done
-    if (xr_coro_flags_has(coro, XR_CORO_FLG_DONE)) {
-        xr_amutex_unlock(&reg->lock);
-        XrString *s = xr_string_new(X, "noproc", 6);
-        xr_channel_try_send(ch, s ? xr_string_value(s) : xr_null());
-        return ch;
-    }
-
-    // Add monitor to coroutine's watched_by list (lazy-alloc ext)
-    XrCoroExt *ext = xr_coro_ensure_ext(coro);
-    XR_CHECK(ext != NULL, "coro ext allocation failed");
-    XrCoroMonitor *mon = (XrCoroMonitor *) xr_malloc(sizeof(XrCoroMonitor));
-    XR_CHECK(mon != NULL, "coro monitor allocation failed");
-    mon->channel = ch;
-    mon->next = ext->watched_by;
-    ext->watched_by = mon;
-
-    xr_amutex_unlock(&reg->lock);
-    return ch;
-}
-
-void xr_coro_demonitor(XrCoroRegistry *reg, XrCoroutine *coro, XrChannel *ch) {
-    if (!reg || !coro || !ch)
-        return;
-
-    xr_amutex_lock(&reg->lock);
-
-    // Walk watched_by list and remove matching entry
-    if (!coro->ext) {
-        xr_amutex_unlock(&reg->lock);
-        return;
-    }
-    XrCoroMonitor **pp = &coro->ext->watched_by;
-    while (*pp) {
-        if ((*pp)->channel == ch) {
-            XrCoroMonitor *victim = *pp;
-            *pp = victim->next;
-            xr_free(victim);
-            break;
-        }
-        pp = &(*pp)->next;
-    }
-
-    xr_amutex_unlock(&reg->lock);
-}
-
-void xr_coro_notify_monitors(XrayIsolate *X, XrCoroRegistry *reg, XrCoroutine *coro,
-                             const char *reason) {
-    if (!coro)
-        return;
-    if (!coro->ext || !coro->ext->watched_by)
-        return;  // fast path: no monitors
-
-    // Detach the list under lock, then send notifications outside lock
-    XrCoroMonitor *mon = NULL;
-    if (reg) {
-        xr_amutex_lock(&reg->lock);
-        mon = coro->ext->watched_by;
-        coro->ext->watched_by = NULL;
-        xr_amutex_unlock(&reg->lock);
-    } else {
-        mon = coro->ext->watched_by;
-        coro->ext->watched_by = NULL;
-    }
-
-    const char *r = reason ? reason : "unknown";
-    XrString *reason_str = xr_string_new(X, r, strlen(r));
-    XrValue reason_val = reason_str ? xr_string_value(reason_str) : xr_null();
-
-    while (mon) {
-        XrCoroMonitor *next = mon->next;
-        xr_channel_notify_send(mon->channel, reason_val);
-        xr_free(mon);
-        mon = next;
-    }
 }

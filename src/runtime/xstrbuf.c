@@ -185,20 +185,7 @@ void xr_strbuf_append_float(XrStrBuf *sb, double val) {
         xr_strbuf_append_cstr(sb, buf, (size_t) len);
 }
 
-/* ========== Convert and Reset ========== */
-
-XrString *xr_strbuf_to_string(XrStrBuf *sb) {
-    // Pre-calculate hash to avoid recalculation in xr_string_intern
-    uint32_t hash = xr_string_hash(sb->data, sb->length);
-
-    // Create new string (interned for later comparison)
-    XrString *s = xr_string_intern(sb->X, sb->data, sb->length, hash);
-
-    // Reset buffer for reuse
-    sb->length = 0;
-
-    return s;
-}
+/* ========== Reset ========== */
 
 void xr_strbuf_reset(XrStrBuf *sb) {
     sb->length = 0;

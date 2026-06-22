@@ -143,6 +143,8 @@ typedef struct XrGlobalStringPool {
 
 XR_FUNC void xr_global_pool_init(XrGlobalStringPool *pool);
 XR_FUNC void xr_global_pool_free(XrGlobalStringPool *pool);
+XR_FUNC XrString *xr_global_pool_insert_locked(XrGlobalStringPool *pool, const char *chars,
+                                               size_t len, uint32_t hash);
 XR_FUNC XrString *xr_global_pool_insert(XrGlobalStringPool *pool, XrayIsolate *iso,
                                         const char *chars, size_t len, uint32_t hash);
 XR_FUNC void xr_global_pool_freeze(XrGlobalStringPool *pool);

@@ -156,21 +156,6 @@ static void xr_map_prepare_weak_key(XrMap *map, XrValue key, XrCoroGC *gc) {
     xr_weak_registry_register_map(map_owning_isolate(gc), map);
 }
 
-static void map_tombstone_entry_index(XrMap *map, uint32_t eidx, XrCoroGC *gc) {
-    XrMapEntry *e = &map->entries[eidx];
-    xr_map_release_entry_values(map, e, gc);
-    e->key_tt = XR_MAP_ENTRY_NIL_KEY;
-    for (uint32_t slot = 0; slot < map->indices_size; slot++) {
-        if (map->indices[slot] == (int32_t) eidx) {
-            map->indices[slot] = XR_MAP_IX_EMPTY;
-            xr_swiss_ctrl_set(map->ctrl, map->indices_size, slot, XR_SWISS_CTRL_DELETED);
-            break;
-        }
-    }
-    if (map->count > 0)
-        map->count--;
-}
-
 /* ========== Swiss Index Lookup ========== */
 
 // Returns the ctrl/indices slot for `key`, or UINT32_MAX if absent. The
@@ -490,22 +475,6 @@ bool xr_map_delete(XrMap *map, XrValue key) {
     xr_swiss_ctrl_set(map->ctrl, map->indices_size, slot, XR_SWISS_CTRL_DELETED);
     map->count--;
     return true;
-}
-
-uint32_t xr_map_purge_weak_target(XrMap *map, XrGCHeader *target, XrCoroGC *owning_gc) {
-    if (!map || !target || !map_is_weak(map) || xr_map_isdummy(map) || !map->entries ||
-        (map->gc.extra & XR_OBJ_DEAD))
-        return 0;
-    uint32_t removed = 0;
-    for (uint32_t i = 0; i < map->nentries; i++) {
-        XrMapEntry *e = &map->entries[i];
-        if (e->key_tt == XR_MAP_ENTRY_NIL_KEY || !XR_IS_PTR(e->key) ||
-            XR_VALUE_GCPTR(e->key) != target)
-            continue;
-        map_tombstone_entry_index(map, i, owning_gc);
-        removed++;
-    }
-    return removed;
 }
 
 void xr_map_clear(XrMap *map) {

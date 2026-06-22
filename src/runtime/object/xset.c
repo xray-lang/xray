@@ -101,21 +101,6 @@ static void xr_set_prepare_weak_value(XrSet *set, XrValue value, XrCoroGC *gc) {
     xr_weak_registry_register_set(set_owning_isolate(gc), set);
 }
 
-static void set_tombstone_entry_index(XrSet *set, uint32_t eidx) {
-    XrSetEntry *e = &set->entries[eidx];
-    e->value = xr_null();
-    e->val_tt = XR_SET_ENTRY_NIL;
-    for (uint32_t slot = 0; slot < set->indices_size; slot++) {
-        if (set->indices[slot] == (int32_t) eidx) {
-            set->indices[slot] = XR_SET_IX_EMPTY;
-            xr_swiss_ctrl_set(set->ctrl, set->indices_size, slot, XR_SWISS_CTRL_DELETED);
-            break;
-        }
-    }
-    if (set->count > 0)
-        set->count--;
-}
-
 /* ========== Swiss Index Lookup ========== */
 
 // Candidate comparator for the shared Swiss probe: type tag then canonical
@@ -363,22 +348,6 @@ bool xr_set_delete(XrSet *set, XrValue value) {
     xr_swiss_ctrl_set(set->ctrl, set->indices_size, slot, XR_SWISS_CTRL_DELETED);
     set->count--;
     return true;
-}
-
-uint32_t xr_set_purge_weak_target(XrSet *set, XrGCHeader *target) {
-    if (!set || !target || !set_is_weak(set) || xr_set_isdummy(set) || !set->entries ||
-        (set->gc.extra & XR_OBJ_DEAD))
-        return 0;
-    uint32_t removed = 0;
-    for (uint32_t i = 0; i < set->nentries; i++) {
-        XrSetEntry *e = &set->entries[i];
-        if (e->val_tt == XR_SET_ENTRY_NIL || !XR_IS_PTR(e->value) ||
-            XR_VALUE_GCPTR(e->value) != target)
-            continue;
-        set_tombstone_entry_index(set, i);
-        removed++;
-    }
-    return removed;
 }
 
 void xr_set_clear(XrSet *set) {
