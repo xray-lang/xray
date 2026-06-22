@@ -37,9 +37,6 @@ typedef struct XrStrBuf {
 
 /* ========== Creation and Destruction ========== */
 
-// Get thread-local temporary buffer (auto-reset after to_string)
-XR_FUNC XrStrBuf *xr_strbuf_tmp(XrayIsolate *X);
-
 XR_FUNC XrStrBuf *xr_strbuf_new(XrayIsolate *X, size_t init_cap);
 XR_FUNC void xr_strbuf_free(XrStrBuf *sb);
 

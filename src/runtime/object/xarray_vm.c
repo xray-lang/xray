@@ -18,7 +18,7 @@
 #include "../gc/xalloc_unified.h"
 #include "../value/xtype_names.h"
 #include "../xisolate_api.h"
-#include "../xstrbuf.h"
+#include "../../vm/xvm_string.h"
 #include "../xvm_call.h"
 #include <string.h>
 

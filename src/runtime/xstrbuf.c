@@ -15,14 +15,10 @@
 #include "xstrbuf.h"
 #include "../base/xchecks.h"
 #include "../base/xlog.h"
-#include "xray_isolate.h"
-#include "xisolate_api.h"
 #include "object/xstring.h"
 #include "../base/xmalloc.h"
-#include "../coro/xworker.h"  // XrWorker, xr_current_worker
 #include "../shared/xr_float_fmt.h"
 #include <string.h>
-#include <stdio.h>
 #include <stdlib.h>
 
 /* ========== Internal Helper Functions ========== */
@@ -64,37 +60,6 @@ static void strbuf_grow(XrStrBuf *sb, size_t need) {
 }
 
 /* ========== Create and Destroy ========== */
-
-// Get current execution-local temp buffer slot.
-// Multi-core execution uses the current machine; single-thread execution
-// reuses isolate-level runtime storage.
-static inline XrStrBuf **xr_get_tmp_strbuf_slot(XrayIsolate *X) {
-    XrWorker *worker = xr_current_worker();
-    if (worker && worker->m) {
-        return &worker->m->tmp_strbuf;
-    }
-    return xr_isolate_tmp_strbuf_slot(X);
-}
-
-XrStrBuf *xr_strbuf_tmp(XrayIsolate *X) {
-    XR_DCHECK(X != NULL, "strbuf_tmp: NULL isolate");
-    XrStrBuf **slot = xr_get_tmp_strbuf_slot(X);
-    if (!slot)
-        return NULL;
-
-    // Lazy allocation
-    if (!*slot) {
-        *slot = xr_strbuf_new(X, XR_STRBUF_MIN_CAP);
-        if (!*slot) {
-            fprintf(stderr, "[ERROR] tmp_strbuf allocation failed\n");
-            return NULL;
-        }
-    }
-
-    // Reset for reuse
-    xr_strbuf_reset(*slot);
-    return *slot;
-}
 
 XrStrBuf *xr_strbuf_new(XrayIsolate *X, size_t init_cap) {
     XR_DCHECK(X != NULL, "strbuf_new: NULL isolate");

@@ -394,7 +394,8 @@ static XrString *string_alloc(XrayIsolate *iso, const char *chars, size_t length
         return NULL;
 
     str->length = (uint32_t) length;
-    memcpy(str->data, chars, length);
+    if (chars)
+        memcpy(str->data, chars, length);
     str->data[length] = '\0';
 
     return str;
@@ -408,6 +409,25 @@ XrString *xr_string_new(XrayIsolate *iso, const char *chars, size_t length) {
     if (!str)
         return NULL;
     str->hash = 0;  // Lazy: computed when needed
+    return str;
+}
+
+XrString *xr_string_concat(XrayIsolate *iso, XrString *a, XrString *b) {
+    XR_DCHECK(iso != NULL, "string_concat: NULL isolate");
+    if (!a || !b)
+        return NULL;
+
+    size_t len = (size_t) a->length + (size_t) b->length;
+    if (len > UINT32_MAX)
+        return NULL;
+
+    XrString *str = string_alloc(iso, NULL, len);
+    if (!str)
+        return NULL;
+    memcpy(str->data, a->data, a->length);
+    memcpy(str->data + a->length, b->data, b->length);
+    str->data[len] = '\0';
+    str->hash = 0;
     return str;
 }
 
@@ -486,19 +506,6 @@ XrString *xr_string_intern(XrayIsolate *iso, const char *chars, size_t length, u
     if (s && hash)
         s->hash = hash;
     return s;
-}
-
-// Concatenate two strings (uses XrStrBuf for efficiency)
-XrString *xr_string_concat(XrayIsolate *iso, XrString *a, XrString *b) {
-    XR_DCHECK(iso != NULL, "string_concat: NULL isolate");
-    if (a == NULL || b == NULL)
-        return NULL;
-
-    XrStrBuf *sb = xr_strbuf_tmp(iso);
-    xr_strbuf_reserve(sb, a->length + b->length);
-    xr_strbuf_append_str(sb, a);
-    xr_strbuf_append_str(sb, b);
-    return xr_strbuf_to_string(sb);
 }
 
 // Fast integer to string (without snprintf)
