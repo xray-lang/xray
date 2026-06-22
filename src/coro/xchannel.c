@@ -28,7 +28,7 @@
 #include "../runtime/core/xr_runtime_core.h"
 #include "../base/xchecks.h"
 #include "xdeep_copy.h"
-#include "../runtime/gc/xsystem_heap.h"
+#include "../runtime/mem/xsystem_heap.h"
 #include "../runtime/xshared.h"
 
 #include <stdlib.h>

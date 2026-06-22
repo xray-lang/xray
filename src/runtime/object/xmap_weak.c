@@ -9,7 +9,7 @@
  */
 
 #include "xmap.h"
-#include "../gc/xcoro_heap.h"
+#include "../mem/xcoro_heap.h"
 #include "../../shared/xr_swiss_index.h"
 
 static void weak_map_tombstone_entry(XrMap *map, uint32_t eidx, XrCoroHeap *heap) {

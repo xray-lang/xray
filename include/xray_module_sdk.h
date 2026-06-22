@@ -30,7 +30,7 @@
 #include "../src/runtime/value/xvalue.h"
 
 /* ========== Object Header (for custom types) ========== */
-#include "../src/runtime/gc/xobj_header.h"
+#include "../src/runtime/mem/xobj_header.h"
 
 /* ========== Core Object Types ========== */
 #include "../src/runtime/object/xstring.h"
@@ -46,10 +46,10 @@
 #include "../src/runtime/object/xnative_type.h"
 
 /* ========== GC Allocation ========== */
-#include "../src/runtime/gc/xheap.h"
+#include "../src/runtime/mem/xheap.h"
 
 /* ========== coroutine heap (mark API for traverse callbacks) ========== */
-#include "../src/runtime/gc/xcoro_heap.h"
+#include "../src/runtime/mem/xcoro_heap.h"
 
 /* ========== Error Reporting ========== */
 /* Forward-declare only the error function to avoid header conflicts

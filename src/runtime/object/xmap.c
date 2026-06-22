@@ -24,8 +24,8 @@
 
 #include "xmap.h"
 #include "xstring.h"
-#include "../gc/xalloc_unified.h"
-#include "../gc/xweak_registry.h"
+#include "../mem/xalloc_unified.h"
+#include "../mem/xweak_registry.h"
 #include "../../base/xchecks.h"
 #include "../value/xvalue_hash.h"
 #include "../../base/xmalloc.h"
@@ -33,7 +33,7 @@
 #include "xtuple.h"
 #include "../class/xclass_system.h"
 #include "../class/xclass.h"
-#include "../gc/xcoro_heap.h"
+#include "../mem/xcoro_heap.h"
 #include "../../coro/xcoroutine.h"
 #include <string.h>
 #include <stdio.h>
@@ -43,7 +43,7 @@
 
 /* ========== Memory Profiling (optional) ========== */
 #include "../../base/xmem_profiler.h"
-#include "../gc/xheap.h"
+#include "../mem/xheap.h"
 
 #ifdef XR_PROFILE_MAP_MEMORY
 XrProfileStats g_map_header_stats;

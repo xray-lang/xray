@@ -14,8 +14,8 @@
 
 #include "xbigint.h"
 #include "../../base/xchecks.h"
-#include "../gc/xheap.h"
-#include "../gc/xalloc_unified.h"
+#include "../mem/xheap.h"
+#include "../mem/xalloc_unified.h"
 #include "../xisolate_api.h"
 #include "../class/xclass_system.h"
 #include <stdlib.h>

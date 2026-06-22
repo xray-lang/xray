@@ -18,7 +18,7 @@
 #define XARRAY_H
 
 #include "../value/xvalue.h"
-#include "../gc/xobj_header.h"
+#include "../mem/xobj_header.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xdefs.h"
 

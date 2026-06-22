@@ -12,7 +12,7 @@
 #define XVM_INTERNAL_H
 
 #include "xvm.h"
-#include "../runtime/gc/xobj_header.h"
+#include "../runtime/mem/xobj_header.h"
 #include <stdatomic.h>
 #include "../runtime/class/xclass.h"
 #include "../runtime/class/xmethod.h"

@@ -15,12 +15,12 @@
 #include "../coro/xnetpoll.h"
 #include "../coro/xworker.h"
 #include "../os/os_net.h"
-#include "../runtime/gc/xheap.h"
+#include "../runtime/mem/xheap.h"
 #include "../runtime/class/xclass.h"
 #include "../runtime/class/xclass_system.h"
 #include "../runtime/xisolate_api.h"
 #include "../runtime/xisolate_internal.h"
-#include "../runtime/gc/xsystem_heap.h"
+#include "../runtime/mem/xsystem_heap.h"
 
 #ifdef XR_ENABLE_TLS
 #include "../../stdlib/net/tls.h"

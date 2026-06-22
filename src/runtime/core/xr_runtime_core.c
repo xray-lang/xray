@@ -10,8 +10,8 @@
 
 #include "xr_runtime_core.h"
 #include "../../base/xmalloc.h"
-#include "../gc/xsystem_heap.h"
-#include "../gc/xweak_registry.h"
+#include "../mem/xsystem_heap.h"
+#include "../mem/xweak_registry.h"
 #include "../object/xstring.h"
 #include "../xstrbuf.h"
 #include <string.h>

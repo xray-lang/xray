@@ -12,7 +12,7 @@
 
 #include "../../base/xchecks.h"
 #include "../../base/xmalloc.h"
-#include "../gc/xcoro_heap.h"
+#include "../mem/xcoro_heap.h"
 
 void xr_obj_destroy_instance(XrObjHeader *obj, struct XrCoroHeap *owner_heap) {
     if (!obj)

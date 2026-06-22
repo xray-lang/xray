@@ -10,7 +10,7 @@
  * KEY CONCEPT:
  *   Implements coroutine-aware allocation functions that need full
  *   XrCoroutine/XrWorker type definitions. Extracted from the header
- *   to break gc/(L2) -> coro/(L3) layer dependency.
+ *   to break mem/(L2) -> coro/(L3) layer dependency.
  */
 
 #include "xalloc_unified.h"

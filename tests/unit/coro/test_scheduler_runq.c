@@ -15,7 +15,7 @@
 #include "coro/xcoro_abi.h"
 #include "coro/xtask.h"
 #include "coro/xworker_internal.h"
-#include "runtime/gc/xsystem_heap.h"
+#include "runtime/mem/xsystem_heap.h"
 #include "runtime/xisolate_internal.h"
 #include <stdatomic.h>
 #include <string.h>

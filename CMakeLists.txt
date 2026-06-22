@@ -462,7 +462,7 @@ set(XRAY_COMMON_INCLUDES
     ${CMAKE_CURRENT_SOURCE_DIR}/src/runtime
     ${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/core
     ${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/value
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/gc
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/mem
     ${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/object
     ${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/object/builtins
     ${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/class
@@ -514,7 +514,7 @@ endif()
 file(GLOB RUNTIME_TOP_SRC "src/runtime/*.c")
 file(GLOB RUNTIME_CORE_SRC "src/runtime/core/*.c")
 file(GLOB RUNTIME_VALUE_SRC "src/runtime/value/*.c")
-file(GLOB RUNTIME_GC_SRC "src/runtime/gc/*.c")
+file(GLOB RUNTIME_MEM_SRC "src/runtime/mem/*.c")
 file(GLOB RUNTIME_OBJECT_SRC "src/runtime/object/*.c")
 file(GLOB RUNTIME_OBJECT_BUILTINS_SRC "src/runtime/object/builtins/*.c")
 list(APPEND RUNTIME_OBJECT_SRC
@@ -671,7 +671,7 @@ endif()
 # C include fragments use *.inc.c for editor support, but they are included
 # from owning .c files and must never be compiled as standalone translation units.
 foreach(XRAY_SRC_LIST
-        BASE_SRC OS_SRC RUNTIME_TOP_SRC RUNTIME_CORE_SRC RUNTIME_VALUE_SRC RUNTIME_GC_SRC
+        BASE_SRC OS_SRC RUNTIME_TOP_SRC RUNTIME_CORE_SRC RUNTIME_VALUE_SRC RUNTIME_MEM_SRC
         RUNTIME_OBJECT_SRC RUNTIME_OBJECT_BUILTINS_SRC RUNTIME_CLASS_SRC
         RUNTIME_CLOSURE_SRC RUNTIME_SYMBOL_SRC CORO_SRC IO_SRC
         FRONTEND_LEXER_SRC FRONTEND_PARSER_SRC FRONTEND_CODEGEN_SRC
@@ -691,7 +691,7 @@ set(CORE_ALL_SOURCES
     ${RUNTIME_TOP_SRC}
     ${RUNTIME_CORE_SRC}
     ${RUNTIME_VALUE_SRC}
-    ${RUNTIME_GC_SRC}
+    ${RUNTIME_MEM_SRC}
     ${RUNTIME_OBJECT_SRC}
     ${RUNTIME_CLASS_SRC}
     ${RUNTIME_CLOSURE_SRC}
@@ -738,7 +738,7 @@ set(XRAY_RT_CORO_SOURCES
     ${RUNTIME_TOP_SRC}
     ${RUNTIME_CORE_SRC}
     ${RUNTIME_VALUE_SRC}
-    ${RUNTIME_GC_SRC}
+    ${RUNTIME_MEM_SRC}
     ${RUNTIME_OBJECT_SRC}
     ${RUNTIME_CLASS_SRC}
     ${RUNTIME_CLOSURE_SRC}
@@ -1285,13 +1285,13 @@ if(BUILD_TESTS)
     )
 
     add_test(
-        NAME regression_gc_closure_self_capture_rc
+        NAME regression_rc_closure_self_capture
         COMMAND $<TARGET_FILE:xray> test
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/regression/08_gc/0803_closure_self_capture_rc.xr
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
-    set_tests_properties(regression_gc_closure_self_capture_rc PROPERTIES
-        LABELS "regression;gc;vm"
+    set_tests_properties(regression_rc_closure_self_capture PROPERTIES
+        LABELS "regression;rc;vm"
         TIMEOUT 30
     )
 endif()
@@ -1384,7 +1384,7 @@ if(CLANG_TIDY)
     file(GLOB_RECURSE CORE_ANALYSIS_FILES
         ${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/*.c
         ${CMAKE_CURRENT_SOURCE_DIR}/src/vm/*.c
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/gc/*.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/mem/*.c
         ${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/value/*.c
         ${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/object/*.c
         ${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/analyzer/*.c

@@ -23,8 +23,8 @@
 #include "../value/xvalue.h"
 #include "../object/xstring.h"
 #include "../value/xchunk.h"
-#include "../gc/xheap.h"
-#include "../gc/xcoro_heap.h"
+#include "../mem/xheap.h"
+#include "../mem/xcoro_heap.h"
 #include "../../coro/xcoroutine.h"
 #include "../xexec_frame.h"  // XrVMContext
 #include "../xexec_state.h"  // XrVMState (via xr_isolate_get_vm_state)

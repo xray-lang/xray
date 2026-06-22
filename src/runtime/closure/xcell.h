@@ -21,7 +21,7 @@
 #define XCELL_H
 
 #include "../../base/xdefs.h"
-#include "../gc/xobj_header.h"
+#include "../mem/xobj_header.h"
 #include "../value/xvalue.h"
 #include "../../shared/xr_cell_abi.h"
 

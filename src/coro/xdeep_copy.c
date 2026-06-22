@@ -13,11 +13,11 @@
 #include "../runtime/xshared.h"
 #include "../runtime/value/xvalue.h"
 #include "../runtime/core/xr_runtime_core.h"
-#include "../runtime/gc/xheap.h"
-#include "../runtime/gc/xfixed_heap.h"
-#include "../runtime/gc/xcoro_heap.h"
-#include "../runtime/gc/xalloc_unified.h"
-#include "../runtime/gc/xsystem_heap.h"
+#include "../runtime/mem/xheap.h"
+#include "../runtime/mem/xfixed_heap.h"
+#include "../runtime/mem/xcoro_heap.h"
+#include "../runtime/mem/xalloc_unified.h"
+#include "../runtime/mem/xsystem_heap.h"
 #include "../runtime/object/xarray.h"
 #include "../runtime/object/xmap.h"
 #include "../runtime/object/xstring.h"
@@ -832,7 +832,7 @@ XrValue xr_deep_copy_closure(struct XrayIsolate *X, struct XrClosure *closure,
     return result;
 }
 
-#include "../runtime/gc/xsystem_heap.h"
+#include "../runtime/mem/xsystem_heap.h"
 #include "../runtime/object/xstringbuilder.h"
 
 bool xr_can_relocate(XrValue value) {

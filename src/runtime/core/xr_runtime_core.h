@@ -13,7 +13,7 @@
 
 #include "../../base/xconfig.h"
 #include "../../base/xforward_decl.h"
-#include "../gc/xheap.h"
+#include "../mem/xheap.h"
 #include "../object/xnative_type.h"
 #include "xr_script_info.h"
 #include <stdbool.h>

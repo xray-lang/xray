@@ -21,7 +21,7 @@
 #include "coro/xwork_queue.h"
 #include "coro/xyieldable.h"
 #include "runtime/class/xenum.h"
-#include "runtime/gc/xobj_destroy_ops.h"
+#include "runtime/mem/xobj_destroy_ops.h"
 #include "runtime/object/xarray.h"
 #include "runtime/xisolate_internal.h"
 #include <stdatomic.h>

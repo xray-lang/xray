@@ -20,7 +20,7 @@
 #include "../runtime/class/xclass.h"
 #include "../runtime/class/xclass_system.h"
 #include "../runtime/class/xenum.h"
-#include "../runtime/gc/xobj_destroy_ops.h"
+#include "../runtime/mem/xobj_destroy_ops.h"
 #include "../base/xconfig.h"
 #include "../runtime/class/xreflect_registry.h"
 #include "../runtime/symbol/xsymbol_table.h"

@@ -14,8 +14,8 @@
 #include "xiterator.h"
 #include "xstring.h"
 #include "../class/xinstance.h"
-#include "../gc/xheap.h"
-#include "../gc/xcoro_heap.h"  // xr_rc_retain_value (unified RC primitive)
+#include "../mem/xheap.h"
+#include "../mem/xcoro_heap.h"  // xr_rc_retain_value (unified RC primitive)
 #include "../value/xvalue.h"
 #include "../value/xvalue_format.h"
 #include "../symbol/xsymbol_table.h"

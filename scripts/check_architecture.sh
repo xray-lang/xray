@@ -294,7 +294,7 @@ echo ""
 # Q-11: Assert density per module (top deficits)
 # -----------------------------------------------
 echo "--- Q-11: Assert density per module ---"
-for mod_dir in base runtime runtime/value runtime/gc runtime/object runtime/class coro vm jit frontend/codegen frontend/parser api module aot; do
+for mod_dir in base runtime runtime/value runtime/mem runtime/object runtime/class coro vm jit frontend/codegen frontend/parser api module aot; do
     if [ -d "$SRC_DIR/$mod_dir" ]; then
         c_files=$(find "$SRC_DIR/$mod_dir" -maxdepth 1 -name '*.c' 2>/dev/null)
         [ -z "$c_files" ] && continue

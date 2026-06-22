@@ -16,8 +16,8 @@
 
 #include "xatomic.h"
 #include "xnative_type.h"
-#include "../gc/xsystem_heap.h"
-#include "../gc/xheap.h"
+#include "../mem/xsystem_heap.h"
+#include "../mem/xheap.h"
 #include "../xshared.h"
 #include "../xisolate_api.h"
 #include "../xerror_codes.h"

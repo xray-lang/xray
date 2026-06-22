@@ -48,15 +48,15 @@
 #include "xvm_checks.h"
 #include "xdebug.h"
 #include "../runtime/xray_debug_hooks.h"
-#include "../runtime/gc/xheap.h"
+#include "../runtime/mem/xheap.h"
 #include "../runtime/xstdlib_bridge.h"
 #include "../runtime/xerror_codes.h"
 #include "../runtime/xshared.h"
 #include "../runtime/xglobal_dict.h"
-#include "../runtime/gc/xsystem_heap.h"
+#include "../runtime/mem/xsystem_heap.h"
 
-#include "../runtime/gc/xcoro_heap.h"
-#include "../runtime/gc/xalloc_unified.h"
+#include "../runtime/mem/xcoro_heap.h"
+#include "../runtime/mem/xalloc_unified.h"
 #include "../ir/xi_ffi.h"
 
 #include <math.h>

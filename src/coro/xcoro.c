@@ -25,7 +25,7 @@
 #include "xchannel.h"
 #include "xchannel_ops.h"
 #include "xtimer_wheel.h"
-#include "../runtime/gc/xcoro_heap.h"
+#include "../runtime/mem/xcoro_heap.h"
 #include "../runtime/object/xexception.h"
 #include "xcoro_registry.h"
 #include "xtask.h"

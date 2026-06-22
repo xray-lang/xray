@@ -32,8 +32,8 @@
 #include "xtask.h"
 #include "../base/xchecks.h"
 #include "../base/xlog.h"
-#include "../runtime/gc/xregion.h"
-#include "../runtime/gc/xcoro_heap.h"
+#include "../runtime/mem/xregion.h"
+#include "../runtime/mem/xcoro_heap.h"
 #include "../io/xio_runtime.h"  // xr_io_runtime_new / xr_io_runtime_free
 #include <stdlib.h>
 #include <string.h>

@@ -35,8 +35,8 @@
 #include "../../base/xlog.h"
 #include "../../base/xchecks.h"
 #include "../../base/xhash.h"
-#include "../gc/xobj_header.h"
-#include "../gc/xsystem_heap.h"
+#include "../mem/xobj_header.h"
+#include "../mem/xsystem_heap.h"
 #include <string.h>
 
 /* ========== VTable Generation (file-local) ========== */
