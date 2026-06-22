@@ -1,0 +1,4 @@
+fn takes(n: int) {}
+
+let x = 1
+takes(x++)

@@ -615,8 +615,9 @@ AstNode *xr_parse_expression(Parser *parser) {
 // destructure-assignment `(a, b) = (b, a)` is the canonical form and
 // is handled by xr_parse_assignment via the AST_TUPLE_LITERAL branch.
 AstNode *xr_parse_expr_statement(Parser *parser) {
-    int line = parser->current.line;
-    (void) line;
+    AstNode *inc_dec = xr_parse_standalone_inc_dec(parser, false);
+    if (inc_dec)
+        return inc_dec;
 
     // Use PREC_TERNARY to avoid parsing assignment
     AstNode *first_expr = xr_parse_precedence(parser, PREC_TERNARY);
@@ -651,6 +652,41 @@ AstNode *xr_parse_expr_statement(Parser *parser) {
     }
 
     return xr_ast_expr_stmt(parser->X, first_expr, parser->previous.line);
+}
+
+AstNode *xr_parse_standalone_inc_dec(Parser *parser, bool for_step) {
+    if (!xr_parser_check(parser, TK_NAME))
+        return NULL;
+
+    Parser checkpoint = *parser;
+    xr_parser_advance(parser);
+    Token name = parser->previous;
+    if (!xr_parser_check(parser, TK_INC) && !xr_parser_check(parser, TK_DEC)) {
+        *parser = checkpoint;
+        return NULL;
+    }
+
+    XrTokenType op = parser->current.type;
+    Token op_token = parser->current;
+    char *var_name = (char *) ast_alloc(parser->X, (size_t) name.length + 1);
+    memcpy(var_name, name.start, (size_t) name.length);
+    var_name[name.length] = '\0';
+
+    xr_parser_advance(parser);
+
+    if (for_step) {
+        if (!xr_parser_check(parser, TK_RPAREN)) {
+            xr_parser_error_at_current(parser,
+                                       "postfix ++/-- for-step must be the entire step expression");
+        }
+    } else if (!xr_parser_check(parser, TK_SEMICOLON) && !xr_parser_check(parser, TK_RBRACE) &&
+               !xr_parser_check(parser, TK_EOF) && parser->current.line == op_token.line &&
+               !xr_parser_check_asi_hint(parser)) {
+        xr_parser_error_at_current(parser, "postfix ++/-- must be a complete standalone statement");
+    }
+
+    return op == TK_INC ? xr_ast_inc(parser->X, var_name, name.line)
+                        : xr_ast_dec(parser->X, var_name, name.line);
 }
 
 // Parse print statement: print(expr1, expr2, ...)
@@ -1597,63 +1633,22 @@ AstNode *xr_parse_inc_dec(Parser *parser) {
     return NULL;
 }
 
-// Check if token is binary operator (for detecting x++ embedded in expression)
-static bool is_binary_operator(XrTokenType type) {
-    switch (type) {
-        case TK_PLUS:
-        case TK_MINUS:
-        case TK_STAR:
-        case TK_SLASH:
-        case TK_PERCENT:
-        case TK_EQ:
-        case TK_NE:
-        case TK_LT:
-        case TK_LE:
-        case TK_GT:
-        case TK_GE:
-        case TK_AND:
-        case TK_OR:
-        case TK_ASSIGN:
-        case TK_PLUS_ASSIGN:
-        case TK_MINUS_ASSIGN:
-        case TK_MUL_ASSIGN:
-        case TK_DIV_ASSIGN:
-        case TK_MOD_ASSIGN:
-        case TK_QUESTION:
-        case TK_COMMA:
-            return true;
-        default:
-            return false;
-    }
-}
-
 // Parse postfix increment/decrement: x++, x--
-// Only postfix form supported; must be standalone statement
+// Only postfix form is supported, and only through the statement-only parser
+// entrypoints. Expression parsing reaches this function only for illegal
+// embedded uses such as `let y = x++`, `f(x++)`, or `a[i++]`.
 AstNode *xr_parse_postfix_inc_dec(Parser *parser, AstNode *left) {
-    XrTokenType op_token = parser->previous.type;
     int line = left->line;
+    (void) line;
 
     if (left->type != AST_VARIABLE) {
         xr_parser_error(parser, "++/-- only for variables");
         return NULL;
     }
 
-    // Check if embedded in expression
-    if (is_binary_operator(parser->current.type)) {
-        xr_parser_error(parser, "++/-- must be standalone statement, cannot be in expression (e.g. "
-                                "y = x++ or a + x++)");
-        return NULL;
-    }
-
-    char *var_name = ast_strdup(parser->X, left->as.variable.name);
-    AstNode *node;
-    if (op_token == TK_INC) {
-        node = xr_ast_inc(parser->X, var_name, line);
-    } else {
-        node = xr_ast_dec(parser->X, var_name, line);
-    }
-
-    return node;
+    xr_parser_error_at_previous(
+        parser, "postfix ++/-- can only be used as a standalone statement or for-step");
+    return NULL;
 }
 
 // Parse single variable declaration: let x = 10 or const PI = 3.14

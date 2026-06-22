@@ -17,7 +17,7 @@ order: 004
 | 级 | 运算符 | 结合性 | 说明 |
 |--|--|--|--|
 | 17 | `(...)` `[...]` `.x` `?.x` `?[...]` `f()` `e!` | 左 | 后缀：分组、索引、成员、可选链、调用、强制解包 |
-| 16 | 前缀 `-` `+` `!` `~` `new` `move` `await` `go` `unsafe` | 右 | 一元前缀 + 协程/FFI 边界操作（`++` / `--` 仅后缀） |
+| 16 | 前缀 `-` `+` `!` `~` `new` `move` `await` `go` `unsafe` | 右 | 一元前缀 + 协程/FFI 边界操作 |
 | 15 | `as` `is` | 左 | 类型转换 / 检查（`as T?` 安全形式靠目标类型可空，非独立 `as?` 运算符） |
 | 14 | `*` `/` `%` | 左 | 乘除取模 |
 | 13 | `+` `-` | 左 | 加减 |
@@ -55,14 +55,7 @@ UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
 | `+x` | 数值 | 同 | 标识，几乎无用 |
 | `!x` | `bool` | `bool` | 逻辑非；**不接受非 bool**（不像 JS） |
 | `~x` | 整数 | 同 | 按位取反 |
-| `x++` `x--` | 整数 | 同 | 后缀自增/减；返回**修改后**的值（与 C/Java 不同，本质上是 `x = x + 1` 的赋值结果） |
-
-**自增/减语义**：
-- xray **只提供后缀** `x++` / `x--`，不支持前缀 `++x` / `--x`（编译错误："prefix ++/-- not supported, use postfix form"）。
-- 等价于赋值 `x = x + 1` / `x = x - 1`；表达式值即赋值后的新值。
-- 不能内联在二元表达式中（如 `a + x++`、`f(x++)`、`x++ + 1`）；解析器会报"++/-- must be standalone statement"。允许 `let y = x++`（赋值左侧紧邻），此时 `y` 取到的是修改后的值。
-- 仅作用于左值（变量、字段、索引）。
-- 浮点数**不支持** `++`/`--`（编译错误）。
+`++` / `--` **不是表达式**：`let y = x++`、`f(x++)`、`a[i++]`、`return x++` 等表达式位置均编译报错。语句级自增/自减见 §4.1。
 
 #### `unsafe { }`
 
@@ -556,7 +549,7 @@ Full precedence table (highest → lowest; operators at the same level share ass
 | Level | Operators | Assoc. | Description |
 |--|--|--|--|
 | 17 | `(...)` `[...]` `.x` `?.x` `?[...]` `f()` `e!` | left | postfix: grouping, index, member, optional chain, call, force unwrap |
-| 16 | prefix `-` `+` `!` `~` `new` `move` `await` `go` `unsafe` | right | unary prefix + coroutine/FFI boundary operators (`++` / `--` are postfix only) |
+| 16 | prefix `-` `+` `!` `~` `new` `move` `await` `go` `unsafe` | right | unary prefix + coroutine/FFI boundary operators |
 | 15 | `as` `is` | left | type cast / check (`as T?` is the safe form via a nullable target type, not a separate `as?` operator) |
 | 14 | `*` `/` `%` | left | multiplication / division / modulo |
 | 13 | `+` `-` | left | addition / subtraction |
@@ -594,14 +587,7 @@ UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
 | `+x` | numeric | same | identity, almost never useful |
 | `!x` | `bool` | `bool` | logical not; **rejects non-bool** (unlike JS) |
 | `~x` | integer | same | bitwise complement |
-| `x++` `x--` | integer | same | postfix inc/dec; returns the **updated** value (unlike C/Java; essentially the result of the assignment `x = x + 1`) |
-
-**Inc/dec semantics**:
-- Xray provides **only postfix** `x++` / `x--`; prefix `++x` / `--x` is a compile error ("prefix ++/-- not supported, use postfix form").
-- Equivalent to the assignment `x = x + 1` / `x = x - 1`; the expression value is the new value after assignment.
-- Cannot be inlined within a binary expression (`a + x++`, `f(x++)`, `x++ + 1` etc.); the parser reports "++/-- must be standalone statement". `let y = x++` is allowed (assignment on the immediate left), and `y` receives the post-update value.
-- Applies only to lvalues (variables, fields, indexes).
-- Floating-point values **do not support** `++`/`--` (compile error).
+`++` / `--` are **not expressions**: expression-position uses such as `let y = x++`, `f(x++)`, `a[i++]`, and `return x++` are compile errors. Statement-level increment/decrement is specified in §4.1.
 
 #### `unsafe { }`
 

@@ -425,7 +425,7 @@ Short-circuit evaluation.
 
 `++` `--`
 
-Only the **postfix** form `x++` / `x--` is supported; the prefix form `++x` / `--x` is a compile error. See §3.2.
+Only the **statement-level postfix** form `x++` / `x--` is supported; prefix `++x` / `--x` and expression-position `x++` / `x--` are compile errors. See §4.1.
 
 #### 1.7.8 Type-related
 
@@ -938,7 +938,7 @@ Full precedence table (highest → lowest; operators at the same level share ass
 | Level | Operators | Assoc. | Description |
 |--|--|--|--|
 | 17 | `(...)` `[...]` `.x` `?.x` `?[...]` `f()` `e!` | left | postfix: grouping, index, member, optional chain, call, force unwrap |
-| 16 | prefix `-` `+` `!` `~` `new` `move` `await` `go` `unsafe` | right | unary prefix + coroutine/FFI boundary operators (`++` / `--` are postfix only) |
+| 16 | prefix `-` `+` `!` `~` `new` `move` `await` `go` `unsafe` | right | unary prefix + coroutine/FFI boundary operators |
 | 15 | `as` `is` | left | type cast / check (`as T?` is the safe form via a nullable target type, not a separate `as?` operator) |
 | 14 | `*` `/` `%` | left | multiplication / division / modulo |
 | 13 | `+` `-` | left | addition / subtraction |
@@ -976,14 +976,7 @@ UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
 | `+x` | numeric | same | identity, almost never useful |
 | `!x` | `bool` | `bool` | logical not; **rejects non-bool** (unlike JS) |
 | `~x` | integer | same | bitwise complement |
-| `x++` `x--` | integer | same | postfix inc/dec; returns the **updated** value (unlike C/Java; essentially the result of the assignment `x = x + 1`) |
-
-**Inc/dec semantics**:
-- Xray provides **only postfix** `x++` / `x--`; prefix `++x` / `--x` is a compile error ("prefix ++/-- not supported, use postfix form").
-- Equivalent to the assignment `x = x + 1` / `x = x - 1`; the expression value is the new value after assignment.
-- Cannot be inlined within a binary expression (`a + x++`, `f(x++)`, `x++ + 1` etc.); the parser reports "++/-- must be standalone statement". `let y = x++` is allowed (assignment on the immediate left), and `y` receives the post-update value.
-- Applies only to lvalues (variables, fields, indexes).
-- Floating-point values **do not support** `++`/`--` (compile error).
+`++` / `--` are **not expressions**: expression-position uses such as `let y = x++`, `f(x++)`, `a[i++]`, and `return x++` are compile errors. Statement-level increment/decrement is specified in §4.1.
 
 #### `unsafe { }`
 
@@ -1473,18 +1466,22 @@ Xray statements are separated by `\n` or `;`; the trailing `;` is optional in mo
 ### 4.1 Expression Statements and Blocks
 
 ```ebnf
-ExprStmt ::= Expression (';' | LineBreak)
-Block    ::= '{' Statement* '}'
+ExprStmt   ::= Expression (';' | LineBreak)
+IncDecStmt ::= Identifier ('++' | '--') (';' | LineBreak)
+Block      ::= '{' Statement* '}'
 ```
 
 ```xray
 foo()                  // expression statement
 x = 1                  // assignment expression as a statement
+x++                    // increment statement; produces no expression value
 {                      // block
     let y = 2
     y + 1              // expression with discarded result
 }
 ```
+
+`++` / `--` are pure statements or `for` step items, and can only be written as `name++` / `name--`. They are equivalent to `name = name + 1` / `name = name - 1` and produce no value; expression-position uses such as `let y = x++`, `f(x++)`, `a[i++]`, and `return x++` are compile errors.
 
 **Note**: a block is **not an expression** — it has no value. To get a value out of a block, use `match` or wrap it in an immediately-invoked function.
 
@@ -1535,7 +1532,7 @@ There is no `do-while` form.
 ```ebnf
 ForStmt ::= 'for' '(' ForInit? ';' Expression? ';' ForStep? ')' Block
 ForInit ::= VarDecl | ExprStmt
-ForStep ::= Expression (',' Expression)*
+ForStep ::= Expression | Identifier ('++' | '--')
 ```
 
 ```xray
@@ -1548,6 +1545,7 @@ for (let j = 100; j > 90; j--) {
 ```
 
 - Variables declared in `ForInit` are scoped to the loop body.
+- `i++` / `i--` in the step position must be the entire step; put multiple updates at the end of the loop body.
 - All three sections may be omitted: `for (;;)` is an infinite loop.
 
 #### Single-variable `for-in`
@@ -5131,7 +5129,7 @@ MultiplicativeExpr ::= TypeOpExpr (('*' | '/' | '%') TypeOpExpr)*
 TypeOpExpr  ::= UnaryExpr (('as' | 'is') Type)*           // safe cast is `x as T?` where T? is a nullable type
 RangeExpr   ::= AdditiveExpr ('..' AdditiveExpr)?
 
-UnaryExpr ::= ('-' | '+' | '!' | '~' | '++' | '--') UnaryExpr
+UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
            |  'new' QualifiedIdent TypeArgs? '(' ArgList? ')'
            |  'move' UnaryExpr
            |  'await' ('all' | 'any' | 'anySuccess')? UnaryExpr
@@ -5148,7 +5146,6 @@ PostfixOp   ::= '(' ArgList? ')'              // call
              |  '[' Expression ']'             // index
              |  '[' Expression? ':' Expression? ']'  // slice
              |  '!'                            // force unwrap
-             |  '++' | '--'                    // postfix inc/dec
 
 Primary ::= IntLiteral | FloatLiteral | BigIntLiteral
          |  StringLiteral | RawStringLiteral | RegexLiteral
@@ -5206,6 +5203,7 @@ MultiPattern    ::= Pattern (',' Pattern)+
 
 ```ebnf
 Statement ::= ExprStmt
+           |  IncDecStmt
            |  VarDecl
            |  FnDecl
            |  ClassDecl
@@ -5234,11 +5232,12 @@ Statement ::= ExprStmt
            // Note: print/dump are calls inside ExprStmt; go is an expression (GoExpr)
 
 ExprStmt ::= Expression (';' | LineBreak)
+IncDecStmt ::= Identifier ('++' | '--') (';' | LineBreak)
 Block    ::= '{' Statement* '}'
 
 IfStmt    ::= 'if' '(' Expression ')' Block ('else' 'if' '(' Expression ')' Block)* ('else' Block)?
 WhileStmt ::= 'while' '(' Expression ')' Block
-ForStmt   ::= 'for' '(' VarDecl? ';' Expression? ';' Expression (',' Expression)* ? ')' Block
+ForStmt   ::= 'for' '(' VarDecl? ';' Expression? ';' (Expression | Identifier ('++' | '--'))? ')' Block
 ForInStmt ::= 'for' '(' Identifier 'in' Expression ')' Block
 ForInPairStmt ::= 'for' '(' Identifier ',' Identifier 'in' Expression ')' Block
              |  'for' '(' '(' Identifier ',' Identifier ')' 'in' Expression ')' Block
@@ -5415,6 +5414,7 @@ The complete operator listing organized by purpose is in [§1.7](#17-operators-a
 | Comparison | `==` `!=` `<` `<=` `>` `>=` |
 | Logical | `&&` `\|\|` `!` |
 | Assignment | `=` `+=` `-=` `*=` `/=` `%=` `&=` `\|=` `^=` `<<=` `>>=` |
+| Statements | `++` `--` |
 | Other | `..` `??` `?.` `?[` `!` `->` |
 
 ---

@@ -15,18 +15,22 @@ Xray 语句以 `\n` 或 `;` 分隔；语句末尾的 `;` 在大多数位置可�
 ### 4.1 表达式语句与块
 
 ```ebnf
-ExprStmt ::= Expression (';' | LineBreak)
-Block    ::= '{' Statement* '}'
+ExprStmt   ::= Expression (';' | LineBreak)
+IncDecStmt ::= Identifier ('++' | '--') (';' | LineBreak)
+Block      ::= '{' Statement* '}'
 ```
 
 ```xray
 foo()                  // 表达式语句
 x = 1                  // 赋值表达式作为语句
+x++                    // 自增语句；不产生表达式值
 {                      // 块
     let y = 2
     y + 1              // 表达式但结果被丢弃
 }
 ```
+
+`++` / `--` 是纯语句或 `for` 步进项，只能写作 `name++` / `name--`。它们等价于 `name = name + 1` / `name = name - 1`，没有返回值；`let y = x++`、`f(x++)`、`a[i++]`、`return x++` 等表达式位置均编译失败。
 
 **注**：块**不是表达式**——它没有值。如果需要从块求值，用 `match` 或包装成立即调用函数。
 
@@ -77,7 +81,7 @@ while (i < 10) {
 ```ebnf
 ForStmt ::= 'for' '(' ForInit? ';' Expression? ';' ForStep? ')' Block
 ForInit ::= VarDecl | ExprStmt
-ForStep ::= Expression (',' Expression)*
+ForStep ::= Expression | Identifier ('++' | '--')
 ```
 
 ```xray @id=stmt-for-c
@@ -90,6 +94,7 @@ for (let j = 100; j > 90; j--) {
 ```
 
 - `ForInit` 中声明的变量作用域限于循环体。
+- 步进项里的 `i++` / `i--` 必须是整个 step；若要多个更新，写在循环体末尾。
 - 三个部分都可省略：`for (;;)` 是无限循环。
 
 #### `for-in` 单变量
@@ -309,18 +314,22 @@ Xray statements are separated by `\n` or `;`; the trailing `;` is optional in mo
 ### 4.1 Expression Statements and Blocks
 
 ```ebnf
-ExprStmt ::= Expression (';' | LineBreak)
-Block    ::= '{' Statement* '}'
+ExprStmt   ::= Expression (';' | LineBreak)
+IncDecStmt ::= Identifier ('++' | '--') (';' | LineBreak)
+Block      ::= '{' Statement* '}'
 ```
 
 ```xray
 foo()                  // expression statement
 x = 1                  // assignment expression as a statement
+x++                    // increment statement; produces no expression value
 {                      // block
     let y = 2
     y + 1              // expression with discarded result
 }
 ```
+
+`++` / `--` are pure statements or `for` step items, and can only be written as `name++` / `name--`. They are equivalent to `name = name + 1` / `name = name - 1` and produce no value; expression-position uses such as `let y = x++`, `f(x++)`, `a[i++]`, and `return x++` are compile errors.
 
 **Note**: a block is **not an expression** — it has no value. To get a value out of a block, use `match` or wrap it in an immediately-invoked function.
 
@@ -371,7 +380,7 @@ There is no `do-while` form.
 ```ebnf
 ForStmt ::= 'for' '(' ForInit? ';' Expression? ';' ForStep? ')' Block
 ForInit ::= VarDecl | ExprStmt
-ForStep ::= Expression (',' Expression)*
+ForStep ::= Expression | Identifier ('++' | '--')
 ```
 
 ```xray @id=stmt-for-c
@@ -384,6 +393,7 @@ for (let j = 100; j > 90; j--) {
 ```
 
 - Variables declared in `ForInit` are scoped to the loop body.
+- `i++` / `i--` in the step position must be the entire step; put multiple updates at the end of the loop body.
 - All three sections may be omitted: `for (;;)` is an infinite loop.
 
 #### Single-variable `for-in`

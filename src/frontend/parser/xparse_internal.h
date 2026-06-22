@@ -154,6 +154,7 @@ XR_FUNC AstNode *xr_parse_arrow_function_body(Parser *parser, XrParamNode **para
 
 XR_FUNC AstNode *xr_parse_statement(Parser *parser);
 XR_FUNC AstNode *xr_parse_expr_statement(Parser *parser);
+XR_FUNC AstNode *xr_parse_standalone_inc_dec(Parser *parser, bool for_step);
 XR_FUNC AstNode *xr_parse_print_statement(Parser *parser);
 XR_FUNC AstNode *xr_parse_block(Parser *parser);
 XR_FUNC AstNode *xr_parse_if_statement(Parser *parser);

@@ -88,7 +88,7 @@ MultiplicativeExpr ::= TypeOpExpr (('*' | '/' | '%') TypeOpExpr)*
 TypeOpExpr  ::= UnaryExpr (('as' | 'is') Type)*           // 安全转换写为 `x as T?`，T? 是可空类型
 RangeExpr   ::= AdditiveExpr ('..' AdditiveExpr)?
 
-UnaryExpr ::= ('-' | '+' | '!' | '~' | '++' | '--') UnaryExpr
+UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
            |  'new' QualifiedIdent TypeArgs? '(' ArgList? ')'
            |  'move' UnaryExpr
            |  'await' ('all' | 'any' | 'anySuccess')? UnaryExpr
@@ -105,7 +105,6 @@ PostfixOp   ::= '(' ArgList? ')'              // call
              |  '[' Expression ']'             // index
              |  '[' Expression? ':' Expression? ']'  // slice
              |  '!'                            // force unwrap
-             |  '++' | '--'                    // postfix inc/dec
 
 Primary ::= IntLiteral | FloatLiteral | BigIntLiteral
          |  StringLiteral | RawStringLiteral | RegexLiteral
@@ -163,6 +162,7 @@ MultiPattern    ::= Pattern (',' Pattern)+
 
 ```ebnf
 Statement ::= ExprStmt
+           |  IncDecStmt
            |  VarDecl
            |  FnDecl
            |  ClassDecl
@@ -191,11 +191,12 @@ Statement ::= ExprStmt
            // \u6ce8\uff1aprint/dump \u4f5c\u4e3a\u51fd\u6570\u8c03\u7528\u5305\u542b\u5728 ExprStmt \u4e2d\uff1bgo \u662f\u8868\u8fbe\u5f0f\uff08GoExpr\uff09
 
 ExprStmt ::= Expression (';' | LineBreak)
+IncDecStmt ::= Identifier ('++' | '--') (';' | LineBreak)
 Block    ::= '{' Statement* '}'
 
 IfStmt    ::= 'if' '(' Expression ')' Block ('else' 'if' '(' Expression ')' Block)* ('else' Block)?
 WhileStmt ::= 'while' '(' Expression ')' Block
-ForStmt   ::= 'for' '(' VarDecl? ';' Expression? ';' Expression (',' Expression)* ? ')' Block
+ForStmt   ::= 'for' '(' VarDecl? ';' Expression? ';' (Expression | Identifier ('++' | '--'))? ')' Block
 ForInStmt ::= 'for' '(' Identifier 'in' Expression ')' Block
 ForInPairStmt ::= 'for' '(' Identifier ',' Identifier 'in' Expression ')' Block
              |  'for' '(' '(' Identifier ',' Identifier ')' 'in' Expression ')' Block
@@ -385,7 +386,7 @@ MultiplicativeExpr ::= TypeOpExpr (('*' | '/' | '%') TypeOpExpr)*
 TypeOpExpr  ::= UnaryExpr (('as' | 'is') Type)*           // safe cast is `x as T?` where T? is a nullable type
 RangeExpr   ::= AdditiveExpr ('..' AdditiveExpr)?
 
-UnaryExpr ::= ('-' | '+' | '!' | '~' | '++' | '--') UnaryExpr
+UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
            |  'new' QualifiedIdent TypeArgs? '(' ArgList? ')'
            |  'move' UnaryExpr
            |  'await' ('all' | 'any' | 'anySuccess')? UnaryExpr
@@ -402,7 +403,6 @@ PostfixOp   ::= '(' ArgList? ')'              // call
              |  '[' Expression ']'             // index
              |  '[' Expression? ':' Expression? ']'  // slice
              |  '!'                            // force unwrap
-             |  '++' | '--'                    // postfix inc/dec
 
 Primary ::= IntLiteral | FloatLiteral | BigIntLiteral
          |  StringLiteral | RawStringLiteral | RegexLiteral
@@ -460,6 +460,7 @@ MultiPattern    ::= Pattern (',' Pattern)+
 
 ```ebnf
 Statement ::= ExprStmt
+           |  IncDecStmt
            |  VarDecl
            |  FnDecl
            |  ClassDecl
@@ -488,11 +489,12 @@ Statement ::= ExprStmt
            // Note: print/dump are calls inside ExprStmt; go is an expression (GoExpr)
 
 ExprStmt ::= Expression (';' | LineBreak)
+IncDecStmt ::= Identifier ('++' | '--') (';' | LineBreak)
 Block    ::= '{' Statement* '}'
 
 IfStmt    ::= 'if' '(' Expression ')' Block ('else' 'if' '(' Expression ')' Block)* ('else' Block)?
 WhileStmt ::= 'while' '(' Expression ')' Block
-ForStmt   ::= 'for' '(' VarDecl? ';' Expression? ';' Expression (',' Expression)* ? ')' Block
+ForStmt   ::= 'for' '(' VarDecl? ';' Expression? ';' (Expression | Identifier ('++' | '--'))? ')' Block
 ForInStmt ::= 'for' '(' Identifier 'in' Expression ')' Block
 ForInPairStmt ::= 'for' '(' Identifier ',' Identifier 'in' Expression ')' Block
              |  'for' '(' '(' Identifier ',' Identifier ')' 'in' Expression ')' Block
