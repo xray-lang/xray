@@ -46,16 +46,6 @@ typedef struct CgAotStdlibMethod {
 #include "xstdlib_aot_methods_generated.inc.c"
 
 static const CgAotStdlibMethod g_aot_stdlib_manual_methods[] = {
-    {"path", "join", CG_AOT_STDLIB_VARIADIC, "xrt_path_join", "*", CG_AOT_RET_VALUE, NULL},
-    {"path", "isAbsolute", 1, "xrt_path_is_absolute", "s", CG_AOT_RET_VALUE, NULL},
-    {"path", "dirname", 1, "xrt_path_dirname", "s", CG_AOT_RET_STR_BORROWED, NULL},
-    {"path", "basename", 1, "xrt_path_basename", "s", CG_AOT_RET_STR_BORROWED, NULL},
-    {"path", "extname", 1, "xrt_path_extname", "s", CG_AOT_RET_STR_BORROWED, NULL},
-    {"path", "normalize", 1, "xrt_path_normalize", "s", CG_AOT_RET_VALUE, NULL},
-    {"path", "relative", 2, "xrt_path_relative", "ss", CG_AOT_RET_VALUE, NULL},
-    {"path", "resolve", CG_AOT_STDLIB_VARIADIC, "xrt_path_resolve", "*", CG_AOT_RET_VALUE, NULL},
-    {"path", "parse", 1, "xrt_path_parse", "s", CG_AOT_RET_VALUE, NULL},
-    {"path", "format", 1, "xrt_path_format", "v", CG_AOT_RET_VALUE, NULL},
     {"encoding", "hexEncode", 1, "xrt_encoding_hex_encode", "s", CG_AOT_RET_VALUE, NULL},
     {"encoding", "hexDecode", 1, "xrt_encoding_hex_decode", "s", CG_AOT_RET_VALUE, NULL},
     {"encoding", "hexDecodeString", 1, "xrt_encoding_hex_decode_string", "s", CG_AOT_RET_VALUE,

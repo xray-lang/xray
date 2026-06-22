@@ -98,6 +98,131 @@ module math {
   }
 }
 
+module path {
+  fn join {
+    signature: "(...parts: string): string"
+    doc: "Join path segments"
+    vm: "path_join"
+    aot: "xrt_path_join"
+    argc: variadic
+    arg_spec: "*"
+    aot_direct: true
+    link_object: false
+    layer: "core"
+  }
+
+  fn isAbsolute {
+    signature: "(path: string): bool"
+    doc: "Check if path is absolute"
+    vm: "path_isAbsolute"
+    aot: "xrt_path_is_absolute"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: false
+    layer: "core"
+  }
+
+  fn dirname {
+    signature: "(path: string): string"
+    doc: "Get directory name"
+    vm: "path_dirname"
+    aot: "xrt_path_dirname"
+    argc: 1
+    arg_spec: "s"
+    ret: "str_borrowed"
+    aot_direct: true
+    link_object: false
+    layer: "core"
+  }
+
+  fn basename {
+    signature: "(path: string): string"
+    doc: "Get base name"
+    vm: "path_basename"
+    aot: "xrt_path_basename"
+    argc: 1
+    arg_spec: "s"
+    ret: "str_borrowed"
+    aot_direct: true
+    link_object: false
+    layer: "core"
+  }
+
+  fn extname {
+    signature: "(path: string): string"
+    doc: "Get file extension"
+    vm: "path_extname"
+    aot: "xrt_path_extname"
+    argc: 1
+    arg_spec: "s"
+    ret: "str_borrowed"
+    aot_direct: true
+    link_object: false
+    layer: "core"
+  }
+
+  fn normalize {
+    signature: "(path: string): string"
+    doc: "Normalize path"
+    vm: "path_normalize"
+    aot: "xrt_path_normalize"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: false
+    layer: "core"
+  }
+
+  fn relative {
+    signature: "(from: string, to: string): string"
+    doc: "Get relative path"
+    vm: "path_relative"
+    aot: "xrt_path_relative"
+    argc: 2
+    arg_spec: "ss"
+    aot_direct: true
+    link_object: false
+    layer: "core"
+  }
+
+  fn resolve {
+    signature: "(...parts: string): string"
+    doc: "Resolve to absolute path"
+    vm: "path_resolve"
+    aot: "xrt_path_resolve"
+    argc: variadic
+    arg_spec: "*"
+    aot_direct: true
+    link_object: false
+    layer: "core"
+  }
+
+  fn parse {
+    signature: "(path: string): PathInfo"
+    doc: "Parse path into components"
+    vm: "path_parse"
+    aot: "xrt_path_parse"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: false
+    layer: "core"
+  }
+
+  fn format {
+    signature: "(obj: PathInfo): string"
+    doc: "Format path from components"
+    vm: "path_format"
+    aot: "xrt_path_format"
+    argc: 1
+    arg_spec: "v"
+    aot_direct: true
+    link_object: false
+    layer: "core"
+  }
+}
+
 module crypto {
   fn md5 {
     signature: "(data: string): string"
