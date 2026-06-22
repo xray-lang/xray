@@ -85,8 +85,6 @@ XR_FUNC const char *xr_isolate_get_script_file(XrayIsolate *X);
 XR_FUNC int xr_isolate_get_script_argc(XrayIsolate *X);
 XR_FUNC char **xr_isolate_get_script_argv(XrayIsolate *X);
 
-XR_FUNC struct XrTypePool *xr_isolate_get_analyzer_pool(XrayIsolate *X);
-
 // Debug
 XR_FUNC void *xr_isolate_get_debug_state(XrayIsolate *X);
 XR_FUNC void xr_isolate_set_debug_state(XrayIsolate *X, void *state);

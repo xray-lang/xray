@@ -43,6 +43,7 @@
 #include "frontend/parser/xast.h"
 #include "base/xarena.h"
 #include "base/xmalloc.h"
+#include "toolchain/xcompiler_session.h"
 #include "xray_isolate.h"
 
 #include <stdint.h>
@@ -123,9 +124,18 @@ static AstNode *parse_recoverable(const char *source, Parser *out_parser, DiagSi
     xr_arena_init(arena, XR_ARENA_SEGMENT_SIZE);
     *out_arena = arena;
 
+    XrCompilerSessionScope parse_scope;
+    if (!xr_compiler_session_push_arena(g_iso, arena, "<test>", &parse_scope)) {
+        xr_arena_destroy(arena);
+        xr_free(arena);
+        *out_arena = NULL;
+        return NULL;
+    }
     xr_parser_init(out_parser, g_iso, source, "<test>", arena);
     xr_parser_set_error_callback(out_parser, diag_callback, sink, max_errors);
-    return xr_parse_recoverable(out_parser);
+    AstNode *ast = xr_parse_recoverable(out_parser);
+    xr_compiler_session_pop_arena(&parse_scope);
+    return ast;
 }
 
 // Release the arena returned by parse_recoverable. AST nodes live

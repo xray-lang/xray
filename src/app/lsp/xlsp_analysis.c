@@ -33,12 +33,17 @@
 #include "../../frontend/analyzer/xanalyzer.h"
 #include "../../frontend/analyzer/xanalyzer_escape.h"
 #include "../../runtime/value/xtype.h"
+#include "../../runtime/value/xtype_pool.h"
+#include "../../toolchain/xcompiler_session.h"
 
 // AST formatter (lives in frontend/format).
 #include "../../frontend/format/xfmt.h"
 #include "../../frontend/analyzer/xanalyzer_ast_visitor.h"
-#include "../../runtime/xisolate_api.h"
-#include "../../runtime/value/xtype_pool.h"
+
+static XrTypePool *lsp_compiler_analyzer_pool(XrayIsolate *isolate) {
+    XrCompilerSession *session = xr_compiler_session_current_for_isolate(isolate);
+    return xr_compiler_session_analyzer_pool(session);
+}
 
 // Use analyzer's scope system for semantic rename (unified design)
 
@@ -267,7 +272,7 @@ static void index_imports_on_demand(XrLspServer *server, AstNode *ast, const cha
         lsp_log("import: indexing from disk %s", full_path);
 
         // Ensure type pool is set
-        XrTypePool *pool = xr_isolate_get_analyzer_pool(server->isolate);
+        XrTypePool *pool = lsp_compiler_analyzer_pool(server->isolate);
         if (server->isolate && pool) {
             xr_type_set_current_pool(pool, &pool->next_type_id);
         }
@@ -276,6 +281,15 @@ static void index_imports_on_demand(XrLspServer *server, AstNode *ast, const cha
         XrArena temp_arena;
         xr_arena_init(&temp_arena, 64 * 1024);  // 64KB initial size
 
+        XrCompilerSessionScope parse_scope;
+        if (!xr_compiler_session_push_arena(server->isolate, &temp_arena, import_uri,
+                                            &parse_scope)) {
+            lsp_log("import: failed to enter compiler session for %s", full_path);
+            xr_arena_destroy(&temp_arena);
+            xr_free(content);
+            continue;
+        }
+
         Parser parser;
         xr_parser_init(&parser, server->isolate, content, import_uri, &temp_arena);
 
@@ -283,6 +297,7 @@ static void index_imports_on_demand(XrLspServer *server, AstNode *ast, const cha
         parser.max_errors = 50;
 
         AstNode *import_ast = xr_parse_recoverable(&parser);
+        xr_compiler_session_pop_arena(&parse_scope);
 
         // Analyze even with parse errors to get partial symbols for completion
         if (import_ast) {
@@ -337,7 +352,7 @@ void xlsp_parse_document(XrLspDocument *doc, XrLspServer *server) {
     }
 
     // Ensure type pool is set for parser (xr_type_* functions need it)
-    XrTypePool *apool = xr_isolate_get_analyzer_pool(isolate);
+    XrTypePool *apool = lsp_compiler_analyzer_pool(isolate);
     if (apool) {
         xr_type_set_current_pool(apool, &apool->next_type_id);
         lsp_log("parse_document: type pool set");
@@ -352,6 +367,11 @@ void xlsp_parse_document(XrLspDocument *doc, XrLspServer *server) {
         return;
     }
     Parser parser;
+    XrCompilerSessionScope parse_scope;
+    if (!xr_compiler_session_push_arena(isolate, &doc->arena, doc->uri, &parse_scope)) {
+        lsp_log("parse_document: failed to enter compiler session");
+        return;
+    }
     xr_parser_init(&parser, isolate, doc->content, doc->uri, &doc->arena);
 
     // Set up error collection
@@ -362,6 +382,7 @@ void xlsp_parse_document(XrLspDocument *doc, XrLspServer *server) {
     lsp_log("parse_document: parsing");
     AstNode *ast = xr_parse_recoverable(&parser);
     lsp_log("parse_document: parsing done");
+    xr_compiler_session_pop_arena(&parse_scope);
 
     doc->ast = ast;
     doc->parse_error = parser.had_error;

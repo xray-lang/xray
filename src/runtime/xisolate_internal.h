@@ -91,7 +91,6 @@ struct XrayIsolate {
     XrGlobalsTable *globals;  // Dynamic global variables table
 
     // Type system
-    struct XrTypePool *analyzer_pool;            // Static analyzer type pool (multi-instance safe)
     struct XrCompilerSession *compiler_session;  // Active toolchain session bridge.
 
     // Configuration

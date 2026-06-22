@@ -63,7 +63,7 @@ static int isolate_init_full(XrayIsolate *isolate) {
     if (!isolate->compiler_session)
         return -1;
     xr_compiler_session_install_analyzer_pool(isolate->compiler_session);
-    if (!isolate->analyzer_pool)
+    if (!xr_compiler_session_analyzer_pool(isolate->compiler_session))
         return -1;
 
     // Symbol table

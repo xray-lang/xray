@@ -26,6 +26,19 @@
 #include "frontend/parser/xparse.h"
 #include "frontend/parser/xast.h"
 #include "frontend/parser/xast_api.h"
+#include "base/xarena.h"
+#include "toolchain/xcompiler_session.h"
+#include "xray_isolate.h"
+
+static XrayIsolate *fuzz_isolate(void) {
+    static XrayIsolate *iso = NULL;
+    if (!iso) {
+        XrayIsolateParams params;
+        xray_isolate_params_init(&params);
+        iso = xray_isolate_new(&params);
+    }
+    return iso;
+}
 
 /*
  * libFuzzer entry point
@@ -50,18 +63,35 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
     memcpy(input, data, size);
     input[size] = '\0';
 
-    /* Initialize parser (X=NULL for fuzzing, no isolate needed) */
+    XrayIsolate *iso = fuzz_isolate();
+    if (!iso) {
+        free(input);
+        return 0;
+    }
+
+    XrArena arena;
+    xr_arena_init(&arena, XR_ARENA_SEGMENT_SIZE);
+    XrCompilerSessionScope parse_scope;
+    if (!xr_compiler_session_push_arena(iso, &arena, "<fuzz>", &parse_scope)) {
+        xr_arena_destroy(&arena);
+        free(input);
+        return 0;
+    }
+
+    /* Initialize parser with an explicit compiler-session arena. */
     Parser parser;
-    xr_parser_init(&parser, NULL, input, "<fuzz>", NULL);
+    xr_parser_init(&parser, iso, input, "<fuzz>", &arena);
 
     /* Parse the input using recoverable mode - errors are expected */
     AstNode *ast = xr_parse_recoverable(&parser);
+    xr_compiler_session_pop_arena(&parse_scope);
 
     /* Free AST if successfully parsed */
     if (ast) {
         xr_program_destroy(ast);
     }
 
+    xr_arena_destroy(&arena);
     free(input);
     return 0;
 }

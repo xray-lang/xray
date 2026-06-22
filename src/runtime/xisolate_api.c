@@ -141,10 +141,6 @@ char **xr_isolate_get_script_argv(XrayIsolate *X) {
     return (X && X->core_rt) ? X->core_rt->script_info.argv : NULL;
 }
 
-struct XrTypePool *xr_isolate_get_analyzer_pool(XrayIsolate *X) {
-    return X ? X->analyzer_pool : NULL;
-}
-
 /* ========== Debug ========== */
 
 void *xr_isolate_get_debug_state(XrayIsolate *X) {

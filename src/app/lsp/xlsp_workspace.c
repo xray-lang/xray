@@ -15,9 +15,10 @@
 #include "../../frontend/parser/xast_nodes.h"
 #include "../../frontend/parser/xast_api.h"
 #include "../../frontend/analyzer/xanalyzer.h"
-#include "../../runtime/xisolate_api.h"
 #include "../../runtime/value/xtype_pool.h"
+#include "../../toolchain/xcompiler_session.h"
 #include "../../frontend/parser/xparse.h"
+#include "../../base/xarena.h"
 #include <stdlib.h>
 #include <string.h>
 #include <limits.h>
@@ -33,6 +34,11 @@
 #include "xlsp_async.h"
 #include "xlsp_index_pool.h"
 #include "../../os/os_dir.h"
+
+static XrTypePool *workspace_compiler_analyzer_pool(XrayIsolate *isolate) {
+    XrCompilerSession *session = xr_compiler_session_current_for_isolate(isolate);
+    return xr_compiler_session_analyzer_pool(session);
+}
 
 // Recursively find all .xr files in a directory (with configurable ignore rules)
 static void find_xr_files_with_config(const char *dir_path, char ***files, int *count,
@@ -123,20 +129,27 @@ static void index_single_file(XrLspServer *server, const char *path) {
     snprintf(uri, sizeof(uri), "file://%s", path);
 
     if (server->workspace_analyzer && server->isolate) {
-        XrTypePool *apool = xr_isolate_get_analyzer_pool(server->isolate);
+        XrTypePool *apool = workspace_compiler_analyzer_pool(server->isolate);
         if (apool) {
             xr_type_set_current_pool(apool, &apool->next_type_id);
         }
+        XrArena arena;
+        xr_arena_init(&arena, 64 * 1024);
+        XrCompilerSessionScope parse_scope;
+        if (!xr_compiler_session_push_arena(server->isolate, &arena, uri, &parse_scope)) {
+            xr_arena_destroy(&arena);
+            xr_free(content);
+            return;
+        }
         Parser parser;
-        xr_parser_init(&parser, server->isolate, content, uri, NULL);
+        xr_parser_init(&parser, server->isolate, content, uri, &arena);
         AstNode *ast = xr_parse_recoverable(&parser);
+        xr_compiler_session_pop_arena(&parse_scope);
 
         if (ast && !parser.had_error) {
             xa_analyzer_analyze(server->workspace_analyzer, uri, (XrAstNode *) ast);
         }
-        if (ast) {
-            xr_program_destroy(ast);
-        }
+        xr_arena_destroy(&arena);
     }
 
     xr_free(content);
@@ -260,13 +273,22 @@ void xlsp_workspace_index_file(XrLspServer *server, const char *uri, const char 
     uint64_t content_hash = xlsp_content_hash(content, read_size);
 
     // Parse and analyze
-    XrTypePool *apool2 = xr_isolate_get_analyzer_pool(server->isolate);
+    XrTypePool *apool2 = workspace_compiler_analyzer_pool(server->isolate);
     if (apool2) {
         xr_type_set_current_pool(apool2, &apool2->next_type_id);
     }
+    XrArena arena;
+    xr_arena_init(&arena, 64 * 1024);
+    XrCompilerSessionScope parse_scope;
+    if (!xr_compiler_session_push_arena(server->isolate, &arena, uri, &parse_scope)) {
+        xr_arena_destroy(&arena);
+        xr_free(content);
+        return;
+    }
     Parser parser;
-    xr_parser_init(&parser, server->isolate, content, uri, NULL);
+    xr_parser_init(&parser, server->isolate, content, uri, &arena);
     AstNode *ast = xr_parse_recoverable(&parser);
+    xr_compiler_session_pop_arena(&parse_scope);
 
     if (ast && !parser.had_error) {
         // Use incremental update with content hash for true change detection
@@ -277,10 +299,8 @@ void xlsp_workspace_index_file(XrLspServer *server, const char *uri, const char 
         xa_analyzer_refresh_file(server->workspace_analyzer, uri, (XrAstNode *) ast, content_hash);
         lsp_log("Indexed file: %s (hash: %llx)", path, (unsigned long long) content_hash);
     }
-    if (ast) {
-        xr_program_destroy(ast);
-    }
 
+    xr_arena_destroy(&arena);
     xr_free(content);
 }
 
