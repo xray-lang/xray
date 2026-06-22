@@ -204,6 +204,16 @@ static bool stdlib_member_is_generated_builtin_direct(const char *module, const 
     return xaot_stdlib_generated_symbol_is_builtin_direct(symbol);
 }
 
+static bool stdlib_member_is_generated_constant(const char *module, const char *member) {
+    if (!module || !module[0] || !member || !member[0])
+        return false;
+    char symbol[XAOT_STDLIB_SYMBOL_NAME_MAX];
+    int n = snprintf(symbol, sizeof(symbol), "%s.%s", module, member);
+    if (n <= 0 || n >= (int) sizeof(symbol))
+        return false;
+    return xaot_stdlib_generated_symbol_is_constant(symbol);
+}
+
 static bool features_add_generated_builtin_stdlib_symbol(XaotFeatureSet *fs, const char *symbol) {
     if (!fs || !symbol || !xaot_stdlib_generated_symbol_is_builtin_direct(symbol))
         return false;
@@ -388,13 +398,14 @@ static void scan_func_features(XiFunc *f, XaotFeatureSet *fs) {
                     }
                     break;
                 case XI_LOAD_FIELD:
-                    /* Module constants (e.g. `path.sep`, `os.platform`) lower
-                     * as field loads from the whole-module import. Track them
-                     * in the same symbol-level closure as method-form calls. */
+                    /* Generated module constants (e.g. `path.sep`) lower as
+                     * field loads from the whole-module import. Track only
+                     * declarative constants in the symbol-level closure. */
                     if (v->aux && v->nargs >= 1) {
                         const char *mod = stdlib_symbol_module_of_value(f, v->args[0]);
-                        if (mod)
-                            features_add_stdlib_member(fs, mod, (const char *) v->aux);
+                        const char *member = (const char *) v->aux;
+                        if (mod && stdlib_member_is_generated_constant(mod, member))
+                            features_add_stdlib_member(fs, mod, member);
                     }
                     break;
                 case XI_CALL_BUILTIN: {

@@ -200,4 +200,36 @@ static bool xaot_stdlib_generated_symbol_is_builtin_direct(const char *symbol) {
     return false;
 }
 
+static bool xaot_stdlib_generated_symbol_is_constant(const char *symbol) {
+    if (!symbol)
+        return false;
+    if (strcmp(symbol, "path.sep") == 0)
+        return true;
+    if (strcmp(symbol, "path.delimiter") == 0)
+        return true;
+    if (strcmp(symbol, "encoding.LE") == 0)
+        return true;
+    if (strcmp(symbol, "encoding.BE") == 0)
+        return true;
+    if (strcmp(symbol, "os.platform") == 0)
+        return true;
+    if (strcmp(symbol, "os.arch") == 0)
+        return true;
+    if (strcmp(symbol, "os.sep") == 0)
+        return true;
+    if (strcmp(symbol, "os.eol") == 0)
+        return true;
+    if (strcmp(symbol, "log.DEBUG") == 0)
+        return true;
+    if (strcmp(symbol, "log.INFO") == 0)
+        return true;
+    if (strcmp(symbol, "log.WARN") == 0)
+        return true;
+    if (strcmp(symbol, "log.ERROR") == 0)
+        return true;
+    if (strcmp(symbol, "log.FATAL") == 0)
+        return true;
+    return false;
+}
+
 /* clang-format on */

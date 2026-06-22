@@ -117,6 +117,17 @@ static bool cg_aot_stdlib_generated_module_has_constants(const char *module) {
     return false;
 }
 
+static const CgAotStdlibConst *cg_aot_stdlib_generated_const_for_member(const char *module, const char *name) {
+    if (!module || !name)
+        return NULL;
+    for (int i = 0; i < CG_AOT_STDLIB_GENERATED_CONST_COUNT; i++) {
+        const CgAotStdlibConst *c = &g_aot_stdlib_generated_consts[i];
+        if (strcmp(module, c->module) == 0 && strcmp(name, c->name) == 0)
+            return c;
+    }
+    return NULL;
+}
+
 static bool cg_aot_stdlib_generated_has_builtin_direct_call(const char *module, const char *name) {
     if (!module || !name)
         return false;

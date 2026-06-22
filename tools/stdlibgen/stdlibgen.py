@@ -383,6 +383,20 @@ def emit_aot_methods(entries: list[StdlibEntry], constants: list[StdlibConstEntr
     lines.append("}")
     lines.append("")
     lines.append(
+        "static const CgAotStdlibConst *cg_aot_stdlib_generated_const_for_member("
+        "const char *module, const char *name) {"
+    )
+    lines.append("    if (!module || !name)")
+    lines.append("        return NULL;")
+    lines.append("    for (int i = 0; i < CG_AOT_STDLIB_GENERATED_CONST_COUNT; i++) {")
+    lines.append("        const CgAotStdlibConst *c = &g_aot_stdlib_generated_consts[i];")
+    lines.append("        if (strcmp(module, c->module) == 0 && strcmp(name, c->name) == 0)")
+    lines.append("            return c;")
+    lines.append("    }")
+    lines.append("    return NULL;")
+    lines.append("}")
+    lines.append("")
+    lines.append(
         "static bool cg_aot_stdlib_generated_has_builtin_direct_call(const char *module, "
         "const char *name) {"
     )
@@ -410,6 +424,7 @@ def emit_driver_metadata(entries: list[StdlibEntry], constants: list[StdlibConst
     builtin_rows = list(
         {e.symbol: e for e in entries if e.aot_direct and e.aot_kind == "builtin"}.values()
     )
+    const_rows = list({c.symbol: c for c in constants if c.aot_const_kind}.values())
     lines = generated_header("xaot_stdlib_generated.inc.c - AOT stdlib driver metadata")
     lines.extend(
         [
@@ -471,6 +486,14 @@ def emit_driver_metadata(entries: list[StdlibEntry], constants: list[StdlibConst
     lines.append("        return false;")
     for e in builtin_rows:
         lines.append(f"    if (strcmp(symbol, {c_string(e.symbol)}) == 0)\n        return true;")
+    lines.append("    return false;")
+    lines.append("}")
+    lines.append("")
+    lines.append("static bool xaot_stdlib_generated_symbol_is_constant(const char *symbol) {")
+    lines.append("    if (!symbol)")
+    lines.append("        return false;")
+    for c in const_rows:
+        lines.append(f"    if (strcmp(symbol, {c_string(c.symbol)}) == 0)\n        return true;")
     lines.append("    return false;")
     lines.append("}")
     lines.append("")
