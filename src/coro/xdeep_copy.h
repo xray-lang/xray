@@ -154,11 +154,11 @@ XR_FUNC bool xr_chan_try_adopt_array_from_transit(struct XrayIsolate *X, XrValue
 XR_FUNC bool xr_can_relocate(XrValue value);
 XR_FUNC XrValue xr_to_shared(struct XrayIsolate *X, XrValue value);
 
-/* ========== Per-Type Hooks Used by g_type_ops ==========
+/* ========== Per-Type Transfer Hooks ==========
  *
  * One pair of callbacks per deep-copyable / shareable type, all sharing
- * the XrGCDeepCopyFn / XrGCToSharedFn signatures so g_type_ops can
- * dispatch directly without casts. The dispatchers above
+ * the XrGCDeepCopyFn / XrGCToSharedFn signatures so the split transfer
+ * tables can dispatch directly without casts. The dispatchers above
  * (xr_deep_copy_with_ctx, xr_to_shared) consult these slots; any GC
  * type without a hook is simply not deep-copyable / not shareable
  * across coroutines and the dispatcher returns the value unchanged. */

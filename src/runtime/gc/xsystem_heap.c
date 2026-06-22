@@ -360,7 +360,7 @@ void xr_sysheap_print_stats(XrSystemHeap *heap) {
 
 /* ========== Shared Object Destruction ========== */
 
-// g_type_ops declared in xgc_internal.h as extern const
+// g_type_destroy_ops declared in xgc_internal.h as extern const
 
 void xr_shared_destroy(XrGCHeader *obj) {
     if (!obj)
@@ -375,8 +375,8 @@ void xr_shared_destroy(XrGCHeader *obj) {
     uint8_t type = XR_GC_GET_TYPE(obj);
 
     // Call destructor if registered (to free internal resources like buffers)
-    if (type < XGC_MAX_TYPES && g_type_ops[type].destroy) {
-        g_type_ops[type].destroy(obj, NULL);
+    if (type < XGC_MAX_TYPES && g_type_destroy_ops[type]) {
+        g_type_destroy_ops[type](obj, NULL);
     }
 
     // Free the object itself

@@ -33,29 +33,17 @@
 #include <string.h>
 #include "../base/xhash.h"
 
-XrCopyKind xr_value_copy_kind(XrValue value) {
-    if (XR_IS_NUM(value) || XR_IS_BOOL(value) || XR_IS_NULL(value))
-        return XR_COPY_IMMEDIATE;
-    if (!XR_IS_PTR(value))
-        return XR_COPY_IMMEDIATE;
+const XrGCDeepCopyFn g_type_deep_copy_ops[XGC_MAX_TYPES] = {
+    [XR_TARRAY] = xr_deep_copy_array_with_ctx,      [XR_TMAP] = xr_deep_copy_map_with_ctx,
+    [XR_TSET] = xr_deep_copy_set_with_ctx,          [XR_TINSTANCE] = xr_deep_copy_instance_with_ctx,
+    [XR_TFUNCTION] = xr_deep_copy_closure_with_ctx, [XR_TCELL] = xr_deep_copy_cell_with_ctx,
+};
 
-    uint8_t type = XR_HEAP_TYPE(value);
-    switch (type) {
-        case XR_TSTRING:
-            return XR_COPY_SHARED;
-        case XR_TCHANNEL:
-        case XR_TATOMIC:
-        case XR_TWORKQUEUE:
-        case XR_TRESULTGROUP:
-            return XR_COPY_SHARED_REF;
-        case XR_TARRAY:
-        case XR_TMAP:
-        case XR_TFUNCTION:
-            return XR_COPY_DEEP;
-        default:
-            return XR_COPY_DEEP;
-    }
-}
+const XrGCToSharedFn g_type_to_shared_ops[XGC_MAX_TYPES] = {
+    [XR_TARRAY] = xr_to_shared_array,      [XR_TMAP] = xr_to_shared_map,
+    [XR_TSET] = xr_to_shared_set,          [XR_TINSTANCE] = xr_to_shared_instance,
+    [XR_TFUNCTION] = xr_to_shared_closure,
+};
 
 // Initial bucket count. Seen hash dynamically grows when the
 // live entry count crosses 75% load factor — avoids O(N) chain traversals
@@ -495,10 +483,10 @@ XrValue xr_deep_copy_instance_with_ctx(XrCopyContext *ctx, XrGCHeader *obj) {
 }
 
 // xr_deep_copy_json_with_ctx removed: Json values flow through
-// xr_deep_copy_instance_with_ctx via the unified g_type_ops dispatch.
+// xr_deep_copy_instance_with_ctx via the unified transfer table dispatch.
 
 // DateTime is now an XrInstance with native body — deep copy flows
-// through xr_deep_copy_instance_with_ctx via the unified g_type_ops
+// through xr_deep_copy_instance_with_ctx via the unified transfer table
 // dispatch.
 
 XrValue xr_deep_copy_with_ctx(XrCopyContext *ctx, XrValue value) {
@@ -530,12 +518,12 @@ XrValue xr_deep_copy_with_ctx(XrCopyContext *ctx, XrValue value) {
     if (type >= XGC_MAX_TYPES)
         return value;
 
-    // Compile-time types resolve through g_type_ops in O(1). Slot is
+    // Compile-time types resolve through g_type_deep_copy_ops in O(1). Slot is
     // NULL for types that are either immutable across coroutines (TSTRING,
     // TBLOB) or simply not transferable (TCHANNEL, TCOROUTINE, TTASK,
     // TCELL, TBOUND_METHOD, TEXCEPTION, TERROR). The dispatcher returns
     // the raw value for those, matching the previous default branch.
-    XrGCDeepCopyFn fn = g_type_ops[type].deep_copy;
+    XrGCDeepCopyFn fn = g_type_deep_copy_ops[type];
     return fn ? fn(ctx, obj) : value;
 }
 
@@ -573,19 +561,6 @@ XrValue xr_deep_copy_to_transit_core(XrRuntimeCore *core, XrValue value) {
 XrValue xr_deep_copy_to_transit(struct XrayIsolate *X, XrValue value) {
     XR_DCHECK(X != NULL, "deep_copy_to_transit: NULL isolate");
     return xr_deep_copy_to_transit_core(xr_isolate_get_runtime_core(X), value);
-}
-
-void xr_chan_transit_release(XrValue value) {
-    if (!XR_IS_PTR(value))
-        return;
-    XrGCHeader *obj = XR_VALUE_GCPTR(value);
-    if (!obj || !XR_OBJ_GET_FLAG(obj, XR_OBJ_TRANSIT))
-        return;
-    /* Drop the channel-buffer reference. The graph's interior nodes hold
-     * one reference each from their parent container, so destroying the
-     * root cascades through the regular shared-destroy path. */
-    if (xr_obj_drop_is_last(obj))
-        xr_shared_destroy(obj);
 }
 
 /* ========== Zero-copy buffer move for self-contained scalar arrays ==========
@@ -1036,10 +1011,10 @@ XrValue xr_to_shared(struct XrayIsolate *X, XrValue value) {
     if (type >= XGC_MAX_TYPES)
         return value;
 
-    // Compile-time types resolve through g_type_ops in O(1). Slot is
+    // Compile-time types resolve through g_type_to_shared_ops in O(1). Slot is
     // NULL for types that have no shared form (channels are already
     // shared at construction; coroutines / tasks / cells / bound-methods
     // / exceptions / errors are deliberately not transferable).
-    XrGCToSharedFn fn = g_type_ops[type].to_shared;
+    XrGCToSharedFn fn = g_type_to_shared_ops[type];
     return fn ? fn(X, obj) : value;
 }

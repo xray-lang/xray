@@ -66,7 +66,7 @@ static inline XrSystemHeap *gc_pool_heap_from_gc(XrCoroGC *gc) {
 
 /* ========== Helper Functions ========== */
 
-// Per-type GC capability lookups derived from g_type_ops.
+// Per-type GC capability lookups derived from the destroy table.
 //
 // Compile-time types: ops table slot is NULL when the type is a leaf
 // (no traverse) or resource-less (no destroy). Extension types
@@ -96,7 +96,7 @@ static inline bool coro_gc_header_is_heap_value(XrGCHeader *obj) {
 static inline bool xr_gc_needs_finalize_ext(XrCoroGC *gc, uint8_t type) {
     if (type >= XR_NATIVE_TYPE_MAX)
         return false;
-    if (g_type_ops[type].destroy)
+    if (g_type_destroy_ops[type])
         return true;
     XrayIsolate *iso = gc_get_isolate(gc);
     return iso && (xr_isolate_get_ext_finalize_bitmap(iso) & (1ULL << type));
@@ -105,7 +105,7 @@ static inline bool xr_gc_needs_finalize_ext(XrCoroGC *gc, uint8_t type) {
 static inline XrGCDestroyFn get_destroy_func_ext(XrCoroGC *gc, uint8_t type) {
     if (type >= XGC_MAX_TYPES)
         return NULL;
-    XrGCDestroyFn fn = g_type_ops[type].destroy;
+    XrGCDestroyFn fn = g_type_destroy_ops[type];
     if (fn)
         return fn;
     XrayIsolate *iso = gc_get_isolate(gc);

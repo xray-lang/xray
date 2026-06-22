@@ -63,30 +63,17 @@ typedef struct XrGCObjectNode {
     struct XrGCObjectNode *next;
 } XrGCObjectNode;
 
-/* ========== Per-Type Operations Table ==========
+/* ========== Per-Type Capability Tables ==========
  *
- * Single source of truth for every compile-time GC type. Each slot
- * either provides a callback or stays NULL to express the absence of
- * that capability:
- *
- *   destroy   == NULL  -> leaf-and-resourceless: nothing to free.
- *   deep_copy == NULL  -> not deep-copyable across coroutines; the
- *                          dispatcher passes the value through unchanged.
- *   to_shared == NULL  -> no shared-storage form available; xr_to_shared
- *                          returns the value unchanged.
- *
- * needs_finalize(t) == destroy != NULL. (There is no traverse slot: the
- * tracing collector that walked GC children has been removed — reference
- * counting owns reclamation.)
+ * Each capability is intentionally stored in its own table. RC/fixedgc cleanup
+ * only needs destroy callbacks, while cross-coroutine transfer needs deep-copy
+ * and to-shared callbacks. Keeping the tables split prevents the minimal AOT
+ * runtime from pulling deep-copy/share code merely because it can destroy an
+ * object.
  *
  * Extension types (registered via xr_register_extension_destroy) live in
- * per-isolate tables on XrayIsolate and are consulted as a fallback when
- * this table's slot is empty. */
-typedef struct {
-    XrGCDestroyFn destroy;     // Release malloc-backed side resources
-    XrGCDeepCopyFn deep_copy;  // Cross-coroutine deep copy (Region heap)
-    XrGCToSharedFn to_shared;  // Cross-coroutine shared/refcount copy
-} XrTypeOps;
+ * per-isolate/runtime-core tables and are consulted as a fallback when the
+ * compile-time destroy slot is empty. */
 
 typedef struct XrGC {
     uint8_t gcstate;
@@ -111,10 +98,13 @@ XR_FUNC bool xr_gc_type_may_need_finalize(uint8_t type);
 
 /* ========== Compile-Time Type Function Tables ========== */
 
-// Single per-type operations table. Defined in xgc.c, referenced by
-// xr_gc_cleanup and xcoro_gc.c (teardown finalize). One entry per
-// XGC_MAX_TYPES slot.
-extern const XrTypeOps g_type_ops[XGC_MAX_TYPES];
+// Destroy table: defined in xgc.c, referenced by RC/fixedgc cleanup.
+extern const XrGCDestroyFn g_type_destroy_ops[XGC_MAX_TYPES];
+
+// Transfer tables: defined in xdeep_copy.c and only pulled when transfer
+// logic is linked.
+extern const XrGCDeepCopyFn g_type_deep_copy_ops[XGC_MAX_TYPES];
+extern const XrGCToSharedFn g_type_to_shared_ops[XGC_MAX_TYPES];
 
 // Destroy functions (non-static, referenced by const tables)
 XR_FUNC void xr_gc_destroy_array(XrGCHeader *obj, XrCoroGC *owning_gc);
