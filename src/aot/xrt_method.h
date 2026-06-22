@@ -353,6 +353,8 @@ static inline XrValue xrt_method_0(XrValue recv, int sym) {
     }
     if (recv.tag == XR_TAG_BOOL && sym == XRT_SYM_TOSTRING)
         return xrt_tostring(recv, 0);
+    if (recv.tag == XR_TAG_ENUM && sym == XRT_SYM_TOSTRING)
+        return xrt_tostring(recv, 0);
     return (XrValue) {.i = 0, .tag = XR_TAG_NULL};
 }
 

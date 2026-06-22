@@ -314,8 +314,15 @@ static void emit_enum_type_expr(XiCgenCtx *ctx, FILE *out, const XiEnumData *ed)
         fprintf(out, ", ");
         if (ed->is_adt)
             fprintf(out, "XR_FROM_INT(%u)", (unsigned) i);
-        else
+        else {
+            fprintf(out, "xrt_enum_value_new(");
+            emit_c_string_literal(out, ed->name ? ed->name : "");
+            fprintf(out, ", ");
+            emit_c_string_literal(out, name);
+            fprintf(out, ", ");
             emit_enum_member_value_expr(ctx, out, member);
+            fprintf(out, ", %u)", (unsigned) i);
+        }
         fprintf(out, "); ");
     }
     fprintf(out, "_e; })");
@@ -386,10 +393,11 @@ static void emit_prelude_enum_member_value_expr(FILE *out, const CgPreludeEnumDa
     }
     fprintf(out,
             "({ static const XrAotEnumValueView _ev_%s_%s = {{0, 0}, NULL, \"%s\", "
-            "\"%s\"}; XrValue _v = {0}; _v.tag = XR_TAG_ENUM; _v.ext = %u; "
+            "\"%s\", {.tag = XR_TAG_I64, .i = %u}, %u}; XrValue _v = {0}; "
+            "_v.tag = XR_TAG_ENUM; _v.ext = %u; "
             "_v.ptr = (void *)&_ev_%s_%s; _v; })",
             ed->enum_name, member->name, ed->enum_name, member->name, (unsigned) member_index,
-            ed->enum_name, member->name);
+            (unsigned) member_index, (unsigned) member_index, ed->enum_name, member->name);
 }
 
 static bool emit_prelude_enum_type_expr(FILE *out, int builtin_index) {
@@ -470,18 +478,25 @@ static void emit_str_concat_expr(XiCgenCtx *ctx, FILE *out, const XiValue *v) {
         cg_emit_str_value(ctx, out, "");
         return;
     }
-    if (v->nargs == 1) {
+    if (v->nargs == 1 && v->args[0] && v->args[0]->type &&
+        v->args[0]->type->kind == XR_KIND_STRING) {
         emit_vref(out, v->args[0]);
         return;
     }
-    for (uint16_t i = 1; i < v->nargs; i++)
-        fprintf(out, "xrt_add(");
-    emit_vref(out, v->args[0]);
-    for (uint16_t i = 1; i < v->nargs; i++) {
-        fprintf(out, ", ");
-        emit_vref(out, v->args[i]);
+    if (v->nargs == 1) {
+        fprintf(out, "xrt_to_string(");
+        emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
         fprintf(out, ")");
+        return;
     }
+
+    fprintf(out, "({ xrt_strpart_t _scp_%u[%u]; ", v->id, (unsigned) v->nargs);
+    for (uint16_t i = 0; i < v->nargs; i++) {
+        fprintf(out, "xrt_strpart_init(&_scp_%u[%u], ", v->id, (unsigned) i);
+        emit_value_as_rep(out, v->args[i], XR_REP_TAGGED);
+        fprintf(out, "); ");
+    }
+    fprintf(out, "xrt_str_concat_parts(%u, _scp_%u); })", (unsigned) v->nargs, v->id);
 }
 
 static bool cg_aot_coro_closure_has_only_supported_uses(XiCgenCtx *ctx, const XiFunc *current,
