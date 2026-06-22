@@ -12,7 +12,7 @@
 #define XAOT_CORO_BRIDGE_H
 
 #include "xrt_coll.h"
-#include "../runtime/gc/xgc_destroy_ops.h"
+#include "../runtime/gc/xobj_destroy_ops.h"
 #include "../runtime/gc/xgc_header.h"
 #include "../coro/xaot_await.h"
 #include "../coro/xaot_coro.h"

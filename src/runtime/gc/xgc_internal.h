@@ -103,17 +103,17 @@ extern const XrObjDeepCopyFn xr_obj_deep_copy_ops[XR_OBJ_TYPE_MAX];
 extern const XrObjToSharedFn xr_obj_to_shared_ops[XR_OBJ_TYPE_MAX];
 
 // Destroy functions (non-static, referenced by const tables)
-XR_FUNC void xr_gc_destroy_array(XrObjHeader *obj, XrCoroHeap *owner_heap);
-XR_FUNC void xr_gc_destroy_map(XrObjHeader *obj, XrCoroHeap *owner_heap);
-XR_FUNC void xr_gc_destroy_set(XrObjHeader *obj, XrCoroHeap *owner_heap);
-XR_FUNC void xr_gc_destroy_channel(XrObjHeader *obj, XrCoroHeap *owner_heap);
-XR_FUNC void xr_gc_destroy_closure(XrObjHeader *obj, XrCoroHeap *owner_heap);
-XR_FUNC void xr_gc_destroy_cell(XrObjHeader *obj, XrCoroHeap *owner_heap);
-XR_FUNC void xr_gc_destroy_coroutine(XrObjHeader *obj, XrCoroHeap *owner_heap);
-XR_FUNC void xr_gc_destroy_instance(XrObjHeader *obj, XrCoroHeap *owner_heap);
-XR_FUNC void xr_gc_destroy_task(XrObjHeader *obj, XrCoroHeap *owner_heap);
-XR_FUNC void xr_gc_destroy_work_queue(XrObjHeader *obj, XrCoroHeap *owner_heap);
-XR_FUNC void xr_gc_destroy_result_group(XrObjHeader *obj, XrCoroHeap *owner_heap);
+XR_FUNC void xr_obj_destroy_array(XrObjHeader *obj, XrCoroHeap *owner_heap);
+XR_FUNC void xr_obj_destroy_map(XrObjHeader *obj, XrCoroHeap *owner_heap);
+XR_FUNC void xr_obj_destroy_set(XrObjHeader *obj, XrCoroHeap *owner_heap);
+XR_FUNC void xr_obj_destroy_channel(XrObjHeader *obj, XrCoroHeap *owner_heap);
+XR_FUNC void xr_obj_destroy_closure(XrObjHeader *obj, XrCoroHeap *owner_heap);
+XR_FUNC void xr_obj_destroy_cell(XrObjHeader *obj, XrCoroHeap *owner_heap);
+XR_FUNC void xr_obj_destroy_coroutine(XrObjHeader *obj, XrCoroHeap *owner_heap);
+XR_FUNC void xr_obj_destroy_instance(XrObjHeader *obj, XrCoroHeap *owner_heap);
+XR_FUNC void xr_obj_destroy_task(XrObjHeader *obj, XrCoroHeap *owner_heap);
+XR_FUNC void xr_obj_destroy_work_queue(XrObjHeader *obj, XrCoroHeap *owner_heap);
+XR_FUNC void xr_obj_destroy_result_group(XrObjHeader *obj, XrCoroHeap *owner_heap);
 // NetConn / NetListener destroy handled by native body descriptors.
 
 /* ========== Debug API ========== */

@@ -152,7 +152,7 @@ XrStringBuilder *xr_to_stringbuilder(XrValue v) {
 
 /* ========== Native Body Lifecycle ========== */
 
-// Destroy hook for XrNativeBodyDesc — called by xr_gc_destroy_instance.
+// Destroy hook for XrNativeBodyDesc — called by xr_obj_destroy_instance.
 // The body pointer points to the XrStrBuf* field inside the instance.
 static void stringbuilder_body_destroy(void *body) {
     XrStrBuf **buf_ptr = (XrStrBuf **) body;

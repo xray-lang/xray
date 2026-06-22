@@ -466,7 +466,7 @@ XR_FUNC XrInstance *xr_enum_adt_construct(XrayIsolate *X, XrEnumType *enum_type,
 /* Release malloc-backed side resources owned by the enum value.
  * The body itself lives on the isolate fixed_heap list and is freed by
  * xr_fixed_heap_cleanup; this hook must NOT call xr_free(obj). */
-void xr_gc_destroy_enum_value(XrObjHeader *obj, XrCoroHeap *owner_heap) {
+void xr_obj_destroy_enum_value(XrObjHeader *obj, XrCoroHeap *owner_heap) {
     (void) owner_heap;
     if (!obj)
         return;
@@ -478,7 +478,7 @@ void xr_gc_destroy_enum_value(XrObjHeader *obj, XrCoroHeap *owner_heap) {
 /* Release malloc-backed side resources owned by the enum type. The
  * member instances are individually owned by the fixed_heap list, so this
  * hook only frees the type's own side arrays and the members[] table. */
-void xr_gc_destroy_enum_type(XrObjHeader *obj, XrCoroHeap *owner_heap) {
+void xr_obj_destroy_enum_type(XrObjHeader *obj, XrCoroHeap *owner_heap) {
     (void) owner_heap;
     if (!obj)
         return;

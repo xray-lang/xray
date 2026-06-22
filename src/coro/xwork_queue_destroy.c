@@ -5,7 +5,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xwork_queue_gc.c - WorkQueue GC cleanup entrypoint
+ * xwork_queue_destroy.c - WorkQueue object destroy entrypoint
  */
 
 #include "xwork_queue.h"
@@ -22,7 +22,7 @@ static void work_queue_shard_destroy(XrWorkQueueShard *shard) {
     shard->count = 0;
 }
 
-void xr_gc_destroy_work_queue(XrObjHeader *obj, struct XrCoroHeap *owner_heap) {
+void xr_obj_destroy_work_queue(XrObjHeader *obj, struct XrCoroHeap *owner_heap) {
     (void) owner_heap;
     if (!obj)
         return;

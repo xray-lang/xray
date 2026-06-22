@@ -5,13 +5,13 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xgc_destroy_ops_basic.c - Basic RC destroy capability registration.
+ * xobj_destroy_ops_basic.c - Basic RC destroy capability registration.
  */
 
-#include "xgc_destroy_ops.h"
+#include "xobj_destroy_ops.h"
 #include "xgc_internal.h"
 #include "../core/xr_runtime_core.h"
 
 void xr_runtime_core_enable_basic_destroy_ops(struct XrRuntimeCore *core) {
-    xr_runtime_core_set_destroy_op(core, XR_TCOROUTINE, xr_gc_destroy_coroutine);
+    xr_runtime_core_set_destroy_op(core, XR_TCOROUTINE, xr_obj_destroy_coroutine);
 }

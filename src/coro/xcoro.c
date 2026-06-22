@@ -840,7 +840,7 @@ void xr_runtime_wake_channel_all(XrRuntime *runtime, void *channel) {
 // ========== GC Integration ==========
 
 // GC destructor: free coroutine internal resources
-void xr_gc_destroy_coroutine(XrObjHeader *obj, struct XrCoroHeap *owner_heap) {
+void xr_obj_destroy_coroutine(XrObjHeader *obj, struct XrCoroHeap *owner_heap) {
     (void) owner_heap;
     xr_coro_free((XrCoroutine *) obj);
 }

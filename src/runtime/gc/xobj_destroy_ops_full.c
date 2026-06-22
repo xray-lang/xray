@@ -5,10 +5,10 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xgc_destroy_ops_full.c - Full RC destroy capability registration.
+ * xobj_destroy_ops_full.c - Full RC destroy capability registration.
  */
 
-#include "xgc_destroy_ops.h"
+#include "xobj_destroy_ops.h"
 
 void xr_runtime_core_enable_full_destroy_ops(struct XrRuntimeCore *core) {
     xr_runtime_core_enable_basic_destroy_ops(core);

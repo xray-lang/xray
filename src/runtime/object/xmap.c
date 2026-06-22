@@ -603,7 +603,7 @@ void xr_map_debug_print(XrMap *map) {
 
 /* ========== GC Integration ========== */
 
-void xr_gc_destroy_map(XrObjHeader *obj, struct XrCoroHeap *owner_heap) {
+void xr_obj_destroy_map(XrObjHeader *obj, struct XrCoroHeap *owner_heap) {
     XrMap *map = (XrMap *) obj;
     if (map->flags & XR_MAP_FLAG_WEAK_REGISTERED)
         xr_weak_registry_unregister_map(map_owning_isolate(owner_heap), map);

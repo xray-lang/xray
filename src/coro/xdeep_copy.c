@@ -245,8 +245,8 @@ XrValue xr_deep_copy_array_with_ctx(XrCopyContext *ctx, XrObjHeader *obj) {
         if (!new_arr->data)
             return XR_NULL_VAL;
         memset(new_arr->data, 0, alloc_size);
-        /* Notify destination GC about the external malloc'd data buffer
-         * so sweep's sub_external (via xr_gc_destroy_array) balances. */
+        /* Notify destination coroutine heap about the external malloc'd data buffer
+         * so sweep's sub_external (via xr_obj_destroy_array) balances. */
         if (ctx->dst_heap) {
             xr_coro_heap_add_external(ctx->dst_heap, (int64_t) alloc_size);
         }

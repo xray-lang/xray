@@ -531,7 +531,7 @@ bool xr_set_is_superset(XrSet *set1, XrSet *set2) {
 
 /* ========== GC Integration ========== */
 
-void xr_gc_destroy_set(XrObjHeader *obj, struct XrCoroHeap *owner_heap) {
+void xr_obj_destroy_set(XrObjHeader *obj, struct XrCoroHeap *owner_heap) {
     XrSet *set = (XrSet *) obj;
     if (set->flags & XR_SET_FLAG_WEAK_REGISTERED)
         xr_weak_registry_unregister_set(set_owning_isolate(owner_heap), set);
