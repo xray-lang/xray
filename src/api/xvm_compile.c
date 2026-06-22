@@ -105,33 +105,13 @@ static XrProto *compile_ast_internal(XrCompilerSession *session, AstNode *ast,
     return proto;
 }
 
-// Compile AST to bytecode
-XrProto *xr_compile_ast(XrayIsolate *isolate, AstNode *ast) {
-    return xr_compile_ast_with_source_session(xr_compiler_session_current_for_isolate(isolate), ast,
-                                              NULL);
-}
-
-// Compile AST to bytecode (with source file path)
-XrProto *xr_compile_ast_with_source(XrayIsolate *isolate, AstNode *ast, const char *source_file) {
-    return xr_compile_ast_with_source_session(xr_compiler_session_current_for_isolate(isolate), ast,
-                                              source_file);
-}
-
-XrProto *xr_compile_ast_with_source_session(XrCompilerSession *session, AstNode *ast,
-                                            const char *source_file) {
+XrProto *xr_compile_ast_with_source(XrCompilerSession *session, AstNode *ast,
+                                    const char *source_file) {
     return compile_ast_internal(session, ast, source_file);
 }
 
-// Compile source code to bytecode (creates compiler context before parsing)
-// This ensures type pool is valid during parsing for type annotations
-XrProto *xr_compile_source_with_path(XrayIsolate *isolate, const char *source,
+XrProto *xr_compile_source_with_path(XrCompilerSession *session, const char *source,
                                      const char *source_file) {
-    return xr_compile_source_with_path_session(xr_compiler_session_current_for_isolate(isolate),
-                                               source, source_file);
-}
-
-XrProto *xr_compile_source_with_path_session(XrCompilerSession *session, const char *source,
-                                             const char *source_file) {
     XrayIsolate *isolate = compile_session_vm_host(session, "compile_source_with_path");
     if (!isolate)
         return NULL;

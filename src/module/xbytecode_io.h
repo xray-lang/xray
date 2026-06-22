@@ -38,6 +38,7 @@
 #include "../base/xdefs.h"
 
 struct XrayIsolate;
+struct XrCompilerSession;
 struct XrProto;
 
 #define XR_BC_MAGIC 0x59415258  // "XRAY" (little-endian)
@@ -71,8 +72,8 @@ XR_FUNC int xr_eval_bytecode(struct XrayIsolate *X, const uint8_t *data, size_t 
 
 /* ========== File API ========== */
 
-// Compile source file and save as bytecode
-XR_FUNC bool xr_compile_to_file(struct XrayIsolate *X, const char *source_file,
+// Compile source file with an explicit compiler session and save as bytecode.
+XR_FUNC bool xr_compile_to_file(struct XrCompilerSession *session, const char *source_file,
                                 const char *output_file, int flags);
 
 // Load and execute bytecode file

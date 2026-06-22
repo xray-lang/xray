@@ -146,7 +146,7 @@ XR_FUNC int cmd_compile(const XrCliInvocation *inv) {
     }
 
     /* Compile */
-    XrProto *proto = xr_compile_ast_with_source_session(session, ast, input_file);
+    XrProto *proto = xr_compile_ast_with_source(session, ast, input_file);
     if (!proto) {
         xr_cli_error("compile", "compilation failed");
         goto cleanup;

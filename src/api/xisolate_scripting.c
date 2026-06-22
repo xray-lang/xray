@@ -19,8 +19,6 @@
 #include "../runtime/xisolate_internal.h"
 #include "../runtime/core/xr_runtime_core.h"
 #include "../base/xchecks.h"
-#include "../frontend/parser/xparse.h"
-#include "../frontend/parser/xast.h"
 #include "../runtime/object/xstring.h"
 #include "../runtime/object/xarray.h"
 #include "../runtime/class/xinstance.h"
@@ -147,23 +145,15 @@ int xray_isolate_dostring(XrayIsolate *isolate, const char *source) {
         fprintf(stderr, "Compiler unavailable: source execution requires a compiler session\n");
         return -1;
     }
-    AstNode *ast = xr_parse(session, source);
-    if (ast == NULL) {
-        fprintf(stderr, "Parse error\n");
-        return -1;
-    }
-
-    XrProto *code = xr_compile_ast_with_source_session(session, ast, NULL);
+    XrProto *code = xr_compile_source_with_path(session, source, NULL);
     if (code == NULL) {
         fprintf(stderr, "Compilation error\n");
-        xr_program_destroy(ast);
         return -1;
     }
 
     int result = execute_and_dump(isolate, code, "<eval>");
 
     xr_free_code(isolate, code);
-    xr_program_destroy(ast);
 
     return result;
 }
@@ -189,15 +179,8 @@ int xray_isolate_dofile(XrayIsolate *isolate, const char *filename) {
         xr_free(source);
         return -1;
     }
-    AstNode *ast = xr_parse_with_source(session, source, filename);
-    if (ast == NULL) {
-        xr_free(source);
-        return -1;
-    }
-
-    XrProto *code = xr_compile_ast_with_source_session(session, ast, filename);
+    XrProto *code = xr_compile_source_with_path(session, source, filename);
     if (code == NULL) {
-        xr_program_destroy(ast);
         xr_free(source);
         return -1;
     }
@@ -205,7 +188,6 @@ int xray_isolate_dofile(XrayIsolate *isolate, const char *filename) {
     int result = execute_and_dump(isolate, code, filename);
 
     xr_free_code(isolate, code);
-    xr_program_destroy(ast);
     xr_free(source);
 
     return result;
@@ -234,15 +216,8 @@ int xray_isolate_dofile_debug(XrayIsolate *isolate, const char *filename, void *
         xr_free(source);
         return -1;
     }
-    AstNode *ast = xr_parse_with_source(session, source, filename);
-    if (ast == NULL) {
-        xr_free(source);
-        return -1;
-    }
-
-    XrProto *code = xr_compile_ast_with_source_session(session, ast, filename);
+    XrProto *code = xr_compile_source_with_path(session, source, filename);
     if (code == NULL) {
-        xr_program_destroy(ast);
         xr_free(source);
         return -1;
     }
@@ -251,9 +226,10 @@ int xray_isolate_dofile_debug(XrayIsolate *isolate, const char *filename, void *
 
     if (out_proto) {
         *out_proto = code;
+    } else {
+        xr_free_code(isolate, code);
     }
 
-    xr_program_destroy(ast);
     xr_free(source);
 
     return result;

@@ -12,16 +12,24 @@
 #include "../base/xfileio.h"
 #include "../base/xlog.h"
 #include "../base/xmalloc.h"
-#include "../frontend/parser/xast.h"
-#include "../frontend/parser/xparse.h"
 #include "../runtime/xisolate_api.h"
 #include "../runtime/value/xchunk.h"
 #include "../toolchain/xcompiler_session.h"
 #include "xray_isolate.h"
 #include <stdio.h>
 
-bool xr_compile_to_file(XrayIsolate *X, const char *source_file, const char *output_file,
-                        int flags) {
+bool xr_compile_to_file(XrCompilerSession *session, const char *source_file,
+                        const char *output_file, int flags) {
+    if (!session) {
+        xr_log_warning("compile", "compiler session is required");
+        return false;
+    }
+    XrayIsolate *X = xr_compiler_session_vm_host(session);
+    if (!X) {
+        xr_log_warning("compile", "compiler session has no VM host");
+        return false;
+    }
+
     // Read source file
     char *source = xr_file_read_all(source_file, "r", NULL);
     if (!source) {
@@ -29,24 +37,8 @@ bool xr_compile_to_file(XrayIsolate *X, const char *source_file, const char *out
         return false;
     }
 
-    // Parse
-    XrCompilerSession *session = xr_compiler_session_current_for_isolate(X);
-    if (!session) {
-        xr_log_warning("compile", "compiler session is required");
-        xr_free(source);
-        return false;
-    }
-    AstNode *ast = xr_parse_with_source(session, source, source_file);
+    XrProto *proto = xr_compile_source_with_path(session, source, source_file);
     xr_free(source);
-
-    if (!ast) {
-        xr_log_warning("compile", "parse failed: %s", source_file);
-        return false;
-    }
-
-    // Compile
-    XrProto *proto = xr_compile_ast_with_source_session(session, ast, source_file);
-    xr_program_destroy(ast);
 
     if (!proto) {
         xr_log_warning("compile", "compilation failed: %s", source_file);
