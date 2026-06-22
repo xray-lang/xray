@@ -42,6 +42,7 @@
 
 #include "xvm_internal.h"
 #include "xvm_coro_state.h"
+#include "xvm_string.h"
 #include "../runtime/closure/xcell.h"
 #include "../base/xchecks.h"
 #include "xvm_checks.h"
@@ -62,7 +63,6 @@
 #include <inttypes.h>
 #include "../base/xarena.h"
 #include "../os/os_time.h"
-#include "../runtime/xstrbuf.h"
 #include "../runtime/object/xstringbuilder.h"
 
 #include "../runtime/object/xjson.h"
