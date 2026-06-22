@@ -70,4 +70,80 @@ static const CgAotStdlibMethod g_aot_stdlib_generated_methods[] = {
 };
 #define CG_AOT_STDLIB_GENERATED_METHOD_COUNT ((int) (sizeof(g_aot_stdlib_generated_methods) / sizeof(g_aot_stdlib_generated_methods[0])))
 
+static bool cg_aot_stdlib_generated_has_builtin_direct_call(const char *module, const char *name) {
+    if (!module || !name)
+        return false;
+    if (strcmp(module, "math") == 0 && strcmp(name, "abs") == 0)
+        return true;
+    if (strcmp(module, "math") == 0 && strcmp(name, "floor") == 0)
+        return true;
+    if (strcmp(module, "math") == 0 && strcmp(name, "ceil") == 0)
+        return true;
+    if (strcmp(module, "math") == 0 && strcmp(name, "round") == 0)
+        return true;
+    if (strcmp(module, "math") == 0 && strcmp(name, "sqrt") == 0)
+        return true;
+    if (strcmp(module, "math") == 0 && strcmp(name, "pow") == 0)
+        return true;
+    if (strcmp(module, "math") == 0 && strcmp(name, "sin") == 0)
+        return true;
+    if (strcmp(module, "math") == 0 && strcmp(name, "cos") == 0)
+        return true;
+    if (strcmp(module, "math") == 0 && strcmp(name, "tan") == 0)
+        return true;
+    if (strcmp(module, "math") == 0 && strcmp(name, "asin") == 0)
+        return true;
+    if (strcmp(module, "math") == 0 && strcmp(name, "acos") == 0)
+        return true;
+    if (strcmp(module, "math") == 0 && strcmp(name, "atan") == 0)
+        return true;
+    if (strcmp(module, "math") == 0 && strcmp(name, "atan2") == 0)
+        return true;
+    if (strcmp(module, "math") == 0 && strcmp(name, "log") == 0)
+        return true;
+    if (strcmp(module, "math") == 0 && strcmp(name, "log10") == 0)
+        return true;
+    if (strcmp(module, "math") == 0 && strcmp(name, "log2") == 0)
+        return true;
+    if (strcmp(module, "math") == 0 && strcmp(name, "exp") == 0)
+        return true;
+    if (strcmp(module, "math") == 0 && strcmp(name, "min") == 0)
+        return true;
+    if (strcmp(module, "math") == 0 && strcmp(name, "max") == 0)
+        return true;
+    if (strcmp(module, "math") == 0 && strcmp(name, "clamp") == 0)
+        return true;
+    if (strcmp(module, "math") == 0 && strcmp(name, "sign") == 0)
+        return true;
+    if (strcmp(module, "math") == 0 && strcmp(name, "sinh") == 0)
+        return true;
+    if (strcmp(module, "math") == 0 && strcmp(name, "cosh") == 0)
+        return true;
+    if (strcmp(module, "math") == 0 && strcmp(name, "tanh") == 0)
+        return true;
+    if (strcmp(module, "math") == 0 && strcmp(name, "hypot") == 0)
+        return true;
+    if (strcmp(module, "math") == 0 && strcmp(name, "cbrt") == 0)
+        return true;
+    if (strcmp(module, "math") == 0 && strcmp(name, "trunc") == 0)
+        return true;
+    if (strcmp(module, "math") == 0 && strcmp(name, "fmod") == 0)
+        return true;
+    if (strcmp(module, "math") == 0 && strcmp(name, "log1p") == 0)
+        return true;
+    if (strcmp(module, "math") == 0 && strcmp(name, "expm1") == 0)
+        return true;
+    if (strcmp(module, "math") == 0 && strcmp(name, "lerp") == 0)
+        return true;
+    if (strcmp(module, "math") == 0 && strcmp(name, "degToRad") == 0)
+        return true;
+    if (strcmp(module, "math") == 0 && strcmp(name, "radToDeg") == 0)
+        return true;
+    if (strcmp(module, "math") == 0 && strcmp(name, "isNaN") == 0)
+        return true;
+    if (strcmp(module, "math") == 0 && strcmp(name, "isFinite") == 0)
+        return true;
+    return false;
+}
+
 /* clang-format on */
