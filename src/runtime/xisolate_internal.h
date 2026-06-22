@@ -162,11 +162,6 @@ struct XrayIsolate {
     // run() accesses execution state via vm_ctx for single/multi-thread unification
     XrVMContext vm_ctx;
 
-    /* ========== Debug Info (placed after VM to avoid stack pollution) ========== */
-
-    // Source code cache (for error display)
-    struct XrSourceCache *source_cache;
-
     /* ========== Debug State (DAP integration) ========== */
     void *debug_state;  // XrDebugState* for debugger integration
     void *debug_hooks;  // XrDebugHooks* for VM callback interface

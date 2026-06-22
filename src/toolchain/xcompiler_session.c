@@ -58,8 +58,8 @@ void xr_compiler_session_delete(XrCompilerSession *session) {
     if (!session)
         return;
     if (session->vm_host) {
-        if (session->vm_host->source_cache == session->source_cache)
-            session->vm_host->source_cache = NULL;
+        if (session->vm_host->vm.debug_source_cache == session->source_cache)
+            session->vm_host->vm.debug_source_cache = NULL;
         if (session->vm_host->compiler_session == session)
             session->vm_host->compiler_session = NULL;
     }
@@ -157,7 +157,7 @@ struct XrSourceCache *xr_compiler_session_ensure_source_cache(XrCompilerSession 
     if (!session->source_cache)
         session->source_cache = xr_source_cache_new();
     if (session->vm_host)
-        session->vm_host->source_cache = session->source_cache;
+        session->vm_host->vm.debug_source_cache = session->source_cache;
     return session->source_cache;
 }
 

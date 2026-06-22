@@ -17,7 +17,6 @@
  */
 
 #include "../runtime/xisolate_internal.h"
-#include "../runtime/xisolate_api.h"
 #include "../runtime/core/xr_runtime_core.h"
 #include "../base/xchecks.h"
 #include "../frontend/parser/xparse.h"
@@ -40,6 +39,12 @@
 #include "../base/xmalloc.h"
 #include "../vm/xdebug.h"
 #include "../base/xsource_cache.h"
+#include "../toolchain/xcompiler_session.h"
+
+static XrSourceCache *ensure_script_source_cache(XrayIsolate *isolate) {
+    XrCompilerSession *session = xr_compiler_session_current_for_isolate(isolate);
+    return xr_compiler_session_ensure_source_cache(session);
+}
 
 /* ========== IC Feedback Dump ========== */
 
@@ -168,7 +173,7 @@ int xray_isolate_dofile(XrayIsolate *isolate, const char *filename) {
         return -1;
     }
 
-    XrSourceCache *source_cache = xr_isolate_get_source_cache(isolate);
+    XrSourceCache *source_cache = ensure_script_source_cache(isolate);
     if (source_cache) {
         xr_source_cache_add(source_cache, filename, source);
     }
@@ -207,7 +212,7 @@ int xray_isolate_dofile_debug(XrayIsolate *isolate, const char *filename, void *
         return -1;
     }
 
-    XrSourceCache *source_cache = xr_isolate_get_source_cache(isolate);
+    XrSourceCache *source_cache = ensure_script_source_cache(isolate);
     if (source_cache) {
         xr_source_cache_add(source_cache, filename, source);
     }
