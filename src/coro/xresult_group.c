@@ -20,6 +20,7 @@
 #include "xblock.h"
 #include "xcoroutine.h"
 #include "xworker.h"
+#include "xresult_group_wait.h"
 #include "xyieldable.h"
 
 static XrRuntime *result_group_runtime(XrResultGroup *g) {
@@ -57,14 +58,6 @@ static XrResultGroupBatch *result_group_batch_new(int64_t value, uint32_t count)
     batch->count = count;
     batch->next = NULL;
     return batch;
-}
-
-static void result_group_batch_free_all(XrResultGroupBatch *batch) {
-    while (batch) {
-        XrResultGroupBatch *next = batch->next;
-        xr_free(batch);
-        batch = next;
-    }
 }
 
 static void result_group_enqueue_batch_locked(XrResultGroup *g, XrResultGroupBatch *batch) {
@@ -146,46 +139,13 @@ static bool result_group_waiter_enqueue_locked(XrResultGroup *g, XrCoroutine *co
     return true;
 }
 
-static void result_group_waiter_unlink_locked(XrResultGroup *g, XrCoroutine *coro) {
-    XR_DCHECK(g != NULL, "result_group_waiter_unlink_locked: NULL group");
-    XR_DCHECK(coro != NULL, "result_group_waiter_unlink_locked: NULL coro");
-    XR_DCHECK(coro->ext != NULL, "result_group_waiter_unlink_locked: NULL ext");
-
-    XrCoroutine *prev = coro->ext->wait_prev;
-    XrCoroutine *next = coro->ext->wait_link;
-    if (prev) {
-        prev->ext->wait_link = next;
-    } else {
-        g->wait_first = next;
-    }
-    if (next) {
-        next->ext->wait_prev = prev;
-    } else {
-        g->wait_last = prev;
-    }
-    coro->ext->wait_link = NULL;
-    coro->ext->wait_prev = NULL;
-    atomic_fetch_sub_explicit(&g->waiter_count, 1, memory_order_relaxed);
-}
-
 static XrCoroutine *result_group_waiter_pop_locked(XrResultGroup *g) {
     XR_DCHECK(g != NULL, "result_group_waiter_pop_locked: NULL group");
     XrCoroutine *coro = g->wait_first;
     if (!coro)
         return NULL;
-    result_group_waiter_unlink_locked(g, coro);
+    xr_result_group_waiter_unlink_locked(g, coro);
     return coro;
-}
-
-static bool result_group_waiter_remove_locked(XrResultGroup *g, XrCoroutine *coro) {
-    XR_DCHECK(g != NULL, "result_group_waiter_remove_locked: NULL group");
-    XR_DCHECK(coro != NULL, "result_group_waiter_remove_locked: NULL coro");
-    if (!coro->ext)
-        return false;
-    if (!coro->ext->wait_prev && g->wait_first != coro)
-        return false;
-    result_group_waiter_unlink_locked(g, coro);
-    return true;
 }
 
 typedef struct XrResultGroupWakeBatch {
@@ -415,24 +375,6 @@ bool xr_result_group_try_recv(XrResultGroup *g, int64_t *out) {
     return ok;
 }
 
-void xr_result_group_cancel_waiter(XrCoroutine *coro) {
-    XrCoroWaitState *wait = xr_coro_wait_state(coro);
-    if (!wait)
-        return;
-    XrResultGroup *g = (XrResultGroup *) atomic_load_explicit(&wait->result_group_token.group,
-                                                              memory_order_acquire);
-    if (!g) {
-        xr_result_group_wait_token_cancel(&wait->result_group_token);
-        return;
-    }
-
-    xr_amutex_lock(&g->lock);
-    bool removed = result_group_waiter_remove_locked(g, coro);
-    xr_amutex_unlock(&g->lock);
-    if (removed)
-        xr_result_group_wait_token_cancel(&wait->result_group_token);
-}
-
 void xr_result_group_close(XrResultGroup *g) {
     if (!g)
         return;
@@ -456,16 +398,6 @@ uint64_t xr_result_group_length(XrResultGroup *g) {
 
 uint64_t xr_result_group_pending_count(XrResultGroup *g) {
     return g ? atomic_load_explicit(&g->pending_count, memory_order_acquire) : 0;
-}
-
-void xr_gc_destroy_result_group(XrGCHeader *obj, XrCoroGC *owning_gc) {
-    (void) owning_gc;
-    if (!obj)
-        return;
-    XrResultGroup *g = (XrResultGroup *) obj;
-    result_group_batch_free_all(g->batch_first);
-    g->batch_first = NULL;
-    g->batch_last = NULL;
 }
 
 static void result_group_finish_wait_if_current(XrCoroutine *coro, XrResultGroup *g) {
