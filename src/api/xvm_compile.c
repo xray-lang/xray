@@ -36,6 +36,12 @@ static void ensure_compiler_proto_hooks(void) {
     xr_vm_proto_set_ir_free_fn(free_xi_func_opaque);
 }
 
+static void restore_session_type_pool(XrayIsolate *isolate) {
+    XrCompilerSession *session = xr_compiler_session_current_for_isolate(isolate);
+    if (xr_compiler_session_analyzer_pool(session))
+        xr_compiler_session_install_analyzer_pool(session);
+}
+
 // Compile AST to bytecode (internal)
 //
 // The compiler's for-in desugaring creates AST nodes via xr_ast_* helpers.
@@ -74,13 +80,10 @@ static XrProto *compile_ast_internal(XrayIsolate *isolate, AstNode *ast, const c
 
     xr_compiler_context_free(ctx);
 
-    // Restore type pool: compiler context freed its analyzer's pool,
-    // leaving current_type_pool as a dangling pointer.  Fall back to the
-    // isolate's long-lived analyzer_pool so later callers (e.g. import-time
-    // parsing that calls xr_type_new_class) can still allocate types safely.
-    if (isolate->analyzer_pool) {
-        isolate->current_type_pool = isolate->analyzer_pool;
-    }
+    // Restore type pool: compiler context freed its analyzer's pool, leaving
+    // current_type_pool as a dangling pointer. Fall back to the session-owned
+    // long-lived analyzer pool.
+    restore_session_type_pool(isolate);
 
     if (has_ast_scope)
         xr_compiler_session_pop_arena(&ast_scope);
@@ -133,12 +136,9 @@ XrProto *xr_compile_source_with_path(XrayIsolate *isolate, const char *source,
     xr_compiler_context_free(ctx);
 
     // Restore type pool: compiler context freed its own pool, leaving
-    // current_type_pool as a dangling pointer.  Fall back to the
-    // isolate's long-lived analyzer_pool so post-compile callers
-    // (e.g. aot_preregister_classes) can still allocate types safely.
-    if (isolate->analyzer_pool) {
-        isolate->current_type_pool = isolate->analyzer_pool;
-    }
+    // current_type_pool as a dangling pointer. Fall back to the session-owned
+    // long-lived analyzer pool so post-compile callers can allocate safely.
+    restore_session_type_pool(isolate);
 
     // Free AST (not needed after compilation)
     xr_program_destroy(ast);

@@ -19,6 +19,7 @@
 #include "xa_node_table.h"
 #include "xa_selection.h"
 #include "../../runtime/value/xtype_internal.h"
+#include "../../toolchain/xcompiler_session.h"
 #include "../parser/xast_nodes.h"
 #include "../parser/xast_types.h"
 #include "../../base/xintmap.h"
@@ -368,9 +369,10 @@ void xa_analyzer_free(XaAnalyzer *analyzer) {
     // leaving isolate->current_type_pool or TLS pointing here turns the next
     // type allocation into a use-after-free.
     if (analyzer->type_pool) {
-        XrTypePool *fallback = NULL;
-        if (analyzer->isolate && analyzer->isolate->analyzer_pool != analyzer->type_pool)
-            fallback = analyzer->isolate->analyzer_pool;
+        XrCompilerSession *session = xr_compiler_session_current_for_isolate(analyzer->isolate);
+        XrTypePool *fallback = xr_compiler_session_analyzer_pool(session);
+        if (fallback == analyzer->type_pool)
+            fallback = NULL;
         if (analyzer->isolate && analyzer->isolate->current_type_pool == analyzer->type_pool)
             analyzer->isolate->current_type_pool = fallback;
         if (xr_type_get_current_pool() == analyzer->type_pool)

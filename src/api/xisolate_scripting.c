@@ -168,8 +168,9 @@ int xray_isolate_dofile(XrayIsolate *isolate, const char *filename) {
         return -1;
     }
 
-    if (isolate->source_cache) {
-        xr_source_cache_add(isolate->source_cache, filename, source);
+    XrSourceCache *source_cache = xr_isolate_get_source_cache(isolate);
+    if (source_cache) {
+        xr_source_cache_add(source_cache, filename, source);
     }
 
     AstNode *ast = xr_parse_with_source(isolate, source, filename);
@@ -206,8 +207,9 @@ int xray_isolate_dofile_debug(XrayIsolate *isolate, const char *filename, void *
         return -1;
     }
 
-    if (isolate->source_cache) {
-        xr_source_cache_add(isolate->source_cache, filename, source);
+    XrSourceCache *source_cache = xr_isolate_get_source_cache(isolate);
+    if (source_cache) {
+        xr_source_cache_add(source_cache, filename, source);
     }
 
     AstNode *ast = xr_parse_with_source(isolate, source, filename);

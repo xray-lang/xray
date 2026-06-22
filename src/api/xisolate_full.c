@@ -46,6 +46,7 @@
 #include "../base/xglobal_indices.h"
 #include "../frontend/analyzer/xanalyzer.h"
 #include "../frontend/analyzer/xanalyzer_native_types.h"
+#include "../toolchain/xcompiler_session.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -57,14 +58,15 @@ static int isolate_init_full(XrayIsolate *isolate) {
     // Process-level type singletons (idempotent, safe to call multiple times)
     xr_type_global_init();
 
-    // Analyzer type pool
-    isolate->analyzer_pool = xr_type_pool_new();
+    XrCompilerSessionConfig compiler_cfg = {
+        .vm_host = isolate,
+    };
+    isolate->compiler_session = xr_compiler_session_new(&compiler_cfg);
+    if (!isolate->compiler_session)
+        return -1;
+    xr_compiler_session_install_analyzer_pool(isolate->compiler_session);
     if (!isolate->analyzer_pool)
         return -1;
-    // Set on isolate directly (xray_isolate_enter not called yet)
-    isolate->current_type_pool = isolate->analyzer_pool;
-    // Also set TLS fallback for code that runs before enter
-    xr_type_set_current_pool(isolate->analyzer_pool, &isolate->analyzer_pool->next_type_id);
 
     // Symbol table
     isolate->core_rt->symbol_table = xr_symbol_table_create();
@@ -126,7 +128,9 @@ static int isolate_init_full(XrayIsolate *isolate) {
     // separate stdlib import.
 
     // Source cache
-    isolate->source_cache = xr_source_cache_new();
+    isolate->source_cache = xr_compiler_session_ensure_source_cache(isolate->compiler_session);
+    if (!isolate->source_cache)
+        return -1;
 
     // Register core classes to VM builtins array (must be after all classes created)
     // init_globals() in xr_vm_init ran before init_extra, so isolate->core was NULL.
@@ -173,11 +177,6 @@ static void isolate_cleanup_full(XrayIsolate *isolate) {
     // isolate state is still intact.
     xr_stdlib_cache_free(isolate);
 
-    if (isolate->source_cache) {
-        xr_source_cache_free(isolate->source_cache);
-        isolate->source_cache = NULL;
-    }
-
     if (isolate->module_registry) {
         xr_module_system_free(isolate);
     }
@@ -212,15 +211,15 @@ static void isolate_cleanup_full(XrayIsolate *isolate) {
         isolate->repl_analyzer = NULL;
     }
 
-    if (isolate->analyzer_pool) {
-        xr_type_pool_free(isolate->analyzer_pool);
-        isolate->analyzer_pool = NULL;
-    }
-
     // Free REPL symbol table
     if (isolate->repl_symbols) {
         xr_repl_symbols_free(isolate->repl_symbols);
         isolate->repl_symbols = NULL;
+    }
+
+    if (isolate->compiler_session) {
+        xr_compiler_session_delete(isolate->compiler_session);
+        isolate->compiler_session = NULL;
     }
 }
 

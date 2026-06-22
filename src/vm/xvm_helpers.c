@@ -17,6 +17,7 @@
 #include "../runtime/mem/xheap.h"
 #include "../runtime/mem/xcoro_heap.h"
 #include "../runtime/xerror_codes.h"
+#include "../runtime/xisolate_api.h"
 #include "../runtime/value/xstruct_layout.h"
 #include "../base/xsource_cache.h"
 
@@ -155,7 +156,8 @@ void xr_runtime_error(XrayIsolate *isolate, const char *format, ...) {
     XrBcCallFrame *frames = ctx ? ctx->frames : NULL;
 
     // Show source code context (only top frame)
-    if (frame_count > 0 && isolate->source_cache) {
+    XrSourceCache *source_cache = isolate ? xr_isolate_get_source_cache(isolate) : NULL;
+    if (frame_count > 0 && source_cache) {
         XrBcCallFrame *top_frame = &frames[frame_count - 1];
         if (top_frame->closure && top_frame->closure->proto) {
             XrProto *proto = top_frame->closure->proto;
@@ -170,10 +172,10 @@ void xr_runtime_error(XrayIsolate *isolate, const char *format, ...) {
             if (line > 0 && proto->source_file) {
                 // Try to get source code line
                 const char *src_line =
-                    xr_source_cache_get_line(isolate->source_cache, proto->source_file, line);
+                    xr_source_cache_get_line(source_cache, proto->source_file, line);
                 if (src_line) {
-                    int line_len = xr_source_cache_get_line_length(isolate->source_cache,
-                                                                   proto->source_file, line);
+                    int line_len =
+                        xr_source_cache_get_line_length(source_cache, proto->source_file, line);
                     fprintf(stderr, "   |\n");
                     fprintf(stderr, " \033[1;34m%d\033[0m | %.*s\n", line, line_len, src_line);
                     fprintf(stderr, "   |\n");
