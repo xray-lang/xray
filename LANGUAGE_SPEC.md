@@ -129,13 +129,13 @@ Line endings recognize `\n` (Unix) and `\r\n` (Windows). A standalone `\r` is tr
 
 ### 1.3 Comments
 
-Xray supports two kinds of comments, **neither of which nests**:
+Xray supports two kinds of comments: line comments do not nest; block comments nest:
 
 ```xray
 // line comment, from // to end-of-line
 /* block comment,
    may span lines;
-   does not nest: an inner /* does not start a new layer */
+   supports /* nested */ layers to any reasonable depth */
 ```
 
 Comments may appear wherever whitespace is allowed. They are collected as **trivia** for formatters and LSP (see `src/frontend/parser/xtrivia.*`), but do not participate in syntactic analysis.
