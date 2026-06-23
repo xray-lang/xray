@@ -994,28 +994,21 @@ static XrValue crypto_encrypt(XrVMRuntime *isolate, XrValue *args, int nargs) {
     XrString *key_str = XR_TO_STRING(args[0]);
     XrString *plain_str = XR_TO_STRING(args[1]);
 
-    // Derive 256-bit key via SHA-256
-    uint8_t aes_key[32];
-    xr_sha256((const uint8_t *) XR_STRING_CHARS(key_str), key_str->length, aes_key);
+    size_t padded_len = 0;
+    size_t hex_len = 0;
+    if (!xr_crypto_core_aes_encrypt_plan(plain_str->length, &padded_len, &hex_len) ||
+        hex_len > UINT32_MAX)
+        return xr_null();
 
-    // Generate random IV
     uint8_t iv[16];
     xr_random_bytes(iv, 16);
-
-    // PKCS7 padding
-    size_t plain_len = plain_str->length;
-    uint8_t pad = 16 - (plain_len % 16);
-    size_t padded_len = plain_len + pad;
 
     uint8_t stack_plain[4096];
     uint8_t *padded =
         (padded_len <= sizeof(stack_plain)) ? stack_plain : (uint8_t *) xr_malloc(padded_len);
     if (!padded)
         return xr_null();
-    memcpy(padded, XR_STRING_CHARS(plain_str), plain_len);
-    memset(padded + plain_len, pad, pad);
 
-    // Encrypt
     uint8_t stack_cipher[4096];
     uint8_t *cipher =
         (padded_len <= sizeof(stack_cipher)) ? stack_cipher : (uint8_t *) xr_malloc(padded_len);
@@ -1025,13 +1018,6 @@ static XrValue crypto_encrypt(XrVMRuntime *isolate, XrValue *args, int nargs) {
         return xr_null();
     }
 
-    XrAESContext ctx;
-    xr_aes_init(&ctx, aes_key, 256);
-    xr_aes_cbc_encrypt(&ctx, iv, padded, cipher, padded_len);
-
-    // Output: hex(iv || ciphertext)
-    size_t out_bytes = 16 + padded_len;
-    size_t hex_len = out_bytes * 2;
     char stack_hex[8193];
     char *hex = (hex_len + 1 <= sizeof(stack_hex)) ? stack_hex : (char *) xr_malloc(hex_len + 1);
     if (!hex) {
@@ -1042,13 +1028,21 @@ static XrValue crypto_encrypt(XrVMRuntime *isolate, XrValue *args, int nargs) {
         return xr_null();
     }
 
-    xr_bytes_to_hex(iv, 16, hex);
-    xr_bytes_to_hex(cipher, padded_len, hex + 32);
+    if (!xr_crypto_core_aes_encrypt_hex((const uint8_t *) XR_STRING_CHARS(key_str), key_str->length,
+                                        (const uint8_t *) XR_STRING_CHARS(plain_str),
+                                        plain_str->length, iv, padded, padded_len, cipher,
+                                        padded_len, hex, hex_len + 1)) {
+        if (padded != stack_plain)
+            xr_free(padded);
+        if (cipher != stack_cipher)
+            xr_free(cipher);
+        if (hex != stack_hex)
+            xr_free(hex);
+        return xr_null();
+    }
 
     XrValue result = xr_string_value(xr_string_new(isolate, hex, (uint32_t) hex_len));
 
-    xr_secure_wipe(aes_key, sizeof(aes_key));
-    xr_secure_wipe(&ctx, sizeof(ctx));
     if (padded != stack_plain)
         xr_free(padded);
     if (cipher != stack_cipher)
@@ -1069,37 +1063,16 @@ static XrValue crypto_decrypt(XrVMRuntime *isolate, XrValue *args, int nargs) {
     XrString *key_str = XR_TO_STRING(args[0]);
     XrString *cipher_hex_str = XR_TO_STRING(args[1]);
 
-    size_t hex_len = cipher_hex_str->length;
-    // Must be even, at least 32 hex chars for IV + 32 for one block
-    if (hex_len < 64 || hex_len % 2 != 0)
+    size_t raw_len = 0;
+    size_t cipher_len = 0;
+    if (!xr_crypto_core_aes_decrypt_plan(cipher_hex_str->length, &raw_len, &cipher_len))
         return xr_null();
 
-    size_t total_bytes = hex_len / 2;
-    size_t cipher_len = total_bytes - 16;
-    if (cipher_len == 0 || cipher_len % 16 != 0)
-        return xr_null();
-
-    // Hex decode
     uint8_t stack_raw[4096];
-    uint8_t *raw =
-        (total_bytes <= sizeof(stack_raw)) ? stack_raw : (uint8_t *) xr_malloc(total_bytes);
+    uint8_t *raw = (raw_len <= sizeof(stack_raw)) ? stack_raw : (uint8_t *) xr_malloc(raw_len);
     if (!raw)
         return xr_null();
 
-    if (xr_hex_to_bytes(XR_STRING_CHARS(cipher_hex_str), raw, total_bytes) < 0) {
-        if (raw != stack_raw)
-            xr_free(raw);
-        return xr_null();
-    }
-
-    uint8_t *iv = raw;
-    uint8_t *cipher = raw + 16;
-
-    // Derive key
-    uint8_t aes_key[32];
-    xr_sha256((const uint8_t *) XR_STRING_CHARS(key_str), key_str->length, aes_key);
-
-    // Decrypt
     uint8_t stack_plain[4096];
     uint8_t *plain =
         (cipher_len <= sizeof(stack_plain)) ? stack_plain : (uint8_t *) xr_malloc(cipher_len);
@@ -1109,39 +1082,21 @@ static XrValue crypto_decrypt(XrVMRuntime *isolate, XrValue *args, int nargs) {
         return xr_null();
     }
 
-    XrAESContext ctx;
-    xr_aes_init(&ctx, aes_key, 256);
-    xr_aes_cbc_decrypt(&ctx, iv, cipher, plain, cipher_len);
-
-    // Remove PKCS7 padding (constant-time to prevent padding oracle attacks)
-    uint8_t pad = plain[cipher_len - 1];
-    volatile uint8_t bad = 0;
-    // pad must be in [1, 16]
-    bad |= (uint8_t) (((unsigned) pad - 1) >> 8);   // bad if pad == 0
-    bad |= (uint8_t) (((unsigned) 16 - pad) >> 8);  // bad if pad > 16
-    // Verify all 16 potential padding bytes (fixed iteration count)
-    for (int i = 0; i < 16; i++) {
-        uint8_t b = plain[cipher_len - 1 - i];
-        // cmp = 0 if i < pad (should check), -1 if i >= pad (ignore)
-        int cmp = ((int) pad - 1 - i) >> 31;
-        bad |= (uint8_t) ((~cmp) & (b ^ pad));
-    }
-    if (bad) {
-        xr_secure_wipe(aes_key, sizeof(aes_key));
-        xr_secure_wipe(&ctx, sizeof(ctx));
+    size_t plain_len = 0;
+    if (!xr_crypto_core_aes_decrypt_hex((const uint8_t *) XR_STRING_CHARS(key_str), key_str->length,
+                                        XR_STRING_CHARS(cipher_hex_str), cipher_hex_str->length,
+                                        raw, raw_len, plain, cipher_len, &plain_len) ||
+        plain_len > UINT32_MAX) {
         if (raw != stack_raw)
             xr_free(raw);
         if (plain != stack_plain)
             xr_free(plain);
         return xr_null();
     }
-    size_t plain_len = cipher_len - pad;
 
     XrValue result =
         xr_string_value(xr_string_new(isolate, (const char *) plain, (uint32_t) plain_len));
 
-    xr_secure_wipe(aes_key, sizeof(aes_key));
-    xr_secure_wipe(&ctx, sizeof(ctx));
     if (raw != stack_raw)
         xr_free(raw);
     if (plain != stack_plain)
