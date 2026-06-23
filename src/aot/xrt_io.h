@@ -11,6 +11,7 @@
 #ifndef XRT_IO_H
 #define XRT_IO_H
 
+#include "../shared/xr_io_core.h"
 #include "xrt_arc.h"
 #include "xrt_coll.h"
 #include "xrt_value.h"
@@ -401,6 +402,16 @@ static inline XrValue xrt_io_copy_file(const char *src_data, int64_t src_len, co
     return XR_FROM_BOOL(ok);
 }
 
+typedef struct XrtIoReadLinesCtx {
+    XrValue arr;
+} XrtIoReadLinesCtx;
+
+static inline bool xrt_io_read_lines_push(void *ctx, const char *data, size_t len) {
+    XrtIoReadLinesCtx *read_ctx = (XrtIoReadLinesCtx *) ctx;
+    xrt_array_push(read_ctx->arr, xrt_io_str_slice(data, len));
+    return true;
+}
+
 static inline XrValue xrt_io_read_lines(const char *path_data, int64_t path_len) {
     char stack_path[512];
     char *owned = NULL;
@@ -411,16 +422,8 @@ static inline XrValue xrt_io_read_lines(const char *path_data, int64_t path_len)
     if (!buf)
         return XR_NULL_VAL;
     XrValue arr = xrt_array_new(8);
-    size_t start = 0;
-    for (size_t i = 0; i <= len; i++) {
-        if (i == len || buf[i] == '\n') {
-            size_t end = i;
-            if (end > start && buf[end - 1] == '\r')
-                end--;
-            xrt_array_push(arr, xrt_io_str_slice(buf + start, end - start));
-            start = i + 1;
-        }
-    }
+    XrtIoReadLinesCtx read_ctx = {arr};
+    xr_io_core_read_lines_each(buf, len, xrt_io_read_lines_push, &read_ctx);
     XRT_FREE(buf);
     return arr;
 }

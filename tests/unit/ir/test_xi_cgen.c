@@ -615,6 +615,28 @@ TEST(cgen_string_literal) {
     xi_func_free(ir);
 }
 
+TEST(cgen_string_literal_escapes_control_bytes) {
+    const char *src = "print(\"a\\r\\n\\t\\\\\\\"z\")";
+
+    XiFunc *ir = compile_to_ir(src);
+    if (!ir) {
+        printf("  SKIP\n");
+        return;
+    }
+
+    char *code = generate_c(ir, "test");
+    assert(code != NULL);
+
+    assert(contains(code, "a\\r\\n\\t") &&
+           "literal table should escape CR, LF, and tab in generated C");
+    assert(!contains(code, "a\r\n\t") &&
+           "literal table must not emit raw control bytes into generated C");
+
+    printf("  Generated escaped string literal %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_function_call) {
     /* Function definition and call */
     const char *src = "fn add(a: int, b: int) -> int { return a + b }\n"
@@ -4894,6 +4916,7 @@ int main(void) {
     run_cgen_multi_print();
     run_cgen_while_loop();
     run_cgen_string_literal();
+    run_cgen_string_literal_escapes_control_bytes();
     run_cgen_function_call();
     run_cgen_c_export_emits_public_c_abi_wrapper();
     run_cgen_stats_tracks_native_abi();
