@@ -188,12 +188,8 @@ vmcase(OP_TOINT) {
         R(a) = xr_int((xr_Integer) XR_TO_FLOAT(val));
     } else if (XR_IS_STRING(val)) {
         XrString *str = XR_TO_STRING(val);
-        const char *p = str->data;
-        while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r')
-            p++;
-        char *end;
-        long long v = strtoll(p, &end, 10);
-        R(a) = (end == p) ? xr_null() : xr_int((xr_Integer) v);
+        XrStringCoreParseIntResult parsed = xr_string_core_parse_int64(str->data, str->length);
+        R(a) = parsed.ok ? xr_int((xr_Integer) parsed.value) : xr_null();
     } else if (XR_IS_BOOL(val)) {
         R(a) = xr_int(XR_TO_BOOL(val) ? 1 : 0);
     } else {
@@ -212,12 +208,8 @@ vmcase(OP_TOFLOAT) {
         R(a) = xr_float((xr_Number) XR_TO_INT(val));
     } else if (XR_IS_STRING(val)) {
         XrString *str = XR_TO_STRING(val);
-        const char *p = str->data;
-        while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r')
-            p++;
-        char *end;
-        double v = strtod(p, &end);
-        R(a) = (end == p) ? xr_null() : xr_float(v);
+        XrStringCoreParseFloatResult parsed = xr_string_core_parse_float64(str->data, str->length);
+        R(a) = parsed.ok ? xr_float(parsed.value) : xr_null();
     } else if (XR_IS_BOOL(val)) {
         R(a) = xr_float(XR_TO_BOOL(val) ? 1.0 : 0.0);
     } else {

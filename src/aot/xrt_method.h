@@ -107,12 +107,9 @@ static XrValue xrt_to_int(XrValue val) {
     if (XR_IS_FLOAT(val))
         return XR_FROM_INT((int64_t) XR_TO_FLOAT(val));
     if (XR_IS_STR(val)) {
-        const char *p = xr_str_data(val);
-        while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r')
-            p++;
-        char *end = NULL;
-        long long n = strtoll(p, &end, 10);
-        return end == p ? XR_NULL_VAL : XR_FROM_INT((int64_t) n);
+        XrStringCoreParseIntResult parsed =
+            xr_string_core_parse_int64(xr_str_data(val), (size_t) xr_str_len(val));
+        return parsed.ok ? XR_FROM_INT(parsed.value) : XR_NULL_VAL;
     }
     if (XR_IS_BOOL(val))
         return XR_FROM_INT(val.i != 0 ? 1 : 0);
@@ -125,12 +122,9 @@ static XrValue xrt_to_float(XrValue val) {
     if (XR_IS_INT(val))
         return XR_FROM_FLOAT((double) XR_TO_INT(val));
     if (XR_IS_STR(val)) {
-        const char *p = xr_str_data(val);
-        while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r')
-            p++;
-        char *end = NULL;
-        double n = strtod(p, &end);
-        return end == p ? XR_NULL_VAL : XR_FROM_FLOAT(n);
+        XrStringCoreParseFloatResult parsed =
+            xr_string_core_parse_float64(xr_str_data(val), (size_t) xr_str_len(val));
+        return parsed.ok ? XR_FROM_FLOAT(parsed.value) : XR_NULL_VAL;
     }
     if (XR_IS_BOOL(val))
         return XR_FROM_FLOAT(val.i != 0 ? 1.0 : 0.0);
@@ -196,24 +190,13 @@ static inline XrValue xrt_str_method_0(const char *s, int64_t slen, XrValue recv
         return sv;
     }
     if (sym == XRT_SYM_TOINT) {
-        int64_t v = 0;
-        int neg = 0;
-        const char *p = s;
-        while (*p == ' ')
-            p++;
-        if (*p == '-') {
-            neg = 1;
-            p++;
-        } else if (*p == '+')
-            p++;
-        while (*p >= '0' && *p <= '9') {
-            v = v * 10 + (*p - '0');
-            p++;
-        }
-        return XR_FROM_INT(neg ? -v : v);
+        XrStringCoreParseIntResult parsed = xr_string_core_parse_int64(s, (size_t) slen);
+        return parsed.ok ? XR_FROM_INT(parsed.value) : XR_NULL_VAL;
     }
-    if (sym == XRT_SYM_TOFLOAT)
-        return XR_FROM_FLOAT(atof(s));
+    if (sym == XRT_SYM_TOFLOAT) {
+        XrStringCoreParseFloatResult parsed = xr_string_core_parse_float64(s, (size_t) slen);
+        return parsed.ok ? XR_FROM_FLOAT(parsed.value) : XR_NULL_VAL;
+    }
     if (sym == XRT_SYM_ORD)
         return XR_FROM_INT(slen > 0 ? (int64_t) (unsigned char) s[0] : 0);
     if (sym == XRT_SYM_REVERSE) {

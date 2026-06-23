@@ -78,6 +78,7 @@
 #include "../base/xutf8.h"  // XR_UNICODE_MAX
 #include "../runtime/value/xslot_type.h"
 #include "../runtime/value/xtype.h"
+#include "../shared/xr_string_core.h"
 #include "../runtime/value/xstruct_layout.h"
 
 #include "../runtime/xray_debug.h"

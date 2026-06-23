@@ -30,7 +30,7 @@
 #include "../../base/xchecks.h"
 #include "../../../stdlib/regex/xregex.h"
 #include "../../../stdlib/regex/xregex_binding.h"
-#include <stdlib.h>
+#include "../../shared/xr_string_core.h"
 #include <string.h>
 
 static inline XrString *str_self(XrValue self) {
@@ -341,14 +341,10 @@ static XrValue m_to_int(XrVMRuntime *iso, XrValue self, XrValue *args, int argc)
     (void) args;
     (void) argc;
     XrString *str = str_self(self);
-    const char *p = str->data;
-    while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r')
-        p++;
-    char *end;
-    long long value = strtoll(p, &end, 10);
-    if (end == p)
+    XrStringCoreParseIntResult parsed = xr_string_core_parse_int64(str->data, str->length);
+    if (!parsed.ok)
         return xr_null();
-    return xr_int((xr_Integer) value);
+    return xr_int((xr_Integer) parsed.value);
 }
 
 static XrValue m_to_float(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
@@ -356,14 +352,10 @@ static XrValue m_to_float(XrVMRuntime *iso, XrValue self, XrValue *args, int arg
     (void) args;
     (void) argc;
     XrString *str = str_self(self);
-    const char *p = str->data;
-    while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r')
-        p++;
-    char *end;
-    double value = strtod(p, &end);
-    if (end == p)
+    XrStringCoreParseFloatResult parsed = xr_string_core_parse_float64(str->data, str->length);
+    if (!parsed.ok)
         return xr_null();
-    return xr_float(value);
+    return xr_float(parsed.value);
 }
 
 static XrValue m_ord(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
