@@ -128,6 +128,8 @@ struct AstNode {
         PatternMultiNode pattern_multi;
         PatternTupleNode pattern_tuple;
         PatternAdtNode pattern_adt;
+        PatternObjectNode pattern_object;
+        PatternArrayNode pattern_array;
         PatternTypeNode pattern_type;
         TernaryNode ternary;
         OptionalChainNode optional_chain;

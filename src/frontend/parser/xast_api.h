@@ -340,6 +340,14 @@ XR_FUNC AstNode *xr_ast_pattern_tuple(XrayIsolate *X, AstNode **patterns, int co
 XR_FUNC AstNode *xr_ast_pattern_adt(XrayIsolate *X, AstNode *variant, AstNode **patterns, int count,
                                     int line);
 
+// Create object/record match pattern node: { x, y } / { x: sub }
+XR_FUNC AstNode *xr_ast_pattern_object(XrayIsolate *X, char **field_names, AstNode **patterns,
+                                       int count, int line);
+
+// Create array match pattern node: [a, b, ..rest]
+XR_FUNC AstNode *xr_ast_pattern_array(XrayIsolate *X, AstNode **patterns, int count, bool has_rest,
+                                      char *rest_name, int line);
+
 // Create type pattern node: `is T` or `is T name`
 XR_FUNC AstNode *xr_ast_pattern_type(XrayIsolate *X, XrTypeRef *type, const char *binding_name,
                                      int line);

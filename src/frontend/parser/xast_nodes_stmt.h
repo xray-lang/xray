@@ -171,6 +171,27 @@ typedef struct PatternTupleNode {
  * variant is the AST_MEMBER_ACCESS / AST_ENUM_ACCESS node for the
  * variant name; sub-patterns are AST_PATTERN_* nodes for each payload
  * slot (bindings, wildcards, or literals). */
+// Object/record match pattern: `{ x, y }` or `{ x: sub }`. field_names[i] is the
+// source field; patterns[i] is the sub-pattern bound to that field value (a
+// bare-name binding for shorthand `{ x }`, or a nested/renamed sub-pattern for
+// `{ x: sub }`). Matches any object/Json carrying those fields.
+typedef struct PatternObjectNode {
+    char **field_names;
+    AstNode **patterns;
+    int count;
+} PatternObjectNode;
+
+// Array match pattern: `[a, b, ..rest]`. patterns[i] are positional element
+// sub-patterns. has_rest enables a trailing rest binding capturing the tail as a
+// new array; rest_name is the binding (NULL for a bare `..` that drops the tail).
+typedef struct PatternArrayNode {
+    AstNode **patterns;
+    int count;
+    bool has_rest;
+    char *rest_name;
+    uint32_t rest_symbol_id;  // analyzer-assigned id for the rest binding (0 if none)
+} PatternArrayNode;
+
 typedef struct PatternAdtNode {
     AstNode *variant;    // e.g. AST_MEMBER_ACCESS(Shape, Circle)
     AstNode **patterns;  // payload sub-patterns

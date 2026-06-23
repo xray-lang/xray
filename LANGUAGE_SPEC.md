@@ -2856,7 +2856,20 @@ let (q, r) = divmod(17, 5)
 let { name, age } = user
 ```
 
-See §5.1.5 for details. Within `match`, tuple and ADT-variant destructuring are currently supported; structural object/array destructuring is not part of the current `match` pattern syntax.
+See §5.1.5 for details. Within `match`, tuple, ADT-variant, object, and array destructuring are supported:
+
+```xray
+match (p) {
+    { x, y } -> ...           // object field destructure (shorthand binding)
+    { name: n, age } -> ...   // field rename + shorthand mixed
+    [a, b, ..rest] -> ...     // array destructure; `..rest` captures the tail as a new array
+    [_, mid, _] -> ...        // element-position wildcards
+}
+```
+
+- An object pattern matches any object/Json carrying those fields; field reads are null-safe for a missing field. Field sub-patterns may be refutable (e.g. `{ mode: 2 }`).
+- An array pattern matches by **length**: without `..rest`, the length must equal the element count; with `..rest`, the length must be ≥ the element count. Element sub-patterns may only be bindings or wildcards (non-rest elements are not value-tested — an out-of-bounds element read traps); use an `if` guard to test element values.
+- The or-pattern `|` is not supported (comma-separated multi-values cover the equivalent need).
 
 ### 6.10 Exhaustiveness and Match Failure
 

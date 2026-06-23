@@ -1267,6 +1267,28 @@ AstNode *xr_ast_pattern_adt(XrayIsolate *X, AstNode *variant, AstNode **patterns
     return node;
 }
 
+// Create object/record match pattern node: { x, y } / { x: sub }
+AstNode *xr_ast_pattern_object(XrayIsolate *X, char **field_names, AstNode **patterns, int count,
+                               int line) {
+    AstNode *node = alloc_node(X, AST_PATTERN_OBJECT, line);
+    node->as.pattern_object.field_names = field_names;
+    node->as.pattern_object.patterns = patterns;
+    node->as.pattern_object.count = count;
+    return node;
+}
+
+// Create array match pattern node: [a, b, ..rest]
+AstNode *xr_ast_pattern_array(XrayIsolate *X, AstNode **patterns, int count, bool has_rest,
+                              char *rest_name, int line) {
+    AstNode *node = alloc_node(X, AST_PATTERN_ARRAY, line);
+    node->as.pattern_array.patterns = patterns;
+    node->as.pattern_array.count = count;
+    node->as.pattern_array.has_rest = has_rest;
+    node->as.pattern_array.rest_name = rest_name;
+    node->as.pattern_array.rest_symbol_id = 0;
+    return node;
+}
+
 // Create type pattern node: `is T` or `is T name`
 AstNode *xr_ast_pattern_type(XrayIsolate *X, XrTypeRef *type, const char *binding_name, int line) {
     AstNode *node = alloc_node(X, AST_PATTERN_TYPE, line);
