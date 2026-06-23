@@ -14,7 +14,8 @@
 static void assert_slice_eq(XrStringCoreSlice slice, const char *expected) {
     size_t expected_len = strlen(expected);
     ASSERT_EQ_UINT(slice.len, expected_len);
-    ASSERT(memcmp(slice.data, expected, expected_len) == 0);
+    if (expected_len != 0)
+        ASSERT(memcmp(slice.data, expected, expected_len) == 0);
 }
 
 TEST(string_core_trim_both) {
@@ -211,6 +212,24 @@ TEST(string_core_parse_float64) {
     ASSERT_FALSE(xr_string_core_parse_float64(NULL, 0).ok);
 }
 
+TEST(string_core_substring_bounds) {
+    const char *s = "abcdef";
+    assert_slice_eq(xr_string_core_substring_slice(s, strlen(s), -3, 3), "abc");
+    assert_slice_eq(xr_string_core_substring_slice(s, strlen(s), 2, -1), "cdef");
+    assert_slice_eq(xr_string_core_substring_slice(s, strlen(s), 0, 99), "abcdef");
+    assert_slice_eq(xr_string_core_substring_slice(s, strlen(s), 9, 12), "");
+    assert_slice_eq(xr_string_core_substring_slice(s, strlen(s), 4, 2), "");
+}
+
+TEST(string_core_slice_bounds) {
+    const char *s = "abcdef";
+    assert_slice_eq(xr_string_core_range_slice(s, strlen(s), -3, -1), "de");
+    assert_slice_eq(xr_string_core_range_slice(s, strlen(s), 2, -1), "cde");
+    assert_slice_eq(xr_string_core_range_slice(s, strlen(s), -100, 99), "abcdef");
+    assert_slice_eq(xr_string_core_range_slice(s, strlen(s), 9, 12), "");
+    assert_slice_eq(xr_string_core_range_slice(s, strlen(s), 4, 2), "");
+}
+
 TEST_MAIN_BEGIN()
 
 RUN_TEST_SUITE("String Core");
@@ -231,5 +250,7 @@ RUN_TEST(string_core_reverse_utf8);
 RUN_TEST(string_core_reverse_empty_and_null_zero);
 RUN_TEST(string_core_parse_int64);
 RUN_TEST(string_core_parse_float64);
+RUN_TEST(string_core_substring_bounds);
+RUN_TEST(string_core_slice_bounds);
 
 TEST_MAIN_END()

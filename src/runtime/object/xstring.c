@@ -347,20 +347,8 @@ XrString *xr_string_substring(XrVMRuntime *iso, XrString *str, xr_Integer start,
     if (str == NULL)
         return NULL;
 
-    // Handle negative index
-    if (start < 0)
-        start = 0;
-    if (end < 0 || (size_t) end > str->length)
-        end = str->length;
-
-    // Bounds check
-    if (start >= end || (size_t) start >= str->length) {
-        return xr_string_intern(iso, "", 0, 0);
-    }
-
-    // Extract substring
-    size_t len = end - start;
-    return xr_string_intern(iso, &str->data[start], len, 0);
+    XrStringCoreSlice slice = xr_string_core_substring_slice(str->data, str->length, start, end);
+    return xr_string_intern(iso, slice.data, slice.len, 0);
 }
 
 // slice - slice with negative index support
@@ -368,34 +356,8 @@ XrString *xr_string_slice(XrVMRuntime *iso, XrString *str, xr_Integer start, xr_
     if (!iso || !str)
         return NULL;
 
-    xr_Integer len = (xr_Integer) str->length;
-
-    // Handle negative index: count from end
-    if (start < 0) {
-        start = len + start;
-        if (start < 0)
-            start = 0;
-    }
-    if (end < 0) {
-        end = len + end;
-        if (end < 0)
-            end = 0;
-    }
-
-    // Bounds check
-    if (start > len)
-        start = len;
-    if (end > len)
-        end = len;
-
-    // start > end returns empty string
-    if (start >= end) {
-        return xr_string_intern(iso, "", 0, 0);
-    }
-
-    // Extract substring
-    size_t slice_len = (size_t) (end - start);
-    return xr_string_intern(iso, &str->data[start], slice_len, 0);
+    XrStringCoreSlice slice = xr_string_core_range_slice(str->data, str->length, start, end);
+    return xr_string_intern(iso, slice.data, slice.len, 0);
 }
 
 // indexOf - find substring position

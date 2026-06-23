@@ -336,6 +336,14 @@ static inline XrValue xrt_method_0(XrValue recv, int sym) {
     return (XrValue) {.i = 0, .tag = XR_TAG_NULL};
 }
 
+static inline XrValue xrt_str_from_core_slice(XrStringCoreSlice slice) {
+    XrValue sv = xrt_str_alloc(slice.len);
+    if (slice.len != 0)
+        memcpy(xr_str_buf(sv), slice.data, slice.len);
+    xr_str_buf(sv)[slice.len] = 0;
+    return sv;
+}
+
 /* String 1-arg method dispatch. */
 static inline XrValue xrt_str_method_1(const char *s, int64_t slen, XrValue recv, int sym,
                                        XrValue arg0) {
@@ -348,18 +356,8 @@ static inline XrValue xrt_str_method_1(const char *s, int64_t slen, XrValue recv
                                                              (size_t) xr_str_len(arg0)));
     }
     if (sym == XRT_SYM_SLICE && arg0.tag == XR_TAG_I64) {
-        int64_t start = arg0.i;
-        if (start < 0)
-            start += slen;
-        if (start < 0)
-            start = 0;
-        if (start >= slen)
-            return xrt_str_alloc(0);
-        int64_t rlen = slen - start;
-        XrValue sv = xrt_str_alloc((size_t) rlen);
-        memcpy(xr_str_buf(sv), s + start, (size_t) rlen);
-        xr_str_buf(sv)[rlen] = 0;
-        return sv;
+        XrStringCoreSlice slice = xr_string_core_range_slice(s, (size_t) slen, arg0.i, slen);
+        return xrt_str_from_core_slice(slice);
     }
     if (sym == XRT_SYM_STARTSWITH && XR_IS_STR(arg0)) {
         const char *p = xr_str_data(arg0);
@@ -674,24 +672,13 @@ static inline XrValue xrt_method_2(XrValue recv, int sym, XrValue arg0, XrValue 
         return xrt_datetime_method_2(recv, sym, arg0, arg1);
     if (XR_IS_STR(recv) && (sym == XRT_SYM_SLICE || sym == XRT_SYM_SUBSTRING)) {
         const char *s = xr_str_data(recv);
-        int64_t slen = xr_str_len(recv);
+        size_t slen = (size_t) xr_str_len(recv);
         int64_t start = (arg0.tag == XR_TAG_I64) ? arg0.i : 0;
-        int64_t end = (arg1.tag == XR_TAG_I64) ? arg1.i : slen;
-        if (start < 0)
-            start += slen;
-        if (end < 0)
-            end += slen;
-        if (start < 0)
-            start = 0;
-        if (end > slen)
-            end = slen;
-        if (start >= end)
-            return xrt_str_alloc(0);
-        int64_t rlen = end - start;
-        XrValue sv = xrt_str_alloc((size_t) rlen);
-        memcpy(xr_str_buf(sv), s + start, (size_t) rlen);
-        xr_str_buf(sv)[rlen] = 0;
-        return sv;
+        int64_t end = (arg1.tag == XR_TAG_I64) ? arg1.i : xr_string_core_len_i64(slen);
+        XrStringCoreSlice slice = (sym == XRT_SYM_SUBSTRING)
+                                      ? xr_string_core_substring_slice(s, slen, start, end)
+                                      : xr_string_core_range_slice(s, slen, start, end);
+        return xrt_str_from_core_slice(slice);
     }
     if (XR_IS_STR(recv) && sym == XRT_SYM_REPLACEALL && XR_IS_STR(arg0) && XR_IS_STR(arg1)) {
         const char *s = xr_str_data(recv);

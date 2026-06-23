@@ -71,6 +71,16 @@ fn test_substring_empty() {
     assert_eq(s.substring(2, 2), "")
 }
 
+@test
+fn test_substring_bounds() {
+    let s = "abcdef"
+    assert_eq(s.substring(-3, 3), "abc")
+    assert_eq(s.substring(2, -1), "cdef")
+    assert_eq(s.substring(0, 99), "abcdef")
+    assert_eq(s.substring(9, 12), "")
+    assert_eq(s.substring(4, 2), "")
+}
+
 // ===== indexOf =====
 
 @test
