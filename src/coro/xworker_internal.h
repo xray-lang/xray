@@ -90,7 +90,6 @@ XR_FUNC int xr_injectq_pop_batch(XrRuntime *runtime, XrWorker *worker, int max_c
 
 // Sysmon constants
 #define XR_SYSMON_WARN_US 100000
-#define XR_SYSMON_CANCEL_US 5000000
 #define XR_SYSMON_STEAL_US 1000
 
 // Sysmon function (defined in xworker_sysmon.c)

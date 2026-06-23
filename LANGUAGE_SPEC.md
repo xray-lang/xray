@@ -3730,7 +3730,7 @@ match t.poll() {
 
 **Cancellation semantics**: `cancel()` sets the cancellation flag; the coroutine throws a cancellation exception at the next safepoint (GC checkpoint, channel operation, `await`, `yield`). Plain `await` on a cancelled task throws `TaskCancelled`; use `awaitResult()` or `awaitTimeout(ms)` when you want a status value.
 
-**Watchdog forced cancellation**: the runtime monitor thread (sysmon) force-cancels coroutines that run **too long without crossing a safepoint**—a coroutine whose heartbeat stays frozen while RUNNING beyond a threshold (default 5 seconds) is marked for cancellation. The threshold is configurable via the `XRAY_SYSMON_CANCEL_MS` environment variable (milliseconds); setting it to `0` **disables** forced cancellation (only a one-time warning around ~100ms remains). A pure-CPU tight loop that may run long should insert `yield` inside the loop to provide a safepoint and avoid spurious watchdog cancellation.
+**Watchdog policy**: the runtime monitor thread (sysmon) observes the heartbeat of RUNNING coroutines. If a heartbeat stays frozen for too long, the default behavior is **warn-only**: a stuck warning is printed after roughly 100ms, but the coroutine is not silently cancelled. Forced cancellation is explicit opt-in: set `XRAY_SYSMON_CANCEL_MS=N` (`N > 0`, milliseconds) to mark a coroutine for cancellation after its heartbeat remains frozen past that threshold; unset or `0` keeps warn-only behavior. Long pure-CPU loops may still insert `yield` for scheduling fairness and cancellation responsiveness, but `yield` is no longer required to avoid default watchdog cancellation.
 
 ### 10.5 Channel
 
