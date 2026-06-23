@@ -998,47 +998,24 @@ XR_FUNC XrCompressError xr_zlib_decompress(const uint8_t *input, size_t in_len, 
 
 /* ========== Heap-Allocated Versions ========== */
 
+static void *compress_core_alloc(void *ctx, size_t size) {
+    (void) ctx;
+    return xr_malloc(size);
+}
+
+static void compress_core_free(void *ctx, void *ptr) {
+    (void) ctx;
+    xr_free(ptr);
+}
+
 XR_FUNC uint8_t *xr_gzip_alloc(const uint8_t *input, size_t in_len, size_t *out_len, int level) {
-    size_t bound = xr_deflate_bound(in_len) + 18;
-    uint8_t *output = (uint8_t *) xr_malloc(bound);
-    if (!output)
-        return NULL;
-
-    XrCompressError err = xr_gzip(input, in_len, output, bound, out_len, level);
-    if (err != XR_COMPRESS_OK) {
-        xr_free(output);
-        return NULL;
-    }
-
-    return output;
+    return xr_compress_core_gzip_alloc(input, in_len, out_len, level, compress_core_alloc,
+                                       compress_core_free, NULL);
 }
 
 XR_FUNC uint8_t *xr_gunzip_alloc(const uint8_t *input, size_t in_len, size_t *out_len) {
-    // Try to get original size from gzip trailer
-    uint32_t orig_size = xr_gzip_original_size(input, in_len);
-    if (orig_size == 0)
-        orig_size = in_len * 4;  // Estimate
-
-    // Try to decompress, expand buffer if needed
-    size_t cap = orig_size + 256;
-    for (int tries = 0; tries < 4; tries++) {
-        uint8_t *output = (uint8_t *) xr_malloc(cap);
-        if (!output)
-            return NULL;
-
-        XrCompressError err = xr_gunzip(input, in_len, output, cap, out_len);
-        if (err == XR_COMPRESS_OK) {
-            return output;
-        } else if (err == XR_COMPRESS_ERR_BUFFER) {
-            xr_free(output);
-            cap *= 2;
-        } else {
-            xr_free(output);
-            return NULL;
-        }
-    }
-
-    return NULL;
+    return xr_compress_core_gunzip_alloc(input, in_len, xr_gzip_original_size(input, in_len),
+                                         out_len, compress_core_alloc, compress_core_free, NULL);
 }
 
 /* ========== Error Messages ========== */
@@ -1135,17 +1112,11 @@ static XrValue compress_deflate(XrVMRuntime *X, XrValue *args, int nargs) {
 
     int level = compress_level_arg(args, nargs);
 
-    size_t bound = xr_deflate_bound(len);
-    uint8_t *output = (uint8_t *) xr_malloc(bound);
+    size_t out_len;
+    uint8_t *output = xr_compress_core_deflate_alloc((const uint8_t *) data, len, &out_len, level,
+                                                     compress_core_alloc, compress_core_free, NULL);
     if (!output)
         return xr_null();
-
-    size_t out_len;
-    XrCompressError err = xr_deflate((const uint8_t *) data, len, output, bound, &out_len, level);
-    if (err != XR_COMPRESS_OK) {
-        xr_free(output);
-        return xr_null();
-    }
 
     XrValue result = make_string_n(X, (char *) output, out_len);
     xr_free(output);
@@ -1162,29 +1133,15 @@ static XrValue compress_inflate(XrVMRuntime *X, XrValue *args, int nargs) {
     if (!data)
         return xr_null();
 
-    // Estimate output size (generous to handle high compression ratios)
-    size_t cap = len * 8 + 1024;
-    for (int tries = 0; tries < 8; tries++) {
-        uint8_t *output = (uint8_t *) xr_malloc(cap);
-        if (!output)
-            return xr_null();
+    size_t out_len;
+    uint8_t *output = xr_compress_core_inflate_alloc((const uint8_t *) data, len, &out_len,
+                                                     compress_core_alloc, compress_core_free, NULL);
+    if (!output)
+        return xr_null();
 
-        size_t out_len;
-        XrCompressError err = xr_inflate((const uint8_t *) data, len, output, cap, &out_len);
-        if (err == XR_COMPRESS_OK) {
-            XrValue result = make_string_n(X, (char *) output, out_len);
-            xr_free(output);
-            return result;
-        } else if (err == XR_COMPRESS_ERR_BUFFER) {
-            xr_free(output);
-            cap *= 2;
-        } else {
-            xr_free(output);
-            return xr_null();
-        }
-    }
-
-    return xr_null();
+    XrValue result = make_string_n(X, (char *) output, out_len);
+    xr_free(output);
+    return result;
 }
 
 // compress.zlibCompress(data, level?) -> string
@@ -1199,18 +1156,12 @@ static XrValue compress_zlib_compress(XrVMRuntime *X, XrValue *args, int nargs) 
 
     int level = compress_level_arg(args, nargs);
 
-    size_t bound = xr_deflate_bound(len) + 6;
-    uint8_t *output = (uint8_t *) xr_malloc(bound);
+    size_t out_len;
+    uint8_t *output =
+        xr_compress_core_zlib_compress_alloc((const uint8_t *) data, len, &out_len, level,
+                                             compress_core_alloc, compress_core_free, NULL);
     if (!output)
         return xr_null();
-
-    size_t out_len;
-    XrCompressError err =
-        xr_zlib_compress((const uint8_t *) data, len, output, bound, &out_len, level);
-    if (err != XR_COMPRESS_OK) {
-        xr_free(output);
-        return xr_null();
-    }
 
     XrValue result = make_string_n(X, (char *) output, out_len);
     xr_free(output);
@@ -1227,29 +1178,15 @@ static XrValue compress_zlib_decompress(XrVMRuntime *X, XrValue *args, int nargs
     if (!data)
         return xr_null();
 
-    size_t cap = len * 8 + 1024;
-    for (int tries = 0; tries < 8; tries++) {
-        uint8_t *output = (uint8_t *) xr_malloc(cap);
-        if (!output)
-            return xr_null();
+    size_t out_len;
+    uint8_t *output = xr_compress_core_zlib_decompress_alloc(
+        (const uint8_t *) data, len, &out_len, compress_core_alloc, compress_core_free, NULL);
+    if (!output)
+        return xr_null();
 
-        size_t out_len;
-        XrCompressError err =
-            xr_zlib_decompress((const uint8_t *) data, len, output, cap, &out_len);
-        if (err == XR_COMPRESS_OK) {
-            XrValue result = make_string_n(X, (char *) output, out_len);
-            xr_free(output);
-            return result;
-        } else if (err == XR_COMPRESS_ERR_BUFFER) {
-            xr_free(output);
-            cap *= 2;
-        } else {
-            xr_free(output);
-            return xr_null();
-        }
-    }
-
-    return xr_null();
+    XrValue result = make_string_n(X, (char *) output, out_len);
+    xr_free(output);
+    return result;
 }
 
 // compress.isGzip(data) -> bool
