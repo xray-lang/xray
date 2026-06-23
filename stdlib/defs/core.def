@@ -2660,6 +2660,319 @@ module mem {
   }
 }
 
+module net {
+  fn dial {
+    signature: "(host: string, port: int, timeout?: int): NetConn?"
+    doc: "Dial a TCP connection"
+    vm: "net_dial_yieldable"
+    vm_binding: "yieldable"
+    argc: 3
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn listen {
+    signature: "(port: int, backlog?: int): NetListener?"
+    doc: "Start listening on a port"
+    vm: "net_listen_handle"
+    argc: 2
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn accept {
+    signature: "(listener: NetListener): NetConn?"
+    doc: "Accept a new connection"
+    vm: "net_accept_handle_yieldable"
+    vm_binding: "yieldable"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn read {
+    signature: "(conn: NetConn, maxlen?: int): string?"
+    doc: "Read data from connection"
+    vm: "net_read_handle_yieldable"
+    vm_binding: "yieldable"
+    argc: 2
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn readInto {
+    signature: "(conn: NetConn, buffer: Bytes, maxlen?: int): int"
+    doc: "Read data into a reusable Bytes buffer"
+    vm: "net_read_into_yieldable"
+    vm_binding: "yieldable"
+    argc: 3
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn write {
+    signature: "(conn: NetConn, data: string): int"
+    doc: "Write data to connection"
+    vm: "net_write_handle_yieldable"
+    vm_binding: "yieldable"
+    argc: 2
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn writeBytes {
+    signature: "(conn: NetConn, data: Bytes): int"
+    doc: "Write Bytes data to connection"
+    vm: "net_write_bytes_yieldable"
+    vm_binding: "yieldable"
+    argc: 2
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn copy {
+    signature: "(src: NetConn, dst: NetConn, bufferSize?: int): int"
+    doc: "Copy a TCP/TLS stream using a reusable native buffer"
+    vm: "net_copy_yieldable"
+    vm_binding: "yieldable"
+    argc: 3
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn copyBidirectional {
+    signature: "(a: NetConn, b: NetConn): Json"
+    doc: "Copy two TCP/TLS streams in both directions"
+    vm: "net_copy_bidirectional_yieldable"
+    vm_binding: "yieldable"
+    argc: 2
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn shutdownRead {
+    signature: "(conn: NetConn): bool"
+    doc: "Shut down the read side of a TCP connection"
+    vm: "net_shutdown_read"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn shutdownWrite {
+    signature: "(conn: NetConn): bool"
+    doc: "Shut down the write side of a TCP connection"
+    vm: "net_shutdown_write"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn shutdown {
+    signature: "(conn: NetConn): bool"
+    doc: "Shut down both sides of a TCP connection"
+    vm: "net_shutdown_conn"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn close {
+    signature: "(handle: NetConn | NetListener): ()"
+    doc: "Close a connection or listener"
+    vm: "net_close_handle"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn fd {
+    signature: "(handle: NetConn | NetListener): int"
+    doc: "Get fd from handle"
+    vm: "net_fd_handle"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn setReadDeadline {
+    signature: "(conn: NetConn, deadline: int): bool"
+    doc: "Set read deadline in monotonic ms"
+    vm: "net_set_read_deadline"
+    argc: 2
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn setWriteDeadline {
+    signature: "(conn: NetConn, deadline: int): bool"
+    doc: "Set write deadline in monotonic ms"
+    vm: "net_set_write_deadline"
+    argc: 2
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn setDeadline {
+    signature: "(conn: NetConn, deadline: int): bool"
+    doc: "Set read and write deadlines in monotonic ms"
+    vm: "net_set_deadline"
+    argc: 2
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn setAcceptDeadline {
+    signature: "(listener: NetListener, deadline: int): bool"
+    doc: "Set accept deadline in monotonic ms"
+    vm: "net_set_accept_deadline"
+    argc: 2
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn lastError {
+    signature: "(handle: NetConn | NetListener): string?"
+    doc: "Return the last network error name"
+    vm: "net_last_error"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn lastErrno {
+    signature: "(handle: NetConn | NetListener): int"
+    doc: "Return the last system errno"
+    vm: "net_last_errno"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn lookup {
+    signature: "(hostname: string): string?"
+    doc: "DNS lookup"
+    vm: "net_dns_lookup"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn hasTLS {
+    signature: "(): bool"
+    doc: "Check if TLS support is available"
+    vm: "net_has_tls"
+    argc: 0
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn dialTLS {
+    signature: "(host: string, port: int, timeout?: int): NetConn?"
+    doc: "Dial a TLS connection"
+    vm: "net_dial_tls_yieldable"
+    vm_binding: "yieldable"
+    vm_ifdef: "XR_ENABLE_TLS"
+    argc: 3
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn upgradeTLS {
+    signature: "(conn: NetConn, hostname: string, timeout?: int): NetConn?"
+    doc: "Upgrade connection to TLS"
+    vm: "net_upgrade_tls_yieldable"
+    vm_binding: "yieldable"
+    vm_ifdef: "XR_ENABLE_TLS"
+    argc: 3
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn udpBind {
+    signature: "(port: int, addr?: string): NetConn?"
+    doc: "Bind a UDP socket"
+    vm: "net_udp_bind_handle"
+    argc: 2
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn sendTo {
+    signature: "(handle: NetConn, data: string, host: string, port: int): int"
+    doc: "Send UDP datagram"
+    vm: "net_send_to_yieldable"
+    vm_binding: "yieldable"
+    argc: 4
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn recvFrom {
+    signature: "(handle: NetConn, maxlen?: int): UdpPacket?"
+    doc: "Receive UDP datagram (returns flat handle: data, host, port)"
+    vm: "net_recv_from_yieldable"
+    vm_binding: "yieldable"
+    argc: 2
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+}
+
 module cluster {
   fn start {
     signature: "(config: Json): ()"
