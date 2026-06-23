@@ -8,6 +8,9 @@ print(root.length > 0)
 let dir = root + "/a/b"
 print(io.mkdirp(dir))
 print(io.isDir(dir))
+print(io.mkdirp(dir))
+print(io.mkdirp(dir + "///"))
+print(io.isDir(dir))
 
 let file = dir + "/sample.txt"
 print(io.writeFile(file, "hello"))

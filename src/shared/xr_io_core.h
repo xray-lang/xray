@@ -15,6 +15,8 @@
 #include <stddef.h>
 
 typedef bool (*XrIoCoreLineFn)(void *ctx, const char *data, size_t len);
+typedef int (*XrIoCoreMkdirFn)(void *ctx, const char *path);
+typedef bool (*XrIoCoreIsDirFn)(void *ctx, const char *path);
 
 static inline size_t xr_io_core_trim_line_end(const char *data, size_t start, size_t end) {
     while (end > start && data[end - 1] == '\r')
@@ -45,6 +47,91 @@ static inline bool xr_io_core_read_lines_each(const char *data, size_t len, XrIo
     }
 
     return true;
+}
+
+static inline bool xr_io_core_is_sep(char ch) {
+    return ch == '/' || ch == '\\';
+}
+
+static inline bool xr_io_core_is_alpha_ascii(char ch) {
+    return (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z');
+}
+
+static inline size_t xr_io_core_root_len(const char *path) {
+    if (!path || path[0] == '\0')
+        return 0;
+
+    if (xr_io_core_is_alpha_ascii(path[0]) && path[1] == ':') {
+        if (xr_io_core_is_sep(path[2]))
+            return 3;
+        return 2;
+    }
+
+    if (xr_io_core_is_sep(path[0])) {
+#if defined(XR_OS_WINDOWS)
+        if (!xr_io_core_is_sep(path[1]))
+            return 1;
+        size_t i = 2;
+        while (path[i] && xr_io_core_is_sep(path[i]))
+            i++;
+        while (path[i] && !xr_io_core_is_sep(path[i]))
+            i++;
+        while (path[i] && xr_io_core_is_sep(path[i]))
+            i++;
+        while (path[i] && !xr_io_core_is_sep(path[i]))
+            i++;
+        return i > 2 ? i : 1;
+#else
+        return 1;
+#endif
+    }
+
+    return 0;
+}
+
+static inline bool xr_io_core_ensure_dir(void *ctx, const char *path, XrIoCoreMkdirFn mkdir_fn,
+                                         XrIoCoreIsDirFn is_dir_fn) {
+    if (!path || path[0] == '\0' || !mkdir_fn || !is_dir_fn)
+        return false;
+    if (mkdir_fn(ctx, path) == 0)
+        return true;
+    return is_dir_fn(ctx, path);
+}
+
+static inline bool xr_io_core_mkdirp(char *path, XrIoCoreMkdirFn mkdir_fn,
+                                     XrIoCoreIsDirFn is_dir_fn, void *ctx) {
+    if (!path || path[0] == '\0' || !mkdir_fn || !is_dir_fn)
+        return false;
+
+    size_t len = 0;
+    while (path[len])
+        len++;
+
+    size_t root_len = xr_io_core_root_len(path);
+    while (len > root_len + 1 && xr_io_core_is_sep(path[len - 1]))
+        path[--len] = '\0';
+
+    if (len <= root_len)
+        return is_dir_fn(ctx, path);
+
+    size_t segment_start = root_len;
+    while (path[segment_start] && xr_io_core_is_sep(path[segment_start]))
+        segment_start++;
+
+    for (size_t i = segment_start; path[i]; i++) {
+        if (!xr_io_core_is_sep(path[i]))
+            continue;
+        char saved = path[i];
+        path[i] = '\0';
+        bool ok = (i > root_len) && xr_io_core_ensure_dir(ctx, path, mkdir_fn, is_dir_fn);
+        path[i] = saved;
+        if (!ok)
+            return false;
+        while (path[i + 1] && xr_io_core_is_sep(path[i + 1]))
+            i++;
+    }
+
+    return xr_io_core_ensure_dir(ctx, path, mkdir_fn, is_dir_fn);
 }
 
 #endif /* XRAY_SHARED_XR_IO_CORE_H */

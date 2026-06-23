@@ -314,35 +314,28 @@ static inline XrValue xrt_io_mkdir(const char *path_data, int64_t path_len) {
     return XR_FROM_BOOL(ok);
 }
 
+static inline int xrt_io_mkdirp_mkdir(void *ctx, const char *path) {
+    (void) ctx;
+    return xrt_io_platform_mkdir(path);
+}
+
+static inline bool xrt_io_mkdirp_is_dir(void *ctx, const char *path) {
+    (void) ctx;
+    struct stat st;
+    if (!path || stat(path, &st) != 0)
+        return false;
+#if defined(XR_OS_WINDOWS)
+    return (st.st_mode & _S_IFDIR) != 0;
+#else
+    return S_ISDIR(st.st_mode);
+#endif
+}
+
 static inline XrValue xrt_io_mkdirp(const char *path_data, int64_t path_len) {
     char stack_path[XRT_IO_PATH_MAX];
     char *owned = NULL;
     char *path = xrt_io_copy_cstr_arg(path_data, path_len, stack_path, sizeof(stack_path), &owned);
-    if (!path || path[0] == '\0') {
-        XRT_FREE(owned);
-        return XR_FROM_BOOL(false);
-    }
-    size_t len = strlen(path);
-    while (len > 1 && (path[len - 1] == '/' || path[len - 1] == '\\'))
-        path[--len] = '\0';
-    for (char *p = path + 1; *p; p++) {
-        if (*p == '/' || *p == '\\') {
-            char saved = *p;
-            *p = '\0';
-            (void) xrt_io_platform_mkdir(path);
-            *p = saved;
-        }
-    }
-    bool ok = xrt_io_platform_mkdir(path) == 0;
-    if (!ok) {
-        struct stat st;
-        ok = stat(path, &st) == 0 &&
-#if defined(XR_OS_WINDOWS)
-             ((st.st_mode & _S_IFDIR) != 0);
-#else
-             S_ISDIR(st.st_mode);
-#endif
-    }
+    bool ok = path && xr_io_core_mkdirp(path, xrt_io_mkdirp_mkdir, xrt_io_mkdirp_is_dir, NULL);
     XRT_FREE(owned);
     return XR_FROM_BOOL(ok);
 }
