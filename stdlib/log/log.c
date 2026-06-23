@@ -1176,6 +1176,10 @@ void xr_register_logger_class(XrVMRuntime *X) {
     core->loggerClass = cls;
 }
 
+#define XR_STDLIB_VM_BIND_MODULE_LOG 1
+#include "../../src/stdlib/xstdlib_vm_bindings_generated.inc.c"
+#undef XR_STDLIB_VM_BIND_MODULE_LOG
+
 XR_FUNC XrModule *xr_load_module_log(XrVMRuntime *isolate) {
     XR_DCHECK(isolate != NULL, "xr_load_module_log: NULL isolate");
 
@@ -1202,12 +1206,7 @@ XR_FUNC XrModule *xr_load_module_log(XrVMRuntime *isolate) {
     // Child logger
     XRS_EXPORT(module, isolate, "child", xr_log_child);
 
-    // Export constants
-    xr_module_add_export(isolate, module, "DEBUG", xr_int(XR_LOG_DEBUG));
-    xr_module_add_export(isolate, module, "INFO", xr_int(XR_LOG_INFO));
-    xr_module_add_export(isolate, module, "WARN", xr_int(XR_LOG_WARN));
-    xr_module_add_export(isolate, module, "ERROR", xr_int(XR_LOG_ERROR));
-    xr_module_add_export(isolate, module, "FATAL", xr_int(XR_LOG_FATAL));
+    xr_stdlib_vm_bind_log_generated(isolate, module);
 
     module->loaded = true;
     return module;

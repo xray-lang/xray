@@ -68,6 +68,7 @@ class StdlibConstEntry:
     signature: str
     doc: str
     vm: str
+    vm_value: str
     aot: str
     aot_const_kind: str
     value: int
@@ -211,6 +212,7 @@ def parse_def_metadata(root: Path) -> tuple[list[StdlibEntry], list[StdlibConstE
                     signature=str(props["signature"]),
                     doc=str(props["doc"]),
                     vm=str(props["vm"]),
+                    vm_value=c_vm_value_expr(str(props.get("vm_value", "")), f"{current_module}.{current_name}"),
                     aot=str(props.get("aot", "")),
                     aot_const_kind=aot_const_kind,
                     value=int(value),
@@ -288,6 +290,18 @@ def c_string(value: str) -> str:
 def c_ident(value: str, context: str) -> str:
     if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", value):
         raise SystemExit(f"{context}: expected C identifier, got {value!r}")
+    return value
+
+
+def c_vm_value_expr(value: str, context: str) -> str:
+    if not value:
+        return ""
+    allowed = (
+        r"xr_int\([A-Za-z_][A-Za-z0-9_]*\)"
+        r"|xrs_string_value_c\(isolate, [A-Za-z_][A-Za-z0-9_]*(?:\(\))?\)"
+    )
+    if not re.fullmatch(allowed, value):
+        raise SystemExit(f"{context}: unsupported VM constant value expression: {value!r}")
     return value
 
 
@@ -516,8 +530,9 @@ def emit_driver_metadata(entries: list[StdlibEntry], constants: list[StdlibConst
     return "\n".join(lines)
 
 
-def emit_vm_bindings(entries: list[StdlibEntry]) -> str:
+def emit_vm_bindings(entries: list[StdlibEntry], constants: list[StdlibConstEntry]) -> str:
     rows_by_module: dict[str, list[StdlibEntry]] = {}
+    consts_by_module: dict[str, list[StdlibConstEntry]] = {}
     seen: dict[tuple[str, str, str], str] = {}
     for e in entries:
         key = (e.module, e.name, e.vm)
@@ -532,6 +547,9 @@ def emit_vm_bindings(entries: list[StdlibEntry]) -> str:
         seen[key] = e.vm_binding
         c_ident(e.vm, e.symbol)
         rows_by_module.setdefault(e.module, []).append(e)
+    for c in constants:
+        if c.vm_value:
+            consts_by_module.setdefault(c.module, []).append(c)
 
     lines = generated_header("xstdlib_vm_bindings_generated.inc.c - VM stdlib binding shell")
     lines.extend(
@@ -545,12 +563,12 @@ def emit_vm_bindings(entries: list[StdlibEntry]) -> str:
             "",
         ]
     )
-    for module in sorted(rows_by_module):
+    for module in sorted(set(rows_by_module) | set(consts_by_module)):
         macro = f"XR_STDLIB_VM_BIND_MODULE_{module.upper()}"
         func = f"xr_stdlib_vm_bind_{module}_generated"
         lines.append(f"#ifdef {macro}")
         lines.append(f"static void {func}(XrVMRuntime *isolate, XrModule *module) {{")
-        for e in rows_by_module[module]:
+        for e in rows_by_module.get(module, []):
             export_macro = {
                 "normal": "XRS_EXPORT",
                 "yieldable": "XRS_EXPORT_YIELDABLE",
@@ -559,6 +577,10 @@ def emit_vm_bindings(entries: list[StdlibEntry]) -> str:
             lines.append(
                 f"    {export_macro}(module, isolate, {c_string(e.name)}, "
                 f"{c_ident(e.vm, e.symbol)});"
+            )
+        for c in consts_by_module.get(module, []):
+            lines.append(
+                f"    xr_module_add_export(isolate, module, {c_string(c.name)}, {c.vm_value});"
             )
         lines.append("}")
         lines.append(f"#endif  /* {macro} */")
@@ -602,6 +624,7 @@ def emit_defs_header(entries: list[StdlibEntry], constants: list[StdlibConstEntr
             "    const char *signature;",
             "    const char *doc;",
             "    const char *vm;",
+            "    const char *vm_value;",
             "    const char *aot;",
             "    const char *aot_const_kind;",
             "    const char *link_object;",
@@ -641,7 +664,7 @@ def emit_defs_header(entries: list[StdlibEntry], constants: list[StdlibConstEntr
         lines.append(
             "    {"
             f"{c_string(c.module)}, {c_string(c.name)}, {c_string(c.signature)}, "
-            f"{c_string(c.doc)}, {c_string(c.vm)}, {c_string(c.aot)}, "
+            f"{c_string(c.doc)}, {c_string(c.vm)}, {c_string(c.vm_value)}, {c_string(c.aot)}, "
             f"{c_string(c.aot_const_kind)}, {c_string(c.link_object)}, "
             f"{c_string(c.define)}, {c_string(c.layer)}, INT64_C({c.value})"
             "},"
@@ -672,7 +695,7 @@ def output_paths(root: Path) -> dict[Path, str]:
             entries, constants
         ),
         root / "src" / "stdlib" / "xstdlib_vm_bindings_generated.inc.c": emit_vm_bindings(
-            entries
+            entries, constants
         ),
         root / "src" / "stdlib" / "xstdlib_defs_generated.h": emit_defs_header(
             entries, constants

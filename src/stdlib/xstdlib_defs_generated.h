@@ -37,6 +37,7 @@ typedef struct XrStdlibConstDefEntry {
     const char *signature;
     const char *doc;
     const char *vm;
+    const char *vm_value;
     const char *aot;
     const char *aot_const_kind;
     const char *link_object;
@@ -223,6 +224,13 @@ static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"io", "touch", "(path: string): bool", "Create or update file timestamp", "io_touch", "normal", "xrt_io_touch", "s", "value", "", "", "system", "method", 1, true},
     {"io", "writeFile", "(path: string, data: string): bool", "Write string to file", "io_writeFile", "yieldable", "xrt_io_write_file", "ss", "value", "", "", "system", "method", 2, true},
     {"io", "writeFileBytes", "(path: string, data: Array<uint8>): bool", "Write byte array to file", "io_writeFileBytes", "yieldable", "xrt_io_write_file_bytes", "sv", "value", "", "", "system", "method", 2, true},
+    {"mem", "collectCycles", "(): int", "Run cycle collection + whole-block reclaim, return cycle collection count", "mem_collect_cycles", "normal", "", "", "value", "", "", "runtime", "", 0, false},
+    {"mem", "disableCycleCollection", "(): ()", "Pause the automatic cycle collector", "mem_disable_cycle_collection", "normal", "", "", "value", "", "", "runtime", "", 0, false},
+    {"mem", "enableCycleCollection", "(): ()", "Resume the automatic cycle collector", "mem_enable_cycle_collection", "normal", "", "", "value", "", "", "runtime", "", 0, false},
+    {"mem", "isCycleCollectionEnabled", "(): bool", "Check if automatic cycle collection is enabled", "mem_is_cycle_collection_enabled", "normal", "", "", "value", "", "", "runtime", "", 0, false},
+    {"mem", "liveBytes", "(): int", "Get live memory usage in bytes", "mem_live_bytes", "normal", "", "", "value", "", "", "runtime", "", 0, false},
+    {"mem", "liveObjects", "(): int", "Get live object count", "mem_live_objects", "normal", "", "", "value", "", "", "runtime", "", 0, false},
+    {"mem", "info", "(): Map", "Get memory-model runtime info as Map", "mem_info", "normal", "", "", "value", "", "", "runtime", "", 0, false},
     {"datetime", "now", "(): DateTime", "Get current local datetime", "dt_now", "normal", "", "", "value", "", "", "alloc", "", 0, false},
     {"datetime", "utc", "(): DateTime", "Get current UTC datetime", "dt_utc", "normal", "", "", "value", "", "", "alloc", "", 0, false},
     {"datetime", "create", "(year: int, month?: int, day?: int, hour?: int, minute?: int, second?: int): DateTime", "Create local datetime", "dt_create", "normal", "", "", "value", "", "", "alloc", "", 6, false},
@@ -235,19 +243,19 @@ static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
 #define XR_STDLIB_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_def_entries) / sizeof(xr_stdlib_def_entries[0])))
 
 static const XrStdlibConstDefEntry xr_stdlib_const_def_entries[] = {
-    {"path", "sep", ": string", "Platform path separator", "path.sep", "xrt_path_sep", "helper_value", "", "", "core", INT64_C(0)},
-    {"path", "delimiter", ": string", "Platform path-list delimiter", "path.delimiter", "xrt_path_delimiter", "helper_value", "", "", "core", INT64_C(0)},
-    {"encoding", "LE", ": int", "Little-endian UTF-16 byte order", "XR_UTF16_LE", "", "int64", "", "", "core", INT64_C(0)},
-    {"encoding", "BE", ": int", "Big-endian UTF-16 byte order", "XR_UTF16_BE", "", "int64", "", "", "core", INT64_C(1)},
-    {"os", "platform", ": string", "Current operating system name", "os.platform", "xrt_os_platform", "helper_value", "", "", "system", INT64_C(0)},
-    {"os", "arch", ": string", "Current CPU architecture name", "os.arch", "xrt_os_arch", "helper_value", "", "", "system", INT64_C(0)},
-    {"os", "sep", ": string", "Platform path separator", "os.sep", "xrt_os_sep", "helper_value", "", "", "system", INT64_C(0)},
-    {"os", "eol", ": string", "Platform end-of-line string", "os.eol", "xrt_os_eol", "helper_value", "", "", "system", INT64_C(0)},
-    {"log", "DEBUG", ": int", "Debug log level", "XR_LOG_DEBUG", "", "int64", "", "", "core", INT64_C(10)},
-    {"log", "INFO", ": int", "Info log level", "XR_LOG_INFO", "", "int64", "", "", "core", INT64_C(20)},
-    {"log", "WARN", ": int", "Warning log level", "XR_LOG_WARN", "", "int64", "", "", "core", INT64_C(30)},
-    {"log", "ERROR", ": int", "Error log level", "XR_LOG_ERROR", "", "int64", "", "", "core", INT64_C(40)},
-    {"log", "FATAL", ": int", "Fatal log level", "XR_LOG_FATAL", "", "int64", "", "", "core", INT64_C(50)},
+    {"path", "sep", ": string", "Platform path separator", "path.sep", "xrs_string_value_c(isolate, PATH_SEP_STR)", "xrt_path_sep", "helper_value", "", "", "core", INT64_C(0)},
+    {"path", "delimiter", ": string", "Platform path-list delimiter", "path.delimiter", "xrs_string_value_c(isolate, PATH_DELIMITER)", "xrt_path_delimiter", "helper_value", "", "", "core", INT64_C(0)},
+    {"encoding", "LE", ": int", "Little-endian UTF-16 byte order", "XR_UTF16_LE", "xr_int(XR_UTF16_LE)", "", "int64", "", "", "core", INT64_C(0)},
+    {"encoding", "BE", ": int", "Big-endian UTF-16 byte order", "XR_UTF16_BE", "xr_int(XR_UTF16_BE)", "", "int64", "", "", "core", INT64_C(1)},
+    {"os", "platform", ": string", "Current operating system name", "os.platform", "xrs_string_value_c(isolate, get_platform())", "xrt_os_platform", "helper_value", "", "", "system", INT64_C(0)},
+    {"os", "arch", ": string", "Current CPU architecture name", "os.arch", "xrs_string_value_c(isolate, get_arch())", "xrt_os_arch", "helper_value", "", "", "system", INT64_C(0)},
+    {"os", "sep", ": string", "Platform path separator", "os.sep", "xrs_string_value_c(isolate, get_sep())", "xrt_os_sep", "helper_value", "", "", "system", INT64_C(0)},
+    {"os", "eol", ": string", "Platform end-of-line string", "os.eol", "xrs_string_value_c(isolate, get_eol())", "xrt_os_eol", "helper_value", "", "", "system", INT64_C(0)},
+    {"log", "DEBUG", ": int", "Debug log level", "XR_LOG_DEBUG", "xr_int(XR_LOG_DEBUG)", "", "int64", "", "", "core", INT64_C(10)},
+    {"log", "INFO", ": int", "Info log level", "XR_LOG_INFO", "xr_int(XR_LOG_INFO)", "", "int64", "", "", "core", INT64_C(20)},
+    {"log", "WARN", ": int", "Warning log level", "XR_LOG_WARN", "xr_int(XR_LOG_WARN)", "", "int64", "", "", "core", INT64_C(30)},
+    {"log", "ERROR", ": int", "Error log level", "XR_LOG_ERROR", "xr_int(XR_LOG_ERROR)", "", "int64", "", "", "core", INT64_C(40)},
+    {"log", "FATAL", ": int", "Fatal log level", "XR_LOG_FATAL", "xr_int(XR_LOG_FATAL)", "", "int64", "", "", "core", INT64_C(50)},
 };
 #define XR_STDLIB_CONST_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_const_def_entries) / sizeof(xr_stdlib_const_def_entries[0])))
 

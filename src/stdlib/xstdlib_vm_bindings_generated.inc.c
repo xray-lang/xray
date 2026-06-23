@@ -80,6 +80,8 @@ static void xr_stdlib_vm_bind_encoding_generated(XrVMRuntime *isolate, XrModule 
     XRS_EXPORT(module, isolate, "utf8ByteLength", encoding_utf8_byte_length);
     XRS_EXPORT(module, isolate, "utf16Encode", encoding_utf16_encode);
     XRS_EXPORT(module, isolate, "utf16Decode", encoding_utf16_decode);
+    xr_module_add_export(isolate, module, "LE", xr_int(XR_UTF16_LE));
+    xr_module_add_export(isolate, module, "BE", xr_int(XR_UTF16_BE));
 }
 #endif  /* XR_STDLIB_VM_BIND_MODULE_ENCODING */
 
@@ -117,6 +119,16 @@ static void xr_stdlib_vm_bind_io_generated(XrVMRuntime *isolate, XrModule *modul
     XRS_EXPORT_YIELDABLE(module, isolate, "writeFileBytes", io_writeFileBytes);
 }
 #endif  /* XR_STDLIB_VM_BIND_MODULE_IO */
+
+#ifdef XR_STDLIB_VM_BIND_MODULE_LOG
+static void xr_stdlib_vm_bind_log_generated(XrVMRuntime *isolate, XrModule *module) {
+    xr_module_add_export(isolate, module, "DEBUG", xr_int(XR_LOG_DEBUG));
+    xr_module_add_export(isolate, module, "INFO", xr_int(XR_LOG_INFO));
+    xr_module_add_export(isolate, module, "WARN", xr_int(XR_LOG_WARN));
+    xr_module_add_export(isolate, module, "ERROR", xr_int(XR_LOG_ERROR));
+    xr_module_add_export(isolate, module, "FATAL", xr_int(XR_LOG_FATAL));
+}
+#endif  /* XR_STDLIB_VM_BIND_MODULE_LOG */
 
 #ifdef XR_STDLIB_VM_BIND_MODULE_MATH
 static void xr_stdlib_vm_bind_math_generated(XrVMRuntime *isolate, XrModule *module) {
@@ -160,6 +172,18 @@ static void xr_stdlib_vm_bind_math_generated(XrVMRuntime *isolate, XrModule *mod
 }
 #endif  /* XR_STDLIB_VM_BIND_MODULE_MATH */
 
+#ifdef XR_STDLIB_VM_BIND_MODULE_MEM
+static void xr_stdlib_vm_bind_mem_generated(XrVMRuntime *isolate, XrModule *module) {
+    XRS_EXPORT(module, isolate, "collectCycles", mem_collect_cycles);
+    XRS_EXPORT(module, isolate, "disableCycleCollection", mem_disable_cycle_collection);
+    XRS_EXPORT(module, isolate, "enableCycleCollection", mem_enable_cycle_collection);
+    XRS_EXPORT(module, isolate, "isCycleCollectionEnabled", mem_is_cycle_collection_enabled);
+    XRS_EXPORT(module, isolate, "liveBytes", mem_live_bytes);
+    XRS_EXPORT(module, isolate, "liveObjects", mem_live_objects);
+    XRS_EXPORT(module, isolate, "info", mem_info);
+}
+#endif  /* XR_STDLIB_VM_BIND_MODULE_MEM */
+
 #ifdef XR_STDLIB_VM_BIND_MODULE_OS
 static void xr_stdlib_vm_bind_os_generated(XrVMRuntime *isolate, XrModule *module) {
     XRS_EXPORT(module, isolate, "getenv", os_getenv);
@@ -186,6 +210,10 @@ static void xr_stdlib_vm_bind_os_generated(XrVMRuntime *isolate, XrModule *modul
     XRS_EXPORT(module, isolate, "clock", os_clock);
     XRS_EXPORT_YIELDABLE(module, isolate, "sleep", os_sleep);
     XRS_EXPORT(module, isolate, "exec", os_exec);
+    xr_module_add_export(isolate, module, "platform", xrs_string_value_c(isolate, get_platform()));
+    xr_module_add_export(isolate, module, "arch", xrs_string_value_c(isolate, get_arch()));
+    xr_module_add_export(isolate, module, "sep", xrs_string_value_c(isolate, get_sep()));
+    xr_module_add_export(isolate, module, "eol", xrs_string_value_c(isolate, get_eol()));
 }
 #endif  /* XR_STDLIB_VM_BIND_MODULE_OS */
 
@@ -201,6 +229,8 @@ static void xr_stdlib_vm_bind_path_generated(XrVMRuntime *isolate, XrModule *mod
     XRS_EXPORT(module, isolate, "resolve", path_resolve);
     XRS_EXPORT(module, isolate, "parse", path_parse);
     XRS_EXPORT(module, isolate, "format", path_format);
+    xr_module_add_export(isolate, module, "sep", xrs_string_value_c(isolate, PATH_SEP_STR));
+    xr_module_add_export(isolate, module, "delimiter", xrs_string_value_c(isolate, PATH_DELIMITER));
 }
 #endif  /* XR_STDLIB_VM_BIND_MODULE_PATH */
 

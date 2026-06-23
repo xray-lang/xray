@@ -524,6 +524,7 @@ module path {
     signature: ": string"
     doc: "Platform path separator"
     vm: "path.sep"
+    vm_value: "xrs_string_value_c(isolate, PATH_SEP_STR)"
     aot_const: "helper_value"
     aot: "xrt_path_sep"
     layer: "core"
@@ -533,6 +534,7 @@ module path {
     signature: ": string"
     doc: "Platform path-list delimiter"
     vm: "path.delimiter"
+    vm_value: "xrs_string_value_c(isolate, PATH_DELIMITER)"
     aot_const: "helper_value"
     aot: "xrt_path_delimiter"
     layer: "core"
@@ -1033,6 +1035,7 @@ module encoding {
     signature: ": int"
     doc: "Little-endian UTF-16 byte order"
     vm: "XR_UTF16_LE"
+    vm_value: "xr_int(XR_UTF16_LE)"
     aot_const: "int64"
     value: 0
     layer: "core"
@@ -1042,6 +1045,7 @@ module encoding {
     signature: ": int"
     doc: "Big-endian UTF-16 byte order"
     vm: "XR_UTF16_BE"
+    vm_value: "xr_int(XR_UTF16_BE)"
     aot_const: "int64"
     value: 1
     layer: "core"
@@ -1540,6 +1544,7 @@ module os {
     signature: ": string"
     doc: "Current operating system name"
     vm: "os.platform"
+    vm_value: "xrs_string_value_c(isolate, get_platform())"
     aot_const: "helper_value"
     aot: "xrt_os_platform"
     layer: "system"
@@ -1549,6 +1554,7 @@ module os {
     signature: ": string"
     doc: "Current CPU architecture name"
     vm: "os.arch"
+    vm_value: "xrs_string_value_c(isolate, get_arch())"
     aot_const: "helper_value"
     aot: "xrt_os_arch"
     layer: "system"
@@ -1558,6 +1564,7 @@ module os {
     signature: ": string"
     doc: "Platform path separator"
     vm: "os.sep"
+    vm_value: "xrs_string_value_c(isolate, get_sep())"
     aot_const: "helper_value"
     aot: "xrt_os_sep"
     layer: "system"
@@ -1567,6 +1574,7 @@ module os {
     signature: ": string"
     doc: "Platform end-of-line string"
     vm: "os.eol"
+    vm_value: "xrs_string_value_c(isolate, get_eol())"
     aot_const: "helper_value"
     aot: "xrt_os_eol"
     layer: "system"
@@ -2243,6 +2251,7 @@ module log {
     signature: ": int"
     doc: "Debug log level"
     vm: "XR_LOG_DEBUG"
+    vm_value: "xr_int(XR_LOG_DEBUG)"
     aot_const: "int64"
     value: 10
     layer: "core"
@@ -2252,6 +2261,7 @@ module log {
     signature: ": int"
     doc: "Info log level"
     vm: "XR_LOG_INFO"
+    vm_value: "xr_int(XR_LOG_INFO)"
     aot_const: "int64"
     value: 20
     layer: "core"
@@ -2261,6 +2271,7 @@ module log {
     signature: ": int"
     doc: "Warning log level"
     vm: "XR_LOG_WARN"
+    vm_value: "xr_int(XR_LOG_WARN)"
     aot_const: "int64"
     value: 30
     layer: "core"
@@ -2270,6 +2281,7 @@ module log {
     signature: ": int"
     doc: "Error log level"
     vm: "XR_LOG_ERROR"
+    vm_value: "xr_int(XR_LOG_ERROR)"
     aot_const: "int64"
     value: 40
     layer: "core"
@@ -2279,9 +2291,89 @@ module log {
     signature: ": int"
     doc: "Fatal log level"
     vm: "XR_LOG_FATAL"
+    vm_value: "xr_int(XR_LOG_FATAL)"
     aot_const: "int64"
     value: 50
     layer: "core"
+  }
+}
+
+module mem {
+  fn collectCycles {
+    signature: "(): int"
+    doc: "Run cycle collection + whole-block reclaim, return cycle collection count"
+    vm: "mem_collect_cycles"
+    argc: 0
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn disableCycleCollection {
+    signature: "(): ()"
+    doc: "Pause the automatic cycle collector"
+    vm: "mem_disable_cycle_collection"
+    argc: 0
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn enableCycleCollection {
+    signature: "(): ()"
+    doc: "Resume the automatic cycle collector"
+    vm: "mem_enable_cycle_collection"
+    argc: 0
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn isCycleCollectionEnabled {
+    signature: "(): bool"
+    doc: "Check if automatic cycle collection is enabled"
+    vm: "mem_is_cycle_collection_enabled"
+    argc: 0
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn liveBytes {
+    signature: "(): int"
+    doc: "Get live memory usage in bytes"
+    vm: "mem_live_bytes"
+    argc: 0
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn liveObjects {
+    signature: "(): int"
+    doc: "Get live object count"
+    vm: "mem_live_objects"
+    argc: 0
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn info {
+    signature: "(): Map"
+    doc: "Get memory-model runtime info as Map"
+    vm: "mem_info"
+    argc: 0
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
   }
 }
 

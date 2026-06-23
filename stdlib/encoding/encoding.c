@@ -380,10 +380,6 @@ XR_FUNC XrModule *xr_load_module_encoding(XrVMRuntime *isolate) {
 
     xr_stdlib_vm_bind_encoding_generated(isolate, module);
 
-    // Endian constants
-    xr_module_add_export(isolate, module, "LE", xr_int(XR_UTF16_LE));
-    xr_module_add_export(isolate, module, "BE", xr_int(XR_UTF16_BE));
-
     module->loaded = true;
     return module;
 }

@@ -467,11 +467,6 @@ XR_FUNC XrModule *xr_load_module_path(XrVMRuntime *isolate) {
 
     xr_stdlib_vm_bind_path_generated(isolate, mod);
 
-    // Add constants
-    xr_module_add_export(isolate, mod, "sep", xrs_string_value_c(isolate, PATH_SEP_STR));
-    xr_module_add_export(isolate, mod, "delimiter", xrs_string_value_c(isolate, PATH_DELIMITER));
-
-    // Mark as loaded
     mod->loaded = true;
     return mod;
 }
