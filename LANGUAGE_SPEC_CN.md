@@ -1110,21 +1110,22 @@ let max = a > b ? a : b
 #### 可选链 `?.` / `?[`
 
 ```ebnf
-OptionalChain ::= Primary ('?.' Identifier | '?[' Expr ']')+
+OptionalChain ::= Primary ('?.' Identifier | '?.' '(' ArgList? ')' | '?[' Expr ']')+
 ```
 
 ```xray
 let len = name?.length          // null 时返回 null
 let item = arr?[0]              // 可选索引
+let value = callback?.(input)   // 可选函数调用
 ```
 
 **语义**：
 - 若 `?.` 或 `?[` 左侧为 `null`，整个表达式短路返回 `null`。
-- `?.` 用于属性访问和方法调用：`obj?.prop`、`obj?.method()`。
+- `?.` 用于属性访问、方法调用和函数调用：`obj?.prop`、`obj?.method()`、`func?.(args)`。
 - `?[` 用于索引访问：`arr?[0]`。与普通索引 `arr[0]` 对称，只需在 `[` 前加 `?`。
+- `func?.(args)` 在函数值为 `null` 时不求值实参，直接返回 `null`。
 - **传播**：`a?.b.c.d` 中，若 `a` 为 null，整个链返回 null；中间 `.` 不重新检查。
 - 结果类型：原类型加 `?`（若已经 `?` 则保持）。
-- 函数可选调用 `func?.()` 不属于当前语法。
 
 ### 3.7 强制解包 `!`
 

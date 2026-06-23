@@ -1,0 +1,40 @@
+// 0381_optional_call.xr
+// Test: optional function call operator (?.()).
+
+type IntFn = (int) -> int
+
+@test
+fn test_optional_call_on_value() {
+    let hits = 0
+
+    fn bump(x: int) -> int {
+        hits += 1
+        return x + 1
+    }
+
+    let f: IntFn? = bump
+    let value = f?.(41)
+    assert_eq(value, 42)
+    assert_eq(hits, 1)
+}
+
+@test
+fn test_optional_call_on_null_short_circuits() {
+    let hits = 0
+
+    fn arg_side_effect() -> int {
+        hits += 100
+        return 41
+    }
+
+    let f: IntFn? = null
+    let value = f?.(arg_side_effect())
+    assert_eq(value, null)
+    assert_eq(hits, 0)
+}
+
+@test
+fn test_optional_call_with_nullish_default() {
+    let f: IntFn? = null
+    assert_eq(f?.(10) ?? 99, 99)
+}

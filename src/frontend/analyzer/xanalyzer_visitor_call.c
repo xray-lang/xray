@@ -373,6 +373,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         return xr_type_new_unknown(NULL);
 
     CallExprNode *call = &node->as.call_expr;
+    bool optional_function_call = call->callee && call->callee->type == AST_OPTIONAL_CHAIN &&
+                                  call->callee->as.optional_chain.chain_type == 3;
 
     // Record dependency: current function depends on called function
     XaSymbol *fn_sym = NULL;
@@ -646,6 +648,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
     }
 
     XrType *callee_type = xa_visit_infer_expr(ctx, call->callee);
+    if (optional_function_call && callee_type)
+        callee_type = xr_type_non_nullable(ctx->analyzer->isolate, callee_type);
 
     /* Resolve symbol_ids in non-lambda arguments before any early-return path.
      * Skip AST_FUNCTION_EXPR args: they require expected_type context from
@@ -1199,6 +1203,9 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
     }
 
     XrType *final_type = return_type ? return_type : xr_type_new_unknown(NULL);
+    if (optional_function_call && final_type && !XR_TYPE_IS_UNKNOWN(final_type))
+        final_type = xr_type_make_nullable(ctx->analyzer->isolate,
+                                           xr_type_copy(ctx->analyzer->isolate, final_type));
     xr_free(effective_arg_types);
     xr_free(effective_arg_symbol_ids);
     xr_free(effective_arg_names);

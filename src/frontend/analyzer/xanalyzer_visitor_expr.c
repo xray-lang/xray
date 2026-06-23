@@ -1597,7 +1597,7 @@ XrType *xa_visit_nullish_coalesce(XaInferContext *ctx, AstNode *node) {
 }
 
 /* ----------------------------------------------------------------------------
- * Optional Chain: obj?.prop, obj?.[index], obj?.method()
+ * Optional Chain: obj?.prop, obj?.[index], obj?.method(), func?.()
  * Result is always nullable: typeof(obj.prop) | null => T?
  * -------------------------------------------------------------------------- */
 XrType *xa_visit_optional_chain(XaInferContext *ctx, AstNode *node) {
@@ -1613,6 +1613,14 @@ XrType *xa_visit_optional_chain(XaInferContext *ctx, AstNode *node) {
 
     // Strip nullable from object for member lookup
     XrType *base_type = xr_type_non_nullable(ctx->analyzer->isolate, obj_type);
+
+    // Optional function-call callee: func?.()
+    if (node->as.optional_chain.chain_type == 3) {
+        if (XR_TYPE_IS_FUNCTION(base_type))
+            return xr_type_make_nullable(ctx->analyzer->isolate,
+                                         xr_type_copy(ctx->analyzer->isolate, base_type));
+        return xr_type_new_unknown(NULL);
+    }
 
     // Property access: obj?.name
     if (node->as.optional_chain.name) {

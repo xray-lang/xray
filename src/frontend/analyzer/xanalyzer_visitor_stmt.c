@@ -16,6 +16,18 @@
 #include "xtype_ref_resolve.h"
 #include "../../base/xchecks.h"
 
+static bool xa_function_assignment_mismatch(XrType *target_type, XrType *value_type) {
+    if (!target_type || !value_type)
+        return true;
+    if (XR_TYPE_IS_NULL(value_type))
+        return !target_type->is_nullable;
+    if (!XR_TYPE_IS_FUNCTION(value_type))
+        return true;
+    if (target_type->is_nullable || value_type->is_nullable)
+        return !xa_typecheck_assignable(target_type, value_type);
+    return !xr_type_equals(target_type, value_type);
+}
+
 XR_FUNC void xa_assign_check_type(XaInferContext *ctx, AstNode *node, XrType *target_type,
                                   XrType *value_type, const char *target_name,
                                   const char *target_kind) {
@@ -29,8 +41,7 @@ XR_FUNC void xa_assign_check_type(XaInferContext *ctx, AstNode *node, XrType *ta
         xa_check_null_safety(ctx->analyzer, target_type, value_type, "Assignment", &loc);
     bool type_mismatch = false;
     if (XR_TYPE_IS_FUNCTION(target_type)) {
-        type_mismatch =
-            !XR_TYPE_IS_FUNCTION(value_type) || !xr_type_equals(target_type, value_type);
+        type_mismatch = xa_function_assignment_mismatch(target_type, value_type);
     } else {
         type_mismatch = !xa_typecheck_assignable(target_type, value_type);
     }
@@ -311,8 +322,7 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
             // Check assignment compatibility
             bool type_mismatch = false;
             if (XR_TYPE_IS_FUNCTION(links->declared_type)) {
-                type_mismatch = !XR_TYPE_IS_FUNCTION(init_type) ||
-                                !xr_type_equals(links->declared_type, init_type);
+                type_mismatch = xa_function_assignment_mismatch(links->declared_type, init_type);
             } else {
                 type_mismatch = !xa_typecheck_assignable(links->declared_type, init_type);
             }

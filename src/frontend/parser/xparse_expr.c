@@ -895,10 +895,14 @@ AstNode *xr_parse_as_cast(Parser *parser, AstNode *left) {
     return xr_ast_as_expr(parser->X, left, (XrType *) target_type, is_safe, line);
 }
 
-// Parse optional chain: obj?.prop, obj?.method()
+// Parse optional chain: obj?.prop, obj?.method(), func?.()
 AstNode *xr_parse_optional_chain(Parser *parser, AstNode *object) {
     XR_DCHECK(parser != NULL, "parse_optional_chain: NULL parser");
     int line = parser->previous.line;
+
+    if (parser->current.type == TK_LPAREN) {
+        return xr_ast_optional_chain(parser->X, object, NULL, NULL, 3, line);
+    }
 
     if (parser->current.type == TK_NAME) {
         // Property access: obj?.prop

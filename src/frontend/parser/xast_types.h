@@ -81,7 +81,7 @@ typedef enum {
     // Ternary and nullish
     AST_TERNARY,           // cond ? true_expr : false_expr
     AST_NULLISH_COALESCE,  // a ?? b
-    AST_OPTIONAL_CHAIN,    // obj?.prop
+    AST_OPTIONAL_CHAIN,    // obj?.prop / obj?[i] / func?.()
     AST_FORCE_UNWRAP,      // expr! (force unwrap nullable)
     AST_AS_EXPR,           // expr as Type (explicit type cast)
     AST_RANGE,             // 1..10
