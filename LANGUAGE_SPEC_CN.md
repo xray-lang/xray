@@ -2385,7 +2385,7 @@ EnumDecl       ::= 'enum' Identifier TypeParams?
                    '{' EnumVariant (',' EnumVariant)* ','? EnumMethod* '}'
 EnumVariant    ::= Identifier VariantPayload?
                 |  Identifier '=' BackingValue                // 简单枚举的显式 backing value
-EnumMethod     ::= 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
+EnumMethod     ::= 'static'? 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
 VariantPayload ::= '(' VariantField (',' VariantField)* ')'
 VariantField   ::= (Identifier ':')? Type
 BackingValue   ::= IntLiteral | FloatLiteral | StringLiteral | BoolLiteral
@@ -2523,9 +2523,9 @@ for (c in Color) { print(c.name) }        // "Red" "Green" "Blue"
 
 简单整数枚举编译器优化反查（Tier 1/2 contiguous/sparse；其他类型走线性扫描）。ADT 变体不支持反查。
 
-#### 5.6.7 enum 实例方法
+#### 5.6.7 enum 方法
 
-`enum` 体内可定义实例方法，语法与 `class` 内的方法完全一致（不引入 `impl` 关键字）。方法在所有变体上可调用；方法体内通过 `match (this)` 区分变体行为：
+`enum` 体内可定义实例方法和静态方法，语法与 `class` 内的方法一致（不引入 `impl` 关键字）。实例方法在所有变体上可调用；方法体内通过 `match (this)` 区分变体行为：
 
 ```xray
 enum Shape {
@@ -2557,12 +2557,33 @@ print(s.area())          // 3.14159
 print(s.isRound())       // true
 ```
 
+静态方法使用 `static fn`，常用于工厂、查表和 enum 相关 helper；静态方法没有 `this`：
+
+```xray
+enum Color {
+    Red, Green, Blue
+
+    static fn fromInt(v: int) -> Color {
+        if (v == 1) { return Color.Red }
+        if (v == 2) { return Color.Green }
+        return Color.Blue
+    }
+
+    fn label() -> string {
+        return this.name
+    }
+}
+
+print(Color.fromInt(2).label())     // "Green"
+```
+
 > 注意 `Triangle(...)` 后没有逗号——最后一个变体与方法块之间用空白分隔（trailing comma 允许但不强制）。
 
 **规则**：
 
-- 方法语法与 `class` 内方法一致：`fn name(params) -> ReturnType { body }`
+- 方法语法与 `class` 内方法一致：`fn name(params) -> ReturnType { body }` 或 `static fn name(params) -> ReturnType { body }`
 - 方法体内 `this` 的静态类型是 enum 自身（如 `Option<T>`），需要 `match (this)` 才能取出变体 payload
+- 静态方法没有 `this`；调用形式是 `EnumName.method(args...)`
 - **不**支持 `constructor`（变体语法本身就是构造器）
 - **不**支持继承（`enum E extends ...` 是非法）；如需共享行为，用接口实现（`enum E implements Iface`）或顶层函数
 - 简单枚举（无 payload）也可定义方法，但方法体内 `this` 是该 enum 的值，可用 `==` 直接比较：
@@ -2574,7 +2595,6 @@ print(s.isRound())       // true
   }
   ```
 - 方法**不能**和变体名同名
-- 静态方法目前**不支持**（如需"工厂方法"请用顶层函数）
 
 > 此设计与 Java enum / Swift enum / Kotlin sealed class 一致。Rust 的 `impl` 块在 xray 中**不**引入——xray 的方法定义统一在类型体内。
 

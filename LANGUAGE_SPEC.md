@@ -2392,7 +2392,7 @@ EnumDecl       ::= 'enum' Identifier TypeParams?
                    '{' EnumVariant (',' EnumVariant)* ','? EnumMethod* '}'
 EnumVariant    ::= Identifier VariantPayload?
                 |  Identifier '=' BackingValue                // explicit backing value for simple enums
-EnumMethod     ::= 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
+EnumMethod     ::= 'static'? 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
 VariantPayload ::= '(' VariantField (',' VariantField)* ')'
 VariantField   ::= (Identifier ':')? Type
 BackingValue   ::= IntLiteral | FloatLiteral | StringLiteral | BoolLiteral
@@ -2530,9 +2530,9 @@ ADT enums with payloads do **not** support direct `for-in`—iterating "all poss
 
 Simple integer enums benefit from reverse-lookup optimization (Tier 1/2 contiguous/sparse; other types fall back to a linear scan). ADT variants do not support reverse lookup.
 
-#### 5.6.7 Enum instance methods
+#### 5.6.7 Enum methods
 
-Instance methods may be defined inside `enum` bodies with the same syntax as `class` methods (no `impl` keyword is introduced). Methods are callable on every variant; method bodies typically `match (this)` to dispatch on the variant:
+Instance and static methods may be defined inside `enum` bodies with the same syntax as `class` methods (no `impl` keyword is introduced). Instance methods are callable on every variant; method bodies typically `match (this)` to dispatch on the variant:
 
 ```xray
 enum Shape {
@@ -2564,12 +2564,33 @@ print(s.area())          // 3.14159
 print(s.isRound())       // true
 ```
 
+Static methods use `static fn` and are useful for factories, lookup helpers, and enum-scoped utilities. Static methods do not have `this`:
+
+```xray
+enum Color {
+    Red, Green, Blue
+
+    static fn fromInt(v: int) -> Color {
+        if (v == 1) { return Color.Red }
+        if (v == 2) { return Color.Green }
+        return Color.Blue
+    }
+
+    fn label() -> string {
+        return this.name
+    }
+}
+
+print(Color.fromInt(2).label())     // "Green"
+```
+
 > Note that `Triangle(...)` is not followed by a comma — the last variant is separated from the method block by whitespace (a trailing comma is allowed but not required).
 
 **Rules**:
 
-- Method syntax matches `class` methods: `fn name(params) -> ReturnType { body }`.
+- Method syntax matches `class` methods: `fn name(params) -> ReturnType { body }` or `static fn name(params) -> ReturnType { body }`.
 - Inside a method, the static type of `this` is the enum itself (e.g. `Option<T>`); use `match (this)` to extract a variant's payload.
+- Static methods have no `this`; call them as `EnumName.method(args...)`.
 - `constructor` is **not** supported (variant syntax already serves as the constructor).
 - Inheritance is **not** supported (`enum E extends ...` is illegal); for shared behaviour use interface implementation (`enum E implements Iface`) or top-level functions.
 - Simple (payload-free) enums may also define methods; inside such methods `this` is the enum value and can be compared directly with `==`:
@@ -2581,7 +2602,6 @@ print(s.isRound())       // true
   }
   ```
 - Methods **may not** share a name with a variant.
-- Static methods are **not yet supported** (use top-level "factory" functions).
 
 > This design matches Java enums, Swift enums, and Kotlin sealed classes. Rust's `impl` blocks are **not** introduced in xray—xray defines methods inside the type body uniformly.
 
