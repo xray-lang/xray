@@ -163,6 +163,54 @@ TEST(string_core_reverse_empty_and_null_zero) {
     ASSERT_EQ_UINT(xr_string_core_reverse_utf8_write(NULL, "abc", 3), 0);
 }
 
+TEST(string_core_parse_int64) {
+    XrStringCoreParseIntResult parsed =
+        xr_string_core_parse_int64(" \t\r\n-123tail", strlen(" \t\r\n-123tail"));
+    ASSERT_TRUE(parsed.ok);
+    ASSERT_EQ_INT(parsed.value, -123);
+
+    parsed = xr_string_core_parse_int64("+42", 3);
+    ASSERT_TRUE(parsed.ok);
+    ASSERT_EQ_INT(parsed.value, 42);
+
+    const char bounded[] = {'1', '2', '3', '4'};
+    parsed = xr_string_core_parse_int64(bounded, 2);
+    ASSERT_TRUE(parsed.ok);
+    ASSERT_EQ_INT(parsed.value, 12);
+
+    parsed = xr_string_core_parse_int64("abc", 3);
+    ASSERT_FALSE(parsed.ok);
+
+    parsed = xr_string_core_parse_int64("   ", 3);
+    ASSERT_FALSE(parsed.ok);
+
+    ASSERT_FALSE(xr_string_core_parse_int64(NULL, 0).ok);
+}
+
+TEST(string_core_parse_float64) {
+    XrStringCoreParseFloatResult parsed =
+        xr_string_core_parse_float64(" \n-3.5e2tail", strlen(" \n-3.5e2tail"));
+    ASSERT_TRUE(parsed.ok);
+    ASSERT_FLOAT_EQ(parsed.value, -350.0, 0.000001);
+
+    parsed = xr_string_core_parse_float64("+0.25", 5);
+    ASSERT_TRUE(parsed.ok);
+    ASSERT_FLOAT_EQ(parsed.value, 0.25, 0.000001);
+
+    const char bounded[] = {'1', '.', '2', '5', '9'};
+    parsed = xr_string_core_parse_float64(bounded, 4);
+    ASSERT_TRUE(parsed.ok);
+    ASSERT_FLOAT_EQ(parsed.value, 1.25, 0.000001);
+
+    parsed = xr_string_core_parse_float64("nope", 4);
+    ASSERT_FALSE(parsed.ok);
+
+    parsed = xr_string_core_parse_float64("\t", 1);
+    ASSERT_FALSE(parsed.ok);
+
+    ASSERT_FALSE(xr_string_core_parse_float64(NULL, 0).ok);
+}
+
 TEST_MAIN_BEGIN()
 
 RUN_TEST_SUITE("String Core");
@@ -181,5 +229,7 @@ RUN_TEST(string_core_ascii_case_preserves_utf8);
 RUN_TEST(string_core_ascii_case_empty_and_null_zero);
 RUN_TEST(string_core_reverse_utf8);
 RUN_TEST(string_core_reverse_empty_and_null_zero);
+RUN_TEST(string_core_parse_int64);
+RUN_TEST(string_core_parse_float64);
 
 TEST_MAIN_END()

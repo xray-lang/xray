@@ -131,6 +131,26 @@ fn test_trim_tabs_newlines() {
     assert_eq("\t hello \n".trim(), "hello")
 }
 
+// ===== conversion =====
+
+@test
+fn test_toInt() {
+    assert_eq("123".toInt(), 123)
+    assert_eq(" \t\r\n-17tail".toInt(), -17)
+    assert_eq("+42".toInt(), 42)
+    assert_eq("abc".toInt(), null)
+    assert_eq("   ".toInt(), null)
+}
+
+@test
+fn test_toFloat() {
+    assert_eq("3.5".toFloat(), 3.5)
+    assert_eq(" \n-3.5e2tail".toFloat(), -350.0)
+    assert_eq("+0.25".toFloat(), 0.25)
+    assert_eq("abc".toFloat(), null)
+    assert_eq("\t".toFloat(), null)
+}
+
 // ===== split =====
 
 @test

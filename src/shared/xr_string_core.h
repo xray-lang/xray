@@ -12,7 +12,9 @@
 #define XRAY_SHARED_XR_STRING_CORE_H
 
 #include <stdbool.h>
+#include <stdint.h>
 #include <stddef.h>
+#include <stdlib.h>
 #include <string.h>
 
 typedef enum XrStringCoreTrimMode {
@@ -26,8 +28,94 @@ typedef struct XrStringCoreSlice {
     size_t len;
 } XrStringCoreSlice;
 
+typedef struct XrStringCoreParseIntResult {
+    bool ok;
+    int64_t value;
+} XrStringCoreParseIntResult;
+
+typedef struct XrStringCoreParseFloatResult {
+    bool ok;
+    double value;
+} XrStringCoreParseFloatResult;
+
 static inline bool xr_string_core_is_ascii_whitespace(unsigned char c) {
     return c == ' ' || c == '\t' || c == '\n' || c == '\r';
+}
+
+static inline const char *xr_string_core_skip_number_leading_ws(const char *data, size_t len) {
+    if (!data)
+        return NULL;
+    size_t pos = 0;
+    while (pos < len && xr_string_core_is_ascii_whitespace((unsigned char) data[pos]))
+        pos++;
+    return data + pos;
+}
+
+static inline XrStringCoreParseIntResult xr_string_core_parse_int64(const char *data, size_t len) {
+    XrStringCoreParseIntResult out = {false, 0};
+    if (!data)
+        return out;
+
+    const char *p = xr_string_core_skip_number_leading_ws(data, len);
+    if (!p || p >= data + len)
+        return out;
+
+    char stack_buf[128];
+    size_t parse_len = (size_t) ((data + len) - p);
+    char *buf = stack_buf;
+    if (parse_len >= sizeof(stack_buf)) {
+        buf = (char *) malloc(parse_len + 1);
+        if (!buf)
+            return out;
+    }
+    memcpy(buf, p, parse_len);
+    buf[parse_len] = '\0';
+
+    char *end = NULL;
+    long long value = strtoll(buf, &end, 10);
+    bool ok = end != buf;
+    if (buf != stack_buf)
+        free(buf);
+    if (!ok)
+        return out;
+
+    out.ok = true;
+    out.value = (int64_t) value;
+    return out;
+}
+
+static inline XrStringCoreParseFloatResult xr_string_core_parse_float64(const char *data,
+                                                                        size_t len) {
+    XrStringCoreParseFloatResult out = {false, 0.0};
+    if (!data)
+        return out;
+
+    const char *p = xr_string_core_skip_number_leading_ws(data, len);
+    if (!p || p >= data + len)
+        return out;
+
+    char stack_buf[128];
+    size_t parse_len = (size_t) ((data + len) - p);
+    char *buf = stack_buf;
+    if (parse_len >= sizeof(stack_buf)) {
+        buf = (char *) malloc(parse_len + 1);
+        if (!buf)
+            return out;
+    }
+    memcpy(buf, p, parse_len);
+    buf[parse_len] = '\0';
+
+    char *end = NULL;
+    double value = strtod(buf, &end);
+    bool ok = end != buf;
+    if (buf != stack_buf)
+        free(buf);
+    if (!ok)
+        return out;
+
+    out.ok = true;
+    out.value = value;
+    return out;
 }
 
 static inline XrStringCoreSlice xr_string_core_trim_slice(const char *data, size_t len,
