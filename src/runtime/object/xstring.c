@@ -755,7 +755,7 @@ XrString *xr_string_char_at_unicode(XrVMRuntime *iso, XrString *str, size_t inde
         return NULL;
 
     XrStringCoreSlice slice =
-        xr_string_core_utf8_char_slice_at(str->data, str->length, (int64_t) index);
+        xr_string_core_utf8_index_slice_at(str->data, str->length, (int64_t) index);
     if (slice.len == 0)
         return NULL;
     return xr_string_intern(iso, slice.data, slice.len, 0);

@@ -412,6 +412,11 @@ TEST(string_core_utf8_char_slice) {
     assert_slice_eq(xr_string_core_utf8_char_slice_at(s, strlen(s), -1), "🌍");
     assert_slice_eq(xr_string_core_utf8_char_slice_at(s, strlen(s), 99), "");
     assert_slice_eq(xr_string_core_utf8_char_slice_at(s, strlen(s), -99), "");
+    assert_slice_eq(xr_string_core_utf8_index_slice_at(s, strlen(s), 0), "A");
+    assert_slice_eq(xr_string_core_utf8_index_slice_at(s, strlen(s), 1), "你");
+    assert_slice_eq(xr_string_core_utf8_index_slice_at(s, strlen(s), 2), "🌍");
+    assert_slice_eq(xr_string_core_utf8_index_slice_at(s, strlen(s), -1), "");
+    assert_slice_eq(xr_string_core_utf8_index_slice_at(s, strlen(s), 99), "");
 }
 
 TEST(string_core_byte_slice_and_codepoint) {

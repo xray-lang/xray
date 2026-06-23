@@ -130,37 +130,16 @@ static inline void xrt_fixed_array_copy(void *dst, XrValue src, uint8_t native_t
                (size_t) (elem_count - count) * elem_size);
 }
 
-static inline int xrt_utf8_char_size(unsigned char lead) {
-    if ((lead & 0x80u) == 0)
-        return 1;
-    if ((lead & 0xE0u) == 0xC0u)
-        return 2;
-    if ((lead & 0xF0u) == 0xE0u)
-        return 3;
-    if ((lead & 0xF8u) == 0xF0u)
-        return 4;
-    return 1;
-}
-
 static inline XrValue xrt_string_index_get(XrValue obj, int64_t target) {
-    if (!XR_IS_STR(obj) || target < 0)
+    if (!XR_IS_STR(obj))
         return XR_NULL_VAL;
-    const char *s = xr_str_data(obj);
-    size_t slen = (size_t) xr_str_len(obj);
-    const unsigned char *p = (const unsigned char *) s;
-    const unsigned char *end = p + slen;
-    for (int64_t char_index = 0; p < end; char_index++) {
-        int size = xrt_utf8_char_size(*p);
-        if (p + size > end)
-            size = 1;
-        if (char_index == target) {
-            XrValue sv = xrt_str_alloc((size_t) size);
-            memcpy(xr_str_buf(sv), p, (size_t) size);
-            return sv;
-        }
-        p += size;
-    }
-    return XR_NULL_VAL;
+    XrStringCoreSlice slice =
+        xr_string_core_utf8_index_slice_at(xr_str_data(obj), (size_t) xr_str_len(obj), target);
+    if (slice.len == 0)
+        return XR_NULL_VAL;
+    XrValue sv = xrt_str_alloc(slice.len);
+    memcpy(xr_str_buf(sv), slice.data, slice.len);
+    return sv;
 }
 
 static inline XrValue xrt_index_get(XrValue obj, XrValue key) {
