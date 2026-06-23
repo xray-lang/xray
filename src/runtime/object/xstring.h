@@ -207,9 +207,9 @@ XR_FUNC XrString *xr_string_to_upper_case(XrVMRuntime *iso, XrString *str);
 XR_FUNC XrString *xr_string_trim(XrVMRuntime *iso, XrString *str);
 XR_FUNC XrString *xr_string_trim_start(XrVMRuntime *iso, XrString *str);
 XR_FUNC XrString *xr_string_trim_end(XrVMRuntime *iso, XrString *str);
-XR_FUNC XrString *xr_string_pad_start(XrVMRuntime *iso, XrString *str, size_t target_len,
+XR_FUNC XrString *xr_string_pad_start(XrVMRuntime *iso, XrString *str, xr_Integer target_len,
                                       XrString *pad_str);
-XR_FUNC XrString *xr_string_pad_end(XrVMRuntime *iso, XrString *str, size_t target_len,
+XR_FUNC XrString *xr_string_pad_end(XrVMRuntime *iso, XrString *str, xr_Integer target_len,
                                     XrString *pad_str);
 XR_FUNC xr_Integer xr_string_last_index_of(XrVMRuntime *iso, XrString *str, XrString *substr);
 

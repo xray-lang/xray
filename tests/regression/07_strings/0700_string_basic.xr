@@ -144,6 +144,19 @@ fn test_trim_tabs_newlines() {
     assert_eq("\t hello \n".trim(), "hello")
 }
 
+// ===== padStart/padEnd =====
+
+@test
+fn test_pad() {
+    assert_eq("42".padStart(5, "0"), "00042")
+    assert_eq("hi".padEnd(5, "!"), "hi!!!")
+    assert_eq("x".padStart(3), "  x")
+    assert_eq("x".padEnd(3), "x  ")
+    assert_eq("abc".padStart(2, "0"), "abc")
+    assert_eq("abc".padEnd(5, ""), "abc")
+    assert_eq("好".padStart(6, "."), "...好")
+}
+
 // ===== conversion =====
 
 @test

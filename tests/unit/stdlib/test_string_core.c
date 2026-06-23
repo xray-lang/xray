@@ -190,6 +190,39 @@ TEST(string_core_repeat_plan_and_write) {
     ASSERT_EQ_INT(xr_string_core_repeat_plan(NULL, 1, 2).kind, XR_STRING_CORE_REPEAT_INVALID);
 }
 
+TEST(string_core_pad_plan_and_write) {
+    XrStringCorePadPlan plan = xr_string_core_pad_plan("42", 2, 5, "0", 1);
+    ASSERT_EQ_INT(plan.kind, XR_STRING_CORE_PAD_ALLOC);
+    ASSERT_EQ_UINT(plan.len, 5);
+    ASSERT_EQ_UINT(plan.fill_len, 3);
+
+    char out[32];
+    ASSERT_EQ_UINT(xr_string_core_pad_write(out, "42", 2, plan, XR_STRING_CORE_PAD_START), 5);
+    ASSERT(strcmp(out, "00042") == 0);
+
+    plan = xr_string_core_pad_plan("hi", 2, 5, "!", 1);
+    ASSERT_EQ_UINT(xr_string_core_pad_write(out, "hi", 2, plan, XR_STRING_CORE_PAD_END), 5);
+    ASSERT(strcmp(out, "hi!!!") == 0);
+
+    plan = xr_string_core_pad_plan("ab", 2, 7, "01", 2);
+    ASSERT_EQ_UINT(xr_string_core_pad_write(out, "ab", 2, plan, XR_STRING_CORE_PAD_START), 7);
+    ASSERT(strcmp(out, "01010ab") == 0);
+
+    plan = xr_string_core_pad_plan("x", 1, 3, NULL, 0);
+    ASSERT_EQ_UINT(xr_string_core_pad_write(out, "x", 1, plan, XR_STRING_CORE_PAD_START), 3);
+    ASSERT(strcmp(out, "  x") == 0);
+
+    plan = xr_string_core_pad_plan("abc", 3, 5, "", 0);
+    ASSERT_EQ_INT(plan.kind, XR_STRING_CORE_PAD_ORIGINAL);
+    ASSERT_EQ_UINT(plan.len, 3);
+
+    plan = xr_string_core_pad_plan("abc", 3, -1, "0", 1);
+    ASSERT_EQ_INT(plan.kind, XR_STRING_CORE_PAD_ORIGINAL);
+
+    ASSERT_EQ_INT(xr_string_core_pad_plan(NULL, 1, 2, "0", 1).kind, XR_STRING_CORE_PAD_INVALID);
+    ASSERT_EQ_INT(xr_string_core_pad_plan("x", 1, 3, NULL, 1).kind, XR_STRING_CORE_PAD_INVALID);
+}
+
 TEST(string_core_parse_int64) {
     XrStringCoreParseIntResult parsed =
         xr_string_core_parse_int64(" \t\r\n-123tail", strlen(" \t\r\n-123tail"));
@@ -302,6 +335,7 @@ RUN_TEST(string_core_ascii_case_empty_and_null_zero);
 RUN_TEST(string_core_reverse_utf8);
 RUN_TEST(string_core_reverse_empty_and_null_zero);
 RUN_TEST(string_core_repeat_plan_and_write);
+RUN_TEST(string_core_pad_plan_and_write);
 RUN_TEST(string_core_parse_int64);
 RUN_TEST(string_core_parse_float64);
 RUN_TEST(string_core_substring_bounds);

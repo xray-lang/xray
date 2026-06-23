@@ -432,6 +432,16 @@ static inline XrValue xrt_str_method_1(const char *s, int64_t slen, XrValue recv
         xr_string_core_repeat_write(xr_str_buf(sv), s, (size_t) slen, arg0.i);
         return sv;
     }
+    if ((sym == XRT_SYM_PAD_START || sym == XRT_SYM_PAD_END) && arg0.tag == XR_TAG_I64) {
+        XrStringCorePadPlan plan = xr_string_core_pad_plan(s, (size_t) slen, arg0.i, NULL, 0);
+        if (plan.kind == XR_STRING_CORE_PAD_INVALID || plan.kind == XR_STRING_CORE_PAD_ORIGINAL)
+            return recv;
+        XrValue sv = xrt_str_alloc(plan.len);
+        xr_string_core_pad_write(xr_str_buf(sv), s, (size_t) slen, plan,
+                                 sym == XRT_SYM_PAD_START ? XR_STRING_CORE_PAD_START
+                                                          : XR_STRING_CORE_PAD_END);
+        return sv;
+    }
     if (sym == XRT_SYM_REPLACE && XR_IS_STR(arg0)) {
         /* replace(old) with empty string — 1-arg form */
         const char *old_s = xr_str_data(arg0);
@@ -678,27 +688,15 @@ static inline XrValue xrt_method_2(XrValue recv, int sym, XrValue arg0, XrValue 
     if (XR_IS_STR(recv) && (sym == XRT_SYM_PAD_START || sym == XRT_SYM_PAD_END) &&
         arg0.tag == XR_TAG_I64 && XR_IS_STR(arg1)) {
         const char *s = xr_str_data(recv);
-        int64_t slen = xr_str_len(recv);
-        int64_t target = arg0.i;
-        if (target <= slen)
-            return recv;
         const char *pad = xr_str_data(arg1);
-        size_t plen = (size_t) xr_str_len(arg1);
-        if (plen == 0)
+        XrStringCorePadPlan plan = xr_string_core_pad_plan(s, (size_t) xr_str_len(recv), arg0.i,
+                                                           pad, (size_t) xr_str_len(arg1));
+        if (plan.kind == XR_STRING_CORE_PAD_INVALID || plan.kind == XR_STRING_CORE_PAD_ORIGINAL)
             return recv;
-        int64_t fill = target - slen;
-        XrValue sv = xrt_str_alloc((size_t) target);
-        char *r = xr_str_buf(sv);
-        if (sym == XRT_SYM_PAD_START) {
-            for (int64_t i = 0; i < fill; i++)
-                r[i] = pad[i % plen];
-            memcpy(r + fill, s, (size_t) slen);
-        } else {
-            memcpy(r, s, (size_t) slen);
-            for (int64_t i = 0; i < fill; i++)
-                r[slen + i] = pad[i % plen];
-        }
-        r[target] = 0;
+        XrValue sv = xrt_str_alloc(plan.len);
+        xr_string_core_pad_write(xr_str_buf(sv), s, (size_t) xr_str_len(recv), plan,
+                                 sym == XRT_SYM_PAD_START ? XR_STRING_CORE_PAD_START
+                                                          : XR_STRING_CORE_PAD_END);
         return sv;
     }
     if (XR_IS_STR(recv) && sym == XRT_SYM_REPLACE && XR_IS_STR(arg0) && XR_IS_STR(arg1)) {

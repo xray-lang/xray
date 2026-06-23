@@ -181,7 +181,7 @@ static XrValue m_pad_start(XrVMRuntime *iso, XrValue self, XrValue *args, int ar
     XrString *str = str_self(self);
     if (argc < 1)
         return xr_string_value(str);
-    size_t target_len = (size_t) XR_TO_INT(args[0]);
+    xr_Integer target_len = XR_TO_INT(args[0]);
     XrString *pad = (argc >= 2 && XR_IS_STRING(args[1])) ? xr_value_to_string(iso, args[1]) : NULL;
     XrString *result = xr_string_pad_start(iso, str, target_len, pad);
     return result ? xr_string_value(result) : xr_string_value(str);
@@ -191,7 +191,7 @@ static XrValue m_pad_end(XrVMRuntime *iso, XrValue self, XrValue *args, int argc
     XrString *str = str_self(self);
     if (argc < 1)
         return xr_string_value(str);
-    size_t target_len = (size_t) XR_TO_INT(args[0]);
+    xr_Integer target_len = XR_TO_INT(args[0]);
     XrString *pad = (argc >= 2 && XR_IS_STRING(args[1])) ? xr_value_to_string(iso, args[1]) : NULL;
     XrString *result = xr_string_pad_end(iso, str, target_len, pad);
     return result ? xr_string_value(result) : xr_string_value(str);

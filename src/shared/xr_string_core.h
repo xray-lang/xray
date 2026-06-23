@@ -40,6 +40,25 @@ typedef struct XrStringCoreRepeatPlan {
     size_t len;
 } XrStringCoreRepeatPlan;
 
+typedef enum XrStringCorePadKind {
+    XR_STRING_CORE_PAD_INVALID = 0,
+    XR_STRING_CORE_PAD_ORIGINAL,
+    XR_STRING_CORE_PAD_ALLOC
+} XrStringCorePadKind;
+
+typedef enum XrStringCorePadSide {
+    XR_STRING_CORE_PAD_START = 0,
+    XR_STRING_CORE_PAD_END
+} XrStringCorePadSide;
+
+typedef struct XrStringCorePadPlan {
+    XrStringCorePadKind kind;
+    size_t len;
+    size_t fill_len;
+    const char *pad;
+    size_t pad_len;
+} XrStringCorePadPlan;
+
 typedef struct XrStringCoreParseIntResult {
     bool ok;
     int64_t value;
@@ -127,6 +146,84 @@ static inline size_t xr_string_core_repeat_write(char *out, const char *data, si
             copy_len = plan.len - written;
         memcpy(out + written, out, copy_len);
         written += copy_len;
+    }
+    out[plan.len] = '\0';
+    return plan.len;
+}
+
+static inline XrStringCorePadPlan xr_string_core_pad_plan(const char *data, size_t len,
+                                                          int64_t target_len, const char *pad_data,
+                                                          size_t pad_len) {
+    XrStringCorePadPlan out = {XR_STRING_CORE_PAD_INVALID, 0, 0, NULL, 0};
+    if (!data && len != 0)
+        return out;
+    if (!pad_data && pad_len != 0)
+        return out;
+
+    int64_t n = xr_string_core_len_i64(len);
+    if (target_len <= n) {
+        out.kind = XR_STRING_CORE_PAD_ORIGINAL;
+        out.len = len;
+        return out;
+    }
+
+    uint64_t target64 = (uint64_t) target_len;
+    if (target64 > (uint64_t) SIZE_MAX)
+        return out;
+
+    if (!pad_data) {
+        pad_data = " ";
+        pad_len = 1;
+    } else if (pad_len == 0) {
+        out.kind = XR_STRING_CORE_PAD_ORIGINAL;
+        out.len = len;
+        return out;
+    }
+
+    size_t target = (size_t) target64;
+    out.kind = XR_STRING_CORE_PAD_ALLOC;
+    out.len = target;
+    out.fill_len = target - len;
+    out.pad = pad_data;
+    out.pad_len = pad_len;
+    return out;
+}
+
+static inline void xr_string_core_pad_fill(char *out, size_t fill_len, const char *pad,
+                                           size_t pad_len) {
+    if (!out || !pad || pad_len == 0)
+        return;
+    size_t pos = 0;
+    while (pos < fill_len) {
+        size_t copy_len = pad_len;
+        if (copy_len > fill_len - pos)
+            copy_len = fill_len - pos;
+        memcpy(out + pos, pad, copy_len);
+        pos += copy_len;
+    }
+}
+
+static inline size_t xr_string_core_pad_write(char *out, const char *data, size_t len,
+                                              XrStringCorePadPlan plan, XrStringCorePadSide side) {
+    if (!out)
+        return 0;
+    if (plan.kind == XR_STRING_CORE_PAD_INVALID)
+        return 0;
+    if (plan.kind == XR_STRING_CORE_PAD_ORIGINAL) {
+        if (len != 0)
+            memcpy(out, data, len);
+        out[len] = '\0';
+        return len;
+    }
+
+    if (side == XR_STRING_CORE_PAD_START) {
+        xr_string_core_pad_fill(out, plan.fill_len, plan.pad, plan.pad_len);
+        if (len != 0)
+            memcpy(out + plan.fill_len, data, len);
+    } else {
+        if (len != 0)
+            memcpy(out, data, len);
+        xr_string_core_pad_fill(out + len, plan.fill_len, plan.pad, plan.pad_len);
     }
     out[plan.len] = '\0';
     return plan.len;
