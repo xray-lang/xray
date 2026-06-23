@@ -83,6 +83,15 @@ typedef struct XrStdlibNativeClassDefEntry {
     const char *builtin_kind;
 } XrStdlibNativeClassDefEntry;
 
+typedef struct XrStdlibClassDefEntry {
+    const char *module;
+    const char *name;
+    const char *super_slot;
+    const char *core_slot;
+    const char *flags;
+    const char *builtin_kind;
+} XrStdlibClassDefEntry;
+
 typedef struct XrStdlibClassMethodDefEntry {
     const char *module;
     const char *class_name;
@@ -91,6 +100,13 @@ typedef struct XrStdlibClassMethodDefEntry {
     int16_t argc;
     const char *flags;
 } XrStdlibClassMethodDefEntry;
+
+typedef struct XrStdlibClassFieldDefEntry {
+    const char *module;
+    const char *class_name;
+    const char *name;
+    const char *flags;
+} XrStdlibClassFieldDefEntry;
 
 static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"time", "now", "(): int", "Current time in milliseconds since epoch", "xr_time_now", "normal", "", "xrt_time_now", "", "value", "time.now", "", "system", "", 0, false},
@@ -577,6 +593,7 @@ static const XrStdlibTypeMethodDefEntry xr_stdlib_type_method_def_entries[] = {
 #define XR_STDLIB_TYPE_METHOD_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_type_method_def_entries) / sizeof(xr_stdlib_type_method_def_entries[0])))
 
 static const XrStdlibNativeClassDefEntry xr_stdlib_native_class_def_entries[] = {
+    {"regex", "Regex", "objectClass", "regexClass", "&g_regex_body_desc", "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY", "XR_BK_REGEX"},
     {"log", "Logger", "objectClass", "loggerClass", "&g_logger_body_desc", "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY", ""},
     {"net", "NetConn", "", "netConnClass", "xr_netconn_body_desc()", "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY", "XR_BK_NETCONN"},
     {"net", "NetListener", "", "netListenerClass", "xr_netlistener_body_desc()", "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY", "XR_BK_NETLISTENER"},
@@ -584,7 +601,22 @@ static const XrStdlibNativeClassDefEntry xr_stdlib_native_class_def_entries[] = 
 };
 #define XR_STDLIB_NATIVE_CLASS_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_native_class_def_entries) / sizeof(xr_stdlib_native_class_def_entries[0])))
 
+static const XrStdlibClassDefEntry xr_stdlib_class_def_entries[] = {
+    {"regex", "RegexMatch", "objectClass", "regexMatchClass", "XR_CLASS_BUILTIN | XR_CLASS_FINAL", "XR_BK_REGEX_MATCH"},
+};
+#define XR_STDLIB_CLASS_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_class_def_entries) / sizeof(xr_stdlib_class_def_entries[0])))
+
 static const XrStdlibClassMethodDefEntry xr_stdlib_class_method_def_entries[] = {
+    {"regex", "Regex", "test", "re_m_test", 1, "0"},
+    {"regex", "Regex", "find", "re_m_find", 2, "0"},
+    {"regex", "Regex", "findText", "re_m_find_text", 1, "0"},
+    {"regex", "Regex", "findGroup", "re_m_find_group", 2, "0"},
+    {"regex", "Regex", "findAll", "re_m_find_all", 2, "0"},
+    {"regex", "Regex", "replace", "re_m_replace", 2, "0"},
+    {"regex", "Regex", "replaceAll", "re_m_replace_all", 2, "0"},
+    {"regex", "Regex", "split", "re_m_split", 2, "0"},
+    {"regex", "Regex", "pattern", "re_method_pattern", 0, "0"},
+    {"regex", "Regex", "toString", "re_m_to_string", 0, "0"},
     {"log", "Logger", "debug", "xr_logger_debug", -1, "0"},
     {"log", "Logger", "info", "xr_logger_info", -1, "0"},
     {"log", "Logger", "warn", "xr_logger_warn", -1, "0"},
@@ -623,6 +655,14 @@ static const XrStdlibClassMethodDefEntry xr_stdlib_class_method_def_entries[] = 
     {"datetime", "DateTime", "get:timestamp", "dt_timestamp", 1, "0"},
 };
 #define XR_STDLIB_CLASS_METHOD_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_class_method_def_entries) / sizeof(xr_stdlib_class_method_def_entries[0])))
+
+static const XrStdlibClassFieldDefEntry xr_stdlib_class_field_def_entries[] = {
+    {"regex", "RegexMatch", "start", "0"},
+    {"regex", "RegexMatch", "end", "0"},
+    {"regex", "RegexMatch", "text", "0"},
+    {"regex", "RegexMatch", "groups", "0"},
+};
+#define XR_STDLIB_CLASS_FIELD_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_class_field_def_entries) / sizeof(xr_stdlib_class_field_def_entries[0])))
 
 #endif  /* XSTDLIB_DEFS_GENERATED_H */
 
