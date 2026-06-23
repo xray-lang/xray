@@ -1,0 +1,34 @@
+// anchor: hashable-contract
+
+class Token implements Hashable {
+    value: int
+
+    constructor(value: int) {
+        this.value = value
+    }
+
+    operator==(other: Token) -> bool {
+        return this.value == other.value
+    }
+
+    hash() -> int {
+        return this.value
+    }
+}
+
+fn passHashable<T: Hashable>(value: T) -> T {
+    return value
+}
+
+let token = new Token(7)
+let values: Map<Token, int> = #{}
+values.set(token, 99)
+print(values.has(token))
+if (values.has(token)) {
+    print(values.get(token))
+}
+
+let seen: Set<Token> = #[]
+seen.add(token)
+print(seen.has(token))
+print(passHashable(token).value)

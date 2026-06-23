@@ -1578,6 +1578,17 @@ void xa_visit_collect_function_decl_only(XaInferContext *ctx, AstNode *node) {
         xr_free(constraint_counts);
     }
 
+    XrLocation sig_loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+    for (int i = 0; i < fn->param_count; i++) {
+        XrParamNode *param = fn->params ? fn->params[i] : NULL;
+        XrLocation param_loc = {.file = ctx->file_path,
+                                .line = param ? param->line : node->line,
+                                .column = param ? param->column : node->column};
+        xa_validate_hashable_key_type(ctx, param_types ? param_types[i] : NULL, links,
+                                      "function parameter type", &param_loc);
+    }
+    xa_validate_hashable_key_type(ctx, return_type, links, "function return type", &sig_loc);
+
     if (param_types)
         xr_free(param_types);
     if (param_names)
@@ -1731,6 +1742,7 @@ void xa_visit_collect_function_body(XaInferContext *ctx, AstNode *node) {
 
     // Enter function scope and collect body
     xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_FUNCTION, node);
+    ctx->analyzer->current_scope->function_symbol = sym;
 
     // Add parameters to scope
     for (int i = 0; i < fn->param_count; i++) {
@@ -2191,7 +2203,12 @@ static void xa_check_interface_conformance(XaInferContext *ctx, AstNode *cls_nod
         if (!iface_name)
             continue;
 
-        // Built-in interfaces have no XrClassInfo* attached; skip them.
+        // Built-in interfaces have no XrClassInfo* attached. Hashable is the
+        // one builtin with a user-visible structural contract.
+        if (strcmp(iface_name, "Hashable") == 0) {
+            xa_validate_hashable_contract_for_class(ctx, cls_node, cls_info);
+            continue;
+        }
         if (xa_is_builtin_interface_name(iface_name))
             continue;
 
@@ -2391,7 +2408,6 @@ skip_interfaces:
                 xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                            XR_ERR_ANALYZE_MISSING_TYPE, msg, &loc);
             }
-
             xa_class_info_add_field(info, field_sym);
         }
     }
@@ -2747,6 +2763,17 @@ skip_layout:
                 xr_free(type_param_names);
             }
 
+            XrLocation sig_loc = {
+                .file = ctx->file_path, .line = method->line, .column = method->column};
+            for (int j = 0; j < md->param_count; j++) {
+                xa_validate_hashable_key_type(
+                    ctx,
+                    method_type->function.param_types ? method_type->function.param_types[j] : NULL,
+                    method_links, "method parameter type", &sig_loc);
+            }
+            xa_validate_hashable_key_type(ctx, method_type->function.return_type, method_links,
+                                          "method return type", &sig_loc);
+
             xa_class_info_add_method(info, method_sym);
 
             // Record constructor info in class_info and validate super() rules
@@ -2770,6 +2797,15 @@ skip_layout:
         }
     }
 
+    for (int i = 0; i < info->field_count; i++) {
+        XaSymbol *field = info->fields[i];
+        XaSymbolLinks *field_links = field ? xa_analyzer_get_links(ctx->analyzer, field) : NULL;
+        XrLocation loc = {
+            .file = ctx->file_path, .line = field ? field->location.line : node->line, .column = 0};
+        xa_validate_hashable_key_type(ctx, field_links ? field_links->type : NULL, links,
+                                      "field type", &loc);
+    }
+
     xa_class_propagate_receiver_mutations(info, cls);
 
     validate_class_field_default_initialization(ctx, node, cls, info);
@@ -2789,6 +2825,7 @@ skip_layout:
 
         // Look up method symbol to get resolved param types
         XaSymbol *msym = xa_scope_lookup_local(ctx->analyzer->current_scope->parent, md->name);
+        ctx->analyzer->current_scope->function_symbol = msym;
         XaSymbolLinks *mlinks = msym ? xa_analyzer_get_links(ctx->analyzer, msym) : NULL;
 
         for (int j = 0; j < md->param_count; j++) {
@@ -2882,6 +2919,10 @@ void xa_visit_collect_var_decl(XaInferContext *ctx, AstNode *node) {
     links->declared_type = var->type_annotation
                                ? xr_tref_resolve_in_analyzer(ctx->analyzer, var->type_annotation)
                                : NULL;
+    if (links->declared_type) {
+        XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+        xa_validate_hashable_key_type(ctx, links->declared_type, NULL, "type annotation", &loc);
+    }
 
     // Mark const types as immutable for concurrency safety
     if (sym->is_shared && sym->is_const && links->declared_type) {

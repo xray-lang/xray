@@ -318,7 +318,8 @@ bool xr_type_satisfies_constraint(XrType *type, XrType *constraint) {
                     return true;
                 // Not a builtin comparable — fall through to user-class check
             } else if (strcmp(iface_name, "Hashable") == 0) {
-                if (xr_kind_is_primitive(type->kind))
+                if (xr_kind_is_primitive(type->kind) || type->kind == XR_KIND_ENUM ||
+                    xr_type_is_named_class(type, "BigInt"))
                     return true;
                 // Not a builtin hashable — fall through to user-class check
             } else if (strcmp(iface_name, "Stringable") == 0) {

@@ -1,0 +1,9 @@
+class LegacyHash implements Hashable {
+    operator==(other: LegacyHash) -> bool {
+        return true
+    }
+
+    hashCode() -> int {
+        return 1
+    }
+}

@@ -289,7 +289,7 @@ fn test_chained_generic_operations() {
 // ===== Generic Functions with Complex Types =====
 @test
 fn test_generic_with_map() {
-    fn getOrDefault<K, V>(m: Map<K, V>, key: K, defaultVal: V) -> V {
+    fn getOrDefault<K: Hashable, V>(m: Map<K, V>, key: K, defaultVal: V) -> V {
         if (m.has(key)) {
             return m.get(key)
         }

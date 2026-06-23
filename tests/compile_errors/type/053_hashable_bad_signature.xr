@@ -1,0 +1,9 @@
+class BadSig implements Hashable {
+    operator==(other: BadSig) -> int {
+        return 1
+    }
+
+    hash() -> string {
+        return "bad"
+    }
+}
