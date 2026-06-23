@@ -151,7 +151,7 @@ static const XaBuiltinHandleField g_gen_http_httpresponse_fields[] = {
     {"status", "int", true},
     {"statusText", "string", true},
     {"headers", "Json", true},
-    {"body", "string", false},
+    {"body", "string", true},
     {"error", "string", true},
     {"ok", "bool", true},
 };
@@ -161,6 +161,7 @@ static const XaBuiltinHandleField g_gen_http_httprequest_fields[] = {
     {"method", "string", true},
     {"path", "string", true},
     {"query", "Json", true},
+    {"headers", "Json", true},
     {"body", "string", true},
     {"contentLength", "int", true},
     {"params", "Json", true},
@@ -172,13 +173,13 @@ static const XaBuiltinHandleField g_gen_http_downloadresult_fields[] = {
     {"status", "int", true},
     {"downloaded", "int", true},
     {"total", "int", true},
-    {"completed", "bool", false},
+    {"completed", "bool", true},
     {"error", "string", true},
 };
 
 static const XaBuiltinHandle g_gen_http_handles[] = {
     {"HttpResponse", g_gen_http_httpresponse_fields, 6, NULL, 0},
-    {"HttpRequest", g_gen_http_httprequest_fields, 7, NULL, 0},
+    {"HttpRequest", g_gen_http_httprequest_fields, 8, NULL, 0},
     {"DownloadResult", g_gen_http_downloadresult_fields, 5, NULL, 0},
 };
 #define GEN_HTTP_HANDLE_COUNT 3
@@ -230,12 +231,12 @@ static const XaBuiltinHandleField g_gen_io_filestat_fields[] = {
     {"mode", "int", true},
     {"mtime", "int", true},
     {"atime", "int", true},
-    {"ctime", "int", false},
+    {"ctime", "int", true},
     {"uid", "int", true},
     {"gid", "int", true},
     {"isFile", "bool", true},
     {"isDir", "bool", true},
-    {"isSymlink", "bool", false},
+    {"isSymlink", "bool", true},
 };
 
 static const XaBuiltinHandle g_gen_io_handles[] = {
@@ -537,6 +538,7 @@ static const XaBuiltinHandleField g_gen_url_url_fields[] = {
     {"protocol", "string", true},
     {"hostname", "string", true},
     {"port", "string", true},
+    {"pathname", "string", true},
     {"search", "string", true},
     {"hash", "string", true},
     {"username", "string", true},
@@ -547,7 +549,7 @@ static const XaBuiltinHandleField g_gen_url_url_fields[] = {
 };
 
 static const XaBuiltinHandle g_gen_url_handles[] = {
-    {"URL", g_gen_url_url_fields, 10, NULL, 0},
+    {"URL", g_gen_url_url_fields, 11, NULL, 0},
 };
 #define GEN_URL_HANDLE_COUNT 1
 

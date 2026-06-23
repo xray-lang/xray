@@ -660,6 +660,10 @@ module math {
 }
 
 module path {
+  handle PathInfo {
+    fields: "const root: string, const dir: string, const base: string, const name: string, const ext: string"
+  }
+
   const sep {
     signature: ": string"
     doc: "Platform path separator"
@@ -891,6 +895,10 @@ module base64 {
 }
 
 module url {
+  handle URL {
+    fields: "const protocol: string, const hostname: string, const port: string, const pathname: string, const search: string, const hash: string, const username: string, const password: string, const host: string, const origin: string, const href: string"
+  }
+
   fn encode {
     signature: "(s: string): string"
     doc: "RFC 3986 percent-encode"
@@ -1680,6 +1688,10 @@ module regex {
 }
 
 module os {
+  handle ExecResult {
+    fields: "const stdout: string, const stderr: string, const exitCode: int"
+  }
+
   const platform {
     signature: ": string"
     doc: "Current operating system name"
@@ -2021,6 +2033,10 @@ module os {
 }
 
 module io {
+  handle FileStat {
+    fields: "const size: int, const mode: int, const mtime: int, const atime: int, const ctime: int, const uid: int, const gid: int, const isFile: bool, const isDir: bool, const isSymlink: bool"
+  }
+
   fn appendFile {
     signature: "(path: string, data: string): bool"
     doc: "Append string to file"
@@ -2661,6 +2677,10 @@ module mem {
 }
 
 module net {
+  handle UdpPacket {
+    fields: "const data: string, const host: string, const port: int"
+  }
+
   fn dial {
     signature: "(host: string, port: int, timeout?: int): NetConn?"
     doc: "Dial a TCP connection"
@@ -2974,6 +2994,18 @@ module net {
 }
 
 module http {
+  handle HttpResponse {
+    fields: "const status: int, const statusText: string, const headers: Json, const body: string, const error: string, const ok: bool"
+  }
+
+  handle HttpRequest {
+    fields: "const method: string, const path: string, const query: Json, const headers: Json, const body: string, const contentLength: int, const params: Json, const streaming: bool"
+  }
+
+  handle DownloadResult {
+    fields: "const status: int, const downloaded: int, const total: int, const completed: bool, const error: string"
+  }
+
   fn get {
     signature: "(url: string): HttpResponse"
     doc: "HTTP GET request"
@@ -3536,6 +3568,14 @@ module cluster {
 }
 
 module ws {
+  handle WsConn {
+    fields: "const wsid: int, url: string, state: string"
+  }
+
+  handle WsMessage {
+    fields: "const data: string, const binary: bool, const error: string"
+  }
+
   fn connect {
     signature: "(url: string, options?: Json): WsConn?"
     doc: "Connect to a WebSocket server"

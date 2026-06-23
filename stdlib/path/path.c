@@ -436,8 +436,6 @@ static XrValue path_format(XrVMRuntime *X, XrValue *args, int argc) {
 #include "../../src/module/xbuiltin_decl.h"
 
 // @module path
-// @handle PathInfo { const root: string, const dir: string, const base: string, const name: string,
-// const ext: string }
 
 XR_DEFINE_BUILTIN(path_join, "join", "(...parts: string): string", "Join path segments")
 XR_DEFINE_BUILTIN(path_dirname, "dirname", "(path: string): string", "Get directory name")

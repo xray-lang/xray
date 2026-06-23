@@ -627,9 +627,6 @@ static XrValue url_join_fn(XrVMRuntime *X, XrValue *args, int nargs) {
 #include "../../src/module/xbuiltin_decl.h"
 
 // @module url
-// @handle URL { const protocol: string, const hostname: string, const port: string, const pathname:
-// string, const search: string, const hash: string, const username: string, const password: string,
-// const host: string, const origin: string, const href: string }
 
 XR_DEFINE_BUILTIN(url_encode_fn, "encode", "(s: string): string", "RFC 3986 percent-encode")
 XR_DEFINE_BUILTIN(url_decode_fn, "decode", "(s: string): string", "RFC 3986 percent-decode")

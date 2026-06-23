@@ -10,8 +10,8 @@ gen_stdlib_types.py - Generate analyzer builtin type declarations
 
 KEY CONCEPT:
   Uses stdlib/defs/*.def as the primary declaration source for migrated module
-  functions, then falls back to C annotations for handles, constants, builtin
-  types, and module members not yet migrated to declarative metadata.
+  functions, constants, and handles, then falls back to C annotations for
+  builtin types and module members not yet migrated to declarative metadata.
 
   Supports two output modes:
     --embed (default): Generate xanalyzer_builtins_generated.h (for stdlib)
@@ -108,7 +108,8 @@ HANDLE_PATTERN = re.compile(
 
 # Pattern to parse individual handle fields
 HANDLE_FIELD_PATTERN = re.compile(
-    r'(const\s+)?(\w+)\s*:\s*(\w+)'
+    r'(const\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*:\s*'
+    r'([A-Za-z_][A-Za-z0-9_]*(?:<[^,{}]+>)?\??)'
 )
 
 
@@ -278,6 +279,35 @@ def load_def_module_constants():
     return modules
 
 
+def load_def_module_handles():
+    """Load migrated handle declarations from stdlib/defs/*.def."""
+    sys.path.insert(0, str(STDLIBGEN_TOOL_DIR))
+    try:
+        from stdlibgen import parse_handles
+    except Exception as e:
+        raise SystemExit(f"Error: cannot import stdlibgen parser: {e}") from e
+    finally:
+        try:
+            sys.path.remove(str(STDLIBGEN_TOOL_DIR))
+        except ValueError:
+            pass
+
+    modules = {}
+    for entry in parse_handles(PROJECT_ROOT):
+        modules.setdefault(entry.module, []).append({
+            'name': entry.name,
+            'fields': [
+                {
+                    'name': field.name,
+                    'type': field.type,
+                    'is_const': field.is_const,
+                }
+                for field in entry.fields
+            ],
+        })
+    return modules
+
+
 def merge_def_module_methods(module_results, def_methods):
     """Overlay .def methods onto C-scanned module declarations.
 
@@ -331,6 +361,32 @@ def merge_def_module_constants(module_results, def_constants):
                 added += 1
             else:
                 mod_data['constants'][idx] = const
+                replaced += 1
+    return replaced, added
+
+
+def merge_def_module_handles(module_results, def_handles):
+    """Overlay .def handles onto C-scanned module declarations."""
+    replaced = 0
+    added = 0
+    for mod_name, handles in sorted(def_handles.items()):
+        mod_data = module_results.setdefault(mod_name, {
+            'handles': [],
+            'methods': [],
+            'handle_methods': {},
+            'constants': [],
+        })
+        by_name = {}
+        for idx, handle in enumerate(mod_data.get('handles', [])):
+            by_name.setdefault(handle['name'], idx)
+        for handle in handles:
+            idx = by_name.get(handle['name'])
+            if idx is None:
+                mod_data.setdefault('handles', []).append(handle)
+                by_name[handle['name']] = len(mod_data['handles']) - 1
+                added += 1
+            else:
+                mod_data['handles'][idx] = handle
                 replaced += 1
     return replaced, added
 
@@ -720,6 +776,8 @@ def main():
     replaced, added = merge_def_module_methods(module_results, def_methods)
     def_constants = load_def_module_constants()
     const_replaced, const_added = merge_def_module_constants(module_results, def_constants)
+    def_handles = load_def_module_handles()
+    handle_replaced, handle_added = merge_def_module_handles(module_results, def_handles)
 
     total_types = len(type_results)
     total_modules = len(module_results)
@@ -734,6 +792,8 @@ def main():
           f"from stdlib/defs/*.def", file=sys.stderr)
     print(f"Def constants overlay: {const_replaced} constants replaced, "
           f"{const_added} constants added from stdlib/defs/*.def", file=sys.stderr)
+    print(f"Def handles overlay: {handle_replaced} handles replaced, "
+          f"{handle_added} handles added from stdlib/defs/*.def", file=sys.stderr)
 
     # Generate embed outputs
     analyzer_content = generate_header(type_results, module_results)

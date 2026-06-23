@@ -1369,12 +1369,6 @@ static XrValue http_clear_proxy(XrVMRuntime *X, XrValue *args, int argc) {
 #include "../../src/module/xbuiltin_decl.h"
 
 // @module http
-// @handle HttpResponse { const status: int, const statusText: string, const headers: Json, const
-// body: string, const error: string, const ok: bool }
-// @handle HttpRequest { const method: string, const path: string, const query: Json, const headers:
-// Json, const body: string, const contentLength: int, const params: Json, const streaming: bool }
-// @handle DownloadResult { const status: int, const downloaded: int, const total: int, const
-// completed: bool, const error: string }
 
 XR_DEFINE_BUILTIN(http_get, "get", "(url: string): HttpResponse", "HTTP GET request")
 XR_DEFINE_BUILTIN(http_post, "post",

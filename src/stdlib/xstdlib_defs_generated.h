@@ -49,6 +49,22 @@ typedef struct XrStdlibConstDefEntry {
     double f64_value;
 } XrStdlibConstDefEntry;
 
+typedef struct XrStdlibHandleFieldDefEntry {
+    const char *module;
+    const char *handle;
+    const char *name;
+    const char *type;
+    bool is_const;
+} XrStdlibHandleFieldDefEntry;
+
+typedef struct XrStdlibHandleDefEntry {
+    const char *module;
+    const char *name;
+    const char *doc;
+    const XrStdlibHandleFieldDefEntry *fields;
+    uint16_t field_count;
+} XrStdlibHandleDefEntry;
+
 static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"time", "now", "(): int", "Current time in milliseconds since epoch", "xr_time_now", "normal", "", "xrt_time_now", "", "value", "time.now", "", "system", "", 0, false},
     {"time", "clock", "(): int", "CPU clock time in milliseconds", "xr_time_clock", "normal", "", "xrt_time_clock", "", "value", "time.clock", "", "system", "", 0, false},
@@ -406,6 +422,107 @@ static const XrStdlibConstDefEntry xr_stdlib_const_def_entries[] = {
     {"log", "FATAL", ": int", "Fatal log level", "XR_LOG_FATAL", "xr_int(XR_LOG_FATAL)", "", "int64", "", "", "core", INT64_C(50), 0.0},
 };
 #define XR_STDLIB_CONST_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_const_def_entries) / sizeof(xr_stdlib_const_def_entries[0])))
+
+static const XrStdlibHandleFieldDefEntry xr_stdlib_handle_fields_path_PathInfo[] = {
+    {"path", "PathInfo", "root", "string", true},
+    {"path", "PathInfo", "dir", "string", true},
+    {"path", "PathInfo", "base", "string", true},
+    {"path", "PathInfo", "name", "string", true},
+    {"path", "PathInfo", "ext", "string", true},
+};
+
+static const XrStdlibHandleFieldDefEntry xr_stdlib_handle_fields_url_URL[] = {
+    {"url", "URL", "protocol", "string", true},
+    {"url", "URL", "hostname", "string", true},
+    {"url", "URL", "port", "string", true},
+    {"url", "URL", "pathname", "string", true},
+    {"url", "URL", "search", "string", true},
+    {"url", "URL", "hash", "string", true},
+    {"url", "URL", "username", "string", true},
+    {"url", "URL", "password", "string", true},
+    {"url", "URL", "host", "string", true},
+    {"url", "URL", "origin", "string", true},
+    {"url", "URL", "href", "string", true},
+};
+
+static const XrStdlibHandleFieldDefEntry xr_stdlib_handle_fields_os_ExecResult[] = {
+    {"os", "ExecResult", "stdout", "string", true},
+    {"os", "ExecResult", "stderr", "string", true},
+    {"os", "ExecResult", "exitCode", "int", true},
+};
+
+static const XrStdlibHandleFieldDefEntry xr_stdlib_handle_fields_io_FileStat[] = {
+    {"io", "FileStat", "size", "int", true},
+    {"io", "FileStat", "mode", "int", true},
+    {"io", "FileStat", "mtime", "int", true},
+    {"io", "FileStat", "atime", "int", true},
+    {"io", "FileStat", "ctime", "int", true},
+    {"io", "FileStat", "uid", "int", true},
+    {"io", "FileStat", "gid", "int", true},
+    {"io", "FileStat", "isFile", "bool", true},
+    {"io", "FileStat", "isDir", "bool", true},
+    {"io", "FileStat", "isSymlink", "bool", true},
+};
+
+static const XrStdlibHandleFieldDefEntry xr_stdlib_handle_fields_net_UdpPacket[] = {
+    {"net", "UdpPacket", "data", "string", true},
+    {"net", "UdpPacket", "host", "string", true},
+    {"net", "UdpPacket", "port", "int", true},
+};
+
+static const XrStdlibHandleFieldDefEntry xr_stdlib_handle_fields_http_HttpResponse[] = {
+    {"http", "HttpResponse", "status", "int", true},
+    {"http", "HttpResponse", "statusText", "string", true},
+    {"http", "HttpResponse", "headers", "Json", true},
+    {"http", "HttpResponse", "body", "string", true},
+    {"http", "HttpResponse", "error", "string", true},
+    {"http", "HttpResponse", "ok", "bool", true},
+};
+
+static const XrStdlibHandleFieldDefEntry xr_stdlib_handle_fields_http_HttpRequest[] = {
+    {"http", "HttpRequest", "method", "string", true},
+    {"http", "HttpRequest", "path", "string", true},
+    {"http", "HttpRequest", "query", "Json", true},
+    {"http", "HttpRequest", "headers", "Json", true},
+    {"http", "HttpRequest", "body", "string", true},
+    {"http", "HttpRequest", "contentLength", "int", true},
+    {"http", "HttpRequest", "params", "Json", true},
+    {"http", "HttpRequest", "streaming", "bool", true},
+};
+
+static const XrStdlibHandleFieldDefEntry xr_stdlib_handle_fields_http_DownloadResult[] = {
+    {"http", "DownloadResult", "status", "int", true},
+    {"http", "DownloadResult", "downloaded", "int", true},
+    {"http", "DownloadResult", "total", "int", true},
+    {"http", "DownloadResult", "completed", "bool", true},
+    {"http", "DownloadResult", "error", "string", true},
+};
+
+static const XrStdlibHandleFieldDefEntry xr_stdlib_handle_fields_ws_WsConn[] = {
+    {"ws", "WsConn", "wsid", "int", true},
+    {"ws", "WsConn", "url", "string", false},
+    {"ws", "WsConn", "state", "string", false},
+};
+
+static const XrStdlibHandleFieldDefEntry xr_stdlib_handle_fields_ws_WsMessage[] = {
+    {"ws", "WsMessage", "data", "string", true},
+    {"ws", "WsMessage", "binary", "bool", true},
+    {"ws", "WsMessage", "error", "string", true},
+};
+
+static const XrStdlibHandleDefEntry xr_stdlib_handle_def_entries[] = {
+    {"path", "PathInfo", "Native handle type", xr_stdlib_handle_fields_path_PathInfo, 5},
+    {"url", "URL", "Native handle type", xr_stdlib_handle_fields_url_URL, 11},
+    {"os", "ExecResult", "Native handle type", xr_stdlib_handle_fields_os_ExecResult, 3},
+    {"io", "FileStat", "Native handle type", xr_stdlib_handle_fields_io_FileStat, 10},
+    {"net", "UdpPacket", "Native handle type", xr_stdlib_handle_fields_net_UdpPacket, 3},
+    {"http", "HttpResponse", "Native handle type", xr_stdlib_handle_fields_http_HttpResponse, 6},
+    {"http", "HttpRequest", "Native handle type", xr_stdlib_handle_fields_http_HttpRequest, 8},
+    {"http", "DownloadResult", "Native handle type", xr_stdlib_handle_fields_http_DownloadResult, 5},
+    {"ws", "WsConn", "Native handle type", xr_stdlib_handle_fields_ws_WsConn, 3},
+    {"ws", "WsMessage", "Native handle type", xr_stdlib_handle_fields_ws_WsMessage, 3},
+};
+#define XR_STDLIB_HANDLE_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_handle_def_entries) / sizeof(xr_stdlib_handle_def_entries[0])))
 
 #endif  /* XSTDLIB_DEFS_GENERATED_H */
 
