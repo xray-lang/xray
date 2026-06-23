@@ -127,6 +127,7 @@ static int net_tcp_socket_for(XrVMRuntime *X, const char *host, int port,
     return fd;
 }
 
+#ifdef XR_ENABLE_TLS
 /*
  * DNS resolve + create non-blocking TCP socket + start connect.
  * Returns fd on success (connect may still be in progress), -1 on failure.
@@ -151,6 +152,7 @@ static int net_tcp_connect(XrVMRuntime *X, const char *host, int port, int *out_
     close(fd);
     return -1;
 }
+#endif
 
 // ========== DNS resolve helper (used by net.lookup binding) ==========
 
@@ -1114,9 +1116,9 @@ static XrCFuncResult net_read_into_yieldable(XrVMRuntime *X, XrValue *args, int 
 
     size_t read_len = (size_t) max_len;
     uint8_t *data = xr_array_raw_u8(buf);
-    bool is_tls = conn->kind == XR_NETCONN_TLS;
 
 #ifdef XR_ENABLE_TLS
+    bool is_tls = conn->kind == XR_NETCONN_TLS;
     if (is_tls) {
         XrTlsConn *tls = (XrTlsConn *) conn->tls_state;
         if (!tls) {
@@ -1395,9 +1397,9 @@ static XrCFuncResult net_write_bytes_yieldable(XrVMRuntime *X, XrValue *args, in
     size_t len = (size_t) data->length;
     size_t written = 0;
     const char *raw = (const char *) xr_array_raw_u8(data);
-    bool is_tls = conn->kind == XR_NETCONN_TLS;
 
 #ifdef XR_ENABLE_TLS
+    bool is_tls = conn->kind == XR_NETCONN_TLS;
     if (is_tls) {
         XrTlsConn *tls = (XrTlsConn *) conn->tls_state;
         if (!tls) {
