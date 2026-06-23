@@ -29,8 +29,12 @@ static inline XrValue xrt_array_resize_value(XrValue arr_value, XrValue len_valu
         len = 0;
     if (len > a->capacity)
         xrt_array_reserve_raw(a, len);
-    for (int64_t i = a->length; i < len; i++)
-        xr_typed_set(a->data, (int32_t) i, fill_value, a->elem_type);
+    int64_t old_length = a->length;
+    if (!xr_array_core_fill_typed_storage(a->data, old_length, len - old_length, a->elem_type,
+                                          fill_value)) {
+        for (int64_t i = old_length; i < len; i++)
+            xr_typed_set(a->data, (int32_t) i, fill_value, a->elem_type);
+    }
     a->length = len;
     return arr_value;
 }
@@ -48,8 +52,10 @@ static inline XrValue xrt_array_new_filled_value(XrValue len_value, XrValue fill
         len = 0;
     XrValue arr = xrt_array_new_typed_exact(len, etype);
     xrt_array_t *a = (xrt_array_t *) arr.ptr;
-    for (int64_t i = 0; i < len; i++)
-        xr_typed_set(a->data, (int32_t) i, fill_value, a->elem_type);
+    if (!xr_array_core_fill_typed_storage(a->data, 0, len, a->elem_type, fill_value)) {
+        for (int64_t i = 0; i < len; i++)
+            xr_typed_set(a->data, (int32_t) i, fill_value, a->elem_type);
+    }
     a->length = len;
     return arr;
 }
@@ -145,60 +151,12 @@ static inline XrValue xrt_bytes_repeat_from_value(XrValue arr_value, XrValue dst
  * float buffer and vice versa).  Return 0 to fall back to the generic loop.
  * ========================================================================= */
 
-#define XRT_FILL_LOOP(T, val, start, end)                                                          \
-    do {                                                                                           \
-        T *d = (T *) a->data;                                                                      \
-        T fv = (T) (val);                                                                          \
-        for (int64_t i = (start); i < (end); i++)                                                  \
-            d[i] = fv;                                                                             \
-    } while (0)
-
 static inline int xrt_array_fill_typed_fast(xrt_array_t *a, XrValue v, XrArrayCoreRange range) {
-    if (range.count <= 0)
-        return 1;
-    switch (a->elem_type) {
-        case XR_ELEM_I8:
-        case XR_ELEM_U8: {
-            uint8_t b = (uint8_t) xr_value_to_int64_coerce(v);
-            memset((uint8_t *) a->data + range.start, b, (size_t) range.count);
-            return 1;
-        }
-        case XR_ELEM_BOOL: {
-            int falsy = XR_IS_FALSE(v) || XR_IS_NULL(v) || (XR_IS_INT(v) && v.i == 0) ||
-                        (XR_IS_FLOAT(v) && v.f == 0.0);
-            memset((uint8_t *) a->data + range.start, falsy ? 0 : 1, (size_t) range.count);
-            return 1;
-        }
-        case XR_ELEM_I16:
-            XRT_FILL_LOOP(int16_t, xr_value_to_int64_coerce(v), range.start, range.end);
-            return 1;
-        case XR_ELEM_U16:
-            XRT_FILL_LOOP(uint16_t, xr_value_to_int64_coerce(v), range.start, range.end);
-            return 1;
-        case XR_ELEM_I32:
-            XRT_FILL_LOOP(int32_t, xr_value_to_int64_coerce(v), range.start, range.end);
-            return 1;
-        case XR_ELEM_U32:
-            XRT_FILL_LOOP(uint32_t, xr_value_to_int64_coerce(v), range.start, range.end);
-            return 1;
-        case XR_ELEM_I64:
-            XRT_FILL_LOOP(int64_t, xr_value_to_int64_coerce(v), range.start, range.end);
-            return 1;
-        case XR_ELEM_U64:
-            XRT_FILL_LOOP(uint64_t, xr_value_to_int64_coerce(v), range.start, range.end);
-            return 1;
-        case XR_ELEM_F32:
-            XRT_FILL_LOOP(float, xr_value_to_f64_coerce(v), range.start, range.end);
-            return 1;
-        case XR_ELEM_F64:
-            XRT_FILL_LOOP(double, xr_value_to_f64_coerce(v), range.start, range.end);
-            return 1;
-        default:
-            return 0;
-    }
+    return xr_array_core_fill_typed_storage(a ? a->data : NULL, range.start, range.count,
+                                            a ? a->elem_type : XR_ELEM_ANY, v)
+               ? 1
+               : 0;
 }
-
-#undef XRT_FILL_LOOP
 
 static inline XrValue xrt_array_fill_range_value(XrValue arr_value, XrValue fill_value,
                                                  int64_t start, int64_t end) {

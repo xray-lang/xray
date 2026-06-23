@@ -12,6 +12,7 @@
 #define XR_ARRAY_CORE_H
 
 #include "xr_elem_type.h"
+#include "xr_typed_ops.h"
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
@@ -92,6 +93,62 @@ static inline XrArrayCoreRange xr_array_core_fill_range(int64_t length, int64_t 
                                                         int64_t end) {
     return xr_array_core_slice_range(length, start, end);
 }
+
+#define XR_ARRAY_CORE_FILL_TYPED_LOOP(T, expr)                                                     \
+    do {                                                                                           \
+        T *d = (T *) data;                                                                         \
+        T fill_value = (T) (expr);                                                                 \
+        for (int64_t i = start; i < end; i++)                                                      \
+            d[i] = fill_value;                                                                     \
+        return true;                                                                               \
+    } while (0)
+
+static inline bool xr_array_core_fill_typed_storage(void *data, int64_t start, int64_t count,
+                                                    uint8_t elem_type, XrValue value) {
+    if (count <= 0)
+        return true;
+    if (start < 0 || !data || start > INT64_MAX - count)
+        return false;
+
+    int64_t end = start + count;
+    switch (elem_type) {
+        case XR_ELEM_ANY:
+            return false;
+        case XR_ELEM_I8:
+        case XR_ELEM_U8: {
+            uint8_t byte = (uint8_t) xr_value_to_int64_coerce(value);
+            memset((uint8_t *) data + (size_t) start, byte, (size_t) count);
+            return true;
+        }
+        case XR_ELEM_BOOL: {
+            bool falsy = XR_IS_FALSE(value) || XR_IS_NULL(value) ||
+                         (XR_IS_INT(value) && XR_TO_INT(value) == 0) ||
+                         (XR_IS_FLOAT(value) && XR_TO_FLOAT(value) == 0.0);
+            memset((uint8_t *) data + (size_t) start, falsy ? 0 : 1, (size_t) count);
+            return true;
+        }
+        case XR_ELEM_I16:
+            XR_ARRAY_CORE_FILL_TYPED_LOOP(int16_t, xr_value_to_int64_coerce(value));
+        case XR_ELEM_U16:
+            XR_ARRAY_CORE_FILL_TYPED_LOOP(uint16_t, xr_value_to_int64_coerce(value));
+        case XR_ELEM_I32:
+            XR_ARRAY_CORE_FILL_TYPED_LOOP(int32_t, xr_value_to_int64_coerce(value));
+        case XR_ELEM_U32:
+            XR_ARRAY_CORE_FILL_TYPED_LOOP(uint32_t, xr_value_to_int64_coerce(value));
+        case XR_ELEM_I64:
+            XR_ARRAY_CORE_FILL_TYPED_LOOP(int64_t, xr_value_to_int64_coerce(value));
+        case XR_ELEM_U64:
+            XR_ARRAY_CORE_FILL_TYPED_LOOP(uint64_t, xr_value_to_int64_coerce(value));
+        case XR_ELEM_F32:
+            XR_ARRAY_CORE_FILL_TYPED_LOOP(float, xr_value_to_f64_coerce(value));
+        case XR_ELEM_F64:
+            XR_ARRAY_CORE_FILL_TYPED_LOOP(double, xr_value_to_f64_coerce(value));
+        default:
+            return false;
+    }
+}
+
+#undef XR_ARRAY_CORE_FILL_TYPED_LOOP
 
 static inline XrArrayCoreIndexSetPlan xr_array_core_index_set_plan(int64_t length, int64_t index) {
     XrArrayCoreIndexSetPlan out = {XR_ARRAY_CORE_INDEX_SET_INVALID, index};
