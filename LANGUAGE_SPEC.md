@@ -541,38 +541,35 @@ Literals default to `float`.
 
 `true` / `false`, a standalone type. **No implicit conversion** to/from numeric types (cannot write `let x: int = true` or `let b: bool = 1`).
 
-**Truthy / falsy context** (applies only at control-flow positions such as `if` / `while` / `?:` / `??` / `&&` / `||`; **does not** change a variable's type):
+**Condition expression rules** (`if` / `while` / `for` conditions / ternary `?:` / `match` guards):
 
-| Value | Treated as |
-|---|---|
-| `false`, `null`, `0`, `0.0`, `""`, `Bytes(0)`, empty array / empty Map | **falsy** |
-| Everything else (including `0.0001`, non-empty strings/collections, object references) | **truthy** |
+| Condition type | Allowed | Meaning |
+|---|---|---|
+| `bool` | yes | direct boolean test |
+| `T?` with `T != bool` | yes | null presence only (content emptiness is **not** checked) |
+| `bool?` | compile error | tri-state ambiguity; write `flag == true` / `flag != null` / `flag ?? false` |
+| `int` / `float` / `string` / collections / objects | compile error | use explicit comparisons such as `n != 0`, `!s.isEmpty()` |
+
+Operands of `&&` / `||` / `!` must be `bool`; do not place `T?` directly into `&&` / `||`.
 
 ```xray
-let x: int? = 41
-if (x) {                  // truthy context: enters when x is neither null nor 0
-    print(x + 1)          // x is narrowed to int in this branch
+let ok = true
+if (ok) { }
+
+let user: User? = findUser()
+if (user) {              // presence: null check only
+    print(user.name)     // user is narrowed to User here
 }
 
-let s: string = ""
-if (s) {
-    print("non-empty")
-} else {
-    print("empty")             // falsy: enters else
-}
+let flag: bool? = maybeFlag()
+if (flag == true) { }    // OK
+if (flag != null) { }    // OK
+// if (flag) { }         // compile error: bare bool? cannot be a condition
 
-let m: Map<string, int> = #{}
-if (m) {
-    print("non-empty map")
-} else {
-    print("empty map")         // falsy: empty Map
-}
-
-let a: int? = null
-let b = a ?? 0                  // null coalescing: b = 0
+let s = ""
+if (!s.isEmpty()) { }    // OK
+// if (s) { }            // compile error
 ```
-
-**Note**: explicit comparisons such as `x is T` and `x != null` are preferred; truthy/falsy is mainly for concise "existence" checks (such as `if (user)`).
 
 #### 2.3.4 `string`
 
@@ -1535,7 +1532,7 @@ if (x > 0) {
 
 **Constraints**:
 - The condition **must** be parenthesized (unlike Go/Rust).
-- The condition is evaluated under truthy/falsy context (see §2.3.3); explicit `bool` expressions or comparisons such as `x != null` / `x is T` are recommended for readability.
+- The condition must be `bool` or nullable presence `T?` (`T != bool`); bare `bool?`, `int`, `string`, collections, etc. are compile errors (see §2.3.3).
 - Branch bodies must be blocks `{...}`; **no** single-statement-without-braces form.
 - `if` is not an expression; for an expression form use the ternary `? :` or `match`.
 
@@ -2799,7 +2796,7 @@ match (x) {
 }
 ```
 
-- The guard expression sits inside `if (...)` parentheses and is evaluated under truthy/falsy context (see §2.3.3, identical to `if` / `while`); explicit `bool` expressions are recommended for readability.
+- The guard must be `bool` or nullable presence `T?` (see §2.3.3), identical to `if` / `while` condition rules.
 - On guard failure, matching falls through to the next arm.
 
 ### 6.6 Multi-value Patterns
@@ -5033,6 +5030,8 @@ Analyzer enum codes (`XrErrorCode`, defined in the 350+ section of `xerror.h`):
 | `XR_ERR_ANALYZE_TUPLE_FIELD_NAME` | tuple accessed with a non-numeric key |
 | `XR_ERR_ANALYZE_TUPLE_FIELD_RANGE` | tuple field index out of range |
 | `XR_ERR_ANALYZE_OVERRIDE_MISMATCH` | `override` did not match a same-name, same-signature instance method in the parent chain |
+| `XR_ERR_ANALYZE_HASHABLE_CONTRACT` | type used as Map key / Set element lacks `operator==` / `hash` contract |
+| `XR_ERR_ANALYZE_CONDITION_TYPE` | condition is not `bool` or nullable presence (`T?`, `T != bool`) |
 
 ### 18.4 Runtime Errors
 
@@ -5658,7 +5657,7 @@ Xray draws inspiration from many existing languages but has notable differences 
 | **struct** | Value-type class (see §5.4) |
 | **TCO** | Tail-Call Optimization |
 | **trait** | Rust terminology; xray uses `interface` |
-| **truthy** | A value treated as true in control flow when it is not `false` / `null` / `0` / `""` / an empty collection (see §2.3.3) |
+| **condition expression** | Control-flow condition: must be `bool` or nullable presence `T?` (`T != bool`); see §2.3.3 |
 | **union** | Union type `A \| B` |
 | **upvalue** | Outer variable captured by a closure |
 | **VM** | Virtual Machine: xray bytecode VM |

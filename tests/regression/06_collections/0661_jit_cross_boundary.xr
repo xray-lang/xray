@@ -88,7 +88,7 @@ fn test_null_overwrites_int() {
 fn test_bool_toggle_loop() {
     let state = { "on": false }
     for (let i = 0; i < 100; i++) {
-        state.on = !state.on
+        state.on = !(state.on == true)
     }
     // 100 toggles, even number, back to false
     assert_eq(state.on, false)

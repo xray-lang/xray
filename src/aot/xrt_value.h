@@ -542,7 +542,7 @@ static inline const char *xr_to_cstr(XrValue v, char *buf, size_t bufsz) {
 }
 
 /* =========================================================================
- * Truthiness (matches VM semantics: null, false, 0, 0.0 are falsy)
+ * Truthiness (assert/debug helpers: null, false, 0, 0.0 are falsy)
  * ========================================================================= */
 
 static inline int xr_truthy(XrValue v) {

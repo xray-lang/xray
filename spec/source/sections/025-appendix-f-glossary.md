@@ -37,7 +37,7 @@ order: 025
 | **struct** | 值类型类（见 §5.4） |
 | **TCO** | Tail-Call Optimization：尾调用优化 |
 | **trait** | Rust 术语；xray 用 `interface` |
-| **truthy** | 真值：控制流中非 `false` / `null` / `0` / `""` / 空集合的值视为真（见 §2.3.3） |
+| **condition expression** | 控制流条件：必须是 `bool` 或 `T?` 存在性（`T != bool`）；见 §2.3.3 |
 | **union** | 联合类型 `A \| B` |
 | **upvalue** | 闭包捕获的外层变量 |
 | **VM** | Virtual Machine：xray 字节码虚拟机 |
@@ -78,7 +78,7 @@ order: 025
 | **struct** | Value-type class (see §5.4) |
 | **TCO** | Tail-Call Optimization |
 | **trait** | Rust terminology; xray uses `interface` |
-| **truthy** | A value treated as true in control flow when it is not `false` / `null` / `0` / `""` / an empty collection (see §2.3.3) |
+| **condition expression** | Control-flow condition: must be `bool` or nullable presence `T?` (`T != bool`); see §2.3.3 |
 | **union** | Union type `A \| B` |
 | **upvalue** | Outer variable captured by a closure |
 | **VM** | Virtual Machine: xray bytecode VM |

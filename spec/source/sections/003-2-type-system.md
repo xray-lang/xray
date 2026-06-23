@@ -73,38 +73,35 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 
 `true` / `false`，独立类型，与数值类型**不可隐式互转**（不能 `let x: int = true`，也不能 `let b: bool = 1`）。
 
-**truthy / falsy 上下文**（仅作用于 `if` / `while` / `?:` / `??` / `&&` / `||` 等控制流位置，**不**改变变量类型）：
+**条件表达式规则**（`if` / `while` / `for` 条件 / 三元 `?:` / `match` 守卫）：
 
-| 值 | 视作 |
-|---|---|
-| `false`、`null`、`0`、`0.0`、`""`、`Bytes(0)`、空数组 / 空 Map | **falsy** |
-| 其他一切（包括 `0.0001`、非空字符串/集合、对象引用） | **truthy** |
+| 条件类型 | 是否允许 | 语义 |
+|---|---|---|
+| `bool` | 允许 | 直接布尔判断 |
+| `T?` 且 `T != bool` | 允许 | 仅判断是否为 `null`（不检查内容是否“空”） |
+| `bool?` | 编译错误 | 三态歧义；写 `flag == true` / `flag != null` / `flag ?? false` |
+| `int` / `float` / `string` / 集合 / 对象 | 编译错误 | 必须写显式比较，如 `n != 0`、`!s.isEmpty()` |
 
-```xray @id=types-truthy-falsy
-let x: int? = 41
-if (x) {                  // truthy 上下文：x 既不是 null 也不是 0 时进入
-    print(x + 1)          // 此分支中 x 被窄化为 int
+`&&` / `||` / `!` 的操作数必须是 `bool`；不要把 `T?` 直接放进 `&&` / `||`。
+
+```xray @id=types-explicit-conditions
+let ok = true
+if (ok) { }
+
+let user: User? = findUser()
+if (user) {              // 存在性：仅检查 null
+    print(user.name)     // 此分支 user 窄化为 User
 }
 
-let s: string = ""
-if (s) {
-    print("non-empty")
-} else {
-    print("empty")             // falsy：进入 else
-}
+let flag: bool? = maybeFlag()
+if (flag == true) { }    // OK
+if (flag != null) { }    // OK
+// if (flag) { }         // 编译错误：裸 bool? 不能作条件
 
-let m: Map<string, int> = #{}
-if (m) {
-    print("non-empty map")
-} else {
-    print("empty map")         // falsy：空 Map
-}
-
-let a: int? = null
-let b = a ?? 0                  // null 合并：b = 0
+let s = ""
+if (!s.isEmpty()) { }    // OK
+// if (s) { }            // 编译错误
 ```
-
-**注意**：`x is T` 和 `x != null` 等显式比较是首选，truthy/falsy 主要用于简洁的"存在性"判断（如 `if (user)`）。
 
 #### 2.3.4 `string`
 
@@ -548,38 +545,35 @@ Literals default to `float`.
 
 `true` / `false`, a standalone type. **No implicit conversion** to/from numeric types (cannot write `let x: int = true` or `let b: bool = 1`).
 
-**Truthy / falsy context** (applies only at control-flow positions such as `if` / `while` / `?:` / `??` / `&&` / `||`; **does not** change a variable's type):
+**Condition expression rules** (`if` / `while` / `for` conditions / ternary `?:` / `match` guards):
 
-| Value | Treated as |
-|---|---|
-| `false`, `null`, `0`, `0.0`, `""`, `Bytes(0)`, empty array / empty Map | **falsy** |
-| Everything else (including `0.0001`, non-empty strings/collections, object references) | **truthy** |
+| Condition type | Allowed | Meaning |
+|---|---|---|
+| `bool` | yes | direct boolean test |
+| `T?` with `T != bool` | yes | null presence only (content emptiness is **not** checked) |
+| `bool?` | compile error | tri-state ambiguity; write `flag == true` / `flag != null` / `flag ?? false` |
+| `int` / `float` / `string` / collections / objects | compile error | use explicit comparisons such as `n != 0`, `!s.isEmpty()` |
 
-```xray @id=types-truthy-falsy
-let x: int? = 41
-if (x) {                  // truthy context: enters when x is neither null nor 0
-    print(x + 1)          // x is narrowed to int in this branch
+Operands of `&&` / `||` / `!` must be `bool`; do not place `T?` directly into `&&` / `||`.
+
+```xray @id=types-explicit-conditions
+let ok = true
+if (ok) { }
+
+let user: User? = findUser()
+if (user) {              // presence: null check only
+    print(user.name)     // user is narrowed to User here
 }
 
-let s: string = ""
-if (s) {
-    print("non-empty")
-} else {
-    print("empty")             // falsy: enters else
-}
+let flag: bool? = maybeFlag()
+if (flag == true) { }    // OK
+if (flag != null) { }    // OK
+// if (flag) { }         // compile error: bare bool? cannot be a condition
 
-let m: Map<string, int> = #{}
-if (m) {
-    print("non-empty map")
-} else {
-    print("empty map")         // falsy: empty Map
-}
-
-let a: int? = null
-let b = a ?? 0                  // null coalescing: b = 0
+let s = ""
+if (!s.isEmpty()) { }    // OK
+// if (s) { }            // compile error
 ```
-
-**Note**: explicit comparisons such as `x is T` and `x != null` are preferred; truthy/falsy is mainly for concise "existence" checks (such as `if (user)`).
 
 #### 2.3.4 `string`
 

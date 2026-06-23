@@ -125,6 +125,8 @@ XR_FUNC const char *xi_lower_enum_method_hidden_name(XiFunc *arena, const char *
  * available.  Returns 0 on failure. */
 XR_FUNC int32_t xi_lower_method_symbol(XiLower *l, const char *method_name);
 
+XR_FUNC XiValue *xi_lower_bool_condition(XiLower *l, XiValue *cond);
+
 /* ========== Compound Statement Lowering (xi_lower_stmt.c) ========== */
 
 XR_FUNC void xi_lower_select(XiLower *l, struct AstNode *node);

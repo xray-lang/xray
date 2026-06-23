@@ -20,9 +20,9 @@
       "markdown": "- `int` — default signed integer\n- `float` — default floating-point number\n- `string` — UTF-8 string\n- `bool` — `true` / `false`\n- `()` — Unit, no return value\n- `Array<T>`, `Map<K,V>`, `Set<T>`, `Channel<T>`, `Json`, `Bytes`, `BigInt`"
     },
     {
-      "heading": "Truthy / falsy",
+      "heading": "Explicit conditions",
       "fences": [
-        "types-truthy-falsy"
+        "types-explicit-conditions"
       ]
     },
     {

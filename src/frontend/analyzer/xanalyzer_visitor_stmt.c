@@ -568,7 +568,7 @@ void xa_visit_if_stmt(XaInferContext *ctx, AstNode *node) {
 
     // Analyze condition
     XrType *cond_type = xa_visit_infer_expr(ctx, if_stmt->condition);
-    (void) cond_type;
+    xa_check_condition_type(ctx, if_stmt->condition, cond_type);
 
     // Flow graph handles all type narrowing via TRUE_CONDITION / FALSE_CONDITION
     // nodes. apply_condition_narrowing() in xanalyzer_flow.c recognizes patterns:
@@ -630,7 +630,8 @@ void xa_visit_while_stmt(XaInferContext *ctx, AstNode *node) {
     }
 
     // Analyze condition
-    xa_visit_infer_expr(ctx, while_stmt->condition);
+    XrType *cond_type = xa_visit_infer_expr(ctx, while_stmt->condition);
+    xa_check_condition_type(ctx, while_stmt->condition, cond_type);
 
     if (ctx->flow) {
         xa_flow_create_condition(ctx->flow, while_stmt->condition, true);
@@ -676,7 +677,8 @@ void xa_visit_for_stmt(XaInferContext *ctx, AstNode *node) {
 
     // Analyze condition
     if (for_stmt->condition) {
-        xa_visit_infer_expr(ctx, for_stmt->condition);
+        XrType *cond_type = xa_visit_infer_expr(ctx, for_stmt->condition);
+        xa_check_condition_type(ctx, for_stmt->condition, cond_type);
     }
 
     // Analyze body - inline block to match Pass 1 scope structure

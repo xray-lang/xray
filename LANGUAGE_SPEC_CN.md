@@ -542,38 +542,35 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 
 `true` / `false`，独立类型，与数值类型**不可隐式互转**（不能 `let x: int = true`，也不能 `let b: bool = 1`）。
 
-**truthy / falsy 上下文**（仅作用于 `if` / `while` / `?:` / `??` / `&&` / `||` 等控制流位置，**不**改变变量类型）：
+**条件表达式规则**（`if` / `while` / `for` 条件 / 三元 `?:` / `match` 守卫）：
 
-| 值 | 视作 |
-|---|---|
-| `false`、`null`、`0`、`0.0`、`""`、`Bytes(0)`、空数组 / 空 Map | **falsy** |
-| 其他一切（包括 `0.0001`、非空字符串/集合、对象引用） | **truthy** |
+| 条件类型 | 是否允许 | 语义 |
+|---|---|---|
+| `bool` | 允许 | 直接布尔判断 |
+| `T?` 且 `T != bool` | 允许 | 仅判断是否为 `null`（不检查内容是否“空”） |
+| `bool?` | 编译错误 | 三态歧义；写 `flag == true` / `flag != null` / `flag ?? false` |
+| `int` / `float` / `string` / 集合 / 对象 | 编译错误 | 必须写显式比较，如 `n != 0`、`!s.isEmpty()` |
+
+`&&` / `||` / `!` 的操作数必须是 `bool`；不要把 `T?` 直接放进 `&&` / `||`。
 
 ```xray
-let x: int? = 41
-if (x) {                  // truthy 上下文：x 既不是 null 也不是 0 时进入
-    print(x + 1)          // 此分支中 x 被窄化为 int
+let ok = true
+if (ok) { }
+
+let user: User? = findUser()
+if (user) {              // 存在性：仅检查 null
+    print(user.name)     // 此分支 user 窄化为 User
 }
 
-let s: string = ""
-if (s) {
-    print("non-empty")
-} else {
-    print("empty")             // falsy：进入 else
-}
+let flag: bool? = maybeFlag()
+if (flag == true) { }    // OK
+if (flag != null) { }    // OK
+// if (flag) { }         // 编译错误：裸 bool? 不能作条件
 
-let m: Map<string, int> = #{}
-if (m) {
-    print("non-empty map")
-} else {
-    print("empty map")         // falsy：空 Map
-}
-
-let a: int? = null
-let b = a ?? 0                  // null 合并：b = 0
+let s = ""
+if (!s.isEmpty()) { }    // OK
+// if (s) { }            // 编译错误
 ```
-
-**注意**：`x is T` 和 `x != null` 等显式比较是首选，truthy/falsy 主要用于简洁的"存在性"判断（如 `if (user)`）。
 
 #### 2.3.4 `string`
 
@@ -1530,7 +1527,7 @@ if (x > 0) {
 
 **约束**：
 - 条件**必须**用括号包裹（与 Go/Rust 不同）。
-- 条件按 truthy/falsy 上下文求值（见 §2.3.3）；推荐使用显式 `bool` 表达式或 `x != null` / `x is T` 等比较以提高可读性。
+- 条件必须是 `bool` 或 `T?`（`T != bool`）存在性检查；`bool?` 与裸 `int` / `string` / 集合等均为编译错误（见 §2.3.3）。
 - 分支体必须是块 `{...}`，**不允许**单语句省略括号。
 - `if` 不是表达式；要表达式形式用三元 `? :` 或 `match`。
 
@@ -2792,7 +2789,7 @@ match (x) {
 }
 ```
 
-- 守卫表达式位于 `if (...)` 括号内，按 truthy/falsy 上下文求值（见 §2.3.3，与 `if` / `while` 一致）；推荐显式使用 `bool` 表达式以提高可读性。
+- 守卫表达式必须是 `bool` 或 `T?` 存在性检查（见 §2.3.3），与 `if` / `while` 条件规则一致。
 - 失败时继续尝试下一分支。
 
 ### 6.6 多值模式
@@ -5020,6 +5017,8 @@ Bytecode  →  AOT (machine code)
 | `XR_ERR_ANALYZE_TUPLE_FIELD_NAME` | 用非数字 key 访问 tuple |
 | `XR_ERR_ANALYZE_TUPLE_FIELD_RANGE` | tuple 字段下标越界 |
 | `XR_ERR_ANALYZE_OVERRIDE_MISMATCH` | `override` 未匹配父类链中的同名同签实例方法 |
+| `XR_ERR_ANALYZE_HASHABLE_CONTRACT` | 类型用作 Map 键 / Set 元素时缺少 `operator==` / `hash` 契约 |
+| `XR_ERR_ANALYZE_CONDITION_TYPE` | 条件表达式不是 `bool` 或 nullable 存在性（`T?`, `T != bool`） |
 
 ### 18.4 运行时错误 (Runtime)
 
@@ -5645,7 +5644,7 @@ xray 在开发过程中借鉴了现有语言的许多优秀设计，但还是有
 | **struct** | 值类型类（见 §5.4） |
 | **TCO** | Tail-Call Optimization：尾调用优化 |
 | **trait** | Rust 术语；xray 用 `interface` |
-| **truthy** | 真值：控制流中非 `false` / `null` / `0` / `""` / 空集合的值视为真（见 §2.3.3） |
+| **condition expression** | 控制流条件：必须是 `bool` 或 `T?` 存在性（`T != bool`）；见 §2.3.3 |
 | **union** | 联合类型 `A \| B` |
 | **upvalue** | 闭包捕获的外层变量 |
 | **VM** | Virtual Machine：xray 字节码虚拟机 |

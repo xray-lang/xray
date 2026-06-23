@@ -22,7 +22,7 @@ class IntBoolMapBag {
             let i = 0
             while (i < n) {
                 if (this.values.has(i)) {
-                    if (this.values.get(i)) {
+                    if (this.values.get(i) == true) {
                         total = total + 1
                     }
                 }

@@ -90,6 +90,8 @@ XR_FUNC bool xa_method_name_mutates_receiver(const char *name);
 XR_FUNC bool xa_type_contains_float(XrType *type);
 XR_FUNC void xa_report_float_modulo_error(XaInferContext *ctx, AstNode *node, XrType *left,
                                           XrType *right);
+XR_FUNC void xa_check_condition_type(XaInferContext *ctx, AstNode *node, XrType *cond_type);
+XR_FUNC void xa_check_logical_operand_type(XaInferContext *ctx, AstNode *node, XrType *type);
 
 // Module graph exports lookup (defined in xanalyzer_visitor.c).
 // Resolves an import specifier to the target module's exports hashmap.

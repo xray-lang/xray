@@ -309,7 +309,8 @@ XrType *xa_visit_match_expr(XaInferContext *ctx, AstNode *node) {
 
         // Infer guard if present
         if (arm_node->guard) {
-            xa_visit_infer_expr(ctx, arm_node->guard);
+            XrType *guard_type = xa_visit_infer_expr(ctx, arm_node->guard);
+            xa_check_condition_type(ctx, arm_node->guard, guard_type);
         }
 
         // Infer body type

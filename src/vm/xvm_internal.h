@@ -56,58 +56,24 @@ XR_FUNC int xr_vm_struct_layout_field_index(XrayIsolate *isolate, const XrStruct
 /* ========== Inline Helper Functions ========== */
 
 /*
- * Falsy values in xray:
+ * Falsy values in control-flow / truthiness helpers:
  *   - null
  *   - false
  *   - 0 (integer)
  *   - 0.0 (float)
- *   - "" (empty string)
- *   - [] (empty array)
- *   - #{} (empty map)
- *   - #[] (empty set)
+ *
+ * Empty strings, collections, and other heap objects are not implicitly falsy.
+ * User conditions must be bool or nullable presence (T?) checked via ISNULL.
  */
 static inline bool vm_is_falsey(XrValue value) {
-    // null is falsy
     if (XR_IS_NULL(value))
         return true;
-
-    // bool: payload 0=false (falsy), 1=true (truthy)
     if (XR_IS_BOOL(value))
         return value.i == 0;
-
-    // 0 is falsy
     if (XR_IS_INT(value))
         return XR_TO_INT(value) == 0;
-
-    // 0.0 is falsy
     if (XR_IS_FLOAT(value))
         return XR_TO_FLOAT(value) == 0.0;
-
-    // Empty string is falsy
-    if (XR_IS_STRING(value)) {
-        XrString *str = XR_TO_STRING(value);
-        return str->length == 0;
-    }
-
-    // Empty array is falsy
-    if (XR_IS_ARRAY(value)) {
-        XrArray *arr = XR_TO_ARRAY(value);
-        return arr->length == 0;
-    }
-
-    // Empty map is falsy
-    if (XR_IS_MAP(value)) {
-        XrMap *map = XR_TO_MAP(value);
-        return map->count == 0;
-    }
-
-    // Empty set is falsy
-    if (XR_IS_SET(value)) {
-        XrSet *set = XR_TO_SET(value);
-        return set->count == 0;
-    }
-
-    // Everything else is truthy
     return false;
 }
 

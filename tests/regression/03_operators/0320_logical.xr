@@ -96,12 +96,14 @@ fn test_not_expression() {
 }
 
 @test
-fn test_not_truthy() {
-    assert_eq(!0, true)       // 0 是假
-    assert_eq(!1, false)      // 非零是真
-    assert_eq(!"", true)      // 空字符串是假
-    assert_eq(!"hi", false)   // 非空是真
-    assert_eq(!null, true)    // null 是假
+fn test_not_explicit() {
+    // ! requires an explicit bool operand (no truthy/falsy)
+    assert_eq(!(0 != 0), true)         // 0 == 0
+    assert_eq(!(1 != 0), false)        // 1 != 0
+    assert_eq(!("".isEmpty()), false)  // empty string
+    assert_eq(!("hi".isEmpty()), true) // non-empty
+    let n: int? = null
+    assert_eq(!(n != null), true)      // null presence
 }
 
 // ===== 组合 =====
@@ -145,11 +147,13 @@ fn test_precedence_and_before_or() {
 // ===== 边界条件 =====
 
 @test
-fn test_with_null() {
-    // && / || always return bool (not the original operand)
-    assert_eq(null || "default", true)
-    assert_eq("value" || "default", true)
-    assert_eq(null && "value", false)
+fn test_with_nullable_presence() {
+    // Logical operators require bool operands; use explicit presence checks
+    let a: string? = null
+    let b: string? = "value"
+    assert_eq((a != null) || (b != null), true)
+    assert_eq((b != null) || (a != null), true)
+    assert_eq((a != null) && (b != null), false)
 }
 
 @test
