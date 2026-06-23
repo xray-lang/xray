@@ -1,0 +1,11 @@
+import datetime
+
+let dt = datetime.createUTC(2024, 2, 29, 23, 45, 6)
+print(dt.year)
+print(dt.toISOString())
+print(dt.format("YYYY/MM/DD HH:mm:ss"))
+print(dt.add(1, "days").day)
+print(dt.diff(datetime.createUTC(2024, 3, 1, 23, 45, 6), "hours"))
+print(datetime.fromTimestamp(0).toISOString())
+print(datetime.fromTimestampMs(-1).millisecond)
+print(datetime.parse("2024-01-15T10:30:45.123Z").millisecond)

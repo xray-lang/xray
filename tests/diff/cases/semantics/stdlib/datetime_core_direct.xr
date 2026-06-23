@@ -1,0 +1,64 @@
+// AOT DateTime light object must match VM DateTime semantics without VM runtime dispatch.
+
+import datetime
+
+let dt = datetime.createUTC(2024, 2, 29, 23, 45, 6)
+print(dt.year)
+print(dt.month)
+print(dt.day)
+print(dt.hour)
+print(dt.minute)
+print(dt.second)
+print(dt.millisecond)
+print(dt.weekday)
+print(dt.yearday)
+print(dt.timestamp)
+print(dt.toISOString())
+print(dt.format("YYYY/MM/DD HH:mm:ss SSS"))
+print(dt.toString())
+
+let epoch = datetime.fromTimestamp(0)
+print(epoch.toISOString())
+print(epoch.year)
+
+let before_epoch = datetime.fromTimestampMs(-1)
+print(before_epoch.timestamp)
+print(before_epoch.millisecond)
+print(before_epoch.toISOString())
+
+let parsed = datetime.parse("2024-01-15T10:30:45.123Z")
+print(parsed.year)
+print(parsed.month)
+print(parsed.day)
+print(parsed.hour)
+print(parsed.minute)
+print(parsed.second)
+print(parsed.millisecond)
+print(parsed.toISOString())
+
+let date_only = datetime.parse("2024-01-15", "date")
+print(date_only.year)
+print(date_only.month)
+print(date_only.day)
+
+let plus_day = dt.add(1, "days")
+print(plus_day.month)
+print(plus_day.day)
+
+let plus_month = datetime.createUTC(2024, 1, 31).add(1, "months")
+print(plus_month.month)
+print(plus_month.day)
+
+let dt2 = datetime.createUTC(2024, 3, 1, 23, 45, 6)
+print(dt.diff(dt2, "seconds"))
+print(dt.diff(dt2, "hours"))
+print(dt.isBefore(dt2))
+print(dt2.isAfter(dt))
+print(dt.equals(datetime.createUTC(2024, 2, 29, 23, 45, 6)))
+print(dt.isLeapYear())
+print(dt.daysInMonth())
+
+let local = datetime.create(2024, 6)
+print(local.year)
+print(local.month)
+print(local.day)

@@ -1926,6 +1926,7 @@ static inline XrValue xrt_value_clone_for_coro(XrValue val) {
                                 : xr_mkptr(dst, XR_TAG_STRUCT_REF);
         }
         case XR_TAG_REGEX:
+        case XR_TAG_DATETIME:
             xrt_retain(val);
             return val;
         default:

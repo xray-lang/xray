@@ -20,6 +20,7 @@
 #include "xrt_coll.h"  // xrt_array_t, xrt_map_t, xrt_strbuf_finish, xrt_array_push
 #include "xrt_array_hof.h"
 #include "xrt_range.h"
+#include "xrt_datetime.h"
 
 /* Builtin method symbol IDs. */
 #include "xrt_method_symbols.h"
@@ -43,6 +44,7 @@ static inline int xrt_weak_value_is_heap_object(XrValue v) {
         case XR_TAG_SET:
         case XR_TAG_STRUCT_REF:
         case XR_TAG_REGEX:
+        case XR_TAG_DATETIME:
             return 1;
         default:
             return 0;
@@ -85,6 +87,8 @@ static XrValue xrt_tostring(XrValue val, int slot_hint) {
         return val;
     if (val.tag == XR_TAG_RANGE)
         return xrt_range_to_string(val);
+    if (val.tag == XR_TAG_DATETIME)
+        return xrt_datetime_method_0(val, XRT_SYM_TOSTRING);
     if (val.tag == XR_TAG_NULL)
         return xr_box_str("null");
     if (val.tag == XR_TAG_BOOL)
@@ -325,6 +329,8 @@ static inline XrValue xrt_method_0(XrValue recv, int sym) {
     }
     if (recv.tag == XR_TAG_RANGE)
         return xrt_range_method_0(recv, sym);
+    if (recv.tag == XR_TAG_DATETIME)
+        return xrt_datetime_method_0(recv, sym);
     if (recv.tag == XR_TAG_I64) {
         if (sym == XRT_SYM_ABS)
             return XR_FROM_INT(recv.i < 0 ? -recv.i : recv.i);
@@ -651,7 +657,7 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
     }
     if (XR_IS_SET(recv)) {
         xrt_set_t *s = (xrt_set_t *) recv.ptr;
-        if (sym == XRT_SYM_SET) {
+        if (sym == XRT_SYM_ADD || sym == XRT_SYM_SET) {
             if ((s->flags & XR_SET_FLAG_WEAK) && !xrt_weak_value_is_heap_object(arg0))
                 return XR_NULL_VAL;
             (void) xrt_set_add(s, arg0);
@@ -664,6 +670,8 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
     }
     if (recv.tag == XR_TAG_RANGE)
         return xrt_range_method_1(recv, sym, arg0);
+    if (recv.tag == XR_TAG_DATETIME)
+        return xrt_datetime_method_1(recv, sym, arg0);
     if (recv.tag == XR_TAG_F64 && sym == XRT_SYM_POW) {
         double exp = (arg0.tag == XR_TAG_F64) ? arg0.f : (double) arg0.i;
         return XR_FROM_FLOAT(pow(recv.f, exp));
@@ -693,6 +701,8 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
 }
 
 static inline XrValue xrt_method_2(XrValue recv, int sym, XrValue arg0, XrValue arg1) {
+    if (recv.tag == XR_TAG_DATETIME)
+        return xrt_datetime_method_2(recv, sym, arg0, arg1);
     if (XR_IS_STR(recv) && (sym == XRT_SYM_SLICE || sym == XRT_SYM_SUBSTRING)) {
         const char *s = xr_str_data(recv);
         int64_t slen = xr_str_len(recv);
