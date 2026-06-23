@@ -433,11 +433,17 @@ static inline XrValue xrt_os_uptime(void) {
         time_t now = time(NULL);
         return XR_FROM_FLOAT((double) (now - boottime.tv_sec));
     }
+    struct timespec ts;
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) == 0)
+        return XR_FROM_FLOAT((double) ts.tv_sec + (double) ts.tv_nsec / 1000000000.0);
     return XR_FROM_FLOAT(0.0);
 #elif defined(__linux__)
     struct sysinfo si;
     if (sysinfo(&si) == 0)
         return XR_FROM_FLOAT((double) si.uptime);
+    struct timespec ts;
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) == 0)
+        return XR_FROM_FLOAT((double) ts.tv_sec + (double) ts.tv_nsec / 1000000000.0);
     return XR_FROM_FLOAT(0.0);
 #else
     return XR_FROM_FLOAT(0.0);
