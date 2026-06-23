@@ -122,6 +122,19 @@ static void xr_stdlib_vm_bind_io_generated(XrVMRuntime *isolate, XrModule *modul
 
 #ifdef XR_STDLIB_VM_BIND_MODULE_LOG
 static void xr_stdlib_vm_bind_log_generated(XrVMRuntime *isolate, XrModule *module) {
+    XRS_EXPORT(module, isolate, "debug", xr_log_debug);
+    XRS_EXPORT(module, isolate, "info", xr_log_info);
+    XRS_EXPORT(module, isolate, "warn", xr_log_warn);
+    XRS_EXPORT(module, isolate, "error", xr_log_error);
+    XRS_EXPORT(module, isolate, "fatal", xr_log_fatal);
+    XRS_EXPORT(module, isolate, "setLevel", xr_log_set_level);
+    XRS_EXPORT(module, isolate, "setFormat", xr_log_set_format);
+    XRS_EXPORT(module, isolate, "setOutput", xr_log_set_output);
+    XRS_EXPORT(module, isolate, "isEnabled", xr_log_is_enabled);
+    XRS_EXPORT(module, isolate, "enableSource", xr_log_enable_source);
+    XRS_EXPORT(module, isolate, "enableAsync", xr_log_enable_async);
+    XRS_EXPORT(module, isolate, "flush", xr_log_flush);
+    XRS_EXPORT(module, isolate, "child", xr_log_child);
     xr_module_add_export(isolate, module, "DEBUG", xr_int(XR_LOG_DEBUG));
     xr_module_add_export(isolate, module, "INFO", xr_int(XR_LOG_INFO));
     xr_module_add_export(isolate, module, "WARN", xr_int(XR_LOG_WARN));
