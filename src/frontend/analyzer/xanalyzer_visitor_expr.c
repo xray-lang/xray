@@ -1235,7 +1235,10 @@ XrType *xa_visit_map_literal(XaInferContext *ctx, AstNode *node) {
     }
 
     ctx->expected_type = saved_expected;
-    return xr_type_new_map(ctx->analyzer->isolate, key_type, val_type);
+    XrType *result = xr_type_new_map(ctx->analyzer->isolate, key_type, val_type);
+    XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+    xa_validate_hashable_key_type(ctx, result, NULL, "map literal", &loc);
+    return result;
 }
 
 XrType *xa_visit_object_literal(XaInferContext *ctx, AstNode *node) {
@@ -1358,8 +1361,11 @@ XrType *xa_visit_new_expr(XaInferContext *ctx, AstNode *node) {
                 bt = xr_type_new_generic_instance(X, "Atomic", NULL, arg_copy, 1);
             }
         }
-        if (bt)
+        if (bt) {
+            XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+            xa_validate_hashable_key_type(ctx, bt, NULL, "constructor type", &loc);
             return bt;
+        }
     }
 
     // Look up class symbol to get XrClassInfo

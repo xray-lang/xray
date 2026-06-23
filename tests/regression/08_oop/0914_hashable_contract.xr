@@ -1,0 +1,55 @@
+// Test: Hashable requires operator== and hash as a static key contract.
+
+class Token implements Hashable {
+    value: int
+
+    constructor(value: int) {
+        this.value = value
+    }
+
+    operator==(other: Token) -> bool {
+        return this.value == other.value
+    }
+
+    hash() -> int {
+        return this.value
+    }
+}
+
+struct Cell implements Hashable {
+    value: int
+
+    operator==(other: Cell) -> bool {
+        return this.value == other.value
+    }
+
+    hash() -> int {
+        return this.value
+    }
+}
+
+fn passHashable<T: Hashable>(value: T) -> T {
+    return value
+}
+
+@test
+fn test_class_hashable_map_set_key() {
+    let token = new Token(7)
+    let values: Map<Token, int> = #{}
+    values.set(token, 99)
+    assert(values.has(token))
+    assert_eq(values.get(token), 99)
+
+    let seen: Set<Token> = #[]
+    seen.add(token)
+    assert(seen.has(token))
+}
+
+@test
+fn test_user_hashable_generic_constraint() {
+    let token = new Token(3)
+    assert_eq(passHashable(token).value, 3)
+
+    let cell = Cell{value: 5}
+    assert_eq(passHashable(cell).value, 5)
+}

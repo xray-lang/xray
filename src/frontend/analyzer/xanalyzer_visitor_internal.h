@@ -59,6 +59,11 @@ XR_FUNC void xa_loop_scope_push(XaInferContext *ctx, XaLoopScope *scope, const c
 XR_FUNC void xa_loop_scope_pop(XaInferContext *ctx, XaLoopScope *scope);
 XR_FUNC void xa_validate_loop_control(XaInferContext *ctx, AstNode *node, const char *label,
                                       bool is_continue);
+XR_FUNC void xa_validate_hashable_key_type(XaInferContext *ctx, XrType *type,
+                                           XaSymbolLinks *generic_links, const char *context,
+                                           XrLocation *loc);
+XR_FUNC void xa_validate_hashable_contract_for_class(XaInferContext *ctx, AstNode *node,
+                                                     XrClassInfo *info);
 
 // Expression visitors (defined in xanalyzer_visitor_expr.c)
 XR_FUNC XrType *xa_visit_struct_literal(XaInferContext *ctx, AstNode *node);

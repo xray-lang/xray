@@ -192,7 +192,7 @@ let v = m["a"]                                      // 取值；不存在返回 
 | `[]` | `Array<T>` | 数组 |
 | `#[]` | `Set<T>` | 集合 |
 
-`K` 必须实现 `Hashable`（详见 §14.14）：通常是 `int`、`string`、`bool`、`enum`、或自定义实现 `Hashable` 的类。
+`K` 必须满足 `Hashable`（详见 §9.2）：通常是 `int`、`float`、`string`、`bool`、`enum`、`BigInt`，或提供 `operator==(other: Self) -> bool` 与 `hash() -> int` 的自定义类型。泛型键类型必须显式写成 `K: Hashable`。
 
 #### 2.4.3 `Set<T>`
 
@@ -663,7 +663,7 @@ let v = m["a"]                                      // lookup; returns null if a
 | `[]` | `Array<T>` | array |
 | `#[]` | `Set<T>` | set |
 
-`K` must implement `Hashable` (see §14.14): typically `int`, `string`, `bool`, `enum`, or a custom class implementing `Hashable`.
+`K` must satisfy `Hashable` (see §9.2): typically `int`, `float`, `string`, `bool`, `enum`, `BigInt`, or a custom type that provides `operator==(other: Self) -> bool` and `hash() -> int`. Generic key types must be explicitly constrained as `K: Hashable`.
 
 #### 2.4.3 `Set<T>`
 

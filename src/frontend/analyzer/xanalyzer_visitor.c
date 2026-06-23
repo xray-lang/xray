@@ -123,6 +123,286 @@ static bool int_literal_fits_native_width(int64_t value, uint8_t native_width) {
     }
 }
 
+static bool xa_type_name_matches(XrType *type, const char *name) {
+    if (!type || !name)
+        return false;
+    if ((type->kind == XR_KIND_CLASS || type->kind == XR_KIND_INSTANCE) &&
+        type->instance.class_name) {
+        return strcmp(type->instance.class_name, name) == 0;
+    }
+    if (type->kind == XR_KIND_ENUM && type->enum_type.enum_name) {
+        return strcmp(type->enum_type.enum_name, name) == 0;
+    }
+    return false;
+}
+
+static bool xa_is_hashable_interface_type(XrType *type) {
+    return type && type->kind == XR_KIND_INTERFACE && type->instance.class_name &&
+           strcmp(type->instance.class_name, "Hashable") == 0;
+}
+
+static bool xa_type_param_link_has_hashable(XaSymbolLinks *links, const char *name,
+                                            bool *out_found) {
+    if (out_found)
+        *out_found = false;
+    if (!links || !name)
+        return false;
+    int count = xa_symbol_links_get_type_param_count(links);
+    for (int i = 0; i < count; i++) {
+        const char *param_name = xa_symbol_links_get_type_param_name(links, i);
+        if (!param_name || strcmp(param_name, name) != 0)
+            continue;
+        if (out_found)
+            *out_found = true;
+        int constraint_count = 0;
+        XrType **constraints =
+            xa_symbol_links_get_type_param_constraints(links, i, &constraint_count);
+        for (int j = 0; j < constraint_count; j++) {
+            if (xa_is_hashable_interface_type(constraints ? constraints[j] : NULL))
+                return true;
+        }
+        return false;
+    }
+    return false;
+}
+
+static bool xa_type_param_has_hashable_constraint(XaInferContext *ctx, XaSymbolLinks *generic_links,
+                                                  const char *name, bool *out_found) {
+    bool found = false;
+    if (xa_type_param_link_has_hashable(generic_links, name, &found)) {
+        if (out_found)
+            *out_found = true;
+        return true;
+    }
+    if (found) {
+        if (out_found)
+            *out_found = true;
+        return false;
+    }
+
+    for (XaScope *scope = ctx && ctx->analyzer ? ctx->analyzer->current_scope : NULL; scope;
+         scope = scope->parent) {
+        if (scope->function_symbol) {
+            XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, scope->function_symbol);
+            if (xa_type_param_link_has_hashable(links, name, &found)) {
+                if (out_found)
+                    *out_found = true;
+                return true;
+            }
+            if (found) {
+                if (out_found)
+                    *out_found = true;
+                return false;
+            }
+        }
+        if (scope->class_symbol) {
+            XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, scope->class_symbol);
+            if (xa_type_param_link_has_hashable(links, name, &found)) {
+                if (out_found)
+                    *out_found = true;
+                return true;
+            }
+            if (found) {
+                if (out_found)
+                    *out_found = true;
+                return false;
+            }
+        }
+    }
+
+    if (out_found)
+        *out_found = false;
+    return false;
+}
+
+static XrClassInfo *xa_hashable_class_info_for_type(XaInferContext *ctx, XrType *type) {
+    if (!ctx || !ctx->analyzer || !type)
+        return NULL;
+    if ((type->kind == XR_KIND_CLASS || type->kind == XR_KIND_INSTANCE) &&
+        type->instance.class_ref) {
+        return type->instance.class_ref;
+    }
+    if ((type->kind == XR_KIND_CLASS || type->kind == XR_KIND_INSTANCE) &&
+        type->instance.class_name) {
+        XaSymbol *sym = xa_analyzer_lookup(ctx->analyzer, type->instance.class_name);
+        XaSymbolLinks *links = sym ? xa_analyzer_get_links(ctx->analyzer, sym) : NULL;
+        return links ? links->class_info : NULL;
+    }
+    return NULL;
+}
+
+static bool xa_type_is_builtin_hashable(XrType *type) {
+    if (!type)
+        return false;
+    if (xr_kind_is_primitive(type->kind))
+        return true;
+    if (type->kind == XR_KIND_NULL || type->kind == XR_KIND_ENUM)
+        return true;
+    return xr_type_is_named_class(type, "BigInt");
+}
+
+static bool xa_method_return_is(XaSymbol *method, XrTypeKind kind) {
+    XaSymbolLinks *links = method ? xa_analyzer_get_links(NULL, method) : NULL;
+    XrType *type = links ? links->type : NULL;
+    return type && XR_TYPE_IS_FUNCTION(type) && type->function.return_type &&
+           type->function.return_type->kind == kind;
+}
+
+static bool xa_hash_method_valid(XaSymbol *method) {
+    if (!method || method->kind != XA_SYM_METHOD || method->is_static || method->is_private)
+        return false;
+    XaSymbolLinks *links = xa_analyzer_get_links(NULL, method);
+    XrType *type = links ? links->type : NULL;
+    return type && XR_TYPE_IS_FUNCTION(type) && type->function.param_count == 0 &&
+           xa_method_return_is(method, XR_KIND_INT);
+}
+
+static bool xa_eq_method_valid(XaSymbol *method, const char *self_name) {
+    if (!method || method->kind != XA_SYM_METHOD || method->is_static || method->is_private)
+        return false;
+    XaSymbolLinks *links = xa_analyzer_get_links(NULL, method);
+    XrType *type = links ? links->type : NULL;
+    if (!type || !XR_TYPE_IS_FUNCTION(type) || type->function.param_count != 1 ||
+        !xa_method_return_is(method, XR_KIND_BOOL)) {
+        return false;
+    }
+    XrType *param = type->function.param_types ? type->function.param_types[0] : NULL;
+    return xa_type_name_matches(param, self_name);
+}
+
+static void xa_report_hashable_contract(XaInferContext *ctx, XrLocation *loc, const char *type_name,
+                                        const char *context, bool has_eq, bool has_hash) {
+    if (!ctx || !ctx->analyzer || !loc)
+        return;
+    const char *name = type_name ? type_name : "<unknown>";
+    char missing[192];
+    if (!has_eq && !has_hash) {
+        snprintf(missing, sizeof(missing),
+                 "missing operator==(other: %s) -> bool and hash() -> int", name);
+    } else if (!has_eq) {
+        snprintf(missing, sizeof(missing), "missing operator==(other: %s) -> bool", name);
+    } else {
+        snprintf(missing, sizeof(missing), "missing hash() -> int");
+    }
+
+    char msg[320];
+    if (context && strcmp(context, "implements Hashable") == 0) {
+        snprintf(msg, sizeof(msg), "Class '%s' implements Hashable but is %s", name, missing);
+    } else {
+        snprintf(msg, sizeof(msg), "Type '%s' used as %s must satisfy Hashable: %s", name,
+                 context ? context : "Map/Set key", missing);
+    }
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_HASHABLE_CONTRACT,
+                               msg, loc);
+}
+
+static bool xa_validate_hashable_type(XaInferContext *ctx, XrType *type,
+                                      XaSymbolLinks *generic_links, const char *context,
+                                      XrLocation *loc) {
+    if (!ctx || !ctx->analyzer || !loc || !type || XR_TYPE_IS_UNKNOWN(type))
+        return true;
+    if (xa_type_is_builtin_hashable(type))
+        return true;
+
+    if (type->kind == XR_KIND_TYPE_PARAM) {
+        const char *name = type->type_param.name;
+        bool found = false;
+        if (xa_type_param_has_hashable_constraint(ctx, generic_links, name, &found))
+            return true;
+        char msg[256];
+        snprintf(msg, sizeof(msg), "Type parameter '%s' used as %s must be constrained as Hashable",
+                 name ? name : "?", context ? context : "Map/Set key");
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                   XR_ERR_ANALYZE_HASHABLE_CONTRACT, msg, loc);
+        return false;
+    }
+
+    XrClassInfo *info = xa_hashable_class_info_for_type(ctx, type);
+    if (info && info->name) {
+        XaSymbol *eq = xa_class_info_lookup_member(info, "==");
+        XaSymbol *hash = xa_class_info_lookup_member(info, "hash");
+        bool has_eq = xa_eq_method_valid(eq, info->name);
+        bool has_hash = xa_hash_method_valid(hash);
+        if (has_eq && has_hash)
+            return true;
+        xa_report_hashable_contract(ctx, loc, info->name, context, has_eq, has_hash);
+        return false;
+    }
+
+    if ((type->kind == XR_KIND_CLASS || type->kind == XR_KIND_INSTANCE) &&
+        type->instance.class_name) {
+        xa_report_hashable_contract(ctx, loc, type->instance.class_name, context, false, false);
+        return false;
+    }
+
+    xa_report_hashable_contract(ctx, loc, xr_type_to_string(type), context, false, false);
+    return false;
+}
+
+XR_FUNC void xa_validate_hashable_contract_for_class(XaInferContext *ctx, AstNode *node,
+                                                     XrClassInfo *info) {
+    if (!ctx || !info || !info->name)
+        return;
+    XrLocation loc = {
+        .file = ctx->file_path, .line = node ? node->line : 0, .column = node ? node->column : 0};
+    XaSymbol *eq = xa_class_info_lookup_member(info, "==");
+    XaSymbol *hash = xa_class_info_lookup_member(info, "hash");
+    bool has_eq = xa_eq_method_valid(eq, info->name);
+    bool has_hash = xa_hash_method_valid(hash);
+    if (!has_eq || !has_hash)
+        xa_report_hashable_contract(ctx, &loc, info->name, "implements Hashable", has_eq, has_hash);
+}
+
+XR_FUNC void xa_validate_hashable_key_type(XaInferContext *ctx, XrType *type,
+                                           XaSymbolLinks *generic_links, const char *context,
+                                           XrLocation *loc) {
+    if (!ctx || !ctx->analyzer || !type || !loc)
+        return;
+    switch (type->kind) {
+        case XR_KIND_MAP:
+            xa_validate_hashable_type(ctx, type->map.key_type, generic_links, "Map key", loc);
+            xa_validate_hashable_key_type(ctx, type->map.value_type, generic_links, context, loc);
+            break;
+        case XR_KIND_SET:
+            xa_validate_hashable_type(ctx, type->container.element_type, generic_links,
+                                      "Set element", loc);
+            break;
+        case XR_KIND_ARRAY:
+        case XR_KIND_CHANNEL:
+            xa_validate_hashable_key_type(ctx, type->container.element_type, generic_links, context,
+                                          loc);
+            break;
+        case XR_KIND_FIXED_ARRAY:
+            xa_validate_hashable_key_type(ctx, type->fixed_array.element_type, generic_links,
+                                          context, loc);
+            break;
+        case XR_KIND_TUPLE:
+            for (int i = 0; i < type->tuple.element_count; i++)
+                xa_validate_hashable_key_type(ctx, type->tuple.element_types[i], generic_links,
+                                              context, loc);
+            break;
+        case XR_KIND_UNION:
+            for (int i = 0; i < type->union_type.member_count; i++)
+                xa_validate_hashable_key_type(ctx, type->union_type.members[i], generic_links,
+                                              context, loc);
+            break;
+        case XR_KIND_FUNCTION:
+            for (int i = 0; i < type->function.param_count; i++)
+                xa_validate_hashable_key_type(ctx, type->function.param_types[i], generic_links,
+                                              context, loc);
+            xa_validate_hashable_key_type(ctx, type->function.return_type, generic_links, context,
+                                          loc);
+            break;
+        case XR_KIND_INSTANCE:
+            for (int i = 0; i < type->instance.type_arg_count; i++)
+                xa_validate_hashable_key_type(ctx, type->instance.type_args[i], generic_links,
+                                              context, loc);
+            break;
+        default:
+            break;
+    }
+}
+
 static void check_contextual_int_literal_range(XaInferContext *ctx, AstNode *node,
                                                XrType *target_type) {
     if (!ctx || !ctx->analyzer || !node || !target_type || !XR_TYPE_IS_INT(target_type))
@@ -1582,6 +1862,8 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
             if (!elem)
                 elem = xr_type_new_unknown(NULL);
             result = xr_type_new_set(ctx->analyzer->isolate, elem);
+            XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+            xa_validate_hashable_key_type(ctx, result, NULL, "set literal", &loc);
             break;
         }
         case AST_CHANNEL_NEW:

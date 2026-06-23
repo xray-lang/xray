@@ -660,7 +660,7 @@ let v = m["a"]                                      // 取值；不存在返回 
 | `[]` | `Array<T>` | 数组 |
 | `#[]` | `Set<T>` | 集合 |
 
-`K` 必须实现 `Hashable`（详见 §14.14）：通常是 `int`、`string`、`bool`、`enum`、或自定义实现 `Hashable` 的类。
+`K` 必须满足 `Hashable`（详见 §9.2）：通常是 `int`、`float`、`string`、`bool`、`enum`、`BigInt`，或提供 `operator==(other: Self) -> bool` 与 `hash() -> int` 的自定义类型。泛型键类型必须显式写成 `K: Hashable`。
 
 #### 2.4.3 `Set<T>`
 
@@ -3479,14 +3479,16 @@ fn pickValue<K: Hashable, V>(k: K, v: V) -> V {
 }
 ```
 
-**内置约束接口**（详见 §14.14）：
+**内置约束接口**：
 
 | 接口 | 含义 |
 |---|---|
 | `Comparable` | 可用 `<` `<=` `>` `>=` 比较；int/float/string/Comparable 实现者 |
-| `Hashable` | 可作为 `Map` / `Set` 的键；int/float/string/bool/enum/Hashable 实现者 |
+| `Hashable` | 可作为 `Map` 键或 `Set` 元素；内置 `int` / `float` / `string` / `bool` / `enum` / `BigInt` 默认满足，用户类型必须同时提供 `operator==(other: Self) -> bool` 与 `hash() -> int` |
 | `Stringable` | 可调 `.toString()`；几乎所有内置类型默认实现 |
-| `Iterable<T>` | 可被 `for-in` 遭历；Array、Map、Json、string、Range、enum、自定义 `iterator()` |
+| `Iterable<T>` | 可被 `for-in` 遍历；Array、Map、Json、string、Range、enum、自定义 `iterator()` |
+
+`Hashable` 是静态契约：具体 class / struct / enum 用作 `Map<K, V>` 的键、`Set<T>` 的元素，或声明 `implements Hashable` 时，编译器必须看到非 `static`、非 `private` 的 `operator==(other: Self) -> bool` 与 `hash() -> int`。只提供旧式 `hashCode()` 不满足契约；只提供 `==` 或只提供 `hash()` 也会编译失败。若键/元素是类型参数，类型参数本身必须显式声明 `: Hashable`，例如 `fn f<K: Hashable>(m: Map<K, int>)`。
 
 **当前限制**：
 - 约束只能位于类型参数后，不支持 where 子句。

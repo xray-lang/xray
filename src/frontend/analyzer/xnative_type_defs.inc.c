@@ -89,8 +89,8 @@ static const char xr_native_def_json[] =
 
 static const char xr_native_def_map[] =
     "// Built-in Map<K, V> type — implementation in "
-    "src/runtime/object/xmap_methods.c\n\n@native\nclass Map<K, V> {\n    length: int\n    size: "
-    "int\n    get(key: K) -> V?\n    set(key: K, value: V)\n    has(key: K) -> bool\n    "
+    "src/runtime/object/xmap_methods.c\n\n@native\nclass Map<K: Hashable, V> {\n    length: int\n  "
+    "  size: int\n    get(key: K) -> V?\n    set(key: K, value: V)\n    has(key: K) -> bool\n    "
     "delete(key: K) -> bool\n    clear()\n    keys() -> Array<K>\n    values() -> Array<V>\n    "
     "entries() -> Array<(K, V)>\n    forEach(fn: (key: K, value: V) -> ())\n    // Iteration "
     "protocol — iterator() yields each key K (used by\n    // single-variable `for (k in m)`); "
@@ -114,8 +114,8 @@ static const char xr_native_def_resultgroup[] =
 
 static const char xr_native_def_set[] =
     "// Built-in Set<T> type — implementation in "
-    "src/runtime/object/xset_methods.c\n\n@native\nclass Set<T> {\n    length: int\n    size: "
-    "int\n    add(value: T)\n    has(value: T) -> bool\n    delete(value: T) -> bool\n    "
+    "src/runtime/object/xset_methods.c\n\n@native\nclass Set<T: Hashable> {\n    length: int\n    "
+    "size: int\n    add(value: T)\n    has(value: T) -> bool\n    delete(value: T) -> bool\n    "
     "clear()\n    values() -> Array<T>\n    forEach(fn: (value: T) -> ())\n    // Iteration "
     "protocol — yields each element T (used by for-in).\n    iterator() -> Iterator<T>\n}\n";
 

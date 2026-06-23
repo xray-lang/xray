@@ -119,14 +119,27 @@ fn test_stale_root_index_does_not_corrupt() {
 
 // ===== 4. Set-mediated cycle =====
 
-class SetNode {
+class SetNode implements Hashable {
+    id: int
     peers: Set<SetNode> = #[]
+
+    constructor(id: int) {
+        this.id = id
+    }
+
+    operator==(other: SetNode) -> bool {
+        return this.id == other.id
+    }
+
+    hash() -> int {
+        return this.id
+    }
 }
 
 @test
 fn test_set_mediated_cycle_reclaimed() {
-    let x = new SetNode()
-    let y = new SetNode()
+    let x = new SetNode(1)
+    let y = new SetNode(2)
     x.peers.add(y)
     y.peers.add(x)
     mem.collectCycles()

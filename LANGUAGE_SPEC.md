@@ -659,7 +659,7 @@ let v = m["a"]                                      // lookup; returns null if a
 | `[]` | `Array<T>` | array |
 | `#[]` | `Set<T>` | set |
 
-`K` must implement `Hashable` (see §14.14): typically `int`, `string`, `bool`, `enum`, or a custom class implementing `Hashable`.
+`K` must satisfy `Hashable` (see §9.2): typically `int`, `float`, `string`, `bool`, `enum`, `BigInt`, or a custom type that provides `operator==(other: Self) -> bool` and `hash() -> int`. Generic key types must be explicitly constrained as `K: Hashable`.
 
 #### 2.4.3 `Set<T>`
 
@@ -3490,14 +3490,16 @@ fn pickValue<K: Hashable, V>(k: K, v: V) -> V {
 }
 ```
 
-**Built-in constraint interfaces** (see §14.14 for details):
+**Built-in constraint interfaces**:
 
 | Interface | Meaning |
 |---|---|
 | `Comparable` | usable with `<` `<=` `>` `>=`; int/float/string and types implementing `Comparable` |
-| `Hashable` | usable as a `Map` / `Set` key; int/float/string/bool/enum and types implementing `Hashable` |
+| `Hashable` | usable as a `Map` key or `Set` element; built-in `int` / `float` / `string` / `bool` / `enum` / `BigInt` satisfy it by default, and user types must provide both `operator==(other: Self) -> bool` and `hash() -> int` |
 | `Stringable` | callable via `.toString()`; almost every built-in type implements it by default |
 | `Iterable<T>` | usable in `for-in`; Array, Map, Json, string, Range, enum, types with custom `iterator()` |
+
+`Hashable` is a static contract: when a concrete class / struct / enum is used as a `Map<K, V>` key, a `Set<T>` element, or declares `implements Hashable`, the compiler must see a non-`static`, non-`private` `operator==(other: Self) -> bool` and `hash() -> int`. Legacy `hashCode()` does not satisfy the contract, and providing only one of `==` or `hash()` is a compile error. If the key/element is a type parameter, that parameter itself must be explicitly constrained, for example `fn f<K: Hashable>(m: Map<K, int>)`.
 
 **Current limitations**:
 - Constraints may only follow type parameters; there is no `where` clause.
