@@ -399,6 +399,24 @@ static inline int xrt_datetime_equals_ptr(const xrt_datetime_object_t *a,
     return a && b && a->timestamp == b->timestamp && a->milliseconds == b->milliseconds;
 }
 
+typedef struct xrt_datetime_buffer_writer {
+    char *data;
+    size_t cap;
+    size_t len;
+} xrt_datetime_buffer_writer_t;
+
+static inline int xrt_datetime_buffer_write(void *ctx, const char *data, size_t len) {
+    xrt_datetime_buffer_writer_t *writer = (xrt_datetime_buffer_writer_t *) ctx;
+    if (!writer || !writer->data || (!data && len != 0))
+        return -1;
+    if (writer->len > writer->cap || len > writer->cap - writer->len)
+        return -1;
+    if (len != 0)
+        memcpy(writer->data + writer->len, data, len);
+    writer->len += len;
+    return 0;
+}
+
 static inline XrValue xrt_datetime_format_pattern(const xrt_datetime_object_t *dt,
                                                   const char *pattern, int64_t pattern_len) {
     if (!dt || !pattern)
@@ -407,41 +425,16 @@ static inline XrValue xrt_datetime_format_pattern(const xrt_datetime_object_t *d
         pattern_len = (int64_t) strlen(pattern);
     size_t cap = (size_t) pattern_len * 4u + 32u;
     XrValue out = xrt_str_alloc(cap);
-    char *buf = xr_str_buf(out);
-    size_t pos = 0;
     struct tm tmv;
     xrt_datetime_to_tm_obj(dt, &tmv);
-
-    for (int64_t i = 0; i < pattern_len;) {
-        const char *p = pattern + i;
-        int64_t left = pattern_len - i;
-        if (left >= 4 && strncmp(p, "YYYY", 4) == 0) {
-            pos += (size_t) snprintf(buf + pos, 5, "%04d", tmv.tm_year + 1900);
-            i += 4;
-        } else if (left >= 2 && strncmp(p, "MM", 2) == 0 && (left == 2 || p[2] != 'M')) {
-            pos += (size_t) snprintf(buf + pos, 3, "%02d", tmv.tm_mon + 1);
-            i += 2;
-        } else if (left >= 2 && strncmp(p, "DD", 2) == 0) {
-            pos += (size_t) snprintf(buf + pos, 3, "%02d", tmv.tm_mday);
-            i += 2;
-        } else if (left >= 2 && strncmp(p, "HH", 2) == 0) {
-            pos += (size_t) snprintf(buf + pos, 3, "%02d", tmv.tm_hour);
-            i += 2;
-        } else if (left >= 2 && strncmp(p, "mm", 2) == 0) {
-            pos += (size_t) snprintf(buf + pos, 3, "%02d", tmv.tm_min);
-            i += 2;
-        } else if (left >= 2 && strncmp(p, "ss", 2) == 0) {
-            pos += (size_t) snprintf(buf + pos, 3, "%02d", tmv.tm_sec);
-            i += 2;
-        } else if (left >= 3 && strncmp(p, "SSS", 3) == 0) {
-            pos += (size_t) snprintf(buf + pos, 4, "%03d", dt->milliseconds);
-            i += 3;
-        } else {
-            buf[pos++] = pattern[i++];
-        }
+    xrt_datetime_buffer_writer_t buffer = {.data = xr_str_buf(out), .cap = cap, .len = 0};
+    XrDateTimeCoreWriter writer = {.ctx = &buffer, .write = xrt_datetime_buffer_write};
+    if (xr_datetime_core_format_tm(&writer, &tmv, dt->milliseconds, pattern, pattern_len) < 0) {
+        xrt_release(out);
+        return XR_NULL_VAL;
     }
-    buf[pos] = '\0';
-    xr_str_hdr(out)->len = (int64_t) pos;
+    buffer.data[buffer.len] = '\0';
+    xr_str_hdr(out)->len = (int64_t) buffer.len;
     return out;
 }
 
@@ -454,25 +447,16 @@ static inline XrValue xrt_datetime_to_iso_value(const xrt_datetime_object_t *dt)
         return XR_NULL_VAL;
     struct tm tmv;
     xrt_datetime_to_tm_obj(dt, &tmv);
-    char tmp[64];
-    int n;
-    if (dt->is_utc) {
-        n = snprintf(tmp, sizeof(tmp), "%04d-%02d-%02dT%02d:%02d:%02d.%03dZ", tmv.tm_year + 1900,
-                     tmv.tm_mon + 1, tmv.tm_mday, tmv.tm_hour, tmv.tm_min, tmv.tm_sec,
-                     dt->milliseconds);
-    } else {
-        int off = dt->tz_offset;
-        char sign = off >= 0 ? '+' : '-';
-        if (off < 0)
-            off = -off;
-        n = snprintf(tmp, sizeof(tmp), "%04d-%02d-%02dT%02d:%02d:%02d.%03d%c%02d:%02d",
-                     tmv.tm_year + 1900, tmv.tm_mon + 1, tmv.tm_mday, tmv.tm_hour, tmv.tm_min,
-                     tmv.tm_sec, dt->milliseconds, sign, off / 60, off % 60);
-    }
-    if (n < 0)
+    XrValue out = xrt_str_alloc(95);
+    xrt_datetime_buffer_writer_t buffer = {.data = xr_str_buf(out), .cap = 95, .len = 0};
+    XrDateTimeCoreWriter writer = {.ctx = &buffer, .write = xrt_datetime_buffer_write};
+    if (xr_datetime_core_iso_write(&writer, &tmv, dt->milliseconds, dt->is_utc, dt->tz_offset) <
+        0) {
+        xrt_release(out);
         return XR_NULL_VAL;
-    XrValue out = xrt_str_alloc((size_t) n);
-    memcpy(xr_str_buf(out), tmp, (size_t) n);
+    }
+    buffer.data[buffer.len] = '\0';
+    xr_str_hdr(out)->len = (int64_t) buffer.len;
     return out;
 }
 
