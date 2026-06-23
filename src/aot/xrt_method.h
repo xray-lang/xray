@@ -226,10 +226,7 @@ static inline XrValue xrt_method_0(XrValue recv, int sym) {
         }
         if (sym == XRT_SYM_SHIFT && a->length > 0) {
             XrValue first = xr_typed_get(a->data, 0, a->elem_type);
-            for (int64_t i = 0; i < a->length - 1; i++) {
-                XrValue next = xr_typed_get(a->data, (int32_t) (i + 1), a->elem_type);
-                xr_typed_set(a->data, (int32_t) i, next, a->elem_type);
-            }
+            (void) xr_array_core_shift_left_one(a->data, a->length, a->elem_size);
             a->length--;
             return first;
         }

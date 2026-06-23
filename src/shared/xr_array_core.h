@@ -129,6 +129,16 @@ static inline bool xr_array_core_reverse(void *data, int64_t length, uint8_t ele
     return true;
 }
 
+static inline bool xr_array_core_shift_left_one(void *data, int64_t length, uint8_t elem_size) {
+    if (length < 2)
+        return true;
+    if (!data || elem_size == 0)
+        return false;
+
+    memmove(data, (uint8_t *) data + elem_size, (size_t) (length - 1) * elem_size);
+    return true;
+}
+
 #define XR_ARRAY_CORE_INDEXOF_LOOP(T)                                                              \
     do {                                                                                           \
         const T *d = (const T *) data;                                                             \
