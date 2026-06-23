@@ -14,6 +14,7 @@
 
 #include "../test_framework.h"
 #include "base/xmalloc.h"
+#include "shared/xr_base64_core.h"
 
 // C-level API from stdlib (forward declare to avoid pulling in module deps)
 char *xr_base64_encode(const unsigned char *data, size_t len, size_t *out_len);
@@ -187,6 +188,14 @@ TEST(base64_binary_data) {
     xr_free(decoded);
 }
 
+TEST(base64_array_lane_byte_semantics) {
+    ASSERT_EQ_UINT(xr_base64_core_byte_from_array_lane(true, 72), 72);
+    ASSERT_EQ_UINT(xr_base64_core_byte_from_array_lane(true, -1), 255);
+    ASSERT_EQ_UINT(xr_base64_core_byte_from_array_lane(true, 300), 44);
+    ASSERT_EQ_UINT(xr_base64_core_byte_from_array_lane(false, 1), 0);
+    ASSERT_EQ_UINT(xr_base64_core_byte_from_array_lane(false, 72), 0);
+}
+
 /* ========== Main ========== */
 
 TEST_MAIN_BEGIN()
@@ -213,5 +222,8 @@ RUN_TEST(base64_is_valid);
 
 RUN_TEST_SUITE("Base64 - Binary Data");
 RUN_TEST(base64_binary_data);
+
+RUN_TEST_SUITE("Base64 - Array Lane Semantics");
+RUN_TEST(base64_array_lane_byte_semantics);
 
 TEST_MAIN_END()
