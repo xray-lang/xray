@@ -155,28 +155,32 @@ static inline XrValue xrt_os_unsetenv(const char *name, int64_t len) {
     return XR_FROM_BOOL(ok);
 }
 
-static inline void xrt_os_environ_set_entry(xrt_map_t *map, const char *entry) {
-    const char *eq = entry ? strchr(entry, '=') : NULL;
-    if (!eq || eq == entry)
-        return;
-    XrValue key = xrt_os_str_slice_value(entry, (size_t) (eq - entry));
-    const char *value = eq + 1;
-    xrt_map_set(map, key, xrt_os_str_slice_value(value, strlen(value)));
+typedef struct XrtOsEnvironCtx {
+    xrt_map_t *map;
+} XrtOsEnvironCtx;
+
+static inline bool xrt_os_environ_add_entry(void *ctx, const char *key, size_t key_len,
+                                            const char *value, size_t value_len) {
+    XrtOsEnvironCtx *env = (XrtOsEnvironCtx *) ctx;
+    xrt_map_set(env->map, xrt_os_str_slice_value(key, key_len),
+                xrt_os_str_slice_value(value, value_len));
+    return true;
 }
 
 static inline XrValue xrt_os_environ(void) {
     XrValue map_value = xrt_map_new(64);
     xrt_map_t *map = (xrt_map_t *) map_value.ptr;
+    XrtOsEnvironCtx env_ctx = {map};
 #ifdef _WIN32
     LPCH env_block = GetEnvironmentStringsA();
     if (!env_block)
         return map_value;
     for (const char *p = env_block; *p; p += strlen(p) + 1)
-        xrt_os_environ_set_entry(map, p);
+        xr_os_core_environ_entry(p, xrt_os_environ_add_entry, &env_ctx);
     FreeEnvironmentStringsA(env_block);
 #else
     for (char **env = environ; env && *env; env++)
-        xrt_os_environ_set_entry(map, *env);
+        xr_os_core_environ_entry(*env, xrt_os_environ_add_entry, &env_ctx);
 #endif
     return map_value;
 }

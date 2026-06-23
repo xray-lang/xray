@@ -13,8 +13,12 @@
 
 #include "../base/xplatform.h"
 #include <stdbool.h>
+#include <stddef.h>
+#include <string.h>
 
 typedef const char *(*XrOsCoreGetenvFn)(void *ctx, const char *name);
+typedef bool (*XrOsCoreEnvEntryFn)(void *ctx, const char *key, size_t key_len, const char *value,
+                                   size_t value_len);
 
 static inline const char *xr_os_core_platform(void) {
 #if defined(XR_OS_WINDOWS) || defined(_WIN64)
@@ -84,6 +88,18 @@ static inline const char *xr_os_core_tmpdir(XrOsCoreGetenvFn getenv_fn, void *ct
 #else
     return "/tmp";
 #endif
+}
+
+static inline bool xr_os_core_environ_entry(const char *entry, XrOsCoreEnvEntryFn fn, void *ctx) {
+    if (!entry || !fn)
+        return false;
+
+    const char *eq = strchr(entry, '=');
+    if (!eq || eq == entry)
+        return false;
+
+    const char *value = eq + 1;
+    return fn(ctx, entry, (size_t) (eq - entry), value, strlen(value));
 }
 
 #endif /* XRAY_SHARED_XR_OS_CORE_H */
