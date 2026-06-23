@@ -482,6 +482,7 @@ vmcase(OP_LOOP_BACK) {
     // GC safe point + reduction check (same as backward JMP)
     if (vm_ctx && vm_ctx->current_coro) {
         XrCoroutine *coro = (XrCoroutine *) vm_ctx->current_coro;
+        xr_worker_bump_heartbeat(vm_worker);
         VM_GC_SAFEPOINT();
 
         /* Same wall-clock deadline check as the backward JMP path;

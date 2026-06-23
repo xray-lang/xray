@@ -413,6 +413,8 @@ XrVMResult run(XrayIsolate *isolate, XrVMContext *vm_ctx) {
     vm_profiler_init(_vm_prof);
     VM_PROFILE_VARS();
 
+    XrWorker *vm_worker = xr_current_worker();
+
 // Per-frame struct storage in vm_ctx (lazy-allocated, persists across calls)
 
 /* ========== Inline Macro Definitions ========== */

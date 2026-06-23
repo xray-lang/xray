@@ -1917,6 +1917,7 @@ XrValue xr_aot_chan_try_recv_sync(XrValue channel_value) {
 XrAotResult xr_aot_poll_yield(const XrAotContext *ctx) {
     if (!ctx || !ctx->coro)
         return xr_aot_done(XR_NULL_VAL);
+    xr_worker_bump_heartbeat(ctx->worker ? (XrWorker *) ctx->worker : xr_current_worker());
     if (xr_coro_consume_reds(ctx->coro, 1) > 0)
         return xr_aot_done(XR_NULL_VAL);
     if (xr_coro_flags_has(ctx->coro, XR_CORO_FLG_CANCEL_REQUESTED | XR_CORO_FLG_CANCELLED))

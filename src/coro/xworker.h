@@ -564,6 +564,15 @@ static inline int xr_worker_total_queue_len(XrWorker *worker) {
 
 XR_FUNC XrWorker *xr_current_worker(void);
 
+static inline void xr_worker_bump_heartbeat(XrWorker *worker) {
+    if (!worker || !worker->m)
+        return;
+    XrMachine *m = worker->m;
+    atomic_store_explicit(&m->heartbeat,
+                          atomic_load_explicit(&m->heartbeat, memory_order_relaxed) + 1,
+                          memory_order_relaxed);
+}
+
 // Enqueue coro to target worker's inbox with full synchronization.
 // Handles: MPSC push + Dekker fence + wake if parked.
 // This is the ONLY correct way to push to a remote worker's inbox.

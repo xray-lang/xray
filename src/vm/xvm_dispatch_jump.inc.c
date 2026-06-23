@@ -9,7 +9,7 @@
  *
  * NOT a standalone translation unit. Included from inside the
  * dispatch switch in xvm.c; relies on locals (i, isolate, pc,
- * frame, ci, base, R, vmcase, vmbreak, savepc, xr_vm_is_truthy,
+ * frame, ci, base, vm_worker, R, vmcase, vmbreak, savepc, xr_vm_is_truthy,
  * VM_CURRENT_CORO, ...) provided by the surrounding scope.
  * CMake excludes *.inc.c from the VM_SRC glob.
  *
@@ -34,6 +34,7 @@ vmcase(OP_JMP) {
     ** Also serves as GC safe point for per-coroutine GC. */
     if (offset < 0 && vm_ctx && vm_ctx->current_coro) {
         XrCoroutine *coro = (XrCoroutine *) vm_ctx->current_coro;
+        xr_worker_bump_heartbeat(vm_worker);
 
         /* GC safe point: check and trigger GC at loop back-edge.
         ** Stack is consistent here (between instructions). */
