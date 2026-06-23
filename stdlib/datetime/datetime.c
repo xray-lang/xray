@@ -1133,34 +1133,6 @@ XR_DEFINE_BUILTIN(dt_parse, "parse", "(s: string, format?: string): DateTime?",
                   "Parse datetime string")
 XR_DEFINE_BUILTIN(dt_offset, "offset", "(): int", "Get UTC offset in minutes")
 
-// @type DateTime
-XR_DEFINE_BUILTIN(dt_format, "format", "(pattern?: string): string", "Format datetime to string")
-XR_DEFINE_BUILTIN(dt_to_iso, "toISOString", "(): string", "Convert to ISO 8601 string")
-XR_DEFINE_BUILTIN(dt_year, "year", "(): int", "Get year")
-XR_DEFINE_BUILTIN(dt_month, "month", "(): int", "Get month (1-12)")
-XR_DEFINE_BUILTIN(dt_day, "day", "(): int", "Get day (1-31)")
-XR_DEFINE_BUILTIN(dt_hour, "hour", "(): int", "Get hour (0-23)")
-XR_DEFINE_BUILTIN(dt_minute, "minute", "(): int", "Get minute (0-59)")
-XR_DEFINE_BUILTIN(dt_second, "second", "(): int", "Get second (0-59)")
-XR_DEFINE_BUILTIN(dt_millisecond, "millisecond", "(): int", "Get millisecond (0-999)")
-XR_DEFINE_BUILTIN(dt_weekday, "weekday", "(): int", "Get weekday (0=Sunday)")
-XR_DEFINE_BUILTIN(dt_yearday, "yearday", "(): int", "Get day of year (1-366)")
-XR_DEFINE_BUILTIN(dt_timestamp, "timestamp", "(): int", "Get Unix timestamp (seconds)")
-XR_DEFINE_BUILTIN(dt_add, "add", "(amount: int, unit: string): DateTime",
-                  "Add duration to datetime")
-XR_DEFINE_BUILTIN(dt_diff, "diff", "(other: DateTime, unit?: string): int",
-                  "Difference between datetimes")
-XR_DEFINE_BUILTIN(dt_to_utc, "toUTC", "(): DateTime", "Convert to UTC")
-XR_DEFINE_BUILTIN(dt_to_local, "toLocal", "(): DateTime", "Convert to local time")
-XR_DEFINE_BUILTIN(dt_is_before, "isBefore", "(other: DateTime): bool",
-                  "Check if before other datetime")
-XR_DEFINE_BUILTIN(dt_is_after, "isAfter", "(other: DateTime): bool",
-                  "Check if after other datetime")
-XR_DEFINE_BUILTIN(dt_equals, "equals", "(other: DateTime): bool",
-                  "Check if equal to other datetime")
-XR_DEFINE_BUILTIN(dt_is_leap_year, "isLeapYear", "(): bool", "Check if leap year")
-XR_DEFINE_BUILTIN(dt_days_in_month, "daysInMonth", "(): int", "Get days in current month")
-
 #define XR_STDLIB_VM_BIND_MODULE_DATETIME 1
 #include "../../src/stdlib/xstdlib_vm_bindings_generated.inc.c"
 #undef XR_STDLIB_VM_BIND_MODULE_DATETIME

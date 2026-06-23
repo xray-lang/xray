@@ -3,9 +3,10 @@
 Generate stdlib metadata from declarative .def files.
 
 The .def files are the source of truth for AOT direct-call, module-constant,
-handle declaration, and link-manifest metadata. The parser intentionally stays
-small: module/function/constant/handle blocks with key: value properties, no
-embedded code, and generated C artifacts that are checked into the repository.
+handle declaration, type-method, and link-manifest metadata. The parser
+intentionally stays small: module/function/constant/handle/type-method blocks
+with key: value properties, no embedded code, and generated C artifacts that
+are checked into the repository.
 """
 
 from __future__ import annotations
@@ -103,6 +104,19 @@ class StdlibHandleEntry:
         return f"{self.module}.{self.name}"
 
 
+@dataclasses.dataclass(frozen=True)
+class StdlibTypeMethodEntry:
+    module: str
+    type_name: str
+    name: str
+    signature: str
+    doc: str
+
+    @property
+    def symbol(self) -> str:
+        return f"{self.type_name}.{self.name}"
+
+
 def strip_comment(line: str) -> str:
     in_string = False
     escaped = False
@@ -175,11 +189,17 @@ def parse_handle_fields(raw: str, context: str) -> tuple[StdlibHandleFieldEntry,
 
 def parse_def_metadata(
     root: Path,
-) -> tuple[list[StdlibEntry], list[StdlibConstEntry], list[StdlibHandleEntry]]:
+) -> tuple[
+    list[StdlibEntry],
+    list[StdlibConstEntry],
+    list[StdlibHandleEntry],
+    list[StdlibTypeMethodEntry],
+]:
     defs_dir = root / "stdlib" / "defs"
     entries: list[StdlibEntry] = []
     constants: list[StdlibConstEntry] = []
     handles: list[StdlibHandleEntry] = []
+    type_methods: list[StdlibTypeMethodEntry] = []
     if not defs_dir.exists():
         raise SystemExit(f"missing stdlib defs directory: {defs_dir}")
 
@@ -309,6 +329,21 @@ def parse_def_metadata(
                     fields=fields,
                 )
             )
+        elif current_kind == "type_method":
+            missing = [k for k in ("signature", "doc") if k not in props]
+            if missing:
+                names = ", ".join(missing)
+                raise SystemExit(f"{path}:{line_no}: {current_module}.{current_name} missing {names}")
+            type_name, method_name = str(current_name).split(".", 1)
+            type_methods.append(
+                StdlibTypeMethodEntry(
+                    module=current_module,
+                    type_name=type_name,
+                    name=method_name,
+                    signature=str(props["signature"]),
+                    doc=str(props["doc"]),
+                )
+            )
         else:
             raise SystemExit(f"{path}:{line_no}: unsupported block kind: {current_kind}")
         current_kind = None
@@ -350,6 +385,19 @@ def parse_def_metadata(
                 current_name = m.group(1)
                 props = {}
                 continue
+            m = re.fullmatch(
+                r"type_method\s+([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*)\s*\{",
+                line,
+            )
+            if m:
+                if current_module is None or current_kind is not None:
+                    raise SystemExit(
+                        f"{path}:{line_no}: type_method outside module or nested type_method"
+                    )
+                current_kind = "type_method"
+                current_name = f"{m.group(1)}.{m.group(2)}"
+                props = {}
+                continue
             if line == "}":
                 if current_kind is not None:
                     finish_entry(path, line_no)
@@ -367,22 +415,27 @@ def parse_def_metadata(
 
     if current_module is not None or current_kind is not None:
         raise SystemExit("unterminated stdlib .def block")
-    return entries, constants, handles
+    return entries, constants, handles, type_methods
 
 
 def parse_defs(root: Path) -> list[StdlibEntry]:
-    entries, _, _ = parse_def_metadata(root)
+    entries, _, _, _ = parse_def_metadata(root)
     return entries
 
 
 def parse_constants(root: Path) -> list[StdlibConstEntry]:
-    _, constants, _ = parse_def_metadata(root)
+    _, constants, _, _ = parse_def_metadata(root)
     return constants
 
 
 def parse_handles(root: Path) -> list[StdlibHandleEntry]:
-    _, _, handles = parse_def_metadata(root)
+    _, _, handles, _ = parse_def_metadata(root)
     return handles
+
+
+def parse_type_methods(root: Path) -> list[StdlibTypeMethodEntry]:
+    _, _, _, type_methods = parse_def_metadata(root)
+    return type_methods
 
 
 def c_string(value: str) -> str:
@@ -727,6 +780,7 @@ def emit_defs_header(
     entries: list[StdlibEntry],
     constants: list[StdlibConstEntry],
     handles: list[StdlibHandleEntry],
+    type_methods: list[StdlibTypeMethodEntry],
 ) -> str:
     lines = generated_header("xstdlib_defs_generated.h - stdlib declarative metadata")
     lines.extend(
@@ -788,6 +842,14 @@ def emit_defs_header(
             "    const XrStdlibHandleFieldDefEntry *fields;",
             "    uint16_t field_count;",
             "} XrStdlibHandleDefEntry;",
+            "",
+            "typedef struct XrStdlibTypeMethodDefEntry {",
+            "    const char *module;",
+            "    const char *type_name;",
+            "    const char *name;",
+            "    const char *signature;",
+            "    const char *doc;",
+            "} XrStdlibTypeMethodDefEntry;",
             "",
             "static const XrStdlibDefEntry xr_stdlib_def_entries[] = {",
         ]
@@ -863,6 +925,23 @@ def emit_defs_header(
             "((uint32_t) (sizeof(xr_stdlib_handle_def_entries) / "
             "sizeof(xr_stdlib_handle_def_entries[0])))",
             "",
+            "static const XrStdlibTypeMethodDefEntry xr_stdlib_type_method_def_entries[] = {",
+        ]
+    )
+    for tm in type_methods:
+        lines.append(
+            "    {"
+            f"{c_string(tm.module)}, {c_string(tm.type_name)}, {c_string(tm.name)}, "
+            f"{c_string(tm.signature)}, {c_string(tm.doc)}"
+            "},"
+        )
+    lines.extend(
+        [
+            "};",
+            "#define XR_STDLIB_TYPE_METHOD_DEF_ENTRY_COUNT "
+            "((uint32_t) (sizeof(xr_stdlib_type_method_def_entries) / "
+            "sizeof(xr_stdlib_type_method_def_entries[0])))",
+            "",
             "#endif  /* XSTDLIB_DEFS_GENERATED_H */",
             "",
             "/* clang-format on */",
@@ -873,7 +952,7 @@ def emit_defs_header(
 
 
 def output_paths(root: Path) -> dict[Path, str]:
-    entries, constants, handles = parse_def_metadata(root)
+    entries, constants, handles, type_methods = parse_def_metadata(root)
     return {
         root / "src" / "aot" / "xstdlib_aot_methods_generated.inc.c": emit_aot_methods(
             entries, constants
@@ -885,7 +964,7 @@ def output_paths(root: Path) -> dict[Path, str]:
             entries, constants
         ),
         root / "src" / "stdlib" / "xstdlib_defs_generated.h": emit_defs_header(
-            entries, constants, handles
+            entries, constants, handles, type_methods
         ),
     }
 

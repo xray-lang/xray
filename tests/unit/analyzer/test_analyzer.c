@@ -783,6 +783,20 @@ TEST(builtin_http_fast_signatures) {
     ASSERT(strcmp(send_resp->signature, "(fd: int, body: string, status?: int): bool") == 0);
 }
 
+TEST(builtin_datetime_type_methods_from_defs) {
+    XrType *dt = xr_type_new_datetime(g_isolate);
+    ASSERT(dt != NULL);
+
+    ASSERT(xa_builtin_is_method(dt, "format"));
+    ASSERT(strcmp(xa_builtin_get_member_signature(dt, "format"), "(pattern?: string): string") ==
+           0);
+    ASSERT(strcmp(xa_builtin_get_member_doc(dt, "format"), "Format datetime to string") == 0);
+
+    ASSERT(xa_builtin_is_method(dt, "daysInMonth"));
+    ASSERT(strcmp(xa_builtin_get_member_signature(dt, "daysInMonth"), "(): int") == 0);
+    ASSERT(strcmp(xa_builtin_get_member_doc(dt, "daysInMonth"), "Get days in current month") == 0);
+}
+
 // ============================================================================
 // Main
 // ============================================================================
@@ -852,6 +866,7 @@ int main(void) {
     RUN_TEST(union_type_dedup);
     RUN_TEST(class_info_members);
     RUN_TEST(builtin_http_fast_signatures);
+    RUN_TEST(builtin_datetime_type_methods_from_defs);
 
     printf("\n========================================\n");
     printf("Tests passed: %d\n", tests_passed);

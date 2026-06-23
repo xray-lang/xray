@@ -4132,4 +4132,109 @@ module datetime {
     link_object: false
     layer: "system"
   }
+
+  type_method DateTime.format {
+    signature: "(pattern?: string): string"
+    doc: "Format datetime to string"
+  }
+
+  type_method DateTime.toISOString {
+    signature: "(): string"
+    doc: "Convert to ISO 8601 string"
+  }
+
+  type_method DateTime.year {
+    signature: "(): int"
+    doc: "Get year"
+  }
+
+  type_method DateTime.month {
+    signature: "(): int"
+    doc: "Get month (1-12)"
+  }
+
+  type_method DateTime.day {
+    signature: "(): int"
+    doc: "Get day (1-31)"
+  }
+
+  type_method DateTime.hour {
+    signature: "(): int"
+    doc: "Get hour (0-23)"
+  }
+
+  type_method DateTime.minute {
+    signature: "(): int"
+    doc: "Get minute (0-59)"
+  }
+
+  type_method DateTime.second {
+    signature: "(): int"
+    doc: "Get second (0-59)"
+  }
+
+  type_method DateTime.millisecond {
+    signature: "(): int"
+    doc: "Get millisecond (0-999)"
+  }
+
+  type_method DateTime.weekday {
+    signature: "(): int"
+    doc: "Get weekday (0=Sunday)"
+  }
+
+  type_method DateTime.yearday {
+    signature: "(): int"
+    doc: "Get day of year (1-366)"
+  }
+
+  type_method DateTime.timestamp {
+    signature: "(): int"
+    doc: "Get Unix timestamp (seconds)"
+  }
+
+  type_method DateTime.add {
+    signature: "(amount: int, unit: string): DateTime"
+    doc: "Add duration to datetime"
+  }
+
+  type_method DateTime.diff {
+    signature: "(other: DateTime, unit?: string): int"
+    doc: "Difference between datetimes"
+  }
+
+  type_method DateTime.toUTC {
+    signature: "(): DateTime"
+    doc: "Convert to UTC"
+  }
+
+  type_method DateTime.toLocal {
+    signature: "(): DateTime"
+    doc: "Convert to local time"
+  }
+
+  type_method DateTime.isBefore {
+    signature: "(other: DateTime): bool"
+    doc: "Check if before other datetime"
+  }
+
+  type_method DateTime.isAfter {
+    signature: "(other: DateTime): bool"
+    doc: "Check if after other datetime"
+  }
+
+  type_method DateTime.equals {
+    signature: "(other: DateTime): bool"
+    doc: "Check if equal to other datetime"
+  }
+
+  type_method DateTime.isLeapYear {
+    signature: "(): bool"
+    doc: "Check if leap year"
+  }
+
+  type_method DateTime.daysInMonth {
+    signature: "(): int"
+    doc: "Get days in current month"
+  }
 }
