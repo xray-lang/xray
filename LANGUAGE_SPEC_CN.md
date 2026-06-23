@@ -3608,7 +3608,7 @@ GoOption ::= 'name' ':' StringLiteral
 // 形式 1：调用一个已声明的函数
 let t1 = go worker(0, channel)
 
-// 形式 2：调用一个 lambda 字面量（用于内联逻辑+捕获参数）
+// 形式 2：调用一个 lambda 字面量（用于内联逻辑 + 显式传参）
 let t2 = go fn(d: Json) -> int {
     return d.value * 2
 }(payload)
@@ -3631,12 +3631,22 @@ let task = go fn(d: Json) -> int {
 }(move data)        // 把 data 的所有权移交给协程；之后 data 不可访问
 ```
 
+**块形式限制**：`go { ... }` 是隐式零参 lambda，没有参数列表，也不会绕过并发捕获规则。块内不能捕获普通可变局部；可直接使用的外部状态必须是 `shared const`、全局不可变状态，或显式并发安全对象（如 Channel / Atomic）。需要把局部数据传入协程时，使用带参数的 lambda / 函数调用形式：
+
+```xray
+let n = 10
+let task = go fn(x: int) -> int {
+    return x + 1
+}(n)
+```
+
 **语义**：
 - 每个 `go` 表达式都返回一个 `Task<T>`，其中 `T` 是被调函数的返回类型；返回 `()` 的函数对应 `Task<null>`。
 - 协程在闲置 worker 线程中调度（M:N）。
 - `go(name: ...)` 只设置调试名称，不影响调度顺序。
 - 协程内**未捕获**异常存在 `Task` 中，由 `await` 时重抛。
 - 普通局部变量（非 `shared`、非 `move`）传给 `go` 时**自动深拷贝**；`shared const` 零拷贝共享；`shared let` 必须 `move`。
+- `go { ... }` 块形式等价于零参 lambda，只能使用符合协程捕获规则的外部状态；传参请用 `go fn(x: T) -> R { ... }(arg)` 或 `go worker(arg)`。
 
 ### 10.3 `await` — 等待结果
 
@@ -3678,6 +3688,7 @@ let firstOk = await anySuccess [t1, t2, t3]
   - `await any` 仅当**全部失败**时抛异常；只要有一个完成，返回该任务结果。
   - `await anySuccess` 类似 `await any`，但**跳过**抛异常的任务，只等成功完成的。
 - `all` / `any` / `anySuccess` 在 `await` 后面是**上下文关键字**，仅在此位置生效。
+- `await all` 的输入必须是同构任务集合：每个元素都必须是同一静态 `Task<T>` 类型，结果类型为 `Array<T>`。异构任务（如 `Task<int>` 与 `Task<string>` 混合）不会自动擦除或装箱；需要逐个 `await`，或在任务内部显式转换为统一 enum / union / Json 结果类型。
 
 ### 10.4 `Task<T>` 句柄
 

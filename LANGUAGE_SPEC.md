@@ -3619,7 +3619,7 @@ GoOption ::= 'name' ':' StringLiteral
 // Form 1: call an existing function
 let t1 = go worker(0, channel)
 
-// Form 2: call a lambda literal (inline logic + captured arguments)
+// Form 2: call a lambda literal (inline logic + explicit arguments)
 let t2 = go fn(d: Json) -> int {
     return d.value * 2
 }(payload)
@@ -3642,12 +3642,22 @@ let task = go fn(d: Json) -> int {
 }(move data)        // transfer data ownership to the coroutine; data is unusable afterwards
 ```
 
+**Block-form restriction**: `go { ... }` is an implicit zero-argument lambda. It has no parameter list and does not bypass concurrency capture rules. The block may not capture ordinary mutable locals; external state used directly inside the block must be `shared const`, immutable global state, or an explicitly concurrency-safe object such as a Channel or Atomic. To pass local data into a coroutine, use the lambda-call or function-call form:
+
+```xray
+let n = 10
+let task = go fn(x: int) -> int {
+    return x + 1
+}(n)
+```
+
 **Semantics**:
 - Every `go` expression returns a `Task<T>`, where `T` is the callee's return type; functions returning `()` correspond to `Task<null>`.
 - Coroutines are scheduled on idle worker threads (M:N).
 - `go(name: ...)` only sets the debugging name and does not affect scheduling order.
 - Uncaught exceptions are stored in the `Task` and rethrown when `await` is called.
 - Plain locals (not `shared`, not `move`d) passed to `go` are **deep-copied automatically**; `shared const` is shared zero-copy; `shared let` must be `move`d.
+- The `go { ... }` block form is equivalent to a zero-argument lambda and may use only external state that satisfies the coroutine capture rules; pass data with `go fn(x: T) -> R { ... }(arg)` or `go worker(arg)`.
 
 ### 10.3 `await` — wait for a result
 
@@ -3689,6 +3699,7 @@ let firstOk = await anySuccess [t1, t2, t3]
   - `await any` throws only when **every** task fails; if any one completes, its result is returned.
   - `await anySuccess` is similar to `await any` but **skips** throwing tasks, awaiting only the first successful one.
 - `all` / `any` / `anySuccess` are **contextual keywords** after `await`; they apply only in this position.
+- The input to `await all` must be homogeneous: every element must have the same static `Task<T>` type, and the result type is `Array<T>`. Heterogeneous tasks such as mixed `Task<int>` and `Task<string>` are not automatically erased or boxed; await them individually, or convert inside each task to a shared enum / union / Json result type.
 
 ### 10.4 `Task<T>` handle
 
