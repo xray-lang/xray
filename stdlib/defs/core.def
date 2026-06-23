@@ -2546,6 +2546,43 @@ module log {
     layer: "system"
   }
 
+  native_class Logger {
+    super_slot: "objectClass"
+    core_slot: "loggerClass"
+    native_body: "g_logger_body_desc"
+    flags: "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY"
+  }
+
+  class_method Logger.debug {
+    vm: "xr_logger_debug"
+    argc: -1
+  }
+
+  class_method Logger.info {
+    vm: "xr_logger_info"
+    argc: -1
+  }
+
+  class_method Logger.warn {
+    vm: "xr_logger_warn"
+    argc: -1
+  }
+
+  class_method Logger.error {
+    vm: "xr_logger_error"
+    argc: -1
+  }
+
+  class_method Logger.fatal {
+    vm: "xr_logger_fatal"
+    argc: -1
+  }
+
+  class_method Logger.child {
+    vm: "xr_logger_child"
+    argc: -1
+  }
+
   const DEBUG {
     signature: ": int"
     doc: "Debug log level"
