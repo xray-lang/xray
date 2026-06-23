@@ -442,9 +442,16 @@ XR_FUNC void xi_lower_insert_err_check(XiLower *l, struct AstNode *node) {
         check->line = node ? (uint32_t) node->line : 0;
 
         XiBlock *catch_blk = l->catch_targets[l->try_depth - 1];
+        XiBlock *err_blk = xi_block_new(l->func);
         XiBlock *cont = xi_block_new(l->func);
 
-        xi_block_set_if(l->cur_block, check, catch_blk, cont);
+        xi_block_set_if(l->cur_block, check, err_blk, cont);
+        xi_lower_braun_seal(l, err_blk);
+        l->cur_block = err_blk;
+        xi_lower_defer_run_to_depth(l, l->catch_defer_depths[l->try_depth - 1],
+                                    node ? node->line : 0);
+        xi_block_set_jump(l->cur_block, catch_blk);
+
         xi_lower_braun_seal(l, cont);
         l->cur_block = cont;
     } else {

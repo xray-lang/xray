@@ -1,0 +1,93 @@
+// anchor: defer-block-scope-exit-edges
+// D22: a defer belongs to the nearest real block and runs LIFO on every exit
+// edge of that block: fallthrough, return, break, continue, value-return error,
+// and caught panic unwind. Function-body top-level defer remains the root scope.
+
+enum BlockErr {
+    Msg(s: string)
+}
+
+fn fail() {
+    throw BlockErr.Msg("bad")
+}
+
+fn plain_block() {
+    print("plain-start")
+    {
+        defer print("plain-defer")
+        print("plain-body")
+    }
+    print("plain-after")
+}
+
+fn return_case(n: int) -> string {
+    defer print("return-root")
+    {
+        defer print("return-inner")
+        if (n > 0) {
+            return "ret"
+        }
+        print("return-fall")
+    }
+    print("return-after")
+    return "end"
+}
+
+fn break_continue_case() {
+    for (i in 0..4) {
+        defer print("break-defer " + string(i))
+        if (i == 1) {
+            print("break-now")
+            break
+        }
+        print("break-body " + string(i))
+    }
+    print("after-break")
+
+    for (i in 0..3) {
+        defer print("continue-defer " + string(i))
+        if (i == 1) {
+            print("continue-now")
+            continue
+        }
+        print("continue-body " + string(i))
+    }
+    print("after-continue")
+}
+
+fn value_error_case() {
+    defer print("value-root")
+    try {
+        defer print("value-try")
+        fail()
+        print("value-unreachable")
+    } catch (e) {
+        print("value-caught")
+    }
+    print("value-after")
+}
+
+fn panic_case() {
+    defer print("panic-root")
+    try {
+        defer print("panic-try")
+        let z = 0
+        let q = 10 / z
+        print(q)
+    } catch panic (p) {
+        print("panic-caught")
+    }
+    print("panic-after")
+}
+
+plain_block()
+print(return_case(1))
+print("--")
+print(return_case(0))
+print("--")
+break_continue_case()
+print("--")
+value_error_case()
+print("--")
+panic_case()
+print("done")

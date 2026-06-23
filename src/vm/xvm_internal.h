@@ -270,6 +270,7 @@ XR_FUNC XrVMResult xr_vm_interpret_proto_isolate(XrayIsolate *isolate, XrProto *
 // Exception handling
 XR_FUNC void xr_vm_add_stacktrace(XrayIsolate *isolate, XrValue exception);
 XR_FUNC void xr_vm_throw_exception(XrayIsolate *isolate, XrValue exception);
+XR_FUNC void xr_vm_run_defers_to_mark(XrayIsolate *isolate, XrVMContext *ctx, int mark);
 
 /*
  * Single-call throw helper: records the full call chain into

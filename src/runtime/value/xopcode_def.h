@@ -295,6 +295,8 @@
     _(CHAN_CLOSE, FMT_A, KOP_A_USE, "R[A].close()")                                                \
     _(CHAN_IS_CLOSED, FMT_AB, KOP_AB_UNARY, "R[A] = R[B].isClosed()")                              \
     _(DEFER, FMT_AB, KOP_AB_BASE_LIT, "defer R[A](args R[A+1..A+B-1])")                            \
+    _(DEFER_MARK, FMT_A, KOP_A_LOAD, "R[A] = defer mark")                                          \
+    _(DEFER_RUN_TO, FMT_A, KOP_A_USE, "run defers down to mark R[A]")                              \
     _(BYTES_NEW, FMT_AB, KOP_AB_NEW_LIT, "R[A] = Bytes(B args)")                                   \
     _(SCOPE_ENTER, FMT_A, KOP_A_LIT, "enter scope, A=mode(0=wait,1=linked,2=supervisor)")          \
     _(SCOPE_EXIT, FMT_AB, KOP_AB_NEW_LIT, "exit scope, A=mode, B=result_reg")                      \

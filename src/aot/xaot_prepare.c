@@ -160,8 +160,8 @@ static void record_array_cache_stats(XaotPrepareStats *stats, const XaotArrayCac
 
 static const XiValue *unwrap_identity_value(const XiValue *v) {
     while (v &&
-           (v->op == XI_BOX || v->op == XI_UNBOX ||
-            (v->op == XI_COPY && !xi_copy_is_value_clone(v)) || v->op == XI_MOVE) &&
+           (v->op == XI_BOX || v->op == XI_UNBOX || xi_copy_is_identity_alias(v) ||
+            v->op == XI_MOVE) &&
            v->nargs >= 1) {
         v = v->args[0];
     }

@@ -147,8 +147,8 @@ static const char *local_ctype_str(const XiValue *v) {
 
 static const XiValue *cg_unwrap_identity_value(const XiValue *v) {
     while (v &&
-           (v->op == XI_BOX || v->op == XI_UNBOX ||
-            (v->op == XI_COPY && !xi_copy_is_value_clone(v)) || v->op == XI_MOVE) &&
+           (v->op == XI_BOX || v->op == XI_UNBOX || xi_copy_is_identity_alias(v) ||
+            v->op == XI_MOVE) &&
            v->nargs >= 1) {
         v = v->args[0];
     }
@@ -231,9 +231,7 @@ static bool cg_shared_slot_is_module_import(const XiFunc *f, int slot, const cha
 }
 
 static bool cg_value_is_module_import(const XiFunc *f, const XiValue *v, const char *module_name) {
-    while (v &&
-           (v->op == XI_BOX || v->op == XI_UNBOX ||
-            (v->op == XI_COPY && !xi_copy_is_value_clone(v))) &&
+    while (v && (v->op == XI_BOX || v->op == XI_UNBOX || xi_copy_is_identity_alias(v)) &&
            v->nargs >= 1)
         v = v->args[0];
     if (cg_import_ref_is_module(v, module_name))
@@ -2635,8 +2633,21 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
 
 /* Emit phi assignments for all phis in `target` whose predecessor
  * at index `pred_idx` is `pred_blk`. Called before the jump/branch. */
+static bool cg_block_has_defer_run_to(const XiBlock *blk) {
+    if (!blk)
+        return false;
+    for (uint32_t i = 0; i < blk->nvalues; i++) {
+        const XiValue *v = blk->values[i];
+        if (v && v->op == XI_DEFER_RUN_TO)
+            return true;
+    }
+    return false;
+}
+
 static void emit_phi_copies(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiBlock *target,
                             uint16_t pred_idx) {
+    const XiBlock *pred = (target && pred_idx < target->npreds) ? target->preds[pred_idx] : NULL;
+    bool pred_ran_defer = cg_block_has_defer_run_to(pred);
     for (const XiPhi *phi = target->phis; phi; phi = phi->next) {
         if (!cg_phi_has_storage(phi))
             continue;
@@ -2649,8 +2660,14 @@ static void emit_phi_copies(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
             fprintf(out, "    ");
             emit_phi_ref(ctx, out, phi);
             fprintf(out, " = ");
-            emit_value_as_rep_ctx(ctx, out, phi->value.args[pred_idx],
-                                  cg_value_plan_storage_rep(ctx, &phi->value));
+            if (pred_ran_defer && cg_value_has_cell(ctx, &phi->value)) {
+                char cell_expr[64];
+                snprintf(cell_expr, sizeof(cell_expr), "cell_%u", (unsigned) phi->value.var_id);
+                emit_cell_get_for_rep(out, &phi->value, cell_expr);
+            } else {
+                emit_value_as_rep_ctx(ctx, out, phi->value.args[pred_idx],
+                                      cg_value_plan_storage_rep(ctx, &phi->value));
+            }
             fprintf(out, ";\n");
             emit_debug_source_var_sync(ctx, out, f, &phi->value);
         }

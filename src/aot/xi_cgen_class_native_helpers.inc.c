@@ -1214,7 +1214,7 @@ static bool cg_class_native_set_field_value_is_elided(XiCgenCtx *ctx, const XiFu
 
 static bool cg_class_native_is_identity_alias(const XiValue *v) {
     return v && (v->op == XI_BOX || v->op == XI_UNBOX || v->op == XI_MOVE ||
-                 (v->op == XI_COPY && !xi_copy_is_value_clone(v)));
+                 xi_copy_is_identity_alias(v));
 }
 
 static const XiValue *cg_class_native_unwrap_receiver_alias(const XiValue *v) {
@@ -1708,8 +1708,7 @@ static const XiValue *cg_class_native_trace_ctor_origin(XiCgenCtx *ctx, const Xi
                                                         const XiValue *v, int depth) {
     if (!v || depth > 8)
         return NULL;
-    while (v && ((v->op == XI_COPY && !xi_copy_is_value_clone(v)) || v->op == XI_MOVE) &&
-           v->nargs >= 1) {
+    while (v && (xi_copy_is_identity_alias(v) || v->op == XI_MOVE) && v->nargs >= 1) {
         if (++depth > 8)
             return NULL;
         v = v->args[0];
@@ -1763,8 +1762,7 @@ static bool cg_class_native_ctor_uses_safe(XiCgenCtx *ctx, const XiFunc *f, cons
                         return false;
                     continue;
                 }
-                if (((v->op == XI_COPY && !xi_copy_is_value_clone(v)) || v->op == XI_MOVE) &&
-                    ai == 0) {
+                if ((xi_copy_is_identity_alias(v) || v->op == XI_MOVE) && ai == 0) {
                     if (cg_class_native_trace_ctor_origin(ctx, f, v, depth + 1) != origin)
                         return false;
                     if (!cg_class_native_ctor_uses_safe(ctx, f, v, origin, depth + 1))

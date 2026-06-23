@@ -1768,10 +1768,11 @@ fn process() {
 ```
 
 **Semantics**:
-- Runs at the **end of the function scope** (not the block scope, unlike Swift).
-- **LIFO**: multiple `defer` statements run in reverse declaration order.
-- **Always executes**: runs on normal `return`, on an error propagating through the value-return channel, and on a cross-frame panic unwind.
-- `defer` is Xray's only deterministic-cleanup mechanism (replacing other languages' `finally`): it is bound to the function scope, not to a block.
+- A `defer` belongs to the nearest enclosing real block `{ ... }`. A function body is a block, so a top-level function-body `defer` still runs before the function exits.
+- **LIFO**: multiple `defer` statements in the same block run in reverse declaration order.
+- **Always executes**: runs when the owning block falls through or exits by `break`, `continue`, `return`, value-error propagation, or panic unwinding.
+- A `defer` inside a loop body runs at the end of each iteration, not at the end of the function.
+- `defer` is Xray's only deterministic-cleanup mechanism (replacing other languages' `finally`): it is bound to lexical block exits, not to a single function tail.
 - An error thrown inside a `defer` body **replaces** any in-flight error (Go-style semantics).
 
 ### 4.10 Built-in Print Functions
@@ -3242,7 +3243,7 @@ User code generally does not construct `Exception` directly — use `throw <enum
 
 ### 8.3 `defer` — resource cleanup
 
-`defer` is a function-scoped cleanup statement guaranteed to run when the function exits (whether by normal return, `throw`, or panic). Syntax: see §4.9.
+`defer` is a block-scoped cleanup statement guaranteed to run when the owning block exits (whether by fallthrough, `break` / `continue`, `return`, `throw`, or panic). Syntax: see §4.9.
 
 ```xray
 fn fetch(url: string) -> string {
@@ -3258,9 +3259,10 @@ fn fetch(url: string) -> string {
 ```
 
 **Rules**:
-- `defer` is function-scoped (Go model), runs when the function exits in **LIFO** order
-- Multiple `defer`s in the same function run in reverse order
-- `defer` executes on `throw`, `return`, and panic
+- `defer` belongs to the nearest real `{}` block; a top-level function-body `defer` still runs when the function exits
+- Multiple `defer`s in the same block run in **LIFO** order
+- `defer` executes on block fallthrough, `break`, `continue`, `return`, `throw`, and panic unwinding
+- A `defer` in a loop body runs as each iteration exits
 - `defer` blocks should not throw errors (behaviour is undefined)
 
 ### 8.4 Optional and error handling

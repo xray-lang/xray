@@ -174,6 +174,23 @@ XR_FUNC void xi_emit_defer(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     emit_inst(ctx, CREATE_ABC(OP_DEFER, dst, nargs, 0));
 }
 
+XR_FUNC void xi_emit_defer_mark(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    (void) v;
+    emit_inst(ctx, CREATE_ABC(OP_DEFER_MARK, dst, 0, 0));
+}
+
+XR_FUNC void xi_emit_defer_run_to(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    (void) dst;
+    if (v->nargs < 1) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+    XiEmitReg mark = reg_of(ctx, v->args[0]);
+    if (ctx->status != XI_EMIT_OK)
+        return;
+    emit_inst(ctx, CREATE_ABC(OP_DEFER_RUN_TO, mark, 0, 0));
+}
+
 /* ========== Coroutine ========== */
 
 /* Go: spawn coroutine, return Task handle for await.

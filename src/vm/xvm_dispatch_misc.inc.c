@@ -67,6 +67,23 @@ vmcase(OP_DEFER) {
     vmbreak;
 }
 
+vmcase(OP_DEFER_MARK) {
+    int a = GETARG_A(i);
+    R(a) = xr_int(vm_ctx->defer_count);
+    vmbreak;
+}
+
+vmcase(OP_DEFER_RUN_TO) {
+    int a = GETARG_A(i);
+    int mark = XR_IS_INT(R(a)) ? (int) XR_TO_INT(R(a)) : 0;
+    if (vm_ctx->defer_count > mark) {
+        savepc();
+        xr_vm_run_defers_to_mark(isolate, vm_ctx, mark);
+        VM_REFRESH_FRAME_CACHE();
+    }
+    vmbreak;
+}
+
 vmcase(OP_BYTES_NEW) {
     /* R[A] = Bytes(R[A+1..A+B]) - create Array<uint8>
      * A = result register

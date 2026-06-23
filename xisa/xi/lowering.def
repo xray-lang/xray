@@ -604,6 +604,18 @@
   :vm-bytecode (driver xi_emit_defer)
   :aot-c-stmt (driver xicgen_stmt_defer))
 
+(lower xi.defer.mark
+  :match ()
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_defer_mark)
+  :aot-c (driver xicgen_defer_mark))
+
+(lower xi.defer.run.to
+  :match ()
+  :required-targets (vm-bytecode aot-c-stmt)
+  :vm-bytecode (driver xi_emit_defer_run_to)
+  :aot-c-stmt (driver xicgen_stmt_defer_run_to))
+
 (lower xi.json.new
   :match ()
   :required-targets (vm-bytecode aot-c)

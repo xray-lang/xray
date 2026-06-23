@@ -39,6 +39,7 @@ static void xi_lower_loop_push(XiLower *l, XiLoopTarget *target, const char *lab
     target->label = label;
     target->break_target = break_target;
     target->continue_target = continue_target;
+    target->defer_scope_depth = l->defer_scope_depth;
     target->prev = l->loop_targets;
     l->loop_targets = target;
     l->break_target = break_target;
@@ -115,6 +116,74 @@ static int stmt_print_slot_hint_for_value(XiValue *v) {
     if (v->type->kind == XR_KIND_INT)
         return 1;
     return 0;
+}
+
+static void lower_emit_defer_run_to_mark(XiLower *l, XiValue *mark, int line) {
+    if (!l || !l->cur_block || !mark)
+        return;
+    XiValue *v = xi_value_new(l->func, l->cur_block, XI_DEFER_RUN_TO, l->type_unit, 1);
+    if (!v)
+        return;
+    v->args[0] = mark;
+    v->flags |= XI_FLAG_SIDE_EFFECT;
+    v->line = (uint32_t) line;
+}
+
+XR_FUNC void xi_lower_defer_scope_push(XiLower *l) {
+    XR_DCHECK(l != NULL, "xi_lower_defer_scope_push: NULL lowerer");
+    XR_CHECK(l->defer_scope_depth < XI_MAX_DEFER_SCOPE_NESTING,
+             "defer scope nesting limit exceeded");
+    l->defer_scopes[l->defer_scope_depth].mark = NULL;
+    l->defer_scope_depth++;
+}
+
+XR_FUNC void xi_lower_defer_scope_pop_normal(XiLower *l, int line) {
+    XR_DCHECK(l != NULL, "xi_lower_defer_scope_pop_normal: NULL lowerer");
+    if (l->defer_scope_depth <= 0)
+        return;
+    XiDeferScope *scope = &l->defer_scopes[l->defer_scope_depth - 1];
+    if (l->cur_block && scope->mark)
+        lower_emit_defer_run_to_mark(l, scope->mark, line);
+    l->defer_scope_depth--;
+}
+
+XR_FUNC void xi_lower_defer_run_to_depth(XiLower *l, int target_depth, int line) {
+    XR_DCHECK(l != NULL, "xi_lower_defer_run_to_depth: NULL lowerer");
+    if (!l->cur_block)
+        return;
+    if (target_depth < 0)
+        target_depth = 0;
+    if (target_depth > l->defer_scope_depth)
+        target_depth = l->defer_scope_depth;
+    for (int i = l->defer_scope_depth - 1; i >= target_depth; i--) {
+        if (l->defer_scopes[i].mark)
+            lower_emit_defer_run_to_mark(l, l->defer_scopes[i].mark, line);
+    }
+}
+
+XR_FUNC bool xi_lower_defer_has_active_mark(XiLower *l) {
+    if (!l)
+        return false;
+    for (int i = l->defer_scope_depth - 1; i >= 0; i--) {
+        if (l->defer_scopes[i].mark)
+            return true;
+    }
+    return false;
+}
+
+static XiValue *lower_defer_scope_ensure_mark(XiLower *l, int line) {
+    if (l->defer_scope_depth <= 0)
+        xi_lower_defer_scope_push(l);
+    XiDeferScope *scope = &l->defer_scopes[l->defer_scope_depth - 1];
+    if (scope->mark)
+        return scope->mark;
+    XiValue *mark = xi_value_new(l->func, l->cur_block, XI_DEFER_MARK, l->type_int, 0);
+    if (!mark)
+        return NULL;
+    mark->flags |= XI_FLAG_SIDE_EFFECT;
+    mark->line = (uint32_t) line;
+    scope->mark = mark;
+    return mark;
 }
 
 static bool stmt_value_is_fresh_value_struct(XiValue *v) {
@@ -1812,6 +1881,7 @@ XR_FUNC void xi_lower_reprop_error(XiLower *l, XiValue *val, AstNode *node) {
             set->flags |= XI_FLAG_SIDE_EFFECT;
             set->line = (uint32_t) node->line;
         }
+        xi_lower_defer_run_to_depth(l, l->catch_defer_depths[l->try_depth - 1], node->line);
         XiBlock *catch_blk = l->catch_targets[l->try_depth - 1];
         xi_block_set_jump(l->cur_block, catch_blk);
         l->cur_block = NULL;
@@ -1965,6 +2035,7 @@ static void lower_try_catch_impl(XiLower *l, TryCatchNode *tc, AstNode *node) {
      * xi_lower_insert_err_check, which consult try_depth/catch_targets). */
     if (has_err) {
         l->catch_targets[l->try_depth] = catch_blk;
+        l->catch_defer_depths[l->try_depth] = l->defer_scope_depth;
         l->try_depth++;
     }
     l->cur_block = try_blk;
@@ -2072,6 +2143,9 @@ static void lower_defer(XiLower *l, AstNode *node) {
      * the backend invokes it with no arguments at scope exit. */
     XiValue *callee = xi_lower_expr(l, expr);
     if (!callee || !l->cur_block)
+        return;
+
+    if (!lower_defer_scope_ensure_mark(l, node->line))
         return;
 
     XiValue *v = xi_value_new(l->func, l->cur_block, XI_DEFER, l->type_unit, 1);
@@ -2474,6 +2548,10 @@ static void lower_return(XiLower *l, AstNode *node) {
         return;
     }
 
+    if (xi_lower_defer_has_active_mark(l) && val)
+        val->flags &= (uint16_t) ~XI_FLAG_TAIL;
+    xi_lower_defer_run_to_depth(l, 0, node->line);
+
     int ret_line = node->line;
     if (ret_line <= 0 && ret->value_count == 1 && ret->values[0])
         ret_line = ret->values[0]->line;
@@ -2487,7 +2565,12 @@ static void lower_block(XiLower *l, AstNode *node) {
     /* No scope push/pop needed: the analyzer assigns unique symbol_ids
      * to variables in different scopes, so shadowed variables naturally
      * get distinct var_id slots in the Braun SSA. */
+    bool owns_defer_scope = !node->as.block.is_synthetic_defer_capture;
+    if (owns_defer_scope)
+        xi_lower_defer_scope_push(l);
     lower_stmts(l, node->as.block.statements, node->as.block.count);
+    if (owns_defer_scope)
+        xi_lower_defer_scope_pop_normal(l, node->line);
 }
 
 static void lower_if(XiLower *l, AstNode *node) {
@@ -2630,6 +2713,7 @@ static void lower_for(XiLower *l, AstNode *node) {
 static void lower_break(XiLower *l, AstNode *node) {
     XiLoopTarget *target = xi_lower_loop_find(l, node ? node->as.break_stmt.label : NULL);
     if (target && target->break_target && l->cur_block) {
+        xi_lower_defer_run_to_depth(l, target->defer_scope_depth, node ? node->line : 0);
         xi_block_set_jump(l->cur_block, target->break_target);
         l->cur_block = NULL;
     }
@@ -2638,6 +2722,7 @@ static void lower_break(XiLower *l, AstNode *node) {
 static void lower_continue(XiLower *l, AstNode *node) {
     XiLoopTarget *target = xi_lower_loop_find(l, node ? node->as.continue_stmt.label : NULL);
     if (target && target->continue_target && l->cur_block) {
+        xi_lower_defer_run_to_depth(l, target->defer_scope_depth, node ? node->line : 0);
         xi_block_set_jump(l->cur_block, target->continue_target);
         l->cur_block = NULL;
     }

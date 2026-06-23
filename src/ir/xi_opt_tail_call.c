@@ -38,7 +38,7 @@ static XiFunc *resolve_callee(const XiValue *v) {
         return NULL;
     if (v->op == XI_CLOSURE_NEW && v->aux)
         return (XiFunc *) v->aux;
-    if (v->op == XI_COPY && v->nargs >= 1)
+    if (xi_copy_is_identity_alias(v) && v->nargs >= 1)
         return resolve_callee(v->args[0]);
     return NULL;
 }

@@ -439,49 +439,81 @@ void xr_vm_add_stacktrace(XrayIsolate *isolate, XrValue exception) {
 }
 
 /*
-** Run defer entries belonging to one frame in LIFO order.
+** Run VM defer entries in LIFO order down to an exact stack mark.
 **
-** Frames being unwound by an exception still have to honour their
-** registered defer closures — the spec guarantees defers execute
-** whenever their scope exits, including via throw. The normal-return
-** path in xvm_dispatch_call.inc.c runs this loop inline for the
-** topmost frame; on unwind we run it here for every frame between the
-** throw site and the catch handler.
+** Marks are value indexes in ctx->defer_stack.  The bytecode lowering emits
+** OP_DEFER_MARK at lexical block ownership points and OP_DEFER_RUN_TO on every
+** block exit edge; frame return/unwind uses the same helper with the frame's
+** entry mark.  Entries are variable-width [closure, nargs, args...], so the
+** helper scans forward to discover starts and executes the last batch in
+** reverse.  Repeating that batch keeps correctness even when a stress case has
+** more defer entries than the fixed scratch array.
+*/
+XR_FUNC void xr_vm_run_defers_to_mark(XrayIsolate *isolate, XrVMContext *ctx, int mark) {
+    if (!ctx || !ctx->defer_stack)
+        return;
+    if (mark < 0)
+        mark = 0;
+    if (mark > ctx->defer_count)
+        mark = ctx->defer_count;
+
+    while (ctx->defer_count > mark) {
+        int entries[XR_DEFER_ENTRIES_MAX];
+        int total_entries = 0;
+        int pos = mark;
+        int end = ctx->defer_count;
+
+        while (pos < end) {
+            if (pos + 1 >= end)
+                break;
+            int nargs = (int) XR_TO_INT(ctx->defer_stack[pos + 1]);
+            if (nargs < 0 || pos + 2 + nargs > end)
+                break;
+            entries[total_entries % XR_DEFER_ENTRIES_MAX] = pos;
+            total_entries++;
+            pos += 2 + nargs;
+        }
+
+        if (total_entries == 0 || pos != end) {
+            ctx->defer_count = mark;
+            return;
+        }
+
+        int batch_count =
+            total_entries < XR_DEFER_ENTRIES_MAX ? total_entries : XR_DEFER_ENTRIES_MAX;
+        int first_total_index = total_entries - batch_count;
+        int batch_starts[XR_DEFER_ENTRIES_MAX];
+        for (int i = 0; i < batch_count; i++) {
+            batch_starts[i] = entries[(first_total_index + i) % XR_DEFER_ENTRIES_MAX];
+        }
+
+        for (int e = batch_count - 1; e >= 0; e--) {
+            int start = batch_starts[e];
+            XrValue closure_val = ctx->defer_stack[start];
+            int nargs = (int) XR_TO_INT(ctx->defer_stack[start + 1]);
+            if (nargs > XR_DEFER_ARGS_MAX)
+                nargs = XR_DEFER_ARGS_MAX;
+            XrValue defer_args[XR_DEFER_ARGS_MAX];
+            for (int j = 0; j < nargs; j++) {
+                defer_args[j] = ctx->defer_stack[start + 2 + j];
+            }
+            if (xr_value_is_closure(closure_val)) {
+                XrClosure *closure = xr_value_to_closure(closure_val);
+                xr_vm_call_closure(isolate, closure, defer_args, nargs);
+            }
+        }
+
+        ctx->defer_count = batch_starts[0];
+    }
+}
+
+/*
+** Run defer entries belonging to one frame in LIFO order.
 */
 static void run_defers_for_frame(XrayIsolate *isolate, XrVMContext *ctx, int frame_index) {
-    if (!ctx->defer_stack || !ctx->defer_frame_marks || frame_index < 0)
+    if (!ctx->defer_frame_marks || frame_index < 0)
         return;
-    int frame_defer_start = ctx->defer_frame_marks[frame_index];
-    if (ctx->defer_count <= frame_defer_start)
-        return;
-
-    int entries[XR_DEFER_ENTRIES_MAX];
-    int entry_count = 0;
-    int pos = frame_defer_start;
-    int end = ctx->defer_count;
-    while (pos < end && entry_count < XR_DEFER_ENTRIES_MAX) {
-        entries[entry_count++] = pos;
-        int nargs = (int) XR_TO_INT(ctx->defer_stack[pos + 1]);
-        pos += 2 + nargs;
-    }
-
-    for (int e = entry_count - 1; e >= 0; e--) {
-        int start = entries[e];
-        XrValue closure_val = ctx->defer_stack[start];
-        int nargs = (int) XR_TO_INT(ctx->defer_stack[start + 1]);
-        if (nargs > XR_DEFER_ARGS_MAX)
-            nargs = XR_DEFER_ARGS_MAX;
-        XrValue defer_args[XR_DEFER_ARGS_MAX];
-        for (int j = 0; j < nargs; j++) {
-            defer_args[j] = ctx->defer_stack[start + 2 + j];
-        }
-        if (xr_value_is_closure(closure_val)) {
-            XrClosure *closure = xr_value_to_closure(closure_val);
-            xr_vm_call_closure(isolate, closure, defer_args, nargs);
-        }
-    }
-
-    ctx->defer_count = frame_defer_start;
+    xr_vm_run_defers_to_mark(isolate, ctx, ctx->defer_frame_marks[frame_index]);
 }
 
 /*
@@ -516,14 +548,16 @@ void xr_vm_throw_exception(XrayIsolate *isolate, XrValue exception) {
 
         ctx->stack_top = ctx->stack + handler->stack_size;
 
-        /* Run defers for frames above the handler (LIFO). Defers on the
-         * handler's own frame stay: they fire when that frame returns
-         * after the catch block completes. */
+        /* Run defers for frames above the handler (LIFO), then run the handler
+         * frame back to the defer count recorded at OP_TRY. That same-frame
+         * cleanup is what makes block-scoped defers inside try execute before
+         * control reaches catch. */
         for (int fi = ctx->frame_count - 1; fi >= handler->frame_count; fi--) {
             run_defers_for_frame(isolate, ctx, fi);
         }
 
         ctx->frame_count = handler->frame_count;
+        xr_vm_run_defers_to_mark(isolate, ctx, handler->defer_count_mark);
 
         if (ctx->frame_count > 0 && handler->catch_offset > 0) {
             XrBcCallFrame *frame = &ctx->frames[ctx->frame_count - 1];

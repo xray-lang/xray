@@ -85,6 +85,7 @@
     X(SLICE, "xi.slice", xicgen_slice) \
     X(RANGE, "xi.range", xicgen_range) \
     X(CHAN_RECV_STATUS, "xi.chan.recv.status", xicgen_chan_recv_status) \
+    X(DEFER_MARK, "xi.defer.mark", xicgen_defer_mark) \
     X(JSON_NEW, "xi.json.new", xicgen_json_new) \
     X(JSON_INIT_F, "xi.json.init.f", xicgen_json_init_f) \
     X(JSON_GET_F, "xi.json.get.f", xicgen_json_get_f) \

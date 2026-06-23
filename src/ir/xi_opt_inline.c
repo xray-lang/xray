@@ -151,7 +151,7 @@ static XiFunc *resolve_callee(const XiFunc *caller, const XiValue *callee_val) {
     if (callee_val->op == XI_GET_SHARED)
         return resolve_shared_slot_callee(caller, callee_val->aux_int);
     /* Through a copy chain */
-    if (callee_val->op == XI_COPY && callee_val->nargs >= 1)
+    if (xi_copy_is_identity_alias(callee_val) && callee_val->nargs >= 1)
         return resolve_callee(caller, callee_val->args[0]);
     return NULL;
 }

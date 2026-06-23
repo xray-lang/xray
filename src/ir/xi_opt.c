@@ -68,7 +68,7 @@ static bool is_const_bool(const XiValue *v) {
 }
 
 static const XiValue *const_source_value(const XiValue *v) {
-    while (v && v->op == XI_COPY && !xi_copy_is_value_clone(v) && v->nargs >= 1)
+    while (v && xi_copy_is_identity_alias(v) && v->nargs >= 1)
         v = v->args[0];
     return v;
 }
@@ -488,7 +488,7 @@ XR_FUNC XiPassChange xi_opt_const_fold(XiFunc *f) {
  * domains, causing loop-carried variables to share a physical
  * register and corrupt each other on reassignment. */
 static XiValue *resolve_copy(XiValue *v) {
-    while (v && v->op == XI_COPY && v->nargs >= 1) {
+    while (v && xi_copy_is_identity_alias(v) && v->nargs >= 1) {
         XiValue *src = v->args[0];
         /* Stop at variable-domain boundaries (prevents register corruption) */
         if (xi_var_id_is_valid(v->var_id) && src && xi_var_id_is_valid(src->var_id) &&
@@ -498,10 +498,6 @@ static XiValue *resolve_copy(XiValue *v) {
          * narrowing carry semantic type information even when the runtime
          * payload is the same value. */
         if (v->type && src && src->type && !xr_type_equals(v->type, src->type))
-            break;
-        /* Stop only at semantic value-clone copies. Optimizer-inserted COPY
-         * values are identity aliases, even when their type is a value struct. */
-        if (xi_copy_is_value_clone(v))
             break;
         v = src;
     }
@@ -902,8 +898,8 @@ static XrRep sr_typed_array_elem_rep(const XrType *type) {
 
 static const XiValue *sr_unwrap_identity_value(const XiValue *v) {
     while (v &&
-           (v->op == XI_BOX || v->op == XI_UNBOX ||
-            (v->op == XI_COPY && !xi_copy_is_value_clone(v)) || v->op == XI_MOVE) &&
+           (v->op == XI_BOX || v->op == XI_UNBOX || xi_copy_is_identity_alias(v) ||
+            v->op == XI_MOVE) &&
            v->nargs >= 1)
         v = v->args[0];
     return v;

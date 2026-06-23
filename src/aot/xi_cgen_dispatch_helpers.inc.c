@@ -38,9 +38,7 @@ static bool xicgen_same_rep_identity_alias(XiCgenCtx *ctx, const XiValue *v, con
 }
 
 static const XiValue *xicgen_getprop_receiver_value(XiCgenCtx *ctx, const XiValue *v) {
-    while (v &&
-           (v->op == XI_UNBOX || (v->op == XI_COPY && !xi_copy_is_value_clone(v)) ||
-            v->op == XI_MOVE) &&
+    while (v && (v->op == XI_UNBOX || xi_copy_is_identity_alias(v) || v->op == XI_MOVE) &&
            v->nargs >= 1 && xicgen_same_rep_identity_alias(ctx, v, v->args[0])) {
         v = v->args[0];
     }
@@ -86,6 +84,12 @@ static void xicgen_copy(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValu
                         const char *prefix) {
     (void) prefix;
     XR_DCHECK(v->nargs >= 1, "xicgen_copy: need arg");
+    if (xi_copy_is_cell_read(v) && v->args[0] && cg_value_has_cell(ctx, v->args[0])) {
+        char cell_expr[64];
+        snprintf(cell_expr, sizeof(cell_expr), "cell_%u", (unsigned) v->args[0]->var_id);
+        emit_cell_get_for_rep(out, v, cell_expr);
+        return;
+    }
     if (!xicgen_copy_needs_value_clone(ctx, f, v)) {
         xicgen_identity(ctx, out, f, v, prefix);
         return;

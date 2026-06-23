@@ -178,8 +178,8 @@ static bool stdlib_symbol_is_compress_core_object(const char *symbol) {
  * identity the emitter resolves at the call site. */
 static const XiValue *stdlib_unwrap_value(const XiValue *v) {
     while (v &&
-           (v->op == XI_BOX || v->op == XI_UNBOX ||
-            (v->op == XI_COPY && !xi_copy_is_value_clone(v)) || v->op == XI_MOVE) &&
+           (v->op == XI_BOX || v->op == XI_UNBOX || xi_copy_is_identity_alias(v) ||
+            v->op == XI_MOVE) &&
            v->nargs >= 1)
         v = v->args[0];
     return v;

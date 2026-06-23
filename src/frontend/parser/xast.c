@@ -268,6 +268,7 @@ AstNode *xr_ast_block(XrayIsolate *X, int line) {
     node->as.block.statements = NULL;
     node->as.block.count = 0;
     node->as.block.capacity = 0;
+    node->as.block.is_synthetic_defer_capture = false;
     return node;
 }
 

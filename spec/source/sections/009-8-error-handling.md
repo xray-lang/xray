@@ -249,7 +249,7 @@ class Exception {
 
 ### 8.3 `defer` — 资源清理
 
-`defer` 是函数作用域的清理语句，在函数退出时**保证执行**（无论正常返回、`throw`、还是 panic）。语法见 §4.9。
+`defer` 是块作用域的清理语句，在所属块退出时**保证执行**（无论正常结束、`break` / `continue`、`return`、`throw`、还是 panic）。语法见 §4.9。
 
 ```xray
 fn fetch(url: string) -> string {
@@ -265,9 +265,10 @@ fn fetch(url: string) -> string {
 ```
 
 **规则**：
-- `defer` 是函数作用域（Go 模型），在函数退出时按 **LIFO** 顺序执行
-- 单个函数可有多个 `defer`，按逆序执行
-- `defer` 在 `throw`、`return`、panic 时均执行
+- `defer` 绑定最近的真实 `{}` 块；函数体顶层 `defer` 仍在函数退出时执行
+- 同一块可有多个 `defer`，按 **LIFO** 顺序执行
+- `defer` 在块正常结束、`break`、`continue`、`return`、`throw`、panic 展开时均执行
+- 循环体中的 `defer` 每轮迭代退出时执行
 - `defer` 块内不应抛出错误（行为未定义）
 
 ### 8.4 Optional 与错误处理
@@ -640,7 +641,7 @@ User code generally does not construct `Exception` directly — use `throw <enum
 
 ### 8.3 `defer` — resource cleanup
 
-`defer` is a function-scoped cleanup statement guaranteed to run when the function exits (whether by normal return, `throw`, or panic). Syntax: see §4.9.
+`defer` is a block-scoped cleanup statement guaranteed to run when the owning block exits (whether by fallthrough, `break` / `continue`, `return`, `throw`, or panic). Syntax: see §4.9.
 
 ```xray
 fn fetch(url: string) -> string {
@@ -656,9 +657,10 @@ fn fetch(url: string) -> string {
 ```
 
 **Rules**:
-- `defer` is function-scoped (Go model), runs when the function exits in **LIFO** order
-- Multiple `defer`s in the same function run in reverse order
-- `defer` executes on `throw`, `return`, and panic
+- `defer` belongs to the nearest real `{}` block; a top-level function-body `defer` still runs when the function exits
+- Multiple `defer`s in the same block run in **LIFO** order
+- `defer` executes on block fallthrough, `break`, `continue`, `return`, `throw`, and panic unwinding
+- A `defer` in a loop body runs as each iteration exits
 - `defer` blocks should not throw errors (behaviour is undefined)
 
 ### 8.4 Optional and error handling

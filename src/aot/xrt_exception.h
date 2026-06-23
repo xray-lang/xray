@@ -44,7 +44,8 @@ typedef struct XrtExcFrame {
     jmp_buf buf;               // setjmp/longjmp target
     XrValue exception;         // exception value (set before longjmp)
     struct XrtExcFrame *prev;  // previous frame in stack
-    void *defer_mark;          // xrt_defer_top at try entry (XrtDeferScope*); see xrt_defer.h
+    void *defer_scope_mark;    // xrt_defer_top at try entry (XrtDeferScope*); see xrt_defer.h
+    int defer_count_mark;      // pending count inside defer_scope_mark at try entry
 } XrtExcFrame;
 
 /* =========================================================================
@@ -69,7 +70,7 @@ static inline int xrt_has_pending_error(void) {
 /* Run pending defers above `mark` before a panic transfers control. Defined in
  * xrt_defer.h (included after this header); forward-declared here because
  * xrt_throw_exc must drain skipped frames' defers before longjmp. */
-static inline void xrt_defer_unwind_to(void *mark);
+static inline void xrt_defer_unwind_to_mark(void *scope_mark, int count_mark);
 
 /* =========================================================================
  * xrt_throw - throw an exception value
@@ -87,7 +88,7 @@ static XRT_COLD _Noreturn void xrt_throw_exc(XrValue exc) {
         /* Caught panic: run the defers of every frame skipped on the way to the
          * handler (down to its recorded mark), then jump. An uncaught panic
          * aborts WITHOUT running defers, matching the VM. */
-        xrt_defer_unwind_to(xrt_exc_top->defer_mark);
+        xrt_defer_unwind_to_mark(xrt_exc_top->defer_scope_mark, xrt_exc_top->defer_count_mark);
         xrt_exc_top->exception = exc;
         longjmp(xrt_exc_top->buf, 1);
     }

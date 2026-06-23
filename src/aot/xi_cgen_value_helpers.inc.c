@@ -67,6 +67,18 @@ static void emit_boxed_value_ref(FILE *out, const XiValue *v) {
     }
 }
 
+static bool xicgen_defer_mark(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                              const char *prefix) {
+    (void) f;
+    (void) prefix;
+    XrRep rep = ctx ? cg_value_plan_storage_rep(ctx, v) : cg_rep(v);
+    if (rep == XR_REP_TAGGED)
+        fprintf(out, "XR_FROM_INT(xrt_defer_mark(&_xrt_ds))");
+    else
+        fprintf(out, "(int64_t)xrt_defer_mark(&_xrt_ds)");
+    return true;
+}
+
 static void emit_cell_get_for_rep(FILE *out, const XiValue *v, const char *cell_expr) {
     XrRep rep = cg_rep(v);
     if (rep == XR_REP_TAGGED) {

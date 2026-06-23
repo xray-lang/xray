@@ -804,9 +804,11 @@ XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyz
     }
 
     /* Lower function body (extern functions are bodyless) */
+    xi_lower_defer_scope_push(&l);
     if (fdecl->body) {
         xi_lower_stmt(&l, fdecl->body);
     }
+    xi_lower_defer_scope_pop_normal(&l, func_node->line);
 
     /* If last block not terminated, add implicit return. Extern functions
      * return a zero of the declared type so the synthesized stub type-checks;
@@ -1252,6 +1254,8 @@ XR_FUNC XiFunc *xi_lower_program_ex(AstNode *program_node, struct XaAnalyzer *an
     }
     prescan_top_level_bindings(&l, stmts, count, next_shared_start);
 
+    xi_lower_defer_scope_push(&l);
+
     /* Lower top-level declaration values before executable code so forward
      * references see initialized bindings, not shared-slot null values. */
     for (int i = 0; i < count; i++) {
@@ -1280,6 +1284,8 @@ XR_FUNC XiFunc *xi_lower_program_ex(AstNode *program_node, struct XaAnalyzer *an
             continue; /* already hoisted above */
         xi_lower_stmt(&l, s);
     }
+
+    xi_lower_defer_scope_pop_normal(&l, program_node->line);
 
     if (l.cur_block) {
         xi_block_set_return(l.cur_block, NULL);
