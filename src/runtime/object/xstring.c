@@ -16,6 +16,7 @@
 #include "../value/xtype.h"
 #include "../../base/xmalloc.h"
 #include "../../shared/xr_float_fmt.h"
+#include "../../shared/xr_string_core.h"
 #include "../../base/xlog.h"
 #include "xarray.h"
 #include "xstring.h"
@@ -36,7 +37,6 @@
 #include <stdio.h>
 #include <ctype.h>
 #include <stdlib.h>
-#include "../../base/xsimd.h"
 
 /* ========== String Pool Management ========== */
 
@@ -573,29 +573,12 @@ XrString *xr_string_trim(XrVMRuntime *iso, XrString *str) {
     if (str->length == 0)
         return str;
 
-    // Find first non-whitespace
-    size_t start = 0;
-    while (start < str->length && xr_is_whitespace(str->data[start])) {
-        start++;
-    }
-
-    // All whitespace
-    if (start == str->length) {
-        return xr_string_intern(iso, "", 0, 0);
-    }
-
-    // Find last non-whitespace
-    size_t end = str->length - 1;
-    while (end > start && xr_is_whitespace(str->data[end])) {
-        end--;
-    }
-
-    // Extract
-    size_t len = end - start + 1;
-    return xr_string_intern(iso, &str->data[start], len, 0);
+    XrStringCoreSlice slice =
+        xr_string_core_trim_slice(str->data, str->length, XR_STRING_CORE_TRIM_BOTH);
+    return xr_string_intern(iso, slice.data, slice.len, 0);
 }
 
-// trimStart - remove leading whitespace (SIMD optimized)
+// trimStart - remove leading whitespace
 XrString *xr_string_trim_start(XrVMRuntime *iso, XrString *str) {
     XR_DCHECK(iso != NULL, "string_trim_start: NULL isolate");
     if (str == NULL)
@@ -603,18 +586,9 @@ XrString *xr_string_trim_start(XrVMRuntime *iso, XrString *str) {
     if (str->length == 0)
         return str;
 
-    // SIMD skip whitespace
-    const char *p = xr_simd_skip_whitespace(str->data, str->length);
-    size_t start = p - str->data;
-
-    // All whitespace
-    if (start == str->length) {
-        return xr_string_intern(iso, "", 0, 0);
-    }
-
-    // Extract to end
-    size_t len = str->length - start;
-    return xr_string_intern(iso, &str->data[start], len, 0);
+    XrStringCoreSlice slice =
+        xr_string_core_trim_slice(str->data, str->length, XR_STRING_CORE_TRIM_START);
+    return xr_string_intern(iso, slice.data, slice.len, 0);
 }
 
 // trimEnd - remove trailing whitespace
@@ -625,18 +599,9 @@ XrString *xr_string_trim_end(XrVMRuntime *iso, XrString *str) {
     if (str->length == 0)
         return str;
 
-    // Find last non-whitespace
-    size_t end = str->length;
-    while (end > 0 && xr_is_whitespace(str->data[end - 1])) {
-        end--;
-    }
-
-    // All whitespace
-    if (end == 0) {
-        return xr_string_intern(iso, "", 0, 0);
-    }
-
-    return xr_string_intern(iso, str->data, end, 0);
+    XrStringCoreSlice slice =
+        xr_string_core_trim_slice(str->data, str->length, XR_STRING_CORE_TRIM_END);
+    return xr_string_intern(iso, slice.data, slice.len, 0);
 }
 
 // padStart - pad at start to target length

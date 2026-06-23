@@ -21,6 +21,7 @@
 #include "xrt_array_hof.h"
 #include "xrt_range.h"
 #include "xrt_datetime.h"
+#include "../shared/xr_string_core.h"
 
 /* Builtin method symbol IDs. */
 #include "xrt_method_symbols.h"
@@ -171,19 +172,15 @@ static inline XrValue xrt_str_method_0(const char *s, int64_t slen, XrValue recv
     if (sym == XRT_SYM_TOSTRING)
         return recv;
     if (sym == XRT_SYM_TRIM || sym == XRT_SYM_TRIM_START || sym == XRT_SYM_TRIM_END) {
-        const char *start = s, *end = s + slen;
-        if (sym != XRT_SYM_TRIM_END)
-            while (start < end &&
-                   (*start == ' ' || *start == '\t' || *start == '\n' || *start == '\r'))
-                start++;
-        if (sym != XRT_SYM_TRIM_START)
-            while (end > start &&
-                   (end[-1] == ' ' || end[-1] == '\t' || end[-1] == '\n' || end[-1] == '\r'))
-                end--;
-        int64_t rlen = (int64_t) (end - start);
-        XrValue sv = xrt_str_alloc((size_t) rlen);
-        memcpy(xr_str_buf(sv), start, (size_t) rlen);
-        xr_str_buf(sv)[rlen] = 0;
+        XrStringCoreTrimMode mode = XR_STRING_CORE_TRIM_BOTH;
+        if (sym == XRT_SYM_TRIM_START)
+            mode = XR_STRING_CORE_TRIM_START;
+        else if (sym == XRT_SYM_TRIM_END)
+            mode = XR_STRING_CORE_TRIM_END;
+        XrStringCoreSlice slice = xr_string_core_trim_slice(s, (size_t) slen, mode);
+        XrValue sv = xrt_str_alloc(slice.len);
+        memcpy(xr_str_buf(sv), slice.data, slice.len);
+        xr_str_buf(sv)[slice.len] = 0;
         return sv;
     }
     if (sym == XRT_SYM_TOLOWER) {
