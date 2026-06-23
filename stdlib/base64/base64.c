@@ -268,19 +268,17 @@ XR_DEFINE_BUILTIN(base64_decodeToBytes, "decodeToBytes", "(data: string): Array<
                   "Decode Base64 to byte array")
 XR_DEFINE_BUILTIN(base64_isValid, "isValid", "(data: string): bool", "Check if valid base64")
 
+#define XR_STDLIB_VM_BIND_MODULE_BASE64 1
+#include "../../src/stdlib/xstdlib_vm_bindings_generated.inc.c"
+#undef XR_STDLIB_VM_BIND_MODULE_BASE64
+
 XR_FUNC XrModule *xr_load_module_base64(XrVMRuntime *isolate) {
     // Create native module
     XrModule *mod = xr_module_create_native(isolate, "base64");
     if (!mod)
         return NULL;
 
-    XRS_EXPORT(mod, isolate, "encode", base64_encode);
-    XRS_EXPORT(mod, isolate, "decode", base64_decode);
-    XRS_EXPORT(mod, isolate, "encodeUrl", base64_encodeUrl);
-    XRS_EXPORT(mod, isolate, "decodeUrl", base64_decodeUrl);
-    XRS_EXPORT(mod, isolate, "encodeBytes", base64_encodeBytes);
-    XRS_EXPORT(mod, isolate, "decodeToBytes", base64_decodeToBytes);
-    XRS_EXPORT(mod, isolate, "isValid", base64_isValid);
+    xr_stdlib_vm_bind_base64_generated(isolate, mod);
 
     // Mark as loaded
     mod->loaded = true;

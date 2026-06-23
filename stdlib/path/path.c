@@ -454,6 +454,10 @@ XR_DEFINE_BUILTIN(path_parse, "parse", "(path: string): PathInfo",
                   "Parse path into components (root, dir, base, name, ext)")
 XR_DEFINE_BUILTIN(path_format, "format", "(obj: PathInfo): string", "Format path from components")
 
+#define XR_STDLIB_VM_BIND_MODULE_PATH 1
+#include "../../src/stdlib/xstdlib_vm_bindings_generated.inc.c"
+#undef XR_STDLIB_VM_BIND_MODULE_PATH
+
 XR_FUNC XrModule *xr_load_module_path(XrVMRuntime *isolate) {
     XR_DCHECK(isolate != NULL, "xr_load_module_path: NULL isolate");
 
@@ -461,16 +465,7 @@ XR_FUNC XrModule *xr_load_module_path(XrVMRuntime *isolate) {
     if (!mod)
         return NULL;
 
-    XRS_EXPORT(mod, isolate, "join", path_join);
-    XRS_EXPORT(mod, isolate, "dirname", path_dirname);
-    XRS_EXPORT(mod, isolate, "basename", path_basename);
-    XRS_EXPORT(mod, isolate, "extname", path_extname);
-    XRS_EXPORT(mod, isolate, "normalize", path_normalize);
-    XRS_EXPORT(mod, isolate, "isAbsolute", path_isAbsolute);
-    XRS_EXPORT(mod, isolate, "resolve", path_resolve);
-    XRS_EXPORT(mod, isolate, "relative", path_relative);
-    XRS_EXPORT(mod, isolate, "parse", path_parse);
-    XRS_EXPORT(mod, isolate, "format", path_format);
+    xr_stdlib_vm_bind_path_generated(isolate, mod);
 
     // Add constants
     xr_module_add_export(isolate, mod, "sep", xrs_string_value_c(isolate, PATH_SEP_STR));

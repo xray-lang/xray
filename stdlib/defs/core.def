@@ -63,6 +63,7 @@ module time {
     signature: "(ms: int): ()"
     doc: "Sleep for milliseconds"
     vm: "xr_time_sleep"
+    vm_binding: "yieldable"
     argc: 1
     arg_spec: "v"
     aot_direct: false
@@ -1619,6 +1620,16 @@ module os {
     layer: "system"
   }
 
+  fn exit {
+    signature: "(code?: int): ()"
+    doc: "Exit process"
+    vm: "os_exit"
+    argc: 1
+    arg_spec: "v"
+    aot_direct: false
+    layer: "system"
+  }
+
   fn getpid {
     signature: "(): int"
     doc: "Get process ID"
@@ -1839,6 +1850,7 @@ module os {
     signature: "(ms: int): ()"
     doc: "Sleep for milliseconds"
     vm: "os_sleep"
+    vm_binding: "yieldable"
     aot: "xrt_os_sleep"
     argc: 1
     arg_spec: "v"
@@ -2033,6 +2045,7 @@ module io {
     signature: "(path: string): string?"
     doc: "Read entire file as string"
     vm: "io_readFile"
+    vm_binding: "yieldable"
     aot: "xrt_io_read_file"
     argc: 1
     arg_spec: "s"
@@ -2045,6 +2058,7 @@ module io {
     signature: "(path: string): Array<uint8>?"
     doc: "Read entire file as byte array"
     vm: "io_readFileBytes"
+    vm_binding: "yieldable"
     aot: "xrt_io_read_file_bytes"
     argc: 1
     arg_spec: "s"
@@ -2201,6 +2215,7 @@ module io {
     signature: "(path: string, data: string): bool"
     doc: "Write string to file"
     vm: "io_writeFile"
+    vm_binding: "yieldable"
     aot: "xrt_io_write_file"
     argc: 2
     arg_spec: "ss"
@@ -2213,6 +2228,7 @@ module io {
     signature: "(path: string, data: Array<uint8>): bool"
     doc: "Write byte array to file"
     vm: "io_writeFileBytes"
+    vm_binding: "yieldable"
     aot: "xrt_io_write_file_bytes"
     argc: 2
     arg_spec: "sv"

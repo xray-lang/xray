@@ -376,6 +376,7 @@ static XrCFuncResult io_readFileBytes(XrVMRuntime *X, XrValue *args, int argc, X
 
 // writeFileBytes(path, bytes) - Write byte array (yieldable; io_uring async when available)
 static XrCFuncResult io_writeFileBytes(XrVMRuntime *X, XrValue *args, int argc, XrValue *result) {
+    (void) X;
     *result = xr_bool(false);
     if (argc < 2)
         return XR_CFUNC_DONE;
@@ -412,6 +413,7 @@ static XrCFuncResult io_writeFileBytes(XrVMRuntime *X, XrValue *args, int argc, 
 
 // writeFile(path, content) - Write string (yieldable; io_uring async when available)
 static XrCFuncResult io_writeFile(XrVMRuntime *X, XrValue *args, int argc, XrValue *result) {
+    (void) X;
     *result = xr_bool(false);
     if (argc < 2)
         return XR_CFUNC_DONE;
@@ -1254,6 +1256,10 @@ XR_DEFINE_BUILTIN(io_tempDir, "tempDir", "(): string?", "Create temporary direct
 XR_DEFINE_BUILTIN(io_readDirRecursive, "readDirRecursive", "(path: string): Array<string>",
                   "List directory entries recursively")
 
+#define XR_STDLIB_VM_BIND_MODULE_IO 1
+#include "../../src/stdlib/xstdlib_vm_bindings_generated.inc.c"
+#undef XR_STDLIB_VM_BIND_MODULE_IO
+
 XR_FUNC XrModule *xr_load_module_io(XrVMRuntime *isolate) {
     XR_DCHECK(isolate != NULL, "xr_load_module_io: NULL isolate");
 
@@ -1265,43 +1271,7 @@ XR_FUNC XrModule *xr_load_module_io(XrVMRuntime *isolate) {
     // io_get_stat_class() on first call, so no explicit pre-init is
     // needed at module-load time.
 
-    // File read/write
-    XRS_EXPORT_YIELDABLE(mod, isolate, "readFile", io_readFile);
-    XRS_EXPORT_YIELDABLE(mod, isolate, "readFileBytes", io_readFileBytes);
-    XRS_EXPORT(mod, isolate, "readStdin", io_readStdin);
-    XRS_EXPORT_YIELDABLE(mod, isolate, "writeFile", io_writeFile);
-    XRS_EXPORT_YIELDABLE(mod, isolate, "writeFileBytes", io_writeFileBytes);
-    XRS_EXPORT(mod, isolate, "appendFile", io_appendFile);
-
-    // File checks
-    XRS_EXPORT(mod, isolate, "exists", io_exists);
-    XRS_EXPORT(mod, isolate, "isFile", io_isFile);
-    XRS_EXPORT(mod, isolate, "isDir", io_isDir);
-    XRS_EXPORT(mod, isolate, "fileSize", io_fileSize);
-
-    // File operations
-    XRS_EXPORT(mod, isolate, "remove", io_remove);
-    XRS_EXPORT(mod, isolate, "rename", io_rename);
-    XRS_EXPORT(mod, isolate, "mkdir", io_mkdir);
-    XRS_EXPORT(mod, isolate, "readDir", io_readDir);
-    XRS_EXPORT(mod, isolate, "cwd", io_cwd);
-
-    // Extended functions
-    XRS_EXPORT(mod, isolate, "chdir", io_chdir);
-    XRS_EXPORT(mod, isolate, "copyFile", io_copyFile);
-    XRS_EXPORT(mod, isolate, "readLines", io_readLines);
-    XRS_EXPORT(mod, isolate, "isSymlink", io_isSymlink);
-    XRS_EXPORT(mod, isolate, "stat", io_stat);
-    XRS_EXPORT(mod, isolate, "mkdirp", io_mkdirp);
-    XRS_EXPORT(mod, isolate, "removeAll", io_removeAll);
-    XRS_EXPORT(mod, isolate, "chmod", io_chmod);
-    XRS_EXPORT(mod, isolate, "touch", io_touch);
-    XRS_EXPORT(mod, isolate, "symlink", io_symlink);
-    XRS_EXPORT(mod, isolate, "readlink", io_readlink);
-    XRS_EXPORT(mod, isolate, "realpath", io_realpath);
-    XRS_EXPORT(mod, isolate, "tempFile", io_tempFile);
-    XRS_EXPORT(mod, isolate, "tempDir", io_tempDir);
-    XRS_EXPORT(mod, isolate, "readDirRecursive", io_readDirRecursive);
+    xr_stdlib_vm_bind_io_generated(isolate, mod);
 
     // Mark as loaded
     mod->loaded = true;
