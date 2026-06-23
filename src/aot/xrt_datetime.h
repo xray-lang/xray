@@ -238,100 +238,11 @@ static inline XrValue xrt_datetime_offset(void) {
 }
 
 static inline XrValue xrt_datetime_parse_impl(const char *str, const char *format) {
-    if (!str)
+    XrDateTimeCoreFields fields;
+    if (!xr_datetime_core_parse_fields(str, format, &fields))
         return XR_NULL_VAL;
 
-    int year = 0, month = 1, day = 1, hour = 0, minute = 0, second = 0, ms = 0;
-    const char *date_end = str;
-    while (*date_end && *date_end != 'T' && *date_end != ' ')
-        date_end++;
-    const char *time_part = (*date_end == 'T' || *date_end == ' ') ? date_end + 1 : NULL;
-
-    if (!format || strcmp(format, "ISO8601") == 0 || strcmp(format, "iso") == 0) {
-        int parsed = sscanf(str, "%d-%d-%dT%d:%d:%d", &year, &month, &day, &hour, &minute, &second);
-        if (parsed < 6)
-            parsed = sscanf(str, "%d-%d-%d %d:%d:%d", &year, &month, &day, &hour, &minute, &second);
-        if (parsed < 3)
-            parsed = sscanf(str, "%d/%d/%d %d:%d:%d", &year, &month, &day, &hour, &minute, &second);
-        if (parsed < 3)
-            return XR_NULL_VAL;
-
-        const char *dot = time_part ? strchr(time_part, '.') : NULL;
-        if (dot && dot[1] >= '0' && dot[1] <= '9') {
-            int digits = 0;
-            const char *p = dot + 1;
-            while (*p >= '0' && *p <= '9' && digits < 3) {
-                ms = ms * 10 + (*p - '0');
-                p++;
-                digits++;
-            }
-            while (digits < 3) {
-                ms *= 10;
-                digits++;
-            }
-        }
-    } else if (strcmp(format, "date") == 0) {
-        if (sscanf(str, "%d-%d-%d", &year, &month, &day) < 3 &&
-            sscanf(str, "%d/%d/%d", &year, &month, &day) < 3)
-            return XR_NULL_VAL;
-    } else if (strcmp(format, "time") == 0) {
-        if (sscanf(str, "%d:%d:%d", &hour, &minute, &second) < 2)
-            return XR_NULL_VAL;
-        year = 1970;
-        month = 1;
-        day = 1;
-    } else {
-        if (sscanf(str, "%d-%d-%d %d:%d:%d", &year, &month, &day, &hour, &minute, &second) < 3)
-            return XR_NULL_VAL;
-    }
-
-    int is_utc = 0;
-    int tz_offset_min = 0;
-    if (time_part) {
-        const char *scan = time_part;
-        const char *tz_marker = NULL;
-        while (*scan) {
-            if (*scan == 'Z') {
-                is_utc = 1;
-                break;
-            }
-            if (*scan == '+' || *scan == '-') {
-                tz_marker = scan;
-                break;
-            }
-            scan++;
-        }
-        if (tz_marker) {
-            int tz_h = 0, tz_m = 0;
-            if (sscanf(tz_marker + 1, "%d:%d", &tz_h, &tz_m) >= 1) {
-                tz_offset_min = tz_h * 60 + tz_m;
-                if (*tz_marker == '-')
-                    tz_offset_min = -tz_offset_min;
-                is_utc = 1;
-            }
-        }
-    }
-
-    struct tm tmv;
-    memset(&tmv, 0, sizeof(tmv));
-    tmv.tm_year = year - 1900;
-    tmv.tm_mon = month - 1;
-    tmv.tm_mday = day;
-    tmv.tm_hour = hour;
-    tmv.tm_min = minute;
-    tmv.tm_sec = second;
-    tmv.tm_isdst = -1;
-
-    time_t t = xr_datetime_core_mktime(&tmv, is_utc);
-    if (is_utc)
-        t -= tz_offset_min * 60;
-
-    xrt_datetime_object_t *dt = xrt_datetime_alloc();
-    dt->timestamp = (int64_t) t;
-    dt->milliseconds = ms;
-    dt->tz_offset = is_utc ? 0 : xr_datetime_core_local_offset_at(t);
-    dt->is_utc = (uint8_t) is_utc;
-    return xrt_datetime_box(dt);
+    return xrt_datetime_from_core_fields(&fields);
 }
 
 static inline XrValue xrt_datetime_parse_default(const char *data, int64_t len) {

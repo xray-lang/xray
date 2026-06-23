@@ -167,124 +167,17 @@ XrDateTime *xr_datetime_from_timestamp_ms(XrVMRuntime *isolate, int64_t timestam
 /* ========== Parse API ========== */
 
 XrDateTime *xr_datetime_parse(XrVMRuntime *isolate, const char *str, const char *format) {
-    if (!str)
+    XrDateTimeCoreFields fields;
+    if (!xr_datetime_core_parse_fields(str, format, &fields))
         return NULL;
-
-    int year = 0, month = 1, day = 1, hour = 0, minute = 0, second = 0, ms = 0;
-
-    // Split the input into (date, time, tz) by anchoring on 'T' or ' '
-    // first. The previous implementation looked backwards for '+' or '-'
-    // and could mis-interpret the '-' used as a date separator in short
-    // strings such as "2024-01-15".
-    const char *date_end = str;
-    while (*date_end && *date_end != 'T' && *date_end != ' ')
-        date_end++;
-    const char *time_part = NULL;
-    if (*date_end == 'T' || *date_end == ' ') {
-        time_part = date_end + 1;
-    }
-
-    if (!format || strcmp(format, "ISO8601") == 0 || strcmp(format, "iso") == 0) {
-        int parsed = sscanf(str, "%d-%d-%dT%d:%d:%d", &year, &month, &day, &hour, &minute, &second);
-        // Fall through to space-separated format when the T-format
-        // only matched the date part (parsed < 6), e.g. "1979-05-27 07:32:00".
-        if (parsed < 6)
-            parsed = sscanf(str, "%d-%d-%d %d:%d:%d", &year, &month, &day, &hour, &minute, &second);
-        if (parsed < 3)
-            parsed = sscanf(str, "%d/%d/%d %d:%d:%d", &year, &month, &day, &hour, &minute, &second);
-        if (parsed < 3)
-            return NULL;
-
-        // Parse milliseconds (.123) but only when the fractional part
-        // follows the time-of-day, never the date. Without this scoping a
-        // pattern like "1.2.3" could accidentally contribute to ms.
-        const char *dot = time_part ? strchr(time_part, '.') : NULL;
-        if (dot && dot[1] >= '0' && dot[1] <= '9') {
-            int digits = 0;
-            ms = 0;
-            const char *p = dot + 1;
-            while (*p >= '0' && *p <= '9' && digits < 3) {
-                ms = ms * 10 + (*p - '0');
-                p++;
-                digits++;
-            }
-            while (digits < 3) {
-                ms *= 10;
-                digits++;
-            }
-        }
-    } else if (strcmp(format, "date") == 0) {
-        if (sscanf(str, "%d-%d-%d", &year, &month, &day) < 3 &&
-            sscanf(str, "%d/%d/%d", &year, &month, &day) < 3) {
-            return NULL;
-        }
-    } else if (strcmp(format, "time") == 0) {
-        if (sscanf(str, "%d:%d:%d", &hour, &minute, &second) < 2) {
-            return NULL;
-        }
-        year = 1970;
-        month = 1;
-        day = 1;
-    } else {
-        if (sscanf(str, "%d-%d-%d %d:%d:%d", &year, &month, &day, &hour, &minute, &second) < 3) {
-            return NULL;
-        }
-    }
-
-    // Parse timezone offset: Z, +HH:MM, -HH:MM. Look only inside the time
-    // portion so date separators can never masquerade as the offset sign.
-    int is_utc = 0;
-    int tz_offset_min = 0;
-    if (time_part) {
-        const char *scan = time_part;
-        const char *tz_marker = NULL;
-        while (*scan) {
-            if (*scan == 'Z') {
-                is_utc = 1;
-                break;
-            }
-            if (*scan == '+' || *scan == '-') {
-                tz_marker = scan;
-                break;
-            }
-            scan++;
-        }
-        if (tz_marker) {
-            int tz_h = 0, tz_m = 0;
-            if (sscanf(tz_marker + 1, "%d:%d", &tz_h, &tz_m) >= 1) {
-                tz_offset_min = tz_h * 60 + tz_m;
-                if (*tz_marker == '-')
-                    tz_offset_min = -tz_offset_min;
-                is_utc = 1;
-            }
-        }
-    }
-
-    struct tm tm = {0};
-    tm.tm_year = year - 1900;
-    tm.tm_mon = month - 1;
-    tm.tm_mday = day;
-    tm.tm_hour = hour;
-    tm.tm_min = minute;
-    tm.tm_sec = second;
-    tm.tm_isdst = -1;
-
-    time_t t;
-    if (is_utc) {
-        t = xr_datetime_core_mktime(&tm, 1);
-        /* Adjust for the timezone offset carried by the parsed string. */
-        t -= tz_offset_min * 60;
-    } else {
-        t = xr_datetime_core_mktime(&tm, 0);
-    }
 
     XrDateTime *dt = datetime_alloc(isolate);
     if (!dt)
         return NULL;
-    dt->timestamp = (int64_t) t;
-    dt->milliseconds = ms;
-    dt->tz_offset = is_utc ? 0 : xr_datetime_core_local_offset_at(t);
-    dt->is_utc = is_utc;
+    dt->timestamp = fields.timestamp;
+    dt->milliseconds = fields.milliseconds;
+    dt->tz_offset = fields.tz_offset;
+    dt->is_utc = fields.is_utc;
     return dt;
 }
 

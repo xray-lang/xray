@@ -141,6 +141,39 @@ TEST(datetime_core_diff_fields) {
     ASSERT_EQ_INT(xr_datetime_core_diff_fields(&later, &earlier, "weeks"), 1);
 }
 
+TEST(datetime_core_parse_fields) {
+    XrDateTimeCoreFields fields;
+    ASSERT_TRUE(xr_datetime_core_parse_fields("2024-01-15T10:30:45.123Z", NULL, &fields));
+    ASSERT_EQ_INT(fields.timestamp,
+                  xr_datetime_core_days_from_civil(2024, 1, 15) * 86400 + 10 * 3600 + 30 * 60 + 45);
+    ASSERT_EQ_INT(fields.milliseconds, 123);
+    ASSERT_EQ_INT(fields.tz_offset, 0);
+    ASSERT_EQ_INT(fields.is_utc, 1);
+
+    ASSERT_TRUE(xr_datetime_core_parse_fields("2024-01-15T10:30:45.5+02:30", "iso", &fields));
+    ASSERT_EQ_INT(fields.timestamp,
+                  xr_datetime_core_days_from_civil(2024, 1, 15) * 86400 + 8 * 3600 + 45);
+    ASSERT_EQ_INT(fields.milliseconds, 500);
+    ASSERT_EQ_INT(fields.is_utc, 1);
+
+    ASSERT_TRUE(xr_datetime_core_parse_fields("2024/01/15", "date", &fields));
+    struct tm tm = {0};
+    xr_datetime_core_to_tm_fields(&fields, &tm);
+    ASSERT_EQ_INT(tm.tm_year + 1900, 2024);
+    ASSERT_EQ_INT(tm.tm_mon + 1, 1);
+    ASSERT_EQ_INT(tm.tm_mday, 15);
+
+    ASSERT_TRUE(xr_datetime_core_parse_fields("07:32", "time", &fields));
+    xr_datetime_core_to_tm_fields(&fields, &tm);
+    ASSERT_EQ_INT(tm.tm_year + 1900, 1970);
+    ASSERT_EQ_INT(tm.tm_mon + 1, 1);
+    ASSERT_EQ_INT(tm.tm_mday, 1);
+    ASSERT_EQ_INT(tm.tm_hour, 7);
+    ASSERT_EQ_INT(tm.tm_min, 32);
+
+    ASSERT_TRUE(!xr_datetime_core_parse_fields("not-a-date", NULL, &fields));
+}
+
 TEST_MAIN_BEGIN()
 
 RUN_TEST_SUITE("DateTime Core");
@@ -150,5 +183,6 @@ RUN_TEST(datetime_core_epoch_boundaries);
 RUN_TEST(datetime_core_utc_mktime);
 RUN_TEST(datetime_core_add_fields);
 RUN_TEST(datetime_core_diff_fields);
+RUN_TEST(datetime_core_parse_fields);
 
 TEST_MAIN_END()
