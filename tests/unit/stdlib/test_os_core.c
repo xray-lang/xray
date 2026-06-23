@@ -281,6 +281,48 @@ TEST(os_core_loadavg_helpers_normalize_values) {
     ASSERT_FLOAT_EQ(xr_os_core_loadavg_from_fixed(65536 * 2), 2.0, 0.000001);
 }
 
+TEST(os_core_exec_result_schema_is_stable) {
+    ASSERT_EQ_INT(XR_OS_CORE_EXEC_FIELD_COUNT, 3);
+    ASSERT_EQ_INT(XR_OS_CORE_EXEC_STDOUT, 0);
+    ASSERT_EQ_INT(XR_OS_CORE_EXEC_STDERR, 1);
+    ASSERT_EQ_INT(XR_OS_CORE_EXEC_EXIT_CODE, 2);
+    ASSERT_STR_EQ(XR_OS_CORE_EXEC_FIELD_NAMES[XR_OS_CORE_EXEC_STDOUT], "stdout");
+    ASSERT_STR_EQ(XR_OS_CORE_EXEC_FIELD_NAMES[XR_OS_CORE_EXEC_STDERR], "stderr");
+    ASSERT_STR_EQ(XR_OS_CORE_EXEC_FIELD_NAMES[XR_OS_CORE_EXEC_EXIT_CODE], "exitCode");
+}
+
+TEST(os_core_exec_buffer_capacity_doubles_from_initial_cap) {
+    size_t cap = 0;
+    ASSERT_TRUE(xr_os_core_exec_buffer_next_cap(0, 0, 0, &cap));
+    ASSERT_EQ_UINT(cap, XR_OS_CORE_EXEC_INITIAL_CAP);
+
+    ASSERT_TRUE(xr_os_core_exec_buffer_next_cap(4090, XR_OS_CORE_EXEC_INITIAL_CAP, 5, &cap));
+    ASSERT_EQ_UINT(cap, XR_OS_CORE_EXEC_INITIAL_CAP);
+
+    ASSERT_TRUE(xr_os_core_exec_buffer_next_cap(4090, XR_OS_CORE_EXEC_INITIAL_CAP, 6, &cap));
+    ASSERT_EQ_UINT(cap, XR_OS_CORE_EXEC_INITIAL_CAP * 2);
+}
+
+TEST(os_core_exec_buffer_append_raw_preserves_nul_terminator) {
+    char buf[8] = {0};
+    size_t len = 0;
+    ASSERT_TRUE(xr_os_core_exec_buffer_append_raw(buf, &len, sizeof(buf), "abc", 3));
+    ASSERT_EQ_UINT(len, 3);
+    ASSERT_STR_EQ(buf, "abc");
+    ASSERT_TRUE(xr_os_core_exec_buffer_append_raw(buf, &len, sizeof(buf), "de", 2));
+    ASSERT_EQ_UINT(len, 5);
+    ASSERT_STR_EQ(buf, "abcde");
+    ASSERT_FALSE(xr_os_core_exec_buffer_append_raw(buf, &len, sizeof(buf), "xyz", 3));
+    ASSERT_EQ_UINT(len, 5);
+    ASSERT_STR_EQ(buf, "abcde");
+}
+
+TEST(os_core_exec_windows_exit_code_decodes_low_byte) {
+    ASSERT_EQ_INT(xr_os_core_exec_windows_exit_code(-1), -1);
+    ASSERT_EQ_INT(xr_os_core_exec_windows_exit_code(0), 0);
+    ASSERT_EQ_INT(xr_os_core_exec_windows_exit_code(0x1234), 0x34);
+}
+
 TEST_MAIN_BEGIN()
 
 RUN_TEST_SUITE("OS Core - platform");
@@ -313,5 +355,11 @@ RUN_TEST(os_core_memory_bytes_saturates_int64);
 RUN_TEST(os_core_seconds_from_nsec_normalizes);
 RUN_TEST(os_core_uptime_from_boot_seconds_clamps_negative_elapsed);
 RUN_TEST(os_core_loadavg_helpers_normalize_values);
+
+RUN_TEST_SUITE("OS Core - exec");
+RUN_TEST(os_core_exec_result_schema_is_stable);
+RUN_TEST(os_core_exec_buffer_capacity_doubles_from_initial_cap);
+RUN_TEST(os_core_exec_buffer_append_raw_preserves_nul_terminator);
+RUN_TEST(os_core_exec_windows_exit_code_decodes_low_byte);
 
 TEST_MAIN_END()
