@@ -46,6 +46,8 @@ typedef struct {
 
 typedef bool (*XrUrlCoreJoinPartFn)(void *ctx, size_t index, const char **data, size_t *len);
 typedef bool (*XrUrlCoreFieldFn)(void *ctx, const char *name, const char **data, size_t *len);
+typedef bool (*XrUrlCoreQueryPairFn)(void *ctx, const char *key, size_t key_len, const char *value,
+                                     size_t value_len, bool has_value);
 
 static inline uint8_t xr_url_core_hex_value(unsigned char c) {
     if (c >= '0' && c <= '9')
@@ -453,6 +455,33 @@ static inline bool xr_url_core_format_write(XrUrlCoreFieldFn field, void *field_
     return xr_url_core_append_field(out, pathname, pathname_len) &&
            xr_url_core_append_field(out, search, search_len) &&
            xr_url_core_append_field(out, hash, hash_len);
+}
+
+static inline bool xr_url_core_parse_query_each(const char *data, size_t len,
+                                                XrUrlCoreQueryPairFn pair, void *pair_ctx) {
+    if ((!data && len != 0) || !pair)
+        return false;
+    if (len > 0 && data[0] == '?') {
+        data++;
+        len--;
+    }
+
+    const char *p = data;
+    const char *end = data + len;
+    while (p < end) {
+        const char *amp = memchr(p, '&', (size_t) (end - p));
+        const char *pair_end = amp ? amp : end;
+        const char *eq = memchr(p, '=', (size_t) (pair_end - p));
+        const char *key = p;
+        size_t key_len = eq ? (size_t) (eq - key) : (size_t) (pair_end - key);
+        const char *value = eq ? eq + 1 : NULL;
+        size_t value_len = eq ? (size_t) (pair_end - value) : 0;
+
+        if (key_len > 0 && !pair(pair_ctx, key, key_len, value, value_len, eq != NULL))
+            return false;
+        p = amp ? amp + 1 : end;
+    }
+    return true;
 }
 
 static inline size_t xr_url_core_remove_dot_segments(char *path, size_t len);

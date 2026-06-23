@@ -224,49 +224,30 @@ static inline void xrt_url_json_set_dynamic(XrValue obj, XrValue key, XrValue va
     xrt_map_set(j->dynamic_fields, key, value);
 }
 
+typedef struct {
+    XrValue obj;
+} xrt_url_parse_query_ctx_t;
+
+static inline bool xrt_url_parse_query_pair(void *ctx, const char *key_data, size_t key_len,
+                                            const char *value_data, size_t value_len,
+                                            bool has_value) {
+    xrt_url_parse_query_ctx_t *parse_ctx = (xrt_url_parse_query_ctx_t *) ctx;
+    XrValue key = xrt_url_decode_impl(key_data, (int64_t) key_len, true);
+    XrValue val =
+        has_value ? xrt_url_decode_impl(value_data, (int64_t) value_len, true) : xrt_str_alloc(0);
+    xrt_url_json_set_dynamic(parse_ctx->obj, key, val);
+    return true;
+}
+
 static inline XrValue xrt_url_parse_query(const char *data, int64_t len_i) {
     size_t len = len_i < 0 ? 0 : (size_t) len_i;
     if (!data && len != 0)
         return XR_NULL_VAL;
-    if (len > 0 && data[0] == '?') {
-        data++;
-        len--;
-    }
-
     XrValue obj = xrt_json_new(0);
-    if (len == 0)
-        return obj;
-
-    const char *p = data;
-    const char *end = data + len;
-    while (p < end) {
-        const char *amp = memchr(p, '&', (size_t) (end - p));
-        const char *pair_end = amp ? amp : end;
-        const char *eq = memchr(p, '=', (size_t) (pair_end - p));
-        const char *key_start = p;
-        size_t key_len = eq ? (size_t) (eq - key_start) : (size_t) (pair_end - key_start);
-        const char *val_start = eq ? eq + 1 : NULL;
-        size_t val_len = eq ? (size_t) (pair_end - val_start) : 0;
-
-        if (key_len > 0) {
-            size_t decoded_key_len = 0;
-            xr_url_core_decoded_len(key_start, key_len, &decoded_key_len);
-            XrValue key = xrt_str_alloc(decoded_key_len);
-            xr_url_core_decode(key_start, key_len, true, xr_str_buf(key), &decoded_key_len);
-
-            XrValue val;
-            if (val_start) {
-                size_t decoded_val_len = 0;
-                xr_url_core_decoded_len(val_start, val_len, &decoded_val_len);
-                val = xrt_str_alloc(decoded_val_len);
-                xr_url_core_decode(val_start, val_len, true, xr_str_buf(val), &decoded_val_len);
-            } else {
-                val = xrt_str_alloc(0);
-            }
-            xrt_url_json_set_dynamic(obj, key, val);
-        }
-        p = amp ? amp + 1 : end;
-    }
+    xrt_url_parse_query_ctx_t ctx;
+    ctx.obj = obj;
+    if (!xr_url_core_parse_query_each(data, len, xrt_url_parse_query_pair, &ctx))
+        return XR_NULL_VAL;
     return obj;
 }
 

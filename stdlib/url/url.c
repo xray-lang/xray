@@ -301,94 +301,87 @@ static XrValue url_format_fn(XrVMRuntime *X, XrValue *args, int nargs) {
     return ctxbuf_to_value(X, &buf);
 }
 
+typedef struct {
+    XrVMRuntime *X;
+    XrJson *json;
+} UrlParseQueryCtx;
+
+static bool url_parse_query_pair(void *ctx, const char *key, size_t key_len, const char *value,
+                                 size_t value_len, bool has_value) {
+    UrlParseQueryCtx *parse_ctx = (UrlParseQueryCtx *) ctx;
+    XrVMRuntime *X = parse_ctx->X;
+
+    size_t decoded_key_len = 0;
+    if (!xr_url_core_decoded_len(key, key_len, &decoded_key_len))
+        return false;
+
+    char key_small[256];
+    char *key_copy = key_small;
+    bool key_heap = false;
+    if (decoded_key_len + 1 > sizeof(key_small)) {
+        key_copy = xr_malloc(decoded_key_len + 1);
+        XR_CHECK(key_copy != NULL, "url.parseQuery: OOM allocating key buffer");
+        key_heap = true;
+    }
+
+    if (!xr_url_core_decode(key, key_len, true, key_copy, &decoded_key_len)) {
+        if (key_heap)
+            xr_free(key_copy);
+        return false;
+    }
+
+    XrValue val;
+    if (has_value) {
+        size_t decoded_value_len = 0;
+        if (!xr_url_core_decoded_len(value, value_len, &decoded_value_len)) {
+            if (key_heap)
+                xr_free(key_copy);
+            return false;
+        }
+
+        char value_small[256];
+        char *value_copy = value_small;
+        bool value_heap = false;
+        if (decoded_value_len + 1 > sizeof(value_small)) {
+            value_copy = xr_malloc(decoded_value_len + 1);
+            XR_CHECK(value_copy != NULL, "url.parseQuery: OOM allocating value buffer");
+            value_heap = true;
+        }
+
+        if (!xr_url_core_decode(value, value_len, true, value_copy, &decoded_value_len)) {
+            if (value_heap)
+                xr_free(value_copy);
+            if (key_heap)
+                xr_free(key_copy);
+            return false;
+        }
+
+        val = make_str(X, value_copy, decoded_value_len);
+        if (value_heap)
+            xr_free(value_copy);
+    } else {
+        val = make_cstr(X, "");
+    }
+
+    xr_json_set_by_key(X, parse_ctx->json, key_copy, val);
+    if (key_heap)
+        xr_free(key_copy);
+    return true;
+}
+
 static XrValue url_parse_query_fn(XrVMRuntime *X, XrValue *args, int nargs) {
     if (nargs < 1 || !XR_IS_STRING(args[0]))
         return XR_NULL_VAL;
     XrString *qs = XR_TO_STRING(args[0]);
-    const char *str = XR_STRING_CHARS(qs);
-    size_t len = qs->length;
-
-    // Skip leading '?'
-    if (len > 0 && str[0] == '?') {
-        str++;
-        len--;
-    }
-
     XrJson *json = xr_json_new(xr_current_coro(X));
     if (!json)
         return XR_NULL_VAL;
-    if (len == 0)
-        return xr_json_value(json);
 
-    // Temp buffer for decoding
-    char *dec_buf = xr_malloc(len + 1);
-    if (!dec_buf)
-        return xr_json_value(json);
-
-    const char *p = str;
-    const char *end = str + len;
-
-    while (p < end) {
-        // Find next '&'
-        const char *amp = memchr(p, '&', end - p);
-        const char *pair_end = amp ? amp : end;
-
-        // Find '=' in pair
-        const char *eq = memchr(p, '=', pair_end - p);
-
-        const char *key_start = p;
-        size_t key_len;
-        const char *val_start;
-        size_t val_len;
-
-        if (eq) {
-            key_len = eq - key_start;
-            val_start = eq + 1;
-            val_len = pair_end - val_start;
-        } else {
-            key_len = pair_end - key_start;
-            val_start = NULL;
-            val_len = 0;
-        }
-
-        if (key_len > 0) {
-            // Decode key. Almost all query-string keys fit comfortably in a
-            // small stack buffer; only fall back to xr_malloc for oversize
-            // keys, and abort loudly on OOM so the caller does not silently
-            // receive a partial map. (Previously the entry was dropped.)
-            int dk = xr_url_decode_form(key_start, key_len, dec_buf, len + 1);
-            char key_small[256];
-            char *key_copy = NULL;
-            bool key_heap = false;
-            if (dk + 1 <= (int) sizeof(key_small)) {
-                memcpy(key_small, dec_buf, dk);
-                key_small[dk] = '\0';
-                key_copy = key_small;
-            } else {
-                key_copy = xr_malloc((size_t) dk + 1);
-                XR_CHECK(key_copy != NULL, "url.parseQuery: OOM allocating key buffer");
-                memcpy(key_copy, dec_buf, dk);
-                key_copy[dk] = '\0';
-                key_heap = true;
-            }
-
-            XrValue val;
-            if (val_start) {
-                int dv = xr_url_decode_form(val_start, val_len, dec_buf, len + 1);
-                val = make_str(X, dec_buf, dv);
-            } else {
-                val = make_cstr(X, "");
-            }
-
-            xr_json_set_by_key(X, json, key_copy, val);
-            if (key_heap)
-                xr_free(key_copy);
-        }
-
-        p = amp ? amp + 1 : end;
-    }
-
-    xr_free(dec_buf);
+    UrlParseQueryCtx ctx;
+    ctx.X = X;
+    ctx.json = json;
+    if (!xr_url_core_parse_query_each(XR_STRING_CHARS(qs), qs->length, url_parse_query_pair, &ctx))
+        return XR_NULL_VAL;
     return xr_json_value(json);
 }
 
