@@ -9,7 +9,7 @@ class GenericQueue<T> {
         this.workers = count
         this.shards = []
         for (let i = 0; i < count; i++) {
-            let ch: Channel<T> = new Channel(capacity)
+            let ch: Channel<T> = Channel(capacity)
             this.shards.push(ch)
         }
     }
@@ -41,7 +41,7 @@ class GenericQueue<T> {
 
 @test
 fn test_work_queue_generic_class() {
-    let q = new GenericQueue<int>(4, 8)
+    let q = GenericQueue<int>(4, 8)
     q.push(10, 0)
     q.push(20, 1)
     q.push(30, 2)

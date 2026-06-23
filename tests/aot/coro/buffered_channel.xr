@@ -1,4 +1,4 @@
-const ch = new Channel<int>(1)
+const ch = Channel<int>(1)
 ch.send(41)
 let v = ch.recv()
 print(match (v) {

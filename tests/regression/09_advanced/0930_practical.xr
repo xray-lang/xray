@@ -150,7 +150,7 @@ fn test_counter_class() {
         constructor() { this.value = 0 }
         inc() { this.value += 1 }        dec() { this.value -= 1 }        getValue() -> int { return this.value }    }
     
-    let c = new Counter()
+    let c = Counter()
     c.inc()
     c.inc()
     c.inc()
@@ -171,7 +171,7 @@ fn test_stack() {
         isEmpty() -> bool { return this.items.length == 0 }
     }
     
-    let s = new Stack()
+    let s = Stack()
     assert_eq(s.isEmpty(), true)
     s.push(1)
     s.push(2)

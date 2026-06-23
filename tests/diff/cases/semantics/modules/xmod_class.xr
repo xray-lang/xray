@@ -3,7 +3,7 @@
 // via the factory, and calls methods.  VM and AOT must agree byte-for-byte.
 import { Counter, make_counter } from "./_classlib"
 
-let c = new Counter(10)
+let c = Counter(10)
 print(c.bump(5))
 print(c.bump(3))
 

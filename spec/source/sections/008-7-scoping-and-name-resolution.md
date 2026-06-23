@@ -90,7 +90,7 @@ print(c())      // 2
 Xray **不**是全面 ownership/borrow checker 语言（不像 Rust）。但在**跨协程数据传递**中使用 move 语义：
 
 ```xray
-shared let big_buffer = new Bytes(1024 * 1024)
+shared let big_buffer = Bytes(1024 * 1024)
 
 let t = go fn(b: Bytes) -> int {
     return process(b)
@@ -148,14 +148,14 @@ let t2 = go fn(c: Json) -> int {
 }(config)
 
 // 方法 3：move 转移所有权
-shared let big = new Bytes(1024)
+shared let big = Bytes(1024)
 let t3 = go fn(b: Bytes) -> int {
     return process(b)
 }(move big)
 // big 在此处不可访问
 
 // 方法 4：Channel 通信（可被捕获）
-shared const ch = new Channel<int>(10)
+shared const ch = Channel<int>(10)
 let t4 = go fn(c: Channel<int>) -> int {
     return match (c.recv()) {
         Recv.Value(v) -> v
@@ -271,7 +271,7 @@ The compiler analyzes upvalues:
 Xray is **not** a full ownership/borrow-checked language (unlike Rust). However, **cross-coroutine data transfer** uses move semantics:
 
 ```xray
-shared let big_buffer = new Bytes(1024 * 1024)
+shared let big_buffer = Bytes(1024 * 1024)
 
 let t = go fn(b: Bytes) -> int {
     return process(b)
@@ -329,14 +329,14 @@ let t2 = go fn(c: Json) -> int {
 }(config)
 
 // Pattern 3: move ownership
-shared let big = new Bytes(1024)
+shared let big = Bytes(1024)
 let t3 = go fn(b: Bytes) -> int {
     return process(b)
 }(move big)
 // big is inaccessible from this point
 
 // Pattern 4: Channel communication (capturable)
-shared const ch = new Channel<int>(10)
+shared const ch = Channel<int>(10)
 let t4 = go fn(c: Channel<int>) -> int {
     return match (c.recv()) {
         Recv.Value(v) -> v

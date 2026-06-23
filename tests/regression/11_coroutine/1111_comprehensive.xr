@@ -32,7 +32,7 @@ fn consumer(ch: Channel<int>, expected: int) -> int {
 
 @test
 fn test_producer_consumer() {
-    shared const ch = new Channel(10)
+    shared const ch = Channel(10)
 
     // 启动多个生产者
     let p1 = go producer(ch, 1, 3)
@@ -65,8 +65,8 @@ fn test_defer() {
 // select 多路复用示例
 @test
 fn test_select() {
-    shared const ch1 = new Channel(1)
-    shared const ch2 = new Channel(1)
+    shared const ch1 = Channel(1)
+    shared const ch2 = Channel(1)
 
     ch1.trySend(100)
 

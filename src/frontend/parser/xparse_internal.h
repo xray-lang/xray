@@ -199,6 +199,9 @@ XR_FUNC AstNode *xr_parse_export_declaration(Parser *parser);
 /* ========== Type Annotations ========== */
 
 XR_FUNC XrTypeRef *xr_parse_type_annotation(Parser *parser);
+
+// True for built-in heap type names constructed via `T(args)` (Map/Array/...).
+XR_FUNC bool xr_is_construct_only_type_name(const char *name);
 XR_FUNC XrTypeRef *xr_parse_type_name_ref(Parser *parser, const char *name);
 XR_FUNC XrTypeRef *xr_parse_generic_type_name_ref(Parser *parser, const char *name,
                                                   XrTypeRef **args, int arg_count);

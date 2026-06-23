@@ -27,19 +27,19 @@ class Vector2D {
     }
     
     operator+(other: Vector2D) -> Vector2D {
-        return new Vector2D(this.x + other.x, this.y + other.y)
+        return Vector2D(this.x + other.x, this.y + other.y)
     }
     
     operator-(other: Vector2D) -> Vector2D {
-        return new Vector2D(this.x - other.x, this.y - other.y)
+        return Vector2D(this.x - other.x, this.y - other.y)
     }
     
     operator*(scalar: float) -> Vector2D {
-        return new Vector2D(this.x * scalar, this.y * scalar)
+        return Vector2D(this.x * scalar, this.y * scalar)
     }
     
     operator/(scalar: float) -> Vector2D {
-        return new Vector2D(this.x / scalar, this.y / scalar)
+        return Vector2D(this.x / scalar, this.y / scalar)
     }
     
     operator==(other: Vector2D) -> bool {
@@ -51,8 +51,8 @@ class Vector2D {
 fn test_property5_add_operator() {
     // **Feature: operator-overload-optimization, Property 5: 向后兼容性 - 有运算符重载**
     // **Validates: Requirements 5.1, 5.3**
-    let a = new Vector2D(1.0, 2.0)
-    let b = new Vector2D(3.0, 4.0)
+    let a = Vector2D(1.0, 2.0)
+    let b = Vector2D(3.0, 4.0)
     let c = a + b
     assert_eq(c.x, 4.0)
     assert_eq(c.y, 6.0)
@@ -62,8 +62,8 @@ fn test_property5_add_operator() {
 fn test_property5_sub_operator() {
     // **Feature: operator-overload-optimization, Property 5: 向后兼容性 - 有运算符重载**
     // **Validates: Requirements 5.1, 5.3**
-    let a = new Vector2D(5.0, 7.0)
-    let b = new Vector2D(2.0, 3.0)
+    let a = Vector2D(5.0, 7.0)
+    let b = Vector2D(2.0, 3.0)
     let c = a - b
     assert_eq(c.x, 3.0)
     assert_eq(c.y, 4.0)
@@ -73,7 +73,7 @@ fn test_property5_sub_operator() {
 fn test_property5_mul_operator() {
     // **Feature: operator-overload-optimization, Property 5: 向后兼容性 - 有运算符重载**
     // **Validates: Requirements 5.1, 5.3**
-    let v = new Vector2D(2.0, 3.0)
+    let v = Vector2D(2.0, 3.0)
     let scaled = v * 2.0
     assert_eq(scaled.x, 4.0)
     assert_eq(scaled.y, 6.0)
@@ -83,7 +83,7 @@ fn test_property5_mul_operator() {
 fn test_property5_div_operator() {
     // **Feature: operator-overload-optimization, Property 5: 向后兼容性 - 有运算符重载**
     // **Validates: Requirements 5.1, 5.3**
-    let v = new Vector2D(10.0, 20.0)
+    let v = Vector2D(10.0, 20.0)
     let halved = v / 2.0
     assert_eq(halved.x, 5.0)
     assert_eq(halved.y, 10.0)
@@ -93,9 +93,9 @@ fn test_property5_div_operator() {
 fn test_property5_eq_operator() {
     // **Feature: operator-overload-optimization, Property 5: 向后兼容性 - 有运算符重载**
     // **Validates: Requirements 5.1, 5.3**
-    let a = new Vector2D(1.0, 2.0)
-    let b = new Vector2D(1.0, 2.0)
-    let c = new Vector2D(3.0, 4.0)
+    let a = Vector2D(1.0, 2.0)
+    let b = Vector2D(1.0, 2.0)
+    let c = Vector2D(3.0, 4.0)
     assert_eq(a == b, true)
     assert_eq(a == c, false)
 }
@@ -104,9 +104,9 @@ fn test_property5_eq_operator() {
 fn test_property5_chained_operations() {
     // **Feature: operator-overload-optimization, Property 5: 向后兼容性 - 有运算符重载**
     // **Validates: Requirements 5.1, 5.3**
-    let a = new Vector2D(1.0, 1.0)
-    let b = new Vector2D(2.0, 2.0)
-    let c = new Vector2D(3.0, 3.0)
+    let a = Vector2D(1.0, 1.0)
+    let b = Vector2D(2.0, 2.0)
+    let c = Vector2D(3.0, 3.0)
     let result = a + b + c
     assert_eq(result.x, 6.0)
     assert_eq(result.y, 6.0)
@@ -142,9 +142,9 @@ class Money {
 fn test_property5_comparison_operators() {
     // **Feature: operator-overload-optimization, Property 5: 向后兼容性 - 有运算符重载**
     // **Validates: Requirements 5.1, 5.3**
-    let a = new Money(100)
-    let b = new Money(200)
-    let c = new Money(100)
+    let a = Money(100)
+    let b = Money(200)
+    let c = Money(100)
     
     assert_eq(a < b, true)
     assert_eq(a <= b, true)
@@ -164,15 +164,15 @@ class BitSet {
     }
     
     operator &(other: BitSet) -> BitSet {
-        return new BitSet(this.value & other.value)
+        return BitSet(this.value & other.value)
     }
     
     operator |(other: BitSet) -> BitSet {
-        return new BitSet(this.value | other.value)
+        return BitSet(this.value | other.value)
     }
     
     operator ^(other: BitSet) -> BitSet {
-        return new BitSet(this.value ^ other.value)
+        return BitSet(this.value ^ other.value)
     }
 }
 
@@ -180,8 +180,8 @@ class BitSet {
 fn test_property5_bitwise_and() {
     // **Feature: operator-overload-optimization, Property 5: 向后兼容性 - 有运算符重载**
     // **Validates: Requirements 5.1, 5.3**
-    let bs1 = new BitSet(12)  // 0b1100
-    let bs2 = new BitSet(10)  // 0b1010
+    let bs1 = BitSet(12)  // 0b1100
+    let bs2 = BitSet(10)  // 0b1010
     let result = bs1 & bs2
     assert_eq(result.value, 8)  // 0b1000
 }
@@ -190,8 +190,8 @@ fn test_property5_bitwise_and() {
 fn test_property5_bitwise_or() {
     // **Feature: operator-overload-optimization, Property 5: 向后兼容性 - 有运算符重载**
     // **Validates: Requirements 5.1, 5.3**
-    let bs1 = new BitSet(12)  // 0b1100
-    let bs2 = new BitSet(10)  // 0b1010
+    let bs1 = BitSet(12)  // 0b1100
+    let bs2 = BitSet(10)  // 0b1010
     let result = bs1 | bs2
     assert_eq(result.value, 14)  // 0b1110
 }
@@ -200,8 +200,8 @@ fn test_property5_bitwise_or() {
 fn test_property5_bitwise_xor() {
     // **Feature: operator-overload-optimization, Property 5: 向后兼容性 - 有运算符重载**
     // **Validates: Requirements 5.1, 5.3**
-    let bs1 = new BitSet(12)  // 0b1100
-    let bs2 = new BitSet(10)  // 0b1010
+    let bs1 = BitSet(12)  // 0b1100
+    let bs2 = BitSet(10)  // 0b1010
     let result = bs1 ^ bs2
     assert_eq(result.value, 6)  // 0b0110
 }
@@ -228,7 +228,7 @@ class Matrix {
 fn test_property5_subscript_get() {
     // **Feature: operator-overload-optimization, Property 5: 向后兼容性 - 有运算符重载**
     // **Validates: Requirements 5.1, 5.3**
-    let m = new Matrix()
+    let m = Matrix()
     m.data[0] = 10
     m.data[1] = 20
     assert_eq(m[0], 10)
@@ -239,7 +239,7 @@ fn test_property5_subscript_get() {
 fn test_property5_subscript_set() {
     // **Feature: operator-overload-optimization, Property 5: 向后兼容性 - 有运算符重载**
     // **Validates: Requirements 5.1, 5.3**
-    let m = new Matrix()
+    let m = Matrix()
     m[0] = 100
     m[1] = 200
     assert_eq(m.data[0], 100)
@@ -258,7 +258,7 @@ class Vector3D extends Vector2D {
     
     // 重写加法运算符
     operator+(other: Vector3D) -> Vector3D {
-        return new Vector3D(this.x + other.x, this.y + other.y, this.z + other.z)
+        return Vector3D(this.x + other.x, this.y + other.y, this.z + other.z)
     }
 }
 
@@ -266,8 +266,8 @@ class Vector3D extends Vector2D {
 fn test_property5_inherited_operator() {
     // **Feature: operator-overload-optimization, Property 5: 向后兼容性 - 有运算符重载**
     // **Validates: Requirements 5.1, 5.3**
-    let a = new Vector3D(1.0, 2.0, 3.0)
-    let b = new Vector3D(4.0, 5.0, 6.0)
+    let a = Vector3D(1.0, 2.0, 3.0)
+    let b = Vector3D(4.0, 5.0, 6.0)
     let c = a + b
     assert_eq(c.x, 5.0)
     assert_eq(c.y, 7.0)
@@ -287,7 +287,7 @@ class Point {
     }
     
     add(other: Point) -> Point {
-        return new Point(this.x + other.x, this.y + other.y)
+        return Point(this.x + other.x, this.y + other.y)
     }
 }
 
@@ -295,8 +295,8 @@ class Point {
 fn test_property6_no_operator_overload() {
     // **Feature: operator-overload-optimization, Property 6: 向后兼容性 - 无运算符重载**
     // **Validates: Requirements 5.2**
-    let p1 = new Point(1, 2)
-    let p2 = new Point(3, 4)
+    let p1 = Point(1, 2)
+    let p2 = Point(3, 4)
     
     // 使用普通方法而不是运算符
     let p3 = p1.add(p2)
@@ -378,10 +378,10 @@ fn test_property6_string_concat() {
 @test
 fn test_mixed_classes() {
     // 同时使用有运算符重载和无运算符重载的类
-    let v1 = new Vector2D(1.0, 2.0)
-    let v2 = new Vector2D(3.0, 4.0)
-    let p1 = new Point(1, 2)
-    let p2 = new Point(3, 4)
+    let v1 = Vector2D(1.0, 2.0)
+    let v2 = Vector2D(3.0, 4.0)
+    let p1 = Point(1, 2)
+    let p2 = Point(3, 4)
     
     // Vector2D 使用运算符重载
     let v3 = v1 + v2
@@ -410,7 +410,7 @@ class ModVector {
     }
     
     operator%(other: ModVector) -> ModVector {
-        return new ModVector(this.x % other.x, this.y % other.y)
+        return ModVector(this.x % other.x, this.y % other.y)
     }
 }
 
@@ -418,8 +418,8 @@ class ModVector {
 fn test_property5_mod_operator() {
     // **Feature: operator-overload-optimization, Property 5: 向后兼容性 - 有运算符重载**
     // **Validates: Requirements 5.1, 5.3**
-    let a = new ModVector(17, 23)
-    let b = new ModVector(5, 7)
+    let a = ModVector(17, 23)
+    let b = ModVector(5, 7)
     let c = a % b
     assert_eq(c.x, 2)  // 17 % 5 = 2
     assert_eq(c.y, 2)  // 23 % 7 = 2

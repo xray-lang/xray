@@ -204,7 +204,7 @@ let s: Set<int> = #[1, 2, 3]
 协程间通信通道。**必须**用 `const` 声明（见 §10.5）。
 
 ```xray @id=types-channel
-const ch: Channel<int> = new Channel<int>(10)
+const ch: Channel<int> = Channel<int>(10)
 ```
 
 #### 2.4.5 `Bytes`
@@ -212,8 +212,8 @@ const ch: Channel<int> = new Channel<int>(10)
 类型化字节缓冲。语义等价 `Array<uint8>`，但底层是连续内存。
 
 ```xray
-let buf = new Bytes(1024)
-let init = new Bytes([72, 101, 108, 108, 111])
+let buf = Bytes(1024)
+let init = Bytes([72, 101, 108, 108, 111])
 ```
 
 #### 2.4.6 `Json` 与对象字面量
@@ -676,7 +676,7 @@ let s: Set<int> = #[1, 2, 3]
 Inter-coroutine communication channel. **Must** be declared `const` (see §10.5).
 
 ```xray @id=types-channel
-const ch: Channel<int> = new Channel<int>(10)
+const ch: Channel<int> = Channel<int>(10)
 ```
 
 #### 2.4.5 `Bytes`
@@ -684,8 +684,8 @@ const ch: Channel<int> = new Channel<int>(10)
 Typed byte buffer. Semantically equivalent to `Array<uint8>`, but stored as contiguous memory.
 
 ```xray
-let buf = new Bytes(1024)
-let init = new Bytes([72, 101, 108, 108, 111])
+let buf = Bytes(1024)
+let init = Bytes([72, 101, 108, 108, 111])
 ```
 
 #### 2.4.6 `Json` and Object Literals

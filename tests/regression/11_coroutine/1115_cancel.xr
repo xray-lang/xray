@@ -15,7 +15,7 @@ fn quick_task(x: int) -> int {
 @test
 fn test_cancel() {
     // Test 1: cancel a task that cannot self-complete (blocked on channel)
-    const ch = new Channel<int>(0)
+    const ch = Channel<int>(0)
     let t1 = go blocked_task(ch)
     t1.cancel()
     let r1 = t1.awaitResult()

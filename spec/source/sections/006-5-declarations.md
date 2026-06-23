@@ -62,7 +62,7 @@ shared const PRIMES = [2, 3, 5, 7, 11]
 #### 5.1.4 `shared let` — 跨协程可变独占
 
 ```xray @id=decl-shared-let
-shared let buffer = new Bytes(1024)
+shared let buffer = Bytes(1024)
 ```
 
 - **Move 语义**：必须用 `move` 显式转移所有权。
@@ -340,11 +340,11 @@ class Animal {
     }
 
     static create(name: string) -> Animal {
-        return new Animal(name)
+        return Animal(name)
     }
 }
 
-let a = new Animal("Rex")
+let a = Animal("Rex")
 print(a.speak())
 print(Animal.create("Bob").name)
 ```
@@ -417,7 +417,7 @@ class Vector2 {
 - 构造器参数**类型可省**——若参数名与字段同名，从字段类型自动推断；其他情况推断为调用位点的实参类型。
 - 构造器隐式返回 `this`（编译期注入）。
 - 派生类构造器必须首行调 `super(...)`。
-- struct 可以**没有**构造器（`new Point()` 创建隐式零值实例，后续手动赋值；详见 §5.4）。
+- struct 可以**没有**构造器（`Point()` 创建隐式零值实例，后续手动赋值；详见 §5.4）。
 
 #### 5.3.5 运算符重载
 
@@ -431,7 +431,7 @@ class Vec2 {
     }
 
     operator+(other: Vec2) -> Vec2 {
-        return new Vec2(this.x + other.x, this.y + other.y)
+        return Vec2(this.x + other.x, this.y + other.y)
     }
 
     operator==(other: Vec2) -> bool {
@@ -491,7 +491,7 @@ struct Point {
 }
 
 // 两种创建方式
-let p = new Point()                  // 默认构造（字段为零值）后逐个赋值
+let p = Point()                  // 默认构造（字段为零值）后逐个赋值
 p.x = 3.0
 p.y = 4.0
 
@@ -515,7 +515,7 @@ b.x = 99.0
 | 泛型 | ✅ | ✅ |
 | `static` / `private` / `protected` / `const` | ✅ | ✅ |
 | 运算符重载 | ✅ | ✅ |
-| 构造器 | `constructor(...)` | **可省略**：`new Point()` 生成零值实例 |
+| 构造器 | `constructor(...)` | **可省略**：`Point()` 生成零值实例 |
 | 字面量 | 无 | `TypeName{field: value, ...}` |
 
 **适用场景**：
@@ -937,7 +937,7 @@ shared const PRIMES = [2, 3, 5, 7, 11]
 #### 5.1.4 `shared let` — cross-coroutine mutable, exclusive
 
 ```xray @id=decl-shared-let
-shared let buffer = new Bytes(1024)
+shared let buffer = Bytes(1024)
 ```
 
 - **Move semantics**: ownership must be transferred explicitly with `move`.
@@ -1215,11 +1215,11 @@ class Animal {
     }
 
     static create(name: string) -> Animal {
-        return new Animal(name)
+        return Animal(name)
     }
 }
 
-let a = new Animal("Rex")
+let a = Animal("Rex")
 print(a.speak())
 print(Animal.create("Bob").name)
 ```
@@ -1292,7 +1292,7 @@ class Vector2 {
 - Constructor parameters **may omit their types**—if a parameter shares a name with a field, the type is inferred from that field; otherwise it is inferred from the call-site argument type.
 - The constructor implicitly returns `this` (compiler-injected).
 - Derived class constructors must call `super(...)` first.
-- A `struct` may have **no** constructor (`new Point()` produces a zero-initialized instance which is then assigned manually; see §5.4).
+- A `struct` may have **no** constructor (`Point()` produces a zero-initialized instance which is then assigned manually; see §5.4).
 
 #### 5.3.5 Operator overloading
 
@@ -1306,7 +1306,7 @@ class Vec2 {
     }
 
     operator+(other: Vec2) -> Vec2 {
-        return new Vec2(this.x + other.x, this.y + other.y)
+        return Vec2(this.x + other.x, this.y + other.y)
     }
 
     operator==(other: Vec2) -> bool {
@@ -1366,7 +1366,7 @@ struct Point {
 }
 
 // Two creation styles
-let p = new Point()                  // default-construct (zero-valued fields), then assign
+let p = Point()                  // default-construct (zero-valued fields), then assign
 p.x = 3.0
 p.y = 4.0
 
@@ -1390,7 +1390,7 @@ b.x = 99.0
 | Generics | ✅ | ✅ |
 | `static` / `private` / `protected` / `const` | ✅ | ✅ |
 | Operator overload | ✅ | ✅ |
-| Constructor | `constructor(...)` | **Optional**: `new Point()` yields a zero-valued instance |
+| Constructor | `constructor(...)` | **Optional**: `Point()` yields a zero-valued instance |
 | Literal | none | `TypeName{field: value, ...}` |
 
 **When to use**:

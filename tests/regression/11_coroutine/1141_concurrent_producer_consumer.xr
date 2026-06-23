@@ -16,7 +16,7 @@ fn recv_ok(r: Recv<int>) -> bool {
 
 @test
 fn test_main() {
-    shared const ch = new Channel(10)
+    shared const ch = Channel(10)
     
     // 生产者发送数据
     let i = 0

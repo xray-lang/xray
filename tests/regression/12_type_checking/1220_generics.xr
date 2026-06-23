@@ -29,20 +29,20 @@ fn test_generics() {
     // Generic class with two type parameters
 
     // Test 1: Generic type annotation in variable declaration
-    let intBox: Box<int> = new Box<int>(42)
-    let strBox: Box<string> = new Box<string>("hello")
+    let intBox: Box<int> = Box<int>(42)
+    let strBox: Box<string> = Box<string>("hello")
     // Test 2: Access generic class members
     assert_eq(intBox.get(), 42)
     assert_eq(strBox.get(), "hello")
     // Test 3: Pair with different types
-    let pair: Pair<string, int> = new Pair<string, int>("age", 30)
+    let pair: Pair<string, int> = Pair<string, int>("age", 30)
     assert_eq(pair.key, "age")
     assert_eq(pair.value, 30)
     // Test 4: Nested generic types
-    let boxOfBox: Box<Box<int>> = new Box<Box<int>>(new Box<int>(100))
+    let boxOfBox: Box<Box<int>> = Box<Box<int>>(Box<int>(100))
     assert_eq(boxOfBox.get().get(), 100)
     // Test 5: Array with generic element type
-    let boxes: Array<Box<int>> = [new Box<int>(1), new Box<int>(2)]
+    let boxes: Array<Box<int>> = [Box<int>(1), Box<int>(2)]
     assert_eq(boxes[0].get(), 1)
     assert_eq(boxes[1].get(), 2)
 }

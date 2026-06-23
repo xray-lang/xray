@@ -4,7 +4,7 @@
 fn test_bytes_slice() {
 
     // ========== Basic slice ==========
-    let bytes = new Bytes(5)
+    let bytes = Bytes(5)
     bytes[0] = 10
     bytes[1] = 20
     bytes[2] = 30
@@ -19,7 +19,7 @@ fn test_bytes_slice() {
     print(s1[2])      // 40
 
     // ========== Slice boundaries ==========
-    let b = new Bytes(5)
+    let b = Bytes(5)
     b[0] = 1
     b[1] = 2
     b[2] = 3

@@ -62,7 +62,7 @@ class Box {
 
 @test
 fn test_new_trailing_comma() {
-    let b = new Box(100,)
+    let b = Box(100,)
     assert(b.value == 100)
 }
 

@@ -1,0 +1,5 @@
+class Point {
+    x: int
+    constructor(x: int) { this.x = x }
+}
+let p = new Point(1)

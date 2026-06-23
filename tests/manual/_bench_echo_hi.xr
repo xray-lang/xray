@@ -43,11 +43,11 @@ fn bench_echo_hi() {
     let lst = net.listen(0, 1024)!
     let port = lst.port()
 
-    let ready = new Channel(1)
+    let ready = Channel(1)
     go server(lst, ready)
     ready.recv()
 
-    let done = new Channel(conns)
+    let done = Channel(conns)
     let start = time.monotonic()
     let i = 0
     while (i < conns) {

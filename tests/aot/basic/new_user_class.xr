@@ -1,6 +1,6 @@
-// AOT test: `new ClassName(...)` construction must match VM/JIT and the bare
-// `ClassName(...)` form. Regression guard for the `new` constructor lowering to
-// XI_CALL_METHOD that previously fell through to AOT runtime method dispatch.
+// AOT test: `ClassName(...)` construction must match the VM. Regression guard
+// for class constructor lowering to XI_CALL_METHOD that previously fell through
+// to AOT runtime method dispatch.
 class Point {
     x: int
     y: int
@@ -19,11 +19,11 @@ class Point {
     }
 }
 
-let p = new Point(3, 4)
+let p = Point(3, 4)
 print(p.sum())        // 7
 p.shift(10)
 print(p.sum())        // 17
 print(p.x)            // 13
 
-let q = new Point(1, 1)
+let q = Point(1, 1)
 print(q.sum())        // 2

@@ -37,7 +37,7 @@ fn isOdd(n: int) -> bool {
 // ===== Function references class defined after it =====
 
 fn createDog(name: string) -> Dog {
-    return new Dog(name)
+    return Dog(name)
 }
 
 class Dog {
@@ -67,7 +67,7 @@ fn addBrackets(s: string) -> string {
 
 @test
 fn test_class_method_uses_later_fn() {
-    let f = new Formatter()
+    let f = Formatter()
     assert_eq(f.format("hello"), "[hello]")
 }
 

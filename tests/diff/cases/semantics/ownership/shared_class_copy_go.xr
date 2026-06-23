@@ -15,7 +15,7 @@ fn serve(c: Config) -> int {
     return c.port
 }
 
-let cfg = new Config("localhost", 8080)
+let cfg = Config("localhost", 8080)
 shared const ro = copy(cfg)
 let t = go serve(ro)
 print(await t)

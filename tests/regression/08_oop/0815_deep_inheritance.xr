@@ -26,7 +26,7 @@ class L12 extends L11 {}
 
 @test
 fn test_instanceof_primary_window() {
-    let x = new L7()
+    let x = L7()
     assert(x is L0)
     assert(x is L3)
     assert(x is L7)
@@ -34,7 +34,7 @@ fn test_instanceof_primary_window() {
 
 @test
 fn test_instanceof_secondary_window() {
-    let x = new L12()
+    let x = L12()
     // Depth > 8: must fall into the secondary supers hash.
     assert(x is L12)
     assert(x is L10)
@@ -49,8 +49,8 @@ fn test_instanceof_secondary_window() {
 @test
 fn test_method_dispatch_through_deep_chain() {
     // L9 overrides tag(), L10..L12 inherit it through the deep chain.
-    let a = new L7()
-    let b = new L12()
+    let a = L7()
+    let b = L12()
     assert_eq(a.tag(), "L0")
     assert_eq(b.tag(), "L9")
 }

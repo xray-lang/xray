@@ -629,6 +629,22 @@ AstNode *xr_parse_call_argument(Parser *parser) {
 }
 
 // Parse function call: add(1, 2) or add(...t, 3)
+// Built-in heap types are constructed with `T(args)` (no `new`). These names
+// have no callable function binding, so a call on them is a construction.
+// User classes/structs already construct through the normal call path; only
+// these built-ins need to be re-targeted to the new-expr construction node.
+bool xr_is_construct_only_type_name(const char *name) {
+    if (!name)
+        return false;
+    static const char *const names[] = {"Map",   "WeakMap", "Array",         "Set", "WeakSet",
+                                        "Bytes", "Channel", "StringBuilder", NULL};
+    for (const char *const *p = names; *p; p++) {
+        if (strcmp(name, *p) == 0)
+            return true;
+    }
+    return false;
+}
+
 AstNode *xr_parse_call_expr(Parser *parser, AstNode *callee) {
     XR_DCHECK(parser != NULL, "parse_call_expr: NULL parser");
     int line = parser->previous.line;
@@ -645,6 +661,13 @@ AstNode *xr_parse_call_expr(Parser *parser, AstNode *callee) {
     }
 
     xr_parser_consume(parser, TK_RPAREN, "expected ')' after argument list");
+
+    // `Map()` / `Array()` / `Channel(n)` etc. construct built-in heap types.
+    if (callee && callee->type == AST_VARIABLE &&
+        xr_is_construct_only_type_name(callee->as.variable.name)) {
+        return xr_ast_new_expr(parser->X, NULL, callee->as.variable.name, arguments, arg_count,
+                               NULL, 0, line);
+    }
 
     return xr_ast_call_expr(parser->X, callee, arguments, arg_count, line);
 }

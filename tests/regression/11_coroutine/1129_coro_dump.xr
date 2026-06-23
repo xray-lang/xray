@@ -20,7 +20,7 @@ fn test_coro_dump() {
     print("stalled:", stalled.length)
 
     print("test4: with coroutines")
-    shared const ch = new Channel(1)
+    shared const ch = Channel(1)
 
 
     let t = go(name: "test-worker") worker(ch)

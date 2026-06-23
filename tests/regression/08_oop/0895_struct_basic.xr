@@ -16,7 +16,7 @@ struct Vec2 {
     }
 
     add(other: Vec2) -> Vec2 {
-        let result = new Vec2()
+        let result = Vec2()
         result.x = this.x + other.x
         result.y = this.y + other.y
         return result
@@ -47,7 +47,7 @@ struct MathHelper {
 @test
 fn test_struct_basic() {
 
-    let p = new Point()
+    let p = Point()
     p.x = 3.0
     p.y = 4.0
     assert(p.x == 3.0)
@@ -55,12 +55,12 @@ fn test_struct_basic() {
 
     // === Struct with method ===
 
-    let a = new Vec2()
+    let a = Vec2()
     a.x = 3.0
     a.y = 4.0
     assert(a.magnitude_sq() == 25.0)
 
-    let b = new Vec2()
+    let b = Vec2()
     b.x = 1.0
     b.y = 2.0
 
@@ -70,7 +70,7 @@ fn test_struct_basic() {
 
     // === Struct with int fields ===
 
-    let red = new Color()
+    let red = Color()
     red.r = 255
     red.g = 0
     red.b = 0
@@ -81,7 +81,7 @@ fn test_struct_basic() {
 
     // === Struct with mixed field types ===
 
-    let r = new Rect()
+    let r = Rect()
     r.x = 10.0
     r.y = 20.0
     r.width = 100.0
@@ -94,13 +94,13 @@ fn test_struct_basic() {
     assert(MathHelper.pi() < 3.15)
 
     // === Struct typeof ===
-    let p2 = new Point()
+    let p2 = Point()
     assert(typeof(p2) == "Point")
 
     // === Multiple struct instances ===
     let points: Array<Point> = []
     for (let i = 0; i < 5; i++) {
-        let pt = new Point()
+        let pt = Point()
         pt.x = float(i)
         pt.y = float(i * 2)
         points.push(pt)

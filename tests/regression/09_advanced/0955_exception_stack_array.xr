@@ -11,14 +11,14 @@ fn mkzero() -> int { return 0 }
 
 @test
 fn test_new_exception_stack_is_array() {
-    let e = new Exception("hello")
+    let e = Exception("hello")
     assert_eq(typeof(e.stack), "Array")
 }
 
 @test
 fn test_new_exception_stack_initially_empty() {
     // 直接 new 不经过 unwind 控制流，stack 为空数组
-    let e = new Exception("hello")
+    let e = Exception("hello")
     assert_eq(e.stack.length, 0)
 }
 
@@ -82,7 +82,7 @@ fn test_subclass_exception_stack_is_array() {
     class MyErr extends Exception {
         constructor(m: string) { super(m) }
     }
-    let e = new MyErr("hi")
+    let e = MyErr("hi")
     assert_eq(typeof(e.stack), "Array")
     assert_eq(e.stack.length, 0)
 }
@@ -91,12 +91,12 @@ fn test_subclass_exception_stack_is_array() {
 
 @test
 fn test_exception_code_default_zero() {
-    let e = new Exception("plain message")
+    let e = Exception("plain message")
     assert_eq(e.code, 0)
 }
 
 @test
 fn test_exception_data_default_null() {
-    let e = new Exception("plain message")
+    let e = Exception("plain message")
     assert_eq(e.data, null)
 }

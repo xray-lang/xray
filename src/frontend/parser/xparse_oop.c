@@ -846,6 +846,12 @@ AstNode *xr_parse_new_expression(Parser *parser) {
     XR_DCHECK(parser != NULL, "parse_new_expression: NULL parser");
     int line = parser->previous.line;
 
+    // The `new` keyword was removed. Construction is now `T(args)` directly.
+    // Emit a clear migration error, then keep parsing the construction so
+    // analysis can recover and report any further issues in the same pass.
+    xr_parser_error(
+        parser, "the 'new' keyword was removed; construct with 'T(...)' directly (delete 'new')");
+
     // 'new' keyword already consumed
 
     // Parse class name (can be class name or type keyword like Map, Array)

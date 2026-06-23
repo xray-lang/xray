@@ -846,6 +846,14 @@ static AstNode *try_parse_generic_call(Parser *parser, AstNode *callee) {
 
     xr_parser_consume(parser, TK_RPAREN, "expected ')' after argument list");
 
+    // `Map<K,V>()` / `Array<T>()` / `Channel<T>(n)` etc. construct built-in
+    // heap types directly (no `new`); route to the construction node so the
+    // generic type arguments drive element/key/value layout.
+    if (callee->type == AST_VARIABLE && xr_is_construct_only_type_name(callee->as.variable.name)) {
+        return xr_ast_new_expr(parser->X, NULL, callee->as.variable.name, arguments, arg_count,
+                               (XrTypeRef **) type_args, type_arg_count, line);
+    }
+
     return xr_ast_call_expr_generic(parser->X, callee, arguments, arg_count, type_args,
                                     type_arg_count, line);
 }

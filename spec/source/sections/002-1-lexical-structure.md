@@ -86,7 +86,7 @@ xray 共 **62 个保留关键字**，源码真值表见 `src/frontend/lexer/xkey
 | `interface` `implements` | 接口声明/实现 |
 | `enum` | 枚举声明 |
 | `type` | 类型别名 |
-| `new` | 实例化 |
+| `new` | 已移除——仍保留为关键字仅用于迁移期报错（构造写 `T(...)`，见 §3.14） |
 | `this` `super` | 自我/父类引用 |
 | `constructor` | 构造器 |
 | `static` `private` `protected` | 类/成员修饰符；公开是默认语义，没有 `public` 关键字 |
@@ -452,7 +452,7 @@ Xray has **62 reserved keywords** in total; the authoritative source-of-truth ta
 | `interface` `implements` | interface declaration / implementation |
 | `enum` | enum declaration |
 | `type` | type alias |
-| `new` | instantiation |
+| `new` | removed—kept as a keyword only for migration errors (construct with `T(...)`, see §3.14) |
 | `this` `super` | self / parent reference |
 | `constructor` | constructor |
 | `static` `private` `protected` | class/member modifiers; public visibility is the default and has no `public` keyword |

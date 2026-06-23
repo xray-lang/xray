@@ -8,7 +8,7 @@ fn linked_value() -> int {
     return 41
 }
 
-let ch = new Channel<int>(2)
+let ch = Channel<int>(2)
 scope {
     go send_after_yield(ch, 1)
     go send_after_yield(ch, 2)

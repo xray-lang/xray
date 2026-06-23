@@ -232,7 +232,7 @@ run_class_symbols() {
     cat >"$app" <<'XR_EOF'
 import { Box } from "./shape"
 
-let b = new Box(4)
+let b = Box(4)
 print(b.area())
 XR_EOF
     cat >"$lib" <<'XR_EOF'

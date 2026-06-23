@@ -23,14 +23,14 @@ class Wrapper<T> {
 @test
 fn test_generic_instanceof() {
     // T1: instanceof with generic — generic_origin check
-    let b = new Box<int>(42)
+    let b = Box<int>(42)
     assert(b is Box)
 
-    let bs = new Box<string>("hello")
+    let bs = Box<string>("hello")
     assert(bs is Box)
 
     // Non-Box should fail
-    let w = new Wrapper<int>(1)
+    let w = Wrapper<int>(1)
     assert(!(w is Box))
     assert(w is Wrapper)
 }
@@ -38,10 +38,10 @@ fn test_generic_instanceof() {
 @test
 fn test_generic_typeof() {
     // T2: Reflect.typeOf for generic class
-    let b = new Box<int>(42)
+    let b = Box<int>(42)
     assert_eq(Reflect.typeOf(b), "Box<int>")
 
-    let bs = new Box<string>("hello")
+    let bs = Box<string>("hello")
     assert_eq(Reflect.typeOf(bs), "Box<string>")
 
     // T7: Multiple type parameters
@@ -49,7 +49,7 @@ fn test_generic_typeof() {
     assert_eq(Reflect.typeOf(p), "Pair<int, string>")
 
     // T8: Non-generic instance
-    let plain = new Box(99)
+    let plain = Box(99)
     assert_eq(Reflect.typeOf(plain), "Box")
 }
 
@@ -65,7 +65,7 @@ fn test_struct_generic_is_typeof() {
     assert_eq(Reflect.typeOf(p2), "Pair<float, bool>")
 
     // Non-struct should not match
-    let b = new Box<int>(1)
+    let b = Box<int>(1)
     assert(!(b is Pair))
 }
 
@@ -74,8 +74,8 @@ fn test_rep_sharing_correctness() {
     // T10: Rep-sharing must not merge distinct reference-type instantiations
     // Wrapper<string> and Wrapper<Array> have the same slot layout (both PTR)
     // but must remain distinct classes with correct type info
-    let ws = new Wrapper<string>("hello")
-    let wi = new Wrapper<int>(42)
+    let ws = Wrapper<string>("hello")
+    let wi = Wrapper<int>(42)
 
     assert_eq(Reflect.typeOf(ws), "Wrapper<string>")
     assert_eq(Reflect.typeOf(wi), "Wrapper<int>")
@@ -85,7 +85,7 @@ fn test_rep_sharing_correctness() {
     assert(wi is Wrapper)
 
     // Different instantiations must not be confused
-    let b = new Box<int>(1)
+    let b = Box<int>(1)
     assert(!(b is Wrapper))
     assert(!(ws is Box))
 }

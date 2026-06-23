@@ -8,7 +8,7 @@ fn worker(ch: Channel<Array<int>>) -> int {
     return xs.length
 }
 
-let ch = new Channel<Array<int>>(1)
+let ch = Channel<Array<int>>(1)
 let xs = [1, 2]
 ch.send(xs)
 let task = go worker(ch)

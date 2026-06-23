@@ -36,8 +36,8 @@ class Box<T> {
     get() -> T { return this.value }
 }
 
-let b1 = new Box<int>(42)
-let b2 = new Box<string>("hi")
+let b1 = Box<int>(42)
+let b2 = Box<string>("hi")
 
 // 多参数泛型
 class Pair<K, V> {
@@ -103,8 +103,8 @@ fn pickValue<K: Hashable, V>(k: K, v: V) -> V {
 
 ```xray @id=generics-inference
 identity(42)                    // T 推断为 int
-new Box("hello")                // T 推断为 string
-new Pair("key", 100)            // K=string, V=int
+Box("hello")                // T 推断为 string
+Pair("key", 100)            // K=string, V=int
 ```
 
 推断算法是**双向推断**：
@@ -116,8 +116,8 @@ new Pair("key", 100)            // K=string, V=int
 在推断失败或需要明确时：
 
 ```xray @id=generics-explicit-instantiation
-let empty = new Array<int>()              // 无元素可推
-let m = new Map<string, int>()
+let empty = Array<int>()              // 无元素可推
+let m = Map<string, int>()
 let result = identity<float>(0)            // 0 默认 int，强制 float
 ```
 
@@ -160,8 +160,8 @@ class Wrong {
 }
 
 fn render(d: Drawable) { d.draw() }
-render(new Square())     // OK
-// render(new Wrong())   // 编译错误：Wrong 不是 Drawable
+render(Square())     // OK
+// render(Wrong())   // 编译错误：Wrong 不是 Drawable
 ```
 
 #### 结构化对象
@@ -191,7 +191,7 @@ describe({ x: 1.0, y: 2.0, z: 3.0 })  // 编译错误：sealed 类型多了字�
 class Container<T> {
     items: Array<T>
 }
-let c = new Container<int>()
+let c = Container<int>()
 print(Reflect.typeOf(c))       // "Container<int>"
 ```
 
@@ -231,8 +231,8 @@ class Box<T> {
     get() -> T { return this.value }
 }
 
-let b1 = new Box<int>(42)
-let b2 = new Box<string>("hi")
+let b1 = Box<int>(42)
+let b2 = Box<string>("hi")
 
 // Multi-parameter generic
 class Pair<K, V> {
@@ -302,8 +302,8 @@ fn pickValue<K: Hashable, V>(k: K, v: V) -> V {
 
 ```xray @id=generics-inference
 identity(42)                    // T inferred as int
-new Box("hello")                // T inferred as string
-new Pair("key", 100)            // K=string, V=int
+Box("hello")                // T inferred as string
+Pair("key", 100)            // K=string, V=int
 ```
 
 The inference algorithm is **bidirectional**:
@@ -315,8 +315,8 @@ The inference algorithm is **bidirectional**:
 When inference fails or precision is needed:
 
 ```xray @id=generics-explicit-instantiation
-let empty = new Array<int>()              // no element to infer from
-let m = new Map<string, int>()
+let empty = Array<int>()              // no element to infer from
+let m = Map<string, int>()
 let result = identity<float>(0)            // 0 defaults to int; force float
 ```
 
@@ -359,8 +359,8 @@ class Wrong {
 }
 
 fn render(d: Drawable) { d.draw() }
-render(new Square())     // OK
-// render(new Wrong())   // compile error: Wrong is not Drawable
+render(Square())     // OK
+// render(Wrong())   // compile error: Wrong is not Drawable
 ```
 
 #### Structural objects
@@ -390,7 +390,7 @@ Because of monomorphization, every concrete instantiation has its own class/func
 class Container<T> {
     items: Array<T>
 }
-let c = new Container<int>()
+let c = Container<int>()
 print(Reflect.typeOf(c))       // "Container<int>"
 ```
 

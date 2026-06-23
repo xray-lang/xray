@@ -1,4 +1,4 @@
-let ch = new Channel<int>(1)
+let ch = Channel<int>(1)
 
 print(ch.trySend(7))
 print(ch.trySend(8))

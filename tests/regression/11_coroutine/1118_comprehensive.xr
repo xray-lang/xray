@@ -33,7 +33,7 @@ fn test_main() {
 
     // === 3. 取消协程（channel-blocked 保证未完成） ===
     print("=== cancel ===")
-    const cancel_ch = new Channel<int>(0)
+    const cancel_ch = Channel<int>(0)
     let task3 = go blocked(cancel_ch)
     task3.cancel()
     let result3 = task3.awaitResult()
@@ -46,7 +46,7 @@ fn test_main() {
 
     // === 4. Channel 通信 ===
     print("=== channel ===")
-    shared const ch = new Channel(3)
+    shared const ch = Channel(3)
     ch.trySend(1)
     ch.trySend(2)
     ch.trySend(3)

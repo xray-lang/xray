@@ -6,7 +6,7 @@ fn send_timeout_worker(ch: Channel<int>, timeout_ms: int, value: int) -> bool {
 }
 
 fn run_once(count: int, timeout_ms: int) -> int {
-    shared const ch = new Channel(1)
+    shared const ch = Channel(1)
     ch.send(1)
 
     let tasks: Array<Task> = []

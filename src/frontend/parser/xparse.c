@@ -1491,6 +1491,13 @@ AstNode *xr_parse_variable(Parser *parser) {
 
         xr_parser_consume(parser, TK_RPAREN, "expected ')' after argument list");
 
+        // `Map<K,V>()` / `Array<T>()` / `Channel<T>(n)` construct built-in heap
+        // types directly (no `new`); route to the construction node.
+        if (xr_is_construct_only_type_name(name)) {
+            return xr_ast_new_expr(parser->X, NULL, name, arguments, arg_count,
+                                   (XrTypeRef **) type_args, type_arg_count, line);
+        }
+
         return xr_ast_call_expr_generic(parser->X, callee, arguments, arg_count, type_args,
                                         type_arg_count, line);
     }

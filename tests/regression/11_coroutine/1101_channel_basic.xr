@@ -24,7 +24,7 @@ fn recv_ok(r: Recv<int>) -> bool {
 @test
 fn test_channel() {
     // 创建缓冲 Channel（容量 3）
-    shared const ch: Channel<int> = new Channel(3)
+    shared const ch: Channel<int> = Channel(3)
     print(ch.capacity == 3)  // true
     
     // 非阻塞发送到缓冲区

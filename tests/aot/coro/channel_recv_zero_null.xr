@@ -20,12 +20,12 @@ fn read_closed(ch: Channel<int>) -> int {
     }
 }
 
-let zero_ch = new Channel<int>(1)
+let zero_ch = Channel<int>(1)
 zero_ch.send(0)
 let zero_task = go read_zero(zero_ch)
 print(await zero_task)
 
-let closed_ch = new Channel<int>(0)
+let closed_ch = Channel<int>(0)
 closed_ch.close()
 let closed_task = go read_closed(closed_ch)
 print(await closed_task)
