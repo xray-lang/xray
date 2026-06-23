@@ -121,11 +121,11 @@ static XrValue m_fill(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
         return self;
     XrArray *arr = array_self(self);
     XrValue fill_val = args[0];
-    int start = 0, end = (int) arr->length;
+    int64_t start = 0, end = arr->length;
     if (argc >= 2 && XR_IS_INT(args[1]))
-        start = (int) XR_TO_INT(args[1]);
+        start = XR_TO_INT(args[1]);
     if (argc >= 3 && XR_IS_INT(args[2]))
-        end = (int) XR_TO_INT(args[2]);
+        end = XR_TO_INT(args[2]);
     xr_array_fill(arr, fill_val, start, end);
     return self;
 }

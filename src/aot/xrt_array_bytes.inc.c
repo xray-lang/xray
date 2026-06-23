@@ -166,51 +166,53 @@ static inline XrValue xrt_bytes_repeat_from_value(XrValue arr_value, XrValue dst
  * float buffer and vice versa).  Return 0 to fall back to the generic loop.
  * ========================================================================= */
 
-#define XRT_FILL_LOOP(T, val)                                                                      \
+#define XRT_FILL_LOOP(T, val, start, end)                                                          \
     do {                                                                                           \
         T *d = (T *) a->data;                                                                      \
         T fv = (T) (val);                                                                          \
-        for (int64_t i = 0; i < a->length; i++)                                                    \
+        for (int64_t i = (start); i < (end); i++)                                                  \
             d[i] = fv;                                                                             \
     } while (0)
 
-static inline int xrt_array_fill_typed_fast(xrt_array_t *a, XrValue v) {
+static inline int xrt_array_fill_typed_fast(xrt_array_t *a, XrValue v, XrArrayCoreRange range) {
+    if (range.count <= 0)
+        return 1;
     switch (a->elem_type) {
         case XR_ELEM_I8:
         case XR_ELEM_U8: {
             uint8_t b = (uint8_t) xr_value_to_int64_coerce(v);
-            memset(a->data, b, (size_t) a->length);
+            memset((uint8_t *) a->data + range.start, b, (size_t) range.count);
             return 1;
         }
         case XR_ELEM_BOOL: {
             int falsy = XR_IS_FALSE(v) || XR_IS_NULL(v) || (XR_IS_INT(v) && v.i == 0) ||
                         (XR_IS_FLOAT(v) && v.f == 0.0);
-            memset(a->data, falsy ? 0 : 1, (size_t) a->length);
+            memset((uint8_t *) a->data + range.start, falsy ? 0 : 1, (size_t) range.count);
             return 1;
         }
         case XR_ELEM_I16:
-            XRT_FILL_LOOP(int16_t, xr_value_to_int64_coerce(v));
+            XRT_FILL_LOOP(int16_t, xr_value_to_int64_coerce(v), range.start, range.end);
             return 1;
         case XR_ELEM_U16:
-            XRT_FILL_LOOP(uint16_t, xr_value_to_int64_coerce(v));
+            XRT_FILL_LOOP(uint16_t, xr_value_to_int64_coerce(v), range.start, range.end);
             return 1;
         case XR_ELEM_I32:
-            XRT_FILL_LOOP(int32_t, xr_value_to_int64_coerce(v));
+            XRT_FILL_LOOP(int32_t, xr_value_to_int64_coerce(v), range.start, range.end);
             return 1;
         case XR_ELEM_U32:
-            XRT_FILL_LOOP(uint32_t, xr_value_to_int64_coerce(v));
+            XRT_FILL_LOOP(uint32_t, xr_value_to_int64_coerce(v), range.start, range.end);
             return 1;
         case XR_ELEM_I64:
-            XRT_FILL_LOOP(int64_t, xr_value_to_int64_coerce(v));
+            XRT_FILL_LOOP(int64_t, xr_value_to_int64_coerce(v), range.start, range.end);
             return 1;
         case XR_ELEM_U64:
-            XRT_FILL_LOOP(uint64_t, xr_value_to_int64_coerce(v));
+            XRT_FILL_LOOP(uint64_t, xr_value_to_int64_coerce(v), range.start, range.end);
             return 1;
         case XR_ELEM_F32:
-            XRT_FILL_LOOP(float, xr_value_to_f64_coerce(v));
+            XRT_FILL_LOOP(float, xr_value_to_f64_coerce(v), range.start, range.end);
             return 1;
         case XR_ELEM_F64:
-            XRT_FILL_LOOP(double, xr_value_to_f64_coerce(v));
+            XRT_FILL_LOOP(double, xr_value_to_f64_coerce(v), range.start, range.end);
             return 1;
         default:
             return 0;
@@ -218,6 +220,19 @@ static inline int xrt_array_fill_typed_fast(xrt_array_t *a, XrValue v) {
 }
 
 #undef XRT_FILL_LOOP
+
+static inline XrValue xrt_array_fill_range_value(XrValue arr_value, XrValue fill_value,
+                                                 int64_t start, int64_t end) {
+    if (!XR_IS_ARRAY(arr_value) || !arr_value.ptr)
+        return arr_value;
+    xrt_array_t *a = (xrt_array_t *) arr_value.ptr;
+    XrArrayCoreRange range = xr_array_core_fill_range(a->length, start, end);
+    if (xrt_array_fill_typed_fast(a, fill_value, range))
+        return arr_value;
+    for (int64_t i = range.start; i < range.end; i++)
+        xr_typed_set(a->data, (int32_t) i, fill_value, a->elem_type);
+    return arr_value;
+}
 
 #define XRT_INDEXOF_LOOP(T)                                                                        \
     do {                                                                                           \

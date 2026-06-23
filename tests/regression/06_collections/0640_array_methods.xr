@@ -144,6 +144,31 @@ fn test_fill() {
     assert_eq(arr[4], 0)
 }
 
+@test
+fn test_fill_range_and_negative_bounds() {
+    let arr = [1, 2, 3, 4, 5, 6]
+    arr.fill(9, 2, 5)
+    assert_eq(arr[0], 1)
+    assert_eq(arr[2], 9)
+    assert_eq(arr[4], 9)
+    assert_eq(arr[5], 6)
+
+    arr.fill(7, -3, -1)
+    assert_eq(arr[2], 9)
+    assert_eq(arr[3], 7)
+    assert_eq(arr[4], 7)
+    assert_eq(arr[5], 6)
+
+    arr.fill(8, 5, 2)
+    assert_eq(arr[2], 9)
+    assert_eq(arr[5], 6)
+
+    arr.fill(4, 4)
+    assert_eq(arr[3], 7)
+    assert_eq(arr[4], 4)
+    assert_eq(arr[5], 4)
+}
+
 // ===== sort =====
 @test
 fn test_sort_numbers() {

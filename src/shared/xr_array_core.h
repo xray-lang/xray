@@ -45,4 +45,9 @@ static inline XrArrayCoreRange xr_array_core_slice_range(int64_t length, int64_t
     return (XrArrayCoreRange) {start, end, end - start};
 }
 
+static inline XrArrayCoreRange xr_array_core_fill_range(int64_t length, int64_t start,
+                                                        int64_t end) {
+    return xr_array_core_slice_range(length, start, end);
+}
+
 #endif  // XR_ARRAY_CORE_H

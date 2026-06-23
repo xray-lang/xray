@@ -214,6 +214,27 @@ static void test_slice_negative_bounds_and_aliasing(void) {
     free_test_array(a);
 }
 
+static void test_fill_range_typed_fast_path(void) {
+    reset_alloc_counts();
+    XrValue value = xrt_array_new_typed(0, XR_ELEM_I64);
+    xrt_array_t *a = (xrt_array_t *) value.ptr;
+    for (int64_t i = 0; i < 6; i++)
+        xrt_array_push(value, XR_FROM_INT(i + 1));
+
+    xrt_array_fill_range_value(value, XR_FROM_INT(99), -4, -1);
+    ASSERT_EQ_INT(((int64_t *) a->data)[0], 1, "fill keeps prefix before negative range");
+    ASSERT_EQ_INT(((int64_t *) a->data)[1], 2, "fill starts at tail-adjusted index");
+    ASSERT_EQ_INT(((int64_t *) a->data)[2], 99, "fill writes first selected element");
+    ASSERT_EQ_INT(((int64_t *) a->data)[4], 99, "fill writes end-exclusive range");
+    ASSERT_EQ_INT(((int64_t *) a->data)[5], 6, "fill leaves suffix after end");
+
+    xrt_array_fill_range_value(value, XR_FROM_INT(7), 5, 2);
+    ASSERT_EQ_INT(((int64_t *) a->data)[2], 99, "empty fill leaves start untouched");
+    ASSERT_EQ_INT(((int64_t *) a->data)[5], 6, "empty fill leaves end untouched");
+
+    free_test_array(a);
+}
+
 static XrValue dummy_closure_body(xrt_closure_t *cl) {
     (void) cl;
     return XR_NULL_VAL;
@@ -244,6 +265,7 @@ int main(void) {
     test_growth_spills_inline_to_heap_and_preserves_values();
     test_slice_marks_borrowed_storage();
     test_slice_negative_bounds_and_aliasing();
+    test_fill_range_typed_fast_path();
     test_stack_closure_borrows_cell_upval();
     printf("test_xrt_array: %d passed, %d failed\n", g_passed, g_failed);
     return g_failed ? 1 : 0;

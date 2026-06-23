@@ -368,34 +368,29 @@ bool xr_array_is_empty(XrArray *arr) {
     do {                                                                                           \
         type *d = (type *) (arr)->data;                                                            \
         type v = (val);                                                                            \
-        for (int _i = (start); _i < (end); _i++)                                                   \
+        for (int64_t _i = (start); _i < (end); _i++)                                               \
             d[_i] = v;                                                                             \
     } while (0)
 
-void xr_array_fill(XrArray *arr, XrValue value, int start, int end) {
+void xr_array_fill(XrArray *arr, XrValue value, int64_t start, int64_t end) {
     if (!arr)
         return;
-    if (start < 0)
-        start = 0;
-    if (end > (int) arr->length)
-        end = (int) arr->length;
-    if (start >= end)
+    XrArrayCoreRange range = xr_array_core_fill_range(arr->length, start, end);
+    if (range.count <= 0)
         return;
-
-    int count = end - start;
 
     if (arr->elem_type == XR_ELEM_ANY) {
         XrValue *data = (XrValue *) arr->data;
         int32_t changed_slots = 0;
         if (XR_VALUE_NEEDS_GC(value)) {
-            for (int i = start; i < end; i++) {
+            for (int64_t i = range.start; i < range.end; i++) {
                 if (!xr_array_same_gc_object(data[i], value))
                     changed_slots++;
             }
             xr_array_retain_extra_fill_refs(value, changed_slots);
         }
         XrCoroHeap *heap = xr_current_coro_heap();
-        for (int i = start; i < end; i++) {
+        for (int64_t i = range.start; i < range.end; i++) {
             XrValue old = data[i];
             if (xr_array_same_gc_object(old, value))
                 continue;
@@ -412,66 +407,66 @@ void xr_array_fill(XrArray *arr, XrValue value, int start, int end) {
             TYPED_FILL(
                 int8_t, arr,
                 (int8_t) (XR_IS_INT(value) ? XR_TO_INT(value) : (int64_t) XR_TO_FLOAT(value)),
-                start, end);
+                range.start, range.end);
             break;
         case XR_ELEM_U8: {
             // Special case: memset for byte arrays
             uint8_t v =
                 (uint8_t) (XR_IS_INT(value) ? XR_TO_INT(value) : (int64_t) XR_TO_FLOAT(value));
-            memset((uint8_t *) arr->data + start, v, (size_t) count);
+            memset((uint8_t *) arr->data + range.start, v, (size_t) range.count);
             break;
         }
         case XR_ELEM_I16:
             TYPED_FILL(
                 int16_t, arr,
                 (int16_t) (XR_IS_INT(value) ? XR_TO_INT(value) : (int64_t) XR_TO_FLOAT(value)),
-                start, end);
+                range.start, range.end);
             break;
         case XR_ELEM_U16:
             TYPED_FILL(
                 uint16_t, arr,
                 (uint16_t) (XR_IS_INT(value) ? XR_TO_INT(value) : (int64_t) XR_TO_FLOAT(value)),
-                start, end);
+                range.start, range.end);
             break;
         case XR_ELEM_I32:
             TYPED_FILL(
                 int32_t, arr,
                 (int32_t) (XR_IS_INT(value) ? XR_TO_INT(value) : (int64_t) XR_TO_FLOAT(value)),
-                start, end);
+                range.start, range.end);
             break;
         case XR_ELEM_U32:
             TYPED_FILL(
                 uint32_t, arr,
                 (uint32_t) (XR_IS_INT(value) ? XR_TO_INT(value) : (int64_t) XR_TO_FLOAT(value)),
-                start, end);
+                range.start, range.end);
             break;
         case XR_ELEM_I64:
             TYPED_FILL(
                 int64_t, arr,
                 (int64_t) (XR_IS_INT(value) ? XR_TO_INT(value) : (int64_t) XR_TO_FLOAT(value)),
-                start, end);
+                range.start, range.end);
             break;
         case XR_ELEM_U64:
             TYPED_FILL(
                 uint64_t, arr,
                 (uint64_t) (XR_IS_INT(value) ? XR_TO_INT(value) : (int64_t) XR_TO_FLOAT(value)),
-                start, end);
+                range.start, range.end);
             break;
         case XR_ELEM_F32:
             TYPED_FILL(
                 float, arr,
                 (float) (XR_IS_FLOAT(value) ? XR_TO_FLOAT(value) : (double) XR_TO_INT(value)),
-                start, end);
+                range.start, range.end);
             break;
         case XR_ELEM_F64:
             TYPED_FILL(
                 double, arr,
                 (double) (XR_IS_FLOAT(value) ? XR_TO_FLOAT(value) : (double) XR_TO_INT(value)),
-                start, end);
+                range.start, range.end);
             break;
         case XR_ELEM_BOOL: {
             uint8_t v = xr_value_is_truthy(value) ? 1 : 0;
-            memset((uint8_t *) arr->data + start, v, (size_t) count);
+            memset((uint8_t *) arr->data + range.start, v, (size_t) range.count);
             break;
         }
         default:

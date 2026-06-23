@@ -111,7 +111,7 @@ XR_FUNC int xr_array_index_of(XrArray *arr, XrValue value);
 XR_FUNC bool xr_array_has(XrArray *arr, XrValue value);
 XR_FUNC bool xr_array_is_empty(XrArray *arr);
 
-XR_FUNC void xr_array_fill(XrArray *arr, XrValue value, int start, int end);
+XR_FUNC void xr_array_fill(XrArray *arr, XrValue value, int64_t start, int64_t end);
 XR_FUNC bool xr_array_reserve(XrArray *arr, int32_t capacity);
 XR_FUNC bool xr_array_resize(XrArray *arr, int32_t length, XrValue fill);
 
