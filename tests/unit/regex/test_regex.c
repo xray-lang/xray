@@ -14,6 +14,7 @@
  */
 
 #include "../test_framework.h"
+#include "../../../src/shared/xr_regex_core.h"
 #include "../../../stdlib/regex/xregex.h"
 #include "../../../stdlib/regex/xregex_internal.h"
 #include <string.h>
@@ -66,6 +67,25 @@ TEST(compile_flags) {
     XrRegex *re = RE_COMPILE_FLAGS("hello", XR_RE_IGNORECASE | XR_RE_MULTILINE);
     ASSERT_NOT_NULL(re);
     xr_regex_free(re);
+}
+
+TEST(core_parse_flags_matches_regex_engine_flags) {
+    ASSERT_EQ_INT(xr_regex_core_parse_flags("ims", 3),
+                  XR_RE_IGNORECASE | XR_RE_MULTILINE | XR_RE_DOTALL);
+    ASSERT_EQ_INT(xr_regex_core_parse_flags("ziz", 3), XR_RE_IGNORECASE);
+    ASSERT_EQ_INT(xr_regex_core_parse_flags(NULL, 0), XR_RE_NONE);
+}
+
+TEST(core_match_field_schema_matches_regex_match_class) {
+    ASSERT_EQ_INT(XR_REGEX_CORE_MATCH_START, 0);
+    ASSERT_EQ_INT(XR_REGEX_CORE_MATCH_END, 1);
+    ASSERT_EQ_INT(XR_REGEX_CORE_MATCH_TEXT, 2);
+    ASSERT_EQ_INT(XR_REGEX_CORE_MATCH_GROUPS, 3);
+    ASSERT_EQ_INT(XR_REGEX_CORE_MATCH_FIELD_COUNT, 4);
+    ASSERT_STR_EQ(XR_REGEX_CORE_MATCH_FIELD_NAMES[XR_REGEX_CORE_MATCH_START], "start");
+    ASSERT_STR_EQ(XR_REGEX_CORE_MATCH_FIELD_NAMES[XR_REGEX_CORE_MATCH_END], "end");
+    ASSERT_STR_EQ(XR_REGEX_CORE_MATCH_FIELD_NAMES[XR_REGEX_CORE_MATCH_TEXT], "text");
+    ASSERT_STR_EQ(XR_REGEX_CORE_MATCH_FIELD_NAMES[XR_REGEX_CORE_MATCH_GROUPS], "groups");
 }
 
 TEST(compile_is_valid) {
@@ -854,6 +874,8 @@ RUN_TEST(compile_invalid_unmatched_paren);
 RUN_TEST(compile_invalid_unmatched_bracket);
 RUN_TEST(compile_invalid_bad_repeat);
 RUN_TEST(compile_flags);
+RUN_TEST(core_parse_flags_matches_regex_engine_flags);
+RUN_TEST(core_match_field_schema_matches_regex_match_class);
 RUN_TEST(compile_is_valid);
 RUN_TEST(compile_rejects_too_many_capture_groups);
 

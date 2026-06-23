@@ -13,7 +13,7 @@ fn test_compile_and_test() {
 // @test instance methods
 @test
 fn test_instance_methods() {
-    let re = regex.compile("(\\w+)(\\d+)")
+    let re = regex.compile("([a-z]+)(\\d+)")
     assert_eq(re.test("abc123"), true)
 
     let found = re.find("abc123 xyz456")
