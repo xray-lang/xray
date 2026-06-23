@@ -8,6 +8,8 @@ print(s.includes("World"))
 print(s.indexOf("World"))
 print("a" + "b" + "c")
 print(s.charAt(1))
+print("你好🌍".reverse())
+print("a你b".reverse())
 
 let parts = "a,b,c,d".split(",")
 print(parts.length)

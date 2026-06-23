@@ -187,6 +187,14 @@ fn test_concat_emoji() {
     assert_eq(s.length, 3)
 }
 
+// ===== reverse 方法 =====
+
+@test
+fn test_reverse_unicode() {
+    assert_eq("你好🌍".reverse(), "🌍好你")
+    assert_eq("a你b".reverse(), "b你a")
+}
+
 // ===== charLength 属性 =====
 
 @test

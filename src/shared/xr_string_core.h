@@ -144,4 +144,27 @@ static inline bool xr_string_core_ends_with(const char *haystack, size_t haystac
     return memcmp(haystack + haystack_len - suffix_len, suffix, suffix_len) == 0;
 }
 
+static inline size_t xr_string_core_reverse_utf8_write(char *out, const char *data, size_t len) {
+    if (!out)
+        return 0;
+    if ((!data && len != 0) || len == 0) {
+        out[0] = '\0';
+        return 0;
+    }
+
+    size_t dst = 0;
+    size_t end = len;
+    while (end > 0) {
+        size_t start = end - 1;
+        while (start > 0 && ((unsigned char) data[start] & 0xC0u) == 0x80u)
+            start--;
+        size_t char_len = end - start;
+        memcpy(out + dst, data + start, char_len);
+        dst += char_len;
+        end = start;
+    }
+    out[dst] = '\0';
+    return dst;
+}
+
 #endif  // XRAY_SHARED_XR_STRING_CORE_H

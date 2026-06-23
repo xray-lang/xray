@@ -787,23 +787,7 @@ XrString *xr_string_reverse(XrVMRuntime *iso, XrString *str) {
     if (!buffer)
         return NULL;
 
-    // Scan backwards: find UTF-8 char boundaries and copy forward
-    const char *src = str->data;
-    size_t dst = 0;
-    size_t end = len;
-
-    while (end > 0) {
-        // Walk back past continuation bytes (10xxxxxx)
-        size_t start = end - 1;
-        while (start > 0 && ((unsigned char) src[start] & 0xC0) == 0x80) {
-            start--;
-        }
-        size_t char_len = end - start;
-        memcpy(buffer + dst, src + start, char_len);
-        dst += char_len;
-        end = start;
-    }
-    buffer[dst] = '\0';
+    size_t dst = xr_string_core_reverse_utf8_write(buffer, str->data, len);
 
     XrString *result = xr_string_intern(iso, buffer, dst, 0);
     if (buffer != stack_buf)
