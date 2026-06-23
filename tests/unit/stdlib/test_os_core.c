@@ -52,6 +52,10 @@ static bool os_core_record_env_entry(void *ctx, const char *key, size_t key_len,
     return true;
 }
 
+static const char *os_core_fake_string(void *ctx) {
+    return (const char *) ctx;
+}
+
 TEST(os_core_platform_matches_target) {
 #ifdef XR_OS_WINDOWS
     ASSERT_STR_EQ(xr_os_core_platform(), "windows");
@@ -128,6 +132,83 @@ TEST(os_core_tmpdir_falls_back_without_env) {
     ASSERT_STR_EQ(xr_os_core_tmpdir(NULL, NULL), xr_os_core_tmpdir(os_core_fake_getenv, &env));
 }
 
+TEST(os_core_username_prefers_system_username) {
+    const OsEnvEntry entries[] = {
+#ifdef XR_OS_WINDOWS
+        {"USERNAME", "env-user"},
+#else
+        {"USER", "env-user"},
+#endif
+        {"LOGNAME", "log-user"},
+    };
+    OsEnvFake env = {entries, sizeof(entries) / sizeof(entries[0])};
+    ASSERT_STR_EQ(
+        xr_os_core_username(os_core_fake_string, "system-user", os_core_fake_getenv, &env),
+        "system-user");
+}
+
+TEST(os_core_username_falls_back_to_env) {
+    const OsEnvEntry entries[] = {
+#ifdef XR_OS_WINDOWS
+        {"USERNAME", "win-user"},
+        {"USER", "env-user"},
+#else
+        {"USER", "env-user"},
+#endif
+        {"LOGNAME", "log-user"},
+    };
+    OsEnvFake env = {entries, sizeof(entries) / sizeof(entries[0])};
+#ifdef XR_OS_WINDOWS
+    ASSERT_STR_EQ(xr_os_core_username(NULL, NULL, os_core_fake_getenv, &env), "win-user");
+#else
+    ASSERT_STR_EQ(xr_os_core_username(NULL, NULL, os_core_fake_getenv, &env), "env-user");
+#endif
+}
+
+TEST(os_core_username_skips_empty_env_values) {
+    const OsEnvEntry entries[] = {
+#ifdef XR_OS_WINDOWS
+        {"USERNAME", ""},
+#endif
+        {"USER", ""},
+        {"LOGNAME", "log-user"},
+    };
+    OsEnvFake env = {entries, sizeof(entries) / sizeof(entries[0])};
+    ASSERT_STR_EQ(xr_os_core_username(NULL, NULL, os_core_fake_getenv, &env), "log-user");
+}
+
+TEST(os_core_homedir_prefers_home_env) {
+    const OsEnvEntry entries[] = {
+        {"HOME", "/home/env"},
+#ifdef XR_OS_WINDOWS
+        {"USERPROFILE", "C:\\Users\\env"},
+#endif
+    };
+    OsEnvFake env = {entries, sizeof(entries) / sizeof(entries[0])};
+    ASSERT_STR_EQ(
+        xr_os_core_homedir(os_core_fake_getenv, &env, os_core_fake_string, "/home/system"),
+        "/home/env");
+}
+
+TEST(os_core_homedir_skips_empty_home) {
+    const OsEnvEntry entries[] = {
+        {"HOME", ""},
+#ifdef XR_OS_WINDOWS
+        {"USERPROFILE", "C:\\Users\\env"},
+#endif
+    };
+    OsEnvFake env = {entries, sizeof(entries) / sizeof(entries[0])};
+#ifdef XR_OS_WINDOWS
+    ASSERT_STR_EQ(
+        xr_os_core_homedir(os_core_fake_getenv, &env, os_core_fake_string, "/home/system"),
+        "C:\\Users\\env");
+#else
+    ASSERT_STR_EQ(
+        xr_os_core_homedir(os_core_fake_getenv, &env, os_core_fake_string, "/home/system"),
+        "/home/system");
+#endif
+}
+
 TEST(os_core_environ_entry_parses_key_value) {
     OsEnvParseRecord record = {0};
     ASSERT_TRUE(xr_os_core_environ_entry("XRAY_ENV=hello", os_core_record_env_entry, &record));
@@ -168,6 +249,13 @@ RUN_TEST(os_core_tmpdir_prefers_tmpdir);
 RUN_TEST(os_core_tmpdir_skips_empty_values);
 RUN_TEST(os_core_tmpdir_uses_temp_after_missing_tmp);
 RUN_TEST(os_core_tmpdir_falls_back_without_env);
+
+RUN_TEST_SUITE("OS Core - user");
+RUN_TEST(os_core_username_prefers_system_username);
+RUN_TEST(os_core_username_falls_back_to_env);
+RUN_TEST(os_core_username_skips_empty_env_values);
+RUN_TEST(os_core_homedir_prefers_home_env);
+RUN_TEST(os_core_homedir_skips_empty_home);
 
 RUN_TEST_SUITE("OS Core - environ");
 RUN_TEST(os_core_environ_entry_parses_key_value);

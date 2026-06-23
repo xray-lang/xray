@@ -255,22 +255,46 @@ static XrValue os_tmpdir(XrVMRuntime *X, XrValue *args, int argc) {
 
 /* ========== User Information (P1) ========== */
 
+#ifdef XR_OS_WINDOWS
+typedef struct OsUsernameCtx {
+    char buf[256];
+} OsUsernameCtx;
+#endif
+
+static const char *os_system_username(void *ctx) {
+#ifdef XR_OS_WINDOWS
+    OsUsernameCtx *user_ctx = (OsUsernameCtx *) ctx;
+    DWORD size = sizeof(user_ctx->buf);
+    return GetUserNameA(user_ctx->buf, &size) ? user_ctx->buf : NULL;
+#else
+    (void) ctx;
+    struct passwd *pw = getpwuid(getuid());
+    return (pw && pw->pw_name) ? pw->pw_name : NULL;
+#endif
+}
+
+static const char *os_system_homedir(void *ctx) {
+    (void) ctx;
+#ifdef XR_OS_WINDOWS
+    return NULL;
+#else
+    struct passwd *pw = getpwuid(getuid());
+    return (pw && pw->pw_dir) ? pw->pw_dir : NULL;
+#endif
+}
+
 // username() - Get current user name
 static XrValue os_username(XrVMRuntime *X, XrValue *args, int argc) {
     (void) args;
     (void) argc;
 
 #ifdef XR_OS_WINDOWS
-    char buf[256];
-    DWORD size = sizeof(buf);
-    if (GetUserNameA(buf, &size))
-        return xrs_string_value_c(X, buf);
-    return xr_null();
+    OsUsernameCtx user_ctx;
+    return xrs_string_value_c(
+        X, xr_os_core_username(os_system_username, &user_ctx, os_core_getenv, NULL));
 #else
-    struct passwd *pw = getpwuid(getuid());
-    if (!pw)
-        return xr_null();
-    return xrs_string_value_c(X, pw->pw_name);
+    return xrs_string_value_c(X,
+                              xr_os_core_username(os_system_username, NULL, os_core_getenv, NULL));
 #endif
 }
 
@@ -279,21 +303,7 @@ static XrValue os_homedir(XrVMRuntime *X, XrValue *args, int argc) {
     (void) args;
     (void) argc;
 
-    const char *home = getenv("HOME");
-#ifdef XR_OS_WINDOWS
-    if (!home)
-        home = getenv("USERPROFILE");
-    if (home)
-        return xrs_string_value_c(X, home);
-    return xr_null();
-#else
-    if (home)
-        return xrs_string_value_c(X, home);
-    struct passwd *pw = getpwuid(getuid());
-    if (!pw)
-        return xr_null();
-    return xrs_string_value_c(X, pw->pw_dir);
-#endif
+    return xrs_string_value_c(X, xr_os_core_homedir(os_core_getenv, NULL, os_system_homedir, NULL));
 }
 
 // uid() - Get user ID

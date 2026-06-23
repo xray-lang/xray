@@ -60,3 +60,13 @@ if (oldTemp != null) {
 }
 print(os.username() != null)
 print(os.homedir() != null)
+let oldHome = os.getenv("HOME")
+os.setenv("HOME", "")
+let fallbackHome = os.homedir()
+print(fallbackHome != null)
+print((fallbackHome ?? "").length > 0)
+if (oldHome != null) {
+    os.setenv("HOME", oldHome ?? "")
+} else {
+    os.unsetenv("HOME")
+}
