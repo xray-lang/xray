@@ -247,6 +247,26 @@ TEST(array_has) {
     teardown();
 }
 
+TEST(array_typed_index_of_uses_shared_tag_rules) {
+    setup();
+    XrArray *bytes = xr_array_with_capacity_typed(main_coro, 0, XR_ELEM_U8);
+    xr_array_push(bytes, xr_int(1));
+    xr_array_push(bytes, xr_int(255));
+    xr_array_push(bytes, xr_int(3));
+    ASSERT_EQ_INT(xr_array_index_of(bytes, xr_int(255)), 1);
+    ASSERT_EQ_INT(xr_array_index_of(bytes, xr_int(-1)), -1);
+    ASSERT_EQ_INT(xr_array_index_of(bytes, xr_bool(true)), -1);
+    ASSERT_TRUE(xr_array_has(bytes, xr_int(3)));
+    ASSERT_FALSE(xr_array_has(bytes, xr_bool(true)));
+
+    XrArray *bools = xr_array_with_capacity_typed(main_coro, 0, XR_ELEM_BOOL);
+    xr_array_push(bools, xr_bool(false));
+    xr_array_push(bools, xr_bool(true));
+    ASSERT_EQ_INT(xr_array_index_of(bools, xr_bool(true)), 1);
+    ASSERT_EQ_INT(xr_array_index_of(bools, xr_int(1)), -1);
+    teardown();
+}
+
 TEST(array_fill_negative_bounds) {
     setup();
     XrArray *arr = xr_array_new(main_coro);
@@ -499,6 +519,7 @@ static void run_all_tests(void) {
     RUN_TEST(array_index_of_found);
     RUN_TEST(array_index_of_not_found);
     RUN_TEST(array_has);
+    RUN_TEST(array_typed_index_of_uses_shared_tag_rules);
     RUN_TEST(array_fill_negative_bounds);
 
     RUN_TEST_SUITE("Array Clear");

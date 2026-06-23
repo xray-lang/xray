@@ -235,6 +235,36 @@ static void test_fill_range_typed_fast_path(void) {
     free_test_array(a);
 }
 
+static void test_indexof_typed_fast_path_shared_rules(void) {
+    reset_alloc_counts();
+    XrValue bytes = xrt_array_new_typed(0, XR_ELEM_U8);
+    xrt_array_t *b = (xrt_array_t *) bytes.ptr;
+    xrt_array_push(bytes, XR_FROM_INT(1));
+    xrt_array_push(bytes, XR_FROM_INT(255));
+    xrt_array_push(bytes, XR_FROM_INT(3));
+
+    int handled = 0;
+    ASSERT_EQ_INT(xrt_array_indexof_typed_fast(b, XR_FROM_INT(255), &handled), 1,
+                  "u8 search finds integer needle");
+    ASSERT_EQ_INT(handled, 1, "u8 search handled by shared core");
+    ASSERT_EQ_INT(xrt_array_indexof_typed_fast(b, XR_FROM_INT(-1), &handled), -1,
+                  "u8 search rejects out-of-range integer");
+    ASSERT_EQ_INT(xrt_array_indexof_typed_fast(b, XR_FROM_BOOL(1), &handled), -1,
+                  "u8 search rejects bool needle");
+
+    XrValue bools = xrt_array_new_typed(0, XR_ELEM_BOOL);
+    xrt_array_t *flags = (xrt_array_t *) bools.ptr;
+    xrt_array_push(bools, XR_FROM_BOOL(0));
+    xrt_array_push(bools, XR_FROM_BOOL(1));
+    ASSERT_EQ_INT(xrt_array_indexof_typed_fast(flags, XR_FROM_BOOL(1), &handled), 1,
+                  "bool search finds bool needle");
+    ASSERT_EQ_INT(xrt_array_indexof_typed_fast(flags, XR_FROM_INT(1), &handled), -1,
+                  "bool search rejects integer needle");
+
+    free_test_array(b);
+    free_test_array(flags);
+}
+
 static XrValue dummy_closure_body(xrt_closure_t *cl) {
     (void) cl;
     return XR_NULL_VAL;
@@ -266,6 +296,7 @@ int main(void) {
     test_slice_marks_borrowed_storage();
     test_slice_negative_bounds_and_aliasing();
     test_fill_range_typed_fast_path();
+    test_indexof_typed_fast_path_shared_rules();
     test_stack_closure_borrows_cell_upval();
     printf("test_xrt_array: %d passed, %d failed\n", g_passed, g_failed);
     return g_failed ? 1 : 0;
