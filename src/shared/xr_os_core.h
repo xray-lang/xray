@@ -16,6 +16,50 @@
 
 typedef const char *(*XrOsCoreGetenvFn)(void *ctx, const char *name);
 
+static inline const char *xr_os_core_platform(void) {
+#if defined(XR_OS_WINDOWS) || defined(_WIN64)
+    return "windows";
+#elif defined(XR_OS_MACOS) && defined(__MACH__)
+    return "darwin";
+#elif defined(XR_OS_LINUX)
+    return "linux";
+#elif defined(XR_OS_BSD)
+    return "freebsd";
+#else
+    return "unknown";
+#endif
+}
+
+static inline const char *xr_os_core_arch(void) {
+#if defined(XR_ARCH_ARM64) || defined(_M_ARM64)
+    return "arm64";
+#elif defined(XR_ARCH_X86_64) || defined(_M_X64)
+    return "x64";
+#elif defined(XR_ARCH_X86) || defined(_M_IX86)
+    return "x86";
+#elif defined(XR_ARCH_ARM) || defined(_M_ARM)
+    return "arm";
+#else
+    return "unknown";
+#endif
+}
+
+static inline const char *xr_os_core_sep(void) {
+#ifdef XR_OS_WINDOWS
+    return "\\";
+#else
+    return "/";
+#endif
+}
+
+static inline const char *xr_os_core_eol(void) {
+#ifdef XR_OS_WINDOWS
+    return "\r\n";
+#else
+    return "\n";
+#endif
+}
+
 static inline bool xr_os_core_has_env_value(const char *value) {
     return value && value[0] != '\0';
 }
