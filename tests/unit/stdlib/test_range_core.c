@@ -61,6 +61,28 @@ TEST(range_core_index_supports_negative_indices) {
     ASSERT_TRUE(ok);
 }
 
+TEST(range_core_materialize_plan_caps_large_ranges) {
+    XrRangeCoreMaterializePlan empty = xr_range_core_materialize_plan(xr_range_core_make(5, 5, 1));
+    ASSERT_EQ_INT(empty.kind, XR_RANGE_CORE_MATERIALIZE_EMPTY);
+    ASSERT_EQ_INT(empty.length, 0);
+
+    XrRangeCoreMaterializePlan values = xr_range_core_materialize_plan(xr_range_core_make(2, 9, 2));
+    ASSERT_EQ_INT(values.kind, XR_RANGE_CORE_MATERIALIZE_VALUES);
+    ASSERT_EQ_INT(values.length, 4);
+    ASSERT_EQ_INT(xr_range_core_value_at(xr_range_core_make(2, 9, 2), values.length - 1), 8);
+
+    XrRangeCoreMaterializePlan reverse =
+        xr_range_core_materialize_plan(xr_range_core_make(10, 1, -3));
+    ASSERT_EQ_INT(reverse.kind, XR_RANGE_CORE_MATERIALIZE_VALUES);
+    ASSERT_EQ_INT(reverse.length, 3);
+    ASSERT_EQ_INT(xr_range_core_value_at(xr_range_core_make(10, 1, -3), reverse.length - 1), 4);
+
+    XrRangeCoreMaterializePlan too_large =
+        xr_range_core_materialize_plan(xr_range_core_make(0, XR_RANGE_CORE_MATERIALIZE_MAX + 1, 1));
+    ASSERT_EQ_INT(too_large.kind, XR_RANGE_CORE_MATERIALIZE_TOO_LARGE);
+    ASSERT_EQ_INT(too_large.length, XR_RANGE_CORE_MATERIALIZE_MAX + 1);
+}
+
 TEST(range_core_format_matches_range_to_string) {
     char buf[64];
     ASSERT_EQ_INT(xr_range_core_format_buf(xr_range_core_make(1, 10, 1), buf, sizeof(buf)), 5);
@@ -76,6 +98,7 @@ RUN_TEST(range_core_length_uses_half_open_forward_bounds);
 RUN_TEST(range_core_length_uses_half_open_reverse_bounds);
 RUN_TEST(range_core_contains_respects_step_and_exclusive_end);
 RUN_TEST(range_core_index_supports_negative_indices);
+RUN_TEST(range_core_materialize_plan_caps_large_ranges);
 RUN_TEST(range_core_format_matches_range_to_string);
 
 TEST_MAIN_END()

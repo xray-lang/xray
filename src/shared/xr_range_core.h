@@ -22,6 +22,21 @@ typedef struct XrRangeCore {
     int64_t step;
 } XrRangeCore;
 
+enum {
+    XR_RANGE_CORE_MATERIALIZE_MAX = 10000000
+};
+
+typedef enum XrRangeCoreMaterializeKind {
+    XR_RANGE_CORE_MATERIALIZE_EMPTY = 0,
+    XR_RANGE_CORE_MATERIALIZE_VALUES,
+    XR_RANGE_CORE_MATERIALIZE_TOO_LARGE,
+} XrRangeCoreMaterializeKind;
+
+typedef struct XrRangeCoreMaterializePlan {
+    XrRangeCoreMaterializeKind kind;
+    int64_t length;
+} XrRangeCoreMaterializePlan;
+
 static inline XrRangeCore xr_range_core_make(int64_t start, int64_t end, int64_t step) {
     return (XrRangeCore) {start, end, step};
 }
@@ -81,6 +96,15 @@ static inline int64_t xr_range_core_index(XrRangeCore r, int64_t index, bool *ok
     if (!in_bounds)
         return 0;
     return xr_range_core_value_at(r, index);
+}
+
+static inline XrRangeCoreMaterializePlan xr_range_core_materialize_plan(XrRangeCore r) {
+    int64_t len = xr_range_core_length(r);
+    if (len <= 0)
+        return (XrRangeCoreMaterializePlan) {XR_RANGE_CORE_MATERIALIZE_EMPTY, 0};
+    if (len > XR_RANGE_CORE_MATERIALIZE_MAX)
+        return (XrRangeCoreMaterializePlan) {XR_RANGE_CORE_MATERIALIZE_TOO_LARGE, len};
+    return (XrRangeCoreMaterializePlan) {XR_RANGE_CORE_MATERIALIZE_VALUES, len};
 }
 
 static inline int xr_range_core_format_buf(XrRangeCore r, char *buf, size_t cap) {

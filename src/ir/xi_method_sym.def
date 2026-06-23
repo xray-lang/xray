@@ -112,6 +112,7 @@ XI_METHOD_SYM(TOSTRING,    85,  TOSTRING,     "toString")
 
 /* --- Set and DateTime methods/properties --- */
 XI_METHOD_SYM(ADD,          74, ADD,           "add")
+XI_METHOD_SYM(TO_ARRAY,     79, TO_ARRAY,      "toArray")
 XI_METHOD_SYM(FORMAT,       88, FORMAT,        "format")
 XI_METHOD_SYM(YEAR,         89, YEAR,          "year")
 XI_METHOD_SYM(MONTH,        90, MONTH,         "month")

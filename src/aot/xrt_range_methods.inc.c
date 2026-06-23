@@ -8,16 +8,20 @@ static inline XrValue xrt_range_method_0(XrValue recv, int sym) {
         return XR_FROM_BOOL(xrt_range_length_ptr(r) == 0);
     if (sym == XRT_SYM_TOSTRING)
         return xrt_range_to_string(recv);
-    if (sym == XRT_SYM_VALUES) {
-        int64_t len = xrt_range_length_ptr(r);
-        XrValue arr = xrt_array_new_typed(len, XR_ELEM_I64);
-        xrt_array_t *a = (xrt_array_t *) arr.ptr;
-        a->length = len;
-        int64_t value = r ? r->start : 0;
-        for (int64_t i = 0; i < len; i++) {
-            xr_typed_set(a->data, (int32_t) i, XR_FROM_INT(value), a->elem_type);
-            value += r->step;
+    if (sym == XRT_SYM_VALUES || sym == XRT_SYM_TO_ARRAY) {
+        XrRangeCore core =
+            r ? xr_range_core_make(r->start, r->end, r->step) : xr_range_core_make(0, 0, 1);
+        XrRangeCoreMaterializePlan plan = xr_range_core_materialize_plan(core);
+        if (plan.kind == XR_RANGE_CORE_MATERIALIZE_TOO_LARGE) {
+            fprintf(stderr, "range_to_array: range too large\n");
+            abort();
         }
+        XrValue arr = xrt_array_new_typed_uninit(plan.length, XR_ELEM_I64);
+        xrt_array_t *a = (xrt_array_t *) arr.ptr;
+        a->length = plan.length;
+        int64_t *data = (int64_t *) a->data;
+        for (int64_t i = 0; i < plan.length; i++)
+            data[i] = xr_range_core_value_at(core, i);
         return arr;
     }
     return XR_NULL_VAL;

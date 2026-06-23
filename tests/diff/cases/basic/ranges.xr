@@ -9,6 +9,10 @@ print(r[-1])
 print(r[-7])
 print(r[-8])
 print(r.toString())
+let values = r.toArray()
+print(values.length)
+print(values[0])
+print(values[6])
 
 let total = 0
 for (i in 2..9) {
