@@ -2660,6 +2660,162 @@ module mem {
   }
 }
 
+module cluster {
+  fn start {
+    signature: "(config: Json): ()"
+    doc: "Start cluster node"
+    vm: "cluster_start"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn join {
+    signature: "(addr: string): bool"
+    doc: "Join cluster by address"
+    vm: "cluster_join"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn self {
+    signature: "(): string"
+    doc: "Get own node name"
+    vm: "cluster_self"
+    argc: 0
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn nodes {
+    signature: "(): Array<string>"
+    doc: "List cluster node names"
+    vm: "cluster_nodes"
+    argc: 0
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn channel {
+    signature: "(name: string, size?: int): Channel"
+    doc: "Create or get named distributed channel"
+    vm: "cluster_channel_fn"
+    argc: 2
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn serve {
+    signature: "(name: string): Channel"
+    doc: "Register service and return request channel"
+    vm: "cluster_serve_fn"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn reply {
+    signature: "(req: Json, result: Json): bool"
+    doc: "Reply to service request"
+    vm: "cluster_reply_fn"
+    argc: 2
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn call {
+    signature: "(service: string, args: Json, timeout?: int): Json"
+    doc: "Call remote service"
+    vm: "cluster_call_fn"
+    argc: 3
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn monitor {
+    signature: "(name: string, coro_name?: string): Channel"
+    doc: "Monitor node or remote coroutine"
+    vm: "cluster_monitor_coro_fn"
+    argc: 2
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn discover {
+    signature: "(): ()"
+    doc: "Start LAN auto-discovery"
+    vm: "cluster_discover_fn"
+    argc: 0
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn stop {
+    signature: "(): ()"
+    doc: "Stop cluster node"
+    vm: "cluster_stop_fn"
+    argc: 0
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn info {
+    signature: "(): Json"
+    doc: "Get cluster status info"
+    vm: "cluster_info_fn"
+    argc: 0
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn publish {
+    signature: "(topic: string, value: Json): bool"
+    doc: "Publish to topic"
+    vm: "cluster_publish_fn"
+    argc: 2
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn subscribe {
+    signature: "(pattern: string): Channel"
+    doc: "Subscribe to topic pattern"
+    vm: "cluster_subscribe_fn"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+}
+
 module csv {
   fn parse {
     signature: "(data: string, options?: Json): Array<Array<string>> | Array<Json>"
