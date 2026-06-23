@@ -35,7 +35,7 @@ typedef struct {
     int use_tabs;                  // Use tabs instead of spaces
     int max_line_length;           // Max line length hint (default 100)
     int trailing_newline;          // Ensure trailing newline at EOF
-    int align_match_arms;          // Column-align `->` of match arms
+    int align_branch_arrows;       // Column-align `->` of match/select branch arms
     int align_enum_values;         // Column-align `=` of enum members
     int align_struct_fields;       // Column-align `:` of class/struct fields
     int align_trailing_comments;   // Column-align `//` of trailing line comments
@@ -47,7 +47,7 @@ static FmtConfig default_config = {.indent_size = 4,
                                    .use_tabs = 0,
                                    .max_line_length = 100,
                                    .trailing_newline = 1,
-                                   .align_match_arms = 0,
+                                   .align_branch_arrows = 1,
                                    .align_enum_values = 0,
                                    .align_struct_fields = 0,
                                    .align_trailing_comments = 0,
@@ -75,7 +75,7 @@ static char *format_source(XrVMRuntime *X, const char *source, const char *path,
                                .space_after_comma = 1,
                                .space_in_parentheses = 0,
                                .brace_same_line = 1,
-                               .align_match_arms = config->align_match_arms,
+                               .align_branch_arrows = config->align_branch_arrows,
                                .align_enum_values = config->align_enum_values,
                                .align_struct_fields = config->align_struct_fields,
                                .align_trailing_comments = config->align_trailing_comments,
@@ -194,8 +194,11 @@ XR_FUNC int cmd_fmt(const XrCliInvocation *inv) {
         }
         config.max_line_length = line_length;
     }
-    if (xr_cli_opt_bool(&inv->options, "align-match")) {
-        config.align_match_arms = 1;
+    if (xr_cli_opt_bool(&inv->options, "align-branch-arrows")) {
+        config.align_branch_arrows = 1;
+    }
+    if (xr_cli_opt_bool(&inv->options, "no-align-branch-arrows")) {
+        config.align_branch_arrows = 0;
     }
     if (xr_cli_opt_bool(&inv->options, "align-enum")) {
         config.align_enum_values = 1;
