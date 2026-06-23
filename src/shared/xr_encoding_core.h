@@ -20,6 +20,14 @@
 #define XR_ENCODING_UTF16_LE 0
 #define XR_ENCODING_UTF16_BE 1
 
+static inline int xr_encoding_core_utf16_endian_arg(bool has_int, int64_t value) {
+    return has_int && value == XR_ENCODING_UTF16_BE ? XR_ENCODING_UTF16_BE : XR_ENCODING_UTF16_LE;
+}
+
+static inline bool xr_encoding_core_bool_arg_or(bool has_bool, bool value, bool fallback) {
+    return has_bool ? value : fallback;
+}
+
 static inline uint8_t xr_encoding_core_hex_value(unsigned char c) {
     if (c >= '0' && c <= '9')
         return (uint8_t) (c - '0');
