@@ -32,6 +32,39 @@
 /* Forward declaration */
 static void lower_stmts(XiLower *l, AstNode **stmts, int count);
 
+static void xi_lower_loop_push(XiLower *l, XiLoopTarget *target, const char *label,
+                               XiBlock *break_target, XiBlock *continue_target) {
+    XR_DCHECK(l != NULL, "xi_lower_loop_push: NULL lowerer");
+    XR_DCHECK(target != NULL, "xi_lower_loop_push: NULL target");
+    target->label = label;
+    target->break_target = break_target;
+    target->continue_target = continue_target;
+    target->prev = l->loop_targets;
+    l->loop_targets = target;
+    l->break_target = break_target;
+    l->continue_target = continue_target;
+}
+
+static void xi_lower_loop_pop(XiLower *l, XiLoopTarget *target) {
+    XR_DCHECK(l != NULL, "xi_lower_loop_pop: NULL lowerer");
+    XR_DCHECK(target != NULL, "xi_lower_loop_pop: NULL target");
+    l->loop_targets = target->prev;
+    l->break_target = target->prev ? target->prev->break_target : NULL;
+    l->continue_target = target->prev ? target->prev->continue_target : NULL;
+}
+
+static XiLoopTarget *xi_lower_loop_find(XiLower *l, const char *label) {
+    if (!l)
+        return NULL;
+    if (!label)
+        return l->loop_targets;
+    for (XiLoopTarget *it = l->loop_targets; it; it = it->prev) {
+        if (it->label && strcmp(it->label, label) == 0)
+            return it;
+    }
+    return NULL;
+}
+
 static void stmt_set_missing_line(XiValue *v, int line) {
     if (v && v->line == 0 && line > 0)
         v->line = (uint32_t) line;
@@ -1332,10 +1365,8 @@ static void lower_for_in_loop(XiLower *l, AstNode *node, XiValue *init_val, XiVa
 
     xi_lower_braun_seal(l, body_blk);
 
-    XiBlock *prev_break = l->break_target;
-    XiBlock *prev_cont = l->continue_target;
-    l->break_target = exit_blk;
-    l->continue_target = incr_blk;
+    XiLoopTarget loop_target;
+    xi_lower_loop_push(l, &loop_target, s->label, exit_blk, incr_blk);
 
     l->cur_block = body_blk;
     XiValue *body_idx = xi_lower_braun_read(l, idx_var, l->cur_block);
@@ -1393,8 +1424,7 @@ static void lower_for_in_loop(XiLower *l, AstNode *node, XiValue *init_val, XiVa
 
     xi_lower_braun_seal(l, cond_blk);
 
-    l->break_target = prev_break;
-    l->continue_target = prev_cont;
+    xi_lower_loop_pop(l, &loop_target);
 
     xi_lower_braun_seal(l, exit_blk);
     l->cur_block = (exit_blk->npreds > 0) ? exit_blk : NULL;
@@ -1448,10 +1478,8 @@ static void lower_for_in_keyvalue(XiLower *l, AstNode *node) {
 
     xi_lower_braun_seal(l, body_blk);
 
-    XiBlock *prev_break = l->break_target;
-    XiBlock *prev_cont = l->continue_target;
-    l->break_target = exit_blk;
-    l->continue_target = cond_blk;
+    XiLoopTarget loop_target;
+    xi_lower_loop_push(l, &loop_target, s->label, exit_blk, cond_blk);
 
     l->cur_block = body_blk;
     XiValue *iter_body = xi_lower_braun_read(l, iter_var, l->cur_block);
@@ -1499,8 +1527,7 @@ static void lower_for_in_keyvalue(XiLower *l, AstNode *node) {
 
     xi_lower_braun_seal(l, cond_blk);
 
-    l->break_target = prev_break;
-    l->continue_target = prev_cont;
+    xi_lower_loop_pop(l, &loop_target);
 
     xi_lower_braun_seal(l, exit_blk);
     l->cur_block = (exit_blk->npreds > 0) ? exit_blk : NULL;
@@ -1562,10 +1589,8 @@ static void lower_for_in_custom_iterator(XiLower *l, AstNode *node, XiValue *col
 
     xi_lower_braun_seal(l, body_blk);
 
-    XiBlock *prev_break = l->break_target;
-    XiBlock *prev_cont = l->continue_target;
-    l->break_target = exit_blk;
-    l->continue_target = cond_blk;
+    XiLoopTarget loop_target;
+    xi_lower_loop_push(l, &loop_target, s->label, exit_blk, cond_blk);
 
     /* Body: let item = __iter.next(); <body> */
     l->cur_block = body_blk;
@@ -1589,8 +1614,7 @@ static void lower_for_in_custom_iterator(XiLower *l, AstNode *node, XiValue *col
 
     xi_lower_braun_seal(l, cond_blk);
 
-    l->break_target = prev_break;
-    l->continue_target = prev_cont;
+    xi_lower_loop_pop(l, &loop_target);
 
     xi_lower_braun_seal(l, exit_blk);
     l->cur_block = (exit_blk->npreds > 0) ? exit_blk : NULL;
@@ -1644,10 +1668,8 @@ static void lower_for_in_enum_loop(XiLower *l, AstNode *node, XiValue *init_val,
 
     xi_lower_braun_seal(l, body_blk);
 
-    XiBlock *prev_break = l->break_target;
-    XiBlock *prev_cont = l->continue_target;
-    l->break_target = exit_blk;
-    l->continue_target = incr_blk;
+    XiLoopTarget loop_target;
+    xi_lower_loop_push(l, &loop_target, s->label, exit_blk, incr_blk);
 
     l->cur_block = body_blk;
     XiValue *body_idx = xi_lower_braun_read(l, idx_var, l->cur_block);
@@ -1687,8 +1709,7 @@ static void lower_for_in_enum_loop(XiLower *l, AstNode *node, XiValue *init_val,
 
     xi_lower_braun_seal(l, cond_blk);
 
-    l->break_target = prev_break;
-    l->continue_target = prev_cont;
+    xi_lower_loop_pop(l, &loop_target);
 
     xi_lower_braun_seal(l, exit_blk);
     l->cur_block = (exit_blk->npreds > 0) ? exit_blk : NULL;
@@ -2526,10 +2547,8 @@ static void lower_while(XiLower *l, AstNode *node) {
     xi_lower_braun_seal(l, body_blk);
 
     /* Body */
-    XiBlock *prev_break = l->break_target;
-    XiBlock *prev_cont = l->continue_target;
-    l->break_target = exit_blk;
-    l->continue_target = cond_blk;
+    XiLoopTarget loop_target;
+    xi_lower_loop_push(l, &loop_target, s->label, exit_blk, cond_blk);
 
     l->cur_block = body_blk;
     xi_lower_stmt(l, s->body);
@@ -2539,8 +2558,7 @@ static void lower_while(XiLower *l, AstNode *node) {
     /* All preds of cond_blk now known (entry + back edge) — seal */
     xi_lower_braun_seal(l, cond_blk);
 
-    l->break_target = prev_break;
-    l->continue_target = prev_cont;
+    xi_lower_loop_pop(l, &loop_target);
 
     xi_lower_braun_seal(l, exit_blk);
     l->cur_block = (exit_blk->npreds > 0) ? exit_blk : NULL;
@@ -2576,10 +2594,8 @@ static void lower_for(XiLower *l, AstNode *node) {
     xi_lower_braun_seal(l, body_blk);
 
     /* Body */
-    XiBlock *prev_break = l->break_target;
-    XiBlock *prev_cont = l->continue_target;
-    l->break_target = exit_blk;
-    l->continue_target = incr_blk;
+    XiLoopTarget loop_target;
+    xi_lower_loop_push(l, &loop_target, s->label, exit_blk, incr_blk);
 
     l->cur_block = body_blk;
     xi_lower_stmt(l, s->body);
@@ -2600,8 +2616,7 @@ static void lower_for(XiLower *l, AstNode *node) {
     /* cond_blk back edge now added — seal */
     xi_lower_braun_seal(l, cond_blk);
 
-    l->break_target = prev_break;
-    l->continue_target = prev_cont;
+    xi_lower_loop_pop(l, &loop_target);
 
     xi_lower_braun_seal(l, exit_blk);
     l->cur_block = (exit_blk->npreds > 0) ? exit_blk : NULL;
@@ -2612,16 +2627,18 @@ static void lower_for(XiLower *l, AstNode *node) {
 /* (function bodies removed — see xi_lower_stmt.c)
  * Remaining: lower_break, lower_continue kept here as they are tiny. */
 
-static void lower_break(XiLower *l) {
-    if (l->break_target && l->cur_block) {
-        xi_block_set_jump(l->cur_block, l->break_target);
+static void lower_break(XiLower *l, AstNode *node) {
+    XiLoopTarget *target = xi_lower_loop_find(l, node ? node->as.break_stmt.label : NULL);
+    if (target && target->break_target && l->cur_block) {
+        xi_block_set_jump(l->cur_block, target->break_target);
         l->cur_block = NULL;
     }
 }
 
-static void lower_continue(XiLower *l) {
-    if (l->continue_target && l->cur_block) {
-        xi_block_set_jump(l->cur_block, l->continue_target);
+static void lower_continue(XiLower *l, AstNode *node) {
+    XiLoopTarget *target = xi_lower_loop_find(l, node ? node->as.continue_stmt.label : NULL);
+    if (target && target->continue_target && l->cur_block) {
+        xi_block_set_jump(l->cur_block, target->continue_target);
         l->cur_block = NULL;
     }
 }
@@ -2869,11 +2886,11 @@ XR_FUNC void xi_lower_stmt(XiLower *l, AstNode *node) {
             break;
 
         case AST_BREAK_STMT:
-            lower_break(l);
+            lower_break(l, node);
             break;
 
         case AST_CONTINUE_STMT:
-            lower_continue(l);
+            lower_continue(l, node);
             break;
 
         case AST_THROW_STMT:

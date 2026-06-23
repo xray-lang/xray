@@ -16,6 +16,70 @@
 #include "xtype_ref_resolve.h"
 #include "../../base/xchecks.h"
 
+XR_FUNC void xa_loop_scope_push(XaInferContext *ctx, XaLoopScope *scope, const char *label,
+                                AstNode *node) {
+    if (!ctx || !scope)
+        return;
+    scope->label = label;
+    scope->line = node ? node->line : 0;
+    scope->prev = ctx->loop_scope;
+
+    if (label) {
+        for (XaLoopScope *it = ctx->loop_scope; it; it = it->prev) {
+            if (it->label && strcmp(it->label, label) == 0) {
+                XrLocation loc = {
+                    .file = ctx->file_path, .line = node ? node->line : 0, .column = 1};
+                char msg[160];
+                snprintf(msg, sizeof(msg), "duplicate loop label '%s' in an active loop", label);
+                xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE, msg,
+                                           &loc);
+                break;
+            }
+        }
+    }
+
+    ctx->loop_scope = scope;
+    ctx->loop_depth++;
+}
+
+XR_FUNC void xa_loop_scope_pop(XaInferContext *ctx, XaLoopScope *scope) {
+    if (!ctx || !scope)
+        return;
+    if (ctx->loop_scope == scope)
+        ctx->loop_scope = scope->prev;
+    else
+        ctx->loop_scope = scope->prev;
+    if (ctx->loop_depth > 0)
+        ctx->loop_depth--;
+}
+
+XR_FUNC void xa_validate_loop_control(XaInferContext *ctx, AstNode *node, const char *label,
+                                      bool is_continue) {
+    if (!ctx || !node)
+        return;
+
+    const char *kind = is_continue ? "continue" : "break";
+    int code = is_continue ? XR_ERR_CMP_INVALID_CONTINUE : XR_ERR_CMP_INVALID_BREAK;
+    XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+
+    if (label) {
+        for (XaLoopScope *it = ctx->loop_scope; it; it = it->prev) {
+            if (it->label && strcmp(it->label, label) == 0)
+                return;
+        }
+        char msg[160];
+        snprintf(msg, sizeof(msg), "unknown loop label '%s' for '%s'", label, kind);
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, code, msg, &loc);
+        return;
+    }
+
+    if (ctx->loop_depth <= 0) {
+        char msg[96];
+        snprintf(msg, sizeof(msg), "'%s' outside of a loop", kind);
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, code, msg, &loc);
+    }
+}
+
 static bool xa_function_assignment_mismatch(XrType *target_type, XrType *value_type) {
     if (!target_type || !value_type)
         return true;
@@ -574,8 +638,11 @@ void xa_visit_while_stmt(XaInferContext *ctx, AstNode *node) {
 
     /* Analyze body. A block body goes through xa_visit_block_stmt so it
      * gets its own scope keyed on the body node, matching Pass 1. */
+    XaLoopScope loop_scope;
+    xa_loop_scope_push(ctx, &loop_scope, while_stmt->label, node);
     if (while_stmt->body)
         xa_visit_infer_stmt(ctx, while_stmt->body);
+    xa_loop_scope_pop(ctx, &loop_scope);
 
     // Back edge to loop start
     if (ctx->flow && loop_start) {
@@ -613,6 +680,8 @@ void xa_visit_for_stmt(XaInferContext *ctx, AstNode *node) {
     }
 
     // Analyze body - inline block to match Pass 1 scope structure
+    XaLoopScope loop_scope;
+    xa_loop_scope_push(ctx, &loop_scope, for_stmt->label, node);
     if (for_stmt->body) {
         if (for_stmt->body->type == AST_BLOCK) {
             BlockNode *blk = &for_stmt->body->as.block;
@@ -623,6 +692,7 @@ void xa_visit_for_stmt(XaInferContext *ctx, AstNode *node) {
             xa_visit_infer_stmt(ctx, for_stmt->body);
         }
     }
+    xa_loop_scope_pop(ctx, &loop_scope);
 
     // Analyze increment
     if (for_stmt->increment) {

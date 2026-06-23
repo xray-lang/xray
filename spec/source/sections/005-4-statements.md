@@ -61,7 +61,8 @@ if (x > 0) {
 ### 4.3 `while`
 
 ```ebnf
-WhileStmt ::= 'while' '(' Expression ')' Block
+LoopLabel ::= Identifier ':'
+WhileStmt ::= LoopLabel? 'while' '(' Expression ')' Block
 ```
 
 ```xray @id=stmt-while
@@ -79,7 +80,7 @@ while (i < 10) {
 #### C 风格 `for`
 
 ```ebnf
-ForStmt ::= 'for' '(' ForInit? ';' Expression? ';' ForStep? ')' Block
+ForStmt ::= LoopLabel? 'for' '(' ForInit? ';' Expression? ';' ForStep? ')' Block
 ForInit ::= VarDecl | ExprStmt
 ForStep ::= Expression | Identifier ('++' | '--')
 ```
@@ -100,7 +101,7 @@ for (let j = 100; j > 90; j--) {
 #### `for-in` 单变量
 
 ```ebnf
-ForInStmt ::= 'for' '(' Identifier 'in' Expression ')' Block
+ForInStmt ::= LoopLabel? 'for' '(' Identifier 'in' Expression ')' Block
 ```
 
 ```xray @id=stmt-for-in
@@ -118,8 +119,8 @@ for (_ in 0..n) { count++ }                   // 占位符忽略
 xray 支持两种等价的双变量形式：
 
 ```ebnf
-ForInPairStmt ::= 'for' '(' Identifier ',' Identifier 'in' Expression ')' Block
-              |  'for' '(' '(' Identifier ',' Identifier ')' 'in' Expression ')' Block
+ForInPairStmt ::= LoopLabel? 'for' '(' Identifier ',' Identifier 'in' Expression ')' Block
+              |  LoopLabel? 'for' '(' '(' Identifier ',' Identifier ')' 'in' Expression ')' Block
 ```
 
 ```xray @id=stmt-for-pairs
@@ -182,13 +183,24 @@ match (action) {
 
 ```xray @id=stmt-break-continue
 break                  // 跳出最内层循环
-continue               // 进入下一次循环
+continue               // 进入最内层循环的下一次迭代
+break outer            // 跳出标签为 outer 的循环
+continue outer         // 进入标签为 outer 的循环的下一次迭代
+
+outer: for (i in 0..10) {
+    for (j in 0..10) {
+        if (j == 3) { continue outer }
+        if (i * j > 20) { break outer }
+    }
+}
 ```
 
 **约束**：
 - 必须在 `while` / `for` 内部；否则编译错误 `E0304` / `E0305`。
 - `match` 内部的 `break` / `continue` **不**作用于 `match`，而是跳出包裹 `match` 的循环。
-- **无标签** break/continue（不像 Java/Rust）。
+- 循环标签写作 `label: for (...)` 或 `label: while (...)`，只能标在循环上；`label:` 后接非循环语句是编译错误。
+- `break label` / `continue label` 必须引用当前活跃的外层循环标签；未知标签或同一活跃循环栈中重复标签是编译错误。
+- 无标签 `continue` 作用于最内层循环；带标签 `continue` 作用于目标循环：`while` 重新检查条件，C 风格 `for` 执行 step 后再检查条件，`for-in` 进入下一项。
 
 ### 4.7 `return`
 
@@ -360,7 +372,8 @@ if (x > 0) {
 ### 4.3 `while`
 
 ```ebnf
-WhileStmt ::= 'while' '(' Expression ')' Block
+LoopLabel ::= Identifier ':'
+WhileStmt ::= LoopLabel? 'while' '(' Expression ')' Block
 ```
 
 ```xray @id=stmt-while
@@ -378,7 +391,7 @@ There is no `do-while` form.
 #### C-style `for`
 
 ```ebnf
-ForStmt ::= 'for' '(' ForInit? ';' Expression? ';' ForStep? ')' Block
+ForStmt ::= LoopLabel? 'for' '(' ForInit? ';' Expression? ';' ForStep? ')' Block
 ForInit ::= VarDecl | ExprStmt
 ForStep ::= Expression | Identifier ('++' | '--')
 ```
@@ -399,7 +412,7 @@ for (let j = 100; j > 90; j--) {
 #### Single-variable `for-in`
 
 ```ebnf
-ForInStmt ::= 'for' '(' Identifier 'in' Expression ')' Block
+ForInStmt ::= LoopLabel? 'for' '(' Identifier 'in' Expression ')' Block
 ```
 
 ```xray @id=stmt-for-in
@@ -417,8 +430,8 @@ for (_ in 0..n) { count++ }                   // discard with placeholder
 Xray supports two equivalent two-variable forms:
 
 ```ebnf
-ForInPairStmt ::= 'for' '(' Identifier ',' Identifier 'in' Expression ')' Block
-              |  'for' '(' '(' Identifier ',' Identifier ')' 'in' Expression ')' Block
+ForInPairStmt ::= LoopLabel? 'for' '(' Identifier ',' Identifier 'in' Expression ')' Block
+              |  LoopLabel? 'for' '(' '(' Identifier ',' Identifier ')' 'in' Expression ')' Block
 ```
 
 ```xray @id=stmt-for-pairs
@@ -481,13 +494,24 @@ For pattern details see [§6](#6-patterns).
 
 ```xray @id=stmt-break-continue
 break                  // exit the innermost loop
-continue               // proceed to the next iteration
+continue               // proceed to the innermost loop's next iteration
+break outer            // exit the loop labeled outer
+continue outer         // proceed to the next iteration of the loop labeled outer
+
+outer: for (i in 0..10) {
+    for (j in 0..10) {
+        if (j == 3) { continue outer }
+        if (i * j > 20) { break outer }
+    }
+}
 ```
 
 **Constraints**:
 - Must appear inside a `while` / `for`; otherwise the compile errors `E0304` / `E0305`.
 - `break` / `continue` inside a `match` does **not** affect `match` itself; it exits the enclosing loop.
-- **No labeled** break/continue (unlike Java/Rust).
+- Loop labels are written as `label: for (...)` or `label: while (...)` and may only annotate loops; `label:` before a non-loop statement is a compile error.
+- `break label` / `continue label` must refer to an active enclosing loop label; unknown labels and duplicate labels in the active loop stack are compile errors.
+- Unlabeled `continue` targets the innermost loop. Labeled `continue` targets the named loop: `while` rechecks its condition, C-style `for` runs its step before rechecking, and `for-in` advances to the next item.
 
 ### 4.7 `return`
 

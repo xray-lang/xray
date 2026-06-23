@@ -1522,7 +1522,8 @@ if (x > 0) {
 ### 4.3 `while`
 
 ```ebnf
-WhileStmt ::= 'while' '(' Expression ')' Block
+LoopLabel ::= Identifier ':'
+WhileStmt ::= LoopLabel? 'while' '(' Expression ')' Block
 ```
 
 ```xray
@@ -1540,7 +1541,7 @@ There is no `do-while` form.
 #### C-style `for`
 
 ```ebnf
-ForStmt ::= 'for' '(' ForInit? ';' Expression? ';' ForStep? ')' Block
+ForStmt ::= LoopLabel? 'for' '(' ForInit? ';' Expression? ';' ForStep? ')' Block
 ForInit ::= VarDecl | ExprStmt
 ForStep ::= Expression | Identifier ('++' | '--')
 ```
@@ -1561,7 +1562,7 @@ for (let j = 100; j > 90; j--) {
 #### Single-variable `for-in`
 
 ```ebnf
-ForInStmt ::= 'for' '(' Identifier 'in' Expression ')' Block
+ForInStmt ::= LoopLabel? 'for' '(' Identifier 'in' Expression ')' Block
 ```
 
 ```xray
@@ -1579,8 +1580,8 @@ for (_ in 0..n) { count++ }                   // discard with placeholder
 Xray supports two equivalent two-variable forms:
 
 ```ebnf
-ForInPairStmt ::= 'for' '(' Identifier ',' Identifier 'in' Expression ')' Block
-              |  'for' '(' '(' Identifier ',' Identifier ')' 'in' Expression ')' Block
+ForInPairStmt ::= LoopLabel? 'for' '(' Identifier ',' Identifier 'in' Expression ')' Block
+              |  LoopLabel? 'for' '(' '(' Identifier ',' Identifier ')' 'in' Expression ')' Block
 ```
 
 ```xray
@@ -1643,13 +1644,24 @@ For pattern details see [§6](#6-patterns).
 
 ```xray
 break                  // exit the innermost loop
-continue               // proceed to the next iteration
+continue               // proceed to the innermost loop's next iteration
+break outer            // exit the loop labeled outer
+continue outer         // proceed to the next iteration of the loop labeled outer
+
+outer: for (i in 0..10) {
+    for (j in 0..10) {
+        if (j == 3) { continue outer }
+        if (i * j > 20) { break outer }
+    }
+}
 ```
 
 **Constraints**:
 - Must appear inside a `while` / `for`; otherwise the compile errors `E0304` / `E0305`.
 - `break` / `continue` inside a `match` does **not** affect `match` itself; it exits the enclosing loop.
-- **No labeled** break/continue (unlike Java/Rust).
+- Loop labels are written as `label: for (...)` or `label: while (...)` and may only annotate loops; `label:` before a non-loop statement is a compile error.
+- `break label` / `continue label` must refer to an active enclosing loop label; unknown labels and duplicate labels in the active loop stack are compile errors.
+- Unlabeled `continue` targets the innermost loop. Labeled `continue` targets the named loop: `while` rechecks its condition, C-style `for` runs its step before rechecking, and `for-in` advances to the next item.
 
 ### 4.7 `return`
 
@@ -5259,16 +5271,17 @@ IncDecStmt ::= Identifier ('++' | '--') (';' | LineBreak)
 Block    ::= '{' Statement* '}'
 
 IfStmt    ::= 'if' '(' Expression ')' Block ('else' 'if' '(' Expression ')' Block)* ('else' Block)?
-WhileStmt ::= 'while' '(' Expression ')' Block
-ForStmt   ::= 'for' '(' VarDecl? ';' Expression? ';' (Expression | Identifier ('++' | '--'))? ')' Block
-ForInStmt ::= 'for' '(' Identifier 'in' Expression ')' Block
-ForInPairStmt ::= 'for' '(' Identifier ',' Identifier 'in' Expression ')' Block
-             |  'for' '(' '(' Identifier ',' Identifier ')' 'in' Expression ')' Block
+LoopLabel ::= Identifier ':'
+WhileStmt ::= LoopLabel? 'while' '(' Expression ')' Block
+ForStmt   ::= LoopLabel? 'for' '(' VarDecl? ';' Expression? ';' (Expression | Identifier ('++' | '--'))? ')' Block
+ForInStmt ::= LoopLabel? 'for' '(' Identifier 'in' Expression ')' Block
+ForInPairStmt ::= LoopLabel? 'for' '(' Identifier ',' Identifier 'in' Expression ')' Block
+             |  LoopLabel? 'for' '(' '(' Identifier ',' Identifier ')' 'in' Expression ')' Block
 MatchStmt ::= 'match' '(' Expression ')' '{' MatchArm (','? MatchArm)* ','? '}'
 
 ReturnStmt   ::= 'return' (Expression | '(' Expression (',' Expression)+ ')')?
-BreakStmt    ::= 'break'
-ContinueStmt ::= 'continue'
+BreakStmt    ::= 'break' Identifier?
+ContinueStmt ::= 'continue' Identifier?
 
 ThrowStmt ::= 'throw' Expression
 TryStmt   ::= 'try' Block CatchClause+

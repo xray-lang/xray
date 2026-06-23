@@ -195,16 +195,17 @@ IncDecStmt ::= Identifier ('++' | '--') (';' | LineBreak)
 Block    ::= '{' Statement* '}'
 
 IfStmt    ::= 'if' '(' Expression ')' Block ('else' 'if' '(' Expression ')' Block)* ('else' Block)?
-WhileStmt ::= 'while' '(' Expression ')' Block
-ForStmt   ::= 'for' '(' VarDecl? ';' Expression? ';' (Expression | Identifier ('++' | '--'))? ')' Block
-ForInStmt ::= 'for' '(' Identifier 'in' Expression ')' Block
-ForInPairStmt ::= 'for' '(' Identifier ',' Identifier 'in' Expression ')' Block
-             |  'for' '(' '(' Identifier ',' Identifier ')' 'in' Expression ')' Block
+LoopLabel ::= Identifier ':'
+WhileStmt ::= LoopLabel? 'while' '(' Expression ')' Block
+ForStmt   ::= LoopLabel? 'for' '(' VarDecl? ';' Expression? ';' (Expression | Identifier ('++' | '--'))? ')' Block
+ForInStmt ::= LoopLabel? 'for' '(' Identifier 'in' Expression ')' Block
+ForInPairStmt ::= LoopLabel? 'for' '(' Identifier ',' Identifier 'in' Expression ')' Block
+             |  LoopLabel? 'for' '(' '(' Identifier ',' Identifier ')' 'in' Expression ')' Block
 MatchStmt ::= 'match' '(' Expression ')' '{' MatchArm (','? MatchArm)* ','? '}'
 
 ReturnStmt   ::= 'return' (Expression | '(' Expression (',' Expression)+ ')')?
-BreakStmt    ::= 'break'
-ContinueStmt ::= 'continue'
+BreakStmt    ::= 'break' Identifier?
+ContinueStmt ::= 'continue' Identifier?
 
 ThrowStmt ::= 'throw' Expression
 TryStmt   ::= 'try' Block CatchClause+
@@ -493,16 +494,17 @@ IncDecStmt ::= Identifier ('++' | '--') (';' | LineBreak)
 Block    ::= '{' Statement* '}'
 
 IfStmt    ::= 'if' '(' Expression ')' Block ('else' 'if' '(' Expression ')' Block)* ('else' Block)?
-WhileStmt ::= 'while' '(' Expression ')' Block
-ForStmt   ::= 'for' '(' VarDecl? ';' Expression? ';' (Expression | Identifier ('++' | '--'))? ')' Block
-ForInStmt ::= 'for' '(' Identifier 'in' Expression ')' Block
-ForInPairStmt ::= 'for' '(' Identifier ',' Identifier 'in' Expression ')' Block
-             |  'for' '(' '(' Identifier ',' Identifier ')' 'in' Expression ')' Block
+LoopLabel ::= Identifier ':'
+WhileStmt ::= LoopLabel? 'while' '(' Expression ')' Block
+ForStmt   ::= LoopLabel? 'for' '(' VarDecl? ';' Expression? ';' (Expression | Identifier ('++' | '--'))? ')' Block
+ForInStmt ::= LoopLabel? 'for' '(' Identifier 'in' Expression ')' Block
+ForInPairStmt ::= LoopLabel? 'for' '(' Identifier ',' Identifier 'in' Expression ')' Block
+             |  LoopLabel? 'for' '(' '(' Identifier ',' Identifier ')' 'in' Expression ')' Block
 MatchStmt ::= 'match' '(' Expression ')' '{' MatchArm (','? MatchArm)* ','? '}'
 
 ReturnStmt   ::= 'return' (Expression | '(' Expression (',' Expression)+ ')')?
-BreakStmt    ::= 'break'
-ContinueStmt ::= 'continue'
+BreakStmt    ::= 'break' Identifier?
+ContinueStmt ::= 'continue' Identifier?
 
 ThrowStmt ::= 'throw' Expression
 TryStmt   ::= 'try' Block CatchClause+

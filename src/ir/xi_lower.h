@@ -79,6 +79,13 @@ typedef struct XiIncompletePhi {
     XiPhi *phi;
 } XiIncompletePhi;
 
+typedef struct XiLoopTarget {
+    const char *label;
+    XiBlock *break_target;
+    XiBlock *continue_target;
+    struct XiLoopTarget *prev;
+} XiLoopTarget;
+
 /* ========== Lowering Context ========== */
 
 typedef struct XiLower {
@@ -109,6 +116,7 @@ typedef struct XiLower {
     /* Loop targets for break/continue */
     XiBlock *break_target;
     XiBlock *continue_target;
+    XiLoopTarget *loop_targets;
 
     /* Cached singleton types (obtained once from isolate) */
     struct XrType *type_int;

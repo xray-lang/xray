@@ -394,11 +394,13 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
                 xr_ast_clone_ctx(node->as.if_stmt.else_branch, map, mc, clone_ctx);
             break;
         case AST_WHILE_STMT:
+            n->as.while_stmt.label = clone_str(node->as.while_stmt.label);
             n->as.while_stmt.condition =
                 xr_ast_clone_ctx(node->as.while_stmt.condition, map, mc, clone_ctx);
             n->as.while_stmt.body = xr_ast_clone_ctx(node->as.while_stmt.body, map, mc, clone_ctx);
             break;
         case AST_FOR_STMT:
+            n->as.for_stmt.label = clone_str(node->as.for_stmt.label);
             n->as.for_stmt.initializer =
                 xr_ast_clone_ctx(node->as.for_stmt.initializer, map, mc, clone_ctx);
             n->as.for_stmt.condition =
@@ -408,6 +410,7 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
             n->as.for_stmt.body = xr_ast_clone_ctx(node->as.for_stmt.body, map, mc, clone_ctx);
             break;
         case AST_FOR_IN_STMT:
+            n->as.for_in_stmt.label = clone_str(node->as.for_in_stmt.label);
             n->as.for_in_stmt.item_name = clone_str(node->as.for_in_stmt.item_name);
             n->as.for_in_stmt.value_name = clone_str(node->as.for_in_stmt.value_name);
             n->as.for_in_stmt.is_keyvalue = node->as.for_in_stmt.is_keyvalue;
@@ -418,8 +421,11 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
                 xr_ast_clone_ctx(node->as.for_in_stmt.body, map, mc, clone_ctx);
             break;
         case AST_BREAK_STMT:
+            n->as.break_stmt.label = clone_str(node->as.break_stmt.label);
+            break;
         case AST_CONTINUE_STMT:
-            break;  // No fields to clone
+            n->as.continue_stmt.label = clone_str(node->as.continue_stmt.label);
+            break;
 
         // === Function ===
         case AST_FUNCTION_DECL:
