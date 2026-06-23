@@ -15,6 +15,7 @@
 #include "xrt_coll.h"
 #include "xrt_value.h"
 #include "../base/xplatform.h"
+#include "../shared/xr_os_core.h"
 #ifndef _WIN32
 #include <errno.h>
 #endif
@@ -288,20 +289,13 @@ static inline XrValue xrt_os_hostname(void) {
     return xrt_os_cstr_value(buf);
 }
 
+static inline const char *xrt_os_core_getenv(void *ctx, const char *name) {
+    (void) ctx;
+    return getenv(name);
+}
+
 static inline XrValue xrt_os_tmpdir(void) {
-    const char *tmpdir = getenv("TMPDIR");
-    if (!tmpdir)
-        tmpdir = getenv("TMP");
-    if (!tmpdir)
-        tmpdir = getenv("TEMP");
-    if (!tmpdir) {
-#ifdef _WIN32
-        tmpdir = "C:\\Windows\\Temp";
-#else
-        tmpdir = "/tmp";
-#endif
-    }
-    return xrt_os_cstr_value(tmpdir);
+    return xrt_os_cstr_value(xr_os_core_tmpdir(xrt_os_core_getenv, NULL));
 }
 
 static inline XrValue xrt_os_username(void) {
@@ -423,6 +417,15 @@ static inline XrValue xrt_os_free_memory(void) {
 #endif
 }
 
+static inline double xrt_os_monotonic_uptime_seconds(void) {
+#if defined(XR_OS_POSIX)
+    struct timespec ts;
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) == 0)
+        return (double) ts.tv_sec + (double) ts.tv_nsec / 1000000000.0;
+#endif
+    return 0.0;
+}
+
 static inline XrValue xrt_os_uptime(void) {
 #ifdef _WIN32
     return XR_FROM_FLOAT((double) GetTickCount64() / 1000.0);
@@ -433,12 +436,12 @@ static inline XrValue xrt_os_uptime(void) {
         time_t now = time(NULL);
         return XR_FROM_FLOAT((double) (now - boottime.tv_sec));
     }
-    return XR_FROM_FLOAT(0.0);
+    return XR_FROM_FLOAT(xrt_os_monotonic_uptime_seconds());
 #elif defined(__linux__)
     struct sysinfo si;
     if (sysinfo(&si) == 0)
         return XR_FROM_FLOAT((double) si.uptime);
-    return XR_FROM_FLOAT(0.0);
+    return XR_FROM_FLOAT(xrt_os_monotonic_uptime_seconds());
 #else
     return XR_FROM_FLOAT(0.0);
 #endif

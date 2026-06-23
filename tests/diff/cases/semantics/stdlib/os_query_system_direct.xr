@@ -32,5 +32,27 @@ print(os.chdir(cwd))
 print(os.getcwd() == cwd)
 print(os.hostname().length > 0)
 print(os.tmpdir().length > 0)
+let oldTmpdir = os.getenv("TMPDIR")
+let oldTmp = os.getenv("TMP")
+let oldTemp = os.getenv("TEMP")
+os.setenv("TMPDIR", "")
+os.setenv("TMP", "/tmp/xray_diff_tmpdir_fallback")
+os.setenv("TEMP", "/tmp/xray_diff_tmpdir_wrong")
+print(os.tmpdir() == "/tmp/xray_diff_tmpdir_fallback")
+if (oldTmpdir != null) {
+    os.setenv("TMPDIR", oldTmpdir ?? "")
+} else {
+    os.unsetenv("TMPDIR")
+}
+if (oldTmp != null) {
+    os.setenv("TMP", oldTmp ?? "")
+} else {
+    os.unsetenv("TMP")
+}
+if (oldTemp != null) {
+    os.setenv("TEMP", oldTemp ?? "")
+} else {
+    os.unsetenv("TEMP")
+}
 print(os.username() != null)
 print(os.homedir() != null)
