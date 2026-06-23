@@ -2286,6 +2286,83 @@ module log {
 }
 
 module datetime {
+  fn now {
+    signature: "(): DateTime"
+    doc: "Get current local datetime"
+    vm: "dt_now"
+    argc: 0
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn utc {
+    signature: "(): DateTime"
+    doc: "Get current UTC datetime"
+    vm: "dt_utc"
+    argc: 0
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn create {
+    signature: "(year: int, month?: int, day?: int, hour?: int, minute?: int, second?: int): DateTime"
+    doc: "Create local datetime"
+    vm: "dt_create"
+    argc: 6
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn createUTC {
+    signature: "(year: int, month?: int, day?: int, hour?: int, minute?: int, second?: int): DateTime"
+    doc: "Create UTC datetime"
+    vm: "dt_create_utc"
+    argc: 6
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn fromTimestamp {
+    signature: "(ts: int): DateTime"
+    doc: "Create datetime from Unix timestamp (seconds)"
+    vm: "dt_from_timestamp"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn fromTimestampMs {
+    signature: "(ts: int): DateTime"
+    doc: "Create datetime from Unix timestamp (milliseconds)"
+    vm: "dt_from_timestamp_ms"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn parse {
+    signature: "(s: string, format?: string): DateTime?"
+    doc: "Parse datetime string"
+    vm: "dt_parse"
+    argc: 2
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "alloc"
+  }
+
   fn offset {
     signature: "(): int"
     doc: "Get UTC offset in minutes"

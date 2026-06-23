@@ -223,6 +223,13 @@ static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"io", "touch", "(path: string): bool", "Create or update file timestamp", "io_touch", "normal", "xrt_io_touch", "s", "value", "", "", "system", "method", 1, true},
     {"io", "writeFile", "(path: string, data: string): bool", "Write string to file", "io_writeFile", "yieldable", "xrt_io_write_file", "ss", "value", "", "", "system", "method", 2, true},
     {"io", "writeFileBytes", "(path: string, data: Array<uint8>): bool", "Write byte array to file", "io_writeFileBytes", "yieldable", "xrt_io_write_file_bytes", "sv", "value", "", "", "system", "method", 2, true},
+    {"datetime", "now", "(): DateTime", "Get current local datetime", "dt_now", "normal", "", "", "value", "", "", "alloc", "", 0, false},
+    {"datetime", "utc", "(): DateTime", "Get current UTC datetime", "dt_utc", "normal", "", "", "value", "", "", "alloc", "", 0, false},
+    {"datetime", "create", "(year: int, month?: int, day?: int, hour?: int, minute?: int, second?: int): DateTime", "Create local datetime", "dt_create", "normal", "", "", "value", "", "", "alloc", "", 6, false},
+    {"datetime", "createUTC", "(year: int, month?: int, day?: int, hour?: int, minute?: int, second?: int): DateTime", "Create UTC datetime", "dt_create_utc", "normal", "", "", "value", "", "", "alloc", "", 6, false},
+    {"datetime", "fromTimestamp", "(ts: int): DateTime", "Create datetime from Unix timestamp (seconds)", "dt_from_timestamp", "normal", "", "", "value", "", "", "alloc", "", 1, false},
+    {"datetime", "fromTimestampMs", "(ts: int): DateTime", "Create datetime from Unix timestamp (milliseconds)", "dt_from_timestamp_ms", "normal", "", "", "value", "", "", "alloc", "", 1, false},
+    {"datetime", "parse", "(s: string, format?: string): DateTime?", "Parse datetime string", "dt_parse", "normal", "", "", "value", "", "", "alloc", "", 2, false},
     {"datetime", "offset", "(): int", "Get UTC offset in minutes", "dt_offset", "normal", "xrt_datetime_offset", "", "value", "", "", "system", "method", 0, true},
 };
 #define XR_STDLIB_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_def_entries) / sizeof(xr_stdlib_def_entries[0])))

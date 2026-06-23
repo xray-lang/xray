@@ -1239,13 +1239,6 @@ XrModule *xr_load_module_datetime(XrVMRuntime *isolate) {
     if (!mod)
         return NULL;
 
-    XRS_EXPORT(mod, isolate, "now", dt_now);
-    XRS_EXPORT(mod, isolate, "utc", dt_utc);
-    XRS_EXPORT(mod, isolate, "create", dt_create);
-    XRS_EXPORT(mod, isolate, "createUTC", dt_create_utc);
-    XRS_EXPORT(mod, isolate, "fromTimestamp", dt_from_timestamp);
-    XRS_EXPORT(mod, isolate, "fromTimestampMs", dt_from_timestamp_ms);
-    XRS_EXPORT(mod, isolate, "parse", dt_parse);
     xr_stdlib_vm_bind_datetime_generated(isolate, mod);
 
     mod->loaded = true;
