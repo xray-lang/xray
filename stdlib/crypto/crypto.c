@@ -897,37 +897,37 @@ XR_FUNC int xr_hex_to_bytes(const char *hex, uint8_t *output, size_t max_len) {
 
 /* ========== Module Bindings ========== */
 
-static XrValue crypto_md5(XrVMRuntime *isolate, XrValue *args, int nargs) {
+static XrValue crypto_hex_string_result(XrVMRuntime *isolate, const uint8_t *digest,
+                                        size_t digest_len) {
+    char hex[129];
+    if (!xr_crypto_core_digest_hex(digest, digest_len, hex, sizeof(hex)))
+        return xr_null();
+    return xr_string_value(xr_string_new(isolate, hex, (uint32_t) (digest_len * 2)));
+}
+
+static XrValue crypto_hash_value(XrVMRuntime *isolate, XrValue *args, int nargs,
+                                 XrCryptoCoreHashAlg alg) {
     if (nargs < 1 || !XR_IS_STRING(args[0]))
         return xr_null();
     XrString *s = XR_TO_STRING(args[0]);
-    uint8_t digest[16];
-    xr_md5((const uint8_t *) XR_STRING_CHARS(s), s->length, digest);
-    char hex[33];
-    xr_bytes_to_hex(digest, 16, hex);
-    return xr_string_value(xr_string_new(isolate, hex, 32));
+    uint8_t digest[64];
+    size_t digest_len = 0;
+    if (!xr_crypto_core_hash(alg, (const uint8_t *) XR_STRING_CHARS(s), s->length, digest,
+                             &digest_len))
+        return xr_null();
+    return crypto_hex_string_result(isolate, digest, digest_len);
+}
+
+static XrValue crypto_md5(XrVMRuntime *isolate, XrValue *args, int nargs) {
+    return crypto_hash_value(isolate, args, nargs, XR_CRYPTO_CORE_HASH_MD5);
 }
 
 static XrValue crypto_sha1(XrVMRuntime *isolate, XrValue *args, int nargs) {
-    if (nargs < 1 || !XR_IS_STRING(args[0]))
-        return xr_null();
-    XrString *s = XR_TO_STRING(args[0]);
-    uint8_t digest[20];
-    xr_sha1((const uint8_t *) XR_STRING_CHARS(s), s->length, digest);
-    char hex[41];
-    xr_bytes_to_hex(digest, 20, hex);
-    return xr_string_value(xr_string_new(isolate, hex, 40));
+    return crypto_hash_value(isolate, args, nargs, XR_CRYPTO_CORE_HASH_SHA1);
 }
 
 static XrValue crypto_sha256(XrVMRuntime *isolate, XrValue *args, int nargs) {
-    if (nargs < 1 || !XR_IS_STRING(args[0]))
-        return xr_null();
-    XrString *s = XR_TO_STRING(args[0]);
-    uint8_t digest[32];
-    xr_sha256((const uint8_t *) XR_STRING_CHARS(s), s->length, digest);
-    char hex[65];
-    xr_bytes_to_hex(digest, 32, hex);
-    return xr_string_value(xr_string_new(isolate, hex, 64));
+    return crypto_hash_value(isolate, args, nargs, XR_CRYPTO_CORE_HASH_SHA256);
 }
 
 static XrValue crypto_hmac(XrVMRuntime *isolate, XrValue *args, int nargs) {
@@ -939,47 +939,19 @@ static XrValue crypto_hmac(XrVMRuntime *isolate, XrValue *args, int nargs) {
     XrString *key = XR_TO_STRING(args[1]);
     XrString *data = XR_TO_STRING(args[2]);
 
-    if (strcmp(XR_STRING_CHARS(algo), "sha256") == 0) {
-        uint8_t digest[32];
-        xr_hmac_sha256((const uint8_t *) XR_STRING_CHARS(key), key->length,
-                       (const uint8_t *) XR_STRING_CHARS(data), data->length, digest);
-        char hex[65];
-        xr_bytes_to_hex(digest, 32, hex);
-        return xr_string_value(xr_string_new(isolate, hex, 64));
-    } else if (strcmp(XR_STRING_CHARS(algo), "md5") == 0) {
-        uint8_t digest[16];
-        xr_hmac_md5((const uint8_t *) XR_STRING_CHARS(key), key->length,
-                    (const uint8_t *) XR_STRING_CHARS(data), data->length, digest);
-        char hex[33];
-        xr_bytes_to_hex(digest, 16, hex);
-        return xr_string_value(xr_string_new(isolate, hex, 32));
-    } else if (strcmp(XR_STRING_CHARS(algo), "sha1") == 0) {
-        uint8_t digest[20];
-        xr_hmac_sha1((const uint8_t *) XR_STRING_CHARS(key), key->length,
-                     (const uint8_t *) XR_STRING_CHARS(data), data->length, digest);
-        char hex[41];
-        xr_bytes_to_hex(digest, 20, hex);
-        return xr_string_value(xr_string_new(isolate, hex, 40));
-    } else if (strcmp(XR_STRING_CHARS(algo), "sha512") == 0) {
-        uint8_t digest[64];
-        xr_hmac_sha512((const uint8_t *) XR_STRING_CHARS(key), key->length,
-                       (const uint8_t *) XR_STRING_CHARS(data), data->length, digest);
-        char hex[129];
-        xr_bytes_to_hex(digest, 64, hex);
-        return xr_string_value(xr_string_new(isolate, hex, 128));
-    }
-    return xr_null();
+    XrCryptoCoreHashAlg alg =
+        xr_crypto_core_hash_alg_from_name(XR_STRING_CHARS(algo), algo->length);
+    uint8_t digest[64];
+    size_t digest_len = 0;
+    if (!xr_crypto_core_hmac(alg, (const uint8_t *) XR_STRING_CHARS(key), key->length,
+                             (const uint8_t *) XR_STRING_CHARS(data), data->length, digest,
+                             &digest_len))
+        return xr_null();
+    return crypto_hex_string_result(isolate, digest, digest_len);
 }
 
 static XrValue crypto_sha512(XrVMRuntime *isolate, XrValue *args, int nargs) {
-    if (nargs < 1 || !XR_IS_STRING(args[0]))
-        return xr_null();
-    XrString *s = XR_TO_STRING(args[0]);
-    uint8_t digest[64];
-    xr_sha512((const uint8_t *) XR_STRING_CHARS(s), s->length, digest);
-    char hex[129];
-    xr_bytes_to_hex(digest, 64, hex);
-    return xr_string_value(xr_string_new(isolate, hex, 128));
+    return crypto_hash_value(isolate, args, nargs, XR_CRYPTO_CORE_HASH_SHA512);
 }
 
 static XrValue crypto_random_bytes(XrVMRuntime *isolate, XrValue *args, int nargs) {
