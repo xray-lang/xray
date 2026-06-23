@@ -290,6 +290,21 @@ XrDateTime *xr_datetime_parse(XrVMRuntime *isolate, const char *str, const char 
 
 /* ========== Format API ========== */
 
+static int datetime_ctxbuf_write(void *ctx, const char *data, size_t len) {
+    xr_ctxbuf_append((XrCtxBuf *) ctx, data, len);
+    return 0;
+}
+
+static int datetime_copy_ctxbuf_to_cstr(const XrCtxBuf *out, char *buf, size_t buf_size) {
+    if (!out || !buf || buf_size == 0)
+        return 0;
+    size_t len = out->len < buf_size - 1 ? out->len : buf_size - 1;
+    if (out->data)
+        memcpy(buf, out->data, len);
+    buf[len] = '\0';
+    return (int) len;
+}
+
 void xr_datetime_to_tm(XrDateTime *dt, struct tm *tm) {
     XR_DCHECK(dt != NULL && tm != NULL, "xr_datetime_to_tm: args must not be NULL");
     time_t t = (time_t) dt->timestamp;
@@ -311,62 +326,23 @@ int xr_datetime_format(XrDateTime *dt, const char *pattern, char *buf, size_t bu
     // caller-provided fixed-size slot, keeping the legacy API contract.
     XrCtxBuf out;
     xr_ctxbuf_init(&out, 64);
-    const char *p = pattern;
-
-    while (*p) {
-        if (strncmp(p, "YYYY", 4) == 0) {
-            xr_ctxbuf_appendf(&out, "%04d", tm.tm_year + 1900);
-            p += 4;
-        } else if (strncmp(p, "MM", 2) == 0 && p[2] != 'M') {
-            xr_ctxbuf_appendf(&out, "%02d", tm.tm_mon + 1);
-            p += 2;
-        } else if (strncmp(p, "DD", 2) == 0) {
-            xr_ctxbuf_appendf(&out, "%02d", tm.tm_mday);
-            p += 2;
-        } else if (strncmp(p, "HH", 2) == 0) {
-            xr_ctxbuf_appendf(&out, "%02d", tm.tm_hour);
-            p += 2;
-        } else if (strncmp(p, "mm", 2) == 0) {
-            xr_ctxbuf_appendf(&out, "%02d", tm.tm_min);
-            p += 2;
-        } else if (strncmp(p, "ss", 2) == 0) {
-            xr_ctxbuf_appendf(&out, "%02d", tm.tm_sec);
-            p += 2;
-        } else if (strncmp(p, "SSS", 3) == 0) {
-            xr_ctxbuf_appendf(&out, "%03d", dt->milliseconds);
-            p += 3;
-        } else {
-            xr_ctxbuf_putc(&out, *p++);
-        }
-    }
-
-    size_t len = out.len < buf_size - 1 ? out.len : buf_size - 1;
-    if (buf_size > 0) {
-        if (out.data)
-            memcpy(buf, out.data, len);
-        buf[len] = '\0';
-    }
+    XrDateTimeCoreWriter writer = {.ctx = &out, .write = datetime_ctxbuf_write};
+    (void) xr_datetime_core_format_tm(&writer, &tm, dt->milliseconds, pattern, -1);
+    int len = datetime_copy_ctxbuf_to_cstr(&out, buf, buf_size);
     xr_ctxbuf_free(&out);
-    return (int) len;
+    return len;
 }
 
 int xr_datetime_to_iso_string(XrDateTime *dt, char *buf, size_t buf_size) {
     struct tm tm;
     xr_datetime_to_tm(dt, &tm);
-    int n;
-    if (dt->is_utc) {
-        n = snprintf(buf, buf_size, "%04d-%02d-%02dT%02d:%02d:%02d.%03dZ", tm.tm_year + 1900,
-                     tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec, dt->milliseconds);
-    } else {
-        int off = dt->tz_offset;
-        char sign = off >= 0 ? '+' : '-';
-        if (off < 0)
-            off = -off;
-        n = snprintf(buf, buf_size, "%04d-%02d-%02dT%02d:%02d:%02d.%03d%c%02d:%02d",
-                     tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec,
-                     dt->milliseconds, sign, off / 60, off % 60);
-    }
-    return n < (int) buf_size ? n : (int) buf_size - 1;
+    XrCtxBuf out;
+    xr_ctxbuf_init(&out, 64);
+    XrDateTimeCoreWriter writer = {.ctx = &out, .write = datetime_ctxbuf_write};
+    (void) xr_datetime_core_iso_write(&writer, &tm, dt->milliseconds, dt->is_utc, dt->tz_offset);
+    int len = datetime_copy_ctxbuf_to_cstr(&out, buf, buf_size);
+    xr_ctxbuf_free(&out);
+    return len;
 }
 
 /* ========== Component Access API ========== */
@@ -710,32 +686,8 @@ static XrValue dt_format(XrVMRuntime *isolate, XrValue self, XrValue *args, int 
     xr_ctxbuf_init(&out, 64);
     struct tm tm;
     xr_datetime_to_tm(dt, &tm);
-    for (const char *p = pattern; *p;) {
-        if (strncmp(p, "YYYY", 4) == 0) {
-            xr_ctxbuf_appendf(&out, "%04d", tm.tm_year + 1900);
-            p += 4;
-        } else if (strncmp(p, "MM", 2) == 0 && p[2] != 'M') {
-            xr_ctxbuf_appendf(&out, "%02d", tm.tm_mon + 1);
-            p += 2;
-        } else if (strncmp(p, "DD", 2) == 0) {
-            xr_ctxbuf_appendf(&out, "%02d", tm.tm_mday);
-            p += 2;
-        } else if (strncmp(p, "HH", 2) == 0) {
-            xr_ctxbuf_appendf(&out, "%02d", tm.tm_hour);
-            p += 2;
-        } else if (strncmp(p, "mm", 2) == 0) {
-            xr_ctxbuf_appendf(&out, "%02d", tm.tm_min);
-            p += 2;
-        } else if (strncmp(p, "ss", 2) == 0) {
-            xr_ctxbuf_appendf(&out, "%02d", tm.tm_sec);
-            p += 2;
-        } else if (strncmp(p, "SSS", 3) == 0) {
-            xr_ctxbuf_appendf(&out, "%03d", dt->milliseconds);
-            p += 3;
-        } else {
-            xr_ctxbuf_putc(&out, *p++);
-        }
-    }
+    XrDateTimeCoreWriter writer = {.ctx = &out, .write = datetime_ctxbuf_write};
+    (void) xr_datetime_core_format_tm(&writer, &tm, dt->milliseconds, pattern, -1);
     XrValue v = xr_string_value(xr_string_new(isolate, out.data ? out.data : "", out.len));
     xr_ctxbuf_free(&out);
     return v;

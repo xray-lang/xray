@@ -12,7 +12,10 @@
 #define XR_DATETIME_CORE_H
 
 #include "../base/xplatform.h"
+#include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
+#include <string.h>
 #include <time.h>
 
 static inline int xr_datetime_core_is_leap_year(int year) {
@@ -129,6 +132,106 @@ static inline time_t xr_datetime_core_mktime(struct tm *tm, int is_utc) {
         return wall_t;
     int off_min = xr_datetime_core_local_offset_at(wall_t);
     return wall_t - (time_t) off_min * 60;
+}
+
+typedef int (*XrDateTimeCoreWriteFn)(void *ctx, const char *data, size_t len);
+
+typedef struct XrDateTimeCoreWriter {
+    void *ctx;
+    XrDateTimeCoreWriteFn write;
+} XrDateTimeCoreWriter;
+
+static inline int xr_datetime_core_write_bytes(XrDateTimeCoreWriter *writer, const char *data,
+                                               size_t len) {
+    if (!writer || !writer->write || (!data && len != 0))
+        return -1;
+    if (len == 0)
+        return 0;
+    return writer->write(writer->ctx, data, len);
+}
+
+static inline int64_t xr_datetime_core_write_i32(XrDateTimeCoreWriter *writer, const char *fmt,
+                                                 int value) {
+    char tmp[32];
+    int n = snprintf(tmp, sizeof(tmp), fmt, value);
+    if (n < 0 || n >= (int) sizeof(tmp))
+        return -1;
+    if (xr_datetime_core_write_bytes(writer, tmp, (size_t) n) != 0)
+        return -1;
+    return n;
+}
+
+static inline int64_t xr_datetime_core_format_tm(XrDateTimeCoreWriter *writer, const struct tm *tm,
+                                                 int milliseconds, const char *pattern,
+                                                 int64_t pattern_len) {
+    if (!writer || !tm || !pattern)
+        return -1;
+    if (pattern_len < 0)
+        pattern_len = (int64_t) strlen(pattern);
+
+    int64_t total = 0;
+    for (int64_t i = 0; i < pattern_len;) {
+        const char *p = pattern + i;
+        int64_t left = pattern_len - i;
+        int64_t wrote = -1;
+        if (left >= 4 && strncmp(p, "YYYY", 4) == 0) {
+            wrote = xr_datetime_core_write_i32(writer, "%04d", tm->tm_year + 1900);
+            i += 4;
+        } else if (left >= 2 && strncmp(p, "MM", 2) == 0 && (left == 2 || p[2] != 'M')) {
+            wrote = xr_datetime_core_write_i32(writer, "%02d", tm->tm_mon + 1);
+            i += 2;
+        } else if (left >= 2 && strncmp(p, "DD", 2) == 0) {
+            wrote = xr_datetime_core_write_i32(writer, "%02d", tm->tm_mday);
+            i += 2;
+        } else if (left >= 2 && strncmp(p, "HH", 2) == 0) {
+            wrote = xr_datetime_core_write_i32(writer, "%02d", tm->tm_hour);
+            i += 2;
+        } else if (left >= 2 && strncmp(p, "mm", 2) == 0) {
+            wrote = xr_datetime_core_write_i32(writer, "%02d", tm->tm_min);
+            i += 2;
+        } else if (left >= 2 && strncmp(p, "ss", 2) == 0) {
+            wrote = xr_datetime_core_write_i32(writer, "%02d", tm->tm_sec);
+            i += 2;
+        } else if (left >= 3 && strncmp(p, "SSS", 3) == 0) {
+            wrote = xr_datetime_core_write_i32(writer, "%03d", milliseconds);
+            i += 3;
+        } else {
+            if (xr_datetime_core_write_bytes(writer, p, 1) != 0)
+                return -1;
+            wrote = 1;
+            i += 1;
+        }
+        if (wrote < 0)
+            return -1;
+        total += wrote;
+    }
+    return total;
+}
+
+static inline int64_t xr_datetime_core_iso_write(XrDateTimeCoreWriter *writer, const struct tm *tm,
+                                                 int milliseconds, int is_utc, int tz_offset) {
+    if (!writer || !tm)
+        return -1;
+    char tmp[96];
+    int n;
+    if (is_utc) {
+        n = snprintf(tmp, sizeof(tmp), "%04d-%02d-%02dT%02d:%02d:%02d.%03dZ", tm->tm_year + 1900,
+                     tm->tm_mon + 1, tm->tm_mday, tm->tm_hour, tm->tm_min, tm->tm_sec,
+                     milliseconds);
+    } else {
+        int off = tz_offset;
+        char sign = off >= 0 ? '+' : '-';
+        if (off < 0)
+            off = -off;
+        n = snprintf(tmp, sizeof(tmp), "%04d-%02d-%02dT%02d:%02d:%02d.%03d%c%02d:%02d",
+                     tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday, tm->tm_hour, tm->tm_min,
+                     tm->tm_sec, milliseconds, sign, off / 60, off % 60);
+    }
+    if (n < 0 || n >= (int) sizeof(tmp))
+        return -1;
+    if (xr_datetime_core_write_bytes(writer, tmp, (size_t) n) != 0)
+        return -1;
+    return n;
 }
 
 #endif  // XR_DATETIME_CORE_H
