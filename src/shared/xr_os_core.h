@@ -17,6 +17,7 @@
 #include <string.h>
 
 typedef const char *(*XrOsCoreGetenvFn)(void *ctx, const char *name);
+typedef const char *(*XrOsCoreStringFn)(void *ctx);
 typedef bool (*XrOsCoreEnvEntryFn)(void *ctx, const char *key, size_t key_len, const char *value,
                                    size_t value_len);
 
@@ -88,6 +89,57 @@ static inline const char *xr_os_core_tmpdir(XrOsCoreGetenvFn getenv_fn, void *ct
 #else
     return "/tmp";
 #endif
+}
+
+static inline const char *xr_os_core_username(XrOsCoreStringFn system_username_fn, void *system_ctx,
+                                              XrOsCoreGetenvFn getenv_fn, void *env_ctx) {
+    if (system_username_fn) {
+        const char *user = system_username_fn(system_ctx);
+        if (xr_os_core_has_env_value(user))
+            return user;
+    }
+
+    if (!getenv_fn)
+        return NULL;
+
+#ifdef XR_OS_WINDOWS
+    const char *user = getenv_fn(env_ctx, "USERNAME");
+    if (xr_os_core_has_env_value(user))
+        return user;
+#endif
+
+    const char *user = getenv_fn(env_ctx, "USER");
+    if (xr_os_core_has_env_value(user))
+        return user;
+
+    user = getenv_fn(env_ctx, "LOGNAME");
+    if (xr_os_core_has_env_value(user))
+        return user;
+
+    return NULL;
+}
+
+static inline const char *xr_os_core_homedir(XrOsCoreGetenvFn getenv_fn, void *env_ctx,
+                                             XrOsCoreStringFn system_homedir_fn, void *system_ctx) {
+    if (getenv_fn) {
+        const char *home = getenv_fn(env_ctx, "HOME");
+        if (xr_os_core_has_env_value(home))
+            return home;
+
+#ifdef XR_OS_WINDOWS
+        home = getenv_fn(env_ctx, "USERPROFILE");
+        if (xr_os_core_has_env_value(home))
+            return home;
+#endif
+    }
+
+    if (system_homedir_fn) {
+        const char *home = system_homedir_fn(system_ctx);
+        if (xr_os_core_has_env_value(home))
+            return home;
+    }
+
+    return NULL;
 }
 
 static inline bool xr_os_core_environ_entry(const char *entry, XrOsCoreEnvEntryFn fn, void *ctx) {

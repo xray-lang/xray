@@ -274,37 +274,34 @@ static inline XrValue xrt_os_tmpdir(void) {
     return xrt_os_cstr_value(xr_os_core_tmpdir(xrt_os_core_getenv, NULL));
 }
 
-static inline XrValue xrt_os_username(void) {
+static inline const char *xrt_os_system_username(void *ctx) {
+    (void) ctx;
 #ifdef _WIN32
-    const char *user = getenv("USERNAME");
-    if (!user)
-        user = getenv("USER");
-    if (!user)
-        user = getenv("LOGNAME");
-    return xrt_os_cstr_value(user);
+    return NULL;
 #else
     struct passwd *pw = getpwuid(getuid());
-    if (pw && pw->pw_name)
-        return xrt_os_cstr_value(pw->pw_name);
-    const char *user = getenv("USER");
-    if (!user)
-        user = getenv("LOGNAME");
-    return xrt_os_cstr_value(user);
+    return (pw && pw->pw_name) ? pw->pw_name : NULL;
 #endif
 }
 
-static inline XrValue xrt_os_homedir(void) {
-    const char *home = getenv("HOME");
+static inline const char *xrt_os_system_homedir(void *ctx) {
+    (void) ctx;
 #ifdef _WIN32
-    if (!home)
-        home = getenv("USERPROFILE");
-    return xrt_os_cstr_value(home);
+    return NULL;
 #else
-    if (home)
-        return xrt_os_cstr_value(home);
     struct passwd *pw = getpwuid(getuid());
-    return pw ? xrt_os_cstr_value(pw->pw_dir) : XR_NULL_VAL;
+    return (pw && pw->pw_dir) ? pw->pw_dir : NULL;
 #endif
+}
+
+static inline XrValue xrt_os_username(void) {
+    return xrt_os_cstr_value(
+        xr_os_core_username(xrt_os_system_username, NULL, xrt_os_core_getenv, NULL));
+}
+
+static inline XrValue xrt_os_homedir(void) {
+    return xrt_os_cstr_value(
+        xr_os_core_homedir(xrt_os_core_getenv, NULL, xrt_os_system_homedir, NULL));
 }
 
 static inline XrValue xrt_os_ppid(void) {
