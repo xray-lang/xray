@@ -10,7 +10,7 @@
 /*
  * Include this file from a stdlib module TU after the class method
  * functions and native body descriptor have been declared, then define
- * exactly one XR_STDLIB_VM_BIND_CLASS_<CLASS> macro before including it.
+ * one or more XR_STDLIB_VM_BIND_CLASS_<CLASS> macros before including it.
  */
 
 #ifdef XR_STDLIB_VM_BIND_CLASS_LOGGER
@@ -35,5 +35,47 @@ static void xr_stdlib_vm_register_logger_class_generated(XrVMRuntime *X) {
     core->loggerClass = cls;
 }
 #endif  /* XR_STDLIB_VM_BIND_CLASS_LOGGER */
+
+#ifdef XR_STDLIB_VM_BIND_CLASS_NET_CONN
+static void xr_stdlib_vm_register_net_conn_class_generated(XrVMRuntime *X) {
+    XR_DCHECK(X != NULL, "xr_stdlib_vm_register_net_conn_class_generated: NULL isolate");
+    XrayCoreClasses *core = xr_isolate_get_core_classes(X);
+    XR_DCHECK(core != NULL, "xr_stdlib_vm_register_net_conn_class_generated: core not initialised");
+    XR_DCHECK(core->netConnClass == NULL, "xr_stdlib_vm_register_net_conn_class_generated: already registered");
+    XrClassBuilder *builder = xr_class_builder_new(X, "NetConn", NULL);
+    XR_CHECK(builder != NULL, "xr_stdlib_vm_register_net_conn_class_generated: builder alloc failed");
+    xr_class_builder_set_native_body(builder, xr_netconn_body_desc());
+    xr_class_builder_add_method(builder, "fd", conn_method_fd, 0, 0);
+    xr_class_builder_add_method(builder, "close", conn_method_close, 0, 0);
+    xr_class_builder_add_method(builder, "isClosed", conn_method_is_closed, 0, 0);
+    xr_class_builder_add_method(builder, "isTLS", conn_method_is_tls, 0, 0);
+    XrClass *cls = xr_class_builder_finalize(builder);
+    XR_CHECK(cls != NULL, "xr_stdlib_vm_register_net_conn_class_generated: finalize failed");
+    cls->flags |= XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY;
+    cls->builtin_kind = XR_BK_NETCONN;
+    core->netConnClass = cls;
+}
+#endif  /* XR_STDLIB_VM_BIND_CLASS_NET_CONN */
+
+#ifdef XR_STDLIB_VM_BIND_CLASS_NET_LISTENER
+static void xr_stdlib_vm_register_net_listener_class_generated(XrVMRuntime *X) {
+    XR_DCHECK(X != NULL, "xr_stdlib_vm_register_net_listener_class_generated: NULL isolate");
+    XrayCoreClasses *core = xr_isolate_get_core_classes(X);
+    XR_DCHECK(core != NULL, "xr_stdlib_vm_register_net_listener_class_generated: core not initialised");
+    XR_DCHECK(core->netListenerClass == NULL, "xr_stdlib_vm_register_net_listener_class_generated: already registered");
+    XrClassBuilder *builder = xr_class_builder_new(X, "NetListener", NULL);
+    XR_CHECK(builder != NULL, "xr_stdlib_vm_register_net_listener_class_generated: builder alloc failed");
+    xr_class_builder_set_native_body(builder, xr_netlistener_body_desc());
+    xr_class_builder_add_method(builder, "fd", listener_method_fd, 0, 0);
+    xr_class_builder_add_method(builder, "port", listener_method_port, 0, 0);
+    xr_class_builder_add_method(builder, "close", listener_method_close, 0, 0);
+    xr_class_builder_add_method(builder, "isClosed", listener_method_is_closed, 0, 0);
+    XrClass *cls = xr_class_builder_finalize(builder);
+    XR_CHECK(cls != NULL, "xr_stdlib_vm_register_net_listener_class_generated: finalize failed");
+    cls->flags |= XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY;
+    cls->builtin_kind = XR_BK_NETLISTENER;
+    core->netListenerClass = cls;
+}
+#endif  /* XR_STDLIB_VM_BIND_CLASS_NET_LISTENER */
 
 /* clang-format on */

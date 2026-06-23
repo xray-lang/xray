@@ -2718,6 +2718,60 @@ module net {
     fields: "const data: string, const host: string, const port: int"
   }
 
+  native_class NetConn {
+    core_slot: "netConnClass"
+    native_body_expr: "xr_netconn_body_desc()"
+    flags: "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY"
+    builtin_kind: "XR_BK_NETCONN"
+  }
+
+  native_class NetListener {
+    core_slot: "netListenerClass"
+    native_body_expr: "xr_netlistener_body_desc()"
+    flags: "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY"
+    builtin_kind: "XR_BK_NETLISTENER"
+  }
+
+  class_method NetConn.fd {
+    vm: "conn_method_fd"
+    argc: 0
+  }
+
+  class_method NetConn.close {
+    vm: "conn_method_close"
+    argc: 0
+  }
+
+  class_method NetConn.isClosed {
+    vm: "conn_method_is_closed"
+    argc: 0
+  }
+
+  class_method NetConn.isTLS {
+    vm: "conn_method_is_tls"
+    argc: 0
+  }
+
+  class_method NetListener.fd {
+    vm: "listener_method_fd"
+    argc: 0
+  }
+
+  class_method NetListener.port {
+    vm: "listener_method_port"
+    argc: 0
+  }
+
+  class_method NetListener.close {
+    vm: "listener_method_close"
+    argc: 0
+  }
+
+  class_method NetListener.isClosed {
+    vm: "listener_method_is_closed"
+    argc: 0
+  }
+
   fn dial {
     signature: "(host: string, port: int, timeout?: int): NetConn?"
     doc: "Dial a TCP connection"

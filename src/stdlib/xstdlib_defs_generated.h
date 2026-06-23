@@ -78,8 +78,9 @@ typedef struct XrStdlibNativeClassDefEntry {
     const char *name;
     const char *super_slot;
     const char *core_slot;
-    const char *native_body;
+    const char *native_body_expr;
     const char *flags;
+    const char *builtin_kind;
 } XrStdlibNativeClassDefEntry;
 
 typedef struct XrStdlibClassMethodDefEntry {
@@ -576,7 +577,9 @@ static const XrStdlibTypeMethodDefEntry xr_stdlib_type_method_def_entries[] = {
 #define XR_STDLIB_TYPE_METHOD_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_type_method_def_entries) / sizeof(xr_stdlib_type_method_def_entries[0])))
 
 static const XrStdlibNativeClassDefEntry xr_stdlib_native_class_def_entries[] = {
-    {"log", "Logger", "objectClass", "loggerClass", "g_logger_body_desc", "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY"},
+    {"log", "Logger", "objectClass", "loggerClass", "&g_logger_body_desc", "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY", ""},
+    {"net", "NetConn", "", "netConnClass", "xr_netconn_body_desc()", "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY", "XR_BK_NETCONN"},
+    {"net", "NetListener", "", "netListenerClass", "xr_netlistener_body_desc()", "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY", "XR_BK_NETLISTENER"},
 };
 #define XR_STDLIB_NATIVE_CLASS_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_native_class_def_entries) / sizeof(xr_stdlib_native_class_def_entries[0])))
 
@@ -587,6 +590,14 @@ static const XrStdlibClassMethodDefEntry xr_stdlib_class_method_def_entries[] = 
     {"log", "Logger", "error", "xr_logger_error", -1, "0"},
     {"log", "Logger", "fatal", "xr_logger_fatal", -1, "0"},
     {"log", "Logger", "child", "xr_logger_child", -1, "0"},
+    {"net", "NetConn", "fd", "conn_method_fd", 0, "0"},
+    {"net", "NetConn", "close", "conn_method_close", 0, "0"},
+    {"net", "NetConn", "isClosed", "conn_method_is_closed", 0, "0"},
+    {"net", "NetConn", "isTLS", "conn_method_is_tls", 0, "0"},
+    {"net", "NetListener", "fd", "listener_method_fd", 0, "0"},
+    {"net", "NetListener", "port", "listener_method_port", 0, "0"},
+    {"net", "NetListener", "close", "listener_method_close", 0, "0"},
+    {"net", "NetListener", "isClosed", "listener_method_is_closed", 0, "0"},
 };
 #define XR_STDLIB_CLASS_METHOD_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_class_method_def_entries) / sizeof(xr_stdlib_class_method_def_entries[0])))
 

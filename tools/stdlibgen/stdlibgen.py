@@ -123,8 +123,9 @@ class StdlibNativeClassEntry:
     name: str
     super_slot: str
     core_slot: str
-    native_body: str
+    native_body_expr: str
     flags: str
+    builtin_kind: str
 
     @property
     def symbol(self) -> str:
@@ -377,18 +378,27 @@ def parse_def_metadata(
                 )
             )
         elif current_kind == "native_class":
-            missing = [k for k in ("core_slot", "native_body") if k not in props]
+            missing = [k for k in ("core_slot",) if k not in props]
             if missing:
                 names = ", ".join(missing)
                 raise SystemExit(f"{path}:{line_no}: {current_module}.{current_name} missing {names}")
+            body_symbol = str(props.get("native_body", "")).strip()
+            body_expr = str(props.get("native_body_expr", "")).strip()
+            if bool(body_symbol) == bool(body_expr):
+                raise SystemExit(
+                    f"{path}:{line_no}: {current_module}.{current_name} requires exactly one "
+                    "of native_body or native_body_expr"
+                )
+            native_body_expr = f"&{body_symbol}" if body_symbol else body_expr
             native_classes.append(
                 StdlibNativeClassEntry(
                     module=current_module,
                     name=current_name,
                     super_slot=str(props.get("super_slot", "")),
                     core_slot=str(props["core_slot"]),
-                    native_body=str(props["native_body"]),
+                    native_body_expr=native_body_expr,
                     flags=str(props.get("flags", "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY")),
+                    builtin_kind=str(props.get("builtin_kind", "")),
                 )
             )
         elif current_kind == "class_method":
@@ -558,10 +568,18 @@ def c_flag_expr(value: str, context: str) -> str:
     return value
 
 
+def c_native_body_expr(value: str, context: str) -> str:
+    value = value.strip()
+    ident = r"[A-Za-z_][A-Za-z0-9_]*"
+    if not re.fullmatch(rf"&?{ident}|{ident}\(\)", value):
+        raise SystemExit(f"{context}: unsupported native body expression: {value!r}")
+    return value
+
+
 def c_macro_suffix(value: str, context: str) -> str:
     if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", value):
         raise SystemExit(f"{context}: expected macro suffix identifier, got {value!r}")
-    return value.upper()
+    return c_snake(value).upper()
 
 
 _C_IDENT_RE = r"[A-Za-z_][A-Za-z0-9_]*"
@@ -926,8 +944,10 @@ def emit_class_bindings(
         c_ident(cls.core_slot, cls.symbol)
         if cls.super_slot:
             c_ident(cls.super_slot, cls.symbol)
-        c_ident(cls.native_body, cls.symbol)
+        c_native_body_expr(cls.native_body_expr, cls.symbol)
         c_flag_expr(cls.flags, cls.symbol)
+        if cls.builtin_kind:
+            c_ident(cls.builtin_kind, cls.symbol)
         other = seen_slots.get(cls.core_slot)
         if other is not None:
             raise SystemExit(f"{cls.symbol}: duplicate native class core slot with {other}")
@@ -939,7 +959,7 @@ def emit_class_bindings(
             "/*",
             " * Include this file from a stdlib module TU after the class method",
             " * functions and native body descriptor have been declared, then define",
-            " * exactly one XR_STDLIB_VM_BIND_CLASS_<CLASS> macro before including it.",
+            " * one or more XR_STDLIB_VM_BIND_CLASS_<CLASS> macros before including it.",
             " */",
             "",
         ]
@@ -967,7 +987,7 @@ def emit_class_bindings(
             f"{c_string(cls.name)}, {super_expr});"
         )
         lines.append(f"    XR_CHECK(builder != NULL, {c_string(helper + ': builder alloc failed')});")
-        lines.append(f"    xr_class_builder_set_native_body(builder, &{cls.native_body});")
+        lines.append(f"    xr_class_builder_set_native_body(builder, {cls.native_body_expr});")
         for method in methods_by_class.get((cls.module, cls.name), []):
             lines.append(
                 f"    xr_class_builder_add_method(builder, {c_string(method.name)}, "
@@ -976,6 +996,8 @@ def emit_class_bindings(
         lines.append("    XrClass *cls = xr_class_builder_finalize(builder);")
         lines.append(f"    XR_CHECK(cls != NULL, {c_string(helper + ': finalize failed')});")
         lines.append(f"    cls->flags |= {cls.flags};")
+        if cls.builtin_kind:
+            lines.append(f"    cls->builtin_kind = {cls.builtin_kind};")
         lines.append(f"    core->{cls.core_slot} = cls;")
         lines.append("}")
         lines.append(f"#endif  /* XR_STDLIB_VM_BIND_CLASS_{suffix} */")
@@ -1067,8 +1089,9 @@ def emit_defs_header(
             "    const char *name;",
             "    const char *super_slot;",
             "    const char *core_slot;",
-            "    const char *native_body;",
+            "    const char *native_body_expr;",
             "    const char *flags;",
+            "    const char *builtin_kind;",
             "} XrStdlibNativeClassDefEntry;",
             "",
             "typedef struct XrStdlibClassMethodDefEntry {",
@@ -1178,7 +1201,8 @@ def emit_defs_header(
         lines.append(
             "    {"
             f"{c_string(cls.module)}, {c_string(cls.name)}, {c_string(cls.super_slot)}, "
-            f"{c_string(cls.core_slot)}, {c_string(cls.native_body)}, {c_string(cls.flags)}"
+            f"{c_string(cls.core_slot)}, {c_string(cls.native_body_expr)}, {c_string(cls.flags)}, "
+            f"{c_string(cls.builtin_kind)}"
             "},"
         )
     lines.extend(
