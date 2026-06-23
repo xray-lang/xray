@@ -421,15 +421,15 @@ static inline XrValue xrt_str_method_1(const char *s, int64_t slen, XrValue recv
         return arr;
     }
     if (sym == XRT_SYM_REPEAT && arg0.tag == XR_TAG_I64) {
-        int64_t n = arg0.i;
-        if (n <= 0)
+        XrStringCoreRepeatPlan plan = xr_string_core_repeat_plan(s, (size_t) slen, arg0.i);
+        if (plan.kind == XR_STRING_CORE_REPEAT_INVALID)
+            return XR_NULL_VAL;
+        if (plan.kind == XR_STRING_CORE_REPEAT_EMPTY)
             return xrt_str_alloc(0);
-        size_t rlen = (size_t) (slen * n);
-        XrValue sv = xrt_str_alloc(rlen);
-        char *r = xr_str_buf(sv);
-        for (int64_t i = 0; i < n; i++)
-            memcpy(r + i * slen, s, (size_t) slen);
-        r[rlen] = 0;
+        if (plan.kind == XR_STRING_CORE_REPEAT_ORIGINAL)
+            return recv;
+        XrValue sv = xrt_str_alloc(plan.len);
+        xr_string_core_repeat_write(xr_str_buf(sv), s, (size_t) slen, arg0.i);
         return sv;
     }
     if (sym == XRT_SYM_REPLACE && XR_IS_STR(arg0)) {

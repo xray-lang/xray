@@ -230,6 +230,9 @@ fn test_repeat() {
     assert_eq("ab".repeat(3), "ababab")
     assert_eq("x".repeat(5), "xxxxx")
     assert_eq("test".repeat(0), "")
+    assert_eq("xy".repeat(-2), "")
+    assert_eq("".repeat(10), "")
+    assert_eq("好".repeat(2), "好好")
     assert_eq("a".repeat(1), "a")
 }
 

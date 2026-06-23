@@ -164,6 +164,32 @@ TEST(string_core_reverse_empty_and_null_zero) {
     ASSERT_EQ_UINT(xr_string_core_reverse_utf8_write(NULL, "abc", 3), 0);
 }
 
+TEST(string_core_repeat_plan_and_write) {
+    XrStringCoreRepeatPlan plan = xr_string_core_repeat_plan("ab", 2, 3);
+    ASSERT_EQ_INT(plan.kind, XR_STRING_CORE_REPEAT_ALLOC);
+    ASSERT_EQ_UINT(plan.len, 6);
+
+    char out[32];
+    ASSERT_EQ_UINT(xr_string_core_repeat_write(out, "ab", 2, 3), 6);
+    ASSERT(strcmp(out, "ababab") == 0);
+
+    ASSERT_EQ_UINT(xr_string_core_repeat_write(out, "好", strlen("好"), 2), strlen("好好"));
+    ASSERT(strcmp(out, "好好") == 0);
+
+    plan = xr_string_core_repeat_plan("abc", 3, 1);
+    ASSERT_EQ_INT(plan.kind, XR_STRING_CORE_REPEAT_ORIGINAL);
+    ASSERT_EQ_UINT(plan.len, 3);
+
+    plan = xr_string_core_repeat_plan("abc", 3, 0);
+    ASSERT_EQ_INT(plan.kind, XR_STRING_CORE_REPEAT_EMPTY);
+    ASSERT_EQ_UINT(xr_string_core_repeat_write(out, "abc", 3, -4), 0);
+    ASSERT(strcmp(out, "") == 0);
+
+    plan = xr_string_core_repeat_plan("x", (SIZE_MAX / 2u) + 1u, 3);
+    ASSERT_EQ_INT(plan.kind, XR_STRING_CORE_REPEAT_INVALID);
+    ASSERT_EQ_INT(xr_string_core_repeat_plan(NULL, 1, 2).kind, XR_STRING_CORE_REPEAT_INVALID);
+}
+
 TEST(string_core_parse_int64) {
     XrStringCoreParseIntResult parsed =
         xr_string_core_parse_int64(" \t\r\n-123tail", strlen(" \t\r\n-123tail"));
@@ -275,6 +301,7 @@ RUN_TEST(string_core_ascii_case_preserves_utf8);
 RUN_TEST(string_core_ascii_case_empty_and_null_zero);
 RUN_TEST(string_core_reverse_utf8);
 RUN_TEST(string_core_reverse_empty_and_null_zero);
+RUN_TEST(string_core_repeat_plan_and_write);
 RUN_TEST(string_core_parse_int64);
 RUN_TEST(string_core_parse_float64);
 RUN_TEST(string_core_substring_bounds);
