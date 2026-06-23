@@ -1,0 +1,8 @@
+type IntFn = (int) -> int
+
+fn bump(x: int) -> int {
+    return x + 1
+}
+
+let f: IntFn? = bump
+let value: int = f?.(41)

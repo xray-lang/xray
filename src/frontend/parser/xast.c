@@ -838,7 +838,7 @@ AstNode *xr_ast_ternary(XrayIsolate *X, AstNode *condition, AstNode *true_expr, 
 // object: object expression
 // name: member name (for property access, optional)
 // index: index expression (for index access, optional)
-// chain_type: 0=property, 1=index, 2=method call
+// chain_type: 0=property, 1=index, 2=method call, 3=function call
 AstNode *xr_ast_optional_chain(XrayIsolate *X, AstNode *object, const char *name, AstNode *index,
                                int chain_type, int line) {
     AstNode *node = alloc_node(X, AST_OPTIONAL_CHAIN, line);

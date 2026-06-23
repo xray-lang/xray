@@ -1109,21 +1109,22 @@ See §3.3.5 (`??`) and below (`?.` / `?[`).
 #### Optional chaining `?.` / `?[`
 
 ```ebnf
-OptionalChain ::= Primary ('?.' Identifier | '?[' Expr ']')+
+OptionalChain ::= Primary ('?.' Identifier | '?.' '(' ArgList? ')' | '?[' Expr ']')+
 ```
 
 ```xray
 let len = name?.length          // returns null when name is null
 let item = arr?[0]              // optional index
+let value = callback?.(input)   // optional function call
 ```
 
 **Semantics**:
 - If the LHS of `?.` or `?[` is `null`, the entire expression short-circuits to `null`.
-- `?.` is for property access and method calls: `obj?.prop`, `obj?.method()`.
+- `?.` is for property access, method calls, and function calls: `obj?.prop`, `obj?.method()`, `func?.(args)`.
 - `?[` is for index access: `arr?[0]`. Symmetric with regular indexing `arr[0]` — just add `?` before `[`.
+- `func?.(args)` does not evaluate its arguments when the function value is `null`; it returns `null` directly.
 - **Propagation**: in `a?.b.c.d`, if `a` is null the whole chain returns null; intermediate `.` operations are not re-checked.
 - Result type: the original type plus `?` (already-nullable types remain unchanged).
-- Optional function call `func?.()` is not part of the current grammar.
 
 ### 3.7 Force Unwrap `!`
 

@@ -2993,6 +2993,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "```xray\n"
             "let len = name?.length          // returns null when name is null\n"
             "let item = arr?[0]              // optional index\n"
+            "let value = callback?.(input)   // optional function call\n"
             "```\n"
             "",
     },

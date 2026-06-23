@@ -691,7 +691,7 @@ void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
                 xfmt_emit_expression(ctx, oc->index);
                 xfmt_write_char(ctx, ']');
             } else {
-                // Optional property/method: obj?.name
+                // Optional property/method/function-call callee: obj?.name / func?.
                 xfmt_write_str(ctx, "?.");
                 if (oc->name) {
                     xfmt_write_str(ctx, oc->name);

@@ -853,6 +853,18 @@ TEST(optional_chain) {
     xi_func_free(f);
 }
 
+TEST(optional_call) {
+    XiFunc *f = lower_source("type IntFn = (int) -> int\n"
+                             "fn bump(x: int) -> int { return x + 1 }\n"
+                             "let fnv: IntFn? = bump\n"
+                             "let n = fnv?.(41)\n"
+                             "print(n)\n");
+    assert(f != NULL);
+    assert(func_tree_has_op(f, XI_ISNULL) && "optional call should null-check callee");
+    assert(func_tree_has_op(f, XI_CALL) && "optional call should call only on non-null path");
+    xi_func_free(f);
+}
+
 TEST(struct_literal) {
     XiFunc *f = lower_source("struct Point {\n"
                              "    x: float\n"
@@ -1068,6 +1080,7 @@ int main(void) {
     run_slice_expr();
     run_range_expr();
     run_optional_chain();
+    run_optional_call();
     run_struct_literal();
     run_struct_literal_inside_function();
     run_struct_field_store_narrows_native_width();
