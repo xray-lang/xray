@@ -223,9 +223,7 @@ static inline XrValue xrt_str_method_0(const char *s, int64_t slen, XrValue recv
     if (sym == XRT_SYM_REVERSE) {
         XrValue sv = xrt_str_alloc((size_t) slen);
         char *r = xr_str_buf(sv);
-        for (int64_t i = 0; i < slen; i++)
-            r[i] = s[slen - 1 - i];
-        r[slen] = 0;
+        xr_string_core_reverse_utf8_write(r, s, (size_t) slen);
         return sv;
     }
     return (XrValue) {.i = 0, .tag = XR_TAG_NULL};

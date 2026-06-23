@@ -104,6 +104,31 @@ TEST(string_core_prefix_suffix) {
     ASSERT_FALSE(xr_string_core_starts_with(NULL, 1, "a", 1));
 }
 
+TEST(string_core_reverse_utf8) {
+    char ascii[16];
+    ASSERT_EQ_UINT(xr_string_core_reverse_utf8_write(ascii, "Hello", 5), 5);
+    ASSERT(strcmp(ascii, "olleH") == 0);
+
+    const char *mixed = "你a好🌍";
+    const char *expected = "🌍好a你";
+    char utf8[32];
+    size_t len = strlen(mixed);
+    ASSERT_EQ_UINT(xr_string_core_reverse_utf8_write(utf8, mixed, len), len);
+    ASSERT(strcmp(utf8, expected) == 0);
+}
+
+TEST(string_core_reverse_empty_and_null_zero) {
+    char out[4] = {'x', 'x', 'x', '\0'};
+    ASSERT_EQ_UINT(xr_string_core_reverse_utf8_write(out, "", 0), 0);
+    ASSERT(strcmp(out, "") == 0);
+
+    out[0] = 'x';
+    ASSERT_EQ_UINT(xr_string_core_reverse_utf8_write(out, NULL, 0), 0);
+    ASSERT(strcmp(out, "") == 0);
+
+    ASSERT_EQ_UINT(xr_string_core_reverse_utf8_write(NULL, "abc", 3), 0);
+}
+
 TEST_MAIN_BEGIN()
 
 RUN_TEST_SUITE("String Core");
@@ -117,5 +142,7 @@ RUN_TEST(string_core_index_of_basic_and_long_pattern);
 RUN_TEST(string_core_index_of_embedded_nul);
 RUN_TEST(string_core_last_index_of_edges);
 RUN_TEST(string_core_prefix_suffix);
+RUN_TEST(string_core_reverse_utf8);
+RUN_TEST(string_core_reverse_empty_and_null_zero);
 
 TEST_MAIN_END()
