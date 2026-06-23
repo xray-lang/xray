@@ -1895,25 +1895,16 @@ XR_DEFINE_BUILTIN(cluster_publish_fn, "publish", "(topic: string, value: Json): 
 XR_DEFINE_BUILTIN(cluster_subscribe_fn, "subscribe", "(pattern: string): Channel",
                   "Subscribe to topic pattern")
 
+#define XR_STDLIB_VM_BIND_MODULE_CLUSTER 1
+#include "../../src/stdlib/xstdlib_vm_bindings_generated.inc.c"
+#undef XR_STDLIB_VM_BIND_MODULE_CLUSTER
+
 /* ========== Module Registration ========== */
 
 XR_FUNC XrModule *xr_load_module_cluster(XrVMRuntime *isolate) {
     XrModule *mod = xr_module_create_native(isolate, "cluster");
 
-    XRS_EXPORT(mod, isolate, "start", cluster_start);
-    XRS_EXPORT(mod, isolate, "join", cluster_join);
-    XRS_EXPORT(mod, isolate, "self", cluster_self);
-    XRS_EXPORT(mod, isolate, "nodes", cluster_nodes);
-    XRS_EXPORT(mod, isolate, "channel", cluster_channel_fn);
-    XRS_EXPORT(mod, isolate, "serve", cluster_serve_fn);
-    XRS_EXPORT(mod, isolate, "reply", cluster_reply_fn);
-    XRS_EXPORT(mod, isolate, "call", cluster_call_fn);
-    XRS_EXPORT(mod, isolate, "monitor", cluster_monitor_coro_fn);
-    XRS_EXPORT(mod, isolate, "discover", cluster_discover_fn);
-    XRS_EXPORT(mod, isolate, "stop", cluster_stop_fn);
-    XRS_EXPORT(mod, isolate, "info", cluster_info_fn);
-    XRS_EXPORT(mod, isolate, "publish", cluster_publish_fn);
-    XRS_EXPORT(mod, isolate, "subscribe", cluster_subscribe_fn);
+    xr_stdlib_vm_bind_cluster_generated(isolate, mod);
 
     return mod;
 }

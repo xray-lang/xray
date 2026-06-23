@@ -26,6 +26,25 @@ static void xr_stdlib_vm_bind_base64_generated(XrVMRuntime *isolate, XrModule *m
 }
 #endif  /* XR_STDLIB_VM_BIND_MODULE_BASE64 */
 
+#ifdef XR_STDLIB_VM_BIND_MODULE_CLUSTER
+static void xr_stdlib_vm_bind_cluster_generated(XrVMRuntime *isolate, XrModule *module) {
+    XRS_EXPORT(module, isolate, "start", cluster_start);
+    XRS_EXPORT(module, isolate, "join", cluster_join);
+    XRS_EXPORT(module, isolate, "self", cluster_self);
+    XRS_EXPORT(module, isolate, "nodes", cluster_nodes);
+    XRS_EXPORT(module, isolate, "channel", cluster_channel_fn);
+    XRS_EXPORT(module, isolate, "serve", cluster_serve_fn);
+    XRS_EXPORT(module, isolate, "reply", cluster_reply_fn);
+    XRS_EXPORT(module, isolate, "call", cluster_call_fn);
+    XRS_EXPORT(module, isolate, "monitor", cluster_monitor_coro_fn);
+    XRS_EXPORT(module, isolate, "discover", cluster_discover_fn);
+    XRS_EXPORT(module, isolate, "stop", cluster_stop_fn);
+    XRS_EXPORT(module, isolate, "info", cluster_info_fn);
+    XRS_EXPORT(module, isolate, "publish", cluster_publish_fn);
+    XRS_EXPORT(module, isolate, "subscribe", cluster_subscribe_fn);
+}
+#endif  /* XR_STDLIB_VM_BIND_MODULE_CLUSTER */
+
 #ifdef XR_STDLIB_VM_BIND_MODULE_COMPRESS
 static void xr_stdlib_vm_bind_compress_generated(XrVMRuntime *isolate, XrModule *module) {
     XRS_EXPORT(module, isolate, "crc32", compress_crc32);
