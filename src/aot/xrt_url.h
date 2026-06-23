@@ -251,48 +251,30 @@ static inline XrValue xrt_url_parse_query(const char *data, int64_t len_i) {
     return obj;
 }
 
-static inline void xrt_url_append_encoded_form(xrt_strbuf_t *buf, const char *data, size_t len) {
-    if (!buf || !data || len == 0)
-        return;
-    size_t encoded_len = 0;
-    if (!xr_url_core_encoded_len(data, len, true, &encoded_len))
-        return;
-    xrt_strbuf_grow(buf, (int64_t) encoded_len);
-    size_t written = 0;
-    xr_url_core_encode(data, len, true, buf->buf + buf->len, &written);
-    buf->len += (int64_t) written;
-    buf->buf[buf->len] = '\0';
-}
-
-static inline void xrt_url_build_query_pair(xrt_strbuf_t *buf, const char *key, size_t key_len,
-                                            XrValue val) {
-    if (!buf || !key)
-        return;
-    if (buf->len > 0)
-        xrt_url_buf_putc(buf, '&');
-    xrt_url_append_encoded_form(buf, key, key_len);
+static inline bool xrt_url_build_query_pair(XrUrlCoreWriter *writer, bool *has_pairs,
+                                            const char *key, size_t key_len, XrValue val) {
     if (XR_IS_NULL(val))
-        return;
-    xrt_url_buf_putc(buf, '=');
+        return xr_url_core_build_query_pair_write(writer, has_pairs, key, key_len, NULL, 0, false);
     if (XR_IS_STR(val)) {
-        xrt_url_append_encoded_form(buf, xr_str_data(val), (size_t) xr_str_len(val));
-    } else {
-        char tmp[128];
-        const char *s = xr_to_cstr(val, tmp, sizeof(tmp));
-        xrt_url_append_encoded_form(buf, s, strlen(s));
+        return xr_url_core_build_query_pair_write(writer, has_pairs, key, key_len, xr_str_data(val),
+                                                  (size_t) xr_str_len(val), true);
     }
+    char tmp[128];
+    const char *s = xr_to_cstr(val, tmp, sizeof(tmp));
+    return xr_url_core_build_query_pair_write(writer, has_pairs, key, key_len, s, strlen(s), true);
 }
 
-static inline void xrt_url_build_query_json_fields(xrt_strbuf_t *buf, xrt_json_t *j) {
-    if (!buf || !j)
-        return;
+static inline bool xrt_url_build_query_json_fields(XrUrlCoreWriter *writer, bool *has_pairs,
+                                                   xrt_json_t *j) {
+    if (!writer || !has_pairs || !j)
+        return false;
     for (int64_t i = 0; i < j->field_count; i++) {
         const char *key = j->field_names ? j->field_names[i] : NULL;
-        if (key)
-            xrt_url_build_query_pair(buf, key, strlen(key), j->fields[i]);
+        if (key && !xrt_url_build_query_pair(writer, has_pairs, key, strlen(key), j->fields[i]))
+            return false;
     }
     if (!j->dynamic_fields)
-        return;
+        return true;
     xrt_map_t *m = j->dynamic_fields;
     for (uint32_t i = 0; i < m->nentries; i++) {
         XrMapEntry *entry = &m->entries[i];
@@ -302,13 +284,16 @@ static inline void xrt_url_build_query_json_fields(xrt_strbuf_t *buf, xrt_json_t
         const char *key = XR_IS_STR(entry->key) ? xr_str_data(entry->key)
                                                 : xr_to_cstr(entry->key, key_buf, sizeof(key_buf));
         size_t key_len = XR_IS_STR(entry->key) ? (size_t) xr_str_len(entry->key) : strlen(key);
-        xrt_url_build_query_pair(buf, key, key_len, entry->value);
+        if (!xrt_url_build_query_pair(writer, has_pairs, key, key_len, entry->value))
+            return false;
     }
+    return true;
 }
 
-static inline void xrt_url_build_query_map_fields(xrt_strbuf_t *buf, xrt_map_t *m) {
-    if (!buf || !m)
-        return;
+static inline bool xrt_url_build_query_map_fields(XrUrlCoreWriter *writer, bool *has_pairs,
+                                                  xrt_map_t *m) {
+    if (!writer || !has_pairs || !m)
+        return false;
     if (!xrt_map_is_typed(m)) {
         for (uint32_t i = 0; i < m->nentries; i++) {
             XrMapEntry *entry = &m->entries[i];
@@ -319,9 +304,10 @@ static inline void xrt_url_build_query_map_fields(xrt_strbuf_t *buf, xrt_map_t *
                                   ? xr_str_data(entry->key)
                                   : xr_to_cstr(entry->key, key_buf, sizeof(key_buf));
             size_t key_len = XR_IS_STR(entry->key) ? (size_t) xr_str_len(entry->key) : strlen(key);
-            xrt_url_build_query_pair(buf, key, key_len, entry->value);
+            if (!xrt_url_build_query_pair(writer, has_pairs, key, key_len, entry->value))
+                return false;
         }
-        return;
+        return true;
     }
     for (int64_t oi = 0; oi < m->order_len; oi++) {
         int64_t slot = m->order[oi];
@@ -333,8 +319,10 @@ static inline void xrt_url_build_query_map_fields(xrt_strbuf_t *buf, xrt_map_t *
         const char *key =
             XR_IS_STR(keyv) ? xr_str_data(keyv) : xr_to_cstr(keyv, key_buf, sizeof(key_buf));
         size_t key_len = XR_IS_STR(keyv) ? (size_t) xr_str_len(keyv) : strlen(key);
-        xrt_url_build_query_pair(buf, key, key_len, val);
+        if (!xrt_url_build_query_pair(writer, has_pairs, key, key_len, val))
+            return false;
     }
+    return true;
 }
 
 static inline XrValue xrt_url_build_query(XrValue obj) {
@@ -342,10 +330,15 @@ static inline XrValue xrt_url_build_query(XrValue obj) {
         return XR_NULL_VAL;
     XrValue bufv = xrt_strbuf_new();
     xrt_strbuf_t *buf = (xrt_strbuf_t *) bufv.ptr;
-    if (XR_IS_MAP(obj))
-        xrt_url_build_query_map_fields(buf, (xrt_map_t *) obj.ptr);
-    else
-        xrt_url_build_query_json_fields(buf, (xrt_json_t *) obj.ptr);
+    XrUrlCoreWriter writer = xrt_url_core_writer(buf);
+    bool has_pairs = false;
+    bool ok = XR_IS_MAP(obj)
+                  ? xrt_url_build_query_map_fields(&writer, &has_pairs, (xrt_map_t *) obj.ptr)
+                  : xrt_url_build_query_json_fields(&writer, &has_pairs, (xrt_json_t *) obj.ptr);
+    if (!ok) {
+        xrt_release(bufv);
+        return XR_NULL_VAL;
+    }
     return xrt_strbuf_finish(bufv);
 }
 

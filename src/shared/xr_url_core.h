@@ -484,6 +484,52 @@ static inline bool xr_url_core_parse_query_each(const char *data, size_t len,
     return true;
 }
 
+static inline bool xr_url_core_write_form_encoded(XrUrlCoreWriter *out, const char *data,
+                                                  size_t len) {
+    static const char hex_chars[] = "0123456789ABCDEF";
+    if ((!data && len != 0) || !out)
+        return false;
+
+    for (size_t i = 0; i < len; i++) {
+        unsigned char c = (unsigned char) data[i];
+        if (c == ' ') {
+            if (!xr_url_core_writer_putc(out, '+'))
+                return false;
+        } else if (xr_url_core_is_unreserved(c)) {
+            if (!xr_url_core_writer_putc(out, (char) c))
+                return false;
+        } else {
+            if (!xr_url_core_writer_putc(out, '%') ||
+                !xr_url_core_writer_putc(out, hex_chars[(c >> 4) & 0x0F]) ||
+                !xr_url_core_writer_putc(out, hex_chars[c & 0x0F]))
+                return false;
+        }
+    }
+    return true;
+}
+
+static inline bool xr_url_core_build_query_pair_write(XrUrlCoreWriter *out, bool *has_pairs,
+                                                      const char *key, size_t key_len,
+                                                      const char *value, size_t value_len,
+                                                      bool has_value) {
+    if (!out || !has_pairs || (!key && key_len != 0) || (!value && value_len != 0))
+        return false;
+
+    if (*has_pairs && !xr_url_core_writer_putc(out, '&'))
+        return false;
+    size_t before = xr_url_core_writer_len(out);
+    if (!xr_url_core_write_form_encoded(out, key, key_len))
+        return false;
+    if (has_value) {
+        if (!xr_url_core_writer_putc(out, '=') ||
+            !xr_url_core_write_form_encoded(out, value, value_len))
+            return false;
+    }
+    if (xr_url_core_writer_len(out) > before)
+        *has_pairs = true;
+    return true;
+}
+
 static inline size_t xr_url_core_remove_dot_segments(char *path, size_t len);
 
 static inline bool xr_url_core_resolve_write(const char *base, size_t base_len, const char *rel,
