@@ -209,28 +209,15 @@ static inline XrValue xrt_datetime_utc(void) {
 }
 
 static inline XrValue xrt_datetime_from_timestamp(XrValue timestamp) {
-    xrt_datetime_object_t *dt = xrt_datetime_alloc();
-    dt->timestamp = xrt_datetime_i64_arg(timestamp, 0);
-    dt->milliseconds = 0;
-    dt->tz_offset = 0;
-    dt->is_utc = 1;
-    return xrt_datetime_box(dt);
+    XrDateTimeCoreFields fields =
+        xr_datetime_core_from_timestamp(xrt_datetime_i64_arg(timestamp, 0));
+    return xrt_datetime_from_core_fields(&fields);
 }
 
 static inline XrValue xrt_datetime_from_timestamp_ms(XrValue timestamp_ms) {
-    int64_t total_ms = xrt_datetime_i64_arg(timestamp_ms, 0);
-    int64_t sec = total_ms / 1000;
-    int32_t ms = (int32_t) (total_ms % 1000);
-    if (ms < 0) {
-        sec -= 1;
-        ms += 1000;
-    }
-    xrt_datetime_object_t *dt = xrt_datetime_alloc();
-    dt->timestamp = sec;
-    dt->milliseconds = ms;
-    dt->tz_offset = 0;
-    dt->is_utc = 1;
-    return xrt_datetime_box(dt);
+    XrDateTimeCoreFields fields =
+        xr_datetime_core_from_timestamp_ms(xrt_datetime_i64_arg(timestamp_ms, 0));
+    return xrt_datetime_from_core_fields(&fields);
 }
 
 static inline XrValue xrt_datetime_offset(void) {
@@ -307,25 +294,23 @@ static inline int xrt_datetime_yearday_ptr(const xrt_datetime_object_t *dt) {
 
 static inline int xrt_datetime_is_before_ptr(const xrt_datetime_object_t *a,
                                              const xrt_datetime_object_t *b) {
-    if (!a || !b)
-        return 0;
-    if (a->timestamp != b->timestamp)
-        return a->timestamp < b->timestamp;
-    return a->milliseconds < b->milliseconds;
+    XrDateTimeCoreFields af = xrt_datetime_core_fields(a);
+    XrDateTimeCoreFields bf = xrt_datetime_core_fields(b);
+    return a && b && xr_datetime_core_compare_fields(&af, &bf) < 0;
 }
 
 static inline int xrt_datetime_is_after_ptr(const xrt_datetime_object_t *a,
                                             const xrt_datetime_object_t *b) {
-    if (!a || !b)
-        return 0;
-    if (a->timestamp != b->timestamp)
-        return a->timestamp > b->timestamp;
-    return a->milliseconds > b->milliseconds;
+    XrDateTimeCoreFields af = xrt_datetime_core_fields(a);
+    XrDateTimeCoreFields bf = xrt_datetime_core_fields(b);
+    return a && b && xr_datetime_core_compare_fields(&af, &bf) > 0;
 }
 
 static inline int xrt_datetime_equals_ptr(const xrt_datetime_object_t *a,
                                           const xrt_datetime_object_t *b) {
-    return a && b && a->timestamp == b->timestamp && a->milliseconds == b->milliseconds;
+    XrDateTimeCoreFields af = xrt_datetime_core_fields(a);
+    XrDateTimeCoreFields bf = xrt_datetime_core_fields(b);
+    return a && b && xr_datetime_core_compare_fields(&af, &bf) == 0;
 }
 
 typedef struct xrt_datetime_buffer_writer {
@@ -416,25 +401,22 @@ static inline XrValue xrt_datetime_to_utc_value(XrValue recv) {
     const xrt_datetime_object_t *dt = xrt_datetime_ptr(recv);
     if (!dt)
         return XR_NULL_VAL;
-    xrt_datetime_object_t *result = xrt_datetime_alloc();
-    result->timestamp = dt->timestamp;
-    result->milliseconds = dt->milliseconds;
-    result->tz_offset = 0;
-    result->is_utc = 1;
-    return xrt_datetime_box(result);
+    XrDateTimeCoreFields input = xrt_datetime_core_fields(dt);
+    XrDateTimeCoreFields output;
+    if (!xr_datetime_core_to_utc_fields(&input, &output))
+        return XR_NULL_VAL;
+    return xrt_datetime_from_core_fields(&output);
 }
 
 static inline XrValue xrt_datetime_to_local_value(XrValue recv) {
     const xrt_datetime_object_t *dt = xrt_datetime_ptr(recv);
     if (!dt)
         return XR_NULL_VAL;
-    xrt_datetime_object_t *result = xrt_datetime_alloc();
-    result->timestamp = dt->timestamp;
-    result->milliseconds = dt->milliseconds;
-    result->tz_offset =
-        dt->is_utc ? xr_datetime_core_local_offset_at((time_t) dt->timestamp) : dt->tz_offset;
-    result->is_utc = 0;
-    return xrt_datetime_box(result);
+    XrDateTimeCoreFields input = xrt_datetime_core_fields(dt);
+    XrDateTimeCoreFields output;
+    if (!xr_datetime_core_to_local_fields(&input, &output))
+        return XR_NULL_VAL;
+    return xrt_datetime_from_core_fields(&output);
 }
 
 static inline XrValue xrt_datetime_getprop(XrValue recv, int sym) {

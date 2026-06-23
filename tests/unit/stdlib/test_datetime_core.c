@@ -141,6 +141,34 @@ TEST(datetime_core_diff_fields) {
     ASSERT_EQ_INT(xr_datetime_core_diff_fields(&later, &earlier, "weeks"), 1);
 }
 
+TEST(datetime_core_timestamp_and_timezone_rules) {
+    XrDateTimeCoreFields ms = xr_datetime_core_from_timestamp_ms(-1001);
+    ASSERT_EQ_INT(ms.timestamp, -2);
+    ASSERT_EQ_INT(ms.milliseconds, 999);
+    ASSERT_EQ_INT(ms.tz_offset, 0);
+    ASSERT_EQ_INT(ms.is_utc, 1);
+
+    XrDateTimeCoreFields same = xr_datetime_core_from_timestamp_ms(-1001);
+    XrDateTimeCoreFields later = xr_datetime_core_from_timestamp_ms(-1000);
+    ASSERT_EQ_INT(xr_datetime_core_compare_fields(&ms, &same), 0);
+    ASSERT_TRUE(xr_datetime_core_compare_fields(&ms, &later) < 0);
+    ASSERT_TRUE(xr_datetime_core_compare_fields(&later, &ms) > 0);
+
+    XrDateTimeCoreFields utc;
+    ASSERT_TRUE(xr_datetime_core_to_utc_fields(&ms, &utc));
+    ASSERT_EQ_INT(utc.timestamp, -2);
+    ASSERT_EQ_INT(utc.milliseconds, 999);
+    ASSERT_EQ_INT(utc.tz_offset, 0);
+    ASSERT_EQ_INT(utc.is_utc, 1);
+
+    XrDateTimeCoreFields local;
+    ASSERT_TRUE(xr_datetime_core_to_local_fields(&utc, &local));
+    ASSERT_EQ_INT(local.timestamp, utc.timestamp);
+    ASSERT_EQ_INT(local.milliseconds, utc.milliseconds);
+    ASSERT_EQ_INT(local.is_utc, 0);
+    ASSERT_EQ_INT(local.tz_offset, xr_datetime_core_local_offset_at((time_t) utc.timestamp));
+}
+
 TEST(datetime_core_parse_fields) {
     XrDateTimeCoreFields fields;
     ASSERT_TRUE(xr_datetime_core_parse_fields("2024-01-15T10:30:45.123Z", NULL, &fields));
@@ -183,6 +211,7 @@ RUN_TEST(datetime_core_epoch_boundaries);
 RUN_TEST(datetime_core_utc_mktime);
 RUN_TEST(datetime_core_add_fields);
 RUN_TEST(datetime_core_diff_fields);
+RUN_TEST(datetime_core_timestamp_and_timezone_rules);
 RUN_TEST(datetime_core_parse_fields);
 
 TEST_MAIN_END()

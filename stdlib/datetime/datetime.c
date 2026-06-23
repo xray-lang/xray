@@ -96,6 +96,23 @@ int xr_datetime_local_offset(void) {
     return xr_datetime_core_local_offset_at(time(NULL));
 }
 
+static XrDateTimeCoreFields datetime_core_fields(const XrDateTime *dt) {
+    return (XrDateTimeCoreFields) {
+        .timestamp = dt ? dt->timestamp : 0,
+        .milliseconds = dt ? dt->milliseconds : 0,
+        .tz_offset = dt ? dt->tz_offset : 0,
+        .is_utc = dt ? dt->is_utc : 0,
+    };
+}
+
+static void datetime_apply_core_fields(XrDateTime *dt, const XrDateTimeCoreFields *fields) {
+    XR_DCHECK(dt != NULL && fields != NULL, "datetime_apply_core_fields: args must not be NULL");
+    dt->timestamp = fields->timestamp;
+    dt->milliseconds = fields->milliseconds;
+    dt->tz_offset = fields->tz_offset;
+    dt->is_utc = fields->is_utc;
+}
+
 /* ========== Creation API ========== */
 
 XrDateTime *xr_datetime_now(XrVMRuntime *isolate) {
@@ -140,27 +157,15 @@ XrDateTime *xr_datetime_create(XrVMRuntime *isolate, int year, int month, int da
 
 XrDateTime *xr_datetime_from_timestamp(XrVMRuntime *isolate, int64_t timestamp) {
     XrDateTime *dt = datetime_alloc(isolate);
-    dt->timestamp = timestamp;
-    dt->milliseconds = 0;
-    dt->tz_offset = 0;
-    dt->is_utc = 1;
+    XrDateTimeCoreFields fields = xr_datetime_core_from_timestamp(timestamp);
+    datetime_apply_core_fields(dt, &fields);
     return dt;
 }
 
 XrDateTime *xr_datetime_from_timestamp_ms(XrVMRuntime *isolate, int64_t timestamp_ms) {
     XrDateTime *dt = datetime_alloc(isolate);
-    // Floor division: milliseconds must be in [0, 999].
-    // C truncation toward zero gives negative remainder for negative inputs.
-    int64_t sec = timestamp_ms / 1000;
-    int32_t ms = (int32_t) (timestamp_ms % 1000);
-    if (ms < 0) {
-        sec -= 1;
-        ms += 1000;
-    }
-    dt->timestamp = sec;
-    dt->milliseconds = ms;
-    dt->tz_offset = 0;
-    dt->is_utc = 1;
+    XrDateTimeCoreFields fields = xr_datetime_core_from_timestamp_ms(timestamp_ms);
+    datetime_apply_core_fields(dt, &fields);
     return dt;
 }
 
@@ -200,12 +205,7 @@ static int datetime_copy_ctxbuf_to_cstr(const XrCtxBuf *out, char *buf, size_t b
 
 void xr_datetime_to_tm(XrDateTime *dt, struct tm *tm) {
     XR_DCHECK(dt != NULL && tm != NULL, "xr_datetime_to_tm: args must not be NULL");
-    XrDateTimeCoreFields fields = {
-        .timestamp = dt->timestamp,
-        .milliseconds = dt->milliseconds,
-        .tz_offset = dt->tz_offset,
-        .is_utc = dt->is_utc,
-    };
+    XrDateTimeCoreFields fields = datetime_core_fields(dt);
     xr_datetime_core_to_tm_fields(&fields, tm);
 }
 
@@ -294,19 +294,21 @@ int xr_datetime_yearday(XrDateTime *dt) {
 /* ========== Comparison API ========== */
 
 int xr_datetime_is_before(XrDateTime *dt1, XrDateTime *dt2) {
-    if (dt1->timestamp != dt2->timestamp)
-        return dt1->timestamp < dt2->timestamp;
-    return dt1->milliseconds < dt2->milliseconds;
+    XrDateTimeCoreFields a = datetime_core_fields(dt1);
+    XrDateTimeCoreFields b = datetime_core_fields(dt2);
+    return xr_datetime_core_compare_fields(&a, &b) < 0;
 }
 
 int xr_datetime_is_after(XrDateTime *dt1, XrDateTime *dt2) {
-    if (dt1->timestamp != dt2->timestamp)
-        return dt1->timestamp > dt2->timestamp;
-    return dt1->milliseconds > dt2->milliseconds;
+    XrDateTimeCoreFields a = datetime_core_fields(dt1);
+    XrDateTimeCoreFields b = datetime_core_fields(dt2);
+    return xr_datetime_core_compare_fields(&a, &b) > 0;
 }
 
 int xr_datetime_equals(XrDateTime *dt1, XrDateTime *dt2) {
-    return dt1->timestamp == dt2->timestamp && dt1->milliseconds == dt2->milliseconds;
+    XrDateTimeCoreFields a = datetime_core_fields(dt1);
+    XrDateTimeCoreFields b = datetime_core_fields(dt2);
+    return xr_datetime_core_compare_fields(&a, &b) == 0;
 }
 
 /* ========== Utility API ========== */
@@ -323,66 +325,33 @@ int xr_datetime_days_in_month(XrDateTime *dt) {
 
 XrDateTime *xr_datetime_add(XrVMRuntime *isolate, XrDateTime *dt, int64_t amount,
                             const char *unit) {
-    XrDateTimeCoreFields input = {
-        .timestamp = dt->timestamp,
-        .milliseconds = dt->milliseconds,
-        .tz_offset = dt->tz_offset,
-        .is_utc = dt->is_utc,
-    };
+    XrDateTimeCoreFields input = datetime_core_fields(dt);
     XrDateTimeCoreFields output;
     if (!xr_datetime_core_add_fields(&input, amount, unit, &output)) {
         fprintf(stderr, "datetime.add(): unknown unit '%s'\n", unit);
     }
 
     XrDateTime *result = datetime_alloc(isolate);
-    result->timestamp = output.timestamp;
-    result->milliseconds = output.milliseconds;
-    result->tz_offset = output.tz_offset;
-    result->is_utc = output.is_utc;
+    datetime_apply_core_fields(result, &output);
     return result;
 }
 
 int64_t xr_datetime_diff(XrDateTime *dt1, XrDateTime *dt2, const char *unit) {
-    XrDateTimeCoreFields a = {
-        .timestamp = dt1->timestamp,
-        .milliseconds = dt1->milliseconds,
-        .tz_offset = dt1->tz_offset,
-        .is_utc = dt1->is_utc,
-    };
-    XrDateTimeCoreFields b = {
-        .timestamp = dt2->timestamp,
-        .milliseconds = dt2->milliseconds,
-        .tz_offset = dt2->tz_offset,
-        .is_utc = dt2->is_utc,
-    };
+    XrDateTimeCoreFields a = datetime_core_fields(dt1);
+    XrDateTimeCoreFields b = datetime_core_fields(dt2);
     return xr_datetime_core_diff_fields(&a, &b, unit);
 }
 
 /* ========== Timezone API ========== */
 
-// Copy every user-visible field explicitly instead of doing a raw memcpy
-// past the object header: the old byte-level copy silently broke every time
-// XrObjHeader changed layout, and produced subtle aliasing issues when header
-// metadata grew.
-static void datetime_copy_fields(XrDateTime *dst, const XrDateTime *src) {
-    dst->timestamp = src->timestamp;
-    dst->milliseconds = src->milliseconds;
-    dst->tz_offset = src->tz_offset;
-    dst->is_utc = src->is_utc;
-}
-
 XrDateTime *xr_datetime_to_utc(XrVMRuntime *isolate, XrDateTime *dt) {
     XrDateTime *result = datetime_alloc(isolate);
     if (!result)
         return NULL;
-    if (dt->is_utc) {
-        datetime_copy_fields(result, dt);
-    } else {
-        result->timestamp = dt->timestamp;
-        result->milliseconds = dt->milliseconds;
-        result->tz_offset = 0;
-        result->is_utc = 1;
-    }
+    XrDateTimeCoreFields input = datetime_core_fields(dt);
+    XrDateTimeCoreFields output;
+    xr_datetime_core_to_utc_fields(&input, &output);
+    datetime_apply_core_fields(result, &output);
     return result;
 }
 
@@ -390,14 +359,10 @@ XrDateTime *xr_datetime_to_local(XrVMRuntime *isolate, XrDateTime *dt) {
     XrDateTime *result = datetime_alloc(isolate);
     if (!result)
         return NULL;
-    if (!dt->is_utc) {
-        datetime_copy_fields(result, dt);
-    } else {
-        result->timestamp = dt->timestamp;
-        result->milliseconds = dt->milliseconds;
-        result->tz_offset = xr_datetime_core_local_offset_at((time_t) dt->timestamp);
-        result->is_utc = 0;
-    }
+    XrDateTimeCoreFields input = datetime_core_fields(dt);
+    XrDateTimeCoreFields output;
+    xr_datetime_core_to_local_fields(&input, &output);
+    datetime_apply_core_fields(result, &output);
     return result;
 }
 

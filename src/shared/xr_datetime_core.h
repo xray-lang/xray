@@ -141,6 +141,66 @@ typedef struct XrDateTimeCoreFields {
     int is_utc;
 } XrDateTimeCoreFields;
 
+static inline XrDateTimeCoreFields xr_datetime_core_from_timestamp(int64_t timestamp) {
+    return (XrDateTimeCoreFields) {
+        .timestamp = timestamp,
+        .milliseconds = 0,
+        .tz_offset = 0,
+        .is_utc = 1,
+    };
+}
+
+static inline XrDateTimeCoreFields xr_datetime_core_from_timestamp_ms(int64_t timestamp_ms) {
+    int64_t sec = timestamp_ms / 1000;
+    int32_t ms = (int32_t) (timestamp_ms % 1000);
+    if (ms < 0) {
+        sec -= 1;
+        ms += 1000;
+    }
+    return (XrDateTimeCoreFields) {
+        .timestamp = sec,
+        .milliseconds = ms,
+        .tz_offset = 0,
+        .is_utc = 1,
+    };
+}
+
+static inline int xr_datetime_core_compare_fields(const XrDateTimeCoreFields *a,
+                                                  const XrDateTimeCoreFields *b) {
+    if (!a || !b)
+        return 0;
+    if (a->timestamp < b->timestamp)
+        return -1;
+    if (a->timestamp > b->timestamp)
+        return 1;
+    if (a->milliseconds < b->milliseconds)
+        return -1;
+    if (a->milliseconds > b->milliseconds)
+        return 1;
+    return 0;
+}
+
+static inline int xr_datetime_core_to_utc_fields(const XrDateTimeCoreFields *dt,
+                                                 XrDateTimeCoreFields *out) {
+    if (!dt || !out)
+        return 0;
+    *out = *dt;
+    out->tz_offset = 0;
+    out->is_utc = 1;
+    return 1;
+}
+
+static inline int xr_datetime_core_to_local_fields(const XrDateTimeCoreFields *dt,
+                                                   XrDateTimeCoreFields *out) {
+    if (!dt || !out)
+        return 0;
+    *out = *dt;
+    if (dt->is_utc)
+        out->tz_offset = xr_datetime_core_local_offset_at((time_t) dt->timestamp);
+    out->is_utc = 0;
+    return 1;
+}
+
 typedef enum XrDateTimeCoreUnit {
     XR_DATETIME_CORE_UNIT_UNKNOWN = 0,
     XR_DATETIME_CORE_UNIT_MILLISECOND,
