@@ -2003,6 +2003,8 @@ AstNode *xr_ast_type_alias(XrayIsolate *X, const char *name, char **field_names,
 
     // Copy type name
     node->as.type_alias.name = ast_strdup(X, name);
+    node->as.type_alias.type_params = NULL;
+    node->as.type_alias.type_param_count = 0;
     node->as.type_alias.field_count = field_count;
 
     if (field_count > 0) {

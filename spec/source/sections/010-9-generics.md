@@ -17,6 +17,7 @@ TypeParams ::= '<' TypeParam (',' TypeParam)* '>'
 TypeParam  ::= Identifier (':' ConstraintList)?
 ConstraintList ::= Type ('&' Type)*               // 交叉约束用 '&' 连接
 TypeArgs   ::= '<' Type (',' Type)* '>'
+AliasTypeParams ::= '<' Identifier (',' Identifier)* ','? '>'
 ```
 
 ```xray @id=generics-basic
@@ -51,7 +52,12 @@ class Pair<K, V> {
 interface Comparable<T> {
     compareTo(other: T) -> int
 }
+
+// 泛型 type alias：透明语法替换，不产生新类型
+type PairAlias<T> = { first: T, second: T }
 ```
+
+`type` 别名的泛型形参使用 `AliasTypeParams`：只允许名字列表，不支持约束。别名使用处会把类型实参直接代入别名 RHS，例如 `PairAlias<int>` 等价于 `{ first: int, second: int }`。这一步发生在编译期，不产生运行时元数据、单态化实例或 AOT 分支；循环别名会被拒绝。
 
 ### 9.2 类型约束：`<T: Constraint>` 与交叉约束 `&`
 
@@ -204,6 +210,7 @@ TypeParams ::= '<' TypeParam (',' TypeParam)* '>'
 TypeParam  ::= Identifier (':' ConstraintList)?
 ConstraintList ::= Type ('&' Type)*               // intersection constraints joined by '&'
 TypeArgs   ::= '<' Type (',' Type)* '>'
+AliasTypeParams ::= '<' Identifier (',' Identifier)* ','? '>'
 ```
 
 ```xray @id=generics-basic
@@ -238,7 +245,16 @@ class Pair<K, V> {
 interface Comparable<T> {
     compareTo(other: T) -> int
 }
+
+// Generic type alias: transparent syntax substitution, not a new type
+type PairAlias<T> = { first: T, second: T }
 ```
+
+Generic `type` aliases use `AliasTypeParams`: only a name list is allowed, with
+no constraints. At each use site, the type arguments are substituted directly
+into the alias RHS, so `PairAlias<int>` is equivalent to `{ first: int, second:
+int }`. This happens at compile time and creates no runtime metadata,
+monomorphization instance, or AOT branch; cyclic aliases are rejected.
 
 ### 9.2 Type Constraints: `<T: Constraint>` and Intersection Constraints `&`
 

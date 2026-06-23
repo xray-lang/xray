@@ -798,21 +798,24 @@ print(s.isRound())       // true
 ### 5.7 `type` 别名
 
 ```ebnf
-TypeAliasDecl ::= 'type' Identifier TypeParams? '=' Type
+TypeAliasDecl ::= 'type' Identifier AliasTypeParams? '=' Type
+AliasTypeParams ::= '<' Identifier (',' Identifier)* ','? '>'
 ```
 
 ```xray
 type Outcome = int | string                          // union 别名
 type Mapper = fn(int) -> int                            // 函数类型别名
 type Point = { x: float, y: float }                  // 结构化对象别名（sealed）
+type Pair<T> = { first: T, second: T }                // 泛型别名
 ```
 
 **语义**：
 - 别名是**纯语法**替换，不产生新名义类型。
+- 泛型别名在使用处做类型实参代入；代入发生在编译期，不引入运行时表示或 AOT 分支。
+- 泛型别名形参只允许名字列表；不支持约束。约束应写在使用该别名的泛型声明上。
 - `type Point = {...}` 的对象类型在使用此别名标注时**密封**：未声明的字段访问/赋值是编译错误。
 - `type T = Json` 等于 `Json`（不密封）。
 - 别名可前向引用，但**禁止循环别名**。
-- 当前 `type` 别名不带类型参数；泛型抽象使用泛型函数、泛型 class / struct / enum / interface。
 
 详见 [§2.4.6](#246-json) 与 [§2.8](#28-类型别名)。
 
@@ -1643,21 +1646,24 @@ print(s.isRound())       // true
 ### 5.7 `type` aliases
 
 ```ebnf
-TypeAliasDecl ::= 'type' Identifier TypeParams? '=' Type
+TypeAliasDecl ::= 'type' Identifier AliasTypeParams? '=' Type
+AliasTypeParams ::= '<' Identifier (',' Identifier)* ','? '>'
 ```
 
 ```xray
 type Outcome = int | string                          // union alias
 type Mapper = fn(int) -> int                         // function-type alias
 type Point = { x: float, y: float }                  // structural object alias (sealed)
+type Pair<T> = { first: T, second: T }                // generic alias
 ```
 
 **Semantics**:
 - An alias is **purely a syntactic** substitution; it does not introduce a new nominal type.
+- A generic alias substitutes type arguments at the use site; substitution happens at compile time and introduces no runtime representation or AOT branch.
+- Generic alias parameters are only a name list; constraints are not supported. Put constraints on the generic declaration that uses the alias.
 - A `type Point = {...}` object alias is **sealed** when used as an annotation: accessing or assigning an undeclared field is a compile error.
 - `type T = Json` equals `Json` (not sealed).
 - Aliases may be referenced before their declaration but **must not be cyclic**.
-- `type` aliases currently do not take type parameters; generic abstraction is provided by generic functions and generic class/struct/enum/interface.
 
 See [§2.4.6](#246-json) and [§2.8](#28-type-aliases).
 

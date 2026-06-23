@@ -39,7 +39,7 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 | FFI / C ABI | `RawPtr<T>`、`RawMut<T>`、`CFn<(T) -> R>`、`uintsize`、`intsize` |
 | Class / Struct / Interface | 用户定义（nominal） |
 | Enum | 用户定义（含 ADT enum，见 §5.6） |
-| Type alias | `type Name = SomeType` |
+| Type alias | `type Name = SomeType`、`type Name<T> = SomeType` |
 
 ### 2.3 基本类型
 
@@ -374,9 +374,18 @@ let p2 = pair(1, "x")             // (int, string)
 type Result = int | string
 type Mapper = (int) -> int
 type Point = { x: float, y: float }
+type Pair<T> = { first: T, second: T }
+type Mapper2<T, U> = (T) -> U
 ```
 
-别名是**纯语法**等价，不产生新类型。
+别名是**纯语法**等价，不产生新类型，也不产生运行时元数据或 AOT 分支。泛型别名在使用处按类型实参做语法代入：
+
+```xray
+let p: Pair<int> = { first: 1, second: 2 }  // 等价于 { first: int, second: int }
+let f: Mapper2<int, string> = (n) -> string(n)
+```
+
+泛型别名形参只允许名字列表（`<T, U>`）；不带约束。需要约束时应放在使用该别名的泛型函数、class / struct / enum / interface 声明上。别名可前向引用，但循环别名（包括递归对象别名）是编译错误。
 
 ### 2.9 类型推断
 
@@ -501,7 +510,7 @@ Xray is statically typed; every expression has a determined type at compile time
 | FFI / C ABI | `RawPtr<T>`, `RawMut<T>`, `CFn<(T) -> R>`, `uintsize`, `intsize` |
 | Class / Struct / Interface | user-defined (nominal) |
 | Enum | user-defined (incl. ADT enum, see §5.6) |
-| Type alias | `type Name = SomeType` |
+| Type alias | `type Name = SomeType`, `type Name<T> = SomeType` |
 
 ### 2.3 Primitive Types
 
@@ -836,9 +845,24 @@ let p2 = pair(1, "x")             // (int, string)
 type Result = int | string
 type Mapper = (int) -> int
 type Point = { x: float, y: float }
+type Pair<T> = { first: T, second: T }
+type Mapper2<T, U> = (T) -> U
 ```
 
-Aliases are **purely syntactic** equivalences; they do not introduce new types.
+Aliases are **purely syntactic** equivalences; they do not introduce new types,
+runtime metadata, or AOT branches. A generic alias is substituted at its use
+site:
+
+```xray
+let p: Pair<int> = { first: 1, second: 2 }  // equivalent to { first: int, second: int }
+let f: Mapper2<int, string> = (n) -> string(n)
+```
+
+Generic alias parameters are a name list only (`<T, U>`); constraints are not
+part of type-alias syntax. Put constraints on the generic function, class /
+struct / enum / interface that uses the alias. Aliases may be forward
+referenced, but cyclic aliases, including recursive object aliases, are compile
+errors.
 
 ### 2.9 Type Inference
 

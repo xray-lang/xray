@@ -249,6 +249,7 @@ Modifier  ::= 'in' | 'ref' | 'private' | 'static' | 'final' | 'abstract' | 'over
 
 TypeParams ::= '<' TypeParam (',' TypeParam)* ','? '>'
 TypeParam  ::= Identifier (':' Type ('&' Type)*)?         // 约束用 ':' ，多约束用 '&'
+AliasTypeParams ::= '<' Identifier (',' Identifier)* ','? '>'
 
 ClassDecl ::= Modifier* 'class' Identifier TypeParams?
               ('extends' NamedType)?
@@ -279,7 +280,7 @@ VariantPayload ::= '(' VariantField (',' VariantField)* ')'
 VariantField   ::= (Identifier ':')? Type
 BackingValue   ::= IntLiteral | FloatLiteral | StringLiteral | BoolLiteral
 
-TypeAliasDecl ::= 'type' Identifier TypeParams? '=' Type
+TypeAliasDecl ::= 'type' Identifier AliasTypeParams? '=' Type
 
 ImportDecl ::= 'import' ImportMembers 'from' ImportModule
             |  'import' ImportModule ('as' Identifier)?
@@ -548,6 +549,7 @@ Modifier  ::= 'in' | 'ref' | 'private' | 'static' | 'final' | 'abstract' | 'over
 
 TypeParams ::= '<' TypeParam (',' TypeParam)* ','? '>'
 TypeParam  ::= Identifier (':' Type ('&' Type)*)?         // constraints use ':', multiple use '&'
+AliasTypeParams ::= '<' Identifier (',' Identifier)* ','? '>'
 
 ClassDecl ::= Modifier* 'class' Identifier TypeParams?
               ('extends' NamedType)?
@@ -578,7 +580,7 @@ VariantPayload ::= '(' VariantField (',' VariantField)* ')'
 VariantField   ::= (Identifier ':')? Type
 BackingValue   ::= IntLiteral | FloatLiteral | StringLiteral | BoolLiteral
 
-TypeAliasDecl ::= 'type' Identifier TypeParams? '=' Type
+TypeAliasDecl ::= 'type' Identifier AliasTypeParams? '=' Type
 
 ImportDecl ::= 'import' ImportMembers 'from' ImportModule
             |  'import' ImportModule ('as' Identifier)?
