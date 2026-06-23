@@ -68,6 +68,7 @@ fn test_setenv_overwrite() {
 
 @test
 fn test_environ() {
+    os.setenv("XRAY_TEST_ENV_EMPTY", "")
     let env = os.environ()
     // PATH should exist; Windows may store it as "Path"
     let path = env.get("PATH")
@@ -75,6 +76,8 @@ fn test_environ() {
         path = env.get("Path")
     }
     assert(path != null)
+    assert_eq(env.get("XRAY_TEST_ENV_EMPTY"), "")
+    os.unsetenv("XRAY_TEST_ENV_EMPTY")
 }
 
 // ===== Process Info =====

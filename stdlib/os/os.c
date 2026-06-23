@@ -69,6 +69,20 @@ extern XrArray *xr_array_new(struct XrCoroutine *coro);
 extern void xr_array_push(XrArray *arr, XrValue value);
 extern XrValue xr_value_from_array(XrArray *arr);
 
+typedef struct OsEnvironCtx {
+    XrVMRuntime *X;
+    XrMap *map;
+} OsEnvironCtx;
+
+static bool os_environ_add_entry(void *ctx, const char *key, size_t key_len, const char *value,
+                                 size_t value_len) {
+    OsEnvironCtx *env = (OsEnvironCtx *) ctx;
+    XrValue key_value = xrs_string_value_n(env->X, key, key_len);
+    XrValue val_value = xrs_string_value_n(env->X, value, value_len);
+    xr_map_set(env->map, key_value, val_value);
+    return true;
+}
+
 /* ========== Windows Compatibility ========== */
 
 #ifdef XR_OS_WINDOWS
@@ -135,38 +149,18 @@ static XrValue os_environ(XrVMRuntime *X, XrValue *args, int argc) {
     XrMap *map = xr_map_new(xr_current_coro(X));
     if (!map)
         return xr_null();
+    OsEnvironCtx env_ctx = {X, map};
 
 #ifdef XR_OS_WINDOWS
     LPCH env_block = GetEnvironmentStringsA();
     if (!env_block)
         return xr_value_from_map(map);
-    for (const char *p = env_block; *p; p += strlen(p) + 1) {
-        const char *eq = strchr(p, '=');
-        if (!eq || eq == p)
-            continue;
-        size_t name_len = eq - p;
-        const char *value = eq + 1;
-        XrString *key_str = xr_string_intern(X, p, name_len, 0);
-        XrValue key = xr_string_value(key_str);
-        XrValue val = xrs_string_value_c(X, value);
-        xr_map_set(map, key, val);
-    }
+    for (const char *p = env_block; *p; p += strlen(p) + 1)
+        xr_os_core_environ_entry(p, os_environ_add_entry, &env_ctx);
     FreeEnvironmentStringsA(env_block);
 #else
-    for (char **env = environ; *env != NULL; env++) {
-        char *eq = strchr(*env, '=');
-        if (!eq)
-            continue;
-
-        size_t name_len = eq - *env;
-        const char *value = eq + 1;
-
-        // Directly intern with length — no temporary allocation needed
-        XrString *key_str = xr_string_intern(X, *env, name_len, 0);
-        XrValue key = xr_string_value(key_str);
-        XrValue val = xrs_string_value_c(X, value);
-        xr_map_set(map, key, val);
-    }
+    for (char **env = environ; *env != NULL; env++)
+        xr_os_core_environ_entry(*env, os_environ_add_entry, &env_ctx);
 #endif
 
     return xr_value_from_map(map);
