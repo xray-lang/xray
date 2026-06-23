@@ -95,7 +95,7 @@ typedef struct ContinueStmtNode {
 
 /* ========== Exception Handling ========== */
 
-// A single catch clause: catch (e), catch (e: HttpError), or catch panic (p)
+// A single catch clause: catch (e), catch (e: NetErr), or catch panic (p)
 typedef struct XrCatchClause {
     char *var_name;
     int var_line;     // Line of catch variable (1-indexed)

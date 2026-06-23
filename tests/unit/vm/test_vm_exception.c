@@ -5,19 +5,14 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * test_vm_exception.c - Lock down the unified throw / unwind contract.
+ * test_vm_exception.c - Lock down the error / panic contract.
  *
  * KEY POINTS:
- *   - xr_vm_unwind_with_trace() must record one trace entry per
- *     active call frame, in throw-site -> outermost order.
  *   - VM_RUNTIME_ERROR (interpreter), VM_COLD_THROW (cold path) and
- *     OP_THROW (user code) must all funnel through the same helper
+ *     OP_THROW (panic channel) must all funnel through the same helper
  *     so user-visible stack traces stay consistent regardless of
  *     who started the unwind.
- *   - Catching an exception must clear ctx->current_exception so a
- *     subsequent builtin call does not see a stale value through
- *     the OP_INVOKE / OP_INVOKE_BUILTIN VM_BUILTIN_INVOKE_CHECK_EXC
- *     guard.
+ *   - Catching a source-level enum error must clear pending_error.
  */
 
 #include "../test_framework.h"
@@ -46,15 +41,16 @@ static XrayIsolate *make_quiet_isolate(void) {
 
 /* ========== User throw propagates through call chain via error channel ========== */
 
-TEST(unwind_records_full_call_chain) {
+TEST(uncaught_enum_error_returns_nonzero) {
     XrayIsolate *iso = make_quiet_isolate();
     ASSERT_NOT_NULL(iso);
 
     /* In the new error model, throw writes to pending_error and returns.
      * Each caller sees the error and also returns (auto-propagation).
      * The error value ends up in pending_error at the top level. */
-    const char *src = "fn deep() {\n"
-                      "    throw Exception(\"boom\")\n"
+    const char *src = "enum VmErr { Boom(string) }\n"
+                      "fn deep() {\n"
+                      "    throw VmErr.Boom(\"boom\")\n"
                       "}\n"
                       "fn level3() { deep() }\n"
                       "fn level2() { level3() }\n"
@@ -96,16 +92,17 @@ TEST(runtime_error_records_trace) {
 
 /* ========== Catch clears the pending error channel ========== */
 
-TEST(catch_clears_pending_exception_state) {
+TEST(catch_clears_pending_error_state) {
     XrayIsolate *iso = make_quiet_isolate();
     ASSERT_NOT_NULL(iso);
 
     /* In the new model, catch reads and clears pending_error.
      * Verify that after a caught error, the program continues
      * normally without stale error state. */
-    const char *src = "let caught = false\n"
+    const char *src = "enum VmErr { Test }\n"
+                      "let caught = false\n"
                       "try {\n"
-                      "    throw Exception(\"test\")\n"
+                      "    throw VmErr.Test\n"
                       "} catch (e) {\n"
                       "    caught = true\n"
                       "}\n"
@@ -122,28 +119,22 @@ TEST(catch_clears_pending_exception_state) {
     xray_isolate_delete(iso);
 }
 
-/* ========== Caught exception keeps its trace through the catch block ========== */
+/* ========== Caught enum error can be rethrown ========== */
 
 /*
- * Verify that a deep throw caught at the top level still has
- * a non-trivial stack trace at the moment of the catch. The
- * trace is inspected from the C side (xray code does not yet
- * expose stackTrace as a stable public field).
- *
- * Implementation: a pre-test debug hook fires when the throw
- * happens uncaught, but we want the caught variant. Instead we
- * use xr_isolate_set_suppress_exception_print and run a script
- * that records the trace length into a global before the catch
- * clears it.
+ * Value-return errors do not use the panic trace channel. Verify that
+ * catch + rethrow preserves the enum error and leaves it pending at top
+ * level.
  */
-TEST(caught_exception_trace_survives_catch) {
+TEST(caught_error_rethrow_preserves_pending_error) {
     XrayIsolate *iso = make_quiet_isolate();
     ASSERT_NOT_NULL(iso);
 
     /* In the new model, throw + catch + re-throw all go through
      * the value-return error channel.  Verify the error value
      * survives catch and re-throw. */
-    const char *src = "fn deep() { throw Exception(\"deep\") }\n"
+    const char *src = "enum VmErr { Deep(string) }\n"
+                      "fn deep() { throw VmErr.Deep(\"deep\") }\n"
                       "fn level2() { deep() }\n"
                       "fn level1() { level2() }\n"
                       "try { level1() } catch (e) { throw e }\n";
@@ -162,12 +153,12 @@ TEST(caught_exception_trace_survives_catch) {
 
 TEST_MAIN_BEGIN()
 RUN_TEST_SUITE("Unified throw/unwind contract");
-RUN_TEST(unwind_records_full_call_chain);
+RUN_TEST(uncaught_enum_error_returns_nonzero);
 RUN_TEST(runtime_error_records_trace);
 
 RUN_TEST_SUITE("Catch state cleanup");
-RUN_TEST(catch_clears_pending_exception_state);
+RUN_TEST(catch_clears_pending_error_state);
 
-RUN_TEST_SUITE("Stack trace surface");
-RUN_TEST(caught_exception_trace_survives_catch);
+RUN_TEST_SUITE("Error rethrow surface");
+RUN_TEST(caught_error_rethrow_preserves_pending_error);
 TEST_MAIN_END()
