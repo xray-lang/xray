@@ -297,6 +297,42 @@ TEST(string_trim_end) {
     teardown();
 }
 
+TEST(string_pad_start_end) {
+    setup();
+    XrString *s = xr_string_intern(X, "42", 2, xr_string_hash("42", 2));
+    XrString *zero = xr_string_intern(X, "0", 1, xr_string_hash("0", 1));
+    XrString *result = xr_string_pad_start(X, s, 5, zero);
+    ASSERT_NOT_NULL(result);
+    ASSERT_STR_EQ(result->data, "00042");
+
+    XrString *hi = xr_string_intern(X, "hi", 2, xr_string_hash("hi", 2));
+    XrString *bang = xr_string_intern(X, "!", 1, xr_string_hash("!", 1));
+    result = xr_string_pad_end(X, hi, 5, bang);
+    ASSERT_NOT_NULL(result);
+    ASSERT_STR_EQ(result->data, "hi!!!");
+    teardown();
+}
+
+TEST(string_pad_default_empty_and_negative) {
+    setup();
+    XrString *s = xr_string_intern(X, "x", 1, xr_string_hash("x", 1));
+    XrString *result = xr_string_pad_start(X, s, 3, NULL);
+    ASSERT_NOT_NULL(result);
+    ASSERT_STR_EQ(result->data, "  x");
+
+    result = xr_string_pad_end(X, s, 3, NULL);
+    ASSERT_NOT_NULL(result);
+    ASSERT_STR_EQ(result->data, "x  ");
+
+    XrString *empty = xr_string_intern(X, "", 0, xr_string_hash("", 0));
+    result = xr_string_pad_start(X, s, 5, empty);
+    ASSERT_EQ_PTR(result, s);
+
+    result = xr_string_pad_end(X, s, -1, NULL);
+    ASSERT_EQ_PTR(result, s);
+    teardown();
+}
+
 /* ========== Substring Tests ========== */
 
 TEST(string_substring) {
@@ -505,6 +541,8 @@ static void run_all_tests(void) {
     RUN_TEST(string_trim);
     RUN_TEST(string_trim_start);
     RUN_TEST(string_trim_end);
+    RUN_TEST(string_pad_start_end);
+    RUN_TEST(string_pad_default_empty_and_negative);
 
     RUN_TEST_SUITE("Substring");
     RUN_TEST(string_substring);

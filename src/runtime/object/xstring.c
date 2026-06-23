@@ -476,85 +476,47 @@ XrString *xr_string_trim_end(XrVMRuntime *iso, XrString *str) {
 }
 
 // padStart - pad at start to target length
-XrString *xr_string_pad_start(XrVMRuntime *iso, XrString *str, size_t target_len,
+XrString *xr_string_pad_start(XrVMRuntime *iso, XrString *str, xr_Integer target_len,
                               XrString *pad_str) {
     if (str == NULL)
         return NULL;
 
-    // Already at target length
-    if (str->length >= target_len) {
+    const char *pad = pad_str ? pad_str->data : NULL;
+    size_t pad_len = pad_str ? pad_str->length : 0;
+    XrStringCorePadPlan plan =
+        xr_string_core_pad_plan(str->data, str->length, target_len, pad, pad_len);
+    if (plan.kind == XR_STRING_CORE_PAD_INVALID || plan.kind == XR_STRING_CORE_PAD_ORIGINAL)
         return str;
-    }
 
-    // Default pad with space
-    const char *pad = " ";
-    size_t pad_len = 1;
-    if (pad_str && pad_str->length > 0) {
-        pad = pad_str->data;
-        pad_len = pad_str->length;
-    }
-
-    size_t fill_len = target_len - str->length;
-
-    char *result = xr_malloc(target_len + 1);
+    char *result = xr_malloc(plan.len + 1);
     if (!result)
         return NULL;
 
-    // Fill start
-    size_t pos = 0;
-    while (pos < fill_len) {
-        size_t copy_len = (fill_len - pos < pad_len) ? (fill_len - pos) : pad_len;
-        memcpy(result + pos, pad, copy_len);
-        pos += copy_len;
-    }
-
-    // Copy original string
-    memcpy(result + fill_len, str->data, str->length);
-    result[target_len] = '\0';
-
-    XrString *ret = xr_string_intern(iso, result, target_len, 0);
+    xr_string_core_pad_write(result, str->data, str->length, plan, XR_STRING_CORE_PAD_START);
+    XrString *ret = xr_string_intern(iso, result, plan.len, 0);
     xr_free(result);
     return ret;
 }
 
 // padEnd - pad at end to target length
-XrString *xr_string_pad_end(XrVMRuntime *iso, XrString *str, size_t target_len, XrString *pad_str) {
+XrString *xr_string_pad_end(XrVMRuntime *iso, XrString *str, xr_Integer target_len,
+                            XrString *pad_str) {
     if (str == NULL)
         return NULL;
 
-    // Already at target length
-    if (str->length >= target_len) {
+    const char *pad = pad_str ? pad_str->data : NULL;
+    size_t pad_len = pad_str ? pad_str->length : 0;
+    XrStringCorePadPlan plan =
+        xr_string_core_pad_plan(str->data, str->length, target_len, pad, pad_len);
+    if (plan.kind == XR_STRING_CORE_PAD_INVALID || plan.kind == XR_STRING_CORE_PAD_ORIGINAL)
         return str;
-    }
 
-    // Default pad with space
-    const char *pad = " ";
-    size_t pad_len = 1;
-    if (pad_str && pad_str->length > 0) {
-        pad = pad_str->data;
-        pad_len = pad_str->length;
-    }
-
-    size_t fill_len = target_len - str->length;
-    (void) fill_len;
-
-    char *result = xr_malloc(target_len + 1);
+    char *result = xr_malloc(plan.len + 1);
     if (!result)
         return NULL;
 
-    // Copy original string
-    memcpy(result, str->data, str->length);
-
-    // Fill end
-    size_t pos = str->length;
-    while (pos < target_len) {
-        size_t copy_len = (target_len - pos < pad_len) ? (target_len - pos) : pad_len;
-        memcpy(result + pos, pad, copy_len);
-        pos += copy_len;
-    }
-    result[target_len] = '\0';
-
-    XrString *ret = xr_string_intern(iso, result, target_len, 0);
+    xr_string_core_pad_write(result, str->data, str->length, plan, XR_STRING_CORE_PAD_END);
+    XrString *ret = xr_string_intern(iso, result, plan.len, 0);
     xr_free(result);
     return ret;
 }
