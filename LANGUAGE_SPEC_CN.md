@@ -672,6 +672,8 @@ let c: Array<string> = []         // 显式空数组
 
 `Array<T>` 的 `T` 必须能在编译期确定。空 `[]` 在无类型标注时是编译错误：`Empty array '[]' requires a type annotation`。
 
+`Array<char>` 保留 `char` 元素身份，读出时得到 `char`，写入时只接受 `char`。实现使用紧凑的 Unicode scalar 存储（`XR_ELEM_CHAR` / `uint32_t[]`），不会退化成 `Array<uint32>`。
+
 #### 2.4.2 `Map<K, V>`
 
 哈希字典，**保持插入顺序**。详见 §14.7。
@@ -4852,6 +4854,8 @@ Xray 值统一用 `XrValue` 表示。当前实现要求 64 位平台，并采用
 | `string` | `XR_TAG_PTR` + `XR_TSTRING` + `XrString*` |
 | `Bytes` | `XR_TAG_PTR` + bytes heap object |
 | 其他对象 | `XR_TAG_PTR` + heap type + heap pointer |
+
+Typed array 元素布局是容器元数据的一部分。`Array<char>` 使用 `XR_ELEM_CHAR`，数据区是连续 `uint32_t[]` Unicode scalar；load 时重新装箱为 `XR_TAG_CHAR`，store 时拒绝非 `char` 值，因此不会与 `Array<uint32>` 混淆。
 
 ### 16.2 内存分配
 

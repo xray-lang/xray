@@ -39,19 +39,26 @@
 ** Container Creation Instructions
 ** ======================================================== */
 
+#define VM_ARRAY_CHECK_STORABLE(arr, val)                                                          \
+    do {                                                                                           \
+        if ((arr)->elem_type == XR_ELEM_CHAR && !XR_IS_CHAR(val)) {                                \
+            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Array<char> element must be char");            \
+        }                                                                                          \
+    } while (0)
+
 vmcase(OP_NEWARRAY) {
     /* OP_NEWARRAY: create array
     ** A = destination register
     ** B = capacity/initial element count
     ** C = (elem_tid << 2) | storage_mode
     **     storage_mode: bits 0-1 (0=normal, 1=shared)
-    **     elem_tid:     bits 2-6 (XrTypeId, 0=any)
+    **     elem_tid:     bits 2-7 (XrTypeId, 0=any)
     */
     int a = GETARG_A(i);
     int b = GETARG_B(i);
     int c_field = GETARG_C(i);
     int storage_mode = c_field & 0x03;
-    uint8_t elem_tid = (uint8_t) ((c_field >> 2) & 0x1F);
+    uint8_t elem_tid = (uint8_t) (c_field >> 2);
     uint8_t elem_type = xr_tid_to_elem_type(elem_tid);
 
     XrArray *array;
@@ -111,7 +118,7 @@ vmcase(OP_ARRAY_NEW_CAP) {
         cap = 0;
 
     int storage_mode = c_field & 0x03;
-    uint8_t elem_tid = (uint8_t) ((c_field >> 2) & 0x1F);
+    uint8_t elem_tid = (uint8_t) (c_field >> 2);
     uint8_t elem_type = xr_tid_to_elem_type(elem_tid);
 
     XrArray *array;
@@ -654,6 +661,7 @@ vmcase(OP_ARRAY_SET) {
                 ((XrValue *) arr->data)[idx] = _av;
                 XR_ARRAY_MARK_REFS(arr, _av);
             } else {
+                VM_ARRAY_CHECK_STORABLE(arr, _av);
                 xr_array_set_element(arr, idx, _av);
             }
         }
@@ -750,6 +758,7 @@ vmcase(OP_ARRAY_SETC) {
                 ((XrValue *) arr->data)[b] = _acv;
                 XR_ARRAY_MARK_REFS(arr, _acv);
             } else {
+                VM_ARRAY_CHECK_STORABLE(arr, _acv);
                 xr_array_set_element(arr, b, _acv);
             }
         }
@@ -795,6 +804,7 @@ vmcase(OP_ARRAY_PUSH) {
         ((XrValue *) arr->data)[arr->length++] = val;
         XR_ARRAY_MARK_REFS(arr, val);
     } else {
+        VM_ARRAY_CHECK_STORABLE(arr, val);
         xr_array_set_element(arr, arr->length++, val);
     }
     vmbreak;
@@ -815,6 +825,7 @@ vmcase(OP_ARRAY_EXTEND) {
     int32_t n = src->length;
     for (int32_t j = 0; j < n; j++) {
         XrValue elem = xr_array_get_element(src, j);
+        VM_ARRAY_CHECK_STORABLE(dst, elem);
         xr_rc_retain_value(elem);
         xr_array_push(dst, elem);
     }
@@ -849,7 +860,9 @@ vmcase(OP_ARRAY_RESIZE) {
     if (!XR_IS_ARRAY(R(a)) || !XR_IS_INT(R(b))) {
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Array.resize(length, fill) expects integer length");
     }
-    if (!xr_array_resize(XR_TO_ARRAY(R(a)), (int32_t) XR_TO_INT(R(b)), R(c))) {
+    XrArray *_resize_arr = XR_TO_ARRAY(R(a));
+    VM_ARRAY_CHECK_STORABLE(_resize_arr, R(c));
+    if (!xr_array_resize(_resize_arr, (int32_t) XR_TO_INT(R(b)), R(c))) {
         VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, "Array.resize failed");
     }
     vmbreak;
@@ -984,6 +997,7 @@ vmcase(OP_ARRAY_INIT) {
     } else {
         // Slow path: typed arrays need per-element unboxing
         for (int j = 1; j <= b; j++) {
+            VM_ARRAY_CHECK_STORABLE(arr, R(a + j));
             xr_array_set(arr, j - 1, R(a + j));
         }
     }
@@ -1389,6 +1403,7 @@ vmcase(OP_INDEX_SET) {
                 ((XrValue *) arr->data)[idx] = val;
                 XR_ARRAY_MARK_REFS(arr, val);
             } else {
+                VM_ARRAY_CHECK_STORABLE(arr, val);
                 xr_array_set_element(arr, idx, val);
             }
         } else if (idx == arr->length && arr->elem_type == XR_ELEM_ANY && !xr_array_is_slice(arr)) {

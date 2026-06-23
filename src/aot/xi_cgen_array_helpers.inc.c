@@ -1261,7 +1261,7 @@ static bool emit_class_native_array_method_call_expr(XiCgenCtx *ctx, FILE *out, 
     if (sym < 0)
         return false;
     uint16_t nargs = (uint16_t) (v->nargs - 1);
-    if (nargs > 2)
+    if (nargs > 3)
         return false;
     const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
     if (nargs == 0) {
@@ -1281,6 +1281,16 @@ static bool emit_class_native_array_method_call_expr(XiCgenCtx *ctx, FILE *out, 
         emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
         fprintf(out, ", ");
         emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_TAGGED);
+        fprintf(out, ")");
+    } else if (nargs == 3) {
+        fprintf(out, "xrt_method_3(");
+        emit_class_native_array_field_box(ctx, out, f, &info, v->args[0], idx);
+        fprintf(out, ", %d, ", sym);
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
+        fprintf(out, ", ");
+        emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_TAGGED);
+        fprintf(out, ", ");
+        emit_value_as_rep_ctx(ctx, out, v->args[3], XR_REP_TAGGED);
         fprintf(out, ")");
     }
     emit_conversion_suffix(out, conv_suffix);

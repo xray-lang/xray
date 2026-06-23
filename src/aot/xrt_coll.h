@@ -86,6 +86,14 @@ static inline void xrt_array_init_header(xrt_array_t *a, int64_t cap, uint8_t et
     a->adt_member_name = NULL;
 }
 
+static inline void xrt_array_check_store_or_abort(const xrt_array_t *a, XrValue val,
+                                                  const char *where) {
+    if (XR_UNLIKELY(a && a->elem_type == XR_ELEM_CHAR && val.tag != XR_TAG_CHAR)) {
+        fprintf(stderr, "%s: Array<char> element must be char\n", where);
+        abort();
+    }
+}
+
 static inline xrt_array_t *xrt_array_alloc_inline(int64_t cap, uint8_t etype, int zeroed,
                                                   const char *where) {
     if (etype >= XR_ELEM_COUNT)
@@ -231,6 +239,7 @@ static inline XrValue xrt_bytes_new_1(XrValue arg) {
 
 static inline void xrt_array_push(XrValue arr, XrValue val) {
     xrt_array_t *a = (xrt_array_t *) arr.ptr;
+    xrt_array_check_store_or_abort(a, val, "xrt_array_push");
     if (XR_UNLIKELY(a->data_storage == XR_ARRAY_DATA_BORROWED)) {
         fprintf(stderr, "xrt_array_push: cannot push to array slice\n");
         abort();

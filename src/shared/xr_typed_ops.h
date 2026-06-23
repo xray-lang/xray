@@ -13,6 +13,7 @@
  *
  * Dependency: caller must include their own XrValue header first, providing:
  *   XrValue, XR_FROM_INT/XR_TO_INT, XR_FROM_FLOAT/XR_TO_FLOAT,
+ *   XR_FROM_CHAR/XR_TO_CHAR, XR_IS_CHAR,
  *   XR_IS_INT/XR_IS_FLOAT/XR_IS_NULL/XR_IS_FALSE,
  *   xr_value_to_int64_coerce, xr_value_to_f64_coerce
  *
@@ -53,6 +54,8 @@ static inline XrValue xr_typed_get(void *data, int32_t index, uint8_t elem_type)
             return XR_FROM_FLOAT(((double *) data)[index]);
         case XR_ELEM_BOOL:
             return ((uint8_t *) data)[index] ? XR_TRUE_VAL : XR_FALSE_VAL;
+        case XR_ELEM_CHAR:
+            return XR_FROM_CHAR(((uint32_t *) data)[index]);
         default:
             return XR_NULL_VAL;
     }
@@ -103,6 +106,11 @@ static inline bool xr_typed_set(void *data, int32_t index, XrValue value, uint8_
             ((uint8_t *) data)[index] = falsy ? 0 : 1;
             return false;
         }
+        case XR_ELEM_CHAR:
+            if (!XR_IS_CHAR(value))
+                return false;
+            ((uint32_t *) data)[index] = XR_TO_CHAR(value);
+            return false;
         default:
             return false;
     }

@@ -680,27 +680,28 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
         if (sym == XRT_SYM_RESERVE)
             return xrt_array_reserve_value(recv, arg0);
         if (sym == XRT_SYM_RESIZE)
-            return xrt_array_resize_value(recv, arg0, XR_FROM_INT(0));
+            return xrt_array_resize_value(
+                recv, arg0, a->elem_type == XR_ELEM_CHAR ? XR_FROM_CHAR(0) : XR_FROM_INT(0));
         if (sym == XRT_SYM_LOADU32LE)
             return xrt_bytes_load_u32_le(recv, arg0);
         if (sym == XRT_SYM_LOADU64LE)
             return xrt_bytes_load_u64_le(recv, arg0);
         if (sym == XRT_SYM_UNSHIFT) {
-            xrt_array_push(recv, XR_NULL_VAL);
-            a = (xrt_array_t *) recv.ptr;
-            for (int64_t i = a->length - 1; i > 0; i--) {
-                XrValue prev = xr_typed_get(a->data, (int32_t) (i - 1), a->elem_type);
-                xr_typed_set(a->data, (int32_t) i, prev, a->elem_type);
+            xrt_array_check_store_or_abort(a, arg0, "Array.unshift");
+            if (XR_UNLIKELY(a->data_storage == XR_ARRAY_DATA_BORROWED)) {
+                fprintf(stderr, "xrt_array_unshift: cannot unshift array slice\n");
+                abort();
             }
+            if (XR_UNLIKELY(a->length >= a->capacity))
+                xrt_array_data_grow(a, a->capacity == 0 ? 4 : a->capacity * 2);
+            memmove((uint8_t *) a->data + a->elem_size, a->data,
+                    (size_t) a->length * (size_t) a->elem_size);
+            a->length++;
             xr_typed_set(a->data, 0, arg0, a->elem_type);
             return XR_NULL_VAL;
         }
         if (sym == XRT_SYM_FILL) {
-            if (xrt_array_fill_typed_fast(a, arg0))
-                return recv;
-            for (int64_t i = 0; i < a->length; i++)
-                xr_typed_set(a->data, (int32_t) i, arg0, a->elem_type);
-            return recv;
+            return xrt_array_fill_value(recv, arg0, XR_FROM_INT(0), XR_FROM_INT(a->length));
         }
         if (sym == XRT_SYM_INDEXOF) {
             int handled;
@@ -967,6 +968,13 @@ static inline XrValue xrt_method_2(XrValue recv, int sym, XrValue arg0, XrValue 
         xrt_map_set(m, arg0, arg1);
         return (XrValue) {.i = 0, .tag = XR_TAG_NULL};
     }
+    return (XrValue) {.i = 0, .tag = XR_TAG_NULL};
+}
+
+static inline XrValue xrt_method_3(XrValue recv, int sym, XrValue arg0, XrValue arg1,
+                                   XrValue arg2) {
+    if (XR_IS_ARRAY(recv) && sym == XRT_SYM_FILL)
+        return xrt_array_fill_value(recv, arg0, arg1, arg2);
     return (XrValue) {.i = 0, .tag = XR_TAG_NULL};
 }
 

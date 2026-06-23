@@ -311,6 +311,9 @@ static XrValue xrt_array_sort(XrValue recv, xrt_closure_t *cl) {
             case XR_ELEM_U32:
                 xrt_sort_u32((uint32_t *) arr->data, n);
                 return recv;
+            case XR_ELEM_CHAR:
+                xrt_sort_u32((uint32_t *) arr->data, n);
+                return recv;
             case XR_ELEM_I64:
                 xrt_sort_i64((int64_t *) arr->data, n);
                 return recv;

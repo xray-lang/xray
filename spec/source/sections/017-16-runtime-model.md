@@ -30,6 +30,8 @@ Xray 值统一用 `XrValue` 表示。当前实现要求 64 位平台，并采用
 | `Bytes` | `XR_TAG_PTR` + bytes heap object |
 | 其他对象 | `XR_TAG_PTR` + heap type + heap pointer |
 
+Typed array 元素布局是容器元数据的一部分。`Array<char>` 使用 `XR_ELEM_CHAR`，数据区是连续 `uint32_t[]` Unicode scalar；load 时重新装箱为 `XR_TAG_CHAR`，store 时拒绝非 `char` 值，因此不会与 `Array<uint32>` 混淆。
+
 ### 16.2 内存分配
 
 | 区域 | 用途 |
@@ -154,6 +156,8 @@ Xray values are uniformly represented as `XrValue`. The current implementation r
 | `string` | `XR_TAG_PTR` + `XR_TSTRING` + `XrString*` |
 | `Bytes` | `XR_TAG_PTR` + bytes heap object |
 | Other objects | `XR_TAG_PTR` + heap type + heap pointer |
+
+Typed-array element layout is part of the container metadata. `Array<char>` uses `XR_ELEM_CHAR`; its data area is a contiguous `uint32_t[]` of Unicode scalars. Loads re-box values as `XR_TAG_CHAR`, and stores reject non-`char` values, so it cannot be confused with `Array<uint32>`.
 
 ### 16.2 Memory Allocation
 

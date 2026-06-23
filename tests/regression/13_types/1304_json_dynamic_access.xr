@@ -67,7 +67,7 @@ fn test_dynamic_read_loop() {
     let keys = ["x", "y", "z"]
     let sum = 0
     for (key in keys) {
-        sum = sum + data[key]
+        sum = sum + int(data[key])
     }
     assert_eq(sum, 60)
 }

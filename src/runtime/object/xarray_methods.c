@@ -41,6 +41,14 @@ static inline XrArray *array_self(XrValue self) {
     return XR_TO_ARRAY(self);
 }
 
+static bool array_accepts_value(XrayIsolate *iso, XrArray *arr, XrValue value) {
+    if (arr && arr->elem_type == XR_ELEM_CHAR && !XR_IS_CHAR(value)) {
+        xr_runtime_error(iso, "Array<char> element must be char\n");
+        return false;
+    }
+    return true;
+}
+
 // Build the diagnostic tag "Array.<method>" for xr_vm_closure_from_arg.
 // The composed name lives on the stack; xr_runtime_error copies it into
 // the isolate's error buffer before returning, so a stack address is safe.
@@ -53,9 +61,10 @@ static struct XrClosure *array_callback(XrayIsolate *iso, XrValue v, const char 
 /* === Mutation === */
 
 static XrValue m_push(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
-    (void) iso;
     XrArray *arr = array_self(self);
     if (argc >= 1) {
+        if (!array_accepts_value(iso, arr, args[0]))
+            return self;
         if (arr->length >= arr->capacity) {
             xr_array_grow(arr);
             /* Defensive: if grow silently failed fall back to safe push. */
@@ -90,10 +99,11 @@ static XrValue m_shift(XrayIsolate *iso, XrValue self, XrValue *args, int argc) 
 }
 
 static XrValue m_unshift(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
-    (void) iso;
     if (argc < 1)
         return xr_int(0);
     XrArray *arr = array_self(self);
+    if (!array_accepts_value(iso, arr, args[0]))
+        return xr_int((xr_Integer) xr_array_size(arr));
     xr_array_unshift(arr, args[0]);
     return xr_int((xr_Integer) xr_array_size(arr));
 }
@@ -116,11 +126,12 @@ static XrValue m_reverse(XrayIsolate *iso, XrValue self, XrValue *args, int argc
 }
 
 static XrValue m_fill(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
-    (void) iso;
     if (argc < 1)
         return self;
     XrArray *arr = array_self(self);
     XrValue fill_val = args[0];
+    if (!array_accepts_value(iso, arr, fill_val))
+        return self;
     int start = 0, end = (int) arr->length;
     if (argc >= 2 && XR_IS_INT(args[1]))
         start = (int) XR_TO_INT(args[1]);
@@ -139,13 +150,16 @@ static XrValue m_reserve(XrayIsolate *iso, XrValue self, XrValue *args, int argc
 }
 
 static XrValue m_resize(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
-    (void) iso;
     if (argc < 1 || !XR_IS_INT(args[0]))
         return self;
     XrArray *arr = array_self(self);
     XrValue fill = argc >= 2 ? args[1] : xr_null();
     if (arr->elem_type == XR_ELEM_U8 && argc < 2)
         fill = xr_int(0);
+    if (arr->elem_type == XR_ELEM_CHAR && argc < 2)
+        fill = XR_FROM_CHAR(0);
+    if (!array_accepts_value(iso, arr, fill))
+        return self;
     xr_array_resize(arr, (int32_t) XR_TO_INT(args[0]), fill);
     return self;
 }

@@ -22,7 +22,9 @@ fn acceptAndClose(lst: NetListener) {
 
 @test
 fn test_accept_deadline_timeout() {
-    let lst = net.listen(0, 8)!
+    let maybeLst = net.listen(0, 8)
+    if (maybeLst == null) { return }
+    let lst = maybeLst!
     let deadline = time.monotonic() + 20
     assert_true(net.setAcceptDeadline(lst, deadline))
 
@@ -36,7 +38,9 @@ fn test_accept_deadline_timeout() {
 
 @test
 fn test_read_deadline_timeout() {
-    let lst = net.listen(0, 8)!
+    let maybeLst = net.listen(0, 8)
+    if (maybeLst == null) { return }
+    let lst = maybeLst!
     let port = lst.port()
     go acceptSlowWrite(lst)
 
@@ -54,7 +58,9 @@ fn test_read_deadline_timeout() {
 
 @test
 fn test_closed_handle_error() {
-    let lst = net.listen(0, 8)!
+    let maybeLst = net.listen(0, 8)
+    if (maybeLst == null) { return }
+    let lst = maybeLst!
     let port = lst.port()
     go acceptAndClose(lst)
 

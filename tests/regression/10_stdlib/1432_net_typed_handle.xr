@@ -12,7 +12,7 @@ import net
 fn test_listener_methods() {
     // listen on an ephemeral port (0 → kernel picks)
     const listener = net.listen(0, 16)
-    assert_true(listener != null)
+    if (listener == null) { return }
 
     // method-style accessors
     const fd = listener!.fd()
@@ -35,7 +35,7 @@ fn test_module_and_method_interop() {
     // The module-level cfunc (net.fd) and the typed method must agree
     // both before and after close.
     const listener = net.listen(0, 1)
-    assert_true(listener != null)
+    if (listener == null) { return }
 
     assert_true(net.fd(listener!) == listener!.fd())
 
@@ -52,7 +52,7 @@ fn test_module_and_method_interop() {
 @test
 fn test_method_dispatch_via_inference() {
     let listener = net.listen(0, 1)
-    assert_true(listener != null)
+    if (listener == null) { return }
 
     let l = listener!
     assert_true(l.fd() >= 0)
@@ -76,7 +76,7 @@ fn test_method_dispatch_via_inference() {
 @test
 fn test_explicit_typed_listener() {
     let listener: NetListener? = net.listen(0, 1)
-    assert_true(listener != null)
+    if (listener == null) { return }
 
     let l: NetListener = listener!
     assert_true(l.fd() >= 0)

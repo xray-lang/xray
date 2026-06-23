@@ -1,0 +1,36 @@
+// anchor: array-char-compact
+let chars: Array<char> = ['b', '中', '\u{1F600}']
+print(chars.length)
+print(typeof(chars[0]))
+print(chars[0])
+print(chars[1].ord())
+print(chars[2].ord())
+
+chars[0] = 'a'
+chars.push('z')
+print(chars.join("|"))
+
+chars.fill('x', 1, 3)
+print(chars.join(""))
+print(chars.indexOf('x'))
+print(chars.indexOf('中'))
+
+chars.resize(6, 'q')
+print(chars.length)
+print(chars[4])
+print(chars[5])
+
+chars.sort()
+print(chars.join(""))
+print(chars[0].ord())
+
+let made = Array<char>(3, 'k')
+print(made.length)
+print(made.join(""))
+
+let from_string: Array<char> = []
+for (ch in "A中\u{1F600}") {
+    from_string.push(ch)
+}
+print(from_string.join("-"))
+print(typeof(from_string[2]))

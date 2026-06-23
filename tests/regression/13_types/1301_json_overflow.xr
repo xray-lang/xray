@@ -79,7 +79,7 @@ fn test_overflow_forin() {
     let sum = 0
     let count = 0
     for (k, v in obj) {
-        sum = sum + v
+        sum = sum + int(v)
         count = count + 1
     }
     assert_eq(count, 11)

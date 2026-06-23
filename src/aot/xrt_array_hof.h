@@ -14,6 +14,7 @@
 #include "xrt_coll.h"
 
 static inline void xrt_array_write_preallocated(xrt_array_t *a, int64_t index, XrValue value) {
+    xrt_array_check_store_or_abort(a, value, "xrt_array_write_preallocated");
     xr_typed_set(a->data, (int32_t) index, value, a->elem_type);
 }
 

@@ -2992,10 +2992,24 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                                XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
                 }
-            } else if (array_type &&
-                       (XR_TYPE_IS_ARRAY(array_type) || XR_TYPE_IS_STRING(array_type)) &&
-                       index_type && !XR_TYPE_IS_UNKNOWN(index_type) &&
-                       !XR_TYPE_IS_INT(index_type)) {
+            } else if (array_type && XR_TYPE_IS_ARRAY(array_type)) {
+                XrLocation loc = {
+                    .file = ctx->file_path, .line = node->line, .column = node->column};
+                if (index_type && !XR_TYPE_IS_UNKNOWN(index_type) && !XR_TYPE_IS_INT(index_type)) {
+                    char msg[256];
+                    snprintf(msg, sizeof(msg),
+                             "Index type '%s' is not assignable to expected type 'int'",
+                             xr_type_to_string(index_type));
+                    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                               XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
+                }
+                if (array_type->container.element_type && value_type &&
+                    !XR_TYPE_IS_UNKNOWN(value_type)) {
+                    xa_analyzer_check_assignment(ctx->analyzer, array_type->container.element_type,
+                                                 value_type, &loc);
+                }
+            } else if (array_type && XR_TYPE_IS_STRING(array_type) && index_type &&
+                       !XR_TYPE_IS_UNKNOWN(index_type) && !XR_TYPE_IS_INT(index_type)) {
                 XrLocation loc = {
                     .file = ctx->file_path, .line = node->line, .column = node->column};
                 char msg[256];
