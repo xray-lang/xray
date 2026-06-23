@@ -562,16 +562,16 @@ XR_DEFINE_BUILTIN(toml_parse_file, "parseFile", "(path: string): Json", "Parse T
 XR_DEFINE_BUILTIN(toml_write_file, "writeFile", "(path: string, value: Json): bool",
                   "Write TOML file")
 
+#define XR_STDLIB_VM_BIND_MODULE_TOML 1
+#include "../../src/stdlib/xstdlib_vm_bindings_generated.inc.c"
+#undef XR_STDLIB_VM_BIND_MODULE_TOML
+
 XR_FUNC XrModule *xr_load_module_toml(XrVMRuntime *isolate) {
     XrModule *mod = xr_module_create_native(isolate, "toml");
     if (!mod)
         return NULL;
 
-    XRS_EXPORT(mod, isolate, "parse", toml_parse);
-    XRS_EXPORT(mod, isolate, "parseStrict", toml_parse_strict);
-    XRS_EXPORT(mod, isolate, "stringify", toml_stringify);
-    XRS_EXPORT(mod, isolate, "parseFile", toml_parse_file);
-    XRS_EXPORT(mod, isolate, "writeFile", toml_write_file);
+    xr_stdlib_vm_bind_toml_generated(isolate, mod);
 
     mod->loaded = true;
     return mod;

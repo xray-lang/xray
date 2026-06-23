@@ -2520,6 +2520,322 @@ module mem {
   }
 }
 
+module csv {
+  fn parse {
+    signature: "(data: string, options?: Json): Array<Array<string>> | Array<Json>"
+    doc: "Parse CSV string"
+    vm: "csv_parse"
+    argc: 2
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn parseDetailed {
+    signature: "(data: string, options?: Json): Json"
+    doc: "Parse CSV with headers"
+    vm: "csv_parse_detailed"
+    argc: 2
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn parseTsv {
+    signature: "(data: string): Array<Array<string>>"
+    doc: "Parse TSV string"
+    vm: "csv_parse_tsv"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn parseAuto {
+    signature: "(data: string): Array<Array<string>>"
+    doc: "Auto-detect delimiter and parse"
+    vm: "csv_parse_auto"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn stringify {
+    signature: "(data: Array<Array<string>>, options?: Json): string"
+    doc: "Convert to CSV string"
+    vm: "csv_stringify"
+    argc: 2
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn parseFile {
+    signature: "(path: string, options?: Json): Array<Array<string>>"
+    doc: "Parse CSV file"
+    vm: "csv_parse_file"
+    argc: 2
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "system"
+  }
+
+  fn writeFile {
+    signature: "(path: string, data: Array<Array<string>>, options?: Json): bool"
+    doc: "Write CSV file"
+    vm: "csv_write_file"
+    argc: 3
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "system"
+  }
+}
+
+module toml {
+  fn parse {
+    signature: "(data: string): Json"
+    doc: "Parse TOML string"
+    vm: "toml_parse"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn parseStrict {
+    signature: "(data: string): Json"
+    doc: "Parse TOML strictly"
+    vm: "toml_parse_strict"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn stringify {
+    signature: "(value: Json): string"
+    doc: "Convert to TOML string"
+    vm: "toml_stringify"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn parseFile {
+    signature: "(path: string): Json"
+    doc: "Parse TOML file"
+    vm: "toml_parse_file"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "system"
+  }
+
+  fn writeFile {
+    signature: "(path: string, value: Json): bool"
+    doc: "Write TOML file"
+    vm: "toml_write_file"
+    argc: 2
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "system"
+  }
+}
+
+module yaml {
+  fn parse {
+    signature: "(data: string): Json"
+    doc: "Parse YAML string"
+    vm: "yaml_parse"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn parseStrict {
+    signature: "(data: string): Json"
+    doc: "Parse YAML strictly"
+    vm: "yaml_parse_strict"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn parseAll {
+    signature: "(data: string): Array<Json>"
+    doc: "Parse all YAML documents"
+    vm: "yaml_parse_all"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn stringify {
+    signature: "(value: Json): string"
+    doc: "Convert to YAML string"
+    vm: "yaml_stringify"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn parseFile {
+    signature: "(path: string): Json"
+    doc: "Parse YAML file"
+    vm: "yaml_parse_file"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "system"
+  }
+
+  fn writeFile {
+    signature: "(path: string, value: Json): bool"
+    doc: "Write YAML file"
+    vm: "yaml_write_file"
+    argc: 2
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "system"
+  }
+}
+
+module xml {
+  fn parse {
+    signature: "(data: string, options?: Json): Json"
+    doc: "Parse XML string"
+    vm: "xml_parse_fn"
+    argc: 2
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn parseDetailed {
+    signature: "(data: string): Json"
+    doc: "Parse XML with details"
+    vm: "xml_parse_detailed"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn parseFile {
+    signature: "(path: string): Json"
+    doc: "Parse XML file"
+    vm: "xml_parse_file"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "system"
+  }
+
+  fn stringify {
+    signature: "(node: Json, options?: Json): string"
+    doc: "Convert to XML string"
+    vm: "xml_stringify_fn"
+    argc: 2
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn writeFile {
+    signature: "(path: string, node: Json): bool"
+    doc: "Write XML file"
+    vm: "xml_write_file"
+    argc: 2
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "system"
+  }
+
+  fn document {
+    signature: "(): Json"
+    doc: "Create XML document node"
+    vm: "xml_document_fn"
+    argc: 0
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn element {
+    signature: "(name: string, attrs?: Json): Json"
+    doc: "Create XML element node"
+    vm: "xml_element_fn"
+    argc: 2
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn text {
+    signature: "(content: string): Json"
+    doc: "Create XML text node"
+    vm: "xml_text_fn"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn comment {
+    signature: "(content: string): Json"
+    doc: "Create XML comment node"
+    vm: "xml_comment_fn"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn cdata {
+    signature: "(content: string): Json"
+    doc: "Create XML CDATA node"
+    vm: "xml_cdata_fn"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "alloc"
+  }
+}
+
 module datetime {
   fn now {
     signature: "(): DateTime"

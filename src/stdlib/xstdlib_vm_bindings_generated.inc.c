@@ -56,6 +56,18 @@ static void xr_stdlib_vm_bind_crypto_generated(XrVMRuntime *isolate, XrModule *m
 }
 #endif  /* XR_STDLIB_VM_BIND_MODULE_CRYPTO */
 
+#ifdef XR_STDLIB_VM_BIND_MODULE_CSV
+static void xr_stdlib_vm_bind_csv_generated(XrVMRuntime *isolate, XrModule *module) {
+    XRS_EXPORT(module, isolate, "parse", csv_parse);
+    XRS_EXPORT(module, isolate, "parseDetailed", csv_parse_detailed);
+    XRS_EXPORT(module, isolate, "parseTsv", csv_parse_tsv);
+    XRS_EXPORT(module, isolate, "parseAuto", csv_parse_auto);
+    XRS_EXPORT(module, isolate, "stringify", csv_stringify);
+    XRS_EXPORT(module, isolate, "parseFile", csv_parse_file);
+    XRS_EXPORT(module, isolate, "writeFile", csv_write_file);
+}
+#endif  /* XR_STDLIB_VM_BIND_MODULE_CSV */
+
 #ifdef XR_STDLIB_VM_BIND_MODULE_DATETIME
 static void xr_stdlib_vm_bind_datetime_generated(XrVMRuntime *isolate, XrModule *module) {
     XRS_EXPORT(module, isolate, "now", dt_now);
@@ -276,6 +288,16 @@ static void xr_stdlib_vm_bind_time_generated(XrVMRuntime *isolate, XrModule *mod
 }
 #endif  /* XR_STDLIB_VM_BIND_MODULE_TIME */
 
+#ifdef XR_STDLIB_VM_BIND_MODULE_TOML
+static void xr_stdlib_vm_bind_toml_generated(XrVMRuntime *isolate, XrModule *module) {
+    XRS_EXPORT(module, isolate, "parse", toml_parse);
+    XRS_EXPORT(module, isolate, "parseStrict", toml_parse_strict);
+    XRS_EXPORT(module, isolate, "stringify", toml_stringify);
+    XRS_EXPORT(module, isolate, "parseFile", toml_parse_file);
+    XRS_EXPORT(module, isolate, "writeFile", toml_write_file);
+}
+#endif  /* XR_STDLIB_VM_BIND_MODULE_TOML */
+
 #ifdef XR_STDLIB_VM_BIND_MODULE_URL
 static void xr_stdlib_vm_bind_url_generated(XrVMRuntime *isolate, XrModule *module) {
     XRS_EXPORT(module, isolate, "encode", url_encode_fn);
@@ -290,5 +312,31 @@ static void xr_stdlib_vm_bind_url_generated(XrVMRuntime *isolate, XrModule *modu
     XRS_EXPORT(module, isolate, "join", url_join_fn);
 }
 #endif  /* XR_STDLIB_VM_BIND_MODULE_URL */
+
+#ifdef XR_STDLIB_VM_BIND_MODULE_XML
+static void xr_stdlib_vm_bind_xml_generated(XrVMRuntime *isolate, XrModule *module) {
+    XRS_EXPORT(module, isolate, "parse", xml_parse_fn);
+    XRS_EXPORT(module, isolate, "parseDetailed", xml_parse_detailed);
+    XRS_EXPORT(module, isolate, "parseFile", xml_parse_file);
+    XRS_EXPORT(module, isolate, "stringify", xml_stringify_fn);
+    XRS_EXPORT(module, isolate, "writeFile", xml_write_file);
+    XRS_EXPORT(module, isolate, "document", xml_document_fn);
+    XRS_EXPORT(module, isolate, "element", xml_element_fn);
+    XRS_EXPORT(module, isolate, "text", xml_text_fn);
+    XRS_EXPORT(module, isolate, "comment", xml_comment_fn);
+    XRS_EXPORT(module, isolate, "cdata", xml_cdata_fn);
+}
+#endif  /* XR_STDLIB_VM_BIND_MODULE_XML */
+
+#ifdef XR_STDLIB_VM_BIND_MODULE_YAML
+static void xr_stdlib_vm_bind_yaml_generated(XrVMRuntime *isolate, XrModule *module) {
+    XRS_EXPORT(module, isolate, "parse", yaml_parse);
+    XRS_EXPORT(module, isolate, "parseStrict", yaml_parse_strict);
+    XRS_EXPORT(module, isolate, "parseAll", yaml_parse_all);
+    XRS_EXPORT(module, isolate, "stringify", yaml_stringify);
+    XRS_EXPORT(module, isolate, "parseFile", yaml_parse_file);
+    XRS_EXPORT(module, isolate, "writeFile", yaml_write_file);
+}
+#endif  /* XR_STDLIB_VM_BIND_MODULE_YAML */
 
 /* clang-format on */
