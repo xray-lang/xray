@@ -2602,7 +2602,6 @@ static XrValue net_dns_lookup(XrVMRuntime *isolate, XrValue *args, int nargs) {
 #include "../../src/module/xbuiltin_decl.h"
 
 // @module net
-// @handle UdpPacket { const data: string, const host: string, const port: int }
 //
 // cfunc signatures use the typed prelude handle classes (NetConn /
 // NetListener), with union types where the cfunc accepts either kind

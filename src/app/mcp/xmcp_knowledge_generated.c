@@ -373,7 +373,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     },
     {
         .name = "DownloadResult.completed",
-        .signature = "bool",
+        .signature = "const bool",
         .summary = "Handle field",
     },
     {
@@ -412,6 +412,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "Handle field",
     },
     {
+        .name = "HttpRequest.headers",
+        .signature = "const Json",
+        .summary = "Handle field",
+    },
+    {
         .name = "HttpRequest.method",
         .signature = "const string",
         .summary = "Handle field",
@@ -443,7 +448,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     },
     {
         .name = "HttpResponse.body",
-        .signature = "string",
+        .signature = "const string",
         .summary = "Handle field",
     },
     {
@@ -666,7 +671,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_io[] = {
     },
     {
         .name = "FileStat.ctime",
-        .signature = "int",
+        .signature = "const int",
         .summary = "Handle field",
     },
     {
@@ -686,7 +691,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_io[] = {
     },
     {
         .name = "FileStat.isSymlink",
-        .signature = "bool",
+        .signature = "const bool",
         .summary = "Handle field",
     },
     {
@@ -1826,6 +1831,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_url[] = {
     },
     {
         .name = "URL.password",
+        .signature = "const string",
+        .summary = "Handle field",
+    },
+    {
+        .name = "URL.pathname",
         .signature = "const string",
         .summary = "Handle field",
     },
@@ -3635,7 +3645,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
             "| `http.DownloadResult` | `DownloadResult` | Handle type |\n"
-            "| `DownloadResult.completed` | `bool` | Handle field |\n"
+            "| `DownloadResult.completed` | `const bool` | Handle field |\n"
             "| `DownloadResult.downloaded` | `const int` | Handle field |\n"
             "| `DownloadResult.error` | `const string` | Handle field |\n"
             "| `DownloadResult.status` | `const int` | Handle field |\n"
@@ -3643,13 +3653,14 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `http.HttpRequest` | `HttpRequest` | Handle type |\n"
             "| `HttpRequest.body` | `const string` | Handle field |\n"
             "| `HttpRequest.contentLength` | `const int` | Handle field |\n"
+            "| `HttpRequest.headers` | `const Json` | Handle field |\n"
             "| `HttpRequest.method` | `const string` | Handle field |\n"
             "| `HttpRequest.params` | `const Json` | Handle field |\n"
             "| `HttpRequest.path` | `const string` | Handle field |\n"
             "| `HttpRequest.query` | `const Json` | Handle field |\n"
             "| `HttpRequest.streaming` | `const bool` | Handle field |\n"
             "| `http.HttpResponse` | `HttpResponse` | Handle type |\n"
-            "| `HttpResponse.body` | `string` | Handle field |\n"
+            "| `HttpResponse.body` | `const string` | Handle field |\n"
             "| `HttpResponse.error` | `const string` | Handle field |\n"
             "| `HttpResponse.headers` | `const Json` | Handle field |\n"
             "| `HttpResponse.ok` | `const bool` | Handle field |\n"
@@ -3711,11 +3722,11 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "|--|--|--|\n"
             "| `io.FileStat` | `FileStat` | Handle type |\n"
             "| `FileStat.atime` | `const int` | Handle field |\n"
-            "| `FileStat.ctime` | `int` | Handle field |\n"
+            "| `FileStat.ctime` | `const int` | Handle field |\n"
             "| `FileStat.gid` | `const int` | Handle field |\n"
             "| `FileStat.isDir` | `const bool` | Handle field |\n"
             "| `FileStat.isFile` | `const bool` | Handle field |\n"
-            "| `FileStat.isSymlink` | `bool` | Handle field |\n"
+            "| `FileStat.isSymlink` | `const bool` | Handle field |\n"
             "| `FileStat.mode` | `const int` | Handle field |\n"
             "| `FileStat.mtime` | `const int` | Handle field |\n"
             "| `FileStat.size` | `const int` | Handle field |\n"
@@ -4172,6 +4183,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `URL.href` | `const string` | Handle field |\n"
             "| `URL.origin` | `const string` | Handle field |\n"
             "| `URL.password` | `const string` | Handle field |\n"
+            "| `URL.pathname` | `const string` | Handle field |\n"
             "| `URL.port` | `const string` | Handle field |\n"
             "| `URL.protocol` | `const string` | Handle field |\n"
             "| `URL.search` | `const string` | Handle field |\n"

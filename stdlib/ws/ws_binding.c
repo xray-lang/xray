@@ -1968,8 +1968,6 @@ XrValue xr_ws_upgrade_and_wrap(XrVMRuntime *X, int fd, const char *request_heade
 #include "../../src/module/xbuiltin_decl.h"
 
 // @module ws
-// @handle WsConn { const wsid: int, url: string, state: string }
-// @handle WsMessage { const data: string, const binary: bool, const error: string }
 
 XR_DEFINE_BUILTIN(ws_connect_yieldable, "connect", "(url: string, options?: Json): WsConn?",
                   "Connect to a WebSocket server")

@@ -1215,9 +1215,6 @@ static XrValue io_readDirRecursive(XrVMRuntime *X, XrValue *args, int argc) {
 #include "../../src/module/xbuiltin_decl.h"
 
 // @module io
-// @handle FileStat { const size: int, const mode: int, const mtime: int, const atime: int, const
-// ctime: int, const uid: int, const gid: int, const isFile: bool, const isDir: bool, const
-// isSymlink: bool }
 
 XR_DEFINE_BUILTIN(io_readFile, "readFile", "(path: string): string?", "Read entire file as string")
 XR_DEFINE_BUILTIN(io_readFileBytes, "readFileBytes", "(path: string): Array<uint8>?",

@@ -862,7 +862,6 @@ static const char *get_eol(void) {
 #include "../../src/module/xbuiltin_decl.h"
 
 // @module os
-// @handle ExecResult { const stdout: string, const stderr: string, const exitCode: int }
 
 XR_DEFINE_BUILTIN(os_getenv, "getenv", "(name: string): string?", "Get environment variable")
 XR_DEFINE_BUILTIN(os_setenv, "setenv", "(name: string, value: string): bool",

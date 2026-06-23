@@ -3,9 +3,9 @@
 Generate stdlib metadata from declarative .def files.
 
 The .def files are the source of truth for AOT direct-call, module-constant,
-and link-manifest metadata. The parser intentionally stays small:
-module/function/constant blocks with key: value properties, no embedded code,
-and generated C artifacts that are checked into the repository.
+handle declaration, and link-manifest metadata. The parser intentionally stays
+small: module/function/constant/handle blocks with key: value properties, no
+embedded code, and generated C artifacts that are checked into the repository.
 """
 
 from __future__ import annotations
@@ -84,6 +84,25 @@ class StdlibConstEntry:
         return f"{self.module}.{self.name}"
 
 
+@dataclasses.dataclass(frozen=True)
+class StdlibHandleFieldEntry:
+    name: str
+    type: str
+    is_const: bool
+
+
+@dataclasses.dataclass(frozen=True)
+class StdlibHandleEntry:
+    module: str
+    name: str
+    doc: str
+    fields: tuple[StdlibHandleFieldEntry, ...]
+
+    @property
+    def symbol(self) -> str:
+        return f"{self.module}.{self.name}"
+
+
 def strip_comment(line: str) -> str:
     in_string = False
     escaped = False
@@ -120,10 +139,47 @@ def parse_scalar(raw: str):
     return raw
 
 
-def parse_def_metadata(root: Path) -> tuple[list[StdlibEntry], list[StdlibConstEntry]]:
+HANDLE_FIELD_RE = re.compile(
+    r"(const\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*:\s*"
+    r"([A-Za-z_][A-Za-z0-9_]*(?:<[^,{}]+>)?\??)"
+)
+
+
+def parse_handle_fields(raw: str, context: str) -> tuple[StdlibHandleFieldEntry, ...]:
+    fields: list[StdlibHandleFieldEntry] = []
+    covered: list[tuple[int, int]] = []
+    for match in HANDLE_FIELD_RE.finditer(raw):
+        fields.append(
+            StdlibHandleFieldEntry(
+                name=match.group(2),
+                type=match.group(3),
+                is_const=match.group(1) is not None,
+            )
+        )
+        covered.append(match.span())
+    if not fields:
+        raise SystemExit(f"{context}: handle requires at least one field")
+
+    # Validate that the regex did not silently skip malformed fragments.
+    cursor = 0
+    for start, end in covered:
+        skipped = raw[cursor:start].strip()
+        if skipped and skipped != ",":
+            raise SystemExit(f"{context}: malformed handle field fragment: {skipped!r}")
+        cursor = end
+    tail = raw[cursor:].strip()
+    if tail and tail != ",":
+        raise SystemExit(f"{context}: malformed handle field fragment: {tail!r}")
+    return tuple(fields)
+
+
+def parse_def_metadata(
+    root: Path,
+) -> tuple[list[StdlibEntry], list[StdlibConstEntry], list[StdlibHandleEntry]]:
     defs_dir = root / "stdlib" / "defs"
     entries: list[StdlibEntry] = []
     constants: list[StdlibConstEntry] = []
+    handles: list[StdlibHandleEntry] = []
     if not defs_dir.exists():
         raise SystemExit(f"missing stdlib defs directory: {defs_dir}")
 
@@ -195,7 +251,7 @@ def parse_def_metadata(root: Path) -> tuple[list[StdlibEntry], list[StdlibConstE
                     caps=caps,
                 )
             )
-        else:
+        elif current_kind == "const":
             missing = [k for k in ("signature", "doc", "vm", "aot_const") if k not in props]
             if missing:
                 names = ", ".join(missing)
@@ -237,6 +293,24 @@ def parse_def_metadata(root: Path) -> tuple[list[StdlibEntry], list[StdlibConstE
                     caps=caps,
                 )
             )
+        elif current_kind == "handle":
+            missing = [k for k in ("fields",) if k not in props]
+            if missing:
+                names = ", ".join(missing)
+                raise SystemExit(f"{path}:{line_no}: {current_module}.{current_name} missing {names}")
+            fields = parse_handle_fields(
+                str(props["fields"]), f"{path}:{line_no}: {current_module}.{current_name}"
+            )
+            handles.append(
+                StdlibHandleEntry(
+                    module=current_module,
+                    name=current_name,
+                    doc=str(props.get("doc", "Native handle type")),
+                    fields=fields,
+                )
+            )
+        else:
+            raise SystemExit(f"{path}:{line_no}: unsupported block kind: {current_kind}")
         current_kind = None
         current_name = None
         props = {}
@@ -268,6 +342,14 @@ def parse_def_metadata(root: Path) -> tuple[list[StdlibEntry], list[StdlibConstE
                 current_name = m.group(1)
                 props = {}
                 continue
+            m = re.fullmatch(r"handle\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{", line)
+            if m:
+                if current_module is None or current_kind is not None:
+                    raise SystemExit(f"{path}:{line_no}: handle outside module or nested handle")
+                current_kind = "handle"
+                current_name = m.group(1)
+                props = {}
+                continue
             if line == "}":
                 if current_kind is not None:
                     finish_entry(path, line_no)
@@ -285,17 +367,22 @@ def parse_def_metadata(root: Path) -> tuple[list[StdlibEntry], list[StdlibConstE
 
     if current_module is not None or current_kind is not None:
         raise SystemExit("unterminated stdlib .def block")
-    return entries, constants
+    return entries, constants, handles
 
 
 def parse_defs(root: Path) -> list[StdlibEntry]:
-    entries, _ = parse_def_metadata(root)
+    entries, _, _ = parse_def_metadata(root)
     return entries
 
 
 def parse_constants(root: Path) -> list[StdlibConstEntry]:
-    _, constants = parse_def_metadata(root)
+    _, constants, _ = parse_def_metadata(root)
     return constants
+
+
+def parse_handles(root: Path) -> list[StdlibHandleEntry]:
+    _, _, handles = parse_def_metadata(root)
+    return handles
 
 
 def c_string(value: str) -> str:
@@ -636,7 +723,11 @@ def emit_vm_bindings(entries: list[StdlibEntry], constants: list[StdlibConstEntr
     return "\n".join(lines)
 
 
-def emit_defs_header(entries: list[StdlibEntry], constants: list[StdlibConstEntry]) -> str:
+def emit_defs_header(
+    entries: list[StdlibEntry],
+    constants: list[StdlibConstEntry],
+    handles: list[StdlibHandleEntry],
+) -> str:
     lines = generated_header("xstdlib_defs_generated.h - stdlib declarative metadata")
     lines.extend(
         [
@@ -682,6 +773,22 @@ def emit_defs_header(entries: list[StdlibEntry], constants: list[StdlibConstEntr
             "    double f64_value;",
             "} XrStdlibConstDefEntry;",
             "",
+            "typedef struct XrStdlibHandleFieldDefEntry {",
+            "    const char *module;",
+            "    const char *handle;",
+            "    const char *name;",
+            "    const char *type;",
+            "    bool is_const;",
+            "} XrStdlibHandleFieldDefEntry;",
+            "",
+            "typedef struct XrStdlibHandleDefEntry {",
+            "    const char *module;",
+            "    const char *name;",
+            "    const char *doc;",
+            "    const XrStdlibHandleFieldDefEntry *fields;",
+            "    uint16_t field_count;",
+            "} XrStdlibHandleDefEntry;",
+            "",
             "static const XrStdlibDefEntry xr_stdlib_def_entries[] = {",
         ]
     )
@@ -726,6 +833,36 @@ def emit_defs_header(entries: list[StdlibEntry], constants: list[StdlibConstEntr
             "((uint32_t) (sizeof(xr_stdlib_const_def_entries) / "
             "sizeof(xr_stdlib_const_def_entries[0])))",
             "",
+        ]
+    )
+    for h in handles:
+        field_array = f"xr_stdlib_handle_fields_{h.module}_{h.name}"
+        lines.append(f"static const XrStdlibHandleFieldDefEntry {field_array}[] = {{")
+        for field in h.fields:
+            lines.append(
+                "    {"
+                f"{c_string(h.module)}, {c_string(h.name)}, {c_string(field.name)}, "
+                f"{c_string(field.type)}, {'true' if field.is_const else 'false'}"
+                "},"
+            )
+        lines.append("};")
+        lines.append("")
+    lines.append("static const XrStdlibHandleDefEntry xr_stdlib_handle_def_entries[] = {")
+    for h in handles:
+        field_array = f"xr_stdlib_handle_fields_{h.module}_{h.name}"
+        lines.append(
+            "    {"
+            f"{c_string(h.module)}, {c_string(h.name)}, {c_string(h.doc)}, "
+            f"{field_array}, {len(h.fields)}"
+            "},"
+        )
+    lines.extend(
+        [
+            "};",
+            "#define XR_STDLIB_HANDLE_DEF_ENTRY_COUNT "
+            "((uint32_t) (sizeof(xr_stdlib_handle_def_entries) / "
+            "sizeof(xr_stdlib_handle_def_entries[0])))",
+            "",
             "#endif  /* XSTDLIB_DEFS_GENERATED_H */",
             "",
             "/* clang-format on */",
@@ -736,7 +873,7 @@ def emit_defs_header(entries: list[StdlibEntry], constants: list[StdlibConstEntr
 
 
 def output_paths(root: Path) -> dict[Path, str]:
-    entries, constants = parse_def_metadata(root)
+    entries, constants, handles = parse_def_metadata(root)
     return {
         root / "src" / "aot" / "xstdlib_aot_methods_generated.inc.c": emit_aot_methods(
             entries, constants
@@ -748,7 +885,7 @@ def output_paths(root: Path) -> dict[Path, str]:
             entries, constants
         ),
         root / "src" / "stdlib" / "xstdlib_defs_generated.h": emit_defs_header(
-            entries, constants
+            entries, constants, handles
         ),
     }
 
