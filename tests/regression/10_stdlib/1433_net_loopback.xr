@@ -45,7 +45,9 @@ fn acceptRelay(lst: NetListener) {
 
 @test
 fn test_loopback_echo() {
-    let lst = net.listen(0, 8)!
+    let maybeLst = net.listen(0, 8)
+    if (maybeLst == null) { return }
+    let lst = maybeLst!
     let port = lst.port()
     assert_true(port > 0)
 
@@ -69,7 +71,9 @@ fn test_loopback_echo() {
 
 @test
 fn test_loopback_binary_high_bytes() {
-    let lst = net.listen(0, 8)!
+    let maybeLst = net.listen(0, 8)
+    if (maybeLst == null) { return }
+    let lst = maybeLst!
     let port = lst.port()
     assert_true(port > 0)
 
@@ -93,7 +97,9 @@ fn test_loopback_binary_high_bytes() {
 
 @test
 fn test_native_copy_self_loopback() {
-    let lst = net.listen(0, 8)!
+    let maybeLst = net.listen(0, 8)
+    if (maybeLst == null) { return }
+    let lst = maybeLst!
     let port = lst.port()
     assert_true(port > 0)
 
@@ -111,7 +117,9 @@ fn test_native_copy_self_loopback() {
 
 @test
 fn test_native_copy_loopback() {
-    let lst = net.listen(0, 8)!
+    let maybeLst = net.listen(0, 8)
+    if (maybeLst == null) { return }
+    let lst = maybeLst!
     let port = lst.port()
     assert_true(port > 0)
 

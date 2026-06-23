@@ -51,7 +51,7 @@ fn test_multi_variable() {
 @test
 fn test_nested_quotes() {
     let name = "test"
-    let s = 'He said "Hello, ${name}"'
+    let s = "He said \"Hello, ${name}\""
     assert_eq(s.includes("Hello"), true)
 }
 

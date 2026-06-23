@@ -461,6 +461,11 @@ static XrType *binary_arith_pair(int op, XrType *left, XrType *right) {
         if (XR_TYPE_IS_STRING(left) || XR_TYPE_IS_STRING(right))
             return xr_type_new_string(NULL);
     }
+    if (op == AST_BINARY_MUL) {
+        if ((XR_TYPE_IS_STRING(left) && XR_TYPE_IS_INT(right)) ||
+            (XR_TYPE_IS_INT(left) && XR_TYPE_IS_STRING(right)))
+            return xr_type_new_string(NULL);
+    }
 
     if (op == AST_BINARY_MOD && (XR_TYPE_IS_FLOAT(left) || XR_TYPE_IS_FLOAT(right)))
         return NULL;
@@ -582,6 +587,27 @@ static void xa_report_binary_operator_type_error(XaInferContext *ctx, AstNode *n
                                &loc);
 }
 
+static bool xa_type_may_use_dynamic_operator(XrType *type) {
+    if (!type || XR_TYPE_IS_UNKNOWN(type))
+        return true;
+    if (type->kind == XR_KIND_TYPE_PARAM)
+        return true;
+    if (type->kind == XR_KIND_CLASS || type->kind == XR_KIND_INSTANCE ||
+        type->kind == XR_KIND_INTERFACE)
+        return true;
+    if (XR_TYPE_IS_UNION(type)) {
+        for (int i = 0; i < type->union_type.member_count; i++) {
+            if (xa_type_may_use_dynamic_operator(type->union_type.members[i]))
+                return true;
+        }
+    }
+    return false;
+}
+
+static bool xa_binary_operator_should_report_static_error(XrType *left, XrType *right) {
+    return !xa_type_may_use_dynamic_operator(left) && !xa_type_may_use_dynamic_operator(right);
+}
+
 static bool xa_type_allows_null_comparison(XrType *type) {
     if (!type || XR_TYPE_IS_UNKNOWN(type))
         return true;
@@ -667,7 +693,8 @@ XrType *xa_visit_binary(XaInferContext *ctx, AstNode *node) {
         case AST_BINARY_DIV:
         case AST_BINARY_MOD: {
             XrType *result = binary_arith_distribute(ctx, node->type, left, right);
-            if (result && XR_TYPE_IS_UNKNOWN(result))
+            if (result && XR_TYPE_IS_UNKNOWN(result) &&
+                xa_binary_operator_should_report_static_error(left, right))
                 xa_report_binary_operator_type_error(ctx, node, node->type, left, right);
             return result;
         }

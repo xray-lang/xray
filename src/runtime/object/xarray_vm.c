@@ -20,6 +20,7 @@
 #include "../xisolate_api.h"
 #include "../../vm/xvm_string.h"
 #include "../xvm_call.h"
+#include "../../base/xutf8.h"
 #include <string.h>
 
 XrArray *xr_array_new_shared(struct XrayIsolate *X, int capacity) {
@@ -381,6 +382,9 @@ void xr_array_sort(struct XrayIsolate *iso, XrArray *arr, struct XrClosure *comp
         case XR_ELEM_U32:
             TYPED_SORT(uint32_t, arr, n);
             break;
+        case XR_ELEM_CHAR:
+            TYPED_SORT(uint32_t, arr, n);
+            break;
         case XR_ELEM_I64:
             TYPED_SORT(int64_t, arr, n);
             break;
@@ -419,6 +423,11 @@ struct XrString *xr_array_join(struct XrayIsolate *iso, XrArray *arr, struct XrS
         } else if (XR_IS_BOOL(val)) {
             const char *s = XR_TO_BOOL(val) ? "true" : "false";
             xr_strbuf_append_cstr(sb, s, strlen(s));
+        } else if (XR_IS_CHAR(val)) {
+            char buf[XR_UTF8_MAX_BYTES];
+            int n = xr_utf8_encode(XR_TO_CHAR(val), buf);
+            if (n > 0)
+                xr_strbuf_append_cstr(sb, buf, (size_t) n);
         } else if (XR_IS_NULL(val)) {
             xr_strbuf_append_cstr(sb, "null", 4);
         } else {

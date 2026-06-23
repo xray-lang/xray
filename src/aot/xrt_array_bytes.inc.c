@@ -27,6 +27,7 @@ static inline XrValue xrt_array_resize_value(XrValue arr_value, XrValue len_valu
     int64_t len = xr_value_to_int64_coerce(len_value);
     if (len < 0)
         len = 0;
+    xrt_array_check_store_or_abort(a, fill_value, "xrt_array_resize");
     if (len > a->capacity)
         xrt_array_reserve_raw(a, len);
     for (int64_t i = a->length; i < len; i++)
@@ -48,6 +49,7 @@ static inline XrValue xrt_array_new_filled_value(XrValue len_value, XrValue fill
         len = 0;
     XrValue arr = xrt_array_new_typed_exact(len, etype);
     xrt_array_t *a = (xrt_array_t *) arr.ptr;
+    xrt_array_check_store_or_abort(a, fill_value, "xrt_array_new_filled");
     for (int64_t i = 0; i < len; i++)
         xr_typed_set(a->data, (int32_t) i, fill_value, a->elem_type);
     a->length = len;
@@ -170,22 +172,23 @@ static inline XrValue xrt_bytes_repeat_from_value(XrValue arr_value, XrValue dst
     do {                                                                                           \
         T *d = (T *) a->data;                                                                      \
         T fv = (T) (val);                                                                          \
-        for (int64_t i = 0; i < a->length; i++)                                                    \
+        for (int64_t i = start; i < end; i++)                                                      \
             d[i] = fv;                                                                             \
     } while (0)
 
-static inline int xrt_array_fill_typed_fast(xrt_array_t *a, XrValue v) {
+static inline int xrt_array_fill_typed_fast(xrt_array_t *a, XrValue v, int64_t start, int64_t end) {
+    size_t count = (size_t) (end - start);
     switch (a->elem_type) {
         case XR_ELEM_I8:
         case XR_ELEM_U8: {
             uint8_t b = (uint8_t) xr_value_to_int64_coerce(v);
-            memset(a->data, b, (size_t) a->length);
+            memset((uint8_t *) a->data + start, b, count);
             return 1;
         }
         case XR_ELEM_BOOL: {
             int falsy = XR_IS_FALSE(v) || XR_IS_NULL(v) || (XR_IS_INT(v) && v.i == 0) ||
                         (XR_IS_FLOAT(v) && v.f == 0.0);
-            memset(a->data, falsy ? 0 : 1, (size_t) a->length);
+            memset((uint8_t *) a->data + start, falsy ? 0 : 1, count);
             return 1;
         }
         case XR_ELEM_I16:
@@ -199,6 +202,11 @@ static inline int xrt_array_fill_typed_fast(xrt_array_t *a, XrValue v) {
             return 1;
         case XR_ELEM_U32:
             XRT_FILL_LOOP(uint32_t, xr_value_to_int64_coerce(v));
+            return 1;
+        case XR_ELEM_CHAR:
+            if (!XR_IS_CHAR(v))
+                return 1;
+            XRT_FILL_LOOP(uint32_t, XR_TO_CHAR(v));
             return 1;
         case XR_ELEM_I64:
             XRT_FILL_LOOP(int64_t, xr_value_to_int64_coerce(v));
@@ -218,6 +226,27 @@ static inline int xrt_array_fill_typed_fast(xrt_array_t *a, XrValue v) {
 }
 
 #undef XRT_FILL_LOOP
+
+static inline XrValue xrt_array_fill_value(XrValue arr_value, XrValue fill_value,
+                                           XrValue start_value, XrValue end_value) {
+    if (!XR_IS_ARRAY(arr_value) || !arr_value.ptr)
+        return arr_value;
+    xrt_array_t *a = (xrt_array_t *) arr_value.ptr;
+    int64_t start = xr_value_to_int64_coerce(start_value);
+    int64_t end = xr_value_to_int64_coerce(end_value);
+    if (start < 0)
+        start = 0;
+    if (end > a->length)
+        end = a->length;
+    if (start >= end)
+        return arr_value;
+    xrt_array_check_store_or_abort(a, fill_value, "Array.fill");
+    if (xrt_array_fill_typed_fast(a, fill_value, start, end))
+        return arr_value;
+    for (int64_t i = start; i < end; i++)
+        xr_typed_set(a->data, (int32_t) i, fill_value, a->elem_type);
+    return arr_value;
+}
 
 #define XRT_INDEXOF_LOOP(T)                                                                        \
     do {                                                                                           \
@@ -274,6 +303,12 @@ static inline int64_t xrt_array_indexof_typed_fast(xrt_array_t *a, XrValue v, in
             if (v.tag != XR_TAG_I64)
                 return -1;
             int64_t needle = v.i;
+            XRT_INDEXOF_LOOP(uint32_t);
+        }
+        case XR_ELEM_CHAR: {
+            if (v.tag != XR_TAG_CHAR)
+                return -1;
+            int64_t needle = (int64_t) XR_TO_CHAR(v);
             XRT_INDEXOF_LOOP(uint32_t);
         }
         case XR_ELEM_I64: {

@@ -138,7 +138,7 @@ fn test_word_count() {
         if (counts[word] == null) {
             counts[word] = 1
         } else {
-            counts[word] = counts[word] + 1
+            counts[word] = int(counts[word]) + 1
         }
     }
     

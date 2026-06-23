@@ -183,6 +183,8 @@ let c: Array<string> = []         // 显式空数组
 
 `Array<T>` 的 `T` 必须能在编译期确定。空 `[]` 在无类型标注时是编译错误：`Empty array '[]' requires a type annotation`。
 
+`Array<char>` 保留 `char` 元素身份，读出时得到 `char`，写入时只接受 `char`。实现使用紧凑的 Unicode scalar 存储（`XR_ELEM_CHAR` / `uint32_t[]`），不会退化成 `Array<uint32>`。
+
 #### 2.4.2 `Map<K, V>`
 
 哈希字典，**保持插入顺序**。详见 §14.7。
@@ -671,6 +673,8 @@ let c: Array<string> = []         // explicit empty array
 ```
 
 The `T` in `Array<T>` must be determinable at compile time. An empty `[]` without a type annotation is a compile error: `Empty array '[]' requires a type annotation`.
+
+`Array<char>` preserves the `char` element identity: reads return `char`, and writes accept only `char`. The implementation uses compact Unicode-scalar storage (`XR_ELEM_CHAR` / `uint32_t[]`) and does not degrade to `Array<uint32>`.
 
 #### 2.4.2 `Map<K, V>`
 

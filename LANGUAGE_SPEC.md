@@ -671,6 +671,8 @@ let c: Array<string> = []         // explicit empty array
 
 The `T` in `Array<T>` must be determinable at compile time. An empty `[]` without a type annotation is a compile error: `Empty array '[]' requires a type annotation`.
 
+`Array<char>` preserves the `char` element identity: reads return `char`, and writes accept only `char`. The implementation uses compact Unicode-scalar storage (`XR_ELEM_CHAR` / `uint32_t[]`) and does not degrade to `Array<uint32>`.
+
 #### 2.4.2 `Map<K, V>`
 
 Hash table that **preserves insertion order**. See §14.7.
@@ -4865,6 +4867,8 @@ Xray values are uniformly represented as `XrValue`. The current implementation r
 | `string` | `XR_TAG_PTR` + `XR_TSTRING` + `XrString*` |
 | `Bytes` | `XR_TAG_PTR` + bytes heap object |
 | Other objects | `XR_TAG_PTR` + heap type + heap pointer |
+
+Typed-array element layout is part of the container metadata. `Array<char>` uses `XR_ELEM_CHAR`; its data area is a contiguous `uint32_t[]` of Unicode scalars. Loads re-box values as `XR_TAG_CHAR`, and stores reject non-`char` values, so it cannot be confused with `Array<uint32>`.
 
 ### 16.2 Memory Allocation
 

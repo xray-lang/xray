@@ -33,6 +33,7 @@ typedef enum {
     XR_ELEM_F32,     /* float[]   */
     XR_ELEM_F64,     /* double[]  (Array<float>) */
     XR_ELEM_BOOL,    /* uint8_t[] (1 byte per element) */
+    XR_ELEM_CHAR,    /* uint32_t[] (Unicode scalar, Array<char>) */
     XR_ELEM_COUNT
 } XrArrayElemType;
 
@@ -46,7 +47,8 @@ static const uint8_t XR_ELEM_SIZES[XR_ELEM_COUNT] = {
     8,  8, /* I64, U64 */
     4,     /* F32 */
     8,     /* F64 */
-    1      /* BOOL */
+    1,     /* BOOL */
+    4      /* CHAR */
 };
 
 /* Map semantic XrTypeId to storage layout.
@@ -76,6 +78,8 @@ static inline XrArrayElemType xr_tid_to_elem_type(uint8_t tid) {
             return XR_ELEM_U64; /* XR_TID_UINT64 */
         case 10:
             return XR_ELEM_F32; /* XR_TID_FLOAT32 */
+        case 40:
+            return XR_ELEM_CHAR; /* XR_TID_CHAR */
         default:
             return XR_ELEM_ANY; /* string, object, etc. */
     }

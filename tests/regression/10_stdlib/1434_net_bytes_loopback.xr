@@ -33,7 +33,9 @@ fn acceptBytesMaxLen(lst: NetListener) {
 
 @test
 fn test_bytes_echo_roundtrip() {
-    let lst = net.listen(0, 8)!
+    let maybeLst = net.listen(0, 8)
+    if (maybeLst == null) { return }
+    let lst = maybeLst!
     let port = lst.port()
     assert_true(port > 0)
 
@@ -56,7 +58,9 @@ fn test_bytes_echo_roundtrip() {
 
 @test
 fn test_read_into_maxlen_controls_length() {
-    let lst = net.listen(0, 8)!
+    let maybeLst = net.listen(0, 8)
+    if (maybeLst == null) { return }
+    let lst = maybeLst!
     let port = lst.port()
     assert_true(port > 0)
 

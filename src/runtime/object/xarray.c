@@ -444,6 +444,10 @@ void xr_array_fill(XrArray *arr, XrValue value, int start, int end) {
                 (uint32_t) (XR_IS_INT(value) ? XR_TO_INT(value) : (int64_t) XR_TO_FLOAT(value)),
                 start, end);
             break;
+        case XR_ELEM_CHAR:
+            if (XR_IS_CHAR(value))
+                TYPED_FILL(uint32_t, arr, XR_TO_CHAR(value), start, end);
+            break;
         case XR_ELEM_I64:
             TYPED_FILL(
                 int64_t, arr,

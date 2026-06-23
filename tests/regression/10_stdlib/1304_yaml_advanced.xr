@@ -41,7 +41,7 @@ fn test_literal_block() {
 fn test_literal_block_strip() {
     let data = "text: |-\n  hello\n  world"
     let obj = yaml.parse(data)
-    let text = obj["text"]
+    let text = string(obj["text"])
     assert(text.length > 0)
     // Strip mode: no trailing newline
     assert(text[text.length - 1] != "\n")
@@ -51,7 +51,7 @@ fn test_literal_block_strip() {
 fn test_literal_block_keep() {
     let data = "text: |+\n  hello\n  world\n\n\n"
     let obj = yaml.parse(data)
-    let text = obj["text"]
+    let text = string(obj["text"])
     assert(text.length > 0)
     // Keep mode: trailing newlines preserved
 }
@@ -62,7 +62,7 @@ fn test_literal_block_keep() {
 fn test_folded_block() {
     let data = "text: >\n  line one\n  line two\n  line three"
     let obj = yaml.parse(data)
-    let text = obj["text"]
+    let text = string(obj["text"])
     assert(text.length > 0)
     // Folded: newlines become spaces
     assert(text.indexOf(" ") >= 0)
@@ -72,7 +72,7 @@ fn test_folded_block() {
 fn test_folded_block_strip() {
     let data = "text: >-\n  hello\n  world"
     let obj = yaml.parse(data)
-    let text = obj["text"]
+    let text = string(obj["text"])
     assert(text.length > 0)
     assert(text[text.length - 1] != "\n")
 }

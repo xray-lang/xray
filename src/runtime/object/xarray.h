@@ -65,6 +65,7 @@ XR_FUNC void xr_array_init_inplace(struct XrArray *arr, int capacity, uint8_t el
  *   XR_ELEM_U8   -> data is uint8_t[], no object references (replaces Bytes)
  *   XR_ELEM_I64  -> data is int64_t[], no object references (Array<int>)
  *   XR_ELEM_F64  -> data is double[], no object references (Array<float>)
+ *   XR_ELEM_CHAR -> data is uint32_t[], no object references (Array<char>)
  *   etc.
  */
 struct XrArray {

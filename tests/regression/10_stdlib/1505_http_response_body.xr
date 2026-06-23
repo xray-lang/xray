@@ -11,7 +11,7 @@ fn test_text_response() {
 
 @test
 fn test_json_response() {
-    let resp = { status: 200, body: '{"name": "test"}', contentType: "application/json" }
+    let resp = { status: 200, body: "{\"name\": \"test\"}", contentType: "application/json" }
     assert(resp.body.indexOf("name") >= 0)
     assert_eq(resp.contentType, "application/json")
 }

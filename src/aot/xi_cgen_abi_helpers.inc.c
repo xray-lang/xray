@@ -274,6 +274,10 @@ static const char *emit_conversion_prefix(FILE *out, const XrType *type, XrRep f
             fprintf(out, "xr_mkptr(");
             return cg_ptr_box_suffix_for_type(type);
         }
+        if (from_rep == XR_REP_I64 && type && type->kind == XR_KIND_CHAR) {
+            fprintf(out, "XR_FROM_CHAR((uint32_t)");
+            return ")";
+        }
         if (from_rep == XR_REP_F64)
             fprintf(out, "XR_FROM_FLOAT(");
         else if (type && type->kind == XR_KIND_BOOL)
@@ -292,7 +296,7 @@ static const char *emit_conversion_prefix(FILE *out, const XrType *type, XrRep f
     }
     if (to_rep == XR_REP_I64) {
         if (from_rep == XR_REP_TAGGED)
-            fprintf(out, "XR_TO_INT(");
+            fprintf(out, type && type->kind == XR_KIND_CHAR ? "XR_TO_CHAR(" : "XR_TO_INT(");
         else
             fprintf(out, "(int64_t)(");
         return ")";

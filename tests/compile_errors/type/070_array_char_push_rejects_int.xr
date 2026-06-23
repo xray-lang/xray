@@ -1,0 +1,2 @@
+let chars: Array<char> = []
+chars.push(65)

@@ -268,7 +268,8 @@ fn test_concurrent_data_isolation() {
         if (r["prefix_ok"] && r["suffix_ok"] && r["contains_id"]) {
             correct = correct + 1
         } else {
-            print('  错误: task ${r["id"]} 数据隔离失败')
+            let task_id = r["id"]
+            print("  错误: task " + string(task_id) + " 数据隔离失败")
         }
     }
     

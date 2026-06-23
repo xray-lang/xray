@@ -261,6 +261,7 @@ static inline void xrt_index_set(XrValue obj, XrValue key, XrValue val) {
         if (idx < 0)
             idx += a->length;
         if (XR_LIKELY(idx >= 0 && idx < a->length)) {
+            xrt_array_check_store_or_abort(a, val, "xrt_index_set");
             xr_typed_set(a->data, (int32_t) idx, val, a->elem_type);
         } else if (idx >= 0) {
             while (a->length < idx)

@@ -1303,6 +1303,38 @@ TEST(cgen_typed_array_float_and_bool_use_raw_storage_fast_path) {
     xi_func_free(ir);
 }
 
+TEST(cgen_typed_array_char_uses_scalar_storage_with_char_boxing) {
+    const char *src = "fn first() -> char {\n"
+                      "    let chars: Array<char> = []\n"
+                      "    chars.push('b')\n"
+                      "    chars[0] = 'a'\n"
+                      "    return chars[0]\n"
+                      "}\n"
+                      "print(first())\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "typed char array fast path should generate");
+    assert(contains(code, "XR_ELEM_CHAR") && "Array<char> must use the CHAR typed element layout");
+    assert(contains(code, "uint32_t") && "Array<char> storage must be a compact scalar buffer");
+    assert(contains(code, "XR_TO_CHAR(") && "Array<char> writes must unbox tagged char values");
+    assert(contains(code, "XR_FROM_CHAR((uint32_t)") &&
+           "Array<char> reads must re-box raw scalars as char");
+    assert(!contains(code, "XR_ELEM_U32") && "Array<char> must not degrade to Array<uint32>");
+    assert(!contains(code, "xrt_method_1(") &&
+           "Array<char>.push must not fall back to dynamic method dispatch");
+    assert(!contains(code, "xrt_index_get(") &&
+           "Array<char> index read must not fall back to runtime index dispatch");
+
+    printf("  Generated typed char array fast path %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_inlined_struct_uses_native_field_storage) {
     const char *src = "struct Sample {\n"
                       "    x: int\n"
@@ -4993,6 +5025,7 @@ int main(void) {
     run_cgen_typed_array_map_uses_typed_result_storage_fast_path();
     run_cgen_typed_array_map_readonly_result_caches_data_pointer();
     run_cgen_typed_array_map_captured_callback_uses_runtime_helper();
+    run_cgen_typed_array_char_uses_scalar_storage_with_char_boxing();
     run_cgen_dynamic_uncaptured_callback_keeps_boxed_adapter();
     run_cgen_closure_cell_var_id_above_255();
     run_cgen_stack_alloc_direct_closure_uses_stack_runtime();
