@@ -4216,9 +4216,10 @@ module datetime {
     signature: "(): DateTime"
     doc: "Get current local datetime"
     vm: "dt_now"
+    aot: "xrt_datetime_now"
     argc: 0
     arg_spec: ""
-    aot_direct: false
+    aot_direct: true
     link_object: false
     layer: "alloc"
   }
@@ -4227,9 +4228,10 @@ module datetime {
     signature: "(): DateTime"
     doc: "Get current UTC datetime"
     vm: "dt_utc"
+    aot: "xrt_datetime_utc"
     argc: 0
     arg_spec: ""
-    aot_direct: false
+    aot_direct: true
     link_object: false
     layer: "alloc"
   }
@@ -4238,9 +4240,70 @@ module datetime {
     signature: "(year: int, month?: int, day?: int, hour?: int, minute?: int, second?: int): DateTime"
     doc: "Create local datetime"
     vm: "dt_create"
+    aot: "xrt_datetime_create_1"
+    argc: 1
+    arg_spec: "v"
+    aot_direct: true
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn create {
+    signature: "(year: int, month?: int, day?: int, hour?: int, minute?: int, second?: int): DateTime"
+    doc: "Create local datetime"
+    vm: "dt_create"
+    aot: "xrt_datetime_create_2"
+    argc: 2
+    arg_spec: "vv"
+    aot_direct: true
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn create {
+    signature: "(year: int, month?: int, day?: int, hour?: int, minute?: int, second?: int): DateTime"
+    doc: "Create local datetime"
+    vm: "dt_create"
+    aot: "xrt_datetime_create_3"
+    argc: 3
+    arg_spec: "vvv"
+    aot_direct: true
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn create {
+    signature: "(year: int, month?: int, day?: int, hour?: int, minute?: int, second?: int): DateTime"
+    doc: "Create local datetime"
+    vm: "dt_create"
+    aot: "xrt_datetime_create_4"
+    argc: 4
+    arg_spec: "vvvv"
+    aot_direct: true
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn create {
+    signature: "(year: int, month?: int, day?: int, hour?: int, minute?: int, second?: int): DateTime"
+    doc: "Create local datetime"
+    vm: "dt_create"
+    aot: "xrt_datetime_create_5"
+    argc: 5
+    arg_spec: "vvvvv"
+    aot_direct: true
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn create {
+    signature: "(year: int, month?: int, day?: int, hour?: int, minute?: int, second?: int): DateTime"
+    doc: "Create local datetime"
+    vm: "dt_create"
+    aot: "xrt_datetime_create_6"
     argc: 6
-    arg_spec: ""
-    aot_direct: false
+    arg_spec: "vvvvvv"
+    aot_direct: true
     link_object: false
     layer: "alloc"
   }
@@ -4249,9 +4312,70 @@ module datetime {
     signature: "(year: int, month?: int, day?: int, hour?: int, minute?: int, second?: int): DateTime"
     doc: "Create UTC datetime"
     vm: "dt_create_utc"
+    aot: "xrt_datetime_create_utc_1"
+    argc: 1
+    arg_spec: "v"
+    aot_direct: true
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn createUTC {
+    signature: "(year: int, month?: int, day?: int, hour?: int, minute?: int, second?: int): DateTime"
+    doc: "Create UTC datetime"
+    vm: "dt_create_utc"
+    aot: "xrt_datetime_create_utc_2"
+    argc: 2
+    arg_spec: "vv"
+    aot_direct: true
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn createUTC {
+    signature: "(year: int, month?: int, day?: int, hour?: int, minute?: int, second?: int): DateTime"
+    doc: "Create UTC datetime"
+    vm: "dt_create_utc"
+    aot: "xrt_datetime_create_utc_3"
+    argc: 3
+    arg_spec: "vvv"
+    aot_direct: true
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn createUTC {
+    signature: "(year: int, month?: int, day?: int, hour?: int, minute?: int, second?: int): DateTime"
+    doc: "Create UTC datetime"
+    vm: "dt_create_utc"
+    aot: "xrt_datetime_create_utc_4"
+    argc: 4
+    arg_spec: "vvvv"
+    aot_direct: true
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn createUTC {
+    signature: "(year: int, month?: int, day?: int, hour?: int, minute?: int, second?: int): DateTime"
+    doc: "Create UTC datetime"
+    vm: "dt_create_utc"
+    aot: "xrt_datetime_create_utc_5"
+    argc: 5
+    arg_spec: "vvvvv"
+    aot_direct: true
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn createUTC {
+    signature: "(year: int, month?: int, day?: int, hour?: int, minute?: int, second?: int): DateTime"
+    doc: "Create UTC datetime"
+    vm: "dt_create_utc"
+    aot: "xrt_datetime_create_utc_6"
     argc: 6
-    arg_spec: ""
-    aot_direct: false
+    arg_spec: "vvvvvv"
+    aot_direct: true
     link_object: false
     layer: "alloc"
   }
@@ -4260,9 +4384,10 @@ module datetime {
     signature: "(ts: int): DateTime"
     doc: "Create datetime from Unix timestamp (seconds)"
     vm: "dt_from_timestamp"
+    aot: "xrt_datetime_from_timestamp"
     argc: 1
-    arg_spec: ""
-    aot_direct: false
+    arg_spec: "v"
+    aot_direct: true
     link_object: false
     layer: "alloc"
   }
@@ -4271,9 +4396,10 @@ module datetime {
     signature: "(ts: int): DateTime"
     doc: "Create datetime from Unix timestamp (milliseconds)"
     vm: "dt_from_timestamp_ms"
+    aot: "xrt_datetime_from_timestamp_ms"
     argc: 1
-    arg_spec: ""
-    aot_direct: false
+    arg_spec: "v"
+    aot_direct: true
     link_object: false
     layer: "alloc"
   }
@@ -4282,9 +4408,22 @@ module datetime {
     signature: "(s: string, format?: string): DateTime?"
     doc: "Parse datetime string"
     vm: "dt_parse"
+    aot: "xrt_datetime_parse_default"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn parse {
+    signature: "(s: string, format?: string): DateTime?"
+    doc: "Parse datetime string"
+    vm: "dt_parse"
+    aot: "xrt_datetime_parse_format"
     argc: 2
-    arg_spec: ""
-    aot_direct: false
+    arg_spec: "ss"
+    aot_direct: true
     link_object: false
     layer: "alloc"
   }
