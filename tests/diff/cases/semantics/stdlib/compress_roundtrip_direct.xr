@@ -8,17 +8,23 @@ print(compress.isGzip(gz))
 print(compress.gunzip(gz) == data)
 let gz0 = compress.gzip(data, 0) ?? ""
 print(compress.gunzip(gz0) == data)
+let gz_hi = compress.gzip(data, 42) ?? ""
+print(compress.gunzip(gz_hi) == data)
 
 let deflated = compress.deflate(data) ?? ""
 print(compress.inflate(deflated) == data)
 let deflated9 = compress.deflate(data, 9) ?? ""
 print(compress.inflate(deflated9) == data)
+let deflated_neg = compress.deflate(data, -7) ?? ""
+print(compress.inflate(deflated_neg) == data)
 
 let zlibbed = compress.zlibCompress(data) ?? ""
 print(compress.isZlib(zlibbed))
 print(compress.zlibDecompress(zlibbed) == data)
 let zlib0 = compress.zlibCompress(data, 0) ?? ""
 print(compress.zlibDecompress(zlib0) == data)
+let zlib_hi = compress.zlibCompress(data, 42) ?? ""
+print(compress.zlibDecompress(zlib_hi) == data)
 
 print(compress.isGzip("not gzip"))
 print(compress.isZlib("not zlib"))

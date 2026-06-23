@@ -1074,6 +1074,11 @@ static XrValue make_string_n(XrVMRuntime *X, const char *s, size_t len) {
     return xrs_string_value_n(X, s, len);
 }
 
+static int compress_level_arg(XrValue *args, int nargs) {
+    bool has_level = nargs >= 2 && XR_IS_INT(args[1]);
+    return xr_compress_core_level_or_default(has_level, has_level ? XR_TO_INT(args[1]) : 0);
+}
+
 /* ========== xray Binding Functions ========== */
 
 // compress.gzip(data, level?) -> string
@@ -1086,14 +1091,7 @@ static XrValue compress_gzip(XrVMRuntime *X, XrValue *args, int nargs) {
     if (!data)
         return xr_null();
 
-    int level = XR_COMPRESS_DEFAULT_COMPRESSION;
-    if (nargs >= 2 && XR_IS_INT(args[1])) {
-        level = (int) XR_TO_INT(args[1]);
-        if (level < 0)
-            level = 0;
-        if (level > 9)
-            level = 9;
-    }
+    int level = compress_level_arg(args, nargs);
 
     size_t out_len;
     uint8_t *output = xr_gzip_alloc((const uint8_t *) data, len, &out_len, level);
@@ -1135,14 +1133,7 @@ static XrValue compress_deflate(XrVMRuntime *X, XrValue *args, int nargs) {
     if (!data)
         return xr_null();
 
-    int level = XR_COMPRESS_DEFAULT_COMPRESSION;
-    if (nargs >= 2 && XR_IS_INT(args[1])) {
-        level = (int) XR_TO_INT(args[1]);
-        if (level < 0)
-            level = 0;
-        if (level > 9)
-            level = 9;
-    }
+    int level = compress_level_arg(args, nargs);
 
     size_t bound = xr_deflate_bound(len);
     uint8_t *output = (uint8_t *) xr_malloc(bound);
@@ -1206,14 +1197,7 @@ static XrValue compress_zlib_compress(XrVMRuntime *X, XrValue *args, int nargs) 
     if (!data)
         return xr_null();
 
-    int level = XR_COMPRESS_DEFAULT_COMPRESSION;
-    if (nargs >= 2 && XR_IS_INT(args[1])) {
-        level = (int) XR_TO_INT(args[1]);
-        if (level < 0)
-            level = 0;
-        if (level > 9)
-            level = 9;
-    }
+    int level = compress_level_arg(args, nargs);
 
     size_t bound = xr_deflate_bound(len) + 6;
     uint8_t *output = (uint8_t *) xr_malloc(bound);
