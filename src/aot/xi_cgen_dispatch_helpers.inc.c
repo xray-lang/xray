@@ -2611,13 +2611,31 @@ static void xicgen_is(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue 
 static void xicgen_load_field(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                               const char *prefix) {
     XR_DCHECK(v->nargs >= 1, "xicgen_load_field: need object");
+    const char *field = (const char *) v->aux;
+    if (field && v->args[0] && v->args[0]->type && v->args[0]->type->kind == XR_KIND_ENUM) {
+        const char *helper = NULL;
+        if (strcmp(field, "name") == 0)
+            helper = "xrt_enum_value_name";
+        else if (strcmp(field, "value") == 0)
+            helper = "xrt_enum_value_raw";
+        else if (strcmp(field, "ordinal") == 0)
+            helper = "xrt_enum_value_ordinal";
+        if (helper) {
+            const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED,
+                                                             cg_value_plan_storage_rep(ctx, v));
+            fprintf(out, "%s(", helper);
+            emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
+            fprintf(out, ")");
+            emit_conversion_suffix(out, conv_suffix);
+            return;
+        }
+    }
     if (emit_class_cached_field_load_expr(ctx, out, v))
         return;
     if (emit_class_native_receiver_field_load_expr(ctx, out, f, v))
         return;
     if (emit_class_native_instance_field_load_expr(ctx, out, f, v, prefix))
         return;
-    const char *field = (const char *) v->aux;
     if (field) {
         const char *helper = NULL;
         int64_t int_const = 0;

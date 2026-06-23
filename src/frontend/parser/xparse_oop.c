@@ -1752,9 +1752,9 @@ static void parse_enum_variant_payload(Parser *parser, char ***out_names, XrType
     *out_count = count;
 }
 
-/* Parse one enum method: 'fn' Name '(' params ')' ReturnType? Block.
+/* Parse one enum method: ('static')? 'fn' Name '(' params ')' ReturnType? Block.
  * Enum methods require 'fn' keyword (unlike class methods). */
-static AstNode *parse_enum_method(Parser *parser) {
+static AstNode *parse_enum_method(Parser *parser, bool is_static) {
     XR_DCHECK(parser != NULL, "parse_enum_method: NULL parser");
 
     /* 'fn' already consumed by caller */
@@ -1765,7 +1765,7 @@ static AstNode *parse_enum_method(Parser *parser) {
 
     return xr_parse_method_declaration(parser, name, name_line, name_col,
                                        /* is_private */ false,
-                                       /* is_static */ false,
+                                       /* is_static */ is_static,
                                        /* is_abstract */ false);
 }
 
@@ -1888,9 +1888,9 @@ AstNode *xr_parse_enum_declaration(Parser *parser) {
         xr_parser_error(parser, "enum requires at least one variant");
     }
 
-    /* Variant phase: parse comma-separated variants until we hit 'fn' or '}'. */
+    /* Variant phase: parse comma-separated variants until we hit a method or '}'. */
     while (!xr_parser_check(parser, TK_RBRACE) && !xr_parser_check(parser, TK_EOF) &&
-           !xr_parser_check(parser, TK_FN)) {
+           !xr_parser_check(parser, TK_FN) && !xr_parser_check(parser, TK_STATIC)) {
         if (parser->panic_mode) {
             xr_parser_synchronize(parser);
             if (xr_parser_check(parser, TK_RBRACE) || xr_parser_check(parser, TK_EOF))
@@ -1939,20 +1939,22 @@ AstNode *xr_parse_enum_declaration(Parser *parser) {
         XR_PARSE_PUSH(parser, members, member_count, member_capacity, member);
 
         /* Comma after variant: required between variants, optional before
-         * '}' or 'fn'. */
-        if (!xr_parser_check(parser, TK_RBRACE) && !xr_parser_check(parser, TK_FN)) {
+         * '}', 'fn', or 'static fn'. */
+        if (!xr_parser_check(parser, TK_RBRACE) && !xr_parser_check(parser, TK_FN) &&
+            !xr_parser_check(parser, TK_STATIC)) {
             if (!xr_parser_match(parser, TK_COMMA)) {
                 xr_parser_error(parser, "expected ',' between enum variants");
                 break;
             }
-            /* Allow trailing comma before '}' or 'fn' */
-            if (xr_parser_check(parser, TK_RBRACE) || xr_parser_check(parser, TK_FN))
+            /* Allow trailing comma before '}', 'fn', or 'static fn' */
+            if (xr_parser_check(parser, TK_RBRACE) || xr_parser_check(parser, TK_FN) ||
+                xr_parser_check(parser, TK_STATIC))
                 break;
         }
     }
 
-    /* Method phase: parse 'fn' methods until '}'. */
-    while (xr_parser_match(parser, TK_FN)) {
+    /* Method phase: parse 'fn' and 'static fn' methods until '}'. */
+    while (xr_parser_check(parser, TK_FN) || xr_parser_check(parser, TK_STATIC)) {
         if (parser->panic_mode) {
             xr_parser_synchronize(parser);
             if (xr_parser_check(parser, TK_RBRACE) || xr_parser_check(parser, TK_EOF))
@@ -1960,7 +1962,18 @@ AstNode *xr_parse_enum_declaration(Parser *parser) {
             continue;
         }
 
-        AstNode *method = parse_enum_method(parser);
+        bool is_static = false;
+        if (xr_parser_match(parser, TK_STATIC)) {
+            is_static = true;
+            if (!xr_parser_match(parser, TK_FN)) {
+                xr_parser_error(parser, "expected 'fn' after 'static' in enum body");
+                break;
+            }
+        } else {
+            xr_parser_consume(parser, TK_FN, "expected 'fn' in enum method declaration");
+        }
+
+        AstNode *method = parse_enum_method(parser, is_static);
         if (method) {
             XR_PARSE_PUSH(parser, methods, method_count, method_capacity, method);
         }

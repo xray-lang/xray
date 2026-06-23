@@ -360,6 +360,33 @@ TEST(parser_class_decl) {
     teardown();
 }
 
+TEST(parser_enum_static_method) {
+    setup();
+    AstNode *stmt = parse_first("enum Color {\n"
+                                "  Red,\n"
+                                "  Green\n"
+                                "  static fn fromInt(v: int) -> Color {\n"
+                                "    return Color.Red\n"
+                                "  }\n"
+                                "  fn label() -> string {\n"
+                                "    return this.name\n"
+                                "  }\n"
+                                "}");
+    ASSERT_EQ_INT(stmt->type, AST_ENUM_DECL);
+    ASSERT_STR_EQ(stmt->as.enum_decl.name, "Color");
+    ASSERT_EQ_INT(stmt->as.enum_decl.member_count, 2);
+    ASSERT_EQ_INT(stmt->as.enum_decl.method_count, 2);
+    AstNode *factory = stmt->as.enum_decl.methods[0];
+    AstNode *label = stmt->as.enum_decl.methods[1];
+    ASSERT_EQ_INT(factory->type, AST_METHOD_DECL);
+    ASSERT(factory->as.method_decl.is_static);
+    ASSERT_STR_EQ(factory->as.method_decl.name, "fromInt");
+    ASSERT_EQ_INT(label->type, AST_METHOD_DECL);
+    ASSERT(!label->as.method_decl.is_static);
+    ASSERT_STR_EQ(label->as.method_decl.name, "label");
+    teardown();
+}
+
 /* ========== Error Handling Tests ========== */
 
 TEST(parser_error_returns_null) {
@@ -693,6 +720,7 @@ int main(void) {
 
     // Classes
     RUN_TEST(parser_class_decl);
+    RUN_TEST(parser_enum_static_method);
 
     // Calls
     RUN_TEST(parser_call_expr);

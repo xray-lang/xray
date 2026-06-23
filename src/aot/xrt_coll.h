@@ -619,6 +619,25 @@ static inline XrValue xrt_enum_value_new(const char *enum_name, const char *memb
     return v;
 }
 
+static inline const XrAotEnumValueView *xrt_enum_value_view(XrValue obj) {
+    return obj.tag == XR_TAG_ENUM ? (const XrAotEnumValueView *) obj.ptr : NULL;
+}
+
+static inline XrValue xrt_enum_value_name(XrValue obj) {
+    const XrAotEnumValueView *ev = xrt_enum_value_view(obj);
+    return (ev && ev->member_name) ? xr_box_str(ev->member_name) : XR_NULL_VAL;
+}
+
+static inline XrValue xrt_enum_value_raw(XrValue obj) {
+    const XrAotEnumValueView *ev = xrt_enum_value_view(obj);
+    return ev ? ev->raw_value : XR_NULL_VAL;
+}
+
+static inline XrValue xrt_enum_value_ordinal(XrValue obj) {
+    const XrAotEnumValueView *ev = xrt_enum_value_view(obj);
+    return ev ? XR_FROM_INT(ev->member_index) : XR_NULL_VAL;
+}
+
 /* =========================================================================
  * Swiss-table core — group-probed open addressing shared by Map and Set.
  *
@@ -1789,15 +1808,14 @@ static inline XrValue xrt_json_set_name(XrValue obj, const char *name, XrValue v
 
 static inline XrValue xrt_getprop_name(XrValue obj, const char *name) {
     if (obj.tag == XR_TAG_ENUM) {
-        const XrAotEnumValueView *ev = (const XrAotEnumValueView *) obj.ptr;
-        if (!ev || !name)
+        if (!name)
             return XR_NULL_VAL;
         if (strcmp(name, "name") == 0)
-            return ev->member_name ? xr_box_str(ev->member_name) : XR_NULL_VAL;
+            return xrt_enum_value_name(obj);
         if (strcmp(name, "value") == 0)
-            return ev->raw_value;
+            return xrt_enum_value_raw(obj);
         if (strcmp(name, "ordinal") == 0)
-            return XR_FROM_INT(ev->member_index);
+            return xrt_enum_value_ordinal(obj);
     }
     if (XR_IS_MAP(obj))
         return xrt_map_get((xrt_map_t *) obj.ptr, xr_box_str(name));

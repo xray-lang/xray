@@ -51,6 +51,83 @@ static int prelude_enum_builtin_index(const char *enum_name) {
     return -1;
 }
 
+static XiValue *lower_enum_method_closure(XiLower *l, XiFunc *child, uint16_t child_idx,
+                                          struct XrType *fn_type, int line) {
+    if (!l || !child)
+        return NULL;
+    uint16_t ncap = child->ncaptures;
+    XiValue *closure =
+        xi_value_new(l->func, l->cur_block, XI_CLOSURE_NEW, fn_type ? fn_type : l->type_any, ncap);
+    if (!closure)
+        return NULL;
+    for (uint16_t ci = 0; ci < ncap; ci++) {
+        XiCapture *cap = &child->captures[ci];
+        closure->args[ci] = (cap->source == XI_CAPTURE_SRC_REG && cap->value) ? cap->value : NULL;
+    }
+    closure->aux = (void *) child;
+    closure->aux_int = child_idx;
+    closure->line = (uint32_t) line;
+    return closure;
+}
+
+static void lower_enum_methods(XiLower *l, EnumDeclNode *ed) {
+    if (!l || !ed || !ed->name || ed->method_count <= 0 || !l->analyzer)
+        return;
+    XaSymbol *enum_sym = xa_analyzer_lookup(l->analyzer, ed->name);
+    XaSymbolLinks *enum_links = enum_sym ? xa_analyzer_get_links(l->analyzer, enum_sym) : NULL;
+    XrClassInfo *info = enum_links ? enum_links->class_info : NULL;
+    if (!info)
+        return;
+
+    for (int i = 0; i < ed->method_count; i++) {
+        AstNode *method = ed->methods ? ed->methods[i] : NULL;
+        if (!method || method->type != AST_METHOD_DECL)
+            continue;
+        MethodDeclNode *md = &method->as.method_decl;
+        XaSymbol *method_sym = xa_class_info_lookup_member(info, md->name);
+        if (!method_sym || method_sym->kind != XA_SYM_METHOD ||
+            method_sym->is_static != md->is_static)
+            continue;
+        XaSymbolLinks *method_links = xa_analyzer_get_links(l->analyzer, method_sym);
+        struct XrType *receiver_type =
+            md->is_static ? NULL : xr_type_new_enum(l->isolate, ed->name);
+        XiFunc *mf = xi_lower_method_as_func(l, md, !md->is_static, NULL, receiver_type);
+        if (!mf) {
+            l->had_error = true;
+            continue;
+        }
+        xi_lower_func_add_child(l->func, mf);
+        uint16_t child_idx = (uint16_t) (l->func->nchildren - 1);
+        XiValue *closure = lower_enum_method_closure(
+            l, mf, child_idx, method_links ? method_links->type : l->type_any, method->line);
+        if (!closure) {
+            l->had_error = true;
+            continue;
+        }
+
+        const char *hidden =
+            xi_lower_enum_method_hidden_name(l->func, ed->name, md->name, md->is_static);
+        int var_id = xi_lower_var_find(l, method_sym->id, hidden);
+        if (var_id < 0)
+            var_id = xi_lower_var_create(l, method_sym->id, hidden, closure->type);
+        xi_lower_braun_write(l, var_id, l->cur_block, closure);
+
+        if (l->is_program && var_id < l->var_count && l->shared_map[var_id] >= 0) {
+            int slot = l->shared_map[var_id];
+            XiTopBinding b;
+            b.slot = slot;
+            b.name = l->vars[var_id].name;
+            b.type = l->vars[var_id].type;
+            xi_lower_emit_top_store(l, b, closure);
+            if (slot >= 0 && slot < l->var_cap) {
+                l->shared_slot_funcs[slot] = mf;
+                if (l->func->shared_slot_funcs && slot < (int) l->func->shared_slot_func_count)
+                    l->func->shared_slot_funcs[slot] = mf;
+            }
+        }
+    }
+}
+
 XR_FUNC XiValue *xi_lower_enum_access(XiLower *l, AstNode *node) {
     EnumAccessNode *ea = &node->as.enum_access;
     XR_DCHECK(ea->enum_name != NULL, "enum access must have enum name");
@@ -282,6 +359,8 @@ XR_FUNC void xi_lower_enum_decl(XiLower *l, AstNode *node) {
         if (binding.slot < l->var_cap)
             l->shared_slot_enums[binding.slot] = enum_data;
     }
+
+    lower_enum_methods(l, ed);
 }
 
 /* ========== Enum Convert ========== */

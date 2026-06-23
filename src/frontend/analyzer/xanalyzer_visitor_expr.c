@@ -78,6 +78,17 @@ static bool xa_symbol_is_collection_length(SymbolId sym, XrType *type) {
     return false;
 }
 
+static bool member_object_is_enum_namespace(XaInferContext *ctx, AstNode *object,
+                                            const char *enum_name) {
+    if (!ctx || !object || object->type != AST_VARIABLE || !enum_name)
+        return false;
+    const char *name = object->as.variable.name;
+    if (!name || strcmp(name, enum_name) != 0)
+        return false;
+    XaSymbol *sym = xa_scope_lookup(ctx->analyzer->current_scope, name);
+    return sym && sym->kind == XA_SYM_ENUM;
+}
+
 static XrType *xa_function_type1(XaInferContext *ctx, XrType *p0, XrType *ret) {
     XrType *params[1] = {p0};
     return xr_type_new_function(ctx->analyzer->isolate, params, 1, ret, false);
@@ -651,30 +662,54 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
         return obj_type->tuple.element_types[(int) idx];
     }
 
-    // Enum static member access: EnumName.Member -> enum value of EnumName.
-    // The member is checked against the declared enum_member_names so a
-    // typo like Color.Yellow is flagged here rather than handed to the
-    // EnumValue builtin probe below (which would also miss).
+    // Enum namespace/value access. `Color.Red` reads a variant from the
+    // enum namespace. `Color.staticFn` resolves a static method. Any other
+    // enum-typed receiver is an enum value and can resolve instance methods.
     if (obj_type->kind == XR_KIND_ENUM && obj_type->enum_type.enum_name) {
         XaSymbol *enum_sym =
             xa_scope_lookup(ctx->analyzer->current_scope, obj_type->enum_type.enum_name);
         if (enum_sym && enum_sym->kind == XA_SYM_ENUM) {
             XaSymbolLinks *el = xa_analyzer_get_links(ctx->analyzer, enum_sym);
             if (el) {
-                for (int i = 0; i < el->enum_member_count; i++) {
-                    if (el->enum_member_names[i] &&
-                        strcmp(el->enum_member_names[i], ma->name) == 0) {
-                        XrType *enum_type =
-                            xr_type_new_enum(ctx->analyzer->isolate, obj_type->enum_type.enum_name);
-                        record_selection(ctx, node, XA_SEL_ENUM_MEMBER, obj_type, enum_sym, i,
-                                         enum_type, false);
-                        return enum_type;
+                bool is_namespace =
+                    member_object_is_enum_namespace(ctx, ma->object, obj_type->enum_type.enum_name);
+                if (is_namespace) {
+                    for (int i = 0; i < el->enum_member_count; i++) {
+                        if (el->enum_member_names[i] &&
+                            strcmp(el->enum_member_names[i], ma->name) == 0) {
+                            XrType *enum_type = xr_type_new_enum(ctx->analyzer->isolate,
+                                                                 obj_type->enum_type.enum_name);
+                            record_selection(ctx, node, XA_SEL_ENUM_MEMBER, obj_type, enum_sym, i,
+                                             enum_type, false);
+                            return enum_type;
+                        }
                     }
-                }
-                // Precise .value type: use the enum's actual backing type
-                // instead of the generic `: Json` from the builtin table.
-                if (strcmp(ma->name, "value") == 0 && el->enum_value_type) {
-                    return el->enum_value_type;
+                    if (el->class_info) {
+                        XaSymbol *member = xa_class_info_lookup_member(el->class_info, ma->name);
+                        if (member && member->kind == XA_SYM_METHOD && member->is_static) {
+                            XaSymbolLinks *ml = xa_analyzer_get_links(ctx->analyzer, member);
+                            if (ml && ml->type) {
+                                record_selection(ctx, node, XA_SEL_STATIC_MEMBER, obj_type, member,
+                                                 -1, ml->type, false);
+                                return ml->type;
+                            }
+                        }
+                    }
+                } else if (el->class_info) {
+                    XaSymbol *member = xa_class_info_lookup_member(el->class_info, ma->name);
+                    if (member && member->kind == XA_SYM_METHOD && !member->is_static) {
+                        XaSymbolLinks *ml = xa_analyzer_get_links(ctx->analyzer, member);
+                        if (ml && ml->type) {
+                            record_selection(ctx, node, XA_SEL_METHOD, obj_type, member, -1,
+                                             ml->type, false);
+                            return ml->type;
+                        }
+                    }
+                    // Precise .value type: use the enum's actual backing type
+                    // instead of the generic `: Json` from the builtin table.
+                    if (strcmp(ma->name, "value") == 0 && el->enum_value_type) {
+                        return el->enum_value_type;
+                    }
                 }
             }
         }
