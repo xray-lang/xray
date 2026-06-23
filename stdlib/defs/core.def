@@ -4224,6 +4224,124 @@ module datetime {
     layer: "system"
   }
 
+  native_class DateTime {
+    super_slot: "objectClass"
+    core_slot: "dateTimeClass"
+    native_body: "g_datetime_body_desc"
+    flags: "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY"
+    builtin_kind: "XR_BK_DATETIME"
+  }
+
+  class_method DateTime.toString {
+    vm: "dt_to_string"
+    argc: 1
+  }
+
+  class_method DateTime.format {
+    vm: "dt_format"
+    argc: 2
+  }
+
+  class_method DateTime.toISOString {
+    vm: "dt_to_iso"
+    argc: 1
+  }
+
+  class_method DateTime.add {
+    vm: "dt_add"
+    argc: 3
+  }
+
+  class_method DateTime.diff {
+    vm: "dt_diff"
+    argc: 3
+  }
+
+  class_method DateTime.toUTC {
+    vm: "dt_to_utc"
+    argc: 1
+  }
+
+  class_method DateTime.toLocal {
+    vm: "dt_to_local"
+    argc: 1
+  }
+
+  class_method DateTime.isBefore {
+    vm: "dt_is_before"
+    argc: 2
+  }
+
+  class_method DateTime.isAfter {
+    vm: "dt_is_after"
+    argc: 2
+  }
+
+  class_method DateTime.equals {
+    vm: "dt_equals"
+    argc: 2
+  }
+
+  class_method DateTime.isLeapYear {
+    vm: "dt_is_leap_year"
+    argc: 1
+  }
+
+  class_method DateTime.daysInMonth {
+    vm: "dt_days_in_month"
+    argc: 1
+  }
+
+  class_method DateTime.get:year {
+    vm: "dt_year"
+    argc: 1
+  }
+
+  class_method DateTime.get:month {
+    vm: "dt_month"
+    argc: 1
+  }
+
+  class_method DateTime.get:day {
+    vm: "dt_day"
+    argc: 1
+  }
+
+  class_method DateTime.get:hour {
+    vm: "dt_hour"
+    argc: 1
+  }
+
+  class_method DateTime.get:minute {
+    vm: "dt_minute"
+    argc: 1
+  }
+
+  class_method DateTime.get:second {
+    vm: "dt_second"
+    argc: 1
+  }
+
+  class_method DateTime.get:millisecond {
+    vm: "dt_millisecond"
+    argc: 1
+  }
+
+  class_method DateTime.get:weekday {
+    vm: "dt_weekday"
+    argc: 1
+  }
+
+  class_method DateTime.get:yearday {
+    vm: "dt_yearday"
+    argc: 1
+  }
+
+  class_method DateTime.get:timestamp {
+    vm: "dt_timestamp"
+    argc: 1
+  }
+
   type_method DateTime.format {
     signature: "(pattern?: string): string"
     doc: "Format datetime to string"
