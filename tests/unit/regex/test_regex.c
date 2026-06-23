@@ -88,6 +88,29 @@ TEST(core_match_field_schema_matches_regex_match_class) {
     ASSERT_STR_EQ(XR_REGEX_CORE_MATCH_FIELD_NAMES[XR_REGEX_CORE_MATCH_GROUPS], "groups");
 }
 
+TEST(core_int_argument_rules_match_adapters) {
+    int value = 0;
+    ASSERT_TRUE(xr_regex_core_int_arg(42, &value));
+    ASSERT_EQ_INT(value, 42);
+    ASSERT_TRUE(xr_regex_core_int_arg((int64_t) INT_MIN, &value));
+    ASSERT_EQ_INT(value, INT_MIN);
+    ASSERT_TRUE(xr_regex_core_int_arg((int64_t) INT_MAX, &value));
+    ASSERT_EQ_INT(value, INT_MAX);
+    ASSERT_FALSE(xr_regex_core_int_arg((int64_t) INT_MAX + 1, &value));
+    ASSERT_FALSE(xr_regex_core_int_arg((int64_t) INT_MIN - 1, &value));
+
+    ASSERT_EQ_INT(xr_regex_core_limit_arg(false, 99), -1);
+    ASSERT_EQ_INT(xr_regex_core_limit_arg(true, 7), 7);
+    ASSERT_EQ_INT(xr_regex_core_limit_arg(true, (int64_t) INT_MAX + 1), INT_MAX);
+    ASSERT_EQ_INT(xr_regex_core_limit_arg(true, (int64_t) INT_MIN - 1), INT_MIN);
+
+    ASSERT_EQ_INT(xr_regex_core_split_max_parts(-1), XR_REGEX_CORE_SPLIT_MAX_PARTS);
+    ASSERT_EQ_INT(xr_regex_core_split_max_parts(0), XR_REGEX_CORE_SPLIT_MAX_PARTS);
+    ASSERT_EQ_INT(xr_regex_core_split_max_parts(3), 3);
+    ASSERT_EQ_INT(xr_regex_core_split_max_parts(XR_REGEX_CORE_SPLIT_MAX_PARTS),
+                  XR_REGEX_CORE_SPLIT_MAX_PARTS);
+}
+
 TEST(compile_is_valid) {
     ASSERT_TRUE(xr_regex_is_valid("\\d+", XR_RE_NONE));
     ASSERT_TRUE(xr_regex_is_valid("[a-z]+", XR_RE_NONE));
@@ -876,6 +899,7 @@ RUN_TEST(compile_invalid_bad_repeat);
 RUN_TEST(compile_flags);
 RUN_TEST(core_parse_flags_matches_regex_engine_flags);
 RUN_TEST(core_match_field_schema_matches_regex_match_class);
+RUN_TEST(core_int_argument_rules_match_adapters);
 RUN_TEST(compile_is_valid);
 RUN_TEST(compile_rejects_too_many_capture_groups);
 

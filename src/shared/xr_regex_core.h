@@ -12,7 +12,9 @@
 #define XR_REGEX_CORE_H
 
 #include <limits.h>
+#include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 
 typedef enum {
     XR_REGEX_CORE_FLAG_NONE = 0,
@@ -36,6 +38,10 @@ static const char *const XR_REGEX_CORE_MATCH_FIELD_NAMES[XR_REGEX_CORE_MATCH_FIE
     "groups",
 };
 
+enum {
+    XR_REGEX_CORE_SPLIT_MAX_PARTS = 256
+};
+
 static inline int xr_regex_core_parse_flags(const char *flags, size_t len) {
     if (!flags && len != 0)
         return XR_REGEX_CORE_FLAG_NONE;
@@ -57,6 +63,28 @@ static inline int xr_regex_core_parse_flags(const char *flags, size_t len) {
         }
     }
     return parsed;
+}
+
+static inline bool xr_regex_core_int_arg(int64_t value, int *out) {
+    if (!out || value < (int64_t) INT_MIN || value > (int64_t) INT_MAX)
+        return false;
+    *out = (int) value;
+    return true;
+}
+
+static inline int xr_regex_core_limit_arg(bool is_int, int64_t value) {
+    if (!is_int)
+        return -1;
+    if (value > (int64_t) INT_MAX)
+        return INT_MAX;
+    if (value < (int64_t) INT_MIN)
+        return INT_MIN;
+    return (int) value;
+}
+
+static inline int xr_regex_core_split_max_parts(int limit) {
+    return (limit > 0 && limit < XR_REGEX_CORE_SPLIT_MAX_PARTS) ? limit
+                                                                : XR_REGEX_CORE_SPLIT_MAX_PARTS;
 }
 
 static inline int xr_regex_core_is_special(char c) {

@@ -347,7 +347,9 @@ static XrValue regex_find_group(XrVMRuntime *isolate, XrValue *args, int argc) {
 
     if (!XR_IS_INT(args[2]))
         return xr_null();
-    int group_idx = (int) XR_TO_INT(args[2]);
+    int group_idx = 0;
+    if (!xr_regex_core_int_arg(XR_TO_INT(args[2]), &group_idx))
+        return xr_null();
 
     XrMatch match;
     if (!xr_regex_match(re, text, text_len, &match))
@@ -378,7 +380,8 @@ static XrValue regex_find(XrVMRuntime *isolate, XrValue *args, int argc) {
 
     int offset = 0;
     if (argc >= 3 && XR_IS_INT(args[2])) {
-        offset = (int) XR_TO_INT(args[2]);
+        if (!xr_regex_core_int_arg(XR_TO_INT(args[2]), &offset))
+            return xr_null();
     }
 
     XrMatch match;
@@ -403,10 +406,8 @@ static XrValue regex_find_all(XrVMRuntime *isolate, XrValue *args, int argc) {
     if (!text)
         return xr_value_from_array(xr_array_new(xr_current_coro(isolate)));
 
-    int limit = -1;
-    if (argc >= 3 && XR_IS_INT(args[2])) {
-        limit = (int) XR_TO_INT(args[2]);
-    }
+    int limit = xr_regex_core_limit_arg(argc >= 3 && XR_IS_INT(args[2]),
+                                        (argc >= 3 && XR_IS_INT(args[2])) ? XR_TO_INT(args[2]) : 0);
 
     int count = 0;
     XrMatch *matches = xr_regex_find_all(re, text, text_len, limit, &count);
@@ -495,13 +496,11 @@ static XrValue regex_split(XrVMRuntime *isolate, XrValue *args, int argc) {
     if (!text)
         return xr_value_from_array(xr_array_new(xr_current_coro(isolate)));
 
-    int limit = -1;
-    if (argc >= 3 && XR_IS_INT(args[2])) {
-        limit = (int) XR_TO_INT(args[2]);
-    }
+    int limit = xr_regex_core_limit_arg(argc >= 3 && XR_IS_INT(args[2]),
+                                        (argc >= 3 && XR_IS_INT(args[2])) ? XR_TO_INT(args[2]) : 0);
 
     // Dynamic allocation to avoid stack overflow on large inputs
-    int max_parts = (limit > 0 && limit < 256) ? limit : 256;
+    int max_parts = xr_regex_core_split_max_parts(limit);
     XrSplitPart *parts = (XrSplitPart *) xr_malloc(max_parts * sizeof(XrSplitPart));
     int count = xr_regex_split(re, text, text_len, parts, max_parts, limit);
 

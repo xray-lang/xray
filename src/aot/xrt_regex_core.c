@@ -193,8 +193,8 @@ XrValue xrt_regex_find_group(XrValue re_value, const char *text_data, int64_t te
                              XrValue group_value) {
     if (!XR_IS_INT(group_value))
         return XR_NULL_VAL;
-    int64_t group_i64 = XR_TO_INT(group_value);
-    if (group_i64 < 0 || group_i64 > INT_MAX)
+    int group_index = 0;
+    if (!xr_regex_core_int_arg(XR_TO_INT(group_value), &group_index) || group_index < 0)
         return XR_NULL_VAL;
     if (re_value.tag != XR_TAG_REGEX || !re_value.ptr || !text_data)
         return XR_NULL_VAL;
@@ -207,7 +207,7 @@ XrValue xrt_regex_find_group(XrValue re_value, const char *text_data, int64_t te
     XrMatch match;
     if (!xr_regex_match(obj->regex, text_data, (int) text_len, &match))
         return XR_NULL_VAL;
-    return xrt_regex_match_group_to_string(&match, (int) group_i64);
+    return xrt_regex_match_group_to_string(&match, group_index);
 }
 
 XrValue xrt_regex_find_offset(XrValue re_value, const char *text_data, int64_t text_len,
@@ -221,10 +221,8 @@ XrValue xrt_regex_find_offset(XrValue re_value, const char *text_data, int64_t t
 
     int offset = 0;
     if (XR_IS_INT(offset_value)) {
-        int64_t offset_i64 = XR_TO_INT(offset_value);
-        if (offset_i64 < (int64_t) INT_MIN || offset_i64 > (int64_t) INT_MAX)
+        if (!xr_regex_core_int_arg(XR_TO_INT(offset_value), &offset))
             return XR_NULL_VAL;
-        offset = (int) offset_i64;
     }
 
     xrt_regex_object_t *obj = (xrt_regex_object_t *) re_value.ptr;
@@ -253,17 +251,6 @@ XrValue xrt_regex_full_find(XrValue re_value, const char *text_data, int64_t tex
     return xrt_regex_make_match_object(text_data, &match);
 }
 
-static int xrt_regex_limit_from_value(XrValue limit_value) {
-    if (!XR_IS_INT(limit_value))
-        return -1;
-    int64_t limit = XR_TO_INT(limit_value);
-    if (limit > (int64_t) INT_MAX)
-        return INT_MAX;
-    if (limit < (int64_t) INT_MIN)
-        return INT_MIN;
-    return (int) limit;
-}
-
 XrValue xrt_regex_find_all_limit(XrValue re_value, const char *text_data, int64_t text_len,
                                  XrValue limit_value) {
     XrValue result = xrt_array_new(0);
@@ -276,8 +263,11 @@ XrValue xrt_regex_find_all_limit(XrValue re_value, const char *text_data, int64_
 
     int count = 0;
     xrt_regex_object_t *obj = (xrt_regex_object_t *) re_value.ptr;
-    XrMatch *matches = xr_regex_find_all(obj->regex, text_data, (int) text_len,
-                                         xrt_regex_limit_from_value(limit_value), &count);
+    XrMatch *matches = xr_regex_find_all(
+        obj->regex, text_data, (int) text_len,
+        xr_regex_core_limit_arg(XR_IS_INT(limit_value),
+                                XR_IS_INT(limit_value) ? XR_TO_INT(limit_value) : 0),
+        &count);
     if (!matches)
         return result;
 
@@ -338,9 +328,10 @@ XrValue xrt_regex_split_limit(XrValue re_value, const char *text_data, int64_t t
     if (text_len < 0 || text_len > (int64_t) INT_MAX)
         return result;
 
-    int limit = xrt_regex_limit_from_value(limit_value);
-    int max_parts = (limit > 0 && limit < 256) ? limit : 256;
-    XrSplitPart parts[256];
+    int limit = xr_regex_core_limit_arg(XR_IS_INT(limit_value),
+                                        XR_IS_INT(limit_value) ? XR_TO_INT(limit_value) : 0);
+    int max_parts = xr_regex_core_split_max_parts(limit);
+    XrSplitPart parts[XR_REGEX_CORE_SPLIT_MAX_PARTS];
 
     xrt_regex_object_t *obj = (xrt_regex_object_t *) re_value.ptr;
     int count = xr_regex_split(obj->regex, text_data, (int) text_len, parts, max_parts, limit);
