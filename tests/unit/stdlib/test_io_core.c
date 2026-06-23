@@ -184,6 +184,42 @@ TEST(io_core_mkdirp_fails_on_blocked_intermediate) {
     ASSERT_STR_EQ(fake.dirs[0], "a");
 }
 
+TEST(io_core_dot_dir_entry_recognizes_reserved_names) {
+    ASSERT(xr_io_core_is_dot_dir_entry("."));
+    ASSERT(xr_io_core_is_dot_dir_entry(".."));
+    ASSERT_FALSE(xr_io_core_is_dot_dir_entry(""));
+    ASSERT_FALSE(xr_io_core_is_dot_dir_entry(NULL));
+    ASSERT_FALSE(xr_io_core_is_dot_dir_entry("..."));
+    ASSERT_FALSE(xr_io_core_is_dot_dir_entry(".hidden"));
+}
+
+TEST(io_core_join_child_path_uses_explicit_separator) {
+    char path[32];
+    ASSERT(xr_io_core_join_child_path("root", '/', "leaf", path, sizeof(path)));
+    ASSERT_STR_EQ(path, "root/leaf");
+    ASSERT(xr_io_core_join_child_path("root", '\\', "leaf", path, sizeof(path)));
+    ASSERT_STR_EQ(path, "root\\leaf");
+}
+
+TEST(io_core_join_child_path_rejects_empty_or_truncated_paths) {
+    char path[8];
+    size_t len = 0;
+    ASSERT(!xr_io_core_join_child_len("", "leaf", &len));
+    ASSERT(!xr_io_core_join_child_len("root", "", &len));
+    ASSERT(!xr_io_core_join_child_path("root", '/', "leaf", path, sizeof(path)));
+    ASSERT(xr_io_core_join_child_path("a", '/', "b", path, sizeof(path)));
+    ASSERT_STR_EQ(path, "a/b");
+}
+
+TEST(io_core_relative_path_from_base_trims_one_separator) {
+    const char *rel = xr_io_core_relative_path_from_base("root/child/file", strlen("root"));
+    ASSERT_STR_EQ(rel, "child/file");
+    rel = xr_io_core_relative_path_from_base("root\\child", strlen("root"));
+    ASSERT_STR_EQ(rel, "child");
+    rel = xr_io_core_relative_path_from_base("root", strlen("root"));
+    ASSERT_STR_EQ(rel, "");
+}
+
 TEST(io_core_stat_field_names_are_shared_schema) {
     ASSERT_EQ_INT(XR_IO_CORE_STAT_FIELD_COUNT, 10);
     ASSERT_EQ_INT(XR_IO_CORE_STAT_SIZE, 0);
@@ -231,6 +267,12 @@ RUN_TEST(io_core_mkdirp_trims_trailing_separators);
 RUN_TEST(io_core_mkdirp_handles_root_path);
 RUN_TEST(io_core_mkdirp_handles_backslash_separators);
 RUN_TEST(io_core_mkdirp_fails_on_blocked_intermediate);
+
+RUN_TEST_SUITE("IO Core - dir walk paths");
+RUN_TEST(io_core_dot_dir_entry_recognizes_reserved_names);
+RUN_TEST(io_core_join_child_path_uses_explicit_separator);
+RUN_TEST(io_core_join_child_path_rejects_empty_or_truncated_paths);
+RUN_TEST(io_core_relative_path_from_base_trims_one_separator);
 
 RUN_TEST_SUITE("IO Core - stat");
 RUN_TEST(io_core_stat_field_names_are_shared_schema);

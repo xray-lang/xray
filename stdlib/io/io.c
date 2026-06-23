@@ -930,10 +930,13 @@ static bool remove_all_impl(const char *dir) {
 
     bool ok = true;
     do {
-        if (strcmp(fd.cFileName, ".") == 0 || strcmp(fd.cFileName, "..") == 0)
+        if (xr_io_core_is_dot_dir_entry(fd.cFileName))
             continue;
         char child[XR_PATH_MAX];
-        snprintf(child, sizeof(child), "%s\\%s", dir, fd.cFileName);
+        if (!xr_io_core_join_child_path(dir, '\\', fd.cFileName, child, sizeof(child))) {
+            ok = false;
+            continue;
+        }
         if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
             if (!remove_all_impl(child))
                 ok = false;
@@ -1188,17 +1191,14 @@ static void read_dir_recursive_impl(ReadDirCtx *ctx, const char *path, int depth
     XrDirEntry e;
     while (xr_dir_next(it, &e)) {
         char fullpath[XR_PATH_MAX];
-        int wrote = snprintf(fullpath, sizeof(fullpath), "%s/%s", path, e.name);
-        if (wrote <= 0 || wrote >= (int) sizeof(fullpath)) {
+        if (!xr_io_core_join_child_path(path, '/', e.name, fullpath, sizeof(fullpath))) {
             // Entry would overflow XR_PATH_MAX; skip rather than report a
             // truncated path to the caller.
             continue;
         }
 
         // Add relative path
-        const char *relpath = fullpath + ctx->base_len;
-        if (*relpath == '/')
-            relpath++;
+        const char *relpath = xr_io_core_relative_path_from_base(fullpath, ctx->base_len);
         XrValue name = xrs_string_value_c(ctx->X, relpath);
         xr_array_push(ctx->arr, name);
 
