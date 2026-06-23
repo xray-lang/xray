@@ -539,21 +539,7 @@ bool xr_array_resize(XrArray *arr, int32_t length, XrValue fill) {
 void xr_array_reverse(XrArray *arr) {
     if (!arr || arr->length <= 1)
         return;
-
-    int left = 0;
-    int right = arr->length - 1;
-    uint8_t esz = arr->elem_size;
-    uint8_t tmp[16];  // max elem_size is 16 (XrValue Tagged Union)
-
-    while (left < right) {
-        uint8_t *lp = (uint8_t *) arr->data + (size_t) left * esz;
-        uint8_t *rp = (uint8_t *) arr->data + (size_t) right * esz;
-        memcpy(tmp, lp, esz);
-        memcpy(lp, rp, esz);
-        memcpy(rp, tmp, esz);
-        left++;
-        right--;
-    }
+    (void) xr_array_core_reverse(arr->data, arr->length, arr->elem_size);
 }
 
 XrArray *xr_array_copy(struct XrCoroutine *coro, XrArray *arr) {

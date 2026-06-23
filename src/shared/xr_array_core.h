@@ -106,6 +106,29 @@ static inline XrArrayCoreIndexSetPlan xr_array_core_index_set_plan(int64_t lengt
     return out;
 }
 
+static inline bool xr_array_core_reverse(void *data, int64_t length, uint8_t elem_size) {
+    if (length < 2)
+        return true;
+    if (!data || elem_size == 0)
+        return false;
+
+    uint8_t *bytes = (uint8_t *) data;
+    int64_t left = 0;
+    int64_t right = length - 1;
+    while (left < right) {
+        uint8_t *lp = bytes + (size_t) left * elem_size;
+        uint8_t *rp = bytes + (size_t) right * elem_size;
+        for (uint8_t i = 0; i < elem_size; i++) {
+            uint8_t tmp = lp[i];
+            lp[i] = rp[i];
+            rp[i] = tmp;
+        }
+        left++;
+        right--;
+    }
+    return true;
+}
+
 #define XR_ARRAY_CORE_INDEXOF_LOOP(T)                                                              \
     do {                                                                                           \
         const T *d = (const T *) data;                                                             \

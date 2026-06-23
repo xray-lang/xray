@@ -1,0 +1,27 @@
+let ints: Array<int> = [1, 2, 3, 4]
+ints.reverse()
+for (v in ints) {
+    print(v)
+}
+
+let flags: Array<bool> = [true, false, true, false]
+flags.reverse()
+for (v in flags) {
+    print(v)
+}
+
+let words: Array<string> = ["left", "middle", "right"]
+words.reverse()
+for (w in words) {
+    print(w)
+}
+
+let bytes = new Bytes(4)
+bytes[0] = 10
+bytes[1] = 20
+bytes[2] = 30
+bytes[3] = 40
+bytes.reverse()
+for (b in bytes) {
+    print(b)
+}
