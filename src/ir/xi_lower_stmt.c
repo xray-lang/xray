@@ -793,6 +793,61 @@ static bool pattern_is_irrefutable_binding(AstNode *pattern) {
     return false;
 }
 
+/* True if the pattern is (or, for nesting, contains at top level) an array
+ * pattern. Array element reads must be deferred until after the length test
+ * passes (out-of-bounds index traps), so their bindings run in the body block. */
+static bool pattern_contains_array(AstNode *pattern) {
+    return pattern && pattern->type == AST_PATTERN_ARRAY;
+}
+
+/* Read object/Json field `fname` from `subject` (static Json index when known,
+ * else a dynamic string-keyed index get; both null-safe on a missing field). */
+static XiValue *lower_match_field_get(XiLower *l, XiValue *subject, const char *fname) {
+    int fidx = subject->type ? stmt_json_field_index(subject->type, fname) : -1;
+    if (fidx >= 0) {
+        struct XrType *ft =
+            subject->type->object.field_types ? subject->type->object.field_types[fidx] : NULL;
+        XiValue *v = xi_value_new(l->func, l->cur_block, XI_JSON_GET_F, ft ? ft : l->type_any, 1);
+        if (v) {
+            v->args[0] = subject;
+            v->aux_int = fidx;
+        }
+        return v;
+    }
+    XiValue *key = xi_const_str(l->func, l->cur_block, fname, l->type_string);
+    XiValue *v = xi_value_new(l->func, l->cur_block, XI_INDEX_GET, l->type_any, 2);
+    if (v) {
+        v->args[0] = subject;
+        v->args[1] = key;
+    }
+    return v;
+}
+
+/* Read array element at index `idx` (caller must have verified bounds). */
+static XiValue *lower_match_elem_get(XiLower *l, XiValue *subject, int idx) {
+    struct XrType *et = (subject->type && XR_TYPE_IS_ARRAY(subject->type))
+                            ? subject->type->container.element_type
+                            : NULL;
+    XiValue *iv = xi_const_int(l->func, l->cur_block, idx, l->type_int);
+    XiValue *v = xi_value_new(l->func, l->cur_block, XI_INDEX_GET, et ? et : l->type_any, 2);
+    if (v) {
+        v->args[0] = subject;
+        v->args[1] = iv;
+    }
+    return v;
+}
+
+/* Array length of `subject` (XI_LOAD_FIELD "length"). */
+static XiValue *lower_match_array_len(XiLower *l, XiValue *subject) {
+    XiValue *len = xi_value_new(l->func, l->cur_block, XI_LOAD_FIELD, l->type_int, 1);
+    if (!len)
+        return NULL;
+    len->args[0] = subject;
+    len->aux = (void *) "length";
+    len->aux_int = xi_lower_method_symbol(l, "length");
+    return len;
+}
+
 /* Resolve the static element type for tuple slot `idx`. Falls back to
  * `type_any` when the analyzer hasn't proven a tuple type for the
  * subject (e.g. the source uses Json or untyped values). */
@@ -903,6 +958,43 @@ XR_FUNC XiValue *xi_lower_pattern_test(XiLower *l, XiValue *subject, AstNode *pa
             return xi_binary(l->func, l->cur_block, XI_EQ, l->type_bool, tag, variant_val);
         }
 
+        case AST_PATTERN_OBJECT: {
+            /* Object pattern: AND of refutable field sub-tests. Field reads are
+             * null-safe (missing field -> null), so they are safe in the test;
+             * irrefutable field sub-patterns (bindings/wildcards) contribute
+             * nothing and are captured by lower_pattern_bindings. */
+            PatternObjectNode *op = &pattern->as.pattern_object;
+            XiValue *result = NULL;
+            for (int i = 0; i < op->count; i++) {
+                AstNode *sub = op->patterns[i];
+                if (pattern_is_irrefutable_binding(sub))
+                    continue;
+                XiValue *fv = lower_match_field_get(l, subject, op->field_names[i]);
+                if (!fv)
+                    continue;
+                XiValue *t = xi_lower_pattern_test(l, fv, sub);
+                if (!t)
+                    continue;
+                result =
+                    result ? xi_binary(l->func, l->cur_block, XI_BAND, l->type_bool, result, t) : t;
+            }
+            return result ? result : xi_const_bool(l->func, l->cur_block, true, l->type_bool);
+        }
+
+        case AST_PATTERN_ARRAY: {
+            /* Array pattern: the test is the length check only. Element reads
+             * trap out of bounds, so element bindings are deferred to the body
+             * block (after the length test passes); element sub-patterns are
+             * restricted to bindings/wildcards by the analyzer. */
+            PatternArrayNode *ap = &pattern->as.pattern_array;
+            XiValue *len = lower_match_array_len(l, subject);
+            if (!len)
+                return NULL;
+            XiValue *cnt = xi_const_int(l->func, l->cur_block, ap->count, l->type_int);
+            return xi_binary(l->func, l->cur_block, ap->has_rest ? XI_GE : XI_EQ, l->type_bool, len,
+                             cnt);
+        }
+
         case AST_PATTERN_TYPE: {
             /* `is T [name]`: runtime type test against T. The binding (if
              * present) is captured in lower_pattern_bindings once the
@@ -970,6 +1062,48 @@ static void lower_pattern_bindings(XiLower *l, XiValue *subject, AstNode *patter
             field->args[0] = subject;
             field->aux_int = 1 + i; /* payload starts at field[1] */
             lower_pattern_bindings(l, field, sub);
+        }
+    }
+
+    /* Object pattern: bind each field's sub-pattern to the field value. */
+    if (pattern->type == AST_PATTERN_OBJECT) {
+        PatternObjectNode *op = &pattern->as.pattern_object;
+        for (int i = 0; i < op->count; i++) {
+            AstNode *sub = op->patterns[i];
+            if (!sub || sub->type == AST_PATTERN_WILDCARD)
+                continue;
+            XiValue *fv = lower_match_field_get(l, subject, op->field_names[i]);
+            if (!fv)
+                continue;
+            lower_pattern_bindings(l, fv, sub);
+        }
+    }
+
+    /* Array pattern: bind positional elements (length already verified by the
+     * test) and the optional rest as a tail slice. */
+    if (pattern->type == AST_PATTERN_ARRAY) {
+        PatternArrayNode *ap = &pattern->as.pattern_array;
+        for (int i = 0; i < ap->count; i++) {
+            AstNode *sub = ap->patterns[i];
+            if (!sub || sub->type == AST_PATTERN_WILDCARD)
+                continue;
+            XiValue *ev = lower_match_elem_get(l, subject, i);
+            if (ev)
+                lower_pattern_bindings(l, ev, sub);
+        }
+        if (ap->rest_name) {
+            struct XrType *rest_type =
+                (subject->type && XR_TYPE_IS_ARRAY(subject->type)) ? subject->type : l->type_any;
+            XiValue *start = xi_const_int(l->func, l->cur_block, ap->count, l->type_int);
+            XiValue *end = lower_match_array_len(l, subject);
+            XiValue *slice = xi_value_new(l->func, l->cur_block, XI_SLICE, rest_type, 3);
+            if (slice && end) {
+                slice->args[0] = subject;
+                slice->args[1] = start;
+                slice->args[2] = end;
+                int var_id = xi_lower_var_create(l, ap->rest_symbol_id, ap->rest_name, rest_type);
+                xi_lower_braun_write(l, var_id, l->cur_block, slice);
+            }
         }
     }
 
@@ -1291,6 +1425,26 @@ static bool lower_channel_recv_match(XiLower *l, AstNode *node, XiValue **out_va
     return true;
 }
 
+/* Lower a match arm body, record its exit value, and jump to the merge block.
+ * Returns false on allocation failure. */
+static bool lower_match_emit_arm_body(XiLower *l, MatchArmNode *arm, LowerMatchExitList *exits,
+                                      XiBlock *merge, int line) {
+    XiValue *val = NULL;
+    if (arm->body && arm->body->type == AST_BLOCK) {
+        xi_lower_stmt(l, arm->body);
+        if (l->cur_block)
+            val = xi_const_null(l->func, l->cur_block, l->type_null);
+    } else {
+        val = xi_lower_expr(l, arm->body);
+    }
+    if (l->cur_block) {
+        if (!lower_match_exit_list_add(l, exits, l->cur_block, val, line))
+            return false;
+        xi_block_set_jump(l->cur_block, merge);
+    }
+    return true;
+}
+
 XR_FUNC XiValue *xi_lower_match(XiLower *l, AstNode *node) {
     MatchExprNode *m = &node->as.match_expr;
     XiValue *fast_value = NULL;
@@ -1324,8 +1478,14 @@ XR_FUNC XiValue *xi_lower_match(XiLower *l, AstNode *node) {
          * the match test reduces to TRUE and selection is decided
          * entirely by the optional guard. Tuple patterns don't get
          * that shortcut: their refutable slots still need TUPLE_GET-
-         * based equality testing. */
-        lower_pattern_bindings(l, subject, arm->pattern);
+         * based equality testing.
+         *
+         * Array patterns defer their bindings (and any guard reading them) to
+         * the matched body block: element reads trap out of bounds, so they
+         * must run only after the length test has passed. */
+        bool defer_bindings = pattern_contains_array(arm->pattern);
+        if (!defer_bindings)
+            lower_pattern_bindings(l, subject, arm->pattern);
 
         bool is_top_irrefutable = !arm->guard && pattern_is_irrefutable_binding(arm->pattern);
         bool is_top_binding = false;
@@ -1344,7 +1504,9 @@ XR_FUNC XiValue *xi_lower_match(XiLower *l, AstNode *node) {
             test = arm->guard ? lower_guard_expr(l, arm->guard) : NULL;
         } else {
             test = xi_lower_pattern_test(l, subject, arm->pattern);
-            if (arm->guard && test) {
+            /* For deferred patterns the guard is folded in inside the body
+             * block (after binding), because it may read captured names. */
+            if (!defer_bindings && arm->guard && test) {
                 XiValue *guard = lower_guard_expr(l, arm->guard);
                 if (guard)
                     test = xi_binary(l->func, l->cur_block, XI_BAND, l->type_bool, test, guard);
@@ -1352,19 +1514,8 @@ XR_FUNC XiValue *xi_lower_match(XiLower *l, AstNode *node) {
         }
 
         if (!test) {
-            XiValue *val = NULL;
-            if (arm->body && arm->body->type == AST_BLOCK) {
-                xi_lower_stmt(l, arm->body);
-                if (l->cur_block)
-                    val = xi_const_null(l->func, l->cur_block, l->type_null);
-            } else {
-                val = xi_lower_expr(l, arm->body);
-            }
-            if (l->cur_block) {
-                if (!lower_match_exit_list_add(l, &exits, l->cur_block, val, node->line))
-                    return NULL;
-                xi_block_set_jump(l->cur_block, merge);
-            }
+            if (!lower_match_emit_arm_body(l, arm, &exits, merge, node->line))
+                return NULL;
             l->cur_block = NULL;
             break;
         } else {
@@ -1372,22 +1523,32 @@ XR_FUNC XiValue *xi_lower_match(XiLower *l, AstNode *node) {
             XiBlock *next_blk = xi_block_new(l->func);
             xi_block_set_if(l->cur_block, test, body_blk, next_blk);
             xi_lower_braun_seal(l, body_blk);
-            xi_lower_braun_seal(l, next_blk);
 
             l->cur_block = body_blk;
-            XiValue *val = NULL;
-            if (arm->body && arm->body->type == AST_BLOCK) {
-                xi_lower_stmt(l, arm->body);
-                if (l->cur_block)
-                    val = xi_const_null(l->func, l->cur_block, l->type_null);
-            } else {
-                val = xi_lower_expr(l, arm->body);
+
+            /* Deferred bindings (array patterns): the length test has passed,
+             * so element reads are now in bounds. A guard that reads the
+             * captures branches back to next_blk on failure. */
+            bool next_sealed = false;
+            if (defer_bindings) {
+                lower_pattern_bindings(l, subject, arm->pattern);
+                if (arm->guard) {
+                    XiValue *guard = lower_guard_expr(l, arm->guard);
+                    if (guard) {
+                        XiBlock *guard_body = xi_block_new(l->func);
+                        xi_block_set_if(l->cur_block, guard, guard_body, next_blk);
+                        xi_lower_braun_seal(l, guard_body);
+                        xi_lower_braun_seal(l, next_blk);
+                        next_sealed = true;
+                        l->cur_block = guard_body;
+                    }
+                }
             }
-            if (l->cur_block) {
-                if (!lower_match_exit_list_add(l, &exits, l->cur_block, val, node->line))
-                    return NULL;
-                xi_block_set_jump(l->cur_block, merge);
-            }
+            if (!next_sealed)
+                xi_lower_braun_seal(l, next_blk);
+
+            if (!lower_match_emit_arm_body(l, arm, &exits, merge, node->line))
+                return NULL;
 
             l->cur_block = next_blk;
         }

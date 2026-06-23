@@ -666,6 +666,22 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
             n->as.pattern_tuple.patterns = clone_node_array(
                 node->as.pattern_tuple.patterns, node->as.pattern_tuple.count, map, mc, clone_ctx);
             break;
+        case AST_PATTERN_OBJECT:
+            n->as.pattern_object.count = node->as.pattern_object.count;
+            n->as.pattern_object.field_names =
+                clone_str_array(node->as.pattern_object.field_names, node->as.pattern_object.count);
+            n->as.pattern_object.patterns =
+                clone_node_array(node->as.pattern_object.patterns, node->as.pattern_object.count,
+                                 map, mc, clone_ctx);
+            break;
+        case AST_PATTERN_ARRAY:
+            n->as.pattern_array.count = node->as.pattern_array.count;
+            n->as.pattern_array.patterns = clone_node_array(
+                node->as.pattern_array.patterns, node->as.pattern_array.count, map, mc, clone_ctx);
+            n->as.pattern_array.has_rest = node->as.pattern_array.has_rest;
+            n->as.pattern_array.rest_name = clone_str(node->as.pattern_array.rest_name);
+            n->as.pattern_array.rest_symbol_id = node->as.pattern_array.rest_symbol_id;
+            break;
         case AST_PATTERN_TYPE:
             n->as.pattern_type.type = node->as.pattern_type.type;
             n->as.pattern_type.binding_name = clone_str(node->as.pattern_type.binding_name);

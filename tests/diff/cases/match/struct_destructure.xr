@@ -1,0 +1,63 @@
+// anchor: match-struct-destructure
+// D44: match object `{ x, y }` / `{ x: a }` and array `[a, b, ..rest]` patterns,
+// exercised through the VM/AOT differential runner for parity.
+
+// ---- Object patterns ----
+let p = {x: 3, y: 4}
+match (p) {
+    { x, y } -> { print(x + y) }       // 7
+    _ -> { print(0) }
+}
+
+let user = {name: "Bob", age: 5}
+match (user) {
+    { name: n, age } -> {
+        print(n)                        // Bob
+        print(age)                      // 5
+    }
+    _ -> { print("none") }
+}
+
+// Object pattern with a refutable field sub-pattern (field reads are null-safe).
+let cfg = {mode: 2, label: "go"}
+match (cfg) {
+    { mode: 1 } -> { print("one") }
+    { mode: 2, label } -> { print("two:" + label) }   // two:go
+    _ -> { print("other") }
+}
+
+// ---- Array patterns ----
+let a = [10, 20, 30]
+match (a) {
+    [first, ..rest] -> {
+        print(first)                    // 10
+        print(rest.length)              // 2
+        print(rest[0])                  // 20
+    }
+    _ -> { print(-1) }
+}
+
+// Length-based arm selection: exact-length arm.
+let pair = [1, 2]
+match (pair) {
+    [x] -> { print("one") }
+    [x, y] -> { print(x * 10 + y) }     // 12
+    _ -> { print(0) }
+}
+
+// Empty rest.
+let single = [99]
+match (single) {
+    [head, ..tail] -> {
+        print(head)                     // 99
+        print(tail.length)              // 0
+    }
+    _ -> { print(-1) }
+}
+
+// Wildcards in element positions.
+let triple = [7, 8, 9]
+match (triple) {
+    [_, mid, _] -> { print(mid) }       // 8
+    _ -> { print(0) }
+}

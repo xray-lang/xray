@@ -177,7 +177,20 @@ let (q, r) = divmod(17, 5)
 let { name, age } = user
 ```
 
-详见 §5.1.5。`match` 中当前支持 tuple 与 ADT variant 解构；对象/数组结构解构不属于当前 `match` 模式语法。
+详见 §5.1.5。`match` 支持 tuple、ADT variant、对象与数组结构解构：
+
+```xray
+match (p) {
+    { x, y } -> ...           // 对象字段解构（簡寫绑定）
+    { name: n, age } -> ...   // 对象字段重命名 + 簡寫混用
+    [a, b, ..rest] -> ...     // 数组解构，`..rest` 捕获尾部为新数组
+    [_, mid, _] -> ...        // 元素位通配
+}
+```
+
+- 对象模式匹配任意带这些字段的对象/Json；字段读取对缺失字段安全（为 `null`）。字段子模式可为可反驳模式（如 `{ mode: 2 }`）。
+- 数组模式按**长度**匹配：无 `..rest` 时要求长度恰等于元素数，有 `..rest` 时要求长度 ≥ 元素数。元素子模式只能是绑定或通配（`..rest` 之外的元素不做按值测试——元素越界读取会陷入 panic）；需要按元素值判断时改用 `if` 守卫。
+- or-pattern `|` 暂不支持（逗号多值已覆盖等价能力）。
 
 ### 6.10 穷举性与匹配失败
 
@@ -360,7 +373,20 @@ let (q, r) = divmod(17, 5)
 let { name, age } = user
 ```
 
-See §5.1.5 for details. Within `match`, tuple and ADT-variant destructuring are currently supported; structural object/array destructuring is not part of the current `match` pattern syntax.
+See §5.1.5 for details. Within `match`, tuple, ADT-variant, object, and array destructuring are supported:
+
+```xray
+match (p) {
+    { x, y } -> ...           // object field destructure (shorthand binding)
+    { name: n, age } -> ...   // field rename + shorthand mixed
+    [a, b, ..rest] -> ...     // array destructure; `..rest` captures the tail as a new array
+    [_, mid, _] -> ...        // element-position wildcards
+}
+```
+
+- An object pattern matches any object/Json carrying those fields; field reads are null-safe for a missing field. Field sub-patterns may be refutable (e.g. `{ mode: 2 }`).
+- An array pattern matches by **length**: without `..rest`, the length must equal the element count; with `..rest`, the length must be ≥ the element count. Element sub-patterns may only be bindings or wildcards (non-rest elements are not value-tested — an out-of-bounds element read traps); use an `if` guard to test element values.
+- The or-pattern `|` is not supported (comma-separated multi-values cover the equivalent need).
 
 ### 6.10 Exhaustiveness and Match Failure
 
