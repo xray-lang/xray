@@ -1,0 +1,41 @@
+// 1234_generic_type_alias.xr
+// Test: generic type aliases are syntax-level substitutions.
+
+type Pair<T> = { first: T, second: T }
+type Mapper<T, U> = (T) -> U
+type Vec<T> = Array<T>
+type Maybe<T> = T?
+type Forward<T> = Box<T>
+type Box<T> = { value: T }
+
+@test
+fn test_object_alias() {
+    let ints: Pair<int> = { first: 2, second: 5 }
+    let names: Pair<string> = { first: "x", second: "ray" }
+    assert_eq(ints.first + ints.second, 7)
+    assert_eq(names.first + names.second, "xray")
+}
+
+@test
+fn test_function_alias() {
+    fn apply(f: Mapper<int, string>, value: int) -> string {
+        return f(value)
+    }
+    assert_eq(apply((n) -> "n=" + string(n), 9), "n=9")
+}
+
+@test
+fn test_container_and_optional_alias() {
+    let xs: Vec<int> = [1, 2, 3]
+    let hit: Maybe<string> = "ok"
+    let miss: Maybe<string> = null
+    assert_eq(xs.length, 3)
+    assert_eq(hit ?? "no", "ok")
+    assert_eq(miss ?? "no", "no")
+}
+
+@test
+fn test_forward_generic_alias() {
+    let box: Forward<int> = { value: 42 }
+    assert_eq(box.value, 42)
+}

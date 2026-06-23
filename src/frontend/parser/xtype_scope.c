@@ -71,6 +71,9 @@ XrTypeAlias *xr_type_scope_define(XrTypeScope *scope, const char *name, XrTypeRe
 
     a->name = name_copy;
     a->type_ref = type_ref;
+    a->type_param_names = NULL;
+    a->type_param_count = 0;
+    a->is_expanding = false;
     a->next = scope->aliases;
     scope->aliases = a;
     return a;

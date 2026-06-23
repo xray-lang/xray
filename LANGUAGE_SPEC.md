@@ -506,7 +506,7 @@ Xray is statically typed; every expression has a determined type at compile time
 | FFI / C ABI | `RawPtr<T>`, `RawMut<T>`, `CFn<(T) -> R>`, `uintsize`, `intsize` |
 | Class / Struct / Interface | user-defined (nominal) |
 | Enum | user-defined (incl. ADT enum, see §5.6) |
-| Type alias | `type Name = SomeType` |
+| Type alias | `type Name = SomeType`, `type Name<T> = SomeType` |
 
 ### 2.3 Primitive Types
 
@@ -841,9 +841,24 @@ let p2 = pair(1, "x")             // (int, string)
 type Result = int | string
 type Mapper = (int) -> int
 type Point = { x: float, y: float }
+type Pair<T> = { first: T, second: T }
+type Mapper2<T, U> = (T) -> U
 ```
 
-Aliases are **purely syntactic** equivalences; they do not introduce new types.
+Aliases are **purely syntactic** equivalences; they do not introduce new types,
+runtime metadata, or AOT branches. A generic alias is substituted at its use
+site:
+
+```xray
+let p: Pair<int> = { first: 1, second: 2 }  // equivalent to { first: int, second: int }
+let f: Mapper2<int, string> = (n) -> string(n)
+```
+
+Generic alias parameters are a name list only (`<T, U>`); constraints are not
+part of type-alias syntax. Put constraints on the generic function, class /
+struct / enum / interface that uses the alias. Aliases may be forward
+referenced, but cyclic aliases, including recursive object aliases, are compile
+errors.
 
 ### 2.9 Type Inference
 
@@ -2570,21 +2585,24 @@ print(s.isRound())       // true
 ### 5.7 `type` aliases
 
 ```ebnf
-TypeAliasDecl ::= 'type' Identifier TypeParams? '=' Type
+TypeAliasDecl ::= 'type' Identifier AliasTypeParams? '=' Type
+AliasTypeParams ::= '<' Identifier (',' Identifier)* ','? '>'
 ```
 
 ```xray
 type Outcome = int | string                          // union alias
 type Mapper = fn(int) -> int                         // function-type alias
 type Point = { x: float, y: float }                  // structural object alias (sealed)
+type Pair<T> = { first: T, second: T }                // generic alias
 ```
 
 **Semantics**:
 - An alias is **purely a syntactic** substitution; it does not introduce a new nominal type.
+- A generic alias substitutes type arguments at the use site; substitution happens at compile time and introduces no runtime representation or AOT branch.
+- Generic alias parameters are only a name list; constraints are not supported. Put constraints on the generic declaration that uses the alias.
 - A `type Point = {...}` object alias is **sealed** when used as an annotation: accessing or assigning an undeclared field is a compile error.
 - `type T = Json` equals `Json` (not sealed).
 - Aliases may be referenced before their declaration but **must not be cyclic**.
-- `type` aliases currently do not take type parameters; generic abstraction is provided by generic functions and generic class/struct/enum/interface.
 
 See [§2.4.6](#246-json) and [§2.8](#28-type-aliases).
 
@@ -3381,6 +3399,7 @@ TypeParams ::= '<' TypeParam (',' TypeParam)* '>'
 TypeParam  ::= Identifier (':' ConstraintList)?
 ConstraintList ::= Type ('&' Type)*               // intersection constraints joined by '&'
 TypeArgs   ::= '<' Type (',' Type)* '>'
+AliasTypeParams ::= '<' Identifier (',' Identifier)* ','? '>'
 ```
 
 ```xray
@@ -3415,7 +3434,16 @@ class Pair<K, V> {
 interface Comparable<T> {
     compareTo(other: T) -> int
 }
+
+// Generic type alias: transparent syntax substitution, not a new type
+type PairAlias<T> = { first: T, second: T }
 ```
+
+Generic `type` aliases use `AliasTypeParams`: only a name list is allowed, with
+no constraints. At each use site, the type arguments are substituted directly
+into the alias RHS, so `PairAlias<int>` is equivalent to `{ first: int, second:
+int }`. This happens at compile time and creates no runtime metadata,
+monomorphization instance, or AOT branch; cyclic aliases are rejected.
 
 ### 9.2 Type Constraints: `<T: Constraint>` and Intersection Constraints `&`
 
@@ -5325,6 +5353,7 @@ Modifier  ::= 'in' | 'ref' | 'private' | 'static' | 'final' | 'abstract' | 'over
 
 TypeParams ::= '<' TypeParam (',' TypeParam)* ','? '>'
 TypeParam  ::= Identifier (':' Type ('&' Type)*)?         // constraints use ':', multiple use '&'
+AliasTypeParams ::= '<' Identifier (',' Identifier)* ','? '>'
 
 ClassDecl ::= Modifier* 'class' Identifier TypeParams?
               ('extends' NamedType)?
@@ -5355,7 +5384,7 @@ VariantPayload ::= '(' VariantField (',' VariantField)* ')'
 VariantField   ::= (Identifier ':')? Type
 BackingValue   ::= IntLiteral | FloatLiteral | StringLiteral | BoolLiteral
 
-TypeAliasDecl ::= 'type' Identifier TypeParams? '=' Type
+TypeAliasDecl ::= 'type' Identifier AliasTypeParams? '=' Type
 
 ImportDecl ::= 'import' ImportMembers 'from' ImportModule
             |  'import' ImportModule ('as' Identifier)?

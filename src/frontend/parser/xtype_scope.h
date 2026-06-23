@@ -35,6 +35,9 @@ typedef struct XrTypeScope XrTypeScope;
 typedef struct XrTypeAlias {
     const char *name;
     XrTypeRef *type_ref;
+    const char **type_param_names;
+    int type_param_count;
+    bool is_expanding;
     struct XrTypeAlias *next;
 } XrTypeAlias;
 

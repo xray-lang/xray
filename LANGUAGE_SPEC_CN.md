@@ -507,7 +507,7 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 | FFI / C ABI | `RawPtr<T>`、`RawMut<T>`、`CFn<(T) -> R>`、`uintsize`、`intsize` |
 | Class / Struct / Interface | 用户定义（nominal） |
 | Enum | 用户定义（含 ADT enum，见 §5.6） |
-| Type alias | `type Name = SomeType` |
+| Type alias | `type Name = SomeType`、`type Name<T> = SomeType` |
 
 ### 2.3 基本类型
 
@@ -842,9 +842,18 @@ let p2 = pair(1, "x")             // (int, string)
 type Result = int | string
 type Mapper = (int) -> int
 type Point = { x: float, y: float }
+type Pair<T> = { first: T, second: T }
+type Mapper2<T, U> = (T) -> U
 ```
 
-别名是**纯语法**等价，不产生新类型。
+别名是**纯语法**等价，不产生新类型，也不产生运行时元数据或 AOT 分支。泛型别名在使用处按类型实参做语法代入：
+
+```xray
+let p: Pair<int> = { first: 1, second: 2 }  // 等价于 { first: int, second: int }
+let f: Mapper2<int, string> = (n) -> string(n)
+```
+
+泛型别名形参只允许名字列表（`<T, U>`）；不带约束。需要约束时应放在使用该别名的泛型函数、class / struct / enum / interface 声明上。别名可前向引用，但循环别名（包括递归对象别名）是编译错误。
 
 ### 2.9 类型推断
 
@@ -2569,21 +2578,24 @@ print(s.isRound())       // true
 ### 5.7 `type` 别名
 
 ```ebnf
-TypeAliasDecl ::= 'type' Identifier TypeParams? '=' Type
+TypeAliasDecl ::= 'type' Identifier AliasTypeParams? '=' Type
+AliasTypeParams ::= '<' Identifier (',' Identifier)* ','? '>'
 ```
 
 ```xray
 type Outcome = int | string                          // union 别名
 type Mapper = fn(int) -> int                            // 函数类型别名
 type Point = { x: float, y: float }                  // 结构化对象别名（sealed）
+type Pair<T> = { first: T, second: T }                // 泛型别名
 ```
 
 **语义**：
 - 别名是**纯语法**替换，不产生新名义类型。
+- 泛型别名在使用处做类型实参代入；代入发生在编译期，不引入运行时表示或 AOT 分支。
+- 泛型别名形参只允许名字列表；不支持约束。约束应写在使用该别名的泛型声明上。
 - `type Point = {...}` 的对象类型在使用此别名标注时**密封**：未声明的字段访问/赋值是编译错误。
 - `type T = Json` 等于 `Json`（不密封）。
 - 别名可前向引用，但**禁止循环别名**。
-- 当前 `type` 别名不带类型参数；泛型抽象使用泛型函数、泛型 class / struct / enum / interface。
 
 详见 [§2.4.6](#246-json) 与 [§2.8](#28-类型别名)。
 
@@ -3380,6 +3392,7 @@ TypeParams ::= '<' TypeParam (',' TypeParam)* '>'
 TypeParam  ::= Identifier (':' ConstraintList)?
 ConstraintList ::= Type ('&' Type)*               // 交叉约束用 '&' 连接
 TypeArgs   ::= '<' Type (',' Type)* '>'
+AliasTypeParams ::= '<' Identifier (',' Identifier)* ','? '>'
 ```
 
 ```xray
@@ -3414,7 +3427,12 @@ class Pair<K, V> {
 interface Comparable<T> {
     compareTo(other: T) -> int
 }
+
+// 泛型 type alias：透明语法替换，不产生新类型
+type PairAlias<T> = { first: T, second: T }
 ```
+
+`type` 别名的泛型形参使用 `AliasTypeParams`：只允许名字列表，不支持约束。别名使用处会把类型实参直接代入别名 RHS，例如 `PairAlias<int>` 等价于 `{ first: int, second: int }`。这一步发生在编译期，不产生运行时元数据、单态化实例或 AOT 分支；循环别名会被拒绝。
 
 ### 9.2 类型约束：`<T: Constraint>` 与交叉约束 `&`
 
@@ -5322,6 +5340,7 @@ Modifier  ::= 'in' | 'ref' | 'private' | 'static' | 'final' | 'abstract' | 'over
 
 TypeParams ::= '<' TypeParam (',' TypeParam)* ','? '>'
 TypeParam  ::= Identifier (':' Type ('&' Type)*)?         // 约束用 ':' ，多约束用 '&'
+AliasTypeParams ::= '<' Identifier (',' Identifier)* ','? '>'
 
 ClassDecl ::= Modifier* 'class' Identifier TypeParams?
               ('extends' NamedType)?
@@ -5352,7 +5371,7 @@ VariantPayload ::= '(' VariantField (',' VariantField)* ')'
 VariantField   ::= (Identifier ':')? Type
 BackingValue   ::= IntLiteral | FloatLiteral | StringLiteral | BoolLiteral
 
-TypeAliasDecl ::= 'type' Identifier TypeParams? '=' Type
+TypeAliasDecl ::= 'type' Identifier AliasTypeParams? '=' Type
 
 ImportDecl ::= 'import' ImportMembers 'from' ImportModule
             |  'import' ImportModule ('as' Identifier)?

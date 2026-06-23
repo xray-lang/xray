@@ -19,6 +19,7 @@
 #include "../../runtime/xerror_codes.h"
 #include "../../base/xchecks.h"
 #include "../../base/xarena.h"
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "../../base/xmalloc.h"
@@ -44,6 +45,180 @@ static bool consume_gt_in_generic(Parser *parser) {
 
     xr_parser_error(parser, "expected '>' (at '>>')");
     return false;
+}
+
+static int alias_param_index(const XrTypeAlias *alias, const char *name) {
+    if (!alias || !name)
+        return -1;
+    for (int i = 0; i < alias->type_param_count; i++) {
+        if (alias->type_param_names && alias->type_param_names[i] &&
+            strcmp(alias->type_param_names[i], name) == 0)
+            return i;
+    }
+    return -1;
+}
+
+static XrTypeRef *clone_subst_type_ref(Parser *parser, const XrTypeRef *src,
+                                       const XrTypeAlias *subst_alias, XrTypeRef **type_args);
+
+static XrTypeRef *expand_type_alias(Parser *parser, XrTypeAlias *alias, XrTypeRef **type_args,
+                                    int type_arg_count) {
+    if (!alias)
+        return xr_tref_unknown(parser->X);
+
+    if (!alias->type_ref) {
+        char msg[256];
+        snprintf(msg, sizeof(msg), "circular type alias '%s'", alias->name ? alias->name : "?");
+        xr_parser_error(parser, msg);
+        return xr_tref_unknown(parser->X);
+    }
+
+    if (alias->type_param_count != type_arg_count) {
+        char msg[256];
+        if (alias->type_param_count == 0) {
+            snprintf(msg, sizeof(msg), "type alias '%s' does not take type arguments",
+                     alias->name ? alias->name : "?");
+        } else {
+            snprintf(msg, sizeof(msg), "generic type alias '%s' expects %d type arguments, got %d",
+                     alias->name ? alias->name : "?", alias->type_param_count, type_arg_count);
+        }
+        xr_parser_error(parser, msg);
+        return xr_tref_unknown(parser->X);
+    }
+
+    if (alias->is_expanding) {
+        char msg[256];
+        snprintf(msg, sizeof(msg), "circular type alias '%s'", alias->name ? alias->name : "?");
+        xr_parser_error(parser, msg);
+        return xr_tref_unknown(parser->X);
+    }
+
+    alias->is_expanding = true;
+    XrTypeRef *result = clone_subst_type_ref(parser, alias->type_ref, alias, type_args);
+    alias->is_expanding = false;
+    return result;
+}
+
+static XrTypeRef *expand_named_or_clone(Parser *parser, const char *name) {
+    if (parser->type_scope) {
+        XrTypeAlias *alias = xr_type_scope_lookup(parser->type_scope, name);
+        if (alias)
+            return expand_type_alias(parser, alias, NULL, 0);
+    }
+    return xr_tref_named(parser->X, name);
+}
+
+static XrTypeRef *expand_generic_or_clone(Parser *parser, const char *name, XrTypeRef **args,
+                                          int arg_count) {
+    if (parser->type_scope) {
+        XrTypeAlias *alias = xr_type_scope_lookup(parser->type_scope, name);
+        if (alias)
+            return expand_type_alias(parser, alias, args, arg_count);
+    }
+    return xr_tref_generic(parser->X, name, args, arg_count);
+}
+
+XR_FUNC XrTypeRef *xr_parse_type_name_ref(Parser *parser, const char *name) {
+    XR_DCHECK(parser != NULL, "xr_parse_type_name_ref: NULL parser");
+    return expand_named_or_clone(parser, name);
+}
+
+XR_FUNC XrTypeRef *xr_parse_generic_type_name_ref(Parser *parser, const char *name,
+                                                  XrTypeRef **args, int arg_count) {
+    XR_DCHECK(parser != NULL, "xr_parse_generic_type_name_ref: NULL parser");
+    return expand_generic_or_clone(parser, name, args, arg_count);
+}
+
+static XrTypeRef *clone_subst_type_ref(Parser *parser, const XrTypeRef *src,
+                                       const XrTypeAlias *subst_alias, XrTypeRef **type_args) {
+    if (!src)
+        return xr_tref_unknown(parser->X);
+
+    switch ((XrTypeRefKind) src->kind) {
+        case XR_TREF_INT:
+            return xr_tref_int(parser->X);
+        case XR_TREF_FLOAT:
+            return xr_tref_float(parser->X);
+        case XR_TREF_STRING:
+            return xr_tref_string(parser->X);
+        case XR_TREF_BOOL:
+            return xr_tref_bool(parser->X);
+        case XR_TREF_UNIT:
+            return xr_tref_unit(parser->X);
+        case XR_TREF_NULL:
+            return xr_tref_null(parser->X);
+        case XR_TREF_UNKNOWN:
+            return xr_tref_unknown(parser->X);
+        case XR_TREF_INT_WIDTH:
+            return xr_tref_int_width(parser->X, src->native_width);
+        case XR_TREF_FLOAT_WIDTH:
+            return xr_tref_float_width(parser->X, src->native_width);
+        case XR_TREF_TYPE_PARAM: {
+            int idx = alias_param_index(subst_alias, src->name);
+            if (idx >= 0 && type_args)
+                return clone_subst_type_ref(parser, type_args[idx], NULL, NULL);
+            return xr_tref_type_param(parser->X, src->name ? src->name : "?");
+        }
+        case XR_TREF_NAMED:
+            return expand_named_or_clone(parser, src->name ? src->name : "?");
+        case XR_TREF_GENERIC: {
+            XrTypeRef *args[256];
+            int count = src->nchildren;
+            for (int i = 0; i < count; i++)
+                args[i] = clone_subst_type_ref(parser, src->children[i], subst_alias, type_args);
+            return expand_generic_or_clone(parser, src->name ? src->name : "?", args, count);
+        }
+        case XR_TREF_OPTIONAL: {
+            XrTypeRef *inner = src->nchildren > 0 ? clone_subst_type_ref(parser, src->children[0],
+                                                                         subst_alias, type_args)
+                                                  : xr_tref_unknown(parser->X);
+            return xr_tref_optional(parser->X, inner);
+        }
+        case XR_TREF_UNION: {
+            XrTypeRef *members[256];
+            int count = src->nchildren;
+            for (int i = 0; i < count; i++)
+                members[i] = clone_subst_type_ref(parser, src->children[i], subst_alias, type_args);
+            return xr_tref_union(parser->X, members, count);
+        }
+        case XR_TREF_FUNCTION: {
+            int total = src->nchildren;
+            if (total <= 0)
+                return xr_tref_function(parser->X, NULL, 0, xr_tref_unit(parser->X));
+            XrTypeRef *params[256];
+            int nparam = total - 1;
+            for (int i = 0; i < nparam; i++)
+                params[i] = clone_subst_type_ref(parser, src->children[i], subst_alias, type_args);
+            XrTypeRef *ret =
+                clone_subst_type_ref(parser, src->children[total - 1], subst_alias, type_args);
+            return xr_tref_function(parser->X, params, nparam, ret);
+        }
+        case XR_TREF_TUPLE: {
+            XrTypeRef *elems[256];
+            int count = src->nchildren;
+            for (int i = 0; i < count; i++)
+                elems[i] = clone_subst_type_ref(parser, src->children[i], subst_alias, type_args);
+            return xr_tref_tuple(parser->X, elems, count);
+        }
+        case XR_TREF_OBJECT: {
+            XrTypeRef *fields[256];
+            int count = src->nchildren;
+            for (int i = 0; i < count; i++)
+                fields[i] = clone_subst_type_ref(parser, src->children[i], subst_alias, type_args);
+            XrTypeRef *obj = xr_tref_object(parser->X, src->field_names, fields,
+                                            src->field_readonly, count, src->extensible);
+            if (src->name)
+                obj->name = ast_strdup(parser->X, src->name);
+            return obj;
+        }
+        case XR_TREF_FIXED_ARRAY: {
+            XrTypeRef *elem = src->nchildren > 0 ? clone_subst_type_ref(parser, src->children[0],
+                                                                        subst_alias, type_args)
+                                                 : xr_tref_unknown(parser->X);
+            return xr_tref_fixed_array(parser->X, elem, src->fixed_length);
+        }
+    }
+    return xr_tref_unknown(parser->X);
 }
 
 /* ========== Type Annotation Parsing (returns XrTypeRef) ========== */
@@ -334,14 +509,14 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
                     type_args[type_arg_count++] = xr_parse_type_annotation(parser);
             } while (xr_parser_match(parser, TK_COMMA));
             consume_gt_in_generic(parser);
-            return xr_tref_generic(parser->X, temp_name, type_args, type_arg_count);
+            return expand_generic_or_clone(parser, temp_name, type_args, type_arg_count);
         }
 
         /* Check parser's type scope for aliases and generic params */
         if (parser->type_scope) {
-            XrTypeRef *alias = xr_type_scope_resolve(parser->type_scope, temp_name);
+            XrTypeAlias *alias = xr_type_scope_lookup(parser->type_scope, temp_name);
             if (alias)
-                return alias;
+                return expand_type_alias(parser, alias, NULL, 0);
         }
 
         /* Plain named type (class, enum, prelude — resolved in analyzer) */

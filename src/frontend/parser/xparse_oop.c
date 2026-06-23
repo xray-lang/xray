@@ -1675,12 +1675,9 @@ static XrTypeRef *build_type_from_consumed_name(Parser *parser, Token *name_tok)
                 type_args[type_arg_count++] = xr_parse_type_annotation(parser);
         } while (xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_GT));
         xr_parser_consume(parser, TK_GT, "expected '>' in generic type");
-        result = xr_tref_generic(parser->X, temp_name, type_args, type_arg_count);
-    } else if (parser->type_scope) {
-        XrTypeRef *alias = xr_type_scope_resolve(parser->type_scope, temp_name);
-        result = alias ? alias : xr_tref_named(parser->X, temp_name);
+        result = xr_parse_generic_type_name_ref(parser, temp_name, type_args, type_arg_count);
     } else {
-        result = xr_tref_named(parser->X, temp_name);
+        result = xr_parse_type_name_ref(parser, temp_name);
     }
 
     /* Handle trailing '?' for optional */

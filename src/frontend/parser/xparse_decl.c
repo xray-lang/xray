@@ -1132,6 +1132,43 @@ AstNode *xr_parse_type_alias_declaration(Parser *parser) {
     xr_parser_consume(parser, TK_NAME, "expected type name after 'type'");
     char *alias_name = xr_strndup(parser->previous.start, parser->previous.length);
 
+    XrGenericParam **type_params = NULL;
+    int type_param_count = 0;
+    int type_param_capacity = 0;
+
+    if (xr_parser_match(parser, TK_LT)) {
+        do {
+            xr_parser_consume(parser, TK_NAME, "expected type parameter name");
+            Token param_token = parser->previous;
+
+            char *param_name = (char *) ast_alloc(parser->X, (size_t) param_token.length + 1);
+            memcpy(param_name, param_token.start, (size_t) param_token.length);
+            param_name[param_token.length] = '\0';
+
+            for (int i = 0; i < type_param_count; i++) {
+                if (type_params[i] && type_params[i]->name &&
+                    strcmp(type_params[i]->name, param_name) == 0) {
+                    xr_parser_error(parser, "duplicate type parameter name in type alias");
+                }
+            }
+
+            XrTypeRef **constraints = NULL;
+            int constraint_count = 0;
+            if (xr_parser_match(parser, TK_COLON)) {
+                xr_parser_error(parser, "type alias type parameters do not support constraints");
+                constraints = xr_parse_constraint_list(parser, &constraint_count);
+            }
+
+            XrGenericParam *gp = (XrGenericParam *) ast_alloc(parser->X, sizeof(XrGenericParam));
+            gp->name = param_name;
+            gp->constraints = constraints;
+            gp->constraint_count = constraint_count;
+            XR_PARSE_PUSH(parser, type_params, type_param_count, type_param_capacity, gp);
+        } while (xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_GT));
+
+        xr_parser_consume(parser, TK_GT, "expected '>' to close type alias parameters");
+    }
+
     // Expect '='
     xr_parser_consume(parser, TK_ASSIGN, "expected '=' in type alias definition");
 
@@ -1144,9 +1181,33 @@ AstNode *xr_parse_type_alias_declaration(Parser *parser) {
         xr_free(alias_name);
         return NULL;
     }
+    if (type_param_count > 0) {
+        const char **param_names = (const char **) ast_alloc_array(parser->X, sizeof(const char *),
+                                                                   (size_t) type_param_count);
+        for (int i = 0; i < type_param_count; i++)
+            param_names[i] = type_params[i]->name;
+        alias_entry->type_param_names = param_names;
+        alias_entry->type_param_count = type_param_count;
+    }
 
-    // Parse type definition (self-reference will resolve to NULL → named type fallback)
+    XrTypeScope *saved_scope = parser->type_scope;
+    XrTypeScope *generic_scope = NULL;
+    if (type_param_count > 0) {
+        generic_scope = xr_type_scope_new(parser->type_scope);
+        for (int i = 0; i < type_param_count; i++) {
+            XrTypeRef *type_param = xr_tref_type_param(parser->X, type_params[i]->name);
+            xr_type_scope_define(generic_scope, type_params[i]->name, type_param);
+        }
+        parser->type_scope = generic_scope;
+    }
+
+    // Parse type definition; alias expansion catches recursive aliases while
+    // the placeholder is still unresolved.
     XrTypeRef *type_definition = xr_parse_type_annotation(parser);
+    if (type_param_count > 0) {
+        parser->type_scope = saved_scope;
+        xr_type_scope_free(generic_scope);
+    }
     if (!type_definition) {
         xr_parser_error(parser, "invalid type definition");
         xr_free(alias_name);
@@ -1170,6 +1231,8 @@ AstNode *xr_parse_type_alias_declaration(Parser *parser) {
     if (!node) {
         return NULL;
     }
+    node->as.type_alias.type_params = type_params;
+    node->as.type_alias.type_param_count = type_param_count;
     node->as.type_alias.resolved_type = type_definition;
 
     return node;

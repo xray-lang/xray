@@ -199,6 +199,9 @@ XR_FUNC AstNode *xr_parse_export_declaration(Parser *parser);
 /* ========== Type Annotations ========== */
 
 XR_FUNC XrTypeRef *xr_parse_type_annotation(Parser *parser);
+XR_FUNC XrTypeRef *xr_parse_type_name_ref(Parser *parser, const char *name);
+XR_FUNC XrTypeRef *xr_parse_generic_type_name_ref(Parser *parser, const char *name,
+                                                  XrTypeRef **args, int arg_count);
 
 /* Parse one or more interface constraints separated by '&', e.g.
  *   T: Comparable
