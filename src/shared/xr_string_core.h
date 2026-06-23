@@ -389,6 +389,21 @@ static inline XrStringCoreSlice xr_string_core_utf8_char_slice_at(const char *da
     return xr_string_core_slice_at(data, len, pos, (size_t) size);
 }
 
+static inline XrStringCoreSlice xr_string_core_utf8_index_slice_at(const char *data, size_t len,
+                                                                   int64_t index) {
+    if (index < 0 || !data || len == 0)
+        return xr_string_core_slice_at(data, len, len, 0);
+
+    size_t pos = 0;
+    if (!xr_string_core_utf8_char_at(data, len, (size_t) index, NULL, &pos))
+        return xr_string_core_slice_at(data, len, len, 0);
+
+    int size = xr_string_core_utf8_char_size((unsigned char) data[pos]);
+    if (pos + (size_t) size > len)
+        return xr_string_core_slice_at(data, len, len, 0);
+    return xr_string_core_slice_at(data, len, pos, (size_t) size);
+}
+
 static inline XrStringCoreSlice xr_string_core_byte_slice_at(const char *data, size_t len,
                                                              int64_t index) {
     if (!data || len == 0)
