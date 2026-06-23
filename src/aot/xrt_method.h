@@ -234,12 +234,7 @@ static inline XrValue xrt_method_0(XrValue recv, int sym) {
             return first;
         }
         if (sym == XRT_SYM_REVERSE) {
-            for (int64_t i = 0, j = a->length - 1; i < j; i++, j--) {
-                XrValue vi = xr_typed_get(a->data, (int32_t) i, a->elem_type);
-                XrValue vj = xr_typed_get(a->data, (int32_t) j, a->elem_type);
-                xr_typed_set(a->data, (int32_t) i, vj, a->elem_type);
-                xr_typed_set(a->data, (int32_t) j, vi, a->elem_type);
-            }
+            (void) xr_array_core_reverse(a->data, a->length, a->elem_size);
             return recv;
         }
         if (sym == XRT_SYM_SORT)

@@ -62,6 +62,37 @@ TEST(array_core_index_set_plan_rejects_wraparound_and_gaps) {
     ASSERT_EQ_INT(plan.kind, XR_ARRAY_CORE_INDEX_SET_INVALID);
 }
 
+TEST(array_core_reverse_swaps_raw_elements_by_size) {
+    uint8_t bytes[] = {1, 2, 3, 4};
+    ASSERT_TRUE(xr_array_core_reverse(bytes, 4, 1));
+    ASSERT_EQ_INT(bytes[0], 4);
+    ASSERT_EQ_INT(bytes[1], 3);
+    ASSERT_EQ_INT(bytes[2], 2);
+    ASSERT_EQ_INT(bytes[3], 1);
+
+    int64_t ints[] = {10, 20, 30};
+    ASSERT_TRUE(xr_array_core_reverse(ints, 3, 8));
+    ASSERT_EQ_INT(ints[0], 30);
+    ASSERT_EQ_INT(ints[1], 20);
+    ASSERT_EQ_INT(ints[2], 10);
+
+    XrValue boxed[] = {XR_FROM_INT(7), XR_FROM_FLOAT(2.5), XR_FROM_BOOL(true)};
+    ASSERT_TRUE(xr_array_core_reverse(boxed, 3, sizeof(XrValue)));
+    ASSERT_TRUE(XR_IS_BOOL(boxed[0]));
+    ASSERT_TRUE(XR_IS_FLOAT(boxed[1]));
+    ASSERT_TRUE(XR_IS_INT(boxed[2]));
+    ASSERT_EQ_INT(XR_TO_INT(boxed[2]), 7);
+}
+
+TEST(array_core_reverse_handles_empty_single_and_invalid_data) {
+    uint8_t value = 42;
+    ASSERT_TRUE(xr_array_core_reverse(NULL, 0, 1));
+    ASSERT_TRUE(xr_array_core_reverse(&value, 1, 1));
+    ASSERT_EQ_INT(value, 42);
+    ASSERT_FALSE(xr_array_core_reverse(NULL, 2, 1));
+    ASSERT_FALSE(xr_array_core_reverse(&value, 2, 0));
+}
+
 TEST(array_core_typed_index_of_matches_boxed_tags) {
     int handled = 0;
     uint8_t bytes[] = {1, 255, 3};
@@ -210,6 +241,8 @@ RUN_TEST(array_core_slice_range_empty_when_start_after_end);
 RUN_TEST(array_core_slice_range_accepts_nonpositive_length);
 RUN_TEST(array_core_fill_range_matches_slice_bounds);
 RUN_TEST(array_core_index_set_plan_rejects_wraparound_and_gaps);
+RUN_TEST(array_core_reverse_swaps_raw_elements_by_size);
+RUN_TEST(array_core_reverse_handles_empty_single_and_invalid_data);
 RUN_TEST(array_core_typed_index_of_matches_boxed_tags);
 RUN_TEST(array_core_bytes_loads_little_endian_and_rejects_invalid_ranges);
 RUN_TEST(array_core_bytes_copy_uses_shared_range_and_overlap_rules);
