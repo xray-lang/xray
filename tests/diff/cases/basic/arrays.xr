@@ -24,3 +24,22 @@ print(a[3])
 let syntax_tail = a[-4:-1]
 print(syntax_tail.length)
 print(syntax_tail[1])
+
+let fill_range = [1, 2, 3, 4, 5, 6]
+fill_range.fill(9, 2, 5)
+print(fill_range[2])
+print(fill_range[5])
+fill_range.fill(7, -3, -1)
+print(fill_range[3])
+print(fill_range[4])
+fill_range.fill(4, 4)
+print(fill_range[4])
+print(fill_range[5])
+
+let bytes = new Bytes(6)
+bytes.fill(1)
+bytes.fill(255, 1, 4)
+print(bytes[0])
+print(bytes[1])
+print(bytes[3])
+print(bytes[4])

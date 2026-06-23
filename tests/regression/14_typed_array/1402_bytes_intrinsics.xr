@@ -51,6 +51,19 @@ fn test_bytes_intrinsics_and_capacity() {
     assert_eq(rep[6], 65)
     assert_eq(rep[7], 66)
     assert_eq(rep[8], 67)
+
+    let fill = new Bytes(6)
+    fill.fill(1)
+    fill.fill(255, 1, 4)
+    assert_eq(fill[0], 1)
+    assert_eq(fill[1], 255)
+    assert_eq(fill[3], 255)
+    assert_eq(fill[4], 1)
+    fill.fill(7, -3, -1)
+    assert_eq(fill[2], 255)
+    assert_eq(fill[3], 7)
+    assert_eq(fill[4], 7)
+    assert_eq(fill[5], 1)
 }
 
 @test

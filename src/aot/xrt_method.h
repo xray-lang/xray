@@ -479,11 +479,7 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
             return XR_NULL_VAL;
         }
         if (sym == XRT_SYM_FILL) {
-            if (xrt_array_fill_typed_fast(a, arg0))
-                return recv;
-            for (int64_t i = 0; i < a->length; i++)
-                xr_typed_set(a->data, (int32_t) i, arg0, a->elem_type);
-            return recv;
+            return xrt_array_fill_range_value(recv, arg0, 0, a->length);
         }
         if (sym == XRT_SYM_INDEXOF) {
             int handled;
@@ -679,6 +675,11 @@ static inline XrValue xrt_method_2(XrValue recv, int sym, XrValue arg0, XrValue 
         int64_t end = (arg1.tag == XR_TAG_I64) ? arg1.i : a->length;
         return xrt_array_slice_view(recv, start, end);
     }
+    if (XR_IS_ARRAY(recv) && sym == XRT_SYM_FILL) {
+        xrt_array_t *a = (xrt_array_t *) recv.ptr;
+        int64_t start = (arg1.tag == XR_TAG_I64) ? arg1.i : 0;
+        return xrt_array_fill_range_value(recv, arg0, start, a->length);
+    }
     if (XR_IS_ARRAY(recv) && sym == XRT_SYM_REDUCE && arg0.tag == XR_TAG_CLOSURE)
         return xrt_array_reduce_typed(recv, arg0, arg1);
     if (XR_IS_ARRAY(recv) && sym == XRT_SYM_RESIZE)
@@ -691,6 +692,17 @@ static inline XrValue xrt_method_2(XrValue recv, int sym, XrValue arg0, XrValue 
         return (XrValue) {.i = 0, .tag = XR_TAG_NULL};
     }
     return (XrValue) {.i = 0, .tag = XR_TAG_NULL};
+}
+
+static inline XrValue xrt_method_3(XrValue recv, int sym, XrValue arg0, XrValue arg1,
+                                   XrValue arg2) {
+    if (XR_IS_ARRAY(recv) && sym == XRT_SYM_FILL) {
+        xrt_array_t *a = (xrt_array_t *) recv.ptr;
+        int64_t start = (arg1.tag == XR_TAG_I64) ? arg1.i : 0;
+        int64_t end = (arg2.tag == XR_TAG_I64) ? arg2.i : a->length;
+        return xrt_array_fill_range_value(recv, arg0, start, end);
+    }
+    return XR_NULL_VAL;
 }
 
 #include "xrt_getprop.inc.c"

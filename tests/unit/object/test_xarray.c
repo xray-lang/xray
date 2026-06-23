@@ -247,6 +247,26 @@ TEST(array_has) {
     teardown();
 }
 
+TEST(array_fill_negative_bounds) {
+    setup();
+    XrArray *arr = xr_array_new(main_coro);
+    for (int i = 0; i < 6; i++)
+        xr_array_push(arr, xr_int(i + 1));
+
+    xr_array_fill(arr, xr_int(9), -4, -1);
+    ASSERT_EQ_INT(xr_as_int(xr_array_get(arr, 0)), 1);
+    ASSERT_EQ_INT(xr_as_int(xr_array_get(arr, 1)), 2);
+    ASSERT_EQ_INT(xr_as_int(xr_array_get(arr, 2)), 9);
+    ASSERT_EQ_INT(xr_as_int(xr_array_get(arr, 3)), 9);
+    ASSERT_EQ_INT(xr_as_int(xr_array_get(arr, 4)), 9);
+    ASSERT_EQ_INT(xr_as_int(xr_array_get(arr, 5)), 6);
+
+    xr_array_fill(arr, xr_int(7), 5, 2);
+    ASSERT_EQ_INT(xr_as_int(xr_array_get(arr, 2)), 9);
+    ASSERT_EQ_INT(xr_as_int(xr_array_get(arr, 5)), 6);
+    teardown();
+}
+
 /* ========== Clear Tests ========== */
 
 TEST(array_clear) {
@@ -479,6 +499,7 @@ static void run_all_tests(void) {
     RUN_TEST(array_index_of_found);
     RUN_TEST(array_index_of_not_found);
     RUN_TEST(array_has);
+    RUN_TEST(array_fill_negative_bounds);
 
     RUN_TEST_SUITE("Array Clear");
     RUN_TEST(array_clear);

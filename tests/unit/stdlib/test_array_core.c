@@ -39,6 +39,12 @@ TEST(array_core_slice_range_accepts_nonpositive_length) {
     assert_range(xr_array_core_slice_range(-7, -1, 10), 0, 0, 0);
 }
 
+TEST(array_core_fill_range_matches_slice_bounds) {
+    assert_range(xr_array_core_fill_range(6, 1, 4), 1, 4, 3);
+    assert_range(xr_array_core_fill_range(6, -3, -1), 3, 5, 2);
+    assert_range(xr_array_core_fill_range(6, 4, 2), 2, 2, 0);
+}
+
 TEST_MAIN_BEGIN()
 
 RUN_TEST_SUITE("Array Core - Slice Range");
@@ -46,5 +52,6 @@ RUN_TEST(array_core_slice_range_clamps_positive_bounds);
 RUN_TEST(array_core_slice_range_handles_negative_bounds);
 RUN_TEST(array_core_slice_range_empty_when_start_after_end);
 RUN_TEST(array_core_slice_range_accepts_nonpositive_length);
+RUN_TEST(array_core_fill_range_matches_slice_bounds);
 
 TEST_MAIN_END()
