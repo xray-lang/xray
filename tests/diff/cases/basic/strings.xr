@@ -3,6 +3,8 @@ let s = "Hello, World"
 print(s.length)
 print(s.toUpperCase())
 print(s.toLowerCase())
+print("Hello 世界🌍".toUpperCase())
+print("Hello 世界🌍".toLowerCase())
 print(s.substring(0, 5))
 print(s.includes("World"))
 print(s.indexOf("World"))

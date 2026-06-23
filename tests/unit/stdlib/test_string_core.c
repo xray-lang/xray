@@ -104,6 +104,40 @@ TEST(string_core_prefix_suffix) {
     ASSERT_FALSE(xr_string_core_starts_with(NULL, 1, "a", 1));
 }
 
+TEST(string_core_ascii_case_write) {
+    char lower[32];
+    ASSERT_EQ_UINT(xr_string_core_ascii_lower_write(lower, "Hello XRay 123!", 15), 15);
+    ASSERT(strcmp(lower, "hello xray 123!") == 0);
+
+    char upper[32];
+    ASSERT_EQ_UINT(xr_string_core_ascii_upper_write(upper, "Hello XRay 123!", 15), 15);
+    ASSERT(strcmp(upper, "HELLO XRAY 123!") == 0);
+}
+
+TEST(string_core_ascii_case_preserves_utf8) {
+    const char *mixed = "Äx你Y🌍";
+    char lower[32];
+    ASSERT_EQ_UINT(xr_string_core_ascii_lower_write(lower, mixed, strlen(mixed)), strlen(mixed));
+    ASSERT(strcmp(lower, "Äx你y🌍") == 0);
+
+    char upper[32];
+    ASSERT_EQ_UINT(xr_string_core_ascii_upper_write(upper, mixed, strlen(mixed)), strlen(mixed));
+    ASSERT(strcmp(upper, "ÄX你Y🌍") == 0);
+}
+
+TEST(string_core_ascii_case_empty_and_null_zero) {
+    char out[4] = {'x', 'x', 'x', '\0'};
+    ASSERT_EQ_UINT(xr_string_core_ascii_lower_write(out, "", 0), 0);
+    ASSERT(strcmp(out, "") == 0);
+
+    out[0] = 'x';
+    ASSERT_EQ_UINT(xr_string_core_ascii_upper_write(out, NULL, 0), 0);
+    ASSERT(strcmp(out, "") == 0);
+
+    ASSERT_EQ_UINT(xr_string_core_ascii_lower_write(NULL, "abc", 3), 0);
+    ASSERT_EQ_UINT(xr_string_core_ascii_upper_write(NULL, "abc", 3), 0);
+}
+
 TEST(string_core_reverse_utf8) {
     char ascii[16];
     ASSERT_EQ_UINT(xr_string_core_reverse_utf8_write(ascii, "Hello", 5), 5);
@@ -142,6 +176,9 @@ RUN_TEST(string_core_index_of_basic_and_long_pattern);
 RUN_TEST(string_core_index_of_embedded_nul);
 RUN_TEST(string_core_last_index_of_edges);
 RUN_TEST(string_core_prefix_suffix);
+RUN_TEST(string_core_ascii_case_write);
+RUN_TEST(string_core_ascii_case_preserves_utf8);
+RUN_TEST(string_core_ascii_case_empty_and_null_zero);
 RUN_TEST(string_core_reverse_utf8);
 RUN_TEST(string_core_reverse_empty_and_null_zero);
 

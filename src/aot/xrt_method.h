@@ -186,17 +186,13 @@ static inline XrValue xrt_str_method_0(const char *s, int64_t slen, XrValue recv
     if (sym == XRT_SYM_TOLOWER) {
         XrValue sv = xrt_str_alloc((size_t) slen);
         char *r = xr_str_buf(sv);
-        for (int64_t i = 0; i < slen; i++)
-            r[i] = (s[i] >= 'A' && s[i] <= 'Z') ? (char) (s[i] + 32) : s[i];
-        r[slen] = 0;
+        xr_string_core_ascii_lower_write(r, s, (size_t) slen);
         return sv;
     }
     if (sym == XRT_SYM_TOUPPER) {
         XrValue sv = xrt_str_alloc((size_t) slen);
         char *r = xr_str_buf(sv);
-        for (int64_t i = 0; i < slen; i++)
-            r[i] = (s[i] >= 'a' && s[i] <= 'z') ? (char) (s[i] - 32) : s[i];
-        r[slen] = 0;
+        xr_string_core_ascii_upper_write(r, s, (size_t) slen);
         return sv;
     }
     if (sym == XRT_SYM_TOINT) {
