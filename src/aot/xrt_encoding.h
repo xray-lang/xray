@@ -81,8 +81,8 @@ static inline XrValue xrt_encoding_utf8_byte_length(const char *data, int64_t le
 }
 
 static inline int xrt_encoding_utf16_endian_from_value(XrValue value) {
-    return XR_IS_INT(value) && XR_TO_INT(value) == XR_ENCODING_UTF16_BE ? XR_ENCODING_UTF16_BE
-                                                                        : XR_ENCODING_UTF16_LE;
+    bool has_endian = XR_IS_INT(value);
+    return xr_encoding_core_utf16_endian_arg(has_endian, has_endian ? XR_TO_INT(value) : 0);
 }
 
 static inline XrValue xrt_encoding_utf16_encode_impl(const char *data, int64_t len, int endian) {
@@ -168,7 +168,9 @@ static inline XrValue xrt_encoding_utf16_decode_endian(XrValue input, XrValue en
 
 static inline XrValue xrt_encoding_utf16_decode_endian_strip(XrValue input, XrValue endian,
                                                              XrValue strip_bom) {
-    int strip = !XR_IS_BOOL(strip_bom) || strip_bom.i != 0;
+    bool has_strip_bom = XR_IS_BOOL(strip_bom);
+    bool strip =
+        xr_encoding_core_bool_arg_or(has_strip_bom, has_strip_bom ? strip_bom.i != 0 : false, true);
     return xrt_encoding_utf16_decode_impl(input, xrt_encoding_utf16_endian_from_value(endian), 1,
                                           strip);
 }

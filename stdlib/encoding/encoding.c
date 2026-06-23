@@ -229,10 +229,9 @@ static XrValue encoding_utf8_byte_length(XrVMRuntime *X, XrValue *args, int narg
 }
 
 static XrUtf16Endian parse_endian_arg(XrValue *args, int nargs) {
-    if (nargs >= 2 && XR_IS_INT(args[1])) {
-        return XR_TO_INT(args[1]) == XR_UTF16_BE ? XR_UTF16_BE : XR_UTF16_LE;
-    }
-    return XR_UTF16_LE;
+    bool has_endian = nargs >= 2 && XR_IS_INT(args[1]);
+    int endian = xr_encoding_core_utf16_endian_arg(has_endian, has_endian ? XR_TO_INT(args[1]) : 0);
+    return endian == XR_ENCODING_UTF16_BE ? XR_UTF16_BE : XR_UTF16_LE;
 }
 
 // encoding.utf16Encode(str, endian?) -> Array<uint8>
@@ -301,10 +300,9 @@ static XrValue encoding_utf16_decode(XrVMRuntime *X, XrValue *args, int nargs) {
     // Auto-detect endian from BOM when the caller did not supply one.
     bool endian_explicit = (nargs >= 2 && XR_IS_INT(args[1]));
     XrUtf16Endian endian = parse_endian_arg(args, nargs);
-    bool strip_bom = true;
-    if (nargs >= 3 && XR_IS_BOOL(args[2])) {
-        strip_bom = XR_TO_BOOL(args[2]);
-    }
+    bool has_strip_bom = nargs >= 3 && XR_IS_BOOL(args[2]);
+    bool strip_bom = xr_encoding_core_bool_arg_or(
+        has_strip_bom, has_strip_bom ? XR_TO_BOOL(args[2]) != 0 : false, true);
 
     XrEncodingCoreUtf16DecodeView view = xr_encoding_core_utf16_decode_view(
         bytes, len, endian == XR_UTF16_BE ? XR_ENCODING_UTF16_BE : XR_ENCODING_UTF16_LE,

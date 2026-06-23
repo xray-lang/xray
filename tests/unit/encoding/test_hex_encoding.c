@@ -149,6 +149,18 @@ TEST(utf16_decode_view_allows_empty_null) {
     ASSERT_EQ_INT(view.endian, XR_ENCODING_UTF16_LE);
 }
 
+TEST(utf16_argument_rules_default_to_le_and_true) {
+    ASSERT_EQ_INT(xr_encoding_core_utf16_endian_arg(false, XR_ENCODING_UTF16_BE),
+                  XR_ENCODING_UTF16_LE);
+    ASSERT_EQ_INT(xr_encoding_core_utf16_endian_arg(true, XR_ENCODING_UTF16_BE),
+                  XR_ENCODING_UTF16_BE);
+    ASSERT_EQ_INT(xr_encoding_core_utf16_endian_arg(true, 999), XR_ENCODING_UTF16_LE);
+    ASSERT_TRUE(xr_encoding_core_bool_arg_or(false, false, true));
+    ASSERT_FALSE(xr_encoding_core_bool_arg_or(false, true, false));
+    ASSERT_TRUE(xr_encoding_core_bool_arg_or(true, true, false));
+    ASSERT_FALSE(xr_encoding_core_bool_arg_or(true, false, true));
+}
+
 /* ========== Main ========== */
 
 TEST_MAIN_BEGIN()
@@ -176,5 +188,6 @@ RUN_TEST(utf16_decode_view_strips_be_bom_and_autodetects);
 RUN_TEST(utf16_decode_view_keeps_explicit_endian);
 RUN_TEST(utf16_decode_view_keeps_bom_when_requested);
 RUN_TEST(utf16_decode_view_allows_empty_null);
+RUN_TEST(utf16_argument_rules_default_to_le_and_true);
 
 TEST_MAIN_END()
