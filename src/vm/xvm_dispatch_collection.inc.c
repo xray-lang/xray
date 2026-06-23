@@ -536,12 +536,9 @@ vmcase(OP_ARRAY_GETC) {
     {
         XrRange *rng = xr_value_get_range_body(isolate, obj_val);
         if (rng) {
-            int64_t len = xr_range_length(rng);
-            if (c >= 0 && c < len) {
-                R(a) = xr_int(rng->start + (int64_t) c * rng->step);
-            } else {
-                R(a) = xr_null();
-            }
+            bool ok = false;
+            int64_t value = xr_range_index(rng, c, &ok);
+            R(a) = ok ? xr_int(value) : xr_null();
             vmbreak;
         }
     }
@@ -1211,12 +1208,9 @@ vmcase(OP_INDEX_GET) {
         XrRange *rng = xr_value_get_range_body(isolate, obj_val);
         if (rng) {
             int64_t idx = XR_TO_INT(key_val);
-            int64_t len = xr_range_length(rng);
-            if (idx >= 0 && idx < len) {
-                R(a) = xr_int(rng->start + idx * rng->step);
-            } else {
-                R(a) = xr_null();
-            }
+            bool ok = false;
+            int64_t value = xr_range_index(rng, idx, &ok);
+            R(a) = ok ? xr_int(value) : xr_null();
             vmbreak;
         }
     }

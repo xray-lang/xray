@@ -115,12 +115,14 @@ static XrValue m_range_to_string(XrVMRuntime *iso, XrValue self, XrValue *args, 
     XrRange *rng = xr_value_get_range_body(iso, self);
     if (!rng)
         return xr_null();
-    char buf[80];
-    int n = (rng->step == 1)
-                ? snprintf(buf, sizeof(buf), "%" PRId64 "..%" PRId64, rng->start, rng->end)
-                : snprintf(buf, sizeof(buf), "%" PRId64 "..%" PRId64 ":%" PRId64, rng->start,
-                           rng->end, rng->step);
-    XrString *s = xr_string_intern(iso, buf, (size_t) n, 0);
+    char buf[96];
+    int n = xr_range_format_buf(rng, buf, sizeof(buf));
+    if (n < 0)
+        return xr_null();
+    size_t len = (size_t) n;
+    if (len >= sizeof(buf))
+        len = sizeof(buf) - 1;
+    XrString *s = xr_string_intern(iso, buf, len, 0);
     return xr_string_value(s);
 }
 
