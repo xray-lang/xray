@@ -1227,13 +1227,25 @@ Allowed in the following positions only:
 - **Function rest parameter declaration**: `fn f(...args: int)`
 - **Function call spread**: `f(...args)`; the spread source must be a tuple whose arity is statically known.
 - **Tuple literal spread**: `(head, ...tail)`; the spread source must be a tuple whose arity is statically known.
+- **Array literal spread**: `[...a, x, ...b]`; the spread source must be an array. The result is a new array built by runtime concatenation (O(n)).
+- **Object/record literal spread**: `{...base, x: 1}`; the spread source must be an object. Fields are merged into a new object; on a name clash the later field wins, and the result field set is the union of every source's fields and the literal fields.
+
+```xray
+let a = [1, 2]
+let b = [3, 4]
+let nums = [...a, 99, ...b]            // [1, 2, 99, 3, 4]
+
+let base = { x: 1, y: 2 }
+let point = { ...base, y: 20, z: 3 }   // { x: 1, y: 20, z: 3 }
+```
 
 ### 3.10 Literal Construction
 
 #### Array `[...]`
 
 ```ebnf
-ArrayLit ::= '[' (Expr (',' Expr)* ','?)? ']'
+ArrayLit  ::= '[' (ArrayElem (',' ArrayElem)* ','?)? ']'
+ArrayElem ::= '...' Expr | Expr
 ```
 
 ```xray
@@ -1274,6 +1286,7 @@ let empty = #[]
 ObjectLit  ::= '{' ObjectField (',' ObjectField)* ','? '}'
 ObjectField ::= Identifier ':' Expr
               | Identifier            // shorthand: `{ x }` ≡ `{ x: x }`
+              | '...' Expr            // spread: `{ ...base }` merges fields
 ```
 
 ```xray
@@ -5269,12 +5282,13 @@ Primary ::= IntLiteral | FloatLiteral | BigIntLiteral
          |  '(' Expression ')'
          |  '(' Expression (',' Expression)+ ')'  // tuple
 
-ArrayLit ::= '[' (Expression (',' Expression)* ','?)? ']'
+ArrayLit ::= '[' (ArrayElem (',' ArrayElem)* ','?)? ']'
+ArrayElem ::= '...' Expression | Expression
 MapLit   ::= '#{' (MapEntry (',' MapEntry)* ','?)? '}'
 MapEntry ::= Expression ':' Expression
 SetLit   ::= '#[' (Expression (',' Expression)* ','?)? ']'
 ObjectLit ::= '{' (ObjectFieldExpr (',' ObjectFieldExpr)* ','?)? '}'
-ObjectFieldExpr ::= Identifier ':' Expression | Identifier
+ObjectFieldExpr ::= Identifier ':' Expression | Identifier | '...' Expression
 
 ArrowFunction ::= '(' ArrowParams? ')' '->' (Expression | Block)
 ArrowParams ::= ArrowParam (',' ArrowParam)*
