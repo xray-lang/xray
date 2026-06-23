@@ -134,6 +134,155 @@ static inline time_t xr_datetime_core_mktime(struct tm *tm, int is_utc) {
     return wall_t - (time_t) off_min * 60;
 }
 
+typedef struct XrDateTimeCoreFields {
+    int64_t timestamp;
+    int32_t milliseconds;
+    int32_t tz_offset;
+    int is_utc;
+} XrDateTimeCoreFields;
+
+typedef enum XrDateTimeCoreUnit {
+    XR_DATETIME_CORE_UNIT_UNKNOWN = 0,
+    XR_DATETIME_CORE_UNIT_MILLISECOND,
+    XR_DATETIME_CORE_UNIT_SECOND,
+    XR_DATETIME_CORE_UNIT_MINUTE,
+    XR_DATETIME_CORE_UNIT_HOUR,
+    XR_DATETIME_CORE_UNIT_DAY,
+    XR_DATETIME_CORE_UNIT_WEEK,
+    XR_DATETIME_CORE_UNIT_MONTH,
+    XR_DATETIME_CORE_UNIT_YEAR,
+} XrDateTimeCoreUnit;
+
+static inline XrDateTimeCoreUnit xr_datetime_core_unit_from_cstr(const char *unit) {
+    if (!unit)
+        return XR_DATETIME_CORE_UNIT_UNKNOWN;
+    if (strcmp(unit, "millisecond") == 0 || strcmp(unit, "milliseconds") == 0)
+        return XR_DATETIME_CORE_UNIT_MILLISECOND;
+    if (strcmp(unit, "second") == 0 || strcmp(unit, "seconds") == 0)
+        return XR_DATETIME_CORE_UNIT_SECOND;
+    if (strcmp(unit, "minute") == 0 || strcmp(unit, "minutes") == 0)
+        return XR_DATETIME_CORE_UNIT_MINUTE;
+    if (strcmp(unit, "hour") == 0 || strcmp(unit, "hours") == 0)
+        return XR_DATETIME_CORE_UNIT_HOUR;
+    if (strcmp(unit, "day") == 0 || strcmp(unit, "days") == 0)
+        return XR_DATETIME_CORE_UNIT_DAY;
+    if (strcmp(unit, "week") == 0 || strcmp(unit, "weeks") == 0)
+        return XR_DATETIME_CORE_UNIT_WEEK;
+    if (strcmp(unit, "month") == 0 || strcmp(unit, "months") == 0)
+        return XR_DATETIME_CORE_UNIT_MONTH;
+    if (strcmp(unit, "year") == 0 || strcmp(unit, "years") == 0)
+        return XR_DATETIME_CORE_UNIT_YEAR;
+    return XR_DATETIME_CORE_UNIT_UNKNOWN;
+}
+
+static inline void xr_datetime_core_to_tm_fields(const XrDateTimeCoreFields *dt, struct tm *tm) {
+    if (!dt || !tm)
+        return;
+    time_t t = (time_t) dt->timestamp;
+    if (!dt->is_utc)
+        t += (time_t) dt->tz_offset * 60;
+    xr_datetime_core_gmtime(t, tm);
+}
+
+static inline void xr_datetime_core_add_milliseconds(const XrDateTimeCoreFields *dt, int64_t amount,
+                                                     XrDateTimeCoreFields *out) {
+    int64_t total_ms = dt->timestamp * 1000 + dt->milliseconds + amount;
+    *out = *dt;
+    out->timestamp = total_ms / 1000;
+    out->milliseconds = (int32_t) (total_ms % 1000);
+    if (out->milliseconds < 0) {
+        out->timestamp--;
+        out->milliseconds += 1000;
+    }
+}
+
+static inline int xr_datetime_core_add_fields(const XrDateTimeCoreFields *dt, int64_t amount,
+                                              const char *unit, XrDateTimeCoreFields *out) {
+    if (!dt || !out)
+        return 0;
+    XrDateTimeCoreUnit kind = xr_datetime_core_unit_from_cstr(unit);
+    *out = *dt;
+
+    switch (kind) {
+        case XR_DATETIME_CORE_UNIT_MILLISECOND:
+            xr_datetime_core_add_milliseconds(dt, amount, out);
+            return 1;
+        case XR_DATETIME_CORE_UNIT_SECOND:
+            out->timestamp = dt->timestamp + amount;
+            return 1;
+        case XR_DATETIME_CORE_UNIT_MINUTE:
+            out->timestamp = dt->timestamp + amount * 60;
+            return 1;
+        case XR_DATETIME_CORE_UNIT_HOUR:
+            out->timestamp = dt->timestamp + amount * 3600;
+            return 1;
+        case XR_DATETIME_CORE_UNIT_DAY:
+            out->timestamp = dt->timestamp + amount * 86400;
+            return 1;
+        case XR_DATETIME_CORE_UNIT_WEEK:
+            out->timestamp = dt->timestamp + amount * 604800;
+            return 1;
+        case XR_DATETIME_CORE_UNIT_MONTH: {
+            struct tm tm;
+            xr_datetime_core_to_tm_fields(dt, &tm);
+            int total_months = (tm.tm_year + 1900) * 12 + tm.tm_mon + (int) amount;
+            tm.tm_year = total_months / 12 - 1900;
+            tm.tm_mon = total_months % 12;
+            if (tm.tm_mon < 0) {
+                tm.tm_mon += 12;
+                tm.tm_year--;
+            }
+            int max_day = xr_datetime_core_days_in_month(tm.tm_year + 1900, tm.tm_mon + 1);
+            if (tm.tm_mday > max_day)
+                tm.tm_mday = max_day;
+            tm.tm_isdst = -1;
+            out->timestamp = (int64_t) xr_datetime_core_mktime(&tm, dt->is_utc);
+            return 1;
+        }
+        case XR_DATETIME_CORE_UNIT_YEAR: {
+            struct tm tm;
+            xr_datetime_core_to_tm_fields(dt, &tm);
+            tm.tm_year += (int) amount;
+            int max_day = xr_datetime_core_days_in_month(tm.tm_year + 1900, tm.tm_mon + 1);
+            if (tm.tm_mday > max_day)
+                tm.tm_mday = max_day;
+            tm.tm_isdst = -1;
+            out->timestamp = (int64_t) xr_datetime_core_mktime(&tm, dt->is_utc);
+            return 1;
+        }
+        case XR_DATETIME_CORE_UNIT_UNKNOWN:
+        default:
+            out->timestamp = dt->timestamp + amount;
+            return 0;
+    }
+}
+
+static inline int64_t xr_datetime_core_diff_fields(const XrDateTimeCoreFields *a,
+                                                   const XrDateTimeCoreFields *b,
+                                                   const char *unit) {
+    if (!a || !b)
+        return 0;
+    int64_t diff_ms = (a->timestamp - b->timestamp) * 1000 + (a->milliseconds - b->milliseconds);
+    switch (xr_datetime_core_unit_from_cstr(unit)) {
+        case XR_DATETIME_CORE_UNIT_MILLISECOND:
+            return diff_ms;
+        case XR_DATETIME_CORE_UNIT_MINUTE:
+            return diff_ms / 60000;
+        case XR_DATETIME_CORE_UNIT_HOUR:
+            return diff_ms / 3600000;
+        case XR_DATETIME_CORE_UNIT_DAY:
+            return diff_ms / 86400000;
+        case XR_DATETIME_CORE_UNIT_WEEK:
+            return diff_ms / 604800000;
+        case XR_DATETIME_CORE_UNIT_SECOND:
+        case XR_DATETIME_CORE_UNIT_MONTH:
+        case XR_DATETIME_CORE_UNIT_YEAR:
+        case XR_DATETIME_CORE_UNIT_UNKNOWN:
+        default:
+            return diff_ms / 1000;
+    }
+}
+
 typedef int (*XrDateTimeCoreWriteFn)(void *ctx, const char *data, size_t len);
 
 typedef struct XrDateTimeCoreWriter {
