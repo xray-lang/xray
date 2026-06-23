@@ -263,62 +263,41 @@ static XrValue url_parse_fn(XrVMRuntime *X, XrValue *args, int nargs) {
     return xr_json_value(json);
 }
 
+typedef struct {
+    XrVMRuntime *X;
+    XrJson *json;
+} UrlFormatFields;
+
+static bool url_format_field(void *ctx, const char *name, const char **data, size_t *len) {
+    UrlFormatFields *fields = (UrlFormatFields *) ctx;
+    if (!fields || !fields->X || !fields->json || !data || !len)
+        return false;
+    XrValue value = xr_json_get_by_key(fields->X, fields->json, name);
+    if (XR_IS_STRING(value)) {
+        XrString *s = XR_TO_STRING(value);
+        *data = XR_STRING_CHARS(s);
+        *len = s->length;
+    } else {
+        *data = NULL;
+        *len = 0;
+    }
+    return true;
+}
+
 static XrValue url_format_fn(XrVMRuntime *X, XrValue *args, int nargs) {
     if (nargs < 1 || !xr_value_is_json(args[0]))
         return XR_NULL_VAL;
-    XrJson *json = xr_value_to_json(args[0]);
-
-    XrValue protocol = xr_json_get_by_key(X, json, "protocol");
-    XrValue hostname = xr_json_get_by_key(X, json, "hostname");
-    XrValue port = xr_json_get_by_key(X, json, "port");
-    XrValue pathname = xr_json_get_by_key(X, json, "pathname");
-    XrValue search = xr_json_get_by_key(X, json, "search");
-    XrValue hash = xr_json_get_by_key(X, json, "hash");
-    XrValue username = xr_json_get_by_key(X, json, "username");
-    XrValue password = xr_json_get_by_key(X, json, "password");
 
     XrCtxBuf buf;
     xr_ctxbuf_init(&buf, 128);
-
-    // protocol
-    if (XR_IS_STRING(protocol) && XR_TO_STRING(protocol)->length > 0) {
-        xr_ctxbuf_appendf(&buf, "%s//", XR_TO_STRING(protocol)->data);
+    XrUrlCoreWriter writer = url_core_writer(&buf);
+    UrlFormatFields fields;
+    fields.X = X;
+    fields.json = xr_value_to_json(args[0]);
+    if (!xr_url_core_format_write(url_format_field, &fields, &writer)) {
+        xr_ctxbuf_free(&buf);
+        return XR_NULL_VAL;
     }
-
-    // userinfo
-    if (XR_IS_STRING(username) && XR_TO_STRING(username)->length > 0) {
-        xr_ctxbuf_append_cstr(&buf, XR_TO_STRING(username)->data);
-        if (XR_IS_STRING(password) && XR_TO_STRING(password)->length > 0) {
-            xr_ctxbuf_appendf(&buf, ":%s", XR_TO_STRING(password)->data);
-        }
-        xr_ctxbuf_putc(&buf, '@');
-    }
-
-    // hostname
-    if (XR_IS_STRING(hostname) && XR_TO_STRING(hostname)->length > 0) {
-        xr_ctxbuf_append_cstr(&buf, XR_TO_STRING(hostname)->data);
-    }
-
-    // port
-    if (XR_IS_STRING(port) && XR_TO_STRING(port)->length > 0) {
-        xr_ctxbuf_appendf(&buf, ":%s", XR_TO_STRING(port)->data);
-    }
-
-    // pathname
-    if (XR_IS_STRING(pathname) && XR_TO_STRING(pathname)->length > 0) {
-        xr_ctxbuf_append_cstr(&buf, XR_TO_STRING(pathname)->data);
-    }
-
-    // search
-    if (XR_IS_STRING(search) && XR_TO_STRING(search)->length > 0) {
-        xr_ctxbuf_append_cstr(&buf, XR_TO_STRING(search)->data);
-    }
-
-    // hash
-    if (XR_IS_STRING(hash) && XR_TO_STRING(hash)->length > 0) {
-        xr_ctxbuf_append_cstr(&buf, XR_TO_STRING(hash)->data);
-    }
-
     return ctxbuf_to_value(X, &buf);
 }
 

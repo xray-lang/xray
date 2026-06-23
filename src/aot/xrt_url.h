@@ -188,46 +188,30 @@ static inline XrValue xrt_url_get_name(XrValue obj, const char *name) {
     return XR_NULL_VAL;
 }
 
-static inline void xrt_url_append_string_value(xrt_strbuf_t *sb, XrValue value) {
-    if (XR_IS_STR(value) && xr_str_len(value) > 0)
-        xrt_url_buf_append_raw(sb, xr_str_data(value), (size_t) xr_str_len(value));
+static inline bool xrt_url_format_field(void *ctx, const char *name, const char **data,
+                                        size_t *len) {
+    XrValue obj = *(XrValue *) ctx;
+    XrValue value = xrt_url_get_name(obj, name);
+    if (XR_IS_STR(value)) {
+        *data = xr_str_data(value);
+        *len = (size_t) xr_str_len(value);
+    } else {
+        *data = NULL;
+        *len = 0;
+    }
+    return true;
 }
 
 static inline XrValue xrt_url_format(XrValue obj) {
     if (obj.tag != XR_TAG_PTR && !XR_IS_MAP(obj))
         return XR_NULL_VAL;
-
-    XrValue protocol = xrt_url_get_name(obj, "protocol");
-    XrValue hostname = xrt_url_get_name(obj, "hostname");
-    XrValue port = xrt_url_get_name(obj, "port");
-    XrValue pathname = xrt_url_get_name(obj, "pathname");
-    XrValue search = xrt_url_get_name(obj, "search");
-    XrValue hash = xrt_url_get_name(obj, "hash");
-    XrValue username = xrt_url_get_name(obj, "username");
-    XrValue password = xrt_url_get_name(obj, "password");
-
     XrValue bufv = xrt_strbuf_new();
     xrt_strbuf_t *buf = (xrt_strbuf_t *) bufv.ptr;
-    if (XR_IS_STR(protocol) && xr_str_len(protocol) > 0) {
-        xrt_url_append_string_value(buf, protocol);
-        xrt_url_buf_append_raw(buf, "//", 2);
+    XrUrlCoreWriter writer = xrt_url_core_writer(buf);
+    if (!xr_url_core_format_write(xrt_url_format_field, &obj, &writer)) {
+        xrt_release(bufv);
+        return XR_NULL_VAL;
     }
-    if (XR_IS_STR(username) && xr_str_len(username) > 0) {
-        xrt_url_append_string_value(buf, username);
-        if (XR_IS_STR(password) && xr_str_len(password) > 0) {
-            xrt_url_buf_putc(buf, ':');
-            xrt_url_append_string_value(buf, password);
-        }
-        xrt_url_buf_putc(buf, '@');
-    }
-    xrt_url_append_string_value(buf, hostname);
-    if (XR_IS_STR(port) && xr_str_len(port) > 0) {
-        xrt_url_buf_putc(buf, ':');
-        xrt_url_append_string_value(buf, port);
-    }
-    xrt_url_append_string_value(buf, pathname);
-    xrt_url_append_string_value(buf, search);
-    xrt_url_append_string_value(buf, hash);
     return xrt_strbuf_finish(bufv);
 }
 
