@@ -1437,6 +1437,7 @@ if(BUILD_TESTS)
         NAME backend_diff
         COMMAND ${CMAKE_COMMAND} -E env
                 XRAY_DIFF_MAX_AUTO_JOBS=${XRAY_CTEST_DIFF_JOBS}
+                XRAY_DIFF_COLD_MAX_AUTO_JOBS=4
                 XRAY_DIFF_HOT_MAX_AUTO_JOBS=8
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/diff/run_backend_diff.sh
                 $<TARGET_FILE:xray>

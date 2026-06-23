@@ -59,6 +59,45 @@ static XrValue ctxbuf_to_value(XrVMRuntime *X, XrCtxBuf *b) {
     return v;
 }
 
+static bool url_core_writer_append(void *ctx, const char *data, size_t len) {
+    xr_ctxbuf_append((XrCtxBuf *) ctx, data, len);
+    return true;
+}
+
+static bool url_core_writer_putc(void *ctx, char c) {
+    xr_ctxbuf_putc((XrCtxBuf *) ctx, c);
+    return true;
+}
+
+static char *url_core_writer_data(void *ctx) {
+    XrCtxBuf *buf = (XrCtxBuf *) ctx;
+    return buf ? buf->data : NULL;
+}
+
+static size_t url_core_writer_len(void *ctx) {
+    XrCtxBuf *buf = (XrCtxBuf *) ctx;
+    return buf ? buf->len : 0;
+}
+
+static void url_core_writer_set_len(void *ctx, size_t len) {
+    XrCtxBuf *buf = (XrCtxBuf *) ctx;
+    if (!buf)
+        return;
+    buf->len = len;
+    buf->data[buf->len] = '\0';
+}
+
+static XrUrlCoreWriter url_core_writer(XrCtxBuf *buf) {
+    XrUrlCoreWriter writer;
+    writer.ctx = buf;
+    writer.append = url_core_writer_append;
+    writer.putc = url_core_writer_putc;
+    writer.data = url_core_writer_data;
+    writer.len = url_core_writer_len;
+    writer.set_len = url_core_writer_set_len;
+    return writer;
+}
+
 /* ========== RFC 3986 Encoding/Decoding ========== */
 
 int xr_url_encode(const char *str, size_t len, char *buf, size_t buf_size) {
@@ -427,165 +466,23 @@ static XrValue url_build_query_fn(XrVMRuntime *X, XrValue *args, int nargs) {
     return ctxbuf_to_value(X, &buf);
 }
 
-// Emit `scheme://authority` prefix from the parsed base URL into `out`.
-// Used to share the header-construction logic across every branch of the
-// RFC 3986 §5.3 reference-resolution algorithm implemented below.
-static void url_emit_base_authority(XrCtxBuf *out, const XrUrlCoreParts *bp) {
-    if (bp->protocol && bp->protocol_len > 0) {
-        xr_ctxbuf_appendf(out, "%.*s//", (int) bp->protocol_len, bp->protocol);
-    }
-    if (bp->hostname && bp->hostname_len > 0) {
-        xr_ctxbuf_append(out, bp->hostname, bp->hostname_len);
-    }
-    if (bp->port && bp->port_len > 0) {
-        xr_ctxbuf_appendf(out, ":%.*s", (int) bp->port_len, bp->port);
-    }
-}
-
-// Faithful implementation of RFC 3986 §5.3 "Reference Resolution". Handles
-// the reference-transforming rules from §5.2.2 including fragment-only
-// references, empty paths, and the query-retention corner cases that the
-// previous ad-hoc implementation silently mishandled.
+// Faithful implementation of RFC 3986 §5.3 "Reference Resolution".
+// The algorithm lives in shared core; this function only adapts VM strings.
 static XrValue url_resolve_fn(XrVMRuntime *X, XrValue *args, int nargs) {
     if (nargs < 2 || !XR_IS_STRING(args[0]) || !XR_IS_STRING(args[1]))
         return XR_NULL_VAL;
 
     XrString *base_str = XR_TO_STRING(args[0]);
     XrString *rel_str = XR_TO_STRING(args[1]);
-    const char *base = XR_STRING_CHARS(base_str);
-    const char *rel = XR_STRING_CHARS(rel_str);
-    size_t rel_len = rel_str->length;
-
-    // If the reference already has a scheme (scheme://...), it is treated
-    // as an absolute URI per §5.2.2 step 1 and returned unchanged.
-    const char *colon = memchr(rel, ':', rel_len);
-    if (colon && colon + 2 < rel + rel_len && colon[1] == '/' && colon[2] == '/') {
-        return args[1];
-    }
-
-    XrUrlCoreParts bp;
-    xr_url_core_parse(base, base_str->length, &bp);
-
-    // Split the reference into path / ?query / #fragment segments so each
-    // component can be assembled independently.
-    const char *rel_hash = memchr(rel, '#', rel_len);
-    size_t rel_hash_len = rel_hash ? (size_t) ((rel + rel_len) - rel_hash) : 0;
-    size_t rel_no_hash_len = rel_hash ? (size_t) (rel_hash - rel) : rel_len;
-
-    const char *rel_query = memchr(rel, '?', rel_no_hash_len);
-    size_t rel_query_len = 0;
-    size_t rel_path_len = rel_no_hash_len;
-    if (rel_query) {
-        rel_query_len = (size_t) ((rel + rel_no_hash_len) - rel_query);
-        rel_path_len = (size_t) (rel_query - rel);
-    }
 
     XrCtxBuf result;
     xr_ctxbuf_init(&result, 128);
-
-    // Track where the path portion lives in the result buffer so
-    // remove_dot_segments operates only on the path, never on
-    // the scheme, authority, query, or fragment.
-    size_t path_start = 0, path_end = 0;
-
-    if (rel_len > 1 && rel[0] == '/' && rel[1] == '/') {
-        // Network-path reference: "//host/...": keep base scheme only.
-        if (bp.protocol && bp.protocol_len > 0) {
-            xr_ctxbuf_appendf(&result, "%.*s", (int) bp.protocol_len, bp.protocol);
-        }
-        // Append reference authority: skip "//" then find path start.
-        xr_ctxbuf_append(&result, rel, 2);  // "//"
-        size_t a = 2;
-        while (a < rel_no_hash_len && rel[a] != '/' && rel[a] != '?')
-            a++;
-        xr_ctxbuf_append(&result, rel + 2, a - 2);  // authority
-        path_start = result.len;
-        xr_ctxbuf_append(&result, rel + a, rel_path_len > a ? rel_path_len - a : 0);
-        path_end = result.len;
-        if (rel_query)
-            xr_ctxbuf_append(&result, rel_query, rel_query_len);
-        if (rel_hash)
-            xr_ctxbuf_append(&result, rel_hash, rel_hash_len);
-    } else if (rel_path_len > 0 && rel[0] == '/') {
-        // Absolute-path reference: keep base authority, take reference path.
-        url_emit_base_authority(&result, &bp);
-        path_start = result.len;
-        xr_ctxbuf_append(&result, rel, rel_path_len);
-        path_end = result.len;
-        if (rel_query)
-            xr_ctxbuf_append(&result, rel_query, rel_query_len);
-        if (rel_hash)
-            xr_ctxbuf_append(&result, rel_hash, rel_hash_len);
-    } else if (rel_path_len == 0) {
-        // Empty-path reference (query-only and/or fragment-only).
-        url_emit_base_authority(&result, &bp);
-        path_start = result.len;
-        if (bp.pathname && bp.pathname_len > 0) {
-            xr_ctxbuf_append(&result, bp.pathname, bp.pathname_len);
-        }
-        path_end = result.len;
-        if (rel_query) {
-            xr_ctxbuf_append(&result, rel_query, rel_query_len);
-        } else if (bp.search && bp.search_len > 0) {
-            // Preserve base query when the reference has none. (§5.2.2: if
-            // reference.query is defined, use it; otherwise use base.query.)
-            xr_ctxbuf_append(&result, bp.search, bp.search_len);
-        }
-        if (rel_hash)
-            xr_ctxbuf_append(&result, rel_hash, rel_hash_len);
-    } else {
-        // Relative-path reference: merge base path with reference path.
-        url_emit_base_authority(&result, &bp);
-        path_start = result.len;
-
-        size_t merge_prefix = 0;
-        if (bp.pathname && bp.pathname_len > 0) {
-            // Merge rule from §5.2.3: retain everything in base.path up to
-            // and including the last '/'. If base has no path separators
-            // we start from scratch with a single leading '/'.
-            const char *last_slash = NULL;
-            for (size_t i = bp.pathname_len; i > 0; i--) {
-                if (bp.pathname[i - 1] == '/') {
-                    last_slash = &bp.pathname[i - 1];
-                    break;
-                }
-            }
-            if (last_slash) {
-                merge_prefix = (size_t) (last_slash - bp.pathname + 1);
-                xr_ctxbuf_append(&result, bp.pathname, merge_prefix);
-            } else {
-                xr_ctxbuf_putc(&result, '/');
-            }
-        } else {
-            xr_ctxbuf_putc(&result, '/');
-        }
-        (void) merge_prefix;
-        xr_ctxbuf_append(&result, rel, rel_path_len);
-        path_end = result.len;
-        if (rel_query)
-            xr_ctxbuf_append(&result, rel_query, rel_query_len);
-        if (rel_hash)
-            xr_ctxbuf_append(&result, rel_hash, rel_hash_len);
+    XrUrlCoreWriter writer = url_core_writer(&result);
+    if (!xr_url_core_resolve_write(XR_STRING_CHARS(base_str), base_str->length,
+                                   XR_STRING_CHARS(rel_str), rel_str->length, &writer)) {
+        xr_ctxbuf_free(&result);
+        return XR_NULL_VAL;
     }
-
-    // Apply remove_dot_segments only to the path portion.
-    // The helper works in-place and never grows, so operating directly
-    // on the buffer storage is safe. Shift the query+fragment tail
-    // leftward by the number of bytes the path shrank.
-    if (path_end > path_start) {
-        size_t old_path_len = path_end - path_start;
-        size_t new_path_len =
-            xr_url_core_remove_dot_segments(result.data + path_start, old_path_len);
-        size_t shrink = old_path_len - new_path_len;
-        if (shrink > 0) {
-            size_t tail_len = result.len - path_end;
-            if (tail_len > 0)
-                memmove(result.data + path_start + new_path_len, result.data + path_end, tail_len);
-            result.len -= shrink;
-        }
-    }
-    if (result.data)
-        result.data[result.len] = '\0';
     return ctxbuf_to_value(X, &result);
 }
 

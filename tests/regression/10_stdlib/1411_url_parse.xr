@@ -210,6 +210,30 @@ fn test_resolve_absolute_url() {
     assert_eq(result, "http://other.com/b")
 }
 
+@test
+fn test_resolve_query_only_replaces_base_query() {
+    let result = url.resolve("https://example.com/a/b/c?old=1#top", "?new=2")
+    assert_eq(result, "https://example.com/a/b/c?new=2")
+}
+
+@test
+fn test_resolve_fragment_only_preserves_base_query() {
+    let result = url.resolve("https://example.com/a/b/c?old=1", "#frag")
+    assert_eq(result, "https://example.com/a/b/c?old=1#frag")
+}
+
+@test
+fn test_resolve_network_path_keeps_base_scheme() {
+    let result = url.resolve("https://example.com/a/b/c", "//cdn.example.com/lib.js")
+    assert_eq(result, "https://cdn.example.com/lib.js")
+}
+
+@test
+fn test_resolve_dot_segments() {
+    let result = url.resolve("https://example.com/a/b/c", "../d/./e")
+    assert_eq(result, "https://example.com/a/d/e")
+}
+
 // ============================================================
 // Part 8: join
 // ============================================================
