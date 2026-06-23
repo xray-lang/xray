@@ -306,19 +306,12 @@ static XrValue encoding_utf16_decode(XrVMRuntime *X, XrValue *args, int nargs) {
         strip_bom = XR_TO_BOOL(args[2]);
     }
 
-    if (strip_bom && len >= 2) {
-        if (bytes[0] == 0xFF && bytes[1] == 0xFE) {
-            if (!endian_explicit)
-                endian = XR_UTF16_LE;
-            bytes += 2;
-            len -= 2;
-        } else if (bytes[0] == 0xFE && bytes[1] == 0xFF) {
-            if (!endian_explicit)
-                endian = XR_UTF16_BE;
-            bytes += 2;
-            len -= 2;
-        }
-    }
+    XrEncodingCoreUtf16DecodeView view = xr_encoding_core_utf16_decode_view(
+        bytes, len, endian == XR_UTF16_BE ? XR_ENCODING_UTF16_BE : XR_ENCODING_UTF16_LE,
+        endian_explicit, strip_bom);
+    bytes = view.data;
+    len = view.len;
+    endian = view.endian == XR_ENCODING_UTF16_BE ? XR_UTF16_BE : XR_UTF16_LE;
     if (len == 0)
         return xrs_string_value_n(X, "", 0);
 

@@ -311,6 +311,37 @@ static inline uint16_t xr_encoding_core_utf16_read_unit(const uint8_t *data, int
     return (uint16_t) ((uint16_t) data[0] | ((uint16_t) data[1] << 8));
 }
 
+typedef struct XrEncodingCoreUtf16DecodeView {
+    const uint8_t *data;
+    size_t len;
+    int endian;
+} XrEncodingCoreUtf16DecodeView;
+
+static inline XrEncodingCoreUtf16DecodeView
+xr_encoding_core_utf16_decode_view(const uint8_t *data, size_t len, int endian,
+                                   bool endian_explicit, bool strip_bom) {
+    XrEncodingCoreUtf16DecodeView view = {
+        .data = data,
+        .len = len,
+        .endian = endian,
+    };
+    if (!strip_bom || !data || len < 2)
+        return view;
+
+    if (data[0] == 0xFF && data[1] == 0xFE) {
+        if (!endian_explicit)
+            view.endian = XR_ENCODING_UTF16_LE;
+        view.data = data + 2;
+        view.len = len - 2;
+    } else if (data[0] == 0xFE && data[1] == 0xFF) {
+        if (!endian_explicit)
+            view.endian = XR_ENCODING_UTF16_BE;
+        view.data = data + 2;
+        view.len = len - 2;
+    }
+    return view;
+}
+
 static inline bool xr_encoding_core_utf16_to_utf8_len(const uint8_t *utf16, size_t utf16_len,
                                                       int endian, size_t *out_len) {
     if ((!utf16 && utf16_len != 0) || (utf16_len % 2u) != 0)
