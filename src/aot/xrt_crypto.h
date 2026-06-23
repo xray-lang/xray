@@ -11,7 +11,6 @@
 #ifndef XRT_CRYPTO_H
 #define XRT_CRYPTO_H
 
-#include <stdio.h>
 #include <string.h>
 
 #include "../os/os_random.h"
@@ -70,7 +69,8 @@ static inline XrValue xrt_crypto_random_bytes(XrValue len_value) {
     uint8_t buf[1024];
     char hex[2049];
     xr_random_bytes(buf, len);
-    xr_bytes_to_hex(buf, len, hex);
+    if (!xr_crypto_core_bytes_hex(buf, len, hex, sizeof(hex)))
+        return XR_NULL_VAL;
 
     XrValue result = xrt_str_alloc(len * 2);
     memcpy(xr_str_buf(result), hex, len * 2);
@@ -81,14 +81,10 @@ static inline XrValue xrt_crypto_random_bytes(XrValue len_value) {
 static inline XrValue xrt_crypto_uuid(void) {
     uint8_t bytes[16];
     xr_random_bytes(bytes, 16);
-    bytes[6] = (bytes[6] & 0x0F) | 0x40;
-    bytes[8] = (bytes[8] & 0x3F) | 0x80;
 
     char uuid[37];
-    snprintf(uuid, sizeof(uuid),
-             "%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x", bytes[0],
-             bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7], bytes[8],
-             bytes[9], bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15]);
+    if (!xr_crypto_core_uuid_v4_write(bytes, uuid, sizeof(uuid)))
+        return XR_NULL_VAL;
 
     XrValue result = xrt_str_alloc(36);
     memcpy(xr_str_buf(result), uuid, 36);

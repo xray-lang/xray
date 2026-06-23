@@ -248,6 +248,27 @@ TEST(crypto_bytes_to_hex) {
     ASSERT_STR_EQ(hex, "deadbeef");
 }
 
+TEST(crypto_core_bytes_hex) {
+    uint8_t data[] = {0x00, 0x0F, 0xA5};
+    char hex[7];
+    ASSERT_TRUE(xr_crypto_core_bytes_hex(data, 3, hex, sizeof(hex)));
+    ASSERT_STR_EQ(hex, "000fa5");
+    ASSERT_TRUE(!xr_crypto_core_bytes_hex(data, 3, hex, 6));
+}
+
+TEST(crypto_core_uuid_v4_write) {
+    uint8_t bytes[16];
+    for (int i = 0; i < 16; i++)
+        bytes[i] = (uint8_t) i;
+
+    char uuid[37];
+    ASSERT_TRUE(xr_crypto_core_uuid_v4_write(bytes, uuid, sizeof(uuid)));
+    ASSERT_STR_EQ(uuid, "00010203-0405-4607-8809-0a0b0c0d0e0f");
+    ASSERT_EQ_INT(bytes[6] >> 4, 4);
+    ASSERT_EQ_INT(bytes[8] >> 6, 2);
+    ASSERT_TRUE(!xr_crypto_core_uuid_v4_write(bytes, uuid, 36));
+}
+
 TEST(crypto_core_hash_selector) {
     uint8_t digest[64];
     size_t len = 0;
@@ -338,6 +359,8 @@ RUN_TEST(crypto_random_bytes_zero);
 
 RUN_TEST_SUITE("Crypto - Utility");
 RUN_TEST(crypto_bytes_to_hex);
+RUN_TEST(crypto_core_bytes_hex);
+RUN_TEST(crypto_core_uuid_v4_write);
 RUN_TEST(crypto_core_hash_selector);
 RUN_TEST(crypto_core_hmac_selector);
 
