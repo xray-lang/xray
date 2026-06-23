@@ -162,6 +162,62 @@ TEST(crypto_aes_cbc_single_block) {
     ASSERT_TRUE(memcmp(plain, recovered, 16) == 0);
 }
 
+TEST(crypto_core_aes_hex_roundtrip) {
+    const uint8_t key[] = "secret";
+    const uint8_t plain_text[] = "hello world";
+    uint8_t iv[16];
+    for (int i = 0; i < 16; i++)
+        iv[i] = (uint8_t) i;
+
+    size_t padded_len = 0;
+    size_t hex_len = 0;
+    ASSERT_TRUE(xr_crypto_core_aes_encrypt_plan(11, &padded_len, &hex_len));
+    ASSERT_EQ_INT((int) padded_len, 16);
+    ASSERT_EQ_INT((int) hex_len, 64);
+
+    uint8_t padded[16];
+    uint8_t cipher[16];
+    char hex[65];
+    ASSERT_TRUE(xr_crypto_core_aes_encrypt_hex(key, 6, plain_text, 11, iv, padded, sizeof(padded),
+                                               cipher, sizeof(cipher), hex, sizeof(hex)));
+    ASSERT_EQ_INT((int) strlen(hex), 64);
+    ASSERT_TRUE(strncmp(hex, "000102030405060708090a0b0c0d0e0f", 32) == 0);
+
+    uint8_t raw[32];
+    uint8_t plain[16];
+    size_t plain_len = 0;
+    ASSERT_TRUE(xr_crypto_core_aes_decrypt_hex(key, 6, hex, strlen(hex), raw, sizeof(raw), plain,
+                                               sizeof(plain), &plain_len));
+    ASSERT_EQ_INT((int) plain_len, 11);
+    ASSERT_TRUE(memcmp(plain, plain_text, plain_len) == 0);
+
+    ASSERT_TRUE(!xr_crypto_core_aes_decrypt_hex(key, 6, "xyz", 3, raw, sizeof(raw), plain,
+                                                sizeof(plain), &plain_len));
+}
+
+TEST(crypto_core_aes_empty_plaintext) {
+    const uint8_t key[] = "";
+    uint8_t iv[16] = {0};
+    uint8_t padded[16];
+    uint8_t cipher[16];
+    char hex[65];
+
+    size_t padded_len = 0;
+    size_t hex_len = 0;
+    ASSERT_TRUE(xr_crypto_core_aes_encrypt_plan(0, &padded_len, &hex_len));
+    ASSERT_EQ_INT((int) padded_len, 16);
+    ASSERT_EQ_INT((int) hex_len, 64);
+    ASSERT_TRUE(xr_crypto_core_aes_encrypt_hex(key, 0, NULL, 0, iv, padded, sizeof(padded), cipher,
+                                               sizeof(cipher), hex, sizeof(hex)));
+
+    uint8_t raw[32];
+    uint8_t plain[16];
+    size_t plain_len = 99;
+    ASSERT_TRUE(xr_crypto_core_aes_decrypt_hex(key, 0, hex, strlen(hex), raw, sizeof(raw), plain,
+                                               sizeof(plain), &plain_len));
+    ASSERT_EQ_INT((int) plain_len, 0);
+}
+
 /* ========== Random Bytes ========== */
 
 TEST(crypto_random_bytes) {
@@ -273,6 +329,8 @@ RUN_TEST(crypto_hmac_sha256_basic);
 RUN_TEST_SUITE("Crypto - AES-256-CBC");
 RUN_TEST(crypto_aes_cbc_roundtrip);
 RUN_TEST(crypto_aes_cbc_single_block);
+RUN_TEST(crypto_core_aes_hex_roundtrip);
+RUN_TEST(crypto_core_aes_empty_plaintext);
 
 RUN_TEST_SUITE("Crypto - Random");
 RUN_TEST(crypto_random_bytes);
