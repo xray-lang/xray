@@ -47,3 +47,13 @@ print(parts.length)
 for (i in 0..parts.length) {
     print(parts[i])
 }
+let edgeParts = "a,,b,".split(",")
+print(edgeParts.length)
+for (i in 0..edgeParts.length) {
+    print(edgeParts[i])
+}
+let charParts = "ab".split("")
+print(charParts.length)
+for (i in 0..charParts.length) {
+    print(charParts[i])
+}

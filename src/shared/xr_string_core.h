@@ -71,6 +71,19 @@ typedef struct XrStringCoreReplacePlan {
     size_t count;
 } XrStringCoreReplacePlan;
 
+typedef enum XrStringCoreSplitKind {
+    XR_STRING_CORE_SPLIT_INVALID = 0,
+    XR_STRING_CORE_SPLIT_EMPTY_DELIMITER,
+    XR_STRING_CORE_SPLIT_DELIMITER
+} XrStringCoreSplitKind;
+
+typedef struct XrStringCoreSplitPlan {
+    XrStringCoreSplitKind kind;
+    size_t count;
+} XrStringCoreSplitPlan;
+
+typedef bool (*XrStringCoreSplitEmitFn)(XrStringCoreSlice slice, void *user);
+
 typedef struct XrStringCoreParseIntResult {
     bool ok;
     int64_t value;
@@ -622,6 +635,72 @@ static inline bool xr_string_core_ends_with(const char *haystack, size_t haystac
     if (suffix_len == 0)
         return true;
     return memcmp(haystack + haystack_len - suffix_len, suffix, suffix_len) == 0;
+}
+
+static inline XrStringCoreSplitPlan xr_string_core_split_plan(const char *data, size_t len,
+                                                              const char *sep, size_t sep_len) {
+    XrStringCoreSplitPlan out = {XR_STRING_CORE_SPLIT_INVALID, 0};
+    if ((!data && len != 0) || (!sep && sep_len != 0))
+        return out;
+
+    if (sep_len == 0) {
+        out.kind = XR_STRING_CORE_SPLIT_EMPTY_DELIMITER;
+        out.count = len;
+        return out;
+    }
+
+    out.kind = XR_STRING_CORE_SPLIT_DELIMITER;
+    out.count = 1;
+    size_t pos = 0;
+    while (pos <= len) {
+        ptrdiff_t rel = xr_string_core_index_of(data ? data + pos : data, len - pos, sep, sep_len);
+        if (rel < 0)
+            break;
+        if (out.count == SIZE_MAX)
+            return (XrStringCoreSplitPlan) {XR_STRING_CORE_SPLIT_INVALID, 0};
+        out.count++;
+        pos += (size_t) rel + sep_len;
+    }
+    return out;
+}
+
+static inline size_t xr_string_core_split_each(const char *data, size_t len, const char *sep,
+                                               size_t sep_len, XrStringCoreSplitEmitFn emit,
+                                               void *user) {
+    XrStringCoreSplitPlan plan = xr_string_core_split_plan(data, len, sep, sep_len);
+    if (plan.kind == XR_STRING_CORE_SPLIT_INVALID)
+        return 0;
+
+    size_t emitted = 0;
+    if (plan.kind == XR_STRING_CORE_SPLIT_EMPTY_DELIMITER) {
+        for (size_t i = 0; i < len; i++) {
+            XrStringCoreSlice slice = {data ? data + i : data, 1};
+            if (emit && !emit(slice, user))
+                return emitted;
+            emitted++;
+        }
+        return emitted;
+    }
+
+    size_t start = 0;
+    while (start <= len) {
+        ptrdiff_t rel =
+            xr_string_core_index_of(data ? data + start : data, len - start, sep, sep_len);
+        if (rel < 0) {
+            XrStringCoreSlice slice = {data ? data + start : data, len - start};
+            if (emit && !emit(slice, user))
+                return emitted;
+            emitted++;
+            break;
+        }
+
+        XrStringCoreSlice slice = {data ? data + start : data, (size_t) rel};
+        if (emit && !emit(slice, user))
+            return emitted;
+        emitted++;
+        start += (size_t) rel + sep_len;
+    }
+    return emitted;
 }
 
 static inline XrStringCoreReplacePlan

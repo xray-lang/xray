@@ -344,6 +344,30 @@ static inline XrValue xrt_str_from_core_slice(XrStringCoreSlice slice) {
     return sv;
 }
 
+typedef struct XrtStringSplitCtx {
+    XrValue array;
+} XrtStringSplitCtx;
+
+static inline bool xrt_str_split_emit(XrStringCoreSlice slice, void *user) {
+    XrtStringSplitCtx *ctx = (XrtStringSplitCtx *) user;
+    xrt_array_push(ctx->array, xrt_str_from_core_slice(slice));
+    return true;
+}
+
+static inline XrValue xrt_str_split(const char *s, int64_t slen, const char *sep, size_t sep_len) {
+    if (slen < 0)
+        return XR_NULL_VAL;
+    size_t len = (size_t) slen;
+    XrStringCoreSplitPlan plan = xr_string_core_split_plan(s, len, sep, sep_len);
+    if (plan.kind == XR_STRING_CORE_SPLIT_INVALID || plan.count > (size_t) INT64_MAX)
+        return XR_NULL_VAL;
+
+    XrValue arr = xrt_array_new((int64_t) plan.count);
+    XrtStringSplitCtx ctx = {arr};
+    size_t emitted = xr_string_core_split_each(s, len, sep, sep_len, xrt_str_split_emit, &ctx);
+    return emitted == plan.count ? arr : XR_NULL_VAL;
+}
+
 /* String 1-arg method dispatch. */
 static inline XrValue xrt_str_method_1(const char *s, int64_t slen, XrValue recv, int sym,
                                        XrValue arg0) {
@@ -390,35 +414,7 @@ static inline XrValue xrt_str_method_1(const char *s, int64_t slen, XrValue recv
     if (sym == XRT_SYM_SPLIT && XR_IS_STR(arg0)) {
         const char *sep = xr_str_data(arg0);
         size_t seplen = (size_t) xr_str_len(arg0);
-        XrValue arr = xrt_array_new(4);
-        if (seplen == 0) {
-            /* split by char */
-            for (int64_t i = 0; i < slen; i++) {
-                XrValue ch = xrt_str_alloc(1);
-                xr_str_buf(ch)[0] = s[i];
-                xr_str_buf(ch)[1] = 0;
-                xrt_array_push(arr, ch);
-            }
-        } else {
-            const char *cur = s;
-            while (1) {
-                const char *found = strstr(cur, sep);
-                if (!found) {
-                    size_t tail = (size_t) (s + slen - cur);
-                    XrValue sv = xrt_str_alloc(tail);
-                    memcpy(xr_str_buf(sv), cur, tail);
-                    xrt_array_push(arr, sv);
-                    break;
-                }
-                size_t part = (size_t) (found - cur);
-                XrValue sv = xrt_str_alloc(part);
-                memcpy(xr_str_buf(sv), cur, part);
-                xr_str_buf(sv)[part] = 0;
-                xrt_array_push(arr, sv);
-                cur = found + seplen;
-            }
-        }
-        return arr;
+        return xrt_str_split(s, slen, sep, seplen);
     }
     if (sym == XRT_SYM_REPEAT && arg0.tag == XR_TAG_I64) {
         XrStringCoreRepeatPlan plan = xr_string_core_repeat_plan(s, (size_t) slen, arg0.i);

@@ -18,6 +18,26 @@ static void assert_slice_eq(XrStringCoreSlice slice, const char *expected) {
         ASSERT(memcmp(slice.data, expected, expected_len) == 0);
 }
 
+static void assert_slice_bytes_eq(XrStringCoreSlice slice, const char *expected,
+                                  size_t expected_len) {
+    ASSERT_EQ_UINT(slice.len, expected_len);
+    if (expected_len != 0)
+        ASSERT(memcmp(slice.data, expected, expected_len) == 0);
+}
+
+typedef struct SplitCapture {
+    XrStringCoreSlice slices[8];
+    size_t count;
+} SplitCapture;
+
+static bool capture_split_slice(XrStringCoreSlice slice, void *user) {
+    SplitCapture *capture = (SplitCapture *) user;
+    if (capture->count >= 8)
+        return false;
+    capture->slices[capture->count++] = slice;
+    return true;
+}
+
 TEST(string_core_trim_both) {
     const char *s = " \t hello\r\n";
     assert_slice_eq(xr_string_core_trim_slice(s, strlen(s), XR_STRING_CORE_TRIM_BOTH), "hello");
@@ -273,6 +293,50 @@ TEST(string_core_replace_plan_and_write) {
                   XR_STRING_CORE_REPLACE_INVALID);
 }
 
+TEST(string_core_split_plan_and_each) {
+    SplitCapture capture = {0};
+    XrStringCoreSplitPlan plan = xr_string_core_split_plan("a,,b,", 5, ",", 1);
+    ASSERT_EQ_INT(plan.kind, XR_STRING_CORE_SPLIT_DELIMITER);
+    ASSERT_EQ_UINT(plan.count, 4);
+    ASSERT_EQ_UINT(xr_string_core_split_each("a,,b,", 5, ",", 1, capture_split_slice, &capture), 4);
+    ASSERT_EQ_UINT(capture.count, 4);
+    assert_slice_eq(capture.slices[0], "a");
+    assert_slice_eq(capture.slices[1], "");
+    assert_slice_eq(capture.slices[2], "b");
+    assert_slice_eq(capture.slices[3], "");
+
+    capture = (SplitCapture) {0};
+    plan = xr_string_core_split_plan("abc", 3, "", 0);
+    ASSERT_EQ_INT(plan.kind, XR_STRING_CORE_SPLIT_EMPTY_DELIMITER);
+    ASSERT_EQ_UINT(plan.count, 3);
+    ASSERT_EQ_UINT(xr_string_core_split_each("abc", 3, "", 0, capture_split_slice, &capture), 3);
+    assert_slice_eq(capture.slices[0], "a");
+    assert_slice_eq(capture.slices[1], "b");
+    assert_slice_eq(capture.slices[2], "c");
+
+    capture = (SplitCapture) {0};
+    plan = xr_string_core_split_plan("", 0, "", 0);
+    ASSERT_EQ_INT(plan.kind, XR_STRING_CORE_SPLIT_EMPTY_DELIMITER);
+    ASSERT_EQ_UINT(plan.count, 0);
+    ASSERT_EQ_UINT(xr_string_core_split_each("", 0, "", 0, capture_split_slice, &capture), 0);
+
+    const char embedded[] = {'a', '\0', 'b', '\0', 'c'};
+    const char nul_sep[] = {'\0'};
+    capture = (SplitCapture) {0};
+    plan = xr_string_core_split_plan(embedded, sizeof(embedded), nul_sep, sizeof(nul_sep));
+    ASSERT_EQ_INT(plan.kind, XR_STRING_CORE_SPLIT_DELIMITER);
+    ASSERT_EQ_UINT(plan.count, 3);
+    ASSERT_EQ_UINT(xr_string_core_split_each(embedded, sizeof(embedded), nul_sep, sizeof(nul_sep),
+                                             capture_split_slice, &capture),
+                   3);
+    assert_slice_bytes_eq(capture.slices[0], "a", 1);
+    assert_slice_bytes_eq(capture.slices[1], "b", 1);
+    assert_slice_bytes_eq(capture.slices[2], "c", 1);
+
+    ASSERT_EQ_INT(xr_string_core_split_plan(NULL, 1, ",", 1).kind, XR_STRING_CORE_SPLIT_INVALID);
+    ASSERT_EQ_INT(xr_string_core_split_plan("abc", 3, NULL, 1).kind, XR_STRING_CORE_SPLIT_INVALID);
+}
+
 TEST(string_core_parse_int64) {
     XrStringCoreParseIntResult parsed =
         xr_string_core_parse_int64(" \t\r\n-123tail", strlen(" \t\r\n-123tail"));
@@ -387,6 +451,7 @@ RUN_TEST(string_core_reverse_empty_and_null_zero);
 RUN_TEST(string_core_repeat_plan_and_write);
 RUN_TEST(string_core_pad_plan_and_write);
 RUN_TEST(string_core_replace_plan_and_write);
+RUN_TEST(string_core_split_plan_and_each);
 RUN_TEST(string_core_parse_int64);
 RUN_TEST(string_core_parse_float64);
 RUN_TEST(string_core_substring_bounds);
