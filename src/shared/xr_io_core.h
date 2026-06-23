@@ -18,6 +18,11 @@
 typedef bool (*XrIoCoreLineFn)(void *ctx, const char *data, size_t len);
 typedef int (*XrIoCoreMkdirFn)(void *ctx, const char *path);
 typedef bool (*XrIoCoreIsDirFn)(void *ctx, const char *path);
+typedef size_t (*XrIoCoreReadFn)(void *ctx, void *buf, size_t cap);
+typedef size_t (*XrIoCoreWriteFn)(void *ctx, const void *buf, size_t len);
+typedef bool (*XrIoCoreErrorFn)(void *ctx);
+
+#define XR_IO_CORE_COPY_BUFFER_SIZE 65536u
 
 typedef enum XrIoCoreStatField {
     XR_IO_CORE_STAT_SIZE = 0,
@@ -101,6 +106,21 @@ static inline bool xr_io_core_read_lines_each(const char *data, size_t len, XrIo
     }
 
     return true;
+}
+
+static inline bool xr_io_core_copy_stream(void *ctx, XrIoCoreReadFn read_fn,
+                                          XrIoCoreWriteFn write_fn, XrIoCoreErrorFn error_fn,
+                                          void *buffer, size_t buffer_cap) {
+    if (!read_fn || !write_fn || !buffer || buffer_cap == 0)
+        return false;
+
+    for (;;) {
+        size_t n = read_fn(ctx, buffer, buffer_cap);
+        if (n > 0 && write_fn(ctx, buffer, n) != n)
+            return false;
+        if (n < buffer_cap)
+            return error_fn ? !error_fn(ctx) : true;
+    }
 }
 
 static inline bool xr_io_core_is_sep(char ch) {

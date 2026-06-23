@@ -120,6 +120,28 @@ XR_FUNC char *xr_io_read_stdin_all(size_t *out_len) {
     return buf;
 }
 
+#if !defined(XR_OS_WINDOWS) && !defined(XR_OS_MACOS) && !defined(XR_OS_LINUX)
+typedef struct IoCopyFileCtx {
+    FILE *src;
+    FILE *dst;
+} IoCopyFileCtx;
+
+static size_t io_copy_file_read(void *ctx, void *buf, size_t cap) {
+    IoCopyFileCtx *copy_ctx = (IoCopyFileCtx *) ctx;
+    return fread(buf, 1, cap, copy_ctx->src);
+}
+
+static size_t io_copy_file_write(void *ctx, const void *buf, size_t len) {
+    IoCopyFileCtx *copy_ctx = (IoCopyFileCtx *) ctx;
+    return fwrite(buf, 1, len, copy_ctx->dst);
+}
+
+static bool io_copy_file_error(void *ctx) {
+    IoCopyFileCtx *copy_ctx = (IoCopyFileCtx *) ctx;
+    return ferror(copy_ctx->src) != 0;
+}
+#endif
+
 static XrValue io_readStdin(XrVMRuntime *X, XrValue *args, int argc) {
     (void) args;
     (void) argc;
@@ -686,19 +708,14 @@ static XrValue io_copyFile(XrVMRuntime *X, XrValue *args, int argc) {
         return xr_bool(false);
     }
 
-    char buf[65536];
-    size_t n;
-    while ((n = fread(buf, 1, sizeof(buf), fsrc)) > 0) {
-        if (fwrite(buf, 1, n, fdst) != n) {
-            fclose(fsrc);
-            fclose(fdst);
-            return xr_bool(false);
-        }
-    }
-
+    char buf[XR_IO_CORE_COPY_BUFFER_SIZE];
+    IoCopyFileCtx copy_ctx = {.src = fsrc, .dst = fdst};
+    bool ok = xr_io_core_copy_stream(&copy_ctx, io_copy_file_read, io_copy_file_write,
+                                     io_copy_file_error, buf, sizeof(buf));
     fclose(fsrc);
-    fclose(fdst);
-    return xr_bool(true);
+    if (fclose(fdst) != 0)
+        ok = false;
+    return xr_bool(ok);
 #endif
 }
 

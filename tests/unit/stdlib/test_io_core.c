@@ -77,6 +77,44 @@ static bool io_mkdirp_fake_run(IoMkdirpFake *fake, char *path) {
     return xr_io_core_mkdirp(path, io_mkdirp_fake_mkdir, io_mkdirp_fake_is_dir, fake);
 }
 
+typedef struct IoCopyFake {
+    const char *src;
+    size_t src_len;
+    size_t read_pos;
+    char dst[64];
+    size_t dst_len;
+    size_t max_write;
+    bool read_error;
+} IoCopyFake;
+
+static size_t io_copy_fake_read(void *ctx, void *buf, size_t cap) {
+    IoCopyFake *fake = (IoCopyFake *) ctx;
+    if (fake->read_pos >= fake->src_len)
+        return 0;
+    size_t n = fake->src_len - fake->read_pos;
+    if (n > cap)
+        n = cap;
+    memcpy(buf, fake->src + fake->read_pos, n);
+    fake->read_pos += n;
+    return n;
+}
+
+static size_t io_copy_fake_write(void *ctx, const void *buf, size_t len) {
+    IoCopyFake *fake = (IoCopyFake *) ctx;
+    size_t n = len;
+    if (fake->max_write != 0 && n > fake->max_write)
+        n = fake->max_write;
+    if (fake->dst_len + n > sizeof(fake->dst))
+        n = sizeof(fake->dst) - fake->dst_len;
+    memcpy(fake->dst + fake->dst_len, buf, n);
+    fake->dst_len += n;
+    return n;
+}
+
+static bool io_copy_fake_error(void *ctx) {
+    return ((IoCopyFake *) ctx)->read_error;
+}
+
 TEST(io_core_read_lines_empty_file_has_no_lines) {
     IoLineCollector collector;
     ASSERT(io_core_collect("", &collector));
@@ -184,6 +222,52 @@ TEST(io_core_mkdirp_fails_on_blocked_intermediate) {
     ASSERT_STR_EQ(fake.dirs[0], "a");
 }
 
+TEST(io_core_copy_stream_copies_multiple_chunks) {
+    char buf[4];
+    IoCopyFake fake = {.src = "abcdefghij", .src_len = 10};
+    ASSERT(xr_io_core_copy_stream(&fake, io_copy_fake_read, io_copy_fake_write, io_copy_fake_error,
+                                  buf, sizeof(buf)));
+    ASSERT_EQ_UINT(fake.read_pos, 10);
+    ASSERT_EQ_UINT(fake.dst_len, 10);
+    ASSERT_MEM_EQ(fake.dst, "abcdefghij", 10);
+}
+
+TEST(io_core_copy_stream_handles_exact_chunk_eof) {
+    char buf[4];
+    IoCopyFake fake = {.src = "abcdefgh", .src_len = 8};
+    ASSERT(xr_io_core_copy_stream(&fake, io_copy_fake_read, io_copy_fake_write, io_copy_fake_error,
+                                  buf, sizeof(buf)));
+    ASSERT_EQ_UINT(fake.dst_len, 8);
+    ASSERT_MEM_EQ(fake.dst, "abcdefgh", 8);
+}
+
+TEST(io_core_copy_stream_rejects_short_write) {
+    char buf[4];
+    IoCopyFake fake = {.src = "abcde", .src_len = 5, .max_write = 3};
+    ASSERT_FALSE(xr_io_core_copy_stream(&fake, io_copy_fake_read, io_copy_fake_write,
+                                        io_copy_fake_error, buf, sizeof(buf)));
+}
+
+TEST(io_core_copy_stream_rejects_read_error) {
+    char buf[4];
+    IoCopyFake fake = {.src = "abc", .src_len = 3, .read_error = true};
+    ASSERT_FALSE(xr_io_core_copy_stream(&fake, io_copy_fake_read, io_copy_fake_write,
+                                        io_copy_fake_error, buf, sizeof(buf)));
+}
+
+TEST(io_core_copy_stream_rejects_invalid_callbacks_or_buffer) {
+    char buf[4];
+    IoCopyFake fake = {.src = "abc", .src_len = 3};
+    ASSERT_FALSE(xr_io_core_copy_stream(&fake, NULL, io_copy_fake_write, io_copy_fake_error, buf,
+                                        sizeof(buf)));
+    ASSERT_FALSE(xr_io_core_copy_stream(&fake, io_copy_fake_read, NULL, io_copy_fake_error, buf,
+                                        sizeof(buf)));
+    ASSERT_FALSE(xr_io_core_copy_stream(&fake, io_copy_fake_read, io_copy_fake_write,
+                                        io_copy_fake_error, NULL, sizeof(buf)));
+    ASSERT_FALSE(xr_io_core_copy_stream(&fake, io_copy_fake_read, io_copy_fake_write,
+                                        io_copy_fake_error, buf, 0));
+}
+
 TEST(io_core_dot_dir_entry_recognizes_reserved_names) {
     ASSERT(xr_io_core_is_dot_dir_entry("."));
     ASSERT(xr_io_core_is_dot_dir_entry(".."));
@@ -282,6 +366,13 @@ RUN_TEST(io_core_mkdirp_trims_trailing_separators);
 RUN_TEST(io_core_mkdirp_handles_root_path);
 RUN_TEST(io_core_mkdirp_handles_backslash_separators);
 RUN_TEST(io_core_mkdirp_fails_on_blocked_intermediate);
+
+RUN_TEST_SUITE("IO Core - copy stream");
+RUN_TEST(io_core_copy_stream_copies_multiple_chunks);
+RUN_TEST(io_core_copy_stream_handles_exact_chunk_eof);
+RUN_TEST(io_core_copy_stream_rejects_short_write);
+RUN_TEST(io_core_copy_stream_rejects_read_error);
+RUN_TEST(io_core_copy_stream_rejects_invalid_callbacks_or_buffer);
 
 RUN_TEST_SUITE("IO Core - dir walk paths");
 RUN_TEST(io_core_dot_dir_entry_recognizes_reserved_names);
