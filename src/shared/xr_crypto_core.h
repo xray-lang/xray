@@ -198,6 +198,36 @@ static inline bool xr_crypto_core_digest_hex(const uint8_t *digest, size_t diges
     return true;
 }
 
+static inline bool xr_crypto_core_bytes_hex(const uint8_t *bytes, size_t len, char *out,
+                                            size_t out_cap) {
+    if ((!bytes && len != 0) || !out || len > (SIZE_MAX - 1) / 2)
+        return false;
+    size_t hex_len = len * 2;
+    if (out_cap < hex_len + 1)
+        return false;
+    xr_bytes_to_hex(bytes, len, out);
+    return true;
+}
+
+static inline bool xr_crypto_core_uuid_v4_write(uint8_t bytes[16], char *out, size_t out_cap) {
+    if (!bytes || !out || out_cap < 37)
+        return false;
+
+    bytes[6] = (bytes[6] & 0x0F) | 0x40;
+    bytes[8] = (bytes[8] & 0x3F) | 0x80;
+
+    static const char hex[] = "0123456789abcdef";
+    size_t j = 0;
+    for (size_t i = 0; i < 16; i++) {
+        if (i == 4 || i == 6 || i == 8 || i == 10)
+            out[j++] = '-';
+        out[j++] = hex[(bytes[i] >> 4) & 0x0F];
+        out[j++] = hex[bytes[i] & 0x0F];
+    }
+    out[j] = '\0';
+    return true;
+}
+
 static inline bool xr_crypto_core_aes_encrypt_plan(size_t plain_len, size_t *out_padded_len,
                                                    size_t *out_hex_len) {
     size_t pad = 16 - (plain_len % 16);

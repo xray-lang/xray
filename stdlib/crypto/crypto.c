@@ -963,7 +963,8 @@ static XrValue crypto_random_bytes(XrVMRuntime *isolate, XrValue *args, int narg
     uint8_t buf[1024];
     char hex[2049];
     xr_random_bytes(buf, len);
-    xr_bytes_to_hex(buf, len, hex);
+    if (!xr_crypto_core_bytes_hex(buf, len, hex, sizeof(hex)))
+        return xr_null();
     return xr_string_value(xr_string_new(isolate, hex, len * 2));
 }
 
@@ -972,13 +973,9 @@ static XrValue crypto_uuid(XrVMRuntime *isolate, XrValue *args, int nargs) {
     (void) nargs;
     uint8_t bytes[16];
     xr_random_bytes(bytes, 16);
-    bytes[6] = (bytes[6] & 0x0F) | 0x40;
-    bytes[8] = (bytes[8] & 0x3F) | 0x80;
     char uuid[37];
-    snprintf(uuid, sizeof(uuid),
-             "%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x", bytes[0],
-             bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7], bytes[8],
-             bytes[9], bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15]);
+    if (!xr_crypto_core_uuid_v4_write(bytes, uuid, sizeof(uuid)))
+        return xr_null();
     return xr_string_value(xr_string_new(isolate, uuid, 36));
 }
 
