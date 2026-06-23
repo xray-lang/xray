@@ -341,10 +341,10 @@ static XrValue os_cpuCount(XrVMRuntime *X, XrValue *args, int argc) {
 #ifdef XR_OS_WINDOWS
     SYSTEM_INFO si;
     GetSystemInfo(&si);
-    return xr_int(si.dwNumberOfProcessors);
+    return xr_int(xr_os_core_cpu_count((long) si.dwNumberOfProcessors));
 #else
     long n = sysconf(_SC_NPROCESSORS_ONLN);
-    return xr_int(n > 0 ? n : 1);
+    return xr_int(xr_os_core_cpu_count(n));
 #endif
 }
 
@@ -358,17 +358,18 @@ static XrValue os_totalMemory(XrVMRuntime *X, XrValue *args, int argc) {
     MEMORYSTATUSEX statex;
     statex.dwLength = sizeof(statex);
     if (GlobalMemoryStatusEx(&statex))
-        return xr_int((int64_t) statex.ullTotalPhys);
+        return xr_int(xr_os_core_memory_bytes((uint64_t) statex.ullTotalPhys, 1));
     return xr_int(0);
 #elif defined(XR_OS_MACOS)
     int64_t memsize = 0;
     size_t len = sizeof(memsize);
-    sysctlbyname("hw.memsize", &memsize, &len, NULL, 0);
-    return xr_int(memsize);
+    if (sysctlbyname("hw.memsize", &memsize, &len, NULL, 0) == 0 && memsize > 0)
+        return xr_int(xr_os_core_memory_bytes((uint64_t) memsize, 1));
+    return xr_int(0);
 #elif defined(XR_OS_LINUX)
     struct sysinfo si;
     if (sysinfo(&si) == 0)
-        return xr_int((int64_t) si.totalram * si.mem_unit);
+        return xr_int(xr_os_core_memory_bytes((uint64_t) si.totalram, (uint64_t) si.mem_unit));
     return xr_int(0);
 #else
     return xr_int(0);
@@ -385,21 +386,21 @@ static XrValue os_freeMemory(XrVMRuntime *X, XrValue *args, int argc) {
     MEMORYSTATUSEX statex;
     statex.dwLength = sizeof(statex);
     if (GlobalMemoryStatusEx(&statex))
-        return xr_int((int64_t) statex.ullAvailPhys);
+        return xr_int(xr_os_core_memory_bytes((uint64_t) statex.ullAvailPhys, 1));
     return xr_int(0);
 #elif defined(XR_OS_MACOS)
     vm_statistics64_data_t vm_stat;
     mach_msg_type_number_t count = HOST_VM_INFO64_COUNT;
     if (host_statistics64(mach_host_self(), HOST_VM_INFO64, (host_info64_t) &vm_stat, &count) ==
         KERN_SUCCESS) {
-        int64_t free_bytes = (int64_t) (vm_stat.free_count + vm_stat.inactive_count) * vm_page_size;
-        return xr_int(free_bytes);
+        uint64_t pages = (uint64_t) vm_stat.free_count + (uint64_t) vm_stat.inactive_count;
+        return xr_int(xr_os_core_memory_bytes(pages, (uint64_t) vm_page_size));
     }
     return xr_int(0);
 #elif defined(XR_OS_LINUX)
     struct sysinfo si;
     if (sysinfo(&si) == 0)
-        return xr_int((int64_t) si.freeram * si.mem_unit);
+        return xr_int(xr_os_core_memory_bytes((uint64_t) si.freeram, (uint64_t) si.mem_unit));
     return xr_int(0);
 #else
     return xr_int(0);
@@ -410,7 +411,7 @@ static double os_monotonic_uptime_seconds(void) {
 #ifdef XR_OS_POSIX
     struct timespec ts;
     if (clock_gettime(CLOCK_MONOTONIC, &ts) == 0)
-        return (double) ts.tv_sec + (double) ts.tv_nsec / 1000000000.0;
+        return xr_os_core_seconds_from_nsec((int64_t) ts.tv_sec, (int64_t) ts.tv_nsec);
 #endif
     return 0.0;
 }
@@ -428,7 +429,8 @@ static XrValue os_uptime(XrVMRuntime *X, XrValue *args, int argc) {
     size_t len = sizeof(boottime);
     if (sysctlbyname("kern.boottime", &boottime, &len, NULL, 0) == 0) {
         time_t now = time(NULL);
-        return xr_float((double) (now - boottime.tv_sec));
+        return xr_float(
+            xr_os_core_uptime_from_boot_seconds((int64_t) now, (int64_t) boottime.tv_sec));
     }
     return xr_float(os_monotonic_uptime_seconds());
 #elif defined(XR_OS_LINUX)
@@ -450,17 +452,25 @@ static XrValue os_loadavg(XrVMRuntime *X, XrValue *args, int argc) {
     if (!arr)
         return xr_null();
 
-#ifndef XR_OS_WINDOWS
-    double avg[3] = {0};
-    getloadavg(avg, 3);
+    double avg[3];
+    xr_os_core_loadavg_zero(avg);
+#if defined(XR_OS_WINDOWS)
+    /* Windows has no load average equivalent in the VM stdlib today. */
+#elif defined(XR_OS_LINUX)
+    struct sysinfo si;
+    if (sysinfo(&si) == 0) {
+        xr_os_core_loadavg_set(avg, xr_os_core_loadavg_from_fixed((uint64_t) si.loads[0]),
+                               xr_os_core_loadavg_from_fixed((uint64_t) si.loads[1]),
+                               xr_os_core_loadavg_from_fixed((uint64_t) si.loads[2]));
+    }
+#else
+    double probed[3];
+    if (getloadavg(probed, 3) == 3)
+        xr_os_core_loadavg_set(avg, probed[0], probed[1], probed[2]);
+#endif
     xr_array_push(arr, xr_float(avg[0]));
     xr_array_push(arr, xr_float(avg[1]));
     xr_array_push(arr, xr_float(avg[2]));
-#else
-    xr_array_push(arr, xr_float(0.0));
-    xr_array_push(arr, xr_float(0.0));
-    xr_array_push(arr, xr_float(0.0));
-#endif
 
     return xr_value_from_array(arr);
 }

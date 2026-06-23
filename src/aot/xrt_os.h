@@ -213,10 +213,10 @@ static inline XrValue xrt_os_cpu_count(void) {
 #ifdef _WIN32
     SYSTEM_INFO si;
     GetSystemInfo(&si);
-    return XR_FROM_INT((int64_t) si.dwNumberOfProcessors);
+    return XR_FROM_INT(xr_os_core_cpu_count((long) si.dwNumberOfProcessors));
 #else
     long n = sysconf(_SC_NPROCESSORS_ONLN);
-    return XR_FROM_INT((int64_t) (n > 0 ? n : 1));
+    return XR_FROM_INT(xr_os_core_cpu_count(n));
 #endif
 }
 
@@ -347,18 +347,18 @@ static inline XrValue xrt_os_total_memory(void) {
     MEMORYSTATUSEX statex;
     statex.dwLength = sizeof(statex);
     if (GlobalMemoryStatusEx(&statex))
-        return XR_FROM_INT((int64_t) statex.ullTotalPhys);
+        return XR_FROM_INT(xr_os_core_memory_bytes((uint64_t) statex.ullTotalPhys, 1));
     return XR_FROM_INT(0);
 #elif defined(__APPLE__)
     int64_t memsize = 0;
     size_t len = sizeof(memsize);
     if (sysctlbyname("hw.memsize", &memsize, &len, NULL, 0) == 0)
-        return XR_FROM_INT(memsize);
+        return XR_FROM_INT(memsize > 0 ? xr_os_core_memory_bytes((uint64_t) memsize, 1) : 0);
     return XR_FROM_INT(0);
 #elif defined(__linux__)
     struct sysinfo si;
     if (sysinfo(&si) == 0)
-        return XR_FROM_INT((int64_t) si.totalram * (int64_t) si.mem_unit);
+        return XR_FROM_INT(xr_os_core_memory_bytes((uint64_t) si.totalram, (uint64_t) si.mem_unit));
     return XR_FROM_INT(0);
 #else
     return XR_FROM_INT(0);
@@ -370,20 +370,21 @@ static inline XrValue xrt_os_free_memory(void) {
     MEMORYSTATUSEX statex;
     statex.dwLength = sizeof(statex);
     if (GlobalMemoryStatusEx(&statex))
-        return XR_FROM_INT((int64_t) statex.ullAvailPhys);
+        return XR_FROM_INT(xr_os_core_memory_bytes((uint64_t) statex.ullAvailPhys, 1));
     return XR_FROM_INT(0);
 #elif defined(__APPLE__)
     vm_statistics64_data_t vm_stat;
     mach_msg_type_number_t count = HOST_VM_INFO64_COUNT;
     if (host_statistics64(mach_host_self(), HOST_VM_INFO64, (host_info64_t) &vm_stat, &count) ==
         KERN_SUCCESS)
-        return XR_FROM_INT((int64_t) (vm_stat.free_count + vm_stat.inactive_count) *
-                           (int64_t) vm_page_size);
+        return XR_FROM_INT(xr_os_core_memory_bytes((uint64_t) vm_stat.free_count +
+                                                       (uint64_t) vm_stat.inactive_count,
+                                                   (uint64_t) vm_page_size));
     return XR_FROM_INT(0);
 #elif defined(__linux__)
     struct sysinfo si;
     if (sysinfo(&si) == 0)
-        return XR_FROM_INT((int64_t) si.freeram * (int64_t) si.mem_unit);
+        return XR_FROM_INT(xr_os_core_memory_bytes((uint64_t) si.freeram, (uint64_t) si.mem_unit));
     return XR_FROM_INT(0);
 #else
     return XR_FROM_INT(0);
@@ -394,7 +395,7 @@ static inline double xrt_os_monotonic_uptime_seconds(void) {
 #if defined(XR_OS_POSIX)
     struct timespec ts;
     if (clock_gettime(CLOCK_MONOTONIC, &ts) == 0)
-        return (double) ts.tv_sec + (double) ts.tv_nsec / 1000000000.0;
+        return xr_os_core_seconds_from_nsec((int64_t) ts.tv_sec, (int64_t) ts.tv_nsec);
 #endif
     return 0.0;
 }
@@ -407,7 +408,8 @@ static inline XrValue xrt_os_uptime(void) {
     size_t len = sizeof(boottime);
     if (sysctlbyname("kern.boottime", &boottime, &len, NULL, 0) == 0) {
         time_t now = time(NULL);
-        return XR_FROM_FLOAT((double) (now - boottime.tv_sec));
+        return XR_FROM_FLOAT(
+            xr_os_core_uptime_from_boot_seconds((int64_t) now, (int64_t) boottime.tv_sec));
     }
     return XR_FROM_FLOAT(xrt_os_monotonic_uptime_seconds());
 #elif defined(__linux__)
@@ -421,22 +423,21 @@ static inline XrValue xrt_os_uptime(void) {
 }
 
 static inline XrValue xrt_os_loadavg(void) {
-    double avg[3] = {0.0, 0.0, 0.0};
+    double avg[3];
+    xr_os_core_loadavg_zero(avg);
 #ifdef _WIN32
     /* Windows has no load average equivalent in the VM stdlib today. */
 #elif defined(__linux__)
     struct sysinfo si;
     if (sysinfo(&si) == 0) {
-        avg[0] = (double) si.loads[0] / 65536.0;
-        avg[1] = (double) si.loads[1] / 65536.0;
-        avg[2] = (double) si.loads[2] / 65536.0;
+        xr_os_core_loadavg_set(avg, xr_os_core_loadavg_from_fixed((uint64_t) si.loads[0]),
+                               xr_os_core_loadavg_from_fixed((uint64_t) si.loads[1]),
+                               xr_os_core_loadavg_from_fixed((uint64_t) si.loads[2]));
     }
 #else
-    if (getloadavg(avg, 3) < 0) {
-        avg[0] = 0.0;
-        avg[1] = 0.0;
-        avg[2] = 0.0;
-    }
+    double probed[3];
+    if (getloadavg(probed, 3) == 3)
+        xr_os_core_loadavg_set(avg, probed[0], probed[1], probed[2]);
 #endif
     XrValue arr = xrt_array_new(3);
     xrt_array_push(arr, XR_FROM_FLOAT(avg[0]));

@@ -11,7 +11,9 @@
 #include "../test_framework.h"
 #include "shared/xr_os_core.h"
 
+#include <limits.h>
 #include <stddef.h>
+#include <stdint.h>
 #include <string.h>
 
 typedef struct OsEnvEntry {
@@ -237,6 +239,48 @@ TEST(os_core_environ_entry_rejects_invalid_entries) {
     ASSERT_EQ_INT(record.calls, 0);
 }
 
+TEST(os_core_cpu_count_normalizes_invalid_raw_values) {
+    ASSERT_EQ_INT(xr_os_core_cpu_count(8), 8);
+    ASSERT_EQ_INT(xr_os_core_cpu_count(0), 1);
+    ASSERT_EQ_INT(xr_os_core_cpu_count(-4), 1);
+}
+
+TEST(os_core_memory_bytes_converts_units) {
+    ASSERT_EQ_INT(xr_os_core_memory_bytes(128, 4096), 524288);
+    ASSERT_EQ_INT(xr_os_core_memory_bytes(0, 4096), 0);
+    ASSERT_EQ_INT(xr_os_core_memory_bytes(128, 0), 0);
+}
+
+TEST(os_core_memory_bytes_saturates_int64) {
+    ASSERT_EQ_INT(xr_os_core_memory_bytes(UINT64_MAX, 2), INT64_MAX);
+}
+
+TEST(os_core_seconds_from_nsec_normalizes) {
+    ASSERT_FLOAT_EQ(xr_os_core_seconds_from_nsec(2, 500000000), 2.5, 0.000001);
+    ASSERT_FLOAT_EQ(xr_os_core_seconds_from_nsec(-1, 500000000), 0.0, 0.000001);
+    ASSERT_FLOAT_EQ(xr_os_core_seconds_from_nsec(2, -1), 2.0, 0.000001);
+}
+
+TEST(os_core_uptime_from_boot_seconds_clamps_negative_elapsed) {
+    ASSERT_FLOAT_EQ(xr_os_core_uptime_from_boot_seconds(120, 100), 20.0, 0.000001);
+    ASSERT_FLOAT_EQ(xr_os_core_uptime_from_boot_seconds(100, 100), 0.0, 0.000001);
+    ASSERT_FLOAT_EQ(xr_os_core_uptime_from_boot_seconds(90, 100), 0.0, 0.000001);
+}
+
+TEST(os_core_loadavg_helpers_normalize_values) {
+    double avg[3] = {1.0, 1.0, 1.0};
+    xr_os_core_loadavg_zero(avg);
+    ASSERT_FLOAT_EQ(avg[0], 0.0, 0.000001);
+    ASSERT_FLOAT_EQ(avg[1], 0.0, 0.000001);
+    ASSERT_FLOAT_EQ(avg[2], 0.0, 0.000001);
+
+    xr_os_core_loadavg_set(avg, 1.25, -2.0, 3.5);
+    ASSERT_FLOAT_EQ(avg[0], 1.25, 0.000001);
+    ASSERT_FLOAT_EQ(avg[1], 0.0, 0.000001);
+    ASSERT_FLOAT_EQ(avg[2], 3.5, 0.000001);
+    ASSERT_FLOAT_EQ(xr_os_core_loadavg_from_fixed(65536 * 2), 2.0, 0.000001);
+}
+
 TEST_MAIN_BEGIN()
 
 RUN_TEST_SUITE("OS Core - platform");
@@ -261,5 +305,13 @@ RUN_TEST_SUITE("OS Core - environ");
 RUN_TEST(os_core_environ_entry_parses_key_value);
 RUN_TEST(os_core_environ_entry_allows_empty_value);
 RUN_TEST(os_core_environ_entry_rejects_invalid_entries);
+
+RUN_TEST_SUITE("OS Core - system metrics");
+RUN_TEST(os_core_cpu_count_normalizes_invalid_raw_values);
+RUN_TEST(os_core_memory_bytes_converts_units);
+RUN_TEST(os_core_memory_bytes_saturates_int64);
+RUN_TEST(os_core_seconds_from_nsec_normalizes);
+RUN_TEST(os_core_uptime_from_boot_seconds_clamps_negative_elapsed);
+RUN_TEST(os_core_loadavg_helpers_normalize_values);
 
 TEST_MAIN_END()
