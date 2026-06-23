@@ -797,6 +797,27 @@ vmcase(OP_ARRAY_PUSH) {
     vmbreak;
 }
 
+vmcase(OP_ARRAY_EXTEND) {
+    // OP_ARRAY_EXTEND: splice every element of R[B]:Array into R[A]:Array.
+    // Elements are borrowed from the source, so each is retained as it is
+    // copied (the source array keeps its own references). Mirrors the
+    // retain-per-element contract of Array.concat.
+    int a = GETARG_A(i);
+    int b = GETARG_B(i);
+    if (!XR_IS_ARRAY(R(b))) {
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "array spread source must be an array");
+    }
+    XrArray *dst = XR_TO_ARRAY(R(a));
+    XrArray *src = XR_TO_ARRAY(R(b));
+    int32_t n = src->length;
+    for (int32_t j = 0; j < n; j++) {
+        XrValue elem = xr_array_get_element(src, j);
+        xr_rc_retain_value(elem);
+        xr_array_push(dst, elem);
+    }
+    vmbreak;
+}
+
 vmcase(OP_ARRAY_LEN) {
     // OP_ARRAY_LEN: array length
     int a = GETARG_A(i);

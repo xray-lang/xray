@@ -955,6 +955,12 @@ void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
             xfmt_write_char(ctx, '!');
             break;
 
+        // Spread element `...expr` inside array / tuple / object literals.
+        case AST_SPREAD_EXPR:
+            xfmt_write_str(ctx, "...");
+            xfmt_emit_expression(ctx, node->as.spread_expr.expr);
+            break;
+
         // As expression: expr as Type / expr as Type?
         // The ? for safe cast is already part of the stored type ref.
         case AST_AS_EXPR:

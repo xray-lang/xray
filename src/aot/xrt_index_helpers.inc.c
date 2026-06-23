@@ -189,6 +189,9 @@ static inline XrValue xrt_index_get(XrValue obj, XrValue key) {
         // Positional access into the set's insertion order (used by for-in).
         xrt_set_t *s = (xrt_set_t *) obj.ptr;
         return xrt_set_value_at(s, key.i);
+    } else if (obj.tag == XR_TAG_PTR && obj.ptr && obj.heap_type == 0 && XR_IS_STR(key)) {
+        // Json object indexed by a string key.
+        return xrt_json_get_name(obj, xr_str_data(key));
     }
     return XR_NULL_VAL;
 }
@@ -219,5 +222,9 @@ static inline void xrt_index_set(XrValue obj, XrValue key, XrValue val) {
         }
     } else if (XR_IS_MAP(obj)) {
         xrt_map_set((xrt_map_t *) obj.ptr, key, val);
+    } else if (obj.tag == XR_TAG_PTR && obj.ptr && obj.heap_type == 0 && XR_IS_STR(key)) {
+        /* Json object indexed by a string key (e.g. computed object-literal
+         * keys `{ [k]: v }` and object spread). */
+        xrt_json_set_name(obj, xr_str_data(key), val);
     }
 }

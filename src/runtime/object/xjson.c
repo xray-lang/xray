@@ -127,3 +127,26 @@ bool xr_json_set_by_key(XrayIsolate *X, XrJson *json, const char *key, XrValue v
     SymbolId symbol = xr_symbol_register_in_table(table, key);
     return xr_json_set(X, json, symbol, value);
 }
+
+bool xr_json_merge(XrayIsolate *X, XrJson *dst, XrJson *src) {
+    XR_DCHECK(X != NULL, "json_merge: NULL isolate");
+    if (!dst || !src || !src->klass)
+        return true;
+    XrClass *cls = src->klass;
+    uint16_t n = cls->field_count;
+    for (uint16_t i = 0; i < n; i++) {
+        const char *name = cls->fields[i].name;
+        if (!name)
+            continue;
+        // Source field is borrowed: dst gains a new owning reference, src keeps
+        // its own. xr_json_set releases any prior value at this key, so later
+        // spread parts / literal fields override earlier ones correctly.
+        XrValue v = xr_instance_get_dynamic_field(src, i);
+        xr_rc_retain_value(v);
+        if (!xr_json_set_by_key(X, dst, name, v)) {
+            xr_rc_release_value(xr_current_coro_heap(), v);
+            return false;
+        }
+    }
+    return true;
+}

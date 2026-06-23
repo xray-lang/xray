@@ -291,16 +291,21 @@ typedef enum {
                       aux=XrStructLayout* */
 
     /* Json / Allocation */
-    XI_JSON_NEW,    /* Create Json object: aux=field_count, aux_ptr=field_names[] */
-    XI_JSON_INIT_F, /* Init field by index: args[0]=json, args[1]=val, aux_int=field_idx */
-    XI_JSON_GET_F,  /* Read field by index: args[0]=json, aux_int=field_idx */
-    XI_JSON_SET_F,  /* Write field by index: args[0]=json, args[1]=val, aux_int=field_idx */
-    XI_JSON_DECODE, /* Typed decode: args[0]=string, aux=field_names[], aux_int=field_count
-                     * result: T? (sealed Json or null on validation failure) */
-    XI_ARRAY_NEW,   /* new array: args[0]=capacity */
-    XI_MAP_NEW,     /* new map: args[0]=capacity */
-    XI_TUPLE_NEW,   /* new tuple: args[0..n-1]=elements, aux_int=n (arity) */
-    XI_TUPLE_GET,   /* read tuple field: args[0]=tuple, aux_int=field_index (zero-based) */
+    XI_JSON_NEW,     /* Create Json object: aux=field_count, aux_ptr=field_names[] */
+    XI_JSON_INIT_F,  /* Init field by index: args[0]=json, args[1]=val, aux_int=field_idx */
+    XI_JSON_GET_F,   /* Read field by index: args[0]=json, aux_int=field_idx */
+    XI_JSON_SET_F,   /* Write field by index: args[0]=json, args[1]=val, aux_int=field_idx */
+    XI_JSON_MERGE,   /* Merge all fields of src into dst: args[0]=dst, args[1]=src
+                      * (object spread `{...base}`; later fields override earlier) */
+    XI_JSON_DECODE,  /* Typed decode: args[0]=string, aux=field_names[], aux_int=field_count
+                      * result: T? (sealed Json or null on validation failure) */
+    XI_ARRAY_NEW,    /* new array: args[0]=capacity */
+    XI_ARRAY_PUSH,   /* append one element: args[0]=array, args[1]=value (in-place, void) */
+    XI_ARRAY_EXTEND, /* splice all elements of src array into dst: args[0]=dst, args[1]=src
+                      * (in-place, void; retains each copied element) — array spread `[...a]` */
+    XI_MAP_NEW,      /* new map: args[0]=capacity */
+    XI_TUPLE_NEW,    /* new tuple: args[0..n-1]=elements, aux_int=n (arity) */
+    XI_TUPLE_GET,    /* read tuple field: args[0]=tuple, aux_int=field_index (zero-based) */
 
     /* Function calls */
     XI_CALL,        /* function call: args[0]=callee, args[1..n]=params

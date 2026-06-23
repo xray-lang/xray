@@ -1461,9 +1461,72 @@ static XiValue *lower_tuple_literal(XiLower *l, AstNode *node) {
     return tup_val;
 }
 
+/* Array literal with `...spread` elements: `[...a, x, ...b]`.
+ * Built dynamically because spread sources have runtime length — a fresh
+ * array is allocated (heap; it grows), singletons are appended with
+ * XI_ARRAY_PUSH and each spread source is spliced with XI_ARRAY_EXTEND.
+ * Runtime cost is O(total elements). The no-spread path keeps the static
+ * pre-sized ARRAY_NEW + INDEX_SET fast path. */
+static XiValue *lower_array_literal_spread(XiLower *l, AstNode *node, struct XrType *result_type) {
+    ArrayLiteralNode *arr = &node->as.array_literal;
+    int count = arr->count;
+
+    /* Capacity hint = number of singleton (non-spread) elements; spreads
+     * grow the array on demand. */
+    int singleton_cap = 0;
+    for (int i = 0; i < count; i++) {
+        AstNode *child = arr->elements[i];
+        if (child && child->type != AST_SPREAD_EXPR)
+            singleton_cap++;
+    }
+
+    XiValue *cap = xi_const_int(l->func, l->cur_block, singleton_cap, l->type_int);
+    XiValue *arr_val = xi_value_new(l->func, l->cur_block, XI_ARRAY_NEW, result_type, 1);
+    if (!arr_val)
+        return NULL;
+    arr_val->args[0] = cap;
+    arr_val->line = (uint32_t) node->line;
+
+    for (int i = 0; i < count; i++) {
+        AstNode *child = arr->elements[i];
+        if (!child)
+            continue;
+        if (child->type == AST_SPREAD_EXPR) {
+            XiValue *src = xi_lower_expr(l, child->as.spread_expr.expr);
+            if (!src)
+                return NULL;
+            XiValue *ext = xi_value_new(l->func, l->cur_block, XI_ARRAY_EXTEND, l->type_unit, 2);
+            if (!ext)
+                return NULL;
+            ext->args[0] = arr_val;
+            ext->args[1] = src;
+            ext->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM;
+            ext->line = (uint32_t) node->line;
+        } else {
+            XiValue *elem = xi_lower_expr(l, child);
+            if (!elem)
+                return NULL;
+            XiValue *push = xi_value_new(l->func, l->cur_block, XI_ARRAY_PUSH, l->type_unit, 2);
+            if (!push)
+                return NULL;
+            push->args[0] = arr_val;
+            push->args[1] = elem;
+            push->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM;
+            push->line = (uint32_t) node->line;
+        }
+    }
+    return arr_val;
+}
+
 static XiValue *lower_array_literal(XiLower *l, AstNode *node) {
     ArrayLiteralNode *arr = &node->as.array_literal;
     int count = arr->count;
+
+    /* Spread elements force the dynamic build path. */
+    for (int i = 0; i < count; i++) {
+        if (arr->elements[i] && arr->elements[i]->type == AST_SPREAD_EXPR)
+            return lower_array_literal_spread(l, node, xi_lower_node_type(l, node));
+    }
 
     /* Evaluate all elements first */
     int n = count;
@@ -2342,6 +2405,55 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
             v->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW | XI_FLAG_MAY_SUSPEND;
             v->line = (uint32_t) node->line;
             return v;
+        }
+
+        if (recv->type && recv->type->kind == XR_KIND_CHANNEL && ma->name &&
+            strcmp(ma->name, "recvOr") == 0 && n == 1) {
+            /* ch.recvOr(fallback): blocking recv returning the received value,
+             * or `fallback` when the channel is closed and drained. Reuses the
+             * raw XI_CHAN_RECV / XI_CHAN_RECV_STATUS fast path (same as the recv
+             * match lowering), so no Recv<T> enum is materialized and VM / AOT
+             * agree. Equivalent to
+             *   match ch.recv() { Recv.Value(v) -> v; _ -> fallback }. */
+            struct XrType *payload_type = recv->type->container.element_type
+                                              ? recv->type->container.element_type
+                                              : result_type;
+            XiValue *chan_recv = xi_value_new(l->func, l->cur_block, XI_CHAN_RECV, payload_type, 1);
+            if (!chan_recv)
+                return NULL;
+            chan_recv->args[0] = recv;
+            chan_recv->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_SUSPEND;
+            chan_recv->line = (uint32_t) node->line;
+
+            XiValue *status =
+                xi_value_new(l->func, l->cur_block, XI_CHAN_RECV_STATUS, l->type_bool, 1);
+            if (!status)
+                return NULL;
+            status->args[0] = chan_recv;
+            status->line = (uint32_t) node->line;
+
+            XiBlock *value_blk = xi_block_new(l->func);
+            XiBlock *fallback_blk = xi_block_new(l->func);
+            XiBlock *merge = xi_block_new(l->func);
+            xi_block_set_if(l->cur_block, status, value_blk, fallback_blk);
+            xi_lower_braun_seal(l, value_blk);
+            xi_lower_braun_seal(l, fallback_blk);
+
+            xi_block_set_jump(value_blk, merge);
+            xi_block_set_jump(fallback_blk, merge);
+
+            xi_lower_braun_seal(l, merge);
+            l->cur_block = merge;
+            XiPhi *phi = xi_phi_new(l->func, merge, result_type, merge->npreds);
+            if (phi) {
+                for (uint16_t i = 0; i < merge->npreds; i++) {
+                    if (merge->preds[i] == value_blk)
+                        phi->value.args[i] = chan_recv;
+                    else
+                        phi->value.args[i] = arg_vals[0];
+                }
+            }
+            return phi ? &phi->value : chan_recv;
         }
 
         uint16_t nargs = (uint16_t) (n + 1); /* receiver + args */

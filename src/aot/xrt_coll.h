@@ -241,6 +241,41 @@ static inline void xrt_array_push(XrValue arr, XrValue val) {
     a->length++;
 }
 
+/* Splice every element of `src_val` onto the end of `dst_val` (array spread
+ * `[...a]`).  Borrowed source: each copied element is retained because the
+ * source array keeps its own references.  Typed primitive arrays bulk-copy
+ * (no per-element refcount), boxed (ANY) arrays retain each value. */
+static inline void xrt_array_extend(XrValue dst_val, XrValue src_val) {
+    xrt_array_t *dst = (xrt_array_t *) dst_val.ptr;
+    xrt_array_t *src = (xrt_array_t *) src_val.ptr;
+    int64_t n = src->length;
+    if (n <= 0)
+        return;
+    if (XR_UNLIKELY(dst->data_storage == XR_ARRAY_DATA_BORROWED)) {
+        fprintf(stderr, "xrt_array_extend: cannot extend array slice\n");
+        abort();
+    }
+    if (dst->elem_type == src->elem_type && dst->elem_type != XR_ELEM_ANY) {
+        /* Packed primitive storage: bulk memcpy, no refcount work. */
+        int64_t need = dst->length + n;
+        if (need > dst->capacity) {
+            int64_t ncap = dst->capacity == 0 ? 4 : dst->capacity;
+            while (ncap < need)
+                ncap *= 2;
+            xrt_array_data_grow(dst, ncap);
+        }
+        memcpy((uint8_t *) dst->data + (size_t) dst->length * dst->elem_size, src->data,
+               (size_t) n * src->elem_size);
+        dst->length = need;
+        return;
+    }
+    for (int64_t j = 0; j < n; j++) {
+        XrValue elem = xr_typed_get(src->data, (int32_t) j, src->elem_type);
+        xrt_retain(elem);
+        xrt_array_push(dst_val, elem);
+    }
+}
+
 static inline int64_t xrt_array_len(XrValue arr) {
     return ((xrt_array_t *) arr.ptr)->length;
 }
@@ -1855,6 +1890,34 @@ static inline XrValue xrt_json_clone_for_coro(XrValue val) {
         dst->dynamic_fields = dst_map;
     }
     return dstv;
+}
+
+/* Object spread `{...src}`: copy every field of `src` into `dst`, overwriting
+ * existing keys so later spread parts / literal fields win.  AOT json fields
+ * are kept alive by escape analysis (the spread source is HEAP_ESCAPE), so no
+ * per-value retain is needed — this mirrors how object-literal fields are
+ * stored without an explicit dup. */
+static inline void xrt_json_merge(XrValue dst_val, XrValue src_val) {
+    if (dst_val.tag != XR_TAG_PTR || !dst_val.ptr)
+        return;
+    if (src_val.tag != XR_TAG_PTR || !src_val.ptr)
+        return;
+    xrt_json_t *src = (xrt_json_t *) src_val.ptr;
+    for (int64_t i = 0; i < src->field_count; i++) {
+        const char *name = src->field_names ? src->field_names[i] : NULL;
+        if (name)
+            xrt_json_set_name(dst_val, name, src->fields[i]);
+    }
+    if (src->dynamic_fields) {
+        xrt_map_t *m = src->dynamic_fields;
+        for (uint32_t i = 0; i < m->nentries; i++) {
+            XrMapEntry *entry = &m->entries[i];
+            if (entry->key_tt == XR_MAP_ENTRY_NIL_KEY)
+                continue;
+            if (XR_IS_STR(entry->key))
+                xrt_json_set_name(dst_val, xr_str_data(entry->key), entry->value);
+        }
+    }
 }
 
 #include "xrt_index_helpers.inc.c"

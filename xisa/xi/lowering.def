@@ -476,6 +476,18 @@
   :vm-bytecode (driver xi_emit_array_new)
   :aot-c (driver xicgen_array_new))
 
+(lower xi.array.push
+  :match ()
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_array_push)
+  :aot-c (driver xicgen_array_push))
+
+(lower xi.array.extend
+  :match ()
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_array_extend)
+  :aot-c (driver xicgen_array_extend))
+
 (lower xi.map.new
   :match ()
   :required-targets (vm-bytecode aot-c)
@@ -639,6 +651,12 @@
   :required-targets (vm-bytecode aot-c)
   :vm-bytecode (driver xi_emit_json_set_f)
   :aot-c (driver xicgen_json_set_f))
+
+(lower xi.json.merge
+  :match ()
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_json_merge)
+  :aot-c (driver xicgen_json_merge))
 
 (lower xi.json.decode
   :match ()

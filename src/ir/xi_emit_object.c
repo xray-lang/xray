@@ -365,6 +365,34 @@ XR_FUNC void xi_emit_array_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     emit_inst(ctx, CREATE_ABC(OP_ARRAY_NEW_CAP, dst, cap, c_field));
 }
 
+/* Array spread append: R[A]:Array.push(R[B]).  In-place store, no dst. */
+XR_FUNC void xi_emit_array_push(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    (void) dst;
+    if (v->nargs < 2) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+    XiEmitReg arr = reg_of(ctx, v->args[0]);
+    XiEmitReg val = reg_of(ctx, v->args[1]);
+    if (ctx->status != XI_EMIT_OK)
+        return;
+    emit_inst(ctx, CREATE_ABC(OP_ARRAY_PUSH, arr, val, 0));
+}
+
+/* Array spread splice: R[A]:Array.extend(R[B]:Array).  In-place store, no dst. */
+XR_FUNC void xi_emit_array_extend(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    (void) dst;
+    if (v->nargs < 2) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+    XiEmitReg arr = reg_of(ctx, v->args[0]);
+    XiEmitReg src = reg_of(ctx, v->args[1]);
+    if (ctx->status != XI_EMIT_OK)
+        return;
+    emit_inst(ctx, CREATE_ABC(OP_ARRAY_EXTEND, arr, src, 0));
+}
+
 /* Tuple creation: N elements in args[0..N-1].  OP_NEWTUPLE scoops
  * elements from R[base+1..base+N] in order, so we materialize the
  * window in a fresh scratch range above every source register.
@@ -515,6 +543,20 @@ XR_FUNC void xi_emit_json_set_f(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     if (!xi_emit_index_to_arg(ctx, field_idx, XI_EMIT_ERR_INTERNAL, &field_arg))
         return;
     emit_inst(ctx, CREATE_ABC(OP_JSON_SET, json_reg, field_arg, val_reg));
+}
+
+/* Json merge: OP_JSON_MERGE A B (A=dst Json, B=src Json).  In-place store. */
+XR_FUNC void xi_emit_json_merge(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    (void) dst;
+    if (v->nargs < 2) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+    XiEmitReg dst_reg = reg_of(ctx, v->args[0]);
+    XiEmitReg src_reg = reg_of(ctx, v->args[1]);
+    if (ctx->status != XI_EMIT_OK)
+        return;
+    emit_inst(ctx, CREATE_ABC(OP_JSON_MERGE, dst_reg, src_reg, 0));
 }
 
 /* Typed JSON decode: OP_JSON_DECODE A B C

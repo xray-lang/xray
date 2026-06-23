@@ -170,6 +170,7 @@
     _(ARRAY_SET, FMT_ABC, KOP_ABC_INPLACE, "R[A]:Array[R[B]] = R[C]")                              \
     _(ARRAY_SETC, FMT_ABC, KOP_ABC_INPLACE_LIT, "R[A]:Array[B] = R[C]")                            \
     _(ARRAY_PUSH, FMT_AB, KOP_AB_INPLACE, "R[A]:Array.push(R[B])")                                 \
+    _(ARRAY_EXTEND, FMT_AB, KOP_AB_INPLACE, "R[A]:Array.extend(R[B]:Array) — splice + retain")     \
     _(ARRAY_LEN, FMT_AB, KOP_AB_UNARY, "R[A] = len(R[B]:Array)")                                   \
     _(ARRAY_RESERVE, FMT_AB, KOP_AB_INPLACE, "R[A]:Array.reserve(R[B])")                           \
     _(ARRAY_RESIZE, FMT_ABC, KOP_ABC_INPLACE, "R[A]:Array.resize(R[B], R[C])")                     \
@@ -212,6 +213,7 @@
     _(JSON_SET, FMT_ABC, KOP_ABC_INPLACE_LIT, "R[A].fields[B] = R[C]")                             \
     _(JSON_GETK, FMT_ABC, KOP_ABC_BIN_LIT, "R[A] = R[B].get(symbol=C)")                            \
     _(JSON_SETK, FMT_ABC, KOP_ABC_INPLACE_LIT, "R[A].set(symbol=B, R[C])")                         \
+    _(JSON_MERGE, FMT_AB, KOP_AB_INPLACE, "R[A]:Json.merge(R[B]:Json) — object spread")            \
     _(JSON_INIT, FMT_ABC, KOP_ABC_INPLACE_LIT, "R[A].fields[B] = R[C]")                            \
     _(JSON_INIT_I, FMT_ABC, KOP_SPECIAL, "R[A].fields[B] = C")                                     \
     _(JSON_INIT_N, FMT_ABC, KOP_SPECIAL, "R[A].fields[B] = null")                                  \

@@ -413,8 +413,113 @@ XR_FUNC XiValue *xi_lower_move_expr(XiLower *l, AstNode *node) {
 
 /* ========== Object Literal ========== */
 
+/* Object literal with `...spread` entries: `{...base, x: 1}`.
+ * The result Json is created pre-sized with the statically-known union shape
+ * (from the analyzer's inferred type), then each part is applied in order:
+ * spread sources are merged field-by-field (XI_JSON_MERGE), literal fields are
+ * written by key (XI_INDEX_SET). Later writes override earlier ones, matching
+ * the union semantics. Dynamic source fields not in the static shape are added
+ * at runtime via overflow. */
+static XiValue *xi_lower_object_literal_spread(XiLower *l, AstNode *node,
+                                               struct XrType *result_type) {
+    ObjectLiteralNode *obj = &node->as.object_literal;
+
+    /* Pre-size the result with the union of statically-known field names. */
+    int static_count = 0;
+    const char **key_names = NULL;
+    if (result_type && result_type->kind == XR_KIND_JSON && result_type->object.field_count > 0 &&
+        result_type->object.field_names) {
+        static_count = result_type->object.field_count;
+        key_names = (const char **) xi_func_arena_alloc(
+            l->func, (uint32_t) (sizeof(const char *) * (size_t) static_count));
+        if (!key_names)
+            return NULL;
+        for (int i = 0; i < static_count; i++) {
+            const char *nm = result_type->object.field_names[i];
+            key_names[i] = nm ? arena_strdup(l->func, nm) : "?";
+        }
+    }
+
+    XiValue *obj_val = xi_value_new(l->func, l->cur_block, XI_JSON_NEW, result_type, 0);
+    if (!obj_val)
+        return NULL;
+    obj_val->aux_int = static_count;
+    obj_val->aux = (void *) key_names;
+    obj_val->line = (uint32_t) node->line;
+
+    for (int i = 0; i < obj->count; i++) {
+        AstNode *val = obj->values[i];
+        if (val && val->type == AST_SPREAD_EXPR) {
+            XiValue *src = xi_lower_expr(l, val->as.spread_expr.expr);
+            if (!src)
+                return NULL;
+            XiValue *mg = xi_value_new(l->func, l->cur_block, XI_JSON_MERGE, l->type_unit, 2);
+            if (!mg)
+                return NULL;
+            mg->args[0] = obj_val;
+            mg->args[1] = src;
+            mg->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM;
+            mg->line = (uint32_t) node->line;
+            continue;
+        }
+
+        XiValue *v = xi_lower_expr(l, obj->values[i]);
+        if (!v)
+            return NULL;
+        bool is_computed = obj->computed && obj->computed[i];
+
+        /* Static literal key: write the field by its index in the union shape
+         * (XI_JSON_SET_F), matching how spread merges and member reads address
+         * the same slots. Computed keys are not part of the static shape and
+         * fall back to a dynamic key set. */
+        int field_idx = -1;
+        if (!is_computed && obj->keys[i] && obj->keys[i]->type == AST_LITERAL_STRING &&
+            static_count > 0 && key_names) {
+            const char *kn = obj->keys[i]->as.literal.raw_value.string_val;
+            for (int k = 0; kn && k < static_count; k++) {
+                if (key_names[k] && strcmp(key_names[k], kn) == 0) {
+                    field_idx = k;
+                    break;
+                }
+            }
+        }
+
+        if (field_idx >= 0) {
+            XiValue *set = xi_value_new(l->func, l->cur_block, XI_JSON_SET_F, l->type_unit, 2);
+            if (!set)
+                return NULL;
+            set->args[0] = obj_val;
+            set->args[1] = v;
+            set->aux_int = field_idx;
+            set->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM;
+            set->line = (uint32_t) node->line;
+        } else {
+            XiValue *key = is_computed ? xi_lower_expr(l, obj->keys[i])
+                                       : xi_const_str(l->func, l->cur_block, "?", l->type_string);
+            if (!key)
+                return NULL;
+            XiValue *set = xi_value_new(l->func, l->cur_block, XI_INDEX_SET, l->type_unit, 3);
+            if (!set)
+                return NULL;
+            set->args[0] = obj_val;
+            set->args[1] = key;
+            set->args[2] = v;
+            set->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM;
+            set->line = (uint32_t) node->line;
+        }
+    }
+    return obj_val;
+}
+
 XR_FUNC XiValue *xi_lower_object_literal(XiLower *l, AstNode *node) {
     ObjectLiteralNode *obj = &node->as.object_literal;
+
+    /* Spread entries force the dynamic merge path. */
+    for (int i = 0; i < obj->count; i++) {
+        if (obj->values[i] && obj->values[i]->type == AST_SPREAD_EXPR)
+            return xi_lower_object_literal_spread(l, node, xi_lower_node_type(l, node));
+    }
+
     int count = obj->count;
     if (count < 0 || count > (int) UINT16_MAX) {
         fprintf(stderr, "[LOWER] object literal field count exceeds %u at line %d\n",

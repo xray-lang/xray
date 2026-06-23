@@ -674,14 +674,45 @@ AstNode *xr_parse_call_expr(Parser *parser, AstNode *callee) {
 
 /* ========== Array Parsing ========== */
 
+// Parse one array-literal element: either `...spread` or a plain expression.
+// Spread elements splice an array's contents into the surrounding literal at
+// runtime (`[...a, x]`), mirroring tuple-literal spread.
+static AstNode *parse_array_element(Parser *parser) {
+    if (xr_parser_check(parser, TK_DOT_DOT_DOT)) {
+        int elem_line = parser->current.line;
+        xr_parser_advance(parser);  // consume '...'
+        AstNode *inner = xr_parse_expression(parser);
+        if (!inner)
+            return NULL;
+        return xr_ast_spread_expr(parser->X, inner, elem_line);
+    }
+    return xr_parse_expression(parser);
+}
+
 // Parse array literal or Map literal (smart detection)
-// [1, 2, 3] -> array, ["key": value, ...] -> Map
+// [1, 2, 3] -> array, ["key": value, ...] -> Map, [...a, x] -> array spread
 AstNode *xr_parse_array_literal(Parser *parser) {
     XR_DCHECK(parser != NULL, "parse_array_literal: NULL parser");
     int line = parser->previous.line;
 
     if (xr_parser_match(parser, TK_RBRACKET)) {
         return xr_ast_array_literal(parser->X, NULL, 0, line);
+    }
+
+    // A leading spread `[...a` is unambiguously an array literal (a Map key
+    // can never be a spread), so commit to the array branch immediately.
+    if (xr_parser_check(parser, TK_DOT_DOT_DOT)) {
+        AstNode **elements = NULL;
+        int count = 0;
+        int capacity = 0;
+        XR_PARSE_PUSH(parser, elements, count, capacity, parse_array_element(parser));
+        while (xr_parser_match(parser, TK_COMMA)) {
+            if (xr_parser_check(parser, TK_RBRACKET))
+                break;
+            XR_PARSE_PUSH(parser, elements, count, capacity, parse_array_element(parser));
+        }
+        xr_parser_consume(parser, TK_RBRACKET, "expected ']' at end of array");
+        return xr_ast_array_literal(parser->X, elements, count, line);
     }
 
     // Parse first expression, then check ':' for Map or ',' for array
@@ -749,7 +780,7 @@ AstNode *xr_parse_array_literal(Parser *parser) {
                 break;
             }
 
-            XR_PARSE_PUSH(parser, elements, count, capacity, xr_parse_expression(parser));
+            XR_PARSE_PUSH(parser, elements, count, capacity, parse_array_element(parser));
         }
 
         xr_parser_consume(parser, TK_RBRACKET, "expected ']' at end of array");
@@ -806,6 +837,22 @@ AstNode *xr_parse_object_literal(Parser *parser) {
             if (_old_cap_capacity > 0 && computed)
                 memcpy(_new_computed, computed, sizeof(bool) * (size_t) _old_cap_capacity);
             computed = _new_computed;
+        }
+
+        // Spread entry: `{ ...base }` splices another object's fields in.
+        // Represented as a NULL key with an AST_SPREAD_EXPR value; later
+        // entries override earlier ones at merge time.
+        if (xr_parser_check(parser, TK_DOT_DOT_DOT)) {
+            int spread_line = parser->current.line;
+            xr_parser_advance(parser);  // consume '...'
+            AstNode *src = xr_parse_expression(parser);
+            if (!src)
+                return xr_ast_literal_null(parser->X, line);
+            keys[count] = NULL;
+            values[count] = xr_ast_spread_expr(parser->X, src, spread_line);
+            computed[count] = false;
+            count++;
+            continue;
         }
 
         // Parse key
