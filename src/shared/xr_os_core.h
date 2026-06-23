@@ -104,19 +104,20 @@ static inline const char *xr_os_core_username(XrOsCoreStringFn system_username_f
     if (!getenv_fn)
         return NULL;
 
+    const char *candidate = NULL;
 #ifdef XR_OS_WINDOWS
-    const char *user = getenv_fn(env_ctx, "USERNAME");
-    if (xr_os_core_has_env_value(user))
-        return user;
+    candidate = getenv_fn(env_ctx, "USERNAME");
+    if (xr_os_core_has_env_value(candidate))
+        return candidate;
 #endif
 
-    const char *user = getenv_fn(env_ctx, "USER");
-    if (xr_os_core_has_env_value(user))
-        return user;
+    candidate = getenv_fn(env_ctx, "USER");
+    if (xr_os_core_has_env_value(candidate))
+        return candidate;
 
-    user = getenv_fn(env_ctx, "LOGNAME");
-    if (xr_os_core_has_env_value(user))
-        return user;
+    candidate = getenv_fn(env_ctx, "LOGNAME");
+    if (xr_os_core_has_env_value(candidate))
+        return candidate;
 
     return NULL;
 }
