@@ -857,47 +857,6 @@ static const char *get_eol(void) {
 
 /* ========== Module Loading ========== */
 
-// ========== Type Declarations (parsed by gen_stdlib_types.py) ==========
-
-#include "../../src/module/xbuiltin_decl.h"
-
-// @module os
-
-XR_DEFINE_BUILTIN(os_getenv, "getenv", "(name: string): string?", "Get environment variable")
-XR_DEFINE_BUILTIN(os_setenv, "setenv", "(name: string, value: string): bool",
-                  "Set environment variable")
-XR_DEFINE_BUILTIN(os_unsetenv, "unsetenv", "(name: string): bool", "Unset environment variable")
-XR_DEFINE_BUILTIN(os_environ, "environ", "(): Map<string, string>", "Get all environment variables")
-XR_DEFINE_BUILTIN(os_exit, "exit", "(code?: int): ()", "Exit process")
-XR_DEFINE_BUILTIN(os_getpid, "getpid", "(): int", "Get process ID")
-XR_DEFINE_BUILTIN(os_getcwd, "getcwd", "(): string", "Get current working directory")
-XR_DEFINE_BUILTIN(os_chdir, "chdir", "(path: string): bool", "Change working directory")
-XR_DEFINE_BUILTIN(os_hostname, "hostname", "(): string", "Get hostname")
-XR_DEFINE_BUILTIN(os_tmpdir, "tmpdir", "(): string", "Get temporary directory path")
-
-// User information
-XR_DEFINE_BUILTIN(os_username, "username", "(): string?", "Get current user name")
-XR_DEFINE_BUILTIN(os_homedir, "homedir", "(): string?", "Get user home directory")
-XR_DEFINE_BUILTIN(os_uid, "uid", "(): int", "Get user ID")
-XR_DEFINE_BUILTIN(os_gid, "gid", "(): int", "Get group ID")
-
-// System information
-XR_DEFINE_BUILTIN(os_cpuCount, "cpuCount", "(): int", "Get number of CPU cores")
-XR_DEFINE_BUILTIN(os_totalMemory, "totalMemory", "(): int", "Get total system memory in bytes")
-XR_DEFINE_BUILTIN(os_freeMemory, "freeMemory", "(): int", "Get available system memory in bytes")
-XR_DEFINE_BUILTIN(os_uptime, "uptime", "(): float", "Get system uptime in seconds")
-XR_DEFINE_BUILTIN(os_loadavg, "loadavg", "(): Array<float>",
-                  "Get system load averages (1, 5, 15 min)")
-
-// Process & signal
-XR_DEFINE_BUILTIN(os_ppid, "ppid", "(): int", "Get parent process ID")
-XR_DEFINE_BUILTIN(os_kill, "kill", "(pid: int, signal?: int): bool", "Send signal to process")
-XR_DEFINE_BUILTIN(os_sleep, "sleep", "(ms: int): ()", "Sleep for milliseconds")
-XR_DEFINE_BUILTIN(os_clock, "clock", "(): float", "Get process CPU time in seconds")
-
-// Process execution
-XR_DEFINE_BUILTIN(os_exec, "exec", "(cmd: string): ExecResult?", "Execute shell command")
-
 #define XR_STDLIB_VM_BIND_MODULE_OS 1
 #include "../../src/stdlib/xstdlib_vm_bindings_generated.inc.c"
 #undef XR_STDLIB_VM_BIND_MODULE_OS

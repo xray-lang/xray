@@ -251,23 +251,6 @@ static XrValue base64_isValid(XrVMRuntime *X, XrValue *args, int argc) {
 
 /* ========== Module loading ========== */
 
-// ========== Type Declarations (parsed by gen_stdlib_types.py) ==========
-
-#include "../../src/module/xbuiltin_decl.h"
-
-// @module base64
-
-XR_DEFINE_BUILTIN(base64_encode, "encode", "(data: string): string", "Base64 encode")
-XR_DEFINE_BUILTIN(base64_decode, "decode", "(data: string): string?", "Base64 decode")
-XR_DEFINE_BUILTIN(base64_encodeUrl, "encodeUrl", "(data: string): string", "URL-safe base64 encode")
-XR_DEFINE_BUILTIN(base64_decodeUrl, "decodeUrl", "(data: string): string?",
-                  "URL-safe base64 decode")
-XR_DEFINE_BUILTIN(base64_encodeBytes, "encodeBytes", "(data: Array<uint8>): string",
-                  "Encode byte array to Base64")
-XR_DEFINE_BUILTIN(base64_decodeToBytes, "decodeToBytes", "(data: string): Array<uint8>?",
-                  "Decode Base64 to byte array")
-XR_DEFINE_BUILTIN(base64_isValid, "isValid", "(data: string): bool", "Check if valid base64")
-
 #define XR_STDLIB_VM_BIND_MODULE_BASE64 1
 #include "../../src/stdlib/xstdlib_vm_bindings_generated.inc.c"
 #undef XR_STDLIB_VM_BIND_MODULE_BASE64

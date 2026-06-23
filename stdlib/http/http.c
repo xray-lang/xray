@@ -1364,55 +1364,6 @@ static XrValue http_clear_proxy(XrVMRuntime *X, XrValue *args, int argc) {
     return xr_null();
 }
 
-/* ========== Type Declarations (parsed by gen_stdlib_types.py) ========== */
-
-#include "../../src/module/xbuiltin_decl.h"
-
-// @module http
-
-XR_DEFINE_BUILTIN(http_get, "get", "(url: string): HttpResponse", "HTTP GET request")
-XR_DEFINE_BUILTIN(http_post, "post",
-                  "(url: string, body?: string, contentType?: string): HttpResponse",
-                  "HTTP POST request")
-XR_DEFINE_BUILTIN(http_put, "put",
-                  "(url: string, body?: string, contentType?: string): HttpResponse",
-                  "HTTP PUT request")
-XR_DEFINE_BUILTIN(http_delete, "delete", "(url: string): HttpResponse", "HTTP DELETE request")
-XR_DEFINE_BUILTIN(http_request, "request", "(options: Json): HttpResponse", "Generic HTTP request")
-XR_DEFINE_BUILTIN(http_url_encode, "urlEncode", "(s: string): string", "URL-encode a string")
-XR_DEFINE_BUILTIN(http_url_decode, "urlDecode", "(s: string): string", "URL-decode a string")
-XR_DEFINE_BUILTIN(http_route, "route",
-                  "(method: string, path: string, handler: fn | string | Json): ()",
-                  "Register a route handler or static response")
-XR_DEFINE_BUILTIN(http_static, "static", "(method: string, path: string, content: string): ()",
-                  "Register a prebuilt static route response")
-XR_DEFINE_BUILTIN(http_stop_server, "stopServer", "(): ()", "Stop the HTTP server")
-XR_DEFINE_BUILTIN(http_parse_request_fast, "parseRequest", "(fd: int): Array<unknown>?",
-                  "Parse raw HTTP request data")
-XR_DEFINE_BUILTIN(http_send_response_fast, "sendResponse",
-                  "(fd: int, body: string, status?: int): bool", "Send HTTP response on fd")
-XR_DEFINE_BUILTIN(http_download, "download", "(url: string, path: string): DownloadResult",
-                  "Download file from URL")
-XR_DEFINE_BUILTIN(http_get_content_length, "getContentLength", "(url: string): int",
-                  "Get content length of URL")
-XR_DEFINE_BUILTIN(http_form_data_new, "formDataNew",
-                  "(maxTotalSize?: int, maxFileSize?: int): bool",
-                  "Create new multipart form data context")
-XR_DEFINE_BUILTIN(http_form_data_append, "formDataAppend", "(name: string, value: string): ()",
-                  "Append field to current form data")
-XR_DEFINE_BUILTIN(http_form_data_append_file, "formDataAppendFile",
-                  "(name: string, path: string): bool", "Append file to current form data")
-XR_DEFINE_BUILTIN(http_form_data_post, "formDataPost", "(url: string): Json",
-                  "POST current multipart form data")
-XR_DEFINE_BUILTIN(http_set_proxy, "setProxy", "(url: string): ()", "Set HTTP proxy")
-XR_DEFINE_BUILTIN(http_clear_proxy, "clearProxy", "(): ()", "Clear HTTP proxy")
-XR_DEFINE_BUILTIN(h2_get, "h2Get", "(url: string, options?: Json): Json", "HTTP/2 GET request")
-XR_DEFINE_BUILTIN(h2_post, "h2Post", "(url: string, body: string, contentType?: string): Json",
-                  "HTTP/2 POST request")
-XR_DEFINE_BUILTIN(h2_request, "h2Request", "(options: Json): Json", "Generic HTTP/2 request")
-
-/* ========== Module Loading ========== */
-
 #define XR_STDLIB_VM_BIND_MODULE_HTTP 1
 #include "../../src/stdlib/xstdlib_vm_bindings_generated.inc.c"
 #undef XR_STDLIB_VM_BIND_MODULE_HTTP

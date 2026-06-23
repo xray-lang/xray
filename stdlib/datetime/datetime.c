@@ -1109,30 +1109,6 @@ static XrNativeMethod datetime_getters[] = {{"year", dt_year, 1},
                                             {"timestamp", dt_timestamp, 1},
                                             {NULL, NULL, 0}};
 
-// ========== Type Declarations (parsed by gen_stdlib_types.py) ==========
-
-#include "../../src/module/xbuiltin_decl.h"
-
-// @module datetime
-
-XR_DEFINE_BUILTIN(dt_now, "now", "(): DateTime", "Get current local datetime")
-XR_DEFINE_BUILTIN(dt_utc, "utc", "(): DateTime", "Get current UTC datetime")
-XR_DEFINE_BUILTIN(
-    dt_create, "create",
-    "(year: int, month?: int, day?: int, hour?: int, minute?: int, second?: int): DateTime",
-    "Create local datetime")
-XR_DEFINE_BUILTIN(
-    dt_create_utc, "createUTC",
-    "(year: int, month?: int, day?: int, hour?: int, minute?: int, second?: int): DateTime",
-    "Create UTC datetime")
-XR_DEFINE_BUILTIN(dt_from_timestamp, "fromTimestamp", "(ts: int): DateTime",
-                  "Create datetime from Unix timestamp (seconds)")
-XR_DEFINE_BUILTIN(dt_from_timestamp_ms, "fromTimestampMs", "(ts: int): DateTime",
-                  "Create datetime from Unix timestamp (milliseconds)")
-XR_DEFINE_BUILTIN(dt_parse, "parse", "(s: string, format?: string): DateTime?",
-                  "Parse datetime string")
-XR_DEFINE_BUILTIN(dt_offset, "offset", "(): int", "Get UTC offset in minutes")
-
 #define XR_STDLIB_VM_BIND_MODULE_DATETIME 1
 #include "../../src/stdlib/xstdlib_vm_bindings_generated.inc.c"
 #undef XR_STDLIB_VM_BIND_MODULE_DATETIME

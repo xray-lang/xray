@@ -990,8 +990,8 @@ static XrType *parse_type_str(XrVMRuntime *X, const char *s, size_t len) {
             }
         }
     } else if (base_len >= 3 && strncmp(s, "fn", 2) == 0 && (s[2] == '(' || s[2] == ' ')) {
-        // fn(p: T, ...): R — legacy function type literal, still emitted by
-        // some hand-authored XR_DEFINE_BUILTIN signatures.
+        // fn(p: T, ...): R — legacy function type literal accepted for older
+        // declaration metadata.
         type = parse_fn_type_str(X, s, base_len);
     } else if (base_len >= 2 && s[0] == '(' &&
                /* (p: T, ...) -> R — current-syntax function type literal.

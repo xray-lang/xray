@@ -1963,36 +1963,6 @@ XrValue xr_ws_upgrade_and_wrap(XrVMRuntime *X, int fd, const char *request_heade
 
 /* ========== Module Registration ========== */
 
-// ========== Type Declarations (parsed by gen_stdlib_types.py) ==========
-
-#include "../../src/module/xbuiltin_decl.h"
-
-// @module ws
-
-XR_DEFINE_BUILTIN(ws_connect_yieldable, "connect", "(url: string, options?: Json): WsConn?",
-                  "Connect to a WebSocket server")
-XR_DEFINE_BUILTIN(ws_send_yieldable, "send", "(conn: WsConn, data: string, binary?: bool?): bool",
-                  "Send data over WebSocket connection")
-XR_DEFINE_BUILTIN(ws_recv_yieldable, "recv", "(conn: WsConn, timeout?: int?): WsMessage?",
-                  "Receive data from WebSocket connection")
-XR_DEFINE_BUILTIN(ws_close, "close", "(conn: WsConn, code?: int?, reason?: string?): bool",
-                  "Close a WebSocket connection")
-XR_DEFINE_BUILTIN(ws_ping, "ping", "(conn: WsConn): bool", "Send a ping frame")
-XR_DEFINE_BUILTIN(ws_state, "state", "(conn: WsConn): string", "Get connection state")
-XR_DEFINE_BUILTIN(ws_is_open, "isOpen", "(conn: WsConn): bool", "Check if connection is open")
-XR_DEFINE_BUILTIN(ws_recvdata, "recvData", "(conn: WsConn, timeout?: int?): string?",
-                  "High-performance recv returning data string directly (no Json wrapper)")
-XR_DEFINE_BUILTIN(ws_send_yieldable, "sendData",
-                  "(conn: WsConn, data: string, binary?: bool?): bool",
-                  "Send data over WebSocket connection")
-XR_DEFINE_BUILTIN(ws_serve_yieldable, "serve", "(port: int, handler: fn(conn: WsConn): ()): bool",
-                  "Start WebSocket server")
-XR_DEFINE_BUILTIN(ws_echo_serve_yieldable, "echoServe", "(port: int): bool",
-                  "Pure C echo server with zero VM allocation overhead per message")
-XR_DEFINE_BUILTIN(ws_stop_server, "stopServer", "(): ()", "Stop the WebSocket server")
-XR_DEFINE_BUILTIN(ws_is_server_running, "isServerRunning", "(): bool",
-                  "Check if the WebSocket server is running")
-
 #define XR_STDLIB_VM_BIND_MODULE_WS 1
 #include "../../src/stdlib/xstdlib_vm_bindings_generated.inc.c"
 #undef XR_STDLIB_VM_BIND_MODULE_WS

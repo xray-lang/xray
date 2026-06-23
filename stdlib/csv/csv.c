@@ -448,29 +448,6 @@ static XrValue csv_write_file(XrVMRuntime *X, XrValue *args, int argc) {
 
 /* ========== Module Loading ========== */
 
-// ========== Type Declarations (parsed by gen_stdlib_types.py) ==========
-
-#include "../../src/module/xbuiltin_decl.h"
-
-// @module csv
-
-XR_DEFINE_BUILTIN(csv_parse, "parse",
-                  "(data: string, options?: Json): Array<Array<string>> | Array<Json>",
-                  "Parse CSV string")
-XR_DEFINE_BUILTIN(csv_parse_detailed, "parseDetailed", "(data: string, options?: Json): Json",
-                  "Parse CSV with headers")
-XR_DEFINE_BUILTIN(csv_parse_tsv, "parseTsv", "(data: string): Array<Array<string>>",
-                  "Parse TSV string")
-XR_DEFINE_BUILTIN(csv_parse_auto, "parseAuto", "(data: string): Array<Array<string>>",
-                  "Auto-detect delimiter and parse")
-XR_DEFINE_BUILTIN(csv_stringify, "stringify",
-                  "(data: Array<Array<string>>, options?: Json): string", "Convert to CSV string")
-XR_DEFINE_BUILTIN(csv_parse_file, "parseFile",
-                  "(path: string, options?: Json): Array<Array<string>>", "Parse CSV file")
-XR_DEFINE_BUILTIN(csv_write_file, "writeFile",
-                  "(path: string, data: Array<Array<string>>, options?: Json): bool",
-                  "Write CSV file")
-
 #define XR_STDLIB_VM_BIND_MODULE_CSV 1
 #include "../../src/stdlib/xstdlib_vm_bindings_generated.inc.c"
 #undef XR_STDLIB_VM_BIND_MODULE_CSV

@@ -1189,27 +1189,6 @@ static XrValue crypto_timing_safe_equal(XrVMRuntime *isolate, XrValue *args, int
     return xr_bool(ok);
 }
 
-// ========== Type Declarations (parsed by gen_stdlib_types.py) ==========
-
-#include "../../src/module/xbuiltin_decl.h"
-
-// @module crypto
-
-XR_DEFINE_BUILTIN(crypto_md5, "md5", "(data: string): string", "Compute MD5 hash")
-XR_DEFINE_BUILTIN(crypto_sha1, "sha1", "(data: string): string", "Compute SHA-1 hash")
-XR_DEFINE_BUILTIN(crypto_sha256, "sha256", "(data: string): string", "Compute SHA-256 hash")
-XR_DEFINE_BUILTIN(crypto_sha512, "sha512", "(data: string): string", "Compute SHA-512 hash")
-XR_DEFINE_BUILTIN(crypto_hmac, "hmac", "(algo: string, key: string, data: string): string?",
-                  "Compute HMAC")
-XR_DEFINE_BUILTIN(crypto_random_bytes, "randomBytes", "(n: int): string", "Generate random bytes")
-XR_DEFINE_BUILTIN(crypto_uuid, "uuid", "(): string", "Generate UUID v4")
-XR_DEFINE_BUILTIN(crypto_encrypt, "encrypt", "(key: string, plaintext: string): string",
-                  "AES-256-CBC encrypt")
-XR_DEFINE_BUILTIN(crypto_decrypt, "decrypt", "(key: string, ciphertext: string): string?",
-                  "AES-256-CBC decrypt")
-XR_DEFINE_BUILTIN(crypto_timing_safe_equal, "timingSafeEqual", "(a: string, b: string): bool",
-                  "Constant-time string comparison")
-
 #define XR_STDLIB_VM_BIND_MODULE_CRYPTO 1
 #include "../../src/stdlib/xstdlib_vm_bindings_generated.inc.c"
 #undef XR_STDLIB_VM_BIND_MODULE_CRYPTO

@@ -1867,34 +1867,6 @@ static XrValue cluster_monitor_coro_fn(XrVMRuntime *X, XrValue *args, int argc) 
     return xr_value_from_channel(ch);
 }
 
-/* ========== Analyzer Type Declarations ========== */
-
-#include "../../src/module/xbuiltin_decl.h"
-
-// @module cluster
-
-XR_DEFINE_BUILTIN(cluster_start, "start", "(config: Json): ()", "Start cluster node")
-XR_DEFINE_BUILTIN(cluster_join, "join", "(addr: string): bool", "Join cluster by address")
-XR_DEFINE_BUILTIN(cluster_self, "self", "(): string", "Get own node name")
-XR_DEFINE_BUILTIN(cluster_nodes, "nodes", "(): Array<string>", "List cluster node names")
-XR_DEFINE_BUILTIN(cluster_channel_fn, "channel", "(name: string, size?: int): Channel",
-                  "Create or get named distributed channel")
-XR_DEFINE_BUILTIN(cluster_serve_fn, "serve", "(name: string): Channel",
-                  "Register service and return request channel")
-XR_DEFINE_BUILTIN(cluster_reply_fn, "reply", "(req: Json, result: Json): bool",
-                  "Reply to service request")
-XR_DEFINE_BUILTIN(cluster_call_fn, "call", "(service: string, args: Json, timeout?: int): Json",
-                  "Call remote service")
-XR_DEFINE_BUILTIN(cluster_monitor_coro_fn, "monitor", "(name: string, coro_name?: string): Channel",
-                  "Monitor node or remote coroutine")
-XR_DEFINE_BUILTIN(cluster_discover_fn, "discover", "(): ()", "Start LAN auto-discovery")
-XR_DEFINE_BUILTIN(cluster_stop_fn, "stop", "(): ()", "Stop cluster node")
-XR_DEFINE_BUILTIN(cluster_info_fn, "info", "(): Json", "Get cluster status info")
-XR_DEFINE_BUILTIN(cluster_publish_fn, "publish", "(topic: string, value: Json): bool",
-                  "Publish to topic")
-XR_DEFINE_BUILTIN(cluster_subscribe_fn, "subscribe", "(pattern: string): Channel",
-                  "Subscribe to topic pattern")
-
 #define XR_STDLIB_VM_BIND_MODULE_CLUSTER 1
 #include "../../src/stdlib/xstdlib_vm_bindings_generated.inc.c"
 #undef XR_STDLIB_VM_BIND_MODULE_CLUSTER

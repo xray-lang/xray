@@ -431,27 +431,6 @@ static XrValue path_format(XrVMRuntime *X, XrValue *args, int argc) {
 
 /* ========== Module Loading ========== */
 
-// ========== Type Declarations (parsed by gen_stdlib_types.py) ==========
-
-#include "../../src/module/xbuiltin_decl.h"
-
-// @module path
-
-XR_DEFINE_BUILTIN(path_join, "join", "(...parts: string): string", "Join path segments")
-XR_DEFINE_BUILTIN(path_dirname, "dirname", "(path: string): string", "Get directory name")
-XR_DEFINE_BUILTIN(path_basename, "basename", "(path: string): string", "Get base name")
-XR_DEFINE_BUILTIN(path_extname, "extname", "(path: string): string", "Get file extension")
-XR_DEFINE_BUILTIN(path_normalize, "normalize", "(path: string): string",
-                  "Normalize path separators")
-XR_DEFINE_BUILTIN(path_isAbsolute, "isAbsolute", "(path: string): bool",
-                  "Check if path is absolute")
-XR_DEFINE_BUILTIN(path_resolve, "resolve", "(...parts: string): string", "Resolve to absolute path")
-XR_DEFINE_BUILTIN(path_relative, "relative", "(from: string, to: string): string",
-                  "Get relative path")
-XR_DEFINE_BUILTIN(path_parse, "parse", "(path: string): PathInfo",
-                  "Parse path into components (root, dir, base, name, ext)")
-XR_DEFINE_BUILTIN(path_format, "format", "(obj: PathInfo): string", "Format path from components")
-
 #define XR_STDLIB_VM_BIND_MODULE_PATH 1
 #include "../../src/stdlib/xstdlib_vm_bindings_generated.inc.c"
 #undef XR_STDLIB_VM_BIND_MODULE_PATH
