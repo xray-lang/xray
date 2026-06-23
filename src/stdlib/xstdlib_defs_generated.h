@@ -11,6 +11,7 @@
 #define XSTDLIB_DEFS_GENERATED_H
 
 #include <stdbool.h>
+#include <math.h>
 #include <stdint.h>
 
 typedef struct XrStdlibDefEntry {
@@ -44,6 +45,7 @@ typedef struct XrStdlibConstDefEntry {
     const char *define;
     const char *layer;
     int64_t value;
+    double f64_value;
 } XrStdlibConstDefEntry;
 
 static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
@@ -284,19 +286,33 @@ static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
 #define XR_STDLIB_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_def_entries) / sizeof(xr_stdlib_def_entries[0])))
 
 static const XrStdlibConstDefEntry xr_stdlib_const_def_entries[] = {
-    {"path", "sep", ": string", "Platform path separator", "path.sep", "xrs_string_value_c(isolate, PATH_SEP_STR)", "xrt_path_sep", "helper_value", "", "", "core", INT64_C(0)},
-    {"path", "delimiter", ": string", "Platform path-list delimiter", "path.delimiter", "xrs_string_value_c(isolate, PATH_DELIMITER)", "xrt_path_delimiter", "helper_value", "", "", "core", INT64_C(0)},
-    {"encoding", "LE", ": int", "Little-endian UTF-16 byte order", "XR_UTF16_LE", "xr_int(XR_UTF16_LE)", "", "int64", "", "", "core", INT64_C(0)},
-    {"encoding", "BE", ": int", "Big-endian UTF-16 byte order", "XR_UTF16_BE", "xr_int(XR_UTF16_BE)", "", "int64", "", "", "core", INT64_C(1)},
-    {"os", "platform", ": string", "Current operating system name", "os.platform", "xrs_string_value_c(isolate, get_platform())", "xrt_os_platform", "helper_value", "", "", "system", INT64_C(0)},
-    {"os", "arch", ": string", "Current CPU architecture name", "os.arch", "xrs_string_value_c(isolate, get_arch())", "xrt_os_arch", "helper_value", "", "", "system", INT64_C(0)},
-    {"os", "sep", ": string", "Platform path separator", "os.sep", "xrs_string_value_c(isolate, get_sep())", "xrt_os_sep", "helper_value", "", "", "system", INT64_C(0)},
-    {"os", "eol", ": string", "Platform end-of-line string", "os.eol", "xrs_string_value_c(isolate, get_eol())", "xrt_os_eol", "helper_value", "", "", "system", INT64_C(0)},
-    {"log", "DEBUG", ": int", "Debug log level", "XR_LOG_DEBUG", "xr_int(XR_LOG_DEBUG)", "", "int64", "", "", "core", INT64_C(10)},
-    {"log", "INFO", ": int", "Info log level", "XR_LOG_INFO", "xr_int(XR_LOG_INFO)", "", "int64", "", "", "core", INT64_C(20)},
-    {"log", "WARN", ": int", "Warning log level", "XR_LOG_WARN", "xr_int(XR_LOG_WARN)", "", "int64", "", "", "core", INT64_C(30)},
-    {"log", "ERROR", ": int", "Error log level", "XR_LOG_ERROR", "xr_int(XR_LOG_ERROR)", "", "int64", "", "", "core", INT64_C(40)},
-    {"log", "FATAL", ": int", "Fatal log level", "XR_LOG_FATAL", "xr_int(XR_LOG_FATAL)", "", "int64", "", "", "core", INT64_C(50)},
+    {"math", "PI", ": float", "Ratio of a circle's circumference to its diameter", "math.PI", "xr_float(M_PI)", "", "float64", "", "", "core", INT64_C(0), 3.14159265358979323846},
+    {"math", "E", ": float", "Euler's number", "math.E", "xr_float(M_E)", "", "float64", "", "", "core", INT64_C(0), 2.71828182845904523536},
+    {"math", "TAU", ": float", "Full-circle radians, 2 * PI", "math.TAU", "xr_float(2.0 * M_PI)", "", "float64", "", "", "core", INT64_C(0), 6.28318530717958647692},
+    {"math", "SQRT2", ": float", "Square root of 2", "math.SQRT2", "xr_float(M_SQRT2)", "", "float64", "", "", "core", INT64_C(0), 1.41421356237309504880},
+    {"math", "LN2", ": float", "Natural logarithm of 2", "math.LN2", "xr_float(M_LN2)", "", "float64", "", "", "core", INT64_C(0), 0.69314718055994530942},
+    {"math", "LN10", ": float", "Natural logarithm of 10", "math.LN10", "xr_float(M_LN10)", "", "float64", "", "", "core", INT64_C(0), 2.30258509299404568402},
+    {"math", "LOG2E", ": float", "Base-2 logarithm of e", "math.LOG2E", "xr_float(M_LOG2E)", "", "float64", "", "", "core", INT64_C(0), 1.44269504088896340736},
+    {"math", "LOG10E", ": float", "Base-10 logarithm of e", "math.LOG10E", "xr_float(M_LOG10E)", "", "float64", "", "", "core", INT64_C(0), 0.43429448190325182765},
+    {"math", "EPSILON", ": float", "Smallest representable difference above 1.0", "math.EPSILON", "xr_float(DBL_EPSILON)", "", "float64", "", "", "core", INT64_C(0), 2.22044604925031308085e-16},
+    {"math", "MAX_INT", ": int", "Largest signed 64-bit integer", "math.MAX_INT", "xr_int(INT64_MAX)", "", "int64", "", "", "core", INT64_MAX, 0.0},
+    {"math", "MIN_INT", ": int", "Smallest signed 64-bit integer", "math.MIN_INT", "xr_int(INT64_MIN)", "", "int64", "", "", "core", INT64_MIN, 0.0},
+    {"math", "MAX_FLOAT", ": float", "Largest finite IEEE-754 double", "math.MAX_FLOAT", "xr_float(DBL_MAX)", "", "float64", "", "", "core", INT64_C(0), 1.79769313486231570815e+308},
+    {"math", "INF", ": float", "Positive infinity", "math.INF", "xr_float(INFINITY)", "", "float64", "", "", "core", INT64_C(0), INFINITY},
+    {"math", "NAN", ": float", "Quiet NaN value", "math.NAN", "xr_float(NAN)", "", "float64", "", "", "core", INT64_C(0), NAN},
+    {"path", "sep", ": string", "Platform path separator", "path.sep", "xrs_string_value_c(isolate, PATH_SEP_STR)", "xrt_path_sep", "helper_value", "", "", "core", INT64_C(0), 0.0},
+    {"path", "delimiter", ": string", "Platform path-list delimiter", "path.delimiter", "xrs_string_value_c(isolate, PATH_DELIMITER)", "xrt_path_delimiter", "helper_value", "", "", "core", INT64_C(0), 0.0},
+    {"encoding", "LE", ": int", "Little-endian UTF-16 byte order", "XR_UTF16_LE", "xr_int(XR_UTF16_LE)", "", "int64", "", "", "core", INT64_C(0), 0.0},
+    {"encoding", "BE", ": int", "Big-endian UTF-16 byte order", "XR_UTF16_BE", "xr_int(XR_UTF16_BE)", "", "int64", "", "", "core", INT64_C(1), 0.0},
+    {"os", "platform", ": string", "Current operating system name", "os.platform", "xrs_string_value_c(isolate, get_platform())", "xrt_os_platform", "helper_value", "", "", "system", INT64_C(0), 0.0},
+    {"os", "arch", ": string", "Current CPU architecture name", "os.arch", "xrs_string_value_c(isolate, get_arch())", "xrt_os_arch", "helper_value", "", "", "system", INT64_C(0), 0.0},
+    {"os", "sep", ": string", "Platform path separator", "os.sep", "xrs_string_value_c(isolate, get_sep())", "xrt_os_sep", "helper_value", "", "", "system", INT64_C(0), 0.0},
+    {"os", "eol", ": string", "Platform end-of-line string", "os.eol", "xrs_string_value_c(isolate, get_eol())", "xrt_os_eol", "helper_value", "", "", "system", INT64_C(0), 0.0},
+    {"log", "DEBUG", ": int", "Debug log level", "XR_LOG_DEBUG", "xr_int(XR_LOG_DEBUG)", "", "int64", "", "", "core", INT64_C(10), 0.0},
+    {"log", "INFO", ": int", "Info log level", "XR_LOG_INFO", "xr_int(XR_LOG_INFO)", "", "int64", "", "", "core", INT64_C(20), 0.0},
+    {"log", "WARN", ": int", "Warning log level", "XR_LOG_WARN", "xr_int(XR_LOG_WARN)", "", "int64", "", "", "core", INT64_C(30), 0.0},
+    {"log", "ERROR", ": int", "Error log level", "XR_LOG_ERROR", "xr_int(XR_LOG_ERROR)", "", "int64", "", "", "core", INT64_C(40), 0.0},
+    {"log", "FATAL", ": int", "Fatal log level", "XR_LOG_FATAL", "xr_int(XR_LOG_FATAL)", "", "int64", "", "", "core", INT64_C(50), 0.0},
 };
 #define XR_STDLIB_CONST_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_const_def_entries) / sizeof(xr_stdlib_const_def_entries[0])))
 

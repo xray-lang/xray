@@ -194,6 +194,20 @@ static void xr_stdlib_vm_bind_math_generated(XrVMRuntime *isolate, XrModule *mod
     XRS_EXPORT(module, isolate, "radToDeg", math_radToDeg);
     XRS_EXPORT(module, isolate, "isNaN", math_isNaN);
     XRS_EXPORT(module, isolate, "isFinite", math_isFinite);
+    xr_module_add_export(isolate, module, "PI", xr_float(M_PI));
+    xr_module_add_export(isolate, module, "E", xr_float(M_E));
+    xr_module_add_export(isolate, module, "TAU", xr_float(2.0 * M_PI));
+    xr_module_add_export(isolate, module, "SQRT2", xr_float(M_SQRT2));
+    xr_module_add_export(isolate, module, "LN2", xr_float(M_LN2));
+    xr_module_add_export(isolate, module, "LN10", xr_float(M_LN10));
+    xr_module_add_export(isolate, module, "LOG2E", xr_float(M_LOG2E));
+    xr_module_add_export(isolate, module, "LOG10E", xr_float(M_LOG10E));
+    xr_module_add_export(isolate, module, "EPSILON", xr_float(DBL_EPSILON));
+    xr_module_add_export(isolate, module, "MAX_INT", xr_int(INT64_MAX));
+    xr_module_add_export(isolate, module, "MIN_INT", xr_int(INT64_MIN));
+    xr_module_add_export(isolate, module, "MAX_FLOAT", xr_float(DBL_MAX));
+    xr_module_add_export(isolate, module, "INF", xr_float(INFINITY));
+    xr_module_add_export(isolate, module, "NAN", xr_float(NAN));
 }
 #endif  /* XR_STDLIB_VM_BIND_MODULE_MATH */
 

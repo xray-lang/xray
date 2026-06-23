@@ -36,12 +36,9 @@
 #include "../base/xconstants.h"
 #include "../runtime/value/xstruct_layout.h"
 #include "../runtime/value/xffi_sig.h"
-#include "../shared/xr_encoding_core.h"
 
 #include <string.h>
 #include <stdio.h>
-#include <float.h>
-#include <math.h>
 
 /* ========== Forward Declarations ========== */
 
@@ -840,65 +837,6 @@ static bool lower_value_is_whole_module_import(XiLower *l, const XiValue *v,
            ref->member_name == NULL;
 }
 
-static bool lower_math_constant(XiLower *l, const char *name, XiValue **out) {
-    if (!out)
-        return false;
-    if (out)
-        *out = NULL;
-    if (!name)
-        return false;
-
-    if (strcmp(name, "PI") == 0)
-        *out = xi_const_float(l->func, l->cur_block, 3.14159265358979323846, l->type_float);
-    else if (strcmp(name, "E") == 0)
-        *out = xi_const_float(l->func, l->cur_block, 2.71828182845904523536, l->type_float);
-    else if (strcmp(name, "TAU") == 0)
-        *out = xi_const_float(l->func, l->cur_block, 6.28318530717958647692, l->type_float);
-    else if (strcmp(name, "SQRT2") == 0)
-        *out = xi_const_float(l->func, l->cur_block, 1.41421356237309504880, l->type_float);
-    else if (strcmp(name, "LN2") == 0)
-        *out = xi_const_float(l->func, l->cur_block, 0.69314718055994530942, l->type_float);
-    else if (strcmp(name, "LN10") == 0)
-        *out = xi_const_float(l->func, l->cur_block, 2.30258509299404568402, l->type_float);
-    else if (strcmp(name, "LOG2E") == 0)
-        *out = xi_const_float(l->func, l->cur_block, 1.44269504088896340736, l->type_float);
-    else if (strcmp(name, "LOG10E") == 0)
-        *out = xi_const_float(l->func, l->cur_block, 0.43429448190325182765, l->type_float);
-    else if (strcmp(name, "EPSILON") == 0)
-        *out = xi_const_float(l->func, l->cur_block, DBL_EPSILON, l->type_float);
-    else if (strcmp(name, "MAX_INT") == 0)
-        *out = xi_const_int(l->func, l->cur_block, INT64_MAX, l->type_int);
-    else if (strcmp(name, "MIN_INT") == 0)
-        *out = xi_const_int(l->func, l->cur_block, INT64_MIN, l->type_int);
-    else if (strcmp(name, "MAX_FLOAT") == 0)
-        *out = xi_const_float(l->func, l->cur_block, DBL_MAX, l->type_float);
-    else if (strcmp(name, "INF") == 0)
-        *out = xi_const_float(l->func, l->cur_block, INFINITY, l->type_float);
-    else if (strcmp(name, "NAN") == 0)
-        *out = xi_const_float(l->func, l->cur_block, NAN, l->type_float);
-    else
-        return false;
-
-    return *out != NULL;
-}
-
-static bool lower_encoding_constant(XiLower *l, const char *name, XiValue **out) {
-    if (!out)
-        return false;
-    *out = NULL;
-    if (!name)
-        return false;
-
-    if (strcmp(name, "LE") == 0)
-        *out = xi_const_int(l->func, l->cur_block, XR_ENCODING_UTF16_LE, l->type_int);
-    else if (strcmp(name, "BE") == 0)
-        *out = xi_const_int(l->func, l->cur_block, XR_ENCODING_UTF16_BE, l->type_int);
-    else
-        return false;
-
-    return *out != NULL;
-}
-
 static bool lower_math_call_arity_ok(const char *name, int nargs) {
     if (!name || nargs < 0)
         return false;
@@ -963,17 +901,6 @@ static XiValue *lower_member_access(XiLower *l, AstNode *node) {
     XiValue *obj = xi_lower_expr(l, ma->object);
     if (!obj)
         return NULL;
-
-    if (lower_value_is_whole_module_import(l, obj, "math")) {
-        XiValue *constant = NULL;
-        if (lower_math_constant(l, ma->name, &constant))
-            return constant;
-    }
-    if (lower_value_is_whole_module_import(l, obj, "encoding")) {
-        XiValue *constant = NULL;
-        if (lower_encoding_constant(l, ma->name, &constant))
-            return constant;
-    }
 
     struct XrType *result_type = xi_lower_node_type(l, node);
 

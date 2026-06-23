@@ -74,6 +74,146 @@ module time {
 }
 
 module math {
+  const PI {
+    signature: ": float"
+    doc: "Ratio of a circle's circumference to its diameter"
+    vm: "math.PI"
+    vm_value: "xr_float(M_PI)"
+    aot_const: "float64"
+    value: 3.14159265358979323846
+    layer: "core"
+  }
+
+  const E {
+    signature: ": float"
+    doc: "Euler's number"
+    vm: "math.E"
+    vm_value: "xr_float(M_E)"
+    aot_const: "float64"
+    value: 2.71828182845904523536
+    layer: "core"
+  }
+
+  const TAU {
+    signature: ": float"
+    doc: "Full-circle radians, 2 * PI"
+    vm: "math.TAU"
+    vm_value: "xr_float(2.0 * M_PI)"
+    aot_const: "float64"
+    value: 6.28318530717958647692
+    layer: "core"
+  }
+
+  const SQRT2 {
+    signature: ": float"
+    doc: "Square root of 2"
+    vm: "math.SQRT2"
+    vm_value: "xr_float(M_SQRT2)"
+    aot_const: "float64"
+    value: 1.41421356237309504880
+    layer: "core"
+  }
+
+  const LN2 {
+    signature: ": float"
+    doc: "Natural logarithm of 2"
+    vm: "math.LN2"
+    vm_value: "xr_float(M_LN2)"
+    aot_const: "float64"
+    value: 0.69314718055994530942
+    layer: "core"
+  }
+
+  const LN10 {
+    signature: ": float"
+    doc: "Natural logarithm of 10"
+    vm: "math.LN10"
+    vm_value: "xr_float(M_LN10)"
+    aot_const: "float64"
+    value: 2.30258509299404568402
+    layer: "core"
+  }
+
+  const LOG2E {
+    signature: ": float"
+    doc: "Base-2 logarithm of e"
+    vm: "math.LOG2E"
+    vm_value: "xr_float(M_LOG2E)"
+    aot_const: "float64"
+    value: 1.44269504088896340736
+    layer: "core"
+  }
+
+  const LOG10E {
+    signature: ": float"
+    doc: "Base-10 logarithm of e"
+    vm: "math.LOG10E"
+    vm_value: "xr_float(M_LOG10E)"
+    aot_const: "float64"
+    value: 0.43429448190325182765
+    layer: "core"
+  }
+
+  const EPSILON {
+    signature: ": float"
+    doc: "Smallest representable difference above 1.0"
+    vm: "math.EPSILON"
+    vm_value: "xr_float(DBL_EPSILON)"
+    aot_const: "float64"
+    value: 2.22044604925031308085e-16
+    layer: "core"
+  }
+
+  const MAX_INT {
+    signature: ": int"
+    doc: "Largest signed 64-bit integer"
+    vm: "math.MAX_INT"
+    vm_value: "xr_int(INT64_MAX)"
+    aot_const: "int64"
+    value: 9223372036854775807
+    layer: "core"
+  }
+
+  const MIN_INT {
+    signature: ": int"
+    doc: "Smallest signed 64-bit integer"
+    vm: "math.MIN_INT"
+    vm_value: "xr_int(INT64_MIN)"
+    aot_const: "int64"
+    value: -9223372036854775808
+    layer: "core"
+  }
+
+  const MAX_FLOAT {
+    signature: ": float"
+    doc: "Largest finite IEEE-754 double"
+    vm: "math.MAX_FLOAT"
+    vm_value: "xr_float(DBL_MAX)"
+    aot_const: "float64"
+    value: 1.79769313486231570815e+308
+    layer: "core"
+  }
+
+  const INF {
+    signature: ": float"
+    doc: "Positive infinity"
+    vm: "math.INF"
+    vm_value: "xr_float(INFINITY)"
+    aot_const: "float64"
+    value: INFINITY
+    layer: "core"
+  }
+
+  const NAN {
+    signature: ": float"
+    doc: "Quiet NaN value"
+    vm: "math.NAN"
+    vm_value: "xr_float(NAN)"
+    aot_const: "float64"
+    value: NAN
+    layer: "core"
+  }
+
   fn abs {
     signature: "(x: float): float"
     doc: "Absolute value (preserves int)"
