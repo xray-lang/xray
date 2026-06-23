@@ -163,6 +163,7 @@
     _(NEWSET, FMT_AB, KOP_AB_NEW_LIT, "R[A] = #[], B=storage")                                     \
     _(NEWSTRINGBUILDER, FMT_AB, KOP_AB_NEW_LIT, "R[A] = new StringBuilder(), B=storage")           \
     _(NEWRANGE, FMT_ABC, KOP_ABC_BIN, "R[A] = Range(R[B], R[C])")                                  \
+    _(NEWRANGE_INCLUSIVE, FMT_ABC, KOP_ABC_BIN, "R[A] = Range inclusive(R[B], R[C])")              \
     _(RANGE_UNPACK, FMT_AB, KOP_AB_RECV, "R[A]=start, R[A+1]=end, R[A+2]=step from Range R[B]")    \
     _(ARRAY_GET, FMT_ABC, KOP_ABC_BIN, "R[A] = R[B]:Array[R[C]]")                                  \
     _(ARRAY_GETC, FMT_ABC, KOP_ABC_BIN_LIT, "R[A] = R[B]:Array[C]")                                \

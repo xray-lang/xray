@@ -184,6 +184,7 @@ typedef enum {
     TK_ARROW,              // -> (unified arrow: fn return, fn type, closure body, match/select arm)
     TK_DOT_DOT_DOT,        // ... (rest/spread operator)
     TK_RANGE,              // .. (range operator)
+    TK_RANGE_INCLUSIVE,    // ..= (inclusive range operator)
     TK_NULLISH_COALESCE,   // ?? (nullish coalescing operator)
     TK_UNDERSCORE,         // _ (wildcard pattern, for match expression)
 

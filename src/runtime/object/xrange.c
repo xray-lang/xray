@@ -45,7 +45,7 @@ XrRange *xr_value_get_range_body(XrayIsolate *X, XrValue v) {
 
 /* ========== Creation ========== */
 
-XrValue xr_range_new(XrayIsolate *X, int64_t start, int64_t end) {
+XrValue xr_range_new(XrayIsolate *X, int64_t start, int64_t end, bool inclusive_end) {
     XR_DCHECK(X != NULL, "xr_range_new: NULL isolate");
     XrInstance *inst = xr_instance_new(X, range_class(X));
     if (!inst)
@@ -55,10 +55,12 @@ XrValue xr_range_new(XrayIsolate *X, int64_t start, int64_t end) {
     body->start = start;
     body->end = end;
     body->step = 1;
+    body->inclusive_end = inclusive_end;
     return XR_FROM_PTR(inst);
 }
 
-XrValue xr_range_new_with_step(XrayIsolate *X, int64_t start, int64_t end, int64_t step) {
+XrValue xr_range_new_with_step(XrayIsolate *X, int64_t start, int64_t end, int64_t step,
+                               bool inclusive_end) {
     XR_DCHECK(X != NULL, "xr_range_new_with_step: NULL isolate");
     XR_CHECK(step != 0, "xr_range_new_with_step: step must not be zero");
     XrInstance *inst = xr_instance_new(X, range_class(X));
@@ -69,6 +71,7 @@ XrValue xr_range_new_with_step(XrayIsolate *X, int64_t start, int64_t end, int64
     body->start = start;
     body->end = end;
     body->step = step;
+    body->inclusive_end = inclusive_end;
     return XR_FROM_PTR(inst);
 }
 
@@ -116,9 +119,10 @@ static XrValue m_range_to_string(XrayIsolate *iso, XrValue self, XrValue *args, 
     if (!rng)
         return xr_null();
     char buf[80];
+    const char *op = rng->inclusive_end ? "..=" : "..";
     int n = (rng->step == 1)
-                ? snprintf(buf, sizeof(buf), "%" PRId64 "..%" PRId64, rng->start, rng->end)
-                : snprintf(buf, sizeof(buf), "%" PRId64 "..%" PRId64 ":%" PRId64, rng->start,
+                ? snprintf(buf, sizeof(buf), "%" PRId64 "%s%" PRId64, rng->start, op, rng->end)
+                : snprintf(buf, sizeof(buf), "%" PRId64 "%s%" PRId64 ":%" PRId64, rng->start, op,
                            rng->end, rng->step);
     XrString *s = xr_string_intern(iso, buf, (size_t) n, 0);
     return xr_string_value(s);
@@ -181,6 +185,7 @@ static void range_body_init(XrInstance *inst, void *body) {
     r->start = 0;
     r->end = 0;
     r->step = 1;
+    r->inclusive_end = false;
 }
 
 static XrNativeBodyDesc g_range_body_desc = {

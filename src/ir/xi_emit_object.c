@@ -571,7 +571,7 @@ XR_FUNC void xi_emit_range(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     XiEmitReg end = reg_of(ctx, v->args[1]);
     if (ctx->status != XI_EMIT_OK)
         return;
-    emit_inst(ctx, CREATE_ABC(OP_NEWRANGE, dst, start, end));
+    emit_inst(ctx, CREATE_ABC(v->aux_int ? OP_NEWRANGE_INCLUSIVE : OP_NEWRANGE, dst, start, end));
 }
 
 /* Slice: OP_SLICE expects start at R[C], end at R[C+1] (consecutive) */

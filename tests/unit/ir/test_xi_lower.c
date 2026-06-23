@@ -825,12 +825,19 @@ TEST(range_expr) {
     XiFunc *f = lower_source("let r = 1..10\n"
                              "print(r)\n");
     assert(f != NULL);
-    int found_range = 0;
-    for (uint32_t i = 0; i < f->entry->nvalues; i++) {
-        if (f->entry->values[i]->op == XI_RANGE)
-            found_range = 1;
-    }
-    assert(found_range && "should have RANGE op");
+    XiValue *range = func_tree_find_op(f, XI_RANGE);
+    assert(range && "should have RANGE op");
+    assert(range->aux_int == 0 && "half-open range should clear inclusive flag");
+    xi_func_free(f);
+}
+
+TEST(range_inclusive_expr) {
+    XiFunc *f = lower_source("let r = 1..=10\n"
+                             "print(r)\n");
+    assert(f != NULL);
+    XiValue *range = func_tree_find_op(f, XI_RANGE);
+    assert(range && "should have RANGE op");
+    assert(range->aux_int == 1 && "inclusive range should set inclusive flag");
     xi_func_free(f);
 }
 
@@ -1079,6 +1086,7 @@ int main(void) {
     run_is_expr();
     run_slice_expr();
     run_range_expr();
+    run_range_inclusive_expr();
     run_optional_chain();
     run_optional_call();
     run_struct_literal();

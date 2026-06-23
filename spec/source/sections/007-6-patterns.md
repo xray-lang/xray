@@ -28,18 +28,19 @@ match (x) {
 - 匹配使用与 `==` 相同的语义。
 - `null` 模式只匹配 `null` 本身。
 
-### 6.2 范围模式 `a..b`
+### 6.2 范围模式 `a..b` / `a..=b`
 
 ```xray
 match (age) {
     0..13 -> "child"
     13..20 -> "teen"
-    20..65 -> "adult"
+    20..=65 -> "adult"
     _ -> "senior"
 }
 ```
 
-- 半开区间 `[a, b)`，仅整数。
+- `a..b` 为半开区间 `[a, b)`；`a..=b` 为闭区间 `[a, b]`。
+- 仅整数。
 
 ### 6.3 枚举模式
 
@@ -210,18 +211,19 @@ match (x) {
 - Matching uses the same semantics as `==`.
 - The `null` pattern matches only `null` itself.
 
-### 6.2 Range Patterns `a..b`
+### 6.2 Range Patterns `a..b` / `a..=b`
 
 ```xray
 match (age) {
     0..13 -> "child"
     13..20 -> "teen"
-    20..65 -> "adult"
+    20..=65 -> "adult"
     _ -> "senior"
 }
 ```
 
-- Half-open interval `[a, b)`; integer-only.
+- `a..b` is the half-open interval `[a, b)`; `a..=b` is the inclusive interval `[a, b]`.
+- Integer-only.
 
 ### 6.3 Enum Patterns
 

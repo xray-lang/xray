@@ -440,7 +440,8 @@ Only the **statement-level postfix** form `x++` / `x--` is supported; prefix `++
 | `\|` | union type (`int \| string`) / bitwise or |
 | `->` | unified arrow: function return type, function type, closures, `match` / `select` arms |
 | `...` | rest / spread |
-| `..` | range (`0..10`) |
+| `..` | half-open range (`0..10`) |
+| `..=` | inclusive range (`0..=10`) |
 | `is` | runtime type check |
 | `as` | type cast |
 
@@ -956,7 +957,7 @@ Full precedence table (highest → lowest; operators at the same level share ass
 | 6 | `&&` | left | logical AND (short-circuit) |
 | 5 | `\|\|` | left | logical OR (short-circuit) |
 | 4 | `??` | left | null coalescing |
-| 3 | `..` | left | range |
+| 3 | `..` `..=` | left | range |
 | 2 | `? :` | right | ternary |
 | 1 | `=` `+=` `-=` `*=` `/=` `%=` `&=` `\|=` `^=` `<<=` `>>=` | right | assignment and compound assignment |
 | 0 | `,` (only in `match` multi-value arms, argument lists, etc.) | — | not a real operator |
@@ -1180,25 +1181,28 @@ let n = v as int?          // returns null on failure (the "as nullable" safe fo
 - Parent → child (runtime `instanceof`).
 - Union member → concrete member.
 
-### 3.9 Range `..` and Spread `...`
+### 3.9 Range `..` / `..=` and Spread `...`
 
-#### Range `a..b`
+#### Range `a..b` / `a..=b`
 
 ```ebnf
-RangeExpr ::= AddExpr ('..' AddExpr)?
+RangeExpr ::= AddExpr (('..' | '..=') AddExpr)?
 ```
 
 ```xray
 0..10                  // 0..10, left-closed right-open (includes 0, excludes 10)
+0..=10                 // 0..=10, closed interval (includes both 0 and 10)
 let r = 1..100
 let n = 10
 for (i in 0..n) { print(i) }
+for (i in 0..=n) { print(i) }
 ```
 
 - Type: `Range` (int ranges only).
-- Half-open interval `[a, b)`: `a` is included, `b` is not. `for-in`, `Range.includes`, `Range.length`, `Range.toArray()`, and the `a..b` pattern in `match` all share the same semantics.
+- `a..b` is the half-open interval `[a, b)`: `a` is included, `b` is not.
+- `a..=b` is the inclusive interval `[a, b]`: both endpoints are included.
+- `for-in`, `Range.includes`, `Range.length`, `Range.toArray()`, and range patterns in `match` all use the corresponding endpoint semantics.
 - Primary uses: `for-in` loops, range checks in pattern matching.
-- The closed-interval syntax (`a..=b`) is not currently provided; to include `b`, write `a..(b+1)`.
 
 #### Spread `...`
 
@@ -2627,18 +2631,19 @@ match (x) {
 - Matching uses the same semantics as `==`.
 - The `null` pattern matches only `null` itself.
 
-### 6.2 Range Patterns `a..b`
+### 6.2 Range Patterns `a..b` / `a..=b`
 
 ```xray
 match (age) {
     0..13 -> "child"
     13..20 -> "teen"
-    20..65 -> "adult"
+    20..=65 -> "adult"
     _ -> "senior"
 }
 ```
 
-- Half-open interval `[a, b)`; integer-only.
+- `a..b` is the half-open interval `[a, b)`; `a..=b` is the inclusive interval `[a, b]`.
+- Integer-only.
 
 ### 6.3 Enum Patterns
 
@@ -5433,7 +5438,7 @@ The complete operator listing organized by purpose is in [§1.7](#17-operators-a
 | Logical | `&&` `\|\|` `!` |
 | Assignment | `=` `+=` `-=` `*=` `/=` `%=` `&=` `\|=` `^=` `<<=` `>>=` |
 | Statements | `++` `--` |
-| Other | `..` `??` `?.` `?[` `!` `->` |
+| Other | `..` `..=` `??` `?.` `?[` `!` `->` |
 
 ---
 

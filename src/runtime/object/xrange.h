@@ -8,7 +8,8 @@
  * xrange.h - Lightweight lazy Range type
  *
  * KEY CONCEPT:
- *   Range represents a lazy integer sequence [start, end] with step.
+ *   Range represents a lazy integer sequence with either half-open or
+ *   inclusive end semantics.
  *   No elements are materialized until iteration or toArray().
  *
  * MEMORY LAYOUT (unified class model):
@@ -17,8 +18,9 @@
  *   │ XrInstance base     │
  *   ├─────────────────────┤
  *   │ start   (8B)        │ inclusive start
- *   │ end     (8B)        │ inclusive end
+ *   │ end     (8B)        │ stored end bound
  *   │ step    (8B)        │ step (default 1, negative for reverse)
+ *   │ inclusive_end       │ false: [start,end), true: [start,end]
  *   └─────────────────────┘
  *   Native body: 24 bytes (no GC-traced children, no destroy)
  */
@@ -40,16 +42,17 @@ typedef struct XrRange {
     int64_t start;
     int64_t end;
     int64_t step;
+    bool inclusive_end;
 } XrRange;
 
 /* ========== Creation ========== */
 
-// Create Range [start, end] with step=1
-XR_FUNC XrValue xr_range_new(struct XrayIsolate *X, int64_t start, int64_t end);
+// Create Range with step=1.
+XR_FUNC XrValue xr_range_new(struct XrayIsolate *X, int64_t start, int64_t end, bool inclusive_end);
 
-// Create Range [start, end] with explicit step
+// Create Range with explicit step.
 XR_FUNC XrValue xr_range_new_with_step(struct XrayIsolate *X, int64_t start, int64_t end,
-                                       int64_t step);
+                                       int64_t step, bool inclusive_end);
 
 /* ========== Type Check ========== */
 
@@ -62,40 +65,49 @@ XR_FUNC XrRange *xr_value_get_range_body(struct XrayIsolate *X, XrValue v);
 /* ========== Properties ========== */
 
 // Number of elements in the range (lazy, O(1)).
-// Range semantics is half-open `[start, end)` (matches spec §3.12 and
-// the for-in / pattern lowering in xi_lower_stmt.c).  Negative step uses
-// the symmetric `(end, start]` interpretation so iteration starts at
-// `start` and stops strictly past `end`.
+// Half-open forward ranges use `[start, end)`, inclusive forward ranges use
+// `[start, end]`; reverse ranges mirror the boundary around `end`.
+static inline int64_t xr_range_len_from_distance(uint64_t distance, uint64_t step,
+                                                 bool inclusive_end) {
+    if (step == 0)
+        return 0;
+    uint64_t base = distance / step;
+    uint64_t extra = inclusive_end ? 1 : (distance % step != 0);
+    if (base > UINT64_MAX - extra)
+        return INT64_MAX;
+    uint64_t len = base + extra;
+    return len > (uint64_t) INT64_MAX ? INT64_MAX : (int64_t) len;
+}
+
 static inline int64_t xr_range_length(XrRange *r) {
     if (!r || r->step == 0)
         return 0;
     if (r->step > 0) {
-        if (r->end <= r->start)
+        if (r->inclusive_end ? (r->end < r->start) : (r->end <= r->start))
             return 0;
-        // Number of strides i with start + i*step < end, i >= 0.
-        return (r->end - r->start + r->step - 1) / r->step;
+        return xr_range_len_from_distance((uint64_t) r->end - (uint64_t) r->start,
+                                          (uint64_t) r->step, r->inclusive_end);
     } else {
-        if (r->end >= r->start)
+        if (r->inclusive_end ? (r->end > r->start) : (r->end >= r->start))
             return 0;
         int64_t neg_step = -r->step;
-        return (r->start - r->end + neg_step - 1) / neg_step;
+        return xr_range_len_from_distance((uint64_t) r->start - (uint64_t) r->end,
+                                          (uint64_t) neg_step, r->inclusive_end);
     }
 }
 
-// Check if value is in the range under half-open semantics.
-// Forward (step > 0): value in [start, end) and (value - start) % step == 0.
-// Reverse (step < 0): value in (end, start] and (start - value) % |step| == 0.
+// Check if value is in the range under the stored end-boundary semantics.
 static inline bool xr_range_contains(XrRange *r, int64_t value) {
     if (!r || r->step == 0)
         return false;
     if (r->step > 0) {
-        if (value < r->start || value >= r->end)
+        if (value < r->start || (r->inclusive_end ? value > r->end : value >= r->end))
             return false;
-        return (value - r->start) % r->step == 0;
+        return ((uint64_t) value - (uint64_t) r->start) % (uint64_t) r->step == 0;
     } else {
-        if (value > r->start || value <= r->end)
+        if (value > r->start || (r->inclusive_end ? value < r->end : value <= r->end))
             return false;
-        return (r->start - value) % (-r->step) == 0;
+        return ((uint64_t) r->start - (uint64_t) value) % (uint64_t) (-r->step) == 0;
     }
 }
 

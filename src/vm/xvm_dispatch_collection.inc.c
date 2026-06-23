@@ -303,7 +303,21 @@ vmcase(OP_NEWRANGE) {
     int c = GETARG_C(i);
     int64_t start_val = XR_TO_INT(R(b));
     int64_t end_val = XR_TO_INT(R(c));
-    R(a) = xr_range_new(isolate, start_val, end_val);
+    R(a) = xr_range_new(isolate, start_val, end_val, false);
+    checkGC(base + a + 1);
+    vmbreak;
+}
+
+vmcase(OP_NEWRANGE_INCLUSIVE) {
+    /* OP_NEWRANGE_INCLUSIVE: create lazy inclusive Range object
+    ** R[A] = Range inclusive(R[B], R[C])
+    */
+    int a = GETARG_A(i);
+    int b = GETARG_B(i);
+    int c = GETARG_C(i);
+    int64_t start_val = XR_TO_INT(R(b));
+    int64_t end_val = XR_TO_INT(R(c));
+    R(a) = xr_range_new(isolate, start_val, end_val, true);
     checkGC(base + a + 1);
     vmbreak;
 }

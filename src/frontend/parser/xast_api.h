@@ -288,7 +288,8 @@ XR_FUNC AstNode *xr_ast_optional_chain(XrayIsolate *X, AstNode *object, const ch
                                        AstNode *index, int chain_type, int line);
 
 // Create range expression node
-XR_FUNC AstNode *xr_ast_range(XrayIsolate *X, AstNode *start, AstNode *end, int line);
+XR_FUNC AstNode *xr_ast_range(XrayIsolate *X, AstNode *start, AstNode *end, bool inclusive_end,
+                              int line);
 
 // Create destructure patterns (flat only)
 XR_FUNC XrDestructurePattern *xr_pattern_array(XrayIsolate *X, XrDestructurePattern **elements,
@@ -320,7 +321,8 @@ XR_FUNC AstNode *xr_ast_match_arm(XrayIsolate *X, AstNode *pattern, AstNode *gua
 XR_FUNC AstNode *xr_ast_pattern_literal(XrayIsolate *X, AstNode *value, int line);
 
 // Create range pattern node
-XR_FUNC AstNode *xr_ast_pattern_range(XrayIsolate *X, AstNode *start, AstNode *end, int line);
+XR_FUNC AstNode *xr_ast_pattern_range(XrayIsolate *X, AstNode *start, AstNode *end,
+                                      bool inclusive_end, int line);
 
 // Create wildcard pattern node
 XR_FUNC AstNode *xr_ast_pattern_wildcard(XrayIsolate *X, int line);

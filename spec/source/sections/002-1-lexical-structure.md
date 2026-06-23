@@ -335,7 +335,8 @@ RegexFlag ::= 'g' | 'i' | 'm' | 's'
 | `\|` | union 类型 (`int \| string`) / 位或 |
 | `->` | 统一箭头：函数返回类型、函数类型、闭包、`match` / `select` 分支 |
 | `...` | rest / spread |
-| `..` | 范围 (`0..10`) |
+| `..` | 半开范围 (`0..10`) |
+| `..=` | 闭区间范围 (`0..=10`) |
 | `is` | 运行时类型检查 |
 | `as` | 类型转换 |
 
@@ -698,7 +699,8 @@ Only the **statement-level postfix** form `x++` / `x--` is supported; prefix `++
 | `\|` | union type (`int \| string`) / bitwise or |
 | `->` | unified arrow: function return type, function type, closures, `match` / `select` arms |
 | `...` | rest / spread |
-| `..` | range (`0..10`) |
+| `..` | half-open range (`0..10`) |
+| `..=` | inclusive range (`0..=10`) |
 | `is` | runtime type check |
 | `as` | type cast |
 

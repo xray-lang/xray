@@ -785,6 +785,9 @@ Token xr_scanner_scan(Scanner *scanner) {
             return make_token(scanner, TK_COMMA);
         case '.':
             if (match(scanner, '.')) {
+                if (match(scanner, '=')) {
+                    return make_token(scanner, TK_RANGE_INCLUSIVE);
+                }
                 if (match(scanner, '.')) {
                     return make_token(scanner, TK_DOT_DOT_DOT);
                 }
@@ -1036,6 +1039,7 @@ static const char *token_names[] = {
     [TK_ARROW] = "->",
     [TK_DOT_DOT_DOT] = "...",
     [TK_RANGE] = "..",
+    [TK_RANGE_INCLUSIVE] = "..=",
     [TK_NULLISH_COALESCE] = "??",
     [TK_UNDERSCORE] = "_",
 

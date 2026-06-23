@@ -1165,7 +1165,7 @@ static void xicgen_range(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiVal
     emit_value_as_rep(out, v->args[0], XR_REP_I64);
     fprintf(out, ", ");
     emit_value_as_rep(out, v->args[1], XR_REP_I64);
-    fprintf(out, ")");
+    fprintf(out, ", %s)", v->aux_int ? "true" : "false");
 }
 
 static bool xicgen_math_result_rep(const char *name, XrRep *out_rep) {
