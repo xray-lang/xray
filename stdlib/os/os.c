@@ -839,6 +839,22 @@ static const char *get_arch(void) {
 #endif
 }
 
+static const char *get_sep(void) {
+#ifdef XR_OS_WINDOWS
+    return "\\";
+#else
+    return "/";
+#endif
+}
+
+static const char *get_eol(void) {
+#ifdef XR_OS_WINDOWS
+    return "\r\n";
+#else
+    return "\n";
+#endif
+}
+
 /* ========== Module Loading ========== */
 
 // ========== Type Declarations (parsed by gen_stdlib_types.py) ==========
@@ -895,22 +911,8 @@ XR_FUNC XrModule *xr_load_module_os(XrVMRuntime *isolate) {
     if (!mod)
         return NULL;
 
-    // 2. Add exported functions
     xr_stdlib_vm_bind_os_generated(isolate, mod);
 
-    // 3. Add constants
-    xr_module_add_export(isolate, mod, "platform", xrs_string_value_c(isolate, get_platform()));
-    xr_module_add_export(isolate, mod, "arch", xrs_string_value_c(isolate, get_arch()));
-
-#ifdef XR_OS_WINDOWS
-    xr_module_add_export(isolate, mod, "sep", xrs_string_value_c(isolate, "\\"));
-    xr_module_add_export(isolate, mod, "eol", xrs_string_value_c(isolate, "\r\n"));
-#else
-    xr_module_add_export(isolate, mod, "sep", xrs_string_value_c(isolate, "/"));
-    xr_module_add_export(isolate, mod, "eol", xrs_string_value_c(isolate, "\n"));
-#endif
-
-    // 4. Mark as loaded
     mod->loaded = true;
     return mod;
 }
