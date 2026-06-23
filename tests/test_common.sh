@@ -18,16 +18,39 @@ xray_test_string_key() {
     printf '%s' "$1" | cksum | awk '{ print $1 "-" $2 }'
 }
 
+xray_test_tree_key() {
+    local dir="$1"
+    local rel f
+    if [ ! -d "$dir" ]; then
+        printf 'missing'
+        return 0
+    fi
+    (
+        find "$dir" -type f \( -name '*.h' -o -name '*.inc.c' \) 2>/dev/null |
+            LC_ALL=C sort |
+            while IFS= read -r f; do
+                rel="${f#$dir/}"
+                printf '%s ' "$rel"
+                cksum "$f" 2>/dev/null || printf '0 0 %s\n' "$f"
+            done
+    ) | cksum | awk '{ print $1 "-" $2 }'
+}
+
 xray_test_toolchain_key() {
     local xray_bin="$1"
-    local bin_dir
+    local bin_dir project_dir
 
     bin_dir="$(cd "$(dirname "$xray_bin")" 2>/dev/null && pwd || printf '.')"
+    project_dir="$(cd "$bin_dir/.." 2>/dev/null && pwd || printf '')"
     (
+        printf 'xray-test-toolchain-cache-schema 2\n'
         printf 'xray %s\n' "$(xray_test_file_key "$xray_bin")"
         printf 'libxray_aot_core.a %s\n' "$(xray_test_file_key "$bin_dir/libxray_aot_core.a")"
         printf 'libxray_rt_coro.a %s\n' "$(xray_test_file_key "$bin_dir/libxray_rt_coro.a")"
         printf 'libxray_core.a %s\n' "$(xray_test_file_key "$bin_dir/libxray_core.a")"
+        printf 'src/aot headers %s\n' "$(xray_test_tree_key "$project_dir/src/aot")"
+        printf 'src/shared headers %s\n' "$(xray_test_tree_key "$project_dir/src/shared")"
+        printf 'src/coro headers %s\n' "$(xray_test_tree_key "$project_dir/src/coro")"
     ) | cksum | awk '{ print $1 "-" $2 }'
 }
 

@@ -71,13 +71,29 @@ def string_key(text: str) -> str:
     return f"{checksum}-{size}"
 
 
+def tree_key(root: Path, suffixes: tuple[str, ...]) -> str:
+    if not root.is_dir():
+        return "missing"
+    chunks: list[str] = []
+    for path in sorted(root.rglob("*")):
+        if not path.is_file() or not path.name.endswith(suffixes):
+            continue
+        checksum, size = run_cksum([str(path)])
+        chunks.append(f"{path.relative_to(root)} {checksum} {size}\n")
+    return string_key("".join(chunks))
+
+
 def toolchain_key(xray_bin: Path) -> str:
     bin_dir = xray_bin.parent
     material = (
+        "xray-test-toolchain-cache-schema 2\n"
         f"xray {file_key(xray_bin)}\n"
         f"libxray_aot_core.a {file_key(bin_dir / 'libxray_aot_core.a')}\n"
         f"libxray_rt_coro.a {file_key(bin_dir / 'libxray_rt_coro.a')}\n"
         f"libxray_core.a {file_key(bin_dir / 'libxray_core.a')}\n"
+        f"src/aot headers {tree_key(PROJECT_DIR / 'src' / 'aot', ('.h', '.inc.c'))}\n"
+        f"src/shared headers {tree_key(PROJECT_DIR / 'src' / 'shared', ('.h', '.inc.c'))}\n"
+        f"src/coro headers {tree_key(PROJECT_DIR / 'src' / 'coro', ('.h', '.inc.c'))}\n"
     )
     return string_key(material)
 
@@ -109,11 +125,6 @@ def case_dir_key(case_file: Path) -> str:
 def stable_cache_dir(suite: str, xray_bin: Path) -> Path:
     root = Path(os.environ.get("XRAY_TEST_CACHE_ROOT", str(PROJECT_DIR / "build" / ".xray-test-cache")))
     return root / suite / toolchain_key(xray_bin)
-
-
-def shared_cache_dir(suite: str) -> Path:
-    root = Path(os.environ.get("XRAY_TEST_CACHE_ROOT", str(PROJECT_DIR / "build" / ".xray-test-cache")))
-    return root / suite
 
 
 def lock_dir(path: Path) -> bool:
@@ -413,7 +424,9 @@ def main(argv: list[str]) -> int:
     auto_jobs = requested_jobs in ("", "auto")
     jobs = configure_jobs(requested_jobs)
     aot_opt = os.environ.get("XRAY_AOT_TEST_OPT", "0")
-    aot_cache = Path(os.environ.get("XRAY_DIFF_CACHE_DIR", str(shared_cache_dir("aot-objects"))))
+    aot_cache = Path(
+        os.environ.get("XRAY_DIFF_CACHE_DIR", str(stable_cache_dir("aot-objects", xray) / f"O{aot_opt}"))
+    )
     aot_bin_cache = Path(
         os.environ.get("XRAY_DIFF_BIN_CACHE_DIR", str(stable_cache_dir("backend-diff-bin", xray) / f"O{aot_opt}"))
     )
@@ -477,7 +490,10 @@ def main(argv: list[str]) -> int:
         case_index += 1
 
     cache_state = "hot" if aot_binary_cache_hot(config, selected) else "cold"
-    if auto_jobs and cache_state == "hot":
+    if auto_jobs and cache_state == "cold":
+        jobs = configure_hot_jobs(jobs, "XRAY_DIFF_COLD_MAX_AUTO_JOBS", 4)
+        config.jobs = jobs
+    elif auto_jobs and cache_state == "hot":
         jobs = configure_hot_jobs(jobs, "XRAY_DIFF_HOT_MAX_AUTO_JOBS", 8)
         config.jobs = jobs
 

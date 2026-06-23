@@ -22,8 +22,8 @@
 #                       when XRAY_DIFF_CASES_FILE is not set; empty disables.
 #   XRAY_DIFF_CASES_FILE
 #                       optional base case manifest replacing tests/diff/cases/**/*.xr
-#   XRAY_DIFF_CACHE_DIR shared native object cache for AOT backend builds
-#                       (default: build/.xray-test-cache/aot-objects)
+#   XRAY_DIFF_CACHE_DIR native object cache for AOT backend builds
+#                       (default: build/.xray-test-cache/aot-objects/<xray-key>/O<opt>)
 #   XRAY_DIFF_BIN_CACHE_DIR
 #                       cached AOT backend test binaries
 #                       (default: build/.xray-test-cache/backend-diff-bin/<xray-key>/O<opt>)
@@ -96,7 +96,7 @@ BACKENDS="${XRAY_DIFF_BACKENDS:-vm,aot}"
 DIFF_STDERR="${XRAY_DIFF_STDERR:-0}"
 REQUESTED_JOBS="${XRAY_DIFF_JOBS:-${XRAY_TEST_JOBS:-auto}}"
 AOT_OPT_LEVEL="${XRAY_AOT_TEST_OPT:-0}"
-AOT_CACHE="${XRAY_DIFF_CACHE_DIR:-$(xray_test_shared_cache_dir "$PROJECT_DIR" "aot-objects")}"
+AOT_CACHE="${XRAY_DIFF_CACHE_DIR:-$(xray_test_stable_cache_dir "$PROJECT_DIR" "aot-objects" "$XRAY")/O$AOT_OPT_LEVEL}"
 AOT_BIN_CACHE="${XRAY_DIFF_BIN_CACHE_DIR:-$(xray_test_stable_cache_dir "$PROJECT_DIR" "backend-diff-bin" "$XRAY")/O$AOT_OPT_LEVEL}"
 RUN_CACHE="${XRAY_DIFF_RUN_CACHE_DIR:-$(xray_test_stable_cache_dir "$PROJECT_DIR" "backend-diff-run" "$XRAY")/O$AOT_OPT_LEVEL}"
 RUN_CACHE_ENABLED="${XRAY_DIFF_ENABLE_RUN_CACHE:-0}"
