@@ -324,21 +324,13 @@ int xr_string_compare(XrString *a, XrString *b) {
 // charAt - get character at position (supports negative index)
 XrString *xr_string_char_at(XrVMRuntime *iso, XrString *str, xr_Integer index) {
     XR_DCHECK(iso != NULL, "string_char_at: NULL isolate");
-    if (str == NULL || str->length == 0)
+    if (str == NULL)
         return NULL;
 
-    // Handle negative index
-    if (index < 0) {
-        index = (xr_Integer) str->length + index;
-    }
-
-    // Bounds check
-    if (index < 0 || (size_t) index >= str->length) {
+    XrStringCoreSlice slice = xr_string_core_byte_slice_at(str->data, str->length, index);
+    if (slice.len == 0)
         return NULL;
-    }
-
-    // Create single character string
-    return xr_string_intern(iso, &str->data[index], 1, 0);
+    return xr_string_intern(iso, slice.data, slice.len, 0);
 }
 
 // substring - extract substring
@@ -753,23 +745,13 @@ XrString *xr_string_reverse(XrVMRuntime *iso, XrString *str) {
 
 // byteAt - O(1) byte index (supports negative index)
 XrString *xr_string_byte_at(XrVMRuntime *iso, XrString *str, xr_Integer index) {
-    if (!iso || !str || str->length == 0)
+    if (!iso || !str)
         return NULL;
 
-    // Handle negative index
-    if (index < 0) {
-        index = (xr_Integer) str->length + index;
-    }
-
-    // Bounds check
-    if (index < 0 || (size_t) index >= str->length)
+    XrStringCoreSlice slice = xr_string_core_byte_slice_at(str->data, str->length, index);
+    if (slice.len == 0)
         return NULL;
-
-    // Get single byte
-    char c = str->data[index];
-
-    // Return interned single char string
-    return xr_string_intern(iso, &c, 1, 0);
+    return xr_string_intern(iso, slice.data, slice.len, 0);
 }
 
 // translate - Unicode char mapping (UTF-8 aware)
@@ -822,16 +804,18 @@ XrString *xr_string_translate(XrVMRuntime *iso, XrString *str, XrMap *table) {
 size_t xr_string_char_length(XrString *str) {
     if (!str)
         return 0;
-    return xr_utf8_strlen(str->data, str->length);
+    return xr_string_core_utf8_char_count(str->data, str->length);
 }
 
 // charCodeAt - get Unicode codepoint at char index
 int32_t xr_string_char_code_at(XrString *str, size_t index) {
     if (!str)
         return -1;
+    if (index > (size_t) INT64_MAX)
+        return -1;
 
     uint32_t cp;
-    if (xr_utf8_char_at(str->data, str->length, index, &cp, NULL)) {
+    if (xr_string_core_codepoint_at(str->data, str->length, (int64_t) index, &cp)) {
         return (int32_t) cp;
     }
     return -1;  // Index out of bounds
@@ -841,21 +825,14 @@ int32_t xr_string_char_code_at(XrString *str, size_t index) {
 XrString *xr_string_char_at_unicode(XrVMRuntime *iso, XrString *str, size_t index) {
     if (!iso || !str)
         return NULL;
+    if (index > (size_t) INT64_MAX)
+        return NULL;
 
-    uint32_t cp;
-    size_t pos;
-    if (!xr_utf8_char_at(str->data, str->length, index, &cp, &pos)) {
-        return NULL;  // Index out of bounds
-    }
-
-    // Get byte length of this char
-    int char_size = xr_utf8_char_size((uint8_t) str->data[pos]);
-    if (pos + char_size > str->length) {
-        return NULL;  // Incomplete char
-    }
-
-    // Create single char string
-    return xr_string_intern(iso, str->data + pos, char_size, 0);
+    XrStringCoreSlice slice =
+        xr_string_core_utf8_char_slice_at(str->data, str->length, (int64_t) index);
+    if (slice.len == 0)
+        return NULL;
+    return xr_string_intern(iso, slice.data, slice.len, 0);
 }
 
 /*

@@ -34,6 +34,8 @@ fn test_charAt() {
     let s = "hello"
     assert_eq(s.charAt(0), "h")
     assert_eq(s.charAt(4), "o")
+    assert_eq(s.charAt(-1), "o")
+    assert_eq(s.charAt(-5), "h")
 }
 
 @test
@@ -46,6 +48,7 @@ fn test_charAt_empty() {
 fn test_charAt_out_of_bounds() {
     let s = "abc"
     assert_eq(s.charAt(10), null)
+    assert_eq(s.charAt(-4), null)
 }
 
 // ===== substring =====

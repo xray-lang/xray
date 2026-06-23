@@ -38,6 +38,9 @@ typedef struct XrStringCoreParseFloatResult {
     double value;
 } XrStringCoreParseFloatResult;
 
+#define XR_STRING_CORE_UNICODE_MAX UINT32_C(0x10FFFF)
+#define XR_STRING_CORE_UNICODE_INVALID UINT32_C(0xFFFD)
+
 static inline int64_t xr_string_core_len_i64(size_t len) {
     return len > (size_t) INT64_MAX ? INT64_MAX : (int64_t) len;
 }
@@ -54,6 +57,161 @@ static inline XrStringCoreSlice xr_string_core_slice_at(const char *data, size_t
     out.data = data ? data + start : data;
     out.len = slice_len;
     return out;
+}
+
+static inline int xr_string_core_utf8_char_size(unsigned char first_byte) {
+    if ((first_byte & 0x80u) == 0x00u)
+        return 1;
+    if ((first_byte & 0xE0u) == 0xC0u)
+        return 2;
+    if ((first_byte & 0xF0u) == 0xE0u)
+        return 3;
+    if ((first_byte & 0xF8u) == 0xF0u)
+        return 4;
+    return 1;
+}
+
+static inline bool xr_string_core_utf8_is_continuation(unsigned char byte) {
+    return (byte & 0xC0u) == 0x80u;
+}
+
+static inline int xr_string_core_utf8_decode(const char *data, size_t len, uint32_t *out_cp) {
+    if (!data || len == 0) {
+        if (out_cp)
+            *out_cp = 0;
+        return 0;
+    }
+
+    const unsigned char *s = (const unsigned char *) data;
+    uint32_t cp = 0;
+    int size = 0;
+
+    if ((s[0] & 0x80u) == 0) {
+        cp = s[0];
+        size = 1;
+    } else if ((s[0] & 0xE0u) == 0xC0u) {
+        if (len < 2 || !xr_string_core_utf8_is_continuation(s[1]))
+            goto invalid;
+        cp = ((uint32_t) (s[0] & 0x1Fu) << 6) | (uint32_t) (s[1] & 0x3Fu);
+        if (cp < 0x80u)
+            goto invalid;
+        size = 2;
+    } else if ((s[0] & 0xF0u) == 0xE0u) {
+        if (len < 3 || !xr_string_core_utf8_is_continuation(s[1]) ||
+            !xr_string_core_utf8_is_continuation(s[2]))
+            goto invalid;
+        cp = ((uint32_t) (s[0] & 0x0Fu) << 12) | ((uint32_t) (s[1] & 0x3Fu) << 6) |
+             (uint32_t) (s[2] & 0x3Fu);
+        if (cp < 0x800u || (cp >= 0xD800u && cp <= 0xDFFFu))
+            goto invalid;
+        size = 3;
+    } else if ((s[0] & 0xF8u) == 0xF0u) {
+        if (len < 4 || !xr_string_core_utf8_is_continuation(s[1]) ||
+            !xr_string_core_utf8_is_continuation(s[2]) ||
+            !xr_string_core_utf8_is_continuation(s[3]))
+            goto invalid;
+        cp = ((uint32_t) (s[0] & 0x07u) << 18) | ((uint32_t) (s[1] & 0x3Fu) << 12) |
+             ((uint32_t) (s[2] & 0x3Fu) << 6) | (uint32_t) (s[3] & 0x3Fu);
+        if (cp < 0x10000u || cp > XR_STRING_CORE_UNICODE_MAX)
+            goto invalid;
+        size = 4;
+    } else {
+        goto invalid;
+    }
+
+    if (out_cp)
+        *out_cp = cp;
+    return size;
+
+invalid:
+    if (out_cp)
+        *out_cp = XR_STRING_CORE_UNICODE_INVALID;
+    return 1;
+}
+
+static inline size_t xr_string_core_utf8_char_count(const char *data, size_t len) {
+    if (!data || len == 0)
+        return 0;
+
+    size_t count = 0;
+    size_t pos = 0;
+    while (pos < len) {
+        int size = xr_string_core_utf8_char_size((unsigned char) data[pos]);
+        if (pos + (size_t) size > len) {
+            count++;
+            break;
+        }
+        pos += (size_t) size;
+        count++;
+    }
+    return count;
+}
+
+static inline bool xr_string_core_utf8_char_at(const char *data, size_t len, size_t index,
+                                               uint32_t *out_cp, size_t *out_pos) {
+    if (!data)
+        return false;
+
+    size_t pos = 0;
+    size_t char_idx = 0;
+    while (pos < len && char_idx < index) {
+        int size = xr_string_core_utf8_char_size((unsigned char) data[pos]);
+        if (pos + (size_t) size > len)
+            break;
+        pos += (size_t) size;
+        char_idx++;
+    }
+
+    if (char_idx != index || pos >= len)
+        return false;
+
+    if (out_pos)
+        *out_pos = pos;
+    if (out_cp)
+        xr_string_core_utf8_decode(data + pos, len - pos, out_cp);
+    return true;
+}
+
+static inline XrStringCoreSlice xr_string_core_utf8_char_slice_at(const char *data, size_t len,
+                                                                  int64_t index) {
+    if (!data || len == 0)
+        return xr_string_core_slice_at(data, len, len, 0);
+
+    if (index < 0) {
+        int64_t char_len = xr_string_core_len_i64(xr_string_core_utf8_char_count(data, len));
+        index += char_len;
+        if (index < 0)
+            return xr_string_core_slice_at(data, len, len, 0);
+    }
+
+    size_t pos = 0;
+    if (!xr_string_core_utf8_char_at(data, len, (size_t) index, NULL, &pos))
+        return xr_string_core_slice_at(data, len, len, 0);
+
+    int size = xr_string_core_utf8_char_size((unsigned char) data[pos]);
+    if (pos + (size_t) size > len)
+        return xr_string_core_slice_at(data, len, len, 0);
+    return xr_string_core_slice_at(data, len, pos, (size_t) size);
+}
+
+static inline XrStringCoreSlice xr_string_core_byte_slice_at(const char *data, size_t len,
+                                                             int64_t index) {
+    if (!data || len == 0)
+        return xr_string_core_slice_at(data, len, len, 0);
+
+    int64_t n = xr_string_core_len_i64(len);
+    if (index < 0)
+        index += n;
+    if (index < 0 || index >= n)
+        return xr_string_core_slice_at(data, len, len, 0);
+    return xr_string_core_slice_at(data, len, (size_t) index, 1);
+}
+
+static inline bool xr_string_core_codepoint_at(const char *data, size_t len, int64_t index,
+                                               uint32_t *out_cp) {
+    if (index < 0)
+        return false;
+    return xr_string_core_utf8_char_at(data, len, (size_t) index, out_cp, NULL);
 }
 
 static inline XrStringCoreSlice xr_string_core_substring_slice(const char *data, size_t len,
