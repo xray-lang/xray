@@ -17,6 +17,12 @@
 #include <limits.h>
 #include <string.h>
 
+_Static_assert((int) XR_RE_IGNORECASE == (int) XR_REGEX_CORE_FLAG_IGNORECASE,
+               "regex ignorecase flag drift");
+_Static_assert((int) XR_RE_MULTILINE == (int) XR_REGEX_CORE_FLAG_MULTILINE,
+               "regex multiline flag drift");
+_Static_assert((int) XR_RE_DOTALL == (int) XR_REGEX_CORE_FLAG_DOTALL, "regex dotall flag drift");
+
 static char *xrt_regex_copy_cstring(const char *data, int64_t len) {
     if (!data && len != 0)
         return NULL;
@@ -34,27 +40,11 @@ static char *xrt_regex_copy_cstring(const char *data, int64_t len) {
 }
 
 static XrRegexFlags xrt_regex_parse_flags(const char *data, int64_t len) {
-    XrRegexFlags flags = XR_RE_NONE;
     if (!data && len != 0)
-        return flags;
+        return XR_RE_NONE;
     if (len < 0)
         len = data ? (int64_t) strlen(data) : 0;
-    for (int64_t i = 0; i < len; i++) {
-        switch (data[i]) {
-            case 'i':
-                flags |= XR_RE_IGNORECASE;
-                break;
-            case 'm':
-                flags |= XR_RE_MULTILINE;
-                break;
-            case 's':
-                flags |= XR_RE_DOTALL;
-                break;
-            default:
-                break;
-        }
-    }
-    return flags;
+    return (XrRegexFlags) xr_regex_core_parse_flags(data, (size_t) len);
 }
 
 bool xrt_regex_is_valid_core(const char *data, int64_t len) {
@@ -150,7 +140,7 @@ static XrValue xrt_regex_match_group_to_string(const XrMatch *match, int group_i
 }
 
 static XrValue xrt_regex_make_match_object(const char *text_data, const XrMatch *match) {
-    XrValue obj = xrt_map_new(4);
+    XrValue obj = xrt_map_new(XR_REGEX_CORE_MATCH_FIELD_COUNT);
     int64_t start_offset = 0;
     int64_t end_offset = 0;
 
@@ -158,21 +148,29 @@ static XrValue xrt_regex_make_match_object(const char *text_data, const XrMatch 
         start_offset = (int64_t) (match->groups[0].start - text_data);
         end_offset = (int64_t) (match->groups[0].end - text_data);
         xrt_map_set(
-            (xrt_map_t *) obj.ptr, xr_box_str("text"),
+            (xrt_map_t *) obj.ptr,
+            xr_box_str(XR_REGEX_CORE_MATCH_FIELD_NAMES[XR_REGEX_CORE_MATCH_TEXT]),
             xrt_regex_copy_slice(match->groups[0].start,
                                  (int64_t) (match->groups[0].end - match->groups[0].start)));
     } else {
-        xrt_map_set((xrt_map_t *) obj.ptr, xr_box_str("text"), XR_NULL_VAL);
+        xrt_map_set((xrt_map_t *) obj.ptr,
+                    xr_box_str(XR_REGEX_CORE_MATCH_FIELD_NAMES[XR_REGEX_CORE_MATCH_TEXT]),
+                    XR_NULL_VAL);
     }
 
-    xrt_map_set((xrt_map_t *) obj.ptr, xr_box_str("start"), XR_FROM_INT(start_offset));
-    xrt_map_set((xrt_map_t *) obj.ptr, xr_box_str("end"), XR_FROM_INT(end_offset));
+    xrt_map_set((xrt_map_t *) obj.ptr,
+                xr_box_str(XR_REGEX_CORE_MATCH_FIELD_NAMES[XR_REGEX_CORE_MATCH_START]),
+                XR_FROM_INT(start_offset));
+    xrt_map_set((xrt_map_t *) obj.ptr,
+                xr_box_str(XR_REGEX_CORE_MATCH_FIELD_NAMES[XR_REGEX_CORE_MATCH_END]),
+                XR_FROM_INT(end_offset));
 
     int group_count = match && match->group_count > 0 ? match->group_count : 0;
     XrValue groups = xrt_array_new(group_count);
     for (int i = 0; i < group_count; i++)
         xrt_array_push(groups, xrt_regex_match_group_to_string(match, i));
-    xrt_map_set((xrt_map_t *) obj.ptr, xr_box_str("groups"), groups);
+    xrt_map_set((xrt_map_t *) obj.ptr,
+                xr_box_str(XR_REGEX_CORE_MATCH_FIELD_NAMES[XR_REGEX_CORE_MATCH_GROUPS]), groups);
     return obj;
 }
 

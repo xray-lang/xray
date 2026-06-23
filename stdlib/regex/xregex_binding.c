@@ -29,10 +29,17 @@
 #include "../../src/runtime/class/xclass.h"
 #include "../../src/runtime/class/xclass_builder.h"
 #include "../../src/runtime/class/xclass_system.h"
+#include "../../src/shared/xr_regex_core.h"
 #include "../../src/runtime/xisolate_internal.h"
 #include "../../src/runtime/xisolate_api.h"
 #include "../../src/coro/xcoroutine.h"
 #include "../../src/runtime/mem/xcoro_heap.h"
+
+_Static_assert((int) XR_RE_IGNORECASE == (int) XR_REGEX_CORE_FLAG_IGNORECASE,
+               "regex ignorecase flag drift");
+_Static_assert((int) XR_RE_MULTILINE == (int) XR_REGEX_CORE_FLAG_MULTILINE,
+               "regex multiline flag drift");
+_Static_assert((int) XR_RE_DOTALL == (int) XR_REGEX_CORE_FLAG_DOTALL, "regex dotall flag drift");
 
 /* ========================================================================
  * Helper Functions
@@ -56,33 +63,13 @@ static const char *value_to_cstring(XrValue v, int *len) {
  * "m" = multiline mode
  * "s" = dot matches newline
  */
-static XrRegexFlags parse_flags(const char *flags_str) {
-    XrRegexFlags flags = XR_RE_NONE;
+static XrRegexFlags parse_flags(const char *flags_str, int flags_len) {
     if (!flags_str)
-        return flags;
-
-    for (const char *p = flags_str; *p; p++) {
-        switch (*p) {
-            case 'i':
-                flags |= XR_RE_IGNORECASE;
-                break;
-            case 'm':
-                flags |= XR_RE_MULTILINE;
-                break;
-            case 's':
-                flags |= XR_RE_DOTALL;
-                break;
-        }
-    }
-    return flags;
+        return XR_RE_NONE;
+    if (flags_len < 0)
+        flags_len = (int) strlen(flags_str);
+    return (XrRegexFlags) xr_regex_core_parse_flags(flags_str, (size_t) flags_len);
 }
-
-/* RegexMatch field slot indices — must match the order in
- * xr_regex_register_match_class() and stdlib/types/regex.xr. */
-#define REGEX_MATCH_FIELD_START 0
-#define REGEX_MATCH_FIELD_END 1
-#define REGEX_MATCH_FIELD_TEXT 2
-#define REGEX_MATCH_FIELD_GROUPS 3
 
 /*
  * Create a RegexMatch instance (typed XrInstance, not Json).
@@ -110,16 +97,16 @@ XrValue xr_regex_make_match_object(XrVMRuntime *isolate, const char *text, XrMat
     /* start / end */
     int start_offset = match->groups[0].start ? (int) (match->groups[0].start - text) : 0;
     int end_offset = match->groups[0].end ? (int) (match->groups[0].end - text) : 0;
-    xr_instance_set_field_fast(inst, REGEX_MATCH_FIELD_START, xr_int(start_offset));
-    xr_instance_set_field_fast(inst, REGEX_MATCH_FIELD_END, xr_int(end_offset));
+    xr_instance_set_field_fast(inst, XR_REGEX_CORE_MATCH_START, xr_int(start_offset));
+    xr_instance_set_field_fast(inst, XR_REGEX_CORE_MATCH_END, xr_int(end_offset));
 
     /* text */
     if (match->groups[0].start && match->groups[0].end) {
         int len = (int) (match->groups[0].end - match->groups[0].start);
         XrString *matched_text = xr_string_intern(isolate, match->groups[0].start, len, 0);
-        xr_instance_set_field_fast(inst, REGEX_MATCH_FIELD_TEXT, xr_string_value(matched_text));
+        xr_instance_set_field_fast(inst, XR_REGEX_CORE_MATCH_TEXT, xr_string_value(matched_text));
     } else {
-        xr_instance_set_field_fast(inst, REGEX_MATCH_FIELD_TEXT, xr_null());
+        xr_instance_set_field_fast(inst, XR_REGEX_CORE_MATCH_TEXT, xr_null());
     }
 
     /* groups */
@@ -133,7 +120,7 @@ XrValue xr_regex_make_match_object(XrVMRuntime *isolate, const char *text, XrMat
             xr_array_push(groups, xr_null());
         }
     }
-    xr_instance_set_field_fast(inst, REGEX_MATCH_FIELD_GROUPS, xr_value_from_array(groups));
+    xr_instance_set_field_fast(inst, XR_REGEX_CORE_MATCH_GROUPS, xr_value_from_array(groups));
 
     if (heap)
         heap->cycle_collection_disabled--;
@@ -210,21 +197,7 @@ XrValue xr_regex_compile_literal(XrVMRuntime *isolate, XrValue pattern_val, XrVa
     }
 
     XrRegexFlags regex_flags = XR_RE_NONE;
-    for (const char *p = flags_str->data; *p; p++) {
-        switch (*p) {
-            case 'i':
-                regex_flags |= XR_RE_IGNORECASE;
-                break;
-            case 'm':
-                regex_flags |= XR_RE_MULTILINE;
-                break;
-            case 's':
-                regex_flags |= XR_RE_DOTALL;
-                break;
-            default:
-                break; /* unknown flag chars are silently ignored */
-        }
-    }
+    regex_flags = parse_flags(flags_str->data, (int) flags_str->length);
 
     XrRegexError error;
     XrRegex *re = xr_regex_compile(pattern_str->data, regex_flags, &error);
@@ -260,8 +233,9 @@ static XrValue regex_compile(XrVMRuntime *isolate, XrValue *args, int argc) {
 
     XrRegexFlags flags = XR_RE_NONE;
     if (argc >= 2) {
-        const char *flags_str = value_to_cstring(args[1], NULL);
-        flags = parse_flags(flags_str);
+        int flags_len;
+        const char *flags_str = value_to_cstring(args[1], &flags_len);
+        flags = parse_flags(flags_str, flags_len);
     }
 
     XrRegexError error;
