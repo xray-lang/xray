@@ -317,6 +317,34 @@ TEST(string_substring_middle) {
     teardown();
 }
 
+TEST(string_substring_bounds) {
+    setup();
+    XrString *s = xr_string_intern(X, "abcdef", 6, xr_string_hash("abcdef", 6));
+
+    XrString *sub = xr_string_substring(X, s, -3, 3);
+    ASSERT_NOT_NULL(sub);
+    ASSERT_STR_EQ(sub->data, "abc");
+
+    sub = xr_string_substring(X, s, 2, -1);
+    ASSERT_NOT_NULL(sub);
+    ASSERT_STR_EQ(sub->data, "cdef");
+    teardown();
+}
+
+TEST(string_slice_bounds) {
+    setup();
+    XrString *s = xr_string_intern(X, "abcdef", 6, xr_string_hash("abcdef", 6));
+
+    XrString *slice = xr_string_slice(X, s, -3, -1);
+    ASSERT_NOT_NULL(slice);
+    ASSERT_STR_EQ(slice->data, "de");
+
+    slice = xr_string_slice(X, s, 2, -1);
+    ASSERT_NOT_NULL(slice);
+    ASSERT_STR_EQ(slice->data, "cde");
+    teardown();
+}
+
 TEST(string_char_at) {
     setup();
     XrString *s = xr_string_intern(X, "hello", 5, xr_string_hash("hello", 5));
@@ -456,6 +484,8 @@ static void run_all_tests(void) {
     RUN_TEST_SUITE("Substring");
     RUN_TEST(string_substring);
     RUN_TEST(string_substring_middle);
+    RUN_TEST(string_substring_bounds);
+    RUN_TEST(string_slice_bounds);
     RUN_TEST(string_char_at);
 
     RUN_TEST_SUITE("String Replace");

@@ -38,6 +38,58 @@ typedef struct XrStringCoreParseFloatResult {
     double value;
 } XrStringCoreParseFloatResult;
 
+static inline int64_t xr_string_core_len_i64(size_t len) {
+    return len > (size_t) INT64_MAX ? INT64_MAX : (int64_t) len;
+}
+
+static inline XrStringCoreSlice xr_string_core_slice_at(const char *data, size_t len, size_t start,
+                                                        size_t slice_len) {
+    XrStringCoreSlice out = {data, 0};
+    if (!data && len != 0)
+        return out;
+    if (start > len)
+        start = len;
+    if (slice_len > len - start)
+        slice_len = len - start;
+    out.data = data ? data + start : data;
+    out.len = slice_len;
+    return out;
+}
+
+static inline XrStringCoreSlice xr_string_core_substring_slice(const char *data, size_t len,
+                                                               int64_t start, int64_t end) {
+    int64_t n = xr_string_core_len_i64(len);
+    if (start < 0)
+        start = 0;
+    if (end < 0 || end > n)
+        end = n;
+    if (start >= end || start >= n)
+        return xr_string_core_slice_at(data, len, len, 0);
+    return xr_string_core_slice_at(data, len, (size_t) start, (size_t) (end - start));
+}
+
+static inline XrStringCoreSlice xr_string_core_range_slice(const char *data, size_t len,
+                                                           int64_t start, int64_t end) {
+    int64_t n = xr_string_core_len_i64(len);
+    if (start < 0) {
+        start += n;
+        if (start < 0)
+            start = 0;
+    }
+    if (end < 0) {
+        end += n;
+        if (end < 0)
+            end = 0;
+    }
+    if (start > n)
+        start = n;
+    if (end > n)
+        end = n;
+    if (start >= end)
+        return xr_string_core_slice_at(data, len, (size_t) start, 0);
+    return xr_string_core_slice_at(data, len, (size_t) start, (size_t) (end - start));
+}
+
 static inline bool xr_string_core_is_ascii_whitespace(unsigned char c) {
     return c == ' ' || c == '\t' || c == '\n' || c == '\r';
 }
