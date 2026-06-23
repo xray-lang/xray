@@ -13,6 +13,8 @@
 
 #include "../base/xplatform.h"
 #include <stdbool.h>
+#include <stdint.h>
+#include <limits.h>
 #include <stddef.h>
 #include <string.h>
 
@@ -152,6 +154,52 @@ static inline bool xr_os_core_environ_entry(const char *entry, XrOsCoreEnvEntryF
 
     const char *value = eq + 1;
     return fn(ctx, entry, (size_t) (eq - entry), value, strlen(value));
+}
+
+static inline int64_t xr_os_core_cpu_count(long raw_count) {
+    return raw_count > 0 ? (int64_t) raw_count : 1;
+}
+
+static inline int64_t xr_os_core_memory_bytes(uint64_t units, uint64_t unit_size) {
+    if (units == 0 || unit_size == 0)
+        return 0;
+    if (units > (uint64_t) INT64_MAX / unit_size)
+        return INT64_MAX;
+    return (int64_t) (units * unit_size);
+}
+
+static inline double xr_os_core_seconds_from_nsec(int64_t sec, int64_t nsec) {
+    if (sec < 0)
+        return 0.0;
+    if (nsec < 0)
+        nsec = 0;
+    return (double) sec + (double) nsec / 1000000000.0;
+}
+
+static inline double xr_os_core_uptime_from_boot_seconds(int64_t now_sec, int64_t boot_sec) {
+    if (now_sec <= boot_sec)
+        return 0.0;
+    return (double) (now_sec - boot_sec);
+}
+
+static inline void xr_os_core_loadavg_zero(double out[3]) {
+    if (!out)
+        return;
+    out[0] = 0.0;
+    out[1] = 0.0;
+    out[2] = 0.0;
+}
+
+static inline double xr_os_core_loadavg_from_fixed(uint64_t fixed_load) {
+    return (double) fixed_load / 65536.0;
+}
+
+static inline void xr_os_core_loadavg_set(double out[3], double one, double five, double fifteen) {
+    if (!out)
+        return;
+    out[0] = one >= 0.0 ? one : 0.0;
+    out[1] = five >= 0.0 ? five : 0.0;
+    out[2] = fifteen >= 0.0 ? fifteen : 0.0;
 }
 
 #endif /* XRAY_SHARED_XR_OS_CORE_H */
