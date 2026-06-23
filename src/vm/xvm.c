@@ -54,6 +54,7 @@
 #include "../runtime/xshared.h"
 #include "../runtime/xglobal_dict.h"
 #include "../runtime/mem/xsystem_heap.h"
+#include "../shared/xr_array_core.h"
 
 #include "../runtime/mem/xcoro_heap.h"
 #include "../runtime/mem/xalloc_unified.h"

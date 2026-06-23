@@ -84,13 +84,13 @@ vmcase(OP_NEWARRAY) {
              * Caller populates via OP_INDEX_SET / OP_ARRAY_INIT afterward.
              * Pushing from registers would crash on non-numeric garbage. */
             array->length = b;
+        } else if (b > 0 && array->data) {
+            /* ANY array literals are also born at their final length so that
+             * user-facing INDEX_SET never doubles as append. Initialize slots
+             * before the post-allocation GC check can scan them. */
+            memset(array->data, 0, (size_t) b * sizeof(XrValue));
+            array->length = b;
         }
-        /* ANY arrays: b is capacity hint only. length stays 0.
-         * lower_array_literal emits OP_INDEX_SET arr[i]=v for i=0..n-1,
-         * which append-grows via the idx == length branch of OP_INDEX_SET.
-         * This mirrors the OP_INDEX_SET append-grow path and avoids reading
-         * uninitialized register slots that would only be immediately
-         * overwritten by the subsequent OP_INDEX_SET. */
     }
     R(a) = xr_value_from_array(array);
     if (storage_mode == 0)
@@ -627,15 +627,21 @@ vmcase(OP_ARRAY_SET) {
     }
     if (XR_IS_ARRAY(obj_val)) {
         XrArray *arr = XR_TO_ARRAY(obj_val);
-        int idx = (int) XR_TO_INT(R(b));
+        int64_t raw_idx = XR_TO_INT(R(b));
         XrValue _av = R(c);
-        if ((unsigned) idx < (unsigned) arr->length) {
+        XrArrayCoreIndexSetPlan plan = xr_array_core_index_set_plan(arr->length, raw_idx);
+        if (plan.kind == XR_ARRAY_CORE_INDEX_SET_WRITE) {
+            int idx = (int) plan.index;
             if (arr->elem_type == XR_ELEM_ANY) {
                 ((XrValue *) arr->data)[idx] = _av;
                 XR_ARRAY_MARK_REFS(arr, _av);
             } else {
                 xr_array_set_element(arr, idx, _av);
             }
+        } else {
+            VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS,
+                             "array index out of range: %lld (length %d)", (long long) raw_idx,
+                             (int) arr->length);
         }
         vmbreak;
     }
@@ -725,13 +731,18 @@ vmcase(OP_ARRAY_SETC) {
     if (XR_IS_ARRAY(obj_val)) {
         XrArray *arr = XR_TO_ARRAY(obj_val);
         XrValue _acv = R(c);
-        if (b < arr->length) {
+        XrArrayCoreIndexSetPlan plan = xr_array_core_index_set_plan(arr->length, b);
+        if (plan.kind == XR_ARRAY_CORE_INDEX_SET_WRITE) {
+            int idx = (int) plan.index;
             if (arr->elem_type == XR_ELEM_ANY) {
-                ((XrValue *) arr->data)[b] = _acv;
+                ((XrValue *) arr->data)[idx] = _acv;
                 XR_ARRAY_MARK_REFS(arr, _acv);
             } else {
-                xr_array_set_element(arr, b, _acv);
+                xr_array_set_element(arr, idx, _acv);
             }
+        } else {
+            VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "array index out of range: %d (length %d)",
+                             b, (int) arr->length);
         }
         vmbreak;
     }
@@ -1336,20 +1347,20 @@ vmcase(OP_INDEX_SET) {
     // Fast path: Array (includes slices — capacity==0 && source!=NULL)
     if (XR_IS_ARRAY(obj_val)) {
         XrArray *arr = XR_TO_ARRAY(obj_val);
-        int idx = (int) XR_TO_INT(key_val);
-        if ((unsigned) idx < (unsigned) arr->length) {
+        int64_t raw_idx = XR_TO_INT(key_val);
+        XrArrayCoreIndexSetPlan plan = xr_array_core_index_set_plan(arr->length, raw_idx);
+        if (plan.kind == XR_ARRAY_CORE_INDEX_SET_WRITE) {
+            int idx = (int) plan.index;
             if (arr->elem_type == XR_ELEM_ANY) {
                 ((XrValue *) arr->data)[idx] = val;
                 XR_ARRAY_MARK_REFS(arr, val);
             } else {
                 xr_array_set_element(arr, idx, val);
             }
-        } else if (idx == arr->length && arr->elem_type == XR_ELEM_ANY && !xr_array_is_slice(arr)) {
-            /* Append: ANY-array append-grow. Used by lower_array_literal
-             * which emits OP_NEWARRAY (length=0) followed by OP_INDEX_SET
-             * arr[i]=v for i=0..n-1. Only valid for ANY arrays; typed
-             * and slice arrays use explicit OP_ARRAY_PUSH or grow. */
-            xr_array_push(arr, val);
+        } else {
+            VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS,
+                             "array index out of range: %lld (length %d)", (long long) raw_idx,
+                             (int) arr->length);
         }
         vmbreak;
     }

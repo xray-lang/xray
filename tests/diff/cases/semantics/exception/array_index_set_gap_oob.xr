@@ -1,0 +1,6 @@
+// anchor: array-index-set-gap-oob
+// Array index assignment follows the same out-of-bounds rule as index access:
+// there is no sparse gap growth through arr[i] = v.
+let xs = [1, 2, 3]
+xs[5] = 9
+print(xs[5])

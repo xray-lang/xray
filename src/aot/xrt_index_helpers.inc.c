@@ -186,15 +186,11 @@ static inline void xrt_index_set(XrValue obj, XrValue key, XrValue val) {
     }
     if (XR_IS_ARRAY(obj) && key.tag == XR_TAG_I64) {
         xrt_array_t *a = (xrt_array_t *) obj.ptr;
-        int64_t idx = key.i;
-        if (idx < 0)
-            idx += a->length;
-        if (XR_LIKELY(idx >= 0 && idx < a->length)) {
-            xr_typed_set(a->data, (int32_t) idx, val, a->elem_type);
-        } else if (idx >= 0) {
-            while (a->length < idx)
-                xrt_array_push(obj, XR_NULL_VAL);
-            xrt_array_push(obj, val);
+        XrArrayCoreIndexSetPlan plan = xr_array_core_index_set_plan(a->length, key.i);
+        if (XR_LIKELY(plan.kind == XR_ARRAY_CORE_INDEX_SET_WRITE)) {
+            xr_typed_set(a->data, (int32_t) plan.index, val, a->elem_type);
+        } else {
+            xrt_index_oob(key.i, a->length);
         }
     } else if (XR_IS_MAP(obj)) {
         xrt_map_set((xrt_map_t *) obj.ptr, key, val);

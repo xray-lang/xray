@@ -1,0 +1,5 @@
+// anchor: array-index-set-negative-oob
+// Array index assignment does not wrap negative indexes from the end.
+let xs = [1, 2, 3]
+xs[-1] = 9
+print(xs[2])

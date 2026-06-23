@@ -22,6 +22,16 @@ typedef struct XrArrayCoreRange {
     int64_t count;
 } XrArrayCoreRange;
 
+typedef enum XrArrayCoreIndexSetKind {
+    XR_ARRAY_CORE_INDEX_SET_INVALID = 0,
+    XR_ARRAY_CORE_INDEX_SET_WRITE,
+} XrArrayCoreIndexSetKind;
+
+typedef struct XrArrayCoreIndexSetPlan {
+    XrArrayCoreIndexSetKind kind;
+    int64_t index;
+} XrArrayCoreIndexSetPlan;
+
 typedef enum XrArrayCoreNeedleKind {
     XR_ARRAY_CORE_NEEDLE_OTHER = 0,
     XR_ARRAY_CORE_NEEDLE_INT,
@@ -81,6 +91,19 @@ static inline XrArrayCoreRange xr_array_core_slice_range(int64_t length, int64_t
 static inline XrArrayCoreRange xr_array_core_fill_range(int64_t length, int64_t start,
                                                         int64_t end) {
     return xr_array_core_slice_range(length, start, end);
+}
+
+static inline XrArrayCoreIndexSetPlan xr_array_core_index_set_plan(int64_t length, int64_t index) {
+    XrArrayCoreIndexSetPlan out = {XR_ARRAY_CORE_INDEX_SET_INVALID, index};
+    if (length < 0)
+        length = 0;
+    if (index < 0)
+        return out;
+    if (index < length) {
+        out.kind = XR_ARRAY_CORE_INDEX_SET_WRITE;
+        return out;
+    }
+    return out;
 }
 
 #define XR_ARRAY_CORE_INDEXOF_LOOP(T)                                                              \
