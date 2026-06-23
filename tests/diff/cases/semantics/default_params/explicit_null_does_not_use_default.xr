@@ -1,0 +1,23 @@
+// anchor: default-params-explicit-null
+// C1: an omitted argument uses the declared default; an explicit `null` is
+// passed through and must NOT trigger the default. VM and AOT must agree.
+
+fn connectI(timeout: int? = 30) -> int? { return timeout }
+fn connectS(host: string? = "local") -> string? { return host }
+fn formatName(first: string, last: string = "Unknown") -> string {
+    return first + " " + last
+}
+
+// Nullable primitive: verify via null-comparison (print of int? null is a
+// separate pre-existing display concern handled by the nullable-primitive task).
+print(connectI() == 30)         // true  (omitted -> default)
+print(connectI(null) == null)   // true  (explicit null preserved, not default)
+print(connectI(5) == 5)         // true
+
+// Nullable reference: null prints consistently in both backends.
+print(connectS())               // local
+print(connectS(null))           // null  (explicit null preserved)
+print(connectS("remote"))       // remote
+
+print(formatName("John"))       // John Unknown
+print(formatName("John", "Doe"))// John Doe

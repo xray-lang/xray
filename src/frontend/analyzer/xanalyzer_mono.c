@@ -835,6 +835,11 @@ AstNode *xr_ast_clone(AstNode *node, XrMonoTypeMap *map, int mc) {
     return xr_ast_clone_ctx(node, map, mc, NULL);
 }
 
+AstNode *xr_ast_clone_session(AstNode *node, XrCompilerSession *session) {
+    XrAstCloneCtx clone_ctx = {.session = session};
+    return xr_ast_clone_ctx(node, NULL, 0, &clone_ctx);
+}
+
 /* ========== Mono Collector ========== */
 
 void xa_mono_collector_init(XaMonoCollector *c) {

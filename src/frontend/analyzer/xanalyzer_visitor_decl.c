@@ -1532,6 +1532,17 @@ void xa_visit_collect_function_decl_only(XaInferContext *ctx, AstNode *node) {
     xa_symbol_links_set_param_escape_summary(ctx, links, param_types, param_names, fn->param_count,
                                              return_type, fn->body, NULL);
 
+    // Record per-parameter default expressions for caller-side default filling.
+    if (fn->param_count > 0) {
+        AstNode **defs = (AstNode **) xr_calloc(fn->param_count, sizeof(AstNode *));
+        if (defs) {
+            for (int i = 0; i < fn->param_count; i++)
+                defs[i] = fn->params[i] ? fn->params[i]->default_value : NULL;
+            xa_symbol_links_set_param_defaults(links, defs, fn->param_count);
+            xr_free(defs);
+        }
+    }
+
     // Store generic type parameters and intersection-style constraint lists.
     if (fn->type_param_count > 0 && fn->type_params) {
         int n = fn->type_param_count;
@@ -2744,6 +2755,11 @@ skip_layout:
                                              md->param_count, ret_type);
             xa_symbol_links_set_param_escape_summary(ctx, method_links, param_types, param_names,
                                                      md->param_count, ret_type, md->body, info);
+            // Record method/constructor default expressions for caller-side
+            // default filling (methods store defaults in md->default_values).
+            if (md->param_count > 0)
+                xa_symbol_links_set_param_defaults(method_links, md->default_values,
+                                                   md->param_count);
 
             // Store generic type parameters for the method.  Method-level
             // constraints aren't tracked in the method-decl AST yet, so the

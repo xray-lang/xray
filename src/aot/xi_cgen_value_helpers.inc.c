@@ -544,7 +544,7 @@ static void emit_str_concat_expr(XiCgenCtx *ctx, FILE *out, const XiValue *v) {
             fprintf(out, "); ");
         } else {
             fprintf(out, "xrt_strpart_init(&_scp_%u[%u], ", v->id, (unsigned) i);
-            emit_value_as_rep(out, v->args[i], XR_REP_TAGGED);
+            emit_value_as_rep_ctx(ctx, out, v->args[i], XR_REP_TAGGED);
             fprintf(out, "); ");
         }
     }

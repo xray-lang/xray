@@ -16,6 +16,8 @@
 #include "xanalyzer_visitor_internal.h"
 #include "xtype_ref_resolve.h"
 #include "xa_selection.h"
+#include "xanalyzer_mono.h"
+#include "../../toolchain/xcompiler_session.h"
 #include "../../base/xchecks.h"
 #include "../../base/xhashmap.h"
 #include "../../../stdlib/prelude/prelude.h"
@@ -1381,6 +1383,46 @@ XrType *xa_visit_new_expr(XaInferContext *ctx, AstNode *node) {
         class_links = xa_analyzer_get_links(ctx->analyzer, class_sym);
         if (class_links && class_links->class_info) {
             class_info = class_links->class_info;
+        }
+    }
+
+    // Caller-side default argument filling for constructors (C1): complete
+    // omitted trailing constructor arguments with session-cloned default
+    // expressions so they are evaluated at the construction site rather than
+    // via a runtime null sentinel inside the constructor body.
+    if (class_info) {
+        XaSymbol *ctor = xa_class_info_lookup_member(class_info, XR_KEYWORD_CONSTRUCTOR);
+        XaSymbolLinks *ctor_links = ctor ? xa_analyzer_get_links(ctx->analyzer, ctor) : NULL;
+        if (ctor_links && ctor_links->param_defaults && ctor_links->param_count > ne->arg_count) {
+            int pc = ctor_links->param_count;
+            bool can_complete = true;
+            for (int i = 0; i < ne->arg_count; i++) {
+                if (ne->arguments[i] && ne->arguments[i]->type == AST_SPREAD_EXPR) {
+                    can_complete = false;
+                    break;
+                }
+            }
+            for (int i = ne->arg_count; can_complete && i < pc; i++) {
+                if (!ctor_links->param_defaults[i])
+                    can_complete = false;
+            }
+            if (can_complete) {
+                XrCompilerSession *sess =
+                    xr_compiler_session_current_for_isolate(ctx->analyzer->isolate);
+                AstNode **new_args = (AstNode **) xr_calloc((size_t) pc, sizeof(AstNode *));
+                if (new_args) {
+                    for (int i = 0; i < ne->arg_count; i++)
+                        new_args[i] = ne->arguments[i];
+                    for (int i = ne->arg_count; i < pc; i++) {
+                        AstNode *clone = xr_ast_clone_session(ctor_links->param_defaults[i], sess);
+                        new_args[i] = clone;
+                        if (clone)
+                            xa_visit_infer_expr(ctx, clone);
+                    }
+                    ne->arguments = new_args;
+                    ne->arg_count = pc;
+                }
+            }
         }
     }
 

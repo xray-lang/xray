@@ -21,6 +21,8 @@
 
 #include "xanalyzer_visitor_internal.h"
 #include "xtype_ref_resolve.h"
+#include "xanalyzer_mono.h"
+#include "../../toolchain/xcompiler_session.h"
 #include "../../base/xchecks.h"
 
 static bool xa_object_literal_bool_field(AstNode *node, const char *field_name, bool *out_value) {
@@ -786,6 +788,42 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
     int param_count = callee_type->function.param_count;
     bool is_variadic = callee_type->function.is_variadic;
 
+    // Caller-side default argument filling (C1): for a direct call to a named
+    // function with default parameters, complete omitted trailing arguments by
+    // appending session-cloned copies of the declared default expressions. This
+    // makes defaults evaluated at the call site instead of via a runtime null
+    // sentinel, so passing an explicit `null` is preserved (not treated as
+    // omitted). Indirect/function-value calls carry no default expressions and
+    // therefore must pass every argument.
+    if (fn_links && fn_links->param_defaults && !is_variadic &&
+        fn_links->param_count == param_count && call->arg_count < param_count) {
+        bool can_complete = true;
+        for (int i = 0; i < call->arg_count; i++) {
+            if (call->arguments[i] && call->arguments[i]->type == AST_SPREAD_EXPR) {
+                can_complete = false;
+                break;
+            }
+        }
+        for (int i = call->arg_count; can_complete && i < param_count; i++) {
+            if (!fn_links->param_defaults[i])
+                can_complete = false;  // missing required arg → real arity error below
+        }
+        if (can_complete) {
+            XrCompilerSession *sess =
+                ctx->analyzer ? xr_compiler_session_current_for_isolate(ctx->analyzer->isolate)
+                              : NULL;
+            AstNode **new_args = (AstNode **) xr_calloc((size_t) param_count, sizeof(AstNode *));
+            if (new_args) {
+                for (int i = 0; i < call->arg_count; i++)
+                    new_args[i] = call->arguments[i];
+                for (int i = call->arg_count; i < param_count; i++)
+                    new_args[i] = xr_ast_clone_session(fn_links->param_defaults[i], sess);
+                call->arguments = new_args;
+                call->arg_count = param_count;
+            }
+        }
+    }
+
     /* Spread expansion: walk arguments once, building a flat per-slot
      * view that splices each `...tuple` arg into its individual element
      * slots. With no spreads this is just call->arguments / call->arg_count. */
@@ -841,6 +879,19 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
         char msg[128];
         snprintf(msg, sizeof(msg), "Expected %d argument(s), but got %d", param_count, arg_count);
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_WRONG_ARG_COUNT,
+                                   msg, &loc);
+    } else if (!is_variadic && arg_count < param_count && min_params < param_count && !fn_links &&
+               call->callee && call->callee->type == AST_VARIABLE) {
+        // Default arguments are filled at the call site only for direct calls
+        // to a named function (C1). A call through a function-typed *value*
+        // carries no default expressions, so every argument must be passed.
+        XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+        char msg[160];
+        snprintf(msg, sizeof(msg),
+                 "Expected %d argument(s), but got %d; default arguments apply only to direct "
+                 "calls, not calls through a function value",
+                 param_count, arg_count);
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_WRONG_ARG_COUNT,
                                    msg, &loc);
     }

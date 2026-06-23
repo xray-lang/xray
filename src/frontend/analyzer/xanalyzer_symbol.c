@@ -423,6 +423,12 @@ void xa_symbol_links_set_function_sig(XaSymbolLinks *links, XrType **param_types
         links->param_escapes = NULL;
         links->param_escape_count = 0;
     }
+    // Default-value expressions are reset together with the signature; call
+    // xa_symbol_links_set_param_defaults afterwards to repopulate them.
+    if (links->param_defaults) {
+        xr_free(links->param_defaults);
+        links->param_defaults = NULL;
+    }
 
     // Copy param types
     if (param_count > 0 && param_types) {
@@ -444,6 +450,33 @@ void xa_symbol_links_set_function_sig(XaSymbolLinks *links, XrType **param_types
 
     links->param_count = param_count;
     links->return_type = return_type;
+}
+
+void xa_symbol_links_set_param_defaults(XaSymbolLinks *links, struct AstNode **defaults,
+                                        int count) {
+    if (!links)
+        return;
+    if (links->param_defaults) {
+        xr_free(links->param_defaults);
+        links->param_defaults = NULL;
+    }
+    if (!defaults || count <= 0)
+        return;
+    bool any = false;
+    for (int i = 0; i < count; i++) {
+        if (defaults[i]) {
+            any = true;
+            break;
+        }
+    }
+    if (!any)
+        return;
+    struct AstNode **copy = (struct AstNode **) xr_calloc((size_t) count, sizeof(struct AstNode *));
+    if (!copy)
+        return;
+    for (int i = 0; i < count; i++)
+        copy[i] = defaults[i];
+    links->param_defaults = copy;
 }
 
 XrType *xa_symbol_links_get_return_type(XaSymbolLinks *links) {
