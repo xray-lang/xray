@@ -54,58 +54,37 @@ static inline XrValue xrt_array_new_filled_value(XrValue len_value, XrValue fill
     return arr;
 }
 
-static inline int xrt_bytes_range_ok(xrt_array_t *a, int64_t offset, int64_t count) {
-    return a && a->elem_type == XR_ELEM_U8 && offset >= 0 && count >= 0 && count <= a->length &&
-           offset <= a->length - count;
-}
-
 static inline uint32_t xrt_bytes_load_u32_le_raw(xrt_array_t *a, int64_t off) {
-    if (!xrt_bytes_range_ok(a, off, 4))
-        return 0;
-    const uint8_t *p = (const uint8_t *) a->data + off;
-    return (uint32_t) p[0] | ((uint32_t) p[1] << 8) | ((uint32_t) p[2] << 16) |
-           ((uint32_t) p[3] << 24);
+    return xr_array_core_bytes_load_u32_le(a ? a->data : NULL, a ? a->length : 0,
+                                           a ? a->elem_type : XR_ELEM_ANY, off, NULL);
 }
 
 static inline uint64_t xrt_bytes_load_u64_le_raw(xrt_array_t *a, int64_t off) {
-    if (!xrt_bytes_range_ok(a, off, 8))
-        return 0;
-    const uint8_t *p = (const uint8_t *) a->data + off;
-    return (uint64_t) p[0] | ((uint64_t) p[1] << 8) | ((uint64_t) p[2] << 16) |
-           ((uint64_t) p[3] << 24) | ((uint64_t) p[4] << 32) | ((uint64_t) p[5] << 40) |
-           ((uint64_t) p[6] << 48) | ((uint64_t) p[7] << 56);
+    return xr_array_core_bytes_load_u64_le(a ? a->data : NULL, a ? a->length : 0,
+                                           a ? a->elem_type : XR_ELEM_ANY, off, NULL);
 }
 
 static inline xrt_array_t *xrt_bytes_copy_within_raw(xrt_array_t *a, int64_t dst, int64_t src,
                                                      int64_t count) {
-    if (xrt_bytes_range_ok(a, dst, count) && xrt_bytes_range_ok(a, src, count) && count > 0)
-        memmove((uint8_t *) a->data + dst, (uint8_t *) a->data + src, (size_t) count);
+    xr_array_core_bytes_copy_within(a ? a->data : NULL, a ? a->length : 0,
+                                    a ? a->elem_type : XR_ELEM_ANY, dst, src, count);
     return a;
 }
 
 static inline xrt_array_t *xrt_bytes_copy_from_raw(xrt_array_t *dst, xrt_array_t *src,
                                                    int64_t src_offset, int64_t dst_offset,
                                                    int64_t count) {
-    if (!xrt_bytes_range_ok(src, src_offset, count) ||
-        !xrt_bytes_range_ok(dst, dst_offset, count) || count <= 0)
-        return dst;
-    uint8_t *dp = (uint8_t *) dst->data + dst_offset;
-    uint8_t *sp = (uint8_t *) src->data + src_offset;
-    if (dst == src)
-        memmove(dp, sp, (size_t) count);
-    else
-        memcpy(dp, sp, (size_t) count);
+    xr_array_core_bytes_copy_from(dst ? dst->data : NULL, dst ? dst->length : 0,
+                                  dst ? dst->elem_type : XR_ELEM_ANY, src ? src->data : NULL,
+                                  src ? src->length : 0, src ? src->elem_type : XR_ELEM_ANY,
+                                  src_offset, dst_offset, count, dst == src);
     return dst;
 }
 
 static inline xrt_array_t *xrt_bytes_repeat_from_raw(xrt_array_t *a, int64_t dst, int64_t distance,
                                                      int64_t count) {
-    if (!a || a->elem_type != XR_ELEM_U8 || dst < 0 || distance <= 0 || count < 0 ||
-        dst - distance < 0 || count > a->length || dst > a->length - count)
-        return a;
-    uint8_t *data = (uint8_t *) a->data;
-    for (int64_t i = 0; i < count; i++)
-        data[dst + i] = data[dst - distance + i];
+    xr_array_core_bytes_repeat_from(a ? a->data : NULL, a ? a->length : 0,
+                                    a ? a->elem_type : XR_ELEM_ANY, dst, distance, count);
     return a;
 }
 

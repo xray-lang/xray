@@ -287,6 +287,48 @@ TEST(array_fill_negative_bounds) {
     teardown();
 }
 
+TEST(array_bytes_helpers_use_shared_bounds_and_copy_rules) {
+    setup();
+    XrArray *bytes = xr_array_with_capacity_typed(main_coro, 0, XR_ELEM_U8);
+    for (int i = 1; i <= 8; i++)
+        xr_array_push(bytes, xr_int(i));
+
+    bool ok = false;
+    ASSERT_EQ_UINT(xr_array_load_u32_le(bytes, 0, &ok), 67305985u);
+    ASSERT_TRUE(ok);
+    ASSERT_EQ_UINT(xr_array_load_u64_le(bytes, 0, &ok), UINT64_C(578437695752307201));
+    ASSERT_TRUE(ok);
+    ASSERT_EQ_UINT(xr_array_load_u32_le(bytes, 5, &ok), 0u);
+    ASSERT_FALSE(ok);
+
+    ASSERT_FALSE(xr_array_bytes_copy_within(bytes, 6, 0, 4));
+    ASSERT_TRUE(xr_array_bytes_copy_within(bytes, 2, 0, 4));
+    ASSERT_EQ_INT(xr_as_int(xr_array_get(bytes, 2)), 1);
+    ASSERT_EQ_INT(xr_as_int(xr_array_get(bytes, 3)), 2);
+    ASSERT_EQ_INT(xr_as_int(xr_array_get(bytes, 5)), 4);
+
+    XrArray *dst = xr_array_with_capacity_typed(main_coro, 0, XR_ELEM_U8);
+    for (int i = 0; i < 6; i++)
+        xr_array_push(dst, xr_int(0));
+    ASSERT_TRUE(xr_array_bytes_copy_from(dst, bytes, 1, 2, 3));
+    ASSERT_EQ_INT(xr_as_int(xr_array_get(dst, 2)), 2);
+    ASSERT_EQ_INT(xr_as_int(xr_array_get(dst, 3)), 1);
+    ASSERT_EQ_INT(xr_as_int(xr_array_get(dst, 4)), 2);
+    ASSERT_FALSE(xr_array_bytes_copy_from(dst, bytes, 7, 0, 3));
+
+    XrArray *rep = xr_array_with_capacity_typed(main_coro, 0, XR_ELEM_U8);
+    int seed[] = {65, 66, 67, 0, 0, 0, 0, 0, 0};
+    for (int i = 0; i < 9; i++)
+        xr_array_push(rep, xr_int(seed[i]));
+    ASSERT_TRUE(xr_array_bytes_repeat_from(rep, 3, 3, 6));
+    ASSERT_EQ_INT(xr_as_int(xr_array_get(rep, 3)), 65);
+    ASSERT_EQ_INT(xr_as_int(xr_array_get(rep, 4)), 66);
+    ASSERT_EQ_INT(xr_as_int(xr_array_get(rep, 5)), 67);
+    ASSERT_EQ_INT(xr_as_int(xr_array_get(rep, 8)), 67);
+    ASSERT_FALSE(xr_array_bytes_repeat_from(rep, 0, 1, 1));
+    teardown();
+}
+
 /* ========== Clear Tests ========== */
 
 TEST(array_clear) {
@@ -521,6 +563,7 @@ static void run_all_tests(void) {
     RUN_TEST(array_has);
     RUN_TEST(array_typed_index_of_uses_shared_tag_rules);
     RUN_TEST(array_fill_negative_bounds);
+    RUN_TEST(array_bytes_helpers_use_shared_bounds_and_copy_rules);
 
     RUN_TEST_SUITE("Array Clear");
     RUN_TEST(array_clear);
