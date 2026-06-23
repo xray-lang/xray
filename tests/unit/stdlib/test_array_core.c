@@ -9,7 +9,9 @@
  */
 
 #include "../test_framework.h"
+#include "runtime/value/xvalue.h"
 #include "shared/xr_array_core.h"
+#include "shared/xr_sort_core.h"
 
 static void assert_range(XrArrayCoreRange range, int64_t start, int64_t end, int64_t count) {
     ASSERT_EQ_INT(range.start, start);
@@ -163,6 +165,42 @@ TEST(array_core_bytes_repeat_from_matches_lz_style_overlap) {
     ASSERT_FALSE(xr_array_core_bytes_repeat_from(empty_count, 2, XR_ELEM_I64, 1, 1, 0));
 }
 
+TEST(array_core_sort_typed_buffers_in_place) {
+    int64_t ints[] = {3, -1, 7, 3, 0};
+    ASSERT_TRUE(xr_sort_core_typed(ints, 5, XR_ELEM_I64));
+    ASSERT_EQ_INT(ints[0], -1);
+    ASSERT_EQ_INT(ints[1], 0);
+    ASSERT_EQ_INT(ints[2], 3);
+    ASSERT_EQ_INT(ints[3], 3);
+    ASSERT_EQ_INT(ints[4], 7);
+
+    uint8_t bools[] = {1, 0, 1, 0};
+    ASSERT_TRUE(xr_sort_core_typed(bools, 4, XR_ELEM_BOOL));
+    ASSERT_EQ_INT(bools[0], 0);
+    ASSERT_EQ_INT(bools[1], 0);
+    ASSERT_EQ_INT(bools[2], 1);
+    ASSERT_EQ_INT(bools[3], 1);
+
+    ASSERT_FALSE(xr_sort_core_typed(ints, 5, XR_ELEM_ANY));
+}
+
+TEST(array_core_sort_compare_result_uses_sign) {
+    ASSERT_EQ_INT(xr_sort_core_compare_result(XR_FROM_INT(INT64_C(4294967296))), 1);
+    ASSERT_EQ_INT(xr_sort_core_compare_result(XR_FROM_INT(-INT64_C(4294967296))), -1);
+    ASSERT_EQ_INT(xr_sort_core_compare_result(XR_FROM_FLOAT(0.5)), 1);
+    ASSERT_EQ_INT(xr_sort_core_compare_result(XR_FROM_FLOAT(-0.5)), -1);
+    ASSERT_EQ_INT(xr_sort_core_compare_result(XR_FROM_BOOL(true)), 0);
+}
+
+TEST(array_core_sort_default_compare_numbers_and_string_slices) {
+    ASSERT_LT(xr_sort_core_compare_default(XR_FROM_INT(3), XR_FROM_FLOAT(4.0), NULL, 0, NULL, 0),
+              0);
+    ASSERT_GT(xr_sort_core_compare_default(XR_FROM_FLOAT(5.5), XR_FROM_INT(5), NULL, 0, NULL, 0),
+              0);
+    ASSERT_LT(xr_sort_core_compare_default(XR_NULL_VAL, XR_NULL_VAL, "aa", 2, "b", 1), 0);
+    ASSERT_GT(xr_sort_core_compare_default(XR_NULL_VAL, XR_NULL_VAL, "abc", 3, "ab", 2), 0);
+}
+
 TEST_MAIN_BEGIN()
 
 RUN_TEST_SUITE("Array Core - Slice Range");
@@ -176,5 +214,8 @@ RUN_TEST(array_core_typed_index_of_matches_boxed_tags);
 RUN_TEST(array_core_bytes_loads_little_endian_and_rejects_invalid_ranges);
 RUN_TEST(array_core_bytes_copy_uses_shared_range_and_overlap_rules);
 RUN_TEST(array_core_bytes_repeat_from_matches_lz_style_overlap);
+RUN_TEST(array_core_sort_typed_buffers_in_place);
+RUN_TEST(array_core_sort_compare_result_uses_sign);
+RUN_TEST(array_core_sort_default_compare_numbers_and_string_slices);
 
 TEST_MAIN_END()

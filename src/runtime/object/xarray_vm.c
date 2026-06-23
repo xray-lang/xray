@@ -18,6 +18,7 @@
 #include "../mem/xalloc_unified.h"
 #include "../value/xtype_names.h"
 #include "../xisolate_api.h"
+#include "../../shared/xr_sort_core.h"
 #include "../../vm/xvm_string.h"
 #include "../xvm_call.h"
 #include <string.h>
@@ -152,184 +153,30 @@ bool xr_array_some(struct XrVMRuntime *iso, XrArray *arr, struct XrClosure *call
     return false;
 }
 
-static int xr_value_compare_default(XrValue a, XrValue b) {
-    if (XR_IS_INT(a) && XR_IS_INT(b)) {
-        int64_t ia = XR_TO_INT(a), ib = XR_TO_INT(b);
-        return (ia > ib) - (ia < ib);
-    }
-    if (XR_IS_FLOAT(a) && XR_IS_FLOAT(b)) {
-        double fa = XR_TO_FLOAT(a), fb = XR_TO_FLOAT(b);
-        return (fa > fb) - (fa < fb);
-    }
-    if (XR_IS_INT(a) && XR_IS_FLOAT(b)) {
-        double fa = (double) XR_TO_INT(a), fb = XR_TO_FLOAT(b);
-        return (fa > fb) - (fa < fb);
-    }
-    if (XR_IS_FLOAT(a) && XR_IS_INT(b)) {
-        double fa = XR_TO_FLOAT(a), fb = (double) XR_TO_INT(b);
-        return (fa > fb) - (fa < fb);
-    }
-    if (XR_IS_STRING(a) && XR_IS_STRING(b)) {
-        const char *da = xr_value_str_data(&a);
-        uint32_t la = xr_value_str_len(&a);
-        const char *db = xr_value_str_data(&b);
-        uint32_t lb = xr_value_str_len(&b);
-        int minlen = la < lb ? la : lb;
-        int cmp = memcmp(da, db, (size_t) minlen);
-        if (cmp != 0)
-            return cmp;
-        return (la > lb) - (la < lb);
-    }
-    return 0;
-}
-
 typedef struct {
     struct XrVMRuntime *iso;
     struct XrClosure *comparator;
 } XrSortCtx;
 
-static int xr_sort_with_comparator(const void *a, const void *b, void *ctx_ptr) {
+static int xr_array_sort_default_cmp(XrValue a, XrValue b) {
+    if (XR_IS_STRING(a) && XR_IS_STRING(b)) {
+        const char *a_data = xr_value_str_data(&a);
+        int64_t a_len = (int64_t) xr_value_str_len(&a);
+        const char *b_data = xr_value_str_data(&b);
+        int64_t b_len = (int64_t) xr_value_str_len(&b);
+        return xr_sort_core_compare_default(a, b, a_data, a_len, b_data, b_len);
+    }
+    return xr_sort_core_compare_default(a, b, NULL, 0, NULL, 0);
+}
+
+static int xr_sort_with_comparator(void *ctx_ptr, XrValue va, XrValue vb) {
     XrSortCtx *ctx = (XrSortCtx *) ctx_ptr;
-    XrValue va = *(const XrValue *) a;
-    XrValue vb = *(const XrValue *) b;
     if (ctx->comparator) {
         XrValue args[2] = {va, vb};
-        XrValue result = xr_vm_call_closure(ctx->iso, ctx->comparator, args, 2);
-        if (XR_IS_INT(result))
-            return (int) XR_TO_INT(result);
-        if (XR_IS_FLOAT(result)) {
-            double d = XR_TO_FLOAT(result);
-            return (d > 0) - (d < 0);
-        }
-        return 0;
+        return xr_sort_core_compare_result(xr_vm_call_closure(ctx->iso, ctx->comparator, args, 2));
     }
-    return xr_value_compare_default(va, vb);
+    return xr_array_sort_default_cmp(va, vb);
 }
-
-#define XR_SORT_INSERTION_THRESHOLD 32
-
-static void xr_sort_insertion(XrValue *data, int lo, int hi, XrSortCtx *ctx) {
-    for (int i = lo + 1; i <= hi; i++) {
-        XrValue key = data[i];
-        int j = i - 1;
-        while (j >= lo && xr_sort_with_comparator(&data[j], &key, ctx) > 0) {
-            data[j + 1] = data[j];
-            j--;
-        }
-        data[j + 1] = key;
-    }
-}
-
-static void xr_sort_merge(XrValue *data, XrValue *tmp, int lo, int mid, int hi, XrSortCtx *ctx) {
-    memcpy(tmp + lo, data + lo, (size_t) (hi - lo + 1) * sizeof(XrValue));
-    int i = lo, j = mid + 1, k = lo;
-    while (i <= mid && j <= hi) {
-        if (xr_sort_with_comparator(&tmp[i], &tmp[j], ctx) <= 0)
-            data[k++] = tmp[i++];
-        else
-            data[k++] = tmp[j++];
-    }
-    while (i <= mid)
-        data[k++] = tmp[i++];
-    while (j <= hi)
-        data[k++] = tmp[j++];
-}
-
-static void xr_array_hybrid_sort(XrValue *data, int n, XrSortCtx *ctx) {
-    if (n <= XR_SORT_INSERTION_THRESHOLD) {
-        xr_sort_insertion(data, 0, n - 1, ctx);
-        return;
-    }
-
-    XrValue *tmp = (XrValue *) xr_malloc((size_t) n * sizeof(XrValue));
-    if (!tmp) {
-        xr_sort_insertion(data, 0, n - 1, ctx);
-        return;
-    }
-
-    for (int i = 0; i < n; i += XR_SORT_INSERTION_THRESHOLD) {
-        int hi = i + XR_SORT_INSERTION_THRESHOLD - 1;
-        if (hi >= n)
-            hi = n - 1;
-        xr_sort_insertion(data, i, hi, ctx);
-    }
-
-    for (int width = XR_SORT_INSERTION_THRESHOLD; width < n; width *= 2) {
-        for (int lo = 0; lo < n; lo += width * 2) {
-            int mid = lo + width - 1;
-            int hi = lo + width * 2 - 1;
-            if (mid >= n)
-                break;
-            if (hi >= n)
-                hi = n - 1;
-            xr_sort_merge(data, tmp, lo, mid, hi, ctx);
-        }
-    }
-
-    xr_free(tmp);
-}
-
-#define TYPED_INSERTION(type, d, lo, hi)                                                           \
-    do {                                                                                           \
-        for (int _i = (lo) + 1; _i <= (hi); _i++) {                                                \
-            type _key = (d)[_i];                                                                   \
-            int _j = _i - 1;                                                                       \
-            while (_j >= (lo) && (d)[_j] > _key) {                                                 \
-                (d)[_j + 1] = (d)[_j];                                                             \
-                _j--;                                                                              \
-            }                                                                                      \
-            (d)[_j + 1] = _key;                                                                    \
-        }                                                                                          \
-    } while (0)
-
-#define TYPED_MERGE(type, d, tmp, lo, mid, hi)                                                     \
-    do {                                                                                           \
-        memcpy((tmp) + (lo), (d) + (lo), (size_t) ((hi) - (lo) + 1) * sizeof(type));               \
-        int _i = (lo), _j = (mid) + 1, _k = (lo);                                                  \
-        while (_i <= (mid) && _j <= (hi)) {                                                        \
-            if ((tmp)[_i] <= (tmp)[_j])                                                            \
-                (d)[_k++] = (tmp)[_i++];                                                           \
-            else                                                                                   \
-                (d)[_k++] = (tmp)[_j++];                                                           \
-        }                                                                                          \
-        while (_i <= (mid))                                                                        \
-            (d)[_k++] = (tmp)[_i++];                                                               \
-        while (_j <= (hi))                                                                         \
-            (d)[_k++] = (tmp)[_j++];                                                               \
-    } while (0)
-
-#define TYPED_SORT(type, arr, n)                                                                   \
-    do {                                                                                           \
-        type *_d = (type *) (arr)->data;                                                           \
-        int _n = (n);                                                                              \
-        if (_n <= XR_SORT_INSERTION_THRESHOLD) {                                                   \
-            TYPED_INSERTION(type, _d, 0, _n - 1);                                                  \
-        } else {                                                                                   \
-            type *_tmp = (type *) xr_malloc((size_t) _n * sizeof(type));                           \
-            if (!_tmp) {                                                                           \
-                TYPED_INSERTION(type, _d, 0, _n - 1);                                              \
-                break;                                                                             \
-            }                                                                                      \
-            for (int _r = 0; _r < _n; _r += XR_SORT_INSERTION_THRESHOLD) {                         \
-                int _hi = _r + XR_SORT_INSERTION_THRESHOLD - 1;                                    \
-                if (_hi >= _n)                                                                     \
-                    _hi = _n - 1;                                                                  \
-                TYPED_INSERTION(type, _d, _r, _hi);                                                \
-            }                                                                                      \
-            for (int _w = XR_SORT_INSERTION_THRESHOLD; _w < _n; _w *= 2) {                         \
-                for (int _lo = 0; _lo < _n; _lo += _w * 2) {                                       \
-                    int _mid = _lo + _w - 1;                                                       \
-                    int _hi2 = _lo + _w * 2 - 1;                                                   \
-                    if (_mid >= _n)                                                                \
-                        break;                                                                     \
-                    if (_hi2 >= _n)                                                                \
-                        _hi2 = _n - 1;                                                             \
-                    TYPED_MERGE(type, _d, _tmp, _lo, _mid, _hi2);                                  \
-                }                                                                                  \
-            }                                                                                      \
-            xr_free(_tmp);                                                                         \
-        }                                                                                          \
-    } while (0)
 
 static void xr_array_typed_sort_with_comparator(struct XrVMRuntime *iso, XrArray *arr,
                                                 struct XrClosure *cmp) {
@@ -340,7 +187,7 @@ static void xr_array_typed_sort_with_comparator(struct XrVMRuntime *iso, XrArray
     for (int i = 0; i < n; i++)
         boxed[i] = xr_array_get_element(arr, i);
     XrSortCtx ctx = {iso, cmp};
-    xr_array_hybrid_sort(boxed, n, &ctx);
+    xr_sort_core_values(boxed, n, xr_sort_with_comparator, &ctx);
     for (int i = 0; i < n; i++)
         xr_array_set_element(arr, i, boxed[i]);
     xr_free(boxed);
@@ -352,7 +199,7 @@ void xr_array_sort(struct XrVMRuntime *iso, XrArray *arr, struct XrClosure *comp
 
     if (arr->elem_type == XR_ELEM_ANY) {
         XrSortCtx ctx = {iso, comparator};
-        xr_array_hybrid_sort((XrValue *) arr->data, (int) arr->length, &ctx);
+        xr_sort_core_values((XrValue *) arr->data, arr->length, xr_sort_with_comparator, &ctx);
         return;
     }
 
@@ -361,41 +208,7 @@ void xr_array_sort(struct XrVMRuntime *iso, XrArray *arr, struct XrClosure *comp
         return;
     }
 
-    int n = arr->length;
-    switch (arr->elem_type) {
-        case XR_ELEM_I8:
-            TYPED_SORT(int8_t, arr, n);
-            break;
-        case XR_ELEM_U8:
-            TYPED_SORT(uint8_t, arr, n);
-            break;
-        case XR_ELEM_I16:
-            TYPED_SORT(int16_t, arr, n);
-            break;
-        case XR_ELEM_U16:
-            TYPED_SORT(uint16_t, arr, n);
-            break;
-        case XR_ELEM_I32:
-            TYPED_SORT(int32_t, arr, n);
-            break;
-        case XR_ELEM_U32:
-            TYPED_SORT(uint32_t, arr, n);
-            break;
-        case XR_ELEM_I64:
-            TYPED_SORT(int64_t, arr, n);
-            break;
-        case XR_ELEM_U64:
-            TYPED_SORT(uint64_t, arr, n);
-            break;
-        case XR_ELEM_F32:
-            TYPED_SORT(float, arr, n);
-            break;
-        case XR_ELEM_F64:
-            TYPED_SORT(double, arr, n);
-            break;
-        default:
-            break;
-    }
+    (void) xr_sort_core_typed(arr->data, arr->length, arr->elem_type);
 }
 
 struct XrString *xr_array_join(struct XrVMRuntime *iso, XrArray *arr, struct XrString *delimiter) {

@@ -1,0 +1,33 @@
+fn hugeAscending(a: int, b: int) -> int {
+    if (a < b) {
+        return -4294967296
+    }
+    if (a > b) {
+        return 4294967296
+    }
+    return 0
+}
+
+let values: Array<int> = [4, 1, 3, 2]
+values.sort(hugeAscending)
+for (v in values) {
+    print(v)
+}
+
+let words: Array<string> = ["b", "aa", "a", "ab"]
+words.sort()
+for (w in words) {
+    print(w)
+}
+
+let typed: Array<int> = [5, 2, 9, 2]
+typed.sort()
+for (v in typed) {
+    print(v)
+}
+
+let flags: Array<bool> = [true, false, true, false]
+flags.sort()
+for (flag in flags) {
+    print(flag)
+}
