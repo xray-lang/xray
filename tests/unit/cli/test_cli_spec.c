@@ -373,6 +373,35 @@ TEST(parse_toolchain_doctor_with_zig) {
     xr_cli_invocation_free(&inv);
 }
 
+TEST(parse_fmt_branch_arrow_options) {
+    const XrCliCommandSpec *spec = xr_cli_find_command("fmt");
+    ASSERT_NOT_NULL(spec);
+
+    XrCliContext ctx = {.program = "xray"};
+    XrCliInvocation inv;
+    char *argv[] = {"--no-align-branch-arrows", "input.xr"};
+
+    XrCliExitCode rc = xr_cli_parse_command(spec, 2, argv, &ctx, &inv);
+    ASSERT_EQ_INT(rc, XR_CLI_EXIT_OK);
+    ASSERT_TRUE(xr_cli_opt_bool(&inv.options, "no-align-branch-arrows"));
+    ASSERT_FALSE(xr_cli_opt_bool(&inv.options, "align-branch-arrows"));
+    ASSERT_EQ_INT(inv.positional_count, 1);
+
+    xr_cli_invocation_free(&inv);
+}
+
+TEST(parse_fmt_legacy_align_match_rejected) {
+    const XrCliCommandSpec *spec = xr_cli_find_command("fmt");
+    ASSERT_NOT_NULL(spec);
+
+    XrCliContext ctx = {.program = "xray"};
+    XrCliInvocation inv;
+    char *argv[] = {"--align-match", "input.xr"};
+
+    XrCliExitCode rc = xr_cli_parse_command(spec, 2, argv, &ctx, &inv);
+    ASSERT_EQ_INT(rc, XR_CLI_EXIT_USAGE);
+}
+
 TEST(parse_cmd_long_option_with_value) {
     const XrCliCommandSpec *spec = xr_cli_find_command("compile");
     ASSERT_NOT_NULL(spec);
@@ -626,6 +655,8 @@ RUN_TEST(parse_build_native_verbose);
 RUN_TEST(parse_build_native_debug_strip);
 RUN_TEST(parse_build_cross_toolchain_options);
 RUN_TEST(parse_toolchain_doctor_with_zig);
+RUN_TEST(parse_fmt_branch_arrow_options);
+RUN_TEST(parse_fmt_legacy_align_match_rejected);
 RUN_TEST(parse_cmd_long_option_with_value);
 RUN_TEST(parse_cmd_long_option_eq_form);
 RUN_TEST(parse_cmd_short_with_value);

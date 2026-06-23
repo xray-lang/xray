@@ -343,7 +343,7 @@ TEST(arrow_return_type_emitted) {
 }
 
 /* ====================================================================== */
-/* Match arm alignment (opt-in)                                            */
+/* Match/select branch arrow alignment                                     */
 /* ====================================================================== */
 
 static char *format_with_config(const char *source, XrFmtConfig *cfg) {
@@ -356,7 +356,7 @@ static char *format_with_config(const char *source, XrFmtConfig *cfg) {
     return out;
 }
 
-TEST(match_arms_default_single_space) {
+TEST(branch_arrows_default_aligned) {
     setup();
     const char *src = "fn f(n: int) -> string {\n"
                       "    return match (n) {\n"
@@ -366,10 +366,31 @@ TEST(match_arms_default_single_space) {
                       "        _ -> \"small positive\"\n"
                       "    }\n"
                       "}\n";
-    /* NULL config -> default; align_match_arms is off by default. */
+    /* NULL config -> default; branch arrows are aligned by default. */
     char *out = format_with_config(src, NULL);
     ASSERT_NOT_NULL(out);
-    /* Every arm must use exactly a single space before `->`, never padded. */
+    ASSERT_TRUE(contains(out, "0              -> \"zero\""));
+    ASSERT_TRUE(contains(out, "n if (n < 0)   -> \"negative\""));
+    ASSERT_TRUE(contains(out, "n if (n > 100) -> \"big\""));
+    ASSERT_TRUE(contains(out, "_              -> \"small positive\""));
+    free(out);
+    teardown();
+}
+
+TEST(branch_arrows_can_disable_alignment) {
+    setup();
+    const char *src = "fn f(n: int) -> string {\n"
+                      "    return match (n) {\n"
+                      "        0 -> \"zero\",\n"
+                      "        n if (n < 0) -> \"negative\",\n"
+                      "        n if (n > 100) -> \"big\",\n"
+                      "        _ -> \"small positive\"\n"
+                      "    }\n"
+                      "}\n";
+    XrFmtConfig cfg = xfmt_default_config;
+    cfg.align_branch_arrows = 0;
+    char *out = format_with_config(src, &cfg);
+    ASSERT_NOT_NULL(out);
     ASSERT_TRUE(contains(out, "0 -> \"zero\""));
     ASSERT_TRUE(contains(out, "n if (n < 0) -> \"negative\""));
     ASSERT_TRUE(contains(out, "n if (n > 100) -> \"big\""));
@@ -380,31 +401,7 @@ TEST(match_arms_default_single_space) {
     teardown();
 }
 
-TEST(match_arms_aligned_when_enabled) {
-    setup();
-    const char *src = "fn f(n: int) -> string {\n"
-                      "    return match (n) {\n"
-                      "        0 -> \"zero\",\n"
-                      "        n if (n < 0) -> \"negative\",\n"
-                      "        n if (n > 100) -> \"big\",\n"
-                      "        _ -> \"small positive\"\n"
-                      "    }\n"
-                      "}\n";
-    XrFmtConfig cfg = xfmt_default_config;
-    cfg.align_match_arms = 1;
-    char *out = format_with_config(src, &cfg);
-    ASSERT_NOT_NULL(out);
-    /* Widest head is `n if (n > 100)` (14 chars). All other arms must be
-     * padded with spaces so that their `->` lands at the same column. */
-    ASSERT_TRUE(contains(out, "0              -> \"zero\""));
-    ASSERT_TRUE(contains(out, "n if (n < 0)   -> \"negative\""));
-    ASSERT_TRUE(contains(out, "n if (n > 100) -> \"big\""));
-    ASSERT_TRUE(contains(out, "_              -> \"small positive\""));
-    free(out);
-    teardown();
-}
-
-TEST(match_arms_aligned_idempotent) {
+TEST(branch_arrows_aligned_idempotent) {
     setup();
     const char *src = "fn f(n: int) -> string {\n"
                       "    return match (n) {\n"
@@ -414,7 +411,7 @@ TEST(match_arms_aligned_idempotent) {
                       "    }\n"
                       "}\n";
     XrFmtConfig cfg = xfmt_default_config;
-    cfg.align_match_arms = 1;
+    cfg.align_branch_arrows = 1;
     char *fmt1 = format_with_config(src, &cfg);
     ASSERT_NOT_NULL(fmt1);
     /* fmt(fmt(src)) == fmt(src) — alignment must not drift on re-format. */
@@ -430,6 +427,28 @@ TEST(match_arms_aligned_idempotent) {
     teardown();
 }
 
+TEST(select_branch_arrows_default_aligned) {
+    setup();
+    const char *src = "fn main() {\n"
+                      "    let ch1 = new Channel<int>(1)\n"
+                      "    let ch2 = new Channel<int>(1)\n"
+                      "    select {\n"
+                      "        v from ch1 -> { print(v) }\n"
+                      "        100 to ch2 -> { print(\"sent\") }\n"
+                      "        after 10 -> { print(\"timeout\") }\n"
+                      "        _ -> { print(\"default\") }\n"
+                      "    }\n"
+                      "}\n";
+    char *out = format_with_config(src, NULL);
+    ASSERT_NOT_NULL(out);
+    ASSERT_TRUE(contains(out, "v from ch1 -> {"));
+    ASSERT_TRUE(contains(out, "100 to ch2 -> {"));
+    ASSERT_TRUE(contains(out, "after 10   -> {"));
+    ASSERT_TRUE(contains(out, "_          -> {"));
+    free(out);
+    teardown();
+}
+
 TEST(match_single_arm_no_padding) {
     setup();
     /* A match with exactly one arm should not introduce any padding even
@@ -439,9 +458,7 @@ TEST(match_single_arm_no_padding) {
                       "        _ -> \"only\"\n"
                       "    }\n"
                       "}\n";
-    XrFmtConfig cfg = xfmt_default_config;
-    cfg.align_match_arms = 1;
-    char *out = format_with_config(src, &cfg);
+    char *out = format_with_config(src, NULL);
     ASSERT_NOT_NULL(out);
     ASSERT_TRUE(contains(out, "_ -> \"only\""));
     ASSERT_FALSE(contains(out, "_  ->"));
@@ -703,9 +720,10 @@ RUN_TEST(empty_string_roundtrip);
 
 RUN_TEST(arrow_return_type_emitted);
 
-RUN_TEST(match_arms_default_single_space);
-RUN_TEST(match_arms_aligned_when_enabled);
-RUN_TEST(match_arms_aligned_idempotent);
+RUN_TEST(branch_arrows_default_aligned);
+RUN_TEST(branch_arrows_can_disable_alignment);
+RUN_TEST(branch_arrows_aligned_idempotent);
+RUN_TEST(select_branch_arrows_default_aligned);
 RUN_TEST(match_single_arm_no_padding);
 
 RUN_TEST(enum_values_aligned_when_enabled);
