@@ -1123,33 +1123,15 @@ static XrNativeBodyDesc g_logger_body_desc = {
     .to_shared = NULL,
 };
 
+#define XR_STDLIB_VM_BIND_CLASS_LOGGER 1
+#include "../../src/stdlib/xstdlib_class_bindings_generated.inc.c"
+#undef XR_STDLIB_VM_BIND_CLASS_LOGGER
+
 /* Class registration is invoked unconditionally during isolate init by
  * xr_prelude_register_all_native_types, so core->loggerClass is
  * available even when user code never imports log. */
 void xr_register_logger_class(XrVMRuntime *X) {
-    XR_DCHECK(X != NULL, "register_logger_class: NULL isolate");
-    XrayCoreClasses *core = xr_isolate_get_core_classes(X);
-    XR_DCHECK(core != NULL, "register_logger_class: core not initialised");
-    XR_DCHECK(core->objectClass != NULL, "register_logger_class: Object not registered");
-    XR_DCHECK(core->loggerClass == NULL, "register_logger_class: already registered");
-
-    XrClassBuilder *builder = xr_class_builder_new(X, "Logger", core->objectClass);
-    XR_CHECK(builder != NULL, "register_logger_class: builder alloc failed");
-
-    xr_class_builder_set_native_body(builder, &g_logger_body_desc);
-
-    xr_class_builder_add_method(builder, "debug", xr_logger_debug, -1, 0);
-    xr_class_builder_add_method(builder, "info", xr_logger_info, -1, 0);
-    xr_class_builder_add_method(builder, "warn", xr_logger_warn, -1, 0);
-    xr_class_builder_add_method(builder, "error", xr_logger_error, -1, 0);
-    xr_class_builder_add_method(builder, "fatal", xr_logger_fatal, -1, 0);
-    xr_class_builder_add_method(builder, "child", xr_logger_child, -1, 0);
-
-    XrClass *cls = xr_class_builder_finalize(builder);
-    XR_CHECK(cls != NULL, "register_logger_class: finalize failed");
-    cls->flags |= XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY;
-
-    core->loggerClass = cls;
+    xr_stdlib_vm_register_logger_class_generated(X);
 }
 
 /* ========== Module Loader ========== */

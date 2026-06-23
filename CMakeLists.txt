@@ -79,6 +79,7 @@ set(XRAY_GEN_STDLIB_METADATA_DEPS
     ${CMAKE_SOURCE_DIR}/src/aot/xstdlib_aot_methods_generated.inc.c
     ${CMAKE_SOURCE_DIR}/src/aot/xaot_stdlib_generated.inc.c
     ${CMAKE_SOURCE_DIR}/src/stdlib/xstdlib_vm_bindings_generated.inc.c
+    ${CMAKE_SOURCE_DIR}/src/stdlib/xstdlib_class_bindings_generated.inc.c
     ${CMAKE_SOURCE_DIR}/src/stdlib/xstdlib_defs_generated.h
 )
 

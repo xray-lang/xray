@@ -73,6 +73,24 @@ typedef struct XrStdlibTypeMethodDefEntry {
     const char *doc;
 } XrStdlibTypeMethodDefEntry;
 
+typedef struct XrStdlibNativeClassDefEntry {
+    const char *module;
+    const char *name;
+    const char *super_slot;
+    const char *core_slot;
+    const char *native_body;
+    const char *flags;
+} XrStdlibNativeClassDefEntry;
+
+typedef struct XrStdlibClassMethodDefEntry {
+    const char *module;
+    const char *class_name;
+    const char *name;
+    const char *vm;
+    int16_t argc;
+    const char *flags;
+} XrStdlibClassMethodDefEntry;
+
 static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"time", "now", "(): int", "Current time in milliseconds since epoch", "xr_time_now", "normal", "", "xrt_time_now", "", "value", "time.now", "", "system", "", 0, false},
     {"time", "clock", "(): int", "CPU clock time in milliseconds", "xr_time_clock", "normal", "", "xrt_time_clock", "", "value", "time.clock", "", "system", "", 0, false},
@@ -556,6 +574,21 @@ static const XrStdlibTypeMethodDefEntry xr_stdlib_type_method_def_entries[] = {
     {"datetime", "DateTime", "daysInMonth", "(): int", "Get days in current month"},
 };
 #define XR_STDLIB_TYPE_METHOD_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_type_method_def_entries) / sizeof(xr_stdlib_type_method_def_entries[0])))
+
+static const XrStdlibNativeClassDefEntry xr_stdlib_native_class_def_entries[] = {
+    {"log", "Logger", "objectClass", "loggerClass", "g_logger_body_desc", "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY"},
+};
+#define XR_STDLIB_NATIVE_CLASS_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_native_class_def_entries) / sizeof(xr_stdlib_native_class_def_entries[0])))
+
+static const XrStdlibClassMethodDefEntry xr_stdlib_class_method_def_entries[] = {
+    {"log", "Logger", "debug", "xr_logger_debug", -1, "0"},
+    {"log", "Logger", "info", "xr_logger_info", -1, "0"},
+    {"log", "Logger", "warn", "xr_logger_warn", -1, "0"},
+    {"log", "Logger", "error", "xr_logger_error", -1, "0"},
+    {"log", "Logger", "fatal", "xr_logger_fatal", -1, "0"},
+    {"log", "Logger", "child", "xr_logger_child", -1, "0"},
+};
+#define XR_STDLIB_CLASS_METHOD_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_class_method_def_entries) / sizeof(xr_stdlib_class_method_def_entries[0])))
 
 #endif  /* XSTDLIB_DEFS_GENERATED_H */
 
