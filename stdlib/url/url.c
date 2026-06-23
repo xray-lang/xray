@@ -385,19 +385,6 @@ static XrValue url_parse_query_fn(XrVMRuntime *X, XrValue *args, int nargs) {
     return xr_json_value(json);
 }
 
-// Percent-encode `src` into `buf`, growing it as needed. The worst-case
-// expansion for form-encoding is 3x (each byte becomes "%HH") so the
-// reservation headroom below is exact.
-static void ctxbuf_append_url_form(XrCtxBuf *buf, const char *src, size_t src_len) {
-    if (src_len == 0)
-        return;
-    xr_ctxbuf_reserve(buf, src_len * 3);
-    int written = xr_url_encode_form(src, src_len, buf->data + buf->len, buf->cap - buf->len);
-    if (written > 0)
-        buf->len += (size_t) written;
-    buf->data[buf->len] = '\0';
-}
-
 static XrValue url_build_query_fn(XrVMRuntime *X, XrValue *args, int nargs) {
     if (nargs < 1 || !xr_value_is_json(args[0]))
         return XR_NULL_VAL;
@@ -409,29 +396,37 @@ static XrValue url_build_query_fn(XrVMRuntime *X, XrValue *args, int nargs) {
 
     XrCtxBuf buf;
     xr_ctxbuf_init(&buf, 128);
+    XrUrlCoreWriter writer = url_core_writer(&buf);
+    bool has_pairs = false;
 
     for (uint16_t i = 0; i < cls->field_count; i++) {
         const char *key_name = cls->fields[i].name;
         if (!key_name)
             continue;
 
-        if (buf.len > 0)
-            xr_ctxbuf_putc(&buf, '&');
-
-        ctxbuf_append_url_form(&buf, key_name, strlen(key_name));
-
         XrValue val = xr_instance_get_dynamic_field(json, i);
         if (XR_IS_STRING(val)) {
             XrString *vs = XR_TO_STRING(val);
-            xr_ctxbuf_putc(&buf, '=');
-            ctxbuf_append_url_form(&buf, XR_STRING_CHARS(vs), vs->length);
+            if (!xr_url_core_build_query_pair_write(&writer, &has_pairs, key_name, strlen(key_name),
+                                                    XR_STRING_CHARS(vs), vs->length, true)) {
+                xr_ctxbuf_free(&buf);
+                return XR_NULL_VAL;
+            }
         } else if (!XR_IS_NULL(val)) {
             // Stringify non-string primitives (int, float, bool) so
             // buildQuery({page: 1}) produces "page=1" not "page=".
             XrString *vs = xr_value_to_string(X, val);
-            xr_ctxbuf_putc(&buf, '=');
-            if (vs)
-                ctxbuf_append_url_form(&buf, XR_STRING_CHARS(vs), vs->length);
+            const char *value_data = vs ? XR_STRING_CHARS(vs) : "";
+            size_t value_len = vs ? vs->length : 0;
+            if (!xr_url_core_build_query_pair_write(&writer, &has_pairs, key_name, strlen(key_name),
+                                                    value_data, value_len, true)) {
+                xr_ctxbuf_free(&buf);
+                return XR_NULL_VAL;
+            }
+        } else if (!xr_url_core_build_query_pair_write(&writer, &has_pairs, key_name,
+                                                       strlen(key_name), NULL, 0, false)) {
+            xr_ctxbuf_free(&buf);
+            return XR_NULL_VAL;
         }
     }
 
