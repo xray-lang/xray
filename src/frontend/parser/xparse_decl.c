@@ -1617,6 +1617,9 @@ AstNode *xr_parse_declaration(Parser *parser) {
     }
 
     // Code block
+    if (xr_parser_check(parser, TK_LBRACE) && xr_lbrace_starts_destructure_assignment(parser)) {
+        return xr_parse_statement(parser);
+    }
     if (xr_parser_match(parser, TK_LBRACE)) {
         return xr_parse_block(parser);
     }
@@ -1799,10 +1802,10 @@ XrDestructurePattern *convert_tuple_literal_to_pattern(XrayIsolate *X, AstNode *
 }
 
 /*
- * Convert object literal to destructure pattern (for destructuring assignment)
- * {a, b, c} -> destructure pattern
- * Can only convert when all field keys and values are variable references and key name equals
- * variable name
+ * Convert object literal to destructure pattern (for destructuring assignment).
+ * `{a, b}` and `{a: local}` both become object patterns. Field keys drive
+ * extraction; values must be bare variable references so assignment targets
+ * never evaluate arbitrary expressions.
  */
 XrDestructurePattern *convert_object_literal_to_pattern(XrayIsolate *X, AstNode *object_literal) {
     if (object_literal->type != AST_OBJECT_LITERAL) {
@@ -1813,6 +1816,7 @@ XrDestructurePattern *convert_object_literal_to_pattern(XrayIsolate *X, AstNode 
     char **field_names = (char **) ast_alloc_array(X, sizeof(char *), (size_t) count);
     XrDestructurePattern **patterns = (XrDestructurePattern **) ast_alloc_array(
         X, sizeof(XrDestructurePattern *), (size_t) count);
+    bool all_shorthand = true;
 
     for (int i = 0; i < count; i++) {
         AstNode *key_node = object_literal->as.object_literal.keys[i];
@@ -1831,17 +1835,10 @@ XrDestructurePattern *convert_object_literal_to_pattern(XrayIsolate *X, AstNode 
             return NULL;
         }
 
-        // Check if value is variable reference
         if (value_node->type == AST_VARIABLE) {
-            // For shorthand syntax {x, y}, key and value should be same variable
-            if (key_node->type == AST_VARIABLE &&
-                strcmp(key_node->as.variable.name, value_node->as.variable.name) != 0) {
-                // Key and value don't match, not shorthand syntax
-                return NULL;
-            }
-
+            if (strcmp(field_name, value_node->as.variable.name) != 0)
+                all_shorthand = false;
             field_names[i] = field_name;
-            // Create identifier pattern
             patterns[i] = xr_pattern_identifier(X, value_node->as.variable.name, NULL);
         } else {
             // Value is not variable reference, cannot convert to destructure pattern
@@ -1849,7 +1846,7 @@ XrDestructurePattern *convert_object_literal_to_pattern(XrayIsolate *X, AstNode 
         }
     }
 
-    return xr_pattern_object(X, field_names, patterns, count, true);
+    return xr_pattern_object(X, field_names, patterns, count, all_shorthand);
 }
 
 // Destructuring declaration/pattern parsing moved to xparse_destructure.c

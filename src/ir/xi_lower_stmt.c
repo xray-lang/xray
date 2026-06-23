@@ -71,6 +71,20 @@ static void stmt_set_missing_line(XiValue *v, int line) {
         v->line = (uint32_t) line;
 }
 
+static int stmt_json_field_index(struct XrType *type, const char *name) {
+    if (!type || type->kind != XR_KIND_JSON || !type->object.field_names || !name)
+        return -1;
+    for (int i = 0; i < type->object.field_count; i++) {
+        if (!type->object.field_names[i])
+            return -1;
+    }
+    for (int i = 0; i < type->object.field_count; i++) {
+        if (type->object.field_names[i] && strcmp(type->object.field_names[i], name) == 0)
+            return i;
+    }
+    return -1;
+}
+
 static uint16_t stmt_narrow_op_for_type(struct XrType *type) {
     if (!type || type->kind != XR_KIND_INT || type->native_width == 0)
         return 0;
@@ -2169,7 +2183,8 @@ static void lower_yield_stmt(XiLower *l, AstNode *node) {
 /*
  * Bind destructure pattern elements to extracted values from 'src'.
  * Array patterns: INDEX_GET by position.
- * Object patterns: LOAD_FIELD by field name.
+ * Object patterns: indexed Json field read when a complete static field table
+ * is known, otherwise string-key INDEX_GET fallback.
  * Identifier patterns: bind directly.
  */
 static void lower_destructure_bind(XiLower *l, XrDestructurePattern *pat, XiValue *src) {
@@ -2219,13 +2234,24 @@ static void lower_destructure_bind(XiLower *l, XrDestructurePattern *pat, XiValu
                 XrDestructurePattern *sub = pat->as.object.patterns[i];
                 if (!fname)
                     continue;
-                /* Use INDEX_GET with string key — works for both JSON objects
-                 * and maps (Xi lowers object literals as NEWMAP). */
-                XiValue *key = xi_const_str(l->func, l->cur_block, fname, l->type_string);
-                XiValue *val = xi_value_new(l->func, l->cur_block, XI_INDEX_GET, l->type_any, 2);
-                if (val) {
-                    val->args[0] = src;
-                    val->args[1] = key;
+                int fidx = stmt_json_field_index(src->type, fname);
+                XiValue *val = NULL;
+                if (fidx >= 0) {
+                    struct XrType *field_type =
+                        src->type->object.field_types ? src->type->object.field_types[fidx] : NULL;
+                    val = xi_value_new(l->func, l->cur_block, XI_JSON_GET_F,
+                                       field_type ? field_type : l->type_any, 1);
+                    if (val) {
+                        val->args[0] = src;
+                        val->aux_int = fidx;
+                    }
+                } else {
+                    XiValue *key = xi_const_str(l->func, l->cur_block, fname, l->type_string);
+                    val = xi_value_new(l->func, l->cur_block, XI_INDEX_GET, l->type_any, 2);
+                    if (val) {
+                        val->args[0] = src;
+                        val->args[1] = key;
+                    }
                 }
                 lower_destructure_bind(l, sub, val);
             }

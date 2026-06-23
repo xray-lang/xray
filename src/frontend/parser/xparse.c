@@ -690,6 +690,27 @@ AstNode *xr_parse_standalone_inc_dec(Parser *parser, bool for_step) {
                         : xr_ast_dec(parser->X, var_name, name.line);
 }
 
+bool xr_lbrace_starts_destructure_assignment(Parser *parser) {
+    Parser probe = *parser;
+    int depth = 0;
+
+    while (!xr_parser_check(&probe, TK_EOF)) {
+        if (xr_parser_check(&probe, TK_LBRACE)) {
+            depth++;
+        } else if (xr_parser_check(&probe, TK_RBRACE)) {
+            depth--;
+            xr_parser_advance(&probe);
+            if (depth == 0)
+                return xr_parser_check(&probe, TK_ASSIGN);
+            continue;
+        }
+
+        xr_parser_advance(&probe);
+    }
+
+    return false;
+}
+
 // Parse print statement: print(expr1, expr2, ...)
 AstNode *xr_parse_print_statement(Parser *parser) {
     int line = parser->previous.line;
@@ -856,6 +877,8 @@ AstNode *xr_parse_statement(Parser *parser) {
 
     // Block
     if (parser->current.type == TK_LBRACE) {
+        if (xr_lbrace_starts_destructure_assignment(parser))
+            return xr_parse_expr_statement(parser);
         return xr_parse_block(parser);
     }
 

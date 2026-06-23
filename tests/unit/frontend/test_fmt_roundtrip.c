@@ -342,6 +342,22 @@ TEST(arrow_return_type_emitted) {
     teardown();
 }
 
+TEST(object_destructure_rename_roundtrip) {
+    setup();
+    const char *src = "let { name: localName, age } = user\n"
+                      "{ name: otherName, age } = user\n";
+    char *fmt1 = parse_and_format(src, "<test>");
+    ASSERT_NOT_NULL(fmt1);
+    ASSERT_TRUE(contains(fmt1, "let {name: localName, age} = user"));
+    ASSERT_TRUE(contains(fmt1, "{name: otherName, age} = user"));
+    char *fmt2 = parse_and_format(fmt1, "<test>");
+    ASSERT_NOT_NULL(fmt2);
+    ASSERT_STR_EQ(fmt1, fmt2);
+    free(fmt1);
+    free(fmt2);
+    teardown();
+}
+
 /* ====================================================================== */
 /* Match arm alignment (opt-in)                                            */
 /* ====================================================================== */
@@ -702,6 +718,7 @@ RUN_TEST(unicode_string_roundtrip);
 RUN_TEST(empty_string_roundtrip);
 
 RUN_TEST(arrow_return_type_emitted);
+RUN_TEST(object_destructure_rename_roundtrip);
 
 RUN_TEST(match_arms_default_single_space);
 RUN_TEST(match_arms_aligned_when_enabled);

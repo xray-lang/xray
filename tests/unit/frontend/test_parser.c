@@ -601,6 +601,37 @@ TEST(parser_tuple_destructure_for_in) {
     teardown();
 }
 
+TEST(parser_object_destructure_rename) {
+    setup();
+    AstNode *stmt = parse_first("let { name: localName, age } = user");
+    ASSERT_EQ_INT(stmt->type, AST_DESTRUCTURE_DECL);
+    XrDestructurePattern *p = stmt->as.destructure_decl.pattern;
+    ASSERT_NOT_NULL(p);
+    ASSERT_EQ_INT(p->type, PATTERN_OBJECT);
+    ASSERT_EQ_INT(p->as.object.field_count, 2);
+    ASSERT_STR_EQ(p->as.object.field_names[0], "name");
+    ASSERT_EQ_INT(p->as.object.patterns[0]->type, PATTERN_IDENTIFIER);
+    ASSERT_STR_EQ(p->as.object.patterns[0]->as.identifier.name, "localName");
+    ASSERT_STR_EQ(p->as.object.field_names[1], "age");
+    ASSERT_EQ_INT(p->as.object.patterns[1]->type, PATTERN_IDENTIFIER);
+    ASSERT_STR_EQ(p->as.object.patterns[1]->as.identifier.name, "age");
+    teardown();
+}
+
+TEST(parser_object_destructure_assign_rename) {
+    setup();
+    AstNode *stmt = parse_first("{ name: localName, age } = user");
+    ASSERT_EQ_INT(stmt->type, AST_DESTRUCTURE_ASSIGN);
+    XrDestructurePattern *p = stmt->as.destructure_assign.pattern;
+    ASSERT_NOT_NULL(p);
+    ASSERT_EQ_INT(p->type, PATTERN_OBJECT);
+    ASSERT_EQ_INT(p->as.object.field_count, 2);
+    ASSERT_STR_EQ(p->as.object.field_names[0], "name");
+    ASSERT_EQ_INT(p->as.object.patterns[0]->type, PATTERN_IDENTIFIER);
+    ASSERT_STR_EQ(p->as.object.patterns[0]->as.identifier.name, "localName");
+    teardown();
+}
+
 TEST(parser_tuple_field_access_chained) {
     setup();
     /* `t.0.1` -- the lexer recognises that the second digit run starts
@@ -683,6 +714,8 @@ int main(void) {
     RUN_TEST(parser_tuple_destructure_const);
     RUN_TEST(parser_tuple_destructure_fn_param);
     RUN_TEST(parser_tuple_destructure_for_in);
+    RUN_TEST(parser_object_destructure_rename);
+    RUN_TEST(parser_object_destructure_assign_rename);
 
     // Error handling
     RUN_TEST(parser_error_returns_null);
