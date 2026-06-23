@@ -25,6 +25,35 @@
 #define XR_COMPRESS_DEFAULT_COMPRESSION 6
 #endif
 
+typedef struct {
+    const uint8_t *data;
+    size_t len;
+} XrCompressCoreInputView;
+
+static inline int xr_compress_core_level_or_default(bool has_level, int64_t raw_level) {
+    if (!has_level)
+        return XR_COMPRESS_DEFAULT_COMPRESSION;
+    if (raw_level < XR_COMPRESS_NO_COMPRESSION)
+        return XR_COMPRESS_NO_COMPRESSION;
+    if (raw_level > XR_COMPRESS_BEST_COMPRESSION)
+        return XR_COMPRESS_BEST_COMPRESSION;
+    return (int) raw_level;
+}
+
+static inline bool xr_compress_core_input_view(const char *data, int64_t len,
+                                               XrCompressCoreInputView *out) {
+    if (!out)
+        return false;
+    if (len < 0)
+        return false;
+    if (!data && len != 0)
+        return false;
+
+    out->data = (const uint8_t *) (data ? data : "");
+    out->len = (size_t) len;
+    return true;
+}
+
 #ifndef XR_COMPRESS_ERROR_DEFINED
 #define XR_COMPRESS_ERROR_DEFINED
 typedef enum {
