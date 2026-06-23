@@ -152,6 +152,30 @@ static inline bool xr_io_core_join_child_path(const char *parent, char sep, cons
     return true;
 }
 
+static inline bool xr_io_core_temp_template(const char *root, char sep, const char *stem, char *out,
+                                            size_t out_cap) {
+    if (!root || root[0] == '\0' || !stem || stem[0] == '\0' || !out)
+        return false;
+
+    size_t root_len = xr_io_core_cstr_len(root);
+    size_t stem_len = xr_io_core_cstr_len(stem);
+    if (root_len > SIZE_MAX - stem_len - 1)
+        return false;
+
+    size_t total = root_len + 1 + stem_len;
+    if (total >= out_cap)
+        return false;
+
+    size_t pos = 0;
+    for (size_t i = 0; i < root_len; i++)
+        out[pos++] = root[i];
+    out[pos++] = sep;
+    for (size_t i = 0; i < stem_len; i++)
+        out[pos++] = stem[i];
+    out[pos] = '\0';
+    return true;
+}
+
 static inline const char *xr_io_core_relative_path_from_base(const char *fullpath,
                                                              size_t base_len) {
     if (!fullpath)
