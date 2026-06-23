@@ -1079,36 +1079,6 @@ static XrValue dt_days_in_month(XrVMRuntime *isolate, XrValue self, XrValue *arg
     return XR_INT(xr_datetime_days_in_month(xr_value_get_datetime_body(isolate, self)));
 }
 
-#include "../../src/runtime/object/xnative_type.h"
-
-/* ========== DateTime Native Type Method Table ========== */
-
-static XrNativeMethod datetime_methods[] = {{"toString", dt_to_string, 1},
-                                            {"format", dt_format, 2},
-                                            {"toISOString", dt_to_iso, 1},
-                                            {"add", dt_add, 3},
-                                            {"diff", dt_diff, 3},
-                                            {"toUTC", dt_to_utc, 1},
-                                            {"toLocal", dt_to_local, 1},
-                                            {"isBefore", dt_is_before, 2},
-                                            {"isAfter", dt_is_after, 2},
-                                            {"equals", dt_equals, 2},
-                                            {"isLeapYear", dt_is_leap_year, 1},
-                                            {"daysInMonth", dt_days_in_month, 1},
-                                            {NULL, NULL, 0}};
-
-static XrNativeMethod datetime_getters[] = {{"year", dt_year, 1},
-                                            {"month", dt_month, 1},
-                                            {"day", dt_day, 1},
-                                            {"hour", dt_hour, 1},
-                                            {"minute", dt_minute, 1},
-                                            {"second", dt_second, 1},
-                                            {"millisecond", dt_millisecond, 1},
-                                            {"weekday", dt_weekday, 1},
-                                            {"yearday", dt_yearday, 1},
-                                            {"timestamp", dt_timestamp, 1},
-                                            {NULL, NULL, 0}};
-
 #define XR_STDLIB_VM_BIND_MODULE_DATETIME 1
 #include "../../src/stdlib/xstdlib_vm_bindings_generated.inc.c"
 #undef XR_STDLIB_VM_BIND_MODULE_DATETIME
@@ -1138,44 +1108,19 @@ static XrNativeBodyDesc g_datetime_body_desc = {
     .to_shared = NULL,
 };
 
+#define XR_STDLIB_VM_BIND_CLASS_DATE_TIME 1
+#include "../../src/stdlib/xstdlib_class_bindings_generated.inc.c"
+#undef XR_STDLIB_VM_BIND_CLASS_DATE_TIME
+
 /* DateTime class registration is invoked unconditionally during isolate
  * init by xr_prelude_register_all_native_types, so the XrClass is
  * available even when user code never `import datetime`. */
 void xr_register_datetime_class(XrVMRuntime *isolate) {
-    XR_DCHECK(isolate != NULL, "register_datetime_class: NULL isolate");
+    xr_stdlib_vm_register_date_time_class_generated(isolate);
     XrayCoreClasses *core = xr_isolate_get_core_classes(isolate);
-    XR_DCHECK(core != NULL, "register_datetime_class: core not initialised");
-    XR_DCHECK(core->objectClass != NULL, "register_datetime_class: Object not registered");
-    XR_DCHECK(core->dateTimeClass == NULL, "register_datetime_class: already registered");
-
-    XrClassBuilder *builder = xr_class_builder_new(isolate, "DateTime", core->objectClass);
-    XR_CHECK(builder != NULL, "register_datetime_class: builder alloc failed");
-
-    xr_class_builder_set_native_body(builder, &g_datetime_body_desc);
-
-    /* Instance methods (with self) */
-    for (int i = 0; datetime_methods[i].name != NULL; i++) {
-        const XrNativeMethod *m = &datetime_methods[i];
-        xr_class_builder_add_method(builder, m->name, m->func, m->arity, 0);
-    }
-    /* Property getters: register as `get:<name>` so OP_GETPROP resolves
-     * them through the standard getter lookup path (no parens at call site). */
-    {
-        char buf[64];
-        for (int i = 0; datetime_getters[i].name != NULL; i++) {
-            const XrNativeMethod *g = &datetime_getters[i];
-            snprintf(buf, sizeof(buf), "get:%s", g->name);
-            xr_class_builder_add_method(builder, buf, g->func, g->arity, 0);
-        }
-    }
-
-    XrClass *cls = xr_class_builder_finalize(builder);
-    XR_CHECK(cls != NULL, "register_datetime_class: finalize failed");
-    cls->flags |= XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY;
-    cls->builtin_kind = XR_BK_DATETIME;
-
-    core->dateTimeClass = cls;
-    g_datetime_body_offset = xr_instance_body_offset(cls);
+    XR_DCHECK(core != NULL && core->dateTimeClass != NULL,
+              "register_datetime_class: DateTime not registered");
+    g_datetime_body_offset = xr_instance_body_offset(core->dateTimeClass);
 }
 
 XrModule *xr_load_module_datetime(XrVMRuntime *isolate) {
