@@ -21,6 +21,8 @@
 
 struct AstNode;
 struct XrType;
+typedef struct MethodDeclNode MethodDeclNode;
+typedef struct ClassDeclNode ClassDeclNode;
 
 /* Copy a string into the XiFunc arena so it survives AST destruction. */
 static inline const char *arena_strdup(XiFunc *f, const char *s) {
@@ -98,6 +100,7 @@ XR_FUNC void xi_lower_cleanup(XiLower *l);
 
 XR_FUNC XiFunc *xi_lower_func_impl(struct AstNode *func_node, struct XaAnalyzer *analyzer,
                                    struct XrayIsolate *isolate, XiLower *parent_ctx);
+XR_FUNC void xi_lower_func_add_child(XiFunc *parent, XiFunc *child);
 
 /* ========== AST Lowering Primitives ========== */
 
@@ -110,6 +113,10 @@ XR_FUNC struct XrType *xi_lower_node_type(XiLower *l, struct AstNode *node);
 XR_FUNC XiValue *xi_lower_function_decl(XiLower *l, struct AstNode *node);
 XR_FUNC void xi_lower_enum_decl(XiLower *l, struct AstNode *node);
 XR_FUNC void xi_lower_class_decl(XiLower *l, struct AstNode *node);
+XR_FUNC XiFunc *xi_lower_method_as_func(XiLower *l, MethodDeclNode *m, bool is_inst,
+                                        ClassDeclNode *cd, struct XrType *receiver_type);
+XR_FUNC const char *xi_lower_enum_method_hidden_name(XiFunc *arena, const char *enum_name,
+                                                     const char *method_name, bool is_static);
 
 /* ========== Method Symbol Resolution ========== */
 

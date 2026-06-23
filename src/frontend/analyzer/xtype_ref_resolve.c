@@ -247,27 +247,27 @@ XR_FUNC XrType *xr_tref_resolve(XrayIsolate *X, const XrTypeRef *tref) {
     return resolve_impl(X, tref);
 }
 
-/* Look up `name` as a class-shaped symbol in analyzer scopes; on hit,
- * return the canonical XrType (carrying the inheritance chain for classes
- * or the interface singleton for user-defined interfaces).  Returns NULL
- * when no matching symbol is registered. */
+/* Look up `name` as a declaration-backed type in analyzer scopes; on hit,
+ * return the canonical XrType (carrying the inheritance chain for classes,
+ * enum identity for enum values, or the interface singleton for interfaces).
+ * Returns NULL when no matching symbol is registered. */
 static XrType *resolve_class_symbol_type(XaAnalyzer *analyzer, const char *name) {
     if (!analyzer || !name)
         return NULL;
 
     XaScope *start = analyzer->current_scope ? analyzer->current_scope : analyzer->global_scope;
     XaSymbol *sym = xa_scope_lookup(start, name);
-    if (!sym || sym->kind != XA_SYM_CLASS)
+    if (!sym || (sym->kind != XA_SYM_CLASS && sym->kind != XA_SYM_ENUM))
         return NULL;
 
     XaSymbolLinks *links = xa_analyzer_get_links(analyzer, sym);
     if (!links || !links->type)
         return NULL;
 
-    /* Honour CLASS, INSTANCE, and INTERFACE kinds. Type aliases fall back to
-     * the standard resolver to preserve their semantics. */
+    /* Honour CLASS, INSTANCE, ENUM, and INTERFACE kinds. Type aliases fall
+     * back to the standard resolver to preserve their semantics. */
     if (links->type->kind != XR_KIND_CLASS && links->type->kind != XR_KIND_INSTANCE &&
-        links->type->kind != XR_KIND_INTERFACE)
+        links->type->kind != XR_KIND_ENUM && links->type->kind != XR_KIND_INTERFACE)
         return NULL;
 
     return links->type;

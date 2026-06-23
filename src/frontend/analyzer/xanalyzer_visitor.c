@@ -22,6 +22,7 @@
 #include "../../runtime/value/xtype_internal.h"
 
 // Forward declarations now in xanalyzer_visitor_internal.h
+void xa_visit_collect(XaInferContext *ctx, AstNode *node);
 
 static const char *json_type_label_local(XrType *type) {
     if (type && XR_TYPE_IS_JSON(type) && type->object.type_name)
@@ -860,6 +861,114 @@ static void xa_visit_collect_import(XaInferContext *ctx, AstNode *node) {
     }
 }
 
+static XrType *enum_method_this_type(XaInferContext *ctx, const char *enum_name) {
+    return enum_name ? xr_type_new_enum(ctx->analyzer->isolate, enum_name)
+                     : xr_type_new_unknown(NULL);
+}
+
+static void xa_visit_collect_enum_method(XaInferContext *ctx, XaSymbol *enum_sym, XrClassInfo *info,
+                                         AstNode *method) {
+    if (!ctx || !enum_sym || !info || !method || method->type != AST_METHOD_DECL)
+        return;
+
+    MethodDeclNode *md = &method->as.method_decl;
+    XaSymbol *method_sym = xa_symbol_new(md->name, XA_SYM_METHOD);
+    method_sym->location.line = method->line;
+    method_sym->is_static = md->is_static;
+    method_sym->is_private = md->is_private;
+    method_sym->mutates_receiver = false;
+    xa_visit_add_symbol_checked(ctx, method_sym, 0);
+
+    XrType **param_types = NULL;
+    const char **param_names = NULL;
+    if (md->param_count > 0) {
+        param_types = xr_malloc(sizeof(XrType *) * md->param_count);
+        param_names = xr_malloc(sizeof(char *) * md->param_count);
+        if (!param_types || !param_names) {
+            xr_free(param_types);
+            xr_free(param_names);
+            param_types = NULL;
+            param_names = NULL;
+        }
+        for (int i = 0; param_types && i < md->param_count; i++) {
+            param_types[i] = (md->param_types && md->param_types[i])
+                                 ? xr_tref_resolve_in_analyzer(ctx->analyzer, md->param_types[i])
+                                 : xr_type_new_unknown(NULL);
+            param_names[i] = md->parameters ? md->parameters[i] : NULL;
+        }
+    }
+
+    XrType *ret_type =
+        md->return_type ? xr_tref_resolve_in_analyzer(ctx->analyzer, md->return_type) : NULL;
+    if (!ret_type)
+        ret_type = xr_type_new_unit(NULL);
+
+    XrType *method_type =
+        xr_type_new_function(ctx->analyzer->isolate, param_types, md->param_count, ret_type, false);
+    if (method_type && md->param_passing_modes) {
+        bool has_modes = false;
+        for (int i = 0; i < md->param_count && !has_modes; i++) {
+            if (md->param_passing_modes[i] != XR_PARAM_VALUE)
+                has_modes = true;
+        }
+        if (has_modes) {
+            uint8_t *modes = xr_calloc(md->param_count, sizeof(uint8_t));
+            if (modes) {
+                for (int i = 0; i < md->param_count; i++)
+                    modes[i] = md->param_passing_modes[i];
+                method_type->function.param_passing_modes = modes;
+            }
+        }
+    }
+
+    XaSymbolLinks *method_links = xa_analyzer_get_links(ctx->analyzer, method_sym);
+    method_links->type = method_type;
+    xa_symbol_links_set_function_sig(method_links, param_types, param_names, md->param_count,
+                                     ret_type);
+
+    xa_class_info_add_method(info, method_sym);
+
+    if (md->body) {
+        xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_FUNCTION, method);
+
+        if (!md->is_static) {
+            XaSymbol *this_sym = xa_symbol_new("this", XA_SYM_PARAMETER);
+            this_sym->location.line = method->line;
+            xa_visit_add_symbol_checked(ctx, this_sym, 0);
+            XaSymbolLinks *this_links = xa_analyzer_get_links(ctx->analyzer, this_sym);
+            if (this_links) {
+                this_links->type = enum_method_this_type(ctx, enum_sym->name);
+                this_links->is_definitely_assigned = true;
+            }
+        }
+
+        for (int i = 0; i < md->param_count; i++) {
+            const char *pname = md->parameters ? md->parameters[i] : NULL;
+            if (!pname)
+                continue;
+            XaSymbol *param = xa_symbol_new(pname, XA_SYM_PARAMETER);
+            param->location.line = method->line;
+            if (md->param_passing_modes)
+                param->passing_mode = md->param_passing_modes[i];
+            xa_visit_add_symbol_checked(ctx, param, 0);
+            XaSymbolLinks *plinks = xa_analyzer_get_links(ctx->analyzer, param);
+            if (plinks) {
+                plinks->type =
+                    (method_links && method_links->param_types && i < method_links->param_count)
+                        ? method_links->param_types[i]
+                        : xr_type_new_unknown(NULL);
+                plinks->is_definitely_assigned = true;
+            }
+        }
+
+        xa_visit_collect(ctx, md->body);
+        xa_analyzer_exit_scope(ctx->analyzer);
+    }
+
+    xr_free(param_types);
+    xr_free(param_names);
+}
+
 void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
     if (!ctx || !node)
         return;
@@ -894,6 +1003,8 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
                 XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
                 links->type = xr_type_new_enum(ctx->analyzer->isolate, edecl->name);
                 links->declared_type = links->type;
+                XrClassInfo *enum_info = xa_class_info_new(edecl->name);
+                links->class_info = enum_info;
                 if (edecl->type_param_count > 0 && edecl->type_params) {
                     const char **type_param_names =
                         xr_malloc(sizeof(const char *) * (size_t) edecl->type_param_count);
@@ -1009,11 +1120,13 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
                     }
                 }
 
-                // Visit enum methods (analyzed like class instance methods)
-                for (int m = 0; m < edecl->method_count; m++) {
-                    if (edecl->methods[m]) {
-                        xa_visit_collect(ctx, edecl->methods[m]);
+                if (enum_info && edecl->method_count > 0) {
+                    xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_CLASS, node);
+                    ctx->analyzer->current_scope->class_symbol = sym;
+                    for (int m = 0; m < edecl->method_count; m++) {
+                        xa_visit_collect_enum_method(ctx, sym, enum_info, edecl->methods[m]);
                     }
+                    xa_analyzer_exit_scope(ctx->analyzer);
                 }
             }
             break;
@@ -1532,11 +1645,15 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
                 const char *cname = s->class_symbol->name;
                 if (cname) {
                     XaSymbolLinks *cl = xa_analyzer_get_links(ctx->analyzer, s->class_symbol);
-                    bool is_struct = cl && cl->type && cl->type->is_value_type;
-                    result = xr_type_new_named_instance(ctx->analyzer->isolate, cname);
-                    if (result) {
-                        result->instance.class_ref = cl ? cl->class_info : NULL;
-                        result->is_value_type = is_struct;
+                    if (s->class_symbol->kind == XA_SYM_ENUM) {
+                        result = xr_type_new_enum(ctx->analyzer->isolate, cname);
+                    } else {
+                        bool is_struct = cl && cl->type && cl->type->is_value_type;
+                        result = xr_type_new_named_instance(ctx->analyzer->isolate, cname);
+                        if (result) {
+                            result->instance.class_ref = cl ? cl->class_info : NULL;
+                            result->is_value_type = is_struct;
+                        }
                     }
                 } else {
                     result = xr_type_new_unknown(NULL);
@@ -2628,9 +2745,32 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
         case AST_CONTINUE_STMT:
             xa_validate_loop_control(ctx, node, node->as.continue_stmt.label, true);
             break;
+        case AST_ENUM_DECL: {
+            EnumDeclNode *ed = &node->as.enum_decl;
+            XaSymbol *enum_sym =
+                ed->name ? xa_scope_lookup(ctx->analyzer->current_scope, ed->name) : NULL;
+            xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_CLASS, node);
+            if (enum_sym && enum_sym->kind == XA_SYM_ENUM)
+                ctx->analyzer->current_scope->class_symbol = enum_sym;
+            for (int i = 0; i < ed->method_count; i++) {
+                AstNode *method = ed->methods ? ed->methods[i] : NULL;
+                if (!method || method->type != AST_METHOD_DECL || !method->as.method_decl.body)
+                    continue;
+                MethodDeclNode *md = &method->as.method_decl;
+                xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_FUNCTION, method);
+                XrType *saved_ret = ctx->expected_return_type;
+                ctx->expected_return_type =
+                    md->return_type ? xr_tref_resolve(ctx->analyzer->isolate, md->return_type)
+                                    : NULL;
+                xa_visit_function_body_unified(ctx, md->body);
+                ctx->expected_return_type = saved_ret;
+                xa_analyzer_exit_scope(ctx->analyzer);
+            }
+            xa_analyzer_exit_scope(ctx->analyzer);
+            break;
+        }
         case AST_YIELD_STMT:
         case AST_IMPORT_STMT:
-        case AST_ENUM_DECL:
         case AST_INTERFACE_DECL:
             break;
         default:

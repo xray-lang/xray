@@ -916,6 +916,53 @@ static bool prescan_is_user_owned_decl(AstNode *s) {
     return s && s->line > 0;
 }
 
+XR_FUNC const char *xi_lower_enum_method_hidden_name(XiFunc *arena, const char *enum_name,
+                                                     const char *method_name, bool is_static) {
+    if (!arena || !enum_name || !method_name)
+        return NULL;
+    const char *kind = is_static ? "static" : "inst";
+    int needed = snprintf(NULL, 0, "__xray_enum_method$%s$%s$%s", enum_name, kind, method_name);
+    if (needed < 0)
+        return NULL;
+    char *buf = (char *) xi_func_arena_alloc(arena, (uint32_t) needed + 1u);
+    if (!buf)
+        return NULL;
+    snprintf(buf, (size_t) needed + 1u, "__xray_enum_method$%s$%s$%s", enum_name, kind,
+             method_name);
+    return buf;
+}
+
+static void prescan_enum_method_bindings(XiLower *l, EnumDeclNode *ed, uint16_t *next_shared) {
+    if (!l || !ed || !next_shared || !ed->name || ed->method_count <= 0)
+        return;
+    XaSymbol *enum_sym = xa_analyzer_lookup(l->analyzer, ed->name);
+    XaSymbolLinks *enum_links = enum_sym ? xa_analyzer_get_links(l->analyzer, enum_sym) : NULL;
+    XrClassInfo *info = enum_links ? enum_links->class_info : NULL;
+    if (!info)
+        return;
+
+    for (int i = 0; i < ed->method_count; i++) {
+        AstNode *method = ed->methods ? ed->methods[i] : NULL;
+        if (!method || method->type != AST_METHOD_DECL)
+            continue;
+        MethodDeclNode *md = &method->as.method_decl;
+        XaSymbol *method_sym = xa_class_info_lookup_member(info, md->name);
+        if (!method_sym || method_sym->kind != XA_SYM_METHOD ||
+            method_sym->is_static != md->is_static)
+            continue;
+        XaSymbolLinks *method_links = xa_analyzer_get_links(l->analyzer, method_sym);
+        const char *hidden =
+            xi_lower_enum_method_hidden_name(l->func, ed->name, md->name, md->is_static);
+        if (!hidden)
+            continue;
+        int vid = xi_lower_var_create(l, method_sym->id, hidden,
+                                      method_links ? method_links->type : l->type_any);
+        XR_DCHECK(vid >= 0 && vid < l->var_cap, "prescan_enum_method_bindings: var_id overflow");
+        l->shared_map[vid] = (int16_t) *next_shared;
+        (*next_shared)++;
+    }
+}
+
 /*
  * Top-level binding prescan: allocate a shared slot for every top-level
  * declaration (var / const / fn / class / enum / struct / import member)
@@ -1011,6 +1058,9 @@ static void prescan_top_level_bindings(XiLower *l, AstNode **stmts, int count,
         if (is_exported && next_shared < 512)
             export_flags[next_shared] = name;
         next_shared++;
+
+        if (s && s->type == AST_ENUM_DECL)
+            prescan_enum_method_bindings(l, &s->as.enum_decl, &next_shared);
     }
     l->func->nshared = next_shared;
 

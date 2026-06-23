@@ -24,6 +24,7 @@
 #include "../frontend/parser/xast_types.h"
 #include "../frontend/parser/xtype_ref.h"
 #include "../frontend/analyzer/xanalyzer.h"
+#include "../frontend/analyzer/xa_selection.h"
 #include "../frontend/lexer/xlex.h"
 #include "../runtime/class/xclass_system.h"
 
@@ -2032,6 +2033,107 @@ static XiValue *lower_emit_function_call(XiLower *l, AstNode *node, CallExprNode
     return v;
 }
 
+static XiValue *lower_enum_method_callee(XiLower *l, const XaSelection *sel, int line) {
+    if (!l || !sel || !sel->target_symbol || !sel->receiver_type ||
+        sel->receiver_type->kind != XR_KIND_ENUM)
+        return NULL;
+    const char *enum_name = sel->receiver_type->enum_type.enum_name;
+    const char *method_name = sel->target_symbol->name;
+    const char *hidden = xi_lower_enum_method_hidden_name(l->func, enum_name, method_name,
+                                                          sel->target_symbol->is_static);
+    uint32_t sid = sel->target_symbol->id;
+
+    int var_id = xi_lower_var_find(l, sid, hidden);
+    if (var_id >= 0) {
+        if (l->is_program && l->shared_map[var_id] >= 0) {
+            XiTopBinding b;
+            b.slot = l->shared_map[var_id];
+            b.name = l->vars[var_id].name;
+            b.type = l->vars[var_id].type;
+            XiValue *load = xi_lower_emit_top_load(l, b, sel->result_type);
+            if (load)
+                load->line = (uint32_t) line;
+            return load;
+        }
+        return xi_lower_braun_read(l, var_id, l->cur_block);
+    }
+
+    XiTopBinding tb = xi_lower_find_top_binding(l, sid, hidden);
+    if (xi_top_binding_valid(tb)) {
+        XiValue *load = xi_lower_emit_top_load(l, tb, sel->result_type);
+        if (load)
+            load->line = (uint32_t) line;
+        return load;
+    }
+
+    struct XrType *upval_type = NULL;
+    int upval_idx = xi_lower_resolve_upvalue(l, sid, hidden, &upval_type);
+    if (upval_idx >= 0) {
+        XiValue *load = xi_value_new(l->func, l->cur_block, XI_LOAD_UPVAL,
+                                     upval_type ? upval_type : sel->result_type, 0);
+        if (load) {
+            load->aux_int = upval_idx;
+            load->line = (uint32_t) line;
+        }
+        return load;
+    }
+    return NULL;
+}
+
+static XiValue *lower_enum_method_direct_call(XiLower *l, AstNode *node, CallExprNode *call,
+                                              MemberAccessNode *ma) {
+    const XaSelection *sel = xa_analyzer_get_selection(l->analyzer, call->callee);
+    if (!sel || !sel->target_symbol || sel->target_symbol->kind != XA_SYM_METHOD ||
+        !sel->receiver_type || sel->receiver_type->kind != XR_KIND_ENUM)
+        return NULL;
+    if (sel->kind != XA_SEL_STATIC_MEMBER && sel->kind != XA_SEL_METHOD)
+        return NULL;
+
+    bool is_static = sel->target_symbol->is_static || sel->kind == XA_SEL_STATIC_MEMBER;
+    XiValue *callee = lower_enum_method_callee(l, sel, (int) node->line);
+    if (!callee)
+        return NULL;
+
+    XiValue *recv = NULL;
+    if (!is_static) {
+        recv = xi_lower_expr(l, ma->object);
+        if (!recv)
+            return NULL;
+    }
+
+    const uint8_t *pmodes = NULL;
+    int pcount = 0;
+    if (sel->result_type && sel->result_type->kind == XR_KIND_FUNCTION) {
+        pmodes = sel->result_type->function.param_passing_modes;
+        pcount = sel->result_type->function.param_count;
+    }
+
+    XiValue *stack_args[XI_LOWER_CALL_ARG_STACK_CAP];
+    XiLowerArgList args;
+    xi_lower_arg_list_init(&args, stack_args, XI_LOWER_CALL_ARG_STACK_CAP);
+    if (!lower_call_args_expand_spread(l, call, &args, XI_LOWER_MAX_CALL_ARGS, pmodes, pcount,
+                                       (int) node->line))
+        return NULL;
+
+    int extra = is_static ? 0 : 1;
+    int n = args.count + extra;
+    uint16_t nargs = (uint16_t) (n + 1);
+    struct XrType *result_type = xi_lower_node_type(l, node);
+    XiValue *v = xi_value_new(l->func, l->cur_block, XI_CALL, result_type, nargs);
+    if (!v)
+        return NULL;
+    v->args[0] = callee;
+    int out = 1;
+    if (!is_static)
+        v->args[out++] = recv;
+    for (int i = 0; i < args.count; i++)
+        v->args[out + i] = args.items[i];
+    v->flags |= XI_FLAG_SIDE_EFFECT;
+    v->line = (uint32_t) node->line;
+    xi_lower_insert_err_check(l, node);
+    return v;
+}
+
 static XiValue *lower_call(XiLower *l, AstNode *node) {
     CallExprNode *call = &node->as.call_expr;
 
@@ -2040,6 +2142,10 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
      * which rely on OP_INVOKE dispatch rather than GETPROP + CALL. */
     if (call->callee && call->callee->type == AST_MEMBER_ACCESS) {
         MemberAccessNode *ma = &call->callee->as.member_access;
+
+        XiValue *enum_direct = lower_enum_method_direct_call(l, node, call, ma);
+        if (enum_direct)
+            return enum_direct;
 
         if (ma->object && ma->object->type == AST_VARIABLE && ma->name &&
             strcmp(ma->name, "withCapacity") == 0 && call->arg_count == 1 &&
@@ -2549,7 +2655,7 @@ static XiValue *lower_map_literal(XiLower *l, AstNode *node) {
     return map_val;
 }
 
-static void func_add_child(XiFunc *parent, XiFunc *child) {
+XR_FUNC void xi_lower_func_add_child(XiFunc *parent, XiFunc *child) {
     if (parent->nchildren >= parent->children_cap) {
         uint16_t new_cap = parent->children_cap ? parent->children_cap * 2 : 4;
         XiFunc **tmp = (XiFunc **) xr_realloc(parent->children, new_cap * sizeof(XiFunc *));
@@ -2578,7 +2684,7 @@ XR_FUNC XiValue *xi_lower_function_decl(XiLower *l, AstNode *node) {
     }
 
     /* Register as child of parent function */
-    func_add_child(l->func, child);
+    xi_lower_func_add_child(l->func, child);
     uint16_t child_idx = (uint16_t) (l->func->nchildren - 1);
 
     /* Emit CLOSURE_NEW with captured values as args.  Listing them as
