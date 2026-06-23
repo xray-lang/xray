@@ -442,22 +442,6 @@ static inline XrValue xrt_str_method_1(const char *s, int64_t slen, XrValue recv
                                                           : XR_STRING_CORE_PAD_END);
         return sv;
     }
-    if (sym == XRT_SYM_REPLACE && XR_IS_STR(arg0)) {
-        /* replace(old) with empty string — 1-arg form */
-        const char *old_s = xr_str_data(arg0);
-        const char *found = strstr(s, old_s);
-        if (!found)
-            return recv;
-        size_t olen = (size_t) xr_str_len(arg0);
-        size_t rlen = (size_t) slen - olen;
-        XrValue sv = xrt_str_alloc(rlen);
-        char *r = xr_str_buf(sv);
-        size_t pre = (size_t) (found - s);
-        memcpy(r, s, pre);
-        memcpy(r + pre, found + olen, (size_t) slen - pre - olen);
-        r[rlen] = 0;
-        return sv;
-    }
     if (sym == XRT_SYM_BYTE_AT && arg0.tag == XR_TAG_I64) {
         XrStringCoreSlice slice = xr_string_core_byte_slice_at(s, (size_t) slen, arg0.i);
         return slice.len == 0 ? XR_NULL_VAL : xrt_str_from_core_slice(slice);
@@ -653,36 +637,18 @@ static inline XrValue xrt_method_2(XrValue recv, int sym, XrValue arg0, XrValue 
     }
     if (XR_IS_STR(recv) && sym == XRT_SYM_REPLACEALL && XR_IS_STR(arg0) && XR_IS_STR(arg1)) {
         const char *s = xr_str_data(recv);
-        int64_t slen = xr_str_len(recv);
         const char *old_s = xr_str_data(arg0);
         const char *new_s = xr_str_data(arg1);
+        size_t slen = (size_t) xr_str_len(recv);
         size_t olen = (size_t) xr_str_len(arg0), nlen = (size_t) xr_str_len(arg1);
-        if (olen == 0)
+        XrStringCoreReplacePlan plan =
+            xr_string_core_replace_plan(s, slen, old_s, olen, new_s, nlen, true);
+        if (plan.kind == XR_STRING_CORE_REPLACE_INVALID)
+            return XR_NULL_VAL;
+        if (plan.kind == XR_STRING_CORE_REPLACE_ORIGINAL)
             return recv;
-        /* Count occurrences before allocating the result. */
-        int count = 0;
-        const char *p = s;
-        while ((p = strstr(p, old_s)) != NULL) {
-            count++;
-            p += olen;
-        }
-        if (count == 0)
-            return recv;
-        size_t rlen = (size_t) slen + count * (nlen - olen);
-        XrValue sv = xrt_str_alloc(rlen);
-        char *r = xr_str_buf(sv);
-        const char *cur = s;
-        size_t pos = 0;
-        while ((p = strstr(cur, old_s)) != NULL) {
-            size_t pre = (size_t) (p - cur);
-            memcpy(r + pos, cur, pre);
-            pos += pre;
-            memcpy(r + pos, new_s, nlen);
-            pos += nlen;
-            cur = p + olen;
-        }
-        memcpy(r + pos, cur, (size_t) (s + slen - cur));
-        r[rlen] = 0;
+        XrValue sv = xrt_str_alloc(plan.len);
+        xr_string_core_replace_write(xr_str_buf(sv), s, slen, old_s, olen, new_s, nlen, plan, true);
         return sv;
     }
     if (XR_IS_STR(recv) && (sym == XRT_SYM_PAD_START || sym == XRT_SYM_PAD_END) &&
@@ -701,21 +667,19 @@ static inline XrValue xrt_method_2(XrValue recv, int sym, XrValue arg0, XrValue 
     }
     if (XR_IS_STR(recv) && sym == XRT_SYM_REPLACE && XR_IS_STR(arg0) && XR_IS_STR(arg1)) {
         const char *s = xr_str_data(recv);
-        int64_t slen = xr_str_len(recv);
         const char *old_s = xr_str_data(arg0);
         const char *new_s = xr_str_data(arg1);
-        const char *found = strstr(s, old_s);
-        if (!found)
-            return recv;
+        size_t slen = (size_t) xr_str_len(recv);
         size_t olen = (size_t) xr_str_len(arg0), nlen = (size_t) xr_str_len(arg1);
-        size_t rlen = (size_t) slen - olen + nlen;
-        XrValue sv = xrt_str_alloc(rlen);
-        char *r = xr_str_buf(sv);
-        size_t pre = (size_t) (found - s);
-        memcpy(r, s, pre);
-        memcpy(r + pre, new_s, nlen);
-        memcpy(r + pre + nlen, found + olen, (size_t) slen - pre - olen);
-        r[rlen] = 0;
+        XrStringCoreReplacePlan plan =
+            xr_string_core_replace_plan(s, slen, old_s, olen, new_s, nlen, false);
+        if (plan.kind == XR_STRING_CORE_REPLACE_INVALID)
+            return XR_NULL_VAL;
+        if (plan.kind == XR_STRING_CORE_REPLACE_ORIGINAL)
+            return recv;
+        XrValue sv = xrt_str_alloc(plan.len);
+        xr_string_core_replace_write(xr_str_buf(sv), s, slen, old_s, olen, new_s, nlen, plan,
+                                     false);
         return sv;
     }
     if (XR_IS_ARRAY(recv) && sym == XRT_SYM_SLICE) {

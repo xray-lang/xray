@@ -443,6 +443,35 @@ TEST(string_replace_all) {
     teardown();
 }
 
+TEST(string_replace_edges) {
+    setup();
+    XrString *s = xr_string_intern(X, "aaaa", 4, xr_string_hash("aaaa", 4));
+    XrString *old = xr_string_intern(X, "aa", 2, xr_string_hash("aa", 2));
+    XrString *new_str = xr_string_intern(X, "X", 1, xr_string_hash("X", 1));
+
+    XrString *result = xr_string_replace(X, s, old, new_str);
+    ASSERT_NOT_NULL(result);
+    ASSERT_STR_EQ(result->data, "Xaa");
+
+    result = xr_string_replace_all(X, s, old, new_str);
+    ASSERT_NOT_NULL(result);
+    ASSERT_STR_EQ(result->data, "XX");
+
+    XrString *empty = xr_string_intern(X, "", 0, 0);
+    result = xr_string_replace(X, s, empty, new_str);
+    ASSERT_EQ_PTR(result, s);
+    result = xr_string_replace_all(X, s, empty, new_str);
+    ASSERT_EQ_PTR(result, s);
+
+    XrString *abc = xr_string_intern(X, "abc", 3, xr_string_hash("abc", 3));
+    XrString *b = xr_string_intern(X, "b", 1, xr_string_hash("b", 1));
+    result = xr_string_replace_all(X, abc, b, empty);
+    ASSERT_NOT_NULL(result);
+    ASSERT_EQ_UINT(result->length, 2);
+    ASSERT(memcmp(result->data, "ac", 2) == 0);
+    teardown();
+}
+
 /* ========== String Repeat Tests ========== */
 
 TEST(string_repeat) {
@@ -555,6 +584,7 @@ static void run_all_tests(void) {
     RUN_TEST_SUITE("String Replace");
     RUN_TEST(string_replace);
     RUN_TEST(string_replace_all);
+    RUN_TEST(string_replace_edges);
 
     RUN_TEST_SUITE("String Repeat");
     RUN_TEST(string_repeat);
