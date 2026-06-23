@@ -373,6 +373,8 @@ XrType *xa_builtin_get_method_return_type(XrayIsolate *X, XrType *container_type
                 XrType *args[1] = {t};
                 return xr_type_new_generic_instance(X, "Recv", NULL, args, 1);
             }
+            case SYMBOL_RECVOR:
+                return elem_type ? xr_type_copy(X, elem_type) : xr_type_new_unknown(NULL);
             case SYMBOL_LENGTH:
             case SYMBOL_CAPACITY:
                 return xr_type_new_int(NULL);

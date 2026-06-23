@@ -342,6 +342,9 @@ XR_FUNC XrAotResult xr_aot_chan_recv_slot(const XrAotContext *ctx, XrValue chann
                                           XrSlotRef out_slot, int64_t timeout_ms);
 XR_FUNC XrAotResult xr_aot_chan_recv_slot_resume(const XrAotContext *ctx, XrSlotRef out_slot,
                                                  bool result_value);
+XR_FUNC XrAotResult xr_aot_chan_recv_or_slot(const XrAotContext *ctx, XrValue channel_value,
+                                             XrSlotRef out_slot, XrValue default_value);
+XR_FUNC XrAotResult xr_aot_chan_recv_or_slot_resume(const XrAotContext *ctx, XrSlotRef out_slot);
 XR_FUNC XrAotResult xr_aot_chan_recv_pair(const XrAotContext *ctx, XrValue channel_value,
                                           XrSlotRef value_slot, XrSlotRef ok_slot,
                                           int64_t timeout_ms);

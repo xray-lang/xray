@@ -353,8 +353,8 @@ static bool call_returns_fresh(const XiValue *v) {
     if (!method)
         return false;
     return strcmp(method, "recv") == 0 || strcmp(method, "tryRecv") == 0 ||
-           strcmp(method, "recvTimeout") == 0 || strcmp(method, "trySend") == 0 ||
-           strcmp(method, "sendTimeout") == 0;
+           strcmp(method, "recvOr") == 0 || strcmp(method, "recvTimeout") == 0 ||
+           strcmp(method, "trySend") == 0 || strcmp(method, "sendTimeout") == 0;
 }
 
 /* Is this value a candidate for dup/drop? RC type, not a stack/region

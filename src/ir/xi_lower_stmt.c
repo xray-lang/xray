@@ -2003,6 +2003,62 @@ static bool is_index_iterable_collection(XiLower *l, AstNode *coll_node) {
     return t->kind == XR_KIND_ARRAY || t->kind == XR_KIND_SET || t->kind == XR_KIND_STRING;
 }
 
+static void lower_for_in_channel_loop(XiLower *l, AstNode *node, XiValue *coll) {
+    ForInStmtNode *s = &node->as.for_in_stmt;
+    struct XrType *item_type = xi_lower_node_type(l, node);
+    if (!item_type)
+        item_type = l->type_any;
+
+    int sid = l->synthetic_id++;
+    char buf[32];
+    snprintf(buf, sizeof(buf), "__for_ch_%d", sid);
+    char *chan_name = (char *) xi_func_arena_alloc(l->func, (uint32_t) (strlen(buf) + 1));
+    XR_DCHECK(chan_name != NULL, "arena alloc failed for chan_name");
+    memcpy(chan_name, buf, strlen(buf) + 1);
+
+    int chan_var = xi_lower_var_create(l, 0, chan_name, coll->type ? coll->type : l->type_any);
+    xi_lower_braun_write(l, chan_var, l->cur_block, coll);
+
+    XiBlock *cond_blk = xi_block_new(l->func);
+    XiBlock *body_blk = xi_block_new(l->func);
+    XiBlock *exit_blk = xi_block_new(l->func);
+
+    xi_block_set_jump(l->cur_block, cond_blk);
+
+    l->cur_block = cond_blk;
+    XiValue *body_chan = xi_lower_braun_read(l, chan_var, l->cur_block);
+    XiValue *recv = xi_value_new(l->func, l->cur_block, XI_CHAN_RECV, item_type, 1);
+    if (!recv)
+        return;
+    recv->args[0] = body_chan;
+    recv->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_SUSPEND;
+    recv->line = (uint32_t) node->line;
+
+    XiValue *recv_status = lower_chan_recv_status(l, recv);
+    if (!recv_status)
+        return;
+    xi_block_set_if(l->cur_block, recv_status, body_blk, exit_blk);
+
+    xi_lower_braun_seal(l, body_blk);
+
+    XiLoopTarget loop_target;
+    xi_lower_loop_push(l, &loop_target, s->label, exit_blk, cond_blk);
+
+    l->cur_block = body_blk;
+    int item_var = xi_lower_var_create(l, s->item_symbol_id, s->item_name, item_type);
+    xi_lower_braun_write(l, item_var, l->cur_block, recv);
+
+    xi_lower_stmt(l, s->body);
+    if (l->cur_block)
+        xi_block_set_jump(l->cur_block, cond_blk);
+
+    xi_lower_braun_seal(l, cond_blk);
+    xi_lower_loop_pop(l, &loop_target);
+
+    xi_lower_braun_seal(l, exit_blk);
+    l->cur_block = (exit_blk->npreds > 0) ? exit_blk : NULL;
+}
+
 XR_FUNC void xi_lower_for_in(XiLower *l, AstNode *node) {
     ForInStmtNode *s = &node->as.for_in_stmt;
 
@@ -2041,6 +2097,11 @@ XR_FUNC void xi_lower_for_in(XiLower *l, AstNode *node) {
         XiValue *zero = xi_const_int(l->func, l->cur_block, 0, l->type_int);
         /* Reuse index loop but with getMember call for item retrieval */
         lower_for_in_enum_loop(l, node, zero, len, coll);
+        return;
+    }
+
+    if (coll_type && stmt_type_is_channel(coll_type)) {
+        lower_for_in_channel_loop(l, node, coll);
         return;
     }
 

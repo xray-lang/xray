@@ -3851,6 +3851,7 @@ shared const cha = Channel(3)          // element type inferred from the first s
 |--|--|--|
 | `send(v)` | `(T) -> ()` | Blocking send; waits for a consumer when full; throws if the channel is closed |
 | `recv()` | `() -> Recv<T>` | Blocking receive; returns `Recv.Closed` when closed and drained |
+| `recvOr(default)` | `(T) -> T` | Blocking receive; returns the payload directly, or `default` when closed and drained, without allocating a `Recv<T>` wrapper |
 | `trySend(v)` | `(T) -> SendResult` | Non-blocking send; returns `Sent` / `Full` / `Closed` |
 | `tryRecv()` | `() -> Recv<T>` | Non-blocking receive; returns `Recv.Empty` when empty |
 | `sendTimeout(v, ms)` | `(T, int) -> SendResult` | Send with timeout; timeout returns `SendResult.Timeout` |
@@ -3875,7 +3876,13 @@ match ch.tryRecv() {
     Recv.Timeout -> print("timeout")
 }
 
+ch.send(7)
 ch.close()
+for (msg in ch) {
+    print(msg)
+}
+
+let value = ch.recvOr(-1)
 ```
 
 **send/recv with `move`**: when sending a large object, use `ch.send(move payload)` to transfer ownership and avoid copying; the receiver becomes the sole owner.
@@ -3892,7 +3899,8 @@ fn producer(ch: Channel<int>) {
 - **MPMC** (multi-producer, multi-consumer).
 - Buffered channel: senders suspend when full; receivers suspend when empty.
 - Unbuffered channel: send and receive must rendezvous (synchronous handshake).
-- After close: `send` throws; `recv` returns remaining buffered values as `Recv.Value(v)`, then `Recv.Closed`; `tryRecv` returns `Recv.Empty` when empty and not closed.
+- After close: `send` throws; `recv` returns remaining buffered values as `Recv.Value(v)`, then `Recv.Closed`; `recvOr(default)` returns remaining buffered values, then `default`; `tryRecv` returns `Recv.Empty` when empty and not closed.
+- `for (msg in ch)` is equivalent to blocking receive until the channel is closed and drained; the loop variable has type `T`. Channels do not support key-value iteration.
 
 ### 10.6 `select`
 

@@ -344,6 +344,38 @@ XR_FUNC XrDispatchAction vm_invoke_channel(XrayIsolate *isolate, XrVMContext *vm
         }
     }
 
+    // ch.recvOr(default) - blocking receive, returning default on close/no-coro
+    if (nargs == 1 && method_symbol == SYMBOL_RECVOR) {
+        XrCoroutine *current = (XrCoroutine *) vm_ctx->current_coro;
+        XrSlotRef value_slot = xr_slot_xvalue_ptr(&base[a]);
+        XrCoroBlockResult resumed = xr_coro_chan_recv_resume(current, value_slot, xr_slot_none());
+        if (resumed.kind == XR_CORO_BLOCK_READY) {
+            return XR_DISP_NEXT;
+        }
+        if (resumed.kind == XR_CORO_BLOCK_CLOSED || resumed.kind == XR_CORO_BLOCK_NO_CORO) {
+            return XR_DISP_NEXT;
+        }
+
+        vm_suspend_replay_yielded(frame, pc);
+        XrValue default_value = base[a + 2];
+        base[a] = default_value;
+        XrCoroBlockResult result =
+            xr_coro_chan_recv(current, ch, value_slot, xr_slot_none(), -1, false);
+        if (result.kind == XR_CORO_BLOCK_READY) {
+            vm_suspend_clear_yielded(frame);
+            return XR_DISP_NEXT;
+        } else if (result.kind == XR_CORO_BLOCK_CLOSED || result.kind == XR_CORO_BLOCK_NO_CORO) {
+            vm_suspend_clear_yielded(frame);
+            base[a] = default_value;
+            return XR_DISP_NEXT;
+        } else if (result.kind == XR_CORO_BLOCK_BLOCKED) {
+            return XR_DISP_BLOCKED;
+        } else {
+            vm_suspend_clear_yielded(frame);
+            VM_THROW(frame, pc, XR_ERR_CORO_DEAD, "Channel receive failed");
+        }
+    }
+
     // ch.close()
     if (nargs == 0 && method_symbol == SYMBOL_CLOSE) {
         xr_channel_close(ch);
@@ -453,8 +485,8 @@ XR_FUNC XrDispatchAction vm_invoke_channel(XrayIsolate *isolate, XrVMContext *vm
     XrSymbolTable *sym_table = (XrSymbolTable *) isolate->core_rt->symbol_table;
     const char *method_name = xr_symbol_get_name_in_table(sym_table, method_symbol);
     VM_THROW(frame, pc, XR_ERR_TYPE_NO_METHOD,
-             "Channel has no method '%s', available: send(), recv(), trySend(), tryRecv(), "
-             "sendTimeout(), recvTimeout(), close(), isClosed()",
+             "Channel has no method '%s', available: send(), recv(), recvOr(), trySend(), "
+             "tryRecv(), sendTimeout(), recvTimeout(), close(), isClosed()",
              method_name ? method_name : "?");
 }
 

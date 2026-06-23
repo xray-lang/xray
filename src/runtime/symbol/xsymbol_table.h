@@ -284,6 +284,9 @@ enum {
     SYMBOL_WRAPPING_SUB,
     SYMBOL_WRAPPING_MUL,
 
+    // Newly added builtins append here to keep existing symbol ids stable.
+    SYMBOL_RECVOR,
+
     SYMBOL_BUILTIN_COUNT  // sentinel
 };
 

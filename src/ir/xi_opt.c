@@ -857,7 +857,8 @@ static bool sr_is_channel_recv_method(const XiValue *v) {
     if (!v || v->op != XI_CALL_METHOD || v->nargs < 1 || !sr_type_is_channel(v->args[0]->type))
         return false;
     const char *method = (const char *) v->aux;
-    return method && (strcmp(method, "recv") == 0 || strcmp(method, "tryRecv") == 0);
+    return method && (strcmp(method, "recv") == 0 || strcmp(method, "tryRecv") == 0 ||
+                      strcmp(method, "recvOr") == 0);
 }
 
 static bool sr_field_receiver_uses_native_rep(const XiValue *receiver) {
