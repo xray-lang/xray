@@ -810,50 +810,20 @@ static XrValue os_exec(XrVMRuntime *X, XrValue *args, int argc) {
 
 // Get operating system name
 static const char *get_platform(void) {
-#if defined(XR_OS_WINDOWS) || defined(_WIN64)
-    return "windows";
-#elif defined(XR_OS_MACOS) && defined(__MACH__)
-    return "darwin";
-#elif defined(XR_OS_LINUX)
-    return "linux";
-#elif defined(XR_OS_BSD)
-    return "freebsd";
-#elif defined(XR_OS_BSD)
-    return "openbsd";
-#else
-    return "unknown";
-#endif
+    return xr_os_core_platform();
 }
 
 // Get processor architecture
 static const char *get_arch(void) {
-#if defined(__aarch64__) || defined(_M_ARM64)
-    return "arm64";
-#elif defined(__x86_64__) || defined(_M_X64)
-    return "x64";
-#elif defined(__i386__) || defined(_M_IX86)
-    return "x86";
-#elif defined(__arm__) || defined(_M_ARM)
-    return "arm";
-#else
-    return "unknown";
-#endif
+    return xr_os_core_arch();
 }
 
 static const char *get_sep(void) {
-#ifdef XR_OS_WINDOWS
-    return "\\";
-#else
-    return "/";
-#endif
+    return xr_os_core_sep();
 }
 
 static const char *get_eol(void) {
-#ifdef XR_OS_WINDOWS
-    return "\r\n";
-#else
-    return "\n";
-#endif
+    return xr_os_core_eol();
 }
 
 /* ========== Module Loading ========== */

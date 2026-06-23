@@ -33,6 +33,44 @@ static const char *os_core_fake_getenv(void *ctx, const char *name) {
     return NULL;
 }
 
+TEST(os_core_platform_matches_target) {
+#ifdef XR_OS_WINDOWS
+    ASSERT_STR_EQ(xr_os_core_platform(), "windows");
+#elif defined(XR_OS_MACOS)
+    ASSERT_STR_EQ(xr_os_core_platform(), "darwin");
+#elif defined(XR_OS_LINUX)
+    ASSERT_STR_EQ(xr_os_core_platform(), "linux");
+#elif defined(XR_OS_BSD)
+    ASSERT_STR_EQ(xr_os_core_platform(), "freebsd");
+#else
+    ASSERT_STR_EQ(xr_os_core_platform(), "unknown");
+#endif
+}
+
+TEST(os_core_arch_matches_target) {
+#ifdef XR_ARCH_ARM64
+    ASSERT_STR_EQ(xr_os_core_arch(), "arm64");
+#elif defined(XR_ARCH_X86_64)
+    ASSERT_STR_EQ(xr_os_core_arch(), "x64");
+#elif defined(XR_ARCH_X86)
+    ASSERT_STR_EQ(xr_os_core_arch(), "x86");
+#elif defined(XR_ARCH_ARM)
+    ASSERT_STR_EQ(xr_os_core_arch(), "arm");
+#else
+    ASSERT_STR_EQ(xr_os_core_arch(), "unknown");
+#endif
+}
+
+TEST(os_core_sep_and_eol_match_target) {
+#ifdef XR_OS_WINDOWS
+    ASSERT_STR_EQ(xr_os_core_sep(), "\\");
+    ASSERT_STR_EQ(xr_os_core_eol(), "\r\n");
+#else
+    ASSERT_STR_EQ(xr_os_core_sep(), "/");
+    ASSERT_STR_EQ(xr_os_core_eol(), "\n");
+#endif
+}
+
 TEST(os_core_tmpdir_prefers_tmpdir) {
     const OsEnvEntry entries[] = {
         {"TMPDIR", "/xray/tmpdir"},
@@ -72,6 +110,11 @@ TEST(os_core_tmpdir_falls_back_without_env) {
 }
 
 TEST_MAIN_BEGIN()
+
+RUN_TEST_SUITE("OS Core - platform");
+RUN_TEST(os_core_platform_matches_target);
+RUN_TEST(os_core_arch_matches_target);
+RUN_TEST(os_core_sep_and_eol_match_target);
 
 RUN_TEST_SUITE("OS Core - tmpdir");
 RUN_TEST(os_core_tmpdir_prefers_tmpdir);
