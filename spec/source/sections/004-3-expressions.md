@@ -438,7 +438,7 @@ FnExpression ::= 'fn' GenericParams? '(' Params ')' ('->' Type)? Block
 arr.map(x -> x * 2)
 arr.filter(x -> x % 2 == 0)
 
-// ── 箭头 lambda：任意位置，支持多参数和类型注解 ──
+// ── 箭头 lambda：任意位置，支持多参数和参数类型注解 ──
 let sum = arr.reduce((acc, x) -> acc + x, 0)    // 无类型
 let double = (x: int) -> x * 2                   // 有类型
 let add = (a: int, b: int) -> a + b              // 多参数
@@ -456,12 +456,12 @@ let identity = fn<T>(x: T) -> T { return x }     // 泛型
 | 形式 | 语法 | 适用场景 |
 |------|------|----------|
 | 裸 lambda | `x -> expr` | 单参数回调，最简洁 |
-| 箭头 lambda | `(x, y) -> expr` | 多参数、需类型注解、或非调用参数位置 |
+| 箭头 lambda | `(x, y) -> expr` | 多参数、需参数类型注解、或非调用参数位置 |
 | fn 表达式 | `fn(x: T) -> R { ... }` | 多语句体、返回类型注解、泛型参数 |
 
 **关键规则**：
 - **裸 lambda**（`x -> expr`）：仅限**调用参数位置**，单参数无括号。参数类型由被调函数签名或容器元素类型推断。
-- **箭头 lambda**（`(x) -> expr`、`(x, y) -> expr`）：任意位置可用。参数类型可省略，由上下文推断；推断失败时报 E0365。
+- **箭头 lambda**（`(x) -> expr`、`(x, y) -> expr`）：任意位置可用。参数类型可省略，由上下文推断；推断失败时报 E0365。箭头 lambda **不支持返回类型注解**；需要显式返回类型时，用 `fn(x: T) -> R { ... }`，或给绑定写函数类型：`let f: (T) -> R = (x) -> ...`。
 - **fn 表达式**（`fn(x: T) { ... }`）：任意位置可用。支持泛型参数 `fn<T>(...)`、返回类型注解 `-> T`、多语句体。
 - 单表达式形式 `-> expr` 自动 `return`。
 - 块形式 `-> { ... }` 或 `{ ... }` 用显式 `return`。
@@ -974,7 +974,7 @@ FnExpression ::= 'fn' GenericParams? '(' Params ')' ('->' Type)? Block
 arr.map(x -> x * 2)
 arr.filter(x -> x % 2 == 0)
 
-// ── Arrow lambda: any position, supports multi-param and type annotation ──
+// ── Arrow lambda: any position, supports multi-param and parameter type annotation ──
 let sum = arr.reduce((acc, x) -> acc + x, 0)    // no type
 let double = (x: int) -> x * 2                   // typed
 let add = (a: int, b: int) -> a + b              // multi-param
@@ -992,12 +992,12 @@ let identity = fn<T>(x: T) -> T { return x }     // generic
 | Form | Syntax | Suitable for |
 |------|------|----------|
 | Bare lambda | `x -> expr` | single-parameter callbacks, most concise |
-| Arrow lambda | `(x, y) -> expr` | multi-param, type annotation, or non-call positions |
+| Arrow lambda | `(x, y) -> expr` | multi-param, parameter type annotation, or non-call positions |
 | fn expression | `fn(x: T) -> R { ... }` | multi-statement body, return-type annotation, generics |
 
 **Key rules**:
 - **Bare lambda** (`x -> expr`): restricted to **call-argument position**; the single parameter is unparenthesized. The parameter type is inferred from the callee signature or the container element type.
-- **Arrow lambda** (`(x) -> expr`, `(x, y) -> expr`): usable in any position. Parameter types may be omitted and inferred from context; inference failure raises `E0365`.
+- **Arrow lambda** (`(x) -> expr`, `(x, y) -> expr`): usable in any position. Parameter types may be omitted and inferred from context; inference failure raises `E0365`. Arrow lambdas **do not support return-type annotations**; use `fn(x: T) -> R { ... }`, or annotate the binding as a function type: `let f: (T) -> R = (x) -> ...`.
 - **fn expression** (`fn(x: T) { ... }`): usable in any position. Supports generic parameters `fn<T>(...)`, return-type annotation `-> T`, and a multi-statement body.
 - Single-expression form `-> expr` implicitly `return`s.
 - Block form `-> { ... }` or `{ ... }` uses an explicit `return`.
