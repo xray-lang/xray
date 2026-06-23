@@ -186,6 +186,28 @@ TEST(xfmt_template_no_backticks) {
     teardown();
 }
 
+TEST(xfmt_template_expr_string_uses_double_quotes) {
+    setup();
+    AstNode *prog = xr_parse(xr_compiler_session_current_for_isolate(X),
+                             "let s = \"${\"inner\".toUpperCase()}\"\n");
+    ASSERT_NOT_NULL(prog);
+    AstNode *init0 = first_initializer(prog);
+    ASSERT_EQ_INT(init0->type, AST_TEMPLATE_STRING);
+
+    char *formatted = format_only(prog);
+    ASSERT_NOT_NULL(formatted);
+    ASSERT(strstr(formatted, "${\"inner\".toUpperCase()}") != NULL);
+    ASSERT(strstr(formatted, "${'inner'.toUpperCase()}") == NULL);
+    xr_free(formatted);
+
+    AstNode *r = format_and_reparse(prog);
+    AstNode *init = first_initializer(r);
+    ASSERT_EQ_INT(init->type, AST_TEMPLATE_STRING);
+    xr_program_destroy(prog);
+    xr_program_destroy(r);
+    teardown();
+}
+
 /* ========== template literal `$` is escaped ========== */
 //
 // A template-string literal part containing `${` would be reparsed as
@@ -261,6 +283,7 @@ RUN_TEST(xfmt_string_control_byte_hex_escape);
 
 RUN_TEST_SUITE("xfmt_literal - template no backticks");
 RUN_TEST(xfmt_template_no_backticks);
+RUN_TEST(xfmt_template_expr_string_uses_double_quotes);
 RUN_TEST(xfmt_template_dollar_escaped);
 
 TEST_MAIN_END()

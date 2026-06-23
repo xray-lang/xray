@@ -226,6 +226,7 @@ Interpolation ::= '${' Expression '}'
 - 双引号 / 单引号**完全等价**——都支持转义、`${...}` 插值。
 - 字符串可跨行；行结尾包含在字符串中。
 - 包含插值的字面量在 lexer 内部产出 `TK_TEMPLATE_STRING`；不含插值的产出 `TK_LITERAL_STRING`。
+- `${...}` 内按表达式模式扫描：大括号按深度配对，内部字符串 / raw string 会被整体跳过，因此允许同种引号嵌套，例如 `"${m["k"]}"` 与 `"${"a}b"}"`。`char` 核心类型落地后，表达式内的 char 字面量也按同一规则整体跳过。
 
 ```xray
 "hello"
@@ -236,7 +237,7 @@ Interpolation ::= '${' Expression '}'
 "\u{1F600}"            // emoji
 ```
 
-**插值表达式内禁止再嵌套未转义的引号字符**（lexer 限制）。
+插值表达式可以继续包含嵌套插值；内层字符串中的 `}` 不会结束外层 `${...}`。
 
 ##### 原始字符串（`r` 前缀）
 
@@ -590,6 +591,7 @@ Interpolation ::= '${' Expression '}'
 - Double and single quotes are **fully equivalent** — both support escapes and `${...}` interpolation.
 - Strings may span multiple lines; line breaks are part of the string.
 - Literals containing interpolation produce `TK_TEMPLATE_STRING` internally; literals without interpolation produce `TK_LITERAL_STRING`.
+- `${...}` is scanned in expression mode: braces are matched by depth, and nested strings / raw strings are skipped as a unit, so same-quote nesting is legal, for example `"${m["k"]}"` and `"${"a}b"}"`. Once the `char` core type lands, char literals inside interpolation are skipped by the same rule.
 
 ```xray
 "hello"
@@ -600,7 +602,7 @@ Interpolation ::= '${' Expression '}'
 "\u{1F600}"            // emoji
 ```
 
-**Interpolation expressions cannot contain unescaped quote characters of the surrounding kind** (a lexer restriction).
+Interpolation expressions may themselves contain nested interpolation; `}` characters inside nested strings do not close the outer `${...}`.
 
 ##### Raw strings (`r` prefix)
 

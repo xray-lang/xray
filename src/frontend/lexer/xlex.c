@@ -573,57 +573,138 @@ static Token number(Scanner *scanner) {
     return make_token(scanner, type);
 }
 
-// String scanning with SIMD optimization
-// Detects ${} interpolation: returns TK_TEMPLATE_STRING when found
-static Token string_with_quote(Scanner *scanner, char quote) {
-    bool has_interpolation = false;
+static void note_scanned_newline(Scanner *scanner) {
+    scanner->line++;
+    scanner->line_start = scanner->current + 1;
+}
+
+static bool scan_interpolation_expr(Scanner *scanner);
+
+static bool scan_string_body(Scanner *scanner, char quote, bool is_raw, bool *has_interpolation) {
     while (!is_at_end(scanner)) {
-        size_t remaining = (size_t) (scanner->end - scanner->current);
-        const char *found = xr_simd_find_string_end_quote(scanner->current, remaining, quote);
-
-        while (scanner->current < found) {
-            // Detect ${} in SIMD-skipped region ($ is not a SIMD stop char)
-            if (*scanner->current == '$' && (scanner->current + 1) < scanner->end &&
-                *(scanner->current + 1) == '{') {
-                has_interpolation = true;
-            }
-            if (*scanner->current == '\n') {
-                scanner->line++;
-                scanner->line_start = scanner->current + 1;
-            }
-            scanner->current++;
-        }
-
-        if (is_at_end(scanner))
-            break;
-
         char c = peek(scanner);
         if (c == quote) {
             advance(scanner);
-            return make_token(scanner, has_interpolation ? TK_TEMPLATE_STRING : TK_LITERAL_STRING);
-        } else if (c == '\\') {
+            return true;
+        }
+        if (!is_raw && c == '\\') {
             advance(scanner);
             if (!is_at_end(scanner)) {
                 if (peek(scanner) == '\n') {
-                    scanner->line++;
-                    scanner->line_start = scanner->current + 1;
+                    note_scanned_newline(scanner);
                 }
                 advance(scanner);
             }
-        } else {
-            // Detect ${} interpolation
-            if (c == '$' && peek_next(scanner) == '{') {
-                has_interpolation = true;
-            }
-            if (c == '\n') {
-                scanner->line++;
-                scanner->line_start = scanner->current + 1;
+            continue;
+        }
+        if (c == '$' && peek_next(scanner) == '{') {
+            if (has_interpolation) {
+                *has_interpolation = true;
             }
             advance(scanner);
+            advance(scanner);
+            if (!scan_interpolation_expr(scanner)) {
+                return false;
+            }
+            continue;
         }
+        if (c == '\n') {
+            note_scanned_newline(scanner);
+        }
+        advance(scanner);
     }
+    return false;
+}
 
-    return error_token(scanner, "Unterminated string");
+static bool scan_line_comment_in_template_expr(Scanner *scanner) {
+    while (!is_at_end(scanner) && peek(scanner) != '\n') {
+        advance(scanner);
+    }
+    return true;
+}
+
+static bool scan_block_comment_in_template_expr(Scanner *scanner) {
+    advance(scanner);
+    advance(scanner);
+    int depth = 1;
+    while (!is_at_end(scanner) && depth > 0) {
+        if (peek(scanner) == '/' && peek_next(scanner) == '*') {
+            advance(scanner);
+            advance(scanner);
+            depth++;
+            continue;
+        }
+        if (peek(scanner) == '*' && peek_next(scanner) == '/') {
+            advance(scanner);
+            advance(scanner);
+            depth--;
+            continue;
+        }
+        if (peek(scanner) == '\n') {
+            note_scanned_newline(scanner);
+        }
+        advance(scanner);
+    }
+    return depth == 0;
+}
+
+static bool scan_interpolation_expr(Scanner *scanner) {
+    int brace_depth = 1;
+    while (!is_at_end(scanner)) {
+        char c = peek(scanner);
+        if (c == '"' || c == '\'') {
+            advance(scanner);
+            if (!scan_string_body(scanner, c, false, NULL)) {
+                return false;
+            }
+            continue;
+        }
+        if (c == 'r' && (peek_next(scanner) == '"' || peek_next(scanner) == '\'')) {
+            advance(scanner);
+            char raw_quote = advance(scanner);
+            if (!scan_string_body(scanner, raw_quote, true, NULL)) {
+                return false;
+            }
+            continue;
+        }
+        if (c == '/' && peek_next(scanner) == '/') {
+            scan_line_comment_in_template_expr(scanner);
+            continue;
+        }
+        if (c == '/' && peek_next(scanner) == '*') {
+            if (!scan_block_comment_in_template_expr(scanner)) {
+                return false;
+            }
+            continue;
+        }
+        if (c == '{') {
+            brace_depth++;
+            advance(scanner);
+            continue;
+        }
+        if (c == '}') {
+            advance(scanner);
+            brace_depth--;
+            if (brace_depth == 0) {
+                return true;
+            }
+            continue;
+        }
+        if (c == '\n') {
+            note_scanned_newline(scanner);
+        }
+        advance(scanner);
+    }
+    return false;
+}
+
+// Detects ${} interpolation: returns TK_TEMPLATE_STRING when found.
+static Token string_with_quote(Scanner *scanner, char quote) {
+    bool has_interpolation = false;
+    if (!scan_string_body(scanner, quote, false, &has_interpolation)) {
+        return error_token(scanner, "Unterminated string");
+    }
+    return make_token(scanner, has_interpolation ? TK_TEMPLATE_STRING : TK_LITERAL_STRING);
 }
 
 static Token string(Scanner *scanner) {
@@ -637,20 +718,9 @@ static Token single_quote_string(Scanner *scanner) {
 // Raw string: r"..." or r'...' (no escape processing, but ${} interpolation)
 static Token raw_string_with_quote(Scanner *scanner, char quote) {
     bool has_interpolation = false;
-    while (!is_at_end(scanner) && peek(scanner) != quote) {
-        if (peek(scanner) == '$' && peek_next(scanner) == '{') {
-            has_interpolation = true;
-        }
-        if (peek(scanner) == '\n') {
-            scanner->line++;
-            scanner->line_start = scanner->current + 1;
-        }
-        advance(scanner);
-    }
-    if (is_at_end(scanner)) {
+    if (!scan_string_body(scanner, quote, true, &has_interpolation)) {
         return error_token(scanner, "Unterminated raw string");
     }
-    advance(scanner);
     return make_token(scanner, has_interpolation ? TK_RAW_TEMPLATE_STRING : TK_RAW_STRING);
 }
 

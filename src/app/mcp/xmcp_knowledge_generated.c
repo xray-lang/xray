@@ -3059,7 +3059,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "```xray\n"
             "\"Hello, ${name}! Age: ${user.age + 1}\"\n"
             "```\n"
-            "Note: avoid unescaped quotes inside `${...}`; use a variable or escape the inner string.\n"
+            "Note: `${...}` is scanned as an expression, so nested strings may use the same quote as the outer template.\n"
             "\n"
             "### Slicing\n"
             "```xray\n"
@@ -4545,7 +4545,7 @@ XR_DATADEF const char xmcp_generated_cheatsheet[] =
     "- arrow function parameter types may be inferred only when the context is known\n"
     "- `new Channel<T>(n)` constructs a channel; `Channel<T>` is used in type position\n"
     "- field increment such as `this.x++` is not supported; assign explicitly\n"
-    "- avoid unescaped quotes inside `${...}` interpolation\n"
+    "- same-quote strings are allowed inside `${...}` interpolation\n"
     "";
 
 XR_DATADEF const char xmcp_generated_concurrency[] =
