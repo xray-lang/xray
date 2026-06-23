@@ -1928,8 +1928,10 @@ connect("localhost", 443)         // tls=false
 connect("localhost", 443, true)
 ```
 
-- Default values are evaluated at the callee entry; if the caller omits an argument, `null` is passed and the entry replaces it with the default expression.
+- Default values are evaluated at the **call site**: when a trailing argument is omitted, the compiler completes the call with the default expression, evaluating it once per omitting call in argument order.
+- Passing an explicit `null` passes `null`; it does **not** trigger the default (defaults are used only when the argument is omitted).
 - Parameters with default values must appear consecutively at the tail of the parameter list.
+- Default arguments apply only to **direct calls of a named function/method/constructor**. A call through a function value (a function-typed variable) carries no default expressions and must pass every argument.
 
 #### 5.2.3 Multiple return values
 

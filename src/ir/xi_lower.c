@@ -751,33 +751,11 @@ XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyz
         xi_lower_braun_write(&l, var_id, entry, param_val);
     }
 
-    /* Emit default-value guards for optional parameters.
-     * The VM fills missing args with null; we emit:
-     *   def_val  = <lower default expression>
-     *   is_null  = (param == null)
-     *   resolved = SELECT(is_null, def_val, param)
-     * Single-block, no branching — avoids phi complexity in emitter. */
-    for (int i = 0; i < fdecl->param_count; i++) {
-        XrParamNode *p = fdecl->params[i];
-        if (!p->default_value)
-            continue;
-
-        struct XrType *ptype = xi_lower_param_type(&l, p);
-        int var_id = xi_lower_var_create(&l, p->symbol_id, p->name, ptype);
-        XR_DCHECK(var_id >= 0, "default param var not found");
-        XiValue *cur = xi_lower_braun_read(&l, var_id, l.cur_block);
-        XiValue *def_val = xi_lower_expr(&l, p->default_value);
-        if (!def_val)
-            continue;
-        XiValue *null_c = xi_const_null(l.func, l.cur_block, l.type_null);
-        XiValue *is_null = xi_binary(l.func, l.cur_block, XI_EQ, l.type_bool, cur, null_c);
-        XiValue *resolved = xi_value_new(l.func, l.cur_block, XI_SELECT, ptype, 3);
-        XR_DCHECK(resolved != NULL, "default param: SELECT alloc failed");
-        resolved->args[0] = is_null;
-        resolved->args[1] = def_val;
-        resolved->args[2] = cur;
-        xi_lower_braun_write(&l, var_id, l.cur_block, resolved);
-    }
+    /* Default parameter values are filled at the call site (C1): the analyzer
+     * completes omitted trailing arguments with cloned default expressions, so
+     * the callee never sees an omitted argument and the old "null sentinel ->
+     * default" entry guard is gone. This keeps an explicit `null` argument
+     * distinct from omission and removes a per-call branch from the AOT path. */
 
     /* For named functions, register a self-reference so the body can
      * resolve recursive calls.  lower_call detects l.self_value and

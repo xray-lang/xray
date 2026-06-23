@@ -139,8 +139,10 @@ connect("localhost", 443)         // tls=false
 connect("localhost", 443, true)
 ```
 
-- 默认值在被调函数入口求值；调用方省略参数时传入 `null`，函数入口用默认表达式替换该 `null`。
+- 默认值在**调用点**求值：省略某个尾部参数时，编译器在该调用点补入默认表达式，按实参顺序、每次省略调用各求值一次。
+- 显式传 `null` 就是传入 `null`，**不会**触发默认值（默认值只在参数被省略时使用）。
 - 有默认值的参数必须在尾部连续出现。
+- 默认参数只作用于**具名函数/方法/构造器的直接调用**。通过函数值（函数类型变量）的间接调用不携带默认表达式，必须传入全部实参。
 
 #### 5.2.3 多返回值
 
@@ -1009,8 +1011,10 @@ connect("localhost", 443)         // tls=false
 connect("localhost", 443, true)
 ```
 
-- Default values are evaluated at the callee entry; if the caller omits an argument, `null` is passed and the entry replaces it with the default expression.
+- Default values are evaluated at the **call site**: when a trailing argument is omitted, the compiler completes the call with the default expression, evaluating it once per omitting call in argument order.
+- Passing an explicit `null` passes `null`; it does **not** trigger the default (defaults are used only when the argument is omitted).
 - Parameters with default values must appear consecutively at the tail of the parameter list.
+- Default arguments apply only to **direct calls of a named function/method/constructor**. A call through a function value (a function-typed variable) carries no default expressions and must pass every argument.
 
 #### 5.2.3 Multiple return values
 

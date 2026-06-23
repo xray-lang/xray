@@ -52,6 +52,11 @@ typedef struct {
 
 XR_FUNC AstNode *xr_ast_clone(AstNode *node, XrMonoTypeMap *type_map, int type_map_count);
 
+// Deep-clone an AST subtree, assigning fresh stable node ids from `session`.
+// Required when the clone must coexist with the original in the analyzer's
+// node-id-keyed side table (e.g. caller-side default argument completion).
+XR_FUNC AstNode *xr_ast_clone_session(AstNode *node, struct XrCompilerSession *session);
+
 /* ========== Type Substitution ========== */
 
 // Substitute type parameters in a type ref tree.

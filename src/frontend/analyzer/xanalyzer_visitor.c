@@ -1205,6 +1205,8 @@ static void xa_visit_collect_enum_method(XaInferContext *ctx, XaSymbol *enum_sym
     method_links->type = method_type;
     xa_symbol_links_set_function_sig(method_links, param_types, param_names, md->param_count,
                                      ret_type);
+    if (md->param_count > 0)
+        xa_symbol_links_set_param_defaults(method_links, md->default_values, md->param_count);
 
     xa_class_info_add_method(info, method_sym);
 
