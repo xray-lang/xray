@@ -432,6 +432,52 @@ TEST(single_worker_ensure_skips_sysmon_thread) {
     scheduler_fixture_cleanup(&f);
 }
 
+TEST(sysmon_forced_cancel_defaults_to_warn_only) {
+    char *old_cancel = dup_env_value(getenv("XRAY_SYSMON_CANCEL_MS"));
+    set_test_env("XRAY_SYSMON_CANCEL_MS", NULL);
+
+    XrayIsolate isolate;
+    XrRuntimeCore core;
+    XrSystemHeap sys_heap;
+    memset(&isolate, 0, sizeof(isolate));
+    memset(&core, 0, sizeof(core));
+    ASSERT_TRUE(xr_sysheap_init(&sys_heap, NULL));
+    core.sys_heap = &sys_heap;
+    isolate.core_rt = &core;
+    core.vm_owner = &isolate;
+
+    XrRuntime *runtime = xr_scheduler_runtime_new(&core, 0);
+    ASSERT_NOT_NULL(runtime);
+    ASSERT_EQ_INT((int) runtime->sysmon_cancel_us, 0);
+
+    xr_scheduler_runtime_delete(runtime);
+    xr_sysheap_destroy(&sys_heap);
+    restore_test_env("XRAY_SYSMON_CANCEL_MS", old_cancel);
+}
+
+TEST(sysmon_forced_cancel_env_opt_in) {
+    char *old_cancel = dup_env_value(getenv("XRAY_SYSMON_CANCEL_MS"));
+    set_test_env("XRAY_SYSMON_CANCEL_MS", "7");
+
+    XrayIsolate isolate;
+    XrRuntimeCore core;
+    XrSystemHeap sys_heap;
+    memset(&isolate, 0, sizeof(isolate));
+    memset(&core, 0, sizeof(core));
+    ASSERT_TRUE(xr_sysheap_init(&sys_heap, NULL));
+    core.sys_heap = &sys_heap;
+    isolate.core_rt = &core;
+    core.vm_owner = &isolate;
+
+    XrRuntime *runtime = xr_scheduler_runtime_new(&core, 0);
+    ASSERT_NOT_NULL(runtime);
+    ASSERT_EQ_INT((int) runtime->sysmon_cancel_us, 7000);
+
+    xr_scheduler_runtime_delete(runtime);
+    xr_sysheap_destroy(&sys_heap);
+    restore_test_env("XRAY_SYSMON_CANCEL_MS", old_cancel);
+}
+
 TEST(deterministic_runtime_forces_single_worker_and_virtual_clock) {
     char *old_det = dup_env_value(getenv("XRAY_CORO_DETERMINISTIC"));
     char *old_workers = dup_env_value(getenv("XRAY_WORKERS"));
@@ -662,6 +708,8 @@ RUN_TEST(global_inject_spill_preserves_all_work);
 RUN_TEST(global_coro_pool_get_pops_bounded_batches);
 RUN_TEST(coro_ext_init_sets_timer_and_owner_sentinels);
 RUN_TEST(single_worker_ensure_skips_sysmon_thread);
+RUN_TEST(sysmon_forced_cancel_defaults_to_warn_only);
+RUN_TEST(sysmon_forced_cancel_env_opt_in);
 RUN_TEST(deterministic_runtime_forces_single_worker_and_virtual_clock);
 RUN_TEST(current_monotonic_uses_virtual_time_in_deterministic_runtime);
 RUN_TEST(work_stealing_moves_batch_and_returns_direct_item);

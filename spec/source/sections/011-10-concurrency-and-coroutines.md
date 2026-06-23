@@ -149,7 +149,7 @@ match t.poll() {
 
 **取消语义**：`cancel()` 设置取消标志；协程在下一个 safepoint（GC 检查点、Channel 操作、`await`、`yield`）检测到标志后抛出取消异常。plain `await` 已取消的 task 会抛 `TaskCancelled`；需要状态值时使用 `awaitResult()` 或 `awaitTimeout(ms)`。
 
-**看门狗强制取消**：运行时监控线程（sysmon）会强制取消**长时间不经过 safepoint**的协程——当某协程在 RUNNING 状态下心跳冻结超过阈值（默认 5 秒）时被标记取消。该阈值可经环境变量 `XRAY_SYSMON_CANCEL_MS` 配置（单位毫秒），设为 `0` 则**禁用**强制取消（仅在 ~100ms 时打印一次告警）。纯 CPU 紧循环若可能长时间运行，应在循环内插入 `yield` 以提供 safepoint，避免被看门狗误取消。
+**看门狗策略**：运行时监控线程（sysmon）会观察 RUNNING 协程的心跳。如果心跳长时间冻结，默认行为是 **warn-only**：约 100ms 后打印一次 stuck warning，但不静默取消协程。强制取消是显式 opt-in：设置环境变量 `XRAY_SYSMON_CANCEL_MS=N`（`N > 0`，单位毫秒）后，心跳冻结超过该阈值的协程会被标记取消；未设置或设为 `0` 时保持仅告警。纯 CPU 长循环仍可在循环内插入 `yield` 改善调度公平性和取消响应性，但不再是避免默认看门狗强杀的必要条件。
 
 ### 10.5 Channel
 
@@ -574,7 +574,7 @@ match t.poll() {
 
 **Cancellation semantics**: `cancel()` sets the cancellation flag; the coroutine throws a cancellation exception at the next safepoint (GC checkpoint, channel operation, `await`, `yield`). Plain `await` on a cancelled task throws `TaskCancelled`; use `awaitResult()` or `awaitTimeout(ms)` when you want a status value.
 
-**Watchdog forced cancellation**: the runtime monitor thread (sysmon) force-cancels coroutines that run **too long without crossing a safepoint**—a coroutine whose heartbeat stays frozen while RUNNING beyond a threshold (default 5 seconds) is marked for cancellation. The threshold is configurable via the `XRAY_SYSMON_CANCEL_MS` environment variable (milliseconds); setting it to `0` **disables** forced cancellation (only a one-time warning around ~100ms remains). A pure-CPU tight loop that may run long should insert `yield` inside the loop to provide a safepoint and avoid spurious watchdog cancellation.
+**Watchdog policy**: the runtime monitor thread (sysmon) observes the heartbeat of RUNNING coroutines. If a heartbeat stays frozen for too long, the default behavior is **warn-only**: a stuck warning is printed after roughly 100ms, but the coroutine is not silently cancelled. Forced cancellation is explicit opt-in: set `XRAY_SYSMON_CANCEL_MS=N` (`N > 0`, milliseconds) to mark a coroutine for cancellation after its heartbeat remains frozen past that threshold; unset or `0` keeps warn-only behavior. Long pure-CPU loops may still insert `yield` for scheduling fairness and cancellation responsiveness, but `yield` is no longer required to avoid default watchdog cancellation.
 
 ### 10.5 Channel
 

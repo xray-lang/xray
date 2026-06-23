@@ -107,7 +107,7 @@ static void sysmon_check(XrRuntime *runtime) {
                                coro_name ? coro_name : "unknown", (unsigned long long) hb);
             }
 
-            // === Level 3 (default 5s): mark coroutine for cancellation ===
+            // === Level 3 (opt-in): mark coroutine for cancellation ===
             // Threshold is runtime-configurable via XRAY_SYSMON_CANCEL_MS;
             // <= 0 disables forced cancel and keeps only the Level 2 warning.
             int64_t cancel_us = runtime->sysmon_cancel_us;
