@@ -400,77 +400,12 @@ XrString *xr_string_slice(XrVMRuntime *iso, XrString *str, xr_Integer start, xr_
 }
 
 // indexOf - find substring position
-// Tiered optimization: single char (memchr), short pattern (<=8), long pattern (Horspool)
 xr_Integer xr_string_index_of(XrVMRuntime *iso, XrString *str, XrString *substr) {
     (void) iso;
     if (str == NULL || substr == NULL)
         return -1;
-    if (substr->length == 0)
-        return 0;
-    if (substr->length > str->length)
-        return -1;
-
-    size_t n = str->length;
-    size_t m = substr->length;
-    const char *haystack = str->data;
-    const char *needle = substr->data;
-
-    // Strategy 1: single char - use memchr (usually SIMD optimized)
-    if (m == 1) {
-        const char *p = memchr(haystack, needle[0], n);
-        return p ? (xr_Integer) (p - haystack) : -1;
-    }
-
-    // Strategy 2: short pattern (<=8 bytes) - first char jump + memcmp
-    if (m <= 8) {
-        char first = needle[0];
-        size_t limit = n - m;
-        for (size_t i = 0; i <= limit;) {
-            // Jump to first char match
-            const char *p = memchr(haystack + i, first, limit - i + 1);
-            if (!p)
-                return -1;
-            i = (size_t) (p - haystack);
-            // Full compare
-            if (memcmp(p, needle, m) == 0) {
-                return (xr_Integer) i;
-            }
-            i++;
-        }
-        return -1;
-    }
-
-    // Strategy 3: long pattern (>8 bytes) - Horspool algorithm
-    size_t skip[256];
-
-    // Initialize skip table: default skip entire pattern length
-    for (int c = 0; c < 256; c++) {
-        skip[c] = m;
-    }
-    // Pattern chars: skip to alignment position
-    for (size_t i = 0; i < m - 1; i++) {
-        skip[(unsigned char) needle[i]] = m - 1 - i;
-    }
-
-    // Horspool search
-    size_t i = 0;
-    size_t limit = n - m;
-    while (i <= limit) {
-        // Compare from end
-        size_t j = m - 1;
-        while (j > 0 && haystack[i + j] == needle[j]) {
-            j--;
-        }
-
-        if (j == 0 && haystack[i] == needle[0]) {
-            return (xr_Integer) i;
-        }
-
-        // Bad character skip
-        i += skip[(unsigned char) haystack[i + m - 1]];
-    }
-
-    return -1;
+    return (xr_Integer) xr_string_core_index_of(str->data, str->length, substr->data,
+                                                substr->length);
 }
 
 // size - get string length
@@ -499,12 +434,7 @@ bool xr_string_starts_with(XrVMRuntime *iso, XrString *str, XrString *prefix) {
     (void) iso;
     if (str == NULL || prefix == NULL)
         return false;
-    if (prefix->length > str->length)
-        return false;
-    if (prefix->length == 0)
-        return true;
-
-    return memcmp(str->data, prefix->data, prefix->length) == 0;
+    return xr_string_core_starts_with(str->data, str->length, prefix->data, prefix->length);
 }
 
 // endsWith - check suffix
@@ -512,13 +442,7 @@ bool xr_string_ends_with(XrVMRuntime *iso, XrString *str, XrString *suffix) {
     (void) iso;
     if (str == NULL || suffix == NULL)
         return false;
-    if (suffix->length > str->length)
-        return false;
-    if (suffix->length == 0)
-        return true;
-
-    size_t offset = str->length - suffix->length;
-    return memcmp(&str->data[offset], suffix->data, suffix->length) == 0;
+    return xr_string_core_ends_with(str->data, str->length, suffix->data, suffix->length);
 }
 
 #define CASE_STACK_BUF 256
@@ -693,21 +617,8 @@ xr_Integer xr_string_last_index_of(XrVMRuntime *iso, XrString *str, XrString *su
     (void) iso;
     if (str == NULL || substr == NULL)
         return -1;
-    if (substr->length == 0)
-        return (xr_Integer) str->length;
-    if (substr->length > str->length)
-        return -1;
-
-    // Search from end
-    size_t last_pos = str->length - substr->length;
-    for (size_t i = last_pos + 1; i > 0; i--) {
-        size_t pos = i - 1;
-        if (memcmp(&str->data[pos], substr->data, substr->length) == 0) {
-            return (xr_Integer) pos;
-        }
-    }
-
-    return -1;
+    return (xr_Integer) xr_string_core_last_index_of(str->data, str->length, substr->data,
+                                                     substr->length);
 }
 
 /* ========== String Advanced Methods ========== */
