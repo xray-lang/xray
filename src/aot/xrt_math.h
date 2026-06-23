@@ -13,34 +13,19 @@
 
 #include "xrt_value.h"
 #include "../os/os_random.h"
+#include "../shared/xr_math_core.h"
+
+static inline void xrt_math_random_bytes(void *ctx, unsigned char *buf, size_t len) {
+    (void) ctx;
+    xr_random_bytes(buf, len);
+}
 
 static inline double xrt_math_random_f64(void) {
-    uint64_t r;
-    xr_random_bytes((unsigned char *) &r, sizeof(r));
-    return (double) (r >> 11) * (1.0 / 9007199254740992.0);
+    return xr_math_core_random_f64(xrt_math_random_bytes, NULL);
 }
 
 static inline int64_t xrt_math_random_i64(int64_t min_val, int64_t max_val) {
-    if (min_val > max_val) {
-        int64_t tmp = min_val;
-        min_val = max_val;
-        max_val = tmp;
-    }
-    if (min_val == max_val)
-        return min_val;
-
-    uint64_t range = (uint64_t) max_val - (uint64_t) min_val + UINT64_C(1);
-    uint64_t r;
-    if (range == 0) {
-        xr_random_bytes((unsigned char *) &r, sizeof(r));
-    } else {
-        uint64_t threshold = (-range) % range;
-        do {
-            xr_random_bytes((unsigned char *) &r, sizeof(r));
-        } while (r < threshold);
-        r %= range;
-    }
-    return (int64_t) ((uint64_t) min_val + r);
+    return xr_math_core_random_i64(xrt_math_random_bytes, NULL, min_val, max_val);
 }
 
 static inline XrValue xrt_math_random(void) {
