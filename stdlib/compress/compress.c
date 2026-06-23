@@ -1346,28 +1346,16 @@ XR_DEFINE_BUILTIN(compress_is_zlib, "isZlib", "(data: string): bool", "Check if 
 XR_DEFINE_BUILTIN(compress_crc32, "crc32", "(data: string): int", "Compute CRC-32 checksum")
 XR_DEFINE_BUILTIN(compress_adler32, "adler32", "(data: string): int", "Compute Adler-32 checksum")
 
+#define XR_STDLIB_VM_BIND_MODULE_COMPRESS 1
+#include "../../src/stdlib/xstdlib_vm_bindings_generated.inc.c"
+#undef XR_STDLIB_VM_BIND_MODULE_COMPRESS
+
 XR_FUNC XrModule *xr_load_module_compress(XrVMRuntime *isolate) {
     XrModule *module = xr_module_create_native(isolate, "compress");
     if (!module)
         return NULL;
 
-    // Gzip
-    XRS_EXPORT(module, isolate, "gzip", compress_gzip);
-    XRS_EXPORT(module, isolate, "gunzip", compress_gunzip);
-    XRS_EXPORT(module, isolate, "isGzip", compress_is_gzip);
-
-    // Deflate/Inflate
-    XRS_EXPORT(module, isolate, "deflate", compress_deflate);
-    XRS_EXPORT(module, isolate, "inflate", compress_inflate);
-
-    // Zlib
-    XRS_EXPORT(module, isolate, "zlibCompress", compress_zlib_compress);
-    XRS_EXPORT(module, isolate, "zlibDecompress", compress_zlib_decompress);
-    XRS_EXPORT(module, isolate, "isZlib", compress_is_zlib);
-
-    // Checksums
-    XRS_EXPORT(module, isolate, "crc32", compress_crc32);
-    XRS_EXPORT(module, isolate, "adler32", compress_adler32);
+    xr_stdlib_vm_bind_compress_generated(isolate, module);
 
     module->loaded = true;
     return module;

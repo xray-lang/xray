@@ -802,25 +802,17 @@ XR_DEFINE_BUILTIN(regex_split, "split", "(pattern: Regex, s: string, limit?: int
 XR_DEFINE_BUILTIN(regex_escape, "escape", "(s: string): string", "Escape regex special chars")
 XR_DEFINE_BUILTIN(regex_is_valid, "isValid", "(pattern: string): bool", "Check if pattern is valid")
 
+#define XR_STDLIB_VM_BIND_MODULE_REGEX 1
+#include "../../src/stdlib/xstdlib_vm_bindings_generated.inc.c"
+#undef XR_STDLIB_VM_BIND_MODULE_REGEX
+
 XR_FUNC XrModule *xr_load_module_regex(XrVMRuntime *isolate) {
     // 1. Create native module
     XrModule *mod = xr_module_create_native(isolate, "regex");
     if (!mod)
         return NULL;
 
-    XRS_EXPORT(mod, isolate, "compile", regex_compile);
-    XRS_EXPORT(mod, isolate, "test", regex_test);
-    XRS_EXPORT(mod, isolate, "find", regex_find);
-    XRS_EXPORT(mod, isolate, "findText", regex_find_text);
-    XRS_EXPORT(mod, isolate, "findGroup", regex_find_group);
-    XRS_EXPORT(mod, isolate, "fullFind", regex_full_match);
-    XRS_EXPORT(mod, isolate, "count", regex_count);
-    XRS_EXPORT(mod, isolate, "findAll", regex_find_all);
-    XRS_EXPORT(mod, isolate, "replace", regex_replace);
-    XRS_EXPORT(mod, isolate, "replaceAll", regex_replace_all);
-    XRS_EXPORT(mod, isolate, "split", regex_split);
-    XRS_EXPORT(mod, isolate, "escape", regex_escape);
-    XRS_EXPORT(mod, isolate, "isValid", regex_is_valid);
+    xr_stdlib_vm_bind_regex_generated(isolate, mod);
 
     // The Regex XrClass itself is registered up front by the prelude
     // module — no need to do it again here.
