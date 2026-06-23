@@ -326,11 +326,7 @@ XrValue xr_array_shift(XrArray *arr) {
 
     XrValue first = xr_array_get_element(arr, 0);
 
-    // Shift all elements left by one (use memmove for typed arrays)
-    if (arr->length > 1) {
-        memmove(arr->data, (uint8_t *) arr->data + arr->elem_size,
-                (size_t) (arr->length - 1) * arr->elem_size);
-    }
+    (void) xr_array_core_shift_left_one(arr->data, arr->length, arr->elem_size);
 
     arr->length--;
     return first;
