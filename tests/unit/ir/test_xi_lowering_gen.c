@@ -10,20 +10,20 @@
 #include <string.h>
 
 int main(void) {
-    assert(XI_LOWERING_ENTRY_COUNT == 126);
+    assert(XI_LOWERING_ENTRY_COUNT == 129);
     assert(XI_LOWERING_PATTERNED_ENTRY_COUNT == 33);
-    assert(XI_LOWERING_CUSTOM_ENTRY_COUNT == 93);
-    assert(XI_LOWERING_MAIN_BACKEND_ENTRY_COUNT == 93);
+    assert(XI_LOWERING_CUSTOM_ENTRY_COUNT == 96);
+    assert(XI_LOWERING_MAIN_BACKEND_ENTRY_COUNT == 96);
     assert(XI_LOWERING_MAIN_BACKEND_PATTERNED_ENTRY_COUNT == 33);
     assert(XI_LOWERING_REJECTED_TARGET_COUNT == 1);
     assert(XI_LOWERING_REJECTED_ENTRY_COUNT == 1);
-    assert(XI_LOWERING_AOT_C_ENTRY_COUNT == 94);
+    assert(XI_LOWERING_AOT_C_ENTRY_COUNT == 97);
     assert(XI_LOWERING_AOT_C_PATTERNED_ENTRY_COUNT == 33);
     assert(XI_LOWERING_AOT_C_STMT_ENTRY_COUNT == 9);
     assert(XI_LOWERING_AOT_C_STMT_PATTERNED_ENTRY_COUNT == 0);
     assert(XI_LOWERING_AOT_VERIFY_ENTRY_COUNT == 0);
     assert(XI_LOWERING_AOT_VERIFY_PATTERNED_ENTRY_COUNT == 0);
-    assert(XI_LOWERING_VM_BYTECODE_ENTRY_COUNT == 125);
+    assert(XI_LOWERING_VM_BYTECODE_ENTRY_COUNT == 128);
     assert(XI_LOWERING_VM_BYTECODE_PATTERNED_ENTRY_COUNT == 33);
     assert(xi_lowering_generated_targets(XI_CONST) == (XI_LOWER_TARGET_AOT_C | XI_LOWER_TARGET_VM_BYTECODE));
     assert(xi_lowering_required_targets(XI_CONST) == (XI_LOWER_TARGET_VM_BYTECODE | XI_LOWER_TARGET_AOT_C));
@@ -810,6 +810,22 @@ int main(void) {
     assert(xi_emit_vm_requires_fresh_dst(XI_ARRAY_NEW) == false);
     assert(xi_emit_vm_uses_raw_cell_args(XI_ARRAY_NEW) == false);
     assert(xi_emit_vm_handles_cell_dst(XI_ARRAY_NEW) == false);
+    assert(xi_lowering_generated_targets(XI_ARRAY_PUSH) == (XI_LOWER_TARGET_AOT_C | XI_LOWER_TARGET_VM_BYTECODE));
+    assert(xi_lowering_required_targets(XI_ARRAY_PUSH) == (XI_LOWER_TARGET_VM_BYTECODE | XI_LOWER_TARGET_AOT_C));
+    assert(xi_lowering_rejected_targets(XI_ARRAY_PUSH) == (0));
+    assert(xi_lowering_template_kind(XI_ARRAY_PUSH) == XI_LOWER_TEMPLATE_CUSTOM);
+    assert(xi_lowering_is_patterned(XI_ARRAY_PUSH) == false);
+    assert(xi_emit_vm_requires_fresh_dst(XI_ARRAY_PUSH) == false);
+    assert(xi_emit_vm_uses_raw_cell_args(XI_ARRAY_PUSH) == false);
+    assert(xi_emit_vm_handles_cell_dst(XI_ARRAY_PUSH) == false);
+    assert(xi_lowering_generated_targets(XI_ARRAY_EXTEND) == (XI_LOWER_TARGET_AOT_C | XI_LOWER_TARGET_VM_BYTECODE));
+    assert(xi_lowering_required_targets(XI_ARRAY_EXTEND) == (XI_LOWER_TARGET_VM_BYTECODE | XI_LOWER_TARGET_AOT_C));
+    assert(xi_lowering_rejected_targets(XI_ARRAY_EXTEND) == (0));
+    assert(xi_lowering_template_kind(XI_ARRAY_EXTEND) == XI_LOWER_TEMPLATE_CUSTOM);
+    assert(xi_lowering_is_patterned(XI_ARRAY_EXTEND) == false);
+    assert(xi_emit_vm_requires_fresh_dst(XI_ARRAY_EXTEND) == false);
+    assert(xi_emit_vm_uses_raw_cell_args(XI_ARRAY_EXTEND) == false);
+    assert(xi_emit_vm_handles_cell_dst(XI_ARRAY_EXTEND) == false);
     assert(xi_lowering_generated_targets(XI_MAP_NEW) == (XI_LOWER_TARGET_AOT_C | XI_LOWER_TARGET_VM_BYTECODE));
     assert(xi_lowering_required_targets(XI_MAP_NEW) == (XI_LOWER_TARGET_VM_BYTECODE | XI_LOWER_TARGET_AOT_C));
     assert(xi_lowering_rejected_targets(XI_MAP_NEW) == (0));
@@ -1050,6 +1066,14 @@ int main(void) {
     assert(xi_emit_vm_requires_fresh_dst(XI_JSON_SET_F) == false);
     assert(xi_emit_vm_uses_raw_cell_args(XI_JSON_SET_F) == false);
     assert(xi_emit_vm_handles_cell_dst(XI_JSON_SET_F) == false);
+    assert(xi_lowering_generated_targets(XI_JSON_MERGE) == (XI_LOWER_TARGET_AOT_C | XI_LOWER_TARGET_VM_BYTECODE));
+    assert(xi_lowering_required_targets(XI_JSON_MERGE) == (XI_LOWER_TARGET_VM_BYTECODE | XI_LOWER_TARGET_AOT_C));
+    assert(xi_lowering_rejected_targets(XI_JSON_MERGE) == (0));
+    assert(xi_lowering_template_kind(XI_JSON_MERGE) == XI_LOWER_TEMPLATE_CUSTOM);
+    assert(xi_lowering_is_patterned(XI_JSON_MERGE) == false);
+    assert(xi_emit_vm_requires_fresh_dst(XI_JSON_MERGE) == false);
+    assert(xi_emit_vm_uses_raw_cell_args(XI_JSON_MERGE) == false);
+    assert(xi_emit_vm_handles_cell_dst(XI_JSON_MERGE) == false);
     assert(xi_lowering_generated_targets(XI_JSON_DECODE) == (XI_LOWER_TARGET_AOT_C | XI_LOWER_TARGET_VM_BYTECODE));
     assert(xi_lowering_required_targets(XI_JSON_DECODE) == (XI_LOWER_TARGET_VM_BYTECODE | XI_LOWER_TARGET_AOT_C));
     assert(xi_lowering_rejected_targets(XI_JSON_DECODE) == (XI_LOWER_TARGET_AOT_C));

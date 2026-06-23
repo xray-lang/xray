@@ -1,0 +1,66 @@
+// anchor: spread-array-object
+// D40: array spread [...a, ...b, x] and object spread {...base, x: 1}.
+// Exercised through the VM/AOT differential runner for parity.
+
+// ---- Array spread ----
+let a = [1, 2, 3]
+let b = [4, 5]
+
+let head = [0, ...a]
+print(head)
+
+let tail = [...a, 99]
+print(tail)
+
+let middle = [...a, 42, ...b]
+print(middle)
+print(middle.length)
+
+let only = [...a]
+print(only)
+print(only.length)
+
+let empty: Array<int> = []
+let from_empty = [...empty, ...b]
+print(from_empty)
+
+let nested = [[1, 2], [3]]
+let flat = [...nested[0], ...nested[1], 7]
+print(flat)
+
+// string element arrays
+let s1 = ["x", "y"]
+let s2 = ["z"]
+print([...s1, "mid", ...s2])
+
+// spread does not consume the source: a is still usable
+print(a)
+print(a.length)
+
+// ---- Object spread ----
+let base = { x: 1, y: 2 }
+
+let added = { ...base, z: 3 }
+print(added.x, added.y, added.z)
+
+let overridden = { ...base, y: 20 }
+print(overridden.x, overridden.y)
+
+let two = { ...base, ...{ y: 7, w: 8 } }
+print(two.x, two.y, two.w)
+
+let q = 11
+let with_shorthand = { ...base, q }
+print(with_shorthand.x, with_shorthand.q)
+
+// later spread overrides earlier
+let chain = { ...base, ...{ x: 100 }, y: 200 }
+print(chain.x, chain.y)
+
+// source object is not consumed
+print(base.x, base.y)
+
+// computed key alongside spread
+let key = "dyn"
+let computed = { ...base, [key]: 55 }
+print(computed.x, computed["dyn"])

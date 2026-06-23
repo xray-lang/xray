@@ -89,6 +89,8 @@
     X(INDEX_GET, xi_emit_index_get) \
     X(INDEX_SET, xi_emit_index_set) \
     X(ARRAY_NEW, xi_emit_array_new) \
+    X(ARRAY_PUSH, xi_emit_array_push) \
+    X(ARRAY_EXTEND, xi_emit_array_extend) \
     X(MAP_NEW, xi_emit_map_new) \
     X(SET_NEW, xi_emit_set_new) \
     X(STR_CONCAT, xi_emit_str_concat) \
@@ -119,6 +121,7 @@
     X(JSON_INIT_F, xi_emit_json_init_f) \
     X(JSON_GET_F, xi_emit_json_get_f) \
     X(JSON_SET_F, xi_emit_json_set_f) \
+    X(JSON_MERGE, xi_emit_json_merge) \
     X(JSON_DECODE, xi_emit_json_decode) \
     X(STRUCT_NEW, xi_emit_struct_new) \
     X(STRUCT_GET, xi_emit_struct_get) \

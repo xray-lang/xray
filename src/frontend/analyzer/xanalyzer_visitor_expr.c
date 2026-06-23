@@ -1252,33 +1252,55 @@ XrType *xa_visit_array_literal(XaInferContext *ctx, AstNode *node) {
         return xr_type_new_array(ctx->analyzer->isolate, xr_type_new_unknown(NULL));
     }
 
-    // Propagate expected element type to children
+    // Propagate expected element type to children. A `...spread` element
+    // contributes a whole array, so its source is checked against the array
+    // type (T[]); plain elements are checked against the element type (T).
     XrType *saved_expected = ctx->expected_type;
+    XrType *expected_array = NULL;
     if (ctx->expected_type && XR_TYPE_IS_ARRAY(ctx->expected_type) &&
         ctx->expected_type->container.element_type) {
         target_elem_type = ctx->expected_type->container.element_type;
-        ctx->expected_type = ctx->expected_type->container.element_type;
-    } else {
-        ctx->expected_type = NULL;
+        expected_array = ctx->expected_type;
     }
 
-    // Infer element type from first element
-    XrType *elem_type = xa_visit_infer_expr(ctx, arr->elements[0]);
     bool use_target_elem_type = (target_elem_type != NULL);
-    if (use_target_elem_type && !XR_TYPE_IS_UNKNOWN(elem_type) &&
-        !xa_typecheck_assignable(target_elem_type, elem_type)) {
-        use_target_elem_type = false;
-    }
+    XrType *elem_type = NULL;
 
-    // Union with other element types
-    for (int i = 1; i < arr->count; i++) {
-        XrType *t = xa_visit_infer_expr(ctx, arr->elements[i]);
-        if (use_target_elem_type && !XR_TYPE_IS_UNKNOWN(t) &&
-            !xa_typecheck_assignable(target_elem_type, t)) {
+    for (int i = 0; i < arr->count; i++) {
+        AstNode *child = arr->elements[i];
+        XrType *contributed = NULL;
+        if (child && child->type == AST_SPREAD_EXPR) {
+            // Spread source must be an array; splice its element type in.
+            ctx->expected_type = expected_array;
+            XrType *src = xa_visit_infer_expr(ctx, child->as.spread_expr.expr);
+            if (src && XR_TYPE_IS_ARRAY(src) && src->container.element_type) {
+                contributed = src->container.element_type;
+            } else {
+                if (src && !XR_TYPE_IS_UNKNOWN(src)) {
+                    XrLocation loc = {
+                        .file = ctx->file_path, .line = child->line, .column = child->column};
+                    char msg[160];
+                    snprintf(msg, sizeof(msg),
+                             "array spread '...' source must be an array, got '%s'",
+                             xr_type_to_string(src));
+                    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                               XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
+                }
+                contributed = xr_type_new_unknown(NULL);
+            }
+        } else {
+            ctx->expected_type = target_elem_type;
+            contributed = xa_visit_infer_expr(ctx, child);
+        }
+
+        if (use_target_elem_type && contributed && !XR_TYPE_IS_UNKNOWN(contributed) &&
+            !xa_typecheck_assignable(target_elem_type, contributed)) {
             use_target_elem_type = false;
         }
-        if (!xr_type_equals(elem_type, t)) {
-            elem_type = xr_type_union(ctx->analyzer->isolate, elem_type, t);
+        if (!elem_type) {
+            elem_type = contributed;
+        } else if (contributed && !xr_type_equals(elem_type, contributed)) {
+            elem_type = xr_type_union(ctx->analyzer->isolate, elem_type, contributed);
         }
     }
 
@@ -1286,7 +1308,8 @@ XrType *xa_visit_array_literal(XaInferContext *ctx, AstNode *node) {
     if (use_target_elem_type) {
         return xr_type_new_array(ctx->analyzer->isolate, target_elem_type);
     }
-    return xr_type_new_array(ctx->analyzer->isolate, elem_type);
+    return xr_type_new_array(ctx->analyzer->isolate,
+                             elem_type ? elem_type : xr_type_new_unknown(NULL));
 }
 
 XrType *xa_visit_map_literal(XaInferContext *ctx, AstNode *node) {
@@ -1343,6 +1366,21 @@ XrType *xa_visit_map_literal(XaInferContext *ctx, AstNode *node) {
     return result;
 }
 
+// Add (name, type) to the unified field list, overriding the type if `name`
+// is already present (later object-literal entries / spread parts win).
+static void object_union_add(const char **names, XrType **types, int *n, const char *name,
+                             XrType *type) {
+    for (int k = 0; k < *n; k++) {
+        if (names[k] && name && strcmp(names[k], name) == 0) {
+            types[k] = type;
+            return;
+        }
+    }
+    names[*n] = name;
+    types[*n] = type;
+    (*n)++;
+}
+
 XrType *xa_visit_object_literal(XaInferContext *ctx, AstNode *node) {
     if (!ctx || !node)
         return xr_type_new_json(NULL);
@@ -1351,46 +1389,97 @@ XrType *xa_visit_object_literal(XaInferContext *ctx, AstNode *node) {
     if (obj->count == 0)
         return xr_type_new_json(NULL);
 
-    // Collect field names and types
-    const char **field_names = (const char **) xr_malloc(sizeof(char *) * obj->count);
-    XrType **field_types = (XrType **) xr_malloc(sizeof(XrType *) * obj->count);
-
+    // Pass 1: infer each entry's contributing type exactly once (a spread
+    // contributes its source object, a normal entry contributes its value),
+    // and bound the unified field set. The result field set is the union of
+    // every statically-known source field plus each literal key.
+    XrType **entry_types = (XrType **) xr_malloc(sizeof(XrType *) * (size_t) obj->count);
+    int cap = 0;
     for (int i = 0; i < obj->count; i++) {
-        // Get field name (computed properties have runtime-only keys)
-        bool is_computed = obj->computed && obj->computed[i];
-        if (is_computed) {
-            field_names[i] = NULL;
-        } else if (obj->keys[i] && obj->keys[i]->type == AST_VARIABLE) {
-            field_names[i] = obj->keys[i]->as.variable.name;
-        } else if (obj->keys[i] && obj->keys[i]->type == AST_LITERAL_STRING) {
-            field_names[i] = obj->keys[i]->as.literal.raw_value.string_val;
+        AstNode *val = obj->values[i];
+        if (val && val->type == AST_SPREAD_EXPR) {
+            XrType *src = xa_visit_infer_expr(ctx, val->as.spread_expr.expr);
+            entry_types[i] = src;
+            if (src && XR_TYPE_IS_JSON(src)) {
+                cap += src->object.field_count;
+            } else if (src && !XR_TYPE_IS_UNKNOWN(src)) {
+                XrLocation loc = {.file = ctx->file_path, .line = val->line, .column = val->column};
+                char msg[160];
+                snprintf(msg, sizeof(msg), "object spread '...' source must be an object, got '%s'",
+                         xr_type_to_string(src));
+                xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                           XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
+            }
         } else {
-            field_names[i] = NULL;
+            entry_types[i] = xa_visit_infer_expr(ctx, obj->values[i]);
+            cap += 1;
+
+            // Warn (not error) for non-serializable types in object literals.
+            if (entry_types[i] && !xr_type_is_json_field_compatible(entry_types[i])) {
+                const char *fname = "<computed>";
+                if (!(obj->computed && obj->computed[i]) && obj->keys[i]) {
+                    if (obj->keys[i]->type == AST_VARIABLE)
+                        fname = obj->keys[i]->as.variable.name;
+                    else if (obj->keys[i]->type == AST_LITERAL_STRING)
+                        fname = obj->keys[i]->as.literal.raw_value.string_val;
+                }
+                XrLocation loc = {.file = ctx->file_path,
+                                  .line = obj->values[i]->line,
+                                  .column = obj->values[i]->column};
+                char msg[256];
+                snprintf(msg, sizeof(msg),
+                         "field '%s' has type '%s' which is not JSON-serializable; "
+                         "Json.stringify() will throw at runtime",
+                         fname, xr_type_to_string(entry_types[i]));
+                xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_WARNING,
+                                           XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
+            }
         }
+    }
+    if (cap < 1)
+        cap = 1;
 
-        // Infer field type
-        field_types[i] = xa_visit_infer_expr(ctx, obj->values[i]);
-
-        // Warn (not error) for non-serializable types in object literals.
-        // Object literals can hold any value at runtime, but non-JSON types
-        // will cause Json.stringify() to throw at runtime.
-        if (field_types[i] && !xr_type_is_json_field_compatible(field_types[i])) {
-            XrLocation loc = {.file = ctx->file_path,
-                              .line = obj->values[i]->line,
-                              .column = obj->values[i]->column};
-            char msg[256];
-            const char *fname = field_names[i] ? field_names[i] : "<computed>";
-            snprintf(msg, sizeof(msg),
-                     "field '%s' has type '%s' which is not JSON-serializable; "
-                     "Json.stringify() will throw at runtime",
-                     fname, xr_type_to_string(field_types[i]));
-            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_WARNING,
-                                       XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
+    // Pass 2: build the unified field set in first-appearance order.
+    const char **field_names = (const char **) xr_malloc(sizeof(char *) * (size_t) cap);
+    XrType **field_types = (XrType **) xr_malloc(sizeof(XrType *) * (size_t) cap);
+    int n = 0;
+    for (int i = 0; i < obj->count; i++) {
+        AstNode *val = obj->values[i];
+        if (val && val->type == AST_SPREAD_EXPR) {
+            XrType *src = entry_types[i];
+            if (src && XR_TYPE_IS_JSON(src) && src->object.field_count > 0 &&
+                src->object.field_names) {
+                for (int j = 0; j < src->object.field_count; j++) {
+                    const char *fname = src->object.field_names[j];
+                    if (!fname)
+                        continue;
+                    XrType *ftype = src->object.field_types ? src->object.field_types[j] : NULL;
+                    object_union_add(field_names, field_types, &n, fname, ftype);
+                }
+            }
+            // Dynamic Json source: fields unknown at compile time; they are
+            // merged at runtime and not part of the static shape.
+        } else {
+            bool is_computed = obj->computed && obj->computed[i];
+            const char *fname = NULL;
+            if (!is_computed && obj->keys[i]) {
+                if (obj->keys[i]->type == AST_VARIABLE)
+                    fname = obj->keys[i]->as.variable.name;
+                else if (obj->keys[i]->type == AST_LITERAL_STRING)
+                    fname = obj->keys[i]->as.literal.raw_value.string_val;
+            }
+            if (fname)
+                object_union_add(field_names, field_types, &n, fname, entry_types[i]);
         }
     }
 
-    XrType *type = xr_type_new_json_with_fields(ctx->analyzer->isolate, field_names, field_types,
-                                                obj->count, false);
+    XrType *type;
+    if (n == 0)
+        type = xr_type_new_json(ctx->analyzer->isolate);
+    else
+        type = xr_type_new_json_with_fields(ctx->analyzer->isolate, field_names, field_types, n,
+                                            false);
+    xr_free(entry_types);
     xr_free(field_names);
     xr_free(field_types);
 

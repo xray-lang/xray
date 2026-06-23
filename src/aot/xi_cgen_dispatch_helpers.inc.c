@@ -2874,6 +2874,47 @@ static void xicgen_index_set(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
     fprintf(out, ")");
 }
 
+/* Object spread merge: `xrt_json_merge(dst, src)`. */
+static void xicgen_json_merge(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                              const char *prefix) {
+    (void) f;
+    (void) prefix;
+    XR_DCHECK(v->nargs >= 2, "xicgen_json_merge: need dst and src");
+    fprintf(out, "xrt_json_merge(");
+    emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
+    fprintf(out, ", ");
+    emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
+    fprintf(out, ")");
+}
+
+/* Array spread append: `xrt_array_push(dst, val)`.  Always routed through the
+ * tagged runtime helper (no typed-array data cache): the destination grows, so
+ * prepare marks it uncacheable (array_value_has_uncacheable_use). */
+static void xicgen_array_push(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                              const char *prefix) {
+    (void) f;
+    (void) prefix;
+    XR_DCHECK(v->nargs >= 2, "xicgen_array_push: need array and value");
+    fprintf(out, "xrt_array_push(");
+    emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
+    fprintf(out, ", ");
+    emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
+    fprintf(out, ")");
+}
+
+/* Array spread splice: `xrt_array_extend(dst, src)`. */
+static void xicgen_array_extend(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                                const char *prefix) {
+    (void) f;
+    (void) prefix;
+    XR_DCHECK(v->nargs >= 2, "xicgen_array_extend: need dst and src");
+    fprintf(out, "xrt_array_extend(");
+    emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
+    fprintf(out, ", ");
+    emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
+    fprintf(out, ")");
+}
+
 static void xicgen_tuple_new(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                              const char *prefix) {
     (void) ctx;

@@ -282,13 +282,25 @@ for (i in 0..=n) { print(i) }
 - **函数 rest 参数声明**：`fn f(...args: int)`
 - **函数调用展开**：`f(...args)`，展开源必须是静态 arity 已知的 tuple。
 - **tuple 字面量展开**：`(head, ...tail)`，展开源必须是静态 arity 已知的 tuple。
+- **数组字面量展开**：`[...a, x, ...b]`，展开源必须是数组，运行期拼接成新数组（O(n)）。
+- **对象/record 字面量展开**：`{...base, x: 1}`，展开源必须是对象；字段合并成新对象，同名字段后者覆盖前者，结果字段集为各展开源字段与字面量字段的并集。
+
+```xray @id=expr-spread-collections
+let a = [1, 2]
+let b = [3, 4]
+let nums = [...a, 99, ...b]            // [1, 2, 99, 3, 4]
+
+let base = { x: 1, y: 2 }
+let point = { ...base, y: 20, z: 3 }   // { x: 1, y: 20, z: 3 }
+```
 
 ### 3.10 字面量构造
 
 #### Array `[...]`
 
 ```ebnf
-ArrayLit ::= '[' (Expr (',' Expr)* ','?)? ']'
+ArrayLit  ::= '[' (ArrayElem (',' ArrayElem)* ','?)? ']'
+ArrayElem ::= '...' Expr | Expr
 ```
 
 ```xray @id=expr-array-lit
@@ -329,6 +341,7 @@ let empty = #[]
 ObjectLit  ::= '{' ObjectField (',' ObjectField)* ','? '}'
 ObjectField ::= Identifier ':' Expr
               | Identifier            // shorthand: `{ x }` 等价 `{ x: x }`
+              | '...' Expr            // spread: `{ ...base }` 合并字段
 ```
 
 ```xray @id=expr-object-lit
@@ -820,13 +833,25 @@ Allowed in the following positions only:
 - **Function rest parameter declaration**: `fn f(...args: int)`
 - **Function call spread**: `f(...args)`; the spread source must be a tuple whose arity is statically known.
 - **Tuple literal spread**: `(head, ...tail)`; the spread source must be a tuple whose arity is statically known.
+- **Array literal spread**: `[...a, x, ...b]`; the spread source must be an array. The result is a new array built by runtime concatenation (O(n)).
+- **Object/record literal spread**: `{...base, x: 1}`; the spread source must be an object. Fields are merged into a new object; on a name clash the later field wins, and the result field set is the union of every source's fields and the literal fields.
+
+```xray @id=expr-spread-collections
+let a = [1, 2]
+let b = [3, 4]
+let nums = [...a, 99, ...b]            // [1, 2, 99, 3, 4]
+
+let base = { x: 1, y: 2 }
+let point = { ...base, y: 20, z: 3 }   // { x: 1, y: 20, z: 3 }
+```
 
 ### 3.10 Literal Construction
 
 #### Array `[...]`
 
 ```ebnf
-ArrayLit ::= '[' (Expr (',' Expr)* ','?)? ']'
+ArrayLit  ::= '[' (ArrayElem (',' ArrayElem)* ','?)? ']'
+ArrayElem ::= '...' Expr | Expr
 ```
 
 ```xray @id=expr-array-lit
@@ -867,6 +892,7 @@ let empty = #[]
 ObjectLit  ::= '{' ObjectField (',' ObjectField)* ','? '}'
 ObjectField ::= Identifier ':' Expr
               | Identifier            // shorthand: `{ x }` ≡ `{ x: x }`
+              | '...' Expr            // spread: `{ ...base }` merges fields
 ```
 
 ```xray @id=expr-object-lit

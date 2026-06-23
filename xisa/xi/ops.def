@@ -627,6 +627,22 @@
   :observable ()
   :targets (vm-bytecode aot-c aot-verify))
 
+; Object spread `{...base, x: 1}`: copy every field of the source object into
+; the destination (later fields override earlier ones). Source is borrowed; the
+; destination escapes to the heap.
+(define-xi-op xi.json.merge
+  :class memory-write
+  :arity 2
+  :result-kind void
+  :result-ownership none
+  :tbaa-group json
+  :escape-use heap
+  :own-use borrow
+  :effects (side-effect memory-read memory-write)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode aot-c aot-verify))
+
 (define-xi-op xi.json.decode
   :class allocation
   :arity 1
@@ -640,6 +656,38 @@
   :arity variadic
   :escape-alloc heap
   :effects (side-effect memory-write allocates)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode aot-c aot-verify))
+
+; Array spread builders. `xi.array.push` appends one element (arg1 consumed,
+; like index.set's stored value); `xi.array.extend` splices every element of
+; the source array into the destination (both args borrowed — the runtime
+; retains each copied element internally, so the source keeps its references).
+; Both grow the destination, so the destination escapes to the heap (no
+; special arg0 carve-out): a spread array can never be stack-allocated.
+(define-xi-op xi.array.push
+  :class memory-write
+  :arity 2
+  :result-kind void
+  :result-ownership none
+  :tbaa-group array
+  :escape-use heap
+  :own-use stored-value
+  :effects (side-effect memory-write)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode aot-c aot-verify))
+
+(define-xi-op xi.array.extend
+  :class memory-write
+  :arity 2
+  :result-kind void
+  :result-ownership none
+  :tbaa-group array
+  :escape-use heap
+  :own-use borrow
+  :effects (side-effect memory-read memory-write)
   :requires ()
   :observable ()
   :targets (vm-bytecode aot-c aot-verify))

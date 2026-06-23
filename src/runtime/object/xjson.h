@@ -62,6 +62,12 @@ XR_FUNC bool xr_json_set(XrayIsolate *X, XrJson *json, SymbolId symbol, XrValue 
 XR_FUNC XrValue xr_json_get_by_key(XrayIsolate *X, XrJson *json, const char *key);
 XR_FUNC bool xr_json_set_by_key(XrayIsolate *X, XrJson *json, const char *key, XrValue value);
 
+// Copy every field of `src` into `dst` (object spread `{...src}`). Each value
+// is retained (src keeps its own reference); existing fields are overwritten so
+// later spread parts override earlier ones. Returns false only if `dst` is
+// sealed and a new field cannot be added.
+XR_FUNC bool xr_json_merge(XrayIsolate *X, XrJson *dst, XrJson *src);
+
 /* ========== Query API ========== */
 
 static inline uint16_t xr_json_field_count(XrayIsolate *X, XrJson *json) {

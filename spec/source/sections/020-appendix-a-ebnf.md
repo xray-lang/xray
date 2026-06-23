@@ -115,12 +115,13 @@ Primary ::= IntLiteral | FloatLiteral | BigIntLiteral
          |  '(' Expression ')'
          |  '(' Expression (',' Expression)+ ')'  // tuple
 
-ArrayLit ::= '[' (Expression (',' Expression)* ','?)? ']'
+ArrayLit ::= '[' (ArrayElem (',' ArrayElem)* ','?)? ']'
+ArrayElem ::= '...' Expression | Expression
 MapLit   ::= '#{' (MapEntry (',' MapEntry)* ','?)? '}'
 MapEntry ::= Expression ':' Expression
 SetLit   ::= '#[' (Expression (',' Expression)* ','?)? ']'
 ObjectLit ::= '{' (ObjectFieldExpr (',' ObjectFieldExpr)* ','?)? '}'
-ObjectFieldExpr ::= Identifier ':' Expression | Identifier
+ObjectFieldExpr ::= Identifier ':' Expression | Identifier | '...' Expression
 
 ArrowFunction ::= '(' ArrowParams? ')' '->' (Expression | Block)
 ArrowParams ::= ArrowParam (',' ArrowParam)*
@@ -415,12 +416,13 @@ Primary ::= IntLiteral | FloatLiteral | BigIntLiteral
          |  '(' Expression ')'
          |  '(' Expression (',' Expression)+ ')'  // tuple
 
-ArrayLit ::= '[' (Expression (',' Expression)* ','?)? ']'
+ArrayLit ::= '[' (ArrayElem (',' ArrayElem)* ','?)? ']'
+ArrayElem ::= '...' Expression | Expression
 MapLit   ::= '#{' (MapEntry (',' MapEntry)* ','?)? '}'
 MapEntry ::= Expression ':' Expression
 SetLit   ::= '#[' (Expression (',' Expression)* ','?)? ']'
 ObjectLit ::= '{' (ObjectFieldExpr (',' ObjectFieldExpr)* ','?)? '}'
-ObjectFieldExpr ::= Identifier ':' Expression | Identifier
+ObjectFieldExpr ::= Identifier ':' Expression | Identifier | '...' Expression
 
 ArrowFunction ::= '(' ArrowParams? ')' '->' (Expression | Block)
 ArrowParams ::= ArrowParam (',' ArrowParam)*

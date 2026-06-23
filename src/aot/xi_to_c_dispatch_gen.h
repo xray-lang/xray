@@ -78,6 +78,8 @@
     X(INDEX_GET, "xi.index.get", xicgen_index_get) \
     X(INDEX_SET, "xi.index.set", xicgen_index_set) \
     X(ARRAY_NEW, "xi.array.new", xicgen_array_new) \
+    X(ARRAY_PUSH, "xi.array.push", xicgen_array_push) \
+    X(ARRAY_EXTEND, "xi.array.extend", xicgen_array_extend) \
     X(MAP_NEW, "xi.map.new", xicgen_map_new) \
     X(SET_NEW, "xi.set.new", xicgen_set_new) \
     X(STR_CONCAT, "xi.str.concat", xicgen_str_concat) \
@@ -90,6 +92,7 @@
     X(JSON_INIT_F, "xi.json.init.f", xicgen_json_init_f) \
     X(JSON_GET_F, "xi.json.get.f", xicgen_json_get_f) \
     X(JSON_SET_F, "xi.json.set.f", xicgen_json_set_f) \
+    X(JSON_MERGE, "xi.json.merge", xicgen_json_merge) \
     X(JSON_DECODE, "xi.json.decode", xicgen_reject_unsupported) \
     X(STRUCT_NEW, "xi.struct.new", xicgen_struct_new) \
     X(STRUCT_GET, "xi.struct.get", xicgen_struct_get) \
