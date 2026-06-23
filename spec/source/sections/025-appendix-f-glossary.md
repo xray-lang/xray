@@ -29,7 +29,6 @@ order: 025
 | **lvalue / rvalue** | 左值（可赋值）/ 右值（仅值） |
 | **monomorphization** | 单态化：泛型在构建期按具体类型/表示生成专门版本；函数泛型可按 I64 / F64 / PTR / BOOL 表示共享，class / struct 泛型按具体类型完整单态化 |
 | **move** | 所有权转移：跨协程时强制（见 §7.3） |
-| **NaN-boxing** | 用 IEEE-754 NaN 的位空间存放标记值 |
 | **nullable** | 可空类型 `T?`：值可以为 null |
 | **pattern** | 模式：用于 `match` 与解构（见 §6） |
 | **scope** | 作用域 |
@@ -39,7 +38,6 @@ order: 025
 | **TCO** | Tail-Call Optimization：尾调用优化 |
 | **trait** | Rust 术语；xray 用 `interface` |
 | **truthy** | 真值：控制流中非 `false` / `null` / `0` / `""` / 空集合的值视为真（见 §2.3.3） |
-| **monomorphization** | 单态化：泛型类型参数在编译期特化为具体类型，运行时保留类型信息 |
 | **union** | 联合类型 `A \| B` |
 | **upvalue** | 闭包捕获的外层变量 |
 | **VM** | Virtual Machine：xray 字节码虚拟机 |
@@ -72,7 +70,6 @@ order: 025
 | **lvalue / rvalue** | Assignable left-hand-side value vs. value-only right-hand-side |
 | **monomorphization** | Build-time specialization of generics into concrete type/representation versions; generic functions may share I64 / F64 / PTR / BOOL representation versions, while generic classes / structs are fully specialized by concrete type |
 | **move** | Ownership transfer: enforced when crossing coroutine boundaries (see §7.3) |
-| **NaN-boxing** | Storing tagged values inside the unused bits of an IEEE-754 NaN |
 | **nullable** | A nullable type `T?` whose value may be `null` |
 | **pattern** | A pattern used in `match` and destructuring (see §6) |
 | **scope** | Lexical scope |
@@ -82,7 +79,6 @@ order: 025
 | **TCO** | Tail-Call Optimization |
 | **trait** | Rust terminology; xray uses `interface` |
 | **truthy** | A value treated as true in control flow when it is not `false` / `null` / `0` / `""` / an empty collection (see §2.3.3) |
-| **monomorphization** | Specializing generic type parameters at compile time into concrete versions while retaining runtime type information |
 | **union** | Union type `A \| B` |
 | **upvalue** | Outer variable captured by a closure |
 | **VM** | Virtual Machine: xray bytecode VM |

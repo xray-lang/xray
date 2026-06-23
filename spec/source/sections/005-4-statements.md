@@ -263,7 +263,7 @@ throw AppError.NotFound                      // 值返回错误通道
 - `try` 必须至少跟一个 `catch` 或 `catch panic` 子句。
 - `catch (e)` 捕获经值返回通道传播的可恢复错误（用户 `throw <enum>`）；用 `match (e)` 解构错误值。
 - `catch panic (p)` 捕获运行时故障（除零、越界、`expr!`、`assert`），与可恢复错误严格分离。
-- `throw` 的操作数是错误值（通常为 enum），经值返回通道传播：零开销、无栈展开。
+- `throw` 的操作数是错误值（通常为 enum），经值返回通道传播：不分配 `Exception`、不展开栈；需要传播或捕获错误的调用边界只经过可预测分支。
 - 没有 `finally`：用 `defer`（§4.9）做确定性清理。
 - 完整错误语义见 [§8](#8-错误处理-error-handling)。
 
@@ -577,7 +577,7 @@ throw AppError.NotFound                      // value-return error channel
 - A `try` must be followed by at least one `catch` or `catch panic` clause.
 - `catch (e)` catches recoverable errors propagated through the value-return channel (a user `throw <enum>`); use `match (e)` to destructure the error value.
 - `catch panic (p)` catches runtime faults (div-by-zero, out-of-bounds, `expr!`, `assert`), strictly separated from recoverable errors.
-- The `throw` operand is an error value (typically an enum) propagated through the value-return channel: zero-cost, no stack unwinding.
+- The `throw` operand is an error value (typically an enum) propagated through the value-return channel: no `Exception` allocation, no stack unwinding, and only a predictable branch at call boundaries that may propagate or catch errors.
 - There is no `finally`: use `defer` (§4.9) for deterministic cleanup.
 - For full error semantics see [§8](#8-error-handling).
 

@@ -3021,7 +3021,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "\n"
             "## Error Handling (throw / catch)\n"
             "\n"
-            "Xray uses a zero-overhead value-return error channel: `throw <enum>` sets an error, `try/catch` handles it.\n"
+            "Xray uses a low-overhead value-return error channel: `throw <enum>` sets an error, `try/catch` handles it without Exception allocation or stack unwinding.\n"
             "\n"
             "### throw\n"
             "`throw expr` writes an enum variant into the error channel and returns. The operand must be an enum variant value. No stack unwinding occurs.\n"
@@ -3034,7 +3034,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "\n"
             "### Design principles\n"
             "- Errors are values (enum variants), not exceptions\n"
-            "- Zero overhead on the happy path (single conditional branch)\n"
+            "- No Exception allocation or stack unwinding; only a predictable branch at call boundaries that may propagate or catch errors\n"
             "- No `throws` in function signatures \xe2\x80\x94 errors are implicit\n"
             "- Use ADT enums for structured error causes with exhaustive `match`\n"
             "",
