@@ -180,7 +180,8 @@ static XrValue base64_encodeBytes(XrVMRuntime *X, XrValue *args, int argc) {
             return xr_null();
         for (size_t i = 0; i < len; i++) {
             XrValue v = xr_array_get_element(arr, (int32_t) i);
-            buf[i] = (unsigned char) (XR_IS_INT(v) ? XR_TO_INT(v) : 0);
+            buf[i] =
+                xr_base64_core_byte_from_array_lane(XR_IS_INT(v), XR_IS_INT(v) ? XR_TO_INT(v) : 0);
         }
         size_t out_len;
         char *encoded = base64_encode_internal(buf, len, false, true, &out_len);
