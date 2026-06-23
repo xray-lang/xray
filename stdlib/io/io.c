@@ -28,6 +28,7 @@
 #include "../../src/coro/xnetpoll.h"
 #include "../../src/coro/xworker.h"
 #include "../../src/shared/xr_io_core.h"
+#include "../../src/shared/xr_os_core.h"
 #include "../../src/vm/xvm.h"  // xr_vm_yieldable_cfunction_new (XRS_EXPORT_YIELDABLE)
 #include "../../src/runtime/xisolate_internal.h"
 #include <stdio.h>
@@ -1095,22 +1096,10 @@ static XrValue io_realpath(XrVMRuntime *X, XrValue *args, int argc) {
     return xrs_string_value_c(X, resolved);
 }
 
-// Determine the directory used for xray-generated temporary entries. Honours
-// TMPDIR / TMP / TEMP before falling back to /tmp or the Windows temp path.
-static const char *io_tempdir_root(void) {
-    const char *d = getenv("TMPDIR");
-    if (!d || !d[0])
-        d = getenv("TMP");
-    if (!d || !d[0])
-        d = getenv("TEMP");
-    if (!d || !d[0]) {
-#ifdef XR_OS_WINDOWS
-        d = "C:\\Windows\\Temp";
-#else
-        d = "/tmp";
-#endif
-    }
-    return d;
+// Adapter for xr_os_core_tmpdir(); fallback ordering lives in shared core.
+static const char *io_core_getenv(void *ctx, const char *name) {
+    (void) ctx;
+    return getenv(name);
 }
 
 // tempFile() - Create temporary file, return path
@@ -1128,8 +1117,8 @@ static XrValue io_tempFile(XrVMRuntime *X, XrValue *args, int argc) {
         return xr_null();
     snprintf(tpl, sizeof(tpl), "%s", tmpfile);
 #else
-    int n = snprintf(tpl, sizeof(tpl), "%s/xray_XXXXXX", io_tempdir_root());
-    if (n <= 0 || n >= (int) sizeof(tpl))
+    const char *root = xr_os_core_tmpdir(io_core_getenv, NULL);
+    if (!xr_io_core_temp_template(root, '/', "xray_XXXXXX", tpl, sizeof(tpl)))
         return xr_null();
     int fd = mkstemp(tpl);
     if (fd < 0)
@@ -1158,8 +1147,8 @@ static XrValue io_tempDir(XrVMRuntime *X, XrValue *args, int argc) {
         return xr_null();
     snprintf(tpl, sizeof(tpl), "%s", tmpfile);
 #else
-    int n = snprintf(tpl, sizeof(tpl), "%s/xray_XXXXXX", io_tempdir_root());
-    if (n <= 0 || n >= (int) sizeof(tpl))
+    const char *root = xr_os_core_tmpdir(io_core_getenv, NULL);
+    if (!xr_io_core_temp_template(root, '/', "xray_XXXXXX", tpl, sizeof(tpl)))
         return xr_null();
     if (mkdtemp(tpl) == NULL)
         return xr_null();

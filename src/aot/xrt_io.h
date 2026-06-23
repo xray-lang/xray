@@ -12,6 +12,7 @@
 #define XRT_IO_H
 
 #include "../shared/xr_io_core.h"
+#include "../shared/xr_os_core.h"
 #include "xrt_arc.h"
 #include "xrt_coll.h"
 #include "xrt_value.h"
@@ -682,20 +683,9 @@ static inline XrValue xrt_io_readlink(const char *path_data, int64_t path_len) {
     return result;
 }
 
-static inline const char *xrt_io_tempdir_root(void) {
-    const char *d = getenv("TMPDIR");
-    if (!d || !d[0])
-        d = getenv("TMP");
-    if (!d || !d[0])
-        d = getenv("TEMP");
-    if (!d || !d[0]) {
-#if defined(XR_OS_WINDOWS)
-        d = "C:\\Windows\\Temp";
-#else
-        d = "/tmp";
-#endif
-    }
-    return d;
+static inline const char *xrt_io_core_getenv(void *ctx, const char *name) {
+    (void) ctx;
+    return getenv(name);
 }
 
 static inline XrValue xrt_io_temp_file(void) {
@@ -709,8 +699,8 @@ static inline XrValue xrt_io_temp_file(void) {
         return XR_NULL_VAL;
     snprintf(tpl, sizeof(tpl), "%s", tmpfile);
 #else
-    int n = snprintf(tpl, sizeof(tpl), "%s/xray_XXXXXX", xrt_io_tempdir_root());
-    if (n <= 0 || n >= (int) sizeof(tpl))
+    const char *root = xr_os_core_tmpdir(xrt_io_core_getenv, NULL);
+    if (!xr_io_core_temp_template(root, '/', "xray_XXXXXX", tpl, sizeof(tpl)))
         return XR_NULL_VAL;
     int fd = mkstemp(tpl);
     if (fd < 0)
@@ -734,8 +724,8 @@ static inline XrValue xrt_io_temp_dir(void) {
         return XR_NULL_VAL;
     snprintf(tpl, sizeof(tpl), "%s", tmpfile);
 #else
-    int n = snprintf(tpl, sizeof(tpl), "%s/xray_XXXXXX", xrt_io_tempdir_root());
-    if (n <= 0 || n >= (int) sizeof(tpl))
+    const char *root = xr_os_core_tmpdir(xrt_io_core_getenv, NULL);
+    if (!xr_io_core_temp_template(root, '/', "xray_XXXXXX", tpl, sizeof(tpl)))
         return XR_NULL_VAL;
     if (!mkdtemp(tpl))
         return XR_NULL_VAL;

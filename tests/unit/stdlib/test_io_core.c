@@ -220,6 +220,21 @@ TEST(io_core_relative_path_from_base_trims_one_separator) {
     ASSERT_STR_EQ(rel, "");
 }
 
+TEST(io_core_temp_template_uses_explicit_separator_and_stem) {
+    char path[64];
+    ASSERT(xr_io_core_temp_template("/tmp", '/', "xray_XXXXXX", path, sizeof(path)));
+    ASSERT_STR_EQ(path, "/tmp/xray_XXXXXX");
+    ASSERT(xr_io_core_temp_template("C:\\Temp", '\\', "xray_XXXXXX", path, sizeof(path)));
+    ASSERT_STR_EQ(path, "C:\\Temp\\xray_XXXXXX");
+}
+
+TEST(io_core_temp_template_rejects_invalid_or_truncated_output) {
+    char path[8];
+    ASSERT(!xr_io_core_temp_template("", '/', "xray_XXXXXX", path, sizeof(path)));
+    ASSERT(!xr_io_core_temp_template("/tmp", '/', "", path, sizeof(path)));
+    ASSERT(!xr_io_core_temp_template("/tmp", '/', "xray_XXXXXX", path, sizeof(path)));
+}
+
 TEST(io_core_stat_field_names_are_shared_schema) {
     ASSERT_EQ_INT(XR_IO_CORE_STAT_FIELD_COUNT, 10);
     ASSERT_EQ_INT(XR_IO_CORE_STAT_SIZE, 0);
@@ -273,6 +288,8 @@ RUN_TEST(io_core_dot_dir_entry_recognizes_reserved_names);
 RUN_TEST(io_core_join_child_path_uses_explicit_separator);
 RUN_TEST(io_core_join_child_path_rejects_empty_or_truncated_paths);
 RUN_TEST(io_core_relative_path_from_base_trims_one_separator);
+RUN_TEST(io_core_temp_template_uses_explicit_separator_and_stem);
+RUN_TEST(io_core_temp_template_rejects_invalid_or_truncated_output);
 
 RUN_TEST_SUITE("IO Core - stat");
 RUN_TEST(io_core_stat_field_names_are_shared_schema);
