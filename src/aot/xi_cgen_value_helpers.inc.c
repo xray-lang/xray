@@ -256,23 +256,41 @@ static void cg_prepare_cell_vars(XiCgenCtx *ctx, const XiFunc *f) {
     }
 }
 
-static void emit_c_string_literal(FILE *out, const char *s) {
+static void emit_c_string_literal_bytes(FILE *out, const char *s, size_t len) {
     fputc('"', out);
     if (s) {
-        for (const char *p = s; *p; p++) {
-            if (*p == '"')
-                fprintf(out, "\\\"");
-            else if (*p == '\\')
-                fprintf(out, "\\\\");
-            else if (*p == '\n')
-                fprintf(out, "\\n");
-            else if (*p == '\t')
-                fprintf(out, "\\t");
-            else
-                fputc(*p, out);
+        for (size_t i = 0; i < len; i++) {
+            unsigned char ch = (unsigned char) s[i];
+            switch (ch) {
+                case '\\':
+                    fputs("\\\\", out);
+                    break;
+                case '"':
+                    fputs("\\\"", out);
+                    break;
+                case '\n':
+                    fputs("\\n", out);
+                    break;
+                case '\r':
+                    fputs("\\r", out);
+                    break;
+                case '\t':
+                    fputs("\\t", out);
+                    break;
+                default:
+                    if (ch < 0x20 || ch >= 0x7f)
+                        fprintf(out, "\\%03o", (unsigned) ch);
+                    else
+                        fputc((int) ch, out);
+                    break;
+            }
         }
     }
     fputc('"', out);
+}
+
+static void emit_c_string_literal(FILE *out, const char *s) {
+    emit_c_string_literal_bytes(out, s, s ? strlen(s) : 0);
 }
 
 static void emit_enum_member_value_expr(XiCgenCtx *ctx, FILE *out, const XiEnumMemberData *member) {

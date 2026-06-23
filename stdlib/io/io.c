@@ -27,6 +27,7 @@
 #include "../../src/coro/xyieldable.h"
 #include "../../src/coro/xnetpoll.h"
 #include "../../src/coro/xworker.h"
+#include "../../src/shared/xr_io_core.h"
 #include "../../src/vm/xvm.h"  // xr_vm_yieldable_cfunction_new (XRS_EXPORT_YIELDABLE)
 #include "../../src/runtime/xisolate_internal.h"
 #include <stdio.h>
@@ -700,6 +701,61 @@ static XrValue io_copyFile(XrVMRuntime *X, XrValue *args, int argc) {
 #endif
 }
 
+static char *io_read_file_buffer_sync(const char *path, size_t *out_len) {
+    if (out_len)
+        *out_len = 0;
+    if (!path || path[0] == '\0')
+        return NULL;
+
+    FILE *f = fopen(path, "rb");
+    if (!f)
+        return NULL;
+    if (fseek(f, 0, SEEK_END) != 0) {
+        fclose(f);
+        return NULL;
+    }
+    long size = ftell(f);
+    if (size < 0 || size > IO_MAX_READ_BYTES) {
+        fclose(f);
+        return NULL;
+    }
+    if (fseek(f, 0, SEEK_SET) != 0) {
+        fclose(f);
+        return NULL;
+    }
+
+    char *buf = (char *) xr_malloc((size_t) size + 1);
+    if (!buf) {
+        fclose(f);
+        return NULL;
+    }
+    size_t n = fread(buf, 1, (size_t) size, f);
+    bool failed = ferror(f) != 0;
+    fclose(f);
+    if (failed) {
+        xr_free(buf);
+        return NULL;
+    }
+    buf[n] = '\0';
+    if (out_len)
+        *out_len = n;
+    return buf;
+}
+
+typedef struct IoReadLinesCtx {
+    XrVMRuntime *X;
+    XrArray *arr;
+} IoReadLinesCtx;
+
+static bool io_read_lines_push(void *ctx, const char *data, size_t len) {
+    IoReadLinesCtx *read_ctx = (IoReadLinesCtx *) ctx;
+    XrString *str = xr_string_intern(read_ctx->X, data, len, 0);
+    if (!str)
+        return false;
+    xr_array_push(read_ctx->arr, xr_string_value(str));
+    return true;
+}
+
 // readLines(path) - Read file by lines
 static XrValue io_readLines(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1)
@@ -708,33 +764,24 @@ static XrValue io_readLines(XrVMRuntime *X, XrValue *args, int argc) {
     if (!path)
         return xr_null();
 
-    FILE *f = fopen(path, "r");
-    if (!f)
+    size_t len = 0;
+    char *buf = io_read_file_buffer_sync(path, &len);
+    if (!buf)
         return xr_null();
 
     XrArray *arr = xr_array_new(xr_current_coro(X));
     if (!arr) {
-        fclose(f);
+        xr_free(buf);
         return xr_null();
     }
 
-    // getline() allocates via the libc allocator; we must release with free()
-    // (the matching deallocator), not xr_free. This is the single documented
-    // exception to the xr_malloc/xr_free symmetry rule.
-    char *line = NULL;
-    size_t cap = 0;
-    ssize_t len;
-    while ((len = getline(&line, &cap, f)) != -1) {
-        // Remove trailing newline
-        while (len > 0 && (line[len - 1] == '\n' || line[len - 1] == '\r')) {
-            len--;
-        }
-        XrString *str = xr_string_intern(X, line, (size_t) len, 0);
-        xr_array_push(arr, xr_string_value(str));
+    IoReadLinesCtx read_ctx = {X, arr};
+    if (!xr_io_core_read_lines_each(buf, len, io_read_lines_push, &read_ctx)) {
+        xr_free(buf);
+        return xr_null();
     }
-    free(line);  // libc-owned buffer, see comment above
 
-    fclose(f);
+    xr_free(buf);
     return xr_value_from_array(arr);
 }
 

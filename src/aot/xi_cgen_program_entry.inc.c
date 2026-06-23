@@ -13,7 +13,7 @@ XR_FUNC void xi_cgen_emit_str_literal_defs(XiCgenCtx *ctx, FILE *out) {
             out,
             "static const xrt_str_t _xstr_%d = {INT64_C(%zu), 0x%08xu, XRT_STR_LITERAL, (char *) ",
             lit->id, lit->len, xrt_str_hash_bytes(lit->str, lit->len));
-        emit_c_string_literal(out, lit->str);
+        emit_c_string_literal_bytes(out, lit->str, lit->len);
         fprintf(out, "};\n");
     }
     fprintf(out, "\n");
@@ -55,23 +55,7 @@ static const char *cg_source_dir_bounds(const char *file, size_t *out_len) {
 }
 
 static void emit_c_string_literal_n(FILE *out, const char *s, size_t len) {
-    fputc('"', out);
-    if (s) {
-        for (size_t i = 0; i < len; i++) {
-            char ch = s[i];
-            if (ch == '"')
-                fprintf(out, "\\\"");
-            else if (ch == '\\')
-                fprintf(out, "\\\\");
-            else if (ch == '\n')
-                fprintf(out, "\\n");
-            else if (ch == '\t')
-                fprintf(out, "\\t");
-            else
-                fputc(ch, out);
-        }
-    }
-    fputc('"', out);
+    emit_c_string_literal_bytes(out, s, len);
 }
 
 static void emit_optional_c_string_literal(FILE *out, const char *s) {

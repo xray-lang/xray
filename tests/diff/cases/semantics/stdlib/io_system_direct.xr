@@ -23,6 +23,20 @@ print(lines.length)
 print(lines[0])
 print(lines[1])
 
+let trailingFile = dir + "/trailing.txt"
+print(io.writeFile(trailingFile, "alpha\n"))
+let trailingLines = io.readLines(trailingFile)
+print(trailingLines.length)
+print(trailingLines[0])
+
+let crlfFile = dir + "/crlf.txt"
+print(io.writeFile(crlfFile, "a\r\n\r\nb\r\n"))
+let crlfLines = io.readLines(crlfFile)
+print(crlfLines.length)
+print(crlfLines[0])
+print(crlfLines[1] == "")
+print(crlfLines[2])
+
 let bytesFile = dir + "/bytes.bin"
 let bytes = new Bytes(3)
 bytes[0] = 65
