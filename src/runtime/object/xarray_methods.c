@@ -240,47 +240,9 @@ static XrValue m_repeat_from(XrVMRuntime *iso, XrValue self, XrValue *args, int 
 
 static XrValue m_slice(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     XrArray *arr = array_self(self);
-    int len = (int) arr->length;
-    int start = 0, end = len;
-    if (argc >= 1 && XR_IS_INT(args[0])) {
-        start = (int) XR_TO_INT(args[0]);
-        if (start < 0)
-            start = len + start;
-        if (start < 0)
-            start = 0;
-    }
-    if (argc >= 2 && XR_IS_INT(args[1])) {
-        end = (int) XR_TO_INT(args[1]);
-        if (end < 0)
-            end = len + end;
-        if (end > len)
-            end = len;
-    }
-    if (start >= end || start >= len) {
-        return xr_value_from_array(xr_array_new(xr_current_coro(iso)));
-    }
-    int count = end - start;
-    XrArray *result;
-    if (arr->elem_type != XR_ELEM_ANY) {
-        result = xr_array_with_capacity_typed(xr_current_coro(iso), count,
-                                              (XrArrayElemType) arr->elem_type);
-        if (result) {
-            result->elem_tid = arr->elem_tid;
-            memcpy(result->data, (uint8_t *) arr->data + (size_t) start * arr->elem_size,
-                   (size_t) count * arr->elem_size);
-            result->length = count;
-        }
-    } else {
-        result = xr_array_with_capacity(xr_current_coro(iso), count);
-        if (result) {
-            memcpy(result->data, (XrValue *) arr->data + start, (size_t) count * sizeof(XrValue));
-            result->length = count;
-            result->contains_refs = arr->contains_refs;
-            XrValue *data = (XrValue *) result->data;
-            for (int i = 0; i < count; i++)
-                xr_rc_retain_value(data[i]);
-        }
-    }
+    int64_t start = (argc >= 1 && XR_IS_INT(args[0])) ? XR_TO_INT(args[0]) : 0;
+    int64_t end = (argc >= 2 && XR_IS_INT(args[1])) ? XR_TO_INT(args[1]) : arr->length;
+    XrArray *result = xr_array_slice(xr_current_coro(iso), arr, start, end);
     return xr_value_from_array(result ? result : xr_array_new(xr_current_coro(iso)));
 }
 

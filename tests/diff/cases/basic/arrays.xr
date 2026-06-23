@@ -14,3 +14,13 @@ print(evens.length)
 
 let total = a.reduce((acc, x) -> acc + x, 0)
 print(total)
+
+let tail = a.slice(-4, -1)
+print(tail.length)
+print(tail[0])
+tail[1] = 33
+print(a[3])
+
+let syntax_tail = a[-4:-1]
+print(syntax_tail.length)
+print(syntax_tail[1])

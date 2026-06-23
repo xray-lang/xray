@@ -126,7 +126,7 @@ XR_FUNC void xr_array_ensure_capacity(XrArray *arr, int min_capacity);
 
 /* ====== Slice Operations (zero-copy) ====== */
 
-XR_FUNC XrArray *xr_array_slice(struct XrCoroutine *coro, XrArray *arr, int32_t start, int32_t end);
+XR_FUNC XrArray *xr_array_slice(struct XrCoroutine *coro, XrArray *arr, int64_t start, int64_t end);
 
 static inline bool xr_array_is_slice(XrArray *arr) {
     return arr && arr->data_storage == XR_ARRAY_DATA_BORROWED;

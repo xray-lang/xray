@@ -17,6 +17,7 @@
 
 #include "xarray.h"
 #include "../core/xr_runtime_core.h"
+#include "../../shared/xr_array_core.h"
 #include "../../base/xchecks.h"
 #include "../mem/xalloc_unified.h"
 #include "../mem/xheap.h"
@@ -672,19 +673,11 @@ void xr_array_ensure_capacity(XrArray *arr, int min_capacity) {
 
 // Create array slice with direct data pointer offset
 // data_storage == XR_ARRAY_DATA_BORROWED marks the slice as non-resizable
-XrArray *xr_array_slice(struct XrCoroutine *coro, XrArray *arr, int32_t start, int32_t end) {
+XrArray *xr_array_slice(struct XrCoroutine *coro, XrArray *arr, int64_t start, int64_t end) {
     if (!coro || !arr)
         return NULL;
 
-    int64_t len = arr->length;
-
-    // Normalize indices
-    if (start < 0)
-        start = 0;
-    if (end < 0 || end > len)
-        end = (int32_t) len;
-    if (start > end)
-        start = end;
+    XrArrayCoreRange range = xr_array_core_slice_range(arr->length, start, end);
 
     // Allocate slice as XR_TARRAY — slices share Array layout, distinguished by
     // data_storage == XR_ARRAY_DATA_BORROWED.
@@ -693,9 +686,9 @@ XrArray *xr_array_slice(struct XrCoroutine *coro, XrArray *arr, int32_t start, i
         return NULL;
 
     // Direct pointer offset (zero-copy, using elem_size)
-    slice->data = (uint8_t *) arr->data + (size_t) start * arr->elem_size;
-    slice->length = end - start;
-    slice->capacity = end - start;  // Pure capacity; growth is gated by data_storage
+    slice->data = (uint8_t *) arr->data + (size_t) range.start * arr->elem_size;
+    slice->length = range.count;
+    slice->capacity = range.count;  // Pure capacity; growth is gated by data_storage
     slice->data_storage = XR_ARRAY_DATA_BORROWED;
 
     // Track source for GC (chase to original if source is also a slice)

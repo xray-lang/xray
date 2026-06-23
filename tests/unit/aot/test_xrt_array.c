@@ -192,6 +192,28 @@ static void test_slice_marks_borrowed_storage(void) {
     free_test_array(a);
 }
 
+static void test_slice_negative_bounds_and_aliasing(void) {
+    reset_alloc_counts();
+    XrValue value = xrt_array_new(5);
+    xrt_array_t *a = (xrt_array_t *) value.ptr;
+    for (int64_t i = 0; i < 5; i++)
+        xrt_array_push(value, XR_FROM_INT(i + 10));
+
+    XrValue slice_value = xrt_array_slice_view(value, -4, -1);
+    xrt_array_t *slice = (xrt_array_t *) slice_value.ptr;
+    ASSERT_TRUE(slice != NULL, "negative-bounds slice allocated");
+    ASSERT_EQ_INT(slice->length, 3, "negative bounds produce expected count");
+    ASSERT_EQ_INT(((XrValue *) slice->data)[0].i, 11, "negative start is from tail");
+    ASSERT_TRUE(slice->data == (uint8_t *) a->data + a->elem_size,
+                "slice data aliases source offset");
+
+    xr_typed_set(slice->data, 1, XR_FROM_INT(77), slice->elem_type);
+    ASSERT_EQ_INT(((XrValue *) a->data)[2].i, 77, "slice write aliases source storage");
+
+    free_test_array(slice);
+    free_test_array(a);
+}
+
 static XrValue dummy_closure_body(xrt_closure_t *cl) {
     (void) cl;
     return XR_NULL_VAL;
@@ -221,6 +243,7 @@ int main(void) {
     test_typed_exact_zero_uses_header_only();
     test_growth_spills_inline_to_heap_and_preserves_values();
     test_slice_marks_borrowed_storage();
+    test_slice_negative_bounds_and_aliasing();
     test_stack_closure_borrows_cell_upval();
     printf("test_xrt_array: %d passed, %d failed\n", g_passed, g_failed);
     return g_failed ? 1 : 0;

@@ -243,6 +243,7 @@ add_xray_unit_test(test_http2_huffman http/test_http2_huffman.c)
 # stdlib/ — DateTime, crypto, compress, XML, buffer pool
 # ============================================================================
 
+add_xray_unit_test(test_array_core stdlib/test_array_core.c)
 add_xray_unit_test(test_datetime_core stdlib/test_datetime_core.c)
 add_xray_unit_test(test_datetime stdlib/test_datetime.c)
 add_xray_unit_test(test_math_core stdlib/test_math_core.c)
