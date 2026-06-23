@@ -42,6 +42,16 @@ fn test_bytes_slice() {
     let s6 = b[2:2]
     print(s6.length)  // 0
 
+    // Negative bounds
+    let s7 = b[-4:-1]
+    print(s7.length)  // 3
+    print(s7[0])      // 2
+    print(s7[2])      // 4
+
+    // Slice aliases the source buffer
+    s7[1] = 99
+    print(b[2])       // 99
+
     print("Bytes slice tests passed!")
 
     // expect: 5
@@ -53,6 +63,9 @@ fn test_bytes_slice() {
     // expect: 3
     // expect: 5
     // expect: 0
+    // expect: 3
+    // expect: 2
+    // expect: 4
+    // expect: 99
     // expect: Bytes slice tests passed!
 }
-

@@ -25,16 +25,25 @@ fn test_slice_syntax() {
     let slice4 = arr[:]
     print(slice4)  // [1, 2, 3, 4, 5]
 
+    // 负索引从尾部计算
+    let slice5 = arr[-4:-1]
+    print(slice5)  // [2, 3, 4]
+
+    // 切片是零拷贝 view
+    slice5[1] = 30
+    print(arr[2])  // 30
+
     print("All slice tests passed!")
 
     // expect: [2, 3, 4]
     // expect: [1, 2, 3]
     // expect: [3, 4, 5]
     // expect: [1, 2, 3, 4, 5]
+    // expect: [2, 3, 4]
+    // expect: 30
     // expect: Hello
     // expect: Hello
     // expect: World!
     // expect: Hello, World!
     // expect: All slice tests passed!
 }
-

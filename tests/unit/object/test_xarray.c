@@ -378,6 +378,42 @@ TEST(array_slice_empty) {
     teardown();
 }
 
+TEST(array_slice_negative_bounds) {
+    setup();
+    XrArray *arr = xr_array_new(main_coro);
+    for (int i = 0; i < 5; i++) {
+        xr_array_push(arr, xr_int(i));
+    }
+
+    XrArray *slice = xr_array_slice(main_coro, arr, -4, -1);
+    ASSERT_NOT_NULL(slice);
+    ASSERT_EQ_INT(xr_array_size(slice), 3);
+    ASSERT_EQ_INT(xr_as_int(xr_array_get(slice, 0)), 1);
+    ASSERT_EQ_INT(xr_as_int(xr_array_get(slice, 2)), 3);
+    ASSERT_EQ_PTR(slice->data, (uint8_t *) arr->data + arr->elem_size);
+    teardown();
+}
+
+TEST(array_slice_is_zero_copy_view) {
+    setup();
+    XrArray *arr = xr_array_new(main_coro);
+    for (int i = 0; i < 4; i++) {
+        xr_array_push(arr, xr_int(i + 10));
+    }
+
+    XrArray *slice = xr_array_slice(main_coro, arr, 1, 3);
+    ASSERT_NOT_NULL(slice);
+    ASSERT_TRUE(xr_array_is_slice(slice));
+    ASSERT_EQ_PTR(slice->source, arr);
+    ASSERT_EQ_PTR(slice->data, (uint8_t *) arr->data + arr->elem_size);
+
+    xr_array_set(arr, 1, xr_int(77));
+    ASSERT_EQ_INT(xr_as_int(xr_array_get(slice, 0)), 77);
+    xr_array_set(slice, 1, xr_int(88));
+    ASSERT_EQ_INT(xr_as_int(xr_array_get(arr, 2)), 88);
+    teardown();
+}
+
 /* ========== Mixed Types Tests ========== */
 
 TEST(array_mixed_types) {
@@ -460,6 +496,8 @@ static void run_all_tests(void) {
     RUN_TEST(array_slice_basic);
     RUN_TEST(array_slice_full);
     RUN_TEST(array_slice_empty);
+    RUN_TEST(array_slice_negative_bounds);
+    RUN_TEST(array_slice_is_zero_copy_view);
 
     RUN_TEST_SUITE("Array Mixed Types");
     RUN_TEST(array_mixed_types);

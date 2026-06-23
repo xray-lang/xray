@@ -15,6 +15,7 @@
 #include "xrt_arc.h"  // xrt_str_alloc used by xrt_strbuf_finish
 #include "xrt_range.h"
 #include "../shared/xr_array_abi.h"
+#include "../shared/xr_array_core.h"
 #include "../shared/xr_cell_abi.h"
 #include "../shared/xr_elem_type.h"
 #include "../shared/xr_float_fmt.h"
@@ -249,14 +250,7 @@ static inline XrValue xrt_array_slice_view(XrValue arr, int64_t start, int64_t e
     if (!XR_IS_ARRAY(arr) || !arr.ptr)
         return XR_NULL_VAL;
     xrt_array_t *src = (xrt_array_t *) arr.ptr;
-    if (start < 0)
-        start = 0;
-    if (end < 0 || end > src->length)
-        end = src->length;
-    if (start > src->length)
-        start = src->length;
-    if (start > end)
-        start = end;
+    XrArrayCoreRange range = xr_array_core_slice_range(src->length, start, end);
 
     xrt_array_t *slice = (xrt_array_t *) XRT_MALLOC(sizeof(xrt_array_t));
     if (XR_UNLIKELY(!slice)) {
@@ -264,8 +258,8 @@ static inline XrValue xrt_array_slice_view(XrValue arr, int64_t start, int64_t e
         abort();
     }
     xrt_bump_header_init(&slice->hdr, XR_TARRAY);
-    slice->length = end - start;
-    slice->capacity = end - start;
+    slice->length = range.count;
+    slice->capacity = range.count;
     slice->source = NULL;
     slice->elem_type = src->elem_type;
     slice->elem_size = src->elem_size;
@@ -274,7 +268,7 @@ static inline XrValue xrt_array_slice_view(XrValue arr, int64_t start, int64_t e
     slice->data_storage = XR_ARRAY_DATA_BORROWED;
     slice->adt_enum_name = NULL;
     slice->adt_member_name = NULL;
-    slice->data = (uint8_t *) src->data + (size_t) start * (size_t) src->elem_size;
+    slice->data = (uint8_t *) src->data + (size_t) range.start * (size_t) src->elem_size;
     return xr_mkptr(slice, XR_TAG_ARRAY);
 }
 
