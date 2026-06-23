@@ -158,6 +158,14 @@ fn test_parse_query_encoded() {
 }
 
 @test
+fn test_parse_query_empty_flag_and_empty_pairs() {
+    let q = url.parseQuery("?empty=&flag&msg=hello+world&&=skip")
+    assert_eq(q.empty, "")
+    assert_eq(q.flag, "")
+    assert_eq(q.msg, "hello world")
+}
+
+@test
 fn test_build_query() {
     let q = url.parseQuery("a=1&b=2")
     let qs = url.buildQuery(q)
