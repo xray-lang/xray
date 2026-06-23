@@ -373,15 +373,6 @@ bool xr_array_is_empty(XrArray *arr) {
     return arr->length == 0;
 }
 
-// Typed fill macro: write native value directly without switch dispatch
-#define TYPED_FILL(type, arr, val, start, end)                                                     \
-    do {                                                                                           \
-        type *d = (type *) (arr)->data;                                                            \
-        type v = (val);                                                                            \
-        for (int64_t _i = (start); _i < (end); _i++)                                               \
-            d[_i] = v;                                                                             \
-    } while (0)
-
 void xr_array_fill(XrArray *arr, XrValue value, int64_t start, int64_t end) {
     if (!arr)
         return;
@@ -411,77 +402,8 @@ void xr_array_fill(XrArray *arr, XrValue value, int64_t start, int64_t end) {
         return;
     }
 
-    // Typed arrays: extract native value and fill directly
-    switch (arr->elem_type) {
-        case XR_ELEM_I8:
-            TYPED_FILL(
-                int8_t, arr,
-                (int8_t) (XR_IS_INT(value) ? XR_TO_INT(value) : (int64_t) XR_TO_FLOAT(value)),
-                range.start, range.end);
-            break;
-        case XR_ELEM_U8: {
-            // Special case: memset for byte arrays
-            uint8_t v =
-                (uint8_t) (XR_IS_INT(value) ? XR_TO_INT(value) : (int64_t) XR_TO_FLOAT(value));
-            memset((uint8_t *) arr->data + range.start, v, (size_t) range.count);
-            break;
-        }
-        case XR_ELEM_I16:
-            TYPED_FILL(
-                int16_t, arr,
-                (int16_t) (XR_IS_INT(value) ? XR_TO_INT(value) : (int64_t) XR_TO_FLOAT(value)),
-                range.start, range.end);
-            break;
-        case XR_ELEM_U16:
-            TYPED_FILL(
-                uint16_t, arr,
-                (uint16_t) (XR_IS_INT(value) ? XR_TO_INT(value) : (int64_t) XR_TO_FLOAT(value)),
-                range.start, range.end);
-            break;
-        case XR_ELEM_I32:
-            TYPED_FILL(
-                int32_t, arr,
-                (int32_t) (XR_IS_INT(value) ? XR_TO_INT(value) : (int64_t) XR_TO_FLOAT(value)),
-                range.start, range.end);
-            break;
-        case XR_ELEM_U32:
-            TYPED_FILL(
-                uint32_t, arr,
-                (uint32_t) (XR_IS_INT(value) ? XR_TO_INT(value) : (int64_t) XR_TO_FLOAT(value)),
-                range.start, range.end);
-            break;
-        case XR_ELEM_I64:
-            TYPED_FILL(
-                int64_t, arr,
-                (int64_t) (XR_IS_INT(value) ? XR_TO_INT(value) : (int64_t) XR_TO_FLOAT(value)),
-                range.start, range.end);
-            break;
-        case XR_ELEM_U64:
-            TYPED_FILL(
-                uint64_t, arr,
-                (uint64_t) (XR_IS_INT(value) ? XR_TO_INT(value) : (int64_t) XR_TO_FLOAT(value)),
-                range.start, range.end);
-            break;
-        case XR_ELEM_F32:
-            TYPED_FILL(
-                float, arr,
-                (float) (XR_IS_FLOAT(value) ? XR_TO_FLOAT(value) : (double) XR_TO_INT(value)),
-                range.start, range.end);
-            break;
-        case XR_ELEM_F64:
-            TYPED_FILL(
-                double, arr,
-                (double) (XR_IS_FLOAT(value) ? XR_TO_FLOAT(value) : (double) XR_TO_INT(value)),
-                range.start, range.end);
-            break;
-        case XR_ELEM_BOOL: {
-            uint8_t v = xr_value_is_truthy(value) ? 1 : 0;
-            memset((uint8_t *) arr->data + range.start, v, (size_t) range.count);
-            break;
-        }
-        default:
-            break;
-    }
+    (void) xr_array_core_fill_typed_storage(arr->data, range.start, range.count, arr->elem_type,
+                                            value);
 }
 
 bool xr_array_reserve(XrArray *arr, int32_t capacity) {
@@ -517,10 +439,14 @@ bool xr_array_resize(XrArray *arr, int32_t length, XrValue fill) {
         return false;
 
     int32_t added = length - old_length;
-    if (arr->elem_type == XR_ELEM_ANY)
+    if (arr->elem_type == XR_ELEM_ANY) {
         xr_array_retain_extra_fill_refs(fill, added);
-    for (int32_t i = old_length; i < length; i++)
-        xr_array_set_element(arr, i, fill);
+        for (int32_t i = old_length; i < length; i++)
+            xr_array_set_element(arr, i, fill);
+    } else if (!xr_array_core_fill_typed_storage(arr->data, old_length, added, arr->elem_type,
+                                                 fill)) {
+        return false;
+    }
     arr->length = length;
     if (XR_ARRAY_MAY_CONTAIN_REFS(arr)) {
         XR_ARRAY_MARK_REFS(arr, fill);

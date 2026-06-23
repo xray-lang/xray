@@ -47,6 +47,46 @@ TEST(array_core_fill_range_matches_slice_bounds) {
     assert_range(xr_array_core_fill_range(6, 4, 2), 2, 2, 0);
 }
 
+TEST(array_core_fill_typed_storage_coerces_once_and_fills_range) {
+    int64_t ints[] = {0, 0, 0, 0, 0};
+    ASSERT_TRUE(xr_array_core_fill_typed_storage(ints, 1, 3, XR_ELEM_I64, XR_FROM_FLOAT(7.9)));
+    ASSERT_EQ_INT(ints[0], 0);
+    ASSERT_EQ_INT(ints[1], 7);
+    ASSERT_EQ_INT(ints[3], 7);
+    ASSERT_EQ_INT(ints[4], 0);
+
+    uint8_t bytes[] = {1, 2, 3, 4};
+    ASSERT_TRUE(xr_array_core_fill_typed_storage(bytes, 1, 2, XR_ELEM_U8, XR_FROM_INT(255)));
+    ASSERT_EQ_INT(bytes[0], 1);
+    ASSERT_EQ_INT(bytes[1], 255);
+    ASSERT_EQ_INT(bytes[2], 255);
+    ASSERT_EQ_INT(bytes[3], 4);
+
+    double doubles[] = {0.0, 0.0, 0.0};
+    ASSERT_TRUE(xr_array_core_fill_typed_storage(doubles, 0, 3, XR_ELEM_F64, XR_FROM_INT(5)));
+    ASSERT(doubles[0] == 5.0);
+    ASSERT(doubles[2] == 5.0);
+}
+
+TEST(array_core_fill_typed_storage_handles_bool_and_invalid_cases) {
+    uint8_t bools[] = {1, 1, 1, 1};
+    ASSERT_TRUE(xr_array_core_fill_typed_storage(bools, 0, 4, XR_ELEM_BOOL, XR_NULL_VAL));
+    ASSERT_EQ_INT(bools[0], 0);
+    ASSERT_EQ_INT(bools[3], 0);
+
+    ASSERT_TRUE(xr_array_core_fill_typed_storage(bools, 1, 2, XR_ELEM_BOOL, XR_FROM_INT(9)));
+    ASSERT_EQ_INT(bools[0], 0);
+    ASSERT_EQ_INT(bools[1], 1);
+    ASSERT_EQ_INT(bools[2], 1);
+    ASSERT_EQ_INT(bools[3], 0);
+
+    XrValue boxed[] = {XR_NULL_VAL, XR_NULL_VAL};
+    ASSERT_FALSE(xr_array_core_fill_typed_storage(boxed, 0, 2, XR_ELEM_ANY, XR_FROM_INT(1)));
+    ASSERT_TRUE(xr_array_core_fill_typed_storage(NULL, 0, 0, XR_ELEM_U8, XR_FROM_INT(1)));
+    ASSERT_FALSE(xr_array_core_fill_typed_storage(NULL, 0, 1, XR_ELEM_U8, XR_FROM_INT(1)));
+    ASSERT_FALSE(xr_array_core_fill_typed_storage(bools, -1, 1, XR_ELEM_BOOL, XR_TRUE_VAL));
+}
+
 TEST(array_core_index_set_plan_rejects_wraparound_and_gaps) {
     XrArrayCoreIndexSetPlan plan = xr_array_core_index_set_plan(3, 1);
     ASSERT_EQ_INT(plan.kind, XR_ARRAY_CORE_INDEX_SET_WRITE);
@@ -299,6 +339,8 @@ RUN_TEST(array_core_slice_range_handles_negative_bounds);
 RUN_TEST(array_core_slice_range_empty_when_start_after_end);
 RUN_TEST(array_core_slice_range_accepts_nonpositive_length);
 RUN_TEST(array_core_fill_range_matches_slice_bounds);
+RUN_TEST(array_core_fill_typed_storage_coerces_once_and_fills_range);
+RUN_TEST(array_core_fill_typed_storage_handles_bool_and_invalid_cases);
 RUN_TEST(array_core_index_set_plan_rejects_wraparound_and_gaps);
 RUN_TEST(array_core_reverse_swaps_raw_elements_by_size);
 RUN_TEST(array_core_reverse_handles_empty_single_and_invalid_data);
