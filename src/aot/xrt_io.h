@@ -546,15 +546,23 @@ static inline bool xrt_io_remove_all_impl(const char *path) {
     if (h != INVALID_HANDLE_VALUE) {
         do {
             const char *name = fd.cFileName;
-            if (strcmp(name, ".") == 0 || strcmp(name, "..") == 0)
+            if (xr_io_core_is_dot_dir_entry(name))
                 continue;
-            size_t child_len = strlen(path) + 1 + strlen(name);
+            size_t child_len = 0;
+            if (!xr_io_core_join_child_len(path, name, &child_len)) {
+                ok = false;
+                continue;
+            }
             char *child = (char *) XRT_MALLOC(child_len + 1);
             if (!child) {
                 ok = false;
                 continue;
             }
-            snprintf(child, child_len + 1, "%s\\%s", path, name);
+            if (!xr_io_core_join_child_path(path, '\\', name, child, child_len + 1)) {
+                XRT_FREE(child);
+                ok = false;
+                continue;
+            }
             if (!xrt_io_remove_all_impl(child))
                 ok = false;
             XRT_FREE(child);
@@ -579,18 +587,23 @@ static inline bool xrt_io_remove_all_impl(const char *path) {
         if (!e)
             break;
         const char *name = e->d_name;
-        if (strcmp(name, ".") == 0 || strcmp(name, "..") == 0)
+        if (xr_io_core_is_dot_dir_entry(name))
             continue;
-        size_t path_len = strlen(path);
-        size_t name_len = strlen(name);
-        char *child = (char *) XRT_MALLOC(path_len + 1 + name_len + 1);
+        size_t child_len = 0;
+        if (!xr_io_core_join_child_len(path, name, &child_len)) {
+            ok = false;
+            continue;
+        }
+        char *child = (char *) XRT_MALLOC(child_len + 1);
         if (!child) {
             ok = false;
             continue;
         }
-        memcpy(child, path, path_len);
-        child[path_len] = '/';
-        memcpy(child + path_len + 1, name, name_len + 1);
+        if (!xr_io_core_join_child_path(path, '/', name, child, child_len + 1)) {
+            XRT_FREE(child);
+            ok = false;
+            continue;
+        }
         if (!xrt_io_remove_all_impl(child))
             ok = false;
         XRT_FREE(child);
@@ -756,7 +769,7 @@ static inline XrValue xrt_io_read_dir(const char *path_data, int64_t path_len) {
     }
     do {
         const char *name = fd.cFileName;
-        if (strcmp(name, ".") != 0 && strcmp(name, "..") != 0)
+        if (!xr_io_core_is_dot_dir_entry(name))
             xrt_array_push(arr, xrt_str_from_cstr(name));
     } while (FindNextFileA(h, &fd));
     FindClose(h);
@@ -771,7 +784,7 @@ static inline XrValue xrt_io_read_dir(const char *path_data, int64_t path_len) {
         if (!e)
             break;
         const char *name = e->d_name;
-        if (strcmp(name, ".") == 0 || strcmp(name, "..") == 0)
+        if (xr_io_core_is_dot_dir_entry(name))
             continue;
         xrt_array_push(arr, xrt_str_from_cstr(name));
     }
@@ -799,16 +812,19 @@ static inline void xrt_io_read_dir_recursive_impl(XrValue arr, const char *base,
         return;
     do {
         const char *name = fd.cFileName;
-        if (strcmp(name, ".") == 0 || strcmp(name, "..") == 0)
+        if (xr_io_core_is_dot_dir_entry(name))
             continue;
-        size_t child_len = strlen(path) + 1 + strlen(name);
+        size_t child_len = 0;
+        if (!xr_io_core_join_child_len(path, name, &child_len))
+            continue;
         char *child = (char *) XRT_MALLOC(child_len + 1);
         if (!child)
             continue;
-        snprintf(child, child_len + 1, "%s\\%s", path, name);
-        const char *rel = child + base_len;
-        if (*rel == '\\' || *rel == '/')
-            rel++;
+        if (!xr_io_core_join_child_path(path, '\\', name, child, child_len + 1)) {
+            XRT_FREE(child);
+            continue;
+        }
+        const char *rel = xr_io_core_relative_path_from_base(child, base_len);
         xrt_array_push(arr, xrt_str_from_cstr(rel));
         if ((fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) &&
             !(fd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT))
@@ -825,16 +841,19 @@ static inline void xrt_io_read_dir_recursive_impl(XrValue arr, const char *base,
         if (!e)
             break;
         const char *name = e->d_name;
-        if (strcmp(name, ".") == 0 || strcmp(name, "..") == 0)
+        if (xr_io_core_is_dot_dir_entry(name))
             continue;
-        size_t child_len = strlen(path) + 1 + strlen(name);
+        size_t child_len = 0;
+        if (!xr_io_core_join_child_len(path, name, &child_len))
+            continue;
         char *child = (char *) XRT_MALLOC(child_len + 1);
         if (!child)
             continue;
-        snprintf(child, child_len + 1, "%s/%s", path, name);
-        const char *rel = child + base_len;
-        if (*rel == '/' || *rel == '\\')
-            rel++;
+        if (!xr_io_core_join_child_path(path, '/', name, child, child_len + 1)) {
+            XRT_FREE(child);
+            continue;
+        }
+        const char *rel = xr_io_core_relative_path_from_base(child, base_len);
         xrt_array_push(arr, xrt_str_from_cstr(rel));
         struct stat st;
         if (lstat(child, &st) == 0 && S_ISDIR(st.st_mode))

@@ -107,6 +107,61 @@ static inline bool xr_io_core_is_sep(char ch) {
     return ch == '/' || ch == '\\';
 }
 
+static inline size_t xr_io_core_cstr_len(const char *s) {
+    size_t len = 0;
+    if (!s)
+        return 0;
+    while (s[len])
+        len++;
+    return len;
+}
+
+static inline bool xr_io_core_is_dot_dir_entry(const char *name) {
+    return name && name[0] == '.' && (name[1] == '\0' || (name[1] == '.' && name[2] == '\0'));
+}
+
+static inline bool xr_io_core_join_child_len(const char *parent, const char *name,
+                                             size_t *out_len) {
+    if (!parent || !name || !out_len)
+        return false;
+
+    size_t parent_len = xr_io_core_cstr_len(parent);
+    size_t name_len = xr_io_core_cstr_len(name);
+    if (parent_len == 0 || name_len == 0)
+        return false;
+    if (parent_len > SIZE_MAX - name_len - 1)
+        return false;
+
+    *out_len = parent_len + 1 + name_len;
+    return true;
+}
+
+static inline bool xr_io_core_join_child_path(const char *parent, char sep, const char *name,
+                                              char *out, size_t out_cap) {
+    size_t len = 0;
+    if (!out || !xr_io_core_join_child_len(parent, name, &len) || len >= out_cap)
+        return false;
+
+    size_t pos = 0;
+    for (size_t i = 0; parent[i]; i++)
+        out[pos++] = parent[i];
+    out[pos++] = sep;
+    for (size_t i = 0; name[i]; i++)
+        out[pos++] = name[i];
+    out[pos] = '\0';
+    return true;
+}
+
+static inline const char *xr_io_core_relative_path_from_base(const char *fullpath,
+                                                             size_t base_len) {
+    if (!fullpath)
+        return NULL;
+    const char *relpath = fullpath + base_len;
+    if (xr_io_core_is_sep(*relpath))
+        relpath++;
+    return relpath;
+}
+
 static inline bool xr_io_core_is_alpha_ascii(char ch) {
     return (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z');
 }
