@@ -401,21 +401,31 @@ static inline XrValue xrt_url_resolve(const char *base, int64_t base_len_i, cons
     return xrt_strbuf_finish(resultv);
 }
 
+typedef struct {
+    const char **parts;
+    const size_t *lens;
+} xrt_url_join_parts_t;
+
+static inline bool xrt_url_join_part(void *ctx, size_t index, const char **data, size_t *len) {
+    xrt_url_join_parts_t *parts = (xrt_url_join_parts_t *) ctx;
+    if (!parts || !data || !len)
+        return false;
+    *data = parts->parts ? parts->parts[index] : NULL;
+    *len = parts->lens ? parts->lens[index] : 0;
+    return true;
+}
+
 static inline XrValue xrt_url_join(int64_t count_i, const char **parts, const size_t *lens) {
-    if (count_i <= 0)
-        return xrt_str_alloc(0);
     XrValue bufv = xrt_strbuf_new();
     xrt_strbuf_t *buf = (xrt_strbuf_t *) bufv.ptr;
-    for (int64_t i = 0; i < count_i; i++) {
-        const char *seg = parts ? parts[i] : NULL;
-        size_t seg_len = lens ? lens[i] : 0;
-        if (!seg || seg_len == 0)
-            continue;
-        if (buf->len > 0 && buf->buf[buf->len - 1] == '/')
-            buf->len--;
-        if (buf->len > 0 && seg[0] != '/')
-            xrt_url_buf_putc(buf, '/');
-        xrt_url_buf_append_raw(buf, seg, seg_len);
+    xrt_url_join_parts_t join_parts;
+    join_parts.parts = parts;
+    join_parts.lens = lens;
+    XrUrlCoreWriter writer = xrt_url_core_writer(buf);
+    size_t count = count_i <= 0 ? 0 : (size_t) count_i;
+    if (!xr_url_core_join_write(count, xrt_url_join_part, &join_parts, &writer)) {
+        xrt_release(bufv);
+        return XR_NULL_VAL;
     }
     return xrt_strbuf_finish(bufv);
 }

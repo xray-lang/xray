@@ -251,6 +251,12 @@ fn test_join_trailing_slash() {
 }
 
 @test
+fn test_join_skips_empty_segments() {
+    let result = url.join("", "/api/", "", "v1", "/users")
+    assert_eq(result, "/api/v1/users")
+}
+
+@test
 fn test_join_single() {
     let result = url.join("/path")
     assert_eq(result, "/path")

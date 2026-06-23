@@ -486,36 +486,41 @@ static XrValue url_resolve_fn(XrVMRuntime *X, XrValue *args, int nargs) {
     return ctxbuf_to_value(X, &result);
 }
 
+typedef struct {
+    XrValue *args;
+    int nargs;
+} UrlJoinParts;
+
+static bool url_join_part(void *ctx, size_t index, const char **data, size_t *len) {
+    UrlJoinParts *parts = (UrlJoinParts *) ctx;
+    if (!parts || !data || !len || index >= (size_t) parts->nargs)
+        return false;
+    XrValue value = parts->args[index];
+    if (!XR_IS_STRING(value)) {
+        *data = NULL;
+        *len = 0;
+        return true;
+    }
+    XrString *s = XR_TO_STRING(value);
+    *data = XR_STRING_CHARS(s);
+    *len = s->length;
+    return true;
+}
+
 static XrValue url_join_fn(XrVMRuntime *X, XrValue *args, int nargs) {
     if (nargs < 1)
         return make_cstr(X, "");
 
     XrCtxBuf buf;
     xr_ctxbuf_init(&buf, 128);
-
-    for (int i = 0; i < nargs; i++) {
-        if (!XR_IS_STRING(args[i]))
-            continue;
-        XrString *s = XR_TO_STRING(args[i]);
-        const char *seg = XR_STRING_CHARS(s);
-        size_t seg_len = s->length;
-        if (seg_len == 0)
-            continue;
-
-        // Remove trailing slash from current result
-        if (buf.len > 0 && buf.data[buf.len - 1] == '/')
-            buf.len--;
-
-        // Add separator if needed
-        if (buf.len > 0 && seg[0] != '/') {
-            xr_ctxbuf_putc(&buf, '/');
-        }
-
-        xr_ctxbuf_append(&buf, seg, seg_len);
+    XrUrlCoreWriter writer = url_core_writer(&buf);
+    UrlJoinParts parts;
+    parts.args = args;
+    parts.nargs = nargs;
+    if (!xr_url_core_join_write((size_t) nargs, url_join_part, &parts, &writer)) {
+        xr_ctxbuf_free(&buf);
+        return XR_NULL_VAL;
     }
-
-    if (buf.data)
-        buf.data[buf.len] = '\0';
     return ctxbuf_to_value(X, &buf);
 }
 

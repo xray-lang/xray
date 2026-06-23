@@ -44,6 +44,8 @@ typedef struct {
     void (*set_len)(void *ctx, size_t len);
 } XrUrlCoreWriter;
 
+typedef bool (*XrUrlCoreJoinPartFn)(void *ctx, size_t index, const char **data, size_t *len);
+
 static inline uint8_t xr_url_core_hex_value(unsigned char c) {
     if (c >= '0' && c <= '9')
         return (uint8_t) (c - '0');
@@ -492,6 +494,39 @@ static inline bool xr_url_core_resolve_write(const char *base, size_t base_len, 
         } else if (tail_len > 0) {
             data[path_end] = tail_first;
         }
+    }
+
+    return true;
+}
+
+static inline bool xr_url_core_join_write(size_t count, XrUrlCoreJoinPartFn part, void *part_ctx,
+                                          XrUrlCoreWriter *out) {
+    if (!out || (count > 0 && !part))
+        return false;
+
+    for (size_t i = 0; i < count; i++) {
+        const char *seg = NULL;
+        size_t seg_len = 0;
+        if (!part(part_ctx, i, &seg, &seg_len))
+            return false;
+        if (!seg || seg_len == 0)
+            continue;
+
+        size_t out_len = xr_url_core_writer_len(out);
+        if (out_len > 0) {
+            char *data = xr_url_core_writer_data(out);
+            if (!data)
+                return false;
+            if (data[out_len - 1] == '/') {
+                xr_url_core_writer_set_len(out, out_len - 1);
+                out_len--;
+            }
+        }
+
+        if (out_len > 0 && seg[0] != '/' && !xr_url_core_writer_putc(out, '/'))
+            return false;
+        if (!xr_url_core_writer_append(out, seg, seg_len))
+            return false;
     }
 
     return true;
