@@ -25,6 +25,7 @@
 #include "../../src/runtime/class/xclass_system.h"
 #include "../../src/runtime/class/xinstance.h"
 #include "../../src/base/xchecks.h"
+#include "../../src/shared/xr_datetime_core.h"
 #include "../../src/os/os_time.h"
 #include <string.h>
 #include <stdio.h>
@@ -91,153 +92,8 @@ static int64_t get_current_millis(void) {
     return (int64_t) (xr_time_realtime_ns() / 1000000ULL);
 }
 
-static int days_in_month_table(int year, int mon) {
-    static const int days[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
-    XR_DCHECK(year >= -9999 && year <= 9999, "days_in_month: year in sane range");
-    if (mon < 1 || mon > 12)
-        return 30;
-    int d = days[mon - 1];
-    if (mon == 2 && (year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)))
-        d = 29;
-    return d;
-}
-
-/* ========== Portable Date Math ==========
- *
- * Calendar <-> days-since-epoch conversions implemented without any libc
- * time function. The platform CRT, especially MSVC, refuses any time_t
- * value outside [0, 32503679999] (1970-01-01 .. 3000-12-31 UTC):
- *   - mktime / _mkgmtime return (time_t)-1 for years before 1970,
- *   - localtime_s / gmtime_s leave the output struct tm in an unspecified
- *     state for negative time_t.
- * Local wall-clock times near the epoch in non-UTC timezones (e.g.
- * 1970-01-01 00:00:00 local in Asia/Shanghai = UTC -28800) hit exactly this
- * limit and were silently corrupted before this code path existed.
- *
- * Algorithms are due to Howard Hinnant (http://howardhinnant.github.io/
- * date_algorithms.html) and are valid for any year representable in int.
- * They form the basis of std::chrono's calendar support in C++20.
- */
-
-static int64_t portable_days_from_civil(int y, unsigned m, unsigned d) {
-    y -= (m <= 2);
-    const int64_t era = (y >= 0 ? y : y - 399) / 400;
-    const unsigned yoe = (unsigned) (y - (int) (era * 400));
-    const unsigned doy = (153u * (m > 2 ? m - 3 : m + 9) + 2) / 5 + d - 1;
-    const unsigned doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
-    return era * 146097 + (int64_t) doe - 719468;
-}
-
-static void portable_civil_from_days(int64_t z, int *y_out, unsigned *m_out, unsigned *d_out) {
-    z += 719468;
-    const int64_t era = (z >= 0 ? z : z - 146096) / 146097;
-    const unsigned doe = (unsigned) (z - era * 146097);
-    const unsigned yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
-    int y = (int) ((int64_t) yoe + era * 400);
-    const unsigned doy = doe - (365u * yoe + yoe / 4 - yoe / 100);
-    const unsigned mp = (5u * doy + 2) / 153;
-    const unsigned d = doy - (153u * mp + 2) / 5 + 1;
-    const unsigned m = mp < 10 ? mp + 3 : mp - 9;
-    *y_out = y + (m <= 2 ? 1 : 0);
-    *m_out = m;
-    *d_out = d;
-}
-
-/* Treat the fields of `tm` as UTC and produce the corresponding time_t.
- * Independent of any CRT call, so negative results (pre-1970 instants) are
- * fully supported. */
-static time_t portable_timegm(const struct tm *tm) {
-    XR_DCHECK(tm != NULL, "portable_timegm: tm must not be NULL");
-    int64_t days = portable_days_from_civil(tm->tm_year + 1900, (unsigned) (tm->tm_mon + 1),
-                                            (unsigned) tm->tm_mday);
-    int64_t secs = days * 86400 + (int64_t) tm->tm_hour * 3600 + (int64_t) tm->tm_min * 60 +
-                   (int64_t) tm->tm_sec;
-    return (time_t) secs;
-}
-
-/* Decompose a UTC time_t into a struct tm. Sets tm_wday, tm_yday and
- * forces tm_isdst = 0. Valid for any time_t value. */
-static void portable_gmtime(time_t t, struct tm *tm) {
-    XR_DCHECK(tm != NULL, "portable_gmtime: tm must not be NULL");
-    int64_t s = (int64_t) t;
-    int64_t days = s / 86400;
-    int64_t secs_of_day = s % 86400;
-    if (secs_of_day < 0) {
-        secs_of_day += 86400;
-        days -= 1;
-    }
-
-    int year;
-    unsigned mon, mday;
-    portable_civil_from_days(days, &year, &mon, &mday);
-
-    tm->tm_year = year - 1900;
-    tm->tm_mon = (int) mon - 1;
-    tm->tm_mday = (int) mday;
-    tm->tm_hour = (int) (secs_of_day / 3600);
-    tm->tm_min = (int) ((secs_of_day % 3600) / 60);
-    tm->tm_sec = (int) (secs_of_day % 60);
-
-    /* 1970-01-01 was Thursday (tm_wday = 4). */
-    int64_t w = (days + 4) % 7;
-    if (w < 0)
-        w += 7;
-    tm->tm_wday = (int) w;
-
-    int64_t jan1 = portable_days_from_civil(year, 1, 1);
-    tm->tm_yday = (int) (days - jan1);
-
-    tm->tm_isdst = 0;
-}
-
-/* ========== Timezone ========== */
-
-/* Compute local UTC offset in minutes for a specific point in time.
- * Uses libc localtime/gmtime to honour the host timezone database and DST.
- * When the requested instant is outside the CRT-safe range (in practice
- * MSVC localtime_s/gmtime_s for t < 0), probe with a date one day past the
- * epoch instead: that yields the standard offset for the zone, which is
- * the correct value for any timestamp near the epoch boundary in zones
- * without pre-1970 DST history (which excludes essentially nothing useful
- * for current calendar arithmetic). */
-static int local_offset_at(time_t t) {
-    struct tm local_tm, utc_tm;
-    time_t probe = t;
-#ifdef XR_OS_WINDOWS
-    if (probe < 86400)
-        probe = 86400; /* 1970-01-02 00:00:00 UTC */
-    localtime_s(&local_tm, &probe);
-    gmtime_s(&utc_tm, &probe);
-#else
-    localtime_r(&probe, &local_tm);
-    gmtime_r(&probe, &utc_tm);
-#endif
-    local_tm.tm_isdst = 0;
-    utc_tm.tm_isdst = 0;
-    /* mktime here interprets both struct tm values as local time. Since we
-     * just fed them with the same probe instant, the difference equals the
-     * zone's UTC offset (negated for the gmtime branch). Both arguments
-     * are post-epoch by construction, so MSVC mktime is happy. */
-    double diff_sec = difftime(mktime(&local_tm), mktime(&utc_tm));
-    return (int) (diff_sec / 60.0);
-}
-
-/* Convert a struct tm to time_t. is_utc=1 treats the fields as UTC,
- * is_utc=0 treats them as local wall-clock and adjusts by the host's
- * effective offset at that instant. Replaces the previous CRT-dependent
- * implementation, which used mktime() for local time and inherited the
- * MSVC 1970+ range limitation. */
-static inline time_t datetime_mktime(struct tm *tm, int is_utc) {
-    XR_DCHECK(tm != NULL, "datetime_mktime: tm must not be NULL");
-    time_t wall_t = portable_timegm(tm);
-    if (is_utc)
-        return wall_t;
-    int off_min = local_offset_at(wall_t);
-    return wall_t - (time_t) off_min * 60;
-}
-
 int xr_datetime_local_offset(void) {
-    return local_offset_at(time(NULL));
+    return xr_datetime_core_local_offset_at(time(NULL));
 }
 
 /* ========== Creation API ========== */
@@ -273,11 +129,11 @@ XrDateTime *xr_datetime_create(XrVMRuntime *isolate, int year, int month, int da
     tm.tm_sec = second;
     tm.tm_isdst = -1;
 
-    time_t t = datetime_mktime(&tm, is_utc);
+    time_t t = xr_datetime_core_mktime(&tm, is_utc);
     XrDateTime *dt = datetime_alloc(isolate);
     dt->timestamp = (int64_t) t;
     dt->milliseconds = 0;
-    dt->tz_offset = is_utc ? 0 : local_offset_at(t);
+    dt->tz_offset = is_utc ? 0 : xr_datetime_core_local_offset_at(t);
     dt->is_utc = (uint8_t) is_utc;
     return dt;
 }
@@ -415,11 +271,11 @@ XrDateTime *xr_datetime_parse(XrVMRuntime *isolate, const char *str, const char 
 
     time_t t;
     if (is_utc) {
-        t = datetime_mktime(&tm, 1);
+        t = xr_datetime_core_mktime(&tm, 1);
         /* Adjust for the timezone offset carried by the parsed string. */
         t -= tz_offset_min * 60;
     } else {
-        t = datetime_mktime(&tm, 0);
+        t = xr_datetime_core_mktime(&tm, 0);
     }
 
     XrDateTime *dt = datetime_alloc(isolate);
@@ -427,7 +283,7 @@ XrDateTime *xr_datetime_parse(XrVMRuntime *isolate, const char *str, const char 
         return NULL;
     dt->timestamp = (int64_t) t;
     dt->milliseconds = ms;
-    dt->tz_offset = is_utc ? 0 : local_offset_at(t);
+    dt->tz_offset = is_utc ? 0 : xr_datetime_core_local_offset_at(t);
     dt->is_utc = is_utc;
     return dt;
 }
@@ -443,7 +299,7 @@ void xr_datetime_to_tm(XrDateTime *dt, struct tm *tm) {
          * localtime_s/gmtime_s rejecting negative time_t values. */
         t += (time_t) dt->tz_offset * 60;
     }
-    portable_gmtime(t, tm);
+    xr_datetime_core_gmtime(t, tm);
 }
 
 int xr_datetime_format(XrDateTime *dt, const char *pattern, char *buf, size_t buf_size) {
@@ -593,7 +449,7 @@ int xr_datetime_is_leap_year(XrDateTime *dt) {
 }
 
 int xr_datetime_days_in_month(XrDateTime *dt) {
-    return days_in_month_table(xr_datetime_year(dt), xr_datetime_month(dt));
+    return xr_datetime_core_days_in_month(xr_datetime_year(dt), xr_datetime_month(dt));
 }
 
 /* ========== Date Arithmetic API ========== */
@@ -635,11 +491,11 @@ XrDateTime *xr_datetime_add(XrVMRuntime *isolate, XrDateTime *dt, int64_t amount
             tm.tm_year--;
         }
         // Clamp day to target month's max
-        int max_day = days_in_month_table(tm.tm_year + 1900, tm.tm_mon + 1);
+        int max_day = xr_datetime_core_days_in_month(tm.tm_year + 1900, tm.tm_mon + 1);
         if (tm.tm_mday > max_day)
             tm.tm_mday = max_day;
         tm.tm_isdst = -1;
-        time_t t = datetime_mktime(&tm, dt->is_utc);
+        time_t t = xr_datetime_core_mktime(&tm, dt->is_utc);
         XrDateTime *result = datetime_alloc(isolate);
         result->timestamp = (int64_t) t;
         result->milliseconds = dt->milliseconds;
@@ -651,11 +507,11 @@ XrDateTime *xr_datetime_add(XrVMRuntime *isolate, XrDateTime *dt, int64_t amount
         xr_datetime_to_tm(dt, &tm);
         tm.tm_year += (int) amount;
         // Clamp day for Feb 29 → non-leap year
-        int max_day = days_in_month_table(tm.tm_year + 1900, tm.tm_mon + 1);
+        int max_day = xr_datetime_core_days_in_month(tm.tm_year + 1900, tm.tm_mon + 1);
         if (tm.tm_mday > max_day)
             tm.tm_mday = max_day;
         tm.tm_isdst = -1;
-        time_t t = datetime_mktime(&tm, dt->is_utc);
+        time_t t = xr_datetime_core_mktime(&tm, dt->is_utc);
         XrDateTime *result = datetime_alloc(isolate);
         result->timestamp = (int64_t) t;
         result->milliseconds = dt->milliseconds;
@@ -734,7 +590,7 @@ XrDateTime *xr_datetime_to_local(XrVMRuntime *isolate, XrDateTime *dt) {
     } else {
         result->timestamp = dt->timestamp;
         result->milliseconds = dt->milliseconds;
-        result->tz_offset = local_offset_at((time_t) dt->timestamp);
+        result->tz_offset = xr_datetime_core_local_offset_at((time_t) dt->timestamp);
         result->is_utc = 0;
     }
     return result;
