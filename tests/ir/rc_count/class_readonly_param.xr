@@ -14,5 +14,5 @@ fn readBox(box: Box) -> int {
     return box.get()
 }
 
-let box = new Box(7)
+let box = Box(7)
 print(readBox(box))

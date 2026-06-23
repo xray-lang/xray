@@ -18,5 +18,5 @@ fn view(counter: in PureCounter) -> int {
     return counter.push() + counter.callPush()
 }
 
-let counter = new PureCounter(10)
+let counter = PureCounter(10)
 print(view(counter))

@@ -191,7 +191,7 @@ Xray has **62 reserved keywords** in total; the authoritative source-of-truth ta
 | `interface` `implements` | interface declaration / implementation |
 | `enum` | enum declaration |
 | `type` | type alias |
-| `new` | instantiation |
+| `new` | removed—kept as a keyword only for migration errors (construct with `T(...)`, see §3.14) |
 | `this` `super` | self / parent reference |
 | `constructor` | constructor |
 | `static` `private` `protected` | class/member modifiers; public visibility is the default and has no `public` keyword |
@@ -673,7 +673,7 @@ let s: Set<int> = #[1, 2, 3]
 Inter-coroutine communication channel. **Must** be declared `const` (see §10.5).
 
 ```xray
-const ch: Channel<int> = new Channel<int>(10)
+const ch: Channel<int> = Channel<int>(10)
 ```
 
 #### 2.4.5 `Bytes`
@@ -681,8 +681,8 @@ const ch: Channel<int> = new Channel<int>(10)
 Typed byte buffer. Semantically equivalent to `Array<uint8>`, but stored as contiguous memory.
 
 ```xray
-let buf = new Bytes(1024)
-let init = new Bytes([72, 101, 108, 108, 111])
+let buf = Bytes(1024)
+let init = Bytes([72, 101, 108, 108, 111])
 ```
 
 #### 2.4.6 `Json` and Object Literals
@@ -962,7 +962,7 @@ Full precedence table (highest → lowest; operators at the same level share ass
 | Level | Operators | Assoc. | Description |
 |--|--|--|--|
 | 17 | `(...)` `[...]` `.x` `?.x` `?[...]` `f()` `e!` | left | postfix: grouping, index, member, optional chain, call, force unwrap |
-| 16 | prefix `-` `+` `!` `~` `new` `move` `await` `go` `unsafe` | right | unary prefix + coroutine/FFI boundary operators |
+| 16 | prefix `-` `+` `!` `~` `move` `await` `go` `unsafe` | right | unary prefix + coroutine/FFI boundary operators |
 | 15 | `as` `is` | left | type cast / check (`as T?` is the safe form via a nullable target type, not a separate `as?` operator) |
 | 14 | `*` `/` `%` | left | multiplication / division / modulo |
 | 13 | `+` `-` | left | addition / subtraction |
@@ -986,7 +986,6 @@ Implementation: Pratt-parser style in `src/frontend/parser/xparse_expr.c`.
 
 ```ebnf
 UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
-            | 'new' Identifier TypeArgs? '(' ArgList? ')'
             | 'move' UnaryExpr
             | 'await' ('all' | 'any')? UnaryExpr
             | 'go' (Block | PostfixExpr)
@@ -1286,14 +1285,14 @@ let obj = { users }              // shorthand
 - Defaults to an **extensible** structured object type (see §2.4.6 / §2.10 Json behavior).
 - Fix the structure with a `type` alias: `let u: User = {...}` (compile-time field check, sealed).
 
-#### Bytes `new Bytes(...)`
+#### Bytes `Bytes(...)`
 
 See §2.4.5 and §14.5.
 
-#### Channel `new Channel<T>(buf?)`
+#### Channel `Channel<T>(buf?)`
 
 ```xray
-const ch: Channel<int> = new Channel<int>(10)
+const ch: Channel<int> = Channel<int>(10)
 ```
 
 See §10.5.
@@ -1437,27 +1436,30 @@ let result = match (x) {
 - **Exhaustiveness**: for enum scrutinees (ADT and simple enums), the compiler enforces exhaustiveness. Otherwise it is not enforced, and an unmatched value at runtime throws `Exception(E0442)`.
 - For pattern details see [§6](#6-patterns).
 
-### 3.14 `new`
+### 3.14 Construction expressions
 
 ```ebnf
-NewExpr ::= 'new' Identifier TypeArgs? '(' ArgList? ')'
+ConstructExpr ::= Identifier TypeArgs? '(' ArgList? ')'
 ```
 
+Construction looks just like a function call: `TypeName(args)`. There is no `new` keyword—writing `new` (e.g. `new Point(...)`) is a compile error that tells you to delete it.
+
 ```xray
-let p = new Point(1.0, 2.0)
-let arr = new Array<int>()
-let ch = new Channel<int>(10)
-let m = new Map<string, int>()
+let p = Point(1.0, 2.0)
+let arr = Array<int>()
+let ch = Channel<int>(10)
+let m = Map<string, int>()
 ```
 
 **Used for**:
-- Class and struct instantiation.
-- Constructing built-in container types (`Array` / `Map` / `Set` / `Channel` / `Bytes` / `StringBuilder`, etc.).
+- Class and struct instantiation (`TypeName(args)`).
+- Constructing built-in container types (`Array` / `Map` / `Set` / `Channel` / `Bytes` / `StringBuilder`, etc.; also `TypeName(args)`).
+- Disambiguation is by symbol kind in the analyzer: type names construct, function names call (naming convention: types capitalized, functions lowercase).
 
 **Relation to literals**:
 ```xray
-let a = [1, 2, 3]              // equivalent to new Array<int>() + push
-let m = #{}                    // equivalent to new Map<...>()
+let a = [1, 2, 3]              // equivalent to Array<int>() + push
+let m = #{}                    // equivalent to Map<...>()
 let p = Point{x: 1, y: 2}      // struct literal
 ```
 
@@ -1853,7 +1855,7 @@ shared const PRIMES = [2, 3, 5, 7, 11]
 #### 5.1.4 `shared let` — cross-coroutine mutable, exclusive
 
 ```xray
-shared let buffer = new Bytes(1024)
+shared let buffer = Bytes(1024)
 ```
 
 - **Move semantics**: ownership must be transferred explicitly with `move`.
@@ -2131,11 +2133,11 @@ class Animal {
     }
 
     static create(name: string) -> Animal {
-        return new Animal(name)
+        return Animal(name)
     }
 }
 
-let a = new Animal("Rex")
+let a = Animal("Rex")
 print(a.speak())
 print(Animal.create("Bob").name)
 ```
@@ -2208,7 +2210,7 @@ class Vector2 {
 - Constructor parameters **may omit their types**—if a parameter shares a name with a field, the type is inferred from that field; otherwise it is inferred from the call-site argument type.
 - The constructor implicitly returns `this` (compiler-injected).
 - Derived class constructors must call `super(...)` first.
-- A `struct` may have **no** constructor (`new Point()` produces a zero-initialized instance which is then assigned manually; see §5.4).
+- A `struct` may have **no** constructor (`Point()` produces a zero-initialized instance which is then assigned manually; see §5.4).
 
 #### 5.3.5 Operator overloading
 
@@ -2222,7 +2224,7 @@ class Vec2 {
     }
 
     operator+(other: Vec2) -> Vec2 {
-        return new Vec2(this.x + other.x, this.y + other.y)
+        return Vec2(this.x + other.x, this.y + other.y)
     }
 
     operator==(other: Vec2) -> bool {
@@ -2282,7 +2284,7 @@ struct Point {
 }
 
 // Two creation styles
-let p = new Point()                  // default-construct (zero-valued fields), then assign
+let p = Point()                  // default-construct (zero-valued fields), then assign
 p.x = 3.0
 p.y = 4.0
 
@@ -2306,7 +2308,7 @@ b.x = 99.0
 | Generics | ✅ | ✅ |
 | `static` / `private` / `protected` / `const` | ✅ | ✅ |
 | Operator overload | ✅ | ✅ |
-| Constructor | `constructor(...)` | **Optional**: `new Point()` yields a zero-valued instance |
+| Constructor | `constructor(...)` | **Optional**: `Point()` yields a zero-valued instance |
 | Literal | none | `TypeName{field: value, ...}` |
 
 **When to use**:
@@ -2935,7 +2937,7 @@ The compiler analyzes upvalues:
 Xray is **not** a full ownership/borrow-checked language (unlike Rust). However, **cross-coroutine data transfer** uses move semantics:
 
 ```xray
-shared let big_buffer = new Bytes(1024 * 1024)
+shared let big_buffer = Bytes(1024 * 1024)
 
 let t = go fn(b: Bytes) -> int {
     return process(b)
@@ -2993,14 +2995,14 @@ let t2 = go fn(c: Json) -> int {
 }(config)
 
 // Pattern 3: move ownership
-shared let big = new Bytes(1024)
+shared let big = Bytes(1024)
 let t3 = go fn(b: Bytes) -> int {
     return process(b)
 }(move big)
 // big is inaccessible from this point
 
 // Pattern 4: Channel communication (capturable)
-shared const ch = new Channel<int>(10)
+shared const ch = Channel<int>(10)
 let t4 = go fn(c: Channel<int>) -> int {
     return match (c.recv()) {
         Recv.Value(v) -> v
@@ -3450,8 +3452,8 @@ class Box<T> {
     get() -> T { return this.value }
 }
 
-let b1 = new Box<int>(42)
-let b2 = new Box<string>("hi")
+let b1 = Box<int>(42)
+let b2 = Box<string>("hi")
 
 // Multi-parameter generic
 class Pair<K, V> {
@@ -3521,8 +3523,8 @@ fn pickValue<K: Hashable, V>(k: K, v: V) -> V {
 
 ```xray
 identity(42)                    // T inferred as int
-new Box("hello")                // T inferred as string
-new Pair("key", 100)            // K=string, V=int
+Box("hello")                // T inferred as string
+Pair("key", 100)            // K=string, V=int
 ```
 
 The inference algorithm is **bidirectional**:
@@ -3534,8 +3536,8 @@ The inference algorithm is **bidirectional**:
 When inference fails or precision is needed:
 
 ```xray
-let empty = new Array<int>()              // no element to infer from
-let m = new Map<string, int>()
+let empty = Array<int>()              // no element to infer from
+let m = Map<string, int>()
 let result = identity<float>(0)            // 0 defaults to int; force float
 ```
 
@@ -3578,8 +3580,8 @@ class Wrong {
 }
 
 fn render(d: Drawable) { d.draw() }
-render(new Square())     // OK
-// render(new Wrong())   // compile error: Wrong is not Drawable
+render(Square())     // OK
+// render(Wrong())   // compile error: Wrong is not Drawable
 ```
 
 #### Structural objects
@@ -3609,7 +3611,7 @@ Because of monomorphization, every concrete instantiation has its own class/func
 class Container<T> {
     items: Array<T>
 }
-let c = new Container<int>()
+let c = Container<int>()
 print(Reflect.typeOf(c))       // "Container<int>"
 ```
 
@@ -3766,15 +3768,15 @@ match t.poll() {
 
 ```ebnf
 ChannelType ::= 'Channel' '<' Type '>'
-ChannelNew  ::= 'new' 'Channel' ('<' Type '>')? '(' Expression ')'
+ChannelNew  ::= 'Channel' ('<' Type '>')? '(' Expression ')'
 ```
 
 Channels are usually declared as `shared const` (cross-coroutine lifetime, reference semantics):
 
 ```xray
-shared const ch  = new Channel<int>(10)    // buffered, capacity = 10
-shared const ch0 = new Channel<int>(0)     // unbuffered (synchronous handshake)
-shared const cha = new Channel(3)          // element type inferred from the first send
+shared const ch  = Channel<int>(10)    // buffered, capacity = 10
+shared const ch0 = Channel<int>(0)     // unbuffered (synchronous handshake)
+shared const cha = Channel(3)          // element type inferred from the first send
 ```
 
 **API** (note that all method names are **camelCase**):
@@ -3791,7 +3793,7 @@ shared const cha = new Channel(3)          // element type inferred from the fir
 | `isClosed` | `bool` (property) | Whether the channel is closed |
 
 ```xray
-shared const ch = new Channel<int>(10)
+shared const ch = Channel<int>(10)
 ch.send(42)                             // blocking send
 let v = match ch.recv() {
     Recv.Value(value) -> value
@@ -3840,8 +3842,8 @@ DefaultArm ::= '_' '->' Block
 ```
 
 ```xray
-shared const ch1 = new Channel<int>(2)
-shared const ch2 = new Channel<int>(2)
+shared const ch1 = Channel<int>(2)
+shared const ch2 = Channel<int>(2)
 
 select {
     msg from ch1 -> { print("got from ch1:", msg) }      // receive arm
@@ -3928,7 +3930,7 @@ MoveExpr ::= 'move' Identifier        // only at call-argument position
 `move` is an **argument-prefix modifier** (not a `go` option). It transfers ownership of a `shared let` variable from the current scope to the callee (including coroutines started by `go`, `ch.send()`, etc.). After `move`, the variable is statically marked as **moved**, and any subsequent reference is a compile error.
 
 ```xray
-shared let buf = new Bytes(1024 * 1024)
+shared let buf = Bytes(1024 * 1024)
 
 // hand off to a coroutine
 let t = go fn(b: Bytes) -> int {
@@ -3938,8 +3940,8 @@ let t = go fn(b: Bytes) -> int {
 // print(buf.length)
 
 // hand off to a channel
-shared const ch = new Channel<Bytes>(1)
-shared let payload = new Bytes(4096)
+shared const ch = Channel<Bytes>(1)
+shared let payload = Bytes(4096)
 ch.send(move payload)
 // compile error: payload has been moved
 ```
@@ -5241,7 +5243,6 @@ TypeOpExpr  ::= UnaryExpr (('as' | 'is') Type)*           // safe cast is `x as 
 RangeExpr   ::= AdditiveExpr ('..' AdditiveExpr)?
 
 UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
-           |  'new' QualifiedIdent TypeArgs? '(' ArgList? ')'
            |  'move' UnaryExpr
            |  'await' ('all' | 'any' | 'anySuccess')? UnaryExpr
            |  'go' (Block | PostfixExpr)

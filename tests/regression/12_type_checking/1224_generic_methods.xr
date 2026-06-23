@@ -49,7 +49,7 @@ class Box<T> {
 @test
 fn test_generic_methods() {
 
-    let c = new Container<int>()
+    let c = Container<int>()
     // Test 1: Typed add method
     c.add(42)
     c.add(100)
@@ -61,7 +61,7 @@ fn test_generic_methods() {
     // Test 2: Typed wrap method
     let wrapped = c.wrap(100)
     assert_eq(wrapped[0], 100)
-    let sc = new Container<string>()
+    let sc = Container<string>()
     let strWrapped = sc.wrap("test")
     assert_eq(strWrapped[0], "test")
     // Test 3: Pair method (multi-value return)
@@ -81,7 +81,7 @@ fn test_generic_methods() {
     // Generic class with generic method
 
     // Test 5: Generic class with generic method
-    let box: Box<int> = new Box<int>(10)
+    let box: Box<int> = Box<int>(10)
     assert_eq(box.get(), 10)
     let str = box.transform(fn(n) {
         return "value: " + string(n)

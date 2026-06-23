@@ -89,7 +89,6 @@ TypeOpExpr  ::= UnaryExpr (('as' | 'is') Type)*           // 安全转换写为 
 RangeExpr   ::= AdditiveExpr ('..' AdditiveExpr)?
 
 UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
-           |  'new' QualifiedIdent TypeArgs? '(' ArgList? ')'
            |  'move' UnaryExpr
            |  'await' ('all' | 'any' | 'anySuccess')? UnaryExpr
            |  'go' (Block | PostfixExpr)
@@ -390,7 +389,6 @@ TypeOpExpr  ::= UnaryExpr (('as' | 'is') Type)*           // safe cast is `x as 
 RangeExpr   ::= AdditiveExpr ('..' AdditiveExpr)?
 
 UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
-           |  'new' QualifiedIdent TypeArgs? '(' ArgList? ')'
            |  'move' UnaryExpr
            |  'await' ('all' | 'any' | 'anySuccess')? UnaryExpr
            |  'go' (Block | PostfixExpr)

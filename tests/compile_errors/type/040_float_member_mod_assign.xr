@@ -10,5 +10,5 @@ class Box {
     }
 }
 
-let box = new Box()
+let box = Box()
 box.reduce()

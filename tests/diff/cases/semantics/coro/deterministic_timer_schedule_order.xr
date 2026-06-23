@@ -17,7 +17,7 @@ fn send_after(ch: Channel<int>, id: int, delay_ms: int) {
     ch.send(id)
 }
 
-shared const ch: Channel<int> = new Channel(3)
+shared const ch: Channel<int> = Channel(3)
 
 go send_after(ch, 1, 50)
 go send_after(ch, 2, 10)

@@ -155,15 +155,15 @@ match t.poll() {
 
 ```ebnf
 ChannelType ::= 'Channel' '<' Type '>'
-ChannelNew  ::= 'new' 'Channel' ('<' Type '>')? '(' Expression ')'
+ChannelNew  ::= 'Channel' ('<' Type '>')? '(' Expression ')'
 ```
 
 Channel 通常以 `shared const` 声明（生命周期跨协程，引用语义）：
 
 ```xray @id=channel-decl-variants
-shared const ch  = new Channel<int>(10)    // 有缓冲，capacity = 10
-shared const ch0 = new Channel<int>(0)     // 无缓冲（同步握手）
-shared const cha = new Channel(3)          // 元素类型从首次 send 推断
+shared const ch  = Channel<int>(10)    // 有缓冲，capacity = 10
+shared const ch0 = Channel<int>(0)     // 无缓冲（同步握手）
+shared const cha = Channel(3)          // 元素类型从首次 send 推断
 ```
 
 **API**（注意全部为 **camelCase**）：
@@ -180,7 +180,7 @@ shared const cha = new Channel(3)          // 元素类型从首次 send 推断
 | `isClosed` | `bool`（属性） | channel 是否已关闭 |
 
 ```xray @id=channel-basic-ops
-shared const ch = new Channel<int>(10)
+shared const ch = Channel<int>(10)
 ch.send(42)                             // 阻塞发送
 let v = match ch.recv() {
     Recv.Value(value) -> value
@@ -229,8 +229,8 @@ DefaultArm ::= '_' '->' Block
 ```
 
 ```xray @id=coro-select
-shared const ch1 = new Channel<int>(2)
-shared const ch2 = new Channel<int>(2)
+shared const ch1 = Channel<int>(2)
+shared const ch2 = Channel<int>(2)
 
 select {
     msg from ch1 -> { print("got from ch1:", msg) }      // 接收分支
@@ -317,7 +317,7 @@ MoveExpr ::= 'move' Identifier        // 仅出现在调用参数位置
 `move` 是**实参修饰前缀**（不是 `go` 的选项）。它把 `shared let` 变量的所有权从当前作用域转移到被调函数（包括 `go` 启动的协程、`ch.send()` 等）。move 后原变量在编译期被标记为**已 moved**，再次引用是编译错误。
 
 ```xray @id=coro-move-transfer
-shared let buf = new Bytes(1024 * 1024)
+shared let buf = Bytes(1024 * 1024)
 
 // 移交给协程
 let t = go fn(b: Bytes) -> int {
@@ -327,8 +327,8 @@ let t = go fn(b: Bytes) -> int {
 // print(buf.length)
 
 // 移交给 channel
-shared const ch = new Channel<Bytes>(1)
-shared let payload = new Bytes(4096)
+shared const ch = Channel<Bytes>(1)
+shared let payload = Bytes(4096)
 ch.send(move payload)
 // 编译错误：payload has been moved
 ```
@@ -580,15 +580,15 @@ match t.poll() {
 
 ```ebnf
 ChannelType ::= 'Channel' '<' Type '>'
-ChannelNew  ::= 'new' 'Channel' ('<' Type '>')? '(' Expression ')'
+ChannelNew  ::= 'Channel' ('<' Type '>')? '(' Expression ')'
 ```
 
 Channels are usually declared as `shared const` (cross-coroutine lifetime, reference semantics):
 
 ```xray @id=channel-decl-variants
-shared const ch  = new Channel<int>(10)    // buffered, capacity = 10
-shared const ch0 = new Channel<int>(0)     // unbuffered (synchronous handshake)
-shared const cha = new Channel(3)          // element type inferred from the first send
+shared const ch  = Channel<int>(10)    // buffered, capacity = 10
+shared const ch0 = Channel<int>(0)     // unbuffered (synchronous handshake)
+shared const cha = Channel(3)          // element type inferred from the first send
 ```
 
 **API** (note that all method names are **camelCase**):
@@ -605,7 +605,7 @@ shared const cha = new Channel(3)          // element type inferred from the fir
 | `isClosed` | `bool` (property) | Whether the channel is closed |
 
 ```xray @id=channel-basic-ops
-shared const ch = new Channel<int>(10)
+shared const ch = Channel<int>(10)
 ch.send(42)                             // blocking send
 let v = match ch.recv() {
     Recv.Value(value) -> value
@@ -654,8 +654,8 @@ DefaultArm ::= '_' '->' Block
 ```
 
 ```xray @id=coro-select
-shared const ch1 = new Channel<int>(2)
-shared const ch2 = new Channel<int>(2)
+shared const ch1 = Channel<int>(2)
+shared const ch2 = Channel<int>(2)
 
 select {
     msg from ch1 -> { print("got from ch1:", msg) }      // receive arm
@@ -742,7 +742,7 @@ MoveExpr ::= 'move' Identifier        // only at call-argument position
 `move` is an **argument-prefix modifier** (not a `go` option). It transfers ownership of a `shared let` variable from the current scope to the callee (including coroutines started by `go`, `ch.send()`, etc.). After `move`, the variable is statically marked as **moved**, and any subsequent reference is a compile error.
 
 ```xray @id=coro-move-transfer
-shared let buf = new Bytes(1024 * 1024)
+shared let buf = Bytes(1024 * 1024)
 
 // hand off to a coroutine
 let t = go fn(b: Bytes) -> int {
@@ -752,8 +752,8 @@ let t = go fn(b: Bytes) -> int {
 // print(buf.length)
 
 // hand off to a channel
-shared const ch = new Channel<Bytes>(1)
-shared let payload = new Bytes(4096)
+shared const ch = Channel<Bytes>(1)
+shared let payload = Bytes(4096)
 ch.send(move payload)
 // compile error: payload has been moved
 ```

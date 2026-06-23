@@ -409,29 +409,6 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         }
     }
 
-    /* Builtin heap types require 'new': Map(), Array(), Set(), Bytes(),
-     * Channel(), StringBuilder(), WeakMap(), WeakSet() without 'new' is
-     * an error — use 'new T()' instead. */
-    if (call->callee && call->callee->type == AST_VARIABLE) {
-        const char *cname = call->callee->as.variable.name;
-        if (cname) {
-            static const char *const heap_types[] = {"Map",     "Array",   "Set",
-                                                     "Bytes",   "Channel", "StringBuilder",
-                                                     "WeakMap", "WeakSet", NULL};
-            for (const char *const *p = heap_types; *p; p++) {
-                if (strcmp(cname, *p) == 0) {
-                    XrLocation loc = {
-                        .file = ctx->file_path, .line = node->line, .column = node->column};
-                    char msg[128];
-                    snprintf(msg, sizeof(msg), "Use 'new %s(...)' to construct %s", cname, cname);
-                    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
-                                               XR_ERR_ANALYZE_NOT_CALLABLE, msg, &loc);
-                    break;
-                }
-            }
-        }
-    }
-
     // Check generic type argument count and constraints
     if (call->type_arg_count > 0 && fn_links) {
         int expected_count = xa_symbol_links_get_type_param_count(fn_links);
@@ -715,12 +692,23 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                 return xr_type_new_named_instance(ctx->analyzer->isolate, "ResultGroup");
             }
 
-            XaSymbol *sym = xa_scope_lookup(ctx->analyzer->global_scope, name);
+            // Construction `T(args)`: resolve the class in any visible scope
+            // (global, enclosing function for nested classes). new-expr used to
+            // be the only path that handled non-global classes; unify here.
+            XaSymbol *sym = xa_scope_lookup(ctx->analyzer->current_scope, name);
+            if (!sym || sym->kind != XA_SYM_CLASS)
+                sym = xa_scope_lookup(ctx->analyzer->global_scope, name);
             if (sym && sym->kind == XA_SYM_CLASS) {
                 XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
                 if (links && links->class_info) {
                     return xr_type_new_instance(ctx->analyzer->isolate, links->class_info);
                 }
+            }
+
+            // Built-in primitive class Exception (and bare construction of it):
+            // `Exception(msg)` constructs the runtime exception instance.
+            if (strcmp(name, "Exception") == 0) {
+                return xr_type_new_named_instance(ctx->analyzer->isolate, "Exception");
             }
         }
         // Container method with callback: infer fn expr arg types even though
@@ -750,10 +738,13 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
 
     // Class constructor call: ClassName(args) returns instance type
     if (callee_type->kind == XR_KIND_CLASS) {
-        // Look up class symbol to get XrClassInfo
+        // Look up class symbol to get XrClassInfo. Try the current scope first
+        // (covers function-local / nested class declarations) then global.
         if (call->callee && call->callee->type == AST_VARIABLE) {
             const char *class_name = call->callee->as.variable.name;
-            XaSymbol *class_sym = xa_scope_lookup(ctx->analyzer->global_scope, class_name);
+            XaSymbol *class_sym = xa_scope_lookup(ctx->analyzer->current_scope, class_name);
+            if (!class_sym || class_sym->kind != XA_SYM_CLASS)
+                class_sym = xa_scope_lookup(ctx->analyzer->global_scope, class_name);
             if (class_sym && class_sym->kind == XA_SYM_CLASS) {
                 XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, class_sym);
                 if (links && links->class_info) {

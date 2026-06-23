@@ -62,11 +62,11 @@ fn test_tostring() {
     assert(js.indexOf("Alice") >= 0)
 
     // === 8. Bytes toString (Bytes is Array<uint8>) ===
-    let buf = new Bytes(3, 0)
+    let buf = Bytes(3, 0)
     assert_eq(string(buf), "[0, 0, 0]")
 
     // === 9. Channel toString ===
-    shared const ch = new Channel(5)
+    shared const ch = Channel(5)
     let cs = string(ch)
     assert(cs.indexOf("Channel") == 0)
 

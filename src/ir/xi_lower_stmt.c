@@ -2587,7 +2587,12 @@ static void lower_return(XiLower *l, AstNode *node) {
          * Other XI_CALL (class constructors, etc.) → NOT safe; OP_TAILCALL
          * only handles closures and would fail on class objects. */
         bool is_direct_call = (ret->values[0]->type == AST_CALL_EXPR);
-        if (is_direct_call && val && val->op == XI_CALL_METHOD) {
+        /* A `T(args)` construction lowers to an XI_CALL_METHOD whose aux is
+         * "constructor". Constructors must materialize and return the new
+         * object, so they are never tail calls (and AOT has no TAIL_CALL). */
+        bool is_constructor_call = val && val->op == XI_CALL_METHOD && val->aux &&
+                                   strcmp((const char *) val->aux, "constructor") == 0;
+        if (is_direct_call && !is_constructor_call && val && val->op == XI_CALL_METHOD) {
             val->flags |= XI_FLAG_TAIL;
         } else if (is_direct_call && val && val->op == XI_CALL) {
             bool is_self = (val->aux_int & 0xFF) == 1;

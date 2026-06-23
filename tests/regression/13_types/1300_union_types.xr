@@ -97,13 +97,13 @@ fn test_union_types() {
 
     // Test 11: class instance union
 
-    let pet: Dog | Cat = new Dog("Buddy")
+    let pet: Dog | Cat = Dog("Buddy")
     assert_eq(pet.speak(), "woof")
-    pet = new Cat("Whiskers")
+    pet = Cat("Whiskers")
     assert_eq(pet.speak(), "meow")
 
     // Test 12: class instance with is check
-    let pet2: Dog | Cat = new Dog("Rex")
+    let pet2: Dog | Cat = Dog("Rex")
     assert_eq(pet2 is Dog, true)
     assert_eq(pet2 is Cat, false)
 

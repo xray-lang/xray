@@ -10,7 +10,7 @@ fn produce(ch: Channel<int>, count: int) {
 
 @test
 fn test_select_wakes_after_buffer_refill() {
-    shared const ch = new Channel(10)
+    shared const ch = Channel(10)
     let task = go produce(ch, 50)
 
     let received = 0

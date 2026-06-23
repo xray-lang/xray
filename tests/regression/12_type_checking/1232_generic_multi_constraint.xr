@@ -131,8 +131,8 @@ fn test_user_class_implements_comparable() {
     fn first<T: Comparable>(a: T, b: T) -> T {
         return a
     }
-    let p = new CmpPoint(7)
-    let q = new CmpPoint(3)
+    let p = CmpPoint(7)
+    let q = CmpPoint(3)
     let r = first<CmpPoint>(p, q)
     assert_eq(r.x, 7)
 }
@@ -142,8 +142,8 @@ fn test_user_class_implements_comparable_implicit() {
     fn first<T: Comparable>(a: T, b: T) -> T {
         return a
     }
-    let p = new CmpPoint(11)
-    let q = new CmpPoint(2)
+    let p = CmpPoint(11)
+    let q = CmpPoint(2)
     let r = first(p, q)
     assert_eq(r.x, 11)
 }

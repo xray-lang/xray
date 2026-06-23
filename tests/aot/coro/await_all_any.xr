@@ -14,8 +14,8 @@ let t3 = go square_after_yield(4)
 let results = await all [t1, t2, t3]
 print(results[0] + results[1] + results[2])
 
-let ch1 = new Channel<int>(0)
-let ch2 = new Channel<int>(1)
+let ch1 = Channel<int>(0)
+let ch2 = Channel<int>(1)
 let a = go recv_then_return(ch1, 10)
 let b = go recv_then_return(ch2, 20)
 ch2.send(1)

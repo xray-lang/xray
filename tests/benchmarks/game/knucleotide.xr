@@ -29,7 +29,7 @@ fn select_random(chars, probs) {
 }
 
 fn generate_sequence(count) {
-    let sb = new StringBuilder()
+    let sb = StringBuilder()
     for (j in 0..count) {
         sb.append(select_random(hs_chars, hs_probs))
     }

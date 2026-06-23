@@ -11,7 +11,7 @@ fn boom() -> int {
 }
 
 fn blocked_in_select_after() -> int {
-    shared const ch = new Channel(1)
+    shared const ch = Channel(1)
     select {
         msg from ch -> { return 1 }
         after 1000000 -> { return 2 }

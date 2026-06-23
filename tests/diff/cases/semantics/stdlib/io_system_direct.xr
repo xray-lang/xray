@@ -24,7 +24,7 @@ print(lines[0])
 print(lines[1])
 
 let bytesFile = dir + "/bytes.bin"
-let bytes = new Bytes(3)
+let bytes = Bytes(3)
 bytes[0] = 65
 bytes[1] = 0
 bytes[2] = 255

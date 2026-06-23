@@ -25,7 +25,7 @@ fn serveMessage(conn: NetConn) {
 
 fn serveBytes(conn: NetConn) {
     defer net.close(conn)
-    let buf = new Bytes(65536)
+    let buf = Bytes(65536)
     while (true) {
         let n = net.readInto(conn, buf)
         if (n <= 0) {

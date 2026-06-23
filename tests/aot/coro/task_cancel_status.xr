@@ -22,7 +22,7 @@ fn task_poll(task: Task<int>) -> TaskResult<int> {
     return task.poll()
 }
 
-const ch = new Channel<int>(0)
+const ch = Channel<int>(0)
 let blocked = go wait_for_value(ch)
 blocked.cancel()
 let cancelled_result = blocked.awaitResult()

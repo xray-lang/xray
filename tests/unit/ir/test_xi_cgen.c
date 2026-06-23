@@ -1015,7 +1015,7 @@ TEST(cgen_coro_syncs_helper_result_debug_source_vars) {
                       "    let received = ch.recv()\n"
                       "    return received + 1\n"
                       "}\n"
-                      "shared const ch: Channel<int> = new Channel(1)\n"
+                      "shared const ch: Channel<int> = Channel(1)\n"
                       "let task = go worker(ch)\n"
                       "print(await task)\n";
 
@@ -1166,12 +1166,12 @@ TEST(cgen_typed_array_u8_uses_byte_storage_fast_path) {
 
 TEST(cgen_bytes_methods_use_raw_memory_helpers) {
     const char *src = "fn run() -> int {\n"
-                      "    let src = new Bytes(8)\n"
+                      "    let src = Bytes(8)\n"
                       "    src[0] = 1\n"
                       "    src[1] = 2\n"
                       "    src[2] = 3\n"
                       "    src[3] = 4\n"
-                      "    let dst = new Bytes(8)\n"
+                      "    let dst = Bytes(8)\n"
                       "    dst.copyFrom(src, 0, 0, 4)\n"
                       "    dst.copyWithin(2, 0, 4)\n"
                       "    dst.repeatFrom(6, 2, 2)\n"
@@ -3460,7 +3460,7 @@ TEST(cgen_direct_suspend_method_call_propagates_cps) {
                       "    }\n"
                       "}\n"
                       "fn main() -> int {\n"
-                      "    let box = new Box()\n"
+                      "    let box = Box()\n"
                       "    return box.bump(41)\n"
                       "}\n"
                       "print(main())\n";
@@ -3671,7 +3671,7 @@ TEST(cgen_coro_loop_tail_phi_survives_poll_suspend) {
                       "    }\n"
                       "}\n"
                       "fn run_once(count: int, timeout_ms: int) -> int {\n"
-                      "    shared const ch = new Channel(1)\n"
+                      "    shared const ch = Channel(1)\n"
                       "    ch.send(1)\n"
                       "    let tasks: Array<Task> = []\n"
                       "    for (let i = 0; i < count; i++) {\n"
@@ -3980,7 +3980,7 @@ TEST(cgen_coro_sync_go_wrappers_only_for_go_targets) {
 }
 
 TEST(cgen_coro_channel_send_clones_value) {
-    const char *src = "let ch = new Channel<Array<int>>(1)\n"
+    const char *src = "let ch = Channel<Array<int>>(1)\n"
                       "let xs = [1, 2]\n"
                       "ch.send(xs)\n";
 
@@ -4004,7 +4004,7 @@ TEST(cgen_coro_channel_send_clones_value) {
 }
 
 TEST(cgen_coro_scalar_channel_send_skips_clone) {
-    const char *src = "let ch = new Channel<int>(1)\n"
+    const char *src = "let ch = Channel<int>(1)\n"
                       "ch.send(42)\n";
 
     XiFunc *ir = compile_to_ir(src);
@@ -4037,8 +4037,8 @@ TEST(cgen_coro_unit_match_send_omits_void_phi) {
                       "        _ -> done.send(-1)\n"
                       "    }\n"
                       "}\n"
-                      "let ch = new Channel<int>(0)\n"
-                      "let done = new Channel<int>(1)\n"
+                      "let ch = Channel<int>(0)\n"
+                      "let done = Channel<int>(1)\n"
                       "go recv_timeout_until_close(ch, done)\n"
                       "ch.close()\n";
 
@@ -4059,7 +4059,7 @@ TEST(cgen_coro_unit_match_send_omits_void_phi) {
 }
 
 TEST(cgen_coro_scalar_channel_try_send_uses_typed_bridge) {
-    const char *src = "let ch = new Channel<int>(1)\n"
+    const char *src = "let ch = Channel<int>(1)\n"
                       "let ok = ch.trySend(42)\n"
                       "print(ok)\n";
 
@@ -4210,7 +4210,7 @@ TEST(cgen_coro_await_timeout_passes_deadline) {
                       "        _ -> { return -1 }\n"
                       "    }\n"
                       "}\n"
-                      "let ch = new Channel<int>(0)\n"
+                      "let ch = Channel<int>(0)\n"
                       "let task = go worker(ch)\n"
                       "let result = task.awaitTimeout(25)\n"
                       "print(result)\n";
@@ -4271,7 +4271,7 @@ TEST(cgen_tagged_null_equality_keeps_null_literal) {
 }
 
 TEST(cgen_coro_recv_resume_uses_wait_state_slot) {
-    const char *src = "let ch = new Channel<int>(0)\n"
+    const char *src = "let ch = Channel<int>(0)\n"
                       "let value = ch.recv()\n"
                       "print(value)\n";
 
@@ -4303,7 +4303,7 @@ TEST(cgen_coro_fused_scalar_channel_recv_uses_typed_pair_bridge) {
                       "        _ -> fallback\n"
                       "    }\n"
                       "}\n"
-                      "let ch = new Channel<int>(1)\n"
+                      "let ch = Channel<int>(1)\n"
                       "ch.send(9)\n"
                       "let task = go recv_or(ch, -1)\n"
                       "let result = await task\n"
@@ -4336,7 +4336,7 @@ TEST(cgen_coro_scalar_channel_recv_uses_tagged_slot) {
                       "        _ -> -1\n"
                       "    }\n"
                       "}\n"
-                      "let ch = new Channel<int>(1)\n"
+                      "let ch = Channel<int>(1)\n"
                       "ch.send(9)\n"
                       "let task = go recv_plus(ch)\n"
                       "let result = await task\n"
@@ -4389,7 +4389,7 @@ TEST(cgen_coro_channel_recv_null_check_keeps_tagged_slot) {
                       "        _ -> { print(\"other\") }\n"
                       "    }\n"
                       "}\n"
-                      "let ch = new Channel<int>(1)\n"
+                      "let ch = Channel<int>(1)\n"
                       "ch.send(0)\n"
                       "let task = go read_or_stop(ch)\n"
                       "await task\n";
@@ -4421,7 +4421,7 @@ TEST(cgen_coro_channel_recv_null_check_keeps_tagged_slot) {
 }
 
 TEST(cgen_coro_scalar_channel_try_recv_returns_recv_enum) {
-    const char *src = "let ch = new Channel<int>(1)\n"
+    const char *src = "let ch = Channel<int>(1)\n"
                       "let recv = ch.tryRecv()\n"
                       "print(recv)\n";
 
@@ -4446,7 +4446,7 @@ TEST(cgen_coro_scalar_channel_try_recv_returns_recv_enum) {
 }
 
 TEST(cgen_coro_select_try_recv_uses_ready_bit) {
-    const char *src = "let ch = new Channel<int>(0)\n"
+    const char *src = "let ch = Channel<int>(0)\n"
                       "select {\n"
                       "    value from ch -> { print(value) }\n"
                       "    _ -> { print(0) }\n"
@@ -4530,7 +4530,7 @@ TEST(cgen_runtime_needed_main_uses_aot_runtime) {
 }
 
 TEST(cgen_coro_select_publishes_state_before_block) {
-    const char *src = "let ch = new Channel<int>(0)\n"
+    const char *src = "let ch = Channel<int>(0)\n"
                       "select {\n"
                       "    value from ch -> { print(value) }\n"
                       "}\n";
@@ -4552,7 +4552,7 @@ TEST(cgen_coro_select_publishes_state_before_block) {
 }
 
 TEST(cgen_coro_channel_timeout_publishes_state_before_block) {
-    const char *src = "let ch = new Channel<int>(0)\n"
+    const char *src = "let ch = Channel<int>(0)\n"
                       "let sent = ch.sendTimeout(7, 10)\n"
                       "let recv = ch.recvTimeout(10)\n"
                       "print(sent)\n"
@@ -4586,7 +4586,7 @@ TEST(cgen_coro_channel_timeout_publishes_state_before_block) {
 }
 
 TEST(cgen_coro_recv_slot_is_traced_as_frame_root) {
-    const char *src = "let ch = new Channel<string>(0)\n"
+    const char *src = "let ch = Channel<string>(0)\n"
                       "let value = ch.recv()\n"
                       "print(value)\n";
 
@@ -4647,8 +4647,8 @@ TEST(cgen_coro_await_any_uses_typed_aggregate_bridge) {
                       "    ch.recv()\n"
                       "    return n\n"
                       "}\n"
-                      "let ch1 = new Channel<int>(0)\n"
-                      "let ch2 = new Channel<int>(1)\n"
+                      "let ch1 = Channel<int>(0)\n"
+                      "let ch2 = Channel<int>(1)\n"
                       "let t1 = go delayed(ch1, 1)\n"
                       "let t2 = go delayed(ch2, 2)\n"
                       "ch2.send(9)\n"
@@ -4681,7 +4681,7 @@ TEST(cgen_coro_scope_exit_publishes_state_before_block) {
                       "    ch.recv()\n"
                       "}\n"
                       "fn scoped() {\n"
-                      "    let ch = new Channel<int>(0)\n"
+                      "    let ch = Channel<int>(0)\n"
                       "    scope {\n"
                       "        go child(ch)\n"
                       "    }\n"
@@ -4705,7 +4705,7 @@ TEST(cgen_coro_scope_exit_publishes_state_before_block) {
 }
 
 TEST(cgen_channel_fields_use_aot_helpers) {
-    const char *src = "let ch = new Channel<int>(2)\n"
+    const char *src = "let ch = Channel<int>(2)\n"
                       "print(ch.length)\n"
                       "print(ch.capacity)\n"
                       "print(ch.isClosed)\n";
@@ -4750,7 +4750,7 @@ TEST(cgen_sync_go_channel_try_methods_use_aot_helpers) {
                       "    ch.close()\n"
                       "    return ch.isClosed()\n"
                       "}\n"
-                      "shared const ch = new Channel<int>(2)\n"
+                      "shared const ch = Channel<int>(2)\n"
                       "let p = go producer(ch)\n"
                       "print(await p)\n"
                       "let c = go consumer(ch)\n"
@@ -4873,7 +4873,7 @@ TEST(cgen_coro_task_status_uses_native_enum_status) {
                       "fn task_poll(task: Task<int>) -> TaskResult<int> {\n"
                       "    return task.poll()\n"
                       "}\n"
-                      "const ch = new Channel<int>(0)\n"
+                      "const ch = Channel<int>(0)\n"
                       "let blocked = go wait_for_value(ch)\n"
                       "blocked.cancel()\n"
                       "let cancelled_result = blocked.awaitResult()\n"

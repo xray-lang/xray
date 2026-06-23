@@ -8,7 +8,7 @@ class BenchCounter {
 }
 
 fn run(rounds: int) -> int {
-    let counter = new BenchCounter()
+    let counter = BenchCounter()
     let total = 0
     for (let i = 0; i < rounds; i++) {
         total = total + counter.bump((i % 5) + 1)

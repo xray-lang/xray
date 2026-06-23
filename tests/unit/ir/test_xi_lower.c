@@ -446,8 +446,8 @@ TEST(member_access_field_symbols_are_distinct) {
 }
 
 TEST(bytes_methods_lower_to_semantic_ops) {
-    XiFunc *f = lower_source("let src = new Bytes(8)\n"
-                             "let dst = new Bytes(8)\n"
+    XiFunc *f = lower_source("let src = Bytes(8)\n"
+                             "let dst = Bytes(8)\n"
                              "let a = src.loadU32LE(0)\n"
                              "let b = src.loadU64LE(0)\n"
                              "src.copyWithin(1, 0, 2)\n"
@@ -473,7 +473,7 @@ TEST(bytes_methods_lower_to_semantic_ops) {
 TEST(throw_stmt) {
     XiFunc *f = lower_source("let x = 1\n"
                              "if (x == 0) {\n"
-                             "    throw new Exception(\"error\")\n"
+                             "    throw Exception(\"error\")\n"
                              "}\n"
                              "print(x)\n");
     assert(f != NULL);

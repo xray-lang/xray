@@ -23,5 +23,5 @@ fn stash(data: in Array<int>, holder: ref Holder) {
 }
 
 let values: Array<int> = [1, 2]
-let holder = new Holder()
+let holder = Holder()
 stash(values, holder)

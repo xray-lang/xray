@@ -4,7 +4,7 @@
 import net
 
 fn serveBytesEcho(c: NetConn) {
-    let buf = new Bytes(16)
+    let buf = Bytes(16)
     let n = net.readInto(c, buf)
     if (n > 0) {
         net.writeBytes(c, buf)
@@ -18,7 +18,7 @@ fn acceptBytesEcho(lst: NetListener) {
 }
 
 fn serveBytesMaxLen(c: NetConn) {
-    let buf = new Bytes(16)
+    let buf = Bytes(16)
     let n = net.readInto(c, buf, 3)
     if (n > 0) {
         net.writeBytes(c, buf)
@@ -40,7 +40,7 @@ fn test_bytes_echo_roundtrip() {
     go acceptBytesEcho(lst)
 
     let c = net.dial("127.0.0.1", port)!
-    let payload = new Bytes([65, 0, 255, 66])
+    let payload = Bytes([65, 0, 255, 66])
     assert_eq(net.writeBytes(c, payload), 4)
 
     let resp = net.read(c)!
@@ -63,7 +63,7 @@ fn test_read_into_maxlen_controls_length() {
     go acceptBytesMaxLen(lst)
 
     let c = net.dial("127.0.0.1", port)!
-    let payload = new Bytes([80, 81, 82, 83, 84])
+    let payload = Bytes([80, 81, 82, 83, 84])
     assert_eq(net.writeBytes(c, payload), 5)
 
     let resp = net.read(c)!

@@ -61,7 +61,7 @@ fn local_arrays() -> int {
     let mapped = values.map(fn(x: int) -> int { return x + 10 })
     let kept = values.filter(fn(x: int) -> bool { return x > 1 })
 
-    let bytes = new Bytes(3)
+    let bytes = Bytes(3)
     bytes[0] = 4
     bytes[1] = 5
     bytes[2] = 6
@@ -87,7 +87,7 @@ fn loop_sum(n: int) -> int {
 }
 
 fn bytes_index(n: int) -> int {
-    let bytes = new Bytes(n)
+    let bytes = Bytes(n)
     let i = 0
     while (i < bytes.length) {
         bytes[i] = i * 3 + 1

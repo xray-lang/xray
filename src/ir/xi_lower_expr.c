@@ -46,6 +46,8 @@
 
 /* ========== Forward Declarations ========== */
 
+static XiValue *lower_try_construct_call(XiLower *l, AstNode *node, CallExprNode *call);
+
 static int pack_go_aux(int link_mode) {
     return link_mode & XI_GO_AUX_LINK_MASK;
 }
@@ -2490,6 +2492,12 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
             return bi;
     }
 
+    /* `T(args)` where T is a class name constructs an instance (no `new`).
+     * Unified with new-expr so nested/builtin/Exception classes all work. */
+    XiValue *constructed = lower_try_construct_call(l, node, call);
+    if (constructed)
+        return constructed;
+
     /* Evaluate callee and all arguments before creating CALL */
     XiValue *callee_val = xi_lower_expr(l, call->callee);
     if (!callee_val)
@@ -2736,15 +2744,18 @@ XR_FUNC XiValue *xi_lower_function_decl(XiLower *l, AstNode *node) {
     return v;
 }
 
-static XiValue *lower_new_expr(XiLower *l, AstNode *node) {
-    NewExprNode *ne = &node->as.new_expr;
-    struct XrType *result_type = xi_lower_node_type(l, node);
-    XR_DCHECK(ne->class_name != NULL, "new expr must have class name");
-    const char *cname = ne->class_name;
+/* Shared construction lowering used by both `T(args)` calls (lower_call) and
+ * the legacy new-expr node. Builds built-in collection ops or a class
+ * constructor invocation. result_type is the resolved instance/container type
+ * from the node table. */
+static XiValue *lower_construct(XiLower *l, AstNode *node, struct XrType *result_type,
+                                const char *module_name, const char *cname, AstNode **arguments,
+                                int arg_count) {
+    XR_DCHECK(cname != NULL, "construct must have class name");
 
     /* Built-in collection types: emit specialized ops (no constructor call) */
-    if (ne->module_name == NULL) {
-        if (strcmp(cname, "Map") == 0 && ne->arg_count == 0) {
+    if (module_name == NULL) {
+        if (strcmp(cname, "Map") == 0 && arg_count == 0) {
             XiValue *cap = xi_const_int(l->func, l->cur_block, 0, l->type_int);
             XiValue *v = xi_value_new(l->func, l->cur_block, XI_MAP_NEW, result_type, 1);
             if (!v)
@@ -2769,7 +2780,7 @@ static XiValue *lower_new_expr(XiLower *l, AstNode *node) {
             v->line = (uint32_t) node->line;
             return v;
         }
-        if (strcmp(cname, "WeakMap") == 0 && ne->arg_count == 0) {
+        if (strcmp(cname, "WeakMap") == 0 && arg_count == 0) {
             XiValue *cap = xi_const_int(l->func, l->cur_block, 0, l->type_int);
             XiValue *v = xi_value_new(l->func, l->cur_block, XI_MAP_NEW, result_type, 1);
             if (!v)
@@ -2779,7 +2790,7 @@ static XiValue *lower_new_expr(XiLower *l, AstNode *node) {
             v->line = (uint32_t) node->line;
             return v;
         }
-        if (strcmp(cname, "Array") == 0 && ne->arg_count == 0) {
+        if (strcmp(cname, "Array") == 0 && arg_count == 0) {
             XiValue *cap = xi_const_int(l->func, l->cur_block, 0, l->type_int);
             XiValue *v = xi_value_new(l->func, l->cur_block, XI_ARRAY_NEW, result_type, 1);
             if (!v)
@@ -2793,9 +2804,9 @@ static XiValue *lower_new_expr(XiLower *l, AstNode *node) {
             v->line = (uint32_t) node->line;
             return v;
         }
-        if (strcmp(cname, "Array") == 0 && ne->arg_count == 2) {
-            XiValue *count = xi_lower_expr(l, ne->arguments[0]);
-            XiValue *fill = xi_lower_expr(l, ne->arguments[1]);
+        if (strcmp(cname, "Array") == 0 && arg_count == 2) {
+            XiValue *count = xi_lower_expr(l, arguments[0]);
+            XiValue *fill = xi_lower_expr(l, arguments[1]);
             if (!count || !fill)
                 return NULL;
             XiValue *v = xi_value_new(l->func, l->cur_block, XI_CALL_BUILTIN, result_type, 2);
@@ -2809,7 +2820,7 @@ static XiValue *lower_new_expr(XiLower *l, AstNode *node) {
             v->line = (uint32_t) node->line;
             return v;
         }
-        if (strcmp(cname, "Set") == 0 && ne->arg_count == 0) {
+        if (strcmp(cname, "Set") == 0 && arg_count == 0) {
             XiValue *cap = xi_const_int(l->func, l->cur_block, 0, l->type_int);
             XiValue *v = xi_value_new(l->func, l->cur_block, XI_SET_NEW, result_type, 1);
             if (!v)
@@ -2825,7 +2836,7 @@ static XiValue *lower_new_expr(XiLower *l, AstNode *node) {
             v->line = (uint32_t) node->line;
             return v;
         }
-        if (strcmp(cname, "WeakSet") == 0 && ne->arg_count == 0) {
+        if (strcmp(cname, "WeakSet") == 0 && arg_count == 0) {
             XiValue *cap = xi_const_int(l->func, l->cur_block, 0, l->type_int);
             XiValue *v = xi_value_new(l->func, l->cur_block, XI_SET_NEW, result_type, 1);
             if (!v)
@@ -2835,7 +2846,7 @@ static XiValue *lower_new_expr(XiLower *l, AstNode *node) {
             v->line = (uint32_t) node->line;
             return v;
         }
-        if (strcmp(cname, "StringBuilder") == 0 && ne->arg_count == 0) {
+        if (strcmp(cname, "StringBuilder") == 0 && arg_count == 0) {
             XiValue *v = xi_value_new(l->func, l->cur_block, XI_CALL_BUILTIN, result_type, 0);
             if (!v)
                 return NULL;
@@ -2848,11 +2859,11 @@ static XiValue *lower_new_expr(XiLower *l, AstNode *node) {
          * primitive constructor registered in core->exceptionClass. Falls through
          * to the generic class-instantiation path below. */
         /* new Bytes() / new Bytes(n) / new Bytes(n, fill) */
-        if (strcmp(cname, "Bytes") == 0 && ne->arg_count <= 2) {
-            int n = (int) ne->arg_count;
+        if (strcmp(cname, "Bytes") == 0 && arg_count <= 2) {
+            int n = (int) arg_count;
             XiValue *arg_vals[2];
             for (int i = 0; i < n; i++)
-                arg_vals[i] = xi_lower_expr(l, ne->arguments[i]);
+                arg_vals[i] = xi_lower_expr(l, arguments[i]);
             XiValue *v =
                 xi_value_new(l->func, l->cur_block, XI_CALL_BUILTIN, result_type, (uint16_t) n);
             if (!v)
@@ -2865,8 +2876,8 @@ static XiValue *lower_new_expr(XiLower *l, AstNode *node) {
             return v;
         }
         /* new Channel() / new Channel(bufferSize) */
-        if (strcmp(cname, "Channel") == 0 && ne->arg_count <= 1) {
-            XiValue *buf_size = ne->arg_count == 1 ? xi_lower_expr(l, ne->arguments[0]) : NULL;
+        if (strcmp(cname, "Channel") == 0 && arg_count <= 1) {
+            XiValue *buf_size = arg_count == 1 ? xi_lower_expr(l, arguments[0]) : NULL;
             uint8_t elem_tid = 0;
             if (result_type && result_type->kind == XR_KIND_CHANNEL &&
                 result_type->container.element_type) {
@@ -2890,8 +2901,8 @@ static XiValue *lower_new_expr(XiLower *l, AstNode *node) {
     XiValue *stack_args[XI_LOWER_CALL_ARG_STACK_CAP];
     XiLowerArgList args;
     xi_lower_arg_list_init(&args, stack_args, XI_LOWER_CALL_ARG_STACK_CAP);
-    for (int i = 0; i < ne->arg_count; i++) {
-        XiValue *arg = xi_lower_expr(l, ne->arguments[i]);
+    for (int i = 0; i < arg_count; i++) {
+        XiValue *arg = xi_lower_expr(l, arguments[i]);
         if (!arg)
             return NULL;
         if (!xi_lower_arg_list_push(l, &args, arg, XI_LOWER_MAX_CALL_ARGS, (int) node->line))
@@ -2959,7 +2970,7 @@ static XiValue *lower_new_expr(XiLower *l, AstNode *node) {
 
     /* Zero-arg struct with compile-time layout → XI_STRUCT_NEW.
      * The emitter decides stack vs heap via struct_can_stack_alloc. */
-    if (ne->arg_count == 0 && ne->module_name == NULL && l->analyzer) {
+    if (arg_count == 0 && module_name == NULL && l->analyzer) {
         XrStructLayout *slayout = xi_lower_lookup_struct_layout(l, cname);
         if (slayout) {
             XiValue *inst = xi_value_new(l->func, l->cur_block, XI_STRUCT_NEW, result_type, 1);
@@ -2985,6 +2996,65 @@ static XiValue *lower_new_expr(XiLower *l, AstNode *node) {
     call->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
     call->line = (uint32_t) node->line;
     return call;
+}
+
+static XiValue *lower_new_expr(XiLower *l, AstNode *node) {
+    NewExprNode *ne = &node->as.new_expr;
+    return lower_construct(l, node, xi_lower_node_type(l, node), ne->module_name, ne->class_name,
+                           ne->arguments, ne->arg_count);
+}
+
+/* True if the named class is `Exception` or derives from it. Exception is a
+ * built-in primitive class; constructing it (or a subclass) must go through the
+ * new-expr construction path, not the normal class-binding call path. */
+static bool lower_class_is_exception_kind(XiLower *l, const char *name) {
+    if (!name)
+        return false;
+    if (strcmp(name, "Exception") == 0)
+        return true;
+    XaSymbol *sym = xi_lower_lookup_class_symbol(l, name);
+    if (!sym || !l->analyzer)
+        return false;
+    XaSymbolLinks *links = xa_analyzer_get_links(l->analyzer, sym);
+    XrClassInfo *info = links ? links->class_info : NULL;
+    for (XrClassInfo *c = info; c; c = c->base) {
+        if (c->base_name && strcmp(c->base_name, "Exception") == 0)
+            return true;
+        if (c->name && strcmp(c->name, "Exception") == 0)
+            return true;
+    }
+    return false;
+}
+
+/* True if the named class declares type parameters (generic). Generic classes
+ * must construct through the new-expr path (monomorphization-aware), which the
+ * normal class-binding call path does not handle for AOT. */
+static bool lower_class_is_generic(XiLower *l, const char *name) {
+    if (!name || !l->analyzer)
+        return false;
+    XaSymbol *sym = xi_lower_lookup_class_symbol(l, name);
+    if (!sym)
+        return false;
+    XaSymbolLinks *links = xa_analyzer_get_links(l->analyzer, sym);
+    return links && xa_symbol_links_get_type_param_count(links) > 0;
+}
+
+/* A bare `T(args)` call constructs through the new-expr construction path when
+ * the normal class-binding call path cannot handle it: Exception (built-in
+ * primitive class) and its subclasses, and generic classes (monomorphization).
+ * Plain non-generic user classes (top-level and nested) construct correctly via
+ * the normal call lowering and are left alone (preserves cross-module dispatch).
+ * Returns NULL when the normal call path should be used. */
+static XiValue *lower_try_construct_call(XiLower *l, AstNode *node, CallExprNode *call) {
+    if (!call->callee || call->callee->type != AST_VARIABLE)
+        return NULL;
+    const char *name = call->callee->as.variable.name;
+    if (!name)
+        return NULL;
+    if (!lower_class_is_exception_kind(l, name) && !lower_class_is_generic(l, name))
+        return NULL;
+    return lower_construct(l, node, xi_lower_node_type(l, node), NULL, name, call->arguments,
+                           call->arg_count);
 }
 
 static XiValue *lower_go_expr(XiLower *l, AstNode *node) {

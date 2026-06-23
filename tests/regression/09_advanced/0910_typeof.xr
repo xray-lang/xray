@@ -78,7 +78,7 @@ class MyClass {
 
 @test
 fn test_typeof_instance() {
-    let obj = new MyClass(10)
+    let obj = MyClass(10)
     assert_eq(typeof(obj), "MyClass")
 }
 

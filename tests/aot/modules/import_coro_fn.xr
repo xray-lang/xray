@@ -1,6 +1,6 @@
 import { suspend_plus, recv_once, sync_plus } from "./coro_lib"
 
-let ch = new Channel<int>(1)
+let ch = Channel<int>(1)
 ch.send(20)
 
 print(suspend_plus(40))

@@ -192,7 +192,7 @@ xray 共 **62 个保留关键字**，源码真值表见 `src/frontend/lexer/xkey
 | `interface` `implements` | 接口声明/实现 |
 | `enum` | 枚举声明 |
 | `type` | 类型别名 |
-| `new` | 实例化 |
+| `new` | 已移除——仍保留为关键字仅用于迁移期报错（构造写 `T(...)`，见 §3.14） |
 | `this` `super` | 自我/父类引用 |
 | `constructor` | 构造器 |
 | `static` `private` `protected` | 类/成员修饰符；公开是默认语义，没有 `public` 关键字 |
@@ -674,7 +674,7 @@ let s: Set<int> = #[1, 2, 3]
 协程间通信通道。**必须**用 `const` 声明（见 §10.5）。
 
 ```xray
-const ch: Channel<int> = new Channel<int>(10)
+const ch: Channel<int> = Channel<int>(10)
 ```
 
 #### 2.4.5 `Bytes`
@@ -682,8 +682,8 @@ const ch: Channel<int> = new Channel<int>(10)
 类型化字节缓冲。语义等价 `Array<uint8>`，但底层是连续内存。
 
 ```xray
-let buf = new Bytes(1024)
-let init = new Bytes([72, 101, 108, 108, 111])
+let buf = Bytes(1024)
+let init = Bytes([72, 101, 108, 108, 111])
 ```
 
 #### 2.4.6 `Json` 与对象字面量
@@ -957,7 +957,7 @@ Reflect.getAllTypes()       // 所有已注册类型
 | 级 | 运算符 | 结合性 | 说明 |
 |--|--|--|--|
 | 17 | `(...)` `[...]` `.x` `?.x` `?[...]` `f()` `e!` | 左 | 后缀：分组、索引、成员、可选链、调用、强制解包 |
-| 16 | 前缀 `-` `+` `!` `~` `new` `move` `await` `go` `unsafe` | 右 | 一元前缀 + 协程/FFI 边界操作 |
+| 16 | 前缀 `-` `+` `!` `~` `move` `await` `go` `unsafe` | 右 | 一元前缀 + 协程/FFI 边界操作 |
 | 15 | `as` `is` | 左 | 类型转换 / 检查（`as T?` 安全形式靠目标类型可空，非独立 `as?` 运算符） |
 | 14 | `*` `/` `%` | 左 | 乘除取模 |
 | 13 | `+` `-` | 左 | 加减 |
@@ -981,7 +981,6 @@ Reflect.getAllTypes()       // 所有已注册类型
 
 ```ebnf
 UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
-            | 'new' Identifier TypeArgs? '(' ArgList? ')'
             | 'move' UnaryExpr
             | 'await' ('all' | 'any')? UnaryExpr
             | 'go' (Block | PostfixExpr)
@@ -1281,14 +1280,14 @@ let obj = { users }              // shorthand
 - 默认推断为**可扩展**的结构化对象类型（见 §2.4.6 / §2.10 Json 行为）。
 - 用 `type` 别名固化结构：`let u: User = {...}`（编译期检查字段集，密封）。
 
-#### Bytes `new Bytes(...)`
+#### Bytes `Bytes(...)`
 
 详见 §2.4.5 与 §14.5。
 
-#### Channel `new Channel<T>(buf?)`
+#### Channel `Channel<T>(buf?)`
 
 ```xray
-const ch: Channel<int> = new Channel<int>(10)
+const ch: Channel<int> = Channel<int>(10)
 ```
 
 详见 §10.5。
@@ -1432,27 +1431,30 @@ let result = match (x) {
 - **穷举性**：对 enum 变量（ADT 与简单枚举）编译器强制穷举。对其他表达式不强制，运行时无匹配抛 `Exception(E0442)`。
 - 模式详见 [§6](#6-模式-patterns)。
 
-### 3.14 `new`
+### 3.14 构造表达式
 
 ```ebnf
-NewExpr ::= 'new' Identifier TypeArgs? '(' ArgList? ')'
+ConstructExpr ::= Identifier TypeArgs? '(' ArgList? ')'
 ```
 
+构造与普通函数调用同形：`TypeName(args)`。没有 `new` 关键字——写出 `new`（如 `new Point(...)`）是编译错误，提示删除 `new`。
+
 ```xray
-let p = new Point(1.0, 2.0)
-let arr = new Array<int>()
-let ch = new Channel<int>(10)
-let m = new Map<string, int>()
+let p = Point(1.0, 2.0)
+let arr = Array<int>()
+let ch = Channel<int>(10)
+let m = Map<string, int>()
 ```
 
 **用于**：
-- 类与 struct 实例化。
-- 容器内置类型构造（`Array`/`Map`/`Set`/`Channel`/`Bytes`/`StringBuilder` 等）。
+- 类与 struct 实例化（`TypeName(args)`）。
+- 容器内置类型构造（`Array`/`Map`/`Set`/`Channel`/`Bytes`/`StringBuilder` 等，同样是 `TypeName(args)`）。
+- 消歧由 analyzer 按符号种类判定：类型名构造，函数名调用（命名约定：类型大写、函数小写）。
 
 **与字面量的关系**：
 ```xray
-let a = [1, 2, 3]              // 等价 new Array<int>() + push
-let m = #{}                    // 等价 new Map<...>()
+let a = [1, 2, 3]              // 等价 Array<int>() + push
+let m = #{}                    // 等价 Map<...>()
 let p = Point{x: 1, y: 2}      // struct literal
 ```
 
@@ -1846,7 +1848,7 @@ shared const PRIMES = [2, 3, 5, 7, 11]
 #### 5.1.4 `shared let` — 跨协程可变独占
 
 ```xray
-shared let buffer = new Bytes(1024)
+shared let buffer = Bytes(1024)
 ```
 
 - **Move 语义**：必须用 `move` 显式转移所有权。
@@ -2124,11 +2126,11 @@ class Animal {
     }
 
     static create(name: string) -> Animal {
-        return new Animal(name)
+        return Animal(name)
     }
 }
 
-let a = new Animal("Rex")
+let a = Animal("Rex")
 print(a.speak())
 print(Animal.create("Bob").name)
 ```
@@ -2201,7 +2203,7 @@ class Vector2 {
 - 构造器参数**类型可省**——若参数名与字段同名，从字段类型自动推断；其他情况推断为调用位点的实参类型。
 - 构造器隐式返回 `this`（编译期注入）。
 - 派生类构造器必须首行调 `super(...)`。
-- struct 可以**没有**构造器（`new Point()` 创建隐式零值实例，后续手动赋值；详见 §5.4）。
+- struct 可以**没有**构造器（`Point()` 创建隐式零值实例，后续手动赋值；详见 §5.4）。
 
 #### 5.3.5 运算符重载
 
@@ -2215,7 +2217,7 @@ class Vec2 {
     }
 
     operator+(other: Vec2) -> Vec2 {
-        return new Vec2(this.x + other.x, this.y + other.y)
+        return Vec2(this.x + other.x, this.y + other.y)
     }
 
     operator==(other: Vec2) -> bool {
@@ -2275,7 +2277,7 @@ struct Point {
 }
 
 // 两种创建方式
-let p = new Point()                  // 默认构造（字段为零值）后逐个赋值
+let p = Point()                  // 默认构造（字段为零值）后逐个赋值
 p.x = 3.0
 p.y = 4.0
 
@@ -2299,7 +2301,7 @@ b.x = 99.0
 | 泛型 | ✅ | ✅ |
 | `static` / `private` / `protected` / `const` | ✅ | ✅ |
 | 运算符重载 | ✅ | ✅ |
-| 构造器 | `constructor(...)` | **可省略**：`new Point()` 生成零值实例 |
+| 构造器 | `constructor(...)` | **可省略**：`Point()` 生成零值实例 |
 | 字面量 | 无 | `TypeName{field: value, ...}` |
 
 **适用场景**：
@@ -2928,7 +2930,7 @@ print(c())      // 2
 Xray **不**是全面 ownership/borrow checker 语言（不像 Rust）。但在**跨协程数据传递**中使用 move 语义：
 
 ```xray
-shared let big_buffer = new Bytes(1024 * 1024)
+shared let big_buffer = Bytes(1024 * 1024)
 
 let t = go fn(b: Bytes) -> int {
     return process(b)
@@ -2986,14 +2988,14 @@ let t2 = go fn(c: Json) -> int {
 }(config)
 
 // 方法 3：move 转移所有权
-shared let big = new Bytes(1024)
+shared let big = Bytes(1024)
 let t3 = go fn(b: Bytes) -> int {
     return process(b)
 }(move big)
 // big 在此处不可访问
 
 // 方法 4：Channel 通信（可被捕获）
-shared const ch = new Channel<int>(10)
+shared const ch = Channel<int>(10)
 let t4 = go fn(c: Channel<int>) -> int {
     return match (c.recv()) {
         Recv.Value(v) -> v
@@ -3443,8 +3445,8 @@ class Box<T> {
     get() -> T { return this.value }
 }
 
-let b1 = new Box<int>(42)
-let b2 = new Box<string>("hi")
+let b1 = Box<int>(42)
+let b2 = Box<string>("hi")
 
 // 多参数泛型
 class Pair<K, V> {
@@ -3510,8 +3512,8 @@ fn pickValue<K: Hashable, V>(k: K, v: V) -> V {
 
 ```xray
 identity(42)                    // T 推断为 int
-new Box("hello")                // T 推断为 string
-new Pair("key", 100)            // K=string, V=int
+Box("hello")                // T 推断为 string
+Pair("key", 100)            // K=string, V=int
 ```
 
 推断算法是**双向推断**：
@@ -3523,8 +3525,8 @@ new Pair("key", 100)            // K=string, V=int
 在推断失败或需要明确时：
 
 ```xray
-let empty = new Array<int>()              // 无元素可推
-let m = new Map<string, int>()
+let empty = Array<int>()              // 无元素可推
+let m = Map<string, int>()
 let result = identity<float>(0)            // 0 默认 int，强制 float
 ```
 
@@ -3567,8 +3569,8 @@ class Wrong {
 }
 
 fn render(d: Drawable) { d.draw() }
-render(new Square())     // OK
-// render(new Wrong())   // 编译错误：Wrong 不是 Drawable
+render(Square())     // OK
+// render(Wrong())   // 编译错误：Wrong 不是 Drawable
 ```
 
 #### 结构化对象
@@ -3598,7 +3600,7 @@ describe({ x: 1.0, y: 2.0, z: 3.0 })  // 编译错误：sealed 类型多了字�
 class Container<T> {
     items: Array<T>
 }
-let c = new Container<int>()
+let c = Container<int>()
 print(Reflect.typeOf(c))       // "Container<int>"
 ```
 
@@ -3755,15 +3757,15 @@ match t.poll() {
 
 ```ebnf
 ChannelType ::= 'Channel' '<' Type '>'
-ChannelNew  ::= 'new' 'Channel' ('<' Type '>')? '(' Expression ')'
+ChannelNew  ::= 'Channel' ('<' Type '>')? '(' Expression ')'
 ```
 
 Channel 通常以 `shared const` 声明（生命周期跨协程，引用语义）：
 
 ```xray
-shared const ch  = new Channel<int>(10)    // 有缓冲，capacity = 10
-shared const ch0 = new Channel<int>(0)     // 无缓冲（同步握手）
-shared const cha = new Channel(3)          // 元素类型从首次 send 推断
+shared const ch  = Channel<int>(10)    // 有缓冲，capacity = 10
+shared const ch0 = Channel<int>(0)     // 无缓冲（同步握手）
+shared const cha = Channel(3)          // 元素类型从首次 send 推断
 ```
 
 **API**（注意全部为 **camelCase**）：
@@ -3780,7 +3782,7 @@ shared const cha = new Channel(3)          // 元素类型从首次 send 推断
 | `isClosed` | `bool`（属性） | channel 是否已关闭 |
 
 ```xray
-shared const ch = new Channel<int>(10)
+shared const ch = Channel<int>(10)
 ch.send(42)                             // 阻塞发送
 let v = match ch.recv() {
     Recv.Value(value) -> value
@@ -3829,8 +3831,8 @@ DefaultArm ::= '_' '->' Block
 ```
 
 ```xray
-shared const ch1 = new Channel<int>(2)
-shared const ch2 = new Channel<int>(2)
+shared const ch1 = Channel<int>(2)
+shared const ch2 = Channel<int>(2)
 
 select {
     msg from ch1 -> { print("got from ch1:", msg) }      // 接收分支
@@ -3917,7 +3919,7 @@ MoveExpr ::= 'move' Identifier        // 仅出现在调用参数位置
 `move` 是**实参修饰前缀**（不是 `go` 的选项）。它把 `shared let` 变量的所有权从当前作用域转移到被调函数（包括 `go` 启动的协程、`ch.send()` 等）。move 后原变量在编译期被标记为**已 moved**，再次引用是编译错误。
 
 ```xray
-shared let buf = new Bytes(1024 * 1024)
+shared let buf = Bytes(1024 * 1024)
 
 // 移交给协程
 let t = go fn(b: Bytes) -> int {
@@ -3927,8 +3929,8 @@ let t = go fn(b: Bytes) -> int {
 // print(buf.length)
 
 // 移交给 channel
-shared const ch = new Channel<Bytes>(1)
-shared let payload = new Bytes(4096)
+shared const ch = Channel<Bytes>(1)
+shared let payload = Bytes(4096)
 ch.send(move payload)
 // 编译错误：payload has been moved
 ```
@@ -5228,7 +5230,6 @@ TypeOpExpr  ::= UnaryExpr (('as' | 'is') Type)*           // 安全转换写为 
 RangeExpr   ::= AdditiveExpr ('..' AdditiveExpr)?
 
 UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
-           |  'new' QualifiedIdent TypeArgs? '(' ArgList? ')'
            |  'move' UnaryExpr
            |  'await' ('all' | 'any' | 'anySuccess')? UnaryExpr
            |  'go' (Block | PostfixExpr)

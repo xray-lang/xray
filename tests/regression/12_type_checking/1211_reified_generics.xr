@@ -26,7 +26,7 @@ fn test_reified_generics() {
     assert_eq(Reflect.keyType(map), "any")
     assert_eq(Reflect.valueType(map), "any")
 
-    let set = new Set()
+    let set = Set()
     assert_eq(Reflect.elementType(set), "any")
 
     // === Test 2: Typed Array ===
@@ -73,12 +73,12 @@ fn test_reified_generics() {
     assert_eq(Reflect.typeOf(map), "Map")
 
     // Set typeOf
-    let typed_set: Set<string> = new Set()
+    let typed_set: Set<string> = Set()
     assert_eq(Reflect.typeOf(typed_set), "Set<string>")
     assert_eq(Reflect.typeOf(set), "Set")
 
     // Channel typeOf
-    let typed_channel = new Channel<int>(1)
+    let typed_channel = Channel<int>(1)
     assert_eq(Reflect.elementType(typed_channel), "int")
     assert_eq(Reflect.typeOf(typed_channel), "Channel<int>")
     typed_channel.close()
@@ -88,7 +88,7 @@ fn test_reified_generics() {
     assert_eq(Reflect.typeOf(annotated_channel), "Channel<string>")
     annotated_channel.close()
 
-    let zero_channel = new Channel<bool>()
+    let zero_channel = Channel<bool>()
     assert_eq(Reflect.elementType(zero_channel), "bool")
     assert_eq(Reflect.typeOf(zero_channel), "Channel<bool>")
     zero_channel.close()
@@ -119,21 +119,21 @@ fn test_reified_generics() {
 
     // === Test 8: User-defined generic class reified ===
 
-    let int_box = new Box<int>(42)
+    let int_box = Box<int>(42)
     assert_eq(Reflect.typeOf(int_box), "Box<int>")
 
-    let str_box = new Box<string>("hello")
+    let str_box = Box<string>("hello")
     assert_eq(Reflect.typeOf(str_box), "Box<string>")
 
     // Non-generic instance
-    let plain_box = new Box(99)
+    let plain_box = Box(99)
     assert_eq(Reflect.typeOf(plain_box), "Box")
 
     // Two type params
 
-    let pair = new Pair<int, string>(1, "one")
+    let pair = Pair<int, string>(1, "one")
     assert_eq(Reflect.typeOf(pair), "Pair<int, string>")
 
-    let plain_pair = new Pair(1, 2)
+    let plain_pair = Pair(1, 2)
     assert_eq(Reflect.typeOf(plain_pair), "Pair")
 }

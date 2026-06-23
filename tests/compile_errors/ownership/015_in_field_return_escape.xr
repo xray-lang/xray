@@ -10,6 +10,6 @@ fn leak(holder: in Holder) -> Array<int> {
     return holder.items
 }
 
-let holder = new Holder()
+let holder = Holder()
 let leaked = leak(holder)
 print(leaked.length)

@@ -26,7 +26,7 @@ class DbError extends Exception {
 @test
 fn test_subclass_let_binding() {
     // F036 核心：let 绑定 Exception 子类不应崩溃
-    let err = new HttpError("not found", 404)
+    let err = HttpError("not found", 404)
     assert_eq(err.message, "not found")
     assert_eq(err.statusCode, 404)
 }
@@ -34,12 +34,12 @@ fn test_subclass_let_binding() {
 @test
 fn test_subclass_as_expression() {
     // 直接 new 不赋值
-    new HttpError("expr-only", 500)
+    HttpError("expr-only", 500)
 }
 
 @test
 fn test_subclass_multiple_fields() {
-    let err = new DbError("query failed", "users")
+    let err = DbError("query failed", "users")
     assert_eq(err.message, "query failed")
     assert_eq(err.table, "users")
 }
@@ -51,15 +51,15 @@ fn test_subclass_passed_to_function() {
     fn handle(e: Exception) -> string {
         return e.message
     }
-    let err = new HttpError("bad request", 400)
+    let err = HttpError("bad request", 400)
     assert_eq(handle(err), "bad request")
 }
 
 @test
 fn test_subclass_stored_in_array() {
     let errors: Array<Exception> = []
-    errors.push(new HttpError("err1", 500))
-    errors.push(new DbError("err2", "logs"))
+    errors.push(HttpError("err1", 500))
+    errors.push(DbError("err2", "logs"))
     assert_eq(errors.length, 2)
     assert_eq(errors[0].message, "err1")
     assert_eq(errors[1].message, "err2")
@@ -71,7 +71,7 @@ fn test_subclass_stored_in_array() {
 fn test_subclass_throw_catch() {
     let caught = ""
     try {
-        throw new HttpError("server error", 503)
+        throw HttpError("server error", 503)
     } catch (e: HttpError) {
         caught = e.message
     }
@@ -82,7 +82,7 @@ fn test_subclass_throw_catch() {
 fn test_subclass_throw_catch_statusCode() {
     let code = 0
     try {
-        throw new HttpError("not found", 404)
+        throw HttpError("not found", 404)
     } catch (e: HttpError) {
         code = e.statusCode
     }
@@ -93,7 +93,7 @@ fn test_subclass_throw_catch_statusCode() {
 
 @test
 fn test_base_exception_direct() {
-    let e = new Exception("hello")
+    let e = Exception("hello")
     assert_eq(e.message, "hello")
 }
 
@@ -103,6 +103,6 @@ class EmptyError extends Exception {}
 
 @test
 fn test_empty_subclass() {
-    let e = new EmptyError("empty")
+    let e = EmptyError("empty")
     assert_eq(e.message, "empty")
 }

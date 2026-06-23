@@ -16,7 +16,7 @@ fn countMatches(re, text: string): int {
 // 生成测试 FASTA 数据
 fn generateFasta(n: int): string {
     let alu = "GGCCGGGCGCGGTGGCTCACGCCTGTAATCCCAGCACTTTGGGAGGCCGAGGCGGGCGGATCACCTGAGGTCAGGAGTTCGAGACCAGCCTGGCCAACATGGTGAAACCCCGTCTCTACTAAAAATACAAAAATTAGCCGGGCGTGGTGGCGCGCGCCTGTAATCCCAGCTACTCGGGAGGCTGAGGCAGGAGAATCGCTTGAACCCGGGAGGCGGAGGTTGCAGTGAGCCGAGATCGCGCCACTGCACTCCAGCCTGGGCGACAGAGCGAGACTCCGTCTCAAAAA"
-    let sb = new StringBuilder()
+    let sb = StringBuilder()
     // 生成 ONE 序列
     sb.append(">ONE Homo sapiens alu
 ")
@@ -41,7 +41,7 @@ fn generateFasta(n: int): string {
     i = 0
     while (i < n * 3) {
         let j = 0
-        let line = new StringBuilder()
+        let line = StringBuilder()
         while (j < 60 && i + j < n * 3) {
             line.append(iub.charAt((i + j) % iubLen))
             j++
@@ -58,7 +58,7 @@ fn generateFasta(n: int): string {
     i = 0
     while (i < n * 5) {
         let j = 0
-        let line = new StringBuilder()
+        let line = StringBuilder()
         while (j < 60 && i + j < n * 5) {
             line.append(bases.charAt((i + j) % 4))
             j++

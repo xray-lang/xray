@@ -14,8 +14,8 @@ class Node {
 
 @test
 fn test_cycle_mutual_reference() {
-    let a = new Node("A")
-    let b = new Node("B")
+    let a = Node("A")
+    let b = Node("B")
     // Create cycle: A -> B -> A
     a.next = b
     b.next = a
@@ -26,8 +26,8 @@ fn test_cycle_mutual_reference() {
 
 @test
 fn test_non_cyclic_not_affected() {
-    let a = new Node("solo")
-    let b = new Node("chain")
+    let a = Node("solo")
+    let b = Node("chain")
     b.next = a
     // b -> a is NOT a cycle (a.next == null)
     mem.collectCycles()
@@ -38,7 +38,7 @@ fn test_non_cyclic_not_affected() {
 
 @test
 fn test_self_referencing_cycle() {
-    let s = new Node("self")
+    let s = Node("self")
     s.next = s  // self-cycle
     mem.collectCycles()
     assert(true) // reclaimed or still live — no crash

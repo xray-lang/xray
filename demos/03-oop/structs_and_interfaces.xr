@@ -49,7 +49,7 @@ class Rect implements Shape {
     describe() -> string { return "Rect(${this.width}x${this.height})" }
 }
 
-let shapes = [new Circle(5.0), new Rect(3.0, 4.0)]
+let shapes = [Circle(5.0), Rect(3.0, 4.0)]
 for (s in shapes) {
     print("${s.describe()} -> area = ${s.area()}")
 }

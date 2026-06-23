@@ -27,20 +27,20 @@ class Account {
 
 @test
 fn test_private_field_access() {
-    let acc = new Account(100)
+    let acc = Account(100)
     assert_eq(acc.getBalance(), 100)
 }
 
 @test
 fn test_private_field_modify() {
-    let acc = new Account(100)
+    let acc = Account(100)
     acc.deposit(50)
     assert_eq(acc.getBalance(), 150)
 }
 
 @test
 fn test_private_field_withdraw() {
-    let acc = new Account(100)
+    let acc = Account(100)
     let success = acc.withdraw(30)
     assert_eq(success, true)
     assert_eq(acc.getBalance(), 70)
@@ -68,7 +68,7 @@ class User {
 
 @test
 fn test_multiple_private_fields() {
-    let user = new User("Alice", "alice@test.com", "secret123")
+    let user = User("Alice", "alice@test.com", "secret123")
     assert_eq(user.name, "Alice")
     assert_eq(user.checkPassword("secret123"), true)
     assert_eq(user.checkPassword("wrong"), false)
@@ -105,7 +105,7 @@ class SavingsAccount extends BankAccount {
 
 @test
 fn test_private_with_inheritance() {
-    let savings = new SavingsAccount(1000, 0.1)
+    let savings = SavingsAccount(1000, 0.1)
     assert_eq(savings.getBalance(), 1000)
     savings.applyInterest()
     assert_eq(savings.getBalance(), 1100)

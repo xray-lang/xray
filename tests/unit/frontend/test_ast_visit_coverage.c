@@ -717,7 +717,7 @@ TEST(class_basic) {
                             "        return \"woof\"\n"
                             "    }\n"
                             "}\n"
-                            "let d = new Dog(\"Rex\")\n"
+                            "let d = Dog(\"Rex\")\n"
                             "print(d.bark())\n",
                             "class_basic");
 }

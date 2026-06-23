@@ -70,7 +70,7 @@ fn test_member_mod_assign_ignores_same_named_const() {
     }
 
     const value = 99
-    let c = new Counter()
+    let c = Counter()
     c.reduce()
     assert_eq(c.get(), 2)
     assert_eq(value, 99)

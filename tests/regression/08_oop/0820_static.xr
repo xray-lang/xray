@@ -57,12 +57,12 @@ class Point {
     }
     
     static origin() -> Point {
-        return new Point(0, 0)
+        return Point(0, 0)
     }
     
     static fromPolar(r: float, theta: float) -> Point {
         // 简化：只返回近似值
-        return new Point(r, 0)
+        return Point(r, 0)
     }
 }
 
@@ -94,8 +94,8 @@ class Item {
 @test
 fn test_mixed_static_instance() {
     Item.resetId()
-    let a = new Item("Apple")
-    let b = new Item("Banana")
+    let a = Item("Apple")
+    let b = Item("Banana")
     
     assert_eq(a.id, 1)
     assert_eq(b.id, 2)

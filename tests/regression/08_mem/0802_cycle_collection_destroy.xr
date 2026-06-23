@@ -31,8 +31,8 @@ class Holder {
 
 @test
 fn test_cycle_with_containers_reclaimed() {
-    let a = new Node("A")
-    let b = new Node("B")
+    let a = Node("A")
+    let b = Node("B")
     a.next = b
     b.next = a
     // Give both nodes heap payloads so the destroy path must free
@@ -51,12 +51,12 @@ fn test_cycle_with_containers_reclaimed() {
 
 @test
 fn test_live_child_survives_dead_cycle() {
-    let keeper = new Node("keeper")
+    let keeper = Node("keeper")
     keeper.items.push(42)
 
     // Build a dead cycle that references keeper.
-    let a = new Node("A")
-    let b = new Node("B")
+    let a = Node("A")
+    let b = Node("B")
     a.next = b
     b.next = a
     a.table.set("kept", keeper)
@@ -75,11 +75,11 @@ fn test_live_child_survives_dead_cycle() {
 
 @test
 fn test_survivor_retracked_after_collect() {
-    let h = new Holder()
+    let h = Holder()
 
     // Cycle {a, b} externally held via h.node — survives round 1.
-    let a = new Node("A")
-    let b = new Node("B")
+    let a = Node("A")
+    let b = Node("B")
     a.next = b
     b.next = a
     h.node = a
@@ -97,9 +97,9 @@ fn test_survivor_retracked_after_collect() {
 @test
 fn test_stale_root_index_does_not_corrupt() {
     // Round 1: collect with survivors.
-    let h1 = new Holder()
-    let s1 = new Node("S1")
-    let s2 = new Node("S2")
+    let h1 = Holder()
+    let s1 = Node("S1")
+    let s2 = Node("S2")
     s1.next = s2
     s2.next = s1
     h1.node = s1
@@ -107,8 +107,8 @@ fn test_stale_root_index_does_not_corrupt() {
 
     // Round 2: track fresh candidates, then mutate the survivors so their
     // (formerly stale) root indices are exercised against the new array.
-    let c1 = new Node("C1")
-    let c2 = new Node("C2")
+    let c1 = Node("C1")
+    let c2 = Node("C2")
     c1.next = c2
     c2.next = c1
     s1.next = null   // drops s2's in-cycle ref → s2 RC churn
@@ -138,8 +138,8 @@ class SetNode implements Hashable {
 
 @test
 fn test_set_mediated_cycle_reclaimed() {
-    let x = new SetNode(1)
-    let y = new SetNode(2)
+    let x = SetNode(1)
+    let y = SetNode(2)
     x.peers.add(y)
     y.peers.add(x)
     mem.collectCycles()
@@ -151,9 +151,9 @@ fn test_set_mediated_cycle_reclaimed() {
 @test
 fn test_many_collect_rounds() {
     for (round in 0..10) {
-        let a = new Node("A")
-        let b = new Node("B")
-        let c = new Node("C")
+        let a = Node("A")
+        let b = Node("B")
+        let c = Node("C")
         a.next = b
         b.next = c
         c.next = a
@@ -170,10 +170,10 @@ fn test_many_collect_rounds() {
 // recursed once per GC edge and would overflow the C stack at this depth;
 // the iterative (BFS work-array) collector walks it without recursion.
 fn build_deep_cycle(n: int) {
-    let head = new Node("head")
+    let head = Node("head")
     let cur = head
     for (i in 0..n) {
-        let m = new Node("n")
+        let m = Node("n")
         cur.next = m
         cur = m
     }

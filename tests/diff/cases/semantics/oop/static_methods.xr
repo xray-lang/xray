@@ -9,10 +9,10 @@ class Vec {
         this.y = y
     }
     static origin() -> Vec {
-        return new Vec(0, 0)
+        return Vec(0, 0)
     }
     static of(x: int, y: int) -> Vec {
-        return new Vec(x, y)
+        return Vec(x, y)
     }
     static diagonal(n: int) -> Vec {
         return Vec.of(n, n)

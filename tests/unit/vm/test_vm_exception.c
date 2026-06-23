@@ -54,7 +54,7 @@ TEST(unwind_records_full_call_chain) {
      * Each caller sees the error and also returns (auto-propagation).
      * The error value ends up in pending_error at the top level. */
     const char *src = "fn deep() {\n"
-                      "    throw new Exception(\"boom\")\n"
+                      "    throw Exception(\"boom\")\n"
                       "}\n"
                       "fn level3() { deep() }\n"
                       "fn level2() { level3() }\n"
@@ -105,7 +105,7 @@ TEST(catch_clears_pending_exception_state) {
      * normally without stale error state. */
     const char *src = "let caught = false\n"
                       "try {\n"
-                      "    throw new Exception(\"test\")\n"
+                      "    throw Exception(\"test\")\n"
                       "} catch (e) {\n"
                       "    caught = true\n"
                       "}\n"
@@ -143,7 +143,7 @@ TEST(caught_exception_trace_survives_catch) {
     /* In the new model, throw + catch + re-throw all go through
      * the value-return error channel.  Verify the error value
      * survives catch and re-throw. */
-    const char *src = "fn deep() { throw new Exception(\"deep\") }\n"
+    const char *src = "fn deep() { throw Exception(\"deep\") }\n"
                       "fn level2() { deep() }\n"
                       "fn level1() { level2() }\n"
                       "try { level1() } catch (e) { throw e }\n";
