@@ -59,6 +59,18 @@ typedef struct XrStringCorePadPlan {
     size_t pad_len;
 } XrStringCorePadPlan;
 
+typedef enum XrStringCoreReplaceKind {
+    XR_STRING_CORE_REPLACE_INVALID = 0,
+    XR_STRING_CORE_REPLACE_ORIGINAL,
+    XR_STRING_CORE_REPLACE_ALLOC
+} XrStringCoreReplaceKind;
+
+typedef struct XrStringCoreReplacePlan {
+    XrStringCoreReplaceKind kind;
+    size_t len;
+    size_t count;
+} XrStringCoreReplacePlan;
+
 typedef struct XrStringCoreParseIntResult {
     bool ok;
     int64_t value;
@@ -610,6 +622,109 @@ static inline bool xr_string_core_ends_with(const char *haystack, size_t haystac
     if (suffix_len == 0)
         return true;
     return memcmp(haystack + haystack_len - suffix_len, suffix, suffix_len) == 0;
+}
+
+static inline XrStringCoreReplacePlan
+xr_string_core_replace_plan(const char *data, size_t len, const char *old_data, size_t old_len,
+                            const char *new_data, size_t new_len, bool replace_all) {
+    XrStringCoreReplacePlan out = {XR_STRING_CORE_REPLACE_INVALID, 0, 0};
+    if ((!data && len != 0) || (!old_data && old_len != 0) || (!new_data && new_len != 0))
+        return out;
+
+    if (old_len == 0 ||
+        (old_len == new_len && old_data && new_data && memcmp(old_data, new_data, old_len) == 0)) {
+        out.kind = XR_STRING_CORE_REPLACE_ORIGINAL;
+        out.len = len;
+        return out;
+    }
+
+    ptrdiff_t first = xr_string_core_index_of(data, len, old_data, old_len);
+    if (first < 0) {
+        out.kind = XR_STRING_CORE_REPLACE_ORIGINAL;
+        out.len = len;
+        return out;
+    }
+
+    size_t count = 1;
+    if (replace_all) {
+        count = 0;
+        size_t pos = 0;
+        while (pos <= len) {
+            ptrdiff_t rel = xr_string_core_index_of(data + pos, len - pos, old_data, old_len);
+            if (rel < 0)
+                break;
+            if (count == SIZE_MAX)
+                return out;
+            count++;
+            pos += (size_t) rel + old_len;
+        }
+    }
+
+    size_t result_len = len;
+    if (new_len >= old_len) {
+        size_t delta = new_len - old_len;
+        if (delta != 0 && count > (SIZE_MAX - len) / delta)
+            return out;
+        result_len = len + count * delta;
+    } else {
+        size_t delta = old_len - new_len;
+        if (count > SIZE_MAX / delta)
+            return out;
+        size_t shrink = count * delta;
+        if (shrink > len)
+            return out;
+        result_len = len - shrink;
+    }
+
+    out.kind = XR_STRING_CORE_REPLACE_ALLOC;
+    out.len = result_len;
+    out.count = count;
+    return out;
+}
+
+static inline size_t xr_string_core_replace_write(char *out, const char *data, size_t len,
+                                                  const char *old_data, size_t old_len,
+                                                  const char *new_data, size_t new_len,
+                                                  XrStringCoreReplacePlan plan, bool replace_all) {
+    if (!out)
+        return 0;
+    if (plan.kind == XR_STRING_CORE_REPLACE_INVALID)
+        return 0;
+    if (plan.kind == XR_STRING_CORE_REPLACE_ORIGINAL) {
+        if (len != 0)
+            memcpy(out, data, len);
+        out[len] = '\0';
+        return len;
+    }
+
+    size_t src_pos = 0;
+    size_t dst_pos = 0;
+    size_t replaced = 0;
+    while (replaced < plan.count) {
+        ptrdiff_t rel = xr_string_core_index_of(data + src_pos, len - src_pos, old_data, old_len);
+        if (rel < 0)
+            break;
+        size_t prefix_len = (size_t) rel;
+        if (prefix_len != 0) {
+            memcpy(out + dst_pos, data + src_pos, prefix_len);
+            dst_pos += prefix_len;
+        }
+        if (new_len != 0) {
+            memcpy(out + dst_pos, new_data, new_len);
+            dst_pos += new_len;
+        }
+        src_pos += prefix_len + old_len;
+        replaced++;
+        if (!replace_all)
+            break;
+    }
+    if (src_pos < len) {
+        size_t tail_len = len - src_pos;
+        memcpy(out + dst_pos, data + src_pos, tail_len);
+        dst_pos += tail_len;
+    }
+    out[plan.len] = '\0';
+    return dst_pos;
 }
 
 static inline char xr_string_core_ascii_lower_byte(char c) {

@@ -223,6 +223,56 @@ TEST(string_core_pad_plan_and_write) {
     ASSERT_EQ_INT(xr_string_core_pad_plan("x", 1, 3, NULL, 1).kind, XR_STRING_CORE_PAD_INVALID);
 }
 
+TEST(string_core_replace_plan_and_write) {
+    char out[32];
+    XrStringCoreReplacePlan plan =
+        xr_string_core_replace_plan("hello world", 11, "world", 5, "xray", 4, false);
+    ASSERT_EQ_INT(plan.kind, XR_STRING_CORE_REPLACE_ALLOC);
+    ASSERT_EQ_UINT(plan.len, 10);
+    ASSERT_EQ_UINT(plan.count, 1);
+    ASSERT_EQ_UINT(
+        xr_string_core_replace_write(out, "hello world", 11, "world", 5, "xray", 4, plan, false),
+        10);
+    ASSERT(strcmp(out, "hello xray") == 0);
+
+    plan = xr_string_core_replace_plan("aaaa", 4, "aa", 2, "X", 1, false);
+    ASSERT_EQ_UINT(xr_string_core_replace_write(out, "aaaa", 4, "aa", 2, "X", 1, plan, false), 3);
+    ASSERT(strcmp(out, "Xaa") == 0);
+
+    plan = xr_string_core_replace_plan("aaaa", 4, "aa", 2, "X", 1, true);
+    ASSERT_EQ_UINT(plan.count, 2);
+    ASSERT_EQ_UINT(xr_string_core_replace_write(out, "aaaa", 4, "aa", 2, "X", 1, plan, true), 2);
+    ASSERT(strcmp(out, "XX") == 0);
+
+    plan = xr_string_core_replace_plan("abc", 3, "b", 1, "", 0, true);
+    ASSERT_EQ_UINT(xr_string_core_replace_write(out, "abc", 3, "b", 1, "", 0, plan, true), 2);
+    ASSERT(strcmp(out, "ac") == 0);
+
+    plan = xr_string_core_replace_plan("abc", 3, "", 0, "x", 1, true);
+    ASSERT_EQ_INT(plan.kind, XR_STRING_CORE_REPLACE_ORIGINAL);
+    plan = xr_string_core_replace_plan("abc", 3, "z", 1, "x", 1, true);
+    ASSERT_EQ_INT(plan.kind, XR_STRING_CORE_REPLACE_ORIGINAL);
+
+    const char embedded[] = {'a', '\0', 'b', '\0', 'b'};
+    const char needle[] = {'\0', 'b'};
+    plan = xr_string_core_replace_plan(embedded, sizeof(embedded), needle, sizeof(needle), "X", 1,
+                                       true);
+    ASSERT_EQ_INT(plan.kind, XR_STRING_CORE_REPLACE_ALLOC);
+    ASSERT_EQ_UINT(plan.len, 3);
+    ASSERT_EQ_UINT(plan.count, 2);
+    ASSERT_EQ_UINT(xr_string_core_replace_write(out, embedded, sizeof(embedded), needle,
+                                                sizeof(needle), "X", 1, plan, true),
+                   3);
+    ASSERT(memcmp(out, "aXX", 3) == 0);
+
+    ASSERT_EQ_INT(xr_string_core_replace_plan(NULL, 1, "a", 1, "b", 1, false).kind,
+                  XR_STRING_CORE_REPLACE_INVALID);
+    ASSERT_EQ_INT(xr_string_core_replace_plan("a", 1, NULL, 1, "b", 1, false).kind,
+                  XR_STRING_CORE_REPLACE_INVALID);
+    ASSERT_EQ_INT(xr_string_core_replace_plan("a", 1, "a", 1, NULL, 1, false).kind,
+                  XR_STRING_CORE_REPLACE_INVALID);
+}
+
 TEST(string_core_parse_int64) {
     XrStringCoreParseIntResult parsed =
         xr_string_core_parse_int64(" \t\r\n-123tail", strlen(" \t\r\n-123tail"));
@@ -336,6 +386,7 @@ RUN_TEST(string_core_reverse_utf8);
 RUN_TEST(string_core_reverse_empty_and_null_zero);
 RUN_TEST(string_core_repeat_plan_and_write);
 RUN_TEST(string_core_pad_plan_and_write);
+RUN_TEST(string_core_replace_plan_and_write);
 RUN_TEST(string_core_parse_int64);
 RUN_TEST(string_core_parse_float64);
 RUN_TEST(string_core_substring_bounds);

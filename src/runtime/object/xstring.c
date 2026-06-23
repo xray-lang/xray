@@ -581,26 +581,22 @@ XrString *xr_string_replace(XrVMRuntime *iso, XrString *str, XrString *old_str, 
     XR_DCHECK(iso != NULL, "string_replace: NULL isolate");
     if (str == NULL || old_str == NULL || new_str == NULL)
         return str;
-    if (old_str->length == 0)
+
+    XrStringCoreReplacePlan plan =
+        xr_string_core_replace_plan(str->data, str->length, old_str->data, old_str->length,
+                                    new_str->data, new_str->length, false);
+    if (plan.kind == XR_STRING_CORE_REPLACE_INVALID)
+        return NULL;
+    if (plan.kind == XR_STRING_CORE_REPLACE_ORIGINAL)
         return str;
 
-    // Find first occurrence
-    xr_Integer pos = xr_string_index_of(iso, str, old_str);
-    if (pos < 0)
-        return str;  // Not found
+    char *buffer = (char *) xr_malloc(plan.len + 1);
+    if (!buffer)
+        return NULL;
+    xr_string_core_replace_write(buffer, str->data, str->length, old_str->data, old_str->length,
+                                 new_str->data, new_str->length, plan, false);
 
-    // Calculate new length
-    size_t new_length = str->length - old_str->length + new_str->length;
-    char *buffer = (char *) xr_malloc(new_length + 1);
-
-    // Concatenate: prefix + new_str + suffix
-    memcpy(buffer, str->data, pos);
-    memcpy(buffer + pos, new_str->data, new_str->length);
-    memcpy(buffer + pos + new_str->length, str->data + pos + old_str->length,
-           str->length - pos - old_str->length);
-    buffer[new_length] = '\0';
-
-    XrString *result = xr_string_intern(iso, buffer, new_length, 0);
+    XrString *result = xr_string_intern(iso, buffer, plan.len, 0);
     xr_free(buffer);
 
     return result;
@@ -612,49 +608,22 @@ XrString *xr_string_replace_all(XrVMRuntime *iso, XrString *str, XrString *old_s
     XR_DCHECK(iso != NULL, "string_replace_all: NULL isolate");
     if (str == NULL || old_str == NULL || new_str == NULL)
         return str;
-    if (old_str->length == 0)
+
+    XrStringCoreReplacePlan plan =
+        xr_string_core_replace_plan(str->data, str->length, old_str->data, old_str->length,
+                                    new_str->data, new_str->length, true);
+    if (plan.kind == XR_STRING_CORE_REPLACE_INVALID)
+        return NULL;
+    if (plan.kind == XR_STRING_CORE_REPLACE_ORIGINAL)
         return str;
 
-    // Count replacements needed
-    int count = 0;
-    size_t pos = 0;
-    while (pos + old_str->length <= str->length) {
-        if (memcmp(&str->data[pos], old_str->data, old_str->length) == 0) {
-            count++;
-            pos += old_str->length;
-        } else {
-            pos++;
-        }
-    }
+    char *buffer = (char *) xr_malloc(plan.len + 1);
+    if (!buffer)
+        return NULL;
+    xr_string_core_replace_write(buffer, str->data, str->length, old_str->data, old_str->length,
+                                 new_str->data, new_str->length, plan, true);
 
-    // No match, return original
-    if (count == 0)
-        return str;
-
-    // Calculate new length
-    size_t new_length = str->length + count * (new_str->length - old_str->length);
-    char *buffer = (char *) xr_malloc(new_length + 1);
-
-    // Build new string
-    size_t src_pos = 0;
-    size_t dst_pos = 0;
-
-    while (src_pos < str->length) {
-        if (src_pos + old_str->length <= str->length &&
-            memcmp(&str->data[src_pos], old_str->data, old_str->length) == 0) {
-            // Found match, copy new_str
-            memcpy(&buffer[dst_pos], new_str->data, new_str->length);
-            dst_pos += new_str->length;
-            src_pos += old_str->length;
-        } else {
-            // No match, copy single char
-            buffer[dst_pos++] = str->data[src_pos++];
-        }
-    }
-
-    buffer[new_length] = '\0';
-
-    XrString *result = xr_string_intern(iso, buffer, new_length, 0);
+    XrString *result = xr_string_intern(iso, buffer, plan.len, 0);
     xr_free(buffer);
 
     return result;

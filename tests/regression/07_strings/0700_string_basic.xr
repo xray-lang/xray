@@ -228,12 +228,18 @@ fn test_replace() {
     let s = "hello world"
     assert_eq(s.replace("world", "xray"), "hello xray")
     assert_eq(s.replace("xyz", "abc"), "hello world")
+    assert_eq(s.replace("", "x"), "hello world")
+    assert_eq("hello".replace("l", "L"), "heLlo")
+    assert_eq("hello".replace("l", ""), "helo")
 }
 
 @test
 fn test_replace_all() {
     let s = "a-b-c-d"
     assert_eq(s.replaceAll("-", "_"), "a_b_c_d")
+    assert_eq("aaaa".replaceAll("aa", "X"), "XX")
+    assert_eq("abc".replaceAll("b", ""), "ac")
+    assert_eq("abc".replaceAll("", "x"), "abc")
 }
 
 // ===== repeat =====
