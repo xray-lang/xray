@@ -144,6 +144,40 @@ static inline bool xr_string_core_ends_with(const char *haystack, size_t haystac
     return memcmp(haystack + haystack_len - suffix_len, suffix, suffix_len) == 0;
 }
 
+static inline char xr_string_core_ascii_lower_byte(char c) {
+    return (c >= 'A' && c <= 'Z') ? (char) (c + ('a' - 'A')) : c;
+}
+
+static inline char xr_string_core_ascii_upper_byte(char c) {
+    return (c >= 'a' && c <= 'z') ? (char) (c - ('a' - 'A')) : c;
+}
+
+static inline size_t xr_string_core_ascii_lower_write(char *out, const char *data, size_t len) {
+    if (!out)
+        return 0;
+    if ((!data && len != 0) || len == 0) {
+        out[0] = '\0';
+        return 0;
+    }
+    for (size_t i = 0; i < len; i++)
+        out[i] = xr_string_core_ascii_lower_byte(data[i]);
+    out[len] = '\0';
+    return len;
+}
+
+static inline size_t xr_string_core_ascii_upper_write(char *out, const char *data, size_t len) {
+    if (!out)
+        return 0;
+    if ((!data && len != 0) || len == 0) {
+        out[0] = '\0';
+        return 0;
+    }
+    for (size_t i = 0; i < len; i++)
+        out[i] = xr_string_core_ascii_upper_byte(data[i]);
+    out[len] = '\0';
+    return len;
+}
+
 static inline size_t xr_string_core_reverse_utf8_write(char *out, const char *data, size_t len) {
     if (!out)
         return 0;

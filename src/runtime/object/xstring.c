@@ -35,7 +35,6 @@
 #include "../xshared.h"
 #include <string.h>
 #include <stdio.h>
-#include <ctype.h>
 #include <stdlib.h>
 
 /* ========== String Pool Management ========== */
@@ -456,10 +455,7 @@ XrString *xr_string_to_lower_case(XrVMRuntime *iso, XrString *str) {
     char stack_buf[CASE_STACK_BUF];
     char *buffer = (str->length < CASE_STACK_BUF) ? stack_buf : (char *) xr_malloc(str->length + 1);
 
-    for (size_t i = 0; i < str->length; i++) {
-        buffer[i] = tolower((unsigned char) str->data[i]);
-    }
-    buffer[str->length] = '\0';
+    xr_string_core_ascii_lower_write(buffer, str->data, str->length);
 
     XrString *result = xr_string_intern(iso, buffer, str->length, 0);
     if (buffer != stack_buf)
@@ -477,10 +473,7 @@ XrString *xr_string_to_upper_case(XrVMRuntime *iso, XrString *str) {
     char stack_buf[CASE_STACK_BUF];
     char *buffer = (str->length < CASE_STACK_BUF) ? stack_buf : (char *) xr_malloc(str->length + 1);
 
-    for (size_t i = 0; i < str->length; i++) {
-        buffer[i] = toupper((unsigned char) str->data[i]);
-    }
-    buffer[str->length] = '\0';
+    xr_string_core_ascii_upper_write(buffer, str->data, str->length);
 
     XrString *result = xr_string_intern(iso, buffer, str->length, 0);
     if (buffer != stack_buf)

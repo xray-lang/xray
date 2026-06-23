@@ -163,6 +163,7 @@ fn test_split_no_delimiter() {
 fn test_toUpperCase() {
     assert_eq("hello".toUpperCase(), "HELLO")
     assert_eq("Hello World".toUpperCase(), "HELLO WORLD")
+    assert_eq("Hello 世界🌍".toUpperCase(), "HELLO 世界🌍")
     assert_eq("".toUpperCase(), "")
 }
 
@@ -170,6 +171,7 @@ fn test_toUpperCase() {
 fn test_toLowerCase() {
     assert_eq("HELLO".toLowerCase(), "hello")
     assert_eq("Hello World".toLowerCase(), "hello world")
+    assert_eq("Hello 世界🌍".toLowerCase(), "hello 世界🌍")
     assert_eq("".toLowerCase(), "")
 }
 
@@ -226,4 +228,3 @@ fn test_long_string() {
     assert_eq(s.length, 1000)
     assert_eq(s.charAt(500), "a")
 }
-
