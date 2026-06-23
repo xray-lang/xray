@@ -78,6 +78,19 @@ fn test_read_dir_recursive() {
     io.removeAll(tmpDir)
 }
 
+// ===== mkdirp existing directory and trailing slashes =====
+
+@test
+fn test_mkdirp_existing_and_trailing_slashes() {
+    let tmpDir = io.tempDir() ?? ""
+    let nested = tmpDir + "/a/b"
+    assert_eq(io.mkdirp(nested), true)
+    assert_eq(io.mkdirp(nested), true)
+    assert_eq(io.mkdirp(nested + "///"), true)
+    assert_eq(io.isDir(nested), true)
+    io.removeAll(tmpDir)
+}
+
 // ===== Remove non-existent =====
 
 @test

@@ -895,6 +895,16 @@ static XrValue io_stat(XrVMRuntime *X, XrValue *args, int argc) {
     return xr_json_value(obj);
 }
 
+static int io_mkdirp_mkdir(void *ctx, const char *path) {
+    (void) ctx;
+    return xr_fs_mkdir(path, 0755);
+}
+
+static bool io_mkdirp_is_dir(void *ctx, const char *path) {
+    (void) ctx;
+    return xr_fs_is_dir(path);
+}
+
 // mkdirp(path) - Recursively create directory.
 // Reject empty paths up-front: the previous implementation wrote to
 // tmp[-1] when handed "".
@@ -915,19 +925,8 @@ static XrValue io_mkdirp(XrVMRuntime *X, XrValue *args, int argc) {
         return xr_bool(false);
     memcpy(tmp, path, len);
     tmp[len] = '\0';
-    if (tmp[len - 1] == '/')
-        tmp[len - 1] = '\0';
 
-    for (char *p = tmp + 1; *p; p++) {
-        if (*p == '/' || *p == '\\') {
-            char saved = *p;
-            *p = '\0';
-            xr_fs_mkdir(tmp, 0755);
-            *p = saved;
-        }
-    }
-
-    return xr_bool(xr_fs_mkdir(tmp, 0755) == 0);
+    return xr_bool(xr_io_core_mkdirp(tmp, io_mkdirp_mkdir, io_mkdirp_is_dir, NULL));
 }
 
 #ifdef XR_OS_WINDOWS
