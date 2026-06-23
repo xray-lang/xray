@@ -472,43 +472,58 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "Handle field",
     },
     {
+        .name = "__getConnHandler",
+        .signature = "(): fn",
+        .summary = "Return the current low-level HTTP connection handler",
+    },
+    {
         .name = "clearProxy",
         .signature = "(): ()",
         .summary = "Clear HTTP proxy",
     },
     {
+        .name = "closeStream",
+        .signature = "(resp: Json): ()",
+        .summary = "Close a streaming HTTP response",
+    },
+    {
+        .name = "config",
+        .signature = "(opts: Json): ()",
+        .summary = "Configure HTTP server limits and timeouts",
+    },
+    {
         .name = "delete",
-        .signature = "(url: string, options?: Json): HttpResponse",
+        .signature = "(url: string): HttpResponse",
         .summary = "HTTP DELETE request",
     },
     {
         .name = "download",
-        .signature = "(url: string, path: string, options?: Json): DownloadResult",
+        .signature = "(url: string, path: string): DownloadResult",
         .summary = "Download file from URL",
     },
     {
         .name = "formDataAppend",
-        .signature = "(form: Json, name: string, value: string): ()",
-        .summary = "Append field to form data",
+        .signature = "(name: string, value: string): ()",
+        .summary = "Append field to current form data",
     },
     {
         .name = "formDataAppendFile",
-        .signature = "(form: Json, name: string, path: string, filename?: string): ()",
-        .summary = "Append file to form data",
+        .signature = "(name: string, path: string): bool",
+        .summary = "Append file to current form data",
     },
     {
         .name = "formDataNew",
-        .signature = "(): Json",
-        .summary = "Create new multipart form data",
+        .signature = "(maxTotalSize?: int, maxFileSize?: int): bool",
+        .summary = "Create new multipart form data context",
     },
     {
         .name = "formDataPost",
-        .signature = "(url: string, form: Json, options?: Json): HttpResponse",
-        .summary = "POST multipart form data",
+        .signature = "(url: string): Json",
+        .summary = "POST current multipart form data",
     },
     {
         .name = "get",
-        .signature = "(url: string, options?: Json): HttpResponse",
+        .signature = "(url: string): HttpResponse",
         .summary = "HTTP GET request",
     },
     {
@@ -517,19 +532,44 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "Get content length of URL",
     },
     {
+        .name = "h2CreateServer",
+        .signature = "(options?: Json): bool",
+        .summary = "Create HTTP/2 server",
+    },
+    {
         .name = "h2Get",
-        .signature = "(url: string, options?: Json): HttpResponse",
+        .signature = "(url: string, options?: Json): Json",
         .summary = "HTTP/2 GET request",
     },
     {
+        .name = "h2Listen",
+        .signature = "(): bool",
+        .summary = "Start HTTP/2 server",
+    },
+    {
         .name = "h2Post",
-        .signature = "(url: string, body?: string, options?: Json): HttpResponse",
+        .signature = "(url: string, body: string, contentType?: string): Json",
         .summary = "HTTP/2 POST request",
     },
     {
+        .name = "h2Push",
+        .signature = "(path: string, contentType: string, data: string): bool",
+        .summary = "Push HTTP/2 response data",
+    },
+    {
         .name = "h2Request",
-        .signature = "(method: string, url: string, options?: Json): HttpResponse",
+        .signature = "(options: Json): Json",
         .summary = "Generic HTTP/2 request",
+    },
+    {
+        .name = "h2Stop",
+        .signature = "(): ()",
+        .summary = "Stop HTTP/2 server",
+    },
+    {
+        .name = "listen",
+        .signature = "(port: int): bool",
+        .summary = "Start HTTP server accept loop",
     },
     {
         .name = "parseRequest",
@@ -538,28 +578,48 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     },
     {
         .name = "post",
-        .signature = "(url: string, body?: string, options?: Json): HttpResponse",
+        .signature = "(url: string, body?: string, contentType?: string): HttpResponse",
         .summary = "HTTP POST request",
     },
     {
         .name = "put",
-        .signature = "(url: string, body?: string, options?: Json): HttpResponse",
+        .signature = "(url: string, body?: string, contentType?: string): HttpResponse",
         .summary = "HTTP PUT request",
     },
     {
+        .name = "readChunk",
+        .signature = "(resp: Json, maxBytes?: int): string?",
+        .summary = "Read the next chunk from a streaming HTTP response",
+    },
+    {
         .name = "request",
-        .signature = "(method: string, url: string, options?: Json): HttpResponse",
+        .signature = "(options: Json): HttpResponse",
         .summary = "Generic HTTP request",
     },
     {
+        .name = "response",
+        .signature = "(status: int, body?: string | Json): string",
+        .summary = "Format an HTTP response string",
+    },
+    {
         .name = "route",
-        .signature = "(method: string, path: string, handler: fn): ()",
-        .summary = "Register a route handler",
+        .signature = "(method: string, path: string, handler: fn | string | Json): ()",
+        .summary = "Register a route handler or static response",
     },
     {
         .name = "sendResponse",
         .signature = "(fd: int, body: string, status?: int): bool",
         .summary = "Send HTTP response on fd",
+    },
+    {
+        .name = "serverStats",
+        .signature = "(): Json",
+        .summary = "Return HTTP server counters",
+    },
+    {
+        .name = "setConnHandler",
+        .signature = "(handler: fn(fd: int): ()): ()",
+        .summary = "Set low-level HTTP connection handler",
     },
     {
         .name = "setProxy",
@@ -568,8 +628,8 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     },
     {
         .name = "static",
-        .signature = "(prefix: string, dir: string): ()",
-        .summary = "Serve static files from directory",
+        .signature = "(method: string, path: string, content: string): ()",
+        .summary = "Register a prebuilt static route response",
     },
     {
         .name = "stopServer",
@@ -585,6 +645,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .name = "urlEncode",
         .signature = "(s: string): string",
         .summary = "URL-encode a string",
+    },
+    {
+        .name = "ws",
+        .signature = "(path: string, handler: fn(conn: WsConn): ()): ()",
+        .summary = "Register WebSocket upgrade route on HTTP server",
     },
 };
 
@@ -3590,29 +3655,42 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `HttpResponse.ok` | `const bool` | Handle field |\n"
             "| `HttpResponse.status` | `const int` | Handle field |\n"
             "| `HttpResponse.statusText` | `const string` | Handle field |\n"
+            "| `http.__getConnHandler` | `(): fn` | Return the current low-level HTTP connection handler |\n"
             "| `http.clearProxy` | `(): ()` | Clear HTTP proxy |\n"
-            "| `http.delete` | `(url: string, options?: Json): HttpResponse` | HTTP DELETE request |\n"
-            "| `http.download` | `(url: string, path: string, options?: Json): DownloadResult` | Download file from URL |\n"
-            "| `http.formDataAppend` | `(form: Json, name: string, value: string): ()` | Append field to form data |\n"
-            "| `http.formDataAppendFile` | `(form: Json, name: string, path: string, filename?: string): ()` | Append file to form data |\n"
-            "| `http.formDataNew` | `(): Json` | Create new multipart form data |\n"
-            "| `http.formDataPost` | `(url: string, form: Json, options?: Json): HttpResponse` | POST multipart form data |\n"
-            "| `http.get` | `(url: string, options?: Json): HttpResponse` | HTTP GET request |\n"
+            "| `http.closeStream` | `(resp: Json): ()` | Close a streaming HTTP response |\n"
+            "| `http.config` | `(opts: Json): ()` | Configure HTTP server limits and timeouts |\n"
+            "| `http.delete` | `(url: string): HttpResponse` | HTTP DELETE request |\n"
+            "| `http.download` | `(url: string, path: string): DownloadResult` | Download file from URL |\n"
+            "| `http.formDataAppend` | `(name: string, value: string): ()` | Append field to current form data |\n"
+            "| `http.formDataAppendFile` | `(name: string, path: string): bool` | Append file to current form data |\n"
+            "| `http.formDataNew` | `(maxTotalSize?: int, maxFileSize?: int): bool` | Create new multipart form data context |\n"
+            "| `http.formDataPost` | `(url: string): Json` | POST current multipart form data |\n"
+            "| `http.get` | `(url: string): HttpResponse` | HTTP GET request |\n"
             "| `http.getContentLength` | `(url: string): int` | Get content length of URL |\n"
-            "| `http.h2Get` | `(url: string, options?: Json): HttpResponse` | HTTP/2 GET request |\n"
-            "| `http.h2Post` | `(url: string, body?: string, options?: Json): HttpResponse` | HTTP/2 POST request |\n"
-            "| `http.h2Request` | `(method: string, url: string, options?: Json): HttpResponse` | Generic HTTP/2 request |\n"
+            "| `http.h2CreateServer` | `(options?: Json): bool` | Create HTTP/2 server |\n"
+            "| `http.h2Get` | `(url: string, options?: Json): Json` | HTTP/2 GET request |\n"
+            "| `http.h2Listen` | `(): bool` | Start HTTP/2 server |\n"
+            "| `http.h2Post` | `(url: string, body: string, contentType?: string): Json` | HTTP/2 POST request |\n"
+            "| `http.h2Push` | `(path: string, contentType: string, data: string): bool` | Push HTTP/2 response data |\n"
+            "| `http.h2Request` | `(options: Json): Json` | Generic HTTP/2 request |\n"
+            "| `http.h2Stop` | `(): ()` | Stop HTTP/2 server |\n"
+            "| `http.listen` | `(port: int): bool` | Start HTTP server accept loop |\n"
             "| `http.parseRequest` | `(fd: int): Array<unknown>?` | Parse raw HTTP request data |\n"
-            "| `http.post` | `(url: string, body?: string, options?: Json): HttpResponse` | HTTP POST request |\n"
-            "| `http.put` | `(url: string, body?: string, options?: Json): HttpResponse` | HTTP PUT request |\n"
-            "| `http.request` | `(method: string, url: string, options?: Json): HttpResponse` | Generic HTTP request |\n"
-            "| `http.route` | `(method: string, path: string, handler: fn): ()` | Register a route handler |\n"
+            "| `http.post` | `(url: string, body?: string, contentType?: string): HttpResponse` | HTTP POST request |\n"
+            "| `http.put` | `(url: string, body?: string, contentType?: string): HttpResponse` | HTTP PUT request |\n"
+            "| `http.readChunk` | `(resp: Json, maxBytes?: int): string?` | Read the next chunk from a streaming HTTP response |\n"
+            "| `http.request` | `(options: Json): HttpResponse` | Generic HTTP request |\n"
+            "| `http.response` | `(status: int, body?: string \\| Json): string` | Format an HTTP response string |\n"
+            "| `http.route` | `(method: string, path: string, handler: fn \\| string \\| Json): ()` | Register a route handler or static response |\n"
             "| `http.sendResponse` | `(fd: int, body: string, status?: int): bool` | Send HTTP response on fd |\n"
+            "| `http.serverStats` | `(): Json` | Return HTTP server counters |\n"
+            "| `http.setConnHandler` | `(handler: fn(fd: int): ()): ()` | Set low-level HTTP connection handler |\n"
             "| `http.setProxy` | `(url: string): ()` | Set HTTP proxy |\n"
-            "| `http.static` | `(prefix: string, dir: string): ()` | Serve static files from directory |\n"
+            "| `http.static` | `(method: string, path: string, content: string): ()` | Register a prebuilt static route response |\n"
             "| `http.stopServer` | `(): ()` | Stop the HTTP server |\n"
             "| `http.urlDecode` | `(s: string): string` | URL-decode a string |\n"
             "| `http.urlEncode` | `(s: string): string` | URL-encode a string |\n"
+            "| `http.ws` | `(path: string, handler: fn(conn: WsConn): ()): ()` | Register WebSocket upgrade route on HTTP server |\n"
             "",
         .symbols = _symbols_http,
         .symbol_count = (int)(sizeof(_symbols_http) / sizeof(_symbols_http[0])),

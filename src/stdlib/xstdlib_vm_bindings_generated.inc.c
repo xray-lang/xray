@@ -116,6 +116,47 @@ static void xr_stdlib_vm_bind_encoding_generated(XrVMRuntime *isolate, XrModule 
 }
 #endif  /* XR_STDLIB_VM_BIND_MODULE_ENCODING */
 
+#ifdef XR_STDLIB_VM_BIND_MODULE_HTTP
+static void xr_stdlib_vm_bind_http_generated(XrVMRuntime *isolate, XrModule *module) {
+    XRS_EXPORT_SLOW(module, isolate, "get", http_get);
+    XRS_EXPORT_SLOW(module, isolate, "post", http_post);
+    XRS_EXPORT_SLOW(module, isolate, "put", http_put);
+    XRS_EXPORT_SLOW(module, isolate, "delete", http_delete);
+    XRS_EXPORT_SLOW(module, isolate, "request", http_request);
+    XRS_EXPORT(module, isolate, "urlEncode", http_url_encode);
+    XRS_EXPORT(module, isolate, "urlDecode", http_url_decode);
+    XRS_EXPORT(module, isolate, "route", http_route);
+    XRS_EXPORT(module, isolate, "static", http_static);
+    XRS_EXPORT(module, isolate, "setConnHandler", http_set_conn_handler);
+    XRS_EXPORT(module, isolate, "__getConnHandler", http_get_conn_handler);
+    XRS_EXPORT_YIELDABLE(module, isolate, "listen", xr_http_listen_impl);
+    XRS_EXPORT(module, isolate, "config", xr_http_config_impl);
+    XRS_EXPORT(module, isolate, "response", xr_http_response_impl);
+    XRS_EXPORT(module, isolate, "serverStats", xr_http_server_stats);
+    XRS_EXPORT(module, isolate, "ws", http_ws_route);
+    XRS_EXPORT_SLOW(module, isolate, "readChunk", http_read_chunk);
+    XRS_EXPORT(module, isolate, "closeStream", http_close_stream);
+    XRS_EXPORT(module, isolate, "stopServer", http_stop_server);
+    XRS_EXPORT(module, isolate, "parseRequest", http_parse_request_fast);
+    XRS_EXPORT(module, isolate, "sendResponse", http_send_response_fast);
+    XRS_EXPORT_SLOW(module, isolate, "download", http_download);
+    XRS_EXPORT(module, isolate, "getContentLength", http_get_content_length);
+    XRS_EXPORT(module, isolate, "formDataNew", http_form_data_new);
+    XRS_EXPORT(module, isolate, "formDataAppend", http_form_data_append);
+    XRS_EXPORT(module, isolate, "formDataAppendFile", http_form_data_append_file);
+    XRS_EXPORT(module, isolate, "formDataPost", http_form_data_post);
+    XRS_EXPORT(module, isolate, "setProxy", http_set_proxy);
+    XRS_EXPORT(module, isolate, "clearProxy", http_clear_proxy);
+    XRS_EXPORT(module, isolate, "h2Get", h2_get);
+    XRS_EXPORT(module, isolate, "h2Post", h2_post);
+    XRS_EXPORT(module, isolate, "h2Request", h2_request);
+    XRS_EXPORT(module, isolate, "h2CreateServer", h2_create_server);
+    XRS_EXPORT(module, isolate, "h2Listen", h2_server_listen);
+    XRS_EXPORT(module, isolate, "h2Stop", h2_server_stop);
+    XRS_EXPORT(module, isolate, "h2Push", h2_push);
+}
+#endif  /* XR_STDLIB_VM_BIND_MODULE_HTTP */
+
 #ifdef XR_STDLIB_VM_BIND_MODULE_IO
 static void xr_stdlib_vm_bind_io_generated(XrVMRuntime *isolate, XrModule *module) {
     XRS_EXPORT(module, isolate, "appendFile", io_appendFile);

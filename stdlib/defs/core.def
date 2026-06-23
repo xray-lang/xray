@@ -2973,6 +2973,412 @@ module net {
   }
 }
 
+module http {
+  fn get {
+    signature: "(url: string): HttpResponse"
+    doc: "HTTP GET request"
+    vm: "http_get"
+    vm_binding: "slow"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn post {
+    signature: "(url: string, body?: string, contentType?: string): HttpResponse"
+    doc: "HTTP POST request"
+    vm: "http_post"
+    vm_binding: "slow"
+    argc: 3
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn put {
+    signature: "(url: string, body?: string, contentType?: string): HttpResponse"
+    doc: "HTTP PUT request"
+    vm: "http_put"
+    vm_binding: "slow"
+    argc: 3
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn delete {
+    signature: "(url: string): HttpResponse"
+    doc: "HTTP DELETE request"
+    vm: "http_delete"
+    vm_binding: "slow"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn request {
+    signature: "(options: Json): HttpResponse"
+    doc: "Generic HTTP request"
+    vm: "http_request"
+    vm_binding: "slow"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn urlEncode {
+    signature: "(s: string): string"
+    doc: "URL-encode a string"
+    vm: "http_url_encode"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn urlDecode {
+    signature: "(s: string): string"
+    doc: "URL-decode a string"
+    vm: "http_url_decode"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn route {
+    signature: "(method: string, path: string, handler: fn | string | Json): ()"
+    doc: "Register a route handler or static response"
+    vm: "http_route"
+    argc: 3
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn static {
+    signature: "(method: string, path: string, content: string): ()"
+    doc: "Register a prebuilt static route response"
+    vm: "http_static"
+    argc: 3
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn setConnHandler {
+    signature: "(handler: fn(fd: int): ()): ()"
+    doc: "Set low-level HTTP connection handler"
+    vm: "http_set_conn_handler"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn __getConnHandler {
+    signature: "(): fn"
+    doc: "Return the current low-level HTTP connection handler"
+    vm: "http_get_conn_handler"
+    argc: 0
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn listen {
+    signature: "(port: int): bool"
+    doc: "Start HTTP server accept loop"
+    vm: "xr_http_listen_impl"
+    vm_binding: "yieldable"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn config {
+    signature: "(opts: Json): ()"
+    doc: "Configure HTTP server limits and timeouts"
+    vm: "xr_http_config_impl"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn response {
+    signature: "(status: int, body?: string | Json): string"
+    doc: "Format an HTTP response string"
+    vm: "xr_http_response_impl"
+    argc: 2
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn serverStats {
+    signature: "(): Json"
+    doc: "Return HTTP server counters"
+    vm: "xr_http_server_stats"
+    argc: 0
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn ws {
+    signature: "(path: string, handler: fn(conn: WsConn): ()): ()"
+    doc: "Register WebSocket upgrade route on HTTP server"
+    vm: "http_ws_route"
+    argc: 2
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn readChunk {
+    signature: "(resp: Json, maxBytes?: int): string?"
+    doc: "Read the next chunk from a streaming HTTP response"
+    vm: "http_read_chunk"
+    vm_binding: "slow"
+    argc: 2
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn closeStream {
+    signature: "(resp: Json): ()"
+    doc: "Close a streaming HTTP response"
+    vm: "http_close_stream"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn stopServer {
+    signature: "(): ()"
+    doc: "Stop the HTTP server"
+    vm: "http_stop_server"
+    argc: 0
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn parseRequest {
+    signature: "(fd: int): Array<unknown>?"
+    doc: "Parse raw HTTP request data"
+    vm: "http_parse_request_fast"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn sendResponse {
+    signature: "(fd: int, body: string, status?: int): bool"
+    doc: "Send HTTP response on fd"
+    vm: "http_send_response_fast"
+    argc: 3
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn download {
+    signature: "(url: string, path: string): DownloadResult"
+    doc: "Download file from URL"
+    vm: "http_download"
+    vm_binding: "slow"
+    argc: 2
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn getContentLength {
+    signature: "(url: string): int"
+    doc: "Get content length of URL"
+    vm: "http_get_content_length"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn formDataNew {
+    signature: "(maxTotalSize?: int, maxFileSize?: int): bool"
+    doc: "Create new multipart form data context"
+    vm: "http_form_data_new"
+    argc: 2
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn formDataAppend {
+    signature: "(name: string, value: string): ()"
+    doc: "Append field to current form data"
+    vm: "http_form_data_append"
+    argc: 2
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn formDataAppendFile {
+    signature: "(name: string, path: string): bool"
+    doc: "Append file to current form data"
+    vm: "http_form_data_append_file"
+    argc: 2
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn formDataPost {
+    signature: "(url: string): Json"
+    doc: "POST current multipart form data"
+    vm: "http_form_data_post"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn setProxy {
+    signature: "(url: string): ()"
+    doc: "Set HTTP proxy"
+    vm: "http_set_proxy"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn clearProxy {
+    signature: "(): ()"
+    doc: "Clear HTTP proxy"
+    vm: "http_clear_proxy"
+    argc: 0
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn h2Get {
+    signature: "(url: string, options?: Json): Json"
+    doc: "HTTP/2 GET request"
+    vm: "h2_get"
+    argc: 2
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn h2Post {
+    signature: "(url: string, body: string, contentType?: string): Json"
+    doc: "HTTP/2 POST request"
+    vm: "h2_post"
+    argc: 3
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn h2Request {
+    signature: "(options: Json): Json"
+    doc: "Generic HTTP/2 request"
+    vm: "h2_request"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn h2CreateServer {
+    signature: "(options?: Json): bool"
+    doc: "Create HTTP/2 server"
+    vm: "h2_create_server"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn h2Listen {
+    signature: "(): bool"
+    doc: "Start HTTP/2 server"
+    vm: "h2_server_listen"
+    argc: 0
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn h2Stop {
+    signature: "(): ()"
+    doc: "Stop HTTP/2 server"
+    vm: "h2_server_stop"
+    argc: 0
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn h2Push {
+    signature: "(path: string, contentType: string, data: string): bool"
+    doc: "Push HTTP/2 response data"
+    vm: "h2_push"
+    argc: 3
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+}
+
 module cluster {
   fn start {
     signature: "(config: Json): ()"
