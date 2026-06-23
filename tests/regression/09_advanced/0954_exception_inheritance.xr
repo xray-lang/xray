@@ -65,28 +65,18 @@ fn test_subclass_stored_in_array() {
     assert_eq(errors[1].message, "err2")
 }
 
-// ===== throw + catch 仍然可用 =====
+// ===== 子类字段访问 =====
 
 @test
-fn test_subclass_throw_catch() {
-    let caught = ""
-    try {
-        throw HttpError("server error", 503)
-    } catch (e: HttpError) {
-        caught = e.message
-    }
-    assert_eq(caught, "server error")
+fn test_subclass_message_access() {
+    let err = HttpError("server error", 503)
+    assert_eq(err.message, "server error")
 }
 
 @test
-fn test_subclass_throw_catch_statusCode() {
-    let code = 0
-    try {
-        throw HttpError("not found", 404)
-    } catch (e: HttpError) {
-        code = e.statusCode
-    }
-    assert_eq(code, 404)
+fn test_subclass_status_code_access() {
+    let err = HttpError("not found", 404)
+    assert_eq(err.statusCode, 404)
 }
 
 // ===== 父类直接 new 不受影响 =====

@@ -471,9 +471,10 @@ TEST(bytes_methods_lower_to_semantic_ops) {
 }
 
 TEST(throw_stmt) {
-    XiFunc *f = lower_source("let x = 1\n"
+    XiFunc *f = lower_source("enum LowerErr { Error }\n"
+                             "let x = 1\n"
                              "if (x == 0) {\n"
-                             "    throw Exception(\"error\")\n"
+                             "    throw LowerErr.Error\n"
                              "}\n"
                              "print(x)\n");
     assert(f != NULL);

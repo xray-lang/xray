@@ -1704,8 +1704,8 @@ AstNode *xr_parse_declaration(Parser *parser) {
  * Parse try-catch statement.
  * Supports multiple typed catch clauses and an optional panic boundary:
  *   try { ... }
- *   catch (e: HttpError) { ... }
- *   catch (e: DbError)   { ... }
+ *   catch (e: NetErr)    { ... }
+ *   catch (e: DiskErr)   { ... }
  *   catch (e)            { ... }   // catch-all
  *   catch panic (p)      { ... }   // recoverable-fault boundary
  * There is no `finally`; use `defer` for cleanup (runs on all exits).
@@ -1753,7 +1753,7 @@ AstNode *xr_parse_try_statement(Parser *parser) {
         int var_column = parser->current.column;
         xr_parser_advance(parser);  // consume variable name
 
-        // Optional type annotation: catch (e: HttpError)
+        // Optional enum error filter annotation: catch (e: NetErr)
         XrTypeRef *type_ann = NULL;
         if (xr_parser_match(parser, TK_COLON)) {
             type_ann = xr_parse_type_annotation(parser);

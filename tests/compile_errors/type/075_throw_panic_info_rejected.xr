@@ -1,0 +1,8 @@
+class PanicInfo {
+    message: string
+    constructor(message: string) {
+        this.message = message
+    }
+}
+
+throw PanicInfo("boom")

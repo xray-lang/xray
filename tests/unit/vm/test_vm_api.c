@@ -160,12 +160,13 @@ TEST(vm_deep_recursion_via_dostring) {
     /* 200 levels of recursion: well below stack overflow threshold but
      * deep enough to exercise xr_coro_grow_stack in run(). prepare_entry
      * must keep entry frame and grow frame array consistently. */
-    const char *src = "fn dive(n: int) -> int {\n"
+    const char *src = "enum VmApiErr { CheckFailed }\n"
+                      "fn dive(n: int) -> int {\n"
                       "  if (n <= 0) { return 0; }\n"
                       "  return dive(n - 1) + 1;\n"
                       "}\n"
                       "let r = dive(200);\n"
-                      "if (r != 200) { throw Exception(\"wrong recursion result\"); }\n";
+                      "if (r != 200) { throw VmApiErr.CheckFailed; }\n";
 
     int rc = xray_isolate_dostring(iso, src);
     ASSERT_EQ_INT(rc, 0);
@@ -185,7 +186,8 @@ TEST(vm_large_maxstacksize_entry) {
     /* Many local variables push proto->maxstacksize past the 128-slot
      * default coroutine stack, forcing prepare_entry to grow before
      * the first instruction runs. */
-    const char *src = "fn wide() -> int {\n"
+    const char *src = "enum VmApiErr { CheckFailed }\n"
+                      "fn wide() -> int {\n"
                       "  let a01 = 1; let a02 = 2; let a03 = 3; let a04 = 4;\n"
                       "  let a05 = 5; let a06 = 6; let a07 = 7; let a08 = 8;\n"
                       "  let a09 = 9; let a10 = 10; let a11 = 11; let a12 = 12;\n"
@@ -197,7 +199,7 @@ TEST(vm_large_maxstacksize_entry) {
                       "  return a01 + a32;\n"
                       "}\n"
                       "let r = wide();\n"
-                      "if (r != 33) { throw Exception(\"wide failed\"); }\n";
+                      "if (r != 33) { throw VmApiErr.CheckFailed; }\n";
 
     int rc = xray_isolate_dostring(iso, src);
     ASSERT_EQ_INT(rc, 0);
@@ -216,7 +218,8 @@ TEST(vm_vararg_entry) {
 
     /* Xray rest-param syntax: ...nums (no type annotation on rest param).
      * Exercises the vararg branch of xr_vm_call_closure. */
-    const char *src = "fn sumAll(...nums) -> int {\n"
+    const char *src = "enum VmApiErr { CheckFailed }\n"
+                      "fn sumAll(...nums) -> int {\n"
                       "  let total = 0\n"
                       "  for (let i = 0; i < nums.length; i = i + 1) {\n"
                       "    total = total + nums[i]\n"
@@ -224,7 +227,7 @@ TEST(vm_vararg_entry) {
                       "  return total\n"
                       "}\n"
                       "let r = sumAll(1, 2, 3, 4, 5)\n"
-                      "if (r != 15) { throw Exception(\"vararg failed\") }\n";
+                      "if (r != 15) { throw VmApiErr.CheckFailed }\n";
 
     int rc = xray_isolate_dostring(iso, src);
     ASSERT_EQ_INT(rc, 0);

@@ -136,6 +136,45 @@ static bool xa_type_name_matches(XrType *type, const char *name) {
     return false;
 }
 
+static bool xa_is_enum_error_type(XrType *type) {
+    return type && !XR_TYPE_IS_UNKNOWN(type) && XR_TYPE_IS_ENUM(type);
+}
+
+static void xa_report_non_enum_catch_type(XaInferContext *ctx, XrCatchClause *cc, XrType *type) {
+    if (!ctx || !ctx->analyzer || !cc || !type || XR_TYPE_IS_UNKNOWN(type) ||
+        xa_is_enum_error_type(type))
+        return;
+
+    XrLocation loc = {.file = ctx->file_path, .line = cc->var_line, .column = cc->var_column};
+    char msg[256];
+    snprintf(msg, sizeof(msg),
+             "catch error type must be an enum error type; use catch panic for runtime faults; "
+             "got '%s'",
+             xr_type_to_string(type));
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH, msg,
+                               &loc);
+}
+
+static XrType *xa_resolve_catch_binding_type(XaInferContext *ctx, XrCatchClause *cc,
+                                             bool report_diagnostics) {
+    if (!ctx || !cc)
+        return xr_type_new_unknown(NULL);
+
+    if (cc->is_panic) {
+        if (cc->type)
+            return xr_tref_resolve_in_analyzer(ctx->analyzer, cc->type);
+        return xr_type_new_named_instance(ctx->analyzer->isolate, "Exception");
+    }
+
+    if (!cc->type)
+        return xr_type_new_unknown(ctx->analyzer ? ctx->analyzer->isolate : NULL);
+
+    XrType *type = xr_tref_resolve_in_analyzer(ctx->analyzer, cc->type);
+    if (report_diagnostics)
+        xa_report_non_enum_catch_type(ctx, cc, type);
+    return type ? type : xr_type_new_unknown(ctx->analyzer ? ctx->analyzer->isolate : NULL);
+}
+
 static bool xa_is_hashable_interface_type(XrType *type) {
     return type && type->kind == XR_KIND_INTERFACE && type->instance.class_name &&
            strcmp(type->instance.class_name, "Hashable") == 0;
@@ -1556,13 +1595,7 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
                     cc->symbol_id = err_sym->id;
                     XaSymbolLinks *err_links = xa_analyzer_get_links(ctx->analyzer, err_sym);
                     if (err_links) {
-                        // Use the type annotation if present, else default Exception
-                        if (cc->type) {
-                            err_links->type = xr_tref_resolve(ctx->analyzer->isolate, cc->type);
-                        } else {
-                            err_links->type =
-                                xr_type_new_named_instance(ctx->analyzer->isolate, "Exception");
-                        }
+                        err_links->type = xa_resolve_catch_binding_type(ctx, cc, false);
                         err_links->is_definitely_assigned = true;
                     }
                 }
@@ -2534,12 +2567,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                     xa_scope_add_symbol(ctx->analyzer->current_scope, err_sym);
                     XaSymbolLinks *err_links = xa_analyzer_get_links(ctx->analyzer, err_sym);
                     if (err_links) {
-                        if (cc->type) {
-                            err_links->type = xr_tref_resolve(ctx->analyzer->isolate, cc->type);
-                        } else {
-                            err_links->type =
-                                xr_type_new_named_instance(ctx->analyzer->isolate, "Exception");
-                        }
+                        err_links->type = xa_resolve_catch_binding_type(ctx, cc, true);
                         err_links->is_definitely_assigned = true;
                     }
                 }
@@ -2551,23 +2579,14 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
         case AST_THROW_STMT:
             if (node->as.throw_stmt.expression) {
                 XrType *thrown = xa_visit_infer_expr(ctx, node->as.throw_stmt.expression);
-                /* Allow throw of: (1) enum value (typed error model), or
-                 * (2) Exception / subclass while legacy exceptions remain.
-                 * Skip the check when the inferred type is unknown. */
                 if (thrown && !XR_TYPE_IS_UNKNOWN(thrown)) {
-                    bool ok = XR_TYPE_IS_ENUM(thrown);
-                    if (!ok) {
-                        XrType *exc =
-                            xr_type_new_named_instance(ctx->analyzer->isolate, "Exception");
-                        ok = exc && (xr_type_is_named_class(thrown, "Exception") ||
-                                     xr_type_is_subclass_of(thrown, exc));
-                    }
-                    if (!ok) {
+                    if (!xa_is_enum_error_type(thrown)) {
                         XrLocation loc = {
                             .file = ctx->file_path, .line = node->line, .column = node->column};
                         char msg[256];
                         snprintf(msg, sizeof(msg),
-                                 "throw expression must be an enum value or an Exception; "
+                                 "throw expression must be an enum error value; use panic channel "
+                                 "for runtime faults; "
                                  "got '%s'",
                                  xr_type_to_string(thrown));
                         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,

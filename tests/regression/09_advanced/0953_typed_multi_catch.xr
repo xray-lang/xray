@@ -4,6 +4,7 @@
 // cleanup interactions are all tested.
 
 enum CatchErr { Msg(string) }
+enum OtherErr { Msg(string) }
 
 // 1. Single catch — existing syntax unchanged
 @test
@@ -144,15 +145,14 @@ fn test_catchall_only() {
     assert_eq(msg, "any")
 }
 
-// 10. Multi-catch: catch-all catches when typed doesn't match
-//     (uses int type which won't match CatchErr)
+// 10. Multi-catch: catch-all catches when typed enum doesn't match
 @test
 fn test_multi_catch_fallthrough_to_catchall() {
     let result = ""
     try {
         throw CatchErr.Msg("fall")
-    } catch (e: int) {
-        result = "int"
+    } catch (e: OtherErr) {
+        result = "other"
     } catch (e) {
         match (e) { CatchErr.Msg(s) -> { result = "catchall:" + s } }
     }

@@ -2192,7 +2192,7 @@ XrType *xa_visit_function_expr(XaInferContext *ctx, AstNode *node) {
         // scopes that are textually assigned after the closure literal.
         // We snapshot the diagnostics list before visiting and, after the
         // body visit, drop only the entries tagged USED_BEFORE_ASSIGN.
-        // Real semantic errors (e.g. throw on a non-Exception, type
+        // Real semantic errors (e.g. throw on a non-enum error, type
         // mismatches inside the body) are kept regardless of whether the
         // return type was already known.
         int saved_diag_count = ctx->analyzer->diagnostic_count;
