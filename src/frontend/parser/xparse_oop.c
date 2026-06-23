@@ -46,8 +46,9 @@ static bool current_is_removed_public_modifier(Parser *parser) {
     Scanner saved = parser->scanner;
     Token peek = xr_scanner_scan(&saved);
     return peek.type == TK_NAME || peek.type == TK_STATIC || peek.type == TK_PRIVATE ||
-           peek.type == TK_CONSTRUCTOR || peek.type == TK_OPERATOR || peek.type == TK_ABSTRACT ||
-           peek.type == TK_OVERRIDE || peek.type == TK_FINAL;
+           peek.type == TK_PROTECTED || peek.type == TK_CONST || peek.type == TK_CONSTRUCTOR ||
+           peek.type == TK_OPERATOR || peek.type == TK_ABSTRACT || peek.type == TK_OVERRIDE ||
+           peek.type == TK_FINAL;
 }
 
 /* ========== Local Cleanup Helpers ========== */
@@ -228,6 +229,7 @@ AstNode *xr_parse_class_declaration(Parser *parser) {
 
         // Skip unknown tokens to avoid infinite loop
         if (!xr_parser_check(parser, TK_NAME) && !xr_parser_check(parser, TK_PRIVATE) &&
+            !xr_parser_check(parser, TK_PROTECTED) && !xr_parser_check(parser, TK_CONST) &&
             !xr_parser_check(parser, TK_STATIC) && !xr_parser_check(parser, TK_CONSTRUCTOR) &&
             !xr_parser_check(parser, TK_ABSTRACT) && !xr_parser_check(parser, TK_OVERRIDE) &&
             !xr_parser_check(parser, TK_FINAL) && !xr_parser_check(parser, TK_OPERATOR)) {
@@ -438,6 +440,7 @@ AstNode *xr_parse_struct_declaration(Parser *parser) {
 
         // Skip unknown tokens
         if (!xr_parser_check(parser, TK_NAME) && !xr_parser_check(parser, TK_PRIVATE) &&
+            !xr_parser_check(parser, TK_PROTECTED) && !xr_parser_check(parser, TK_CONST) &&
             !xr_parser_check(parser, TK_STATIC) && !xr_parser_check(parser, TK_OPERATOR)) {
             xr_parser_error_expected_name(parser, "expected field or method name in struct");
             xr_parser_advance(parser);
@@ -500,6 +503,7 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
 
     // Parse access modifiers (optional)
     bool is_private = false;
+    bool is_protected = false;
     bool is_static = false;
     bool is_getter = false;
     (void) is_getter;
@@ -508,6 +512,7 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
     bool is_abstract = false;
     bool is_override = false;
     bool is_final = false;
+    bool is_const = false;
 
     if (current_is_removed_public_modifier(parser)) {
         xr_parser_error_at_current(
@@ -525,6 +530,8 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
 
     if (xr_parser_match(parser, TK_PRIVATE)) {
         is_private = true;
+    } else if (xr_parser_match(parser, TK_PROTECTED)) {
+        is_protected = true;
     }
 
     if (xr_parser_match(parser, TK_STATIC)) {
@@ -545,11 +552,18 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
         is_final = true;
     }
 
+    // `const` marks an immutable field (assignable only in the constructor).
+    if (xr_parser_match(parser, TK_CONST)) {
+        is_const = true;
+    }
+
     if (xr_parser_match(parser, TK_OPERATOR)) {
         *is_method_out = true;
         AstNode *method = xr_parse_operator_method(parser, is_private, is_static);
-        if (method)
+        if (method) {
             method->as.method_decl.is_override = is_override;
+            method->as.method_decl.is_protected = is_protected;
+        }
         return method;
     }
 
@@ -583,11 +597,15 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
         is_override) {
         // Method: has parameter list or generic type params or override modifier
         *is_method_out = true;
+        if (is_const) {
+            xr_parser_error_at_current(parser, "'const' applies to fields, not methods; remove it");
+        }
         AstNode *method = xr_parse_method_declaration(parser, name, name_line, name_column,
                                                       is_private, is_static, is_abstract);
         if (method) {
             method->as.method_decl.is_override = is_override;
             method->as.method_decl.is_final = is_final;
+            method->as.method_decl.is_protected = is_protected;
         }
         return method;
     } else {
@@ -597,6 +615,12 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
         // 'override' can only be used for methods
         if (is_override) {
             xr_parser_error_at_current(parser, "'override' modifier can only be used for methods");
+        }
+
+        // 'final' marks classes/methods as sealed; immutable fields use 'const'.
+        if (is_final) {
+            xr_parser_error_at_current(
+                parser, "'final' applies to classes/methods; use 'const' for an immutable field");
         }
 
         // Parse type annotation (optional)
@@ -626,6 +650,8 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
                                            initializer, name_line);
         if (field) {
             field->as.field_decl.is_final = is_final;
+            field->as.field_decl.is_protected = is_protected;
+            field->as.field_decl.is_const = is_const;
             field->column = name_column;
             // End span: to end of initializer if present, else just the name.
             if (initializer && initializer->end_line > 0) {

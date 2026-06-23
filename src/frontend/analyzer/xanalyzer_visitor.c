@@ -2158,8 +2158,33 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                 XaSymbolLinks *class_links = NULL;
                 XrClassInfo *class_info = member_set_class_info(ctx, obj_type, &class_links);
                 if (class_info) {
-                    XaSymbol *field = xa_class_info_lookup_member(class_info, ms->member);
+                    XrClassInfo *field_owner = NULL;
+                    XaSymbol *field =
+                        xa_class_info_lookup_member_owner(class_info, ms->member, &field_owner);
                     if (field) {
+                        // Enforce private/protected visibility on the write target.
+                        xa_check_member_visibility(ctx, node, field, field_owner);
+
+                        // const fields are immutable: only the declaring class's
+                        // constructor may assign them, and only through `this`.
+                        if (field->is_const) {
+                            bool in_owner_ctor = ctx->current_method_is_constructor &&
+                                                 ctx->current_class_info != NULL &&
+                                                 ctx->current_class_info == field_owner;
+                            bool through_this = ms->object && ms->object->type == AST_THIS_EXPR;
+                            if (!in_owner_ctor || !through_this) {
+                                XrLocation loc = {.file = ctx->file_path,
+                                                  .line = node->line,
+                                                  .column = node->column};
+                                char msg[256];
+                                snprintf(msg, sizeof(msg),
+                                         "cannot assign to const field '%s'; const fields are set "
+                                         "only in the constructor",
+                                         ms->member);
+                                xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                                           XR_ERR_ANALYZE_CONST_FIELD, msg, &loc);
+                            }
+                        }
                         XaSymbolLinks *fl = xa_analyzer_get_links(ctx->analyzer, field);
                         if (fl && fl->type && !XR_TYPE_IS_UNKNOWN(fl->type)) {
                             member_type = member_set_substitute_field_type(ctx, obj_type,
@@ -2440,13 +2465,29 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             ClassDeclNode *cls =
                 (node->type == AST_STRUCT_DECL) ? &node->as.struct_decl : &node->as.class_decl;
             xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_CLASS, node);
+            // Establish class context so member-visibility and const-field
+            // checks know which class body they are inside.
+            XrClassInfo *saved_class_info = ctx->current_class_info;
+            const char *saved_class_name = ctx->current_class_name;
+            ctx->current_class_name = cls->name;
+            ctx->current_class_info = NULL;
+            {
+                XaSymbol *class_sym = xa_scope_lookup(ctx->analyzer->current_scope, cls->name);
+                if (class_sym) {
+                    XaSymbolLinks *cl = xa_analyzer_get_links(ctx->analyzer, class_sym);
+                    if (cl)
+                        ctx->current_class_info = cl->class_info;
+                }
+            }
             for (int i = 0; i < cls->method_count; i++) {
                 if (cls->methods[i] && cls->methods[i]->as.method_decl.body) {
                     xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_FUNCTION, cls->methods[i]);
                     // Save/restore expected_return_type so the enclosing
                     // function's type doesn't leak into method bodies.
                     XrType *saved_ret = ctx->expected_return_type;
+                    bool saved_is_ctor = ctx->current_method_is_constructor;
                     MethodDeclNode *md = &cls->methods[i]->as.method_decl;
+                    ctx->current_method_is_constructor = md->is_constructor;
                     if (md->return_type) {
                         ctx->expected_return_type =
                             xr_tref_resolve(ctx->analyzer->isolate, md->return_type);
@@ -2455,9 +2496,12 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                     }
                     xa_visit_function_body_unified(ctx, md->body);
                     ctx->expected_return_type = saved_ret;
+                    ctx->current_method_is_constructor = saved_is_ctor;
                     xa_analyzer_exit_scope(ctx->analyzer);
                 }
             }
+            ctx->current_class_info = saved_class_info;
+            ctx->current_class_name = saved_class_name;
             xa_analyzer_exit_scope(ctx->analyzer);
             break;
         }

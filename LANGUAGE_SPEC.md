@@ -113,7 +113,7 @@ Error codes use the `E0xxx` format (e.g., `E0101`); the full list is in [Chapter
 
 ## 1. Lexical Structure
 
-> Source of truth: `src/frontend/lexer/xlex.h` (token enum), `src/frontend/lexer/xkeywords.def` (keyword table, 61 entries), `src/frontend/lexer/xlex.c` (scanner implementation).
+> Source of truth: `src/frontend/lexer/xlex.h` (token enum), `src/frontend/lexer/xkeywords.def` (keyword table, 62 entries), `src/frontend/lexer/xlex.c` (scanner implementation).
 
 ### 1.1 Character Encoding
 
@@ -164,7 +164,7 @@ The character `_` is a **dedicated wildcard token**, not an ordinary identifier:
 
 ### 1.5 Keywords
 
-Xray has **61 reserved keywords** in total; the authoritative source-of-truth table is in `src/frontend/lexer/xkeywords.def`. Keywords are grouped by purpose:
+Xray has **62 reserved keywords** in total; the authoritative source-of-truth table is in `src/frontend/lexer/xkeywords.def`. Keywords are grouped by purpose:
 
 #### 1.5.1 Declarations and Control Flow
 
@@ -194,8 +194,9 @@ Xray has **61 reserved keywords** in total; the authoritative source-of-truth ta
 | `new` | instantiation |
 | `this` `super` | self / parent reference |
 | `constructor` | constructor |
-| `static` `private` | class/member modifiers; public visibility is the default and has no `public` keyword |
-| `abstract` `final` `override` | class/method modifiers (`override` is **optional** — overriding a parent method does not require an explicit annotation) |
+| `static` `private` `protected` | class/member modifiers; public visibility is the default and has no `public` keyword |
+| `const` | immutable field/binding modifier |
+| `abstract` `final` `override` | class/method modifiers (`override` is **optional** — overriding a parent method does not require an explicit annotation; `final` only seals classes/methods) |
 | `operator` | operator overloading |
 | `is` `as` | runtime type check / cast |
 
@@ -2102,12 +2103,13 @@ FieldDecl ::= Modifier* Identifier ':' Type ('=' Expression)?
 MethodDecl ::= Modifier* Identifier '(' ParamList? ')' ReturnType? Block
             |  Modifier* 'operator' OpToken '(' ParamList? ')' ReturnType? Block
 ConstructorDecl ::= 'constructor' '(' ParamList? ')' Block          // parameter types may be omitted
-Modifier ::= 'private' | 'static' | 'final' | 'abstract' | 'override'
+Modifier ::= 'private' | 'protected' | 'static' | 'final' | 'const' | 'abstract' | 'override'
 ```
 
 > **About default public visibility and `override`**:
 >
-> - Public is the **default visibility**—every field/method without `private` is public; the language has no `public` modifier.
+> - Public is the **default visibility**—every field/method without `private` / `protected` is public; the language has no `public` modifier.
+> - Visibility is **compile-time enforced**: accessing a `private` / `protected` member from outside the class, or a `protected` member from a non-subclass, reports `E0377`.
 > - `override` is **optional**—an override happens automatically when the derived class declares a method with the same signature; an explicit `override` annotation is not required.
 > - Once written, `override` is checked: the analyzer must find a same-name, same-signature instance method in the parent chain, or report compile error `E0374`.
 >
@@ -2166,15 +2168,17 @@ class Dog extends Animal {
 | Modifier | Applies to | Semantics |
 |--|--|--|
 | (none) | field/method | Default public—externally visible |
-| `private` | field/method | Class-internal access only; subclasses cannot access directly but may go through public parent methods |
+| `private` | field/method | Accessible only inside the declaring class (including other instances of the same class); subclass and external access report `E0377` |
+| `protected` | field/method | Accessible inside the declaring class and its subclasses; external access reports `E0377` |
 | `static` | field/method | Class-level, not part of an instance; called as `ClassName.method()` |
-| `final` | class/method/field | Class: cannot be inherited. Method: cannot be overridden. Field: cannot be reassigned after initialization |
+| `const` | field | Immutable field—assignable once via `this` in the declaring class's constructor; later writes report `E0378` |
+| `final` | class/method | Class: cannot be inherited. Method: cannot be overridden. **No longer applies to fields** (use `const` for immutable fields) |
 | `abstract` | class/method | Cannot be instantiated / must be implemented by subclasses |
 | `override` | method | **Optional but checked**—overrides do not require explicit annotation; when present, it must match a same-name, same-signature instance method in the parent chain |
 
-**Modifiers may combine**: `private final secret: string = "key123"`, `static final pi() -> float`, `private static counter: int = 0`.
+**Modifiers may combine**: `private const secret: string = "key123"`, `static final pi() -> float`, `protected static counter: int = 0`.
 
-xray has **no** `protected` modifier—subclasses go through public parent methods to reach private fields when needed.
+> `const` = immutable field/binding, `final` = sealing a class/method (inheritance dimension). Their roles are separate: immutable fields use `const` only; writing `final` on a field is an error that suggests `const`.
 
 #### 5.3.4 Constructors
 
@@ -2300,7 +2304,7 @@ b.x = 99.0
 | Inheritance | Supports `extends` | **No** inheritance |
 | `implements` | ✅ | ✅ |
 | Generics | ✅ | ✅ |
-| `static` / `private` / `final` | ✅ | ✅ |
+| `static` / `private` / `protected` / `const` | ✅ | ✅ |
 | Operator overload | ✅ | ✅ |
 | Constructor | `constructor(...)` | **Optional**: `new Point()` yields a zero-valued instance |
 | Literal | none | `TypeName{field: value, ...}` |
@@ -5393,7 +5397,7 @@ ParamList ::= Param (',' Param)* ','?
 Param     ::= Modifier* Identifier ':' Type ('=' Expression)?
            |  '...' Identifier ':' Type
 ReturnType ::= '->' Type | '->' '(' Type (',' Type)+ ')'
-Modifier  ::= 'in' | 'ref' | 'private' | 'static' | 'final' | 'abstract' | 'override'
+Modifier  ::= 'in' | 'ref' | 'private' | 'protected' | 'static' | 'const' | 'final' | 'abstract' | 'override'
               // public visibility is the default; override is optional
 
 TypeParams ::= '<' TypeParam (',' TypeParam)* ','? '>'
@@ -5455,7 +5459,7 @@ OperatorToken ::= '+' | '-' | '*' | '/' | '%'
 
 ## Appendix B. Keyword Index
 
-The full set of 61 reserved keywords sorted alphabetically; see [§1.5](#15-keywords) for the authoritative list.
+The full set of 62 reserved keywords sorted alphabetically; see [§1.5](#15-keywords) for the authoritative list.
 
 | Keyword | Section |
 |--|--|
@@ -5494,6 +5498,7 @@ The full set of 61 reserved keywords sorted alphabetically; see [§1.5](#15-keyw
 | `operator` | §5.3 |
 | `override` | §5.3 |
 | `private` | §5.3 |
+| `protected` | §5.3 |
 | `return` | §4.7 |
 | `scope` | §10.7 |
 | `select` | §10.6 |

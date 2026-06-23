@@ -216,6 +216,41 @@ static bool xa_type_is_nullable_non_bool(XrType *type) {
     return base && !XR_TYPE_IS_BOOL(base);
 }
 
+static bool xa_class_info_is_subclass_of(struct XrClassInfo *sub, struct XrClassInfo *base) {
+    for (struct XrClassInfo *c = sub; c; c = c->base) {
+        if (c == base)
+            return true;
+    }
+    return false;
+}
+
+XR_FUNC void xa_check_member_visibility(XaInferContext *ctx, AstNode *node, XaSymbol *member,
+                                        struct XrClassInfo *owner) {
+    if (!ctx || !ctx->analyzer || !node || !member)
+        return;
+    if (!member->is_private && !member->is_protected)
+        return;
+
+    struct XrClassInfo *access = ctx->current_class_info;
+    bool ok = false;
+    if (access) {
+        if (member->is_private)
+            ok = (owner != NULL && access == owner);
+        else
+            ok = (owner != NULL && xa_class_info_is_subclass_of(access, owner));
+    }
+    if (ok)
+        return;
+
+    XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+    char msg[256];
+    const char *vis = member->is_private ? "private" : "protected";
+    snprintf(msg, sizeof(msg), "cannot access %s member '%s' of '%s' from here", vis,
+             member->name ? member->name : "?", (owner && owner->name) ? owner->name : "?");
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_VISIBILITY, msg,
+                               &loc);
+}
+
 XR_FUNC void xa_check_condition_type(XaInferContext *ctx, AstNode *node, XrType *cond_type) {
     if (!ctx || !ctx->analyzer || !node || !cond_type || XR_TYPE_IS_UNKNOWN(cond_type))
         return;
@@ -928,8 +963,11 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
         if (class_sym) {
             XaSymbolLinks *class_links = xa_analyzer_get_links(ctx->analyzer, class_sym);
             if (class_links && class_links->class_info) {
-                XaSymbol *member = xa_class_info_lookup_member(class_links->class_info, ma->name);
+                struct XrClassInfo *member_owner = NULL;
+                XaSymbol *member = xa_class_info_lookup_member_owner(class_links->class_info,
+                                                                     ma->name, &member_owner);
                 if (member) {
+                    xa_check_member_visibility(ctx, node, member, member_owner);
                     XaSymbolLinks *member_links = xa_analyzer_get_links(ctx->analyzer, member);
                     if (member_links && member_links->type) {
                         XrType *member_type = member_links->type;

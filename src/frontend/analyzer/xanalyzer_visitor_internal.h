@@ -92,6 +92,9 @@ XR_FUNC void xa_report_float_modulo_error(XaInferContext *ctx, AstNode *node, Xr
                                           XrType *right);
 XR_FUNC void xa_check_condition_type(XaInferContext *ctx, AstNode *node, XrType *cond_type);
 XR_FUNC void xa_check_logical_operand_type(XaInferContext *ctx, AstNode *node, XrType *type);
+struct XrClassInfo;
+XR_FUNC void xa_check_member_visibility(XaInferContext *ctx, AstNode *node, XaSymbol *member,
+                                        struct XrClassInfo *owner);
 
 // Module graph exports lookup (defined in xanalyzer_visitor.c).
 // Resolves an import specifier to the target module's exports hashmap.

@@ -598,6 +598,22 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         MemberAccessNode *ma = &call->callee->as.member_access;
         method_name = ma->name;
         callee_obj_type = xa_visit_infer_expr(ctx, ma->object);
+
+        // Enforce private/protected visibility on user-class method calls.
+        if (method_name && callee_obj_type && XR_TYPE_IS_INSTANCE(callee_obj_type) &&
+            callee_obj_type->instance.class_name) {
+            XaSymbol *mc_sym =
+                xa_scope_lookup(ctx->analyzer->current_scope, callee_obj_type->instance.class_name);
+            XaSymbolLinks *mc_links = mc_sym ? xa_analyzer_get_links(ctx->analyzer, mc_sym) : NULL;
+            if (mc_links && mc_links->class_info) {
+                struct XrClassInfo *m_owner = NULL;
+                XaSymbol *m_sym =
+                    xa_class_info_lookup_member_owner(mc_links->class_info, method_name, &m_owner);
+                if (m_sym && m_sym->kind == XA_SYM_METHOD)
+                    xa_check_member_visibility(ctx, call->callee, m_sym, m_owner);
+            }
+        }
+
         XaSymbol *in_param = xa_in_param_symbol_for_expr(ctx, ma->object);
         if (in_param && method_name) {
             // Decide whether the call mutates the `in` receiver. For user class

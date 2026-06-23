@@ -114,7 +114,7 @@ Xray 是一个**轻量级静态类型脚本语言，原生支持并发**。设�
 
 ## 1. 词法结构 (Lexical Structure)
 
-> 真值源：`src/frontend/lexer/xlex.h`（token 枚举）、`src/frontend/lexer/xkeywords.def`（关键字表，61 条）、`src/frontend/lexer/xlex.c`（扫描器实现）。
+> 真值源：`src/frontend/lexer/xlex.h`（token 枚举）、`src/frontend/lexer/xkeywords.def`（关键字表，62 条）、`src/frontend/lexer/xlex.c`（扫描器实现）。
 
 ### 1.1 字符编码
 
@@ -165,7 +165,7 @@ IdentCont  ::= IdentStart | '0'..'9'
 
 ### 1.5 关键字
 
-xray 共 **61 个保留关键字**，源码真值表见 `src/frontend/lexer/xkeywords.def`。关键字按用途分组：
+xray 共 **62 个保留关键字**，源码真值表见 `src/frontend/lexer/xkeywords.def`。关键字按用途分组：
 
 #### 1.5.1 声明与流程控制
 
@@ -195,8 +195,9 @@ xray 共 **61 个保留关键字**，源码真值表见 `src/frontend/lexer/xkey
 | `new` | 实例化 |
 | `this` `super` | 自我/父类引用 |
 | `constructor` | 构造器 |
-| `static` `private` | 类/成员修饰符；公开是默认语义，没有 `public` 关键字 |
-| `abstract` `final` `override` | 类/方法修饰符（`override` 是**可选**——重写父类方法不要求显式标注） |
+| `static` `private` `protected` | 类/成员修饰符；公开是默认语义，没有 `public` 关键字 |
+| `const` | 不可变字段/绑定修饰符 |
+| `abstract` `final` `override` | 类/方法修饰符（`override` 是**可选**——重写父类方法不要求显式标注；`final` 仅用于封类/封方法） |
 | `operator` | 运算符重载 |
 | `is` `as` | 运行时类型检查 / 转换 |
 
@@ -2095,12 +2096,13 @@ FieldDecl ::= Modifier* Identifier ':' Type ('=' Expression)?
 MethodDecl ::= Modifier* Identifier '(' ParamList? ')' ReturnType? Block
             |  Modifier* 'operator' OpToken '(' ParamList? ')' ReturnType? Block
 ConstructorDecl ::= 'constructor' '(' ParamList? ')' Block          // 参数类型可省
-Modifier ::= 'private' | 'static' | 'final' | 'abstract' | 'override'
+Modifier ::= 'private' | 'protected' | 'static' | 'final' | 'const' | 'abstract' | 'override'
 ```
 
 > **关于默认公开可见性和 `override`**：
 >
-> - 公开是**默认可见性**——所有未带 `private` 的字段/方法都是公开的；语言没有 `public` 修饰符。
+> - 公开是**默认可见性**——所有未带 `private` / `protected` 的字段/方法都是公开的；语言没有 `public` 修饰符。
+> - 可见性受**编译期强制**：从类外访问 `private` / `protected` 成员、或从非子类访问 `protected` 成员，均报 `E0377`。
 > - `override` 是**可选**——重写父类方法只要同名同参就自动覆盖，不要求显式 `override` 标注。
 > - 但一旦写出 `override`，分析器必须验证父类链存在同名同签实例方法；否则编译错误 `E0374`。
 >
@@ -2159,15 +2161,17 @@ class Dog extends Animal {
 | 修饰符 | 适用 | 语义 |
 |--|--|--|
 | （无） | 字段/方法 | 默认 public——公开可见 |
-| `private` | 字段/方法 | 仅类内部可访问；子类不能直接访问，但可通过父类公开方法间接访问 |
+| `private` | 字段/方法 | 仅声明类内部可访问（含同类其它实例）；子类与外部访问均报 `E0377` |
+| `protected` | 字段/方法 | 声明类及其子类内部可访问；外部访问报 `E0377` |
 | `static` | 字段/方法 | 类级别，不属于实例；调用为 `ClassName.method()` |
-| `final` | 类/方法/字段 | 类：禁止继承；方法：禁止重写；字段：初始化后不可修改 |
+| `const` | 字段 | 不可变字段——只能在声明类的构造器中经 `this` 赋值一次，之后重写报 `E0378` |
+| `final` | 类/方法 | 类：禁止继承；方法：禁止重写。**不再用于字段**（字段不可变用 `const`） |
 | `abstract` | 类/方法 | 不可实例化 / 必须由子类实现 |
 | `override` | 方法 | **可选但受检**——重写不要求显式标注；写了必须覆盖父类链中同名同签实例方法 |
 
-**修饰符可组合**：`private final secret: string = "key123"`、`static final pi() -> float`、`private static counter: int = 0`。
+**修饰符可组合**：`private const secret: string = "key123"`、`static final pi() -> float`、`protected static counter: int = 0`。
 
-xray **没有** `protected` 修饰符——子类通过父类公开方法间接访问私有字段即可。
+> `const` = 不可变字段/绑定，`final` = 封类/封方法（继承维度）。两者职责分离：字段不可变只用 `const`，对字段写 `final` 报错并提示改用 `const`。
 
 #### 5.3.4 构造器
 
@@ -2293,7 +2297,7 @@ b.x = 99.0
 | 继承 | 支持 `extends` | **不支持**继承 |
 | `implements` | ✅ | ✅ |
 | 泛型 | ✅ | ✅ |
-| `static` / `private` / `final` | ✅ | ✅ |
+| `static` / `private` / `protected` / `const` | ✅ | ✅ |
 | 运算符重载 | ✅ | ✅ |
 | 构造器 | `constructor(...)` | **可省略**：`new Point()` 生成零值实例 |
 | 字面量 | 无 | `TypeName{field: value, ...}` |
@@ -5380,7 +5384,7 @@ ParamList ::= Param (',' Param)* ','?
 Param     ::= Modifier* Identifier ':' Type ('=' Expression)?
            |  '...' Identifier ':' Type
 ReturnType ::= '->' Type | '->' '(' Type (',' Type)+ ')'
-Modifier  ::= 'in' | 'ref' | 'private' | 'static' | 'final' | 'abstract' | 'override'
+Modifier  ::= 'in' | 'ref' | 'private' | 'protected' | 'static' | 'const' | 'final' | 'abstract' | 'override'
               // 公开可见性是默认语义；override 可选
 
 TypeParams ::= '<' TypeParam (',' TypeParam)* ','? '>'
@@ -5442,7 +5446,7 @@ OperatorToken ::= '+' | '-' | '*' | '/' | '%'
 
 ## 附录 B. 关键字索引
 
-完整 61 个关键字按字母排序见 [§1.5](#15-关键字)。
+完整 62 个关键字按字母排序见 [§1.5](#15-关键字)。
 
 | 关键字 | 节 |
 |--|--|
@@ -5481,6 +5485,7 @@ OperatorToken ::= '+' | '-' | '*' | '/' | '%'
 | `operator` | §5.3 |
 | `override` | §5.3 |
 | `private` | §5.3 |
+| `protected` | §5.3 |
 | `return` | §4.7 |
 | `scope` | §10.7 |
 | `select` | §10.6 |

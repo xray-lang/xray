@@ -397,6 +397,58 @@ XaSymbol *xa_class_info_lookup_member(XrClassInfo *info, const char *name) {
     return NULL;
 }
 
+XaSymbol *xa_class_info_lookup_member_owner(XrClassInfo *info, const char *name,
+                                            XrClassInfo **owner_out) {
+    if (owner_out)
+        *owner_out = NULL;
+    if (!info || !name)
+        return NULL;
+
+    if (info->members_map) {
+        XaSymbol *found = (XaSymbol *) xr_hashmap_get(info->members_map, name);
+        if (found) {
+            if (owner_out)
+                *owner_out = info;
+            return found;
+        }
+    } else {
+        for (int i = 0; i < info->field_count; i++) {
+            if (strcmp(info->fields[i]->name, name) == 0) {
+                if (owner_out)
+                    *owner_out = info;
+                return info->fields[i];
+            }
+        }
+        for (int i = 0; i < info->method_count; i++) {
+            if (strcmp(info->methods[i]->name, name) == 0) {
+                if (owner_out)
+                    *owner_out = info;
+                return info->methods[i];
+            }
+        }
+        for (int i = 0; i < info->static_field_count; i++) {
+            if (strcmp(info->static_fields[i]->name, name) == 0) {
+                if (owner_out)
+                    *owner_out = info;
+                return info->static_fields[i];
+            }
+        }
+        for (int i = 0; i < info->static_method_count; i++) {
+            if (strcmp(info->static_methods[i]->name, name) == 0) {
+                if (owner_out)
+                    *owner_out = info;
+                return info->static_methods[i];
+            }
+        }
+    }
+
+    if (info->base) {
+        return xa_class_info_lookup_member_owner(info->base, name, owner_out);
+    }
+
+    return NULL;
+}
+
 // Function signature helpers
 void xa_symbol_links_set_function_sig(XaSymbolLinks *links, XrType **param_types,
                                       const char **param_names, int param_count,

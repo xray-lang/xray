@@ -147,10 +147,11 @@ struct XaSymbol {
     XrLocation location;  // Definition location
 
     // Modifiers
-    bool is_const;          // const declaration
+    bool is_const;          // const declaration / immutable field
     bool is_exported;       // export modifier
     bool is_static;         // static member
-    bool is_private;        // private member (starts with _)
+    bool is_private;        // private member (class-only visibility)
+    bool is_protected;      // protected member (class + subclass visibility)
     bool is_override;       // explicit override modifier on a method
     bool is_shared;         // shared variable
     bool is_builtin;        // built-in type member (Array.push, etc.)
@@ -241,6 +242,11 @@ XR_FUNC void xa_class_info_free(XrClassInfo *info);
 XR_FUNC void xa_class_info_add_field(XrClassInfo *info, XaSymbol *field);
 XR_FUNC void xa_class_info_add_method(XrClassInfo *info, XaSymbol *method);
 XR_FUNC XaSymbol *xa_class_info_lookup_member(XrClassInfo *info, const char *name);
+
+// Same as xa_class_info_lookup_member but also reports which class in the base
+// chain actually declares the member (used for private/protected visibility).
+XR_FUNC XaSymbol *xa_class_info_lookup_member_owner(XrClassInfo *info, const char *name,
+                                                    XrClassInfo **owner_out);
 
 // API: Function signature helpers (integrated into XaSymbolLinks)
 XR_FUNC void xa_symbol_links_set_function_sig(XaSymbolLinks *links, XrType **param_types,
