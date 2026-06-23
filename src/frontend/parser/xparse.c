@@ -47,7 +47,8 @@ static ParseRule rules[] = {
     [TK_RBRACKET] = {NULL, NULL, PREC_NONE},
     [TK_COMMA] = {NULL, NULL, PREC_NONE},
     [TK_DOT] = {NULL, xr_parse_member_access, PREC_CALL},
-    [TK_RANGE] = {NULL, xr_parse_range, PREC_FACTOR},  // .. (range operator)
+    [TK_RANGE] = {NULL, xr_parse_range, PREC_FACTOR},            // .. (range operator)
+    [TK_RANGE_INCLUSIVE] = {NULL, xr_parse_range, PREC_FACTOR},  // ..= (inclusive range)
     [TK_COLON] = {NULL, NULL, PREC_NONE},
     [TK_SEMICOLON] = {NULL, NULL, PREC_NONE},
 

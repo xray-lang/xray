@@ -41,7 +41,7 @@ struct XrayIsolate;
 struct XrProto;
 
 #define XR_BC_MAGIC 0x59415258  // "XRAY" (little-endian)
-#define XR_BC_VERSION 7         // v7: current VM opcode table encoding
+#define XR_BC_VERSION 8         // v8: adds OP_NEWRANGE_INCLUSIVE
 
 // Serialization flags
 #define XR_BC_STRIP_DEBUG (1 << 0)   // Remove debug info (line numbers, var names)

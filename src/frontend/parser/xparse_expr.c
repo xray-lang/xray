@@ -936,12 +936,13 @@ AstNode *xr_parse_optional_index(Parser *parser, AstNode *object) {
     return xr_ast_optional_chain(parser->X, object, NULL, index, 1, line);
 }
 
-// Parse range expression: start..end
+// Parse range expression: start..end / start..=end
 AstNode *xr_parse_range(Parser *parser, AstNode *start) {
     XR_DCHECK(parser != NULL, "parse_range: NULL parser");
     int line = parser->previous.line;
+    bool inclusive_end = parser->previous.type == TK_RANGE_INCLUSIVE;
 
     AstNode *end = xr_parse_precedence(parser, PREC_FACTOR + 1);
 
-    return xr_ast_range(parser->X, start, end, line);
+    return xr_ast_range(parser->X, start, end, inclusive_end, line);
 }

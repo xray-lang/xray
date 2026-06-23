@@ -856,10 +856,11 @@ AstNode *xr_ast_optional_chain(XrayIsolate *X, AstNode *object, const char *name
 // Create range expression node
 // start: start value expression
 // end: end value expression
-AstNode *xr_ast_range(XrayIsolate *X, AstNode *start, AstNode *end, int line) {
+AstNode *xr_ast_range(XrayIsolate *X, AstNode *start, AstNode *end, bool inclusive_end, int line) {
     AstNode *node = alloc_node(X, AST_RANGE, line);
     node->as.range.start = start;
     node->as.range.end = end;
+    node->as.range.inclusive_end = inclusive_end;
     return node;
 }
 
@@ -1215,11 +1216,13 @@ AstNode *xr_ast_pattern_literal(XrayIsolate *X, AstNode *value, int line) {
 }
 
 // Create range pattern node
-// 1..10
-AstNode *xr_ast_pattern_range(XrayIsolate *X, AstNode *start, AstNode *end, int line) {
+// 1..10 / 1..=10
+AstNode *xr_ast_pattern_range(XrayIsolate *X, AstNode *start, AstNode *end, bool inclusive_end,
+                              int line) {
     AstNode *node = alloc_node(X, AST_PATTERN_RANGE, line);
     node->as.pattern_range.start = start;
     node->as.pattern_range.end = end;
+    node->as.pattern_range.inclusive_end = inclusive_end;
     return node;
 }
 

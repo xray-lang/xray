@@ -703,7 +703,7 @@ void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
         // Range
         case AST_RANGE:
             xfmt_emit_expression(ctx, node->as.range.start);
-            xfmt_write_str(ctx, "..");
+            xfmt_write_str(ctx, node->as.range.inclusive_end ? "..=" : "..");
             xfmt_emit_expression(ctx, node->as.range.end);
             break;
 
@@ -930,7 +930,7 @@ void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
 
         case AST_PATTERN_RANGE:
             xfmt_emit_expression(ctx, node->as.pattern_range.start);
-            xfmt_write_str(ctx, "..");
+            xfmt_write_str(ctx, node->as.pattern_range.inclusive_end ? "..=" : "..");
             xfmt_emit_expression(ctx, node->as.pattern_range.end);
             break;
 

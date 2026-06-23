@@ -141,6 +141,7 @@ typedef struct PatternLiteralNode {
 typedef struct PatternRangeNode {
     AstNode *start;
     AstNode *end;
+    bool inclusive_end;
 } PatternRangeNode;
 
 typedef struct PatternWildcardNode {

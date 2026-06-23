@@ -685,14 +685,15 @@ XR_FUNC XiValue *xi_lower_pattern_test(XiLower *l, XiValue *subject, AstNode *pa
         }
 
         case AST_PATTERN_RANGE: {
-            /* Half-open interval [start, end), consistent with for-in range. */
             XiValue *start = xi_lower_expr(l, pattern->as.pattern_range.start);
             XiValue *end = xi_lower_expr(l, pattern->as.pattern_range.end);
             if (!start || !end)
                 return NULL;
             XiValue *ge = xi_binary(l->func, l->cur_block, XI_GE, l->type_bool, subject, start);
-            XiValue *lt = xi_binary(l->func, l->cur_block, XI_LT, l->type_bool, subject, end);
-            return xi_binary(l->func, l->cur_block, XI_BAND, l->type_bool, ge, lt);
+            XiValue *upper = xi_binary(l->func, l->cur_block,
+                                       pattern->as.pattern_range.inclusive_end ? XI_LE : XI_LT,
+                                       l->type_bool, subject, end);
+            return xi_binary(l->func, l->cur_block, XI_BAND, l->type_bool, ge, upper);
         }
 
         case AST_PATTERN_MULTI: {
@@ -1280,7 +1281,7 @@ XR_FUNC XiValue *xi_lower_match(XiLower *l, AstNode *node) {
 /* ========== For-In Loop (index-based) ========== */
 
 static void lower_for_in_loop(XiLower *l, AstNode *node, XiValue *init_val, XiValue *limit,
-                              XiValue *get_item_coll) {
+                              XiValue *get_item_coll, bool inclusive_limit) {
     ForInStmtNode *s = &node->as.for_in_stmt;
     (void) s;
     struct XrType *item_type = xi_lower_node_type(l, node);
@@ -1324,7 +1325,8 @@ static void lower_for_in_loop(XiLower *l, AstNode *node, XiValue *init_val, XiVa
     XiValue *cur_idx = xi_lower_braun_read(l, idx_var, l->cur_block);
     XiValue *cur_lim = xi_lower_braun_read(l, lim_var, l->cur_block);
     XR_DCHECK(cur_idx != NULL, "braun_read idx must not be NULL");
-    XiValue *cond = xi_binary(l->func, l->cur_block, XI_LT, l->type_bool, cur_idx, cur_lim);
+    XiValue *cond = xi_binary(l->func, l->cur_block, inclusive_limit ? XI_LE : XI_LT, l->type_bool,
+                              cur_idx, cur_lim);
     if (cond)
         xi_block_set_if(l->cur_block, cond, body_blk, exit_blk);
 
@@ -1364,10 +1366,27 @@ static void lower_for_in_loop(XiLower *l, AstNode *node, XiValue *init_val, XiVa
     l->cur_block = incr_blk;
     if (incr_blk->npreds > 0) {
         XiValue *inc_idx = xi_lower_braun_read(l, idx_var, l->cur_block);
-        XiValue *one = xi_const_int(l->func, l->cur_block, 1, l->type_int);
-        XiValue *new_idx = xi_binary(l->func, l->cur_block, XI_ADD, l->type_int, inc_idx, one);
-        if (new_idx)
-            xi_lower_braun_write(l, idx_var, l->cur_block, new_idx);
+        if (inclusive_limit) {
+            XiValue *inc_lim = xi_lower_braun_read(l, lim_var, l->cur_block);
+            XiValue *at_limit =
+                xi_binary(l->func, l->cur_block, XI_EQ, l->type_bool, inc_idx, inc_lim);
+            XiBlock *step_blk = xi_block_new(l->func);
+            if (at_limit)
+                xi_block_set_if(l->cur_block, at_limit, exit_blk, step_blk);
+            xi_lower_braun_seal(l, step_blk);
+
+            l->cur_block = step_blk;
+            XiValue *step_idx = xi_lower_braun_read(l, idx_var, l->cur_block);
+            XiValue *one = xi_const_int(l->func, l->cur_block, 1, l->type_int);
+            XiValue *new_idx = xi_binary(l->func, l->cur_block, XI_ADD, l->type_int, step_idx, one);
+            if (new_idx)
+                xi_lower_braun_write(l, idx_var, l->cur_block, new_idx);
+        } else {
+            XiValue *one = xi_const_int(l->func, l->cur_block, 1, l->type_int);
+            XiValue *new_idx = xi_binary(l->func, l->cur_block, XI_ADD, l->type_int, inc_idx, one);
+            if (new_idx)
+                xi_lower_braun_write(l, idx_var, l->cur_block, new_idx);
+        }
     }
     if (l->cur_block && incr_blk->npreds > 0)
         xi_block_set_jump(l->cur_block, cond_blk);
@@ -1707,7 +1726,7 @@ XR_FUNC void xi_lower_for_in(XiLower *l, AstNode *node) {
         XiValue *end = xi_lower_expr(l, rn->end);
         if (!end || !l->cur_block)
             return;
-        lower_for_in_loop(l, node, start, end, NULL);
+        lower_for_in_loop(l, node, start, end, NULL, rn->inclusive_end);
         return;
     }
 
@@ -1750,7 +1769,7 @@ XR_FUNC void xi_lower_for_in(XiLower *l, AstNode *node) {
     len->line = (uint32_t) node->line;
 
     XiValue *zero = xi_const_int(l->func, l->cur_block, 0, l->type_int);
-    lower_for_in_loop(l, node, zero, len, coll);
+    lower_for_in_loop(l, node, zero, len, coll, false);
 }
 
 /* ========== Try-Catch ========== */

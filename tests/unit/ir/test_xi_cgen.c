@@ -2488,7 +2488,9 @@ TEST(cgen_typeof_as_and_slice_use_direct_drivers) {
 
 TEST(cgen_range_uses_direct_aot_driver) {
     const char *src = "let r = 2..6\n"
+                      "let ri = 2..=6\n"
                       "print(r)\n"
+                      "print(ri)\n"
                       "print(typeof(r))\n";
 
     XiFunc *ir = compile_to_ir(src);
@@ -2501,6 +2503,8 @@ TEST(cgen_range_uses_direct_aot_driver) {
 
     assert(contains(code, "xrt_range_from_i64(") &&
            "range expression must use the direct AOT range helper");
+    assert(contains(code, ", false)") && "half-open range must pass inclusive=false");
+    assert(contains(code, ", true)") && "inclusive range must pass inclusive=true");
     assert(contains(code, "xrt_typeof_str(") && "typeof(range) must use direct typeof helper");
     assert(!contains(code, "xrt_range(XR_FROM_INT") &&
            "range creation must not box start/end before the AOT helper");

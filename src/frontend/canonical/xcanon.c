@@ -794,9 +794,13 @@ static void canon_node(XrCanonCtx *ctx, AstNode *node) {
         case AST_BINARY_LSHIFT:
         case AST_BINARY_RSHIFT:
         case AST_NULLISH_COALESCE:
-        case AST_RANGE:
             canon_node(ctx, node->as.binary.left);
             canon_node(ctx, node->as.binary.right);
+            break;
+
+        case AST_RANGE:
+            canon_node(ctx, node->as.range.start);
+            canon_node(ctx, node->as.range.end);
             break;
 
         case AST_UNARY_NEG:
@@ -826,9 +830,13 @@ static void canon_node(XrCanonCtx *ctx, AstNode *node) {
         case AST_INTERFACE_DECL:
         case AST_YIELD_STMT:
         case AST_PATTERN_LITERAL:
-        case AST_PATTERN_RANGE:
         case AST_PATTERN_WILDCARD:
         case AST_PATTERN_MULTI:
+            break;
+
+        case AST_PATTERN_RANGE:
+            canon_node(ctx, node->as.pattern_range.start);
+            canon_node(ctx, node->as.pattern_range.end);
             break;
 
         default:

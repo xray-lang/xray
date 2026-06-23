@@ -552,6 +552,7 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
         case AST_RANGE:
             n->as.range.start = xr_ast_clone_ctx(node->as.range.start, map, mc, clone_ctx);
             n->as.range.end = xr_ast_clone_ctx(node->as.range.end, map, mc, clone_ctx);
+            n->as.range.inclusive_end = node->as.range.inclusive_end;
             break;
 
         // === Optional chain / Force unwrap ===
@@ -644,6 +645,7 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
                 xr_ast_clone_ctx(node->as.pattern_range.start, map, mc, clone_ctx);
             n->as.pattern_range.end =
                 xr_ast_clone_ctx(node->as.pattern_range.end, map, mc, clone_ctx);
+            n->as.pattern_range.inclusive_end = node->as.pattern_range.inclusive_end;
             break;
         case AST_PATTERN_WILDCARD:
             break;

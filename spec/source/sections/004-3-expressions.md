@@ -30,7 +30,7 @@ order: 004
 | 6 | `&&` | 左 | 逻辑与（短路） |
 | 5 | `\|\|` | 左 | 逻辑或（短路） |
 | 4 | `??` | 左 | 空值合并 |
-| 3 | `..` | 左 | 范围 |
+| 3 | `..` `..=` | 左 | 范围 |
 | 2 | `? :` | 右 | 三元 |
 | 1 | `=` `+=` `-=` `*=` `/=` `%=` `&=` `\|=` `^=` `<<=` `>>=` | 右 | 赋值与复合赋值 |
 | 0 | `,`（仅 `match` 多值、参数列表等特定位置）| — | 不是真正运算符 |
@@ -254,25 +254,28 @@ let n = v as int?          // 失败返回 null（"as nullable" 安全形式）
 - 父类 → 子类（运行时 instanceof）。
 - Union 成员 → 具体成员。
 
-### 3.9 范围 `..` 与展开 `...`
+### 3.9 范围 `..` / `..=` 与展开 `...`
 
-#### 范围 `a..b`
+#### 范围 `a..b` / `a..=b`
 
 ```ebnf
-RangeExpr ::= AddExpr ('..' AddExpr)?
+RangeExpr ::= AddExpr (('..' | '..=') AddExpr)?
 ```
 
 ```xray @id=expr-range
 0..10                  // 0..10，左闭右开（包含 0，不包含 10）
+0..=10                 // 0..=10，闭区间（包含 0 和 10）
 let r = 1..100
 let n = 10
 for (i in 0..n) { print(i) }
+for (i in 0..=n) { print(i) }
 ```
 
 - 类型 `Range`（仅 int 范围）。
-- 半开区间 `[a, b)`：`a` 包含、`b` 不包含。`for-in`、`Range.includes`、`Range.length`、`Range.toArray()`、`match` 中的 `a..b` 模式全部遵循同一语义。
+- `a..b` 是半开区间 `[a, b)`：`a` 包含、`b` 不包含。
+- `a..=b` 是闭区间 `[a, b]`：两端都包含。
+- `for-in`、`Range.includes`、`Range.length`、`Range.toArray()`、`match` 中的范围模式全部遵循对应端点语义。
 - 主要用途：`for-in` 循环、模式匹配中的范围判定。
-- 当前不提供闭区间语法（`a..=b`）；如需"包含 b"，写 `a..(b+1)`。
 
 #### 展开 `...`
 
@@ -563,7 +566,7 @@ Full precedence table (highest → lowest; operators at the same level share ass
 | 6 | `&&` | left | logical AND (short-circuit) |
 | 5 | `\|\|` | left | logical OR (short-circuit) |
 | 4 | `??` | left | null coalescing |
-| 3 | `..` | left | range |
+| 3 | `..` `..=` | left | range |
 | 2 | `? :` | right | ternary |
 | 1 | `=` `+=` `-=` `*=` `/=` `%=` `&=` `\|=` `^=` `<<=` `>>=` | right | assignment and compound assignment |
 | 0 | `,` (only in `match` multi-value arms, argument lists, etc.) | — | not a real operator |
@@ -787,25 +790,28 @@ let n = v as int?          // returns null on failure (the "as nullable" safe fo
 - Parent → child (runtime `instanceof`).
 - Union member → concrete member.
 
-### 3.9 Range `..` and Spread `...`
+### 3.9 Range `..` / `..=` and Spread `...`
 
-#### Range `a..b`
+#### Range `a..b` / `a..=b`
 
 ```ebnf
-RangeExpr ::= AddExpr ('..' AddExpr)?
+RangeExpr ::= AddExpr (('..' | '..=') AddExpr)?
 ```
 
 ```xray @id=expr-range
 0..10                  // 0..10, left-closed right-open (includes 0, excludes 10)
+0..=10                 // 0..=10, closed interval (includes both 0 and 10)
 let r = 1..100
 let n = 10
 for (i in 0..n) { print(i) }
+for (i in 0..=n) { print(i) }
 ```
 
 - Type: `Range` (int ranges only).
-- Half-open interval `[a, b)`: `a` is included, `b` is not. `for-in`, `Range.includes`, `Range.length`, `Range.toArray()`, and the `a..b` pattern in `match` all share the same semantics.
+- `a..b` is the half-open interval `[a, b)`: `a` is included, `b` is not.
+- `a..=b` is the inclusive interval `[a, b]`: both endpoints are included.
+- `for-in`, `Range.includes`, `Range.length`, `Range.toArray()`, and range patterns in `match` all use the corresponding endpoint semantics.
 - Primary uses: `for-in` loops, range checks in pattern matching.
-- The closed-interval syntax (`a..=b`) is not currently provided; to include `b`, write `a..(b+1)`.
 
 #### Spread `...`
 

@@ -163,13 +163,15 @@ static AstNode *parse_pattern_single(Parser *parser) {
         return NULL;
     }
 
-    if (xr_parser_match(parser, TK_RANGE)) {
+    if (xr_parser_check(parser, TK_RANGE) || xr_parser_check(parser, TK_RANGE_INCLUSIVE)) {
+        bool inclusive_end = parser->current.type == TK_RANGE_INCLUSIVE;
+        xr_parser_advance(parser);
         AstNode *end = xr_parse_precedence(parser, PREC_CALL);
         if (!end) {
             xr_parser_error(parser, "expected range end value");
             return NULL;
         }
-        return xr_ast_pattern_range(parser->X, first, end, line);
+        return xr_ast_pattern_range(parser->X, first, end, inclusive_end, line);
     }
 
     /* ADT variant destructure: Shape.Circle(r, ...)

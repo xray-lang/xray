@@ -3308,6 +3308,7 @@ static XiValue *lower_range_expr(XiLower *l, AstNode *node) {
         return NULL;
     v->args[0] = start;
     v->args[1] = end;
+    v->aux_int = rn->inclusive_end ? 1 : 0;
     v->line = (uint32_t) node->line;
     return v;
 }
