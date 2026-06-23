@@ -25,7 +25,7 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 
 | 类别 | 示例 |
 |--|--|
-| Primitive | `int`、`float`、`bool`、`string`、`()`（Unit，无返回值） |
+| Primitive | `int`、`float`、`bool`、`string`、`char`、`()`（Unit，无返回值） |
 | 精确整数 | `int8`、`int16`、`int32`、`int64`、`uint8`..`uint64` |
 | 精确浮点 | `float32`、`float64` |
 | 容器 | `Array<T>`、`Map<K,V>`、`Set<T>`、`Channel<T>`、`Bytes`（即 `Array<uint8>`） |
@@ -80,7 +80,7 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 | `bool` | 允许 | 直接布尔判断 |
 | `T?` 且 `T != bool` | 允许 | 仅判断是否为 `null`（不检查内容是否“空”） |
 | `bool?` | 编译错误 | 三态歧义；写 `flag == true` / `flag != null` / `flag ?? false` |
-| `int` / `float` / `string` / 集合 / 对象 | 编译错误 | 必须写显式比较，如 `n != 0`、`!s.isEmpty()` |
+| `int` / `float` / `string` / `char` / 集合 / 对象 | 编译错误 | 必须写显式比较，如 `n != 0`、`!s.isEmpty()` |
 
 `&&` / `||` / `!` 的操作数必须是 `bool`；不要把 `T?` 直接放进 `&&` / `||`。
 
@@ -105,11 +105,28 @@ if (!s.isEmpty()) { }    // OK
 
 #### 2.3.4 `string`
 
-不可变 UTF-8 字符串。支持 `length`、索引、切片、丰富方法集（见 §14.2）。
+不可变 UTF-8 字符串。`length` / `size`、索引和默认迭代都以 Unicode scalar value 为单位：`s[i]` 返回 `char`，切片返回 `string`。丰富方法集见 §14.5。
 
 底层使用引用计数（ARC）+ 字符串驻留（interning）优化。
 
-#### 2.3.5 Unit `()`（无返回值）
+#### 2.3.5 `char`
+
+`char` 表示一个 Unicode scalar value（有效范围 `U+0000..U+10FFFF`，排除 surrogate 区间 `U+D800..U+DFFF`）。它是独立的原始类型，**不是**数值类型，也**不是** `uint32` 的别名。
+
+```xray
+let a: char = 'a'
+let zh = '中'
+let smile = '\u{1F600}'
+print(typeof(a))          // "char"
+print(int(smile))         // 128512
+```
+
+- char 字面量必须恰好包含一个 Unicode scalar；空字面量、多 scalar 字面量和 surrogate 字面量都是编译错误。
+- `char` 不参与算术、位运算或窄整数赋值：`'a' + 1`、`let n: uint32 = 'a'` 都会在分析期拒绝。
+- 显式转换：`int(c)` 得到 scalar code point；`char(n)` 从整数构造 char 并验证 scalar 合法性；`string(c)` / `c.toString()` 得到单 scalar 字符串。
+- 常用方法见 §14.4.1。
+
+#### 2.3.6 Unit `()`（无返回值）
 
 xray 用 **0-元组 `()`** 表示"无返回值"（Unit 类型）：
 
@@ -122,7 +139,7 @@ let r: () = log("hi")                        // 允许；r 是 Unit 值
 - 一个函数省略返回类型等同于 `-> ()`。
 - `void` 不是类型名：写 `fn f() -> void` 会被拒绝（`E0804`）；无返回值使用 `-> ()` 或省略返回类型。
 
-#### 2.3.6 FFI 标量与 C ABI 边界类型
+#### 2.3.7 FFI 标量与 C ABI 边界类型
 
 xray 的 C FFI 使用一组显式边界类型，避免把普通 xray 对象隐式解释成 C 数据：
 
@@ -497,7 +514,7 @@ Xray is statically typed; every expression has a determined type at compile time
 
 | Category | Examples |
 |--|--|
-| Primitive | `int`, `float`, `bool`, `string`, `()` (Unit, no return value) |
+| Primitive | `int`, `float`, `bool`, `string`, `char`, `()` (Unit, no return value) |
 | Sized integers | `int8`, `int16`, `int32`, `int64`, `uint8`..`uint64` |
 | Sized floats | `float32`, `float64` |
 | Containers | `Array<T>`, `Map<K,V>`, `Set<T>`, `Channel<T>`, `Bytes` (equivalent to `Array<uint8>`) |
@@ -552,7 +569,7 @@ Literals default to `float`.
 | `bool` | yes | direct boolean test |
 | `T?` with `T != bool` | yes | null presence only (content emptiness is **not** checked) |
 | `bool?` | compile error | tri-state ambiguity; write `flag == true` / `flag != null` / `flag ?? false` |
-| `int` / `float` / `string` / collections / objects | compile error | use explicit comparisons such as `n != 0`, `!s.isEmpty()` |
+| `int` / `float` / `string` / `char` / collections / objects | compile error | use explicit comparisons such as `n != 0`, `!s.isEmpty()` |
 
 Operands of `&&` / `||` / `!` must be `bool`; do not place `T?` directly into `&&` / `||`.
 
@@ -577,11 +594,28 @@ if (!s.isEmpty()) { }    // OK
 
 #### 2.3.4 `string`
 
-Immutable UTF-8 strings. Supports `length`, indexing, slicing, and a rich method set (see §14.2).
+Immutable UTF-8 strings. `length` / `size`, indexing, and default iteration are expressed in Unicode scalar values: `s[i]` returns `char`, and slicing returns `string`. For the rich method set, see §14.5.
 
 Internally uses ARC + string interning optimizations.
 
-#### 2.3.5 Unit `()` (no return value)
+#### 2.3.5 `char`
+
+`char` represents one Unicode scalar value (valid range `U+0000..U+10FFFF`, excluding the surrogate range `U+D800..U+DFFF`). It is an independent primitive type, **not** a numeric type and **not** an alias of `uint32`.
+
+```xray
+let a: char = 'a'
+let zh = '中'
+let smile = '\u{1F600}'
+print(typeof(a))          // "char"
+print(int(smile))         // 128512
+```
+
+- A char literal must contain exactly one Unicode scalar; empty literals, multi-scalar literals, and surrogate literals are compile errors.
+- `char` does not participate in arithmetic, bitwise operations, or narrow-integer assignment: `'a' + 1` and `let n: uint32 = 'a'` are rejected by the analyzer.
+- Explicit conversions: `int(c)` returns the scalar code point; `char(n)` constructs a char from an integer and validates that it is a legal scalar; `string(c)` / `c.toString()` returns a one-scalar string.
+- Common methods are listed in §14.4.1.
+
+#### 2.3.6 Unit `()` (no return value)
 
 Xray uses the **0-tuple `()`** to represent "no return value" (the Unit type):
 
@@ -594,7 +628,7 @@ let r: () = log("hi")                        // allowed; r is a Unit value
 - A function omitting its return type is equivalent to `-> ()`.
 - `void` is not a type name: `fn f() -> void` is rejected (`E0804`); use `-> ()` or omit the return type to indicate no return value.
 
-#### 2.3.6 FFI Scalars and C ABI Boundary Types
+#### 2.3.7 FFI Scalars and C ABI Boundary Types
 
 Xray's C FFI uses explicit boundary types so ordinary xray objects are not implicitly interpreted as C data:
 

@@ -531,8 +531,11 @@ vmcase(OP_ARRAY_GETC) {
     // String indexing support
     if (XR_IS_STRING(obj_val)) {
         XrString *str = XR_TO_STRING(obj_val);
-        XrString *ch = xr_string_char_at_unicode(isolate, str, (size_t) c);
-        R(a) = ch ? xr_string_value(ch) : xr_null();
+        uint32_t cp = 0;
+        R(a) = (c >= 0 && xr_utf8_char_at(str->data, str->length, (size_t) c, &cp, NULL) &&
+                xr_unicode_is_scalar(cp))
+                   ? xr_char(cp)
+                   : xr_null();
         vmbreak;
     }
     // Array indexing (includes slices — capacity==0 && source!=NULL)
@@ -1221,9 +1224,12 @@ vmcase(OP_INDEX_GET) {
     // Fast path: String (Unicode character index)
     if (XR_IS_STRING(obj_val) && XR_IS_INT(key_val)) {
         XrString *str = XR_TO_STRING(obj_val);
-        size_t idx = (size_t) XR_TO_INT(key_val);
-        XrString *ch = xr_string_char_at_unicode(isolate, str, idx);
-        R(a) = ch ? xr_string_value(ch) : xr_null();
+        int64_t idx = XR_TO_INT(key_val);
+        uint32_t cp = 0;
+        R(a) = (idx >= 0 && xr_utf8_char_at(str->data, str->length, (size_t) idx, &cp, NULL) &&
+                xr_unicode_is_scalar(cp))
+                   ? xr_char(cp)
+                   : xr_null();
         vmbreak;
     }
     // Fast path: Array (includes slices — capacity==0 && source!=NULL)

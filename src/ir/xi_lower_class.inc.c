@@ -22,6 +22,7 @@ static bool is_simple_literal(AstNode *init) {
         case AST_LITERAL_FLOAT:
         case AST_LITERAL_TRUE:
         case AST_LITERAL_FALSE:
+        case AST_LITERAL_CHAR:
         case AST_LITERAL_STRING:
             return true;
         default:

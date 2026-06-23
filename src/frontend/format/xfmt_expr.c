@@ -17,6 +17,7 @@
 #include "xfmt_internal.h"
 #include "xfmt_literal.h"
 #include "../../base/xmalloc.h"
+#include "../../base/xutf8.h"
 #include <string.h>
 
 // ----------------------------------------------------------------------------
@@ -42,6 +43,51 @@ static void fmt_literal(XrFmtContext *ctx, AstNode *node) {
             // control bytes round-trip through the parser.
             const char *s = node->as.literal.raw_value.string_val;
             xfmt_emit_string(ctx, s, s ? (int) strlen(s) : 0);
+            break;
+        }
+        case AST_LITERAL_CHAR: {
+            uint32_t cp = node->as.literal.raw_value.char_val;
+            xfmt_write_char(ctx, '\'');
+            switch (cp) {
+                case '\n':
+                    xfmt_write_str(ctx, "\\n");
+                    break;
+                case '\r':
+                    xfmt_write_str(ctx, "\\r");
+                    break;
+                case '\t':
+                    xfmt_write_str(ctx, "\\t");
+                    break;
+                case '\\':
+                    xfmt_write_str(ctx, "\\\\");
+                    break;
+                case '\'':
+                    xfmt_write_str(ctx, "\\'");
+                    break;
+                case '\b':
+                    xfmt_write_str(ctx, "\\b");
+                    break;
+                case '\f':
+                    xfmt_write_str(ctx, "\\f");
+                    break;
+                case '\0':
+                    xfmt_write_str(ctx, "\\0");
+                    break;
+                default: {
+                    if (cp < 0x20) {
+                        xfmt_write_fmt(ctx, "\\u{%X}", cp);
+                    } else {
+                        char buf[XR_UTF8_MAX_BYTES + 1];
+                        int n = xr_utf8_encode(cp, buf);
+                        if (n > 0) {
+                            buf[n] = '\0';
+                            xfmt_write_str(ctx, buf);
+                        }
+                    }
+                    break;
+                }
+            }
+            xfmt_write_char(ctx, '\'');
             break;
         }
         case AST_LITERAL_REGEX:
@@ -299,6 +345,7 @@ void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
         case AST_LITERAL_FLOAT:
         case AST_LITERAL_BIGINT:
         case AST_LITERAL_STRING:
+        case AST_LITERAL_CHAR:
         case AST_LITERAL_REGEX:
         case AST_LITERAL_NULL:
         case AST_LITERAL_TRUE:

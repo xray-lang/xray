@@ -375,6 +375,9 @@ static XiValue *lower_literal(XiLower *l, AstNode *node) {
             return xi_const_bool(l->func, l->cur_block, true, l->type_bool);
         case AST_LITERAL_FALSE:
             return xi_const_bool(l->func, l->cur_block, false, l->type_bool);
+        case AST_LITERAL_CHAR:
+            return xi_const_char(l->func, l->cur_block, node->as.literal.raw_value.char_val,
+                                 l->type_char);
         case AST_LITERAL_NULL:
             return xi_const_null(l->func, l->cur_block, l->type_null);
         case AST_LITERAL_STRING:
@@ -1795,6 +1798,8 @@ static XiValue *lower_builtin_call(XiLower *l, AstNode *node, const char *fname,
             target = l->type_float;
         else if (strcmp(fname, "bool") == 0)
             target = l->type_bool;
+        else if (strcmp(fname, "char") == 0)
+            target = l->type_char;
 
         if (target) {
             XiValue *arg = xi_lower_expr(l, call->arguments[0]);
@@ -3509,6 +3514,10 @@ static XiValue *lower_as_expr(XiLower *l, AstNode *node) {
                 tid = 1;
                 tname = "bool";
                 break; /* XR_TID_BOOL */
+            case XR_TREF_CHAR:
+                tid = XR_TID_CHAR;
+                tname = "char";
+                break;
             case XR_TREF_NULL:
                 tid = 0;
                 tname = "null";
@@ -3989,6 +3998,7 @@ XR_FUNC XiValue *xi_lower_expr(XiLower *l, AstNode *node) {
         case AST_LITERAL_FLOAT:
         case AST_LITERAL_TRUE:
         case AST_LITERAL_FALSE:
+        case AST_LITERAL_CHAR:
         case AST_LITERAL_NULL:
         case AST_LITERAL_STRING:
             return lower_literal(l, node);

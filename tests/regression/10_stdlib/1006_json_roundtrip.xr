@@ -338,3 +338,12 @@ fn test_roundtrip_long_string() {
     assert_eq(parsed, original)
 }
 
+@test
+fn test_stringify_char_as_string() {
+    assert_eq(Json.stringify('A'), "\"A\"")
+    assert_eq(Json.stringify('\u{1F600}'), "\"😀\"")
+
+    let parsed = Json.parse(Json.stringify({ letter: 'A', emoji: '\u{1F600}' }))
+    assert_eq(parsed.letter, "A")
+    assert_eq(parsed.emoji, "😀")
+}

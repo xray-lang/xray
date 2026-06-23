@@ -19,6 +19,7 @@
 #include "xast.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xarena.h"
+#include "../../base/xutf8.h"
 #include "../../runtime/value/xtype.h"
 #include "../../toolchain/xcompiler_session.h"
 #include "xstring_pool.h"
@@ -117,6 +118,14 @@ AstNode *xr_ast_literal_string(XrayIsolate *X, const char *value, int line) {
 
     node->as.literal.raw_value.string_val = ast_strdup(X, value);
 
+    return node;
+}
+
+// Create char literal node
+AstNode *xr_ast_literal_char(XrayIsolate *X, uint32_t value, int line) {
+    AstNode *node = alloc_node(X, AST_LITERAL_CHAR, line);
+    node->as.literal.kind = LITERAL_KIND_CHAR;
+    node->as.literal.raw_value.char_val = value;
     return node;
 }
 
@@ -1329,6 +1338,8 @@ const char *xr_ast_typename(AstNodeType type) {
             return "LiteralFloat";
         case AST_LITERAL_STRING:
             return "LiteralString";
+        case AST_LITERAL_CHAR:
+            return "LiteralChar";
         case AST_LITERAL_REGEX:
             return "LiteralRegex";
         case AST_LITERAL_NULL:
@@ -1518,6 +1529,13 @@ void xr_ast_print(AstNode *node, int indent) {
         case AST_LITERAL_STRING:
             printf("(\"%s\")", node->as.literal.raw_value.string_val);  // Print C string
             break;
+        case AST_LITERAL_CHAR: {
+            char buf[XR_UTF8_MAX_BYTES + 1];
+            int n = xr_utf8_encode(node->as.literal.raw_value.char_val, buf);
+            buf[n > 0 ? n : 0] = '\0';
+            printf("('%s')", buf);
+            break;
+        }
         case AST_LITERAL_REGEX:
             printf("(/%s/%s)", node->as.literal.raw_value.regex.pattern,
                    node->as.literal.raw_value.regex.flags);

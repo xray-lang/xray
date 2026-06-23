@@ -32,6 +32,7 @@ static XrType g_type_int;
 static XrType g_type_float;
 static XrType g_type_string;
 static XrType g_type_bool;
+static XrType g_type_char;
 static XrType g_type_null;
 static XrType g_type_unknown;
 static XrType g_type_never;
@@ -43,6 +44,7 @@ static XrType g_type_int_nullable;
 static XrType g_type_float_nullable;
 static XrType g_type_string_nullable;
 static XrType g_type_bool_nullable;
+static XrType g_type_char_nullable;
 static XrType g_type_json_nullable;
 
 static XR_THREAD_LOCAL XrTypePool *g_current_type_pool = NULL;
@@ -67,6 +69,7 @@ void xr_type_global_init(void) {
     init_singleton(&g_type_float, XR_KIND_FLOAT, id++, false, 0);
     init_singleton(&g_type_string, XR_KIND_STRING, id++, false, 0);
     init_singleton(&g_type_bool, XR_KIND_BOOL, id++, false, 0);
+    init_singleton(&g_type_char, XR_KIND_CHAR, id++, false, 0);
     init_singleton(&g_type_null, XR_KIND_NULL, id++, false, 0);
     init_singleton(&g_type_unknown, XR_KIND_UNKNOWN, id++, false, 0);
     init_singleton(&g_type_never, XR_KIND_NEVER, id++, false, 0);
@@ -80,6 +83,7 @@ void xr_type_global_init(void) {
     init_singleton(&g_type_float_nullable, XR_KIND_FLOAT, id++, true, 0);
     init_singleton(&g_type_string_nullable, XR_KIND_STRING, id++, true, 0);
     init_singleton(&g_type_bool_nullable, XR_KIND_BOOL, id++, true, 0);
+    init_singleton(&g_type_char_nullable, XR_KIND_CHAR, id++, true, 0);
     init_singleton(&g_type_json_nullable, XR_KIND_JSON, id++, true, 0);
 }
 
@@ -145,6 +149,10 @@ XrType *xr_type_new_string(XrayIsolate *X) {
 XrType *xr_type_new_bool(XrayIsolate *X) {
     (void) X;
     return &g_type_bool;
+}
+XrType *xr_type_new_char(XrayIsolate *X) {
+    (void) X;
+    return &g_type_char;
 }
 XrType *xr_type_new_null(XrayIsolate *X) {
     (void) X;
@@ -1076,6 +1084,8 @@ XrType *xr_type_make_nullable(XrayIsolate *X, XrType *type) {
         return &g_type_string_nullable;
     if (type == &g_type_bool)
         return &g_type_bool_nullable;
+    if (type == &g_type_char)
+        return &g_type_char_nullable;
     if (type == &g_type_json)
         return &g_type_json_nullable;
 
@@ -1090,6 +1100,8 @@ XrType *xr_type_make_nullable(XrayIsolate *X, XrType *type) {
                 return &g_type_string_nullable;
             case XR_KIND_BOOL:
                 return &g_type_bool_nullable;
+            case XR_KIND_CHAR:
+                return &g_type_char_nullable;
             case XR_KIND_JSON:
                 if (type->object.field_count == 0)
                     return &g_type_json_nullable;

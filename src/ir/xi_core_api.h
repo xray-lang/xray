@@ -24,6 +24,7 @@ XR_FUNC XiValue *xi_value_insert_after(XiFunc *f, XiBlock *blk, XiValue *anchor,
 XR_FUNC XiValue *xi_const_int(XiFunc *f, XiBlock *blk, int64_t val, struct XrType *int_type);
 XR_FUNC XiValue *xi_const_float(XiFunc *f, XiBlock *blk, double val, struct XrType *float_type);
 XR_FUNC XiValue *xi_const_bool(XiFunc *f, XiBlock *blk, bool val, struct XrType *bool_type);
+XR_FUNC XiValue *xi_const_char(XiFunc *f, XiBlock *blk, uint32_t val, struct XrType *char_type);
 XR_FUNC XiValue *xi_const_null(XiFunc *f, XiBlock *blk, struct XrType *null_type);
 XR_FUNC XiValue *xi_const_str(XiFunc *f, XiBlock *blk, const char *str, struct XrType *str_type);
 XR_FUNC XiValue *xi_const_bigint(XiFunc *f, XiBlock *blk, const char *digits,

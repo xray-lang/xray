@@ -89,6 +89,7 @@ static void xa_register_codegen_builtins(XaAnalyzer *analyzer) {
     XrType *t_float = xr_type_new_float(NULL);
     XrType *t_string = xr_type_new_string(NULL);
     XrType *t_bool = xr_type_new_bool(NULL);
+    XrType *t_char = xr_type_new_char(NULL);
 
     // Test framework: fn(...any) -> void
     XrType *fn_assert = xr_type_new_function(analyzer->isolate, NULL, 0, t_void, true);
@@ -111,6 +112,9 @@ static void xa_register_codegen_builtins(XaAnalyzer *analyzer) {
     register_builtin_func(analyzer, "string", fn_to_string);
     XrType *fn_to_bool = xr_type_new_function(analyzer->isolate, &p_any, 1, t_bool, false);
     register_builtin_func(analyzer, "bool", fn_to_bool);
+    // char(n): construct a Unicode scalar char from an int codepoint.
+    XrType *fn_to_char = xr_type_new_function(analyzer->isolate, &p_any, 1, t_char, false);
+    register_builtin_func(analyzer, "char", fn_to_char);
 
     // Type constructors: fn(...any) -> Container
     XrType *fn_array = xr_type_new_function(analyzer->isolate, NULL, 0,

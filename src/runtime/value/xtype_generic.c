@@ -248,7 +248,7 @@ static XrType *iterable_element_of(XrType *type) {
         case XR_KIND_MAP:
             return type->map.key_type;
         case XR_KIND_STRING:
-            return type;  // string iterates as single-character string
+            return xr_type_new_char(NULL);
         default:
             return NULL;
     }
@@ -266,7 +266,7 @@ static void indexable_kv_of(XrType *type, XrType **key_out, XrType **value_out) 
             *value_out = type->container.element_type;
             break;
         case XR_KIND_STRING:
-            *value_out = type;
+            *value_out = xr_type_new_char(NULL);
             break;
         case XR_KIND_MAP:
             *key_out = type->map.key_type;
@@ -422,7 +422,7 @@ bool xr_type_is_iterable(XrType *type, XrType **out_element_type) {
 
     if (type->kind == XR_KIND_STRING) {
         if (out_element_type) {
-            *out_element_type = xr_type_new_string(NULL);  // Character strings
+            *out_element_type = xr_type_new_char(NULL);
         }
         return true;
     }

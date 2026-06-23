@@ -553,6 +553,35 @@ static XrType *binary_arith_distribute(XaInferContext *ctx, int op, XrType *left
     return acc ? acc : xr_type_new_unknown(NULL);
 }
 
+static const char *binary_operator_spelling(int op) {
+    switch (op) {
+        case AST_BINARY_ADD:
+            return "+";
+        case AST_BINARY_SUB:
+            return "-";
+        case AST_BINARY_MUL:
+            return "*";
+        case AST_BINARY_DIV:
+            return "/";
+        case AST_BINARY_MOD:
+            return "%";
+        default:
+            return "?";
+    }
+}
+
+static void xa_report_binary_operator_type_error(XaInferContext *ctx, AstNode *node, int op,
+                                                 XrType *left, XrType *right) {
+    if (!ctx || !ctx->analyzer || !node || !left || !right)
+        return;
+    XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+    char msg[256];
+    snprintf(msg, sizeof(msg), "operator '%s' is not defined for '%s' and '%s'",
+             binary_operator_spelling(op), xr_type_to_string(left), xr_type_to_string(right));
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH, msg,
+                               &loc);
+}
+
 static bool xa_type_allows_null_comparison(XrType *type) {
     if (!type || XR_TYPE_IS_UNKNOWN(type))
         return true;
@@ -636,8 +665,12 @@ XrType *xa_visit_binary(XaInferContext *ctx, AstNode *node) {
         case AST_BINARY_SUB:
         case AST_BINARY_MUL:
         case AST_BINARY_DIV:
-        case AST_BINARY_MOD:
-            return binary_arith_distribute(ctx, node->type, left, right);
+        case AST_BINARY_MOD: {
+            XrType *result = binary_arith_distribute(ctx, node->type, left, right);
+            if (result && XR_TYPE_IS_UNKNOWN(result))
+                xa_report_binary_operator_type_error(ctx, node, node->type, left, right);
+            return result;
+        }
         default:
             return xr_type_new_unknown(NULL);
     }
@@ -1095,7 +1128,7 @@ XrType *xa_visit_index_get(XaInferContext *ctx, AstNode *node) {
     if (XR_TYPE_IS_STRING(container)) {
         if (index_type && !XR_TYPE_IS_UNKNOWN(index_type) && !XR_TYPE_IS_INT(index_type))
             add_index_type_error(ctx, node, index_type, xr_type_new_int(NULL));
-        return xr_type_new_string(NULL);  // string[i] => string
+        return xr_type_new_char(NULL);  // string[i] => char
     }
 
     // Json subscript access: json["key"] → Json (or schema field type if known)

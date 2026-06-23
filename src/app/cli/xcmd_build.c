@@ -29,9 +29,11 @@
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
 #include "../../base/xhash.h"
+#include "../../os/os_dir.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdbool.h>
+#include <stdlib.h>
 #include "../../os/os_fs.h"
 #include "../../os/os_proc.h"
 #ifdef XR_OS_WINDOWS
@@ -1114,6 +1116,132 @@ static uint64_t xaot_hash_fold_string_list(uint64_t h, char **items, uint32_t co
     return h;
 }
 
+static uint64_t xaot_hash_fold_file_stat(uint64_t h, const char *path);
+
+typedef struct XaotSourcePathList {
+    char **items;
+    size_t count;
+    size_t cap;
+} XaotSourcePathList;
+
+static void xaot_source_path_list_free(XaotSourcePathList *list) {
+    if (!list)
+        return;
+    for (size_t i = 0; i < list->count; i++)
+        xr_free(list->items[i]);
+    xr_free(list->items);
+    memset(list, 0, sizeof(*list));
+}
+
+static bool xaot_source_path_list_add(XaotSourcePathList *list, const char *path) {
+    char **next;
+    size_t cap;
+
+    if (!list || !path)
+        return false;
+    if (list->count == list->cap) {
+        cap = list->cap ? list->cap * 2 : 64;
+        next = (char **) xr_realloc(list->items, cap * sizeof(char *));
+        if (!next)
+            return false;
+        list->items = next;
+        list->cap = cap;
+    }
+    list->items[list->count] = xr_strdup(path);
+    if (!list->items[list->count])
+        return false;
+    list->count++;
+    return true;
+}
+
+static int xaot_source_path_cmp(const void *a, const void *b) {
+    const char *pa = *(const char *const *) a;
+    const char *pb = *(const char *const *) b;
+    return strcmp(pa ? pa : "", pb ? pb : "");
+}
+
+static bool xaot_source_path_has_cache_suffix(const char *path) {
+    size_t len;
+
+    if (!path)
+        return false;
+    len = strlen(path);
+    return (len > 2 && strcmp(path + len - 2, ".c") == 0) ||
+           (len > 2 && strcmp(path + len - 2, ".h") == 0);
+}
+
+static void xaot_collect_source_tree_files(const char *dir, XaotSourcePathList *list, int depth) {
+    XrDirIter *it;
+    XrDirEntry entry;
+
+    if (!dir || !list || depth > 16)
+        return;
+    it = xr_dir_open(dir);
+    if (!it)
+        return;
+    while (xr_dir_next(it, &entry)) {
+        char path[XR_PATH_MAX];
+        int n = snprintf(path, sizeof(path), "%s/%s", dir, entry.name);
+        if (n < 0 || (size_t) n >= sizeof(path))
+            continue;
+        if (entry.is_dir) {
+            xaot_collect_source_tree_files(path, list, depth + 1);
+        } else if (xaot_source_path_has_cache_suffix(path)) {
+            (void) xaot_source_path_list_add(list, path);
+        }
+    }
+    xr_dir_close(it);
+}
+
+static uint64_t xaot_hash_fold_source_path_list(uint64_t h, const char *label, const char *root) {
+    XaotSourcePathList list = {0};
+    int exists;
+
+    h = xaot_hash_fold_str(h, label);
+    h = xaot_hash_fold_str(h, root);
+    exists = (root && root[0] && xr_fs_is_dir(root)) ? 1 : 0;
+    h = xaot_hash_fold(h, &exists, sizeof(exists));
+    if (!exists)
+        return h;
+
+    xaot_collect_source_tree_files(root, &list, 0);
+    if (list.count > 1)
+        qsort(list.items, list.count, sizeof(char *), xaot_source_path_cmp);
+    h = xaot_hash_fold(h, &list.count, sizeof(list.count));
+    for (size_t i = 0; i < list.count; i++)
+        h = xaot_hash_fold_file_stat(h, list.items[i]);
+    xaot_source_path_list_free(&list);
+    return h;
+}
+
+static uint64_t xaot_aot_runtime_source_key(void) {
+    static bool cached = false;
+    static uint64_t cached_key = 0;
+    uint64_t h;
+    char shared_dir[XR_PATH_MAX];
+
+    if (cached)
+        return cached_key;
+    h = XR_FNV64_OFFSET_BASIS;
+    h = xaot_hash_fold_str(h, "xaot-aot-runtime-source-key-v1");
+#ifdef XRT_AOT_INCLUDE_DIR
+    h = xaot_hash_fold_source_path_list(h, "aot", XRT_AOT_INCLUDE_DIR);
+    snprintf(shared_dir, sizeof(shared_dir), "%s/../shared", XRT_AOT_INCLUDE_DIR);
+    h = xaot_hash_fold_source_path_list(h, "shared", shared_dir);
+#else
+    h = xaot_hash_fold_source_path_list(h, "aot", NULL);
+    h = xaot_hash_fold_source_path_list(h, "shared", NULL);
+#endif
+#ifdef XRT_SOURCE_INCLUDE_DIR
+    h = xaot_hash_fold_source_path_list(h, "include", XRT_SOURCE_INCLUDE_DIR);
+#else
+    h = xaot_hash_fold_source_path_list(h, "include", NULL);
+#endif
+    cached_key = h;
+    cached = true;
+    return cached_key;
+}
+
 static uint64_t xaot_hash_fold_file_stat(uint64_t h, const char *path) {
     XrFsStat st;
     int ok;
@@ -1189,7 +1317,8 @@ static uint64_t xaot_object_cache_key(const char *c_source, const char *opt_flag
                                       const XrCliToolchainPlan *plan,
                                       const XaotLinkManifest *manifest, const char *sysroot) {
     uint64_t h = XR_FNV64_OFFSET_BASIS;
-    h = xaot_hash_fold_str(h, "xaot-obj-cache-v1");
+    h = xaot_hash_fold_str(h, "xaot-obj-cache-v2");
+    h = xaot_hash_fold(h, &(uint64_t) {xaot_aot_runtime_source_key()}, sizeof(uint64_t));
     h = xaot_hash_fold_str(h, opt_flag);
     if (target) {
         h = xaot_hash_fold_str(h, target->name);
@@ -1217,7 +1346,8 @@ static uint64_t xaot_link_output_cache_key(const XaotBuildResult *result, const 
                                            bool strip_symbols, bool shared_library) {
     uint64_t h = XR_FNV64_OFFSET_BASIS;
 
-    h = xaot_hash_fold_str(h, "xaot-link-output-cache-v1");
+    h = xaot_hash_fold_str(h, "xaot-link-output-cache-v2");
+    h = xaot_hash_fold(h, &(uint64_t) {xaot_aot_runtime_source_key()}, sizeof(uint64_t));
     h = xaot_hash_fold_str(h, opt_flag);
     h = xaot_hash_fold_bool(h, strip_symbols);
     h = xaot_hash_fold_bool(h, shared_library);

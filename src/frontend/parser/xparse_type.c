@@ -143,6 +143,8 @@ static XrTypeRef *clone_subst_type_ref(Parser *parser, const XrTypeRef *src,
             return xr_tref_string(parser->X);
         case XR_TREF_BOOL:
             return xr_tref_bool(parser->X);
+        case XR_TREF_CHAR:
+            return xr_tref_char(parser->X);
         case XR_TREF_UNIT:
             return xr_tref_unit(parser->X);
         case XR_TREF_NULL:
@@ -291,6 +293,8 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
         return xr_tref_string(parser->X);
     if (xr_parser_match(parser, TK_BOOL))
         return xr_tref_bool(parser->X);
+    if (xr_parser_match(parser, TK_CHAR))
+        return xr_tref_char(parser->X);
     if (xr_parser_match(parser, TK_NULL))
         return xr_tref_null(parser->X);
 
@@ -481,9 +485,9 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
             xr_parser_error(parser, "use 'bool' (lowercase) for boolean type in Xray");
             return xr_tref_bool(parser->X);
         }
-        if (strcmp(temp_name, "char") == 0 || strcmp(temp_name, "Char") == 0) {
-            xr_parser_error(parser, "there is no 'char' type in Xray. Use 'string' for characters");
-            return xr_tref_string(parser->X);
+        if (strcmp(temp_name, "Char") == 0) {
+            xr_parser_error(parser, "use 'char' (lowercase) for character type in Xray");
+            return xr_tref_char(parser->X);
         }
         if (strcmp(temp_name, "void") == 0) {
             xr_parser_emit_removed_syntax(

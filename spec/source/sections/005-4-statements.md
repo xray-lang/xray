@@ -107,7 +107,7 @@ ForInStmt ::= LoopLabel? 'for' '(' Identifier 'in' Expression ')' Block
 ```xray @id=stmt-for-in
 for (item in [1, 2, 3]) { print(item) }
 for (i in 0..n) { print(i) }                  // 范围迭代（半开区间）
-for (ch in "hello") { print(ch) }             // 字符串字符（按 codepoint）
+for (ch in "hello") { print(ch) }             // 字符串字符（按 Unicode scalar）
 for (key in someMap) { print(key) }           // Map 单变量 → key
 for (key in someJson) { print(key) }          // Json 单变量 → key
 for (day in Color) { print(day.name) }        // 枚举迭代（按声明顺序）
@@ -141,7 +141,7 @@ for ((i, c) in "hi".entries()) { print("${i}-${c}") }
 | `Array<T>` / `T[]` | element | (index, element) |
 | `Map<K, V>` | key | (key, value) |
 | `Json` | key (string) | (key, value) |
-| `string` | char (1-codepoint string) | (index, char) |
+| `string` | `char` | (index, char) |
 | `Range`（`a..b`） | int | — |
 | Enum 类型 | EnumValue | — |
 | 自定义 `Iterator<T>` | T | — |
@@ -419,7 +419,7 @@ ForInStmt ::= LoopLabel? 'for' '(' Identifier 'in' Expression ')' Block
 ```xray @id=stmt-for-in
 for (item in [1, 2, 3]) { print(item) }
 for (i in 0..n) { print(i) }                  // range iteration (half-open)
-for (ch in "hello") { print(ch) }             // string characters (by codepoint)
+for (ch in "hello") { print(ch) }             // string characters (by Unicode scalar)
 for (key in someMap) { print(key) }           // single variable over Map → key
 for (key in someJson) { print(key) }          // single variable over Json → key
 for (day in Color) { print(day.name) }        // enum iteration (declaration order)
@@ -453,7 +453,7 @@ Iteration source / yield mapping:
 | `Array<T>` / `T[]` | element | (index, element) |
 | `Map<K, V>` | key | (key, value) |
 | `Json` | key (string) | (key, value) |
-| `string` | char (1-codepoint string) | (index, char) |
+| `string` | `char` | (index, char) |
 | `Range` (`a..b`) | int | — |
 | Enum type | EnumValue | — |
 | Custom `Iterator<T>` | T | — |

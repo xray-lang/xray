@@ -77,6 +77,26 @@ def string_key(text: str) -> str:
     return f"{checksum}-{size}"
 
 
+def aot_source_key() -> str:
+    files: list[Path] = []
+    aot_dir = PROJECT_DIR / "src" / "aot"
+    if aot_dir.is_dir():
+        files.extend(
+            path
+            for path in aot_dir.rglob("*")
+            if path.is_file() and (path.suffix in (".h", ".c") or path.name.endswith(".inc.c"))
+        )
+    method_symbols = PROJECT_DIR / "src" / "ir" / "xi_method_sym.def"
+    if method_symbols.is_file():
+        files.append(method_symbols)
+    if not files:
+        return "missing"
+    chunks = []
+    for path in sorted(files):
+        chunks.append(f"{path.relative_to(PROJECT_DIR)} {file_key(path)}\n")
+    return string_key("".join(chunks))
+
+
 def toolchain_key(xray_bin: Path) -> str:
     bin_dir = xray_bin.parent
     material = (
@@ -84,6 +104,7 @@ def toolchain_key(xray_bin: Path) -> str:
         f"libxray_aot_core.a {file_key(bin_dir / 'libxray_aot_core.a')}\n"
         f"libxray_rt_coro.a {file_key(bin_dir / 'libxray_rt_coro.a')}\n"
         f"libxray_core.a {file_key(bin_dir / 'libxray_core.a')}\n"
+        f"aot-sources {aot_source_key()}\n"
     )
     return string_key(material)
 

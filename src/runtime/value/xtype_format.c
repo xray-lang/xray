@@ -68,6 +68,8 @@ const char *xr_type_to_string(XrType *type) {
         return TYPE_NAME_STRING;
     if (XR_TYPE_IS_BOOL(type) && !type->is_nullable)
         return TYPE_NAME_BOOL;
+    if (XR_TYPE_IS_CHAR(type) && !type->is_nullable)
+        return TYPE_NAME_CHAR;
     if (XR_TYPE_IS_NULL(type))
         return TYPE_NAME_NULL;
 
@@ -364,6 +366,7 @@ bool xr_type_is_inherently_immutable(XrType *type) {
         case XR_KIND_INT:
         case XR_KIND_FLOAT:
         case XR_KIND_BOOL:
+        case XR_KIND_CHAR:
         case XR_KIND_NULL:
         case XR_KIND_STRING:
         case XR_KIND_UNIT:

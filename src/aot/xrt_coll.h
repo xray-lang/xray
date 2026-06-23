@@ -579,6 +579,26 @@ static inline void xrt_strpart_init(xrt_strpart_t *part, XrValue val) {
     } else if (val.tag == XR_TAG_BOOL) {
         part->a = val.i ? "true" : "false";
         part->alen = val.i ? 4u : 5u;
+    } else if (val.tag == XR_TAG_CHAR) {
+        uint32_t cp = XR_TO_CHAR(val);
+        int n = 0;
+        if (cp <= 0x7Fu) {
+            part->scratch[n++] = (char) cp;
+        } else if (cp <= 0x7FFu) {
+            part->scratch[n++] = (char) (0xC0u | (cp >> 6));
+            part->scratch[n++] = (char) (0x80u | (cp & 0x3Fu));
+        } else if (cp <= 0xFFFFu && !(cp >= 0xD800u && cp <= 0xDFFFu)) {
+            part->scratch[n++] = (char) (0xE0u | (cp >> 12));
+            part->scratch[n++] = (char) (0x80u | ((cp >> 6) & 0x3Fu));
+            part->scratch[n++] = (char) (0x80u | (cp & 0x3Fu));
+        } else if (cp <= 0x10FFFFu) {
+            part->scratch[n++] = (char) (0xF0u | (cp >> 18));
+            part->scratch[n++] = (char) (0x80u | ((cp >> 12) & 0x3Fu));
+            part->scratch[n++] = (char) (0x80u | ((cp >> 6) & 0x3Fu));
+            part->scratch[n++] = (char) (0x80u | (cp & 0x3Fu));
+        }
+        part->a = part->scratch;
+        part->alen = (size_t) n;
     } else if (val.tag == XR_TAG_NULL) {
         part->a = "null";
         part->alen = 4u;
@@ -1631,18 +1651,20 @@ static inline XrValue xrt_set_value_at(xrt_set_t *s, int64_t index) {
 }
 
 /* =========================================================================
- * Iterator runtime — backs the for-in iterator protocol over Map / Set.
+ * Iterator runtime — backs the for-in iterator protocol over Map / Set / string.
  * The iterator borrows its source by value (no extra RC: AOT collections are
- * not individually reclaimed) and walks dense entries or typed order[].
+ * not individually reclaimed) and walks dense entries, typed order[], or UTF-8
+ * scalar boundaries.
  * ========================================================================= */
 
 #define XRT_ITER_KEYS 0   /* map: yield key */
 #define XRT_ITER_VALUES 1 /* set: yield value; map: yield value */
-#define XRT_ITER_PAIRS 2  /* map: yield (key, value) tuple */
+#define XRT_ITER_PAIRS 2  /* map/string: yield (key, value) tuple */
 
 typedef struct {
-    XrValue coll;   /* XR_TAG_MAP or XR_TAG_SET being iterated */
-    int64_t cursor; /* next dense entry index or typed order[] cursor */
+    XrValue coll;   /* XR_TAG_MAP, XR_TAG_SET, or string being iterated */
+    int64_t cursor; /* next dense entry index, order[] cursor, or string byte offset */
+    int64_t index;  /* logical iteration index; used by string pair iteration */
     uint8_t kind;   /* XRT_ITER_* projection */
 } xrt_iterator_t;
 
@@ -1654,8 +1676,58 @@ static inline XrValue xrt_iterator_new(XrValue coll, uint8_t kind) {
     }
     it->coll = coll;
     it->cursor = 0;
+    it->index = 0;
     it->kind = kind;
     return xr_mkptr(it, XR_TAG_ITERATOR);
+}
+
+static inline int xrt_iter_utf8_decode_scalar(const char *s, int64_t slen, int64_t *cursor,
+                                              uint32_t *out_cp) {
+    if (!s || !cursor || !out_cp || *cursor < 0 || *cursor >= slen)
+        return 0;
+    const unsigned char *p = (const unsigned char *) s + *cursor;
+    const unsigned char *end = (const unsigned char *) s + slen;
+    unsigned char b0 = p[0];
+    uint32_t cp = 0;
+    int size = 0;
+    if (b0 < 0x80u) {
+        cp = b0;
+        size = 1;
+    } else if ((b0 & 0xE0u) == 0xC0u) {
+        if (p + 2 > end || (p[1] & 0xC0u) != 0x80u)
+            goto invalid;
+        cp = ((uint32_t) (b0 & 0x1Fu) << 6) | (uint32_t) (p[1] & 0x3Fu);
+        if (cp < 0x80u)
+            goto invalid;
+        size = 2;
+    } else if ((b0 & 0xF0u) == 0xE0u) {
+        if (p + 3 > end || (p[1] & 0xC0u) != 0x80u || (p[2] & 0xC0u) != 0x80u)
+            goto invalid;
+        cp = ((uint32_t) (b0 & 0x0Fu) << 12) | ((uint32_t) (p[1] & 0x3Fu) << 6) |
+             (uint32_t) (p[2] & 0x3Fu);
+        if (cp < 0x800u || (cp >= 0xD800u && cp <= 0xDFFFu))
+            goto invalid;
+        size = 3;
+    } else if ((b0 & 0xF8u) == 0xF0u) {
+        if (p + 4 > end || (p[1] & 0xC0u) != 0x80u || (p[2] & 0xC0u) != 0x80u ||
+            (p[3] & 0xC0u) != 0x80u)
+            goto invalid;
+        cp = ((uint32_t) (b0 & 0x07u) << 18) | ((uint32_t) (p[1] & 0x3Fu) << 12) |
+             ((uint32_t) (p[2] & 0x3Fu) << 6) | (uint32_t) (p[3] & 0x3Fu);
+        if (cp < 0x10000u || cp > 0x10FFFFu)
+            goto invalid;
+        size = 4;
+    } else {
+        goto invalid;
+    }
+    *cursor += size;
+    *out_cp = cp;
+    return 1;
+
+invalid:
+    (*cursor)++;
+    *out_cp = 0;
+    return 0;
 }
 
 // Park cursor at the next live entry/order[] slot; return 1 if one exists.
@@ -1696,6 +1768,8 @@ static inline int xrt_iterator_has_next(xrt_iterator_t *it) {
         }
         return 0;
     }
+    if (XR_IS_STR(it->coll))
+        return it->cursor < xr_str_len(it->coll);
     return 0;
 }
 
@@ -1729,6 +1803,20 @@ static inline XrValue xrt_iterator_next(xrt_iterator_t *it) {
         xrt_set_t *s = (xrt_set_t *) it->coll.ptr;
         int64_t slot = xrt_set_is_typed(s) ? s->order[it->cursor++] : it->cursor++;
         return xrt_set_slot_item(s, slot);
+    }
+    if (XR_IS_STR(it->coll)) {
+        int64_t char_index = it->index++;
+        uint32_t cp = 0;
+        int ok = xrt_iter_utf8_decode_scalar(xr_str_data(it->coll), xr_str_len(it->coll),
+                                             &it->cursor, &cp);
+        XrValue ch = ok ? XR_FROM_CHAR(cp) : XR_NULL_VAL;
+        if (it->kind == XRT_ITER_KEYS)
+            return XR_FROM_INT(char_index);
+        if (it->kind == XRT_ITER_PAIRS) {
+            XrValue kv[2] = {XR_FROM_INT(char_index), ch};
+            return xrt_tuple_make(2, kv);
+        }
+        return ch;
     }
     return XR_NULL_VAL;
 }

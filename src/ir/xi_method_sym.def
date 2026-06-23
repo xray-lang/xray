@@ -36,6 +36,7 @@ XI_METHOD_SYM(DELETE,       6,  DELETE,       "delete")
 XI_METHOD_SYM(CLEAR,        7,  CLEAR,        "clear")
 XI_METHOD_SYM(KEYS,         8,  KEYS,         "keys")
 XI_METHOD_SYM(VALUES,       9,  VALUES,       "values")
+XI_METHOD_SYM(ENTRIES,     10,  ENTRIES,      "entries")
 
 /* --- Functional iteration --- */
 XI_METHOD_SYM(FOREACH,     12,  FOREACH,      "forEach")
@@ -69,6 +70,10 @@ XI_METHOD_SYM(LASTINDEXOF, 39,  LASTINDEXOF,  "lastIndexOf")
 /* --- Type conversion --- */
 XI_METHOD_SYM(TOINT,       40,  TOINT,        "toInt")
 XI_METHOD_SYM(TOFLOAT,     41,  TOFLOAT,      "toFloat")
+XI_METHOD_SYM(IS_LETTER,   42,  IS_LETTER,    "isLetter")
+XI_METHOD_SYM(IS_NUMBER,   43,  IS_NUMBER,    "isNumber")
+XI_METHOD_SYM(IS_ALNUM,    44,  IS_ALNUM,     "isAlphanumeric")
+XI_METHOD_SYM(IS_WHITESPACE, 45, IS_WHITESPACE, "isWhitespace")
 XI_METHOD_SYM(ORD,         46,  ORD,          "ord")
 
 /* --- Array methods --- */

@@ -72,6 +72,8 @@ typedef enum XrTypeKind {
     XR_KIND_FIXED_ARRAY,  // Fixed-length array: [N]T (compile-time length, runtime Array<T>)
     XR_KIND_POINTER,      // FFI raw pointer: RawPtr<T> (const) / RawMut<T> (mut). Address-
                           // width integer at the value level, invisible to the GC.
+    XR_KIND_CHAR,         // Unicode scalar value. Immediate value (tag XR_TAG_CHAR), not
+                          // a uint32; appended last to keep existing kind values stable.
     XR_KIND_COUNT
 } XrTypeKind;
 
@@ -80,7 +82,8 @@ static inline bool xr_kind_is_numeric(XrTypeKind k) {
     return k == XR_KIND_INT || k == XR_KIND_FLOAT;
 }
 static inline bool xr_kind_is_primitive(XrTypeKind k) {
-    return k == XR_KIND_INT || k == XR_KIND_FLOAT || k == XR_KIND_STRING || k == XR_KIND_BOOL;
+    return k == XR_KIND_INT || k == XR_KIND_FLOAT || k == XR_KIND_STRING || k == XR_KIND_BOOL ||
+           k == XR_KIND_CHAR;
 }
 static inline bool xr_kind_is_container(XrTypeKind k) {
     return k == XR_KIND_ARRAY || k == XR_KIND_MAP || k == XR_KIND_SET;
@@ -251,6 +254,7 @@ static inline bool xr_type_is_runtime_managed(const XrType *t) {
 #define XR_TYPE_IS_FLOAT(t) ((t)->kind == XR_KIND_FLOAT)
 #define XR_TYPE_IS_STRING(t) ((t)->kind == XR_KIND_STRING)
 #define XR_TYPE_IS_BOOL(t) ((t)->kind == XR_KIND_BOOL)
+#define XR_TYPE_IS_CHAR(t) ((t)->kind == XR_KIND_CHAR)
 #define XR_TYPE_IS_NULL(t) ((t)->kind == XR_KIND_NULL)
 #define XR_TYPE_IS_NUMERIC(t) (xr_kind_is_numeric((t)->kind))
 #define XR_TYPE_IS_PRIMITIVE(t) (xr_kind_is_primitive((t)->kind))
@@ -294,6 +298,9 @@ static inline XrRep xr_type_base_rep(const XrType *t) {
             return XR_REP_F64;
         case XR_KIND_UNIT:
             return XR_REP_VOID;
+        /* char keeps the tagged representation so the XR_TAG_CHAR identity
+         * survives across slots, print and typeof. A raw u32 rep is a future
+         * AOT optimization, not needed for correctness. */
         case XR_KIND_STRING:
         case XR_KIND_ARRAY:
         case XR_KIND_MAP:
@@ -350,6 +357,7 @@ XR_FUNC XrType *xr_type_new_int(XrayIsolate *X);
 XR_FUNC XrType *xr_type_new_float(XrayIsolate *X);
 XR_FUNC XrType *xr_type_new_string(XrayIsolate *X);
 XR_FUNC XrType *xr_type_new_bool(XrayIsolate *X);
+XR_FUNC XrType *xr_type_new_char(XrayIsolate *X);
 XR_FUNC XrType *xr_type_new_null(XrayIsolate *X);
 XR_FUNC XrType *xr_type_new_unknown(XrayIsolate *X);
 XR_FUNC XrType *xr_type_new_never(XrayIsolate *X);

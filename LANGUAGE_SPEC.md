@@ -113,7 +113,7 @@ Error codes use the `E0xxx` format (e.g., `E0101`); the full list is in [Chapter
 
 ## 1. Lexical Structure
 
-> Source of truth: `src/frontend/lexer/xlex.h` (token enum), `src/frontend/lexer/xkeywords.def` (keyword table, 62 entries), `src/frontend/lexer/xlex.c` (scanner implementation).
+> Source of truth: `src/frontend/lexer/xlex.h` (token enum), `src/frontend/lexer/xkeywords.def` (keyword table, 63 entries), `src/frontend/lexer/xlex.c` (scanner implementation).
 
 ### 1.1 Character Encoding
 
@@ -164,7 +164,7 @@ The character `_` is a **dedicated wildcard token**, not an ordinary identifier:
 
 ### 1.5 Keywords
 
-Xray has **62 reserved keywords** in total; the authoritative source-of-truth table is in `src/frontend/lexer/xkeywords.def`. Keywords are grouped by purpose:
+Xray has **63 reserved keywords** in total; the authoritative source-of-truth table is in `src/frontend/lexer/xkeywords.def`. Keywords are grouped by purpose:
 
 #### 1.5.1 Declarations and Control Flow
 
@@ -202,7 +202,7 @@ Xray has **62 reserved keywords** in total; the authoritative source-of-truth ta
 
 #### 1.5.3 Error Handling
 
-`try` `catch` `panic` `throw` `defer`
+`try` `catch` `throw` `defer`
 
 #### 1.5.4 Module System
 
@@ -210,12 +210,12 @@ Xray has **62 reserved keywords** in total; the authoritative source-of-truth ta
 
 #### 1.5.5 Coroutines and Concurrency
 
-`go` `await` `select` `defer` `scope`
+`go` `await` `select` `defer` `scope` `unsafe`
 
 #### 1.5.6 Type Names (reserved)
 
 `int` `int8` `int16` `int32` `int64` `uint8` `uint16` `uint32` `uint64`
-`float` `float32` `float64` `bool` `string`
+`float` `float32` `float64` `bool` `string` `char`
 
 `unknown` is the display name for a compiler-internal type lattice value, not a lexical keyword; user code may use it as an ordinary identifier.
 
@@ -242,6 +242,7 @@ These are not in the lexer keyword table; the parser recognizes them by position
 | `linked` | `linked go` / `linked scope` modifier |
 | `supervisor` | `supervisor scope` modifier |
 | `after` | `select` timeout arm (`after 1000 -> ...`) |
+| `panic` | panic-channel boundary in `catch panic (p)` |
 
 ### 1.6 Literals
 
@@ -313,13 +314,13 @@ null
 
 #### 1.6.5 String Literals
 
-Xray supports two flavors of string literals: **escaped** and **raw**. Both can be quoted with single or double quotes, and both support `${...}` interpolation. Backtick strings are not part of the current grammar — the lexer rejects them.
+Xray supports two flavors of string literals: **escaped** and **raw**. Strings use double quotes only; single quotes are reserved for `char` literals. Backtick strings are not part of the current grammar — the lexer rejects them.
 
-##### Plain strings (double / single quotes)
+##### Plain strings (double quotes)
 
 ```ebnf
-StringLiteral ::= '"' StrChar* '"' | "'" StrChar* "'"
-StrChar ::= any character that is not a quote, backslash, or newline
+StringLiteral ::= '"' StrChar* '"'
+StrChar ::= any character that is not a double quote, backslash, or newline
           | EscapeSeq
           | Interpolation
 EscapeSeq ::= '\' ('"' | "'" | '\\' | 'n' | 't' | 'r' | '0'
@@ -329,16 +330,14 @@ EscapeSeq ::= '\' ('"' | "'" | '\\' | 'n' | 't' | 'r' | '0'
 Interpolation ::= '${' Expression '}'
 ```
 
-- Double and single quotes are **fully equivalent** — both support escapes and `${...}` interpolation.
 - Strings may span multiple lines; line breaks are part of the string.
 - Literals containing interpolation produce `TK_TEMPLATE_STRING` internally; literals without interpolation produce `TK_LITERAL_STRING`.
-- `${...}` is scanned in expression mode: braces are matched by depth, and nested strings / raw strings are skipped as a unit, so same-quote nesting is legal, for example `"${m["k"]}"` and `"${"a}b"}"`. Once the `char` core type lands, char literals inside interpolation are skipped by the same rule.
+- `${...}` is scanned in expression mode: braces are matched by depth, and nested strings / raw strings / char literals are skipped as a unit, so same-quote nesting is legal, for example `"${m["k"]}"` and `"${"a}b"}"`.
 
 ```xray
 "hello"
-'world'
 "Hello, ${name}! ${1 + 2}"
-'tab\there\nnewline'
+"tab\there\nnewline"
 "\u4F60\u597D"        // "你好"
 "\u{1F600}"            // emoji
 ```
@@ -348,24 +347,44 @@ Interpolation expressions may themselves contain nested interpolation; `}` chara
 ##### Raw strings (`r` prefix)
 
 ```ebnf
-RawString ::= 'r' ('"' RawChar* '"' | "'" RawChar* "'")
-RawChar ::= any character except the closing quote (including `\`, which is not processed)
+RawString ::= 'r' '"' RawChar* '"'
+RawChar ::= any character except double quote (including `\`, which is not processed)
 ```
 
 - **No** escape processing (`\n`, `\t`, etc. are kept as-is).
 - `${...}` interpolation is still supported.
-- The identifier `r` standing alone is still a regular identifier (`TK_NAME`); it is recognized as a raw-string prefix only when immediately followed by a quote.
+- The identifier `r` standing alone is still a regular identifier (`TK_NAME`); it is recognized as a raw-string prefix only when immediately followed by a double quote.
+- `r'...'` has been removed; single quotes do not participate in raw strings.
 
 ```xray
 r"C:\path\to\file"          // literal contains two backslashes
-r'C:\Users\${USER}'         // backslash is not escaped, but ${USER} still interpolates
+r"C:\Users\${USER}"         // backslash is not escaped, but ${USER} still interpolates
+```
+
+#### 1.6.6 `char` Literals
+
+```ebnf
+CharLiteral ::= "'" CharBody "'"
+CharBody ::= UnicodeScalar | EscapeSeq | '\u{' HexDigit{1,6} '}'
+```
+
+- `'a'` has type `char` and represents one Unicode scalar value.
+- The valid range is `U+0000..U+10FFFF`, excluding surrogates `U+D800..U+DFFF`.
+- A literal must contain exactly one scalar; `''`, `'ab'`, `'🇨🇳'`, and `'é'` are compile errors.
+- Escapes such as `'\n'`, `'\t'`, `'\r'`, `'\0'`, `'\''`, `'\\'`, and `'\u{1F600}'` are supported.
+- Char literals do not support `${...}` interpolation.
+
+```xray
+let a: char = 'a'
+let zh: char = '中'
+let smile: char = '\u{1F600}'
 ```
 
 ##### Backtick strings (illegal)
 
-The lexer explicitly rejects backtick strings. For templates, use plain double / single quotes plus `${...}`.
+The lexer explicitly rejects backtick strings. For templates, use plain double quotes plus `${...}`.
 
-#### 1.6.6 Regex Literals
+#### 1.6.7 Regex Literals
 
 ```ebnf
 RegexLiteral ::= '/' RegexBody '/' RegexFlag*
@@ -494,7 +513,7 @@ Xray is statically typed; every expression has a determined type at compile time
 
 | Category | Examples |
 |--|--|
-| Primitive | `int`, `float`, `bool`, `string`, `()` (Unit, no return value) |
+| Primitive | `int`, `float`, `bool`, `string`, `char`, `()` (Unit, no return value) |
 | Sized integers | `int8`, `int16`, `int32`, `int64`, `uint8`..`uint64` |
 | Sized floats | `float32`, `float64` |
 | Containers | `Array<T>`, `Map<K,V>`, `Set<T>`, `Channel<T>`, `Bytes` (equivalent to `Array<uint8>`) |
@@ -549,7 +568,7 @@ Literals default to `float`.
 | `bool` | yes | direct boolean test |
 | `T?` with `T != bool` | yes | null presence only (content emptiness is **not** checked) |
 | `bool?` | compile error | tri-state ambiguity; write `flag == true` / `flag != null` / `flag ?? false` |
-| `int` / `float` / `string` / collections / objects | compile error | use explicit comparisons such as `n != 0`, `!s.isEmpty()` |
+| `int` / `float` / `string` / `char` / collections / objects | compile error | use explicit comparisons such as `n != 0`, `!s.isEmpty()` |
 
 Operands of `&&` / `||` / `!` must be `bool`; do not place `T?` directly into `&&` / `||`.
 
@@ -574,11 +593,28 @@ if (!s.isEmpty()) { }    // OK
 
 #### 2.3.4 `string`
 
-Immutable UTF-8 strings. Supports `length`, indexing, slicing, and a rich method set (see §14.2).
+Immutable UTF-8 strings. `length` / `size`, indexing, and default iteration are expressed in Unicode scalar values: `s[i]` returns `char`, and slicing returns `string`. For the rich method set, see §14.5.
 
 Internally uses ARC + string interning optimizations.
 
-#### 2.3.5 Unit `()` (no return value)
+#### 2.3.5 `char`
+
+`char` represents one Unicode scalar value (valid range `U+0000..U+10FFFF`, excluding the surrogate range `U+D800..U+DFFF`). It is an independent primitive type, **not** a numeric type and **not** an alias of `uint32`.
+
+```xray
+let a: char = 'a'
+let zh = '中'
+let smile = '\u{1F600}'
+print(typeof(a))          // "char"
+print(int(smile))         // 128512
+```
+
+- A char literal must contain exactly one Unicode scalar; empty literals, multi-scalar literals, and surrogate literals are compile errors.
+- `char` does not participate in arithmetic, bitwise operations, or narrow-integer assignment: `'a' + 1` and `let n: uint32 = 'a'` are rejected by the analyzer.
+- Explicit conversions: `int(c)` returns the scalar code point; `char(n)` constructs a char from an integer and validates that it is a legal scalar; `string(c)` / `c.toString()` returns a one-scalar string.
+- Common methods are listed in §14.4.1.
+
+#### 2.3.6 Unit `()` (no return value)
 
 Xray uses the **0-tuple `()`** to represent "no return value" (the Unit type):
 
@@ -591,7 +627,7 @@ let r: () = log("hi")                        // allowed; r is a Unit value
 - A function omitting its return type is equivalent to `-> ()`.
 - `void` is not a type name: `fn f() -> void` is rejected (`E0804`); use `-> ()` or omit the return type to indicate no return value.
 
-#### 2.3.6 FFI Scalars and C ABI Boundary Types
+#### 2.3.7 FFI Scalars and C ABI Boundary Types
 
 Xray's C FFI uses explicit boundary types so ordinary xray objects are not implicitly interpreted as C data:
 
@@ -1048,6 +1084,7 @@ BinOp ::= '+' | '-' | '*' | '/' | '%'
 - `%` accepts integer operands only; modulo with a static type that contains float (e.g. `5.0 % 2.0`) is a compile-time analyzer error. Runtime `XR_ERR_TYPE_MISMATCH` (E0404) remains only as a dynamic fallback.
 - Integer overflow: see §2.3.1.
 - `string + string` is O(n) concatenation; for heavy concatenation use `StringBuilder`.
+- `char` is an independent Unicode scalar type and does not participate in arithmetic; use `int(c)` explicitly when the code point is needed.
 
 #### 3.3.2 Bitwise Operators
 
@@ -1057,6 +1094,7 @@ BinOp ::= '+' | '-' | '*' | '/' | '%'
 - Shift counts are taken modulo 64 (unlike C: always defined in xray).
 - `>>` is an **arithmetic right shift** (preserves the sign bit). For unsigned shifts, use the corresponding `uintN`.
 - `bool` does not participate in bitwise operations (use `&&` `||`).
+- `char` does not participate in bitwise operations; use `int(c)` explicitly when the code point is needed.
 
 #### 3.3.3 Comparison Operators
 
@@ -1351,12 +1389,12 @@ IndexAccess ::= Primary '[' Expr ']'
 arr[0]
 arr[0] = 10
 map["key"]
-str[i]                  // returns a single-character string
+str[i]                  // returns char
 ```
 
 - `Array` indexing: `int`; out-of-bounds throws `E0430`.
 - `Map` indexing: key type; missing key → `E0431`.
-- `string` indexing: returns a length-1 string (**not** a char/int).
+- `string` indexing: addresses Unicode scalar positions and returns `char`.
 - User classes: via `operator[]` overload.
 
 #### Slice
@@ -1485,7 +1523,7 @@ See §1.6.5. In brief:
 ```
 
 - `${...}` accepts any expression (calls, object access, arithmetic).
-- Embedded string literals inside `${...}` may use the same quote as the outer template; the lexer matches expression braces by depth and skips nested strings / raw strings. Once the `char` core type lands, char literals inside interpolation are skipped by the same rule.
+- Embedded string literals inside `${...}` may use the same quote as the outer template; the lexer matches expression braces by depth and skips nested strings / raw strings / char literals.
 - The expression's type must be convertible to a string (implement `toString()` or be a primitive).
 
 ### 3.16 `yield` Statement
@@ -1601,7 +1639,7 @@ ForInStmt ::= LoopLabel? 'for' '(' Identifier 'in' Expression ')' Block
 ```xray
 for (item in [1, 2, 3]) { print(item) }
 for (i in 0..n) { print(i) }                  // range iteration (half-open)
-for (ch in "hello") { print(ch) }             // string characters (by codepoint)
+for (ch in "hello") { print(ch) }             // string characters (by Unicode scalar)
 for (key in someMap) { print(key) }           // single variable over Map → key
 for (key in someJson) { print(key) }          // single variable over Json → key
 for (day in Color) { print(day.name) }        // enum iteration (declaration order)
@@ -1635,7 +1673,7 @@ Iteration source / yield mapping:
 | `Array<T>` / `T[]` | element | (index, element) |
 | `Map<K, V>` | key | (key, value) |
 | `Json` | key (string) | (key, value) |
-| `string` | char (1-codepoint string) | (index, char) |
+| `string` | `char` | (index, char) |
 | `Range` (`a..b`) | int | — |
 | Enum type | EnumValue | — |
 | Custom `Iterator<T>` | T | — |
@@ -4373,11 +4411,12 @@ These global functions and built-in constructor/static functions are usable with
 
 | Function | Signature | Description |
 |--|--|--|
-| `int(x)` | `(value) -> int` | convert to int; throws if string parsing fails |
+| `int(x)` | `(value) -> int` | convert to int; `char` converts to its Unicode scalar code point; throws if string parsing fails |
 | `float(x)` | `(value) -> float` | convert to float |
-| `string(x)` | `(value) -> string` | convert to string |
-| `bool(x)` | `(value) -> bool` | convert to bool; rules in §2.4.1 |
-| `chr(n)` | `(int) -> string` | Unicode code point → single-character string |
+| `string(x)` | `(value) -> string` | convert to string; `char` converts to a one-scalar string |
+| `bool(x)` | `(value) -> bool` | convert to bool; rules in §2.3.3 |
+| `char(n)` | `(int) -> char` | construct a Unicode scalar from an integer; surrogate and out-of-range values throw |
+| `chr(n)` | `(int) -> string` | Unicode code point → one-scalar string |
 | `copy(x)` | `(T) -> T` | deep copy, preserving runtime type |
 
 ### 13.3 Type Checking
@@ -4484,13 +4523,26 @@ This section is a **method index** for each type (grouped by topic). Concrete si
 |--|--|--|
 | `toString()` | `() -> string` | returns `"true"` or `"false"` |
 
+### 14.4.1 `char` Methods
+
+| Method | Signature | Description |
+|--|--|--|
+| `toString()` | `() -> string` | return a one-Unicode-scalar string |
+| `ord()` | `() -> int` | return the Unicode scalar code point |
+| `isLetter()` | `() -> bool` | whether the scalar is a Unicode letter |
+| `isNumber()` | `() -> bool` | whether the scalar is a Unicode number |
+| `isAlphanumeric()` | `() -> bool` | whether the scalar is a letter or number |
+| `isWhitespace()` | `() -> bool` | whether the scalar is whitespace |
+
+`char` is an independent primitive type and does not inherit integer methods; use `ord()` or `int(c)` explicitly when the code point is needed.
+
 ### 14.5 `string` Methods
 
 | Member | Type / Description |
 |--|--|
-| `length` | string-length property |
-| `charAt(i)` | character at the given index |
-| `charCodeAt(i)` | code point at the given index |
+| `length` / `size` | Unicode scalar count property |
+| `charAt(i)` | one-scalar string at the given Unicode scalar index |
+| `charCodeAt(i)` | code point at the given Unicode scalar index |
 | `concat(...others)` | concatenate strings |
 | `includes(s)` | substring containment test |
 | `indexOf(s)` / `lastIndexOf(s)` | substring search |
@@ -4503,9 +4555,11 @@ This section is a **method index** for each type (grouped by topic). Concrete si
 | `startsWith(s)` / `endsWith(s)` | prefix/suffix check |
 | `padStart(len, pad?)` / `padEnd(len, pad?)` | padding |
 | `match(pattern)` | regex match |
-| `iterator()` / `entriesIterator()` / `entries()` | iteration protocol |
+| `iterator()` | `() -> Iterator<char>` |
+| `entriesIterator()` | `() -> Iterator<(int, char)>` |
+| `entries()` | `() -> Array<(int, char)>` |
 
-`slice(start, end?)` uses the same half-open range and negative-index rules as slice expressions: a negative index is first converted as `length + index`, then clamped into `[0, length]`.
+The string index expression `s[i]` returns `char`; `charAt(i)` keeps the JavaScript-style string return value. `slice(start, end?)` uses the same half-open range and negative-index rules as slice expressions: a negative index is first converted as `length + index`, then clamped into `[0, length]`.
 
 ### 14.6 `Bytes`
 
@@ -4806,6 +4860,7 @@ Xray values are uniformly represented as `XrValue`. The current implementation r
 | `int` | `XR_TAG_I64` + 64-bit signed payload |
 | `float` | `XR_TAG_F64` + IEEE-754 double payload |
 | `bool` | `XR_TAG_BOOL` + `0/1` payload |
+| `char` | `XR_TAG_CHAR` + Unicode scalar payload |
 | `null` | `XR_TAG_NULL` + zero payload |
 | `string` | `XR_TAG_PTR` + `XR_TSTRING` + `XrString*` |
 | `Bytes` | `XR_TAG_PTR` + bytes heap object |
@@ -5215,8 +5270,9 @@ Exponent     ::= ('e' | 'E') ('+' | '-')? DecimalDigit+
 BigIntLiteral ::= DecimalInt 'n'
 
 StringLiteral ::= '"' StringChar* '"'
-                | "'" StringChar* "'"
 RawStringLiteral ::= 'r' '"' [^"]* '"'
+CharLiteral ::= "'" CharBody "'"
+CharBody ::= UnicodeScalar | EscapeSeq | '\u{' HexDigit{1,6} '}'
 RegexLiteral ::= '/' RegexBody '/' RegexFlags?
 
 BoolLiteral ::= 'true' | 'false'
@@ -5286,7 +5342,7 @@ PostfixOp   ::= '(' ArgList? ')'              // call
              |  '!'                            // force unwrap
 
 Primary ::= IntLiteral | FloatLiteral | BigIntLiteral
-         |  StringLiteral | RawStringLiteral | RegexLiteral
+         |  StringLiteral | RawStringLiteral | CharLiteral | RegexLiteral
          |  BoolLiteral | NullLiteral
          |  Identifier
          |  ArrayLit | MapLit | SetLit | ObjectLit
@@ -5328,7 +5384,7 @@ Pattern ::= LiteralPattern
          |  BindingPattern
          |  MultiPattern
 
-LiteralPattern  ::= IntLiteral | FloatLiteral | StringLiteral | BoolLiteral | NullLiteral
+LiteralPattern  ::= IntLiteral | FloatLiteral | StringLiteral | CharLiteral | BoolLiteral | NullLiteral
 RangePattern    ::= Expression '..' Expression
 EnumPattern     ::= QualifiedIdent VariantPayloadPattern?    // ADT enum payload destructuring
 VariantPayloadPattern ::= '(' Pattern (',' Pattern)* ')'
@@ -5487,7 +5543,7 @@ OperatorToken ::= '+' | '-' | '*' | '/' | '%'
 
 ## Appendix B. Keyword Index
 
-The full set of 62 reserved keywords sorted alphabetically; see [§1.5](#15-keywords) for the authoritative list.
+The full set of 63 reserved keywords sorted alphabetically; see [§1.5](#15-keywords) for the authoritative list.
 
 | Keyword | Section |
 |--|--|
@@ -5497,6 +5553,7 @@ The full set of 62 reserved keywords sorted alphabetically; see [§1.5](#15-keyw
 | `bool` | §2.3.3 |
 | `break` | §4.6 |
 | `catch` | §8 |
+| `char` | §2.3.5 |
 | `class` | §5.3 |
 | `const` | §5.1 |
 | `constructor` | §5.3 |
@@ -5541,6 +5598,7 @@ The full set of 62 reserved keywords sorted alphabetically; see [§1.5](#15-keyw
 | `try` | §8 |
 | `type` | §5.7 |
 | `uint8`..`uint64` | §2.3.1 |
+| `unsafe` | §3.2 |
 | `while` | §4.3 |
 | `yield` | §3.16 / §10.10 |
 
@@ -5667,6 +5725,7 @@ Xray draws inspiration from many existing languages but has notable differences 
 | **AST** | Abstract Syntax Tree: intermediate representation produced by the parser |
 | **Arena** | Bulk allocator: every allocation is freed together |
 | **Bytes** | Byte buffer type (see §2.4.5) |
+| **char** | Primitive type for one Unicode scalar value; not numeric and not an alias of `uint32` (see §2.3.5) |
 | **Channel** | Typed inter-coroutine communication pipe (see §10.5) |
 | **closure** | Function value that captures outer variables |
 | **coroutine** | User-space, suspendable/resumable execution flow |
@@ -5691,7 +5750,9 @@ Xray draws inspiration from many existing languages but has notable differences 
 | **TCO** | Tail-Call Optimization |
 | **trait** | Rust terminology; xray uses `interface` |
 | **condition expression** | Control-flow condition: must be `bool` or nullable presence `T?` (`T != bool`); see §2.3.3 |
+| **grapheme cluster** | User-perceived character that may contain multiple Unicode scalars; current `string.length` / indexing / iteration operate on Unicode scalars, not grapheme clusters |
 | **union** | Union type `A \| B` |
+| **Unicode scalar value** | Legal Unicode code point in `U+0000..U+10FFFF`, excluding the surrogate range `U+D800..U+DFFF` |
 | **upvalue** | Outer variable captured by a closure |
 | **VM** | Virtual Machine: xray bytecode VM |
 | **write barrier** | Hook inserted by the GC on pointer updates |

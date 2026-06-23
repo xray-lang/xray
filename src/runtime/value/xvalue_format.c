@@ -39,6 +39,7 @@
 #include "../symbol/xsymbol_table.h"
 #include "../xisolate_internal.h"
 #include "../xstdlib_bridge.h"
+#include "../../base/xutf8.h"
 #include "../../shared/xr_float_fmt.h"
 #include "xtype_names.h"
 
@@ -183,6 +184,18 @@ void xr_value_to_strbuf(XrayIsolate *isolate, XrStrBuf *sb, XrValue val, int dep
             xr_strbuf_append_cstr(sb, "true", 4);
         else
             xr_strbuf_append_cstr(sb, "false", 5);
+        return;
+    }
+    if (XR_IS_CHAR(val)) {
+        /* In nested/dump context wrap in single quotes so a char is visibly
+         * distinct from a one-character string ("a" vs 'a'). */
+        char buf[XR_UTF8_MAX_BYTES];
+        int n = xr_utf8_encode(XR_TO_CHAR(val), buf);
+        if (depth > 0)
+            xr_strbuf_append_cstr(sb, "'", 1);
+        xr_strbuf_append_cstr(sb, buf, (size_t) (n > 0 ? n : 0));
+        if (depth > 0)
+            xr_strbuf_append_cstr(sb, "'", 1);
         return;
     }
     if (XR_IS_NULL(val)) {
@@ -457,6 +470,11 @@ XrString *xr_value_to_string(XrayIsolate *isolate, XrValue val) {
     if (XR_IS_BOOL(val)) {
         return XR_TO_BOOL(val) ? xr_string_intern(isolate, "true", 4, 0)
                                : xr_string_intern(isolate, "false", 5, 0);
+    }
+    if (XR_IS_CHAR(val)) {
+        char buf[XR_UTF8_MAX_BYTES];
+        int n = xr_utf8_encode(XR_TO_CHAR(val), buf);
+        return xr_string_intern(isolate, buf, (size_t) (n > 0 ? n : 0), 0);
     }
     if (XR_IS_NULL(val)) {
         return xr_string_intern(isolate, "null", 4, 0);

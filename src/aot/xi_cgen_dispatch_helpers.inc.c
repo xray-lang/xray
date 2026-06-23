@@ -32,6 +32,8 @@ static void xicgen_const(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiVal
         fprintf(out, "%" PRId64, v->aux_int);
         if (boxed)
             fprintf(out, ")");
+    } else if (v->type->kind == XR_KIND_CHAR) {
+        fprintf(out, "XR_FROM_CHAR((uint32_t)0x%X)", (unsigned) (uint32_t) v->aux_int);
     } else if (v->type->kind == XR_KIND_NULL)
         fprintf(out, "XR_NULL_VAL");
     else if (v->type->kind == XR_KIND_STRING) {
@@ -3003,6 +3005,11 @@ static void xicgen_convert(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
             emit_vref(out, v->args[0]);
             fprintf(out, " != 0)");
         }
+    } else if (v->type->kind == XR_KIND_CHAR) {
+        /* char(x): tagged XR_TAG_CHAR result, validated Unicode scalar. */
+        fprintf(out, "xrt_to_char(");
+        emit_boxed_value_ref(out, v->args[0]);
+        fprintf(out, ")");
     } else {
         emit_vref(out, v->args[0]);
     }

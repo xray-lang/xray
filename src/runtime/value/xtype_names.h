@@ -39,6 +39,7 @@
 #define TYPE_NAME_FLOAT64 "float64"
 #define TYPE_NAME_STRING "string"
 #define TYPE_NAME_BOOL "bool"
+#define TYPE_NAME_CHAR "char"
 #define TYPE_NAME_NULL "null"
 #define TYPE_NAME_VOID "void"
 #define TYPE_NAME_UNIT "()"
@@ -171,6 +172,9 @@ typedef enum {
     // Analyzer-only type IDs (not returned by typeof at runtime)
     XR_TID_WEAKMAP,  // 38
     XR_TID_WEAKSET,  // 39
+    // char: appended last to keep all existing TID values stable (embedded
+    // in Reflect/Type constants and MCP knowledge tables).
+    XR_TID_CHAR,  // 40
     XR_TID_COUNT
 } XrTypeId;
 

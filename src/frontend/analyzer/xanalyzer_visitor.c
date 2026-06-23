@@ -1370,6 +1370,8 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
                                     seen_types |= 2;
                                 } else if (val->type == AST_LITERAL_STRING) {
                                     seen_types |= 4;
+                                } else if (val->type == AST_LITERAL_CHAR) {
+                                    seen_types |= 16;
                                 } else if (val->type == AST_LITERAL_TRUE ||
                                            val->type == AST_LITERAL_FALSE) {
                                     seen_types |= 8;
@@ -1396,6 +1398,13 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
                             links->enum_value_type = xr_type_new_float(NULL);
                         } else if (seen_types & 8) {
                             links->enum_value_type = xr_type_new_bool(NULL);
+                        } else if (seen_types & 16) {
+                            XrLocation loc = {
+                                .file = ctx->file_path, .line = node->line, .column = node->column};
+                            xa_analyzer_add_diagnostic(
+                                ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ENUM_MIXED_TYPE,
+                                "Enum member values cannot use char as the backing type", &loc);
+                            links->enum_value_type = xr_type_new_int(NULL);
                         } else {
                             links->enum_value_type = xr_type_new_int(NULL);
                         }
@@ -1677,6 +1686,7 @@ XrType *xa_visit_infer(XaInferContext *ctx, AstNode *node) {
         // Expressions
         case AST_LITERAL_INT:
         case AST_LITERAL_FLOAT:
+        case AST_LITERAL_CHAR:
         case AST_LITERAL_STRING:
         case AST_LITERAL_BIGINT:
         case AST_LITERAL_REGEX:
@@ -1719,6 +1729,9 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
             break;
         case AST_LITERAL_FLOAT:
             result = xr_type_new_float(NULL);
+            break;
+        case AST_LITERAL_CHAR:
+            result = xr_type_new_char(NULL);
             break;
         case AST_LITERAL_STRING:
             result = xr_type_new_string(NULL);
@@ -2654,9 +2667,9 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                         item_type = coll_type->container.element_type;
                     }
                 } else if (XR_TYPE_IS_STRING(coll_type)) {
-                    item_type = xr_type_new_string(NULL);
+                    item_type = xr_type_new_char(NULL);
                     if (fi->is_keyvalue) {
-                        value_type = xr_type_new_string(NULL);
+                        value_type = xr_type_new_char(NULL);
                         item_type = xr_type_new_int(NULL);  // key is index
                     }
                 } else if (XR_TYPE_IS_JSON(coll_type)) {

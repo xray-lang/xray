@@ -103,6 +103,7 @@ BinOp ::= '+' | '-' | '*' | '/' | '%'
 - `%` 仅接受整数操作数；静态类型包含 float 的求模（如 `5.0 % 2.0`）在分析期编译错误。运行时 `XR_ERR_TYPE_MISMATCH` (E0404) 仅作为动态兜底。
 - 整数溢出：见 §2.3.1。
 - 字符串 `+ string` 是 O(n) 拼接；密集拼接请用 `StringBuilder`。
+- `char` 是独立的 Unicode scalar 类型，不参与算术；需要码点时显式写 `int(c)`。
 
 #### 3.3.2 位运算
 
@@ -112,6 +113,7 @@ BinOp ::= '+' | '-' | '*' | '/' | '%'
 - 移位计数取模 64（与 C 不同：xray 总是定义的）。
 - `>>` 是**算术右移**（保留符号位）。无符号类型用对应的 `uintN`。
 - bool 不参与位运算（用 `&&` `||`）。
+- `char` 不参与位运算；需要码点时显式写 `int(c)`。
 
 #### 3.3.3 比较运算符
 
@@ -406,12 +408,12 @@ IndexAccess ::= Primary '[' Expr ']'
 arr[0]
 arr[0] = 10
 map["key"]
-str[i]                  // 返回单字符字符串
+str[i]                  // 返回 char
 ```
 
 - `Array` 索引：`int`，越界抛 `E0430`。
 - `Map` 索引：键类型；找不到键 → `E0431`。
-- `string` 索引：返回长度为 1 的字符串（**不是** char/int）。
+- `string` 索引：按 Unicode scalar 下标访问，返回 `char`。
 - 自定义类：通过 `operator[]` 重载。
 
 #### 切片
@@ -540,7 +542,7 @@ let p = Point{x: 1, y: 2}      // struct literal
 ```
 
 - `${...}` 内任意表达式（含函数调用、对象访问、算术）。
-- `${...}` 内的字符串字面量可使用与外层模板相同的引号；lexer 按表达式大括号深度匹配，并跳过内层字符串 / raw string。`char` 核心类型落地后，表达式内 char 字面量也按同一规则跳过。
+- `${...}` 内的字符串字面量可使用与外层模板相同的引号；lexer 按表达式大括号深度匹配，并跳过内层字符串 / raw string / char 字面量。
 - 表达式类型必须可转为字符串（实现 `toString()` 或为基本类型）。
 
 ### 3.16 `yield` 语句
@@ -654,6 +656,7 @@ BinOp ::= '+' | '-' | '*' | '/' | '%'
 - `%` accepts integer operands only; modulo with a static type that contains float (e.g. `5.0 % 2.0`) is a compile-time analyzer error. Runtime `XR_ERR_TYPE_MISMATCH` (E0404) remains only as a dynamic fallback.
 - Integer overflow: see §2.3.1.
 - `string + string` is O(n) concatenation; for heavy concatenation use `StringBuilder`.
+- `char` is an independent Unicode scalar type and does not participate in arithmetic; use `int(c)` explicitly when the code point is needed.
 
 #### 3.3.2 Bitwise Operators
 
@@ -663,6 +666,7 @@ BinOp ::= '+' | '-' | '*' | '/' | '%'
 - Shift counts are taken modulo 64 (unlike C: always defined in xray).
 - `>>` is an **arithmetic right shift** (preserves the sign bit). For unsigned shifts, use the corresponding `uintN`.
 - `bool` does not participate in bitwise operations (use `&&` `||`).
+- `char` does not participate in bitwise operations; use `int(c)` explicitly when the code point is needed.
 
 #### 3.3.3 Comparison Operators
 
@@ -957,12 +961,12 @@ IndexAccess ::= Primary '[' Expr ']'
 arr[0]
 arr[0] = 10
 map["key"]
-str[i]                  // returns a single-character string
+str[i]                  // returns char
 ```
 
 - `Array` indexing: `int`; out-of-bounds throws `E0430`.
 - `Map` indexing: key type; missing key → `E0431`.
-- `string` indexing: returns a length-1 string (**not** a char/int).
+- `string` indexing: addresses Unicode scalar positions and returns `char`.
 - User classes: via `operator[]` overload.
 
 #### Slice
@@ -1091,7 +1095,7 @@ See §1.6.5. In brief:
 ```
 
 - `${...}` accepts any expression (calls, object access, arithmetic).
-- Embedded string literals inside `${...}` may use the same quote as the outer template; the lexer matches expression braces by depth and skips nested strings / raw strings. Once the `char` core type lands, char literals inside interpolation are skipped by the same rule.
+- Embedded string literals inside `${...}` may use the same quote as the outer template; the lexer matches expression braces by depth and skips nested strings / raw strings / char literals.
 - The expression's type must be convertible to a string (implement `toString()` or be a primitive).
 
 ### 3.16 `yield` Statement

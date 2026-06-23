@@ -331,6 +331,7 @@
      * the blob — simply shifts up by two. */                                                    \
     _(ARRAY_EXTEND, FMT_AB, KOP_AB_INPLACE, "R[A]:Array.extend(R[B]:Array) — splice + retain")     \
     _(JSON_MERGE, FMT_AB, KOP_AB_INPLACE, "R[A]:Json.merge(R[B]:Json) — object spread")            \
+    _(TOCHAR, FMT_AB, KOP_AB_UNARY, "R[A] = char(R[B]) — int codepoint to Unicode scalar")         \
     _(NOP, FMT_SPECIAL, KOP_SPECIAL, "no-op / spawn metadata")
 
 #endif  // XOPCODE_DEF_H
