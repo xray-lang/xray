@@ -807,24 +807,6 @@ static XrValue io_isSymlink(XrVMRuntime *X, XrValue *args, int argc) {
 #endif
 }
 
-// Dynamic-layout class for stat() result. SymbolIds are allocated
-// per-isolate, so the class must live on the isolate's stdlib cache
-// rather than on process-global state. Building it lazily means the
-// cost is paid exactly once per isolate and the class is reused by
-// every subsequent io.stat() call in that isolate.
-enum {
-    STAT_SIZE_IDX = 0,
-    STAT_MODE_IDX,
-    STAT_MTIME_IDX,
-    STAT_ATIME_IDX,
-    STAT_CTIME_IDX,
-    STAT_UID_IDX,
-    STAT_GID_IDX,
-    STAT_ISFILE_IDX,
-    STAT_ISDIR_IDX,
-    STAT_ISSYMLINK_IDX
-};
-
 // Lazily construct the stat() result class chain for the given isolate
 // and stash it in the per-isolate stdlib cache. Returns NULL on OOM.
 static XrClass *io_get_stat_class(XrVMRuntime *X) {
@@ -834,9 +816,8 @@ static XrClass *io_get_stat_class(XrVMRuntime *X) {
     if (cache->io_stat_class)
         return cache->io_stat_class;
 
-    static const char *const names[] = {"size", "mode", "mtime",  "atime", "ctime",
-                                        "uid",  "gid",  "isFile", "isDir", "isSymlink"};
-    XrClass *cls = xr_class_build_json_chain(X, names, 10, false);
+    XrClass *cls = xr_class_build_json_chain(X, XR_IO_CORE_STAT_FIELD_NAMES,
+                                             XR_IO_CORE_STAT_FIELD_COUNT, false);
     if (!cls)
         return NULL;
     cache->io_stat_class = cls;
@@ -865,6 +846,18 @@ static XrValue io_stat(XrVMRuntime *X, XrValue *args, int argc) {
     bool is_symlink = (lstat(path, &lst) == 0) && S_ISLNK(lst.st_mode);
 #endif
 
+#ifdef XR_OS_WINDOWS
+    XrIoCoreStatFields fields = xr_io_core_stat_fields(
+        (int64_t) st.st_size, (int64_t) st.st_mode, (int64_t) st.st_mtime, (int64_t) st.st_atime,
+        (int64_t) st.st_ctime, 0, 0, (st.st_mode & _S_IFREG) != 0, (st.st_mode & _S_IFDIR) != 0,
+        is_symlink);
+#else
+    XrIoCoreStatFields fields = xr_io_core_stat_fields(
+        (int64_t) st.st_size, (int64_t) st.st_mode, (int64_t) st.st_mtime, (int64_t) st.st_atime,
+        (int64_t) st.st_ctime, (int64_t) st.st_uid, (int64_t) st.st_gid, S_ISREG(st.st_mode),
+        S_ISDIR(st.st_mode), is_symlink);
+#endif
+
     extern XrValue xr_json_value(XrJson * json);
 
     XrClass *stat_cls = io_get_stat_class(X);
@@ -874,23 +867,16 @@ static XrValue io_stat(XrVMRuntime *X, XrValue *args, int argc) {
     if (!obj)
         return xr_null();
 
-    xr_instance_set_dynamic_field(X, obj, STAT_SIZE_IDX, xr_int((int64_t) st.st_size));
-    xr_instance_set_dynamic_field(X, obj, STAT_MODE_IDX, xr_int((int64_t) (st.st_mode & 0777)));
-    xr_instance_set_dynamic_field(X, obj, STAT_MTIME_IDX, xr_int((int64_t) st.st_mtime));
-    xr_instance_set_dynamic_field(X, obj, STAT_ATIME_IDX, xr_int((int64_t) st.st_atime));
-    xr_instance_set_dynamic_field(X, obj, STAT_CTIME_IDX, xr_int((int64_t) st.st_ctime));
-#ifdef XR_OS_WINDOWS
-    xr_instance_set_dynamic_field(X, obj, STAT_UID_IDX, xr_int(0));
-    xr_instance_set_dynamic_field(X, obj, STAT_GID_IDX, xr_int(0));
-    xr_instance_set_dynamic_field(X, obj, STAT_ISFILE_IDX, xr_bool((st.st_mode & _S_IFREG) != 0));
-    xr_instance_set_dynamic_field(X, obj, STAT_ISDIR_IDX, xr_bool((st.st_mode & _S_IFDIR) != 0));
-#else
-    xr_instance_set_dynamic_field(X, obj, STAT_UID_IDX, xr_int((int64_t) st.st_uid));
-    xr_instance_set_dynamic_field(X, obj, STAT_GID_IDX, xr_int((int64_t) st.st_gid));
-    xr_instance_set_dynamic_field(X, obj, STAT_ISFILE_IDX, xr_bool(S_ISREG(st.st_mode)));
-    xr_instance_set_dynamic_field(X, obj, STAT_ISDIR_IDX, xr_bool(S_ISDIR(st.st_mode)));
-#endif
-    xr_instance_set_dynamic_field(X, obj, STAT_ISSYMLINK_IDX, xr_bool(is_symlink));
+    xr_instance_set_dynamic_field(X, obj, XR_IO_CORE_STAT_SIZE, xr_int(fields.size));
+    xr_instance_set_dynamic_field(X, obj, XR_IO_CORE_STAT_MODE, xr_int(fields.mode));
+    xr_instance_set_dynamic_field(X, obj, XR_IO_CORE_STAT_MTIME, xr_int(fields.mtime));
+    xr_instance_set_dynamic_field(X, obj, XR_IO_CORE_STAT_ATIME, xr_int(fields.atime));
+    xr_instance_set_dynamic_field(X, obj, XR_IO_CORE_STAT_CTIME, xr_int(fields.ctime));
+    xr_instance_set_dynamic_field(X, obj, XR_IO_CORE_STAT_UID, xr_int(fields.uid));
+    xr_instance_set_dynamic_field(X, obj, XR_IO_CORE_STAT_GID, xr_int(fields.gid));
+    xr_instance_set_dynamic_field(X, obj, XR_IO_CORE_STAT_IS_FILE, xr_bool(fields.is_file));
+    xr_instance_set_dynamic_field(X, obj, XR_IO_CORE_STAT_IS_DIR, xr_bool(fields.is_dir));
+    xr_instance_set_dynamic_field(X, obj, XR_IO_CORE_STAT_IS_SYMLINK, xr_bool(fields.is_symlink));
 
     return xr_json_value(obj);
 }

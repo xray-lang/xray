@@ -184,6 +184,36 @@ TEST(io_core_mkdirp_fails_on_blocked_intermediate) {
     ASSERT_STR_EQ(fake.dirs[0], "a");
 }
 
+TEST(io_core_stat_field_names_are_shared_schema) {
+    ASSERT_EQ_INT(XR_IO_CORE_STAT_FIELD_COUNT, 10);
+    ASSERT_EQ_INT(XR_IO_CORE_STAT_SIZE, 0);
+    ASSERT_STR_EQ(XR_IO_CORE_STAT_FIELD_NAMES[XR_IO_CORE_STAT_SIZE], "size");
+    ASSERT_STR_EQ(XR_IO_CORE_STAT_FIELD_NAMES[XR_IO_CORE_STAT_MODE], "mode");
+    ASSERT_STR_EQ(XR_IO_CORE_STAT_FIELD_NAMES[XR_IO_CORE_STAT_MTIME], "mtime");
+    ASSERT_STR_EQ(XR_IO_CORE_STAT_FIELD_NAMES[XR_IO_CORE_STAT_ATIME], "atime");
+    ASSERT_STR_EQ(XR_IO_CORE_STAT_FIELD_NAMES[XR_IO_CORE_STAT_CTIME], "ctime");
+    ASSERT_STR_EQ(XR_IO_CORE_STAT_FIELD_NAMES[XR_IO_CORE_STAT_UID], "uid");
+    ASSERT_STR_EQ(XR_IO_CORE_STAT_FIELD_NAMES[XR_IO_CORE_STAT_GID], "gid");
+    ASSERT_STR_EQ(XR_IO_CORE_STAT_FIELD_NAMES[XR_IO_CORE_STAT_IS_FILE], "isFile");
+    ASSERT_STR_EQ(XR_IO_CORE_STAT_FIELD_NAMES[XR_IO_CORE_STAT_IS_DIR], "isDir");
+    ASSERT_STR_EQ(XR_IO_CORE_STAT_FIELD_NAMES[XR_IO_CORE_STAT_IS_SYMLINK], "isSymlink");
+}
+
+TEST(io_core_stat_fields_normalize_mode_and_preserve_metadata) {
+    XrIoCoreStatFields fields =
+        xr_io_core_stat_fields(12, 0100644, 1, 2, 3, 501, 20, true, false, true);
+    ASSERT_EQ_INT(fields.size, 12);
+    ASSERT_EQ_INT(fields.mode, 0644);
+    ASSERT_EQ_INT(fields.mtime, 1);
+    ASSERT_EQ_INT(fields.atime, 2);
+    ASSERT_EQ_INT(fields.ctime, 3);
+    ASSERT_EQ_INT(fields.uid, 501);
+    ASSERT_EQ_INT(fields.gid, 20);
+    ASSERT_TRUE(fields.is_file);
+    ASSERT_FALSE(fields.is_dir);
+    ASSERT_TRUE(fields.is_symlink);
+}
+
 TEST_MAIN_BEGIN()
 
 RUN_TEST_SUITE("IO Core - readLines");
@@ -201,5 +231,9 @@ RUN_TEST(io_core_mkdirp_trims_trailing_separators);
 RUN_TEST(io_core_mkdirp_handles_root_path);
 RUN_TEST(io_core_mkdirp_handles_backslash_separators);
 RUN_TEST(io_core_mkdirp_fails_on_blocked_intermediate);
+
+RUN_TEST_SUITE("IO Core - stat");
+RUN_TEST(io_core_stat_field_names_are_shared_schema);
+RUN_TEST(io_core_stat_fields_normalize_mode_and_preserve_metadata);
 
 TEST_MAIN_END()
