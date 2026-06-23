@@ -14,7 +14,6 @@
 
 #include "path.h"
 #include "../common.h"
-#include "../ctxbuf.h"
 #include "../../src/runtime/object/xmap.h"
 #include "../../src/runtime/object/xjson.h"
 #include "../../src/base/xplatform.h"
@@ -28,11 +27,6 @@
 
 /* Output always uses '/' for portability; input parsing accepts both on Windows. */
 #define PATH_SEP '/'
-#ifdef XR_OS_WINDOWS
-#define IS_SEP(c) ((c) == '/' || (c) == '\\')
-#else
-#define IS_SEP(c) ((c) == '/')
-#endif
 
 /* ========== Helper Functions ========== */
 
@@ -372,9 +366,8 @@ static XrValue path_parse(XrVMRuntime *X, XrValue *args, int argc) {
 
 // format(obj) - Build path from a PathInfo Json.
 //
-// Uses a dynamic buffer so arbitrarily long paths are preserved, and honours
-// PATH_SEP rather than hard-coding '/'. That avoids mixed-separator output
-// on Windows, e.g. `C:\foo/bar`.
+// The layout rule is shared with AOT: base wins over name/ext; otherwise
+// name+ext forms the basename, and a single '/' joins non-empty dir/base.
 static XrValue path_format(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1)
         return xrs_string_value_c(X, "");
@@ -388,42 +381,26 @@ static XrValue path_format(XrVMRuntime *X, XrValue *args, int argc) {
     XrValue name = xr_json_get_by_key(X, json, "name");
     XrValue ext = xr_json_get_by_key(X, json, "ext");
 
-    // Derive `base` from name+ext when only those are present.
-    XrCtxBuf base_buf;
-    xr_ctxbuf_init(&base_buf, 64);
-    const char *base_str = xrs_string_arg(base, NULL);
-    if (!base_str || base_str[0] == '\0') {
-        const char *name_str = xrs_string_arg(name, NULL);
-        const char *ext_str = xrs_string_arg(ext, NULL);
-        if (name_str && name_str[0] != '\0') {
-            xr_ctxbuf_append_cstr(&base_buf, name_str);
-            if (ext_str)
-                xr_ctxbuf_append_cstr(&base_buf, ext_str);
-            base_str = base_buf.data;
-        }
+    size_t dir_len = 0;
+    size_t base_len = 0;
+    size_t name_len = 0;
+    size_t ext_len = 0;
+    XrPathCoreFormatPlan plan;
+    if (!xr_path_core_format_plan(xr_path_core_slice(xrs_string_arg(dir, &dir_len), dir_len),
+                                  xr_path_core_slice(xrs_string_arg(base, &base_len), base_len),
+                                  xr_path_core_slice(xrs_string_arg(name, &name_len), name_len),
+                                  xr_path_core_slice(xrs_string_arg(ext, &ext_len), ext_len),
+                                  &plan)) {
+        return xr_null();
     }
 
-    const char *dir_str = xrs_string_arg(dir, NULL);
-    if (dir_str && dir_str[0] != '\0') {
-        XrCtxBuf out;
-        xr_ctxbuf_init(&out, 128);
-        xr_ctxbuf_append_cstr(&out, dir_str);
-        // Avoid duplicating the separator if `dir` already ends with one.
-        if (out.len > 0 && !IS_SEP(out.data[out.len - 1])) {
-            xr_ctxbuf_putc(&out, PATH_SEP);
-        }
-        if (base_str)
-            xr_ctxbuf_append_cstr(&out, base_str);
-        xr_ctxbuf_free(&base_buf);
-        XrValue v = xrs_string_value_n(X, out.data ? out.data : "", out.len);
-        xr_ctxbuf_free(&out);
-        return v;
-    }
-
-    XrValue v =
-        (base_str && base_str[0]) ? xrs_string_value_c(X, base_str) : xrs_string_value_c(X, "");
-    xr_ctxbuf_free(&base_buf);
-    return v;
+    char *result = (char *) xr_malloc(plan.out_len + 1);
+    if (!result)
+        return xr_null();
+    xr_path_core_format_write(&plan, result);
+    XrValue ret = xrs_string_value_n(X, result, plan.out_len);
+    xr_free(result);
+    return ret;
 }
 
 /* ========== Module Loading ========== */

@@ -166,13 +166,6 @@ static inline XrPathCoreSlice xrt_path_string_view(XrValue value) {
     return xr_path_core_slice(xr_str_data(value), (size_t) len);
 }
 
-static inline void xrt_path_copy_slice(char *out, size_t *pos, XrPathCoreSlice slice) {
-    if (slice.len > 0 && slice.data) {
-        memcpy(out + *pos, slice.data, slice.len);
-        *pos += slice.len;
-    }
-}
-
 static inline XrValue xrt_path_format(XrValue obj) {
     if (obj.tag != XR_TAG_PTR || !obj.ptr)
         return xrt_str_alloc(0);
@@ -182,34 +175,11 @@ static inline XrValue xrt_path_format(XrValue obj) {
     XrPathCoreSlice name = xrt_path_string_view(xrt_json_get_name(obj, "name"));
     XrPathCoreSlice ext = xrt_path_string_view(xrt_json_get_name(obj, "ext"));
 
-    XrPathCoreSlice base_a = base;
-    XrPathCoreSlice base_b = xr_path_core_slice(NULL, 0);
-    if (base.len == 0 && name.len > 0) {
-        base_a = name;
-        base_b = ext;
-    }
-
-    size_t base_len = base_a.len + base_b.len;
-    if (dir.len > 0) {
-        bool need_sep = !xr_path_core_is_sep(dir.data[dir.len - 1]);
-        XrValue result = xrt_str_alloc(dir.len + (need_sep ? 1 : 0) + base_len);
-        char *out = xr_str_buf(result);
-        size_t pos = 0;
-        xrt_path_copy_slice(out, &pos, dir);
-        if (need_sep)
-            out[pos++] = '/';
-        xrt_path_copy_slice(out, &pos, base_a);
-        xrt_path_copy_slice(out, &pos, base_b);
-        out[pos] = '\0';
-        return result;
-    }
-
-    XrValue result = xrt_str_alloc(base_len);
-    char *out = xr_str_buf(result);
-    size_t pos = 0;
-    xrt_path_copy_slice(out, &pos, base_a);
-    xrt_path_copy_slice(out, &pos, base_b);
-    out[pos] = '\0';
+    XrPathCoreFormatPlan plan;
+    if (!xr_path_core_format_plan(dir, base, name, ext, &plan))
+        return XR_NULL_VAL;
+    XrValue result = xrt_str_alloc(plan.out_len);
+    xr_path_core_format_write(&plan, xr_str_buf(result));
     return result;
 }
 

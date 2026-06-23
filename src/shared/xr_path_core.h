@@ -235,6 +235,70 @@ static inline bool xr_path_core_parse_plan(const char *path, size_t len,
     return true;
 }
 
+typedef struct XrPathCoreFormatPlan {
+    XrPathCoreSlice dir;
+    XrPathCoreSlice base_a;
+    XrPathCoreSlice base_b;
+    bool need_sep;
+    size_t out_len;
+} XrPathCoreFormatPlan;
+
+static inline XrPathCoreSlice xr_path_core_sanitize_slice(XrPathCoreSlice slice) {
+    if (!slice.data)
+        slice.len = 0;
+    return slice;
+}
+
+static inline bool xr_path_core_format_plan(XrPathCoreSlice dir, XrPathCoreSlice base,
+                                            XrPathCoreSlice name, XrPathCoreSlice ext,
+                                            XrPathCoreFormatPlan *plan) {
+    if (!plan)
+        return false;
+    dir = xr_path_core_sanitize_slice(dir);
+    base = xr_path_core_sanitize_slice(base);
+    name = xr_path_core_sanitize_slice(name);
+    ext = xr_path_core_sanitize_slice(ext);
+
+    XrPathCoreSlice base_a = base;
+    XrPathCoreSlice base_b = xr_path_core_slice(NULL, 0);
+    if (base.len == 0 && name.len > 0) {
+        base_a = name;
+        base_b = ext;
+    }
+
+    size_t base_len = base_a.len + base_b.len;
+    bool need_sep = dir.len > 0 && !xr_path_core_is_sep(dir.data[dir.len - 1]);
+    size_t out_len = base_len;
+    if (dir.len > 0)
+        out_len += dir.len + (need_sep ? 1 : 0);
+
+    plan->dir = dir;
+    plan->base_a = base_a;
+    plan->base_b = base_b;
+    plan->need_sep = need_sep;
+    plan->out_len = out_len;
+    return true;
+}
+
+static inline void xr_path_core_copy_slice(char *out, size_t *pos, XrPathCoreSlice slice) {
+    if (slice.len > 0 && slice.data) {
+        memcpy(out + *pos, slice.data, slice.len);
+        *pos += slice.len;
+    }
+}
+
+static inline void xr_path_core_format_write(const XrPathCoreFormatPlan *plan, char *out) {
+    size_t pos = 0;
+    if (plan->dir.len > 0) {
+        xr_path_core_copy_slice(out, &pos, plan->dir);
+        if (plan->need_sep)
+            out[pos++] = '/';
+    }
+    xr_path_core_copy_slice(out, &pos, plan->base_a);
+    xr_path_core_copy_slice(out, &pos, plan->base_b);
+    out[pos] = '\0';
+}
+
 static inline bool xr_path_core_is_absolute(const char *path, size_t len) {
     if (!path || len == 0)
         return false;
