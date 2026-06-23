@@ -47,3 +47,38 @@ print(bytes.indexOf(255))
 print(bytes.indexOf(42))
 print(bytes.includes(255))
 print(bytes.includes(42))
+
+let packet = new Bytes(8)
+packet[0] = 1
+packet[1] = 2
+packet[2] = 3
+packet[3] = 4
+packet[4] = 5
+packet[5] = 6
+packet[6] = 7
+packet[7] = 8
+print(packet.loadU32LE(0))
+print(packet.loadU64LE(0))
+
+let moved = new Bytes(6)
+moved[0] = 10
+moved[1] = 20
+moved[2] = 30
+moved[3] = 40
+moved.copyWithin(2, 0, 4)
+print(moved[2])
+print(moved[5])
+
+let copied = new Bytes(6)
+copied.resize(6)
+copied.copyFrom(packet, 1, 2, 3)
+print(copied[2])
+print(copied[4])
+
+let repeated = new Bytes(9)
+repeated[0] = 65
+repeated[1] = 66
+repeated[2] = 67
+repeated.repeatFrom(3, 3, 6)
+print(repeated[3])
+print(repeated[8])

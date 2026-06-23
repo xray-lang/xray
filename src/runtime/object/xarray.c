@@ -766,78 +766,35 @@ void xr_obj_destroy_array(XrObjHeader *obj, struct XrCoroHeap *owner_heap) {
 
 /* ====== Bytes Convenience Functions ====== */
 
-static bool xr_array_bytes_range_ok(XrArray *arr, int32_t offset, int32_t count) {
-    if (!arr || arr->elem_type != XR_ELEM_U8)
-        return false;
-    if (offset < 0 || count < 0)
-        return false;
-    return (int64_t) offset + (int64_t) count <= (int64_t) arr->length;
-}
-
 uint32_t xr_array_load_u32_le(XrArray *arr, int32_t offset, bool *ok) {
-    bool valid = xr_array_bytes_range_ok(arr, offset, 4);
-    if (ok)
-        *ok = valid;
-    if (!valid)
-        return 0;
-    const uint8_t *p = (const uint8_t *) arr->data + offset;
-    return (uint32_t) p[0] | ((uint32_t) p[1] << 8) | ((uint32_t) p[2] << 16) |
-           ((uint32_t) p[3] << 24);
+    return xr_array_core_bytes_load_u32_le(arr ? arr->data : NULL, arr ? arr->length : 0,
+                                           arr ? arr->elem_type : XR_ELEM_ANY, offset, ok);
 }
 
 uint64_t xr_array_load_u64_le(XrArray *arr, int32_t offset, bool *ok) {
-    bool valid = xr_array_bytes_range_ok(arr, offset, 8);
-    if (ok)
-        *ok = valid;
-    if (!valid)
-        return 0;
-    const uint8_t *p = (const uint8_t *) arr->data + offset;
-    uint64_t lo = (uint64_t) xr_array_load_u32_le(arr, offset, NULL);
-    uint64_t hi = (uint64_t) p[4] | ((uint64_t) p[5] << 8) | ((uint64_t) p[6] << 16) |
-                  ((uint64_t) p[7] << 24);
-    return lo | (hi << 32);
+    return xr_array_core_bytes_load_u64_le(arr ? arr->data : NULL, arr ? arr->length : 0,
+                                           arr ? arr->elem_type : XR_ELEM_ANY, offset, ok);
 }
 
 bool xr_array_bytes_copy_within(XrArray *arr, int32_t dst_offset, int32_t src_offset,
                                 int32_t count) {
-    if (!xr_array_bytes_range_ok(arr, src_offset, count) ||
-        !xr_array_bytes_range_ok(arr, dst_offset, count))
-        return false;
-    if (count > 0) {
-        uint8_t *data = (uint8_t *) arr->data;
-        memmove(data + dst_offset, data + src_offset, (size_t) count);
-    }
-    return true;
+    return xr_array_core_bytes_copy_within(arr ? arr->data : NULL, arr ? arr->length : 0,
+                                           arr ? arr->elem_type : XR_ELEM_ANY, dst_offset,
+                                           src_offset, count);
 }
 
 bool xr_array_bytes_copy_from(XrArray *dst, XrArray *src, int32_t src_offset, int32_t dst_offset,
                               int32_t count) {
-    if (!xr_array_bytes_range_ok(src, src_offset, count) ||
-        !xr_array_bytes_range_ok(dst, dst_offset, count))
-        return false;
-    if (count > 0) {
-        uint8_t *dst_data = (uint8_t *) dst->data + dst_offset;
-        uint8_t *src_data = (uint8_t *) src->data + src_offset;
-        if (dst == src)
-            memmove(dst_data, src_data, (size_t) count);
-        else
-            memcpy(dst_data, src_data, (size_t) count);
-    }
-    return true;
+    return xr_array_core_bytes_copy_from(dst ? dst->data : NULL, dst ? dst->length : 0,
+                                         dst ? dst->elem_type : XR_ELEM_ANY, src ? src->data : NULL,
+                                         src ? src->length : 0, src ? src->elem_type : XR_ELEM_ANY,
+                                         src_offset, dst_offset, count, dst == src);
 }
 
 bool xr_array_bytes_repeat_from(XrArray *arr, int32_t dst_offset, int32_t distance, int32_t count) {
-    if (!arr || arr->elem_type != XR_ELEM_U8 || distance <= 0 || count < 0 || dst_offset < 0)
-        return false;
-    int64_t src_offset = (int64_t) dst_offset - (int64_t) distance;
-    if (src_offset < 0)
-        return false;
-    if ((int64_t) dst_offset + (int64_t) count > (int64_t) arr->length)
-        return false;
-    uint8_t *data = (uint8_t *) arr->data;
-    for (int32_t i = 0; i < count; i++)
-        data[dst_offset + i] = data[dst_offset - distance + i];
-    return true;
+    return xr_array_core_bytes_repeat_from(arr ? arr->data : NULL, arr ? arr->length : 0,
+                                           arr ? arr->elem_type : XR_ELEM_ANY, dst_offset, distance,
+                                           count);
 }
 
 void xr_array_append_data(XrArray *arr, const uint8_t *src_data, int32_t len) {

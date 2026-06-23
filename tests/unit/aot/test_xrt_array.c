@@ -265,6 +265,54 @@ static void test_indexof_typed_fast_path_shared_rules(void) {
     free_test_array(flags);
 }
 
+static void test_bytes_raw_helpers_share_core_rules(void) {
+    reset_alloc_counts();
+    XrValue value = xrt_array_new_typed(0, XR_ELEM_U8);
+    xrt_array_t *a = (xrt_array_t *) value.ptr;
+    for (int64_t i = 1; i <= 8; i++)
+        xrt_array_push(value, XR_FROM_INT(i));
+
+    ASSERT_EQ_INT(xrt_bytes_load_u32_le_raw(a, 0), 67305985, "u32 load is little-endian");
+    ASSERT_EQ_INT((int64_t) xrt_bytes_load_u64_le_raw(a, 0), 578437695752307201LL,
+                  "u64 load is little-endian");
+    ASSERT_EQ_INT(xrt_bytes_load_u32_le_raw(a, 5), 0, "out-of-range load returns zero");
+
+    xrt_bytes_copy_within_raw(a, 6, 0, 4);
+    ASSERT_EQ_INT(((uint8_t *) a->data)[6], 7, "invalid copyWithin leaves destination byte");
+    xrt_bytes_copy_within_raw(a, 2, 0, 4);
+    ASSERT_EQ_INT(((uint8_t *) a->data)[2], 1, "copyWithin writes first overlap byte");
+    ASSERT_EQ_INT(((uint8_t *) a->data)[3], 2, "copyWithin writes second overlap byte");
+    ASSERT_EQ_INT(((uint8_t *) a->data)[5], 4, "copyWithin writes last selected byte");
+
+    XrValue dst_value = xrt_array_new_typed(0, XR_ELEM_U8);
+    xrt_array_t *dst = (xrt_array_t *) dst_value.ptr;
+    for (int64_t i = 0; i < 6; i++)
+        xrt_array_push(dst_value, XR_FROM_INT(0));
+    xrt_bytes_copy_from_raw(dst, a, 1, 2, 3);
+    ASSERT_EQ_INT(((uint8_t *) dst->data)[2], 2, "copyFrom writes first source byte");
+    ASSERT_EQ_INT(((uint8_t *) dst->data)[3], 1, "copyFrom preserves shared source state");
+    ASSERT_EQ_INT(((uint8_t *) dst->data)[4], 2, "copyFrom writes count bytes");
+    xrt_bytes_copy_from_raw(dst, a, 7, 0, 3);
+    ASSERT_EQ_INT(((uint8_t *) dst->data)[0], 0, "invalid copyFrom is a no-op");
+
+    XrValue rep_value = xrt_array_new_typed(0, XR_ELEM_U8);
+    xrt_array_t *rep = (xrt_array_t *) rep_value.ptr;
+    uint8_t seed[] = {65, 66, 67, 0, 0, 0, 0, 0, 0};
+    for (int64_t i = 0; i < 9; i++)
+        xrt_array_push(rep_value, XR_FROM_INT(seed[i]));
+    xrt_bytes_repeat_from_raw(rep, 3, 3, 6);
+    ASSERT_EQ_INT(((uint8_t *) rep->data)[3], 65, "repeatFrom writes first repeat byte");
+    ASSERT_EQ_INT(((uint8_t *) rep->data)[4], 66, "repeatFrom writes second repeat byte");
+    ASSERT_EQ_INT(((uint8_t *) rep->data)[5], 67, "repeatFrom writes third repeat byte");
+    ASSERT_EQ_INT(((uint8_t *) rep->data)[8], 67, "repeatFrom repeats through overlap");
+    xrt_bytes_repeat_from_raw(rep, 0, 1, 1);
+    ASSERT_EQ_INT(((uint8_t *) rep->data)[0], 65, "invalid repeatFrom is a no-op");
+
+    free_test_array(a);
+    free_test_array(dst);
+    free_test_array(rep);
+}
+
 static XrValue dummy_closure_body(xrt_closure_t *cl) {
     (void) cl;
     return XR_NULL_VAL;
@@ -297,6 +345,7 @@ int main(void) {
     test_slice_negative_bounds_and_aliasing();
     test_fill_range_typed_fast_path();
     test_indexof_typed_fast_path_shared_rules();
+    test_bytes_raw_helpers_share_core_rules();
     test_stack_closure_borrows_cell_upval();
     printf("test_xrt_array: %d passed, %d failed\n", g_passed, g_failed);
     return g_failed ? 1 : 0;

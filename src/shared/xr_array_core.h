@@ -185,4 +185,92 @@ static inline int64_t xr_array_core_typed_index_of(const void *data, int64_t len
 
 #undef XR_ARRAY_CORE_INDEXOF_LOOP
 
+static inline bool xr_array_core_bytes_range_ok(int64_t length, uint8_t elem_type, int64_t offset,
+                                                int64_t count) {
+    if (length < 0 || elem_type != XR_ELEM_U8 || offset < 0 || count < 0)
+        return false;
+    return count <= length && offset <= length - count;
+}
+
+static inline uint32_t xr_array_core_bytes_load_u32_le(const void *data, int64_t length,
+                                                       uint8_t elem_type, int64_t offset,
+                                                       bool *ok) {
+    bool valid = data && xr_array_core_bytes_range_ok(length, elem_type, offset, 4);
+    if (ok)
+        *ok = valid;
+    if (!valid)
+        return 0;
+    const uint8_t *p = (const uint8_t *) data + offset;
+    return (uint32_t) p[0] | ((uint32_t) p[1] << 8) | ((uint32_t) p[2] << 16) |
+           ((uint32_t) p[3] << 24);
+}
+
+static inline uint64_t xr_array_core_bytes_load_u64_le(const void *data, int64_t length,
+                                                       uint8_t elem_type, int64_t offset,
+                                                       bool *ok) {
+    bool valid = data && xr_array_core_bytes_range_ok(length, elem_type, offset, 8);
+    if (ok)
+        *ok = valid;
+    if (!valid)
+        return 0;
+    const uint8_t *p = (const uint8_t *) data + offset;
+    return (uint64_t) p[0] | ((uint64_t) p[1] << 8) | ((uint64_t) p[2] << 16) |
+           ((uint64_t) p[3] << 24) | ((uint64_t) p[4] << 32) | ((uint64_t) p[5] << 40) |
+           ((uint64_t) p[6] << 48) | ((uint64_t) p[7] << 56);
+}
+
+static inline bool xr_array_core_bytes_copy_within(void *data, int64_t length, uint8_t elem_type,
+                                                   int64_t dst_offset, int64_t src_offset,
+                                                   int64_t count) {
+    if (!xr_array_core_bytes_range_ok(length, elem_type, src_offset, count) ||
+        !xr_array_core_bytes_range_ok(length, elem_type, dst_offset, count))
+        return false;
+    if (count == 0)
+        return true;
+    if (!data)
+        return false;
+    memmove((uint8_t *) data + dst_offset, (uint8_t *) data + src_offset, (size_t) count);
+    return true;
+}
+
+static inline bool xr_array_core_bytes_copy_from(void *dst_data, int64_t dst_length,
+                                                 uint8_t dst_elem_type, const void *src_data,
+                                                 int64_t src_length, uint8_t src_elem_type,
+                                                 int64_t src_offset, int64_t dst_offset,
+                                                 int64_t count, bool same_array) {
+    if (!xr_array_core_bytes_range_ok(src_length, src_elem_type, src_offset, count) ||
+        !xr_array_core_bytes_range_ok(dst_length, dst_elem_type, dst_offset, count))
+        return false;
+    if (count == 0)
+        return true;
+    if (!dst_data || !src_data)
+        return false;
+    uint8_t *dp = (uint8_t *) dst_data + dst_offset;
+    const uint8_t *sp = (const uint8_t *) src_data + src_offset;
+    if (same_array)
+        memmove(dp, sp, (size_t) count);
+    else
+        memcpy(dp, sp, (size_t) count);
+    return true;
+}
+
+static inline bool xr_array_core_bytes_repeat_from(void *data, int64_t length, uint8_t elem_type,
+                                                   int64_t dst_offset, int64_t distance,
+                                                   int64_t count) {
+    if (elem_type != XR_ELEM_U8 || dst_offset < 0 || distance <= 0 || count < 0)
+        return false;
+    if (distance > dst_offset)
+        return false;
+    if (!xr_array_core_bytes_range_ok(length, elem_type, dst_offset, count))
+        return false;
+    if (count == 0)
+        return true;
+    if (!data)
+        return false;
+    uint8_t *bytes = (uint8_t *) data;
+    for (int64_t i = 0; i < count; i++)
+        bytes[dst_offset + i] = bytes[dst_offset - distance + i];
+    return true;
+}
+
 #endif  // XR_ARRAY_CORE_H
