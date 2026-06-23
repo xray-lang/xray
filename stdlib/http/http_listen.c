@@ -323,7 +323,7 @@ static HttpRawResponse format_response_arena(XrArena *arena, int status, const c
     return resp;
 }
 
-// GC-based format_response for module API (http.response)
+// Heap-backed format_response for module API (http.response)
 static XrValue format_response(XrVMRuntime *X, int status, const char *content_type,
                                const char *body, size_t body_len) {
     HttpRawResponse raw = format_response_raw(status, content_type, body, body_len);
@@ -561,6 +561,7 @@ static XrCFuncResult http_conn_cleanup_cont(XrVMRuntime *X, int status, XrValue 
                                             void *user_ctx, XrValue *result) {
     (void) X;
     (void) status;
+    (void) resume_value;
     (void) result;
     return http_conn_cleanup((HttpConnCtx *) user_ctx);
 }
@@ -571,6 +572,7 @@ static XrCFuncResult http_conn_cleanup_cont(XrVMRuntime *X, int status, XrValue 
  */
 static XrCFuncResult http_conn_write_cont(XrVMRuntime *X, int status, XrValue resume_value,
                                           void *user_ctx, XrValue *result) {
+    (void) resume_value;
     HttpConnCtx *ctx = (HttpConnCtx *) user_ctx;
     if (status != XR_RESUME_IO_READY)
         return http_conn_cleanup(ctx);
@@ -899,6 +901,7 @@ static XrCFuncResult handle_dynamic_route(XrVMRuntime *X, HttpConnCtx *ctx, XrVa
  */
 static XrCFuncResult http_conn_read_body(XrVMRuntime *X, int status, XrValue resume_value,
                                          void *user_ctx, XrValue *result) {
+    (void) resume_value;
     HttpConnCtx *ctx = (HttpConnCtx *) user_ctx;
     if (status != XR_RESUME_IO_READY)
         return http_conn_cleanup(ctx);
@@ -934,6 +937,7 @@ static XrCFuncResult http_conn_read_body(XrVMRuntime *X, int status, XrValue res
  */
 static XrCFuncResult http_conn_read_chunked(XrVMRuntime *X, int status, XrValue resume_value,
                                             void *user_ctx, XrValue *result) {
+    (void) resume_value;
     HttpConnCtx *ctx = (HttpConnCtx *) user_ctx;
     if (status != XR_RESUME_IO_READY)
         goto chunk_error;
@@ -994,6 +998,7 @@ chunk_error:
  */
 static XrCFuncResult http_conn_read_large_body(XrVMRuntime *X, int status, XrValue resume_value,
                                                void *user_ctx, XrValue *result) {
+    (void) resume_value;
     HttpConnCtx *ctx = (HttpConnCtx *) user_ctx;
     if (status != XR_RESUME_IO_READY)
         return http_conn_cleanup(ctx);
@@ -1142,6 +1147,7 @@ static XrCFuncResult http_conn_init(XrVMRuntime *X, XrValue *args, int argc, XrV
  */
 static XrCFuncResult http_conn_loop(XrVMRuntime *X, int status, XrValue resume_value,
                                     void *user_ctx, XrValue *result) {
+    (void) resume_value;
     HttpConnCtx *ctx = (HttpConnCtx *) user_ctx;
     if (status != XR_RESUME_IO_READY && status != XR_RESUME_OK)
         return http_conn_cleanup(ctx);
@@ -1178,6 +1184,7 @@ static XrCFuncResult http_conn_loop(XrVMRuntime *X, int status, XrValue resume_v
 
 static XrCFuncResult http_conn_read_request(XrVMRuntime *X, int status, XrValue resume_value,
                                             void *user_ctx, XrValue *result) {
+    (void) resume_value;
     HttpConnCtx *ctx = (HttpConnCtx *) user_ctx;
     if (status != XR_RESUME_IO_READY && status != XR_RESUME_OK)
         return http_conn_cleanup(ctx);
@@ -1269,6 +1276,7 @@ static XrCFuncResult http_listen_init(XrVMRuntime *X, XrValue *args, int argc, X
  */
 static XrCFuncResult http_listen_cont(XrVMRuntime *X, int status, XrValue resume_value,
                                       void *user_ctx, XrValue *result) {
+    (void) resume_value;
     HttpListenCtx *lctx = (HttpListenCtx *) user_ctx;
     XrHttpContext *ctx = lctx->ctx;
 
@@ -1338,6 +1346,7 @@ static XrCFuncResult http_listen_cont(XrVMRuntime *X, int status, XrValue resume
 static XrCFuncResult http_listen_wait_cont(XrVMRuntime *X, int status, XrValue resume_value,
                                            void *ctx, XrValue *result) {
     (void) status;
+    (void) resume_value;
     XrHttpContext *hctx = (XrHttpContext *) ctx;
     if (!hctx || !hctx->server || !hctx->server->running) {
         *result = xr_bool(true);
