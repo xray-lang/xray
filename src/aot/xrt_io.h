@@ -357,6 +357,26 @@ static inline XrValue xrt_io_chdir(const char *path_data, int64_t path_len) {
     return XR_FROM_BOOL(ok);
 }
 
+typedef struct XrtIoCopyFileCtx {
+    FILE *src;
+    FILE *dst;
+} XrtIoCopyFileCtx;
+
+static inline size_t xrt_io_copy_file_read(void *ctx, void *buf, size_t cap) {
+    XrtIoCopyFileCtx *copy_ctx = (XrtIoCopyFileCtx *) ctx;
+    return fread(buf, 1, cap, copy_ctx->src);
+}
+
+static inline size_t xrt_io_copy_file_write(void *ctx, const void *buf, size_t len) {
+    XrtIoCopyFileCtx *copy_ctx = (XrtIoCopyFileCtx *) ctx;
+    return fwrite(buf, 1, len, copy_ctx->dst);
+}
+
+static inline bool xrt_io_copy_file_error(void *ctx) {
+    XrtIoCopyFileCtx *copy_ctx = (XrtIoCopyFileCtx *) ctx;
+    return ferror(copy_ctx->src) != 0;
+}
+
 static inline XrValue xrt_io_copy_file(const char *src_data, int64_t src_len, const char *dst_data,
                                        int64_t dst_len) {
     char src_stack[512];
@@ -371,20 +391,11 @@ static inline XrValue xrt_io_copy_file(const char *src_data, int64_t src_len, co
         if (in) {
             FILE *out = fopen(dst, "wb");
             if (out) {
-                char buf[65536];
-                ok = true;
-                for (;;) {
-                    size_t n = fread(buf, 1, sizeof(buf), in);
-                    if (n > 0 && fwrite(buf, 1, n, out) != n) {
-                        ok = false;
-                        break;
-                    }
-                    if (n < sizeof(buf)) {
-                        if (ferror(in))
-                            ok = false;
-                        break;
-                    }
-                }
+                char buf[XR_IO_CORE_COPY_BUFFER_SIZE];
+                XrtIoCopyFileCtx copy_ctx = {.src = in, .dst = out};
+                ok =
+                    xr_io_core_copy_stream(&copy_ctx, xrt_io_copy_file_read, xrt_io_copy_file_write,
+                                           xrt_io_copy_file_error, buf, sizeof(buf));
                 if (fclose(out) != 0)
                     ok = false;
             }
