@@ -1,0 +1,20 @@
+// anchor: bool-nullable-explicit-condition
+let flag: bool? = true
+if (flag == true) {
+    print("yes")
+} else {
+    print("no")
+}
+
+flag = null
+if (flag != null) {
+    print("has-value")
+} else {
+    print("null-flag")
+}
+
+if (flag ?? false) {
+    print("coalesced-true")
+} else {
+    print("coalesced-false")
+}

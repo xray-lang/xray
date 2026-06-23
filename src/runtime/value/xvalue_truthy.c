@@ -9,10 +9,6 @@
  */
 
 #include "xvalue.h"
-#include "../object/xarray.h"
-#include "../object/xmap.h"
-#include "../object/xset.h"
-#include "../object/xstring.h"
 
 bool xr_value_is_truthy(XrValue value) {
     if (XR_IS_NULL(value))
@@ -23,13 +19,5 @@ bool xr_value_is_truthy(XrValue value) {
         return XR_TO_INT(value) != 0;
     if (XR_IS_FLOAT(value))
         return XR_TO_FLOAT(value) != 0.0;
-    if (XR_IS_STRING(value))
-        return XR_TO_STRING(value)->length != 0;
-    if (XR_IS_ARRAY(value))
-        return XR_TO_ARRAY(value)->length != 0;
-    if (XR_IS_MAP(value))
-        return XR_TO_MAP(value)->count != 0;
-    if (XR_IS_SET(value))
-        return XR_TO_SET(value)->count != 0;
     return true;
 }

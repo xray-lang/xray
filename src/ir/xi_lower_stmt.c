@@ -32,6 +32,30 @@
 /* Forward declaration */
 static void lower_stmts(XiLower *l, AstNode **stmts, int count);
 
+XiValue *xi_lower_bool_condition(XiLower *l, XiValue *cond) {
+    if (!cond || !cond->type)
+        return cond;
+    if (cond->type->kind == XR_KIND_BOOL && !cond->type->is_nullable)
+        return cond;
+    if (cond->type->is_nullable) {
+        XiValue *is_null = xi_value_new(l->func, l->cur_block, XI_ISNULL, l->type_bool, 1);
+        if (!is_null)
+            return cond;
+        is_null->args[0] = cond;
+        XiValue *not_null = xi_value_new(l->func, l->cur_block, XI_NOT, l->type_bool, 1);
+        if (!not_null)
+            return is_null;
+        not_null->args[0] = is_null;
+        return not_null;
+    }
+    return cond;
+}
+
+static XiValue *lower_guard_expr(XiLower *l, AstNode *guard_node) {
+    XiValue *guard = xi_lower_expr(l, guard_node);
+    return guard ? xi_lower_bool_condition(l, guard) : NULL;
+}
+
 static void xi_lower_loop_push(XiLower *l, XiLoopTarget *target, const char *label,
                                XiBlock *break_target, XiBlock *continue_target) {
     XR_DCHECK(l != NULL, "xi_lower_loop_push: NULL lowerer");
@@ -1209,12 +1233,12 @@ static bool lower_channel_recv_match(XiLower *l, AstNode *node, XiValue **out_va
             lower_pattern_bindings(l, recv, payload);
             test = recv_status;
             if (arm->guard) {
-                XiValue *guard = xi_lower_expr(l, arm->guard);
+                XiValue *guard = lower_guard_expr(l, arm->guard);
                 if (guard)
                     test = xi_binary(l->func, l->cur_block, XI_BAND, l->type_bool, test, guard);
             }
         } else if (arm->guard) {
-            test = xi_lower_expr(l, arm->guard);
+            test = lower_guard_expr(l, arm->guard);
         }
 
         if (!test) {
@@ -1317,11 +1341,11 @@ XR_FUNC XiValue *xi_lower_match(XiLower *l, AstNode *node) {
             test = NULL;
         } else if (is_top_binding) {
             /* Guarded bare-name pattern narrows with the guard expression. */
-            test = arm->guard ? xi_lower_expr(l, arm->guard) : NULL;
+            test = arm->guard ? lower_guard_expr(l, arm->guard) : NULL;
         } else {
             test = xi_lower_pattern_test(l, subject, arm->pattern);
             if (arm->guard && test) {
-                XiValue *guard = xi_lower_expr(l, arm->guard);
+                XiValue *guard = lower_guard_expr(l, arm->guard);
                 if (guard)
                     test = xi_binary(l->func, l->cur_block, XI_BAND, l->type_bool, test, guard);
             }
@@ -2609,6 +2633,7 @@ static void lower_if(XiLower *l, AstNode *node) {
     XiValue *cond = xi_lower_expr(l, s->condition);
     if (!cond || !l->cur_block)
         return;
+    cond = xi_lower_bool_condition(l, cond);
 
     XiBlock *then_blk = xi_block_new(l->func);
     XiBlock *merge = xi_block_new(l->func);
@@ -2654,6 +2679,8 @@ static void lower_while(XiLower *l, AstNode *node) {
     l->cur_block = cond_blk;
     XiValue *cond = xi_lower_expr(l, s->condition);
     if (cond)
+        cond = xi_lower_bool_condition(l, cond);
+    if (cond)
         xi_block_set_if(l->cur_block, cond, body_blk, exit_blk);
 
     /* body_blk has 1 pred (cond_blk) — seal immediately */
@@ -2698,6 +2725,8 @@ static void lower_for(XiLower *l, AstNode *node) {
     l->cur_block = cond_blk;
     if (s->condition) {
         XiValue *cond = xi_lower_expr(l, s->condition);
+        if (cond)
+            cond = xi_lower_bool_condition(l, cond);
         if (cond)
             xi_block_set_if(l->cur_block, cond, body_blk, exit_blk);
     } else {

@@ -205,6 +205,65 @@ XR_FUNC void xa_report_float_modulo_error(XaInferContext *ctx, AstNode *node, Xr
                                &loc);
 }
 
+static bool xa_type_is_plain_bool(XrType *type) {
+    return type && XR_TYPE_IS_BOOL(type) && !type->is_nullable;
+}
+
+static bool xa_type_is_nullable_non_bool(XrType *type) {
+    if (!type || !type->is_nullable || XR_TYPE_IS_UNKNOWN(type))
+        return false;
+    XrType *base = xr_type_non_nullable(NULL, type);
+    return base && !XR_TYPE_IS_BOOL(base);
+}
+
+XR_FUNC void xa_check_condition_type(XaInferContext *ctx, AstNode *node, XrType *cond_type) {
+    if (!ctx || !ctx->analyzer || !node || !cond_type || XR_TYPE_IS_UNKNOWN(cond_type))
+        return;
+    if (xa_type_is_plain_bool(cond_type))
+        return;
+    if (xa_type_is_nullable_non_bool(cond_type))
+        return;
+
+    XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+    char msg[384];
+    if (cond_type->is_nullable && XR_TYPE_IS_BOOL(cond_type)) {
+        snprintf(msg, sizeof(msg),
+                 "a bare 'bool?' value cannot be used as a condition; use 'flag == true', "
+                 "'flag != null', or 'flag ?? false'");
+    } else if (XR_TYPE_IS_NULL(cond_type)) {
+        snprintf(msg, sizeof(msg), "'null' cannot be used as a condition");
+    } else {
+        snprintf(msg, sizeof(msg),
+                 "condition requires 'bool' or nullable presence (T?), got '%s'; use an explicit "
+                 "comparison",
+                 xr_type_to_string(cond_type));
+    }
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_CONDITION_TYPE, msg,
+                               &loc);
+}
+
+XR_FUNC void xa_check_logical_operand_type(XaInferContext *ctx, AstNode *node, XrType *type) {
+    if (!ctx || !ctx->analyzer || !node || !type || XR_TYPE_IS_UNKNOWN(type))
+        return;
+    if (xa_type_is_plain_bool(type))
+        return;
+
+    XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+    char msg[384];
+    if (type->is_nullable) {
+        snprintf(msg, sizeof(msg),
+                 "logical operator operand must be 'bool', not nullable '%s'; compare explicitly "
+                 "before combining",
+                 xr_type_to_string(type));
+    } else {
+        snprintf(msg, sizeof(msg),
+                 "logical operator operand must be 'bool', got '%s'; use an explicit comparison",
+                 xr_type_to_string(type));
+    }
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_CONDITION_TYPE, msg,
+                               &loc);
+}
+
 /* ============================================================================
  * Pass 2: Expression Visitors
  * ============================================================================
@@ -509,6 +568,8 @@ XrType *xa_visit_binary(XaInferContext *ctx, AstNode *node) {
         // Logical → always bool
         case AST_BINARY_AND:
         case AST_BINARY_OR:
+            xa_check_logical_operand_type(ctx, node->as.binary.left, left);
+            xa_check_logical_operand_type(ctx, node->as.binary.right, right);
             return xr_type_new_bool(NULL);
         // Bitwise → always int
         case AST_BINARY_BAND:
@@ -560,6 +621,7 @@ XrType *xa_visit_unary(XaInferContext *ctx, AstNode *node) {
         case AST_UNARY_NEG:
             return operand;  // -x has same type as x
         case AST_UNARY_NOT:
+            xa_check_logical_operand_type(ctx, node, operand);
             return xr_type_new_bool(NULL);
         case AST_UNARY_BNOT:
             return XR_TYPE_IS_INT(operand) ? operand : xr_type_new_int(NULL);
@@ -1641,7 +1703,8 @@ XrType *xa_visit_ternary(XaInferContext *ctx, AstNode *node) {
 
     TernaryNode *tern = &node->as.ternary;
     // Visit condition to resolve variable symbol_ids
-    xa_visit_infer_expr(ctx, tern->condition);
+    XrType *cond_type = xa_visit_infer_expr(ctx, tern->condition);
+    xa_check_condition_type(ctx, tern->condition, cond_type);
     // Bidirectional inference: propagate outer expected_type to both branches
     // (expected_type is already set by the caller, just pass through)
     XrType *then_type = xa_visit_infer_expr(ctx, tern->true_expr);

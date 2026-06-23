@@ -2514,6 +2514,7 @@ static XiValue *lower_ternary(XiLower *l, AstNode *node) {
     XiValue *cond = xi_lower_expr(l, node->as.ternary.condition);
     if (!cond)
         return NULL;
+    cond = xi_lower_bool_condition(l, cond);
 
     struct XrType *result_type = xi_lower_node_type(l, node);
 

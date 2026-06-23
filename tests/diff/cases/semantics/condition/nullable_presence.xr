@@ -1,0 +1,28 @@
+// anchor: nullable-presence-condition
+let s: string? = null
+if (s) {
+    print("present")
+} else {
+    print("absent")
+}
+
+let empty: string? = ""
+if (empty) {
+    print("empty-but-present")
+} else {
+    print("absent2")
+}
+
+let n: int? = 0
+if (n) {
+    print("zero-but-present")
+} else {
+    print("absent3")
+}
+
+let absent: int? = null
+if (absent) {
+    print("bad")
+} else {
+    print("absent4")
+}

@@ -1,0 +1,6 @@
+fn main() {
+    let flag: bool? = true
+    if (flag) {
+        print("bad")
+    }
+}

@@ -137,30 +137,36 @@ fn test_nested_nullable() {
     assert_eq(city, "Beijing")
 }
 
-// ===== Truthiness Narrowing =====
+// ===== Nullable Presence Narrowing =====
 @test
-fn test_truthiness_string() {
-    let s: string? = ""
-    // Empty string is falsy
+fn test_nullable_presence_string() {
+    let s: string? = null
     if (s) {
         assert(false)
     }
-    s = "hello"
-    if (s) {
-        assert_eq(s.length, 5)
+    let empty: string? = ""
+    if (empty) {
+        assert_eq(empty.length, 0)
+    }
+    let hello: string? = "hello"
+    if (hello) {
+        assert_eq(hello.length, 5)
     }
 }
 
 @test
-fn test_truthiness_number() {
-    let n: int? = 0
-    // 0 is falsy
+fn test_nullable_presence_number() {
+    let n: int? = null
     if (n) {
         assert(false)
     }
-    n = 42
-    if (n) {
-        assert_eq(n + 1, 43)
+    let zero: int? = 0
+    if (zero) {
+        assert_eq(zero + 1, 1)
+    }
+    let forty: int? = 42
+    if (forty) {
+        assert_eq(forty + 1, 43)
     }
 }
 
