@@ -2247,6 +2247,149 @@ module io {
 }
 
 module log {
+  fn debug {
+    signature: "(...args: unknown): ()"
+    doc: "Log debug message"
+    vm: "xr_log_debug"
+    argc: variadic
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "system"
+  }
+
+  fn info {
+    signature: "(...args: unknown): ()"
+    doc: "Log info message"
+    vm: "xr_log_info"
+    argc: variadic
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "system"
+  }
+
+  fn warn {
+    signature: "(...args: unknown): ()"
+    doc: "Log warning message"
+    vm: "xr_log_warn"
+    argc: variadic
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "system"
+  }
+
+  fn error {
+    signature: "(...args: unknown): ()"
+    doc: "Log error message"
+    vm: "xr_log_error"
+    argc: variadic
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "system"
+  }
+
+  fn fatal {
+    signature: "(...args: unknown): ()"
+    doc: "Log fatal message"
+    vm: "xr_log_fatal"
+    argc: variadic
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "system"
+  }
+
+  fn setLevel {
+    signature: "(level: int): ()"
+    doc: "Set log level"
+    vm: "xr_log_set_level"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "system"
+  }
+
+  fn setFormat {
+    signature: "(format: string): ()"
+    doc: "Set log format"
+    vm: "xr_log_set_format"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "system"
+  }
+
+  fn setOutput {
+    signature: "(path: string): ()"
+    doc: "Set log output file"
+    vm: "xr_log_set_output"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "system"
+  }
+
+  fn isEnabled {
+    signature: "(level: int): bool"
+    doc: "Check if log level enabled"
+    vm: "xr_log_is_enabled"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "system"
+  }
+
+  fn enableSource {
+    signature: "(enabled: bool): ()"
+    doc: "Enable source location in logs"
+    vm: "xr_log_enable_source"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "system"
+  }
+
+  fn enableAsync {
+    signature: "(enabled: bool): ()"
+    doc: "Enable async logging"
+    vm: "xr_log_enable_async"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "system"
+  }
+
+  fn flush {
+    signature: "(): ()"
+    doc: "Flush log buffer"
+    vm: "xr_log_flush"
+    argc: 0
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "system"
+  }
+
+  fn child {
+    signature: "(...fields: unknown): Logger"
+    doc: "Create child logger"
+    vm: "xr_log_child"
+    argc: variadic
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "system"
+  }
+
   const DEBUG {
     signature: ": int"
     doc: "Debug log level"

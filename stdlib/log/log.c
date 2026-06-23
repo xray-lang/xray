@@ -1187,25 +1187,6 @@ XR_FUNC XrModule *xr_load_module_log(XrVMRuntime *isolate) {
     if (!module)
         return NULL;
 
-    // Log functions
-    XRS_EXPORT(module, isolate, "debug", xr_log_debug);
-    XRS_EXPORT(module, isolate, "info", xr_log_info);
-    XRS_EXPORT(module, isolate, "warn", xr_log_warn);
-    XRS_EXPORT(module, isolate, "error", xr_log_error);
-    XRS_EXPORT(module, isolate, "fatal", xr_log_fatal);
-
-    // Config functions
-    XRS_EXPORT(module, isolate, "setLevel", xr_log_set_level);
-    XRS_EXPORT(module, isolate, "setFormat", xr_log_set_format);
-    XRS_EXPORT(module, isolate, "setOutput", xr_log_set_output);
-    XRS_EXPORT(module, isolate, "isEnabled", xr_log_is_enabled);
-    XRS_EXPORT(module, isolate, "enableSource", xr_log_enable_source);
-    XRS_EXPORT(module, isolate, "enableAsync", xr_log_enable_async);
-    XRS_EXPORT(module, isolate, "flush", xr_log_flush);
-
-    // Child logger
-    XRS_EXPORT(module, isolate, "child", xr_log_child);
-
     xr_stdlib_vm_bind_log_generated(isolate, module);
 
     module->loaded = true;
