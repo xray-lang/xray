@@ -701,21 +701,24 @@ XrString *xr_string_replace_all(XrVMRuntime *iso, XrString *str, XrString *old_s
 // repeat - repeat string
 XrString *xr_string_repeat(XrVMRuntime *iso, XrString *str, xr_Integer count) {
     XR_DCHECK(iso != NULL, "string_repeat: NULL isolate");
-    if (str == NULL || count <= 0) {
+    if (str == NULL) {
         return xr_string_intern(iso, "", 0, 0);
     }
-    if (count == 1)
+
+    XrStringCoreRepeatPlan plan = xr_string_core_repeat_plan(str->data, str->length, count);
+    if (plan.kind == XR_STRING_CORE_REPEAT_INVALID)
+        return NULL;
+    if (plan.kind == XR_STRING_CORE_REPEAT_EMPTY)
+        return xr_string_intern(iso, "", 0, 0);
+    if (plan.kind == XR_STRING_CORE_REPEAT_ORIGINAL)
         return str;
 
-    size_t new_length = str->length * count;
-    char *buffer = (char *) xr_malloc(new_length + 1);
+    char *buffer = (char *) xr_malloc(plan.len + 1);
+    if (!buffer)
+        return NULL;
+    xr_string_core_repeat_write(buffer, str->data, str->length, count);
 
-    for (xr_Integer i = 0; i < count; i++) {
-        memcpy(buffer + i * str->length, str->data, str->length);
-    }
-    buffer[new_length] = '\0';
-
-    XrString *result = xr_string_intern(iso, buffer, new_length, 0);
+    XrString *result = xr_string_intern(iso, buffer, plan.len, 0);
     xr_free(buffer);
 
     return result;

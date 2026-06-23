@@ -28,6 +28,18 @@ typedef struct XrStringCoreSlice {
     size_t len;
 } XrStringCoreSlice;
 
+typedef enum XrStringCoreRepeatKind {
+    XR_STRING_CORE_REPEAT_INVALID = 0,
+    XR_STRING_CORE_REPEAT_EMPTY,
+    XR_STRING_CORE_REPEAT_ORIGINAL,
+    XR_STRING_CORE_REPEAT_ALLOC
+} XrStringCoreRepeatKind;
+
+typedef struct XrStringCoreRepeatPlan {
+    XrStringCoreRepeatKind kind;
+    size_t len;
+} XrStringCoreRepeatPlan;
+
 typedef struct XrStringCoreParseIntResult {
     bool ok;
     int64_t value;
@@ -57,6 +69,67 @@ static inline XrStringCoreSlice xr_string_core_slice_at(const char *data, size_t
     out.data = data ? data + start : data;
     out.len = slice_len;
     return out;
+}
+
+static inline XrStringCoreRepeatPlan xr_string_core_repeat_plan(const char *data, size_t len,
+                                                                int64_t count) {
+    XrStringCoreRepeatPlan out = {XR_STRING_CORE_REPEAT_INVALID, 0};
+    if (!data && len != 0)
+        return out;
+    if (count <= 0) {
+        out.kind = XR_STRING_CORE_REPEAT_EMPTY;
+        return out;
+    }
+    if (count == 1) {
+        out.kind = XR_STRING_CORE_REPEAT_ORIGINAL;
+        out.len = len;
+        return out;
+    }
+    if (len == 0) {
+        out.kind = XR_STRING_CORE_REPEAT_EMPTY;
+        return out;
+    }
+
+    uint64_t n64 = (uint64_t) count;
+    if (n64 > (uint64_t) SIZE_MAX)
+        return out;
+    size_t n = (size_t) n64;
+    if (len > SIZE_MAX / n)
+        return out;
+
+    out.kind = XR_STRING_CORE_REPEAT_ALLOC;
+    out.len = len * n;
+    return out;
+}
+
+static inline size_t xr_string_core_repeat_write(char *out, const char *data, size_t len,
+                                                 int64_t count) {
+    if (!out)
+        return 0;
+
+    XrStringCoreRepeatPlan plan = xr_string_core_repeat_plan(data, len, count);
+    if (plan.kind == XR_STRING_CORE_REPEAT_INVALID)
+        return 0;
+    if (plan.kind == XR_STRING_CORE_REPEAT_EMPTY) {
+        out[0] = '\0';
+        return 0;
+    }
+    if (plan.len == 0) {
+        out[0] = '\0';
+        return 0;
+    }
+
+    memcpy(out, data, len);
+    size_t written = len;
+    while (written < plan.len) {
+        size_t copy_len = written;
+        if (copy_len > plan.len - written)
+            copy_len = plan.len - written;
+        memcpy(out + written, out, copy_len);
+        written += copy_len;
+    }
+    out[plan.len] = '\0';
+    return plan.len;
 }
 
 static inline int xr_string_core_utf8_char_size(unsigned char first_byte) {
