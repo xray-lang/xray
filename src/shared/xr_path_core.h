@@ -29,6 +29,14 @@ static inline const char *xr_path_core_sep_str(void) {
     return "/";
 }
 
+static inline const char *xr_path_core_delimiter_str(void) {
+#ifdef XR_OS_WINDOWS
+    return ";";
+#else
+    return ":";
+#endif
+}
+
 static inline bool xr_path_core_is_absolute(const char *path, size_t len);
 
 static inline bool xr_path_core_join_has_absolute(const char **parts, const size_t *lens,
