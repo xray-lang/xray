@@ -76,6 +76,7 @@
 #include "../runtime/object/xbigint.h"
 #include "../runtime/object/xrange.h"
 #include "../base/xutf8.h"  // XR_UNICODE_MAX
+#include "../base/xunicode.h"
 #include "../runtime/value/xslot_type.h"
 #include "../runtime/value/xtype.h"
 #include "../runtime/value/xstruct_layout.h"

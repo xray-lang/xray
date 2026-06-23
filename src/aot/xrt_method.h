@@ -52,6 +52,60 @@ static inline int xrt_weak_value_is_heap_object(XrValue v) {
 
 /* toString helper. */
 
+static inline int xrt_char_encode(uint32_t cp, char *tmp) {
+    if (cp <= 0x7Fu) {
+        tmp[0] = (char) cp;
+        return 1;
+    }
+    if (cp <= 0x7FFu) {
+        tmp[0] = (char) (0xC0u | (cp >> 6));
+        tmp[1] = (char) (0x80u | (cp & 0x3Fu));
+        return 2;
+    }
+    if (cp <= 0xFFFFu) {
+        if (cp >= 0xD800u && cp <= 0xDFFFu)
+            return 0;
+        tmp[0] = (char) (0xE0u | (cp >> 12));
+        tmp[1] = (char) (0x80u | ((cp >> 6) & 0x3Fu));
+        tmp[2] = (char) (0x80u | (cp & 0x3Fu));
+        return 3;
+    }
+    if (cp <= 0x10FFFFu) {
+        tmp[0] = (char) (0xF0u | (cp >> 18));
+        tmp[1] = (char) (0x80u | ((cp >> 12) & 0x3Fu));
+        tmp[2] = (char) (0x80u | ((cp >> 6) & 0x3Fu));
+        tmp[3] = (char) (0x80u | (cp & 0x3Fu));
+        return 4;
+    }
+    return 0;
+}
+
+static inline XrValue xrt_char_to_string(uint32_t cp) {
+    char tmp[4];
+    int n = xrt_char_encode(cp, tmp);
+    XrValue out = xrt_str_alloc((size_t) (n > 0 ? n : 0));
+    if (n > 0)
+        memcpy(xr_str_buf(out), tmp, (size_t) n);
+    xr_str_buf(out)[n > 0 ? n : 0] = 0;
+    return out;
+}
+
+static inline int xrt_char_is_letter(uint32_t cp) {
+    return (cp >= 'A' && cp <= 'Z') || (cp >= 'a' && cp <= 'z');
+}
+
+static inline int xrt_char_is_number(uint32_t cp) {
+    return cp >= '0' && cp <= '9';
+}
+
+static inline int xrt_char_is_alnum(uint32_t cp) {
+    return xrt_char_is_letter(cp) || xrt_char_is_number(cp);
+}
+
+static inline int xrt_char_is_whitespace(uint32_t cp) {
+    return cp == ' ' || cp == '\t' || cp == '\n' || cp == '\r' || cp == '\f' || cp == '\v';
+}
+
 static XrValue xrt_tostring(XrValue val, int slot_hint) {
     if (slot_hint == 3)
         return xrt_uint64_to_string((uint64_t) val.i);
@@ -91,6 +145,9 @@ static XrValue xrt_tostring(XrValue val, int slot_hint) {
         return xr_box_str("null");
     if (val.tag == XR_TAG_BOOL)
         return xr_box_str(val.i ? "true" : "false");
+    if (val.tag == XR_TAG_CHAR) {
+        return xrt_char_to_string(XR_TO_CHAR(val));
+    }
     if (val.tag == XR_TAG_ENUM) {
         char tmp[256];
         return xrt_str_from_cstr(xr_to_cstr(val, tmp, sizeof(tmp)));
@@ -98,9 +155,24 @@ static XrValue xrt_tostring(XrValue val, int slot_hint) {
     return xr_box_str("[object]");
 }
 
+/* char(x): construct a Unicode scalar char (tagged XR_TAG_CHAR).
+ * Validates range and excludes UTF-16 surrogates; invalid yields null. */
+static XrValue xrt_to_char(XrValue val) {
+    if (XR_IS_CHAR(val))
+        return val;
+    if (XR_IS_INT(val)) {
+        int64_t cp = XR_TO_INT(val);
+        if (cp >= 0 && cp <= 0x10FFFF && !(cp >= 0xD800 && cp <= 0xDFFF))
+            return XR_FROM_CHAR((uint32_t) cp);
+    }
+    return XR_NULL_VAL;
+}
+
 static XrValue xrt_to_int(XrValue val) {
     if (XR_IS_INT(val))
         return val;
+    if (XR_IS_CHAR(val))
+        return XR_FROM_INT((int64_t) XR_TO_CHAR(val));
     if (XR_IS_FLOAT(val))
         return XR_FROM_INT((int64_t) XR_TO_FLOAT(val));
     if (XR_IS_STR(val)) {
@@ -160,14 +232,59 @@ static XrValue xrt_to_bool(XrValue val) {
 
 /* Fixed-arity method dispatch is intentionally inlineable by the C compiler. */
 
+static inline int64_t xrt_utf8_scalar_count(const char *s, int64_t slen) {
+    if (!s || slen <= 0)
+        return 0;
+    const unsigned char *p = (const unsigned char *) s;
+    const unsigned char *end = p + slen;
+    int64_t count = 0;
+    while (p < end) {
+        unsigned char b = *p;
+        int size = 1;
+        if ((b & 0x80u) == 0)
+            size = 1;
+        else if ((b & 0xE0u) == 0xC0u)
+            size = 2;
+        else if ((b & 0xF0u) == 0xE0u)
+            size = 3;
+        else if ((b & 0xF8u) == 0xF0u)
+            size = 4;
+        if (p + size > end)
+            size = 1;
+        p += size;
+        count++;
+    }
+    return count;
+}
+
+static inline XrValue xrt_string_entries(XrValue recv) {
+    int64_t n = xrt_utf8_scalar_count(xr_str_data(recv), xr_str_len(recv));
+    XrValue arr = xrt_array_new(n);
+    xrt_iterator_t iter = {
+        .coll = recv,
+        .cursor = 0,
+        .index = 0,
+        .kind = XRT_ITER_PAIRS,
+    };
+    while (xrt_iterator_has_next(&iter))
+        xrt_array_push(arr, xrt_iterator_next(&iter));
+    return arr;
+}
+
 /* String 0-arg method dispatch. */
 static inline XrValue xrt_str_method_0(const char *s, int64_t slen, XrValue recv, int sym) {
     if (sym == XRT_SYM_LENGTH || sym == XRT_SYM_SIZE)
-        return XR_FROM_INT(slen);
+        return XR_FROM_INT(xrt_utf8_scalar_count(s, slen));
     if (sym == XRT_SYM_IS_EMPTY)
         return XR_FROM_BOOL(slen == 0);
     if (sym == XRT_SYM_TOSTRING)
         return recv;
+    if (sym == XRT_SYM_ITERATOR)
+        return xrt_iterator_new(recv, XRT_ITER_VALUES);
+    if (sym == XRT_SYM_ENTRIES_ITERATOR)
+        return xrt_iterator_new(recv, XRT_ITER_PAIRS);
+    if (sym == XRT_SYM_ENTRIES)
+        return xrt_string_entries(recv);
     if (sym == XRT_SYM_TRIM || sym == XRT_SYM_TRIM_START || sym == XRT_SYM_TRIM_END) {
         const char *start = s, *end = s + slen;
         if (sym != XRT_SYM_TRIM_END)
@@ -360,6 +477,21 @@ static inline XrValue xrt_method_0(XrValue recv, int sym) {
     }
     if (recv.tag == XR_TAG_BOOL && sym == XRT_SYM_TOSTRING)
         return xrt_tostring(recv, 0);
+    if (recv.tag == XR_TAG_CHAR) {
+        uint32_t cp = XR_TO_CHAR(recv);
+        if (sym == XRT_SYM_TOSTRING)
+            return xrt_char_to_string(cp);
+        if (sym == XRT_SYM_ORD)
+            return XR_FROM_INT((int64_t) cp);
+        if (sym == XRT_SYM_IS_LETTER)
+            return XR_FROM_BOOL(xrt_char_is_letter(cp));
+        if (sym == XRT_SYM_IS_NUMBER)
+            return XR_FROM_BOOL(xrt_char_is_number(cp));
+        if (sym == XRT_SYM_IS_ALNUM)
+            return XR_FROM_BOOL(xrt_char_is_alnum(cp));
+        if (sym == XRT_SYM_IS_WHITESPACE)
+            return XR_FROM_BOOL(xrt_char_is_whitespace(cp));
+    }
     if (recv.tag == XR_TAG_ENUM && sym == XRT_SYM_TOSTRING)
         return xrt_tostring(recv, 0);
     return (XrValue) {.i = 0, .tag = XR_TAG_NULL};

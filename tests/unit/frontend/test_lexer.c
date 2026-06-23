@@ -204,11 +204,26 @@ TEST(lexer_string_literals) {
     t = scan_single("\"hello\"");
     assert_token(t, TK_LITERAL_STRING, "\"hello\"");
 
-    t = scan_single("'world'");
-    assert_token(t, TK_LITERAL_STRING, "'world'");
-
     t = scan_single("\"\"");
     assert_token(t, TK_LITERAL_STRING, "\"\"");
+}
+
+TEST(lexer_char_literals) {
+    Token t;
+
+    t = scan_single("'a'");
+    assert_token(t, TK_LITERAL_CHAR, "'a'");
+
+    t = scan_single("'\\n'");
+    assert_token(t, TK_LITERAL_CHAR, "'\\n'");
+
+    t = scan_single("'\\u{1F600}'");
+    assert_token(t, TK_LITERAL_CHAR, "'\\u{1F600}'");
+}
+
+TEST(lexer_raw_single_quote_removed) {
+    Token t = scan_single("r'abc'");
+    assert_error_token(t, "r'", "single-quoted raw strings were removed; use r\"...\"");
 }
 
 TEST(lexer_string_escapes) {
@@ -654,6 +669,10 @@ static void run_all_tests(void) {
     RUN_TEST_SUITE("String Literals");
     RUN_TEST(lexer_string_literals);
     RUN_TEST(lexer_string_escapes);
+
+    RUN_TEST_SUITE("Char Literals");
+    RUN_TEST(lexer_char_literals);
+    RUN_TEST(lexer_raw_single_quote_removed);
 
     RUN_TEST_SUITE("Identifiers");
     RUN_TEST(lexer_identifiers);

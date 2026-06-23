@@ -976,6 +976,8 @@ static XrValue ast_field_default_to_value(EmitCtx *ctx, AstNode *init) {
         return xr_bool(true);
     if (init->type == AST_LITERAL_FALSE)
         return xr_bool(false);
+    if (init->type == AST_LITERAL_CHAR)
+        return xr_char(init->as.literal.raw_value.char_val);
     if (init->type == AST_LITERAL_STRING && ctx->isolate) {
         const char *s = init->as.literal.raw_value.string_val;
         if (s) {

@@ -185,6 +185,34 @@ invoke_dispatch:;
         }
     }
 
+    if (XR_IS_CHAR(receiver)) {
+        uint32_t cp = XR_TO_CHAR(receiver);
+        if (nargs == 0 && method_symbol == SYMBOL_TOSTRING) {
+            R(a) = xr_string_value(xr_value_to_string(isolate, receiver));
+            vmbreak;
+        }
+        if (nargs == 0 && method_symbol == SYMBOL_ORD) {
+            R(a) = xr_int((int64_t) cp);
+            vmbreak;
+        }
+        if (nargs == 0 && method_symbol == SYMBOL_IS_LETTER) {
+            R(a) = xr_bool(xr_unicode_is_letter(cp));
+            vmbreak;
+        }
+        if (nargs == 0 && method_symbol == SYMBOL_IS_NUMBER) {
+            R(a) = xr_bool(xr_unicode_is_number(cp));
+            vmbreak;
+        }
+        if (nargs == 0 && method_symbol == SYMBOL_IS_ALNUM) {
+            R(a) = xr_bool(xr_unicode_is_alnum(cp));
+            vmbreak;
+        }
+        if (nargs == 0 && method_symbol == SYMBOL_IS_WHITESPACE) {
+            R(a) = xr_bool(xr_unicode_is_whitespace(cp));
+            vmbreak;
+        }
+    }
+
     /* ══════════════════════════════════════════════════════════════════
      * UNIFIED CLASS-BASED DISPATCH
      *

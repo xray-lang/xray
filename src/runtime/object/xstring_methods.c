@@ -414,7 +414,7 @@ static XrValue m_to_string(XrayIsolate *iso, XrValue self, XrValue *args, int ar
 
 /* === Iteration === */
 
-/* Character iterator: yields each character (length-1 string). */
+/* Character iterator: yields each Unicode scalar as a char value. */
 static XrValue m_iterator(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
     (void) args;
     (void) argc;
@@ -435,7 +435,7 @@ static XrValue m_entries_iterator(XrayIsolate *iso, XrValue self, XrValue *args,
     return iter ? xr_value_from_iterator(iter) : xr_null();
 }
 
-/* Eager entries() returning Array<(int, string)>. Each element is a
+/* Eager entries() returning Array<(int, char)>. Each element is a
  * real (index, char) tuple, matching the static signature and the
  * XI_TUPLE_GET destructuring used by `for ((i, c) in s.entries())`. */
 static XrValue m_entries(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
@@ -448,12 +448,12 @@ static XrValue m_entries(XrayIsolate *iso, XrValue self, XrValue *args, int argc
     if (!out)
         return xr_null();
     for (size_t i = 0; i < n; i++) {
-        XrString *ch = xr_string_char_at_unicode(iso, s, i);
+        int32_t cp = xr_string_char_code_at(s, i);
         XrTuple *pair = xr_tuple_new(coro, 2);
         if (!pair)
             return xr_null();
         xr_tuple_set(pair, 0, xr_int((int64_t) i));
-        xr_tuple_set(pair, 1, ch ? xr_string_value(ch) : xr_null());
+        xr_tuple_set(pair, 1, cp >= 0 ? xr_char((uint32_t) cp) : xr_null());
         xr_array_set(out, (int) i, xr_value_from_tuple(pair));
     }
     out->length = (int32_t) n;

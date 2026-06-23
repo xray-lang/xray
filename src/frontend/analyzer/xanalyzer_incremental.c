@@ -86,6 +86,9 @@ static uint64_t hash_ast_node(AstNode *node, uint64_t hash) {
         case AST_LITERAL_STRING:
             hash = hash_string_into(node->as.literal.raw_value.string_val, hash);
             break;
+        case AST_LITERAL_CHAR:
+            hash = hash_int_into((int64_t) node->as.literal.raw_value.char_val, hash);
+            break;
         case AST_VARIABLE:
             hash = hash_string_into(node->as.variable.name, hash);
             break;

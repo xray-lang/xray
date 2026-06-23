@@ -62,13 +62,26 @@ order: 015
 |--|--|--|
 | `toString()` | `() -> string` | 返回 `"true"` 或 `"false"` |
 
+### 14.4.1 `char` 方法
+
+| 方法 | 签名 | 说明 |
+|--|--|--|
+| `toString()` | `() -> string` | 返回单 Unicode scalar 字符串 |
+| `ord()` | `() -> int` | 返回 Unicode scalar code point |
+| `isLetter()` | `() -> bool` | 是否为 Unicode 字母 |
+| `isNumber()` | `() -> bool` | 是否为 Unicode 数字 |
+| `isAlphanumeric()` | `() -> bool` | 是否为字母或数字 |
+| `isWhitespace()` | `() -> bool` | 是否为空白字符 |
+
+`char` 是独立原始类型，不继承整数方法；需要码点时显式使用 `ord()` 或 `int(c)`。
+
 ### 14.5 `string` 方法
 
 | 成员 | 类型 / 说明 |
 |--|--|
-| `length` | 字符串长度属性 |
-| `charAt(i)` | 返回指定位置字符 |
-| `charCodeAt(i)` | 返回码点 |
+| `length` / `size` | Unicode scalar 数量属性 |
+| `charAt(i)` | 返回指定 Unicode scalar 位置的单 scalar 字符串 |
+| `charCodeAt(i)` | 返回指定 Unicode scalar 位置的码点 |
 | `concat(...others)` | 拼接字符串 |
 | `includes(s)` | 是否包含子串 |
 | `indexOf(s)` / `lastIndexOf(s)` | 查找子串 |
@@ -81,9 +94,11 @@ order: 015
 | `startsWith(s)` / `endsWith(s)` | 前缀/后缀判断 |
 | `padStart(len, pad?)` / `padEnd(len, pad?)` | 填充 |
 | `match(pattern)` | 正则匹配 |
-| `iterator()` / `entriesIterator()` / `entries()` | 迭代协议 |
+| `iterator()` | `() -> Iterator<char>` |
+| `entriesIterator()` | `() -> Iterator<(int, char)>` |
+| `entries()` | `() -> Array<(int, char)>` |
 
-`slice(start, end?)` 使用与切片表达式相同的半开区间和负索引规则：负索引先按 `length + index` 从末尾计数，再夹到 `[0, length]`。
+字符串下标表达式 `s[i]` 返回 `char`；`charAt(i)` 保留 JavaScript 风格的字符串返回值。`slice(start, end?)` 使用与切片表达式相同的半开区间和负索引规则：负索引先按 `length + index` 从末尾计数，再夹到 `[0, length]`。
 
 ### 14.6 `Bytes`
 
@@ -297,13 +312,26 @@ This section is a **method index** for each type (grouped by topic). Concrete si
 |--|--|--|
 | `toString()` | `() -> string` | returns `"true"` or `"false"` |
 
+### 14.4.1 `char` Methods
+
+| Method | Signature | Description |
+|--|--|--|
+| `toString()` | `() -> string` | return a one-Unicode-scalar string |
+| `ord()` | `() -> int` | return the Unicode scalar code point |
+| `isLetter()` | `() -> bool` | whether the scalar is a Unicode letter |
+| `isNumber()` | `() -> bool` | whether the scalar is a Unicode number |
+| `isAlphanumeric()` | `() -> bool` | whether the scalar is a letter or number |
+| `isWhitespace()` | `() -> bool` | whether the scalar is whitespace |
+
+`char` is an independent primitive type and does not inherit integer methods; use `ord()` or `int(c)` explicitly when the code point is needed.
+
 ### 14.5 `string` Methods
 
 | Member | Type / Description |
 |--|--|
-| `length` | string-length property |
-| `charAt(i)` | character at the given index |
-| `charCodeAt(i)` | code point at the given index |
+| `length` / `size` | Unicode scalar count property |
+| `charAt(i)` | one-scalar string at the given Unicode scalar index |
+| `charCodeAt(i)` | code point at the given Unicode scalar index |
 | `concat(...others)` | concatenate strings |
 | `includes(s)` | substring containment test |
 | `indexOf(s)` / `lastIndexOf(s)` | substring search |
@@ -316,9 +344,11 @@ This section is a **method index** for each type (grouped by topic). Concrete si
 | `startsWith(s)` / `endsWith(s)` | prefix/suffix check |
 | `padStart(len, pad?)` / `padEnd(len, pad?)` | padding |
 | `match(pattern)` | regex match |
-| `iterator()` / `entriesIterator()` / `entries()` | iteration protocol |
+| `iterator()` | `() -> Iterator<char>` |
+| `entriesIterator()` | `() -> Iterator<(int, char)>` |
+| `entries()` | `() -> Array<(int, char)>` |
 
-`slice(start, end?)` uses the same half-open range and negative-index rules as slice expressions: a negative index is first converted as `length + index`, then clamped into `[0, length]`.
+The string index expression `s[i]` returns `char`; `charAt(i)` keeps the JavaScript-style string return value. `slice(start, end?)` uses the same half-open range and negative-index rules as slice expressions: a negative index is first converted as `length + index`, then clamped into `[0, length]`.
 
 ### 14.6 `Bytes`
 

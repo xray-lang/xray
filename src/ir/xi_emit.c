@@ -19,6 +19,7 @@
 #include "xi_emit_vm_gen.h"
 #include "xi_opt.h"
 #include "../runtime/value/xtype.h"
+#include "../runtime/value/xvalue.h"
 #include "../runtime/value/xffi_sig.h"
 #include "../runtime/object/xstring.h"
 #include "../runtime/object/xbigint.h"
@@ -324,6 +325,15 @@ XR_FUNC int add_const_float(EmitCtx *ctx, double val) {
     return idx;
 }
 
+XR_FUNC int add_const_char(EmitCtx *ctx, uint32_t cp) {
+    XrValue xv = xr_char(cp);
+    int idx = xr_vm_proto_add_constant(ctx->proto, xv);
+    if (idx < 0 || (uint64_t) idx > MAXARG_Bx) {
+        emit_error(ctx, XI_EMIT_ERR_TOO_MANY_CONSTS);
+    }
+    return idx;
+}
+
 XR_FUNC int add_const_string(EmitCtx *ctx, const char *str) {
     XrValue xv;
     if (ctx->isolate && str) {
@@ -427,6 +437,13 @@ static void emit_const(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
             else
                 emit_inst(ctx, CREATE_ABC(OP_LOADFALSE, dst, 0, 0));
             break;
+        case XR_KIND_CHAR: {
+            int ki = add_const_char(ctx, (uint32_t) v->aux_int);
+            if (ctx->status != XI_EMIT_OK)
+                return;
+            emit_inst(ctx, CREATE_ABx(OP_LOADK, dst, ki));
+            break;
+        }
         case XR_KIND_NULL:
             emit_inst(ctx, CREATE_ABC(OP_LOADNULL, dst, 0, 0));
             break;

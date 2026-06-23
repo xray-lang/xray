@@ -29,7 +29,7 @@ class string {
     // Iteration protocol — iterator() yields each character, while
     // entriesIterator() yields (charIndex, character) tuples. Both
     // are used by for-in lowering and may be called directly.
-    iterator() -> Iterator<string>
-    entriesIterator() -> Iterator<(int, string)>
-    entries() -> Array<(int, string)>
+    iterator() -> Iterator<char>
+    entriesIterator() -> Iterator<(int, char)>
+    entries() -> Array<(int, char)>
 }

@@ -158,7 +158,7 @@ static inline XiInvariantMask xi_stage_invariants(XiStage s) {
  *
  *  Op               aux                  aux_int
  *  ──────────────── ──────────────────── ────────────────────────────
- *  XI_CONST         string: char*        int/bool/null literal value
+ *  XI_CONST         string: char*        int/bool/char/null literal value
  *                   (other: unused)
  *  XI_PARAM         —                    parameter index
  *  XI_LOAD_FIELD    field name or NULL   symbol id or field index
@@ -196,7 +196,7 @@ static inline XiInvariantMask xi_stage_invariants(XiStage s) {
 
 typedef enum {
     /* Constants */
-    XI_CONST = 0, /* constant value (int/float/bool/null/string in aux) */
+    XI_CONST = 0, /* constant value (int/float/bool/char/null/string in aux) */
     XI_PARAM,     /* function parameter (aux_int = param index) */
 
     /* Arithmetic (polymorphic: type determines int vs float) */

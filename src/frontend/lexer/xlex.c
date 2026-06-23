@@ -438,13 +438,17 @@ static Token identifier(Scanner *scanner) {
     while (XR_IS_IDENT(peek(scanner))) {
         advance(scanner);
     }
-    // Detect raw string prefix: single 'r' followed by quote
+    // Detect raw string prefix: single 'r' followed by double quote.
     int len = (int) (scanner->current - scanner->start);
     if (len == 1 && scanner->start[0] == 'r') {
         char next = peek(scanner);
-        if (next == '"' || next == '\'') {
+        if (next == '"') {
             advance(scanner);
             return raw_string_with_quote(scanner, next);
+        }
+        if (next == '\'') {
+            advance(scanner);
+            return error_token(scanner, "single-quoted raw strings were removed; use r\"...\"");
         }
     }
     return make_token(scanner, identifier_type(scanner));
@@ -652,14 +656,35 @@ static bool scan_interpolation_expr(Scanner *scanner) {
     int brace_depth = 1;
     while (!is_at_end(scanner)) {
         char c = peek(scanner);
-        if (c == '"' || c == '\'') {
+        if (c == '"') {
             advance(scanner);
             if (!scan_string_body(scanner, c, false, NULL)) {
                 return false;
             }
             continue;
         }
-        if (c == 'r' && (peek_next(scanner) == '"' || peek_next(scanner) == '\'')) {
+        if (c == '\'') {
+            advance(scanner);
+            while (!is_at_end(scanner)) {
+                char q = peek(scanner);
+                if (q == '\'') {
+                    advance(scanner);
+                    break;
+                }
+                if (q == '\\') {
+                    advance(scanner);
+                    if (!is_at_end(scanner))
+                        advance(scanner);
+                    continue;
+                }
+                if (q == '\n') {
+                    note_scanned_newline(scanner);
+                }
+                advance(scanner);
+            }
+            continue;
+        }
+        if (c == 'r' && peek_next(scanner) == '"') {
             advance(scanner);
             char raw_quote = advance(scanner);
             if (!scan_string_body(scanner, raw_quote, true, NULL)) {
@@ -711,11 +736,29 @@ static Token string(Scanner *scanner) {
     return string_with_quote(scanner, '"');
 }
 
-static Token single_quote_string(Scanner *scanner) {
-    return string_with_quote(scanner, '\'');
+static Token char_literal(Scanner *scanner) {
+    while (!is_at_end(scanner)) {
+        char c = peek(scanner);
+        if (c == '\'') {
+            advance(scanner);
+            return make_token(scanner, TK_LITERAL_CHAR);
+        }
+        if (c == '\n') {
+            return error_token(scanner, "Unterminated char literal");
+        }
+        if (c == '\\') {
+            advance(scanner);
+            if (is_at_end(scanner) || peek(scanner) == '\n')
+                return error_token(scanner, "Unterminated char literal");
+            advance(scanner);
+            continue;
+        }
+        advance(scanner);
+    }
+    return error_token(scanner, "Unterminated char literal");
 }
 
-// Raw string: r"..." or r'...' (no escape processing, but ${} interpolation)
+// Raw string: r"..." (no escape processing, but ${} interpolation)
 static Token raw_string_with_quote(Scanner *scanner, char quote) {
     bool has_interpolation = false;
     if (!scan_string_body(scanner, quote, true, &has_interpolation)) {
@@ -965,7 +1008,7 @@ Token xr_scanner_scan(Scanner *scanner) {
         case '"':
             return string(scanner);
         case '\'':
-            return single_quote_string(scanner);
+            return char_literal(scanner);
         case '`':
             return error_token(
                 scanner, "Backtick strings are deprecated, use \"\" or '' with ${} interpolation");
@@ -1124,6 +1167,7 @@ static const char *token_names[] = {
     [TK_LITERAL_FLOAT] = "LITERAL_FLOAT",
     [TK_LITERAL_BIGINT] = "LITERAL_BIGINT",
     [TK_LITERAL_STRING] = "LITERAL_STRING",
+    [TK_LITERAL_CHAR] = "LITERAL_CHAR",
     [TK_LITERAL_REGEX] = "LITERAL_REGEX",
     [TK_NAME] = "NAME",
     [TK_TEMPLATE_STRING] = "TEMPLATE_STRING",

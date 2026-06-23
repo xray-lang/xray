@@ -34,6 +34,8 @@ XrTypeId xr_type_to_builtin_id(XrType *type) {
         return XR_TID_FLOAT;
     if (XR_TYPE_IS_STRING(type))
         return XR_TID_STRING;
+    if (XR_TYPE_IS_CHAR(type))
+        return XR_TID_CHAR;
     if (XR_TYPE_IS_BOOL(type))
         return XR_TID_BOOL;
     if (XR_TYPE_IS_ARRAY(type))
@@ -263,6 +265,23 @@ XrType *xa_builtin_get_method_return_type(XrayIsolate *X, XrType *container_type
                     t->is_nullable = true;
                 return t;
             }
+            default:
+                break;
+        }
+    }
+
+    // char methods
+    if (XR_TYPE_IS_CHAR(container_type)) {
+        switch (sym) {
+            case SYMBOL_TOSTRING:
+                return xr_type_new_string(NULL);
+            case SYMBOL_ORD:
+                return xr_type_new_int(NULL);
+            case SYMBOL_IS_LETTER:
+            case SYMBOL_IS_NUMBER:
+            case SYMBOL_IS_ALNUM:
+            case SYMBOL_IS_WHITESPACE:
+                return xr_type_new_bool(NULL);
             default:
                 break;
         }
@@ -869,6 +888,8 @@ static XrType *parse_type_str(XrayIsolate *X, const char *s, size_t len) {
         type = xr_type_new_bool(NULL);
     } else if (base_len == 6 && strncmp(s, TYPE_NAME_STRING, 6) == 0) {
         type = xr_type_new_string(NULL);
+    } else if (base_len == 4 && strncmp(s, TYPE_NAME_CHAR, 4) == 0) {
+        type = xr_type_new_char(NULL);
     } else if (base_len == 4 && strncmp(s, TYPE_NAME_VOID, 4) == 0) {
         type = xr_type_new_unit(NULL);
     } else if (base_len == 4 && strncmp(s, TYPE_NAME_JSON, 4) == 0) {

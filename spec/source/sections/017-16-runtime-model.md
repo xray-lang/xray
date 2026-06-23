@@ -24,6 +24,7 @@ Xray 值统一用 `XrValue` 表示。当前实现要求 64 位平台，并采用
 | `int` | `XR_TAG_I64` + 64-bit signed payload |
 | `float` | `XR_TAG_F64` + IEEE-754 double payload |
 | `bool` | `XR_TAG_BOOL` + `0/1` payload |
+| `char` | `XR_TAG_CHAR` + Unicode scalar payload |
 | `null` | `XR_TAG_NULL` + zero payload |
 | `string` | `XR_TAG_PTR` + `XR_TSTRING` + `XrString*` |
 | `Bytes` | `XR_TAG_PTR` + bytes heap object |
@@ -148,6 +149,7 @@ Xray values are uniformly represented as `XrValue`. The current implementation r
 | `int` | `XR_TAG_I64` + 64-bit signed payload |
 | `float` | `XR_TAG_F64` + IEEE-754 double payload |
 | `bool` | `XR_TAG_BOOL` + `0/1` payload |
+| `char` | `XR_TAG_CHAR` + Unicode scalar payload |
 | `null` | `XR_TAG_NULL` + zero payload |
 | `string` | `XR_TAG_PTR` + `XR_TSTRING` + `XrString*` |
 | `Bytes` | `XR_TAG_PTR` + bytes heap object |

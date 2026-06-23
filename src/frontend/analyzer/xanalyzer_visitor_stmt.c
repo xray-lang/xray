@@ -461,8 +461,9 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
     if (sym->is_const && var->initializer) {
         AstNodeType init_t = var->initializer->type;
         if (init_t == AST_LITERAL_INT || init_t == AST_LITERAL_FLOAT ||
-            init_t == AST_LITERAL_STRING || init_t == AST_LITERAL_TRUE ||
-            init_t == AST_LITERAL_FALSE || init_t == AST_LITERAL_NULL) {
+            init_t == AST_LITERAL_CHAR || init_t == AST_LITERAL_STRING ||
+            init_t == AST_LITERAL_TRUE || init_t == AST_LITERAL_FALSE ||
+            init_t == AST_LITERAL_NULL) {
             links->is_const_foldable = true;
         }
     }

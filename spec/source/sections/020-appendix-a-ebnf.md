@@ -35,8 +35,9 @@ Exponent     ::= ('e' | 'E') ('+' | '-')? DecimalDigit+
 BigIntLiteral ::= DecimalInt 'n'
 
 StringLiteral ::= '"' StringChar* '"'
-                | "'" StringChar* "'"
 RawStringLiteral ::= 'r' '"' [^"]* '"'
+CharLiteral ::= "'" CharBody "'"
+CharBody ::= UnicodeScalar | EscapeSeq | '\u{' HexDigit{1,6} '}'
 RegexLiteral ::= '/' RegexBody '/' RegexFlags?
 
 BoolLiteral ::= 'true' | 'false'
@@ -106,7 +107,7 @@ PostfixOp   ::= '(' ArgList? ')'              // call
              |  '!'                            // force unwrap
 
 Primary ::= IntLiteral | FloatLiteral | BigIntLiteral
-         |  StringLiteral | RawStringLiteral | RegexLiteral
+         |  StringLiteral | RawStringLiteral | CharLiteral | RegexLiteral
          |  BoolLiteral | NullLiteral
          |  Identifier
          |  ArrayLit | MapLit | SetLit | ObjectLit
@@ -148,7 +149,7 @@ Pattern ::= LiteralPattern
          |  BindingPattern
          |  MultiPattern
 
-LiteralPattern  ::= IntLiteral | FloatLiteral | StringLiteral | BoolLiteral | NullLiteral
+LiteralPattern  ::= IntLiteral | FloatLiteral | StringLiteral | CharLiteral | BoolLiteral | NullLiteral
 RangePattern    ::= Expression '..' Expression
 EnumPattern     ::= QualifiedIdent VariantPayloadPattern?    // ADT enum payload 解构
 VariantPayloadPattern ::= '(' Pattern (',' Pattern)* ')'
@@ -336,8 +337,9 @@ Exponent     ::= ('e' | 'E') ('+' | '-')? DecimalDigit+
 BigIntLiteral ::= DecimalInt 'n'
 
 StringLiteral ::= '"' StringChar* '"'
-                | "'" StringChar* "'"
 RawStringLiteral ::= 'r' '"' [^"]* '"'
+CharLiteral ::= "'" CharBody "'"
+CharBody ::= UnicodeScalar | EscapeSeq | '\u{' HexDigit{1,6} '}'
 RegexLiteral ::= '/' RegexBody '/' RegexFlags?
 
 BoolLiteral ::= 'true' | 'false'
@@ -407,7 +409,7 @@ PostfixOp   ::= '(' ArgList? ')'              // call
              |  '!'                            // force unwrap
 
 Primary ::= IntLiteral | FloatLiteral | BigIntLiteral
-         |  StringLiteral | RawStringLiteral | RegexLiteral
+         |  StringLiteral | RawStringLiteral | CharLiteral | RegexLiteral
          |  BoolLiteral | NullLiteral
          |  Identifier
          |  ArrayLit | MapLit | SetLit | ObjectLit
@@ -449,7 +451,7 @@ Pattern ::= LiteralPattern
          |  BindingPattern
          |  MultiPattern
 
-LiteralPattern  ::= IntLiteral | FloatLiteral | StringLiteral | BoolLiteral | NullLiteral
+LiteralPattern  ::= IntLiteral | FloatLiteral | StringLiteral | CharLiteral | BoolLiteral | NullLiteral
 RangePattern    ::= Expression '..' Expression
 EnumPattern     ::= QualifiedIdent VariantPayloadPattern?    // ADT enum payload destructuring
 VariantPayloadPattern ::= '(' Pattern (',' Pattern)* ')'

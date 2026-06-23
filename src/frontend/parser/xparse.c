@@ -154,6 +154,7 @@ static ParseRule rules[] = {
     [TK_LITERAL_FLOAT] = {xr_parse_literal, NULL, PREC_NONE},
     [TK_LITERAL_BIGINT] = {xr_parse_literal, NULL, PREC_NONE},
     [TK_LITERAL_STRING] = {xr_parse_literal, NULL, PREC_NONE},
+    [TK_LITERAL_CHAR] = {xr_parse_literal, NULL, PREC_NONE},
     [TK_LITERAL_REGEX] = {xr_parse_regex_literal, NULL, PREC_NONE},
     [TK_TEMPLATE_STRING] = {xr_parse_template_string, NULL, PREC_NONE},
     [TK_RAW_STRING] = {xr_parse_literal, NULL, PREC_NONE},
@@ -165,6 +166,7 @@ static ParseRule rules[] = {
     [TK_FLOAT] = {xr_parse_type_cast, NULL, PREC_NONE},
     [TK_STRING] = {xr_parse_type_cast, NULL, PREC_NONE},
     [TK_BOOL] = {xr_parse_type_cast, NULL, PREC_NONE},
+    [TK_CHAR] = {xr_parse_type_cast, NULL, PREC_NONE},
 
     // Container constructors. Array / Map / Set are no longer keywords;
     // a call like `Array(1, 2, 3)` reaches xr_compile_call_builtin via

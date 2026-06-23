@@ -22,6 +22,7 @@ XR_FUNC AstNode *xr_ast_literal_int(XrayIsolate *X, xr_Integer value, int line);
 XR_FUNC AstNode *xr_ast_literal_float(XrayIsolate *X, xr_Number value, int line);
 XR_FUNC AstNode *xr_ast_literal_bigint(XrayIsolate *X, const char *value, int line);
 XR_FUNC AstNode *xr_ast_literal_string(XrayIsolate *X, const char *value, int line);
+XR_FUNC AstNode *xr_ast_literal_char(XrayIsolate *X, uint32_t value, int line);
 XR_FUNC AstNode *xr_ast_literal_regex(XrayIsolate *X, const char *pattern, const char *flags,
                                       int line);
 XR_FUNC AstNode *xr_ast_literal_null(XrayIsolate *X, int line);

@@ -135,8 +135,8 @@ static const char xr_native_def_string[] =
     "string\n    match(pattern: string) -> Array<string>?\n    // Iteration protocol — iterator() "
     "yields each character, while\n    // entriesIterator() yields (charIndex, character) tuples. "
     "Both\n    // are used by for-in lowering and may be called directly.\n    iterator() -> "
-    "Iterator<string>\n    entriesIterator() -> Iterator<(int, string)>\n    entries() -> "
-    "Array<(int, string)>\n}\n";
+    "Iterator<char>\n    entriesIterator() -> Iterator<(int, char)>\n    entries() -> Array<(int, "
+    "char)>\n}\n";
 
 static const char xr_native_def_stringbuilder[] =
     "// Built-in StringBuilder type — implementation in "

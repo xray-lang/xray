@@ -57,6 +57,8 @@ static const char *mono_type_display_name(XrTypeRef *t) {
             return "float";
         case XR_TREF_BOOL:
             return "bool";
+        case XR_TREF_CHAR:
+            return "char";
         case XR_TREF_STRING:
             return "string";
         case XR_TREF_NULL:
@@ -89,6 +91,8 @@ const char *xr_mono_type_tag(XrTypeRef *t) {
             return "f64";
         case XR_TREF_BOOL:
             return "bool";
+        case XR_TREF_CHAR:
+            return "char";
         case XR_TREF_STRING:
             return "str";
         case XR_TREF_NULL:
@@ -281,6 +285,7 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
         // === Literals ===
         case AST_LITERAL_INT:
         case AST_LITERAL_FLOAT:
+        case AST_LITERAL_CHAR:
         case AST_LITERAL_TRUE:
         case AST_LITERAL_FALSE:
         case AST_LITERAL_NULL:

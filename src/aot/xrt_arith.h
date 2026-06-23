@@ -171,6 +171,13 @@ static void xrt_print_value(XrValue v, int depth) {
         case XR_TAG_BOOL:
             printf("%s", v.i ? "true" : "false");
             return;
+        case XR_TAG_CHAR: {
+            char buf[4];
+            int n = xrt_char_utf8_encode(XR_TO_CHAR(v), buf);
+            if (n > 0)
+                fwrite(buf, 1, (size_t) n, stdout);
+            return;
+        }
         case XR_TAG_NULL:
             printf("null");
             return;
@@ -310,6 +317,8 @@ static inline int64_t xrt_typeof_id(XrValue v) {
             return 11; /* XR_TID_FLOAT */
         case XR_TAG_BOOL:
             return 1; /* XR_TID_BOOL */
+        case XR_TAG_CHAR:
+            return 40; /* XR_TID_CHAR */
         case XR_TAG_NULL:
             return 0; /* XR_TID_NULL */
         case XR_TAG_STR:
@@ -337,6 +346,7 @@ static inline XrValue xrt_typeof_str(XrValue v) {
     XRT_STR_LIT_DEF(xs_int, "int");
     XRT_STR_LIT_DEF(xs_float, "float");
     XRT_STR_LIT_DEF(xs_bool, "bool");
+    XRT_STR_LIT_DEF(xs_char, "char");
     XRT_STR_LIT_DEF(xs_null, "null");
     XRT_STR_LIT_DEF(xs_string, "string");
     XRT_STR_LIT_DEF(xs_array, "Array");
@@ -354,6 +364,8 @@ static inline XrValue xrt_typeof_str(XrValue v) {
             return xr_str_lit(&xs_float);
         case XR_TAG_BOOL:
             return xr_str_lit(&xs_bool);
+        case XR_TAG_CHAR:
+            return xr_str_lit(&xs_char);
         case XR_TAG_NULL:
             return xr_str_lit(&xs_null);
         case XR_TAG_STR:

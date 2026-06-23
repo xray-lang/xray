@@ -142,6 +142,50 @@ static inline int xrt_utf8_char_size(unsigned char lead) {
     return 1;
 }
 
+static inline int xrt_utf8_decode_scalar(const unsigned char *p, const unsigned char *end,
+                                         uint32_t *out_cp, int *out_size) {
+    if (!p || p >= end)
+        return 0;
+    unsigned char b0 = p[0];
+    uint32_t cp = 0;
+    int size = 0;
+    if ((b0 & 0x80u) == 0) {
+        cp = b0;
+        size = 1;
+    } else if ((b0 & 0xE0u) == 0xC0u) {
+        if (p + 2 > end || (p[1] & 0xC0u) != 0x80u)
+            return 0;
+        cp = ((uint32_t) (b0 & 0x1Fu) << 6) | (uint32_t) (p[1] & 0x3Fu);
+        if (cp < 0x80u)
+            return 0;
+        size = 2;
+    } else if ((b0 & 0xF0u) == 0xE0u) {
+        if (p + 3 > end || (p[1] & 0xC0u) != 0x80u || (p[2] & 0xC0u) != 0x80u)
+            return 0;
+        cp = ((uint32_t) (b0 & 0x0Fu) << 12) | ((uint32_t) (p[1] & 0x3Fu) << 6) |
+             (uint32_t) (p[2] & 0x3Fu);
+        if (cp < 0x800u || (cp >= 0xD800u && cp <= 0xDFFFu))
+            return 0;
+        size = 3;
+    } else if ((b0 & 0xF8u) == 0xF0u) {
+        if (p + 4 > end || (p[1] & 0xC0u) != 0x80u || (p[2] & 0xC0u) != 0x80u ||
+            (p[3] & 0xC0u) != 0x80u)
+            return 0;
+        cp = ((uint32_t) (b0 & 0x07u) << 18) | ((uint32_t) (p[1] & 0x3Fu) << 12) |
+             ((uint32_t) (p[2] & 0x3Fu) << 6) | (uint32_t) (p[3] & 0x3Fu);
+        if (cp < 0x10000u || cp > 0x10FFFFu)
+            return 0;
+        size = 4;
+    } else {
+        return 0;
+    }
+    if (out_cp)
+        *out_cp = cp;
+    if (out_size)
+        *out_size = size;
+    return 1;
+}
+
 static inline XrValue xrt_string_index_get(XrValue obj, int64_t target) {
     if (!XR_IS_STR(obj) || target < 0)
         return XR_NULL_VAL;
@@ -150,13 +194,16 @@ static inline XrValue xrt_string_index_get(XrValue obj, int64_t target) {
     const unsigned char *p = (const unsigned char *) s;
     const unsigned char *end = p + slen;
     for (int64_t char_index = 0; p < end; char_index++) {
-        int size = xrt_utf8_char_size(*p);
-        if (p + size > end)
-            size = 1;
+        uint32_t cp = 0;
+        int size = 0;
+        int valid = xrt_utf8_decode_scalar(p, end, &cp, &size);
+        if (!valid) {
+            size = xrt_utf8_char_size(*p);
+            if (p + size > end)
+                size = 1;
+        }
         if (char_index == target) {
-            XrValue sv = xrt_str_alloc((size_t) size);
-            memcpy(xr_str_buf(sv), p, (size_t) size);
-            return sv;
+            return valid ? XR_FROM_CHAR(cp) : XR_NULL_VAL;
         }
         p += size;
     }

@@ -196,6 +196,9 @@ vmcase(OP_TOINT) {
         R(a) = val;
     } else if (XR_IS_FLOAT(val)) {
         R(a) = xr_int((xr_Integer) XR_TO_FLOAT(val));
+    } else if (XR_IS_CHAR(val)) {
+        /* int(char) yields the Unicode codepoint. */
+        R(a) = xr_int((xr_Integer) XR_TO_CHAR(val));
     } else if (XR_IS_STRING(val)) {
         XrString *str = XR_TO_STRING(val);
         const char *p = str->data;
@@ -364,6 +367,28 @@ vmcase(OP_CHR) {
         } else {
             R(a) = xr_null();
         }
+    } else {
+        R(a) = xr_null();
+    }
+    vmbreak;
+}
+
+vmcase(OP_TOCHAR) {
+    /* char(x): construct a Unicode scalar char.
+     *   - char(char) is identity.
+     *   - char(int) validates the scalar range (excluding surrogates).
+     *   - invalid codepoint / non-int yields null (caller may guard). */
+    int a = GETARG_A(i);
+    int b = GETARG_B(i);
+    XrValue val = R(b);
+    if (XR_IS_CHAR(val)) {
+        R(a) = val;
+    } else if (XR_IS_INT(val)) {
+        xr_Integer cp = XR_TO_INT(val);
+        if (cp >= 0 && xr_unicode_is_scalar((uint32_t) cp))
+            R(a) = xr_char((uint32_t) cp);
+        else
+            R(a) = xr_null();
     } else {
         R(a) = xr_null();
     }

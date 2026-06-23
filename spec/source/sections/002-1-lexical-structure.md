@@ -8,7 +8,7 @@ order: 002
 
 ## 1. 词法结构 (Lexical Structure)
 
-> 真值源：`src/frontend/lexer/xlex.h`（token 枚举）、`src/frontend/lexer/xkeywords.def`（关键字表，62 条）、`src/frontend/lexer/xlex.c`（扫描器实现）。
+> 真值源：`src/frontend/lexer/xlex.h`（token 枚举）、`src/frontend/lexer/xkeywords.def`（关键字表，63 条）、`src/frontend/lexer/xlex.c`（扫描器实现）。
 
 ### 1.1 字符编码
 
@@ -59,7 +59,7 @@ IdentCont  ::= IdentStart | '0'..'9'
 
 ### 1.5 关键字
 
-xray 共 **62 个保留关键字**，源码真值表见 `src/frontend/lexer/xkeywords.def`。关键字按用途分组：
+xray 共 **63 个保留关键字**，源码真值表见 `src/frontend/lexer/xkeywords.def`。关键字按用途分组：
 
 #### 1.5.1 声明与流程控制
 
@@ -97,7 +97,7 @@ xray 共 **62 个保留关键字**，源码真值表见 `src/frontend/lexer/xkey
 
 #### 1.5.3 错误处理
 
-`try` `catch` `panic` `throw` `defer`
+`try` `catch` `throw` `defer`
 
 #### 1.5.4 模块系统
 
@@ -105,12 +105,12 @@ xray 共 **62 个保留关键字**，源码真值表见 `src/frontend/lexer/xkey
 
 #### 1.5.5 协程与并发
 
-`go` `await` `select` `defer` `scope`
+`go` `await` `select` `defer` `scope` `unsafe`
 
 #### 1.5.6 类型名（保留）
 
 `int` `int8` `int16` `int32` `int64` `uint8` `uint16` `uint32` `uint64`
-`float` `float32` `float64` `bool` `string`
+`float` `float32` `float64` `bool` `string` `char`
 
 `unknown` 是编译器内部类型格子的显示名，不是词法关键字；用户代码中可作为普通标识符使用。
 
@@ -137,6 +137,7 @@ xray 共 **62 个保留关键字**，源码真值表见 `src/frontend/lexer/xkey
 | `linked` | `linked go` / `linked scope` 修饰符 |
 | `supervisor` | `supervisor scope` 修饰符 |
 | `after` | `select` 的超时分支 (`after 1000 -> ...`) |
+| `panic` | `catch panic (p)` 的 panic 通道边界 |
 
 ### 1.6 字面量
 
@@ -208,13 +209,13 @@ null
 
 #### 1.6.5 字符串字面量
 
-xray 支持两类字符串字面量：**带转义** 和 **原始字符串**。两者均使用双引号或单引号，且均支持 `${...}` 插值。反引号字符串不属于当前语法——lexer 直接报错。
+xray 支持两类字符串字面量：**带转义** 和 **原始字符串**。字符串只使用双引号；单引号专用于 `char` 字面量。反引号字符串不属于当前语法——lexer 直接报错。
 
-##### 普通字符串（双引号 / 单引号）
+##### 普通字符串（双引号）
 
 ```ebnf
-StringLiteral ::= '"' StrChar* '"' | "'" StrChar* "'"
-StrChar ::= 任何非引号、非反斜杠、非换行符
+StringLiteral ::= '"' StrChar* '"'
+StrChar ::= 任何非双引号、非反斜杠、非换行符
           | EscapeSeq
           | Interpolation
 EscapeSeq ::= '\' ('"' | "'" | '\\' | 'n' | 't' | 'r' | '0'
@@ -224,16 +225,14 @@ EscapeSeq ::= '\' ('"' | "'" | '\\' | 'n' | 't' | 'r' | '0'
 Interpolation ::= '${' Expression '}'
 ```
 
-- 双引号 / 单引号**完全等价**——都支持转义、`${...}` 插值。
 - 字符串可跨行；行结尾包含在字符串中。
 - 包含插值的字面量在 lexer 内部产出 `TK_TEMPLATE_STRING`；不含插值的产出 `TK_LITERAL_STRING`。
-- `${...}` 内按表达式模式扫描：大括号按深度配对，内部字符串 / raw string 会被整体跳过，因此允许同种引号嵌套，例如 `"${m["k"]}"` 与 `"${"a}b"}"`。`char` 核心类型落地后，表达式内的 char 字面量也按同一规则整体跳过。
+- `${...}` 内按表达式模式扫描：大括号按深度配对，内部字符串 / raw string / char 字面量会被整体跳过，因此允许同种引号嵌套，例如 `"${m["k"]}"` 与 `"${"a}b"}"`。
 
 ```xray
 "hello"
-'world'
 "Hello, ${name}! ${1 + 2}"
-'tab\there\nnewline'
+"tab\there\nnewline"
 "\u4F60\u597D"        // "你好"
 "\u{1F600}"            // emoji
 ```
@@ -243,24 +242,44 @@ Interpolation ::= '${' Expression '}'
 ##### 原始字符串（`r` 前缀）
 
 ```ebnf
-RawString ::= 'r' ('"' RawChar* '"' | "'" RawChar* "'")
-RawChar ::= 任何非引号字符（包括 `\`，不做转义处理）
+RawString ::= 'r' '"' RawChar* '"'
+RawChar ::= 任何非双引号字符（包括 `\`，不做转义处理）
 ```
 
 - **不**处理任何转义（`\n`、`\t` 等保持原样）。
 - 仍然支持 `${...}` 插值。
-- 标识符 `r` 单独使用时仍为普通标识符（`TK_NAME`），仅当后紧接引号才识别为原始字符串前缀。
+- 标识符 `r` 单独使用时仍为普通标识符（`TK_NAME`），仅当后紧接双引号才识别为原始字符串前缀。
+- `r'...'` 已移除；单引号不参与 raw string。
 
 ```xray
 r"C:\path\to\file"          // 字面量包含两个反斜杠
-r'C:\Users\${USER}'         // 反斜杠不转义，但 ${USER} 仍插值
+r"C:\Users\${USER}"         // 反斜杠不转义，但 ${USER} 仍插值
+```
+
+#### 1.6.6 `char` 字面量
+
+```ebnf
+CharLiteral ::= "'" CharBody "'"
+CharBody ::= UnicodeScalar | EscapeSeq | '\u{' HexDigit{1,6} '}'
+```
+
+- `'a'` 的类型是 `char`，表示一个 Unicode scalar value。
+- 合法范围为 `U+0000..U+10FFFF`，排除 surrogate `U+D800..U+DFFF`。
+- 字面量必须恰好包含一个 scalar；`''`、`'ab'`、`'🇨🇳'`、`'é'` 均编译失败。
+- 支持 `'\n'`、`'\t'`、`'\r'`、`'\0'`、`'\''`、`'\\'`、`'\u{1F600}'` 等转义。
+- char 字面量不支持 `${...}` 插值。
+
+```xray
+let a: char = 'a'
+let zh: char = '中'
+let smile: char = '\u{1F600}'
 ```
 
 ##### 反引号字符串（非法）
 
-源码 lexer 显式拒绝反引号字符串。如需模板，使用普通双 / 单引号 + `${...}`。
+源码 lexer 显式拒绝反引号字符串。如需模板，使用普通双引号 + `${...}`。
 
-#### 1.6.6 正则字面量
+#### 1.6.7 正则字面量
 
 ```ebnf
 RegexLiteral ::= '/' RegexBody '/' RegexFlag*
@@ -374,7 +393,7 @@ let primes = #[2, 3, 5, 7]
 
 ## 1. Lexical Structure
 
-> Source of truth: `src/frontend/lexer/xlex.h` (token enum), `src/frontend/lexer/xkeywords.def` (keyword table, 62 entries), `src/frontend/lexer/xlex.c` (scanner implementation).
+> Source of truth: `src/frontend/lexer/xlex.h` (token enum), `src/frontend/lexer/xkeywords.def` (keyword table, 63 entries), `src/frontend/lexer/xlex.c` (scanner implementation).
 
 ### 1.1 Character Encoding
 
@@ -425,7 +444,7 @@ The character `_` is a **dedicated wildcard token**, not an ordinary identifier:
 
 ### 1.5 Keywords
 
-Xray has **62 reserved keywords** in total; the authoritative source-of-truth table is in `src/frontend/lexer/xkeywords.def`. Keywords are grouped by purpose:
+Xray has **63 reserved keywords** in total; the authoritative source-of-truth table is in `src/frontend/lexer/xkeywords.def`. Keywords are grouped by purpose:
 
 #### 1.5.1 Declarations and Control Flow
 
@@ -463,7 +482,7 @@ Xray has **62 reserved keywords** in total; the authoritative source-of-truth ta
 
 #### 1.5.3 Error Handling
 
-`try` `catch` `panic` `throw` `defer`
+`try` `catch` `throw` `defer`
 
 #### 1.5.4 Module System
 
@@ -471,12 +490,12 @@ Xray has **62 reserved keywords** in total; the authoritative source-of-truth ta
 
 #### 1.5.5 Coroutines and Concurrency
 
-`go` `await` `select` `defer` `scope`
+`go` `await` `select` `defer` `scope` `unsafe`
 
 #### 1.5.6 Type Names (reserved)
 
 `int` `int8` `int16` `int32` `int64` `uint8` `uint16` `uint32` `uint64`
-`float` `float32` `float64` `bool` `string`
+`float` `float32` `float64` `bool` `string` `char`
 
 `unknown` is the display name for a compiler-internal type lattice value, not a lexical keyword; user code may use it as an ordinary identifier.
 
@@ -503,6 +522,7 @@ These are not in the lexer keyword table; the parser recognizes them by position
 | `linked` | `linked go` / `linked scope` modifier |
 | `supervisor` | `supervisor scope` modifier |
 | `after` | `select` timeout arm (`after 1000 -> ...`) |
+| `panic` | panic-channel boundary in `catch panic (p)` |
 
 ### 1.6 Literals
 
@@ -574,13 +594,13 @@ null
 
 #### 1.6.5 String Literals
 
-Xray supports two flavors of string literals: **escaped** and **raw**. Both can be quoted with single or double quotes, and both support `${...}` interpolation. Backtick strings are not part of the current grammar — the lexer rejects them.
+Xray supports two flavors of string literals: **escaped** and **raw**. Strings use double quotes only; single quotes are reserved for `char` literals. Backtick strings are not part of the current grammar — the lexer rejects them.
 
-##### Plain strings (double / single quotes)
+##### Plain strings (double quotes)
 
 ```ebnf
-StringLiteral ::= '"' StrChar* '"' | "'" StrChar* "'"
-StrChar ::= any character that is not a quote, backslash, or newline
+StringLiteral ::= '"' StrChar* '"'
+StrChar ::= any character that is not a double quote, backslash, or newline
           | EscapeSeq
           | Interpolation
 EscapeSeq ::= '\' ('"' | "'" | '\\' | 'n' | 't' | 'r' | '0'
@@ -590,16 +610,14 @@ EscapeSeq ::= '\' ('"' | "'" | '\\' | 'n' | 't' | 'r' | '0'
 Interpolation ::= '${' Expression '}'
 ```
 
-- Double and single quotes are **fully equivalent** — both support escapes and `${...}` interpolation.
 - Strings may span multiple lines; line breaks are part of the string.
 - Literals containing interpolation produce `TK_TEMPLATE_STRING` internally; literals without interpolation produce `TK_LITERAL_STRING`.
-- `${...}` is scanned in expression mode: braces are matched by depth, and nested strings / raw strings are skipped as a unit, so same-quote nesting is legal, for example `"${m["k"]}"` and `"${"a}b"}"`. Once the `char` core type lands, char literals inside interpolation are skipped by the same rule.
+- `${...}` is scanned in expression mode: braces are matched by depth, and nested strings / raw strings / char literals are skipped as a unit, so same-quote nesting is legal, for example `"${m["k"]}"` and `"${"a}b"}"`.
 
 ```xray
 "hello"
-'world'
 "Hello, ${name}! ${1 + 2}"
-'tab\there\nnewline'
+"tab\there\nnewline"
 "\u4F60\u597D"        // "你好"
 "\u{1F600}"            // emoji
 ```
@@ -609,24 +627,44 @@ Interpolation expressions may themselves contain nested interpolation; `}` chara
 ##### Raw strings (`r` prefix)
 
 ```ebnf
-RawString ::= 'r' ('"' RawChar* '"' | "'" RawChar* "'")
-RawChar ::= any character except the closing quote (including `\`, which is not processed)
+RawString ::= 'r' '"' RawChar* '"'
+RawChar ::= any character except double quote (including `\`, which is not processed)
 ```
 
 - **No** escape processing (`\n`, `\t`, etc. are kept as-is).
 - `${...}` interpolation is still supported.
-- The identifier `r` standing alone is still a regular identifier (`TK_NAME`); it is recognized as a raw-string prefix only when immediately followed by a quote.
+- The identifier `r` standing alone is still a regular identifier (`TK_NAME`); it is recognized as a raw-string prefix only when immediately followed by a double quote.
+- `r'...'` has been removed; single quotes do not participate in raw strings.
 
 ```xray
 r"C:\path\to\file"          // literal contains two backslashes
-r'C:\Users\${USER}'         // backslash is not escaped, but ${USER} still interpolates
+r"C:\Users\${USER}"         // backslash is not escaped, but ${USER} still interpolates
+```
+
+#### 1.6.6 `char` Literals
+
+```ebnf
+CharLiteral ::= "'" CharBody "'"
+CharBody ::= UnicodeScalar | EscapeSeq | '\u{' HexDigit{1,6} '}'
+```
+
+- `'a'` has type `char` and represents one Unicode scalar value.
+- The valid range is `U+0000..U+10FFFF`, excluding surrogates `U+D800..U+DFFF`.
+- A literal must contain exactly one scalar; `''`, `'ab'`, `'🇨🇳'`, and `'é'` are compile errors.
+- Escapes such as `'\n'`, `'\t'`, `'\r'`, `'\0'`, `'\''`, `'\\'`, and `'\u{1F600}'` are supported.
+- Char literals do not support `${...}` interpolation.
+
+```xray
+let a: char = 'a'
+let zh: char = '中'
+let smile: char = '\u{1F600}'
 ```
 
 ##### Backtick strings (illegal)
 
-The lexer explicitly rejects backtick strings. For templates, use plain double / single quotes plus `${...}`.
+The lexer explicitly rejects backtick strings. For templates, use plain double quotes plus `${...}`.
 
-#### 1.6.6 Regex Literals
+#### 1.6.7 Regex Literals
 
 ```ebnf
 RegexLiteral ::= '/' RegexBody '/' RegexFlag*

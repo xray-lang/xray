@@ -342,11 +342,11 @@ XrValue xr_iterator_next(XrIterator *iter) {
         XrString *s = iter->source.string;
         if (!s || iter->scan_index >= iter->total_count)
             return xr_null();
-        XrayIsolate *X = (XrayIsolate *) iter->context;
         uint32_t idx = iter->scan_index++;
-        XrString *ch = xr_string_char_at_unicode(X, s, (size_t) idx);
+        int32_t cp = xr_string_char_code_at(s, (size_t) idx);
+        XrValue ch = cp >= 0 ? xr_char((uint32_t) cp) : xr_null();
         if (iter->mode == XR_ITER_MODE_VALUES) {
-            return ch ? xr_string_value(ch) : xr_null();
+            return ch;
         }
         if (iter->mode == XR_ITER_MODE_KEYS) {
             return xr_int((int64_t) idx);
@@ -355,7 +355,7 @@ XrValue xr_iterator_next(XrIterator *iter) {
         if (!pair)
             return xr_null();
         xr_tuple_set(pair, 0, xr_int((int64_t) idx));
-        xr_tuple_set(pair, 1, ch ? xr_string_value(ch) : xr_null());
+        xr_tuple_set(pair, 1, ch);
         return xr_value_from_tuple(pair);
     }
 

@@ -193,6 +193,7 @@ XR_FUNC XiEmitReg alloc_reg_fresh(EmitCtx *ctx, const XiValue *v);
 XR_FUNC void try_free_args(EmitCtx *ctx, const XiValue *v);
 XR_FUNC int add_const_int(EmitCtx *ctx, int64_t val);
 XR_FUNC int add_const_float(EmitCtx *ctx, double val);
+XR_FUNC int add_const_char(EmitCtx *ctx, uint32_t cp);
 XR_FUNC int add_const_string(EmitCtx *ctx, const char *str);
 XR_FUNC int add_symbol(EmitCtx *ctx, const char *name);
 
