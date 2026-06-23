@@ -411,18 +411,22 @@ static const XlspSymbolInfo g_xlsp_stdlib_url_symbols[] = {
 // ws module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_ws_symbols[] = {
     {"connect", XLSP_SYM_FUNCTION, "fn(url: string, options?: Json): WsConn?", "Connect to a WebSocket server", NULL, 0},
-    {"send", XLSP_SYM_FUNCTION, "fn(conn: WsConn, data: string, binary?: bool): bool", "Send data over WebSocket connection", NULL, 0},
-    {"recv", XLSP_SYM_FUNCTION, "fn(conn: WsConn, timeout?: int): WsMessage?", "Receive data from WebSocket connection", NULL, 0},
-    {"close", XLSP_SYM_FUNCTION, "fn(conn: WsConn, code?: int, reason?: string?): bool", "Close a WebSocket connection", NULL, 0},
+    {"send", XLSP_SYM_FUNCTION, "fn(conn: WsConn, data: string, binary?: bool?): bool", "Send data over WebSocket connection", NULL, 0},
+    {"recv", XLSP_SYM_FUNCTION, "fn(conn: WsConn, timeout?: int?): WsMessage?", "Receive data from WebSocket connection", NULL, 0},
+    {"close", XLSP_SYM_FUNCTION, "fn(conn: WsConn, code?: int?, reason?: string?): bool", "Close a WebSocket connection", NULL, 0},
     {"ping", XLSP_SYM_FUNCTION, "fn(conn: WsConn): bool", "Send a ping frame", NULL, 0},
     {"state", XLSP_SYM_FUNCTION, "fn(conn: WsConn): string", "Get connection state", NULL, 0},
     {"isOpen", XLSP_SYM_FUNCTION, "fn(conn: WsConn): bool", "Check if connection is open", NULL, 0},
-    {"recvData", XLSP_SYM_FUNCTION, "fn(conn: WsConn, timeout?: int): string?", "High-performance recv returning data string directly (no Json wrapper)", NULL, 0},
-    {"echoServe", XLSP_SYM_FUNCTION, "fn(port: int): bool", "Pure C echo server with zero VM/GC overhead per message", NULL, 0},
+    {"recvData", XLSP_SYM_FUNCTION, "fn(conn: WsConn, timeout?: int?): string?", "High-performance recv returning data string directly (no Json wrapper)", NULL, 0},
+    {"sendData", XLSP_SYM_FUNCTION, "fn(conn: WsConn, data: string, binary?: bool?): bool", "Send data over WebSocket connection", NULL, 0},
+    {"serve", XLSP_SYM_FUNCTION, "fn(port: int, handler: fn(conn: WsConn): ()): bool", "Start WebSocket server", NULL, 0},
+    {"echoServe", XLSP_SYM_FUNCTION, "fn(port: int): bool", "Pure C echo server with zero VM allocation overhead per message", NULL, 0},
+    {"stopServer", XLSP_SYM_FUNCTION, "fn(): ()", "Stop the WebSocket server", NULL, 0},
+    {"isServerRunning", XLSP_SYM_FUNCTION, "fn(): bool", "Check if the WebSocket server is running", NULL, 0},
     {"WsConn", XLSP_SYM_CLASS, "type WsConn", "Native handle type", NULL, 0},
     {"WsMessage", XLSP_SYM_CLASS, "type WsMessage", "Native handle type", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_WS_SYMBOL_COUNT 11
+#define GEN_XLSP_STDLIB_WS_SYMBOL_COUNT 15
 
 // xml module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_xml_symbols[] = {

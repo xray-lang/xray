@@ -1879,7 +1879,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
     },
     {
         .name = "close",
-        .signature = "(conn: WsConn, code?: int, reason?: string?): bool",
+        .signature = "(conn: WsConn, code?: int?, reason?: string?): bool",
         .summary = "Close a WebSocket connection",
     },
     {
@@ -1890,12 +1890,17 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
     {
         .name = "echoServe",
         .signature = "(port: int): bool",
-        .summary = "Pure C echo server with zero VM/GC overhead per message",
+        .summary = "Pure C echo server with zero VM allocation overhead per message",
     },
     {
         .name = "isOpen",
         .signature = "(conn: WsConn): bool",
         .summary = "Check if connection is open",
+    },
+    {
+        .name = "isServerRunning",
+        .signature = "(): bool",
+        .summary = "Check if the WebSocket server is running",
     },
     {
         .name = "ping",
@@ -1904,23 +1909,38 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
     },
     {
         .name = "recv",
-        .signature = "(conn: WsConn, timeout?: int): WsMessage?",
+        .signature = "(conn: WsConn, timeout?: int?): WsMessage?",
         .summary = "Receive data from WebSocket connection",
     },
     {
         .name = "recvData",
-        .signature = "(conn: WsConn, timeout?: int): string?",
+        .signature = "(conn: WsConn, timeout?: int?): string?",
         .summary = "High-performance recv returning data string directly (no Json wrapper)",
     },
     {
         .name = "send",
-        .signature = "(conn: WsConn, data: string, binary?: bool): bool",
+        .signature = "(conn: WsConn, data: string, binary?: bool?): bool",
         .summary = "Send data over WebSocket connection",
+    },
+    {
+        .name = "sendData",
+        .signature = "(conn: WsConn, data: string, binary?: bool?): bool",
+        .summary = "Send data over WebSocket connection",
+    },
+    {
+        .name = "serve",
+        .signature = "(port: int, handler: fn(conn: WsConn): ()): bool",
+        .summary = "Start WebSocket server",
     },
     {
         .name = "state",
         .signature = "(conn: WsConn): string",
         .summary = "Get connection state",
+    },
+    {
+        .name = "stopServer",
+        .signature = "(): ()",
+        .summary = "Stop the WebSocket server",
     },
 };
 
@@ -4114,15 +4134,19 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `WsMessage.binary` | `const bool` | Handle field |\n"
             "| `WsMessage.data` | `const string` | Handle field |\n"
             "| `WsMessage.error` | `const string` | Handle field |\n"
-            "| `ws.close` | `(conn: WsConn, code?: int, reason?: string?): bool` | Close a WebSocket connection |\n"
+            "| `ws.close` | `(conn: WsConn, code?: int?, reason?: string?): bool` | Close a WebSocket connection |\n"
             "| `ws.connect` | `(url: string, options?: Json): WsConn?` | Connect to a WebSocket server |\n"
-            "| `ws.echoServe` | `(port: int): bool` | Pure C echo server with zero VM/GC overhead per message |\n"
+            "| `ws.echoServe` | `(port: int): bool` | Pure C echo server with zero VM allocation overhead per message |\n"
             "| `ws.isOpen` | `(conn: WsConn): bool` | Check if connection is open |\n"
+            "| `ws.isServerRunning` | `(): bool` | Check if the WebSocket server is running |\n"
             "| `ws.ping` | `(conn: WsConn): bool` | Send a ping frame |\n"
-            "| `ws.recv` | `(conn: WsConn, timeout?: int): WsMessage?` | Receive data from WebSocket connection |\n"
-            "| `ws.recvData` | `(conn: WsConn, timeout?: int): string?` | High-performance recv returning data string directly (no Json wrapper) |\n"
-            "| `ws.send` | `(conn: WsConn, data: string, binary?: bool): bool` | Send data over WebSocket connection |\n"
+            "| `ws.recv` | `(conn: WsConn, timeout?: int?): WsMessage?` | Receive data from WebSocket connection |\n"
+            "| `ws.recvData` | `(conn: WsConn, timeout?: int?): string?` | High-performance recv returning data string directly (no Json wrapper) |\n"
+            "| `ws.send` | `(conn: WsConn, data: string, binary?: bool?): bool` | Send data over WebSocket connection |\n"
+            "| `ws.sendData` | `(conn: WsConn, data: string, binary?: bool?): bool` | Send data over WebSocket connection |\n"
+            "| `ws.serve` | `(port: int, handler: fn(conn: WsConn): ()): bool` | Start WebSocket server |\n"
             "| `ws.state` | `(conn: WsConn): string` | Get connection state |\n"
+            "| `ws.stopServer` | `(): ()` | Stop the WebSocket server |\n"
             "",
         .symbols = _symbols_ws,
         .symbol_count = (int)(sizeof(_symbols_ws) / sizeof(_symbols_ws[0])),
