@@ -18,6 +18,7 @@
 #include "../../src/base/xmalloc.h"
 #include "../../src/base/xchecks.h"
 #include "../../src/runtime/object/xjson.h"
+#include "../../src/shared/xr_os_core.h"
 #include "../../src/coro/xyieldable.h"  // xr_yield_for_timeout
 #include "../../src/vm/xvm.h"           // xr_vm_yieldable_cfunction_new
 #include <stdio.h>
@@ -246,25 +247,16 @@ static XrValue os_hostname(XrVMRuntime *X, XrValue *args, int argc) {
 }
 
 // tmpdir() - Get temporary directory
+static const char *os_core_getenv(void *ctx, const char *name) {
+    (void) ctx;
+    return getenv(name);
+}
+
 static XrValue os_tmpdir(XrVMRuntime *X, XrValue *args, int argc) {
     (void) args;
     (void) argc;
 
-    // Try to get from environment variables
-    const char *tmpdir = getenv("TMPDIR");
-    if (!tmpdir)
-        tmpdir = getenv("TMP");
-    if (!tmpdir)
-        tmpdir = getenv("TEMP");
-    if (!tmpdir) {
-#ifdef XR_OS_WINDOWS
-        tmpdir = "C:\\Windows\\Temp";
-#else
-        tmpdir = "/tmp";
-#endif
-    }
-
-    return xrs_string_value_c(X, tmpdir);
+    return xrs_string_value_c(X, xr_os_core_tmpdir(os_core_getenv, NULL));
 }
 
 /* ========== User Information (P1) ========== */
@@ -410,6 +402,15 @@ static XrValue os_freeMemory(XrVMRuntime *X, XrValue *args, int argc) {
 #endif
 }
 
+static double os_monotonic_uptime_seconds(void) {
+#ifdef XR_OS_POSIX
+    struct timespec ts;
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) == 0)
+        return (double) ts.tv_sec + (double) ts.tv_nsec / 1000000000.0;
+#endif
+    return 0.0;
+}
+
 // uptime() - Get system uptime in seconds
 static XrValue os_uptime(XrVMRuntime *X, XrValue *args, int argc) {
     (void) X;
@@ -425,12 +426,12 @@ static XrValue os_uptime(XrVMRuntime *X, XrValue *args, int argc) {
         time_t now = time(NULL);
         return xr_float((double) (now - boottime.tv_sec));
     }
-    return xr_float(0.0);
+    return xr_float(os_monotonic_uptime_seconds());
 #elif defined(XR_OS_LINUX)
     struct sysinfo si;
     if (sysinfo(&si) == 0)
         return xr_float((double) si.uptime);
-    return xr_float(0.0);
+    return xr_float(os_monotonic_uptime_seconds());
 #else
     return xr_float(0.0);
 #endif
