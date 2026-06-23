@@ -74,6 +74,73 @@ TEST(datetime_core_utc_mktime) {
     ASSERT_EQ_INT(xr_datetime_core_mktime(&tm, 1), expected);
 }
 
+TEST(datetime_core_add_fields) {
+    XrDateTimeCoreFields jan31 = {
+        .timestamp = xr_datetime_core_days_from_civil(2024, 1, 31) * 86400,
+        .milliseconds = 123,
+        .tz_offset = 0,
+        .is_utc = 1,
+    };
+    XrDateTimeCoreFields out;
+    ASSERT_EQ_INT(xr_datetime_core_add_fields(&jan31, 1, "months", &out), 1);
+    struct tm tm = {0};
+    xr_datetime_core_to_tm_fields(&out, &tm);
+    ASSERT_EQ_INT(tm.tm_year + 1900, 2024);
+    ASSERT_EQ_INT(tm.tm_mon + 1, 2);
+    ASSERT_EQ_INT(tm.tm_mday, 29);
+    ASSERT_EQ_INT(out.milliseconds, 123);
+
+    XrDateTimeCoreFields leap_day = {
+        .timestamp = xr_datetime_core_days_from_civil(2024, 2, 29) * 86400,
+        .milliseconds = 0,
+        .tz_offset = 0,
+        .is_utc = 1,
+    };
+    ASSERT_EQ_INT(xr_datetime_core_add_fields(&leap_day, 1, "year", &out), 1);
+    xr_datetime_core_to_tm_fields(&out, &tm);
+    ASSERT_EQ_INT(tm.tm_year + 1900, 2025);
+    ASSERT_EQ_INT(tm.tm_mon + 1, 2);
+    ASSERT_EQ_INT(tm.tm_mday, 28);
+
+    XrDateTimeCoreFields ms = {
+        .timestamp = 10,
+        .milliseconds = 250,
+        .tz_offset = 0,
+        .is_utc = 1,
+    };
+    ASSERT_EQ_INT(xr_datetime_core_add_fields(&ms, -500, "milliseconds", &out), 1);
+    ASSERT_EQ_INT(out.timestamp, 9);
+    ASSERT_EQ_INT(out.milliseconds, 750);
+    ASSERT_EQ_INT(xr_datetime_core_add_fields(&ms, 2, "bogus", &out), 0);
+    ASSERT_EQ_INT(out.timestamp, 12);
+    ASSERT_EQ_INT(out.milliseconds, 250);
+}
+
+TEST(datetime_core_diff_fields) {
+    XrDateTimeCoreFields later = {
+        .timestamp = 12,
+        .milliseconds = 250,
+        .tz_offset = 0,
+        .is_utc = 1,
+    };
+    XrDateTimeCoreFields earlier = {
+        .timestamp = 10,
+        .milliseconds = 750,
+        .tz_offset = 0,
+        .is_utc = 1,
+    };
+    ASSERT_EQ_INT(xr_datetime_core_diff_fields(&later, &earlier, "milliseconds"), 1500);
+    ASSERT_EQ_INT(xr_datetime_core_diff_fields(&later, &earlier, "seconds"), 1);
+    ASSERT_EQ_INT(xr_datetime_core_diff_fields(&later, &earlier, "bogus"), 1);
+
+    later.timestamp = 10 * 86400;
+    later.milliseconds = 0;
+    earlier.timestamp = 3 * 86400;
+    earlier.milliseconds = 0;
+    ASSERT_EQ_INT(xr_datetime_core_diff_fields(&later, &earlier, "days"), 7);
+    ASSERT_EQ_INT(xr_datetime_core_diff_fields(&later, &earlier, "weeks"), 1);
+}
+
 TEST_MAIN_BEGIN()
 
 RUN_TEST_SUITE("DateTime Core");
@@ -81,5 +148,7 @@ RUN_TEST(datetime_core_days_in_month);
 RUN_TEST(datetime_core_days_roundtrip);
 RUN_TEST(datetime_core_epoch_boundaries);
 RUN_TEST(datetime_core_utc_mktime);
+RUN_TEST(datetime_core_add_fields);
+RUN_TEST(datetime_core_diff_fields);
 
 TEST_MAIN_END()

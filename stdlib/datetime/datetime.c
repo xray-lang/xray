@@ -307,14 +307,13 @@ static int datetime_copy_ctxbuf_to_cstr(const XrCtxBuf *out, char *buf, size_t b
 
 void xr_datetime_to_tm(XrDateTime *dt, struct tm *tm) {
     XR_DCHECK(dt != NULL && tm != NULL, "xr_datetime_to_tm: args must not be NULL");
-    time_t t = (time_t) dt->timestamp;
-    if (!dt->is_utc) {
-        /* Shift to the local wall-clock instant by adding the stored UTC
-         * offset, then decompose as if UTC. This sidesteps MSVC
-         * localtime_s/gmtime_s rejecting negative time_t values. */
-        t += (time_t) dt->tz_offset * 60;
-    }
-    xr_datetime_core_gmtime(t, tm);
+    XrDateTimeCoreFields fields = {
+        .timestamp = dt->timestamp,
+        .milliseconds = dt->milliseconds,
+        .tz_offset = dt->tz_offset,
+        .is_utc = dt->is_utc,
+    };
+    xr_datetime_core_to_tm_fields(&fields, tm);
 }
 
 int xr_datetime_format(XrDateTime *dt, const char *pattern, char *buf, size_t buf_size) {
@@ -420,8 +419,7 @@ int xr_datetime_equals(XrDateTime *dt1, XrDateTime *dt2) {
 /* ========== Utility API ========== */
 
 int xr_datetime_is_leap_year(XrDateTime *dt) {
-    int y = xr_datetime_year(dt);
-    return (y % 4 == 0 && (y % 100 != 0 || y % 400 == 0));
+    return xr_datetime_core_is_leap_year(xr_datetime_year(dt));
 }
 
 int xr_datetime_days_in_month(XrDateTime *dt) {
@@ -432,101 +430,39 @@ int xr_datetime_days_in_month(XrDateTime *dt) {
 
 XrDateTime *xr_datetime_add(XrVMRuntime *isolate, XrDateTime *dt, int64_t amount,
                             const char *unit) {
-    int64_t seconds = 0;
-
-    if (strcmp(unit, "millisecond") == 0 || strcmp(unit, "milliseconds") == 0) {
-        XrDateTime *result = datetime_alloc(isolate);
-        int64_t total_ms = dt->timestamp * 1000 + dt->milliseconds + amount;
-        result->timestamp = total_ms / 1000;
-        result->milliseconds = (int32_t) (total_ms % 1000);
-        if (result->milliseconds < 0) {
-            result->timestamp--;
-            result->milliseconds += 1000;
-        }
-        result->tz_offset = dt->tz_offset;
-        result->is_utc = dt->is_utc;
-        return result;
-    } else if (strcmp(unit, "second") == 0 || strcmp(unit, "seconds") == 0) {
-        seconds = amount;
-    } else if (strcmp(unit, "minute") == 0 || strcmp(unit, "minutes") == 0) {
-        seconds = amount * 60;
-    } else if (strcmp(unit, "hour") == 0 || strcmp(unit, "hours") == 0) {
-        seconds = amount * 3600;
-    } else if (strcmp(unit, "day") == 0 || strcmp(unit, "days") == 0) {
-        seconds = amount * 86400;
-    } else if (strcmp(unit, "week") == 0 || strcmp(unit, "weeks") == 0) {
-        seconds = amount * 604800;
-    } else if (strcmp(unit, "month") == 0 || strcmp(unit, "months") == 0) {
-        struct tm tm;
-        xr_datetime_to_tm(dt, &tm);
-        int total_months = (tm.tm_year + 1900) * 12 + tm.tm_mon + (int) amount;
-        tm.tm_year = total_months / 12 - 1900;
-        tm.tm_mon = total_months % 12;
-        if (tm.tm_mon < 0) {
-            tm.tm_mon += 12;
-            tm.tm_year--;
-        }
-        // Clamp day to target month's max
-        int max_day = xr_datetime_core_days_in_month(tm.tm_year + 1900, tm.tm_mon + 1);
-        if (tm.tm_mday > max_day)
-            tm.tm_mday = max_day;
-        tm.tm_isdst = -1;
-        time_t t = xr_datetime_core_mktime(&tm, dt->is_utc);
-        XrDateTime *result = datetime_alloc(isolate);
-        result->timestamp = (int64_t) t;
-        result->milliseconds = dt->milliseconds;
-        result->tz_offset = dt->tz_offset;
-        result->is_utc = dt->is_utc;
-        return result;
-    } else if (strcmp(unit, "year") == 0 || strcmp(unit, "years") == 0) {
-        struct tm tm;
-        xr_datetime_to_tm(dt, &tm);
-        tm.tm_year += (int) amount;
-        // Clamp day for Feb 29 → non-leap year
-        int max_day = xr_datetime_core_days_in_month(tm.tm_year + 1900, tm.tm_mon + 1);
-        if (tm.tm_mday > max_day)
-            tm.tm_mday = max_day;
-        tm.tm_isdst = -1;
-        time_t t = xr_datetime_core_mktime(&tm, dt->is_utc);
-        XrDateTime *result = datetime_alloc(isolate);
-        result->timestamp = (int64_t) t;
-        result->milliseconds = dt->milliseconds;
-        result->tz_offset = dt->tz_offset;
-        result->is_utc = dt->is_utc;
-        return result;
-    } else {
-        // Unknown unit — report error and default to seconds
+    XrDateTimeCoreFields input = {
+        .timestamp = dt->timestamp,
+        .milliseconds = dt->milliseconds,
+        .tz_offset = dt->tz_offset,
+        .is_utc = dt->is_utc,
+    };
+    XrDateTimeCoreFields output;
+    if (!xr_datetime_core_add_fields(&input, amount, unit, &output)) {
         fprintf(stderr, "datetime.add(): unknown unit '%s'\n", unit);
-        seconds = amount;
     }
 
     XrDateTime *result = datetime_alloc(isolate);
-    result->timestamp = dt->timestamp + seconds;
-    result->milliseconds = dt->milliseconds;
-    result->tz_offset = dt->tz_offset;
-    result->is_utc = dt->is_utc;
+    result->timestamp = output.timestamp;
+    result->milliseconds = output.milliseconds;
+    result->tz_offset = output.tz_offset;
+    result->is_utc = output.is_utc;
     return result;
 }
 
 int64_t xr_datetime_diff(XrDateTime *dt1, XrDateTime *dt2, const char *unit) {
-    int64_t diff_ms =
-        (dt1->timestamp - dt2->timestamp) * 1000 + (dt1->milliseconds - dt2->milliseconds);
-
-    if (strcmp(unit, "millisecond") == 0 || strcmp(unit, "milliseconds") == 0) {
-        return diff_ms;
-    } else if (strcmp(unit, "second") == 0 || strcmp(unit, "seconds") == 0) {
-        return diff_ms / 1000;
-    } else if (strcmp(unit, "minute") == 0 || strcmp(unit, "minutes") == 0) {
-        return diff_ms / 60000;
-    } else if (strcmp(unit, "hour") == 0 || strcmp(unit, "hours") == 0) {
-        return diff_ms / 3600000;
-    } else if (strcmp(unit, "day") == 0 || strcmp(unit, "days") == 0) {
-        return diff_ms / 86400000;
-    } else if (strcmp(unit, "week") == 0 || strcmp(unit, "weeks") == 0) {
-        return diff_ms / 604800000;
-    }
-    // Default: seconds
-    return diff_ms / 1000;
+    XrDateTimeCoreFields a = {
+        .timestamp = dt1->timestamp,
+        .milliseconds = dt1->milliseconds,
+        .tz_offset = dt1->tz_offset,
+        .is_utc = dt1->is_utc,
+    };
+    XrDateTimeCoreFields b = {
+        .timestamp = dt2->timestamp,
+        .milliseconds = dt2->milliseconds,
+        .tz_offset = dt2->tz_offset,
+        .is_utc = dt2->is_utc,
+    };
+    return xr_datetime_core_diff_fields(&a, &b, unit);
 }
 
 /* ========== Timezone API ========== */

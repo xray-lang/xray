@@ -73,11 +73,29 @@ static inline int64_t xrt_datetime_current_millis(void) {
     return (int64_t) time(NULL) * 1000;
 }
 
+static inline XrDateTimeCoreFields xrt_datetime_core_fields(const xrt_datetime_object_t *dt) {
+    return (XrDateTimeCoreFields) {
+        .timestamp = dt ? dt->timestamp : 0,
+        .milliseconds = dt ? dt->milliseconds : 0,
+        .tz_offset = dt ? dt->tz_offset : 0,
+        .is_utc = dt ? dt->is_utc : 0,
+    };
+}
+
+static inline XrValue xrt_datetime_from_core_fields(const XrDateTimeCoreFields *fields) {
+    if (!fields)
+        return XR_NULL_VAL;
+    xrt_datetime_object_t *dt = xrt_datetime_alloc();
+    dt->timestamp = fields->timestamp;
+    dt->milliseconds = fields->milliseconds;
+    dt->tz_offset = fields->tz_offset;
+    dt->is_utc = (uint8_t) (fields->is_utc ? 1 : 0);
+    return xrt_datetime_box(dt);
+}
+
 static inline void xrt_datetime_to_tm_obj(const xrt_datetime_object_t *dt, struct tm *tmv) {
-    time_t t = (time_t) dt->timestamp;
-    if (!dt->is_utc)
-        t += (time_t) dt->tz_offset * 60;
-    xr_datetime_core_gmtime(t, tmv);
+    XrDateTimeCoreFields fields = xrt_datetime_core_fields(dt);
+    xr_datetime_core_to_tm_fields(&fields, tmv);
 }
 
 static inline XrValue xrt_datetime_make(int year, int month, int day, int hour, int minute,
@@ -466,76 +484,10 @@ static inline XrValue xrt_datetime_add_value(XrValue recv, XrValue amount_v, XrV
         return XR_NULL_VAL;
     int64_t amount = xrt_datetime_i64_arg(amount_v, 0);
     const char *unit = xr_str_data(unit_v);
-    int64_t seconds = 0;
-
-    if (strcmp(unit, "millisecond") == 0 || strcmp(unit, "milliseconds") == 0) {
-        int64_t total_ms = dt->timestamp * 1000 + dt->milliseconds + amount;
-        xrt_datetime_object_t *result = xrt_datetime_alloc();
-        result->timestamp = total_ms / 1000;
-        result->milliseconds = (int32_t) (total_ms % 1000);
-        if (result->milliseconds < 0) {
-            result->timestamp--;
-            result->milliseconds += 1000;
-        }
-        result->tz_offset = dt->tz_offset;
-        result->is_utc = dt->is_utc;
-        return xrt_datetime_box(result);
-    } else if (strcmp(unit, "second") == 0 || strcmp(unit, "seconds") == 0) {
-        seconds = amount;
-    } else if (strcmp(unit, "minute") == 0 || strcmp(unit, "minutes") == 0) {
-        seconds = amount * 60;
-    } else if (strcmp(unit, "hour") == 0 || strcmp(unit, "hours") == 0) {
-        seconds = amount * 3600;
-    } else if (strcmp(unit, "day") == 0 || strcmp(unit, "days") == 0) {
-        seconds = amount * 86400;
-    } else if (strcmp(unit, "week") == 0 || strcmp(unit, "weeks") == 0) {
-        seconds = amount * 604800;
-    } else if (strcmp(unit, "month") == 0 || strcmp(unit, "months") == 0) {
-        struct tm tmv;
-        xrt_datetime_to_tm_obj(dt, &tmv);
-        int total_months = (tmv.tm_year + 1900) * 12 + tmv.tm_mon + (int) amount;
-        tmv.tm_year = total_months / 12 - 1900;
-        tmv.tm_mon = total_months % 12;
-        if (tmv.tm_mon < 0) {
-            tmv.tm_mon += 12;
-            tmv.tm_year--;
-        }
-        int max_day = xr_datetime_core_days_in_month(tmv.tm_year + 1900, tmv.tm_mon + 1);
-        if (tmv.tm_mday > max_day)
-            tmv.tm_mday = max_day;
-        tmv.tm_isdst = -1;
-        time_t t = xr_datetime_core_mktime(&tmv, dt->is_utc);
-        xrt_datetime_object_t *result = xrt_datetime_alloc();
-        result->timestamp = (int64_t) t;
-        result->milliseconds = dt->milliseconds;
-        result->tz_offset = dt->tz_offset;
-        result->is_utc = dt->is_utc;
-        return xrt_datetime_box(result);
-    } else if (strcmp(unit, "year") == 0 || strcmp(unit, "years") == 0) {
-        struct tm tmv;
-        xrt_datetime_to_tm_obj(dt, &tmv);
-        tmv.tm_year += (int) amount;
-        int max_day = xr_datetime_core_days_in_month(tmv.tm_year + 1900, tmv.tm_mon + 1);
-        if (tmv.tm_mday > max_day)
-            tmv.tm_mday = max_day;
-        tmv.tm_isdst = -1;
-        time_t t = xr_datetime_core_mktime(&tmv, dt->is_utc);
-        xrt_datetime_object_t *result = xrt_datetime_alloc();
-        result->timestamp = (int64_t) t;
-        result->milliseconds = dt->milliseconds;
-        result->tz_offset = dt->tz_offset;
-        result->is_utc = dt->is_utc;
-        return xrt_datetime_box(result);
-    } else {
-        seconds = amount;
-    }
-
-    xrt_datetime_object_t *result = xrt_datetime_alloc();
-    result->timestamp = dt->timestamp + seconds;
-    result->milliseconds = dt->milliseconds;
-    result->tz_offset = dt->tz_offset;
-    result->is_utc = dt->is_utc;
-    return xrt_datetime_box(result);
+    XrDateTimeCoreFields input = xrt_datetime_core_fields(dt);
+    XrDateTimeCoreFields output;
+    xr_datetime_core_add_fields(&input, amount, unit, &output);
+    return xrt_datetime_from_core_fields(&output);
 }
 
 static inline XrValue xrt_datetime_diff_value(XrValue recv, XrValue other_v, XrValue unit_v) {
@@ -544,20 +496,9 @@ static inline XrValue xrt_datetime_diff_value(XrValue recv, XrValue other_v, XrV
     if (!a || !b)
         return XR_FROM_INT(0);
     const char *unit = XR_IS_STR(unit_v) ? xr_str_data(unit_v) : "seconds";
-    int64_t diff_ms = (a->timestamp - b->timestamp) * 1000 + (a->milliseconds - b->milliseconds);
-    if (strcmp(unit, "millisecond") == 0 || strcmp(unit, "milliseconds") == 0)
-        return XR_FROM_INT(diff_ms);
-    if (strcmp(unit, "second") == 0 || strcmp(unit, "seconds") == 0)
-        return XR_FROM_INT(diff_ms / 1000);
-    if (strcmp(unit, "minute") == 0 || strcmp(unit, "minutes") == 0)
-        return XR_FROM_INT(diff_ms / 60000);
-    if (strcmp(unit, "hour") == 0 || strcmp(unit, "hours") == 0)
-        return XR_FROM_INT(diff_ms / 3600000);
-    if (strcmp(unit, "day") == 0 || strcmp(unit, "days") == 0)
-        return XR_FROM_INT(diff_ms / 86400000);
-    if (strcmp(unit, "week") == 0 || strcmp(unit, "weeks") == 0)
-        return XR_FROM_INT(diff_ms / 604800000);
-    return XR_FROM_INT(diff_ms / 1000);
+    XrDateTimeCoreFields af = xrt_datetime_core_fields(a);
+    XrDateTimeCoreFields bf = xrt_datetime_core_fields(b);
+    return XR_FROM_INT(xr_datetime_core_diff_fields(&af, &bf, unit));
 }
 
 static inline XrValue xrt_datetime_to_utc_value(XrValue recv) {
