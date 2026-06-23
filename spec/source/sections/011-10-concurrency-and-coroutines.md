@@ -38,7 +38,7 @@ GoOption ::= 'name' ':' StringLiteral
 // 形式 1：调用一个已声明的函数
 let t1 = go worker(0, channel)
 
-// 形式 2：调用一个 lambda 字面量（用于内联逻辑+捕获参数）
+// 形式 2：调用一个 lambda 字面量（用于内联逻辑 + 显式传参）
 let t2 = go fn(d: Json) -> int {
     return d.value * 2
 }(payload)
@@ -61,12 +61,22 @@ let task = go fn(d: Json) -> int {
 }(move data)        // 把 data 的所有权移交给协程；之后 data 不可访问
 ```
 
+**块形式限制**：`go { ... }` 是隐式零参 lambda，没有参数列表，也不会绕过并发捕获规则。块内不能捕获普通可变局部；可直接使用的外部状态必须是 `shared const`、全局不可变状态，或显式并发安全对象（如 Channel / Atomic）。需要把局部数据传入协程时，使用带参数的 lambda / 函数调用形式：
+
+```xray
+let n = 10
+let task = go fn(x: int) -> int {
+    return x + 1
+}(n)
+```
+
 **语义**：
 - 每个 `go` 表达式都返回一个 `Task<T>`，其中 `T` 是被调函数的返回类型；返回 `()` 的函数对应 `Task<null>`。
 - 协程在闲置 worker 线程中调度（M:N）。
 - `go(name: ...)` 只设置调试名称，不影响调度顺序。
 - 协程内**未捕获**异常存在 `Task` 中，由 `await` 时重抛。
 - 普通局部变量（非 `shared`、非 `move`）传给 `go` 时**自动深拷贝**；`shared const` 零拷贝共享；`shared let` 必须 `move`。
+- `go { ... }` 块形式等价于零参 lambda，只能使用符合协程捕获规则的外部状态；传参请用 `go fn(x: T) -> R { ... }(arg)` 或 `go worker(arg)`。
 
 ### 10.3 `await` — 等待结果
 
@@ -108,6 +118,7 @@ let firstOk = await anySuccess [t1, t2, t3]
   - `await any` 仅当**全部失败**时抛异常；只要有一个完成，返回该任务结果。
   - `await anySuccess` 类似 `await any`，但**跳过**抛异常的任务，只等成功完成的。
 - `all` / `any` / `anySuccess` 在 `await` 后面是**上下文关键字**，仅在此位置生效。
+- `await all` 的输入必须是同构任务集合：每个元素都必须是同一静态 `Task<T>` 类型，结果类型为 `Array<T>`。异构任务（如 `Task<int>` 与 `Task<string>` 混合）不会自动擦除或装箱；需要逐个 `await`，或在任务内部显式转换为统一 enum / union / Json 结果类型。
 
 ### 10.4 `Task<T>` 句柄
 
@@ -452,7 +463,7 @@ GoOption ::= 'name' ':' StringLiteral
 // Form 1: call an existing function
 let t1 = go worker(0, channel)
 
-// Form 2: call a lambda literal (inline logic + captured arguments)
+// Form 2: call a lambda literal (inline logic + explicit arguments)
 let t2 = go fn(d: Json) -> int {
     return d.value * 2
 }(payload)
@@ -475,12 +486,22 @@ let task = go fn(d: Json) -> int {
 }(move data)        // transfer data ownership to the coroutine; data is unusable afterwards
 ```
 
+**Block-form restriction**: `go { ... }` is an implicit zero-argument lambda. It has no parameter list and does not bypass concurrency capture rules. The block may not capture ordinary mutable locals; external state used directly inside the block must be `shared const`, immutable global state, or an explicitly concurrency-safe object such as a Channel or Atomic. To pass local data into a coroutine, use the lambda-call or function-call form:
+
+```xray
+let n = 10
+let task = go fn(x: int) -> int {
+    return x + 1
+}(n)
+```
+
 **Semantics**:
 - Every `go` expression returns a `Task<T>`, where `T` is the callee's return type; functions returning `()` correspond to `Task<null>`.
 - Coroutines are scheduled on idle worker threads (M:N).
 - `go(name: ...)` only sets the debugging name and does not affect scheduling order.
 - Uncaught exceptions are stored in the `Task` and rethrown when `await` is called.
 - Plain locals (not `shared`, not `move`d) passed to `go` are **deep-copied automatically**; `shared const` is shared zero-copy; `shared let` must be `move`d.
+- The `go { ... }` block form is equivalent to a zero-argument lambda and may use only external state that satisfies the coroutine capture rules; pass data with `go fn(x: T) -> R { ... }(arg)` or `go worker(arg)`.
 
 ### 10.3 `await` — wait for a result
 
@@ -522,6 +543,7 @@ let firstOk = await anySuccess [t1, t2, t3]
   - `await any` throws only when **every** task fails; if any one completes, its result is returned.
   - `await anySuccess` is similar to `await any` but **skips** throwing tasks, awaiting only the first successful one.
 - `all` / `any` / `anySuccess` are **contextual keywords** after `await`; they apply only in this position.
+- The input to `await all` must be homogeneous: every element must have the same static `Task<T>` type, and the result type is `Array<T>`. Heterogeneous tasks such as mixed `Task<int>` and `Task<string>` are not automatically erased or boxed; await them individually, or convert inside each task to a shared enum / union / Json result type.
 
 ### 10.4 `Task<T>` handle
 

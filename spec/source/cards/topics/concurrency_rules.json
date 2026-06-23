@@ -13,7 +13,11 @@
   "sections": [
     {
       "heading": "Sharing model",
-      "markdown": "- `shared const` is immutable and can be shared across coroutines without copying\n- `shared let` represents exclusive mutable ownership and must be transferred with `move`\n- ordinary local variables cannot be captured by `go` closures; pass data explicitly"
+      "markdown": "- `shared const` is immutable and can be shared across coroutines without copying\n- `shared let` represents exclusive mutable ownership and must be transferred with `move`\n- ordinary local variables cannot be captured by `go` closures; pass data explicitly\n- `go { ... }` is a zero-argument block form; pass local data with `go fn(x: T) -> R { ... }(arg)` or `go worker(arg)`"
+    },
+    {
+      "heading": "await all",
+      "markdown": "`await all` requires a homogeneous collection of tasks: every element must have the same static `Task<T>` type, and the result is `Array<T>`. Await heterogeneous tasks individually, or convert each task to a shared enum / union / Json result type."
     },
     {
       "heading": "Move into coroutine",
