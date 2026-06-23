@@ -516,6 +516,7 @@ static XrCFuncResult os_sleep_done(XrVMRuntime *X, int status, XrValue resume_va
                                    XrValue *result) {
     (void) X;
     (void) status;
+    (void) resume_value;
     (void) ctx;
     *result = xr_null();
     return XR_CFUNC_DONE;
@@ -882,6 +883,10 @@ XR_DEFINE_BUILTIN(os_clock, "clock", "(): float", "Get process CPU time in secon
 // Process execution
 XR_DEFINE_BUILTIN(os_exec, "exec", "(cmd: string): ExecResult?", "Execute shell command")
 
+#define XR_STDLIB_VM_BIND_MODULE_OS 1
+#include "../../src/stdlib/xstdlib_vm_bindings_generated.inc.c"
+#undef XR_STDLIB_VM_BIND_MODULE_OS
+
 XR_FUNC XrModule *xr_load_module_os(XrVMRuntime *isolate) {
     XR_DCHECK(isolate != NULL, "xr_load_module_os: NULL isolate");
 
@@ -891,40 +896,7 @@ XR_FUNC XrModule *xr_load_module_os(XrVMRuntime *isolate) {
         return NULL;
 
     // 2. Add exported functions
-    XRS_EXPORT(mod, isolate, "getenv", os_getenv);
-    XRS_EXPORT(mod, isolate, "setenv", os_setenv);
-    XRS_EXPORT(mod, isolate, "unsetenv", os_unsetenv);
-    XRS_EXPORT(mod, isolate, "environ", os_environ);
-
-    // Process control
-    XRS_EXPORT(mod, isolate, "exit", os_exit);
-    XRS_EXPORT(mod, isolate, "getpid", os_getpid);
-    XRS_EXPORT(mod, isolate, "getcwd", os_getcwd);
-    XRS_EXPORT(mod, isolate, "chdir", os_chdir);
-    XRS_EXPORT(mod, isolate, "hostname", os_hostname);
-    XRS_EXPORT(mod, isolate, "tmpdir", os_tmpdir);
-
-    // User information
-    XRS_EXPORT(mod, isolate, "username", os_username);
-    XRS_EXPORT(mod, isolate, "homedir", os_homedir);
-    XRS_EXPORT(mod, isolate, "uid", os_uid);
-    XRS_EXPORT(mod, isolate, "gid", os_gid);
-
-    // System information
-    XRS_EXPORT(mod, isolate, "cpuCount", os_cpuCount);
-    XRS_EXPORT(mod, isolate, "totalMemory", os_totalMemory);
-    XRS_EXPORT(mod, isolate, "freeMemory", os_freeMemory);
-    XRS_EXPORT(mod, isolate, "uptime", os_uptime);
-    XRS_EXPORT(mod, isolate, "loadavg", os_loadavg);
-
-    // Process & signal
-    XRS_EXPORT(mod, isolate, "ppid", os_ppid);
-    XRS_EXPORT(mod, isolate, "kill", os_kill);
-    XRS_EXPORT_YIELDABLE(mod, isolate, "sleep", os_sleep);
-    XRS_EXPORT(mod, isolate, "clock", os_clock);
-
-    // Process execution
-    XRS_EXPORT(mod, isolate, "exec", os_exec);
+    xr_stdlib_vm_bind_os_generated(isolate, mod);
 
     // 3. Add constants
     xr_module_add_export(isolate, mod, "platform", xrs_string_value_c(isolate, get_platform()));

@@ -44,6 +44,7 @@ class StdlibEntry:
     signature: str
     doc: str
     vm: str
+    vm_binding: str
     aot: str
     argc: str
     arg_spec: str
@@ -157,6 +158,12 @@ def parse_def_metadata(root: Path) -> tuple[list[StdlibEntry], list[StdlibConstE
                 raise SystemExit(
                     f"{path}:{line_no}: {current_module}.{current_name} aot_kind requires aot_direct: true"
                 )
+            vm_binding = str(props.get("vm_binding", "normal"))
+            if vm_binding not in {"normal", "yieldable", "slow"}:
+                raise SystemExit(
+                    f"{path}:{line_no}: unsupported vm_binding for "
+                    f"{current_module}.{current_name}: {vm_binding}"
+                )
 
             entries.append(
                 StdlibEntry(
@@ -165,6 +172,7 @@ def parse_def_metadata(root: Path) -> tuple[list[StdlibEntry], list[StdlibConstE
                     signature=str(props["signature"]),
                     doc=str(props["doc"]),
                     vm=str(props["vm"]),
+                    vm_binding=vm_binding,
                     aot=str(props.get("aot", "")),
                     argc=str(props["argc"]),
                     arg_spec=str(props.get("arg_spec", "")),
@@ -275,6 +283,12 @@ def parse_constants(root: Path) -> list[StdlibConstEntry]:
 
 def c_string(value: str) -> str:
     return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+def c_ident(value: str, context: str) -> str:
+    if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", value):
+        raise SystemExit(f"{context}: expected C identifier, got {value!r}")
+    return value
 
 
 def generated_header(title: str) -> list[str]:
@@ -502,6 +516,58 @@ def emit_driver_metadata(entries: list[StdlibEntry], constants: list[StdlibConst
     return "\n".join(lines)
 
 
+def emit_vm_bindings(entries: list[StdlibEntry]) -> str:
+    rows_by_module: dict[str, list[StdlibEntry]] = {}
+    seen: dict[tuple[str, str, str], str] = {}
+    for e in entries:
+        key = (e.module, e.name, e.vm)
+        existing_binding = seen.get(key)
+        if existing_binding is not None:
+            if existing_binding != e.vm_binding:
+                raise SystemExit(
+                    f"{e.symbol}: duplicate VM binding rows disagree: "
+                    f"{existing_binding} vs {e.vm_binding}"
+                )
+            continue
+        seen[key] = e.vm_binding
+        c_ident(e.vm, e.symbol)
+        rows_by_module.setdefault(e.module, []).append(e)
+
+    lines = generated_header("xstdlib_vm_bindings_generated.inc.c - VM stdlib binding shell")
+    lines.extend(
+        [
+            "/*",
+            " * Include this file from a stdlib module TU after stdlib/common.h",
+            " * and after the module's static",
+            " * C functions have been declared, then define exactly one",
+            " * XR_STDLIB_VM_BIND_MODULE_<MODULE> macro before including it.",
+            " */",
+            "",
+        ]
+    )
+    for module in sorted(rows_by_module):
+        macro = f"XR_STDLIB_VM_BIND_MODULE_{module.upper()}"
+        func = f"xr_stdlib_vm_bind_{module}_generated"
+        lines.append(f"#ifdef {macro}")
+        lines.append(f"static void {func}(XrVMRuntime *isolate, XrModule *module) {{")
+        for e in rows_by_module[module]:
+            export_macro = {
+                "normal": "XRS_EXPORT",
+                "yieldable": "XRS_EXPORT_YIELDABLE",
+                "slow": "XRS_EXPORT_SLOW",
+            }[e.vm_binding]
+            lines.append(
+                f"    {export_macro}(module, isolate, {c_string(e.name)}, "
+                f"{c_ident(e.vm, e.symbol)});"
+            )
+        lines.append("}")
+        lines.append(f"#endif  /* {macro} */")
+        lines.append("")
+    lines.append("/* clang-format on */")
+    lines.append("")
+    return "\n".join(lines)
+
+
 def emit_defs_header(entries: list[StdlibEntry], constants: list[StdlibConstEntry]) -> str:
     lines = generated_header("xstdlib_defs_generated.h - stdlib declarative metadata")
     lines.extend(
@@ -518,6 +584,7 @@ def emit_defs_header(entries: list[StdlibEntry], constants: list[StdlibConstEntr
             "    const char *signature;",
             "    const char *doc;",
             "    const char *vm;",
+            "    const char *vm_binding;",
             "    const char *aot;",
             "    const char *arg_spec;",
             "    const char *ret;",
@@ -554,9 +621,10 @@ def emit_defs_header(entries: list[StdlibEntry], constants: list[StdlibConstEntr
         lines.append(
             "    {"
             f"{c_string(e.module)}, {c_string(e.name)}, {c_string(e.signature)}, "
-            f"{c_string(e.doc)}, {c_string(e.vm)}, {c_string(e.aot)}, "
-            f"{c_string(e.arg_spec)}, {c_string(e.ret)}, {c_string(e.link_object)}, "
-            f"{c_string(e.define)}, {c_string(e.layer)}, {c_string(e.aot_kind)}, {argc}, "
+            f"{c_string(e.doc)}, {c_string(e.vm)}, {c_string(e.vm_binding)}, "
+            f"{c_string(e.aot)}, {c_string(e.arg_spec)}, {c_string(e.ret)}, "
+            f"{c_string(e.link_object)}, {c_string(e.define)}, {c_string(e.layer)}, "
+            f"{c_string(e.aot_kind)}, {argc}, "
             f"{'true' if e.aot_direct else 'false'}"
             "},"
         )
@@ -602,6 +670,9 @@ def output_paths(root: Path) -> dict[Path, str]:
         ),
         root / "src" / "aot" / "xaot_stdlib_generated.inc.c": emit_driver_metadata(
             entries, constants
+        ),
+        root / "src" / "stdlib" / "xstdlib_vm_bindings_generated.inc.c": emit_vm_bindings(
+            entries
         ),
         root / "src" / "stdlib" / "xstdlib_defs_generated.h": emit_defs_header(
             entries, constants

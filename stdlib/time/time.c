@@ -75,6 +75,7 @@ static XrCFuncResult time_sleep_done(XrVMRuntime *X, int status, XrValue resume_
                                      XrValue *result) {
     (void) X;
     (void) status;
+    (void) resume_value;
     (void) ctx;
     *result = xr_null();
     return XR_CFUNC_DONE;
@@ -126,6 +127,10 @@ XR_DEFINE_BUILTIN(xr_time_nanos, "nanos", "(): int", "Monotonic time in nanoseco
 XR_DEFINE_BUILTIN(xr_time_micros, "micros", "(): int", "Monotonic time in microseconds")
 XR_DEFINE_BUILTIN(xr_time_sleep, "sleep", "(ms: int): ()", "Sleep for milliseconds")
 
+#define XR_STDLIB_VM_BIND_MODULE_TIME 1
+#include "../../src/stdlib/xstdlib_vm_bindings_generated.inc.c"
+#undef XR_STDLIB_VM_BIND_MODULE_TIME
+
 XR_FUNC XrModule *xr_load_module_time(XrVMRuntime *isolate) {
     XR_DCHECK(isolate != NULL, "xr_load_module_time: NULL isolate");
 
@@ -133,12 +138,7 @@ XR_FUNC XrModule *xr_load_module_time(XrVMRuntime *isolate) {
     if (!module)
         return NULL;
 
-    XRS_EXPORT(module, isolate, "now", xr_time_now);
-    XRS_EXPORT(module, isolate, "clock", xr_time_clock);
-    XRS_EXPORT(module, isolate, "monotonic", xr_time_monotonic);
-    XRS_EXPORT(module, isolate, "nanos", xr_time_nanos);
-    XRS_EXPORT(module, isolate, "micros", xr_time_micros);
-    XRS_EXPORT_YIELDABLE(module, isolate, "sleep", xr_time_sleep);
+    xr_stdlib_vm_bind_time_generated(isolate, module);
 
     module->loaded = true;
     return module;

@@ -650,6 +650,10 @@ XR_DEFINE_BUILTIN(url_resolve_fn, "resolve", "(base: string, relative: string): 
                   "Resolve relative URL")
 XR_DEFINE_BUILTIN(url_join_fn, "join", "(...parts: string): string", "Join URL path segments")
 
+#define XR_STDLIB_VM_BIND_MODULE_URL 1
+#include "../../src/stdlib/xstdlib_vm_bindings_generated.inc.c"
+#undef XR_STDLIB_VM_BIND_MODULE_URL
+
 /* ========== Module Registration ========== */
 
 XR_FUNC XrModule *xr_load_module_url(XrVMRuntime *X) {
@@ -659,16 +663,7 @@ XR_FUNC XrModule *xr_load_module_url(XrVMRuntime *X) {
     if (!mod)
         return NULL;
 
-    XRS_EXPORT(mod, X, "encode", url_encode_fn);
-    XRS_EXPORT(mod, X, "decode", url_decode_fn);
-    XRS_EXPORT(mod, X, "encodeForm", url_encode_form_fn);
-    XRS_EXPORT(mod, X, "decodeForm", url_decode_form_fn);
-    XRS_EXPORT(mod, X, "parse", url_parse_fn);
-    XRS_EXPORT(mod, X, "format", url_format_fn);
-    XRS_EXPORT(mod, X, "parseQuery", url_parse_query_fn);
-    XRS_EXPORT(mod, X, "buildQuery", url_build_query_fn);
-    XRS_EXPORT(mod, X, "resolve", url_resolve_fn);
-    XRS_EXPORT(mod, X, "join", url_join_fn);
+    xr_stdlib_vm_bind_url_generated(X, mod);
 
     mod->loaded = true;
     return mod;
