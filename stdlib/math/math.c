@@ -19,6 +19,7 @@
 #include <stdbool.h>
 #include <float.h>
 #include "../../src/os/os_random.h"
+#include "../../src/shared/xr_math_core.h"
 #include "../../src/base/xchecks.h"
 
 // Portability: MSVC/<math.h> does not define M_PI/M_E unless _USE_MATH_DEFINES
@@ -427,14 +428,16 @@ static XrValue math_clamp(XrVMRuntime *X, XrValue *args, int argc) {
 
 /* ========== Random ========== */
 
+static void math_random_bytes(void *ctx, unsigned char *buf, size_t len) {
+    (void) ctx;
+    xr_random_bytes(buf, len);
+}
+
 static XrValue math_random(XrVMRuntime *X, XrValue *args, int argc) {
     (void) X;
     (void) args;
     (void) argc;
-    uint64_t r;
-    xr_random_bytes((unsigned char *) &r, sizeof(r));
-    // Top 53 bits → full double mantissa precision, result in [0, 1)
-    return xr_float((r >> 11) * (1.0 / ((uint64_t) 1 << 53)));
+    return xr_float(xr_math_core_random_f64(math_random_bytes, NULL));
 }
 
 static XrValue math_randomInt(XrVMRuntime *X, XrValue *args, int argc) {
@@ -453,25 +456,7 @@ static XrValue math_randomInt(XrVMRuntime *X, XrValue *args, int argc) {
     if (min_val == max_val)
         return xr_int(min_val);
 
-    /* Pure unsigned arithmetic avoids signed overflow UB when the
-     * range spans a large portion of int64 (e.g. INT64_MIN..INT64_MAX). */
-    uint64_t range = (uint64_t) max_val - (uint64_t) min_val + 1;
-    uint64_t r;
-
-    if (range == 0) {
-        // Full 2^64 range (min=INT64_MIN, max=INT64_MAX)
-        xr_random_bytes((unsigned char *) &r, sizeof(r));
-    } else {
-        // Rejection sampling to eliminate modulo bias
-        uint64_t threshold = (-range) % range;
-        do {
-            xr_random_bytes((unsigned char *) &r, sizeof(r));
-        } while (r < threshold);
-        r = r % range;
-    }
-    /* Cast through unsigned so the addition wraps predictably on
-     * 2's-complement (mandated by C23, universal in practice). */
-    return xr_int((int64_t) ((uint64_t) min_val + r));
+    return xr_int(xr_math_core_random_i64(math_random_bytes, NULL, min_val, max_val));
 }
 
 /* ========== Utilities ========== */
