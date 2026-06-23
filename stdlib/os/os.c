@@ -425,11 +425,17 @@ static XrValue os_uptime(XrayIsolate *X, XrValue *args, int argc) {
         time_t now = time(NULL);
         return xr_float((double) (now - boottime.tv_sec));
     }
+    struct timespec ts;
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) == 0)
+        return xr_float((double) ts.tv_sec + (double) ts.tv_nsec / 1000000000.0);
     return xr_float(0.0);
 #elif defined(XR_OS_LINUX)
     struct sysinfo si;
     if (sysinfo(&si) == 0)
         return xr_float((double) si.uptime);
+    struct timespec ts;
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) == 0)
+        return xr_float((double) ts.tv_sec + (double) ts.tv_nsec / 1000000000.0);
     return xr_float(0.0);
 #else
     return xr_float(0.0);
