@@ -331,6 +331,7 @@ Interpolation ::= '${' Expression '}'
 - Double and single quotes are **fully equivalent** — both support escapes and `${...}` interpolation.
 - Strings may span multiple lines; line breaks are part of the string.
 - Literals containing interpolation produce `TK_TEMPLATE_STRING` internally; literals without interpolation produce `TK_LITERAL_STRING`.
+- `${...}` is scanned in expression mode: braces are matched by depth, and nested strings / raw strings are skipped as a unit, so same-quote nesting is legal, for example `"${m["k"]}"` and `"${"a}b"}"`. Once the `char` core type lands, char literals inside interpolation are skipped by the same rule.
 
 ```xray
 "hello"
@@ -341,7 +342,7 @@ Interpolation ::= '${' Expression '}'
 "\u{1F600}"            // emoji
 ```
 
-**Interpolation expressions cannot contain unescaped quote characters of the surrounding kind** (a lexer restriction).
+Interpolation expressions may themselves contain nested interpolation; `}` characters inside nested strings do not close the outer `${...}`.
 
 ##### Raw strings (`r` prefix)
 
@@ -1467,7 +1468,7 @@ See §1.6.5. In brief:
 ```
 
 - `${...}` accepts any expression (calls, object access, arithmetic).
-- Embedded string literals inside the interpolation require escaped quotes or a switch to single-quoted outer strings.
+- Embedded string literals inside `${...}` may use the same quote as the outer template; the lexer matches expression braces by depth and skips nested strings / raw strings. Once the `char` core type lands, char literals inside interpolation are skipped by the same rule.
 - The expression's type must be convertible to a string (implement `toString()` or be a primitive).
 
 ### 3.16 `yield` Statement

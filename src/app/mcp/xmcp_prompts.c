@@ -105,7 +105,7 @@ static const char EXPLAIN_ERROR_SYSTEM[] =
     "- Channel must be declared with const, not let\n"
     "- go closures cannot capture let/const variables (pass as params)\n"
     "- Arrow function params MUST have type annotations\n"
-    "- No quotes inside ${} interpolation\n";
+    "- Quotes inside ${} interpolation are allowed; nested strings are scanned as expressions\n";
 
 static const char CONVERT_SYSTEM[] =
     "Convert the following code to idiomatic Xray. Guidelines:\n"

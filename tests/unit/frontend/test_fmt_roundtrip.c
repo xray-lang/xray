@@ -287,7 +287,9 @@ TEST(string_escape_roundtrip) {
 TEST(template_string_roundtrip) {
     setup();
     /* Modern syntax uses double quotes with ${} interpolation. */
-    const char *src = "let name = \"world\"\nlet s = \"hello ${name}\"\n";
+    const char *src = "let name = \"world\"\n"
+                      "let m = #{\"k\": \"value\"}\n"
+                      "let s = \"hello ${name} ${\"literal\"} ${m[\"k\"]}\"\n";
     char *fmt1 = parse_and_format(src, "<test>");
     ASSERT_NOT_NULL(fmt1);
     char *fmt2 = parse_and_format(fmt1, "<test>");

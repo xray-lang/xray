@@ -90,7 +90,7 @@
         "arrow function parameter types may be inferred only when the context is known",
         "`new Channel<T>(n)` constructs a channel; `Channel<T>` is used in type position",
         "field increment such as `this.x++` is not supported; assign explicitly",
-        "avoid unescaped quotes inside `${...}` interpolation"
+        "same-quote strings are allowed inside `${...}` interpolation"
       ]
     }
   ]

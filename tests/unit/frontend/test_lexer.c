@@ -572,6 +572,13 @@ TEST(lexer_error_token_message_field) {
                 strstr(t.error_message, "unterminated") != NULL);
 }
 
+TEST(lexer_template_string_nested_same_quote) {
+    assert_token(scan_single("\"${m[\"k\"]}\""), TK_TEMPLATE_STRING, "\"${m[\"k\"]}\"");
+    assert_token(scan_single("\"${\"a}b\"}\""), TK_TEMPLATE_STRING, "\"${\"a}b\"}\"");
+    assert_token(scan_single("\"${'}'}\""), TK_TEMPLATE_STRING, "\"${'}'}\"");
+    assert_token(scan_single("r\"${m[\"k\"]}\""), TK_RAW_TEMPLATE_STRING, "r\"${m[\"k\"]}\"");
+}
+
 TEST(lexer_error_token_unterminated_block_comment) {
     Scanner scanner;
     Token t;
@@ -683,6 +690,7 @@ static void run_all_tests(void) {
 
     RUN_TEST_SUITE("Error Token Contract (L-03)");
     RUN_TEST(lexer_error_token_message_field);
+    RUN_TEST(lexer_template_string_nested_same_quote);
     RUN_TEST(lexer_error_token_unterminated_block_comment);
     RUN_TEST(lexer_error_token_unterminated_nested_block_comment);
     RUN_TEST(lexer_normal_token_no_error_message);

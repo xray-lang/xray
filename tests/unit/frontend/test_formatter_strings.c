@@ -214,6 +214,8 @@ TEST(template_string_round_trip) {
         "let p = 0;\nlet s = \"$${p}\";\n",  // user wants literal `$`
         "let n = \"x\";\nlet s = \"${n}-${n}-${n}\";\n",
         "let x = 1;\nlet s = \"start ${x} mid ${x + 1} end\";\n",
+        "let s = \"${\"quoted\"}\";\n",
+        "let m = #{\"k\": \"value\"};\nlet s = \"${m[\"k\"]}\";\n",
     };
     int n = (int) (sizeof(kSources) / sizeof(kSources[0]));
     for (int i = 0; i < n; i++) {

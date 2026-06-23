@@ -268,6 +268,106 @@ static AstNode *make_template_part(Parser *parser, const char *src, int len, boo
     return node;
 }
 
+static bool template_find_expr_end(const char *src, int len, int expr_start, int *expr_end);
+
+static bool template_skip_string(const char *src, int len, int *pos, char quote, bool is_raw) {
+    while (*pos < len) {
+        char c = src[*pos];
+        if (c == quote) {
+            (*pos)++;
+            return true;
+        }
+        if (!is_raw && c == '\\') {
+            *pos += (*pos + 1 < len) ? 2 : 1;
+            continue;
+        }
+        if (c == '$' && *pos + 1 < len && src[*pos + 1] == '{') {
+            int nested_end = -1;
+            if (!template_find_expr_end(src, len, *pos, &nested_end)) {
+                return false;
+            }
+            *pos = nested_end + 1;
+            continue;
+        }
+        (*pos)++;
+    }
+    return false;
+}
+
+static void template_skip_line_comment(const char *src, int len, int *pos) {
+    while (*pos < len && src[*pos] != '\n') {
+        (*pos)++;
+    }
+}
+
+static bool template_skip_block_comment(const char *src, int len, int *pos) {
+    *pos += 2;
+    int depth = 1;
+    while (*pos < len && depth > 0) {
+        if (*pos + 1 < len && src[*pos] == '/' && src[*pos + 1] == '*') {
+            *pos += 2;
+            depth++;
+            continue;
+        }
+        if (*pos + 1 < len && src[*pos] == '*' && src[*pos + 1] == '/') {
+            *pos += 2;
+            depth--;
+            continue;
+        }
+        (*pos)++;
+    }
+    return depth == 0;
+}
+
+static bool template_find_expr_end(const char *src, int len, int expr_start, int *expr_end) {
+    int brace_count = 1;
+    int j = expr_start + 2;
+    while (j < len && brace_count > 0) {
+        char c = src[j];
+        if (c == '"' || c == '\'') {
+            j++;
+            if (!template_skip_string(src, len, &j, c, false)) {
+                return false;
+            }
+            continue;
+        }
+        if (c == 'r' && j + 1 < len && (src[j + 1] == '"' || src[j + 1] == '\'')) {
+            char raw_quote = src[j + 1];
+            j += 2;
+            if (!template_skip_string(src, len, &j, raw_quote, true)) {
+                return false;
+            }
+            continue;
+        }
+        if (c == '/' && j + 1 < len && src[j + 1] == '/') {
+            template_skip_line_comment(src, len, &j);
+            continue;
+        }
+        if (c == '/' && j + 1 < len && src[j + 1] == '*') {
+            if (!template_skip_block_comment(src, len, &j)) {
+                return false;
+            }
+            continue;
+        }
+        if (c == '{') {
+            brace_count++;
+            j++;
+            continue;
+        }
+        if (c == '}') {
+            brace_count--;
+            if (brace_count == 0) {
+                *expr_end = j;
+                return true;
+            }
+            j++;
+            continue;
+        }
+        j++;
+    }
+    return false;
+}
+
 // Parse template string: "Hello, ${name}!" or r"raw ${name}"
 AstNode *xr_parse_template_string(Parser *parser) {
     XR_DCHECK(parser != NULL, "parse_template_string: NULL parser");
@@ -315,25 +415,8 @@ AstNode *xr_parse_template_string(Parser *parser) {
             XR_PARSE_PUSH(parser, parts, part_count, part_capacity, str_node);
         }
 
-        // Find matching }
         int expr_end = -1;
-        int brace_count = 1;
-        int j = expr_start + 2;  // Skip ${
-
-        while (j < tmpl_len && brace_count > 0) {
-            if (tmpl[j] == '{') {
-                brace_count++;
-            } else if (tmpl[j] == '}') {
-                brace_count--;
-                if (brace_count == 0) {
-                    expr_end = j;
-                    break;
-                }
-            }
-            j++;
-        }
-
-        if (expr_end == -1) {
+        if (!template_find_expr_end(tmpl, tmpl_len, expr_start, &expr_end)) {
             xr_parser_error(parser, "missing closing } in template string");
             return NULL;
         }
