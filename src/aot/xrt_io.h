@@ -449,30 +449,29 @@ static inline XrValue xrt_io_stat(const char *path_data, int64_t path_len) {
 #if defined(XR_OS_WINDOWS)
     DWORD attrs = GetFileAttributesA(path);
     bool is_symlink = attrs != INVALID_FILE_ATTRIBUTES && (attrs & FILE_ATTRIBUTE_REPARSE_POINT);
+    XrIoCoreStatFields fields = xr_io_core_stat_fields(
+        (int64_t) st.st_size, (int64_t) st.st_mode, (int64_t) st.st_mtime, (int64_t) st.st_atime,
+        (int64_t) st.st_ctime, 0, 0, (st.st_mode & _S_IFREG) != 0, (st.st_mode & _S_IFDIR) != 0,
+        is_symlink);
 #else
     struct stat lst;
     bool is_symlink = lstat(path, &lst) == 0 && S_ISLNK(lst.st_mode);
+    XrIoCoreStatFields fields = xr_io_core_stat_fields(
+        (int64_t) st.st_size, (int64_t) st.st_mode, (int64_t) st.st_mtime, (int64_t) st.st_atime,
+        (int64_t) st.st_ctime, (int64_t) st.st_uid, (int64_t) st.st_gid, S_ISREG(st.st_mode),
+        S_ISDIR(st.st_mode), is_symlink);
 #endif
-    static const char *const fields[] = {"size", "mode", "mtime",  "atime", "ctime",
-                                         "uid",  "gid",  "isFile", "isDir", "isSymlink"};
-    XrValue obj = xrt_json_new_named(10, fields);
-    xrt_json_set_field(obj, 0, XR_FROM_INT((int64_t) st.st_size));
-    xrt_json_set_field(obj, 1, XR_FROM_INT((int64_t) (st.st_mode & 0777)));
-    xrt_json_set_field(obj, 2, XR_FROM_INT((int64_t) st.st_mtime));
-    xrt_json_set_field(obj, 3, XR_FROM_INT((int64_t) st.st_atime));
-    xrt_json_set_field(obj, 4, XR_FROM_INT((int64_t) st.st_ctime));
-#if defined(XR_OS_WINDOWS)
-    xrt_json_set_field(obj, 5, XR_FROM_INT(0));
-    xrt_json_set_field(obj, 6, XR_FROM_INT(0));
-    xrt_json_set_field(obj, 7, XR_FROM_BOOL((st.st_mode & _S_IFREG) != 0));
-    xrt_json_set_field(obj, 8, XR_FROM_BOOL((st.st_mode & _S_IFDIR) != 0));
-#else
-    xrt_json_set_field(obj, 5, XR_FROM_INT((int64_t) st.st_uid));
-    xrt_json_set_field(obj, 6, XR_FROM_INT((int64_t) st.st_gid));
-    xrt_json_set_field(obj, 7, XR_FROM_BOOL(S_ISREG(st.st_mode)));
-    xrt_json_set_field(obj, 8, XR_FROM_BOOL(S_ISDIR(st.st_mode)));
-#endif
-    xrt_json_set_field(obj, 9, XR_FROM_BOOL(is_symlink));
+    XrValue obj = xrt_json_new_named(XR_IO_CORE_STAT_FIELD_COUNT, XR_IO_CORE_STAT_FIELD_NAMES);
+    xrt_json_set_field(obj, XR_IO_CORE_STAT_SIZE, XR_FROM_INT(fields.size));
+    xrt_json_set_field(obj, XR_IO_CORE_STAT_MODE, XR_FROM_INT(fields.mode));
+    xrt_json_set_field(obj, XR_IO_CORE_STAT_MTIME, XR_FROM_INT(fields.mtime));
+    xrt_json_set_field(obj, XR_IO_CORE_STAT_ATIME, XR_FROM_INT(fields.atime));
+    xrt_json_set_field(obj, XR_IO_CORE_STAT_CTIME, XR_FROM_INT(fields.ctime));
+    xrt_json_set_field(obj, XR_IO_CORE_STAT_UID, XR_FROM_INT(fields.uid));
+    xrt_json_set_field(obj, XR_IO_CORE_STAT_GID, XR_FROM_INT(fields.gid));
+    xrt_json_set_field(obj, XR_IO_CORE_STAT_IS_FILE, XR_FROM_BOOL(fields.is_file));
+    xrt_json_set_field(obj, XR_IO_CORE_STAT_IS_DIR, XR_FROM_BOOL(fields.is_dir));
+    xrt_json_set_field(obj, XR_IO_CORE_STAT_IS_SYMLINK, XR_FROM_BOOL(fields.is_symlink));
     XRT_FREE(owned);
     return obj;
 }

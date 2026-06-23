@@ -12,11 +12,65 @@
 #define XRAY_SHARED_XR_IO_CORE_H
 
 #include <stdbool.h>
+#include <stdint.h>
 #include <stddef.h>
 
 typedef bool (*XrIoCoreLineFn)(void *ctx, const char *data, size_t len);
 typedef int (*XrIoCoreMkdirFn)(void *ctx, const char *path);
 typedef bool (*XrIoCoreIsDirFn)(void *ctx, const char *path);
+
+typedef enum XrIoCoreStatField {
+    XR_IO_CORE_STAT_SIZE = 0,
+    XR_IO_CORE_STAT_MODE,
+    XR_IO_CORE_STAT_MTIME,
+    XR_IO_CORE_STAT_ATIME,
+    XR_IO_CORE_STAT_CTIME,
+    XR_IO_CORE_STAT_UID,
+    XR_IO_CORE_STAT_GID,
+    XR_IO_CORE_STAT_IS_FILE,
+    XR_IO_CORE_STAT_IS_DIR,
+    XR_IO_CORE_STAT_IS_SYMLINK,
+    XR_IO_CORE_STAT_FIELD_COUNT
+} XrIoCoreStatField;
+
+typedef struct XrIoCoreStatFields {
+    int64_t size;
+    int64_t mode;
+    int64_t mtime;
+    int64_t atime;
+    int64_t ctime;
+    int64_t uid;
+    int64_t gid;
+    bool is_file;
+    bool is_dir;
+    bool is_symlink;
+} XrIoCoreStatFields;
+
+static const char *const XR_IO_CORE_STAT_FIELD_NAMES[XR_IO_CORE_STAT_FIELD_COUNT] = {
+    "size", "mode", "mtime", "atime", "ctime", "uid", "gid", "isFile", "isDir", "isSymlink",
+};
+
+static inline int64_t xr_io_core_stat_perm_mode(int64_t mode) {
+    return mode & 0777;
+}
+
+static inline XrIoCoreStatFields xr_io_core_stat_fields(int64_t size, int64_t mode, int64_t mtime,
+                                                        int64_t atime, int64_t ctime, int64_t uid,
+                                                        int64_t gid, bool is_file, bool is_dir,
+                                                        bool is_symlink) {
+    XrIoCoreStatFields fields;
+    fields.size = size;
+    fields.mode = xr_io_core_stat_perm_mode(mode);
+    fields.mtime = mtime;
+    fields.atime = atime;
+    fields.ctime = ctime;
+    fields.uid = uid;
+    fields.gid = gid;
+    fields.is_file = is_file;
+    fields.is_dir = is_dir;
+    fields.is_symlink = is_symlink;
+    return fields;
+}
 
 static inline size_t xr_io_core_trim_line_end(const char *data, size_t start, size_t end) {
     while (end > start && data[end - 1] == '\r')
