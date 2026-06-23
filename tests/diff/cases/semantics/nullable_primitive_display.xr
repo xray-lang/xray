@@ -1,0 +1,24 @@
+// anchor: nullable-primitive-display
+// C5: nullable primitives (int?/float?/bool?) are kept. A null value must
+// render as "null" (not its raw numeric payload) and non-null values must
+// round-trip, identically in VM and AOT.
+
+let i: int? = null
+let f: float? = null
+let b: bool? = null
+print(i)              // null
+print(f)              // null
+print(b)              // null
+print(string(i))      // null
+print("i=" + string(i))
+
+let i2: int? = 5
+let f2: float? = 1.5
+let b2: bool? = true
+print(i2)             // 5
+print(f2)             // 1.5
+print(b2)             // true
+print("i2=" + string(i2))
+print("f2=" + string(f2))
+print("b2=" + string(b2))
+print("cat=" + string(i))

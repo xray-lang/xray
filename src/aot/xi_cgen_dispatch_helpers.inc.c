@@ -6,18 +6,33 @@ static void xicgen_const(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiVal
                          const char *prefix) {
     (void) f;
     (void) prefix;
+    // A scalar const whose storage rep is TAGGED (e.g. an int/float/bool value
+    // typed as a nullable primitive) must be boxed to match its XrValue C slot.
+    bool boxed = cg_value_plan_storage_rep(ctx, v) == XR_REP_TAGGED;
     if (v->type->kind == XR_KIND_INT) {
+        if (boxed)
+            fprintf(out, "XR_FROM_INT(");
         if (v->aux_int == INT64_MIN)
             fprintf(out, "INT64_MIN");
         else
             fprintf(out, "INT64_C(%" PRId64 ")", v->aux_int);
+        if (boxed)
+            fprintf(out, ")");
     } else if (v->type->kind == XR_KIND_FLOAT) {
         double d;
         memcpy(&d, &v->aux_int, sizeof(double));
+        if (boxed)
+            fprintf(out, "XR_FROM_FLOAT(");
         emit_c_float_literal(out, d);
-    } else if (v->type->kind == XR_KIND_BOOL)
+        if (boxed)
+            fprintf(out, ")");
+    } else if (v->type->kind == XR_KIND_BOOL) {
+        if (boxed)
+            fprintf(out, "XR_FROM_BOOL(");
         fprintf(out, "%" PRId64, v->aux_int);
-    else if (v->type->kind == XR_KIND_NULL)
+        if (boxed)
+            fprintf(out, ")");
+    } else if (v->type->kind == XR_KIND_NULL)
         fprintf(out, "XR_NULL_VAL");
     else if (v->type->kind == XR_KIND_STRING) {
         cg_emit_str_value(ctx, out, (const char *) v->aux);
@@ -812,8 +827,8 @@ static const XiValue *xicgen_native_int_print_source(XiCgenCtx *ctx, const XiVal
         return NULL;
     if (arg->op == XI_BOX && arg->nargs >= 1)
         arg = arg->args[0];
-    if (!arg->type || arg->type->kind != XR_KIND_INT)
-        return NULL;
+    if (!arg->type || arg->type->kind != XR_KIND_INT || arg->type->is_nullable)
+        return NULL;  // nullable ints print via the tagged path so null -> "null"
     XrRep rep = cg_value_plan_storage_rep(ctx, arg);
     if (rep != XR_REP_I64 && rep != XR_REP_TAGGED)
         return NULL;

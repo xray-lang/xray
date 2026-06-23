@@ -123,6 +123,10 @@ static bool stmt_type_is_unsigned_int(struct XrType *type) {
 static int stmt_print_slot_hint_for_value(XiValue *v) {
     if (!v || !v->type)
         return 0;
+    // Nullable primitives must print through the tagged path so a `null`
+    // value renders as "null" rather than its raw numeric payload (0).
+    if (v->type->is_nullable)
+        return 0;
     if (v->type->kind == XR_KIND_FLOAT)
         return 2;
     if (stmt_type_is_unsigned_int(v->type))
