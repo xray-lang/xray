@@ -3351,8 +3351,9 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "// tuple destructuring (multi-return)\n"
             "let (q, r) = divmod(17, 5)\n"
             "\n"
-            "// object destructuring (extract by name; **no** rename syntax)\n"
+            "// object destructuring (extract by field name; local binding may be renamed)\n"
             "let { name, age } = { name: \"Alice\", age: 30 }\n"
+            "let { name: localName, age } = { name: \"Alice\", age: 30 }\n"
             "```\n"
             "",
     },

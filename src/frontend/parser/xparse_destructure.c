@@ -9,9 +9,9 @@
  *
  * KEY CONCEPT:
  *   Flat (non-nested) destructuring only:
- *     - Array: let [a, b, c] = expr   (positional)
- *     - Object: let {x, y} = expr     (same-name fields, JSON object or class instance)
- *   No nesting, no renaming, no rest (...), no Map destructuring.
+ *     - Array: let [a, b, c] = expr        (positional)
+ *     - Object: let {x, y: local} = expr   (field-name extraction)
+ *   No nesting, no rest (...), no Map destructuring.
  */
 
 #include "xparse_internal.h"
@@ -131,8 +131,8 @@ XrDestructurePattern *xr_parse_tuple_pattern(Parser *parser) {
     return xr_pattern_tuple(parser->X, elements, count);
 }
 
-// Parse flat object destructuring: {name, age}
-// Variable names must match field names exactly (no renaming, no defaults).
+// Parse flat object destructuring: {name, age: local}
+// Field names drive extraction; optional aliases choose the local binding name.
 XrDestructurePattern *xr_parse_object_pattern(Parser *parser) {
     XR_DCHECK(parser != NULL, "parse_object_pattern: NULL parser");
     // '{' already consumed
@@ -140,6 +140,7 @@ XrDestructurePattern *xr_parse_object_pattern(Parser *parser) {
     XrDestructurePattern **patterns = NULL;
     int count = 0;
     int capacity = 0;
+    bool all_shorthand = true;
 
     while (!xr_parser_check(parser, TK_RBRACE) && !xr_parser_check(parser, TK_EOF)) {
         if (count >= capacity) {
@@ -166,15 +167,21 @@ XrDestructurePattern *xr_parse_object_pattern(Parser *parser) {
 
         char *field = copy_token_string(parser, &parser->previous);
 
-        // Reject renaming syntax: {name: alias}
-        if (xr_parser_check(parser, TK_COLON)) {
-            xr_parser_error(parser, "renaming in destructuring is not supported; "
-                                    "variable name must match field name");
-            return NULL;
+        XrDestructurePattern *binding = NULL;
+        if (xr_parser_match(parser, TK_COLON)) {
+            all_shorthand = false;
+            if (!xr_parser_match(parser, TK_NAME)) {
+                xr_parser_error_expected_name(parser, "expected local binding name after ':'");
+                return NULL;
+            }
+            char *local = copy_token_string(parser, &parser->previous);
+            binding = xr_pattern_identifier(parser->X, local, NULL);
+        } else {
+            binding = xr_pattern_identifier(parser->X, field, NULL);
         }
 
         field_names[count] = field;
-        patterns[count] = xr_pattern_identifier(parser->X, field, NULL);
+        patterns[count] = binding;
         count++;
 
         if (!xr_parser_check(parser, TK_RBRACE)) {
@@ -186,7 +193,7 @@ XrDestructurePattern *xr_parse_object_pattern(Parser *parser) {
     }
 
     xr_parser_consume(parser, TK_RBRACE, "expected '}'");
-    return xr_pattern_object(parser->X, field_names, patterns, count, true);
+    return xr_pattern_object(parser->X, field_names, patterns, count, all_shorthand);
 }
 
 // Unified entry point

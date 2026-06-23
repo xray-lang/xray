@@ -236,7 +236,8 @@ Binding ::= BindingPattern (':' Type)? ('=' Expression)?
 BindingPattern ::= Identifier
                 |  '[' BindingPattern (',' BindingPattern)* ','? ']'
                 |  '(' BindingPattern (',' BindingPattern)+ ','? ')'
-                |  '{' Identifier (',' Identifier)* ','? '}'
+                |  '{' ObjectBinding (',' ObjectBinding)* ','? '}'
+ObjectBinding ::= Identifier (':' Identifier)?
 
 FnDecl ::= AttrList? Modifier* 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? FnBody
 FnBody ::= Block | ';'?                         // 空函数体仅允许 @extern
@@ -536,7 +537,8 @@ Binding ::= BindingPattern (':' Type)? ('=' Expression)?
 BindingPattern ::= Identifier
                 |  '[' BindingPattern (',' BindingPattern)* ','? ']'
                 |  '(' BindingPattern (',' BindingPattern)+ ','? ')'
-                |  '{' Identifier (',' Identifier)* ','? '}'
+                |  '{' ObjectBinding (',' ObjectBinding)* ','? '}'
+ObjectBinding ::= Identifier (':' Identifier)?
 
 FnDecl ::= AttrList? Modifier* 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? FnBody
 FnBody ::= Block | ';'?                         // empty body is only allowed for @extern

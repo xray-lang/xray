@@ -1806,7 +1806,8 @@ Binding ::= Pattern (':' Type)? ('=' Expression)?
 Pattern ::= Identifier
          | '[' BindingPattern (',' BindingPattern)* ','? ']'    // array destructure
          | '(' BindingPattern (',' BindingPattern)+ ','? ')'    // tuple destructure
-         | '{' Identifier (',' Identifier)* ','? '}'            // object destructure
+         | '{' ObjectBinding (',' ObjectBinding)* ','? '}'      // object destructure
+ObjectBinding ::= Identifier (':' Identifier)?
 ```
 
 #### 5.1.1 `let` — mutable binding
@@ -1868,13 +1869,14 @@ let [first, , third] = [10, 20, 30]         // skip elements
 // tuple destructuring (multi-return)
 let (q, r) = divmod(17, 5)
 
-// object destructuring (extract by name; **no** rename syntax)
+// object destructuring (extract by field name; local binding may be renamed)
 let { name, age } = { name: "Alice", age: 30 }
+let { name: localName, age } = { name: "Alice", age: 30 }
 ```
 
 Constraints:
 - The number of destructured bindings must match (except with rest patterns).
-- Object destructuring accepts only an `Identifier` list; `{ name: localName }` style renaming is **not** supported.
+- Object destructuring field names must be `Identifier`s; `field: localName` changes only the local binding name, not the field being read.
 
 ### 5.2 `fn` function declaration
 
@@ -5342,7 +5344,8 @@ Binding ::= BindingPattern (':' Type)? ('=' Expression)?
 BindingPattern ::= Identifier
                 |  '[' BindingPattern (',' BindingPattern)* ','? ']'
                 |  '(' BindingPattern (',' BindingPattern)+ ','? ')'
-                |  '{' Identifier (',' Identifier)* ','? '}'
+                |  '{' ObjectBinding (',' ObjectBinding)* ','? '}'
+ObjectBinding ::= Identifier (':' Identifier)?
 
 FnDecl ::= AttrList? Modifier* 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? FnBody
 FnBody ::= Block | ';'?                         // empty body is only allowed for @extern

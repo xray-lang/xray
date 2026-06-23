@@ -18,7 +18,8 @@ Binding ::= Pattern (':' Type)? ('=' Expression)?
 Pattern ::= Identifier
          | '[' BindingPattern (',' BindingPattern)* ','? ']'    // array destructure
          | '(' BindingPattern (',' BindingPattern)+ ','? ')'    // tuple destructure
-         | '{' Identifier (',' Identifier)* ','? '}'            // object destructure
+         | '{' ObjectBinding (',' ObjectBinding)* ','? '}'      // object destructure
+ObjectBinding ::= Identifier (':' Identifier)?
 ```
 
 #### 5.1.1 `let` — 可变绑定
@@ -80,13 +81,14 @@ let [first, , third] = [10, 20, 30]         // 跳过元素
 // 元组解构（多返回值）
 let (q, r) = divmod(17, 5)
 
-// 对象解构（仅按名提取，**不**支持重命名）
+// 对象解构（按字段名提取，可重命名本地绑定）
 let { name, age } = { name: "Alice", age: 30 }
+let { name: localName, age } = { name: "Alice", age: 30 }
 ```
 
 约束：
 - 解构变量数必须匹配（除 rest 模式外）。
-- 对象解构只接受 `Identifier` 列表，**不支持** `{ name: localName }` 风格的重命名。
+- 对象解构字段名必须是 `Identifier`；`field: localName` 只改变本地绑定名，不改变被读取的字段名。
 
 ### 5.2 `fn` 函数声明
 
@@ -866,7 +868,8 @@ Binding ::= Pattern (':' Type)? ('=' Expression)?
 Pattern ::= Identifier
          | '[' BindingPattern (',' BindingPattern)* ','? ']'    // array destructure
          | '(' BindingPattern (',' BindingPattern)+ ','? ')'    // tuple destructure
-         | '{' Identifier (',' Identifier)* ','? '}'            // object destructure
+         | '{' ObjectBinding (',' ObjectBinding)* ','? '}'      // object destructure
+ObjectBinding ::= Identifier (':' Identifier)?
 ```
 
 #### 5.1.1 `let` — mutable binding
@@ -928,13 +931,14 @@ let [first, , third] = [10, 20, 30]         // skip elements
 // tuple destructuring (multi-return)
 let (q, r) = divmod(17, 5)
 
-// object destructuring (extract by name; **no** rename syntax)
+// object destructuring (extract by field name; local binding may be renamed)
 let { name, age } = { name: "Alice", age: 30 }
+let { name: localName, age } = { name: "Alice", age: 30 }
 ```
 
 Constraints:
 - The number of destructured bindings must match (except with rest patterns).
-- Object destructuring accepts only an `Identifier` list; `{ name: localName }` style renaming is **not** supported.
+- Object destructuring field names must be `Identifier`s; `field: localName` changes only the local binding name, not the field being read.
 
 ### 5.2 `fn` function declaration
 

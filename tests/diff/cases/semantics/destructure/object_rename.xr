@@ -1,0 +1,12 @@
+// anchor: destructure-object-rename
+let user = { name: "Alice", age: 30, city: "Shanghai" }
+
+let { name: localName, age } = user
+print(localName)
+print(age)
+
+let otherName = ""
+let otherCity = ""
+{ name: otherName, city: otherCity } = user
+print(otherName)
+print(otherCity)

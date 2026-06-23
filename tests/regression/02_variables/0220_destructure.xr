@@ -51,7 +51,7 @@ fn test_flat_nested_value() {
     assert_eq(c, 13)
 }
 
-// ===== Object destructuring (same-name only) =====
+// ===== Object destructuring =====
 
 @test
 fn test_object_basic() {
@@ -69,3 +69,14 @@ fn test_object_flat_nested_value() {
     assert_eq(f.f2, 400)
 }
 
+@test
+fn test_object_rename() {
+    let user = { name: "Alice", age: 30 }
+    let { name: localName, age } = user
+    assert_eq(localName, "Alice")
+    assert_eq(age, 30)
+
+    let otherName = ""
+    { name: otherName } = user
+    assert_eq(otherName, "Alice")
+}

@@ -244,5 +244,6 @@ XR_FUNC AstNode *xr_parse_scope_block_with_mode(Parser *parser, uint8_t scope_mo
 /* ========== Misc Helpers ========== */
 
 XR_FUNC size_t xr_process_escapes(const char *src, size_t src_len, char *out);
+XR_FUNC bool xr_lbrace_starts_destructure_assignment(Parser *parser);
 
 #endif  // XPARSE_INTERNAL_H

@@ -839,11 +839,14 @@ static XiValue *lower_assignment(XiLower *l, AstNode *node) {
 }
 
 static int json_field_index(struct XrType *type, const char *name) {
-    if (!type || type->kind != XR_KIND_JSON || !type->object.is_sealed)
+    if (!type || type->kind != XR_KIND_JSON || !type->object.field_names || !name)
         return -1;
     for (int i = 0; i < type->object.field_count; i++) {
-        if (type->object.field_names && type->object.field_names[i] &&
-            strcmp(type->object.field_names[i], name) == 0)
+        if (!type->object.field_names[i])
+            return -1;
+    }
+    for (int i = 0; i < type->object.field_count; i++) {
+        if (type->object.field_names[i] && strcmp(type->object.field_names[i], name) == 0)
             return i;
     }
     return -1;
@@ -1032,7 +1035,11 @@ static XiValue *lower_member_access(XiLower *l, AstNode *node) {
         }
     }
 
-    /* Sealed Json with known field → direct indexed access */
+    /* Json with a complete compile-time field table → direct indexed access.
+     * Non-sealed object literals may still grow dynamically, but their
+     * declared field indices remain stable. Computed-key object literals
+     * have NULL holes in the analyzer field table and use name lookup
+     * because codegen compacts only the static named fields. */
     int fidx = json_field_index(obj->type, ma->name);
     if (fidx >= 0) {
         XiValue *v = xi_value_new(l->func, l->cur_block, XI_JSON_GET_F, result_type, 1);

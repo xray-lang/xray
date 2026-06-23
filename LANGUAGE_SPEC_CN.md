@@ -1799,7 +1799,8 @@ Binding ::= Pattern (':' Type)? ('=' Expression)?
 Pattern ::= Identifier
          | '[' BindingPattern (',' BindingPattern)* ','? ']'    // array destructure
          | '(' BindingPattern (',' BindingPattern)+ ','? ')'    // tuple destructure
-         | '{' Identifier (',' Identifier)* ','? '}'            // object destructure
+         | '{' ObjectBinding (',' ObjectBinding)* ','? '}'      // object destructure
+ObjectBinding ::= Identifier (':' Identifier)?
 ```
 
 #### 5.1.1 `let` — 可变绑定
@@ -1861,13 +1862,14 @@ let [first, , third] = [10, 20, 30]         // 跳过元素
 // 元组解构（多返回值）
 let (q, r) = divmod(17, 5)
 
-// 对象解构（仅按名提取，**不**支持重命名）
+// 对象解构（按字段名提取，可重命名本地绑定）
 let { name, age } = { name: "Alice", age: 30 }
+let { name: localName, age } = { name: "Alice", age: 30 }
 ```
 
 约束：
 - 解构变量数必须匹配（除 rest 模式外）。
-- 对象解构只接受 `Identifier` 列表，**不支持** `{ name: localName }` 风格的重命名。
+- 对象解构字段名必须是 `Identifier`；`field: localName` 只改变本地绑定名，不改变被读取的字段名。
 
 ### 5.2 `fn` 函数声明
 
@@ -5329,7 +5331,8 @@ Binding ::= BindingPattern (':' Type)? ('=' Expression)?
 BindingPattern ::= Identifier
                 |  '[' BindingPattern (',' BindingPattern)* ','? ']'
                 |  '(' BindingPattern (',' BindingPattern)+ ','? ')'
-                |  '{' Identifier (',' Identifier)* ','? '}'
+                |  '{' ObjectBinding (',' ObjectBinding)* ','? '}'
+ObjectBinding ::= Identifier (':' Identifier)?
 
 FnDecl ::= AttrList? Modifier* 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? FnBody
 FnBody ::= Block | ';'?                         // 空函数体仅允许 @extern
