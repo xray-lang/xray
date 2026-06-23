@@ -1523,7 +1523,8 @@ if (x > 0) {
 ### 4.3 `while`
 
 ```ebnf
-WhileStmt ::= 'while' '(' Expression ')' Block
+LoopLabel ::= Identifier ':'
+WhileStmt ::= LoopLabel? 'while' '(' Expression ')' Block
 ```
 
 ```xray
@@ -1541,7 +1542,7 @@ while (i < 10) {
 #### C 风格 `for`
 
 ```ebnf
-ForStmt ::= 'for' '(' ForInit? ';' Expression? ';' ForStep? ')' Block
+ForStmt ::= LoopLabel? 'for' '(' ForInit? ';' Expression? ';' ForStep? ')' Block
 ForInit ::= VarDecl | ExprStmt
 ForStep ::= Expression | Identifier ('++' | '--')
 ```
@@ -1562,7 +1563,7 @@ for (let j = 100; j > 90; j--) {
 #### `for-in` 单变量
 
 ```ebnf
-ForInStmt ::= 'for' '(' Identifier 'in' Expression ')' Block
+ForInStmt ::= LoopLabel? 'for' '(' Identifier 'in' Expression ')' Block
 ```
 
 ```xray
@@ -1580,8 +1581,8 @@ for (_ in 0..n) { count++ }                   // 占位符忽略
 xray 支持两种等价的双变量形式：
 
 ```ebnf
-ForInPairStmt ::= 'for' '(' Identifier ',' Identifier 'in' Expression ')' Block
-              |  'for' '(' '(' Identifier ',' Identifier ')' 'in' Expression ')' Block
+ForInPairStmt ::= LoopLabel? 'for' '(' Identifier ',' Identifier 'in' Expression ')' Block
+              |  LoopLabel? 'for' '(' '(' Identifier ',' Identifier ')' 'in' Expression ')' Block
 ```
 
 ```xray
@@ -1644,13 +1645,24 @@ match (action) {
 
 ```xray
 break                  // 跳出最内层循环
-continue               // 进入下一次循环
+continue               // 进入最内层循环的下一次迭代
+break outer            // 跳出标签为 outer 的循环
+continue outer         // 进入标签为 outer 的循环的下一次迭代
+
+outer: for (i in 0..10) {
+    for (j in 0..10) {
+        if (j == 3) { continue outer }
+        if (i * j > 20) { break outer }
+    }
+}
 ```
 
 **约束**：
 - 必须在 `while` / `for` 内部；否则编译错误 `E0304` / `E0305`。
 - `match` 内部的 `break` / `continue` **不**作用于 `match`，而是跳出包裹 `match` 的循环。
-- **无标签** break/continue（不像 Java/Rust）。
+- 循环标签写作 `label: for (...)` 或 `label: while (...)`，只能标在循环上；`label:` 后接非循环语句是编译错误。
+- `break label` / `continue label` 必须引用当前活跃的外层循环标签；未知标签或同一活跃循环栈中重复标签是编译错误。
+- 无标签 `continue` 作用于最内层循环；带标签 `continue` 作用于目标循环：`while` 重新检查条件，C 风格 `for` 执行 step 后再检查条件，`for-in` 进入下一项。
 
 ### 4.7 `return`
 
@@ -5256,16 +5268,17 @@ IncDecStmt ::= Identifier ('++' | '--') (';' | LineBreak)
 Block    ::= '{' Statement* '}'
 
 IfStmt    ::= 'if' '(' Expression ')' Block ('else' 'if' '(' Expression ')' Block)* ('else' Block)?
-WhileStmt ::= 'while' '(' Expression ')' Block
-ForStmt   ::= 'for' '(' VarDecl? ';' Expression? ';' (Expression | Identifier ('++' | '--'))? ')' Block
-ForInStmt ::= 'for' '(' Identifier 'in' Expression ')' Block
-ForInPairStmt ::= 'for' '(' Identifier ',' Identifier 'in' Expression ')' Block
-             |  'for' '(' '(' Identifier ',' Identifier ')' 'in' Expression ')' Block
+LoopLabel ::= Identifier ':'
+WhileStmt ::= LoopLabel? 'while' '(' Expression ')' Block
+ForStmt   ::= LoopLabel? 'for' '(' VarDecl? ';' Expression? ';' (Expression | Identifier ('++' | '--'))? ')' Block
+ForInStmt ::= LoopLabel? 'for' '(' Identifier 'in' Expression ')' Block
+ForInPairStmt ::= LoopLabel? 'for' '(' Identifier ',' Identifier 'in' Expression ')' Block
+             |  LoopLabel? 'for' '(' '(' Identifier ',' Identifier ')' 'in' Expression ')' Block
 MatchStmt ::= 'match' '(' Expression ')' '{' MatchArm (','? MatchArm)* ','? '}'
 
 ReturnStmt   ::= 'return' (Expression | '(' Expression (',' Expression)+ ')')?
-BreakStmt    ::= 'break'
-ContinueStmt ::= 'continue'
+BreakStmt    ::= 'break' Identifier?
+ContinueStmt ::= 'continue' Identifier?
 
 ThrowStmt ::= 'throw' Expression
 TryStmt   ::= 'try' Block CatchClause+

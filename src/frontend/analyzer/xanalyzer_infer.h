@@ -21,6 +21,12 @@
 #include "xanalyzer_flow.h"
 #include "../../base/xdefs.h"
 
+typedef struct XaLoopScope {
+    const char *label;
+    int line;
+    struct XaLoopScope *prev;
+} XaLoopScope;
+
 // Inference context (for a single file/function)
 typedef struct XaInferContext {
     XaAnalyzer *analyzer;
@@ -53,6 +59,10 @@ typedef struct XaInferContext {
     // Nonzero inside an `unsafe { }` region. Gates raw-pointer dereference and
     // extern-function calls: those are errors at depth 0 (Rust model).
     int unsafe_depth;
+
+    // Active loop stack for validating break/continue and resolving labels.
+    XaLoopScope *loop_scope;
+    int loop_depth;
 } XaInferContext;
 
 // API: Context lifecycle

@@ -74,26 +74,29 @@ XR_FUNC AstNode *xr_ast_if_stmt(XrayIsolate *X, AstNode *condition, AstNode *the
                                 AstNode *else_branch, int line);
 
 // Create while loop node
-XR_FUNC AstNode *xr_ast_while_stmt(XrayIsolate *X, AstNode *condition, AstNode *body, int line);
+XR_FUNC AstNode *xr_ast_while_stmt(XrayIsolate *X, const char *label, AstNode *condition,
+                                   AstNode *body, int line);
 
 // Create for loop node
-XR_FUNC AstNode *xr_ast_for_stmt(XrayIsolate *X, AstNode *initializer, AstNode *condition,
-                                 AstNode *increment, AstNode *body, int line);
+XR_FUNC AstNode *xr_ast_for_stmt(XrayIsolate *X, const char *label, AstNode *initializer,
+                                 AstNode *condition, AstNode *increment, AstNode *body, int line);
 
 // Create for-in loop node
-XR_FUNC AstNode *xr_ast_for_in_stmt(XrayIsolate *X, const char *item_name, XrTypeRef *item_type,
-                                    AstNode *collection, AstNode *body, int line);
+XR_FUNC AstNode *xr_ast_for_in_stmt(XrayIsolate *X, const char *label, const char *item_name,
+                                    XrTypeRef *item_type, AstNode *collection, AstNode *body,
+                                    int line);
 
 // Create for-in key-value loop node
 XR_FUNC AstNode *xr_ast_for_in_keyvalue_stmt(XrayIsolate *X, const char *key_name,
-                                             const char *value_name, XrTypeRef *item_type,
-                                             AstNode *collection, AstNode *body, int line);
+                                             const char *value_name, const char *label,
+                                             XrTypeRef *item_type, AstNode *collection,
+                                             AstNode *body, int line);
 
 // Create break statement node
-XR_FUNC AstNode *xr_ast_break_stmt(XrayIsolate *X, int line);
+XR_FUNC AstNode *xr_ast_break_stmt(XrayIsolate *X, const char *label, int line);
 
 // Create continue statement node
-XR_FUNC AstNode *xr_ast_continue_stmt(XrayIsolate *X, int line);
+XR_FUNC AstNode *xr_ast_continue_stmt(XrayIsolate *X, const char *label, int line);
 
 // Create parameter node
 XR_FUNC XrParamNode *xr_param_node_new(XrayIsolate *X, const char *name, int line, int column);

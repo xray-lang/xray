@@ -61,11 +61,13 @@ typedef struct IfStmtNode {
 } IfStmtNode;
 
 typedef struct WhileStmtNode {
+    char *label;
     AstNode *condition;
     AstNode *body;
 } WhileStmtNode;
 
 typedef struct ForStmtNode {
+    char *label;
     AstNode *initializer;
     AstNode *condition;
     AstNode *increment;
@@ -73,6 +75,7 @@ typedef struct ForStmtNode {
 } ForStmtNode;
 
 typedef struct ForInStmtNode {
+    char *label;
     char *item_name;
     char *value_name;
     bool is_keyvalue;
@@ -84,10 +87,10 @@ typedef struct ForInStmtNode {
 } ForInStmtNode;
 
 typedef struct BreakStmtNode {
-    int placeholder;
+    char *label;
 } BreakStmtNode;
 typedef struct ContinueStmtNode {
-    int placeholder;
+    char *label;
 } ContinueStmtNode;
 
 /* ========== Exception Handling ========== */

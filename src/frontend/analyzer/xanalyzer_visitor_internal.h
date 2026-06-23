@@ -54,6 +54,11 @@ XR_FUNC XrType *resolve_class_to_type_param(XrayIsolate *X, XrType *type, const 
                                             int tp_count);
 XR_FUNC void xa_set_function_type_params_from_ast(XaInferContext *ctx, XrType *fn_type,
                                                   XrGenericParam **type_params, int count);
+XR_FUNC void xa_loop_scope_push(XaInferContext *ctx, XaLoopScope *scope, const char *label,
+                                AstNode *node);
+XR_FUNC void xa_loop_scope_pop(XaInferContext *ctx, XaLoopScope *scope);
+XR_FUNC void xa_validate_loop_control(XaInferContext *ctx, AstNode *node, const char *label,
+                                      bool is_continue);
 
 // Expression visitors (defined in xanalyzer_visitor_expr.c)
 XR_FUNC XrType *xa_visit_struct_literal(XaInferContext *ctx, AstNode *node);

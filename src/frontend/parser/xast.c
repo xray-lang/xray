@@ -404,8 +404,10 @@ AstNode *xr_ast_if_stmt(XrayIsolate *X, AstNode *condition, AstNode *then_branch
 // Create while loop node
 // condition: loop condition
 // body: loop body (must be block)
-AstNode *xr_ast_while_stmt(XrayIsolate *X, AstNode *condition, AstNode *body, int line) {
+AstNode *xr_ast_while_stmt(XrayIsolate *X, const char *label, AstNode *condition, AstNode *body,
+                           int line) {
     AstNode *node = alloc_node(X, AST_WHILE_STMT, line);
+    node->as.while_stmt.label = label ? ast_strdup(X, label) : NULL;
     node->as.while_stmt.condition = condition;
     node->as.while_stmt.body = body;
     return node;
@@ -416,9 +418,10 @@ AstNode *xr_ast_while_stmt(XrayIsolate *X, AstNode *condition, AstNode *body, in
 // condition: condition (optional)
 // increment: update (optional)
 // body: loop body (must be block)
-AstNode *xr_ast_for_stmt(XrayIsolate *X, AstNode *initializer, AstNode *condition,
-                         AstNode *increment, AstNode *body, int line) {
+AstNode *xr_ast_for_stmt(XrayIsolate *X, const char *label, AstNode *initializer,
+                         AstNode *condition, AstNode *increment, AstNode *body, int line) {
     AstNode *node = alloc_node(X, AST_FOR_STMT, line);
+    node->as.for_stmt.label = label ? ast_strdup(X, label) : NULL;
     node->as.for_stmt.initializer = initializer;
     node->as.for_stmt.condition = condition;
     node->as.for_stmt.increment = increment;
@@ -431,10 +434,11 @@ AstNode *xr_ast_for_stmt(XrayIsolate *X, AstNode *initializer, AstNode *conditio
 // item_type: optional type annotation (NULL for type inference)
 // collection: collection expression to iterate
 // body: loop body (must be block)
-AstNode *xr_ast_for_in_stmt(XrayIsolate *X, const char *item_name, XrTypeRef *item_type,
-                            AstNode *collection, AstNode *body, int line) {
+AstNode *xr_ast_for_in_stmt(XrayIsolate *X, const char *label, const char *item_name,
+                            XrTypeRef *item_type, AstNode *collection, AstNode *body, int line) {
     AstNode *node = alloc_node(X, AST_FOR_IN_STMT, line);
 
+    node->as.for_in_stmt.label = label ? ast_strdup(X, label) : NULL;
     node->as.for_in_stmt.item_name = ast_strdup(X, item_name);
     node->as.for_in_stmt.value_name = NULL;  // Single variable mode
     node->as.for_in_stmt.is_keyvalue = false;
@@ -447,10 +451,11 @@ AstNode *xr_ast_for_in_stmt(XrayIsolate *X, const char *item_name, XrTypeRef *it
 // Create for-in key-value loop node
 // for (key, value in map) { body }
 AstNode *xr_ast_for_in_keyvalue_stmt(XrayIsolate *X, const char *key_name, const char *value_name,
-                                     XrTypeRef *item_type, AstNode *collection, AstNode *body,
-                                     int line) {
+                                     const char *label, XrTypeRef *item_type, AstNode *collection,
+                                     AstNode *body, int line) {
     AstNode *node = alloc_node(X, AST_FOR_IN_STMT, line);
 
+    node->as.for_in_stmt.label = label ? ast_strdup(X, label) : NULL;
     node->as.for_in_stmt.item_name = ast_strdup(X, key_name);
     node->as.for_in_stmt.value_name = ast_strdup(X, value_name);
     node->as.for_in_stmt.is_keyvalue = true;  // Key-value pair mode
@@ -461,16 +466,16 @@ AstNode *xr_ast_for_in_keyvalue_stmt(XrayIsolate *X, const char *key_name, const
 }
 
 // Create break statement node
-AstNode *xr_ast_break_stmt(XrayIsolate *X, int line) {
+AstNode *xr_ast_break_stmt(XrayIsolate *X, const char *label, int line) {
     AstNode *node = alloc_node(X, AST_BREAK_STMT, line);
-    node->as.break_stmt.placeholder = 0;
+    node->as.break_stmt.label = label ? ast_strdup(X, label) : NULL;
     return node;
 }
 
 // Create continue statement node
-AstNode *xr_ast_continue_stmt(XrayIsolate *X, int line) {
+AstNode *xr_ast_continue_stmt(XrayIsolate *X, const char *label, int line) {
     AstNode *node = alloc_node(X, AST_CONTINUE_STMT, line);
-    node->as.continue_stmt.placeholder = 0;
+    node->as.continue_stmt.label = label ? ast_strdup(X, label) : NULL;
     return node;
 }
 

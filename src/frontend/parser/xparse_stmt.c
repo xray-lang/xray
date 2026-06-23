@@ -25,6 +25,13 @@ static inline void inherit_block_end(AstNode *stmt, AstNode *body) {
     stmt->end_column = body->end_column;
 }
 
+static char *token_to_ast_string(Parser *parser, Token tok) {
+    char *s = (char *) ast_alloc(parser->X, (size_t) tok.length + 1);
+    memcpy(s, tok.start, (size_t) tok.length);
+    s[tok.length] = '\0';
+    return s;
+}
+
 // Parse if statement
 AstNode *xr_parse_if_statement(Parser *parser) {
     int line = parser->previous.line;
@@ -85,7 +92,7 @@ AstNode *xr_parse_while_statement(Parser *parser) {
     xr_parser_advance(parser);
     AstNode *body = xr_parse_block(parser);
 
-    AstNode *stmt = xr_ast_while_stmt(parser->X, condition, body, line);
+    AstNode *stmt = xr_ast_while_stmt(parser->X, NULL, condition, body, line);
     inherit_block_end(stmt, body);
     return stmt;
 }
@@ -129,7 +136,7 @@ AstNode *xr_parse_for_statement(Parser *parser) {
     xr_parser_advance(parser);
     AstNode *body = xr_parse_block(parser);
 
-    AstNode *stmt = xr_ast_for_stmt(parser->X, initializer, condition, increment, body, line);
+    AstNode *stmt = xr_ast_for_stmt(parser->X, NULL, initializer, condition, increment, body, line);
     inherit_block_end(stmt, body);
     return stmt;
 }
@@ -196,7 +203,7 @@ AstNode *xr_parse_for_in_statement(Parser *parser) {
     }
 
     // Optional type annotation (not supported yet)
-    XrType *item_type = NULL;
+    XrTypeRef *item_type = NULL;
     if (xr_parser_match(parser, TK_COLON)) {
         while (!xr_parser_check(parser, TK_IN) && !xr_parser_check(parser, TK_EOF)) {
             xr_parser_advance(parser);
@@ -239,23 +246,34 @@ AstNode *xr_parse_for_in_statement(Parser *parser) {
     }
 
     AstNode *stmt =
-        is_keyvalue ? xr_ast_for_in_keyvalue_stmt(parser->X, first_name, second_name, item_type,
-                                                  collection, body, line)
-                    : xr_ast_for_in_stmt(parser->X, first_name, item_type, collection, body, line);
+        is_keyvalue
+            ? xr_ast_for_in_keyvalue_stmt(parser->X, first_name, second_name, NULL, item_type,
+                                          collection, body, line)
+            : xr_ast_for_in_stmt(parser->X, NULL, first_name, item_type, collection, body, line);
     inherit_block_end(stmt, body);
     return stmt;
 }
 
 // Parse break statement
 AstNode *xr_parse_break_statement(Parser *parser) {
-    int line = parser->previous.line;
+    int line = parser->current.line;
     xr_parser_advance(parser);
-    return xr_ast_break_stmt(parser->X, line);
+    char *label = NULL;
+    if (xr_parser_check(parser, TK_NAME) && parser->current.line == line) {
+        label = token_to_ast_string(parser, parser->current);
+        xr_parser_advance(parser);
+    }
+    return xr_ast_break_stmt(parser->X, label, line);
 }
 
 // Parse continue statement
 AstNode *xr_parse_continue_statement(Parser *parser) {
-    int line = parser->previous.line;
+    int line = parser->current.line;
     xr_parser_advance(parser);
-    return xr_ast_continue_stmt(parser->X, line);
+    char *label = NULL;
+    if (xr_parser_check(parser, TK_NAME) && parser->current.line == line) {
+        label = token_to_ast_string(parser, parser->current);
+        xr_parser_advance(parser);
+    }
+    return xr_ast_continue_stmt(parser->X, label, line);
 }

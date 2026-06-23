@@ -715,6 +715,44 @@ AstNode *xr_parse_print_statement(Parser *parser) {
 
 // Parse statement
 AstNode *xr_parse_statement(Parser *parser) {
+    if (parser->current.type == TK_NAME) {
+        Parser checkpoint = *parser;
+        Token label_tok = parser->current;
+        xr_parser_advance(parser);
+        if (xr_parser_match(parser, TK_COLON)) {
+            if (parser->current.type == TK_FOR || parser->current.type == TK_WHILE) {
+                char *label = (char *) ast_alloc(parser->X, (size_t) label_tok.length + 1);
+                memcpy(label, label_tok.start, (size_t) label_tok.length);
+                label[label_tok.length] = '\0';
+
+                AstNode *stmt = xr_parse_statement(parser);
+                if (!stmt)
+                    return NULL;
+                switch (stmt->type) {
+                    case AST_WHILE_STMT:
+                        stmt->as.while_stmt.label = label;
+                        return stmt;
+                    case AST_FOR_STMT:
+                        stmt->as.for_stmt.label = label;
+                        return stmt;
+                    case AST_FOR_IN_STMT:
+                        stmt->as.for_in_stmt.label = label;
+                        return stmt;
+                    default:
+                        xr_parser_error_at_current(parser, "loop labels can only annotate loops");
+                        return NULL;
+                }
+            }
+            if (parser->current.type != TK_ASSIGN) {
+                *parser = checkpoint;
+                xr_parser_error_at_current(parser,
+                                           "loop labels can only annotate 'for' or 'while'");
+                return NULL;
+            }
+        }
+        *parser = checkpoint;
+    }
+
     // Control flow
     if (parser->current.type == TK_IF) {
         return xr_parse_if_statement(parser);

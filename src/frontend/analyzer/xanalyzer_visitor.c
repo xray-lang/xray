@@ -2294,6 +2294,8 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             // Infer body - process block statements inline (without xa_visit_block_stmt)
             // to match Pass 1 scope structure: Pass 1 processes for-in body block
             // statements in the for-in scope, so Pass 2 must do the same.
+            XaLoopScope loop_scope;
+            xa_loop_scope_push(ctx, &loop_scope, fi->label, node);
             if (fi->body) {
                 if (fi->body->type == AST_BLOCK) {
                     BlockNode *blk = &fi->body->as.block;
@@ -2304,6 +2306,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                     xa_visit_infer_stmt(ctx, fi->body);
                 }
             }
+            xa_loop_scope_pop(ctx, &loop_scope);
 
             xa_analyzer_exit_scope(ctx->analyzer);
             break;
@@ -2620,7 +2623,11 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             break;
         }
         case AST_BREAK_STMT:
+            xa_validate_loop_control(ctx, node, node->as.break_stmt.label, false);
+            break;
         case AST_CONTINUE_STMT:
+            xa_validate_loop_control(ctx, node, node->as.continue_stmt.label, true);
+            break;
         case AST_YIELD_STMT:
         case AST_IMPORT_STMT:
         case AST_ENUM_DECL:
