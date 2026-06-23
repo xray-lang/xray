@@ -20,6 +20,7 @@
 #include "../shared/xr_elem_type.h"
 #include "../shared/xr_float_fmt.h"
 #include "../shared/xr_map_set_abi.h"
+#include "../shared/xr_string_core.h"
 #include "../shared/xr_typed_ops.h"
 #include <string.h>
 
@@ -311,6 +312,13 @@ static inline XrValue xrt_tuple_get(XrValue tuple, int64_t index) {
     return t->items[index];
 }
 
+static inline XrValue xrt_slice_string_from_core(XrStringCoreSlice slice) {
+    XrValue sv = xrt_str_alloc(slice.len);
+    if (slice.len != 0)
+        memcpy(xr_str_buf(sv), slice.data, slice.len);
+    return sv;
+}
+
 static inline XrValue xrt_slice(XrValue source, XrValue start_value, XrValue end_value) {
     int64_t start = xr_value_to_int64_coerce(start_value);
     int64_t end = xr_value_to_int64_coerce(end_value);
@@ -318,27 +326,8 @@ static inline XrValue xrt_slice(XrValue source, XrValue start_value, XrValue end
         return xrt_array_slice_view(source, start, end);
     if (XR_IS_STR(source)) {
         const char *s = xr_str_data(source);
-        int64_t len = xr_str_len(source);
-        if (start < 0) {
-            start += len;
-            if (start < 0)
-                start = 0;
-        }
-        if (end < 0) {
-            end += len;
-            if (end < 0)
-                end = 0;
-        }
-        if (start > len)
-            start = len;
-        if (end > len)
-            end = len;
-        if (start >= end)
-            return xrt_str_alloc(0);
-        int64_t rlen = end - start;
-        XrValue sv = xrt_str_alloc((size_t) rlen);
-        memcpy(xr_str_buf(sv), s + start, (size_t) rlen);
-        return sv;
+        size_t len = (size_t) xr_str_len(source);
+        return xrt_slice_string_from_core(xr_string_core_range_slice(s, len, start, end));
     }
     return XR_NULL_VAL;
 }
