@@ -565,6 +565,37 @@ static XrValue os_clock(XrVMRuntime *X, XrValue *args, int argc) {
 
 /* ========== Process Execution (P0) ========== */
 
+static bool os_exec_buffer_init(char **buf, size_t *len, size_t *cap) {
+    if (!buf || !len || !cap)
+        return false;
+    *len = 0;
+    *cap = XR_OS_CORE_EXEC_INITIAL_CAP;
+    *buf = (char *) xr_malloc(*cap);
+    if (!*buf) {
+        *cap = 0;
+        return false;
+    }
+    (*buf)[0] = '\0';
+    return true;
+}
+
+static bool os_exec_buffer_append(char **buf, size_t *len, size_t *cap, const char *data,
+                                  size_t data_len) {
+    if (!buf || !*buf || !len || !cap || (!data && data_len > 0))
+        return false;
+    size_t new_cap = 0;
+    if (!xr_os_core_exec_buffer_next_cap(*len, *cap, data_len, &new_cap))
+        return false;
+    if (new_cap > *cap) {
+        char *grown = (char *) xr_realloc(*buf, new_cap);
+        if (!grown)
+            return false;
+        *buf = grown;
+        *cap = new_cap;
+    }
+    return xr_os_core_exec_buffer_append_raw(*buf, len, *cap, data, data_len);
+}
+
 #ifndef XR_OS_WINDOWS
 typedef struct {
     int fd;
@@ -576,13 +607,12 @@ typedef struct {
 
 static bool exec_pipe_init(XrExecPipe *pipe, int fd) {
     pipe->fd = fd;
+    pipe->buf = NULL;
     pipe->len = 0;
-    pipe->cap = 4096;
+    pipe->cap = 0;
     pipe->open = true;
-    pipe->buf = (char *) xr_malloc(pipe->cap);
-    if (!pipe->buf)
+    if (!os_exec_buffer_init(&pipe->buf, &pipe->len, &pipe->cap))
         return false;
-    pipe->buf[0] = '\0';
 
     int flags = fcntl(fd, F_GETFL, 0);
     if (flags >= 0) {
@@ -607,18 +637,7 @@ static void exec_pipe_free(XrExecPipe *pipe) {
 }
 
 static bool exec_pipe_append(XrExecPipe *pipe, const char *data, size_t n) {
-    if (pipe->len + n + 1 > pipe->cap) {
-        size_t new_cap = pipe->cap;
-        while (pipe->len + n + 1 > new_cap)
-            new_cap *= 2;
-        if (!XR_REALLOC(pipe->buf, new_cap))
-            return false;
-        pipe->cap = new_cap;
-    }
-    memcpy(pipe->buf + pipe->len, data, n);
-    pipe->len += n;
-    pipe->buf[pipe->len] = '\0';
-    return true;
+    return os_exec_buffer_append(&pipe->buf, &pipe->len, &pipe->cap, data, n);
 }
 
 static bool exec_pipe_drain(XrExecPipe *pipe) {
@@ -711,46 +730,36 @@ static XrValue os_exec(XrVMRuntime *X, XrValue *args, int argc) {
         return xr_null();
 
     char buf[4096];
-    size_t len = 0, cap = 4096;
-    char *output = (char *) xr_malloc(cap);
-    if (!output) {
+    size_t len = 0;
+    size_t cap = 0;
+    char *output = NULL;
+    if (!os_exec_buffer_init(&output, &len, &cap)) {
         _pclose(fp);
         return xr_null();
     }
 
     size_t n;
     while ((n = fread(buf, 1, sizeof(buf), fp)) > 0) {
-        if (len + n + 1 >= cap) {
-            size_t new_cap = cap * 2;
-            while (len + n + 1 >= new_cap)
-                new_cap *= 2;
-            if (!XR_REALLOC(output, new_cap)) {
-                xr_free(output);
-                _pclose(fp);
-                return xr_null();
-            }
-            cap = new_cap;
+        if (!os_exec_buffer_append(&output, &len, &cap, buf, n)) {
+            xr_free(output);
+            _pclose(fp);
+            return xr_null();
         }
-        memcpy(output + len, buf, n);
-        len += n;
     }
-    output[len] = '\0';
     // _pclose returns the same wait-style encoding as _cwait/_spawn, so the
     // exit code lives in the low-order byte only when the child terminated
     // normally. Treat negative values (close itself failed) as -1.
     int raw_status = _pclose(fp);
-    int exit_code = raw_status;
-    if (raw_status < 0) {
-        exit_code = -1;
-    } else {
-        exit_code = raw_status & 0xFF;
-    }
+    int64_t exit_code = xr_os_core_exec_windows_exit_code(raw_status);
 
     XrJson *json = xr_json_new(xr_current_coro(X));
     XR_CHECK(json != NULL, "os_exec: json alloc failed");
-    xr_json_set_by_key(X, json, "stdout", xrs_string_value_c(X, output));
-    xr_json_set_by_key(X, json, "stderr", xrs_string_value_c(X, ""));
-    xr_json_set_by_key(X, json, "exitCode", xr_int(exit_code));
+    xr_json_set_by_key(X, json, XR_OS_CORE_EXEC_FIELD_NAMES[XR_OS_CORE_EXEC_STDOUT],
+                       xrs_string_value_c(X, output));
+    xr_json_set_by_key(X, json, XR_OS_CORE_EXEC_FIELD_NAMES[XR_OS_CORE_EXEC_STDERR],
+                       xrs_string_value_c(X, ""));
+    xr_json_set_by_key(X, json, XR_OS_CORE_EXEC_FIELD_NAMES[XR_OS_CORE_EXEC_EXIT_CODE],
+                       xr_int(exit_code));
     xr_free(output);
     return xr_json_value(json);
 #else
@@ -810,9 +819,12 @@ static XrValue os_exec(XrVMRuntime *X, XrValue *args, int argc) {
 
     XrJson *json = xr_json_new(xr_current_coro(X));
     XR_CHECK(json != NULL, "os_exec: json alloc failed");
-    xr_json_set_by_key(X, json, "stdout", xrs_string_value_c(X, stdout_buf ? stdout_buf : ""));
-    xr_json_set_by_key(X, json, "stderr", xrs_string_value_c(X, stderr_buf ? stderr_buf : ""));
-    xr_json_set_by_key(X, json, "exitCode", xr_int(exit_code));
+    xr_json_set_by_key(X, json, XR_OS_CORE_EXEC_FIELD_NAMES[XR_OS_CORE_EXEC_STDOUT],
+                       xrs_string_value_c(X, stdout_buf ? stdout_buf : ""));
+    xr_json_set_by_key(X, json, XR_OS_CORE_EXEC_FIELD_NAMES[XR_OS_CORE_EXEC_STDERR],
+                       xrs_string_value_c(X, stderr_buf ? stderr_buf : ""));
+    xr_json_set_by_key(X, json, XR_OS_CORE_EXEC_FIELD_NAMES[XR_OS_CORE_EXEC_EXIT_CODE],
+                       xr_int(exit_code));
 
     xr_free(stdout_buf);
     xr_free(stderr_buf);

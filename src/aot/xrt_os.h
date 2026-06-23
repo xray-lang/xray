@@ -478,7 +478,7 @@ static inline XrValue xrt_os_sleep(XrValue ms_value) {
 
 static inline bool xrt_os_exec_buffer_init(char **buf, size_t *len, size_t *cap) {
     *len = 0;
-    *cap = 4096;
+    *cap = XR_OS_CORE_EXEC_INITIAL_CAP;
     *buf = (char *) XRT_MALLOC(*cap);
     if (!*buf) {
         *cap = 0;
@@ -490,35 +490,29 @@ static inline bool xrt_os_exec_buffer_init(char **buf, size_t *len, size_t *cap)
 
 static inline bool xrt_os_exec_buffer_append(char **buf, size_t *len, size_t *cap, const char *data,
                                              size_t n) {
-    if (!buf || !len || !cap || !data)
+    if (!buf || !*buf || !len || !cap || (!data && n > 0))
         return false;
-    if (*len + n + 1 > *cap) {
-        size_t new_cap = *cap ? *cap : 4096;
-        while (*len + n + 1 > new_cap) {
-            size_t next = new_cap * 2;
-            if (next <= new_cap)
-                return false;
-            new_cap = next;
-        }
+    size_t new_cap = 0;
+    if (!xr_os_core_exec_buffer_next_cap(*len, *cap, n, &new_cap))
+        return false;
+    if (new_cap > *cap) {
         char *grown = (char *) XRT_REALLOC(*buf, new_cap);
         if (!grown)
             return false;
         *buf = grown;
         *cap = new_cap;
     }
-    memcpy(*buf + *len, data, n);
-    *len += n;
-    (*buf)[*len] = '\0';
-    return true;
+    return xr_os_core_exec_buffer_append_raw(*buf, len, *cap, data, n);
 }
 
 static inline XrValue xrt_os_exec_result(const char *stdout_buf, const char *stderr_buf,
                                          int64_t exit_code) {
-    static const char *const fields[] = {"stdout", "stderr", "exitCode"};
-    XrValue obj = xrt_json_new_named(3, fields);
-    xrt_json_set_field(obj, 0, xrt_os_cstr_value(stdout_buf ? stdout_buf : ""));
-    xrt_json_set_field(obj, 1, xrt_os_cstr_value(stderr_buf ? stderr_buf : ""));
-    xrt_json_set_field(obj, 2, XR_FROM_INT(exit_code));
+    XrValue obj = xrt_json_new_named(XR_OS_CORE_EXEC_FIELD_COUNT, XR_OS_CORE_EXEC_FIELD_NAMES);
+    xrt_json_set_field(obj, XR_OS_CORE_EXEC_STDOUT,
+                       xrt_os_cstr_value(stdout_buf ? stdout_buf : ""));
+    xrt_json_set_field(obj, XR_OS_CORE_EXEC_STDERR,
+                       xrt_os_cstr_value(stderr_buf ? stderr_buf : ""));
+    xrt_json_set_field(obj, XR_OS_CORE_EXEC_EXIT_CODE, XR_FROM_INT(exit_code));
     return obj;
 }
 
@@ -681,7 +675,7 @@ static inline XrValue xrt_os_exec(const char *cmd_data, int64_t cmd_len) {
         XRT_FREE(output);
         return XR_NULL_VAL;
     }
-    int64_t exit_code = raw_status < 0 ? -1 : (raw_status & 0xFF);
+    int64_t exit_code = xr_os_core_exec_windows_exit_code(raw_status);
     XrValue result = xrt_os_exec_result(output, "", exit_code);
     XRT_FREE(output);
     return result;
