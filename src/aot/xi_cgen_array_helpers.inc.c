@@ -1121,7 +1121,7 @@ static bool emit_typed_array_new_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f
         emit_value_as_rep(out, fill.cap_value, XR_REP_I64);
         fprintf(out, ", %s)", info.elem_name);
     } else {
-        fprintf(out, "xrt_array_new_typed(%" PRId64 ", %s)", cap, info.elem_name);
+        fprintf(out, "xrt_array_new_typed_len(%" PRId64 ", %s)", cap, info.elem_name);
     }
     return true;
 }
@@ -1137,7 +1137,10 @@ static bool emit_typed_array_new_ptr_expr(XiCgenCtx *ctx, FILE *out, const XiFun
         emit_value_as_rep(out, fill.cap_value, XR_REP_I64);
         fprintf(out, ", %s)", info.elem_name);
     } else {
-        fprintf(out, "xrt_array_new_typed_ptr(%" PRId64 ", %s)", cap, info.elem_name);
+        fprintf(out,
+                "({ xrt_array_t *_a = xrt_array_new_typed_ptr(%" PRId64 ", %s); "
+                "_a->length = %" PRId64 "; _a; })",
+                cap, info.elem_name, cap < 0 ? 0 : cap);
     }
     return true;
 }
@@ -1433,20 +1436,13 @@ static bool emit_typed_array_index_set_expr(XiCgenCtx *ctx, FILE *out, const XiF
     emit_typed_array_ptr_expr(ctx, out, f, v->args[0], prefix);
     fprintf(out, "; int64_t _idx = ");
     emit_value_as_rep(out, v->args[1], XR_REP_I64);
-    fprintf(out, "; if (_idx < 0) _idx += _a->length; ");
-    fprintf(
-        out,
-        "if (_idx >= 0) { if (XR_UNLIKELY(_idx >= _a->capacity)) { if (_a->data_storage == "
-        "XR_ARRAY_DATA_BORROWED) { "
-        "fprintf(stderr, \"xrt_array_set: cannot grow array slice\\n\"); abort(); } "
-        "int64_t _ncap = _a->capacity == 0 ? 4 : _a->capacity; while (_idx >= _ncap) _ncap *= 2; "
-        "xrt_array_data_grow(_a, _ncap); } "
-        "if (_idx > _a->length) { memset((uint8_t*)_a->data + (size_t)_a->length * "
-        "sizeof(%s), 0, (size_t)(_idx - _a->length) * sizeof(%s)); "
-        "_a->length = _idx; } ((%s*)_a->data)[_idx] = ",
-        info.ctype, info.ctype, info.ctype);
+    fprintf(out,
+            "; XrArrayCoreIndexSetPlan _plan = "
+            "xr_array_core_index_set_plan(_a->length, _idx); "
+            "if (_plan.kind == XR_ARRAY_CORE_INDEX_SET_WRITE) { ((%s*)_a->data)[_plan.index] = ",
+            info.ctype);
     emit_typed_array_store_value(out, &info, v->args[2]);
-    fprintf(out, "; if (_idx == _a->length) _a->length++; } XR_NULL_VAL; })");
+    fprintf(out, "; } else { xrt_index_oob(_idx, _a->length); } XR_NULL_VAL; })");
     return true;
 }
 

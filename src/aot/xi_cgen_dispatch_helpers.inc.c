@@ -986,8 +986,9 @@ static void xicgen_json_set_f(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
 }
 
 static int64_t xicgen_capacity_arg_or_default(const XiValue *v, int64_t fallback) {
-    if (v && v->nargs >= 1 && v->args[0] && v->args[0]->op == XI_CONST)
-        return v->args[0]->aux_int;
+    const XiValue *arg = (v && v->nargs >= 1) ? cg_unwrap_identity_value(v->args[0]) : NULL;
+    if (arg && arg->op == XI_CONST)
+        return arg->aux_int;
     return fallback;
 }
 
@@ -1004,9 +1005,12 @@ static void xicgen_array_new(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
     int64_t cap = xicgen_capacity_arg_or_default(v, 4);
     if (xicgen_value_c_storage_rep(ctx, f, v) == XR_REP_PTR) {
         if (!emit_typed_array_new_ptr_expr(ctx, out, f, v, cap))
-            fprintf(out, "(xrt_array_t*)xrt_array_new(%" PRId64 ").ptr", cap);
+            fprintf(out,
+                    "({ XrValue _a = xrt_array_new_len(%" PRId64 "); "
+                    "(xrt_array_t*)_a.ptr; })",
+                    cap);
     } else if (!emit_typed_array_new_expr(ctx, out, f, v, cap)) {
-        fprintf(out, "xrt_array_new(%" PRId64 ")", cap);
+        fprintf(out, "xrt_array_new_len(%" PRId64 ")", cap);
     }
 }
 
@@ -2279,9 +2283,11 @@ static void xicgen_stack_alloc(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
     (void) f;
     int32_t orig_op = v->aux_int;
     if (orig_op == XI_ARRAY_NEW) {
-        int64_t cap =
-            (v->nargs >= 1 && v->args[0] && v->args[0]->op == XI_CONST) ? v->args[0]->aux_int : 4;
-        fprintf(out, "xrt_array_stack_new(%" PRId64 ")", cap);
+        int64_t cap = xicgen_capacity_arg_or_default(v, 4);
+        fprintf(out,
+                "({ XrValue _a = xrt_array_stack_new(%" PRId64 "); "
+                "((xrt_array_t*)_a.ptr)->length = %" PRId64 "; _a; })",
+                cap, cap < 0 ? 0 : cap);
     } else if (orig_op == XI_MAP_NEW) {
         int64_t cap =
             (v->nargs >= 1 && v->args[0] && v->args[0]->op == XI_CONST) ? v->args[0]->aux_int : 8;

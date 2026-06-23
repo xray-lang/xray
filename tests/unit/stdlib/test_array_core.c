@@ -45,6 +45,21 @@ TEST(array_core_fill_range_matches_slice_bounds) {
     assert_range(xr_array_core_fill_range(6, 4, 2), 2, 2, 0);
 }
 
+TEST(array_core_index_set_plan_rejects_wraparound_and_gaps) {
+    XrArrayCoreIndexSetPlan plan = xr_array_core_index_set_plan(3, 1);
+    ASSERT_EQ_INT(plan.kind, XR_ARRAY_CORE_INDEX_SET_WRITE);
+    ASSERT_EQ_INT(plan.index, 1);
+
+    plan = xr_array_core_index_set_plan(3, -1);
+    ASSERT_EQ_INT(plan.kind, XR_ARRAY_CORE_INDEX_SET_INVALID);
+
+    plan = xr_array_core_index_set_plan(3, 5);
+    ASSERT_EQ_INT(plan.kind, XR_ARRAY_CORE_INDEX_SET_INVALID);
+
+    plan = xr_array_core_index_set_plan(3, 3);
+    ASSERT_EQ_INT(plan.kind, XR_ARRAY_CORE_INDEX_SET_INVALID);
+}
+
 TEST(array_core_typed_index_of_matches_boxed_tags) {
     int handled = 0;
     uint8_t bytes[] = {1, 255, 3};
@@ -156,6 +171,7 @@ RUN_TEST(array_core_slice_range_handles_negative_bounds);
 RUN_TEST(array_core_slice_range_empty_when_start_after_end);
 RUN_TEST(array_core_slice_range_accepts_nonpositive_length);
 RUN_TEST(array_core_fill_range_matches_slice_bounds);
+RUN_TEST(array_core_index_set_plan_rejects_wraparound_and_gaps);
 RUN_TEST(array_core_typed_index_of_matches_boxed_tags);
 RUN_TEST(array_core_bytes_loads_little_endian_and_rejects_invalid_ranges);
 RUN_TEST(array_core_bytes_copy_uses_shared_range_and_overlap_rules);

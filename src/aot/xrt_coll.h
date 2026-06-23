@@ -171,6 +171,14 @@ static inline XrValue xrt_array_new(int64_t cap) {
     return xr_mkptr(a, XR_TAG_ARRAY);
 }
 
+static inline XrValue xrt_array_new_len(int64_t len) {
+    if (len < 0)
+        len = 0;
+    XrValue arr = xrt_array_new(len);
+    ((xrt_array_t *) arr.ptr)->length = len;
+    return arr;
+}
+
 static inline xrt_array_t *xrt_array_new_typed_ptr(int64_t cap, uint8_t etype) {
     if (cap < 4)
         cap = 4;
@@ -179,6 +187,14 @@ static inline xrt_array_t *xrt_array_new_typed_ptr(int64_t cap, uint8_t etype) {
 
 static inline XrValue xrt_array_new_typed(int64_t cap, uint8_t etype) {
     return xr_mkptr(xrt_array_new_typed_ptr(cap, etype), XR_TAG_ARRAY);
+}
+
+static inline XrValue xrt_array_new_typed_len(int64_t len, uint8_t etype) {
+    if (len < 0)
+        len = 0;
+    XrValue arr = xrt_array_new_typed(len, etype);
+    ((xrt_array_t *) arr.ptr)->length = len;
+    return arr;
 }
 
 static inline xrt_array_t *xrt_array_new_typed_uninit_ptr(int64_t cap, uint8_t etype) {
