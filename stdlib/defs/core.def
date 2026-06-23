@@ -1467,6 +1467,83 @@ module crypto {
 }
 
 module regex {
+  native_class Regex {
+    super_slot: objectClass
+    core_slot: regexClass
+    native_body: g_regex_body_desc
+    flags: "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY"
+    builtin_kind: XR_BK_REGEX
+  }
+
+  class RegexMatch {
+    super_slot: objectClass
+    core_slot: regexMatchClass
+    flags: "XR_CLASS_BUILTIN | XR_CLASS_FINAL"
+    builtin_kind: XR_BK_REGEX_MATCH
+  }
+
+  class_method Regex.test {
+    vm: "re_m_test"
+    argc: 1
+  }
+
+  class_method Regex.find {
+    vm: "re_m_find"
+    argc: 2
+  }
+
+  class_method Regex.findText {
+    vm: "re_m_find_text"
+    argc: 1
+  }
+
+  class_method Regex.findGroup {
+    vm: "re_m_find_group"
+    argc: 2
+  }
+
+  class_method Regex.findAll {
+    vm: "re_m_find_all"
+    argc: 2
+  }
+
+  class_method Regex.replace {
+    vm: "re_m_replace"
+    argc: 2
+  }
+
+  class_method Regex.replaceAll {
+    vm: "re_m_replace_all"
+    argc: 2
+  }
+
+  class_method Regex.split {
+    vm: "re_m_split"
+    argc: 2
+  }
+
+  class_method Regex.pattern {
+    vm: "re_method_pattern"
+    argc: 0
+  }
+
+  class_method Regex.toString {
+    vm: "re_m_to_string"
+    argc: 0
+  }
+
+  class_field RegexMatch.start {
+  }
+
+  class_field RegexMatch.end {
+  }
+
+  class_field RegexMatch.text {
+  }
+
+  class_field RegexMatch.groups {
+  }
+
   fn compile {
     signature: "(pattern: string, flags?: string): Regex"
     doc: "Compile regex pattern"

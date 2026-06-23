@@ -133,12 +133,38 @@ class StdlibNativeClassEntry:
 
 
 @dataclasses.dataclass(frozen=True)
+class StdlibClassEntry:
+    module: str
+    name: str
+    super_slot: str
+    core_slot: str
+    flags: str
+    builtin_kind: str
+
+    @property
+    def symbol(self) -> str:
+        return f"{self.module}.{self.name}"
+
+
+@dataclasses.dataclass(frozen=True)
 class StdlibClassMethodEntry:
     module: str
     class_name: str
     name: str
     vm: str
     argc: str
+    flags: str
+
+    @property
+    def symbol(self) -> str:
+        return f"{self.class_name}.{self.name}"
+
+
+@dataclasses.dataclass(frozen=True)
+class StdlibClassFieldEntry:
+    module: str
+    class_name: str
+    name: str
     flags: str
 
     @property
@@ -224,7 +250,9 @@ def parse_def_metadata(
     list[StdlibHandleEntry],
     list[StdlibTypeMethodEntry],
     list[StdlibNativeClassEntry],
+    list[StdlibClassEntry],
     list[StdlibClassMethodEntry],
+    list[StdlibClassFieldEntry],
 ]:
     defs_dir = root / "stdlib" / "defs"
     entries: list[StdlibEntry] = []
@@ -232,7 +260,9 @@ def parse_def_metadata(
     handles: list[StdlibHandleEntry] = []
     type_methods: list[StdlibTypeMethodEntry] = []
     native_classes: list[StdlibNativeClassEntry] = []
+    classes: list[StdlibClassEntry] = []
     class_methods: list[StdlibClassMethodEntry] = []
+    class_fields: list[StdlibClassFieldEntry] = []
     if not defs_dir.exists():
         raise SystemExit(f"missing stdlib defs directory: {defs_dir}")
 
@@ -401,6 +431,21 @@ def parse_def_metadata(
                     builtin_kind=str(props.get("builtin_kind", "")),
                 )
             )
+        elif current_kind == "class":
+            missing = [k for k in ("core_slot",) if k not in props]
+            if missing:
+                names = ", ".join(missing)
+                raise SystemExit(f"{path}:{line_no}: {current_module}.{current_name} missing {names}")
+            classes.append(
+                StdlibClassEntry(
+                    module=current_module,
+                    name=current_name,
+                    super_slot=str(props.get("super_slot", "")),
+                    core_slot=str(props["core_slot"]),
+                    flags=str(props.get("flags", "XR_CLASS_BUILTIN")),
+                    builtin_kind=str(props.get("builtin_kind", "")),
+                )
+            )
         elif current_kind == "class_method":
             missing = [k for k in ("vm", "argc") if k not in props]
             if missing:
@@ -414,6 +459,16 @@ def parse_def_metadata(
                     name=method_name,
                     vm=str(props["vm"]),
                     argc=str(props["argc"]),
+                    flags=str(props.get("flags", "0")),
+                )
+            )
+        elif current_kind == "class_field":
+            class_name, field_name = str(current_name).split(".", 1)
+            class_fields.append(
+                StdlibClassFieldEntry(
+                    module=current_module,
+                    class_name=class_name,
+                    name=field_name,
                     flags=str(props.get("flags", "0")),
                 )
             )
@@ -481,6 +536,14 @@ def parse_def_metadata(
                 current_name = m.group(1)
                 props = {}
                 continue
+            m = re.fullmatch(r"class\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{", line)
+            if m:
+                if current_module is None or current_kind is not None:
+                    raise SystemExit(f"{path}:{line_no}: class outside module or nested class")
+                current_kind = "class"
+                current_name = m.group(1)
+                props = {}
+                continue
             m = re.fullmatch(
                 r"class_method\s+([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_:]*)\s*\{",
                 line,
@@ -491,6 +554,19 @@ def parse_def_metadata(
                         f"{path}:{line_no}: class_method outside module or nested class_method"
                     )
                 current_kind = "class_method"
+                current_name = f"{m.group(1)}.{m.group(2)}"
+                props = {}
+                continue
+            m = re.fullmatch(
+                r"class_field\s+([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*)\s*\{",
+                line,
+            )
+            if m:
+                if current_module is None or current_kind is not None:
+                    raise SystemExit(
+                        f"{path}:{line_no}: class_field outside module or nested class_field"
+                    )
+                current_kind = "class_field"
                 current_name = f"{m.group(1)}.{m.group(2)}"
                 props = {}
                 continue
@@ -511,36 +587,36 @@ def parse_def_metadata(
 
     if current_module is not None or current_kind is not None:
         raise SystemExit("unterminated stdlib .def block")
-    return entries, constants, handles, type_methods, native_classes, class_methods
+    return entries, constants, handles, type_methods, native_classes, classes, class_methods, class_fields
 
 
 def parse_defs(root: Path) -> list[StdlibEntry]:
-    entries, _, _, _, _, _ = parse_def_metadata(root)
+    entries, _, _, _, _, _, _, _ = parse_def_metadata(root)
     return entries
 
 
 def parse_constants(root: Path) -> list[StdlibConstEntry]:
-    _, constants, _, _, _, _ = parse_def_metadata(root)
+    _, constants, _, _, _, _, _, _ = parse_def_metadata(root)
     return constants
 
 
 def parse_handles(root: Path) -> list[StdlibHandleEntry]:
-    _, _, handles, _, _, _ = parse_def_metadata(root)
+    _, _, handles, _, _, _, _, _ = parse_def_metadata(root)
     return handles
 
 
 def parse_type_methods(root: Path) -> list[StdlibTypeMethodEntry]:
-    _, _, _, type_methods, _, _ = parse_def_metadata(root)
+    _, _, _, type_methods, _, _, _, _ = parse_def_metadata(root)
     return type_methods
 
 
 def parse_native_classes(root: Path) -> list[StdlibNativeClassEntry]:
-    _, _, _, _, native_classes, _ = parse_def_metadata(root)
+    _, _, _, _, native_classes, _, _, _ = parse_def_metadata(root)
     return native_classes
 
 
 def parse_class_methods(root: Path) -> list[StdlibClassMethodEntry]:
-    _, _, _, _, _, class_methods = parse_def_metadata(root)
+    _, _, _, _, _, _, class_methods, _ = parse_def_metadata(root)
     return class_methods
 
 
@@ -926,31 +1002,45 @@ def c_snake(value: str) -> str:
 
 def emit_class_bindings(
     native_classes: list[StdlibNativeClassEntry],
+    classes: list[StdlibClassEntry],
     class_methods: list[StdlibClassMethodEntry],
+    class_fields: list[StdlibClassFieldEntry],
 ) -> str:
     class_keys = {(c.module, c.name) for c in native_classes}
+    class_keys.update((c.module, c.name) for c in classes)
     methods_by_class: dict[tuple[str, str], list[StdlibClassMethodEntry]] = {}
     for method in class_methods:
         key = (method.module, method.class_name)
         if key not in class_keys:
-            raise SystemExit(f"{method.symbol}: class_method has no native_class entry")
+            raise SystemExit(f"{method.symbol}: class_method has no class entry")
         c_ident(method.vm, method.symbol)
         c_int_expr(method.argc, method.symbol)
         c_flag_expr(method.flags, method.symbol)
         methods_by_class.setdefault(key, []).append(method)
 
+    fields_by_class: dict[tuple[str, str], list[StdlibClassFieldEntry]] = {}
+    for field in class_fields:
+        key = (field.module, field.class_name)
+        if key not in class_keys:
+            raise SystemExit(f"{field.symbol}: class_field has no class entry")
+        c_flag_expr(field.flags, field.symbol)
+        fields_by_class.setdefault(key, []).append(field)
+
     seen_slots: dict[str, str] = {}
-    for cls in native_classes:
+    all_classes = [*native_classes, *classes]
+    native_keys = {(c.module, c.name) for c in native_classes}
+    for cls in all_classes:
         c_ident(cls.core_slot, cls.symbol)
         if cls.super_slot:
             c_ident(cls.super_slot, cls.symbol)
-        c_native_body_expr(cls.native_body_expr, cls.symbol)
         c_flag_expr(cls.flags, cls.symbol)
         if cls.builtin_kind:
             c_ident(cls.builtin_kind, cls.symbol)
+        if (cls.module, cls.name) in native_keys:
+            c_native_body_expr(cls.native_body_expr, cls.symbol)
         other = seen_slots.get(cls.core_slot)
         if other is not None:
-            raise SystemExit(f"{cls.symbol}: duplicate native class core slot with {other}")
+            raise SystemExit(f"{cls.symbol}: duplicate class core slot with {other}")
         seen_slots[cls.core_slot] = cls.symbol
 
     lines = generated_header("xstdlib_class_bindings_generated.inc.c - VM stdlib class binding shell")
@@ -964,10 +1054,11 @@ def emit_class_bindings(
             "",
         ]
     )
-    for cls in native_classes:
+    for cls in all_classes:
         suffix = c_macro_suffix(cls.name, cls.symbol)
         helper = f"xr_stdlib_vm_register_{c_snake(cls.name)}_class_generated"
         super_expr = f"core->{cls.super_slot}" if cls.super_slot else "NULL"
+        is_native = (cls.module, cls.name) in native_keys
         lines.append(f"#ifdef XR_STDLIB_VM_BIND_CLASS_{suffix}")
         lines.append(f"static void {helper}(XrVMRuntime *X) {{")
         lines.append(f"    XR_DCHECK(X != NULL, {c_string(helper + ': NULL isolate')});")
@@ -987,7 +1078,12 @@ def emit_class_bindings(
             f"{c_string(cls.name)}, {super_expr});"
         )
         lines.append(f"    XR_CHECK(builder != NULL, {c_string(helper + ': builder alloc failed')});")
-        lines.append(f"    xr_class_builder_set_native_body(builder, {cls.native_body_expr});")
+        if is_native:
+            lines.append(f"    xr_class_builder_set_native_body(builder, {cls.native_body_expr});")
+        for field in fields_by_class.get((cls.module, cls.name), []):
+            lines.append(
+                f"    xr_class_builder_add_field(builder, {c_string(field.name)}, {field.flags});"
+            )
         for method in methods_by_class.get((cls.module, cls.name), []):
             lines.append(
                 f"    xr_class_builder_add_method(builder, {c_string(method.name)}, "
@@ -1013,7 +1109,9 @@ def emit_defs_header(
     handles: list[StdlibHandleEntry],
     type_methods: list[StdlibTypeMethodEntry],
     native_classes: list[StdlibNativeClassEntry],
+    classes: list[StdlibClassEntry],
     class_methods: list[StdlibClassMethodEntry],
+    class_fields: list[StdlibClassFieldEntry],
 ) -> str:
     lines = generated_header("xstdlib_defs_generated.h - stdlib declarative metadata")
     lines.extend(
@@ -1094,6 +1192,15 @@ def emit_defs_header(
             "    const char *builtin_kind;",
             "} XrStdlibNativeClassDefEntry;",
             "",
+            "typedef struct XrStdlibClassDefEntry {",
+            "    const char *module;",
+            "    const char *name;",
+            "    const char *super_slot;",
+            "    const char *core_slot;",
+            "    const char *flags;",
+            "    const char *builtin_kind;",
+            "} XrStdlibClassDefEntry;",
+            "",
             "typedef struct XrStdlibClassMethodDefEntry {",
             "    const char *module;",
             "    const char *class_name;",
@@ -1102,6 +1209,13 @@ def emit_defs_header(
             "    int16_t argc;",
             "    const char *flags;",
             "} XrStdlibClassMethodDefEntry;",
+            "",
+            "typedef struct XrStdlibClassFieldDefEntry {",
+            "    const char *module;",
+            "    const char *class_name;",
+            "    const char *name;",
+            "    const char *flags;",
+            "} XrStdlibClassFieldDefEntry;",
             "",
             "static const XrStdlibDefEntry xr_stdlib_def_entries[] = {",
         ]
@@ -1212,6 +1326,23 @@ def emit_defs_header(
             "((uint32_t) (sizeof(xr_stdlib_native_class_def_entries) / "
             "sizeof(xr_stdlib_native_class_def_entries[0])))",
             "",
+            "static const XrStdlibClassDefEntry xr_stdlib_class_def_entries[] = {",
+        ]
+    )
+    for cls in classes:
+        lines.append(
+            "    {"
+            f"{c_string(cls.module)}, {c_string(cls.name)}, {c_string(cls.super_slot)}, "
+            f"{c_string(cls.core_slot)}, {c_string(cls.flags)}, {c_string(cls.builtin_kind)}"
+            "},"
+        )
+    lines.extend(
+        [
+            "};",
+            "#define XR_STDLIB_CLASS_DEF_ENTRY_COUNT "
+            "((uint32_t) (sizeof(xr_stdlib_class_def_entries) / "
+            "sizeof(xr_stdlib_class_def_entries[0])))",
+            "",
             "static const XrStdlibClassMethodDefEntry xr_stdlib_class_method_def_entries[] = {",
         ]
     )
@@ -1230,6 +1361,23 @@ def emit_defs_header(
             "((uint32_t) (sizeof(xr_stdlib_class_method_def_entries) / "
             "sizeof(xr_stdlib_class_method_def_entries[0])))",
             "",
+            "static const XrStdlibClassFieldDefEntry xr_stdlib_class_field_def_entries[] = {",
+        ]
+    )
+    for field in class_fields:
+        lines.append(
+            "    {"
+            f"{c_string(field.module)}, {c_string(field.class_name)}, "
+            f"{c_string(field.name)}, {c_string(field.flags)}"
+            "},"
+        )
+    lines.extend(
+        [
+            "};",
+            "#define XR_STDLIB_CLASS_FIELD_DEF_ENTRY_COUNT "
+            "((uint32_t) (sizeof(xr_stdlib_class_field_def_entries) / "
+            "sizeof(xr_stdlib_class_field_def_entries[0])))",
+            "",
             "#endif  /* XSTDLIB_DEFS_GENERATED_H */",
             "",
             "/* clang-format on */",
@@ -1240,7 +1388,9 @@ def emit_defs_header(
 
 
 def output_paths(root: Path) -> dict[Path, str]:
-    entries, constants, handles, type_methods, native_classes, class_methods = parse_def_metadata(root)
+    entries, constants, handles, type_methods, native_classes, classes, class_methods, class_fields = (
+        parse_def_metadata(root)
+    )
     return {
         root / "src" / "aot" / "xstdlib_aot_methods_generated.inc.c": emit_aot_methods(
             entries, constants
@@ -1252,10 +1402,17 @@ def output_paths(root: Path) -> dict[Path, str]:
             entries, constants
         ),
         root / "src" / "stdlib" / "xstdlib_class_bindings_generated.inc.c": emit_class_bindings(
-            native_classes, class_methods
+            native_classes, classes, class_methods, class_fields
         ),
         root / "src" / "stdlib" / "xstdlib_defs_generated.h": emit_defs_header(
-            entries, constants, handles, type_methods, native_classes, class_methods
+            entries,
+            constants,
+            handles,
+            type_methods,
+            native_classes,
+            classes,
+            class_methods,
+            class_fields,
         ),
     }
 

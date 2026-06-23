@@ -720,52 +720,15 @@ static XrValue re_m_to_string(XrVMRuntime *iso, XrValue self, XrValue *args, int
     return xr_string_value(xr_value_to_string(iso, self));
 }
 
+#define XR_STDLIB_VM_BIND_CLASS_REGEX 1
+#define XR_STDLIB_VM_BIND_CLASS_REGEX_MATCH 1
+#include "../../src/stdlib/xstdlib_class_bindings_generated.inc.c"
+#undef XR_STDLIB_VM_BIND_CLASS_REGEX_MATCH
+#undef XR_STDLIB_VM_BIND_CLASS_REGEX
+
 void xr_regex_register_class(XrVMRuntime *isolate) {
-    XR_DCHECK(isolate != NULL, "regex_register_class: NULL isolate");
-    XrayCoreClasses *core = xr_isolate_get_core_classes(isolate);
-    XR_DCHECK(core != NULL, "regex_register_class: core not initialised");
-    XR_DCHECK(core->regexClass == NULL, "regex_register_class: already registered");
-
-    XrClassBuilder *b = xr_class_builder_new(isolate, "Regex", core->objectClass);
-    XR_CHECK(b != NULL, "regex_register_class: builder alloc failed");
-
-    xr_class_builder_set_native_body(b, &g_regex_body_desc);
-
-    /* Instance methods */
-    xr_class_builder_add_method(b, "test", re_m_test, 0, 1);
-    xr_class_builder_add_method(b, "find", re_m_find, 0, 2);
-    xr_class_builder_add_method(b, "findText", re_m_find_text, 0, 1);
-    xr_class_builder_add_method(b, "findGroup", re_m_find_group, 0, 2);
-    xr_class_builder_add_method(b, "findAll", re_m_find_all, 0, 2);
-    xr_class_builder_add_method(b, "replace", re_m_replace, 0, 2);
-    xr_class_builder_add_method(b, "replaceAll", re_m_replace_all, 0, 2);
-    xr_class_builder_add_method(b, "split", re_m_split, 0, 2);
-    xr_class_builder_add_method(b, "pattern", re_method_pattern, 0, 0);
-    xr_class_builder_add_method(b, "toString", re_m_to_string, 0, 0);
-
-    XrClass *cls = xr_class_builder_finalize(b);
-    XR_CHECK(cls != NULL, "regex_register_class: finalize failed");
-    cls->flags |= XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY;
-    cls->builtin_kind = XR_BK_REGEX;
-    core->regexClass = cls;
-
-    /* ---- RegexMatch (plain fields, no native body) ---- */
-    XR_DCHECK(core->regexMatchClass == NULL,
-              "regex_register_class: regexMatchClass already registered");
-    XrClassBuilder *mb = xr_class_builder_new(isolate, "RegexMatch", core->objectClass);
-    XR_CHECK(mb != NULL, "regex_register_class: match builder alloc failed");
-
-    /* Field order MUST match REGEX_MATCH_FIELD_* constants. */
-    xr_class_builder_add_field(mb, "start", 0);
-    xr_class_builder_add_field(mb, "end", 0);
-    xr_class_builder_add_field(mb, "text", 0);
-    xr_class_builder_add_field(mb, "groups", 0);
-
-    XrClass *mcls = xr_class_builder_finalize(mb);
-    XR_CHECK(mcls != NULL, "regex_register_class: match finalize failed");
-    mcls->flags |= XR_CLASS_BUILTIN | XR_CLASS_FINAL;
-    mcls->builtin_kind = XR_BK_REGEX_MATCH;
-    core->regexMatchClass = mcls;
+    xr_stdlib_vm_register_regex_class_generated(isolate);
+    xr_stdlib_vm_register_regex_match_class_generated(isolate);
 }
 
 /* ========================================================================

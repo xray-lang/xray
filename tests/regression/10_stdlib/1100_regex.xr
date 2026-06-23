@@ -10,6 +10,31 @@ fn test_compile_and_test() {
     assert_eq(regex.test(re, "no digits"), false)
 }
 
+// @test instance methods
+@test
+fn test_instance_methods() {
+    let re = regex.compile("(\\w+)(\\d+)")
+    assert_eq(re.test("abc123"), true)
+
+    let found = re.find("abc123 xyz456")
+    assert(found != null)
+    assert_eq(found.text, "abc123")
+
+    assert_eq(re.findText("abc123 xyz456"), "abc123")
+    assert_eq(re.findGroup("abc123 xyz456", 1), "abc")
+    assert_eq(re.findGroup("abc123 xyz456", 2), "123")
+
+    let all = re.findAll("abc123 xyz456")
+    assert_eq(all.length, 2)
+
+    assert_eq(re.replace("abc123 xyz456", "N"), "N xyz456")
+
+    let comma = regex.compile(",\\s*")
+    let parts = comma.split("a, b, c")
+    assert_eq(parts.length, 3)
+    assert_eq(parts[2], "c")
+}
+
 // @test find with positions
 @test
 fn test_find() {
