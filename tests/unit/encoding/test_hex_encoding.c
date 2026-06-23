@@ -12,6 +12,7 @@
  */
 
 #include "../test_framework.h"
+#include "shared/xr_encoding_core.h"
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -102,6 +103,52 @@ TEST(hex_roundtrip) {
     ASSERT_TRUE(memcmp(decoded, original, 256) == 0);
 }
 
+/* ========== UTF-16 Decode View ========== */
+
+TEST(utf16_decode_view_strips_le_bom_and_autodetects) {
+    const uint8_t data[] = {0xFF, 0xFE, 0x41, 0x00};
+    XrEncodingCoreUtf16DecodeView view =
+        xr_encoding_core_utf16_decode_view(data, sizeof(data), XR_ENCODING_UTF16_BE, false, true);
+    ASSERT_EQ_PTR(view.data, data + 2);
+    ASSERT_EQ_UINT(view.len, 2);
+    ASSERT_EQ_INT(view.endian, XR_ENCODING_UTF16_LE);
+}
+
+TEST(utf16_decode_view_strips_be_bom_and_autodetects) {
+    const uint8_t data[] = {0xFE, 0xFF, 0x00, 0x41};
+    XrEncodingCoreUtf16DecodeView view =
+        xr_encoding_core_utf16_decode_view(data, sizeof(data), XR_ENCODING_UTF16_LE, false, true);
+    ASSERT_EQ_PTR(view.data, data + 2);
+    ASSERT_EQ_UINT(view.len, 2);
+    ASSERT_EQ_INT(view.endian, XR_ENCODING_UTF16_BE);
+}
+
+TEST(utf16_decode_view_keeps_explicit_endian) {
+    const uint8_t data[] = {0xFE, 0xFF, 0x00, 0x41};
+    XrEncodingCoreUtf16DecodeView view =
+        xr_encoding_core_utf16_decode_view(data, sizeof(data), XR_ENCODING_UTF16_LE, true, true);
+    ASSERT_EQ_PTR(view.data, data + 2);
+    ASSERT_EQ_UINT(view.len, 2);
+    ASSERT_EQ_INT(view.endian, XR_ENCODING_UTF16_LE);
+}
+
+TEST(utf16_decode_view_keeps_bom_when_requested) {
+    const uint8_t data[] = {0xFF, 0xFE, 0x41, 0x00};
+    XrEncodingCoreUtf16DecodeView view =
+        xr_encoding_core_utf16_decode_view(data, sizeof(data), XR_ENCODING_UTF16_BE, false, false);
+    ASSERT_EQ_PTR(view.data, data);
+    ASSERT_EQ_UINT(view.len, sizeof(data));
+    ASSERT_EQ_INT(view.endian, XR_ENCODING_UTF16_BE);
+}
+
+TEST(utf16_decode_view_allows_empty_null) {
+    XrEncodingCoreUtf16DecodeView view =
+        xr_encoding_core_utf16_decode_view(NULL, 0, XR_ENCODING_UTF16_LE, false, true);
+    ASSERT_EQ_PTR(view.data, NULL);
+    ASSERT_EQ_UINT(view.len, 0);
+    ASSERT_EQ_INT(view.endian, XR_ENCODING_UTF16_LE);
+}
+
 /* ========== Main ========== */
 
 TEST_MAIN_BEGIN()
@@ -122,5 +169,12 @@ RUN_TEST(hex_valid_false);
 
 RUN_TEST_SUITE("Hex - Roundtrip");
 RUN_TEST(hex_roundtrip);
+
+RUN_TEST_SUITE("UTF-16 - Decode View");
+RUN_TEST(utf16_decode_view_strips_le_bom_and_autodetects);
+RUN_TEST(utf16_decode_view_strips_be_bom_and_autodetects);
+RUN_TEST(utf16_decode_view_keeps_explicit_endian);
+RUN_TEST(utf16_decode_view_keeps_bom_when_requested);
+RUN_TEST(utf16_decode_view_allows_empty_null);
 
 TEST_MAIN_END()

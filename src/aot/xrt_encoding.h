@@ -138,19 +138,11 @@ static inline XrValue xrt_encoding_utf16_decode_impl(XrValue input, int endian, 
     if (!xrt_encoding_value_bytes_view(input, &data, &len))
         return XR_NULL_VAL;
 
-    if (strip_bom && len >= 2) {
-        if (data[0] == 0xFF && data[1] == 0xFE) {
-            if (!endian_explicit)
-                endian = XR_ENCODING_UTF16_LE;
-            data += 2;
-            len -= 2;
-        } else if (data[0] == 0xFE && data[1] == 0xFF) {
-            if (!endian_explicit)
-                endian = XR_ENCODING_UTF16_BE;
-            data += 2;
-            len -= 2;
-        }
-    }
+    XrEncodingCoreUtf16DecodeView view =
+        xr_encoding_core_utf16_decode_view(data, len, endian, endian_explicit != 0, strip_bom != 0);
+    data = view.data;
+    len = view.len;
+    endian = view.endian;
 
     size_t out_len = 0;
     if (!xr_encoding_core_utf16_to_utf8_len(data, len, endian, &out_len) ||
