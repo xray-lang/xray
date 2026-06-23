@@ -657,74 +657,11 @@ return_with_defer:;  // Label for RETURN0/RETURN1 fallback when defer exists
     // Get first return value (for defer/toString compatibility)
     XrValue ret_result = (nret > 0) ? R(a) : xr_null();
 
-    /* Execute current frame's defer (LIFO order)
-     * Only execute defer belonging to current frame
-     *
-     * defer stack format: [closure, arg_count, arg1, arg2, ...]
-     * Read from back: pop args, then arg count, then closure
-     */
     if (vm_ctx->defer_count > 0 && vm_ctx->defer_frame_marks) {
-        // Get current frame's defer start position
         int frame_defer_start = vm_ctx->defer_frame_marks[VM_FRAME_COUNT - 1];
-
-        // Only execute defer registered by current frame
         if (vm_ctx->defer_count > frame_defer_start) {
-            // Save current frame state
             ci->pc = pc;
-
-            // Execute current frame's defer from stack top (LIFO)
-            while (vm_ctx->defer_count > frame_defer_start) {
-                // Temporary array for args (bounded)
-                XrValue defer_args[XR_DEFER_ARGS_MAX];
-
-                // Simplified implementation: iterate all entries and execute
-                int pos = frame_defer_start;
-                int entries[XR_DEFER_ENTRIES_MAX];  // Start position of each defer entry
-                int entry_count = 0;
-                int end = vm_ctx->defer_count;
-
-                // Collect all defer entry positions (with bounds check)
-                while (pos < end && entry_count < XR_DEFER_ENTRIES_MAX) {
-                    entries[entry_count++] = pos;
-                    // Skip: closure + arg count + args
-                    int nargs = (int) XR_TO_INT(vm_ctx->defer_stack[pos + 1]);
-                    pos += 2 + nargs;
-                }
-
-                // Error if defer entries exceed limit
-                if (pos < end) {
-                    VM_RUNTIME_ERROR(XR_ERR_OVERFLOW, "defer: too many entries (%d), max=%d",
-                                     entry_count + (end - pos), XR_DEFER_ENTRIES_MAX);
-                }
-
-                // LIFO execution: from back to front
-                for (int e = entry_count - 1; e >= 0; e--) {
-                    int start = entries[e];
-                    XrValue closure_val = vm_ctx->defer_stack[start];
-                    int nargs = (int) XR_TO_INT(vm_ctx->defer_stack[start + 1]);
-
-                    // Error if defer args exceed limit
-                    if (nargs > XR_DEFER_ARGS_MAX) {
-                        VM_RUNTIME_ERROR(XR_ERR_OVERFLOW, "defer: too many arguments (%d), max=%d",
-                                         nargs, XR_DEFER_ARGS_MAX);
-                    }
-
-                    // Collect args
-                    for (int j = 0; j < nargs; j++) {
-                        defer_args[j] = vm_ctx->defer_stack[start + 2 + j];
-                    }
-
-                    // Execute
-                    if (xr_value_is_closure(closure_val)) {
-                        struct XrClosure *closure = xr_value_to_closure(closure_val);
-                        xr_vm_call_closure(isolate, closure, defer_args, nargs);
-                    }
-                }
-
-                // Clear current frame's defer
-                vm_ctx->defer_count = frame_defer_start;
-                break;
-            }
+            xr_vm_run_defers_to_mark(isolate, vm_ctx, frame_defer_start);
             // Deferred closures re-enter the VM and may grow (relocate) the
             // coroutine stack and frames; re-derive ci/base/cl/k before the
             // frame pop below reads ci->flags and the return values via R(a + j).

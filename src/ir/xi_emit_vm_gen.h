@@ -113,6 +113,8 @@
     X(CORO_OP, xi_emit_coro_op) \
     X(CHAN_NEW, xi_emit_chan_new) \
     X(DEFER, xi_emit_defer) \
+    X(DEFER_MARK, xi_emit_defer_mark) \
+    X(DEFER_RUN_TO, xi_emit_defer_run_to) \
     X(JSON_NEW, xi_emit_json_new) \
     X(JSON_INIT_F, xi_emit_json_init_f) \
     X(JSON_GET_F, xi_emit_json_get_f) \

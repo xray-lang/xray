@@ -1761,10 +1761,11 @@ fn process() {
 ```
 
 **语义**：
-- 在**函数作用域结束**时执行（不是块作用域，与 Swift 不同）。
-- **LIFO**：多个 `defer` 按声明的逆序执行。
-- **必执行**：函数正常 `return`、错误经值返回通道传播、或 panic 跨帧展开时都执行。
-- `defer` 是 Xray 唯一的确定性清理机制（取代其他语言的 `finally`）：它绑定函数作用域，而非某个块。
+- `defer` 绑定到包含它的**最近真实块** `{ ... }`。函数体本身也是块，因此写在函数体顶层的 `defer` 仍在函数退出前执行。
+- **LIFO**：同一块内多个 `defer` 按声明的逆序执行。
+- **必执行**：所属块正常结束，或通过 `break`、`continue`、`return`、值错误传播、panic 展开退出时都执行。
+- 循环体内的 `defer` 每轮迭代结束时执行，不会堆积到函数尾。
+- `defer` 是 Xray 唯一的确定性清理机制（取代其他语言的 `finally`）：它绑定词法块退出边，而不是整个函数的单一栈尾。
 - `defer` 中抛出的错误会**取代**当前正在传播的错误（参考 Go 语义）。
 
 ### 4.10 内置打印函数
@@ -3235,7 +3236,7 @@ class Exception {
 
 ### 8.3 `defer` — 资源清理
 
-`defer` 是函数作用域的清理语句，在函数退出时**保证执行**（无论正常返回、`throw`、还是 panic）。语法见 §4.9。
+`defer` 是块作用域的清理语句，在所属块退出时**保证执行**（无论正常结束、`break` / `continue`、`return`、`throw`、还是 panic）。语法见 §4.9。
 
 ```xray
 fn fetch(url: string) -> string {
@@ -3251,9 +3252,10 @@ fn fetch(url: string) -> string {
 ```
 
 **规则**：
-- `defer` 是函数作用域（Go 模型），在函数退出时按 **LIFO** 顺序执行
-- 单个函数可有多个 `defer`，按逆序执行
-- `defer` 在 `throw`、`return`、panic 时均执行
+- `defer` 绑定最近的真实 `{}` 块；函数体顶层 `defer` 仍在函数退出时执行
+- 同一块可有多个 `defer`，按 **LIFO** 顺序执行
+- `defer` 在块正常结束、`break`、`continue`、`return`、`throw`、panic 展开时均执行
+- 循环体中的 `defer` 每轮迭代退出时执行
 - `defer` 块内不应抛出错误（行为未定义）
 
 ### 8.4 Optional 与错误处理

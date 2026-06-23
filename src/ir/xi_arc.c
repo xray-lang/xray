@@ -414,7 +414,7 @@ static XiFunc *arc_resolve_callee(const XiFunc *caller, const XiValue *cv) {
         }
         return NULL;
     }
-    if (cv->op == XI_COPY && !xi_copy_is_value_clone(cv) && cv->nargs >= 1)
+    if (xi_copy_is_identity_alias(cv) && cv->nargs >= 1)
         return arc_resolve_callee(caller, cv->args[0]);
     return NULL;
 }

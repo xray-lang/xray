@@ -109,8 +109,7 @@ static XrStructLayout *xi_lower_value_struct_layout(XiLower *l, XiValue *v) {
     XrStructLayout *layout = xi_lower_type_struct_layout(l, v ? v->type : NULL);
     if (layout)
         return layout;
-    while (v && ((v->op == XI_COPY && !xi_copy_is_value_clone(v)) || v->op == XI_MOVE) &&
-           v->nargs >= 1)
+    while (v && (xi_copy_is_identity_alias(v) || v->op == XI_MOVE) && v->nargs >= 1)
         v = v->args[0];
     layout = xi_lower_type_struct_layout(l, v ? v->type : NULL);
     if (layout)
@@ -166,7 +165,7 @@ static XiValue *xi_lower_apply_primitive_type_view(XiLower *l, AstNode *node, Xi
 }
 
 static XiFunc *lower_resolve_static_callee_func_in_scope(XiFunc *scope, XiValue *callee) {
-    while (callee && callee->op == XI_COPY && !xi_copy_is_value_clone(callee) && callee->nargs >= 1)
+    while (callee && xi_copy_is_identity_alias(callee) && callee->nargs >= 1)
         callee = callee->args[0];
     if (!callee)
         return NULL;
@@ -588,7 +587,18 @@ static XiValue *lower_variable(XiLower *l, AstNode *node) {
             b.type = l->vars[var_id].type;
             return xi_lower_emit_top_load(l, b, NULL);
         }
-        return xi_lower_braun_read(l, var_id, l->cur_block);
+        XiValue *cur = xi_lower_braun_read(l, var_id, l->cur_block);
+        if (cur && var_id < l->var_count && l->vars[var_id].captured_by_child) {
+            XiValue *load = xi_value_new(l->func, l->cur_block, XI_COPY, cur->type, 1);
+            if (load) {
+                load->args[0] = cur;
+                load->aux_int = XI_COPY_KIND_CELL_READ;
+                load->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_READS_MEM;
+                load->line = (uint32_t) node->line;
+                return load;
+            }
+        }
+        return cur;
     }
 
     /* Check for program-level variable from a nested scope */
@@ -1069,8 +1079,7 @@ static XiValue *lower_member_access(XiLower *l, AstNode *node) {
 }
 
 static XiValue *lower_member_set_target(XiValue *obj) {
-    while (obj && obj->op == XI_COPY && !xi_copy_is_value_clone(obj) && obj->nargs >= 1 &&
-           obj->args[0])
+    while (obj && xi_copy_is_identity_alias(obj) && obj->nargs >= 1 && obj->args[0])
         obj = obj->args[0];
     return obj;
 }
@@ -3581,6 +3590,7 @@ static XiValue *lower_force_unwrap(XiLower *l, AstNode *node) {
             set->flags |= XI_FLAG_SIDE_EFFECT;
             set->line = (uint32_t) node->line;
         }
+        xi_lower_defer_run_to_depth(l, l->catch_defer_depths[l->try_depth - 1], node->line);
         XiBlock *catch_blk = l->catch_targets[l->try_depth - 1];
         xi_block_set_jump(l->cur_block, catch_blk);
         l->cur_block = NULL;

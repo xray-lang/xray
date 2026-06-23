@@ -274,8 +274,9 @@ static AstNode *defer_wrap_in_closure(Parser *parser, AstNode *call_expr, int li
  * The callee (free function, method receiver, or builtin) stays inside the
  * closure body so it resolves through the normal call path; only the arguments
  * are snapshotted, matching the eager argument semantics of `defer fn(args)`.
- * Each desugared defer gets its own block scope, so the fixed temp names never
- * collide across sibling defers. */
+ * Each desugared defer gets its own synthetic block for name isolation, but it
+ * must not become a semantic defer scope: the deferred call belongs to the
+ * nearest user-written block, not to this eager-capture wrapper. */
 static AstNode *defer_desugar_call(Parser *parser, AstNode *call_node, int line) {
     XrayIsolate *X = parser->X;
     CallExprNode *call = &call_node->as.call_expr;
@@ -296,6 +297,7 @@ static AstNode *defer_desugar_call(Parser *parser, AstNode *call_node, int line)
 
     /* Outer block: snapshot args into temps, then defer the rewritten call. */
     AstNode *outer = xr_ast_block(X, line);
+    outer->as.block.is_synthetic_defer_capture = true;
     for (int k = 0; k < n; k++) {
         snprintf(name, sizeof(name), "__xr_dtmp_%d", k);
         xr_ast_block_add(X, outer, xr_ast_var_decl(X, name, call->arguments[k], false, line));

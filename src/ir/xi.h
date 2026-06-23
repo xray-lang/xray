@@ -364,7 +364,9 @@ typedef enum {
     XI_ITER_VALID, /* test not-done: args[0]=iterator, returns bool */
 
     /* Defer */
-    XI_DEFER, /* defer expr: args[0]=callee (executed at scope exit) */
+    XI_DEFER,        /* defer expr: args[0]=callee (executed at scope exit) */
+    XI_DEFER_MARK,   /* returns current per-frame defer stack count */
+    XI_DEFER_RUN_TO, /* args[0]=mark; run defers registered after mark */
 
     /* Channel creation */
     XI_CHAN_NEW, /* create channel: args[0]=buffer_size (optional) */
@@ -395,7 +397,9 @@ typedef enum {
 
     /* Identity / type narrowing.  Most XI_COPY values are optimizer-inserted
      * aliases.  Lowering marks semantic value-struct copies with
-     * XI_COPY_KIND_VALUE_CLONE in aux_int so VM/AOT emit an independent clone. */
+     * XI_COPY_KIND_VALUE_CLONE in aux_int so VM/AOT emit an independent clone,
+     * and mutable-capture reads with XI_COPY_KIND_CELL_READ so optimizers do
+     * not fold them through stale SSA values before backend cell loads. */
     XI_COPY, /* identity by default: dst = args[0], may carry narrowed type */
 
     /* OOP: class creation */
@@ -639,9 +643,18 @@ typedef struct XiValue {
 
 #define XI_COPY_KIND_IDENTITY 0
 #define XI_COPY_KIND_VALUE_CLONE INT64_C(0x58434F5059434C4E)
+#define XI_COPY_KIND_CELL_READ INT64_C(0x5843454C4C524541)
 
 static inline bool xi_copy_is_value_clone(const XiValue *v) {
     return v && v->op == XI_COPY && v->aux_int == XI_COPY_KIND_VALUE_CLONE;
+}
+
+static inline bool xi_copy_is_cell_read(const XiValue *v) {
+    return v && v->op == XI_COPY && v->aux_int == XI_COPY_KIND_CELL_READ;
+}
+
+static inline bool xi_copy_is_identity_alias(const XiValue *v) {
+    return v && v->op == XI_COPY && v->aux_int == XI_COPY_KIND_IDENTITY;
 }
 
 /*

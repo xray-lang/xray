@@ -83,8 +83,13 @@ typedef struct XiLoopTarget {
     const char *label;
     XiBlock *break_target;
     XiBlock *continue_target;
+    int defer_scope_depth;
     struct XiLoopTarget *prev;
 } XiLoopTarget;
+
+typedef struct XiDeferScope {
+    XiValue *mark;
+} XiDeferScope;
 
 /* ========== Lowering Context ========== */
 
@@ -117,6 +122,13 @@ typedef struct XiLower {
     XiBlock *break_target;
     XiBlock *continue_target;
     XiLoopTarget *loop_targets;
+
+    /* Lexical defer scopes.  A scope receives a mark lazily when the first
+     * `defer` owned by that block is lowered; scopes with no direct defer stay
+     * free at runtime. */
+#define XI_MAX_DEFER_SCOPE_NESTING 256
+    XiDeferScope defer_scopes[XI_MAX_DEFER_SCOPE_NESTING];
+    int defer_scope_depth;
 
     /* Cached singleton types (obtained once from isolate) */
     struct XrType *type_int;
@@ -179,6 +191,7 @@ typedef struct XiLower {
      * throw inside try { } writes pending_error and jumps here. */
 #define XI_MAX_TRY_NESTING 32
     struct XiBlock *catch_targets[XI_MAX_TRY_NESTING];
+    int catch_defer_depths[XI_MAX_TRY_NESTING];
 
     /* True when cur_block's last instruction is XI_ERR_RETURN but the
      * block is kept alive for SSA predecessor edges (try_depth > 0).

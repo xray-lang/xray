@@ -126,6 +126,10 @@ XR_FUNC void xi_lower_for_in(XiLower *l, struct AstNode *node);
 XR_FUNC void xi_lower_try_catch(XiLower *l, struct AstNode *node);
 XR_FUNC XiValue *xi_lower_match(XiLower *l, struct AstNode *node);
 XR_FUNC XiValue *xi_lower_pattern_test(XiLower *l, XiValue *subject, struct AstNode *pattern);
+XR_FUNC void xi_lower_defer_scope_push(XiLower *l);
+XR_FUNC void xi_lower_defer_scope_pop_normal(XiLower *l, int line);
+XR_FUNC void xi_lower_defer_run_to_depth(XiLower *l, int target_depth, int line);
+XR_FUNC bool xi_lower_defer_has_active_mark(XiLower *l);
 
 /* Emit XI_IS test against the given XrTypeRef on a pre-lowered value. */
 struct XrTypeRef;

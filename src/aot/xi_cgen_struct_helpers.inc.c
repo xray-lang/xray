@@ -298,7 +298,7 @@ static XrRep cg_struct_field_rep(const XrStructLayout *sl, int64_t idx) {
 }
 
 static bool cg_is_identity_copy_or_move(const XiValue *v) {
-    return v && (v->op == XI_MOVE || (v->op == XI_COPY && !xi_copy_is_value_clone(v)));
+    return v && (v->op == XI_MOVE || xi_copy_is_identity_alias(v));
 }
 
 static const XiValue *cg_trace_struct_new_depth(const XiValue *v, int depth) {

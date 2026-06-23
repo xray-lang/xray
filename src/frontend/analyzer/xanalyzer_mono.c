@@ -349,6 +349,7 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
         case AST_BLOCK:
             n->as.block.count = node->as.block.count;
             n->as.block.capacity = node->as.block.count;
+            n->as.block.is_synthetic_defer_capture = node->as.block.is_synthetic_defer_capture;
             n->as.block.statements = clone_node_array(node->as.block.statements,
                                                       node->as.block.count, map, mc, clone_ctx);
             break;

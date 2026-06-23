@@ -1,0 +1,43 @@
+// AOT test: D22 block-scoped defer exit edges.
+
+enum BlockErr {
+    Msg(s: string)
+}
+
+fn fail() {
+    throw BlockErr.Msg("bad")
+}
+
+fn loop_sum() -> int {
+    let sum = 0
+    for (i in 0..4) {
+        defer { sum = sum + 10 + i }
+        sum = sum + 1
+    }
+    return sum
+}
+
+fn value_try() -> int {
+    let sum = 0
+    try {
+        defer { sum = sum + 10 }
+        fail()
+        sum = sum + 100
+    } catch (e) {
+        sum = sum + 1
+    }
+    return sum
+}
+
+fn return_from_block() -> int {
+    let sum = 0
+    defer { sum = sum + 100 }
+    {
+        defer { sum = sum + 10 }
+        return sum + 1
+    }
+}
+
+print(loop_sum())          // (4 body increments) + 10+0 + 10+1 + 10+2 + 10+3 = 50
+print(value_try())         // try defer runs before catch: 10 + 1
+print(return_from_block()) // defers run before caller observes return, return value remains 1

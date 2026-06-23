@@ -25,9 +25,12 @@ static bool xicgen_stmt_try(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
     const XiBlock *catch_blk = (const XiBlock *) v->aux;
     fprintf(out, "    XrtExcFrame _ef%u;\n", v->id);
     fprintf(out, "    _ef%u.prev = xrt_exc_top;\n", v->id);
-    /* Record the defer-chain top at try entry: a panic caught here unwinds and
-     * runs only the defers registered after this point (xrt_defer_unwind_to). */
-    fprintf(out, "    _ef%u.defer_mark = xrt_defer_top;\n", v->id);
+    /* Record both the active defer scope and its count at try entry. A caught
+     * panic unwinds skipped functions and then runs this same scope back to the
+     * count mark, so block-scoped defers inside the try do not leak to the
+     * enclosing block. */
+    fprintf(out, "    _ef%u.defer_scope_mark = xrt_defer_top;\n", v->id);
+    fprintf(out, "    _ef%u.defer_count_mark = xrt_defer_top ? xrt_defer_top->count : 0;\n", v->id);
     fprintf(out, "    xrt_exc_top = &_ef%u;\n", v->id);
     if (catch_blk) {
         fprintf(out,
@@ -82,6 +85,19 @@ static bool xicgen_stmt_defer(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
         return true;
     fprintf(out, "    xrt_defer_push(&_xrt_ds, ");
     emit_value_as_rep(out, cg_unwrap_identity_value(v->args[0]), XR_REP_TAGGED);
+    fprintf(out, ");\n");
+    return true;
+}
+
+static bool xicgen_stmt_defer_run_to(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                                     const char *prefix) {
+    (void) ctx;
+    (void) f;
+    (void) prefix;
+    if (!v || v->nargs < 1)
+        return true;
+    fprintf(out, "    xrt_defer_run_to(&_xrt_ds, (int)");
+    emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
     fprintf(out, ");\n");
     return true;
 }

@@ -58,6 +58,7 @@ vmcase(OP_TRY) {
     handler->catch_offset = (uint32_t) catch_offset;
     handler->stack_size = (int) (VM_STACK_TOP - VM_STACK);
     handler->frame_count = VM_FRAME_COUNT;
+    handler->defer_count_mark = vm_ctx->defer_count;
     handler->exception = xr_null();
     handler->caught = false;
 

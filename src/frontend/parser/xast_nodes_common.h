@@ -129,6 +129,7 @@ typedef struct BlockNode {
     AstNode **statements;
     int count;
     int capacity;
+    bool is_synthetic_defer_capture;
 } BlockNode;
 
 #endif  // XAST_NODES_COMMON_H

@@ -39,8 +39,7 @@ typedef uint16_t XiEmitReg;
 #define XI_EMIT_STRUCT_IS_PROMOTED(v) (((v)->aux_int & XI_EMIT_STRUCT_PROMOTED_BIT) != 0)
 
 static inline XiValue *xi_emit_trace_struct_origin(XiValue *v) {
-    while (v && ((v->op == XI_COPY && !xi_copy_is_value_clone(v)) || v->op == XI_MOVE) &&
-           v->nargs >= 1)
+    while (v && (xi_copy_is_identity_alias(v) || v->op == XI_MOVE) && v->nargs >= 1)
         v = v->args[0];
     return v;
 }
@@ -326,6 +325,8 @@ XR_FUNC void xi_emit_try(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
 XR_FUNC void xi_emit_catch(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
 XR_FUNC void xi_emit_end_try(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
 XR_FUNC void xi_emit_defer(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_defer_mark(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_defer_run_to(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
 XR_FUNC void xi_emit_go(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
 XR_FUNC void xi_emit_await(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
 XR_FUNC void xi_emit_yield(EmitCtx *ctx, XiValue *v, XiEmitReg dst);

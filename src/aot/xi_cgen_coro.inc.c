@@ -1352,6 +1352,26 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         return;
     }
 
+    if (v->op == XI_DEFER_MARK) {
+        fprintf(out, "    ");
+        emit_vref(out, v);
+        XrRep rep = cg_value_plan_storage_rep(ctx, v);
+        if (rep == XR_REP_TAGGED)
+            fprintf(out, " = XR_FROM_INT(xrt_defer_mark(&f->_xrt_ds));\n");
+        else
+            fprintf(out, " = (int64_t)xrt_defer_mark(&f->_xrt_ds);\n");
+        return;
+    }
+
+    if (v->op == XI_DEFER_RUN_TO) {
+        if (v->nargs >= 1) {
+            fprintf(out, "    xrt_defer_run_to(&f->_xrt_ds, (int)");
+            emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
+            fprintf(out, ");\n");
+        }
+        return;
+    }
+
     if (v->op == XI_ERR_RETURN || v->op == XI_THROW) {
         if (v->nargs < 1) {
             fprintf(out, "    return xr_aot_error(XR_NULL_VAL, %s);\n",

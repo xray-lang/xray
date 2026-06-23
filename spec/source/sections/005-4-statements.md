@@ -290,10 +290,11 @@ fn process() {
 ```
 
 **语义**：
-- 在**函数作用域结束**时执行（不是块作用域，与 Swift 不同）。
-- **LIFO**：多个 `defer` 按声明的逆序执行。
-- **必执行**：函数正常 `return`、错误经值返回通道传播、或 panic 跨帧展开时都执行。
-- `defer` 是 Xray 唯一的确定性清理机制（取代其他语言的 `finally`）：它绑定函数作用域，而非某个块。
+- `defer` 绑定到包含它的**最近真实块** `{ ... }`。函数体本身也是块，因此写在函数体顶层的 `defer` 仍在函数退出前执行。
+- **LIFO**：同一块内多个 `defer` 按声明的逆序执行。
+- **必执行**：所属块正常结束，或通过 `break`、`continue`、`return`、值错误传播、panic 展开退出时都执行。
+- 循环体内的 `defer` 每轮迭代结束时执行，不会堆积到函数尾。
+- `defer` 是 Xray 唯一的确定性清理机制（取代其他语言的 `finally`）：它绑定词法块退出边，而不是整个函数的单一栈尾。
 - `defer` 中抛出的错误会**取代**当前正在传播的错误（参考 Go 语义）。
 
 ### 4.10 内置打印函数
@@ -603,10 +604,11 @@ fn process() {
 ```
 
 **Semantics**:
-- Runs at the **end of the function scope** (not the block scope, unlike Swift).
-- **LIFO**: multiple `defer` statements run in reverse declaration order.
-- **Always executes**: runs on normal `return`, on an error propagating through the value-return channel, and on a cross-frame panic unwind.
-- `defer` is Xray's only deterministic-cleanup mechanism (replacing other languages' `finally`): it is bound to the function scope, not to a block.
+- A `defer` belongs to the nearest enclosing real block `{ ... }`. A function body is a block, so a top-level function-body `defer` still runs before the function exits.
+- **LIFO**: multiple `defer` statements in the same block run in reverse declaration order.
+- **Always executes**: runs when the owning block falls through or exits by `break`, `continue`, `return`, value-error propagation, or panic unwinding.
+- A `defer` inside a loop body runs at the end of each iteration, not at the end of the function.
+- `defer` is Xray's only deterministic-cleanup mechanism (replacing other languages' `finally`): it is bound to lexical block exits, not to a single function tail.
 - An error thrown inside a `defer` body **replaces** any in-flight error (Go-style semantics).
 
 ### 4.10 Built-in Print Functions

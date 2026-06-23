@@ -1060,6 +1060,26 @@
   :observable ()
   :targets (vm-bytecode aot-c aot-verify))
 
+(define-xi-op xi.defer.mark
+  :class side-effect
+  :arity 0
+  :result-ownership none
+  :effects (side-effect memory-read)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode aot-c aot-verify))
+
+(define-xi-op xi.defer.run.to
+  :class side-effect
+  :arity 1
+  :result-kind void
+  :result-ownership none
+  :own-use borrow
+  :effects (side-effect memory-read memory-write)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode aot-c aot-verify))
+
 (define-xi-op xi.chan.new
   :class coroutine
   :arity variadic
