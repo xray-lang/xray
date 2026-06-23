@@ -1210,21 +1210,16 @@ XR_DEFINE_BUILTIN(crypto_decrypt, "decrypt", "(key: string, ciphertext: string):
 XR_DEFINE_BUILTIN(crypto_timing_safe_equal, "timingSafeEqual", "(a: string, b: string): bool",
                   "Constant-time string comparison")
 
+#define XR_STDLIB_VM_BIND_MODULE_CRYPTO 1
+#include "../../src/stdlib/xstdlib_vm_bindings_generated.inc.c"
+#undef XR_STDLIB_VM_BIND_MODULE_CRYPTO
+
 XR_FUNC XrModule *xr_load_module_crypto(XrVMRuntime *isolate) {
     XrModule *mod = xr_module_create_native(isolate, "crypto");
     if (!mod)
         return NULL;
 
-    XRS_EXPORT(mod, isolate, "md5", crypto_md5);
-    XRS_EXPORT(mod, isolate, "sha1", crypto_sha1);
-    XRS_EXPORT(mod, isolate, "sha256", crypto_sha256);
-    XRS_EXPORT(mod, isolate, "sha512", crypto_sha512);
-    XRS_EXPORT(mod, isolate, "hmac", crypto_hmac);
-    XRS_EXPORT(mod, isolate, "randomBytes", crypto_random_bytes);
-    XRS_EXPORT(mod, isolate, "uuid", crypto_uuid);
-    XRS_EXPORT(mod, isolate, "encrypt", crypto_encrypt);
-    XRS_EXPORT(mod, isolate, "decrypt", crypto_decrypt);
-    XRS_EXPORT(mod, isolate, "timingSafeEqual", crypto_timing_safe_equal);
+    xr_stdlib_vm_bind_crypto_generated(isolate, mod);
 
     mod->loaded = true;
     return mod;

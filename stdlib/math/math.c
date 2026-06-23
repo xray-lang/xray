@@ -557,6 +557,10 @@ XR_DEFINE_BUILTIN(math_radToDeg, "radToDeg", "(rad: float): float", "Radians to 
 XR_DEFINE_BUILTIN(math_isNaN, "isNaN", "(x: float): bool", "Check if NaN")
 XR_DEFINE_BUILTIN(math_isFinite, "isFinite", "(x: float): bool", "Check if finite")
 
+#define XR_STDLIB_VM_BIND_MODULE_MATH 1
+#include "../../src/stdlib/xstdlib_vm_bindings_generated.inc.c"
+#undef XR_STDLIB_VM_BIND_MODULE_MATH
+
 /* ========== Module Loading ========== */
 
 XR_FUNC XrModule *xr_load_module_math(XrVMRuntime *isolate) {
@@ -566,43 +570,7 @@ XR_FUNC XrModule *xr_load_module_math(XrVMRuntime *isolate) {
     if (!mod)
         return NULL;
 
-    XRS_EXPORT(mod, isolate, "abs", math_abs);
-    XRS_EXPORT(mod, isolate, "floor", math_floor);
-    XRS_EXPORT(mod, isolate, "ceil", math_ceil);
-    XRS_EXPORT(mod, isolate, "round", math_round);
-    XRS_EXPORT(mod, isolate, "sqrt", math_sqrt);
-    XRS_EXPORT(mod, isolate, "pow", math_pow);
-    XRS_EXPORT(mod, isolate, "sin", math_sin);
-    XRS_EXPORT(mod, isolate, "cos", math_cos);
-    XRS_EXPORT(mod, isolate, "tan", math_tan);
-    XRS_EXPORT(mod, isolate, "asin", math_asin);
-    XRS_EXPORT(mod, isolate, "acos", math_acos);
-    XRS_EXPORT(mod, isolate, "atan", math_atan);
-    XRS_EXPORT(mod, isolate, "atan2", math_atan2);
-    XRS_EXPORT(mod, isolate, "log", math_log);
-    XRS_EXPORT(mod, isolate, "log10", math_log10);
-    XRS_EXPORT(mod, isolate, "log2", math_log2);
-    XRS_EXPORT(mod, isolate, "exp", math_exp);
-    XRS_EXPORT(mod, isolate, "min", math_min);
-    XRS_EXPORT(mod, isolate, "max", math_max);
-    XRS_EXPORT(mod, isolate, "clamp", math_clamp);
-    XRS_EXPORT(mod, isolate, "random", math_random);
-    XRS_EXPORT(mod, isolate, "randomInt", math_randomInt);
-    XRS_EXPORT(mod, isolate, "sign", math_sign);
-    XRS_EXPORT(mod, isolate, "sinh", math_sinh);
-    XRS_EXPORT(mod, isolate, "cosh", math_cosh);
-    XRS_EXPORT(mod, isolate, "tanh", math_tanh);
-    XRS_EXPORT(mod, isolate, "hypot", math_hypot);
-    XRS_EXPORT(mod, isolate, "cbrt", math_cbrt);
-    XRS_EXPORT(mod, isolate, "trunc", math_trunc);
-    XRS_EXPORT(mod, isolate, "fmod", math_fmod);
-    XRS_EXPORT(mod, isolate, "log1p", math_log1p);
-    XRS_EXPORT(mod, isolate, "expm1", math_expm1);
-    XRS_EXPORT(mod, isolate, "lerp", math_lerp);
-    XRS_EXPORT(mod, isolate, "degToRad", math_degToRad);
-    XRS_EXPORT(mod, isolate, "radToDeg", math_radToDeg);
-    XRS_EXPORT(mod, isolate, "isNaN", math_isNaN);
-    XRS_EXPORT(mod, isolate, "isFinite", math_isFinite);
+    xr_stdlib_vm_bind_math_generated(isolate, mod);
 
     // Constants
     xr_module_add_export(isolate, mod, "PI", xr_float(M_PI));

@@ -367,6 +367,10 @@ XR_DEFINE_BUILTIN(encoding_utf16_decode, "utf16Decode",
                   "(data: string | Array<uint8>, endian?: int, stripBom?: bool): string?",
                   "UTF-16 decode to string (auto-detects BOM)")
 
+#define XR_STDLIB_VM_BIND_MODULE_ENCODING 1
+#include "../../src/stdlib/xstdlib_vm_bindings_generated.inc.c"
+#undef XR_STDLIB_VM_BIND_MODULE_ENCODING
+
 XR_FUNC XrModule *xr_load_module_encoding(XrVMRuntime *isolate) {
     XR_DCHECK(isolate != NULL, "xr_load_module_encoding: NULL isolate");
 
@@ -374,20 +378,7 @@ XR_FUNC XrModule *xr_load_module_encoding(XrVMRuntime *isolate) {
     if (!module)
         return NULL;
 
-    // Hex encoding
-    XRS_EXPORT(module, isolate, "hexEncode", encoding_hex_encode);
-    XRS_EXPORT(module, isolate, "hexDecode", encoding_hex_decode);
-    XRS_EXPORT(module, isolate, "hexDecodeString", encoding_hex_decode_string);
-    XRS_EXPORT(module, isolate, "hexValid", encoding_hex_valid);
-
-    // UTF-8 operations
-    XRS_EXPORT(module, isolate, "utf8Valid", encoding_utf8_valid);
-    XRS_EXPORT(module, isolate, "utf8Count", encoding_utf8_count);
-    XRS_EXPORT(module, isolate, "utf8ByteLength", encoding_utf8_byte_length);
-
-    // UTF-16 encoding
-    XRS_EXPORT(module, isolate, "utf16Encode", encoding_utf16_encode);
-    XRS_EXPORT(module, isolate, "utf16Decode", encoding_utf16_decode);
+    xr_stdlib_vm_bind_encoding_generated(isolate, module);
 
     // Endian constants
     xr_module_add_export(isolate, module, "LE", xr_int(XR_UTF16_LE));

@@ -1161,6 +1161,10 @@ XR_DEFINE_BUILTIN(dt_equals, "equals", "(other: DateTime): bool",
 XR_DEFINE_BUILTIN(dt_is_leap_year, "isLeapYear", "(): bool", "Check if leap year")
 XR_DEFINE_BUILTIN(dt_days_in_month, "daysInMonth", "(): int", "Get days in current month")
 
+#define XR_STDLIB_VM_BIND_MODULE_DATETIME 1
+#include "../../src/stdlib/xstdlib_vm_bindings_generated.inc.c"
+#undef XR_STDLIB_VM_BIND_MODULE_DATETIME
+
 /* ========== Native Body Descriptor ========== */
 
 static void datetime_body_init(XrInstance *inst, void *body) {
@@ -1242,7 +1246,7 @@ XrModule *xr_load_module_datetime(XrVMRuntime *isolate) {
     XRS_EXPORT(mod, isolate, "fromTimestamp", dt_from_timestamp);
     XRS_EXPORT(mod, isolate, "fromTimestampMs", dt_from_timestamp_ms);
     XRS_EXPORT(mod, isolate, "parse", dt_parse);
-    XRS_EXPORT(mod, isolate, "offset", dt_offset);
+    xr_stdlib_vm_bind_datetime_generated(isolate, mod);
 
     mod->loaded = true;
     return mod;
