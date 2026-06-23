@@ -358,6 +358,31 @@ TEST(string_char_at) {
     teardown();
 }
 
+TEST(string_unicode_char_and_byte_at) {
+    setup();
+    const char *text = "A你🌍";
+    XrString *s = xr_string_intern(X, text, strlen(text), xr_string_hash(text, strlen(text)));
+
+    XrString *ch = xr_string_char_at_unicode(X, s, 1);
+    ASSERT_NOT_NULL(ch);
+    ASSERT_STR_EQ(ch->data, "你");
+
+    ch = xr_string_char_at_unicode(X, s, 2);
+    ASSERT_NOT_NULL(ch);
+    ASSERT_STR_EQ(ch->data, "🌍");
+
+    ASSERT_NULL(xr_string_char_at_unicode(X, s, 3));
+    ASSERT_EQ_INT(xr_string_char_code_at(s, 2), 127757);
+    ASSERT_EQ_INT(xr_string_char_code_at(s, 9), -1);
+
+    XrString *byte = xr_string_byte_at(X, s, -1);
+    ASSERT_NOT_NULL(byte);
+    ASSERT_EQ_UINT(byte->length, 1);
+    ASSERT_EQ_UINT((unsigned char) byte->data[0], 0x8D);
+    ASSERT_NULL(xr_string_byte_at(X, s, -99));
+    teardown();
+}
+
 /* ========== String Replace Tests ========== */
 
 TEST(string_replace) {
@@ -487,6 +512,7 @@ static void run_all_tests(void) {
     RUN_TEST(string_substring_bounds);
     RUN_TEST(string_slice_bounds);
     RUN_TEST(string_char_at);
+    RUN_TEST(string_unicode_char_and_byte_at);
 
     RUN_TEST_SUITE("String Replace");
     RUN_TEST(string_replace);

@@ -370,13 +370,8 @@ static inline XrValue xrt_str_method_1(const char *s, int64_t slen, XrValue recv
         return XR_FROM_BOOL(xr_string_core_ends_with(s, (size_t) slen, p, plen));
     }
     if (sym == XRT_SYM_CHARAT && arg0.tag == XR_TAG_I64) {
-        int64_t idx = arg0.i;
-        if (idx < 0 || idx >= slen)
-            return xrt_str_alloc(0);
-        XrValue sv = xrt_str_alloc(1);
-        xr_str_buf(sv)[0] = s[idx];
-        xr_str_buf(sv)[1] = 0;
-        return sv;
+        XrStringCoreSlice slice = xr_string_core_utf8_char_slice_at(s, (size_t) slen, arg0.i);
+        return slice.len == 0 ? XR_NULL_VAL : xrt_str_from_core_slice(slice);
     }
     if (sym == XRT_SYM_CONCAT && XR_IS_STR(arg0)) {
         const char *s2 = xr_str_data(arg0);
@@ -454,47 +449,13 @@ static inline XrValue xrt_str_method_1(const char *s, int64_t slen, XrValue recv
         return sv;
     }
     if (sym == XRT_SYM_BYTE_AT && arg0.tag == XR_TAG_I64) {
-        int64_t idx = arg0.i;
-        if (idx < 0 || idx >= slen)
-            return XR_NULL_VAL;
-        XrValue sv = xrt_str_alloc(1);
-        xr_str_buf(sv)[0] = s[idx];
-        xr_str_buf(sv)[1] = 0;
-        return sv;
+        XrStringCoreSlice slice = xr_string_core_byte_slice_at(s, (size_t) slen, arg0.i);
+        return slice.len == 0 ? XR_NULL_VAL : xrt_str_from_core_slice(slice);
     }
     if (sym == XRT_SYM_CODEPOINT_AT && arg0.tag == XR_TAG_I64) {
-        int64_t target = arg0.i;
-        if (target < 0)
-            return XR_FROM_INT(-1);
-        const unsigned char *p = (const unsigned char *) s;
-        const unsigned char *end = p + slen;
-        for (int64_t char_index = 0; p < end; char_index++) {
-            int64_t remaining = (int64_t) (end - p);
-            uint32_t cp = p[0];
-            int advance = 1;
-            if ((p[0] & 0x80u) == 0) {
-                cp = p[0];
-            } else if ((p[0] & 0xE0u) == 0xC0u && remaining >= 2 && (p[1] & 0xC0u) == 0x80u) {
-                cp = ((uint32_t) (p[0] & 0x1Fu) << 6) | (uint32_t) (p[1] & 0x3Fu);
-                advance = 2;
-            } else if ((p[0] & 0xF0u) == 0xE0u && remaining >= 3 && (p[1] & 0xC0u) == 0x80u &&
-                       (p[2] & 0xC0u) == 0x80u) {
-                cp = ((uint32_t) (p[0] & 0x0Fu) << 12) | ((uint32_t) (p[1] & 0x3Fu) << 6) |
-                     (uint32_t) (p[2] & 0x3Fu);
-                advance = 3;
-            } else if ((p[0] & 0xF8u) == 0xF0u && remaining >= 4 && (p[1] & 0xC0u) == 0x80u &&
-                       (p[2] & 0xC0u) == 0x80u && (p[3] & 0xC0u) == 0x80u) {
-                cp = ((uint32_t) (p[0] & 0x07u) << 18) | ((uint32_t) (p[1] & 0x3Fu) << 12) |
-                     ((uint32_t) (p[2] & 0x3Fu) << 6) | (uint32_t) (p[3] & 0x3Fu);
-                advance = 4;
-            } else {
-                cp = 0xFFFD;
-            }
-            if (char_index == target)
-                return XR_FROM_INT(cp);
-            p += advance;
-        }
-        return XR_FROM_INT(-1);
+        uint32_t cp = 0;
+        return xr_string_core_codepoint_at(s, (size_t) slen, arg0.i, &cp) ? XR_FROM_INT(cp)
+                                                                          : XR_FROM_INT(-1);
     }
     return (XrValue) {.i = 0, .tag = XR_TAG_NULL};
 }

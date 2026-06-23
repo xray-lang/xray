@@ -230,6 +230,33 @@ TEST(string_core_slice_bounds) {
     assert_slice_eq(xr_string_core_range_slice(s, strlen(s), 4, 2), "");
 }
 
+TEST(string_core_utf8_char_slice) {
+    const char *s = "A你🌍";
+    ASSERT_EQ_UINT(xr_string_core_utf8_char_count(s, strlen(s)), 3);
+    assert_slice_eq(xr_string_core_utf8_char_slice_at(s, strlen(s), 0), "A");
+    assert_slice_eq(xr_string_core_utf8_char_slice_at(s, strlen(s), 1), "你");
+    assert_slice_eq(xr_string_core_utf8_char_slice_at(s, strlen(s), 2), "🌍");
+    assert_slice_eq(xr_string_core_utf8_char_slice_at(s, strlen(s), -1), "🌍");
+    assert_slice_eq(xr_string_core_utf8_char_slice_at(s, strlen(s), 99), "");
+    assert_slice_eq(xr_string_core_utf8_char_slice_at(s, strlen(s), -99), "");
+}
+
+TEST(string_core_byte_slice_and_codepoint) {
+    const char *bytes = "é€";
+    assert_slice_eq(xr_string_core_byte_slice_at(bytes, strlen(bytes), 0), "\xC3");
+    assert_slice_eq(xr_string_core_byte_slice_at(bytes, strlen(bytes), 1), "\xA9");
+    assert_slice_eq(xr_string_core_byte_slice_at(bytes, strlen(bytes), -1), "\xAC");
+    assert_slice_eq(xr_string_core_byte_slice_at(bytes, strlen(bytes), 99), "");
+
+    uint32_t cp = 0;
+    ASSERT_TRUE(xr_string_core_codepoint_at("A", 1, 0, &cp));
+    ASSERT_EQ_UINT(cp, 65);
+    ASSERT_TRUE(xr_string_core_codepoint_at("世界", strlen("世界"), 1, &cp));
+    ASSERT_EQ_UINT(cp, 30028);
+    ASSERT_FALSE(xr_string_core_codepoint_at("A", 1, -1, &cp));
+    ASSERT_FALSE(xr_string_core_codepoint_at("A", 1, 9, &cp));
+}
+
 TEST_MAIN_BEGIN()
 
 RUN_TEST_SUITE("String Core");
@@ -252,5 +279,7 @@ RUN_TEST(string_core_parse_int64);
 RUN_TEST(string_core_parse_float64);
 RUN_TEST(string_core_substring_bounds);
 RUN_TEST(string_core_slice_bounds);
+RUN_TEST(string_core_utf8_char_slice);
+RUN_TEST(string_core_byte_slice_and_codepoint);
 
 TEST_MAIN_END()
