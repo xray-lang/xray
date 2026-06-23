@@ -346,6 +346,24 @@ static void xr_stdlib_vm_bind_url_generated(XrVMRuntime *isolate, XrModule *modu
 }
 #endif  /* XR_STDLIB_VM_BIND_MODULE_URL */
 
+#ifdef XR_STDLIB_VM_BIND_MODULE_WS
+static void xr_stdlib_vm_bind_ws_generated(XrVMRuntime *isolate, XrModule *module) {
+    XRS_EXPORT_YIELDABLE(module, isolate, "connect", ws_connect_yieldable);
+    XRS_EXPORT_YIELDABLE(module, isolate, "send", ws_send_yieldable);
+    XRS_EXPORT_YIELDABLE(module, isolate, "recv", ws_recv_yieldable);
+    XRS_EXPORT(module, isolate, "close", ws_close);
+    XRS_EXPORT(module, isolate, "ping", ws_ping);
+    XRS_EXPORT(module, isolate, "state", ws_state);
+    XRS_EXPORT(module, isolate, "isOpen", ws_is_open);
+    XRS_EXPORT_YIELDABLE(module, isolate, "recvData", ws_recvdata);
+    XRS_EXPORT_YIELDABLE(module, isolate, "sendData", ws_send_yieldable);
+    XRS_EXPORT_YIELDABLE(module, isolate, "serve", ws_serve_yieldable);
+    XRS_EXPORT_YIELDABLE(module, isolate, "echoServe", ws_echo_serve_yieldable);
+    XRS_EXPORT(module, isolate, "stopServer", ws_stop_server);
+    XRS_EXPORT(module, isolate, "isServerRunning", ws_is_server_running);
+}
+#endif  /* XR_STDLIB_VM_BIND_MODULE_WS */
+
 #ifdef XR_STDLIB_VM_BIND_MODULE_XML
 static void xr_stdlib_vm_bind_xml_generated(XrVMRuntime *isolate, XrModule *module) {
     XRS_EXPORT(module, isolate, "parse", xml_parse_fn);

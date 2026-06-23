@@ -2816,6 +2816,158 @@ module cluster {
   }
 }
 
+module ws {
+  fn connect {
+    signature: "(url: string, options?: Json): WsConn?"
+    doc: "Connect to a WebSocket server"
+    vm: "ws_connect_yieldable"
+    vm_binding: "yieldable"
+    argc: 2
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn send {
+    signature: "(conn: WsConn, data: string, binary?: bool?): bool"
+    doc: "Send data over WebSocket connection"
+    vm: "ws_send_yieldable"
+    vm_binding: "yieldable"
+    argc: 3
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn recv {
+    signature: "(conn: WsConn, timeout?: int?): WsMessage?"
+    doc: "Receive data from WebSocket connection"
+    vm: "ws_recv_yieldable"
+    vm_binding: "yieldable"
+    argc: 2
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn close {
+    signature: "(conn: WsConn, code?: int?, reason?: string?): bool"
+    doc: "Close a WebSocket connection"
+    vm: "ws_close"
+    argc: 3
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn ping {
+    signature: "(conn: WsConn): bool"
+    doc: "Send a ping frame"
+    vm: "ws_ping"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn state {
+    signature: "(conn: WsConn): string"
+    doc: "Get connection state"
+    vm: "ws_state"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn isOpen {
+    signature: "(conn: WsConn): bool"
+    doc: "Check if connection is open"
+    vm: "ws_is_open"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn recvData {
+    signature: "(conn: WsConn, timeout?: int?): string?"
+    doc: "High-performance recv returning data string directly (no Json wrapper)"
+    vm: "ws_recvdata"
+    vm_binding: "yieldable"
+    argc: 2
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn sendData {
+    signature: "(conn: WsConn, data: string, binary?: bool?): bool"
+    doc: "Send data over WebSocket connection"
+    vm: "ws_send_yieldable"
+    vm_binding: "yieldable"
+    argc: 3
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn serve {
+    signature: "(port: int, handler: fn(conn: WsConn): ()): bool"
+    doc: "Start WebSocket server"
+    vm: "ws_serve_yieldable"
+    vm_binding: "yieldable"
+    argc: 2
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn echoServe {
+    signature: "(port: int): bool"
+    doc: "Pure C echo server with zero VM allocation overhead per message"
+    vm: "ws_echo_serve_yieldable"
+    vm_binding: "yieldable"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn stopServer {
+    signature: "(): ()"
+    doc: "Stop the WebSocket server"
+    vm: "ws_stop_server"
+    argc: 0
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn isServerRunning {
+    signature: "(): bool"
+    doc: "Check if the WebSocket server is running"
+    vm: "ws_is_server_running"
+    argc: 0
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+}
+
 module csv {
   fn parse {
     signature: "(data: string, options?: Json): Array<Array<string>> | Array<Json>"

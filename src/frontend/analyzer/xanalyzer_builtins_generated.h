@@ -576,16 +576,20 @@ static const XaBuiltinHandle g_gen_ws_handles[] = {
 // ws module functions
 static const XaBuiltinMember g_gen_ws_functions[] = {
     {"connect", "(url: string, options?: Json): WsConn?", "Connect to a WebSocket server", true, false},
-    {"send", "(conn: WsConn, data: string, binary?: bool): bool", "Send data over WebSocket connection", true, false},
-    {"recv", "(conn: WsConn, timeout?: int): WsMessage?", "Receive data from WebSocket connection", true, false},
-    {"close", "(conn: WsConn, code?: int, reason?: string?): bool", "Close a WebSocket connection", true, false},
+    {"send", "(conn: WsConn, data: string, binary?: bool?): bool", "Send data over WebSocket connection", true, false},
+    {"recv", "(conn: WsConn, timeout?: int?): WsMessage?", "Receive data from WebSocket connection", true, false},
+    {"close", "(conn: WsConn, code?: int?, reason?: string?): bool", "Close a WebSocket connection", true, false},
     {"ping", "(conn: WsConn): bool", "Send a ping frame", true, false},
     {"state", "(conn: WsConn): string", "Get connection state", true, false},
     {"isOpen", "(conn: WsConn): bool", "Check if connection is open", true, false},
-    {"recvData", "(conn: WsConn, timeout?: int): string?", "High-performance recv returning data string directly (no Json wrapper)", true, false},
-    {"echoServe", "(port: int): bool", "Pure C echo server with zero VM/GC overhead per message", true, false},
+    {"recvData", "(conn: WsConn, timeout?: int?): string?", "High-performance recv returning data string directly (no Json wrapper)", true, false},
+    {"sendData", "(conn: WsConn, data: string, binary?: bool?): bool", "Send data over WebSocket connection", true, false},
+    {"serve", "(port: int, handler: fn(conn: WsConn): ()): bool", "Start WebSocket server", true, false},
+    {"echoServe", "(port: int): bool", "Pure C echo server with zero VM allocation overhead per message", true, false},
+    {"stopServer", "(): ()", "Stop the WebSocket server", true, false},
+    {"isServerRunning", "(): bool", "Check if the WebSocket server is running", true, false},
 };
-#define GEN_WS_FUNCTION_COUNT 9
+#define GEN_WS_FUNCTION_COUNT 13
 
 // xml module functions
 static const XaBuiltinMember g_gen_xml_functions[] = {
