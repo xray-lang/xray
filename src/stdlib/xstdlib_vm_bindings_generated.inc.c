@@ -364,8 +364,8 @@ static void xr_stdlib_vm_bind_path_generated(XrVMRuntime *isolate, XrModule *mod
     XRS_EXPORT(module, isolate, "resolve", path_resolve);
     XRS_EXPORT(module, isolate, "parse", path_parse);
     XRS_EXPORT(module, isolate, "format", path_format);
-    xr_module_add_export(isolate, module, "sep", xrs_string_value_c(isolate, PATH_SEP_STR));
-    xr_module_add_export(isolate, module, "delimiter", xrs_string_value_c(isolate, PATH_DELIMITER));
+    xr_module_add_export(isolate, module, "sep", xrs_string_value_c(isolate, xr_path_core_sep_str()));
+    xr_module_add_export(isolate, module, "delimiter", xrs_string_value_c(isolate, xr_path_core_delimiter_str()));
 }
 #endif  /* XR_STDLIB_VM_BIND_MODULE_PATH */
 

@@ -39,11 +39,7 @@ static inline XrValue xrt_path_sep(void) {
 }
 
 static inline XrValue xrt_path_delimiter(void) {
-#ifdef XR_OS_WINDOWS
-    return xrt_str_from_cstr(";");
-#else
-    return xrt_str_from_cstr(":");
-#endif
+    return xrt_str_from_cstr(xr_path_core_delimiter_str());
 }
 
 static inline XrValue xrt_path_is_absolute(const char *path, int64_t len) {
