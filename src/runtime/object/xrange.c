@@ -79,26 +79,23 @@ XrValue xr_range_to_array(struct XrCoroutine *coro, XrRange *r) {
     if (!r)
         return xr_null();
 
-    int64_t len = xr_range_length(r);
-    if (len <= 0) {
+    XrRangeCore core = xr_range_core_from_body(r);
+    XrRangeCoreMaterializePlan plan = xr_range_core_materialize_plan(core);
+    if (plan.kind == XR_RANGE_CORE_MATERIALIZE_EMPTY) {
         XrArray *arr = xr_array_with_capacity(coro, 0);
         return xr_value_from_array(arr);
     }
 
-    // Safety cap to prevent OOM (10M elements ~= 160MB for XrValue array)
-    XR_CHECK(len <= 10000000, "range_to_array: range too large");
+    XR_CHECK(plan.kind != XR_RANGE_CORE_MATERIALIZE_TOO_LARGE, "range_to_array: range too large");
 
-    XrArray *arr = xr_array_with_capacity(coro, (int32_t) len);
+    XrArray *arr = xr_array_with_capacity(coro, (int32_t) plan.length);
     if (!arr)
         return xr_null();
 
     XrValue *data = (XrValue *) arr->data;
-    int64_t val = r->start;
-    for (int64_t i = 0; i < len; i++) {
-        data[i] = xr_int(val);
-        val += r->step;
-    }
-    arr->length = (int32_t) len;
+    for (int64_t i = 0; i < plan.length; i++)
+        data[i] = xr_int(xr_range_core_value_at(core, i));
+    arr->length = (int32_t) plan.length;
 
     return xr_value_from_array(arr);
 }
