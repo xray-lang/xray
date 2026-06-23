@@ -532,47 +532,39 @@ xr_Integer xr_string_last_index_of(XrVMRuntime *iso, XrString *str, XrString *su
 
 /* ========== String Advanced Methods ========== */
 
+typedef struct XrStringSplitVmCtx {
+    XrVMRuntime *iso;
+    XrArray *array;
+} XrStringSplitVmCtx;
+
+static bool xr_string_split_emit_vm(XrStringCoreSlice slice, void *user) {
+    XrStringSplitVmCtx *ctx = (XrStringSplitVmCtx *) user;
+    const char *data = slice.data ? slice.data : "";
+    XrString *part = xr_string_intern(ctx->iso, data, slice.len, 0);
+    if (!part)
+        return false;
+    xr_array_push(ctx->array, xr_string_value(part));
+    return true;
+}
+
 // split - split string into array
 XrArray *xr_string_split(XrVMRuntime *iso, XrString *str, XrString *delimiter) {
     XR_DCHECK(iso != NULL, "string_split: NULL isolate");
-    XrArray *result = xr_array_new(xr_current_coro(iso));
 
-    if (str == NULL)
+    const char *data = str ? str->data : NULL;
+    size_t len = str ? str->length : 0;
+    const char *sep = delimiter ? delimiter->data : NULL;
+    size_t sep_len = delimiter ? delimiter->length : 0;
+    XrStringCoreSplitPlan plan = xr_string_core_split_plan(data, len, sep, sep_len);
+    int capacity = (plan.kind != XR_STRING_CORE_SPLIT_INVALID && plan.count <= (size_t) INT32_MAX)
+                       ? (int) plan.count
+                       : 0;
+    XrArray *result = xr_array_with_capacity(xr_current_coro(iso), capacity);
+    if (str == NULL || plan.kind == XR_STRING_CORE_SPLIT_INVALID)
         return result;
 
-    // Empty delimiter, split by character
-    if (delimiter == NULL || delimiter->length == 0) {
-        for (size_t i = 0; i < str->length; i++) {
-            XrString *ch = xr_string_intern(iso, &str->data[i], 1, 0);
-            xr_array_push(result, xr_string_value(ch));
-        }
-        return result;
-    }
-
-    // Split by delimiter
-    const char *start = str->data;
-    const char *end = str->data;
-    const char *str_end = str->data + str->length;
-
-    while (end <= str_end - delimiter->length) {
-        if (memcmp(end, delimiter->data, delimiter->length) == 0) {
-            // Found delimiter
-            size_t len = end - start;
-            XrString *part = xr_string_intern(iso, start, len, 0);
-            xr_array_push(result, xr_string_value(part));
-
-            end += delimiter->length;
-            start = end;
-        } else {
-            end++;
-        }
-    }
-
-    // Add last part
-    size_t len = str_end - start;
-    XrString *part = xr_string_intern(iso, start, len, 0);
-    xr_array_push(result, xr_string_value(part));
-
+    XrStringSplitVmCtx ctx = {iso, result};
+    xr_string_core_split_each(data, len, sep, sep_len, xr_string_split_emit_vm, &ctx);
     return result;
 }
 

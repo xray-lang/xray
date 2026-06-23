@@ -419,6 +419,45 @@ TEST(string_unicode_char_and_byte_at) {
     teardown();
 }
 
+TEST(string_split_edges) {
+    setup();
+    XrString *s = xr_string_intern(X, "a,,b,", 5, xr_string_hash("a,,b,", 5));
+    XrString *comma = xr_string_intern(X, ",", 1, xr_string_hash(",", 1));
+    XrArray *parts = xr_string_split(X, s, comma);
+    ASSERT_NOT_NULL(parts);
+    ASSERT_EQ_INT(parts->length, 4);
+    ASSERT_STR_EQ(XR_TO_STRING(xr_array_get(parts, 0))->data, "a");
+    ASSERT_EQ_UINT(XR_TO_STRING(xr_array_get(parts, 1))->length, 0);
+    ASSERT_STR_EQ(XR_TO_STRING(xr_array_get(parts, 2))->data, "b");
+    ASSERT_EQ_UINT(XR_TO_STRING(xr_array_get(parts, 3))->length, 0);
+
+    XrString *empty = xr_string_intern(X, "", 0, 0);
+    XrString *ab = xr_string_intern(X, "ab", 2, xr_string_hash("ab", 2));
+    parts = xr_string_split(X, ab, empty);
+    ASSERT_NOT_NULL(parts);
+    ASSERT_EQ_INT(parts->length, 2);
+    ASSERT_STR_EQ(XR_TO_STRING(xr_array_get(parts, 0))->data, "a");
+    ASSERT_STR_EQ(XR_TO_STRING(xr_array_get(parts, 1))->data, "b");
+
+    parts = xr_string_split(X, empty, empty);
+    ASSERT_NOT_NULL(parts);
+    ASSERT_EQ_INT(parts->length, 0);
+
+    const char embedded[] = {'a', '\0', 'b', '\0', 'c'};
+    const char nul_sep[] = {'\0'};
+    XrString *embedded_str =
+        xr_string_intern(X, embedded, sizeof(embedded), xr_string_hash(embedded, sizeof(embedded)));
+    XrString *sep_str =
+        xr_string_intern(X, nul_sep, sizeof(nul_sep), xr_string_hash(nul_sep, sizeof(nul_sep)));
+    parts = xr_string_split(X, embedded_str, sep_str);
+    ASSERT_NOT_NULL(parts);
+    ASSERT_EQ_INT(parts->length, 3);
+    ASSERT_STR_EQ(XR_TO_STRING(xr_array_get(parts, 0))->data, "a");
+    ASSERT_STR_EQ(XR_TO_STRING(xr_array_get(parts, 1))->data, "b");
+    ASSERT_STR_EQ(XR_TO_STRING(xr_array_get(parts, 2))->data, "c");
+    teardown();
+}
+
 /* ========== String Replace Tests ========== */
 
 TEST(string_replace) {
@@ -580,6 +619,9 @@ static void run_all_tests(void) {
     RUN_TEST(string_slice_bounds);
     RUN_TEST(string_char_at);
     RUN_TEST(string_unicode_char_and_byte_at);
+
+    RUN_TEST_SUITE("String Split");
+    RUN_TEST(string_split_edges);
 
     RUN_TEST_SUITE("String Replace");
     RUN_TEST(string_replace);

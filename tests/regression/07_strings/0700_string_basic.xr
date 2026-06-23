@@ -186,6 +186,21 @@ fn test_split() {
     assert_eq(parts.length, 4)
     assert_eq(parts[0], "a")
     assert_eq(parts[3], "d")
+
+    let edges = "a,,b,".split(",")
+    assert_eq(edges.length, 4)
+    assert_eq(edges[0], "a")
+    assert_eq(edges[1], "")
+    assert_eq(edges[2], "b")
+    assert_eq(edges[3], "")
+
+    let chars = "ab".split("")
+    assert_eq(chars.length, 2)
+    assert_eq(chars[0], "a")
+    assert_eq(chars[1], "b")
+
+    let empty = "".split("")
+    assert_eq(empty.length, 0)
 }
 
 @test
