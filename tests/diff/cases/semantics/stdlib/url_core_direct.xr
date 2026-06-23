@@ -17,6 +17,7 @@ print(r.hash)
 print(r.host)
 print(r.origin)
 print(url.format(r))
+print(url.format(url.parse("http://user:pass@example.com/path")))
 
 let q = url.parseQuery("msg=hello+world&key=a%26b")
 print(q.msg)

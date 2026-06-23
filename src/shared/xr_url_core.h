@@ -45,6 +45,7 @@ typedef struct {
 } XrUrlCoreWriter;
 
 typedef bool (*XrUrlCoreJoinPartFn)(void *ctx, size_t index, const char **data, size_t *len);
+typedef bool (*XrUrlCoreFieldFn)(void *ctx, const char *name, const char **data, size_t *len);
 
 static inline uint8_t xr_url_core_hex_value(unsigned char c) {
     if (c >= '0' && c <= '9')
@@ -378,6 +379,80 @@ static inline bool xr_url_core_emit_base_authority(XrUrlCoreWriter *out,
             return false;
     }
     return true;
+}
+
+static inline bool xr_url_core_get_field(XrUrlCoreFieldFn field, void *field_ctx, const char *name,
+                                         const char **data, size_t *len) {
+    if (data)
+        *data = NULL;
+    if (len)
+        *len = 0;
+    return field && data && len && field(field_ctx, name, data, len);
+}
+
+static inline bool xr_url_core_append_field(XrUrlCoreWriter *out, const char *data, size_t len) {
+    return (!data || len == 0) ? true : xr_url_core_writer_append(out, data, len);
+}
+
+static inline bool xr_url_core_format_write(XrUrlCoreFieldFn field, void *field_ctx,
+                                            XrUrlCoreWriter *out) {
+    if (!field || !out)
+        return false;
+
+    const char *protocol = NULL;
+    const char *hostname = NULL;
+    const char *port = NULL;
+    const char *pathname = NULL;
+    const char *search = NULL;
+    const char *hash = NULL;
+    const char *username = NULL;
+    const char *password = NULL;
+    size_t protocol_len = 0;
+    size_t hostname_len = 0;
+    size_t port_len = 0;
+    size_t pathname_len = 0;
+    size_t search_len = 0;
+    size_t hash_len = 0;
+    size_t username_len = 0;
+    size_t password_len = 0;
+
+    if (!xr_url_core_get_field(field, field_ctx, "protocol", &protocol, &protocol_len) ||
+        !xr_url_core_get_field(field, field_ctx, "hostname", &hostname, &hostname_len) ||
+        !xr_url_core_get_field(field, field_ctx, "port", &port, &port_len) ||
+        !xr_url_core_get_field(field, field_ctx, "pathname", &pathname, &pathname_len) ||
+        !xr_url_core_get_field(field, field_ctx, "search", &search, &search_len) ||
+        !xr_url_core_get_field(field, field_ctx, "hash", &hash, &hash_len) ||
+        !xr_url_core_get_field(field, field_ctx, "username", &username, &username_len) ||
+        !xr_url_core_get_field(field, field_ctx, "password", &password, &password_len))
+        return false;
+
+    if (protocol && protocol_len > 0) {
+        if (!xr_url_core_writer_append(out, protocol, protocol_len) ||
+            !xr_url_core_writer_append(out, "//", 2))
+            return false;
+    }
+
+    if (username && username_len > 0) {
+        if (!xr_url_core_writer_append(out, username, username_len))
+            return false;
+        if (password && password_len > 0) {
+            if (!xr_url_core_writer_putc(out, ':') ||
+                !xr_url_core_writer_append(out, password, password_len))
+                return false;
+        }
+        if (!xr_url_core_writer_putc(out, '@'))
+            return false;
+    }
+
+    if (!xr_url_core_append_field(out, hostname, hostname_len))
+        return false;
+    if (port && port_len > 0) {
+        if (!xr_url_core_writer_putc(out, ':') || !xr_url_core_writer_append(out, port, port_len))
+            return false;
+    }
+    return xr_url_core_append_field(out, pathname, pathname_len) &&
+           xr_url_core_append_field(out, search, search_len) &&
+           xr_url_core_append_field(out, hash, hash_len);
 }
 
 static inline size_t xr_url_core_remove_dot_segments(char *path, size_t len);
