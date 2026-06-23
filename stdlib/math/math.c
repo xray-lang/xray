@@ -572,22 +572,6 @@ XR_FUNC XrModule *xr_load_module_math(XrVMRuntime *isolate) {
 
     xr_stdlib_vm_bind_math_generated(isolate, mod);
 
-    // Constants
-    xr_module_add_export(isolate, mod, "PI", xr_float(M_PI));
-    xr_module_add_export(isolate, mod, "E", xr_float(M_E));
-    xr_module_add_export(isolate, mod, "TAU", xr_float(2.0 * M_PI));
-    xr_module_add_export(isolate, mod, "SQRT2", xr_float(M_SQRT2));
-    xr_module_add_export(isolate, mod, "LN2", xr_float(M_LN2));
-    xr_module_add_export(isolate, mod, "LN10", xr_float(M_LN10));
-    xr_module_add_export(isolate, mod, "LOG2E", xr_float(M_LOG2E));
-    xr_module_add_export(isolate, mod, "LOG10E", xr_float(M_LOG10E));
-    xr_module_add_export(isolate, mod, "EPSILON", xr_float(DBL_EPSILON));
-    xr_module_add_export(isolate, mod, "MAX_INT", xr_int(INT64_MAX));
-    xr_module_add_export(isolate, mod, "MIN_INT", xr_int(INT64_MIN));
-    xr_module_add_export(isolate, mod, "MAX_FLOAT", xr_float(DBL_MAX));
-    xr_module_add_export(isolate, mod, "INF", xr_float(INFINITY));
-    xr_module_add_export(isolate, mod, "NAN", xr_float(NAN));
-
     mod->loaded = true;
     return mod;
 }

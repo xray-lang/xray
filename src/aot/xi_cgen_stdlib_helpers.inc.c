@@ -85,7 +85,17 @@ static bool cg_emit_aot_stdlib_generated_constant_value(XiCgenCtx *ctx, FILE *ou
     if (c->kind == CG_AOT_STDLIB_CONST_I64) {
         const char *conv_suffix =
             emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
-        fprintf(out, "INT64_C(%" PRId64 ")", c->i64_value);
+        if (c->i64_value == INT64_MIN)
+            fprintf(out, "INT64_MIN");
+        else
+            fprintf(out, "INT64_C(%" PRId64 ")", c->i64_value);
+        emit_conversion_suffix(out, conv_suffix);
+        return true;
+    }
+    if (c->kind == CG_AOT_STDLIB_CONST_F64 && c->f64_expr && c->f64_expr[0]) {
+        const char *conv_suffix =
+            emit_conversion_prefix(out, v->type, XR_REP_F64, cg_value_plan_storage_rep(ctx, v));
+        fprintf(out, "%s", c->f64_expr);
         emit_conversion_suffix(out, conv_suffix);
         return true;
     }

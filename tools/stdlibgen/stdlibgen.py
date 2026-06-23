@@ -72,6 +72,7 @@ class StdlibConstEntry:
     aot: str
     aot_const_kind: str
     value: int
+    f64_value: str
     link_object: str
     define: str
     layer: str
@@ -192,7 +193,7 @@ def parse_def_metadata(root: Path) -> tuple[list[StdlibEntry], list[StdlibConstE
                 names = ", ".join(missing)
                 raise SystemExit(f"{path}:{line_no}: {current_module}.{current_name} missing {names}")
             aot_const_kind = str(props["aot_const"])
-            if aot_const_kind not in {"helper_value", "int64"}:
+            if aot_const_kind not in {"helper_value", "int64", "float64"}:
                 raise SystemExit(
                     f"{path}:{line_no}: unsupported aot_const for {current_module}.{current_name}: {aot_const_kind}"
                 )
@@ -205,6 +206,11 @@ def parse_def_metadata(root: Path) -> tuple[list[StdlibEntry], list[StdlibConstE
                 raise SystemExit(
                     f"{path}:{line_no}: {current_module}.{current_name} int64 constant requires integer value"
                 )
+            f64_value = "0.0"
+            if aot_const_kind == "float64":
+                f64_value = c_float_const_expr(
+                    str(value), f"{current_module}.{current_name} float64 constant value"
+                )
             constants.append(
                 StdlibConstEntry(
                     module=current_module,
@@ -215,7 +221,8 @@ def parse_def_metadata(root: Path) -> tuple[list[StdlibEntry], list[StdlibConstE
                     vm_value=c_vm_value_expr(str(props.get("vm_value", "")), f"{current_module}.{current_name}"),
                     aot=str(props.get("aot", "")),
                     aot_const_kind=aot_const_kind,
-                    value=int(value),
+                    value=int(value) if isinstance(value, int) else 0,
+                    f64_value=f64_value,
                     link_object=link_object,
                     define=str(props.get("define", "")),
                     layer=str(props.get("layer", "")),
@@ -293,16 +300,38 @@ def c_ident(value: str, context: str) -> str:
     return value
 
 
+_C_IDENT_RE = r"[A-Za-z_][A-Za-z0-9_]*"
+_C_NUM_RE = r"(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?"
+_C_FLOAT_ATOM_RE = rf"(?:{_C_IDENT_RE}|{_C_NUM_RE})"
+_C_FLOAT_EXPR_RE = rf"-?{_C_FLOAT_ATOM_RE}(?:\s*[*+/-]\s*-?{_C_FLOAT_ATOM_RE})?"
+
+
+def c_float_const_expr(value: str, context: str) -> str:
+    value = value.strip()
+    if not value or not re.fullmatch(_C_FLOAT_EXPR_RE, value):
+        raise SystemExit(f"{context}: unsupported C float constant expression: {value!r}")
+    return value
+
+
 def c_vm_value_expr(value: str, context: str) -> str:
     if not value:
         return ""
     allowed = (
         r"xr_int\([A-Za-z_][A-Za-z0-9_]*\)"
+        rf"|xr_float\({_C_FLOAT_EXPR_RE}\)"
         r"|xrs_string_value_c\(isolate, [A-Za-z_][A-Za-z0-9_]*(?:\(\))?\)"
     )
     if not re.fullmatch(allowed, value):
         raise SystemExit(f"{context}: unsupported VM constant value expression: {value!r}")
     return value
+
+
+def c_i64_literal(value: int) -> str:
+    if value == -(2**63):
+        return "INT64_MIN"
+    if value == 2**63 - 1:
+        return "INT64_MAX"
+    return f"INT64_C({value})"
 
 
 def generated_header(title: str) -> list[str]:
@@ -336,6 +365,8 @@ def const_kind_expr(entry: StdlibConstEntry) -> str:
         return "CG_AOT_STDLIB_CONST_HELPER_VALUE"
     if entry.aot_const_kind == "int64":
         return "CG_AOT_STDLIB_CONST_I64"
+    if entry.aot_const_kind == "float64":
+        return "CG_AOT_STDLIB_CONST_F64"
     raise SystemExit(f"unsupported aot_const kind for {entry.symbol}: {entry.aot_const_kind}")
 
 
@@ -365,6 +396,7 @@ def emit_aot_methods(entries: list[StdlibEntry], constants: list[StdlibConstEntr
         [
             "typedef enum CgAotStdlibConstKind {",
             "    CG_AOT_STDLIB_CONST_I64,",
+            "    CG_AOT_STDLIB_CONST_F64,",
             "    CG_AOT_STDLIB_CONST_HELPER_VALUE,",
             "} CgAotStdlibConstKind;",
             "",
@@ -373,6 +405,7 @@ def emit_aot_methods(entries: list[StdlibEntry], constants: list[StdlibConstEntr
             "    const char *name;",
             "    CgAotStdlibConstKind kind;",
             "    const char *helper;",
+            "    const char *f64_expr;",
             "    int64_t i64_value;",
             "} CgAotStdlibConst;",
             "",
@@ -383,7 +416,7 @@ def emit_aot_methods(entries: list[StdlibEntry], constants: list[StdlibConstEntr
         lines.append(
             "    {"
             f"{c_string(c.module)}, {c_string(c.name)}, {const_kind_expr(c)}, "
-            f"{c_string(c.aot)}, INT64_C({c.value})"
+            f"{c_string(c.aot)}, {c_string(c.f64_value)}, {c_i64_literal(c.value)}"
             "},"
         )
     lines.append("};")
@@ -598,6 +631,7 @@ def emit_defs_header(entries: list[StdlibEntry], constants: list[StdlibConstEntr
             "#define XSTDLIB_DEFS_GENERATED_H",
             "",
             "#include <stdbool.h>",
+            "#include <math.h>",
             "#include <stdint.h>",
             "",
             "typedef struct XrStdlibDefEntry {",
@@ -631,6 +665,7 @@ def emit_defs_header(entries: list[StdlibEntry], constants: list[StdlibConstEntr
             "    const char *define;",
             "    const char *layer;",
             "    int64_t value;",
+            "    double f64_value;",
             "} XrStdlibConstDefEntry;",
             "",
             "static const XrStdlibDefEntry xr_stdlib_def_entries[] = {",
@@ -666,7 +701,7 @@ def emit_defs_header(entries: list[StdlibEntry], constants: list[StdlibConstEntr
             f"{c_string(c.module)}, {c_string(c.name)}, {c_string(c.signature)}, "
             f"{c_string(c.doc)}, {c_string(c.vm)}, {c_string(c.vm_value)}, {c_string(c.aot)}, "
             f"{c_string(c.aot_const_kind)}, {c_string(c.link_object)}, "
-            f"{c_string(c.define)}, {c_string(c.layer)}, INT64_C({c.value})"
+            f"{c_string(c.define)}, {c_string(c.layer)}, {c_i64_literal(c.value)}, {c.f64_value}"
             "},"
         )
     lines.extend(

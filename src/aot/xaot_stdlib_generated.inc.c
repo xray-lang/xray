@@ -219,6 +219,34 @@ static bool xaot_stdlib_generated_symbol_is_builtin_direct(const char *symbol) {
 static bool xaot_stdlib_generated_symbol_is_constant(const char *symbol) {
     if (!symbol)
         return false;
+    if (strcmp(symbol, "math.PI") == 0)
+        return true;
+    if (strcmp(symbol, "math.E") == 0)
+        return true;
+    if (strcmp(symbol, "math.TAU") == 0)
+        return true;
+    if (strcmp(symbol, "math.SQRT2") == 0)
+        return true;
+    if (strcmp(symbol, "math.LN2") == 0)
+        return true;
+    if (strcmp(symbol, "math.LN10") == 0)
+        return true;
+    if (strcmp(symbol, "math.LOG2E") == 0)
+        return true;
+    if (strcmp(symbol, "math.LOG10E") == 0)
+        return true;
+    if (strcmp(symbol, "math.EPSILON") == 0)
+        return true;
+    if (strcmp(symbol, "math.MAX_INT") == 0)
+        return true;
+    if (strcmp(symbol, "math.MIN_INT") == 0)
+        return true;
+    if (strcmp(symbol, "math.MAX_FLOAT") == 0)
+        return true;
+    if (strcmp(symbol, "math.INF") == 0)
+        return true;
+    if (strcmp(symbol, "math.NAN") == 0)
+        return true;
     if (strcmp(symbol, "path.sep") == 0)
         return true;
     if (strcmp(symbol, "path.delimiter") == 0)

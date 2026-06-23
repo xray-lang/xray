@@ -893,72 +893,72 @@ static const XmcpGeneratedStdlibSymbol _symbols_math[] = {
     {
         .name = "E",
         .signature = ": float",
-        .summary = "",
+        .summary = "Euler's number",
     },
     {
         .name = "EPSILON",
         .signature = ": float",
-        .summary = "",
+        .summary = "Smallest representable difference above 1.0",
     },
     {
         .name = "INF",
         .signature = ": float",
-        .summary = "",
+        .summary = "Positive infinity",
     },
     {
         .name = "LN10",
         .signature = ": float",
-        .summary = "",
+        .summary = "Natural logarithm of 10",
     },
     {
         .name = "LN2",
         .signature = ": float",
-        .summary = "",
+        .summary = "Natural logarithm of 2",
     },
     {
         .name = "LOG10E",
         .signature = ": float",
-        .summary = "",
+        .summary = "Base-10 logarithm of e",
     },
     {
         .name = "LOG2E",
         .signature = ": float",
-        .summary = "",
+        .summary = "Base-2 logarithm of e",
     },
     {
         .name = "MAX_FLOAT",
         .signature = ": float",
-        .summary = "",
+        .summary = "Largest finite IEEE-754 double",
     },
     {
         .name = "MAX_INT",
         .signature = ": int",
-        .summary = "",
+        .summary = "Largest signed 64-bit integer",
     },
     {
         .name = "MIN_INT",
         .signature = ": int",
-        .summary = "",
+        .summary = "Smallest signed 64-bit integer",
     },
     {
         .name = "NAN",
         .signature = ": float",
-        .summary = "",
+        .summary = "Quiet NaN value",
     },
     {
         .name = "PI",
         .signature = ": float",
-        .summary = "",
+        .summary = "Ratio of a circle's circumference to its diameter",
     },
     {
         .name = "SQRT2",
         .signature = ": float",
-        .summary = "",
+        .summary = "Square root of 2",
     },
     {
         .name = "TAU",
         .signature = ": float",
-        .summary = "",
+        .summary = "Full-circle radians, 2 * PI",
     },
     {
         .name = "abs",
@@ -3727,20 +3727,20 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
-            "| `math.E` | `: float` |  |\n"
-            "| `math.EPSILON` | `: float` |  |\n"
-            "| `math.INF` | `: float` |  |\n"
-            "| `math.LN10` | `: float` |  |\n"
-            "| `math.LN2` | `: float` |  |\n"
-            "| `math.LOG10E` | `: float` |  |\n"
-            "| `math.LOG2E` | `: float` |  |\n"
-            "| `math.MAX_FLOAT` | `: float` |  |\n"
-            "| `math.MAX_INT` | `: int` |  |\n"
-            "| `math.MIN_INT` | `: int` |  |\n"
-            "| `math.NAN` | `: float` |  |\n"
-            "| `math.PI` | `: float` |  |\n"
-            "| `math.SQRT2` | `: float` |  |\n"
-            "| `math.TAU` | `: float` |  |\n"
+            "| `math.E` | `: float` | Euler's number |\n"
+            "| `math.EPSILON` | `: float` | Smallest representable difference above 1.0 |\n"
+            "| `math.INF` | `: float` | Positive infinity |\n"
+            "| `math.LN10` | `: float` | Natural logarithm of 10 |\n"
+            "| `math.LN2` | `: float` | Natural logarithm of 2 |\n"
+            "| `math.LOG10E` | `: float` | Base-10 logarithm of e |\n"
+            "| `math.LOG2E` | `: float` | Base-2 logarithm of e |\n"
+            "| `math.MAX_FLOAT` | `: float` | Largest finite IEEE-754 double |\n"
+            "| `math.MAX_INT` | `: int` | Largest signed 64-bit integer |\n"
+            "| `math.MIN_INT` | `: int` | Smallest signed 64-bit integer |\n"
+            "| `math.NAN` | `: float` | Quiet NaN value |\n"
+            "| `math.PI` | `: float` | Ratio of a circle's circumference to its diameter |\n"
+            "| `math.SQRT2` | `: float` | Square root of 2 |\n"
+            "| `math.TAU` | `: float` | Full-circle radians, 2 * PI |\n"
             "| `math.abs` | `(x: float): float` | Absolute value (preserves int) |\n"
             "| `math.acos` | `(x: float): float` | Arc cosine |\n"
             "| `math.asin` | `(x: float): float` | Arc sine |\n"

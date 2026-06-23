@@ -149,6 +149,7 @@ static const CgAotStdlibMethod g_aot_stdlib_generated_methods[] = {
 
 typedef enum CgAotStdlibConstKind {
     CG_AOT_STDLIB_CONST_I64,
+    CG_AOT_STDLIB_CONST_F64,
     CG_AOT_STDLIB_CONST_HELPER_VALUE,
 } CgAotStdlibConstKind;
 
@@ -157,23 +158,38 @@ typedef struct CgAotStdlibConst {
     const char *name;
     CgAotStdlibConstKind kind;
     const char *helper;
+    const char *f64_expr;
     int64_t i64_value;
 } CgAotStdlibConst;
 
 static const CgAotStdlibConst g_aot_stdlib_generated_consts[] = {
-    {"path", "sep", CG_AOT_STDLIB_CONST_HELPER_VALUE, "xrt_path_sep", INT64_C(0)},
-    {"path", "delimiter", CG_AOT_STDLIB_CONST_HELPER_VALUE, "xrt_path_delimiter", INT64_C(0)},
-    {"encoding", "LE", CG_AOT_STDLIB_CONST_I64, "", INT64_C(0)},
-    {"encoding", "BE", CG_AOT_STDLIB_CONST_I64, "", INT64_C(1)},
-    {"os", "platform", CG_AOT_STDLIB_CONST_HELPER_VALUE, "xrt_os_platform", INT64_C(0)},
-    {"os", "arch", CG_AOT_STDLIB_CONST_HELPER_VALUE, "xrt_os_arch", INT64_C(0)},
-    {"os", "sep", CG_AOT_STDLIB_CONST_HELPER_VALUE, "xrt_os_sep", INT64_C(0)},
-    {"os", "eol", CG_AOT_STDLIB_CONST_HELPER_VALUE, "xrt_os_eol", INT64_C(0)},
-    {"log", "DEBUG", CG_AOT_STDLIB_CONST_I64, "", INT64_C(10)},
-    {"log", "INFO", CG_AOT_STDLIB_CONST_I64, "", INT64_C(20)},
-    {"log", "WARN", CG_AOT_STDLIB_CONST_I64, "", INT64_C(30)},
-    {"log", "ERROR", CG_AOT_STDLIB_CONST_I64, "", INT64_C(40)},
-    {"log", "FATAL", CG_AOT_STDLIB_CONST_I64, "", INT64_C(50)},
+    {"math", "PI", CG_AOT_STDLIB_CONST_F64, "", "3.14159265358979323846", INT64_C(0)},
+    {"math", "E", CG_AOT_STDLIB_CONST_F64, "", "2.71828182845904523536", INT64_C(0)},
+    {"math", "TAU", CG_AOT_STDLIB_CONST_F64, "", "6.28318530717958647692", INT64_C(0)},
+    {"math", "SQRT2", CG_AOT_STDLIB_CONST_F64, "", "1.41421356237309504880", INT64_C(0)},
+    {"math", "LN2", CG_AOT_STDLIB_CONST_F64, "", "0.69314718055994530942", INT64_C(0)},
+    {"math", "LN10", CG_AOT_STDLIB_CONST_F64, "", "2.30258509299404568402", INT64_C(0)},
+    {"math", "LOG2E", CG_AOT_STDLIB_CONST_F64, "", "1.44269504088896340736", INT64_C(0)},
+    {"math", "LOG10E", CG_AOT_STDLIB_CONST_F64, "", "0.43429448190325182765", INT64_C(0)},
+    {"math", "EPSILON", CG_AOT_STDLIB_CONST_F64, "", "2.22044604925031308085e-16", INT64_C(0)},
+    {"math", "MAX_INT", CG_AOT_STDLIB_CONST_I64, "", "0.0", INT64_MAX},
+    {"math", "MIN_INT", CG_AOT_STDLIB_CONST_I64, "", "0.0", INT64_MIN},
+    {"math", "MAX_FLOAT", CG_AOT_STDLIB_CONST_F64, "", "1.79769313486231570815e+308", INT64_C(0)},
+    {"math", "INF", CG_AOT_STDLIB_CONST_F64, "", "INFINITY", INT64_C(0)},
+    {"math", "NAN", CG_AOT_STDLIB_CONST_F64, "", "NAN", INT64_C(0)},
+    {"path", "sep", CG_AOT_STDLIB_CONST_HELPER_VALUE, "xrt_path_sep", "0.0", INT64_C(0)},
+    {"path", "delimiter", CG_AOT_STDLIB_CONST_HELPER_VALUE, "xrt_path_delimiter", "0.0", INT64_C(0)},
+    {"encoding", "LE", CG_AOT_STDLIB_CONST_I64, "", "0.0", INT64_C(0)},
+    {"encoding", "BE", CG_AOT_STDLIB_CONST_I64, "", "0.0", INT64_C(1)},
+    {"os", "platform", CG_AOT_STDLIB_CONST_HELPER_VALUE, "xrt_os_platform", "0.0", INT64_C(0)},
+    {"os", "arch", CG_AOT_STDLIB_CONST_HELPER_VALUE, "xrt_os_arch", "0.0", INT64_C(0)},
+    {"os", "sep", CG_AOT_STDLIB_CONST_HELPER_VALUE, "xrt_os_sep", "0.0", INT64_C(0)},
+    {"os", "eol", CG_AOT_STDLIB_CONST_HELPER_VALUE, "xrt_os_eol", "0.0", INT64_C(0)},
+    {"log", "DEBUG", CG_AOT_STDLIB_CONST_I64, "", "0.0", INT64_C(10)},
+    {"log", "INFO", CG_AOT_STDLIB_CONST_I64, "", "0.0", INT64_C(20)},
+    {"log", "WARN", CG_AOT_STDLIB_CONST_I64, "", "0.0", INT64_C(30)},
+    {"log", "ERROR", CG_AOT_STDLIB_CONST_I64, "", "0.0", INT64_C(40)},
+    {"log", "FATAL", CG_AOT_STDLIB_CONST_I64, "", "0.0", INT64_C(50)},
 };
 #define CG_AOT_STDLIB_GENERATED_CONST_COUNT ((int) (sizeof(g_aot_stdlib_generated_consts) / sizeof(g_aot_stdlib_generated_consts[0])))
 
