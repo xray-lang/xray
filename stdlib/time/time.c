@@ -114,19 +114,6 @@ static XrCFuncResult xr_time_sleep(XrVMRuntime *X, XrValue *args, int nargs, XrV
 
 // ========== Module loader ==========
 
-// ========== Type Declarations (parsed by gen_stdlib_types.py) ==========
-
-#include "../../src/module/xbuiltin_decl.h"
-
-// @module time
-
-XR_DEFINE_BUILTIN(xr_time_now, "now", "(): int", "Current time in milliseconds since epoch")
-XR_DEFINE_BUILTIN(xr_time_clock, "clock", "(): int", "CPU clock time in milliseconds")
-XR_DEFINE_BUILTIN(xr_time_monotonic, "monotonic", "(): int", "Monotonic time in milliseconds")
-XR_DEFINE_BUILTIN(xr_time_nanos, "nanos", "(): int", "Monotonic time in nanoseconds")
-XR_DEFINE_BUILTIN(xr_time_micros, "micros", "(): int", "Monotonic time in microseconds")
-XR_DEFINE_BUILTIN(xr_time_sleep, "sleep", "(ms: int): ()", "Sleep for milliseconds")
-
 #define XR_STDLIB_VM_BIND_MODULE_TIME 1
 #include "../../src/stdlib/xstdlib_vm_bindings_generated.inc.c"
 #undef XR_STDLIB_VM_BIND_MODULE_TIME

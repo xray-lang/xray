@@ -1326,26 +1326,6 @@ static XrValue compress_adler32(XrVMRuntime *X, XrValue *args, int nargs) {
 
 /* ========== Module Loading ========== */
 
-// ========== Type Declarations (parsed by gen_stdlib_types.py) ==========
-
-#include "../../src/module/xbuiltin_decl.h"
-
-// @module compress
-
-XR_DEFINE_BUILTIN(compress_gzip, "gzip", "(data: string, level?: int): string?", "Gzip compress")
-XR_DEFINE_BUILTIN(compress_gunzip, "gunzip", "(data: string): string?", "Gzip decompress")
-XR_DEFINE_BUILTIN(compress_is_gzip, "isGzip", "(data: string): bool", "Check if gzip data")
-XR_DEFINE_BUILTIN(compress_deflate, "deflate", "(data: string, level?: int): string?",
-                  "Deflate compress")
-XR_DEFINE_BUILTIN(compress_inflate, "inflate", "(data: string): string?", "Inflate decompress")
-XR_DEFINE_BUILTIN(compress_zlib_compress, "zlibCompress", "(data: string, level?: int): string?",
-                  "Zlib compress")
-XR_DEFINE_BUILTIN(compress_zlib_decompress, "zlibDecompress", "(data: string): string?",
-                  "Zlib decompress")
-XR_DEFINE_BUILTIN(compress_is_zlib, "isZlib", "(data: string): bool", "Check if zlib data")
-XR_DEFINE_BUILTIN(compress_crc32, "crc32", "(data: string): int", "Compute CRC-32 checksum")
-XR_DEFINE_BUILTIN(compress_adler32, "adler32", "(data: string): int", "Compute Adler-32 checksum")
-
 #define XR_STDLIB_VM_BIND_MODULE_COMPRESS 1
 #include "../../src/stdlib/xstdlib_vm_bindings_generated.inc.c"
 #undef XR_STDLIB_VM_BIND_MODULE_COMPRESS

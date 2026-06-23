@@ -165,24 +165,6 @@ static XrValue mem_info(XrVMRuntime *isolate, XrValue *args, int argc) {
 
 /* ========== Module Loading ========== */
 
-// ========== Type Declarations (parsed by gen_stdlib_types.py) ==========
-
-#include "../../src/module/xbuiltin_decl.h"
-
-// @module mem
-
-XR_DEFINE_BUILTIN(mem_collect_cycles, "collectCycles", "(): int",
-                  "Run cycle collection + whole-block reclaim, return cycle collection count")
-XR_DEFINE_BUILTIN(mem_disable_cycle_collection, "disableCycleCollection", "(): ()",
-                  "Pause the automatic cycle collector")
-XR_DEFINE_BUILTIN(mem_enable_cycle_collection, "enableCycleCollection", "(): ()",
-                  "Resume the automatic cycle collector")
-XR_DEFINE_BUILTIN(mem_is_cycle_collection_enabled, "isCycleCollectionEnabled", "(): bool",
-                  "Check if automatic cycle collection is enabled")
-XR_DEFINE_BUILTIN(mem_live_bytes, "liveBytes", "(): int", "Get live memory usage in bytes")
-XR_DEFINE_BUILTIN(mem_live_objects, "liveObjects", "(): int", "Get live object count")
-XR_DEFINE_BUILTIN(mem_info, "info", "(): Map", "Get memory-model runtime info as Map")
-
 #define XR_STDLIB_VM_BIND_MODULE_MEM 1
 #include "../../src/stdlib/xstdlib_vm_bindings_generated.inc.c"
 #undef XR_STDLIB_VM_BIND_MODULE_MEM

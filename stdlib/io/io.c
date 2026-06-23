@@ -1210,49 +1210,6 @@ static XrValue io_readDirRecursive(XrVMRuntime *X, XrValue *args, int argc) {
 
 /* ========== Module Loading ========== */
 
-// ========== Type Declarations (parsed by gen_stdlib_types.py) ==========
-
-#include "../../src/module/xbuiltin_decl.h"
-
-// @module io
-
-XR_DEFINE_BUILTIN(io_readFile, "readFile", "(path: string): string?", "Read entire file as string")
-XR_DEFINE_BUILTIN(io_readFileBytes, "readFileBytes", "(path: string): Array<uint8>?",
-                  "Read entire file as byte array")
-XR_DEFINE_BUILTIN(io_readStdin, "readStdin", "(): string?", "Read all data from standard input")
-XR_DEFINE_BUILTIN(io_writeFile, "writeFile", "(path: string, data: string): bool",
-                  "Write string to file")
-XR_DEFINE_BUILTIN(io_writeFileBytes, "writeFileBytes", "(path: string, data: Array<uint8>): bool",
-                  "Write byte array to file")
-XR_DEFINE_BUILTIN(io_appendFile, "appendFile", "(path: string, data: string): bool",
-                  "Append string to file")
-XR_DEFINE_BUILTIN(io_exists, "exists", "(path: string): bool", "Check if path exists")
-XR_DEFINE_BUILTIN(io_isFile, "isFile", "(path: string): bool", "Check if path is a file")
-XR_DEFINE_BUILTIN(io_isDir, "isDir", "(path: string): bool", "Check if path is a directory")
-XR_DEFINE_BUILTIN(io_fileSize, "fileSize", "(path: string): int", "Get file size in bytes")
-XR_DEFINE_BUILTIN(io_remove, "remove", "(path: string): bool", "Remove a file")
-XR_DEFINE_BUILTIN(io_rename, "rename", "(old: string, new: string): bool", "Rename a file")
-XR_DEFINE_BUILTIN(io_mkdir, "mkdir", "(path: string): bool", "Create directory")
-XR_DEFINE_BUILTIN(io_readDir, "readDir", "(path: string): Array<string>", "List directory entries")
-XR_DEFINE_BUILTIN(io_cwd, "cwd", "(): string", "Get current working directory")
-XR_DEFINE_BUILTIN(io_chdir, "chdir", "(path: string): bool", "Change working directory")
-XR_DEFINE_BUILTIN(io_copyFile, "copyFile", "(src: string, dst: string): bool", "Copy a file")
-XR_DEFINE_BUILTIN(io_readLines, "readLines", "(path: string): Array<string>", "Read file as lines")
-XR_DEFINE_BUILTIN(io_isSymlink, "isSymlink", "(path: string): bool", "Check if path is a symlink")
-XR_DEFINE_BUILTIN(io_stat, "stat", "(path: string): FileStat?", "Get file stat info")
-XR_DEFINE_BUILTIN(io_mkdirp, "mkdirp", "(path: string): bool", "Create directory recursively")
-XR_DEFINE_BUILTIN(io_removeAll, "removeAll", "(path: string): bool", "Remove directory recursively")
-XR_DEFINE_BUILTIN(io_chmod, "chmod", "(path: string, mode: int): bool", "Change file permissions")
-XR_DEFINE_BUILTIN(io_touch, "touch", "(path: string): bool", "Create or update file timestamp")
-XR_DEFINE_BUILTIN(io_symlink, "symlink", "(target: string, link: string): bool",
-                  "Create symbolic link")
-XR_DEFINE_BUILTIN(io_readlink, "readlink", "(path: string): string?", "Read symlink target")
-XR_DEFINE_BUILTIN(io_realpath, "realpath", "(path: string): string?", "Resolve to absolute path")
-XR_DEFINE_BUILTIN(io_tempFile, "tempFile", "(): string?", "Create temporary file")
-XR_DEFINE_BUILTIN(io_tempDir, "tempDir", "(): string?", "Create temporary directory")
-XR_DEFINE_BUILTIN(io_readDirRecursive, "readDirRecursive", "(path: string): Array<string>",
-                  "List directory entries recursively")
-
 #define XR_STDLIB_VM_BIND_MODULE_IO 1
 #include "../../src/stdlib/xstdlib_vm_bindings_generated.inc.c"
 #undef XR_STDLIB_VM_BIND_MODULE_IO

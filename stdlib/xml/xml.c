@@ -619,26 +619,6 @@ static XrValue xml_cdata_fn(XrVMRuntime *X, XrValue *args, int argc) {
 
 // ========== Module loading ===========
 
-// ========== Type Declarations (parsed by gen_stdlib_types.py) ==========
-
-#include "../../src/module/xbuiltin_decl.h"
-
-// @module xml
-
-XR_DEFINE_BUILTIN(xml_parse_fn, "parse", "(data: string, options?: Json): Json", "Parse XML string")
-XR_DEFINE_BUILTIN(xml_parse_detailed, "parseDetailed", "(data: string): Json",
-                  "Parse XML with details")
-XR_DEFINE_BUILTIN(xml_parse_file, "parseFile", "(path: string): Json", "Parse XML file")
-XR_DEFINE_BUILTIN(xml_stringify_fn, "stringify", "(node: Json, options?: Json): string",
-                  "Convert to XML string")
-XR_DEFINE_BUILTIN(xml_write_file, "writeFile", "(path: string, node: Json): bool", "Write XML file")
-XR_DEFINE_BUILTIN(xml_document_fn, "document", "(): Json", "Create XML document node")
-XR_DEFINE_BUILTIN(xml_element_fn, "element", "(name: string, attrs?: Json): Json",
-                  "Create XML element node")
-XR_DEFINE_BUILTIN(xml_text_fn, "text", "(content: string): Json", "Create XML text node")
-XR_DEFINE_BUILTIN(xml_comment_fn, "comment", "(content: string): Json", "Create XML comment node")
-XR_DEFINE_BUILTIN(xml_cdata_fn, "cdata", "(content: string): Json", "Create XML CDATA node")
-
 #define XR_STDLIB_VM_BIND_MODULE_XML 1
 #include "../../src/stdlib/xstdlib_vm_bindings_generated.inc.c"
 #undef XR_STDLIB_VM_BIND_MODULE_XML

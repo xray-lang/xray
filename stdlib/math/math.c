@@ -510,53 +510,6 @@ static XrValue math_isFinite(XrVMRuntime *X, XrValue *args, int argc) {
     return xr_bool(isfinite(v));
 }
 
-/* ========== Type Declarations (parsed by gen_stdlib_types.py) ========== */
-
-#include "../../src/module/xbuiltin_decl.h"
-
-// @module math
-
-XR_DEFINE_BUILTIN(math_abs, "abs", "(x: float): float", "Absolute value (preserves int)")
-XR_DEFINE_BUILTIN(math_floor, "floor", "(x: float): int", "Floor to integer")
-XR_DEFINE_BUILTIN(math_ceil, "ceil", "(x: float): int", "Ceiling to integer")
-XR_DEFINE_BUILTIN(math_round, "round", "(x: float): int", "Round to nearest integer")
-XR_DEFINE_BUILTIN(math_sqrt, "sqrt", "(x: float): float", "Square root")
-XR_DEFINE_BUILTIN(math_pow, "pow", "(base: float, exp: float): float", "Power")
-XR_DEFINE_BUILTIN(math_sin, "sin", "(x: float): float", "Sine")
-XR_DEFINE_BUILTIN(math_cos, "cos", "(x: float): float", "Cosine")
-XR_DEFINE_BUILTIN(math_tan, "tan", "(x: float): float", "Tangent")
-XR_DEFINE_BUILTIN(math_asin, "asin", "(x: float): float", "Arc sine")
-XR_DEFINE_BUILTIN(math_acos, "acos", "(x: float): float", "Arc cosine")
-XR_DEFINE_BUILTIN(math_atan, "atan", "(x: float): float", "Arc tangent")
-XR_DEFINE_BUILTIN(math_atan2, "atan2", "(y: float, x: float): float", "Arc tangent of y/x")
-XR_DEFINE_BUILTIN(math_log, "log", "(x: float): float", "Natural logarithm")
-XR_DEFINE_BUILTIN(math_log10, "log10", "(x: float): float", "Base-10 logarithm")
-XR_DEFINE_BUILTIN(math_log2, "log2", "(x: float): float", "Base-2 logarithm")
-XR_DEFINE_BUILTIN(math_exp, "exp", "(x: float): float", "Exponential e^x")
-XR_DEFINE_BUILTIN(math_min, "min", "(...args: float): float", "Minimum (preserves int)")
-XR_DEFINE_BUILTIN(math_max, "max", "(...args: float): float", "Maximum (preserves int)")
-XR_DEFINE_BUILTIN(math_clamp, "clamp", "(x: float, min: float, max: float): float",
-                  "Clamp (preserves int)")
-XR_DEFINE_BUILTIN(math_random, "random", "(): float", "Random float in [0, 1)")
-XR_DEFINE_BUILTIN(math_randomInt, "randomInt", "(min: int, max: int): int",
-                  "Random integer in [min, max]")
-XR_DEFINE_BUILTIN(math_sign, "sign", "(x: float): int", "Sign of value (-1, 0, 1)")
-XR_DEFINE_BUILTIN(math_sinh, "sinh", "(x: float): float", "Hyperbolic sine")
-XR_DEFINE_BUILTIN(math_cosh, "cosh", "(x: float): float", "Hyperbolic cosine")
-XR_DEFINE_BUILTIN(math_tanh, "tanh", "(x: float): float", "Hyperbolic tangent")
-XR_DEFINE_BUILTIN(math_hypot, "hypot", "(x: float, y: float): float", "Hypotenuse sqrt(x*x+y*y)")
-XR_DEFINE_BUILTIN(math_cbrt, "cbrt", "(x: float): float", "Cube root")
-XR_DEFINE_BUILTIN(math_trunc, "trunc", "(x: float): int", "Truncate toward zero")
-XR_DEFINE_BUILTIN(math_fmod, "fmod", "(x: float, y: float): float", "Floating-point remainder")
-XR_DEFINE_BUILTIN(math_log1p, "log1p", "(x: float): float", "log(1+x) accurate for small x")
-XR_DEFINE_BUILTIN(math_expm1, "expm1", "(x: float): float", "exp(x)-1 accurate for small x")
-XR_DEFINE_BUILTIN(math_lerp, "lerp", "(a: float, b: float, t: float): float",
-                  "Linear interpolation")
-XR_DEFINE_BUILTIN(math_degToRad, "degToRad", "(deg: float): float", "Degrees to radians")
-XR_DEFINE_BUILTIN(math_radToDeg, "radToDeg", "(rad: float): float", "Radians to degrees")
-XR_DEFINE_BUILTIN(math_isNaN, "isNaN", "(x: float): bool", "Check if NaN")
-XR_DEFINE_BUILTIN(math_isFinite, "isFinite", "(x: float): bool", "Check if finite")
-
 #define XR_STDLIB_VM_BIND_MODULE_MATH 1
 #include "../../src/stdlib/xstdlib_vm_bindings_generated.inc.c"
 #undef XR_STDLIB_VM_BIND_MODULE_MATH

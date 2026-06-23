@@ -353,8 +353,7 @@ static void load_one_source(const char *source) {
     }
 }
 
-/* Generated type member tables for types whose single source of truth
- * is the C source (via XR_DEFINE_BUILTIN), not a .xr declaration. */
+/* Generated member tables for stdlib definition files rather than .xr declarations. */
 #include "xanalyzer_builtins_generated.h"
 
 XR_FUNC void xa_native_types_init(void) {

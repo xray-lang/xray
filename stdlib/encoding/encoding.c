@@ -343,30 +343,6 @@ static XrValue encoding_utf16_decode(XrVMRuntime *X, XrValue *args, int nargs) {
 
 /* ========== Module Loading ========== */
 
-// ========== Type Declarations (parsed by gen_stdlib_types.py) ==========
-
-#include "../../src/module/xbuiltin_decl.h"
-
-// @module encoding
-
-XR_DEFINE_BUILTIN(encoding_hex_encode, "hexEncode", "(data: string): string",
-                  "Hex encode string to hex")
-XR_DEFINE_BUILTIN(encoding_hex_decode, "hexDecode", "(hex: string): Array<uint8>?",
-                  "Hex decode to bytes")
-XR_DEFINE_BUILTIN(encoding_hex_decode_string, "hexDecodeString", "(hex: string): string?",
-                  "Hex decode to string")
-XR_DEFINE_BUILTIN(encoding_hex_valid, "hexValid", "(hex: string): bool",
-                  "Check if valid hex string")
-XR_DEFINE_BUILTIN(encoding_utf8_valid, "utf8Valid", "(data: string): bool", "Check if valid UTF-8")
-XR_DEFINE_BUILTIN(encoding_utf8_count, "utf8Count", "(data: string): int", "Count UTF-8 characters")
-XR_DEFINE_BUILTIN(encoding_utf8_byte_length, "utf8ByteLength", "(data: string): int",
-                  "Get UTF-8 byte length")
-XR_DEFINE_BUILTIN(encoding_utf16_encode, "utf16Encode",
-                  "(data: string, endian?: int): Array<uint8>", "UTF-16 encode to bytes")
-XR_DEFINE_BUILTIN(encoding_utf16_decode, "utf16Decode",
-                  "(data: string | Array<uint8>, endian?: int, stripBom?: bool): string?",
-                  "UTF-16 decode to string (auto-detects BOM)")
-
 #define XR_STDLIB_VM_BIND_MODULE_ENCODING 1
 #include "../../src/stdlib/xstdlib_vm_bindings_generated.inc.c"
 #undef XR_STDLIB_VM_BIND_MODULE_ENCODING

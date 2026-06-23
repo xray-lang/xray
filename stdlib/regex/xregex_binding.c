@@ -772,36 +772,6 @@ void xr_regex_register_class(XrVMRuntime *isolate) {
  * Module Loading
  * ======================================================================== */
 
-// ========== Type Declarations (parsed by gen_stdlib_types.py) ==========
-
-#include "../../src/module/xbuiltin_decl.h"
-
-// @module regex
-
-XR_DEFINE_BUILTIN(regex_compile, "compile", "(pattern: string, flags?: string): Regex",
-                  "Compile a regex pattern")
-XR_DEFINE_BUILTIN(regex_test, "test", "(pattern: Regex, s: string): bool",
-                  "Test if pattern matches string")
-XR_DEFINE_BUILTIN(regex_find, "find", "(pattern: Regex, s: string, offset?: int): RegexMatch?",
-                  "Find first match")
-XR_DEFINE_BUILTIN(regex_find_text, "findText", "(pattern: Regex, s: string): string?",
-                  "Find first match, return matched text only (zero-alloc)")
-XR_DEFINE_BUILTIN(regex_find_group, "findGroup", "(pattern: Regex, s: string, index: int): string?",
-                  "Find first match, return single capture group (zero-alloc)")
-XR_DEFINE_BUILTIN(regex_full_match, "fullFind", "(pattern: Regex, s: string): RegexMatch?",
-                  "Full match with captures")
-XR_DEFINE_BUILTIN(regex_count, "count", "(pattern: Regex, s: string): int", "Count matches")
-XR_DEFINE_BUILTIN(regex_find_all, "findAll",
-                  "(pattern: Regex, s: string, limit?: int): Array<RegexMatch>", "Find all matches")
-XR_DEFINE_BUILTIN(regex_replace, "replace",
-                  "(pattern: Regex, s: string, replacement: string): string", "Replace first match")
-XR_DEFINE_BUILTIN(regex_replace_all, "replaceAll",
-                  "(pattern: Regex, s: string, replacement: string): string", "Replace all matches")
-XR_DEFINE_BUILTIN(regex_split, "split", "(pattern: Regex, s: string, limit?: int): Array<string>",
-                  "Split by pattern")
-XR_DEFINE_BUILTIN(regex_escape, "escape", "(s: string): string", "Escape regex special chars")
-XR_DEFINE_BUILTIN(regex_is_valid, "isValid", "(pattern: string): bool", "Check if pattern is valid")
-
 #define XR_STDLIB_VM_BIND_MODULE_REGEX 1
 #include "../../src/stdlib/xstdlib_vm_bindings_generated.inc.c"
 #undef XR_STDLIB_VM_BIND_MODULE_REGEX

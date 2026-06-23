@@ -549,19 +549,6 @@ static XrValue toml_write_file(XrVMRuntime *X, XrValue *args, int argc) {
 
 // ========== Module Loading ==========
 
-// ========== Type Declarations (parsed by gen_stdlib_types.py) ==========
-
-#include "../../src/module/xbuiltin_decl.h"
-
-// @module toml
-
-XR_DEFINE_BUILTIN(toml_parse, "parse", "(data: string): Json", "Parse TOML string")
-XR_DEFINE_BUILTIN(toml_parse_strict, "parseStrict", "(data: string): Json", "Parse TOML strictly")
-XR_DEFINE_BUILTIN(toml_stringify, "stringify", "(value: Json): string", "Convert to TOML string")
-XR_DEFINE_BUILTIN(toml_parse_file, "parseFile", "(path: string): Json", "Parse TOML file")
-XR_DEFINE_BUILTIN(toml_write_file, "writeFile", "(path: string, value: Json): bool",
-                  "Write TOML file")
-
 #define XR_STDLIB_VM_BIND_MODULE_TOML 1
 #include "../../src/stdlib/xstdlib_vm_bindings_generated.inc.c"
 #undef XR_STDLIB_VM_BIND_MODULE_TOML
