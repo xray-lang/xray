@@ -37,6 +37,12 @@ typedef struct XaInferContext {
     XaSymbol *current_function;
     XrType *expected_return_type;
 
+    // Current class context (set while inferring a class/struct method body).
+    // Used to enforce private/protected member visibility and const-field writes.
+    struct XrClassInfo *current_class_info;
+    const char *current_class_name;
+    bool current_method_is_constructor;
+
     // Collected return types (for inference)
     XrType **return_types;
     int return_type_count;

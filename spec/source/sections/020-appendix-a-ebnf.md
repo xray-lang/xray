@@ -245,7 +245,7 @@ ParamList ::= Param (',' Param)* ','?
 Param     ::= Modifier* Identifier ':' Type ('=' Expression)?
            |  '...' Identifier ':' Type
 ReturnType ::= '->' Type | '->' '(' Type (',' Type)+ ')'
-Modifier  ::= 'in' | 'ref' | 'private' | 'static' | 'final' | 'abstract' | 'override'
+Modifier  ::= 'in' | 'ref' | 'private' | 'protected' | 'static' | 'const' | 'final' | 'abstract' | 'override'
               // 公开可见性是默认语义；override 可选
 
 TypeParams ::= '<' TypeParam (',' TypeParam)* ','? '>'
@@ -546,7 +546,7 @@ ParamList ::= Param (',' Param)* ','?
 Param     ::= Modifier* Identifier ':' Type ('=' Expression)?
            |  '...' Identifier ':' Type
 ReturnType ::= '->' Type | '->' '(' Type (',' Type)+ ')'
-Modifier  ::= 'in' | 'ref' | 'private' | 'static' | 'final' | 'abstract' | 'override'
+Modifier  ::= 'in' | 'ref' | 'private' | 'protected' | 'static' | 'const' | 'final' | 'abstract' | 'override'
               // public visibility is the default; override is optional
 
 TypeParams ::= '<' TypeParam (',' TypeParam)* ','? '>'

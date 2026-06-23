@@ -1052,6 +1052,7 @@ static const char *token_names[] = {
     [TK_CONSTRUCTOR] = "constructor",
     [TK_STATIC] = "static",
     [TK_PRIVATE] = "private",
+    [TK_PROTECTED] = "protected",
     [TK_OPERATOR] = "operator",
     [TK_ABSTRACT] = "abstract",
     [TK_OVERRIDE] = "override",

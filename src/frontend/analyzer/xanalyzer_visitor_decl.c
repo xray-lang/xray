@@ -2395,6 +2395,8 @@ skip_interfaces:
             field_sym->location.line = field->line;
             field_sym->is_static = fd->is_static;
             field_sym->is_private = fd->is_private;
+            field_sym->is_protected = fd->is_protected;
+            field_sym->is_const = fd->is_const;
             xa_visit_add_symbol_checked(ctx, field_sym, 0);
 
             XaSymbolLinks *field_links = xa_analyzer_get_links(ctx->analyzer, field_sym);
@@ -2654,6 +2656,7 @@ skip_layout:
             method_sym->location.line = method->line;
             method_sym->is_static = md->is_static;
             method_sym->is_private = md->is_private;
+            method_sym->is_protected = md->is_protected;
             method_sym->is_override = md->is_override;
             method_sym->mutates_receiver =
                 !md->is_static && xa_method_body_mutates_receiver(md->body, info);

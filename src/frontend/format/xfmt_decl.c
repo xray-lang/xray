@@ -146,8 +146,12 @@ void xfmt_emit_class_decl(XrFmtContext *ctx, AstNode *node) {
         xfmt_write_indent(ctx);
         if (f->is_private)
             xfmt_write_str(ctx, "private ");
+        if (f->is_protected)
+            xfmt_write_str(ctx, "protected ");
         if (f->is_static)
             xfmt_write_str(ctx, "static ");
+        if (f->is_const)
+            xfmt_write_str(ctx, "const ");
         xfmt_write_str(ctx, f->name);
         if (f->field_type) {
             if (align_fields) {
@@ -241,6 +245,8 @@ void xfmt_emit_class_decl(XrFmtContext *ctx, AstNode *node) {
             xfmt_write_indent(ctx);
             if (m->is_private)
                 xfmt_write_str(ctx, "private ");
+            if (m->is_protected)
+                xfmt_write_str(ctx, "protected ");
             if (m->is_static)
                 xfmt_write_str(ctx, "static ");
             xfmt_write_str(ctx, prop_name);
@@ -303,6 +309,8 @@ void xfmt_emit_class_decl(XrFmtContext *ctx, AstNode *node) {
         xfmt_write_indent(ctx);
         if (m->is_private)
             xfmt_write_str(ctx, "private ");
+        if (m->is_protected)
+            xfmt_write_str(ctx, "protected ");
         if (m->is_static)
             xfmt_write_str(ctx, "static ");
         if (m->is_abstract)

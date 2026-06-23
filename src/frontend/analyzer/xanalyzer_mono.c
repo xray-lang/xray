@@ -762,6 +762,7 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
             dst->is_constructor = src->is_constructor;
             dst->is_static = src->is_static;
             dst->is_private = src->is_private;
+            dst->is_protected = src->is_protected;
             dst->is_getter = src->is_getter;
             dst->is_setter = src->is_setter;
             dst->is_abstract = src->is_abstract;
@@ -787,8 +788,10 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
             dst->name = clone_str(src->name);
             dst->field_type = sub_tref(src->field_type, map, mc);
             dst->is_private = src->is_private;
+            dst->is_protected = src->is_protected;
             dst->is_static = src->is_static;
             dst->is_final = src->is_final;
+            dst->is_const = src->is_const;
             dst->initializer = xr_ast_clone_ctx(src->initializer, map, mc, clone_ctx);
             break;
         }

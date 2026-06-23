@@ -107,7 +107,7 @@ fn test_final_static_method() {
 // ===== Final field =====
 
 class Settings {
-    final maxRetries: int = 3
+    const maxRetries: int = 3
     timeout: int = 1000
 
     constructor() {
@@ -124,7 +124,7 @@ fn test_final_field() {
 // ===== Multiple modifiers combined =====
 
 class Service {
-    private final secret: string = "key123"
+    private const secret: string = "key123"
     
     final getSecret() -> string {
         return this.secret

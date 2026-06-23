@@ -312,12 +312,13 @@ FieldDecl ::= Modifier* Identifier ':' Type ('=' Expression)?
 MethodDecl ::= Modifier* Identifier '(' ParamList? ')' ReturnType? Block
             |  Modifier* 'operator' OpToken '(' ParamList? ')' ReturnType? Block
 ConstructorDecl ::= 'constructor' '(' ParamList? ')' Block          // 参数类型可省
-Modifier ::= 'private' | 'static' | 'final' | 'abstract' | 'override'
+Modifier ::= 'private' | 'protected' | 'static' | 'final' | 'const' | 'abstract' | 'override'
 ```
 
 > **关于默认公开可见性和 `override`**：
 >
-> - 公开是**默认可见性**——所有未带 `private` 的字段/方法都是公开的；语言没有 `public` 修饰符。
+> - 公开是**默认可见性**——所有未带 `private` / `protected` 的字段/方法都是公开的；语言没有 `public` 修饰符。
+> - 可见性受**编译期强制**：从类外访问 `private` / `protected` 成员、或从非子类访问 `protected` 成员，均报 `E0377`。
 > - `override` 是**可选**——重写父类方法只要同名同参就自动覆盖，不要求显式 `override` 标注。
 > - 但一旦写出 `override`，分析器必须验证父类链存在同名同签实例方法；否则编译错误 `E0374`。
 >
@@ -376,15 +377,17 @@ class Dog extends Animal {
 | 修饰符 | 适用 | 语义 |
 |--|--|--|
 | （无） | 字段/方法 | 默认 public——公开可见 |
-| `private` | 字段/方法 | 仅类内部可访问；子类不能直接访问，但可通过父类公开方法间接访问 |
+| `private` | 字段/方法 | 仅声明类内部可访问（含同类其它实例）；子类与外部访问均报 `E0377` |
+| `protected` | 字段/方法 | 声明类及其子类内部可访问；外部访问报 `E0377` |
 | `static` | 字段/方法 | 类级别，不属于实例；调用为 `ClassName.method()` |
-| `final` | 类/方法/字段 | 类：禁止继承；方法：禁止重写；字段：初始化后不可修改 |
+| `const` | 字段 | 不可变字段——只能在声明类的构造器中经 `this` 赋值一次，之后重写报 `E0378` |
+| `final` | 类/方法 | 类：禁止继承；方法：禁止重写。**不再用于字段**（字段不可变用 `const`） |
 | `abstract` | 类/方法 | 不可实例化 / 必须由子类实现 |
 | `override` | 方法 | **可选但受检**——重写不要求显式标注；写了必须覆盖父类链中同名同签实例方法 |
 
-**修饰符可组合**：`private final secret: string = "key123"`、`static final pi() -> float`、`private static counter: int = 0`。
+**修饰符可组合**：`private const secret: string = "key123"`、`static final pi() -> float`、`protected static counter: int = 0`。
 
-xray **没有** `protected` 修饰符——子类通过父类公开方法间接访问私有字段即可。
+> `const` = 不可变字段/绑定，`final` = 封类/封方法（继承维度）。两者职责分离：字段不可变只用 `const`，对字段写 `final` 报错并提示改用 `const`。
 
 #### 5.3.4 构造器
 
@@ -510,7 +513,7 @@ b.x = 99.0
 | 继承 | 支持 `extends` | **不支持**继承 |
 | `implements` | ✅ | ✅ |
 | 泛型 | ✅ | ✅ |
-| `static` / `private` / `final` | ✅ | ✅ |
+| `static` / `private` / `protected` / `const` | ✅ | ✅ |
 | 运算符重载 | ✅ | ✅ |
 | 构造器 | `constructor(...)` | **可省略**：`new Point()` 生成零值实例 |
 | 字面量 | 无 | `TypeName{field: value, ...}` |
@@ -1184,12 +1187,13 @@ FieldDecl ::= Modifier* Identifier ':' Type ('=' Expression)?
 MethodDecl ::= Modifier* Identifier '(' ParamList? ')' ReturnType? Block
             |  Modifier* 'operator' OpToken '(' ParamList? ')' ReturnType? Block
 ConstructorDecl ::= 'constructor' '(' ParamList? ')' Block          // parameter types may be omitted
-Modifier ::= 'private' | 'static' | 'final' | 'abstract' | 'override'
+Modifier ::= 'private' | 'protected' | 'static' | 'final' | 'const' | 'abstract' | 'override'
 ```
 
 > **About default public visibility and `override`**:
 >
-> - Public is the **default visibility**—every field/method without `private` is public; the language has no `public` modifier.
+> - Public is the **default visibility**—every field/method without `private` / `protected` is public; the language has no `public` modifier.
+> - Visibility is **compile-time enforced**: accessing a `private` / `protected` member from outside the class, or a `protected` member from a non-subclass, reports `E0377`.
 > - `override` is **optional**—an override happens automatically when the derived class declares a method with the same signature; an explicit `override` annotation is not required.
 > - Once written, `override` is checked: the analyzer must find a same-name, same-signature instance method in the parent chain, or report compile error `E0374`.
 >
@@ -1248,15 +1252,17 @@ class Dog extends Animal {
 | Modifier | Applies to | Semantics |
 |--|--|--|
 | (none) | field/method | Default public—externally visible |
-| `private` | field/method | Class-internal access only; subclasses cannot access directly but may go through public parent methods |
+| `private` | field/method | Accessible only inside the declaring class (including other instances of the same class); subclass and external access report `E0377` |
+| `protected` | field/method | Accessible inside the declaring class and its subclasses; external access reports `E0377` |
 | `static` | field/method | Class-level, not part of an instance; called as `ClassName.method()` |
-| `final` | class/method/field | Class: cannot be inherited. Method: cannot be overridden. Field: cannot be reassigned after initialization |
+| `const` | field | Immutable field—assignable once via `this` in the declaring class's constructor; later writes report `E0378` |
+| `final` | class/method | Class: cannot be inherited. Method: cannot be overridden. **No longer applies to fields** (use `const` for immutable fields) |
 | `abstract` | class/method | Cannot be instantiated / must be implemented by subclasses |
 | `override` | method | **Optional but checked**—overrides do not require explicit annotation; when present, it must match a same-name, same-signature instance method in the parent chain |
 
-**Modifiers may combine**: `private final secret: string = "key123"`, `static final pi() -> float`, `private static counter: int = 0`.
+**Modifiers may combine**: `private const secret: string = "key123"`, `static final pi() -> float`, `protected static counter: int = 0`.
 
-xray has **no** `protected` modifier—subclasses go through public parent methods to reach private fields when needed.
+> `const` = immutable field/binding, `final` = sealing a class/method (inheritance dimension). Their roles are separate: immutable fields use `const` only; writing `final` on a field is an error that suggests `const`.
 
 #### 5.3.4 Constructors
 
@@ -1382,7 +1388,7 @@ b.x = 99.0
 | Inheritance | Supports `extends` | **No** inheritance |
 | `implements` | ✅ | ✅ |
 | Generics | ✅ | ✅ |
-| `static` / `private` / `final` | ✅ | ✅ |
+| `static` / `private` / `protected` / `const` | ✅ | ✅ |
 | Operator overload | ✅ | ✅ |
 | Constructor | `constructor(...)` | **Optional**: `new Point()` yields a zero-valued instance |
 | Literal | none | `TypeName{field: value, ...}` |
