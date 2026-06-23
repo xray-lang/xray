@@ -10,7 +10,7 @@ gen_stdlib_types.py - Generate analyzer builtin type declarations
 
 KEY CONCEPT:
   Uses stdlib/defs/*.def as the primary declaration source for migrated module
-  functions, constants, and handles, then falls back to C annotations for
+  functions, constants, handles, and type methods, then falls back to C annotations for
   builtin types and module members not yet migrated to declarative metadata.
 
   Supports two output modes:
@@ -308,6 +308,29 @@ def load_def_module_handles():
     return modules
 
 
+def load_def_type_methods():
+    """Load migrated builtin type methods from stdlib/defs/*.def."""
+    sys.path.insert(0, str(STDLIBGEN_TOOL_DIR))
+    try:
+        from stdlibgen import parse_type_methods
+    except Exception as e:
+        raise SystemExit(f"Error: cannot import stdlibgen parser: {e}") from e
+    finally:
+        try:
+            sys.path.remove(str(STDLIBGEN_TOOL_DIR))
+        except ValueError:
+            pass
+
+    types = {}
+    for entry in parse_type_methods(PROJECT_ROOT):
+        types.setdefault(entry.type_name, []).append({
+            'name': entry.name,
+            'signature': entry.signature,
+            'doc': entry.doc,
+        })
+    return types
+
+
 def merge_def_module_methods(module_results, def_methods):
     """Overlay .def methods onto C-scanned module declarations.
 
@@ -387,6 +410,27 @@ def merge_def_module_handles(module_results, def_handles):
                 added += 1
             else:
                 mod_data['handles'][idx] = handle
+                replaced += 1
+    return replaced, added
+
+
+def merge_def_type_methods(type_results, def_type_methods):
+    """Overlay .def type methods onto C-scanned builtin type declarations."""
+    replaced = 0
+    added = 0
+    for type_name, methods in sorted(def_type_methods.items()):
+        current = type_results.setdefault(type_name, [])
+        by_name = {}
+        for idx, method in enumerate(current):
+            by_name.setdefault(method['name'], idx)
+        for method in methods:
+            idx = by_name.get(method['name'])
+            if idx is None:
+                current.append(method)
+                by_name[method['name']] = len(current) - 1
+                added += 1
+            else:
+                current[idx] = method
                 replaced += 1
     return replaced, added
 
@@ -778,6 +822,10 @@ def main():
     const_replaced, const_added = merge_def_module_constants(module_results, def_constants)
     def_handles = load_def_module_handles()
     handle_replaced, handle_added = merge_def_module_handles(module_results, def_handles)
+    def_type_methods = load_def_type_methods()
+    type_method_replaced, type_method_added = merge_def_type_methods(
+        type_results, def_type_methods
+    )
 
     total_types = len(type_results)
     total_modules = len(module_results)
@@ -794,6 +842,8 @@ def main():
           f"{const_added} constants added from stdlib/defs/*.def", file=sys.stderr)
     print(f"Def handles overlay: {handle_replaced} handles replaced, "
           f"{handle_added} handles added from stdlib/defs/*.def", file=sys.stderr)
+    print(f"Def type-method overlay: {type_method_replaced} methods replaced, "
+          f"{type_method_added} methods added from stdlib/defs/*.def", file=sys.stderr)
 
     # Generate embed outputs
     analyzer_content = generate_header(type_results, module_results)

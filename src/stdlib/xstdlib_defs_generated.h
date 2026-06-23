@@ -65,6 +65,14 @@ typedef struct XrStdlibHandleDefEntry {
     uint16_t field_count;
 } XrStdlibHandleDefEntry;
 
+typedef struct XrStdlibTypeMethodDefEntry {
+    const char *module;
+    const char *type_name;
+    const char *name;
+    const char *signature;
+    const char *doc;
+} XrStdlibTypeMethodDefEntry;
+
 static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"time", "now", "(): int", "Current time in milliseconds since epoch", "xr_time_now", "normal", "", "xrt_time_now", "", "value", "time.now", "", "system", "", 0, false},
     {"time", "clock", "(): int", "CPU clock time in milliseconds", "xr_time_clock", "normal", "", "xrt_time_clock", "", "value", "time.clock", "", "system", "", 0, false},
@@ -523,6 +531,31 @@ static const XrStdlibHandleDefEntry xr_stdlib_handle_def_entries[] = {
     {"ws", "WsMessage", "Native handle type", xr_stdlib_handle_fields_ws_WsMessage, 3},
 };
 #define XR_STDLIB_HANDLE_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_handle_def_entries) / sizeof(xr_stdlib_handle_def_entries[0])))
+
+static const XrStdlibTypeMethodDefEntry xr_stdlib_type_method_def_entries[] = {
+    {"datetime", "DateTime", "format", "(pattern?: string): string", "Format datetime to string"},
+    {"datetime", "DateTime", "toISOString", "(): string", "Convert to ISO 8601 string"},
+    {"datetime", "DateTime", "year", "(): int", "Get year"},
+    {"datetime", "DateTime", "month", "(): int", "Get month (1-12)"},
+    {"datetime", "DateTime", "day", "(): int", "Get day (1-31)"},
+    {"datetime", "DateTime", "hour", "(): int", "Get hour (0-23)"},
+    {"datetime", "DateTime", "minute", "(): int", "Get minute (0-59)"},
+    {"datetime", "DateTime", "second", "(): int", "Get second (0-59)"},
+    {"datetime", "DateTime", "millisecond", "(): int", "Get millisecond (0-999)"},
+    {"datetime", "DateTime", "weekday", "(): int", "Get weekday (0=Sunday)"},
+    {"datetime", "DateTime", "yearday", "(): int", "Get day of year (1-366)"},
+    {"datetime", "DateTime", "timestamp", "(): int", "Get Unix timestamp (seconds)"},
+    {"datetime", "DateTime", "add", "(amount: int, unit: string): DateTime", "Add duration to datetime"},
+    {"datetime", "DateTime", "diff", "(other: DateTime, unit?: string): int", "Difference between datetimes"},
+    {"datetime", "DateTime", "toUTC", "(): DateTime", "Convert to UTC"},
+    {"datetime", "DateTime", "toLocal", "(): DateTime", "Convert to local time"},
+    {"datetime", "DateTime", "isBefore", "(other: DateTime): bool", "Check if before other datetime"},
+    {"datetime", "DateTime", "isAfter", "(other: DateTime): bool", "Check if after other datetime"},
+    {"datetime", "DateTime", "equals", "(other: DateTime): bool", "Check if equal to other datetime"},
+    {"datetime", "DateTime", "isLeapYear", "(): bool", "Check if leap year"},
+    {"datetime", "DateTime", "daysInMonth", "(): int", "Get days in current month"},
+};
+#define XR_STDLIB_TYPE_METHOD_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_type_method_def_entries) / sizeof(xr_stdlib_type_method_def_entries[0])))
 
 #endif  /* XSTDLIB_DEFS_GENERATED_H */
 
