@@ -234,101 +234,20 @@ static inline XrValue xrt_array_fill_range_value(XrValue arr_value, XrValue fill
     return arr_value;
 }
 
-#define XRT_INDEXOF_LOOP(T)                                                                        \
-    do {                                                                                           \
-        const T *d = (const T *) a->data;                                                          \
-        for (int64_t i = 0; i < a->length; i++)                                                    \
-            if ((int64_t) d[i] == needle)                                                          \
-                return i;                                                                          \
-        return -1;                                                                                 \
-    } while (0)
+static inline XrArrayCoreNeedle xrt_array_core_needle_from_value(XrValue v) {
+    if (XR_IS_INT(v))
+        return xr_array_core_needle_int(v.i);
+    if (XR_IS_FLOAT(v))
+        return xr_array_core_needle_float(v.f);
+    if (XR_IS_BOOL(v))
+        return xr_array_core_needle_bool(v.i != 0);
+    return xr_array_core_needle_other();
+}
 
 /* Returns the match index, -1 for no match, or sets *handled = 0 when the
  * combination requires the generic boxed loop. */
 static inline int64_t xrt_array_indexof_typed_fast(xrt_array_t *a, XrValue v, int *handled) {
-    *handled = 1;
-    switch (a->elem_type) {
-        case XR_ELEM_I8:
-        case XR_ELEM_U8: {
-            if (v.tag != XR_TAG_I64)
-                return -1; /* boxed elem is I64; other tags never match */
-            int64_t needle = v.i;
-            if (a->elem_type == XR_ELEM_U8) {
-                if (needle < 0 || needle > 255)
-                    return -1;
-                const void *p = memchr(a->data, (int) needle, (size_t) a->length);
-                return p ? (int64_t) ((const uint8_t *) p - (const uint8_t *) a->data) : -1;
-            }
-            XRT_INDEXOF_LOOP(int8_t);
-        }
-        case XR_ELEM_BOOL: {
-            if (v.tag != XR_TAG_BOOL)
-                return -1;
-            const void *p = memchr(a->data, v.i ? 1 : 0, (size_t) a->length);
-            return p ? (int64_t) ((const uint8_t *) p - (const uint8_t *) a->data) : -1;
-        }
-        case XR_ELEM_I16: {
-            if (v.tag != XR_TAG_I64)
-                return -1;
-            int64_t needle = v.i;
-            XRT_INDEXOF_LOOP(int16_t);
-        }
-        case XR_ELEM_U16: {
-            if (v.tag != XR_TAG_I64)
-                return -1;
-            int64_t needle = v.i;
-            XRT_INDEXOF_LOOP(uint16_t);
-        }
-        case XR_ELEM_I32: {
-            if (v.tag != XR_TAG_I64)
-                return -1;
-            int64_t needle = v.i;
-            XRT_INDEXOF_LOOP(int32_t);
-        }
-        case XR_ELEM_U32: {
-            if (v.tag != XR_TAG_I64)
-                return -1;
-            int64_t needle = v.i;
-            XRT_INDEXOF_LOOP(uint32_t);
-        }
-        case XR_ELEM_I64: {
-            if (v.tag != XR_TAG_I64)
-                return -1;
-            int64_t needle = v.i;
-            XRT_INDEXOF_LOOP(int64_t);
-        }
-        case XR_ELEM_U64: {
-            if (v.tag != XR_TAG_I64)
-                return -1;
-            int64_t needle = v.i;
-            const uint64_t *d = (const uint64_t *) a->data;
-            for (int64_t i = 0; i < a->length; i++)
-                if ((int64_t) d[i] == needle)
-                    return i;
-            return -1;
-        }
-        case XR_ELEM_F32: {
-            if (v.tag != XR_TAG_F64)
-                return -1;
-            const float *d = (const float *) a->data;
-            for (int64_t i = 0; i < a->length; i++)
-                if ((double) d[i] == v.f)
-                    return i;
-            return -1;
-        }
-        case XR_ELEM_F64: {
-            if (v.tag != XR_TAG_F64)
-                return -1;
-            const double *d = (const double *) a->data;
-            for (int64_t i = 0; i < a->length; i++)
-                if (d[i] == v.f)
-                    return i;
-            return -1;
-        }
-        default:
-            *handled = 0;
-            return -1;
-    }
+    return xr_array_core_typed_index_of(a ? a->data : NULL, a ? a->length : 0,
+                                        a ? a->elem_type : XR_ELEM_ANY,
+                                        xrt_array_core_needle_from_value(v), handled);
 }
-
-#undef XRT_INDEXOF_LOOP

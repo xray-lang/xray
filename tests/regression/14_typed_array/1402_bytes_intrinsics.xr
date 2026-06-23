@@ -64,6 +64,10 @@ fn test_bytes_intrinsics_and_capacity() {
     assert_eq(fill[3], 7)
     assert_eq(fill[4], 7)
     assert_eq(fill[5], 1)
+    assert_eq(fill.indexOf(255), 1)
+    assert_eq(fill.indexOf(42), -1)
+    assert_eq(fill.includes(7), true)
+    assert_eq(fill.includes(42), false)
 }
 
 @test

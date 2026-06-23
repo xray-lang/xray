@@ -45,6 +45,42 @@ TEST(array_core_fill_range_matches_slice_bounds) {
     assert_range(xr_array_core_fill_range(6, 4, 2), 2, 2, 0);
 }
 
+TEST(array_core_typed_index_of_matches_boxed_tags) {
+    int handled = 0;
+    uint8_t bytes[] = {1, 255, 3};
+    ASSERT_EQ_INT(
+        xr_array_core_typed_index_of(bytes, 3, XR_ELEM_U8, xr_array_core_needle_int(255), &handled),
+        1);
+    ASSERT_TRUE(handled);
+    ASSERT_EQ_INT(
+        xr_array_core_typed_index_of(bytes, 3, XR_ELEM_U8, xr_array_core_needle_int(-1), &handled),
+        -1);
+    ASSERT_EQ_INT(xr_array_core_typed_index_of(bytes, 3, XR_ELEM_U8,
+                                               xr_array_core_needle_bool(true), &handled),
+                  -1);
+
+    uint8_t bools[] = {0, 1, 0};
+    ASSERT_EQ_INT(xr_array_core_typed_index_of(bools, 3, XR_ELEM_BOOL,
+                                               xr_array_core_needle_bool(true), &handled),
+                  1);
+    ASSERT_EQ_INT(
+        xr_array_core_typed_index_of(bools, 3, XR_ELEM_BOOL, xr_array_core_needle_int(1), &handled),
+        -1);
+
+    float floats[] = {1.25f, 2.5f};
+    ASSERT_EQ_INT(xr_array_core_typed_index_of(floats, 2, XR_ELEM_F32,
+                                               xr_array_core_needle_float(2.5), &handled),
+                  1);
+    ASSERT_EQ_INT(
+        xr_array_core_typed_index_of(floats, 2, XR_ELEM_F32, xr_array_core_needle_int(2), &handled),
+        -1);
+
+    ASSERT_EQ_INT(
+        xr_array_core_typed_index_of(bytes, 3, XR_ELEM_ANY, xr_array_core_needle_int(1), &handled),
+        -1);
+    ASSERT_FALSE(handled);
+}
+
 TEST_MAIN_BEGIN()
 
 RUN_TEST_SUITE("Array Core - Slice Range");
@@ -53,5 +89,6 @@ RUN_TEST(array_core_slice_range_handles_negative_bounds);
 RUN_TEST(array_core_slice_range_empty_when_start_after_end);
 RUN_TEST(array_core_slice_range_accepts_nonpositive_length);
 RUN_TEST(array_core_fill_range_matches_slice_bounds);
+RUN_TEST(array_core_typed_index_of_matches_boxed_tags);
 
 TEST_MAIN_END()

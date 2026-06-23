@@ -344,8 +344,24 @@ void xr_array_clear(XrArray *arr) {
 
 /* ====== Query Methods ====== */
 
+static inline XrArrayCoreNeedle xr_array_core_needle_from_value(XrValue value) {
+    if (XR_IS_INT(value))
+        return xr_array_core_needle_int(XR_TO_INT(value));
+    if (XR_IS_FLOAT(value))
+        return xr_array_core_needle_float(XR_TO_FLOAT(value));
+    if (XR_IS_BOOL(value))
+        return xr_array_core_needle_bool(XR_TO_BOOL(value));
+    return xr_array_core_needle_other();
+}
+
 int xr_array_index_of(XrArray *arr, XrValue value) {
     XR_DCHECK(arr != NULL, "array_index_of: NULL array");
+    int handled = 0;
+    int64_t typed_idx = xr_array_core_typed_index_of(
+        arr->data, arr->length, arr->elem_type, xr_array_core_needle_from_value(value), &handled);
+    if (handled)
+        return (int) typed_idx;
+
     for (int i = 0; i < arr->length; i++) {
         if (xr_value_eq(xr_array_get_element(arr, i), value)) {
             return i;

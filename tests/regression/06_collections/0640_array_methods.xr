@@ -97,6 +97,15 @@ fn test_find_index_not_found() {
     assert_eq(idx, -1)
 }
 
+@test
+fn test_index_of_and_includes() {
+    let arr = [10, 20, 30]
+    assert_eq(arr.indexOf(20), 1)
+    assert_eq(arr.indexOf(99), -1)
+    assert_eq(arr.includes(30), true)
+    assert_eq(arr.includes(99), false)
+}
+
 // ===== every =====
 @test
 fn test_every_true() {
