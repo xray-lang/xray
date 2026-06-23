@@ -242,6 +242,42 @@ static void xr_stdlib_vm_bind_mem_generated(XrVMRuntime *isolate, XrModule *modu
 }
 #endif  /* XR_STDLIB_VM_BIND_MODULE_MEM */
 
+#ifdef XR_STDLIB_VM_BIND_MODULE_NET
+static void xr_stdlib_vm_bind_net_generated(XrVMRuntime *isolate, XrModule *module) {
+    XRS_EXPORT_YIELDABLE(module, isolate, "dial", net_dial_yieldable);
+    XRS_EXPORT(module, isolate, "listen", net_listen_handle);
+    XRS_EXPORT_YIELDABLE(module, isolate, "accept", net_accept_handle_yieldable);
+    XRS_EXPORT_YIELDABLE(module, isolate, "read", net_read_handle_yieldable);
+    XRS_EXPORT_YIELDABLE(module, isolate, "readInto", net_read_into_yieldable);
+    XRS_EXPORT_YIELDABLE(module, isolate, "write", net_write_handle_yieldable);
+    XRS_EXPORT_YIELDABLE(module, isolate, "writeBytes", net_write_bytes_yieldable);
+    XRS_EXPORT_YIELDABLE(module, isolate, "copy", net_copy_yieldable);
+    XRS_EXPORT_YIELDABLE(module, isolate, "copyBidirectional", net_copy_bidirectional_yieldable);
+    XRS_EXPORT(module, isolate, "shutdownRead", net_shutdown_read);
+    XRS_EXPORT(module, isolate, "shutdownWrite", net_shutdown_write);
+    XRS_EXPORT(module, isolate, "shutdown", net_shutdown_conn);
+    XRS_EXPORT(module, isolate, "close", net_close_handle);
+    XRS_EXPORT(module, isolate, "fd", net_fd_handle);
+    XRS_EXPORT(module, isolate, "setReadDeadline", net_set_read_deadline);
+    XRS_EXPORT(module, isolate, "setWriteDeadline", net_set_write_deadline);
+    XRS_EXPORT(module, isolate, "setDeadline", net_set_deadline);
+    XRS_EXPORT(module, isolate, "setAcceptDeadline", net_set_accept_deadline);
+    XRS_EXPORT(module, isolate, "lastError", net_last_error);
+    XRS_EXPORT(module, isolate, "lastErrno", net_last_errno);
+    XRS_EXPORT(module, isolate, "lookup", net_dns_lookup);
+    XRS_EXPORT(module, isolate, "hasTLS", net_has_tls);
+#ifdef XR_ENABLE_TLS
+    XRS_EXPORT_YIELDABLE(module, isolate, "dialTLS", net_dial_tls_yieldable);
+#endif  /* XR_ENABLE_TLS */
+#ifdef XR_ENABLE_TLS
+    XRS_EXPORT_YIELDABLE(module, isolate, "upgradeTLS", net_upgrade_tls_yieldable);
+#endif  /* XR_ENABLE_TLS */
+    XRS_EXPORT(module, isolate, "udpBind", net_udp_bind_handle);
+    XRS_EXPORT_YIELDABLE(module, isolate, "sendTo", net_send_to_yieldable);
+    XRS_EXPORT_YIELDABLE(module, isolate, "recvFrom", net_recv_from_yieldable);
+}
+#endif  /* XR_STDLIB_VM_BIND_MODULE_NET */
+
 #ifdef XR_STDLIB_VM_BIND_MODULE_OS
 static void xr_stdlib_vm_bind_os_generated(XrVMRuntime *isolate, XrModule *module) {
     XRS_EXPORT(module, isolate, "getenv", os_getenv);

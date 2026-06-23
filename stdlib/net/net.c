@@ -97,7 +97,7 @@ static void net_close_fd(XrVMRuntime *X, int fd) {
  */
 /*
  * DNS resolve + create non-blocking TCP socket (TCP_NODELAY), without calling
- * connect(). Fills the resolved, port-set sockaddr into *sa_out/*salen_out so
+ * connect(). Fills the resolved, port-set sockaddr into *sa_out / *salen_out so
  * the caller can connect() (readiness) or submit an io_uring connect op
  * (completion). Returns fd on success, -1 on failure.
  */
@@ -458,6 +458,7 @@ static XrCFuncResult net_dial_step(XrVMRuntime *X, NetDialState *state, XrValue 
 
 static XrCFuncResult net_dial_continue(XrVMRuntime *X, int status, XrValue resume_value, void *ctx,
                                        XrValue *result) {
+    (void) resume_value;
     NetDialState *state = (NetDialState *) ctx;
     if (status == XR_RESUME_TIMEOUT || status == XR_RESUME_CANCELLED) {
         net_close_fd(X, state->fd);
@@ -591,6 +592,7 @@ static XrCFuncResult net_accept_step(XrVMRuntime *X, NetAcceptState *state, XrVa
 
 static XrCFuncResult net_accept_continue(XrVMRuntime *X, int status, XrValue resume_value,
                                          void *ctx, XrValue *result) {
+    (void) resume_value;
     NetAcceptState *state = (NetAcceptState *) ctx;
     if (status == XR_RESUME_TIMEOUT || status == XR_RESUME_CANCELLED) {
         net_listener_set_error(
@@ -763,6 +765,7 @@ static XrCFuncResult net_read_handle_step(XrVMRuntime *X, NetReadHandleState *st
 
 static XrCFuncResult net_read_handle_continue(XrVMRuntime *X, int status, XrValue resume_value,
                                               void *ctx, XrValue *result) {
+    (void) resume_value;
     NetReadHandleState *state = (NetReadHandleState *) ctx;
     if (status == XR_RESUME_TIMEOUT || status == XR_RESUME_CANCELLED) {
         net_conn_set_error(state->conn,
@@ -1162,6 +1165,7 @@ static XrCFuncResult net_write_handle_step(XrVMRuntime *X, NetWriteHandleState *
 
 static XrCFuncResult net_write_handle_continue(XrVMRuntime *X, int status, XrValue resume_value,
                                                void *ctx, XrValue *result) {
+    (void) resume_value;
     NetWriteHandleState *state = (NetWriteHandleState *) ctx;
     if (status == XR_RESUME_TIMEOUT || status == XR_RESUME_CANCELLED) {
         net_conn_set_error(state->conn,
@@ -2046,6 +2050,7 @@ static void net_dial_tls_cleanup(XrVMRuntime *X, NetDialTLSState *state) {
 
 static XrCFuncResult net_dial_tls_continue(XrVMRuntime *X, int status, XrValue resume_value,
                                            void *ctx, XrValue *result) {
+    (void) resume_value;
     NetDialTLSState *state = (NetDialTLSState *) ctx;
     if (status == XR_RESUME_TIMEOUT || status == XR_RESUME_CANCELLED) {
         net_dial_tls_cleanup(X, state);
@@ -2181,6 +2186,7 @@ static XrCFuncResult net_upgrade_tls_step(XrVMRuntime *X, NetUpgradeTLSState *st
 
 static XrCFuncResult net_upgrade_tls_continue(XrVMRuntime *X, int status, XrValue resume_value,
                                               void *ctx, XrValue *result) {
+    (void) resume_value;
     NetUpgradeTLSState *state = (NetUpgradeTLSState *) ctx;
     if (status == XR_RESUME_TIMEOUT || status == XR_RESUME_CANCELLED) {
         // Cleanup TLS
@@ -2358,6 +2364,7 @@ static XrCFuncResult net_send_to_step(XrVMRuntime *X, NetSendToState *state, XrV
 
 static XrCFuncResult net_send_to_continue(XrVMRuntime *X, int status, XrValue resume_value,
                                           void *ctx, XrValue *result) {
+    (void) resume_value;
     NetSendToState *state = (NetSendToState *) ctx;
     if (status == XR_RESUME_TIMEOUT || status == XR_RESUME_CANCELLED) {
         xr_free(state->data);
@@ -2473,6 +2480,7 @@ static XrCFuncResult net_recv_from_step(XrVMRuntime *X, NetRecvFromState *state,
 
 static XrCFuncResult net_recv_from_continue(XrVMRuntime *X, int status, XrValue resume_value,
                                             void *ctx, XrValue *result) {
+    (void) resume_value;
     NetRecvFromState *state = (NetRecvFromState *) ctx;
     if (status == XR_RESUME_TIMEOUT || status == XR_RESUME_CANCELLED) {
         xr_free(state);
@@ -2658,6 +2666,10 @@ XR_DEFINE_BUILTIN(net_recv_from_yieldable, "recvFrom",
                   "(handle: NetConn, maxlen?: int): UdpPacket?",
                   "Receive UDP datagram (returns flat handle: data, host, port)")
 
+#define XR_STDLIB_VM_BIND_MODULE_NET 1
+#include "../../src/stdlib/xstdlib_vm_bindings_generated.inc.c"
+#undef XR_STDLIB_VM_BIND_MODULE_NET
+
 /* ========== Native-type instance methods (synchronous) ==========
  *
  * Yieldable operations (read / write / accept) stay as module-level
@@ -2788,39 +2800,7 @@ XrModule *xr_load_module_net(XrVMRuntime *isolate) {
     // NetConn / NetListener XrClasses are registered up front by the
     // prelude module; nothing to do here.
 
-    // User-level API (handle-based)
-    XRS_EXPORT_YIELDABLE(mod, isolate, "dial", net_dial_yieldable);
-    XRS_EXPORT(mod, isolate, "listen", net_listen_handle);
-    XRS_EXPORT_YIELDABLE(mod, isolate, "accept", net_accept_handle_yieldable);
-    XRS_EXPORT_YIELDABLE(mod, isolate, "read", net_read_handle_yieldable);
-    XRS_EXPORT_YIELDABLE(mod, isolate, "readInto", net_read_into_yieldable);
-    XRS_EXPORT_YIELDABLE(mod, isolate, "write", net_write_handle_yieldable);
-    XRS_EXPORT_YIELDABLE(mod, isolate, "writeBytes", net_write_bytes_yieldable);
-    XRS_EXPORT_YIELDABLE(mod, isolate, "copy", net_copy_yieldable);
-    XRS_EXPORT_YIELDABLE(mod, isolate, "copyBidirectional", net_copy_bidirectional_yieldable);
-    XRS_EXPORT(mod, isolate, "shutdownRead", net_shutdown_read);
-    XRS_EXPORT(mod, isolate, "shutdownWrite", net_shutdown_write);
-    XRS_EXPORT(mod, isolate, "shutdown", net_shutdown_conn);
-    XRS_EXPORT(mod, isolate, "close", net_close_handle);
-    XRS_EXPORT(mod, isolate, "fd", net_fd_handle);
-    XRS_EXPORT(mod, isolate, "setReadDeadline", net_set_read_deadline);
-    XRS_EXPORT(mod, isolate, "setWriteDeadline", net_set_write_deadline);
-    XRS_EXPORT(mod, isolate, "setDeadline", net_set_deadline);
-    XRS_EXPORT(mod, isolate, "setAcceptDeadline", net_set_accept_deadline);
-    XRS_EXPORT(mod, isolate, "lastError", net_last_error);
-    XRS_EXPORT(mod, isolate, "lastErrno", net_last_errno);
-    XRS_EXPORT(mod, isolate, "lookup", net_dns_lookup);
-    XRS_EXPORT(mod, isolate, "hasTLS", net_has_tls);
-
-#ifdef XR_ENABLE_TLS
-    XRS_EXPORT_YIELDABLE(mod, isolate, "dialTLS", net_dial_tls_yieldable);
-    XRS_EXPORT_YIELDABLE(mod, isolate, "upgradeTLS", net_upgrade_tls_yieldable);
-#endif
-
-    // UDP (handle-based)
-    XRS_EXPORT(mod, isolate, "udpBind", net_udp_bind_handle);
-    XRS_EXPORT_YIELDABLE(mod, isolate, "sendTo", net_send_to_yieldable);
-    XRS_EXPORT_YIELDABLE(mod, isolate, "recvFrom", net_recv_from_yieldable);
+    xr_stdlib_vm_bind_net_generated(isolate, mod);
 
     return mod;
 }

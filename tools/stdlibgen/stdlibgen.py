@@ -45,6 +45,7 @@ class StdlibEntry:
     doc: str
     vm: str
     vm_binding: str
+    vm_ifdef: str
     aot: str
     argc: str
     arg_spec: str
@@ -166,6 +167,12 @@ def parse_def_metadata(root: Path) -> tuple[list[StdlibEntry], list[StdlibConstE
                     f"{path}:{line_no}: unsupported vm_binding for "
                     f"{current_module}.{current_name}: {vm_binding}"
                 )
+            vm_ifdef = str(props.get("vm_ifdef", ""))
+            if vm_ifdef and not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", vm_ifdef):
+                raise SystemExit(
+                    f"{path}:{line_no}: unsupported vm_ifdef for "
+                    f"{current_module}.{current_name}: {vm_ifdef}"
+                )
 
             entries.append(
                 StdlibEntry(
@@ -175,6 +182,7 @@ def parse_def_metadata(root: Path) -> tuple[list[StdlibEntry], list[StdlibConstE
                     doc=str(props["doc"]),
                     vm=str(props["vm"]),
                     vm_binding=vm_binding,
+                    vm_ifdef=vm_ifdef,
                     aot=str(props.get("aot", "")),
                     argc=str(props["argc"]),
                     arg_spec=str(props.get("arg_spec", "")),
@@ -566,18 +574,19 @@ def emit_driver_metadata(entries: list[StdlibEntry], constants: list[StdlibConst
 def emit_vm_bindings(entries: list[StdlibEntry], constants: list[StdlibConstEntry]) -> str:
     rows_by_module: dict[str, list[StdlibEntry]] = {}
     consts_by_module: dict[str, list[StdlibConstEntry]] = {}
-    seen: dict[tuple[str, str, str], str] = {}
+    seen: dict[tuple[str, str, str], tuple[str, str]] = {}
     for e in entries:
         key = (e.module, e.name, e.vm)
-        existing_binding = seen.get(key)
-        if existing_binding is not None:
-            if existing_binding != e.vm_binding:
+        existing = seen.get(key)
+        if existing is not None:
+            existing_binding, existing_ifdef = existing
+            if existing_binding != e.vm_binding or existing_ifdef != e.vm_ifdef:
                 raise SystemExit(
                     f"{e.symbol}: duplicate VM binding rows disagree: "
-                    f"{existing_binding} vs {e.vm_binding}"
+                    f"{existing_binding}/{existing_ifdef} vs {e.vm_binding}/{e.vm_ifdef}"
                 )
             continue
-        seen[key] = e.vm_binding
+        seen[key] = (e.vm_binding, e.vm_ifdef)
         c_ident(e.vm, e.symbol)
         rows_by_module.setdefault(e.module, []).append(e)
     for c in constants:
@@ -607,10 +616,14 @@ def emit_vm_bindings(entries: list[StdlibEntry], constants: list[StdlibConstEntr
                 "yieldable": "XRS_EXPORT_YIELDABLE",
                 "slow": "XRS_EXPORT_SLOW",
             }[e.vm_binding]
+            if e.vm_ifdef:
+                lines.append(f"#ifdef {e.vm_ifdef}")
             lines.append(
                 f"    {export_macro}(module, isolate, {c_string(e.name)}, "
                 f"{c_ident(e.vm, e.symbol)});"
             )
+            if e.vm_ifdef:
+                lines.append(f"#endif  /* {e.vm_ifdef} */")
         for c in consts_by_module.get(module, []):
             lines.append(
                 f"    xr_module_add_export(isolate, module, {c_string(c.name)}, {c.vm_value});"
@@ -641,6 +654,7 @@ def emit_defs_header(entries: list[StdlibEntry], constants: list[StdlibConstEntr
             "    const char *doc;",
             "    const char *vm;",
             "    const char *vm_binding;",
+            "    const char *vm_ifdef;",
             "    const char *aot;",
             "    const char *arg_spec;",
             "    const char *ret;",
@@ -680,6 +694,7 @@ def emit_defs_header(entries: list[StdlibEntry], constants: list[StdlibConstEntr
             "    {"
             f"{c_string(e.module)}, {c_string(e.name)}, {c_string(e.signature)}, "
             f"{c_string(e.doc)}, {c_string(e.vm)}, {c_string(e.vm_binding)}, "
+            f"{c_string(e.vm_ifdef)}, "
             f"{c_string(e.aot)}, {c_string(e.arg_spec)}, {c_string(e.ret)}, "
             f"{c_string(e.link_object)}, {c_string(e.define)}, {c_string(e.layer)}, "
             f"{c_string(e.aot_kind)}, {argc}, "
