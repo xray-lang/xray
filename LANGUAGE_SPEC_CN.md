@@ -1734,7 +1734,7 @@ throw AppError.NotFound                      // 值返回错误通道
 - `try` 必须至少跟一个 `catch` 或 `catch panic` 子句。
 - `catch (e)` 捕获经值返回通道传播的可恢复错误（用户 `throw <enum>`）；用 `match (e)` 解构错误值。
 - `catch panic (p)` 捕获运行时故障（除零、越界、`expr!`、`assert`），与可恢复错误严格分离。
-- `throw` 的操作数是错误值（通常为 enum），经值返回通道传播：零开销、无栈展开。
+- `throw` 的操作数是错误值（通常为 enum），经值返回通道传播：不分配 `Exception`、不展开栈；需要传播或捕获错误的调用边界只经过可预测分支。
 - 没有 `finally`：用 `defer`（§4.9）做确定性清理。
 - 完整错误语义见 [§8](#8-错误处理-error-handling)。
 
@@ -3005,7 +3005,7 @@ Xray 的错误处理分为两个严格分离的通道：
 
 | 通道 | 语法 | 适用场景 | 运行时开销 |
 |--|--|--|--|
-| **值返回通道**（`throw <enum>` / `try` / `catch`） | 业务错误、可恢复失败 | **零开销**（正常路径无额外指令） |
+| **值返回通道**（`throw <enum>` / `try` / `catch`） | 业务错误、可恢复失败 | **低开销**（不分配 `Exception`、不 unwind；需传播/捕获错误的调用边界只有可预测分支） |
 | **panic 通道**（`catch panic`） | 运行时故障（越界、除零、不完整 match） | 有限栈展开 |
 
 设计原则：
@@ -3035,7 +3035,7 @@ throw AppErr.InvalidInput("bad format")     // ✅ 带载荷的 ADT 枚举变体
 ```
 
 - 不展开栈帧（不同于传统异常的 unwind）
-- 正常路径零开销，仅在错误路径有条件跳转成本
+- 正常路径不分配对象、不展开栈；在需传播或捕获错误的调用边界只经过可预测的错误标志分支
 - 未捕获的顶层错误打印 `[Uncaught Error] <enum value>`，退出码 = 1
 
 #### 8.1.2 `try` / `catch`
@@ -3281,7 +3281,7 @@ fn fetch(url: string) -> string {
 │
 ├─ 需要，且失败有结构化错因
 │   ↓
-│   throw <enum>，catch 处理（零开销值返回通道）
+│   throw <enum>，catch 处理（低开销值返回通道）
 │
 ├─ 需要，但失败只表示"没值"，无错因意义
 │   ↓
@@ -4712,21 +4712,22 @@ TLS client 路径通过 `dialTLS(host, port, timeout?)` 和 `upgradeTLS(conn, ho
 
 ### 16.1 值表示
 
-xray 值统一用 `xray_value_t` 表示。布局策略：
+Xray 值统一用 `XrValue` 表示。当前实现要求 64 位平台，并采用 **16 字节 tagged struct-of-union**：
 
-- **NaN-boxing**（在 64 位平台）：double 编码用未使用的 NaN 表示空间存放小整数、bool、指针标记。
-- **指针标记**：低位 tag 区分对象类型。
-- **对象引用**：堆对象通过 tagged pointer 引用；当前内存模型不移动对象。
+- **Descriptor（8 字节）**：`tag: uint8`、`flags: uint8`、`heap_type: uint16`、`ext: uint32`。`tag` 是类型判定的唯一入口；`heap_type` 只在 `tag == PTR` 时表示堆对象类型。
+- **Payload（8 字节）**：`int64` / `double` / 指针三选一，按 `tag` 解释。
+- **无 NaN-boxing / 无指针低位标记**：整数保留完整 64 位；对象引用是普通堆指针，类型信息在 descriptor 中。
+- **字符串不是值级 SSO**：`string` 始终是 `XrString` 堆对象，字符数据存放在对象内的 `data[]` flexible array 中。短串 intern / 长串共享是对象层存储策略，不改变 `XrValue` 表示。
 
 | 值类型 | 内部表示 |
 |--|--|
-| `int` | 53-bit immediate（NaN-box） |
-| `float` | 双精度直接存放 |
-| `bool` | tag |
-| `null` | 单一全局值 |
-| `string` | 堆对象 + 短字符串内联（≤ 7 字节） |
-| `Bytes` | 堆对象 + capacity/length |
-| 其他对象 | 堆指针 |
+| `int` | `XR_TAG_I64` + 64-bit signed payload |
+| `float` | `XR_TAG_F64` + IEEE-754 double payload |
+| `bool` | `XR_TAG_BOOL` + `0/1` payload |
+| `null` | `XR_TAG_NULL` + zero payload |
+| `string` | `XR_TAG_PTR` + `XR_TSTRING` + `XrString*` |
+| `Bytes` | `XR_TAG_PTR` + bytes heap object |
+| 其他对象 | `XR_TAG_PTR` + heap type + heap pointer |
 
 ### 16.2 内存分配
 
@@ -4788,9 +4789,9 @@ os.sleep(100)             // 休眠毫秒数（与 `time.sleep` 等价）
 
 详见 `stdlib/os/`。
 
-### 16.6 异常运行时
+### 16.6 Panic 运行时
 
-内置 `Exception` 类是 prelude 类型（声明：`stdlib/types/exception.xr`），用户可直接 `new` 或继承：
+内置 `Exception` 类是 prelude 类型（声明：`stdlib/types/exception.xr`），仅属于 **panic 通道**。运行时故障（越界、除零、不完整 `match`、运行时不变量违背等）由 VM/AOT runtime 构造 `Exception` 对象：
 
 ```xray
 @native
@@ -4799,20 +4800,20 @@ class Exception {
     stack: Array<string>        // 自动 capture 的调用栈，每帧一行格式化字符串
     cause: Exception?           // 链式 cause
     code: int                   // 错误码（从 "E0xxx: ..." 前缀自动解析，默认 0）
-    data: Json?                 // throw 非异常值时原始值被包装在此
+    data: Json?                 // 运行时故障的可选结构化附加数据
 
     constructor(message: string = "", cause: Exception? = null)
     fn toString() -> string
 }
 ```
 
-`throw` 表达式的操作数静态类型必须是 `Exception` 或其派生类（见 §8.1.1）；其它类型在编译期被拒绝（错误码 `E0370`）。VM 抛出的运行时错误也使用此 `Exception` 类型。
+用户级可恢复错误不使用 `Exception`：`throw` 表达式只接受 enum 变体值（见 §8.1.1）；非 enum 错误值在编译期被拒绝（错误码 `E0370`）。
 
 栈展开（仅 panic 通道）：VM `xvm_unwind_stack()` 按 try-table 查找 `catch panic` handler，逐帧释放局部、执行 defer，到达 handler 后跳转。可恢复错误走值返回通道，不展开栈。详见 §8。
 
 ### 16.7 值返回错误通道运行时
 
-`throw <enum>` 将枚举值写入帧的 `pending_error` 槽位，设置错误标志位并返回。调用方通过 `OP_ERR_CHECK` 检测标志位，决定进入 `catch` handler 或继续向上返回。正常路径零开销（仅一次条件跳转），不展开栈、不分配对象。
+`throw <enum>` 将枚举值写入帧的 `pending_error` 槽位，设置错误标志位并返回。调用方通过 `OP_ERR_CHECK` 检测标志位，决定进入 `catch` handler 或继续向上返回。该通道不展开栈、不分配 `Exception`；在需要传播或捕获错误的调用边界，正常路径只经过可预测的错误标志分支。
 
 ### 16.8 对象回收与析构时机契约
 
@@ -5061,15 +5062,15 @@ Bytecode  →  AOT (machine code)
 
 | 码 | 名称 | 描述 |
 |--|--|--|
-| `E0820` | `XR_ERR_THROW_NOT_EXCEPTION` | 已合并到 `E0370`（见 §8.1.1）；代码仅保留以免重复分配 |
+| `E0820` | `XR_ERR_THROW_NOT_EXCEPTION` | 历史名称保留以免重复分配；当前 `throw` 非 enum 错误统一由 `E0370` 表达（见 §8.1.1） |
 | `E0821` | `XR_ERR_TRY_BANG_BAD_OPERAND` | 已废弃（`try!` 已移除）；代码仅保留以免重复分配 |
 | `E0822` | `XR_ERR_TRY_BANG_NON_EXCEPTION_ERR` | 已废弃（`try!` 已移除）；代码仅保留以免重复分配 |
 | `E0823` | `XR_ERR_MATCH_NOT_EXHAUSTIVE` | 已合并到 `E0371`（见 §6.3.3）；代码仅保留以免重复分配 |
 | `E0824` | `XR_ERR_UNWRAP_NON_EXCEPTION_ERR` | 已废弃（`Result` 已移除）；代码仅保留以免重复分配 |
 
-### 18.8 错误对象结构
+### 18.8 Panic 错误对象结构
 
-VM 抛出的运行时错误使用 prelude `Exception` 类（声明：`stdlib/types/exception.xr`）：
+panic 通道的运行时故障使用 prelude `Exception` 类（声明：`stdlib/types/exception.xr`）：
 
 ```xray
 @native
@@ -5078,26 +5079,26 @@ class Exception {
     stack: Array<string>        // 自动 capture 的调用栈，每帧一行格式化字符串
     cause: Exception?           // 链式 cause
     code: int                   // 错误码（从 "E0xxx: ..." 前缀自动解析，默认 0）
-    data: Json?                 // throw 非异常值时原始值被包装在此
+    data: Json?                 // 运行时故障的可选结构化附加数据
 
     constructor(message: string = "", cause: Exception? = null)
     fn toString() -> string
 }
 ```
 
-`throw` 操作数的静态类型**必须**是 `Exception` 派生（见 §8.1.1 / `E0370`）。如需结构化错误，继承 `Exception` 添加业务字段：
+用户级 `throw` 操作数**必须**是 enum 变体值（见 §8.1.1 / `E0370`）。结构化业务错误使用 ADT enum，而不是继承 `Exception`：
 
 ```xray
-class HttpError extends Exception {
-    statusCode: int
-    constructor(statusCode: int, message: string, cause: Exception? = null) {
-        super(message, cause)
-        this.statusCode = statusCode
-    }
+enum HttpErr {
+    NotFound(string),
+    ServerError(int, string),
+    Timeout,
 }
+
+throw HttpErr.ServerError(500, "upstream failed")
 ```
 
-或使用 ADT enum + `throw` / `catch` 表达可枚举的失败模式（见 §8.1）。
+`Exception` 只表示 panic 通道的运行时故障；业务错误通过 `throw <enum>` / `catch` 的值返回通道传播（见 §8.1）。
 
 ---
 
@@ -5596,7 +5597,6 @@ xray 在开发过程中借鉴了现有语言的许多优秀设计，但还是有
 | **lvalue / rvalue** | 左值（可赋值）/ 右值（仅值） |
 | **monomorphization** | 单态化：泛型在构建期按具体类型/表示生成专门版本；函数泛型可按 I64 / F64 / PTR / BOOL 表示共享，class / struct 泛型按具体类型完整单态化 |
 | **move** | 所有权转移：跨协程时强制（见 §7.3） |
-| **NaN-boxing** | 用 IEEE-754 NaN 的位空间存放标记值 |
 | **nullable** | 可空类型 `T?`：值可以为 null |
 | **pattern** | 模式：用于 `match` 与解构（见 §6） |
 | **scope** | 作用域 |
@@ -5606,7 +5606,6 @@ xray 在开发过程中借鉴了现有语言的许多优秀设计，但还是有
 | **TCO** | Tail-Call Optimization：尾调用优化 |
 | **trait** | Rust 术语；xray 用 `interface` |
 | **truthy** | 真值：控制流中非 `false` / `null` / `0` / `""` / 空集合的值视为真（见 §2.3.3） |
-| **monomorphization** | 单态化：泛型类型参数在编译期特化为具体类型，运行时保留类型信息 |
 | **union** | 联合类型 `A \| B` |
 | **upvalue** | 闭包捕获的外层变量 |
 | **VM** | Virtual Machine：xray 字节码虚拟机 |

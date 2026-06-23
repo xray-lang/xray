@@ -12,21 +12,22 @@ order: 017
 
 ### 16.1 值表示
 
-xray 值统一用 `xray_value_t` 表示。布局策略：
+Xray 值统一用 `XrValue` 表示。当前实现要求 64 位平台，并采用 **16 字节 tagged struct-of-union**：
 
-- **NaN-boxing**（在 64 位平台）：double 编码用未使用的 NaN 表示空间存放小整数、bool、指针标记。
-- **指针标记**：低位 tag 区分对象类型。
-- **对象引用**：堆对象通过 tagged pointer 引用；当前内存模型不移动对象。
+- **Descriptor（8 字节）**：`tag: uint8`、`flags: uint8`、`heap_type: uint16`、`ext: uint32`。`tag` 是类型判定的唯一入口；`heap_type` 只在 `tag == PTR` 时表示堆对象类型。
+- **Payload（8 字节）**：`int64` / `double` / 指针三选一，按 `tag` 解释。
+- **无 NaN-boxing / 无指针低位标记**：整数保留完整 64 位；对象引用是普通堆指针，类型信息在 descriptor 中。
+- **字符串不是值级 SSO**：`string` 始终是 `XrString` 堆对象，字符数据存放在对象内的 `data[]` flexible array 中。短串 intern / 长串共享是对象层存储策略，不改变 `XrValue` 表示。
 
 | 值类型 | 内部表示 |
 |--|--|
-| `int` | 53-bit immediate（NaN-box） |
-| `float` | 双精度直接存放 |
-| `bool` | tag |
-| `null` | 单一全局值 |
-| `string` | 堆对象 + 短字符串内联（≤ 7 字节） |
-| `Bytes` | 堆对象 + capacity/length |
-| 其他对象 | 堆指针 |
+| `int` | `XR_TAG_I64` + 64-bit signed payload |
+| `float` | `XR_TAG_F64` + IEEE-754 double payload |
+| `bool` | `XR_TAG_BOOL` + `0/1` payload |
+| `null` | `XR_TAG_NULL` + zero payload |
+| `string` | `XR_TAG_PTR` + `XR_TSTRING` + `XrString*` |
+| `Bytes` | `XR_TAG_PTR` + bytes heap object |
+| 其他对象 | `XR_TAG_PTR` + heap type + heap pointer |
 
 ### 16.2 内存分配
 
@@ -88,9 +89,9 @@ os.sleep(100)             // 休眠毫秒数（与 `time.sleep` 等价）
 
 详见 `stdlib/os/`。
 
-### 16.6 异常运行时
+### 16.6 Panic 运行时
 
-内置 `Exception` 类是 prelude 类型（声明：`stdlib/types/exception.xr`），用户可直接 `new` 或继承：
+内置 `Exception` 类是 prelude 类型（声明：`stdlib/types/exception.xr`），仅属于 **panic 通道**。运行时故障（越界、除零、不完整 `match`、运行时不变量违背等）由 VM/AOT runtime 构造 `Exception` 对象：
 
 ```xray
 @native
@@ -99,20 +100,20 @@ class Exception {
     stack: Array<string>        // 自动 capture 的调用栈，每帧一行格式化字符串
     cause: Exception?           // 链式 cause
     code: int                   // 错误码（从 "E0xxx: ..." 前缀自动解析，默认 0）
-    data: Json?                 // throw 非异常值时原始值被包装在此
+    data: Json?                 // 运行时故障的可选结构化附加数据
 
     constructor(message: string = "", cause: Exception? = null)
     fn toString() -> string
 }
 ```
 
-`throw` 表达式的操作数静态类型必须是 `Exception` 或其派生类（见 §8.1.1）；其它类型在编译期被拒绝（错误码 `E0370`）。VM 抛出的运行时错误也使用此 `Exception` 类型。
+用户级可恢复错误不使用 `Exception`：`throw` 表达式只接受 enum 变体值（见 §8.1.1）；非 enum 错误值在编译期被拒绝（错误码 `E0370`）。
 
 栈展开（仅 panic 通道）：VM `xvm_unwind_stack()` 按 try-table 查找 `catch panic` handler，逐帧释放局部、执行 defer，到达 handler 后跳转。可恢复错误走值返回通道，不展开栈。详见 §8。
 
 ### 16.7 值返回错误通道运行时
 
-`throw <enum>` 将枚举值写入帧的 `pending_error` 槽位，设置错误标志位并返回。调用方通过 `OP_ERR_CHECK` 检测标志位，决定进入 `catch` handler 或继续向上返回。正常路径零开销（仅一次条件跳转），不展开栈、不分配对象。
+`throw <enum>` 将枚举值写入帧的 `pending_error` 槽位，设置错误标志位并返回。调用方通过 `OP_ERR_CHECK` 检测标志位，决定进入 `catch` handler 或继续向上返回。该通道不展开栈、不分配 `Exception`；在需要传播或捕获错误的调用边界，正常路径只经过可预测的错误标志分支。
 
 ### 16.8 对象回收与析构时机契约
 
@@ -135,21 +136,22 @@ xray **当前不提供用户可见的确定性析构（destructor / finalizer / 
 
 ### 16.1 Value Representation
 
-Xray values are uniformly represented as `xray_value_t`. Layout strategy:
+Xray values are uniformly represented as `XrValue`. The current implementation requires a 64-bit platform and uses a **16-byte tagged struct-of-union**:
 
-- **NaN-boxing** (on 64-bit platforms): unused IEEE-754 NaN bit space encodes small integers, booleans, and pointer tags.
-- **Pointer tagging**: low-bit tags distinguish object kinds.
-- **Object references**: heap objects are referenced via tagged pointers; the current memory model does not move objects.
+- **Descriptor (8 bytes)**: `tag: uint8`, `flags: uint8`, `heap_type: uint16`, and `ext: uint32`. The `tag` is the single entry point for type dispatch; `heap_type` is meaningful only when `tag == PTR`.
+- **Payload (8 bytes)**: one of `int64`, `double`, or pointer, interpreted by the tag.
+- **No NaN-boxing / no low-bit pointer tagging**: integers keep the full 64-bit payload; object references are ordinary heap pointers, with type metadata in the descriptor.
+- **Strings are not value-level SSO**: `string` is always an `XrString` heap object, with bytes stored inside the object's `data[]` flexible array. Short-string interning and long-string sharing are object-storage policies and do not change the `XrValue` representation.
 
 | Value type | Internal representation |
 |--|--|
-| `int` | 53-bit immediate (NaN-box) |
-| `float` | double precision stored directly |
-| `bool` | tag |
-| `null` | single global value |
-| `string` | heap object + short-string inline (≤ 7 bytes) |
-| `Bytes` | heap object + capacity/length |
-| Other objects | heap pointer |
+| `int` | `XR_TAG_I64` + 64-bit signed payload |
+| `float` | `XR_TAG_F64` + IEEE-754 double payload |
+| `bool` | `XR_TAG_BOOL` + `0/1` payload |
+| `null` | `XR_TAG_NULL` + zero payload |
+| `string` | `XR_TAG_PTR` + `XR_TSTRING` + `XrString*` |
+| `Bytes` | `XR_TAG_PTR` + bytes heap object |
+| Other objects | `XR_TAG_PTR` + heap type + heap pointer |
 
 ### 16.2 Memory Allocation
 
@@ -211,9 +213,9 @@ os.sleep(100)             // sleep in milliseconds (equivalent to `time.sleep`)
 
 See `stdlib/os/` for details.
 
-### 16.6 Exception Runtime
+### 16.6 Panic Runtime
 
-The built-in `Exception` class is a prelude type (declared in `stdlib/types/exception.xr`); users may directly `new` it or inherit from it:
+The built-in `Exception` class is a prelude type (declared in `stdlib/types/exception.xr`) and belongs only to the **panic channel**. Runtime faults (out-of-bounds, division by zero, non-exhaustive `match`, runtime invariant violations, and similar faults) are represented by `Exception` objects constructed by the VM/AOT runtime:
 
 ```xray
 @native
@@ -222,20 +224,20 @@ class Exception {
     stack: Array<string>        // automatically captured call stack, one formatted line per frame
     cause: Exception?           // chained cause
     code: int                   // error code (auto-parsed from "E0xxx: ..." prefix; default 0)
-    data: Json?                 // when a non-exception value is thrown, the original value is wrapped here
+    data: Json?                 // optional structured data for a runtime fault
 
     constructor(message: string = "", cause: Exception? = null)
     fn toString() -> string
 }
 ```
 
-The operand of a `throw` expression must have a static type that is `Exception` or one of its subclasses (see §8.1.1); other types are rejected at compile time (error code `E0370`). Runtime errors thrown by the VM also use this `Exception` type.
+Recoverable user-level errors do not use `Exception`: a `throw` expression accepts enum variant values only (see §8.1.1); non-enum error values are rejected at compile time (error code `E0370`).
 
 Stack unwinding (panic channel only): the VM's `xvm_unwind_stack()` walks the try-table to find `catch panic` handlers, releasing locals frame by frame and running `defer` along the way before jumping to the handler. Recoverable errors use the value-return channel and never unwind the stack. See §8 for details.
 
 ### 16.7 Value-return Error Channel Runtime
 
-`throw <enum>` writes the enum value into the frame's `pending_error` slot, sets the error flag, and returns. The caller detects the flag via `OP_ERR_CHECK` and either enters a `catch` handler or continues returning upward. The happy path has zero overhead (only a single conditional branch); no stack unwinding or object allocation occurs.
+`throw <enum>` writes the enum value into the frame's `pending_error` slot, sets the error flag, and returns. The caller detects the flag via `OP_ERR_CHECK` and either enters a `catch` handler or continues returning upward. This channel performs no stack unwinding and allocates no `Exception`; at call boundaries that may propagate or catch errors, the happy path goes through only a predictable error-flag branch.
 
 ### 16.8 Object Reclamation & Finalizer Timing Contract
 

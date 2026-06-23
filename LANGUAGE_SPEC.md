@@ -1741,7 +1741,7 @@ throw AppError.NotFound                      // value-return error channel
 - A `try` must be followed by at least one `catch` or `catch panic` clause.
 - `catch (e)` catches recoverable errors propagated through the value-return channel (a user `throw <enum>`); use `match (e)` to destructure the error value.
 - `catch panic (p)` catches runtime faults (div-by-zero, out-of-bounds, `expr!`, `assert`), strictly separated from recoverable errors.
-- The `throw` operand is an error value (typically an enum) propagated through the value-return channel: zero-cost, no stack unwinding.
+- The `throw` operand is an error value (typically an enum) propagated through the value-return channel: no `Exception` allocation, no stack unwinding, and only a predictable branch at call boundaries that may propagate or catch errors.
 - There is no `finally`: use `defer` (§4.9) for deterministic cleanup.
 - For full error semantics see [§8](#8-error-handling).
 
@@ -3012,7 +3012,7 @@ Xray's error handling is split into two strictly separated channels:
 
 | Channel | Syntax | Use case | Runtime cost |
 |--|--|--|--|
-| **Value-return channel** (`throw <enum>` / `try` / `catch`) | Business errors, recoverable failures | **Zero overhead** (no extra instructions on the happy path) |
+| **Value-return channel** (`throw <enum>` / `try` / `catch`) | Business errors, recoverable failures | **Low overhead** (no `Exception` allocation and no unwind; only a predictable branch at call boundaries that may propagate or catch errors) |
 | **Panic channel** (`catch panic`) | Runtime faults (OOB, division by zero, non-exhaustive match) | Limited stack unwinding |
 
 Design principles:
@@ -3042,7 +3042,7 @@ throw point → write to pending_error → return up the call stack → run defe
 ```
 
 - No stack frame unwinding (unlike traditional exception unwinding)
-- Zero overhead on the happy path; only a conditional branch on the error path
+- No object allocation and no stack unwinding on the happy path; call boundaries that may propagate or catch errors go through only a predictable error-flag branch
 - Unhandled top-level errors print `[Uncaught Error] <enum value>`, exit code = 1
 
 #### 8.1.2 `try` / `catch`
@@ -3288,7 +3288,7 @@ Does the caller need to handle the failure?
 │
 ├─ Yes, with structured causes
 │   ↓
-│   throw <enum>, catch to handle (zero-overhead value-return channel)
+│   throw <enum>, catch to handle (low-overhead value-return channel)
 │
 ├─ Yes, but the failure simply means "no value"
 │   ↓
@@ -4725,21 +4725,22 @@ Their functionality has either moved into other modules (see the per-section not
 
 ### 16.1 Value Representation
 
-Xray values are uniformly represented as `xray_value_t`. Layout strategy:
+Xray values are uniformly represented as `XrValue`. The current implementation requires a 64-bit platform and uses a **16-byte tagged struct-of-union**:
 
-- **NaN-boxing** (on 64-bit platforms): unused IEEE-754 NaN bit space encodes small integers, booleans, and pointer tags.
-- **Pointer tagging**: low-bit tags distinguish object kinds.
-- **Object references**: heap objects are referenced via tagged pointers; the current memory model does not move objects.
+- **Descriptor (8 bytes)**: `tag: uint8`, `flags: uint8`, `heap_type: uint16`, and `ext: uint32`. The `tag` is the single entry point for type dispatch; `heap_type` is meaningful only when `tag == PTR`.
+- **Payload (8 bytes)**: one of `int64`, `double`, or pointer, interpreted by the tag.
+- **No NaN-boxing / no low-bit pointer tagging**: integers keep the full 64-bit payload; object references are ordinary heap pointers, with type metadata in the descriptor.
+- **Strings are not value-level SSO**: `string` is always an `XrString` heap object, with bytes stored inside the object's `data[]` flexible array. Short-string interning and long-string sharing are object-storage policies and do not change the `XrValue` representation.
 
 | Value type | Internal representation |
 |--|--|
-| `int` | 53-bit immediate (NaN-box) |
-| `float` | double precision stored directly |
-| `bool` | tag |
-| `null` | single global value |
-| `string` | heap object + short-string inline (≤ 7 bytes) |
-| `Bytes` | heap object + capacity/length |
-| Other objects | heap pointer |
+| `int` | `XR_TAG_I64` + 64-bit signed payload |
+| `float` | `XR_TAG_F64` + IEEE-754 double payload |
+| `bool` | `XR_TAG_BOOL` + `0/1` payload |
+| `null` | `XR_TAG_NULL` + zero payload |
+| `string` | `XR_TAG_PTR` + `XR_TSTRING` + `XrString*` |
+| `Bytes` | `XR_TAG_PTR` + bytes heap object |
+| Other objects | `XR_TAG_PTR` + heap type + heap pointer |
 
 ### 16.2 Memory Allocation
 
@@ -4801,9 +4802,9 @@ os.sleep(100)             // sleep in milliseconds (equivalent to `time.sleep`)
 
 See `stdlib/os/` for details.
 
-### 16.6 Exception Runtime
+### 16.6 Panic Runtime
 
-The built-in `Exception` class is a prelude type (declared in `stdlib/types/exception.xr`); users may directly `new` it or inherit from it:
+The built-in `Exception` class is a prelude type (declared in `stdlib/types/exception.xr`) and belongs only to the **panic channel**. Runtime faults (out-of-bounds, division by zero, non-exhaustive `match`, runtime invariant violations, and similar faults) are represented by `Exception` objects constructed by the VM/AOT runtime:
 
 ```xray
 @native
@@ -4812,20 +4813,20 @@ class Exception {
     stack: Array<string>        // automatically captured call stack, one formatted line per frame
     cause: Exception?           // chained cause
     code: int                   // error code (auto-parsed from "E0xxx: ..." prefix; default 0)
-    data: Json?                 // when a non-exception value is thrown, the original value is wrapped here
+    data: Json?                 // optional structured data for a runtime fault
 
     constructor(message: string = "", cause: Exception? = null)
     fn toString() -> string
 }
 ```
 
-The operand of a `throw` expression must have a static type that is `Exception` or one of its subclasses (see §8.1.1); other types are rejected at compile time (error code `E0370`). Runtime errors thrown by the VM also use this `Exception` type.
+Recoverable user-level errors do not use `Exception`: a `throw` expression accepts enum variant values only (see §8.1.1); non-enum error values are rejected at compile time (error code `E0370`).
 
 Stack unwinding (panic channel only): the VM's `xvm_unwind_stack()` walks the try-table to find `catch panic` handlers, releasing locals frame by frame and running `defer` along the way before jumping to the handler. Recoverable errors use the value-return channel and never unwind the stack. See §8 for details.
 
 ### 16.7 Value-return Error Channel Runtime
 
-`throw <enum>` writes the enum value into the frame's `pending_error` slot, sets the error flag, and returns. The caller detects the flag via `OP_ERR_CHECK` and either enters a `catch` handler or continues returning upward. The happy path has zero overhead (only a single conditional branch); no stack unwinding or object allocation occurs.
+`throw <enum>` writes the enum value into the frame's `pending_error` slot, sets the error flag, and returns. The caller detects the flag via `OP_ERR_CHECK` and either enters a `catch` handler or continues returning upward. This channel performs no stack unwinding and allocates no `Exception`; at call boundaries that may propagate or catch errors, the happy path goes through only a predictable error-flag branch.
 
 ### 16.8 Object Reclamation & Finalizer Timing Contract
 
@@ -5074,15 +5075,15 @@ Analyzer enum codes (`XrErrorCode`, defined in the 350+ section of `xerror.h`):
 
 | Code | Name | Description |
 |--|--|--|
-| `E0820` | `XR_ERR_THROW_NOT_EXCEPTION` | merged into `E0370` (see §8.1.1); code preserved to avoid reuse |
+| `E0820` | `XR_ERR_THROW_NOT_EXCEPTION` | historical name preserved to avoid reuse; non-enum `throw` operands are now reported as `E0370` (see §8.1.1) |
 | `E0821` | `XR_ERR_TRY_BANG_BAD_OPERAND` | deprecated (`try!` removed); code preserved to avoid reuse |
 | `E0822` | `XR_ERR_TRY_BANG_NON_EXCEPTION_ERR` | deprecated (`try!` removed); code preserved to avoid reuse |
 | `E0823` | `XR_ERR_MATCH_NOT_EXHAUSTIVE` | merged into `E0371` (see §6.3.3); code preserved to avoid reuse |
 | `E0824` | `XR_ERR_UNWRAP_NON_EXCEPTION_ERR` | deprecated (`Result` removed); code preserved to avoid reuse |
 
-### 18.8 Error-Object Layout
+### 18.8 Panic Error-Object Layout
 
-Runtime errors thrown by the VM use the prelude `Exception` class (declared in `stdlib/types/exception.xr`):
+Runtime faults in the panic channel use the prelude `Exception` class (declared in `stdlib/types/exception.xr`):
 
 ```xray
 @native
@@ -5091,26 +5092,26 @@ class Exception {
     stack: Array<string>        // auto-captured call stack, one formatted line per frame
     cause: Exception?           // chained cause
     code: int                   // error code (auto-parsed from "E0xxx: ..." prefix; default 0)
-    data: Json?                 // when a non-exception value is thrown, the original value is wrapped here
+    data: Json?                 // optional structured data for a runtime fault
 
     constructor(message: string = "", cause: Exception? = null)
     fn toString() -> string
 }
 ```
 
-The static type of a `throw` operand **must** be a subclass of `Exception` (see §8.1.1 / `E0370`). For structured errors, inherit `Exception` and add business fields:
+The static type of a user-level `throw` operand **must** be an enum variant value (see §8.1.1 / `E0370`). Structured business errors use ADT enums rather than `Exception` inheritance:
 
 ```xray
-class HttpError extends Exception {
-    statusCode: int
-    constructor(statusCode: int, message: string, cause: Exception? = null) {
-        super(message, cause)
-        this.statusCode = statusCode
-    }
+enum HttpErr {
+    NotFound(string),
+    ServerError(int, string),
+    Timeout,
 }
+
+throw HttpErr.ServerError(500, "upstream failed")
 ```
 
-Alternatively, use an ADT enum + `throw` / `catch` to express enumerable failure modes (see §8.1).
+`Exception` represents panic-channel runtime faults only; business errors propagate through the `throw <enum>` / `catch` value-return channel (see §8.1).
 
 ---
 
@@ -5609,7 +5610,6 @@ Xray draws inspiration from many existing languages but has notable differences 
 | **lvalue / rvalue** | Assignable left-hand-side value vs. value-only right-hand-side |
 | **monomorphization** | Build-time specialization of generics into concrete type/representation versions; generic functions may share I64 / F64 / PTR / BOOL representation versions, while generic classes / structs are fully specialized by concrete type |
 | **move** | Ownership transfer: enforced when crossing coroutine boundaries (see §7.3) |
-| **NaN-boxing** | Storing tagged values inside the unused bits of an IEEE-754 NaN |
 | **nullable** | A nullable type `T?` whose value may be `null` |
 | **pattern** | A pattern used in `match` and destructuring (see §6) |
 | **scope** | Lexical scope |
@@ -5619,7 +5619,6 @@ Xray draws inspiration from many existing languages but has notable differences 
 | **TCO** | Tail-Call Optimization |
 | **trait** | Rust terminology; xray uses `interface` |
 | **truthy** | A value treated as true in control flow when it is not `false` / `null` / `0` / `""` / an empty collection (see §2.3.3) |
-| **monomorphization** | Specializing generic type parameters at compile time into concrete versions while retaining runtime type information |
 | **union** | Union type `A \| B` |
 | **upvalue** | Outer variable captured by a closure |
 | **VM** | Virtual Machine: xray bytecode VM |

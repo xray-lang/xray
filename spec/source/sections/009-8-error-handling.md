@@ -16,7 +16,7 @@ Xray 的错误处理分为两个严格分离的通道：
 
 | 通道 | 语法 | 适用场景 | 运行时开销 |
 |--|--|--|--|
-| **值返回通道**（`throw <enum>` / `try` / `catch`） | 业务错误、可恢复失败 | **零开销**（正常路径无额外指令） |
+| **值返回通道**（`throw <enum>` / `try` / `catch`） | 业务错误、可恢复失败 | **低开销**（不分配 `Exception`、不 unwind；需传播/捕获错误的调用边界只有可预测分支） |
 | **panic 通道**（`catch panic`） | 运行时故障（越界、除零、不完整 match） | 有限栈展开 |
 
 设计原则：
@@ -46,7 +46,7 @@ throw AppErr.InvalidInput("bad format")     // ✅ 带载荷的 ADT 枚举变体
 ```
 
 - 不展开栈帧（不同于传统异常的 unwind）
-- 正常路径零开销，仅在错误路径有条件跳转成本
+- 正常路径不分配对象、不展开栈；在需传播或捕获错误的调用边界只经过可预测的错误标志分支
 - 未捕获的顶层错误打印 `[Uncaught Error] <enum value>`，退出码 = 1
 
 #### 8.1.2 `try` / `catch`
@@ -292,7 +292,7 @@ fn fetch(url: string) -> string {
 │
 ├─ 需要，且失败有结构化错因
 │   ↓
-│   throw <enum>，catch 处理（零开销值返回通道）
+│   throw <enum>，catch 处理（低开销值返回通道）
 │
 ├─ 需要，但失败只表示"没值"，无错因意义
 │   ↓
@@ -408,7 +408,7 @@ Xray's error handling is split into two strictly separated channels:
 
 | Channel | Syntax | Use case | Runtime cost |
 |--|--|--|--|
-| **Value-return channel** (`throw <enum>` / `try` / `catch`) | Business errors, recoverable failures | **Zero overhead** (no extra instructions on the happy path) |
+| **Value-return channel** (`throw <enum>` / `try` / `catch`) | Business errors, recoverable failures | **Low overhead** (no `Exception` allocation and no unwind; only a predictable branch at call boundaries that may propagate or catch errors) |
 | **Panic channel** (`catch panic`) | Runtime faults (OOB, division by zero, non-exhaustive match) | Limited stack unwinding |
 
 Design principles:
@@ -438,7 +438,7 @@ throw point → write to pending_error → return up the call stack → run defe
 ```
 
 - No stack frame unwinding (unlike traditional exception unwinding)
-- Zero overhead on the happy path; only a conditional branch on the error path
+- No object allocation and no stack unwinding on the happy path; call boundaries that may propagate or catch errors go through only a predictable error-flag branch
 - Unhandled top-level errors print `[Uncaught Error] <enum value>`, exit code = 1
 
 #### 8.1.2 `try` / `catch`
@@ -684,7 +684,7 @@ Does the caller need to handle the failure?
 │
 ├─ Yes, with structured causes
 │   ↓
-│   throw <enum>, catch to handle (zero-overhead value-return channel)
+│   throw <enum>, catch to handle (low-overhead value-return channel)
 │
 ├─ Yes, but the failure simply means "no value"
 │   ↓
