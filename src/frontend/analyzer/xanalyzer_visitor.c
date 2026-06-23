@@ -480,12 +480,12 @@ XR_FUNC bool xa_method_name_mutates_receiver(const char *name) {
     if (!name)
         return false;
     static const char *const mutators[] = {
-        "push",     "pop",     "shift",       "unshift",      "reserve",     "resize",
-        "splice",   "reverse", "sort",        "fill",         "copyWithin",  "repeatFrom",
-        "copyFrom", "set",     "delete",      "clear",        "add",         "send",
-        "recv",     "trySend", "tryRecv",     "sendTimeout",  "recvTimeout", "close",
-        "cancel",   "poll",    "awaitResult", "awaitTimeout", "append",      "flush",
-        "tryPop",   NULL};
+        "push",     "pop",     "shift",   "unshift",     "reserve",      "resize",
+        "splice",   "reverse", "sort",    "fill",        "copyWithin",   "repeatFrom",
+        "copyFrom", "set",     "delete",  "clear",       "add",          "send",
+        "recv",     "recvOr",  "trySend", "tryRecv",     "sendTimeout",  "recvTimeout",
+        "close",    "cancel",  "poll",    "awaitResult", "awaitTimeout", "append",
+        "flush",    "tryPop",  NULL};
     for (const char *const *p = mutators; *p; p++) {
         if (strcmp(name, *p) == 0)
             return true;
@@ -2663,6 +2663,13 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                         item_type = coll_type->container.element_type;
                     }
                 } else if (coll_type->kind == XR_KIND_CHANNEL) {
+                    if (fi->is_keyvalue) {
+                        XrLocation loc = {
+                            .file = ctx->file_path, .line = node->line, .column = node->column};
+                        xa_analyzer_add_diagnostic(
+                            ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
+                            "Channel iteration yields values only; use `for (msg in ch)`", &loc);
+                    }
                     if (coll_type->container.element_type) {
                         item_type = coll_type->container.element_type;
                     }

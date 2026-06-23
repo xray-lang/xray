@@ -2466,6 +2466,45 @@ XrAotResult xr_aot_chan_recv_slot_resume(const XrAotContext *ctx, XrSlotRef out_
     return xr_aot_error(XR_NULL_VAL, false);
 }
 
+XrAotResult xr_aot_chan_recv_or_slot(const XrAotContext *ctx, XrValue channel_value,
+                                     XrSlotRef out_slot, XrValue default_value) {
+    if (!ctx || !ctx->coro || !xr_value_is_channel(channel_value))
+        return xr_aot_error(XR_NULL_VAL, false);
+    if (!xr_slot_store_value(out_slot, default_value))
+        return xr_aot_error(XR_NULL_VAL, false);
+
+    XrChannel *ch = xr_value_to_channel(channel_value);
+    XrCoroBlockResult block = xr_coro_chan_recv(ctx->coro, ch, out_slot, xr_slot_none(), -1, false);
+    if (block.kind == XR_CORO_BLOCK_BLOCKED)
+        return xr_aot_blocked();
+    if (block.kind == XR_CORO_BLOCK_READY)
+        return xr_aot_done(block.value);
+    if (block.kind == XR_CORO_BLOCK_CLOSED || block.kind == XR_CORO_BLOCK_NO_CORO ||
+        block.kind == XR_CORO_BLOCK_TIMEOUT) {
+        if (!xr_slot_store_value(out_slot, default_value))
+            return xr_aot_error(XR_NULL_VAL, false);
+        return xr_aot_done(default_value);
+    }
+    return xr_aot_error(XR_NULL_VAL, false);
+}
+
+XrAotResult xr_aot_chan_recv_or_slot_resume(const XrAotContext *ctx, XrSlotRef out_slot) {
+    if (!ctx || !ctx->coro)
+        return xr_aot_error(XR_NULL_VAL, false);
+
+    XrCoroBlockResult block = xr_coro_chan_recv_resume(ctx->coro, out_slot, xr_slot_none());
+    if (block.kind == XR_CORO_BLOCK_READY)
+        return xr_aot_done(block.value);
+    if (block.kind == XR_CORO_BLOCK_CLOSED || block.kind == XR_CORO_BLOCK_NO_CORO ||
+        block.kind == XR_CORO_BLOCK_TIMEOUT) {
+        XrValue default_value = XR_NULL_VAL;
+        if (!xr_slot_load_value(out_slot, &default_value))
+            return xr_aot_error(XR_NULL_VAL, false);
+        return xr_aot_done(default_value);
+    }
+    return xr_aot_error(XR_NULL_VAL, false);
+}
+
 XrAotResult xr_aot_chan_recv_pair(const XrAotContext *ctx, XrValue channel_value,
                                   XrSlotRef value_slot, XrSlotRef ok_slot, int64_t timeout_ms) {
     if (!ctx || !ctx->coro || !xr_value_is_channel(channel_value))

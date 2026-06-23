@@ -172,6 +172,7 @@ shared const cha = Channel(3)          // 元素类型从首次 send 推断
 |--|--|--|
 | `send(v)` | `(T) -> ()` | 阻塞发送；满则等待消费者；channel 已关闭时抛异常 |
 | `recv()` | `() -> Recv<T>` | 阻塞接收；关闭且缓冲为空时返回 `Recv.Closed` |
+| `recvOr(default)` | `(T) -> T` | 阻塞接收；收到值时直接返回 `T`，关闭且缓冲为空时返回 `default`，不分配 `Recv<T>` 包装 |
 | `trySend(v)` | `(T) -> SendResult` | 非阻塞发送；返回 `Sent` / `Full` / `Closed` |
 | `tryRecv()` | `() -> Recv<T>` | 非阻塞接收；空时返回 `Recv.Empty` |
 | `sendTimeout(v, ms)` | `(T, int) -> SendResult` | 带超时发送；超时返回 `SendResult.Timeout` |
@@ -196,7 +197,13 @@ match ch.tryRecv() {
     Recv.Timeout -> print("timeout")
 }
 
+ch.send(7)
 ch.close()
+for (msg in ch) {
+    print(msg)
+}
+
+let value = ch.recvOr(-1)
 ```
 
 **send/recv 与 `move`**：发送大对象时用 `ch.send(move payload)` 转移所有权，避免拷贝；接收方独占。
@@ -213,7 +220,8 @@ fn producer(ch: Channel<int>) {
 - **MPMC**（多生产者多消费者）。
 - 有缓冲 ch：满则发送方挂起，空则接收方挂起。
 - 无缓冲 ch：发送/接收必须同时握手（rendezvous）。
-- 关闭后：`send` 抛异常；`recv` 返回剩余 buffered value 的 `Recv.Value(v)`，取完后返回 `Recv.Closed`；`tryRecv` 在空且未关闭时返回 `Recv.Empty`。
+- 关闭后：`send` 抛异常；`recv` 返回剩余 buffered value 的 `Recv.Value(v)`，取完后返回 `Recv.Closed`；`recvOr(default)` 返回剩余 buffered value，取完后返回 `default`；`tryRecv` 在空且未关闭时返回 `Recv.Empty`。
+- `for (msg in ch)` 等价于阻塞接收直到 channel 关闭且 drained；循环变量类型为 `T`。Channel 不支持 key-value 迭代。
 
 ### 10.6 `select`
 
@@ -597,6 +605,7 @@ shared const cha = Channel(3)          // element type inferred from the first s
 |--|--|--|
 | `send(v)` | `(T) -> ()` | Blocking send; waits for a consumer when full; throws if the channel is closed |
 | `recv()` | `() -> Recv<T>` | Blocking receive; returns `Recv.Closed` when closed and drained |
+| `recvOr(default)` | `(T) -> T` | Blocking receive; returns the payload directly, or `default` when closed and drained, without allocating a `Recv<T>` wrapper |
 | `trySend(v)` | `(T) -> SendResult` | Non-blocking send; returns `Sent` / `Full` / `Closed` |
 | `tryRecv()` | `() -> Recv<T>` | Non-blocking receive; returns `Recv.Empty` when empty |
 | `sendTimeout(v, ms)` | `(T, int) -> SendResult` | Send with timeout; timeout returns `SendResult.Timeout` |
@@ -621,7 +630,13 @@ match ch.tryRecv() {
     Recv.Timeout -> print("timeout")
 }
 
+ch.send(7)
 ch.close()
+for (msg in ch) {
+    print(msg)
+}
+
+let value = ch.recvOr(-1)
 ```
 
 **send/recv with `move`**: when sending a large object, use `ch.send(move payload)` to transfer ownership and avoid copying; the receiver becomes the sole owner.
@@ -638,7 +653,8 @@ fn producer(ch: Channel<int>) {
 - **MPMC** (multi-producer, multi-consumer).
 - Buffered channel: senders suspend when full; receivers suspend when empty.
 - Unbuffered channel: send and receive must rendezvous (synchronous handshake).
-- After close: `send` throws; `recv` returns remaining buffered values as `Recv.Value(v)`, then `Recv.Closed`; `tryRecv` returns `Recv.Empty` when empty and not closed.
+- After close: `send` throws; `recv` returns remaining buffered values as `Recv.Value(v)`, then `Recv.Closed`; `recvOr(default)` returns remaining buffered values, then `default`; `tryRecv` returns `Recv.Empty` when empty and not closed.
+- `for (msg in ch)` is equivalent to blocking receive until the channel is closed and drained; the loop variable has type `T`. Channels do not support key-value iteration.
 
 ### 10.6 `select`
 

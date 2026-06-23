@@ -33,9 +33,10 @@ static const char xr_native_def_channel[] =
     "// Built-in Channel<T> type — implementation in src/runtime/coro/xchannel_methods.c\n\nenum "
     "Recv<T> {\n    Value(T)\n    Empty\n    Timeout\n    Closed\n}\n\nenum SendResult {\n    "
     "Sent\n    Full\n    Timeout\n    Closed\n}\n\n@native\nclass Channel<T> {\n    length: int\n  "
-    "  capacity: int\n    isClosed: bool\n\n    send(value: T)\n    recv() -> Recv<T>\n\n    "
-    "trySend(value: T) -> SendResult\n    tryRecv() -> Recv<T>\n\n    sendTimeout(value: T, "
-    "timeout: int) -> SendResult\n    recvTimeout(timeout: int) -> Recv<T>\n\n    close()\n}\n";
+    "  capacity: int\n    isClosed: bool\n\n    send(value: T)\n    recv() -> Recv<T>\n    "
+    "recvOr(default: T) -> T\n\n    trySend(value: T) -> SendResult\n    tryRecv() -> Recv<T>\n\n  "
+    "  sendTimeout(value: T, timeout: int) -> SendResult\n    recvTimeout(timeout: int) -> "
+    "Recv<T>\n\n    close()\n}\n";
 
 static const char xr_native_def_coroutine[] =
     "// Built-in Task type (coroutine handle) — implementation in src/runtime/coro/\n\nenum "

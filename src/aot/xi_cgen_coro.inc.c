@@ -2683,6 +2683,55 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         return;
     }
 
+    if (xi_value_is_channel_method_call(v, "recvOr", 1)) {
+        emit_value_generated_line_reset(ctx, out, v);
+        if (v->nargs < 2) {
+            ctx->error = true;
+            fprintf(stderr, "[xi_cgen] ERROR: channel recvOr missing operands\n");
+            emit_codegen_abort_aot_result(out);
+            return;
+        }
+        int sid = ++(*state_id);
+        fprintf(out, "    XrSlotRef _chan_recv_or_slot_%u = ", v->id);
+        emit_coro_slot_ref(ctx, out, f, prefix, v);
+        fprintf(out, ";\n");
+        fprintf(out, "    f->state = %d;\n", sid);
+        emit_value_source_line(ctx, out, v);
+        fprintf(out, "    XrAotResult _chan_recv_or_%u = xr_aot_chan_recv_or_slot(ctx, ", v->id);
+        emit_vref(out, v->args[0]);
+        fprintf(out, ", _chan_recv_or_slot_%u, ", v->id);
+        emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
+        fprintf(out, ");\n");
+        emit_value_generated_line_reset(ctx, out, v);
+        fprintf(out, "    if (_chan_recv_or_%u.kind == XR_AOT_RUN_BLOCKED) {\n", v->id);
+        fprintf(out, "        return _chan_recv_or_%u;\n", v->id);
+        fprintf(out, "    }\n");
+        fprintf(out, "    if (_chan_recv_or_%u.kind == XR_AOT_RUN_ERROR) {\n", v->id);
+        fprintf(out, "        f->state = 0;\n");
+        fprintf(out, "        return _chan_recv_or_%u;\n", v->id);
+        fprintf(out, "    }\n");
+        fprintf(out, "    f->state = 0;\n");
+        fprintf(out, "    goto S%d_DONE;\n", sid);
+        fprintf(out, "S%d:;\n", sid);
+        fprintf(out, "    f->state = 0;\n");
+        fprintf(out, "    _chan_recv_or_slot_%u = ", v->id);
+        emit_coro_slot_ref(ctx, out, f, prefix, v);
+        fprintf(out, ";\n");
+        emit_value_source_line(ctx, out, v);
+        fprintf(out,
+                "    _chan_recv_or_%u = xr_aot_chan_recv_or_slot_resume(ctx, "
+                "_chan_recv_or_slot_%u);\n",
+                v->id, v->id);
+        emit_value_generated_line_reset(ctx, out, v);
+        fprintf(out, "    if (_chan_recv_or_%u.kind == XR_AOT_RUN_ERROR)\n", v->id);
+        fprintf(out, "        return _chan_recv_or_%u;\n", v->id);
+        fprintf(out, "S%d_DONE:;\n", sid);
+        if (cg_coro_value_has_storage(f, v))
+            emit_bridge_stored_tagged_value(out, v);
+        emit_coro_debug_result_source_var_sync(ctx, out, f, v);
+        return;
+    }
+
     if (v->op == XI_CALL_METHOD && xi_value_type_is_channel(v->args[0])) {
         if (xi_value_is_channel_method_call(v, "trySend", 1)) {
             emit_value_generated_line_reset(ctx, out, v);

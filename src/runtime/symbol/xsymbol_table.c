@@ -251,6 +251,8 @@ static const char *xr_builtin_symbol_names[] = {
     "wrappingAdd",
     "wrappingSub",
     "wrappingMul",
+    // Newly added builtins append here to keep existing symbol ids stable.
+    "recvOr",
 };
 
 #define BUILTIN_NAME_COUNT                                                                         \

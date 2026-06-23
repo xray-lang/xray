@@ -1,0 +1,26 @@
+fn drain_sum(ch: Channel<int>) -> int {
+    let sum = 0
+    for (msg in ch) {
+        sum += msg
+    }
+    return sum
+}
+
+let ints = Channel<int>(4)
+ints.send(2)
+ints.send(5)
+ints.send(8)
+ints.close()
+print(drain_sum(ints))
+
+let fallback_ints = Channel<int>(1)
+fallback_ints.send(42)
+fallback_ints.close()
+print(fallback_ints.recvOr(-1))
+print(fallback_ints.recvOr(-1))
+
+let words = Channel<string>(1)
+words.send("xray")
+words.close()
+print(words.recvOr("fallback"))
+print(words.recvOr("fallback"))

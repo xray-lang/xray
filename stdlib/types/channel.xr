@@ -22,6 +22,7 @@ class Channel<T> {
 
     send(value: T)
     recv() -> Recv<T>
+    recvOr(default: T) -> T
 
     trySend(value: T) -> SendResult
     tryRecv() -> Recv<T>
