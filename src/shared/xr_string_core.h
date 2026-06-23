@@ -13,6 +13,7 @@
 
 #include <stdbool.h>
 #include <stddef.h>
+#include <string.h>
 
 typedef enum XrStringCoreTrimMode {
     XR_STRING_CORE_TRIM_BOTH = 0,
@@ -48,6 +49,99 @@ static inline XrStringCoreSlice xr_string_core_trim_slice(const char *data, size
     out.data = data + start;
     out.len = end - start;
     return out;
+}
+
+static inline ptrdiff_t xr_string_core_index_of(const char *haystack, size_t haystack_len,
+                                                const char *needle, size_t needle_len) {
+    if ((!haystack && haystack_len != 0) || (!needle && needle_len != 0))
+        return -1;
+    if (needle_len == 0)
+        return 0;
+    if (needle_len > haystack_len)
+        return -1;
+
+    if (needle_len == 1) {
+        const char *p = (const char *) memchr(haystack, needle[0], haystack_len);
+        return p ? (ptrdiff_t) (p - haystack) : -1;
+    }
+
+    if (needle_len <= 8) {
+        char first = needle[0];
+        size_t limit = haystack_len - needle_len;
+        for (size_t i = 0; i <= limit;) {
+            const char *p = (const char *) memchr(haystack + i, first, limit - i + 1);
+            if (!p)
+                return -1;
+            i = (size_t) (p - haystack);
+            if (memcmp(p, needle, needle_len) == 0)
+                return (ptrdiff_t) i;
+            i++;
+        }
+        return -1;
+    }
+
+    size_t skip[256];
+    for (int c = 0; c < 256; c++)
+        skip[c] = needle_len;
+    for (size_t i = 0; i < needle_len - 1; i++)
+        skip[(unsigned char) needle[i]] = needle_len - 1 - i;
+
+    size_t i = 0;
+    size_t limit = haystack_len - needle_len;
+    while (i <= limit) {
+        size_t j = needle_len - 1;
+        while (j > 0 && haystack[i + j] == needle[j])
+            j--;
+        if (j == 0 && haystack[i] == needle[0])
+            return (ptrdiff_t) i;
+        i += skip[(unsigned char) haystack[i + needle_len - 1]];
+    }
+    return -1;
+}
+
+static inline ptrdiff_t xr_string_core_last_index_of(const char *haystack, size_t haystack_len,
+                                                     const char *needle, size_t needle_len) {
+    if ((!haystack && haystack_len != 0) || (!needle && needle_len != 0))
+        return -1;
+    if (needle_len == 0)
+        return (ptrdiff_t) haystack_len;
+    if (needle_len > haystack_len)
+        return -1;
+
+    size_t last_pos = haystack_len - needle_len;
+    for (size_t i = last_pos + 1; i > 0; i--) {
+        size_t pos = i - 1;
+        if (memcmp(haystack + pos, needle, needle_len) == 0)
+            return (ptrdiff_t) pos;
+    }
+    return -1;
+}
+
+static inline bool xr_string_core_contains(const char *haystack, size_t haystack_len,
+                                           const char *needle, size_t needle_len) {
+    return xr_string_core_index_of(haystack, haystack_len, needle, needle_len) >= 0;
+}
+
+static inline bool xr_string_core_starts_with(const char *haystack, size_t haystack_len,
+                                              const char *prefix, size_t prefix_len) {
+    if ((!haystack && haystack_len != 0) || (!prefix && prefix_len != 0))
+        return false;
+    if (prefix_len > haystack_len)
+        return false;
+    if (prefix_len == 0)
+        return true;
+    return memcmp(haystack, prefix, prefix_len) == 0;
+}
+
+static inline bool xr_string_core_ends_with(const char *haystack, size_t haystack_len,
+                                            const char *suffix, size_t suffix_len) {
+    if ((!haystack && haystack_len != 0) || (!suffix && suffix_len != 0))
+        return false;
+    if (suffix_len > haystack_len)
+        return false;
+    if (suffix_len == 0)
+        return true;
+    return memcmp(haystack + haystack_len - suffix_len, suffix, suffix_len) == 0;
 }
 
 #endif  // XRAY_SHARED_XR_STRING_CORE_H

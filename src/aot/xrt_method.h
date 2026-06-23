@@ -362,11 +362,13 @@ static inline XrValue xrt_method_0(XrValue recv, int sym) {
 /* String 1-arg method dispatch. */
 static inline XrValue xrt_str_method_1(const char *s, int64_t slen, XrValue recv, int sym,
                                        XrValue arg0) {
-    if ((sym == XRT_SYM_CONTAINS || sym == XRT_SYM_INCLUDES) && XR_IS_STR(arg0))
-        return XR_FROM_BOOL(strstr(s, xr_str_data(arg0)) ? 1 : 0);
+    if ((sym == XRT_SYM_CONTAINS || sym == XRT_SYM_INCLUDES) && XR_IS_STR(arg0)) {
+        return XR_FROM_BOOL(xr_string_core_contains(s, (size_t) slen, xr_str_data(arg0),
+                                                    (size_t) xr_str_len(arg0)));
+    }
     if (sym == XRT_SYM_INDEXOF && XR_IS_STR(arg0)) {
-        const char *p = strstr(s, xr_str_data(arg0));
-        return XR_FROM_INT(p ? (int64_t) (p - s) : -1);
+        return XR_FROM_INT((int64_t) xr_string_core_index_of(s, (size_t) slen, xr_str_data(arg0),
+                                                             (size_t) xr_str_len(arg0)));
     }
     if (sym == XRT_SYM_SLICE && arg0.tag == XR_TAG_I64) {
         int64_t start = arg0.i;
@@ -385,12 +387,12 @@ static inline XrValue xrt_str_method_1(const char *s, int64_t slen, XrValue recv
     if (sym == XRT_SYM_STARTSWITH && XR_IS_STR(arg0)) {
         const char *p = xr_str_data(arg0);
         size_t plen = (size_t) xr_str_len(arg0);
-        return XR_FROM_BOOL((size_t) slen >= plen && memcmp(s, p, plen) == 0);
+        return XR_FROM_BOOL(xr_string_core_starts_with(s, (size_t) slen, p, plen));
     }
     if (sym == XRT_SYM_ENDSWITH && XR_IS_STR(arg0)) {
         const char *p = xr_str_data(arg0);
         size_t plen = (size_t) xr_str_len(arg0);
-        return XR_FROM_BOOL((size_t) slen >= plen && memcmp(s + slen - plen, p, plen) == 0);
+        return XR_FROM_BOOL(xr_string_core_ends_with(s, (size_t) slen, p, plen));
     }
     if (sym == XRT_SYM_CHARAT && arg0.tag == XR_TAG_I64) {
         int64_t idx = arg0.i;
@@ -412,15 +414,8 @@ static inline XrValue xrt_str_method_1(const char *s, int64_t slen, XrValue recv
         return sv;
     }
     if (sym == XRT_SYM_LASTINDEXOF && XR_IS_STR(arg0)) {
-        const char *needle = xr_str_data(arg0);
-        size_t nlen = (size_t) xr_str_len(arg0);
-        if (nlen == 0)
-            return XR_FROM_INT(slen);
-        for (int64_t i = slen - (int64_t) nlen; i >= 0; i--) {
-            if (memcmp(s + i, needle, nlen) == 0)
-                return XR_FROM_INT(i);
-        }
-        return XR_FROM_INT(-1);
+        return XR_FROM_INT((int64_t) xr_string_core_last_index_of(
+            s, (size_t) slen, xr_str_data(arg0), (size_t) xr_str_len(arg0)));
     }
     if (sym == XRT_SYM_SPLIT && XR_IS_STR(arg0)) {
         const char *sep = xr_str_data(arg0);
