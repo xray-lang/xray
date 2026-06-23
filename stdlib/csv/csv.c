@@ -471,18 +471,16 @@ XR_DEFINE_BUILTIN(csv_write_file, "writeFile",
                   "(path: string, data: Array<Array<string>>, options?: Json): bool",
                   "Write CSV file")
 
+#define XR_STDLIB_VM_BIND_MODULE_CSV 1
+#include "../../src/stdlib/xstdlib_vm_bindings_generated.inc.c"
+#undef XR_STDLIB_VM_BIND_MODULE_CSV
+
 XR_FUNC XrModule *xr_load_module_csv(XrVMRuntime *isolate) {
     XrModule *mod = xr_module_create_native(isolate, "csv");
     if (!mod)
         return NULL;
 
-    XRS_EXPORT(mod, isolate, "parse", csv_parse);
-    XRS_EXPORT(mod, isolate, "parseDetailed", csv_parse_detailed);
-    XRS_EXPORT(mod, isolate, "parseTsv", csv_parse_tsv);
-    XRS_EXPORT(mod, isolate, "parseAuto", csv_parse_auto);
-    XRS_EXPORT(mod, isolate, "stringify", csv_stringify);
-    XRS_EXPORT(mod, isolate, "parseFile", csv_parse_file);
-    XRS_EXPORT(mod, isolate, "writeFile", csv_write_file);
+    xr_stdlib_vm_bind_csv_generated(isolate, mod);
 
     mod->loaded = true;
     return mod;
