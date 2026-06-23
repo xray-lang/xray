@@ -463,10 +463,7 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
         if (sym == XRT_SYM_UNSHIFT) {
             xrt_array_push(recv, XR_NULL_VAL);
             a = (xrt_array_t *) recv.ptr;
-            for (int64_t i = a->length - 1; i > 0; i--) {
-                XrValue prev = xr_typed_get(a->data, (int32_t) (i - 1), a->elem_type);
-                xr_typed_set(a->data, (int32_t) i, prev, a->elem_type);
-            }
+            (void) xr_array_core_shift_right_one(a->data, a->length - 1, a->elem_size);
             xr_typed_set(a->data, 0, arg0, a->elem_type);
             return XR_NULL_VAL;
         }

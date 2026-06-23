@@ -305,9 +305,7 @@ void xr_array_unshift(XrArray *arr, XrValue value) {
         xr_array_grow(arr);
     }
 
-    // Shift all elements right by one (use memmove for typed arrays)
-    memmove((uint8_t *) arr->data + arr->elem_size, arr->data,
-            (size_t) arr->length * arr->elem_size);
+    (void) xr_array_core_shift_right_one(arr->data, arr->length, arr->elem_size);
 
     xr_array_set_element(arr, 0, value);
     arr->length++;
