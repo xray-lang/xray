@@ -1156,7 +1156,7 @@ static bool emit_bytes_new_native_local_expr(FILE *out, const XiValue *v) {
     if (v->nargs == 1 && v->args[0] && v->args[0]->type && v->args[0]->type->kind == XR_KIND_INT) {
         fprintf(out, "({ int64_t _n = ");
         emit_value_as_rep(out, v->args[0], XR_REP_I64);
-        fprintf(out, "; if (_n < 0) _n = 0; ");
+        fprintf(out, "; _n = xr_array_core_nonnegative_length(_n); ");
         fprintf(out, "xrt_array_t *_b = xrt_array_new_typed_ptr(_n, XR_ELEM_U8); ");
         fprintf(out, "_b->length = _n; _b; })");
         return true;

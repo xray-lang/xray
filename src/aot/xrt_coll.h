@@ -208,20 +208,18 @@ static inline XrValue xrt_array_new_typed_uninit(int64_t cap, uint8_t etype) {
     return xr_mkptr(xrt_array_new_typed_uninit_ptr(cap, etype), XR_TAG_ARRAY);
 }
 static inline XrValue xrt_bytes_new_len(int64_t len) {
-    if (len < 0)
-        len = 0;
+    len = xr_array_core_nonnegative_length(len);
     XrValue arr = xrt_array_new_typed(len, XR_ELEM_U8);
     ((xrt_array_t *) arr.ptr)->length = len;
     return arr;
 }
 
 static inline XrValue xrt_bytes_new_fill(XrValue len_value, XrValue fill_value) {
-    int64_t len = xr_value_to_int64_coerce(len_value);
+    int64_t len = xr_array_core_nonnegative_length(xr_value_to_int64_coerce(len_value));
     XrValue arr = xrt_bytes_new_len(len);
     xrt_array_t *a = (xrt_array_t *) arr.ptr;
-    uint8_t fill = (uint8_t) (xr_value_to_int64_coerce(fill_value) & 0xFF);
-    if (a->length > 0)
-        memset(a->data, fill, (size_t) a->length);
+    if (!xr_array_core_bytes_fill_value(a->data, a->length, fill_value))
+        return XR_NULL_VAL;
     return arr;
 }
 
@@ -231,14 +229,9 @@ static inline XrValue xrt_bytes_new_copy(XrValue src_value) {
     xrt_array_t *src = (xrt_array_t *) src_value.ptr;
     XrValue arr = xrt_bytes_new_len(src->length);
     xrt_array_t *dst = (xrt_array_t *) arr.ptr;
-    if (src->elem_type == XR_ELEM_U8) {
-        memcpy(dst->data, src->data, (size_t) src->length);
-        return arr;
-    }
-    for (int64_t i = 0; i < src->length; i++) {
-        XrValue item = xr_typed_get(src->data, (int32_t) i, src->elem_type);
-        xr_typed_set(dst->data, (int32_t) i, item, dst->elem_type);
-    }
+    if (!xr_array_core_bytes_copy_from_typed(dst->data, dst->length, src->data, src->length,
+                                             src->elem_type))
+        return XR_NULL_VAL;
     return arr;
 }
 

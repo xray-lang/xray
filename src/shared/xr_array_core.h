@@ -361,6 +361,49 @@ static inline bool xr_array_core_fill_typed_storage(void *data, int64_t start, i
 
 #undef XR_ARRAY_CORE_FILL_TYPED_LOOP
 
+static inline int64_t xr_array_core_nonnegative_length(int64_t length) {
+    return length < 0 ? 0 : length;
+}
+
+static inline uint8_t xr_array_core_byte_from_value(XrValue value) {
+    if (XR_IS_INT(value))
+        return (uint8_t) (XR_TO_INT(value) & 0xFF);
+    if (XR_IS_FLOAT(value))
+        return (uint8_t) ((int64_t) XR_TO_FLOAT(value) & 0xFF);
+    if (XR_IS_BOOL(value))
+        return XR_IS_FALSE(value) ? 0 : 1;
+    return 0;
+}
+
+static inline bool xr_array_core_bytes_fill_value(void *dst_data, int64_t length,
+                                                  XrValue fill_value) {
+    if (length <= 0)
+        return true;
+    if (!dst_data)
+        return false;
+    memset(dst_data, xr_array_core_byte_from_value(fill_value), (size_t) length);
+    return true;
+}
+
+static inline bool xr_array_core_bytes_copy_from_typed(void *dst_data, int64_t dst_length,
+                                                       const void *src_data, int64_t src_length,
+                                                       uint8_t src_elem_type) {
+    if (dst_length <= 0)
+        return true;
+    if (!dst_data || !src_data || src_length < dst_length || dst_length > INT32_MAX)
+        return false;
+    if (src_elem_type == XR_ELEM_U8) {
+        memcpy(dst_data, src_data, (size_t) dst_length);
+        return true;
+    }
+
+    uint8_t *dst = (uint8_t *) dst_data;
+    void *src_mut = (void *) src_data;
+    for (int64_t i = 0; i < dst_length; i++)
+        dst[i] = xr_array_core_byte_from_value(xr_typed_get(src_mut, (int32_t) i, src_elem_type));
+    return true;
+}
+
 static inline XrArrayCoreIndexSetPlan xr_array_core_index_set_plan(int64_t length, int64_t index) {
     XrArrayCoreIndexSetPlan out = {XR_ARRAY_CORE_INDEX_SET_INVALID, index};
     if (length < 0)
