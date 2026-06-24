@@ -11,10 +11,15 @@
 #ifndef XRAY_SHARED_XR_MATH_CORE_H
 #define XRAY_SHARED_XR_MATH_CORE_H
 
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
 typedef void (*XrMathCoreRandomBytesFn)(void *ctx, unsigned char *buf, size_t len);
+
+static inline int64_t xr_math_core_int_arg_or(bool has_int, int64_t value, int64_t fallback) {
+    return has_int ? value : fallback;
+}
 
 static inline uint64_t xr_math_core_random_u64(XrMathCoreRandomBytesFn fill, void *ctx) {
     uint64_t r = 0;

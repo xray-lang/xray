@@ -60,6 +60,12 @@ TEST(math_core_random_i64_full_range_wraps_from_unsigned) {
     ASSERT_EQ_UINT(seq.index, 1);
 }
 
+TEST(math_core_int_argument_rules) {
+    ASSERT_EQ_INT(xr_math_core_int_arg_or(true, 42, 0), 42);
+    ASSERT_EQ_INT(xr_math_core_int_arg_or(false, 42, 0), 0);
+    ASSERT_EQ_INT(xr_math_core_int_arg_or(false, -7, 99), 99);
+}
+
 TEST_MAIN_BEGIN()
 
 RUN_TEST_SUITE("Math Core - Random");
@@ -67,5 +73,6 @@ RUN_TEST(math_core_random_f64_uses_top_53_bits);
 RUN_TEST(math_core_random_i64_equal_and_swapped_range);
 RUN_TEST(math_core_random_i64_rejects_modulo_bias_tail);
 RUN_TEST(math_core_random_i64_full_range_wraps_from_unsigned);
+RUN_TEST(math_core_int_argument_rules);
 
 TEST_MAIN_END()

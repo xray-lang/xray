@@ -1,0 +1,17 @@
+import math
+
+let dyn: Json = {
+    "intMin": 7,
+    "intMax": 7,
+    "floatMin": 5.8,
+    "floatMax": 5.8,
+    "boolMin": true,
+    "boolMax": true,
+    "nullMin": null,
+    "zero": 0
+}
+
+print(math.randomInt(dyn.intMin, dyn.intMax))
+print(math.randomInt(dyn.floatMin, dyn.floatMax))
+print(math.randomInt(dyn.boolMin, dyn.boolMax))
+print(math.randomInt(dyn.nullMin, dyn.zero))
