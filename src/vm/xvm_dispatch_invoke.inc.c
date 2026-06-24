@@ -62,8 +62,9 @@ invoke_dispatch:;
      * Recv<T>/SendResult protocol state model. */
     if (xr_value_is_channel(receiver)) {
         XrChannel *ch = xr_value_to_channel(receiver);
-        XrDispatchAction _cr =
-            vm_invoke_channel(isolate, vm_ctx, ch, method_symbol, nargs, base, a, frame, pc);
+        uint8_t transfer_mode = vm_channel_transfer_mode_before(frame, pc);
+        XrDispatchAction _cr = vm_invoke_channel(isolate, vm_ctx, ch, method_symbol, nargs, base, a,
+                                                 frame, pc, transfer_mode);
         if (_cr == XR_DISP_NEXT) {
             VM_REBIND_AFTER_NATIVE_CALL();
             vmbreak;

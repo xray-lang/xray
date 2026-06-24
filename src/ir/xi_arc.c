@@ -169,7 +169,7 @@ static bool value_has_consuming_use(const XiFunc *f, const XiValue *v) {
             if (!u || u->op == XI_RETAIN || u->op == XI_RELEASE)
                 continue;
             for (uint16_t a = 0; a < u->nargs; a++) {
-                if (u->args[a] == v && xi_own_use_is_consuming(u->op, a))
+                if (u->args[a] == v && xi_own_value_arg_is_consuming(u, a))
                     return true;
             }
         }
@@ -467,7 +467,7 @@ static bool collect_consume_sites(XiFunc *f, XiValue *target, ConsumeSiteVec *si
             for (uint16_t a = 0; a < user->nargs; a++) {
                 if (user->args[a] != target)
                     continue;
-                if (!xi_own_use_is_consuming(user->op, a))
+                if (!xi_own_value_arg_is_consuming(user, a))
                     continue;
                 /* A call argument the callee only borrows is not consumed: the
                  * caller keeps ownership and drops it at its death point (the
@@ -1159,7 +1159,7 @@ static bool param_has_consuming_use(XiFunc *f, XiValue *p) {
             if (!u || u->op == XI_RETAIN || u->op == XI_RELEASE)
                 continue;
             for (uint16_t a = 0; a < u->nargs; a++) {
-                if (u->args[a] != p || !xi_own_use_is_consuming(u->op, a))
+                if (u->args[a] != p || !xi_own_value_arg_is_consuming(u, a))
                     continue;
                 if (u->op == XI_CALL && a >= 1) {
                     XiFunc *callee = arc_resolve_callee(f, u->args[0]);

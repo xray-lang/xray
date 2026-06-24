@@ -33,7 +33,10 @@
 #include "xi_escape.h"
 #include "xi_analysis.h"
 #include "xi_loop.h"
+#include "xi_value_query.h"
 #include "../base/xchecks.h"
+
+#include <string.h>
 
 /* ========== Helpers ========== */
 
@@ -48,12 +51,27 @@ static inline void raise_esc(XiValue *v, XiEscapeLevel level) {
 
 /* ========== Use-Site Escape Rules ========== */
 
+static bool is_channel_send_payload_arg(const XiValue *user, uint16_t arg_idx) {
+    if (!user || arg_idx != 1)
+        return false;
+    if (user->op == XI_CHAN_SEND || user->op == XI_CHAN_TRY_SEND)
+        return true;
+    if (user->op != XI_CALL_METHOD || user->nargs < 2 || !xi_value_type_is_channel(user->args[0]))
+        return false;
+    const char *method = (const char *) user->aux;
+    return method && (strcmp(method, "send") == 0 || strcmp(method, "trySend") == 0 ||
+                      strcmp(method, "sendTimeout") == 0);
+}
+
 /* Determine the escape level that a given use-site imposes on the
  * value being used. Returns the minimum escape level required. */
 static XiEscapeLevel use_escape_level(const XiValue *user, uint16_t arg_idx) {
     XR_DCHECK(user != NULL, "use_escape_level: NULL user");
     if (user->op == XI_CALL && arg_idx == 0)
         return XI_ESC_NONE; /* calling a closure does not make the closure escape */
+    if (is_channel_send_payload_arg(user, arg_idx) &&
+        xi_chan_send_transfer_mode(user) != XR_TRANSFER_MOVE)
+        return XI_ESC_NONE;
     /* Subscript store `c[k] = v` (INDEX_SET) escapes only the STORED VALUE (and
      * key) into the heap collection; the collection itself (arg 0) is merely
      * mutated and does not escape through the write. This mirrors the per-arg

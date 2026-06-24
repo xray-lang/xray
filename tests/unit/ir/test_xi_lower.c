@@ -135,6 +135,27 @@ static XiValue *func_tree_find_op(XiFunc *f, uint16_t op) {
     return NULL;
 }
 
+static XiValue *func_tree_find_method(XiFunc *f, const char *name) {
+    if (!f || !name)
+        return NULL;
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        XiBlock *blk = f->blocks[b];
+        if (!blk)
+            continue;
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            XiValue *v = blk->values[i];
+            if (v && v->op == XI_CALL_METHOD && v->aux && strcmp((const char *) v->aux, name) == 0)
+                return v;
+        }
+    }
+    for (uint16_t i = 0; i < f->nchildren; i++) {
+        XiValue *v = func_tree_find_method(f->children[i], name);
+        if (v)
+            return v;
+    }
+    return NULL;
+}
+
 static int func_tree_has_builtin_name(XiFunc *f, const char *name) {
     if (!f || !name)
         return 0;
@@ -777,6 +798,52 @@ TEST(go_arg_transfer_modes) {
     xi_func_free(share_ir);
 }
 
+TEST(channel_send_transfer_modes) {
+    XiFunc *copy_ir = lower_source("let ch: Channel<Array<int>> = Channel(1)\n"
+                                   "let xs = [1, 2]\n"
+                                   "ch.send(copy(xs))\n");
+    assert(copy_ir != NULL);
+    XiValue *copy_send = func_tree_find_op(copy_ir, XI_CHAN_SEND);
+    assert(copy_send != NULL && "copy case should lower to CHAN_SEND");
+    assert(xi_chan_send_transfer_mode(copy_send) == XR_TRANSFER_COPY &&
+           "copy(...) at a channel send boundary must be encoded as COPY transfer");
+    assert(!func_tree_has_op(copy_ir, XI_COPY) &&
+           "channel boundary copy(...) must not lower to a separate copy op before send");
+    xi_func_free(copy_ir);
+
+    XiFunc *move_ir = lower_source("let ch: Channel<Array<int>> = Channel(1)\n"
+                                   "let xs = [1, 2]\n"
+                                   "ch.send(move xs)\n");
+    assert(move_ir != NULL);
+    XiValue *move_send = func_tree_find_op(move_ir, XI_CHAN_SEND);
+    assert(move_send != NULL && "move case should lower to CHAN_SEND");
+    assert(xi_chan_send_transfer_mode(move_send) == XR_TRANSFER_MOVE &&
+           "move at a channel send boundary must be encoded as MOVE transfer");
+    assert(func_tree_has_op(move_ir, XI_MOVE) &&
+           "move transfer should still consume source ownership");
+    xi_func_free(move_ir);
+
+    XiFunc *try_ir = lower_source("let ch: Channel<Array<int>> = Channel(1)\n"
+                                  "let xs = [1, 2]\n"
+                                  "print(ch.trySend(copy(xs)))\n");
+    assert(try_ir != NULL);
+    XiValue *try_send = func_tree_find_method(try_ir, "trySend");
+    assert(try_send != NULL && "copy trySend should lower to CALL_METHOD");
+    assert(xi_chan_send_transfer_mode(try_send) == XR_TRANSFER_COPY &&
+           "copy(...) at trySend boundary must be encoded as COPY transfer");
+    xi_func_free(try_ir);
+
+    XiFunc *timeout_ir = lower_source("let ch: Channel<Array<int>> = Channel(1)\n"
+                                      "let xs = [1, 2]\n"
+                                      "print(ch.sendTimeout(copy(xs), 0))\n");
+    assert(timeout_ir != NULL);
+    XiValue *timeout_send = func_tree_find_method(timeout_ir, "sendTimeout");
+    assert(timeout_send != NULL && "copy sendTimeout should lower to CALL_METHOD");
+    assert(xi_chan_send_transfer_mode(timeout_send) == XR_TRANSFER_COPY &&
+           "copy(...) at sendTimeout boundary must be encoded as COPY transfer");
+    xi_func_free(timeout_ir);
+}
+
 TEST(defer_stmt) {
     XiFunc *f = lower_source("fn cleanup() { print(0) }\n"
                              "defer cleanup()\n"
@@ -1122,6 +1189,7 @@ int main(void) {
     run_go_await();
     run_direct_await_go_one_shot();
     run_go_arg_transfer_modes();
+    run_channel_send_transfer_modes();
     run_defer_stmt();
     run_defer_args_lower_before_defer();
     run_set_literal();

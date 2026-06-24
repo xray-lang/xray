@@ -29,6 +29,7 @@
 #include "xi_analysis.h"
 #include "xi_escape.h"
 #include "xi_ops_gen.h"
+#include "xi_value_query.h"
 #include "../runtime/value/xtype.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
@@ -103,8 +104,20 @@ XR_FUNC bool xi_own_type_may_be_ref(const XrType *type) {
  * Call arguments are conservatively owned until borrow signature inference
  * refines the contract. The per-op policy lives in generated Xi metadata
  * so ownership analysis and ARC rewriting share the same semantic table. */
-static bool use_is_consuming(uint16_t user_op, uint16_t arg_idx) {
-    return xi_own_use_is_consuming(user_op, arg_idx);
+static bool channel_send_method_payload_arg(const XiValue *user, uint16_t arg_idx) {
+    if (!user || arg_idx != 1)
+        return false;
+    if (user->op == XI_CHAN_SEND || user->op == XI_CHAN_TRY_SEND)
+        return true;
+    if (user->op != XI_CALL_METHOD || user->nargs < 2 || !xi_value_type_is_channel(user->args[0]))
+        return false;
+    const char *method = (const char *) user->aux;
+    return method && (strcmp(method, "send") == 0 || strcmp(method, "trySend") == 0 ||
+                      strcmp(method, "sendTimeout") == 0);
+}
+
+static bool use_is_consuming(const XiValue *user, uint16_t arg_idx) {
+    return xi_own_value_arg_is_consuming(user, arg_idx);
 }
 
 XR_FUNC bool xi_own_use_is_consuming(uint16_t user_op, uint16_t arg_idx) {
@@ -125,6 +138,14 @@ XR_FUNC bool xi_own_use_is_consuming(uint16_t user_op, uint16_t arg_idx) {
             return true;
     }
     return true;
+}
+
+XR_FUNC bool xi_own_value_arg_is_consuming(const XiValue *user, uint16_t arg_idx) {
+    if (!user)
+        return true;
+    if (channel_send_method_payload_arg(user, arg_idx))
+        return xi_chan_send_transfer_mode(user) == XR_TRANSFER_MOVE;
+    return xi_own_use_is_consuming(user->op, arg_idx);
 }
 
 /* ========== Last-Use Computation ========== */
@@ -179,7 +200,7 @@ static void compute_last_use(XiFunc *f, const XiDefUse *du, const XiLiveness *li
                     user = cand;
             }
             /* Unknown user (shouldn't happen) → conservatively consuming. */
-            consuming = user ? use_is_consuming(user->op, s->arg_idx) : true;
+            consuming = user ? use_is_consuming(user, s->arg_idx) : true;
         }
 
         /* A consuming use where the value is dead on block exit is the

@@ -83,7 +83,8 @@ fn chameneo(id: int, initial_color: int) {
 
     while (true) {
         try {
-            request_ch.send([id, color, reply_ch])
+            let req = [id, color, reply_ch]
+            request_ch.send(move req)
         } catch (e) {
             break  // channel closed by broker
         }

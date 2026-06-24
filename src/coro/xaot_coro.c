@@ -1848,7 +1848,8 @@ XrValue xr_aot_channel_new(const XrAotContext *ctx, int64_t buffer_size) {
     return ch ? xr_value_from_channel(ch) : XR_NULL_VAL;
 }
 
-XrValue xr_aot_chan_try_send(const XrAotContext *ctx, XrValue channel_value, XrValue send_value) {
+XrValue xr_aot_chan_try_send_transfer(const XrAotContext *ctx, XrValue channel_value,
+                                      XrValue send_value, uint8_t transfer_mode) {
     if (!ctx || !xr_value_is_channel(channel_value))
         return aot_send_result(ctx, 3);
     XrChannel *ch = xr_value_to_channel(channel_value);
@@ -1857,20 +1858,30 @@ XrValue xr_aot_chan_try_send(const XrAotContext *ctx, XrValue channel_value, XrV
     XrRuntimeCore *core = aot_context_runtime_core(ctx);
     if (!core)
         core = ch->core;
-    return aot_send_result(ctx, xr_chan_try_send_core(core, ch, send_value) ? 0 : 1);
+    return aot_send_result(
+        ctx, xr_chan_try_send_transfer_core(core, ch, send_value, transfer_mode) ? 0 : 1);
+}
+
+XrValue xr_aot_chan_try_send(const XrAotContext *ctx, XrValue channel_value, XrValue send_value) {
+    return xr_aot_chan_try_send_transfer(ctx, channel_value, send_value, XR_TRANSFER_MOVE);
+}
+
+XrValue xr_aot_chan_try_send_ready_transfer(const XrAotContext *ctx, XrValue channel_value,
+                                            XrValue send_value, uint8_t transfer_mode) {
+    if (!ctx || !xr_value_is_channel(channel_value))
+        return xr_bool(false);
+    XrChannel *ch = xr_value_to_channel(channel_value);
+    if (xr_channel_is_closed(ch))
+        return xr_bool(false);
+    XrRuntimeCore *core = aot_context_runtime_core(ctx);
+    if (!core)
+        core = ch->core;
+    return xr_bool(xr_chan_try_send_transfer_core(core, ch, send_value, transfer_mode));
 }
 
 XrValue xr_aot_chan_try_send_ready(const XrAotContext *ctx, XrValue channel_value,
                                    XrValue send_value) {
-    if (!ctx || !xr_value_is_channel(channel_value))
-        return xr_bool(false);
-    XrChannel *ch = xr_value_to_channel(channel_value);
-    if (xr_channel_is_closed(ch))
-        return xr_bool(false);
-    XrRuntimeCore *core = aot_context_runtime_core(ctx);
-    if (!core)
-        core = ch->core;
-    return xr_bool(xr_chan_try_send_core(core, ch, send_value));
+    return xr_aot_chan_try_send_ready_transfer(ctx, channel_value, send_value, XR_TRANSFER_MOVE);
 }
 
 static bool aot_context_from_channel_value(XrValue channel_value, XrAotContext *out) {
@@ -2361,13 +2372,15 @@ XrValue xr_aot_tuple_get(const XrAotContext *ctx, XrValue tuple_value, uint16_t 
     return xr_tuple_get(xr_value_to_tuple(tuple_value), index);
 }
 
-XrAotResult xr_aot_chan_send(const XrAotContext *ctx, XrValue channel_value, XrValue send_value,
-                             XrSlotRef result_slot, int64_t timeout_ms) {
+XrAotResult xr_aot_chan_send_transfer(const XrAotContext *ctx, XrValue channel_value,
+                                      XrValue send_value, XrSlotRef result_slot, int64_t timeout_ms,
+                                      uint8_t transfer_mode) {
     if (!ctx || !ctx->coro || !xr_value_is_channel(channel_value))
         return xr_aot_error(XR_NULL_VAL, false);
 
     XrChannel *ch = xr_value_to_channel(channel_value);
-    XrCoroBlockResult block = xr_coro_chan_send(ctx->coro, ch, send_value, result_slot, timeout_ms);
+    XrCoroBlockResult block = xr_coro_chan_send_transfer(ctx->coro, ch, send_value, result_slot,
+                                                         timeout_ms, transfer_mode);
     if (block.kind == XR_CORO_BLOCK_BLOCKED)
         return xr_aot_blocked();
     if (block.kind == XR_CORO_BLOCK_READY || block.kind == XR_CORO_BLOCK_TIMEOUT ||
@@ -2382,6 +2395,12 @@ XrAotResult xr_aot_chan_send(const XrAotContext *ctx, XrValue channel_value, XrV
             return aot_channel_closed_error(ctx);
     }
     return xr_aot_error(XR_NULL_VAL, false);
+}
+
+XrAotResult xr_aot_chan_send(const XrAotContext *ctx, XrValue channel_value, XrValue send_value,
+                             XrSlotRef result_slot, int64_t timeout_ms) {
+    return xr_aot_chan_send_transfer(ctx, channel_value, send_value, result_slot, timeout_ms,
+                                     XR_TRANSFER_MOVE);
 }
 
 static XrAotResult aot_chan_send_scalar(const XrAotContext *ctx, XrValue channel_value,

@@ -57,8 +57,8 @@ fn test_generic_channel() {
     assert_eq(s2, "world")
     // Channel with Array
     shared const arrCh: Channel<Array<int>> = Channel(2)
-    arrCh.send([1, 2, 3])
-    arrCh.send([4, 5, 6])
+    arrCh.send(copy([1, 2, 3]))
+    arrCh.send(copy([4, 5, 6]))
     let arr1 = recv_array(arrCh)
     let arr2 = recv_array(arrCh)
     assert_eq(arr1[0], 1)

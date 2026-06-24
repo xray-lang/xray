@@ -13,6 +13,12 @@
 #include "../runtime/value/xtype.h"
 #include <stdio.h>
 
+static void emit_channel_transfer_annotation(EmitCtx *ctx, uint8_t mode) {
+    if (mode == XR_TRANSFER_SHARE)
+        return;
+    emit_inst(ctx, CREATE_ABx(OP_NOP, 6, (uint32_t) mode));
+}
+
 /* ========== Exception Handling ========== */
 
 /* Throw */
@@ -332,6 +338,7 @@ XR_FUNC void xi_emit_chan_send(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     XiEmitReg val = reg_of(ctx, v->args[1]);
     if (ctx->status != XI_EMIT_OK)
         return;
+    emit_channel_transfer_annotation(ctx, xi_chan_send_transfer_mode(v));
     emit_inst(ctx, CREATE_ABC(OP_CHAN_SEND, dst, ch, val));
 }
 
@@ -401,6 +408,7 @@ XR_FUNC void xi_emit_chan_try_send(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     XiEmitReg val = reg_of(ctx, v->args[1]);
     if (ctx->status != XI_EMIT_OK)
         return;
+    emit_channel_transfer_annotation(ctx, xi_chan_send_transfer_mode(v));
     emit_inst(ctx, CREATE_ABC(OP_CHAN_TRY_SEND, dst, ch, val));
 }
 

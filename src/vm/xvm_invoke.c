@@ -258,7 +258,8 @@ vm_call_yieldable_primitive_method(XrayIsolate *isolate, XrVMContext *vm_ctx, Xr
 
 XR_FUNC XrDispatchAction vm_invoke_channel(XrayIsolate *isolate, XrVMContext *vm_ctx, XrChannel *ch,
                                            int method_symbol, int nargs, XrValue *base, int a,
-                                           XrBcCallFrame *frame, XrInstruction *pc) {
+                                           XrBcCallFrame *frame, XrInstruction *pc,
+                                           uint8_t transfer_mode) {
     XR_DCHECK(isolate != NULL, "vm_invoke_channel: NULL isolate");
     XR_DCHECK(ch != NULL, "vm_invoke_channel: NULL channel");
     XR_DCHECK(base != NULL, "vm_invoke_channel: NULL base");
@@ -268,7 +269,8 @@ XR_FUNC XrDispatchAction vm_invoke_channel(XrayIsolate *isolate, XrVMContext *vm
             base[a] = vm_send_result(isolate, 3);
             return XR_DISP_NEXT;
         }
-        base[a] = vm_send_result(isolate, xr_chan_try_send(isolate, ch, base[a + 2]) ? 0 : 1);
+        base[a] = vm_send_result(
+            isolate, xr_chan_try_send_transfer(isolate, ch, base[a + 2], transfer_mode) ? 0 : 1);
         return XR_DISP_NEXT;
     }
 
@@ -296,7 +298,8 @@ XR_FUNC XrDispatchAction vm_invoke_channel(XrayIsolate *isolate, XrVMContext *vm
             VM_THROW(frame, pc, XR_ERR_CORO_DEAD, "Channel is closed");
         }
         vm_suspend_replay_yielded(frame, pc);
-        XrCoroBlockResult result = xr_coro_chan_send(current, ch, base[a + 2], xr_slot_none(), -1);
+        XrCoroBlockResult result =
+            xr_coro_chan_send_transfer(current, ch, base[a + 2], xr_slot_none(), -1, transfer_mode);
         if (result.kind == XR_CORO_BLOCK_READY) {
             vm_suspend_clear_yielded(frame);
             base[a] = xr_null();
@@ -410,8 +413,8 @@ XR_FUNC XrDispatchAction vm_invoke_channel(XrayIsolate *isolate, XrVMContext *vm
         }
 
         vm_suspend_replay_current(frame, pc);
-        XrCoroBlockResult result =
-            xr_coro_chan_send(current, ch, base[a + 2], result_slot, timeout_ms);
+        XrCoroBlockResult result = xr_coro_chan_send_transfer(current, ch, base[a + 2], result_slot,
+                                                              timeout_ms, transfer_mode);
         if (result.kind == XR_CORO_BLOCK_READY) {
             vm_suspend_continue_from_next(frame, pc);
             base[a] = vm_send_result(isolate, 0);

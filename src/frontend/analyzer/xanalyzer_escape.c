@@ -242,7 +242,7 @@ static void ea_note_move_arg(EaContext *ctx, AstNode *ref_node, const char *var_
 }
 
 /*
- * Check arguments of a go call or ch.send for move expressions.
+ * Check arguments of a go call or channel send boundary for move expressions.
  * For each 'move var', keep the move visible to the normal expression walk.
  */
 static void ea_check_move_args(EaContext *ctx, AstNode **args, int arg_count) {
@@ -303,13 +303,16 @@ static void ea_check_go_shared_let_args(EaContext *ctx, AstNode **args, int arg_
 }
 
 /*
- * Check if a call expression is ch.send(move var) pattern.
- * Pattern: callee is MemberAccess with name "send", and object is a variable.
+ * Check if a call expression is a channel send boundary candidate. Precise
+ * receiver typing is handled later by the main analyzer; this pass only keeps
+ * move expressions visible to the AST walk.
  */
 static bool ea_is_channel_send(AstNode *callee) {
     if (!callee || callee->type != AST_MEMBER_ACCESS)
         return false;
-    return strcmp(callee->as.member_access.name, "send") == 0;
+    const char *name = callee->as.member_access.name;
+    return name && (strcmp(name, "send") == 0 || strcmp(name, "trySend") == 0 ||
+                    strcmp(name, "sendTimeout") == 0);
 }
 
 /*
@@ -429,14 +432,13 @@ static void ea_walk(EaContext *ctx, AstNode *node) {
             break;
         }
 
-        // ---- Call expression: check for ch.send pattern ----
+        // ---- Call expression: check for channel send boundary pattern ----
         case AST_CALL_EXPR: {
             CallExprNode *call = &node->as.call_expr;
+            ea_walk(ctx, call->callee);
             if (ea_is_channel_send(call->callee)) {
                 ea_check_move_args(ctx, call->arguments, call->arg_count);
-                ea_walk(ctx, call->callee);
             } else {
-                ea_walk(ctx, call->callee);
                 for (int i = 0; i < call->arg_count; i++) {
                     ea_walk(ctx, call->arguments[i]);
                 }

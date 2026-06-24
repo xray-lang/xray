@@ -304,6 +304,20 @@ static void xa_check_borrowed_mutator_arg_escape(XaInferContext *ctx, AstNode *c
                                &loc);
 }
 
+static bool xa_is_channel_send_boundary_method(XrType *receiver_type, const char *method_name) {
+    return receiver_type && receiver_type->kind == XR_KIND_CHANNEL && method_name &&
+           (strcmp(method_name, "send") == 0 || strcmp(method_name, "trySend") == 0 ||
+            strcmp(method_name, "sendTimeout") == 0);
+}
+
+static void xa_check_channel_send_transfer_arg(XaInferContext *ctx, AstNode *call_node,
+                                               XrType *receiver_type, const char *method_name,
+                                               AstNode *arg_node, XrType *arg_type, int slot) {
+    if (slot != 0 || !xa_is_channel_send_boundary_method(receiver_type, method_name))
+        return;
+    xa_check_boundary_transfer_arg(ctx, call_node, arg_node, arg_type, "channel send argument");
+}
+
 static XaSymbolLinks *xa_method_symbol_links_for_call(XaInferContext *ctx, XrType *receiver_type,
                                                       const char *method_name) {
     if (!ctx || !receiver_type || !method_name)
@@ -963,6 +977,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                     effective_arg_types[slot] = arg_type;
                 if (effective_arg_modes && slot < arg_count)
                     effective_arg_modes[slot] = xa_call_param_mode(callee_type, slot);
+                xa_check_channel_send_transfer_arg(ctx, node, callee_obj_type, method_name,
+                                                   arg_node, arg_type, slot);
                 if (slot >= param_count)
                     continue;
                 XrType *param_type = param_types ? param_types[slot] : NULL;
@@ -1009,6 +1025,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         ctx->expected_type = saved_expected;
         if (effective_arg_types && slot < arg_count)
             effective_arg_types[slot] = arg_type;
+        xa_check_channel_send_transfer_arg(ctx, node, callee_obj_type, method_name, arg_node,
+                                           arg_type, slot);
         uint8_t param_mode = xa_call_param_mode(callee_type, slot);
         if (effective_arg_modes && slot < arg_count)
             effective_arg_modes[slot] = param_mode;

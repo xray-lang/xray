@@ -195,13 +195,13 @@ fn test_coro_chain() {
 fn test_execution_trace() {
     let trace = Channel(20)
     fn traced_task(id) {
-        trace.send({ "event" => "start", "id" => id })
+        trace.send(copy({ "event" => "start", "id" => id }))
         // 模拟工作
         let sum = 0
         for (let i = 0; i < 100; i++) {
             sum = sum + i
         }
-        trace.send({ "event" => "end", "id" => id })
+        trace.send(copy({ "event" => "end", "id" => id }))
         return sum
     }
     let t1 = go traced_task(1)

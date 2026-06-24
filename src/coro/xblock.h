@@ -56,6 +56,9 @@ XR_FUNC XrCoroBlockResult xr_coro_chan_recv_resume(struct XrCoroutine *coro, XrS
 
 XR_FUNC XrCoroBlockResult xr_coro_chan_send(struct XrCoroutine *coro, XrChannel *ch, XrValue value,
                                             XrSlotRef result_slot, int64_t timeout_ms);
+XR_FUNC XrCoroBlockResult xr_coro_chan_send_transfer(struct XrCoroutine *coro, XrChannel *ch,
+                                                     XrValue value, XrSlotRef result_slot,
+                                                     int64_t timeout_ms, uint8_t transfer_mode);
 /* deliver=true registers value_slot+ok_slot for waker-side delivery: when
  * the woken value needs no receive-side deep copy, the waker stores value+ok
  * directly and the coroutine can resume without replaying the channel

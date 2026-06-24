@@ -1168,6 +1168,9 @@ static void emit_typed_array_ptr_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f
         return;
     if (cg_array_value_uses_native_local(ctx, f, value)) {
         emit_vref(out, value);
+        if (f && cg_func_needs_aot_coro_ctx(ctx, f) &&
+            cg_value_plan_storage_rep(ctx, value) != XR_REP_PTR)
+            fprintf(out, ".ptr");
         return;
     }
     fprintf(out, "(");
