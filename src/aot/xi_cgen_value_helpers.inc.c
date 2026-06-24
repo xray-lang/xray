@@ -375,7 +375,10 @@ static void emit_enum_type_expr(XiCgenCtx *ctx, FILE *out, const XiEnumData *ed)
         fprintf(out, "XR_NULL_VAL");
         return;
     }
-    fprintf(out, "({ XrValue _e = xrt_map_new(%u); ", (unsigned) ed->member_count);
+    fprintf(out,
+            "({ XrValue _e = xrt_map_new(%u); ((xrt_map_t*)_e.ptr)->flags |= "
+            "XR_MAP_FLAG_ENUM_TYPE; ",
+            (unsigned) ed->member_count);
     for (uint32_t i = 0; i < ed->member_count; i++) {
         const XiEnumMemberData *member = &ed->members[i];
         const char *name = member->name ? member->name : "";
@@ -467,7 +470,10 @@ static bool emit_prelude_enum_type_expr(FILE *out, int builtin_index) {
     const CgPreludeEnumData *ed = cg_prelude_enum_data(builtin_index);
     if (!ed)
         return false;
-    fprintf(out, "({ XrValue _e = xrt_map_new(%u); ", (unsigned) ed->member_count);
+    fprintf(out,
+            "({ XrValue _e = xrt_map_new(%u); ((xrt_map_t*)_e.ptr)->flags |= "
+            "XR_MAP_FLAG_ENUM_TYPE; ",
+            (unsigned) ed->member_count);
     for (uint32_t i = 0; i < ed->member_count; i++) {
         fprintf(out, "xrt_map_set((xrt_map_t*)_e.ptr, xr_box_str(\"%s\"), ", ed->members[i].name);
         emit_prelude_enum_member_value_expr(out, ed, i);
