@@ -41,6 +41,16 @@ static inline XrValue make_string_slice(XrVMRuntime *X, XrPathCoreSlice slice) {
     return make_string_n(X, slice.data, slice.len);
 }
 
+static void *path_core_alloc(void *ctx, size_t size) {
+    (void) ctx;
+    return xr_malloc(size);
+}
+
+static void path_core_free(void *ctx, void *ptr) {
+    (void) ctx;
+    xr_free(ptr);
+}
+
 /* ========== Path Operations ========== */
 
 // join(...) - Join multiple path segments
@@ -166,33 +176,8 @@ static XrValue path_isAbsolute(XrVMRuntime *X, XrValue *args, int argc) {
 }
 
 static bool path_normalize_alloc(const char *path, size_t len, char **out, size_t *out_len) {
-    if (!out || !out_len)
-        return false;
-    *out = NULL;
-    *out_len = 0;
-    size_t max_segs = xr_path_core_normalize_segment_cap(len);
-    size_t *seg_buf = (size_t *) xr_malloc(sizeof(size_t) * max_segs * 2);
-    if (!seg_buf)
-        return false;
-    size_t *seg_starts = seg_buf;
-    size_t *seg_lens = seg_buf + max_segs;
-    size_t seg_count = 0;
-    bool is_absolute = false;
-    if (!xr_path_core_normalize_plan(path, len, seg_starts, seg_lens, max_segs, &seg_count,
-                                     &is_absolute, out_len)) {
-        xr_free(seg_buf);
-        return false;
-    }
-
-    char *result = (char *) xr_malloc(*out_len + 1);
-    if (!result) {
-        xr_free(seg_buf);
-        return false;
-    }
-    xr_path_core_normalize_write(path, seg_starts, seg_lens, seg_count, is_absolute, result);
-    xr_free(seg_buf);
-    *out = result;
-    return true;
+    return xr_path_core_normalize_alloc(path, len, path_core_alloc, path_core_free, NULL, out,
+                                        out_len);
 }
 
 // normalize(path) - Normalize path (resolve . and ..)
