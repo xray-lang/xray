@@ -1,8 +1,10 @@
-class PanicInfo {
+// A user-defined (non-enum) class is not a valid throw payload either; business
+// errors must be enum values.
+class MyError {
     message: string
     constructor(message: string) {
         this.message = message
     }
 }
 
-throw PanicInfo("boom")
+throw MyError("boom")

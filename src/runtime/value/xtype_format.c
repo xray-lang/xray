@@ -210,8 +210,8 @@ const char *xr_type_to_string(XrType *type) {
         return "BigInt";
     if (xr_type_is_named_class(type, "StringBuilder"))
         return "StringBuilder";
-    if (xr_type_is_named_class(type, "Exception"))
-        return "Exception";
+    if (xr_type_is_named_class(type, "PanicInfo"))
+        return "PanicInfo";
     if (type->kind == XR_KIND_ENUM) {
         return type->enum_type.enum_name ? type->enum_type.enum_name : "Enum";
     }

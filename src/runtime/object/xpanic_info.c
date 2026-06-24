@@ -7,14 +7,14 @@
  *
  * xexception.c - Exception runtime API on top of XrInstance
  *
- * Exception is a regular class registered into core->exceptionClass
- * (built by xr_register_exception_class below; called from
+ * Exception is a regular class registered into core->panicInfoClass
+ * (built by xr_register_panic_info_class below; called from
  * xr_core_init). All field access here is direct indexing into
- * XrInstance.fields[] using the EXCEPTION_FIELD_* indices fixed in
+ * XrInstance.fields[] using the PANIC_INFO_FIELD_* indices fixed in
  * xclass_system.h.
  */
 
-#include "xexception.h"
+#include "xpanic_info.h"
 #include "../../base/xchecks.h"
 #include "../xerror_impl.h"
 #include "../xisolate_api.h"
@@ -34,7 +34,7 @@
 /* ========== Local helpers ========== */
 
 static XrInstance *exception_instance(XrayIsolate *X, XrValue v) {
-    if (!xr_value_is_exception(X, v))
+    if (!xr_value_is_panic_info(X, v))
         return NULL;
     return (XrInstance *) XR_TO_PTR(v);
 }
@@ -43,27 +43,27 @@ static XrClass *exception_class(XrayIsolate *X) {
     XR_DCHECK(X != NULL, "exception: NULL isolate");
     XrayCoreClasses *core = xr_isolate_get_core_classes(X);
     XR_DCHECK(core != NULL, "exception: core not initialised");
-    XR_DCHECK(core->exceptionClass != NULL,
-              "exception: core->exceptionClass not registered (core_init incomplete)");
-    return core->exceptionClass;
+    XR_DCHECK(core->panicInfoClass != NULL,
+              "exception: core->panicInfoClass not registered (core_init incomplete)");
+    return core->panicInfoClass;
 }
 
 /* ========== Type Check ========== */
 
-bool xr_value_is_exception(XrayIsolate *X, XrValue v) {
-    XR_DCHECK(X != NULL, "xr_value_is_exception: NULL isolate");
+bool xr_value_is_panic_info(XrayIsolate *X, XrValue v) {
+    XR_DCHECK(X != NULL, "xr_value_is_panic_info: NULL isolate");
     if (!XR_IS_INSTANCE(v))
         return false;
     XrInstance *inst = (XrInstance *) XR_TO_PTR(v);
     XrayCoreClasses *core = xr_isolate_get_core_classes(X);
-    if (!core || !core->exceptionClass)
+    if (!core || !core->panicInfoClass)
         return false;
-    return xr_class_instanceof(inst->klass, core->exceptionClass);
+    return xr_class_instanceof(inst->klass, core->panicInfoClass);
 }
 
 /* ========== Construction ========== */
 
-XrValue xr_exception_new(XrayIsolate *X, XrErrorCode code, const char *message) {
+XrValue xr_panic_info_new(XrayIsolate *X, XrErrorCode code, const char *message) {
     XR_DCHECK(X != NULL, "exception_new: NULL isolate");
     XrClass *cls = exception_class(X);
     XrInstance *inst = xr_instance_new(X, cls);
@@ -74,19 +74,19 @@ XrValue xr_exception_new(XrayIsolate *X, XrErrorCode code, const char *message) 
     if (message) {
         msg = xr_string_intern(X, message, strlen(message), 0);
     }
-    inst->fields[EXCEPTION_FIELD_MESSAGE] = msg ? XR_FROM_PTR(msg) : xr_null();
+    inst->fields[PANIC_INFO_FIELD_MESSAGE] = msg ? XR_FROM_PTR(msg) : xr_null();
 
     XrArray *stack = xr_array_new(xr_current_coro(X));
-    inst->fields[EXCEPTION_FIELD_STACK] = stack ? xr_value_from_array(stack) : xr_null();
+    inst->fields[PANIC_INFO_FIELD_STACK] = stack ? xr_value_from_array(stack) : xr_null();
 
-    inst->fields[EXCEPTION_FIELD_CAUSE] = xr_null();
-    inst->fields[EXCEPTION_FIELD_CODE] = xr_int((int64_t) code);
-    inst->fields[EXCEPTION_FIELD_DATA] = xr_null();
+    inst->fields[PANIC_INFO_FIELD_CAUSE] = xr_null();
+    inst->fields[PANIC_INFO_FIELD_CODE] = xr_int((int64_t) code);
+    inst->fields[PANIC_INFO_FIELD_DATA] = xr_null();
 
     return xr_value_from_instance(inst);
 }
 
-XrValue xr_exception_newf(XrayIsolate *X, XrErrorCode code, const char *fmt, ...) {
+XrValue xr_panic_info_newf(XrayIsolate *X, XrErrorCode code, const char *fmt, ...) {
     XR_DCHECK(X != NULL, "exception_newf: NULL isolate");
     XR_DCHECK(fmt != NULL, "exception_newf: NULL fmt");
     char buffer[512];
@@ -94,13 +94,13 @@ XrValue xr_exception_newf(XrayIsolate *X, XrErrorCode code, const char *fmt, ...
     va_start(args, fmt);
     vsnprintf(buffer, sizeof(buffer), fmt, args);
     va_end(args);
-    return xr_exception_new(X, code, buffer);
+    return xr_panic_info_new(X, code, buffer);
 }
 
-XrValue xr_exception_from_error(XrayIsolate *X, XrError *error) {
+XrValue xr_panic_info_from_error(XrayIsolate *X, XrError *error) {
     XR_DCHECK(X != NULL, "exception_from_error: NULL isolate");
     if (!error) {
-        return xr_exception_new(X, XR_ERR_UNKNOWN, "Unknown error");
+        return xr_panic_info_new(X, XR_ERR_UNKNOWN, "Unknown error");
     }
 
     XrClass *cls = exception_class(X);
@@ -108,65 +108,65 @@ XrValue xr_exception_from_error(XrayIsolate *X, XrError *error) {
     if (!inst)
         return xr_null();
 
-    inst->fields[EXCEPTION_FIELD_MESSAGE] =
+    inst->fields[PANIC_INFO_FIELD_MESSAGE] =
         error->message ? XR_FROM_PTR(error->message) : xr_null();
 
     XrArray *stack = xr_array_new(xr_current_coro(X));
-    inst->fields[EXCEPTION_FIELD_STACK] = stack ? xr_value_from_array(stack) : xr_null();
+    inst->fields[PANIC_INFO_FIELD_STACK] = stack ? xr_value_from_array(stack) : xr_null();
 
-    inst->fields[EXCEPTION_FIELD_CAUSE] = xr_null();
-    inst->fields[EXCEPTION_FIELD_CODE] = xr_int((int64_t) error->code);
-    inst->fields[EXCEPTION_FIELD_DATA] = xr_null();
+    inst->fields[PANIC_INFO_FIELD_CAUSE] = xr_null();
+    inst->fields[PANIC_INFO_FIELD_CODE] = xr_int((int64_t) error->code);
+    inst->fields[PANIC_INFO_FIELD_DATA] = xr_null();
 
     return xr_value_from_instance(inst);
 }
 
-XrValue xr_exception_from_value(XrayIsolate *X, XrValue value) {
+XrValue xr_panic_info_from_value(XrayIsolate *X, XrValue value) {
     XR_DCHECK(X != NULL, "exception_from_value: NULL isolate");
-    if (xr_value_is_exception(X, value))
+    if (xr_value_is_panic_info(X, value))
         return value;
 
     if (XR_IS_PTR(value)) {
         XrObjHeader *gc = (XrObjHeader *) XR_TO_PTR(value);
         if (XR_OBJ_GET_TYPE(gc) == XR_TERROR) {
-            return xr_exception_from_error(X, (XrError *) gc);
+            return xr_panic_info_from_error(X, (XrError *) gc);
         }
     }
 
-    XrValue exc = xr_exception_new(X, XR_ERR_RUNTIME, "Value thrown as exception");
+    XrValue exc = xr_panic_info_new(X, XR_ERR_RUNTIME, "Value thrown as exception");
     XrInstance *inst = exception_instance(X, exc);
     if (inst) {
-        inst->fields[EXCEPTION_FIELD_DATA] = value;
+        inst->fields[PANIC_INFO_FIELD_DATA] = value;
     }
     return exc;
 }
 
 /* ========== Field Accessors ========== */
 
-XrErrorCode xr_exception_get_code(XrayIsolate *X, XrValue exception) {
+XrErrorCode xr_panic_info_get_code(XrayIsolate *X, XrValue exception) {
     XrInstance *inst = exception_instance(X, exception);
     if (!inst)
         return XR_ERR_UNKNOWN;
-    XrValue v = inst->fields[EXCEPTION_FIELD_CODE];
+    XrValue v = inst->fields[PANIC_INFO_FIELD_CODE];
     return XR_IS_INT(v) ? (XrErrorCode) XR_TO_INT(v) : XR_ERR_UNKNOWN;
 }
 
-const char *xr_exception_get_message(XrayIsolate *X, XrValue exception) {
+const char *xr_panic_info_get_message(XrayIsolate *X, XrValue exception) {
     XrInstance *inst = exception_instance(X, exception);
     if (!inst)
         return "Not an exception";
-    XrValue v = inst->fields[EXCEPTION_FIELD_MESSAGE];
+    XrValue v = inst->fields[PANIC_INFO_FIELD_MESSAGE];
     if (!XR_IS_STRING(v))
         return "";
     XrString *s = (XrString *) XR_TO_PTR(v);
     return s->data;
 }
 
-XrValue xr_exception_get_stacktrace(XrayIsolate *X, XrValue exception) {
+XrValue xr_panic_info_get_stacktrace(XrayIsolate *X, XrValue exception) {
     XrInstance *inst = exception_instance(X, exception);
     if (!inst)
         return xr_null();
-    XrValue v = inst->fields[EXCEPTION_FIELD_STACK];
+    XrValue v = inst->fields[PANIC_INFO_FIELD_STACK];
     if (XR_IS_ARRAY(v))
         return v;
     // Lazily create the stack array if it was nulled out (defensive).
@@ -174,26 +174,26 @@ XrValue xr_exception_get_stacktrace(XrayIsolate *X, XrValue exception) {
     if (!stack)
         return xr_null();
     XrValue av = xr_value_from_array(stack);
-    inst->fields[EXCEPTION_FIELD_STACK] = av;
+    inst->fields[PANIC_INFO_FIELD_STACK] = av;
     return av;
 }
 
-XrValue xr_exception_get_data(XrayIsolate *X, XrValue exception) {
+XrValue xr_panic_info_get_data(XrayIsolate *X, XrValue exception) {
     XrInstance *inst = exception_instance(X, exception);
     if (!inst)
         return xr_null();
-    return inst->fields[EXCEPTION_FIELD_DATA];
+    return inst->fields[PANIC_INFO_FIELD_DATA];
 }
 
 /* ========== Stack Trace ========== */
 
-void xr_exception_add_frame(XrayIsolate *X, XrValue exception, const char *funcName, int line) {
+void xr_panic_info_add_frame(XrayIsolate *X, XrValue exception, const char *funcName, int line) {
     XR_DCHECK(funcName != NULL, "exception_add_frame: NULL funcName");
     XrInstance *inst = exception_instance(X, exception);
     if (!inst)
         return;
 
-    XrValue stack_val = inst->fields[EXCEPTION_FIELD_STACK];
+    XrValue stack_val = inst->fields[PANIC_INFO_FIELD_STACK];
     XrArray *stack;
     if (XR_IS_ARRAY(stack_val)) {
         stack = (XrArray *) XR_TO_PTR(stack_val);
@@ -201,7 +201,7 @@ void xr_exception_add_frame(XrayIsolate *X, XrValue exception, const char *funcN
         stack = xr_array_new(xr_current_coro(X));
         if (!stack)
             return;
-        inst->fields[EXCEPTION_FIELD_STACK] = xr_value_from_array(stack);
+        inst->fields[PANIC_INFO_FIELD_STACK] = xr_value_from_array(stack);
     }
 
     char frameStr[256];
@@ -215,7 +215,7 @@ void xr_exception_add_frame(XrayIsolate *X, XrValue exception, const char *funcN
 /* ========== Primitive Class Methods ==========
  *
  * These run from vm_invoke_class / vm_superinvoke as XMETHOD_PRIMITIVE
- * entries on core->exceptionClass. They receive the pre-allocated
+ * entries on core->panicInfoClass. They receive the pre-allocated
  * XrInstance via `self` (either Exception or a subclass — Exception
  * fields occupy indices 0..4 regardless), write parent fields by index,
  * and return the same value back so the caller's base[a] points at it.
@@ -236,17 +236,17 @@ static XrValue exception_primitive_constructor(XrayIsolate *X, XrValue self, XrV
     } else {
         msg_str = xr_string_intern(X, "", 0, 0);
     }
-    inst->fields[EXCEPTION_FIELD_MESSAGE] = msg_str ? XR_FROM_PTR(msg_str) : xr_null();
+    inst->fields[PANIC_INFO_FIELD_MESSAGE] = msg_str ? XR_FROM_PTR(msg_str) : xr_null();
 
     // stack: Array<string> — fresh empty array per instance
     XrArray *stack = xr_array_new(xr_current_coro(X));
-    inst->fields[EXCEPTION_FIELD_STACK] = stack ? xr_value_from_array(stack) : xr_null();
+    inst->fields[PANIC_INFO_FIELD_STACK] = stack ? xr_value_from_array(stack) : xr_null();
 
     // cause: Exception? = null
-    if (argc >= 2 && xr_value_is_exception(X, args[1])) {
-        inst->fields[EXCEPTION_FIELD_CAUSE] = args[1];
+    if (argc >= 2 && xr_value_is_panic_info(X, args[1])) {
+        inst->fields[PANIC_INFO_FIELD_CAUSE] = args[1];
     } else {
-        inst->fields[EXCEPTION_FIELD_CAUSE] = xr_null();
+        inst->fields[PANIC_INFO_FIELD_CAUSE] = xr_null();
     }
 
     // code: int — auto-detect from "E0xxx: ..." message prefix, else 0.
@@ -262,10 +262,10 @@ static XrValue exception_primitive_constructor(XrayIsolate *X, XrValue self, XrV
         if (n >= 3)
             code = atoi(buf);
     }
-    inst->fields[EXCEPTION_FIELD_CODE] = xr_int(code);
+    inst->fields[PANIC_INFO_FIELD_CODE] = xr_int(code);
 
-    // data: Json? = null (used by xr_exception_from_value to wrap thrown values)
-    inst->fields[EXCEPTION_FIELD_DATA] = xr_null();
+    // data: Json? = null (used by xr_panic_info_from_value to wrap thrown values)
+    inst->fields[PANIC_INFO_FIELD_DATA] = xr_null();
 
     return self;
 }
@@ -278,9 +278,9 @@ static XrValue exception_primitive_to_string(XrayIsolate *X, XrValue self, XrVal
         return xr_null();
 
     XrInstance *inst = (XrInstance *) XR_TO_PTR(self);
-    const char *class_name = inst->klass && inst->klass->name ? inst->klass->name : "Exception";
+    const char *class_name = inst->klass && inst->klass->name ? inst->klass->name : "PanicInfo";
     const char *message = "";
-    XrValue msg_val = inst->fields[EXCEPTION_FIELD_MESSAGE];
+    XrValue msg_val = inst->fields[PANIC_INFO_FIELD_MESSAGE];
     if (XR_IS_STRING(msg_val)) {
         message = ((XrString *) XR_TO_PTR(msg_val))->data;
     }
@@ -299,21 +299,21 @@ static XrValue exception_primitive_to_string(XrayIsolate *X, XrValue self, XrVal
  *
  * Called from xr_core_init after Object is ready. Builds the Exception
  * class with 5 fields and 2 primitive methods, then asserts that field
- * indices match the EXCEPTION_FIELD_* constants — any drift between
+ * indices match the PANIC_INFO_FIELD_* constants — any drift between
  * builder ordering and the constants would silently corrupt every throw.
  */
 
-void xr_register_exception_class(XrayIsolate *X) {
+void xr_register_panic_info_class(XrayIsolate *X) {
     XR_DCHECK(X != NULL, "register_exception_class: NULL isolate");
     XrayCoreClasses *core = xr_isolate_get_core_classes(X);
     XR_DCHECK(core != NULL, "register_exception_class: core not initialised");
     XR_DCHECK(core->objectClass != NULL, "register_exception_class: Object not registered yet");
-    XR_DCHECK(core->exceptionClass == NULL, "register_exception_class: already registered");
+    XR_DCHECK(core->panicInfoClass == NULL, "register_exception_class: already registered");
 
-    XrClassBuilder *builder = xr_class_builder_new(X, TYPE_NAME_EXCEPTION, core->objectClass);
+    XrClassBuilder *builder = xr_class_builder_new(X, TYPE_NAME_PANIC_INFO, core->objectClass);
     XR_CHECK(builder != NULL, "register_exception_class: builder alloc failed");
 
-    /* Field order MUST match EXCEPTION_FIELD_* in xclass_system.h. */
+    /* Field order MUST match PANIC_INFO_FIELD_* in xclass_system.h. */
     xr_class_builder_add_field(builder, "message", 0);
     xr_class_builder_add_field(builder, "stack", 0);
     xr_class_builder_add_field(builder, "cause", 0);
@@ -328,41 +328,41 @@ void xr_register_exception_class(XrayIsolate *X) {
     XrClass *cls = xr_class_builder_finalize(builder);
     XR_CHECK(cls != NULL, "register_exception_class: finalize failed");
     cls->flags |= XR_CLASS_BUILTIN;
-    cls->builtin_kind = XR_BK_EXCEPTION;
+    cls->builtin_kind = XR_BK_PANIC_INFO;
 
     /* Sanity-check that builder layout matches the indices the entire VM
      * relies on. If finalize ever reorders fields these asserts trip
      * immediately at init, not at the first throw. */
-    XR_DCHECK(xr_class_lookup_field_by_name(X, cls, "message") == EXCEPTION_FIELD_MESSAGE,
+    XR_DCHECK(xr_class_lookup_field_by_name(X, cls, "message") == PANIC_INFO_FIELD_MESSAGE,
               "Exception field 'message' index drift");
-    XR_DCHECK(xr_class_lookup_field_by_name(X, cls, "stack") == EXCEPTION_FIELD_STACK,
+    XR_DCHECK(xr_class_lookup_field_by_name(X, cls, "stack") == PANIC_INFO_FIELD_STACK,
               "Exception field 'stack' index drift");
-    XR_DCHECK(xr_class_lookup_field_by_name(X, cls, "cause") == EXCEPTION_FIELD_CAUSE,
+    XR_DCHECK(xr_class_lookup_field_by_name(X, cls, "cause") == PANIC_INFO_FIELD_CAUSE,
               "Exception field 'cause' index drift");
-    XR_DCHECK(xr_class_lookup_field_by_name(X, cls, "code") == EXCEPTION_FIELD_CODE,
+    XR_DCHECK(xr_class_lookup_field_by_name(X, cls, "code") == PANIC_INFO_FIELD_CODE,
               "Exception field 'code' index drift");
-    XR_DCHECK(xr_class_lookup_field_by_name(X, cls, "data") == EXCEPTION_FIELD_DATA,
+    XR_DCHECK(xr_class_lookup_field_by_name(X, cls, "data") == PANIC_INFO_FIELD_DATA,
               "Exception field 'data' index drift");
 
-    core->exceptionClass = cls;
+    core->panicInfoClass = cls;
 }
 
 /* ========== Output ========== */
 
-void xr_exception_print(XrayIsolate *X, XrValue exception) {
+void xr_panic_info_print(XrayIsolate *X, XrValue exception) {
     XrInstance *inst = exception_instance(X, exception);
     if (!inst) {
         fprintf(stderr, "Error: Not an exception object\n");
         return;
     }
 
-    XrErrorCode code = xr_exception_get_code(X, exception);
-    const char *message = xr_exception_get_message(X, exception);
+    XrErrorCode code = xr_panic_info_get_code(X, exception);
+    const char *message = xr_panic_info_get_message(X, exception);
     fprintf(stderr, "\033[1;31mUncaught %s [%d]:\033[0m %s\n",
-            inst->klass && inst->klass->name ? inst->klass->name : "Exception", (int) code,
+            inst->klass && inst->klass->name ? inst->klass->name : "PanicInfo", (int) code,
             message ? message : "");
 
-    XrValue stack_val = inst->fields[EXCEPTION_FIELD_STACK];
+    XrValue stack_val = inst->fields[PANIC_INFO_FIELD_STACK];
     if (XR_IS_ARRAY(stack_val)) {
         XrArray *stack = (XrArray *) XR_TO_PTR(stack_val);
         if (stack->length > 0) {

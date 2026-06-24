@@ -30,7 +30,7 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 | 精确浮点 | `float32`、`float64` |
 | 容器 | `Array<T>`、`Map<K,V>`、`Set<T>`、`Channel<T>`、`Bytes`（即 `Array<uint8>`） |
 | 特殊 | `Json`、`BigInt`、`Range`、`DateTime`、`Regex`、`StringBuilder`、`Logger`、`NetConn`、`NetListener` |
-| 错误处理 prelude | `Exception`（见 §8） |
+| 错误处理 prelude | `PanicInfo`（见 §8） |
 | 弱引用容器 | `WeakMap`、`WeakSet` |
 | Nullable | `T?` |
 | Union | `A \| B \| ...` |
@@ -521,7 +521,7 @@ Xray is statically typed; every expression has a determined type at compile time
 | Sized floats | `float32`, `float64` |
 | Containers | `Array<T>`, `Map<K,V>`, `Set<T>`, `Channel<T>`, `Bytes` (equivalent to `Array<uint8>`) |
 | Special | `Json`, `BigInt`, `Range`, `DateTime`, `Regex`, `StringBuilder`, `Logger`, `NetConn`, `NetListener` |
-| Error-handling prelude | `Exception` (see §8) |
+| Error-handling prelude | `PanicInfo` (see §8) |
 | Weak containers | `WeakMap`, `WeakSet` |
 | Nullable | `T?` |
 | Union | `A \| B \| ...` |

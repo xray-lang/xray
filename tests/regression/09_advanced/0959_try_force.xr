@@ -1,5 +1,5 @@
 /*
-** Exception propagation via try-catch (migrated from try!).
+** PanicInfo propagation via try-catch (migrated from try!).
 ** When a called function throws, the exception propagates naturally.
 ** The surrounding try-catch can still handle it.
 */

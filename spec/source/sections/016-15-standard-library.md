@@ -16,7 +16,7 @@ order: 016
 >
 > `base64`、`cluster`、`compress`、`crypto`、`csv`、`datetime`、`encoding`、`mem`、`http`、`io`、`log`、`math`、`net`、`os`、`path`、`regex`、`time`、`toml`、`url`、`ws`、`xml`、`yaml`。
 >
-> 不需要 import 的内置类型由 prelude 注册（`Array` `Map` `Set` `Json` `Channel` `Bytes` `BigInt` `StringBuilder` `Exception` `Regex` `Logger` `NetConn` `NetListener` 等）。详见 §1.5.6 / §2.2。
+> 不需要 import 的内置类型由 prelude 注册（`Array` `Map` `Set` `Json` `Channel` `Bytes` `BigInt` `StringBuilder` `PanicInfo` `Regex` `Logger` `NetConn` `NetListener` 等）。详见 §1.5.6 / §2.2。
 
 ### 15.1 文件 IO 与系统
 
@@ -145,7 +145,7 @@ TLS client 路径通过 `dialTLS(host, port, timeout?)` 和 `upgradeTLS(conn, ho
 >
 > `base64`, `cluster`, `compress`, `crypto`, `csv`, `datetime`, `encoding`, `mem`, `http`, `io`, `log`, `math`, `net`, `os`, `path`, `regex`, `time`, `toml`, `url`, `ws`, `xml`, `yaml`.
 >
-> Built-in types that need no import are registered by the prelude (`Array`, `Map`, `Set`, `Json`, `Channel`, `Bytes`, `BigInt`, `StringBuilder`, `Exception`, `Regex`, `Logger`, `NetConn`, `NetListener`, etc.). See §1.5.6 / §2.2.
+> Built-in types that need no import are registered by the prelude (`Array`, `Map`, `Set`, `Json`, `Channel`, `Bytes`, `BigInt`, `StringBuilder`, `PanicInfo`, `Regex`, `Logger`, `NetConn`, `NetListener`, etc.). See §1.5.6 / §2.2.
 
 ### 15.1 File I/O and System
 

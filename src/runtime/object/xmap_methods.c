@@ -13,7 +13,7 @@
 #include "xmap_vm.h"
 #include "xarray.h"
 #include "xiterator.h"
-#include "xexception.h"
+#include "xpanic_info.h"
 #include "xstring.h"
 #include "../closure/xclosure.h"
 #include "../../vm/xvm_closure.h"
@@ -62,9 +62,9 @@ static XrValue xr_map_method_set(XrayIsolate *iso, XrValue self, XrValue *args, 
     XrMap *m = map_self(self);
     /* WeakMap contract: key must be a heap object. */
     if (map_is_weak(m) && argc >= 1 && !XR_VALUE_NEEDS_GC(args[0])) {
-        XrValue exc = xr_exception_newf(iso, XR_ERR_INVALID_ARG_TYPE,
-                                        "WeakMap key must be a heap object, got %s",
-                                        xr_typeid_name(xr_value_typeid(args[0])));
+        XrValue exc = xr_panic_info_newf(iso, XR_ERR_INVALID_ARG_TYPE,
+                                         "WeakMap key must be a heap object, got %s",
+                                         xr_typeid_name(xr_value_typeid(args[0])));
         xr_vm_unwind_with_trace(iso, exc);
         return xr_null();
     }

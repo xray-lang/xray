@@ -16,12 +16,12 @@ Xray 的错误处理分为两个严格分离的通道：
 
 | 通道 | 语法 | 适用场景 | 运行时开销 |
 |--|--|--|--|
-| **值返回通道**（`throw <enum>` / `try` / `catch`） | 业务错误、可恢复失败 | **低开销**（不分配 `Exception`、不 unwind；需传播/捕获错误的调用边界只有可预测分支） |
+| **值返回通道**（`throw <enum>` / `try` / `catch`） | 业务错误、可恢复失败 | **低开销**（不分配 `PanicInfo`、不 unwind；需传播/捕获错误的调用边界只有可预测分支） |
 | **panic 通道**（`catch panic`） | 运行时故障（越界、除零、不完整 match） | 有限栈展开 |
 
 设计原则：
 
-- **错误是值**：`throw <enum>` 把枚举值写入返回通道，不展开栈、不分配 Exception 对象。
+- **错误是值**：`throw <enum>` 把枚举值写入返回通道，不展开栈、不分配 PanicInfo 对象。
 - **panic 不是错误**：panic 表示程序 bug 或运行时不变量违背，不应用于业务逻辑。
 - **函数签名不标 `throws`**：xray 不引入 Java/Swift 的受检异常语义。错误通过 throw/catch 值返回通道处理。
 - **`defer` 替代 `finally`**：xray 没有 `finally` 关键字，资源清理统一用函数作用域的 `defer`（Go 模型）。
@@ -192,7 +192,7 @@ panic 表示**程序 bug 或运行时不变量违背**，不应用于业务逻�
 - 空引用解引用
 - 运行时类型断言失败
 
-panic 通过有限的栈展开传播，生成 `Exception` 对象携带堆栈信息。
+panic 通过有限的栈展开传播，生成 `PanicInfo` 对象携带堆栈信息。
 
 #### 8.2.2 `catch panic`
 
@@ -227,25 +227,25 @@ try {
 }
 ```
 
-#### 8.2.3 `Exception` 类
+#### 8.2.3 `PanicInfo` 类
 
-`Exception` 现在**仅用于 panic 通道**。运行时故障发生时，VM 自动构造 `Exception` 对象：
+`PanicInfo` 现在**仅用于 panic 通道**。运行时故障发生时，VM 自动构造 `PanicInfo` 对象：
 
 ```xray
 @native
-class Exception {
+class PanicInfo {
     message: string             // 人类可读消息（如 "index out of bounds"）
     stack: Array<string>        // 自动捕获的调用栈
-    cause: Exception?           // 链式 cause
+    cause: PanicInfo?           // 链式 cause
     code: int                   // 错误码
     data: Json?                 // 附加数据
 
-    constructor(message: string = "", cause: Exception? = null)
+    constructor(message: string = "", cause: PanicInfo? = null)
     fn toString() -> string
 }
 ```
 
-用户代码一般不直接构造 `Exception`——业务错误用 `throw <enum>`。
+用户代码一般不直接构造 `PanicInfo`——业务错误用 `throw <enum>`。
 
 ### 8.3 `defer` — 资源清理
 
@@ -408,12 +408,12 @@ Xray's error handling is split into two strictly separated channels:
 
 | Channel | Syntax | Use case | Runtime cost |
 |--|--|--|--|
-| **Value-return channel** (`throw <enum>` / `try` / `catch`) | Business errors, recoverable failures | **Low overhead** (no `Exception` allocation and no unwind; only a predictable branch at call boundaries that may propagate or catch errors) |
+| **Value-return channel** (`throw <enum>` / `try` / `catch`) | Business errors, recoverable failures | **Low overhead** (no `PanicInfo` allocation and no unwind; only a predictable branch at call boundaries that may propagate or catch errors) |
 | **Panic channel** (`catch panic`) | Runtime faults (OOB, division by zero, non-exhaustive match) | Limited stack unwinding |
 
 Design principles:
 
-- **Errors are values**: `throw <enum>` writes an enum value into the return channel — no stack unwinding, no Exception allocation.
+- **Errors are values**: `throw <enum>` writes an enum value into the return channel — no stack unwinding, no PanicInfo allocation.
 - **Panics are not errors**: a panic signals a program bug or runtime invariant violation, not business logic.
 - **No `throws` in function signatures**: xray does not adopt Java/Swift-style checked exceptions. Errors are handled via the throw/catch value-return channel.
 - **`defer` replaces `finally`**: xray has no `finally` keyword; resource cleanup uses function-scoped `defer` (Go model).
@@ -584,7 +584,7 @@ A panic represents a **program bug or runtime invariant violation**, not busines
 - Null reference dereference
 - Runtime type assertion failure
 
-Panics propagate via limited stack unwinding and generate `Exception` objects with stack traces.
+Panics propagate via limited stack unwinding and generate `PanicInfo` objects with stack traces.
 
 #### 8.2.2 `catch panic`
 
@@ -619,25 +619,25 @@ try {
 }
 ```
 
-#### 8.2.3 The `Exception` class
+#### 8.2.3 The `PanicInfo` class
 
-`Exception` is now **used only by the panic channel**. The VM constructs `Exception` objects automatically on runtime faults:
+`PanicInfo` is now **used only by the panic channel**. The VM constructs `PanicInfo` objects automatically on runtime faults:
 
 ```xray
 @native
-class Exception {
+class PanicInfo {
     message: string             // human-readable message (e.g. "index out of bounds")
     stack: Array<string>        // automatically captured call stack
-    cause: Exception?           // chained cause
+    cause: PanicInfo?           // chained cause
     code: int                   // error code
     data: Json?                 // additional data
 
-    constructor(message: string = "", cause: Exception? = null)
+    constructor(message: string = "", cause: PanicInfo? = null)
     fn toString() -> string
 }
 ```
 
-User code generally does not construct `Exception` directly — use `throw <enum>` for business errors.
+User code generally does not construct `PanicInfo` directly — use `throw <enum>` for business errors.
 
 ### 8.3 `defer` — resource cleanup
 

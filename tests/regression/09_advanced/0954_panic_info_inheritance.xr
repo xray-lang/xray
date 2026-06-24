@@ -1,11 +1,11 @@
 // 0954_exception_inheritance.xr
 // 作者：xingleixu@gmail.com
-// 测试：Exception 子类的非 throw 使用（F036 回归）
+// 测试：PanicInfo 子类的非 throw 使用（F036 回归）
 // 历史：vm_superinvoke 的 primitive parent ctor 路径返回 XR_DISP_NEXT，
 // OP_SUPERINVOKE 调度器未识别 NEXT，把它当作 "no catch reachable" 处理，
 // 导致 `let err = new HttpError(...)` 静默退出 1。修复：dispatcher 增加 NEXT 分支。
 
-class HttpError extends Exception {
+class HttpError extends PanicInfo {
     statusCode: int
     constructor(msg: string, statusCode: int) {
         super(msg)
@@ -13,7 +13,7 @@ class HttpError extends Exception {
     }
 }
 
-class DbError extends Exception {
+class DbError extends PanicInfo {
     table: string
     constructor(msg: string, table: string) {
         super(msg)
@@ -25,7 +25,7 @@ class DbError extends Exception {
 
 @test
 fn test_subclass_let_binding() {
-    // F036 核心：let 绑定 Exception 子类不应崩溃
+    // F036 核心：let 绑定 PanicInfo 子类不应崩溃
     let err = HttpError("not found", 404)
     assert_eq(err.message, "not found")
     assert_eq(err.statusCode, 404)
@@ -48,7 +48,7 @@ fn test_subclass_multiple_fields() {
 
 @test
 fn test_subclass_passed_to_function() {
-    fn handle(e: Exception) -> string {
+    fn handle(e: PanicInfo) -> string {
         return e.message
     }
     let err = HttpError("bad request", 400)
@@ -57,7 +57,7 @@ fn test_subclass_passed_to_function() {
 
 @test
 fn test_subclass_stored_in_array() {
-    let errors: Array<Exception> = []
+    let errors: Array<PanicInfo> = []
     errors.push(HttpError("err1", 500))
     errors.push(DbError("err2", "logs"))
     assert_eq(errors.length, 2)
@@ -83,13 +83,13 @@ fn test_subclass_status_code_access() {
 
 @test
 fn test_base_exception_direct() {
-    let e = Exception("hello")
+    let e = PanicInfo("hello")
     assert_eq(e.message, "hello")
 }
 
 // ===== 空子类（无自定义 ctor）仍然工作 =====
 
-class EmptyError extends Exception {}
+class EmptyError extends PanicInfo {}
 
 @test
 fn test_empty_subclass() {

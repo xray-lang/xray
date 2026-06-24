@@ -10,7 +10,7 @@
     "error",
     "value_return_error"
   ],
-  "lead": "Xray uses a low-overhead value-return error channel: `throw <enum>` sets an error, `try/catch` handles it without Exception allocation or stack unwinding.",
+  "lead": "Xray uses a low-overhead value-return error channel: `throw <enum>` sets an error, `try/catch` handles it without PanicInfo allocation or stack unwinding.",
   "sections": [
     {
       "heading": "throw",
@@ -28,7 +28,7 @@
       "heading": "Design principles",
       "bullets": [
         "Errors are values (enum variants), not exceptions",
-        "No Exception allocation or stack unwinding; only a predictable branch at call boundaries that may propagate or catch errors",
+        "No PanicInfo allocation or stack unwinding; only a predictable branch at call boundaries that may propagate or catch errors",
         "No `throws` in function signatures — errors are implicit",
         "Use ADT enums for structured error causes with exhaustive `match`"
       ]

@@ -721,8 +721,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
 
             // Built-in primitive class Exception (and bare construction of it):
             // `Exception(msg)` constructs the runtime exception instance.
-            if (strcmp(name, "Exception") == 0) {
-                return xr_type_new_named_instance(ctx->analyzer->isolate, "Exception");
+            if (strcmp(name, "PanicInfo") == 0) {
+                return xr_type_new_named_instance(ctx->analyzer->isolate, "PanicInfo");
             }
         }
         // Container method with callback: infer fn expr arg types even though

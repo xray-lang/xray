@@ -1143,12 +1143,12 @@ static void lower_match_no_match_throw(XiLower *l, int line) {
     if (!l || !l->cur_block)
         return;
 
-    struct XrType *exception_type = xr_type_new_class(NULL, "Exception");
+    struct XrType *exception_type = xr_type_new_class(NULL, "PanicInfo");
     XiValue *cls = xi_value_new(l->func, l->cur_block, XI_GET_BUILTIN, exception_type, 0);
     if (!cls)
         return;
-    cls->aux_int = XR_GLOBAL_VAR_EXCEPTION;
-    cls->aux = (void *) "Exception";
+    cls->aux_int = XR_GLOBAL_VAR_PANIC_INFO;
+    cls->aux = (void *) "PanicInfo";
 
     XiValue *msg =
         xi_const_str(l->func, l->cur_block, "E0442: non-exhaustive match", l->type_string);

@@ -556,7 +556,7 @@ let firstOk = await anySuccess [t1, t2, t3]
 
 - `await` only applies to `Task<T>`; other types are a compile error.
 - The current coroutine **yields** until the target completes (without blocking the OS thread).
-- Exception propagation:
+- PanicInfo propagation:
   - `await t` rethrows the exception thrown by `t`.
   - On success, `await t` returns `T`; if `T` is nullable, a returned `null` is the task's real result, not a cancellation or failure marker.
   - `await all` throws if any task throws (the others are cancelled).

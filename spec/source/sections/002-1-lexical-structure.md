@@ -115,7 +115,7 @@ xray 共 **63 个保留关键字**，源码真值表见 `src/frontend/lexer/xkey
 `unknown` 在类型位置是内置擦除/未知值类型名（例如 `TaskOutcome.Success(unknown)`）；它不是词法关键字，表达式位置仍可作为普通标识符使用。
 
 > **注意**：以下名字**不是**词法关键字，而是 `prelude` 自动引入的内置类型符号：
-> `Array` · `BigInt` · `Bytes` · `Channel` · `DateTime` · `Exception` · `Json` · `Logger` · `Map` · `NetConn` · `NetListener` · `Range` · `Regex` · `Set` · `StringBuilder`。
+> `Array` · `BigInt` · `Bytes` · `Channel` · `DateTime` · `PanicInfo` · `Json` · `Logger` · `Map` · `NetConn` · `NetListener` · `Range` · `Regex` · `Set` · `StringBuilder`。
 > 它们可被用户类同名覆盖（局部 shadow），但通常无须 import 即可使用。
 
 #### 1.5.7 字面量关键字
@@ -500,7 +500,7 @@ Xray has **63 reserved keywords** in total; the authoritative source-of-truth ta
 In type position, `unknown` is the built-in erased/unknown-value type name (for example, `TaskOutcome.Success(unknown)`); it is not a lexical keyword, and remains usable as an ordinary identifier in expression position.
 
 > **Note**: the following names are **not** lexer keywords; they are built-in type symbols automatically introduced by the prelude:
-> `Array` · `BigInt` · `Bytes` · `Channel` · `DateTime` · `Exception` · `Json` · `Logger` · `Map` · `NetConn` · `NetListener` · `Range` · `Regex` · `Set` · `StringBuilder`.
+> `Array` · `BigInt` · `Bytes` · `Channel` · `DateTime` · `PanicInfo` · `Json` · `Logger` · `Map` · `NetConn` · `NetListener` · `Range` · `Regex` · `Set` · `StringBuilder`.
 > They may be locally shadowed by user types of the same name, but typically need no import.
 
 #### 1.5.7 Literal Keywords

@@ -91,7 +91,7 @@ static void bind_builtin_value(XrayIsolate *X, int global_index, XrValue value) 
 
 /* Bind a unified-class XrClass into the VM builtins slot keyed by a
  * predefined XR_GLOBAL_VAR_* index. The IR lowerer's builtin_classes
- * table maps user-visible names ("Exception", "Range", "DateTime", ...)
+ * table maps user-visible names ("PanicInfo", "Range", "DateTime", ...)
  * onto these indices via XI_GET_BUILTIN, so `new Exception(...)`
  * resolves to the actual class value at run time. */
 static void bind_class_global(XrayIsolate *X, int global_index, void *cls) {
@@ -232,7 +232,7 @@ void xr_prelude_register_all_native_types(XrayIsolate *isolate) {
      * IR lowerer's builtin_classes table can resolve them. */
     XrayCoreClasses *core = isolate->core;
     if (core) {
-        bind_class_global(isolate, XR_GLOBAL_VAR_EXCEPTION, core->exceptionClass);
+        bind_class_global(isolate, XR_GLOBAL_VAR_PANIC_INFO, core->panicInfoClass);
         bind_class_global(isolate, XR_GLOBAL_VAR_RANGE, core->rangeClass);
         bind_class_global(isolate, XR_GLOBAL_VAR_DATETIME, core->dateTimeClass);
     }

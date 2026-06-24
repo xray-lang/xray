@@ -36,7 +36,7 @@
 #include "../../src/runtime/object/xjson_serde.h"
 #include "../../src/runtime/object/xmap.h"
 #include "../../src/runtime/mem/xfixed_heap.h"
-#include "../../src/runtime/object/xexception.h"
+#include "../../src/runtime/object/xpanic_info.h"
 #include "../../src/base/xchecks.h"
 #include "../../src/base/xarena.h"
 #include "../../src/base/xmalloc.h"
@@ -1039,8 +1039,8 @@ static XrCFuncResult http_conn_handler_done(XrayIsolate *X, int status, XrValue 
      * forced because the request lifecycle was aborted mid-flight. */
     if (status == XR_RESUME_CLOSURE_ERROR) {
         const char *msg = NULL;
-        if (xr_value_is_exception(X, resume_value))
-            msg = xr_exception_get_message(X, resume_value);
+        if (xr_value_is_panic_info(X, resume_value))
+            msg = xr_panic_info_get_message(X, resume_value);
         char body[512];
         int body_len = snprintf(body, sizeof(body), "Internal Server Error: %s",
                                 msg ? msg : "uncaught exception");

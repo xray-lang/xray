@@ -209,8 +209,8 @@ vmcase(OP_SCOPE_EXIT) {
             /* Child failed via the panic channel — re-raise as a panic so the
              * parent's `catch panic` observes it. */
             XrValue exc = err;
-            if (!xr_value_is_exception(isolate, exc)) {
-                exc = xr_exception_from_value(isolate, exc);
+            if (!xr_value_is_panic_info(isolate, exc)) {
+                exc = xr_panic_info_from_value(isolate, exc);
             }
             savepc();
             xr_vm_unwind_with_trace(isolate, exc);
@@ -245,8 +245,8 @@ vmcase(OP_SCOPE_EXIT) {
                 vmbreak;
             }
             XrValue exc = err;
-            if (!xr_value_is_exception(isolate, exc)) {
-                exc = xr_exception_from_value(isolate, exc);
+            if (!xr_value_is_panic_info(isolate, exc)) {
+                exc = xr_panic_info_from_value(isolate, exc);
             }
             savepc();
             xr_vm_unwind_with_trace(isolate, exc);

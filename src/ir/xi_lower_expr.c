@@ -640,7 +640,7 @@ static XiValue *lower_variable(XiLower *l, AstNode *node) {
             {"Json", XR_GLOBAL_VAR_JSON},
             {"Bytes", XR_GLOBAL_VAR_BYTES},
             {"Process", XR_GLOBAL_VAR_PROCESS},
-            {"Exception", XR_GLOBAL_VAR_EXCEPTION},
+            {"PanicInfo", XR_GLOBAL_VAR_PANIC_INFO},
             {"Range", XR_GLOBAL_VAR_RANGE},
             {"DateTime", XR_GLOBAL_VAR_DATETIME},
             {"Atomic", XR_GLOBAL_VAR_ATOMIC},
@@ -3193,7 +3193,7 @@ static XiValue *lower_construct(XiLower *l, AstNode *node, struct XrType *result
             return v;
         }
         /* Exception: no special handling needed — it is a regular class with a
-         * primitive constructor registered in core->exceptionClass. Falls through
+         * primitive constructor registered in core->panicInfoClass. Falls through
          * to the generic class-instantiation path below. */
         /* new Bytes() / new Bytes(n) / new Bytes(n, fill) */
         if (strcmp(cname, "Bytes") == 0 && arg_count <= 2) {
@@ -3284,7 +3284,7 @@ static XiValue *lower_construct(XiLower *l, AstNode *node, struct XrType *result
             const char *name;
             int index;
         } builtin_class_globals[] = {
-            {"Exception", XR_GLOBAL_VAR_EXCEPTION},
+            {"PanicInfo", XR_GLOBAL_VAR_PANIC_INFO},
             {"Range", XR_GLOBAL_VAR_RANGE},
             {"DateTime", XR_GLOBAL_VAR_DATETIME},
         };
@@ -3347,7 +3347,7 @@ static XiValue *lower_new_expr(XiLower *l, AstNode *node) {
 static bool lower_class_is_exception_kind(XiLower *l, const char *name) {
     if (!name)
         return false;
-    if (strcmp(name, "Exception") == 0)
+    if (strcmp(name, "PanicInfo") == 0)
         return true;
     XaSymbol *sym = xi_lower_lookup_class_symbol(l, name);
     if (!sym || !l->analyzer)
@@ -3355,9 +3355,9 @@ static bool lower_class_is_exception_kind(XiLower *l, const char *name) {
     XaSymbolLinks *links = xa_analyzer_get_links(l->analyzer, sym);
     XrClassInfo *info = links ? links->class_info : NULL;
     for (XrClassInfo *c = info; c; c = c->base) {
-        if (c->base_name && strcmp(c->base_name, "Exception") == 0)
+        if (c->base_name && strcmp(c->base_name, "PanicInfo") == 0)
             return true;
-        if (c->name && strcmp(c->name, "Exception") == 0)
+        if (c->name && strcmp(c->name, "PanicInfo") == 0)
             return true;
     }
     return false;
@@ -3650,8 +3650,8 @@ XR_FUNC XiValue *xi_lower_is_test(XiLower *l, XiValue *val, XrTypeRef *tref, int
                 tid = 15;
             else if (strcmp(tref->name, "Json") == 0)
                 tid = 18;
-            else if (strcmp(tref->name, "Exception") == 0)
-                tid = 24; /* XR_TID_EXCEPTION */
+            else if (strcmp(tref->name, "PanicInfo") == 0)
+                tid = 24; /* XR_TID_PANIC_INFO */
         }
         /* Tuple type: (T1, T2, ...) → look up TupleN class by arity */
         if (tid < 0 && tref->kind == XR_TREF_TUPLE && l->isolate) {
@@ -4091,15 +4091,15 @@ static XiValue *lower_force_unwrap(XiLower *l, AstNode *node) {
 
     /* Throw path: construct Exception(E0413) and throw */
     l->cur_block = throw_blk;
-    struct XrType *exception_type = xr_type_new_class(NULL, "Exception");
+    struct XrType *exception_type = xr_type_new_class(NULL, "PanicInfo");
     XiValue *cls = xi_value_new(l->func, l->cur_block, XI_GET_BUILTIN, exception_type, 0);
     if (!cls) {
         l->cur_block->kind = XI_BLOCK_UNREACHABLE;
         l->cur_block = ok_blk;
         return val;
     }
-    cls->aux_int = XR_GLOBAL_VAR_EXCEPTION;
-    cls->aux = (void *) "Exception";
+    cls->aux_int = XR_GLOBAL_VAR_PANIC_INFO;
+    cls->aux = (void *) "PanicInfo";
 
     XiValue *msg = xi_const_str(l->func, l->cur_block, "E0413: Attempted to unwrap a null value",
                                 l->type_string);

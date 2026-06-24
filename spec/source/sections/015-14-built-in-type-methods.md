@@ -221,9 +221,9 @@ order: 015
 | `toString()` | 输出字符串 |
 | `clear()` | 清空并返回自身 |
 
-### 14.16 `Exception`
+### 14.16 `PanicInfo`
 
-内置 `Exception` 类包含 `message`、`stack`、`cause`、`code`、`data` 字段，构造函数 `constructor(message: string = "", cause: Exception? = null)`，以及 `toString()`。
+内置 `PanicInfo` 类包含 `message`、`stack`、`cause`、`code`、`data` 字段，构造函数 `constructor(message: string = "", cause: PanicInfo? = null)`，以及 `toString()`。
 
 ### 14.17 `Task<T>` / `EnumValue` / `EnumType`
 
@@ -471,9 +471,9 @@ The `import datetime` module provides factory functions: `now`, `utc`, `create`,
 | `toString()` | output string |
 | `clear()` | empty and return self |
 
-### 14.16 `Exception`
+### 14.16 `PanicInfo`
 
-The built-in `Exception` class has fields `message`, `stack`, `cause`, `code`, `data`, the constructor `constructor(message: string = "", cause: Exception? = null)`, and `toString()`.
+The built-in `PanicInfo` class has fields `message`, `stack`, `cause`, `code`, `data`, the constructor `constructor(message: string = "", cause: PanicInfo? = null)`, and `toString()`.
 
 ### 14.17 `Task<T>` / `EnumValue` / `EnumType`
 

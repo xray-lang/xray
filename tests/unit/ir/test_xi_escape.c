@@ -151,10 +151,14 @@ static void test_store_field_escape(void) {
 /*
  * func send_array(ch):
  *   b0:
- *     v0 = PARAM 0             ; channel
+ *     v0 = PARAM 0                  ; channel
  *     v1 = ARRAY_NEW
- *     v2 = CHAN_SEND v0, v1    ; send array through channel
+ *     v2 = CHAN_SEND v0, move v1    ; move array through channel
  *     RETURN v0
+ *
+ * Only a MOVE payload transfers ownership out of the sender, so only a moved
+ * channel-send payload globally escapes. copy/share sends keep the value owned
+ * by the sender (task 131-S2 transfer-aware escape).
  */
 static void test_chan_send_escape(void) {
     XiFunc *f = make_func("send_array", &t_any);
@@ -166,6 +170,7 @@ static void test_chan_send_escape(void) {
     send->args[0] = ch;
     send->args[1] = arr;
     send->flags = XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_SUSPEND;
+    xi_chan_send_set_transfer_mode(send, XR_TRANSFER_MOVE);
 
     xi_block_set_return(b0, ch);
 

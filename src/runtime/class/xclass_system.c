@@ -23,7 +23,7 @@
 #include "xstringbuilder_builtins.h"
 #include "xenum.h"
 #include "../value/xtype_names.h"
-#include "../object/xexception.h"
+#include "../object/xpanic_info.h"
 
 /* Forward declarations: register functions live in *_methods.c files.
  * We call them here to unify core->xxxClass with native_type_classes[]. */
@@ -130,9 +130,9 @@ void xr_core_init(XrayIsolate *X) {
 
     // Exception class with 5 fields + primitive constructor + toString.
     // Registered here (not in stdlib prelude) because VM throw paths
-    // need a valid core->exceptionClass before any user code runs;
+    // need a valid core->panicInfoClass before any user code runs;
     // bootstrap errors (OOM, type mismatch on early init) must succeed.
-    xr_register_exception_class(X);
+    xr_register_panic_info_class(X);
 
     // All classes above were created through xr_class_new / a builder,
     // and xr_class_builder_finalize already registers every finished

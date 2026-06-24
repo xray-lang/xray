@@ -29,7 +29,7 @@
 #include "../runtime/mem/xcoro_heap.h"
 #include "../runtime/mem/xsystem_heap.h"
 #include "../runtime/object/xarray.h"
-#include "../runtime/object/xexception.h"
+#include "../runtime/object/xpanic_info.h"
 #include "../runtime/object/xmap.h"
 #include "../runtime/object/xstring.h"
 #include "../runtime/object/xtuple.h"

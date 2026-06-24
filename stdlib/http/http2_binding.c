@@ -20,7 +20,7 @@
 #include "../../src/runtime/object/xmap.h"
 #include "../../src/runtime/object/xstring.h"
 #include "../../src/runtime/object/xjson.h"
-#include "../../src/runtime/object/xexception.h"
+#include "../../src/runtime/object/xpanic_info.h"
 #include "../net/tls.h"
 #include <string.h>
 
@@ -30,7 +30,7 @@ static const char TLS_UNAVAIL_MSG[] =
     " -- rebuild with: cmake -DENABLE_TLS=ON -DOPENSSL_ROOT_DIR=<path>";
 
 static void throw_tls_unavailable(XrayIsolate *X) {
-    XrValue exc = xr_exception_new(X, XR_ERR_TLS_UNAVAILABLE, TLS_UNAVAIL_MSG);
+    XrValue exc = xr_panic_info_new(X, XR_ERR_TLS_UNAVAILABLE, TLS_UNAVAIL_MSG);
     xr_vm_unwind_with_trace(X, exc);
 }
 // clang-format on

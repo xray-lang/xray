@@ -180,23 +180,23 @@ order: 019
 
 ### 18.8 Panic 错误对象结构
 
-panic 通道的运行时故障使用 prelude `Exception` 类（声明：`stdlib/types/exception.xr`）：
+panic 通道的运行时故障使用 prelude `PanicInfo` 类（声明：`stdlib/types/panic_info.xr`）：
 
 ```xray
 @native
-class Exception {
+class PanicInfo {
     message: string             // 人类可读消息，含错误码与上下文
     stack: Array<string>        // 自动 capture 的调用栈，每帧一行格式化字符串
-    cause: Exception?           // 链式 cause
+    cause: PanicInfo?           // 链式 cause
     code: int                   // 错误码（从 "E0xxx: ..." 前缀自动解析，默认 0）
     data: Json?                 // 运行时故障的可选结构化附加数据
 
-    constructor(message: string = "", cause: Exception? = null)
+    constructor(message: string = "", cause: PanicInfo? = null)
     fn toString() -> string
 }
 ```
 
-用户级 `throw` 操作数**必须**是 enum 变体值（见 §8.1.1 / `E0370`）。结构化业务错误使用 ADT enum，而不是继承 `Exception`：
+用户级 `throw` 操作数**必须**是 enum 变体值（见 §8.1.1 / `E0370`）。结构化业务错误使用 ADT enum，而不是继承 `PanicInfo`：
 
 ```xray
 enum HttpErr {
@@ -208,7 +208,7 @@ enum HttpErr {
 throw HttpErr.ServerError(500, "upstream failed")
 ```
 
-`Exception` 只表示 panic 通道的运行时故障；业务错误通过 `throw <enum>` / `catch` 的值返回通道传播（见 §8.1）。
+`PanicInfo` 只表示 panic 通道的运行时故障；业务错误通过 `throw <enum>` / `catch` 的值返回通道传播（见 §8.1）。
 <!-- /xr-spec:cn -->
 
 <!-- xr-spec:en -->
@@ -388,23 +388,23 @@ Analyzer enum codes (`XrErrorCode`, defined in the 350+ section of `xerror.h`):
 
 ### 18.8 Panic Error-Object Layout
 
-Runtime faults in the panic channel use the prelude `Exception` class (declared in `stdlib/types/exception.xr`):
+Runtime faults in the panic channel use the prelude `PanicInfo` class (declared in `stdlib/types/panic_info.xr`):
 
 ```xray
 @native
-class Exception {
+class PanicInfo {
     message: string             // human-readable message including error code and context
     stack: Array<string>        // auto-captured call stack, one formatted line per frame
-    cause: Exception?           // chained cause
+    cause: PanicInfo?           // chained cause
     code: int                   // error code (auto-parsed from "E0xxx: ..." prefix; default 0)
     data: Json?                 // optional structured data for a runtime fault
 
-    constructor(message: string = "", cause: Exception? = null)
+    constructor(message: string = "", cause: PanicInfo? = null)
     fn toString() -> string
 }
 ```
 
-The static type of a user-level `throw` operand **must** be an enum variant value (see §8.1.1 / `E0370`). Structured business errors use ADT enums rather than `Exception` inheritance:
+The static type of a user-level `throw` operand **must** be an enum variant value (see §8.1.1 / `E0370`). Structured business errors use ADT enums rather than `PanicInfo` inheritance:
 
 ```xray
 enum HttpErr {
@@ -416,5 +416,5 @@ enum HttpErr {
 throw HttpErr.ServerError(500, "upstream failed")
 ```
 
-`Exception` represents panic-channel runtime faults only; business errors propagate through the `throw <enum>` / `catch` value-return channel (see §8.1).
+`PanicInfo` represents panic-channel runtime faults only; business errors propagate through the `throw <enum>` / `catch` value-return channel (see §8.1).
 <!-- /xr-spec:en -->

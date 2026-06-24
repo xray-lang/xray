@@ -48,8 +48,8 @@ static XrType *create_type_for_builtin(XlspBuiltinType type) {
             return xr_type_new_bigint(NULL);
         case XLSP_TYPE_STRINGBUILDER:
             return xr_type_new_stringbuilder(NULL);
-        case XLSP_TYPE_EXCEPTION:
-            return xr_type_new_named_instance(NULL, "Exception");
+        case XLSP_TYPE_PANIC_INFO:
+            return xr_type_new_named_instance(NULL, "PanicInfo");
         case XLSP_TYPE_COROUTINE:
             return xr_type_new_task(NULL, NULL);
         default:
@@ -88,8 +88,8 @@ XlspBuiltinType xlsp_builtin_type_from_name(const char *name) {
         return XLSP_TYPE_STRINGBUILDER;
     if (strcmp(name, TYPE_NAME_REGEX) == 0)
         return XLSP_TYPE_REGEX;
-    if (strcmp(name, TYPE_NAME_EXCEPTION) == 0)
-        return XLSP_TYPE_EXCEPTION;
+    if (strcmp(name, TYPE_NAME_PANIC_INFO) == 0)
+        return XLSP_TYPE_PANIC_INFO;
     if (strcmp(name, TYPE_NAME_COROUTINE) == 0)
         return XLSP_TYPE_COROUTINE;
     return XLSP_TYPE_UNKNOWN;

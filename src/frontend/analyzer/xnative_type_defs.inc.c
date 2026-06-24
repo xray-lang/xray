@@ -40,7 +40,7 @@ static const char xr_native_def_channel[] =
 
 static const char xr_native_def_coroutine[] =
     "// Built-in Task type (coroutine handle) — implementation in src/runtime/coro/\n\nenum "
-    "TaskResult<T> {\n    Success(T)\n    Failed(Exception)\n    Cancelled\n    Timeout\n    "
+    "TaskResult<T> {\n    Success(T)\n    Failed(PanicInfo)\n    Cancelled\n    Timeout\n    "
     "Pending\n}\n\nenum TaskOutcome {\n    Success(unknown)\n    Failed(unknown)\n    "
     "Cancelled\n}\n\nenum TaskStatus {\n    Pending\n    Running\n    Success\n    Failed\n    "
     "Cancelled\n}\n\n@native\nclass Task<T> {\n    done: bool\n    status: TaskStatus\n\n    "
@@ -51,15 +51,6 @@ static const char xr_native_def_enum[] =
     "// Built-in enum value/type runtime info\n\n@native\nclass EnumValue {\n    name: string\n    "
     "value: Json\n    ordinal: int\n    toString() -> string\n}\n\n@native\nclass EnumType {\n    "
     "memberCount: int\n    getMember(index: int) -> EnumValue\n}\n";
-
-static const char xr_native_def_exception[] =
-    "// Built-in Exception class.\n//\n// Field layout matches xclass_system.h EXCEPTION_FIELD_* "
-    "indices and the\n// XrClass built by xr_register_exception_class in xclass_system.c. The\n// "
-    "constructor and toString bodies are PRIMITIVE on the C side; this\n// declaration exists for "
-    "analyzer / LSP awareness so user code can write\n// `class HttpError extends Exception { ... "
-    "}` and reference fields by\n// name from any module.\n\nclass Exception {\n    message: "
-    "string\n    stack: Array<string>\n    cause: Exception?\n    code: int\n    data: Json?\n    "
-    "constructor(message: string = \"\", cause: Exception? = null)\n    toString() -> string\n}\n";
 
 static const char xr_native_def_float[] =
     "// Built-in float type — implementation in "
@@ -98,6 +89,18 @@ static const char xr_native_def_map[] =
     "protocol — iterator() yields each key K (used by\n    // single-variable `for (k in m)`); "
     "entriesIterator() yields each\n    // (key, value) tuple (used by `for (k, v in m)`).\n    "
     "iterator() -> Iterator<K>\n    entriesIterator() -> Iterator<(K, V)>\n}\n";
+
+static const char xr_native_def_panic_info[] =
+    "// Built-in PanicInfo class — the runtime panic diagnostic payload.\n//\n// PanicInfo belongs "
+    "to the panic channel only: the VM/AOT runtime constructs it\n// on faults (out-of-bounds, "
+    "division by zero, non-exhaustive match, etc.) and\n// `catch panic (p: PanicInfo)` reads its "
+    "fields. Business errors are enum values\n// (`throw <enum>`), never PanicInfo. Field layout "
+    "matches xclass_system.h\n// PANIC_INFO_FIELD_* indices and the XrClass built by\n// "
+    "xr_register_panic_info_class in xclass_system.c; the constructor and toString\n// bodies are "
+    "PRIMITIVE on the C side. This declaration exists for analyzer / LSP\n// awareness so the "
+    "fields are visible from any module.\n\nclass PanicInfo {\n    message: string\n    stack: "
+    "Array<string>\n    cause: PanicInfo?\n    code: int\n    data: Json?\n    "
+    "constructor(message: string = \"\", cause: PanicInfo? = null)\n    toString() -> string\n}\n";
 
 static const char xr_native_def_regex[] =
     "// Built-in Regex type — implementation in stdlib/regex/xregex_binding.c\n\n@native\nclass "
@@ -158,11 +161,11 @@ static const char xr_native_def_workqueue[] =
     X("channel", xr_native_def_channel)                                                            \
     X("coroutine", xr_native_def_coroutine)                                                        \
     X("enum", xr_native_def_enum)                                                                  \
-    X("exception", xr_native_def_exception)                                                        \
     X("float", xr_native_def_float)                                                                \
     X("int", xr_native_def_int)                                                                    \
     X("json", xr_native_def_json)                                                                  \
     X("map", xr_native_def_map)                                                                    \
+    X("panic_info", xr_native_def_panic_info)                                                      \
     X("regex", xr_native_def_regex)                                                                \
     X("resultgroup", xr_native_def_resultgroup)                                                    \
     X("set", xr_native_def_set)                                                                    \
