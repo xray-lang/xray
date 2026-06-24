@@ -68,6 +68,11 @@ static inline void *xrt_io_core_alloc(void *ctx, size_t size) {
     return XRT_MALLOC(size);
 }
 
+static inline void *xrt_io_core_realloc(void *ctx, void *ptr, size_t size) {
+    (void) ctx;
+    return XRT_REALLOC(ptr, size);
+}
+
 static inline void xrt_io_core_free(void *ctx, void *ptr) {
     (void) ctx;
     XRT_FREE(ptr);
@@ -887,38 +892,13 @@ static inline XrValue xrt_io_read_dir_recursive(const char *path_data, int64_t p
 }
 
 static inline XrValue xrt_io_read_stdin(void) {
-    size_t cap = 4096;
+    clearerr(stdin);
     size_t len = 0;
-    char *buf = (char *) XRT_MALLOC(cap + 1);
+    char *buf = xr_io_core_read_all_stream_alloc(
+        stdin, xrt_io_file_read, xrt_io_file_error, xrt_io_core_alloc, xrt_io_core_realloc,
+        xrt_io_core_free, NULL, 4096, XRT_IO_MAX_READ_BYTES, &len);
     if (!buf)
         return XR_NULL_VAL;
-    for (;;) {
-        size_t avail = cap - len;
-        size_t n = fread(buf + len, 1, avail, stdin);
-        len += n;
-        if (n < avail) {
-            if (ferror(stdin)) {
-                XRT_FREE(buf);
-                return XR_NULL_VAL;
-            }
-            break;
-        }
-        if (cap >= (size_t) XRT_IO_MAX_READ_BYTES) {
-            XRT_FREE(buf);
-            return XR_NULL_VAL;
-        }
-        size_t new_cap = cap * 2;
-        if (new_cap > (size_t) XRT_IO_MAX_READ_BYTES)
-            new_cap = (size_t) XRT_IO_MAX_READ_BYTES;
-        char *next = (char *) XRT_REALLOC(buf, new_cap + 1);
-        if (!next) {
-            XRT_FREE(buf);
-            return XR_NULL_VAL;
-        }
-        buf = next;
-        cap = new_cap;
-    }
-    buf[len] = '\0';
     XrValue out = xrt_io_str_slice(buf, len);
     XRT_FREE(buf);
     return out;

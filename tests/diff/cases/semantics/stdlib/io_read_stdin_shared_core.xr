@@ -1,0 +1,8 @@
+// anchor: io-read-stdin-shared-core
+import io
+
+let data = io.readStdin() ?? ""
+print(data.length)
+print(data.startsWith("alpha\n"))
+print(data.indexOf("\nbeta\n") >= 0)
+print(data.endsWith("omega\n"))

@@ -130,6 +130,18 @@ typedef struct IoReadFake {
     size_t free_count;
 } IoReadFake;
 
+typedef struct IoReadAllFake {
+    const char *src;
+    size_t src_len;
+    size_t pos;
+    bool read_error;
+    bool alloc_fails;
+    bool realloc_fails;
+    size_t alloc_count;
+    size_t realloc_count;
+    size_t free_count;
+} IoReadAllFake;
+
 static bool io_read_fake_seek_end(void *ctx) {
     IoReadFake *fake = (IoReadFake *) ctx;
     if (fake->seek_end_fails)
@@ -178,6 +190,45 @@ static void *io_read_fake_alloc(void *ctx, size_t size) {
 
 static void io_read_fake_free(void *ctx, void *ptr) {
     IoReadFake *fake = (IoReadFake *) ctx;
+    fake->free_count++;
+    free(ptr);
+}
+
+static size_t io_read_all_fake_read(void *ctx, void *buf, size_t cap) {
+    IoReadAllFake *fake = (IoReadAllFake *) ctx;
+    if (fake->pos >= fake->src_len)
+        return 0;
+    size_t n = fake->src_len - fake->pos;
+    if (n > cap)
+        n = cap;
+    if (n > 0)
+        memcpy(buf, fake->src + fake->pos, n);
+    fake->pos += n;
+    return n;
+}
+
+static bool io_read_all_fake_error(void *ctx) {
+    return ((IoReadAllFake *) ctx)->read_error;
+}
+
+static void *io_read_all_fake_alloc(void *ctx, size_t size) {
+    IoReadAllFake *fake = (IoReadAllFake *) ctx;
+    fake->alloc_count++;
+    if (fake->alloc_fails)
+        return NULL;
+    return malloc(size);
+}
+
+static void *io_read_all_fake_realloc(void *ctx, void *ptr, size_t size) {
+    IoReadAllFake *fake = (IoReadAllFake *) ctx;
+    fake->realloc_count++;
+    if (fake->realloc_fails)
+        return NULL;
+    return realloc(ptr, size);
+}
+
+static void io_read_all_fake_free(void *ctx, void *ptr) {
+    IoReadAllFake *fake = (IoReadAllFake *) ctx;
     fake->free_count++;
     free(ptr);
 }
@@ -389,6 +440,79 @@ TEST(io_core_read_sized_stream_alloc_releases_on_read_error) {
     ASSERT_EQ_UINT(fake.free_count, 1);
 }
 
+TEST(io_core_read_all_stream_alloc_grows_and_nul_terminates) {
+    IoReadAllFake fake = {.src = "abcdefghij", .src_len = 10};
+    size_t len = 99;
+    char *buf = xr_io_core_read_all_stream_alloc(
+        &fake, io_read_all_fake_read, io_read_all_fake_error, io_read_all_fake_alloc,
+        io_read_all_fake_realloc, io_read_all_fake_free, &fake, 4, 64, &len);
+
+    ASSERT_NOT_NULL(buf);
+    ASSERT_EQ_UINT(len, 10);
+    ASSERT_MEM_EQ(buf, "abcdefghij", 10);
+    ASSERT_EQ_INT(buf[10], '\0');
+    ASSERT_EQ_UINT(fake.alloc_count, 1);
+    ASSERT_EQ_UINT(fake.realloc_count, 2);
+    ASSERT_EQ_UINT(fake.free_count, 0);
+    free(buf);
+}
+
+TEST(io_core_read_all_stream_alloc_handles_exact_chunk_eof) {
+    IoReadAllFake fake = {.src = "abcd", .src_len = 4};
+    size_t len = 99;
+    char *buf = xr_io_core_read_all_stream_alloc(
+        &fake, io_read_all_fake_read, io_read_all_fake_error, io_read_all_fake_alloc,
+        io_read_all_fake_realloc, io_read_all_fake_free, &fake, 4, 8, &len);
+
+    ASSERT_NOT_NULL(buf);
+    ASSERT_EQ_UINT(len, 4);
+    ASSERT_MEM_EQ(buf, "abcd", 4);
+    ASSERT_EQ_INT(buf[4], '\0');
+    ASSERT_EQ_UINT(fake.realloc_count, 1);
+    free(buf);
+}
+
+TEST(io_core_read_all_stream_alloc_rejects_read_error_and_releases) {
+    IoReadAllFake fake = {.src = "abc", .src_len = 3, .read_error = true};
+    size_t len = 99;
+    char *buf = xr_io_core_read_all_stream_alloc(
+        &fake, io_read_all_fake_read, io_read_all_fake_error, io_read_all_fake_alloc,
+        io_read_all_fake_realloc, io_read_all_fake_free, &fake, 4, 64, &len);
+
+    ASSERT_NULL(buf);
+    ASSERT_EQ_UINT(len, 0);
+    ASSERT_EQ_UINT(fake.alloc_count, 1);
+    ASSERT_EQ_UINT(fake.free_count, 1);
+}
+
+TEST(io_core_read_all_stream_alloc_rejects_stream_past_max_and_releases) {
+    IoReadAllFake fake = {.src = "abcde", .src_len = 5};
+    size_t len = 99;
+    char *buf = xr_io_core_read_all_stream_alloc(
+        &fake, io_read_all_fake_read, io_read_all_fake_error, io_read_all_fake_alloc,
+        io_read_all_fake_realloc, io_read_all_fake_free, &fake, 4, 4, &len);
+
+    ASSERT_NULL(buf);
+    ASSERT_EQ_UINT(len, 0);
+    ASSERT_EQ_UINT(fake.alloc_count, 1);
+    ASSERT_EQ_UINT(fake.realloc_count, 0);
+    ASSERT_EQ_UINT(fake.free_count, 1);
+}
+
+TEST(io_core_read_all_stream_alloc_rejects_realloc_failure_and_releases) {
+    IoReadAllFake fake = {.src = "abcde", .src_len = 5, .realloc_fails = true};
+    size_t len = 99;
+    char *buf = xr_io_core_read_all_stream_alloc(
+        &fake, io_read_all_fake_read, io_read_all_fake_error, io_read_all_fake_alloc,
+        io_read_all_fake_realloc, io_read_all_fake_free, &fake, 4, 8, &len);
+
+    ASSERT_NULL(buf);
+    ASSERT_EQ_UINT(len, 0);
+    ASSERT_EQ_UINT(fake.alloc_count, 1);
+    ASSERT_EQ_UINT(fake.realloc_count, 1);
+    ASSERT_EQ_UINT(fake.free_count, 1);
+}
+
 TEST(io_core_dot_dir_entry_recognizes_reserved_names) {
     ASSERT(xr_io_core_is_dot_dir_entry("."));
     ASSERT(xr_io_core_is_dot_dir_entry(".."));
@@ -500,6 +624,13 @@ RUN_TEST(io_core_read_sized_stream_alloc_reads_and_nul_terminates);
 RUN_TEST(io_core_read_sized_stream_alloc_accepts_empty_stream);
 RUN_TEST(io_core_read_sized_stream_alloc_rejects_too_large_stream);
 RUN_TEST(io_core_read_sized_stream_alloc_releases_on_read_error);
+
+RUN_TEST_SUITE("IO Core - read all stream");
+RUN_TEST(io_core_read_all_stream_alloc_grows_and_nul_terminates);
+RUN_TEST(io_core_read_all_stream_alloc_handles_exact_chunk_eof);
+RUN_TEST(io_core_read_all_stream_alloc_rejects_read_error_and_releases);
+RUN_TEST(io_core_read_all_stream_alloc_rejects_stream_past_max_and_releases);
+RUN_TEST(io_core_read_all_stream_alloc_rejects_realloc_failure_and_releases);
 
 RUN_TEST_SUITE("IO Core - dir walk paths");
 RUN_TEST(io_core_dot_dir_entry_recognizes_reserved_names);

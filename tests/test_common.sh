@@ -85,7 +85,7 @@ xray_test_case_dir_key() {
         return 0
     fi
     key="$((
-        for f in "$dir"/*.xr "$dir"/*.args; do
+        for f in "$dir"/*.xr "$dir"/*.args "$dir"/*.stdin; do
             [ -f "$f" ] || continue
             printf '%s ' "$(basename "$f")"
             cksum "$f" 2>/dev/null || printf '0 0 %s\n' "$f"

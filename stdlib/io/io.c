@@ -79,6 +79,11 @@ static void *io_core_alloc(void *ctx, size_t size) {
     return xr_malloc(size);
 }
 
+static void *io_core_realloc(void *ctx, void *ptr, size_t size) {
+    (void) ctx;
+    return xr_realloc(ptr, size);
+}
+
 static void io_core_free(void *ctx, void *ptr) {
     (void) ctx;
     xr_free(ptr);
@@ -109,47 +114,9 @@ XR_FUNC char *xr_io_read_stdin_all(size_t *out_len) {
         *out_len = 0;
 
     clearerr(stdin);
-
-    size_t cap = 4096;
-    size_t len = 0;
-    char *buf = (char *) xr_malloc(cap + 1);
-    if (!buf)
-        return NULL;
-
-    for (;;) {
-        size_t avail = cap - len;
-        size_t nread = fread(buf + len, 1, avail, stdin);
-        len += nread;
-
-        if (nread < avail) {
-            if (ferror(stdin)) {
-                xr_free(buf);
-                return NULL;
-            }
-            break;
-        }
-
-        if (cap >= (size_t) IO_MAX_READ_BYTES) {
-            xr_free(buf);
-            return NULL;
-        }
-
-        size_t new_cap = cap * 2;
-        if (new_cap > (size_t) IO_MAX_READ_BYTES)
-            new_cap = (size_t) IO_MAX_READ_BYTES;
-        char *new_buf = (char *) xr_realloc(buf, new_cap + 1);
-        if (!new_buf) {
-            xr_free(buf);
-            return NULL;
-        }
-        buf = new_buf;
-        cap = new_cap;
-    }
-
-    buf[len] = '\0';
-    if (out_len)
-        *out_len = len;
-    return buf;
+    return xr_io_core_read_all_stream_alloc(stdin, io_file_read, io_file_error, io_core_alloc,
+                                            io_core_realloc, io_core_free, NULL, 4096,
+                                            IO_MAX_READ_BYTES, out_len);
 }
 
 #if !defined(XR_OS_WINDOWS) && !defined(XR_OS_MACOS) && !defined(XR_OS_LINUX)
