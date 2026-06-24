@@ -109,6 +109,15 @@ TEST(array_core_fill_range_matches_slice_bounds) {
     assert_range(xr_array_core_fill_range(6, 4, 2), 2, 2, 0);
 }
 
+TEST(array_core_required_int_arg_accepts_only_present_ints) {
+    int64_t out = 123;
+    ASSERT_TRUE(xr_array_core_required_int_arg(true, -7, &out));
+    ASSERT_EQ_INT(out, -7);
+    ASSERT_FALSE(xr_array_core_required_int_arg(false, 99, &out));
+    ASSERT_EQ_INT(out, -7);
+    ASSERT_FALSE(xr_array_core_required_int_arg(true, 42, NULL));
+}
+
 TEST(array_core_join_plans_total_and_writes_separators) {
     const char *items[] = {"aa", "b", ""};
     JoinParts ctx = {items};
@@ -602,6 +611,7 @@ RUN_TEST(array_core_slice_range_handles_negative_bounds);
 RUN_TEST(array_core_slice_range_empty_when_start_after_end);
 RUN_TEST(array_core_slice_range_accepts_nonpositive_length);
 RUN_TEST(array_core_fill_range_matches_slice_bounds);
+RUN_TEST(array_core_required_int_arg_accepts_only_present_ints);
 RUN_TEST(array_core_join_plans_total_and_writes_separators);
 RUN_TEST(array_core_join_handles_empty_and_invalid_capacity);
 RUN_TEST(array_core_hof_map_preserves_iteration_and_write_indices);

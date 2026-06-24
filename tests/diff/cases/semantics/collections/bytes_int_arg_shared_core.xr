@@ -1,0 +1,9 @@
+// anchor: bytes-int-arg-shared-core
+let dyn: Json = {
+    "badOffset": true
+}
+
+let bytes = new Bytes(8, 1)
+print("before")
+print(bytes.loadU32LE(dyn.badOffset))
+print("unreachable")

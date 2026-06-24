@@ -2905,7 +2905,14 @@ static void xicgen_bytes_ptr_arg(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
 
 static void xicgen_bytes_i64_arg(FILE *out, const XiValue *v, uint16_t arg_index) {
     XR_DCHECK(v != NULL && arg_index < v->nargs, "xicgen bytes i64 arg out of range");
-    emit_value_as_rep(out, v->args[arg_index], XR_REP_I64);
+    const XiValue *arg = v->args[arg_index];
+    if (arg && arg->type && arg->type->kind == XR_KIND_INT && cg_rep(arg) == XR_REP_I64) {
+        emit_value_as_rep(out, arg, XR_REP_I64);
+        return;
+    }
+    fprintf(out, "xrt_array_required_int_arg_or_panic(");
+    emit_value_as_rep(out, arg, XR_REP_TAGGED);
+    fprintf(out, ", \"Bytes argument must be integer\")");
 }
 
 static void xicgen_bytes_box_array_result(FILE *out, bool boxed) {
