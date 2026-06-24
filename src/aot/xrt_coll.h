@@ -485,10 +485,9 @@ static inline XrValue xrt_strbuf_finish(XrValue sbv) {
  * only allocation and packed typed-storage policy here. */
 
 static inline uint64_t xrt_hash_f64(double d) {
-    uint64_t bits;
-    if (d == 0.0)
-        d = 0.0; /* canonicalize -0.0: IEEE == treats them equal */
-    memcpy(&bits, &d, sizeof(bits));
+    uint64_t bits = 0;
+    if (!xr_typed_scalar_bits_f64(d, XR_ELEM_F64, &bits))
+        abort();
     return xrt_hash_mix_u64(bits);
 }
 
