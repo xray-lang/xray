@@ -354,6 +354,8 @@ static inline XrValue xrt_method_0(XrValue recv, int sym) {
         return xrt_range_method_0(recv, sym);
     if (recv.tag == XR_TAG_DATETIME)
         return xrt_datetime_method_0(recv, sym);
+    if (recv.tag == XR_TAG_ENUM && sym == XRT_SYM_TOSTRING)
+        return xrt_tostring(recv, 0);
     if (recv.tag == XR_TAG_I64) {
         if (sym == XRT_SYM_ABS)
             return XR_FROM_INT(xr_numeric_core_i64_abs_wrap(recv.i));

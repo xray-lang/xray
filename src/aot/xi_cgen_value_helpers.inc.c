@@ -293,29 +293,81 @@ static void emit_c_string_literal(FILE *out, const char *s) {
     emit_c_string_literal_bytes(out, s, s ? strlen(s) : 0);
 }
 
-static void emit_enum_member_value_expr(XiCgenCtx *ctx, FILE *out, const XiEnumMemberData *member) {
+static void emit_i64_literal(FILE *out, int64_t value) {
+    if (value == INT64_MIN)
+        fprintf(out, "INT64_MIN");
+    else
+        fprintf(out, "INT64_C(%" PRId64 ")", value);
+}
+
+static const char *enum_literal_kind_name(const XiEnumMemberData *member) {
+    if (!member)
+        return "XR_AOT_ENUM_LITERAL_NULL";
+    switch (member->value_kind) {
+        case XI_ENUM_LITERAL_INT:
+            return "XR_AOT_ENUM_LITERAL_INT";
+        case XI_ENUM_LITERAL_FLOAT:
+            return "XR_AOT_ENUM_LITERAL_FLOAT";
+        case XI_ENUM_LITERAL_BOOL:
+            return "XR_AOT_ENUM_LITERAL_BOOL";
+        case XI_ENUM_LITERAL_STRING:
+            return "XR_AOT_ENUM_LITERAL_STRING";
+        case XI_ENUM_LITERAL_NULL:
+        default:
+            return "XR_AOT_ENUM_LITERAL_NULL";
+    }
+}
+
+static void emit_enum_member_raw_value_initializer(FILE *out, const XiEnumMemberData *member) {
     if (!member) {
-        fprintf(out, "XR_NULL_VAL");
+        fprintf(out, "{ .tag = XR_TAG_NULL }");
         return;
     }
     switch (member->value_kind) {
         case XI_ENUM_LITERAL_INT:
-            fprintf(out, "XR_FROM_INT(%" PRId64 ")", member->int_value);
+            fprintf(out, "{ .tag = XR_TAG_I64, .i = ");
+            emit_i64_literal(out, member->int_value);
+            fprintf(out, " }");
             break;
         case XI_ENUM_LITERAL_FLOAT:
-            fprintf(out, "XR_FROM_FLOAT(%a)", member->float_value);
+            fprintf(out, "{ .tag = XR_TAG_F64, .f = %a }", member->float_value);
             break;
         case XI_ENUM_LITERAL_BOOL:
-            fprintf(out, "XR_FROM_BOOL(%d)", member->bool_value ? 1 : 0);
+            fprintf(out, "{ .tag = XR_TAG_BOOL, .i = %d }", member->bool_value ? 1 : 0);
             break;
         case XI_ENUM_LITERAL_STRING:
-            cg_emit_str_value(ctx, out, member->string_value);
-            break;
         case XI_ENUM_LITERAL_NULL:
         default:
-            fprintf(out, "XR_NULL_VAL");
+            fprintf(out, "{ .tag = XR_TAG_NULL }");
             break;
     }
+}
+
+static void emit_enum_member_string_initializer(FILE *out, const XiEnumMemberData *member) {
+    if (member && member->value_kind == XI_ENUM_LITERAL_STRING && member->string_value) {
+        emit_c_string_literal(out, member->string_value);
+    } else {
+        fprintf(out, "NULL");
+    }
+}
+
+static void emit_enum_member_value_expr(FILE *out, const XiEnumData *ed,
+                                        const XiEnumMemberData *member, uint32_t member_index) {
+    const char *enum_name = ed && ed->name ? ed->name : "";
+    const char *member_name = member && member->name ? member->name : "";
+    fprintf(out, "({ static const XrAotEnumValueView _ev_%u = {{0, 0}, NULL, ",
+            (unsigned) member_index);
+    emit_c_string_literal(out, enum_name);
+    fprintf(out, ", ");
+    emit_c_string_literal(out, member_name);
+    fprintf(out, ", %s, ", enum_literal_kind_name(member));
+    emit_enum_member_raw_value_initializer(out, member);
+    fprintf(out, ", ");
+    emit_enum_member_string_initializer(out, member);
+    fprintf(out,
+            "}; XrValue _v = {0}; _v.tag = XR_TAG_ENUM; _v.ext = %u; "
+            "_v.ptr = (void *)&_ev_%u; _v; })",
+            (unsigned) member_index, (unsigned) member_index);
 }
 
 static void emit_enum_type_expr(XiCgenCtx *ctx, FILE *out, const XiEnumData *ed) {
@@ -333,7 +385,7 @@ static void emit_enum_type_expr(XiCgenCtx *ctx, FILE *out, const XiEnumData *ed)
         if (ed->is_adt)
             fprintf(out, "XR_FROM_INT(%u)", (unsigned) i);
         else
-            emit_enum_member_value_expr(ctx, out, member);
+            emit_enum_member_value_expr(out, ed, member, i);
         fprintf(out, "); ");
     }
     fprintf(out, "_e; })");
@@ -404,10 +456,11 @@ static void emit_prelude_enum_member_value_expr(FILE *out, const CgPreludeEnumDa
     }
     fprintf(out,
             "({ static const XrAotEnumValueView _ev_%s_%s = {{0, 0}, NULL, \"%s\", "
-            "\"%s\"}; XrValue _v = {0}; _v.tag = XR_TAG_ENUM; _v.ext = %u; "
+            "\"%s\", XR_AOT_ENUM_LITERAL_INT, { .tag = XR_TAG_I64, .i = INT64_C(%u) }, "
+            "NULL}; XrValue _v = {0}; _v.tag = XR_TAG_ENUM; _v.ext = %u; "
             "_v.ptr = (void *)&_ev_%s_%s; _v; })",
             ed->enum_name, member->name, ed->enum_name, member->name, (unsigned) member_index,
-            ed->enum_name, member->name);
+            (unsigned) member_index, ed->enum_name, member->name);
 }
 
 static bool emit_prelude_enum_type_expr(FILE *out, int builtin_index) {
