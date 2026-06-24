@@ -24,6 +24,7 @@ typedef bool (*XrIoCoreErrorFn)(void *ctx);
 typedef bool (*XrIoCoreSeekFn)(void *ctx);
 typedef long (*XrIoCoreTellFn)(void *ctx);
 typedef void *(*XrIoCoreAllocFn)(void *ctx, size_t size);
+typedef void *(*XrIoCoreReallocFn)(void *ctx, void *ptr, size_t size);
 typedef void (*XrIoCoreFreeFn)(void *ctx, void *ptr);
 
 #define XR_IO_CORE_COPY_BUFFER_SIZE 65536u
@@ -176,6 +177,63 @@ static inline char *xr_io_core_read_sized_stream_alloc(
         free_fn(alloc_ctx, buf);
         return NULL;
     }
+    return buf;
+}
+
+static inline char *
+xr_io_core_read_all_stream_alloc(void *ctx, XrIoCoreReadFn read_fn, XrIoCoreErrorFn error_fn,
+                                 XrIoCoreAllocFn alloc_fn, XrIoCoreReallocFn realloc_fn,
+                                 XrIoCoreFreeFn free_fn, void *alloc_ctx, size_t initial_cap,
+                                 long max_read_bytes, size_t *out_len) {
+    if (out_len)
+        *out_len = 0;
+    if (!read_fn || !alloc_fn || !realloc_fn || !free_fn || initial_cap == 0 || max_read_bytes <= 0)
+        return NULL;
+
+    size_t max_cap = (size_t) max_read_bytes;
+    size_t cap = initial_cap > max_cap ? max_cap : initial_cap;
+    char *buf = (char *) alloc_fn(alloc_ctx, cap + 1);
+    if (!buf)
+        return NULL;
+
+    size_t len = 0;
+    for (;;) {
+        size_t avail = cap - len;
+        size_t n = read_fn(ctx, buf + len, avail);
+        if (n > avail)
+            n = avail;
+        len += n;
+
+        if (n < avail) {
+            if (error_fn && error_fn(ctx)) {
+                free_fn(alloc_ctx, buf);
+                return NULL;
+            }
+            break;
+        }
+
+        if (cap >= max_cap) {
+            free_fn(alloc_ctx, buf);
+            return NULL;
+        }
+
+        size_t new_cap = cap > max_cap / 2 ? max_cap : cap * 2;
+        if (new_cap <= cap) {
+            free_fn(alloc_ctx, buf);
+            return NULL;
+        }
+        char *next = (char *) realloc_fn(alloc_ctx, buf, new_cap + 1);
+        if (!next) {
+            free_fn(alloc_ctx, buf);
+            return NULL;
+        }
+        buf = next;
+        cap = new_cap;
+    }
+
+    buf[len] = '\0';
+    if (out_len)
+        *out_len = len;
     return buf;
 }
 

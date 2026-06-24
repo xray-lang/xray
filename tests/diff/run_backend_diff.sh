@@ -39,6 +39,7 @@
 #
 # Per-case optional sidecar:
 #   <case>.args    first line = whitespace-separated program arguments
+#   <case>.stdin   bytes fed to both VM and AOT stdin
 #   <case>.xr first line may carry "// anchor: <tag>" for failure labeling.
 #
 # Cases live in tests/diff/cases/**/*.xr; files whose basename starts with
@@ -222,11 +223,12 @@ run_backend() {
     local kind="$1" case="$2" out_prefix="$3"
     shift 3
     local raw_err="$out_prefix.rawerr"
-    local rel safe key run_key_material run_key run_cache_dir
+    local rel safe key run_key_material run_key run_cache_dir stdinfile
     local arg
     local rc=0
 
     rel="$(rel_path "$case")"
+    stdinfile="${case%.xr}.stdin"
     if [ "$kind" = "aot" ] || [ "$RUN_CACHE_ENABLED" = "1" ]; then
         safe="$(printf '%s' "${rel%.xr}" | sed 's#[^A-Za-z0-9_.-]#_#g')"
         key="$(xray_test_case_dir_key "$case")"
@@ -243,6 +245,10 @@ args:"
             run_key_material="$run_key_material
 $arg"
         done
+        if [ -f "$stdinfile" ]; then
+            run_key_material="$run_key_material
+stdin=$(xray_test_file_key "$stdinfile")"
+        fi
     fi
 
     case "$kind" in
@@ -258,9 +264,17 @@ $arg"
                 fi
             fi
             if [ "$#" -gt 0 ]; then
-                "$XRAY" run "$case" -- "$@" >"$out_prefix.out" 2>"$raw_err" || rc=$?
+                if [ -f "$stdinfile" ]; then
+                    "$XRAY" run "$case" -- "$@" <"$stdinfile" >"$out_prefix.out" 2>"$raw_err" || rc=$?
+                else
+                    "$XRAY" run "$case" -- "$@" >"$out_prefix.out" 2>"$raw_err" || rc=$?
+                fi
             else
-                "$XRAY" run "$case" >"$out_prefix.out" 2>"$raw_err" || rc=$?
+                if [ -f "$stdinfile" ]; then
+                    "$XRAY" run "$case" <"$stdinfile" >"$out_prefix.out" 2>"$raw_err" || rc=$?
+                else
+                    "$XRAY" run "$case" >"$out_prefix.out" 2>"$raw_err" || rc=$?
+                fi
             fi
             ;;
         aot)
@@ -309,9 +323,17 @@ $arg"
                 :
             else
                 if [ "$#" -gt 0 ]; then
-                    "$bin" "$@" >"$out_prefix.out" 2>"$raw_err" || rc=$?
+                    if [ -f "$stdinfile" ]; then
+                        "$bin" "$@" <"$stdinfile" >"$out_prefix.out" 2>"$raw_err" || rc=$?
+                    else
+                        "$bin" "$@" >"$out_prefix.out" 2>"$raw_err" || rc=$?
+                    fi
                 else
-                    "$bin" >"$out_prefix.out" 2>"$raw_err" || rc=$?
+                    if [ -f "$stdinfile" ]; then
+                        "$bin" <"$stdinfile" >"$out_prefix.out" 2>"$raw_err" || rc=$?
+                    else
+                        "$bin" >"$out_prefix.out" 2>"$raw_err" || rc=$?
+                    fi
                 fi
             fi
             ;;

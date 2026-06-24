@@ -110,7 +110,7 @@ def case_dir_key(case_file: Path) -> str:
             return cached
 
     chunks: list[str] = []
-    for pattern in ("*.xr", "*.args"):
+    for pattern in ("*.xr", "*.args", "*.stdin"):
         for file in sorted(directory.glob(pattern)):
             if not file.is_file():
                 continue
@@ -209,6 +209,16 @@ def read_args(path: Path) -> list[str]:
     return first.split()
 
 
+def read_stdin(path: Path) -> bytes | None:
+    stdin_file = path.with_suffix(".stdin")
+    if not stdin_file.is_file():
+        return None
+    try:
+        return stdin_file.read_bytes()
+    except OSError:
+        return None
+
+
 def head_text(data: bytes, lines: int = 3) -> str:
     text = data.decode("utf-8", "replace")
     return "|".join(text.splitlines()[:lines])
@@ -286,12 +296,13 @@ def build_aot_binary(config: RunnerConfig, case: Path, rel: str, case_key: str) 
         unlock_dir(lock)
 
 
-def run_backend(config: RunnerConfig, kind: str, case: Path, args: list[str]) -> BackendResult:
+def run_backend(config: RunnerConfig, kind: str, case: Path, args: list[str],
+                stdin_data: bytes | None) -> BackendResult:
     if kind == "vm":
         cmd = [str(config.xray), "run", str(case)]
         if args:
             cmd.extend(["--", *args])
-        proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        proc = subprocess.run(cmd, input=stdin_data, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         return BackendResult(proc.returncode, proc.stdout, proc.stderr)
 
     if kind == "aot":
@@ -300,7 +311,8 @@ def run_backend(config: RunnerConfig, kind: str, case: Path, args: list[str]) ->
         binary, buildlog = build_aot_binary(config, case, rel, key)
         if binary is None:
             return BackendResult(200, b"BUILDFAIL\n", b"", buildlog)
-        proc = subprocess.run([str(binary), *args], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        proc = subprocess.run([str(binary), *args], input=stdin_data, stdout=subprocess.PIPE,
+                              stderr=subprocess.PIPE)
         return BackendResult(proc.returncode, proc.stdout, proc.stderr, buildlog)
 
     return BackendResult(201, b"BADBACKEND\n", f"unknown backend: {kind}".encode())
@@ -327,9 +339,10 @@ def run_case(config: RunnerConfig, order: int, case: Path) -> CaseResult:
         return CaseResult(order, "skip", prefix + f"SKIP (need >=2 backends; case={case_backends_raw or 'all'} global={','.join(config.backends)})")
 
     args = read_args(case)
+    stdin_data = read_stdin(case)
     results: dict[str, BackendResult] = {}
     for backend in enabled:
-        results[backend] = run_backend(config, backend, case, args)
+        results[backend] = run_backend(config, backend, case, args, stdin_data)
 
     ref = enabled[0]
     ref_result = results[ref]
