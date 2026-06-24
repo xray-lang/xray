@@ -29,6 +29,42 @@ static inline int64_t xr_numeric_core_i64_abs_wrap(int64_t value) {
     return (int64_t) (-(uint64_t) value);
 }
 
+static inline int64_t xr_numeric_core_i64_add_wrap(int64_t a, int64_t b) {
+    return (int64_t) ((uint64_t) a + (uint64_t) b);
+}
+
+static inline int64_t xr_numeric_core_i64_sub_wrap(int64_t a, int64_t b) {
+    return (int64_t) ((uint64_t) a - (uint64_t) b);
+}
+
+static inline int64_t xr_numeric_core_i64_mul_wrap(int64_t a, int64_t b) {
+    return (int64_t) ((uint64_t) a * (uint64_t) b);
+}
+
+static inline int64_t xr_numeric_core_i64_neg_wrap(int64_t value) {
+    return (int64_t) (-(uint64_t) value);
+}
+
+static inline int64_t xr_numeric_core_i64_div_wrap(int64_t a, int64_t b) {
+    if (b == -1)
+        return xr_numeric_core_i64_neg_wrap(a);
+    return a / b;
+}
+
+static inline int64_t xr_numeric_core_i64_mod_wrap(int64_t a, int64_t b) {
+    if (b == -1)
+        return 0;
+    return a % b;
+}
+
+static inline int64_t xr_numeric_core_i64_shl_wrap(int64_t a, int64_t b) {
+    return (int64_t) ((uint64_t) a << ((uint64_t) b & 63));
+}
+
+static inline int64_t xr_numeric_core_i64_shr_wrap(int64_t a, int64_t b) {
+    return a >> ((uint64_t) b & 63);
+}
+
 static inline int xr_numeric_core_format_i64(char *buf, size_t bufsz, int64_t value) {
     if (!buf || bufsz == 0)
         return -1;

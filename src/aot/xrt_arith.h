@@ -23,18 +23,16 @@
  * ========================================================================= */
 
 /* int64 add/sub/mul with two's-complement wrap on overflow.
- * Signed overflow is UB in C, so compute on uint64_t and cast back. This is
- * the single source of truth for AOT integer arithmetic wrap and MUST match
- * the VM (uint64 wrap in xvm_dispatch_arith) and xi_opt constant folding so
- * INT64_MAX + 1, INT64_MIN - 1, etc. produce identical results across tiers. */
+ * Signed overflow is UB in C, so these AOT adapters forward to shared numeric
+ * core helpers used by VM dispatch and xi_opt constant folding. */
 static inline int64_t xrt_i64_add(int64_t a, int64_t b) {
-    return (int64_t) ((uint64_t) a + (uint64_t) b);
+    return xr_numeric_core_i64_add_wrap(a, b);
 }
 static inline int64_t xrt_i64_sub(int64_t a, int64_t b) {
-    return (int64_t) ((uint64_t) a - (uint64_t) b);
+    return xr_numeric_core_i64_sub_wrap(a, b);
 }
 static inline int64_t xrt_i64_mul(int64_t a, int64_t b) {
-    return (int64_t) ((uint64_t) a * (uint64_t) b);
+    return xr_numeric_core_i64_mul_wrap(a, b);
 }
 
 static inline XrValue xrt_add(XrValue a, XrValue b) {
@@ -72,24 +70,20 @@ static inline XrValue xrt_mul(XrValue a, XrValue b) {
 }
 
 /* Integer div/mod with zero-check + wrap.
- * Single source of truth for every AOT integer divide path (typed scalar
- * codegen in xi_cgen and the tagged xrt_div / xrt_mod below).
+ * Typed scalar codegen in xi_cgen and tagged xrt_div / xrt_mod both pass
+ * through this AOT exception adapter, then into shared numeric core.
  *   b == 0          → throw (matches VM E0420 / E0421)
  *   INT64_MIN / -1  → INT64_MIN (unsigned negate; matches xi_opt fold)
  *   INT64_MIN % -1  → 0 */
 static inline int64_t xrt_int_div(int64_t a, int64_t b) {
     if (XR_UNLIKELY(b == 0))
         xrt_throw_exc(xr_box_str("E0420: division by zero"));
-    if (XR_UNLIKELY(b == -1))
-        return (int64_t) (-(uint64_t) a);
-    return a / b;
+    return xr_numeric_core_i64_div_wrap(a, b);
 }
 static inline int64_t xrt_int_mod(int64_t a, int64_t b) {
     if (XR_UNLIKELY(b == 0))
         xrt_throw_exc(xr_box_str("E0421: modulo by zero"));
-    if (XR_UNLIKELY(b == -1))
-        return 0;
-    return a % b;
+    return xr_numeric_core_i64_mod_wrap(a, b);
 }
 
 /* Shifts: the language defines the count as taken mod 64 (spec: "shift count
@@ -98,10 +92,10 @@ static inline int64_t xrt_int_mod(int64_t a, int64_t b) {
  * ARM64 LSL/ASR, RISC-V SLL/SRA all mask to 6 bits). Left shift goes through
  * uint64_t because shifting into/past the sign bit is UB on signed in C. */
 static inline int64_t xrt_i64_shl(int64_t a, int64_t b) {
-    return (int64_t) ((uint64_t) a << ((uint64_t) b & 63));
+    return xr_numeric_core_i64_shl_wrap(a, b);
 }
 static inline int64_t xrt_i64_shr(int64_t a, int64_t b) {
-    return a >> ((uint64_t) b & 63);
+    return xr_numeric_core_i64_shr_wrap(a, b);
 }
 
 static inline XrValue xrt_div(XrValue a, XrValue b) {
@@ -122,7 +116,7 @@ static inline XrValue xrt_mod(XrValue a, XrValue b) {
 
 static inline XrValue xrt_neg(XrValue a) {
     if (a.tag == XR_TAG_I64)
-        return XR_FROM_INT((int64_t) (-(uint64_t) a.i));
+        return XR_FROM_INT(xr_numeric_core_i64_neg_wrap(a.i));
     if (a.tag == XR_TAG_F64)
         return XR_FROM_FLOAT(-a.f);
     return XR_FROM_INT(0);
