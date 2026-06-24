@@ -20,6 +20,7 @@
 #include "../shared/xr_elem_type.h"
 #include "../shared/xr_float_fmt.h"
 #include "../shared/xr_map_set_abi.h"
+#include "../shared/xr_numeric_core.h"
 #include "../shared/xr_string_core.h"
 #include "../shared/xr_typed_ops.h"
 #include <string.h>
@@ -431,7 +432,11 @@ static inline void xrt_strbuf_append(XrValue sbv, XrValue val) {
         sb->buf[sb->len] = 0;
     } else if (val.tag == XR_TAG_I64) {
         char tmp[24];
-        int n = snprintf(tmp, sizeof(tmp), "%lld", (long long) val.i);
+        int n = xr_numeric_core_format_i64(tmp, sizeof(tmp), val.i);
+        if (XR_UNLIKELY(n < 0)) {
+            fprintf(stderr, "xrt_strbuf_append: integer formatting failed\n");
+            abort();
+        }
         xrt_strbuf_grow(sb, n);
         memcpy(sb->buf + sb->len, tmp, (size_t) n);
         sb->len += n;
