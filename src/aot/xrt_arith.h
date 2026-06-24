@@ -168,8 +168,11 @@ static void xrt_print_value(XrValue v, int depth) {
             if (depth > 0)
                 putchar('"');
             return;
-        case XR_TAG_I64:
-            printf("%lld", (long long) v.i);
+        case XR_TAG_I64: {
+            char buf[32];
+            (void) xr_numeric_core_format_i64(buf, sizeof(buf), v.i);
+            fputs(buf, stdout);
+        }
             return;
         case XR_TAG_F64: {
             char buf[64];

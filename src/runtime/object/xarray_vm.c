@@ -20,6 +20,7 @@
 #include "../xisolate_api.h"
 #include "../../shared/xr_array_core.h"
 #include "../../shared/xr_float_fmt.h"
+#include "../../shared/xr_numeric_core.h"
 #include "../../shared/xr_sort_core.h"
 #include "../xvm_call.h"
 #include <stdio.h>
@@ -246,7 +247,7 @@ static bool xr_array_join_vm_part(XrValue val, char *dst, size_t *len) {
         data = xr_value_str_data(&val);
         n = xr_value_str_len(&val);
     } else if (XR_IS_INT(val)) {
-        int written = snprintf(tmp, sizeof(tmp), "%lld", (long long) XR_TO_INT(val));
+        int written = xr_numeric_core_format_i64(tmp, sizeof(tmp), XR_TO_INT(val));
         if (written < 0 || (size_t) written >= sizeof(tmp))
             return false;
         data = tmp;

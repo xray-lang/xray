@@ -1,0 +1,17 @@
+let min: int = -9223372036854775807 - 1
+let max: int = 9223372036854775807
+
+print(min)
+print(max)
+print("left=" + min)
+print(max + "=right")
+
+let ints = new Array<int>(3, 0)
+ints[0] = min
+ints[1] = max
+ints[2] = -42
+print(ints.join("|"))
+print(ints)
+
+let mixed = ["n", min, null, true, max]
+print(mixed.join(":"))
