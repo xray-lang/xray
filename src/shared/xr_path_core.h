@@ -13,6 +13,7 @@
 
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 #include <string.h>
 
 #include "../base/xplatform.h"
@@ -404,6 +405,50 @@ static inline void xr_path_core_normalize_write(const char *path, const size_t *
     if (pos == 0)
         out[pos++] = '.';
     out[pos] = '\0';
+}
+
+typedef void *(*XrPathCoreAllocFn)(void *ctx, size_t size);
+typedef void (*XrPathCoreFreeFn)(void *ctx, void *ptr);
+
+static inline bool xr_path_core_normalize_alloc(const char *path, size_t len,
+                                                XrPathCoreAllocFn alloc_fn,
+                                                XrPathCoreFreeFn free_fn, void *ctx, char **out,
+                                                size_t *out_len) {
+    if (!out || !out_len || !alloc_fn || !free_fn)
+        return false;
+    *out = NULL;
+    *out_len = 0;
+    if (!path)
+        len = 0;
+
+    size_t max_segs = xr_path_core_normalize_segment_cap(len);
+    if (max_segs > (SIZE_MAX / sizeof(size_t)) / 2)
+        return false;
+    size_t seg_bytes = sizeof(size_t) * max_segs * 2;
+    size_t *seg_buf = (size_t *) alloc_fn(ctx, seg_bytes);
+    if (!seg_buf)
+        return false;
+
+    size_t *seg_starts = seg_buf;
+    size_t *seg_lens = seg_buf + max_segs;
+    size_t seg_count = 0;
+    bool is_absolute = false;
+    bool ok = xr_path_core_normalize_plan(path, len, seg_starts, seg_lens, max_segs, &seg_count,
+                                          &is_absolute, out_len);
+    if (!ok || *out_len == SIZE_MAX) {
+        free_fn(ctx, seg_buf);
+        return false;
+    }
+
+    char *result = (char *) alloc_fn(ctx, *out_len + 1);
+    if (!result) {
+        free_fn(ctx, seg_buf);
+        return false;
+    }
+    xr_path_core_normalize_write(path, seg_starts, seg_lens, seg_count, is_absolute, result);
+    free_fn(ctx, seg_buf);
+    *out = result;
+    return true;
 }
 
 typedef struct XrPathCoreRelativePlan {

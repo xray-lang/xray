@@ -34,6 +34,16 @@
 #endif
 #endif
 
+static inline void *xrt_path_core_alloc(void *ctx, size_t size) {
+    (void) ctx;
+    return XRT_MALLOC(size);
+}
+
+static inline void xrt_path_core_free(void *ctx, void *ptr) {
+    (void) ctx;
+    XRT_FREE(ptr);
+}
+
 static inline XrValue xrt_path_sep(void) {
     return xrt_str_from_cstr(xr_path_core_sep_str());
 }
@@ -57,27 +67,15 @@ static inline XrValue xrt_path_join(int64_t count_i, const char **parts, const s
 }
 
 static inline XrValue xrt_path_normalize_joined(const char *path, size_t path_len) {
-    size_t max_segs = xr_path_core_normalize_segment_cap(path_len);
-    size_t *seg_buf = (size_t *) XRT_MALLOC(sizeof(size_t) * max_segs * 2);
-    if (!seg_buf)
-        return XR_NULL_VAL;
-
-    size_t *seg_starts = seg_buf;
-    size_t *seg_lens = seg_buf + max_segs;
-    size_t seg_count = 0;
-    bool is_absolute = false;
     size_t out_len = 0;
-    bool ok = xr_path_core_normalize_plan(path, path_len, seg_starts, seg_lens, max_segs,
-                                          &seg_count, &is_absolute, &out_len);
-    if (!ok) {
-        XRT_FREE(seg_buf);
+    char *normalized = NULL;
+    if (!xr_path_core_normalize_alloc(path, path_len, xrt_path_core_alloc, xrt_path_core_free, NULL,
+                                      &normalized, &out_len))
         return XR_NULL_VAL;
-    }
 
     XrValue result = xrt_str_alloc(out_len);
-    xr_path_core_normalize_write(path, seg_starts, seg_lens, seg_count, is_absolute,
-                                 xr_str_buf(result));
-    XRT_FREE(seg_buf);
+    memcpy(xr_str_buf(result), normalized, out_len);
+    XRT_FREE(normalized);
     return result;
 }
 
@@ -209,35 +207,8 @@ static inline const char *xrt_path_extname(const char *path, int64_t len, int64_
 
 static inline bool xrt_path_normalize_temp(const char *path, size_t path_len, char **out,
                                            size_t *out_len) {
-    if (!out || !out_len)
-        return false;
-    *out = NULL;
-    *out_len = 0;
-    size_t max_segs = xr_path_core_normalize_segment_cap(path_len);
-    size_t *seg_buf = (size_t *) XRT_MALLOC(sizeof(size_t) * max_segs * 2);
-    if (!seg_buf)
-        return false;
-
-    size_t *seg_starts = seg_buf;
-    size_t *seg_lens = seg_buf + max_segs;
-    size_t seg_count = 0;
-    bool is_absolute = false;
-    bool ok = xr_path_core_normalize_plan(path, path_len, seg_starts, seg_lens, max_segs,
-                                          &seg_count, &is_absolute, out_len);
-    if (!ok) {
-        XRT_FREE(seg_buf);
-        return false;
-    }
-
-    char *result = (char *) XRT_MALLOC(*out_len + 1);
-    if (!result) {
-        XRT_FREE(seg_buf);
-        return false;
-    }
-    xr_path_core_normalize_write(path, seg_starts, seg_lens, seg_count, is_absolute, result);
-    XRT_FREE(seg_buf);
-    *out = result;
-    return true;
+    return xr_path_core_normalize_alloc(path, path_len, xrt_path_core_alloc, xrt_path_core_free,
+                                        NULL, out, out_len);
 }
 
 static inline XrValue xrt_path_normalize(const char *path, int64_t len) {
