@@ -1,0 +1,6 @@
+fn inc(x: int) -> int {
+    return x + 1
+}
+
+let task = go inc(41)
+print(await task)
