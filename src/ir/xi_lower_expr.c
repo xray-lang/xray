@@ -2065,6 +2065,24 @@ XR_FUNC bool xi_lower_boundary_transfer_arg(XiLower *l, AstNode *child, XiValue 
  * Returns NULL for unrecognized methods. */
 static XiValue *lower_coro_method(XiLower *l, AstNode *node, const char *method,
                                   CallExprNode *call) {
+    /* Coro.yield(): cooperative CPU yield (Gosched). Lowers to an immediate
+     * XI_YIELD suspend point — the same primitive the former bare `yield`
+     * statement used. `yield expr` is reserved for generator value production. */
+    if (strcmp(method, "yield") == 0) {
+        if (call->arg_count != 0) {
+            fprintf(stderr, "[LOWER] Coro.yield() takes no arguments at line %d\n",
+                    (int) node->line);
+            l->had_error = true;
+            return NULL;
+        }
+        XiValue *y = xi_value_new(l->func, l->cur_block, XI_YIELD, l->type_unit, 0);
+        if (!y)
+            return NULL;
+        y->aux_int = XI_YIELD_AUX_IMMEDIATE;
+        y->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_SUSPEND;
+        y->line = (uint32_t) node->line;
+        return y;
+    }
     int sub = coro_method_sub_type(method);
     if (sub < 0)
         return NULL;

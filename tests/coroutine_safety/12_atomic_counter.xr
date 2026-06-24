@@ -51,14 +51,14 @@ scope {
         go fn() {
             while (!shutdown.load()) {
                 work_count.add(1)
-                yield
+                Coro.yield()
             }
         }()
     }
 
     // Let workers run briefly
-    yield
-    yield
+    Coro.yield()
+    Coro.yield()
 
     // Signal shutdown
     shutdown.store(true)

@@ -23,7 +23,7 @@ for (let i = 0; i < waiter_count; i++) {
 }
 
 for (let i = 0; i < 16; i++) {
-    yield
+    Coro.yield()
 }
 
 ch.close()

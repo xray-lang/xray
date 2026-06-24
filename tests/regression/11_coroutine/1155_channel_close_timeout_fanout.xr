@@ -29,7 +29,7 @@ fn test_channel_close_wakes_timed_recv_fanout() {
     }
 
     for (let i = 0; i < 16; i++) {
-        yield
+        Coro.yield()
     }
 
     ch.close()

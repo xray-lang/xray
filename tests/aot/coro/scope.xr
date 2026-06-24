@@ -1,10 +1,10 @@
 fn send_after_yield(ch: Channel<int>, n: int) {
-    yield
+    Coro.yield()
     ch.send(n)
 }
 
 fn linked_value() -> int {
-    yield
+    Coro.yield()
     return 41
 }
 

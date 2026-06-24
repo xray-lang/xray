@@ -40,7 +40,7 @@ fn consumer(id, total_items) {
         if (item != null) {
             count = count + 1
         } else {
-            yield
+            Coro.yield()
         }
     }
     return count

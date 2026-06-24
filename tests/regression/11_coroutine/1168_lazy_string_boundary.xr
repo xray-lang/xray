@@ -17,7 +17,7 @@ fn map_worker(seed: string) -> Map<string, string> {
     let k = make_key(3)
     let m: Map<string, string> = #{}
     m.set(k, seed + "_value")
-    yield
+    Coro.yield()
     return m
 }
 

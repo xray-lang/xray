@@ -23,7 +23,7 @@ fn test_select_wakes_on_channel_close() {
     assert_eq(recv_int(ready), 1)
 
     for (let i = 0; i < 16; i++) {
-        yield
+        Coro.yield()
     }
 
     ch.close()

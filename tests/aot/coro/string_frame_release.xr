@@ -1,6 +1,6 @@
 fn worker() -> string {
     let s = "hello" + "_aot"
-    yield
+    Coro.yield()
     return s
 }
 

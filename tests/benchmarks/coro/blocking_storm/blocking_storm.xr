@@ -23,7 +23,7 @@ fn cpu_task(rounds: int) -> int {
     for (let i = 0; i < rounds; i++) {
         sum = sum + (i % 17)
         if (i % 256 == 0) {
-            yield
+            Coro.yield()
         }
     }
     return sum

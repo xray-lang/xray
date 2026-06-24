@@ -574,6 +574,7 @@ static const int builtin_module_count = GEN_BUILTIN_MODULE_COUNT;
 // These use special opcodes (OP_CORO_CTRL etc.), not module XRS_EXPORT.
 
 static const XaBuiltinMember g_rt_coro_functions[] = {
+    {"yield", "(): ()", "Cooperative CPU yield (Gosched)", true, true},
     {"stats", "(): Json", "Get coroutine statistics", true, true},
     {"list", "(limit?: int, state?: string): Array<Json>", "List coroutines", true, true},
     {"deadlocks", "(): Array<Json>", "Detect deadlocked coroutines", true, true},
