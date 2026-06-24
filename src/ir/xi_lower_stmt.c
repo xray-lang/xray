@@ -1852,8 +1852,9 @@ static void lower_try_catch_impl(XiLower *l, TryCatchNode *tc, AstNode *node) {
     /* Panic handler: register OP_TRY pointing at panic_blk.  This is the
      * VM's mechanism for synchronous runtime faults (the only thing that
      * uses the handler stack now). */
+    XiValue *try_op = NULL;
     if (has_panic) {
-        XiValue *try_op = xi_value_new(l->func, l->cur_block, XI_TRY, l->type_unit, 0);
+        try_op = xi_value_new(l->func, l->cur_block, XI_TRY, l->type_unit, 0);
         if (try_op) {
             try_op->aux = (void *) panic_blk;
             try_op->aux_int = -1;
@@ -1885,6 +1886,7 @@ static void lower_try_catch_impl(XiLower *l, TryCatchNode *tc, AstNode *node) {
         if (has_panic) {
             XiValue *end_op = xi_value_new(l->func, l->cur_block, XI_END_TRY, l->type_unit, 0);
             if (end_op) {
+                end_op->aux = (void *) try_op;
                 end_op->flags |= XI_FLAG_SIDE_EFFECT;
                 end_op->line = (uint32_t) node->line;
             }
@@ -1908,6 +1910,7 @@ static void lower_try_catch_impl(XiLower *l, TryCatchNode *tc, AstNode *node) {
         if (has_panic) {
             XiValue *end_op = xi_value_new(l->func, l->cur_block, XI_END_TRY, l->type_unit, 0);
             if (end_op) {
+                end_op->aux = (void *) try_op;
                 end_op->flags |= XI_FLAG_SIDE_EFFECT;
                 end_op->line = (uint32_t) node->line;
             }
@@ -1931,6 +1934,7 @@ static void lower_try_catch_impl(XiLower *l, TryCatchNode *tc, AstNode *node) {
 
         XiValue *catch_op = xi_value_new(l->func, l->cur_block, XI_CATCH, l->type_any, 0);
         if (catch_op) {
+            catch_op->aux = (void *) try_op;
             catch_op->flags |= XI_FLAG_SIDE_EFFECT;
             catch_op->line = (uint32_t) panic_clause->var_line;
         }
@@ -1945,6 +1949,7 @@ static void lower_try_catch_impl(XiLower *l, TryCatchNode *tc, AstNode *node) {
         if (l->cur_block) {
             XiValue *end_op = xi_value_new(l->func, l->cur_block, XI_END_TRY, l->type_unit, 0);
             if (end_op) {
+                end_op->aux = (void *) try_op;
                 end_op->flags |= XI_FLAG_SIDE_EFFECT;
                 end_op->line = (uint32_t) node->line;
             }
@@ -2193,6 +2198,7 @@ static void lower_var_decl(XiLower *l, AstNode *node) {
                 init_val = conv;
             }
         }
+        init_val = xi_lower_checktype_for_type(l, node, init_val, type);
         init_val = stmt_narrow_for_target_type(l, node, init_val, type);
     } else {
         /* Zero-value initialization for typed variables without initializer.
@@ -2372,6 +2378,7 @@ static void lower_return(XiLower *l, AstNode *node) {
                 val->flags |= XI_FLAG_TAIL;
             }
         }
+        val = xi_lower_checktype_for_type(l, node, val, l->func ? l->func->return_type : NULL);
     } else if (ret->value_count > 1) {
         XR_CHECK(false, "obsolete multi-value return reached Xi lowering");
         return;

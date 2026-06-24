@@ -101,6 +101,21 @@ static XiValue *xi_lower_narrow_for_static_type(XiLower *l, AstNode *node, XiVal
     return xi_lower_narrow_for_native_type(l, node, val, target_type, target_type->native_width);
 }
 
+static void xi_lower_check_map_method_args(XiLower *l, AstNode *node, const char *method,
+                                           XiValue *recv, XiValue **args, int n) {
+    if (!recv || !recv->type || !XR_TYPE_IS_MAP(recv->type) || !method)
+        return;
+    if (n == 1 && (strcmp(method, "get") == 0 || strcmp(method, "has") == 0 ||
+                   strcmp(method, "delete") == 0)) {
+        args[0] = xi_lower_checktype_for_type(l, node, args[0], recv->type->map.key_type);
+        return;
+    }
+    if (n == 2 && strcmp(method, "set") == 0) {
+        args[0] = xi_lower_checktype_for_type(l, node, args[0], recv->type->map.key_type);
+        args[1] = xi_lower_checktype_for_type(l, node, args[1], recv->type->map.value_type);
+    }
+}
+
 static void xi_lower_narrow_map_method_args(XiLower *l, AstNode *node, const char *method,
                                             XiValue *recv, XiValue **args, int n) {
     if (!recv || !recv->type || !XR_TYPE_IS_MAP(recv->type) || !method)
@@ -123,6 +138,14 @@ static void xi_lower_narrow_set_method_args(XiLower *l, AstNode *node, const cha
     if (strcmp(method, "add") == 0 || strcmp(method, "has") == 0 || strcmp(method, "delete") == 0)
         args[0] =
             xi_lower_narrow_for_static_type(l, node, args[0], recv->type->container.element_type);
+}
+
+static void xi_lower_check_set_method_args(XiLower *l, AstNode *node, const char *method,
+                                           XiValue *recv, XiValue **args, int n) {
+    if (!recv || !recv->type || !XR_TYPE_IS_SET(recv->type) || !method || n != 1)
+        return;
+    if (strcmp(method, "add") == 0 || strcmp(method, "has") == 0 || strcmp(method, "delete") == 0)
+        args[0] = xi_lower_checktype_for_type(l, node, args[0], recv->type->container.element_type);
 }
 
 /* Map typed-array element type to XI_WIDEN_* op (for loads).

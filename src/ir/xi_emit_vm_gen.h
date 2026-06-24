@@ -95,6 +95,7 @@
     X(SET_NEW, xi_emit_set_new) \
     X(STR_CONCAT, xi_emit_str_concat) \
     X(AS, xi_emit_as) \
+    X(CHECKTYPE, xi_emit_checktype) \
     X(SLICE, xi_emit_slice) \
     X(RANGE, xi_emit_range) \
     X(ITER_NEW, xi_emit_iter) \

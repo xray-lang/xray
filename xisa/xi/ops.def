@@ -1122,6 +1122,16 @@
   :observable ()
   :targets (vm-bytecode aot-c aot-verify))
 
+(define-xi-op xi.checktype
+  :class type
+  :arity 1
+  :result-ownership borrowed
+  :own-use borrow
+  :effects (side-effect may-throw)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode aot-c aot-verify))
+
 (define-xi-op xi.slice
   :class sequence
   :arity 3
