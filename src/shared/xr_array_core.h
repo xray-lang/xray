@@ -15,6 +15,7 @@
 #include "xr_typed_ops.h"
 #include <stdbool.h>
 #include <stdint.h>
+#include <stddef.h>
 #include <string.h>
 
 typedef struct XrArrayCoreRange {
@@ -46,6 +47,8 @@ typedef struct XrArrayCoreNeedle {
     double f64;
     uint8_t boolean;
 } XrArrayCoreNeedle;
+
+typedef bool (*XrArrayCoreJoinElementFn)(void *ctx, int64_t index, char *dst, size_t *len);
 
 static inline XrArrayCoreNeedle xr_array_core_needle_other(void) {
     return (XrArrayCoreNeedle) {XR_ARRAY_CORE_NEEDLE_OTHER, 0, 0.0, 0};
@@ -92,6 +95,75 @@ static inline XrArrayCoreRange xr_array_core_slice_range(int64_t length, int64_t
 static inline XrArrayCoreRange xr_array_core_fill_range(int64_t length, int64_t start,
                                                         int64_t end) {
     return xr_array_core_slice_range(length, start, end);
+}
+
+static inline bool xr_array_core_join_total(int64_t length, size_t sep_len,
+                                            XrArrayCoreJoinElementFn element_fn, void *ctx,
+                                            size_t *out_total) {
+    if (!out_total || !element_fn)
+        return false;
+    *out_total = 0;
+    if (length <= 0)
+        return true;
+
+    size_t total = 0;
+    for (int64_t i = 0; i < length; i++) {
+        size_t elem_len = 0;
+        if (!element_fn(ctx, i, NULL, &elem_len))
+            return false;
+        if (elem_len > SIZE_MAX - total)
+            return false;
+        total += elem_len;
+        if (i < length - 1) {
+            if (sep_len > SIZE_MAX - total)
+                return false;
+            total += sep_len;
+        }
+    }
+
+    *out_total = total;
+    return true;
+}
+
+static inline bool xr_array_core_join_write(char *dst, size_t capacity, int64_t length,
+                                            const char *sep, size_t sep_len,
+                                            XrArrayCoreJoinElementFn element_fn, void *ctx,
+                                            size_t *out_written) {
+    if (out_written)
+        *out_written = 0;
+    if (!dst || capacity == 0 || !element_fn)
+        return false;
+    if (length <= 0) {
+        dst[0] = '\0';
+        return true;
+    }
+
+    size_t pos = 0;
+    for (int64_t i = 0; i < length; i++) {
+        size_t elem_len = 0;
+        if (!element_fn(ctx, i, NULL, &elem_len))
+            return false;
+        if (elem_len >= capacity - pos)
+            return false;
+        size_t written_len = 0;
+        if (!element_fn(ctx, i, dst + pos, &written_len))
+            return false;
+        if (written_len != elem_len)
+            return false;
+        pos += written_len;
+
+        if (i < length - 1 && sep_len > 0) {
+            if (!sep || sep_len >= capacity - pos)
+                return false;
+            memcpy(dst + pos, sep, sep_len);
+            pos += sep_len;
+        }
+    }
+
+    dst[pos] = '\0';
+    if (out_written)
+        *out_written = pos;
+    return true;
 }
 
 #define XR_ARRAY_CORE_FILL_TYPED_LOOP(T, expr)                                                     \
