@@ -72,6 +72,38 @@ extern struct XrCoroutine *xr_current_coro(XrVMRuntime *X);
 // bytes. Callers needing >2 GiB inputs must stream the file manually.
 #define IO_MAX_READ_BYTES ((long) INT32_MAX)
 
+static char *io_read_file_buffer_sync(const char *path, size_t *out_len);
+
+static void *io_core_alloc(void *ctx, size_t size) {
+    (void) ctx;
+    return xr_malloc(size);
+}
+
+static void io_core_free(void *ctx, void *ptr) {
+    (void) ctx;
+    xr_free(ptr);
+}
+
+static bool io_file_seek_end(void *ctx) {
+    return fseek((FILE *) ctx, 0, SEEK_END) == 0;
+}
+
+static long io_file_tell(void *ctx) {
+    return ftell((FILE *) ctx);
+}
+
+static bool io_file_seek_start(void *ctx) {
+    return fseek((FILE *) ctx, 0, SEEK_SET) == 0;
+}
+
+static size_t io_file_read(void *ctx, void *buf, size_t cap) {
+    return fread(buf, 1, cap, (FILE *) ctx);
+}
+
+static bool io_file_error(void *ctx) {
+    return ferror((FILE *) ctx) != 0;
+}
+
 XR_FUNC char *xr_io_read_stdin_all(size_t *out_len) {
     if (out_len)
         *out_len = 0;
@@ -323,24 +355,10 @@ static XrCFuncResult io_readFile(XrVMRuntime *X, XrValue *args, int argc, XrValu
     }
 #endif
 
-    FILE *f = fopen(path, "rb");
-    if (!f)
+    size_t read_size = 0;
+    char *buf = io_read_file_buffer_sync(path, &read_size);
+    if (!buf)
         return XR_CFUNC_DONE;
-    fseek(f, 0, SEEK_END);
-    long size = ftell(f);
-    if (size < 0 || size > IO_MAX_READ_BYTES) {
-        fclose(f);
-        return XR_CFUNC_DONE;
-    }
-    fseek(f, 0, SEEK_SET);
-    char *buf = (char *) xr_malloc((size_t) size + 1);
-    if (!buf) {
-        fclose(f);
-        return XR_CFUNC_DONE;
-    }
-    size_t read_size = fread(buf, 1, (size_t) size, f);
-    buf[read_size] = '\0';
-    fclose(f);
     *result = xr_string_value(xr_string_intern(X, buf, read_size, 0));
     xr_free(buf);
     return XR_CFUNC_DONE;
@@ -376,24 +394,19 @@ static XrCFuncResult io_readFileBytes(XrVMRuntime *X, XrValue *args, int argc, X
     }
 #endif
 
-    FILE *f = fopen(path, "rb");
-    if (!f)
+    size_t read_size = 0;
+    char *buf = io_read_file_buffer_sync(path, &read_size);
+    if (!buf)
         return XR_CFUNC_DONE;
-    fseek(f, 0, SEEK_END);
-    long size = ftell(f);
-    if (size < 0 || size > IO_MAX_READ_BYTES) {
-        fclose(f);
-        return XR_CFUNC_DONE;
-    }
-    fseek(f, 0, SEEK_SET);
-    XrArray *arr = xr_array_bytes_new(xr_current_coro(X), (int32_t) size);
+    XrArray *arr = xr_array_bytes_new(xr_current_coro(X), (int32_t) read_size);
     if (!arr) {
-        fclose(f);
+        xr_free(buf);
         return XR_CFUNC_DONE;
     }
-    size_t read_size = fread(arr->data, 1, (size_t) size, f);
-    fclose(f);
+    if (read_size > 0)
+        memcpy(arr->data, buf, read_size);
     arr->length = (int32_t) read_size;
+    xr_free(buf);
     *result = xr_value_from_array(arr);
     return XR_CFUNC_DONE;
 }
@@ -728,35 +741,10 @@ static char *io_read_file_buffer_sync(const char *path, size_t *out_len) {
     FILE *f = fopen(path, "rb");
     if (!f)
         return NULL;
-    if (fseek(f, 0, SEEK_END) != 0) {
-        fclose(f);
-        return NULL;
-    }
-    long size = ftell(f);
-    if (size < 0 || size > IO_MAX_READ_BYTES) {
-        fclose(f);
-        return NULL;
-    }
-    if (fseek(f, 0, SEEK_SET) != 0) {
-        fclose(f);
-        return NULL;
-    }
-
-    char *buf = (char *) xr_malloc((size_t) size + 1);
-    if (!buf) {
-        fclose(f);
-        return NULL;
-    }
-    size_t n = fread(buf, 1, (size_t) size, f);
-    bool failed = ferror(f) != 0;
+    char *buf = xr_io_core_read_sized_stream_alloc(
+        f, io_file_seek_end, io_file_tell, io_file_seek_start, io_file_read, io_file_error,
+        io_core_alloc, io_core_free, NULL, IO_MAX_READ_BYTES, out_len);
     fclose(f);
-    if (failed) {
-        xr_free(buf);
-        return NULL;
-    }
-    buf[n] = '\0';
-    if (out_len)
-        *out_len = n;
     return buf;
 }
 

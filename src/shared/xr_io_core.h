@@ -21,6 +21,10 @@ typedef bool (*XrIoCoreIsDirFn)(void *ctx, const char *path);
 typedef size_t (*XrIoCoreReadFn)(void *ctx, void *buf, size_t cap);
 typedef size_t (*XrIoCoreWriteFn)(void *ctx, const void *buf, size_t len);
 typedef bool (*XrIoCoreErrorFn)(void *ctx);
+typedef bool (*XrIoCoreSeekFn)(void *ctx);
+typedef long (*XrIoCoreTellFn)(void *ctx);
+typedef void *(*XrIoCoreAllocFn)(void *ctx, size_t size);
+typedef void (*XrIoCoreFreeFn)(void *ctx, void *ptr);
 
 #define XR_IO_CORE_COPY_BUFFER_SIZE 65536u
 
@@ -106,6 +110,73 @@ static inline bool xr_io_core_read_lines_each(const char *data, size_t len, XrIo
     }
 
     return true;
+}
+
+static inline bool xr_io_core_prepare_sized_read(void *ctx, XrIoCoreSeekFn seek_end_fn,
+                                                 XrIoCoreTellFn tell_fn,
+                                                 XrIoCoreSeekFn seek_start_fn, long max_read_bytes,
+                                                 size_t *out_size) {
+    if (out_size)
+        *out_size = 0;
+    if (!seek_end_fn || !tell_fn || !seek_start_fn || max_read_bytes < 0)
+        return false;
+    if (!seek_end_fn(ctx))
+        return false;
+    long size = tell_fn(ctx);
+    if (size < 0 || size > max_read_bytes)
+        return false;
+    if (!seek_start_fn(ctx))
+        return false;
+    if (out_size)
+        *out_size = (size_t) size;
+    return true;
+}
+
+static inline bool xr_io_core_read_into(void *ctx, XrIoCoreReadFn read_fn, XrIoCoreErrorFn error_fn,
+                                        void *buf, size_t size, bool nul_terminate,
+                                        size_t *out_len) {
+    if (out_len)
+        *out_len = 0;
+    if (!read_fn || (!buf && (size != 0 || nul_terminate)))
+        return false;
+
+    size_t n = 0;
+    if (size > 0)
+        n = read_fn(ctx, buf, size);
+    if (n > size)
+        n = size;
+    bool failed = error_fn ? error_fn(ctx) : false;
+    if (failed)
+        return false;
+    if (nul_terminate)
+        ((char *) buf)[n] = '\0';
+    if (out_len)
+        *out_len = n;
+    return true;
+}
+
+static inline char *xr_io_core_read_sized_stream_alloc(
+    void *ctx, XrIoCoreSeekFn seek_end_fn, XrIoCoreTellFn tell_fn, XrIoCoreSeekFn seek_start_fn,
+    XrIoCoreReadFn read_fn, XrIoCoreErrorFn error_fn, XrIoCoreAllocFn alloc_fn,
+    XrIoCoreFreeFn free_fn, void *alloc_ctx, long max_read_bytes, size_t *out_len) {
+    if (out_len)
+        *out_len = 0;
+    if (!alloc_fn || !free_fn)
+        return NULL;
+
+    size_t size = 0;
+    if (!xr_io_core_prepare_sized_read(ctx, seek_end_fn, tell_fn, seek_start_fn, max_read_bytes,
+                                       &size))
+        return NULL;
+
+    char *buf = (char *) alloc_fn(alloc_ctx, size + 1);
+    if (!buf)
+        return NULL;
+    if (!xr_io_core_read_into(ctx, read_fn, error_fn, buf, size, true, out_len)) {
+        free_fn(alloc_ctx, buf);
+        return NULL;
+    }
+    return buf;
 }
 
 static inline bool xr_io_core_copy_stream(void *ctx, XrIoCoreReadFn read_fn,
