@@ -51,6 +51,18 @@ typedef struct XrIoCoreRemoveAllOps {
     char sep;
 } XrIoCoreRemoveAllOps;
 
+#define XR_IO_CORE_READ_DIR_MAX_DEPTH 64
+
+typedef struct XrIoCoreReadDirOps {
+    XrIoCoreForEachDirEntryFn for_each_entry;
+    XrIoCorePathKindFn kind;
+    XrIoCoreAllocFn alloc;
+    XrIoCoreFreeFn free;
+    void *alloc_ctx;
+    char sep;
+    int max_depth;
+} XrIoCoreReadDirOps;
+
 #define XR_IO_CORE_COPY_BUFFER_SIZE 65536u
 
 typedef enum XrIoCoreStatField {
@@ -445,6 +457,117 @@ static inline bool xr_io_core_remove_all(const char *path, const XrIoCoreRemoveA
         !ops->remove_dir || !ops->alloc || !ops->free)
         return false;
     return xr_io_core_remove_all_impl(path, ops, ctx);
+}
+
+typedef struct XrIoCoreReadDirVisitCtx {
+    XrIoCorePathFn emit;
+    void *emit_ctx;
+} XrIoCoreReadDirVisitCtx;
+
+static inline bool xr_io_core_read_dir_visit(void *ctx, const char *name) {
+    XrIoCoreReadDirVisitCtx *v = (XrIoCoreReadDirVisitCtx *) ctx;
+    if (xr_io_core_is_dot_dir_entry(name))
+        return true;
+    return v->emit(v->emit_ctx, name);
+}
+
+static inline bool xr_io_core_read_dir(const char *path, XrIoCoreForEachDirEntryFn for_each_entry,
+                                       void *ctx, XrIoCorePathFn emit, void *emit_ctx) {
+    if (!path || !for_each_entry || !emit)
+        return false;
+    XrIoCoreReadDirVisitCtx visit_ctx = {.emit = emit, .emit_ctx = emit_ctx};
+    return for_each_entry(ctx, path, xr_io_core_read_dir_visit, &visit_ctx);
+}
+
+typedef struct XrIoCoreReadDirRecursiveCtx {
+    const XrIoCoreReadDirOps *ops;
+    void *ctx;
+    XrIoCorePathFn emit;
+    void *emit_ctx;
+    const char *base;
+    size_t base_len;
+    const char *current;
+    int depth;
+    bool ok;
+} XrIoCoreReadDirRecursiveCtx;
+
+static inline const char *xr_io_core_relative_path_from_base(const char *fullpath, size_t base_len);
+static inline bool xr_io_core_read_dir_recursive_impl(const char *path,
+                                                      XrIoCoreReadDirRecursiveCtx *r);
+
+static inline bool xr_io_core_read_dir_recursive_visit(void *ctx, const char *name) {
+    XrIoCoreReadDirRecursiveCtx *r = (XrIoCoreReadDirRecursiveCtx *) ctx;
+    if (xr_io_core_is_dot_dir_entry(name))
+        return true;
+
+    size_t child_len = 0;
+    if (!xr_io_core_join_child_len(r->current, name, &child_len))
+        return true;
+
+    char *child = (char *) r->ops->alloc(r->ops->alloc_ctx, child_len + 1);
+    if (!child)
+        return true;
+
+    char sep = r->ops->sep ? r->ops->sep : '/';
+    if (!xr_io_core_join_child_path(r->current, sep, name, child, child_len + 1)) {
+        r->ops->free(r->ops->alloc_ctx, child);
+        return true;
+    }
+
+    const char *rel = xr_io_core_relative_path_from_base(child, r->base_len);
+    if (!r->emit(r->emit_ctx, rel)) {
+        r->ok = false;
+        r->ops->free(r->ops->alloc_ctx, child);
+        return false;
+    }
+
+    if (r->ops->kind(r->ctx, child) == XR_IO_CORE_PATH_DIR) {
+        XrIoCoreReadDirRecursiveCtx child_ctx = *r;
+        child_ctx.depth = r->depth + 1;
+        child_ctx.ok = true;
+        if (!xr_io_core_read_dir_recursive_impl(child, &child_ctx))
+            r->ok = false;
+    }
+
+    r->ops->free(r->ops->alloc_ctx, child);
+    return true;
+}
+
+static inline bool xr_io_core_read_dir_recursive_impl(const char *path,
+                                                      XrIoCoreReadDirRecursiveCtx *r) {
+    int max_depth = r->ops->max_depth > 0 ? r->ops->max_depth : XR_IO_CORE_READ_DIR_MAX_DEPTH;
+    if (r->depth >= max_depth)
+        return true;
+
+    XrIoCoreReadDirRecursiveCtx visit_ctx = *r;
+    visit_ctx.current = path;
+    visit_ctx.ok = true;
+    bool iter_ok =
+        r->ops->for_each_entry(r->ctx, path, xr_io_core_read_dir_recursive_visit, &visit_ctx);
+    if (!iter_ok && visit_ctx.ok)
+        return true;
+    if (!visit_ctx.ok)
+        r->ok = false;
+    return r->ok;
+}
+
+static inline bool xr_io_core_read_dir_recursive(const char *path, const XrIoCoreReadDirOps *ops,
+                                                 void *ctx, XrIoCorePathFn emit, void *emit_ctx) {
+    if (!path || !ops || !ops->for_each_entry || !ops->kind || !ops->alloc || !ops->free || !emit)
+        return false;
+
+    XrIoCoreReadDirRecursiveCtx r = {
+        .ops = ops,
+        .ctx = ctx,
+        .emit = emit,
+        .emit_ctx = emit_ctx,
+        .base = path,
+        .base_len = xr_io_core_cstr_len(path),
+        .current = path,
+        .depth = 0,
+        .ok = true,
+    };
+    return xr_io_core_read_dir_recursive_impl(path, &r);
 }
 
 static inline bool xr_io_core_temp_template(const char *root, char sep, const char *stem, char *out,

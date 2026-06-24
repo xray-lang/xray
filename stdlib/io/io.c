@@ -22,6 +22,8 @@
 #include "../../src/runtime/xisolate_api.h"
 #include "../../src/runtime/object/xarray.h"
 #include "../../src/runtime/object/xstring.h"
+#include "../../src/runtime/mem/xcoro_heap.h"
+#include "../../src/runtime/mem/xalloc_unified.h"
 #include "../../src/base/xmalloc.h"
 #include "../../src/base/xchecks.h"
 #include "../../src/coro/xyieldable.h"
@@ -565,6 +567,61 @@ static XrValue io_mkdir(XrVMRuntime *X, XrValue *args, int argc) {
     return xr_bool(xr_fs_mkdir(path, 0755) == 0);
 }
 
+static bool io_dir_for_each_entry(void *ctx, const char *path, XrIoCoreDirEntryFn visit,
+                                  void *visit_ctx) {
+    (void) ctx;
+    if (!path || !visit)
+        return false;
+    XrDirIter *it = xr_dir_open(path);
+    if (!it)
+        return false;
+
+    XrDirEntry e;
+    bool ok = true;
+    while (xr_dir_next(it, &e)) {
+        if (!visit(visit_ctx, e.name)) {
+            ok = false;
+            break;
+        }
+    }
+
+    xr_dir_close(it);
+    return ok;
+}
+
+static XrIoCorePathKind io_path_kind(void *ctx, const char *path) {
+    (void) ctx;
+#ifdef XR_OS_WINDOWS
+    DWORD attrs = GetFileAttributesA(path);
+    if (attrs == INVALID_FILE_ATTRIBUTES)
+        return XR_IO_CORE_PATH_MISSING;
+    if ((attrs & FILE_ATTRIBUTE_DIRECTORY) && !(attrs & FILE_ATTRIBUTE_REPARSE_POINT))
+        return XR_IO_CORE_PATH_DIR;
+    return XR_IO_CORE_PATH_LEAF;
+#else
+    struct stat st;
+    if (lstat(path, &st) != 0)
+        return XR_IO_CORE_PATH_MISSING;
+    return S_ISDIR(st.st_mode) ? XR_IO_CORE_PATH_DIR : XR_IO_CORE_PATH_LEAF;
+#endif
+}
+
+typedef struct IoReadDirEmitCtx {
+    XrVMRuntime *X;
+    XrArray *arr;
+} IoReadDirEmitCtx;
+
+static bool io_read_dir_emit(void *ctx, const char *path) {
+    IoReadDirEmitCtx *emit = (IoReadDirEmitCtx *) ctx;
+    xr_array_push(emit->arr, xrs_string_value_c(emit->X, path));
+    return true;
+}
+
+static void io_release_array(XrArray *arr) {
+    if (arr)
+        xr_rc_release_value(xr_current_coro_heap(), xr_value_from_array(arr));
+}
+
 // readDir(path) - Read directory contents
 static XrValue io_readDir(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1)
@@ -573,23 +630,16 @@ static XrValue io_readDir(XrVMRuntime *X, XrValue *args, int argc) {
     if (!path)
         return xr_null();
 
-    XrDirIter *it = xr_dir_open(path);
-    if (!it)
-        return xr_null();
-
     XrArray *arr = xr_array_new(xr_current_coro(X));
-    if (!arr) {
-        xr_dir_close(it);
+    if (!arr)
+        return xr_null();
+
+    IoReadDirEmitCtx emit = {.X = X, .arr = arr};
+    if (!xr_io_core_read_dir(path, io_dir_for_each_entry, NULL, io_read_dir_emit, &emit)) {
+        io_release_array(arr);
         return xr_null();
     }
 
-    XrDirEntry e;
-    while (xr_dir_next(it, &e)) {
-        XrValue name = xrs_string_value_c(X, e.name);
-        xr_array_push(arr, name);
-    }
-
-    xr_dir_close(it);
     return xr_value_from_array(arr);
 }
 
@@ -910,45 +960,6 @@ static bool io_touch_create(void *ctx, const char *path) {
 }
 
 #ifdef XR_OS_WINDOWS
-static XrIoCorePathKind io_remove_all_kind(void *ctx, const char *path) {
-    (void) ctx;
-    DWORD attrs = GetFileAttributesA(path);
-    if (attrs == INVALID_FILE_ATTRIBUTES)
-        return XR_IO_CORE_PATH_MISSING;
-    if ((attrs & FILE_ATTRIBUTE_DIRECTORY) && !(attrs & FILE_ATTRIBUTE_REPARSE_POINT))
-        return XR_IO_CORE_PATH_DIR;
-    return XR_IO_CORE_PATH_LEAF;
-}
-
-static bool io_remove_all_for_each_entry(void *ctx, const char *path, XrIoCoreDirEntryFn visit,
-                                         void *visit_ctx) {
-    (void) ctx;
-    size_t len = strlen(path);
-    char *pattern = (char *) xr_malloc(len + 4);
-    if (!pattern)
-        return false;
-    memcpy(pattern, path, len);
-    pattern[len++] = '\\';
-    pattern[len++] = '*';
-    pattern[len] = '\0';
-
-    WIN32_FIND_DATAA fd;
-    HANDLE h = FindFirstFileA(pattern, &fd);
-    xr_free(pattern);
-    if (h == INVALID_HANDLE_VALUE)
-        return GetLastError() == ERROR_FILE_NOT_FOUND;
-
-    bool ok = true;
-    do {
-        if (!visit(visit_ctx, fd.cFileName)) {
-            ok = false;
-            break;
-        }
-    } while (FindNextFileA(h, &fd));
-    FindClose(h);
-    return ok;
-}
-
 static bool io_remove_all_leaf(void *ctx, const char *path) {
     (void) ctx;
     DWORD attrs = GetFileAttributesA(path);
@@ -963,36 +974,6 @@ static bool io_remove_all_dir(void *ctx, const char *path) {
     return RemoveDirectoryA(path) != 0;
 }
 #else
-static XrIoCorePathKind io_remove_all_kind(void *ctx, const char *path) {
-    (void) ctx;
-    struct stat st;
-    if (lstat(path, &st) != 0)
-        return XR_IO_CORE_PATH_MISSING;
-    if (S_ISDIR(st.st_mode) && !S_ISLNK(st.st_mode))
-        return XR_IO_CORE_PATH_DIR;
-    return XR_IO_CORE_PATH_LEAF;
-}
-
-static bool io_remove_all_for_each_entry(void *ctx, const char *path, XrIoCoreDirEntryFn visit,
-                                         void *visit_ctx) {
-    (void) ctx;
-    DIR *dir = opendir(path);
-    if (!dir)
-        return false;
-    bool ok = true;
-    for (;;) {
-        struct dirent *e = readdir(dir);
-        if (!e)
-            break;
-        if (!visit(visit_ctx, e->d_name)) {
-            ok = false;
-            break;
-        }
-    }
-    closedir(dir);
-    return ok;
-}
-
 static bool io_remove_all_leaf(void *ctx, const char *path) {
     (void) ctx;
     return remove(path) == 0;
@@ -1014,8 +995,8 @@ static XrValue io_removeAll(XrVMRuntime *X, XrValue *args, int argc) {
         return xr_bool(false);
 
     XrIoCoreRemoveAllOps ops = {
-        .kind = io_remove_all_kind,
-        .for_each_entry = io_remove_all_for_each_entry,
+        .kind = io_path_kind,
+        .for_each_entry = io_dir_for_each_entry,
         .remove_leaf = io_remove_all_leaf,
         .remove_dir = io_remove_all_dir,
         .alloc = io_core_alloc,
@@ -1195,59 +1176,6 @@ static XrValue io_tempDir(XrVMRuntime *X, XrValue *args, int argc) {
 }
 
 // readDirRecursive helper struct
-#define READ_DIR_MAX_DEPTH 64
-
-typedef struct {
-    XrVMRuntime *X;
-    XrArray *arr;
-    const char *base;
-    size_t base_len;
-} ReadDirCtx;
-
-// readDirRecursive helper function.
-// Skips entries whose composed full path does not fit into XR_PATH_MAX instead
-// of silently truncating, and descends only into real directories (symlinks
-// are intentionally not followed, mirroring POSIX `find -xdev` semantics).
-static void read_dir_recursive_impl(ReadDirCtx *ctx, const char *path, int depth) {
-    if (depth >= READ_DIR_MAX_DEPTH)
-        return;
-    XrDirIter *it = xr_dir_open(path);
-    if (!it)
-        return;
-
-    XrDirEntry e;
-    while (xr_dir_next(it, &e)) {
-        char fullpath[XR_PATH_MAX];
-        if (!xr_io_core_join_child_path(path, '/', e.name, fullpath, sizeof(fullpath))) {
-            // Entry would overflow XR_PATH_MAX; skip rather than report a
-            // truncated path to the caller.
-            continue;
-        }
-
-        // Add relative path
-        const char *relpath = xr_io_core_relative_path_from_base(fullpath, ctx->base_len);
-        XrValue name = xrs_string_value_c(ctx->X, relpath);
-        xr_array_push(ctx->arr, name);
-
-        // Recursively enter real subdirectories only, without following
-        // symlinks (prevents escape via bind mounts or malicious links).
-#ifdef XR_OS_WINDOWS
-        DWORD attrs = GetFileAttributesA(fullpath);
-        if (attrs != INVALID_FILE_ATTRIBUTES && (attrs & FILE_ATTRIBUTE_DIRECTORY) &&
-            !(attrs & FILE_ATTRIBUTE_REPARSE_POINT)) {
-            read_dir_recursive_impl(ctx, fullpath, depth + 1);
-        }
-#else
-        struct stat st;
-        if (lstat(fullpath, &st) == 0 && S_ISDIR(st.st_mode)) {
-            read_dir_recursive_impl(ctx, fullpath, depth + 1);
-        }
-#endif
-    }
-
-    xr_dir_close(it);
-}
-
 // readDirRecursive(path) - Recursively read directory
 static XrValue io_readDirRecursive(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1)
@@ -1255,15 +1183,25 @@ static XrValue io_readDirRecursive(XrVMRuntime *X, XrValue *args, int argc) {
     const char *path = xrs_string_arg(args[0], NULL);
     if (!path)
         return xr_null();
-    XR_DCHECK(strlen(path) < XR_PATH_MAX, "io_readDirRecursive: path within bounds");
 
     XrArray *arr = xr_array_new(xr_current_coro(X));
     if (!arr)
         return xr_null();
 
-    ReadDirCtx ctx = {.X = X, .arr = arr, .base = path, .base_len = strlen(path)};
-
-    read_dir_recursive_impl(&ctx, path, 0);
+    IoReadDirEmitCtx emit = {.X = X, .arr = arr};
+    XrIoCoreReadDirOps ops = {
+        .for_each_entry = io_dir_for_each_entry,
+        .kind = io_path_kind,
+        .alloc = io_core_alloc,
+        .free = io_core_free,
+        .alloc_ctx = NULL,
+        .sep = '/',
+        .max_depth = XR_IO_CORE_READ_DIR_MAX_DEPTH,
+    };
+    if (!xr_io_core_read_dir_recursive(path, &ops, NULL, io_read_dir_emit, &emit)) {
+        io_release_array(arr);
+        return xr_null();
+    }
     return xr_value_from_array(arr);
 }
 
