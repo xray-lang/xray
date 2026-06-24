@@ -892,6 +892,23 @@ static XrValue io_mkdirp(XrVMRuntime *X, XrValue *args, int argc) {
     return xr_bool(xr_io_core_mkdirp(tmp, io_mkdirp_mkdir, io_mkdirp_is_dir, NULL));
 }
 
+static bool io_touch_update(void *ctx, const char *path) {
+    (void) ctx;
+#ifdef XR_OS_WINDOWS
+    return _utime(path, NULL) == 0;
+#else
+    return utime(path, NULL) == 0;
+#endif
+}
+
+static bool io_touch_create(void *ctx, const char *path) {
+    (void) ctx;
+    FILE *f = fopen(path, "a");
+    if (!f)
+        return false;
+    return fclose(f) == 0;
+}
+
 #ifdef XR_OS_WINDOWS
 // Windows recursive removal using FindFirstFile/FindNextFile
 static bool remove_all_impl(const char *dir) {
@@ -987,21 +1004,7 @@ static XrValue io_touch(XrVMRuntime *X, XrValue *args, int argc) {
     const char *path = xrs_string_arg(args[0], NULL);
     if (!path)
         return xr_bool(false);
-
-    // Try to update timestamp
-#ifdef XR_OS_WINDOWS
-    if (_utime(path, NULL) == 0)
-#else
-    if (utime(path, NULL) == 0)
-#endif
-        return xr_bool(true);
-
-    // File doesn't exist, create empty file
-    FILE *f = fopen(path, "a");
-    if (!f)
-        return xr_bool(false);
-    fclose(f);
-    return xr_bool(true);
+    return xr_bool(xr_io_core_touch(path, io_touch_update, io_touch_create, NULL));
 }
 
 // symlink(target, path) - Create symbolic link

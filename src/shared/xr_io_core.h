@@ -23,6 +23,7 @@ typedef size_t (*XrIoCoreWriteFn)(void *ctx, const void *buf, size_t len);
 typedef bool (*XrIoCoreErrorFn)(void *ctx);
 typedef bool (*XrIoCoreSeekFn)(void *ctx);
 typedef long (*XrIoCoreTellFn)(void *ctx);
+typedef bool (*XrIoCorePathFn)(void *ctx, const char *path);
 typedef void *(*XrIoCoreAllocFn)(void *ctx, size_t size);
 typedef void *(*XrIoCoreReallocFn)(void *ctx, void *ptr, size_t size);
 typedef void (*XrIoCoreFreeFn)(void *ctx, void *ptr);
@@ -265,6 +266,15 @@ static inline bool xr_io_core_write_all(void *ctx, XrIoCoreWriteFn write_fn,
         off += n;
     }
     return error_fn ? !error_fn(ctx) : true;
+}
+
+static inline bool xr_io_core_touch(const char *path, XrIoCorePathFn update_fn,
+                                    XrIoCorePathFn create_fn, void *ctx) {
+    if (!path || !update_fn || !create_fn)
+        return false;
+    if (update_fn(ctx, path))
+        return true;
+    return create_fn(ctx, path);
 }
 
 static inline bool xr_io_core_is_sep(char ch) {

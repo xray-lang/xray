@@ -516,20 +516,24 @@ static inline XrValue xrt_io_chmod_value(const char *path_data, int64_t path_len
     return XR_FROM_BOOL(ok);
 }
 
+static inline bool xrt_io_touch_update(void *ctx, const char *path) {
+    (void) ctx;
+    return xrt_io_platform_utime(path, NULL) == 0;
+}
+
+static inline bool xrt_io_touch_create(void *ctx, const char *path) {
+    (void) ctx;
+    FILE *f = fopen(path, "a");
+    if (!f)
+        return false;
+    return fclose(f) == 0;
+}
+
 static inline XrValue xrt_io_touch(const char *path_data, int64_t path_len) {
     char stack_path[512];
     char *owned = NULL;
     char *path = xrt_io_copy_cstr_arg(path_data, path_len, stack_path, sizeof(stack_path), &owned);
-    bool ok = false;
-    if (path) {
-        ok = xrt_io_platform_utime(path, NULL) == 0;
-        if (!ok) {
-            FILE *f = fopen(path, "a");
-            if (f) {
-                ok = fclose(f) == 0;
-            }
-        }
-    }
+    bool ok = xr_io_core_touch(path, xrt_io_touch_update, xrt_io_touch_create, NULL);
     XRT_FREE(owned);
     return XR_FROM_BOOL(ok);
 }
