@@ -1,0 +1,17 @@
+contains=xaot-plan v0
+contains="runtime_caps": ["coro", "transfer", "netpoll", "task", "objects"]
+contains="runtime_objects": ["xray_rt_coro"]
+contains="stdlib_objects": []
+contains="stdlib_symbols": []
+regex="system_libs": \[[^]]*"m"
+regex="system_libs": \[[^]]*"pthread"
+contains="defines": ["XRT_IMPL"]
+c_contains=xr_aot_scope_enter(
+c_contains=xr_aot_spawn(
+c_contains=xr_aot_scope_exit(
+c_contains=runtime_cfg.caps = XR_AOT_CAP_CORO | XR_AOT_CAP_TRANSFER | XR_AOT_CAP_TASK | XR_AOT_CAP_OBJECTS;
+not_contains=xray_core
+not_contains=channel
+not_contains=timer
+not_contains=work_queue
+not_contains=result_group
