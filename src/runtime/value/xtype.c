@@ -1625,8 +1625,11 @@ bool xr_type_equals(XrType *a, XrType *b) {
                 return false;
             }
         }
-        if (!xr_error_set_equals(a->function.error_set, b->function.error_set))
-            return false;
+        /* error_set is advisory metadata (IDE / optimization), not part of the
+         * function type identity: two functions with the same signature but
+         * different inferred error sets are the same type and interchangeable.
+         * It is intentionally excluded from equality, assignability, and the
+         * monomorphization key (errors are unchecked). */
         return true;
     }
     if (a->kind == XR_KIND_JSON) {
