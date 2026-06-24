@@ -54,6 +54,13 @@ typedef XrValue (*XrArrayCoreMapFn)(void *ctx, XrValue value);
 typedef bool (*XrArrayCoreWriteFn)(void *ctx, int64_t index, XrValue value);
 typedef bool (*XrArrayCorePredicateFn)(void *ctx, XrValue value);
 typedef XrValue (*XrArrayCoreReduceFn)(void *ctx, XrValue acc, XrValue value);
+typedef bool (*XrArrayCoreEachFn)(void *ctx, XrValue value);
+
+typedef struct XrArrayCoreFindResult {
+    bool found;
+    int64_t index;
+    XrValue value;
+} XrArrayCoreFindResult;
 
 static inline XrArrayCoreNeedle xr_array_core_needle_other(void) {
     return (XrArrayCoreNeedle) {XR_ARRAY_CORE_NEEDLE_OTHER, 0, 0.0, 0};
@@ -226,6 +233,76 @@ static inline XrValue xr_array_core_hof_reduce(int64_t length, XrArrayCoreReadFn
     for (int64_t i = 0; i < length; i++)
         acc = reduce_fn(ctx, acc, read_fn(ctx, i));
     return acc;
+}
+
+static inline bool xr_array_core_hof_for_each(int64_t length, XrArrayCoreReadFn read_fn,
+                                              XrArrayCoreEachFn each_fn, void *ctx,
+                                              int64_t *out_count) {
+    if (out_count)
+        *out_count = 0;
+    if (length <= 0)
+        return true;
+    if (!read_fn || !each_fn)
+        return false;
+
+    for (int64_t i = 0; i < length; i++) {
+        if (!each_fn(ctx, read_fn(ctx, i)))
+            return false;
+    }
+    if (out_count)
+        *out_count = length;
+    return true;
+}
+
+static inline XrArrayCoreFindResult xr_array_core_hof_find(int64_t length,
+                                                           XrArrayCoreReadFn read_fn,
+                                                           XrArrayCorePredicateFn predicate_fn,
+                                                           void *ctx) {
+    XrArrayCoreFindResult result = {false, -1, XR_NULL_VAL};
+    if (length <= 0 || !read_fn || !predicate_fn)
+        return result;
+
+    for (int64_t i = 0; i < length; i++) {
+        XrValue value = read_fn(ctx, i);
+        if (predicate_fn(ctx, value)) {
+            result.found = true;
+            result.index = i;
+            result.value = value;
+            return result;
+        }
+    }
+    return result;
+}
+
+static inline int64_t xr_array_core_hof_find_index(int64_t length, XrArrayCoreReadFn read_fn,
+                                                   XrArrayCorePredicateFn predicate_fn, void *ctx) {
+    return xr_array_core_hof_find(length, read_fn, predicate_fn, ctx).index;
+}
+
+static inline bool xr_array_core_hof_every(int64_t length, XrArrayCoreReadFn read_fn,
+                                           XrArrayCorePredicateFn predicate_fn, void *ctx) {
+    if (length <= 0)
+        return true;
+    if (!read_fn || !predicate_fn)
+        return false;
+
+    for (int64_t i = 0; i < length; i++) {
+        if (!predicate_fn(ctx, read_fn(ctx, i)))
+            return false;
+    }
+    return true;
+}
+
+static inline bool xr_array_core_hof_some(int64_t length, XrArrayCoreReadFn read_fn,
+                                          XrArrayCorePredicateFn predicate_fn, void *ctx) {
+    if (length <= 0 || !read_fn || !predicate_fn)
+        return false;
+
+    for (int64_t i = 0; i < length; i++) {
+        if (predicate_fn(ctx, read_fn(ctx, i)))
+            return true;
+    }
+    return false;
 }
 
 #define XR_ARRAY_CORE_FILL_TYPED_LOOP(T, expr)                                                     \

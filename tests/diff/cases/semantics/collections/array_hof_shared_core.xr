@@ -17,6 +17,29 @@ print(kept[1])
 let total = values.reduce(fn(acc: int, x: int) -> int { return acc * 10 + x }, 0)
 print(total)
 
+let each_total = 0
+values.forEach(fn(x: int) {
+    each_total = each_total + x
+})
+print(each_total)
+
+let found = values.find(fn(x: int) -> bool { return x > 2 })
+print(found)
+
+let missing = values.find(fn(x: int) -> bool { return x > 10 })
+print(missing)
+
+let found_index = values.findIndex(fn(x: int) -> bool { return x == 3 })
+print(found_index)
+
+let missing_index = values.findIndex(fn(x: int) -> bool { return x > 10 })
+print(missing_index)
+
+print(values.every(fn(x: int) -> bool { return x > 0 }))
+print(values.every(fn(x: int) -> bool { return x < 4 }))
+print(values.some(fn(x: int) -> bool { return x == 4 }))
+print(values.some(fn(x: int) -> bool { return x > 10 }))
+
 let chained = values
     .map(fn(x: int) -> int { return x + 1 })
     .filter(fn(x: int) -> bool { return x > 2 })

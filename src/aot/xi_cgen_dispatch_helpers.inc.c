@@ -808,7 +808,7 @@ static const XiValue *xicgen_native_int_print_source(XiCgenCtx *ctx, const XiVal
         return NULL;
     if (arg->op == XI_BOX && arg->nargs >= 1)
         arg = arg->args[0];
-    if (!arg->type || arg->type->kind != XR_KIND_INT)
+    if (!arg->type || arg->type->is_nullable || arg->type->kind != XR_KIND_INT)
         return NULL;
     XrRep rep = cg_value_plan_storage_rep(ctx, arg);
     if (rep != XR_REP_I64 && rep != XR_REP_TAGGED)

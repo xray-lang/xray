@@ -29,16 +29,6 @@ XrArray *xr_array_new_shared(struct XrVMRuntime *X, int capacity) {
     return xr_array_new_shared_core(xr_isolate_get_runtime_core(X), capacity);
 }
 
-void xr_array_foreach(struct XrVMRuntime *iso, XrArray *arr, struct XrClosure *callback) {
-    XR_DCHECK(arr != NULL, "xr_array_foreach: NULL arr");
-    XR_DCHECK(callback != NULL, "xr_array_foreach: NULL callback");
-    for (int i = 0; i < arr->length; i++) {
-        XrValue args[1];
-        args[0] = xr_array_get_element(arr, i);
-        xr_vm_call_closure(iso, callback, args, 1);
-    }
-}
-
 static uint8_t array_map_result_tid(struct XrClosure *callback) {
     if (!callback || !callback->proto || !callback->proto->return_type_info)
         return 0;
@@ -63,6 +53,13 @@ static XrValue xr_array_hof_vm_map(void *ctx_ptr, XrValue value) {
     XrArrayHofVMCtx *ctx = (XrArrayHofVMCtx *) ctx_ptr;
     XrValue args[1] = {value};
     return xr_vm_call_closure(ctx->iso, ctx->callback, args, 1);
+}
+
+static bool xr_array_hof_vm_each(void *ctx_ptr, XrValue value) {
+    XrArrayHofVMCtx *ctx = (XrArrayHofVMCtx *) ctx_ptr;
+    XrValue args[1] = {value};
+    (void) xr_vm_call_closure(ctx->iso, ctx->callback, args, 1);
+    return true;
 }
 
 static bool xr_array_hof_vm_write(void *ctx_ptr, int64_t index, XrValue value) {
@@ -114,6 +111,14 @@ XrArray *xr_array_map(struct XrVMRuntime *iso, XrArray *arr, struct XrClosure *c
     return result;
 }
 
+void xr_array_foreach(struct XrVMRuntime *iso, XrArray *arr, struct XrClosure *callback) {
+    XR_DCHECK(arr != NULL, "xr_array_foreach: NULL arr");
+    XR_DCHECK(callback != NULL, "xr_array_foreach: NULL callback");
+    XrArrayHofVMCtx ctx = {iso, arr, NULL, callback};
+    (void) xr_array_core_hof_for_each(arr->length, xr_array_hof_vm_read, xr_array_hof_vm_each, &ctx,
+                                      NULL);
+}
+
 XrArray *xr_array_filter(struct XrVMRuntime *iso, XrArray *arr, struct XrClosure *callback) {
     XR_DCHECK(arr != NULL, "xr_array_filter: NULL arr");
     XR_DCHECK(callback != NULL, "xr_array_filter: NULL callback");
@@ -140,54 +145,34 @@ XrValue xr_array_reduce(struct XrVMRuntime *iso, XrArray *arr, struct XrClosure 
 XrValue xr_array_find(struct XrVMRuntime *iso, XrArray *arr, struct XrClosure *callback) {
     XR_DCHECK(arr != NULL, "xr_array_find: NULL arr");
     XR_DCHECK(callback != NULL, "xr_array_find: NULL callback");
-    for (int i = 0; i < arr->length; i++) {
-        XrValue elem = xr_array_get_element(arr, i);
-        XrValue args[1];
-        args[0] = elem;
-        XrValue result = xr_vm_call_closure(iso, callback, args, 1);
-        if (xr_value_is_truthy(result))
-            return elem;
-    }
-    return xr_null();
+    XrArrayHofVMCtx ctx = {iso, arr, NULL, callback};
+    XrArrayCoreFindResult result = xr_array_core_hof_find(arr->length, xr_array_hof_vm_read,
+                                                          xr_array_hof_vm_filter_predicate, &ctx);
+    return result.found ? result.value : xr_null();
 }
 
 int xr_array_find_index(struct XrVMRuntime *iso, XrArray *arr, struct XrClosure *callback) {
     XR_DCHECK(arr != NULL, "xr_array_find_index: NULL arr");
     XR_DCHECK(callback != NULL, "xr_array_find_index: NULL callback");
-    for (int i = 0; i < arr->length; i++) {
-        XrValue args[1];
-        args[0] = xr_array_get_element(arr, i);
-        XrValue result = xr_vm_call_closure(iso, callback, args, 1);
-        if (xr_value_is_truthy(result))
-            return i;
-    }
-    return -1;
+    XrArrayHofVMCtx ctx = {iso, arr, NULL, callback};
+    return (int) xr_array_core_hof_find_index(arr->length, xr_array_hof_vm_read,
+                                              xr_array_hof_vm_filter_predicate, &ctx);
 }
 
 bool xr_array_every(struct XrVMRuntime *iso, XrArray *arr, struct XrClosure *callback) {
     XR_DCHECK(arr != NULL, "xr_array_every: NULL arr");
     XR_DCHECK(callback != NULL, "xr_array_every: NULL callback");
-    for (int i = 0; i < arr->length; i++) {
-        XrValue args[1];
-        args[0] = xr_array_get_element(arr, i);
-        XrValue result = xr_vm_call_closure(iso, callback, args, 1);
-        if (!xr_value_is_truthy(result))
-            return false;
-    }
-    return true;
+    XrArrayHofVMCtx ctx = {iso, arr, NULL, callback};
+    return xr_array_core_hof_every(arr->length, xr_array_hof_vm_read,
+                                   xr_array_hof_vm_filter_predicate, &ctx);
 }
 
 bool xr_array_some(struct XrVMRuntime *iso, XrArray *arr, struct XrClosure *callback) {
     XR_DCHECK(arr != NULL, "xr_array_some: NULL arr");
     XR_DCHECK(callback != NULL, "xr_array_some: NULL callback");
-    for (int i = 0; i < arr->length; i++) {
-        XrValue args[1];
-        args[0] = xr_array_get_element(arr, i);
-        XrValue result = xr_vm_call_closure(iso, callback, args, 1);
-        if (xr_value_is_truthy(result))
-            return true;
-    }
-    return false;
+    XrArrayHofVMCtx ctx = {iso, arr, NULL, callback};
+    return xr_array_core_hof_some(arr->length, xr_array_hof_vm_read,
+                                  xr_array_hof_vm_filter_predicate, &ctx);
 }
 
 typedef struct {

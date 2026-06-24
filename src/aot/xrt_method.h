@@ -577,8 +577,6 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
         /* Higher-order callbacks are AOT closures. */
         if (arg0.tag == XR_TAG_CLOSURE) {
             xrt_closure_t *cl = (xrt_closure_t *) arg0.ptr;
-            typedef XrValue (*xrt_fn1_t)(xrt_closure_t *, XrValue);
-            xrt_fn1_t fn = (xrt_fn1_t) cl->fn;
             if (sym == XRT_SYM_SORT)
                 return xrt_array_sort(recv, cl);
             if (sym == XRT_SYM_MAP) {
@@ -587,11 +585,16 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
             if (sym == XRT_SYM_FILTER) {
                 return xrt_array_filter_typed(recv, arg0);
             }
-            if (sym == XRT_SYM_FOREACH) {
-                for (int64_t i = 0; i < a->length; i++)
-                    fn(cl, xr_typed_get(a->data, (int32_t) i, a->elem_type));
-                return XR_NULL_VAL;
-            }
+            if (sym == XRT_SYM_FOREACH)
+                return xrt_array_for_each_typed(recv, arg0);
+            if (sym == XRT_SYM_FIND)
+                return xrt_array_find_typed(recv, arg0);
+            if (sym == XRT_SYM_FINDINDEX)
+                return xrt_array_find_index_typed(recv, arg0);
+            if (sym == XRT_SYM_EVERY)
+                return xrt_array_every_typed(recv, arg0);
+            if (sym == XRT_SYM_SOME)
+                return xrt_array_some_typed(recv, arg0);
         }
     }
     if (XR_IS_MAP(recv)) {
