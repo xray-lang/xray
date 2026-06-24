@@ -24,6 +24,7 @@
 
 #include "xr_elem_type.h"
 #include <stdbool.h>
+#include <string.h>
 
 /* Read one element from a typed buffer, returning a boxed XrValue.
  * Caller must ensure index is within bounds. */
@@ -106,6 +107,64 @@ static inline bool xr_typed_set(void *data, int32_t index, XrValue value, uint8_
         default:
             return false;
     }
+}
+
+/* Canonical scalar bit patterns for typed hash/equality users.
+ * This is deliberately storage-shape only: callers keep their own hash,
+ * allocation, and error policy. */
+static inline bool xr_typed_scalar_bits_i64(int64_t value, uint8_t elem_type, uint64_t *out_bits) {
+    if (!out_bits)
+        return false;
+    switch (elem_type) {
+        case XR_ELEM_I8:
+            *out_bits = (uint64_t) (int8_t) value;
+            return true;
+        case XR_ELEM_U8:
+            *out_bits = (uint64_t) (uint8_t) value;
+            return true;
+        case XR_ELEM_I16:
+            *out_bits = (uint64_t) (int16_t) value;
+            return true;
+        case XR_ELEM_U16:
+            *out_bits = (uint64_t) (uint16_t) value;
+            return true;
+        case XR_ELEM_I32:
+            *out_bits = (uint64_t) (int32_t) value;
+            return true;
+        case XR_ELEM_U32:
+            *out_bits = (uint64_t) (uint32_t) value;
+            return true;
+        case XR_ELEM_I64:
+        case XR_ELEM_U64:
+            *out_bits = (uint64_t) value;
+            return true;
+        case XR_ELEM_BOOL:
+            *out_bits = value != 0 ? 1u : 0u;
+            return true;
+        default:
+            return false;
+    }
+}
+
+static inline bool xr_typed_scalar_bits_f64(double value, uint8_t elem_type, uint64_t *out_bits) {
+    if (!out_bits)
+        return false;
+    if (elem_type == XR_ELEM_F32) {
+        float f = (float) value;
+        uint32_t b32;
+        if (f == 0.0f)
+            f = 0.0f;
+        memcpy(&b32, &f, sizeof(b32));
+        *out_bits = b32;
+        return true;
+    }
+    if (elem_type == XR_ELEM_F64) {
+        if (value == 0.0)
+            value = 0.0;
+        memcpy(out_bits, &value, sizeof(*out_bits));
+        return true;
+    }
+    return false;
 }
 
 #endif  // XR_TYPED_OPS_H

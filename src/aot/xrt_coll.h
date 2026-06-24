@@ -492,6 +492,26 @@ static inline uint64_t xrt_hash_f64(double d) {
     return xrt_hash_mix_u64(bits);
 }
 
+static inline uint64_t xrt_typed_scalar_bits_i64_or_abort(int64_t value, uint8_t elem_type,
+                                                          const char *who) {
+    uint64_t bits = 0;
+    if (xr_typed_scalar_bits_i64(value, elem_type, &bits))
+        return bits;
+    fprintf(stderr, "%s: unsupported integer element type %u\n",
+            who ? who : "xrt_typed_scalar_bits_i64", (unsigned) elem_type);
+    abort();
+}
+
+static inline uint64_t xrt_typed_scalar_bits_f64_or_abort(double value, uint8_t elem_type,
+                                                          const char *who) {
+    uint64_t bits = 0;
+    if (xr_typed_scalar_bits_f64(value, elem_type, &bits))
+        return bits;
+    fprintf(stderr, "%s: unsupported float element type %u\n",
+            who ? who : "xrt_typed_scalar_bits_f64", (unsigned) elem_type);
+    abort();
+}
+
 /* Hash for tagged values, consistent with xrt_eq: strings hash content
  * through the header cache (literals carry a precomputed hash). */
 static inline uint64_t xrt_hash_value(XrValue v) {

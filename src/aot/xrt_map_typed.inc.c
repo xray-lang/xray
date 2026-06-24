@@ -57,52 +57,12 @@ static inline XrValue xrt_map_slot_value(xrt_map_t *m, int64_t slot) {
 
 /* ---- typed scalar key normalization ------------------------------------ */
 
-/* Pack a scalar key into the canonical 64-bit pattern used for hashing and
- * raw comparison.  Sub-width integers zero/sign-extend through their stored
- * representation; floats canonicalize -0.0 so hash agrees with IEEE ==. */
 static inline uint64_t xrt_map_key_bits_i64(int64_t key, uint8_t key_type) {
-    switch (key_type) {
-        case XR_ELEM_I8:
-            return (uint64_t) (int8_t) key;
-        case XR_ELEM_U8:
-            return (uint64_t) (uint8_t) key;
-        case XR_ELEM_I16:
-            return (uint64_t) (int16_t) key;
-        case XR_ELEM_U16:
-            return (uint64_t) (uint16_t) key;
-        case XR_ELEM_I32:
-            return (uint64_t) (int32_t) key;
-        case XR_ELEM_U32:
-            return (uint64_t) (uint32_t) key;
-        case XR_ELEM_I64:
-        case XR_ELEM_U64:
-            return (uint64_t) key;
-        case XR_ELEM_BOOL:
-            return key != 0 ? 1u : 0u;
-        default:
-            xrt_map_typed_abort("xrt_map_key_bits_i64", "unsupported integer key type");
-    }
-    return 0;
+    return xrt_typed_scalar_bits_i64_or_abort(key, key_type, "xrt_map_key_bits_i64");
 }
 
 static inline uint64_t xrt_map_key_bits_f64(double key, uint8_t key_type) {
-    if (key_type == XR_ELEM_F32) {
-        float f = (float) key;
-        uint32_t b32;
-        if (f == 0.0f)
-            f = 0.0f;
-        memcpy(&b32, &f, sizeof(b32));
-        return b32;
-    }
-    if (key_type == XR_ELEM_F64) {
-        uint64_t b64;
-        if (key == 0.0)
-            key = 0.0;
-        memcpy(&b64, &key, sizeof(b64));
-        return b64;
-    }
-    xrt_map_typed_abort("xrt_map_key_bits_f64", "unsupported float key type");
-    return 0;
+    return xrt_typed_scalar_bits_f64_or_abort(key, key_type, "xrt_map_key_bits_f64");
 }
 
 static inline int64_t xrt_map_slot_key_raw(const xrt_map_t *m, int64_t slot) {
