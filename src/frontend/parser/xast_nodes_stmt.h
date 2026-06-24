@@ -250,6 +250,15 @@ typedef struct SelectStmtNode {
     int case_count;
 } SelectStmtNode;
 
+// yield statement:
+//   `yield expr`     — generator value production (the enclosing function is a
+//                      generator returning Iterator<T>).
+//   value == NULL is invalid at parse time (bare `yield` is rejected; use
+//   `Coro.yield()` for cooperative scheduling).
+typedef struct YieldStmtNode {
+    AstNode *value;
+} YieldStmtNode;
+
 typedef struct DeferStmtNode {
     AstNode *expr;
 } DeferStmtNode;

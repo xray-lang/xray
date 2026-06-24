@@ -2438,9 +2438,17 @@ static void lower_defer(XiLower *l, AstNode *node) {
 }
 
 static void lower_yield_stmt(XiLower *l, AstNode *node) {
-    XiValue *v = xi_value_new(l->func, l->cur_block, XI_YIELD, l->type_unit, 0);
+    /* `yield expr` produces a generator value. The enclosing function is a
+     * generator (suspendable coroutine); XI_GEN_YIELD suspends and hands the
+     * value to the driving iterator. (Cooperative scheduling is Coro.yield().) */
+    AstNode *value_node = node ? node->as.yield_stmt.value : NULL;
+    XiValue *value = value_node ? xi_lower_expr(l, value_node) : NULL;
+    if (!value)
+        value = xi_const_null(l->func, l->cur_block, l->type_null);
+    XiValue *v = xi_value_new(l->func, l->cur_block, XI_GEN_YIELD, l->type_unit, 1);
     if (v) {
-        v->flags |= XI_FLAG_SIDE_EFFECT;
+        v->args[0] = value;
+        v->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_SUSPEND;
         v->line = node ? (uint32_t) node->line : 0;
     }
 }

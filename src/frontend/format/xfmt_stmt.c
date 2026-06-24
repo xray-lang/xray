@@ -429,6 +429,10 @@ void xfmt_emit_statement(XrFmtContext *ctx, AstNode *node) {
         case AST_YIELD_STMT:
             xfmt_write_indent(ctx);
             xfmt_write_str(ctx, "yield");
+            if (node->as.yield_stmt.value) {
+                xfmt_write_space(ctx);
+                xfmt_emit_expression(ctx, node->as.yield_stmt.value);
+            }
             xfmt_write_newline(ctx);
             break;
 

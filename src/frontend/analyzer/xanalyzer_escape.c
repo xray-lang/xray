@@ -723,11 +723,13 @@ static void ea_walk(EaContext *ctx, AstNode *node) {
         case AST_BREAK_STMT:
         case AST_CONTINUE_STMT:
         case AST_THIS_EXPR:
-        case AST_YIELD_STMT:
         case AST_CANCELLED_EXPR:
         case AST_CHANNEL_NEW:
         case AST_INC:
         case AST_DEC:
+            break;
+        case AST_YIELD_STMT:
+            ea_walk(ctx, node->as.yield_stmt.value);
             break;
 
         default:

@@ -140,6 +140,7 @@ struct AstNode {
         ChannelNewNode channel_new;
         SelectStmtNode select_stmt;
         SelectCaseNode select_case;
+        YieldStmtNode yield_stmt;
         DeferStmtNode defer_stmt;
         ScopeBlockNode scope_block;
         CancelledExprNode cancelled_expr;

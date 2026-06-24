@@ -724,6 +724,9 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
             n->as.scope_block.scope_mode = node->as.scope_block.scope_mode;
             break;
         case AST_YIELD_STMT:
+            n->as.yield_stmt.value =
+                xr_ast_clone_ctx(node->as.yield_stmt.value, map, mc, clone_ctx);
+            break;
         case AST_CANCELLED_EXPR:
             break;
 
@@ -1337,6 +1340,9 @@ static void collect_instantiation_sites(AstNode *node, XaGenericRegistry *regist
         case AST_DEFER_STMT:
             collect_instantiation_sites(node->as.defer_stmt.expr, registry, collector);
             break;
+        case AST_YIELD_STMT:
+            collect_instantiation_sites(node->as.yield_stmt.value, registry, collector);
+            break;
         default:
             break;
     }
@@ -1534,6 +1540,9 @@ static void rewrite_call_sites(AstNode *node, XaGenericRegistry *registry,
             break;
         case AST_DEFER_STMT:
             rewrite_call_sites(node->as.defer_stmt.expr, registry, collector);
+            break;
+        case AST_YIELD_STMT:
+            rewrite_call_sites(node->as.yield_stmt.value, registry, collector);
             break;
         default:
             break;

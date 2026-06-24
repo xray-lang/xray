@@ -172,7 +172,7 @@ typedef enum {
 #define XI_GEN_ALGEBRAIC_ASSOCIATIVE (1u << 0)
 #define XI_GEN_ALGEBRAIC_COMMUTATIVE (1u << 1)
 
-enum { XI_GEN_OP_COUNT = 138 };
+enum { XI_GEN_OP_COUNT = 139 };
 typedef char xi_generated_op_count_must_match_XiOp[
     ((int) XI_OP_COUNT == (int) XI_GEN_OP_COUNT) ? 1 : -1];
 
@@ -296,6 +296,7 @@ typedef struct {
     X(CHAN_TIMER_DISPOSE, "xi.chan.timer.dispose", XI_GEN_CLASS_COROUTINE, 1, 0, 0, XI_GEN_RESULT_VOID, XI_GEN_RESULT_OWNERSHIP_NONE, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_NEVER, XI_GEN_VN_NONE, XI_GEN_TBAA_CHAN, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_BORROW, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM, 0, XI_EFFECT_SIDE_EFFECT | XI_EFFECT_MEMORY_WRITE, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_VERIFY, NULL, NULL) \
     X(SELECT_BLOCK, "xi.select.block", XI_GEN_CLASS_COROUTINE, XI_OP_ARITY_VARIADIC, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_OWNED, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_NEVER, XI_GEN_VN_NONE, XI_GEN_TBAA_CHAN, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_BORROW, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_SUSPEND | XI_FLAG_READS_MEM, 0, XI_EFFECT_SIDE_EFFECT | XI_EFFECT_MAY_SUSPEND | XI_EFFECT_MEMORY_READ, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_VERIFY, NULL, NULL) \
     X(YIELD, "xi.yield", XI_GEN_CLASS_COROUTINE, 0, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_NONE, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_NEVER, XI_GEN_VN_NONE, XI_GEN_TBAA_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_CONSUME, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_SUSPEND, 0, XI_EFFECT_SIDE_EFFECT | XI_EFFECT_MAY_SUSPEND, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_VERIFY, NULL, NULL) \
+    X(GEN_YIELD, "xi.gen.yield", XI_GEN_CLASS_COROUTINE, 1, 0, 0, XI_GEN_RESULT_VOID, XI_GEN_RESULT_OWNERSHIP_NONE, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_NEVER, XI_GEN_VN_NONE, XI_GEN_TBAA_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_ARG, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_CONSUME, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_SUSPEND, 0, XI_EFFECT_SIDE_EFFECT | XI_EFFECT_MAY_SUSPEND, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_VERIFY, NULL, NULL) \
     X(THROW, "xi.throw", XI_GEN_CLASS_EXCEPTION, 1, 0, 0, XI_GEN_RESULT_VOID, XI_GEN_RESULT_OWNERSHIP_NONE, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_NEVER, XI_GEN_VN_NONE, XI_GEN_TBAA_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_ARG, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_CONSUME, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW, 0, XI_EFFECT_SIDE_EFFECT | XI_EFFECT_MAY_THROW, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, NULL) \
     X(ERR_SET, "xi.err.set", XI_GEN_CLASS_ERROR, 1, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_OWNED, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_NEVER, XI_GEN_VN_NONE, XI_GEN_TBAA_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_CONSUME, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, XI_FLAG_SIDE_EFFECT, 0, XI_EFFECT_SIDE_EFFECT, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, NULL) \
     X(ERR_RETURN, "xi.err.return", XI_GEN_CLASS_ERROR, 1, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_OWNED, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_NEVER, XI_GEN_VN_NONE, XI_GEN_TBAA_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_CONSUME, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, XI_FLAG_SIDE_EFFECT, 0, XI_EFFECT_SIDE_EFFECT, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, NULL) \
@@ -438,6 +439,7 @@ static inline const char *xi_generated_op_name(uint16_t op) {
         case XI_CHAN_TIMER_DISPOSE: return "CHAN_TIMER_DISPOSE";
         case XI_SELECT_BLOCK: return "SELECT_BLOCK";
         case XI_YIELD: return "YIELD";
+        case XI_GEN_YIELD: return "GEN_YIELD";
         case XI_THROW: return "THROW";
         case XI_ERR_SET: return "ERR_SET";
         case XI_ERR_RETURN: return "ERR_RETURN";
@@ -583,6 +585,7 @@ static inline uint8_t xi_generated_op_arity(uint16_t op) {
         case XI_CHAN_TIMER_DISPOSE: return 1;
         case XI_SELECT_BLOCK: return XI_OP_ARITY_VARIADIC;
         case XI_YIELD: return 0;
+        case XI_GEN_YIELD: return 1;
         case XI_THROW: return 1;
         case XI_ERR_SET: return 1;
         case XI_ERR_RETURN: return 1;
@@ -728,6 +731,7 @@ static inline uint8_t xi_generated_op_class(uint16_t op) {
         case XI_CHAN_TIMER_DISPOSE: return XI_GEN_CLASS_COROUTINE;
         case XI_SELECT_BLOCK: return XI_GEN_CLASS_COROUTINE;
         case XI_YIELD: return XI_GEN_CLASS_COROUTINE;
+        case XI_GEN_YIELD: return XI_GEN_CLASS_COROUTINE;
         case XI_THROW: return XI_GEN_CLASS_EXCEPTION;
         case XI_ERR_SET: return XI_GEN_CLASS_ERROR;
         case XI_ERR_RETURN: return XI_GEN_CLASS_ERROR;
@@ -873,6 +877,7 @@ static inline uint8_t xi_generated_op_result_kind(uint16_t op) {
         case XI_CHAN_TIMER_DISPOSE: return XI_GEN_RESULT_VOID;
         case XI_SELECT_BLOCK: return XI_GEN_RESULT_VALUE;
         case XI_YIELD: return XI_GEN_RESULT_VALUE;
+        case XI_GEN_YIELD: return XI_GEN_RESULT_VOID;
         case XI_THROW: return XI_GEN_RESULT_VOID;
         case XI_ERR_SET: return XI_GEN_RESULT_VALUE;
         case XI_ERR_RETURN: return XI_GEN_RESULT_VALUE;
@@ -1018,6 +1023,7 @@ static inline uint8_t xi_generated_op_result_ownership(uint16_t op) {
         case XI_CHAN_TIMER_DISPOSE: return XI_GEN_RESULT_OWNERSHIP_NONE;
         case XI_SELECT_BLOCK: return XI_GEN_RESULT_OWNERSHIP_OWNED;
         case XI_YIELD: return XI_GEN_RESULT_OWNERSHIP_NONE;
+        case XI_GEN_YIELD: return XI_GEN_RESULT_OWNERSHIP_NONE;
         case XI_THROW: return XI_GEN_RESULT_OWNERSHIP_NONE;
         case XI_ERR_SET: return XI_GEN_RESULT_OWNERSHIP_OWNED;
         case XI_ERR_RETURN: return XI_GEN_RESULT_OWNERSHIP_OWNED;
@@ -1163,6 +1169,7 @@ static inline const char *xi_generated_op_result_native_type(uint16_t op) {
         case XI_CHAN_TIMER_DISPOSE: return NULL;
         case XI_SELECT_BLOCK: return NULL;
         case XI_YIELD: return NULL;
+        case XI_GEN_YIELD: return NULL;
         case XI_THROW: return NULL;
         case XI_ERR_SET: return NULL;
         case XI_ERR_RETURN: return NULL;
@@ -1308,6 +1315,7 @@ static inline uint8_t xi_generated_op_lowering_policy(uint16_t op) {
         case XI_CHAN_TIMER_DISPOSE: return XI_GEN_LOWERING_GENERATED;
         case XI_SELECT_BLOCK: return XI_GEN_LOWERING_GENERATED;
         case XI_YIELD: return XI_GEN_LOWERING_GENERATED;
+        case XI_GEN_YIELD: return XI_GEN_LOWERING_GENERATED;
         case XI_THROW: return XI_GEN_LOWERING_GENERATED;
         case XI_ERR_SET: return XI_GEN_LOWERING_GENERATED;
         case XI_ERR_RETURN: return XI_GEN_LOWERING_GENERATED;
@@ -1453,6 +1461,7 @@ static inline uint8_t xi_generated_op_speculation(uint16_t op) {
         case XI_CHAN_TIMER_DISPOSE: return XI_GEN_SPECULATION_NEVER;
         case XI_SELECT_BLOCK: return XI_GEN_SPECULATION_NEVER;
         case XI_YIELD: return XI_GEN_SPECULATION_NEVER;
+        case XI_GEN_YIELD: return XI_GEN_SPECULATION_NEVER;
         case XI_THROW: return XI_GEN_SPECULATION_NEVER;
         case XI_ERR_SET: return XI_GEN_SPECULATION_NEVER;
         case XI_ERR_RETURN: return XI_GEN_SPECULATION_NEVER;
@@ -1598,6 +1607,7 @@ static inline uint8_t xi_generated_op_value_numbering(uint16_t op) {
         case XI_CHAN_TIMER_DISPOSE: return XI_GEN_VN_NONE;
         case XI_SELECT_BLOCK: return XI_GEN_VN_NONE;
         case XI_YIELD: return XI_GEN_VN_NONE;
+        case XI_GEN_YIELD: return XI_GEN_VN_NONE;
         case XI_THROW: return XI_GEN_VN_NONE;
         case XI_ERR_SET: return XI_GEN_VN_NONE;
         case XI_ERR_RETURN: return XI_GEN_VN_NONE;
@@ -1743,6 +1753,7 @@ static inline uint8_t xi_generated_op_tbaa_group(uint16_t op) {
         case XI_CHAN_TIMER_DISPOSE: return XI_GEN_TBAA_CHAN;
         case XI_SELECT_BLOCK: return XI_GEN_TBAA_CHAN;
         case XI_YIELD: return XI_GEN_TBAA_NONE;
+        case XI_GEN_YIELD: return XI_GEN_TBAA_NONE;
         case XI_THROW: return XI_GEN_TBAA_NONE;
         case XI_ERR_SET: return XI_GEN_TBAA_NONE;
         case XI_ERR_RETURN: return XI_GEN_TBAA_NONE;
@@ -1888,6 +1899,7 @@ static inline uint8_t xi_generated_op_backend_rewrite(uint16_t op) {
         case XI_CHAN_TIMER_DISPOSE: return XI_GEN_BACKEND_REWRITE_NONE;
         case XI_SELECT_BLOCK: return XI_GEN_BACKEND_REWRITE_NONE;
         case XI_YIELD: return XI_GEN_BACKEND_REWRITE_NONE;
+        case XI_GEN_YIELD: return XI_GEN_BACKEND_REWRITE_NONE;
         case XI_THROW: return XI_GEN_BACKEND_REWRITE_NONE;
         case XI_ERR_SET: return XI_GEN_BACKEND_REWRITE_NONE;
         case XI_ERR_RETURN: return XI_GEN_BACKEND_REWRITE_NONE;
@@ -2033,6 +2045,7 @@ static inline const char *xi_generated_op_backend_rewrite_name(uint16_t op) {
         case XI_CHAN_TIMER_DISPOSE: return NULL;
         case XI_SELECT_BLOCK: return NULL;
         case XI_YIELD: return NULL;
+        case XI_GEN_YIELD: return NULL;
         case XI_THROW: return NULL;
         case XI_ERR_SET: return NULL;
         case XI_ERR_RETURN: return NULL;
@@ -2183,6 +2196,7 @@ static inline uint8_t xi_generated_op_escape_use(uint16_t op) {
         case XI_CHAN_TIMER_DISPOSE: return XI_GEN_ESCAPE_USE_NONE;
         case XI_SELECT_BLOCK: return XI_GEN_ESCAPE_USE_NONE;
         case XI_YIELD: return XI_GEN_ESCAPE_USE_NONE;
+        case XI_GEN_YIELD: return XI_GEN_ESCAPE_USE_ARG;
         case XI_THROW: return XI_GEN_ESCAPE_USE_ARG;
         case XI_ERR_SET: return XI_GEN_ESCAPE_USE_NONE;
         case XI_ERR_RETURN: return XI_GEN_ESCAPE_USE_NONE;
@@ -2328,6 +2342,7 @@ static inline uint8_t xi_generated_op_escape_alloc(uint16_t op) {
         case XI_CHAN_TIMER_DISPOSE: return XI_GEN_ESCAPE_ALLOC_NONE;
         case XI_SELECT_BLOCK: return XI_GEN_ESCAPE_ALLOC_NONE;
         case XI_YIELD: return XI_GEN_ESCAPE_ALLOC_NONE;
+        case XI_GEN_YIELD: return XI_GEN_ESCAPE_ALLOC_NONE;
         case XI_THROW: return XI_GEN_ESCAPE_ALLOC_NONE;
         case XI_ERR_SET: return XI_GEN_ESCAPE_ALLOC_NONE;
         case XI_ERR_RETURN: return XI_GEN_ESCAPE_ALLOC_NONE;
@@ -2473,6 +2488,7 @@ static inline uint8_t xi_generated_op_own_use(uint16_t op) {
         case XI_CHAN_TIMER_DISPOSE: return XI_GEN_OWN_USE_BORROW;
         case XI_SELECT_BLOCK: return XI_GEN_OWN_USE_BORROW;
         case XI_YIELD: return XI_GEN_OWN_USE_CONSUME;
+        case XI_GEN_YIELD: return XI_GEN_OWN_USE_CONSUME;
         case XI_THROW: return XI_GEN_OWN_USE_CONSUME;
         case XI_ERR_SET: return XI_GEN_OWN_USE_CONSUME;
         case XI_ERR_RETURN: return XI_GEN_OWN_USE_CONSUME;
@@ -2618,6 +2634,7 @@ static inline uint8_t xi_generated_op_ic_site(uint16_t op) {
         case XI_CHAN_TIMER_DISPOSE: return XI_GEN_IC_SITE_NONE;
         case XI_SELECT_BLOCK: return XI_GEN_IC_SITE_NONE;
         case XI_YIELD: return XI_GEN_IC_SITE_NONE;
+        case XI_GEN_YIELD: return XI_GEN_IC_SITE_NONE;
         case XI_THROW: return XI_GEN_IC_SITE_NONE;
         case XI_ERR_SET: return XI_GEN_IC_SITE_NONE;
         case XI_ERR_RETURN: return XI_GEN_IC_SITE_NONE;
@@ -2763,6 +2780,7 @@ static inline XiOp xi_generated_op_negates_to(uint16_t op) {
         case XI_CHAN_TIMER_DISPOSE: return XI_OP_COUNT;
         case XI_SELECT_BLOCK: return XI_OP_COUNT;
         case XI_YIELD: return XI_OP_COUNT;
+        case XI_GEN_YIELD: return XI_OP_COUNT;
         case XI_THROW: return XI_OP_COUNT;
         case XI_ERR_SET: return XI_OP_COUNT;
         case XI_ERR_RETURN: return XI_OP_COUNT;
@@ -2908,6 +2926,7 @@ static inline uint32_t xi_generated_op_algebraic_traits(uint16_t op) {
         case XI_CHAN_TIMER_DISPOSE: return 0;
         case XI_SELECT_BLOCK: return 0;
         case XI_YIELD: return 0;
+        case XI_GEN_YIELD: return 0;
         case XI_THROW: return 0;
         case XI_ERR_SET: return 0;
         case XI_ERR_RETURN: return 0;
@@ -3053,6 +3072,7 @@ static inline uint8_t xi_generated_op_default_flags(uint16_t op) {
         case XI_CHAN_TIMER_DISPOSE: return XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM;
         case XI_SELECT_BLOCK: return XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_SUSPEND | XI_FLAG_READS_MEM;
         case XI_YIELD: return XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_SUSPEND;
+        case XI_GEN_YIELD: return XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_SUSPEND;
         case XI_THROW: return XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
         case XI_ERR_SET: return XI_FLAG_SIDE_EFFECT;
         case XI_ERR_RETURN: return XI_FLAG_SIDE_EFFECT;
@@ -3198,6 +3218,7 @@ static inline uint32_t xi_generated_op_effects(uint16_t op) {
         case XI_CHAN_TIMER_DISPOSE: return XI_EFFECT_SIDE_EFFECT | XI_EFFECT_MEMORY_WRITE;
         case XI_SELECT_BLOCK: return XI_EFFECT_SIDE_EFFECT | XI_EFFECT_MAY_SUSPEND | XI_EFFECT_MEMORY_READ;
         case XI_YIELD: return XI_EFFECT_SIDE_EFFECT | XI_EFFECT_MAY_SUSPEND;
+        case XI_GEN_YIELD: return XI_EFFECT_SIDE_EFFECT | XI_EFFECT_MAY_SUSPEND;
         case XI_THROW: return XI_EFFECT_SIDE_EFFECT | XI_EFFECT_MAY_THROW;
         case XI_ERR_SET: return XI_EFFECT_SIDE_EFFECT;
         case XI_ERR_RETURN: return XI_EFFECT_SIDE_EFFECT;

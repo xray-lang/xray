@@ -383,8 +383,8 @@ XR_FUNC AstNode *xr_ast_defer_stmt(XrayIsolate *X, AstNode *expr, int line);
 // Create scope block node (supports scope mode)
 XR_FUNC AstNode *xr_ast_scope_block(XrayIsolate *X, AstNode *body, uint8_t scope_mode, int line);
 
-// Create yield statement node (yield execution)
-XR_FUNC AstNode *xr_ast_yield_stmt(XrayIsolate *X, int line);
+// Create yield statement node (`yield value` — generator value production)
+XR_FUNC AstNode *xr_ast_yield_stmt(XrayIsolate *X, AstNode *value, int line);
 
 // Create cancelled() expression node
 XR_FUNC AstNode *xr_ast_cancelled_expr(XrayIsolate *X, int line);

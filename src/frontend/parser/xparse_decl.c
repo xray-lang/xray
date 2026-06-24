@@ -1384,10 +1384,21 @@ AstNode *xr_parse_declaration(Parser *parser) {
         return xr_parse_scope_block(parser);
     }
 
-    // yield statement: cooperatively yield execution to the scheduler
+    // yield statement: `yield expr` produces a generator value. Bare `yield`
+    // (cooperative scheduling) was removed in favor of `Coro.yield()`.
     if (xr_parser_match(parser, TK_YIELD)) {
         int line = parser->previous.line;
-        return xr_ast_yield_stmt(parser->X, line);
+        if (xr_parser_check(parser, TK_SEMICOLON) || xr_parser_check(parser, TK_RBRACE) ||
+            xr_parser_check(parser, TK_EOF)) {
+            xr_parser_error_at_current(
+                parser, "`yield` requires a value (generator value production); use `Coro.yield()` "
+                        "for cooperative scheduling");
+            return NULL;
+        }
+        AstNode *value = xr_parse_expression(parser);
+        if (!value)
+            return NULL;
+        return xr_ast_yield_stmt(parser->X, value, line);
     }
 
     // Attributed declaration: @test fn ..., @native class ..., etc.

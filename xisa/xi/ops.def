@@ -1026,6 +1026,17 @@
   :observable ()
   :targets (vm-bytecode aot-verify))
 
+(define-xi-op xi.gen.yield
+  :class coroutine
+  :arity 1
+  :result-kind void
+  :result-ownership none
+  :escape-use arg
+  :effects (side-effect may-suspend)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode aot-verify))
+
 (define-xi-op xi.throw
   :class exception
   :arity 1

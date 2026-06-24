@@ -246,8 +246,9 @@ XR_FUNC bool xi_coro_is_suspend_point(const XiFunc *f, const XiValue *v,
                                       const XiCoroResolver *resolver) {
     if (!v)
         return false;
-    if (v->op == XI_YIELD || v->op == XI_GO || v->op == XI_AWAIT || v->op == XI_CHAN_SEND ||
-        v->op == XI_CHAN_RECV || v->op == XI_SELECT_BLOCK || v->op == XI_SCOPE_EXIT)
+    if (v->op == XI_YIELD || v->op == XI_GEN_YIELD || v->op == XI_GO || v->op == XI_AWAIT ||
+        v->op == XI_CHAN_SEND || v->op == XI_CHAN_RECV || v->op == XI_SELECT_BLOCK ||
+        v->op == XI_SCOPE_EXIT)
         return true;
     if (xi_value_is_blocking_channel_method_call(v) || xi_value_is_blocking_task_method_call(v) ||
         xi_value_is_blocking_work_queue_method_call(v) ||

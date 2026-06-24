@@ -2160,9 +2160,10 @@ AstNode *xr_ast_scope_block(XrayIsolate *X, AstNode *body, uint8_t scope_mode, i
 }
 
 // Create yield statement node
-// yield - yields execution
-AstNode *xr_ast_yield_stmt(XrayIsolate *X, int line) {
+// `yield value` - generator value production
+AstNode *xr_ast_yield_stmt(XrayIsolate *X, AstNode *value, int line) {
     AstNode *node = alloc_node(X, AST_YIELD_STMT, line);
+    node->as.yield_stmt.value = value;
     return node;
 }
 
