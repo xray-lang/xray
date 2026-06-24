@@ -152,7 +152,7 @@ static inline bool xrt_array_join_part(XrValue val, char *dst, size_t *len) {
         data = xr_str_data(val);
         n = (size_t) xr_str_len(val);
     } else if (val.tag == XR_TAG_I64) {
-        int written = snprintf(tmp, sizeof(tmp), "%lld", (long long) val.i);
+        int written = xr_numeric_core_format_i64(tmp, sizeof(tmp), val.i);
         if (written < 0 || (size_t) written >= sizeof(tmp))
             return false;
         data = tmp;

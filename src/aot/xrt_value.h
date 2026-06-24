@@ -29,6 +29,7 @@
 
 #include "xrt_hash.h"
 #include "../shared/xr_float_fmt.h"
+#include "../shared/xr_numeric_core.h"
 #include "../shared/xr_obj_header.h" /* XrObjType ids shared with the VM */
 
 /* =========================================================================
@@ -523,7 +524,7 @@ static inline const char *xr_to_cstr(XrValue v, char *buf, size_t bufsz) {
         case XR_TAG_STR_ARC:
             return xr_str_data(v);
         case XR_TAG_I64:
-            snprintf(buf, bufsz, "%lld", (long long) v.i);
+            (void) xr_numeric_core_format_i64(buf, bufsz, v.i);
             return buf;
         case XR_TAG_F64:
             xrt_format_float(buf, bufsz, v.f);
