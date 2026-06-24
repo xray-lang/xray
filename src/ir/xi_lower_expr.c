@@ -2032,8 +2032,8 @@ static bool lower_go_call_args(XiLower *l, CallExprNode *call, XiLowerGoArgList 
     return true;
 }
 
-static bool lower_boundary_transfer_arg(XiLower *l, AstNode *child, XiValue **out_value,
-                                        uint8_t *out_mode) {
+XR_FUNC bool xi_lower_boundary_transfer_arg(XiLower *l, AstNode *child, XiValue **out_value,
+                                            uint8_t *out_mode) {
     if (out_value)
         *out_value = NULL;
     if (out_mode)
@@ -2378,7 +2378,7 @@ static XiValue *lower_channel_send_boundary_call(XiLower *l, AstNode *node, Call
 
     XiValue *payload = NULL;
     uint8_t transfer_mode = XR_TRANSFER_SHARE;
-    if (!lower_boundary_transfer_arg(l, call->arguments[0], &payload, &transfer_mode))
+    if (!xi_lower_boundary_transfer_arg(l, call->arguments[0], &payload, &transfer_mode))
         return NULL;
     XiValue *timeout = NULL;
     if (want_args == 2) {

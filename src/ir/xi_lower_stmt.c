@@ -504,6 +504,7 @@ static void lower_select_emit_timer_dispose(XiLower *l, XiValue *timer_chan_val,
 typedef struct LowerSelectLists {
     XiValue **case_channels;
     XiValue **case_send_values;
+    uint8_t *case_send_modes;
     XiValue **block_channels;
     int block_channel_count;
     int cap;
@@ -521,6 +522,7 @@ static bool lower_select_validate_case_count(XiLower *l, int case_count, int lin
 
 static bool lower_select_lists_init(XiLower *l, LowerSelectLists *lists, int case_count,
                                     XiValue **stack_case_channels, XiValue **stack_case_send_values,
+                                    uint8_t *stack_case_send_modes,
                                     XiValue **stack_block_channels) {
     int cap = case_count > 0 ? case_count : 1;
     lists->block_channel_count = 0;
@@ -528,7 +530,9 @@ static bool lower_select_lists_init(XiLower *l, LowerSelectLists *lists, int cas
     if (cap <= XI_LOWER_SELECT_STACK_CAP) {
         lists->case_channels = stack_case_channels;
         lists->case_send_values = stack_case_send_values;
+        lists->case_send_modes = stack_case_send_modes;
         lists->block_channels = stack_block_channels;
+        memset(lists->case_send_modes, 0, (size_t) cap * sizeof(uint8_t));
         return true;
     }
 
@@ -536,14 +540,18 @@ static bool lower_select_lists_init(XiLower *l, LowerSelectLists *lists, int cas
         (XiValue **) xi_func_arena_alloc(l->func, (uint32_t) ((size_t) cap * sizeof(XiValue *)));
     lists->case_send_values =
         (XiValue **) xi_func_arena_alloc(l->func, (uint32_t) ((size_t) cap * sizeof(XiValue *)));
+    lists->case_send_modes =
+        (uint8_t *) xi_func_arena_alloc(l->func, (uint32_t) ((size_t) cap * sizeof(uint8_t)));
     lists->block_channels =
         (XiValue **) xi_func_arena_alloc(l->func, (uint32_t) ((size_t) cap * sizeof(XiValue *)));
-    if (!lists->case_channels || !lists->case_send_values || !lists->block_channels) {
+    if (!lists->case_channels || !lists->case_send_values || !lists->case_send_modes ||
+        !lists->block_channels) {
         l->had_error = true;
         return false;
     }
     memset(lists->case_channels, 0, (size_t) cap * sizeof(XiValue *));
     memset(lists->case_send_values, 0, (size_t) cap * sizeof(XiValue *));
+    memset(lists->case_send_modes, 0, (size_t) cap * sizeof(uint8_t));
     return true;
 }
 
@@ -610,11 +618,12 @@ XR_FUNC void xi_lower_select(XiLower *l, AstNode *node) {
     XiBlock *try_head = NULL;
     XiValue *stack_case_channels[XI_LOWER_SELECT_STACK_CAP] = {0};
     XiValue *stack_case_send_values[XI_LOWER_SELECT_STACK_CAP] = {0};
+    uint8_t stack_case_send_modes[XI_LOWER_SELECT_STACK_CAP] = {0};
     XiValue *stack_block_channels[XI_LOWER_SELECT_STACK_CAP];
     LowerSelectLists lists;
     XiValue *timer_chan_val = NULL;  // `after` timer channel; disposed at merge (design/885)
     if (!lower_select_lists_init(l, &lists, n, stack_case_channels, stack_case_send_values,
-                                 stack_block_channels))
+                                 stack_case_send_modes, stack_block_channels))
         return;
     for (int i = 0; i < n; i++) {
         SelectCaseNode *sc = &sel->cases[i]->as.select_case;
@@ -639,7 +648,8 @@ XR_FUNC void xi_lower_select(XiLower *l, AstNode *node) {
             }
             lists.case_channels[i] = xi_lower_expr(l, sc->channel);
             if (sc->is_send)
-                lists.case_send_values[i] = xi_lower_expr(l, sc->value);
+                xi_lower_boundary_transfer_arg(l, sc->value, &lists.case_send_values[i],
+                                               &lists.case_send_modes[i]);
             if (!l->cur_block)
                 return;
         }
@@ -680,8 +690,10 @@ XR_FUNC void xi_lower_select(XiLower *l, AstNode *node) {
             if (sc->is_send) {
                 XiValue *chan =
                     lists.case_channels[i] ? lists.case_channels[i] : xi_lower_expr(l, sc->channel);
-                XiValue *val = lists.case_send_values[i] ? lists.case_send_values[i]
-                                                         : xi_lower_expr(l, sc->value);
+                XiValue *val = lists.case_send_values[i];
+                uint8_t send_mode = lists.case_send_modes[i];
+                if (!val)
+                    xi_lower_boundary_transfer_arg(l, sc->value, &val, &send_mode);
                 if (chan && val) {
                     XiValue *send =
                         xi_value_new(l->func, l->cur_block, XI_CHAN_TRY_SEND, l->type_bool, 2);
@@ -689,6 +701,7 @@ XR_FUNC void xi_lower_select(XiLower *l, AstNode *node) {
                         send->args[0] = chan;
                         send->args[1] = val;
                         send->flags |= XI_FLAG_SIDE_EFFECT;
+                        xi_chan_send_set_transfer_mode(send, send_mode);
                         xi_block_set_if(l->cur_block, send, body_blk, next_blk);
                     }
                 }
