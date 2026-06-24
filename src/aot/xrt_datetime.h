@@ -54,14 +54,14 @@ static inline xrt_datetime_object_t *xrt_datetime_alloc(void) {
     return dt;
 }
 
-static inline int64_t xrt_datetime_i64_arg(XrValue v, int64_t fallback) {
-    if (XR_IS_INT(v))
-        return XR_TO_INT(v);
-    if (XR_IS_FLOAT(v))
-        return (int64_t) XR_TO_FLOAT(v);
-    if (XR_IS_BOOL(v))
-        return v.i ? 1 : 0;
-    return fallback;
+static inline int64_t xrt_datetime_int_arg_or(XrValue v, int64_t fallback) {
+    bool has_int = XR_IS_INT(v);
+    return xr_datetime_core_int_arg_or(has_int, has_int ? XR_TO_INT(v) : 0, fallback);
+}
+
+static inline bool xrt_datetime_required_int_arg(XrValue v, int64_t *out) {
+    bool has_int = XR_IS_INT(v);
+    return xr_datetime_core_required_int_arg(has_int, has_int ? XR_TO_INT(v) : 0, out);
 }
 
 static inline int64_t xrt_datetime_current_millis(void) {
@@ -122,12 +122,12 @@ static inline XrValue xrt_datetime_make(int year, int month, int day, int hour, 
 static inline XrValue xrt_datetime_make_defaulted(XrValue year_v, XrValue month_v, XrValue day_v,
                                                   XrValue hour_v, XrValue minute_v,
                                                   XrValue second_v, int argc, int is_utc) {
-    int year = (int) xrt_datetime_i64_arg(year_v, 1970);
-    int month = argc > 1 ? (int) xrt_datetime_i64_arg(month_v, 1) : 1;
-    int day = argc > 2 ? (int) xrt_datetime_i64_arg(day_v, 1) : 1;
-    int hour = argc > 3 ? (int) xrt_datetime_i64_arg(hour_v, 0) : 0;
-    int minute = argc > 4 ? (int) xrt_datetime_i64_arg(minute_v, 0) : 0;
-    int second = argc > 5 ? (int) xrt_datetime_i64_arg(second_v, 0) : 0;
+    int year = (int) xrt_datetime_int_arg_or(year_v, 1970);
+    int month = argc > 1 ? (int) xrt_datetime_int_arg_or(month_v, 1) : 1;
+    int day = argc > 2 ? (int) xrt_datetime_int_arg_or(day_v, 1) : 1;
+    int hour = argc > 3 ? (int) xrt_datetime_int_arg_or(hour_v, 0) : 0;
+    int minute = argc > 4 ? (int) xrt_datetime_int_arg_or(minute_v, 0) : 0;
+    int second = argc > 5 ? (int) xrt_datetime_int_arg_or(second_v, 0) : 0;
     return xrt_datetime_make(year, month, day, hour, minute, second, is_utc);
 }
 
@@ -209,14 +209,18 @@ static inline XrValue xrt_datetime_utc(void) {
 }
 
 static inline XrValue xrt_datetime_from_timestamp(XrValue timestamp) {
-    XrDateTimeCoreFields fields =
-        xr_datetime_core_from_timestamp(xrt_datetime_i64_arg(timestamp, 0));
+    int64_t ts = 0;
+    if (!xrt_datetime_required_int_arg(timestamp, &ts))
+        return XR_NULL_VAL;
+    XrDateTimeCoreFields fields = xr_datetime_core_from_timestamp(ts);
     return xrt_datetime_from_core_fields(&fields);
 }
 
 static inline XrValue xrt_datetime_from_timestamp_ms(XrValue timestamp_ms) {
-    XrDateTimeCoreFields fields =
-        xr_datetime_core_from_timestamp_ms(xrt_datetime_i64_arg(timestamp_ms, 0));
+    int64_t ts = 0;
+    if (!xrt_datetime_required_int_arg(timestamp_ms, &ts))
+        return XR_NULL_VAL;
+    XrDateTimeCoreFields fields = xr_datetime_core_from_timestamp_ms(ts);
     return xrt_datetime_from_core_fields(&fields);
 }
 
@@ -378,7 +382,7 @@ static inline XrValue xrt_datetime_add_value(XrValue recv, XrValue amount_v, XrV
     const xrt_datetime_object_t *dt = xrt_datetime_ptr(recv);
     if (!dt || !XR_IS_STR(unit_v))
         return XR_NULL_VAL;
-    int64_t amount = xrt_datetime_i64_arg(amount_v, 0);
+    int64_t amount = xrt_datetime_int_arg_or(amount_v, 0);
     const char *unit = xr_str_data(unit_v);
     XrDateTimeCoreFields input = xrt_datetime_core_fields(dt);
     XrDateTimeCoreFields output;

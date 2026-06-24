@@ -12,6 +12,7 @@
 #define XR_DATETIME_CORE_H
 
 #include "../base/xplatform.h"
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -140,6 +141,19 @@ typedef struct XrDateTimeCoreFields {
     int32_t tz_offset;
     int is_utc;
 } XrDateTimeCoreFields;
+
+static inline int64_t xr_datetime_core_int_arg_or(bool has_int, int64_t value, int64_t fallback) {
+    return has_int ? value : fallback;
+}
+
+static inline bool xr_datetime_core_required_int_arg(bool has_int, int64_t value, int64_t *out) {
+    if (out)
+        *out = 0;
+    if (!out || !has_int)
+        return false;
+    *out = value;
+    return true;
+}
 
 static inline XrDateTimeCoreFields xr_datetime_core_from_timestamp(int64_t timestamp) {
     return (XrDateTimeCoreFields) {
