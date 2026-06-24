@@ -37,8 +37,6 @@ static const char *xaot_stdlib_generated_object_for_symbol(const char *symbol) {
         return "time.nanos";
     if (strcmp(symbol, "time.micros") == 0)
         return "time.micros";
-    if (strcmp(symbol, "time.sleep") == 0)
-        return "time";
     if (strcmp(symbol, "math.random") == 0)
         return "math.random";
     if (strcmp(symbol, "math.randomInt") == 0)
