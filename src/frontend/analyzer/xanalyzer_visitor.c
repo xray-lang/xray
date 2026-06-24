@@ -2023,6 +2023,16 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
                          ? xr_type_new_enum(ctx->analyzer->isolate, node->as.enum_access.enum_name)
                          : xr_type_new_unknown(NULL);
             break;
+        case AST_SCOPE_BLOCK:
+            if (node->as.scope_block.body)
+                xa_visit_infer_stmt(ctx, node->as.scope_block.body);
+            if (node->as.scope_block.scope_mode == 2) {
+                XrType *outcome = xr_type_new_enum(ctx->analyzer->isolate, "TaskOutcome");
+                result = xr_type_new_array(ctx->analyzer->isolate, outcome);
+            } else {
+                result = xr_type_new_null(NULL);
+            }
+            break;
         case AST_CANCELLED_EXPR:
             result = xr_type_new_bool(NULL);
             break;

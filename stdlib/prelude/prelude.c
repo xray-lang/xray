@@ -76,8 +76,18 @@ extern void xr_netlistener_register_class(XrayIsolate *isolate);
 #include "../../src/runtime/class/xclass_system.h"
 #include "../../src/runtime/class/xclass.h"
 #include "../../src/runtime/class/xenum.h"
+#include "../../src/runtime/core/xr_runtime_core.h"
 #include "../../src/runtime/value/xvalue.h"
 #include "../../src/base/xmalloc.h"
+
+static void bind_builtin_value(XrayIsolate *X, int global_index, XrValue value) {
+    if (!X || (size_t) global_index >= (size_t) XR_USER_GLOBALS_START)
+        return;
+    X->vm.builtins[global_index] = value;
+    xr_runtime_core_set_builtin(xr_isolate_get_runtime_core(X), global_index, value);
+    if (X->vm.builtin_count < XR_USER_GLOBALS_START)
+        X->vm.builtin_count = XR_USER_GLOBALS_START;
+}
 
 /* Bind a unified-class XrClass into the VM builtins slot keyed by a
  * predefined XR_GLOBAL_VAR_* index. The IR lowerer's builtin_classes
@@ -87,11 +97,7 @@ extern void xr_netlistener_register_class(XrayIsolate *isolate);
 static void bind_class_global(XrayIsolate *X, int global_index, void *cls) {
     if (!X || !cls)
         return;
-    if ((size_t) global_index < (size_t) XR_USER_GLOBALS_START) {
-        X->vm.builtins[global_index] = xr_value_from_class((struct XrClass *) cls);
-        if (X->vm.builtin_count < XR_USER_GLOBALS_START)
-            X->vm.builtin_count = XR_USER_GLOBALS_START;
-    }
+    bind_builtin_value(X, global_index, xr_value_from_class((struct XrClass *) cls));
 }
 
 /* Build one canonical prelude enum and bind it into a VM builtin slot so
@@ -160,7 +166,7 @@ static void xr_prelude_register_builtin_enums(XrayIsolate *X) {
     XrEnumType *ordering_et =
         make_prelude_enum(X, "Ordering", ordering_members, ordering_values, 5, NULL, false);
     if (ordering_et)
-        X->vm.builtins[XR_GLOBAL_VAR_ORDERING] = XR_FROM_PTR(ordering_et);
+        bind_builtin_value(X, XR_GLOBAL_VAR_ORDERING, XR_FROM_PTR(ordering_et));
 
     static const char *recv_members[] = {"Value", "Empty", "Timeout", "Closed"};
     static const int recv_values[] = {0, 1, 2, 3};
@@ -168,14 +174,14 @@ static void xr_prelude_register_builtin_enums(XrayIsolate *X) {
     XrEnumType *recv_et =
         make_prelude_enum(X, "Recv", recv_members, recv_values, 4, recv_payload_counts, true);
     if (recv_et)
-        X->vm.builtins[XR_GLOBAL_VAR_RECV] = XR_FROM_PTR(recv_et);
+        bind_builtin_value(X, XR_GLOBAL_VAR_RECV, XR_FROM_PTR(recv_et));
 
     static const char *send_result_members[] = {"Sent", "Full", "Timeout", "Closed"};
     static const int send_result_values[] = {0, 1, 2, 3};
     XrEnumType *send_result_et =
         make_prelude_enum(X, "SendResult", send_result_members, send_result_values, 4, NULL, false);
     if (send_result_et)
-        X->vm.builtins[XR_GLOBAL_VAR_SEND_RESULT] = XR_FROM_PTR(send_result_et);
+        bind_builtin_value(X, XR_GLOBAL_VAR_SEND_RESULT, XR_FROM_PTR(send_result_et));
 
     static const char *task_result_members[] = {"Success", "Failed", "Cancelled", "Timeout",
                                                 "Pending"};
@@ -185,7 +191,16 @@ static void xr_prelude_register_builtin_enums(XrayIsolate *X) {
         make_prelude_enum(X, "TaskResult", task_result_members, task_result_values, 5,
                           task_result_payload_counts, true);
     if (task_result_et)
-        X->vm.builtins[XR_GLOBAL_VAR_TASK_RESULT] = XR_FROM_PTR(task_result_et);
+        bind_builtin_value(X, XR_GLOBAL_VAR_TASK_RESULT, XR_FROM_PTR(task_result_et));
+
+    static const char *task_outcome_members[] = {"Success", "Failed", "Cancelled"};
+    static const int task_outcome_values[] = {0, 1, 2};
+    static const int task_outcome_payload_counts[] = {1, 1, 0};
+    XrEnumType *task_outcome_et =
+        make_prelude_enum(X, "TaskOutcome", task_outcome_members, task_outcome_values, 3,
+                          task_outcome_payload_counts, true);
+    if (task_outcome_et)
+        bind_builtin_value(X, XR_GLOBAL_VAR_TASK_OUTCOME, XR_FROM_PTR(task_outcome_et));
 
     static const char *task_status_members[] = {"Pending", "Running", "Success", "Failed",
                                                 "Cancelled"};
@@ -193,7 +208,7 @@ static void xr_prelude_register_builtin_enums(XrayIsolate *X) {
     XrEnumType *task_status_et =
         make_prelude_enum(X, "TaskStatus", task_status_members, task_status_values, 5, NULL, false);
     if (task_status_et)
-        X->vm.builtins[XR_GLOBAL_VAR_TASK_STATUS] = XR_FROM_PTR(task_status_et);
+        bind_builtin_value(X, XR_GLOBAL_VAR_TASK_STATUS, XR_FROM_PTR(task_status_et));
 
     if (X->vm.builtin_count < XR_USER_GLOBALS_START)
         X->vm.builtin_count = XR_USER_GLOBALS_START;

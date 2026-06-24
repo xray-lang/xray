@@ -180,7 +180,7 @@ vmcase(OP_SCOPE_ENTER) {
 
 vmcase(OP_SCOPE_EXIT) {
     /* Exit structured concurrency scope.
-     * A = scope_mode, B = result_reg (supervisor: errors[]) */
+     * A = scope_mode, B = result_reg (supervisor: Array<TaskOutcome>) */
     int scope_mode = GETARG_A(i);
     int result_reg = GETARG_B(i);
     XrCoroutine *current = (XrCoroutine *) VM_CURRENT_CORO;
@@ -255,9 +255,10 @@ vmcase(OP_SCOPE_EXIT) {
             goto startfunc;
         }
         if (scope_mode == XR_SCOPE_SUPERVISOR) {
-            // Main thread: no coro for array alloc, use null
-            if (scope->errors && scope->errors->length > 0) {
-                base[result_reg] = xr_value_from_array(scope->errors);
+            // Main thread fallback: no child coroutine owner, but return the
+            // shared outcomes array when one was allocated.
+            if (scope->outcomes) {
+                base[result_reg] = xr_value_from_array(scope->outcomes);
             } else {
                 base[result_reg] = xr_null();
             }

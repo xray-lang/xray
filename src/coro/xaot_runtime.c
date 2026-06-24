@@ -12,6 +12,7 @@
 
 #include <string.h>
 
+#include "../base/xglobal_indices.h"
 #include "../base/xmalloc.h"
 #include "../runtime/core/xr_runtime_core.h"
 #include "../runtime/core/xr_script_info.h"
@@ -104,6 +105,7 @@ static void aot_runtime_configure_core(XrAotRuntime *runtime, const XrAotRuntime
 }
 
 void xr_aot_runtime_enable_transfer(XrAotRuntime *runtime) {
+    (void) xr_aot_runtime_builtin_lazy(runtime, XR_GLOBAL_VAR_TASK_OUTCOME);
     xr_scope_transfer_enable_core(xr_aot_runtime_core(runtime));
 }
 
@@ -285,13 +287,17 @@ XrRuntime *xr_aot_runtime_scheduler(XrAotRuntime *runtime) {
 XrValue xr_aot_runtime_builtin(const XrAotRuntime *runtime, int32_t index) {
     if (!runtime || index < 0 || index >= XR_USER_GLOBALS_START)
         return XR_NULL_VAL;
-    return runtime->builtins[index];
+    XrValue value = runtime->builtins[index];
+    if (!XR_IS_NULL(value))
+        return value;
+    return xr_runtime_core_builtin(runtime->core, index);
 }
 
 void xr_aot_runtime_set_builtin(XrAotRuntime *runtime, int32_t index, XrValue value) {
     if (!runtime || index < 0 || index >= XR_USER_GLOBALS_START)
         return;
     runtime->builtins[index] = value;
+    xr_runtime_core_set_builtin(runtime->core, index, value);
 }
 
 XrCoroutine *xr_coro_create_aot(XrAotRuntime *runtime, const XrAotCoroDesc *desc, void *frame,

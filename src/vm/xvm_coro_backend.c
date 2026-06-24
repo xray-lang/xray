@@ -1248,17 +1248,14 @@ static XrVMResult run_finalize(XrayIsolate *isolate, XrWorker *worker, XrCorouti
          * Two cases ARE printed because their error would otherwise vanish
          * with no observer:
          *   - the main coroutine (top-level program), and
-         *   - a statement-form fire-and-forget `go f()`. The codegen only
-         *     allocates an XrTask when the result/Task state is user-visible
-         *     (awaited handle, or a linked/scoped child whose error propagates
-         *     to a parent), so coro->task == NULL is exactly the case where no
-         *     observer exists. Silently swallowing such an error once disguised
-         *     a deterministic compiler miscompile as a scheduler "lost wakeup",
-         *     so surfacing it is worth a line on stderr. */
+         *   - a statement-form fire-and-forget `go f()`. Scoped children may
+         *     also have no Task handle, but their parent scope observes the
+         *     terminal state via first_error/outcomes at OP_SCOPE_EXIT. */
         if (coro->error_is_value && !(isolate && isolate->suppress_exception_print) &&
             !XR_IS_NULL(coro->error)) {
             bool is_main = xr_coro_flags_has(coro, XR_CORO_FLG_MAIN);
-            bool dropped_fire_and_forget = !is_main && coro->task == NULL;
+            bool dropped_fire_and_forget =
+                !is_main && coro->task == NULL && !xr_coro_parent_scope(coro);
             if (is_main || dropped_fire_and_forget) {
                 XrString *msg = xr_value_to_string(isolate, coro->error);
                 fprintf(stderr, "\n[Uncaught Error%s] %s\n", is_main ? "" : " in go coroutine",

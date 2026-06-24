@@ -24,6 +24,8 @@ XrRuntimeCore *xr_runtime_core_new(const XrRuntimeCoreConfig *cfg) {
     core->vm_owner = cfg ? cfg->owner_isolate : NULL;
     core->userdata = cfg ? cfg->userdata : NULL;
     core->ext_type_next = XR_TTASK + 1;
+    for (int32_t i = 0; i < XR_USER_GLOBALS_START; i++)
+        core->builtins[i] = XR_NULL_VAL;
     xr_script_info_init(&core->script_info);
 
     core->config = (XrayConfig *) xr_malloc(sizeof(XrayConfig));
@@ -75,6 +77,18 @@ void xr_runtime_core_cleanup_fixed_heap(XrRuntimeCore *core) {
 
 struct XrayIsolate *xr_runtime_core_vm_owner(const XrRuntimeCore *core) {
     return core ? core->vm_owner : NULL;
+}
+
+XrValue xr_runtime_core_builtin(const XrRuntimeCore *core, int32_t index) {
+    if (!core || index < 0 || index >= XR_USER_GLOBALS_START)
+        return XR_NULL_VAL;
+    return core->builtins[index];
+}
+
+void xr_runtime_core_set_builtin(XrRuntimeCore *core, int32_t index, XrValue value) {
+    if (!core || index < 0 || index >= XR_USER_GLOBALS_START)
+        return;
+    core->builtins[index] = value;
 }
 
 void xr_runtime_core_set_destroy_op(XrRuntimeCore *core, uint8_t type, XrObjDestroyFn destroy) {

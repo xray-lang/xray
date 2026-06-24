@@ -218,7 +218,7 @@ xray 共 **63 个保留关键字**，源码真值表见 `src/frontend/lexer/xkey
 `int` `int8` `int16` `int32` `int64` `uint8` `uint16` `uint32` `uint64`
 `float` `float32` `float64` `bool` `string` `char`
 
-`unknown` 是编译器内部类型格子的显示名，不是词法关键字；用户代码中可作为普通标识符使用。
+`unknown` 在类型位置是内置擦除/未知值类型名（例如 `TaskOutcome.Success(unknown)`）；它不是词法关键字，表达式位置仍可作为普通标识符使用。
 
 > **注意**：以下名字**不是**词法关键字，而是 `prelude` 自动引入的内置类型符号：
 > `Array` · `BigInt` · `Bytes` · `Channel` · `DateTime` · `Exception` · `Json` · `Logger` · `Map` · `NetConn` · `NetListener` · `Range` · `Regex` · `Set` · `StringBuilder`。
@@ -3932,7 +3932,7 @@ select {
 ```ebnf
 ScopeStmt          ::= 'scope' Block
 LinkedScopeStmt    ::= 'linked' 'scope' Block          // 兄弟失败 → 取消所有 + 重抛
-SupervisorScopeExpr ::= 'supervisor' 'scope' Block     // 收集所有错误，返回 Array<string>
+SupervisorScopeExpr ::= 'supervisor' 'scope' Block     // 收集每个子协程结果，返回 Array<TaskOutcome>
 ```
 
 ```xray
@@ -3958,7 +3958,19 @@ scope {
 |---|---|---|
 | `scope { ... }` | 不取消兄弟；异常不向外传播（每个 task 独立） | 无（语句形式） |
 | `linked scope { ... }` | **取消所有兄弟**协程，并向外**重抛**最先抛出的异常 | 无 |
-| `supervisor scope { ... }` | **收集**所有失败子协程的异常消息，子协程之间互不影响 | `Array<string>`（错误列表；可为空表示全部成功） |
+| `supervisor scope { ... }` | **收集**每个子协程的完成结果，子协程之间互不影响 | `Array<TaskOutcome>`（每个子协程一个 outcome） |
+
+`TaskOutcome` 是 prelude 枚举：
+
+```xray
+enum TaskOutcome {
+    Success(unknown)    // 子协程正常返回；payload 为返回值
+    Failed(unknown)     // 子协程抛异常；payload 为原始错误值，不强制字符串化
+    Cancelled           // 子协程被取消
+}
+```
+
+`supervisor scope` 会等待块内所有 `go` 子协程完成，并按完成记录追加 outcome。它不会为了旧式错误列表把失败转换成字符串；调用方需要消息时可在 `TaskOutcome.Failed(err)` 分支中自行决定如何格式化。
 
 ```xray
 // linked scope：失败传播
@@ -3971,13 +3983,13 @@ try {
     print("caught:", e)              // 命中此分支
 }
 
-// supervisor scope：收集错误
-let errors = supervisor scope {
+// supervisor scope：收集每个子协程的 outcome
+let outcomes = supervisor scope {
     go failing("error1")
     go failing("error2")
     go ok()
 }
-print(errors.length)                 // 2（只统计失败的）
+print(outcomes.length)               // 3（每个子协程一个 outcome）
 ```
 
 **通用语义**：

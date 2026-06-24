@@ -78,9 +78,11 @@ static bool aot_runtime_register_prelude_enums(XrAotRuntime *runtime) {
     char *recv_members[] = {"Value", "Empty", "Timeout", "Closed"};
     char *send_result_members[] = {"Sent", "Full", "Timeout", "Closed"};
     char *task_result_members[] = {"Success", "Failed", "Cancelled", "Timeout", "Pending"};
+    char *task_outcome_members[] = {"Success", "Failed", "Cancelled"};
     char *task_status_members[] = {"Pending", "Running", "Success", "Failed", "Cancelled"};
     const int recv_payloads[] = {1, 0, 0, 0};
     const int task_result_payloads[] = {1, 1, 0, 0, 0};
+    const int task_outcome_payloads[] = {1, 1, 0};
 
     return aot_runtime_register_prelude_enum(runtime, XR_GLOBAL_VAR_ORDERING, "Ordering",
                                              ordering_members, 5, NULL) &&
@@ -90,6 +92,8 @@ static bool aot_runtime_register_prelude_enums(XrAotRuntime *runtime) {
                                              send_result_members, 4, NULL) &&
            aot_runtime_register_prelude_enum(runtime, XR_GLOBAL_VAR_TASK_RESULT, "TaskResult",
                                              task_result_members, 5, task_result_payloads) &&
+           aot_runtime_register_prelude_enum(runtime, XR_GLOBAL_VAR_TASK_OUTCOME, "TaskOutcome",
+                                             task_outcome_members, 3, task_outcome_payloads) &&
            aot_runtime_register_prelude_enum(runtime, XR_GLOBAL_VAR_TASK_STATUS, "TaskStatus",
                                              task_status_members, 5, NULL);
 }
@@ -115,7 +119,7 @@ static bool aot_value_is_runtime_instance(XrValue value);
 static bool aot_builtin_index_is_prelude_enum(int32_t index) {
     return index == XR_GLOBAL_VAR_ORDERING || index == XR_GLOBAL_VAR_RECV ||
            index == XR_GLOBAL_VAR_SEND_RESULT || index == XR_GLOBAL_VAR_TASK_RESULT ||
-           index == XR_GLOBAL_VAR_TASK_STATUS;
+           index == XR_GLOBAL_VAR_TASK_OUTCOME || index == XR_GLOBAL_VAR_TASK_STATUS;
 }
 
 static XrValue aot_runtime_script_builtin_lazy(XrAotRuntime *runtime, int32_t index) {
@@ -142,7 +146,7 @@ static XrValue aot_runtime_script_builtin_lazy(XrAotRuntime *runtime, int32_t in
     return value;
 }
 
-static XrValue aot_runtime_builtin_lazy(XrAotRuntime *runtime, int32_t index) {
+static XrValue aot_runtime_builtin_lazy_inner(XrAotRuntime *runtime, int32_t index) {
     XrValue value = xr_aot_runtime_builtin(runtime, index);
     if (!XR_IS_NULL(value))
         return value;
@@ -153,6 +157,12 @@ static XrValue aot_runtime_builtin_lazy(XrAotRuntime *runtime, int32_t index) {
     if (!aot_runtime_register_prelude_enums(runtime))
         return XR_NULL_VAL;
     return xr_aot_runtime_builtin(runtime, index);
+}
+
+XrValue xr_aot_runtime_builtin_lazy(XrAotRuntime *runtime, int32_t index) {
+    if (!runtime || index < 0 || index >= XR_USER_GLOBALS_START)
+        return XR_NULL_VAL;
+    return aot_runtime_builtin_lazy_inner(runtime, index);
 }
 
 static XrValue aot_runtime_process_field(const XrAotContext *ctx, const char *field) {
@@ -210,7 +220,7 @@ XrValue xr_aot_get_builtin(const XrAotContext *ctx, int32_t index) {
     if (!ctx || index < 0)
         return XR_NULL_VAL;
     if (ctx->runtime && index < XR_USER_GLOBALS_START)
-        return aot_runtime_builtin_lazy(ctx->runtime, index);
+        return aot_runtime_builtin_lazy_inner(ctx->runtime, index);
     if (!ctx->vm_host || !ctx->vm_host_ops || !ctx->vm_host_ops->get_builtin ||
         index >= XR_GLOBALS_MAX) {
         return XR_NULL_VAL;
