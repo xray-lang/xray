@@ -11,6 +11,7 @@
 #include "../test_framework.h"
 #include "shared/xr_io_core.h"
 
+#include <stdlib.h>
 #include <string.h>
 
 typedef struct IoLineCollector {
@@ -113,6 +114,72 @@ static size_t io_copy_fake_write(void *ctx, const void *buf, size_t len) {
 
 static bool io_copy_fake_error(void *ctx) {
     return ((IoCopyFake *) ctx)->read_error;
+}
+
+typedef struct IoReadFake {
+    const char *src;
+    size_t src_len;
+    size_t pos;
+    bool seek_end_fails;
+    bool seek_start_fails;
+    bool read_error;
+    bool alloc_fails;
+    bool has_tell_override;
+    long tell_override;
+    size_t alloc_count;
+    size_t free_count;
+} IoReadFake;
+
+static bool io_read_fake_seek_end(void *ctx) {
+    IoReadFake *fake = (IoReadFake *) ctx;
+    if (fake->seek_end_fails)
+        return false;
+    fake->pos = fake->src_len;
+    return true;
+}
+
+static long io_read_fake_tell(void *ctx) {
+    IoReadFake *fake = (IoReadFake *) ctx;
+    if (fake->has_tell_override)
+        return fake->tell_override;
+    return (long) fake->pos;
+}
+
+static bool io_read_fake_seek_start(void *ctx) {
+    IoReadFake *fake = (IoReadFake *) ctx;
+    if (fake->seek_start_fails)
+        return false;
+    fake->pos = 0;
+    return true;
+}
+
+static size_t io_read_fake_read(void *ctx, void *buf, size_t cap) {
+    IoReadFake *fake = (IoReadFake *) ctx;
+    size_t n = fake->src_len - fake->pos;
+    if (n > cap)
+        n = cap;
+    if (n > 0)
+        memcpy(buf, fake->src + fake->pos, n);
+    fake->pos += n;
+    return n;
+}
+
+static bool io_read_fake_error(void *ctx) {
+    return ((IoReadFake *) ctx)->read_error;
+}
+
+static void *io_read_fake_alloc(void *ctx, size_t size) {
+    IoReadFake *fake = (IoReadFake *) ctx;
+    fake->alloc_count++;
+    if (fake->alloc_fails)
+        return NULL;
+    return malloc(size);
+}
+
+static void io_read_fake_free(void *ctx, void *ptr) {
+    IoReadFake *fake = (IoReadFake *) ctx;
+    fake->free_count++;
+    free(ptr);
 }
 
 TEST(io_core_read_lines_empty_file_has_no_lines) {
@@ -268,6 +335,60 @@ TEST(io_core_copy_stream_rejects_invalid_callbacks_or_buffer) {
                                         io_copy_fake_error, buf, 0));
 }
 
+TEST(io_core_read_sized_stream_alloc_reads_and_nul_terminates) {
+    IoReadFake fake = {.src = "hello", .src_len = 5};
+    size_t len = 99;
+    char *buf = xr_io_core_read_sized_stream_alloc(
+        &fake, io_read_fake_seek_end, io_read_fake_tell, io_read_fake_seek_start, io_read_fake_read,
+        io_read_fake_error, io_read_fake_alloc, io_read_fake_free, &fake, 16, &len);
+
+    ASSERT_NOT_NULL(buf);
+    ASSERT_EQ_UINT(len, 5);
+    ASSERT_MEM_EQ(buf, "hello", 5);
+    ASSERT_EQ_INT(buf[5], '\0');
+    ASSERT_EQ_UINT(fake.alloc_count, 1);
+    ASSERT_EQ_UINT(fake.free_count, 0);
+    free(buf);
+}
+
+TEST(io_core_read_sized_stream_alloc_accepts_empty_stream) {
+    IoReadFake fake = {.src = "", .src_len = 0};
+    size_t len = 99;
+    char *buf = xr_io_core_read_sized_stream_alloc(
+        &fake, io_read_fake_seek_end, io_read_fake_tell, io_read_fake_seek_start, io_read_fake_read,
+        io_read_fake_error, io_read_fake_alloc, io_read_fake_free, &fake, 16, &len);
+
+    ASSERT_NOT_NULL(buf);
+    ASSERT_EQ_UINT(len, 0);
+    ASSERT_EQ_INT(buf[0], '\0');
+    free(buf);
+}
+
+TEST(io_core_read_sized_stream_alloc_rejects_too_large_stream) {
+    IoReadFake fake = {.src = "hello", .src_len = 5};
+    size_t len = 99;
+    char *buf = xr_io_core_read_sized_stream_alloc(
+        &fake, io_read_fake_seek_end, io_read_fake_tell, io_read_fake_seek_start, io_read_fake_read,
+        io_read_fake_error, io_read_fake_alloc, io_read_fake_free, &fake, 4, &len);
+
+    ASSERT_NULL(buf);
+    ASSERT_EQ_UINT(len, 0);
+    ASSERT_EQ_UINT(fake.alloc_count, 0);
+}
+
+TEST(io_core_read_sized_stream_alloc_releases_on_read_error) {
+    IoReadFake fake = {.src = "hello", .src_len = 5, .read_error = true};
+    size_t len = 99;
+    char *buf = xr_io_core_read_sized_stream_alloc(
+        &fake, io_read_fake_seek_end, io_read_fake_tell, io_read_fake_seek_start, io_read_fake_read,
+        io_read_fake_error, io_read_fake_alloc, io_read_fake_free, &fake, 16, &len);
+
+    ASSERT_NULL(buf);
+    ASSERT_EQ_UINT(len, 0);
+    ASSERT_EQ_UINT(fake.alloc_count, 1);
+    ASSERT_EQ_UINT(fake.free_count, 1);
+}
+
 TEST(io_core_dot_dir_entry_recognizes_reserved_names) {
     ASSERT(xr_io_core_is_dot_dir_entry("."));
     ASSERT(xr_io_core_is_dot_dir_entry(".."));
@@ -373,6 +494,12 @@ RUN_TEST(io_core_copy_stream_handles_exact_chunk_eof);
 RUN_TEST(io_core_copy_stream_rejects_short_write);
 RUN_TEST(io_core_copy_stream_rejects_read_error);
 RUN_TEST(io_core_copy_stream_rejects_invalid_callbacks_or_buffer);
+
+RUN_TEST_SUITE("IO Core - sized read");
+RUN_TEST(io_core_read_sized_stream_alloc_reads_and_nul_terminates);
+RUN_TEST(io_core_read_sized_stream_alloc_accepts_empty_stream);
+RUN_TEST(io_core_read_sized_stream_alloc_rejects_too_large_stream);
+RUN_TEST(io_core_read_sized_stream_alloc_releases_on_read_error);
 
 RUN_TEST_SUITE("IO Core - dir walk paths");
 RUN_TEST(io_core_dot_dir_entry_recognizes_reserved_names);

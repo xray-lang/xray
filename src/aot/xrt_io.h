@@ -63,6 +63,36 @@
 
 #define XRT_IO_MAX_READ_BYTES ((long) INT32_MAX)
 
+static inline void *xrt_io_core_alloc(void *ctx, size_t size) {
+    (void) ctx;
+    return XRT_MALLOC(size);
+}
+
+static inline void xrt_io_core_free(void *ctx, void *ptr) {
+    (void) ctx;
+    XRT_FREE(ptr);
+}
+
+static inline bool xrt_io_file_seek_end(void *ctx) {
+    return fseek((FILE *) ctx, 0, SEEK_END) == 0;
+}
+
+static inline long xrt_io_file_tell(void *ctx) {
+    return ftell((FILE *) ctx);
+}
+
+static inline bool xrt_io_file_seek_start(void *ctx) {
+    return fseek((FILE *) ctx, 0, SEEK_SET) == 0;
+}
+
+static inline size_t xrt_io_file_read(void *ctx, void *buf, size_t cap) {
+    return fread(buf, 1, cap, (FILE *) ctx);
+}
+
+static inline bool xrt_io_file_error(void *ctx) {
+    return ferror((FILE *) ctx) != 0;
+}
+
 static inline char *xrt_io_copy_cstr_arg(const char *data, int64_t len, char *stack,
                                          size_t stack_cap, char **owned) {
     if (owned)
@@ -160,34 +190,11 @@ static inline char *xrt_io_read_file_buffer(const char *path, size_t *out_len) {
     FILE *f = fopen(path, "rb");
     if (!f)
         return NULL;
-    if (fseek(f, 0, SEEK_END) != 0) {
-        fclose(f);
-        return NULL;
-    }
-    long size = ftell(f);
-    if (size < 0 || size > XRT_IO_MAX_READ_BYTES) {
-        fclose(f);
-        return NULL;
-    }
-    if (fseek(f, 0, SEEK_SET) != 0) {
-        fclose(f);
-        return NULL;
-    }
-    char *buf = (char *) XRT_MALLOC((size_t) size + 1);
-    if (!buf) {
-        fclose(f);
-        return NULL;
-    }
-    size_t n = fread(buf, 1, (size_t) size, f);
-    bool failed = ferror(f) != 0;
+    char *buf = xr_io_core_read_sized_stream_alloc(
+        f, xrt_io_file_seek_end, xrt_io_file_tell, xrt_io_file_seek_start, xrt_io_file_read,
+        xrt_io_file_error, xrt_io_core_alloc, xrt_io_core_free, NULL, XRT_IO_MAX_READ_BYTES,
+        out_len);
     fclose(f);
-    if (failed) {
-        XRT_FREE(buf);
-        return NULL;
-    }
-    buf[n] = '\0';
-    if (out_len)
-        *out_len = n;
     return buf;
 }
 
