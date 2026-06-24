@@ -16,7 +16,7 @@
 #include "xset.h"
 #include "xarray.h"
 #include "xiterator.h"
-#include "xexception.h"
+#include "xpanic_info.h"
 #include "xstring.h"
 #include "../value/xvalue.h"
 #include "../value/xvalue_format.h"
@@ -61,9 +61,9 @@ static XrValue xr_set_method_add(XrayIsolate *iso, XrValue self, XrValue *args, 
     XrSet *s = set_self(self);
     /* WeakSet contract: value must be a heap object. */
     if (set_is_weak(s) && argc >= 1 && !XR_VALUE_NEEDS_GC(args[0])) {
-        XrValue exc = xr_exception_newf(iso, XR_ERR_INVALID_ARG_TYPE,
-                                        "WeakSet value must be a heap object, got %s",
-                                        xr_typeid_name(xr_value_typeid(args[0])));
+        XrValue exc = xr_panic_info_newf(iso, XR_ERR_INVALID_ARG_TYPE,
+                                         "WeakSet value must be a heap object, got %s",
+                                         xr_typeid_name(xr_value_typeid(args[0])));
         xr_vm_unwind_with_trace(iso, exc);
         return xr_null();
     }

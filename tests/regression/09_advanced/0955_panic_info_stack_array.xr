@@ -11,14 +11,14 @@ fn mkzero() -> int { return 0 }
 
 @test
 fn test_new_exception_stack_is_array() {
-    let e = Exception("hello")
+    let e = PanicInfo("hello")
     assert_eq(typeof(e.stack), "Array")
 }
 
 @test
 fn test_new_exception_stack_initially_empty() {
     // 直接 new 不经过 unwind 控制流，stack 为空数组
-    let e = Exception("hello")
+    let e = PanicInfo("hello")
     assert_eq(e.stack.length, 0)
 }
 
@@ -79,7 +79,7 @@ fn test_panic_stack_frames_are_strings() {
 
 @test
 fn test_subclass_exception_stack_is_array() {
-    class MyErr extends Exception {
+    class MyErr extends PanicInfo {
         constructor(m: string) { super(m) }
     }
     let e = MyErr("hi")
@@ -91,12 +91,12 @@ fn test_subclass_exception_stack_is_array() {
 
 @test
 fn test_exception_code_default_zero() {
-    let e = Exception("plain message")
+    let e = PanicInfo("plain message")
     assert_eq(e.code, 0)
 }
 
 @test
 fn test_exception_data_default_null() {
-    let e = Exception("plain message")
+    let e = PanicInfo("plain message")
     assert_eq(e.data, null)
 }

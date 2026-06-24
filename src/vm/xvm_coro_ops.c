@@ -30,7 +30,7 @@
 #include "../runtime/object/xstringbuilder.h"
 
 #include "../runtime/object/xjson.h"
-#include "../runtime/object/xexception.h"
+#include "../runtime/object/xpanic_info.h"
 #include "../runtime/class/xclass_descriptor.h"
 #include "../runtime/object/xrange.h"
 #include "../base/xutf8.h"
@@ -785,12 +785,12 @@ static XrDispatchAction vm_task_raise_await_terminal(XrayIsolate *isolate, XrTas
     XrValue exc;
     if (tstate == XR_TASK_FAILED && task && !XR_IS_NULL(task->error)) {
         exc = task->error;
-        if (!xr_value_is_exception(isolate, exc))
-            exc = xr_exception_from_value(isolate, exc);
+        if (!xr_value_is_panic_info(isolate, exc))
+            exc = xr_panic_info_from_value(isolate, exc);
     } else if (tstate == XR_TASK_FAILED) {
-        exc = xr_exception_new(isolate, XR_ERR_RUNTIME, "Task failed");
+        exc = xr_panic_info_new(isolate, XR_ERR_RUNTIME, "Task failed");
     } else {
-        exc = xr_exception_new(isolate, XR_ERR_CORO_CANCELLED, "Task cancelled");
+        exc = xr_panic_info_new(isolate, XR_ERR_CORO_CANCELLED, "Task cancelled");
     }
     if (frame)
         frame->pc = pc;

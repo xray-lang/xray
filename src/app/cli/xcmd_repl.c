@@ -81,7 +81,7 @@ static const char *const k_repl_keywords[] = {
     "super",        "extends",   "implements", "static",  "private",   "abstract", "override",
     "operator",     "void",      "int",        "float",   "string",    "bool",     "Array",
     "Map",          "Set",       "Json",       "Channel", "Bytes",     "BigInt",   "StringBuilder",
-    "Exception",    "Regex",     "print",      "dump",    "typeof",    "assert",   "assert_true",
+    "PanicInfo",    "Regex",     "print",      "dump",    "typeof",    "assert",   "assert_true",
     "assert_false", "assert_eq", "assert_ne",  "copy",    "chr",       "Coro",     "CoroPool",
     "Reflect",      NULL,
 };

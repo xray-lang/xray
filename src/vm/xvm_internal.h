@@ -32,7 +32,7 @@
 #include "../runtime/object/xiterator.h"
 #include "../runtime/class/xclass_system.h"
 #include "../runtime/class/xenum.h"
-#include "../runtime/object/xexception.h"
+#include "../runtime/object/xpanic_info.h"
 #include "../runtime/object/xbigint.h"
 #include "../runtime/value/xstruct_layout.h"
 #include "../runtime/symbol/xsymbol_table.h"

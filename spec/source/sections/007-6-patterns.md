@@ -195,7 +195,7 @@ match (p) {
 ### 6.10 穷举性与匹配失败
 
 - 对 enum 表达式的 `match` 强制穷举（错误码 `E0371`，见 §6.3.3）。
-- 其他类型不强制；运行时无分支匹配 → 抛 `Exception` 错误码 `E0442`（见 §18.x）。
+- 其他类型不强制；运行时无分支匹配 → 抛 `PanicInfo` 错误码 `E0442`（见 §18.x）。
 - 建议总是提供 `_` 兜底。
 <!-- /xr-spec:cn -->
 
@@ -391,6 +391,6 @@ match (p) {
 ### 6.10 Exhaustiveness and Match Failure
 
 - `match` over an enum expression is exhaustive (error code `E0371`, see §6.3.3).
-- Other operand types are not enforced; if no arm matches at runtime, an `Exception` with code `E0442` is raised (see §18.x).
+- Other operand types are not enforced; if no arm matches at runtime, an `PanicInfo` with code `E0442` is raised (see §18.x).
 - Always providing a `_` fallback is recommended.
 <!-- /xr-spec:en -->

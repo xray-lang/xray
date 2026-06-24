@@ -185,8 +185,8 @@ XR_FUNC bool xr_value_is_bigint(XrValue v);
 #define XR_IS_STRUCT_REF(v) ((v).tag == XR_TAG_STRUCT_REF)
 /* DateTime is no longer a dedicated GC type; use xr_value_is_datetime(iso, v)
  * from datetime.h which walks the class super-chain. */
-/* Exception is no longer a dedicated GC type; use xr_value_is_exception(iso, v)
- * from xexception.h which walks the class super-chain. The historical
+/* Exception is no longer a dedicated GC type; use xr_value_is_panic_info(iso, v)
+ * from xpanic_info.h which walks the class super-chain. The historical
  * XR_IS_EXCEPTION macro and XR_TEXCEPTION enumerator are gone. */
 #define XR_IS_ERROR(v) (XR_IS_PTR(v) && XR_HEAP_TYPE(v) == XR_TERROR)
 /* Tuple is no longer a dedicated GC type; use xr_value_is_tuple(v)

@@ -128,7 +128,7 @@ typedef enum {
     XR_BK_ADT_ENUM,
     XR_BK_RANGE,
     XR_BK_DATETIME,
-    XR_BK_EXCEPTION,
+    XR_BK_PANIC_INFO,
     XR_BK_MAX
 } XrBuiltinKind;
 

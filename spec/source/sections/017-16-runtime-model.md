@@ -94,29 +94,29 @@ os.sleep(100)             // 休眠毫秒数（与 `time.sleep` 等价）
 
 ### 16.6 Panic 运行时
 
-内置 `Exception` 类是 prelude 类型（声明：`stdlib/types/exception.xr`），仅属于 **panic 通道**。运行时故障（越界、除零、不完整 `match`、运行时不变量违背等）由 VM/AOT runtime 构造 `Exception` 对象：
+内置 `PanicInfo` 类是 prelude 类型（声明：`stdlib/types/panic_info.xr`），仅属于 **panic 通道**。运行时故障（越界、除零、不完整 `match`、运行时不变量违背等）由 VM/AOT runtime 构造 `PanicInfo` 对象：
 
 ```xray
 @native
-class Exception {
+class PanicInfo {
     message: string             // 人类可读消息
     stack: Array<string>        // 自动 capture 的调用栈，每帧一行格式化字符串
-    cause: Exception?           // 链式 cause
+    cause: PanicInfo?           // 链式 cause
     code: int                   // 错误码（从 "E0xxx: ..." 前缀自动解析，默认 0）
     data: Json?                 // 运行时故障的可选结构化附加数据
 
-    constructor(message: string = "", cause: Exception? = null)
+    constructor(message: string = "", cause: PanicInfo? = null)
     fn toString() -> string
 }
 ```
 
-用户级可恢复错误不使用 `Exception`：`throw` 表达式只接受 enum 变体值（见 §8.1.1）；非 enum 错误值在编译期被拒绝（错误码 `E0370`）。
+用户级可恢复错误不使用 `PanicInfo`：`throw` 表达式只接受 enum 变体值（见 §8.1.1）；非 enum 错误值在编译期被拒绝（错误码 `E0370`）。
 
 栈展开（仅 panic 通道）：VM `xvm_unwind_stack()` 按 try-table 查找 `catch panic` handler，逐帧释放局部、执行 defer，到达 handler 后跳转。可恢复错误走值返回通道，不展开栈。详见 §8。
 
 ### 16.7 值返回错误通道运行时
 
-`throw <enum>` 将枚举值写入帧的 `pending_error` 槽位，设置错误标志位并返回。调用方通过 `OP_ERR_CHECK` 检测标志位，决定进入 `catch` handler 或继续向上返回。该通道不展开栈、不分配 `Exception`；在需要传播或捕获错误的调用边界，正常路径只经过可预测的错误标志分支。
+`throw <enum>` 将枚举值写入帧的 `pending_error` 槽位，设置错误标志位并返回。调用方通过 `OP_ERR_CHECK` 检测标志位，决定进入 `catch` handler 或继续向上返回。该通道不展开栈、不分配 `PanicInfo`；在需要传播或捕获错误的调用边界，正常路径只经过可预测的错误标志分支。
 
 ### 16.8 对象回收与析构时机契约
 
@@ -221,29 +221,29 @@ See `stdlib/os/` for details.
 
 ### 16.6 Panic Runtime
 
-The built-in `Exception` class is a prelude type (declared in `stdlib/types/exception.xr`) and belongs only to the **panic channel**. Runtime faults (out-of-bounds, division by zero, non-exhaustive `match`, runtime invariant violations, and similar faults) are represented by `Exception` objects constructed by the VM/AOT runtime:
+The built-in `PanicInfo` class is a prelude type (declared in `stdlib/types/panic_info.xr`) and belongs only to the **panic channel**. Runtime faults (out-of-bounds, division by zero, non-exhaustive `match`, runtime invariant violations, and similar faults) are represented by `PanicInfo` objects constructed by the VM/AOT runtime:
 
 ```xray
 @native
-class Exception {
+class PanicInfo {
     message: string             // human-readable message
     stack: Array<string>        // automatically captured call stack, one formatted line per frame
-    cause: Exception?           // chained cause
+    cause: PanicInfo?           // chained cause
     code: int                   // error code (auto-parsed from "E0xxx: ..." prefix; default 0)
     data: Json?                 // optional structured data for a runtime fault
 
-    constructor(message: string = "", cause: Exception? = null)
+    constructor(message: string = "", cause: PanicInfo? = null)
     fn toString() -> string
 }
 ```
 
-Recoverable user-level errors do not use `Exception`: a `throw` expression accepts enum variant values only (see §8.1.1); non-enum error values are rejected at compile time (error code `E0370`).
+Recoverable user-level errors do not use `PanicInfo`: a `throw` expression accepts enum variant values only (see §8.1.1); non-enum error values are rejected at compile time (error code `E0370`).
 
 Stack unwinding (panic channel only): the VM's `xvm_unwind_stack()` walks the try-table to find `catch panic` handlers, releasing locals frame by frame and running `defer` along the way before jumping to the handler. Recoverable errors use the value-return channel and never unwind the stack. See §8 for details.
 
 ### 16.7 Value-return Error Channel Runtime
 
-`throw <enum>` writes the enum value into the frame's `pending_error` slot, sets the error flag, and returns. The caller detects the flag via `OP_ERR_CHECK` and either enters a `catch` handler or continues returning upward. This channel performs no stack unwinding and allocates no `Exception`; at call boundaries that may propagate or catch errors, the happy path goes through only a predictable error-flag branch.
+`throw <enum>` writes the enum value into the frame's `pending_error` slot, sets the error flag, and returns. The caller detects the flag via `OP_ERR_CHECK` and either enters a `catch` handler or continues returning upward. This channel performs no stack unwinding and allocates no `PanicInfo`; at call boundaries that may propagate or catch errors, the happy path goes through only a predictable error-flag branch.
 
 ### 16.8 Object Reclamation & Finalizer Timing Contract
 

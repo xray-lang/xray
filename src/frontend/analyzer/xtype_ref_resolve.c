@@ -73,8 +73,8 @@ static XrType *resolve_named(XrayIsolate *X, const char *name) {
     /* Well-known names not in prelude */
     if (strcmp(name, "Task") == 0)
         return xr_type_new_task(X, xr_type_new_unknown(NULL));
-    if (strcmp(name, "Exception") == 0)
-        return xr_type_new_named_instance(X, "Exception");
+    if (strcmp(name, "PanicInfo") == 0)
+        return xr_type_new_named_instance(X, "PanicInfo");
     if (strcmp(name, "unknown") == 0)
         return xr_type_new_unknown(X);
 

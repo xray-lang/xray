@@ -34,7 +34,7 @@
 
 #include "../base/xglobal_indices.h"
 #include "../runtime/object/xjson.h"
-#include "../runtime/object/xexception.h"
+#include "../runtime/object/xpanic_info.h"
 #include "../runtime/object/xtuple.h"
 #include "../runtime/class/xclass_descriptor.h"
 #include "../runtime/object/xrange.h"
@@ -128,7 +128,7 @@ static XrValue vm_task_result_success(XrayIsolate *isolate, XrValue value) {
 static XrValue vm_task_result_failed(XrayIsolate *isolate, XrTask *task, XrCoroutine *dst_coro) {
     XrValue error = task ? task->error : xr_null();
     if (XR_IS_NULL(error))
-        error = xr_exception_new(isolate, XR_ERR_RUNTIME, "Task failed");
+        error = xr_panic_info_new(isolate, XR_ERR_RUNTIME, "Task failed");
     if (dst_coro && xr_value_needs_copy(error))
         error = xr_deep_copy_to_coro(isolate, error, dst_coro);
     XrValue args[1] = {error};
@@ -195,12 +195,12 @@ static XrDispatchAction vm_task_raise_terminal(XrayIsolate *isolate, XrTask *tas
     XrValue exc;
     if (state == XR_TASK_FAILED && task && !XR_IS_NULL(task->error)) {
         exc = task->error;
-        if (!xr_value_is_exception(isolate, exc))
-            exc = xr_exception_from_value(isolate, exc);
+        if (!xr_value_is_panic_info(isolate, exc))
+            exc = xr_panic_info_from_value(isolate, exc);
     } else if (state == XR_TASK_FAILED) {
-        exc = xr_exception_new(isolate, XR_ERR_RUNTIME, "Task failed");
+        exc = xr_panic_info_new(isolate, XR_ERR_RUNTIME, "Task failed");
     } else {
-        exc = xr_exception_new(isolate, XR_ERR_CORO_CANCELLED, "Task cancelled");
+        exc = xr_panic_info_new(isolate, XR_ERR_CORO_CANCELLED, "Task cancelled");
     }
     if (frame)
         frame->pc = pc;

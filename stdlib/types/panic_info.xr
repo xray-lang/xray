@@ -1,0 +1,20 @@
+// Built-in PanicInfo class — the runtime panic diagnostic payload.
+//
+// PanicInfo belongs to the panic channel only: the VM/AOT runtime constructs it
+// on faults (out-of-bounds, division by zero, non-exhaustive match, etc.) and
+// `catch panic (p: PanicInfo)` reads its fields. Business errors are enum values
+// (`throw <enum>`), never PanicInfo. Field layout matches xclass_system.h
+// PANIC_INFO_FIELD_* indices and the XrClass built by
+// xr_register_panic_info_class in xclass_system.c; the constructor and toString
+// bodies are PRIMITIVE on the C side. This declaration exists for analyzer / LSP
+// awareness so the fields are visible from any module.
+
+class PanicInfo {
+    message: string
+    stack: Array<string>
+    cause: PanicInfo?
+    code: int
+    data: Json?
+    constructor(message: string = "", cause: PanicInfo? = null)
+    toString() -> string
+}

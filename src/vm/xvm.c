@@ -314,14 +314,14 @@ XrVMResult run(XrayIsolate *isolate, XrVMContext *vm_ctx) {
  * startfunc (panic handler) or returns XR_VM_RUNTIME_ERROR. */
 #define VM_RUNTIME_ERROR(code, fmt, ...)                                                           \
     do {                                                                                           \
-        XrValue _exc = xr_exception_newf(isolate, (code), fmt, ##__VA_ARGS__);                     \
+        XrValue _exc = xr_panic_info_newf(isolate, (code), fmt, ##__VA_ARGS__);                    \
         savepc();                                                                                  \
         {                                                                                          \
             XrDebugHooks *_eh = (XrDebugHooks *) isolate->debug_hooks;                             \
             if (_eh && _eh->on_exception) {                                                        \
                 bool _unc = (VM_HANDLER_COUNT == 0);                                               \
-                const char *_msg = xr_value_is_exception(isolate, _exc)                            \
-                                       ? xr_exception_get_message(isolate, _exc)                   \
+                const char *_msg = xr_value_is_panic_info(isolate, _exc)                           \
+                                       ? xr_panic_info_get_message(isolate, _exc)                  \
                                        : "<exception>";                                            \
                 if (_eh->on_exception(isolate, _msg, _unc) == XR_DBG_ACTION_BREAK) {               \
                     VM_SET_EXCEPTION(_exc);                                                        \

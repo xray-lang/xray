@@ -220,7 +220,7 @@ Xray has **63 reserved keywords** in total; the authoritative source-of-truth ta
 In type position, `unknown` is the built-in erased/unknown-value type name (for example, `TaskOutcome.Success(unknown)`); it is not a lexical keyword, and remains usable as an ordinary identifier in expression position.
 
 > **Note**: the following names are **not** lexer keywords; they are built-in type symbols automatically introduced by the prelude:
-> `Array` · `BigInt` · `Bytes` · `Channel` · `DateTime` · `Exception` · `Json` · `Logger` · `Map` · `NetConn` · `NetListener` · `Range` · `Regex` · `Set` · `StringBuilder`.
+> `Array` · `BigInt` · `Bytes` · `Channel` · `DateTime` · `PanicInfo` · `Json` · `Logger` · `Map` · `NetConn` · `NetListener` · `Range` · `Regex` · `Set` · `StringBuilder`.
 > They may be locally shadowed by user types of the same name, but typically need no import.
 
 #### 1.5.7 Literal Keywords
@@ -518,7 +518,7 @@ Xray is statically typed; every expression has a determined type at compile time
 | Sized floats | `float32`, `float64` |
 | Containers | `Array<T>`, `Map<K,V>`, `Set<T>`, `Channel<T>`, `Bytes` (equivalent to `Array<uint8>`) |
 | Special | `Json`, `BigInt`, `Range`, `DateTime`, `Regex`, `StringBuilder`, `Logger`, `NetConn`, `NetListener` |
-| Error-handling prelude | `Exception` (see §8) |
+| Error-handling prelude | `PanicInfo` (see §8) |
 | Weak containers | `WeakMap`, `WeakSet` |
 | Nullable | `T?` |
 | Union | `A \| B \| ...` |
@@ -1486,7 +1486,7 @@ let result = match (x) {
 **Semantics**:
 - Matches top-down, taking the first successful arm.
 - All arm expressions must yield the same type (or a union).
-- **Exhaustiveness**: for enum scrutinees (ADT and simple enums), the compiler enforces exhaustiveness. Otherwise it is not enforced, and an unmatched value at runtime throws `Exception(E0442)`.
+- **Exhaustiveness**: for enum scrutinees (ADT and simple enums), the compiler enforces exhaustiveness. Otherwise it is not enforced, and an unmatched value at runtime throws `PanicInfo(E0442)`.
 - For pattern details see [§6](#6-patterns).
 
 ### 3.14 Construction expressions
@@ -1799,7 +1799,7 @@ throw AppError.NotFound                      // value-return error channel
 - A `try` must be followed by at least one `catch` or `catch panic` clause.
 - `catch (e)` catches recoverable errors propagated through the value-return channel (a user `throw <enum>`); use `match (e)` to destructure the error value.
 - `catch panic (p)` catches runtime faults (div-by-zero, out-of-bounds, `expr!`, `assert`), strictly separated from recoverable errors.
-- The `throw` operand is an error value (typically an enum) propagated through the value-return channel: no `Exception` allocation, no stack unwinding, and only a predictable branch at call boundaries that may propagate or catch errors.
+- The `throw` operand is an error value (typically an enum) propagated through the value-return channel: no `PanicInfo` allocation, no stack unwinding, and only a predictable branch at call boundaries that may propagate or catch errors.
 - There is no `finally`: use `defer` (§4.9) for deterministic cleanup.
 - For full error semantics see [§8](#8-error-handling).
 
@@ -2914,7 +2914,7 @@ match (p) {
 ### 6.10 Exhaustiveness and Match Failure
 
 - `match` over an enum expression is exhaustive (error code `E0371`, see §6.3.3).
-- Other operand types are not enforced; if no arm matches at runtime, an `Exception` with code `E0442` is raised (see §18.x).
+- Other operand types are not enforced; if no arm matches at runtime, an `PanicInfo` with code `E0442` is raised (see §18.x).
 - Always providing a `_` fallback is recommended.
 
 ---
@@ -3108,12 +3108,12 @@ Xray's error handling is split into two strictly separated channels:
 
 | Channel | Syntax | Use case | Runtime cost |
 |--|--|--|--|
-| **Value-return channel** (`throw <enum>` / `try` / `catch`) | Business errors, recoverable failures | **Low overhead** (no `Exception` allocation and no unwind; only a predictable branch at call boundaries that may propagate or catch errors) |
+| **Value-return channel** (`throw <enum>` / `try` / `catch`) | Business errors, recoverable failures | **Low overhead** (no `PanicInfo` allocation and no unwind; only a predictable branch at call boundaries that may propagate or catch errors) |
 | **Panic channel** (`catch panic`) | Runtime faults (OOB, division by zero, non-exhaustive match) | Limited stack unwinding |
 
 Design principles:
 
-- **Errors are values**: `throw <enum>` writes an enum value into the return channel — no stack unwinding, no Exception allocation.
+- **Errors are values**: `throw <enum>` writes an enum value into the return channel — no stack unwinding, no PanicInfo allocation.
 - **Panics are not errors**: a panic signals a program bug or runtime invariant violation, not business logic.
 - **No `throws` in function signatures**: xray does not adopt Java/Swift-style checked exceptions. Errors are handled via the throw/catch value-return channel.
 - **`defer` replaces `finally`**: xray has no `finally` keyword; resource cleanup uses function-scoped `defer` (Go model).
@@ -3284,7 +3284,7 @@ A panic represents a **program bug or runtime invariant violation**, not busines
 - Null reference dereference
 - Runtime type assertion failure
 
-Panics propagate via limited stack unwinding and generate `Exception` objects with stack traces.
+Panics propagate via limited stack unwinding and generate `PanicInfo` objects with stack traces.
 
 #### 8.2.2 `catch panic`
 
@@ -3319,25 +3319,25 @@ try {
 }
 ```
 
-#### 8.2.3 The `Exception` class
+#### 8.2.3 The `PanicInfo` class
 
-`Exception` is now **used only by the panic channel**. The VM constructs `Exception` objects automatically on runtime faults:
+`PanicInfo` is now **used only by the panic channel**. The VM constructs `PanicInfo` objects automatically on runtime faults:
 
 ```xray
 @native
-class Exception {
+class PanicInfo {
     message: string             // human-readable message (e.g. "index out of bounds")
     stack: Array<string>        // automatically captured call stack
-    cause: Exception?           // chained cause
+    cause: PanicInfo?           // chained cause
     code: int                   // error code
     data: Json?                 // additional data
 
-    constructor(message: string = "", cause: Exception? = null)
+    constructor(message: string = "", cause: PanicInfo? = null)
     fn toString() -> string
 }
 ```
 
-User code generally does not construct `Exception` directly — use `throw <enum>` for business errors.
+User code generally does not construct `PanicInfo` directly — use `throw <enum>` for business errors.
 
 ### 8.3 `defer` — resource cleanup
 
@@ -3790,7 +3790,7 @@ let firstOk = await anySuccess [t1, t2, t3]
 
 - `await` only applies to `Task<T>`; other types are a compile error.
 - The current coroutine **yields** until the target completes (without blocking the OS thread).
-- Exception propagation:
+- PanicInfo propagation:
   - `await t` rethrows the exception thrown by `t`.
   - On success, `await t` returns `T`; if `T` is nullable, a returned `null` is the task's real result, not a cancellation or failure marker.
   - `await all` throws if any task throws (the others are cancelled).
@@ -4704,9 +4704,9 @@ The `import datetime` module provides factory functions: `now`, `utc`, `create`,
 | `toString()` | output string |
 | `clear()` | empty and return self |
 
-### 14.16 `Exception`
+### 14.16 `PanicInfo`
 
-The built-in `Exception` class has fields `message`, `stack`, `cause`, `code`, `data`, the constructor `constructor(message: string = "", cause: Exception? = null)`, and `toString()`.
+The built-in `PanicInfo` class has fields `message`, `stack`, `cause`, `code`, `data`, the constructor `constructor(message: string = "", cause: PanicInfo? = null)`, and `toString()`.
 
 ### 14.17 `Task<T>` / `EnumValue` / `EnumType`
 
@@ -4747,7 +4747,7 @@ The `ord?` parameter accepts an `Ordering` enum; defaults to `Ordering.SeqCst`. 
 >
 > `base64`, `cluster`, `compress`, `crypto`, `csv`, `datetime`, `encoding`, `mem`, `http`, `io`, `log`, `math`, `net`, `os`, `path`, `regex`, `time`, `toml`, `url`, `ws`, `xml`, `yaml`.
 >
-> Built-in types that need no import are registered by the prelude (`Array`, `Map`, `Set`, `Json`, `Channel`, `Bytes`, `BigInt`, `StringBuilder`, `Exception`, `Regex`, `Logger`, `NetConn`, `NetListener`, etc.). See §1.5.6 / §2.2.
+> Built-in types that need no import are registered by the prelude (`Array`, `Map`, `Set`, `Json`, `Channel`, `Bytes`, `BigInt`, `StringBuilder`, `PanicInfo`, `Regex`, `Logger`, `NetConn`, `NetListener`, etc.). See §1.5.6 / §2.2.
 
 ### 15.1 File I/O and System
 
@@ -4952,29 +4952,29 @@ See `stdlib/os/` for details.
 
 ### 16.6 Panic Runtime
 
-The built-in `Exception` class is a prelude type (declared in `stdlib/types/exception.xr`) and belongs only to the **panic channel**. Runtime faults (out-of-bounds, division by zero, non-exhaustive `match`, runtime invariant violations, and similar faults) are represented by `Exception` objects constructed by the VM/AOT runtime:
+The built-in `PanicInfo` class is a prelude type (declared in `stdlib/types/panic_info.xr`) and belongs only to the **panic channel**. Runtime faults (out-of-bounds, division by zero, non-exhaustive `match`, runtime invariant violations, and similar faults) are represented by `PanicInfo` objects constructed by the VM/AOT runtime:
 
 ```xray
 @native
-class Exception {
+class PanicInfo {
     message: string             // human-readable message
     stack: Array<string>        // automatically captured call stack, one formatted line per frame
-    cause: Exception?           // chained cause
+    cause: PanicInfo?           // chained cause
     code: int                   // error code (auto-parsed from "E0xxx: ..." prefix; default 0)
     data: Json?                 // optional structured data for a runtime fault
 
-    constructor(message: string = "", cause: Exception? = null)
+    constructor(message: string = "", cause: PanicInfo? = null)
     fn toString() -> string
 }
 ```
 
-Recoverable user-level errors do not use `Exception`: a `throw` expression accepts enum variant values only (see §8.1.1); non-enum error values are rejected at compile time (error code `E0370`).
+Recoverable user-level errors do not use `PanicInfo`: a `throw` expression accepts enum variant values only (see §8.1.1); non-enum error values are rejected at compile time (error code `E0370`).
 
 Stack unwinding (panic channel only): the VM's `xvm_unwind_stack()` walks the try-table to find `catch panic` handlers, releasing locals frame by frame and running `defer` along the way before jumping to the handler. Recoverable errors use the value-return channel and never unwind the stack. See §8 for details.
 
 ### 16.7 Value-return Error Channel Runtime
 
-`throw <enum>` writes the enum value into the frame's `pending_error` slot, sets the error flag, and returns. The caller detects the flag via `OP_ERR_CHECK` and either enters a `catch` handler or continues returning upward. This channel performs no stack unwinding and allocates no `Exception`; at call boundaries that may propagate or catch errors, the happy path goes through only a predictable error-flag branch.
+`throw <enum>` writes the enum value into the frame's `pending_error` slot, sets the error flag, and returns. The caller detects the flag via `OP_ERR_CHECK` and either enters a `catch` handler or continues returning upward. This channel performs no stack unwinding and allocates no `PanicInfo`; at call boundaries that may propagate or catch errors, the happy path goes through only a predictable error-flag branch.
 
 ### 16.8 Object Reclamation & Finalizer Timing Contract
 
@@ -5233,23 +5233,23 @@ Analyzer enum codes (`XrErrorCode`, defined in the 350+ section of `xerror.h`):
 
 ### 18.8 Panic Error-Object Layout
 
-Runtime faults in the panic channel use the prelude `Exception` class (declared in `stdlib/types/exception.xr`):
+Runtime faults in the panic channel use the prelude `PanicInfo` class (declared in `stdlib/types/panic_info.xr`):
 
 ```xray
 @native
-class Exception {
+class PanicInfo {
     message: string             // human-readable message including error code and context
     stack: Array<string>        // auto-captured call stack, one formatted line per frame
-    cause: Exception?           // chained cause
+    cause: PanicInfo?           // chained cause
     code: int                   // error code (auto-parsed from "E0xxx: ..." prefix; default 0)
     data: Json?                 // optional structured data for a runtime fault
 
-    constructor(message: string = "", cause: Exception? = null)
+    constructor(message: string = "", cause: PanicInfo? = null)
     fn toString() -> string
 }
 ```
 
-The static type of a user-level `throw` operand **must** be an enum variant value (see §8.1.1 / `E0370`). Structured business errors use ADT enums rather than `Exception` inheritance:
+The static type of a user-level `throw` operand **must** be an enum variant value (see §8.1.1 / `E0370`). Structured business errors use ADT enums rather than `PanicInfo` inheritance:
 
 ```xray
 enum HttpErr {
@@ -5261,7 +5261,7 @@ enum HttpErr {
 throw HttpErr.ServerError(500, "upstream failed")
 ```
 
-`Exception` represents panic-channel runtime faults only; business errors propagate through the `throw <enum>` / `catch` value-return channel (see §8.1).
+`PanicInfo` represents panic-channel runtime faults only; business errors propagate through the `throw <enum>` / `catch` value-return channel (see §8.1).
 
 ---
 

@@ -42,7 +42,7 @@
 #include "../coro/xdeep_copy.h"
 #include "../coro/xresult_group.h"
 #include "../coro/xwork_queue.h"
-#include "../runtime/object/xexception.h"
+#include "../runtime/object/xpanic_info.h"
 #include "../runtime/class/xenum.h"
 #include "../base/xglobal_indices.h"
 
@@ -357,8 +357,8 @@ XR_FUNC XrDispatchAction vm_getprop_type_dispatch(XrayIsolate *isolate, XrVMCont
         } else if (prop_symbol == SYMBOL_ERROR) {
             if (tstate == XR_TASK_FAILED && !XR_IS_NULL(task->error)) {
                 XrValue err = task->error;
-                if (xr_value_is_exception(isolate, err)) {
-                    const char *m = xr_exception_get_message(isolate, err);
+                if (xr_value_is_panic_info(isolate, err)) {
+                    const char *m = xr_panic_info_get_message(isolate, err);
                     if (m) {
                         XrString *s = xr_string_intern(isolate, m, strlen(m), 0);
                         base[a] = xr_string_value(s);

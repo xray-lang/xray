@@ -34,7 +34,7 @@ static const XrTypeId gctype_to_typeid[XR_TRESULTGROUP + 1] = {
     [XR_TCLASS] = XR_TID_FUNCTION,
     [XR_TINSTANCE] = XR_TID_INSTANCE,
     [XR_TBOUND_METHOD] = XR_TID_BOUND_METHOD,
-    [XR_TERROR] = XR_TID_EXCEPTION,
+    [XR_TERROR] = XR_TID_PANIC_INFO,
     [XR_TMODULE] = XR_TID_MODULE,
     [XR_TCOROUTINE] = XR_TID_COROUTINE,
     [XR_TCHANNEL] = XR_TID_CHANNEL,
@@ -75,8 +75,8 @@ XrTypeId xr_value_typeid(XrValue v) {
                             return XR_TID_NETLISTENER;
                         case XR_BK_BIGINT:
                             return XR_TID_BIGINT;
-                        case XR_BK_EXCEPTION:
-                            return XR_TID_EXCEPTION;
+                        case XR_BK_PANIC_INFO:
+                            return XR_TID_PANIC_INFO;
                         case XR_BK_RANGE:
                             return XR_TID_RANGE;
                         case XR_BK_DATETIME:
@@ -118,7 +118,7 @@ XR_DATADEF const char *typeid_names[XR_TID_COUNT] = {
     [XR_TID_CHANNEL] = TYPE_NAME_CHANNEL,
     [XR_TID_REGEX] = TYPE_NAME_REGEX,
     [XR_TID_DATETIME] = TYPE_NAME_DATETIME,
-    [XR_TID_EXCEPTION] = TYPE_NAME_EXCEPTION,
+    [XR_TID_PANIC_INFO] = TYPE_NAME_PANIC_INFO,
     [XR_TID_ENUM_VALUE] = TYPE_NAME_ENUM_VALUE,
     [XR_TID_ENUM_TYPE] = TYPE_NAME_ENUM_TYPE,
     [XR_TID_BOUND_METHOD] = TYPE_NAME_FUNCTION,

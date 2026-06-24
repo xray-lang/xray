@@ -70,7 +70,7 @@ typedef struct XrayCoreClasses {
     XrClass *jsonRootClass;
 
     // Exception (populated when stdlib/types/exception.xr is loaded)
-    XrClass *exceptionClass;
+    XrClass *panicInfoClass;
 
     // Native-body migrated types
     XrClass *rangeClass;
@@ -102,11 +102,11 @@ typedef struct XrayCoreClasses {
 XR_FUNC struct XrClass *xr_get_or_create_tuple_class(XrayIsolate *X, uint16_t arity);
 
 /* Exception field indices — must match stdlib/types/exception.xr layout */
-#define EXCEPTION_FIELD_MESSAGE 0
-#define EXCEPTION_FIELD_STACK 1
-#define EXCEPTION_FIELD_CAUSE 2
-#define EXCEPTION_FIELD_CODE 3
-#define EXCEPTION_FIELD_DATA 4
+#define PANIC_INFO_FIELD_MESSAGE 0
+#define PANIC_INFO_FIELD_STACK 1
+#define PANIC_INFO_FIELD_CAUSE 2
+#define PANIC_INFO_FIELD_CODE 3
+#define PANIC_INFO_FIELD_DATA 4
 
 /* Process field indices — must match xr_core_init() and script-info setup. */
 #define PROCESS_FIELD_FILE 0

@@ -11,7 +11,7 @@
 #include "xwork_queue.h"
 
 #include "../base/xchecks.h"
-#include "../runtime/object/xexception.h"
+#include "../runtime/object/xpanic_info.h"
 #include "../runtime/object/xnative_type.h"
 #include "../runtime/object/xtuple.h"
 #include "../runtime/xisolate_api.h"
@@ -150,7 +150,7 @@ static XrValue work_queue_construct(XrayIsolate *isolate, XrValue receiver, XrVa
                                        xr_isolate_get_scheduler_runtime(isolate), shards, capacity);
     if (!q) {
         XrValue exc =
-            xr_exception_newf(isolate, XR_ERR_OUT_OF_MEMORY, "WorkQueue allocation failed");
+            xr_panic_info_newf(isolate, XR_ERR_OUT_OF_MEMORY, "WorkQueue allocation failed");
         xr_vm_throw_exception(isolate, exc);
         return xr_null();
     }

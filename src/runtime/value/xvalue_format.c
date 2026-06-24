@@ -28,7 +28,7 @@
 #include "../closure/xclosure.h"
 #include "../object/xarray.h"
 #include "../object/xbigint.h"
-#include "../object/xexception.h"
+#include "../object/xpanic_info.h"
 #include "../object/xjson.h"
 #include "../object/xmap.h"
 #include "../object/xrange.h"
@@ -274,8 +274,8 @@ void xr_value_to_strbuf(XrayIsolate *isolate, XrStrBuf *sb, XrValue val, int dep
             /* Exception: keep the legacy "Error: <message>" form so
              * `string(e)` and string concatenation behave identically
              * to the pre-unified-class implementation. */
-            if (xr_value_is_exception(isolate, val)) {
-                const char *msg = xr_exception_get_message(isolate, val);
+            if (xr_value_is_panic_info(isolate, val)) {
+                const char *msg = xr_panic_info_get_message(isolate, val);
                 if (msg) {
                     xr_strbuf_append_cstr(sb, "Error: ", 7);
                     xr_strbuf_append_cstr(sb, msg, strlen(msg));

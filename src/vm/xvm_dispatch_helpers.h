@@ -79,7 +79,7 @@ static inline uint8_t vm_channel_transfer_mode_before(const XrBcCallFrame *frame
 #define VM_THROW(frame_ptr, pc_ptr, code, ...)                                                     \
     do {                                                                                           \
         (frame_ptr)->pc = (pc_ptr);                                                                \
-        XrValue _exc = xr_exception_newf(isolate, (code), __VA_ARGS__);                            \
+        XrValue _exc = xr_panic_info_newf(isolate, (code), __VA_ARGS__);                           \
         xr_vm_unwind_with_trace(isolate, _exc);                                                    \
         return XR_DISP_RAISE;                                                                      \
     } while (0)

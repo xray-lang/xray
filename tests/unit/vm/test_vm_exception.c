@@ -20,7 +20,7 @@
 #include "../test_helper.h"
 
 #include "runtime/xisolate_internal.h"
-#include "runtime/object/xexception.h"
+#include "runtime/object/xpanic_info.h"
 #include "runtime/object/xarray.h"
 #include "vm/xvm_internal.h"
 
@@ -85,7 +85,7 @@ TEST(runtime_error_records_trace) {
      * and the value-return error channel stays clean. */
     XrVMContext *ctx = xr_vm_current_ctx(iso);
     ASSERT(XR_IS_NULL(ctx->pending_error));
-    ASSERT(xr_value_is_exception(iso, ctx->current_exception));
+    ASSERT(xr_value_is_panic_info(iso, ctx->current_exception));
 
     xray_isolate_delete(iso);
 }

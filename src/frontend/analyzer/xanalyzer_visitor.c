@@ -163,7 +163,7 @@ static XrType *xa_resolve_catch_binding_type(XaInferContext *ctx, XrCatchClause 
     if (cc->is_panic) {
         if (cc->type)
             return xr_tref_resolve_in_analyzer(ctx->analyzer, cc->type);
-        return xr_type_new_named_instance(ctx->analyzer->isolate, "Exception");
+        return xr_type_new_named_instance(ctx->analyzer->isolate, "PanicInfo");
     }
 
     if (!cc->type)

@@ -503,7 +503,7 @@ let result = match (x) {
 **语义**：
 - 自上而下匹配第一个成功的分支。
 - 所有分支表达式必须返回相同类型（或 union）。
-- **穷举性**：对 enum 变量（ADT 与简单枚举）编译器强制穷举。对其他表达式不强制，运行时无匹配抛 `Exception(E0442)`。
+- **穷举性**：对 enum 变量（ADT 与简单枚举）编译器强制穷举。对其他表达式不强制，运行时无匹配抛 `PanicInfo(E0442)`。
 - 模式详见 [§6](#6-模式-patterns)。
 
 ### 3.14 构造表达式
@@ -1056,7 +1056,7 @@ let result = match (x) {
 **Semantics**:
 - Matches top-down, taking the first successful arm.
 - All arm expressions must yield the same type (or a union).
-- **Exhaustiveness**: for enum scrutinees (ADT and simple enums), the compiler enforces exhaustiveness. Otherwise it is not enforced, and an unmatched value at runtime throws `Exception(E0442)`.
+- **Exhaustiveness**: for enum scrutinees (ADT and simple enums), the compiler enforces exhaustiveness. Otherwise it is not enforced, and an unmatched value at runtime throws `PanicInfo(E0442)`.
 - For pattern details see [§6](#6-patterns).
 
 ### 3.14 Construction expressions

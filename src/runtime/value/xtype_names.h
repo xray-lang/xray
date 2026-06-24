@@ -66,7 +66,7 @@
 #define TYPE_NAME_ENUM_TYPE "enum_type"
 #define TYPE_NAME_ENUM_VALUE "enum_value"
 #define TYPE_NAME_ERROR "error"
-#define TYPE_NAME_EXCEPTION "Exception"
+#define TYPE_NAME_PANIC_INFO "PanicInfo"
 #define TYPE_NAME_MODULE "module"
 #define TYPE_NAME_ITERATOR "iterator"
 #define TYPE_NAME_STRUCT "struct"
@@ -155,7 +155,7 @@ typedef enum {
     XR_TID_CHANNEL,        // 21
     XR_TID_REGEX,          // 22
     XR_TID_DATETIME,       // 23
-    XR_TID_EXCEPTION,      // 24
+    XR_TID_PANIC_INFO,     // 24
     XR_TID_ENUM_VALUE,     // 25
     XR_TID_ENUM_TYPE,      // 26
     XR_TID_BOUND_METHOD,   // 27

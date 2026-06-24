@@ -221,7 +221,7 @@ xray 共 **63 个保留关键字**，源码真值表见 `src/frontend/lexer/xkey
 `unknown` 在类型位置是内置擦除/未知值类型名（例如 `TaskOutcome.Success(unknown)`）；它不是词法关键字，表达式位置仍可作为普通标识符使用。
 
 > **注意**：以下名字**不是**词法关键字，而是 `prelude` 自动引入的内置类型符号：
-> `Array` · `BigInt` · `Bytes` · `Channel` · `DateTime` · `Exception` · `Json` · `Logger` · `Map` · `NetConn` · `NetListener` · `Range` · `Regex` · `Set` · `StringBuilder`。
+> `Array` · `BigInt` · `Bytes` · `Channel` · `DateTime` · `PanicInfo` · `Json` · `Logger` · `Map` · `NetConn` · `NetListener` · `Range` · `Regex` · `Set` · `StringBuilder`。
 > 它们可被用户类同名覆盖（局部 shadow），但通常无须 import 即可使用。
 
 #### 1.5.7 字面量关键字
@@ -519,7 +519,7 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 | 精确浮点 | `float32`、`float64` |
 | 容器 | `Array<T>`、`Map<K,V>`、`Set<T>`、`Channel<T>`、`Bytes`（即 `Array<uint8>`） |
 | 特殊 | `Json`、`BigInt`、`Range`、`DateTime`、`Regex`、`StringBuilder`、`Logger`、`NetConn`、`NetListener` |
-| 错误处理 prelude | `Exception`（见 §8） |
+| 错误处理 prelude | `PanicInfo`（见 §8） |
 | 弱引用容器 | `WeakMap`、`WeakSet` |
 | Nullable | `T?` |
 | Union | `A \| B \| ...` |
@@ -1481,7 +1481,7 @@ let result = match (x) {
 **语义**：
 - 自上而下匹配第一个成功的分支。
 - 所有分支表达式必须返回相同类型（或 union）。
-- **穷举性**：对 enum 变量（ADT 与简单枚举）编译器强制穷举。对其他表达式不强制，运行时无匹配抛 `Exception(E0442)`。
+- **穷举性**：对 enum 变量（ADT 与简单枚举）编译器强制穷举。对其他表达式不强制，运行时无匹配抛 `PanicInfo(E0442)`。
 - 模式详见 [§6](#6-模式-patterns)。
 
 ### 3.14 构造表达式
@@ -1792,7 +1792,7 @@ throw AppError.NotFound                      // 值返回错误通道
 - `try` 必须至少跟一个 `catch` 或 `catch panic` 子句。
 - `catch (e)` 捕获经值返回通道传播的可恢复错误（用户 `throw <enum>`）；用 `match (e)` 解构错误值。
 - `catch panic (p)` 捕获运行时故障（除零、越界、`expr!`、`assert`），与可恢复错误严格分离。
-- `throw` 的操作数是错误值（通常为 enum），经值返回通道传播：不分配 `Exception`、不展开栈；需要传播或捕获错误的调用边界只经过可预测分支。
+- `throw` 的操作数是错误值（通常为 enum），经值返回通道传播：不分配 `PanicInfo`、不展开栈；需要传播或捕获错误的调用边界只经过可预测分支。
 - 没有 `finally`：用 `defer`（§4.9）做确定性清理。
 - 完整错误语义见 [§8](#8-错误处理-error-handling)。
 
@@ -2907,7 +2907,7 @@ match (p) {
 ### 6.10 穷举性与匹配失败
 
 - 对 enum 表达式的 `match` 强制穷举（错误码 `E0371`，见 §6.3.3）。
-- 其他类型不强制；运行时无分支匹配 → 抛 `Exception` 错误码 `E0442`（见 §18.x）。
+- 其他类型不强制；运行时无分支匹配 → 抛 `PanicInfo` 错误码 `E0442`（见 §18.x）。
 - 建议总是提供 `_` 兜底。
 
 ---
@@ -3101,12 +3101,12 @@ Xray 的错误处理分为两个严格分离的通道：
 
 | 通道 | 语法 | 适用场景 | 运行时开销 |
 |--|--|--|--|
-| **值返回通道**（`throw <enum>` / `try` / `catch`） | 业务错误、可恢复失败 | **低开销**（不分配 `Exception`、不 unwind；需传播/捕获错误的调用边界只有可预测分支） |
+| **值返回通道**（`throw <enum>` / `try` / `catch`） | 业务错误、可恢复失败 | **低开销**（不分配 `PanicInfo`、不 unwind；需传播/捕获错误的调用边界只有可预测分支） |
 | **panic 通道**（`catch panic`） | 运行时故障（越界、除零、不完整 match） | 有限栈展开 |
 
 设计原则：
 
-- **错误是值**：`throw <enum>` 把枚举值写入返回通道，不展开栈、不分配 Exception 对象。
+- **错误是值**：`throw <enum>` 把枚举值写入返回通道，不展开栈、不分配 PanicInfo 对象。
 - **panic 不是错误**：panic 表示程序 bug 或运行时不变量违背，不应用于业务逻辑。
 - **函数签名不标 `throws`**：xray 不引入 Java/Swift 的受检异常语义。错误通过 throw/catch 值返回通道处理。
 - **`defer` 替代 `finally`**：xray 没有 `finally` 关键字，资源清理统一用函数作用域的 `defer`（Go 模型）。
@@ -3277,7 +3277,7 @@ panic 表示**程序 bug 或运行时不变量违背**，不应用于业务逻�
 - 空引用解引用
 - 运行时类型断言失败
 
-panic 通过有限的栈展开传播，生成 `Exception` 对象携带堆栈信息。
+panic 通过有限的栈展开传播，生成 `PanicInfo` 对象携带堆栈信息。
 
 #### 8.2.2 `catch panic`
 
@@ -3312,25 +3312,25 @@ try {
 }
 ```
 
-#### 8.2.3 `Exception` 类
+#### 8.2.3 `PanicInfo` 类
 
-`Exception` 现在**仅用于 panic 通道**。运行时故障发生时，VM 自动构造 `Exception` 对象：
+`PanicInfo` 现在**仅用于 panic 通道**。运行时故障发生时，VM 自动构造 `PanicInfo` 对象：
 
 ```xray
 @native
-class Exception {
+class PanicInfo {
     message: string             // 人类可读消息（如 "index out of bounds"）
     stack: Array<string>        // 自动捕获的调用栈
-    cause: Exception?           // 链式 cause
+    cause: PanicInfo?           // 链式 cause
     code: int                   // 错误码
     data: Json?                 // 附加数据
 
-    constructor(message: string = "", cause: Exception? = null)
+    constructor(message: string = "", cause: PanicInfo? = null)
     fn toString() -> string
 }
 ```
 
-用户代码一般不直接构造 `Exception`——业务错误用 `throw <enum>`。
+用户代码一般不直接构造 `PanicInfo`——业务错误用 `throw <enum>`。
 
 ### 8.3 `defer` — 资源清理
 
@@ -4691,9 +4691,9 @@ BigInt 使用 `123n` 字面量或 `int.toBigInt()`；Json 使用 `Json.parse` / 
 | `toString()` | 输出字符串 |
 | `clear()` | 清空并返回自身 |
 
-### 14.16 `Exception`
+### 14.16 `PanicInfo`
 
-内置 `Exception` 类包含 `message`、`stack`、`cause`、`code`、`data` 字段，构造函数 `constructor(message: string = "", cause: Exception? = null)`，以及 `toString()`。
+内置 `PanicInfo` 类包含 `message`、`stack`、`cause`、`code`、`data` 字段，构造函数 `constructor(message: string = "", cause: PanicInfo? = null)`，以及 `toString()`。
 
 ### 14.17 `Task<T>` / `EnumValue` / `EnumType`
 
@@ -4734,7 +4734,7 @@ BigInt 使用 `123n` 字面量或 `int.toBigInt()`；Json 使用 `Json.parse` / 
 >
 > `base64`、`cluster`、`compress`、`crypto`、`csv`、`datetime`、`encoding`、`mem`、`http`、`io`、`log`、`math`、`net`、`os`、`path`、`regex`、`time`、`toml`、`url`、`ws`、`xml`、`yaml`。
 >
-> 不需要 import 的内置类型由 prelude 注册（`Array` `Map` `Set` `Json` `Channel` `Bytes` `BigInt` `StringBuilder` `Exception` `Regex` `Logger` `NetConn` `NetListener` 等）。详见 §1.5.6 / §2.2。
+> 不需要 import 的内置类型由 prelude 注册（`Array` `Map` `Set` `Json` `Channel` `Bytes` `BigInt` `StringBuilder` `PanicInfo` `Regex` `Logger` `NetConn` `NetListener` 等）。详见 §1.5.6 / §2.2。
 
 ### 15.1 文件 IO 与系统
 
@@ -4939,29 +4939,29 @@ os.sleep(100)             // 休眠毫秒数（与 `time.sleep` 等价）
 
 ### 16.6 Panic 运行时
 
-内置 `Exception` 类是 prelude 类型（声明：`stdlib/types/exception.xr`），仅属于 **panic 通道**。运行时故障（越界、除零、不完整 `match`、运行时不变量违背等）由 VM/AOT runtime 构造 `Exception` 对象：
+内置 `PanicInfo` 类是 prelude 类型（声明：`stdlib/types/panic_info.xr`），仅属于 **panic 通道**。运行时故障（越界、除零、不完整 `match`、运行时不变量违背等）由 VM/AOT runtime 构造 `PanicInfo` 对象：
 
 ```xray
 @native
-class Exception {
+class PanicInfo {
     message: string             // 人类可读消息
     stack: Array<string>        // 自动 capture 的调用栈，每帧一行格式化字符串
-    cause: Exception?           // 链式 cause
+    cause: PanicInfo?           // 链式 cause
     code: int                   // 错误码（从 "E0xxx: ..." 前缀自动解析，默认 0）
     data: Json?                 // 运行时故障的可选结构化附加数据
 
-    constructor(message: string = "", cause: Exception? = null)
+    constructor(message: string = "", cause: PanicInfo? = null)
     fn toString() -> string
 }
 ```
 
-用户级可恢复错误不使用 `Exception`：`throw` 表达式只接受 enum 变体值（见 §8.1.1）；非 enum 错误值在编译期被拒绝（错误码 `E0370`）。
+用户级可恢复错误不使用 `PanicInfo`：`throw` 表达式只接受 enum 变体值（见 §8.1.1）；非 enum 错误值在编译期被拒绝（错误码 `E0370`）。
 
 栈展开（仅 panic 通道）：VM `xvm_unwind_stack()` 按 try-table 查找 `catch panic` handler，逐帧释放局部、执行 defer，到达 handler 后跳转。可恢复错误走值返回通道，不展开栈。详见 §8。
 
 ### 16.7 值返回错误通道运行时
 
-`throw <enum>` 将枚举值写入帧的 `pending_error` 槽位，设置错误标志位并返回。调用方通过 `OP_ERR_CHECK` 检测标志位，决定进入 `catch` handler 或继续向上返回。该通道不展开栈、不分配 `Exception`；在需要传播或捕获错误的调用边界，正常路径只经过可预测的错误标志分支。
+`throw <enum>` 将枚举值写入帧的 `pending_error` 槽位，设置错误标志位并返回。调用方通过 `OP_ERR_CHECK` 检测标志位，决定进入 `catch` handler 或继续向上返回。该通道不展开栈、不分配 `PanicInfo`；在需要传播或捕获错误的调用边界，正常路径只经过可预测的错误标志分支。
 
 ### 16.8 对象回收与析构时机契约
 
@@ -5220,23 +5220,23 @@ Bytecode  →  AOT (machine code)
 
 ### 18.8 Panic 错误对象结构
 
-panic 通道的运行时故障使用 prelude `Exception` 类（声明：`stdlib/types/exception.xr`）：
+panic 通道的运行时故障使用 prelude `PanicInfo` 类（声明：`stdlib/types/panic_info.xr`）：
 
 ```xray
 @native
-class Exception {
+class PanicInfo {
     message: string             // 人类可读消息，含错误码与上下文
     stack: Array<string>        // 自动 capture 的调用栈，每帧一行格式化字符串
-    cause: Exception?           // 链式 cause
+    cause: PanicInfo?           // 链式 cause
     code: int                   // 错误码（从 "E0xxx: ..." 前缀自动解析，默认 0）
     data: Json?                 // 运行时故障的可选结构化附加数据
 
-    constructor(message: string = "", cause: Exception? = null)
+    constructor(message: string = "", cause: PanicInfo? = null)
     fn toString() -> string
 }
 ```
 
-用户级 `throw` 操作数**必须**是 enum 变体值（见 §8.1.1 / `E0370`）。结构化业务错误使用 ADT enum，而不是继承 `Exception`：
+用户级 `throw` 操作数**必须**是 enum 变体值（见 §8.1.1 / `E0370`）。结构化业务错误使用 ADT enum，而不是继承 `PanicInfo`：
 
 ```xray
 enum HttpErr {
@@ -5248,7 +5248,7 @@ enum HttpErr {
 throw HttpErr.ServerError(500, "upstream failed")
 ```
 
-`Exception` 只表示 panic 通道的运行时故障；业务错误通过 `throw <enum>` / `catch` 的值返回通道传播（见 §8.1）。
+`PanicInfo` 只表示 panic 通道的运行时故障；业务错误通过 `throw <enum>` / `catch` 的值返回通道传播（见 §8.1）。
 
 ---
 

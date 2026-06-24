@@ -401,7 +401,7 @@ XrVMResult xr_vm_interpret(const char *source) {
 */
 void xr_vm_add_stacktrace(XrayIsolate *isolate, XrValue exception) {
     XR_DCHECK(isolate != NULL, "vm_add_stacktrace: NULL isolate");
-    if (!xr_value_is_exception(isolate, exception)) {
+    if (!xr_value_is_panic_info(isolate, exception)) {
         return;
     }
 
@@ -435,7 +435,7 @@ void xr_vm_add_stacktrace(XrayIsolate *isolate, XrValue exception) {
     }
 
     // Add stack frame
-    xr_exception_add_frame(isolate, exception, func_name, line);
+    xr_panic_info_add_frame(isolate, exception, func_name, line);
 }
 
 /*
@@ -578,7 +578,7 @@ void xr_vm_throw_exception(XrayIsolate *isolate, XrValue exception) {
     }
     if (!is_child_coro && !(isolate && isolate->suppress_exception_print)) {
         fprintf(stderr, "\n[Uncaught Exception]\n");
-        xr_exception_print(isolate, exception);
+        xr_panic_info_print(isolate, exception);
         fprintf(stderr, "\n");
     }
 }
