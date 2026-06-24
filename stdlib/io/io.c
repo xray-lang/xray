@@ -1047,17 +1047,18 @@ static XrValue io_readlink(XrVMRuntime *X, XrValue *args, int argc) {
     CloseHandle(h);
     if (len == 0 || len >= sizeof(buf))
         return xr_null();
-    // Strip \\?\ prefix if present
-    const char *result = buf;
-    if (len >= 4 && buf[0] == '\\' && buf[1] == '\\' && buf[2] == '?' && buf[3] == '\\')
-        result = buf + 4;
-    return xrs_string_value_c(X, result);
+    XrIoCorePathView view;
+    if (!xr_io_core_path_result_view(buf, (size_t) len, &view))
+        return xr_null();
+    return xrs_string_value_n(X, view.data, view.len);
 #else
     ssize_t len = readlink(path, buf, sizeof(buf) - 1);
     if (len < 0)
         return xr_null();
-    buf[len] = '\0';
-    return xrs_string_value_c(X, buf);
+    XrIoCorePathView view;
+    if (!xr_io_core_path_result_view(buf, (size_t) len, &view))
+        return xr_null();
+    return xrs_string_value_n(X, view.data, view.len);
 #endif
 }
 
@@ -1072,7 +1073,10 @@ static XrValue io_realpath(XrVMRuntime *X, XrValue *args, int argc) {
     char resolved[XR_PATH_MAX];
     if (xr_fs_realpath(path, resolved, sizeof(resolved)) == NULL)
         return xr_null();
-    return xrs_string_value_c(X, resolved);
+    XrIoCorePathView view;
+    if (!xr_io_core_path_result_cstr_view(resolved, &view))
+        return xr_null();
+    return xrs_string_value_n(X, view.data, view.len);
 }
 
 // Adapter for xr_os_core_tmpdir(); fallback ordering lives in shared core.

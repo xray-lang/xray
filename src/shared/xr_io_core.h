@@ -57,6 +57,11 @@ typedef struct XrIoCoreStatFields {
     bool is_symlink;
 } XrIoCoreStatFields;
 
+typedef struct XrIoCorePathView {
+    const char *data;
+    size_t len;
+} XrIoCorePathView;
+
 static const char *const XR_IO_CORE_STAT_FIELD_NAMES[XR_IO_CORE_STAT_FIELD_COUNT] = {
     "size", "mode", "mtime", "atime", "ctime", "uid", "gid", "isFile", "isDir", "isSymlink",
 };
@@ -288,6 +293,29 @@ static inline size_t xr_io_core_cstr_len(const char *s) {
     while (s[len])
         len++;
     return len;
+}
+
+static inline bool xr_io_core_path_result_view(const char *data, size_t len,
+                                               XrIoCorePathView *out) {
+    if (out) {
+        out->data = NULL;
+        out->len = 0;
+    }
+    if (!data || !out)
+        return false;
+
+    if (len >= 4 && data[0] == '\\' && data[1] == '\\' && data[2] == '?' && data[3] == '\\') {
+        data += 4;
+        len -= 4;
+    }
+
+    out->data = data;
+    out->len = len;
+    return true;
+}
+
+static inline bool xr_io_core_path_result_cstr_view(const char *data, XrIoCorePathView *out) {
+    return xr_io_core_path_result_view(data, xr_io_core_cstr_len(data), out);
 }
 
 static inline bool xr_io_core_is_dot_dir_entry(const char *name) {

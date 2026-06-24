@@ -1,0 +1,38 @@
+import io
+
+let root = io.tempDir() ?? ""
+print(root.length > 0)
+
+let dir = root + "/paths"
+print(io.mkdirp(dir))
+
+let file = dir + "/target.txt"
+print(io.writeFile(file, "target"))
+
+let missing = dir + "/missing.txt"
+print(io.realpath(missing) == null)
+print(io.readlink(missing) == null)
+
+let resolvedDir = io.realpath(dir) ?? ""
+let resolvedFile = io.realpath(file) ?? ""
+print(resolvedDir.length > 0)
+print(resolvedFile.length > 0)
+
+let oldCwd = io.cwd()
+print(io.chdir(dir))
+print((io.realpath(".") ?? "") == resolvedDir)
+print(io.chdir(oldCwd))
+
+let link = root + "/target-link.txt"
+let linkOk = io.symlink(file, link)
+if (linkOk) {
+    let target = io.readlink(link) ?? ""
+    print(target.length > 0)
+    print((io.realpath(target) ?? "") == resolvedFile)
+} else {
+    print(true)
+    print(true)
+}
+
+print(io.removeAll(root))
+print(!io.exists(root))

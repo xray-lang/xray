@@ -674,6 +674,40 @@ TEST(io_core_temp_template_rejects_invalid_or_truncated_output) {
     ASSERT(!xr_io_core_temp_template("/tmp", '/', "xray_XXXXXX", path, sizeof(path)));
 }
 
+TEST(io_core_path_result_view_keeps_length_and_buffer) {
+    XrIoCorePathView view;
+    const char path[] = "/tmp/xray-target-extra";
+    ASSERT(xr_io_core_path_result_view(path, 16, &view));
+    ASSERT_EQ_PTR(view.data, path);
+    ASSERT_EQ_UINT(view.len, 16);
+    ASSERT_MEM_EQ(view.data, "/tmp/xray-target", 16);
+}
+
+TEST(io_core_path_result_view_strips_windows_extended_prefix) {
+    XrIoCorePathView view;
+    const char path[] = "\\\\?\\C:\\Temp\\xray.txt";
+    ASSERT(xr_io_core_path_result_view(path, strlen(path), &view));
+    ASSERT_EQ_PTR(view.data, path + 4);
+    ASSERT_EQ_UINT(view.len, strlen("C:\\Temp\\xray.txt"));
+    ASSERT_MEM_EQ(view.data, "C:\\Temp\\xray.txt", view.len);
+}
+
+TEST(io_core_path_result_cstr_view_uses_c_string_length) {
+    XrIoCorePathView view;
+    const char path[] = "relative/path";
+    ASSERT(xr_io_core_path_result_cstr_view(path, &view));
+    ASSERT_EQ_PTR(view.data, path);
+    ASSERT_EQ_UINT(view.len, strlen(path));
+}
+
+TEST(io_core_path_result_view_rejects_invalid_args_and_resets_output) {
+    XrIoCorePathView view = {.data = "old", .len = 3};
+    ASSERT_FALSE(xr_io_core_path_result_view(NULL, 0, &view));
+    ASSERT_NULL(view.data);
+    ASSERT_EQ_UINT(view.len, 0);
+    ASSERT_FALSE(xr_io_core_path_result_view("x", 1, NULL));
+}
+
 TEST(io_core_stat_field_names_are_shared_schema) {
     ASSERT_EQ_INT(XR_IO_CORE_STAT_FIELD_COUNT, 10);
     ASSERT_EQ_INT(XR_IO_CORE_STAT_SIZE, 0);
@@ -760,6 +794,12 @@ RUN_TEST(io_core_join_child_path_rejects_empty_or_truncated_paths);
 RUN_TEST(io_core_relative_path_from_base_trims_one_separator);
 RUN_TEST(io_core_temp_template_uses_explicit_separator_and_stem);
 RUN_TEST(io_core_temp_template_rejects_invalid_or_truncated_output);
+
+RUN_TEST_SUITE("IO Core - path result view");
+RUN_TEST(io_core_path_result_view_keeps_length_and_buffer);
+RUN_TEST(io_core_path_result_view_strips_windows_extended_prefix);
+RUN_TEST(io_core_path_result_cstr_view_uses_c_string_length);
+RUN_TEST(io_core_path_result_view_rejects_invalid_args_and_resets_output);
 
 RUN_TEST_SUITE("IO Core - stat");
 RUN_TEST(io_core_stat_field_names_are_shared_schema);
