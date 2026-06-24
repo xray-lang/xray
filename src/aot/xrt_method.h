@@ -21,6 +21,7 @@
 #include "xrt_array_hof.h"
 #include "xrt_range.h"
 #include "xrt_datetime.h"
+#include "../shared/xr_array_core.h"
 #include "../shared/xr_string_core.h"
 
 /* Builtin method symbol IDs. */
@@ -153,6 +154,80 @@ static XrValue xrt_to_bool(XrValue val) {
     if (XR_IS_SET(val))
         return XR_FROM_BOOL(((xrt_set_t *) val.ptr)->len > 0);
     return XR_TRUE_VAL;
+}
+
+typedef struct XrtArrayJoinCtx {
+    xrt_array_t *array;
+} XrtArrayJoinCtx;
+
+static inline bool xrt_array_join_part(XrValue val, char *dst, size_t *len) {
+    const char *data = NULL;
+    size_t n = 0;
+    char tmp[256];
+    XrValue tmp_str = XR_NULL_VAL;
+
+    if (val.tag == XR_TAG_STR || val.tag == XR_TAG_STR_ARC) {
+        data = xr_str_data(val);
+        n = (size_t) xr_str_len(val);
+    } else if (val.tag == XR_TAG_I64) {
+        int written = snprintf(tmp, sizeof(tmp), "%lld", (long long) val.i);
+        if (written < 0 || (size_t) written >= sizeof(tmp))
+            return false;
+        data = tmp;
+        n = (size_t) written;
+    } else if (val.tag == XR_TAG_F64) {
+        int written = xrt_format_float(tmp, sizeof(tmp), val.f);
+        if (written < 0 || (size_t) written >= sizeof(tmp))
+            return false;
+        data = tmp;
+        n = (size_t) written;
+    } else if (val.tag == XR_TAG_BOOL) {
+        data = val.i ? "true" : "false";
+        n = val.i ? 4 : 5;
+    } else if (val.tag == XR_TAG_NULL) {
+        data = "null";
+        n = 4;
+    } else if (val.tag == XR_TAG_RANGE || val.tag == XR_TAG_DATETIME || val.tag == XR_TAG_ENUM) {
+        tmp_str = xrt_tostring(val, 0);
+        data = xr_str_data(tmp_str);
+        n = (size_t) xr_str_len(tmp_str);
+    } else {
+        data = "[object]";
+        n = 8;
+    }
+
+    if (dst && n > 0)
+        memcpy(dst, data, n);
+    if (len)
+        *len = n;
+    return true;
+}
+
+static inline bool xrt_array_join_element(void *ctx, int64_t index, char *dst, size_t *len) {
+    XrtArrayJoinCtx *join_ctx = (XrtArrayJoinCtx *) ctx;
+    if (!join_ctx || !join_ctx->array || index < 0 || index > INT32_MAX)
+        return false;
+    xrt_array_t *a = join_ctx->array;
+    return xrt_array_join_part(xr_typed_get(a->data, (int32_t) index, a->elem_type), dst, len);
+}
+
+static inline XrValue xrt_array_join_value(xrt_array_t *a, XrValue sep_value) {
+    if (!a || !XR_IS_STR(sep_value))
+        return XR_NULL_VAL;
+    const char *sep = xr_str_data(sep_value);
+    size_t sep_len = (size_t) xr_str_len(sep_value);
+    XrtArrayJoinCtx ctx = {a};
+    size_t total = 0;
+    if (!xr_array_core_join_total(a->length, sep_len, xrt_array_join_element, &ctx, &total))
+        return XR_NULL_VAL;
+    if (total == SIZE_MAX)
+        return XR_NULL_VAL;
+    XrValue result = xrt_str_alloc(total);
+    size_t written = 0;
+    if (!xr_array_core_join_write(xr_str_buf(result), total + 1, a->length, sep, sep_len,
+                                  xrt_array_join_element, &ctx, &written))
+        return XR_NULL_VAL;
+    return result;
 }
 
 /* Fixed-arity method dispatch is intentionally inlineable by the C compiler. */
@@ -494,33 +569,8 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
             }
             return XR_FROM_BOOL(0);
         }
-        if (sym == XRT_SYM_JOIN && XR_IS_STR(arg0)) {
-            const char *sep = xr_str_data(arg0);
-            size_t seplen = (size_t) xr_str_len(arg0);
-            size_t total = 0;
-            for (int64_t i = 0; i < a->length; i++) {
-                XrValue sv = xrt_tostring(xr_typed_get(a->data, (int32_t) i, a->elem_type), 0);
-                total += (size_t) xr_str_len(sv);
-                if (i < a->length - 1)
-                    total += seplen;
-            }
-            XrValue result = xrt_str_alloc(total);
-            char *r = xr_str_buf(result);
-            size_t pos = 0;
-            for (int64_t i = 0; i < a->length; i++) {
-                XrValue sv = xrt_tostring(xr_typed_get(a->data, (int32_t) i, a->elem_type), 0);
-                const char *p = xr_str_data(sv);
-                size_t plen = (size_t) xr_str_len(sv);
-                memcpy(r + pos, p, plen);
-                pos += plen;
-                if (i < a->length - 1) {
-                    memcpy(r + pos, sep, seplen);
-                    pos += seplen;
-                }
-            }
-            r[total] = 0;
-            return result;
-        }
+        if (sym == XRT_SYM_JOIN && XR_IS_STR(arg0))
+            return xrt_array_join_value(a, arg0);
         if (sym == XRT_SYM_SLICE && arg0.tag == XR_TAG_I64) {
             return xrt_array_slice_view(recv, arg0.i, a->length);
         }

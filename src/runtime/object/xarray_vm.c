@@ -18,9 +18,11 @@
 #include "../mem/xalloc_unified.h"
 #include "../value/xtype_names.h"
 #include "../xisolate_api.h"
+#include "../../shared/xr_array_core.h"
+#include "../../shared/xr_float_fmt.h"
 #include "../../shared/xr_sort_core.h"
-#include "../../vm/xvm_string.h"
 #include "../xvm_call.h"
+#include <stdio.h>
 #include <string.h>
 
 XrArray *xr_array_new_shared(struct XrVMRuntime *X, int capacity) {
@@ -211,35 +213,81 @@ void xr_array_sort(struct XrVMRuntime *iso, XrArray *arr, struct XrClosure *comp
     (void) xr_sort_core_typed(arr->data, arr->length, arr->elem_type);
 }
 
+typedef struct XrArrayJoinVMCtx {
+    XrArray *arr;
+} XrArrayJoinVMCtx;
+
+static bool xr_array_join_vm_part(XrValue val, char *dst, size_t *len) {
+    const char *data = NULL;
+    size_t n = 0;
+    char tmp[64];
+
+    if (XR_IS_STRING(val)) {
+        data = xr_value_str_data(&val);
+        n = xr_value_str_len(&val);
+    } else if (XR_IS_INT(val)) {
+        int written = snprintf(tmp, sizeof(tmp), "%lld", (long long) XR_TO_INT(val));
+        if (written < 0 || (size_t) written >= sizeof(tmp))
+            return false;
+        data = tmp;
+        n = (size_t) written;
+    } else if (XR_IS_FLOAT(val)) {
+        int written = xr_format_float(tmp, sizeof(tmp), XR_TO_FLOAT(val));
+        if (written < 0 || (size_t) written >= sizeof(tmp))
+            return false;
+        data = tmp;
+        n = (size_t) written;
+    } else if (XR_IS_BOOL(val)) {
+        data = XR_TO_BOOL(val) ? "true" : "false";
+        n = XR_TO_BOOL(val) ? 4 : 5;
+    } else if (XR_IS_NULL(val)) {
+        data = "null";
+        n = 4;
+    } else {
+        data = "[object]";
+        n = 8;
+    }
+
+    if (dst && n > 0)
+        memcpy(dst, data, n);
+    if (len)
+        *len = n;
+    return true;
+}
+
+static bool xr_array_join_vm_element(void *ctx, int64_t index, char *dst, size_t *len) {
+    XrArrayJoinVMCtx *join_ctx = (XrArrayJoinVMCtx *) ctx;
+    if (!join_ctx || !join_ctx->arr || index < 0 || index > INT32_MAX)
+        return false;
+    return xr_array_join_vm_part(xr_array_get_element(join_ctx->arr, (int32_t) index), dst, len);
+}
+
 struct XrString *xr_array_join(struct XrVMRuntime *iso, XrArray *arr, struct XrString *delimiter) {
     if (arr == NULL || arr->length == 0)
         return xr_string_intern(iso, "", 0, 0);
 
-    XrStrBuf *sb = xr_strbuf_tmp(iso);
+    const char *sep = delimiter ? delimiter->data : NULL;
+    size_t sep_len = delimiter ? delimiter->length : 0;
+    XrArrayJoinVMCtx ctx = {arr};
+    size_t total = 0;
+    if (!xr_array_core_join_total(arr->length, sep_len, xr_array_join_vm_element, &ctx, &total))
+        return NULL;
 
-    for (int i = 0; i < arr->length; i++) {
-        if (i > 0 && delimiter != NULL)
-            xr_strbuf_append_str(sb, delimiter);
+    if (total == 0)
+        return xr_string_intern(iso, "", 0, 0);
 
-        XrValue val = xr_array_get_element(arr, i);
+    char stack_buf[256];
+    char *buf = total < sizeof(stack_buf) ? stack_buf : (char *) xr_malloc(total + 1);
+    if (!buf)
+        return NULL;
 
-        if (XR_IS_STRING(val)) {
-            xr_strbuf_append_cstr(sb, xr_value_str_data(&val), xr_value_str_len(&val));
-        } else if (XR_IS_INT(val)) {
-            xr_strbuf_append_int(sb, XR_TO_INT(val));
-        } else if (XR_IS_FLOAT(val)) {
-            xr_strbuf_append_float(sb, XR_TO_FLOAT(val));
-        } else if (XR_IS_BOOL(val)) {
-            const char *s = XR_TO_BOOL(val) ? "true" : "false";
-            xr_strbuf_append_cstr(sb, s, strlen(s));
-        } else if (XR_IS_NULL(val)) {
-            xr_strbuf_append_cstr(sb, "null", 4);
-        } else {
-            xr_strbuf_append_cstr(sb, "[object]", 8);
-        }
-    }
-
-    return xr_strbuf_to_string(sb);
+    size_t written = 0;
+    bool ok = xr_array_core_join_write(buf, total + 1, arr->length, sep, sep_len,
+                                       xr_array_join_vm_element, &ctx, &written);
+    XrString *result = ok ? xr_string_intern(iso, buf, written, 0) : NULL;
+    if (buf != stack_buf)
+        xr_free(buf);
+    return result;
 }
 
 struct XrString *xr_array_to_string(struct XrVMRuntime *iso, XrArray *arr) {

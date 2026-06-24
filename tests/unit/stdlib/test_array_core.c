@@ -19,6 +19,25 @@ static void assert_range(XrArrayCoreRange range, int64_t start, int64_t end, int
     ASSERT_EQ_INT(range.count, count);
 }
 
+typedef struct JoinParts {
+    const char **parts;
+} JoinParts;
+
+static bool join_parts_element(void *ctx, int64_t index, char *dst, size_t *len) {
+    JoinParts *parts = (JoinParts *) ctx;
+    if (!parts || index < 0)
+        return false;
+    const char *part = parts->parts[index];
+    if (!part)
+        return false;
+    size_t n = strlen(part);
+    if (dst && n > 0)
+        memcpy(dst, part, n);
+    if (len)
+        *len = n;
+    return true;
+}
+
 TEST(array_core_slice_range_clamps_positive_bounds) {
     assert_range(xr_array_core_slice_range(5, 1, 4), 1, 4, 3);
     assert_range(xr_array_core_slice_range(5, 0, 99), 0, 5, 5);
@@ -45,6 +64,36 @@ TEST(array_core_fill_range_matches_slice_bounds) {
     assert_range(xr_array_core_fill_range(6, 1, 4), 1, 4, 3);
     assert_range(xr_array_core_fill_range(6, -3, -1), 3, 5, 2);
     assert_range(xr_array_core_fill_range(6, 4, 2), 2, 2, 0);
+}
+
+TEST(array_core_join_plans_total_and_writes_separators) {
+    const char *items[] = {"aa", "b", ""};
+    JoinParts ctx = {items};
+    size_t total = 0;
+    ASSERT_TRUE(xr_array_core_join_total(3, 2, join_parts_element, &ctx, &total));
+    ASSERT_EQ_INT(total, 7);
+
+    char out[8];
+    size_t written = 0;
+    ASSERT_TRUE(
+        xr_array_core_join_write(out, sizeof(out), 3, "::", 2, join_parts_element, &ctx, &written));
+    ASSERT_EQ_INT(written, 7);
+    ASSERT_STR_EQ(out, "aa::b::");
+}
+
+TEST(array_core_join_handles_empty_and_invalid_capacity) {
+    const char *items[] = {"x", "y"};
+    JoinParts ctx = {items};
+    size_t total = 99;
+    ASSERT_TRUE(xr_array_core_join_total(0, 1, join_parts_element, &ctx, &total));
+    ASSERT_EQ_INT(total, 0);
+
+    char out[2] = {'?', '?'};
+    ASSERT_TRUE(
+        xr_array_core_join_write(out, sizeof(out), 0, ",", 1, join_parts_element, &ctx, NULL));
+    ASSERT_STR_EQ(out, "");
+
+    ASSERT_FALSE(xr_array_core_join_write(out, 3, 2, ",", 1, join_parts_element, &ctx, NULL));
 }
 
 TEST(array_core_fill_typed_storage_coerces_once_and_fills_range) {
@@ -339,6 +388,8 @@ RUN_TEST(array_core_slice_range_handles_negative_bounds);
 RUN_TEST(array_core_slice_range_empty_when_start_after_end);
 RUN_TEST(array_core_slice_range_accepts_nonpositive_length);
 RUN_TEST(array_core_fill_range_matches_slice_bounds);
+RUN_TEST(array_core_join_plans_total_and_writes_separators);
+RUN_TEST(array_core_join_handles_empty_and_invalid_capacity);
 RUN_TEST(array_core_fill_typed_storage_coerces_once_and_fills_range);
 RUN_TEST(array_core_fill_typed_storage_handles_bool_and_invalid_cases);
 RUN_TEST(array_core_index_set_plan_rejects_wraparound_and_gaps);
