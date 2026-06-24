@@ -49,6 +49,11 @@ typedef struct XrArrayCoreNeedle {
 } XrArrayCoreNeedle;
 
 typedef bool (*XrArrayCoreJoinElementFn)(void *ctx, int64_t index, char *dst, size_t *len);
+typedef XrValue (*XrArrayCoreReadFn)(void *ctx, int64_t index);
+typedef XrValue (*XrArrayCoreMapFn)(void *ctx, XrValue value);
+typedef bool (*XrArrayCoreWriteFn)(void *ctx, int64_t index, XrValue value);
+typedef bool (*XrArrayCorePredicateFn)(void *ctx, XrValue value);
+typedef XrValue (*XrArrayCoreReduceFn)(void *ctx, XrValue acc, XrValue value);
 
 static inline XrArrayCoreNeedle xr_array_core_needle_other(void) {
     return (XrArrayCoreNeedle) {XR_ARRAY_CORE_NEEDLE_OTHER, 0, 0.0, 0};
@@ -164,6 +169,63 @@ static inline bool xr_array_core_join_write(char *dst, size_t capacity, int64_t 
     if (out_written)
         *out_written = pos;
     return true;
+}
+
+static inline bool xr_array_core_hof_map(int64_t length, XrArrayCoreReadFn read_fn,
+                                         XrArrayCoreMapFn map_fn, XrArrayCoreWriteFn write_fn,
+                                         void *ctx, int64_t *out_count) {
+    if (out_count)
+        *out_count = 0;
+    if (length <= 0)
+        return true;
+    if (!read_fn || !map_fn || !write_fn)
+        return false;
+
+    for (int64_t i = 0; i < length; i++) {
+        XrValue mapped = map_fn(ctx, read_fn(ctx, i));
+        if (!write_fn(ctx, i, mapped))
+            return false;
+    }
+    if (out_count)
+        *out_count = length;
+    return true;
+}
+
+static inline bool xr_array_core_hof_filter(int64_t length, XrArrayCoreReadFn read_fn,
+                                            XrArrayCorePredicateFn predicate_fn,
+                                            XrArrayCoreWriteFn write_fn, void *ctx,
+                                            int64_t *out_count) {
+    if (out_count)
+        *out_count = 0;
+    if (length <= 0)
+        return true;
+    if (!read_fn || !predicate_fn || !write_fn)
+        return false;
+
+    int64_t kept = 0;
+    for (int64_t i = 0; i < length; i++) {
+        XrValue value = read_fn(ctx, i);
+        if (!predicate_fn(ctx, value))
+            continue;
+        if (!write_fn(ctx, kept, value))
+            return false;
+        kept++;
+    }
+    if (out_count)
+        *out_count = kept;
+    return true;
+}
+
+static inline XrValue xr_array_core_hof_reduce(int64_t length, XrArrayCoreReadFn read_fn,
+                                               XrArrayCoreReduceFn reduce_fn, void *ctx,
+                                               XrValue initial) {
+    XrValue acc = initial;
+    if (length <= 0 || !read_fn || !reduce_fn)
+        return acc;
+
+    for (int64_t i = 0; i < length; i++)
+        acc = reduce_fn(ctx, acc, read_fn(ctx, i));
+    return acc;
 }
 
 #define XR_ARRAY_CORE_FILL_TYPED_LOOP(T, expr)                                                     \
