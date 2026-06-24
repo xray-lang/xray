@@ -9,7 +9,7 @@
  * plus the direct AOT helpers emitted by codegen for class-native fields.
  *
  * Every lookup family funnels into xrt_map_probe_* which walk the shared
- * control bytes declared in xrt_coll.h.  Typed maps store packed scalar
+ * Swiss probe primitives declared in xr_swiss_index.h. Typed maps store packed scalar
  * keys/values addressed by slot; tagged maps store XrValue pairs.
  */
 
@@ -40,7 +40,7 @@ static inline XrValue xrt_map_new_typed(int64_t cap, uint8_t key_type, uint8_t v
     m->value_type = value_type;
     m->key_size = XR_ELEM_SIZES[key_type];
     m->value_size = XR_ELEM_SIZES[value_type];
-    xrt_map_alloc_slots(m, xrt_swiss_slots_for(cap));
+    xrt_map_alloc_slots(m, xr_swiss_slots_for_i64(cap));
     return xr_mkptr(m, XR_TAG_MAP);
 }
 
@@ -202,14 +202,14 @@ static inline int64_t xrt_map_find_i64_hashed(xrt_map_t *m, uint64_t bits, uint6
     xrt_map_probe_i64_ctx ctx;
     ctx.map = m;
     ctx.bits = bits;
-    return xrt_swiss_find(m->ctrl, m->cap, hash, xrt_map_probe_i64_eq, &ctx);
+    return xr_swiss_find_match_i64(m->ctrl, m->cap, hash, xrt_map_probe_i64_eq, &ctx);
 }
 
 static inline int64_t xrt_map_find_f64_hashed(xrt_map_t *m, double key, uint64_t hash) {
     xrt_map_probe_f64_ctx ctx;
     ctx.map = m;
     ctx.key = key;
-    return xrt_swiss_find(m->ctrl, m->cap, hash, xrt_map_probe_f64_eq, &ctx);
+    return xr_swiss_find_match_i64(m->ctrl, m->cap, hash, xrt_map_probe_f64_eq, &ctx);
 }
 
 /* ---- rehash ------------------------------------------------------------- */
@@ -269,8 +269,8 @@ static inline void xrt_map_rehash(xrt_map_t *m, int64_t new_slots) {
             if (slot < 0 || slot >= old_slots || (old_ctrl[slot] & 0x80u))
                 continue;
             uint64_t hash = xrt_map_stored_key_hash(old_keys, slot, m->key_type);
-            int64_t dst = xrt_swiss_find_free(m->ctrl, m->cap, hash);
-            xrt_swiss_ctrl_set(m->ctrl, m->cap, dst, (uint8_t) (hash & 0x7F));
+            int64_t dst = xr_swiss_find_free_i64(m->ctrl, m->cap, hash);
+            xr_swiss_ctrl_set_i64(m->ctrl, m->cap, dst, (uint8_t) (hash & 0x7F));
             memcpy((uint8_t *) m->keys + (size_t) dst * m->key_size,
                    (const uint8_t *) old_keys + (size_t) slot * m->key_size, m->key_size);
             memcpy((uint8_t *) m->values + (size_t) dst * m->value_size,
@@ -284,8 +284,8 @@ static inline void xrt_map_rehash(xrt_map_t *m, int64_t new_slots) {
             if (old_ctrl[slot] & 0x80u)
                 continue;
             uint64_t hash = xrt_map_stored_key_hash(old_keys, slot, m->key_type);
-            int64_t dst = xrt_swiss_find_free(m->ctrl, m->cap, hash);
-            xrt_swiss_ctrl_set(m->ctrl, m->cap, dst, (uint8_t) (hash & 0x7F));
+            int64_t dst = xr_swiss_find_free_i64(m->ctrl, m->cap, hash);
+            xr_swiss_ctrl_set_i64(m->ctrl, m->cap, dst, (uint8_t) (hash & 0x7F));
             memcpy((uint8_t *) m->keys + (size_t) dst * m->key_size,
                    (const uint8_t *) old_keys + (size_t) slot * m->key_size, m->key_size);
             memcpy((uint8_t *) m->values + (size_t) dst * m->value_size,
@@ -307,16 +307,16 @@ static inline void xrt_map_rehash_tagged(xrt_map_t *m, int64_t new_slots) {
 static inline void xrt_map_reserve_one(xrt_map_t *m) {
     if (m->growth_left > 0)
         return;
-    xrt_map_rehash(m, m->len >= xrt_map_growth_budget(m->cap) / 2 ? m->cap * 2 : m->cap);
+    xrt_map_rehash(m, m->len >= xr_swiss_capacity_budget_i64(m->cap) / 2 ? m->cap * 2 : m->cap);
 }
 
 static inline int64_t xrt_map_insert_slot(xrt_map_t *m, uint64_t hash) {
     xrt_map_reserve_one(m);
     /* EMPTY-only: never reuse a tombstoned slot while a stale order[] entry may
      * still reference it; reserve_one guarantees an EMPTY slot exists. */
-    int64_t slot = xrt_swiss_find_empty(m->ctrl, m->cap, hash);
+    int64_t slot = xr_swiss_find_empty_i64(m->ctrl, m->cap, hash);
     m->growth_left--;
-    xrt_swiss_ctrl_set(m->ctrl, m->cap, slot, (uint8_t) (hash & 0x7F));
+    xr_swiss_ctrl_set_i64(m->ctrl, m->cap, slot, (uint8_t) (hash & 0x7F));
     m->len++;
     xrt_map_order_append(m, slot);
     return slot;
@@ -327,7 +327,7 @@ static inline void xrt_map_erase_slot(xrt_map_t *m, int64_t slot) {
      * in place and is skipped by slot_is_full during iteration, then dropped by
      * rehash compaction, avoiding the old O(n) order[] scan + memmove that made
      * delete-heavy churn O(n^2). */
-    xrt_swiss_ctrl_set(m->ctrl, m->cap, slot, (uint8_t) XRT_CTRL_DELETED);
+    xr_swiss_ctrl_set_i64(m->ctrl, m->cap, slot, (uint8_t) XR_SWISS_CTRL_DELETED);
     m->len--;
 }
 

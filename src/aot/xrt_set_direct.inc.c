@@ -192,16 +192,17 @@ static inline int64_t xrt_set_find_i64_typed_slot(xrt_set_t *s, int64_t value, u
     xrt_set_probe_i64_ctx ctx;
     ctx.set = s;
     ctx.bits = bits;
-    return xrt_swiss_find(s->ctrl, s->cap, xrt_hash_mix_u64(bits), xrt_set_probe_i64_eq, &ctx);
+    return xr_swiss_find_match_i64(s->ctrl, s->cap, xrt_hash_mix_u64(bits), xrt_set_probe_i64_eq,
+                                   &ctx);
 }
 
 static inline int64_t xrt_set_find_f64_typed_slot(xrt_set_t *s, double value, uint8_t elem_type) {
     xrt_set_probe_f64_ctx ctx;
     ctx.set = s;
     ctx.value = value;
-    return xrt_swiss_find(s->ctrl, s->cap,
-                          xrt_hash_mix_u64(xrt_set_item_bits_f64(value, elem_type)),
-                          xrt_set_probe_f64_eq, &ctx);
+    return xr_swiss_find_match_i64(s->ctrl, s->cap,
+                                   xrt_hash_mix_u64(xrt_set_item_bits_f64(value, elem_type)),
+                                   xrt_set_probe_f64_eq, &ctx);
 }
 
 static inline int64_t xrt_set_find_value(xrt_set_t *s, XrValue value) {
@@ -209,7 +210,8 @@ static inline int64_t xrt_set_find_value(xrt_set_t *s, XrValue value) {
         xrt_set_probe_tag_ctx ctx;
         ctx.set = s;
         ctx.value = value;
-        return xrt_swiss_find(s->ctrl, s->cap, xrt_hash_value(value), xrt_set_probe_tag_eq, &ctx);
+        return xr_swiss_find_match_i64(s->ctrl, s->cap, xrt_hash_value(value), xrt_set_probe_tag_eq,
+                                       &ctx);
     }
     if (s->elem_type == XR_ELEM_F32 || s->elem_type == XR_ELEM_F64) {
         double d = value.tag == XR_TAG_F64 ? value.f : (double) value.i;
@@ -238,8 +240,8 @@ static inline void xrt_set_rehash(xrt_set_t *s, int64_t new_slots) {
         uint64_t hash = s->elem_type == XR_ELEM_ANY
                             ? xrt_hash_value(((const XrValue *) old_items)[slot])
                             : xrt_map_stored_key_hash(old_items, slot, s->elem_type);
-        int64_t dst = xrt_swiss_find_free(s->ctrl, s->cap, hash);
-        xrt_swiss_ctrl_set(s->ctrl, s->cap, dst, (uint8_t) (hash & 0x7F));
+        int64_t dst = xr_swiss_find_free_i64(s->ctrl, s->cap, hash);
+        xr_swiss_ctrl_set_i64(s->ctrl, s->cap, dst, (uint8_t) (hash & 0x7F));
         memcpy((uint8_t *) s->items + (size_t) dst * s->elem_size,
                (const uint8_t *) old_items + (size_t) slot * s->elem_size, s->elem_size);
         s->order[w++] = dst;
@@ -252,12 +254,12 @@ static inline void xrt_set_rehash(xrt_set_t *s, int64_t new_slots) {
 
 static inline int64_t xrt_set_insert_slot(xrt_set_t *s, uint64_t hash) {
     if (s->growth_left <= 0)
-        xrt_set_rehash(s, s->len >= (s->cap - s->cap / 8) / 2 ? s->cap * 2 : s->cap);
+        xrt_set_rehash(s, s->len >= xr_swiss_capacity_budget_i64(s->cap) / 2 ? s->cap * 2 : s->cap);
     /* EMPTY-only: never reuse a tombstoned slot while a stale order[] entry may
      * still reference it; the reserve above guarantees an EMPTY slot exists. */
-    int64_t slot = xrt_swiss_find_empty(s->ctrl, s->cap, hash);
+    int64_t slot = xr_swiss_find_empty_i64(s->ctrl, s->cap, hash);
     s->growth_left--;
-    xrt_swiss_ctrl_set(s->ctrl, s->cap, slot, (uint8_t) (hash & 0x7F));
+    xr_swiss_ctrl_set_i64(s->ctrl, s->cap, slot, (uint8_t) (hash & 0x7F));
     s->len++;
     xrt_set_order_append(s, slot);
     return slot;
@@ -267,7 +269,7 @@ static inline void xrt_set_erase_slot(xrt_set_t *s, int64_t slot) {
     /* O(1) delete: tombstone the ctrl byte only; the order[] entry is skipped by
      * slot_is_full on iteration and dropped by rehash compaction, avoiding the old
      * O(n) order[] scan + memmove that made delete-heavy churn O(n^2)). */
-    xrt_swiss_ctrl_set(s->ctrl, s->cap, slot, (uint8_t) XRT_CTRL_DELETED);
+    xr_swiss_ctrl_set_i64(s->ctrl, s->cap, slot, (uint8_t) XR_SWISS_CTRL_DELETED);
     s->len--;
 }
 
@@ -287,7 +289,7 @@ static inline int xrt_set_add_i64_typed(xrt_set_t *s, int64_t value, uint8_t ele
     ctx.set = s;
     ctx.bits = bits;
     uint64_t hash = xrt_hash_mix_u64(bits);
-    if (xrt_swiss_find(s->ctrl, s->cap, hash, xrt_set_probe_i64_eq, &ctx) >= 0)
+    if (xr_swiss_find_match_i64(s->ctrl, s->cap, hash, xrt_set_probe_i64_eq, &ctx) >= 0)
         return 0;
     int64_t slot = xrt_set_insert_slot(s, hash);
     xrt_set_slot_store_i64(s, slot, value);
@@ -317,7 +319,7 @@ static inline int xrt_set_add_f64_typed(xrt_set_t *s, double value, uint8_t elem
     xrt_set_probe_f64_ctx ctx;
     ctx.set = s;
     ctx.value = value;
-    if (xrt_swiss_find(s->ctrl, s->cap, hash, xrt_set_probe_f64_eq, &ctx) >= 0)
+    if (xr_swiss_find_match_i64(s->ctrl, s->cap, hash, xrt_set_probe_f64_eq, &ctx) >= 0)
         return 0;
     int64_t slot = xrt_set_insert_slot(s, hash);
     xrt_set_slot_store_f64(s, slot, value);

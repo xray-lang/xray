@@ -481,56 +481,8 @@ static inline XrValue xrt_strbuf_finish(XrValue sbv) {
     return v;
 }
 
-/* =========================================================================
- * Swiss-table core — group-probed open addressing shared by Map and Set.
- *
- * Control bytes:  EMPTY=0xFF  DELETED=0x80  FULL=h2 (top bit clear, 7 hash
- * bits).  Slot count is a power of two; the ctrl array carries XRT_GROUP
- * mirrored tail bytes so an unaligned group load never reads out of bounds.
- * Probing is triangular by whole groups, which visits every group exactly
- * once for power-of-two capacities.  Group matching uses portable 8-byte
- * SWAR; a byte match may be a false positive, so callers always confirm
- * with a key comparison (empty detection is exact).
- * ========================================================================= */
-
-#define XRT_GROUP 8
-#define XRT_CTRL_EMPTY 0xFFu
-#define XRT_CTRL_DELETED 0x80u
-#define XRT_SWAR_LOW 0x0101010101010101ull
-#define XRT_SWAR_HIGH 0x8080808080808080ull
-
-static inline uint64_t xrt_group_load(const uint8_t *p) {
-    uint64_t g;
-    memcpy(&g, p, sizeof(g));
-    return g;
-}
-
-/* High bit set in each byte that may equal b (false positives possible). */
-static inline uint64_t xrt_group_match(uint64_t g, uint8_t b) {
-    uint64_t x = g ^ (XRT_SWAR_LOW * (uint64_t) b);
-    return (x - XRT_SWAR_LOW) & ~x & XRT_SWAR_HIGH;
-}
-
-/* Exact: EMPTY (0xFF) has bits 7 and 6 set; DELETED only bit 7; FULL neither. */
-static inline uint64_t xrt_group_match_empty(uint64_t g) {
-    return g & (g << 1) & XRT_SWAR_HIGH;
-}
-
-static inline uint64_t xrt_group_match_free(uint64_t g) {
-    return g & XRT_SWAR_HIGH; /* EMPTY or DELETED */
-}
-
-static inline int xrt_swar_first(uint64_t bits) {
-    int n = 0;
-    while (!(bits & 0xFFu)) {
-        bits >>= 8;
-        n++;
-    }
-    return n;
-}
-
-/* xrt_hash_mix_u64 / xrt_hash_bytes live in xrt_value.h (shared with the
- * compile-time literal hashing in the C backend). */
+/* Swiss-table probing lives in src/shared/xr_swiss_index.h.  The AOT side keeps
+ * only allocation and packed typed-storage policy here. */
 
 static inline uint64_t xrt_hash_f64(double d) {
     uint64_t bits;
@@ -559,94 +511,14 @@ static inline uint64_t xrt_hash_value(XrValue v) {
     }
 }
 
-static inline int64_t xrt_swiss_slots_for(int64_t want) {
-    /* Smallest power of two whose 7/8 usable share covers `want` entries. */
-    int64_t slots = XRT_GROUP;
-    if (want < 0)
-        want = 0;
-    while (slots - slots / 8 < want)
-        slots <<= 1;
-    return slots;
-}
-
 static inline uint8_t *xrt_swiss_ctrl_alloc(int64_t slots) {
-    uint8_t *ctrl = (uint8_t *) XRT_MALLOC((size_t) slots + XRT_GROUP);
+    uint8_t *ctrl = (uint8_t *) XRT_MALLOC((size_t) slots + XR_SWISS_GROUP);
     if (!ctrl) {
         fprintf(stderr, "xrt swiss: out of memory\n");
         abort();
     }
-    memset(ctrl, (int) XRT_CTRL_EMPTY, (size_t) slots + XRT_GROUP);
+    memset(ctrl, (int) XR_SWISS_CTRL_EMPTY, (size_t) slots + XR_SWISS_GROUP);
     return ctrl;
-}
-
-static inline void xrt_swiss_ctrl_set(uint8_t *ctrl, int64_t slots, int64_t slot, uint8_t b) {
-    ctrl[slot] = b;
-    if (slot < XRT_GROUP)
-        ctrl[slots + slot] = b; /* mirrored tail keeps group loads in bounds */
-}
-
-/* Find the slot holding `h2`-tagged keys; `eq_slot(ctx, slot)` confirms.
- * Returns the slot index or -1. */
-typedef int (*xrt_swiss_eq_fn)(void *ctx, int64_t slot);
-
-static inline int64_t xrt_swiss_find(const uint8_t *ctrl, int64_t slots, uint64_t hash,
-                                     xrt_swiss_eq_fn eq, void *ctx) {
-    uint64_t mask = (uint64_t) slots - 1;
-    uint8_t h2 = (uint8_t) (hash & 0x7F);
-    uint64_t pos = (hash >> 7) & mask;
-    uint64_t stride = 0;
-    for (;;) {
-        uint64_t g = xrt_group_load(ctrl + pos);
-        uint64_t m = xrt_group_match(g, h2);
-        while (m) {
-            int off = xrt_swar_first(m);
-            int64_t slot = (int64_t) ((pos + (uint64_t) off) & mask);
-            if (eq(ctx, slot))
-                return slot;
-            m &= ~(0xFFull << ((unsigned) off * 8u)); /* clear matched byte */
-        }
-        if (xrt_group_match_empty(g))
-            return -1;
-        stride += XRT_GROUP;
-        pos = (pos + stride) & mask;
-    }
-}
-
-/* First free (EMPTY or DELETED) slot along the probe sequence. */
-static inline int64_t xrt_swiss_find_free(const uint8_t *ctrl, int64_t slots, uint64_t hash) {
-    uint64_t mask = (uint64_t) slots - 1;
-    uint64_t pos = (hash >> 7) & mask;
-    uint64_t stride = 0;
-    for (;;) {
-        uint64_t g = xrt_group_load(ctrl + pos);
-        uint64_t m = xrt_group_match_free(g);
-        if (m) {
-            int off = xrt_swar_first(m);
-            return (int64_t) ((pos + (uint64_t) off) & mask);
-        }
-        stride += XRT_GROUP;
-        pos = (pos + stride) & mask;
-    }
-}
-
-/* First EMPTY (never DELETED) slot along the probe sequence. Insertion uses this
- * so a tombstoned slot is never reused while a stale order[] entry still points
- * at it; tombstones are reclaimed only by rehash compaction. The caller must
- * ensure a free slot exists (growth_left > 0). */
-static inline int64_t xrt_swiss_find_empty(const uint8_t *ctrl, int64_t slots, uint64_t hash) {
-    uint64_t mask = (uint64_t) slots - 1;
-    uint64_t pos = (hash >> 7) & mask;
-    uint64_t stride = 0;
-    for (;;) {
-        uint64_t g = xrt_group_load(ctrl + pos);
-        uint64_t m = xrt_group_match_empty(g);
-        if (m) {
-            int off = xrt_swar_first(m);
-            return (int64_t) ((pos + (uint64_t) off) & mask);
-        }
-        stride += XRT_GROUP;
-        pos = (pos + stride) & mask;
-    }
 }
 
 /* =========================================================================
@@ -811,13 +683,9 @@ static inline void xrt_map_order_append(xrt_map_t *m, int64_t slot) {
     m->order[m->order_len++] = slot;
 }
 
-static inline int64_t xrt_map_growth_budget(int64_t slots) {
-    return slots - slots / 8; /* 7/8 max load factor */
-}
-
 static inline void xrt_map_alloc_slots(xrt_map_t *m, int64_t slots) {
     m->cap = slots;
-    m->growth_left = xrt_map_growth_budget(slots);
+    m->growth_left = xr_swiss_capacity_budget_i64(slots);
     m->ctrl = xrt_swiss_ctrl_alloc(slots);
     m->keys = XRT_CALLOC((size_t) slots, (size_t) m->key_size);
     m->values = XRT_CALLOC((size_t) slots, (size_t) m->value_size);
@@ -1086,7 +954,7 @@ static inline void xrt_set_order_append(xrt_set_t *s, int64_t slot) {
 
 static inline void xrt_set_alloc_slots(xrt_set_t *s, int64_t slots) {
     s->cap = slots;
-    s->growth_left = slots - slots / 8;
+    s->growth_left = xr_swiss_capacity_budget_i64(slots);
     s->ctrl = xrt_swiss_ctrl_alloc(slots);
     s->items = XRT_CALLOC((size_t) slots, (size_t) s->elem_size);
     if (XR_UNLIKELY(!s->items)) {
@@ -1109,7 +977,7 @@ static inline XrValue xrt_set_new_typed(int64_t cap, uint8_t elem_type) {
         if (cap > 0)
             xrt_set_resize_tagged(s, (uint32_t) cap);
     } else {
-        xrt_set_alloc_slots(s, xrt_swiss_slots_for(cap));
+        xrt_set_alloc_slots(s, xr_swiss_slots_for_i64(cap));
     }
     return xr_mkptr(s, XR_TAG_SET);
 }
@@ -1348,8 +1216,8 @@ static inline void xrt_set_clear(xrt_set_t *s) {
         s->count = 0;
         return;
     }
-    memset(s->ctrl, (int) XRT_CTRL_EMPTY, (size_t) s->cap + XRT_GROUP);
-    s->growth_left = s->cap - s->cap / 8;
+    memset(s->ctrl, (int) XR_SWISS_CTRL_EMPTY, (size_t) s->cap + XR_SWISS_GROUP);
+    s->growth_left = xr_swiss_capacity_budget_i64(s->cap);
     s->len = 0;
     s->order_len = 0;
 }
@@ -1865,7 +1733,7 @@ static inline XrValue xrt_value_clone_for_coro(XrValue val) {
                 /* Same geometry: clone the slot arrays and control bytes. */
                 dst->len = src->len;
                 dst->growth_left = src->growth_left;
-                memcpy(dst->ctrl, src->ctrl, (size_t) src->cap + XRT_GROUP);
+                memcpy(dst->ctrl, src->ctrl, (size_t) src->cap + XR_SWISS_GROUP);
                 memcpy(dst->keys, src->keys, (size_t) src->cap * (size_t) src->key_size);
                 memcpy(dst->values, src->values, (size_t) src->cap * (size_t) src->value_size);
                 xrt_map_order_reserve(dst, src->order_len);
@@ -1903,7 +1771,7 @@ static inline XrValue xrt_value_clone_for_coro(XrValue val) {
             if (src->elem_type != XR_ELEM_ANY && dst->cap == src->cap) {
                 dst->len = src->len;
                 dst->growth_left = src->growth_left;
-                memcpy(dst->ctrl, src->ctrl, (size_t) src->cap + XRT_GROUP);
+                memcpy(dst->ctrl, src->ctrl, (size_t) src->cap + XR_SWISS_GROUP);
                 memcpy(dst->items, src->items, (size_t) src->cap * (size_t) src->elem_size);
                 xrt_set_order_reserve(dst, src->order_len);
                 memcpy(dst->order, src->order, (size_t) src->order_len * sizeof(int64_t));
