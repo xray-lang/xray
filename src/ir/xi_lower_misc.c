@@ -46,6 +46,8 @@ static int prelude_enum_builtin_index(const char *enum_name) {
         return XR_GLOBAL_VAR_SEND_RESULT;
     if (strcmp(enum_name, "TaskResult") == 0)
         return XR_GLOBAL_VAR_TASK_RESULT;
+    if (strcmp(enum_name, "TaskOutcome") == 0)
+        return XR_GLOBAL_VAR_TASK_OUTCOME;
     if (strcmp(enum_name, "TaskStatus") == 0)
         return XR_GLOBAL_VAR_TASK_STATUS;
     return -1;

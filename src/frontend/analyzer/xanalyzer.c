@@ -267,6 +267,15 @@ static void xa_register_prelude_enums(XaAnalyzer *analyzer) {
                                task_result_members, 5, task_result_payload_counts,
                                task_result_payload_types, true);
 
+    static const char *task_outcome_members[] = {"Success", "Failed", "Cancelled"};
+    static const int task_outcome_payload_counts[] = {1, 1, 0};
+    XrType *task_outcome_success_payload[] = {xr_type_new_unknown(NULL)};
+    XrType *task_outcome_failed_payload[] = {xr_type_new_unknown(NULL)};
+    XrType **task_outcome_payload_types[] = {task_outcome_success_payload,
+                                             task_outcome_failed_payload, NULL};
+    register_prelude_enum_full(analyzer, "TaskOutcome", NULL, 0, task_outcome_members, 3,
+                               task_outcome_payload_counts, task_outcome_payload_types, true);
+
     static const char *task_status_members[] = {"Pending", "Running", "Success", "Failed",
                                                 "Cancelled"};
     register_prelude_enum(analyzer, "TaskStatus", task_status_members, 5, NULL, false);

@@ -98,6 +98,8 @@ static bool cg_coro_builtin_field_needs_xrt_bridge(const XiValue *builtin, const
             return strcmp(field, "Value") == 0;
         case XR_GLOBAL_VAR_TASK_RESULT:
             return strcmp(field, "Success") == 0 || strcmp(field, "Failed") == 0;
+        case XR_GLOBAL_VAR_TASK_OUTCOME:
+            return strcmp(field, "Success") == 0 || strcmp(field, "Failed") == 0;
         default:
             return true;
     }

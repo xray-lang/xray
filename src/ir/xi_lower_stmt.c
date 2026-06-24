@@ -756,7 +756,11 @@ XR_FUNC XiValue *xi_lower_scope_block(XiLower *l, AstNode *node) {
 
     xi_lower_stmt(l, sb->body);
 
-    struct XrType *res_type = (sb->scope_mode == 2) ? l->type_any : l->type_unit;
+    struct XrType *res_type = l->type_unit;
+    if (sb->scope_mode == 2) {
+        XrType *outcome = xr_type_new_enum(l->isolate, "TaskOutcome");
+        res_type = xr_type_new_array(l->isolate, outcome);
+    }
     XiValue *exit_v = xi_value_new(l->func, l->cur_block, XI_SCOPE_EXIT, res_type, 0);
     if (exit_v) {
         exit_v->aux_int = sb->scope_mode;

@@ -264,7 +264,7 @@ select {
 ```ebnf
 ScopeStmt          ::= 'scope' Block
 LinkedScopeStmt    ::= 'linked' 'scope' Block          // 兄弟失败 → 取消所有 + 重抛
-SupervisorScopeExpr ::= 'supervisor' 'scope' Block     // 收集所有错误，返回 Array<string>
+SupervisorScopeExpr ::= 'supervisor' 'scope' Block     // 收集每个子协程结果，返回 Array<TaskOutcome>
 ```
 
 ```xray @id=coro-scope
@@ -290,7 +290,19 @@ scope {
 |---|---|---|
 | `scope { ... }` | 不取消兄弟；异常不向外传播（每个 task 独立） | 无（语句形式） |
 | `linked scope { ... }` | **取消所有兄弟**协程，并向外**重抛**最先抛出的异常 | 无 |
-| `supervisor scope { ... }` | **收集**所有失败子协程的异常消息，子协程之间互不影响 | `Array<string>`（错误列表；可为空表示全部成功） |
+| `supervisor scope { ... }` | **收集**每个子协程的完成结果，子协程之间互不影响 | `Array<TaskOutcome>`（每个子协程一个 outcome） |
+
+`TaskOutcome` 是 prelude 枚举：
+
+```xray
+enum TaskOutcome {
+    Success(unknown)    // 子协程正常返回；payload 为返回值
+    Failed(unknown)     // 子协程抛异常；payload 为原始错误值，不强制字符串化
+    Cancelled           // 子协程被取消
+}
+```
+
+`supervisor scope` 会等待块内所有 `go` 子协程完成，并按完成记录追加 outcome。它不会为了旧式错误列表把失败转换成字符串；调用方需要消息时可在 `TaskOutcome.Failed(err)` 分支中自行决定如何格式化。
 
 ```xray @id=coro-linked-supervisor-scope
 // linked scope：失败传播
@@ -303,13 +315,13 @@ try {
     print("caught:", e)              // 命中此分支
 }
 
-// supervisor scope：收集错误
-let errors = supervisor scope {
+// supervisor scope：收集每个子协程的 outcome
+let outcomes = supervisor scope {
     go failing("error1")
     go failing("error2")
     go ok()
 }
-print(errors.length)                 // 2（只统计失败的）
+print(outcomes.length)               // 3（每个子协程一个 outcome）
 ```
 
 **通用语义**：
@@ -697,7 +709,7 @@ select {
 ```ebnf
 ScopeStmt          ::= 'scope' Block
 LinkedScopeStmt    ::= 'linked' 'scope' Block          // sibling failure → cancel all + rethrow
-SupervisorScopeExpr ::= 'supervisor' 'scope' Block     // collect all errors, return Array<string>
+SupervisorScopeExpr ::= 'supervisor' 'scope' Block     // collect every child result, return Array<TaskOutcome>
 ```
 
 ```xray @id=coro-scope
@@ -723,7 +735,19 @@ scope {
 |---|---|---|
 | `scope { ... }` | Siblings are not cancelled; exceptions do not propagate outward (each task is independent) | none (statement form) |
 | `linked scope { ... }` | **Cancels all siblings** and **rethrows** the first exception outward | none |
-| `supervisor scope { ... }` | **Collects** failure messages from every failing child; siblings do not affect each other | `Array<string>` (error list; empty means all succeeded) |
+| `supervisor scope { ... }` | **Collects** every child coroutine's completion result; siblings do not affect each other | `Array<TaskOutcome>` (one outcome per child) |
+
+`TaskOutcome` is a prelude enum:
+
+```xray
+enum TaskOutcome {
+    Success(unknown)    // child returned normally; payload is the return value
+    Failed(unknown)     // child threw; payload is the original error value, not a forced string
+    Cancelled           // child was cancelled
+}
+```
+
+`supervisor scope` waits for all child coroutines started by `go` inside the block and appends an outcome for each completion. It does not flatten failures into a legacy error-message list; format the error explicitly inside a `TaskOutcome.Failed(err)` branch when text is needed.
 
 ```xray @id=coro-linked-supervisor-scope
 // linked scope: failure propagation
@@ -736,13 +760,13 @@ try {
     print("caught:", e)              // hits this branch
 }
 
-// supervisor scope: collect errors
-let errors = supervisor scope {
+// supervisor scope: collect every child outcome
+let outcomes = supervisor scope {
     go failing("error1")
     go failing("error2")
     go ok()
 }
-print(errors.length)                 // 2 (only the failures are counted)
+print(outcomes.length)               // 3 (one outcome per child)
 ```
 
 **General semantics**:

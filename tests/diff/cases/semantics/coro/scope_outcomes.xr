@@ -1,21 +1,11 @@
-fn send_after_yield(ch: Channel<int>, n: int) {
-    yield
-    ch.send(n)
+enum DiffScopeErr { Msg(string) }
+
+fn ok() -> int {
+    return 11
 }
 
-fn linked_value() -> int {
-    yield
-    return 41
-}
-
-enum ScopeAotErr { Msg(string) }
-
-fn supervisor_ok() -> int {
-    return 5
-}
-
-fn supervisor_fail() -> int {
-    throw ScopeAotErr.Msg("aot_fail")
+fn fail() -> int {
+    throw DiffScopeErr.Msg("diff_fail")
     return 0
 }
 
@@ -41,13 +31,13 @@ fn count_failed(outcomes: Array<TaskOutcome>) -> int {
     return count
 }
 
-fn has_aot_error(outcomes: Array<TaskOutcome>) -> bool {
+fn has_error(outcomes: Array<TaskOutcome>) -> bool {
     for (let i = 0; i < outcomes.length; i++) {
         match (outcomes[i]) {
             TaskOutcome.Failed(err) -> {
                 match (err) {
-                    ScopeAotErr.Msg(msg) -> {
-                        if (msg == "aot_fail") {
+                    DiffScopeErr.Msg(msg) -> {
+                        if (msg == "diff_fail") {
                             return true
                         }
                     }
@@ -60,34 +50,12 @@ fn has_aot_error(outcomes: Array<TaskOutcome>) -> bool {
     return false
 }
 
-let ch = Channel<int>(2)
-scope {
-    go send_after_yield(ch, 1)
-    go send_after_yield(ch, 2)
-}
-
-let a = ch.recv()
-let b = ch.recv()
-print(match (a) {
-    Recv.Value(av) -> match (b) {
-        Recv.Value(bv) -> av + bv
-        _ -> -1
-    }
-    _ -> -1
-})
-ch.close()
-
-linked scope {
-    let task = go linked_value()
-    let value = await task
-    print(value + 1)
-}
-
 let outcomes = supervisor scope {
-    go supervisor_ok()
-    go supervisor_fail()
+    go ok()
+    go fail()
 }
+
 print(outcomes.length)
 print(count_success(outcomes))
 print(count_failed(outcomes))
-print(has_aot_error(outcomes))
+print(has_error(outcomes))

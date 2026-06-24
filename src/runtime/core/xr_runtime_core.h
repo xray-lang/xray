@@ -13,10 +13,13 @@
 
 #include "../../base/xconfig.h"
 #include "../../base/xforward_decl.h"
+#include "../../base/xglobal_indices.h"
 #include "../mem/xheap.h"
 #include "../object/xnative_type.h"
+#include "../value/xvalue.h"
 #include "xr_script_info.h"
 #include <stdbool.h>
+#include <stdint.h>
 
 struct XrCoroutine;
 struct XrayIsolate;
@@ -26,7 +29,7 @@ struct XrSystemHeap;
 struct XrScopeContext;
 
 typedef struct XrScopeTransferOps {
-    bool (*record_child_error_locked)(struct XrCoroutine *coro, struct XrScopeContext *scope);
+    bool (*record_child_completion_locked)(struct XrCoroutine *coro, struct XrScopeContext *scope);
 } XrScopeTransferOps;
 
 typedef struct XrRuntimeCoreConfig {
@@ -45,6 +48,7 @@ typedef struct XrRuntimeCore {
     XrTypeRegistry *type_registry;
     XrSymbolTable *symbol_table;
     XrClass *native_type_classes[XR_NATIVE_TYPE_MAX];
+    XrValue builtins[XR_USER_GLOBALS_START];
 
     void *userdata;
     XrayConfig *config;
@@ -67,6 +71,8 @@ XR_FUNC void xr_runtime_core_free_tmp_strbuf(XrRuntimeCore *core);
 XR_FUNC void xr_runtime_core_destroy_coro_storage(XrRuntimeCore *core);
 XR_FUNC void xr_runtime_core_cleanup_fixed_heap(XrRuntimeCore *core);
 XR_FUNC struct XrayIsolate *xr_runtime_core_vm_owner(const XrRuntimeCore *core);
+XR_FUNC XrValue xr_runtime_core_builtin(const XrRuntimeCore *core, int32_t index);
+XR_FUNC void xr_runtime_core_set_builtin(XrRuntimeCore *core, int32_t index, XrValue value);
 XR_FUNC void xr_runtime_core_set_destroy_op(XrRuntimeCore *core, uint8_t type,
                                             XrObjDestroyFn destroy);
 XR_FUNC XrObjDestroyFn xr_runtime_core_destroy_op(const XrRuntimeCore *core, uint8_t type);

@@ -217,7 +217,7 @@ Xray has **63 reserved keywords** in total; the authoritative source-of-truth ta
 `int` `int8` `int16` `int32` `int64` `uint8` `uint16` `uint32` `uint64`
 `float` `float32` `float64` `bool` `string` `char`
 
-`unknown` is the display name for a compiler-internal type lattice value, not a lexical keyword; user code may use it as an ordinary identifier.
+In type position, `unknown` is the built-in erased/unknown-value type name (for example, `TaskOutcome.Success(unknown)`); it is not a lexical keyword, and remains usable as an ordinary identifier in expression position.
 
 > **Note**: the following names are **not** lexer keywords; they are built-in type symbols automatically introduced by the prelude:
 > `Array` · `BigInt` · `Bytes` · `Channel` · `DateTime` · `Exception` · `Json` · `Logger` · `Map` · `NetConn` · `NetListener` · `Range` · `Regex` · `Set` · `StringBuilder`.
@@ -3943,7 +3943,7 @@ select {
 ```ebnf
 ScopeStmt          ::= 'scope' Block
 LinkedScopeStmt    ::= 'linked' 'scope' Block          // sibling failure → cancel all + rethrow
-SupervisorScopeExpr ::= 'supervisor' 'scope' Block     // collect all errors, return Array<string>
+SupervisorScopeExpr ::= 'supervisor' 'scope' Block     // collect every child result, return Array<TaskOutcome>
 ```
 
 ```xray
@@ -3969,7 +3969,19 @@ scope {
 |---|---|---|
 | `scope { ... }` | Siblings are not cancelled; exceptions do not propagate outward (each task is independent) | none (statement form) |
 | `linked scope { ... }` | **Cancels all siblings** and **rethrows** the first exception outward | none |
-| `supervisor scope { ... }` | **Collects** failure messages from every failing child; siblings do not affect each other | `Array<string>` (error list; empty means all succeeded) |
+| `supervisor scope { ... }` | **Collects** every child coroutine's completion result; siblings do not affect each other | `Array<TaskOutcome>` (one outcome per child) |
+
+`TaskOutcome` is a prelude enum:
+
+```xray
+enum TaskOutcome {
+    Success(unknown)    // child returned normally; payload is the return value
+    Failed(unknown)     // child threw; payload is the original error value, not a forced string
+    Cancelled           // child was cancelled
+}
+```
+
+`supervisor scope` waits for all child coroutines started by `go` inside the block and appends an outcome for each completion. It does not flatten failures into a legacy error-message list; format the error explicitly inside a `TaskOutcome.Failed(err)` branch when text is needed.
 
 ```xray
 // linked scope: failure propagation
@@ -3982,13 +3994,13 @@ try {
     print("caught:", e)              // hits this branch
 }
 
-// supervisor scope: collect errors
-let errors = supervisor scope {
+// supervisor scope: collect every child outcome
+let outcomes = supervisor scope {
     go failing("error1")
     go failing("error2")
     go ok()
 }
-print(errors.length)                 // 2 (only the failures are counted)
+print(outcomes.length)               // 3 (one outcome per child)
 ```
 
 **General semantics**:

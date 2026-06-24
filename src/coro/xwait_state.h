@@ -873,7 +873,7 @@ struct XrBlockedBucket {
  * has no parent scope at all.
  *
  * Concurrency: child_lock serializes mutations of first_child, first_error,
- * errors[], and cancel_requested under the wake dispatcher. errors[] is
+ * outcomes[], and cancel_requested under the wake dispatcher. outcomes[] is
  * preallocated at OP_SCOPE_ENTER for the supervisor mode so the locked
  * section never needs to allocate. */
 
@@ -886,7 +886,7 @@ typedef struct XrScopeContext {
     _Atomic bool child_lock;        // Spinlock; see lock contract above
     XrValue first_error;            // linked scope: first child error (lock-protected)
     bool first_error_is_value;      // linked scope: first_error came via value channel
-    struct XrArray *errors;         // supervisor scope: collected errors
+    struct XrArray *outcomes;       // supervisor scope: collected TaskOutcome values
     XrCoroutine *first_child;       // linked list of child coroutines in this scope
 } XrScopeContext;
 

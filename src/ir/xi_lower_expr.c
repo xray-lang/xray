@@ -648,6 +648,7 @@ static XiValue *lower_variable(XiLower *l, AstNode *node) {
             {"Recv", XR_GLOBAL_VAR_RECV},
             {"SendResult", XR_GLOBAL_VAR_SEND_RESULT},
             {"TaskResult", XR_GLOBAL_VAR_TASK_RESULT},
+            {"TaskOutcome", XR_GLOBAL_VAR_TASK_OUTCOME},
             {"TaskStatus", XR_GLOBAL_VAR_TASK_STATUS},
             {"WorkQueue", XR_GLOBAL_VAR_WORKQUEUE},
             {"ResultGroup", XR_GLOBAL_VAR_RESULTGROUP},
@@ -4380,7 +4381,7 @@ XR_FUNC XiValue *xi_lower_expr(XiLower *l, AstNode *node) {
         case AST_MOVE_EXPR:
             return xi_lower_move_expr(l, node);
 
-        /* Scope block in expression context: supervisor returns errors[] */
+        /* Scope block in expression context: supervisor returns Array<TaskOutcome>. */
         case AST_SCOPE_BLOCK: {
             XiValue *scope_result = xi_lower_scope_block(l, node);
             if (node->as.scope_block.scope_mode == 2 && scope_result)

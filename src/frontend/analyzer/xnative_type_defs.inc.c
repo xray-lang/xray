@@ -41,7 +41,8 @@ static const char xr_native_def_channel[] =
 static const char xr_native_def_coroutine[] =
     "// Built-in Task type (coroutine handle) — implementation in src/runtime/coro/\n\nenum "
     "TaskResult<T> {\n    Success(T)\n    Failed(Exception)\n    Cancelled\n    Timeout\n    "
-    "Pending\n}\n\nenum TaskStatus {\n    Pending\n    Running\n    Success\n    Failed\n    "
+    "Pending\n}\n\nenum TaskOutcome {\n    Success(unknown)\n    Failed(unknown)\n    "
+    "Cancelled\n}\n\nenum TaskStatus {\n    Pending\n    Running\n    Success\n    Failed\n    "
     "Cancelled\n}\n\n@native\nclass Task<T> {\n    done: bool\n    status: TaskStatus\n\n    "
     "cancel()\n    poll() -> TaskResult<T>\n    awaitResult() -> TaskResult<T>\n    "
     "awaitTimeout(timeout: int) -> TaskResult<T>\n}\n";
