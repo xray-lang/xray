@@ -28,13 +28,18 @@ static inline int64_t xrt_math_random_i64(int64_t min_val, int64_t max_val) {
     return xr_math_core_random_i64(xrt_math_random_bytes, NULL, min_val, max_val);
 }
 
+static inline int64_t xrt_math_int_arg_or(XrValue v, int64_t fallback) {
+    bool has_int = XR_IS_INT(v);
+    return xr_math_core_int_arg_or(has_int, has_int ? XR_TO_INT(v) : 0, fallback);
+}
+
 static inline XrValue xrt_math_random(void) {
     return XR_FROM_FLOAT(xrt_math_random_f64());
 }
 
 static inline XrValue xrt_math_random_int(XrValue min_value, XrValue max_value) {
-    return XR_FROM_INT(xrt_math_random_i64(xr_value_to_int64_coerce(min_value),
-                                           xr_value_to_int64_coerce(max_value)));
+    return XR_FROM_INT(
+        xrt_math_random_i64(xrt_math_int_arg_or(min_value, 0), xrt_math_int_arg_or(max_value, 0)));
 }
 
 #endif  // XRT_MATH_H

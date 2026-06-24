@@ -9,7 +9,8 @@
  *
  * KEY CONCEPT:
  *   Thin wrappers over C math.h functions, exposed to xray scripts.
- *   All numeric functions accept both int and float arguments.
+ *   Floating math functions accept both int and float arguments; int-signed
+ *   APIs such as randomInt keep their declared int boundary.
  */
 
 #include "math.h"
@@ -445,16 +446,10 @@ static XrValue math_randomInt(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 2)
         return xr_int(0);
 
-    int64_t min_val = XR_IS_INT(args[0]) ? XR_TO_INT(args[0]) : (int64_t) get_number(args[0]);
-    int64_t max_val = XR_IS_INT(args[1]) ? XR_TO_INT(args[1]) : (int64_t) get_number(args[1]);
-
-    if (min_val > max_val) {
-        int64_t tmp = min_val;
-        min_val = max_val;
-        max_val = tmp;
-    }
-    if (min_val == max_val)
-        return xr_int(min_val);
+    int64_t min_val =
+        xr_math_core_int_arg_or(XR_IS_INT(args[0]), XR_IS_INT(args[0]) ? XR_TO_INT(args[0]) : 0, 0);
+    int64_t max_val =
+        xr_math_core_int_arg_or(XR_IS_INT(args[1]), XR_IS_INT(args[1]) ? XR_TO_INT(args[1]) : 0, 0);
 
     return xr_int(xr_math_core_random_i64(math_random_bytes, NULL, min_val, max_val));
 }
