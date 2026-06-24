@@ -11,6 +11,7 @@
 #include "../test_framework.h"
 #include "shared/xr_io_core.h"
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -106,6 +107,23 @@ typedef struct IoTouchFake {
     char created_path[32];
 } IoTouchFake;
 
+typedef struct IoRemoveAllNode {
+    const char *path;
+    XrIoCorePathKind kind;
+    const char *entries[8];
+    size_t entry_count;
+} IoRemoveAllNode;
+
+typedef struct IoRemoveAllFake {
+    IoRemoveAllNode nodes[8];
+    size_t node_count;
+    const char *fail_path;
+    char log[16][64];
+    size_t log_count;
+    size_t alloc_count;
+    size_t free_count;
+} IoRemoveAllFake;
+
 static size_t io_copy_fake_read(void *ctx, void *buf, size_t cap) {
     IoCopyFake *fake = (IoCopyFake *) ctx;
     if (fake->read_pos >= fake->src_len)
@@ -165,6 +183,73 @@ static bool io_touch_fake_create(void *ctx, const char *path) {
     fake->create_count++;
     strcpy(fake->created_path, path);
     return fake->create_ok;
+}
+
+static const IoRemoveAllNode *io_remove_all_fake_find(const IoRemoveAllFake *fake,
+                                                      const char *path) {
+    for (size_t i = 0; i < fake->node_count; i++) {
+        if (strcmp(fake->nodes[i].path, path) == 0)
+            return &fake->nodes[i];
+    }
+    return NULL;
+}
+
+static XrIoCorePathKind io_remove_all_fake_kind(void *ctx, const char *path) {
+    const IoRemoveAllNode *node = io_remove_all_fake_find((const IoRemoveAllFake *) ctx, path);
+    return node ? node->kind : XR_IO_CORE_PATH_MISSING;
+}
+
+static bool io_remove_all_fake_for_each(void *ctx, const char *path, XrIoCoreDirEntryFn visit,
+                                        void *visit_ctx) {
+    const IoRemoveAllNode *node = io_remove_all_fake_find((const IoRemoveAllFake *) ctx, path);
+    if (!node || node->kind != XR_IO_CORE_PATH_DIR)
+        return false;
+    for (size_t i = 0; i < node->entry_count; i++) {
+        if (!visit(visit_ctx, node->entries[i]))
+            return false;
+    }
+    return true;
+}
+
+static bool io_remove_all_fake_log(IoRemoveAllFake *fake, const char *kind, const char *path) {
+    if (fake->log_count >= 16)
+        return false;
+    snprintf(fake->log[fake->log_count++], sizeof(fake->log[0]), "%s:%s", kind, path);
+    return !fake->fail_path || strcmp(fake->fail_path, path) != 0;
+}
+
+static bool io_remove_all_fake_remove_leaf(void *ctx, const char *path) {
+    return io_remove_all_fake_log((IoRemoveAllFake *) ctx, "leaf", path);
+}
+
+static bool io_remove_all_fake_remove_dir(void *ctx, const char *path) {
+    return io_remove_all_fake_log((IoRemoveAllFake *) ctx, "dir", path);
+}
+
+static void *io_remove_all_fake_alloc(void *ctx, size_t size) {
+    IoRemoveAllFake *fake = (IoRemoveAllFake *) ctx;
+    fake->alloc_count++;
+    return malloc(size);
+}
+
+static void io_remove_all_fake_free(void *ctx, void *ptr) {
+    IoRemoveAllFake *fake = (IoRemoveAllFake *) ctx;
+    fake->free_count++;
+    free(ptr);
+}
+
+static XrIoCoreRemoveAllOps io_remove_all_fake_ops(IoRemoveAllFake *fake) {
+    XrIoCoreRemoveAllOps ops = {
+        .kind = io_remove_all_fake_kind,
+        .for_each_entry = io_remove_all_fake_for_each,
+        .remove_leaf = io_remove_all_fake_remove_leaf,
+        .remove_dir = io_remove_all_fake_remove_dir,
+        .alloc = io_remove_all_fake_alloc,
+        .free = io_remove_all_fake_free,
+        .alloc_ctx = fake,
+        .sep = '/',
+    };
+    return ops;
 }
 
 typedef struct IoReadFake {
@@ -496,6 +581,71 @@ TEST(io_core_touch_rejects_create_failure_and_invalid_args) {
     ASSERT_FALSE(xr_io_core_touch("x", io_touch_fake_update, NULL, &fake));
 }
 
+TEST(io_core_remove_all_recurses_depth_first_and_skips_dot_entries) {
+    IoRemoveAllFake fake = {
+        .nodes =
+            {
+                {.path = "root",
+                 .kind = XR_IO_CORE_PATH_DIR,
+                 .entries = {".", "..", "a", "sub"},
+                 .entry_count = 4},
+                {.path = "root/a", .kind = XR_IO_CORE_PATH_LEAF},
+                {.path = "root/sub",
+                 .kind = XR_IO_CORE_PATH_DIR,
+                 .entries = {"b"},
+                 .entry_count = 1},
+                {.path = "root/sub/b", .kind = XR_IO_CORE_PATH_LEAF},
+            },
+        .node_count = 4,
+    };
+    XrIoCoreRemoveAllOps ops = io_remove_all_fake_ops(&fake);
+
+    ASSERT_TRUE(xr_io_core_remove_all("root", &ops, &fake));
+    ASSERT_EQ_UINT(fake.log_count, 4);
+    ASSERT_STR_EQ(fake.log[0], "leaf:root/a");
+    ASSERT_STR_EQ(fake.log[1], "leaf:root/sub/b");
+    ASSERT_STR_EQ(fake.log[2], "dir:root/sub");
+    ASSERT_STR_EQ(fake.log[3], "dir:root");
+    ASSERT_EQ_UINT(fake.alloc_count, 3);
+    ASSERT_EQ_UINT(fake.free_count, 3);
+}
+
+TEST(io_core_remove_all_handles_leaf_and_missing_paths) {
+    IoRemoveAllFake fake = {
+        .nodes = {{.path = "file", .kind = XR_IO_CORE_PATH_LEAF}},
+        .node_count = 1,
+    };
+    XrIoCoreRemoveAllOps ops = io_remove_all_fake_ops(&fake);
+
+    ASSERT_TRUE(xr_io_core_remove_all("file", &ops, &fake));
+    ASSERT_EQ_UINT(fake.log_count, 1);
+    ASSERT_STR_EQ(fake.log[0], "leaf:file");
+    ASSERT_FALSE(xr_io_core_remove_all("missing", &ops, &fake));
+}
+
+TEST(io_core_remove_all_reports_child_failure_but_still_visits_parent_dirs) {
+    IoRemoveAllFake fake = {
+        .nodes =
+            {
+                {.path = "root", .kind = XR_IO_CORE_PATH_DIR, .entries = {"sub"}, .entry_count = 1},
+                {.path = "root/sub",
+                 .kind = XR_IO_CORE_PATH_DIR,
+                 .entries = {"bad"},
+                 .entry_count = 1},
+                {.path = "root/sub/bad", .kind = XR_IO_CORE_PATH_LEAF},
+            },
+        .node_count = 3,
+        .fail_path = "root/sub/bad",
+    };
+    XrIoCoreRemoveAllOps ops = io_remove_all_fake_ops(&fake);
+
+    ASSERT_FALSE(xr_io_core_remove_all("root", &ops, &fake));
+    ASSERT_EQ_UINT(fake.log_count, 3);
+    ASSERT_STR_EQ(fake.log[0], "leaf:root/sub/bad");
+    ASSERT_STR_EQ(fake.log[1], "dir:root/sub");
+    ASSERT_STR_EQ(fake.log[2], "dir:root");
+}
+
 TEST(io_core_read_sized_stream_alloc_reads_and_nul_terminates) {
     IoReadFake fake = {.src = "hello", .src_len = 5};
     size_t len = 99;
@@ -792,6 +942,11 @@ RUN_TEST_SUITE("IO Core - touch");
 RUN_TEST(io_core_touch_prefers_timestamp_update);
 RUN_TEST(io_core_touch_creates_when_update_fails);
 RUN_TEST(io_core_touch_rejects_create_failure_and_invalid_args);
+
+RUN_TEST_SUITE("IO Core - remove all");
+RUN_TEST(io_core_remove_all_recurses_depth_first_and_skips_dot_entries);
+RUN_TEST(io_core_remove_all_handles_leaf_and_missing_paths);
+RUN_TEST(io_core_remove_all_reports_child_failure_but_still_visits_parent_dirs);
 
 RUN_TEST_SUITE("IO Core - sized read");
 RUN_TEST(io_core_read_sized_stream_alloc_reads_and_nul_terminates);

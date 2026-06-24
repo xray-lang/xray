@@ -47,11 +47,11 @@
 #include <sys/utime.h>
 #include <windows.h>
 #else
+#include <dirent.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <utime.h>
-#include <ftw.h>
 #ifdef XR_OS_MACOS
 #include <copyfile.h>
 #elif defined(XR_OS_LINUX)
@@ -910,53 +910,97 @@ static bool io_touch_create(void *ctx, const char *path) {
 }
 
 #ifdef XR_OS_WINDOWS
-// Windows recursive removal using FindFirstFile/FindNextFile
-static bool remove_all_impl(const char *dir) {
-    char pattern[XR_PATH_MAX];
-    int n = snprintf(pattern, sizeof(pattern), "%s\\*", dir);
-    if (n <= 0 || n >= (int) sizeof(pattern))
+static XrIoCorePathKind io_remove_all_kind(void *ctx, const char *path) {
+    (void) ctx;
+    DWORD attrs = GetFileAttributesA(path);
+    if (attrs == INVALID_FILE_ATTRIBUTES)
+        return XR_IO_CORE_PATH_MISSING;
+    if ((attrs & FILE_ATTRIBUTE_DIRECTORY) && !(attrs & FILE_ATTRIBUTE_REPARSE_POINT))
+        return XR_IO_CORE_PATH_DIR;
+    return XR_IO_CORE_PATH_LEAF;
+}
+
+static bool io_remove_all_for_each_entry(void *ctx, const char *path, XrIoCoreDirEntryFn visit,
+                                         void *visit_ctx) {
+    (void) ctx;
+    size_t len = strlen(path);
+    char *pattern = (char *) xr_malloc(len + 4);
+    if (!pattern)
         return false;
+    memcpy(pattern, path, len);
+    pattern[len++] = '\\';
+    pattern[len++] = '*';
+    pattern[len] = '\0';
 
     WIN32_FIND_DATAA fd;
     HANDLE h = FindFirstFileA(pattern, &fd);
+    xr_free(pattern);
     if (h == INVALID_HANDLE_VALUE)
-        return RemoveDirectoryA(dir) || DeleteFileA(dir);
+        return GetLastError() == ERROR_FILE_NOT_FOUND;
 
     bool ok = true;
     do {
-        if (xr_io_core_is_dot_dir_entry(fd.cFileName))
-            continue;
-        char child[XR_PATH_MAX];
-        if (!xr_io_core_join_child_path(dir, '\\', fd.cFileName, child, sizeof(child))) {
+        if (!visit(visit_ctx, fd.cFileName)) {
             ok = false;
-            continue;
-        }
-        if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
-            if (!remove_all_impl(child))
-                ok = false;
-        } else {
-            SetFileAttributesA(child, FILE_ATTRIBUTE_NORMAL);
-            if (!DeleteFileA(child))
-                ok = false;
+            break;
         }
     } while (FindNextFileA(h, &fd));
     FindClose(h);
-    if (!RemoveDirectoryA(dir))
-        ok = false;
     return ok;
 }
+
+static bool io_remove_all_leaf(void *ctx, const char *path) {
+    (void) ctx;
+    DWORD attrs = GetFileAttributesA(path);
+    if (attrs != INVALID_FILE_ATTRIBUTES && (attrs & FILE_ATTRIBUTE_DIRECTORY))
+        return RemoveDirectoryA(path) != 0;
+    SetFileAttributesA(path, FILE_ATTRIBUTE_NORMAL);
+    return DeleteFileA(path) != 0;
+}
+
+static bool io_remove_all_dir(void *ctx, const char *path) {
+    (void) ctx;
+    return RemoveDirectoryA(path) != 0;
+}
 #else
-// POSIX removeAll helper callback.
-// FTW_PHYS is passed to nftw so that symlinks are *not* followed — the
-// callback therefore only observes entries inside the originally supplied
-// subtree, and remove() here will unlink the link itself instead of
-// traversing out of tree.
-static int remove_callback(const char *fpath, const struct stat *sb, int typeflag,
-                           struct FTW *ftwbuf) {
-    (void) sb;
-    (void) typeflag;
-    (void) ftwbuf;
-    return remove(fpath);
+static XrIoCorePathKind io_remove_all_kind(void *ctx, const char *path) {
+    (void) ctx;
+    struct stat st;
+    if (lstat(path, &st) != 0)
+        return XR_IO_CORE_PATH_MISSING;
+    if (S_ISDIR(st.st_mode) && !S_ISLNK(st.st_mode))
+        return XR_IO_CORE_PATH_DIR;
+    return XR_IO_CORE_PATH_LEAF;
+}
+
+static bool io_remove_all_for_each_entry(void *ctx, const char *path, XrIoCoreDirEntryFn visit,
+                                         void *visit_ctx) {
+    (void) ctx;
+    DIR *dir = opendir(path);
+    if (!dir)
+        return false;
+    bool ok = true;
+    for (;;) {
+        struct dirent *e = readdir(dir);
+        if (!e)
+            break;
+        if (!visit(visit_ctx, e->d_name)) {
+            ok = false;
+            break;
+        }
+    }
+    closedir(dir);
+    return ok;
+}
+
+static bool io_remove_all_leaf(void *ctx, const char *path) {
+    (void) ctx;
+    return remove(path) == 0;
+}
+
+static bool io_remove_all_dir(void *ctx, const char *path) {
+    (void) ctx;
+    return rmdir(path) == 0;
 }
 #endif
 
@@ -969,12 +1013,21 @@ static XrValue io_removeAll(XrVMRuntime *X, XrValue *args, int argc) {
     if (!path)
         return xr_bool(false);
 
+    XrIoCoreRemoveAllOps ops = {
+        .kind = io_remove_all_kind,
+        .for_each_entry = io_remove_all_for_each_entry,
+        .remove_leaf = io_remove_all_leaf,
+        .remove_dir = io_remove_all_dir,
+        .alloc = io_core_alloc,
+        .free = io_core_free,
+        .sep =
 #ifdef XR_OS_WINDOWS
-    return xr_bool(remove_all_impl(path));
+            '\\',
 #else
-    int ret = nftw(path, remove_callback, 64, FTW_DEPTH | FTW_PHYS);
-    return xr_bool(ret == 0);
+            '/',
 #endif
+    };
+    return xr_bool(xr_io_core_remove_all(path, &ops, NULL));
 }
 
 // chmod(path, mode) - Change file permissions

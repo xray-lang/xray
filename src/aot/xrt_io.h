@@ -561,13 +561,19 @@ static inline XrValue xrt_io_realpath(const char *path_data, int64_t path_len) {
 }
 
 #if defined(XR_OS_WINDOWS)
-static inline bool xrt_io_remove_all_impl(const char *path) {
+static inline XrIoCorePathKind xrt_io_remove_all_kind(void *ctx, const char *path) {
+    (void) ctx;
     DWORD attrs = GetFileAttributesA(path);
     if (attrs == INVALID_FILE_ATTRIBUTES)
-        return false;
-    if (!(attrs & FILE_ATTRIBUTE_DIRECTORY) || (attrs & FILE_ATTRIBUTE_REPARSE_POINT))
-        return DeleteFileA(path) != 0;
+        return XR_IO_CORE_PATH_MISSING;
+    if ((attrs & FILE_ATTRIBUTE_DIRECTORY) && !(attrs & FILE_ATTRIBUTE_REPARSE_POINT))
+        return XR_IO_CORE_PATH_DIR;
+    return XR_IO_CORE_PATH_LEAF;
+}
 
+static inline bool xrt_io_remove_all_for_each_entry(void *ctx, const char *path,
+                                                    XrIoCoreDirEntryFn visit, void *visit_ctx) {
+    (void) ctx;
     size_t len = strlen(path);
     char *pattern = (char *) XRT_MALLOC(len + 4);
     if (!pattern)
@@ -580,42 +586,47 @@ static inline bool xrt_io_remove_all_impl(const char *path) {
     WIN32_FIND_DATAA fd;
     HANDLE h = FindFirstFileA(pattern, &fd);
     XRT_FREE(pattern);
+    if (h == INVALID_HANDLE_VALUE)
+        return GetLastError() == ERROR_FILE_NOT_FOUND;
+
     bool ok = true;
-    if (h != INVALID_HANDLE_VALUE) {
-        do {
-            const char *name = fd.cFileName;
-            if (xr_io_core_is_dot_dir_entry(name))
-                continue;
-            size_t child_len = 0;
-            if (!xr_io_core_join_child_len(path, name, &child_len)) {
-                ok = false;
-                continue;
-            }
-            char *child = (char *) XRT_MALLOC(child_len + 1);
-            if (!child) {
-                ok = false;
-                continue;
-            }
-            if (!xr_io_core_join_child_path(path, '\\', name, child, child_len + 1)) {
-                XRT_FREE(child);
-                ok = false;
-                continue;
-            }
-            if (!xrt_io_remove_all_impl(child))
-                ok = false;
-            XRT_FREE(child);
-        } while (FindNextFileA(h, &fd));
-        FindClose(h);
-    }
-    return RemoveDirectoryA(path) != 0 && ok;
+    do {
+        if (!visit(visit_ctx, fd.cFileName)) {
+            ok = false;
+            break;
+        }
+    } while (FindNextFileA(h, &fd));
+    FindClose(h);
+    return ok;
+}
+
+static inline bool xrt_io_remove_all_leaf(void *ctx, const char *path) {
+    (void) ctx;
+    DWORD attrs = GetFileAttributesA(path);
+    if (attrs != INVALID_FILE_ATTRIBUTES && (attrs & FILE_ATTRIBUTE_DIRECTORY))
+        return RemoveDirectoryA(path) != 0;
+    SetFileAttributesA(path, FILE_ATTRIBUTE_NORMAL);
+    return DeleteFileA(path) != 0;
+}
+
+static inline bool xrt_io_remove_all_dir(void *ctx, const char *path) {
+    (void) ctx;
+    return RemoveDirectoryA(path) != 0;
 }
 #else
-static inline bool xrt_io_remove_all_impl(const char *path) {
+static inline XrIoCorePathKind xrt_io_remove_all_kind(void *ctx, const char *path) {
+    (void) ctx;
     struct stat st;
     if (lstat(path, &st) != 0)
-        return false;
+        return XR_IO_CORE_PATH_MISSING;
     if (!S_ISDIR(st.st_mode) || S_ISLNK(st.st_mode))
-        return remove(path) == 0;
+        return XR_IO_CORE_PATH_LEAF;
+    return XR_IO_CORE_PATH_DIR;
+}
+
+static inline bool xrt_io_remove_all_for_each_entry(void *ctx, const char *path,
+                                                    XrIoCoreDirEntryFn visit, void *visit_ctx) {
+    (void) ctx;
     DIR *dir = opendir(path);
     if (!dir)
         return false;
@@ -624,30 +635,23 @@ static inline bool xrt_io_remove_all_impl(const char *path) {
         struct dirent *e = readdir(dir);
         if (!e)
             break;
-        const char *name = e->d_name;
-        if (xr_io_core_is_dot_dir_entry(name))
-            continue;
-        size_t child_len = 0;
-        if (!xr_io_core_join_child_len(path, name, &child_len)) {
+        if (!visit(visit_ctx, e->d_name)) {
             ok = false;
-            continue;
+            break;
         }
-        char *child = (char *) XRT_MALLOC(child_len + 1);
-        if (!child) {
-            ok = false;
-            continue;
-        }
-        if (!xr_io_core_join_child_path(path, '/', name, child, child_len + 1)) {
-            XRT_FREE(child);
-            ok = false;
-            continue;
-        }
-        if (!xrt_io_remove_all_impl(child))
-            ok = false;
-        XRT_FREE(child);
     }
     closedir(dir);
-    return rmdir(path) == 0 && ok;
+    return ok;
+}
+
+static inline bool xrt_io_remove_all_leaf(void *ctx, const char *path) {
+    (void) ctx;
+    return remove(path) == 0;
+}
+
+static inline bool xrt_io_remove_all_dir(void *ctx, const char *path) {
+    (void) ctx;
+    return rmdir(path) == 0;
 }
 #endif
 
@@ -655,7 +659,21 @@ static inline XrValue xrt_io_remove_all(const char *path_data, int64_t path_len)
     char stack_path[512];
     char *owned = NULL;
     char *path = xrt_io_copy_cstr_arg(path_data, path_len, stack_path, sizeof(stack_path), &owned);
-    bool ok = path && xrt_io_remove_all_impl(path);
+    XrIoCoreRemoveAllOps ops = {
+        .kind = xrt_io_remove_all_kind,
+        .for_each_entry = xrt_io_remove_all_for_each_entry,
+        .remove_leaf = xrt_io_remove_all_leaf,
+        .remove_dir = xrt_io_remove_all_dir,
+        .alloc = xrt_io_core_alloc,
+        .free = xrt_io_core_free,
+        .sep =
+#if defined(XR_OS_WINDOWS)
+            '\\',
+#else
+            '/',
+#endif
+    };
+    bool ok = path && xr_io_core_remove_all(path, &ops, NULL);
     XRT_FREE(owned);
     return XR_FROM_BOOL(ok);
 }
