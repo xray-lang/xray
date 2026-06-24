@@ -2007,7 +2007,13 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         emit_vref(out, v->args[0]);
         fprintf(out, ");\n");
         emit_value_generated_line_reset(ctx, out, v);
-        fprintf(out, "    XrValue _chan_try_payload_%u = xr_aot_recv_payload(_chan_try_%u);\n",
+        /* The payload extracted from the runtime Recv ADT is in runtime
+         * representation; bridge it to xrt so heap payloads (e.g. Array) are
+         * indexed/released with the correct AOT representation. Matches the
+         * full-Recv path, which bridges via xr_aot_bridge_value_to_xrt. */
+        fprintf(out,
+                "    XrValue _chan_try_payload_%u = "
+                "xr_aot_bridge_value_to_xrt(xr_aot_recv_payload(_chan_try_%u));\n",
                 v->id, v->id);
         if (cg_coro_value_has_storage(f, v)) {
             char tmp[32];
