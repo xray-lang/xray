@@ -552,7 +552,10 @@ static inline XrValue xrt_io_realpath(const char *path_data, int64_t path_len) {
 #endif
     }
     XRT_FREE(owned);
-    return ok ? xrt_str_from_cstr(resolved) : XR_NULL_VAL;
+    XrIoCorePathView view;
+    return ok && xr_io_core_path_result_cstr_view(resolved, &view)
+               ? xrt_io_str_slice(view.data, view.len)
+               : XR_NULL_VAL;
 }
 
 #if defined(XR_OS_WINDOWS)
@@ -697,17 +700,17 @@ static inline XrValue xrt_io_readlink(const char *path_data, int64_t path_len) {
             DWORD len = GetFinalPathNameByHandleA(h, buf, sizeof(buf), FILE_NAME_NORMALIZED);
             CloseHandle(h);
             if (len > 0 && len < sizeof(buf)) {
-                const char *s = buf;
-                if (len >= 4 && buf[0] == '\\' && buf[1] == '\\' && buf[2] == '?' && buf[3] == '\\')
-                    s = buf + 4;
-                result = xrt_str_from_cstr(s);
+                XrIoCorePathView view;
+                if (xr_io_core_path_result_view(buf, (size_t) len, &view))
+                    result = xrt_io_str_slice(view.data, view.len);
             }
         }
 #else
         ssize_t len = readlink(path, buf, sizeof(buf) - 1);
         if (len >= 0) {
-            buf[len] = '\0';
-            result = xrt_io_str_slice(buf, (size_t) len);
+            XrIoCorePathView view;
+            if (xr_io_core_path_result_view(buf, (size_t) len, &view))
+                result = xrt_io_str_slice(view.data, view.len);
         }
 #endif
     }
