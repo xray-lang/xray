@@ -1,0 +1,22 @@
+let min: int = -9223372036854775807 - 1
+print(min.toString())
+print(min.abs())
+print(min.abs().toString())
+print(min.toHex())
+
+let neg = -15
+print(neg.toHex())
+print((255).toHex())
+
+let f = 3.7
+print(f.floor())
+print(typeof(f.floor()))
+print(f.ceil())
+print(typeof(f.ceil()))
+print(f.round())
+print(typeof(f.round()))
+
+let g = 1.25
+print(g.toFixed(2))
+print(g.toFixed(-3))
+print(g.toFixed(99))
