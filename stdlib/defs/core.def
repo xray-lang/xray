@@ -67,7 +67,7 @@ module time {
     argc: 1
     arg_spec: "v"
     aot_direct: false
-    link_object: "time"
+    link_object: false
     layer: "runtime"
     caps: "coro,timer"
   }

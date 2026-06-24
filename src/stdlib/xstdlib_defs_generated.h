@@ -114,7 +114,7 @@ static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"time", "monotonic", "(): int", "Monotonic time in milliseconds", "xr_time_monotonic", "normal", "", "xrt_time_monotonic", "", "value", "time.monotonic", "", "system", "", 0, false},
     {"time", "nanos", "(): int", "Monotonic time in nanoseconds", "xr_time_nanos", "normal", "", "xrt_time_nanos", "", "value", "time.nanos", "", "system", "", 0, false},
     {"time", "micros", "(): int", "Monotonic time in microseconds", "xr_time_micros", "normal", "", "xrt_time_micros", "", "value", "time.micros", "", "system", "", 0, false},
-    {"time", "sleep", "(ms: int): ()", "Sleep for milliseconds", "xr_time_sleep", "yieldable", "", "", "v", "value", "time", "", "runtime", "", 1, false},
+    {"time", "sleep", "(ms: int): ()", "Sleep for milliseconds", "xr_time_sleep", "yieldable", "", "", "v", "value", "", "", "runtime", "", 1, false},
     {"math", "abs", "(x: float): float", "Absolute value (preserves int)", "math_abs", "normal", "", "builtin", "", "value", "", "", "core", "builtin", 1, true},
     {"math", "floor", "(x: float): int", "Floor to integer", "math_floor", "normal", "", "builtin", "", "value", "", "", "core", "builtin", 1, true},
     {"math", "ceil", "(x: float): int", "Ceiling to integer", "math_ceil", "normal", "", "builtin", "", "value", "", "", "core", "builtin", 1, true},
