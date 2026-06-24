@@ -21,7 +21,7 @@
 #include "xisolate_api.h"
 #include "xclass_builder.h"
 #include "xclass_system.h"
-#include <string.h>
+#include "../../../shared/xr_strbuf_core.h"
 
 /* ========== Helpers ========== */
 
@@ -35,12 +35,15 @@ static void append_value(XrStringBuilder *sb, XrVMRuntime *iso, XrValue value) {
     } else if (XR_IS_FLOAT(value)) {
         xr_stringbuilder_append_float(sb, XR_TO_FLOAT(value));
     } else if (XR_IS_BOOL(value)) {
-        const char *s = XR_TO_BOOL(value) ? "true" : "false";
-        xr_stringbuilder_append_cstr(sb, s, strlen(s));
+        XrStrbufCoreSlice s =
+            xr_strbuf_core_literal_slice(XR_STRBUF_CORE_LITERAL_BOOL, XR_TO_BOOL(value));
+        xr_stringbuilder_append_cstr(sb, s.data, s.len);
     } else if (XR_IS_NULL(value)) {
-        xr_stringbuilder_append_cstr(sb, "null", 4);
+        XrStrbufCoreSlice s = xr_strbuf_core_literal_slice(XR_STRBUF_CORE_LITERAL_NULL, false);
+        xr_stringbuilder_append_cstr(sb, s.data, s.len);
     } else {
-        xr_stringbuilder_append_cstr(sb, "<object>", 8);
+        XrStrbufCoreSlice s = xr_strbuf_core_literal_slice(XR_STRBUF_CORE_LITERAL_OBJECT, false);
+        xr_stringbuilder_append_cstr(sb, s.data, s.len);
     }
 }
 

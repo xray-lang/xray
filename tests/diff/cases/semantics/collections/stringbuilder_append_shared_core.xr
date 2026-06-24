@@ -1,0 +1,11 @@
+let sb = new StringBuilder()
+sb.append("bool=")
+sb.append(true)
+sb.append("; null=")
+sb.append(null)
+sb.append("; range=")
+sb.append(1..4)
+let xs = [1, 2, 3]
+sb.append("; array=")
+sb.append(xs)
+print(sb.toString())
