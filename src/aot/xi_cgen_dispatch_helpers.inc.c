@@ -1103,6 +1103,32 @@ static void xicgen_as(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue 
     }
 }
 
+static void xicgen_checktype(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                             const char *prefix) {
+    (void) f;
+    (void) prefix;
+    XR_DCHECK(v->nargs >= 1, "xicgen_checktype: need arg");
+
+    int32_t tid = (int32_t) (v->aux_int >> 1);
+    bool allow_null = (v->aux_int & 1) != 0;
+    const char *tname = v->aux ? (const char *) v->aux : "unknown";
+    char err_buf[128];
+    snprintf(err_buf, sizeof(err_buf), "Type check failed: expected %s", tname);
+
+    XrRep to_rep = cg_value_plan_storage_rep(ctx, v);
+    const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, to_rep);
+    fprintf(out, "({ XrValue _ct = ");
+    emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
+    fprintf(out, "; int64_t _ct_tid = xrt_typeof_id(_ct); ");
+    fprintf(out, "if (_ct_tid != %" PRId32, tid);
+    if (allow_null && tid != 0)
+        fprintf(out, " && _ct_tid != 0");
+    fprintf(out, ") xrt_throw_exc(");
+    cg_emit_str_value(ctx, out, err_buf);
+    fprintf(out, "); _ct; })");
+    emit_conversion_suffix(out, conv_suffix);
+}
+
 static void xicgen_slice(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                          const char *prefix) {
     (void) ctx;

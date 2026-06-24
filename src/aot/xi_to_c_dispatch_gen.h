@@ -84,6 +84,7 @@
     X(SET_NEW, "xi.set.new", xicgen_set_new) \
     X(STR_CONCAT, "xi.str.concat", xicgen_str_concat) \
     X(AS, "xi.as", xicgen_as) \
+    X(CHECKTYPE, "xi.checktype", xicgen_checktype) \
     X(SLICE, "xi.slice", xicgen_slice) \
     X(RANGE, "xi.range", xicgen_range) \
     X(CHAN_RECV_STATUS, "xi.chan.recv.status", xicgen_chan_recv_status) \

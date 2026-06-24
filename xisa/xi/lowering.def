@@ -512,6 +512,12 @@
   :vm-bytecode (driver xi_emit_as)
   :aot-c (driver xicgen_as))
 
+(lower xi.checktype
+  :match ()
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_checktype)
+  :aot-c (driver xicgen_checktype))
+
 (lower xi.slice
   :match ()
   :required-targets (vm-bytecode aot-c)
