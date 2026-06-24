@@ -88,6 +88,15 @@ typedef struct IoCopyFake {
     bool read_error;
 } IoCopyFake;
 
+typedef struct IoWriteAllFake {
+    char dst[64];
+    size_t dst_len;
+    size_t max_chunk;
+    bool write_error;
+    bool stall;
+    size_t call_count;
+} IoWriteAllFake;
+
 static size_t io_copy_fake_read(void *ctx, void *buf, size_t cap) {
     IoCopyFake *fake = (IoCopyFake *) ctx;
     if (fake->read_pos >= fake->src_len)
@@ -114,6 +123,25 @@ static size_t io_copy_fake_write(void *ctx, const void *buf, size_t len) {
 
 static bool io_copy_fake_error(void *ctx) {
     return ((IoCopyFake *) ctx)->read_error;
+}
+
+static size_t io_write_all_fake_write(void *ctx, const void *buf, size_t len) {
+    IoWriteAllFake *fake = (IoWriteAllFake *) ctx;
+    fake->call_count++;
+    if (fake->stall)
+        return 0;
+    size_t n = len;
+    if (fake->max_chunk != 0 && n > fake->max_chunk)
+        n = fake->max_chunk;
+    if (fake->dst_len + n > sizeof(fake->dst))
+        n = sizeof(fake->dst) - fake->dst_len;
+    memcpy(fake->dst + fake->dst_len, buf, n);
+    fake->dst_len += n;
+    return n;
+}
+
+static bool io_write_all_fake_error(void *ctx) {
+    return ((IoWriteAllFake *) ctx)->write_error;
 }
 
 typedef struct IoReadFake {
@@ -386,6 +414,38 @@ TEST(io_core_copy_stream_rejects_invalid_callbacks_or_buffer) {
                                         io_copy_fake_error, buf, 0));
 }
 
+TEST(io_core_write_all_retries_short_writes) {
+    IoWriteAllFake fake = {.max_chunk = 2};
+    ASSERT_TRUE(
+        xr_io_core_write_all(&fake, io_write_all_fake_write, io_write_all_fake_error, "abcdef", 6));
+    ASSERT_EQ_UINT(fake.call_count, 3);
+    ASSERT_EQ_UINT(fake.dst_len, 6);
+    ASSERT_MEM_EQ(fake.dst, "abcdef", 6);
+}
+
+TEST(io_core_write_all_accepts_zero_length_without_data) {
+    IoWriteAllFake fake = {.stall = true};
+    ASSERT_TRUE(
+        xr_io_core_write_all(&fake, io_write_all_fake_write, io_write_all_fake_error, NULL, 0));
+    ASSERT_EQ_UINT(fake.call_count, 0);
+}
+
+TEST(io_core_write_all_rejects_error_after_full_write) {
+    IoWriteAllFake fake = {.write_error = true};
+    ASSERT_FALSE(
+        xr_io_core_write_all(&fake, io_write_all_fake_write, io_write_all_fake_error, "abc", 3));
+    ASSERT_EQ_UINT(fake.dst_len, 3);
+}
+
+TEST(io_core_write_all_rejects_no_progress_and_invalid_args) {
+    IoWriteAllFake fake = {.stall = true};
+    ASSERT_FALSE(
+        xr_io_core_write_all(&fake, io_write_all_fake_write, io_write_all_fake_error, "abc", 3));
+    ASSERT_FALSE(xr_io_core_write_all(&fake, NULL, io_write_all_fake_error, "abc", 3));
+    ASSERT_FALSE(
+        xr_io_core_write_all(&fake, io_write_all_fake_write, io_write_all_fake_error, NULL, 1));
+}
+
 TEST(io_core_read_sized_stream_alloc_reads_and_nul_terminates) {
     IoReadFake fake = {.src = "hello", .src_len = 5};
     size_t len = 99;
@@ -618,6 +678,12 @@ RUN_TEST(io_core_copy_stream_handles_exact_chunk_eof);
 RUN_TEST(io_core_copy_stream_rejects_short_write);
 RUN_TEST(io_core_copy_stream_rejects_read_error);
 RUN_TEST(io_core_copy_stream_rejects_invalid_callbacks_or_buffer);
+
+RUN_TEST_SUITE("IO Core - write all");
+RUN_TEST(io_core_write_all_retries_short_writes);
+RUN_TEST(io_core_write_all_accepts_zero_length_without_data);
+RUN_TEST(io_core_write_all_rejects_error_after_full_write);
+RUN_TEST(io_core_write_all_rejects_no_progress_and_invalid_args);
 
 RUN_TEST_SUITE("IO Core - sized read");
 RUN_TEST(io_core_read_sized_stream_alloc_reads_and_nul_terminates);

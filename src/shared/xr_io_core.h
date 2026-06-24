@@ -252,6 +252,21 @@ static inline bool xr_io_core_copy_stream(void *ctx, XrIoCoreReadFn read_fn,
     }
 }
 
+static inline bool xr_io_core_write_all(void *ctx, XrIoCoreWriteFn write_fn,
+                                        XrIoCoreErrorFn error_fn, const void *data, size_t len) {
+    if (!write_fn || (!data && len != 0))
+        return false;
+    const char *bytes = (const char *) data;
+    size_t off = 0;
+    while (off < len) {
+        size_t n = write_fn(ctx, bytes + off, len - off);
+        if (n == 0 || n > len - off)
+            return false;
+        off += n;
+    }
+    return error_fn ? !error_fn(ctx) : true;
+}
+
 static inline bool xr_io_core_is_sep(char ch) {
     return ch == '/' || ch == '\\';
 }

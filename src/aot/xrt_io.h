@@ -94,6 +94,10 @@ static inline size_t xrt_io_file_read(void *ctx, void *buf, size_t cap) {
     return fread(buf, 1, cap, (FILE *) ctx);
 }
 
+static inline size_t xrt_io_file_write(void *ctx, const void *buf, size_t len) {
+    return fwrite(buf, 1, len, (FILE *) ctx);
+}
+
 static inline bool xrt_io_file_error(void *ctx) {
     return ferror((FILE *) ctx) != 0;
 }
@@ -242,8 +246,9 @@ static inline XrValue xrt_io_write_buffer(const char *path, const char *data, si
     FILE *f = fopen(path, mode);
     if (!f)
         return XR_FROM_BOOL(false);
-    size_t written = len == 0 ? 0 : fwrite(data, 1, len, f);
-    bool ok = (written == len) && (fclose(f) == 0);
+    bool ok = xr_io_core_write_all(f, xrt_io_file_write, xrt_io_file_error, data, len);
+    bool close_ok = fclose(f) == 0;
+    ok = ok && close_ok;
     return XR_FROM_BOOL(ok);
 }
 
