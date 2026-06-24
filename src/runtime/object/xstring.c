@@ -16,6 +16,7 @@
 #include "../value/xtype.h"
 #include "../../base/xmalloc.h"
 #include "../../shared/xr_float_fmt.h"
+#include "../../shared/xr_numeric_core.h"
 #include "../../shared/xr_string_core.h"
 #include "../../base/xlog.h"
 #include "xarray.h"
@@ -198,54 +199,11 @@ XrString *xr_string_intern(XrVMRuntime *iso, const char *chars, size_t length, u
     return s;
 }
 
-// Fast integer to string (without snprintf)
-static inline int fast_int_to_str(xr_Integer i, char *buffer) {
-    char *p = buffer;
-    int neg = 0;
-    uint64_t uval;
-
-    // Extract digits in the unsigned domain to avoid UB on -INT64_MIN
-    // (negating INT64_MIN as a signed value overflows and previously
-    // produced garbage like "-(" for the most-negative integer).
-    if (i < 0) {
-        neg = 1;
-        uval = (uint64_t) (-(i + 1)) + 1;
-    } else {
-        uval = (uint64_t) i;
-    }
-
-    // Write digits in reverse
-    char *start = p;
-    do {
-        *p++ = '0' + (char) (uval % 10);
-        uval /= 10;
-    } while (uval > 0);
-
-    if (neg) {
-        *p++ = '-';
-    }
-
-    int len = (int) (p - start);
-    *p = '\0';
-
-    // Reverse string
-    char *end = p - 1;
-    while (start < end) {
-        char tmp = *start;
-        *start = *end;
-        *end = tmp;
-        start++;
-        end--;
-    }
-
-    return len;
-}
-
 // Create string from integer
 XrString *xr_string_from_int(XrVMRuntime *iso, xr_Integer i) {
     XR_DCHECK(iso != NULL, "string_from_int: NULL isolate");
     char buffer[32];
-    int len = fast_int_to_str(i, buffer);
+    int len = xr_numeric_core_format_i64(buffer, sizeof(buffer), i);
     return xr_string_intern(iso, buffer, len, 0);
 }
 

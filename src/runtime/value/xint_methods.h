@@ -26,6 +26,7 @@
 #include "../object/xbigint.h"
 #include "../symbol/xsymbol_table.h"
 #include "../../coro/xcoroutine.h"
+#include "../../shared/xr_numeric_core.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -41,7 +42,7 @@ static inline XrValue xr_int_to_string_method(XrVMRuntime *iso, XrValue self, Xr
     (void) argc;
     XR_DCHECK(iso != NULL, "xr_int_to_string_method: NULL isolate");
     char buffer[32];
-    int len = snprintf(buffer, sizeof(buffer), "%lld", (long long) XR_TO_INT(self));
+    int len = xr_numeric_core_format_i64(buffer, sizeof(buffer), XR_TO_INT(self));
     XrString *str = xr_string_intern(iso, buffer, (size_t) len, 0);
     return xr_string_value(str);
 }
@@ -57,7 +58,7 @@ static inline XrValue xr_int_abs_method(XrVMRuntime *iso, XrValue self, XrValue 
     xr_Integer v = XR_TO_INT(self);
     if (v >= 0)
         return xr_int(v);
-    return xr_int((xr_Integer) (-(uint64_t) v));
+    return xr_int(xr_numeric_core_i64_abs_wrap(v));
 }
 
 /* int.toBigInt() -> BigInt. Allocates. */
@@ -121,14 +122,8 @@ static inline XrValue xr_int_to_hex_method(XrVMRuntime *iso, XrValue self, XrVal
     (void) args;
     (void) argc;
     XR_DCHECK(iso != NULL, "xr_int_to_hex_method: NULL isolate");
-    xr_Integer v = XR_TO_INT(self);
     char buffer[32];
-    int len;
-    if (v < 0) {
-        len = snprintf(buffer, sizeof(buffer), "-0x%llX", (unsigned long long) (-v));
-    } else {
-        len = snprintf(buffer, sizeof(buffer), "0x%llX", (unsigned long long) v);
-    }
+    int len = xr_numeric_core_format_i64_hex(buffer, sizeof(buffer), XR_TO_INT(self));
     XrString *str = xr_string_intern(iso, buffer, (size_t) len, 0);
     return xr_string_value(str);
 }

@@ -18,6 +18,7 @@
 #include "object/xstring.h"
 #include "../base/xmalloc.h"
 #include "../shared/xr_float_fmt.h"
+#include "../shared/xr_numeric_core.h"
 #include <string.h>
 #include <stdlib.h>
 
@@ -138,44 +139,10 @@ void xr_strbuf_append_char(XrStrBuf *sb, char c) {
 }
 
 void xr_strbuf_append_int(XrStrBuf *sb, int64_t val) {
-    // Fast int-to-string (without snprintf)
-    // Use uint64_t to avoid UB on -INT64_MIN
     char buf[24];
-    char *p = buf;
-    int neg = 0;
-    uint64_t uval;
-
-    if (val < 0) {
-        neg = 1;
-        uval = (uint64_t) (-(val + 1)) + 1;
-    } else {
-        uval = (uint64_t) val;
-    }
-
-    // Write digits in reverse
-    char *start = p;
-    do {
-        *p++ = '0' + (char) (uval % 10);
-        uval /= 10;
-    } while (uval > 0);
-
-    if (neg) {
-        *p++ = '-';
-    }
-
-    int len = (int) (p - start);
-
-    // Reverse the string
-    char *end = p - 1;
-    while (start < end) {
-        char tmp = *start;
-        *start = *end;
-        *end = tmp;
-        start++;
-        end--;
-    }
-
-    xr_strbuf_append_cstr(sb, buf, (size_t) len);
+    int len = xr_numeric_core_format_i64(buf, sizeof(buf), val);
+    if (len > 0)
+        xr_strbuf_append_cstr(sb, buf, (size_t) len);
 }
 
 void xr_strbuf_append_float(XrStrBuf *sb, double val) {

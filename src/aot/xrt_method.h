@@ -22,6 +22,7 @@
 #include "xrt_range.h"
 #include "xrt_datetime.h"
 #include "../shared/xr_array_core.h"
+#include "../shared/xr_numeric_core.h"
 #include "../shared/xr_string_core.h"
 
 /* Builtin method symbol IDs. */
@@ -58,26 +59,7 @@ static inline int xrt_weak_value_is_heap_object(XrValue v) {
 static XrValue xrt_tostring(XrValue val, int slot_hint) {
     if (slot_hint == 1 || val.tag == XR_TAG_I64) {
         char tmp[32];
-        int n = 0;
-        int64_t v = val.i;
-        int64_t t = v;
-        if (t < 0) {
-            tmp[n++] = '-';
-            t = -t;
-        }
-        if (t == 0) {
-            tmp[n++] = '0';
-        } else {
-            char rev[20];
-            int r = 0;
-            while (t > 0) {
-                rev[r++] = '0' + (char) (t % 10);
-                t /= 10;
-            }
-            while (r > 0)
-                tmp[n++] = rev[--r];
-        }
-        tmp[n] = 0;
+        (void) xr_numeric_core_format_i64(tmp, sizeof(tmp), val.i);
         return xrt_str_from_cstr(tmp);
     }
     if (slot_hint == 2 || val.tag == XR_TAG_F64) {
@@ -374,12 +356,12 @@ static inline XrValue xrt_method_0(XrValue recv, int sym) {
         return xrt_datetime_method_0(recv, sym);
     if (recv.tag == XR_TAG_I64) {
         if (sym == XRT_SYM_ABS)
-            return XR_FROM_INT(recv.i < 0 ? -recv.i : recv.i);
+            return XR_FROM_INT(xr_numeric_core_i64_abs_wrap(recv.i));
         if (sym == XRT_SYM_TOSTRING)
             return xrt_tostring(recv, 1);
         if (sym == XRT_SYM_TOHEX) {
             char buf[32];
-            snprintf(buf, sizeof(buf), "0x%02" PRIX64, (uint64_t) recv.i);
+            (void) xr_numeric_core_format_i64_hex(buf, sizeof(buf), recv.i);
             return xrt_str_from_cstr(buf);
         }
     }
@@ -388,11 +370,11 @@ static inline XrValue xrt_method_0(XrValue recv, int sym) {
         if (sym == XRT_SYM_TOSTRING)
             return xrt_tostring(recv, 2);
         if (sym == XRT_SYM_FLOOR)
-            return XR_FROM_FLOAT(floor(v));
+            return XR_FROM_INT((int64_t) floor(v));
         if (sym == XRT_SYM_CEIL)
-            return XR_FROM_FLOAT(ceil(v));
+            return XR_FROM_INT((int64_t) ceil(v));
         if (sym == XRT_SYM_ROUND)
-            return XR_FROM_FLOAT(round(v));
+            return XR_FROM_INT((int64_t) round(v));
         if (sym == XRT_SYM_ABS)
             return XR_FROM_FLOAT(fabs(v));
         if (sym == XRT_SYM_SQRT)
@@ -630,7 +612,7 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
     /* toFixed(digits). */
     if (recv.tag == XR_TAG_F64 && sym == XRT_SYM_TOFIXED && arg0.tag == XR_TAG_I64) {
         char buf[64];
-        snprintf(buf, sizeof(buf), "%.*f", (int) arg0.i, recv.f);
+        (void) xr_numeric_core_format_fixed(buf, sizeof(buf), recv.f, arg0.i);
         return xrt_str_from_cstr(buf);
     }
     /* max/min accept int or float operands. */
