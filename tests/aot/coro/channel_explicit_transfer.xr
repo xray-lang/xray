@@ -1,0 +1,49 @@
+fn sent(r: SendResult) -> bool {
+    return match (r) {
+        SendResult.Sent -> true
+        _ -> false
+    }
+}
+
+fn recv_array(ch: Channel<Array<int>>) -> Array<int> {
+    return match (ch.recv()) {
+        Recv.Value(v) -> v
+        _ -> []
+    }
+}
+
+let send_ch: Channel<Array<int>> = Channel(1)
+let xs = [1, 2]
+send_ch.send(copy(xs))
+xs.push(3)
+let got_send = recv_array(send_ch)
+got_send.push(99)
+print(xs.length)
+print(got_send.length)
+send_ch.close()
+
+let try_ch: Channel<Array<int>> = Channel(1)
+let ys = [4, 5]
+print(sent(try_ch.trySend(copy(ys))))
+ys.push(6)
+let got_try = recv_array(try_ch)
+print(ys.length)
+print(got_try.length)
+try_ch.close()
+
+let timeout_ch: Channel<Array<int>> = Channel(1)
+let zs = [7, 8]
+print(sent(timeout_ch.sendTimeout(copy(zs), 0)))
+zs.push(9)
+let got_timeout = recv_array(timeout_ch)
+print(zs.length)
+print(got_timeout.length)
+timeout_ch.close()
+
+let move_ch: Channel<Array<int>> = Channel(1)
+let moved = [10, 11]
+move_ch.send(move moved)
+let got_move = recv_array(move_ch)
+print(got_move.length)
+print(got_move[0])
+move_ch.close()

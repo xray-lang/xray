@@ -24,6 +24,7 @@
 #ifndef XRT_VALUE_H
 #include "../runtime/value/xvalue.h"
 #endif
+#include "../runtime/value/xtransfer_mode.h"
 
 struct XrCoroutine;
 struct XrCoroHeap;
@@ -229,8 +230,12 @@ XR_FUNC XrAotResult xr_aot_await_task_resume(const XrAotContext *ctx, XrSlotRef 
 XR_FUNC XrValue xr_aot_channel_new(const XrAotContext *ctx, int64_t buffer_size);
 XR_FUNC XrValue xr_aot_chan_try_send(const XrAotContext *ctx, XrValue channel_value,
                                      XrValue send_value);
+XR_FUNC XrValue xr_aot_chan_try_send_transfer(const XrAotContext *ctx, XrValue channel_value,
+                                              XrValue send_value, uint8_t transfer_mode);
 XR_FUNC XrValue xr_aot_chan_try_send_ready(const XrAotContext *ctx, XrValue channel_value,
                                            XrValue send_value);
+XR_FUNC XrValue xr_aot_chan_try_send_ready_transfer(const XrAotContext *ctx, XrValue channel_value,
+                                                    XrValue send_value, uint8_t transfer_mode);
 XR_FUNC XrValue xr_aot_chan_try_send_sync(XrValue channel_value, XrValue send_value);
 
 static inline XrValue xr_aot_chan_try_send_i64(const XrAotContext *ctx, XrValue channel_value,
@@ -313,6 +318,9 @@ XR_FUNC XrValue xr_aot_result_group_is_closed_sync(XrValue group_value);
 XR_FUNC XrValue xr_aot_tuple_get(const XrAotContext *ctx, XrValue tuple_value, uint16_t index);
 XR_FUNC XrAotResult xr_aot_chan_send(const XrAotContext *ctx, XrValue channel_value,
                                      XrValue send_value, XrSlotRef result_slot, int64_t timeout_ms);
+XR_FUNC XrAotResult xr_aot_chan_send_transfer(const XrAotContext *ctx, XrValue channel_value,
+                                              XrValue send_value, XrSlotRef result_slot,
+                                              int64_t timeout_ms, uint8_t transfer_mode);
 XR_FUNC XrAotResult xr_aot_chan_send_i64(const XrAotContext *ctx, XrValue channel_value,
                                          int64_t send_value);
 XR_FUNC XrAotResult xr_aot_chan_send_f64(const XrAotContext *ctx, XrValue channel_value,
@@ -322,6 +330,15 @@ static inline XrAotResult xr_aot_chan_send_timeout(const XrAotContext *ctx, XrVa
                                                    XrValue send_value, int64_t timeout_ms,
                                                    XrSlotRef result_slot) {
     return xr_aot_chan_send(ctx, channel_value, send_value, result_slot, timeout_ms);
+}
+
+static inline XrAotResult xr_aot_chan_send_timeout_transfer(const XrAotContext *ctx,
+                                                            XrValue channel_value,
+                                                            XrValue send_value, int64_t timeout_ms,
+                                                            XrSlotRef result_slot,
+                                                            uint8_t transfer_mode) {
+    return xr_aot_chan_send_transfer(ctx, channel_value, send_value, result_slot, timeout_ms,
+                                     transfer_mode);
 }
 
 static inline XrAotResult xr_aot_chan_send_timeout_i64(const XrAotContext *ctx,

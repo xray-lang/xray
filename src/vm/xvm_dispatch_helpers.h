@@ -32,6 +32,7 @@
 #include "../runtime/mem/xsystem_heap.h"
 #include "../runtime/xerror_codes.h"
 #include "../runtime/xshared.h"
+#include "../runtime/value/xtransfer_mode.h"
 #include "../coro/xtimer_wheel.h"
 #include "../os/os_thread.h"
 
@@ -53,6 +54,19 @@ typedef enum {
     XR_DISP_GO_CHILD,    /* Spawned child coroutine needs immediate execution */
     XR_DISP_FATAL,       /* Unrecoverable error; abort VM loop */
 } XrDispatchAction;
+
+static inline uint8_t vm_channel_transfer_mode_before(const XrBcCallFrame *frame,
+                                                      XrInstruction *pc_after_current) {
+    if (!frame || !frame->closure || !frame->closure->proto || !pc_after_current)
+        return XR_TRANSFER_SHARE;
+    XrInstruction *base = PROTO_CODE_BASE(frame->closure->proto);
+    if (pc_after_current <= base + 1)
+        return XR_TRANSFER_SHARE;
+    XrInstruction prev = pc_after_current[-2];
+    if (GET_OPCODE(prev) != OP_NOP || GETARG_A(prev) != 6)
+        return XR_TRANSFER_SHARE;
+    return (uint8_t) (GETARG_Bx(prev) & XR_TRANSFER_MODE_MASK);
+}
 
 /* ========== Intern String Helper ========== */
 #define VM_INTERN(s) xr_string_intern(isolate, s, XR_STRLEN_LITERAL(s), 0)
@@ -317,7 +331,8 @@ static inline XrClass *invoke_resolve_class(XrayIsolate *isolate, XrValue receiv
 
 XR_FUNC XrDispatchAction vm_invoke_channel(XrayIsolate *isolate, XrVMContext *vm_ctx, XrChannel *ch,
                                            int method_symbol, int nargs, XrValue *base, int a,
-                                           XrBcCallFrame *frame, XrInstruction *pc);
+                                           XrBcCallFrame *frame, XrInstruction *pc,
+                                           uint8_t transfer_mode);
 XR_FUNC XrDispatchAction vm_invoke_task_handle(XrayIsolate *isolate, XrVMContext *vm_ctx,
                                                XrValue receiver, int method_symbol, int nargs,
                                                XrValue *base, int a, XrBcCallFrame *frame,
@@ -382,7 +397,7 @@ XR_FUNC XrDispatchAction vm_select_block(XrayIsolate *isolate, XrVMContext *vm_c
                                          XrInstruction *pc);
 XR_FUNC XrDispatchAction vm_chan_send(XrayIsolate *isolate, XrVMContext *vm_ctx,
                                       XrInstruction instr, XrValue *base, XrBcCallFrame *frame,
-                                      XrInstruction *pc);
+                                      XrInstruction *pc, uint8_t transfer_mode);
 XR_FUNC XrDispatchAction vm_chan_recv(XrayIsolate *isolate, XrVMContext *vm_ctx,
                                       XrInstruction instr, XrValue *base, XrBcCallFrame *frame,
                                       XrInstruction *pc);

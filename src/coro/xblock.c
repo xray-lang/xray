@@ -172,14 +172,15 @@ XrCoroBlockResult xr_coro_chan_recv_resume(XrCoroutine *coro, XrSlotRef value_sl
     return block_result(XR_CORO_BLOCK_NOT_RESUMED, xr_null(), false);
 }
 
-XrCoroBlockResult xr_coro_chan_send(XrCoroutine *coro, XrChannel *ch, XrValue value,
-                                    XrSlotRef result_slot, int64_t timeout_ms) {
+XrCoroBlockResult xr_coro_chan_send_transfer(XrCoroutine *coro, XrChannel *ch, XrValue value,
+                                             XrSlotRef result_slot, int64_t timeout_ms,
+                                             uint8_t transfer_mode) {
     XR_DCHECK(ch != NULL, "xr_coro_chan_send: NULL channel");
 
     bool had_ext = coro && coro->ext != NULL;
     XrRuntimeCore *core = channel_transfer_core(ch, coro);
     record_channel_ownership_metric(channel_transfer_stats_runtime(ch, coro), value, false);
-    value = xr_chan_prepare_send_core(core, value);
+    value = xr_chan_prepare_send_transfer_core(core, value, transfer_mode);
 
     if (timeout_ms == 0) {
         if (xr_channel_try_send(ch, value)) {
@@ -229,6 +230,11 @@ XrCoroBlockResult xr_coro_chan_send(XrCoroutine *coro, XrChannel *ch, XrValue va
 
     xr_slot_store_value(result_slot, xr_bool(false));
     return block_result(XR_CORO_BLOCK_ERROR, xr_null(), false);
+}
+
+XrCoroBlockResult xr_coro_chan_send(XrCoroutine *coro, XrChannel *ch, XrValue value,
+                                    XrSlotRef result_slot, int64_t timeout_ms) {
+    return xr_coro_chan_send_transfer(coro, ch, value, result_slot, timeout_ms, XR_TRANSFER_MOVE);
 }
 
 XrCoroBlockResult xr_coro_chan_recv(XrCoroutine *coro, XrChannel *ch, XrSlotRef value_slot,

@@ -129,18 +129,6 @@ static void emit_boxed_vref(FILE *out, const XiValue *v) {
     }
 }
 
-static void emit_coro_boundary_value(XiCgenCtx *ctx, FILE *out, const XiValue *v) {
-    if (xi_coro_value_needs_boundary_clone(v)) {
-        fprintf(out, "%s(",
-                xi_coro_value_has_json_type(v) ? "xrt_json_clone_for_coro"
-                                               : "xrt_value_clone_for_coro");
-        emit_value_as_rep_ctx(ctx, out, v, XR_REP_TAGGED);
-        fprintf(out, ")");
-        return;
-    }
-    emit_value_as_rep_ctx(ctx, out, v, XR_REP_TAGGED);
-}
-
 static void emit_coro_transfer_xrvalue(XiCgenCtx *ctx, FILE *out, const XiValue *v, uint8_t mode) {
     if (mode == XR_TRANSFER_COPY && xi_coro_value_needs_boundary_clone(v)) {
         fprintf(out, "%s(",
@@ -236,7 +224,7 @@ static void emit_coro_send_value(XiCgenCtx *ctx, FILE *out, const XiValue *send_
         emit_vref(out, send_arg);
         return;
     }
-    emit_coro_boundary_value(ctx, out, send_value);
+    emit_value_as_rep_ctx(ctx, out, send_value, XR_REP_TAGGED);
 }
 
 static const char *cg_coro_typed_recv_pair_helper(const XiFunc *f, const XiValue *v) {
@@ -1947,11 +1935,17 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         const XiValue *send_arg = NULL;
         const char *helper =
             cg_coro_typed_send_helper("xr_aot_chan_try_send_ready", v->args[1], &send_arg);
+        bool transfer_helper =
+            send_arg == NULL && strcmp(helper, "xr_aot_chan_try_send_ready") == 0;
+        if (transfer_helper)
+            helper = "xr_aot_chan_try_send_ready_transfer";
         emit_value_source_line(ctx, out, v);
         fprintf(out, "    XrValue _chan_try_%u = %s(ctx, ", v->id, helper);
         emit_vref(out, v->args[0]);
         fprintf(out, ", ");
         emit_coro_send_value(ctx, out, v->args[1], send_arg);
+        if (transfer_helper)
+            fprintf(out, ", %u", (unsigned) xi_chan_send_transfer_mode(v));
         fprintf(out, ");\n");
         emit_value_generated_line_reset(ctx, out, v);
         if (cg_coro_value_has_storage(f, v)) {
@@ -2472,6 +2466,9 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         const XiValue *send_arg = NULL;
         const char *helper =
             cg_coro_typed_send_helper("xr_aot_chan_send_timeout", v->args[1], &send_arg);
+        bool transfer_helper = send_arg == NULL && strcmp(helper, "xr_aot_chan_send_timeout") == 0;
+        if (transfer_helper)
+            helper = "xr_aot_chan_send_timeout_transfer";
         int sid = ++(*state_id);
         fprintf(out, "    f->state = %d;\n", sid);
         emit_value_source_line(ctx, out, v);
@@ -2483,6 +2480,8 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         emit_int64_arg(out, v->args[2]);
         fprintf(out, ", ");
         emit_coro_optional_slot_ref(ctx, out, f, prefix, v);
+        if (transfer_helper)
+            fprintf(out, ", %u", (unsigned) xi_chan_send_transfer_mode(v));
         fprintf(out, ");\n");
         emit_value_generated_line_reset(ctx, out, v);
         fprintf(out, "    if (_chan_send_timeout_%u.kind == XR_AOT_RUN_BLOCKED) {\n", v->id);
@@ -2558,6 +2557,9 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         const XiValue *send_value = v->args[1];
         const XiValue *send_arg = NULL;
         const char *helper = cg_coro_typed_send_helper("xr_aot_chan_send", send_value, &send_arg);
+        bool transfer_helper = send_arg == NULL && strcmp(helper, "xr_aot_chan_send") == 0;
+        if (transfer_helper)
+            helper = "xr_aot_chan_send_transfer";
         int sid = ++(*state_id);
         fprintf(out, "    f->state = %d;\n", sid);
         emit_value_source_line(ctx, out, v);
@@ -2565,7 +2567,9 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         emit_vref(out, channel);
         fprintf(out, ", ");
         emit_coro_send_value(ctx, out, send_value, send_arg);
-        if (strcmp(helper, "xr_aot_chan_send") == 0)
+        if (transfer_helper)
+            fprintf(out, ", xr_slot_none(), -1, %u", (unsigned) xi_chan_send_transfer_mode(v));
+        else if (strcmp(helper, "xr_aot_chan_send") == 0)
             fprintf(out, ", xr_slot_none(), -1");
         fprintf(out, ");\n");
         emit_value_generated_line_reset(ctx, out, v);
@@ -2761,11 +2765,16 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             const XiValue *send_arg = NULL;
             const char *helper =
                 cg_coro_typed_send_helper("xr_aot_chan_try_send", v->args[1], &send_arg);
+            bool transfer_helper = send_arg == NULL && strcmp(helper, "xr_aot_chan_try_send") == 0;
+            if (transfer_helper)
+                helper = "xr_aot_chan_try_send_transfer";
             emit_value_source_line(ctx, out, v);
             fprintf(out, "    XrValue _chan_method_%u = %s(ctx, ", v->id, helper);
             emit_vref(out, v->args[0]);
             fprintf(out, ", ");
             emit_coro_send_value(ctx, out, v->args[1], send_arg);
+            if (transfer_helper)
+                fprintf(out, ", %u", (unsigned) xi_chan_send_transfer_mode(v));
             fprintf(out, ");\n");
             emit_value_generated_line_reset(ctx, out, v);
             if (cg_coro_value_has_storage(f, v)) {

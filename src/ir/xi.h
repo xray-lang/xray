@@ -633,6 +633,8 @@ typedef struct XiValue {
     uint8_t flags;         /* XI_FLAG_* */
     uint8_t rep;           /* XrRep: machine representation (set by select_rep,
                             * default XR_REP_TAGGED until STAGE_REPPED) */
+    uint8_t transfer_mode; /* XrTransferMode for single-value coroutine boundaries.
+                            * Default 0 = SHARE. GO uses its per-arg aux table. */
     uint8_t escape;        /* XiEscapeLevel (2-bit): escape analysis result
                             * (set by xi_escape_analyze, default 0 = NO_ESCAPE) */
     uint8_t mem_group;     /* XiMemGroup (TBAA): memory group for alias analysis
@@ -652,6 +654,24 @@ static inline uint8_t xi_go_arg_transfer_mode(const XiValue *go, uint16_t arg_in
         return XR_TRANSFER_SHARE;
     const uint8_t *modes = (const uint8_t *) go->aux;
     return modes ? modes[arg_index] : XR_TRANSFER_SHARE;
+}
+
+static inline uint8_t xi_chan_send_transfer_mode(const XiValue *v) {
+    if (!v)
+        return XR_TRANSFER_SHARE;
+    switch (v->op) {
+        case XI_CHAN_SEND:
+        case XI_CHAN_TRY_SEND:
+        case XI_CALL_METHOD:
+            return v->transfer_mode;
+        default:
+            return XR_TRANSFER_SHARE;
+    }
+}
+
+static inline void xi_chan_send_set_transfer_mode(XiValue *v, uint8_t mode) {
+    if (v)
+        v->transfer_mode = mode;
 }
 
 #define XI_JSON_AUX_STORAGE_SHIFT 32

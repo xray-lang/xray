@@ -36,6 +36,24 @@ static bool emit_callee_is_plain_closure(EmitCtx *ctx, XiValue *callee) {
     return false;
 }
 
+static bool emit_call_is_channel_send_boundary(const XiValue *v) {
+    if (!v || v->op != XI_CALL_METHOD || v->nargs < 2 || !v->args[0] || !v->args[0]->type ||
+        v->args[0]->type->kind != XR_KIND_CHANNEL)
+        return false;
+    const char *method = (const char *) v->aux;
+    return method && (strcmp(method, "send") == 0 || strcmp(method, "trySend") == 0 ||
+                      strcmp(method, "sendTimeout") == 0);
+}
+
+static void emit_channel_method_transfer_annotation(EmitCtx *ctx, const XiValue *v) {
+    if (!emit_call_is_channel_send_boundary(v))
+        return;
+    uint8_t mode = xi_chan_send_transfer_mode(v);
+    if (mode == XR_TRANSFER_SHARE)
+        return;
+    emit_inst(ctx, CREATE_ABx(OP_NOP, 6, (uint32_t) mode));
+}
+
 /* Function call: args[0]=callee, args[1..n]=params
  * aux_int bits 0-7: flags (1=self_call)
  * aux_int bits 8-15: nresults (0 means 1) */
@@ -214,6 +232,7 @@ XR_FUNC void xi_emit_call_method(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         if (!xi_emit_symbol_index_to_arg(ctx, sym, &sym_arg))
             return;
         OpCode invoke_op = (v->flags & XI_FLAG_TAIL) ? OP_INVOKE_TAIL : OP_INVOKE;
+        emit_channel_method_transfer_annotation(ctx, v);
         emit_inst(ctx, CREATE_ABC(invoke_op, dst, sym_arg, nargs));
     }
 }

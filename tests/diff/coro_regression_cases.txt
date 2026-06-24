@@ -1,4 +1,4 @@
-# 123 M0 coroutine regression cases promoted into the VM/AOT diff net.
+# 124 M0 coroutine regression cases promoted into the VM/AOT diff net.
 # Keep this list to cases that are deterministic and currently compile/run on
 # both backends. Failing 11_coroutine cases remain tracked in the execution log.
 tests/regression/11_coroutine/1100_cancelled.xr
@@ -65,3 +65,4 @@ tests/regression/11_coroutine/1163_channel_send_opcode_preserves_receiver.xr
 tests/regression/11_coroutine/1164_channel_recv_raw_match_nullable_payload.xr
 tests/regression/11_coroutine/1165_result_group_native.xr
 tests/regression/11_coroutine/1166_channel_map_deep_copy_stress.xr
+tests/regression/11_coroutine/1167_channel_explicit_transfer.xr

@@ -115,7 +115,7 @@ fn test_move_pipeline() {
     let t1 = go fn(c: Channel<Json>, d: Json) {
         d.step = int(d.step) + 1
         print("stage1:", d.step)
-        c.send(d)
+        c.send(move d)
     }(ch, move msg)
 
     await t1

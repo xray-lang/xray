@@ -114,6 +114,7 @@ vmcase(OP_CHAN_NEW_NAMED) {
 
 vmcase(OP_CHAN_SEND) {
     TRACE_EXECUTION();
+    uint8_t _transfer_mode = vm_channel_transfer_mode_before(frame, pc);
     /* Inline buffered fast path: trylock hit + free slot + no waiters.
      * Flattens the three-call helper chain for the dominant buffered case.
      * Falls through to the out-of-line helper (the semantic authority) for
@@ -135,6 +136,8 @@ vmcase(OP_CHAN_SEND) {
         if (XR_UNLIKELY(_rt && _rt->sched_stats_enabled))
             break;
         XrValue _v = base[GETARG_C(i)];
+        if (_transfer_mode != XR_TRANSFER_MOVE && XR_IS_PTR(_v))
+            break;
         if (XR_IS_PTR(_v) && xr_value_needs_copy(_v))
             break;
         if (!xr_amutex_trylock(&_ch->lock))
@@ -157,7 +160,7 @@ vmcase(OP_CHAN_SEND) {
         }
         vmbreak;
     } while (0);
-    VM_DISPATCH(vm_chan_send(isolate, vm_ctx, i, base, frame, pc));
+    VM_DISPATCH(vm_chan_send(isolate, vm_ctx, i, base, frame, pc, _transfer_mode));
 }
 
 vmcase(OP_CHAN_RECV) {
@@ -215,7 +218,8 @@ vmcase(OP_CHAN_TRY_SEND) {
         vmbreak;
     }
     XrChannel *ch = xr_value_to_channel(ch_val);
-    R(a) = xr_bool(xr_chan_try_send(isolate, ch, R(c)));
+    uint8_t transfer_mode = vm_channel_transfer_mode_before(frame, pc);
+    R(a) = xr_bool(xr_chan_try_send_transfer(isolate, ch, R(c), transfer_mode));
     vmbreak;
 }
 

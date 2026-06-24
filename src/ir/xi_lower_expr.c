@@ -225,7 +225,7 @@ static bool lower_value_param_is_readonly_depth(XiFunc *callee, uint16_t pidx, i
                     continue;
                 if (lower_call_arg_is_readonly_forward(callee, user, a, depth))
                     continue;
-                if (xi_own_use_is_consuming(user->op, a))
+                if (xi_own_value_arg_is_consuming(user, a))
                     return false;
                 if ((xi_op_default_effects(user->op) | user->flags) & XI_FLAG_WRITES_MEM)
                     return false;
@@ -2031,6 +2031,35 @@ static bool lower_go_call_args(XiLower *l, CallExprNode *call, XiLowerGoArgList 
     return true;
 }
 
+static bool lower_boundary_transfer_arg(XiLower *l, AstNode *child, XiValue **out_value,
+                                        uint8_t *out_mode) {
+    if (out_value)
+        *out_value = NULL;
+    if (out_mode)
+        *out_mode = XR_TRANSFER_SHARE;
+    if (!child || !out_value || !out_mode)
+        return false;
+
+    uint8_t mode = XR_TRANSFER_SHARE;
+    AstNode *value_node = child;
+    if (child->type == AST_MOVE_EXPR) {
+        mode = XR_TRANSFER_MOVE;
+    } else {
+        AstNode *copy_inner = NULL;
+        if (lower_expr_is_copy_call(child, &copy_inner) && copy_inner) {
+            mode = XR_TRANSFER_COPY;
+            value_node = copy_inner;
+        }
+    }
+
+    XiValue *value = xi_lower_expr(l, value_node);
+    if (!value)
+        return false;
+    *out_value = value;
+    *out_mode = mode;
+    return true;
+}
+
 /* Lower Coro.method(args...) → XI_CORO_OP.
  * Returns NULL for unrecognized methods. */
 static XiValue *lower_coro_method(XiLower *l, AstNode *node, const char *method,
@@ -2326,6 +2355,70 @@ static XiValue *lower_enum_method_direct_call(XiLower *l, AstNode *node, CallExp
     return v;
 }
 
+static bool lower_is_direct_arg(AstNode *arg) {
+    return arg && arg->type != AST_SPREAD_EXPR;
+}
+
+static bool lower_is_channel_send_boundary_method(const char *method) {
+    return method && (strcmp(method, "send") == 0 || strcmp(method, "trySend") == 0 ||
+                      strcmp(method, "sendTimeout") == 0);
+}
+
+static XiValue *lower_channel_send_boundary_call(XiLower *l, AstNode *node, CallExprNode *call,
+                                                 const char *method, XiValue *recv) {
+    if (!recv || !recv->type || recv->type->kind != XR_KIND_CHANNEL ||
+        !lower_is_channel_send_boundary_method(method))
+        return NULL;
+    int want_args = strcmp(method, "sendTimeout") == 0 ? 2 : 1;
+    if (call->arg_count != want_args || !lower_is_direct_arg(call->arguments[0]))
+        return NULL;
+    if (want_args == 2 && !lower_is_direct_arg(call->arguments[1]))
+        return NULL;
+
+    XiValue *payload = NULL;
+    uint8_t transfer_mode = XR_TRANSFER_SHARE;
+    if (!lower_boundary_transfer_arg(l, call->arguments[0], &payload, &transfer_mode))
+        return NULL;
+    XiValue *timeout = NULL;
+    if (want_args == 2) {
+        timeout = xi_lower_expr(l, call->arguments[1]);
+        if (!timeout)
+            return NULL;
+    }
+
+    struct XrType *result_type = xi_lower_node_type(l, node);
+    if (strcmp(method, "send") == 0) {
+        XiValue *v = xi_value_new(l->func, l->cur_block, XI_CHAN_SEND, l->type_unit, 2);
+        if (!v)
+            return NULL;
+        v->args[0] = recv;
+        v->args[1] = payload;
+        xi_chan_send_set_transfer_mode(v, transfer_mode);
+        v->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW | XI_FLAG_MAY_SUSPEND;
+        v->line = (uint32_t) node->line;
+        return v;
+    }
+
+    uint16_t nargs = (uint16_t) (want_args + 1);
+    XiValue *v = xi_value_new(l->func, l->cur_block, XI_CALL_METHOD, result_type, nargs);
+    if (!v)
+        return NULL;
+    v->args[0] = recv;
+    v->args[1] = payload;
+    if (want_args == 2) {
+        v->args[2] = timeout;
+    }
+    v->aux = (void *) arena_strdup(l->func, method);
+    v->aux_int = (int64_t) xi_lower_method_symbol(l, method) << 1;
+    xi_chan_send_set_transfer_mode(v, transfer_mode);
+    v->flags |= XI_FLAG_SIDE_EFFECT;
+    if (xi_lower_method_may_suspend(recv->type, method, want_args))
+        v->flags |= XI_FLAG_MAY_SUSPEND;
+    v->line = (uint32_t) node->line;
+    xi_lower_insert_err_check(l, node);
+    return v;
+}
+
 static XiValue *lower_call(XiLower *l, AstNode *node) {
     CallExprNode *call = &node->as.call_expr;
 
@@ -2410,6 +2503,10 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
         XiValue *recv = xi_lower_expr(l, ma->object);
         if (!recv)
             return NULL;
+
+        XiValue *chan_send = lower_channel_send_boundary_call(l, node, call, ma->name, recv);
+        if (chan_send)
+            return chan_send;
 
         XiValue *stack_args[XI_LOWER_CALL_ARG_STACK_CAP];
         XiLowerArgList args;

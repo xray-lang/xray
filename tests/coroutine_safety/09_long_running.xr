@@ -30,12 +30,12 @@ fn test_cpu_intensive_fairness() {
         for (let i = 0; i < 10000; i++) {
             sum = sum + i
         }
-        results.send({ "id" => id, "sum" => sum })
+        results.send(copy({ "id" => id, "sum" => sum }))
         return sum
     }
     // 轻量级任务
     fn light_task(id) {
-        results.send({ "id" => id, "type" => "light" })
+        results.send(copy({ "id" => id, "type" => "light" }))
         return id
     }
     // 同时启动 CPU 密集型和轻量级任务
@@ -130,7 +130,7 @@ fn test_yield_behavior() {
     // 协作式让出的任务
     fn cooperative_task(id) {
         for (let i = 0; i < 5; i++) {
-            log.send({ "id" => id, "step" => i })
+            log.send(copy({ "id" => id, "step" => i }))
         }
         return id
     }

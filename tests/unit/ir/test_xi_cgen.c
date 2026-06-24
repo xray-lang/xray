@@ -4011,10 +4011,10 @@ TEST(cgen_coro_sync_go_wrappers_only_for_go_targets) {
     xi_func_free(ir);
 }
 
-TEST(cgen_coro_channel_send_clones_value) {
-    const char *src = "let ch = Channel<Array<int>>(1)\n"
+TEST(cgen_coro_channel_send_copy_uses_transfer_helper) {
+    const char *src = "let ch: Channel<Array<int>> = Channel(1)\n"
                       "let xs = [1, 2]\n"
-                      "ch.send(xs)\n";
+                      "ch.send(copy(xs))\n";
 
     XiFunc *ir = compile_to_ir(src);
     assert(ir != NULL && "IR compilation failed");
@@ -4023,14 +4023,16 @@ TEST(cgen_coro_channel_send_clones_value) {
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "AOT channel send should generate");
-    assert(contains(code, "xr_aot_chan_send(ctx,") && "channel send must use the AOT bridge");
-    assert(nonzero_state_precedes_call(code, "xr_aot_chan_send(ctx,") &&
+    assert(contains(code, "xr_aot_chan_send_transfer(ctx,") &&
+           "boxed channel copy send must use the transfer-aware AOT bridge");
+    assert(nonzero_state_precedes_call(code, "xr_aot_chan_send_transfer(ctx,") &&
            "channel send must publish the AOT resume state before runtime blocking");
-    assert(contains(code, "xr_aot_chan_send(ctx, ") &&
-           contains(code, "xrt_value_clone_for_coro(") &&
-           "channel send values must be cloned at the coroutine boundary");
+    assert(contains(code, ", xr_slot_none(), -1, 1);") &&
+           "copy send must encode XR_TRANSFER_COPY at the runtime boundary");
+    assert(!contains(code, "xrt_value_clone_for_coro(") &&
+           "copy send must not clone before the transfer-aware channel helper");
 
-    printf("  Generated channel send clone %zu bytes of C code\n", strlen(code));
+    printf("  Generated channel send transfer %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
@@ -5057,7 +5059,7 @@ int main(void) {
     run_cgen_coro_go_zero_state_sync_wrapper_has_nonempty_frame();
     run_cgen_sync_functions_without_go_emit_no_aot_wrappers();
     run_cgen_coro_sync_go_wrappers_only_for_go_targets();
-    run_cgen_coro_channel_send_clones_value();
+    run_cgen_coro_channel_send_copy_uses_transfer_helper();
     run_cgen_coro_scalar_channel_send_skips_clone();
     run_cgen_coro_unit_match_send_omits_void_phi();
     run_cgen_coro_scalar_channel_try_send_uses_typed_bridge();
