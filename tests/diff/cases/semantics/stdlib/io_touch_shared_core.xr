@@ -1,0 +1,24 @@
+// anchor: io-touch-shared-core
+import io
+
+let root = io.tempDir() ?? ""
+let file = root + "/touch.txt"
+
+print(io.touch(file))
+print(io.exists(file))
+print(io.fileSize(file))
+
+print(io.writeFile(file, "payload"))
+let before = io.stat(file)
+print(before != null)
+print(io.touch(file))
+let after = io.stat(file)
+print(after != null)
+print(io.readFile(file) == "payload")
+if (before != null && after != null) {
+    print(after.mtime >= before.mtime)
+} else {
+    print(false)
+}
+
+print(io.removeAll(root))
