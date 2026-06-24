@@ -354,7 +354,8 @@ typedef enum {
     XI_TIME_AFTER,         /* time.after(ms): args[0]=timeout_ms, returns timer channel */
     XI_CHAN_TIMER_DISPOSE, /* dispose select-owned timer channel: args[0]=timer chan */
     XI_SELECT_BLOCK,       /* blocking select wait: args[0..n]=channels */
-    XI_YIELD,              /* yield execution */
+    XI_YIELD,              /* cooperative yield (Coro.yield / Gosched) */
+    XI_GEN_YIELD,          /* generator `yield expr`: args[0]=value, suspend */
     /* Exception handling (legacy, retained for panic) */
     XI_THROW, /* throw exception: args[0]=value */
 

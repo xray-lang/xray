@@ -600,6 +600,11 @@
   :required-targets (vm-bytecode)
   :vm-bytecode (driver xi_emit_yield))
 
+(lower xi.gen.yield
+  :match ()
+  :required-targets (vm-bytecode)
+  :vm-bytecode (driver xi_emit_gen_yield))
+
 (lower xi.coro.op
   :match ()
   :required-targets (vm-bytecode)

@@ -307,6 +307,20 @@ XR_FUNC void xi_emit_yield(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     emit_inst(ctx, CREATE_ABC(OP_YIELD, (int) hint, 0, 0));
 }
 
+/* Generator value yield: `yield expr`. A = register holding the value to hand
+ * to the driving iterator; the generator coroutine suspends. */
+XR_FUNC void xi_emit_gen_yield(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    (void) dst;
+    if (!v || v->nargs < 1) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+    XiEmitReg src = reg_of(ctx, v->args[0]);
+    if (ctx->status != XI_EMIT_OK)
+        return;
+    emit_inst(ctx, CREATE_ABC(OP_GEN_YIELD, src, 0, 0));
+}
+
 /* Channel new */
 XR_FUNC void xi_emit_chan_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     uint8_t elem_tid = (uint8_t) v->aux_int;

@@ -834,10 +834,13 @@ static void canon_node(XrCanonCtx *ctx, AstNode *node) {
         case AST_IMPORT_STMT:
         case AST_TYPE_ALIAS:
         case AST_INTERFACE_DECL:
-        case AST_YIELD_STMT:
         case AST_PATTERN_LITERAL:
         case AST_PATTERN_WILDCARD:
         case AST_PATTERN_MULTI:
+            break;
+
+        case AST_YIELD_STMT:
+            canon_node(ctx, node->as.yield_stmt.value);
             break;
 
         case AST_PATTERN_RANGE:

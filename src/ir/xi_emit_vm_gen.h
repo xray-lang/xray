@@ -112,6 +112,7 @@
     X(CHAN_TIMER_DISPOSE, xi_emit_chan_timer_dispose) \
     X(SELECT_BLOCK, xi_emit_select_block) \
     X(YIELD, xi_emit_yield) \
+    X(GEN_YIELD, xi_emit_gen_yield) \
     X(CORO_OP, xi_emit_coro_op) \
     X(CHAN_NEW, xi_emit_chan_new) \
     X(DEFER, xi_emit_defer) \
