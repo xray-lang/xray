@@ -738,6 +738,25 @@ TEST(io_core_stat_fields_normalize_mode_and_preserve_metadata) {
     ASSERT_TRUE(fields.is_symlink);
 }
 
+TEST(io_core_chmod_mode_accepts_nonnegative_int_range) {
+    int mode = -1;
+    ASSERT_TRUE(xr_io_core_chmod_mode(0644, &mode));
+    ASSERT_EQ_INT(mode, 0644);
+    ASSERT_TRUE(xr_io_core_chmod_mode(0, &mode));
+    ASSERT_EQ_INT(mode, 0);
+    ASSERT_TRUE(xr_io_core_chmod_mode(INT_MAX, &mode));
+    ASSERT_EQ_INT(mode, INT_MAX);
+}
+
+TEST(io_core_chmod_mode_rejects_negative_overflow_and_invalid_output) {
+    int mode = 123;
+    ASSERT_FALSE(xr_io_core_chmod_mode(-1, &mode));
+    ASSERT_EQ_INT(mode, 0);
+    ASSERT_FALSE(xr_io_core_chmod_mode((int64_t) INT_MAX + 1, &mode));
+    ASSERT_EQ_INT(mode, 0);
+    ASSERT_FALSE(xr_io_core_chmod_mode(0644, NULL));
+}
+
 TEST_MAIN_BEGIN()
 
 RUN_TEST_SUITE("IO Core - readLines");
@@ -804,5 +823,9 @@ RUN_TEST(io_core_path_result_view_rejects_invalid_args_and_resets_output);
 RUN_TEST_SUITE("IO Core - stat");
 RUN_TEST(io_core_stat_field_names_are_shared_schema);
 RUN_TEST(io_core_stat_fields_normalize_mode_and_preserve_metadata);
+
+RUN_TEST_SUITE("IO Core - chmod");
+RUN_TEST(io_core_chmod_mode_accepts_nonnegative_int_range);
+RUN_TEST(io_core_chmod_mode_rejects_negative_overflow_and_invalid_output);
 
 TEST_MAIN_END()

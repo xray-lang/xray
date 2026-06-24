@@ -510,8 +510,10 @@ static inline XrValue xrt_io_chmod_value(const char *path_data, int64_t path_len
     char stack_path[512];
     char *owned = NULL;
     char *path = xrt_io_copy_cstr_arg(path_data, path_len, stack_path, sizeof(stack_path), &owned);
-    int mode = (int) xr_value_to_int64_coerce(mode_value);
-    bool ok = path && xrt_io_platform_chmod(path, mode) == 0;
+    int mode = 0;
+    bool ok = path && XR_IS_INT(mode_value) &&
+              xr_io_core_chmod_mode(XR_TO_INT(mode_value), &mode) &&
+              xrt_io_platform_chmod(path, mode) == 0;
     XRT_FREE(owned);
     return XR_FROM_BOOL(ok);
 }
