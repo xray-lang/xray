@@ -1754,6 +1754,16 @@ static bool xicgen_emit_direct_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f
     return true;
 }
 
+static bool xicgen_value_sources_null_const(const XiValue *v, uint8_t depth) {
+    if (!v || depth > 8)
+        return false;
+    if (v->op == XI_CONST && v->type && v->type->kind == XR_KIND_NULL)
+        return true;
+    if ((v->op == XI_BOX || v->op == XI_UNBOX || v->op == XI_CONVERT) && v->nargs >= 1)
+        return xicgen_value_sources_null_const(v->args[0], (uint8_t) (depth + 1));
+    return false;
+}
+
 static bool xicgen_emit_stringbuilder_append(FILE *out, const XiValue *v, const char *method,
                                              uint16_t nargs) {
     const XrType *recv_type = v->nargs > 0 && v->args[0] ? v->args[0]->type : NULL;
@@ -1765,7 +1775,10 @@ static bool xicgen_emit_stringbuilder_append(FILE *out, const XiValue *v, const 
     fprintf(out, "(xrt_strbuf_append(");
     emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
     fprintf(out, ", ");
-    emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
+    if (xicgen_value_sources_null_const(v->args[1], 0))
+        fprintf(out, "XR_NULL_VAL");
+    else
+        emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
     fprintf(out, "), ");
     emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
     fprintf(out, ")");

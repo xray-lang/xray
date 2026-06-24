@@ -21,6 +21,7 @@
 #include "../shared/xr_float_fmt.h"
 #include "../shared/xr_map_set_abi.h"
 #include "../shared/xr_numeric_core.h"
+#include "../shared/xr_strbuf_core.h"
 #include "../shared/xr_string_core.h"
 #include "../shared/xr_typed_ops.h"
 #include <string.h>
@@ -414,15 +415,25 @@ static inline void xrt_strbuf_grow(xrt_strbuf_t *sb, int64_t need) {
     sb->buf = tmp;
 }
 
+static inline void xrt_strbuf_append_bytes(xrt_strbuf_t *sb, const char *data, size_t len) {
+    if (!data || len == 0)
+        return;
+    if (XR_UNLIKELY(len > (size_t) INT64_MAX)) {
+        fprintf(stderr, "xrt_strbuf_append: string too long\n");
+        abort();
+    }
+    xrt_strbuf_grow(sb, (int64_t) len);
+    memcpy(sb->buf + sb->len, data, len);
+    sb->len += (int64_t) len;
+    sb->buf[sb->len] = 0;
+}
+
 static inline void xrt_strbuf_append(XrValue sbv, XrValue val) {
     xrt_strbuf_t *sb = (xrt_strbuf_t *) sbv.ptr;
     if (val.tag == XR_TAG_STR || val.tag == XR_TAG_STR_ARC) {
         const char *s = xr_str_data(val);
         int64_t slen = xr_str_len(val);
-        xrt_strbuf_grow(sb, slen);
-        memcpy(sb->buf + sb->len, s, (size_t) slen);
-        sb->len += slen;
-        sb->buf[sb->len] = 0;
+        xrt_strbuf_append_bytes(sb, s, (size_t) slen);
     } else if (val.tag == XR_TAG_I64) {
         char tmp[24];
         int n = xr_numeric_core_format_i64(tmp, sizeof(tmp), val.i);
@@ -430,29 +441,24 @@ static inline void xrt_strbuf_append(XrValue sbv, XrValue val) {
             fprintf(stderr, "xrt_strbuf_append: integer formatting failed\n");
             abort();
         }
-        xrt_strbuf_grow(sb, n);
-        memcpy(sb->buf + sb->len, tmp, (size_t) n);
-        sb->len += n;
-        sb->buf[sb->len] = 0;
+        xrt_strbuf_append_bytes(sb, tmp, (size_t) n);
     } else if (val.tag == XR_TAG_F64) {
         char tmp[64];
         int n = xr_format_float(tmp, sizeof(tmp), val.f);
-        xrt_strbuf_grow(sb, n);
-        memcpy(sb->buf + sb->len, tmp, (size_t) n);
-        sb->len += n;
-        sb->buf[sb->len] = 0;
+        if (XR_UNLIKELY(n < 0)) {
+            fprintf(stderr, "xrt_strbuf_append: float formatting failed\n");
+            abort();
+        }
+        xrt_strbuf_append_bytes(sb, tmp, (size_t) n);
     } else if (val.tag == XR_TAG_BOOL) {
-        const char *bs = val.i ? "true" : "false";
-        int blen = val.i ? 4 : 5;
-        xrt_strbuf_grow(sb, blen);
-        memcpy(sb->buf + sb->len, bs, (size_t) blen);
-        sb->len += blen;
-        sb->buf[sb->len] = 0;
+        XrStrbufCoreSlice s = xr_strbuf_core_literal_slice(XR_STRBUF_CORE_LITERAL_BOOL, val.i != 0);
+        xrt_strbuf_append_bytes(sb, s.data, s.len);
     } else if (val.tag == XR_TAG_NULL) {
-        xrt_strbuf_grow(sb, 4);
-        memcpy(sb->buf + sb->len, "null", 4);
-        sb->len += 4;
-        sb->buf[sb->len] = 0;
+        XrStrbufCoreSlice s = xr_strbuf_core_literal_slice(XR_STRBUF_CORE_LITERAL_NULL, false);
+        xrt_strbuf_append_bytes(sb, s.data, s.len);
+    } else {
+        XrStrbufCoreSlice s = xr_strbuf_core_literal_slice(XR_STRBUF_CORE_LITERAL_OBJECT, false);
+        xrt_strbuf_append_bytes(sb, s.data, s.len);
     }
 }
 
