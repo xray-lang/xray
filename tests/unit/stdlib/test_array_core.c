@@ -23,6 +23,15 @@ typedef struct JoinParts {
     const char **parts;
 } JoinParts;
 
+typedef struct ArrayHofTestCtx {
+    XrValue input[8];
+    XrValue output[8];
+    int64_t read_order[8];
+    int64_t write_order[8];
+    int read_count;
+    int write_count;
+} ArrayHofTestCtx;
+
 static bool join_parts_element(void *ctx, int64_t index, char *dst, size_t *len) {
     JoinParts *parts = (JoinParts *) ctx;
     if (!parts || index < 0)
@@ -36,6 +45,34 @@ static bool join_parts_element(void *ctx, int64_t index, char *dst, size_t *len)
     if (len)
         *len = n;
     return true;
+}
+
+static XrValue array_hof_test_read(void *ctx_ptr, int64_t index) {
+    ArrayHofTestCtx *ctx = (ArrayHofTestCtx *) ctx_ptr;
+    ctx->read_order[ctx->read_count++] = index;
+    return ctx->input[index];
+}
+
+static XrValue array_hof_test_map_double(void *ctx_ptr, XrValue value) {
+    (void) ctx_ptr;
+    return XR_FROM_INT(XR_TO_INT(value) * 2);
+}
+
+static bool array_hof_test_write(void *ctx_ptr, int64_t index, XrValue value) {
+    ArrayHofTestCtx *ctx = (ArrayHofTestCtx *) ctx_ptr;
+    ctx->write_order[ctx->write_count++] = index;
+    ctx->output[index] = value;
+    return true;
+}
+
+static bool array_hof_test_predicate_odd(void *ctx_ptr, XrValue value) {
+    (void) ctx_ptr;
+    return (XR_TO_INT(value) & 1) != 0;
+}
+
+static XrValue array_hof_test_reduce_digits(void *ctx_ptr, XrValue acc, XrValue value) {
+    (void) ctx_ptr;
+    return XR_FROM_INT(XR_TO_INT(acc) * 10 + XR_TO_INT(value));
 }
 
 TEST(array_core_slice_range_clamps_positive_bounds) {
@@ -94,6 +131,76 @@ TEST(array_core_join_handles_empty_and_invalid_capacity) {
     ASSERT_STR_EQ(out, "");
 
     ASSERT_FALSE(xr_array_core_join_write(out, 3, 2, ",", 1, join_parts_element, &ctx, NULL));
+}
+
+TEST(array_core_hof_map_preserves_iteration_and_write_indices) {
+    ArrayHofTestCtx ctx = {0};
+    ctx.input[0] = XR_FROM_INT(2);
+    ctx.input[1] = XR_FROM_INT(3);
+    ctx.input[2] = XR_FROM_INT(4);
+
+    int64_t count = -1;
+    ASSERT_TRUE(xr_array_core_hof_map(3, array_hof_test_read, array_hof_test_map_double,
+                                      array_hof_test_write, &ctx, &count));
+    ASSERT_EQ_INT(count, 3);
+    ASSERT_EQ_INT(ctx.read_count, 3);
+    ASSERT_EQ_INT(ctx.write_count, 3);
+    ASSERT_EQ_INT(ctx.read_order[0], 0);
+    ASSERT_EQ_INT(ctx.read_order[2], 2);
+    ASSERT_EQ_INT(ctx.write_order[0], 0);
+    ASSERT_EQ_INT(ctx.write_order[2], 2);
+    ASSERT_EQ_INT(XR_TO_INT(ctx.output[0]), 4);
+    ASSERT_EQ_INT(XR_TO_INT(ctx.output[1]), 6);
+    ASSERT_EQ_INT(XR_TO_INT(ctx.output[2]), 8);
+}
+
+TEST(array_core_hof_filter_compacts_kept_values) {
+    ArrayHofTestCtx ctx = {0};
+    for (int i = 0; i < 5; i++)
+        ctx.input[i] = XR_FROM_INT(i + 1);
+
+    int64_t count = -1;
+    ASSERT_TRUE(xr_array_core_hof_filter(5, array_hof_test_read, array_hof_test_predicate_odd,
+                                         array_hof_test_write, &ctx, &count));
+    ASSERT_EQ_INT(count, 3);
+    ASSERT_EQ_INT(ctx.read_count, 5);
+    ASSERT_EQ_INT(ctx.write_count, 3);
+    ASSERT_EQ_INT(ctx.write_order[0], 0);
+    ASSERT_EQ_INT(ctx.write_order[1], 1);
+    ASSERT_EQ_INT(ctx.write_order[2], 2);
+    ASSERT_EQ_INT(XR_TO_INT(ctx.output[0]), 1);
+    ASSERT_EQ_INT(XR_TO_INT(ctx.output[1]), 3);
+    ASSERT_EQ_INT(XR_TO_INT(ctx.output[2]), 5);
+}
+
+TEST(array_core_hof_reduce_updates_accumulator_in_order) {
+    ArrayHofTestCtx ctx = {0};
+    ctx.input[0] = XR_FROM_INT(1);
+    ctx.input[1] = XR_FROM_INT(2);
+    ctx.input[2] = XR_FROM_INT(3);
+
+    XrValue result = xr_array_core_hof_reduce(3, array_hof_test_read, array_hof_test_reduce_digits,
+                                              &ctx, XR_FROM_INT(0));
+    ASSERT_EQ_INT(XR_TO_INT(result), 123);
+    ASSERT_EQ_INT(ctx.read_count, 3);
+    ASSERT_EQ_INT(ctx.read_order[0], 0);
+    ASSERT_EQ_INT(ctx.read_order[2], 2);
+}
+
+TEST(array_core_hof_handles_empty_and_rejects_missing_callbacks) {
+    ArrayHofTestCtx ctx = {0};
+    int64_t count = 99;
+
+    ASSERT_TRUE(xr_array_core_hof_map(0, NULL, NULL, NULL, &ctx, &count));
+    ASSERT_EQ_INT(count, 0);
+    ASSERT_FALSE(xr_array_core_hof_map(1, NULL, array_hof_test_map_double, array_hof_test_write,
+                                       &ctx, &count));
+    ASSERT_FALSE(
+        xr_array_core_hof_filter(1, array_hof_test_read, NULL, array_hof_test_write, &ctx, &count));
+    XrValue initial = XR_FROM_INT(42);
+    XrValue reduced =
+        xr_array_core_hof_reduce(1, NULL, array_hof_test_reduce_digits, &ctx, initial);
+    ASSERT_EQ_INT(XR_TO_INT(reduced), 42);
 }
 
 TEST(array_core_fill_typed_storage_coerces_once_and_fills_range) {
@@ -390,6 +497,10 @@ RUN_TEST(array_core_slice_range_accepts_nonpositive_length);
 RUN_TEST(array_core_fill_range_matches_slice_bounds);
 RUN_TEST(array_core_join_plans_total_and_writes_separators);
 RUN_TEST(array_core_join_handles_empty_and_invalid_capacity);
+RUN_TEST(array_core_hof_map_preserves_iteration_and_write_indices);
+RUN_TEST(array_core_hof_filter_compacts_kept_values);
+RUN_TEST(array_core_hof_reduce_updates_accumulator_in_order);
+RUN_TEST(array_core_hof_handles_empty_and_rejects_missing_callbacks);
 RUN_TEST(array_core_fill_typed_storage_coerces_once_and_fills_range);
 RUN_TEST(array_core_fill_typed_storage_handles_bool_and_invalid_cases);
 RUN_TEST(array_core_index_set_plan_rejects_wraparound_and_gaps);

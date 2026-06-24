@@ -1,0 +1,39 @@
+let values: Array<int> = []
+values.push(1)
+values.push(2)
+values.push(3)
+values.push(4)
+
+let mapped = values.map(fn(x: int) -> int { return x * 3 })
+print(mapped.length)
+print(mapped[0])
+print(mapped[3])
+
+let kept = values.filter(fn(x: int) -> bool { return x % 2 == 1 })
+print(kept.length)
+print(kept[0])
+print(kept[1])
+
+let total = values.reduce(fn(acc: int, x: int) -> int { return acc * 10 + x }, 0)
+print(total)
+
+let chained = values
+    .map(fn(x: int) -> int { return x + 1 })
+    .filter(fn(x: int) -> bool { return x > 2 })
+    .reduce(fn(acc: int, x: int) -> int { return acc + x }, 0)
+print(chained)
+
+let bytes: Array<uint8> = []
+bytes.push(1)
+bytes.push(2)
+bytes.push(3)
+
+let byte_mapped = bytes.map(fn(x: uint8) -> int { return x + 10 })
+print(byte_mapped.length)
+print(byte_mapped[0])
+print(byte_mapped[2])
+
+let byte_kept = bytes.filter(fn(x: uint8) -> bool { return x > 1 })
+print(byte_kept.length)
+print(byte_kept[0])
+print(byte_kept[1])
