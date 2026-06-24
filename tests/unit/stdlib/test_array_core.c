@@ -322,6 +322,34 @@ TEST(array_core_fill_typed_storage_handles_bool_and_invalid_cases) {
     ASSERT_FALSE(xr_array_core_fill_typed_storage(bools, -1, 1, XR_ELEM_BOOL, XR_TRUE_VAL));
 }
 
+TEST(array_core_bytes_constructor_helpers_coerce_and_copy_typed_sources) {
+    ASSERT_EQ_INT(xr_array_core_nonnegative_length(-7), 0);
+    ASSERT_EQ_INT(xr_array_core_nonnegative_length(3), 3);
+    ASSERT_EQ_INT(xr_array_core_byte_from_value(XR_FROM_INT(257)), 1);
+    ASSERT_EQ_INT(xr_array_core_byte_from_value(xr_float(-2.8)), 254);
+    ASSERT_EQ_INT(xr_array_core_byte_from_value(XR_TRUE_VAL), 1);
+    ASSERT_EQ_INT(xr_array_core_byte_from_value(XR_NULL_VAL), 0);
+
+    uint8_t dst[4] = {0, 0, 0, 0};
+    ASSERT_TRUE(xr_array_core_bytes_fill_value(dst, 4, XR_FROM_INT(255)));
+    ASSERT_EQ_INT(dst[0], 255);
+    ASSERT_EQ_INT(dst[3], 255);
+
+    int64_t ints[] = {257, -1, 0, 128};
+    ASSERT_TRUE(xr_array_core_bytes_copy_from_typed(dst, 4, ints, 4, XR_ELEM_I64));
+    ASSERT_EQ_INT(dst[0], 1);
+    ASSERT_EQ_INT(dst[1], 255);
+    ASSERT_EQ_INT(dst[2], 0);
+    ASSERT_EQ_INT(dst[3], 128);
+
+    XrValue mixed[] = {XR_FROM_INT(3), XR_TRUE_VAL, XR_NULL_VAL, xr_float(260.0)};
+    ASSERT_TRUE(xr_array_core_bytes_copy_from_typed(dst, 4, mixed, 4, XR_ELEM_ANY));
+    ASSERT_EQ_INT(dst[0], 3);
+    ASSERT_EQ_INT(dst[1], 1);
+    ASSERT_EQ_INT(dst[2], 0);
+    ASSERT_EQ_INT(dst[3], 4);
+}
+
 TEST(array_core_index_set_plan_rejects_wraparound_and_gaps) {
     XrArrayCoreIndexSetPlan plan = xr_array_core_index_set_plan(3, 1);
     ASSERT_EQ_INT(plan.kind, XR_ARRAY_CORE_INDEX_SET_WRITE);
@@ -585,6 +613,7 @@ RUN_TEST(array_core_hof_find_index_every_some_short_circuit);
 RUN_TEST(array_core_hof_handles_empty_and_rejects_missing_callbacks);
 RUN_TEST(array_core_fill_typed_storage_coerces_once_and_fills_range);
 RUN_TEST(array_core_fill_typed_storage_handles_bool_and_invalid_cases);
+RUN_TEST(array_core_bytes_constructor_helpers_coerce_and_copy_typed_sources);
 RUN_TEST(array_core_index_set_plan_rejects_wraparound_and_gaps);
 RUN_TEST(array_core_reverse_swaps_raw_elements_by_size);
 RUN_TEST(array_core_reverse_handles_empty_single_and_invalid_data);

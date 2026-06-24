@@ -1,0 +1,40 @@
+let ints = new Array<int>(4, 0)
+ints[0] = 257
+ints[1] = -1
+ints[2] = 0
+ints[3] = 128
+let from_ints = new Bytes(ints)
+print(from_ints.length)
+print(from_ints[0])
+print(from_ints[1])
+print(from_ints[2])
+print(from_ints[3])
+
+let flags = new Array<bool>(3, false)
+flags[0] = true
+flags[1] = false
+flags[2] = true
+let from_flags = new Bytes(flags)
+print(from_flags[0])
+print(from_flags[1])
+print(from_flags[2])
+
+let floats = new Array<float>(3, 0.0)
+floats[0] = 3.8
+floats[1] = -2.2
+floats[2] = 260.0
+let from_floats = new Bytes(floats)
+print(from_floats[0])
+print(from_floats[1])
+print(from_floats[2])
+
+let mixed = [1, true, "x", 258]
+let from_mixed = new Bytes(mixed)
+print(from_mixed[0])
+print(from_mixed[1])
+print(from_mixed[2])
+print(from_mixed[3])
+
+let filled = new Bytes(4, 257)
+print(filled[0])
+print(filled[3])
