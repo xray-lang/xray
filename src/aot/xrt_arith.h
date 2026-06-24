@@ -42,6 +42,10 @@ static inline XrValue xrt_add(XrValue a, XrValue b) {
     if (XR_IS_STR(a) && XR_IS_STR(b))
         return xrt_str_concat_value(a, b); /* header lengths, no strlen */
     if (XR_IS_STR(a) || XR_IS_STR(b)) {
+        if (a.tag == XR_TAG_RANGE)
+            return xrt_str_concat_value(xrt_range_to_string(a), b);
+        if (b.tag == XR_TAG_RANGE)
+            return xrt_str_concat_value(a, xrt_range_to_string(b));
         char ba[64], bb[64];
         return xrt_str_concat(xr_to_cstr(a, ba, sizeof(ba)), xr_to_cstr(b, bb, sizeof(bb)));
     }

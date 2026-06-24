@@ -276,12 +276,9 @@ void xr_value_to_strbuf(XrVMRuntime *isolate, XrStrBuf *sb, XrValue val, int dep
             if (xr_value_is_range(isolate, val)) {
                 XrRange *rng = (XrRange *) xr_instance_native_body(inst);
                 char buf[80];
-                int n =
-                    (rng->step == 1)
-                        ? snprintf(buf, sizeof(buf), "%" PRId64 "..%" PRId64, rng->start, rng->end)
-                        : snprintf(buf, sizeof(buf), "%" PRId64 "..%" PRId64 ":%" PRId64,
-                                   rng->start, rng->end, rng->step);
-                xr_strbuf_append_cstr(sb, buf, (size_t) n);
+                int n = xr_range_format_buf(rng, buf, sizeof(buf));
+                if (n > 0)
+                    xr_strbuf_append_cstr(sb, buf, (size_t) n);
             } else if (xr_value_is_datetime(isolate, val)) {
                 void *dt = xr_instance_native_body(inst);
                 char buf[64];
