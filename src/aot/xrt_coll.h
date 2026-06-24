@@ -1640,9 +1640,10 @@ static inline XrValue xrt_json_set_name(XrValue obj, const char *name, XrValue v
 
 static inline XrValue xrt_getprop_name(XrValue obj, const char *name) {
     if (XR_IS_MAP(obj)) {
-        if (name && strcmp(name, "memberCount") == 0)
-            return XR_FROM_INT(xrt_map_len((xrt_map_t *) obj.ptr));
-        return xrt_map_get((xrt_map_t *) obj.ptr, xr_box_str(name));
+        xrt_map_t *map = (xrt_map_t *) obj.ptr;
+        if (name && strcmp(name, "memberCount") == 0 && (map->flags & XR_MAP_FLAG_ENUM_TYPE))
+            return XR_FROM_INT(xrt_map_len(map));
+        return xrt_map_get(map, xr_box_str(name));
     }
     if (obj.tag == XR_TAG_ENUM) {
         const XrAotEnumValueView *ev = (const XrAotEnumValueView *) obj.ptr;
