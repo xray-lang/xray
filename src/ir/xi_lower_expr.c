@@ -1251,8 +1251,10 @@ static XiValue *lower_index_get(XiLower *l, AstNode *node) {
     }
 
     struct XrType *result_type = xi_lower_node_type(l, node);
-    if (obj->type && XR_TYPE_IS_MAP(obj->type))
+    if (obj->type && XR_TYPE_IS_MAP(obj->type)) {
+        idx = xi_lower_checktype_for_type(l, node, idx, obj->type->map.key_type);
         idx = xi_lower_narrow_for_static_type(l, node, idx, obj->type->map.key_type);
+    }
     struct XrType *elem_type = xi_get_container_elem_type(obj->type);
     struct XrType *index_type =
         xi_lower_type_is_unknown(result_type) && elem_type ? elem_type : result_type;
