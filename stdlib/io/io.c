@@ -988,7 +988,9 @@ static XrValue io_chmod(XrVMRuntime *X, XrValue *args, int argc) {
     if (!XR_IS_INT(args[1]))
         return xr_bool(false);
 
-    int mode = (int) XR_TO_INT(args[1]);
+    int mode = 0;
+    if (!xr_io_core_chmod_mode(XR_TO_INT(args[1]), &mode))
+        return xr_bool(false);
 #ifdef XR_OS_WINDOWS
     return xr_bool(_chmod(path, mode) == 0);
 #else

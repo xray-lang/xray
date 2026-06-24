@@ -14,6 +14,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stddef.h>
+#include <limits.h>
 
 typedef bool (*XrIoCoreLineFn)(void *ctx, const char *data, size_t len);
 typedef int (*XrIoCoreMkdirFn)(void *ctx, const char *path);
@@ -68,6 +69,15 @@ static const char *const XR_IO_CORE_STAT_FIELD_NAMES[XR_IO_CORE_STAT_FIELD_COUNT
 
 static inline int64_t xr_io_core_stat_perm_mode(int64_t mode) {
     return mode & 0777;
+}
+
+static inline bool xr_io_core_chmod_mode(int64_t mode_value, int *out_mode) {
+    if (out_mode)
+        *out_mode = 0;
+    if (!out_mode || mode_value < 0 || mode_value > INT_MAX)
+        return false;
+    *out_mode = (int) mode_value;
+    return true;
 }
 
 static inline XrIoCoreStatFields xr_io_core_stat_fields(int64_t size, int64_t mode, int64_t mtime,
