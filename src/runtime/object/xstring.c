@@ -5,11 +5,12 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xstring.c - Immutable string implementation with interning
+ * xstring.c - Immutable string implementation with lazy sharing
  *
  * KEY CONCEPT:
- *   - Short strings (<=64B): interned in global pool
- *   - Long strings (>64B): shared on system heap
+ *   - Runtime strings: coroutine-local by default
+ *   - Canonical short strings (literals/symbols/intern/map keys): global pool
+ *   - Boundary strings: shared system-heap clones
  *   - FNV-1a hash cached at creation time
  */
 
@@ -30,6 +31,7 @@
 #include "../class/xclass_system.h"
 #include "../class/xclass.h"
 #include "../mem/xheap.h"
+#include "../mem/xcoro_heap.h"
 #include "../mem/xsystem_heap.h"
 #include "../xshared.h"
 #include <string.h>
@@ -72,7 +74,20 @@ void xr_string_pool_free_internal(XrStringPool *pool) {
 
 /* ========== String Creation ========== */
 
-// Allocate string object on coroutine heap (shared by both paths)
+static inline uint32_t string_hash_nonzero(const char *chars, size_t length) {
+    uint32_t hash = xr_string_hash(chars, length);
+    return hash == 0 ? 1u : hash;
+}
+
+static inline void string_finish_runtime(XrString *str, const char *chars, size_t length,
+                                         uint32_t hash) {
+    str->hash = hash ? hash : string_hash_nonzero(chars, length);
+    if (length > XR_SHORT_STR_MAX)
+        XR_STR_SET_LONG(str);
+    XR_STR_SET_LOCAL(str);
+}
+
+// Allocate string object on coroutine heap (shared by runtime-local paths)
 static XrString *string_alloc(XrayIsolate *iso, const char *chars, size_t length) {
     if (length > UINT32_MAX)
         return NULL;
@@ -92,14 +107,15 @@ static XrString *string_alloc(XrayIsolate *iso, const char *chars, size_t length
     return str;
 }
 
-// Create non-interned string (lazy hash: computed on first use)
+// Create coroutine-local string. Hash is computed eagerly so equality and
+// map/set hashing never write into a string after it has been shared.
 XrString *xr_string_new(XrayIsolate *iso, const char *chars, size_t length) {
     XR_DCHECK(iso != NULL, "string_new: NULL isolate");
     XR_DCHECK(length == 0 || chars != NULL, "string_new: NULL chars with length > 0");
     XrString *str = string_alloc(iso, chars, length);
     if (!str)
         return NULL;
-    str->hash = 0;  // Lazy: computed when needed
+    string_finish_runtime(str, str->data, length, 0);
     return str;
 }
 
@@ -118,7 +134,7 @@ XrString *xr_string_concat(XrayIsolate *iso, XrString *a, XrString *b) {
     memcpy(str->data, a->data, a->length);
     memcpy(str->data + a->length, b->data, b->length);
     str->data[len] = '\0';
-    str->hash = 0;
+    string_finish_runtime(str, str->data, len, 0);
     return str;
 }
 
@@ -132,9 +148,8 @@ XrString *xr_string_intern_core(XrRuntimeCore *core, const char *chars, size_t l
         return NULL;
     }
 
-    if (hash == 0) {
-        hash = xr_string_hash(chars, length);
-    }
+    if (hash == 0)
+        hash = string_hash_nonzero(chars, length);
 
     if (length > XR_SHORT_STR_MAX) {
         XrSystemHeap *heap = core->sys_heap;
@@ -194,9 +209,32 @@ XrString *xr_string_intern(XrayIsolate *iso, const char *chars, size_t length, u
         return xr_string_intern_core(core, chars, length, hash);
     }
     XrString *s = string_alloc(iso, chars, length);
-    if (s && hash)
-        s->hash = hash;
+    if (s)
+        string_finish_runtime(s, s->data, length, hash);
     return s;
+}
+
+XrString *xr_string_clone_shared_core(XrRuntimeCore *core, XrString *str) {
+    if (!str)
+        return NULL;
+    if (XR_OBJ_IS_SHARED(&str->hdr) && !XR_OBJ_GET_FLAG(&str->hdr, XR_OBJ_TRANSIT)) {
+        xr_shared_retain(&str->hdr);
+        return str;
+    }
+    if (!core || !core->sys_heap)
+        return NULL;
+    size_t length = str->length;
+    size_t total_size = sizeof(XrString) + length + 1;
+    XrString *shared = (XrString *) xr_sysheap_alloc_shared(core->sys_heap, total_size, XR_TSTRING);
+    if (!shared)
+        return NULL;
+    shared->length = str->length;
+    shared->hash = str->hash ? str->hash : string_hash_nonzero(str->data, str->length);
+    memcpy(shared->data, str->data, length);
+    shared->data[length] = '\0';
+    if (length > XR_SHORT_STR_MAX)
+        XR_STR_SET_LONG(shared);
+    return shared;
 }
 
 // Fast integer to string (without snprintf)
@@ -247,7 +285,7 @@ XrString *xr_string_from_int(XrayIsolate *iso, xr_Integer i) {
     XR_DCHECK(iso != NULL, "string_from_int: NULL isolate");
     char buffer[32];
     int len = fast_int_to_str(i, buffer);
-    return xr_string_intern(iso, buffer, len, 0);
+    return xr_string_new(iso, buffer, (size_t) len);
 }
 
 // Create string from unsigned 64-bit integer
@@ -257,7 +295,7 @@ XrString *xr_string_from_uint64(XrayIsolate *iso, uint64_t i) {
     int len = snprintf(buffer, sizeof(buffer), "%llu", (unsigned long long) i);
     if (len < 0)
         len = 0;
-    return xr_string_intern(iso, buffer, (size_t) len, 0);
+    return xr_string_new(iso, buffer, (size_t) len);
 }
 
 // Create string from float
@@ -266,13 +304,13 @@ XrString *xr_string_from_float(XrayIsolate *iso, xr_Number n) {
     XR_DCHECK(iso != NULL, "string_from_float: NULL isolate");
     char buffer[64];
     int len = xr_format_float(buffer, sizeof(buffer), n);
-    return xr_string_intern(iso, buffer, (size_t) len, 0);
+    return xr_string_new(iso, buffer, (size_t) len);
 }
 
 /* ========== String Comparison ========== */
 
 // String equality comparison (optimized)
-// Priority: pointer -> length -> hash -> pool check -> content
+// Priority: pointer -> length -> hash -> interned pointer proof -> content
 bool xr_string_equal(XrString *a, XrString *b) {
     XR_DCHECK(a != NULL && b != NULL, "string_equal: NULL argument");
     // Pointer equal (fastest path for interned strings)
@@ -286,18 +324,16 @@ bool xr_string_equal(XrString *a, XrString *b) {
     if (a->length != b->length)
         return false;
 
+    uint32_t ah = a->hash ? a->hash : string_hash_nonzero(a->data, a->length);
+    uint32_t bh = b->hash ? b->hash : string_hash_nonzero(b->data, b->length);
+
     // Hash not equal, fast reject
-    if (a->hash != b->hash)
+    if (ah != bh)
         return false;
 
-    // Same pool interned: pointer not equal means content not equal
-    if (XR_STR_IS_GLOBAL(a) && XR_STR_IS_GLOBAL(b)) {
+    // Same canonical intern pool: pointer not equal means content not equal.
+    if (XR_STR_IS_INTERNED(a) && XR_STR_IS_INTERNED(b)) {
         return false;  // Pointer not equal, content not equal
-    }
-
-    // Local pool strings: need content comparison for cross-pool
-    if (XR_STR_IS_LOCAL(a) && XR_STR_IS_LOCAL(b)) {
-        // Cannot determine if same pool, conservatively do content compare
     }
 
     // Content comparison (long strings or cross-pool)
@@ -349,7 +385,7 @@ XrString *xr_string_char_at(XrayIsolate *iso, XrString *str, xr_Integer index) {
     }
 
     // Create single character string
-    return xr_string_intern(iso, &str->data[index], 1, 0);
+    return xr_string_new(iso, &str->data[index], 1);
 }
 
 // substring - extract substring
@@ -366,12 +402,12 @@ XrString *xr_string_substring(XrayIsolate *iso, XrString *str, xr_Integer start,
 
     // Bounds check
     if (start >= end || (size_t) start >= str->length) {
-        return xr_string_intern(iso, "", 0, 0);
+        return xr_string_new(iso, "", 0);
     }
 
     // Extract substring
     size_t len = end - start;
-    return xr_string_intern(iso, &str->data[start], len, 0);
+    return xr_string_new(iso, &str->data[start], len);
 }
 
 // slice - slice with negative index support
@@ -401,12 +437,12 @@ XrString *xr_string_slice(XrayIsolate *iso, XrString *str, xr_Integer start, xr_
 
     // start > end returns empty string
     if (start >= end) {
-        return xr_string_intern(iso, "", 0, 0);
+        return xr_string_new(iso, "", 0);
     }
 
     // Extract substring
     size_t slice_len = (size_t) (end - start);
-    return xr_string_intern(iso, &str->data[start], slice_len, 0);
+    return xr_string_new(iso, &str->data[start], slice_len);
 }
 
 // indexOf - find substring position
@@ -547,7 +583,7 @@ XrString *xr_string_to_lower_case(XrayIsolate *iso, XrString *str) {
     }
     buffer[str->length] = '\0';
 
-    XrString *result = xr_string_intern(iso, buffer, str->length, 0);
+    XrString *result = xr_string_new(iso, buffer, str->length);
     if (buffer != stack_buf)
         xr_free(buffer);
 
@@ -568,7 +604,7 @@ XrString *xr_string_to_upper_case(XrayIsolate *iso, XrString *str) {
     }
     buffer[str->length] = '\0';
 
-    XrString *result = xr_string_intern(iso, buffer, str->length, 0);
+    XrString *result = xr_string_new(iso, buffer, str->length);
     if (buffer != stack_buf)
         xr_free(buffer);
 
@@ -591,7 +627,7 @@ XrString *xr_string_trim(XrayIsolate *iso, XrString *str) {
 
     // All whitespace
     if (start == str->length) {
-        return xr_string_intern(iso, "", 0, 0);
+        return xr_string_new(iso, "", 0);
     }
 
     // Find last non-whitespace
@@ -602,7 +638,7 @@ XrString *xr_string_trim(XrayIsolate *iso, XrString *str) {
 
     // Extract
     size_t len = end - start + 1;
-    return xr_string_intern(iso, &str->data[start], len, 0);
+    return xr_string_new(iso, &str->data[start], len);
 }
 
 // trimStart - remove leading whitespace (SIMD optimized)
@@ -619,12 +655,12 @@ XrString *xr_string_trim_start(XrayIsolate *iso, XrString *str) {
 
     // All whitespace
     if (start == str->length) {
-        return xr_string_intern(iso, "", 0, 0);
+        return xr_string_new(iso, "", 0);
     }
 
     // Extract to end
     size_t len = str->length - start;
-    return xr_string_intern(iso, &str->data[start], len, 0);
+    return xr_string_new(iso, &str->data[start], len);
 }
 
 // trimEnd - remove trailing whitespace
@@ -643,10 +679,10 @@ XrString *xr_string_trim_end(XrayIsolate *iso, XrString *str) {
 
     // All whitespace
     if (end == 0) {
-        return xr_string_intern(iso, "", 0, 0);
+        return xr_string_new(iso, "", 0);
     }
 
-    return xr_string_intern(iso, str->data, end, 0);
+    return xr_string_new(iso, str->data, end);
 }
 
 // padStart - pad at start to target length
@@ -686,7 +722,7 @@ XrString *xr_string_pad_start(XrayIsolate *iso, XrString *str, size_t target_len
     memcpy(result + fill_len, str->data, str->length);
     result[target_len] = '\0';
 
-    XrString *ret = xr_string_intern(iso, result, target_len, 0);
+    XrString *ret = xr_string_new(iso, result, target_len);
     xr_free(result);
     return ret;
 }
@@ -728,7 +764,7 @@ XrString *xr_string_pad_end(XrayIsolate *iso, XrString *str, size_t target_len, 
     }
     result[target_len] = '\0';
 
-    XrString *ret = xr_string_intern(iso, result, target_len, 0);
+    XrString *ret = xr_string_new(iso, result, target_len);
     xr_free(result);
     return ret;
 }
@@ -768,7 +804,7 @@ XrArray *xr_string_split(XrayIsolate *iso, XrString *str, XrString *delimiter) {
     // Empty delimiter, split by character
     if (delimiter == NULL || delimiter->length == 0) {
         for (size_t i = 0; i < str->length; i++) {
-            XrString *ch = xr_string_intern(iso, &str->data[i], 1, 0);
+            XrString *ch = xr_string_new(iso, &str->data[i], 1);
             xr_array_push(result, xr_string_value(ch));
         }
         return result;
@@ -783,7 +819,7 @@ XrArray *xr_string_split(XrayIsolate *iso, XrString *str, XrString *delimiter) {
         if (memcmp(end, delimiter->data, delimiter->length) == 0) {
             // Found delimiter
             size_t len = end - start;
-            XrString *part = xr_string_intern(iso, start, len, 0);
+            XrString *part = xr_string_new(iso, start, len);
             xr_array_push(result, xr_string_value(part));
 
             end += delimiter->length;
@@ -795,7 +831,7 @@ XrArray *xr_string_split(XrayIsolate *iso, XrString *str, XrString *delimiter) {
 
     // Add last part
     size_t len = str_end - start;
-    XrString *part = xr_string_intern(iso, start, len, 0);
+    XrString *part = xr_string_new(iso, start, len);
     xr_array_push(result, xr_string_value(part));
 
     return result;
@@ -825,7 +861,7 @@ XrString *xr_string_replace(XrayIsolate *iso, XrString *str, XrString *old_str, 
            str->length - pos - old_str->length);
     buffer[new_length] = '\0';
 
-    XrString *result = xr_string_intern(iso, buffer, new_length, 0);
+    XrString *result = xr_string_new(iso, buffer, new_length);
     xr_free(buffer);
 
     return result;
@@ -879,7 +915,7 @@ XrString *xr_string_replace_all(XrayIsolate *iso, XrString *str, XrString *old_s
 
     buffer[new_length] = '\0';
 
-    XrString *result = xr_string_intern(iso, buffer, new_length, 0);
+    XrString *result = xr_string_new(iso, buffer, new_length);
     xr_free(buffer);
 
     return result;
@@ -889,7 +925,7 @@ XrString *xr_string_replace_all(XrayIsolate *iso, XrString *str, XrString *old_s
 XrString *xr_string_repeat(XrayIsolate *iso, XrString *str, xr_Integer count) {
     XR_DCHECK(iso != NULL, "string_repeat: NULL isolate");
     if (str == NULL || count <= 0) {
-        return xr_string_intern(iso, "", 0, 0);
+        return xr_string_new(iso, "", 0);
     }
     if (count == 1)
         return str;
@@ -902,7 +938,7 @@ XrString *xr_string_repeat(XrayIsolate *iso, XrString *str, xr_Integer count) {
     }
     buffer[new_length] = '\0';
 
-    XrString *result = xr_string_intern(iso, buffer, new_length, 0);
+    XrString *result = xr_string_new(iso, buffer, new_length);
     xr_free(buffer);
 
     return result;
@@ -939,7 +975,7 @@ XrString *xr_string_reverse(XrayIsolate *iso, XrString *str) {
     }
     buffer[dst] = '\0';
 
-    XrString *result = xr_string_intern(iso, buffer, dst, 0);
+    XrString *result = xr_string_new(iso, buffer, dst);
     if (buffer != stack_buf)
         xr_free(buffer);
 
@@ -963,8 +999,7 @@ XrString *xr_string_byte_at(XrayIsolate *iso, XrString *str, xr_Integer index) {
     // Get single byte
     char c = str->data[index];
 
-    // Return interned single char string
-    return xr_string_intern(iso, &c, 1, 0);
+    return xr_string_new(iso, &c, 1);
 }
 
 // translate - Unicode char mapping (UTF-8 aware)
@@ -990,10 +1025,12 @@ XrString *xr_string_translate(XrayIsolate *iso, XrString *str, XrMap *table) {
             char_len = 1;
         }
 
-        // Create current char string as key
-        XrString *key = xr_string_intern(iso, str->data + pos, char_len, 0);
+        // Create current char as a local probe key; map lookup compares by content.
+        XrString *key = xr_string_new(iso, str->data + pos, char_len);
         bool found = false;
-        XrValue val = xr_map_get(table, xr_string_value(key), &found);
+        XrValue key_value = xr_string_value(key);
+        XrValue val = xr_map_get(table, key_value, &found);
+        xr_rc_release_value(xr_current_coro_heap(), key_value);
 
         if (found && XR_IS_STRING(val)) {
             XrString *replacement = XR_TO_STRING(val);
@@ -1050,7 +1087,7 @@ XrString *xr_string_char_at_unicode(XrayIsolate *iso, XrString *str, size_t inde
     }
 
     // Create single char string
-    return xr_string_intern(iso, str->data + pos, char_size, 0);
+    return xr_string_new(iso, str->data + pos, (size_t) char_size);
 }
 
 /*
@@ -1073,7 +1110,7 @@ XrString *xr_string_substring_by_char(XrayIsolate *iso, XrString *str, size_t st
     if (byte_end > str->length)
         byte_end = str->length;
 
-    return xr_string_intern(iso, str->data + byte_start, byte_end - byte_start, 0);
+    return xr_string_new(iso, str->data + byte_start, byte_end - byte_start);
 }
 
 /*
@@ -1091,7 +1128,7 @@ XrString *xr_string_from_codepoint(XrayIsolate *iso, uint32_t codepoint) {
         len = xr_utf8_encode(XR_UNICODE_INVALID, buf);
     }
 
-    return xr_string_intern(iso, buf, len, 0);
+    return xr_string_new(iso, buf, (size_t) len);
 }
 
 /* ========== Helper Functions ========== */

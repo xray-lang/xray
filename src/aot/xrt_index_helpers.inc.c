@@ -222,7 +222,7 @@ static inline XrValue xrt_index_get(XrValue obj, XrValue key) {
         xrt_array_t *a = (xrt_array_t *) obj.ptr;
         int64_t idx = key.i;
         if (XR_LIKELY(idx >= 0 && idx < a->length))
-            return xr_typed_get(a->data, (int32_t) idx, a->elem_type);
+            return xrt_value_to_owned(xr_typed_get(a->data, (int32_t) idx, a->elem_type));
         xrt_index_oob(idx, a->length);
     } else if (XR_IS_STR(obj) && key.tag == XR_TAG_I64) {
         return xrt_string_index_get(obj, key.i);
@@ -231,14 +231,14 @@ static inline XrValue xrt_index_get(XrValue obj, XrValue key) {
         int64_t value = xrt_range_index_ptr((const xrt_range_t *) obj.ptr, key.i, &ok);
         return ok ? XR_FROM_INT(value) : XR_NULL_VAL;
     } else if (XR_IS_MAP(obj)) {
-        return xrt_map_get((xrt_map_t *) obj.ptr, key);
+        return xrt_map_get_owned((xrt_map_t *) obj.ptr, key);
     } else if (XR_IS_SET(obj) && key.tag == XR_TAG_I64) {
         // Positional access into the set's insertion order (used by for-in).
         xrt_set_t *s = (xrt_set_t *) obj.ptr;
-        return xrt_set_value_at(s, key.i);
+        return xrt_set_value_at_owned(s, key.i);
     } else if (obj.tag == XR_TAG_PTR && obj.ptr && obj.heap_type == 0 && XR_IS_STR(key)) {
         // Json object indexed by a string key.
-        return xrt_json_get_name(obj, xr_str_data(key));
+        return xrt_json_get_name_owned(obj, xr_str_data(key));
     }
     return XR_NULL_VAL;
 }

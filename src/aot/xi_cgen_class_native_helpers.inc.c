@@ -435,7 +435,7 @@ static bool emit_class_native_map_method_call_expr(XiCgenCtx *ctx, FILE *out, co
             }
         }
         const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
-        fprintf(out, "xrt_map_get(");
+        fprintf(out, "xrt_map_get_owned(");
         emit_class_native_field_ref(ctx, out, info.class_data, "p0", idx);
         fprintf(out, ", ");
         emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);

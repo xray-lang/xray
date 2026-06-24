@@ -17,7 +17,10 @@ uint32_t xr_hash_string(XrString *str) {
     XR_DCHECK(str != NULL, "hash_string: NULL string");
     if (str->hash == 0) {
         uint32_t h = xr_string_hash(str->data, str->length);
-        str->hash = (h == 0) ? 1 : h;
+        h = (h == 0) ? 1 : h;
+        if (!XR_OBJ_IS_SHARED(&str->hdr))
+            str->hash = h;
+        return h;
     }
     return str->hash;
 }

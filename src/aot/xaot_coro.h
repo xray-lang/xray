@@ -18,6 +18,10 @@
 #include "../coro/xaot_coro.h"
 #include "../coro/xaot_task.h"
 
+typedef struct XrString XrString;
+XR_FUNC XrString *xr_string_intern_core(struct XrRuntimeCore *core, const char *chars,
+                                        size_t length, uint32_t hash);
+
 typedef struct XrAotRuntimeStringView {
     XrObjHeader hdr;
     uint32_t length;
@@ -89,6 +93,30 @@ static inline XrValue xr_aot_bridge_string_to_xrt(XrValue value) {
     memcpy(data, src->data, (size_t) src->length);
     data[src->length] = '\0';
     return dst;
+}
+
+static inline XrValue xr_aot_bridge_xrt_string_to_runtime(const XrAotContext *ctx, XrValue value) {
+    if (!XR_IS_STR(value))
+        return value;
+    if (!ctx || !ctx->runtime)
+        return XR_NULL_VAL;
+
+    const xrt_str_t *src = xr_str_hdr(value);
+    if (!src || !src->data || src->len < 0)
+        return XR_NULL_VAL;
+
+    struct XrRuntimeCore *core = xr_aot_runtime_core(ctx->runtime);
+    if (!core)
+        return XR_NULL_VAL;
+
+    XrString *dst = xr_string_intern_core(core, src->data, (size_t) src->len, src->hash);
+    return dst ? xr_mkheap(dst, XR_TSTRING) : XR_NULL_VAL;
+}
+
+static inline XrValue xr_aot_bridge_xrt_to_runtime(const XrAotContext *ctx, XrValue value) {
+    if (XR_IS_STR(value))
+        return xr_aot_bridge_xrt_string_to_runtime(ctx, value);
+    return value;
 }
 
 static inline XrValue xr_aot_bridge_array_to_xrt(XrValue value) {

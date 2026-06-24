@@ -17,7 +17,7 @@ Xray 值统一用 `XrValue` 表示。当前实现要求 64 位平台，并采用
 - **Descriptor（8 字节）**：`tag: uint8`、`flags: uint8`、`heap_type: uint16`、`ext: uint32`。`tag` 是类型判定的唯一入口；`heap_type` 只在 `tag == PTR` 时表示堆对象类型。
 - **Payload（8 字节）**：`int64` / `double` / 指针三选一，按 `tag` 解释。
 - **无 NaN-boxing / 无指针低位标记**：整数保留完整 64 位；对象引用是普通堆指针，类型信息在 descriptor 中。
-- **字符串不是值级 SSO**：`string` 始终是 `XrString` 堆对象，字符数据存放在对象内的 `data[]` flexible array 中。短串 intern / 长串共享是对象层存储策略，不改变 `XrValue` 表示。
+- **字符串不是值级 SSO**：`string` 始终是 `XrString` 堆对象，字符数据存放在对象内的 `data[]` flexible array 中。运行期短串默认协程本地无锁分配，仅字面量/符号、显式 `intern()` 与 map/set 键驻留全局池；跨协程边界（channel send、`go` 实参、task/scope 结果）按需提升为共享原子 RC。这些都是对象层存储策略，不改变 `XrValue` 表示。
 
 | 值类型 | 内部表示 |
 |--|--|
@@ -144,7 +144,7 @@ Xray values are uniformly represented as `XrValue`. The current implementation r
 - **Descriptor (8 bytes)**: `tag: uint8`, `flags: uint8`, `heap_type: uint16`, and `ext: uint32`. The `tag` is the single entry point for type dispatch; `heap_type` is meaningful only when `tag == PTR`.
 - **Payload (8 bytes)**: one of `int64`, `double`, or pointer, interpreted by the tag.
 - **No NaN-boxing / no low-bit pointer tagging**: integers keep the full 64-bit payload; object references are ordinary heap pointers, with type metadata in the descriptor.
-- **Strings are not value-level SSO**: `string` is always an `XrString` heap object, with bytes stored inside the object's `data[]` flexible array. Short-string interning and long-string sharing are object-storage policies and do not change the `XrValue` representation.
+- **Strings are not value-level SSO**: `string` is always an `XrString` heap object, with bytes stored inside the object's `data[]` flexible array. Runtime short strings are coroutine-local with lock-free allocation by default; only literals/symbols, explicit `intern()`, and map/set keys are interned in the global pool, and strings are promoted to shared (atomic RC) on demand when crossing coroutine boundaries (channel send, `go` arguments, task/scope results). These are object-storage policies and do not change the `XrValue` representation.
 
 | Value type | Internal representation |
 |--|--|

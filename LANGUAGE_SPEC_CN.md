@@ -596,7 +596,7 @@ if (!s.isEmpty()) { }    // OK
 
 不可变 UTF-8 字符串。`length` / `size`、索引和默认迭代都以 Unicode scalar value 为单位：`s[i]` 返回 `char`，切片返回 `string`。丰富方法集见 §14.5。
 
-底层使用引用计数（ARC）+ 字符串驻留（interning）优化。
+底层使用引用计数（ARC）；运行期短串默认协程本地（无锁分配），字面量/符号、显式 `intern()` 与 map/set 键走全局驻留池，跨协程边界按需提升为共享。
 
 #### 2.3.5 `char`
 
@@ -4862,7 +4862,7 @@ Xray 值统一用 `XrValue` 表示。当前实现要求 64 位平台，并采用
 - **Descriptor（8 字节）**：`tag: uint8`、`flags: uint8`、`heap_type: uint16`、`ext: uint32`。`tag` 是类型判定的唯一入口；`heap_type` 只在 `tag == PTR` 时表示堆对象类型。
 - **Payload（8 字节）**：`int64` / `double` / 指针三选一，按 `tag` 解释。
 - **无 NaN-boxing / 无指针低位标记**：整数保留完整 64 位；对象引用是普通堆指针，类型信息在 descriptor 中。
-- **字符串不是值级 SSO**：`string` 始终是 `XrString` 堆对象，字符数据存放在对象内的 `data[]` flexible array 中。短串 intern / 长串共享是对象层存储策略，不改变 `XrValue` 表示。
+- **字符串不是值级 SSO**：`string` 始终是 `XrString` 堆对象，字符数据存放在对象内的 `data[]` flexible array 中。运行期短串默认协程本地无锁分配，仅字面量/符号、显式 `intern()` 与 map/set 键驻留全局池；跨协程边界（channel send、`go` 实参、task/scope 结果）按需提升为共享原子 RC。这些都是对象层存储策略，不改变 `XrValue` 表示。
 
 | 值类型 | 内部表示 |
 |--|--|

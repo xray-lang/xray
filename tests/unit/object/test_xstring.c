@@ -105,6 +105,36 @@ TEST(string_from_float) {
     teardown();
 }
 
+TEST(string_new_is_local_not_interned) {
+    setup();
+    XrString *a = xr_string_new(X, "lazy", 4);
+    XrString *b = xr_string_new(X, "lazy", 4);
+    ASSERT_NOT_NULL(a);
+    ASSERT_NOT_NULL(b);
+    ASSERT_NE(a, b);
+    ASSERT_TRUE(XR_STR_IS_LOCAL(a));
+    ASSERT_TRUE(XR_STR_IS_LOCAL(b));
+    ASSERT_FALSE(XR_STR_IS_INTERNED(a));
+    ASSERT_FALSE(XR_STR_IS_INTERNED(b));
+    ASSERT_TRUE(xr_string_equal(a, b));
+    ASSERT_NE(a->hash, 0u);
+    ASSERT_NE(b->hash, 0u);
+    teardown();
+}
+
+TEST(string_concat_result_is_local_not_interned) {
+    setup();
+    XrString *a = xr_string_intern(X, "la", 2, xr_string_hash("la", 2));
+    XrString *b = xr_string_intern(X, "zy", 2, xr_string_hash("zy", 2));
+    XrString *c = xr_string_concat(X, a, b);
+    ASSERT_NOT_NULL(c);
+    ASSERT_STR_EQ(c->data, "lazy");
+    ASSERT_TRUE(XR_STR_IS_LOCAL(c));
+    ASSERT_FALSE(XR_STR_IS_INTERNED(c));
+    ASSERT_NE(c->hash, 0u);
+    teardown();
+}
+
 /* ========== String Comparison Tests ========== */
 
 TEST(string_equal_same) {
@@ -423,6 +453,8 @@ static void run_all_tests(void) {
     RUN_TEST(string_from_int_negative);
     RUN_TEST(string_from_int_zero);
     RUN_TEST(string_from_float);
+    RUN_TEST(string_new_is_local_not_interned);
+    RUN_TEST(string_concat_result_is_local_not_interned);
 
     RUN_TEST_SUITE("String Comparison");
     RUN_TEST(string_equal_same);

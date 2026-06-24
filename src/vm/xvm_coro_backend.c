@@ -412,10 +412,12 @@ static XrValue vm_entry_transfer_arg(XrCoroutine *coro, XrayIsolate *X, XrValue 
                                      bool copy_args) {
     if (mode == XR_TRANSFER_COPY || (copy_args && mode == XR_TRANSFER_SHARE))
         return (X && XR_IS_PTR(value)) ? xr_deep_copy_to_coro(X, value, coro) : value;
+    if (mode == XR_TRANSFER_SHARE && XR_IS_PTR(value) && xr_value_needs_copy(value))
+        return X ? xr_deep_copy_to_coro(X, value, coro) : value;
     if (mode == XR_TRANSFER_SHARE && XR_IS_PTR(value)) {
         XrObjHeader *obj = XR_VALUE_GCPTR(value);
         if (obj && XR_OBJ_IS_SHARED(obj) && !XR_OBJ_GET_FLAG(obj, XR_OBJ_TRANSIT))
-            xr_shared_incref(obj);
+            xr_shared_retain(obj);
     }
     return value;
 }

@@ -17,6 +17,7 @@
 #include "../test_helper.h"
 #include "runtime/object/xset.h"
 #include "runtime/object/xarray.h"
+#include "runtime/object/xstring.h"
 
 static XrayIsolate *X = NULL;
 static XrCoroutine *main_coro = NULL;
@@ -281,6 +282,36 @@ TEST(set_tombstone_probe_and_compaction_order) {
     teardown();
 }
 
+TEST(set_local_string_member_canonicalizes_for_content_lookup) {
+    setup();
+    XrSet *set = xr_set_new_with_capacity(main_coro, 8);
+
+    XrString *local_value = xr_string_new(X, "lazy_member", 11);
+    ASSERT_NOT_NULL(local_value);
+    ASSERT_TRUE(XR_STR_IS_LOCAL(local_value));
+    ASSERT_FALSE(XR_STR_IS_INTERNED(local_value));
+    ASSERT_TRUE(xr_set_add(set, xr_string_value(local_value)));
+
+    XrString *duplicate = xr_string_new(X, "lazy_member", 11);
+    ASSERT_FALSE(xr_set_add(set, xr_string_value(duplicate)));
+    ASSERT_EQ_INT(xr_set_size(set), 1);
+
+    XrString *probe = xr_string_new(X, "lazy_member", 11);
+    ASSERT_TRUE(xr_set_has(set, xr_string_value(probe)));
+
+    XrArray *values = xr_set_values(main_coro, set);
+    ASSERT_NOT_NULL(values);
+    ASSERT_EQ_INT(xr_array_size(values), 1);
+    XrString *stored = XR_TO_STRING(xr_array_get(values, 0));
+    ASSERT_TRUE(XR_STR_IS_INTERNED(stored));
+    ASSERT_STR_EQ(stored->data, "lazy_member");
+
+    XrString *delete_value = xr_string_new(X, "lazy_member", 11);
+    ASSERT_TRUE(xr_set_delete(set, xr_string_value(delete_value)));
+    ASSERT_FALSE(xr_set_has(set, xr_string_value(probe)));
+    teardown();
+}
+
 /* ========== Main ========== */
 
 int main(void) {
@@ -301,6 +332,7 @@ int main(void) {
     RUN_TEST(set_from_array);
     RUN_TEST(set_many_entries);
     RUN_TEST(set_tombstone_probe_and_compaction_order);
+    RUN_TEST(set_local_string_member_canonicalizes_for_content_lookup);
 
     TEST_REPORT();
     return TEST_EXIT();

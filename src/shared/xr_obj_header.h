@@ -58,10 +58,14 @@ _Static_assert(sizeof(XrObjHeader) == 16, "XrObjHeader must be 16 bytes");
  *                          bulk with the bump arena) and no collector scans it.
  *   bit 12 STORAGE_STACK - AOT stack-allocated object with a real destructor
  *                          but no heap block to free.
+ *   bit 14 AOT_NATIVE    - AOT-native header-bearing value. It boxes with the
+ *                          same heap_type as VM containers for fast dispatch,
+ *                          but must stay on AOT clone/release paths.
  */
 #define XR_OBJ_HAS_DTOR 0x0008
 #define XR_OBJ_STORAGE_BUMP 0x0800
 #define XR_OBJ_STORAGE_STACK 0x1000
+#define XR_OBJ_AOT_NATIVE 0x4000
 
 /* Shared signed-RC sentinels. Bump/immortal objects store XR_RC_STICKY so the
  * VM and AOT fast paths never mistake them for unique thread-local objects. */

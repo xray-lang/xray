@@ -99,13 +99,13 @@ static inline XrValue xr_chan_prepare_send_transfer_core(XrRuntimeCore *core, Xr
         return value;
     if (!xr_value_needs_copy(value)) {
         if (XR_OBJ_IS_SHARED(obj))
-            xr_shared_incref(obj);
+            xr_shared_retain(obj);
         return value;
     }
     if (mode == XR_TRANSFER_COPY)
         return xr_deep_copy_to_transit_core(core, value);
     if (XR_OBJ_IS_SHARED(obj)) {
-        xr_shared_incref(obj);
+        xr_shared_retain(obj);
         return value;
     }
     return xr_deep_copy_to_transit_core(core, value);

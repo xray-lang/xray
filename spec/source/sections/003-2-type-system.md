@@ -107,7 +107,7 @@ if (!s.isEmpty()) { }    // OK
 
 不可变 UTF-8 字符串。`length` / `size`、索引和默认迭代都以 Unicode scalar value 为单位：`s[i]` 返回 `char`，切片返回 `string`。丰富方法集见 §14.5。
 
-底层使用引用计数（ARC）+ 字符串驻留（interning）优化。
+底层使用引用计数（ARC）；运行期短串默认协程本地（无锁分配），字面量/符号、显式 `intern()` 与 map/set 键走全局驻留池，跨协程边界按需提升为共享。
 
 #### 2.3.5 `char`
 
@@ -598,7 +598,7 @@ if (!s.isEmpty()) { }    // OK
 
 Immutable UTF-8 strings. `length` / `size`, indexing, and default iteration are expressed in Unicode scalar values: `s[i]` returns `char`, and slicing returns `string`. For the rich method set, see §14.5.
 
-Internally uses ARC + string interning optimizations.
+Internally uses ARC; runtime short strings are coroutine-local by default (lock-free allocation), while literals/symbols, explicit `intern()`, and map/set keys use the global intern pool, with strings promoted to shared on demand when crossing coroutine boundaries.
 
 #### 2.3.5 `char`
 

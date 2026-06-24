@@ -1719,7 +1719,7 @@ static bool xicgen_emit_enum_method(XiCgenCtx *ctx, FILE *out, const XiValue *v,
         recv_enum->members[enum_member].payload_count > 0) {
         emit_adt_enum_construct_expr(out, enum_member, v);
     } else {
-        fprintf(out, "xrt_map_get((xrt_map_t*)");
+        fprintf(out, "xrt_map_get_owned((xrt_map_t*)");
         emit_vref(out, v->args[0]);
         fprintf(out, ".ptr, ");
         cg_emit_str_value(ctx, out, method);
@@ -2806,7 +2806,7 @@ static void xicgen_load_field(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
         const char *conv_suffix =
             emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
         if (cg_value_type_is_json(v->args[0])) {
-            fprintf(out, "xrt_json_get_name(");
+            fprintf(out, "xrt_json_get_name_owned(");
             emit_value_as_rep_ctx(ctx, out, receiver, XR_REP_TAGGED);
             fprintf(out, ", ");
             xicgen_emit_c_string_literal(out, field ? field : "?");
