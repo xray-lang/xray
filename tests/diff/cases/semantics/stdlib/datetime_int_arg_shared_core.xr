@@ -1,0 +1,24 @@
+import datetime
+
+let dyn: Json = {
+    "floatYear": 2024.9,
+    "boolMonth": true,
+    "nullDay": null,
+    "amount": true
+}
+
+let created = datetime.createUTC(dyn.floatYear, dyn.boolMonth, dyn.nullDay)
+print(created.year)
+print(created.month)
+print(created.day)
+print(created.hour)
+
+let base = datetime.createUTC(2024, 1, 2)
+let shifted = base.add(dyn.amount, "days")
+print(shifted.year)
+print(shifted.month)
+print(shifted.day)
+
+print(datetime.fromTimestamp(dyn.floatYear))
+print(datetime.fromTimestamp(dyn.boolMonth))
+print(datetime.fromTimestampMs(dyn.nullDay))

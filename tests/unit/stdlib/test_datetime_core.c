@@ -169,6 +169,20 @@ TEST(datetime_core_timestamp_and_timezone_rules) {
     ASSERT_EQ_INT(local.tz_offset, xr_datetime_core_local_offset_at((time_t) utc.timestamp));
 }
 
+TEST(datetime_core_int_argument_rules) {
+    int64_t value = 99;
+    ASSERT_EQ_INT(xr_datetime_core_int_arg_or(true, 42, 1970), 42);
+    ASSERT_EQ_INT(xr_datetime_core_int_arg_or(false, 42, 1970), 1970);
+
+    ASSERT_TRUE(xr_datetime_core_required_int_arg(true, -7, &value));
+    ASSERT_EQ_INT(value, -7);
+
+    value = 99;
+    ASSERT_FALSE(xr_datetime_core_required_int_arg(false, 123, &value));
+    ASSERT_EQ_INT(value, 0);
+    ASSERT_FALSE(xr_datetime_core_required_int_arg(true, 123, NULL));
+}
+
 TEST(datetime_core_parse_fields) {
     XrDateTimeCoreFields fields;
     ASSERT_TRUE(xr_datetime_core_parse_fields("2024-01-15T10:30:45.123Z", NULL, &fields));
@@ -212,6 +226,7 @@ RUN_TEST(datetime_core_utc_mktime);
 RUN_TEST(datetime_core_add_fields);
 RUN_TEST(datetime_core_diff_fields);
 RUN_TEST(datetime_core_timestamp_and_timezone_rules);
+RUN_TEST(datetime_core_int_argument_rules);
 RUN_TEST(datetime_core_parse_fields);
 
 TEST_MAIN_END()

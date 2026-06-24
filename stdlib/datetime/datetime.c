@@ -35,6 +35,16 @@
 
 /* ========== Internal Helpers ========== */
 
+static int64_t dt_int_arg_or(XrValue *args, int nargs, int index, int64_t fallback) {
+    bool has_int = index < nargs && XR_IS_INT(args[index]);
+    return xr_datetime_core_int_arg_or(has_int, has_int ? XR_TO_INT(args[index]) : 0, fallback);
+}
+
+static bool dt_required_int_arg(XrValue *args, int nargs, int index, int64_t *out) {
+    bool has_int = index < nargs && XR_IS_INT(args[index]);
+    return xr_datetime_core_required_int_arg(has_int, has_int ? XR_TO_INT(args[index]) : 0, out);
+}
+
 /* Cached body offset for DateTime class instances (set in
  * xr_register_datetime_class). Since the class has 0 fields and a
  * fixed body alignment, this is a constant after registration and lets
@@ -384,49 +394,37 @@ static XrValue dt_utc(XrVMRuntime *isolate, XrValue *args, int nargs) {
 }
 
 static XrValue dt_create(XrVMRuntime *isolate, XrValue *args, int nargs) {
-    int year = nargs > 0 && XR_IS_INT(args[0]) ? (int) XR_TO_INT(args[0]) : 1970;
-    int month = nargs > 1 && XR_IS_INT(args[1]) ? (int) XR_TO_INT(args[1]) : 1;
-    int day = nargs > 2 && XR_IS_INT(args[2]) ? (int) XR_TO_INT(args[2]) : 1;
-    int hour = nargs > 3 && XR_IS_INT(args[3]) ? (int) XR_TO_INT(args[3]) : 0;
-    int minute = nargs > 4 && XR_IS_INT(args[4]) ? (int) XR_TO_INT(args[4]) : 0;
-    int second = nargs > 5 && XR_IS_INT(args[5]) ? (int) XR_TO_INT(args[5]) : 0;
+    int year = (int) dt_int_arg_or(args, nargs, 0, 1970);
+    int month = (int) dt_int_arg_or(args, nargs, 1, 1);
+    int day = (int) dt_int_arg_or(args, nargs, 2, 1);
+    int hour = (int) dt_int_arg_or(args, nargs, 3, 0);
+    int minute = (int) dt_int_arg_or(args, nargs, 4, 0);
+    int second = (int) dt_int_arg_or(args, nargs, 5, 0);
     return xr_datetime_value(
         xr_datetime_create(isolate, year, month, day, hour, minute, second, 0));
 }
 
 static XrValue dt_create_utc(XrVMRuntime *isolate, XrValue *args, int nargs) {
-    int year = nargs > 0 && XR_IS_INT(args[0]) ? (int) XR_TO_INT(args[0]) : 1970;
-    int month = nargs > 1 && XR_IS_INT(args[1]) ? (int) XR_TO_INT(args[1]) : 1;
-    int day = nargs > 2 && XR_IS_INT(args[2]) ? (int) XR_TO_INT(args[2]) : 1;
-    int hour = nargs > 3 && XR_IS_INT(args[3]) ? (int) XR_TO_INT(args[3]) : 0;
-    int minute = nargs > 4 && XR_IS_INT(args[4]) ? (int) XR_TO_INT(args[4]) : 0;
-    int second = nargs > 5 && XR_IS_INT(args[5]) ? (int) XR_TO_INT(args[5]) : 0;
+    int year = (int) dt_int_arg_or(args, nargs, 0, 1970);
+    int month = (int) dt_int_arg_or(args, nargs, 1, 1);
+    int day = (int) dt_int_arg_or(args, nargs, 2, 1);
+    int hour = (int) dt_int_arg_or(args, nargs, 3, 0);
+    int minute = (int) dt_int_arg_or(args, nargs, 4, 0);
+    int second = (int) dt_int_arg_or(args, nargs, 5, 0);
     return xr_datetime_value(
         xr_datetime_create(isolate, year, month, day, hour, minute, second, 1));
 }
 
 static XrValue dt_from_timestamp(XrVMRuntime *isolate, XrValue *args, int nargs) {
-    if (nargs < 1)
-        return XR_NULL_VAL;
     int64_t ts = 0;
-    if (XR_IS_INT(args[0]))
-        ts = XR_TO_INT(args[0]);
-    else if (XR_IS_FLOAT(args[0]))
-        ts = (int64_t) XR_TO_FLOAT(args[0]);
-    else
+    if (!dt_required_int_arg(args, nargs, 0, &ts))
         return XR_NULL_VAL;
     return xr_datetime_value(xr_datetime_from_timestamp(isolate, ts));
 }
 
 static XrValue dt_from_timestamp_ms(XrVMRuntime *isolate, XrValue *args, int nargs) {
-    if (nargs < 1)
-        return XR_NULL_VAL;
     int64_t ts = 0;
-    if (XR_IS_INT(args[0]))
-        ts = XR_TO_INT(args[0]);
-    else if (XR_IS_FLOAT(args[0]))
-        ts = (int64_t) XR_TO_FLOAT(args[0]);
-    else
+    if (!dt_required_int_arg(args, nargs, 0, &ts))
         return XR_NULL_VAL;
     return xr_datetime_value(xr_datetime_from_timestamp_ms(isolate, ts));
 }
@@ -592,7 +590,7 @@ static XrValue dt_add(XrVMRuntime *isolate, XrValue self, XrValue *args, int nar
     if (!xr_value_is_datetime(isolate, self) || nargs < 2 || !XR_IS_STRING(args[1]))
         return XR_NULL_VAL;
     XrDateTime *dt = xr_value_get_datetime_body(isolate, self);
-    int64_t amount = XR_IS_INT(args[0]) ? XR_TO_INT(args[0]) : 0;
+    int64_t amount = dt_int_arg_or(args, nargs, 0, 0);
     const char *unit = XR_STRING_CHARS(XR_TO_STRING(args[1]));
     return xr_datetime_value(xr_datetime_add(isolate, dt, amount, unit));
 }
