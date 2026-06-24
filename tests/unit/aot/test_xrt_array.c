@@ -241,6 +241,52 @@ static void test_fill_range_typed_fast_path(void) {
     free_test_array(a);
 }
 
+static void test_resize_reserve_use_shared_capacity_plan(void) {
+    reset_alloc_counts();
+    XrValue value = xrt_array_new_typed(0, XR_ELEM_I64);
+    xrt_array_t *a = (xrt_array_t *) value.ptr;
+    for (int64_t i = 0; i < 3; i++)
+        xrt_array_push(value, XR_FROM_INT(i + 1));
+
+    int64_t initial_capacity = a->capacity;
+    xrt_array_reserve_value(value, XR_FROM_INT(-9));
+    ASSERT_EQ_INT(a->capacity, initial_capacity, "negative reserve is a no-op");
+    xrt_array_reserve_value(value, XR_FROM_INT(9));
+    ASSERT_TRUE(a->capacity >= 9, "reserve grows to requested capacity");
+    ASSERT_EQ_INT(a->length, 3, "reserve does not change length");
+
+    xrt_array_resize_value(value, XR_FROM_INT(6), XR_FROM_INT(42));
+    ASSERT_EQ_INT(a->length, 6, "resize grow updates length");
+    ASSERT_EQ_INT(((int64_t *) a->data)[3], 42, "resize fills first new slot");
+    ASSERT_EQ_INT(((int64_t *) a->data)[5], 42, "resize fills last new slot");
+
+    xrt_array_resize_value(value, XR_FROM_INT(-3), XR_FROM_INT(7));
+    ASSERT_EQ_INT(a->length, 0, "negative resize clamps to zero length");
+
+    free_test_array(a);
+}
+
+static void test_slice_resize_reserve_are_noops(void) {
+    reset_alloc_counts();
+    XrValue value = xrt_array_new_typed(0, XR_ELEM_I64);
+    xrt_array_t *a = (xrt_array_t *) value.ptr;
+    for (int64_t i = 0; i < 5; i++)
+        xrt_array_push(value, XR_FROM_INT(i + 10));
+
+    XrValue slice_value = xrt_array_slice_view(value, 1, 4);
+    xrt_array_t *slice = (xrt_array_t *) slice_value.ptr;
+    ASSERT_EQ_INT(slice->length, 3, "slice has expected initial length");
+    xrt_array_resize_value(slice_value, XR_FROM_INT(1), XR_FROM_INT(0));
+    ASSERT_EQ_INT(slice->length, 3, "slice resize shrink is a no-op");
+    xrt_array_resize_value(slice_value, XR_FROM_INT(8), XR_FROM_INT(0));
+    ASSERT_EQ_INT(slice->length, 3, "slice resize grow is a no-op");
+    xrt_array_reserve_value(slice_value, XR_FROM_INT(12));
+    ASSERT_EQ_INT(slice->capacity, 3, "slice reserve is a no-op");
+
+    free_test_array(slice);
+    free_test_array(a);
+}
+
 static void test_indexof_typed_fast_path_shared_rules(void) {
     reset_alloc_counts();
     XrValue bytes = xrt_array_new_typed(0, XR_ELEM_U8);
@@ -340,6 +386,8 @@ int main(void) {
     test_slice_marks_borrowed_storage();
     test_slice_negative_bounds_and_aliasing();
     test_fill_range_typed_fast_path();
+    test_resize_reserve_use_shared_capacity_plan();
+    test_slice_resize_reserve_are_noops();
     test_indexof_typed_fast_path_shared_rules();
     test_bytes_raw_helpers_share_core_rules();
     test_stack_closure_borrows_cell_upval();

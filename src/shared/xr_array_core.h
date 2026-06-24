@@ -34,6 +34,32 @@ typedef struct XrArrayCoreIndexSetPlan {
     int64_t index;
 } XrArrayCoreIndexSetPlan;
 
+typedef enum XrArrayCoreCapacityPlanKind {
+    XR_ARRAY_CORE_CAPACITY_INVALID = 0,
+    XR_ARRAY_CORE_CAPACITY_KEEP,
+    XR_ARRAY_CORE_CAPACITY_GROW,
+} XrArrayCoreCapacityPlanKind;
+
+typedef struct XrArrayCoreCapacityPlan {
+    XrArrayCoreCapacityPlanKind kind;
+    int64_t target_capacity;
+} XrArrayCoreCapacityPlan;
+
+typedef enum XrArrayCoreResizePlanKind {
+    XR_ARRAY_CORE_RESIZE_INVALID = 0,
+    XR_ARRAY_CORE_RESIZE_KEEP,
+    XR_ARRAY_CORE_RESIZE_SHRINK,
+    XR_ARRAY_CORE_RESIZE_GROW,
+} XrArrayCoreResizePlanKind;
+
+typedef struct XrArrayCoreResizePlan {
+    XrArrayCoreResizePlanKind kind;
+    int64_t length;
+    int64_t fill_start;
+    int64_t fill_count;
+    int64_t reserve_capacity;
+} XrArrayCoreResizePlan;
+
 typedef enum XrArrayCoreNeedleKind {
     XR_ARRAY_CORE_NEEDLE_OTHER = 0,
     XR_ARRAY_CORE_NEEDLE_INT,
@@ -363,6 +389,57 @@ static inline bool xr_array_core_fill_typed_storage(void *data, int64_t start, i
 
 static inline int64_t xr_array_core_nonnegative_length(int64_t length) {
     return length < 0 ? 0 : length;
+}
+
+static inline XrArrayCoreCapacityPlan
+xr_array_core_reserve_plan(int64_t current_capacity, int64_t requested_capacity, bool can_resize) {
+    if (current_capacity < 0)
+        current_capacity = 0;
+    requested_capacity = xr_array_core_nonnegative_length(requested_capacity);
+
+    if (!can_resize || requested_capacity <= current_capacity)
+        return (XrArrayCoreCapacityPlan) {XR_ARRAY_CORE_CAPACITY_KEEP, current_capacity};
+    if (requested_capacity > INT32_MAX)
+        return (XrArrayCoreCapacityPlan) {XR_ARRAY_CORE_CAPACITY_INVALID, current_capacity};
+    return (XrArrayCoreCapacityPlan) {XR_ARRAY_CORE_CAPACITY_GROW, requested_capacity};
+}
+
+static inline XrArrayCoreResizePlan xr_array_core_resize_plan(int64_t current_length,
+                                                              int64_t current_capacity,
+                                                              int64_t requested_length,
+                                                              bool can_resize) {
+    XrArrayCoreResizePlan out = {XR_ARRAY_CORE_RESIZE_INVALID, 0, 0, 0, 0};
+    if (current_length < 0)
+        current_length = 0;
+    if (current_capacity < 0)
+        current_capacity = 0;
+
+    int64_t length = xr_array_core_nonnegative_length(requested_length);
+    if (!can_resize) {
+        out.kind = XR_ARRAY_CORE_RESIZE_KEEP;
+        out.length = current_length;
+        out.reserve_capacity = current_capacity;
+        return out;
+    }
+    if (length > INT32_MAX)
+        return out;
+
+    out.length = length;
+    out.reserve_capacity = current_capacity;
+    if (length == current_length) {
+        out.kind = XR_ARRAY_CORE_RESIZE_KEEP;
+        return out;
+    }
+    if (length < current_length) {
+        out.kind = XR_ARRAY_CORE_RESIZE_SHRINK;
+        return out;
+    }
+
+    out.kind = XR_ARRAY_CORE_RESIZE_GROW;
+    out.fill_start = current_length;
+    out.fill_count = length - current_length;
+    out.reserve_capacity = length > current_capacity ? length : current_capacity;
+    return out;
 }
 
 static inline bool xr_array_core_required_int_arg(bool has_int, int64_t value, int64_t *out) {

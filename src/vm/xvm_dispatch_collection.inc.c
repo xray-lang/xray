@@ -806,7 +806,7 @@ vmcase(OP_ARRAY_RESERVE) {
     if (!XR_IS_ARRAY(R(a)) || !XR_IS_INT(R(b))) {
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Array.reserve(capacity) expects an integer");
     }
-    if (!xr_array_reserve(XR_TO_ARRAY(R(a)), (int32_t) XR_TO_INT(R(b)))) {
+    if (!xr_array_reserve(XR_TO_ARRAY(R(a)), XR_TO_INT(R(b)))) {
         VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, "Array.reserve failed");
     }
     vmbreak;
@@ -819,7 +819,7 @@ vmcase(OP_ARRAY_RESIZE) {
     if (!XR_IS_ARRAY(R(a)) || !XR_IS_INT(R(b))) {
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Array.resize(length, fill) expects integer length");
     }
-    if (!xr_array_resize(XR_TO_ARRAY(R(a)), (int32_t) XR_TO_INT(R(b)), R(c))) {
+    if (!xr_array_resize(XR_TO_ARRAY(R(a)), XR_TO_INT(R(b)), R(c))) {
         VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, "Array.resize failed");
     }
     vmbreak;

@@ -57,10 +57,10 @@ static bool xr_array_same_gc_object(XrValue a, XrValue b) {
     return XR_IS_PTR(a) && XR_IS_PTR(b) && XR_TO_PTR(a) == XR_TO_PTR(b);
 }
 
-static void xr_array_retain_extra_fill_refs(XrValue value, int32_t changed_slots) {
+static void xr_array_retain_extra_fill_refs(XrValue value, int64_t changed_slots) {
     if (!XR_VALUE_NEEDS_GC(value))
         return;
-    for (int32_t i = 0; i < changed_slots; i++)
+    for (int64_t i = 0; i < changed_slots; i++)
         xr_rc_retain_value(value);
 }
 
@@ -406,48 +406,56 @@ void xr_array_fill(XrArray *arr, XrValue value, int64_t start, int64_t end) {
                                             value);
 }
 
-bool xr_array_reserve(XrArray *arr, int32_t capacity) {
-    if (!arr || capacity < 0 || xr_array_is_slice(arr))
+bool xr_array_reserve(XrArray *arr, int64_t capacity) {
+    if (!arr)
         return false;
-    if (arr->capacity >= capacity)
+    XrArrayCoreCapacityPlan plan =
+        xr_array_core_reserve_plan(arr->capacity, capacity, !xr_array_is_slice(arr));
+    if (plan.kind == XR_ARRAY_CORE_CAPACITY_INVALID)
+        return false;
+    if (plan.kind == XR_ARRAY_CORE_CAPACITY_KEEP)
         return true;
-    xr_array_ensure_capacity(arr, capacity);
-    return arr->capacity >= capacity;
+    xr_array_ensure_capacity(arr, plan.target_capacity);
+    return arr->capacity >= plan.target_capacity;
 }
 
-bool xr_array_resize(XrArray *arr, int32_t length, XrValue fill) {
-    if (!arr || length < 0 || xr_array_is_slice(arr))
+bool xr_array_resize(XrArray *arr, int64_t length, XrValue fill) {
+    if (!arr)
         return false;
-    int32_t old_length = arr->length;
-    if (length < old_length) {
+    XrArrayCoreResizePlan plan =
+        xr_array_core_resize_plan(arr->length, arr->capacity, length, !xr_array_is_slice(arr));
+    if (plan.kind == XR_ARRAY_CORE_RESIZE_INVALID)
+        return false;
+    if (plan.kind == XR_ARRAY_CORE_RESIZE_KEEP)
+        return true;
+
+    int64_t old_length = arr->length;
+    if (plan.kind == XR_ARRAY_CORE_RESIZE_SHRINK) {
         if (arr->elem_type == XR_ELEM_ANY) {
             XrValue *data = (XrValue *) arr->data;
             XrCoroHeap *heap = xr_current_coro_heap();
-            for (int32_t i = length; i < old_length; i++) {
+            for (int64_t i = plan.length; i < old_length; i++) {
                 xr_rc_release_value(heap, data[i]);
                 data[i] = xr_null();
             }
         }
-        arr->length = length;
+        arr->length = plan.length;
         return true;
     }
-    if (length == old_length)
-        return true;
 
-    xr_array_ensure_capacity(arr, length);
-    if (arr->capacity < length || !arr->data)
+    xr_array_ensure_capacity(arr, plan.reserve_capacity);
+    if (arr->capacity < plan.reserve_capacity || !arr->data)
         return false;
 
-    int32_t added = length - old_length;
     if (arr->elem_type == XR_ELEM_ANY) {
-        xr_array_retain_extra_fill_refs(fill, added);
-        for (int32_t i = old_length; i < length; i++)
-            xr_array_set_element(arr, i, fill);
-    } else if (!xr_array_core_fill_typed_storage(arr->data, old_length, added, arr->elem_type,
-                                                 fill)) {
+        xr_array_retain_extra_fill_refs(fill, plan.fill_count);
+        for (int64_t i = plan.fill_start; i < plan.length; i++)
+            xr_array_set_element(arr, (int32_t) i, fill);
+    } else if (!xr_array_core_fill_typed_storage(arr->data, plan.fill_start, plan.fill_count,
+                                                 arr->elem_type, fill)) {
         return false;
     }
-    arr->length = length;
+    arr->length = plan.length;
     if (XR_ARRAY_MAY_CONTAIN_REFS(arr)) {
         XR_ARRAY_MARK_REFS(arr, fill);
     }
@@ -531,7 +539,7 @@ void xr_array_grow(XrArray *arr) {
     }
 }
 
-void xr_array_ensure_capacity(XrArray *arr, int min_capacity) {
+void xr_array_ensure_capacity(XrArray *arr, int64_t min_capacity) {
     XR_DCHECK(arr != NULL, "ensure_capacity: NULL array");
     XR_DCHECK(min_capacity >= 0, "ensure_capacity: negative min_capacity");
     // Slices cannot grow

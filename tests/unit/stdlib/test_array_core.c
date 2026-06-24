@@ -118,6 +118,52 @@ TEST(array_core_required_int_arg_accepts_only_present_ints) {
     ASSERT_FALSE(xr_array_core_required_int_arg(true, 42, NULL));
 }
 
+TEST(array_core_reserve_plan_clamps_negative_and_grows_only_when_needed) {
+    XrArrayCoreCapacityPlan keep = xr_array_core_reserve_plan(8, 4, true);
+    ASSERT_EQ_INT(keep.kind, XR_ARRAY_CORE_CAPACITY_KEEP);
+    ASSERT_EQ_INT(keep.target_capacity, 8);
+
+    XrArrayCoreCapacityPlan negative = xr_array_core_reserve_plan(8, -5, true);
+    ASSERT_EQ_INT(negative.kind, XR_ARRAY_CORE_CAPACITY_KEEP);
+    ASSERT_EQ_INT(negative.target_capacity, 8);
+
+    XrArrayCoreCapacityPlan grow = xr_array_core_reserve_plan(2, 9, true);
+    ASSERT_EQ_INT(grow.kind, XR_ARRAY_CORE_CAPACITY_GROW);
+    ASSERT_EQ_INT(grow.target_capacity, 9);
+
+    XrArrayCoreCapacityPlan borrowed = xr_array_core_reserve_plan(2, 9, false);
+    ASSERT_EQ_INT(borrowed.kind, XR_ARRAY_CORE_CAPACITY_KEEP);
+    ASSERT_EQ_INT(borrowed.target_capacity, 2);
+
+    XrArrayCoreCapacityPlan huge = xr_array_core_reserve_plan(2, (int64_t) INT32_MAX + 1, true);
+    ASSERT_EQ_INT(huge.kind, XR_ARRAY_CORE_CAPACITY_INVALID);
+}
+
+TEST(array_core_resize_plan_shrink_grow_and_slice_noop) {
+    XrArrayCoreResizePlan shrink = xr_array_core_resize_plan(5, 8, 2, true);
+    ASSERT_EQ_INT(shrink.kind, XR_ARRAY_CORE_RESIZE_SHRINK);
+    ASSERT_EQ_INT(shrink.length, 2);
+    ASSERT_EQ_INT(shrink.fill_count, 0);
+
+    XrArrayCoreResizePlan negative = xr_array_core_resize_plan(5, 8, -3, true);
+    ASSERT_EQ_INT(negative.kind, XR_ARRAY_CORE_RESIZE_SHRINK);
+    ASSERT_EQ_INT(negative.length, 0);
+
+    XrArrayCoreResizePlan grow = xr_array_core_resize_plan(3, 4, 7, true);
+    ASSERT_EQ_INT(grow.kind, XR_ARRAY_CORE_RESIZE_GROW);
+    ASSERT_EQ_INT(grow.length, 7);
+    ASSERT_EQ_INT(grow.fill_start, 3);
+    ASSERT_EQ_INT(grow.fill_count, 4);
+    ASSERT_EQ_INT(grow.reserve_capacity, 7);
+
+    XrArrayCoreResizePlan borrowed = xr_array_core_resize_plan(3, 3, 1, false);
+    ASSERT_EQ_INT(borrowed.kind, XR_ARRAY_CORE_RESIZE_KEEP);
+    ASSERT_EQ_INT(borrowed.length, 3);
+
+    XrArrayCoreResizePlan huge = xr_array_core_resize_plan(3, 4, (int64_t) INT32_MAX + 1, true);
+    ASSERT_EQ_INT(huge.kind, XR_ARRAY_CORE_RESIZE_INVALID);
+}
+
 TEST(array_core_join_plans_total_and_writes_separators) {
     const char *items[] = {"aa", "b", ""};
     JoinParts ctx = {items};
@@ -612,6 +658,8 @@ RUN_TEST(array_core_slice_range_empty_when_start_after_end);
 RUN_TEST(array_core_slice_range_accepts_nonpositive_length);
 RUN_TEST(array_core_fill_range_matches_slice_bounds);
 RUN_TEST(array_core_required_int_arg_accepts_only_present_ints);
+RUN_TEST(array_core_reserve_plan_clamps_negative_and_grows_only_when_needed);
+RUN_TEST(array_core_resize_plan_shrink_grow_and_slice_noop);
 RUN_TEST(array_core_join_plans_total_and_writes_separators);
 RUN_TEST(array_core_join_handles_empty_and_invalid_capacity);
 RUN_TEST(array_core_hof_map_preserves_iteration_and_write_indices);
