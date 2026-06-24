@@ -1,0 +1,5 @@
+let ranges = [1..3, 4..4, 9..12]
+print(ranges.join(","))
+
+let mixed = ["tag", 2..5, null]
+print(mixed.join(":"))

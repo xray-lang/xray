@@ -10,13 +10,16 @@
 
 #include "xarray_vm.h"
 
+#include "xrange.h"
 #include "xstring.h"
 #include "../../base/xchecks.h"
 #include "../../base/xmalloc.h"
 #include "../../coro/xcoroutine.h"
 #include "../closure/xclosure.h"
 #include "../mem/xalloc_unified.h"
+#include "../value/xvalue_format.h"
 #include "../value/xtype_names.h"
+#include "../xstdlib_bridge.h"
 #include "../xisolate_api.h"
 #include "../../shared/xr_array_core.h"
 #include "../../shared/xr_float_fmt.h"
@@ -235,10 +238,11 @@ void xr_array_sort(struct XrVMRuntime *iso, XrArray *arr, struct XrClosure *comp
 }
 
 typedef struct XrArrayJoinVMCtx {
+    XrVMRuntime *iso;
     XrArray *arr;
 } XrArrayJoinVMCtx;
 
-static bool xr_array_join_vm_part(XrValue val, char *dst, size_t *len) {
+static bool xr_array_join_vm_part(XrArrayJoinVMCtx *join_ctx, XrValue val, char *dst, size_t *len) {
     const char *data = NULL;
     size_t n = 0;
     char tmp[64];
@@ -264,6 +268,14 @@ static bool xr_array_join_vm_part(XrValue val, char *dst, size_t *len) {
     } else if (XR_IS_NULL(val)) {
         data = "null";
         n = 4;
+    } else if (join_ctx && join_ctx->iso &&
+               (xr_value_is_range(join_ctx->iso, val) ||
+                xr_value_is_datetime(join_ctx->iso, val))) {
+        XrString *s = xr_value_to_string(join_ctx->iso, val);
+        if (!s)
+            return false;
+        data = s->data;
+        n = (size_t) s->length;
     } else {
         data = "[object]";
         n = 8;
@@ -280,7 +292,8 @@ static bool xr_array_join_vm_element(void *ctx, int64_t index, char *dst, size_t
     XrArrayJoinVMCtx *join_ctx = (XrArrayJoinVMCtx *) ctx;
     if (!join_ctx || !join_ctx->arr || index < 0 || index > INT32_MAX)
         return false;
-    return xr_array_join_vm_part(xr_array_get_element(join_ctx->arr, (int32_t) index), dst, len);
+    return xr_array_join_vm_part(join_ctx, xr_array_get_element(join_ctx->arr, (int32_t) index),
+                                 dst, len);
 }
 
 struct XrString *xr_array_join(struct XrVMRuntime *iso, XrArray *arr, struct XrString *delimiter) {
@@ -289,7 +302,7 @@ struct XrString *xr_array_join(struct XrVMRuntime *iso, XrArray *arr, struct XrS
 
     const char *sep = delimiter ? delimiter->data : NULL;
     size_t sep_len = delimiter ? delimiter->length : 0;
-    XrArrayJoinVMCtx ctx = {arr};
+    XrArrayJoinVMCtx ctx = {iso, arr};
     size_t total = 0;
     if (!xr_array_core_join_total(arr->length, sep_len, xr_array_join_vm_element, &ctx, &total))
         return NULL;
