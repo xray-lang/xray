@@ -138,11 +138,22 @@ typedef struct XrValue {
 #define XR_TAG_REGEX 26    /* AOT compiled regex handle */
 #define XR_TAG_DATETIME 27 /* AOT DateTime light object */
 
+typedef enum XrAotEnumLiteralKind {
+    XR_AOT_ENUM_LITERAL_NULL = 0,
+    XR_AOT_ENUM_LITERAL_INT,
+    XR_AOT_ENUM_LITERAL_FLOAT,
+    XR_AOT_ENUM_LITERAL_BOOL,
+    XR_AOT_ENUM_LITERAL_STRING,
+} XrAotEnumLiteralKind;
+
 typedef struct XrAotEnumValueView {
     uint64_t gc_words[2];
     void *klass;
     const char *enum_name;
     const char *member_name;
+    XrAotEnumLiteralKind value_kind;
+    XrValue value;
+    const char *string_value;
 } XrAotEnumValueView;
 
 static inline const char *xrt_enum_to_cstr(XrValue v, char *buf, size_t bufsz) {

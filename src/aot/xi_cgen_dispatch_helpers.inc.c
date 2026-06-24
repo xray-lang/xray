@@ -1652,8 +1652,25 @@ static bool xicgen_emit_typed_array_method(XiCgenCtx *ctx, FILE *out, const XiFu
 static bool xicgen_emit_enum_method(XiCgenCtx *ctx, FILE *out, const XiValue *v,
                                     const char *method) {
     const XiEnumData *recv_enum = cg_enum_for_shared_value(ctx, v->args[0]);
+    if (!recv_enum || !method)
+        return false;
+    if (strcmp(method, "getMember") == 0 && v->nargs == 2) {
+        fprintf(out, "({ int64_t _idx = ");
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
+        fprintf(out, "; XrValue _member = XR_NULL_VAL; switch (_idx) { ");
+        for (uint32_t i = 0; i < recv_enum->member_count; i++) {
+            const XiEnumMemberData *member = &recv_enum->members[i];
+            fprintf(out, "case %u: _member = xrt_map_get((xrt_map_t*)", (unsigned) i);
+            emit_vref(out, v->args[0]);
+            fprintf(out, ".ptr, ");
+            cg_emit_str_value(ctx, out, member->name ? member->name : "");
+            fprintf(out, "); break; ");
+        }
+        fprintf(out, "} _member; })");
+        return true;
+    }
     int enum_member = cg_enum_member_index(recv_enum, method);
-    if (!recv_enum || enum_member < 0)
+    if (enum_member < 0)
         return false;
     if (recv_enum->is_adt && recv_enum->members &&
         recv_enum->members[enum_member].payload_count > 0) {

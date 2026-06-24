@@ -1639,8 +1639,25 @@ static inline XrValue xrt_json_set_name(XrValue obj, const char *name, XrValue v
 }
 
 static inline XrValue xrt_getprop_name(XrValue obj, const char *name) {
-    if (XR_IS_MAP(obj))
+    if (XR_IS_MAP(obj)) {
+        if (name && strcmp(name, "memberCount") == 0)
+            return XR_FROM_INT(xrt_map_len((xrt_map_t *) obj.ptr));
         return xrt_map_get((xrt_map_t *) obj.ptr, xr_box_str(name));
+    }
+    if (obj.tag == XR_TAG_ENUM) {
+        const XrAotEnumValueView *ev = (const XrAotEnumValueView *) obj.ptr;
+        if (!ev || !name)
+            return XR_NULL_VAL;
+        if (strcmp(name, "name") == 0)
+            return ev->member_name ? xr_box_str(ev->member_name) : XR_NULL_VAL;
+        if (strcmp(name, "ordinal") == 0)
+            return XR_FROM_INT((int64_t) obj.ext);
+        if (strcmp(name, "value") == 0) {
+            if (ev->value_kind == XR_AOT_ENUM_LITERAL_STRING)
+                return ev->string_value ? xr_box_str(ev->string_value) : XR_NULL_VAL;
+            return ev->value;
+        }
+    }
     if (obj.tag == XR_TAG_PTR && obj.ptr && obj.heap_type == 0)
         return xrt_json_get_name(obj, name);
     return XR_NULL_VAL;

@@ -269,8 +269,8 @@ static bool xr_array_join_vm_part(XrArrayJoinVMCtx *join_ctx, XrValue val, char 
         data = "null";
         n = 4;
     } else if (join_ctx && join_ctx->iso &&
-               (xr_value_is_range(join_ctx->iso, val) ||
-                xr_value_is_datetime(join_ctx->iso, val))) {
+               (xr_value_is_range(join_ctx->iso, val) || xr_value_is_datetime(join_ctx->iso, val) ||
+                xr_value_is_enum_value(val))) {
         XrString *s = xr_value_to_string(join_ctx->iso, val);
         if (!s)
             return false;
