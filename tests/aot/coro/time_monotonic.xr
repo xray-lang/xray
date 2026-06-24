@@ -2,7 +2,7 @@ import time
 
 fn monotonic_ok() -> bool {
     let before = time.monotonic()
-    yield
+    Coro.yield()
     let after = time.monotonic()
     return after >= before
 }

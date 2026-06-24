@@ -1,7 +1,7 @@
 fn worker(m: Map<string, Array<int>>) -> int {
     let xs = m.get("items")
     xs.push(99)
-    yield
+    Coro.yield()
     return xs.length
 }
 

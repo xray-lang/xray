@@ -1,5 +1,5 @@
 fn square_after_yield(n: int) -> int {
-    yield
+    Coro.yield()
     return n * n
 }
 

@@ -10,7 +10,7 @@ fn captured_sync_go(x: int) -> int {
 
 fn captured_suspend_go(x: int) -> int {
     fn inner() -> int {
-        yield
+        Coro.yield()
         return x + 1
     }
 
@@ -22,7 +22,7 @@ fn captured_suspend_go(x: int) -> int {
 fn nested_captured_suspend_go(x: int) -> int {
     fn mid() -> int {
         fn inner() -> int {
-            yield
+            Coro.yield()
             return x + 2
         }
 

@@ -4,7 +4,7 @@ fn worker(ch: Channel<Array<int>>) -> int {
         _ -> []
     }
     xs.push(99)
-    yield
+    Coro.yield()
     return xs.length
 }
 

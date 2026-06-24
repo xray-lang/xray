@@ -1,6 +1,6 @@
 fn worker(xs: Array<int>) -> int {
     xs.push(99)
-    yield
+    Coro.yield()
     return xs.length
 }
 

@@ -1,6 +1,6 @@
 fn make_worker() -> () -> int {
     return fn() -> int {
-        yield
+        Coro.yield()
         return 41
     }
 }

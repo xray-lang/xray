@@ -19,7 +19,7 @@ print(match (ready.recv()) {
 })
 
 for (let i = 0; i < 16; i++) {
-    yield
+    Coro.yield()
 }
 
 ch.close()

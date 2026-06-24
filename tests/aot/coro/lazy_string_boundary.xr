@@ -11,7 +11,7 @@ fn recv_string(ch: Channel<string>) -> string {
 
 fn produce(n: int) -> string {
     let s = glue("task_", string(n))
-    yield
+    Coro.yield()
     return s
 }
 
@@ -19,7 +19,7 @@ fn build_map(seed: string) -> Map<string, string> {
     let key = glue("k", "9")
     let m: Map<string, string> = #{}
     m.set(key, seed + "_value")
-    yield
+    Coro.yield()
     return m
 }
 

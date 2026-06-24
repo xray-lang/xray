@@ -6,7 +6,7 @@
 // tuples (XR_TAG_TUPLE), so every coroutine tuple element silently read back
 // as null on AOT while the VM produced the values.
 fn produce() -> (int, int) {
-    yield
+    Coro.yield()
     return (10, 20)
 }
 
@@ -17,7 +17,7 @@ print(b)
 
 // Tuple constructed and destructured within a coroutine body.
 fn sum_pair() -> int {
-    yield
+    Coro.yield()
     let pair = (3, 4)
     let (x, y) = pair
     return x + y

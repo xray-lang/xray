@@ -1,11 +1,11 @@
 fn send_after_yield(ch: Channel<int>, value: int) -> int {
-    yield
+    Coro.yield()
     ch.send(value)
     return value
 }
 
 fn recv_after_yield(ch: Channel<int>) -> int {
-    yield
+    Coro.yield()
     return match (ch.recv()) {
         Recv.Value(value) -> value
         _ -> -1

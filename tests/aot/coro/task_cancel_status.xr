@@ -6,7 +6,7 @@ fn wait_for_value(ch: Channel<int>) -> int {
 }
 
 fn quick_value(n: int) -> int {
-    yield
+    Coro.yield()
     return n * 2
 }
 
