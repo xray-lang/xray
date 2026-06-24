@@ -3077,8 +3077,19 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             SelectCaseNode *sc = &node->as.select_case;
             if (sc->channel)
                 xa_visit_infer_expr(ctx, sc->channel);
-            if (sc->value)
+            if (sc->value) {
                 xa_visit_infer_expr(ctx, sc->value);
+                /* Send arms cross a coroutine boundary just like ch.send / go,
+                 * so a bare owned-heap payload must use explicit copy/move/
+                 * shared const. */
+                if (sc->is_send) {
+                    XrType *send_type = xa_analyzer_get_node_type(ctx->analyzer, sc->value);
+                    if (!send_type)
+                        send_type = xa_visit_infer_expr(ctx, sc->value);
+                    xa_check_boundary_transfer_arg(ctx, node, sc->value, send_type,
+                                                   "select send value");
+                }
+            }
             /* Recv cases have a block scope from pass 1 for the variable. */
             if (sc->var_name && !sc->is_send && !sc->is_default) {
                 xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, node);

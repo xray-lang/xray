@@ -105,6 +105,8 @@ XR_FUNC void xi_lower_func_add_child(XiFunc *parent, XiFunc *child);
 /* ========== AST Lowering Primitives ========== */
 
 XR_FUNC XiValue *xi_lower_expr(XiLower *l, struct AstNode *node);
+XR_FUNC bool xi_lower_boundary_transfer_arg(XiLower *l, struct AstNode *child, XiValue **out_value,
+                                            uint8_t *out_mode);
 XR_FUNC void xi_lower_stmt(XiLower *l, struct AstNode *node);
 XR_FUNC struct XrType *xi_lower_node_type(XiLower *l, struct AstNode *node);
 
