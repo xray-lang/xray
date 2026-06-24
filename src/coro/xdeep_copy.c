@@ -34,9 +34,10 @@
 #include "../base/xhash.h"
 
 const XrObjDeepCopyFn xr_obj_deep_copy_ops[XR_OBJ_TYPE_MAX] = {
-    [XR_TARRAY] = xr_deep_copy_array_with_ctx,      [XR_TMAP] = xr_deep_copy_map_with_ctx,
-    [XR_TSET] = xr_deep_copy_set_with_ctx,          [XR_TINSTANCE] = xr_deep_copy_instance_with_ctx,
-    [XR_TFUNCTION] = xr_deep_copy_closure_with_ctx, [XR_TCELL] = xr_deep_copy_cell_with_ctx,
+    [XR_TSTRING] = xr_deep_copy_string_with_ctx,     [XR_TARRAY] = xr_deep_copy_array_with_ctx,
+    [XR_TMAP] = xr_deep_copy_map_with_ctx,           [XR_TSET] = xr_deep_copy_set_with_ctx,
+    [XR_TINSTANCE] = xr_deep_copy_instance_with_ctx, [XR_TFUNCTION] = xr_deep_copy_closure_with_ctx,
+    [XR_TCELL] = xr_deep_copy_cell_with_ctx,
 };
 
 const XrObjToSharedFn xr_obj_to_shared_ops[XR_OBJ_TYPE_MAX] = {
@@ -109,6 +110,13 @@ static inline void *copy_ctx_alloc(XrCopyContext *ctx, size_t size, uint8_t type
     return xr_fixed_heap_alloc(ctx->dst_fixed_heap, size, type);
 }
 
+XrValue xr_deep_copy_string_with_ctx(XrCopyContext *ctx, XrObjHeader *obj) {
+    if (!ctx || !obj)
+        return XR_NULL_VAL;
+    XrString *copy = xr_string_clone_shared_core(ctx->core, (XrString *) obj);
+    return copy ? xr_string_value(copy) : XR_NULL_VAL;
+}
+
 void xr_copy_context_cleanup(XrCopyContext *ctx) {
     // Free arena blocks (bulk deallocation, no per-entry free)
     XrSeenArena *arena = ctx->arena_head;
@@ -137,7 +145,7 @@ static XrValue xr_copy_context_lookup(XrCopyContext *ctx, void *src) {
             if (ctx->to_transit && XR_IS_PTR(e->dst)) {
                 XrObjHeader *dst_obj = XR_VALUE_GCPTR(e->dst);
                 if (dst_obj)
-                    xr_shared_incref(dst_obj);
+                    xr_shared_retain(dst_obj);
             }
             return e->dst;
         }
@@ -512,7 +520,7 @@ XrValue xr_deep_copy_with_ctx(XrCopyContext *ctx, XrValue value) {
         /* TRANSIT graphs are never pointer-shared: the receive side must
          * materialize a private copy, so fall through to the per-type copy. */
         if (!XR_OBJ_GET_FLAG(obj, XR_OBJ_TRANSIT)) {
-            xr_shared_incref(obj);
+            xr_shared_retain(obj);
             return value;
         }
     }
@@ -522,10 +530,10 @@ XrValue xr_deep_copy_with_ctx(XrCopyContext *ctx, XrValue value) {
         return value;
 
     // Compile-time types resolve through xr_obj_deep_copy_ops in O(1). Slot is
-    // NULL for types that are either immutable across coroutines (TSTRING,
-    // TBLOB) or simply not transferable (TCHANNEL, TCOROUTINE, TTASK,
-    // TCELL, TBOUND_METHOD, TEXCEPTION, TERROR). The dispatcher returns
-    // the raw value for those, matching the previous default branch.
+    // NULL for types that are either immediate by policy (TBLOB) or simply
+    // not transferable (TCHANNEL, TCOROUTINE, TTASK, TBOUND_METHOD,
+    // TEXCEPTION, TERROR). Strings have a hook because short runtime strings
+    // are coroutine-local and must be promoted before crossing a boundary.
     XrObjDeepCopyFn fn = xr_obj_deep_copy_ops[type];
     return fn ? fn(ctx, obj) : value;
 }
@@ -732,7 +740,7 @@ XrValue xr_deep_copy_to_coro_core(XrRuntimeCore *core, XrValue value,
     // TRANSIT graphs are the exception: they must be materialized privately.
     XrObjHeader *obj = XR_VALUE_GCPTR(value);
     if (obj && XR_OBJ_IS_SHARED(obj) && !XR_OBJ_GET_FLAG(obj, XR_OBJ_TRANSIT)) {
-        xr_shared_incref(obj);
+        xr_shared_retain(obj);
         return value;
     }
     if (xr_value_copy_kind(value) != XR_COPY_DEEP)
@@ -1009,9 +1017,11 @@ XrValue xr_to_shared(struct XrayIsolate *X, XrValue value) {
     // Already shared: no-op (do NOT incref — caller already owns the reference)
     if (XR_OBJ_IS_SHARED(obj))
         return value;
-    // Strings are interned: pointer-shareable as-is, no copy required.
-    if (XR_OBJ_GET_TYPE(obj) == XR_TSTRING)
-        return value;
+    if (XR_OBJ_GET_TYPE(obj) == XR_TSTRING) {
+        XrString *shared =
+            xr_string_clone_shared_core(xr_isolate_get_runtime_core(X), (XrString *) obj);
+        return shared ? xr_string_value(shared) : XR_NULL_VAL;
+    }
 
     uint8_t type = XR_OBJ_GET_TYPE(obj);
     if (type >= XR_OBJ_TYPE_MAX)

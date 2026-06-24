@@ -595,7 +595,7 @@ if (!s.isEmpty()) { }    // OK
 
 Immutable UTF-8 strings. `length` / `size`, indexing, and default iteration are expressed in Unicode scalar values: `s[i]` returns `char`, and slicing returns `string`. For the rich method set, see §14.5.
 
-Internally uses ARC + string interning optimizations.
+Internally uses ARC; runtime short strings are coroutine-local by default (lock-free allocation), while literals/symbols, explicit `intern()`, and map/set keys use the global intern pool, with strings promoted to shared on demand when crossing coroutine boundaries.
 
 #### 2.3.5 `char`
 
@@ -4875,7 +4875,7 @@ Xray values are uniformly represented as `XrValue`. The current implementation r
 - **Descriptor (8 bytes)**: `tag: uint8`, `flags: uint8`, `heap_type: uint16`, and `ext: uint32`. The `tag` is the single entry point for type dispatch; `heap_type` is meaningful only when `tag == PTR`.
 - **Payload (8 bytes)**: one of `int64`, `double`, or pointer, interpreted by the tag.
 - **No NaN-boxing / no low-bit pointer tagging**: integers keep the full 64-bit payload; object references are ordinary heap pointers, with type metadata in the descriptor.
-- **Strings are not value-level SSO**: `string` is always an `XrString` heap object, with bytes stored inside the object's `data[]` flexible array. Short-string interning and long-string sharing are object-storage policies and do not change the `XrValue` representation.
+- **Strings are not value-level SSO**: `string` is always an `XrString` heap object, with bytes stored inside the object's `data[]` flexible array. Runtime short strings are coroutine-local with lock-free allocation by default; only literals/symbols, explicit `intern()`, and map/set keys are interned in the global pool, and strings are promoted to shared (atomic RC) on demand when crossing coroutine boundaries (channel send, `go` arguments, task/scope results). These are object-storage policies and do not change the `XrValue` representation.
 
 | Value type | Internal representation |
 |--|--|

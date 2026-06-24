@@ -285,6 +285,42 @@ TEST(map_string_fast_path_swiss_ctrl) {
     teardown();
 }
 
+TEST(map_local_string_key_canonicalizes_for_fast_lookup) {
+    setup();
+    XrMap *map = xr_map_with_capacity(main_coro, 8);
+
+    XrString *local_key = xr_string_new(X, "lazy_key", 8);
+    ASSERT_NOT_NULL(local_key);
+    ASSERT_TRUE(XR_STR_IS_LOCAL(local_key));
+    ASSERT_FALSE(XR_STR_IS_INTERNED(local_key));
+    xr_map_set(map, xr_string_value(local_key), xr_int(7));
+
+    XrString *interned = xr_string_intern(X, "lazy_key", 8, 0);
+    ASSERT_NOT_NULL(interned);
+    XrMapEntry *entry = xr_map_find_string_fast(map, interned);
+    ASSERT_NOT_NULL(entry);
+    ASSERT_EQ_PTR(XR_TO_STRING(entry->key), interned);
+    ASSERT_EQ_INT(XR_TO_INT(entry->value), 7);
+
+    XrString *probe = xr_string_new(X, "lazy_key", 8);
+    bool found = false;
+    XrValue value = xr_map_get(map, xr_string_value(probe), &found);
+    ASSERT_TRUE(found);
+    ASSERT_EQ_INT(XR_TO_INT(value), 7);
+
+    XrString *update_key = xr_string_new(X, "lazy_key", 8);
+    xr_map_set(map, xr_string_value(update_key), xr_int(11));
+    ASSERT_EQ_INT(xr_map_size(map), 1);
+    value = xr_map_get(map, xr_string_value(probe), &found);
+    ASSERT_TRUE(found);
+    ASSERT_EQ_INT(XR_TO_INT(value), 11);
+
+    XrString *delete_key = xr_string_new(X, "lazy_key", 8);
+    ASSERT_TRUE(xr_map_delete(map, xr_string_value(delete_key)));
+    ASSERT_FALSE(xr_map_has(map, xr_string_value(probe)));
+    teardown();
+}
+
 /* ========== Main ========== */
 
 int main(void) {
@@ -305,6 +341,7 @@ int main(void) {
     RUN_TEST(map_many_entries);
     RUN_TEST(map_tombstone_probe_and_compaction_order);
     RUN_TEST(map_string_fast_path_swiss_ctrl);
+    RUN_TEST(map_local_string_key_canonicalizes_for_fast_lookup);
 
     TEST_REPORT();
     return TEST_EXIT();

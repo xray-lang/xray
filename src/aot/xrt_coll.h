@@ -65,6 +65,7 @@ static inline size_t xrt_array_data_bytes_or_abort(int64_t cap, uint8_t elem_siz
  * policy, heap containers become normal RC objects; under XRAY_AOT_ARENA=1 they
  * keep bump lifetime and release at process exit. */
 static inline void xrt_coll_make_deterministic(XrObjHeader *h) {
+    h->extra |= XR_OBJ_AOT_NATIVE;
     if (xrt_bump_enabled)
         return;
     h->extra &= (uint16_t) ~(uint16_t) XR_OBJ_STORAGE_BUMP;
@@ -1124,6 +1125,10 @@ static inline XrValue xrt_map_get(xrt_map_t *m, XrValue key) {
     return eidx >= 0 ? m->entries[eidx].value : XR_NULL_VAL;
 }
 
+static inline XrValue xrt_map_get_owned(xrt_map_t *m, XrValue key) {
+    return xrt_value_to_owned(xrt_map_get(m, key));
+}
+
 static inline int xrt_map_has(xrt_map_t *m, XrValue key) {
     if (xrt_map_is_boolmap(m))
         return xrt_boolmap_has_v((xrt_boolmap_t *) m, key);
@@ -1144,6 +1149,10 @@ static inline int xrt_map_delete(xrt_map_t *m, XrValue key) {
     if (slot == UINT32_MAX)
         return 0;
     m->entries[eidx].key_tt = XR_MAP_ENTRY_NIL_KEY;
+    if (!(m->flags & XR_MAP_FLAG_WEAK)) {
+        xrt_release(m->entries[eidx].key);
+        xrt_release(m->entries[eidx].value);
+    }
     m->entries[eidx].key = XR_NULL_VAL;
     m->entries[eidx].value = XR_NULL_VAL;
     m->indices[slot] = XR_MAP_IX_EMPTY;
@@ -1165,6 +1174,10 @@ static inline void xrt_map_set(xrt_map_t *m, XrValue key, XrValue val) {
     uint32_t hash = xrt_hash32_value(key);
     int32_t eidx = xrt_map_find_entry(m, key, hash, key_tt);
     if (eidx >= 0) {
+        if (!(m->flags & XR_MAP_FLAG_WEAK)) {
+            xrt_release(key);
+            xrt_release(m->entries[eidx].value);
+        }
         m->entries[eidx].value = val;
         return;
     }
@@ -1499,8 +1512,11 @@ static inline int xrt_set_has(xrt_set_t *s, XrValue value) {
 static inline int xrt_set_add(xrt_set_t *s, XrValue value) {
     if (!xrt_set_is_typed(s)) {
         uint32_t hash = xrt_hash32_value(value);
-        if (xrt_set_find_entry(s, value, hash) >= 0)
+        if (xrt_set_find_entry(s, value, hash) >= 0) {
+            if (!(s->flags & XR_SET_FLAG_WEAK))
+                xrt_release(value);
             return 0;
+        }
         if (s->nentries >= s->entries_cap)
             xrt_set_resize_tagged(s, s->count + 1);
         int32_t eidx = (int32_t) s->nentries++;
@@ -1526,6 +1542,8 @@ static inline int xrt_set_delete(xrt_set_t *s, XrValue value) {
         uint32_t slot = xrt_set_find_entry_slot(s, value, hash, &eidx);
         if (slot == UINT32_MAX)
             return 0;
+        if (!(s->flags & XR_SET_FLAG_WEAK))
+            xrt_release(s->entries[eidx].value);
         s->entries[eidx].value = XR_NULL_VAL;
         s->entries[eidx].val_tt = XR_SET_ENTRY_NIL;
         s->indices[slot] = XR_SET_IX_EMPTY;
@@ -1657,6 +1675,10 @@ static inline XrValue xrt_set_value_at(xrt_set_t *s, int64_t index) {
         out++;
     }
     return XR_NULL_VAL;
+}
+
+static inline XrValue xrt_set_value_at_owned(xrt_set_t *s, int64_t index) {
+    return xrt_value_to_owned(xrt_set_value_at(s, index));
 }
 
 /* =========================================================================
@@ -1921,6 +1943,10 @@ static inline XrValue xrt_json_get_name(XrValue obj, const char *name) {
     return j->dynamic_fields ? xrt_map_get(j->dynamic_fields, xr_box_str(name)) : XR_NULL_VAL;
 }
 
+static inline XrValue xrt_json_get_name_owned(XrValue obj, const char *name) {
+    return xrt_value_to_owned(xrt_json_get_name(obj, name));
+}
+
 static inline XrValue xrt_json_set_name(XrValue obj, const char *name, XrValue val) {
     if (obj.tag != XR_TAG_PTR || !obj.ptr || !name)
         return val;
@@ -1950,9 +1976,9 @@ static inline XrValue xrt_getprop_name(XrValue obj, const char *name) {
             return xrt_enum_value_ordinal(obj);
     }
     if (XR_IS_MAP(obj))
-        return xrt_map_get((xrt_map_t *) obj.ptr, xr_box_str(name));
+        return xrt_map_get_owned((xrt_map_t *) obj.ptr, xr_box_str(name));
     if (obj.tag == XR_TAG_PTR && obj.ptr && obj.heap_type == 0)
-        return xrt_json_get_name(obj, name);
+        return xrt_json_get_name_owned(obj, name);
     return XR_NULL_VAL;
 }
 
@@ -2138,6 +2164,18 @@ static inline void xrt_dispatch_builtin_destructor(uint32_t kind, void *obj) {
 
 static inline XrValue xrt_value_clone_for_coro(XrValue val) {
     switch (xrt_value_kind(val)) {
+        case XR_TAG_STR:
+            return val;
+        case XR_TAG_STR_ARC: {
+            xrt_str_t *src = (xrt_str_t *) val.ptr;
+            if (!src)
+                return val;
+            XrValue dstv = xrt_str_alloc((size_t) src->len);
+            xrt_str_t *dst = (xrt_str_t *) dstv.ptr;
+            dst->hash = src->hash;
+            memcpy(xr_str_buf(dstv), src->data, (size_t) src->len);
+            return dstv;
+        }
         case XR_TAG_ARRAY: {
             xrt_array_t *src = (xrt_array_t *) val.ptr;
             if (!src)

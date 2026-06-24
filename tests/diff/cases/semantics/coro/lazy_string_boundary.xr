@@ -1,0 +1,60 @@
+// anchor: lazy-string-boundary
+// Runtime-created strings stay local until they cross a coroutine/container
+// boundary. VM and AOT must agree on content equality, Map/Set lookup, channel
+// send/recv, and task-result publication.
+
+fn glue(a: string, b: string) -> string {
+    return a + b
+}
+
+fn recv_string(ch: Channel<string>) -> string {
+    return match (ch.recv()) {
+        Recv.Value(v) -> v
+        _ -> ""
+    }
+}
+
+fn produce(n: int) -> string {
+    let s = glue("task_", string(n))
+    yield
+    return s
+}
+
+fn build_map(seed: string) -> Map<string, string> {
+    let key = glue("k", "9")
+    let m: Map<string, string> = #{}
+    m.set(key, seed + "_value")
+    yield
+    return m
+}
+
+let map_key = glue("k", "1")
+let m: Map<string, int> = #{}
+m.set(map_key, 7)
+m.set(glue("k", "1"), 11)
+print(m.length)
+print(m.get("k1") ?? -1)
+print(m.has(glue("k", "1")))
+print(m.delete("k1"))
+print(m.has(glue("k", "1")))
+
+let s: Set<string> = #[]
+s.add(glue("t", "ag"))
+s.add("tag")
+print(s.length)
+print(s.has(glue("t", "ag")))
+print(s.delete("tag"))
+print(s.has(glue("t", "ag")))
+
+let ch: Channel<string> = Channel(1)
+ch.send(glue("chan_", string(2)))
+print(recv_string(ch))
+ch.close()
+
+let task = go produce(3)
+print(await task)
+
+let nested = go build_map(glue("seed_", string(4)))
+let out = await nested
+print(out.get(glue("k", "9")) ?? "")
+print(out.get("k9") ?? "")

@@ -232,6 +232,7 @@ XR_FUNC void xr_task_isolate_adopt_deferred(struct XrayIsolate *isolate, struct 
 XR_FUNC void xr_task_isolate_destroy_deferred(struct XrayIsolate *isolate);
 
 // Simple state setters (called from xworker.c on executor completion)
+XR_FUNC XrValue xr_task_prepare_publish_value(struct XrTask *task, XrValue value);
 XR_FUNC void xr_task_complete(struct XrTask *task, XrValue result);
 XR_FUNC void xr_task_fail(struct XrTask *task, XrValue error);
 XR_FUNC void xr_task_cancel(struct XrTask *task);

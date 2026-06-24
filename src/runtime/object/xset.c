@@ -23,6 +23,7 @@
  */
 
 #include "xset.h"
+#include "xstring.h"
 #include "../../base/xchecks.h"
 #include "../value/xvalue_hash.h"
 #include "../../base/xmalloc.h"
@@ -30,8 +31,10 @@
 #include "../mem/xweak_registry.h"
 #include "../class/xclass_system.h"
 #include "../class/xclass.h"
+#include "../core/xr_runtime_core.h"
 #include "../mem/xheap.h"
 #include "../mem/xcoro_heap.h"
+#include "../xisolate_api.h"
 #include "../../coro/xcoroutine.h"
 #include "../../shared/xr_swiss_index.h"
 #include <stdlib.h>
@@ -98,6 +101,24 @@ static void xr_set_prepare_weak_value(XrSet *set, XrValue value, XrCoroHeap *hea
     XrObjHeader *target = XR_VALUE_GCPTR(value);
     XR_OBJ_SET_FLAG(target, XR_OBJ_WEAKABLE);
     xr_weak_registry_register_set(set_owning_isolate(heap), set);
+}
+
+static XrValue set_canonicalize_value(XrSet *set, XrValue value, XrCoroHeap *heap) {
+    if (set_is_weak(set) || !XR_IS_STRING(value))
+        return value;
+    XrayIsolate *iso = set_owning_isolate(heap);
+    XrRuntimeCore *core = iso ? xr_isolate_get_runtime_core(iso) : NULL;
+    if (!core)
+        return value;
+    XrString *src = XR_TO_STRING(value);
+    if (XR_STR_IS_INTERNED(src) || (src->length > XR_SHORT_STR_MAX && XR_OBJ_IS_SHARED(&src->hdr) &&
+                                    !XR_OBJ_GET_FLAG(&src->hdr, XR_OBJ_TRANSIT)))
+        return value;
+    XrString *canonical = xr_string_intern_core(core, src->data, src->length, src->hash);
+    if (!canonical || canonical == src)
+        return value;
+    xr_rc_release_value(heap, value);
+    return xr_string_value(canonical);
 }
 
 /* ========== Swiss Index Lookup ========== */
@@ -283,8 +304,9 @@ bool xr_set_add(XrSet *set, XrValue value) {
     XR_DCHECK(set != NULL, "set_add: NULL set");
     XR_DCHECK(XR_OBJ_GET_TYPE(&set->hdr) == XR_TSET, "set_add: object is not a set");
 
-    uint32_t hash = hash_value(value);
     XrCoroHeap *heap = set_current_or_owner_heap(set);
+    value = set_canonicalize_value(set, value, heap);
+    uint32_t hash = hash_value(value);
 
     int32_t ix = set_lookup(set, value, hash);
     if (ix >= 0) {

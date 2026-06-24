@@ -229,6 +229,24 @@ static void emit_coro_send_value(XiCgenCtx *ctx, FILE *out, const XiValue *send_
     emit_value_as_rep_ctx(ctx, out, send_value, XR_REP_TAGGED);
 }
 
+static void emit_coro_runtime_channel_bridge_temp(XiCgenCtx *ctx, FILE *out,
+                                                  const XiValue *send_value, uint32_t id,
+                                                  const char *name_prefix, uint8_t transfer_mode,
+                                                  char *value_name, size_t value_name_size,
+                                                  char *mode_name, size_t mode_name_size) {
+    snprintf(value_name, value_name_size, "_%s_send_value_%u", name_prefix, id);
+    snprintf(mode_name, mode_name_size, "_%s_transfer_mode_%u", name_prefix, id);
+
+    fprintf(out, "    XrValue %s = ", value_name);
+    emit_value_as_rep_ctx(ctx, out, send_value, XR_REP_TAGGED);
+    fprintf(out, ";\n");
+    fprintf(out, "    uint8_t %s = %u;\n", mode_name, (unsigned) transfer_mode);
+    fprintf(out, "    if (XR_IS_STR(%s)) {\n", value_name);
+    fprintf(out, "        %s = xr_aot_bridge_xrt_to_runtime(ctx, %s);\n", value_name, value_name);
+    fprintf(out, "        %s = XR_TRANSFER_MOVE;\n", mode_name);
+    fprintf(out, "    }\n");
+}
+
 static const char *cg_coro_typed_recv_pair_helper(const XiFunc *f, const XiValue *v) {
     const XiValue *slot_value = xi_coro_typed_recv_unbox_user(f, v);
     XrRep rep = cg_rep(slot_value ? slot_value : v);
@@ -423,17 +441,25 @@ static bool cg_coro_value_may_hold_frame_root(XiCgenCtx *ctx, const XiFunc *f, c
            xi_coro_value_is_aggregate_await_tasks(f, v);
 }
 
-static bool cg_coro_value_is_borrowed_unbox_alias(const XiValue *v) {
-    return v && v->op == XI_UNBOX && v->nargs >= 1 && v->args[0] && cg_rep(v) == XR_REP_PTR &&
-           cg_rep(v->args[0]) == XR_REP_TAGGED && xi_coro_value_rep_can_trace_root(v);
+static bool cg_coro_value_is_borrowed_unbox_alias(XiCgenCtx *ctx, const XiFunc *f,
+                                                  const XiValue *v) {
+    if (!v || v->op != XI_UNBOX || v->nargs < 1 || !v->args[0] || cg_rep(v) != XR_REP_PTR ||
+        cg_rep(v->args[0]) != XR_REP_TAGGED || !xi_coro_value_rep_can_trace_root(v))
+        return false;
+
+    const XiValue *source = v->args[0];
+    if (source->op == XI_PARAM)
+        return true;
+    return cg_coro_value_needs_frame(ctx, f, source);
 }
 
-static bool cg_coro_value_can_trace_frame_slot(const XiValue *v) {
-    return xi_coro_value_rep_can_trace_root(v) && !cg_coro_value_is_borrowed_unbox_alias(v);
+static bool cg_coro_value_can_trace_frame_slot(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v) {
+    return xi_coro_value_rep_can_trace_root(v) && !cg_coro_value_is_borrowed_unbox_alias(ctx, f, v);
 }
 
-static bool cg_coro_value_needs_frame_arc_release(const XiValue *v) {
-    return xi_coro_value_needs_arc_release(v) && !cg_coro_value_is_borrowed_unbox_alias(v);
+static bool cg_coro_value_needs_frame_arc_release(XiCgenCtx *ctx, const XiFunc *f,
+                                                  const XiValue *v) {
+    return xi_coro_value_needs_arc_release(v) && !cg_coro_value_is_borrowed_unbox_alias(ctx, f, v);
 }
 
 static bool cg_coro_param_is_native_receiver(XiCgenCtx *ctx, const XiFunc *f, uint16_t index) {
@@ -1941,13 +1967,23 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             send_arg == NULL && strcmp(helper, "xr_aot_chan_try_send_ready") == 0;
         if (transfer_helper)
             helper = "xr_aot_chan_try_send_ready_transfer";
+        char bridge_value[64] = {0};
+        char bridge_mode[64] = {0};
+        if (transfer_helper) {
+            emit_coro_runtime_channel_bridge_temp(
+                ctx, out, v->args[1], v->id, "chan_try", xi_chan_send_transfer_mode(v),
+                bridge_value, sizeof(bridge_value), bridge_mode, sizeof(bridge_mode));
+        }
         emit_value_source_line(ctx, out, v);
         fprintf(out, "    XrValue _chan_try_%u = %s(ctx, ", v->id, helper);
         emit_vref(out, v->args[0]);
         fprintf(out, ", ");
-        emit_coro_send_value(ctx, out, v->args[1], send_arg);
         if (transfer_helper)
-            fprintf(out, ", %u", (unsigned) xi_chan_send_transfer_mode(v));
+            fprintf(out, "%s", bridge_value);
+        else
+            emit_coro_send_value(ctx, out, v->args[1], send_arg);
+        if (transfer_helper)
+            fprintf(out, ", %s", bridge_mode);
         fprintf(out, ");\n");
         emit_value_generated_line_reset(ctx, out, v);
         if (cg_coro_value_has_storage(f, v)) {
@@ -2472,18 +2508,28 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         if (transfer_helper)
             helper = "xr_aot_chan_send_timeout_transfer";
         int sid = ++(*state_id);
+        char bridge_value[64] = {0};
+        char bridge_mode[64] = {0};
+        if (transfer_helper) {
+            emit_coro_runtime_channel_bridge_temp(
+                ctx, out, v->args[1], v->id, "chan_send_timeout", xi_chan_send_transfer_mode(v),
+                bridge_value, sizeof(bridge_value), bridge_mode, sizeof(bridge_mode));
+        }
         fprintf(out, "    f->state = %d;\n", sid);
         emit_value_source_line(ctx, out, v);
         fprintf(out, "    XrAotResult _chan_send_timeout_%u = %s(ctx, ", v->id, helper);
         emit_vref(out, v->args[0]);
         fprintf(out, ", ");
-        emit_coro_send_value(ctx, out, v->args[1], send_arg);
+        if (transfer_helper)
+            fprintf(out, "%s", bridge_value);
+        else
+            emit_coro_send_value(ctx, out, v->args[1], send_arg);
         fprintf(out, ", ");
         emit_int64_arg(out, v->args[2]);
         fprintf(out, ", ");
         emit_coro_optional_slot_ref(ctx, out, f, prefix, v);
         if (transfer_helper)
-            fprintf(out, ", %u", (unsigned) xi_chan_send_transfer_mode(v));
+            fprintf(out, ", %s", bridge_mode);
         fprintf(out, ");\n");
         emit_value_generated_line_reset(ctx, out, v);
         fprintf(out, "    if (_chan_send_timeout_%u.kind == XR_AOT_RUN_BLOCKED) {\n", v->id);
@@ -2563,14 +2609,24 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         if (transfer_helper)
             helper = "xr_aot_chan_send_transfer";
         int sid = ++(*state_id);
+        char bridge_value[64] = {0};
+        char bridge_mode[64] = {0};
+        if (transfer_helper) {
+            emit_coro_runtime_channel_bridge_temp(
+                ctx, out, send_value, v->id, "chan_send", xi_chan_send_transfer_mode(v),
+                bridge_value, sizeof(bridge_value), bridge_mode, sizeof(bridge_mode));
+        }
         fprintf(out, "    f->state = %d;\n", sid);
         emit_value_source_line(ctx, out, v);
         fprintf(out, "    XrAotResult _chan_send_%u = %s(ctx, ", v->id, helper);
         emit_vref(out, channel);
         fprintf(out, ", ");
-        emit_coro_send_value(ctx, out, send_value, send_arg);
         if (transfer_helper)
-            fprintf(out, ", xr_slot_none(), -1, %u", (unsigned) xi_chan_send_transfer_mode(v));
+            fprintf(out, "%s", bridge_value);
+        else
+            emit_coro_send_value(ctx, out, send_value, send_arg);
+        if (transfer_helper)
+            fprintf(out, ", xr_slot_none(), -1, %s", bridge_mode);
         else if (strcmp(helper, "xr_aot_chan_send") == 0)
             fprintf(out, ", xr_slot_none(), -1");
         fprintf(out, ");\n");
@@ -2663,6 +2719,8 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "    if (_chan_recv_%u.kind == XR_AOT_RUN_ERROR)\n", v->id);
         fprintf(out, "        return _chan_recv_%u;\n", v->id);
         fprintf(out, "S%d_DONE:;\n", sid);
+        if (cg_coro_value_has_storage(f, v))
+            emit_bridge_stored_tagged_value(out, v);
         emit_coro_debug_result_source_var_sync(ctx, out, f, v);
         if (status)
             emit_coro_debug_result_source_var_sync(ctx, out, f, status);
@@ -2770,13 +2828,23 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             bool transfer_helper = send_arg == NULL && strcmp(helper, "xr_aot_chan_try_send") == 0;
             if (transfer_helper)
                 helper = "xr_aot_chan_try_send_transfer";
+            char bridge_value[64] = {0};
+            char bridge_mode[64] = {0};
+            if (transfer_helper) {
+                emit_coro_runtime_channel_bridge_temp(
+                    ctx, out, v->args[1], v->id, "chan_method", xi_chan_send_transfer_mode(v),
+                    bridge_value, sizeof(bridge_value), bridge_mode, sizeof(bridge_mode));
+            }
             emit_value_source_line(ctx, out, v);
             fprintf(out, "    XrValue _chan_method_%u = %s(ctx, ", v->id, helper);
             emit_vref(out, v->args[0]);
             fprintf(out, ", ");
-            emit_coro_send_value(ctx, out, v->args[1], send_arg);
             if (transfer_helper)
-                fprintf(out, ", %u", (unsigned) xi_chan_send_transfer_mode(v));
+                fprintf(out, "%s", bridge_value);
+            else
+                emit_coro_send_value(ctx, out, v->args[1], send_arg);
+            if (transfer_helper)
+                fprintf(out, ", %s", bridge_mode);
             fprintf(out, ");\n");
             emit_value_generated_line_reset(ctx, out, v);
             if (cg_coro_value_has_storage(f, v)) {
@@ -3012,8 +3080,7 @@ static void emit_coro_frame_slot_as_xrvalue(FILE *out, const XrType *type, XrRep
 static void emit_coro_frame_value_visit(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                         const char *helper, bool with_visitor) {
     for (uint16_t i = 0; i < f->nparams; i++) {
-        if (!cg_coro_value_can_trace_frame_slot(f->params[i]) ||
-            !cg_coro_value_live_across_suspend(ctx, f, f->params[i]))
+        if (!cg_sync_go_param_needs_trace(f, i))
             continue;
         fprintf(out, "    %s(", helper);
         if (with_visitor)
@@ -3027,7 +3094,7 @@ static void emit_coro_frame_value_visit(XiCgenCtx *ctx, FILE *out, const XiFunc 
         if (!blk)
             continue;
         for (const XiPhi *phi = blk->phis; phi; phi = phi->next) {
-            if (!cg_coro_value_can_trace_frame_slot(&phi->value) ||
+            if (!cg_coro_value_can_trace_frame_slot(ctx, f, &phi->value) ||
                 !cg_coro_value_live_across_suspend(ctx, f, &phi->value))
                 continue;
             fprintf(out, "    %s(", helper);
@@ -3040,7 +3107,8 @@ static void emit_coro_frame_value_visit(XiCgenCtx *ctx, FILE *out, const XiFunc 
         }
         for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
             const XiValue *v = blk->values[vi];
-            if (!cg_coro_value_needs_frame(ctx, f, v) || !cg_coro_value_can_trace_frame_slot(v) ||
+            if (!cg_coro_value_needs_frame(ctx, f, v) ||
+                !cg_coro_value_can_trace_frame_slot(ctx, f, v) ||
                 !cg_coro_value_may_hold_frame_root(ctx, f, v))
                 continue;
             fprintf(out, "    %s(", helper);
@@ -3116,14 +3184,20 @@ static bool cg_coro_plan_slot_is_physical(const XiFunc *f, const XiCoroSlot *s) 
     return s->kind != XI_CORO_SLOT_VALUE || cg_coro_value_has_storage(f, s->value);
 }
 
-static bool cg_coro_plan_slot_is_physical_root(const XiFunc *f, const XiCoroSlot *s) {
+static bool cg_coro_plan_slot_is_physical_root(XiCgenCtx *ctx, const XiFunc *f,
+                                               const XiCoroSlot *s) {
+    if (s && s->kind == XI_CORO_SLOT_PARAM)
+        return false;
     return s && s->frame_root && cg_coro_plan_slot_is_physical(f, s) &&
-           cg_coro_value_can_trace_frame_slot(s->value);
+           cg_coro_value_can_trace_frame_slot(ctx, f, s->value);
 }
 
-static bool cg_coro_plan_slot_is_physical_release(const XiFunc *f, const XiCoroSlot *s) {
+static bool cg_coro_plan_slot_is_physical_release(XiCgenCtx *ctx, const XiFunc *f,
+                                                  const XiCoroSlot *s) {
+    if (s && s->kind == XI_CORO_SLOT_PARAM)
+        return false;
     return s && s->frame_release && cg_coro_plan_slot_is_physical(f, s) &&
-           cg_coro_value_needs_frame_arc_release(s->value);
+           cg_coro_value_needs_frame_arc_release(ctx, f, s->value);
 }
 
 /* Physical GC-root count for the coroutine frame: each plan slot whose logical
@@ -3133,9 +3207,13 @@ static uint32_t cg_coro_plan_frame_roots(XiCgenCtx *ctx, const XiFunc *f, const 
     uint32_t count = cg_coro_direct_call_frame_count(ctx, f);
     if (!plan)
         return count;
+    for (uint16_t i = 0; i < f->nparams; i++) {
+        if (cg_sync_go_param_needs_trace(f, i))
+            count++;
+    }
     for (uint32_t i = 0; i < plan->nslots; i++) {
         const XiCoroSlot *s = &plan->slots[i];
-        if (cg_coro_plan_slot_is_physical_root(f, s))
+        if (cg_coro_plan_slot_is_physical_root(ctx, f, s))
             count++;
     }
     return count;
@@ -3143,8 +3221,7 @@ static uint32_t cg_coro_plan_frame_roots(XiCgenCtx *ctx, const XiFunc *f, const 
 
 static void emit_coro_frame_arc_release(XiCgenCtx *ctx, FILE *out, const XiFunc *f) {
     for (uint16_t i = 0; i < f->nparams; i++) {
-        if (!cg_coro_value_needs_frame_arc_release(f->params[i]) ||
-            !cg_coro_value_live_across_suspend(ctx, f, f->params[i]))
+        if (!cg_sync_go_param_needs_release(f, i))
             continue;
         fprintf(out, "    xrt_release(");
         emit_coro_frame_slot_as_xrvalue(out, f->params[i]->type, cg_coro_param_rep(ctx, f, i),
@@ -3156,7 +3233,7 @@ static void emit_coro_frame_arc_release(XiCgenCtx *ctx, FILE *out, const XiFunc 
         if (!blk)
             continue;
         for (const XiPhi *phi = blk->phis; phi; phi = phi->next) {
-            if (!cg_coro_value_needs_frame_arc_release(&phi->value) ||
+            if (!cg_coro_value_needs_frame_arc_release(ctx, f, &phi->value) ||
                 !cg_coro_value_live_across_suspend(ctx, f, &phi->value))
                 continue;
             fprintf(out, "    xrt_release(");
@@ -3168,7 +3245,7 @@ static void emit_coro_frame_arc_release(XiCgenCtx *ctx, FILE *out, const XiFunc 
         for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
             const XiValue *v = blk->values[vi];
             if (!cg_coro_value_needs_frame(ctx, f, v) ||
-                !cg_coro_value_needs_frame_arc_release(v) ||
+                !cg_coro_value_needs_frame_arc_release(ctx, f, v) ||
                 !cg_coro_value_live_across_suspend(ctx, f, v))
                 continue;
             fprintf(out, "    xrt_release(");
@@ -3188,9 +3265,13 @@ static uint32_t cg_coro_plan_frame_releases(XiCgenCtx *ctx, const XiFunc *f,
         (cg_func_frame_needs_cl(f) ? 1u : 0u) + cg_coro_direct_call_frame_count(ctx, f);
     if (!plan)
         return count;
+    for (uint16_t i = 0; i < f->nparams; i++) {
+        if (cg_sync_go_param_needs_release(f, i))
+            count++;
+    }
     for (uint32_t i = 0; i < plan->nslots; i++) {
         const XiCoroSlot *s = &plan->slots[i];
-        if (cg_coro_plan_slot_is_physical_release(f, s))
+        if (cg_coro_plan_slot_is_physical_release(ctx, f, s))
             count++;
     }
     return count;

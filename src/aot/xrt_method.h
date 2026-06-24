@@ -780,7 +780,7 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
     if (XR_IS_MAP(recv)) {
         xrt_map_t *m = (xrt_map_t *) recv.ptr;
         if (sym == XRT_SYM_GET)
-            return xrt_map_get(m, arg0);
+            return xrt_map_get_owned(m, arg0);
         if (sym == XRT_SYM_HAS)
             return XR_FROM_BOOL(xrt_map_has(m, arg0));
         if (sym == XRT_SYM_DELETE)

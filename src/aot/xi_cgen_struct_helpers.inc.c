@@ -814,7 +814,7 @@ static void emit_struct_runtime_field_get(XiCgenCtx *ctx, FILE *out, const XrStr
     const char *fname =
         (sl && sl->field_names && idx >= 0 && idx < sl->field_count) ? sl->field_names[idx] : NULL;
     const char *conv_suffix = emit_conversion_prefix(out, result_type, XR_REP_TAGGED, result_rep);
-    fprintf(out, "xrt_map_get((xrt_map_t*)");
+    fprintf(out, "xrt_map_get_owned((xrt_map_t*)");
     emit_vref(out, object);
     fprintf(out, ".ptr, ");
     cg_emit_str_value(ctx, out, fname ? fname : "?");

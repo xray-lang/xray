@@ -690,12 +690,13 @@ void xr_obj_destroy_channel(XrObjHeader *obj, struct XrCoroHeap *owner_heap) {
     (void) owner_heap;
     XrChannel *ch = (XrChannel *) obj;
     if (ch->buffer) {
-        // Release transit graphs of values never consumed by a receiver.
+        // Release prepared values never consumed by a receiver: transit graphs
+        // and promoted shared strings/handles both own a channel-side ref.
         for (uint32_t i = 0; i < ch->buf_count; i++) {
             uint32_t idx = ch->recv_idx + i;
             if (ch->buf_size > 0 && idx >= ch->buf_size)
                 idx -= ch->buf_size;
-            xr_chan_transit_release_core(channel_core(ch), ch->buffer[idx]);
+            xr_chan_abandon_send_core(channel_core(ch), ch->buffer[idx]);
         }
         if (!channel_buffer_is_inline(ch)) {
             xr_free(ch->buffer);
@@ -912,7 +913,7 @@ void xr_channel_timer_arm(XrChannel *ch, XrTimerWheel *tw) {
     // Take the wheel's counted reference before queuing the node; it is released
     // on fire (timer_channel_fire_cb) or on cancel (xr_channel_timer_dispose).
     // This keeps the channel alive while the wheel holds the embedded tw_timer.
-    xr_shared_incref(&ch->gc_header);
+    xr_shared_retain(&ch->gc_header);
     if (!xr_twheel_set_timer(tw, &ch->tw_timer, timer_channel_fire_cb, ch, timeout_pos)) {
         // Could not queue (e.g. zombie reuse race): deliver inline so the select
         // timeout still resolves, then release the wheel reference we took.

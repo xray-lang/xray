@@ -69,6 +69,15 @@ static inline int xr_shared_incref(XrObjHeader *gc) {
     return (int) (-(old - 1));
 }
 
+static inline void xr_shared_retain(XrObjHeader *gc) {
+    if (!gc)
+        return;
+    int32_t rc = atomic_load_explicit(xr_shared_refc_ptr(gc), memory_order_relaxed);
+    if (xr_rc_is_sticky(rc))
+        return;
+    (void) xr_shared_incref(gc);
+}
+
 static inline int xr_shared_decref(XrObjHeader *gc) {
     /* Releasing moves toward zero. old == -1 means this was the last
      * reference (count drops to 0). Returns the new (positive) count. */
