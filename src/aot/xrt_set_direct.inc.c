@@ -24,51 +24,14 @@ static inline void xrt_set_direct_unsupported(uint8_t elem_type, const char *who
     abort();
 }
 
-/* ---- canonical bit patterns (shared with the map key logic) ------------- */
+/* ---- canonical bit patterns --------------------------------------------- */
 
 static inline uint64_t xrt_set_item_bits_i64(int64_t value, uint8_t elem_type) {
-    switch (elem_type) {
-        case XR_ELEM_I8:
-            return (uint64_t) (int8_t) value;
-        case XR_ELEM_U8:
-            return (uint64_t) (uint8_t) value;
-        case XR_ELEM_I16:
-            return (uint64_t) (int16_t) value;
-        case XR_ELEM_U16:
-            return (uint64_t) (uint16_t) value;
-        case XR_ELEM_I32:
-            return (uint64_t) (int32_t) value;
-        case XR_ELEM_U32:
-            return (uint64_t) (uint32_t) value;
-        case XR_ELEM_I64:
-        case XR_ELEM_U64:
-            return (uint64_t) value;
-        case XR_ELEM_BOOL:
-            return value != 0 ? 1u : 0u;
-        default:
-            xrt_set_direct_unsupported(elem_type, "xrt_set_item_bits_i64");
-    }
-    return 0;
+    return xrt_typed_scalar_bits_i64_or_abort(value, elem_type, "xrt_set_item_bits_i64");
 }
 
 static inline uint64_t xrt_set_item_bits_f64(double value, uint8_t elem_type) {
-    if (elem_type == XR_ELEM_F32) {
-        float f = (float) value;
-        uint32_t b32;
-        if (f == 0.0f)
-            f = 0.0f;
-        memcpy(&b32, &f, sizeof(b32));
-        return b32;
-    }
-    if (elem_type == XR_ELEM_F64) {
-        uint64_t b64;
-        if (value == 0.0)
-            value = 0.0;
-        memcpy(&b64, &value, sizeof(b64));
-        return b64;
-    }
-    xrt_set_direct_unsupported(elem_type, "xrt_set_item_bits_f64");
-    return 0;
+    return xrt_typed_scalar_bits_f64_or_abort(value, elem_type, "xrt_set_item_bits_f64");
 }
 
 static inline int64_t xrt_set_slot_raw_i64(const xrt_set_t *s, int64_t slot) {
