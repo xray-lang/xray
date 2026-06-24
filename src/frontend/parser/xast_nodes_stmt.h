@@ -26,8 +26,8 @@
 // Variable declaration node
 //
 // Storage mode (storage_mode):
-//   0 = normal variable (deep copy across coroutines)
-//   1 = shared variable (stored in global heap, passed by reference)
+//   0 = normal variable (must use explicit copy/move at coroutine boundaries)
+//   1 = shared variable (stored in global heap, passed by reference when const)
 //
 // shared variable features:
 //   - shared const: can be directly read concurrently by coroutine closures

@@ -134,10 +134,10 @@ static void ea_register_params(EaContext *ctx, FunctionDeclNode *fn) {
  * Look up a variable captured by a go closure and enforce the explicit
  * sharing model: mutable non-shared captures are rejected (no auto-promote).
  *
- *   - const              -> allowed (immutable, compile-time safe)
- *   - shared let/const   -> allowed (user declared the sharing intent)
- *   - function parameter -> allowed (deep-copied by call site)
- *   - plain let          -> ERROR (must declare shared or pass via arg)
+ *   - shared const       -> allowed (user declared read-only sharing intent)
+ *   - shared let         -> ERROR (mutable shared state)
+ *   - function parameter -> ERROR (must pass via explicit go argument)
+ *   - plain let/const    -> ERROR (must pass via explicit go argument)
  */
 static void ea_mark_capture_for_go(EaContext *ctx, AstNode *ref_node, const char *name) {
     for (int d = ctx->go_scope_boundary - 1; d >= 0; d--) {
@@ -153,6 +153,12 @@ static void ea_mark_capture_for_go(EaContext *ctx, AstNode *ref_node, const char
                                       "hint: pass an owned value or copy(%s) through an explicit "
                                       "go argument",
                                       name);
+                    } else {
+                        ea_emit_error(ctx, ref_node, XR_ERR_ANALYZE_CLOSURE_CAPTURE,
+                                      "go closure cannot capture parameter '%s'\n"
+                                      "hint: pass copy(%s) or move %s through an explicit go "
+                                      "argument",
+                                      name);
                     }
                     return;
                 }
@@ -167,21 +173,25 @@ static void ea_mark_capture_for_go(EaContext *ctx, AstNode *ref_node, const char
                     // shared const capture is the only legal shared capture.
                     if (vd->is_const)
                         return;
-                    ea_emit_error(
-                        ctx, ref_node, XR_ERR_ANALYZE_CLOSURE_CAPTURE,
-                        "go closure cannot capture mutable 'shared let' variable '%s'\n"
-                        "hint: pass it through an argument with 'move': go worker(move %s)",
-                        name);
+                    ea_emit_error(ctx, ref_node, XR_ERR_ANALYZE_CLOSURE_CAPTURE,
+                                  "go closure cannot capture mutable 'shared let' variable '%s'\n"
+                                  "hint: pass it through an argument with 'move': go worker(move "
+                                  "%s)",
+                                  name);
                     return;
                 }
-                if (vd->is_const)
-                    return;  // const upvalues are coro-safe
-                // Plain let captured by go closure — reject instead of silently promoting.
+                if (vd->is_const) {
+                    ea_emit_error(ctx, ref_node, XR_ERR_ANALYZE_CLOSURE_CAPTURE,
+                                  "go closure cannot capture const variable '%s'\n"
+                                  "hint: pass copy(%s) through an explicit go argument, or declare "
+                                  "shared const for read-only sharing",
+                                  name);
+                    return;
+                }
                 ea_emit_error(ctx, ref_node, XR_ERR_ANALYZE_CLOSURE_CAPTURE,
                               "go closure cannot capture mutable variable '%s'\n"
-                              "hint: use one of the following:\n"
-                              "  1. pass through argument: go worker(%s)  // deep-copied\n"
-                              "  2. declare as 'shared const %s = ...' for concurrent reads",
+                              "hint: pass copy(%s) or move %s through an explicit go argument, or "
+                              "declare shared const for read-only sharing",
                               name);
                 return;
             }
@@ -217,9 +227,9 @@ static void ea_walk_statements(EaContext *ctx, AstNode **stmts, int count);
 /*
  * Validate `move var` arguments seen by coroutine/channel boundaries:
  *   - shared let    -> allowed; already shared storage, ownership is explicit
- *   - plain let     -> allowed by move strategy B; channel/go call paths keep
- *                      their existing deep-copy isolation while the source is
- *                      invalidated by the type checker
+ *   - plain let     -> allowed by move strategy B; go call paths consume the
+ *                      source at the boundary, channel paths keep their
+ *                      existing send-side isolation
  *   - const/shared const/thread-safe primitives -> rejected by xa_visit_move_expr
  */
 static void ea_note_move_arg(EaContext *ctx, AstNode *ref_node, const char *var_name) {

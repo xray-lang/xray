@@ -12,14 +12,15 @@
 #define XVM_CORO_API_H
 
 #include "../coro/xcoroutine.h"
+#include "../runtime/value/xtransfer_mode.h"
 
 XR_FUNC XrCoroutine *xr_coro_create_bootstrap(XrayIsolate *X);
 XR_FUNC void xr_coro_setup_main(XrCoroutine *coro, XrayIsolate *X, XrClosure *closure);
 XR_FUNC void xr_coro_reset_for_call(XrCoroutine *coro, XrayIsolate *X, XrClosure *closure);
 XR_FUNC bool xr_coro_grow_stack(XrCoroutine *coro, int extra_slots);
 XR_FUNC XrCoroutine *xr_coro_create_vm_closure(XrayIsolate *X, XrClosure *closure, XrValue *args,
-                                               int arg_count, const char *name, const char *file,
-                                               int line);
+                                               const uint8_t *arg_modes, int arg_count,
+                                               const char *name, const char *file, int line);
 XR_FUNC XrCoroutine *xr_coro_create_vm_cfunc(XrayIsolate *X, XrCoroCFuncEntry cfunc, XrValue *args,
                                              int argc, const char *name);
 

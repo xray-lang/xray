@@ -2602,12 +2602,148 @@ static void lower_mark_decl_captured_by_child(XiLower *l, int var_id, const char
     }
 }
 
+static bool stmt_call_is_named_builtin(AstNode *node, const char *name) {
+    if (!node || node->type != AST_CALL_EXPR || !name)
+        return false;
+    CallExprNode *call = &node->as.call_expr;
+    return call->callee && call->callee->type == AST_VARIABLE && call->callee->as.variable.name &&
+           strcmp(call->callee->as.variable.name, name) == 0;
+}
+
+static bool stmt_shared_init_direct_alloc_safe(AstNode *node) {
+    if (!node)
+        return false;
+    switch (node->type) {
+        case AST_LITERAL_INT:
+        case AST_LITERAL_FLOAT:
+        case AST_LITERAL_TRUE:
+        case AST_LITERAL_FALSE:
+        case AST_LITERAL_CHAR:
+        case AST_LITERAL_NULL:
+        case AST_LITERAL_STRING:
+            return true;
+        case AST_ARRAY_LITERAL: {
+            ArrayLiteralNode *arr = &node->as.array_literal;
+            for (int i = 0; i < arr->count; i++) {
+                AstNode *elem = arr->elements[i];
+                if (!elem || elem->type == AST_SPREAD_EXPR ||
+                    !stmt_shared_init_direct_alloc_safe(elem))
+                    return false;
+            }
+            return true;
+        }
+        case AST_OBJECT_LITERAL: {
+            ObjectLiteralNode *obj = &node->as.object_literal;
+            for (int i = 0; i < obj->count; i++) {
+                if (obj->computed && obj->computed[i] &&
+                    !stmt_shared_init_direct_alloc_safe(obj->keys[i]))
+                    return false;
+                if (!stmt_shared_init_direct_alloc_safe(obj->values[i]))
+                    return false;
+            }
+            return true;
+        }
+        case AST_MAP_LITERAL: {
+            MapLiteralNode *map = &node->as.map_literal;
+            for (int i = 0; i < map->count; i++) {
+                if (!stmt_shared_init_direct_alloc_safe(map->keys[i]) ||
+                    !stmt_shared_init_direct_alloc_safe(map->values[i]))
+                    return false;
+            }
+            return true;
+        }
+        case AST_SET_LITERAL: {
+            SetLiteralNode *set = &node->as.set_literal;
+            for (int i = 0; i < set->count; i++) {
+                if (!stmt_shared_init_direct_alloc_safe(set->elements[i]))
+                    return false;
+            }
+            return true;
+        }
+        default:
+            return false;
+    }
+}
+
+static bool stmt_mark_value_shared_alloc(XiValue *v) {
+    if (!v)
+        return false;
+    switch (v->op) {
+        case XI_ARRAY_NEW:
+        case XI_MAP_NEW:
+        case XI_SET_NEW:
+            v->aux_int |= 0x01;
+            return true;
+        case XI_JSON_NEW:
+            xi_json_set_storage_mode(v, XR_STORAGE_SHARED);
+            return true;
+        case XI_CHAN_NEW:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static void stmt_mark_shared_allocs_in_range(XiBlock *block, uint32_t begin) {
+    if (!block || begin > block->nvalues)
+        return;
+    for (uint32_t i = begin; i < block->nvalues; i++)
+        stmt_mark_value_shared_alloc(block->values[i]);
+}
+
+static XiValue *stmt_wrap_to_shared(XiLower *l, XiValue *value, int line) {
+    if (!l || !value)
+        return value;
+    if (value->op == XI_CALL_BUILTIN && value->aux &&
+        strcmp((const char *) value->aux, "to_shared") == 0)
+        return value;
+    if (value->op == XI_CALL_BUILTIN && value->aux &&
+        strcmp((const char *) value->aux, "copy") == 0) {
+        value->aux = (void *) "to_shared";
+        return value;
+    }
+    XiValue *shared = xi_value_new(l->func, l->cur_block, XI_CALL_BUILTIN,
+                                   value->type ? value->type : l->type_any, 1);
+    if (!shared)
+        return value;
+    shared->args[0] = value;
+    shared->aux = (void *) "to_shared";
+    shared->flags |= XI_FLAG_SIDE_EFFECT;
+    shared->line = (uint32_t) line;
+    return shared;
+}
+
+static XiValue *stmt_lower_shared_initializer(XiLower *l, AstNode *decl, XiValue *init_val,
+                                              XiBlock *init_block, uint32_t init_begin) {
+    if (!l || !decl || !init_val || decl->as.var_decl.storage_mode != XR_STORAGE_SHARED)
+        return init_val;
+
+    AstNode *init = decl->as.var_decl.initializer;
+    if (!init)
+        return init_val;
+
+    if (stmt_shared_init_direct_alloc_safe(init)) {
+        stmt_mark_shared_allocs_in_range(init_block, init_begin);
+        return init_val;
+    }
+
+    if (stmt_call_is_named_builtin(init, "copy"))
+        return stmt_wrap_to_shared(l, init_val, init->line);
+
+    if (init->type == AST_VARIABLE || init->type == AST_MOVE_EXPR)
+        return init_val;
+
+    return stmt_wrap_to_shared(l, init_val, init->line ? init->line : decl->line);
+}
+
 static void lower_var_decl(XiLower *l, AstNode *node) {
     const char *name = node->as.var_decl.name;
     uint32_t sid = node->as.var_decl.symbol_id;
     struct XrType *type = xi_lower_node_type(l, node);
 
     int var_id = xi_lower_var_create(l, sid, name, type);
+    XiBlock *init_block = l->cur_block;
+    uint32_t init_begin = init_block ? init_block->nvalues : 0;
 
     XiValue *init_val;
     if (node->as.var_decl.initializer) {
@@ -2690,6 +2826,7 @@ static void lower_var_decl(XiLower *l, AstNode *node) {
             init_val->aux_int = (int64_t) ((key_kind << 7) | ((value_tid & 0x1F) << 2) | flags);
         }
     }
+    init_val = stmt_lower_shared_initializer(l, node, init_val, init_block, init_begin);
     /* When the initializer comes from a different variable, insert an
      * explicit copy so the new variable gets its own SSA value.  Without
      * this, both variables map to the same physical register and

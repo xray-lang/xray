@@ -35,6 +35,7 @@
 #include "../runtime/object/xrange.h"
 #include "../base/xutf8.h"
 #include "../runtime/value/xslot_type.h"
+#include "../runtime/value/xtransfer_mode.h"
 #include "../runtime/value/xtype.h"
 #include "../coro/xcoro_pool.h"
 #include "../coro/xdeep_copy.h"
@@ -636,29 +637,40 @@ XR_FUNC XrDispatchAction vm_go(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInst
     XrInstruction next_inst = *pc;
     int link_mode = 0;
     bool one_shot_await = false;
+    uint8_t arg_modes[128];
+    for (int i = 0; i < c; i++)
+        arg_modes[i] = XR_TRANSFER_SHARE;
+    int mode_base = 0;
 
-    if (GET_OPCODE(next_inst) == OP_NOP && GETARG_A(next_inst) == 1) {
-        int name_idx = GETARG_Bx(next_inst);
-        XrValue name_val = PROTO_CONSTANT(frame->closure->proto, name_idx);
-        if (XR_IS_STRING(name_val))
-            coro_name = xr_value_to_string(isolate, name_val)->data;
-        pc++;
-        next_inst = *pc;
-    }
-    if (GET_OPCODE(next_inst) == OP_NOP && GETARG_A(next_inst) == 3) {
-        link_mode = GETARG_Bx(next_inst);
-        pc++;
-        next_inst = *pc;
-    }
-    if (GET_OPCODE(next_inst) == OP_NOP && GETARG_A(next_inst) == 4) {
-        one_shot_await = GETARG_Bx(next_inst) != 0;
+    while (GET_OPCODE(next_inst) == OP_NOP) {
+        int ann = GETARG_A(next_inst);
+        if (ann == 1) {
+            int name_idx = GETARG_Bx(next_inst);
+            XrValue name_val = PROTO_CONSTANT(frame->closure->proto, name_idx);
+            if (XR_IS_STRING(name_val))
+                coro_name = xr_value_to_string(isolate, name_val)->data;
+        } else if (ann == 3) {
+            link_mode = GETARG_Bx(next_inst);
+        } else if (ann == 4) {
+            one_shot_await = GETARG_Bx(next_inst) != 0;
+        } else if (ann == 5) {
+            uint32_t packed = GETARG_Bx(next_inst);
+            for (uint32_t slot = 0; slot < XR_TRANSFER_MODES_PER_U32 && mode_base + (int) slot < c;
+                 slot++) {
+                arg_modes[mode_base + (int) slot] = xr_transfer_unpack_mode(packed, slot);
+            }
+            mode_base += (int) XR_TRANSFER_MODES_PER_U32;
+        } else {
+            break;
+        }
         pc++;
         next_inst = *pc;
     }
     XrValue *args = (c > 0) ? &base[b + 1] : NULL;
 
     // Debug source metadata is populated lazily for named coroutines.
-    XrCoroutine *coro = xr_coro_create_vm_closure(isolate, closure, args, c, coro_name, NULL, 0);
+    XrCoroutine *coro = xr_coro_create_vm_closure(isolate, closure, args, c > 0 ? arg_modes : NULL,
+                                                  c, coro_name, NULL, 0);
     if (!coro) {
         VM_THROW(frame, pc, XR_ERR_CORO_DEAD, "go: failed to create coroutine");
     }

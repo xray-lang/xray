@@ -5,7 +5,7 @@ fn worker(xs: Array<int>) -> int {
 }
 
 let xs = [1, 2]
-let task = go worker(xs)
+let task = go worker(copy(xs))
 let child_len = await task
 print(child_len)
 print(xs.length)

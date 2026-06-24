@@ -203,6 +203,8 @@ static int disasm_special(const char *name, XrProto *proto, XrInstruction inst, 
             // Link mode
             const char *mode = bx == 1 ? "LINKED" : bx == 2 ? "MONITORED" : "?";
             printf("%-16s ; link_mode=%s(%u)\n", name, mode, (unsigned) bx);
+        } else if (a == 5) {
+            printf("%-16s ; transfer_modes=0x%08x\n", name, (unsigned) bx);
         } else {
             printf("%-16s\n", name);
         }

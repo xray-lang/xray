@@ -1,0 +1,1 @@
+go argument transfer of type 'Array<int>' requires explicit copy(...) or move

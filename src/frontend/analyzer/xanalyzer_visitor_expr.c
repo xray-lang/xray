@@ -2367,9 +2367,108 @@ XrType *xa_visit_function_expr(XaInferContext *ctx, AstNode *node) {
 }
 
 /* ----------------------------------------------------------------------------
+ * Cross-Coroutine Boundary Transfer Validation
+ *
+ * Heap-shaped values that currently need a coroutine-boundary clone must be
+ * transferred with explicit syntax. This keeps the source model aligned with
+ * AOT cost: copy(...) means the user accepts O(n), move means ownership leaves
+ * the current coroutine, and shared const is the zero-copy read-only path.
+ * -------------------------------------------------------------------------- */
+bool xa_boundary_transfer_type_needs_explicit(const XrType *type) {
+    if (!type || XR_TYPE_IS_UNKNOWN(type) || XR_TYPE_IS_NEVER(type) || XR_TYPE_IS_NULL(type))
+        return false;
+    switch (type->kind) {
+        case XR_KIND_ARRAY:
+        case XR_KIND_MAP:
+        case XR_KIND_SET:
+        case XR_KIND_FIXED_ARRAY:
+        case XR_KIND_JSON:
+            return true;
+        case XR_KIND_INSTANCE:
+            return type->instance.class_name &&
+                   strcmp(type->instance.class_name, "StringBuilder") == 0;
+        case XR_KIND_UNION:
+            for (uint8_t i = 0; i < type->union_type.member_count; i++) {
+                if (xa_boundary_transfer_type_needs_explicit(type->union_type.members[i]))
+                    return true;
+            }
+            return false;
+        default:
+            return false;
+    }
+}
+
+bool xa_boundary_arg_is_explicit_copy(AstNode *arg_node) {
+    if (!arg_node || arg_node->type != AST_CALL_EXPR)
+        return false;
+    CallExprNode *call = &arg_node->as.call_expr;
+    if (call->arg_count != 1 || !call->callee || call->callee->type != AST_VARIABLE)
+        return false;
+    const char *name = call->callee->as.variable.name;
+    return name && strcmp(name, "copy") == 0;
+}
+
+bool xa_boundary_arg_is_shared_const(XaInferContext *ctx, AstNode *arg_node) {
+    if (!ctx || !ctx->analyzer || !arg_node || arg_node->type != AST_VARIABLE)
+        return false;
+    const char *name = arg_node->as.variable.name;
+    XaSymbol *sym = name ? xa_scope_lookup(ctx->analyzer->current_scope, name) : NULL;
+    return sym && sym->is_shared && sym->is_const;
+}
+
+void xa_check_boundary_transfer_arg(XaInferContext *ctx, AstNode *boundary_node, AstNode *arg_node,
+                                    XrType *arg_type, const char *boundary_label) {
+    if (!ctx || !ctx->analyzer || !arg_node || !xa_boundary_transfer_type_needs_explicit(arg_type))
+        return;
+    if (arg_node->type == AST_MOVE_EXPR || xa_boundary_arg_is_explicit_copy(arg_node) ||
+        xa_boundary_arg_is_shared_const(ctx, arg_node))
+        return;
+
+    XrLocation loc = {.file = ctx->file_path,
+                      .line = arg_node->line ? arg_node->line
+                                             : (boundary_node ? boundary_node->line : 0),
+                      .column = arg_node->column ? arg_node->column
+                                                 : (boundary_node ? boundary_node->column : 0)};
+    char msg[256];
+    snprintf(msg, sizeof(msg),
+             "%s transfer of type '%s' requires explicit copy(...) or move; use shared const for "
+             "read-only sharing",
+             boundary_label ? boundary_label : "cross-coroutine value",
+             xr_type_to_string(arg_type));
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE, msg,
+                               &loc);
+}
+
+static void xa_check_go_call_boundary_args(XaInferContext *ctx, AstNode *go_node,
+                                           CallExprNode *call) {
+    if (!ctx || !call)
+        return;
+    for (int i = 0; i < call->arg_count; i++) {
+        AstNode *arg = call->arguments[i];
+        if (!arg)
+            continue;
+        if (arg->type == AST_SPREAD_EXPR) {
+            XrType *src = xa_analyzer_get_node_type(ctx->analyzer, arg->as.spread_expr.expr);
+            if (!src)
+                src = xa_visit_infer_expr(ctx, arg->as.spread_expr.expr);
+            if (src && XR_TYPE_IS_TUPLE(src)) {
+                for (int j = 0; j < src->tuple.element_count; j++) {
+                    xa_check_boundary_transfer_arg(ctx, go_node, arg, src->tuple.element_types[j],
+                                                   "go argument");
+                }
+            }
+            continue;
+        }
+        XrType *arg_type = xa_analyzer_get_node_type(ctx->analyzer, arg);
+        if (!arg_type)
+            arg_type = xa_visit_infer_expr(ctx, arg);
+        xa_check_boundary_transfer_arg(ctx, go_node, arg, arg_type, "go argument");
+    }
+}
+
+/* ----------------------------------------------------------------------------
  * Coroutine Closure Capture Validation
  * Ensures coroutines don't capture non-shared variables unsafely.
- * Function arguments are deep-copied (safe), but closure captures need checking.
  * -------------------------------------------------------------------------- */
 void check_closure_capture(XaInferContext *ctx, AstNode *node, int line) {
     if (!node)
@@ -2379,24 +2478,51 @@ void check_closure_capture(XaInferContext *ctx, AstNode *node, int line) {
         case AST_VARIABLE: {
             const char *name = node->as.variable.name;
             XaSymbol *sym = xa_scope_lookup(ctx->analyzer->current_scope, name);
-            if (sym && sym->kind != XA_SYM_PARAMETER) {
-                // Check if variable is shared, builtin, or a type (function/class)
-                if (!sym->is_shared && !sym->is_builtin && sym->kind != XA_SYM_FUNCTION &&
-                    sym->kind != XA_SYM_CLASS && sym->kind != XA_SYM_MODULE &&
-                    sym->kind != XA_SYM_IMPORT) {
-                    // Non-shared variable captured in coroutine closure
-                    XrLocation loc = {.file = ctx->file_path, .line = line, .column = node->column};
-                    char msg[512];
+            if (!sym || sym->is_builtin || sym->kind == XA_SYM_FUNCTION ||
+                sym->kind == XA_SYM_CLASS || sym->kind == XA_SYM_MODULE ||
+                sym->kind == XA_SYM_IMPORT)
+                break;
+
+            if (sym->is_shared && sym->is_const)
+                break;
+
+            XrLocation loc = {.file = ctx->file_path, .line = line, .column = node->column};
+            char msg[512];
+            if (sym->kind == XA_SYM_PARAMETER) {
+                if (sym->passing_mode == XR_PARAM_IN || sym->passing_mode == XR_PARAM_REF) {
+                    snprintf(
+                        msg, sizeof(msg),
+                        "go closure cannot capture borrowed parameter '%s'\n"
+                        "hint: pass an owned value or copy(%s) through an explicit go argument",
+                        name, name);
+                } else {
                     snprintf(msg, sizeof(msg),
-                             "go closure cannot capture mutable variable '%s'\n"
-                             "hint: use one of the following:\n"
-                             "  1. pass through argument: go worker(%s)  // deep-copied\n"
-                             "  2. declare as 'shared const %s = ...' for concurrent reads",
+                             "go closure cannot capture parameter '%s'\n"
+                             "hint: pass copy(%s) or move %s through an explicit go argument",
                              name, name, name);
-                    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
-                                               XR_ERR_ANALYZE_CLOSURE_CAPTURE, msg, &loc);
                 }
+            } else if (sym->is_shared) {
+                snprintf(msg, sizeof(msg),
+                         "go closure cannot capture mutable 'shared let' variable '%s'\n"
+                         "hint: pass it through an argument with 'move': go worker(move %s)",
+                         name, name);
+            } else if (sym->is_const) {
+                snprintf(
+                    msg, sizeof(msg),
+                    "go closure cannot capture const variable '%s'\n"
+                    "hint: pass copy(%s) through an explicit go argument, or declare shared const "
+                    "for read-only sharing",
+                    name, name);
+            } else {
+                snprintf(
+                    msg, sizeof(msg),
+                    "go closure cannot capture mutable variable '%s'\n"
+                    "hint: pass copy(%s) or move %s through an explicit go argument, or declare "
+                    "shared const for read-only sharing",
+                    name, name, name);
             }
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                       XR_ERR_ANALYZE_CLOSURE_CAPTURE, msg, &loc);
             break;
         }
         case AST_BINARY_ADD:
@@ -2421,7 +2547,8 @@ void check_closure_capture(XaInferContext *ctx, AstNode *node, int line) {
             check_closure_capture(ctx, node->as.unary.operand, line);
             break;
         case AST_CALL_EXPR:
-            // Only check callee, not arguments (arguments are deep-copied, safe)
+            // Only check callee captures here; go-call arguments are validated
+            // separately by xa_check_go_call_boundary_args.
             check_closure_capture(ctx, node->as.call_expr.callee, line);
             break;
         case AST_MEMBER_ACCESS:
@@ -2482,16 +2609,15 @@ void check_closure_capture(XaInferContext *ctx, AstNode *node, int line) {
 }
 
 // Check coroutine expression for closure capture issues
-// go fn(args) - args are passed by deep copy (safe)
+// go fn(args) - arguments are checked by xa_check_go_call_boundary_args.
 // go { ... }  - closure captures need checking
 void check_coro_capture(XaInferContext *ctx, AstNode *node, int line) {
     if (!node)
         return;
 
-    // go fn(args) - function call with arguments passed by value (safe)
+    // go fn(args) - arguments are checked by xa_check_go_call_boundary_args.
     if (node->type == AST_CALL_EXPR) {
-        // Don't check arguments - they are deep copied
-        // Only check if callee itself is a closure that captures variables
+        // Only check if callee itself is a closure that captures variables.
         CallExprNode *call = &node->as.call_expr;
         if (call->callee && call->callee->type == AST_FUNCTION_EXPR) {
             // go (fn() { ... })(args) - check the closure body
@@ -2525,6 +2651,8 @@ XrType *xa_visit_go_expr(XaInferContext *ctx, AstNode *node) {
     XrType *result_type = xr_type_new_unit(NULL);
     if (go->expr) {
         XrType *expr_type = xa_visit_infer_expr(ctx, go->expr);
+        if (go->expr->type == AST_CALL_EXPR)
+            xa_check_go_call_boundary_args(ctx, node, &go->expr->as.call_expr);
         // If spawning a function call, get its return type
         if (XR_TYPE_IS_FUNCTION(expr_type) && expr_type->function.return_type) {
             result_type = expr_type->function.return_type;
@@ -2533,9 +2661,9 @@ XrType *xa_visit_go_expr(XaInferContext *ctx, AstNode *node) {
             result_type = expr_type;
         }
 
-        // Check coroutine closure capture rules
-        // Coroutine closures can only capture shared variables
-        // Regular variables must be passed as arguments (deep copy)
+        // Check coroutine closure capture rules. Coroutine closures can only
+        // capture shared const; heap-shaped values must cross as explicit
+        // copy(...), move, or shared const arguments.
         check_coro_capture(ctx, go->expr, node->line);
     }
 

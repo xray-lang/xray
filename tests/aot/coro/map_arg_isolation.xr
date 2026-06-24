@@ -6,7 +6,7 @@ fn worker(m: Map<string, Array<int>>) -> int {
 }
 
 let m: Map<string, Array<int>> = #{"items": [1, 2]}
-let task = go worker(m)
+let task = go worker(copy(m))
 let child_len = await task
 print(child_len)
 print(m.get("items").length)

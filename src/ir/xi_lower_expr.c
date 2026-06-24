@@ -1866,6 +1866,13 @@ typedef struct XiLowerArgList {
     int cap;
 } XiLowerArgList;
 
+typedef struct XiLowerGoArgList {
+    XiValue **items;
+    uint8_t *modes;
+    int count;
+    int cap;
+} XiLowerGoArgList;
+
 static void xi_lower_arg_list_init(XiLowerArgList *list, XiValue **stack_items, int stack_cap) {
     list->items = stack_items;
     list->count = 0;
@@ -1906,6 +1913,121 @@ static bool xi_lower_arg_list_push(XiLower *l, XiLowerArgList *list, XiValue *va
         return false;
     }
     list->items[list->count++] = value;
+    return true;
+}
+
+static void xi_lower_go_arg_list_init(XiLowerGoArgList *list, XiValue **stack_items,
+                                      uint8_t *stack_modes, int stack_cap) {
+    list->items = stack_items;
+    list->modes = stack_modes;
+    list->count = 0;
+    list->cap = stack_cap;
+}
+
+static bool xi_lower_go_arg_list_grow(XiLower *l, XiLowerGoArgList *list, int max_args) {
+    int next_cap = list->cap > 0 ? list->cap * 2 : 1;
+    if (next_cap <= list->count)
+        next_cap = list->count + 1;
+    if (next_cap > max_args)
+        next_cap = max_args;
+    if (next_cap <= list->cap)
+        return false;
+
+    XiValue **items =
+        (XiValue **) xi_func_arena_alloc(l->func, (uint32_t) (next_cap * (int) sizeof(XiValue *)));
+    uint8_t *modes =
+        (uint8_t *) xi_func_arena_alloc(l->func, (uint32_t) (next_cap * (int) sizeof(uint8_t)));
+    if (!items || !modes) {
+        l->had_error = true;
+        return false;
+    }
+    if (list->count > 0) {
+        memcpy(items, list->items, (size_t) list->count * sizeof(XiValue *));
+        memcpy(modes, list->modes, (size_t) list->count * sizeof(uint8_t));
+    }
+    list->items = items;
+    list->modes = modes;
+    list->cap = next_cap;
+    return true;
+}
+
+static bool xi_lower_go_arg_list_push(XiLower *l, XiLowerGoArgList *list, XiValue *value,
+                                      uint8_t mode, int max_args, int line) {
+    if (list->count >= max_args) {
+        fprintf(stderr, "[LOWER] go argument count exceeds %d at line %d\n", max_args, line);
+        l->had_error = true;
+        return false;
+    }
+    if (list->count >= list->cap && !xi_lower_go_arg_list_grow(l, list, max_args)) {
+        l->had_error = true;
+        return false;
+    }
+    list->items[list->count] = value;
+    list->modes[list->count] = mode;
+    list->count++;
+    return true;
+}
+
+static bool lower_expr_is_copy_call(AstNode *node, AstNode **inner_out) {
+    if (inner_out)
+        *inner_out = NULL;
+    if (!node || node->type != AST_CALL_EXPR)
+        return false;
+    CallExprNode *call = &node->as.call_expr;
+    if (call->arg_count != 1 || !call->callee || call->callee->type != AST_VARIABLE)
+        return false;
+    const char *name = call->callee->as.variable.name;
+    if (!name || strcmp(name, "copy") != 0)
+        return false;
+    if (inner_out)
+        *inner_out = call->arguments[0];
+    return true;
+}
+
+static bool lower_go_call_args(XiLower *l, CallExprNode *call, XiLowerGoArgList *args, int max_args,
+                               int line) {
+    for (int i = 0; i < call->arg_count; i++) {
+        AstNode *child = call->arguments[i];
+        if (!child)
+            continue;
+
+        if (child->type == AST_SPREAD_EXPR) {
+            XiValue *src = xi_lower_expr(l, child->as.spread_expr.expr);
+            if (!src)
+                return false;
+            int arity = src->type ? xr_type_tuple_count(src->type) : 0;
+            for (int j = 0; j < arity; j++) {
+                struct XrType *et = xr_type_tuple_get(src->type, j);
+                XiValue *get =
+                    xi_value_new(l->func, l->cur_block, XI_TUPLE_GET, et ? et : l->type_any, 1);
+                if (!get)
+                    return false;
+                get->args[0] = src;
+                get->aux_int = j;
+                if (!xi_lower_go_arg_list_push(l, args, get, XR_TRANSFER_SHARE, max_args, line))
+                    return false;
+            }
+            continue;
+        }
+
+        uint8_t mode = XR_TRANSFER_SHARE;
+        AstNode *value_node = child;
+        if (child->type == AST_MOVE_EXPR) {
+            mode = XR_TRANSFER_MOVE;
+        } else {
+            AstNode *copy_inner = NULL;
+            if (lower_expr_is_copy_call(child, &copy_inner) && copy_inner) {
+                mode = XR_TRANSFER_COPY;
+                value_node = copy_inner;
+            }
+        }
+
+        XiValue *a = xi_lower_expr(l, value_node);
+        if (!a)
+            return false;
+        if (!xi_lower_go_arg_list_push(l, args, a, mode, max_args, line))
+            return false;
+    }
     return true;
 }
 
@@ -3189,10 +3311,10 @@ static XiValue *lower_go_expr(XiLower *l, AstNode *node) {
         if (!callee)
             return NULL;
         XiValue *stack_args[XI_LOWER_CALL_ARG_STACK_CAP];
-        XiLowerArgList args;
-        xi_lower_arg_list_init(&args, stack_args, XI_LOWER_CALL_ARG_STACK_CAP);
-        if (!lower_call_args_expand_spread(l, call, &args, XI_LOWER_MAX_CALL_ARGS, NULL, 0,
-                                           (int) node->line))
+        uint8_t stack_modes[XI_LOWER_CALL_ARG_STACK_CAP];
+        XiLowerGoArgList args;
+        xi_lower_go_arg_list_init(&args, stack_args, stack_modes, XI_LOWER_CALL_ARG_STACK_CAP);
+        if (!lower_go_call_args(l, call, &args, XI_LOWER_MAX_CALL_ARGS, (int) node->line))
             return NULL;
         XiValue **arg_vals = args.items;
         int n = args.count;
@@ -3203,6 +3325,14 @@ static XiValue *lower_go_expr(XiLower *l, AstNode *node) {
         v->args[0] = callee;
         for (int i = 0; i < n; i++) {
             v->args[1 + i] = arg_vals[i];
+        }
+        if (n > 0) {
+            uint8_t *modes =
+                (uint8_t *) xi_func_arena_alloc(l->func, (uint32_t) ((size_t) n * sizeof(uint8_t)));
+            if (!modes)
+                return NULL;
+            memcpy(modes, args.modes, (size_t) n * sizeof(uint8_t));
+            v->aux = modes;
         }
         v->aux_int = (int64_t) pack_go_aux((int) go->link_mode);
         v->flags |= XI_FLAG_SIDE_EFFECT;

@@ -62,6 +62,8 @@ static const XiValue *xicgen_getprop_receiver_value(XiCgenCtx *ctx, const XiValu
     return v;
 }
 
+static XrRep xicgen_value_c_storage_rep(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v);
+
 static void xicgen_param(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                          const char *prefix) {
     (void) prefix;
@@ -82,8 +84,8 @@ static void xicgen_identity(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
      * PTR array moved into a TAGGED-declared local). Bridge that gap so the
      * emitted initializer matches the result's declared C type; when the reps
      * already agree this is a no-op and emits the bare source reference. */
-    XrRep from_rep = cg_value_decl_storage_rep(ctx, f, v->args[0]);
-    XrRep to_rep = cg_value_decl_storage_rep(ctx, f, v);
+    XrRep from_rep = xicgen_value_c_storage_rep(ctx, f, v->args[0]);
+    XrRep to_rep = xicgen_value_c_storage_rep(ctx, f, v);
     const char *conv_suffix = emit_conversion_prefix(out, v->type, from_rep, to_rep);
     emit_vref(out, v->args[0]);
     emit_conversion_suffix(out, conv_suffix);
@@ -999,7 +1001,7 @@ static void xicgen_emit_c_string_literal(FILE *out, const char *s) {
 }
 
 static void xicgen_emit_json_new_expr(FILE *out, const XiValue *v) {
-    int64_t field_count = v->aux_int > 0 ? v->aux_int : 0;
+    int64_t field_count = xi_json_field_count(v);
     const char **field_names = (const char **) v->aux;
     if (field_count <= 0 || !field_names) {
         fprintf(out, "xrt_json_new(%" PRId64 ")", field_count);

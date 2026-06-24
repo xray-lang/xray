@@ -22,6 +22,7 @@
 #include "../runtime/xvm_call.h"
 #include "../runtime/xisolate_api.h"
 #include "../runtime/xray_debug_hooks.h"
+#include "../runtime/xshared.h"
 #include "../runtime/mem/xcoro_heap.h"
 #include "../runtime/mem/xsystem_heap.h"
 #include "../runtime/value/xtype.h"
@@ -72,6 +73,9 @@ static void vm_backend_clear_entry_state(XrCoroutine *coro);
 static void vm_backend_reset_entry_state_no_free(XrCoroutine *coro);
 static bool vm_backend_bind_closure_entry(XrCoroutine *coro, XrayIsolate *X, XrClosure *closure,
                                           XrValue *args, int arg_count, bool copy_args);
+static bool vm_backend_bind_closure_entry_modes(XrCoroutine *coro, XrayIsolate *X,
+                                                XrClosure *closure, XrValue *args,
+                                                const uint8_t *arg_modes, int arg_count);
 static bool vm_backend_bind_cfunc_entry(XrCoroutine *coro, XrCoroCFuncEntry cfunc, XrValue *args,
                                         int arg_count);
 static bool vm_backend_prepare_recycle(XrCoroutine *coro, XrWorker *worker);
@@ -311,8 +315,8 @@ void xr_coro_reset_for_call(XrCoroutine *coro, XrayIsolate *X, XrClosure *closur
 }
 
 XrCoroutine *xr_coro_create_vm_closure(XrayIsolate *X, XrClosure *closure, XrValue *args,
-                                       int arg_count, const char *name, const char *file,
-                                       int line) {
+                                       const uint8_t *arg_modes, int arg_count, const char *name,
+                                       const char *file, int line) {
     XR_DCHECK(X != NULL, "coro_create_vm_closure: NULL isolate");
     XR_DCHECK(closure != NULL, "coro_create_vm_closure: NULL closure");
     XR_DCHECK(arg_count >= 0, "coro_create_vm_closure: negative arg_count");
@@ -328,7 +332,7 @@ XrCoroutine *xr_coro_create_vm_closure(XrayIsolate *X, XrClosure *closure, XrVal
         return NULL;
     }
 
-    if (!vm_backend_bind_closure_entry(coro, X, closure, args, arg_count, true)) {
+    if (!vm_backend_bind_closure_entry_modes(coro, X, closure, args, arg_modes, arg_count)) {
         xr_coro_free(coro);
         xr_coro_discard_uninitialized(coro);
         return NULL;
@@ -404,8 +408,21 @@ static void vm_backend_clear_entry_state(XrCoroutine *coro) {
     vm_entry_reset_no_free(state);
 }
 
+static XrValue vm_entry_transfer_arg(XrCoroutine *coro, XrayIsolate *X, XrValue value, uint8_t mode,
+                                     bool copy_args) {
+    if (mode == XR_TRANSFER_COPY || (copy_args && mode == XR_TRANSFER_SHARE))
+        return (X && XR_IS_PTR(value)) ? xr_deep_copy_to_coro(X, value, coro) : value;
+    if (mode == XR_TRANSFER_SHARE && XR_IS_PTR(value)) {
+        XrObjHeader *obj = XR_VALUE_GCPTR(value);
+        if (obj && XR_OBJ_IS_SHARED(obj) && !XR_OBJ_GET_FLAG(obj, XR_OBJ_TRANSIT))
+            xr_shared_incref(obj);
+    }
+    return value;
+}
+
 static bool vm_entry_copy_args(XrCoroutine *coro, XrayIsolate *X, XrVmCoroState *state,
-                               XrValue *args, int arg_count, bool copy_args) {
+                               XrValue *args, const uint8_t *arg_modes, int arg_count,
+                               bool copy_args) {
     if (!state || arg_count < 0 || (arg_count > 0 && !args))
         return false;
     state->arg_count = arg_count;
@@ -428,8 +445,8 @@ static bool vm_entry_copy_args(XrCoroutine *coro, XrayIsolate *X, XrVmCoroState 
     }
     state->args = dst;
     for (int i = 0; i < arg_count; i++) {
-        dst[i] =
-            (copy_args && XR_IS_PTR(args[i])) ? xr_deep_copy_to_coro(X, args[i], coro) : args[i];
+        uint8_t mode = arg_modes ? arg_modes[i] : XR_TRANSFER_SHARE;
+        dst[i] = vm_entry_transfer_arg(coro, X, args[i], mode, copy_args);
     }
     return true;
 }
@@ -454,7 +471,29 @@ static bool vm_backend_bind_closure_entry(XrCoroutine *coro, XrayIsolate *X, XrC
      * return it to the owner's heap, not its own). */
     xr_rc_retain((XrObjHeader *) closure);
     state->entry_closure_owner = xr_current_coro_heap();
-    if (!vm_entry_copy_args(coro, X, state, args, arg_count, copy_args)) {
+    if (!vm_entry_copy_args(coro, X, state, args, NULL, arg_count, copy_args)) {
+        vm_backend_clear_entry_state(coro);
+        return false;
+    }
+    return true;
+}
+
+static bool vm_backend_bind_closure_entry_modes(XrCoroutine *coro, XrayIsolate *X,
+                                                XrClosure *closure, XrValue *args,
+                                                const uint8_t *arg_modes, int arg_count) {
+    if (!coro || !closure)
+        return false;
+    if (!vm_backend_ensure_state(coro))
+        return false;
+    XrVmCoroState *state = vm_state_for_coro(coro);
+    if (!state)
+        return false;
+    vm_backend_clear_entry_state(coro);
+    state->entry_type = XR_CORO_ENTRY_CLOSURE;
+    state->entry.closure = closure;
+    xr_rc_retain((XrObjHeader *) closure);
+    state->entry_closure_owner = xr_current_coro_heap();
+    if (!vm_entry_copy_args(coro, X, state, args, arg_modes, arg_count, false)) {
         vm_backend_clear_entry_state(coro);
         return false;
     }
@@ -473,7 +512,7 @@ static bool vm_backend_bind_cfunc_entry(XrCoroutine *coro, XrCoroCFuncEntry cfun
     vm_backend_clear_entry_state(coro);
     state->entry_type = XR_CORO_ENTRY_CFUNC;
     state->entry.cfunc = cfunc;
-    if (!vm_entry_copy_args(coro, NULL, state, args, arg_count, false)) {
+    if (!vm_entry_copy_args(coro, NULL, state, args, NULL, arg_count, false)) {
         vm_backend_clear_entry_state(coro);
         return false;
     }

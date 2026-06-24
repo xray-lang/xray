@@ -230,6 +230,25 @@ XR_FUNC void xi_emit_go(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         c_field |= 0x80;
     emit_inst(ctx, CREATE_ABC(OP_GO, dst, dst, c_field));
 
+    bool has_transfer_modes = false;
+    for (uint16_t i = 0; i < nargs; i++) {
+        if (xi_go_arg_transfer_mode(v, i) != XR_TRANSFER_SHARE) {
+            has_transfer_modes = true;
+            break;
+        }
+    }
+    if (has_transfer_modes) {
+        for (uint16_t base = 0; base < nargs; base += XR_TRANSFER_MODES_PER_U32) {
+            uint32_t packed = 0;
+            for (uint16_t slot = 0; slot < XR_TRANSFER_MODES_PER_U32 && base + slot < nargs;
+                 slot++) {
+                packed =
+                    xr_transfer_pack_mode(packed, slot, xi_go_arg_transfer_mode(v, base + slot));
+            }
+            emit_inst(ctx, CREATE_ABx(OP_NOP, 5, packed));
+        }
+    }
+
     /* NOP A=3: link_mode annotation (read by vm_go) */
     int link_mode = (int) v->aux_int & XI_GO_AUX_LINK_MASK;
     if (link_mode != 0) {
