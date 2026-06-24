@@ -151,7 +151,7 @@ static bool analyze_uses(XiFunc *f) {
     return changed;
 }
 
-/* Propagate escape through COPY / BOX / UNBOX / EXTRACT chains:
+/* Propagate escape through COPY / MOVE / BOX / UNBOX / EXTRACT chains:
  * if the output escapes, the input must escape at least as much. */
 static bool propagate_transparent(XiFunc *f) {
     bool changed = false;
@@ -164,7 +164,7 @@ static bool propagate_transparent(XiFunc *f) {
             if (!v)
                 continue;
             /* Transparent ops: output escape ≥ input escape, and vice versa */
-            if (v->op == XI_COPY || v->op == XI_BOX || v->op == XI_UNBOX) {
+            if (v->op == XI_COPY || v->op == XI_MOVE || v->op == XI_BOX || v->op == XI_UNBOX) {
                 if (v->nargs < 1 || !v->args[0])
                     continue;
                 XiValue *src = v->args[0];

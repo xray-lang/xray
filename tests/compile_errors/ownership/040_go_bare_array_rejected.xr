@@ -1,0 +1,7 @@
+fn worker(xs: Array<int>) -> int {
+    return xs.length
+}
+
+let xs = [1, 2, 3]
+let task = go worker(xs)
+print(await task)

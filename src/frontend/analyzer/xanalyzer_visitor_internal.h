@@ -74,6 +74,12 @@ XR_FUNC XrType *xa_visit_force_unwrap(XaInferContext *ctx, AstNode *node);
 XR_FUNC XrType *xa_visit_as_expr(XaInferContext *ctx, AstNode *node);
 XR_FUNC void check_closure_capture(XaInferContext *ctx, AstNode *node, int line);
 XR_FUNC void check_coro_capture(XaInferContext *ctx, AstNode *node, int line);
+XR_FUNC bool xa_boundary_transfer_type_needs_explicit(const XrType *type);
+XR_FUNC bool xa_boundary_arg_is_explicit_copy(AstNode *arg_node);
+XR_FUNC bool xa_boundary_arg_is_shared_const(XaInferContext *ctx, AstNode *arg_node);
+XR_FUNC void xa_check_boundary_transfer_arg(XaInferContext *ctx, AstNode *boundary_node,
+                                            AstNode *arg_node, XrType *arg_type,
+                                            const char *boundary_label);
 
 // Unified function body visitor (collect + direct traversal)
 XR_FUNC void xa_visit_function_body_unified(XaInferContext *ctx, AstNode *body);

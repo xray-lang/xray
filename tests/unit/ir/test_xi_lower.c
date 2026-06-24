@@ -737,6 +737,46 @@ TEST(direct_await_go_one_shot) {
     xi_func_free(f);
 }
 
+TEST(go_arg_transfer_modes) {
+    XiFunc *copy_ir = lower_source("fn worker(xs: Array<int>) -> int { return xs.length }\n"
+                                   "let xs = [1, 2]\n"
+                                   "let task = go worker(copy(xs))\n"
+                                   "print(await task)\n");
+    assert(copy_ir != NULL);
+    XiValue *copy_go = func_tree_find_op(copy_ir, XI_GO);
+    assert(copy_go != NULL && "copy case should lower a GO op");
+    assert(copy_go->nargs == 2 && "go worker(copy(xs)) should keep callee plus one arg");
+    assert(xi_go_arg_transfer_mode(copy_go, 0) == XR_TRANSFER_COPY &&
+           "copy(...) at a go boundary must be encoded as COPY transfer");
+    assert(!func_tree_has_op(copy_ir, XI_COPY) &&
+           "go boundary copy(...) must not lower to a separate copy op before GO");
+    xi_func_free(copy_ir);
+
+    XiFunc *move_ir = lower_source("fn worker(xs: Array<int>) -> int { return xs.length }\n"
+                                   "shared let xs: Array<int> = [1, 2]\n"
+                                   "let task = go worker(move xs)\n"
+                                   "print(await task)\n");
+    assert(move_ir != NULL);
+    XiValue *move_go = func_tree_find_op(move_ir, XI_GO);
+    assert(move_go != NULL && "move case should lower a GO op");
+    assert(xi_go_arg_transfer_mode(move_go, 0) == XR_TRANSFER_MOVE &&
+           "move at a go boundary must be encoded as MOVE transfer");
+    assert(func_tree_has_op(move_ir, XI_MOVE) &&
+           "move transfer should still consume source ownership");
+    xi_func_free(move_ir);
+
+    XiFunc *share_ir = lower_source("fn worker(xs: Array<int>) -> int { return xs.length }\n"
+                                    "shared const xs: Array<int> = [1, 2]\n"
+                                    "let task = go worker(xs)\n"
+                                    "print(await task)\n");
+    assert(share_ir != NULL);
+    XiValue *share_go = func_tree_find_op(share_ir, XI_GO);
+    assert(share_go != NULL && "shared const case should lower a GO op");
+    assert(xi_go_arg_transfer_mode(share_go, 0) == XR_TRANSFER_SHARE &&
+           "shared const go arguments should be encoded as zero-copy SHARE transfer");
+    xi_func_free(share_ir);
+}
+
 TEST(defer_stmt) {
     XiFunc *f = lower_source("fn cleanup() { print(0) }\n"
                              "defer cleanup()\n"
@@ -1081,6 +1121,7 @@ int main(void) {
     run_template_string();
     run_go_await();
     run_direct_await_go_one_shot();
+    run_go_arg_transfer_modes();
     run_defer_stmt();
     run_defer_args_lower_before_defer();
     run_set_literal();

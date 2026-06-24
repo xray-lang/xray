@@ -125,8 +125,8 @@ static const char CONCURRENCY_SYSTEM[] =
     "4. select: multiplex channels with timeout\n"
     "5. shared const: read-only shared config\n"
     "6. await all / await any: fan-out patterns\n"
-    "Rules: Channel must be const. go closures deep-copy params. "
-    "Cannot capture let variables in go closures.\n";
+    "Rules: Channel must be const. go arguments that transfer heap values must use "
+    "copy(...), move, or shared const. Cannot capture let variables in go closures.\n";
 
 static const char WRITE_TEST_SYSTEM[] =
     "Generate @test functions for the given Xray code.\n"

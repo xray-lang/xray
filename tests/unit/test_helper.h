@@ -60,7 +60,8 @@ static inline XrCoroutine *xr_test_init_coro(XrayIsolate *X) {
     }
 
     // Create main coroutine
-    XrCoroutine *coro = xr_coro_create_vm_closure(X, closure, NULL, 0, "test_main", "<test>", 0);
+    XrCoroutine *coro =
+        xr_coro_create_vm_closure(X, closure, NULL, NULL, 0, "test_main", "<test>", 0);
     if (!coro)
         return NULL;
 

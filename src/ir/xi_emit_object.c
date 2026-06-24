@@ -459,7 +459,8 @@ XR_FUNC void xi_emit_set_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
 
 /* Json object creation: build Shape, store in constant pool, emit OP_NEWJSON */
 XR_FUNC void xi_emit_json_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
-    int field_count = (int) v->aux_int;
+    int field_count = xi_json_field_count(v);
+    uint8_t storage_mode = xi_json_storage_mode(v);
     const char **field_names = (const char **) v->aux;
     if (field_count < 0 || field_count > UINT16_MAX) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
@@ -490,7 +491,7 @@ XR_FUNC void xi_emit_json_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     if (!xi_emit_const_index_to_c(ctx, kidx, &karg))
         return;
 
-    emit_inst(ctx, CREATE_ABC(OP_NEWJSON, dst, karg, 0));
+    emit_inst(ctx, CREATE_ABC(OP_NEWJSON, dst, karg, storage_mode));
 }
 
 /* Json field init by index: OP_JSON_INIT A B C (A=json, B=field_idx, C=val) */

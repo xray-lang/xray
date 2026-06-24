@@ -3809,7 +3809,7 @@ TEST(cgen_coro_go_clones_tagged_args) {
                       "    return xs.length\n"
                       "}\n"
                       "let xs = [1, 2]\n"
-                      "let task = go worker(xs)\n"
+                      "let task = go worker(copy(xs))\n"
                       "let result = await task\n"
                       "print(result)\n";
 
@@ -3821,7 +3821,7 @@ TEST(cgen_coro_go_clones_tagged_args) {
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "AOT coroutine with tagged go args should generate");
     assert(contains(code, "xrt_value_clone_for_coro(") &&
-           "tagged go arguments must be cloned at the coroutine boundary");
+           "explicit copy(...) go arguments must be cloned once at the coroutine boundary");
 
     printf("  Generated coroutine argument clone %zu bytes of C code\n", strlen(code));
     xr_free(code);
@@ -3842,10 +3842,10 @@ TEST(cgen_coro_go_sync_function_uses_wrapper_desc) {
                       "let high = go(name: \"compute\") compute(5)\n"
                       "print(await high)\n"
                       "let xs = [1, 2]\n"
-                      "let copied = go mutate_copy(xs)\n"
+                      "let copied = go mutate_copy(copy(xs))\n"
                       "print(await copied)\n"
                       "print(xs.length)\n"
-                      "let roundtrip = go identity_copy(xs)\n"
+                      "let roundtrip = go identity_copy(copy(xs))\n"
                       "let ys = await roundtrip\n"
                       "print(ys.length)\n";
 

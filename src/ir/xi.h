@@ -41,6 +41,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include "../base/xdefs.h"
+#include "../runtime/value/xtransfer_mode.h"
 
 /* Forward declarations for types defined in other modules */
 struct XrType;
@@ -645,6 +646,34 @@ typedef struct XiValue {
     uint32_t line;         /* source line number (0 = unknown) */
     struct XiBlock *block; /* containing block */
 } XiValue;
+
+static inline uint8_t xi_go_arg_transfer_mode(const XiValue *go, uint16_t arg_index) {
+    if (!go || go->op != XI_GO || arg_index + 1 >= go->nargs)
+        return XR_TRANSFER_SHARE;
+    const uint8_t *modes = (const uint8_t *) go->aux;
+    return modes ? modes[arg_index] : XR_TRANSFER_SHARE;
+}
+
+#define XI_JSON_AUX_STORAGE_SHIFT 32
+#define XI_JSON_AUX_FIELD_MASK INT64_C(0xffffffff)
+
+static inline int32_t xi_json_field_count(const XiValue *v) {
+    return v ? (int32_t) (v->aux_int & XI_JSON_AUX_FIELD_MASK) : 0;
+}
+
+static inline uint8_t xi_json_storage_mode(const XiValue *v) {
+    return v ? (uint8_t) ((uint64_t) v->aux_int >> XI_JSON_AUX_STORAGE_SHIFT) : 0;
+}
+
+static inline int64_t xi_json_pack_aux(int32_t field_count, uint8_t storage_mode) {
+    return ((int64_t) storage_mode << XI_JSON_AUX_STORAGE_SHIFT) |
+           ((int64_t) field_count & XI_JSON_AUX_FIELD_MASK);
+}
+
+static inline void xi_json_set_storage_mode(XiValue *v, uint8_t storage_mode) {
+    if (v && v->op == XI_JSON_NEW)
+        v->aux_int = xi_json_pack_aux(xi_json_field_count(v), storage_mode);
+}
 
 #define XI_COPY_KIND_IDENTITY 0
 #define XI_COPY_KIND_VALUE_CLONE INT64_C(0x58434F5059434C4E)

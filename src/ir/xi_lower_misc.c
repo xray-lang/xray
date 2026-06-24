@@ -402,11 +402,10 @@ XR_FUNC XiValue *xi_lower_move_expr(XiLower *l, AstNode *node) {
     if (!val)
         return NULL;
     struct XrType *result_type = xi_lower_node_type(l, node);
-    XiValue *v = xi_value_new(l->func, l->cur_block, XI_COPY, result_type, 1);
+    XiValue *v = xi_value_new(l->func, l->cur_block, XI_MOVE, result_type, 1);
     if (!v)
         return val;
     v->args[0] = val;
-    v->flags |= XI_FLAG_SIDE_EFFECT;
     v->line = (uint32_t) node->line;
     return v;
 }
