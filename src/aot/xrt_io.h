@@ -561,7 +561,7 @@ static inline XrValue xrt_io_realpath(const char *path_data, int64_t path_len) {
 }
 
 #if defined(XR_OS_WINDOWS)
-static inline XrIoCorePathKind xrt_io_remove_all_kind(void *ctx, const char *path) {
+static inline XrIoCorePathKind xrt_io_path_kind(void *ctx, const char *path) {
     (void) ctx;
     DWORD attrs = GetFileAttributesA(path);
     if (attrs == INVALID_FILE_ATTRIBUTES)
@@ -571,8 +571,8 @@ static inline XrIoCorePathKind xrt_io_remove_all_kind(void *ctx, const char *pat
     return XR_IO_CORE_PATH_LEAF;
 }
 
-static inline bool xrt_io_remove_all_for_each_entry(void *ctx, const char *path,
-                                                    XrIoCoreDirEntryFn visit, void *visit_ctx) {
+static inline bool xrt_io_dir_for_each_entry(void *ctx, const char *path, XrIoCoreDirEntryFn visit,
+                                             void *visit_ctx) {
     (void) ctx;
     size_t len = strlen(path);
     char *pattern = (char *) XRT_MALLOC(len + 4);
@@ -614,7 +614,7 @@ static inline bool xrt_io_remove_all_dir(void *ctx, const char *path) {
     return RemoveDirectoryA(path) != 0;
 }
 #else
-static inline XrIoCorePathKind xrt_io_remove_all_kind(void *ctx, const char *path) {
+static inline XrIoCorePathKind xrt_io_path_kind(void *ctx, const char *path) {
     (void) ctx;
     struct stat st;
     if (lstat(path, &st) != 0)
@@ -624,8 +624,8 @@ static inline XrIoCorePathKind xrt_io_remove_all_kind(void *ctx, const char *pat
     return XR_IO_CORE_PATH_DIR;
 }
 
-static inline bool xrt_io_remove_all_for_each_entry(void *ctx, const char *path,
-                                                    XrIoCoreDirEntryFn visit, void *visit_ctx) {
+static inline bool xrt_io_dir_for_each_entry(void *ctx, const char *path, XrIoCoreDirEntryFn visit,
+                                             void *visit_ctx) {
     (void) ctx;
     DIR *dir = opendir(path);
     if (!dir)
@@ -660,8 +660,8 @@ static inline XrValue xrt_io_remove_all(const char *path_data, int64_t path_len)
     char *owned = NULL;
     char *path = xrt_io_copy_cstr_arg(path_data, path_len, stack_path, sizeof(stack_path), &owned);
     XrIoCoreRemoveAllOps ops = {
-        .kind = xrt_io_remove_all_kind,
-        .for_each_entry = xrt_io_remove_all_for_each_entry,
+        .kind = xrt_io_path_kind,
+        .for_each_entry = xrt_io_dir_for_each_entry,
         .remove_leaf = xrt_io_remove_all_leaf,
         .remove_dir = xrt_io_remove_all_dir,
         .alloc = xrt_io_core_alloc,
@@ -788,6 +788,16 @@ static inline XrValue xrt_io_temp_dir(void) {
     return xrt_str_from_cstr(tpl);
 }
 
+typedef struct XrtIoReadDirEmitCtx {
+    XrValue arr;
+} XrtIoReadDirEmitCtx;
+
+static inline bool xrt_io_read_dir_emit(void *ctx, const char *path) {
+    XrtIoReadDirEmitCtx *emit = (XrtIoReadDirEmitCtx *) ctx;
+    xrt_array_push(emit->arr, xrt_str_from_cstr(path));
+    return true;
+}
+
 static inline XrValue xrt_io_read_dir(const char *path_data, int64_t path_len) {
     char stack_path[512];
     char *owned = NULL;
@@ -796,117 +806,19 @@ static inline XrValue xrt_io_read_dir(const char *path_data, int64_t path_len) {
         XRT_FREE(owned);
         return XR_NULL_VAL;
     }
+    if (xrt_io_path_kind(NULL, path) != XR_IO_CORE_PATH_DIR) {
+        XRT_FREE(owned);
+        return XR_NULL_VAL;
+    }
     XrValue arr = xrt_array_new(8);
-#if defined(XR_OS_WINDOWS)
-    size_t plen = strlen(path);
-    char *pattern = (char *) XRT_MALLOC(plen + 4);
-    if (!pattern) {
+    XrtIoReadDirEmitCtx emit = {.arr = arr};
+    if (!xr_io_core_read_dir(path, xrt_io_dir_for_each_entry, NULL, xrt_io_read_dir_emit, &emit)) {
+        xrt_release(arr);
         XRT_FREE(owned);
         return XR_NULL_VAL;
     }
-    snprintf(pattern, plen + 4, "%s\\*", path);
-    WIN32_FIND_DATAA fd;
-    HANDLE h = FindFirstFileA(pattern, &fd);
-    XRT_FREE(pattern);
-    if (h == INVALID_HANDLE_VALUE) {
-        XRT_FREE(owned);
-        return XR_NULL_VAL;
-    }
-    do {
-        const char *name = fd.cFileName;
-        if (!xr_io_core_is_dot_dir_entry(name))
-            xrt_array_push(arr, xrt_str_from_cstr(name));
-    } while (FindNextFileA(h, &fd));
-    FindClose(h);
-#else
-    DIR *dir = opendir(path);
-    if (!dir) {
-        XRT_FREE(owned);
-        return XR_NULL_VAL;
-    }
-    for (;;) {
-        struct dirent *e = readdir(dir);
-        if (!e)
-            break;
-        const char *name = e->d_name;
-        if (xr_io_core_is_dot_dir_entry(name))
-            continue;
-        xrt_array_push(arr, xrt_str_from_cstr(name));
-    }
-    closedir(dir);
-#endif
     XRT_FREE(owned);
     return arr;
-}
-
-static inline void xrt_io_read_dir_recursive_impl(XrValue arr, const char *base, const char *path,
-                                                  int depth) {
-    if (!base || !path || depth >= 64)
-        return;
-    size_t base_len = strlen(base);
-#if defined(XR_OS_WINDOWS)
-    size_t plen = strlen(path);
-    char *pattern = (char *) XRT_MALLOC(plen + 4);
-    if (!pattern)
-        return;
-    snprintf(pattern, plen + 4, "%s\\*", path);
-    WIN32_FIND_DATAA fd;
-    HANDLE h = FindFirstFileA(pattern, &fd);
-    XRT_FREE(pattern);
-    if (h == INVALID_HANDLE_VALUE)
-        return;
-    do {
-        const char *name = fd.cFileName;
-        if (xr_io_core_is_dot_dir_entry(name))
-            continue;
-        size_t child_len = 0;
-        if (!xr_io_core_join_child_len(path, name, &child_len))
-            continue;
-        char *child = (char *) XRT_MALLOC(child_len + 1);
-        if (!child)
-            continue;
-        if (!xr_io_core_join_child_path(path, '\\', name, child, child_len + 1)) {
-            XRT_FREE(child);
-            continue;
-        }
-        const char *rel = xr_io_core_relative_path_from_base(child, base_len);
-        xrt_array_push(arr, xrt_str_from_cstr(rel));
-        if ((fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) &&
-            !(fd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT))
-            xrt_io_read_dir_recursive_impl(arr, base, child, depth + 1);
-        XRT_FREE(child);
-    } while (FindNextFileA(h, &fd));
-    FindClose(h);
-#else
-    DIR *dir = opendir(path);
-    if (!dir)
-        return;
-    for (;;) {
-        struct dirent *e = readdir(dir);
-        if (!e)
-            break;
-        const char *name = e->d_name;
-        if (xr_io_core_is_dot_dir_entry(name))
-            continue;
-        size_t child_len = 0;
-        if (!xr_io_core_join_child_len(path, name, &child_len))
-            continue;
-        char *child = (char *) XRT_MALLOC(child_len + 1);
-        if (!child)
-            continue;
-        if (!xr_io_core_join_child_path(path, '/', name, child, child_len + 1)) {
-            XRT_FREE(child);
-            continue;
-        }
-        const char *rel = xr_io_core_relative_path_from_base(child, base_len);
-        xrt_array_push(arr, xrt_str_from_cstr(rel));
-        struct stat st;
-        if (lstat(child, &st) == 0 && S_ISDIR(st.st_mode))
-            xrt_io_read_dir_recursive_impl(arr, base, child, depth + 1);
-        XRT_FREE(child);
-    }
-    closedir(dir);
-#endif
 }
 
 static inline XrValue xrt_io_read_dir_recursive(const char *path_data, int64_t path_len) {
@@ -918,7 +830,26 @@ static inline XrValue xrt_io_read_dir_recursive(const char *path_data, int64_t p
         return XR_NULL_VAL;
     }
     XrValue arr = xrt_array_new(8);
-    xrt_io_read_dir_recursive_impl(arr, path, path, 0);
+    XrtIoReadDirEmitCtx emit = {.arr = arr};
+    XrIoCoreReadDirOps ops = {
+        .for_each_entry = xrt_io_dir_for_each_entry,
+        .kind = xrt_io_path_kind,
+        .alloc = xrt_io_core_alloc,
+        .free = xrt_io_core_free,
+        .alloc_ctx = NULL,
+        .sep =
+#if defined(XR_OS_WINDOWS)
+            '\\',
+#else
+            '/',
+#endif
+        .max_depth = XR_IO_CORE_READ_DIR_MAX_DEPTH,
+    };
+    if (!xr_io_core_read_dir_recursive(path, &ops, NULL, xrt_io_read_dir_emit, &emit)) {
+        xrt_release(arr);
+        XRT_FREE(owned);
+        return XR_NULL_VAL;
+    }
     XRT_FREE(owned);
     return arr;
 }

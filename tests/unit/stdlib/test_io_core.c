@@ -124,6 +124,12 @@ typedef struct IoRemoveAllFake {
     size_t free_count;
 } IoRemoveAllFake;
 
+typedef struct IoDirCollectFake {
+    char entries[16][64];
+    size_t entry_count;
+    bool fail_on_emit;
+} IoDirCollectFake;
+
 static size_t io_copy_fake_read(void *ctx, void *buf, size_t cap) {
     IoCopyFake *fake = (IoCopyFake *) ctx;
     if (fake->read_pos >= fake->src_len)
@@ -250,6 +256,29 @@ static XrIoCoreRemoveAllOps io_remove_all_fake_ops(IoRemoveAllFake *fake) {
         .sep = '/',
     };
     return ops;
+}
+
+static XrIoCoreReadDirOps io_read_dir_fake_ops(IoRemoveAllFake *fake) {
+    XrIoCoreReadDirOps ops = {
+        .for_each_entry = io_remove_all_fake_for_each,
+        .kind = io_remove_all_fake_kind,
+        .alloc = io_remove_all_fake_alloc,
+        .free = io_remove_all_fake_free,
+        .alloc_ctx = fake,
+        .sep = '/',
+        .max_depth = XR_IO_CORE_READ_DIR_MAX_DEPTH,
+    };
+    return ops;
+}
+
+static bool io_dir_collect_emit(void *ctx, const char *path) {
+    IoDirCollectFake *collector = (IoDirCollectFake *) ctx;
+    if (collector->fail_on_emit)
+        return false;
+    if (collector->entry_count >= 16 || strlen(path) >= sizeof(collector->entries[0]))
+        return false;
+    strcpy(collector->entries[collector->entry_count++], path);
+    return true;
 }
 
 typedef struct IoReadFake {
@@ -646,6 +675,88 @@ TEST(io_core_remove_all_reports_child_failure_but_still_visits_parent_dirs) {
     ASSERT_STR_EQ(fake.log[2], "dir:root");
 }
 
+TEST(io_core_read_dir_filters_dot_entries) {
+    IoRemoveAllFake fake = {
+        .nodes = {{.path = "root",
+                   .kind = XR_IO_CORE_PATH_DIR,
+                   .entries = {".", "..", "a.txt", "b.txt"},
+                   .entry_count = 4}},
+        .node_count = 1,
+    };
+    IoDirCollectFake collector = {0};
+
+    ASSERT_TRUE(xr_io_core_read_dir("root", io_remove_all_fake_for_each, &fake, io_dir_collect_emit,
+                                    &collector));
+    ASSERT_EQ_UINT(collector.entry_count, 2);
+    ASSERT_STR_EQ(collector.entries[0], "a.txt");
+    ASSERT_STR_EQ(collector.entries[1], "b.txt");
+}
+
+TEST(io_core_read_dir_recursive_emits_relative_depth_first_paths) {
+    IoRemoveAllFake fake = {
+        .nodes =
+            {
+                {.path = "root",
+                 .kind = XR_IO_CORE_PATH_DIR,
+                 .entries = {".", "a.txt", "sub", "link"},
+                 .entry_count = 4},
+                {.path = "root/a.txt", .kind = XR_IO_CORE_PATH_LEAF},
+                {.path = "root/sub",
+                 .kind = XR_IO_CORE_PATH_DIR,
+                 .entries = {"b.txt"},
+                 .entry_count = 1},
+                {.path = "root/sub/b.txt", .kind = XR_IO_CORE_PATH_LEAF},
+                {.path = "root/link", .kind = XR_IO_CORE_PATH_LEAF},
+            },
+        .node_count = 5,
+    };
+    XrIoCoreReadDirOps ops = io_read_dir_fake_ops(&fake);
+    IoDirCollectFake collector = {0};
+
+    ASSERT_TRUE(
+        xr_io_core_read_dir_recursive("root", &ops, &fake, io_dir_collect_emit, &collector));
+    ASSERT_EQ_UINT(collector.entry_count, 4);
+    ASSERT_STR_EQ(collector.entries[0], "a.txt");
+    ASSERT_STR_EQ(collector.entries[1], "sub");
+    ASSERT_STR_EQ(collector.entries[2], "sub/b.txt");
+    ASSERT_STR_EQ(collector.entries[3], "link");
+    ASSERT_EQ_UINT(fake.alloc_count, 4);
+    ASSERT_EQ_UINT(fake.free_count, 4);
+}
+
+TEST(io_core_read_dir_recursive_treats_missing_root_as_empty) {
+    IoRemoveAllFake fake = {0};
+    XrIoCoreReadDirOps ops = io_read_dir_fake_ops(&fake);
+    IoDirCollectFake collector = {0};
+
+    ASSERT_TRUE(
+        xr_io_core_read_dir_recursive("missing", &ops, &fake, io_dir_collect_emit, &collector));
+    ASSERT_EQ_UINT(collector.entry_count, 0);
+}
+
+TEST(io_core_read_dir_recursive_obeys_depth_limit) {
+    IoRemoveAllFake fake = {
+        .nodes =
+            {
+                {.path = "root", .kind = XR_IO_CORE_PATH_DIR, .entries = {"sub"}, .entry_count = 1},
+                {.path = "root/sub",
+                 .kind = XR_IO_CORE_PATH_DIR,
+                 .entries = {"deep.txt"},
+                 .entry_count = 1},
+                {.path = "root/sub/deep.txt", .kind = XR_IO_CORE_PATH_LEAF},
+            },
+        .node_count = 3,
+    };
+    XrIoCoreReadDirOps ops = io_read_dir_fake_ops(&fake);
+    ops.max_depth = 1;
+    IoDirCollectFake collector = {0};
+
+    ASSERT_TRUE(
+        xr_io_core_read_dir_recursive("root", &ops, &fake, io_dir_collect_emit, &collector));
+    ASSERT_EQ_UINT(collector.entry_count, 1);
+    ASSERT_STR_EQ(collector.entries[0], "sub");
+}
+
 TEST(io_core_read_sized_stream_alloc_reads_and_nul_terminates) {
     IoReadFake fake = {.src = "hello", .src_len = 5};
     size_t len = 99;
@@ -947,6 +1058,12 @@ RUN_TEST_SUITE("IO Core - remove all");
 RUN_TEST(io_core_remove_all_recurses_depth_first_and_skips_dot_entries);
 RUN_TEST(io_core_remove_all_handles_leaf_and_missing_paths);
 RUN_TEST(io_core_remove_all_reports_child_failure_but_still_visits_parent_dirs);
+
+RUN_TEST_SUITE("IO Core - read dir");
+RUN_TEST(io_core_read_dir_filters_dot_entries);
+RUN_TEST(io_core_read_dir_recursive_emits_relative_depth_first_paths);
+RUN_TEST(io_core_read_dir_recursive_treats_missing_root_as_empty);
+RUN_TEST(io_core_read_dir_recursive_obeys_depth_limit);
 
 RUN_TEST_SUITE("IO Core - sized read");
 RUN_TEST(io_core_read_sized_stream_alloc_reads_and_nul_terminates);
