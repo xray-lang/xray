@@ -54,6 +54,29 @@ TEST(numeric_core_abs_wraps_int64_min) {
     ASSERT_EQ_INT(xr_numeric_core_i64_abs_wrap(INT64_MIN), INT64_MIN);
 }
 
+TEST(numeric_core_integer_arithmetic_wraps) {
+    ASSERT_EQ_INT(xr_numeric_core_i64_add_wrap(INT64_MAX, 1), INT64_MIN);
+    ASSERT_EQ_INT(xr_numeric_core_i64_sub_wrap(INT64_MIN, 1), INT64_MAX);
+    ASSERT_EQ_INT(xr_numeric_core_i64_mul_wrap(INT64_MAX, 2), -2);
+    ASSERT_EQ_INT(xr_numeric_core_i64_neg_wrap(INT64_MIN), INT64_MIN);
+}
+
+TEST(numeric_core_integer_div_mod_edges_match_language) {
+    ASSERT_EQ_INT(xr_numeric_core_i64_div_wrap(INT64_MIN, -1), INT64_MIN);
+    ASSERT_EQ_INT(xr_numeric_core_i64_mod_wrap(INT64_MIN, -1), 0);
+    ASSERT_EQ_INT(xr_numeric_core_i64_div_wrap(7, -3), -2);
+    ASSERT_EQ_INT(xr_numeric_core_i64_mod_wrap(7, -3), 1);
+}
+
+TEST(numeric_core_shift_counts_are_mod64) {
+    ASSERT_EQ_INT(xr_numeric_core_i64_shl_wrap(12345, 64), 12345);
+    ASSERT_EQ_INT(xr_numeric_core_i64_shl_wrap(12345, 65), 24690);
+    ASSERT_EQ_INT(xr_numeric_core_i64_shr_wrap(12345, 70), 192);
+    ASSERT_EQ_INT(xr_numeric_core_i64_shl_wrap(1, -1), INT64_MIN);
+    ASSERT_EQ_INT(xr_numeric_core_i64_shr_wrap(-8, 1), -4);
+    ASSERT_EQ_INT(xr_numeric_core_i64_shr_wrap(INT64_MIN, 63), -1);
+}
+
 TEST(numeric_core_to_fixed_decimals_clamps) {
     ASSERT_EQ_INT(xr_numeric_core_to_fixed_decimals(-10), 0);
     ASSERT_EQ_INT(xr_numeric_core_to_fixed_decimals(3), 3);
@@ -67,6 +90,9 @@ RUN_TEST(numeric_core_format_i64_handles_boundaries);
 RUN_TEST(numeric_core_format_i64_rejects_short_buffer);
 RUN_TEST(numeric_core_hex_matches_signed_magnitude_rule);
 RUN_TEST(numeric_core_abs_wraps_int64_min);
+RUN_TEST(numeric_core_integer_arithmetic_wraps);
+RUN_TEST(numeric_core_integer_div_mod_edges_match_language);
+RUN_TEST(numeric_core_shift_counts_are_mod64);
 RUN_TEST(numeric_core_to_fixed_decimals_clamps);
 
 TEST_MAIN_END()
