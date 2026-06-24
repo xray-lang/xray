@@ -58,6 +58,12 @@ static XrValue array_hof_test_map_double(void *ctx_ptr, XrValue value) {
     return XR_FROM_INT(XR_TO_INT(value) * 2);
 }
 
+static bool array_hof_test_each_collect(void *ctx_ptr, XrValue value) {
+    ArrayHofTestCtx *ctx = (ArrayHofTestCtx *) ctx_ptr;
+    ctx->output[ctx->write_count++] = value;
+    return true;
+}
+
 static bool array_hof_test_write(void *ctx_ptr, int64_t index, XrValue value) {
     ArrayHofTestCtx *ctx = (ArrayHofTestCtx *) ctx_ptr;
     ctx->write_order[ctx->write_count++] = index;
@@ -187,12 +193,85 @@ TEST(array_core_hof_reduce_updates_accumulator_in_order) {
     ASSERT_EQ_INT(ctx.read_order[2], 2);
 }
 
+TEST(array_core_hof_for_each_preserves_read_order) {
+    ArrayHofTestCtx ctx = {0};
+    ctx.input[0] = XR_FROM_INT(7);
+    ctx.input[1] = XR_FROM_INT(8);
+    ctx.input[2] = XR_FROM_INT(9);
+
+    int64_t count = -1;
+    ASSERT_TRUE(xr_array_core_hof_for_each(3, array_hof_test_read, array_hof_test_each_collect,
+                                           &ctx, &count));
+    ASSERT_EQ_INT(count, 3);
+    ASSERT_EQ_INT(ctx.read_count, 3);
+    ASSERT_EQ_INT(ctx.write_count, 3);
+    ASSERT_EQ_INT(ctx.read_order[0], 0);
+    ASSERT_EQ_INT(ctx.read_order[2], 2);
+    ASSERT_EQ_INT(XR_TO_INT(ctx.output[0]), 7);
+    ASSERT_EQ_INT(XR_TO_INT(ctx.output[1]), 8);
+    ASSERT_EQ_INT(XR_TO_INT(ctx.output[2]), 9);
+}
+
+TEST(array_core_hof_find_returns_first_matching_value_and_index) {
+    ArrayHofTestCtx ctx = {0};
+    ctx.input[0] = XR_FROM_INT(2);
+    ctx.input[1] = XR_FROM_INT(4);
+    ctx.input[2] = XR_FROM_INT(5);
+    ctx.input[3] = XR_FROM_INT(7);
+
+    XrArrayCoreFindResult result =
+        xr_array_core_hof_find(4, array_hof_test_read, array_hof_test_predicate_odd, &ctx);
+    ASSERT_TRUE(result.found);
+    ASSERT_EQ_INT(result.index, 2);
+    ASSERT_EQ_INT(XR_TO_INT(result.value), 5);
+    ASSERT_EQ_INT(ctx.read_count, 3);
+    ASSERT_EQ_INT(ctx.read_order[2], 2);
+}
+
+TEST(array_core_hof_find_index_every_some_short_circuit) {
+    ArrayHofTestCtx ctx = {0};
+    ctx.input[0] = XR_FROM_INT(2);
+    ctx.input[1] = XR_FROM_INT(4);
+    ctx.input[2] = XR_FROM_INT(5);
+    ctx.input[3] = XR_FROM_INT(7);
+
+    ASSERT_EQ_INT(
+        xr_array_core_hof_find_index(4, array_hof_test_read, array_hof_test_predicate_odd, &ctx),
+        2);
+    ASSERT_EQ_INT(ctx.read_count, 3);
+
+    ctx = (ArrayHofTestCtx) {0};
+    ctx.input[0] = XR_FROM_INT(1);
+    ctx.input[1] = XR_FROM_INT(3);
+    ctx.input[2] = XR_FROM_INT(4);
+    ctx.input[3] = XR_FROM_INT(5);
+    ASSERT_FALSE(
+        xr_array_core_hof_every(4, array_hof_test_read, array_hof_test_predicate_odd, &ctx));
+    ASSERT_EQ_INT(ctx.read_count, 3);
+
+    ctx = (ArrayHofTestCtx) {0};
+    ctx.input[0] = XR_FROM_INT(2);
+    ctx.input[1] = XR_FROM_INT(4);
+    ctx.input[2] = XR_FROM_INT(5);
+    ASSERT_TRUE(xr_array_core_hof_some(3, array_hof_test_read, array_hof_test_predicate_odd, &ctx));
+    ASSERT_EQ_INT(ctx.read_count, 3);
+}
+
 TEST(array_core_hof_handles_empty_and_rejects_missing_callbacks) {
     ArrayHofTestCtx ctx = {0};
     int64_t count = 99;
 
     ASSERT_TRUE(xr_array_core_hof_map(0, NULL, NULL, NULL, &ctx, &count));
     ASSERT_EQ_INT(count, 0);
+    ASSERT_TRUE(xr_array_core_hof_for_each(0, NULL, NULL, &ctx, &count));
+    ASSERT_EQ_INT(count, 0);
+    ASSERT_FALSE(xr_array_core_hof_for_each(1, NULL, array_hof_test_each_collect, &ctx, &count));
+    ASSERT_FALSE(xr_array_core_hof_find(1, NULL, array_hof_test_predicate_odd, &ctx).found);
+    ASSERT_EQ_INT(xr_array_core_hof_find_index(1, NULL, array_hof_test_predicate_odd, &ctx), -1);
+    ASSERT_TRUE(xr_array_core_hof_every(0, NULL, NULL, &ctx));
+    ASSERT_FALSE(xr_array_core_hof_every(1, NULL, array_hof_test_predicate_odd, &ctx));
+    ASSERT_FALSE(xr_array_core_hof_some(0, NULL, NULL, &ctx));
+    ASSERT_FALSE(xr_array_core_hof_some(1, NULL, array_hof_test_predicate_odd, &ctx));
     ASSERT_FALSE(xr_array_core_hof_map(1, NULL, array_hof_test_map_double, array_hof_test_write,
                                        &ctx, &count));
     ASSERT_FALSE(
@@ -500,6 +579,9 @@ RUN_TEST(array_core_join_handles_empty_and_invalid_capacity);
 RUN_TEST(array_core_hof_map_preserves_iteration_and_write_indices);
 RUN_TEST(array_core_hof_filter_compacts_kept_values);
 RUN_TEST(array_core_hof_reduce_updates_accumulator_in_order);
+RUN_TEST(array_core_hof_for_each_preserves_read_order);
+RUN_TEST(array_core_hof_find_returns_first_matching_value_and_index);
+RUN_TEST(array_core_hof_find_index_every_some_short_circuit);
 RUN_TEST(array_core_hof_handles_empty_and_rejects_missing_callbacks);
 RUN_TEST(array_core_fill_typed_storage_coerces_once_and_fills_range);
 RUN_TEST(array_core_fill_typed_storage_handles_bool_and_invalid_cases);
