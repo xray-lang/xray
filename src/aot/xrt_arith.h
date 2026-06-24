@@ -16,6 +16,7 @@
 #include "xrt_exception.h"  // xrt_throw_exc for div/mod by zero
 #include "xrt_range.h"
 #include "xrt_coll.h"
+#include "../shared/xr_type_names_core.h"
 
 /* =========================================================================
  * Tagged arithmetic — all inline, no extern dependency
@@ -310,55 +311,52 @@ static inline void xrt_println(XrValue v) {
     printf("\n");
 }
 
-/* typeof(x) — return integer type ID matching VM XrTypeId.
- * XR_TID_INT=8, XR_TID_FLOAT=11, XR_TID_BOOL=1, XR_TID_NULL=0,
- * XR_TID_STRING=12, XR_TID_FUNCTION=13, XR_TID_ARRAY=14, XR_TID_SET=15,
- * XR_TID_MAP=16. */
+/* typeof(x) returns the shared public XrTypeId used by VM Type.xxx and AOT. */
 static inline int64_t xrt_typeof_id(XrValue v) {
     switch (xrt_value_kind(v)) {
         case XR_TAG_I64:
-            return 8; /* XR_TID_INT */
+            return XR_TID_INT;
         case XR_TAG_F64:
-            return 11; /* XR_TID_FLOAT */
+            return XR_TID_FLOAT;
         case XR_TAG_BOOL:
-            return 1; /* XR_TID_BOOL */
+            return XR_TID_BOOL;
         case XR_TAG_NULL:
-            return 0; /* XR_TID_NULL */
+            return XR_TID_NULL;
         case XR_TAG_STR:
         case XR_TAG_STR_ARC:
-            return 12; /* XR_TID_STRING */
+            return XR_TID_STRING;
         case XR_TAG_ARRAY:
-            return 14; /* XR_TID_ARRAY */
+            return XR_TID_ARRAY;
         case XR_TAG_SET:
-            return 15; /* XR_TID_SET */
+            return XR_TID_SET;
         case XR_TAG_MAP:
-            return 16; /* XR_TID_MAP */
+            return XR_TID_MAP;
         case XR_TAG_CLOSURE:
-            return 13; /* XR_TID_FUNCTION */
+            return XR_TID_FUNCTION;
         case XR_TAG_STRBUF:
-            return 20; /* XR_TID_STRINGBUILDER */
+            return XR_TID_STRINGBUILDER;
         case XR_TAG_RANGE:
-            return 31; /* XR_TID_RANGE */
+            return XR_TID_RANGE;
         default:
-            return 17; /* XR_TID_INSTANCE */
+            return XR_TID_INSTANCE;
     }
 }
 
 /* typename(x) — return type name as a static literal string value */
 static inline XrValue xrt_typeof_str(XrValue v) {
-    XRT_STR_LIT_DEF(xs_int, "int");
-    XRT_STR_LIT_DEF(xs_float, "float");
-    XRT_STR_LIT_DEF(xs_bool, "bool");
-    XRT_STR_LIT_DEF(xs_null, "null");
-    XRT_STR_LIT_DEF(xs_string, "string");
-    XRT_STR_LIT_DEF(xs_array, "Array");
-    XRT_STR_LIT_DEF(xs_set, "Set");
-    XRT_STR_LIT_DEF(xs_map, "Map");
-    XRT_STR_LIT_DEF(xs_function, "function");
-    XRT_STR_LIT_DEF(xs_strbuf, "StringBuilder");
+    XRT_STR_LIT_DEF(xs_int, TYPE_NAME_INT);
+    XRT_STR_LIT_DEF(xs_float, TYPE_NAME_FLOAT);
+    XRT_STR_LIT_DEF(xs_bool, TYPE_NAME_BOOL);
+    XRT_STR_LIT_DEF(xs_null, TYPE_NAME_NULL);
+    XRT_STR_LIT_DEF(xs_string, TYPE_NAME_STRING);
+    XRT_STR_LIT_DEF(xs_array, TYPE_NAME_ARRAY);
+    XRT_STR_LIT_DEF(xs_set, TYPE_NAME_SET);
+    XRT_STR_LIT_DEF(xs_map, TYPE_NAME_MAP);
+    XRT_STR_LIT_DEF(xs_function, TYPE_NAME_FUNCTION);
+    XRT_STR_LIT_DEF(xs_strbuf, TYPE_NAME_STRINGBUILDER);
     XRT_STR_LIT_DEF(xs_tuple, "tuple");
-    XRT_STR_LIT_DEF(xs_range, "Range");
-    XRT_STR_LIT_DEF(xs_object, "object");
+    XRT_STR_LIT_DEF(xs_range, TYPE_NAME_RANGE);
+    XRT_STR_LIT_DEF(xs_object, TYPE_NAME_OBJECT);
     switch (xrt_value_kind(v)) {
         case XR_TAG_I64:
             return xr_str_lit(&xs_int);
