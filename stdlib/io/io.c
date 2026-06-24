@@ -105,6 +105,10 @@ static size_t io_file_read(void *ctx, void *buf, size_t cap) {
     return fread(buf, 1, cap, (FILE *) ctx);
 }
 
+static size_t io_file_write(void *ctx, const void *buf, size_t len) {
+    return fwrite(buf, 1, len, (FILE *) ctx);
+}
+
 static bool io_file_error(void *ctx) {
     return ferror((FILE *) ctx) != 0;
 }
@@ -409,9 +413,10 @@ static XrCFuncResult io_writeFileBytes(XrVMRuntime *X, XrValue *args, int argc, 
     FILE *f = fopen(path, "wb");
     if (!f)
         return XR_CFUNC_DONE;
-    size_t written = fwrite(arr->data, 1, arr->length, f);
-    fclose(f);
-    *result = xr_bool(written == (size_t) arr->length);
+    bool ok =
+        xr_io_core_write_all(f, io_file_write, io_file_error, arr->data, (size_t) arr->length);
+    bool close_ok = fclose(f) == 0;
+    *result = xr_bool(ok && close_ok);
     return XR_CFUNC_DONE;
 }
 
@@ -441,9 +446,9 @@ static XrCFuncResult io_writeFile(XrVMRuntime *X, XrValue *args, int argc, XrVal
     FILE *f = fopen(path, "wb");
     if (!f)
         return XR_CFUNC_DONE;
-    size_t written = fwrite(str->data, 1, str->length, f);
-    fclose(f);
-    *result = xr_bool(written == str->length);
+    bool ok = xr_io_core_write_all(f, io_file_write, io_file_error, str->data, str->length);
+    bool close_ok = fclose(f) == 0;
+    *result = xr_bool(ok && close_ok);
     return XR_CFUNC_DONE;
 }
 
@@ -462,10 +467,9 @@ static XrValue io_appendFile(XrVMRuntime *X, XrValue *args, int argc) {
     if (!f)
         return xr_bool(false);
 
-    size_t written = fwrite(str->data, 1, str->length, f);
-    fclose(f);
-
-    return xr_bool(written == str->length);
+    bool ok = xr_io_core_write_all(f, io_file_write, io_file_error, str->data, str->length);
+    bool close_ok = fclose(f) == 0;
+    return xr_bool(ok && close_ok);
 }
 
 /* ========== File Checks ========== */
