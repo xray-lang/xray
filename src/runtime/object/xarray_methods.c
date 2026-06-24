@@ -134,7 +134,7 @@ static XrValue m_reserve(XrVMRuntime *iso, XrValue self, XrValue *args, int argc
     (void) iso;
     if (argc < 1 || !XR_IS_INT(args[0]))
         return self;
-    xr_array_reserve(array_self(self), (int32_t) XR_TO_INT(args[0]));
+    xr_array_reserve(array_self(self), XR_TO_INT(args[0]));
     return self;
 }
 
@@ -146,7 +146,7 @@ static XrValue m_resize(XrVMRuntime *iso, XrValue self, XrValue *args, int argc)
     XrValue fill = argc >= 2 ? args[1] : xr_null();
     if (arr->elem_type == XR_ELEM_U8 && argc < 2)
         fill = xr_int(0);
-    xr_array_resize(arr, (int32_t) XR_TO_INT(args[0]), fill);
+    xr_array_resize(arr, XR_TO_INT(args[0]), fill);
     return self;
 }
 

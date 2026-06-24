@@ -7,12 +7,20 @@ static inline XrValue xrt_array_new_typed_exact(int64_t cap, uint8_t etype) {
     return xr_mkptr(a, XR_TAG_ARRAY);
 }
 
-static inline void xrt_array_reserve_raw(xrt_array_t *a, int64_t cap) {
-    if (!a || a->data_storage == XR_ARRAY_DATA_BORROWED || cap <= a->capacity)
-        return;
+static inline bool xrt_array_reserve_raw(xrt_array_t *a, int64_t cap) {
+    if (!a)
+        return false;
+    XrArrayCoreCapacityPlan plan =
+        xr_array_core_reserve_plan(a->capacity, cap, a->data_storage != XR_ARRAY_DATA_BORROWED);
+    if (plan.kind == XR_ARRAY_CORE_CAPACITY_INVALID)
+        return false;
+    if (plan.kind == XR_ARRAY_CORE_CAPACITY_KEEP)
+        return true;
     size_t old_bytes = (size_t) a->capacity * (size_t) a->elem_size;
-    xrt_array_data_grow(a, cap);
-    memset((uint8_t *) a->data + old_bytes, 0, (size_t) cap * (size_t) a->elem_size - old_bytes);
+    xrt_array_data_grow(a, plan.target_capacity);
+    size_t new_bytes = (size_t) plan.target_capacity * (size_t) a->elem_size;
+    memset((uint8_t *) a->data + old_bytes, 0, new_bytes - old_bytes);
+    return a->capacity >= plan.target_capacity;
 }
 
 static inline XrValue xrt_array_with_capacity_value(XrValue cap_value, uint8_t etype) {
@@ -28,25 +36,45 @@ static inline XrValue xrt_array_resize_value(XrValue arr_value, XrValue len_valu
     xrt_array_t *a = (xrt_array_t *) arr_value.ptr;
     int64_t len = xrt_array_required_int_arg_or_panic(
         len_value, "Array.resize(length): length must be integer");
-    if (len < 0)
-        len = 0;
-    if (len > a->capacity)
-        xrt_array_reserve_raw(a, len);
-    int64_t old_length = a->length;
-    if (!xr_array_core_fill_typed_storage(a->data, old_length, len - old_length, a->elem_type,
+    XrArrayCoreResizePlan plan = xr_array_core_resize_plan(
+        a->length, a->capacity, len, a->data_storage != XR_ARRAY_DATA_BORROWED);
+    if (plan.kind == XR_ARRAY_CORE_RESIZE_INVALID)
+        xrt_throw_exc(xr_box_str("Array.resize(length): length out of range"));
+    if (plan.kind == XR_ARRAY_CORE_RESIZE_KEEP)
+        return arr_value;
+    if (plan.kind == XR_ARRAY_CORE_RESIZE_SHRINK) {
+        if (a->elem_type == XR_ELEM_ANY && a->data) {
+            XrValue *items = (XrValue *) a->data;
+            for (int64_t i = plan.length; i < a->length; i++) {
+                xrt_release(items[i]);
+                items[i] = XR_NULL_VAL;
+            }
+        }
+        a->length = plan.length;
+        return arr_value;
+    }
+    if (!xrt_array_reserve_raw(a, plan.reserve_capacity))
+        xrt_throw_exc(xr_box_str("Array.resize(length): reserve failed"));
+    if (!xr_array_core_fill_typed_storage(a->data, plan.fill_start, plan.fill_count, a->elem_type,
                                           fill_value)) {
-        for (int64_t i = old_length; i < len; i++)
+        if (a->elem_type == XR_ELEM_ANY) {
+            for (int64_t i = 0; i < plan.fill_count; i++)
+                xrt_retain(fill_value);
+        }
+        for (int64_t i = plan.fill_start; i < plan.length; i++)
             xr_typed_set(a->data, (int32_t) i, fill_value, a->elem_type);
     }
-    a->length = len;
+    a->length = plan.length;
     return arr_value;
 }
 
 static inline XrValue xrt_array_reserve_value(XrValue arr_value, XrValue cap_value) {
-    if (XR_IS_ARRAY(arr_value) && arr_value.ptr)
-        xrt_array_reserve_raw((xrt_array_t *) arr_value.ptr,
-                              xrt_array_required_int_arg_or_panic(
-                                  cap_value, "Array.reserve(cap): cap must be integer"));
+    if (XR_IS_ARRAY(arr_value) && arr_value.ptr) {
+        int64_t cap = xrt_array_required_int_arg_or_panic(
+            cap_value, "Array.reserve(cap): cap must be integer");
+        if (!xrt_array_reserve_raw((xrt_array_t *) arr_value.ptr, cap))
+            xrt_throw_exc(xr_box_str("Array.reserve(cap): reserve failed"));
+    }
     return arr_value;
 }
 
@@ -59,6 +87,10 @@ static inline XrValue xrt_array_new_filled_value(XrValue len_value, XrValue fill
     XrValue arr = xrt_array_new_typed_exact(len, etype);
     xrt_array_t *a = (xrt_array_t *) arr.ptr;
     if (!xr_array_core_fill_typed_storage(a->data, 0, len, a->elem_type, fill_value)) {
+        if (a->elem_type == XR_ELEM_ANY) {
+            for (int64_t i = 0; i < len; i++)
+                xrt_retain(fill_value);
+        }
         for (int64_t i = 0; i < len; i++)
             xr_typed_set(a->data, (int32_t) i, fill_value, a->elem_type);
     }
