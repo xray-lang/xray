@@ -1,0 +1,6 @@
+shared const rg: ResultGroup = ResultGroup(2)
+
+assert_true(rg.add(4))
+assert_true(rg.add(5))
+print(rg.recv())
+rg.close()
