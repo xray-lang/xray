@@ -672,32 +672,32 @@ void xr_obj_destroy_array(XrObjHeader *obj, struct XrCoroHeap *owner_heap) {
 
 /* ====== Bytes Convenience Functions ====== */
 
-uint32_t xr_array_load_u32_le(XrArray *arr, int32_t offset, bool *ok) {
+uint32_t xr_array_load_u32_le(XrArray *arr, int64_t offset, bool *ok) {
     return xr_array_core_bytes_load_u32_le(arr ? arr->data : NULL, arr ? arr->length : 0,
                                            arr ? arr->elem_type : XR_ELEM_ANY, offset, ok);
 }
 
-uint64_t xr_array_load_u64_le(XrArray *arr, int32_t offset, bool *ok) {
+uint64_t xr_array_load_u64_le(XrArray *arr, int64_t offset, bool *ok) {
     return xr_array_core_bytes_load_u64_le(arr ? arr->data : NULL, arr ? arr->length : 0,
                                            arr ? arr->elem_type : XR_ELEM_ANY, offset, ok);
 }
 
-bool xr_array_bytes_copy_within(XrArray *arr, int32_t dst_offset, int32_t src_offset,
-                                int32_t count) {
+bool xr_array_bytes_copy_within(XrArray *arr, int64_t dst_offset, int64_t src_offset,
+                                int64_t count) {
     return xr_array_core_bytes_copy_within(arr ? arr->data : NULL, arr ? arr->length : 0,
                                            arr ? arr->elem_type : XR_ELEM_ANY, dst_offset,
                                            src_offset, count);
 }
 
-bool xr_array_bytes_copy_from(XrArray *dst, XrArray *src, int32_t src_offset, int32_t dst_offset,
-                              int32_t count) {
+bool xr_array_bytes_copy_from(XrArray *dst, XrArray *src, int64_t src_offset, int64_t dst_offset,
+                              int64_t count) {
     return xr_array_core_bytes_copy_from(dst ? dst->data : NULL, dst ? dst->length : 0,
                                          dst ? dst->elem_type : XR_ELEM_ANY, src ? src->data : NULL,
                                          src ? src->length : 0, src ? src->elem_type : XR_ELEM_ANY,
                                          src_offset, dst_offset, count, dst == src);
 }
 
-bool xr_array_bytes_repeat_from(XrArray *arr, int32_t dst_offset, int32_t distance, int32_t count) {
+bool xr_array_bytes_repeat_from(XrArray *arr, int64_t dst_offset, int64_t distance, int64_t count) {
     return xr_array_core_bytes_repeat_from(arr ? arr->data : NULL, arr ? arr->length : 0,
                                            arr ? arr->elem_type : XR_ELEM_ANY, dst_offset, distance,
                                            count);

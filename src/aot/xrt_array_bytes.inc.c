@@ -16,7 +16,9 @@ static inline void xrt_array_reserve_raw(xrt_array_t *a, int64_t cap) {
 }
 
 static inline XrValue xrt_array_with_capacity_value(XrValue cap_value, uint8_t etype) {
-    return xrt_array_new_typed_exact(xr_value_to_int64_coerce(cap_value), etype);
+    int64_t cap = xrt_array_required_int_arg_or_panic(
+        cap_value, "Array.withCapacity(cap): cap must be integer");
+    return xrt_array_new_typed_exact(cap, etype);
 }
 
 static inline XrValue xrt_array_resize_value(XrValue arr_value, XrValue len_value,
@@ -24,7 +26,8 @@ static inline XrValue xrt_array_resize_value(XrValue arr_value, XrValue len_valu
     if (!XR_IS_ARRAY(arr_value) || !arr_value.ptr)
         return arr_value;
     xrt_array_t *a = (xrt_array_t *) arr_value.ptr;
-    int64_t len = xr_value_to_int64_coerce(len_value);
+    int64_t len = xrt_array_required_int_arg_or_panic(
+        len_value, "Array.resize(length): length must be integer");
     if (len < 0)
         len = 0;
     if (len > a->capacity)
@@ -41,13 +44,16 @@ static inline XrValue xrt_array_resize_value(XrValue arr_value, XrValue len_valu
 
 static inline XrValue xrt_array_reserve_value(XrValue arr_value, XrValue cap_value) {
     if (XR_IS_ARRAY(arr_value) && arr_value.ptr)
-        xrt_array_reserve_raw((xrt_array_t *) arr_value.ptr, xr_value_to_int64_coerce(cap_value));
+        xrt_array_reserve_raw((xrt_array_t *) arr_value.ptr,
+                              xrt_array_required_int_arg_or_panic(
+                                  cap_value, "Array.reserve(cap): cap must be integer"));
     return arr_value;
 }
 
 static inline XrValue xrt_array_new_filled_value(XrValue len_value, XrValue fill_value,
                                                  uint8_t etype) {
-    int64_t len = xr_value_to_int64_coerce(len_value);
+    int64_t len = xrt_array_required_int_arg_or_panic(
+        len_value, "Array(length, fill): length must be integer");
     if (len < 0)
         len = 0;
     XrValue arr = xrt_array_new_typed_exact(len, etype);
@@ -61,50 +67,63 @@ static inline XrValue xrt_array_new_filled_value(XrValue len_value, XrValue fill
 }
 
 static inline uint32_t xrt_bytes_load_u32_le_raw(xrt_array_t *a, int64_t off) {
-    return xr_array_core_bytes_load_u32_le(a ? a->data : NULL, a ? a->length : 0,
-                                           a ? a->elem_type : XR_ELEM_ANY, off, NULL);
+    bool ok = false;
+    uint32_t value = xr_array_core_bytes_load_u32_le(a ? a->data : NULL, a ? a->length : 0,
+                                                     a ? a->elem_type : XR_ELEM_ANY, off, &ok);
+    if (!ok)
+        xrt_throw_exc(xr_box_str("Bytes.loadU32LE offset out of bounds"));
+    return value;
 }
 
 static inline uint64_t xrt_bytes_load_u64_le_raw(xrt_array_t *a, int64_t off) {
-    return xr_array_core_bytes_load_u64_le(a ? a->data : NULL, a ? a->length : 0,
-                                           a ? a->elem_type : XR_ELEM_ANY, off, NULL);
+    bool ok = false;
+    uint64_t value = xr_array_core_bytes_load_u64_le(a ? a->data : NULL, a ? a->length : 0,
+                                                     a ? a->elem_type : XR_ELEM_ANY, off, &ok);
+    if (!ok)
+        xrt_throw_exc(xr_box_str("Bytes.loadU64LE offset out of bounds"));
+    return value;
 }
 
 static inline xrt_array_t *xrt_bytes_copy_within_raw(xrt_array_t *a, int64_t dst, int64_t src,
                                                      int64_t count) {
-    xr_array_core_bytes_copy_within(a ? a->data : NULL, a ? a->length : 0,
-                                    a ? a->elem_type : XR_ELEM_ANY, dst, src, count);
+    if (!xr_array_core_bytes_copy_within(a ? a->data : NULL, a ? a->length : 0,
+                                         a ? a->elem_type : XR_ELEM_ANY, dst, src, count))
+        xrt_throw_exc(xr_box_str("Bytes.copyWithin range out of bounds"));
     return a;
 }
 
 static inline xrt_array_t *xrt_bytes_copy_from_raw(xrt_array_t *dst, xrt_array_t *src,
                                                    int64_t src_offset, int64_t dst_offset,
                                                    int64_t count) {
-    xr_array_core_bytes_copy_from(dst ? dst->data : NULL, dst ? dst->length : 0,
-                                  dst ? dst->elem_type : XR_ELEM_ANY, src ? src->data : NULL,
-                                  src ? src->length : 0, src ? src->elem_type : XR_ELEM_ANY,
-                                  src_offset, dst_offset, count, dst == src);
+    if (!xr_array_core_bytes_copy_from(dst ? dst->data : NULL, dst ? dst->length : 0,
+                                       dst ? dst->elem_type : XR_ELEM_ANY, src ? src->data : NULL,
+                                       src ? src->length : 0, src ? src->elem_type : XR_ELEM_ANY,
+                                       src_offset, dst_offset, count, dst == src))
+        xrt_throw_exc(xr_box_str("Bytes.copyFrom range out of bounds"));
     return dst;
 }
 
 static inline xrt_array_t *xrt_bytes_repeat_from_raw(xrt_array_t *a, int64_t dst, int64_t distance,
                                                      int64_t count) {
-    xr_array_core_bytes_repeat_from(a ? a->data : NULL, a ? a->length : 0,
-                                    a ? a->elem_type : XR_ELEM_ANY, dst, distance, count);
+    if (!xr_array_core_bytes_repeat_from(a ? a->data : NULL, a ? a->length : 0,
+                                         a ? a->elem_type : XR_ELEM_ANY, dst, distance, count))
+        xrt_throw_exc(xr_box_str("Bytes.repeatFrom range out of bounds"));
     return a;
 }
 
 static inline XrValue xrt_bytes_load_u32_le(XrValue arr_value, XrValue offset_value) {
     if (!XR_IS_ARRAY(arr_value) || !arr_value.ptr)
-        return XR_FROM_INT(0);
-    int64_t off = xr_value_to_int64_coerce(offset_value);
+        xrt_throw_exc(xr_box_str("Bytes.loadU32LE receiver must be Bytes"));
+    int64_t off = xrt_array_required_int_arg_or_panic(
+        offset_value, "Bytes.loadU32LE(offset): offset must be integer");
     return XR_FROM_INT((int64_t) xrt_bytes_load_u32_le_raw((xrt_array_t *) arr_value.ptr, off));
 }
 
 static inline XrValue xrt_bytes_load_u64_le(XrValue arr_value, XrValue offset_value) {
     if (!XR_IS_ARRAY(arr_value) || !arr_value.ptr)
-        return XR_FROM_INT(0);
-    int64_t off = xr_value_to_int64_coerce(offset_value);
+        xrt_throw_exc(xr_box_str("Bytes.loadU64LE receiver must be Bytes"));
+    int64_t off = xrt_array_required_int_arg_or_panic(
+        offset_value, "Bytes.loadU64LE(offset): offset must be integer");
     return XR_FROM_INT((int64_t) xrt_bytes_load_u64_le_raw((xrt_array_t *) arr_value.ptr, off));
 }
 
@@ -112,9 +131,12 @@ static inline XrValue xrt_bytes_copy_within_value(XrValue arr_value, XrValue dst
                                                   XrValue src_value, XrValue count_value) {
     if (!XR_IS_ARRAY(arr_value) || !arr_value.ptr)
         return arr_value;
-    int64_t dst = xr_value_to_int64_coerce(dst_value);
-    int64_t src = xr_value_to_int64_coerce(src_value);
-    int64_t count = xr_value_to_int64_coerce(count_value);
+    int64_t dst = xrt_array_required_int_arg_or_panic(
+        dst_value, "Bytes.copyWithin(dst, src, count): dst must be integer");
+    int64_t src = xrt_array_required_int_arg_or_panic(
+        src_value, "Bytes.copyWithin(dst, src, count): src must be integer");
+    int64_t count = xrt_array_required_int_arg_or_panic(
+        count_value, "Bytes.copyWithin(dst, src, count): count must be integer");
     xrt_bytes_copy_within_raw((xrt_array_t *) arr_value.ptr, dst, src, count);
     return arr_value;
 }
@@ -124,9 +146,14 @@ static inline XrValue xrt_bytes_copy_from_value(XrValue dst_value, XrValue src_v
                                                 XrValue count_value) {
     if (!XR_IS_ARRAY(dst_value) || !XR_IS_ARRAY(src_value) || !dst_value.ptr || !src_value.ptr)
         return dst_value;
-    int64_t src_offset = xr_value_to_int64_coerce(src_offset_value);
-    int64_t dst_offset = xr_value_to_int64_coerce(dst_offset_value);
-    int64_t count = xr_value_to_int64_coerce(count_value);
+    int64_t src_offset = xrt_array_required_int_arg_or_panic(
+        src_offset_value,
+        "Bytes.copyFrom(src, srcOffset, dstOffset, count): srcOffset must be integer");
+    int64_t dst_offset = xrt_array_required_int_arg_or_panic(
+        dst_offset_value,
+        "Bytes.copyFrom(src, srcOffset, dstOffset, count): dstOffset must be integer");
+    int64_t count = xrt_array_required_int_arg_or_panic(
+        count_value, "Bytes.copyFrom(src, srcOffset, dstOffset, count): count must be integer");
     xrt_bytes_copy_from_raw((xrt_array_t *) dst_value.ptr, (xrt_array_t *) src_value.ptr,
                             src_offset, dst_offset, count);
     return dst_value;
@@ -136,9 +163,12 @@ static inline XrValue xrt_bytes_repeat_from_value(XrValue arr_value, XrValue dst
                                                   XrValue distance_value, XrValue count_value) {
     if (!XR_IS_ARRAY(arr_value) || !arr_value.ptr)
         return arr_value;
-    int64_t dst = xr_value_to_int64_coerce(dst_value);
-    int64_t distance = xr_value_to_int64_coerce(distance_value);
-    int64_t count = xr_value_to_int64_coerce(count_value);
+    int64_t dst = xrt_array_required_int_arg_or_panic(
+        dst_value, "Bytes.repeatFrom(dst, distance, count): dst must be integer");
+    int64_t distance = xrt_array_required_int_arg_or_panic(
+        distance_value, "Bytes.repeatFrom(dst, distance, count): distance must be integer");
+    int64_t count = xrt_array_required_int_arg_or_panic(
+        count_value, "Bytes.repeatFrom(dst, distance, count): count must be integer");
     xrt_bytes_repeat_from_raw((xrt_array_t *) arr_value.ptr, dst, distance, count);
     return arr_value;
 }

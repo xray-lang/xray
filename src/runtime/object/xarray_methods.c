@@ -195,7 +195,7 @@ static XrValue m_load_u32_le(XrVMRuntime *iso, XrValue self, XrValue *args, int 
     if (argc < 1 || !XR_IS_INT(args[0]))
         return xr_int(0);
     bool ok = false;
-    uint32_t value = xr_array_load_u32_le(array_self(self), (int32_t) XR_TO_INT(args[0]), &ok);
+    uint32_t value = xr_array_load_u32_le(array_self(self), XR_TO_INT(args[0]), &ok);
     return ok ? xr_int((xr_Integer) value) : xr_int(0);
 }
 
@@ -204,7 +204,7 @@ static XrValue m_load_u64_le(XrVMRuntime *iso, XrValue self, XrValue *args, int 
     if (argc < 1 || !XR_IS_INT(args[0]))
         return xr_int(0);
     bool ok = false;
-    uint64_t value = xr_array_load_u64_le(array_self(self), (int32_t) XR_TO_INT(args[0]), &ok);
+    uint64_t value = xr_array_load_u64_le(array_self(self), XR_TO_INT(args[0]), &ok);
     return ok ? xr_int((xr_Integer) value) : xr_int(0);
 }
 
@@ -212,8 +212,8 @@ static XrValue m_copy_within(XrVMRuntime *iso, XrValue self, XrValue *args, int 
     (void) iso;
     if (argc < 3 || !XR_IS_INT(args[0]) || !XR_IS_INT(args[1]) || !XR_IS_INT(args[2]))
         return self;
-    xr_array_bytes_copy_within(array_self(self), (int32_t) XR_TO_INT(args[0]),
-                               (int32_t) XR_TO_INT(args[1]), (int32_t) XR_TO_INT(args[2]));
+    xr_array_bytes_copy_within(array_self(self), XR_TO_INT(args[0]), XR_TO_INT(args[1]),
+                               XR_TO_INT(args[2]));
     return self;
 }
 
@@ -222,8 +222,8 @@ static XrValue m_copy_from(XrVMRuntime *iso, XrValue self, XrValue *args, int ar
     if (argc < 4 || !XR_IS_ARRAY(args[0]) || !XR_IS_INT(args[1]) || !XR_IS_INT(args[2]) ||
         !XR_IS_INT(args[3]))
         return self;
-    xr_array_bytes_copy_from(array_self(self), XR_TO_ARRAY(args[0]), (int32_t) XR_TO_INT(args[1]),
-                             (int32_t) XR_TO_INT(args[2]), (int32_t) XR_TO_INT(args[3]));
+    xr_array_bytes_copy_from(array_self(self), XR_TO_ARRAY(args[0]), XR_TO_INT(args[1]),
+                             XR_TO_INT(args[2]), XR_TO_INT(args[3]));
     return self;
 }
 
@@ -231,8 +231,8 @@ static XrValue m_repeat_from(XrVMRuntime *iso, XrValue self, XrValue *args, int 
     (void) iso;
     if (argc < 3 || !XR_IS_INT(args[0]) || !XR_IS_INT(args[1]) || !XR_IS_INT(args[2]))
         return self;
-    xr_array_bytes_repeat_from(array_self(self), (int32_t) XR_TO_INT(args[0]),
-                               (int32_t) XR_TO_INT(args[1]), (int32_t) XR_TO_INT(args[2]));
+    xr_array_bytes_repeat_from(array_self(self), XR_TO_INT(args[0]), XR_TO_INT(args[1]),
+                               XR_TO_INT(args[2]));
     return self;
 }
 

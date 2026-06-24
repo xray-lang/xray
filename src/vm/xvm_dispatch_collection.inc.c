@@ -836,7 +836,7 @@ vmcase(OP_BYTES_LOAD_U32_LE) {
     if (arr->elem_type != XR_ELEM_U8)
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Bytes.loadU32LE receiver must be Bytes");
     bool ok = false;
-    uint32_t value = xr_array_load_u32_le(arr, (int32_t) XR_TO_INT(R(c)), &ok);
+    uint32_t value = xr_array_load_u32_le(arr, XR_TO_INT(R(c)), &ok);
     if (!ok)
         VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "Bytes.loadU32LE offset out of bounds");
     R(a) = xr_int((xr_Integer) value);
@@ -854,7 +854,7 @@ vmcase(OP_BYTES_LOAD_U64_LE) {
     if (arr->elem_type != XR_ELEM_U8)
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Bytes.loadU64LE receiver must be Bytes");
     bool ok = false;
-    uint64_t value = xr_array_load_u64_le(arr, (int32_t) XR_TO_INT(R(c)), &ok);
+    uint64_t value = xr_array_load_u64_le(arr, XR_TO_INT(R(c)), &ok);
     if (!ok)
         VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "Bytes.loadU64LE offset out of bounds");
     R(a) = xr_int((xr_Integer) value);
@@ -889,8 +889,8 @@ vmcase(OP_BYTES_COPY_WITHIN) {
     XrArray *arr = XR_TO_ARRAY(R(a));
     if (arr->elem_type != XR_ELEM_U8)
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Bytes.copyWithin receiver must be Bytes");
-    if (!xr_array_bytes_copy_within(arr, (int32_t) XR_TO_INT(R(a + 1)),
-                                    (int32_t) XR_TO_INT(R(a + 2)), (int32_t) XR_TO_INT(R(a + 3)))) {
+    if (!xr_array_bytes_copy_within(arr, XR_TO_INT(R(a + 1)), XR_TO_INT(R(a + 2)),
+                                    XR_TO_INT(R(a + 3)))) {
         VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "Bytes.copyWithin range out of bounds");
     }
     vmbreak;
@@ -906,8 +906,8 @@ vmcase(OP_BYTES_COPY_FROM) {
     XrArray *src = XR_TO_ARRAY(R(a + 1));
     if (dst->elem_type != XR_ELEM_U8 || src->elem_type != XR_ELEM_U8)
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Bytes.copyFrom operands must be Bytes");
-    if (!xr_array_bytes_copy_from(dst, src, (int32_t) XR_TO_INT(R(a + 2)),
-                                  (int32_t) XR_TO_INT(R(a + 3)), (int32_t) XR_TO_INT(R(a + 4)))) {
+    if (!xr_array_bytes_copy_from(dst, src, XR_TO_INT(R(a + 2)), XR_TO_INT(R(a + 3)),
+                                  XR_TO_INT(R(a + 4)))) {
         VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "Bytes.copyFrom range out of bounds");
     }
     vmbreak;
@@ -923,8 +923,8 @@ vmcase(OP_BYTES_REPEAT_FROM) {
     XrArray *arr = XR_TO_ARRAY(R(a));
     if (arr->elem_type != XR_ELEM_U8)
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Bytes.repeatFrom receiver must be Bytes");
-    if (!xr_array_bytes_repeat_from(arr, (int32_t) XR_TO_INT(R(a + 1)),
-                                    (int32_t) XR_TO_INT(R(a + 2)), (int32_t) XR_TO_INT(R(a + 3)))) {
+    if (!xr_array_bytes_repeat_from(arr, XR_TO_INT(R(a + 1)), XR_TO_INT(R(a + 2)),
+                                    XR_TO_INT(R(a + 3)))) {
         VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "Bytes.repeatFrom range out of bounds");
     }
     vmbreak;
@@ -1422,6 +1422,9 @@ vmcase(OP_SLICE) {
     int b = GETARG_B(i);
     int c = GETARG_C(i);
     XrValue source = R(b);
+    if (!XR_IS_INT(R(c)) || !XR_IS_INT(R(c + 1))) {
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "slice bounds must be integers");
+    }
     int64_t start = XR_TO_INT(R(c));
     int64_t end = XR_TO_INT(R(c + 1));
 

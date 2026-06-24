@@ -365,6 +365,13 @@ static inline int64_t xr_array_core_nonnegative_length(int64_t length) {
     return length < 0 ? 0 : length;
 }
 
+static inline bool xr_array_core_required_int_arg(bool has_int, int64_t value, int64_t *out) {
+    if (!has_int || !out)
+        return false;
+    *out = value;
+    return true;
+}
+
 static inline uint8_t xr_array_core_byte_from_value(XrValue value) {
     if (XR_IS_INT(value))
         return (uint8_t) (XR_TO_INT(value) & 0xFF);
