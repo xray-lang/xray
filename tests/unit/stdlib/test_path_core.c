@@ -103,6 +103,48 @@ TEST(path_core_normalize_alloc_cleans_segment_buffer_on_output_failure) {
     ASSERT_EQ_INT(stats.allocs, stats.frees);
 }
 
+TEST(path_core_resolve_parts_keeps_absolute_inputs_without_cwd) {
+    const char *input[] = {"rel", "/abs", "tail"};
+    size_t lens[] = {3, 4, 4};
+    const char *out[4] = {0};
+    size_t out_lens[4] = {0};
+    size_t out_count = 0;
+
+    ASSERT(!xr_path_core_resolve_needs_cwd(input, lens, 3));
+    ASSERT(xr_path_core_resolve_parts(input, lens, 3, "/cwd", 4, out, out_lens, 4, &out_count));
+    ASSERT_EQ_UINT(out_count, 3);
+    ASSERT_EQ_PTR(out[0], input[0]);
+    ASSERT_EQ_PTR(out[1], input[1]);
+    ASSERT_EQ_PTR(out[2], input[2]);
+    ASSERT_EQ_UINT(out_lens[0], 3);
+    ASSERT_EQ_UINT(out_lens[1], 4);
+    ASSERT_EQ_UINT(out_lens[2], 4);
+}
+
+TEST(path_core_resolve_parts_prepends_cwd_for_relative_inputs) {
+    const char *input[] = {"rel", "tail"};
+    size_t lens[] = {3, 4};
+    const char *out[4] = {0};
+    size_t out_lens[4] = {0};
+    size_t out_count = 0;
+
+    ASSERT(xr_path_core_resolve_needs_cwd(input, lens, 2));
+    ASSERT(xr_path_core_resolve_parts(input, lens, 2, "/cwd", 4, out, out_lens, 4, &out_count));
+    ASSERT_EQ_UINT(out_count, 3);
+    ASSERT_STR_EQ(out[0], "/cwd");
+    ASSERT_EQ_PTR(out[1], input[0]);
+    ASSERT_EQ_PTR(out[2], input[1]);
+    ASSERT_EQ_UINT(out_lens[0], 4);
+    ASSERT_EQ_UINT(out_lens[1], 3);
+    ASSERT_EQ_UINT(out_lens[2], 4);
+}
+
+TEST(path_core_resolve_fallback_cwd_is_root) {
+    char cwd[8] = {0};
+    xr_path_core_resolve_fallback_cwd(cwd, sizeof(cwd));
+    ASSERT_STR_EQ(cwd, "/");
+}
+
 TEST_MAIN_BEGIN()
 RUN_TEST_SUITE("path core");
 RUN_TEST(path_core_constants_match_target);
@@ -111,4 +153,7 @@ RUN_TEST(path_core_format_derives_base_from_name_ext);
 RUN_TEST(path_core_format_base_wins_over_name_ext);
 RUN_TEST(path_core_normalize_alloc_writes_normalized_path);
 RUN_TEST(path_core_normalize_alloc_cleans_segment_buffer_on_output_failure);
+RUN_TEST(path_core_resolve_parts_keeps_absolute_inputs_without_cwd);
+RUN_TEST(path_core_resolve_parts_prepends_cwd_for_relative_inputs);
+RUN_TEST(path_core_resolve_fallback_cwd_is_root);
 TEST_MAIN_END()

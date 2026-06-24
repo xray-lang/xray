@@ -246,21 +246,21 @@ static XrValue path_resolve(XrVMRuntime *X, XrValue *args, int argc) {
         lens[i + 1] = parts[i + 1] ? len : 0;
     }
 
-    if (xr_path_core_join_has_absolute(parts + 1, lens + 1, (size_t) argc)) {
-        XrValue ret = path_resolve_join_normalized(X, parts + 1, lens + 1, (size_t) argc);
-        xr_free(heap_buf);
-        return ret;
-    }
-
     char cwd[XR_PATH_MAX];
-    if (xr_fs_getcwd(cwd, sizeof(cwd)) == NULL) {
-        cwd[0] = PATH_SEP;
-        cwd[1] = '\0';
+    size_t cwd_len = 0;
+    if (xr_path_core_resolve_needs_cwd(parts + 1, lens + 1, (size_t) argc)) {
+        if (xr_fs_getcwd(cwd, sizeof(cwd)) == NULL)
+            xr_path_core_resolve_fallback_cwd(cwd, sizeof(cwd));
+        cwd_len = strlen(cwd);
     }
 
-    parts[0] = cwd;
-    lens[0] = strlen(cwd);
-    XrValue ret = path_resolve_join_normalized(X, parts, lens, total);
+    size_t resolve_count = 0;
+    if (!xr_path_core_resolve_parts(parts + 1, lens + 1, (size_t) argc, cwd, cwd_len, parts, lens,
+                                    total, &resolve_count)) {
+        xr_free(heap_buf);
+        return xr_null();
+    }
+    XrValue ret = path_resolve_join_normalized(X, parts, lens, resolve_count);
     xr_free(heap_buf);
     return ret;
 }

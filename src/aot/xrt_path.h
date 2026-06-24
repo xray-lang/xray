@@ -95,9 +95,6 @@ static inline XrValue xrt_path_join_then_normalize(const char **parts, const siz
 
 static inline XrValue xrt_path_resolve(int64_t count_i, const char **parts, const size_t *lens) {
     size_t count = count_i < 0 ? 0 : (size_t) count_i;
-    if (xr_path_core_join_has_absolute(parts, lens, count))
-        return xrt_path_join_then_normalize(parts, lens, count);
-
     enum {
         XRT_PATH_RESOLVE_STACK_PARTS = 17
     };
@@ -116,18 +113,24 @@ static inline XrValue xrt_path_resolve(int64_t count_i, const char **parts, cons
     }
 
     char cwd[XRT_PATH_MAX];
-    if (!xrt_path_getcwd(cwd, sizeof(cwd))) {
-        cwd[0] = '/';
-        cwd[1] = '\0';
+    size_t cwd_len = 0;
+    if (xr_path_core_resolve_needs_cwd(parts, lens, count)) {
+        if (!xrt_path_getcwd(cwd, sizeof(cwd)))
+            xr_path_core_resolve_fallback_cwd(cwd, sizeof(cwd));
+        cwd_len = strlen(cwd);
     }
-    all_parts[0] = cwd;
-    all_lens[0] = strlen(cwd);
     for (size_t i = 0; i < count; i++) {
         all_parts[i + 1] = parts ? parts[i] : NULL;
         all_lens[i + 1] = lens ? lens[i] : 0;
     }
 
-    XrValue result = xrt_path_join_then_normalize(all_parts, all_lens, total);
+    size_t resolve_count = 0;
+    if (!xr_path_core_resolve_parts(all_parts + 1, all_lens + 1, count, cwd, cwd_len, all_parts,
+                                    all_lens, total, &resolve_count)) {
+        XRT_FREE(heap_buf);
+        return XR_NULL_VAL;
+    }
+    XrValue result = xrt_path_join_then_normalize(all_parts, all_lens, resolve_count);
     XRT_FREE(heap_buf);
     return result;
 }

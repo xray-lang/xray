@@ -51,6 +51,49 @@ static inline bool xr_path_core_join_has_absolute(const char **parts, const size
     return false;
 }
 
+static inline bool xr_path_core_resolve_needs_cwd(const char **parts, const size_t *lens,
+                                                  size_t count) {
+    return !xr_path_core_join_has_absolute(parts, lens, count);
+}
+
+static inline void xr_path_core_resolve_fallback_cwd(char *cwd, size_t cap) {
+    if (!cwd || cap == 0)
+        return;
+    if (cap == 1) {
+        cwd[0] = '\0';
+        return;
+    }
+    cwd[0] = '/';
+    cwd[1] = '\0';
+}
+
+static inline bool xr_path_core_resolve_parts(const char **input_parts, const size_t *input_lens,
+                                              size_t input_count, const char *cwd, size_t cwd_len,
+                                              const char **out_parts, size_t *out_lens,
+                                              size_t out_cap, size_t *out_count) {
+    if (!out_parts || !out_lens || !out_count)
+        return false;
+
+    bool needs_cwd = xr_path_core_resolve_needs_cwd(input_parts, input_lens, input_count);
+    size_t total = input_count + (needs_cwd ? 1 : 0);
+    if (total > out_cap)
+        return false;
+
+    size_t pos = 0;
+    if (needs_cwd) {
+        out_parts[pos] = cwd;
+        out_lens[pos] = cwd ? cwd_len : 0;
+        pos++;
+    }
+    for (size_t i = 0; i < input_count; i++) {
+        out_parts[pos] = input_parts ? input_parts[i] : NULL;
+        out_lens[pos] = input_lens ? input_lens[i] : 0;
+        pos++;
+    }
+    *out_count = total;
+    return true;
+}
+
 static inline size_t xr_path_core_join_start_index(const char **parts, const size_t *lens,
                                                    size_t count) {
     size_t start = 0;
