@@ -1559,6 +1559,35 @@ TEST(cgen_fixed_array_struct_field_uses_embedded_heap_native_storage) {
     xi_func_free(ir);
 }
 
+TEST(cgen_fixed_array_checked_set_throws_index_oob) {
+    const char *src = "struct Buf {\n"
+                      "    data: [4]int\n"
+                      "}\n"
+                      "fn poke(i: int) -> int {\n"
+                      "    let buf = Buf{data: [1, 2, 3, 4]}\n"
+                      "    buf.data[i] = 9\n"
+                      "    return buf.data[0]\n"
+                      "}\n"
+                      "print(poke(1))\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "checked fixed-array set should generate");
+
+    assert(contains(code, "xrt_index_oob(_idx, 4)") &&
+           "checked fixed-array set must throw shared index-OOB panic");
+    assert(!contains(code, "fixed array index out of range") &&
+           "checked fixed-array set must not emit a private abort string");
+
+    printf("  Generated checked fixed-array set path %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_shared_struct_alias_elides_tagged_hot_locals) {
     const char *src = "struct Cell {\n"
                       "    a: int\n"
@@ -4942,6 +4971,7 @@ int main(void) {
     run_cgen_repr_c_struct_omits_native_header();
     run_cgen_nested_struct_field_uses_embedded_heap_native_storage();
     run_cgen_fixed_array_struct_field_uses_embedded_heap_native_storage();
+    run_cgen_fixed_array_checked_set_throws_index_oob();
     run_cgen_shared_struct_alias_elides_tagged_hot_locals();
     run_cgen_class_method_caches_receiver_scalar_fields();
     run_cgen_local_class_direct_native_methods_omit_boxed_adapters();

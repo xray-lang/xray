@@ -153,9 +153,7 @@ static inline void xrt_index_set(XrValue obj, XrValue key, XrValue val) {
             xrt_fixed_array_set(obj.ptr, XR_ARRAY_REF_ELEM_TYPE(obj), idx, val);
             return;
         }
-        fprintf(stderr, "fixed array index out of range: %lld (length %u)\n", (long long) idx,
-                (unsigned) count);
-        abort();
+        xrt_index_oob(idx, count);
     }
     if (XR_IS_ARRAY(obj) && key.tag == XR_TAG_I64) {
         xrt_array_t *a = (xrt_array_t *) obj.ptr;
