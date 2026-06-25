@@ -553,25 +553,6 @@ static inline const char *xr_to_cstr(XrValue v, char *buf, size_t bufsz) {
 }
 
 /* =========================================================================
- * Truthiness (matches VM semantics: null, false, 0, 0.0 are falsy)
- * ========================================================================= */
-
-static inline int xr_truthy(XrValue v) {
-    switch (v.tag) {
-        case XR_TAG_NULL:
-            return 0;
-        case XR_TAG_BOOL:
-            return v.i != 0;
-        case XR_TAG_I64:
-            return v.i != 0;
-        case XR_TAG_F64:
-            return v.f != 0.0;
-        default:
-            return 1;
-    }
-}
-
-/* =========================================================================
  * Runtime context — opaque handle passed to all AOT functions.
  * Points to XrCoroutine* internally; AOT code never dereferences it.
  * ========================================================================= */

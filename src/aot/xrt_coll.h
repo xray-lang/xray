@@ -23,6 +23,7 @@
 #include "../shared/xr_numeric_core.h"
 #include "../shared/xr_strbuf_core.h"
 #include "../shared/xr_string_core.h"
+#include "../shared/xr_truthy_core.h"
 #include "../shared/xr_typed_ops.h"
 #include <string.h>
 
@@ -1138,6 +1139,35 @@ static inline int xrt_set_is_typed(const xrt_set_t *s) {
 
 static inline int64_t xrt_set_len(const xrt_set_t *s) {
     return xrt_set_is_typed(s) ? s->len : (int64_t) s->count;
+}
+
+/* Truthiness mirrors the VM: null, false, numeric zero and empty
+ * string/Array/Map/Set are falsy; all other objects are truthy. */
+static inline int xr_truthy(XrValue v) {
+    switch (xrt_value_kind(v)) {
+        case XR_TAG_NULL:
+            return xr_truthy_core_eval(XR_TRUTHY_CORE_NULL, 0, 0.0, 0);
+        case XR_TAG_BOOL:
+            return xr_truthy_core_eval(XR_TRUTHY_CORE_BOOL, v.i, 0.0, 0);
+        case XR_TAG_I64:
+            return xr_truthy_core_eval(XR_TRUTHY_CORE_INT, v.i, 0.0, 0);
+        case XR_TAG_F64:
+            return xr_truthy_core_eval(XR_TRUTHY_CORE_FLOAT, 0, v.f, 0);
+        case XR_TAG_STR:
+        case XR_TAG_STR_ARC:
+            return xr_truthy_core_eval(XR_TRUTHY_CORE_SIZED, 0, 0.0, xr_str_len(v));
+        case XR_TAG_ARRAY:
+            return xr_truthy_core_eval(XR_TRUTHY_CORE_SIZED, 0, 0.0,
+                                       ((const xrt_array_t *) v.ptr)->length);
+        case XR_TAG_MAP:
+            return xr_truthy_core_eval(XR_TRUTHY_CORE_SIZED, 0, 0.0,
+                                       xrt_map_len((const xrt_map_t *) v.ptr));
+        case XR_TAG_SET:
+            return xr_truthy_core_eval(XR_TRUTHY_CORE_SIZED, 0, 0.0,
+                                       xrt_set_len((const xrt_set_t *) v.ptr));
+        default:
+            return xr_truthy_core_eval(XR_TRUTHY_CORE_OBJECT, 0, 0.0, 0);
+    }
 }
 
 static inline int xrt_set_slot_is_full(const xrt_set_t *s, int64_t slot) {
