@@ -77,7 +77,8 @@ static inline XrValue xrt_encoding_utf8_count(const char *data, int64_t len) {
 }
 
 static inline XrValue xrt_encoding_utf8_byte_length(const char *data, int64_t len) {
-    return XR_FROM_INT(len < 0 ? 0 : len);
+    return XR_FROM_INT(
+        (int64_t) xr_encoding_core_utf8_byte_length(data, len < 0 ? 0 : (size_t) len));
 }
 
 static inline int xrt_encoding_utf16_endian_from_value(XrValue value) {

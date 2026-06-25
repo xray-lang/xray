@@ -161,6 +161,14 @@ TEST(utf16_argument_rules_default_to_le_and_true) {
     ASSERT_FALSE(xr_encoding_core_bool_arg_or(true, false, true));
 }
 
+TEST(utf8_byte_length_is_byte_count) {
+    ASSERT_EQ_UINT(xr_encoding_core_utf8_byte_length("Hello", 5), 5);
+    ASSERT_EQ_UINT(xr_encoding_core_utf8_byte_length("你好", 6), 6);
+    ASSERT_EQ_UINT(xr_encoding_core_utf8_byte_length("", 0), 0);
+    ASSERT_EQ_UINT(xr_encoding_core_utf8_byte_length(NULL, 0), 0);
+    ASSERT_EQ_UINT(xr_encoding_core_utf8_byte_length(NULL, 3), 0);
+}
+
 /* ========== Main ========== */
 
 TEST_MAIN_BEGIN()
@@ -189,5 +197,8 @@ RUN_TEST(utf16_decode_view_keeps_explicit_endian);
 RUN_TEST(utf16_decode_view_keeps_bom_when_requested);
 RUN_TEST(utf16_decode_view_allows_empty_null);
 RUN_TEST(utf16_argument_rules_default_to_le_and_true);
+
+RUN_TEST_SUITE("UTF-8 - Byte Length");
+RUN_TEST(utf8_byte_length_is_byte_count);
 
 TEST_MAIN_END()
