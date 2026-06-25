@@ -17,6 +17,9 @@
 #include <stdio.h>
 
 #define XR_ERROR_CORE_INDEX_OOB_BUFSZ 96
+#define XR_ERROR_CORE_DIVISION_BY_ZERO_MSG "division by zero"
+#define XR_ERROR_CORE_MODULO_BY_ZERO_MSG "modulo by zero"
+#define XR_ERROR_CORE_MODULO_REQUIRES_INTEGER_MSG "modulo requires integer types"
 
 typedef struct XrErrorCoreMessageView {
     int code;

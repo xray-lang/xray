@@ -32,6 +32,16 @@ fn show_div_zero() {
     }
 }
 
+fn show_mod_zero() {
+    try {
+        print(10 % 0)
+    } catch panic (p) {
+        print(p.message)
+        print(p.code)
+    }
+}
+
 show_index_read(-1)
 show_index_write(5)
 show_div_zero()
+show_mod_zero()

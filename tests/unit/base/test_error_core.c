@@ -21,6 +21,12 @@ TEST(error_core_formats_array_index_oob) {
     ASSERT_STR_EQ(buf, "array index out of range: -1 (length 3)");
 }
 
+TEST(error_core_defines_arithmetic_messages) {
+    ASSERT_STR_EQ(XR_ERROR_CORE_DIVISION_BY_ZERO_MSG, "division by zero");
+    ASSERT_STR_EQ(XR_ERROR_CORE_MODULO_BY_ZERO_MSG, "modulo by zero");
+    ASSERT_STR_EQ(XR_ERROR_CORE_MODULO_REQUIRES_INTEGER_MSG, "modulo requires integer types");
+}
+
 TEST(error_core_parses_prefixed_message) {
     const char *text = "E0430: array index out of range: 5 (length 3)";
     const char *expected = "array index out of range: 5 (length 3)";
@@ -46,6 +52,7 @@ TEST_MAIN_BEGIN()
 
 RUN_TEST_SUITE("Error Core");
 RUN_TEST(error_core_formats_array_index_oob);
+RUN_TEST(error_core_defines_arithmetic_messages);
 RUN_TEST(error_core_parses_prefixed_message);
 RUN_TEST(error_core_leaves_unprefixed_message_intact);
 
