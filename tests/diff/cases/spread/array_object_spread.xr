@@ -62,5 +62,6 @@ print(base.x, base.y)
 
 // computed key alongside spread
 let key = "dyn"
-let computed = { ...base, [key]: 55 }
+let jsonBase: Json = { x: 1, y: 2 }
+let computed: Json = { ...jsonBase, [key]: 55 }
 print(computed.x, computed["dyn"])

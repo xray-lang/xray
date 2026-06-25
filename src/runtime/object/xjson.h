@@ -99,6 +99,21 @@ static inline bool xr_value_is_json(XrValue v) {
     return inst->klass && inst->klass->builtin_kind == XR_BK_JSON;
 }
 
+static inline bool xr_value_is_record(XrValue v) {
+    if (!XR_IS_INSTANCE(v))
+        return false;
+    XrInstance *inst = (XrInstance *) XR_TO_PTR(v);
+    return inst->klass && inst->klass->builtin_kind == XR_BK_RECORD;
+}
+
+static inline bool xr_value_has_object_shape(XrValue v) {
+    if (!XR_IS_INSTANCE(v))
+        return false;
+    XrInstance *inst = (XrInstance *) XR_TO_PTR(v);
+    return inst->klass &&
+           (inst->klass->builtin_kind == XR_BK_JSON || inst->klass->builtin_kind == XR_BK_RECORD);
+}
+
 static inline XrJson *xr_value_to_json(XrValue v) {
     return (XrJson *) XR_TO_PTR(v);
 }

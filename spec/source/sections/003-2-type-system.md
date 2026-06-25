@@ -189,7 +189,7 @@ let c: Array<string> = []         // 显式空数组
 
 哈希字典，**保持插入顺序**。详见 §14.7。
 
-**Map 字面量**必须用 `#{ ... }` 前缀，分隔符用 `:`（与 Json 一致，靠 `#` 前缀消歧）：
+**Map 字面量**必须用 `#{ ... }` 前缀，分隔符用 `:`（与 Record / Json 对象一致，靠 `#` 前缀消歧）：
 
 ```xray @id=types-map
 let m: Map<string, int> = #{"a": 1, "b": 2}
@@ -235,16 +235,17 @@ let buf = Bytes(1024)
 let init = Bytes([72, 101, 108, 108, 111])
 ```
 
-#### 2.4.6 `Json` 与对象字面量
+#### 2.4.6 `Record` / `Json` 与对象字面量
 
-`Json` 是 xray 的**动态结构化数据类型**——可以装载 JSON 等价的任意结构。详见 §14.10 与 §2.10。
+裸对象字面量默认推断为 sealed structural `Record`，用于普通业务对象、options 和多字段返回值。`Json` 是显式 opt-in 的 JSON 值域类型：它用于外部数据交换边界，可以装载 JSON 等价的任意结构，并且本身包含 `null`。
 
 **对象字面量** `{ field: value, ... }` 与 Map 字面量的关键区别：
 
 ```xray @id=types-json-object
-// Object/Json 字面量：标识符或字符串 key + 冒号 ':'
+// Record/Json 对象字面量：标识符或字符串 key + 冒号 ':'
 let data: Json = { name: "Alice", tags: ["a", "b"], age: 30 }
-let user = { name: "Bob", age: 25 }       // 默认类型为 Json
+let user = { name: "Bob", age: 25 }       // 默认类型为 sealed Record
+typeof(user)                              // "Record"
 data.name              // 类型: Json（字段访问返回 Json）
 data["name"]           // 等价
 
@@ -261,12 +262,13 @@ let m = #{"k1": 1, "k2": 2}           // 类型: Map<string, int>
 
 | 写法 | 类型 | 备注 |
 |---|---|---|
-| `{ name: "x", age: 1 }` | `Json` / `Object` | 标识符或字符串 key 后跟 `:` |
-| `{ x: y }`（`x` 是字段名，`y` 是变量名） | `Json` / `Object` | 字段简写 `{ x }` 等价 `{ x: x }`，仅裸 key |
+| `{ name: "x", age: 1 }` | sealed anonymous `Record` | 标识符或字符串 key 后跟 `:` |
+| `let j: Json = { name: "x" }` | `Json` object | 只有显式 `Json` 期望类型时按动态 Json 解释 |
+| `{ x: y }`（`x` 是字段名，`y` 是变量名） | sealed anonymous `Record` | 字段简写 `{ x }` 等价 `{ x: x }`，仅裸 key |
 | `#{"a": 1}` | `Map<K, V>` | `#` 前缀消歧，分隔符用 `:` |
 | `Point{x: 1.0, y: 2.0}` | `Point`（struct） | 类型名 + `{...}` 字面量 |
 
-**密封（sealed）对象类型**：通过 `type` 别名为对象类型起名后，类型成为 sealed——访问/赋值未声明字段是编译错误：
+**Record 类型**：裸对象字面量和 `type T = {...}` 都是 Record。默认 Record 是 sealed——访问/赋值未声明字段是编译错误；需要 JSON 边界时显式标注 `Json` 或调用 `Json.encode(value)`。
 
 ```xray
 type User = { name: string, age: int }
@@ -275,9 +277,11 @@ let u: User = { name: "Alice", age: 30 }
 print(u.name)         // OK
 // u.extra = "x"      // 编译错误：sealed type User has no field 'extra'
 
-// 不指定类型则为动态 Json
-let u2 = { name: "Alice", age: 30 }      // Json（可动态扩展）
-u2.extra = "x"        // OK（Json 是动态的）
+let u2 = { name: "Alice", age: 30 }      // sealed Record
+// u2.extra = "x"     // 编译错误
+
+let j: Json = { name: "Alice", age: 30 } // 动态 Json object
+j.extra = "x"        // OK（Json 是动态的）
 ```
 
 #### 2.4.7 `BigInt`
@@ -305,6 +309,8 @@ let x: int? = null      // OK
 let y: int? = 42        // OK
 let z: int = null       // 编译错误：null 不是 int
 ```
+
+`Json` 本身包含 `null`，因此 `Json?` 与 `Json | null` 是语义重复并在解析阶段报错；需要表达解析失败或缺失值时应使用 `Result<T, E>`、ADT、或含显式状态字段的 Record。
 
 **可空原始类型一等公民**：`int?` / `float?` / `bool?` 与其它 `T?` 一样是合法类型，泛型与容器会自然产生它们（如 `Map<string, bool>.get(k) -> bool?`、`fn find<T>(...) -> T?` 在 `T = bool` 时）。它们以 tagged 表示承载 `null`，因此 `null` 值在 `print` / `string()` / 字符串拼接中统一显示为 `"null"`（不是底层数值 `0`），VM 与 AOT 一致。
 
@@ -726,16 +732,17 @@ let buf = Bytes(1024)
 let init = Bytes([72, 101, 108, 108, 111])
 ```
 
-#### 2.4.6 `Json` and Object Literals
+#### 2.4.6 `Record` / `Json` and Object Literals
 
-`Json` is xray's **dynamic structured data type** — it can hold any JSON-equivalent structure. See §14.10 and §2.10.
+Bare object literals default to sealed structural `Record`, for ordinary business objects, options, and multi-field returns. `Json` is an explicit opt-in JSON value-domain type: it is used at external data-exchange boundaries, can hold any JSON-equivalent structure, and intrinsically includes `null`.
 
 The key difference between an **object literal** `{ field: value, ... }` and a Map literal:
 
 ```xray @id=types-json-object
-// Object/Json literal: identifier or string key + colon ':'
+// Record/Json object literal: identifier or string key + colon ':'
 let data: Json = { name: "Alice", tags: ["a", "b"], age: 30 }
-let user = { name: "Bob", age: 25 }       // default type is Json
+let user = { name: "Bob", age: 25 }       // default type is sealed Record
+typeof(user)                              // "Record"
 data.name              // type: Json (field access returns Json)
 data["name"]           // equivalent
 
@@ -752,12 +759,13 @@ let m = #{"k1": 1, "k2": 2}           // type: Map<string, int>
 
 | Form | Type | Notes |
 |---|---|---|
-| `{ name: "x", age: 1 }` | `Json` / `Object` | identifier or string key followed by `:` |
-| `{ x: y }` (`x` is field name, `y` is variable) | `Json` / `Object` | shorthand `{ x }` equivalent to `{ x: x }`; bare key only |
+| `{ name: "x", age: 1 }` | sealed anonymous `Record` | identifier or string key followed by `:` |
+| `let j: Json = { name: "x" }` | `Json` object | interpreted as dynamic Json only with an explicit `Json` expected type |
+| `{ x: y }` (`x` is field name, `y` is variable) | sealed anonymous `Record` | shorthand `{ x }` equivalent to `{ x: x }`; bare key only |
 | `#{"a": 1}` | `Map<K, V>` | `#` prefix disambiguates; separator `:` |
 | `Point{x: 1.0, y: 2.0}` | `Point` (struct) | type name + `{...}` literal |
 
-**Sealed object types**: once an object type is named via `type`, it becomes sealed — accessing or assigning an undeclared field is a compile error:
+**Record types**: bare object literals and `type T = {...}` are Records. Records are sealed by default — accessing or assigning an undeclared field is a compile error. Use an explicit `Json` annotation or `Json.encode(value)` at JSON boundaries.
 
 ```xray
 type User = { name: string, age: int }
@@ -766,9 +774,11 @@ let u: User = { name: "Alice", age: 30 }
 print(u.name)         // OK
 // u.extra = "x"      // compile error: sealed type User has no field 'extra'
 
-// Without a type annotation, the literal is dynamic Json
-let u2 = { name: "Alice", age: 30 }      // Json (dynamically extensible)
-u2.extra = "x"        // OK (Json is dynamic)
+let u2 = { name: "Alice", age: 30 }      // sealed Record
+// u2.extra = "x"     // compile error
+
+let j: Json = { name: "Alice", age: 30 } // dynamic Json object
+j.extra = "x"        // OK (Json is dynamic)
 ```
 
 #### 2.4.7 `BigInt`
@@ -796,6 +806,8 @@ let x: int? = null      // OK
 let y: int? = 42        // OK
 let z: int = null       // compile error: null is not int
 ```
+
+`Json` intrinsically includes `null`, so `Json?` and `Json | null` are redundant and rejected during parsing. Use `Result<T, E>`, an ADT, or a Record with an explicit status field for parse failure or absence.
 
 **Nullable primitives are first-class**: `int?` / `float?` / `bool?` are ordinary `T?` types and arise naturally from generics and containers (e.g. `Map<string, bool>.get(k) -> bool?`, or `fn find<T>(...) -> T?` at `T = bool`). They carry `null` in the tagged representation, so a `null` value renders as `"null"` in `print` / `string()` / string concatenation (never as the raw payload `0`), identically in the VM and AOT.
 

@@ -224,11 +224,11 @@ static XrType *resolve_impl(XrayIsolate *X, const XrTypeRef *t) {
             for (int i = 0; i < count; i++)
                 types[i] = resolve_impl(X, t->children[i]);
             bool is_sealed = !t->extensible;
-            XrType *result = xr_type_new_json_with_fields(X, names, types, count, is_sealed);
+            XrType *result = xr_type_new_record_with_fields(X, names, types, count, is_sealed);
             if (result && t->field_readonly)
-                xr_type_set_json_field_readonly(X, result, t->field_readonly, count);
+                xr_type_set_object_field_readonly(X, result, t->field_readonly, count);
             if (result && t->name)
-                xr_type_set_json_type_name(X, result, t->name);
+                xr_type_set_object_type_name(X, result, t->name);
             if (types != stack_types)
                 xr_free(types);
             return result;
@@ -255,7 +255,7 @@ XR_FUNC XrType *xr_tref_resolve(XrayIsolate *X, const XrTypeRef *tref) {
  * return the canonical XrType (carrying the inheritance chain for classes,
  * enum identity for enum values, or the interface singleton for interfaces).
  * Returns NULL when no matching symbol is registered. */
-static XrType *resolve_class_symbol_type(XaAnalyzer *analyzer, const char *name) {
+static XaSymbol *resolve_type_symbol(XaAnalyzer *analyzer, const char *name) {
     if (!analyzer || !name)
         return NULL;
 
@@ -263,18 +263,27 @@ static XrType *resolve_class_symbol_type(XaAnalyzer *analyzer, const char *name)
     XaSymbol *sym = xa_scope_lookup(start, name);
     if (!sym || (sym->kind != XA_SYM_CLASS && sym->kind != XA_SYM_ENUM))
         return NULL;
+    return sym;
+}
+
+static XrType *resolve_type_ref_symbol_type(XaAnalyzer *analyzer, const char *name) {
+    XaSymbol *sym = resolve_type_symbol(analyzer, name);
+    if (!sym)
+        return NULL;
 
     XaSymbolLinks *links = xa_analyzer_get_links(analyzer, sym);
     if (!links || !links->type)
         return NULL;
 
-    /* Honour CLASS, INSTANCE, ENUM, and INTERFACE kinds. Type aliases fall
-     * back to the standard resolver to preserve their semantics. */
-    if (links->type->kind != XR_KIND_CLASS && links->type->kind != XR_KIND_INSTANCE &&
-        links->type->kind != XR_KIND_ENUM && links->type->kind != XR_KIND_INTERFACE)
-        return NULL;
-
-    return links->type;
+    if (sym->kind == XA_SYM_ENUM)
+        return links->type;
+    if (links->type->kind == XR_KIND_INTERFACE)
+        return links->type;
+    if (links->type->kind == XR_KIND_INSTANCE)
+        return links->type;
+    if (links->type->kind == XR_KIND_CLASS)
+        return xr_type_new_instance(analyzer->isolate, links->class_info);
+    return NULL;
 }
 
 XR_FUNC XrType *xr_tref_resolve_in_analyzer(XaAnalyzer *analyzer, const XrTypeRef *tref) {
@@ -286,17 +295,19 @@ XR_FUNC XrType *xr_tref_resolve_in_analyzer(XaAnalyzer *analyzer, const XrTypeRe
     /* Named class lookup preserves the inheritance chain that
      * xr_type_new_class() would otherwise drop. */
     if (tref->kind == XR_TREF_NAMED && tref->name) {
-        XrType *cls = resolve_class_symbol_type(analyzer, tref->name);
+        XrType *cls = resolve_type_ref_symbol_type(analyzer, tref->name);
         if (cls)
             return cls;
     }
 
-    /* Generic form: if the head names a user-defined interface, return a
-     * parameterized interface so conformance checks see the type arguments
-     * (e.g. `Container<int>` vs `Container<string>` must not collide). */
+    /* Generic form: preserve declaration-backed class/interface identity so
+     * member lookup and conformance checks do not fall back to a bare name. */
     if (tref->kind == XR_TREF_GENERIC && tref->name) {
-        XrType *head = resolve_class_symbol_type(analyzer, tref->name);
-        if (head && head->kind == XR_KIND_INTERFACE) {
+        XaSymbol *sym = resolve_type_symbol(analyzer, tref->name);
+        XaSymbolLinks *links = sym ? xa_analyzer_get_links(analyzer, sym) : NULL;
+        XrType *head = links ? links->type : NULL;
+        if (head && (head->kind == XR_KIND_INTERFACE || head->kind == XR_KIND_CLASS ||
+                     head->kind == XR_KIND_INSTANCE)) {
             int nargs = tref->nchildren;
             XrType *stack_args[8];
             XrType **args =
@@ -305,7 +316,10 @@ XR_FUNC XrType *xr_tref_resolve_in_analyzer(XaAnalyzer *analyzer, const XrTypeRe
                 for (int i = 0; i < nargs; i++)
                     args[i] = xr_tref_resolve_in_analyzer(analyzer, tref->children[i]);
                 XrType *result =
-                    xr_type_new_generic_interface(analyzer->isolate, tref->name, args, nargs);
+                    head->kind == XR_KIND_INTERFACE
+                        ? xr_type_new_generic_interface(analyzer->isolate, tref->name, args, nargs)
+                        : xr_type_new_generic_instance(analyzer->isolate, tref->name,
+                                                       links->class_info, args, nargs);
                 if (args != stack_args)
                     xr_free(args);
                 return result;

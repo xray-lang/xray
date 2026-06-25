@@ -72,13 +72,20 @@ static const char xr_native_def_int[] =
 
 static const char xr_native_def_json[] =
     "// Built-in Json type — implementation in "
-    "src/runtime/object/xjson_methods.c\n\n@native\nclass Json {\n    keys() -> Array<string>\n    "
-    "values() -> Array<Json>\n    entries() -> Array<(string, Json)>\n    // Iteration protocol — "
-    "iterator() yields each field name (used by\n    // single-variable `for (k in jsonObj)`); "
-    "entriesIterator() yields\n    // (fieldName, value) tuples (used by `for (k, v in "
-    "jsonObj)`).\n    iterator() -> Iterator<string>\n    entriesIterator() -> Iterator<(string, "
-    "Json)>\n    has(key: string) -> bool\n    get(key: string) -> Json\n    isEmpty() -> bool\n   "
-    " delete(key: string)\n    clear()\n    toString() -> string\n}\n";
+    "src/runtime/object/xjson_methods.c\n\n@native\nclass Json {\n    static parse(text: string) "
+    "-> Json\n    static stringify(value: unknown, indent?: int) -> string\n    static "
+    "encode(value: unknown) -> Json\n    static isValid(text: string, strict?: bool) -> bool\n    "
+    "static tryParse(text: string) -> Json\n    static keys(obj: Json) -> Array<string>\n    "
+    "static values(obj: Json) -> Array<Json>\n    static entries(obj: Json) -> Array<(string, "
+    "Json)>\n    static has(obj: Json, key: string) -> bool\n    static get(obj: Json, key: "
+    "string, default?: unknown) -> Json\n    static size(obj: Json) -> int\n    static "
+    "isEmpty(obj: Json) -> bool\n\n    keys() -> Array<string>\n    values() -> Array<Json>\n    "
+    "entries() -> Array<(string, Json)>\n    // Iteration protocol — iterator() yields each field "
+    "name (used by\n    // single-variable `for (k in jsonObj)`); entriesIterator() yields\n    // "
+    "(fieldName, value) tuples (used by `for (k, v in jsonObj)`).\n    iterator() -> "
+    "Iterator<string>\n    entriesIterator() -> Iterator<(string, Json)>\n    has(key: string) -> "
+    "bool\n    get(key: string) -> Json\n    isEmpty() -> bool\n    delete(key: string)\n    "
+    "clear()\n    toString() -> string\n}\n";
 
 static const char xr_native_def_map[] =
     "// Built-in Map<K, V> type — implementation in "
@@ -99,8 +106,8 @@ static const char xr_native_def_panic_info[] =
     "xr_register_panic_info_class in xclass_system.c; the constructor and toString\n// bodies are "
     "PRIMITIVE on the C side. This declaration exists for analyzer / LSP\n// awareness so the "
     "fields are visible from any module.\n\nclass PanicInfo {\n    message: string\n    stack: "
-    "Array<string>\n    cause: PanicInfo?\n    code: int\n    data: Json?\n    "
-    "constructor(message: string = \"\", cause: PanicInfo? = null)\n    toString() -> string\n}\n";
+    "Array<string>\n    cause: PanicInfo?\n    code: int\n    data: Json\n    constructor(message: "
+    "string = \"\", cause: PanicInfo? = null)\n    toString() -> string\n}\n";
 
 static const char xr_native_def_regex[] =
     "// Built-in Regex type — implementation in stdlib/regex/xregex_binding.c\n\n@native\nclass "

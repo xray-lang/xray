@@ -56,6 +56,43 @@ fn test_json_stringify_object() {
     assert_eq(s.includes("Bob"), true)
 }
 
+// ===== Json.encode =====
+@test
+fn test_json_encode_record() {
+    let user = { name: "Bob", scores: [10, 20] }
+    let encoded = Json.encode(user)
+    assert_eq(typeof(encoded), "Json")
+    assert_eq(encoded.name, "Bob")
+    assert_eq(encoded.scores[1], 20)
+}
+
+@test
+fn test_json_encode_map_and_set() {
+    let m = #{"a": 1, "b": { ok: true }}
+    let encoded = Json.encode(m)
+    assert_eq(encoded.a, 1)
+    assert_eq(encoded.b.ok, true)
+
+    let s: Set<int> = #[1, 2, 3]
+    let arr = Json.encode(s)
+    assert_eq(arr.length, 3)
+    assert_eq(arr[0], 1)
+    assert_eq(arr[2], 3)
+}
+
+@test
+fn test_json_encode_non_serializable_throws() {
+    let f = fn() {}
+    let caught = false
+    try {
+        Json.encode(f)
+    } catch panic (e) {
+        caught = true
+        assert(string(e).includes("cannot encode"))
+    }
+    assert(caught)
+}
+
 // ===== Json.isValid =====
 @test
 fn test_json_is_valid() {

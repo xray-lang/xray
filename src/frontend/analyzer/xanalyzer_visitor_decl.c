@@ -1429,7 +1429,7 @@ void xa_visit_collect_function_decl_only(XaInferContext *ctx, AstNode *node) {
         for (int i = 0; i < fn->param_count; i++) {
             XrParamNode *param = fn->params[i];
             param_types[i] = (param && param->type)
-                                 ? xr_tref_resolve(ctx->analyzer->isolate, param->type)
+                                 ? xr_tref_resolve_in_analyzer(ctx->analyzer, param->type)
                                  : xr_type_new_unknown(NULL);
             param_names[i] = param ? param->name : NULL;
             if (param && param->is_rest)
@@ -1450,8 +1450,9 @@ void xa_visit_collect_function_decl_only(XaInferContext *ctx, AstNode *node) {
     }
 
     // Omitted return type defaults to void; error if body has 'return <expr>'
-    XrType *return_type = fn->return_type ? xr_tref_resolve(ctx->analyzer->isolate, fn->return_type)
-                                          : xr_type_new_unit(NULL);
+    XrType *return_type = fn->return_type
+                              ? xr_tref_resolve_in_analyzer(ctx->analyzer, fn->return_type)
+                              : xr_type_new_unit(NULL);
     if (!fn->return_type && fn->name && fn->body) {
         if (xa_body_has_return_expr(fn->body)) {
             char msg[256];
@@ -1645,9 +1646,8 @@ static void xa_collect_returns(AstNode *node, AstNode **out, int *count, int cap
     }
 }
 
-// Infer Json return type for a function whose returns are all same-shape object literals.
-// Returns an interned XrType (XR_KIND_JSON) or NULL.
-static XrType *xa_infer_return_json_type(XrayIsolate *X, FunctionDeclNode *fn) {
+// Infer Record return type for a function whose returns are all same-shape object literals.
+static XrType *xa_infer_return_record_type(XrayIsolate *X, FunctionDeclNode *fn) {
     if (!fn->body || fn->return_type)
         return NULL;
 
@@ -1735,7 +1735,7 @@ static XrType *xa_infer_return_json_type(XrayIsolate *X, FunctionDeclNode *fn) {
         }
         idx++;
     }
-    return xr_type_new_json_with_fields(X, names, types, fc, true);
+    return xr_type_new_record_with_fields(X, names, types, fc, true);
 }
 
 // Phase 2: Collect function body (parameters and body declarations).
@@ -1796,7 +1796,7 @@ void xa_visit_collect_function_body(XaInferContext *ctx, AstNode *node) {
     // This updates the function's return type so that call-site type propagation
     // can see a concrete Json type instead of unknown.
     if (links && !fn->return_type) {
-        XrType *inferred_ret = xa_infer_return_json_type(ctx->analyzer->isolate, fn);
+        XrType *inferred_ret = xa_infer_return_record_type(ctx->analyzer->isolate, fn);
         if (inferred_ret) {
             links->return_type = inferred_ret;
             links->return_type_inferred = true;
@@ -2677,7 +2677,7 @@ skip_layout:
                 for (int j = 0; param_types && j < md->param_count; j++) {
                     param_types[j] =
                         (md->param_types && md->param_types[j])
-                            ? xr_tref_resolve(ctx->analyzer->isolate, md->param_types[j])
+                            ? xr_tref_resolve_in_analyzer(ctx->analyzer, md->param_types[j])
                             : xr_type_new_unknown(NULL);
                     param_names[j] = md->parameters ? md->parameters[j] : NULL;
 
@@ -2699,8 +2699,9 @@ skip_layout:
             // Skip getter/setter (set:xxx, get:xxx) - return types are implicit
             bool is_accessor = md->name && (strncmp(md->name, "set:", 4) == 0 ||
                                             strncmp(md->name, "get:", 4) == 0);
-            XrType *ret_type =
-                md->return_type ? xr_tref_resolve(ctx->analyzer->isolate, md->return_type) : NULL;
+            XrType *ret_type = md->return_type
+                                   ? xr_tref_resolve_in_analyzer(ctx->analyzer, md->return_type)
+                                   : NULL;
             if (!ret_type && is_accessor && md->body) {
                 ret_type = xa_infer_function_return_type(ctx, md->body);
             }

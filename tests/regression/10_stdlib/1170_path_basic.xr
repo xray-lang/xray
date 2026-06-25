@@ -254,15 +254,15 @@ fn test_parse_trailing_separator() {
 
 @test
 fn test_format_basic() {
-    // path.format accepts a PathInfo handle (Json with the documented fields).
-    let obj = { dir: "/home/user", base: "file.txt", root: "", name: "", ext: "" }
+    // path.format accepts a PathInfo handle produced by path.parse.
+    let obj = path.parse("/home/user/file.txt")
     let result = path.format(obj)
     assert_eq(result, "/home/user/file.txt")
 }
 
 @test
-fn test_format_derive_base_from_name_ext() {
-    let obj = { dir: "", base: "", root: "", name: "archive", ext: ".tar" }
+fn test_format_relative_parse_result() {
+    let obj = path.parse("archive.tar")
     let result = path.format(obj)
-    assert_eq(result, "archive.tar")
+    assert_eq(result, "./archive.tar")
 }

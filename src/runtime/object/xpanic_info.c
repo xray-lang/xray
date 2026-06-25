@@ -264,7 +264,7 @@ static XrValue exception_primitive_constructor(XrayIsolate *X, XrValue self, XrV
     }
     inst->fields[PANIC_INFO_FIELD_CODE] = xr_int(code);
 
-    // data: Json? = null (used by xr_panic_info_from_value to wrap thrown values)
+    // data: Json = null (Json already includes null)
     inst->fields[PANIC_INFO_FIELD_DATA] = xr_null();
 
     return self;

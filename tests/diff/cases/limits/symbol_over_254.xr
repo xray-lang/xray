@@ -1,6 +1,6 @@
 // anchor: bytecode-symbol-over-254
 // Static property names push proto-local symbol indexes above 254.
-let obj = {}
+let obj: Json = {}
 obj.p000 = 0
 obj.p001 = 1
 obj.p002 = 2

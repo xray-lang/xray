@@ -472,11 +472,13 @@ XR_FUNC void xi_emit_json_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         emit_inst(ctx, CREATE_ABC(OP_NEWMAP, dst, 0, 0));
         return;
     }
-    /* Build dynamic-layout class chain (jsonRoot -> field1 -> ... -> fieldN).
-     * Empty {} just uses the root. The leaf class becomes the constant the
-     * VM uses to allocate the Json instance. */
+    /* Build dynamic-layout class chain. Record and Json share the fixed-index
+     * field storage machinery but use separate roots and builtin kinds. */
     int n = field_count > 0 ? field_count : 0;
-    XrClass *cls = xr_class_build_json_chain(ctx->isolate, field_names, n, false);
+    bool is_record = v->type && v->type->kind == XR_KIND_RECORD;
+    bool sealed = is_record ? v->type->object.is_sealed : false;
+    XrClass *cls = is_record ? xr_class_build_record_chain(ctx->isolate, field_names, n, sealed)
+                             : xr_class_build_json_chain(ctx->isolate, field_names, n, false);
     if (!cls) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;
@@ -584,10 +586,9 @@ XR_FUNC void xi_emit_json_decode(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     if (ctx->status != XI_EMIT_OK)
         return;
 
-    /* Build sealed class chain: typed JSON decode produces a fixed-shape
-     * sealed Json with exactly the declared fields. */
-    bool sealed = (v->type && v->type->kind == XR_KIND_JSON && v->type->object.is_sealed);
-    XrClass *cls = xr_class_build_json_chain(ctx->isolate, field_names, n, sealed);
+    /* Build sealed Record class chain for typed Json.decode<T>. */
+    bool sealed = (v->type && v->type->kind == XR_KIND_RECORD && v->type->object.is_sealed);
+    XrClass *cls = xr_class_build_record_chain(ctx->isolate, field_names, n, sealed);
     if (!cls) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;

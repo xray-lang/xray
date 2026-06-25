@@ -428,7 +428,7 @@ static XiValue *xi_lower_object_literal_spread(XiLower *l, AstNode *node,
     /* Pre-size the result with the union of statically-known field names. */
     int static_count = 0;
     const char **key_names = NULL;
-    if (result_type && result_type->kind == XR_KIND_JSON && result_type->object.field_count > 0 &&
+    if (XR_TYPE_HAS_OBJECT_SHAPE(result_type) && result_type->object.field_count > 0 &&
         result_type->object.field_names) {
         static_count = result_type->object.field_count;
         key_names = (const char **) xi_func_arena_alloc(

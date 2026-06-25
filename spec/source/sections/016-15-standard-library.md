@@ -67,7 +67,7 @@ TLS client 路径通过 `dialTLS(host, port, timeout?)` 和 `upgradeTLS(conn, ho
 | `base64` | Base64 编/解 |
 | `encoding` | hex / UTF-8 等通用编码（不含 Base64，base64 在自身模块） |
 
-> JSON 编解码**不在**单独的 `json` 模块；通过内置类型 `Json` 的静态方法 `Json.parse(s)` / `Json.stringify(v)` 使用（无需 import；见 §14.10）。
+> JSON 编解码**不在**单独的 `json` 模块；通过内置类型 `Json` 的静态方法 `Json.parse(s)` / `Json.encode(v)` / `Json.stringify(v)` 使用（无需 import；见 §14.11）。
 
 ### 15.4 加密与哈希
 
@@ -196,7 +196,7 @@ The TLS client path is provided by `dialTLS(host, port, timeout?)` and `upgradeT
 | `base64` | Base64 encode / decode |
 | `encoding` | hex / UTF-8 and other generic encodings (Base64 lives in its own module) |
 
-> JSON encoding/decoding is **not** in a separate `json` module; use the built-in type `Json`'s static methods `Json.parse(s)` / `Json.stringify(v)` (no import required; see §14.10).
+> JSON encoding/decoding is **not** in a separate `json` module; use the built-in type `Json`'s static methods `Json.parse(s)` / `Json.encode(v)` / `Json.stringify(v)` (no import required; see §14.11).
 
 ### 15.4 Cryptography and Hashing
 

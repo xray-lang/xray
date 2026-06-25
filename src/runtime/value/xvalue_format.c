@@ -261,8 +261,8 @@ void xr_value_to_strbuf(XrayIsolate *isolate, XrStrBuf *sb, XrValue val, int dep
                     xr_strbuf_append_cstr(sb, et->name, strlen(et->name));
                 break;
             }
-            /* Json: recursive key-value format. */
-            if (cls && cls->builtin_kind == XR_BK_JSON) {
+            /* Json/Record: recursive key-value format. */
+            if (cls && (cls->builtin_kind == XR_BK_JSON || cls->builtin_kind == XR_BK_RECORD)) {
                 format_json(isolate, sb, (XrJson *) gc, depth);
                 break;
             }

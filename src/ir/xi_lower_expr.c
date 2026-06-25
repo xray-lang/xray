@@ -878,7 +878,7 @@ static XiValue *lower_assignment(XiLower *l, AstNode *node) {
 }
 
 static int json_field_index(struct XrType *type, const char *name) {
-    if (!type || type->kind != XR_KIND_JSON || !type->object.field_names || !name)
+    if (!XR_TYPE_HAS_OBJECT_SHAPE(type) || !type->object.field_names || !name)
         return -1;
     for (int i = 0; i < type->object.field_count; i++) {
         if (!type->object.field_names[i])
@@ -2505,13 +2505,13 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
         }
 
         /* Json.decode<T>(data) → XI_JSON_DECODE with compile-time field info.
-         * The analyzer already validated T is a sealed Json type with fields
+         * The analyzer already validated T is a sealed Record type with fields
          * and stored the result type as T? in the node table. */
         if (ma->name && strcmp(ma->name, "decode") == 0 && ma->object &&
             ma->object->type == AST_VARIABLE && strcmp(ma->object->as.variable.name, "Json") == 0 &&
             call->type_arg_count == 1 && call->arg_count == 1) {
             struct XrType *result_type = xi_lower_node_type(l, node);
-            if (result_type && XR_TYPE_IS_JSON(result_type) && result_type->object.is_sealed &&
+            if (result_type && XR_TYPE_IS_RECORD(result_type) && result_type->object.is_sealed &&
                 result_type->object.field_count > 0) {
                 int fc = result_type->object.field_count;
                 XiValue *data_val = xi_lower_expr(l, call->arguments[0]);

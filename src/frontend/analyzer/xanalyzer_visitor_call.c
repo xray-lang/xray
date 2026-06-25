@@ -546,14 +546,14 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                 }
             }
 
-            // Validate: target must be sealed Json type with known fields
-            if (!target_type || !XR_TYPE_IS_JSON(target_type) || !target_type->object.is_sealed ||
+            // Validate: target must be a sealed Record type with known fields.
+            if (!target_type || !XR_TYPE_IS_RECORD(target_type) || !target_type->object.is_sealed ||
                 target_type->object.field_count == 0) {
                 XrLocation loc = {
                     .file = ctx->file_path, .line = node->line, .column = node->column};
                 xa_analyzer_add_diagnostic(
                     ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_GENERIC_CONSTRAINT,
-                    "Json.decode<T>() requires T to be an object type (type alias with fields)",
+                    "Json.decode<T>() requires T to be a sealed Record type alias with fields",
                     &loc);
                 return xr_type_new_unknown(NULL);
             }
@@ -598,8 +598,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             XaSymbolLinks *mc_links = mc_sym ? xa_analyzer_get_links(ctx->analyzer, mc_sym) : NULL;
             if (mc_links && mc_links->class_info) {
                 struct XrClassInfo *m_owner = NULL;
-                XaSymbol *m_sym =
-                    xa_class_info_lookup_member_owner(mc_links->class_info, method_name, &m_owner);
+                XaSymbol *m_sym = xa_class_info_lookup_instance_member_owner(mc_links->class_info,
+                                                                             method_name, &m_owner);
                 if (m_sym && m_sym->kind == XA_SYM_METHOD)
                     xa_check_member_visibility(ctx, call->callee, m_sym, m_owner);
             }
@@ -622,7 +622,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                     class_sym ? xa_analyzer_get_links(ctx->analyzer, class_sym) : NULL;
                 XaSymbol *method_sym =
                     (class_links && class_links->class_info)
-                        ? xa_class_info_lookup_member(class_links->class_info, method_name)
+                        ? xa_class_info_lookup_instance_member(class_links->class_info, method_name)
                         : NULL;
                 call_mutates_receiver =
                     method_sym && method_sym->kind == XA_SYM_METHOD && method_sym->mutates_receiver;
@@ -1244,7 +1244,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                 XaSymbolLinks *class_links = xa_analyzer_get_links(ctx->analyzer, class_sym);
                 if (class_links && class_links->class_info) {
                     XaSymbol *method_sym =
-                        xa_class_info_lookup_member(class_links->class_info, ma->name);
+                        xa_class_info_lookup_instance_member(class_links->class_info, ma->name);
                     if (method_sym && method_sym->kind == XA_SYM_METHOD) {
                         XaSymbolLinks *method_links =
                             xa_analyzer_get_links(ctx->analyzer, method_sym);

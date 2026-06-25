@@ -118,18 +118,23 @@ XaSymbol **xa_builtin_get_members(XrType *type, int *count) {
     return symbols;
 }
 
-// Get member signature for hover
-const char *xa_builtin_get_member_signature(XrType *type, const char *member_name) {
+static const XaBuiltinMember *xa_builtin_find_instance_member(XrType *type,
+                                                              const char *member_name) {
     const XaBuiltinType *bt = xa_builtin_get_type_info(type);
     if (!bt || !member_name)
         return NULL;
-
     for (int i = 0; i < bt->member_count; i++) {
-        if (strcmp(bt->members[i].name, member_name) == 0) {
-            return bt->members[i].signature;
-        }
+        const XaBuiltinMember *m = &bt->members[i];
+        if (!m->is_static && strcmp(m->name, member_name) == 0)
+            return m;
     }
     return NULL;
+}
+
+// Get member signature for instance access and hover
+const char *xa_builtin_get_member_signature(XrType *type, const char *member_name) {
+    const XaBuiltinMember *m = xa_builtin_find_instance_member(type, member_name);
+    return m ? m->signature : NULL;
 }
 
 // Get member documentation
@@ -149,16 +154,8 @@ const char *xa_builtin_get_member_doc(XrType *type, const char *member_name) {
 // Check if member is a method
 bool xa_builtin_is_method(XrType *type, const char *member_name) {
     XR_DCHECK(member_name != NULL, "builtin_is_method: NULL member_name");
-    const XaBuiltinType *bt = xa_builtin_get_type_info(type);
-    if (!bt || !member_name)
-        return false;
-
-    for (int i = 0; i < bt->member_count; i++) {
-        if (strcmp(bt->members[i].name, member_name) == 0) {
-            return bt->members[i].is_method;
-        }
-    }
-    return false;
+    const XaBuiltinMember *m = xa_builtin_find_instance_member(type, member_name);
+    return m ? m->is_method : false;
 }
 
 // Get method return type with generic substitution
@@ -603,16 +600,16 @@ static const XaBuiltinMember g_rt_coropool_functions[] = {
     ((int) (sizeof(g_rt_coropool_functions) / sizeof(g_rt_coropool_functions[0])))
 
 static const XaBuiltinMember g_rt_reflect_functions[] = {
-    {"getType", "(obj: Json): Json", "Get type info of object", true, true},
+    {"getType", "(obj: any): Json", "Get type info of object", true, true},
     {"getTypeByName", "(name: string): Json", "Get type info by name", true, true},
     {"getAllTypes", "(): Array<Json>", "Get all registered types", true, true},
-    {"isInstance", "(obj: Json, cls: Json): bool", "Check if obj is instance of cls", true, true},
-    {"isInstanceOf", "(obj: Json, name: string): bool", "Check by class name", true, true},
-    {"fieldCount", "(obj: Json): int", "Get field count of object", true, true},
-    {"elementType", "(obj: Json): string", "Get element type of container", true, true},
-    {"keyType", "(obj: Json): string", "Get key type of map", true, true},
-    {"valueType", "(obj: Json): string", "Get value type of map", true, true},
-    {"typeOf", "(obj: Json): string", "Get type name string", true, true},
+    {"isInstance", "(obj: any, cls: any): bool", "Check if obj is instance of cls", true, true},
+    {"isInstanceOf", "(obj: any, name: string): bool", "Check by class name", true, true},
+    {"fieldCount", "(obj: any): int", "Get field count of object", true, true},
+    {"elementType", "(obj: any): string", "Get element type of container", true, true},
+    {"keyType", "(obj: any): string", "Get key type of map", true, true},
+    {"valueType", "(obj: any): string", "Get value type of map", true, true},
+    {"typeOf", "(obj: any): string", "Get type name string", true, true},
 };
 #define RT_REFLECT_FUNCTION_COUNT                                                                  \
     ((int) (sizeof(g_rt_reflect_functions) / sizeof(g_rt_reflect_functions[0])))
@@ -1157,7 +1154,7 @@ static XrType *parse_type_str(XrayIsolate *X, const char *s, size_t len) {
             type = xr_type_new_unknown(X);
     }
 
-    if (type && nullable) {
+    if (type && nullable && !xr_type_intrinsically_includes_null(type)) {
         type = xr_type_make_nullable(X, type);
     }
     return type;

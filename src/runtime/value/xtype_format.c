@@ -150,7 +150,9 @@ const char *xr_type_to_string(XrType *type) {
         return xr_pool_strdup(pool, buf);
     }
 
-    if (type->kind == XR_KIND_JSON) {
+    if (XR_TYPE_HAS_OBJECT_SHAPE(type)) {
+        if (XR_TYPE_IS_JSON(type) && type->object.field_count == 0)
+            return TYPE_NAME_JSON;
         if (type->object.type_name) {
             return type->object.type_name;
         }
@@ -164,7 +166,7 @@ const char *xr_type_to_string(XrType *type) {
                 else
                     has_computed = true;
             }
-            /* All fields computed → fall through to plain "Json" */
+            /* All fields computed → fall through to the domain name. */
             if (named > 0) {
                 char *ptr = buf;
                 size_t remaining = TYPE_STR_BUF_SIZE;
@@ -195,7 +197,7 @@ const char *xr_type_to_string(XrType *type) {
                 return xr_pool_strdup(pool, buf);
             }
         }
-        return (type->kind == XR_KIND_JSON) ? TYPE_NAME_JSON : "{...}";
+        return XR_TYPE_IS_JSON(type) ? TYPE_NAME_JSON : TYPE_NAME_RECORD;
     }
 
     if (type->kind == XR_KIND_TYPE_PARAM) {
@@ -412,7 +414,7 @@ XrType *xr_type_make_const(XrayIsolate *X, XrType *base) {
 XrType *xr_type_object_get_field(XrType *type, const char *field_name) {
     if (!type || !field_name)
         return NULL;
-    if (type->kind != XR_KIND_JSON)
+    if (!XR_TYPE_HAS_OBJECT_SHAPE(type))
         return NULL;
 
     for (int i = 0; i < type->object.field_count; i++) {
@@ -462,6 +464,7 @@ bool xr_type_is_default_initializable(const XrType *type) {
         case XR_KIND_FUNCTION:
         case XR_KIND_INTERFACE:
         case XR_KIND_JSON:
+        case XR_KIND_RECORD:
         case XR_KIND_ENUM:
         case XR_KIND_TUPLE:
         case XR_KIND_UNION:

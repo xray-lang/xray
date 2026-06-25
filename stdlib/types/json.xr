@@ -2,6 +2,19 @@
 
 @native
 class Json {
+    static parse(text: string) -> Json
+    static stringify(value: unknown, indent?: int) -> string
+    static encode(value: unknown) -> Json
+    static isValid(text: string, strict?: bool) -> bool
+    static tryParse(text: string) -> Json
+    static keys(obj: Json) -> Array<string>
+    static values(obj: Json) -> Array<Json>
+    static entries(obj: Json) -> Array<(string, Json)>
+    static has(obj: Json, key: string) -> bool
+    static get(obj: Json, key: string, default?: unknown) -> Json
+    static size(obj: Json) -> int
+    static isEmpty(obj: Json) -> bool
+
     keys() -> Array<string>
     values() -> Array<Json>
     entries() -> Array<(string, Json)>

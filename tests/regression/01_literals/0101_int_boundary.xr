@@ -67,10 +67,10 @@ fn test_large_constants() {
 @test
 fn test_sbx_in_json() {
     // The original bug manifested when -32768 appeared in JSON context
-    let obj = {"min": -32768, "max": 32767, "beyond": 32768}
+    let obj: Json = {"min": -32768, "max": 32767, "beyond": 32768}
     assert_eq(obj["min"], -32768)
     assert_eq(obj["max"], 32767)
     assert_eq(obj["beyond"], 32768)
-    assert_eq(obj["min"] + obj["max"], -1)
-    assert_eq(obj["min"] + obj["beyond"], 0)
+    assert_eq(int(obj["min"]) + int(obj["max"]), -1)
+    assert_eq(int(obj["min"]) + int(obj["beyond"]), 0)
 }

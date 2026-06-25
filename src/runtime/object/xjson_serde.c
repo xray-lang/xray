@@ -30,6 +30,7 @@
 #include "../../base/xjson.h"
 
 #include "xmap.h"
+#include "xset.h"
 #include "xarray.h"
 #include "../class/xinstance.h"
 #include "../class/xclass.h"
@@ -117,6 +118,13 @@ typedef struct {
     char error_msg[128];
 } JsonWriter;
 
+typedef struct {
+    XrayIsolate *isolate;
+    int depth;
+    bool has_error;
+    char error_msg[128];
+} JsonEncoder;
+
 static inline void writer_init(JsonWriter *w, XrayIsolate *isolate, int indent) {
     w->cap = 1024;
     w->data = (char *) xr_malloc(w->cap);
@@ -175,6 +183,24 @@ static inline void writer_newline(JsonWriter *w) {
 
 // Forward declaration
 static void stringify_value(JsonWriter *w, XrValue val);
+
+static void encode_value(JsonEncoder *e, XrValue val, XrValue *out);
+
+static inline void encode_error(JsonEncoder *e, const char *msg) {
+    if (!e->has_error) {
+        e->has_error = true;
+        snprintf(e->error_msg, sizeof(e->error_msg), "%s", msg);
+    }
+}
+
+static inline void encode_type_error(JsonEncoder *e, XrValue val) {
+    if (!e->has_error) {
+        XrTypeId tid = xr_value_typeid(val);
+        snprintf(e->error_msg, sizeof(e->error_msg), "cannot encode value of type '%s' to JSON",
+                 xr_typeid_name(tid));
+        e->has_error = true;
+    }
+}
 
 // Stringify string: batch non-escape spans for fewer writer calls
 static void stringify_string(JsonWriter *w, const char *s, size_t len) {
@@ -484,6 +510,174 @@ static void stringify_value(JsonWriter *w, XrValue val) {
     }
 }
 
+static void encode_array(JsonEncoder *e, XrArray *arr, XrValue *out) {
+    XrArray *copy = xr_array_with_capacity(xr_current_coro(e->isolate), arr ? arr->length : 0);
+    if (!copy) {
+        encode_error(e, "out of memory while encoding Array to JSON");
+        *out = xr_null();
+        return;
+    }
+
+    int count = arr ? arr->length : 0;
+    for (int i = 0; i < count && !e->has_error; i++) {
+        XrValue encoded = xr_null();
+        encode_value(e, xr_array_get(arr, i), &encoded);
+        if (!e->has_error)
+            xr_array_push(copy, encoded);
+    }
+
+    *out = e->has_error ? xr_null() : xr_value_from_array(copy);
+}
+
+static void encode_object_fields(JsonEncoder *e, XrInstance *inst, bool dynamic_fields,
+                                 XrValue *out) {
+    XrJson *json = xr_json_new(xr_current_coro(e->isolate));
+    if (!json) {
+        encode_error(e, "out of memory while encoding object to JSON");
+        *out = xr_null();
+        return;
+    }
+
+    XrClass *cls = xr_instance_get_class(inst);
+    if (!cls) {
+        *out = xr_json_value(json);
+        return;
+    }
+
+    for (uint16_t i = 0; i < cls->field_count && !e->has_error; i++) {
+        if (cls->fields[i].flags & XR_FIELD_STATIC)
+            continue;
+        const char *name = cls->fields[i].name;
+        if (!name)
+            continue;
+
+        XrValue field = dynamic_fields ? xr_instance_get_dynamic_field(inst, i)
+                                       : xr_instance_get_field_fast(inst, i);
+        XrValue encoded = xr_null();
+        encode_value(e, field, &encoded);
+        if (!e->has_error)
+            xr_json_set_by_key(e->isolate, json, name, encoded);
+    }
+
+    *out = e->has_error ? xr_null() : xr_json_value(json);
+}
+
+static void encode_map(JsonEncoder *e, XrMap *map, XrValue *out) {
+    XrJson *json = xr_json_new(xr_current_coro(e->isolate));
+    if (!json) {
+        encode_error(e, "out of memory while encoding Map to JSON");
+        *out = xr_null();
+        return;
+    }
+    if (!map || (map->flags & XR_MAP_FLAG_DUMMY)) {
+        *out = xr_json_value(json);
+        return;
+    }
+
+    for (uint32_t i = 0; i < map->nentries && !e->has_error; i++) {
+        XrMapEntry *entry = xr_map_entry(map, i);
+        if (entry->key_tt == XR_MAP_ENTRY_NIL_KEY)
+            continue;
+
+        char int_key[32];
+        const char *key = NULL;
+        if (XR_IS_STRING(entry->key)) {
+            key = XR_TO_STRING(entry->key)->data;
+        } else if (XR_IS_INT(entry->key)) {
+            snprintf(int_key, sizeof(int_key), "%lld", (long long) XR_TO_INT(entry->key));
+            key = int_key;
+        } else {
+            encode_error(e, "Json.encode(Map) requires string or int keys");
+            break;
+        }
+
+        XrValue encoded = xr_null();
+        encode_value(e, entry->value, &encoded);
+        if (!e->has_error)
+            xr_json_set_by_key(e->isolate, json, key, encoded);
+    }
+
+    *out = e->has_error ? xr_null() : xr_json_value(json);
+}
+
+static void encode_set(JsonEncoder *e, XrSet *set, XrValue *out) {
+    XrArray *arr = xr_array_with_capacity(xr_current_coro(e->isolate), set ? (int) set->count : 0);
+    if (!arr) {
+        encode_error(e, "out of memory while encoding Set to JSON");
+        *out = xr_null();
+        return;
+    }
+    if (!set || (set->flags & XR_SET_FLAG_DUMMY)) {
+        *out = xr_value_from_array(arr);
+        return;
+    }
+
+    for (uint32_t i = 0; i < set->nentries && !e->has_error; i++) {
+        XrSetEntry *entry = xr_set_entry(set, i);
+        if (entry->val_tt == XR_SET_ENTRY_NIL)
+            continue;
+        XrValue encoded = xr_null();
+        encode_value(e, entry->value, &encoded);
+        if (!e->has_error)
+            xr_array_push(arr, encoded);
+    }
+
+    *out = e->has_error ? xr_null() : xr_value_from_array(arr);
+}
+
+static void encode_value(JsonEncoder *e, XrValue val, XrValue *out) {
+    if (e->depth >= JSON_MAX_DEPTH) {
+        encode_error(e, "value is too deeply nested for JSON");
+        *out = xr_null();
+        return;
+    }
+
+    if (XR_IS_NULL(val) || XR_IS_BOOL(val) || XR_IS_INT(val) || XR_IS_STRING(val)) {
+        *out = val;
+        return;
+    }
+
+    if (XR_IS_FLOAT(val)) {
+        double d = XR_TO_FLOAT(val);
+        *out = (isinf(d) || isnan(d)) ? xr_null() : val;
+        return;
+    }
+
+    if (XR_IS_CHAR(val)) {
+        char buf[XR_UTF8_MAX_BYTES];
+        int n = xr_utf8_encode(XR_TO_CHAR(val), buf);
+        *out = n > 0 ? xr_string_value(xr_string_new(e->isolate, buf, (size_t) n)) : xr_null();
+        return;
+    }
+
+    e->depth++;
+    if (XR_IS_ARRAY(val)) {
+        encode_array(e, XR_TO_ARRAY(val), out);
+    } else if (xr_value_is_json(val) || xr_value_is_record(val)) {
+        encode_object_fields(e, (XrInstance *) XR_TO_PTR(val), true, out);
+    } else if (XR_IS_MAP(val)) {
+        encode_map(e, XR_TO_MAP(val), out);
+    } else if (XR_IS_SET(val)) {
+        encode_set(e, XR_TO_SET(val), out);
+    } else if (XR_IS_ENUM_VALUE(val)) {
+        XrEnumValue *ev = XR_TO_ENUM_VALUE(val);
+        const char *name = ev->member_name ? ev->member_name : "";
+        *out = xr_string_value(xr_string_intern(e->isolate, name, strlen(name), 0));
+    } else if (xr_value_is_datetime(e->isolate, val)) {
+        XrInstance *inst = (XrInstance *) XR_TO_PTR(val);
+        XrDateTime *dt = (XrDateTime *) xr_instance_native_body(inst);
+        char buf[64];
+        int n = xr_datetime_to_iso_string(dt, buf, sizeof(buf));
+        *out = n > 0 ? xr_string_value(xr_string_new(e->isolate, buf, (size_t) n)) : xr_null();
+    } else if (xr_value_is_instance(val)) {
+        encode_object_fields(e, (XrInstance *) XR_TO_PTR(val), false, out);
+    } else {
+        encode_type_error(e, val);
+        *out = xr_null();
+    }
+    e->depth--;
+}
+
 /* ========== Public Functions ========== */
 
 // parse(str) - Parse JSON string
@@ -530,6 +724,21 @@ XrJsonStringifyResult xr_json_stringify_core(XrayIsolate *X, XrValue val, int in
     writer_free(&writer);
 
     out.result = xr_string_value(str);
+    return out;
+}
+
+XrJsonEncodeResult xr_json_encode_core(XrayIsolate *X, XrValue val) {
+    XrJsonEncodeResult out = {.result = xr_null(), .has_error = false};
+    out.error_msg[0] = '\0';
+
+    JsonEncoder enc = {.isolate = X, .depth = 0, .has_error = false};
+    enc.error_msg[0] = '\0';
+    encode_value(&enc, val, &out.result);
+    if (enc.has_error) {
+        out.has_error = true;
+        memcpy(out.error_msg, enc.error_msg, sizeof(out.error_msg));
+        out.result = xr_null();
+    }
     return out;
 }
 

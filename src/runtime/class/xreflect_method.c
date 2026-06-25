@@ -207,6 +207,8 @@ static const char *type_kind_to_name(XrTypeKind kind) {
             return "Channel";
         case XR_KIND_JSON:
             return "Json";
+        case XR_KIND_RECORD:
+            return "Record";
         case XR_KIND_INSTANCE:
             return "object";
         case XR_KIND_FUNCTION:

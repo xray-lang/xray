@@ -149,6 +149,7 @@ XR_FUNC bool xa_type_needs_borrow_escape_guard(XrType *type) {
         case XR_KIND_SET:
         case XR_KIND_CHANNEL:
         case XR_KIND_JSON:
+        case XR_KIND_RECORD:
         case XR_KIND_INSTANCE:
         case XR_KIND_FUNCTION:
         case XR_KIND_TUPLE:

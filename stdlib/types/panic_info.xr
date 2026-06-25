@@ -14,7 +14,7 @@ class PanicInfo {
     stack: Array<string>
     cause: PanicInfo?
     code: int
-    data: Json?
+    data: Json
     constructor(message: string = "", cause: PanicInfo? = null)
     toString() -> string
 }

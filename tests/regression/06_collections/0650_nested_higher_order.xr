@@ -164,10 +164,11 @@ fn test_chain_with_type_change() {
 @test
 fn test_reduce_to_map() {
     let pairs = [["a", 1], ["b", 2], ["c", 3]]
+    let seed: Json = {}
     let obj = pairs.reduce(fn(acc, pair) {
         acc[pair[0]] = pair[1]
         return acc
-    }, {})
+    }, seed)
     assert_eq(obj.a, 1)
     assert_eq(obj.b, 2)
     assert_eq(obj.c, 3)
@@ -423,13 +424,14 @@ fn test_unique_via_reduce() {
 @test
 fn test_count_by_reduce() {
     let words = ["apple", "banana", "apple", "cherry", "banana", "apple"]
+    let seed: Json = {}
     let counts = words.reduce(fn(acc, word) {
         if (acc[word] == null) {
             acc[word] = 0
         }
         acc[word] = acc[word] + 1
         return acc
-    }, {})
+    }, seed)
     assert_eq(counts.apple, 3)
     assert_eq(counts.banana, 2)
     assert_eq(counts.cherry, 1)

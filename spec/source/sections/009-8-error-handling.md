@@ -238,7 +238,7 @@ class PanicInfo {
     stack: Array<string>        // 自动捕获的调用栈
     cause: PanicInfo?           // 链式 cause
     code: int                   // 错误码
-    data: Json?                 // 附加数据
+    data: Json                  // 附加数据；无数据时为 JSON null
 
     constructor(message: string = "", cause: PanicInfo? = null)
     fn toString() -> string
@@ -630,7 +630,7 @@ class PanicInfo {
     stack: Array<string>        // automatically captured call stack
     cause: PanicInfo?           // chained cause
     code: int                   // error code
-    data: Json?                 // additional data
+    data: Json                  // additional data; JSON null when absent
 
     constructor(message: string = "", cause: PanicInfo? = null)
     fn toString() -> string

@@ -352,8 +352,9 @@ let users = "Bob"
 let obj = { users }              // shorthand
 ```
 
-- 默认推断为**可扩展**的结构化对象类型（见 §2.4.6 / §2.10 Json 行为）。
-- 用 `type` 别名固化结构：`let u: User = {...}`（编译期检查字段集，密封）。
+- 默认推断为 sealed structural `Record`（见 §2.4.6），字段集和字段 offset 在编译期固定，适合 AOT 快路径。
+- 只有显式 `Json` 期望类型时才按动态 Json object literal 解释；typed value 进入 JSON 边界使用 `Json.encode(value)`。
+- 用 `type` 别名命名 Record：`let u: User = {...}`（编译期检查字段集，密封）。
 
 #### Bytes `Bytes(...)`
 
@@ -905,8 +906,9 @@ let users = "Bob"
 let obj = { users }              // shorthand
 ```
 
-- Defaults to an **extensible** structured object type (see §2.4.6 / §2.10 Json behavior).
-- Fix the structure with a `type` alias: `let u: User = {...}` (compile-time field check, sealed).
+- Defaults to sealed structural `Record` (see §2.4.6); the field set and offsets are fixed at compile time for AOT fast paths.
+- It is interpreted as a dynamic Json object literal only under an explicit `Json` expected type; use `Json.encode(value)` when a typed value crosses a JSON boundary.
+- Name the Record with a `type` alias: `let u: User = {...}` (compile-time field check, sealed).
 
 #### Bytes `Bytes(...)`
 

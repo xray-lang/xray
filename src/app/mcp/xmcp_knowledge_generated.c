@@ -2202,11 +2202,12 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "let empty = #[]\n"
             "```\n"
             "\n"
-            "### Json object\n"
+            "### Record / Json object\n"
             "```xray\n"
-            "// Object/Json literal: identifier or string key + colon ':'\n"
+            "// Record/Json object literal: identifier or string key + colon ':'\n"
             "let data: Json = { name: \"Alice\", tags: [\"a\", \"b\"], age: 30 }\n"
-            "let user = { name: \"Bob\", age: 25 }       // default type is Json\n"
+            "let user = { name: \"Bob\", age: 25 }       // default type is sealed Record\n"
+            "typeof(user)                              // \"Record\"\n"
             "data.name              // type: Json (field access returns Json)\n"
             "data[\"name\"]           // equivalent\n"
             "\n"
@@ -3691,16 +3692,17 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
     },
     {
         .module = "json",
-        .summary = "Built-in Json utility class for parse/stringify and object helpers",
+        .summary = "Built-in Json utility class for parse/encode/stringify and object helpers",
         .body =
             "# Json built-in utility\n"
             "\n"
-            "Json is a built-in utility class; use Json.parse() and Json.stringify() directly without import.\n"
+            "Json is a built-in utility class; use Json.parse(), Json.encode(), and Json.stringify() directly without import.\n"
             "\n"
             "Use it directly without `import`.\n"
             "\n"
             "### Common helpers\n"
             "- `Json.parse(text)`\n"
+            "- `Json.encode(value)`\n"
             "- `Json.stringify(value, indent?)`\n"
             "- `Json.isValid(text)` / `Json.tryParse(text)`\n"
             "- `Json.keys(obj)` / `Json.values(obj)` / `Json.entries(obj)`\n"
@@ -4400,9 +4402,10 @@ XR_DATADEF const char xmcp_generated_cheatsheet[] =
     "let s: Set<int> = #[1, 2, 3]\n"
     "```\n"
     "```xray\n"
-    "// Object/Json literal: identifier or string key + colon ':'\n"
+    "// Record/Json object literal: identifier or string key + colon ':'\n"
     "let data: Json = { name: \"Alice\", tags: [\"a\", \"b\"], age: 30 }\n"
-    "let user = { name: \"Bob\", age: 25 }       // default type is Json\n"
+    "let user = { name: \"Bob\", age: 25 }       // default type is sealed Record\n"
+    "typeof(user)                              // \"Record\"\n"
     "data.name              // type: Json (field access returns Json)\n"
     "data[\"name\"]           // equivalent\n"
     "\n"
@@ -4741,7 +4744,7 @@ XR_DATADEF const char xmcp_generated_stdlib_list[] =
     "\n"
     "Usage: `import <module>` then call `module.function()`.\n"
     "\n"
-    "Built-in JSON helpers are exposed as `Json.parse()` / `Json.stringify()` without `import`.\n"
+    "Built-in JSON helpers are exposed as `Json.parse()` / `Json.encode()` / `Json.stringify()` without `import`.\n"
     "";
 
 // clang-format on

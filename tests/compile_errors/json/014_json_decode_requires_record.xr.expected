@@ -1,0 +1,2 @@
+Json.decode<T>() requires T to be a sealed Record type alias with fields
+

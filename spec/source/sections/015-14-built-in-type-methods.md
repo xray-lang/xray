@@ -137,7 +137,7 @@ order: 015
 | `forEach(fn)` | 遍历 |
 | `iterator()` / `entriesIterator()` | 迭代协议 |
 
-**Map 字面量**：`#{"k1": v1, "k2": v2}` 或 `#{}`；使用 `:`，靠 `#` 前缀区别于 Object/Json 字面量。
+**Map 字面量**：`#{"k1": v1, "k2": v2}` 或 `#{}`；使用 `:`，靠 `#` 前缀区别于 Record/Json 对象字面量。
 
 ### 14.9 `Set<T>` 方法
 
@@ -179,9 +179,10 @@ order: 015
 | `Json.size(obj)` | 字段数量 |
 | `Json.isEmpty(obj)` | 是否为空 |
 | `Json.parse(s)` / `Json.tryParse(s)` / `Json.isValid(s)` | JSON 解析与校验 |
+| `Json.encode(value)` | 显式 typed value → Json 边界转换 |
 | `Json.stringify(value, indent?)` | 序列化 |
 
-**字面量**：`{ name: "alice", age: 30 }`，动态类型为 `Json`。如需 sealed 对象，用 `type T = { name: string, age: int }` 标注。
+**字面量**：`{ name: "alice", age: 30 }` 默认是 sealed `Record`。显式写 `let j: Json = {...}` 时才是动态 Json object；typed value 进入 JSON 边界使用 `Json.encode(value)`。
 
 ### 14.12 `Range`
 
@@ -387,7 +388,7 @@ The string index expression `s[i]` returns `char`; `charAt(i)` keeps the JavaScr
 | `forEach(fn)` | traversal |
 | `iterator()` / `entriesIterator()` | iteration protocol |
 
-**Map literal**: `#{"k1": v1, "k2": v2}` or `#{}`; entries use `:`, distinguished from Object/Json literals by the `#` prefix.
+**Map literal**: `#{"k1": v1, "k2": v2}` or `#{}`; entries use `:`, distinguished from Record/Json object literals by the `#` prefix.
 
 ### 14.9 `Set<T>` Methods
 
@@ -429,9 +430,10 @@ The string index expression `s[i]` returns `char`; `charAt(i)` keeps the JavaScr
 | `Json.size(obj)` | number of fields |
 | `Json.isEmpty(obj)` | emptiness predicate |
 | `Json.parse(s)` / `Json.tryParse(s)` / `Json.isValid(s)` | JSON parsing and validation |
+| `Json.encode(value)` | explicit typed value → Json boundary conversion |
 | `Json.stringify(value, indent?)` | serialization |
 
-**Literal**: `{ name: "alice", age: 30 }` has dynamic type `Json`. For sealed objects, annotate with `type T = { name: string, age: int }`.
+**Literal**: `{ name: "alice", age: 30 }` defaults to sealed `Record`. It becomes a dynamic Json object only with an explicit `Json` annotation such as `let j: Json = {...}`; use `Json.encode(value)` when a typed value crosses a JSON boundary.
 
 ### 14.12 `Range`
 

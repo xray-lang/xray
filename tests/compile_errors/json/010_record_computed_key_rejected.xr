@@ -1,0 +1,3 @@
+let key = "dynamic"
+let obj = { [key]: 1 }
+

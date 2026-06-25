@@ -678,7 +678,7 @@ let c: Array<string> = []         // 显式空数组
 
 哈希字典，**保持插入顺序**。详见 §14.7。
 
-**Map 字面量**必须用 `#{ ... }` 前缀，分隔符用 `:`（与 Json 一致，靠 `#` 前缀消歧）：
+**Map 字面量**必须用 `#{ ... }` 前缀，分隔符用 `:`（与 Record / Json 对象一致，靠 `#` 前缀消歧）：
 
 ```xray
 let m: Map<string, int> = #{"a": 1, "b": 2}
@@ -724,16 +724,17 @@ let buf = Bytes(1024)
 let init = Bytes([72, 101, 108, 108, 111])
 ```
 
-#### 2.4.6 `Json` 与对象字面量
+#### 2.4.6 `Record` / `Json` 与对象字面量
 
-`Json` 是 xray 的**动态结构化数据类型**——可以装载 JSON 等价的任意结构。详见 §14.10 与 §2.10。
+裸对象字面量默认推断为 sealed structural `Record`，用于普通业务对象、options 和多字段返回值。`Json` 是显式 opt-in 的 JSON 值域类型：它用于外部数据交换边界，可以装载 JSON 等价的任意结构，并且本身包含 `null`。
 
 **对象字面量** `{ field: value, ... }` 与 Map 字面量的关键区别：
 
 ```xray
-// Object/Json 字面量：标识符或字符串 key + 冒号 ':'
+// Record/Json 对象字面量：标识符或字符串 key + 冒号 ':'
 let data: Json = { name: "Alice", tags: ["a", "b"], age: 30 }
-let user = { name: "Bob", age: 25 }       // 默认类型为 Json
+let user = { name: "Bob", age: 25 }       // 默认类型为 sealed Record
+typeof(user)                              // "Record"
 data.name              // 类型: Json（字段访问返回 Json）
 data["name"]           // 等价
 
@@ -750,12 +751,13 @@ let m = #{"k1": 1, "k2": 2}           // 类型: Map<string, int>
 
 | 写法 | 类型 | 备注 |
 |---|---|---|
-| `{ name: "x", age: 1 }` | `Json` / `Object` | 标识符或字符串 key 后跟 `:` |
-| `{ x: y }`（`x` 是字段名，`y` 是变量名） | `Json` / `Object` | 字段简写 `{ x }` 等价 `{ x: x }`，仅裸 key |
+| `{ name: "x", age: 1 }` | sealed anonymous `Record` | 标识符或字符串 key 后跟 `:` |
+| `let j: Json = { name: "x" }` | `Json` object | 只有显式 `Json` 期望类型时按动态 Json 解释 |
+| `{ x: y }`（`x` 是字段名，`y` 是变量名） | sealed anonymous `Record` | 字段简写 `{ x }` 等价 `{ x: x }`，仅裸 key |
 | `#{"a": 1}` | `Map<K, V>` | `#` 前缀消歧，分隔符用 `:` |
 | `Point{x: 1.0, y: 2.0}` | `Point`（struct） | 类型名 + `{...}` 字面量 |
 
-**密封（sealed）对象类型**：通过 `type` 别名为对象类型起名后，类型成为 sealed——访问/赋值未声明字段是编译错误：
+**Record 类型**：裸对象字面量和 `type T = {...}` 都是 Record。默认 Record 是 sealed——访问/赋值未声明字段是编译错误；需要 JSON 边界时显式标注 `Json` 或调用 `Json.encode(value)`。
 
 ```xray
 type User = { name: string, age: int }
@@ -764,9 +766,11 @@ let u: User = { name: "Alice", age: 30 }
 print(u.name)         // OK
 // u.extra = "x"      // 编译错误：sealed type User has no field 'extra'
 
-// 不指定类型则为动态 Json
-let u2 = { name: "Alice", age: 30 }      // Json（可动态扩展）
-u2.extra = "x"        // OK（Json 是动态的）
+let u2 = { name: "Alice", age: 30 }      // sealed Record
+// u2.extra = "x"     // 编译错误
+
+let j: Json = { name: "Alice", age: 30 } // 动态 Json object
+j.extra = "x"        // OK（Json 是动态的）
 ```
 
 #### 2.4.7 `BigInt`
@@ -794,6 +798,8 @@ let x: int? = null      // OK
 let y: int? = 42        // OK
 let z: int = null       // 编译错误：null 不是 int
 ```
+
+`Json` 本身包含 `null`，因此 `Json?` 与 `Json | null` 是语义重复并在解析阶段报错；需要表达解析失败或缺失值时应使用 `Result<T, E>`、ADT、或含显式状态字段的 Record。
 
 **可空原始类型一等公民**：`int?` / `float?` / `bool?` 与其它 `T?` 一样是合法类型，泛型与容器会自然产生它们（如 `Map<string, bool>.get(k) -> bool?`、`fn find<T>(...) -> T?` 在 `T = bool` 时）。它们以 tagged 表示承载 `null`，因此 `null` 值在 `print` / `string()` / 字符串拼接中统一显示为 `"null"`（不是底层数值 `0`），VM 与 AOT 一致。
 
@@ -1330,8 +1336,9 @@ let users = "Bob"
 let obj = { users }              // shorthand
 ```
 
-- 默认推断为**可扩展**的结构化对象类型（见 §2.4.6 / §2.10 Json 行为）。
-- 用 `type` 别名固化结构：`let u: User = {...}`（编译期检查字段集，密封）。
+- 默认推断为 sealed structural `Record`（见 §2.4.6），字段集和字段 offset 在编译期固定，适合 AOT 快路径。
+- 只有显式 `Json` 期望类型时才按动态 Json object literal 解释；typed value 进入 JSON 边界使用 `Json.encode(value)`。
+- 用 `type` 别名命名 Record：`let u: User = {...}`（编译期检查字段集，密封）。
 
 #### Bytes `Bytes(...)`
 
@@ -3323,7 +3330,7 @@ class PanicInfo {
     stack: Array<string>        // 自动捕获的调用栈
     cause: PanicInfo?           // 链式 cause
     code: int                   // 错误码
-    data: Json?                 // 附加数据
+    data: Json                  // 附加数据；无数据时为 JSON null
 
     constructor(message: string = "", cause: PanicInfo? = null)
     fn toString() -> string
@@ -4472,7 +4479,7 @@ print(typeof(x) == "int")       // true
 | `Set.from(iterable)` | 从 string / Array / Set 创建 Set |
 | `Set.range(start, end)` | 创建闭区间整数 Set |
 
-BigInt 使用 `123n` 字面量或 `int.toBigInt()`；Json 使用 `Json.parse` / `Json.stringify`；DateTime 使用 `datetime` 模块工厂函数。
+BigInt 使用 `123n` 字面量或 `int.toBigInt()`；Json 使用 `Json.parse` / `Json.encode` / `Json.stringify`；DateTime 使用 `datetime` 模块工厂函数。
 
 ---
 
@@ -4607,7 +4614,7 @@ BigInt 使用 `123n` 字面量或 `int.toBigInt()`；Json 使用 `Json.parse` / 
 | `forEach(fn)` | 遍历 |
 | `iterator()` / `entriesIterator()` | 迭代协议 |
 
-**Map 字面量**：`#{"k1": v1, "k2": v2}` 或 `#{}`；使用 `:`，靠 `#` 前缀区别于 Object/Json 字面量。
+**Map 字面量**：`#{"k1": v1, "k2": v2}` 或 `#{}`；使用 `:`，靠 `#` 前缀区别于 Record/Json 对象字面量。
 
 ### 14.9 `Set<T>` 方法
 
@@ -4649,9 +4656,10 @@ BigInt 使用 `123n` 字面量或 `int.toBigInt()`；Json 使用 `Json.parse` / 
 | `Json.size(obj)` | 字段数量 |
 | `Json.isEmpty(obj)` | 是否为空 |
 | `Json.parse(s)` / `Json.tryParse(s)` / `Json.isValid(s)` | JSON 解析与校验 |
+| `Json.encode(value)` | 显式 typed value → Json 边界转换 |
 | `Json.stringify(value, indent?)` | 序列化 |
 
-**字面量**：`{ name: "alice", age: 30 }`，动态类型为 `Json`。如需 sealed 对象，用 `type T = { name: string, age: int }` 标注。
+**字面量**：`{ name: "alice", age: 30 }` 默认是 sealed `Record`。显式写 `let j: Json = {...}` 时才是动态 Json object；typed value 进入 JSON 边界使用 `Json.encode(value)`。
 
 ### 14.12 `Range`
 
@@ -4785,7 +4793,7 @@ TLS client 路径通过 `dialTLS(host, port, timeout?)` 和 `upgradeTLS(conn, ho
 | `base64` | Base64 编/解 |
 | `encoding` | hex / UTF-8 等通用编码（不含 Base64，base64 在自身模块） |
 
-> JSON 编解码**不在**单独的 `json` 模块；通过内置类型 `Json` 的静态方法 `Json.parse(s)` / `Json.stringify(v)` 使用（无需 import；见 §14.10）。
+> JSON 编解码**不在**单独的 `json` 模块；通过内置类型 `Json` 的静态方法 `Json.parse(s)` / `Json.encode(v)` / `Json.stringify(v)` 使用（无需 import；见 §14.11）。
 
 ### 15.4 加密与哈希
 
@@ -4948,7 +4956,7 @@ class PanicInfo {
     stack: Array<string>        // 自动 capture 的调用栈，每帧一行格式化字符串
     cause: PanicInfo?           // 链式 cause
     code: int                   // 错误码（从 "E0xxx: ..." 前缀自动解析，默认 0）
-    data: Json?                 // 运行时故障的可选结构化附加数据
+    data: Json                  // 运行时故障的结构化附加数据；无数据时为 JSON null
 
     constructor(message: string = "", cause: PanicInfo? = null)
     fn toString() -> string
@@ -5229,7 +5237,7 @@ class PanicInfo {
     stack: Array<string>        // 自动 capture 的调用栈，每帧一行格式化字符串
     cause: PanicInfo?           // 链式 cause
     code: int                   // 错误码（从 "E0xxx: ..." 前缀自动解析，默认 0）
-    data: Json?                 // 运行时故障的可选结构化附加数据
+    data: Json                  // 运行时故障的结构化附加数据；无数据时为 JSON null
 
     constructor(message: string = "", cause: PanicInfo? = null)
     fn toString() -> string

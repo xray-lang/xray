@@ -723,16 +723,17 @@ let buf = Bytes(1024)
 let init = Bytes([72, 101, 108, 108, 111])
 ```
 
-#### 2.4.6 `Json` and Object Literals
+#### 2.4.6 `Record` / `Json` and Object Literals
 
-`Json` is xray's **dynamic structured data type** — it can hold any JSON-equivalent structure. See §14.10 and §2.10.
+Bare object literals default to sealed structural `Record`, for ordinary business objects, options, and multi-field returns. `Json` is an explicit opt-in JSON value-domain type: it is used at external data-exchange boundaries, can hold any JSON-equivalent structure, and intrinsically includes `null`.
 
 The key difference between an **object literal** `{ field: value, ... }` and a Map literal:
 
 ```xray
-// Object/Json literal: identifier or string key + colon ':'
+// Record/Json object literal: identifier or string key + colon ':'
 let data: Json = { name: "Alice", tags: ["a", "b"], age: 30 }
-let user = { name: "Bob", age: 25 }       // default type is Json
+let user = { name: "Bob", age: 25 }       // default type is sealed Record
+typeof(user)                              // "Record"
 data.name              // type: Json (field access returns Json)
 data["name"]           // equivalent
 
@@ -749,12 +750,13 @@ let m = #{"k1": 1, "k2": 2}           // type: Map<string, int>
 
 | Form | Type | Notes |
 |---|---|---|
-| `{ name: "x", age: 1 }` | `Json` / `Object` | identifier or string key followed by `:` |
-| `{ x: y }` (`x` is field name, `y` is variable) | `Json` / `Object` | shorthand `{ x }` equivalent to `{ x: x }`; bare key only |
+| `{ name: "x", age: 1 }` | sealed anonymous `Record` | identifier or string key followed by `:` |
+| `let j: Json = { name: "x" }` | `Json` object | interpreted as dynamic Json only with an explicit `Json` expected type |
+| `{ x: y }` (`x` is field name, `y` is variable) | sealed anonymous `Record` | shorthand `{ x }` equivalent to `{ x: x }`; bare key only |
 | `#{"a": 1}` | `Map<K, V>` | `#` prefix disambiguates; separator `:` |
 | `Point{x: 1.0, y: 2.0}` | `Point` (struct) | type name + `{...}` literal |
 
-**Sealed object types**: once an object type is named via `type`, it becomes sealed — accessing or assigning an undeclared field is a compile error:
+**Record types**: bare object literals and `type T = {...}` are Records. Records are sealed by default — accessing or assigning an undeclared field is a compile error. Use an explicit `Json` annotation or `Json.encode(value)` at JSON boundaries.
 
 ```xray
 type User = { name: string, age: int }
@@ -763,9 +765,11 @@ let u: User = { name: "Alice", age: 30 }
 print(u.name)         // OK
 // u.extra = "x"      // compile error: sealed type User has no field 'extra'
 
-// Without a type annotation, the literal is dynamic Json
-let u2 = { name: "Alice", age: 30 }      // Json (dynamically extensible)
-u2.extra = "x"        // OK (Json is dynamic)
+let u2 = { name: "Alice", age: 30 }      // sealed Record
+// u2.extra = "x"     // compile error
+
+let j: Json = { name: "Alice", age: 30 } // dynamic Json object
+j.extra = "x"        // OK (Json is dynamic)
 ```
 
 #### 2.4.7 `BigInt`
@@ -793,6 +797,8 @@ let x: int? = null      // OK
 let y: int? = 42        // OK
 let z: int = null       // compile error: null is not int
 ```
+
+`Json` intrinsically includes `null`, so `Json?` and `Json | null` are redundant and rejected during parsing. Use `Result<T, E>`, an ADT, or a Record with an explicit status field for parse failure or absence.
 
 **Nullable primitives are first-class**: `int?` / `float?` / `bool?` are ordinary `T?` types and arise naturally from generics and containers (e.g. `Map<string, bool>.get(k) -> bool?`, or `fn find<T>(...) -> T?` at `T = bool`). They carry `null` in the tagged representation, so a `null` value renders as `"null"` in `print` / `string()` / string concatenation (never as the raw payload `0`), identically in the VM and AOT.
 
@@ -1335,8 +1341,9 @@ let users = "Bob"
 let obj = { users }              // shorthand
 ```
 
-- Defaults to an **extensible** structured object type (see §2.4.6 / §2.10 Json behavior).
-- Fix the structure with a `type` alias: `let u: User = {...}` (compile-time field check, sealed).
+- Defaults to sealed structural `Record` (see §2.4.6); the field set and offsets are fixed at compile time for AOT fast paths.
+- It is interpreted as a dynamic Json object literal only under an explicit `Json` expected type; use `Json.encode(value)` when a typed value crosses a JSON boundary.
+- Name the Record with a `type` alias: `let u: User = {...}` (compile-time field check, sealed).
 
 #### Bytes `Bytes(...)`
 
@@ -3330,7 +3337,7 @@ class PanicInfo {
     stack: Array<string>        // automatically captured call stack
     cause: PanicInfo?           // chained cause
     code: int                   // error code
-    data: Json?                 // additional data
+    data: Json                  // additional data; JSON null when absent
 
     constructor(message: string = "", cause: PanicInfo? = null)
     fn toString() -> string
@@ -4485,7 +4492,7 @@ Coroutine launch and waiting are syntax, not global functions: `go`, `await`, `a
 | `Set.from(iterable)` | Set from a string / Array / Set |
 | `Set.range(start, end)` | inclusive integer Set |
 
-BigInt uses the `123n` literal or `int.toBigInt()`; Json uses `Json.parse` / `Json.stringify`; DateTime uses factory functions in the `datetime` module.
+BigInt uses the `123n` literal or `int.toBigInt()`; Json uses `Json.parse` / `Json.encode` / `Json.stringify`; DateTime uses factory functions in the `datetime` module.
 
 ---
 
@@ -4620,7 +4627,7 @@ The string index expression `s[i]` returns `char`; `charAt(i)` keeps the JavaScr
 | `forEach(fn)` | traversal |
 | `iterator()` / `entriesIterator()` | iteration protocol |
 
-**Map literal**: `#{"k1": v1, "k2": v2}` or `#{}`; entries use `:`, distinguished from Object/Json literals by the `#` prefix.
+**Map literal**: `#{"k1": v1, "k2": v2}` or `#{}`; entries use `:`, distinguished from Record/Json object literals by the `#` prefix.
 
 ### 14.9 `Set<T>` Methods
 
@@ -4662,9 +4669,10 @@ The string index expression `s[i]` returns `char`; `charAt(i)` keeps the JavaScr
 | `Json.size(obj)` | number of fields |
 | `Json.isEmpty(obj)` | emptiness predicate |
 | `Json.parse(s)` / `Json.tryParse(s)` / `Json.isValid(s)` | JSON parsing and validation |
+| `Json.encode(value)` | explicit typed value → Json boundary conversion |
 | `Json.stringify(value, indent?)` | serialization |
 
-**Literal**: `{ name: "alice", age: 30 }` has dynamic type `Json`. For sealed objects, annotate with `type T = { name: string, age: int }`.
+**Literal**: `{ name: "alice", age: 30 }` defaults to sealed `Record`. It becomes a dynamic Json object only with an explicit `Json` annotation such as `let j: Json = {...}`; use `Json.encode(value)` when a typed value crosses a JSON boundary.
 
 ### 14.12 `Range`
 
@@ -4798,7 +4806,7 @@ The TLS client path is provided by `dialTLS(host, port, timeout?)` and `upgradeT
 | `base64` | Base64 encode / decode |
 | `encoding` | hex / UTF-8 and other generic encodings (Base64 lives in its own module) |
 
-> JSON encoding/decoding is **not** in a separate `json` module; use the built-in type `Json`'s static methods `Json.parse(s)` / `Json.stringify(v)` (no import required; see §14.10).
+> JSON encoding/decoding is **not** in a separate `json` module; use the built-in type `Json`'s static methods `Json.parse(s)` / `Json.encode(v)` / `Json.stringify(v)` (no import required; see §14.11).
 
 ### 15.4 Cryptography and Hashing
 
@@ -4961,7 +4969,7 @@ class PanicInfo {
     stack: Array<string>        // automatically captured call stack, one formatted line per frame
     cause: PanicInfo?           // chained cause
     code: int                   // error code (auto-parsed from "E0xxx: ..." prefix; default 0)
-    data: Json?                 // optional structured data for a runtime fault
+    data: Json                  // structured data for a runtime fault; JSON null when absent
 
     constructor(message: string = "", cause: PanicInfo? = null)
     fn toString() -> string
@@ -5242,7 +5250,7 @@ class PanicInfo {
     stack: Array<string>        // auto-captured call stack, one formatted line per frame
     cause: PanicInfo?           // chained cause
     code: int                   // error code (auto-parsed from "E0xxx: ..." prefix; default 0)
-    data: Json?                 // optional structured data for a runtime fault
+    data: Json                  // structured data for a runtime fault; JSON null when absent
 
     constructor(message: string = "", cause: PanicInfo? = null)
     fn toString() -> string
