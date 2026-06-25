@@ -1,0 +1,16 @@
+// anchor: value-format-truncation-shared-core
+// VM and AOT share the public truncation limit and ", ...(N more)" suffix.
+
+let xs: Array<int> = []
+let m: Map<int, int> = #{}
+let s: Set<int> = #[]
+
+for (i in 0..35) {
+    xs.push(i)
+    m.set(i, i + 100)
+    s.add(i)
+}
+
+print(xs)
+print(m)
+print(s)

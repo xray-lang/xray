@@ -191,7 +191,7 @@ static void xrt_print_value(XrValue v, int depth) {
             break;
     }
 
-    if (depth > XR_VALUE_FORMAT_MAX_DEPTH) {
+    if (xr_value_format_depth_exceeded(depth)) {
         fputs("...", stdout);
         return;
     }
@@ -214,30 +214,38 @@ static void xrt_print_value(XrValue v, int depth) {
                 return;
             }
             int64_t len = a ? a->length : 0;
-            int64_t limit = len > XR_VALUE_FORMAT_MAX_ELEMENTS ? XR_VALUE_FORMAT_MAX_ELEMENTS : len;
+            int64_t limit = xr_value_format_limit_count(len);
             putchar('[');
             for (int64_t i = 0; i < limit; i++) {
                 if (i > 0)
                     fputs(", ", stdout);
                 xrt_print_value(xr_typed_get(a->data, (int32_t) i, a->elem_type), depth + 1);
             }
-            if (len > limit)
-                printf(", ...(%lld more)", (long long) (len - limit));
+            if (len > limit) {
+                char more[32];
+                int n = xr_value_format_more_suffix(more, sizeof(more), len, limit);
+                if (n > 0)
+                    fputs(more, stdout);
+            }
             putchar(']');
             return;
         }
         case XR_TAG_TUPLE: {
             xrt_tuple_t *t = (xrt_tuple_t *) v.ptr;
             int64_t len = t ? t->len : 0;
-            int64_t limit = len > XR_VALUE_FORMAT_MAX_ELEMENTS ? XR_VALUE_FORMAT_MAX_ELEMENTS : len;
+            int64_t limit = xr_value_format_limit_count(len);
             putchar('(');
             for (int64_t i = 0; i < limit; i++) {
                 if (i > 0)
                     fputs(", ", stdout);
                 xrt_print_value(t->items[i], depth + 1);
             }
-            if (len > limit)
-                printf(", ...(%lld more)", (long long) (len - limit));
+            if (len > limit) {
+                char more[32];
+                int n = xr_value_format_more_suffix(more, sizeof(more), len, limit);
+                if (n > 0)
+                    fputs(more, stdout);
+            }
             if (len == 1)
                 putchar(',');
             putchar(')');
@@ -248,8 +256,9 @@ static void xrt_print_value(XrValue v, int depth) {
             int64_t total = m ? xrt_map_len(m) : 0;
             int64_t n_slots = !m ? 0 : (xrt_map_is_typed(m) ? m->order_len : (int64_t) m->nentries);
             int64_t count = 0;
+            int64_t limit = xr_value_format_limit_count(total);
             fputs("#{", stdout);
-            for (int64_t i = 0; i < n_slots && count < XR_VALUE_FORMAT_MAX_ELEMENTS; i++) {
+            for (int64_t i = 0; i < n_slots && count < limit; i++) {
                 int64_t slot = xrt_map_is_typed(m) ? m->order[i] : i;
                 if (!xrt_map_slot_is_full(m, slot))
                     continue;
@@ -260,8 +269,12 @@ static void xrt_print_value(XrValue v, int depth) {
                 xrt_print_value(xrt_map_slot_value(m, slot), depth + 1);
                 count++;
             }
-            if (total > count)
-                printf(", ...(%lld more)", (long long) (total - count));
+            if (total > count) {
+                char more[32];
+                int n = xr_value_format_more_suffix(more, sizeof(more), total, count);
+                if (n > 0)
+                    fputs(more, stdout);
+            }
             putchar('}');
             return;
         }
@@ -270,8 +283,9 @@ static void xrt_print_value(XrValue v, int depth) {
             int64_t total = s ? xrt_set_len(s) : 0;
             int64_t n_slots = !s ? 0 : (xrt_set_is_typed(s) ? s->order_len : (int64_t) s->nentries);
             int64_t count = 0;
+            int64_t limit = xr_value_format_limit_count(total);
             fputs("#[", stdout);
-            for (int64_t i = 0; i < n_slots && count < XR_VALUE_FORMAT_MAX_ELEMENTS; i++) {
+            for (int64_t i = 0; i < n_slots && count < limit; i++) {
                 int64_t slot = xrt_set_is_typed(s) ? s->order[i] : i;
                 if (!xrt_set_slot_is_full(s, slot))
                     continue;
@@ -280,8 +294,12 @@ static void xrt_print_value(XrValue v, int depth) {
                 xrt_print_value(xrt_set_slot_item(s, slot), depth + 1);
                 count++;
             }
-            if (total > count)
-                printf(", ...(%lld more)", (long long) (total - count));
+            if (total > count) {
+                char more[32];
+                int n = xr_value_format_more_suffix(more, sizeof(more), total, count);
+                if (n > 0)
+                    fputs(more, stdout);
+            }
             putchar(']');
             return;
         }
