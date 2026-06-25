@@ -1112,8 +1112,6 @@ static void xicgen_checktype(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
     int32_t tid = (int32_t) (v->aux_int >> 1);
     bool allow_null = (v->aux_int & 1) != 0;
     const char *tname = v->aux ? (const char *) v->aux : "unknown";
-    char err_buf[128];
-    snprintf(err_buf, sizeof(err_buf), "Type check failed: expected %s", tname);
 
     XrRep to_rep = cg_value_plan_storage_rep(ctx, v);
     const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, to_rep);
@@ -1123,9 +1121,11 @@ static void xicgen_checktype(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
     fprintf(out, "if (_ct_tid != %" PRId32, tid);
     if (allow_null && tid != 0)
         fprintf(out, " && _ct_tid != 0");
-    fprintf(out, ") xrt_throw_exc(");
-    cg_emit_str_value(ctx, out, err_buf);
-    fprintf(out, "); _ct; })");
+    fprintf(out, ") { char _ct_msg[XR_ERROR_CORE_TYPE_MISMATCH_BUFSZ]; "
+                 "xr_error_core_format_type_mismatch(_ct_msg, sizeof(_ct_msg), ");
+    xicgen_emit_c_string_literal(out, tname);
+    fprintf(out, ", xr_type_name_from_tid((XrTypeId) _ct_tid)); "
+                 "xrt_throw_error(XR_ERR_TYPE_MISMATCH, _ct_msg); } _ct; })");
     emit_conversion_suffix(out, conv_suffix);
 }
 

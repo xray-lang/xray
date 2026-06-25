@@ -171,4 +171,90 @@ typedef enum {
 #define XR_TID_IS_FLOAT(tid) ((tid) == XR_TID_FLOAT32 || (tid) == XR_TID_FLOAT)
 #define XR_TID_IS_NUMBER(tid) (XR_TID_IS_INT(tid) || XR_TID_IS_FLOAT(tid))
 
+static inline const char *xr_type_name_from_tid(XrTypeId tid) {
+    switch (tid) {
+        case XR_TID_NULL:
+            return TYPE_NAME_NULL;
+        case XR_TID_BOOL:
+            return TYPE_NAME_BOOL;
+        case XR_TID_INT8:
+            return TYPE_NAME_INT8;
+        case XR_TID_UINT8:
+            return TYPE_NAME_UINT8;
+        case XR_TID_INT16:
+            return TYPE_NAME_INT16;
+        case XR_TID_UINT16:
+            return TYPE_NAME_UINT16;
+        case XR_TID_INT32:
+            return TYPE_NAME_INT32;
+        case XR_TID_UINT32:
+            return TYPE_NAME_UINT32;
+        case XR_TID_INT:
+            return TYPE_NAME_INT;
+        case XR_TID_UINT64:
+            return TYPE_NAME_UINT64;
+        case XR_TID_FLOAT32:
+            return TYPE_NAME_FLOAT32;
+        case XR_TID_FLOAT:
+            return TYPE_NAME_FLOAT;
+        case XR_TID_STRING:
+            return TYPE_NAME_STRING;
+        case XR_TID_FUNCTION:
+        case XR_TID_BOUND_METHOD:
+            return TYPE_NAME_FUNCTION;
+        case XR_TID_ARRAY:
+            return TYPE_NAME_ARRAY;
+        case XR_TID_SET:
+            return TYPE_NAME_SET;
+        case XR_TID_MAP:
+            return TYPE_NAME_MAP;
+        case XR_TID_INSTANCE:
+            return TYPE_NAME_INSTANCE;
+        case XR_TID_JSON:
+            return TYPE_NAME_JSON;
+        case XR_TID_BIGINT:
+            return TYPE_NAME_BIGINT;
+        case XR_TID_STRINGBUILDER:
+            return TYPE_NAME_STRINGBUILDER;
+        case XR_TID_CHANNEL:
+            return TYPE_NAME_CHANNEL;
+        case XR_TID_REGEX:
+            return TYPE_NAME_REGEX;
+        case XR_TID_DATETIME:
+            return TYPE_NAME_DATETIME;
+        case XR_TID_EXCEPTION:
+            return TYPE_NAME_EXCEPTION;
+        case XR_TID_ENUM_VALUE:
+            return TYPE_NAME_ENUM_VALUE;
+        case XR_TID_ENUM_TYPE:
+            return TYPE_NAME_ENUM_TYPE;
+        case XR_TID_ITERATOR:
+            return TYPE_NAME_ITERATOR;
+        case XR_TID_MODULE:
+            return TYPE_NAME_MODULE;
+        case XR_TID_COROUTINE:
+            return TYPE_NAME_COROUTINE;
+        case XR_TID_RANGE:
+            return TYPE_NAME_RANGE;
+        case XR_TID_TASK:
+            return TYPE_NAME_TASK;
+        case XR_TID_NETCONN:
+            return TYPE_NAME_NETCONN;
+        case XR_TID_NETLISTENER:
+            return TYPE_NAME_NETLISTENER;
+        case XR_TID_ATOMIC:
+            return TYPE_NAME_ATOMIC;
+        case XR_TID_WORKQUEUE:
+            return TYPE_NAME_WORKQUEUE;
+        case XR_TID_RESULTGROUP:
+            return TYPE_NAME_RESULTGROUP;
+        case XR_TID_WEAKMAP:
+            return TYPE_NAME_WEAKMAP;
+        case XR_TID_WEAKSET:
+            return TYPE_NAME_WEAKSET;
+        default:
+            return TYPE_NAME_UNKNOWN;
+    }
+}
+
 #endif /* XR_TYPE_NAMES_CORE_H */
