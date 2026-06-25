@@ -1878,7 +1878,7 @@ static inline XrValue xrt_value_clone_for_coro(XrValue val) {
             if (XR_IS_ARRAY_REF(val)) {
                 uint8_t elem_type = XR_ARRAY_REF_ELEM_TYPE(val);
                 uint16_t elem_count = XR_ARRAY_REF_ELEM_COUNT(val);
-                size_t size = xrt_native_type_size(elem_type) * (size_t) elem_count;
+                size_t size = (size_t) xr_native_type_size(elem_type) * (size_t) elem_count;
                 void *dst = xrt_arc_alloc(size);
                 if (XR_UNLIKELY(!dst)) {
                     fprintf(stderr, "xrt_value_clone_for_coro: out of memory\n");

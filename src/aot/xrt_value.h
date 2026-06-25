@@ -29,6 +29,7 @@
 
 #include "../shared/xr_hash_core.h"
 #include "../shared/xr_float_fmt.h"
+#include "../shared/xr_native_type_core.h"
 #include "../shared/xr_numeric_core.h"
 #include "../shared/xr_obj_header.h" /* XrObjType ids shared with the VM */
 
@@ -184,25 +185,6 @@ static inline int xrt_enum_key_eq(XrValue a, XrValue b) {
     return xrt_cstr_eq(ea->enum_name, eb->enum_name) &&
            xrt_cstr_eq(ea->member_name, eb->member_name);
 }
-
-/* Native field tags mirror XrNativeType for standalone generated C. */
-#define XR_NATIVE_I64 0
-#define XR_NATIVE_F64 1
-#define XR_NATIVE_BOOL 2
-#define XR_NATIVE_I8 3
-#define XR_NATIVE_I16 4
-#define XR_NATIVE_I32 5
-#define XR_NATIVE_U8 6
-#define XR_NATIVE_U16 7
-#define XR_NATIVE_U32 8
-#define XR_NATIVE_U64 9
-#define XR_NATIVE_F32 10
-#define XR_NATIVE_STRUCT 11
-#define XR_NATIVE_ARRAY 12
-#define XR_NATIVE_STRING 13
-#define XR_NATIVE_ARRAY_REF 14
-#define XR_NATIVE_MAP_REF 15
-#define XR_NATIVE_SET_REF 16
 
 /* String type check (both literal and bump-allocated) */
 #define XR_IS_STR(v) ((v).tag == XR_TAG_STR || (v).tag == XR_TAG_STR_ARC)
@@ -396,24 +378,6 @@ static inline const char *xr_unbox_str(XrValue v) {
     return xr_str_data(v);
 }
 
-static inline size_t xrt_value_native_type_size(uint8_t native_type) {
-    switch (native_type) {
-        case XR_NATIVE_I8:
-        case XR_NATIVE_U8:
-        case XR_NATIVE_BOOL:
-            return 1;
-        case XR_NATIVE_I16:
-        case XR_NATIVE_U16:
-            return 2;
-        case XR_NATIVE_I32:
-        case XR_NATIVE_U32:
-        case XR_NATIVE_F32:
-            return 4;
-        default:
-            return 8;
-    }
-}
-
 /* =========================================================================
  * Value equality — single authoritative implementation for the AOT runtime.
  * Mirrors the VM's xr_value_eq semantics: strings compare by content
@@ -451,7 +415,7 @@ static inline int64_t xrt_eq(XrValue a, XrValue b) {
         if (!a.ptr || !b.ptr || a.ext != b.ext)
             return 0;
         if (XR_IS_ARRAY_REF(a)) {
-            size_t size = xrt_value_native_type_size(XR_ARRAY_REF_ELEM_TYPE(a)) *
+            size_t size = (size_t) xr_native_type_size(XR_ARRAY_REF_ELEM_TYPE(a)) *
                           (size_t) XR_ARRAY_REF_ELEM_COUNT(a);
             return memcmp(a.ptr, b.ptr, size) == 0;
         }

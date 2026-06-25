@@ -9,35 +9,8 @@
  * path, so the static-inline callers are elided). */
 static XRT_COLD _Noreturn void xrt_index_oob(int64_t idx, int64_t length);
 
-static inline size_t xrt_native_type_size(uint8_t native_type) {
-    switch (native_type) {
-        case XR_NATIVE_I64:
-        case XR_NATIVE_U64:
-        case XR_NATIVE_F64:
-        case XR_NATIVE_STRING:
-            return 8;
-        case XR_NATIVE_ARRAY_REF:
-        case XR_NATIVE_MAP_REF:
-        case XR_NATIVE_SET_REF:
-            return sizeof(XrValue);
-        case XR_NATIVE_I32:
-        case XR_NATIVE_U32:
-        case XR_NATIVE_F32:
-            return 4;
-        case XR_NATIVE_I16:
-        case XR_NATIVE_U16:
-            return 2;
-        case XR_NATIVE_I8:
-        case XR_NATIVE_U8:
-        case XR_NATIVE_BOOL:
-            return 1;
-        default:
-            return 8;
-    }
-}
-
 static inline XrValue xrt_fixed_array_get(void *base, uint8_t native_type, int64_t idx) {
-    uint8_t *p = (uint8_t *) base + (size_t) idx * xrt_native_type_size(native_type);
+    uint8_t *p = (uint8_t *) base + (size_t) idx * xr_native_type_size(native_type);
     switch (native_type) {
         case XR_NATIVE_F32:
             return XR_FROM_FLOAT((double) *(float *) p);
@@ -66,7 +39,7 @@ static inline XrValue xrt_fixed_array_get(void *base, uint8_t native_type, int64
 
 static inline void xrt_fixed_array_set(void *base, uint8_t native_type, int64_t idx,
                                        XrValue value) {
-    uint8_t *p = (uint8_t *) base + (size_t) idx * xrt_native_type_size(native_type);
+    uint8_t *p = (uint8_t *) base + (size_t) idx * xr_native_type_size(native_type);
     switch (native_type) {
         case XR_NATIVE_F32:
             *(float *) p = (float) xr_value_to_f64_coerce(value);
@@ -106,7 +79,7 @@ static inline void xrt_fixed_array_set(void *base, uint8_t native_type, int64_t 
 
 static inline void xrt_fixed_array_copy(void *dst, XrValue src, uint8_t native_type,
                                         uint16_t elem_count) {
-    size_t elem_size = xrt_native_type_size(native_type);
+    size_t elem_size = xr_native_type_size(native_type);
     int64_t count = 0;
     if (XR_IS_ARRAY_REF(src)) {
         uint16_t src_count = XR_ARRAY_REF_ELEM_COUNT(src);
