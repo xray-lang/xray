@@ -73,17 +73,17 @@ static inline XrValue xrt_mul(XrValue a, XrValue b) {
 /* Integer div/mod with zero-check + wrap.
  * Typed scalar codegen in xi_cgen and tagged xrt_div / xrt_mod both pass
  * through this AOT exception adapter, then into shared numeric core.
- *   b == 0          → throw (matches VM E0420 / E0421)
+ *   b == 0          → throw (matches VM XR_ERR_DIV_BY_ZERO / XR_ERR_MOD_BY_ZERO)
  *   INT64_MIN / -1  → INT64_MIN (unsigned negate; matches xi_opt fold)
  *   INT64_MIN % -1  → 0 */
 static inline int64_t xrt_int_div(int64_t a, int64_t b) {
     if (XR_UNLIKELY(b == 0))
-        xrt_throw_exc(xr_box_str("E0420: division by zero"));
+        xrt_throw_error(XR_ERR_DIV_BY_ZERO, XR_ERROR_CORE_DIVISION_BY_ZERO_MSG);
     return xr_numeric_core_i64_div_wrap(a, b);
 }
 static inline int64_t xrt_int_mod(int64_t a, int64_t b) {
     if (XR_UNLIKELY(b == 0))
-        xrt_throw_exc(xr_box_str("E0421: modulo by zero"));
+        xrt_throw_error(XR_ERR_MOD_BY_ZERO, XR_ERROR_CORE_MODULO_BY_ZERO_MSG);
     return xr_numeric_core_i64_mod_wrap(a, b);
 }
 
@@ -105,14 +105,14 @@ static inline XrValue xrt_div(XrValue a, XrValue b) {
     double fa = (a.tag == XR_TAG_I64) ? (double) a.i : a.f;
     double fb = (b.tag == XR_TAG_I64) ? (double) b.i : b.f;
     if (XR_UNLIKELY(fb == 0.0))
-        xrt_throw_exc(xr_box_str("E0420: division by zero"));
+        xrt_throw_error(XR_ERR_DIV_BY_ZERO, XR_ERROR_CORE_DIVISION_BY_ZERO_MSG);
     return XR_FROM_FLOAT(fa / fb);
 }
 
 static inline XrValue xrt_mod(XrValue a, XrValue b) {
     if (a.tag == XR_TAG_I64 && b.tag == XR_TAG_I64)
         return XR_FROM_INT(xrt_int_mod(a.i, b.i));
-    xrt_throw_exc(xr_box_str("E0404: modulo requires integer types"));
+    xrt_throw_error(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_MODULO_REQUIRES_INTEGER_MSG);
 }
 
 static inline XrValue xrt_neg(XrValue a) {

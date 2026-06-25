@@ -95,6 +95,8 @@ static inline XrValue xrt_exception_new_value(int code, const char *message, siz
     return exc;
 }
 
+static XRT_COLD _Noreturn void xrt_throw_error(int code, const char *message);
+
 static inline XrValue xrt_exception_normalize(XrValue exc) {
     if (XR_IS_STR(exc)) {
         const char *data = xr_str_data(exc);
@@ -150,6 +152,11 @@ static XRT_COLD _Noreturn void xrt_throw_exc(XrValue exc) {
         fprintf(stderr, "Uncaught exception (tag=%d)\n", exc.tag);
     }
     exit(1);
+}
+
+static XRT_COLD _Noreturn void xrt_throw_error(int code, const char *message) {
+    size_t len = message ? strlen(message) : 0;
+    xrt_throw_exc(xrt_exception_new_value(code, message ? message : "", len));
 }
 
 /* Array index out of bounds → E0430 (spec §3 expr-index-access), matching the
