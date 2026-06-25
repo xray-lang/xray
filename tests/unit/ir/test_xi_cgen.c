@@ -1853,8 +1853,8 @@ TEST(cgen_native_class_ref_field_constructor_result_uses_ptr_storage) {
     assert(count_between(run, run_end, "xrt_obj_alloc(") == 0 &&
            "non-escaping ref-field native class should be stack-constructed");
     assert(count_between(run, run_end, "xrt_native_test_IntBag _ci") == 1 &&
-           count_between(run, run_end, "xrt_native_test_IntBag_dtor(&_ci") == 0 &&
-           "stack-constructed collection-only ref field class should skip no-op destructor calls");
+           count_between(run, run_end, "xrt_native_test_IntBag_dtor(&_ci") == 1 &&
+           "stack-constructed collection ref field class should release fields at exit");
     assert(count_between(run, run_end, "xrt_box_obj(_inst)") == 0 &&
            "local native class constructor result must not be boxed before direct method calls");
     assert(count_between(run, run_end, "test_scan_") >= 1 &&
@@ -1874,7 +1874,7 @@ TEST(cgen_native_class_ref_field_constructor_result_uses_ptr_storage) {
     xi_func_free(ir);
 }
 
-TEST(cgen_native_class_collection_ref_fields_skip_noop_arc) {
+TEST(cgen_native_class_collection_ref_fields_use_arc) {
     const char *src = "class Bag {\n"
                       "    values: Array<int>\n"
                       "    constructor(values: Array<int>) {\n"
@@ -1912,13 +1912,13 @@ TEST(cgen_native_class_collection_ref_fields_skip_noop_arc) {
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "native class ref field ownership path should generate");
 
-    assert(!contains(code, "static void xrt_native_test_Bag_dtor(void *obj)") &&
-           "AOT collection ref fields are not prepend-header ARC-managed and need no destructor");
-    assert(!contains(code, "xrt_release(xr_mkptr((self)->f0, XR_TAG_ARRAY));") &&
-           "collection ref field destructors should not emit no-op releases");
-    assert(contains(code, "xrt_type_register(\"Bag\", 0, NULL, 0, NULL, "
+    assert(contains(code, "static void xrt_native_test_Bag_dtor(void *obj)") &&
+           "AOT collection ref fields are RC-managed and need a destructor");
+    assert(contains(code, "xrt_release(xr_mkptr((self)->f0, XR_TAG_ARRAY));") &&
+           "collection ref field destructors should release stored containers");
+    assert(contains(code, "xrt_type_register(\"Bag\", 0, NULL, 0, xrt_native_test_Bag_dtor, "
                           "(uint32_t)sizeof(xrt_native_test_Bag))") &&
-           "class type registration should not wire a destructor for collection-only refs");
+           "class type registration should wire the collection ref-field destructor");
 
     const char *replace = strstr(code, "static int64_t test_replace_");
     assert(replace != NULL && "replace method should use typed ABI");
@@ -1927,10 +1927,10 @@ TEST(cgen_native_class_collection_ref_fields_skip_noop_arc) {
     const char *replace_end = next_static_after(replace);
     const char *assign = strstr(replace, "(p0)->f0 = (xrt_array_t *)_new.ptr");
     assert(assign && assign < replace_end &&
-           count_between(replace, replace_end, "xrt_retain(_new);") == 0 &&
+           count_between(replace, replace_end, "xrt_retain(_new);") == 1 &&
            count_between(replace, replace_end, "xrt_release(xr_mkptr((p0)->f0, XR_TAG_ARRAY));") ==
-               0 &&
-           "direct native receiver collection ref stores should assign without no-op ARC calls");
+               1 &&
+           "direct native receiver collection ref stores should retain new and release old");
 
     const char *swap = strstr(code, "static int64_t test_swap_");
     assert(swap != NULL && "swap function should use typed scalar return ABI");
@@ -1944,10 +1944,10 @@ TEST(cgen_native_class_collection_ref_fields_skip_noop_arc) {
            count_between(swap, swap_end, "xrt_map_set(") == 0 &&
            "native class pointer parameters should access ref fields without Map fallback");
     assign = strstr(swap, "(_native)->f0 = (xrt_array_t *)_new.ptr");
-    assert(assign && assign < swap_end && count_between(swap, swap_end, "xrt_retain(_new);") == 0 &&
+    assert(assign && assign < swap_end && count_between(swap, swap_end, "xrt_retain(_new);") == 1 &&
            count_between(swap, swap_end, "xrt_release(xr_mkptr((_native)->f0, XR_TAG_ARRAY));") ==
-               0 &&
-           "heap native instance collection ref stores should assign without no-op ARC calls");
+               1 &&
+           "heap native instance collection ref stores should retain new and release old");
 
     const char *local = strstr(code, "static int64_t test_local_");
     assert(local != NULL && "local function should use typed scalar return ABI");
@@ -1958,7 +1958,7 @@ TEST(cgen_native_class_collection_ref_fields_skip_noop_arc) {
            count_between(local, local_end, "_ci") == 0 &&
            "ref-field native classes should not stack-inline without stack destructors");
 
-    printf("  Generated native class collection ref field path %zu bytes of C code\n",
+    printf("  Generated native class collection ref field ARC path %zu bytes of C code\n",
            strlen(code));
     xr_free(code);
     xi_func_free(ir);
@@ -4947,7 +4947,7 @@ int main(void) {
     run_cgen_local_class_direct_native_methods_omit_boxed_adapters();
     run_cgen_class_constructor_returns_heap_native_instance();
     run_cgen_native_class_ref_field_constructor_result_uses_ptr_storage();
-    run_cgen_native_class_collection_ref_fields_skip_noop_arc();
+    run_cgen_native_class_collection_ref_fields_use_arc();
     run_cgen_class_set_length_size_sum_uses_native_arithmetic();
     run_cgen_class_set_u8_uses_typed_direct_helpers();
     run_cgen_class_map_i64_i64_uses_typed_direct_helpers();
