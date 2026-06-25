@@ -13,6 +13,7 @@
 
 #include "../shared/xr_io_core.h"
 #include "../shared/xr_os_core.h"
+#include "../shared/xr_path_core.h"
 #include "xrt_arc.h"
 #include "xrt_coll.h"
 #include "xrt_value.h"
@@ -49,16 +50,6 @@
 #define xrt_io_platform_mkdir(path) mkdir((path), 0755)
 #define xrt_io_platform_chmod chmod
 #define xrt_io_platform_utime utime
-#endif
-
-#ifndef XRT_IO_PATH_MAX
-#if defined(XR_OS_WINDOWS)
-#define XRT_IO_PATH_MAX 4096
-#elif defined(PATH_MAX)
-#define XRT_IO_PATH_MAX PATH_MAX
-#else
-#define XRT_IO_PATH_MAX 4096
-#endif
 #endif
 
 #define XRT_IO_MAX_READ_BYTES ((long) INT32_MAX)
@@ -350,7 +341,7 @@ static inline bool xrt_io_mkdirp_is_dir(void *ctx, const char *path) {
 }
 
 static inline XrValue xrt_io_mkdirp(const char *path_data, int64_t path_len) {
-    char stack_path[XRT_IO_PATH_MAX];
+    char stack_path[XR_PATH_CORE_MAX_PATH];
     char *owned = NULL;
     char *path = xrt_io_copy_cstr_arg(path_data, path_len, stack_path, sizeof(stack_path), &owned);
     bool ok = path && xr_io_core_mkdirp(path, xrt_io_mkdirp_mkdir, xrt_io_mkdirp_is_dir, NULL);
@@ -359,7 +350,7 @@ static inline XrValue xrt_io_mkdirp(const char *path_data, int64_t path_len) {
 }
 
 static inline XrValue xrt_io_cwd(void) {
-    char buf[XRT_IO_PATH_MAX];
+    char buf[XR_PATH_CORE_MAX_PATH];
     if (!xrt_io_platform_getcwd(buf, sizeof(buf)))
         return XR_NULL_VAL;
     return xrt_str_from_cstr(buf);
@@ -544,7 +535,7 @@ static inline XrValue xrt_io_realpath(const char *path_data, int64_t path_len) {
     char stack_path[512];
     char *owned = NULL;
     char *path = xrt_io_copy_cstr_arg(path_data, path_len, stack_path, sizeof(stack_path), &owned);
-    char resolved[XRT_IO_PATH_MAX];
+    char resolved[XR_PATH_CORE_MAX_PATH];
     char *ok = NULL;
     if (path) {
 #if defined(XR_OS_WINDOWS)
@@ -710,7 +701,7 @@ static inline XrValue xrt_io_readlink(const char *path_data, int64_t path_len) {
     char stack_path[512];
     char *owned = NULL;
     char *path = xrt_io_copy_cstr_arg(path_data, path_len, stack_path, sizeof(stack_path), &owned);
-    char buf[XRT_IO_PATH_MAX];
+    char buf[XR_PATH_CORE_MAX_PATH];
     XrValue result = XR_NULL_VAL;
     if (path) {
 #if defined(XR_OS_WINDOWS)
@@ -744,12 +735,12 @@ static inline const char *xrt_io_core_getenv(void *ctx, const char *name) {
 }
 
 static inline XrValue xrt_io_temp_file(void) {
-    char tpl[XRT_IO_PATH_MAX];
+    char tpl[XR_PATH_CORE_MAX_PATH];
 #if defined(XR_OS_WINDOWS)
-    char tmpdir[MAX_PATH];
+    char tmpdir[XR_PATH_CORE_MAX_PATH];
     if (GetTempPathA(sizeof(tmpdir), tmpdir) == 0)
         return XR_NULL_VAL;
-    char tmpfile[MAX_PATH];
+    char tmpfile[XR_PATH_CORE_MAX_PATH];
     if (GetTempFileNameA(tmpdir, "xr_", 0, tmpfile) == 0)
         return XR_NULL_VAL;
     snprintf(tpl, sizeof(tpl), "%s", tmpfile);
@@ -766,12 +757,12 @@ static inline XrValue xrt_io_temp_file(void) {
 }
 
 static inline XrValue xrt_io_temp_dir(void) {
-    char tpl[XRT_IO_PATH_MAX];
+    char tpl[XR_PATH_CORE_MAX_PATH];
 #if defined(XR_OS_WINDOWS)
-    char tmpdir[MAX_PATH];
+    char tmpdir[XR_PATH_CORE_MAX_PATH];
     if (GetTempPathA(sizeof(tmpdir), tmpdir) == 0)
         return XR_NULL_VAL;
-    char tmpfile[MAX_PATH];
+    char tmpfile[XR_PATH_CORE_MAX_PATH];
     if (GetTempFileNameA(tmpdir, "xr_", 0, tmpfile) == 0)
         return XR_NULL_VAL;
     DeleteFileA(tmpfile);

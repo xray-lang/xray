@@ -16,6 +16,7 @@
 #include "xrt_value.h"
 #include "../base/xplatform.h"
 #include "../shared/xr_os_core.h"
+#include "../shared/xr_path_core.h"
 #ifndef _WIN32
 #include <errno.h>
 #endif
@@ -42,10 +43,6 @@ extern char **environ;
 #include <sys/time.h>
 #elif defined(__linux__)
 #include <sys/sysinfo.h>
-#endif
-
-#ifndef XRT_OS_PATH_MAX
-#define XRT_OS_PATH_MAX 4096
 #endif
 
 static inline XrValue xrt_os_cstr_value(const char *s) {
@@ -221,7 +218,7 @@ static inline XrValue xrt_os_cpu_count(void) {
 }
 
 static inline XrValue xrt_os_getcwd(void) {
-    char buf[XRT_OS_PATH_MAX];
+    char buf[XR_PATH_CORE_MAX_PATH];
 #ifdef _WIN32
     DWORD n = GetCurrentDirectoryA((DWORD) sizeof(buf), buf);
     if (n == 0 || n >= (DWORD) sizeof(buf))
@@ -234,7 +231,7 @@ static inline XrValue xrt_os_getcwd(void) {
 }
 
 static inline XrValue xrt_os_chdir(const char *path, int64_t len) {
-    char stack_path[XRT_OS_PATH_MAX];
+    char stack_path[XR_PATH_CORE_MAX_PATH];
     char *owned = NULL;
     char *dir = xrt_os_copy_cstr_arg(path, len, stack_path, sizeof(stack_path), &owned);
     bool ok = false;

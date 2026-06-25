@@ -40,9 +40,16 @@ TEST(path_core_constants_match_target) {
     ASSERT_STR_EQ(xr_path_core_sep_str(), "/");
 #ifdef XR_OS_WINDOWS
     ASSERT_STR_EQ(xr_path_core_delimiter_str(), ";");
+    ASSERT_EQ_UINT(XR_PATH_CORE_MAX_PATH, 4096);
 #else
     ASSERT_STR_EQ(xr_path_core_delimiter_str(), ":");
+#ifdef PATH_MAX
+    ASSERT_EQ_UINT(XR_PATH_CORE_MAX_PATH, PATH_MAX);
+#else
+    ASSERT_EQ_UINT(XR_PATH_CORE_MAX_PATH, 4096);
 #endif
+#endif
+    ASSERT(XR_PATH_CORE_MAX_PATH >= 260);
 }
 
 static void assert_slice_eq(XrPathCoreSlice slice, const char *expected) {

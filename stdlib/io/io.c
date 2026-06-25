@@ -1128,10 +1128,10 @@ static XrValue io_tempFile(XrVMRuntime *X, XrValue *args, int argc) {
 
     char tpl[XR_PATH_MAX];
 #ifdef XR_OS_WINDOWS
-    char tmpdir[MAX_PATH];
+    char tmpdir[XR_PATH_MAX];
     if (GetTempPathA(sizeof(tmpdir), tmpdir) == 0)
         return xr_null();
-    char tmpfile[MAX_PATH];
+    char tmpfile[XR_PATH_MAX];
     if (GetTempFileNameA(tmpdir, "xr_", 0, tmpfile) == 0)
         return xr_null();
     snprintf(tpl, sizeof(tpl), "%s", tmpfile);
@@ -1154,10 +1154,10 @@ static XrValue io_tempDir(XrVMRuntime *X, XrValue *args, int argc) {
 
     char tpl[XR_PATH_MAX];
 #ifdef XR_OS_WINDOWS
-    char tmpdir[MAX_PATH];
+    char tmpdir[XR_PATH_MAX];
     if (GetTempPathA(sizeof(tmpdir), tmpdir) == 0)
         return xr_null();
-    char tmpfile[MAX_PATH];
+    char tmpfile[XR_PATH_MAX];
     if (GetTempFileNameA(tmpdir, "xr_", 0, tmpfile) == 0)
         return xr_null();
     // GetTempFileName creates a file; remove it and create dir instead
