@@ -15,6 +15,7 @@
 #include "xrt_coll.h"
 #include "xrt_value.h"
 #include "../base/xplatform.h"
+#include "../shared/xr_cstr_core.h"
 #include "../shared/xr_os_core.h"
 #include "../shared/xr_path_core.h"
 #ifndef _WIN32
@@ -82,21 +83,14 @@ static inline XrValue xrt_os_str_slice_value(const char *s, size_t len) {
     return v;
 }
 
+static inline void *xrt_os_cstr_alloc(void *ctx, size_t size) {
+    (void) ctx;
+    return XRT_MALLOC(size);
+}
+
 static inline char *xrt_os_copy_cstr_arg(const char *data, int64_t len, char *stack,
                                          size_t stack_cap, char **owned_out) {
-    *owned_out = NULL;
-    if (!data || len < 0 || stack_cap == 0)
-        return NULL;
-    char *out = stack;
-    if ((size_t) len >= stack_cap) {
-        *owned_out = (char *) XRT_MALLOC((size_t) len + 1);
-        if (!*owned_out)
-            return NULL;
-        out = *owned_out;
-    }
-    memcpy(out, data, (size_t) len);
-    out[len] = '\0';
-    return out;
+    return xr_cstr_core_copy_arg(data, len, stack, stack_cap, xrt_os_cstr_alloc, NULL, owned_out);
 }
 
 static inline XrValue xrt_os_getenv(const char *name, int64_t len) {
