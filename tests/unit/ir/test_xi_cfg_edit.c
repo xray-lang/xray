@@ -183,6 +183,28 @@ TEST(compact_blocks_removes_unreachable_non_entry) {
     xi_func_free(f);
 }
 
+TEST(compact_blocks_keeps_referenced_unreachable_terminator) {
+    XiFunc *f = make_func();
+    XiBlock *entry = f->entry;
+    XiBlock *noreturn = xi_block_new(f);
+    entry->sealed = noreturn->sealed = true;
+
+    xi_block_set_jump(entry, noreturn);
+    noreturn->kind = XI_BLOCK_UNREACHABLE;
+
+    uint32_t removed = xi_cfg_compact_blocks(f);
+
+    ASSERT(removed == 0);
+    ASSERT(f->nblocks == 2);
+    ASSERT(f->blocks[0] == entry);
+    ASSERT(f->blocks[1] == noreturn);
+    ASSERT(entry->succs[0] == noreturn);
+    ASSERT(noreturn->npreds == 1);
+    ASSERT(noreturn->id == 1);
+
+    xi_func_free(f);
+}
+
 int main(void) {
     printf("=== Xi CFG Edit Tests ===\n\n");
 
@@ -192,6 +214,7 @@ int main(void) {
     run_redirect_edge_rejects_phi_arity_mismatch();
     run_mark_unreachable_removes_all_stale_preds();
     run_compact_blocks_removes_unreachable_non_entry();
+    run_compact_blocks_keeps_referenced_unreachable_terminator();
 
     printf("\n=== Results: %d passed, %d failed ===\n", tests_passed, tests_failed);
     return tests_failed > 0 ? 1 : 0;

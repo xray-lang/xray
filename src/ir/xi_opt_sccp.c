@@ -787,7 +787,10 @@ XR_FUNC XiPassChange xi_opt_sccp(XiFunc *f) {
         XiBlock *blk = f->blocks[i];
         if (!blk)
             continue;
-        if (blk->id != i || (blk->kind == XI_BLOCK_UNREACHABLE && blk != f->entry)) {
+        /* XI_BLOCK_UNREACHABLE is also the normal terminator kind for a
+         * reachable no-return block (throw/panic).  Do not pre-compact it
+         * as dead before SCCP has computed reachability. */
+        if (blk->id != i) {
             uint32_t removed = xi_cfg_compact_blocks(f);
             xi_cfg_invalidate(f);
             compacted_at_entry = removed > 0;
