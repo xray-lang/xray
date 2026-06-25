@@ -16,8 +16,8 @@
  *
  * MEMORY:
  *   Allocation goes through xr_instance_new(X, core->exceptionClass).
- *   Each field lives at the index baked into EXCEPTION_FIELD_* (declared
- *   in xclass_system.h). The C runtime writes those indices directly;
+ *   Each field lives at the index baked into the shared builtin schema.
+ *   The C runtime writes those indices directly;
  *   user code accesses them through the standard property pipeline.
  */
 

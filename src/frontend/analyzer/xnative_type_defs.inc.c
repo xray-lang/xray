@@ -51,12 +51,12 @@ static const char xr_native_def_enum[] =
     "memberCount: int\n    getMember(index: int) -> EnumValue\n}\n";
 
 static const char xr_native_def_exception[] =
-    "// Built-in Exception class.\n//\n// Field layout matches xclass_system.h EXCEPTION_FIELD_* "
-    "indices and the\n// XrClass built by xr_register_exception_class in xclass_system.c. The\n// "
-    "constructor and toString bodies are PRIMITIVE on the C side; this\n// declaration exists for "
-    "analyzer / LSP awareness so user code can write\n// `class HttpError extends Exception { ... "
-    "}` and reference fields by\n// name from any module.\n\nclass Exception {\n    message: "
-    "string\n    stack: Array<string>\n    cause: Exception?\n    code: int\n    data: Json?\n    "
+    "// Built-in Exception class.\n//\n// Field layout matches src/shared/xr_builtin_schema.h and "
+    "the XrClass built\n// by xr_register_exception_class in xexception.c. The\n// constructor and "
+    "toString bodies are PRIMITIVE on the C side; this\n// declaration exists for analyzer / LSP "
+    "awareness so user code can write\n// `class HttpError extends Exception { ... }` and "
+    "reference fields by\n// name from any module.\n\nclass Exception {\n    message: string\n    "
+    "stack: Array<string>\n    cause: Exception?\n    code: int\n    data: Json?\n    "
     "constructor(message: string = \"\", cause: Exception? = null)\n    toString() -> string\n}\n";
 
 static const char xr_native_def_float[] =

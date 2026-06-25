@@ -34,6 +34,7 @@
 #include "xrt_coll.h"
 #include "xrt_value.h"
 #include "../runtime/xerror_codes.h"
+#include "../shared/xr_builtin_schema.h"
 #include "../shared/xr_error_core.h"
 #include <setjmp.h>
 #include <stdio.h>
@@ -85,13 +86,12 @@ static inline XrValue xrt_exception_message_value(const char *message, size_t le
 }
 
 static inline XrValue xrt_exception_new_value(int code, const char *message, size_t len) {
-    static const char *const fields[] = {"message", "stack", "cause", "code", "data"};
-    XrValue exc = xrt_json_new_named(5, fields);
-    xrt_json_set_field(exc, 0, xrt_exception_message_value(message, len));
-    xrt_json_set_field(exc, 1, xrt_array_new_len(0));
-    xrt_json_set_field(exc, 2, XR_NULL_VAL);
-    xrt_json_set_field(exc, 3, XR_FROM_INT(code));
-    xrt_json_set_field(exc, 4, XR_NULL_VAL);
+    XrValue exc = xrt_json_new_named(EXCEPTION_FIELD_COUNT, xr_exception_field_names());
+    xrt_json_set_field(exc, EXCEPTION_FIELD_MESSAGE, xrt_exception_message_value(message, len));
+    xrt_json_set_field(exc, EXCEPTION_FIELD_STACK, xrt_array_new_len(0));
+    xrt_json_set_field(exc, EXCEPTION_FIELD_CAUSE, XR_NULL_VAL);
+    xrt_json_set_field(exc, EXCEPTION_FIELD_CODE, XR_FROM_INT(code));
+    xrt_json_set_field(exc, EXCEPTION_FIELD_DATA, XR_NULL_VAL);
     return exc;
 }
 

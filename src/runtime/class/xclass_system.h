@@ -16,6 +16,7 @@
 #ifndef XCLASS_SYSTEM_H
 #define XCLASS_SYSTEM_H
 
+#include "../../shared/xr_builtin_schema.h"
 #include "../value/xvalue.h"
 
 // Forward declarations via xforward_decl.h
@@ -100,18 +101,6 @@ typedef struct XrayCoreClasses {
  * arities allocate a fresh class each call (cold path, never measured
  * to matter in practice). */
 XR_FUNC struct XrClass *xr_get_or_create_tuple_class(XrVMRuntime *X, uint16_t arity);
-
-/* Exception field indices — must match stdlib/types/exception.xr layout */
-#define EXCEPTION_FIELD_MESSAGE 0
-#define EXCEPTION_FIELD_STACK 1
-#define EXCEPTION_FIELD_CAUSE 2
-#define EXCEPTION_FIELD_CODE 3
-#define EXCEPTION_FIELD_DATA 4
-
-/* Process field indices — must match xr_core_init() and script-info setup. */
-#define PROCESS_FIELD_FILE 0
-#define PROCESS_FIELD_ARGS 1
-#define PROCESS_FIELD_DIR 2
 
 /* ========== Lifecycle ========== */
 
