@@ -290,6 +290,11 @@ static XrTypeId class_name_to_tid(const char *name, const char **out_display) {
     return XR_TID_NULL;
 }
 
+static bool class_name_is_generated_plain_class(const char *name) {
+    XR_DCHECK(name != NULL, "class_name_is_generated_plain_class: NULL name");
+    return strcmp(name, "RegexMatch") == 0;
+}
+
 /* ========== Initialization ========== */
 
 /* Runtime-populated builtin type table (indexed by XrTypeId). */
@@ -319,6 +324,16 @@ static void load_one_source(const char *source) {
                 native_builtin_types[tid].name = display_name;
                 native_builtin_types[tid].members = members;
                 native_builtin_types[tid].member_count = member_count;
+            } else if (class_name_is_generated_plain_class(class_name)) {
+                /* Owned by .def-generated class metadata rather than the legacy
+                 * XrTypeId-indexed builtin table. */
+                if (members) {
+                    for (int i = 0; i < member_count; i++) {
+                        xr_free((void *) members[i].name);
+                        xr_free((void *) members[i].signature);
+                    }
+                    xr_free(members);
+                }
             } else {
                 fprintf(stderr, "xray: warning: @native class '%s' has no XrTypeId mapping\n",
                         class_name);
