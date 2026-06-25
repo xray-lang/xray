@@ -1,0 +1,12 @@
+// anchor: force-unwrap-error-shape
+// `expr!` uses the value-return error channel, not `catch panic`. AOT must
+// construct the same lightweight Exception-shaped value as VM.
+
+let value: int? = null
+
+try {
+    print(value!)
+} catch (e) {
+    print(e.message)
+    print(e.code)
+}

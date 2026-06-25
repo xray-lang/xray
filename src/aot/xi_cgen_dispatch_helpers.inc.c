@@ -560,7 +560,8 @@ static void xicgen_get_builtin(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
     if (v->aux_int == XR_GLOBAL_VAR_PROCESS || v->aux_int == XR_GLOBAL_VAR_FILE ||
         v->aux_int == XR_GLOBAL_VAR_DIR) {
         fprintf(out, "xrt_builtins[%d]", (int) v->aux_int);
-    } else if (v->aux_int == XR_GLOBAL_VAR_WORKQUEUE || v->aux_int == XR_GLOBAL_VAR_RESULTGROUP) {
+    } else if (v->aux_int == XR_GLOBAL_VAR_EXCEPTION || v->aux_int == XR_GLOBAL_VAR_WORKQUEUE ||
+               v->aux_int == XR_GLOBAL_VAR_RESULTGROUP) {
         fprintf(out, "XR_NULL_VAL /* builtin native class token: %s */",
                 v->aux ? (const char *) v->aux : "?");
     } else if (emit_prelude_enum_type_expr(out, (int) v->aux_int)) {
@@ -2009,6 +2010,25 @@ static void xicgen_emit_runtime_method(XiCgenCtx *ctx, FILE *out, const XiFunc *
     emit_conversion_suffix(out, conv_suffix);
 }
 
+static bool xicgen_emit_exception_constructor(XiCgenCtx *ctx, FILE *out, const XiValue *v,
+                                              const char *method) {
+    if (!v || !method || strcmp(method, "constructor") != 0 || v->nargs < 1)
+        return false;
+    const XiValue *receiver = cg_unwrap_identity_value(v->args[0]);
+    if (!receiver || receiver->op != XI_GET_BUILTIN || receiver->aux_int != XR_GLOBAL_VAR_EXCEPTION)
+        return false;
+
+    const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+    fprintf(out, "xrt_exception_from_message_value(");
+    if (v->nargs >= 2)
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
+    else
+        fprintf(out, "XR_NULL_VAL");
+    fprintf(out, ")");
+    emit_conversion_suffix(out, conv_suffix);
+    return true;
+}
+
 /* Resolve a class constructor XiFunc + module prefix by class name, searching
  * the current module first and then every module (cross-module `new`). */
 static const XiFunc *cg_lookup_class_ctor_global(XiCgenCtx *ctx, const char *class_name,
@@ -2232,6 +2252,8 @@ static void xicgen_call_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
     if (xicgen_emit_time_method(ctx, out, f, v))
         return;
     if (xicgen_emit_stdlib_method(ctx, out, f, v))
+        return;
+    if (!is_super && xicgen_emit_exception_constructor(ctx, out, v, method))
         return;
     if (!is_super && method && strcmp(method, "constructor") == 0 &&
         xicgen_emit_user_constructor(ctx, out, f, v, prefix))
