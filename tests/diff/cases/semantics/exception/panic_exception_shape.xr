@@ -1,0 +1,37 @@
+// anchor: panic-exception-shape
+// `catch panic (p)` exposes an Exception-shaped value on both VM and AOT:
+// message is the user-visible text without the Exxxx prefix, and code is the
+// numeric runtime error code.
+fn show_index_read(i: int) {
+    let xs = [1, 2, 3]
+    try {
+        print(xs[i])
+    } catch panic (p) {
+        print(p.message)
+        print(p.code)
+    }
+}
+
+fn show_index_write(i: int) {
+    let xs = [1, 2, 3]
+    try {
+        xs[i] = 9
+        print(xs[0])
+    } catch panic (p) {
+        print(p.message)
+        print(p.code)
+    }
+}
+
+fn show_div_zero() {
+    try {
+        print(10 / 0)
+    } catch panic (p) {
+        print(p.message)
+        print(p.code)
+    }
+}
+
+show_index_read(-1)
+show_index_write(5)
+show_div_zero()

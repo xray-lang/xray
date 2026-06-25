@@ -639,9 +639,7 @@ vmcase(OP_ARRAY_SET) {
                 xr_array_set_element(arr, idx, _av);
             }
         } else {
-            VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS,
-                             "array index out of range: %lld (length %d)", (long long) raw_idx,
-                             (int) arr->length);
+            VM_ARRAY_INDEX_OOB(raw_idx, arr->length);
         }
         vmbreak;
     }
@@ -741,8 +739,7 @@ vmcase(OP_ARRAY_SETC) {
                 xr_array_set_element(arr, idx, _acv);
             }
         } else {
-            VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "array index out of range: %d (length %d)",
-                             b, (int) arr->length);
+            VM_ARRAY_INDEX_OOB(b, arr->length);
         }
         vmbreak;
     }
@@ -1209,8 +1206,7 @@ vmcase(OP_INDEX_GET) {
             R(a) = (arr->elem_type == XR_ELEM_ANY) ? ((XrValue *) arr->data)[idx]
                                                    : xr_array_get_element(arr, idx);
         } else {
-            VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "array index out of range: %d (length %d)",
-                             idx, (int) arr->length);
+            VM_ARRAY_INDEX_OOB(idx, arr->length);
         }
         vmbreak;
     }
@@ -1358,9 +1354,7 @@ vmcase(OP_INDEX_SET) {
                 xr_array_set_element(arr, idx, val);
             }
         } else {
-            VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS,
-                             "array index out of range: %lld (length %d)", (long long) raw_idx,
-                             (int) arr->length);
+            VM_ARRAY_INDEX_OOB(raw_idx, arr->length);
         }
         vmbreak;
     }

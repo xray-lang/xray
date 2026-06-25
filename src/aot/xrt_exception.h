@@ -31,10 +31,14 @@
 #ifndef XRT_EXCEPTION_H
 #define XRT_EXCEPTION_H
 
+#include "xrt_coll.h"
 #include "xrt_value.h"
+#include "../runtime/xerror_codes.h"
+#include "../shared/xr_error_core.h"
 #include <setjmp.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 /* =========================================================================
  * Exception frame (stack-allocated in each try block)
@@ -71,6 +75,50 @@ static inline int xrt_has_pending_error(void) {
  * xrt_throw_exc must drain skipped frames' defers before longjmp. */
 static inline void xrt_defer_unwind_to(void *mark);
 
+static inline XrValue xrt_exception_message_value(const char *message, size_t len) {
+    if (!message)
+        return XR_NULL_VAL;
+    XrValue s = xrt_str_alloc(len);
+    if (len > 0)
+        memcpy(xr_str_buf(s), message, len);
+    return s;
+}
+
+static inline XrValue xrt_exception_new_value(int code, const char *message, size_t len) {
+    static const char *const fields[] = {"message", "stack", "cause", "code", "data"};
+    XrValue exc = xrt_json_new_named(5, fields);
+    xrt_json_set_field(exc, 0, xrt_exception_message_value(message, len));
+    xrt_json_set_field(exc, 1, xrt_array_new_len(0));
+    xrt_json_set_field(exc, 2, XR_NULL_VAL);
+    xrt_json_set_field(exc, 3, XR_FROM_INT(code));
+    xrt_json_set_field(exc, 4, XR_NULL_VAL);
+    return exc;
+}
+
+static inline XrValue xrt_exception_normalize(XrValue exc) {
+    if (XR_IS_STR(exc)) {
+        const char *data = xr_str_data(exc);
+        size_t len = (size_t) xr_str_len(exc);
+        XrErrorCoreMessageView view = xr_error_core_parse_prefixed(data, len);
+        return xrt_exception_new_value(view.has_code ? view.code : 0, view.message,
+                                       view.message_len);
+    }
+    return exc;
+}
+
+static inline XrValue xrt_exception_get_message_value(XrValue exc) {
+    if (XR_IS_STR(exc))
+        return exc;
+    if (exc.tag == XR_TAG_PTR && exc.ptr && exc.heap_type == 0)
+        return xrt_json_get_name(exc, "message");
+    return XR_NULL_VAL;
+}
+
+static inline const char *xrt_exception_message_cstr(XrValue exc) {
+    XrValue msg = xrt_exception_get_message_value(exc);
+    return XR_IS_STR(msg) ? xr_str_data(msg) : NULL;
+}
+
 /* =========================================================================
  * xrt_throw - throw an exception value
  *
@@ -83,6 +131,7 @@ static inline void xrt_defer_unwind_to(void *mark);
  * ========================================================================= */
 
 static XRT_COLD _Noreturn void xrt_throw_exc(XrValue exc) {
+    exc = xrt_exception_normalize(exc);
     if (xrt_exc_top) {
         /* Caught panic: run the defers of every frame skipped on the way to the
          * handler (down to its recorded mark), then jump. An uncaught panic
@@ -94,8 +143,9 @@ static XRT_COLD _Noreturn void xrt_throw_exc(XrValue exc) {
     /* Uncaught exception: report and exit with status 1, matching the VM's
      * uncaught-exception behavior (a clean exit(1), not a SIGABRT/134 core
      * dump) so both backends agree on the observable exit code. */
-    if (exc.tag == XR_TAG_STR || exc.tag == XR_TAG_STR_ARC) {
-        fprintf(stderr, "Uncaught exception: %s\n", xr_str_data(exc));
+    const char *message = xrt_exception_message_cstr(exc);
+    if (message) {
+        fprintf(stderr, "Uncaught exception: %s\n", message);
     } else {
         fprintf(stderr, "Uncaught exception (tag=%d)\n", exc.tag);
     }
@@ -107,10 +157,9 @@ static XRT_COLD _Noreturn void xrt_throw_exc(XrValue exc) {
  * a panic is an exception-layer concern; xrt_coll.h's index helpers and the
  * generated typed/fixed-array reads call it via a forward declaration. */
 static XRT_COLD _Noreturn void xrt_index_oob(int64_t idx, int64_t length) {
-    char buf[96];
-    snprintf(buf, sizeof(buf), "E0430: array index out of range: %lld (length %lld)",
-             (long long) idx, (long long) length);
-    xrt_throw_exc(xr_box_str(buf));
+    char buf[XR_ERROR_CORE_INDEX_OOB_BUFSZ];
+    xr_error_core_format_array_index_oob(buf, sizeof(buf), idx, length);
+    xrt_throw_exc(xrt_exception_new_value(XR_ERR_INDEX_OUT_OF_BOUNDS, buf, strlen(buf)));
 }
 
 #endif  // XRT_EXCEPTION_H
