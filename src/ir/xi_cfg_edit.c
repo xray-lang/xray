@@ -182,7 +182,7 @@ XR_FUNC uint32_t xi_cfg_compact_blocks(XiFunc *f) {
     uint32_t orig = f->nblocks;
     for (uint32_t i = 0; i < f->nblocks; i++) {
         XiBlock *blk = f->blocks[i];
-        if (blk->kind != XI_BLOCK_UNREACHABLE || blk == f->entry) {
+        if (blk->kind != XI_BLOCK_UNREACHABLE || blk == f->entry || blk->npreds > 0) {
             f->blocks[write] = blk;
             f->blocks[write]->id = write;
             write++;
