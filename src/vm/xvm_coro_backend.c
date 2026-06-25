@@ -61,6 +61,7 @@ static XrVMResult try_recover_via_closure_continuation(XrayIsolate *isolate, XrW
 static XrVMResult vm_backend_resume_on_worker(XrWorker *worker, XrCoroutine *coro);
 static XrCoroRunResult vm_backend_resume(XrCoroutine *coro, const XrCoroEvent *event,
                                          const XrCoroRunContext *run_ctx);
+static XrCoroRunKind vm_backend_gen_drive(XrCoroutine *coro, XrValue *out);
 static XrCoroRunResult worker_run_result_from_vm(XrCoroutine *coro, XrVMResult result);
 static const char *vm_backend_debug_name(const XrCoroutine *coro);
 static void vm_backend_debug_snapshot(const XrCoroutine *coro, XrCoroDebugSnapshot *snapshot);
@@ -90,6 +91,7 @@ static XrCFuncResult vm_backend_call_closure(XrayIsolate *X, XrCoroutine *coro, 
 static const XrCoroBackendVTable vm_backend_vtable = {
     .kind = XR_CORO_BACKEND_VM,
     .resume = vm_backend_resume,
+    .gen_drive = vm_backend_gen_drive,
     .trace_roots = NULL,
     .prepare_recycle = vm_backend_prepare_recycle,
     .reset_reusable = vm_backend_reset_reusable,
@@ -1462,9 +1464,11 @@ XR_FUNC XrVMContext *xr_vm_try_direct_switch(XrayIsolate *isolate, XrVMContext *
 // Precondition: caller has already set RUNNING|STARTED on coro->flags and
 // bound current_coro on both ctx and coro_ctx. VM state must carry a
 // non-NULL closure with a non-NULL proto (validated upstream).
-static XrVMResult run_first_exec(XrayIsolate *isolate, XrWorker *worker, XrCoroutine *coro,
-                                 XrVMContext *ctx, XrVMContext *coro_ctx) {
-    (void) worker;
+// Build the coroutine's first bytecode frame (stack/frame/args) without running
+// the interpreter. Shared by the scheduled first-exec path and the synchronous
+// generator drive. Returns XR_VM_OK once the frame is set up, or
+// XR_VM_RUNTIME_ERROR on a missing closure / stack-grow failure.
+static XrVMResult vm_setup_first_frame(XrCoroutine *coro, XrVMContext *coro_ctx) {
     XrVmCoroState *vm_state = vm_state_for_coro(coro);
     if (!vm_state || vm_state->entry_type != XR_CORO_ENTRY_CLOSURE)
         return XR_VM_RUNTIME_ERROR;
@@ -1508,8 +1512,83 @@ static XrVMResult run_first_exec(XrayIsolate *isolate, XrWorker *worker, XrCorou
 
     coro_ctx->stack_top = coro_ctx->stack + frame->base_offset + proto->maxstacksize;
     coro_ctx->module_base_frame = 0;
+    return XR_VM_OK;
+}
 
+static XrVMResult run_first_exec(XrayIsolate *isolate, XrWorker *worker, XrCoroutine *coro,
+                                 XrVMContext *ctx, XrVMContext *coro_ctx) {
+    (void) worker;
+    XrVMResult setup = vm_setup_first_frame(coro, coro_ctx);
+    if (setup != XR_VM_OK)
+        return setup;
     return run_dispatch_and_finalize(isolate, worker, coro, ctx, coro_ctx);
+}
+
+// ========== Generator Drive (synchronous pull) ==========
+//
+// Runs a generator coroutine — created but never scheduled — to its next
+// `yield expr` (OP_GEN_YIELD) or to completion, directly on its own VM context.
+// Called from the consuming iterator's hasNext()/next(); it does NOT touch the
+// worker run queue or arm direct-switch admission, so the generator executes in
+// isolation and returns control to the caller at each yield.
+static XrCoroRunKind vm_backend_gen_drive(XrCoroutine *coro, XrValue *out) {
+    if (out)
+        *out = xr_null();
+    if (!coro)
+        return XR_CORO_RUN_ERROR;
+    if (xr_coro_flags_has(coro, XR_CORO_FLG_DONE))
+        return XR_CORO_RUN_DONE;
+
+    XrayIsolate *isolate = xr_coro_vm_owner(coro);
+    XrVmCoroState *vm_state = vm_state_for_coro(coro);
+    if (!isolate || !vm_state)
+        return XR_CORO_RUN_ERROR;
+    XrVMContext *gctx = &vm_state->ctx;
+    gctx->current_coro = coro;
+    if (gctx->isolate != isolate)
+        gctx->isolate = isolate;
+
+    XrVMResult res;
+    uint32_t flags = xr_coro_flags_load(coro);
+    if (!(flags & XR_CORO_FLG_STARTED)) {
+        xr_coro_flags_swap(coro, XR_CORO_FLG_READY | XR_CORO_FLG_BLOCKED,
+                           XR_CORO_FLG_RUNNING | XR_CORO_FLG_STARTED);
+        res = vm_setup_first_frame(coro, gctx);
+        if (res == XR_VM_OK)
+            res = run(isolate, gctx);
+    } else {
+        xr_coro_transition_to_running(coro);
+        res = run(isolate, gctx);
+    }
+
+    if (res == XR_VM_YIELD) {
+        xr_coro_transition_to_ready(coro);
+        if (out)
+            *out = coro->result;
+        return XR_CORO_RUN_YIELD;
+    }
+    if (res == XR_VM_OK && XR_IS_NULL(gctx->pending_error)) {
+        coro->result = gctx->stack_capacity > 0 ? gctx->stack[0] : xr_null();
+        xr_coro_flags_set(coro, XR_CORO_FLG_DONE);
+        if (out)
+            *out = coro->result;
+        return XR_CORO_RUN_DONE;
+    }
+
+    // Error / unexpected suspend (block): generators are pure value producers.
+    xr_coro_flags_set(coro, XR_CORO_FLG_DONE);
+    XrValue err = xr_null();
+    coro->error_is_value = !XR_IS_NULL(gctx->pending_error);
+    if (!XR_IS_NULL(gctx->pending_error))
+        err = gctx->pending_error;
+    else if (!XR_IS_NULL(gctx->current_exception))
+        err = gctx->current_exception;
+    coro->error = err;
+    if (out)
+        *out = err;
+    gctx->pending_error = xr_null();
+    gctx->current_exception = xr_null();
+    return XR_CORO_RUN_ERROR;
 }
 
 // ========== run_resume_path: Continuation + Unroll ==========

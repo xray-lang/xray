@@ -27,6 +27,14 @@ vmcase(OP_GO) {
     VM_DISPATCH(_sc_cr);
 }
 
+vmcase(OP_GEN_START) {
+    TRACE_EXECUTION();
+    ci->pc = pc;
+    XrDispatchAction _gs_cr = vm_gen_start(isolate, vm_ctx, i, base, ci);
+    pc = ci->pc;
+    VM_DISPATCH(_gs_cr);
+}
+
 vmcase(OP_AWAIT) {
     TRACE_EXECUTION();
     /* Inline fast path: task completed with immediate value.

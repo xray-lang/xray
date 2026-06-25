@@ -1,0 +1,33 @@
+// Generator value-yield: `yield expr` produces Iterator<T>, consumable by for-in.
+
+fn counter(n: int) -> Iterator<int> {
+    for (let i = 0; i < n; i++) {
+        yield i
+    }
+}
+
+fn rangeSum(n: int) -> int {
+    let sum = 0
+    for (x in counter(n)) {
+        sum = sum + x
+    }
+    return sum
+}
+
+fn firstTwoTotal(n: int) -> int {
+    let sum = 0
+    for (x in counter(n)) {
+        sum = sum + x
+        if (x == 1) {
+            break
+        }
+    }
+    return sum
+}
+
+@test
+fn test_generator_for_in() {
+    assert(rangeSum(5) == 10)  // 0+1+2+3+4
+    assert(rangeSum(0) == 0)
+    assert(firstTwoTotal(5) == 1)
+}

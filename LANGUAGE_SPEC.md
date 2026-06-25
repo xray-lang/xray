@@ -175,7 +175,7 @@ Xray has **63 reserved keywords** in total; the authoritative source-of-truth ta
 | `shared` | cross-coroutine shared modifier (combined with `const`/`let`) |
 | `fn` | function declaration |
 | `return` | function return |
-| `yield` | coroutine yield (statement form) |
+| `yield` | generator value-yield statement |
 | `if` `else` | conditional branches |
 | `while` | loop |
 | `for` `in` | loops (C-style + for-in) |
@@ -1531,12 +1531,12 @@ See §1.6.5. In brief:
 ### 3.16 `yield` Statement
 
 ```xray
-yield                       // yield execution
+yield expr                  // produce one generator value and suspend
 ```
 
-**Current implementation**: only the value-less statement form is supported, letting the coroutine relinquish the CPU (analogous to Go's `runtime.Gosched()`).
+`yield expr` is only valid inside a generator function declared to return `Iterator<T>`. Calling a generator function does not immediately execute its body; it returns a lazy `Iterator<T>`. `for-in` pulls through `hasNext()` / `next()`, and each `yield expr` produces one `T` before suspending until the next pull.
 
-See §10.10.
+Cooperative CPU yielding no longer uses bare `yield`; use `Coro.yield()` (see §10.10). Bare `yield` is a syntax error.
 
 ---
 
@@ -3826,9 +3826,9 @@ match t.poll() {
 }
 ```
 
-**Cancellation semantics**: `cancel()` sets the cancellation flag; the coroutine throws a cancellation exception at the next safepoint (GC checkpoint, channel operation, `await`, `yield`). Plain `await` on a cancelled task throws `TaskCancelled`; use `awaitResult()` or `awaitTimeout(ms)` when you want a status value.
+**Cancellation semantics**: `cancel()` sets the cancellation flag; the coroutine throws a cancellation exception at the next safepoint (GC checkpoint, channel operation, `await`, `Coro.yield()`). Plain `await` on a cancelled task throws `TaskCancelled`; use `awaitResult()` or `awaitTimeout(ms)` when you want a status value.
 
-**Watchdog policy**: the runtime monitor thread (sysmon) observes the heartbeat of RUNNING coroutines. Pure Xray loops advance the heartbeat at back-edge safepoints, so they are observed as making progress; sysmon is mainly for long native/FFI calls or no-safepoint regions that stop progressing. If a heartbeat stays frozen for too long, the default behavior is **warn-only**: a stuck warning is printed after roughly 100ms, but the coroutine is not silently cancelled. Forced cancellation is explicit opt-in: set `XRAY_SYSMON_CANCEL_MS=N` (`N > 0`, milliseconds) to mark a coroutine for cancellation after its heartbeat remains frozen past that threshold; unset or `0` keeps warn-only behavior. Long pure-CPU loops may still insert `yield` for scheduling fairness and cancellation responsiveness, but `yield` is no longer required to avoid default watchdog cancellation.
+**Watchdog policy**: the runtime monitor thread (sysmon) observes the heartbeat of RUNNING coroutines. Pure Xray loops advance the heartbeat at back-edge safepoints, so they are observed as making progress; sysmon is mainly for long native/FFI calls or no-safepoint regions that stop progressing. If a heartbeat stays frozen for too long, the default behavior is **warn-only**: a stuck warning is printed after roughly 100ms, but the coroutine is not silently cancelled. Forced cancellation is explicit opt-in: set `XRAY_SYSMON_CANCEL_MS=N` (`N > 0`, milliseconds) to mark a coroutine for cancellation after its heartbeat remains frozen past that threshold; unset or `0` keeps warn-only behavior. Long pure-CPU loops may still insert `Coro.yield()` for scheduling fairness and cancellation responsiveness, but it is no longer required to avoid default watchdog cancellation.
 
 ### 10.5 Channel
 
@@ -4096,20 +4096,20 @@ let val = counter.load(Ordering.Acquire)
 ```
 
 
-### 10.10 `yield` — yield the CPU
+### 10.10 `Coro.yield()` — yield the CPU
 
 ```ebnf
-YieldStmt ::= 'yield'
+CoroYieldCall ::= 'Coro' '.' 'yield' '(' ')'
 ```
 
 ```xray
 for (i in 0..1000) {
     do_chunk(i)
-    yield                       // explicit safepoint, lets other coroutines run
+    Coro.yield()                // explicit safepoint, lets other coroutines run
 }
 ```
 
-**Current implementation**: usable as a statement, equivalent to Go's `runtime.Gosched()`; valued `yield` is not supported.
+`Coro.yield()` is a cooperative scheduling point, equivalent to an explicit safepoint where the scheduler can run other coroutines and observe cancellation. `yield expr` is reserved for generator value production; bare `yield` is rejected.
 
 ### 10.11 Concurrency safety model
 
@@ -5485,7 +5485,7 @@ SelectArm  ::= Identifier 'from' Expression '->' Block      // receive
             |  'after' Expression '->' Block                // timeout
             |  '_' '->' Block                                // default
 
-YieldStmt ::= 'yield'
+YieldStmt ::= 'yield' Expression
 ```
 
 ### A.6 Declarations
@@ -5624,7 +5624,7 @@ The full set of 63 reserved keywords sorted alphabetically; see [§1.5](#15-keyw
 | `uint8`..`uint64` | §2.3.1 |
 | `unsafe` | §3.2 |
 | `while` | §4.3 |
-| `yield` | §3.16 / §10.10 |
+| `yield` | §3.16 |
 
 ---
 

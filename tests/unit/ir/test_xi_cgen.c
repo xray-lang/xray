@@ -898,7 +898,7 @@ TEST(cgen_struct_debug_source_var_slots_use_typed_pointers) {
 
 TEST(cgen_coro_emits_source_line_directives) {
     const char *src = "fn worker(n: int) -> int {\n"
-                      "    yield\n"
+                      "    Coro.yield()\n"
                       "    return n + 1\n"
                       "}\n"
                       "let task = go worker(41)\n"
@@ -950,7 +950,7 @@ TEST(cgen_coro_emits_source_line_directives) {
 TEST(cgen_coro_emits_debug_source_var_slots) {
     const char *src = "fn worker(seed: int) -> int {\n"
                       "    let answer = seed + 1\n"
-                      "    yield\n"
+                      "    Coro.yield()\n"
                       "    let doubled = answer * 2\n"
                       "    let ratio = doubled / 2.0\n"
                       "    let ok = ratio == 21.0\n"
@@ -3423,7 +3423,7 @@ TEST(cgen_unknown_method_symbol_fails_fast) {
 
 TEST(cgen_suspendable_wrapper_aborts) {
     const char *src = "fn worker(n: int) -> int {\n"
-                      "    yield\n"
+                      "    Coro.yield()\n"
                       "    return n + 1\n"
                       "}\n"
                       "let task = go worker(41)\n"
@@ -3450,7 +3450,7 @@ TEST(cgen_suspendable_wrapper_aborts) {
 
 TEST(cgen_direct_suspend_call_propagates_cps) {
     const char *src = "fn worker(n: int) -> int {\n"
-                      "    yield\n"
+                      "    Coro.yield()\n"
                       "    return n + 1\n"
                       "}\n"
                       "print(worker(41))\n";
@@ -3487,7 +3487,7 @@ TEST(cgen_direct_suspend_call_propagates_cps) {
 TEST(cgen_direct_suspend_method_call_propagates_cps) {
     const char *src = "class Box {\n"
                       "    bump(n: int) -> int {\n"
-                      "        yield\n"
+                      "        Coro.yield()\n"
                       "        return n + 1\n"
                       "    }\n"
                       "}\n"
@@ -3546,7 +3546,7 @@ TEST(cgen_coro_shared_static_function_retain_is_elided) {
                       "    return n + 1\n"
                       "}\n"
                       "fn worker(n: int) -> int {\n"
-                      "    yield\n"
+                      "    Coro.yield()\n"
                       "    return inc(n)\n"
                       "}\n"
                       "let task = go worker(41)\n"
@@ -3622,7 +3622,7 @@ TEST(cgen_suspendable_dependency_init_fails_fast) {
 
 TEST(cgen_coro_frame_params_use_typed_storage) {
     const char *src = "fn worker(n: int) -> int {\n"
-                      "    yield\n"
+                      "    Coro.yield()\n"
                       "    return n + 1\n"
                       "}\n"
                       "let task = go worker(41)\n"
@@ -3662,7 +3662,7 @@ TEST(cgen_coro_frame_skips_dead_ssa_slots) {
     const char *src = "fn worker(n: int) -> int {\n"
                       "    let a = n + 1\n"
                       "    let b = a + 2\n"
-                      "    yield\n"
+                      "    Coro.yield()\n"
                       "    return n + 3\n"
                       "}\n"
                       "let task = go worker(41)\n"
@@ -3768,7 +3768,7 @@ TEST(cgen_runtime_managed_types_skip_arc) {
 TEST(cgen_coro_frame_release_uses_aot_arc) {
     const char *src = "fn worker() -> string {\n"
                       "    let s = \"hello\" + \"_aot\"\n"
-                      "    yield\n"
+                      "    Coro.yield()\n"
                       "    return s\n"
                       "}\n"
                       "let task = go worker()\n"
@@ -3805,7 +3805,7 @@ TEST(cgen_coro_frame_release_uses_aot_arc) {
 TEST(cgen_coro_go_clones_tagged_args) {
     const char *src = "fn worker(xs: Array<int>) -> int {\n"
                       "    xs.push(99)\n"
-                      "    yield\n"
+                      "    Coro.yield()\n"
                       "    return xs.length\n"
                       "}\n"
                       "let xs = [1, 2]\n"
@@ -4124,7 +4124,7 @@ TEST(cgen_coro_scalar_channel_try_send_uses_typed_bridge) {
 
 TEST(cgen_coro_builtin_no_payload_enum_fields_skip_bridge) {
     const char *src = "fn read_builtin_enums() -> int {\n"
-                      "    yield\n"
+                      "    Coro.yield()\n"
                       "    let sent = SendResult.Sent\n"
                       "    let closed = Recv.Closed\n"
                       "    let pending = TaskResult.Pending\n"
@@ -4158,7 +4158,7 @@ TEST(cgen_coro_builtin_no_payload_enum_fields_skip_bridge) {
 
 TEST(cgen_coro_await_clones_tagged_result) {
     const char *src = "fn worker() -> Array<int> {\n"
-                      "    yield\n"
+                      "    Coro.yield()\n"
                       "    return [1, 2]\n"
                       "}\n"
                       "let task = go worker()\n"
@@ -4189,7 +4189,7 @@ TEST(cgen_coro_await_clones_tagged_result) {
 
 TEST(cgen_coro_scalar_await_uses_tagged_slot) {
     const char *src = "fn worker() -> int {\n"
-                      "    yield\n"
+                      "    Coro.yield()\n"
                       "    return 41\n"
                       "}\n"
                       "fn main_plus() -> int {\n"
@@ -4645,7 +4645,7 @@ TEST(cgen_coro_recv_slot_is_traced_as_frame_root) {
 
 TEST(cgen_coro_await_all_uses_aggregate_bridge) {
     const char *src = "fn worker(n: int) -> int {\n"
-                      "    yield\n"
+                      "    Coro.yield()\n"
                       "    return n * n\n"
                       "}\n"
                       "let t1 = go worker(2)\n"
@@ -4895,7 +4895,7 @@ TEST(cgen_coro_task_status_uses_native_enum_status) {
                       "    }\n"
                       "}\n"
                       "fn quick_value(n: int) -> int {\n"
-                      "    yield\n"
+                      "    Coro.yield()\n"
                       "    return n * 2\n"
                       "}\n"
                       "fn task_done(task: Task<int>) -> bool {\n"

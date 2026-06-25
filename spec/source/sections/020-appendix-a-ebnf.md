@@ -226,7 +226,7 @@ SelectArm  ::= Identifier 'from' Expression '->' Block      // 接收
             |  'after' Expression '->' Block                // 超时
             |  '_' '->' Block                                // 默认
 
-YieldStmt ::= 'yield'
+YieldStmt ::= 'yield' Expression
 ```
 
 ### A.6 声明
@@ -528,7 +528,7 @@ SelectArm  ::= Identifier 'from' Expression '->' Block      // receive
             |  'after' Expression '->' Block                // timeout
             |  '_' '->' Block                                // default
 
-YieldStmt ::= 'yield'
+YieldStmt ::= 'yield' Expression
 ```
 
 ### A.6 Declarations

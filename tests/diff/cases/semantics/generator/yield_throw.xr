@@ -1,0 +1,21 @@
+enum GenErr {
+    Msg(s: string)
+}
+
+fn gen() -> Iterator<int> {
+    yield 1
+    throw GenErr.Msg("boom")
+}
+
+try {
+    let it = gen().iterator()
+    while (it.hasNext()) {
+        let x = it.next()
+        print("x " + string(x))
+    }
+    print("after try")
+} catch (e) {
+    match (e) {
+        GenErr.Msg(s) -> print("caught " + s)
+    }
+}

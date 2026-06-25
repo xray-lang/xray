@@ -191,6 +191,38 @@ static XiFunc *lower_resolve_static_callee_func(XiLower *l, XiValue *callee) {
     return lower_resolve_static_callee_func_in_scope(l ? l->func : NULL, callee);
 }
 
+/* Post-lowering rewrite: a direct call to a generator function does not run the
+ * body — it constructs a coroutine-backed iterator. Rewrite XI_CALL -> XI_GEN_CALL
+ * for every call whose static callee is a generator (entry_type == 2). This runs
+ * after the whole function tree is lowered (so every callee's entry_type is set,
+ * including forward/nested references) and before escape/ownership analysis (so
+ * the generator call's coroutine-capture escape semantics are honored). The call
+ * result type is already Iterator<T> (the generator's declared return type), so
+ * only the opcode changes. */
+static void xi_lower_rewrite_generator_calls_in(XiFunc *f) {
+    if (!f)
+        return;
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        XiBlock *blk = f->blocks[b];
+        if (!blk)
+            continue;
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            XiValue *v = blk->values[i];
+            if (!v || v->op != XI_CALL || v->nargs < 1)
+                continue;
+            XiFunc *callee = lower_resolve_static_callee_func_in_scope(f, v->args[0]);
+            if (callee && callee->entry_type == 2 /* XR_ENTRY_GENERATOR */)
+                v->op = XI_GEN_CALL;
+        }
+    }
+    for (uint16_t c = 0; c < f->nchildren; c++)
+        xi_lower_rewrite_generator_calls_in(f->children[c]);
+}
+
+XR_FUNC void xi_lower_rewrite_generator_calls(XiFunc *root) {
+    xi_lower_rewrite_generator_calls_in(root);
+}
+
 static bool lower_value_param_is_readonly_depth(XiFunc *callee, uint16_t pidx, int depth);
 
 static bool lower_call_arg_is_readonly_forward(XiFunc *scope, XiValue *call, uint16_t arg_idx,

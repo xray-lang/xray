@@ -26,10 +26,13 @@
 #include "../mem/xheap.h"
 #include "../mem/xalloc_unified.h"
 #include "../mem/xcoro_heap.h"
+#include "../../coro/xcoroutine.h"
+#include "../../coro/xdeep_copy.h"
 #include "../class/xclass.h"
 #include "../class/xclass_builder.h"
 #include "../class/xclass_system.h"
 #include "../class/xinstance.h"
+#include "../../vm/xvm.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -162,6 +165,26 @@ XrIterator *xr_iterator_keys_from_json(struct XrCoroutine *coro, XrJson *json,
     return iter;
 }
 
+// Create iterator over a generator coroutine (created but not scheduled). The
+// iterator owns `gen` and drives it synchronously: hasNext() prefetches the next
+// `yield`ed value (buffered in gen->result), next() promotes it to the owner's
+// heap. scan_index doubles as the pull phase: 0=idle, 1=buffered, 2=exhausted.
+XrIterator *xr_iterator_new_from_generator(struct XrCoroutine *owner, struct XrCoroutine *gen) {
+    XR_DCHECK(owner != NULL, "iterator_new_from_generator: NULL owner");
+    XR_DCHECK(gen != NULL, "iterator_new_from_generator: NULL gen");
+    XrIterator *iter = iterator_alloc(owner);
+    if (!iter)
+        return NULL;
+    iter->type = XR_ITERATOR_GENERATOR;
+    iter->source.gen = gen;
+    iter->scan_index = 0;  // phase: idle (needs a drive)
+    iter->total_count = 0;
+    iter->coro = owner;
+    iter->context = NULL;
+    iter->mode = XR_ITER_MODE_VALUES;
+    return iter;
+}
+
 // Check if more elements available (advances scan_index past empty slots)
 bool xr_iterator_has_next(XrIterator *iter) {
     if (!iter) {
@@ -214,6 +237,23 @@ bool xr_iterator_has_next(XrIterator *iter) {
         if (!iter->source.string)
             return false;
         return iter->scan_index < iter->total_count;
+    } else if (iter->type == XR_ITERATOR_GENERATOR) {
+        XrCoroutine *gen = iter->source.gen;
+        if (!gen)
+            return false;
+        if (iter->scan_index == 2)  // exhausted
+            return false;
+        if (iter->scan_index == 1)  // already prefetched
+            return true;
+        // idle: pull the producer one step to prefetch the next yielded value
+        XrValue out = xr_null();
+        XrCoroRunKind kind = gen->backend->gen_drive(gen, &out);
+        if (kind == XR_CORO_RUN_YIELD) {
+            iter->scan_index = 1;  // buffered in gen->result
+            return true;
+        }
+        iter->scan_index = 2;  // done or error: no more elements
+        return false;
     }
 
     return false;
@@ -357,6 +397,25 @@ XrValue xr_iterator_next(XrIterator *iter) {
         xr_tuple_set(pair, 0, xr_int((int64_t) idx));
         xr_tuple_set(pair, 1, ch);
         return xr_value_from_tuple(pair);
+    } else if (iter->type == XR_ITERATOR_GENERATOR) {
+        XrCoroutine *gen = iter->source.gen;
+        if (!gen || iter->scan_index == 2)
+            return xr_null();
+        if (iter->scan_index != 1) {
+            // not prefetched (direct next() without hasNext()): pull one step
+            XrValue out = xr_null();
+            XrCoroRunKind kind = gen->backend->gen_drive(gen, &out);
+            if (kind != XR_CORO_RUN_YIELD) {
+                iter->scan_index = 2;
+                return xr_null();
+            }
+        }
+        // Consume the buffered yielded value (held in gen->result) and promote it
+        // to the consuming coroutine's heap so it outlives the producer. Driven
+        // through the VM-neutral runtime core so the same path serves VM and AOT
+        // generators; scalars promote as identity.
+        iter->scan_index = 0;  // consumed; the next pull must drive again
+        return xr_deep_copy_to_coro_core(iter->coro->core, gen->result, iter->coro);
     }
 
     return xr_null();
@@ -405,6 +464,13 @@ static void iterator_body_destroy(void *body) {
         case XR_ITERATOR_JSON:
             src = (XrObjHeader *) iter->source.json;
             break;
+        case XR_ITERATOR_GENERATOR:
+            // The producer coroutine is owned (not RC-shared); tear it down.
+            if (iter->source.gen) {
+                xr_coro_destroy(iter->source.gen);
+                iter->source.gen = NULL;
+            }
+            break;
         default:
             break;
     }
@@ -431,27 +497,55 @@ XrNativeBodyDesc *xr_iterator_native_body_desc(void) {
 #include "../value/xvalue_format.h"
 
 static XrValue m_iter_has_next(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
-    (void) iso;
     (void) args;
     (void) argc;
     XrIterator *iter = xr_value_to_iterator(self);
     XR_DCHECK(iter != NULL, "Iterator.hasNext: invalid iterator");
-    return xr_bool(xr_iterator_has_next(iter));
+    bool has_next = xr_iterator_has_next(iter);
+    if (!has_next && iter->type == XR_ITERATOR_GENERATOR && iter->source.gen &&
+        !XR_IS_NULL(iter->source.gen->error)) {
+        XrValue err = iter->source.gen->error;
+        if (iter->source.gen->error_is_value)
+            xr_vm_set_pending_error(iso, err);
+        else
+            xr_vm_throw_exception(iso, err);
+        iter->source.gen->error = xr_null();
+    }
+    return xr_bool(has_next);
 }
 
 static XrValue m_iter_next(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
-    (void) iso;
     (void) args;
     (void) argc;
     XrIterator *iter = xr_value_to_iterator(self);
     XR_DCHECK(iter != NULL, "Iterator.next: invalid iterator");
-    return xr_iterator_next(iter);
+    XrValue value = xr_iterator_next(iter);
+    if (iter->type == XR_ITERATOR_GENERATOR && iter->source.gen &&
+        !XR_IS_NULL(iter->source.gen->error)) {
+        XrValue err = iter->source.gen->error;
+        if (iter->source.gen->error_is_value)
+            xr_vm_set_pending_error(iso, err);
+        else
+            xr_vm_throw_exception(iso, err);
+        iter->source.gen->error = xr_null();
+    }
+    return value;
 }
 
 static XrValue m_iter_to_string(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
     (void) args;
     (void) argc;
     return xr_string_value(xr_value_to_string(iso, self));
+}
+
+// An iterator is its own iterable: `for (x in it)` lowers to it.iterator()
+// then hasNext()/next(); returning self lets a bare iterator (e.g. the value a
+// generator call yields) flow through that same protocol with no wrapper.
+static XrValue m_iter_iterator(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+    (void) iso;
+    (void) args;
+    (void) argc;
+    return self;
 }
 
 void xr_iterator_register_class(XrayIsolate *X) {
@@ -466,6 +560,7 @@ void xr_iterator_register_class(XrayIsolate *X) {
     xr_class_builder_set_native_body(b, xr_iterator_native_body_desc());
     xr_class_builder_add_method(b, "hasNext", m_iter_has_next, 0, 0);
     xr_class_builder_add_method(b, "next", m_iter_next, 0, 0);
+    xr_class_builder_add_method(b, "iterator", m_iter_iterator, 0, 0);
     xr_class_builder_add_method(b, "toString", m_iter_to_string, 0, 0);
 
     XrClass *cls = xr_class_builder_finalize(b);

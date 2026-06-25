@@ -102,6 +102,10 @@ XR_FUNC XiFunc *xi_lower_func_impl(struct AstNode *func_node, struct XaAnalyzer 
                                    struct XrayIsolate *isolate, XiLower *parent_ctx);
 XR_FUNC void xi_lower_func_add_child(XiFunc *parent, XiFunc *child);
 
+/* Rewrite direct calls to generator functions into XI_GEN_CALL across the whole
+ * function tree. Call once on the program/function root after lowering. */
+XR_FUNC void xi_lower_rewrite_generator_calls(XiFunc *root);
+
 /* ========== AST Lowering Primitives ========== */
 
 XR_FUNC XiValue *xi_lower_expr(XiLower *l, struct AstNode *node);

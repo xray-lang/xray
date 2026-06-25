@@ -332,6 +332,7 @@ XR_FUNC void xi_emit_defer(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
 XR_FUNC void xi_emit_defer_mark(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
 XR_FUNC void xi_emit_defer_run_to(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
 XR_FUNC void xi_emit_go(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_gen_call(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
 XR_FUNC void xi_emit_await(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
 XR_FUNC void xi_emit_yield(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
 XR_FUNC void xi_emit_gen_yield(EmitCtx *ctx, XiValue *v, XiEmitReg dst);

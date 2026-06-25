@@ -3207,6 +3207,9 @@ static void xicgen_ptr_store(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
     }
 }
 
+static void xicgen_gen_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                            const char *prefix);
+
 static bool xi_to_c_emit_generated(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                    const char *prefix) {
     switch (v->op) {

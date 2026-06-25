@@ -96,11 +96,15 @@ static void cg_builtin_init_scan_value(CgBuiltinInitPlan *plan, const XiValue *v
 
     switch (v->op) {
         case XI_YIELD:
+        case XI_GEN_YIELD:
         case XI_AWAIT:
             plan->runtime_caps |= XR_AOT_CAP_CORO;
             break;
         case XI_GO:
             plan->runtime_caps |= XR_AOT_CAP_CORO | XR_AOT_CAP_TASK;
+            break;
+        case XI_GEN_CALL:
+            plan->runtime_caps |= XR_AOT_CAP_CORO;
             break;
         case XI_SCOPE_ENTER:
         case XI_SCOPE_EXIT:

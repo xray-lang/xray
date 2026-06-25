@@ -70,8 +70,15 @@ typedef enum {
     XR_AOT_RUN_YIELD,
     XR_AOT_RUN_SPAWN_CHILD,
     XR_AOT_RUN_ERROR,
-    XR_AOT_RUN_CANCELLED
+    XR_AOT_RUN_CANCELLED,
+    XR_AOT_RUN_GEN_YIELD  // generator `yield expr`: .value carries the yielded element
 } XrAotRunKind;
+
+typedef enum {
+    XR_AOT_GEN_DRIVE_DONE = 0,
+    XR_AOT_GEN_DRIVE_YIELD,
+    XR_AOT_GEN_DRIVE_ERROR
+} XrAotGenDriveKind;
 
 typedef struct XrAotResult {
     XrAotRunKind kind;
@@ -159,6 +166,15 @@ static inline XrAotResult xr_aot_yielded(void) {
     return xr_aot_result(XR_AOT_RUN_YIELD);
 }
 
+// Generator value yield: hand `value` to the driving iterator and suspend the
+// producer. Distinct from xr_aot_yielded() (cooperative scheduling) so the
+// generator drive can read the element and never re-enqueues on a worker.
+static inline XrAotResult xr_aot_gen_yielded(XrValue value) {
+    XrAotResult result = xr_aot_result(XR_AOT_RUN_GEN_YIELD);
+    result.value = value;
+    return result;
+}
+
 static inline XrAotResult xr_aot_spawn_child(struct XrCoroutine *child) {
     XrAotResult result = xr_aot_result(XR_AOT_RUN_SPAWN_CHILD);
     result.child = child;
@@ -206,12 +222,24 @@ XR_FUNC XrValue xr_aot_coro_op(const XrAotContext *ctx, int32_t sub_op, const Xr
 
 XR_FUNC struct XrCoroutine *xr_coro_create_aot(XrAotRuntime *runtime, const XrAotCoroDesc *desc,
                                                void *frame, const char *name);
+XR_FUNC void xr_coro_destroy(struct XrCoroutine *coro);
+
+// Pull a generator coroutine to its next yielded value without exposing the
+// scheduler/backend ABI to AOT collection helpers.
+XR_FUNC XrAotGenDriveKind xr_aot_gen_drive(struct XrCoroutine *coro, XrValue *out,
+                                           bool *out_error_is_value);
 
 XR_FUNC XrValue xr_aot_run_main(XrAotRuntime *runtime, const XrAotCoroDesc *desc, void *frame);
 
 XR_FUNC XrAotSpawnResult xr_aot_spawn(const XrAotContext *ctx, const XrAotCoroDesc *desc,
                                       void *frame, int link_mode, bool fire_and_forget,
                                       const char *name);
+
+// Construct a coroutine-backed iterator over a generator function. The producer
+// coroutine is created from desc+frame but NOT scheduled; it is pull-driven by
+// the returned iterator's hasNext()/next(). Returns the iterator as an XrValue.
+XR_FUNC XrValue xr_aot_gen_iterator_new(const XrAotContext *ctx, const XrAotCoroDesc *desc,
+                                        void *frame);
 
 XR_FUNC XrAotResult xr_aot_sleep(const XrAotContext *ctx, int64_t milliseconds);
 XR_FUNC XrAotResult xr_aot_scope_enter(const XrAotContext *ctx, uint8_t scope_mode);

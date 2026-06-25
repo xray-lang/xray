@@ -70,7 +70,7 @@ xray 共 **63 个保留关键字**，源码真值表见 `src/frontend/lexer/xkey
 | `shared` | 跨协程共享修饰符（与 `const`/`let` 组合） |
 | `fn` | 函数声明 |
 | `return` | 函数返回 |
-| `yield` | 协程让出（语句形式）|
+| `yield` | 生成器产值语句 |
 | `if` `else` | 条件分支 |
 | `while` | 循环 |
 | `for` `in` | 循环（C 风格 + for-in） |
@@ -455,7 +455,7 @@ Xray has **63 reserved keywords** in total; the authoritative source-of-truth ta
 | `shared` | cross-coroutine shared modifier (combined with `const`/`let`) |
 | `fn` | function declaration |
 | `return` | function return |
-| `yield` | coroutine yield (statement form) |
+| `yield` | generator value-yield statement |
 | `if` `else` | conditional branches |
 | `while` | loop |
 | `for` `in` | loops (C-style + for-in) |

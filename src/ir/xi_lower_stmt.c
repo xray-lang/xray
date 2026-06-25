@@ -1847,6 +1847,9 @@ static void lower_for_in_custom_iterator(XiLower *l, AstNode *node, XiValue *col
     iter->aux_int = (int64_t) xi_lower_method_symbol(l, "iterator") << 1;
     iter->flags |= XI_FLAG_SIDE_EFFECT;
     iter->line = line;
+    xi_lower_insert_err_check(l, node);
+    if (!l->cur_block)
+        return;
 
     int sid = l->synthetic_id++;
     char buf[32];
@@ -1874,6 +1877,9 @@ static void lower_for_in_custom_iterator(XiLower *l, AstNode *node, XiValue *col
     has_next->aux_int = (int64_t) xi_lower_method_symbol(l, "hasNext") << 1;
     has_next->flags |= XI_FLAG_SIDE_EFFECT;
     has_next->line = line;
+    xi_lower_insert_err_check(l, node);
+    if (!l->cur_block)
+        return;
     xi_block_set_if(l->cur_block, has_next, body_blk, exit_blk);
 
     xi_lower_braun_seal(l, body_blk);
@@ -1892,6 +1898,9 @@ static void lower_for_in_custom_iterator(XiLower *l, AstNode *node, XiValue *col
     next_val->aux_int = (int64_t) xi_lower_method_symbol(l, "next") << 1;
     next_val->flags |= XI_FLAG_SIDE_EFFECT;
     next_val->line = line;
+    xi_lower_insert_err_check(l, node);
+    if (!l->cur_block)
+        return;
 
     struct XrType *item_type = xi_lower_node_type(l, node);
     int item_var = xi_lower_var_create(l, s->item_symbol_id, s->item_name, item_type);

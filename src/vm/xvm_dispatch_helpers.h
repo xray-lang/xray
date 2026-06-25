@@ -378,6 +378,8 @@ XR_FUNC XrDispatchAction vm_invoke_module(XrayIsolate *isolate, XrVMContext *vm_
                                           XrInstruction *pc);
 XR_FUNC XrDispatchAction vm_go(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstruction instr,
                                XrValue *base, XrBcCallFrame *frame);
+XR_FUNC XrDispatchAction vm_gen_start(XrayIsolate *isolate, XrVMContext *vm_ctx,
+                                      XrInstruction instr, XrValue *base, XrBcCallFrame *frame);
 XR_FUNC XrDispatchAction vm_await(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstruction instr,
                                   XrValue *base, XrBcCallFrame *frame, XrInstruction *pc);
 XR_FUNC XrDispatchAction vm_await_timeout(XrayIsolate *isolate, XrVMContext *vm_ctx,
