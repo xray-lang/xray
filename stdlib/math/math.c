@@ -21,6 +21,7 @@
 #include <float.h>
 #include "../../src/os/os_random.h"
 #include "../../src/shared/xr_math_core.h"
+#include "../../src/shared/xr_numeric_core.h"
 #include "../../src/base/xchecks.h"
 
 // Portability: MSVC/<math.h> does not define M_PI/M_E unless _USE_MATH_DEFINES
@@ -70,11 +71,8 @@ static XrValue math_abs(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1)
         return xr_int(0);
     if (XR_IS_INT(args[0])) {
-        int64_t v = XR_TO_INT(args[0]);
-        // INT64_MIN overflow: |INT64_MIN| = 2^63, exceeds INT64_MAX
-        if (v == INT64_MIN)
-            return xr_float((double) INT64_MAX + 1.0);
-        return xr_int(v < 0 ? -v : v);
+        XrNumericCoreI64AbsResult result = xr_numeric_core_i64_math_abs(XR_TO_INT(args[0]));
+        return result.is_float ? xr_float(result.float_value) : xr_int(result.int_value);
     }
     return xr_float(fabs(get_number(args[0])));
 }

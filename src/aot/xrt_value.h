@@ -513,10 +513,8 @@ static inline double xrt_math_number(XrValue v) {
 
 static inline XrValue xrt_math_abs(XrValue v) {
     if (XR_IS_INT(v)) {
-        int64_t i = v.i;
-        if (i == INT64_MIN)
-            return XR_FROM_FLOAT((double) INT64_MAX + 1.0);
-        return XR_FROM_INT(i < 0 ? -i : i);
+        XrNumericCoreI64AbsResult result = xr_numeric_core_i64_math_abs(v.i);
+        return result.is_float ? XR_FROM_FLOAT(result.float_value) : XR_FROM_INT(result.int_value);
     }
     return XR_FROM_FLOAT(fabs(xrt_math_number(v)));
 }
