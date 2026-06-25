@@ -21,6 +21,14 @@ TEST(error_core_formats_array_index_oob) {
     ASSERT_STR_EQ(buf, "array index out of range: -1 (length 3)");
 }
 
+TEST(error_core_formats_type_mismatch) {
+    char buf[XR_ERROR_CORE_TYPE_MISMATCH_BUFSZ];
+    int n = xr_error_core_format_type_mismatch(buf, sizeof(buf), "int", "float");
+
+    ASSERT_TRUE(n > 0);
+    ASSERT_STR_EQ(buf, "TypeError: expected 'int', got 'float'");
+}
+
 TEST(error_core_defines_arithmetic_messages) {
     ASSERT_STR_EQ(XR_ERROR_CORE_DIVISION_BY_ZERO_MSG, "division by zero");
     ASSERT_STR_EQ(XR_ERROR_CORE_MODULO_BY_ZERO_MSG, "modulo by zero");
@@ -95,6 +103,7 @@ TEST_MAIN_BEGIN()
 
 RUN_TEST_SUITE("Error Core");
 RUN_TEST(error_core_formats_array_index_oob);
+RUN_TEST(error_core_formats_type_mismatch);
 RUN_TEST(error_core_defines_arithmetic_messages);
 RUN_TEST(error_core_defines_bytes_messages);
 RUN_TEST(error_core_defines_array_messages);

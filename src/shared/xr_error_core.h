@@ -17,6 +17,7 @@
 #include <stdio.h>
 
 #define XR_ERROR_CORE_INDEX_OOB_BUFSZ 96
+#define XR_ERROR_CORE_TYPE_MISMATCH_BUFSZ 160
 #define XR_ERROR_CORE_DIVISION_BY_ZERO_MSG "division by zero"
 #define XR_ERROR_CORE_MODULO_BY_ZERO_MSG "modulo by zero"
 #define XR_ERROR_CORE_MODULO_REQUIRES_INTEGER_MSG "modulo requires integer types"
@@ -58,6 +59,12 @@ static inline int xr_error_core_format_array_index_oob(char *buf, size_t cap, in
                                                        int64_t length) {
     return snprintf(buf, cap, "array index out of range: %" PRId64 " (length %" PRId64 ")", index,
                     length);
+}
+
+static inline int xr_error_core_format_type_mismatch(char *buf, size_t cap, const char *expected,
+                                                     const char *actual) {
+    return snprintf(buf, cap, "TypeError: expected '%s', got '%s'", expected ? expected : "unknown",
+                    actual ? actual : "unknown");
 }
 
 static inline int xr_error_core_format_prefixed(char *buf, size_t cap, int code,

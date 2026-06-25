@@ -461,64 +461,22 @@ XR_FUNC void xi_emit_checktype(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     if (dst != src)
         emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, src, 0));
 
-    if (ctx->next_reg >= MAX_REGS) {
-        emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
-        return;
-    }
-    XiEmitReg tmp = (XiEmitReg) ctx->next_reg++;
-    if (tmp >= ctx->max_reg)
-        ctx->max_reg = (tmp + 1);
-    emit_inst(ctx, CREATE_ABC(OP_TYPEOF, tmp, dst, 0));
-
     int tid = (int) (v->aux_int >> 1);
     bool allow_null = (v->aux_int & 1) != 0;
-    const char *tname = v->aux ? (const char *) v->aux : "unknown";
 
-    int tid_k = add_const_int(ctx, tid);
+    int64_t mask = 0;
+    if (tid >= 0 && tid < 63)
+        mask |= (1LL << tid);
+    if (allow_null)
+        mask |= (1LL << XR_TID_NULL);
+
+    int mask_k = add_const_int(ctx, mask);
     if (ctx->status != XI_EMIT_OK)
         return;
-    uint16_t tid_arg = 0;
-    if (!xi_emit_const_index_to_c(ctx, tid_k, &tid_arg))
+    uint16_t mask_arg = 0;
+    if (!xi_emit_const_index_to_c(ctx, mask_k, &mask_arg))
         return;
-    emit_inst(ctx, CREATE_ABC(OP_EQK, tmp, tid_arg, 1));
-    int ok_jmp_pc = current_pc(ctx);
-    emit_inst(ctx, CREATE_sJ(OP_JMP, 0));
-
-    int null_ok_jmp_pc = -1;
-    if (allow_null && tid != 0) {
-        int null_k = add_const_int(ctx, 0);
-        if (ctx->status != XI_EMIT_OK)
-            return;
-        uint16_t null_arg = 0;
-        if (!xi_emit_const_index_to_c(ctx, null_k, &null_arg))
-            return;
-        emit_inst(ctx, CREATE_ABC(OP_EQK, tmp, null_arg, 1));
-        null_ok_jmp_pc = current_pc(ctx);
-        emit_inst(ctx, CREATE_sJ(OP_JMP, 0));
-    }
-
-    char err_buf[128];
-    snprintf(err_buf, sizeof(err_buf), "Type check failed: expected %s", tname);
-    int err_k = add_const_string(ctx, err_buf);
-    if (ctx->status != XI_EMIT_OK)
-        return;
-    if (ctx->next_reg >= MAX_REGS) {
-        emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
-        return;
-    }
-    XiEmitReg err_reg = (XiEmitReg) ctx->next_reg++;
-    if (err_reg >= ctx->max_reg)
-        ctx->max_reg = (err_reg + 1);
-    emit_inst(ctx, CREATE_ABx(OP_LOADK, err_reg, err_k));
-    emit_inst(ctx, CREATE_ABC(OP_THROW, err_reg, 0, 0));
-
-    int ok_target = current_pc(ctx);
-    XrInstruction *ok_inst = PROTO_CODE_PTR(ctx->proto, ok_jmp_pc);
-    *ok_inst = CREATE_sJ(OP_JMP, ok_target - (ok_jmp_pc + 1));
-    if (null_ok_jmp_pc >= 0) {
-        XrInstruction *null_ok_inst = PROTO_CODE_PTR(ctx->proto, null_ok_jmp_pc);
-        *null_ok_inst = CREATE_sJ(OP_JMP, ok_target - (null_ok_jmp_pc + 1));
-    }
+    emit_inst(ctx, CREATE_ABC(OP_CHECKTYPE, dst, mask_arg, 0));
 }
 
 /* typeof(x) / typename(x) */
