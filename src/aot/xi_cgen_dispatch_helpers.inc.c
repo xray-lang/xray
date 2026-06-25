@@ -1088,18 +1088,18 @@ static void xicgen_as(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue 
         }
     }
 
-    const char *tname = v->aux ? (const char *) v->aux : "unknown";
-    char err_buf[128];
-    snprintf(err_buf, sizeof(err_buf), "Type cast failed: expected %s", tname);
     fprintf(out, "({ XrValue _as = ");
     emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
-    fprintf(out, "; (xrt_typeof_id(_as) == %" PRId32 ") ? _as : ", tid);
+    fprintf(out, "; XrTypeId _as_tid = xrt_typeof_id(_as); ");
     if (is_safe) {
-        fprintf(out, "XR_NULL_VAL; })");
+        fprintf(out, "(_as_tid == %" PRId32 ") ? _as : XR_NULL_VAL; })", tid);
     } else {
-        fprintf(out, "(xrt_throw_exc(");
-        cg_emit_str_value(ctx, out, err_buf);
-        fprintf(out, "), XR_NULL_VAL); })");
+        fprintf(out,
+                "if (_as_tid != %" PRId32 ") { char _as_msg[XR_ERROR_CORE_TYPE_MISMATCH_BUFSZ]; "
+                "xr_error_core_format_type_mismatch(_as_msg, sizeof(_as_msg), "
+                "xr_type_name_from_tid((XrTypeId) %" PRId32 "), xr_type_name_from_tid(_as_tid)); "
+                "xrt_throw_error(XR_ERR_TYPE_MISMATCH, _as_msg); } _as; })",
+                tid, tid);
     }
 }
 
