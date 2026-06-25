@@ -4,10 +4,10 @@
  * the VM's XR_ERR_INDEX_OUT_OF_BOUNDS. An `int` index outside [0, length) —
  * including any negative index — is a fault: there is no from-end wraparound.
  * Defined in xrt_exception.h (pulled in ahead of this header via xrt_arith.h in
- * the full runtime); forward-declared here so the index helpers still parse in
- * standalone TUs that include xrt_coll.h alone (those never reach the throwing
- * path, so the static-inline callers are elided). */
-static XRT_COLD _Noreturn void xrt_index_oob(int64_t idx, int64_t length);
+ * the full runtime); forward-declared here so core-library TUs can link against
+ * the generated program's XRT_IMPL exception entry when a throwing path is
+ * reachable. */
+XRT_COLD _Noreturn void xrt_index_oob(int64_t idx, int64_t length);
 
 static inline XrValue xrt_fixed_array_get(void *base, uint8_t native_type, int64_t idx) {
     uint8_t *p = (uint8_t *) base + (size_t) idx * xr_native_type_size(native_type);

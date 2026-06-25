@@ -21,6 +21,7 @@
 #include "xarray_methods.h"
 #include "xarray.h"
 #include "xarray_vm.h"
+#include "xexception.h"
 #include "xstring.h"
 #include "xtuple.h"
 #include "xiterator.h"
@@ -32,8 +33,11 @@
 #include "../mem/xheap.h"
 #include "../mem/xcoro_heap.h"
 #include "../xisolate_api.h"
+#include "../xerror_codes.h"
 #include "../../coro/xcoroutine.h"
 #include "../../base/xchecks.h"
+#include "../../shared/xr_error_core.h"
+#include "../../vm/xvm.h"
 #include <string.h>
 
 static inline XrArray *array_self(XrValue self) {
@@ -53,9 +57,14 @@ static struct XrClosure *array_callback(XrVMRuntime *iso, XrValue v, const char 
 /* === Mutation === */
 
 static XrValue m_push(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
-    (void) iso;
     XrArray *arr = array_self(self);
     if (argc >= 1) {
+        if (xr_array_is_slice(arr)) {
+            XrValue exc =
+                xr_exception_new(iso, XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_ARRAY_SLICE_PUSH_MSG);
+            xr_vm_throw_exception(iso, exc);
+            return xr_null();
+        }
         if (arr->length >= arr->capacity) {
             xr_array_grow(arr);
             /* Defensive: if grow silently failed fall back to safe push. */

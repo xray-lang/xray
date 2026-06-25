@@ -75,7 +75,7 @@ static jmp_buf g_throw_jmp;
 static int g_expect_throw;
 static XrValue g_thrown_exc;
 
-static XRT_COLD _Noreturn void xrt_throw_exc(XrValue exc) {
+XRT_COLD _Noreturn void xrt_throw_exc(XrValue exc) {
     if (g_expect_throw) {
         g_thrown_exc = exc;
         longjmp(g_throw_jmp, 1);

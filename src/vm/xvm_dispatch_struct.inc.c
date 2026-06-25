@@ -75,7 +75,7 @@ vmcase(OP_TARRAY_PUSH) {
     int b = GETARG_B(i);
     XrArray *arr = XR_TO_ARRAY(R(a));
     if (XR_UNLIKELY(xr_array_is_slice(arr))) {
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "cannot push to array slice");
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_ARRAY_SLICE_PUSH_MSG);
     }
     if (arr->length >= arr->capacity) {
         xr_array_grow(arr);

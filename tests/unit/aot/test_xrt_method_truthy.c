@@ -52,7 +52,7 @@ static void test_free_aligned(void *ptr) {
 #pragma clang diagnostic pop
 #endif
 
-static XRT_COLD _Noreturn void xrt_throw_exc(XrValue exc) {
+XRT_COLD _Noreturn void xrt_throw_exc(XrValue exc) {
     (void) exc;
     fprintf(stderr, "unexpected xrt_throw_exc in test_xrt_method_truthy\n");
     abort();
