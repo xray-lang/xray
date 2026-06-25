@@ -489,7 +489,7 @@ static inline uint64_t xrt_hash_f64(double d) {
     uint64_t bits = 0;
     if (!xr_typed_scalar_bits_f64(d, XR_ELEM_F64, &bits))
         abort();
-    return xrt_hash_mix_u64(bits);
+    return xr_hash_core_mix_u64(bits);
 }
 
 static inline uint64_t xrt_typed_scalar_bits_i64_or_abort(int64_t value, uint8_t elem_type,
@@ -519,15 +519,15 @@ static inline uint64_t xrt_hash_value(XrValue v) {
     switch (tag) {
         case XR_TAG_I64:
         case XR_TAG_BOOL:
-            return xrt_hash_mix_u64((uint64_t) v.i);
+            return xr_hash_core_mix_u64((uint64_t) v.i);
         case XR_TAG_F64:
             return xrt_hash_f64(v.f);
         case XR_TAG_STR:
-            return xrt_hash_mix_u64(xrt_str_hash(v));
+            return xr_hash_core_mix_u64(xrt_str_hash(v));
         case XR_TAG_NULL:
-            return xrt_hash_mix_u64(0x9e3779b97f4a7c15ull);
+            return xr_hash_core_mix_u64(0x9e3779b97f4a7c15ull);
         default:
-            return xrt_hash_mix_u64((uint64_t) (uintptr_t) v.ptr);
+            return xr_hash_core_mix_u64((uint64_t) (uintptr_t) v.ptr);
     }
 }
 

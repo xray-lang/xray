@@ -27,7 +27,7 @@
 #include <stdarg.h>
 #include <math.h>
 
-#include "xrt_hash.h"
+#include "../shared/xr_hash_core.h"
 #include "../shared/xr_float_fmt.h"
 #include "../shared/xr_numeric_core.h"
 #include "../shared/xr_obj_header.h" /* XrObjType ids shared with the VM */
@@ -285,7 +285,7 @@ static inline uint32_t xrt_str_hash(XrValue v) {
     uint32_t cached = h->hash;
     if (cached)
         return cached;
-    uint32_t computed = xrt_str_hash_bytes(h->data, (size_t) h->len);
+    uint32_t computed = xr_hash_core_str_hash_bytes(h->data, (size_t) h->len);
     if (!(h->flags & XRT_STR_LITERAL))
         __atomic_store_n(&h->hash, computed, __ATOMIC_RELAXED);
     return computed;

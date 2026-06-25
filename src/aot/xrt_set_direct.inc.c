@@ -144,10 +144,10 @@ static inline uint64_t xrt_set_hash_value(xrt_set_t *s, XrValue value) {
         return xrt_hash_value(value);
     if (s->elem_type == XR_ELEM_F32 || s->elem_type == XR_ELEM_F64) {
         double d = value.tag == XR_TAG_F64 ? value.f : (double) value.i;
-        return xrt_hash_mix_u64(xrt_set_item_bits_f64(d, s->elem_type));
+        return xr_hash_core_mix_u64(xrt_set_item_bits_f64(d, s->elem_type));
     }
     int64_t i = value.tag == XR_TAG_F64 ? (int64_t) value.f : value.i;
-    return xrt_hash_mix_u64(xrt_set_item_bits_i64(i, s->elem_type));
+    return xr_hash_core_mix_u64(xrt_set_item_bits_i64(i, s->elem_type));
 }
 
 static inline int64_t xrt_set_find_i64_typed_slot(xrt_set_t *s, int64_t value, uint8_t elem_type) {
@@ -155,8 +155,8 @@ static inline int64_t xrt_set_find_i64_typed_slot(xrt_set_t *s, int64_t value, u
     xrt_set_probe_i64_ctx ctx;
     ctx.set = s;
     ctx.bits = bits;
-    return xr_swiss_find_match_i64(s->ctrl, s->cap, xrt_hash_mix_u64(bits), xrt_set_probe_i64_eq,
-                                   &ctx);
+    return xr_swiss_find_match_i64(s->ctrl, s->cap, xr_hash_core_mix_u64(bits),
+                                   xrt_set_probe_i64_eq, &ctx);
 }
 
 static inline int64_t xrt_set_find_f64_typed_slot(xrt_set_t *s, double value, uint8_t elem_type) {
@@ -164,7 +164,7 @@ static inline int64_t xrt_set_find_f64_typed_slot(xrt_set_t *s, double value, ui
     ctx.set = s;
     ctx.value = value;
     return xr_swiss_find_match_i64(s->ctrl, s->cap,
-                                   xrt_hash_mix_u64(xrt_set_item_bits_f64(value, elem_type)),
+                                   xr_hash_core_mix_u64(xrt_set_item_bits_f64(value, elem_type)),
                                    xrt_set_probe_f64_eq, &ctx);
 }
 
@@ -251,7 +251,7 @@ static inline int xrt_set_add_i64_typed(xrt_set_t *s, int64_t value, uint8_t ele
     xrt_set_probe_i64_ctx ctx;
     ctx.set = s;
     ctx.bits = bits;
-    uint64_t hash = xrt_hash_mix_u64(bits);
+    uint64_t hash = xr_hash_core_mix_u64(bits);
     if (xr_swiss_find_match_i64(s->ctrl, s->cap, hash, xrt_set_probe_i64_eq, &ctx) >= 0)
         return 0;
     int64_t slot = xrt_set_insert_slot(s, hash);
@@ -278,7 +278,7 @@ static inline int xrt_set_has_f64_typed(xrt_set_t *s, double value, uint8_t elem
 static inline int xrt_set_add_f64_typed(xrt_set_t *s, double value, uint8_t elem_type) {
     if (s->elem_type != elem_type)
         xrt_set_direct_type_mismatch(elem_type, s->elem_type, "xrt_set_add_f64_typed");
-    uint64_t hash = xrt_hash_mix_u64(xrt_set_item_bits_f64(value, elem_type));
+    uint64_t hash = xr_hash_core_mix_u64(xrt_set_item_bits_f64(value, elem_type));
     xrt_set_probe_f64_ctx ctx;
     ctx.set = s;
     ctx.value = value;
