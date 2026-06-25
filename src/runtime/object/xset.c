@@ -52,19 +52,6 @@ static inline uint32_t hash_value(XrValue value) {
     return (uint32_t) xr_hash_value(value);
 }
 
-// Smallest power-of-two index size whose usable capacity (2/3) covers `needed`.
-static uint32_t calc_indices_size(uint32_t needed) {
-    uint32_t size = 8;
-    while ((uint64_t) size * 2 / 3 < needed) {
-        if (size >= (1u << XR_SET_MAXHBITS)) {
-            size = 1u << XR_SET_MAXHBITS;
-            break;
-        }
-        size <<= 1;
-    }
-    return size;
-}
-
 static inline void xr_set_release_entry(XrSetEntry *e, XrCoroHeap *heap) {
     xr_rc_release_value(heap, e->value);
     e->value = xr_null();
@@ -139,10 +126,8 @@ static bool set_resize(XrSet *set, uint32_t min_needed) {
     uint32_t needed = set->count > min_needed ? set->count : min_needed;
     if (needed < 1)
         needed = 1;
-    uint32_t new_isize = calc_indices_size(needed);
-    uint32_t new_ecap = (uint32_t) ((uint64_t) new_isize * 2 / 3);
-    if (new_ecap < needed)
-        new_ecap = needed;
+    uint32_t new_isize = xr_set_indices_size_for(needed);
+    uint32_t new_ecap = xr_map_set_entries_cap_for(new_isize, needed);
 
     // First allocation from dummy may use the Region GC blob heap; subsequent
     // resizes force malloc (region recycling could overlap the old blob while

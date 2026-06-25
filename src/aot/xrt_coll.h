@@ -583,16 +583,6 @@ static inline uint32_t xrt_hash32_value(XrValue v) {
     return (uint32_t) xrt_hash_value(v);
 }
 
-static inline uint32_t xrt_ordered_indices_size_for(uint32_t needed, uint32_t max_hbits) {
-    uint32_t size = XR_SWISS_GROUP;
-    while ((uint64_t) size * 2 / 3 < needed) {
-        if (size >= (1u << max_hbits))
-            return 1u << max_hbits;
-        size <<= 1;
-    }
-    return size;
-}
-
 static inline void xrt_map_init_header(xrt_map_t *m) {
     xrt_bump_header_init(&m->hdr, XR_TMAP);
     m->count = 0;
@@ -655,10 +645,8 @@ static inline void xrt_map_resize_tagged(xrt_map_t *m, uint32_t min_needed) {
     uint32_t needed = m->count > min_needed ? m->count : min_needed;
     if (needed < 1)
         needed = 1;
-    uint32_t indices_size = xrt_ordered_indices_size_for(needed, XR_MAP_MAXHBITS);
-    uint32_t entries_cap = (uint32_t) ((uint64_t) indices_size * 2 / 3);
-    if (entries_cap < needed)
-        entries_cap = needed;
+    uint32_t indices_size = xr_map_indices_size_for(needed);
+    uint32_t entries_cap = xr_map_set_entries_cap_for(indices_size, needed);
 
     size_t cbytes = (size_t) indices_size + XR_SWISS_GROUP;
     size_t ibytes = sizeof(int32_t) * (size_t) indices_size;
@@ -746,10 +734,8 @@ static inline XrValue xrt_map_new(int64_t cap) {
         if (_need64 < 1)                                                                           \
             _need64 = 1;                                                                           \
         uint32_t _need = (uint32_t) _need64;                                                       \
-        uint32_t _slots = xrt_ordered_indices_size_for(_need, XR_MAP_MAXHBITS);                    \
-        uint32_t _ecap = (uint32_t) ((uint64_t) _slots * 2u / 3u);                                 \
-        if (_ecap < _need)                                                                         \
-            _ecap = _need;                                                                         \
+        uint32_t _slots = xr_map_indices_size_for(_need);                                          \
+        uint32_t _ecap = xr_map_set_entries_cap_for(_slots, _need);                                \
         xrt_map_t *_m = (xrt_map_t *) __builtin_alloca(sizeof(xrt_map_t));                         \
         uint8_t *_ctrl = (uint8_t *) __builtin_alloca((size_t) _slots + XR_SWISS_GROUP);           \
         int32_t *_indices = (int32_t *) __builtin_alloca(sizeof(int32_t) * (size_t) _slots);       \
@@ -924,10 +910,8 @@ static inline void xrt_set_resize_tagged(xrt_set_t *s, uint32_t min_needed) {
     uint32_t needed = s->count > min_needed ? s->count : min_needed;
     if (needed < 1)
         needed = 1;
-    uint32_t indices_size = xrt_ordered_indices_size_for(needed, XR_SET_MAXHBITS);
-    uint32_t entries_cap = (uint32_t) ((uint64_t) indices_size * 2 / 3);
-    if (entries_cap < needed)
-        entries_cap = needed;
+    uint32_t indices_size = xr_set_indices_size_for(needed);
+    uint32_t entries_cap = xr_map_set_entries_cap_for(indices_size, needed);
 
     size_t cbytes = (size_t) indices_size + XR_SWISS_GROUP;
     size_t ibytes = sizeof(int32_t) * (size_t) indices_size;
@@ -1115,10 +1099,8 @@ static inline XrValue xrt_set_new(int64_t cap) {
         if (_need64 < 1)                                                                           \
             _need64 = 1;                                                                           \
         uint32_t _need = (uint32_t) _need64;                                                       \
-        uint32_t _slots = xrt_ordered_indices_size_for(_need, XR_SET_MAXHBITS);                    \
-        uint32_t _ecap = (uint32_t) ((uint64_t) _slots * 2u / 3u);                                 \
-        if (_ecap < _need)                                                                         \
-            _ecap = _need;                                                                         \
+        uint32_t _slots = xr_set_indices_size_for(_need);                                          \
+        uint32_t _ecap = xr_map_set_entries_cap_for(_slots, _need);                                \
         xrt_set_t *_s = (xrt_set_t *) __builtin_alloca(sizeof(xrt_set_t));                         \
         uint8_t *_ctrl = (uint8_t *) __builtin_alloca((size_t) _slots + XR_SWISS_GROUP);           \
         int32_t *_indices = (int32_t *) __builtin_alloca(sizeof(int32_t) * (size_t) _slots);       \
