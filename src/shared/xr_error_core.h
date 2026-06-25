@@ -24,6 +24,10 @@
 #define XR_ERROR_CORE_BYTES_CONSTRUCTOR_FILL_EXPECTS_MSG                                           \
     "Bytes(n, value): both args must be integers"
 #define XR_ERROR_CORE_SLICE_BOUNDS_EXPECTS_MSG "slice bounds must be integers"
+#define XR_ERROR_CORE_ARRAY_RESERVE_EXPECTS_MSG "Array.reserve(capacity) expects an integer"
+#define XR_ERROR_CORE_ARRAY_RESERVE_FAILED_MSG "Array.reserve failed"
+#define XR_ERROR_CORE_ARRAY_RESIZE_EXPECTS_MSG "Array.resize(length, fill) expects integer length"
+#define XR_ERROR_CORE_ARRAY_RESIZE_FAILED_MSG "Array.resize failed"
 #define XR_ERROR_CORE_BYTES_LOAD_U32_EXPECTS_MSG "Bytes.loadU32LE(offset) expects Bytes and integer"
 #define XR_ERROR_CORE_BYTES_LOAD_U32_RECEIVER_MSG "Bytes.loadU32LE receiver must be Bytes"
 #define XR_ERROR_CORE_BYTES_LOAD_U32_OOB_MSG "Bytes.loadU32LE offset out of bounds"

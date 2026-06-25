@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <setjmp.h>
 
 #define XRT_DATA_ALIGN 32
 
@@ -70,8 +71,15 @@ static void test_free_aligned(void *ptr) {
 #pragma clang diagnostic pop
 #endif
 
+static jmp_buf g_throw_jmp;
+static int g_expect_throw;
+static XrValue g_thrown_exc;
+
 static XRT_COLD _Noreturn void xrt_throw_exc(XrValue exc) {
-    (void) exc;
+    if (g_expect_throw) {
+        g_thrown_exc = exc;
+        longjmp(g_throw_jmp, 1);
+    }
     fprintf(stderr, "unexpected xrt_throw_exc in test_xrt_array\n");
     abort();
 }
@@ -96,6 +104,22 @@ static inline void xrt_dispatch_destructor(uint16_t type_id, void *obj) {
         if ((int64_t) (actual) != (int64_t) (expected)) {                                          \
             fprintf(stderr, "FAIL: %s (got %lld, expected %lld)\n", msg, (long long) (actual),     \
                     (long long) (expected));                                                       \
+            g_failed++;                                                                            \
+            return;                                                                                \
+        }                                                                                          \
+        g_passed++;                                                                                \
+    } while (0)
+
+#define ASSERT_XR_STR_EQ(actual, expected, msg)                                                    \
+    do {                                                                                           \
+        XrValue _actual = (actual);                                                                \
+        const char *_expected = (expected);                                                        \
+        size_t _expected_len = strlen(_expected);                                                  \
+        if (!XR_IS_STR(_actual) || (size_t) xr_str_len(_actual) != _expected_len ||                \
+            memcmp(xr_str_data(_actual), _expected, _expected_len) != 0) {                         \
+            fprintf(stderr, "FAIL: %s (got '%.*s', expected '%s')\n", msg,                         \
+                    XR_IS_STR(_actual) ? (int) xr_str_len(_actual) : 0,                            \
+                    XR_IS_STR(_actual) ? xr_str_data(_actual) : "", _expected);                    \
             g_failed++;                                                                            \
             return;                                                                                \
         }                                                                                          \
@@ -287,6 +311,40 @@ static void test_slice_resize_reserve_are_noops(void) {
     free_test_array(a);
 }
 
+static void test_resize_reserve_type_errors_are_structured(void) {
+    reset_alloc_counts();
+    XrValue value = xrt_array_new_typed(0, XR_ELEM_I64);
+    xrt_array_t *a = (xrt_array_t *) value.ptr;
+
+    g_expect_throw = 1;
+    if (setjmp(g_throw_jmp) == 0) {
+        xrt_array_reserve_value(value, XR_TRUE_VAL);
+        g_expect_throw = 0;
+        ASSERT_TRUE(false, "reserve with non-int capacity throws");
+    }
+    g_expect_throw = 0;
+    ASSERT_XR_STR_EQ(xrt_json_get_name(g_thrown_exc, "message"),
+                     XR_ERROR_CORE_ARRAY_RESERVE_EXPECTS_MSG, "reserve type error message");
+    XrValue code = xrt_json_get_name(g_thrown_exc, "code");
+    ASSERT_TRUE(XR_IS_INT(code), "reserve type error code is int");
+    ASSERT_EQ_INT(XR_TO_INT(code), XR_ERR_TYPE_MISMATCH, "reserve type error code");
+
+    g_expect_throw = 1;
+    if (setjmp(g_throw_jmp) == 0) {
+        xrt_array_resize_value(value, XR_TRUE_VAL, XR_FROM_INT(0));
+        g_expect_throw = 0;
+        ASSERT_TRUE(false, "resize with non-int length throws");
+    }
+    g_expect_throw = 0;
+    ASSERT_XR_STR_EQ(xrt_json_get_name(g_thrown_exc, "message"),
+                     XR_ERROR_CORE_ARRAY_RESIZE_EXPECTS_MSG, "resize type error message");
+    code = xrt_json_get_name(g_thrown_exc, "code");
+    ASSERT_TRUE(XR_IS_INT(code), "resize type error code is int");
+    ASSERT_EQ_INT(XR_TO_INT(code), XR_ERR_TYPE_MISMATCH, "resize type error code");
+
+    free_test_array(a);
+}
+
 static void test_indexof_typed_fast_path_shared_rules(void) {
     reset_alloc_counts();
     XrValue bytes = xrt_array_new_typed(0, XR_ELEM_U8);
@@ -388,6 +446,7 @@ int main(void) {
     test_fill_range_typed_fast_path();
     test_resize_reserve_use_shared_capacity_plan();
     test_slice_resize_reserve_are_noops();
+    test_resize_reserve_type_errors_are_structured();
     test_indexof_typed_fast_path_shared_rules();
     test_bytes_raw_helpers_share_core_rules();
     test_stack_closure_borrows_cell_upval();
