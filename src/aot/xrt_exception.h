@@ -95,6 +95,16 @@ static inline XrValue xrt_exception_new_value(int code, const char *message, siz
     return exc;
 }
 
+static inline XrValue xrt_exception_from_message_value(XrValue message) {
+    if (XR_IS_STR(message)) {
+        const char *data = xr_str_data(message);
+        size_t len = (size_t) xr_str_len(message);
+        XrErrorCoreMessageView view = xr_error_core_parse_prefixed(data, len);
+        return xrt_exception_new_value(view.has_code ? view.code : 0, data, len);
+    }
+    return xrt_exception_new_value(0, NULL, 0);
+}
+
 static inline XrValue xrt_exception_normalize(XrValue exc) {
     if (XR_IS_STR(exc)) {
         const char *data = xr_str_data(exc);
