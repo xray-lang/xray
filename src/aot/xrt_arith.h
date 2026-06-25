@@ -17,6 +17,7 @@
 #include "xrt_range.h"
 #include "xrt_coll.h"
 #include "../shared/xr_type_names_core.h"
+#include "../shared/xr_value_format_core.h"
 
 /* =========================================================================
  * Tagged arithmetic — all inline, no extern dependency
@@ -146,12 +147,6 @@ static inline int64_t xrt_le(XrValue a, XrValue b) {
  * Inline print
  * ========================================================================= */
 
-/* Recursion / element caps must match the VM formatter (xvalue_format.c:
- * XR_FORMAT_MAX_DEPTH / XR_FORMAT_MAX_ELEMENTS) so container printing is
- * byte-identical across backends. */
-#define XRT_FORMAT_MAX_DEPTH 3
-#define XRT_FORMAT_MAX_ELEMENTS 32
-
 static void xrt_print_value(XrValue v, int depth) {
     switch (v.tag) {
         case XR_TAG_STR:
@@ -196,7 +191,7 @@ static void xrt_print_value(XrValue v, int depth) {
             break;
     }
 
-    if (depth > XRT_FORMAT_MAX_DEPTH) {
+    if (depth > XR_VALUE_FORMAT_MAX_DEPTH) {
         fputs("...", stdout);
         return;
     }
@@ -219,7 +214,7 @@ static void xrt_print_value(XrValue v, int depth) {
                 return;
             }
             int64_t len = a ? a->length : 0;
-            int64_t limit = len > XRT_FORMAT_MAX_ELEMENTS ? XRT_FORMAT_MAX_ELEMENTS : len;
+            int64_t limit = len > XR_VALUE_FORMAT_MAX_ELEMENTS ? XR_VALUE_FORMAT_MAX_ELEMENTS : len;
             putchar('[');
             for (int64_t i = 0; i < limit; i++) {
                 if (i > 0)
@@ -234,7 +229,7 @@ static void xrt_print_value(XrValue v, int depth) {
         case XR_TAG_TUPLE: {
             xrt_tuple_t *t = (xrt_tuple_t *) v.ptr;
             int64_t len = t ? t->len : 0;
-            int64_t limit = len > XRT_FORMAT_MAX_ELEMENTS ? XRT_FORMAT_MAX_ELEMENTS : len;
+            int64_t limit = len > XR_VALUE_FORMAT_MAX_ELEMENTS ? XR_VALUE_FORMAT_MAX_ELEMENTS : len;
             putchar('(');
             for (int64_t i = 0; i < limit; i++) {
                 if (i > 0)
@@ -254,7 +249,7 @@ static void xrt_print_value(XrValue v, int depth) {
             int64_t n_slots = !m ? 0 : (xrt_map_is_typed(m) ? m->order_len : (int64_t) m->nentries);
             int64_t count = 0;
             fputs("#{", stdout);
-            for (int64_t i = 0; i < n_slots && count < XRT_FORMAT_MAX_ELEMENTS; i++) {
+            for (int64_t i = 0; i < n_slots && count < XR_VALUE_FORMAT_MAX_ELEMENTS; i++) {
                 int64_t slot = xrt_map_is_typed(m) ? m->order[i] : i;
                 if (!xrt_map_slot_is_full(m, slot))
                     continue;
@@ -276,7 +271,7 @@ static void xrt_print_value(XrValue v, int depth) {
             int64_t n_slots = !s ? 0 : (xrt_set_is_typed(s) ? s->order_len : (int64_t) s->nentries);
             int64_t count = 0;
             fputs("#[", stdout);
-            for (int64_t i = 0; i < n_slots && count < XRT_FORMAT_MAX_ELEMENTS; i++) {
+            for (int64_t i = 0; i < n_slots && count < XR_VALUE_FORMAT_MAX_ELEMENTS; i++) {
                 int64_t slot = xrt_set_is_typed(s) ? s->order[i] : i;
                 if (!xrt_set_slot_is_full(s, slot))
                     continue;
