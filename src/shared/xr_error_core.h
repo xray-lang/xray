@@ -20,6 +20,23 @@
 #define XR_ERROR_CORE_DIVISION_BY_ZERO_MSG "division by zero"
 #define XR_ERROR_CORE_MODULO_BY_ZERO_MSG "modulo by zero"
 #define XR_ERROR_CORE_MODULO_REQUIRES_INTEGER_MSG "modulo requires integer types"
+#define XR_ERROR_CORE_BYTES_LOAD_U32_EXPECTS_MSG "Bytes.loadU32LE(offset) expects Bytes and integer"
+#define XR_ERROR_CORE_BYTES_LOAD_U32_RECEIVER_MSG "Bytes.loadU32LE receiver must be Bytes"
+#define XR_ERROR_CORE_BYTES_LOAD_U32_OOB_MSG "Bytes.loadU32LE offset out of bounds"
+#define XR_ERROR_CORE_BYTES_LOAD_U64_EXPECTS_MSG "Bytes.loadU64LE(offset) expects Bytes and integer"
+#define XR_ERROR_CORE_BYTES_LOAD_U64_RECEIVER_MSG "Bytes.loadU64LE receiver must be Bytes"
+#define XR_ERROR_CORE_BYTES_LOAD_U64_OOB_MSG "Bytes.loadU64LE offset out of bounds"
+#define XR_ERROR_CORE_BYTES_COPY_WITHIN_EXPECTS_MSG                                                \
+    "Bytes.copyWithin expects integer offsets and count"
+#define XR_ERROR_CORE_BYTES_COPY_WITHIN_RECEIVER_MSG "Bytes.copyWithin receiver must be Bytes"
+#define XR_ERROR_CORE_BYTES_COPY_WITHIN_OOB_MSG "Bytes.copyWithin range out of bounds"
+#define XR_ERROR_CORE_BYTES_COPY_FROM_EXPECTS_MSG "Bytes.copyFrom expects Bytes and integer ranges"
+#define XR_ERROR_CORE_BYTES_COPY_FROM_OPERANDS_MSG "Bytes.copyFrom operands must be Bytes"
+#define XR_ERROR_CORE_BYTES_COPY_FROM_OOB_MSG "Bytes.copyFrom range out of bounds"
+#define XR_ERROR_CORE_BYTES_REPEAT_FROM_EXPECTS_MSG                                                \
+    "Bytes.repeatFrom expects integer offsets and count"
+#define XR_ERROR_CORE_BYTES_REPEAT_FROM_RECEIVER_MSG "Bytes.repeatFrom receiver must be Bytes"
+#define XR_ERROR_CORE_BYTES_REPEAT_FROM_OOB_MSG "Bytes.repeatFrom range out of bounds"
 
 typedef struct XrErrorCoreMessageView {
     int code;

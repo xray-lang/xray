@@ -41,7 +41,30 @@ fn show_mod_zero() {
     }
 }
 
+fn show_bytes_load_oob() {
+    let bytes = new Bytes(4, 1)
+    try {
+        print(bytes.loadU32LE(2))
+    } catch panic (p) {
+        print(p.message)
+        print(p.code)
+    }
+}
+
+fn show_bytes_copy_within_oob() {
+    let bytes = new Bytes(4, 1)
+    try {
+        bytes.copyWithin(2, 0, 4)
+        print(bytes[0])
+    } catch panic (p) {
+        print(p.message)
+        print(p.code)
+    }
+}
+
 show_index_read(-1)
 show_index_write(5)
 show_div_zero()
 show_mod_zero()
+show_bytes_load_oob()
+show_bytes_copy_within_oob()
