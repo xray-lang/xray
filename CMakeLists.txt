@@ -1311,6 +1311,21 @@ if(BUILD_TESTS)
         TIMEOUT 120
     )
 
+    # Broad AOT manifest sweep: non-runtime diff cases must remain freestanding
+    # and must not accidentally pull xray_rt_coro/xray_core.
+    add_test(
+        NAME aot_manifest_sweep
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_aot_manifest_sweep_tests.py
+                --xray $<TARGET_FILE:xray>
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(aot_manifest_sweep PROPERTIES
+        LABELS "aot;link;manifest;smoke"
+        PROCESSORS 1
+        TIMEOUT 180
+    )
+
     # Isolate/runtime split guard (132/M0 + 133/I0/I4): AOT binaries must stay
     # free of xray_core and public isolate/VM/compiler/module-loader symbols.
     add_test(
