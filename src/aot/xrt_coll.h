@@ -17,6 +17,7 @@
 #include "../runtime/xerror_codes.h"
 #include "../shared/xr_array_abi.h"
 #include "../shared/xr_array_core.h"
+#include "../shared/xr_builtin_schema.h"
 #include "../shared/xr_cell_abi.h"
 #include "../shared/xr_elem_type.h"
 #include "../shared/xr_error_core.h"
@@ -1453,11 +1454,13 @@ static inline XrValue xrt_process_new(const char *file, int argc, char **argv, c
     for (int i = 0; argv && i < argc; i++)
         xrt_array_push(args, xr_box_str(argv[i] ? argv[i] : ""));
 
-    XrValue process = xrt_map_new(4);
+    XrValue process = xrt_map_new(PROCESS_FIELD_COUNT + 1);
     xrt_map_t *m = (xrt_map_t *) process.ptr;
-    xrt_map_set(m, xr_box_str("file"), file ? xr_box_str(file) : XR_NULL_VAL);
-    xrt_map_set(m, xr_box_str("args"), args);
-    xrt_map_set(m, xr_box_str("dir"), dir ? xr_box_str(dir) : XR_NULL_VAL);
+    xrt_map_set(m, xr_box_str(xr_process_field_name(PROCESS_FIELD_FILE)),
+                file ? xr_box_str(file) : XR_NULL_VAL);
+    xrt_map_set(m, xr_box_str(xr_process_field_name(PROCESS_FIELD_ARGS)), args);
+    xrt_map_set(m, xr_box_str(xr_process_field_name(PROCESS_FIELD_DIR)),
+                dir ? xr_box_str(dir) : XR_NULL_VAL);
     return process;
 }
 
@@ -1528,17 +1531,16 @@ static inline void xrt_json_set_field(XrValue obj, int field_idx, XrValue val) {
 }
 
 static XRT_COLD _Noreturn void xrt_throw_error(int code, const char *message) {
-    static const char *const fields[] = {"message", "stack", "cause", "code", "data"};
     size_t len = message ? strlen(message) : 0;
-    XrValue exc = xrt_json_new_named(5, fields);
+    XrValue exc = xrt_json_new_named(EXCEPTION_FIELD_COUNT, xr_exception_field_names());
     XrValue msg = xrt_str_alloc(len);
     if (len > 0)
         memcpy(xr_str_buf(msg), message, len);
-    xrt_json_set_field(exc, 0, msg);
-    xrt_json_set_field(exc, 1, xrt_array_new_len(0));
-    xrt_json_set_field(exc, 2, XR_NULL_VAL);
-    xrt_json_set_field(exc, 3, XR_FROM_INT(code));
-    xrt_json_set_field(exc, 4, XR_NULL_VAL);
+    xrt_json_set_field(exc, EXCEPTION_FIELD_MESSAGE, msg);
+    xrt_json_set_field(exc, EXCEPTION_FIELD_STACK, xrt_array_new_len(0));
+    xrt_json_set_field(exc, EXCEPTION_FIELD_CAUSE, XR_NULL_VAL);
+    xrt_json_set_field(exc, EXCEPTION_FIELD_CODE, XR_FROM_INT(code));
+    xrt_json_set_field(exc, EXCEPTION_FIELD_DATA, XR_NULL_VAL);
     xrt_throw_exc(exc);
 }
 
