@@ -2584,70 +2584,127 @@ static void xicgen_unbox(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiVal
     emit_conversion_suffix(out, conv_suffix);
 }
 
-static void xicgen_is(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
-                      const char *prefix) {
-    (void) f;
-    (void) prefix;
-    XR_DCHECK(v->nargs >= 1, "xicgen_is: missing arg");
-    struct XrType *target = (struct XrType *) v->aux;
+static void xicgen_emit_is_class_check(XiCgenCtx *ctx, FILE *out, const XiValue *subject,
+                                       const XiValue *type_value, const char *class_name) {
+    if (type_value) {
+        fprintf(out, "xrt_instanceof(");
+        emit_vref(out, subject);
+        fprintf(out, ", (uint16_t)(");
+        emit_vref(out, type_value);
+        fprintf(out, ").i)");
+        return;
+    }
+    int slot = cg_find_class_slot(ctx, class_name);
+    if (slot >= 0) {
+        fprintf(out, "xrt_instanceof(");
+        emit_vref(out, subject);
+        fprintf(out, ", (uint16_t)%s[%d].i)", ctx->shared_name, slot);
+        return;
+    }
+    fprintf(out, "0 /* is %s: class not resolved */", class_name ? class_name : "?");
+}
+
+static void xicgen_emit_is_tref_check(XiCgenCtx *ctx, FILE *out, const XiValue *subject,
+                                      const XrTypeRef *target, const XiValue *type_value) {
     if (!target) {
         fprintf(out, "0 /* XI_IS: NULL target type */");
         return;
     }
     switch (target->kind) {
-        case XR_KIND_INT:
+        case XR_TREF_INT:
+        case XR_TREF_INT_WIDTH:
             fprintf(out, "(");
-            emit_vref(out, v->args[0]);
-            fprintf(out, ".tag == %u)", XR_TAG_I64);
+            emit_vref(out, subject);
+            fprintf(out, ".tag == XR_TAG_I64)");
             break;
-        case XR_KIND_FLOAT:
+        case XR_TREF_FLOAT:
+        case XR_TREF_FLOAT_WIDTH:
             fprintf(out, "(");
-            emit_vref(out, v->args[0]);
-            fprintf(out, ".tag == %u)", XR_TAG_F64);
+            emit_vref(out, subject);
+            fprintf(out, ".tag == XR_TAG_F64)");
             break;
-        case XR_KIND_BOOL:
+        case XR_TREF_BOOL:
             fprintf(out, "(");
-            emit_vref(out, v->args[0]);
-            fprintf(out, ".tag == %u)", XR_TAG_BOOL);
+            emit_vref(out, subject);
+            fprintf(out, ".tag == XR_TAG_BOOL)");
             break;
-        case XR_KIND_NULL:
-            fprintf(out, "(");
-            emit_vref(out, v->args[0]);
-            fprintf(out, ".tag == %u)", XR_TAG_NULL);
-            break;
-        case XR_KIND_STRING:
-            fprintf(out, "XR_IS_STR(");
-            emit_vref(out, v->args[0]);
+        case XR_TREF_NULL:
+            fprintf(out, "XR_IS_NULL(");
+            emit_vref(out, subject);
             fprintf(out, ")");
             break;
-        case XR_KIND_INSTANCE:
-        case XR_KIND_CLASS: {
-            const char *cname = target->instance.class_name;
-            int slot = cg_find_class_slot(ctx, cname);
-            if (slot >= 0) {
-                fprintf(out, "xrt_instanceof(");
-                emit_vref(out, v->args[0]);
-                fprintf(out, ", (uint16_t)%s[%d].i)", ctx->shared_name, slot);
+        case XR_TREF_STRING:
+            fprintf(out, "XR_IS_STR(");
+            emit_vref(out, subject);
+            fprintf(out, ")");
+            break;
+        case XR_TREF_OPTIONAL:
+            fprintf(out, "(XR_IS_NULL(");
+            emit_vref(out, subject);
+            fprintf(out, ") || ");
+            xicgen_emit_is_tref_check(ctx, out, subject,
+                                      target->nchildren > 0 ? target->children[0] : NULL, NULL);
+            fprintf(out, ")");
+            break;
+        case XR_TREF_UNION:
+            fprintf(out, "(");
+            for (uint8_t i = 0; i < target->nchildren; i++) {
+                if (i)
+                    fprintf(out, " || ");
+                xicgen_emit_is_tref_check(ctx, out, subject, target->children[i], NULL);
+            }
+            if (target->nchildren == 0)
+                fprintf(out, "0");
+            fprintf(out, ")");
+            break;
+        case XR_TREF_GENERIC:
+            if (target->name && strcmp(target->name, "Array") == 0) {
+                fprintf(out, "XR_IS_ARRAY(");
+                emit_vref(out, subject);
+                fprintf(out, ")");
+            } else if (target->name && strcmp(target->name, "Map") == 0) {
+                fprintf(out, "XR_IS_MAP(");
+                emit_vref(out, subject);
+                fprintf(out, ")");
+            } else if (target->name && strcmp(target->name, "Set") == 0) {
+                fprintf(out, "XR_IS_SET(");
+                emit_vref(out, subject);
+                fprintf(out, ")");
             } else {
-                fprintf(out, "(");
-                emit_vref(out, v->args[0]);
-                fprintf(out, ".tag == %u) /* is %s: class not resolved */", (unsigned) XR_TAG_PTR,
-                        cname ? cname : "?");
+                xicgen_emit_is_class_check(ctx, out, subject, type_value, target->name);
             }
             break;
-        }
-        default: {
-            uint8_t tag = xr_type_to_xr_tag(target);
-            if (tag != 0xFF) {
-                fprintf(out, "(");
-                emit_vref(out, v->args[0]);
-                fprintf(out, ".tag == %u)", (unsigned) tag);
+        case XR_TREF_NAMED:
+            if (target->name && strcmp(target->name, "Array") == 0) {
+                fprintf(out, "XR_IS_ARRAY(");
+                emit_vref(out, subject);
+                fprintf(out, ")");
+            } else if (target->name && strcmp(target->name, "Map") == 0) {
+                fprintf(out, "XR_IS_MAP(");
+                emit_vref(out, subject);
+                fprintf(out, ")");
+            } else if (target->name && strcmp(target->name, "Set") == 0) {
+                fprintf(out, "XR_IS_SET(");
+                emit_vref(out, subject);
+                fprintf(out, ")");
             } else {
-                fprintf(out, "0 /* unsupported is-check */");
+                xicgen_emit_is_class_check(ctx, out, subject, type_value, target->name);
             }
             break;
-        }
+        default:
+            fprintf(out, "0 /* unsupported is-check */");
+            break;
     }
+}
+
+static void xicgen_is(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                      const char *prefix) {
+    (void) f;
+    (void) prefix;
+    XR_DCHECK(v->nargs >= 1, "xicgen_is: missing arg");
+    const XrTypeRef *target = (const XrTypeRef *) v->aux;
+    const XiValue *type_value = (v->nargs >= 2) ? v->args[1] : NULL;
+    xicgen_emit_is_tref_check(ctx, out, v->args[0], target, type_value);
 }
 
 static void xicgen_load_field(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,

@@ -410,7 +410,9 @@ static void scan_func_features(XiFunc *f, XaotFeatureSet *fs) {
                     fs->need_exception = true;
                     break;
                 case XI_IS:
-                    fs->need_instanceof = true;
+                    /* AOT `is` checks lower to header-only tag comparisons or
+                     * xrt_instanceof() over the generated type table. They do
+                     * not require the coroutine/runtime archive. */
                     break;
                 case XI_IMPORT_REF: {
                     XiImportRef *ref = (XiImportRef *) v->aux;

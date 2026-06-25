@@ -47,6 +47,7 @@
 #include "xrt_hash.h"
 #include "../base/xmemstream.h"
 #include "../frontend/parser/xast_nodes.h"
+#include "../frontend/parser/xtype_ref.h"
 #include <string.h>
 #include <inttypes.h>
 /* ========== Representation Helpers ========== */
