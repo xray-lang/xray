@@ -148,13 +148,12 @@ static inline XrValue xrt_path_parse(const char *path, int64_t len_i) {
     if (!xr_path_core_parse_plan(path, len, &plan))
         return XR_NULL_VAL;
 
-    static const char *const fields[] = {"root", "dir", "base", "name", "ext"};
-    XrValue obj = xrt_json_new_named(5, fields);
-    xrt_json_set_field(obj, 0, xrt_path_string_from_slice(plan.root));
-    xrt_json_set_field(obj, 1, xrt_path_string_from_slice(plan.dir));
-    xrt_json_set_field(obj, 2, xrt_path_string_from_slice(plan.base));
-    xrt_json_set_field(obj, 3, xrt_path_string_from_slice(plan.name));
-    xrt_json_set_field(obj, 4, xrt_path_string_from_slice(plan.ext));
+    XrValue obj =
+        xrt_json_new_named(XR_PATH_CORE_PARSE_FIELD_COUNT, xr_path_core_parse_field_names());
+    for (int i = 0; i < XR_PATH_CORE_PARSE_FIELD_COUNT; i++) {
+        XrPathCoreSlice field = xr_path_core_parse_plan_field(&plan, (XrPathCoreParseField) i);
+        xrt_json_set_field(obj, i, xrt_path_string_from_slice(field));
+    }
     return obj;
 }
 

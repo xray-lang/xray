@@ -234,6 +234,15 @@ typedef struct XrPathCoreSlice {
     size_t len;
 } XrPathCoreSlice;
 
+typedef enum XrPathCoreParseField {
+    XR_PATH_CORE_PARSE_FIELD_ROOT = 0,
+    XR_PATH_CORE_PARSE_FIELD_DIR = 1,
+    XR_PATH_CORE_PARSE_FIELD_BASE = 2,
+    XR_PATH_CORE_PARSE_FIELD_NAME = 3,
+    XR_PATH_CORE_PARSE_FIELD_EXT = 4,
+    XR_PATH_CORE_PARSE_FIELD_COUNT = 5
+} XrPathCoreParseField;
+
 typedef struct XrPathCoreParsePlan {
     XrPathCoreSlice root;
     XrPathCoreSlice dir;
@@ -247,6 +256,40 @@ static inline XrPathCoreSlice xr_path_core_slice(const char *data, size_t len) {
     s.data = data;
     s.len = len;
     return s;
+}
+
+static inline const char *const *xr_path_core_parse_field_names(void) {
+    static const char *const names[XR_PATH_CORE_PARSE_FIELD_COUNT] = {
+        "root", "dir", "base", "name", "ext",
+    };
+    return names;
+}
+
+static inline const char *xr_path_core_parse_field_name(XrPathCoreParseField field) {
+    if ((int) field < 0 || field >= XR_PATH_CORE_PARSE_FIELD_COUNT)
+        return NULL;
+    return xr_path_core_parse_field_names()[field];
+}
+
+static inline XrPathCoreSlice xr_path_core_parse_plan_field(const XrPathCoreParsePlan *plan,
+                                                            XrPathCoreParseField field) {
+    if (!plan)
+        return xr_path_core_slice(NULL, 0);
+    switch (field) {
+        case XR_PATH_CORE_PARSE_FIELD_ROOT:
+            return plan->root;
+        case XR_PATH_CORE_PARSE_FIELD_DIR:
+            return plan->dir;
+        case XR_PATH_CORE_PARSE_FIELD_BASE:
+            return plan->base;
+        case XR_PATH_CORE_PARSE_FIELD_NAME:
+            return plan->name;
+        case XR_PATH_CORE_PARSE_FIELD_EXT:
+            return plan->ext;
+        case XR_PATH_CORE_PARSE_FIELD_COUNT:
+            break;
+    }
+    return xr_path_core_slice(NULL, 0);
 }
 
 static inline bool xr_path_core_parse_plan(const char *path, size_t len,

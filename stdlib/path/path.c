@@ -323,11 +323,9 @@ static XrValue path_parse(XrVMRuntime *X, XrValue *args, int argc) {
 
     if (argc < 1 || !XR_IS_STRING(args[0])) {
         XrValue empty = xrs_string_value_c(X, "");
-        xr_json_set_by_key(X, json, "root", empty);
-        xr_json_set_by_key(X, json, "dir", empty);
-        xr_json_set_by_key(X, json, "base", empty);
-        xr_json_set_by_key(X, json, "name", empty);
-        xr_json_set_by_key(X, json, "ext", empty);
+        for (int i = 0; i < XR_PATH_CORE_PARSE_FIELD_COUNT; i++)
+            xr_json_set_by_key(X, json, xr_path_core_parse_field_name((XrPathCoreParseField) i),
+                               empty);
         return xr_json_value(json);
     }
 
@@ -340,11 +338,11 @@ static XrValue path_parse(XrVMRuntime *X, XrValue *args, int argc) {
     if (!xr_path_core_parse_plan(path, plen, &plan))
         return xr_null();
 
-    xr_json_set_by_key(X, json, "root", make_string_slice(X, plan.root));
-    xr_json_set_by_key(X, json, "dir", make_string_slice(X, plan.dir));
-    xr_json_set_by_key(X, json, "base", make_string_slice(X, plan.base));
-    xr_json_set_by_key(X, json, "name", make_string_slice(X, plan.name));
-    xr_json_set_by_key(X, json, "ext", make_string_slice(X, plan.ext));
+    for (int i = 0; i < XR_PATH_CORE_PARSE_FIELD_COUNT; i++) {
+        XrPathCoreParseField field = (XrPathCoreParseField) i;
+        xr_json_set_by_key(X, json, xr_path_core_parse_field_name(field),
+                           make_string_slice(X, xr_path_core_parse_plan_field(&plan, field)));
+    }
 
     return xr_json_value(json);
 }
