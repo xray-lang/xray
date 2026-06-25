@@ -54,6 +54,20 @@ TEST(numeric_core_abs_wraps_int64_min) {
     ASSERT_EQ_INT(xr_numeric_core_i64_abs_wrap(INT64_MIN), INT64_MIN);
 }
 
+TEST(numeric_core_math_abs_preserves_int_or_promotes_min) {
+    XrNumericCoreI64AbsResult zero = xr_numeric_core_i64_math_abs(0);
+    ASSERT_FALSE(zero.is_float);
+    ASSERT_EQ_INT(zero.int_value, 0);
+
+    XrNumericCoreI64AbsResult neg = xr_numeric_core_i64_math_abs(-42);
+    ASSERT_FALSE(neg.is_float);
+    ASSERT_EQ_INT(neg.int_value, 42);
+
+    XrNumericCoreI64AbsResult min = xr_numeric_core_i64_math_abs(INT64_MIN);
+    ASSERT_TRUE(min.is_float);
+    ASSERT(min.float_value == (double) INT64_MAX + 1.0);
+}
+
 TEST(numeric_core_integer_arithmetic_wraps) {
     ASSERT_EQ_INT(xr_numeric_core_i64_add_wrap(INT64_MAX, 1), INT64_MIN);
     ASSERT_EQ_INT(xr_numeric_core_i64_sub_wrap(INT64_MIN, 1), INT64_MAX);
@@ -90,6 +104,7 @@ RUN_TEST(numeric_core_format_i64_handles_boundaries);
 RUN_TEST(numeric_core_format_i64_rejects_short_buffer);
 RUN_TEST(numeric_core_hex_matches_signed_magnitude_rule);
 RUN_TEST(numeric_core_abs_wraps_int64_min);
+RUN_TEST(numeric_core_math_abs_preserves_int_or_promotes_min);
 RUN_TEST(numeric_core_integer_arithmetic_wraps);
 RUN_TEST(numeric_core_integer_div_mod_edges_match_language);
 RUN_TEST(numeric_core_shift_counts_are_mod64);

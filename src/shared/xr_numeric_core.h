@@ -29,6 +29,24 @@ static inline int64_t xr_numeric_core_i64_abs_wrap(int64_t value) {
     return (int64_t) (-(uint64_t) value);
 }
 
+typedef struct XrNumericCoreI64AbsResult {
+    bool is_float;
+    int64_t int_value;
+    double float_value;
+} XrNumericCoreI64AbsResult;
+
+static inline XrNumericCoreI64AbsResult xr_numeric_core_i64_math_abs(int64_t value) {
+    XrNumericCoreI64AbsResult result = {0};
+    if (value == INT64_MIN) {
+        result.is_float = true;
+        result.float_value = (double) INT64_MAX + 1.0;
+        return result;
+    }
+    result.int_value = xr_numeric_core_i64_abs_wrap(value);
+    result.float_value = (double) result.int_value;
+    return result;
+}
+
 static inline int64_t xr_numeric_core_i64_add_wrap(int64_t a, int64_t b) {
     return (int64_t) ((uint64_t) a + (uint64_t) b);
 }
