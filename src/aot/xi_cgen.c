@@ -26,6 +26,7 @@
 #include "xi_to_c_stmt_dispatch_gen.h"
 #include "../ir/xi_analysis.h"
 #include "../ir/xi_backend_lower.h"
+#include "../shared/xr_hash_core.h"
 #include "../ir/xi_op_name.h"
 #include "../ir/xi_ops_gen.h"
 #include "../ir/xi_opt.h"
@@ -44,7 +45,6 @@
 #include "../runtime/value/xffi_sig.h"
 #include "../coro/xaot_coro.h"
 #include "xrt_method_symbols.h"
-#include "xrt_hash.h"
 #include "../base/xmemstream.h"
 #include "../frontend/parser/xast_nodes.h"
 #include "../frontend/parser/xtype_ref.h"
@@ -497,7 +497,7 @@ static int cg_intern_str_lit(XiCgenCtx *ctx, const char *s) {
     if (!s)
         s = "";
     size_t len = strlen(s);
-    uint32_t bucket = (uint32_t) xrt_hash_bytes(s, len) & (CG_STRLIT_BUCKETS - 1);
+    uint32_t bucket = (uint32_t) xr_hash_core_bytes(s, len) & (CG_STRLIT_BUCKETS - 1);
     for (CgStrLit *e = ctx->strlit_buckets[bucket]; e; e = e->next) {
         if (e->len == len && memcmp(e->str, s, len) == 0)
             return e->id;
