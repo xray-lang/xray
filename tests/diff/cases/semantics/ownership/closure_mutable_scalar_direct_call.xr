@@ -1,0 +1,18 @@
+// A tiny mutable scalar capture should remain correct when AOT decides whether
+// to direct-call or inline the nested closure. Regression guard for cloning
+// LOAD_UPVAL / STORE_UPVAL into a caller without remapping the closure env.
+
+fn run() -> int {
+    let n = 0
+
+    fn inc(step: int) -> int {
+        n = n + step
+        return n
+    }
+
+    let a = inc(2)
+    let b = inc(3)
+    return a * 10 + b
+}
+
+print(run())
