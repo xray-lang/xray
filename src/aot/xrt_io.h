@@ -11,6 +11,7 @@
 #ifndef XRT_IO_H
 #define XRT_IO_H
 
+#include "../shared/xr_cstr_core.h"
 #include "../shared/xr_io_core.h"
 #include "../shared/xr_os_core.h"
 #include "../shared/xr_path_core.h"
@@ -95,22 +96,7 @@ static inline bool xrt_io_file_error(void *ctx) {
 
 static inline char *xrt_io_copy_cstr_arg(const char *data, int64_t len, char *stack,
                                          size_t stack_cap, char **owned) {
-    if (owned)
-        *owned = NULL;
-    if (!data || len < 0)
-        return NULL;
-    size_t n = (size_t) len;
-    char *out = stack;
-    if (n + 1 > stack_cap) {
-        out = (char *) XRT_MALLOC(n + 1);
-        if (!out)
-            return NULL;
-        if (owned)
-            *owned = out;
-    }
-    memcpy(out, data, n);
-    out[n] = '\0';
-    return out;
+    return xr_cstr_core_copy_arg(data, len, stack, stack_cap, xrt_io_core_alloc, NULL, owned);
 }
 
 static inline XrValue xrt_io_str_slice(const char *data, size_t len) {
