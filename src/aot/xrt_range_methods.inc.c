@@ -13,8 +13,7 @@ static inline XrValue xrt_range_method_0(XrValue recv, int sym) {
             r ? xr_range_core_make(r->start, r->end, r->step) : xr_range_core_make(0, 0, 1);
         XrRangeCoreMaterializePlan plan = xr_range_core_materialize_plan(core);
         if (plan.kind == XR_RANGE_CORE_MATERIALIZE_TOO_LARGE) {
-            fprintf(stderr, "range_to_array: range too large\n");
-            abort();
+            xrt_throw_error(XR_ERR_OUT_OF_MEMORY, XR_ERROR_CORE_RANGE_TO_ARRAY_TOO_LARGE_MSG);
         }
         XrValue arr = xrt_array_new_typed_uninit(plan.length, XR_ELEM_I64);
         xrt_array_t *a = (xrt_array_t *) arr.ptr;

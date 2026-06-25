@@ -47,6 +47,7 @@
     "Bytes.repeatFrom expects integer offsets and count"
 #define XR_ERROR_CORE_BYTES_REPEAT_FROM_RECEIVER_MSG "Bytes.repeatFrom receiver must be Bytes"
 #define XR_ERROR_CORE_BYTES_REPEAT_FROM_OOB_MSG "Bytes.repeatFrom range out of bounds"
+#define XR_ERROR_CORE_RANGE_TO_ARRAY_TOO_LARGE_MSG "Range.toArray range too large"
 
 typedef struct XrErrorCoreMessageView {
     int code;

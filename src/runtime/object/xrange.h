@@ -112,8 +112,8 @@ static inline XrRange *xr_value_to_range(XrValue v) {
 
 /* ========== Conversion ========== */
 
-// Materialize range into an Array (caller must handle large ranges)
-XR_FUNC XrValue xr_range_to_array(struct XrCoroutine *coro, XrRange *r);
+// Materialize range into an Array or throw if the range exceeds the materialization cap.
+XR_FUNC XrValue xr_range_to_array(struct XrVMRuntime *X, XrRange *r);
 
 /* Register Range class into core->rangeClass with native body. */
 XR_FUNC void xr_register_range_class(struct XrVMRuntime *X);
