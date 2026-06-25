@@ -34,12 +34,12 @@ static inline XrValue xrt_array_resize_value(XrValue arr_value, XrValue len_valu
     if (!XR_IS_ARRAY(arr_value) || !arr_value.ptr)
         return arr_value;
     xrt_array_t *a = (xrt_array_t *) arr_value.ptr;
-    int64_t len = xrt_array_required_int_arg_or_panic(
-        len_value, "Array.resize(length): length must be integer");
+    int64_t len =
+        xrt_array_required_int_arg_or_panic(len_value, XR_ERROR_CORE_ARRAY_RESIZE_EXPECTS_MSG);
     XrArrayCoreResizePlan plan = xr_array_core_resize_plan(
         a->length, a->capacity, len, a->data_storage != XR_ARRAY_DATA_BORROWED);
     if (plan.kind == XR_ARRAY_CORE_RESIZE_INVALID)
-        xrt_throw_exc(xr_box_str("Array.resize(length): length out of range"));
+        xrt_throw_error(XR_ERR_OUT_OF_MEMORY, XR_ERROR_CORE_ARRAY_RESIZE_FAILED_MSG);
     if (plan.kind == XR_ARRAY_CORE_RESIZE_KEEP)
         return arr_value;
     if (plan.kind == XR_ARRAY_CORE_RESIZE_SHRINK) {
@@ -54,7 +54,7 @@ static inline XrValue xrt_array_resize_value(XrValue arr_value, XrValue len_valu
         return arr_value;
     }
     if (!xrt_array_reserve_raw(a, plan.reserve_capacity))
-        xrt_throw_exc(xr_box_str("Array.resize(length): reserve failed"));
+        xrt_throw_error(XR_ERR_OUT_OF_MEMORY, XR_ERROR_CORE_ARRAY_RESIZE_FAILED_MSG);
     if (!xr_array_core_fill_typed_storage(a->data, plan.fill_start, plan.fill_count, a->elem_type,
                                           fill_value)) {
         if (a->elem_type == XR_ELEM_ANY) {
@@ -70,10 +70,10 @@ static inline XrValue xrt_array_resize_value(XrValue arr_value, XrValue len_valu
 
 static inline XrValue xrt_array_reserve_value(XrValue arr_value, XrValue cap_value) {
     if (XR_IS_ARRAY(arr_value) && arr_value.ptr) {
-        int64_t cap = xrt_array_required_int_arg_or_panic(
-            cap_value, "Array.reserve(cap): cap must be integer");
+        int64_t cap =
+            xrt_array_required_int_arg_or_panic(cap_value, XR_ERROR_CORE_ARRAY_RESERVE_EXPECTS_MSG);
         if (!xrt_array_reserve_raw((xrt_array_t *) arr_value.ptr, cap))
-            xrt_throw_exc(xr_box_str("Array.reserve(cap): reserve failed"));
+            xrt_throw_error(XR_ERR_OUT_OF_MEMORY, XR_ERROR_CORE_ARRAY_RESERVE_FAILED_MSG);
     }
     return arr_value;
 }
