@@ -1415,7 +1415,7 @@ vmcase(OP_SLICE) {
     int c = GETARG_C(i);
     XrValue source = R(b);
     if (!XR_IS_INT(R(c)) || !XR_IS_INT(R(c + 1))) {
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "slice bounds must be integers");
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_SLICE_BOUNDS_EXPECTS_MSG);
     }
     int64_t start = XR_TO_INT(R(c));
     int64_t end = XR_TO_INT(R(c + 1));

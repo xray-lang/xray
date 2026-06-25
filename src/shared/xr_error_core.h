@@ -20,6 +20,10 @@
 #define XR_ERROR_CORE_DIVISION_BY_ZERO_MSG "division by zero"
 #define XR_ERROR_CORE_MODULO_BY_ZERO_MSG "modulo by zero"
 #define XR_ERROR_CORE_MODULO_REQUIRES_INTEGER_MSG "modulo requires integer types"
+#define XR_ERROR_CORE_BYTES_CONSTRUCTOR_EXPECTS_MSG "Bytes(n): n must be integer or array"
+#define XR_ERROR_CORE_BYTES_CONSTRUCTOR_FILL_EXPECTS_MSG                                           \
+    "Bytes(n, value): both args must be integers"
+#define XR_ERROR_CORE_SLICE_BOUNDS_EXPECTS_MSG "slice bounds must be integers"
 #define XR_ERROR_CORE_BYTES_LOAD_U32_EXPECTS_MSG "Bytes.loadU32LE(offset) expects Bytes and integer"
 #define XR_ERROR_CORE_BYTES_LOAD_U32_RECEIVER_MSG "Bytes.loadU32LE receiver must be Bytes"
 #define XR_ERROR_CORE_BYTES_LOAD_U32_OOB_MSG "Bytes.loadU32LE offset out of bounds"
