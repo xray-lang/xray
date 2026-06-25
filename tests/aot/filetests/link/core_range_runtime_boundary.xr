@@ -1,0 +1,7 @@
+let r = 2..6
+print(r)
+print(typeof(r))
+
+for (i in 2..5) {
+    print(i)
+}
