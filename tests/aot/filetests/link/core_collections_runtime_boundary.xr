@@ -1,0 +1,27 @@
+let label = "  alpha,beta  ".trim()
+let parts = label.split(",")
+print(parts.length)
+print(parts[0])
+print("xo".repeat(3))
+print(("pre" + "fix").startsWith("pre"))
+
+let xs: Array<int> = [1, 2, 3]
+xs.push(4)
+print(xs.length)
+print(xs[2])
+print(xs.join("|"))
+let view = xs[1:3]
+print(view.length)
+
+let scores: Map<string, int> = #{"a": 1}
+scores.set("b", 2)
+print(scores.get("b"))
+print(scores.has("a"))
+scores.delete("a")
+print(scores.length)
+
+let seen: Set<string> = #["x"]
+seen.add("y")
+print(seen.has("y"))
+seen.delete("x")
+print(seen.length)
