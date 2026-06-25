@@ -228,7 +228,7 @@ order: 015
 
 ### 14.17 `Task<T>` / `EnumValue` / `EnumType`
 
-`Task<T>` 属性：`done`、`status`；方法：`cancel()`、`poll()`、`awaitResult()`、`awaitTimeout(ms)`。`poll()` 和显式等待方法返回 `TaskResult<T>`，plain `await task` 成功时返回 `T`，失败或取消时走异常路径。`EnumValue` 属性：`name`、`value`、`ordinal`，方法：`toString()`。`EnumType` 属性：`name`、`memberCount`，方法：`getMember(name)`。
+`Task<T>` 属性：`done`、`status`；方法：`cancel()`、`poll()`、`awaitResult()`、`awaitTimeout(ms)`。`poll()` 和显式等待方法返回 `TaskResult<T>`；`TaskResult.Failed(error)` 以 `unknown` 保留原始失败值（业务 enum 错误或 `PanicInfo`），plain `await task` 成功时返回 `T`，失败或取消时走对应错误/panic 路径。`EnumValue` 属性：`name`、`value`、`ordinal`，方法：`toString()`。`EnumType` 属性：`name`、`memberCount`，方法：`getMember(name)`。
 
 ### 14.18 其他 prelude 类型（`Logger` / `NetConn` / `NetListener`）
 
@@ -479,7 +479,7 @@ The built-in `PanicInfo` class has fields `message`, `stack`, `cause`, `code`, `
 
 ### 14.17 `Task<T>` / `EnumValue` / `EnumType`
 
-`Task<T>` properties: `done`, `status`; methods: `cancel()`, `poll()`, `awaitResult()`, `awaitTimeout(ms)`. `poll()` and explicit wait methods return `TaskResult<T>`; plain `await task` returns `T` on success and uses the exception path for failure or cancellation. `EnumValue` properties: `name`, `value`, `ordinal`; methods: `toString()`. `EnumType` properties: `name`, `memberCount`; methods: `getMember(name)`.
+`Task<T>` properties: `done`, `status`; methods: `cancel()`, `poll()`, `awaitResult()`, `awaitTimeout(ms)`. `poll()` and explicit wait methods return `TaskResult<T>`; `TaskResult.Failed(error)` preserves the original failure value (business enum error or `PanicInfo`) as `unknown`, while plain `await task` returns `T` on success and uses the matching error/panic path for failure or cancellation. `EnumValue` properties: `name`, `value`, `ordinal`; methods: `toString()`. `EnumType` properties: `name`, `memberCount`; methods: `getMember(name)`.
 
 ### 14.18 Other Prelude Types (`Logger` / `NetConn` / `NetListener`)
 

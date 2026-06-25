@@ -491,9 +491,22 @@ static const XiEnumData *cg_enum_for_runtime_type(const XiCgenCtx *ctx, const vo
     return NULL;
 }
 
-static void emit_adt_enum_construct_expr(FILE *out, int member_idx, const XiValue *v) {
+static void emit_adt_enum_construct_expr(FILE *out, const XiEnumData *ed, int member_idx,
+                                         const XiValue *v) {
     uint16_t payload_count = v->nargs > 0 ? (uint16_t) (v->nargs - 1) : 0;
+    const char *enum_name = ed && ed->name ? ed->name : "";
+    const char *member_name =
+        (ed && ed->members && member_idx >= 0 && (uint32_t) member_idx < ed->member_count &&
+         ed->members[member_idx].name)
+            ? ed->members[member_idx].name
+            : "";
     fprintf(out, "({ XrValue _adt = xrt_array_new(%u); ", (unsigned) payload_count + 1);
+    fprintf(out, "xrt_array_t *_adt_arr = (xrt_array_t*)_adt.ptr; ");
+    fprintf(out, "_adt_arr->adt_enum_name = ");
+    emit_c_string_literal(out, enum_name);
+    fprintf(out, "; _adt_arr->adt_member_name = ");
+    emit_c_string_literal(out, member_name);
+    fprintf(out, "; ");
     fprintf(out, "xrt_array_push(_adt, XR_FROM_INT(%d)); ", member_idx);
     for (uint16_t a = 1; a < v->nargs; a++) {
         fprintf(out, "xrt_array_push(_adt, ");

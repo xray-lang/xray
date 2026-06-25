@@ -39,6 +39,18 @@ typedef struct XrAotRuntimeArrayView {
     uint8_t pad[2];
 } XrAotRuntimeArrayView;
 
+typedef struct XrAotRuntimeMapView {
+    XrObjHeader hdr;
+    void *owner_heap;
+    XR_MAP_ABI_FIELDS;
+} XrAotRuntimeMapView;
+
+typedef struct XrAotRuntimeSetView {
+    XrObjHeader hdr;
+    void *owner_heap;
+    XR_SET_ABI_FIELDS;
+} XrAotRuntimeSetView;
+
 static inline XrValue xr_aot_bridge_value_to_xrt(XrValue value);
 
 static inline XrValue xr_aot_bridge_enum_key_to_xrt(XrValue value, uint32_t member_index) {
@@ -130,6 +142,8 @@ static inline XrValue xr_aot_bridge_array_to_xrt(XrValue value) {
     XrValue dst_value = xrt_array_new_typed((int64_t) src->length, elem_type);
     xrt_array_t *dst = (xrt_array_t *) dst_value.ptr;
     dst->length = (int64_t) src->length;
+    dst->adt_enum_name = src->adt_enum_name;
+    dst->adt_member_name = src->adt_member_name;
     if (src->length == 0 || !src->data)
         return dst_value;
 
@@ -140,6 +154,48 @@ static inline XrValue xr_aot_bridge_array_to_xrt(XrValue value) {
         }
     } else {
         memcpy(dst->data, src->data, (size_t) src->length * (size_t) dst->elem_size);
+    }
+    return dst_value;
+}
+
+static inline XrValue xr_aot_bridge_map_to_xrt(XrValue value) {
+    XrAotRuntimeMapView *src = (XrAotRuntimeMapView *) value.ptr;
+    if (!src)
+        return XR_NULL_VAL;
+
+    XrValue dst_value = xrt_map_new((int64_t) src->count);
+    xrt_map_t *dst = (xrt_map_t *) dst_value.ptr;
+    dst->key_tid = src->key_tid;
+    dst->value_tid = src->value_tid;
+    if ((src->flags & (XR_MAP_FLAG_DUMMY | XR_MAP_FLAG_WEAK)) || src->count == 0 || !src->entries)
+        return dst_value;
+
+    for (uint32_t i = 0; i < src->nentries; i++) {
+        XrMapEntry *entry = &src->entries[i];
+        if (entry->key_tt == XR_MAP_ENTRY_NIL_KEY)
+            continue;
+        xrt_map_set(dst, xr_aot_bridge_value_to_xrt(entry->key),
+                    xr_aot_bridge_value_to_xrt(entry->value));
+    }
+    return dst_value;
+}
+
+static inline XrValue xr_aot_bridge_set_to_xrt(XrValue value) {
+    XrAotRuntimeSetView *src = (XrAotRuntimeSetView *) value.ptr;
+    if (!src)
+        return XR_NULL_VAL;
+
+    XrValue dst_value = xrt_set_new((int64_t) src->count);
+    xrt_set_t *dst = (xrt_set_t *) dst_value.ptr;
+    dst->elem_tid = src->elem_tid;
+    if ((src->flags & (XR_SET_FLAG_DUMMY | XR_SET_FLAG_WEAK)) || src->count == 0 || !src->entries)
+        return dst_value;
+
+    for (uint32_t i = 0; i < src->nentries; i++) {
+        XrSetEntry *entry = &src->entries[i];
+        if (entry->val_tt == XR_SET_ENTRY_NIL)
+            continue;
+        xrt_set_add(dst, xr_aot_bridge_value_to_xrt(entry->value));
     }
     return dst_value;
 }
@@ -162,6 +218,12 @@ static inline XrValue xr_aot_bridge_value_to_xrt(XrValue value) {
     if (value.heap_type == XR_TARRAY && value.ptr &&
         !(((const XrObjHeader *) value.ptr)->extra & XR_OBJ_STORAGE_BUMP))
         return xr_aot_bridge_array_to_xrt(value);
+    if (value.ptr && !(((const XrObjHeader *) value.ptr)->extra & XR_OBJ_AOT_NATIVE)) {
+        if (value.heap_type == XR_TMAP)
+            return xr_aot_bridge_map_to_xrt(value);
+        if (value.heap_type == XR_TSET)
+            return xr_aot_bridge_set_to_xrt(value);
+    }
     return value;
 }
 

@@ -260,7 +260,7 @@ static void xa_register_prelude_enums(XaAnalyzer *analyzer) {
                                                 "Pending"};
     static const int task_result_payload_counts[] = {1, 1, 0, 0, 0};
     XrType *task_success_payload[] = {xr_type_new_type_param(analyzer->isolate, "T", 0)};
-    XrType *task_failed_payload[] = {xr_type_new_named_instance(analyzer->isolate, "PanicInfo")};
+    XrType *task_failed_payload[] = {xr_type_new_unknown(NULL)};
     XrType **task_result_payload_types[] = {task_success_payload, task_failed_payload, NULL, NULL,
                                             NULL};
     register_prelude_enum_full(analyzer, "TaskResult", task_result_type_params, 1,

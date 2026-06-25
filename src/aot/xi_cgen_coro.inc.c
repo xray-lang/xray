@@ -1598,8 +1598,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "    }\n");
         fprintf(out, "    f->state = 0;\n");
         fprintf(out, "S%d_DONE:;\n", sid);
-        if ((await_all || await_any) && cg_coro_value_has_storage(f, v) &&
-            cg_rep(v) == XR_REP_TAGGED) {
+        if (cg_coro_value_has_storage(f, v) && cg_rep(v) == XR_REP_TAGGED) {
             fprintf(out, "    ");
             emit_vref(out, v);
             fprintf(out, " = xr_aot_bridge_value_to_xrt(");

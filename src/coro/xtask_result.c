@@ -20,13 +20,6 @@ static inline void task_result_lock_release(_Atomic bool *lock) {
     atomic_store_explicit(lock, false, memory_order_release);
 }
 
-static inline bool task_result_is_aot_native_container(XrValue value) {
-    if (!XR_IS_ARRAY(value) && !XR_IS_MAP(value) && !XR_IS_SET(value))
-        return false;
-    XrObjHeader *obj = XR_VALUE_GCPTR(value);
-    return obj && (obj->extra & XR_OBJ_AOT_NATIVE);
-}
-
 XrValue xr_task_consume_result_copy(struct XrRuntimeCore *core, XrTask *task,
                                     struct XrCoroutine *dst_coro) {
     /* Serialize concurrent awaiters of the same task: the first one deep
@@ -36,7 +29,7 @@ XrValue xr_task_consume_result_copy(struct XrRuntimeCore *core, XrTask *task,
      * a torn cache write. */
     task_result_lock_acquire(&task->await_lock);
     XrValue result = task->result;
-    if (xr_value_needs_copy(result) && !task_result_is_aot_native_container(result)) {
+    if (xr_value_needs_copy(result)) {
         XrValue copy = xr_deep_copy_to_coro_core(core, result, dst_coro);
         task->result = copy;
         result = copy;

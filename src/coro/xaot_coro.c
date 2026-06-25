@@ -1236,7 +1236,7 @@ static XrValue aot_task_result_success(const XrAotContext *ctx, XrValue value) {
     return aot_builtin_adt_value(ctx, XR_GLOBAL_VAR_TASK_RESULT, 0, args, 1);
 }
 
-static XrValue aot_task_failure_exception(const XrAotContext *ctx, XrTask *task) {
+static XrValue aot_task_failure_value(const XrAotContext *ctx, XrTask *task) {
     XrAotVmHost vm_host = aot_context_vm_host(ctx, task);
     XrCoroutine *coro = aot_context_coro(ctx, vm_host, task);
     XrRuntimeCore *core = aot_context_runtime_core(ctx);
@@ -1249,15 +1249,11 @@ static XrValue aot_task_failure_exception(const XrAotContext *ctx, XrTask *task)
     }
     if (coro && xr_value_needs_copy(error))
         error = xr_deep_copy_to_coro_core(core, error, coro);
-    if (aot_vm_host_available(vm_host) && vm_host.ops->is_exception &&
-        vm_host.ops->exception_from_value && !vm_host.ops->is_exception(vm_host.host, error)) {
-        error = vm_host.ops->exception_from_value(vm_host.host, error);
-    }
     return error;
 }
 
 static XrValue aot_task_result_failed(const XrAotContext *ctx, XrTask *task) {
-    XrValue error = aot_task_failure_exception(ctx, task);
+    XrValue error = aot_task_failure_value(ctx, task);
     XrValue args[1] = {error};
     return aot_builtin_adt_value(ctx, XR_GLOBAL_VAR_TASK_RESULT, 1, args, 1);
 }
@@ -1301,7 +1297,7 @@ static XrAotResult aot_task_terminal_error(const XrAotContext *ctx, XrTask *task
         task ? atomic_load_explicit(&task->state, memory_order_acquire) : XR_TASK_CANCELLED;
     XrValue error;
     if (state == XR_TASK_FAILED) {
-        error = aot_task_failure_exception(ctx, task);
+        error = aot_task_failure_value(ctx, task);
     } else {
         XrAotVmHost vm_host = aot_context_vm_host(ctx, task);
         if (aot_vm_host_available(vm_host) && vm_host.ops->exception_new) {
