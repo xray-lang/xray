@@ -103,7 +103,7 @@ static inline uint32_t xrt_bytes_load_u32_le_raw(xrt_array_t *a, int64_t off) {
     uint32_t value = xr_array_core_bytes_load_u32_le(a ? a->data : NULL, a ? a->length : 0,
                                                      a ? a->elem_type : XR_ELEM_ANY, off, &ok);
     if (!ok)
-        xrt_throw_exc(xr_box_str("Bytes.loadU32LE offset out of bounds"));
+        xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTES_LOAD_U32_OOB_MSG);
     return value;
 }
 
@@ -112,7 +112,7 @@ static inline uint64_t xrt_bytes_load_u64_le_raw(xrt_array_t *a, int64_t off) {
     uint64_t value = xr_array_core_bytes_load_u64_le(a ? a->data : NULL, a ? a->length : 0,
                                                      a ? a->elem_type : XR_ELEM_ANY, off, &ok);
     if (!ok)
-        xrt_throw_exc(xr_box_str("Bytes.loadU64LE offset out of bounds"));
+        xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTES_LOAD_U64_OOB_MSG);
     return value;
 }
 
@@ -120,7 +120,7 @@ static inline xrt_array_t *xrt_bytes_copy_within_raw(xrt_array_t *a, int64_t dst
                                                      int64_t count) {
     if (!xr_array_core_bytes_copy_within(a ? a->data : NULL, a ? a->length : 0,
                                          a ? a->elem_type : XR_ELEM_ANY, dst, src, count))
-        xrt_throw_exc(xr_box_str("Bytes.copyWithin range out of bounds"));
+        xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTES_COPY_WITHIN_OOB_MSG);
     return a;
 }
 
@@ -131,7 +131,7 @@ static inline xrt_array_t *xrt_bytes_copy_from_raw(xrt_array_t *dst, xrt_array_t
                                        dst ? dst->elem_type : XR_ELEM_ANY, src ? src->data : NULL,
                                        src ? src->length : 0, src ? src->elem_type : XR_ELEM_ANY,
                                        src_offset, dst_offset, count, dst == src))
-        xrt_throw_exc(xr_box_str("Bytes.copyFrom range out of bounds"));
+        xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTES_COPY_FROM_OOB_MSG);
     return dst;
 }
 
@@ -139,13 +139,13 @@ static inline xrt_array_t *xrt_bytes_repeat_from_raw(xrt_array_t *a, int64_t dst
                                                      int64_t count) {
     if (!xr_array_core_bytes_repeat_from(a ? a->data : NULL, a ? a->length : 0,
                                          a ? a->elem_type : XR_ELEM_ANY, dst, distance, count))
-        xrt_throw_exc(xr_box_str("Bytes.repeatFrom range out of bounds"));
+        xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTES_REPEAT_FROM_OOB_MSG);
     return a;
 }
 
 static inline XrValue xrt_bytes_load_u32_le(XrValue arr_value, XrValue offset_value) {
     if (!XR_IS_ARRAY(arr_value) || !arr_value.ptr)
-        xrt_throw_exc(xr_box_str("Bytes.loadU32LE receiver must be Bytes"));
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTES_LOAD_U32_RECEIVER_MSG);
     int64_t off = xrt_array_required_int_arg_or_panic(
         offset_value, "Bytes.loadU32LE(offset): offset must be integer");
     return XR_FROM_INT((int64_t) xrt_bytes_load_u32_le_raw((xrt_array_t *) arr_value.ptr, off));
@@ -153,7 +153,7 @@ static inline XrValue xrt_bytes_load_u32_le(XrValue arr_value, XrValue offset_va
 
 static inline XrValue xrt_bytes_load_u64_le(XrValue arr_value, XrValue offset_value) {
     if (!XR_IS_ARRAY(arr_value) || !arr_value.ptr)
-        xrt_throw_exc(xr_box_str("Bytes.loadU64LE receiver must be Bytes"));
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTES_LOAD_U64_RECEIVER_MSG);
     int64_t off = xrt_array_required_int_arg_or_panic(
         offset_value, "Bytes.loadU64LE(offset): offset must be integer");
     return XR_FROM_INT((int64_t) xrt_bytes_load_u64_le_raw((xrt_array_t *) arr_value.ptr, off));

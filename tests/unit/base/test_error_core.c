@@ -27,6 +27,34 @@ TEST(error_core_defines_arithmetic_messages) {
     ASSERT_STR_EQ(XR_ERROR_CORE_MODULO_REQUIRES_INTEGER_MSG, "modulo requires integer types");
 }
 
+TEST(error_core_defines_bytes_messages) {
+    ASSERT_STR_EQ(XR_ERROR_CORE_BYTES_LOAD_U32_EXPECTS_MSG,
+                  "Bytes.loadU32LE(offset) expects Bytes and integer");
+    ASSERT_STR_EQ(XR_ERROR_CORE_BYTES_LOAD_U32_RECEIVER_MSG,
+                  "Bytes.loadU32LE receiver must be Bytes");
+    ASSERT_STR_EQ(XR_ERROR_CORE_BYTES_LOAD_U32_OOB_MSG, "Bytes.loadU32LE offset out of bounds");
+    ASSERT_STR_EQ(XR_ERROR_CORE_BYTES_LOAD_U64_EXPECTS_MSG,
+                  "Bytes.loadU64LE(offset) expects Bytes and integer");
+    ASSERT_STR_EQ(XR_ERROR_CORE_BYTES_LOAD_U64_RECEIVER_MSG,
+                  "Bytes.loadU64LE receiver must be Bytes");
+    ASSERT_STR_EQ(XR_ERROR_CORE_BYTES_LOAD_U64_OOB_MSG, "Bytes.loadU64LE offset out of bounds");
+    ASSERT_STR_EQ(XR_ERROR_CORE_BYTES_COPY_WITHIN_EXPECTS_MSG,
+                  "Bytes.copyWithin expects integer offsets and count");
+    ASSERT_STR_EQ(XR_ERROR_CORE_BYTES_COPY_WITHIN_RECEIVER_MSG,
+                  "Bytes.copyWithin receiver must be Bytes");
+    ASSERT_STR_EQ(XR_ERROR_CORE_BYTES_COPY_WITHIN_OOB_MSG, "Bytes.copyWithin range out of bounds");
+    ASSERT_STR_EQ(XR_ERROR_CORE_BYTES_COPY_FROM_EXPECTS_MSG,
+                  "Bytes.copyFrom expects Bytes and integer ranges");
+    ASSERT_STR_EQ(XR_ERROR_CORE_BYTES_COPY_FROM_OPERANDS_MSG,
+                  "Bytes.copyFrom operands must be Bytes");
+    ASSERT_STR_EQ(XR_ERROR_CORE_BYTES_COPY_FROM_OOB_MSG, "Bytes.copyFrom range out of bounds");
+    ASSERT_STR_EQ(XR_ERROR_CORE_BYTES_REPEAT_FROM_EXPECTS_MSG,
+                  "Bytes.repeatFrom expects integer offsets and count");
+    ASSERT_STR_EQ(XR_ERROR_CORE_BYTES_REPEAT_FROM_RECEIVER_MSG,
+                  "Bytes.repeatFrom receiver must be Bytes");
+    ASSERT_STR_EQ(XR_ERROR_CORE_BYTES_REPEAT_FROM_OOB_MSG, "Bytes.repeatFrom range out of bounds");
+}
+
 TEST(error_core_parses_prefixed_message) {
     const char *text = "E0430: array index out of range: 5 (length 3)";
     const char *expected = "array index out of range: 5 (length 3)";
@@ -53,6 +81,7 @@ TEST_MAIN_BEGIN()
 RUN_TEST_SUITE("Error Core");
 RUN_TEST(error_core_formats_array_index_oob);
 RUN_TEST(error_core_defines_arithmetic_messages);
+RUN_TEST(error_core_defines_bytes_messages);
 RUN_TEST(error_core_parses_prefixed_message);
 RUN_TEST(error_core_leaves_unprefixed_message_intact);
 

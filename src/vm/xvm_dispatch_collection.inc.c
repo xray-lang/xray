@@ -827,15 +827,15 @@ vmcase(OP_BYTES_LOAD_U32_LE) {
     int b = GETARG_B(i);
     int c = GETARG_C(i);
     if (!XR_IS_ARRAY(R(b)) || !XR_IS_INT(R(c))) {
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Bytes.loadU32LE(offset) expects Bytes and integer");
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTES_LOAD_U32_EXPECTS_MSG);
     }
     XrArray *arr = XR_TO_ARRAY(R(b));
     if (arr->elem_type != XR_ELEM_U8)
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Bytes.loadU32LE receiver must be Bytes");
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTES_LOAD_U32_RECEIVER_MSG);
     bool ok = false;
     uint32_t value = xr_array_load_u32_le(arr, XR_TO_INT(R(c)), &ok);
     if (!ok)
-        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "Bytes.loadU32LE offset out of bounds");
+        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTES_LOAD_U32_OOB_MSG);
     R(a) = xr_int((xr_Integer) value);
     vmbreak;
 }
@@ -845,15 +845,15 @@ vmcase(OP_BYTES_LOAD_U64_LE) {
     int b = GETARG_B(i);
     int c = GETARG_C(i);
     if (!XR_IS_ARRAY(R(b)) || !XR_IS_INT(R(c))) {
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Bytes.loadU64LE(offset) expects Bytes and integer");
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTES_LOAD_U64_EXPECTS_MSG);
     }
     XrArray *arr = XR_TO_ARRAY(R(b));
     if (arr->elem_type != XR_ELEM_U8)
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Bytes.loadU64LE receiver must be Bytes");
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTES_LOAD_U64_RECEIVER_MSG);
     bool ok = false;
     uint64_t value = xr_array_load_u64_le(arr, XR_TO_INT(R(c)), &ok);
     if (!ok)
-        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "Bytes.loadU64LE offset out of bounds");
+        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTES_LOAD_U64_OOB_MSG);
     R(a) = xr_int((xr_Integer) value);
     vmbreak;
 }
@@ -880,15 +880,14 @@ vmcase(OP_BYTES_COPY_WITHIN) {
     int a = GETARG_A(i);
     if (!XR_IS_ARRAY(R(a)) || !XR_IS_INT(R(a + 1)) || !XR_IS_INT(R(a + 2)) ||
         !XR_IS_INT(R(a + 3))) {
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
-                         "Bytes.copyWithin expects integer offsets and count");
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTES_COPY_WITHIN_EXPECTS_MSG);
     }
     XrArray *arr = XR_TO_ARRAY(R(a));
     if (arr->elem_type != XR_ELEM_U8)
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Bytes.copyWithin receiver must be Bytes");
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTES_COPY_WITHIN_RECEIVER_MSG);
     if (!xr_array_bytes_copy_within(arr, XR_TO_INT(R(a + 1)), XR_TO_INT(R(a + 2)),
                                     XR_TO_INT(R(a + 3)))) {
-        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "Bytes.copyWithin range out of bounds");
+        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTES_COPY_WITHIN_OOB_MSG);
     }
     vmbreak;
 }
@@ -897,15 +896,15 @@ vmcase(OP_BYTES_COPY_FROM) {
     int a = GETARG_A(i);
     if (!XR_IS_ARRAY(R(a)) || !XR_IS_ARRAY(R(a + 1)) || !XR_IS_INT(R(a + 2)) ||
         !XR_IS_INT(R(a + 3)) || !XR_IS_INT(R(a + 4))) {
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Bytes.copyFrom expects Bytes and integer ranges");
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTES_COPY_FROM_EXPECTS_MSG);
     }
     XrArray *dst = XR_TO_ARRAY(R(a));
     XrArray *src = XR_TO_ARRAY(R(a + 1));
     if (dst->elem_type != XR_ELEM_U8 || src->elem_type != XR_ELEM_U8)
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Bytes.copyFrom operands must be Bytes");
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTES_COPY_FROM_OPERANDS_MSG);
     if (!xr_array_bytes_copy_from(dst, src, XR_TO_INT(R(a + 2)), XR_TO_INT(R(a + 3)),
                                   XR_TO_INT(R(a + 4)))) {
-        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "Bytes.copyFrom range out of bounds");
+        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTES_COPY_FROM_OOB_MSG);
     }
     vmbreak;
 }
@@ -914,15 +913,14 @@ vmcase(OP_BYTES_REPEAT_FROM) {
     int a = GETARG_A(i);
     if (!XR_IS_ARRAY(R(a)) || !XR_IS_INT(R(a + 1)) || !XR_IS_INT(R(a + 2)) ||
         !XR_IS_INT(R(a + 3))) {
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
-                         "Bytes.repeatFrom expects integer offsets and count");
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTES_REPEAT_FROM_EXPECTS_MSG);
     }
     XrArray *arr = XR_TO_ARRAY(R(a));
     if (arr->elem_type != XR_ELEM_U8)
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Bytes.repeatFrom receiver must be Bytes");
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTES_REPEAT_FROM_RECEIVER_MSG);
     if (!xr_array_bytes_repeat_from(arr, XR_TO_INT(R(a + 1)), XR_TO_INT(R(a + 2)),
                                     XR_TO_INT(R(a + 3)))) {
-        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "Bytes.repeatFrom range out of bounds");
+        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTES_REPEAT_FROM_OOB_MSG);
     }
     vmbreak;
 }

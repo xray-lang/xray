@@ -14,10 +14,12 @@
 #include "xrt_value.h"
 #include "xrt_arc.h"  // xrt_str_alloc used by xrt_strbuf_finish
 #include "xrt_range.h"
+#include "../runtime/xerror_codes.h"
 #include "../shared/xr_array_abi.h"
 #include "../shared/xr_array_core.h"
 #include "../shared/xr_cell_abi.h"
 #include "../shared/xr_elem_type.h"
+#include "../shared/xr_error_core.h"
 #include "../shared/xr_float_fmt.h"
 #include "../shared/xr_map_set_abi.h"
 #include "../shared/xr_numeric_core.h"
@@ -28,6 +30,7 @@
 #include <string.h>
 
 static XRT_COLD _Noreturn void xrt_throw_exc(XrValue exc);
+static XRT_COLD _Noreturn void xrt_throw_error(int code, const char *message);
 
 /* =========================================================================
  * Array runtime
@@ -1537,6 +1540,21 @@ static inline void xrt_json_set_field(XrValue obj, int field_idx, XrValue val) {
     xrt_json_t *j = (xrt_json_t *) obj.ptr;
     if (field_idx >= 0 && field_idx < j->field_count)
         j->fields[field_idx] = val;
+}
+
+static XRT_COLD _Noreturn void xrt_throw_error(int code, const char *message) {
+    static const char *const fields[] = {"message", "stack", "cause", "code", "data"};
+    size_t len = message ? strlen(message) : 0;
+    XrValue exc = xrt_json_new_named(5, fields);
+    XrValue msg = xrt_str_alloc(len);
+    if (len > 0)
+        memcpy(xr_str_buf(msg), message, len);
+    xrt_json_set_field(exc, 0, msg);
+    xrt_json_set_field(exc, 1, xrt_array_new_len(0));
+    xrt_json_set_field(exc, 2, XR_NULL_VAL);
+    xrt_json_set_field(exc, 3, XR_FROM_INT(code));
+    xrt_json_set_field(exc, 4, XR_NULL_VAL);
+    xrt_throw_exc(exc);
 }
 
 static inline XrValue xrt_json_get_name(XrValue obj, const char *name) {
