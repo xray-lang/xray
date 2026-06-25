@@ -1,0 +1,22 @@
+enum Color {
+    Red,
+    Green,
+    Blue,
+}
+
+let t = (1, "two", true)
+print(t)
+print(typeof(t))
+let (a, b, c) = t
+print(a)
+print(b)
+print(c)
+
+let color = Color.Green
+print(color.name)
+print(color.ordinal)
+print(color.toString())
+
+for (member in Color) {
+    print(member.name)
+}
