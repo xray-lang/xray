@@ -303,12 +303,6 @@ static const char *stdlib_symbol_module_of_value(const XiFunc *f, const XiValue 
     return ref->module_path;
 }
 
-static bool feature_copy_needs_deep_clone(const XiValue *v) {
-    if (!v || v->op != XI_COPY || v->nargs < 1 || !v->args[0])
-        return false;
-    return xi_copy_is_value_clone(v);
-}
-
 /* Scan a single XiFunc (non-recursive) for feature-indicating ops */
 static void scan_func_features(XiFunc *f, XaotFeatureSet *fs) {
     XR_DCHECK(f != NULL, "scan_func_features: NULL func");
@@ -406,8 +400,10 @@ static void scan_func_features(XiFunc *f, XaotFeatureSet *fs) {
                     break;
                 }
                 case XI_COPY:
-                    if (feature_copy_needs_deep_clone(v))
-                        fs->need_deep_copy = true;
+                    /* AOT-local value clones lower to header-only
+                     * xrt_value_clone_for_coro(). Coroutine/channel/scope
+                     * transfer paths declare runtime deep-copy needs through
+                     * their own feature ops or generated stdlib caps. */
                     break;
                 case XI_TRY:
                 case XI_THROW:
