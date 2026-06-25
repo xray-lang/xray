@@ -365,8 +365,6 @@ XR_FUNC void xi_emit_as(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
 
     bool is_safe = (v->aux_int & 1) != 0;
     int tid = v->aux_int >> 1;
-    const char *tname = v->aux ? (const char *) v->aux : "unknown";
-
     /* Unknown target type: degenerate to a move */
     if (tid < 0) {
         if (dst != src)
@@ -399,6 +397,21 @@ XR_FUNC void xi_emit_as(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     if (dst != src)
         emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, src, 0));
 
+    if (!is_safe) {
+        int64_t mask = 0;
+        if (tid >= 0 && tid < 63)
+            mask |= (1LL << tid);
+
+        int mask_k = add_const_int(ctx, mask);
+        if (ctx->status != XI_EMIT_OK)
+            return;
+        uint16_t mask_arg = 0;
+        if (!xi_emit_const_index_to_c(ctx, mask_k, &mask_arg))
+            return;
+        emit_inst(ctx, CREATE_ABC(OP_CHECKTYPE, dst, mask_arg, 0));
+        return;
+    }
+
     /* OP_TYPEOF tmp, dst, 0 */
     if (ctx->next_reg >= MAX_REGS) {
         emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
@@ -419,34 +432,14 @@ XR_FUNC void xi_emit_as(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     int ok_jmp_pc = current_pc(ctx);
     emit_inst(ctx, CREATE_sJ(OP_JMP, 0)); /* placeholder */
 
-    if (is_safe) {
-        emit_inst(ctx, CREATE_ABC(OP_LOADNULL, dst, 0, 0));
-        int end_jmp_pc = current_pc(ctx);
-        emit_inst(ctx, CREATE_sJ(OP_JMP, 0));
-        int ok_target = current_pc(ctx);
-        XrInstruction *ok_inst = PROTO_CODE_PTR(ctx->proto, ok_jmp_pc);
-        *ok_inst = CREATE_sJ(OP_JMP, ok_target - (ok_jmp_pc + 1));
-        XrInstruction *end_inst = PROTO_CODE_PTR(ctx->proto, end_jmp_pc);
-        *end_inst = CREATE_sJ(OP_JMP, ok_target - (end_jmp_pc + 1));
-    } else {
-        char err_buf[128];
-        snprintf(err_buf, sizeof(err_buf), "Type cast failed: expected %s", tname);
-        int err_k = add_const_string(ctx, err_buf);
-        if (ctx->status != XI_EMIT_OK)
-            return;
-        if (ctx->next_reg >= MAX_REGS) {
-            emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
-            return;
-        }
-        XiEmitReg err_reg = (XiEmitReg) ctx->next_reg++;
-        if (err_reg >= ctx->max_reg)
-            ctx->max_reg = (err_reg + 1);
-        emit_inst(ctx, CREATE_ABx(OP_LOADK, err_reg, err_k));
-        emit_inst(ctx, CREATE_ABC(OP_THROW, err_reg, 0, 0));
-        int ok_target = current_pc(ctx);
-        XrInstruction *ok_inst = PROTO_CODE_PTR(ctx->proto, ok_jmp_pc);
-        *ok_inst = CREATE_sJ(OP_JMP, ok_target - (ok_jmp_pc + 1));
-    }
+    emit_inst(ctx, CREATE_ABC(OP_LOADNULL, dst, 0, 0));
+    int end_jmp_pc = current_pc(ctx);
+    emit_inst(ctx, CREATE_sJ(OP_JMP, 0));
+    int ok_target = current_pc(ctx);
+    XrInstruction *ok_inst = PROTO_CODE_PTR(ctx->proto, ok_jmp_pc);
+    *ok_inst = CREATE_sJ(OP_JMP, ok_target - (ok_jmp_pc + 1));
+    XrInstruction *end_inst = PROTO_CODE_PTR(ctx->proto, end_jmp_pc);
+    *end_inst = CREATE_sJ(OP_JMP, ok_target - (end_jmp_pc + 1));
 }
 
 XR_FUNC void xi_emit_checktype(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
