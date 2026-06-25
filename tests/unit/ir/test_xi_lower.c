@@ -436,7 +436,7 @@ TEST(member_access) {
 
 TEST(member_access_field_symbols_are_distinct) {
     XiFunc *f = lower_source("fn worker() -> int {\n"
-                             "    yield\n"
+                             "    Coro.yield()\n"
                              "    return 1\n"
                              "}\n"
                              "let task = go worker()\n"
@@ -1134,7 +1134,7 @@ TEST(class_decl_skip) {
 }
 
 TEST(yield_stmt) {
-    XiFunc *f = lower_source("yield\n"
+    XiFunc *f = lower_source("Coro.yield()\n"
                              "print(1)\n");
     assert(f != NULL);
     int found_yield = 0;

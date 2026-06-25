@@ -124,6 +124,9 @@ static XrCoroRunResult aot_map_result(XrCoroutine *coro, XrAotResult result) {
             return xr_coro_run_result(XR_CORO_RUN_BLOCKED);
         case XR_AOT_RUN_YIELD:
             return xr_coro_run_result(XR_CORO_RUN_YIELD);
+        case XR_AOT_RUN_GEN_YIELD:
+            coro->result = result.value;
+            return xr_coro_run_result(XR_CORO_RUN_YIELD);
         case XR_AOT_RUN_SPAWN_CHILD:
             return xr_coro_run_spawn_child(result.child);
         case XR_AOT_RUN_CANCELLED:
@@ -176,9 +179,86 @@ static XrCoroRunResult aot_runtime_backend_resume(XrCoroutine *coro, const XrCor
     return aot_map_result(coro, state->desc->resume(state->frame, &ctx));
 }
 
+// Synchronous generator pull: run the (non-scheduled) AOT coroutine to its next
+// `yield expr` or completion without touching the worker run queue.
+static XrCoroRunKind aot_backend_gen_drive(XrCoroutine *coro, XrValue *out) {
+    if (out)
+        *out = XR_NULL_VAL;
+    if (!coro)
+        return XR_CORO_RUN_ERROR;
+    if (xr_coro_flags_has(coro, XR_CORO_FLG_DONE))
+        return XR_CORO_RUN_DONE;
+
+    XrAotCoroState *state = aot_state_from_coro(coro);
+    if (!state || !state->desc || !state->desc->resume)
+        return XR_CORO_RUN_ERROR;
+
+    XrAotContext ctx;
+    ctx.runtime = state->runtime;
+    ctx.coro = coro;
+    ctx.vm_host_ops = NULL;
+    ctx.vm_host = NULL;
+    ctx.worker = NULL;
+
+    aot_mark_running(coro);
+    XrAotResult result = state->desc->resume(state->frame, &ctx);
+
+    switch (result.kind) {
+        case XR_AOT_RUN_GEN_YIELD:
+            coro->result = result.value;
+            xr_coro_transition_to_ready(coro);
+            if (out)
+                *out = result.value;
+            return XR_CORO_RUN_YIELD;
+        case XR_AOT_RUN_DONE:
+            coro->result = result.value;
+            xr_coro_flags_set(coro, XR_CORO_FLG_DONE);
+            if (out)
+                *out = result.value;
+            return XR_CORO_RUN_DONE;
+        case XR_AOT_RUN_ERROR:
+            xr_coro_flags_set(coro, XR_CORO_FLG_DONE);
+            coro->error = result.error;
+            coro->error_is_value = result.error_is_value;
+            if (out)
+                *out = result.error;
+            return XR_CORO_RUN_ERROR;
+        default:
+            /* Generators are pure value producers; channel/await suspend is invalid. */
+            xr_coro_flags_set(coro, XR_CORO_FLG_DONE);
+            coro->error = XR_NULL_VAL;
+            coro->error_is_value = false;
+            return XR_CORO_RUN_ERROR;
+    }
+}
+
+XR_FUNC XrAotGenDriveKind xr_aot_gen_drive(XrCoroutine *coro, XrValue *out,
+                                           bool *out_error_is_value) {
+    if (out)
+        *out = XR_NULL_VAL;
+    if (out_error_is_value)
+        *out_error_is_value = false;
+    if (!coro || !coro->backend || !coro->backend->gen_drive)
+        return XR_AOT_GEN_DRIVE_ERROR;
+    XrCoroRunKind kind = coro->backend->gen_drive(coro, out);
+    switch (kind) {
+        case XR_CORO_RUN_YIELD:
+            return XR_AOT_GEN_DRIVE_YIELD;
+        case XR_CORO_RUN_DONE:
+            return XR_AOT_GEN_DRIVE_DONE;
+        default:
+            if (out_error_is_value)
+                *out_error_is_value = coro->error_is_value;
+            if (out && XR_IS_NULL(*out))
+                *out = coro->error;
+            return XR_AOT_GEN_DRIVE_ERROR;
+    }
+}
+
 static const XrCoroBackendVTable aot_runtime_backend_vtable = {
     .kind = XR_CORO_BACKEND_AOT,
     .resume = aot_runtime_backend_resume,
+    .gen_drive = aot_backend_gen_drive,
     .trace_roots = aot_backend_trace_roots,
     .prepare_recycle = NULL,
     .reset_reusable = NULL,

@@ -11,6 +11,10 @@
 #ifndef XRT_COLL_H
 #define XRT_COLL_H
 
+#ifndef XR_FUNC
+#define XR_FUNC extern
+#endif
+
 #include "xrt_value.h"
 #include "xrt_arc.h"  // xrt_str_alloc used by xrt_strbuf_finish
 #include "xrt_range.h"
@@ -1688,16 +1692,28 @@ static inline XrValue xrt_set_value_at_owned(xrt_set_t *s, int64_t index) {
  * scalar boundaries.
  * ========================================================================= */
 
-#define XRT_ITER_KEYS 0   /* map: yield key */
-#define XRT_ITER_VALUES 1 /* set: yield value; map: yield value */
-#define XRT_ITER_PAIRS 2  /* map/string: yield (key, value) tuple */
+#define XRT_ITER_KEYS 0      /* map: yield key */
+#define XRT_ITER_VALUES 1    /* set: yield value; map: yield value */
+#define XRT_ITER_PAIRS 2     /* map/string: yield (key, value) tuple */
+#define XRT_ITER_GENERATOR 3 /* coroutine-backed generator: pull-driven via gen_drive */
+
+typedef struct XrCoroutine XrCoroutine;
 
 typedef struct {
-    XrValue coll;   /* XR_TAG_MAP, XR_TAG_SET, or string being iterated */
-    int64_t cursor; /* next dense entry index, order[] cursor, or string byte offset */
-    int64_t index;  /* logical iteration index; used by string pair iteration */
-    uint8_t kind;   /* XRT_ITER_* projection */
+    XrValue coll;     /* XR_TAG_MAP, XR_TAG_SET, or string being iterated */
+    int64_t cursor;   /* collection cursor, or generator phase: 0=idle 1=buffered 2=done */
+    int64_t index;    /* logical iteration index; used by string pair iteration */
+    uint8_t kind;     /* XRT_ITER_* projection */
+    XrCoroutine *gen; /* XRT_ITER_GENERATOR only; owns the producer coroutine */
 } xrt_iterator_t;
+
+/* Generator iterator pull helpers live in xray_rt_coro. Freestanding AOT
+ * collection users must not reference them or they would pull in the coroutine
+ * runtime for plain Map/Set/String iteration. */
+#ifdef XRT_ENABLE_GENERATORS
+XR_FUNC int xrt_gen_iter_has_next(xrt_iterator_t *it);
+XR_FUNC XrValue xrt_gen_iter_next(xrt_iterator_t *it);
+#endif
 
 static inline XrValue xrt_iterator_new(XrValue coll, uint8_t kind) {
     xrt_iterator_t *it = (xrt_iterator_t *) XRT_MALLOC(sizeof(xrt_iterator_t));
@@ -1709,6 +1725,7 @@ static inline XrValue xrt_iterator_new(XrValue coll, uint8_t kind) {
     it->cursor = 0;
     it->index = 0;
     it->kind = kind;
+    it->gen = NULL;
     return xr_mkptr(it, XR_TAG_ITERATOR);
 }
 
@@ -1763,6 +1780,13 @@ invalid:
 
 // Park cursor at the next live entry/order[] slot; return 1 if one exists.
 static inline int xrt_iterator_has_next(xrt_iterator_t *it) {
+    if (it->kind == XRT_ITER_GENERATOR) {
+#ifdef XRT_ENABLE_GENERATORS
+        return xrt_gen_iter_has_next(it);
+#else
+        return 0;
+#endif
+    }
     if (XR_IS_MAP(it->coll)) {
         xrt_map_t *m = (xrt_map_t *) it->coll.ptr;
         if (xrt_map_is_boolmap(m))
@@ -1805,6 +1829,13 @@ static inline int xrt_iterator_has_next(xrt_iterator_t *it) {
 }
 
 static inline XrValue xrt_iterator_next(xrt_iterator_t *it) {
+    if (it->kind == XRT_ITER_GENERATOR) {
+#ifdef XRT_ENABLE_GENERATORS
+        return xrt_gen_iter_next(it);
+#else
+        return XR_NULL_VAL;
+#endif
+    }
     if (!xrt_iterator_has_next(it))
         return XR_NULL_VAL;
     if (XR_IS_MAP(it->coll)) {

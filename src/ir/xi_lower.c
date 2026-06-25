@@ -1322,6 +1322,10 @@ XR_FUNC XiFunc *xi_lower_program_ex(AstNode *program_node, struct XaAnalyzer *an
 
     /* Build module metadata from lowerer tracking data (no IR scan needed) */
     if (!l.had_error) {
+        /* Rewrite generator calls before metadata/effects: every function is now
+         * lowered, so generator callees are reliably identifiable (handles
+         * forward/nested references), and this runs before escape analysis. */
+        xi_lower_rewrite_generator_calls(l.func);
         build_module_metadata(&l);
         finalize_capture_metadata(l.func);
         xi_func_compute_effects(l.func);

@@ -1,0 +1,31 @@
+fn tryScopeCounter(n: int) -> Iterator<int> {
+    for (i in 0..n) {
+        yield i
+    }
+}
+
+@test
+fn test_array_for_in_variable_visible_inside_try() {
+    let sum = 0
+    try {
+        for (x in [1, 2, 3]) {
+            sum += x
+        }
+    } catch (e) {
+        assert(false, "array for-in in try should not throw")
+    }
+    assert(sum == 6)
+}
+
+@test
+fn test_generator_for_in_variable_visible_inside_try() {
+    let sum = 0
+    try {
+        for (x in tryScopeCounter(4)) {
+            sum += x
+        }
+    } catch (e) {
+        assert(false, "generator for-in in try should not throw")
+    }
+    assert(sum == 6)
+}

@@ -1936,10 +1936,10 @@ TEST(cmp_defer_lifo) {
 }
 
 TEST(cmp_yield_basic) {
-    /* yield in main should be a no-op (no other coroutines) */
+    /* Coro.yield() in main should be a no-op (no other coroutines). */
     run_compare((CompareSpec) {
-        .source = "print(\"before\")\nyield\nprint(\"after\")",
-        .label = "yield: no-op without other coroutines",
+        .source = "print(\"before\")\nCoro.yield()\nprint(\"after\")",
+        .label = "Coro.yield(): no-op without other coroutines",
         .expect_xi_success = true,
         .min_similarity = 0.1,
         .check_exec = true,

@@ -78,6 +78,7 @@ typedef struct {
     bool need_task;
     bool need_work_queue;
     bool need_result_group;
+    bool need_generator;
     bool need_objects;
     bool need_deep_copy;
     bool need_exception;

@@ -170,6 +170,7 @@ static void native_backend_debug_snapshot(const XrCoroutine *coro, XrCoroDebugSn
 static const XrCoroBackendVTable native_backend_vtable = {
     .kind = XR_CORO_BACKEND_NATIVE,
     .resume = native_backend_resume,
+    .gen_drive = NULL,
     .trace_roots = NULL,
     .prepare_recycle = NULL,
     .reset_reusable = NULL,

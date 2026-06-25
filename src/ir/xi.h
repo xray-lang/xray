@@ -356,6 +356,7 @@ typedef enum {
     XI_SELECT_BLOCK,       /* blocking select wait: args[0..n]=channels */
     XI_YIELD,              /* cooperative yield (Coro.yield / Gosched) */
     XI_GEN_YIELD,          /* generator `yield expr`: args[0]=value, suspend */
+    XI_GEN_CALL, /* call generator fn: args[0]=callee, args[1..n]=params; result=Iterator */
     /* Exception handling (legacy, retained for panic) */
     XI_THROW, /* throw exception: args[0]=value */
 

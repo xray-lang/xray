@@ -1580,8 +1580,14 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
             break;
         case AST_TRY_CATCH: {
             TryCatchNode *tc = &node->as.try_catch;
-            if (tc->try_body)
+            if (tc->try_body) {
+                bool is_block = tc->try_body->type == AST_BLOCK;
+                if (is_block)
+                    xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, tc->try_body);
                 xa_visit_collect(ctx, tc->try_body);
+                if (is_block)
+                    xa_analyzer_exit_scope(ctx->analyzer);
+            }
             for (int ci = 0; ci < tc->catch_count; ci++) {
                 XrCatchClause *cc = tc->catch_clauses[ci];
                 if (!cc || !cc->body)
@@ -2096,6 +2102,30 @@ void xa_visit_function_body_unified(XaInferContext *ctx, AstNode *body) {
     }
 }
 
+/* Generator return-type recognition. A generator function declares
+ * `-> Iterator<T>`, which resolves to the built-in Iterator interface
+ * (XR_KIND_INTERFACE, name "Iterator", one type arg). Accept that form and
+ * extract T; also accept a structural iterator (class/instance exposing
+ * hasNext()/next()) so a generator may be annotated with a concrete iterator
+ * type. The global xr_type_is_iterator() is a stub that always returns false
+ * (custom-iterator recognition needs analyzer context), so generator typing
+ * must use this analyzer-aware helper. */
+static bool xa_generator_return_element(XaAnalyzer *analyzer, XrType *rt, XrType **out_elem) {
+    if (!rt)
+        return false;
+    if ((rt->kind == XR_KIND_INTERFACE || rt->kind == XR_KIND_INSTANCE) &&
+        rt->instance.class_name && strcmp(rt->instance.class_name, "Iterator") == 0) {
+        if (out_elem) {
+            *out_elem = (rt->instance.type_arg_count >= 1 && rt->instance.type_args &&
+                         rt->instance.type_args[0])
+                            ? rt->instance.type_args[0]
+                            : xr_type_new_unknown(NULL);
+        }
+        return true;
+    }
+    return xa_analyzer_is_iterator(analyzer, rt, out_elem);
+}
+
 void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
     if (!ctx || !node)
         return;
@@ -2440,8 +2470,21 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                 ctx->expected_return_type = xr_type_new_unit(NULL);
             }
 
+            // Generator detection: `yield expr` in the body makes this a
+            // generator. Scope the flag per function (nested functions reset it).
+            bool saved_has_yield = ctx->current_fn_has_yield;
+            ctx->current_fn_has_yield = false;
+
             // Unified body visitor: idempotent collect + direct traversal
             xa_visit_function_body_unified(ctx, fn_decl->body);
+
+            if (ctx->current_fn_has_yield) {
+                /* `yield expr` in the body makes this a generator. The required
+                 * `-> Iterator<T>` return type is enforced at the yield site
+                 * (single diagnostic), so here we only mark the function. */
+                fn_decl->is_generator = true;
+            }
+            ctx->current_fn_has_yield = saved_has_yield;
 
             // Re-check inferred_param_types after body analysis: recursive calls
             // inside the body may have widened param types (e.g. Json → Json?).
@@ -3171,7 +3214,38 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             xa_analyzer_exit_scope(ctx->analyzer);
             break;
         }
-        case AST_YIELD_STMT:
+        case AST_YIELD_STMT: {
+            /* `yield expr` produces a generator value. The enclosing function
+             * must be a generator declared `-> Iterator<T>`; the yielded value
+             * must be assignable to T. Mark the function as a generator so IR
+             * lowering emits the generator entry. */
+            YieldStmtNode *ys = &node->as.yield_stmt;
+            XrType *val_type = ys->value ? xa_visit_infer_expr(ctx, ys->value) : NULL;
+            ctx->current_fn_has_yield = true;
+            XrType *elem = NULL;
+            XrLocation yloc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+            bool is_gen_ret =
+                xa_generator_return_element(ctx->analyzer, ctx->expected_return_type, &elem);
+            if (!is_gen_ret) {
+                /* `yield expr` requires an enclosing function declared
+                 * `-> Iterator<T>` (covers top-level yield and yield inside a
+                 * non-generator function). Single diagnostic for both. */
+                xa_analyzer_add_diagnostic(
+                    ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
+                    "`yield` is only valid inside a generator function declared `-> Iterator<T>`",
+                    &yloc);
+            } else if (elem && val_type && !XR_TYPE_IS_UNKNOWN(val_type) &&
+                       !xr_type_assignable(elem, val_type)) {
+                char msg[256];
+                snprintf(msg, sizeof(msg),
+                         "yielded value of type '%s' is not assignable to generator element "
+                         "type '%s'",
+                         xr_type_to_string(val_type), xr_type_to_string(elem));
+                xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                           XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &yloc);
+            }
+            break;
+        }
         case AST_IMPORT_STMT:
         case AST_INTERFACE_DECL:
             break;

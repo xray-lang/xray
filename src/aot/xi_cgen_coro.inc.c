@@ -72,7 +72,7 @@ static bool cg_coro_value_has_storage(const XiFunc *f, const XiValue *v) {
         return false;
     if (cg_coro_box_only_feeds_typed_send(f, v))
         return false;
-    if (v->op == XI_YIELD || v->op == XI_TRY || v->op == XI_END_TRY)
+    if (v->op == XI_YIELD || v->op == XI_GEN_YIELD || v->op == XI_TRY || v->op == XI_END_TRY)
         return false;
     if (cg_is_void_like(v))
         return false;
@@ -1374,6 +1374,20 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             fprintf(out, "    return xr_aot_yielded();\n");
             emit_value_generated_line_reset(ctx, out, v);
         }
+        fprintf(out, "S%d:;\n", sid);
+        fprintf(out, "    f->state = 0;\n");
+        return;
+    }
+
+    if (v->op == XI_GEN_YIELD) {
+        int sid = ++(*state_id);
+        emit_value_generated_line_reset(ctx, out, v);
+        fprintf(out, "    f->state = %d;\n", sid);
+        emit_value_source_line(ctx, out, v);
+        fprintf(out, "    return xr_aot_gen_yielded(");
+        emit_boxed_vref(out, v->args[0]);
+        fprintf(out, ");\n");
+        emit_value_generated_line_reset(ctx, out, v);
         fprintf(out, "S%d:;\n", sid);
         fprintf(out, "    f->state = 0;\n");
         return;
@@ -3407,4 +3421,40 @@ static void xi_cgen_coro_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *
     emit_fname_suffix(ctx, out, prefix, f, "_aot_release");
     fprintf(out, ",\n");
     fprintf(out, "};\n\n");
+}
+
+/* Generator call: allocate a producer coroutine frame and wrap it in a pull-driven
+ * xrt_iterator (never scheduled — driven synchronously by hasNext()/next()). */
+static void xicgen_gen_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                            const char *prefix) {
+    if (!v || v->nargs < 1) {
+        ctx->error = true;
+        fprintf(stderr, "[xi_cgen] ERROR: GEN_CALL missing callee\n");
+        emit_codegen_abort_expr(out);
+        return;
+    }
+    CgStaticFunctionCall gen_call = cg_resolve_static_function_call(ctx, f, v->args[0]);
+    const XiFunc *target = gen_call.func;
+    const char *gen_prefix = gen_call.prefix ? gen_call.prefix : prefix;
+    if (!target || target->entry_type != 2 /* XR_ENTRY_GENERATOR */) {
+        ctx->error = true;
+        fprintf(stderr, "[xi_cgen] ERROR: GEN_CALL target is not a generator\n");
+        emit_codegen_abort_expr(out);
+        return;
+    }
+    if (!cg_aot_frame_new_can_supply_cl_arg(f, v->args[0], target)) {
+        ctx->error = true;
+        fprintf(stderr, "[xi_cgen] ERROR: unsupported captured AOT generator call\n");
+        emit_codegen_abort_expr(out);
+        return;
+    }
+    const char *aot_ctx = cg_func_needs_aot_coro_ctx(ctx, f) ? "ctx" : "&xrt_global_ctx";
+    fprintf(out, "({ void *_gen_frame_%u = ", v->id);
+    emit_fname_suffix(ctx, out, gen_prefix, target, "_aot_frame_new");
+    fprintf(out, "(");
+    emit_aot_frame_new_call_args(ctx, out, f, v->args[0], target, false, v->args, 1, v->nargs, v);
+    fprintf(out, ");\n");
+    fprintf(out, "    xr_aot_gen_iterator_new(%s, &", aot_ctx);
+    emit_fname_suffix(ctx, out, gen_prefix, target, "_aot_desc");
+    fprintf(out, ", _gen_frame_%u); })", v->id);
 }

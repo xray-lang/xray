@@ -1,0 +1,3 @@
+fn bad() -> Iterator<int> {
+    yield "x"
+}

@@ -893,6 +893,22 @@
   :observable ()
   :targets (vm-bytecode aot-verify))
 
+; Synchronous: constructs a coroutine-backed iterator over a generator function.
+; It does NOT suspend the caller (the producer is pull-driven by the iterator),
+; so it is a `call`, not a `coroutine` op — callers stay non-coroutine. Args are
+; captured into the producer frame, hence escape-use global.
+(define-xi-op xi.gen.call
+  :class call
+  :arity variadic
+  :result-ownership call-result
+  :tbaa-group top
+  :own-use borrow
+  :escape-use global
+  :effects (side-effect memory-write)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode aot-c aot-verify))
+
 (define-xi-op xi.await
   :class coroutine
   :arity variadic

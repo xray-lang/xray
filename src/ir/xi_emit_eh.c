@@ -265,6 +265,41 @@ XR_FUNC void xi_emit_go(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     }
 }
 
+/* Generator call: build a coroutine-backed iterator from a generator closure.
+ * Same register-packing convention as OP_GO (closure at dst, args at
+ * dst+1..dst+nargs), but the coroutine is pull-driven (never scheduled) and the
+ * result is an Iterator instance rather than a Task. */
+XR_FUNC void xi_emit_gen_call(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    if (v->nargs < 1) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+    uint16_t nargs = (uint16_t) (v->nargs - 1);
+
+    {
+        uint32_t call_top = (dst + nargs + 1);
+        if (call_top > ctx->max_reg)
+            ctx->max_reg = call_top;
+    }
+
+    XiEmitReg callee = reg_of(ctx, v->args[0]);
+    if (ctx->status != XI_EMIT_OK)
+        return;
+    if (callee != dst)
+        emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, callee, 0));
+
+    for (uint16_t a = 1; a < v->nargs; a++) {
+        XiEmitReg arg_reg = reg_of(ctx, v->args[a]);
+        if (ctx->status != XI_EMIT_OK)
+            return;
+        XiEmitReg target = (XiEmitReg) (dst + a);
+        if (arg_reg != target)
+            emit_inst(ctx, CREATE_ABC(OP_MOVE, target, arg_reg, 0));
+    }
+
+    emit_inst(ctx, CREATE_ABC(OP_GEN_START, dst, dst, (uint8_t) nargs));
+}
+
 /* Await */
 XR_FUNC void xi_emit_await(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     if (v->nargs < 1) {

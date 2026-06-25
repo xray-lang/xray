@@ -1681,6 +1681,21 @@ bool xa_analyzer_is_iterable(XaAnalyzer *analyzer, XrType *type, XrType **out_el
         return true;
     }
 
+    // An Iterator<T> value (the built-in iteration protocol type — e.g. the
+    // result of a generator call) is its own iterable: for-in drives it through
+    // iterator() (which returns self) + hasNext()/next(). The element type is the
+    // interface's single type argument.
+    if ((type->kind == XR_KIND_INTERFACE || type->kind == XR_KIND_INSTANCE) &&
+        type->instance.class_name && strcmp(type->instance.class_name, "Iterator") == 0) {
+        if (out_element_type) {
+            *out_element_type = (type->instance.type_arg_count >= 1 && type->instance.type_args &&
+                                 type->instance.type_args[0])
+                                    ? type->instance.type_args[0]
+                                    : xr_type_new_unknown(NULL);
+        }
+        return true;
+    }
+
     // Custom class: check if it has iterator() method returning Iterator<T>
     if (analyzer && (type->kind == XR_KIND_INSTANCE || type->kind == XR_KIND_CLASS)) {
         XrClassInfo *info = resolve_class_info(analyzer, type);

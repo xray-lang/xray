@@ -176,7 +176,7 @@ xray 共 **63 个保留关键字**，源码真值表见 `src/frontend/lexer/xkey
 | `shared` | 跨协程共享修饰符（与 `const`/`let` 组合） |
 | `fn` | 函数声明 |
 | `return` | 函数返回 |
-| `yield` | 协程让出（语句形式）|
+| `yield` | 生成器产值语句 |
 | `if` `else` | 条件分支 |
 | `while` | 循环 |
 | `for` `in` | 循环（C 风格 + for-in） |
@@ -1526,12 +1526,12 @@ let p = Point{x: 1, y: 2}      // struct literal
 ### 3.16 `yield` 语句
 
 ```xray
-yield                       // 让出执行权
+yield expr                  // 生成器产出一个值并挂起
 ```
 
-**当前实现**：仅支持无值语句形式，让协程让出 CPU（类似 Go 的 `runtime.Gosched()`）。
+`yield expr` 只能出现在声明返回 `Iterator<T>` 的生成器函数体内。第一次调用生成器函数不会立即执行函数体，而是返回一个惰性 `Iterator<T>`；`for-in` 通过 `hasNext()` / `next()` 拉取，每次 `yield expr` 产出一个 `T` 并暂停到下一次拉取。
 
-详见 §10.10。
+协作让出 CPU 不再使用裸 `yield`；使用 `Coro.yield()`（见 §10.10）。裸 `yield` 是语法错误。
 
 ---
 
@@ -3815,9 +3815,9 @@ match t.poll() {
 }
 ```
 
-**取消语义**：`cancel()` 设置取消标志；协程在下一个 safepoint（GC 检查点、Channel 操作、`await`、`yield`）检测到标志后抛出取消异常。plain `await` 已取消的 task 会抛 `TaskCancelled`；需要状态值时使用 `awaitResult()` 或 `awaitTimeout(ms)`。
+**取消语义**：`cancel()` 设置取消标志；协程在下一个 safepoint（GC 检查点、Channel 操作、`await`、`Coro.yield()`）检测到标志后抛出取消异常。plain `await` 已取消的 task 会抛 `TaskCancelled`；需要状态值时使用 `awaitResult()` 或 `awaitTimeout(ms)`。
 
-**看门狗策略**：运行时监控线程（sysmon）会观察 RUNNING 协程的心跳。纯 Xray 循环在后向跳转 safepoint 推进心跳，因此会被观测为持续进展；sysmon 主要用于发现长时间 native/FFI 或无 safepoint 区域卡住。如果心跳长时间冻结，默认行为是 **warn-only**：约 100ms 后打印一次 stuck warning，但不静默取消协程。强制取消是显式 opt-in：设置环境变量 `XRAY_SYSMON_CANCEL_MS=N`（`N > 0`，单位毫秒）后，心跳冻结超过该阈值的协程会被标记取消；未设置或设为 `0` 时保持仅告警。纯 CPU 长循环仍可在循环内插入 `yield` 改善调度公平性和取消响应性，但不再是避免默认看门狗强杀的必要条件。
+**看门狗策略**：运行时监控线程（sysmon）会观察 RUNNING 协程的心跳。纯 Xray 循环在后向跳转 safepoint 推进心跳，因此会被观测为持续进展；sysmon 主要用于发现长时间 native/FFI 或无 safepoint 区域卡住。如果心跳长时间冻结，默认行为是 **warn-only**：约 100ms 后打印一次 stuck warning，但不静默取消协程。强制取消是显式 opt-in：设置环境变量 `XRAY_SYSMON_CANCEL_MS=N`（`N > 0`，单位毫秒）后，心跳冻结超过该阈值的协程会被标记取消；未设置或设为 `0` 时保持仅告警。纯 CPU 长循环仍可在循环内插入 `Coro.yield()` 改善调度公平性和取消响应性，但不再是避免默认看门狗强杀的必要条件。
 
 ### 10.5 Channel
 
@@ -4085,20 +4085,20 @@ let val = counter.load(Ordering.Acquire)
 ```
 
 
-### 10.10 `yield` — 让出 CPU
+### 10.10 `Coro.yield()` — 让出 CPU
 
 ```ebnf
-YieldStmt ::= 'yield'
+CoroYieldCall ::= 'Coro' '.' 'yield' '(' ')'
 ```
 
 ```xray
 for (i in 0..1000) {
     do_chunk(i)
-    yield                       // 主动 safepoint，让其他协程有机会跑
+    Coro.yield()                // 主动 safepoint，让其他协程有机会跑
 }
 ```
 
-**当前实现**：作为语句使用，等价 Go 的 `runtime.Gosched()`；不支持带值 `yield`。
+`Coro.yield()` 是协作式调度让出点，等价于显式 safepoint，让调度器有机会运行其他协程并响应取消。`yield expr` 已专用于生成器产值；裸 `yield` 被拒绝。
 
 ### 10.11 并发安全模型
 
@@ -5472,7 +5472,7 @@ SelectArm  ::= Identifier 'from' Expression '->' Block      // 接收
             |  'after' Expression '->' Block                // 超时
             |  '_' '->' Block                                // 默认
 
-YieldStmt ::= 'yield'
+YieldStmt ::= 'yield' Expression
 ```
 
 ### A.6 声明
@@ -5611,7 +5611,7 @@ OperatorToken ::= '+' | '-' | '*' | '/' | '%'
 | `uint8`..`uint64` | §2.3.1 |
 | `unsafe` | §3.2 |
 | `while` | §4.3 |
-| `yield` | §3.16 / §10.10 |
+| `yield` | §3.16 |
 
 ---
 

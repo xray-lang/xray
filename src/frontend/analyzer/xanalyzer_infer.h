@@ -36,6 +36,9 @@ typedef struct XaInferContext {
     // Current function being analyzed
     XaSymbol *current_function;
     XrType *expected_return_type;
+    // Generator detection: set true when a `yield expr` is seen in the current
+    // function body; the function-decl handler then marks it as a generator.
+    bool current_fn_has_yield;
 
     // Current class context (set while inferring a class/struct method body).
     // Used to enforce private/protected member visibility and const-field writes.

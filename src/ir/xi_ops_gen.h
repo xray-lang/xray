@@ -172,7 +172,7 @@ typedef enum {
 #define XI_GEN_ALGEBRAIC_ASSOCIATIVE (1u << 0)
 #define XI_GEN_ALGEBRAIC_COMMUTATIVE (1u << 1)
 
-enum { XI_GEN_OP_COUNT = 139 };
+enum { XI_GEN_OP_COUNT = 140 };
 typedef char xi_generated_op_count_must_match_XiOp[
     ((int) XI_OP_COUNT == (int) XI_GEN_OP_COUNT) ? 1 : -1];
 
@@ -285,6 +285,7 @@ typedef struct {
     X(SET_GLOBAL, "xi.set.global", XI_GEN_CLASS_MEMORY_WRITE, 1, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_NONE, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_NEVER, XI_GEN_VN_NONE, XI_GEN_TBAA_GLOBAL, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_GLOBAL, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_CONSUME, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM, 0, XI_EFFECT_SIDE_EFFECT | XI_EFFECT_MEMORY_WRITE, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_VERIFY, NULL, NULL) \
     X(PRINT, "xi.print", XI_GEN_CLASS_SIDE_EFFECT, XI_OP_ARITY_VARIADIC, 0, 0, XI_GEN_RESULT_VOID, XI_GEN_RESULT_OWNERSHIP_NONE, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_NEVER, XI_GEN_VN_NONE, XI_GEN_TBAA_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_BORROW, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM, 0, XI_EFFECT_SIDE_EFFECT | XI_EFFECT_MEMORY_WRITE, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, NULL) \
     X(GO, "xi.go", XI_GEN_CLASS_COROUTINE, XI_OP_ARITY_VARIADIC, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_NONE, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_NEVER, XI_GEN_VN_NONE, XI_GEN_TBAA_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_GLOBAL, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_BORROW, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM, 0, XI_EFFECT_SIDE_EFFECT | XI_EFFECT_MEMORY_WRITE, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_VERIFY, NULL, NULL) \
+    X(GEN_CALL, "xi.gen.call", XI_GEN_CLASS_CALL, XI_OP_ARITY_VARIADIC, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_CALL_RESULT, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_NEVER, XI_GEN_VN_NONE, XI_GEN_TBAA_TOP, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_GLOBAL, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_BORROW, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM, 0, XI_EFFECT_SIDE_EFFECT | XI_EFFECT_MEMORY_WRITE, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, NULL) \
     X(AWAIT, "xi.await", XI_GEN_CLASS_COROUTINE, XI_OP_ARITY_VARIADIC, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_OWNED, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_NEVER, XI_GEN_VN_NONE, XI_GEN_TBAA_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_CONSUME, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_SUSPEND | XI_FLAG_MAY_THROW, 0, XI_EFFECT_SIDE_EFFECT | XI_EFFECT_MAY_SUSPEND | XI_EFFECT_MAY_THROW, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_VERIFY, NULL, NULL) \
     X(CHAN_SEND, "xi.chan.send", XI_GEN_CLASS_COROUTINE, 2, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_NONE, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_NEVER, XI_GEN_VN_NONE, XI_GEN_TBAA_CHAN, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_GLOBAL, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_STORED_VALUE, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_SUSPEND | XI_FLAG_WRITES_MEM, 0, XI_EFFECT_SIDE_EFFECT | XI_EFFECT_MAY_SUSPEND | XI_EFFECT_MEMORY_WRITE, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_VERIFY, NULL, NULL) \
     X(CHAN_RECV, "xi.chan.recv", XI_GEN_CLASS_COROUTINE, 1, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_OWNED, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_NEVER, XI_GEN_VN_NONE, XI_GEN_TBAA_CHAN, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_BORROW, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_SUSPEND | XI_FLAG_READS_MEM, 0, XI_EFFECT_SIDE_EFFECT | XI_EFFECT_MAY_SUSPEND | XI_EFFECT_MEMORY_READ, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_VERIFY, NULL, NULL) \
@@ -428,6 +429,7 @@ static inline const char *xi_generated_op_name(uint16_t op) {
         case XI_SET_GLOBAL: return "SET_GLOBAL";
         case XI_PRINT: return "PRINT";
         case XI_GO: return "GO";
+        case XI_GEN_CALL: return "GEN_CALL";
         case XI_AWAIT: return "AWAIT";
         case XI_CHAN_SEND: return "CHAN_SEND";
         case XI_CHAN_RECV: return "CHAN_RECV";
@@ -574,6 +576,7 @@ static inline uint8_t xi_generated_op_arity(uint16_t op) {
         case XI_SET_GLOBAL: return 1;
         case XI_PRINT: return XI_OP_ARITY_VARIADIC;
         case XI_GO: return XI_OP_ARITY_VARIADIC;
+        case XI_GEN_CALL: return XI_OP_ARITY_VARIADIC;
         case XI_AWAIT: return XI_OP_ARITY_VARIADIC;
         case XI_CHAN_SEND: return 2;
         case XI_CHAN_RECV: return 1;
@@ -720,6 +723,7 @@ static inline uint8_t xi_generated_op_class(uint16_t op) {
         case XI_SET_GLOBAL: return XI_GEN_CLASS_MEMORY_WRITE;
         case XI_PRINT: return XI_GEN_CLASS_SIDE_EFFECT;
         case XI_GO: return XI_GEN_CLASS_COROUTINE;
+        case XI_GEN_CALL: return XI_GEN_CLASS_CALL;
         case XI_AWAIT: return XI_GEN_CLASS_COROUTINE;
         case XI_CHAN_SEND: return XI_GEN_CLASS_COROUTINE;
         case XI_CHAN_RECV: return XI_GEN_CLASS_COROUTINE;
@@ -866,6 +870,7 @@ static inline uint8_t xi_generated_op_result_kind(uint16_t op) {
         case XI_SET_GLOBAL: return XI_GEN_RESULT_VALUE;
         case XI_PRINT: return XI_GEN_RESULT_VOID;
         case XI_GO: return XI_GEN_RESULT_VALUE;
+        case XI_GEN_CALL: return XI_GEN_RESULT_VALUE;
         case XI_AWAIT: return XI_GEN_RESULT_VALUE;
         case XI_CHAN_SEND: return XI_GEN_RESULT_VALUE;
         case XI_CHAN_RECV: return XI_GEN_RESULT_VALUE;
@@ -1012,6 +1017,7 @@ static inline uint8_t xi_generated_op_result_ownership(uint16_t op) {
         case XI_SET_GLOBAL: return XI_GEN_RESULT_OWNERSHIP_NONE;
         case XI_PRINT: return XI_GEN_RESULT_OWNERSHIP_NONE;
         case XI_GO: return XI_GEN_RESULT_OWNERSHIP_NONE;
+        case XI_GEN_CALL: return XI_GEN_RESULT_OWNERSHIP_CALL_RESULT;
         case XI_AWAIT: return XI_GEN_RESULT_OWNERSHIP_OWNED;
         case XI_CHAN_SEND: return XI_GEN_RESULT_OWNERSHIP_NONE;
         case XI_CHAN_RECV: return XI_GEN_RESULT_OWNERSHIP_OWNED;
@@ -1158,6 +1164,7 @@ static inline const char *xi_generated_op_result_native_type(uint16_t op) {
         case XI_SET_GLOBAL: return NULL;
         case XI_PRINT: return NULL;
         case XI_GO: return NULL;
+        case XI_GEN_CALL: return NULL;
         case XI_AWAIT: return NULL;
         case XI_CHAN_SEND: return NULL;
         case XI_CHAN_RECV: return NULL;
@@ -1304,6 +1311,7 @@ static inline uint8_t xi_generated_op_lowering_policy(uint16_t op) {
         case XI_SET_GLOBAL: return XI_GEN_LOWERING_GENERATED;
         case XI_PRINT: return XI_GEN_LOWERING_GENERATED;
         case XI_GO: return XI_GEN_LOWERING_GENERATED;
+        case XI_GEN_CALL: return XI_GEN_LOWERING_GENERATED;
         case XI_AWAIT: return XI_GEN_LOWERING_GENERATED;
         case XI_CHAN_SEND: return XI_GEN_LOWERING_GENERATED;
         case XI_CHAN_RECV: return XI_GEN_LOWERING_GENERATED;
@@ -1450,6 +1458,7 @@ static inline uint8_t xi_generated_op_speculation(uint16_t op) {
         case XI_SET_GLOBAL: return XI_GEN_SPECULATION_NEVER;
         case XI_PRINT: return XI_GEN_SPECULATION_NEVER;
         case XI_GO: return XI_GEN_SPECULATION_NEVER;
+        case XI_GEN_CALL: return XI_GEN_SPECULATION_NEVER;
         case XI_AWAIT: return XI_GEN_SPECULATION_NEVER;
         case XI_CHAN_SEND: return XI_GEN_SPECULATION_NEVER;
         case XI_CHAN_RECV: return XI_GEN_SPECULATION_NEVER;
@@ -1596,6 +1605,7 @@ static inline uint8_t xi_generated_op_value_numbering(uint16_t op) {
         case XI_SET_GLOBAL: return XI_GEN_VN_NONE;
         case XI_PRINT: return XI_GEN_VN_NONE;
         case XI_GO: return XI_GEN_VN_NONE;
+        case XI_GEN_CALL: return XI_GEN_VN_NONE;
         case XI_AWAIT: return XI_GEN_VN_NONE;
         case XI_CHAN_SEND: return XI_GEN_VN_NONE;
         case XI_CHAN_RECV: return XI_GEN_VN_NONE;
@@ -1742,6 +1752,7 @@ static inline uint8_t xi_generated_op_tbaa_group(uint16_t op) {
         case XI_SET_GLOBAL: return XI_GEN_TBAA_GLOBAL;
         case XI_PRINT: return XI_GEN_TBAA_NONE;
         case XI_GO: return XI_GEN_TBAA_NONE;
+        case XI_GEN_CALL: return XI_GEN_TBAA_TOP;
         case XI_AWAIT: return XI_GEN_TBAA_NONE;
         case XI_CHAN_SEND: return XI_GEN_TBAA_CHAN;
         case XI_CHAN_RECV: return XI_GEN_TBAA_CHAN;
@@ -1888,6 +1899,7 @@ static inline uint8_t xi_generated_op_backend_rewrite(uint16_t op) {
         case XI_SET_GLOBAL: return XI_GEN_BACKEND_REWRITE_NONE;
         case XI_PRINT: return XI_GEN_BACKEND_REWRITE_NONE;
         case XI_GO: return XI_GEN_BACKEND_REWRITE_NONE;
+        case XI_GEN_CALL: return XI_GEN_BACKEND_REWRITE_NONE;
         case XI_AWAIT: return XI_GEN_BACKEND_REWRITE_NONE;
         case XI_CHAN_SEND: return XI_GEN_BACKEND_REWRITE_NONE;
         case XI_CHAN_RECV: return XI_GEN_BACKEND_REWRITE_NONE;
@@ -2034,6 +2046,7 @@ static inline const char *xi_generated_op_backend_rewrite_name(uint16_t op) {
         case XI_SET_GLOBAL: return NULL;
         case XI_PRINT: return NULL;
         case XI_GO: return NULL;
+        case XI_GEN_CALL: return NULL;
         case XI_AWAIT: return NULL;
         case XI_CHAN_SEND: return NULL;
         case XI_CHAN_RECV: return NULL;
@@ -2185,6 +2198,7 @@ static inline uint8_t xi_generated_op_escape_use(uint16_t op) {
         case XI_SET_GLOBAL: return XI_GEN_ESCAPE_USE_GLOBAL;
         case XI_PRINT: return XI_GEN_ESCAPE_USE_NONE;
         case XI_GO: return XI_GEN_ESCAPE_USE_GLOBAL;
+        case XI_GEN_CALL: return XI_GEN_ESCAPE_USE_GLOBAL;
         case XI_AWAIT: return XI_GEN_ESCAPE_USE_NONE;
         case XI_CHAN_SEND: return XI_GEN_ESCAPE_USE_GLOBAL;
         case XI_CHAN_RECV: return XI_GEN_ESCAPE_USE_NONE;
@@ -2331,6 +2345,7 @@ static inline uint8_t xi_generated_op_escape_alloc(uint16_t op) {
         case XI_SET_GLOBAL: return XI_GEN_ESCAPE_ALLOC_NONE;
         case XI_PRINT: return XI_GEN_ESCAPE_ALLOC_NONE;
         case XI_GO: return XI_GEN_ESCAPE_ALLOC_NONE;
+        case XI_GEN_CALL: return XI_GEN_ESCAPE_ALLOC_NONE;
         case XI_AWAIT: return XI_GEN_ESCAPE_ALLOC_NONE;
         case XI_CHAN_SEND: return XI_GEN_ESCAPE_ALLOC_NONE;
         case XI_CHAN_RECV: return XI_GEN_ESCAPE_ALLOC_NONE;
@@ -2477,6 +2492,7 @@ static inline uint8_t xi_generated_op_own_use(uint16_t op) {
         case XI_SET_GLOBAL: return XI_GEN_OWN_USE_CONSUME;
         case XI_PRINT: return XI_GEN_OWN_USE_BORROW;
         case XI_GO: return XI_GEN_OWN_USE_BORROW;
+        case XI_GEN_CALL: return XI_GEN_OWN_USE_BORROW;
         case XI_AWAIT: return XI_GEN_OWN_USE_CONSUME;
         case XI_CHAN_SEND: return XI_GEN_OWN_USE_STORED_VALUE;
         case XI_CHAN_RECV: return XI_GEN_OWN_USE_BORROW;
@@ -2623,6 +2639,7 @@ static inline uint8_t xi_generated_op_ic_site(uint16_t op) {
         case XI_SET_GLOBAL: return XI_GEN_IC_SITE_NONE;
         case XI_PRINT: return XI_GEN_IC_SITE_NONE;
         case XI_GO: return XI_GEN_IC_SITE_NONE;
+        case XI_GEN_CALL: return XI_GEN_IC_SITE_NONE;
         case XI_AWAIT: return XI_GEN_IC_SITE_NONE;
         case XI_CHAN_SEND: return XI_GEN_IC_SITE_NONE;
         case XI_CHAN_RECV: return XI_GEN_IC_SITE_NONE;
@@ -2769,6 +2786,7 @@ static inline XiOp xi_generated_op_negates_to(uint16_t op) {
         case XI_SET_GLOBAL: return XI_OP_COUNT;
         case XI_PRINT: return XI_OP_COUNT;
         case XI_GO: return XI_OP_COUNT;
+        case XI_GEN_CALL: return XI_OP_COUNT;
         case XI_AWAIT: return XI_OP_COUNT;
         case XI_CHAN_SEND: return XI_OP_COUNT;
         case XI_CHAN_RECV: return XI_OP_COUNT;
@@ -2915,6 +2933,7 @@ static inline uint32_t xi_generated_op_algebraic_traits(uint16_t op) {
         case XI_SET_GLOBAL: return 0;
         case XI_PRINT: return 0;
         case XI_GO: return 0;
+        case XI_GEN_CALL: return 0;
         case XI_AWAIT: return 0;
         case XI_CHAN_SEND: return 0;
         case XI_CHAN_RECV: return 0;
@@ -3061,6 +3080,7 @@ static inline uint8_t xi_generated_op_default_flags(uint16_t op) {
         case XI_SET_GLOBAL: return XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM;
         case XI_PRINT: return XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM;
         case XI_GO: return XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM;
+        case XI_GEN_CALL: return XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM;
         case XI_AWAIT: return XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_SUSPEND | XI_FLAG_MAY_THROW;
         case XI_CHAN_SEND: return XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_SUSPEND | XI_FLAG_WRITES_MEM;
         case XI_CHAN_RECV: return XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_SUSPEND | XI_FLAG_READS_MEM;
@@ -3207,6 +3227,7 @@ static inline uint32_t xi_generated_op_effects(uint16_t op) {
         case XI_SET_GLOBAL: return XI_EFFECT_SIDE_EFFECT | XI_EFFECT_MEMORY_WRITE;
         case XI_PRINT: return XI_EFFECT_SIDE_EFFECT | XI_EFFECT_MEMORY_WRITE;
         case XI_GO: return XI_EFFECT_SIDE_EFFECT | XI_EFFECT_MEMORY_WRITE;
+        case XI_GEN_CALL: return XI_EFFECT_SIDE_EFFECT | XI_EFFECT_MEMORY_WRITE;
         case XI_AWAIT: return XI_EFFECT_SIDE_EFFECT | XI_EFFECT_MAY_SUSPEND | XI_EFFECT_MAY_THROW;
         case XI_CHAN_SEND: return XI_EFFECT_SIDE_EFFECT | XI_EFFECT_MAY_SUSPEND | XI_EFFECT_MEMORY_WRITE;
         case XI_CHAN_RECV: return XI_EFFECT_SIDE_EFFECT | XI_EFFECT_MAY_SUSPEND | XI_EFFECT_MEMORY_READ;

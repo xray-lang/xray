@@ -86,6 +86,7 @@
     X(AS, "xi.as", xicgen_as) \
     X(SLICE, "xi.slice", xicgen_slice) \
     X(RANGE, "xi.range", xicgen_range) \
+    X(GEN_CALL, "xi.gen.call", xicgen_gen_call) \
     X(CHAN_RECV_STATUS, "xi.chan.recv.status", xicgen_chan_recv_status) \
     X(DEFER_MARK, "xi.defer.mark", xicgen_defer_mark) \
     X(JSON_NEW, "xi.json.new", xicgen_json_new) \

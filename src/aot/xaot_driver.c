@@ -264,6 +264,11 @@ static void scan_func_features(XiFunc *f, XaotFeatureSet *fs) {
                 case XI_YIELD:
                     fs->need_coro = true;
                     break;
+                case XI_GEN_YIELD:
+                case XI_GEN_CALL:
+                    fs->need_generator = true;
+                    fs->need_coro = true;
+                    break;
                 case XI_GO:
                     fs->need_coro = true;
                     fs->need_task = true;
@@ -512,6 +517,9 @@ static bool add_runtime_cap_manifest_entries(const XaotFeatureSet *features,
     if (features->need_coro || features->need_scope) {
         if (!add_runtime_cap(manifest, "coro"))
             return false;
+        if (features->need_generator &&
+            !xaot_link_manifest_add_unique(manifest, XAOT_LINK_DEFINE, "XRT_ENABLE_GENERATORS"))
+            return false;
         needs_aot_runtime = true;
     }
     if (features->need_scope) {
@@ -596,8 +604,8 @@ static bool xaot_fast_test_can_skip_size_link_flags(const XaotFeatureSet *featur
     return features && !features->need_coro && !features->need_channel && !features->need_scope &&
            !features->need_timer && !features->need_netpoll && !features->need_deep_copy &&
            !features->need_task && !features->need_work_queue && !features->need_result_group &&
-           !features->need_reflection && !features->need_stacktrace && !features->need_instanceof &&
-           features->stdlib == 0 && features->n_stdlib_symbols == 0 &&
+           !features->need_generator && !features->need_reflection && !features->need_stacktrace &&
+           !features->need_instanceof && features->stdlib == 0 && features->n_stdlib_symbols == 0 &&
            features->n_extern_dylibs == 0;
 }
 

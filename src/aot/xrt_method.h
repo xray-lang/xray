@@ -422,6 +422,8 @@ static inline XrValue xrt_method_0(XrValue recv, int sym) {
     }
     if (recv.tag == XR_TAG_ITERATOR) {
         xrt_iterator_t *it = (xrt_iterator_t *) recv.ptr;
+        if (sym == XRT_SYM_ITERATOR)
+            return recv;
         if (sym == XRT_SYM_HAS_NEXT)
             return XR_FROM_BOOL(xrt_iterator_has_next(it));
         if (sym == XRT_SYM_NEXT)

@@ -1,0 +1,1 @@
+`yield` is only valid inside a generator function declared `-> Iterator<T>`

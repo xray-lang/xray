@@ -548,12 +548,12 @@ let p = Point{x: 1, y: 2}      // struct literal
 ### 3.16 `yield` 语句
 
 ```xray @id=expr-yield
-yield                       // 让出执行权
+yield expr                  // 生成器产出一个值并挂起
 ```
 
-**当前实现**：仅支持无值语句形式，让协程让出 CPU（类似 Go 的 `runtime.Gosched()`）。
+`yield expr` 只能出现在声明返回 `Iterator<T>` 的生成器函数体内。第一次调用生成器函数不会立即执行函数体，而是返回一个惰性 `Iterator<T>`；`for-in` 通过 `hasNext()` / `next()` 拉取，每次 `yield expr` 产出一个 `T` 并暂停到下一次拉取。
 
-详见 §10.10。
+协作让出 CPU 不再使用裸 `yield`；使用 `Coro.yield()`（见 §10.10）。裸 `yield` 是语法错误。
 <!-- /xr-spec:cn -->
 
 <!-- xr-spec:en -->
@@ -1101,10 +1101,10 @@ See §1.6.5. In brief:
 ### 3.16 `yield` Statement
 
 ```xray @id=expr-yield
-yield                       // yield execution
+yield expr                  // produce one generator value and suspend
 ```
 
-**Current implementation**: only the value-less statement form is supported, letting the coroutine relinquish the CPU (analogous to Go's `runtime.Gosched()`).
+`yield expr` is only valid inside a generator function declared to return `Iterator<T>`. Calling a generator function does not immediately execute its body; it returns a lazy `Iterator<T>`. `for-in` pulls through `hasNext()` / `next()`, and each `yield expr` produces one `T` before suspending until the next pull.
 
-See §10.10.
+Cooperative CPU yielding no longer uses bare `yield`; use `Coro.yield()` (see §10.10). Bare `yield` is a syntax error.
 <!-- /xr-spec:en -->

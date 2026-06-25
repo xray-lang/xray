@@ -1,0 +1,4 @@
+fn bad() -> int {
+    yield 1
+    return 0
+}

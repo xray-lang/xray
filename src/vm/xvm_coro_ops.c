@@ -30,6 +30,7 @@
 #include "../runtime/object/xstringbuilder.h"
 
 #include "../runtime/object/xjson.h"
+#include "../runtime/object/xiterator.h"
 #include "../runtime/object/xpanic_info.h"
 #include "../runtime/class/xclass_descriptor.h"
 #include "../runtime/object/xrange.h"
@@ -604,6 +605,54 @@ XR_FUNC XrDispatchAction vm_coro_ctrl(XrayIsolate *isolate, XrVMContext *vm_ctx,
 // vm_get_coro lives in xvm_dispatch_helpers.h so the invoke /
 // props / chan-ops TUs can call it without an owning .c
 // file having to re-export it.
+
+/* OP_GEN_START: construct a coroutine-backed iterator over a generator function.
+ * Unlike `go`, the producer coroutine is NOT scheduled — it is pull-driven by the
+ * returned iterator. R[A]=dst iterator, R[B]=generator closure, C=arg count with
+ * args at R[B+1..B+C]. Generator args are passed by SHARE: the consumer is blocked
+ * while the producer runs, so there is no concurrent mutation to guard against. */
+XR_FUNC XrDispatchAction vm_gen_start(XrayIsolate *isolate, XrVMContext *vm_ctx,
+                                      XrInstruction instr, XrValue *base, XrBcCallFrame *frame) {
+    int a = GETARG_A(instr);
+    int b = GETARG_B(instr);
+    int c = GETARG_C(instr);  // argument count
+    XrInstruction *pc = frame->pc;
+
+    XrValue fn_val = base[b];
+    if (!xr_value_is_closure(fn_val)) {
+        VM_THROW(frame, pc, XR_ERR_TYPE_MISMATCH, "generator: expected closure");
+    }
+    struct XrClosure *closure = xr_value_to_closure(fn_val);
+    XrProto *proto = closure->proto;
+    if (c != proto->numparams) {
+        VM_THROW(frame, pc, XR_ERR_WRONG_ARG_COUNT,
+                 "generator: argument count mismatch (expected %d, got %d)", proto->numparams, c);
+    }
+
+    XrValue *args = (c > 0) ? &base[b + 1] : NULL;
+    uint8_t arg_modes[128];
+    for (int i = 0; i < c && i < 128; i++)
+        arg_modes[i] = XR_TRANSFER_SHARE;
+
+    XrCoroutine *gen = xr_coro_create_vm_closure(isolate, closure, args, c > 0 ? arg_modes : NULL,
+                                                 c, NULL, NULL, 0);
+    if (!gen) {
+        VM_THROW(frame, pc, XR_ERR_CORO_DEAD, "generator: failed to create coroutine");
+    }
+
+    XrCoroutine *owner = (XrCoroutine *) vm_ctx->current_coro;
+    if (!owner)
+        owner = gen; /* top-level (main) drives generators on the gen's own heap */
+    XrIterator *iter = xr_iterator_new_from_generator(owner, gen);
+    if (!iter) {
+        xr_coro_destroy(gen);
+        VM_THROW(frame, pc, XR_ERR_CORO_DEAD, "generator: failed to allocate iterator");
+    }
+
+    base[a] = xr_value_from_iterator(iter);
+    frame->pc = pc;
+    return XR_DISP_NEXT;
+}
 
 XR_FUNC XrDispatchAction vm_go(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstruction instr,
                                XrValue *base, XrBcCallFrame *frame) {
