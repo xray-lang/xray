@@ -40,6 +40,7 @@
 #include "../xisolate_internal.h"
 #include "../xstdlib_bridge.h"
 #include "../../shared/xr_float_fmt.h"
+#include "../../shared/xr_value_format_core.h"
 #include "xtype_names.h"
 
 #include <inttypes.h>
@@ -47,17 +48,12 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* ========== Tunables ========== */
-
-#define XR_FORMAT_MAX_DEPTH 3
-#define XR_FORMAT_MAX_ELEMENTS 32
-
 /* ========== Container helpers (static) ========== */
 
 static void format_array(XrVMRuntime *isolate, XrStrBuf *sb, XrArray *arr, int depth) {
     xr_strbuf_append_cstr(sb, "[", 1);
     int len = arr->length;
-    int limit = (len > XR_FORMAT_MAX_ELEMENTS) ? XR_FORMAT_MAX_ELEMENTS : len;
+    int limit = (len > XR_VALUE_FORMAT_MAX_ELEMENTS) ? XR_VALUE_FORMAT_MAX_ELEMENTS : len;
     for (int i = 0; i < limit; i++) {
         if (i > 0)
             xr_strbuf_append_cstr(sb, ", ", 2);
@@ -74,7 +70,7 @@ static void format_array(XrVMRuntime *isolate, XrStrBuf *sb, XrArray *arr, int d
 static void format_tuple(XrVMRuntime *isolate, XrStrBuf *sb, XrTuple *tup, int depth) {
     xr_strbuf_append_cstr(sb, "(", 1);
     uint16_t n = xr_tuple_arity(tup);
-    uint16_t limit = (n > XR_FORMAT_MAX_ELEMENTS) ? XR_FORMAT_MAX_ELEMENTS : n;
+    uint16_t limit = (n > XR_VALUE_FORMAT_MAX_ELEMENTS) ? XR_VALUE_FORMAT_MAX_ELEMENTS : n;
     for (uint16_t i = 0; i < limit; i++) {
         if (i > 0)
             xr_strbuf_append_cstr(sb, ", ", 2);
@@ -95,7 +91,7 @@ static void format_map(XrVMRuntime *isolate, XrStrBuf *sb, XrMap *map, int depth
     if (!xr_map_isdummy(map)) {
         uint32_t size = map->nentries;
         int count = 0;
-        for (uint32_t i = 0; i < size && count < XR_FORMAT_MAX_ELEMENTS; i++) {
+        for (uint32_t i = 0; i < size && count < XR_VALUE_FORMAT_MAX_ELEMENTS; i++) {
             XrMapEntry *node = xr_map_entry(map, i);
             if (!XR_MAP_ENTRY_EMPTY(node)) {
                 if (count > 0)
@@ -118,7 +114,7 @@ static void format_map(XrVMRuntime *isolate, XrStrBuf *sb, XrMap *map, int depth
 static void format_set(XrVMRuntime *isolate, XrStrBuf *sb, XrSet *set, int depth) {
     xr_strbuf_append_cstr(sb, "#[", 2);
     int count = 0;
-    for (uint32_t i = 0; i < set->nentries && count < XR_FORMAT_MAX_ELEMENTS; i++) {
+    for (uint32_t i = 0; i < set->nentries && count < XR_VALUE_FORMAT_MAX_ELEMENTS; i++) {
         XrSetEntry *entry = &set->entries[i];
         if (!XR_SET_ENTRY_EMPTY(entry)) {
             if (count > 0)
@@ -142,7 +138,7 @@ static void format_json(XrVMRuntime *isolate, XrStrBuf *sb, XrJson *json, int de
         xr_strbuf_append_cstr(sb, "}", 1);
         return;
     }
-    for (int i = 0; i < cls->field_count && i < XR_FORMAT_MAX_ELEMENTS; i++) {
+    for (int i = 0; i < cls->field_count && i < XR_VALUE_FORMAT_MAX_ELEMENTS; i++) {
         if (i > 0)
             xr_strbuf_append_cstr(sb, ", ", 2);
         const char *fname = cls->fields[i].name;
@@ -196,7 +192,7 @@ void xr_value_to_strbuf(XrVMRuntime *isolate, XrStrBuf *sb, XrValue val, int dep
     }
 
     // Depth guard for recursive types
-    if (depth > XR_FORMAT_MAX_DEPTH) {
+    if (depth > XR_VALUE_FORMAT_MAX_DEPTH) {
         xr_strbuf_append_cstr(sb, "...", 3);
         return;
     }
