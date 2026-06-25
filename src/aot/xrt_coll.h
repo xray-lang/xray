@@ -30,8 +30,8 @@
 #include "../shared/xr_typed_ops.h"
 #include <string.h>
 
-static XRT_COLD _Noreturn void xrt_throw_exc(XrValue exc);
-static XRT_COLD _Noreturn void xrt_throw_error(int code, const char *message);
+XRT_COLD _Noreturn void xrt_throw_exc(XrValue exc);
+XRT_COLD _Noreturn void xrt_throw_error(int code, const char *message);
 
 /* =========================================================================
  * Array runtime
@@ -263,8 +263,7 @@ static inline XrValue xrt_bytes_new_1(XrValue arg) {
 static inline void xrt_array_push(XrValue arr, XrValue val) {
     xrt_array_t *a = (xrt_array_t *) arr.ptr;
     if (XR_UNLIKELY(a->data_storage == XR_ARRAY_DATA_BORROWED)) {
-        fprintf(stderr, "xrt_array_push: cannot push to array slice\n");
-        abort();
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_ARRAY_SLICE_PUSH_MSG);
     }
     if (XR_UNLIKELY(a->length >= a->capacity))
         xrt_array_data_grow(a, a->capacity == 0 ? 4 : a->capacity * 2);
@@ -1530,7 +1529,8 @@ static inline void xrt_json_set_field(XrValue obj, int field_idx, XrValue val) {
         j->fields[field_idx] = val;
 }
 
-static XRT_COLD _Noreturn void xrt_throw_error(int code, const char *message) {
+#ifdef XRT_IMPL
+XRT_COLD _Noreturn void xrt_throw_error(int code, const char *message) {
     size_t len = message ? strlen(message) : 0;
     XrValue exc = xrt_json_new_named(EXCEPTION_FIELD_COUNT, xr_exception_field_names());
     XrValue msg = xrt_str_alloc(len);
@@ -1543,6 +1543,7 @@ static XRT_COLD _Noreturn void xrt_throw_error(int code, const char *message) {
     xrt_json_set_field(exc, EXCEPTION_FIELD_DATA, XR_NULL_VAL);
     xrt_throw_exc(exc);
 }
+#endif
 
 static inline XrValue xrt_json_get_name(XrValue obj, const char *name) {
     if (obj.tag != XR_TAG_PTR || !obj.ptr || !name)

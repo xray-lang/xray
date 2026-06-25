@@ -30,6 +30,7 @@
 #define XR_ERROR_CORE_ARRAY_RESERVE_FAILED_MSG "Array.reserve failed"
 #define XR_ERROR_CORE_ARRAY_RESIZE_EXPECTS_MSG "Array.resize(length, fill) expects integer length"
 #define XR_ERROR_CORE_ARRAY_RESIZE_FAILED_MSG "Array.resize failed"
+#define XR_ERROR_CORE_ARRAY_SLICE_PUSH_MSG "cannot push to array slice"
 #define XR_ERROR_CORE_BYTES_LOAD_U32_EXPECTS_MSG "Bytes.loadU32LE(offset) expects Bytes and integer"
 #define XR_ERROR_CORE_BYTES_LOAD_U32_RECEIVER_MSG "Bytes.loadU32LE receiver must be Bytes"
 #define XR_ERROR_CORE_BYTES_LOAD_U32_OOB_MSG "Bytes.loadU32LE offset out of bounds"

@@ -1503,8 +1503,8 @@ static bool emit_typed_array_push_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *
     emit_typed_array_ptr_expr(ctx, out, f, recv, prefix);
     {
         fprintf(out,
-                "; if (_a->data_storage == XR_ARRAY_DATA_BORROWED) { fprintf(stderr, "
-                "\"xrt_array_push: cannot push to array slice\\n\"); abort(); } "
+                "; if (_a->data_storage == XR_ARRAY_DATA_BORROWED) { "
+                "xrt_throw_error(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_ARRAY_SLICE_PUSH_MSG); } "
                 "if (XR_UNLIKELY(_a->length >= _a->capacity)) { "
                 "xrt_array_data_grow(_a, _a->capacity == 0 ? 4 : _a->capacity * 2); } "
                 "((%s*)_a->data)[_a->length++] = ",

@@ -140,7 +140,8 @@ static inline const char *xrt_exception_message_cstr(XrValue exc) {
  * uncaught), so `defer` cleanup runs on the panic path exactly as in the VM.
  * ========================================================================= */
 
-static XRT_COLD _Noreturn void xrt_throw_exc(XrValue exc) {
+#ifdef XRT_IMPL
+XRT_COLD _Noreturn void xrt_throw_exc(XrValue exc) {
     exc = xrt_exception_normalize(exc);
     if (xrt_exc_top) {
         /* Caught panic: run the defers of every frame skipped on the way to the
@@ -166,10 +167,11 @@ static XRT_COLD _Noreturn void xrt_throw_exc(XrValue exc) {
  * VM's XR_ERR_INDEX_OUT_OF_BOUNDS. Lives here (not in xrt_coll.h) because raising
  * a panic is an exception-layer concern; xrt_coll.h's index helpers and the
  * generated typed/fixed-array reads call it via a forward declaration. */
-static XRT_COLD _Noreturn void xrt_index_oob(int64_t idx, int64_t length) {
+XRT_COLD _Noreturn void xrt_index_oob(int64_t idx, int64_t length) {
     char buf[XR_ERROR_CORE_INDEX_OOB_BUFSZ];
     xr_error_core_format_array_index_oob(buf, sizeof(buf), idx, length);
     xrt_throw_exc(xrt_exception_new_value(XR_ERR_INDEX_OUT_OF_BOUNDS, buf, strlen(buf)));
 }
+#endif
 
 #endif  // XRT_EXCEPTION_H
