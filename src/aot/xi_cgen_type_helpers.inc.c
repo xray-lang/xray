@@ -43,7 +43,7 @@ static bool cg_value_type_is_bool(const XiValue *v) {
 static bool cg_type_is_json(const XrType *type) {
     if (!type)
         return false;
-    if (type->kind == XR_KIND_JSON)
+    if (XR_TYPE_HAS_OBJECT_SHAPE(type))
         return true;
     if (type->kind == XR_KIND_INSTANCE && type->instance.class_name &&
         (strcmp(type->instance.class_name, "PathInfo") == 0 ||

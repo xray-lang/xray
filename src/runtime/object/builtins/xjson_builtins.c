@@ -208,6 +208,22 @@ static XrValue xr_json_builtin_stringify(XrayIsolate *X, XrValue self, XrValue *
     return r.result;
 }
 
+// Json.encode(value) — explicit typed-value -> Json boundary. This uses the
+// serde encoder directly so the hot path avoids stringify/parse round-trips.
+static XrValue xr_json_builtin_encode(XrayIsolate *X, XrValue self, XrValue *args, int argc) {
+    (void) self;
+    if (argc < 1)
+        return xr_null();
+
+    XrJsonEncodeResult r = xr_json_encode_core(X, args[0]);
+    if (r.has_error) {
+        XrValue exc = xr_panic_info_newf(X, XR_ERR_JSON_INVALID, "Json.encode: %s", r.error_msg);
+        xr_vm_unwind_with_trace(X, exc);
+        return xr_null();
+    }
+    return r.result;
+}
+
 /* ========== Class Creation ========== */
 
 static XrClass *create_json_utility_class(XrayIsolate *X) {
@@ -228,6 +244,7 @@ static XrClass *create_json_utility_class(XrayIsolate *X) {
     // JSON parse/stringify — core engine in xjson_serde.c, throw wrapper above
     xr_class_builder_add_static_method(builder, "parse", xr_json_fn_parse, 1, 0);
     xr_class_builder_add_static_method(builder, "stringify", xr_json_builtin_stringify, 2, 0);
+    xr_class_builder_add_static_method(builder, "encode", xr_json_builtin_encode, 1, 0);
     xr_class_builder_add_static_method(builder, "isValid", xr_json_fn_is_valid, 1, 0);
     xr_class_builder_add_static_method(builder, "tryParse", xr_json_fn_try_parse, 1, 0);
 

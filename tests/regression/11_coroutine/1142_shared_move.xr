@@ -28,7 +28,7 @@ fn recvJson(ch: Channel<Json>) -> Json {
 fn test_shared_const() {
     print("=== Test shared const ===")
 
-    shared const config = {
+    shared const config: Json = {
         name: "test",
         value: 42
     }
@@ -55,7 +55,7 @@ fn test_shared_const() {
 fn test_move_go() {
     print("=== Test move go ===")
 
-    shared let data = { count: 10 }
+    shared let data: Json = { count: 10 }
 
     // 'move data' transfers ownership to child coroutine (zero-copy)
     let task = go fn(d: Json) -> int {
@@ -109,7 +109,7 @@ fn test_move_pipeline() {
     print("=== Test move pipeline ===")
 
     shared const ch: Channel<Json> = Channel(1)
-    shared let msg = { step: 0 }
+    shared let msg: Json = { step: 0 }
 
     // Stage 1: modify and move-send
     let t1 = go fn(c: Channel<Json>, d: Json) {

@@ -24,8 +24,8 @@
 // Forward declarations now in xanalyzer_visitor_internal.h
 void xa_visit_collect(XaInferContext *ctx, AstNode *node);
 
-static const char *json_type_label_local(XrType *type) {
-    if (type && XR_TYPE_IS_JSON(type) && type->object.type_name)
+static const char *object_shape_type_label_local(XrType *type) {
+    if (XR_TYPE_HAS_OBJECT_SHAPE(type) && type->object.type_name)
         return type->object.type_name;
     return xr_type_to_string(type);
 }
@@ -466,8 +466,8 @@ static void check_contextual_int_literal_range(XaInferContext *ctx, AstNode *nod
                                &loc);
 }
 
-static int json_field_index_local(XrType *type, const char *name) {
-    if (!type || !XR_TYPE_IS_JSON(type) || !name || !type->object.field_names)
+static int object_shape_field_index_local(XrType *type, const char *name) {
+    if (!XR_TYPE_HAS_OBJECT_SHAPE(type) || !name || !type->object.field_names)
         return -1;
     for (int i = 0; i < type->object.field_count; i++) {
         if (type->object.field_names[i] && strcmp(type->object.field_names[i], name) == 0)
@@ -2300,8 +2300,9 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                                                XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
                 }
             }
-            if (XR_TYPE_IS_JSON(obj_type) && obj_type->object.field_count > 0 && ms->member) {
-                int field_idx = json_field_index_local(obj_type, ms->member);
+            if (XR_TYPE_HAS_OBJECT_SHAPE(obj_type) && obj_type->object.field_count > 0 &&
+                ms->member) {
+                int field_idx = object_shape_field_index_local(obj_type, ms->member);
                 XrLocation loc = {
                     .file = ctx->file_path, .line = node->line, .column = node->column};
                 if (field_idx >= 0) {
@@ -2311,14 +2312,14 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                     if (readonly) {
                         char msg[256];
                         snprintf(msg, sizeof(msg), "无法修改只读字段 '%s.%s'（const 修饰）",
-                                 json_type_label_local(obj_type), ms->member);
+                                 object_shape_type_label_local(obj_type), ms->member);
                         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                                    XR_ERR_ANALYZE_CONST_ASSIGN, msg, &loc);
                     }
                 } else if (obj_type->object.is_sealed) {
                     char msg[256];
                     snprintf(msg, sizeof(msg), "类型 '%s' 不允许添加字段 '%s'",
-                             json_type_label_local(obj_type), ms->member);
+                             object_shape_type_label_local(obj_type), ms->member);
                     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                                XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
                 }
@@ -2487,7 +2488,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             ctx->current_fn_has_yield = saved_has_yield;
 
             // Re-check inferred_param_types after body analysis: recursive calls
-            // inside the body may have widened param types (e.g. Json → Json?).
+            // inside the body may have widened param types (e.g. int → int?).
             if (fn_decl->name) {
                 XaSymbol *fn_sym2 =
                     xa_scope_lookup(ctx->analyzer->current_scope->parent, fn_decl->name);
@@ -2983,9 +2984,32 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                 array_type = xa_visit_infer_expr(ctx, is->array);
             if (is->index)
                 index_type = xa_visit_infer_expr(ctx, is->index);
+            XrType *value_expected = NULL;
+            if (array_type) {
+                if (XR_TYPE_IS_ARRAY(array_type) && array_type->container.element_type) {
+                    value_expected = array_type->container.element_type;
+                } else if (XR_TYPE_IS_MAP(array_type) && array_type->map.value_type) {
+                    value_expected = array_type->map.value_type;
+                } else if (XR_TYPE_HAS_OBJECT_SHAPE(array_type)) {
+                    if (array_type->object.field_count > 0 && is->index &&
+                        is->index->type == AST_LITERAL_STRING) {
+                        const char *key = is->index->as.literal.raw_value.string_val;
+                        int field_idx = object_shape_field_index_local(array_type, key);
+                        if (field_idx >= 0 && array_type->object.field_types)
+                            value_expected = array_type->object.field_types[field_idx];
+                    }
+                    if (!value_expected && XR_TYPE_IS_JSON(array_type))
+                        value_expected = xr_type_new_json(ctx->analyzer->isolate);
+                }
+            }
             XrType *value_type = NULL;
-            if (is->value)
+            if (is->value) {
+                XrType *saved_expected = ctx->expected_type;
+                if (value_expected && !XR_TYPE_IS_UNKNOWN(value_expected))
+                    ctx->expected_type = value_expected;
                 value_type = xa_visit_infer_expr(ctx, is->value);
+                ctx->expected_type = saved_expected;
+            }
             if (xa_type_needs_borrow_escape_guard(value_type)) {
                 XaSymbol *borrowed_root = xa_borrowed_param_root_symbol(ctx, is->value);
                 if (borrowed_root) {
@@ -3047,10 +3071,11 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                 }
                 break;
             }
-            if (array_type && XR_TYPE_IS_JSON(array_type) && array_type->object.field_count > 0 &&
-                is->index && is->index->type == AST_LITERAL_STRING) {
+            if (array_type && XR_TYPE_HAS_OBJECT_SHAPE(array_type) &&
+                array_type->object.field_count > 0 && is->index &&
+                is->index->type == AST_LITERAL_STRING) {
                 const char *key = is->index->as.literal.raw_value.string_val;
-                int field_idx = json_field_index_local(array_type, key);
+                int field_idx = object_shape_field_index_local(array_type, key);
                 XrLocation loc = {
                     .file = ctx->file_path, .line = node->line, .column = node->column};
                 if (field_idx >= 0) {
@@ -3060,17 +3085,26 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                     if (readonly) {
                         char msg[256];
                         snprintf(msg, sizeof(msg), "无法修改只读字段 '%s.%s'（const 修饰）",
-                                 json_type_label_local(array_type), key);
+                                 object_shape_type_label_local(array_type), key);
                         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                                    XR_ERR_ANALYZE_CONST_ASSIGN, msg, &loc);
                     }
                 } else if (array_type->object.is_sealed) {
                     char msg[256];
                     snprintf(msg, sizeof(msg), "类型 '%s' 不允许添加字段 '%s'",
-                             json_type_label_local(array_type), key);
+                             object_shape_type_label_local(array_type), key);
                     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                                XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
                 }
+            } else if (array_type && XR_TYPE_IS_RECORD(array_type) &&
+                       array_type->object.is_sealed) {
+                XrLocation loc = {
+                    .file = ctx->file_path, .line = node->line, .column = node->column};
+                xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                           XR_ERR_ANALYZE_TYPE_MISMATCH,
+                                           "sealed Record index assignment requires a string "
+                                           "literal key",
+                                           &loc);
             } else if (array_type && XR_TYPE_IS_ARRAY(array_type)) {
                 XrLocation loc = {
                     .file = ctx->file_path, .line = node->line, .column = node->column};

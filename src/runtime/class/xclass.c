@@ -149,8 +149,8 @@ XrClass *xr_class_new(XrayIsolate *X, const char *name, XrClass *super) {
 // longer a supported API for patching a class's super link after the
 // class has been frozen.
 
-XrClass *xr_class_new_dynamic_root(XrayIsolate *X, const char *name, uint16_t capacity,
-                                   bool sealed) {
+XrClass *xr_class_new_dynamic_root(XrayIsolate *X, const char *name, uint16_t capacity, bool sealed,
+                                   uint8_t builtin_kind) {
     (void) X;
     XR_DCHECK(name != NULL, "dynamic_root: NULL name");
     XR_DCHECK(capacity >= 2, "dynamic_root: capacity must be >= 2 (1 slot reserved for overflow)");
@@ -159,7 +159,7 @@ XrClass *xr_class_new_dynamic_root(XrayIsolate *X, const char *name, uint16_t ca
         return NULL;
     cls->name = name;
     cls->flags = XR_CLASS_DYNAMIC_LAYOUT | (sealed ? XR_CLASS_DYNAMIC_SEALED : 0);
-    cls->builtin_kind = XR_BK_JSON;
+    cls->builtin_kind = builtin_kind;
     cls->in_object_capacity = capacity;
     cls->field_count = 0;
     cls->own_field_count = 0;

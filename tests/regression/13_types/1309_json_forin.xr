@@ -15,28 +15,27 @@
 
 @test
 fn test_json_forin() {
-    let user = {name: "Alice", age: "30", city: "Beijing"}
+    let user: Json = {name: "Alice", age: "30", city: "Beijing"}
     for (k, v in user) {
         print(k + " = " + v)
     }
 
     // Test 2: Blank key (only value)
-    let config = {host: "localhost", port: "8080"}
+    let config: Json = {host: "localhost", port: "8080"}
     for (_, v in config) {
         print(v)
     }
 
     // Test 3: Empty Json
-    let empty = {}
+    let empty: Json = {}
     for (k, v in empty) {
         print("unreachable")
     }
     print("empty ok")
 
     // Test 4: Mixed value types
-    let data = {count: 42, label: "test", flag: true}
+    let data: Json = {count: 42, label: "test", flag: true}
     for (k, v in data) {
         print(k + " -> " + string(v))
     }
 }
-

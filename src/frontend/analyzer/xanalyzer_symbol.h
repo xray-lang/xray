@@ -242,11 +242,17 @@ XR_FUNC void xa_class_info_free(XrClassInfo *info);
 XR_FUNC void xa_class_info_add_field(XrClassInfo *info, XaSymbol *field);
 XR_FUNC void xa_class_info_add_method(XrClassInfo *info, XaSymbol *method);
 XR_FUNC XaSymbol *xa_class_info_lookup_member(XrClassInfo *info, const char *name);
+XR_FUNC XaSymbol *xa_class_info_lookup_instance_member(XrClassInfo *info, const char *name);
+XR_FUNC XaSymbol *xa_class_info_lookup_static_member(XrClassInfo *info, const char *name);
 
 // Same as xa_class_info_lookup_member but also reports which class in the base
 // chain actually declares the member (used for private/protected visibility).
 XR_FUNC XaSymbol *xa_class_info_lookup_member_owner(XrClassInfo *info, const char *name,
                                                     XrClassInfo **owner_out);
+XR_FUNC XaSymbol *xa_class_info_lookup_instance_member_owner(XrClassInfo *info, const char *name,
+                                                             XrClassInfo **owner_out);
+XR_FUNC XaSymbol *xa_class_info_lookup_static_member_owner(XrClassInfo *info, const char *name,
+                                                           XrClassInfo **owner_out);
 
 // API: Function signature helpers (integrated into XaSymbolLinks)
 XR_FUNC void xa_symbol_links_set_function_sig(XaSymbolLinks *links, XrType **param_types,

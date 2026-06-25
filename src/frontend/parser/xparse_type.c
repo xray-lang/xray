@@ -227,6 +227,40 @@ static XrTypeRef *clone_subst_type_ref(Parser *parser, const XrTypeRef *src,
 
 static XrTypeRef *parse_type_annotation_base(Parser *parser);
 
+static bool tref_is_json(const XrTypeRef *t) {
+    return t && t->kind == XR_TREF_NAMED && t->name && strcmp(t->name, "Json") == 0;
+}
+
+static bool tref_is_null(const XrTypeRef *t) {
+    return t && t->kind == XR_TREF_NULL;
+}
+
+static bool tref_intrinsically_includes_null(const XrTypeRef *t) {
+    return tref_is_json(t);
+}
+
+static XrTypeRef *parse_nullable_suffix(Parser *parser, XrTypeRef *base) {
+    if (tref_intrinsically_includes_null(base)) {
+        xr_parser_error(parser, "Json already includes null; use 'Json' instead of 'Json?'");
+        return base;
+    }
+    return xr_tref_optional(parser->X, base);
+}
+
+static void reject_redundant_null_union(Parser *parser, XrTypeRef **members, int count) {
+    bool has_null = false;
+    bool has_intrinsic_null = false;
+    for (int i = 0; i < count; i++) {
+        if (tref_is_null(members[i]))
+            has_null = true;
+        if (tref_intrinsically_includes_null(members[i]))
+            has_intrinsic_null = true;
+    }
+    if (has_null && has_intrinsic_null) {
+        xr_parser_error(parser, "Json already includes null; use 'Json' instead of 'Json | null'");
+    }
+}
+
 /* ---- Top-level: base + optional '?' + optional '|' union ---- */
 
 XR_FUNC XrTypeRef *xr_parse_type_annotation(Parser *parser) {
@@ -235,7 +269,7 @@ XR_FUNC XrTypeRef *xr_parse_type_annotation(Parser *parser) {
 
     /* Optional type suffix: T? */
     if (xr_parser_match(parser, TK_QUESTION))
-        base = xr_tref_optional(parser->X, base);
+        base = parse_nullable_suffix(parser, base);
 
     /* Union type: T | U | ... */
     if (xr_parser_check(parser, TK_PIPE)) {
@@ -246,7 +280,7 @@ XR_FUNC XrTypeRef *xr_parse_type_annotation(Parser *parser) {
         while (xr_parser_match(parser, TK_PIPE) && count < XR_TREF_UNION_MAX + 1) {
             XrTypeRef *next = parse_type_annotation_base(parser);
             if (xr_parser_match(parser, TK_QUESTION))
-                next = xr_tref_optional(parser->X, next);
+                next = parse_nullable_suffix(parser, next);
             if (count < XR_TREF_UNION_MAX + 1)
                 members[count++] = next;
         }
@@ -256,6 +290,7 @@ XR_FUNC XrTypeRef *xr_parse_type_annotation(Parser *parser) {
             return xr_tref_unknown(parser->X);
         }
 
+        reject_redundant_null_union(parser, members, count);
         return xr_tref_union(parser->X, members, count);
     }
 

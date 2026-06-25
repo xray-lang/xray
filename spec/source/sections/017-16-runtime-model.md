@@ -103,7 +103,7 @@ class PanicInfo {
     stack: Array<string>        // 自动 capture 的调用栈，每帧一行格式化字符串
     cause: PanicInfo?           // 链式 cause
     code: int                   // 错误码（从 "E0xxx: ..." 前缀自动解析，默认 0）
-    data: Json?                 // 运行时故障的可选结构化附加数据
+    data: Json                  // 运行时故障的结构化附加数据；无数据时为 JSON null
 
     constructor(message: string = "", cause: PanicInfo? = null)
     fn toString() -> string
@@ -230,7 +230,7 @@ class PanicInfo {
     stack: Array<string>        // automatically captured call stack, one formatted line per frame
     cause: PanicInfo?           // chained cause
     code: int                   // error code (auto-parsed from "E0xxx: ..." prefix; default 0)
-    data: Json?                 // optional structured data for a runtime fault
+    data: Json                  // structured data for a runtime fault; JSON null when absent
 
     constructor(message: string = "", cause: PanicInfo? = null)
     fn toString() -> string

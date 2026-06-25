@@ -583,6 +583,8 @@ static void xicgen_get_builtin(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
     if (v->aux_int == XR_GLOBAL_VAR_PROCESS || v->aux_int == XR_GLOBAL_VAR_FILE ||
         v->aux_int == XR_GLOBAL_VAR_DIR) {
         fprintf(out, "xrt_builtins[%d]", (int) v->aux_int);
+    } else if (v->aux_int == XR_GLOBAL_VAR_JSON) {
+        fprintf(out, "XR_NULL_VAL /* builtin Json namespace */");
     } else if (v->aux_int == XR_GLOBAL_VAR_WORKQUEUE || v->aux_int == XR_GLOBAL_VAR_RESULTGROUP) {
         fprintf(out, "XR_NULL_VAL /* builtin native class token: %s */",
                 v->aux ? (const char *) v->aux : "?");
@@ -1003,11 +1005,14 @@ static void xicgen_emit_c_string_literal(FILE *out, const char *s) {
 static void xicgen_emit_json_new_expr(FILE *out, const XiValue *v) {
     int64_t field_count = xi_json_field_count(v);
     const char **field_names = (const char **) v->aux;
+    const bool is_record = v && v->type && v->type->kind == XR_KIND_RECORD;
+    const char *ctor = is_record ? "xrt_record_new" : "xrt_json_new";
+    const char *ctor_named = is_record ? "xrt_record_new_named" : "xrt_json_new_named";
     if (field_count <= 0 || !field_names) {
-        fprintf(out, "xrt_json_new(%" PRId64 ")", field_count);
+        fprintf(out, "%s(%" PRId64 ")", ctor, field_count);
         return;
     }
-    fprintf(out, "xrt_json_new_named(%" PRId64 ", (const char*[]){", field_count);
+    fprintf(out, "%s(%" PRId64 ", (const char*[]){", ctor_named, field_count);
     for (int64_t i = 0; i < field_count; i++) {
         if (i > 0)
             fprintf(out, ", ");
@@ -1585,7 +1590,7 @@ static void xicgen_call_builtin(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
          * only for shared-slot stores; standalone AOT has one RC heap, so it
          * is still a single recursive clone rather than a VM heap promotion. */
         XR_DCHECK(v->nargs >= 1, "builtin copy: need arg");
-        bool is_json = v->args[0] && v->args[0]->type && v->args[0]->type->kind == XR_KIND_JSON;
+        bool is_json = v->args[0] && XR_TYPE_HAS_OBJECT_SHAPE(v->args[0]->type);
         const char *conv_suffix =
             emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
         fprintf(out, "%s(", is_json ? "xrt_json_clone_for_coro" : "xrt_value_clone_for_coro");
@@ -1948,8 +1953,35 @@ static bool xicgen_emit_result_group_method(FILE *out, const XiValue *v, const c
     return true;
 }
 
+static bool xicgen_receiver_is_builtin_global(const XiValue *receiver, int global_index) {
+    const XiValue *origin = cg_unwrap_identity_value(receiver);
+    return origin && origin->op == XI_GET_BUILTIN && origin->aux_int == global_index;
+}
+
+static bool xicgen_emit_json_static_method(XiCgenCtx *ctx, FILE *out, const XiValue *v,
+                                           const char *method, uint16_t nargs) {
+    if (!v || v->op != XI_CALL_METHOD || v->nargs < 1 || !method ||
+        !xicgen_receiver_is_builtin_global(v->args[0], XR_GLOBAL_VAR_JSON))
+        return false;
+    if (strcmp(method, "encode") != 0 || nargs != 1 || v->nargs < 2) {
+        ctx->error = true;
+        fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT Json static method '%s'\n",
+                method ? method : "?");
+        emit_codegen_abort_expr(out);
+        return true;
+    }
+    const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+    fprintf(out, "xrt_json_encode(");
+    emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
+    fprintf(out, ")");
+    emit_conversion_suffix(out, conv_suffix);
+    return true;
+}
+
 static void xicgen_emit_runtime_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                        const char *method, uint16_t nargs) {
+    if (xicgen_emit_json_static_method(ctx, out, v, method, nargs))
+        return;
     if (xicgen_emit_channel_method(out, v, method, nargs))
         return;
     if (xicgen_emit_work_queue_method(out, v, method, nargs))
@@ -2485,7 +2517,7 @@ static void xicgen_cast_i64_arg(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
         }
     }
     fprintf(out, "(int64_t)(%s)", ctype);
-    emit_vref(out, arg);
+    emit_value_as_rep_ctx(ctx, out, arg, XR_REP_I64);
 }
 
 static void xicgen_f32_roundtrip(FILE *out, const XiValue *v, bool preserve_loaded_float32) {

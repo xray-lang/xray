@@ -616,6 +616,7 @@ XR_FUNC bool xi_coro_type_needs_boundary_clone(const XrType *type) {
         case XR_KIND_SET:
         case XR_KIND_FIXED_ARRAY:
         case XR_KIND_JSON:
+        case XR_KIND_RECORD:
         case XR_KIND_STRING:
             return true;
         case XR_KIND_INSTANCE:

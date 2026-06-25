@@ -71,6 +71,7 @@
 #define TYPE_NAME_ITERATOR "iterator"
 #define TYPE_NAME_STRUCT "struct"
 #define TYPE_NAME_JSON "Json"
+#define TYPE_NAME_RECORD "Record"
 #define TYPE_NAME_STRINGBUILDER "StringBuilder"
 #define TYPE_NAME_UNKNOWN "unknown"
 #define TYPE_NAME_BIGINT "BigInt"
@@ -175,6 +176,7 @@ typedef enum {
     // char: appended last to keep all existing TID values stable (embedded
     // in Reflect/Type constants and MCP knowledge tables).
     XR_TID_CHAR,  // 40
+    XR_TID_RECORD,
     XR_TID_COUNT
 } XrTypeId;
 

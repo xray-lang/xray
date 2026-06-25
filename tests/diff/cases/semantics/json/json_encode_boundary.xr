@@ -1,0 +1,22 @@
+let user = { name: "Bob", scores: [10, 20], nested: { ok: true } }
+let encoded = Json.encode(user)
+print(typeof(encoded))
+print(encoded.name)
+print(encoded.scores[1])
+print(encoded.nested.ok)
+
+let m = #{ "a": 1, "b": { tag: "bee" } }
+let jm = Json.encode(m)
+print(typeof(jm))
+print(jm.a)
+print(jm.b.tag)
+
+let im = #{ 7: { tag: "seven" } }
+let jim = Json.encode(im)
+print(jim["7"].tag)
+
+let s: Set<int> = #[1, 2, 3]
+let arr = Json.encode(s)
+print(arr.length)
+print(arr[0])
+print(arr[2])

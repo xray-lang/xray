@@ -163,5 +163,7 @@ XR_FUNC struct XrClass *xr_class_transition_get_or_create(struct XrayIsolate *X,
 // Returns the leaf class (or NULL on OOM).
 XR_FUNC struct XrClass *xr_class_build_json_chain(struct XrayIsolate *X, const char *const *names,
                                                   int count, bool sealed);
+XR_FUNC struct XrClass *xr_class_build_record_chain(struct XrayIsolate *X, const char *const *names,
+                                                    int count, bool sealed);
 
 #endif  // XINSTANCE_H

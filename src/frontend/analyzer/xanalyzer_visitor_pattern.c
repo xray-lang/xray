@@ -360,13 +360,16 @@ static void register_pattern_bindings(XaInferContext *ctx, AstNode *pattern, XrT
             if (!sub)
                 continue;
             XrType *field_type = NULL;
-            if (slot_type && XR_TYPE_IS_JSON(slot_type) && slot_type->object.field_count > 0 &&
-                slot_type->object.field_names && slot_type->object.field_types) {
+            if (slot_type && XR_TYPE_HAS_OBJECT_SHAPE(slot_type) &&
+                slot_type->object.field_count > 0 && slot_type->object.field_names &&
+                slot_type->object.field_types) {
                 for (int f = 0; f < slot_type->object.field_count; f++) {
                     if (slot_type->object.field_names[f] && op->field_names[i] &&
                         strcmp(slot_type->object.field_names[f], op->field_names[i]) == 0) {
                         XrType *ft = slot_type->object.field_types[f];
-                        field_type = ft ? xr_type_make_nullable(ctx->analyzer->isolate, ft) : NULL;
+                        field_type = ft && XR_TYPE_IS_JSON(slot_type)
+                                         ? xr_type_make_nullable(ctx->analyzer->isolate, ft)
+                                         : ft;
                         break;
                     }
                 }

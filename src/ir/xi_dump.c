@@ -60,6 +60,8 @@ static const char *xi_type_name(const struct XrType *type) {
             return "enum";
         case XR_KIND_JSON:
             return "json";
+        case XR_KIND_RECORD:
+            return "record";
         case XR_KIND_UNION:
             return "union";
         case XR_KIND_TUPLE:

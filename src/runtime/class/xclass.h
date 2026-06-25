@@ -115,6 +115,7 @@ typedef struct XrItableEntry XrItableEntry;
 typedef enum {
     XR_BK_NONE = 0,
     XR_BK_JSON,
+    XR_BK_RECORD,
     XR_BK_STRINGBUILDER,
     XR_BK_ENUM_VALUE,
     XR_BK_ENUM_TYPE,
@@ -383,7 +384,7 @@ XR_FUNC void xr_class_mark_abstract(XrClass *cls);
 // hidden-class transitions via xr_class_transition_get_or_create. If sealed
 // is true, transitions are rejected (used for sealed Json types).
 XR_FUNC XrClass *xr_class_new_dynamic_root(XrayIsolate *X, const char *name, uint16_t capacity,
-                                           bool sealed);
+                                           bool sealed, uint8_t builtin_kind);
 
 // Get class for any value (instance, class, or primitive)
 XR_FUNC XrClass *xr_value_get_class(XrayIsolate *X, XrValue value);

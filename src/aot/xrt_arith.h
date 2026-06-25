@@ -330,6 +330,12 @@ static inline int64_t xrt_typeof_id(XrValue v) {
             return 15; /* XR_TID_SET */
         case XR_TAG_MAP:
             return 16; /* XR_TID_MAP */
+        case XR_TAG_PTR:
+            if (v.ptr && v.heap_type == 0) {
+                const xrt_json_t *obj = (const xrt_json_t *) v.ptr;
+                return obj->object_kind == XRT_OBJECT_RECORD ? 41 : 18;
+            }
+            return 17; /* XR_TID_INSTANCE */
         case XR_TAG_CLOSURE:
             return 13; /* XR_TID_FUNCTION */
         case XR_TAG_STRBUF:
@@ -356,6 +362,8 @@ static inline XrValue xrt_typeof_str(XrValue v) {
     XRT_STR_LIT_DEF(xs_strbuf, "StringBuilder");
     XRT_STR_LIT_DEF(xs_tuple, "tuple");
     XRT_STR_LIT_DEF(xs_range, "Range");
+    XRT_STR_LIT_DEF(xs_json, "Json");
+    XRT_STR_LIT_DEF(xs_record, "Record");
     XRT_STR_LIT_DEF(xs_object, "object");
     switch (xrt_value_kind(v)) {
         case XR_TAG_I64:
@@ -385,6 +393,13 @@ static inline XrValue xrt_typeof_str(XrValue v) {
             return xr_str_lit(&xs_tuple);
         case XR_TAG_RANGE:
             return xr_str_lit(&xs_range);
+        case XR_TAG_PTR:
+            if (v.ptr && v.heap_type == 0) {
+                const xrt_json_t *obj = (const xrt_json_t *) v.ptr;
+                return obj->object_kind == XRT_OBJECT_RECORD ? xr_str_lit(&xs_record)
+                                                             : xr_str_lit(&xs_json);
+            }
+            return xr_str_lit(&xs_object);
         default:
             return xr_str_lit(&xs_object);
     }

@@ -1,0 +1,6 @@
+class User {
+    name: string = ""
+}
+
+let data = Json.parse("{\"name\":\"Ada\"}")
+let user = Json.decode<User>(data)

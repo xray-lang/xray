@@ -100,25 +100,18 @@ fn test_json_dot_access_coercion() {
 
 // ===== Rule 6: Array is a valid Json field type =====
 @test
-fn test_json_to_array_coercion() {
+fn test_json_array_value_access() {
     let data: Json = { "items": [1, 2, 3] }
-    let items: Array<int> = data["items"]
-    assert_eq(items.length, 3)
+    let items = data["items"]
     assert_eq(items[0], 1)
     assert_eq(items[2], 3)
 }
 
 @test
-fn test_json_array_mismatch_throws() {
+fn test_json_non_array_value_stays_json() {
     let data: Json = { "name": "xray" }
-    let caught = false
-    try {
-        let arr: Array<int> = data["name"]
-        assert(false)
-    } catch panic (e) {
-        caught = true
-    }
-    assert(caught)
+    let value = data["name"]
+    assert_eq(value, "xray")
 }
 
 print("json_type_coercion: all tests passed")

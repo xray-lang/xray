@@ -79,7 +79,7 @@ fn test_json_fuzz_wide_objects() {
 @test
 fn test_json_roundtrip_stress() {
     // Build a complex object, stringify, parse, verify
-    let data = {
+    let data: Json = {
         users: [],
         meta: { count: 0 }
     }
@@ -186,7 +186,7 @@ fn test_yaml_fuzz_nested_flow() {
 
 @test
 fn test_yaml_roundtrip_basic() {
-    let original = #{"name": "test", "version": 1, "debug": false}
+    let original: Json = {"name": "test", "version": 1, "debug": false}
     let s = yaml.stringify(original)
     let parsed = yaml.parse(s)
     assert_eq(parsed["name"], "test")
@@ -291,7 +291,7 @@ fn test_json_fuzz_deep_mixed() {
 
 @test
 fn test_json_fuzz_complex_roundtrip() {
-    let data = {
+    let data: Json = {
         matrix: [[1, 2], [3, 4]],
         config: {
             nested: {
@@ -326,7 +326,8 @@ fn test_json_fuzz_stringify_special() {
     assert_eq(Json.stringify(42), "42")
     assert_eq(Json.stringify("hello"), "\"hello\"")
     assert_eq(Json.stringify([]), "[]")
-    assert_eq(Json.stringify({}), "{}")
+    let emptyObj: Json = {}
+    assert_eq(Json.stringify(emptyObj), "{}")
 }
 
 // ===== JSON fuzz: many nested arrays =====

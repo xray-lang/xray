@@ -346,7 +346,7 @@ vmcase(OP_JSON_MERGE) {
     // value). Source must be a Json object.
     int a = GETARG_A(i);
     int b = GETARG_B(i);
-    if (!xr_value_is_json(R(b))) {
+    if (!xr_value_has_object_shape(R(b))) {
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "object spread source must be an object");
     }
     XrJson *dst = xr_value_to_json(R(a));

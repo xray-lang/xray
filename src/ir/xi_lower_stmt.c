@@ -96,7 +96,7 @@ static void stmt_set_missing_line(XiValue *v, int line) {
 }
 
 static int stmt_json_field_index(struct XrType *type, const char *name) {
-    if (!type || type->kind != XR_KIND_JSON || !type->object.field_names || !name)
+    if (!XR_TYPE_HAS_OBJECT_SHAPE(type) || !type->object.field_names || !name)
         return -1;
     for (int i = 0; i < type->object.field_count; i++) {
         if (!type->object.field_names[i])

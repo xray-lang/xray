@@ -153,13 +153,14 @@ fn test_reduce_build_nested_map() {
         { group: "veg", item: "pea" }
     ]
     // Group by category
+    let seed: Json = {}
     let grouped = entries.reduce(fn(acc, e) {
         if (acc[e.group] == null) {
             acc[e.group] = []
         }
         acc[e.group].push(e.item)
         return acc
-    }, {})
+    }, seed)
     assert_eq(grouped.fruit.length, 2)
     assert_eq(grouped.veg.length, 2)
     assert_eq(grouped.fruit[0], "apple")
