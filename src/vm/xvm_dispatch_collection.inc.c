@@ -104,7 +104,7 @@ vmcase(OP_ARRAY_NEW_CAP) {
     int c_field = GETARG_C(i);
     XrValue cap_value = R(b);
     if (!XR_IS_INT(cap_value)) {
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Array capacity must be an integer");
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_ARRAY_CAPACITY_EXPECTS_MSG);
     }
     int32_t cap = (int32_t) XR_TO_INT(cap_value);
     if (cap < 0)

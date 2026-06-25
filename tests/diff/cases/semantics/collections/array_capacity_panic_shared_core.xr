@@ -1,0 +1,20 @@
+// anchor: array-capacity-panic-shared-core
+let dyn: Json = {
+    "bad": true
+}
+
+try {
+    let xs = new Array<int>(dyn.bad, 1)
+    print(xs.length)
+} catch panic (p) {
+    print(p.message)
+    print(p.code)
+}
+
+try {
+    let ys = Array.withCapacity(dyn.bad)
+    print(ys.length)
+} catch panic (p) {
+    print(p.message)
+    print(p.code)
+}

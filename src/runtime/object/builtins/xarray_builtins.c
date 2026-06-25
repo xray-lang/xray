@@ -20,6 +20,7 @@
 #include "xset.h"
 #include "xmap.h"
 #include "xvalue.h"
+#include "../../../shared/xr_error_core.h"
 #include <stdio.h>
 
 // Array() - empty array
@@ -35,7 +36,7 @@ XrValue xr_builtin_array_construct(XrVMRuntime *isolate, XrValue self, XrValue *
     } else if (nargs == 1) {
         // Array(n) - length n, filled with null
         if (!XR_IS_INT(args[0])) {
-            xr_runtime_error(isolate, "Array(n): n must be integer\n");
+            xr_runtime_error(isolate, "%s\n", XR_ERROR_CORE_ARRAY_CAPACITY_EXPECTS_MSG);
             return xr_null();
         }
 
@@ -56,7 +57,7 @@ XrValue xr_builtin_array_construct(XrVMRuntime *isolate, XrValue self, XrValue *
     } else if (nargs == 2) {
         // Array(n, value) - length n, filled with value
         if (!XR_IS_INT(args[0])) {
-            xr_runtime_error(isolate, "Array(n, value): n must be integer\n");
+            xr_runtime_error(isolate, "%s\n", XR_ERROR_CORE_ARRAY_CAPACITY_EXPECTS_MSG);
             return xr_null();
         }
 
@@ -195,7 +196,7 @@ XrValue xr_builtin_array_with_capacity(XrVMRuntime *isolate, XrValue self, XrVal
     }
 
     if (!XR_IS_INT(args[0])) {
-        xr_runtime_error(isolate, "Array.withCapacity(n): n must be integer\n");
+        xr_runtime_error(isolate, "%s\n", XR_ERROR_CORE_ARRAY_CAPACITY_EXPECTS_MSG);
         return xr_null();
     }
 

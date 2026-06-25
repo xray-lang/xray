@@ -61,6 +61,7 @@ TEST(error_core_defines_bytes_messages) {
 }
 
 TEST(error_core_defines_array_messages) {
+    ASSERT_STR_EQ(XR_ERROR_CORE_ARRAY_CAPACITY_EXPECTS_MSG, "Array capacity must be an integer");
     ASSERT_STR_EQ(XR_ERROR_CORE_ARRAY_RESERVE_EXPECTS_MSG,
                   "Array.reserve(capacity) expects an integer");
     ASSERT_STR_EQ(XR_ERROR_CORE_ARRAY_RESERVE_FAILED_MSG, "Array.reserve failed");
