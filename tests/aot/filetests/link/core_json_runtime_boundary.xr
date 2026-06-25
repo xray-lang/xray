@@ -1,0 +1,10 @@
+let obj: Json = {
+    "name": "xray",
+    "count": 3,
+    "ok": true,
+}
+
+print(obj.name)
+print(obj.count)
+print(obj.ok)
+print(typeof(obj))
