@@ -94,13 +94,14 @@ vmcase(OP_BYTES_NEW) {
             src_arr = XR_TO_ARRAY(arg);
             len = src_arr->length;
         } else {
-            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Bytes(n): n must be integer or array");
+            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTES_CONSTRUCTOR_EXPECTS_MSG);
         }
     } else if (nargs == 2) {
         XrValue arg1 = R(a + 1);
         XrValue arg2 = R(a + 2);
         if (!XR_IS_INT(arg1) || !XR_IS_INT(arg2)) {
-            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Bytes(n, value): both args must be integers");
+            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
+                             XR_ERROR_CORE_BYTES_CONSTRUCTOR_FILL_EXPECTS_MSG);
         }
         len = xr_array_core_nonnegative_length(XR_TO_INT(arg1));
         fill_value = arg2;

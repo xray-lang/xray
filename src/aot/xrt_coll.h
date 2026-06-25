@@ -225,13 +225,14 @@ static inline int64_t xrt_array_required_int_arg_or_panic(XrValue value, const c
     int64_t out = 0;
     bool has_int = XR_IS_INT(value);
     if (!xr_array_core_required_int_arg(has_int, has_int ? XR_TO_INT(value) : 0, &out))
-        xrt_throw_exc(xr_box_str(message));
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH, message);
     return out;
 }
 
 static inline XrValue xrt_bytes_new_fill(XrValue len_value, XrValue fill_value) {
-    int64_t len = xr_array_core_nonnegative_length(
-        xrt_array_required_int_arg_or_panic(len_value, "Bytes(n, value): n must be integer"));
+    if (!XR_IS_INT(len_value) || !XR_IS_INT(fill_value))
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTES_CONSTRUCTOR_FILL_EXPECTS_MSG);
+    int64_t len = xr_array_core_nonnegative_length(XR_TO_INT(len_value));
     XrValue arr = xrt_bytes_new_len(len);
     xrt_array_t *a = (xrt_array_t *) arr.ptr;
     if (!xr_array_core_bytes_fill_value(a->data, a->length, fill_value))
@@ -255,7 +256,7 @@ static inline XrValue xrt_bytes_new_1(XrValue arg) {
     if (XR_IS_ARRAY(arg))
         return xrt_bytes_new_copy(arg);
     return xrt_bytes_new_len(
-        xrt_array_required_int_arg_or_panic(arg, "Bytes(n): n must be integer or array"));
+        xrt_array_required_int_arg_or_panic(arg, XR_ERROR_CORE_BYTES_CONSTRUCTOR_EXPECTS_MSG));
 }
 
 static inline void xrt_array_push(XrValue arr, XrValue val) {
@@ -347,8 +348,10 @@ static inline XrValue xrt_slice_string_from_core(XrStringCoreSlice slice) {
 }
 
 static inline XrValue xrt_slice(XrValue source, XrValue start_value, XrValue end_value) {
-    int64_t start = xrt_array_required_int_arg_or_panic(start_value, "slice start must be integer");
-    int64_t end = xrt_array_required_int_arg_or_panic(end_value, "slice end must be integer");
+    if (!XR_IS_INT(start_value) || !XR_IS_INT(end_value))
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_SLICE_BOUNDS_EXPECTS_MSG);
+    int64_t start = XR_TO_INT(start_value);
+    int64_t end = XR_TO_INT(end_value);
     if (XR_IS_ARRAY(source))
         return xrt_array_slice_view(source, start, end);
     if (XR_IS_STR(source)) {

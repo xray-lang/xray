@@ -62,9 +62,39 @@ fn show_bytes_copy_within_oob() {
     }
 }
 
+fn show_bytes_ctor_type_error() {
+    try {
+        let bytes1 = new Bytes("bad")
+        print(bytes1.length)
+    } catch panic (p) {
+        print(p.message)
+        print(p.code)
+    }
+
+    try {
+        let bytes2 = new Bytes(2, "bad")
+        print(bytes2.length)
+    } catch panic (p) {
+        print(p.message)
+        print(p.code)
+    }
+}
+
+fn show_slice_bounds_type_error() {
+    let xs = [1, 2, 3]
+    try {
+        print(xs["a":"b"].length)
+    } catch panic (p) {
+        print(p.message)
+        print(p.code)
+    }
+}
+
 show_index_read(-1)
 show_index_write(5)
 show_div_zero()
 show_mod_zero()
 show_bytes_load_oob()
 show_bytes_copy_within_oob()
+show_bytes_ctor_type_error()
+show_slice_bounds_type_error()

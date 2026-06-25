@@ -28,6 +28,11 @@ TEST(error_core_defines_arithmetic_messages) {
 }
 
 TEST(error_core_defines_bytes_messages) {
+    ASSERT_STR_EQ(XR_ERROR_CORE_BYTES_CONSTRUCTOR_EXPECTS_MSG,
+                  "Bytes(n): n must be integer or array");
+    ASSERT_STR_EQ(XR_ERROR_CORE_BYTES_CONSTRUCTOR_FILL_EXPECTS_MSG,
+                  "Bytes(n, value): both args must be integers");
+    ASSERT_STR_EQ(XR_ERROR_CORE_SLICE_BOUNDS_EXPECTS_MSG, "slice bounds must be integers");
     ASSERT_STR_EQ(XR_ERROR_CORE_BYTES_LOAD_U32_EXPECTS_MSG,
                   "Bytes.loadU32LE(offset) expects Bytes and integer");
     ASSERT_STR_EQ(XR_ERROR_CORE_BYTES_LOAD_U32_RECEIVER_MSG,
