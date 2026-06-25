@@ -46,6 +46,9 @@ static inline int xrt_weak_value_is_heap_object(XrValue v) {
         case XR_TAG_TUPLE:
         case XR_TAG_SET:
         case XR_TAG_STRUCT_REF:
+        case XR_TAG_RANGE:
+        case XR_TAG_ENUM:
+        case XR_TAG_ITERATOR:
         case XR_TAG_REGEX:
         case XR_TAG_DATETIME:
             return 1;
