@@ -10,6 +10,7 @@
 
 #include "xrange.h"
 #include "xarray.h"
+#include "xexception.h"
 #include "../mem/xheap.h"
 #include "../class/xclass.h"
 #include "../class/xclass_builder.h"
@@ -18,6 +19,8 @@
 #include "../xisolate_api.h"
 #include "../../base/xchecks.h"
 #include "../../coro/xcoroutine.h"
+#include "../../shared/xr_error_core.h"
+#include "../../vm/xvm.h"
 
 /* ========== Internal helpers ========== */
 
@@ -74,20 +77,26 @@ XrValue xr_range_new_with_step(XrVMRuntime *X, int64_t start, int64_t end, int64
 
 /* ========== Conversion ========== */
 
-XrValue xr_range_to_array(struct XrCoroutine *coro, XrRange *r) {
-    XR_DCHECK(coro != NULL, "xr_range_to_array: coro must not be NULL");
+XrValue xr_range_to_array(XrVMRuntime *iso, XrRange *r) {
+    XR_DCHECK(iso != NULL, "xr_range_to_array: iso must not be NULL");
     if (!r)
         return xr_null();
 
     XrRangeCore core = xr_range_core_from_body(r);
     XrRangeCoreMaterializePlan plan = xr_range_core_materialize_plan(core);
     if (plan.kind == XR_RANGE_CORE_MATERIALIZE_EMPTY) {
-        XrArray *arr = xr_array_with_capacity(coro, 0);
+        XrArray *arr = xr_array_with_capacity(xr_current_coro(iso), 0);
         return xr_value_from_array(arr);
     }
 
-    XR_CHECK(plan.kind != XR_RANGE_CORE_MATERIALIZE_TOO_LARGE, "range_to_array: range too large");
+    if (plan.kind == XR_RANGE_CORE_MATERIALIZE_TOO_LARGE) {
+        XrValue exc =
+            xr_exception_new(iso, XR_ERR_OUT_OF_MEMORY, XR_ERROR_CORE_RANGE_TO_ARRAY_TOO_LARGE_MSG);
+        xr_vm_throw_exception(iso, exc);
+        return xr_null();
+    }
 
+    XrCoroutine *coro = xr_current_coro(iso);
     XrArray *arr = xr_array_with_capacity(coro, (int32_t) plan.length);
     if (!arr)
         return xr_null();
@@ -129,7 +138,7 @@ static XrValue m_range_to_array(XrVMRuntime *iso, XrValue self, XrValue *args, i
     XrRange *rng = xr_value_get_range_body(iso, self);
     if (!rng)
         return xr_null();
-    return xr_range_to_array(xr_current_coro(iso), rng);
+    return xr_range_to_array(iso, rng);
 }
 
 static XrValue m_range_contains(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {

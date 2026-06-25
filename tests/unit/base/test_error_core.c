@@ -78,6 +78,10 @@ TEST(error_core_defines_array_messages) {
     ASSERT_STR_EQ(XR_ERROR_CORE_ARRAY_RESIZE_FAILED_MSG, "Array.resize failed");
 }
 
+TEST(error_core_defines_range_messages) {
+    ASSERT_STR_EQ(XR_ERROR_CORE_RANGE_TO_ARRAY_TOO_LARGE_MSG, "Range.toArray range too large");
+}
+
 TEST(error_core_parses_prefixed_message) {
     const char *text = "E0430: array index out of range: 5 (length 3)";
     const char *expected = "array index out of range: 5 (length 3)";
@@ -107,6 +111,7 @@ RUN_TEST(error_core_formats_type_mismatch);
 RUN_TEST(error_core_defines_arithmetic_messages);
 RUN_TEST(error_core_defines_bytes_messages);
 RUN_TEST(error_core_defines_array_messages);
+RUN_TEST(error_core_defines_range_messages);
 RUN_TEST(error_core_parses_prefixed_message);
 RUN_TEST(error_core_leaves_unprefixed_message_intact);
 
