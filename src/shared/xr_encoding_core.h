@@ -206,6 +206,12 @@ static inline size_t xr_encoding_core_utf8_count(const char *str, size_t len) {
     return count;
 }
 
+static inline size_t xr_encoding_core_utf8_byte_length(const char *str, size_t len) {
+    if (!str && len != 0)
+        return 0;
+    return len;
+}
+
 static inline int xr_encoding_core_utf8_encode_size(uint32_t cp) {
     if (cp <= 0x7F)
         return 1;

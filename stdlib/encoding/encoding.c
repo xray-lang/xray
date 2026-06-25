@@ -225,7 +225,7 @@ static XrValue encoding_utf8_byte_length(XrVMRuntime *X, XrValue *args, int narg
     if (!str)
         return xr_int(0);
 
-    return xr_int((int64_t) len);
+    return xr_int((int64_t) xr_encoding_core_utf8_byte_length(str, len));
 }
 
 static XrUtf16Endian parse_endian_arg(XrValue *args, int nargs) {
