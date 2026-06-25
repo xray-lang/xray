@@ -119,23 +119,7 @@ static XrValue xrt_to_string(XrValue val) {
 }
 
 static XrValue xrt_to_bool(XrValue val) {
-    if (XR_IS_BOOL(val))
-        return val;
-    if (XR_IS_NULL(val))
-        return XR_FALSE_VAL;
-    if (XR_IS_INT(val))
-        return XR_FROM_BOOL(XR_TO_INT(val) != 0);
-    if (XR_IS_FLOAT(val))
-        return XR_FROM_BOOL(XR_TO_FLOAT(val) != 0.0);
-    if (XR_IS_STR(val))
-        return XR_FROM_BOOL((xr_str_data(val))[0] != '\0');
-    if (XR_IS_ARRAY(val))
-        return XR_FROM_BOOL(((xrt_array_t *) val.ptr)->length > 0);
-    if (XR_IS_MAP(val))
-        return XR_FROM_BOOL(xrt_map_len((xrt_map_t *) val.ptr) > 0);
-    if (XR_IS_SET(val))
-        return XR_FROM_BOOL(((xrt_set_t *) val.ptr)->len > 0);
-    return XR_TRUE_VAL;
+    return XR_FROM_BOOL(xr_truthy(val));
 }
 
 typedef struct XrtArrayJoinCtx {
