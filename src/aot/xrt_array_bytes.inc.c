@@ -24,8 +24,8 @@ static inline bool xrt_array_reserve_raw(xrt_array_t *a, int64_t cap) {
 }
 
 static inline XrValue xrt_array_with_capacity_value(XrValue cap_value, uint8_t etype) {
-    int64_t cap = xrt_array_required_int_arg_or_panic(
-        cap_value, "Array.withCapacity(cap): cap must be integer");
+    int64_t cap =
+        xrt_array_required_int_arg_or_panic(cap_value, XR_ERROR_CORE_ARRAY_CAPACITY_EXPECTS_MSG);
     return xrt_array_new_typed_exact(cap, etype);
 }
 
@@ -80,8 +80,8 @@ static inline XrValue xrt_array_reserve_value(XrValue arr_value, XrValue cap_val
 
 static inline XrValue xrt_array_new_filled_value(XrValue len_value, XrValue fill_value,
                                                  uint8_t etype) {
-    int64_t len = xrt_array_required_int_arg_or_panic(
-        len_value, "Array(length, fill): length must be integer");
+    int64_t len =
+        xrt_array_required_int_arg_or_panic(len_value, XR_ERROR_CORE_ARRAY_CAPACITY_EXPECTS_MSG);
     if (len < 0)
         len = 0;
     XrValue arr = xrt_array_new_typed_exact(len, etype);
