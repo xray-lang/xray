@@ -1,0 +1,9 @@
+fn run() {
+    let msg = "cleanup"
+    defer {
+        print(msg)
+    }
+    print("body")
+}
+
+run()
