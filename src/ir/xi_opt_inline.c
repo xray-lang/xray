@@ -23,7 +23,8 @@
  * LIMITATIONS:
  *   - Single-level inlining per pass invocation (no recursive inlining).
  *   - No inlining of calls with variadic args.
- *   - Callee must not capture upvalues that alias caller locals.
+ *   - Callee must not capture upvalues.  Upvalue-aware inlining needs a
+ *     capture remap for LOAD_UPVAL / STORE_UPVAL before it is safe.
  */
 
 #include "xi_opt_inline.h"
@@ -268,6 +269,7 @@ static bool inline_call_site(XiFunc *caller, XiBlock *call_blk, uint32_t call_id
             continue;
         bool replaced = xi_cfg_replace_pred(succ, call_blk, cont_blk);
         XR_DCHECK(replaced, "inline: successor missing call block predecessor");
+        (void) replaced;
     }
 
     /* Move post-call values to continuation block. */
@@ -536,6 +538,8 @@ XR_FUNC XiPassChange xi_opt_inline(XiFunc *f) {
                 continue; /* FFI: extern call must survive to a direct C call */
             if (callee->nblocks == 0)
                 continue;
+            if (callee->ncaptures > 0)
+                continue; /* LOAD_UPVAL/STORE_UPVAL need closure-env remapping before inlining. */
 
             XiInlineCostModel cm = analyze_callee(callee);
             if (cm.value_count > XI_INLINE_MAX_COST)
