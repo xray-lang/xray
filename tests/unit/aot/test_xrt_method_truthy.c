@@ -75,6 +75,18 @@ static inline void xrt_dispatch_destructor(uint16_t type_id, void *obj) {
         g_passed++;                                                                                \
     } while (0)
 
+#define ASSERT_WEAK_ACCEPTS(value, expected, msg)                                                  \
+    do {                                                                                           \
+        int _actual = xrt_weak_value_is_heap_object(value);                                        \
+        if ((_actual != 0) != (expected)) {                                                        \
+            fprintf(stderr, "FAIL: %s (got %d, expected %s)\n", msg, _actual,                      \
+                    (expected) ? "accepted" : "rejected");                                         \
+            g_failed++;                                                                            \
+            return;                                                                                \
+        }                                                                                          \
+        g_passed++;                                                                                \
+    } while (0)
+
 static XrValue test_string_with_bytes(const char *bytes, size_t len) {
     XrValue s = xrt_str_alloc(len);
     if (len != 0)
@@ -120,9 +132,26 @@ static void test_xrt_to_bool_reuses_truthy_core_for_sized_containers(void) {
     ASSERT_BOOL(xrt_to_bool(set), true, "nonempty set is truthy");
 }
 
+static void test_xrt_weak_predicate_accepts_aot_object_tags(void) {
+    char dummy = 0;
+    XrAotEnumValueView enum_view = {0};
+
+    ASSERT_WEAK_ACCEPTS(XR_NULL_VAL, false, "null is not a weak key object");
+    ASSERT_WEAK_ACCEPTS(XR_FROM_INT(1), false, "int is not a weak key object");
+    ASSERT_WEAK_ACCEPTS(XR_TRUE_VAL, false, "bool is not a weak key object");
+    ASSERT_WEAK_ACCEPTS(xrt_range_from_i64(1, 4), true, "Range is an object-like weak key");
+    ASSERT_WEAK_ACCEPTS(xr_mkptr(&enum_view, XR_TAG_ENUM), true,
+                        "Enum value view is an object-like weak key");
+    ASSERT_WEAK_ACCEPTS(xr_mkptr(&dummy, XR_TAG_ITERATOR), true,
+                        "Iterator is an object-like weak key");
+    ASSERT_WEAK_ACCEPTS(xr_struct_ref(&dummy, 1), true,
+                        "native struct reference is an object-like weak key");
+}
+
 int main(void) {
     test_xrt_to_bool_reuses_truthy_core_for_scalars_and_strings();
     test_xrt_to_bool_reuses_truthy_core_for_sized_containers();
+    test_xrt_weak_predicate_accepts_aot_object_tags();
 
     if (g_failed == 0) {
         printf("test_xrt_method_truthy: %d passed, %d failed\n", g_passed, g_failed);
