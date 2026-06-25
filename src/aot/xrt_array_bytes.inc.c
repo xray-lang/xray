@@ -146,16 +146,16 @@ static inline xrt_array_t *xrt_bytes_repeat_from_raw(xrt_array_t *a, int64_t dst
 static inline XrValue xrt_bytes_load_u32_le(XrValue arr_value, XrValue offset_value) {
     if (!XR_IS_ARRAY(arr_value) || !arr_value.ptr)
         xrt_throw_error(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTES_LOAD_U32_RECEIVER_MSG);
-    int64_t off = xrt_array_required_int_arg_or_panic(
-        offset_value, "Bytes.loadU32LE(offset): offset must be integer");
+    int64_t off =
+        xrt_array_required_int_arg_or_panic(offset_value, XR_ERROR_CORE_BYTES_LOAD_U32_EXPECTS_MSG);
     return XR_FROM_INT((int64_t) xrt_bytes_load_u32_le_raw((xrt_array_t *) arr_value.ptr, off));
 }
 
 static inline XrValue xrt_bytes_load_u64_le(XrValue arr_value, XrValue offset_value) {
     if (!XR_IS_ARRAY(arr_value) || !arr_value.ptr)
         xrt_throw_error(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTES_LOAD_U64_RECEIVER_MSG);
-    int64_t off = xrt_array_required_int_arg_or_panic(
-        offset_value, "Bytes.loadU64LE(offset): offset must be integer");
+    int64_t off =
+        xrt_array_required_int_arg_or_panic(offset_value, XR_ERROR_CORE_BYTES_LOAD_U64_EXPECTS_MSG);
     return XR_FROM_INT((int64_t) xrt_bytes_load_u64_le_raw((xrt_array_t *) arr_value.ptr, off));
 }
 
@@ -163,12 +163,12 @@ static inline XrValue xrt_bytes_copy_within_value(XrValue arr_value, XrValue dst
                                                   XrValue src_value, XrValue count_value) {
     if (!XR_IS_ARRAY(arr_value) || !arr_value.ptr)
         return arr_value;
-    int64_t dst = xrt_array_required_int_arg_or_panic(
-        dst_value, "Bytes.copyWithin(dst, src, count): dst must be integer");
-    int64_t src = xrt_array_required_int_arg_or_panic(
-        src_value, "Bytes.copyWithin(dst, src, count): src must be integer");
+    int64_t dst =
+        xrt_array_required_int_arg_or_panic(dst_value, XR_ERROR_CORE_BYTES_COPY_WITHIN_EXPECTS_MSG);
+    int64_t src =
+        xrt_array_required_int_arg_or_panic(src_value, XR_ERROR_CORE_BYTES_COPY_WITHIN_EXPECTS_MSG);
     int64_t count = xrt_array_required_int_arg_or_panic(
-        count_value, "Bytes.copyWithin(dst, src, count): count must be integer");
+        count_value, XR_ERROR_CORE_BYTES_COPY_WITHIN_EXPECTS_MSG);
     xrt_bytes_copy_within_raw((xrt_array_t *) arr_value.ptr, dst, src, count);
     return arr_value;
 }
@@ -179,13 +179,11 @@ static inline XrValue xrt_bytes_copy_from_value(XrValue dst_value, XrValue src_v
     if (!XR_IS_ARRAY(dst_value) || !XR_IS_ARRAY(src_value) || !dst_value.ptr || !src_value.ptr)
         return dst_value;
     int64_t src_offset = xrt_array_required_int_arg_or_panic(
-        src_offset_value,
-        "Bytes.copyFrom(src, srcOffset, dstOffset, count): srcOffset must be integer");
+        src_offset_value, XR_ERROR_CORE_BYTES_COPY_FROM_EXPECTS_MSG);
     int64_t dst_offset = xrt_array_required_int_arg_or_panic(
-        dst_offset_value,
-        "Bytes.copyFrom(src, srcOffset, dstOffset, count): dstOffset must be integer");
-    int64_t count = xrt_array_required_int_arg_or_panic(
-        count_value, "Bytes.copyFrom(src, srcOffset, dstOffset, count): count must be integer");
+        dst_offset_value, XR_ERROR_CORE_BYTES_COPY_FROM_EXPECTS_MSG);
+    int64_t count =
+        xrt_array_required_int_arg_or_panic(count_value, XR_ERROR_CORE_BYTES_COPY_FROM_EXPECTS_MSG);
     xrt_bytes_copy_from_raw((xrt_array_t *) dst_value.ptr, (xrt_array_t *) src_value.ptr,
                             src_offset, dst_offset, count);
     return dst_value;
@@ -195,12 +193,12 @@ static inline XrValue xrt_bytes_repeat_from_value(XrValue arr_value, XrValue dst
                                                   XrValue distance_value, XrValue count_value) {
     if (!XR_IS_ARRAY(arr_value) || !arr_value.ptr)
         return arr_value;
-    int64_t dst = xrt_array_required_int_arg_or_panic(
-        dst_value, "Bytes.repeatFrom(dst, distance, count): dst must be integer");
+    int64_t dst =
+        xrt_array_required_int_arg_or_panic(dst_value, XR_ERROR_CORE_BYTES_REPEAT_FROM_EXPECTS_MSG);
     int64_t distance = xrt_array_required_int_arg_or_panic(
-        distance_value, "Bytes.repeatFrom(dst, distance, count): distance must be integer");
+        distance_value, XR_ERROR_CORE_BYTES_REPEAT_FROM_EXPECTS_MSG);
     int64_t count = xrt_array_required_int_arg_or_panic(
-        count_value, "Bytes.repeatFrom(dst, distance, count): count must be integer");
+        count_value, XR_ERROR_CORE_BYTES_REPEAT_FROM_EXPECTS_MSG);
     xrt_bytes_repeat_from_raw((xrt_array_t *) arr_value.ptr, dst, distance, count);
     return arr_value;
 }

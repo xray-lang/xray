@@ -1,9 +1,64 @@
 // anchor: bytes-int-arg-shared-core
 let dyn: Json = {
-    "badOffset": true
+    "badOffset": true,
+    "badDst": false,
+    "badSrc": "src",
+    "badCount": null
 }
 
 let bytes = new Bytes(8, 1)
-print("before")
-print(bytes.loadU32LE(dyn.badOffset))
-print("unreachable")
+let src = new Bytes(8, 2)
+
+fn show_load_u32() {
+    try {
+        print(bytes.loadU32LE(dyn.badOffset))
+    } catch panic (p) {
+        print(p.message)
+        print(p.code)
+    }
+}
+
+fn show_load_u64() {
+    try {
+        print(bytes.loadU64LE(dyn.badOffset))
+    } catch panic (p) {
+        print(p.message)
+        print(p.code)
+    }
+}
+
+fn show_copy_within() {
+    try {
+        bytes.copyWithin(dyn.badDst, 0, 1)
+        print(bytes[0])
+    } catch panic (p) {
+        print(p.message)
+        print(p.code)
+    }
+}
+
+fn show_copy_from() {
+    try {
+        bytes.copyFrom(src, dyn.badOffset, 0, 1)
+        print(bytes[0])
+    } catch panic (p) {
+        print(p.message)
+        print(p.code)
+    }
+}
+
+fn show_repeat_from() {
+    try {
+        bytes.repeatFrom(2, 1, dyn.badCount)
+        print(bytes[0])
+    } catch panic (p) {
+        print(p.message)
+        print(p.code)
+    }
+}
+
+show_load_u32()
+show_load_u64()
+show_copy_within()
+show_copy_from()
+show_repeat_from()
