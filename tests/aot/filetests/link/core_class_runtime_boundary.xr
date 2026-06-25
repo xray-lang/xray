@@ -1,0 +1,31 @@
+class Counter {
+    value: int
+
+    constructor(init: int) {
+        this.value = init
+    }
+
+    bump(n: int) -> int {
+        this.value = this.value + n
+        return this.value
+    }
+
+    get() -> int {
+        return this.value
+    }
+}
+
+fn make(n: int) -> Counter {
+    return Counter(n)
+}
+
+fn touch(c: Counter) -> int {
+    c.value = c.value + 1
+    return c.get()
+}
+
+let c = make(2)
+print(c.bump(5))
+print(c.value)
+print(touch(c))
+print(c.get())
