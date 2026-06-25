@@ -3008,6 +3008,25 @@ static void xicgen_bytes_ptr_arg(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
     emit_typed_array_ptr_expr(ctx, out, f, v->args[arg_index], prefix);
 }
 
+static const char *xicgen_bytes_int_error_macro(const XiValue *v) {
+    if (!v)
+        return "XR_ERROR_CORE_BYTES_LOAD_U32_EXPECTS_MSG";
+    switch (v->op) {
+        case XI_BYTES_LOAD_U32_LE:
+            return "XR_ERROR_CORE_BYTES_LOAD_U32_EXPECTS_MSG";
+        case XI_BYTES_LOAD_U64_LE:
+            return "XR_ERROR_CORE_BYTES_LOAD_U64_EXPECTS_MSG";
+        case XI_BYTES_COPY_WITHIN:
+            return "XR_ERROR_CORE_BYTES_COPY_WITHIN_EXPECTS_MSG";
+        case XI_BYTES_COPY_FROM:
+            return "XR_ERROR_CORE_BYTES_COPY_FROM_EXPECTS_MSG";
+        case XI_BYTES_REPEAT_FROM:
+            return "XR_ERROR_CORE_BYTES_REPEAT_FROM_EXPECTS_MSG";
+        default:
+            return "XR_ERROR_CORE_BYTES_LOAD_U32_EXPECTS_MSG";
+    }
+}
+
 static void xicgen_bytes_i64_arg(FILE *out, const XiValue *v, uint16_t arg_index) {
     XR_DCHECK(v != NULL && arg_index < v->nargs, "xicgen bytes i64 arg out of range");
     const XiValue *arg = v->args[arg_index];
@@ -3017,7 +3036,7 @@ static void xicgen_bytes_i64_arg(FILE *out, const XiValue *v, uint16_t arg_index
     }
     fprintf(out, "xrt_array_required_int_arg_or_panic(");
     emit_value_as_rep(out, arg, XR_REP_TAGGED);
-    fprintf(out, ", \"Bytes argument must be integer\")");
+    fprintf(out, ", %s)", xicgen_bytes_int_error_macro(v));
 }
 
 static void xicgen_bytes_box_array_result(FILE *out, bool boxed) {
