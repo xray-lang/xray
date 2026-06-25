@@ -42,21 +42,12 @@
 #include <stdint.h>
 
 #include "../base/xdefs.h"
+#include "../shared/xr_path_core.h"
 
-// Cross-platform maximum path length. On POSIX PATH_MAX is 4096
-// (Linux) or 1024 (macOS); on Windows MAX_PATH is 260 but extended
-// paths can reach 32767. We pick 4096 as a pragmatic compromise.
+// Cross-platform maximum path length. Shared with freestanding AOT helpers so
+// VM and AOT stack path buffers follow one platform policy.
 #ifndef XR_PATH_MAX
-#ifdef _WIN32
-#define XR_PATH_MAX 4096
-#else
-#include <limits.h>
-#ifdef PATH_MAX
-#define XR_PATH_MAX PATH_MAX
-#else
-#define XR_PATH_MAX 4096
-#endif
-#endif
+#define XR_PATH_MAX XR_PATH_CORE_MAX_PATH
 #endif
 
 #ifdef __cplusplus

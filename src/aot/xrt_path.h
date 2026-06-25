@@ -19,19 +19,8 @@
 #include <direct.h>
 #define xrt_path_getcwd _getcwd
 #else
-#include <limits.h>
 #include <unistd.h>
 #define xrt_path_getcwd getcwd
-#endif
-
-#ifndef XRT_PATH_MAX
-#if defined(XR_OS_WINDOWS)
-#define XRT_PATH_MAX 4096
-#elif defined(PATH_MAX)
-#define XRT_PATH_MAX PATH_MAX
-#else
-#define XRT_PATH_MAX 4096
-#endif
 #endif
 
 static inline void *xrt_path_core_alloc(void *ctx, size_t size) {
@@ -112,7 +101,7 @@ static inline XrValue xrt_path_resolve(int64_t count_i, const char **parts, cons
         all_lens = (size_t *) (all_parts + total);
     }
 
-    char cwd[XRT_PATH_MAX];
+    char cwd[XR_PATH_CORE_MAX_PATH];
     size_t cwd_len = 0;
     if (xr_path_core_resolve_needs_cwd(parts, lens, count)) {
         if (!xrt_path_getcwd(cwd, sizeof(cwd)))

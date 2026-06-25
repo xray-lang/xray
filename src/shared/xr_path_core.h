@@ -12,11 +12,22 @@
 #define XR_PATH_CORE_H
 
 #include <stdbool.h>
+#include <limits.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
 
 #include "../base/xplatform.h"
+
+#ifndef XR_PATH_CORE_MAX_PATH
+#if defined(XR_OS_WINDOWS)
+#define XR_PATH_CORE_MAX_PATH 4096
+#elif defined(PATH_MAX)
+#define XR_PATH_CORE_MAX_PATH PATH_MAX
+#else
+#define XR_PATH_CORE_MAX_PATH 4096
+#endif
+#endif
 
 static inline bool xr_path_core_is_sep(char c) {
 #ifdef XR_OS_WINDOWS
