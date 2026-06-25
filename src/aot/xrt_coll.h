@@ -47,8 +47,6 @@ typedef struct {
     XrObjHeader hdr; /* embedded-at-0 header: same placement as the VM XrArray so
                       * the two layouts line up (C0 object-header unification) */
     XR_ARRAY_ABI_FIELDS;
-    const char *adt_enum_name;
-    const char *adt_member_name;
 } xrt_array_t;
 
 static inline size_t xrt_array_data_bytes_or_abort(int64_t cap, uint8_t elem_size,

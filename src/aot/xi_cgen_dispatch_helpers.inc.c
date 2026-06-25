@@ -1722,7 +1722,7 @@ static bool xicgen_emit_enum_method(XiCgenCtx *ctx, FILE *out, const XiValue *v,
         return false;
     if (recv_enum->is_adt && recv_enum->members &&
         recv_enum->members[enum_member].payload_count > 0) {
-        emit_adt_enum_construct_expr(out, enum_member, v);
+        emit_adt_enum_construct_expr(out, recv_enum, enum_member, v);
     } else {
         fprintf(out, "xrt_map_get_owned((xrt_map_t*)");
         emit_vref(out, v->args[0]);

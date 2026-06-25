@@ -1,0 +1,20 @@
+enum TaskResultErr { Msg(string) }
+
+fn fail_with_enum() -> int {
+    throw TaskResultErr.Msg("task-error")
+    return 0
+}
+
+let task = go fail_with_enum()
+let result = task.awaitResult()
+
+match (result) {
+    TaskResult.Failed(err) -> {
+        print(typeof(err))
+        match (err) {
+            TaskResultErr.Msg(message) -> print(message)
+            _ -> print("unexpected payload")
+        }
+    }
+    _ -> print("unexpected status")
+}

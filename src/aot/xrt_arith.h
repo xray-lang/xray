@@ -324,8 +324,12 @@ static inline int64_t xrt_typeof_id(XrValue v) {
         case XR_TAG_STR:
         case XR_TAG_STR_ARC:
             return 12; /* XR_TID_STRING */
-        case XR_TAG_ARRAY:
-            return 14; /* XR_TID_ARRAY */
+        case XR_TAG_ARRAY: {
+            const xrt_array_t *arr = (const xrt_array_t *) v.ptr;
+            if (arr && arr->adt_enum_name)
+                return 25; /* XR_TID_ENUM_VALUE */
+            return 14;     /* XR_TID_ARRAY */
+        }
         case XR_TAG_SET:
             return 15; /* XR_TID_SET */
         case XR_TAG_MAP:
@@ -342,6 +346,8 @@ static inline int64_t xrt_typeof_id(XrValue v) {
             return 20; /* XR_TID_STRINGBUILDER */
         case XR_TAG_RANGE:
             return 31; /* XR_TID_RANGE */
+        case XR_TAG_ENUM:
+            return 25; /* XR_TID_ENUM_VALUE */
         default:
             return 17; /* XR_TID_INSTANCE */
     }
@@ -379,8 +385,12 @@ static inline XrValue xrt_typeof_str(XrValue v) {
         case XR_TAG_STR:
         case XR_TAG_STR_ARC:
             return xr_str_lit(&xs_string);
-        case XR_TAG_ARRAY:
+        case XR_TAG_ARRAY: {
+            const xrt_array_t *arr = (const xrt_array_t *) v.ptr;
+            if (arr && arr->adt_enum_name)
+                return xr_box_str(arr->adt_enum_name);
             return xr_str_lit(&xs_array);
+        }
         case XR_TAG_SET:
             return xr_str_lit(&xs_set);
         case XR_TAG_MAP:
@@ -393,6 +403,10 @@ static inline XrValue xrt_typeof_str(XrValue v) {
             return xr_str_lit(&xs_tuple);
         case XR_TAG_RANGE:
             return xr_str_lit(&xs_range);
+        case XR_TAG_ENUM: {
+            const XrAotEnumValueView *ev = xrt_enum_value_view(v);
+            return ev && ev->enum_name ? xr_box_str(ev->enum_name) : xr_str_lit(&xs_object);
+        }
         case XR_TAG_PTR:
             if (v.ptr && v.heap_type == 0) {
                 const xrt_json_t *obj = (const xrt_json_t *) v.ptr;

@@ -147,6 +147,8 @@ match t.poll() {
 }
 ```
 
+`TaskResult.Failed(err)` 保留原始失败值：业务错误是 `throw <enum>` 产生的 enum 值，运行时故障是 `PanicInfo`。payload 类型为 `unknown`，调用方按需要用 `match` / `is` 收窄；实现不得把业务 enum 错误包装成 `PanicInfo`。
+
 **取消语义**：`cancel()` 设置取消标志；协程在下一个 safepoint（GC 检查点、Channel 操作、`await`、`Coro.yield()`）检测到标志后抛出取消异常。plain `await` 已取消的 task 会抛 `TaskCancelled`；需要状态值时使用 `awaitResult()` 或 `awaitTimeout(ms)`。
 
 **看门狗策略**：运行时监控线程（sysmon）会观察 RUNNING 协程的心跳。纯 Xray 循环在后向跳转 safepoint 推进心跳，因此会被观测为持续进展；sysmon 主要用于发现长时间 native/FFI 或无 safepoint 区域卡住。如果心跳长时间冻结，默认行为是 **warn-only**：约 100ms 后打印一次 stuck warning，但不静默取消协程。强制取消是显式 opt-in：设置环境变量 `XRAY_SYSMON_CANCEL_MS=N`（`N > 0`，单位毫秒）后，心跳冻结超过该阈值的协程会被标记取消；未设置或设为 `0` 时保持仅告警。纯 CPU 长循环仍可在循环内插入 `Coro.yield()` 改善调度公平性和取消响应性，但不再是避免默认看门狗强杀的必要条件。
@@ -591,6 +593,8 @@ match t.poll() {
     TaskResult.Timeout -> print("timeout")
 }
 ```
+
+`TaskResult.Failed(err)` preserves the original failure value: business errors are enum values produced by `throw <enum>`, and runtime faults are `PanicInfo`. The payload type is `unknown`, so callers narrow it with `match` / `is` as needed; implementations must not wrap business enum errors into `PanicInfo`.
 
 **Cancellation semantics**: `cancel()` sets the cancellation flag; the coroutine throws a cancellation exception at the next safepoint (GC checkpoint, channel operation, `await`, `Coro.yield()`). Plain `await` on a cancelled task throws `TaskCancelled`; use `awaitResult()` or `awaitTimeout(ms)` when you want a status value.
 

@@ -2,7 +2,7 @@
 
 enum TaskResult<T> {
     Success(T)
-    Failed(PanicInfo)
+    Failed(unknown)
     Cancelled
     Timeout
     Pending
