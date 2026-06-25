@@ -416,9 +416,7 @@ vmcase(OP_ARRAY_GET) {
                     break;
             }
         } else {
-            VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS,
-                             "fixed array index out of range: %d (length %u)", idx,
-                             (unsigned) ecount);
+            VM_ARRAY_INDEX_OOB(idx, ecount);
         }
         vmbreak;
     }
@@ -508,9 +506,7 @@ vmcase(OP_ARRAY_GETC) {
                     break;
             }
         } else {
-            VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS,
-                             "fixed array index out of range: %d (length %u)", c,
-                             (unsigned) ecount);
+            VM_ARRAY_INDEX_OOB(c, ecount);
         }
         vmbreak;
     }
@@ -619,9 +615,7 @@ vmcase(OP_ARRAY_SET) {
                     break;
             }
         } else {
-            VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS,
-                             "fixed array index out of range: %d (length %u)", idx,
-                             (unsigned) ecount);
+            VM_ARRAY_INDEX_OOB(idx, ecount);
         }
         vmbreak;
     }
@@ -720,9 +714,7 @@ vmcase(OP_ARRAY_SETC) {
                     break;
             }
         } else {
-            VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS,
-                             "fixed array index out of range: %d (length %u)", b,
-                             (unsigned) ecount);
+            VM_ARRAY_INDEX_OOB(b, ecount);
         }
         vmbreak;
     }
@@ -1180,9 +1172,7 @@ vmcase(OP_INDEX_GET) {
                     break;
             }
         } else {
-            VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS,
-                             "fixed array index out of range: %d (length %u)", idx,
-                             (unsigned) ecount);
+            VM_ARRAY_INDEX_OOB(idx, ecount);
         }
         vmbreak;
     }
@@ -1332,9 +1322,7 @@ vmcase(OP_INDEX_SET) {
                     break;
             }
         } else {
-            VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS,
-                             "fixed array index out of range: %d (length %u)", idx,
-                             (unsigned) ecount);
+            VM_ARRAY_INDEX_OOB(idx, ecount);
         }
         vmbreak;
     }
