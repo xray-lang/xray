@@ -450,12 +450,13 @@ static inline XrValue xrt_method_0(XrValue recv, int sym) {
         double v = recv.f;
         if (sym == XRT_SYM_TOSTRING)
             return xrt_tostring(recv, 2);
+        /* floor/ceil/round return int (matching the VM float methods), not float. */
         if (sym == XRT_SYM_FLOOR)
-            return XR_FROM_FLOAT(floor(v));
+            return XR_FROM_INT((int64_t) floor(v));
         if (sym == XRT_SYM_CEIL)
-            return XR_FROM_FLOAT(ceil(v));
+            return XR_FROM_INT((int64_t) ceil(v));
         if (sym == XRT_SYM_ROUND)
-            return XR_FROM_FLOAT(round(v));
+            return XR_FROM_INT((int64_t) round(v));
         if (sym == XRT_SYM_ABS)
             return XR_FROM_FLOAT(fabs(v));
         if (sym == XRT_SYM_SQRT)
@@ -789,10 +790,11 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
         double exp = (arg0.tag == XR_TAG_F64) ? arg0.f : (double) arg0.i;
         return XR_FROM_FLOAT(pow(recv.f, exp));
     }
-    /* toFixed(digits). */
+    /* toFixed(digits): clamp decimals to [0, XR_TOFIXED_MAX_DECIMALS] via the
+     * shared numeric core, matching the VM (negative -> 0, large -> capped). */
     if (recv.tag == XR_TAG_F64 && sym == XRT_SYM_TOFIXED && arg0.tag == XR_TAG_I64) {
         char buf[64];
-        snprintf(buf, sizeof(buf), "%.*f", (int) arg0.i, recv.f);
+        xr_numeric_core_format_fixed(buf, sizeof(buf), recv.f, arg0.i);
         return xrt_str_from_cstr(buf);
     }
     if (recv.tag == XR_TAG_I64 && arg0.tag == XR_TAG_I64) {
