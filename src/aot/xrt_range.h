@@ -18,7 +18,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-typedef struct {
+typedef struct xrt_range_s {
     int64_t start;
     int64_t end;
     int64_t step;

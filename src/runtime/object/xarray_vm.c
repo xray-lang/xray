@@ -17,6 +17,7 @@
 #include "../closure/xclosure.h"
 #include "../mem/xalloc_unified.h"
 #include "../value/xtype_names.h"
+#include "../value/xvalue_format.h"
 #include "../xisolate_api.h"
 #include "../../vm/xvm_string.h"
 #include "../xvm_call.h"
@@ -436,7 +437,12 @@ struct XrString *xr_array_join(struct XrVMRuntime *iso, XrArray *arr, struct XrS
         } else if (XR_IS_NULL(val)) {
             xr_strbuf_append_cstr(sb, "null", 4);
         } else {
-            xr_strbuf_append_cstr(sb, "[object]", 8);
+            /* Ranges, enum values and other objects format via the shared
+             * value-to-string path so VM join output matches AOT (e.g. "1..3",
+             * "Color.Red") instead of a generic "[object]" placeholder. */
+            XrString *s = xr_value_to_string(iso, val);
+            if (s != NULL)
+                xr_strbuf_append_str(sb, s);
         }
     }
 

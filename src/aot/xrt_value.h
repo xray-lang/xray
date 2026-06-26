@@ -555,6 +555,12 @@ static inline int xrt_char_utf8_encode(uint32_t cp, char *buf) {
     return 0;
 }
 
+/* Defined in xrt_range.h (L1, included after this header in xrt.h). Forward
+ * declared so the low-level stringifier can render ranges as "start..end"
+ * instead of a generic pointer placeholder, matching the VM. */
+struct xrt_range_s;
+static inline int xrt_range_format_buf(const struct xrt_range_s *r, char *buf, size_t cap);
+
 static inline const char *xr_to_cstr(XrValue v, char *buf, size_t bufsz) {
     switch (v.tag) {
         case XR_TAG_STR:
@@ -578,6 +584,12 @@ static inline const char *xr_to_cstr(XrValue v, char *buf, size_t bufsz) {
             return "null";
         case XR_TAG_ENUM:
             return xrt_enum_to_cstr(v, buf, bufsz);
+        case XR_TAG_RANGE:
+            if (v.ptr)
+                xrt_range_format_buf((const struct xrt_range_s *) v.ptr, buf, bufsz);
+            else
+                snprintf(buf, bufsz, "<Range>");
+            return buf;
         default:
             snprintf(buf, bufsz, "<object@%p>", v.ptr);
             return buf;
