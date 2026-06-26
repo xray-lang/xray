@@ -240,7 +240,9 @@ static inline XrValue xrt_bytes_new_len(int64_t len) {
 }
 
 static inline XrValue xrt_bytes_new_fill(XrValue len_value, XrValue fill_value) {
-    int64_t len = xr_value_to_int64_coerce(len_value);
+    if (!XR_IS_INT(len_value) || !XR_IS_INT(fill_value))
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTES_CONSTRUCTOR_FILL_EXPECTS_MSG);
+    int64_t len = XR_TO_INT(len_value);
     XrValue arr = xrt_bytes_new_len(len);
     xrt_array_t *a = (xrt_array_t *) arr.ptr;
     uint8_t fill = (uint8_t) (xr_value_to_int64_coerce(fill_value) & 0xFF);
@@ -269,7 +271,9 @@ static inline XrValue xrt_bytes_new_copy(XrValue src_value) {
 static inline XrValue xrt_bytes_new_1(XrValue arg) {
     if (XR_IS_ARRAY(arg))
         return xrt_bytes_new_copy(arg);
-    return xrt_bytes_new_len(xr_value_to_int64_coerce(arg));
+    if (!XR_IS_INT(arg))
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTES_CONSTRUCTOR_EXPECTS_MSG);
+    return xrt_bytes_new_len(XR_TO_INT(arg));
 }
 
 static inline void xrt_array_push(XrValue arr, XrValue val) {

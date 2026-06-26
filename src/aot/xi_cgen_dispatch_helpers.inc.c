@@ -3197,19 +3197,26 @@ static void xicgen_bytes_load_u64_le(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
 
 static void xicgen_bytes_copy_within(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                      const char *prefix) {
+    (void) ctx;
+    (void) f;
+    (void) prefix;
+    /* Route through the validating value helper so a bad receiver/integer args or
+     * an out-of-range copy raise the same panics as the VM, instead of silently
+     * no-op'ing via the raw path. */
     bool boxed = cg_rep(v) == XR_REP_TAGGED;
-    if (boxed)
-        fprintf(out, "xr_mkptr(");
-    fprintf(out, "xrt_bytes_copy_within_raw(");
-    xicgen_bytes_ptr_arg(ctx, out, f, v, prefix, 0);
+    if (!boxed)
+        fprintf(out, "((xrt_array_t *)(");
+    fprintf(out, "xrt_bytes_copy_within_value(");
+    emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
     fprintf(out, ", ");
-    xicgen_bytes_i64_arg(out, v, 1);
+    emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
     fprintf(out, ", ");
-    xicgen_bytes_i64_arg(out, v, 2);
+    emit_value_as_rep(out, v->args[2], XR_REP_TAGGED);
     fprintf(out, ", ");
-    xicgen_bytes_i64_arg(out, v, 3);
+    emit_value_as_rep(out, v->args[3], XR_REP_TAGGED);
     fprintf(out, ")");
-    xicgen_bytes_box_array_result(out, boxed);
+    if (!boxed)
+        fprintf(out, ").ptr)");
 }
 
 static void xicgen_bytes_copy_from(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
