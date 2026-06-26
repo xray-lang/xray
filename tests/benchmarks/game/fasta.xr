@@ -84,7 +84,7 @@ fn repeat_fasta(id, desc, seq, count) {
             line_len = lw
         }
         // 使用 StringBuilder 构建行
-        let sb = new StringBuilder()
+        let sb = StringBuilder()
         for (let i = 0; i < line_len; i++) {
             sb.append(seq.charAt(pos))
             pos = pos + 1
@@ -111,7 +111,7 @@ fn random_fasta(id, desc, chars, probs, count) {
             line_len = lw
         }
         // 使用 StringBuilder 构建行
-        let sb = new StringBuilder()
+        let sb = StringBuilder()
         for (let j = 0; j < line_len; j++) {
             sb.append(select_random(chars, probs))
         }

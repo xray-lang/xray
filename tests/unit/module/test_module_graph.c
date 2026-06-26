@@ -195,6 +195,9 @@ TEST(graph_cycle_self) {
     rc = xr_module_graph_topological_sort(g);
     ASSERT_EQ_INT(rc, -1);
     ASSERT_TRUE(g->has_cycle);
+    ASSERT_NOT_NULL(g->cycle_desc);
+    ASSERT_NOT_NULL(strstr(g->cycle_desc, "E0504"));
+    ASSERT_NOT_NULL(strstr(g->cycle_desc, "self.xr -> self.xr"));
 
     xr_module_graph_free(g);
     xr_module_resolver_free(r);
@@ -219,6 +222,8 @@ TEST(graph_cycle_two) {
     ASSERT_EQ_INT(rc, -1);
     ASSERT_TRUE(g->has_cycle);
     ASSERT_NOT_NULL(g->cycle_desc);
+    ASSERT_NOT_NULL(strstr(g->cycle_desc, "E0504"));
+    ASSERT_NOT_NULL(strstr(g->cycle_desc, "a.xr -> b.xr -> a.xr"));
 
     xr_module_graph_free(g);
     xr_module_resolver_free(r);
@@ -243,6 +248,11 @@ TEST(graph_cycle_three) {
     rc = xr_module_graph_topological_sort(g);
     ASSERT_EQ_INT(rc, -1);
     ASSERT_TRUE(g->has_cycle);
+    ASSERT_NOT_NULL(g->cycle_desc);
+    ASSERT_NOT_NULL(strstr(g->cycle_desc, "E0504"));
+    ASSERT_NOT_NULL(strstr(g->cycle_desc, "a.xr"));
+    ASSERT_NOT_NULL(strstr(g->cycle_desc, "b.xr"));
+    ASSERT_NOT_NULL(strstr(g->cycle_desc, "c.xr"));
 
     xr_module_graph_free(g);
     xr_module_resolver_free(r);

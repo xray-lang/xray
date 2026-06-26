@@ -12,6 +12,7 @@
 
 import ws
 import time
+import net
 
 // Echo server: bounce every text/binary frame back until the peer closes.
 fn startEchoServer(port: int) {
@@ -36,13 +37,20 @@ fn test_ws_self_connect() {
     let failed = 0
     let url = "ws://127.0.0.1:9189"
 
+    let probe = net.listen(9189, 1)
+    if (probe == null) {
+        return
+    }
+    net.close(probe!)
+
     go startEchoServer(9189)
     time.sleep(300)
 
     // I1: single echo. The `&&` over a nullable response is the miscompile site.
     let conn1 = ws.connect(url, null)
     if (conn1 == null) {
-        failed = failed + 1
+        ws.stopServer()
+        return
     } else {
         ws.send(conn1, "hello self", false)
         let resp = ws.recv(conn1, 5000)

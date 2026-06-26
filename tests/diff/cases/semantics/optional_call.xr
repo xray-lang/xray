@@ -1,0 +1,35 @@
+// optional_call.xr
+// VM/AOT differential coverage for func?.(args).
+
+type IntFn = (int) -> int
+type FloatFn = (float) -> float
+
+let calls = 0
+
+fn bump(x: int) -> int {
+    calls += 1
+    return x + 1
+}
+
+fn half(x: float) -> float {
+    calls += 1
+    return x / 2.0
+}
+
+fn arg_side_effect() -> int {
+    calls += 100
+    return 41
+}
+
+let active: IntFn? = bump
+let missing: IntFn? = null
+let promoted: FloatFn? = half
+
+print(active?.(41))
+print(calls)
+
+print(missing?.(arg_side_effect()) ?? -1)
+print(calls)
+
+print(promoted?.(9) ?? 0.0)
+print(calls)

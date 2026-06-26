@@ -58,6 +58,7 @@ vmcase(OP_TRY) {
     handler->catch_offset = (uint32_t) catch_offset;
     handler->stack_size = (int) (VM_STACK_TOP - VM_STACK);
     handler->frame_count = VM_FRAME_COUNT;
+    handler->defer_count_mark = vm_ctx->defer_count;
     handler->exception = xr_null();
     handler->caught = false;
 
@@ -123,8 +124,8 @@ vmcase(OP_THROW) {
     /* Strict throw is enforced by the analyzer so source-level
      * `throw <e>` always produces an Exception. Defensive wrap
      * only fires for bytecode that bypassed the analyzer. */
-    if (!xr_value_is_exception(isolate, exception)) {
-        exception = xr_exception_from_value(isolate, exception);
+    if (!xr_value_is_panic_info(isolate, exception)) {
+        exception = xr_panic_info_from_value(isolate, exception);
     }
 
     savepc();
@@ -134,8 +135,8 @@ vmcase(OP_THROW) {
         XrDebugHooks *_eh = (XrDebugHooks *) isolate->debug_hooks;
         if (_eh && _eh->on_exception) {
             bool _unc = (VM_HANDLER_COUNT == 0);
-            const char *_msg = xr_value_is_exception(isolate, exception)
-                                   ? xr_exception_get_message(isolate, exception)
+            const char *_msg = xr_value_is_panic_info(isolate, exception)
+                                   ? xr_panic_info_get_message(isolate, exception)
                                    : "<exception>";
             if (_eh->on_exception(isolate, _msg, _unc) == XR_DBG_ACTION_BREAK) {
                 VM_SET_EXCEPTION(exception);
@@ -175,8 +176,8 @@ vmcase(OP_ERR_RETURN) {
         XrDebugHooks *_eh = (XrDebugHooks *) isolate->debug_hooks;
         if (_eh && _eh->on_exception) {
             XrValue _err = R(a);
-            const char *_msg = xr_value_is_exception(isolate, _err)
-                                   ? xr_exception_get_message(isolate, _err)
+            const char *_msg = xr_value_is_panic_info(isolate, _err)
+                                   ? xr_panic_info_get_message(isolate, _err)
                                    : "<exception>";
             if (_eh->on_exception(isolate, _msg, true) == XR_DBG_ACTION_BREAK) {
                 vm_ctx->pending_error = _err;

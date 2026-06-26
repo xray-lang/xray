@@ -15,7 +15,7 @@ fn compute(x: int) -> int {
 @test
 fn test_main() {
     // Test 1: blocked task — poll is Pending before completion
-    const ch = new Channel<int>(0)
+    const ch = Channel<int>(0)
     let task = go blocked(ch)
     print("before pending:", match (task.poll()) {
         TaskResult.Pending -> true
@@ -32,7 +32,7 @@ fn test_main() {
     ch.close()
 
     // Test 2: cancel blocked task — explicit status is Cancelled
-    const ch2 = new Channel<int>(0)
+    const ch2 = Channel<int>(0)
     let task2 = go blocked(ch2)
     task2.cancel()
     let cancelled = task2.awaitResult()

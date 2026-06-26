@@ -38,6 +38,8 @@ struct XrCompilerSession {
 
     struct XrReplSymbolTable *repl_symbols;
     struct XaAnalyzer *repl_analyzer;
+
+    struct XrModuleGraph *module_graph;
 };
 
 XrCompilerSession *xr_compiler_session_new(const XrCompilerSessionConfig *cfg) {
@@ -187,6 +189,15 @@ struct XaAnalyzer *xr_compiler_session_ensure_repl_analyzer(XrCompilerSession *s
 
 struct XaAnalyzer *xr_compiler_session_repl_analyzer(const XrCompilerSession *session) {
     return session ? session->repl_analyzer : NULL;
+}
+
+void xr_compiler_session_set_module_graph(XrCompilerSession *session, struct XrModuleGraph *graph) {
+    if (session)
+        session->module_graph = graph;
+}
+
+struct XrModuleGraph *xr_compiler_session_module_graph(const XrCompilerSession *session) {
+    return session ? session->module_graph : NULL;
 }
 
 bool xr_compiler_session_push_arena(XrCompilerSession *session, struct XrArena *arena,

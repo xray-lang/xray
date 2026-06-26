@@ -43,7 +43,7 @@ print(trailing.name)
 print(trailing.ext)
 
 print(path.format(parsed))
-let formatted = { dir: "/home/user", base: "file.txt", root: "", name: "", ext: "" }
+let formatted = path.parse("/home/user/file.txt")
 print(path.format(formatted))
-let derived = { dir: "", base: "", root: "", name: "archive", ext: ".tar" }
+let derived = path.parse("archive.tar")
 print(path.format(derived))

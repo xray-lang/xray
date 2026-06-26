@@ -4,13 +4,13 @@ fn worker(ch: Channel<Array<int>>) -> int {
         _ -> []
     }
     xs.push(99)
-    yield
+    Coro.yield()
     return xs.length
 }
 
-let ch = new Channel<Array<int>>(1)
+let ch = Channel<Array<int>>(1)
 let xs = [1, 2]
-ch.send(xs)
+ch.send(copy(xs))
 let task = go worker(ch)
 let child_len = await task
 print(child_len)

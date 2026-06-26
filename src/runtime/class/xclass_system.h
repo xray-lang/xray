@@ -16,8 +16,8 @@
 #ifndef XCLASS_SYSTEM_H
 #define XCLASS_SYSTEM_H
 
-#include "../../shared/xr_builtin_schema.h"
 #include "../value/xvalue.h"
+#include "../../shared/xr_builtin_schema.h"
 
 // Forward declarations via xforward_decl.h
 
@@ -63,15 +63,16 @@ typedef struct XrayCoreClasses {
     // methods via normal class-chain lookup.
     XrClass *jsonInstanceMethodClass;
 
-    // Dynamic-layout root classes for Json objects.
-    // jsonRootClass: open Json (transitions create child classes on field add)
-    // jsonRootSealedClass: prototype for sealed Json types — each sealed
-    //   compile-time Json<{...}> derives its own sealed class via transitions
-    //   from this root and toggling XR_CLASS_DYNAMIC_SEALED.
+    // Dynamic-layout root classes for Json objects and Records.
+    // Json inherits Json instance methods; Record does not. Sealed and open
+    // Records intentionally use separate roots so hidden-class leaf flags do
+    // not leak between `{x,y}` and `{x,y,...}` shapes.
     XrClass *jsonRootClass;
+    XrClass *recordRootClass;
+    XrClass *recordSealedRootClass;
 
     // Exception (populated when stdlib/types/exception.xr is loaded)
-    XrClass *exceptionClass;
+    XrClass *panicInfoClass;
 
     // Native-body migrated types
     XrClass *rangeClass;
@@ -101,6 +102,13 @@ typedef struct XrayCoreClasses {
  * arities allocate a fresh class each call (cold path, never measured
  * to matter in practice). */
 XR_FUNC struct XrClass *xr_get_or_create_tuple_class(XrVMRuntime *X, uint16_t arity);
+
+/* Exception field indices — must match stdlib/types/exception.xr layout */
+#define PANIC_INFO_FIELD_MESSAGE 0
+#define PANIC_INFO_FIELD_STACK 1
+#define PANIC_INFO_FIELD_CAUSE 2
+#define PANIC_INFO_FIELD_CODE 3
+#define PANIC_INFO_FIELD_DATA 4
 
 /* ========== Lifecycle ========== */
 

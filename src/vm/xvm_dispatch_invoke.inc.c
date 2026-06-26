@@ -62,8 +62,9 @@ invoke_dispatch:;
      * Recv<T>/SendResult protocol state model. */
     if (xr_value_is_channel(receiver)) {
         XrChannel *ch = xr_value_to_channel(receiver);
-        XrDispatchAction _cr =
-            vm_invoke_channel(isolate, vm_ctx, ch, method_symbol, nargs, base, a, frame, pc);
+        uint8_t transfer_mode = vm_channel_transfer_mode_before(frame, pc);
+        XrDispatchAction _cr = vm_invoke_channel(isolate, vm_ctx, ch, method_symbol, nargs, base, a,
+                                                 frame, pc, transfer_mode);
         if (_cr == XR_DISP_NEXT) {
             VM_REBIND_AFTER_NATIVE_CALL();
             vmbreak;
@@ -181,6 +182,34 @@ invoke_dispatch:;
             vmbreak;
         } else if (XR_IS_SET(receiver)) {
             R(a) = xr_bool(XR_TO_SET(receiver)->count == 0);
+            vmbreak;
+        }
+    }
+
+    if (XR_IS_CHAR(receiver)) {
+        uint32_t cp = XR_TO_CHAR(receiver);
+        if (nargs == 0 && method_symbol == SYMBOL_TOSTRING) {
+            R(a) = xr_string_value(xr_value_to_string(isolate, receiver));
+            vmbreak;
+        }
+        if (nargs == 0 && method_symbol == SYMBOL_ORD) {
+            R(a) = xr_int((int64_t) cp);
+            vmbreak;
+        }
+        if (nargs == 0 && method_symbol == SYMBOL_IS_LETTER) {
+            R(a) = xr_bool(xr_unicode_is_letter(cp));
+            vmbreak;
+        }
+        if (nargs == 0 && method_symbol == SYMBOL_IS_NUMBER) {
+            R(a) = xr_bool(xr_unicode_is_number(cp));
+            vmbreak;
+        }
+        if (nargs == 0 && method_symbol == SYMBOL_IS_ALNUM) {
+            R(a) = xr_bool(xr_unicode_is_alnum(cp));
+            vmbreak;
+        }
+        if (nargs == 0 && method_symbol == SYMBOL_IS_WHITESPACE) {
+            R(a) = xr_bool(xr_unicode_is_whitespace(cp));
             vmbreak;
         }
     }

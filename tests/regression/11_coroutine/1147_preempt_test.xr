@@ -25,7 +25,7 @@ fn worker(id: int, ch: Channel<int>, iterations: int) {
 fn test_preempt_test() {
     shared const WORKER_COUNT = 4
     shared const ITERATIONS = 3
-    shared const resultCh = new Channel(WORKER_COUNT)
+    shared const resultCh = Channel(WORKER_COUNT)
 
 
     print("启动 " + string(WORKER_COUNT) + " 个协程...")

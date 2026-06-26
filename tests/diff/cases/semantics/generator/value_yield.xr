@@ -1,0 +1,29 @@
+// anchor: generator-value-yield
+// `yield expr` creates a pull-driven Iterator<T>. VM and AOT must agree on
+// production order, for-in consumption, and early break laziness.
+
+fn counter(n: int) -> Iterator<int> {
+    print("start " + string(n))
+    for (let i = 0; i < n; i++) {
+        print("yield " + string(i))
+        yield i
+    }
+    print("done " + string(n))
+}
+
+let sum = 0
+for (x in counter(3)) {
+    print("take " + string(x))
+    sum = sum + x
+}
+print("sum " + string(sum))
+
+let partial = 0
+for (x in counter(5)) {
+    print("partial " + string(x))
+    partial = partial + x
+    if (x == 1) {
+        break
+    }
+}
+print("partial-sum " + string(partial))

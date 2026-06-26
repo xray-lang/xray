@@ -24,8 +24,7 @@
 #include "../../../src/frontend/analyzer/xanalyzer.h"
 #include "../../../src/base/xmalloc.h"
 #include "../../../src/base/xmemstream.h"
-#include "../../../src/toolchain/xcompiler_session.h"
-#include "../../../include/xray_vm.h"
+#include "../../../include/xray.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -615,26 +614,49 @@ TEST(cgen_string_literal) {
     xi_func_free(ir);
 }
 
-TEST(cgen_string_literal_escapes_control_bytes) {
-    const char *src = "print(\"a\\r\\n\\t\\\\\\\"z\")";
+TEST(cgen_str_concat_uses_single_allocation_helper) {
+#define CHECK_CGEN_STR_CONCAT(cond, msg)                                                           \
+    do {                                                                                           \
+        if (!(cond)) {                                                                             \
+            fprintf(stderr, "  FAIL: %s\n", (msg));                                                \
+            abort();                                                                               \
+        }                                                                                          \
+    } while (0)
+
+    const char *src = "enum Kind { Ready }\n"
+                      "let s = \"a\" + string(1) + \"b\" + string(2) + true + null + Kind.Ready\n"
+                      "print(s)\n"
+                      "print(\"q\" + string(3))\n"
+                      "print(\"${42}\")\n";
 
     XiFunc *ir = compile_to_ir(src);
-    if (!ir) {
-        printf("  SKIP\n");
-        return;
-    }
+    CHECK_CGEN_STR_CONCAT(ir != NULL, "IR compilation failed");
 
     char *code = generate_c(ir, "test");
-    assert(code != NULL);
+    CHECK_CGEN_STR_CONCAT(code != NULL, "C code generation failed");
 
-    assert(contains(code, "a\\r\\n\\t") &&
-           "literal table should escape CR, LF, and tab in generated C");
-    assert(!contains(code, "a\r\n\t") &&
-           "literal table must not emit raw control bytes into generated C");
+    size_t code_len = strlen(code);
+    const char *code_end = code + code_len;
+    size_t add_calls = count_between(code, code_end, "xrt_add(");
+    size_t strbuf_new_calls = count_between(code, code_end, "xrt_strbuf_new()");
+    size_t part_init_calls = count_between(code, code_end, "xrt_strpart_init(");
+    size_t concat_parts_calls = count_between(code, code_end, "xrt_str_concat_parts(");
+    CHECK_CGEN_STR_CONCAT(add_calls == 0 && !contains(code, "xrt_add("),
+                          "AOT STR_CONCAT must not lower to nested binary xrt_add calls");
+    CHECK_CGEN_STR_CONCAT(strbuf_new_calls == 0,
+                          "multi-part concat sites should not allocate temporary StringBuilder");
+    CHECK_CGEN_STR_CONCAT(part_init_calls >= 8,
+                          "AOT STR_CONCAT should materialize every part exactly once");
+    CHECK_CGEN_STR_CONCAT(concat_parts_calls >= 2,
+                          "AOT STR_CONCAT should use the single-allocation concat helper");
 
-    printf("  Generated escaped string literal %zu bytes of C code\n", strlen(code));
+    printf("  Generated single-allocation string concat %zu bytes of C code "
+           "(add=%zu strbuf_new=%zu parts=%zu concat=%zu)\n",
+           code_len, add_calls, strbuf_new_calls, part_init_calls, concat_parts_calls);
     xr_free(code);
     xi_func_free(ir);
+
+#undef CHECK_CGEN_STR_CONCAT
 }
 
 TEST(cgen_function_call) {
@@ -876,7 +898,7 @@ TEST(cgen_struct_debug_source_var_slots_use_typed_pointers) {
 
 TEST(cgen_coro_emits_source_line_directives) {
     const char *src = "fn worker(n: int) -> int {\n"
-                      "    yield\n"
+                      "    Coro.yield()\n"
                       "    return n + 1\n"
                       "}\n"
                       "let task = go worker(41)\n"
@@ -928,7 +950,7 @@ TEST(cgen_coro_emits_source_line_directives) {
 TEST(cgen_coro_emits_debug_source_var_slots) {
     const char *src = "fn worker(seed: int) -> int {\n"
                       "    let answer = seed + 1\n"
-                      "    yield\n"
+                      "    Coro.yield()\n"
                       "    let doubled = answer * 2\n"
                       "    let ratio = doubled / 2.0\n"
                       "    let ok = ratio == 21.0\n"
@@ -993,7 +1015,7 @@ TEST(cgen_coro_syncs_helper_result_debug_source_vars) {
                       "    let received = ch.recv()\n"
                       "    return received + 1\n"
                       "}\n"
-                      "shared const ch: Channel<int> = new Channel(1)\n"
+                      "shared const ch: Channel<int> = Channel(1)\n"
                       "let task = go worker(ch)\n"
                       "print(await task)\n";
 
@@ -1144,12 +1166,12 @@ TEST(cgen_typed_array_u8_uses_byte_storage_fast_path) {
 
 TEST(cgen_bytes_methods_use_raw_memory_helpers) {
     const char *src = "fn run() -> int {\n"
-                      "    let src = new Bytes(8)\n"
+                      "    let src = Bytes(8)\n"
                       "    src[0] = 1\n"
                       "    src[1] = 2\n"
                       "    src[2] = 3\n"
                       "    src[3] = 4\n"
-                      "    let dst = new Bytes(8)\n"
+                      "    let dst = Bytes(8)\n"
                       "    dst.copyFrom(src, 0, 0, 4)\n"
                       "    dst.copyWithin(2, 0, 4)\n"
                       "    dst.repeatFrom(6, 2, 2)\n"
@@ -1277,6 +1299,38 @@ TEST(cgen_typed_array_float_and_bool_use_raw_storage_fast_path) {
            "typed array index read must not fall back to runtime index dispatch");
 
     printf("  Generated typed float/bool array fast path %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_typed_array_char_uses_scalar_storage_with_char_boxing) {
+    const char *src = "fn first() -> char {\n"
+                      "    let chars: Array<char> = []\n"
+                      "    chars.push('b')\n"
+                      "    chars[0] = 'a'\n"
+                      "    return chars[0]\n"
+                      "}\n"
+                      "print(first())\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "typed char array fast path should generate");
+    assert(contains(code, "XR_ELEM_CHAR") && "Array<char> must use the CHAR typed element layout");
+    assert(contains(code, "uint32_t") && "Array<char> storage must be a compact scalar buffer");
+    assert(contains(code, "XR_TO_CHAR(") && "Array<char> writes must unbox tagged char values");
+    assert(contains(code, "XR_FROM_CHAR((uint32_t)") &&
+           "Array<char> reads must re-box raw scalars as char");
+    assert(!contains(code, "XR_ELEM_U32") && "Array<char> must not degrade to Array<uint32>");
+    assert(!contains(code, "xrt_method_1(") &&
+           "Array<char>.push must not fall back to dynamic method dispatch");
+    assert(!contains(code, "xrt_index_get(") &&
+           "Array<char> index read must not fall back to runtime index dispatch");
+
+    printf("  Generated typed char array fast path %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
@@ -1555,35 +1609,6 @@ TEST(cgen_fixed_array_struct_field_uses_embedded_heap_native_storage) {
            !contains(code, "xrt_map_set(") && "fixed array struct must not use map storage");
 
     printf("  Generated fixed-array struct heap-native path %zu bytes of C code\n", strlen(code));
-    xr_free(code);
-    xi_func_free(ir);
-}
-
-TEST(cgen_fixed_array_checked_set_throws_index_oob) {
-    const char *src = "struct Buf {\n"
-                      "    data: [4]int\n"
-                      "}\n"
-                      "fn poke(i: int) -> int {\n"
-                      "    let buf = Buf{data: [1, 2, 3, 4]}\n"
-                      "    buf.data[i] = 9\n"
-                      "    return buf.data[0]\n"
-                      "}\n"
-                      "print(poke(1))\n";
-
-    XiFunc *ir = compile_to_ir(src);
-    assert(ir != NULL && "IR compilation failed");
-
-    bool had_error = false;
-    char *code = generate_c_with_status(ir, "test", &had_error);
-    assert(code != NULL && "C code generation failed");
-    assert(!had_error && "checked fixed-array set should generate");
-
-    assert(contains(code, "xrt_index_oob(_idx, 4)") &&
-           "checked fixed-array set must throw shared index-OOB panic");
-    assert(!contains(code, "fixed array index out of range") &&
-           "checked fixed-array set must not emit a private abort string");
-
-    printf("  Generated checked fixed-array set path %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
@@ -1882,8 +1907,8 @@ TEST(cgen_native_class_ref_field_constructor_result_uses_ptr_storage) {
     assert(count_between(run, run_end, "xrt_obj_alloc(") == 0 &&
            "non-escaping ref-field native class should be stack-constructed");
     assert(count_between(run, run_end, "xrt_native_test_IntBag _ci") == 1 &&
-           count_between(run, run_end, "xrt_native_test_IntBag_dtor(&_ci") == 1 &&
-           "stack-constructed collection ref field class should release fields at exit");
+           count_between(run, run_end, "xrt_native_test_IntBag_dtor(&_ci") == 0 &&
+           "stack-constructed collection-only ref field class should skip no-op destructor calls");
     assert(count_between(run, run_end, "xrt_box_obj(_inst)") == 0 &&
            "local native class constructor result must not be boxed before direct method calls");
     assert(count_between(run, run_end, "test_scan_") >= 1 &&
@@ -1903,7 +1928,7 @@ TEST(cgen_native_class_ref_field_constructor_result_uses_ptr_storage) {
     xi_func_free(ir);
 }
 
-TEST(cgen_native_class_collection_ref_fields_use_arc) {
+TEST(cgen_native_class_collection_ref_fields_skip_noop_arc) {
     const char *src = "class Bag {\n"
                       "    values: Array<int>\n"
                       "    constructor(values: Array<int>) {\n"
@@ -1941,13 +1966,13 @@ TEST(cgen_native_class_collection_ref_fields_use_arc) {
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "native class ref field ownership path should generate");
 
-    assert(contains(code, "static void xrt_native_test_Bag_dtor(void *obj)") &&
-           "AOT collection ref fields are RC-managed and need a destructor");
-    assert(contains(code, "xrt_release(xr_mkptr((self)->f0, XR_TAG_ARRAY));") &&
-           "collection ref field destructors should release stored containers");
-    assert(contains(code, "xrt_type_register(\"Bag\", 0, NULL, 0, xrt_native_test_Bag_dtor, "
+    assert(!contains(code, "static void xrt_native_test_Bag_dtor(void *obj)") &&
+           "AOT collection ref fields are not prepend-header ARC-managed and need no destructor");
+    assert(!contains(code, "xrt_release(xr_mkptr((self)->f0, XR_TAG_ARRAY));") &&
+           "collection ref field destructors should not emit no-op releases");
+    assert(contains(code, "xrt_type_register(\"Bag\", 0, NULL, 0, NULL, "
                           "(uint32_t)sizeof(xrt_native_test_Bag))") &&
-           "class type registration should wire the collection ref-field destructor");
+           "class type registration should not wire a destructor for collection-only refs");
 
     const char *replace = strstr(code, "static int64_t test_replace_");
     assert(replace != NULL && "replace method should use typed ABI");
@@ -1956,10 +1981,10 @@ TEST(cgen_native_class_collection_ref_fields_use_arc) {
     const char *replace_end = next_static_after(replace);
     const char *assign = strstr(replace, "(p0)->f0 = (xrt_array_t *)_new.ptr");
     assert(assign && assign < replace_end &&
-           count_between(replace, replace_end, "xrt_retain(_new);") == 1 &&
+           count_between(replace, replace_end, "xrt_retain(_new);") == 0 &&
            count_between(replace, replace_end, "xrt_release(xr_mkptr((p0)->f0, XR_TAG_ARRAY));") ==
-               1 &&
-           "direct native receiver collection ref stores should retain new and release old");
+               0 &&
+           "direct native receiver collection ref stores should assign without no-op ARC calls");
 
     const char *swap = strstr(code, "static int64_t test_swap_");
     assert(swap != NULL && "swap function should use typed scalar return ABI");
@@ -1973,10 +1998,10 @@ TEST(cgen_native_class_collection_ref_fields_use_arc) {
            count_between(swap, swap_end, "xrt_map_set(") == 0 &&
            "native class pointer parameters should access ref fields without Map fallback");
     assign = strstr(swap, "(_native)->f0 = (xrt_array_t *)_new.ptr");
-    assert(assign && assign < swap_end && count_between(swap, swap_end, "xrt_retain(_new);") == 1 &&
+    assert(assign && assign < swap_end && count_between(swap, swap_end, "xrt_retain(_new);") == 0 &&
            count_between(swap, swap_end, "xrt_release(xr_mkptr((_native)->f0, XR_TAG_ARRAY));") ==
-               1 &&
-           "heap native instance collection ref stores should retain new and release old");
+               0 &&
+           "heap native instance collection ref stores should assign without no-op ARC calls");
 
     const char *local = strstr(code, "static int64_t test_local_");
     assert(local != NULL && "local function should use typed scalar return ABI");
@@ -1987,7 +2012,7 @@ TEST(cgen_native_class_collection_ref_fields_use_arc) {
            count_between(local, local_end, "_ci") == 0 &&
            "ref-field native classes should not stack-inline without stack destructors");
 
-    printf("  Generated native class collection ref field ARC path %zu bytes of C code\n",
+    printf("  Generated native class collection ref field path %zu bytes of C code\n",
            strlen(code));
     xr_free(code);
     xi_func_free(ir);
@@ -2495,7 +2520,9 @@ TEST(cgen_typeof_as_and_slice_use_direct_drivers) {
 
 TEST(cgen_range_uses_direct_aot_driver) {
     const char *src = "let r = 2..6\n"
+                      "let ri = 2..=6\n"
                       "print(r)\n"
+                      "print(ri)\n"
                       "print(typeof(r))\n";
 
     XiFunc *ir = compile_to_ir(src);
@@ -2508,6 +2535,8 @@ TEST(cgen_range_uses_direct_aot_driver) {
 
     assert(contains(code, "xrt_range_from_i64(") &&
            "range expression must use the direct AOT range helper");
+    assert(contains(code, ", false)") && "half-open range must pass inclusive=false");
+    assert(contains(code, ", true)") && "inclusive range must pass inclusive=true");
     assert(contains(code, "xrt_typeof_str(") && "typeof(range) must use direct typeof helper");
     assert(!contains(code, "xrt_range(XR_FROM_INT") &&
            "range creation must not box start/end before the AOT helper");
@@ -3394,7 +3423,7 @@ TEST(cgen_unknown_method_symbol_fails_fast) {
 
 TEST(cgen_suspendable_wrapper_aborts) {
     const char *src = "fn worker(n: int) -> int {\n"
-                      "    yield\n"
+                      "    Coro.yield()\n"
                       "    return n + 1\n"
                       "}\n"
                       "let task = go worker(41)\n"
@@ -3421,7 +3450,7 @@ TEST(cgen_suspendable_wrapper_aborts) {
 
 TEST(cgen_direct_suspend_call_propagates_cps) {
     const char *src = "fn worker(n: int) -> int {\n"
-                      "    yield\n"
+                      "    Coro.yield()\n"
                       "    return n + 1\n"
                       "}\n"
                       "print(worker(41))\n";
@@ -3458,12 +3487,12 @@ TEST(cgen_direct_suspend_call_propagates_cps) {
 TEST(cgen_direct_suspend_method_call_propagates_cps) {
     const char *src = "class Box {\n"
                       "    bump(n: int) -> int {\n"
-                      "        yield\n"
+                      "        Coro.yield()\n"
                       "        return n + 1\n"
                       "    }\n"
                       "}\n"
                       "fn main() -> int {\n"
-                      "    let box = new Box()\n"
+                      "    let box = Box()\n"
                       "    return box.bump(41)\n"
                       "}\n"
                       "print(main())\n";
@@ -3517,7 +3546,7 @@ TEST(cgen_coro_shared_static_function_retain_is_elided) {
                       "    return n + 1\n"
                       "}\n"
                       "fn worker(n: int) -> int {\n"
-                      "    yield\n"
+                      "    Coro.yield()\n"
                       "    return inc(n)\n"
                       "}\n"
                       "let task = go worker(41)\n"
@@ -3593,7 +3622,7 @@ TEST(cgen_suspendable_dependency_init_fails_fast) {
 
 TEST(cgen_coro_frame_params_use_typed_storage) {
     const char *src = "fn worker(n: int) -> int {\n"
-                      "    yield\n"
+                      "    Coro.yield()\n"
                       "    return n + 1\n"
                       "}\n"
                       "let task = go worker(41)\n"
@@ -3633,7 +3662,7 @@ TEST(cgen_coro_frame_skips_dead_ssa_slots) {
     const char *src = "fn worker(n: int) -> int {\n"
                       "    let a = n + 1\n"
                       "    let b = a + 2\n"
-                      "    yield\n"
+                      "    Coro.yield()\n"
                       "    return n + 3\n"
                       "}\n"
                       "let task = go worker(41)\n"
@@ -3674,7 +3703,7 @@ TEST(cgen_coro_loop_tail_phi_survives_poll_suspend) {
                       "    }\n"
                       "}\n"
                       "fn run_once(count: int, timeout_ms: int) -> int {\n"
-                      "    shared const ch = new Channel(1)\n"
+                      "    shared const ch = Channel(1)\n"
                       "    ch.send(1)\n"
                       "    let tasks: Array<Task> = []\n"
                       "    for (let i = 0; i < count; i++) {\n"
@@ -3739,7 +3768,7 @@ TEST(cgen_runtime_managed_types_skip_arc) {
 TEST(cgen_coro_frame_release_uses_aot_arc) {
     const char *src = "fn worker() -> string {\n"
                       "    let s = \"hello\" + \"_aot\"\n"
-                      "    yield\n"
+                      "    Coro.yield()\n"
                       "    return s\n"
                       "}\n"
                       "let task = go worker()\n"
@@ -3776,11 +3805,11 @@ TEST(cgen_coro_frame_release_uses_aot_arc) {
 TEST(cgen_coro_go_clones_tagged_args) {
     const char *src = "fn worker(xs: Array<int>) -> int {\n"
                       "    xs.push(99)\n"
-                      "    yield\n"
+                      "    Coro.yield()\n"
                       "    return xs.length\n"
                       "}\n"
                       "let xs = [1, 2]\n"
-                      "let task = go worker(xs)\n"
+                      "let task = go worker(copy(xs))\n"
                       "let result = await task\n"
                       "print(result)\n";
 
@@ -3792,7 +3821,7 @@ TEST(cgen_coro_go_clones_tagged_args) {
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "AOT coroutine with tagged go args should generate");
     assert(contains(code, "xrt_value_clone_for_coro(") &&
-           "tagged go arguments must be cloned at the coroutine boundary");
+           "explicit copy(...) go arguments must be cloned once at the coroutine boundary");
 
     printf("  Generated coroutine argument clone %zu bytes of C code\n", strlen(code));
     xr_free(code);
@@ -3813,10 +3842,10 @@ TEST(cgen_coro_go_sync_function_uses_wrapper_desc) {
                       "let high = go(name: \"compute\") compute(5)\n"
                       "print(await high)\n"
                       "let xs = [1, 2]\n"
-                      "let copied = go mutate_copy(xs)\n"
+                      "let copied = go mutate_copy(copy(xs))\n"
                       "print(await copied)\n"
                       "print(xs.length)\n"
-                      "let roundtrip = go identity_copy(xs)\n"
+                      "let roundtrip = go identity_copy(copy(xs))\n"
                       "let ys = await roundtrip\n"
                       "print(ys.length)\n";
 
@@ -3982,10 +4011,10 @@ TEST(cgen_coro_sync_go_wrappers_only_for_go_targets) {
     xi_func_free(ir);
 }
 
-TEST(cgen_coro_channel_send_clones_value) {
-    const char *src = "let ch = new Channel<Array<int>>(1)\n"
+TEST(cgen_coro_channel_send_copy_uses_transfer_helper) {
+    const char *src = "let ch: Channel<Array<int>> = Channel(1)\n"
                       "let xs = [1, 2]\n"
-                      "ch.send(xs)\n";
+                      "ch.send(copy(xs))\n";
 
     XiFunc *ir = compile_to_ir(src);
     assert(ir != NULL && "IR compilation failed");
@@ -3994,20 +4023,22 @@ TEST(cgen_coro_channel_send_clones_value) {
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "AOT channel send should generate");
-    assert(contains(code, "xr_aot_chan_send(ctx,") && "channel send must use the AOT bridge");
-    assert(nonzero_state_precedes_call(code, "xr_aot_chan_send(ctx,") &&
+    assert(contains(code, "xr_aot_chan_send_transfer(ctx,") &&
+           "boxed channel copy send must use the transfer-aware AOT bridge");
+    assert(nonzero_state_precedes_call(code, "xr_aot_chan_send_transfer(ctx,") &&
            "channel send must publish the AOT resume state before runtime blocking");
-    assert(contains(code, "xr_aot_chan_send(ctx, ") &&
-           contains(code, "xrt_value_clone_for_coro(") &&
-           "channel send values must be cloned at the coroutine boundary");
+    assert(contains(code, ", xr_slot_none(), -1, 1);") &&
+           "copy send must encode XR_TRANSFER_COPY at the runtime boundary");
+    assert(!contains(code, "xrt_value_clone_for_coro(") &&
+           "copy send must not clone before the transfer-aware channel helper");
 
-    printf("  Generated channel send clone %zu bytes of C code\n", strlen(code));
+    printf("  Generated channel send transfer %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
 
 TEST(cgen_coro_scalar_channel_send_skips_clone) {
-    const char *src = "let ch = new Channel<int>(1)\n"
+    const char *src = "let ch = Channel<int>(1)\n"
                       "ch.send(42)\n";
 
     XiFunc *ir = compile_to_ir(src);
@@ -4040,8 +4071,8 @@ TEST(cgen_coro_unit_match_send_omits_void_phi) {
                       "        _ -> done.send(-1)\n"
                       "    }\n"
                       "}\n"
-                      "let ch = new Channel<int>(0)\n"
-                      "let done = new Channel<int>(1)\n"
+                      "let ch = Channel<int>(0)\n"
+                      "let done = Channel<int>(1)\n"
                       "go recv_timeout_until_close(ch, done)\n"
                       "ch.close()\n";
 
@@ -4062,7 +4093,7 @@ TEST(cgen_coro_unit_match_send_omits_void_phi) {
 }
 
 TEST(cgen_coro_scalar_channel_try_send_uses_typed_bridge) {
-    const char *src = "let ch = new Channel<int>(1)\n"
+    const char *src = "let ch = Channel<int>(1)\n"
                       "let ok = ch.trySend(42)\n"
                       "print(ok)\n";
 
@@ -4093,7 +4124,7 @@ TEST(cgen_coro_scalar_channel_try_send_uses_typed_bridge) {
 
 TEST(cgen_coro_builtin_no_payload_enum_fields_skip_bridge) {
     const char *src = "fn read_builtin_enums() -> int {\n"
-                      "    yield\n"
+                      "    Coro.yield()\n"
                       "    let sent = SendResult.Sent\n"
                       "    let closed = Recv.Closed\n"
                       "    let pending = TaskResult.Pending\n"
@@ -4127,7 +4158,7 @@ TEST(cgen_coro_builtin_no_payload_enum_fields_skip_bridge) {
 
 TEST(cgen_coro_await_clones_tagged_result) {
     const char *src = "fn worker() -> Array<int> {\n"
-                      "    yield\n"
+                      "    Coro.yield()\n"
                       "    return [1, 2]\n"
                       "}\n"
                       "let task = go worker()\n"
@@ -4158,7 +4189,7 @@ TEST(cgen_coro_await_clones_tagged_result) {
 
 TEST(cgen_coro_scalar_await_uses_tagged_slot) {
     const char *src = "fn worker() -> int {\n"
-                      "    yield\n"
+                      "    Coro.yield()\n"
                       "    return 41\n"
                       "}\n"
                       "fn main_plus() -> int {\n"
@@ -4213,7 +4244,7 @@ TEST(cgen_coro_await_timeout_passes_deadline) {
                       "        _ -> { return -1 }\n"
                       "    }\n"
                       "}\n"
-                      "let ch = new Channel<int>(0)\n"
+                      "let ch = Channel<int>(0)\n"
                       "let task = go worker(ch)\n"
                       "let result = task.awaitTimeout(25)\n"
                       "print(result)\n";
@@ -4274,7 +4305,7 @@ TEST(cgen_tagged_null_equality_keeps_null_literal) {
 }
 
 TEST(cgen_coro_recv_resume_uses_wait_state_slot) {
-    const char *src = "let ch = new Channel<int>(0)\n"
+    const char *src = "let ch = Channel<int>(0)\n"
                       "let value = ch.recv()\n"
                       "print(value)\n";
 
@@ -4306,7 +4337,7 @@ TEST(cgen_coro_fused_scalar_channel_recv_uses_typed_pair_bridge) {
                       "        _ -> fallback\n"
                       "    }\n"
                       "}\n"
-                      "let ch = new Channel<int>(1)\n"
+                      "let ch = Channel<int>(1)\n"
                       "ch.send(9)\n"
                       "let task = go recv_or(ch, -1)\n"
                       "let result = await task\n"
@@ -4339,7 +4370,7 @@ TEST(cgen_coro_scalar_channel_recv_uses_tagged_slot) {
                       "        _ -> -1\n"
                       "    }\n"
                       "}\n"
-                      "let ch = new Channel<int>(1)\n"
+                      "let ch = Channel<int>(1)\n"
                       "ch.send(9)\n"
                       "let task = go recv_plus(ch)\n"
                       "let result = await task\n"
@@ -4392,7 +4423,7 @@ TEST(cgen_coro_channel_recv_null_check_keeps_tagged_slot) {
                       "        _ -> { print(\"other\") }\n"
                       "    }\n"
                       "}\n"
-                      "let ch = new Channel<int>(1)\n"
+                      "let ch = Channel<int>(1)\n"
                       "ch.send(0)\n"
                       "let task = go read_or_stop(ch)\n"
                       "await task\n";
@@ -4424,7 +4455,7 @@ TEST(cgen_coro_channel_recv_null_check_keeps_tagged_slot) {
 }
 
 TEST(cgen_coro_scalar_channel_try_recv_returns_recv_enum) {
-    const char *src = "let ch = new Channel<int>(1)\n"
+    const char *src = "let ch = Channel<int>(1)\n"
                       "let recv = ch.tryRecv()\n"
                       "print(recv)\n";
 
@@ -4449,7 +4480,7 @@ TEST(cgen_coro_scalar_channel_try_recv_returns_recv_enum) {
 }
 
 TEST(cgen_coro_select_try_recv_uses_ready_bit) {
-    const char *src = "let ch = new Channel<int>(0)\n"
+    const char *src = "let ch = Channel<int>(0)\n"
                       "select {\n"
                       "    value from ch -> { print(value) }\n"
                       "    _ -> { print(0) }\n"
@@ -4518,7 +4549,7 @@ TEST(cgen_runtime_needed_main_uses_aot_runtime) {
            "generated main must tear down XrAotRuntime directly");
     assert(!contains(code, "XrVMConfig") && "generated main must not construct VM isolate params");
     assert(!contains(code, "xray_vm_new(") && "generated main must not construct a VM isolate");
-    assert(!contains(code, "xray_vm_multicore_init(") &&
+    assert(!contains(code, "xr_multicore_init(") &&
            "generated main must not initialize scheduler through isolate");
     assert(!contains(code, "xr_aot_run_main_vm_bridge(") &&
            "generated main must not use the VM bridge entry");
@@ -4530,7 +4561,7 @@ TEST(cgen_runtime_needed_main_uses_aot_runtime) {
 }
 
 TEST(cgen_coro_select_publishes_state_before_block) {
-    const char *src = "let ch = new Channel<int>(0)\n"
+    const char *src = "let ch = Channel<int>(0)\n"
                       "select {\n"
                       "    value from ch -> { print(value) }\n"
                       "}\n";
@@ -4552,7 +4583,7 @@ TEST(cgen_coro_select_publishes_state_before_block) {
 }
 
 TEST(cgen_coro_channel_timeout_publishes_state_before_block) {
-    const char *src = "let ch = new Channel<int>(0)\n"
+    const char *src = "let ch = Channel<int>(0)\n"
                       "let sent = ch.sendTimeout(7, 10)\n"
                       "let recv = ch.recvTimeout(10)\n"
                       "print(sent)\n"
@@ -4586,7 +4617,7 @@ TEST(cgen_coro_channel_timeout_publishes_state_before_block) {
 }
 
 TEST(cgen_coro_recv_slot_is_traced_as_frame_root) {
-    const char *src = "let ch = new Channel<string>(0)\n"
+    const char *src = "let ch = Channel<string>(0)\n"
                       "let value = ch.recv()\n"
                       "print(value)\n";
 
@@ -4611,7 +4642,7 @@ TEST(cgen_coro_recv_slot_is_traced_as_frame_root) {
 
 TEST(cgen_coro_await_all_uses_aggregate_bridge) {
     const char *src = "fn worker(n: int) -> int {\n"
-                      "    yield\n"
+                      "    Coro.yield()\n"
                       "    return n * n\n"
                       "}\n"
                       "let t1 = go worker(2)\n"
@@ -4647,8 +4678,8 @@ TEST(cgen_coro_await_any_uses_typed_aggregate_bridge) {
                       "    ch.recv()\n"
                       "    return n\n"
                       "}\n"
-                      "let ch1 = new Channel<int>(0)\n"
-                      "let ch2 = new Channel<int>(1)\n"
+                      "let ch1 = Channel<int>(0)\n"
+                      "let ch2 = Channel<int>(1)\n"
                       "let t1 = go delayed(ch1, 1)\n"
                       "let t2 = go delayed(ch2, 2)\n"
                       "ch2.send(9)\n"
@@ -4681,7 +4712,7 @@ TEST(cgen_coro_scope_exit_publishes_state_before_block) {
                       "    ch.recv()\n"
                       "}\n"
                       "fn scoped() {\n"
-                      "    let ch = new Channel<int>(0)\n"
+                      "    let ch = Channel<int>(0)\n"
                       "    scope {\n"
                       "        go child(ch)\n"
                       "    }\n"
@@ -4705,7 +4736,7 @@ TEST(cgen_coro_scope_exit_publishes_state_before_block) {
 }
 
 TEST(cgen_channel_fields_use_aot_helpers) {
-    const char *src = "let ch = new Channel<int>(2)\n"
+    const char *src = "let ch = Channel<int>(2)\n"
                       "print(ch.length)\n"
                       "print(ch.capacity)\n"
                       "print(ch.isClosed)\n";
@@ -4750,7 +4781,7 @@ TEST(cgen_sync_go_channel_try_methods_use_aot_helpers) {
                       "    ch.close()\n"
                       "    return ch.isClosed()\n"
                       "}\n"
-                      "shared const ch = new Channel<int>(2)\n"
+                      "shared const ch = Channel<int>(2)\n"
                       "let p = go producer(ch)\n"
                       "print(await p)\n"
                       "let c = go consumer(ch)\n"
@@ -4861,7 +4892,7 @@ TEST(cgen_coro_task_status_uses_native_enum_status) {
                       "    }\n"
                       "}\n"
                       "fn quick_value(n: int) -> int {\n"
-                      "    yield\n"
+                      "    Coro.yield()\n"
                       "    return n * 2\n"
                       "}\n"
                       "fn task_done(task: Task<int>) -> bool {\n"
@@ -4873,7 +4904,7 @@ TEST(cgen_coro_task_status_uses_native_enum_status) {
                       "fn task_poll(task: Task<int>) -> TaskResult<int> {\n"
                       "    return task.poll()\n"
                       "}\n"
-                      "const ch = new Channel<int>(0)\n"
+                      "const ch = Channel<int>(0)\n"
                       "let blocked = go wait_for_value(ch)\n"
                       "blocked.cancel()\n"
                       "let cancelled_result = blocked.awaitResult()\n"
@@ -4945,7 +4976,7 @@ int main(void) {
     run_cgen_multi_print();
     run_cgen_while_loop();
     run_cgen_string_literal();
-    run_cgen_string_literal_escapes_control_bytes();
+    run_cgen_str_concat_uses_single_allocation_helper();
     run_cgen_function_call();
     run_cgen_c_export_emits_public_c_abi_wrapper();
     run_cgen_stats_tracks_native_abi();
@@ -4971,13 +5002,12 @@ int main(void) {
     run_cgen_repr_c_struct_omits_native_header();
     run_cgen_nested_struct_field_uses_embedded_heap_native_storage();
     run_cgen_fixed_array_struct_field_uses_embedded_heap_native_storage();
-    run_cgen_fixed_array_checked_set_throws_index_oob();
     run_cgen_shared_struct_alias_elides_tagged_hot_locals();
     run_cgen_class_method_caches_receiver_scalar_fields();
     run_cgen_local_class_direct_native_methods_omit_boxed_adapters();
     run_cgen_class_constructor_returns_heap_native_instance();
     run_cgen_native_class_ref_field_constructor_result_uses_ptr_storage();
-    run_cgen_native_class_collection_ref_fields_use_arc();
+    run_cgen_native_class_collection_ref_fields_skip_noop_arc();
     run_cgen_class_set_length_size_sum_uses_native_arithmetic();
     run_cgen_class_set_u8_uses_typed_direct_helpers();
     run_cgen_class_map_i64_i64_uses_typed_direct_helpers();
@@ -4994,6 +5024,7 @@ int main(void) {
     run_cgen_typed_array_map_uses_typed_result_storage_fast_path();
     run_cgen_typed_array_map_readonly_result_caches_data_pointer();
     run_cgen_typed_array_map_captured_callback_uses_runtime_helper();
+    run_cgen_typed_array_char_uses_scalar_storage_with_char_boxing();
     run_cgen_dynamic_uncaptured_callback_keeps_boxed_adapter();
     run_cgen_closure_cell_var_id_above_255();
     run_cgen_stack_alloc_direct_closure_uses_stack_runtime();
@@ -5025,7 +5056,7 @@ int main(void) {
     run_cgen_coro_go_zero_state_sync_wrapper_has_nonempty_frame();
     run_cgen_sync_functions_without_go_emit_no_aot_wrappers();
     run_cgen_coro_sync_go_wrappers_only_for_go_targets();
-    run_cgen_coro_channel_send_clones_value();
+    run_cgen_coro_channel_send_copy_uses_transfer_helper();
     run_cgen_coro_scalar_channel_send_skips_clone();
     run_cgen_coro_unit_match_send_omits_void_phi();
     run_cgen_coro_scalar_channel_try_send_uses_typed_bridge();

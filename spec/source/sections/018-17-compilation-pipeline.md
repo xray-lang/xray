@@ -49,7 +49,7 @@ Bytecode  →  AOT (machine code)
 - 真值源：`src/frontend/analyzer/xanalyzer_*.c`（按主题拆分）。
 - **作用域**：嵌套符号表、变量解析、shadowing 检查。
 - **类型检查**：双向类型推断、union 收窄、Json 结构匹配。
-- **泛型**：monomorphization、约束检查、调用点重写。
+- **泛型**：构建期 monomorphization、约束检查、调用点重写；跨模块泛型在 whole-program / LTO 阶段展开，泛型库必须提供可分析 IR/AST。
 - **闭包分析**：upvalue 标记、`go` 闭包捕获禁令。
 - **错误码**：`XR_ERR_ANALYZE_*` 系列。
 
@@ -121,7 +121,7 @@ Execution
 - Source of truth: `src/frontend/analyzer/xanalyzer_*.c` (split by topic).
 - **Scoping**: nested symbol tables, name resolution, shadowing checks.
 - **Type checking**: bidirectional type inference, union narrowing, Json structural matching.
-- **Generics**: monomorphization, constraint checking, call-site rewriting.
+- **Generics**: build-time monomorphization, constraint checking, call-site rewriting; cross-module generics are expanded during whole-program / LTO analysis, so generic libraries must provide analyzable IR/AST.
 - **Closure analysis**: upvalue tagging, `go` closure capture restrictions.
 - **Error codes**: the `XR_ERR_ANALYZE_*` family.
 

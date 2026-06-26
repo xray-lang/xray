@@ -165,6 +165,7 @@ TEST(symbol_builtin_lookup) {
     SymbolId length_id = xr_symbol_lookup_in_table(table, "length");
     SymbolId size_id = xr_symbol_lookup_in_table(table, "size");
     SymbolId push_id = xr_symbol_lookup_in_table(table, "push");
+    SymbolId isnan_id = xr_symbol_lookup_in_table(table, "isNaN");
 
     ASSERT_TRUE(has_id != SYMBOL_INVALID);
     ASSERT_TRUE(length_id != SYMBOL_INVALID);
@@ -172,6 +173,8 @@ TEST(symbol_builtin_lookup) {
     ASSERT_EQ_INT(size_id, SYMBOL_SIZE);
     ASSERT_EQ_INT(xr_builtin_symbol_from_name("size"), SYMBOL_SIZE);
     ASSERT_TRUE(push_id != SYMBOL_INVALID);
+    ASSERT_EQ_INT(isnan_id, SYMBOL_ISNAN);
+    ASSERT_EQ_INT(xr_builtin_symbol_from_name("isNaN"), SYMBOL_ISNAN);
 
     xr_symbol_table_destroy(table);
 }

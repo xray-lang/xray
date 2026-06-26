@@ -34,9 +34,10 @@
 #include "../base/xhash.h"
 
 const XrObjDeepCopyFn xr_obj_deep_copy_ops[XR_OBJ_TYPE_MAX] = {
-    [XR_TARRAY] = xr_deep_copy_array_with_ctx,      [XR_TMAP] = xr_deep_copy_map_with_ctx,
-    [XR_TSET] = xr_deep_copy_set_with_ctx,          [XR_TINSTANCE] = xr_deep_copy_instance_with_ctx,
-    [XR_TFUNCTION] = xr_deep_copy_closure_with_ctx, [XR_TCELL] = xr_deep_copy_cell_with_ctx,
+    [XR_TSTRING] = xr_deep_copy_string_with_ctx,     [XR_TARRAY] = xr_deep_copy_array_with_ctx,
+    [XR_TMAP] = xr_deep_copy_map_with_ctx,           [XR_TSET] = xr_deep_copy_set_with_ctx,
+    [XR_TINSTANCE] = xr_deep_copy_instance_with_ctx, [XR_TFUNCTION] = xr_deep_copy_closure_with_ctx,
+    [XR_TCELL] = xr_deep_copy_cell_with_ctx,         [XR_TBOOLMAP] = xr_deep_copy_map_with_ctx,
 };
 
 const XrObjToSharedFn xr_obj_to_shared_ops[XR_OBJ_TYPE_MAX] = {
@@ -109,6 +110,13 @@ static inline void *copy_ctx_alloc(XrCopyContext *ctx, size_t size, uint8_t type
     return xr_fixed_heap_alloc(ctx->dst_fixed_heap, size, type);
 }
 
+XrValue xr_deep_copy_string_with_ctx(XrCopyContext *ctx, XrObjHeader *obj) {
+    if (!ctx || !obj)
+        return XR_NULL_VAL;
+    XrString *copy = xr_string_clone_shared_core(ctx->core, (XrString *) obj);
+    return copy ? xr_string_value(copy) : XR_NULL_VAL;
+}
+
 void xr_copy_context_cleanup(XrCopyContext *ctx) {
     // Free arena blocks (bulk deallocation, no per-entry free)
     XrSeenArena *arena = ctx->arena_head;
@@ -137,7 +145,7 @@ static XrValue xr_copy_context_lookup(XrCopyContext *ctx, void *src) {
             if (ctx->to_transit && XR_IS_PTR(e->dst)) {
                 XrObjHeader *dst_obj = XR_VALUE_GCPTR(e->dst);
                 if (dst_obj)
-                    xr_shared_incref(dst_obj);
+                    xr_shared_retain(dst_obj);
             }
             return e->dst;
         }
@@ -214,6 +222,229 @@ static void xr_copy_context_record(XrCopyContext *ctx, void *src, XrValue dst) {
     ctx->buckets[idx] = entry;
 }
 
+typedef struct XrAotNativeMapView {
+    XrObjHeader hdr;
+    XR_MAP_ABI_FIELDS;
+    int64_t len;
+    int64_t cap;
+    int64_t growth_left;
+    void *keys;
+    void *values;
+    int64_t *order;
+    int64_t order_len;
+    int64_t order_cap;
+    uint8_t key_type;
+    uint8_t value_type;
+    uint8_t key_size;
+    uint8_t value_size;
+} XrAotNativeMapView;
+
+typedef struct XrAotNativeSetView {
+    XrObjHeader hdr;
+    XR_SET_ABI_FIELDS;
+    int64_t len;
+    int64_t cap;
+    int64_t growth_left;
+    void *items;
+    int64_t *order;
+    int64_t order_len;
+    int64_t order_cap;
+    uint8_t elem_type;
+    uint8_t elem_size;
+} XrAotNativeSetView;
+
+typedef union XrAotBoolMapSlot {
+    int64_t i;
+    double f;
+} XrAotBoolMapSlot;
+
+typedef struct XrAotBoolMapView {
+    XrObjHeader hdr;
+    uint8_t value_type;
+    uint8_t present;
+    uint8_t order[2];
+    uint8_t order_len;
+    XrAotBoolMapSlot v[2];
+} XrAotBoolMapView;
+
+static inline bool xr_aot_native_obj(const XrObjHeader *obj) {
+    return obj && XR_OBJ_GET_FLAG(obj, XR_OBJ_AOT_NATIVE);
+}
+
+static inline bool xr_aot_map_is_typed(const XrAotNativeMapView *map) {
+    return map && map->key_type != XR_ELEM_ANY && map->value_type != XR_ELEM_ANY;
+}
+
+static inline bool xr_aot_set_is_typed(const XrAotNativeSetView *set) {
+    return set && set->elem_type != XR_ELEM_ANY;
+}
+
+static inline bool xr_aot_typed_slot_live(const uint8_t *ctrl, int64_t cap, int64_t slot) {
+    return ctrl && slot >= 0 && slot < cap && (ctrl[slot] & 0x80u) == 0;
+}
+
+static void xr_deep_copy_init_empty_map(XrCopyContext *ctx, XrMap *new_map, uint8_t flags,
+                                        uint8_t key_tid, uint8_t value_tid) {
+    new_map->count = 0;
+    new_map->nentries = 0;
+    new_map->entries_cap = 0;
+    new_map->indices_size = 0;
+    new_map->ctrl = NULL;
+    new_map->indices = NULL;
+    new_map->entries = NULL;
+    new_map->owner_heap = ctx->dst_heap;
+    new_map->flags = XR_MAP_FLAG_DUMMY;
+    if (flags & XR_MAP_FLAG_WEAK)
+        new_map->flags |= XR_MAP_FLAG_WEAK;
+    new_map->key_tid = key_tid;
+    new_map->value_tid = value_tid;
+}
+
+static XrValue xr_deep_copy_aot_boolmap_with_ctx(XrCopyContext *ctx, XrObjHeader *obj) {
+    XrAotBoolMapView *map = (XrAotBoolMapView *) obj;
+    if (!map || !ctx->dst_fixed_heap)
+        return XR_NULL_VAL;
+    XrValue cached = xr_copy_context_lookup(ctx, map);
+    if (!XR_IS_NULL(cached))
+        return cached;
+
+    XrMap *new_map = (XrMap *) copy_ctx_alloc(ctx, sizeof(XrMap), XR_TMAP);
+    if (!new_map)
+        return XR_NULL_VAL;
+    xr_deep_copy_init_empty_map(ctx, new_map, 0, 0, 0);
+
+    XrValue result = XR_FROM_PTR(new_map);
+    xr_copy_context_record(ctx, map, result);
+    ctx->objects_copied++;
+
+    uint32_t count = map->order_len <= 2 ? map->order_len : 2;
+    if (count == 0)
+        return result;
+    if (!xr_map_reserve_external(new_map, count, ctx->dst_heap))
+        return XR_NULL_VAL;
+    for (uint32_t oi = 0; oi < count; oi++) {
+        uint8_t key = map->order[oi] ? 1 : 0;
+        if (((map->present >> key) & 1u) == 0)
+            continue;
+        XrValue value = map->value_type == XR_ELEM_F32 ? XR_FROM_FLOAT(map->v[key].f)
+                                                       : XR_FROM_INT(map->v[key].i);
+        xr_map_set(new_map, XR_FROM_BOOL(key != 0), value);
+    }
+    return result;
+}
+
+static XrValue xr_deep_copy_aot_native_map_with_ctx(XrCopyContext *ctx, XrObjHeader *obj) {
+    if (XR_OBJ_GET_TYPE(obj) == XR_TBOOLMAP)
+        return xr_deep_copy_aot_boolmap_with_ctx(ctx, obj);
+
+    XrAotNativeMapView *map = (XrAotNativeMapView *) obj;
+    if (!map || !ctx->dst_fixed_heap)
+        return XR_NULL_VAL;
+    XrValue cached = xr_copy_context_lookup(ctx, map);
+    if (!XR_IS_NULL(cached))
+        return cached;
+
+    XrMap *new_map = (XrMap *) copy_ctx_alloc(ctx, sizeof(XrMap), XR_TMAP);
+    if (!new_map)
+        return XR_NULL_VAL;
+    xr_deep_copy_init_empty_map(ctx, new_map, map->flags, map->key_tid, map->value_tid);
+
+    XrValue result = XR_FROM_PTR(new_map);
+    xr_copy_context_record(ctx, map, result);
+    ctx->objects_copied++;
+
+    if (map->flags & XR_MAP_FLAG_WEAK)
+        return result;
+
+    if (xr_aot_map_is_typed(map)) {
+        if (map->len <= 0)
+            return result;
+        if (!xr_map_reserve_external(new_map, (uint32_t) map->len, ctx->dst_heap))
+            return XR_NULL_VAL;
+        if (map->order && map->order_len > 0) {
+            for (int64_t oi = 0; oi < map->order_len; oi++) {
+                int64_t slot = map->order[oi];
+                if (!xr_aot_typed_slot_live(map->ctrl, map->cap, slot))
+                    continue;
+                XrValue key = xr_typed_get(map->keys, (int32_t) slot, map->key_type);
+                XrValue value = xr_typed_get(map->values, (int32_t) slot, map->value_type);
+                xr_map_set(new_map, key, value);
+            }
+        } else {
+            for (int64_t slot = 0; slot < map->cap; slot++) {
+                if (!xr_aot_typed_slot_live(map->ctrl, map->cap, slot))
+                    continue;
+                XrValue key = xr_typed_get(map->keys, (int32_t) slot, map->key_type);
+                XrValue value = xr_typed_get(map->values, (int32_t) slot, map->value_type);
+                xr_map_set(new_map, key, value);
+            }
+        }
+        return result;
+    }
+
+    if ((map->flags & XR_MAP_FLAG_DUMMY) || map->count == 0)
+        return result;
+    if (!xr_map_reserve_external(new_map, map->count, ctx->dst_heap))
+        return XR_NULL_VAL;
+    for (uint32_t i = 0; i < map->nentries; i++) {
+        XrMapEntry *node = &map->entries[i];
+        if (!XR_MAP_ENTRY_EMPTY(node)) {
+            xr_map_set(new_map, xr_deep_copy_with_ctx(ctx, node->key),
+                       xr_deep_copy_with_ctx(ctx, node->value));
+        }
+    }
+    return result;
+}
+
+static XrValue xr_deep_copy_aot_native_set_with_ctx(XrCopyContext *ctx, XrObjHeader *obj) {
+    XrAotNativeSetView *set = (XrAotNativeSetView *) obj;
+    if (!set || !ctx->dst_fixed_heap)
+        return XR_NULL_VAL;
+    XrValue cached = xr_copy_context_lookup(ctx, set);
+    if (!XR_IS_NULL(cached))
+        return cached;
+
+    XrSet *new_set = (XrSet *) copy_ctx_alloc(ctx, sizeof(XrSet), XR_TSET);
+    if (!new_set)
+        return XR_NULL_VAL;
+    xr_set_init_inplace(new_set);
+    new_set->owner_heap = ctx->dst_heap;
+    if (set->flags & XR_SET_FLAG_WEAK)
+        new_set->flags |= XR_SET_FLAG_WEAK;
+    new_set->elem_tid = set->elem_tid;
+
+    XrValue result = XR_FROM_PTR(new_set);
+    xr_copy_context_record(ctx, set, result);
+    ctx->objects_copied++;
+    if (set->flags & XR_SET_FLAG_WEAK)
+        return result;
+
+    if (xr_aot_set_is_typed(set)) {
+        if (set->order && set->order_len > 0) {
+            for (int64_t oi = 0; oi < set->order_len; oi++) {
+                int64_t slot = set->order[oi];
+                if (!xr_aot_typed_slot_live(set->ctrl, set->cap, slot))
+                    continue;
+                xr_set_add(new_set, xr_typed_get(set->items, (int32_t) slot, set->elem_type));
+            }
+        } else {
+            for (int64_t slot = 0; slot < set->cap; slot++) {
+                if (!xr_aot_typed_slot_live(set->ctrl, set->cap, slot))
+                    continue;
+                xr_set_add(new_set, xr_typed_get(set->items, (int32_t) slot, set->elem_type));
+            }
+        }
+        return result;
+    }
+
+    for (uint32_t i = 0; i < set->nentries; i++) {
+        XrSetEntry *entry = &set->entries[i];
+        if (!XR_SET_ENTRY_EMPTY(entry))
+            xr_set_add(new_set, xr_deep_copy_with_ctx(ctx, entry->value));
+    }
+    return result;
+}
+
 XrValue xr_deep_copy_array_with_ctx(XrCopyContext *ctx, XrObjHeader *obj) {
     XrArray *array = (XrArray *) obj;
     if (!array || !ctx->dst_fixed_heap)
@@ -236,6 +467,8 @@ XrValue xr_deep_copy_array_with_ctx(XrCopyContext *ctx, XrObjHeader *obj) {
     new_arr->elem_size = array->elem_size;
     new_arr->elem_tid = array->elem_tid;
     new_arr->contains_refs = array->contains_refs;
+    new_arr->adt_enum_name = array->adt_enum_name;
+    new_arr->adt_member_name = array->adt_member_name;
     new_arr->data_on_region_heap = 0;  // data allocated via xr_malloc (system heap)
     memset(new_arr->_pad, 0, sizeof(new_arr->_pad));
 
@@ -273,6 +506,9 @@ XrValue xr_deep_copy_array_with_ctx(XrCopyContext *ctx, XrObjHeader *obj) {
 }
 
 XrValue xr_deep_copy_map_with_ctx(XrCopyContext *ctx, XrObjHeader *obj) {
+    if (xr_aot_native_obj(obj))
+        return xr_deep_copy_aot_native_map_with_ctx(ctx, obj);
+
     XrMap *map = (XrMap *) obj;
     if (!map || !ctx->dst_fixed_heap)
         return XR_NULL_VAL;
@@ -386,6 +622,9 @@ XrValue xr_deep_copy_cell_with_ctx(XrCopyContext *ctx, XrObjHeader *obj) {
 }
 
 XrValue xr_deep_copy_set_with_ctx(XrCopyContext *ctx, XrObjHeader *obj) {
+    if (xr_aot_native_obj(obj))
+        return xr_deep_copy_aot_native_set_with_ctx(ctx, obj);
+
     XrSet *set = (XrSet *) obj;
     if (!set || !ctx->dst_fixed_heap)
         return XR_NULL_VAL;
@@ -512,7 +751,7 @@ XrValue xr_deep_copy_with_ctx(XrCopyContext *ctx, XrValue value) {
         /* TRANSIT graphs are never pointer-shared: the receive side must
          * materialize a private copy, so fall through to the per-type copy. */
         if (!XR_OBJ_GET_FLAG(obj, XR_OBJ_TRANSIT)) {
-            xr_shared_incref(obj);
+            xr_shared_retain(obj);
             return value;
         }
     }
@@ -522,10 +761,10 @@ XrValue xr_deep_copy_with_ctx(XrCopyContext *ctx, XrValue value) {
         return value;
 
     // Compile-time types resolve through xr_obj_deep_copy_ops in O(1). Slot is
-    // NULL for types that are either immutable across coroutines (TSTRING,
-    // TBLOB) or simply not transferable (TCHANNEL, TCOROUTINE, TTASK,
-    // TCELL, TBOUND_METHOD, TEXCEPTION, TERROR). The dispatcher returns
-    // the raw value for those, matching the previous default branch.
+    // NULL for types that are either immediate by policy (TBLOB) or simply
+    // not transferable (TCHANNEL, TCOROUTINE, TTASK, TBOUND_METHOD,
+    // TEXCEPTION, TERROR). Strings have a hook because short runtime strings
+    // are coroutine-local and must be promoted before crossing a boundary.
     XrObjDeepCopyFn fn = xr_obj_deep_copy_ops[type];
     return fn ? fn(ctx, obj) : value;
 }
@@ -616,6 +855,8 @@ bool xr_chan_try_move_array_to_transit_core(XrRuntimeCore *core, XrValue value, 
     t->elem_size = src->elem_size;
     t->elem_tid = src->elem_tid;
     t->contains_refs = 0;
+    t->adt_enum_name = src->adt_enum_name;
+    t->adt_member_name = src->adt_member_name;
     t->data_on_region_heap = 0;
     memset(t->_pad, 0, sizeof(t->_pad));
 
@@ -671,6 +912,8 @@ bool xr_chan_try_adopt_array_from_transit_core(XrValue value, struct XrCoroutine
     r->elem_size = t->elem_size;
     r->elem_tid = t->elem_tid;
     r->contains_refs = 0;
+    r->adt_enum_name = t->adt_enum_name;
+    r->adt_member_name = t->adt_member_name;
     r->data_on_region_heap = 0; /* malloc-backed buffer, freed by the array dtor */
     memset(r->_pad, 0, sizeof(r->_pad));
 
@@ -732,7 +975,7 @@ XrValue xr_deep_copy_to_coro_core(XrRuntimeCore *core, XrValue value,
     // TRANSIT graphs are the exception: they must be materialized privately.
     XrObjHeader *obj = XR_VALUE_GCPTR(value);
     if (obj && XR_OBJ_IS_SHARED(obj) && !XR_OBJ_GET_FLAG(obj, XR_OBJ_TRANSIT)) {
-        xr_shared_incref(obj);
+        xr_shared_retain(obj);
         return value;
     }
     if (xr_value_copy_kind(value) != XR_COPY_DEEP)
@@ -858,6 +1101,8 @@ XrValue xr_to_shared_array(struct XrVMRuntime *X, XrObjHeader *obj) {
     if (!new_arr)
         return XR_NULL_VAL;
     xr_array_init_inplace(new_arr, length > 0 ? length : 4, array->elem_type);
+    new_arr->adt_enum_name = array->adt_enum_name;
+    new_arr->adt_member_name = array->adt_member_name;
     XR_OBJ_SET_STORAGE(&new_arr->hdr, XR_OBJ_STORAGE_SHARED);
     xr_shared_set_refc(&new_arr->hdr, 1);
     if (array->elem_type == XR_ELEM_ANY) {
@@ -1009,9 +1254,11 @@ XrValue xr_to_shared(struct XrVMRuntime *X, XrValue value) {
     // Already shared: no-op (do NOT incref — caller already owns the reference)
     if (XR_OBJ_IS_SHARED(obj))
         return value;
-    // Strings are interned: pointer-shareable as-is, no copy required.
-    if (XR_OBJ_GET_TYPE(obj) == XR_TSTRING)
-        return value;
+    if (XR_OBJ_GET_TYPE(obj) == XR_TSTRING) {
+        XrString *shared =
+            xr_string_clone_shared_core(xr_isolate_get_runtime_core(X), (XrString *) obj);
+        return shared ? xr_string_value(shared) : XR_NULL_VAL;
+    }
 
     uint8_t type = XR_OBJ_GET_TYPE(obj);
     if (type >= XR_OBJ_TYPE_MAX)

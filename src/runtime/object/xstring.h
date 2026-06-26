@@ -5,10 +5,11 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xstring.h - Immutable string object with interning
+ * xstring.h - Immutable string object with lazy sharing
  *
  * KEY CONCEPT:
- *   - Immutable strings with automatic interning
+ *   - Runtime strings are coroutine-local by default
+ *   - Literals, symbols, explicit intern(), and map/set keys use canonical storage
  *   - Hash value cached at creation time
  *   - UTF-8 byte-level operations
  *   - Compact header + flexible array
@@ -55,8 +56,9 @@ _Static_assert(sizeof(XrString) == 24, "XrString must be 24 bytes (16B header + 
 /* ========== Short/Long String Separation ========== */
 
 /*
- * Short strings (≤64B): interned, pointer comparison O(1)
- * Long strings (>64B): not interned, content comparison O(n)
+ * Short runtime strings (≤64B): coroutine-local, no global lock
+ * Canonical short strings: interned in the global pool, pointer fast path
+ * Long strings (>64B): content comparison; shared when crossing boundaries
  * Flag stored in hdr.extra lowest bit
  */
 
@@ -116,7 +118,7 @@ typedef struct XrStringPool {
     ((void) atomic_fetch_or_explicit((_Atomic uint16_t *) &(s)->hdr.extra, (uint16_t) (bits),      \
                                      memory_order_relaxed))
 #define XR_STR_SET_GLOBAL(s) XR_STR_SET_FLAGS_RELAXED(s, STR_FLAG_INTERNED | STR_FLAG_GLOBAL)
-#define XR_STR_SET_LOCAL(s) XR_STR_SET_FLAGS_RELAXED(s, STR_FLAG_INTERNED | STR_FLAG_LOCAL)
+#define XR_STR_SET_LOCAL(s) XR_STR_SET_FLAGS_RELAXED(s, STR_FLAG_LOCAL)
 #define XR_STR_SET_PERMANENT(s) XR_STR_SET_FLAGS_RELAXED(s, STR_FLAG_PERMANENT)
 #define XR_STR_SET_ACCESSED(s) XR_STR_SET_FLAGS_RELAXED(s, STR_FLAG_ACCESSED)
 #define XR_STR_CLR_ACCESSED(s)                                                                     \
@@ -160,6 +162,7 @@ XR_FUNC XrString *xr_string_new(XrVMRuntime *iso, const char *chars, size_t leng
 
 XR_FUNC XrString *xr_string_concat(XrVMRuntime *iso, XrString *a, XrString *b);
 XR_FUNC XrString *xr_string_from_int(XrVMRuntime *iso, xr_Integer i);
+XR_FUNC XrString *xr_string_from_uint64(XrVMRuntime *iso, uint64_t i);
 XR_FUNC XrString *xr_string_from_float(XrVMRuntime *iso, xr_Number n);
 
 /* ========== String Interning ========== */
@@ -168,6 +171,7 @@ XR_FUNC XrString *xr_string_intern(XrVMRuntime *iso, const char *chars, size_t l
                                    uint32_t hash);
 XR_FUNC XrString *xr_string_intern_core(struct XrRuntimeCore *core, const char *chars,
                                         size_t length, uint32_t hash);
+XR_FUNC XrString *xr_string_clone_shared_core(struct XrRuntimeCore *core, XrString *str);
 
 /* ========== String Pool Management ========== */
 
@@ -178,7 +182,8 @@ XR_FUNC void xr_string_pool_free_internal(XrStringPool *pool);
 
 XR_FUNC bool xr_string_equal(XrString *a, XrString *b);
 
-// Fast pointer comparison (for interned strings in same pool)
+// Fast pointer comparison (valid only when the caller already knows both
+// strings are canonical/interned or only identity matters).
 static inline bool xr_string_equal_fast(XrString *a, XrString *b) {
     return a == b;
 }
@@ -207,9 +212,9 @@ XR_FUNC XrString *xr_string_to_upper_case(XrVMRuntime *iso, XrString *str);
 XR_FUNC XrString *xr_string_trim(XrVMRuntime *iso, XrString *str);
 XR_FUNC XrString *xr_string_trim_start(XrVMRuntime *iso, XrString *str);
 XR_FUNC XrString *xr_string_trim_end(XrVMRuntime *iso, XrString *str);
-XR_FUNC XrString *xr_string_pad_start(XrVMRuntime *iso, XrString *str, xr_Integer target_len,
+XR_FUNC XrString *xr_string_pad_start(XrVMRuntime *iso, XrString *str, int64_t target_len,
                                       XrString *pad_str);
-XR_FUNC XrString *xr_string_pad_end(XrVMRuntime *iso, XrString *str, xr_Integer target_len,
+XR_FUNC XrString *xr_string_pad_end(XrVMRuntime *iso, XrString *str, int64_t target_len,
                                     XrString *pad_str);
 XR_FUNC xr_Integer xr_string_last_index_of(XrVMRuntime *iso, XrString *str, XrString *substr);
 

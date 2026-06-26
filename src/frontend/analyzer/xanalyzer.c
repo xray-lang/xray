@@ -88,6 +88,7 @@ static void xa_register_codegen_builtins(XaAnalyzer *analyzer) {
     XrType *t_float = xr_type_new_float(NULL);
     XrType *t_string = xr_type_new_string(NULL);
     XrType *t_bool = xr_type_new_bool(NULL);
+    XrType *t_char = xr_type_new_char(NULL);
 
     // Test framework: fn(...any) -> void
     XrType *fn_assert = xr_type_new_function(analyzer->isolate, NULL, 0, t_void, true);
@@ -110,6 +111,9 @@ static void xa_register_codegen_builtins(XaAnalyzer *analyzer) {
     register_builtin_func(analyzer, "string", fn_to_string);
     XrType *fn_to_bool = xr_type_new_function(analyzer->isolate, &p_any, 1, t_bool, false);
     register_builtin_func(analyzer, "bool", fn_to_bool);
+    // char(n): construct a Unicode scalar char from an int codepoint.
+    XrType *fn_to_char = xr_type_new_function(analyzer->isolate, &p_any, 1, t_char, false);
+    register_builtin_func(analyzer, "char", fn_to_char);
 
     // Type constructors: fn(...any) -> Container
     XrType *fn_array = xr_type_new_function(analyzer->isolate, NULL, 0,
@@ -255,12 +259,21 @@ static void xa_register_prelude_enums(XaAnalyzer *analyzer) {
                                                 "Pending"};
     static const int task_result_payload_counts[] = {1, 1, 0, 0, 0};
     XrType *task_success_payload[] = {xr_type_new_type_param(analyzer->isolate, "T", 0)};
-    XrType *task_failed_payload[] = {xr_type_new_named_instance(analyzer->isolate, "Exception")};
+    XrType *task_failed_payload[] = {xr_type_new_unknown(NULL)};
     XrType **task_result_payload_types[] = {task_success_payload, task_failed_payload, NULL, NULL,
                                             NULL};
     register_prelude_enum_full(analyzer, "TaskResult", task_result_type_params, 1,
                                task_result_members, 5, task_result_payload_counts,
                                task_result_payload_types, true);
+
+    static const char *task_outcome_members[] = {"Success", "Failed", "Cancelled"};
+    static const int task_outcome_payload_counts[] = {1, 1, 0};
+    XrType *task_outcome_success_payload[] = {xr_type_new_unknown(NULL)};
+    XrType *task_outcome_failed_payload[] = {xr_type_new_unknown(NULL)};
+    XrType **task_outcome_payload_types[] = {task_outcome_success_payload,
+                                             task_outcome_failed_payload, NULL};
+    register_prelude_enum_full(analyzer, "TaskOutcome", NULL, 0, task_outcome_members, 3,
+                               task_outcome_payload_counts, task_outcome_payload_types, true);
 
     static const char *task_status_members[] = {"Pending", "Running", "Success", "Failed",
                                                 "Cancelled"};
@@ -1671,6 +1684,21 @@ bool xa_analyzer_is_iterable(XaAnalyzer *analyzer, XrType *type, XrType **out_el
 
     // First check built-in iterable types (doesn't need analyzer)
     if (xr_type_is_iterable(type, out_element_type)) {
+        return true;
+    }
+
+    // An Iterator<T> value (the built-in iteration protocol type — e.g. the
+    // result of a generator call) is its own iterable: for-in drives it through
+    // iterator() (which returns self) + hasNext()/next(). The element type is the
+    // interface's single type argument.
+    if ((type->kind == XR_KIND_INTERFACE || type->kind == XR_KIND_INSTANCE) &&
+        type->instance.class_name && strcmp(type->instance.class_name, "Iterator") == 0) {
+        if (out_element_type) {
+            *out_element_type = (type->instance.type_arg_count >= 1 && type->instance.type_args &&
+                                 type->instance.type_args[0])
+                                    ? type->instance.type_args[0]
+                                    : xr_type_new_unknown(NULL);
+        }
         return true;
     }
 

@@ -16,5 +16,5 @@ print(typeof(s))
 let r = 2..6
 print(typeof(r))
 
-let sb = new StringBuilder()
+let sb = StringBuilder()
 print(typeof(sb))

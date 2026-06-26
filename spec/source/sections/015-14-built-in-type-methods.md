@@ -26,6 +26,11 @@ order: 015
 | `floor()` / `ceil()` / `round()` | `() -> int` | 对 int 返回自身 |
 | `sqrt()` | `() -> float` | 平方根 |
 | `pow(exp)` | `(float) -> float` | 幂运算 |
+| `checkedAdd(other)` / `checkedSub(other)` / `checkedMul(other)` | `(int) -> int?` | 溢出返回 `null` |
+| `saturatingAdd(other)` / `saturatingSub(other)` / `saturatingMul(other)` | `(int) -> int` | 溢出饱和到 `int` 边界 |
+| `wrappingAdd(other)` / `wrappingSub(other)` / `wrappingMul(other)` | `(int) -> int` | 显式二补码环绕 |
+
+`abs()` 遵循整数环绕语义：`(-9223372036854775807 - 1).abs()` 返回自身。`toHex()` 对负数使用带符号前缀，例如 `-0x8000000000000000`。
 
 ### 14.2 `float` 方法
 
@@ -38,6 +43,7 @@ order: 015
 | `floor()` / `ceil()` / `round()` | `() -> int` | 取整 |
 | `sqrt()` | `() -> float` | 平方根 |
 | `pow(exp)` | `(float) -> float` | 幂运算 |
+| `isNaN()` | `() -> bool` | 是否为 IEEE NaN |
 
 ### 14.3 `BigInt` 方法
 
@@ -56,13 +62,26 @@ order: 015
 |--|--|--|
 | `toString()` | `() -> string` | 返回 `"true"` 或 `"false"` |
 
+### 14.4.1 `char` 方法
+
+| 方法 | 签名 | 说明 |
+|--|--|--|
+| `toString()` | `() -> string` | 返回单 Unicode scalar 字符串 |
+| `ord()` | `() -> int` | 返回 Unicode scalar code point |
+| `isLetter()` | `() -> bool` | 是否为 Unicode 字母 |
+| `isNumber()` | `() -> bool` | 是否为 Unicode 数字 |
+| `isAlphanumeric()` | `() -> bool` | 是否为字母或数字 |
+| `isWhitespace()` | `() -> bool` | 是否为空白字符 |
+
+`char` 是独立原始类型，不继承整数方法；需要码点时显式使用 `ord()` 或 `int(c)`。
+
 ### 14.5 `string` 方法
 
 | 成员 | 类型 / 说明 |
 |--|--|
-| `length` | 字符串长度属性 |
-| `charAt(i)` | 返回指定位置字符 |
-| `charCodeAt(i)` | 返回码点 |
+| `length` / `size` | Unicode scalar 数量属性 |
+| `charAt(i)` | 返回指定 Unicode scalar 位置的单 scalar 字符串 |
+| `charCodeAt(i)` | 返回指定 Unicode scalar 位置的码点 |
 | `concat(...others)` | 拼接字符串 |
 | `includes(s)` | 是否包含子串 |
 | `indexOf(s)` / `lastIndexOf(s)` | 查找子串 |
@@ -75,7 +94,11 @@ order: 015
 | `startsWith(s)` / `endsWith(s)` | 前缀/后缀判断 |
 | `padStart(len, pad?)` / `padEnd(len, pad?)` | 填充 |
 | `match(pattern)` | 正则匹配 |
-| `iterator()` / `entriesIterator()` / `entries()` | 迭代协议 |
+| `iterator()` | `() -> Iterator<char>` |
+| `entriesIterator()` | `() -> Iterator<(int, char)>` |
+| `entries()` | `() -> Array<(int, char)>` |
+
+字符串下标表达式 `s[i]` 返回 `char`；`charAt(i)` 保留 JavaScript 风格的字符串返回值。`slice(start, end?)` 使用与切片表达式相同的半开区间和负索引规则：负索引先按 `length + index` 从末尾计数，再夹到 `[0, length]`。
 
 ### 14.6 `Bytes`
 
@@ -100,6 +123,8 @@ order: 015
 | `flat(depth?)` / `fill(v, start?, end?)` / `copyWithin(target, start, end?)` | 数组工具 |
 | `iterator()` / `entriesIterator()` / `entries()` | 迭代协议 |
 
+`slice(start?, end?)` 使用与切片表达式相同的半开区间和负索引规则；返回独立数组，原数组不变。
+
 ### 14.8 `Map<K, V>` 方法
 
 | 成员 | 类型/说明 |
@@ -112,7 +137,7 @@ order: 015
 | `forEach(fn)` | 遍历 |
 | `iterator()` / `entriesIterator()` | 迭代协议 |
 
-**Map 字面量**：`#{"k1": v1, "k2": v2}` 或 `#{}`；使用 `:`，靠 `#` 前缀区别于 Object/Json 字面量。
+**Map 字面量**：`#{"k1": v1, "k2": v2}` 或 `#{}`；使用 `:`，靠 `#` 前缀区别于 Record/Json 对象字面量。
 
 ### 14.9 `Set<T>` 方法
 
@@ -154,9 +179,10 @@ order: 015
 | `Json.size(obj)` | 字段数量 |
 | `Json.isEmpty(obj)` | 是否为空 |
 | `Json.parse(s)` / `Json.tryParse(s)` / `Json.isValid(s)` | JSON 解析与校验 |
+| `Json.encode(value)` | 显式 typed value → Json 边界转换 |
 | `Json.stringify(value, indent?)` | 序列化 |
 
-**字面量**：`{ name: "alice", age: 30 }`，动态类型为 `Json`。如需 sealed 对象，用 `type T = { name: string, age: int }` 标注。
+**字面量**：`{ name: "alice", age: 30 }` 默认是 sealed `Record`。显式写 `let j: Json = {...}` 时才是动态 Json object；typed value 进入 JSON 边界使用 `Json.encode(value)`。
 
 ### 14.12 `Range`
 
@@ -196,13 +222,13 @@ order: 015
 | `toString()` | 输出字符串 |
 | `clear()` | 清空并返回自身 |
 
-### 14.16 `Exception`
+### 14.16 `PanicInfo`
 
-内置 `Exception` 类包含 `message`、`stack`、`cause`、`code`、`data` 字段，构造函数 `constructor(message: string = "", cause: Exception? = null)`，以及 `toString()`。
+内置 `PanicInfo` 类包含 `message`、`stack`、`cause`、`code`、`data` 字段，构造函数 `constructor(message: string = "", cause: PanicInfo? = null)`，以及 `toString()`。
 
 ### 14.17 `Task<T>` / `EnumValue` / `EnumType`
 
-`Task<T>` 属性：`done`、`status`；方法：`cancel()`、`poll()`、`awaitResult()`、`awaitTimeout(ms)`。`poll()` 和显式等待方法返回 `TaskResult<T>`，plain `await task` 成功时返回 `T`，失败或取消时走异常路径。`EnumValue` 属性：`name`、`value`、`ordinal`，方法：`toString()`。`EnumType` 属性：`name`、`memberCount`，方法：`getMember(name)`。
+`Task<T>` 属性：`done`、`status`；方法：`cancel()`、`poll()`、`awaitResult()`、`awaitTimeout(ms)`。`poll()` 和显式等待方法返回 `TaskResult<T>`；`TaskResult.Failed(error)` 以 `unknown` 保留原始失败值（业务 enum 错误或 `PanicInfo`），plain `await task` 成功时返回 `T`，失败或取消时走对应错误/panic 路径。`EnumValue` 属性：`name`、`value`、`ordinal`，方法：`toString()`。`EnumType` 属性：`name`、`memberCount`，方法：`getMember(name)`。
 
 ### 14.18 其他 prelude 类型（`Logger` / `NetConn` / `NetListener`）
 
@@ -251,6 +277,11 @@ This section is a **method index** for each type (grouped by topic). Concrete si
 | `floor()` / `ceil()` / `round()` | `() -> int` | for `int`, returns self |
 | `sqrt()` | `() -> float` | square root |
 | `pow(exp)` | `(float) -> float` | power |
+| `checkedAdd(other)` / `checkedSub(other)` / `checkedMul(other)` | `(int) -> int?` | returns `null` on overflow |
+| `saturatingAdd(other)` / `saturatingSub(other)` / `saturatingMul(other)` | `(int) -> int` | clamps overflow to the `int` boundary |
+| `wrappingAdd(other)` / `wrappingSub(other)` / `wrappingMul(other)` | `(int) -> int` | explicit two's-complement wrap |
+
+`abs()` follows integer wrap semantics: `(-9223372036854775807 - 1).abs()` returns itself. `toHex()` keeps a sign prefix for negative values, for example `-0x8000000000000000`.
 
 ### 14.2 `float` Methods
 
@@ -263,6 +294,7 @@ This section is a **method index** for each type (grouped by topic). Concrete si
 | `floor()` / `ceil()` / `round()` | `() -> int` | rounding |
 | `sqrt()` | `() -> float` | square root |
 | `pow(exp)` | `(float) -> float` | power |
+| `isNaN()` | `() -> bool` | whether the value is IEEE NaN |
 
 ### 14.3 `BigInt` Methods
 
@@ -281,13 +313,26 @@ This section is a **method index** for each type (grouped by topic). Concrete si
 |--|--|--|
 | `toString()` | `() -> string` | returns `"true"` or `"false"` |
 
+### 14.4.1 `char` Methods
+
+| Method | Signature | Description |
+|--|--|--|
+| `toString()` | `() -> string` | return a one-Unicode-scalar string |
+| `ord()` | `() -> int` | return the Unicode scalar code point |
+| `isLetter()` | `() -> bool` | whether the scalar is a Unicode letter |
+| `isNumber()` | `() -> bool` | whether the scalar is a Unicode number |
+| `isAlphanumeric()` | `() -> bool` | whether the scalar is a letter or number |
+| `isWhitespace()` | `() -> bool` | whether the scalar is whitespace |
+
+`char` is an independent primitive type and does not inherit integer methods; use `ord()` or `int(c)` explicitly when the code point is needed.
+
 ### 14.5 `string` Methods
 
 | Member | Type / Description |
 |--|--|
-| `length` | string-length property |
-| `charAt(i)` | character at the given index |
-| `charCodeAt(i)` | code point at the given index |
+| `length` / `size` | Unicode scalar count property |
+| `charAt(i)` | one-scalar string at the given Unicode scalar index |
+| `charCodeAt(i)` | code point at the given Unicode scalar index |
 | `concat(...others)` | concatenate strings |
 | `includes(s)` | substring containment test |
 | `indexOf(s)` / `lastIndexOf(s)` | substring search |
@@ -300,7 +345,11 @@ This section is a **method index** for each type (grouped by topic). Concrete si
 | `startsWith(s)` / `endsWith(s)` | prefix/suffix check |
 | `padStart(len, pad?)` / `padEnd(len, pad?)` | padding |
 | `match(pattern)` | regex match |
-| `iterator()` / `entriesIterator()` / `entries()` | iteration protocol |
+| `iterator()` | `() -> Iterator<char>` |
+| `entriesIterator()` | `() -> Iterator<(int, char)>` |
+| `entries()` | `() -> Array<(int, char)>` |
+
+The string index expression `s[i]` returns `char`; `charAt(i)` keeps the JavaScript-style string return value. `slice(start, end?)` uses the same half-open range and negative-index rules as slice expressions: a negative index is first converted as `length + index`, then clamped into `[0, length]`.
 
 ### 14.6 `Bytes`
 
@@ -325,6 +374,8 @@ This section is a **method index** for each type (grouped by topic). Concrete si
 | `flat(depth?)` / `fill(v, start?, end?)` / `copyWithin(target, start, end?)` | array utilities |
 | `iterator()` / `entriesIterator()` / `entries()` | iteration protocol |
 
+`slice(start?, end?)` uses the same half-open range and negative-index rules as slice expressions; it returns an independent array and leaves the original array unchanged.
+
 ### 14.8 `Map<K, V>` Methods
 
 | Member | Type / Description |
@@ -337,7 +388,7 @@ This section is a **method index** for each type (grouped by topic). Concrete si
 | `forEach(fn)` | traversal |
 | `iterator()` / `entriesIterator()` | iteration protocol |
 
-**Map literal**: `#{"k1": v1, "k2": v2}` or `#{}`; entries use `:`, distinguished from Object/Json literals by the `#` prefix.
+**Map literal**: `#{"k1": v1, "k2": v2}` or `#{}`; entries use `:`, distinguished from Record/Json object literals by the `#` prefix.
 
 ### 14.9 `Set<T>` Methods
 
@@ -379,9 +430,10 @@ This section is a **method index** for each type (grouped by topic). Concrete si
 | `Json.size(obj)` | number of fields |
 | `Json.isEmpty(obj)` | emptiness predicate |
 | `Json.parse(s)` / `Json.tryParse(s)` / `Json.isValid(s)` | JSON parsing and validation |
+| `Json.encode(value)` | explicit typed value → Json boundary conversion |
 | `Json.stringify(value, indent?)` | serialization |
 
-**Literal**: `{ name: "alice", age: 30 }` has dynamic type `Json`. For sealed objects, annotate with `type T = { name: string, age: int }`.
+**Literal**: `{ name: "alice", age: 30 }` defaults to sealed `Record`. It becomes a dynamic Json object only with an explicit `Json` annotation such as `let j: Json = {...}`; use `Json.encode(value)` when a typed value crosses a JSON boundary.
 
 ### 14.12 `Range`
 
@@ -421,13 +473,13 @@ The `import datetime` module provides factory functions: `now`, `utc`, `create`,
 | `toString()` | output string |
 | `clear()` | empty and return self |
 
-### 14.16 `Exception`
+### 14.16 `PanicInfo`
 
-The built-in `Exception` class has fields `message`, `stack`, `cause`, `code`, `data`, the constructor `constructor(message: string = "", cause: Exception? = null)`, and `toString()`.
+The built-in `PanicInfo` class has fields `message`, `stack`, `cause`, `code`, `data`, the constructor `constructor(message: string = "", cause: PanicInfo? = null)`, and `toString()`.
 
 ### 14.17 `Task<T>` / `EnumValue` / `EnumType`
 
-`Task<T>` properties: `done`, `status`; methods: `cancel()`, `poll()`, `awaitResult()`, `awaitTimeout(ms)`. `poll()` and explicit wait methods return `TaskResult<T>`; plain `await task` returns `T` on success and uses the exception path for failure or cancellation. `EnumValue` properties: `name`, `value`, `ordinal`; methods: `toString()`. `EnumType` properties: `name`, `memberCount`; methods: `getMember(name)`.
+`Task<T>` properties: `done`, `status`; methods: `cancel()`, `poll()`, `awaitResult()`, `awaitTimeout(ms)`. `poll()` and explicit wait methods return `TaskResult<T>`; `TaskResult.Failed(error)` preserves the original failure value (business enum error or `PanicInfo`) as `unknown`, while plain `await task` returns `T` on success and uses the matching error/panic path for failure or cancellation. `EnumValue` properties: `name`, `value`, `ordinal`; methods: `toString()`. `EnumType` properties: `name`, `memberCount`; methods: `getMember(name)`.
 
 ### 14.18 Other Prelude Types (`Logger` / `NetConn` / `NetListener`)
 

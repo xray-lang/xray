@@ -17,6 +17,7 @@
 #include "xfmt_internal.h"
 #include "xfmt_literal.h"
 #include "../../base/xmalloc.h"
+#include "../../base/xutf8.h"
 #include <string.h>
 
 // ----------------------------------------------------------------------------
@@ -42,6 +43,51 @@ static void fmt_literal(XrFmtContext *ctx, AstNode *node) {
             // control bytes round-trip through the parser.
             const char *s = node->as.literal.raw_value.string_val;
             xfmt_emit_string(ctx, s, s ? (int) strlen(s) : 0);
+            break;
+        }
+        case AST_LITERAL_CHAR: {
+            uint32_t cp = node->as.literal.raw_value.char_val;
+            xfmt_write_char(ctx, '\'');
+            switch (cp) {
+                case '\n':
+                    xfmt_write_str(ctx, "\\n");
+                    break;
+                case '\r':
+                    xfmt_write_str(ctx, "\\r");
+                    break;
+                case '\t':
+                    xfmt_write_str(ctx, "\\t");
+                    break;
+                case '\\':
+                    xfmt_write_str(ctx, "\\\\");
+                    break;
+                case '\'':
+                    xfmt_write_str(ctx, "\\'");
+                    break;
+                case '\b':
+                    xfmt_write_str(ctx, "\\b");
+                    break;
+                case '\f':
+                    xfmt_write_str(ctx, "\\f");
+                    break;
+                case '\0':
+                    xfmt_write_str(ctx, "\\0");
+                    break;
+                default: {
+                    if (cp < 0x20) {
+                        xfmt_write_fmt(ctx, "\\u{%X}", cp);
+                    } else {
+                        char buf[XR_UTF8_MAX_BYTES + 1];
+                        int n = xr_utf8_encode(cp, buf);
+                        if (n > 0) {
+                            buf[n] = '\0';
+                            xfmt_write_str(ctx, buf);
+                        }
+                    }
+                    break;
+                }
+            }
+            xfmt_write_char(ctx, '\'');
             break;
         }
         case AST_LITERAL_REGEX:
@@ -299,6 +345,7 @@ void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
         case AST_LITERAL_FLOAT:
         case AST_LITERAL_BIGINT:
         case AST_LITERAL_STRING:
+        case AST_LITERAL_CHAR:
         case AST_LITERAL_REGEX:
         case AST_LITERAL_NULL:
         case AST_LITERAL_TRUE:
@@ -324,8 +371,6 @@ void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
         case AST_BINARY_RSHIFT:
         case AST_BINARY_EQ:
         case AST_BINARY_NE:
-        case AST_BINARY_EQ_STRICT:
-        case AST_BINARY_NE_STRICT:
         case AST_BINARY_LT:
         case AST_BINARY_LE:
         case AST_BINARY_GT:
@@ -693,7 +738,7 @@ void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
                 xfmt_emit_expression(ctx, oc->index);
                 xfmt_write_char(ctx, ']');
             } else {
-                // Optional property/method: obj?.name
+                // Optional property/method/function-call callee: obj?.name / func?.
                 xfmt_write_str(ctx, "?.");
                 if (oc->name) {
                     xfmt_write_str(ctx, oc->name);
@@ -705,7 +750,7 @@ void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
         // Range
         case AST_RANGE:
             xfmt_emit_expression(ctx, node->as.range.start);
-            xfmt_write_str(ctx, "..");
+            xfmt_write_str(ctx, node->as.range.inclusive_end ? "..=" : "..");
             xfmt_emit_expression(ctx, node->as.range.end);
             break;
 
@@ -932,7 +977,7 @@ void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
 
         case AST_PATTERN_RANGE:
             xfmt_emit_expression(ctx, node->as.pattern_range.start);
-            xfmt_write_str(ctx, "..");
+            xfmt_write_str(ctx, node->as.pattern_range.inclusive_end ? "..=" : "..");
             xfmt_emit_expression(ctx, node->as.pattern_range.end);
             break;
 
@@ -951,10 +996,98 @@ void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
             break;
         }
 
+        // ADT variant destructure: `Shape.Circle(r)`
+        case AST_PATTERN_ADT: {
+            PatternAdtNode *pa = &node->as.pattern_adt;
+            xfmt_emit_expression(ctx, pa->variant);
+            xfmt_write_char(ctx, '(');
+            for (int i = 0; i < pa->count; i++) {
+                if (i > 0)
+                    xfmt_write_str(ctx, ", ");
+                xfmt_emit_expression(ctx, pa->patterns[i]);
+            }
+            xfmt_write_char(ctx, ')');
+            break;
+        }
+
+        // Tuple destructure pattern: `(a, b)`
+        case AST_PATTERN_TUPLE: {
+            PatternTupleNode *pt = &node->as.pattern_tuple;
+            xfmt_write_char(ctx, '(');
+            for (int i = 0; i < pt->count; i++) {
+                if (i > 0)
+                    xfmt_write_str(ctx, ", ");
+                xfmt_emit_expression(ctx, pt->patterns[i]);
+            }
+            xfmt_write_char(ctx, ')');
+            break;
+        }
+
+        // Object destructure pattern: `{ x, y }` or `{ x: sub }`
+        case AST_PATTERN_OBJECT: {
+            PatternObjectNode *po = &node->as.pattern_object;
+            xfmt_write_str(ctx, "{ ");
+            for (int i = 0; i < po->count; i++) {
+                if (i > 0)
+                    xfmt_write_str(ctx, ", ");
+                AstNode *sub = po->patterns[i];
+                bool shorthand =
+                    sub && sub->type == AST_PATTERN_LITERAL && sub->as.pattern_literal.value &&
+                    sub->as.pattern_literal.value->type == AST_VARIABLE && po->field_names[i] &&
+                    strcmp(sub->as.pattern_literal.value->as.variable.name, po->field_names[i]) ==
+                        0;
+                xfmt_write_str(ctx, po->field_names[i]);
+                if (!shorthand) {
+                    xfmt_write_str(ctx, ": ");
+                    xfmt_emit_expression(ctx, sub);
+                }
+            }
+            xfmt_write_str(ctx, " }");
+            break;
+        }
+
+        // Array destructure pattern: `[a, b, ..rest]`
+        case AST_PATTERN_ARRAY: {
+            PatternArrayNode *pa = &node->as.pattern_array;
+            xfmt_write_char(ctx, '[');
+            for (int i = 0; i < pa->count; i++) {
+                if (i > 0)
+                    xfmt_write_str(ctx, ", ");
+                xfmt_emit_expression(ctx, pa->patterns[i]);
+            }
+            if (pa->has_rest) {
+                if (pa->count > 0)
+                    xfmt_write_str(ctx, ", ");
+                xfmt_write_str(ctx, "..");
+                if (pa->rest_name)
+                    xfmt_write_str(ctx, pa->rest_name);
+            }
+            xfmt_write_char(ctx, ']');
+            break;
+        }
+
+        // Type pattern: `is T` / `is T name`
+        case AST_PATTERN_TYPE: {
+            PatternTypeNode *ptn = &node->as.pattern_type;
+            xfmt_write_str(ctx, "is ");
+            xfmt_emit_type(ctx, ptn->type);
+            if (ptn->binding_name) {
+                xfmt_write_char(ctx, ' ');
+                xfmt_write_str(ctx, ptn->binding_name);
+            }
+            break;
+        }
+
         // Force unwrap: expr!
         case AST_FORCE_UNWRAP:
             xfmt_emit_expression(ctx, node->as.unary.operand);
             xfmt_write_char(ctx, '!');
+            break;
+
+        // Spread element `...expr` inside array / tuple / object literals.
+        case AST_SPREAD_EXPR:
+            xfmt_write_str(ctx, "...");
+            xfmt_emit_expression(ctx, node->as.spread_expr.expr);
             break;
 
         // As expression: expr as Type / expr as Type?

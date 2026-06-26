@@ -13,7 +13,7 @@ class Payload {
 }
 
 fn run(rounds: int) -> int {
-    let payload = new Payload(17, 29)
+    let payload = Payload(17, 29)
     let total = 0
     for (let i = 0; i < rounds; i++) {
         total = total + payload.x + payload.y + payload.sum()

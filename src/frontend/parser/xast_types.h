@@ -44,6 +44,7 @@ typedef enum {
     AST_LITERAL_FLOAT,   // Float: 3.14
     AST_LITERAL_BIGINT,  // BigInt: 123n
     AST_LITERAL_STRING,  // String: "hello"
+    AST_LITERAL_CHAR,    // Char: 'a'
     AST_LITERAL_REGEX,   // Regex: /pattern/flags
     AST_LITERAL_NULL,    // null
     AST_LITERAL_TRUE,    // true
@@ -67,14 +68,12 @@ typedef enum {
     AST_BINARY_RSHIFT,  // a >> b
 
     // Binary - comparison
-    AST_BINARY_EQ,         // a == b
-    AST_BINARY_NE,         // a != b
-    AST_BINARY_EQ_STRICT,  // a === b
-    AST_BINARY_NE_STRICT,  // a !== b
-    AST_BINARY_LT,         // a < b
-    AST_BINARY_LE,         // a <= b
-    AST_BINARY_GT,         // a > b
-    AST_BINARY_GE,         // a >= b
+    AST_BINARY_EQ,  // a == b
+    AST_BINARY_NE,  // a != b
+    AST_BINARY_LT,  // a < b
+    AST_BINARY_LE,  // a <= b
+    AST_BINARY_GT,  // a > b
+    AST_BINARY_GE,  // a >= b
 
     // Binary - logical
     AST_BINARY_AND,  // a && b
@@ -83,7 +82,7 @@ typedef enum {
     // Ternary and nullish
     AST_TERNARY,           // cond ? true_expr : false_expr
     AST_NULLISH_COALESCE,  // a ?? b
-    AST_OPTIONAL_CHAIN,    // obj?.prop
+    AST_OPTIONAL_CHAIN,    // obj?.prop / obj?[i] / func?.()
     AST_FORCE_UNWRAP,      // expr! (force unwrap nullable)
     AST_AS_EXPR,           // expr as Type (explicit type cast)
     AST_RANGE,             // 1..10
@@ -184,6 +183,8 @@ typedef enum {
     AST_PATTERN_MULTI,     // 1 | 2 | 3 (alternation list)
     AST_PATTERN_TUPLE,     // (a, b) / (0, _) / ((x, y), z) — positional tuple destructure
     AST_PATTERN_ADT,       // Shape.Circle(r) — ADT variant destructure
+    AST_PATTERN_OBJECT,    // { x, y } / { x: sub } — object/record field destructure
+    AST_PATTERN_ARRAY,     // [a, b, ..rest] — array element destructure with optional rest
     AST_PATTERN_TYPE,      // is T  /  is T name — runtime type check with optional binding
 
     // Spread element: `...expr` inside tuple literal or call argument list.
@@ -218,6 +219,7 @@ typedef enum {
     LITERAL_KIND_FLOAT,
     LITERAL_KIND_BIGINT,
     LITERAL_KIND_STRING,
+    LITERAL_KIND_CHAR,
     LITERAL_KIND_REGEX,
     LITERAL_KIND_BOOL,
     LITERAL_KIND_NULL

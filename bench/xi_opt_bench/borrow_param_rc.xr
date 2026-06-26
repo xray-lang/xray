@@ -33,7 +33,7 @@ fn sumArray(values: Array<int>) -> int {
 
 fn run(rounds: int) -> int {
     let pair = Pair{a: 11, b: 17}
-    let box = new Box(23)
+    let box = Box(23)
     let values = [3, 5, 7, 9]
     let total = 0
     for (let i = 0; i < rounds; i++) {

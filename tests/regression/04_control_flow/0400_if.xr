@@ -167,33 +167,26 @@ fn test_deep_nested() {
     assert_eq(result, 6)
 }
 
-// ===== 真值判断 =====
+// ===== 显式条件（非 truthy） =====
 
 @test
-fn test_truthy_number() {
+fn test_explicit_bool_condition() {
     let result = ""
-    if (1) { result = "truthy" } else { result = "falsy" }
-    assert_eq(result, "truthy")
-    
-    if (0) { result = "truthy" } else { result = "falsy" }
-    assert_eq(result, "falsy")
+    if (true) { result = "yes" } else { result = "no" }
+    assert_eq(result, "yes")
+    if (false) { result = "yes" } else { result = "no" }
+    assert_eq(result, "no")
 }
 
 @test
-fn test_truthy_string() {
+fn test_nullable_presence_condition() {
+    let s: string? = null
     let result = ""
-    if ("hello") { result = "truthy" } else { result = "falsy" }
-    assert_eq(result, "truthy")
-    
-    if ("") { result = "truthy" } else { result = "falsy" }
-    assert_eq(result, "falsy")
-}
-
-@test
-fn test_truthy_null() {
-    let result = ""
-    if (null) { result = "truthy" } else { result = "falsy" }
-    assert_eq(result, "falsy")
+    if (s) { result = "present" } else { result = "absent" }
+    assert_eq(result, "absent")
+    let empty: string? = ""
+    if (empty) { result = "present" } else { result = "absent" }
+    assert_eq(result, "present")
 }
 
 // ===== 复合条件 =====

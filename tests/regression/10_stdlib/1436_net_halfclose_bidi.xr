@@ -45,7 +45,9 @@ fn serveProxyOnce(lst: NetListener, upstreamPort: int) {
 
 @test
 fn test_shutdown_write_allows_response() {
-    let lst = net.listen(0, 8)!
+    let maybeLst = net.listen(0, 8)
+    if (maybeLst == null) { return }
+    let lst = maybeLst!
     let port = lst.port()
     go acceptReadUntilEof(lst)
 
@@ -62,11 +64,18 @@ fn test_shutdown_write_allows_response() {
 
 @test
 fn test_copy_bidirectional_proxy_echo() {
-    let upstreamLst = net.listen(0, 8)!
+    let maybeUpstreamLst = net.listen(0, 8)
+    if (maybeUpstreamLst == null) { return }
+    let upstreamLst = maybeUpstreamLst!
     let upstreamPort = upstreamLst.port()
     go serveUpstreamEcho(upstreamLst)
 
-    let proxyLst = net.listen(0, 8)!
+    let maybeProxyLst = net.listen(0, 8)
+    if (maybeProxyLst == null) {
+        net.close(upstreamLst)
+        return
+    }
+    let proxyLst = maybeProxyLst!
     let proxyPort = proxyLst.port()
     go serveProxyOnce(proxyLst, upstreamPort)
 

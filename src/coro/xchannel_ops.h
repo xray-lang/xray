@@ -23,6 +23,7 @@
 #include "xchannel.h"
 #include "xdeep_copy.h"
 #include "../runtime/value/xvalue.h"
+#include "../runtime/value/xtransfer_mode.h"
 #include "../runtime/core/xr_runtime_core.h"
 #include "../runtime/xisolate_api.h"
 #include "../runtime/xshared.h"
@@ -84,8 +85,40 @@ static inline XrValue xr_chan_prepare_send_core(XrRuntimeCore *core, XrValue val
     return copied;
 }
 
+static inline XrValue xr_chan_prepare_send_transfer_core(XrRuntimeCore *core, XrValue value,
+                                                         uint8_t mode) {
+    if (mode == XR_TRANSFER_MOVE)
+        return xr_chan_prepare_send_core(core, value);
+    if (!XR_IS_PTR(value))
+        return value;
+
+    XrObjHeader *obj = XR_VALUE_GCPTR(value);
+    if (!obj)
+        return value;
+    if (XR_OBJ_GET_FLAG(obj, XR_OBJ_TRANSIT))
+        return value;
+    if (!xr_value_needs_copy(value)) {
+        if (XR_OBJ_IS_SHARED(obj))
+            xr_shared_retain(obj);
+        return value;
+    }
+    if (mode == XR_TRANSFER_COPY)
+        return xr_deep_copy_to_transit_core(core, value);
+    if (XR_OBJ_IS_SHARED(obj)) {
+        xr_shared_retain(obj);
+        return value;
+    }
+    return xr_deep_copy_to_transit_core(core, value);
+}
+
 static inline XrValue xr_chan_prepare_send(struct XrVMRuntime *isolate, XrValue value) {
     return xr_chan_prepare_send_core(isolate ? xr_isolate_get_runtime_core(isolate) : NULL, value);
+}
+
+static inline XrValue xr_chan_prepare_send_transfer(struct XrVMRuntime *isolate, XrValue value,
+                                                    uint8_t mode) {
+    return xr_chan_prepare_send_transfer_core(isolate ? xr_isolate_get_runtime_core(isolate) : NULL,
+                                              value, mode);
 }
 
 /* A prepared send value that never entered the channel — try-send
@@ -191,8 +224,25 @@ static inline bool xr_chan_try_send_core(XrRuntimeCore *core, XrChannel *ch, XrV
     return false;
 }
 
+static inline bool xr_chan_try_send_transfer_core(XrRuntimeCore *core, XrChannel *ch, XrValue value,
+                                                  uint8_t mode) {
+    XR_DCHECK(ch != NULL, "xr_chan_try_send_transfer: NULL channel");
+
+    value = xr_chan_prepare_send_transfer_core(core, value, mode);
+    if (xr_channel_try_send(ch, value))
+        return true;
+    xr_chan_abandon_send_core(core, value);
+    return false;
+}
+
 static inline bool xr_chan_try_send(struct XrVMRuntime *isolate, XrChannel *ch, XrValue value) {
     return xr_chan_try_send_core(isolate ? xr_isolate_get_runtime_core(isolate) : NULL, ch, value);
+}
+
+static inline bool xr_chan_try_send_transfer(struct XrVMRuntime *isolate, XrChannel *ch,
+                                             XrValue value, uint8_t mode) {
+    return xr_chan_try_send_transfer_core(isolate ? xr_isolate_get_runtime_core(isolate) : NULL, ch,
+                                          value, mode);
 }
 
 #endif  // XCHANNEL_OPS_H

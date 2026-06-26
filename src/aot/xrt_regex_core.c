@@ -9,6 +9,7 @@
  */
 
 #include "xrt_coll.h"
+#include "xrt_class.h"
 #include "xrt_regex.h"
 #include "../../stdlib/regex/xregex.h"
 #include "../../stdlib/regex/xregex_internal.h"

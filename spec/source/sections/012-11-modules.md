@@ -321,10 +321,12 @@ Xray builds a complete **module dependency graph** (DAG) at compile time:
 
 1. Starting from the entry file, all `import` declarations are recursively resolved to build the dependency graph.
 2. The graph is topologically sorted to determine module initialization order.
-3. If a **circular dependency** is detected (SCC size > 1 or self-loop), a compile error is emitted.
+3. If a **circular dependency** is detected (SCC size > 1 or self-loop), compilation fails with `E0504` and reports a concrete cycle path such as `a.xr -> b.xr -> a.xr`.
 4. Modules are initialized in topological order, from leaf modules (no dependencies) to the entry module.
 
 Selective imports (`import { foo } from "./m"`) are resolved at compile time to fixed module indices and export slots, resulting in O(1) indexed access at runtime with no string lookup.
+
+Xray does not use partial module initialization or cache-based cycle breaking. A module that is still loading is not observable through `import`; mutual dependencies must be refactored into a DAG.
 
 ### 11.7 Native Modules
 

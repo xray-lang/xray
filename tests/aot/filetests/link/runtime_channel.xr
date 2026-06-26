@@ -1,4 +1,4 @@
-let ch = new Channel<int>(2)
+let ch = Channel<int>(2)
 
 select {
     1 to ch -> { print("sent") }

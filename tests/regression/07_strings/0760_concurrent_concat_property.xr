@@ -115,32 +115,32 @@ fn test_property_concurrent_concat_isolation() {
     
     let chars = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"]
     
-    fn isolation_task(id: int, char: string) -> string {
+    fn isolation_task(id: int, glyph: string) -> string {
         // 使用唯一字符构建字符串
-        let prefix = char.repeat(30)
+        let prefix = glyph.repeat(30)
         let middle = "_" + string(id) + "_"
-        let suffix = char.repeat(30)
+        let suffix = glyph.repeat(30)
         return prefix + middle + suffix
     }
     
     let n = 30
     let tasks: Array<Task> = []
     for (let i = 0; i < n; i++) {
-        let char = chars[i % 10]
-        tasks.push(go isolation_task(i, char))
+        let glyph = chars[i % 10]
+        tasks.push(go isolation_task(i, glyph))
     }
     
     let results = await all tasks
     
     // 验证每个结果只包含该协程的唯一字符
     for (let i = 0; i < n; i++) {
-        let char = chars[i % 10]
+        let glyph = chars[i % 10]
         let result = results[i]
-        
+
         // 验证前缀
-        assert_eq(result.startsWith(char.repeat(30)), true)
+        assert_eq(result.startsWith(glyph.repeat(30)), true)
         // 验证后缀
-        assert_eq(result.endsWith(char.repeat(30)), true)
+        assert_eq(result.endsWith(glyph.repeat(30)), true)
         // 验证中间包含 id
         assert_eq(result.includes("_" + string(i) + "_"), true)
     }

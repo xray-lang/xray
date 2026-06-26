@@ -78,6 +78,7 @@
 #include "../runtime/object/xbigint.h"
 #include "../runtime/object/xrange.h"
 #include "../base/xutf8.h"  // XR_UNICODE_MAX
+#include "../base/xunicode.h"
 #include "../runtime/value/xslot_type.h"
 #include "../runtime/value/xtype.h"
 #include "../shared/xr_string_core.h"
@@ -316,14 +317,14 @@ XrVMResult run(XrVMRuntime *isolate, XrVMContext *vm_ctx) {
  * startfunc (panic handler) or returns XR_VM_RUNTIME_ERROR. */
 #define VM_RUNTIME_ERROR(code, fmt, ...)                                                           \
     do {                                                                                           \
-        XrValue _exc = xr_exception_newf(isolate, (code), fmt, ##__VA_ARGS__);                     \
+        XrValue _exc = xr_panic_info_newf(isolate, (code), fmt, ##__VA_ARGS__);                    \
         savepc();                                                                                  \
         {                                                                                          \
             XrDebugHooks *_eh = (XrDebugHooks *) isolate->debug_hooks;                             \
             if (_eh && _eh->on_exception) {                                                        \
                 bool _unc = (VM_HANDLER_COUNT == 0);                                               \
-                const char *_msg = xr_value_is_exception(isolate, _exc)                            \
-                                       ? xr_exception_get_message(isolate, _exc)                   \
+                const char *_msg = xr_value_is_panic_info(isolate, _exc)                           \
+                                       ? xr_panic_info_get_message(isolate, _exc)                  \
                                        : "<exception>";                                            \
                 if (_eh->on_exception(isolate, _msg, _unc) == XR_DBG_ACTION_BREAK) {               \
                     VM_SET_EXCEPTION(_exc);                                                        \
@@ -422,6 +423,8 @@ XrVMResult run(XrVMRuntime *isolate, XrVMContext *vm_ctx) {
         (VMProfiler *) (vm_ctx && vm_ctx->isolate ? vm_ctx->isolate->profiler : NULL);
     vm_profiler_init(_vm_prof);
     VM_PROFILE_VARS();
+
+    XrWorker *vm_worker = xr_current_worker();
 
 // Per-frame struct storage in vm_ctx (lazy-allocated, persists across calls)
 

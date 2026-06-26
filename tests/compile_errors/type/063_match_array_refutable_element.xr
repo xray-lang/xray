@@ -1,0 +1,7 @@
+fn main() {
+    let a = [0, 1]
+    match (a) {
+        [0, x] -> { print(x) }
+        _ -> { print(-1) }
+    }
+}

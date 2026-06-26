@@ -1,6 +1,6 @@
 fn build_array() -> Array<int> {
     let xs = [1, 2]
-    yield
+    Coro.yield()
     return xs
 }
 

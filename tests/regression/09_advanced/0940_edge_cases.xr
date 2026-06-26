@@ -98,13 +98,12 @@ fn test_negative_numbers() {
 
 @test
 fn test_zero_division_float() {
-    let caught = false
-    try {
-        let x = 1.0 / 0.0
-    } catch panic (p) {
-        caught = true
-    }
-    assert_eq(caught, true)
+    let inf = 1.0 / 0.0
+    let neg_inf = -1.0 / 0.0
+    let nan = 0.0 / 0.0
+    assert_eq(inf > 1.0, true)
+    assert_eq(neg_inf < -1.0, true)
+    assert_eq(nan.isNaN(), true)
 }
 
 // ===== 字符串边界 =====
@@ -151,4 +150,3 @@ fn test_closure_capture() {
     x = 20
     assert_eq(f(), 20)
 }
-

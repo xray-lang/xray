@@ -225,6 +225,8 @@ static bool cg_class_field_cache_can_collect(const XiCgenCtx *ctx, CgClassFieldC
         return false;
     if (xi_type_is_task(f->params[0]->type))
         return false;
+    if (f->params[0]->type->kind == XR_KIND_ENUM)
+        return false;
     const CgMethodEntry *method = cg_class_field_cache_method_entry(ctx, f);
     if (!f->receiver_borrowed && !method)
         return false;

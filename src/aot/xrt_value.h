@@ -117,6 +117,7 @@ typedef struct XrValue {
 
 #define XR_TAG_NULL 0       /* null singleton */
 #define XR_TAG_BOOL 1       /* bool: payload 0=false, 1=true */
+#define XR_TAG_CHAR 2       /* char: Unicode scalar value in .i */
 #define XR_TAG_I64 3        /* integer (stored in .i as int64) */
 #define XR_TAG_F64 4        /* float (stored in .f as double) */
 #define XR_TAG_PTR 5        /* generic heap object pointer */
@@ -139,22 +140,13 @@ typedef struct XrValue {
 #define XR_TAG_REGEX 26    /* AOT compiled regex handle */
 #define XR_TAG_DATETIME 27 /* AOT DateTime light object */
 
-typedef enum XrAotEnumLiteralKind {
-    XR_AOT_ENUM_LITERAL_NULL = 0,
-    XR_AOT_ENUM_LITERAL_INT,
-    XR_AOT_ENUM_LITERAL_FLOAT,
-    XR_AOT_ENUM_LITERAL_BOOL,
-    XR_AOT_ENUM_LITERAL_STRING,
-} XrAotEnumLiteralKind;
-
 typedef struct XrAotEnumValueView {
     uint64_t gc_words[2];
     void *klass;
     const char *enum_name;
     const char *member_name;
-    XrAotEnumLiteralKind value_kind;
-    XrValue value;
-    const char *string_value;
+    XrValue raw_value;
+    uint32_t member_index;
 } XrAotEnumValueView;
 
 static inline const char *xrt_enum_to_cstr(XrValue v, char *buf, size_t bufsz) {
@@ -185,6 +177,25 @@ static inline int xrt_enum_key_eq(XrValue a, XrValue b) {
     return xrt_cstr_eq(ea->enum_name, eb->enum_name) &&
            xrt_cstr_eq(ea->member_name, eb->member_name);
 }
+
+/* Native field tags mirror XrNativeType for standalone generated C. */
+#define XR_NATIVE_I64 0
+#define XR_NATIVE_F64 1
+#define XR_NATIVE_BOOL 2
+#define XR_NATIVE_I8 3
+#define XR_NATIVE_I16 4
+#define XR_NATIVE_I32 5
+#define XR_NATIVE_U8 6
+#define XR_NATIVE_U16 7
+#define XR_NATIVE_U32 8
+#define XR_NATIVE_U64 9
+#define XR_NATIVE_F32 10
+#define XR_NATIVE_STRUCT 11
+#define XR_NATIVE_ARRAY 12
+#define XR_NATIVE_STRING 13
+#define XR_NATIVE_ARRAY_REF 14
+#define XR_NATIVE_MAP_REF 15
+#define XR_NATIVE_SET_REF 16
 
 /* String type check (both literal and bump-allocated) */
 #define XR_IS_STR(v) ((v).tag == XR_TAG_STR || (v).tag == XR_TAG_STR_ARC)
@@ -367,15 +378,35 @@ static inline XrValue xr_mkf64(double v, uint8_t tag) {
 #define XR_FROM_INT(x) ((XrValue) {.tag = XR_TAG_I64, .i = (int64_t) (x)})
 #define XR_FROM_FLOAT(x) ((XrValue) {.tag = XR_TAG_F64, .f = (double) (x)})
 #define XR_FROM_BOOL(x) ((XrValue) {.tag = XR_TAG_BOOL, .i = (x) ? 1 : 0})
+#define XR_FROM_CHAR(cp) ((XrValue) {.tag = XR_TAG_CHAR, .i = (int64_t) (uint32_t) (cp)})
 #define XR_NULL_VAL ((XrValue) {.tag = XR_TAG_NULL})
 #define XR_TRUE_VAL ((XrValue) {.tag = XR_TAG_BOOL, .i = 1})
 #define XR_FALSE_VAL ((XrValue) {.tag = XR_TAG_BOOL, .i = 0})
 
 #define XR_TO_INT(v) ((v).i)
 #define XR_TO_FLOAT(v) ((v).f)
+#define XR_TO_CHAR(v) ((uint32_t) (v).i)
 
 static inline const char *xr_unbox_str(XrValue v) {
     return xr_str_data(v);
+}
+
+static inline size_t xrt_value_native_type_size(uint8_t native_type) {
+    switch (native_type) {
+        case XR_NATIVE_I8:
+        case XR_NATIVE_U8:
+        case XR_NATIVE_BOOL:
+            return 1;
+        case XR_NATIVE_I16:
+        case XR_NATIVE_U16:
+            return 2;
+        case XR_NATIVE_I32:
+        case XR_NATIVE_U32:
+        case XR_NATIVE_F32:
+            return 4;
+        default:
+            return 8;
+    }
 }
 
 /* =========================================================================
@@ -394,7 +425,7 @@ static inline int64_t xrt_eq(XrValue a, XrValue b) {
         return 0;
     if (ta == XR_TAG_ENUM)
         return xrt_enum_key_eq(a, b);
-    if (ta == XR_TAG_I64 || ta == XR_TAG_BOOL)
+    if (ta == XR_TAG_I64 || ta == XR_TAG_BOOL || ta == XR_TAG_CHAR)
         return a.i == b.i;
     if (ta == XR_TAG_F64)
         return a.f == b.f;
@@ -415,7 +446,7 @@ static inline int64_t xrt_eq(XrValue a, XrValue b) {
         if (!a.ptr || !b.ptr || a.ext != b.ext)
             return 0;
         if (XR_IS_ARRAY_REF(a)) {
-            size_t size = (size_t) xr_native_type_size(XR_ARRAY_REF_ELEM_TYPE(a)) *
+            size_t size = xrt_value_native_type_size(XR_ARRAY_REF_ELEM_TYPE(a)) *
                           (size_t) XR_ARRAY_REF_ELEM_COUNT(a);
             return memcmp(a.ptr, b.ptr, size) == 0;
         }
@@ -439,6 +470,7 @@ static inline int64_t xrt_eq(XrValue a, XrValue b) {
 
 #define XR_IS_NULL(v) ((v).tag == XR_TAG_NULL)
 #define XR_IS_BOOL(v) ((v).tag == XR_TAG_BOOL)
+#define XR_IS_CHAR(v) ((v).tag == XR_TAG_CHAR)
 #define XR_IS_INT(v) ((v).tag == XR_TAG_I64)
 #define XR_IS_FLOAT(v) ((v).tag == XR_TAG_F64)
 #define XR_IS_FALSE(v) ((v).tag == XR_TAG_BOOL && (v).i == 0)
@@ -477,8 +509,10 @@ static inline double xrt_math_number(XrValue v) {
 
 static inline XrValue xrt_math_abs(XrValue v) {
     if (XR_IS_INT(v)) {
-        XrNumericCoreI64AbsResult result = xr_numeric_core_i64_math_abs(v.i);
-        return result.is_float ? XR_FROM_FLOAT(result.float_value) : XR_FROM_INT(result.int_value);
+        int64_t i = v.i;
+        if (i == INT64_MIN)
+            return XR_FROM_FLOAT((double) INT64_MAX + 1.0);
+        return XR_FROM_INT(i < 0 ? -i : i);
     }
     return XR_FROM_FLOAT(fabs(xrt_math_number(v)));
 }
@@ -491,19 +525,55 @@ static inline int xrt_format_float(char *buf, size_t bufsz, double value) {
     return xr_format_float(buf, bufsz, value);
 }
 
+static inline int xrt_char_utf8_encode(uint32_t cp, char *buf) {
+    if (!buf)
+        return 0;
+    if (cp <= 0x7Fu) {
+        buf[0] = (char) cp;
+        return 1;
+    }
+    if (cp <= 0x7FFu) {
+        buf[0] = (char) (0xC0u | (cp >> 6));
+        buf[1] = (char) (0x80u | (cp & 0x3Fu));
+        return 2;
+    }
+    if (cp <= 0xFFFFu) {
+        if (cp >= 0xD800u && cp <= 0xDFFFu)
+            return 0;
+        buf[0] = (char) (0xE0u | (cp >> 12));
+        buf[1] = (char) (0x80u | ((cp >> 6) & 0x3Fu));
+        buf[2] = (char) (0x80u | (cp & 0x3Fu));
+        return 3;
+    }
+    if (cp <= 0x10FFFFu) {
+        buf[0] = (char) (0xF0u | (cp >> 18));
+        buf[1] = (char) (0x80u | ((cp >> 12) & 0x3Fu));
+        buf[2] = (char) (0x80u | ((cp >> 6) & 0x3Fu));
+        buf[3] = (char) (0x80u | (cp & 0x3Fu));
+        return 4;
+    }
+    return 0;
+}
+
 static inline const char *xr_to_cstr(XrValue v, char *buf, size_t bufsz) {
     switch (v.tag) {
         case XR_TAG_STR:
         case XR_TAG_STR_ARC:
             return xr_str_data(v);
         case XR_TAG_I64:
-            (void) xr_numeric_core_format_i64(buf, bufsz, v.i);
+            snprintf(buf, bufsz, "%lld", (long long) v.i);
             return buf;
         case XR_TAG_F64:
             xrt_format_float(buf, bufsz, v.f);
             return buf;
         case XR_TAG_BOOL:
             return v.i ? "true" : "false";
+        case XR_TAG_CHAR: {
+            int n = (bufsz > 0) ? xrt_char_utf8_encode(XR_TO_CHAR(v), buf) : 0;
+            if (bufsz > 0)
+                buf[(n > 0 && (size_t) n < bufsz) ? n : 0] = '\0';
+            return buf;
+        }
         case XR_TAG_NULL:
             return "null";
         case XR_TAG_ENUM:
@@ -511,6 +581,25 @@ static inline const char *xr_to_cstr(XrValue v, char *buf, size_t bufsz) {
         default:
             snprintf(buf, bufsz, "<object@%p>", v.ptr);
             return buf;
+    }
+}
+
+/* =========================================================================
+ * Truthiness (assert/debug helpers: null, false, 0, 0.0 are falsy)
+ * ========================================================================= */
+
+static inline int xr_truthy(XrValue v) {
+    switch (v.tag) {
+        case XR_TAG_NULL:
+            return 0;
+        case XR_TAG_BOOL:
+            return v.i != 0;
+        case XR_TAG_I64:
+            return v.i != 0;
+        case XR_TAG_F64:
+            return v.f != 0.0;
+        default:
+            return 1;
     }
 }
 

@@ -1169,8 +1169,6 @@ XI_VM_TEMPLATE_OPCODES = {
     'xi.shr': 'OP_SHR',
     'xi.eq': 'OP_CMP_EQ',
     'xi.ne': 'OP_CMP_NE',
-    'xi.eq.strict': 'OP_CMP_EQ_STRICT',
-    'xi.ne.strict': 'OP_CMP_NE_STRICT',
     'xi.lt': 'OP_CMP_LT',
     'xi.le': 'OP_CMP_LE',
     'xi.gt': 'OP_CMP_LT',
@@ -1259,11 +1257,6 @@ XI_VM_TEMPLATE_COMPARE_DEEP = {
     'xi.ne': ('true', 'XR_OP_NE_FLAG', 'SYMBOL_OP_NE', '"!="', 'vm_values_equal_deep'),
 }
 
-XI_VM_TEMPLATE_COMPARE_STRICT = {
-    'xi.eq.strict': 'false',
-    'xi.ne.strict': 'true',
-}
-
 XI_VM_TEMPLATE_COMPARE_ORDER = {
     'xi.lt': ('XR_OP_LT_FLAG', 'SYMBOL_OP_LT', '"<"', 'vm_numeric_less'),
     'xi.le': ('XR_OP_LE_FLAG', 'SYMBOL_OP_LE', '"<="', 'vm_numeric_less_equal'),
@@ -1271,7 +1264,6 @@ XI_VM_TEMPLATE_COMPARE_ORDER = {
 
 XI_VM_TEMPLATE_COMPARE_OPS = (
     set(XI_VM_TEMPLATE_COMPARE_DEEP) |
-    set(XI_VM_TEMPLATE_COMPARE_STRICT) |
     set(XI_VM_TEMPLATE_COMPARE_ORDER) |
     {'xi.gt', 'xi.ge'}
 )
@@ -1327,12 +1319,6 @@ XI_AOT_C_TEMPLATE_COMPARE = {
     'xi.gt': ('xrt_lt', '>', True),
     'xi.ge': ('xrt_le', '>=', True),
 }
-
-XI_AOT_C_TEMPLATE_STRICT_COMPARE = {
-    'xi.eq.strict': '==',
-    'xi.ne.strict': '!=',
-}
-
 
 @dataclass
 class XiLoweringDef:
@@ -1935,9 +1921,6 @@ def generate_xi_vm_template_compare_dispatch(entries: list[XiLoweringDef]) -> st
     lines.append('#ifndef XVM_TEMPLATE_COMPARE_DEEP_CASE')
     lines.append('#error "XVM_TEMPLATE_COMPARE_DEEP_CASE must be defined before including this file"')
     lines.append('#endif')
-    lines.append('#ifndef XVM_TEMPLATE_COMPARE_STRICT_CASE')
-    lines.append('#error "XVM_TEMPLATE_COMPARE_STRICT_CASE must be defined before including this file"')
-    lines.append('#endif')
     lines.append('#ifndef XVM_TEMPLATE_COMPARE_ORDER_CASE')
     lines.append('#error "XVM_TEMPLATE_COMPARE_ORDER_CASE must be defined before including this file"')
     lines.append('#endif')
@@ -1954,9 +1937,6 @@ def generate_xi_vm_template_compare_dispatch(entries: list[XiLoweringDef]) -> st
             lines.append(
                 f'XVM_TEMPLATE_COMPARE_DEEP_CASE({opcode}, {negate}, {op_flag}, '
                 f'{op_symbol}, {op_name}, {deep_fn})')
-        elif entry.op_name in XI_VM_TEMPLATE_COMPARE_STRICT:
-            negate = XI_VM_TEMPLATE_COMPARE_STRICT[entry.op_name]
-            lines.append(f'XVM_TEMPLATE_COMPARE_STRICT_CASE({opcode}, {negate})')
         elif entry.op_name in XI_VM_TEMPLATE_COMPARE_ORDER:
             op_flag, op_symbol, op_name, compare_fn = XI_VM_TEMPLATE_COMPARE_ORDER[entry.op_name]
             lines.append(
@@ -2019,10 +1999,6 @@ def generate_xi_to_c_dispatch_header(entries: list[XiLoweringDef]) -> str:
         entry for entry in target_entries
         if entry.op_name in XI_AOT_C_TEMPLATE_COMPARE
     ]
-    strict_compare_entries = [
-        entry for entry in target_entries
-        if entry.op_name in XI_AOT_C_TEMPLATE_STRICT_COMPARE
-    ]
     value_binary_templates = [
         entry for entry in target_entries
         if entry.template == 'value-binary'
@@ -2044,7 +2020,6 @@ def generate_xi_to_c_dispatch_header(entries: list[XiLoweringDef]) -> str:
     missing_compare_ops = [
         entry.op_name for entry in compare_templates
         if entry.op_name not in XI_AOT_C_TEMPLATE_COMPARE
-        and entry.op_name not in XI_AOT_C_TEMPLATE_STRICT_COMPARE
     ]
     if missing_compare_ops:
         die("xi-lowering: missing AOT C compare template op(s) for " +
@@ -2093,8 +2068,6 @@ def generate_xi_to_c_dispatch_header(entries: list[XiLoweringDef]) -> str:
                                bitwise_unary_entries)
     emit_template_driver_macro(lines, 'XI_TO_C_TEMPLATE_SHIFT_DRIVERS', shift_entries)
     emit_template_driver_macro(lines, 'XI_TO_C_TEMPLATE_COMPARE_DRIVERS', compare_entries)
-    emit_template_driver_macro(lines, 'XI_TO_C_TEMPLATE_STRICT_COMPARE_DRIVERS',
-                               strict_compare_entries)
     emit_template_driver_macro(lines, 'XI_TO_C_TEMPLATE_WIDTH_DRIVERS', width_entries)
     lines.append('static inline const char *xi_to_c_template_arith_runtime_fn(uint16_t op) {')
     lines.append('    switch ((XiOp) op) {')
@@ -2216,17 +2189,6 @@ def generate_xi_to_c_dispatch_header(entries: list[XiLoweringDef]) -> str:
     lines.append('        default: return false;')
     lines.append('    }')
     lines.append('    return false;')
-    lines.append('}')
-    lines.append('')
-    lines.append('static inline const char *xi_to_c_template_strict_compare_op(uint16_t op) {')
-    lines.append('    switch ((XiOp) op) {')
-    for entry in strict_compare_entries:
-        op_text = XI_AOT_C_TEMPLATE_STRICT_COMPARE[entry.op_name]
-        lines.append(f'        case XI_{entry.ident}: return "{op_text}";')
-    lines.append('        case XI_OP_COUNT: return "";')
-    lines.append('        default: return "";')
-    lines.append('    }')
-    lines.append('    return "";')
     lines.append('}')
     lines.append('')
     lines.append('typedef enum {')
@@ -2363,10 +2325,6 @@ def generate_xi_lowering_test(entries: list[XiLoweringDef]) -> str:
                 f'    assert(strcmp(xi_to_c_template_compare_native_op(XI_{entry.ident}), "{native_op}") == 0);')
             lines.append(
                 f'    assert(xi_to_c_template_compare_swaps_tagged_args(XI_{entry.ident}) == {swaps_c});')
-        if 'aot-c' in entry.target_drivers and entry.op_name in XI_AOT_C_TEMPLATE_STRICT_COMPARE:
-            op_text = XI_AOT_C_TEMPLATE_STRICT_COMPARE[entry.op_name]
-            lines.append(
-                f'    assert(strcmp(xi_to_c_template_strict_compare_op(XI_{entry.ident}), "{op_text}") == 0);')
         if 'aot-c' in entry.target_drivers and entry.template in {'narrow', 'widen'}:
             kind, ctype, preserve = XI_AOT_C_TEMPLATE_WIDTH[entry.op_name]
             preserve_c = 'true' if preserve else 'false'
@@ -3593,12 +3551,6 @@ def _test_xi_lowering_parser():
         XiLoweringDef('xi.ne', 'NE', ['vm-bytecode'], ['vm-bytecode'],
                       {'vm-bytecode': 'xi_emit_cmp'}, {}, {},
                       template='compare'),
-        XiLoweringDef('xi.eq.strict', 'EQ_STRICT', ['vm-bytecode'], ['vm-bytecode'],
-                      {'vm-bytecode': 'xi_emit_cmp'}, {}, {},
-                      template='compare'),
-        XiLoweringDef('xi.ne.strict', 'NE_STRICT', ['vm-bytecode'], ['vm-bytecode'],
-                      {'vm-bytecode': 'xi_emit_cmp'}, {}, {},
-                      template='compare'),
         XiLoweringDef('xi.lt', 'LT', ['vm-bytecode'], ['vm-bytecode'],
                       {'vm-bytecode': 'xi_emit_cmp'}, {}, {},
                       template='compare'),
@@ -3608,8 +3560,6 @@ def _test_xi_lowering_parser():
     ])
     assert 'XVM_TEMPLATE_COMPARE_DEEP_CASE(OP_CMP_EQ, false, XR_OP_EQ_FLAG' in vm_compare
     assert 'XVM_TEMPLATE_COMPARE_DEEP_CASE(OP_CMP_NE, true, XR_OP_NE_FLAG' in vm_compare
-    assert 'XVM_TEMPLATE_COMPARE_STRICT_CASE(OP_CMP_EQ_STRICT, false)' in vm_compare
-    assert 'XVM_TEMPLATE_COMPARE_STRICT_CASE(OP_CMP_NE_STRICT, true)' in vm_compare
     assert 'XVM_TEMPLATE_COMPARE_ORDER_CASE(OP_CMP_LT, XR_OP_LT_FLAG' in vm_compare
     assert vm_compare.count('OP_CMP_LT') == 1
     lowering_test = generate_xi_lowering_test(entries)

@@ -85,6 +85,8 @@ KOP_SIGS: dict[str, tuple[list[tuple[str, str]], str, tuple[str, ...]]] = {
                           "abc", ("dst", "src", "sliteral")),
     "KOP_ABC_BIN_LIT":   ([("int", "dst"), ("int", "src"), ("int", "literal")],
                           "abc", ("dst", "src", "literal")),
+    "KOP_ABC_STORE_LIT": ([("int", "target"), ("int", "src"), ("int", "literal")],
+                          "abc", ("target", "src", "literal")),
     "KOP_ABC_BIN_SYM":   ([("int", "dst"), ("int", "src"), ("int", "sym_idx")],
                           "abc", ("dst", "src", "sym_idx")),
     "KOP_ABC_INPLACE_K": ([("int", "target"), ("int", "k_idx"), ("int", "value")],
@@ -97,6 +99,8 @@ KOP_SIGS: dict[str, tuple[list[tuple[str, str]], str, tuple[str, ...]]] = {
     # FMT_ABx / FMT_AsBx / FMT_PROTO / FMT_GLOBAL — Bx-encoded opcodes.
     "KOP_ABx_K":         ([("int", "dst"), ("int", "k_idx")],
                           "abx", ("dst", "k_idx")),
+    "KOP_ABx_K_IN":      ([("int", "src"), ("int", "k_idx")],
+                          "abx", ("src", "k_idx")),
     "KOP_AsBx_LITS":     ([("int", "dst"), ("int", "sbx")],
                           "asbx", ("dst", "sbx")),
     "KOP_PROTO":         ([("int", "dst"), ("int", "proto_idx")],

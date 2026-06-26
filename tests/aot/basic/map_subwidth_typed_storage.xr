@@ -1,7 +1,7 @@
 let m: Map<uint8, int32> = #{}
 m.set(255, 2147483647)
-m.set(256, 2147483648)
-m.set(1, -2147483649)
+m.set(255 + 1, 2147483647 + 1)
+m.set(1, -2147483648 - 1)
 print(m.length)
 print(m.size)
 print(m.has(0))

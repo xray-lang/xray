@@ -129,7 +129,7 @@ fn test_roundtrip_nested_array() {
 
 @test
 fn test_roundtrip_empty_object() {
-    let original = {}
+    let original: Json = {}
     let jsonStr = Json.stringify(original)
     let parsed = Json.parse(jsonStr)
     assert_eq(parsed != null, true)
@@ -137,7 +137,7 @@ fn test_roundtrip_empty_object() {
 
 @test
 fn test_roundtrip_simple_object() {
-    let original = { name: "Alice", age: 30 }
+    let original: Json = { name: "Alice", age: 30 }
     let jsonStr = Json.stringify(original)
     let parsed = Json.parse(jsonStr)
     assert_eq(parsed.name, "Alice")
@@ -146,7 +146,7 @@ fn test_roundtrip_simple_object() {
 
 @test
 fn test_roundtrip_nested_object() {
-    let original = { user: { name: "Bob", profile: { city: "NYC" } } }
+    let original: Json = { user: { name: "Bob", profile: { city: "NYC" } } }
     let jsonStr = Json.stringify(original)
     let parsed = Json.parse(jsonStr)
     assert_eq(parsed.user.name, "Bob")
@@ -155,7 +155,7 @@ fn test_roundtrip_nested_object() {
 
 @test
 fn test_roundtrip_object_with_array() {
-    let original = { numbers: [1, 2, 3], active: true }
+    let original: Json = { numbers: [1, 2, 3], active: true }
     let jsonStr = Json.stringify(original)
     let parsed = Json.parse(jsonStr)
     assert_eq(parsed.numbers.length, 3)
@@ -183,7 +183,7 @@ fn test_roundtrip_emoji() {
 
 @test
 fn test_roundtrip_mixed_unicode() {
-    let original = { greeting: "你好", emoji: "🎉", text: "Hello" }
+    let original: Json = { greeting: "你好", emoji: "🎉", text: "Hello" }
     let jsonStr = Json.stringify(original)
     let parsed = Json.parse(jsonStr)
     assert_eq(parsed.greeting, "你好")
@@ -231,7 +231,7 @@ fn test_roundtrip_scientific() {
 
 @test
 fn test_roundtrip_complex_structure() {
-    let original = {
+    let original: Json = {
         id: 12345,
         name: "Test User",
         active: true,
@@ -256,7 +256,7 @@ fn test_roundtrip_complex_structure() {
 
 @test
 fn test_roundtrip_array_of_objects() {
-    let original = [
+    let original: Json = [
         { id: 1, name: "First" },
         { id: 2, name: "Second" },
         { id: 3, name: "Third" }
@@ -302,7 +302,7 @@ fn test_consistency_array() {
 @test
 fn test_consistency_object() {
     // 注意：对象键顺序可能不确定
-    let data = { a: 1 }
+    let data: Json = { a: 1 }
     let json1 = Json.stringify(data)
     let json2 = Json.stringify(data)
     // 至少两次应该包含相同内容
@@ -322,7 +322,7 @@ fn test_roundtrip_deep_nesting() {
 
 @test
 fn test_roundtrip_many_keys() {
-    let original = { a: 1, b: 2, c: 3, d: 4, e: 5 }
+    let original: Json = { a: 1, b: 2, c: 3, d: 4, e: 5 }
     let jsonStr = Json.stringify(original)
     let parsed = Json.parse(jsonStr)
     assert_eq(parsed.a, 1)
@@ -338,3 +338,13 @@ fn test_roundtrip_long_string() {
     assert_eq(parsed, original)
 }
 
+@test
+fn test_stringify_char_as_string() {
+    assert_eq(Json.stringify('A'), "\"A\"")
+    assert_eq(Json.stringify('\u{1F600}'), "\"😀\"")
+
+    let original: Json = { letter: 'A', emoji: '\u{1F600}' }
+    let parsed = Json.parse(Json.stringify(original))
+    assert_eq(parsed.letter, "A")
+    assert_eq(parsed.emoji, "😀")
+}

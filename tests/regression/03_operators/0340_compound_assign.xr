@@ -51,6 +51,31 @@ fn test_mod_assign() {
     assert_eq(x, 2)
 }
 
+@test
+fn test_member_mod_assign_ignores_same_named_const() {
+    class Counter {
+        value: int
+
+        constructor() {
+            this.value = 17
+        }
+
+        reduce() {
+            this.value %= 5
+        }
+
+        get() -> int {
+            return this.value
+        }
+    }
+
+    const value = 99
+    let c = Counter()
+    c.reduce()
+    assert_eq(c.get(), 2)
+    assert_eq(value, 99)
+}
+
 // ===== 位运算复合赋值 =====
 
 @test
@@ -147,4 +172,3 @@ fn test_negative_increment() {
     x--
     assert_eq(x, -1)
 }
-

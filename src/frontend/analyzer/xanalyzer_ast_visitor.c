@@ -295,6 +295,7 @@ static void visit_node(AstNode *node, XaAstVisitor *v) {
         case AST_LITERAL_INT:
         case AST_LITERAL_FLOAT:
         case AST_LITERAL_STRING:
+        case AST_LITERAL_CHAR:
         case AST_LITERAL_TRUE:
         case AST_LITERAL_FALSE:
         case AST_LITERAL_NULL:

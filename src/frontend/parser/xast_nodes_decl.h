@@ -126,8 +126,10 @@ typedef struct FieldDeclNode {
     char *name;
     XrTypeRef *field_type;
     bool is_private;
+    bool is_protected;
     bool is_static;
     bool is_final;
+    bool is_const;  // immutable field (assignable only in the constructor)
     AstNode *initializer;
 } FieldDeclNode;
 
@@ -144,9 +146,11 @@ typedef struct MethodDeclNode {
     bool is_constructor;
     bool is_static;
     bool is_private;
+    bool is_protected;
     bool is_getter;
     bool is_setter;
     bool is_abstract;
+    bool is_override;
     bool is_final;
     bool is_static_constructor;
     AstNode **base_args;
@@ -185,6 +189,8 @@ typedef struct SuperCallNode {
 
 typedef struct TypeAliasNode {
     char *name;
+    XrGenericParam **type_params;
+    int type_param_count;
     char **field_names;
     XrTypeRef **field_types;
     bool *field_optional;

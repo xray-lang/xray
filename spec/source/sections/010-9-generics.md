@@ -17,6 +17,7 @@ TypeParams ::= '<' TypeParam (',' TypeParam)* '>'
 TypeParam  ::= Identifier (':' ConstraintList)?
 ConstraintList ::= Type ('&' Type)*               // 交叉约束用 '&' 连接
 TypeArgs   ::= '<' Type (',' Type)* '>'
+AliasTypeParams ::= '<' Identifier (',' Identifier)* ','? '>'
 ```
 
 ```xray @id=generics-basic
@@ -35,8 +36,8 @@ class Box<T> {
     get() -> T { return this.value }
 }
 
-let b1 = new Box<int>(42)
-let b2 = new Box<string>("hi")
+let b1 = Box<int>(42)
+let b2 = Box<string>("hi")
 
 // 多参数泛型
 class Pair<K, V> {
@@ -51,7 +52,12 @@ class Pair<K, V> {
 interface Comparable<T> {
     compareTo(other: T) -> int
 }
+
+// 泛型 type alias：透明语法替换，不产生新类型
+type PairAlias<T> = { first: T, second: T }
 ```
+
+`type` 别名的泛型形参使用 `AliasTypeParams`：只允许名字列表，不支持约束。别名使用处会把类型实参直接代入别名 RHS，例如 `PairAlias<int>` 等价于 `{ first: int, second: int }`。这一步发生在编译期，不产生运行时元数据、单态化实例或 AOT 分支；循环别名会被拒绝。
 
 ### 9.2 类型约束：`<T: Constraint>` 与交叉约束 `&`
 
@@ -74,14 +80,16 @@ fn pickValue<K: Hashable, V>(k: K, v: V) -> V {
 }
 ```
 
-**内置约束接口**（详见 §14.14）：
+**内置约束接口**：
 
 | 接口 | 含义 |
 |---|---|
 | `Comparable` | 可用 `<` `<=` `>` `>=` 比较；int/float/string/Comparable 实现者 |
-| `Hashable` | 可作为 `Map` / `Set` 的键；int/float/string/bool/enum/Hashable 实现者 |
+| `Hashable` | 可作为 `Map` 键或 `Set` 元素；内置 `int` / `float` / `string` / `bool` / `enum` / `BigInt` 默认满足，用户类型必须同时提供 `operator==(other: Self) -> bool` 与 `hash() -> int` |
 | `Stringable` | 可调 `.toString()`；几乎所有内置类型默认实现 |
-| `Iterable<T>` | 可被 `for-in` 遭历；Array、Map、Json、string、Range、enum、自定义 `iterator()` |
+| `Iterable<T>` | 可被 `for-in` 遍历；Array、Map、Json、string、Range、enum、自定义 `iterator()` |
+
+`Hashable` 是静态契约：具体 class / struct / enum 用作 `Map<K, V>` 的键、`Set<T>` 的元素，或声明 `implements Hashable` 时，编译器必须看到非 `static`、非 `private` 的 `operator==(other: Self) -> bool` 与 `hash() -> int`。只提供旧式 `hashCode()` 不满足契约；只提供 `==` 或只提供 `hash()` 也会编译失败。若键/元素是类型参数，类型参数本身必须显式声明 `: Hashable`，例如 `fn f<K: Hashable>(m: Map<K, int>)`。
 
 **当前限制**：
 - 约束只能位于类型参数后，不支持 where 子句。
@@ -95,8 +103,8 @@ fn pickValue<K: Hashable, V>(k: K, v: V) -> V {
 
 ```xray @id=generics-inference
 identity(42)                    // T 推断为 int
-new Box("hello")                // T 推断为 string
-new Pair("key", 100)            // K=string, V=int
+Box("hello")                // T 推断为 string
+Pair("key", 100)            // K=string, V=int
 ```
 
 推断算法是**双向推断**：
@@ -108,26 +116,31 @@ new Pair("key", 100)            // K=string, V=int
 在推断失败或需要明确时：
 
 ```xray @id=generics-explicit-instantiation
-let empty = new Array<int>()              // 无元素可推
-let m = new Map<string, int>()
+let empty = Array<int>()              // 无元素可推
+let m = Map<string, int>()
 let result = identity<float>(0)            // 0 默认 int，强制 float
 ```
 
 ### 9.4 特化与 monomorphization
 
-**实现策略**：编译期 monomorphization（单态化）。
+**实现策略**：构建期 monomorphization（单态化），按泛型种类采用不同表示策略。
 
-- 编译器收集所有泛型函数/类的具体类型实例化点，为每个类型组合生成专用 AST 克隆并编译为独立字节码。
+- **函数泛型**：编译器收集具体调用点，按运行时表示做 rep-sharing。当前表示组为 I64 / F64 / PTR / BOOL，同一函数最多生成 4 个表示版本；同为 PTR 表示的引用类型共享一份函数体，避免因引用类型数量导致代码体积爆炸。
+- **class / struct 泛型**：逐具体类型组合完整单态化，按 mangled name 去重，不按 PTR 表示合并。`Box<string>` 与 `Box<MyClass>` 即使同为 PTR 表示也保留不同类型身份，以保证字段布局、反射与名义类型语义精确。
 - 名字修饰（name mangling）：`identity<int>` → `identity$i64`，`Pair<string, int>` → `Pair$str$i64`。
-- 按表示分组共享（rep-sharing）：同为指针表示的类型共用同一份特化（最多 3 版本：I64 / F64 / PTR）。
+- 单态化实例总数受 `XR_MONO_MAX_INSTANCES = 256` 保护，防止递归/组合爆炸。
 - 编译期严格类型检查保证安全；运行时保留具体类型参数信息供 `Reflect.typeOf` 使用。
 
 > 真值源：`src/frontend/analyzer/xanalyzer_mono.c`（单态化 pass）、`xanalyzer_mono.h`（API）。
 
 **性能影响**：
-- 单态化的泛型函数可被 JIT / AOT 直接优化为原生类型操作（无装箱）。
+- 函数泛型 rep-sharing 让 AOT 在 I64 / F64 / BOOL 等值表示上生成无装箱 fast path，同时让引用类型共享 PTR 版本。
+- class / struct 泛型不做 rep-sharing 会增加代码和元数据体积（大致按“类型组合数 × 类体积”增长），但换来精确布局、反射保真和按类型特化；未来体积敏感场景可考虑对纯 PTR class 泛型增加显式 opt-in rep-sharing。
 - 内置特化容器（`Array<int>`、`Bytes`）进一步避免装箱开销。
-- 编译体积随实例化组合数线性增长；上限 `XR_MONO_MAX_INSTANCES` 防止爆炸。
+- 跨模块泛型在构建期 whole-program / LTO 阶段展开；提供泛型定义的库必须保留可分析的 IR/AST 形态，不能只发布不透明预编译产物。
+
+**当前缓项**：
+- 声明点方差标注（`out T` / `in T`）、默认类型参数和 `where` 子句本轮不提供；容器默认保持不变性，这是 AOT 友好且安全的基线。
 
 ### 9.5 协议（duck typing）与名义类型
 
@@ -147,8 +160,8 @@ class Wrong {
 }
 
 fn render(d: Drawable) { d.draw() }
-render(new Square())     // OK
-// render(new Wrong())   // 编译错误：Wrong 不是 Drawable
+render(Square())     // OK
+// render(Wrong())   // 编译错误：Wrong 不是 Drawable
 ```
 
 #### 结构化对象
@@ -178,7 +191,7 @@ describe({ x: 1.0, y: 2.0, z: 3.0 })  // 编译错误：sealed 类型多了字�
 class Container<T> {
     items: Array<T>
 }
-let c = new Container<int>()
+let c = Container<int>()
 print(Reflect.typeOf(c))       // "Container<int>"
 ```
 
@@ -199,6 +212,7 @@ TypeParams ::= '<' TypeParam (',' TypeParam)* '>'
 TypeParam  ::= Identifier (':' ConstraintList)?
 ConstraintList ::= Type ('&' Type)*               // intersection constraints joined by '&'
 TypeArgs   ::= '<' Type (',' Type)* '>'
+AliasTypeParams ::= '<' Identifier (',' Identifier)* ','? '>'
 ```
 
 ```xray @id=generics-basic
@@ -217,8 +231,8 @@ class Box<T> {
     get() -> T { return this.value }
 }
 
-let b1 = new Box<int>(42)
-let b2 = new Box<string>("hi")
+let b1 = Box<int>(42)
+let b2 = Box<string>("hi")
 
 // Multi-parameter generic
 class Pair<K, V> {
@@ -233,7 +247,16 @@ class Pair<K, V> {
 interface Comparable<T> {
     compareTo(other: T) -> int
 }
+
+// Generic type alias: transparent syntax substitution, not a new type
+type PairAlias<T> = { first: T, second: T }
 ```
+
+Generic `type` aliases use `AliasTypeParams`: only a name list is allowed, with
+no constraints. At each use site, the type arguments are substituted directly
+into the alias RHS, so `PairAlias<int>` is equivalent to `{ first: int, second:
+int }`. This happens at compile time and creates no runtime metadata,
+monomorphization instance, or AOT branch; cyclic aliases are rejected.
 
 ### 9.2 Type Constraints: `<T: Constraint>` and Intersection Constraints `&`
 
@@ -256,14 +279,16 @@ fn pickValue<K: Hashable, V>(k: K, v: V) -> V {
 }
 ```
 
-**Built-in constraint interfaces** (see §14.14 for details):
+**Built-in constraint interfaces**:
 
 | Interface | Meaning |
 |---|---|
 | `Comparable` | usable with `<` `<=` `>` `>=`; int/float/string and types implementing `Comparable` |
-| `Hashable` | usable as a `Map` / `Set` key; int/float/string/bool/enum and types implementing `Hashable` |
+| `Hashable` | usable as a `Map` key or `Set` element; built-in `int` / `float` / `string` / `bool` / `enum` / `BigInt` satisfy it by default, and user types must provide both `operator==(other: Self) -> bool` and `hash() -> int` |
 | `Stringable` | callable via `.toString()`; almost every built-in type implements it by default |
 | `Iterable<T>` | usable in `for-in`; Array, Map, Json, string, Range, enum, types with custom `iterator()` |
+
+`Hashable` is a static contract: when a concrete class / struct / enum is used as a `Map<K, V>` key, a `Set<T>` element, or declares `implements Hashable`, the compiler must see a non-`static`, non-`private` `operator==(other: Self) -> bool` and `hash() -> int`. Legacy `hashCode()` does not satisfy the contract, and providing only one of `==` or `hash()` is a compile error. If the key/element is a type parameter, that parameter itself must be explicitly constrained, for example `fn f<K: Hashable>(m: Map<K, int>)`.
 
 **Current limitations**:
 - Constraints may only follow type parameters; there is no `where` clause.
@@ -277,8 +302,8 @@ fn pickValue<K: Hashable, V>(k: K, v: V) -> V {
 
 ```xray @id=generics-inference
 identity(42)                    // T inferred as int
-new Box("hello")                // T inferred as string
-new Pair("key", 100)            // K=string, V=int
+Box("hello")                // T inferred as string
+Pair("key", 100)            // K=string, V=int
 ```
 
 The inference algorithm is **bidirectional**:
@@ -290,26 +315,31 @@ The inference algorithm is **bidirectional**:
 When inference fails or precision is needed:
 
 ```xray @id=generics-explicit-instantiation
-let empty = new Array<int>()              // no element to infer from
-let m = new Map<string, int>()
+let empty = Array<int>()              // no element to infer from
+let m = Map<string, int>()
 let result = identity<float>(0)            // 0 defaults to int; force float
 ```
 
 ### 9.4 Specialization and Monomorphization
 
-**Implementation strategy**: compile-time monomorphization.
+**Implementation strategy**: build-time monomorphization, with different representation policies for different generic kinds.
 
-- The compiler collects all concrete instantiation sites of generic functions/classes, generates a dedicated AST clone for each type combination, and compiles each into independent bytecode.
+- **Generic functions**: the compiler collects concrete call sites and applies rep-sharing by runtime representation. The current representation groups are I64 / F64 / PTR / BOOL, so one generic function produces at most four representation versions. Reference types that share the PTR representation reuse one function body, avoiding code-size growth proportional to the number of reference types.
+- **Generic classes / structs**: each concrete type-argument combination is fully monomorphized and deduplicated by mangled name, not by PTR representation. `Box<string>` and `Box<MyClass>` remain distinct even though both use PTR representation, preserving exact type identity, field layout, and reflection semantics.
 - Name mangling: `identity<int>` → `identity$i64`, `Pair<string, int>` → `Pair$str$i64`.
-- Sharing by representation (rep-sharing): types with the same pointer representation share a single specialization (at most three versions: I64 / F64 / PTR).
+- The total number of monomorphization instances is capped by `XR_MONO_MAX_INSTANCES = 256` to prevent recursive or combinatorial explosion.
 - Strict compile-time type checking ensures safety; concrete type-parameter information is retained at runtime for `Reflect.typeOf`.
 
 > Source of truth: `src/frontend/analyzer/xanalyzer_mono.c` (monomorphization pass), `xanalyzer_mono.h` (API).
 
 **Performance impact**:
-- Monomorphized generic functions can be optimized directly by JIT / AOT into native-typed operations (no boxing).
+- Function-level rep-sharing lets AOT generate unboxed fast paths for I64 / F64 / BOOL value representations while sharing one PTR version for reference types.
+- Generic classes / structs do not use rep-sharing, so code and metadata size grow roughly with "type combinations x class body size"; this buys exact layout, faithful reflection, and per-type specialization. A future size-sensitive mode may add explicit opt-in rep-sharing for pure-PTR class generics.
 - Built-in specialized containers (`Array<int>`, `Bytes`) further avoid boxing overhead.
-- Compiled binary size grows linearly with the number of instantiation combinations; the ceiling `XR_MONO_MAX_INSTANCES` prevents explosion.
+- Cross-module generics are expanded during build-time whole-program / LTO analysis. Libraries that expose generic definitions must ship analyzable IR/AST form rather than only opaque precompiled artifacts.
+
+**Deferred features**:
+- Declaration-site variance annotations (`out T` / `in T`), default type parameters, and `where` clauses are not provided in this round; invariant containers remain the safe, AOT-friendly baseline.
 
 ### 9.5 Protocols (Duck Typing) vs. Nominal Typing
 
@@ -329,8 +359,8 @@ class Wrong {
 }
 
 fn render(d: Drawable) { d.draw() }
-render(new Square())     // OK
-// render(new Wrong())   // compile error: Wrong is not Drawable
+render(Square())     // OK
+// render(Wrong())   // compile error: Wrong is not Drawable
 ```
 
 #### Structural objects
@@ -360,7 +390,7 @@ Because of monomorphization, every concrete instantiation has its own class/func
 class Container<T> {
     items: Array<T>
 }
-let c = new Container<int>()
+let c = Container<int>()
 print(Reflect.typeOf(c))       // "Container<int>"
 ```
 

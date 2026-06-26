@@ -38,6 +38,7 @@
 #include "xi_opt_call_specialize.h"
 #include "xi_opt_comptime.h"
 #include "xi_range.h"
+#include "../shared/xr_int_arith.h"
 #include "xi_analysis.h"
 #include "xi_pass.h"
 #include "xi_verify.h"
@@ -47,7 +48,6 @@
 #include "../os/os_time.h"
 #include "../runtime/symbol/xsymbol_table.h"
 #include "../runtime/value/xtype.h"
-#include "../shared/xr_numeric_core.h"
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -65,6 +65,75 @@ static bool is_const_float(const XiValue *v) {
 
 static bool is_const_bool(const XiValue *v) {
     return v && v->op == XI_CONST && v->type && v->type->kind == XR_KIND_BOOL;
+}
+
+static const XiValue *const_source_value(const XiValue *v) {
+    while (v && xi_copy_is_identity_alias(v) && v->nargs >= 1)
+        v = v->args[0];
+    return v;
+}
+
+static bool const_int_value(const XiValue *v, int64_t *out) {
+    v = const_source_value(v);
+    if (!is_const_int(v))
+        return false;
+    if (out)
+        *out = v->aux_int;
+    return true;
+}
+
+static bool const_float_value(const XiValue *v, double *out) {
+    v = const_source_value(v);
+    if (!is_const_float(v))
+        return false;
+    if (out)
+        memcpy(out, &v->aux_int, sizeof(double));
+    return true;
+}
+
+static bool const_bool_value(const XiValue *v, bool *out) {
+    v = const_source_value(v);
+    if (!is_const_bool(v))
+        return false;
+    if (out)
+        *out = v->aux_int != 0;
+    return true;
+}
+
+static bool opt_type_is_unsigned_int(const XrType *type) {
+    if (!type || type->kind != XR_KIND_INT || type->is_nullable)
+        return false;
+    switch (type->native_width) {
+        case XR_NATIVE_U8:
+        case XR_NATIVE_U16:
+        case XR_NATIVE_U32:
+        case XR_NATIVE_U64:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static bool opt_type_is_int_like(const XrType *type) {
+    return type && type->kind == XR_KIND_INT && !type->is_nullable;
+}
+
+static bool opt_compare_uses_unsigned(const XiValue *v) {
+    if (!v || v->nargs < 2)
+        return false;
+    switch ((XiOp) v->op) {
+        case XI_LT:
+        case XI_LE:
+        case XI_GT:
+        case XI_GE:
+            break;
+        default:
+            return false;
+    }
+    const XrType *left = v->args[0] ? v->args[0]->type : NULL;
+    const XrType *right = v->args[1] ? v->args[1]->type : NULL;
+    return opt_type_is_int_like(left) && opt_type_is_int_like(right) &&
+           (opt_type_is_unsigned_int(left) || opt_type_is_unsigned_int(right));
 }
 
 /* Replace all uses of 'old_val' in the function with 'new_val'.
@@ -115,31 +184,32 @@ static void block_remove_value(XiBlock *blk, uint32_t idx) {
 /* Try to fold a binary op on two integer constants.
  *
  * xray integer semantics: signed 64-bit, wrap-on-overflow (Go/Rust/Java).
- * C signed overflow is UB, so wrap arithmetic is performed through the
- * runtime-neutral numeric core helpers shared by VM/AOT.
+ * C signed overflow is UB, so wrap arithmetic is performed via uint64_t and
+ * cast back to int64_t (implementation-defined but well-defined on every
+ * two's-complement target xray supports: x64, arm64, riscv64).
  * INT64_MIN / -1 and INT64_MIN %% -1 are special-cased to match the
  * runtime VM and AOT, which also produce INT64_MIN / 0 respectively.
  */
 static bool fold_int_binary(uint16_t op, int64_t a, int64_t b, int64_t *result) {
     switch (op) {
         case XI_ADD:
-            *result = xr_numeric_core_i64_add_wrap(a, b);
+            *result = xr_i64_add_wrap(a, b);
             return true;
         case XI_SUB:
-            *result = xr_numeric_core_i64_sub_wrap(a, b);
+            *result = xr_i64_sub_wrap(a, b);
             return true;
         case XI_MUL:
-            *result = xr_numeric_core_i64_mul_wrap(a, b);
+            *result = xr_i64_mul_wrap(a, b);
             return true;
         case XI_DIV:
             if (b == 0)
                 return false;
-            *result = xr_numeric_core_i64_div_wrap(a, b);
+            *result = xr_i64_div_wrap(a, b);
             return true;
         case XI_MOD:
             if (b == 0)
                 return false;
-            *result = xr_numeric_core_i64_mod_wrap(a, b);
+            *result = xr_i64_mod_wrap(a, b);
             return true;
         case XI_BAND:
             *result = a & b;
@@ -154,13 +224,13 @@ static bool fold_int_binary(uint16_t op, int64_t a, int64_t b, int64_t *result) 
             /* Left shift of a negative or shift that overflows the sign bit
              * is UB on signed; do it on uint64_t and cast back. Shift amount
              * is masked to 6 bits to match runtime semantics. */
-            *result = (int64_t) ((uint64_t) a << (b & 63));
+            *result = xr_i64_shl_wrap(a, b);
             return true;
         case XI_SHR:
             /* Arithmetic right shift on negative values is
              * implementation-defined in C99/C11 but well-defined on every
              * compiler xray supports (GCC, Clang, MSVC all sign-extend). */
-            *result = a >> (b & 63);
+            *result = xr_i64_shr_wrap(a, b);
             return true;
         default:
             return false;
@@ -168,7 +238,9 @@ static bool fold_int_binary(uint16_t op, int64_t a, int64_t b, int64_t *result) 
 }
 
 /* Try to fold a comparison on two integer constants. */
-static bool fold_int_compare(uint16_t op, int64_t a, int64_t b, bool *result) {
+static bool fold_int_compare(uint16_t op, int64_t a, int64_t b, bool use_unsigned, bool *result) {
+    uint64_t ua = (uint64_t) a;
+    uint64_t ub = (uint64_t) b;
     switch (op) {
         case XI_EQ:
             *result = (a == b);
@@ -177,16 +249,16 @@ static bool fold_int_compare(uint16_t op, int64_t a, int64_t b, bool *result) {
             *result = (a != b);
             return true;
         case XI_LT:
-            *result = (a < b);
+            *result = use_unsigned ? (ua < ub) : (a < b);
             return true;
         case XI_LE:
-            *result = (a <= b);
+            *result = use_unsigned ? (ua <= ub) : (a <= b);
             return true;
         case XI_GT:
-            *result = (a > b);
+            *result = use_unsigned ? (ua > ub) : (a > b);
             return true;
         case XI_GE:
-            *result = (a >= b);
+            *result = use_unsigned ? (ua >= ub) : (a >= b);
             return true;
         default:
             return false;
@@ -213,10 +285,8 @@ static bool fold_float_binary(uint16_t op, double a, double b, bool is_f32, doub
                 *result = (double) (float) (fa * fb);
                 return true;
             case XI_DIV:
-                if (fb == 0.0f)
-                    return false;
                 /* f32 division: narrowed operands, divide in double, narrow the
-                 * quotient back to float (matches OP_DIV_F32 / AOT xrt_div). */
+                 * quotient back to float (matches OP_DIV_F32 / AOT). */
                 *result = (double) (float) ((double) fa / (double) fb);
                 return true;
             default:
@@ -234,8 +304,6 @@ static bool fold_float_binary(uint16_t op, double a, double b, bool is_f32, doub
             *result = a * b;
             return true;
         case XI_DIV:
-            if (b == 0.0)
-                return false;
             *result = a / b;
             return true;
         default:
@@ -314,16 +382,17 @@ XR_FUNC XiPassChange xi_opt_const_fold(XiFunc *f) {
             /* Fold unary NEG on const int.
              * -INT64_MIN is UB on signed; negate on uint64_t then cast back
              * to preserve wrap-on-overflow semantics (matches VM and AOT). */
-            if (v->op == XI_NEG && v->nargs == 1 && is_const_int(v->args[0])) {
-                rewrite_to_const_int(v, xr_numeric_core_i64_neg_wrap(v->args[0]->aux_int));
+            int64_t unary_i = 0;
+            if (v->op == XI_NEG && v->nargs == 1 && const_int_value(v->args[0], &unary_i)) {
+                rewrite_to_const_int(v, (int64_t) (0u - (uint64_t) unary_i));
                 chg.values_changed = true;
                 continue;
             }
 
             /* Fold unary NEG on const float */
-            if (v->op == XI_NEG && v->nargs == 1 && is_const_float(v->args[0])) {
-                double val;
-                memcpy(&val, &v->args[0]->aux_int, sizeof(double));
+            double unary_f = 0.0;
+            if (v->op == XI_NEG && v->nargs == 1 && const_float_value(v->args[0], &unary_f)) {
+                double val = unary_f;
                 val = -val;
                 rewrite_to_const_float(v, val);
                 chg.values_changed = true;
@@ -331,15 +400,16 @@ XR_FUNC XiPassChange xi_opt_const_fold(XiFunc *f) {
             }
 
             /* Fold unary NOT on const bool */
-            if (v->op == XI_NOT && v->nargs == 1 && is_const_bool(v->args[0])) {
-                rewrite_to_const_int(v, v->args[0]->aux_int ? 0 : 1);
+            bool unary_b = false;
+            if (v->op == XI_NOT && v->nargs == 1 && const_bool_value(v->args[0], &unary_b)) {
+                rewrite_to_const_int(v, unary_b ? 0 : 1);
                 chg.values_changed = true;
                 continue;
             }
 
             /* Fold unary BNOT on const int */
-            if (v->op == XI_BNOT && v->nargs == 1 && is_const_int(v->args[0])) {
-                rewrite_to_const_int(v, ~(v->args[0]->aux_int));
+            if (v->op == XI_BNOT && v->nargs == 1 && const_int_value(v->args[0], &unary_i)) {
+                rewrite_to_const_int(v, ~unary_i);
                 chg.values_changed = true;
                 continue;
             }
@@ -370,15 +440,16 @@ XR_FUNC XiPassChange xi_opt_const_fold(XiFunc *f) {
             XiValue *rhs = v->args[1];
 
             /* Integer binary/compare */
-            if (is_const_int(lhs) && is_const_int(rhs)) {
+            int64_t lhs_i = 0, rhs_i = 0;
+            if (const_int_value(lhs, &lhs_i) && const_int_value(rhs, &rhs_i)) {
                 int64_t result;
-                if (fold_int_binary(v->op, lhs->aux_int, rhs->aux_int, &result)) {
+                if (fold_int_binary(v->op, lhs_i, rhs_i, &result)) {
                     rewrite_to_const_int(v, result);
                     chg.values_changed = true;
                     continue;
                 }
                 bool bres;
-                if (fold_int_compare(v->op, lhs->aux_int, rhs->aux_int, &bres)) {
+                if (fold_int_compare(v->op, lhs_i, rhs_i, opt_compare_uses_unsigned(v), &bres)) {
                     rewrite_to_const_int(v, bres ? 1 : 0);
                     chg.values_changed = true;
                     continue;
@@ -386,21 +457,18 @@ XR_FUNC XiPassChange xi_opt_const_fold(XiFunc *f) {
             }
 
             /* Float binary/compare */
-            if (is_const_float(lhs) && is_const_float(rhs)) {
-                double a, b;
-                memcpy(&a, &lhs->aux_int, sizeof(double));
-                memcpy(&b, &rhs->aux_int, sizeof(double));
-
+            double lhs_f = 0.0, rhs_f = 0.0;
+            if (const_float_value(lhs, &lhs_f) && const_float_value(rhs, &rhs_f)) {
                 double dresult;
                 bool is_f32 = v->type && v->type->kind == XR_KIND_FLOAT &&
                               v->type->native_width == XR_NATIVE_F32;
-                if (fold_float_binary(v->op, a, b, is_f32, &dresult)) {
+                if (fold_float_binary(v->op, lhs_f, rhs_f, is_f32, &dresult)) {
                     rewrite_to_const_float(v, dresult);
                     chg.values_changed = true;
                     continue;
                 }
                 bool bres;
-                if (fold_float_compare(v->op, a, b, &bres)) {
+                if (fold_float_compare(v->op, lhs_f, rhs_f, &bres)) {
                     rewrite_to_const_int(v, bres ? 1 : 0);
                     chg.values_changed = true;
                     continue;
@@ -420,7 +488,7 @@ XR_FUNC XiPassChange xi_opt_const_fold(XiFunc *f) {
  * domains, causing loop-carried variables to share a physical
  * register and corrupt each other on reassignment. */
 static XiValue *resolve_copy(XiValue *v) {
-    while (v && v->op == XI_COPY && v->nargs >= 1) {
+    while (v && xi_copy_is_identity_alias(v) && v->nargs >= 1) {
         XiValue *src = v->args[0];
         /* Stop at variable-domain boundaries (prevents register corruption) */
         if (xi_var_id_is_valid(v->var_id) && src && xi_var_id_is_valid(src->var_id) &&
@@ -430,10 +498,6 @@ static XiValue *resolve_copy(XiValue *v) {
          * narrowing carry semantic type information even when the runtime
          * payload is the same value. */
         if (v->type && src && src->type && !xr_type_equals(v->type, src->type))
-            break;
-        /* Stop only at semantic value-clone copies. Optimizer-inserted COPY
-         * values are identity aliases, even when their type is a value struct. */
-        if (xi_copy_is_value_clone(v))
             break;
         v = src;
     }
@@ -793,7 +857,8 @@ static bool sr_is_channel_recv_method(const XiValue *v) {
     if (!v || v->op != XI_CALL_METHOD || v->nargs < 1 || !sr_type_is_channel(v->args[0]->type))
         return false;
     const char *method = (const char *) v->aux;
-    return method && (strcmp(method, "recv") == 0 || strcmp(method, "tryRecv") == 0);
+    return method && (strcmp(method, "recv") == 0 || strcmp(method, "tryRecv") == 0 ||
+                      strcmp(method, "recvOr") == 0);
 }
 
 static bool sr_field_receiver_uses_native_rep(const XiValue *receiver) {
@@ -834,8 +899,8 @@ static XrRep sr_typed_array_elem_rep(const XrType *type) {
 
 static const XiValue *sr_unwrap_identity_value(const XiValue *v) {
     while (v &&
-           (v->op == XI_BOX || v->op == XI_UNBOX ||
-            (v->op == XI_COPY && !xi_copy_is_value_clone(v)) || v->op == XI_MOVE) &&
+           (v->op == XI_BOX || v->op == XI_UNBOX || xi_copy_is_identity_alias(v) ||
+            v->op == XI_MOVE) &&
            v->nargs >= 1)
         v = v->args[0];
     return v;
@@ -1306,8 +1371,6 @@ static XrRep sr_use_rep(const XiValue *user, uint16_t arg_idx, const XiRepPolicy
         case XI_LE:
         case XI_GT:
         case XI_GE:
-        case XI_EQ_STRICT:
-        case XI_NE_STRICT:
             if (sr_compare_uses_null(user))
                 return XR_REP_TAGGED;
             if (arg_idx < user->nargs && user->args[arg_idx] && user->args[arg_idx]->type) {

@@ -21,7 +21,7 @@
  *     and used by OP_LE / OP_LEI right after.
  *
  *   Producing comparisons (write-bool):
- *     OP_CMP_EQ / CMP_NE / CMP_EQ_STRICT / CMP_NE_STRICT
+ *     OP_CMP_EQ / CMP_NE
  *     OP_CMP_LT / CMP_LE
  *
  *   Type predicates:
@@ -159,6 +159,29 @@ vmcase(OP_LTI) {
 VM_CMP_RR(OP_LE, <=, <=, <=)
 VM_CMP_RI(OP_LEI, <=, <=)
 
+#define VM_CMP_UNSIGNED_RR(op, cmp_op)                                                             \
+    vmcase(op) {                                                                                   \
+        XrValue va = R(GETARG_A(i));                                                               \
+        XrValue vb = R(GETARG_B(i));                                                               \
+        int k_flag = GETARG_C(i);                                                                  \
+        bool cond;                                                                                 \
+        if (XR_IS_INT(va) && XR_IS_INT(vb)) {                                                      \
+            cond = (uint64_t) XR_TO_INT(va) cmp_op(uint64_t) XR_TO_INT(vb);                        \
+        } else {                                                                                   \
+            cond = vm_numeric_less_equal(va, vb);                                                  \
+            if (op == OP_LTU)                                                                      \
+                cond = vm_numeric_less(va, vb);                                                    \
+        }                                                                                          \
+        if (cond != k_flag)                                                                        \
+            pc++;                                                                                  \
+        vmbreak;                                                                                   \
+    }
+
+VM_CMP_UNSIGNED_RR(OP_LTU, <)
+VM_CMP_UNSIGNED_RR(OP_LEU, <=)
+
+#undef VM_CMP_UNSIGNED_RR
+
 /* ========================================================
 ** Comparison Instructions (Produce Boolean Value)
 ** ======================================================== */
@@ -184,16 +207,6 @@ VM_CMP_RI(OP_LEI, <=, <=)
         vmbreak;                                                                                   \
     }
 
-#define XVM_TEMPLATE_COMPARE_STRICT_CASE(op, negate)                                               \
-    vmcase(op) {                                                                                   \
-        int dest = GETARG_A(i);                                                                    \
-        int left = GETARG_B(i);                                                                    \
-        int right = GETARG_C(i);                                                                   \
-        bool equal = vm_values_strict_equal(R(left), R(right));                                    \
-        R(dest) = xr_bool((negate) ? !equal : equal);                                              \
-        vmbreak;                                                                                   \
-    }
-
 #define XVM_TEMPLATE_COMPARE_ORDER_CASE(op, op_flag, op_symbol, op_name, compare_fn)               \
     vmcase(op) {                                                                                   \
         int dest = GETARG_A(i);                                                                    \
@@ -208,8 +221,33 @@ VM_CMP_RI(OP_LEI, <=, <=)
 
 #include "xvm_template_compare_gen.inc.c"
 
+vmcase(OP_CMP_LTU) {
+    int dest = GETARG_A(i);
+    XrValue vl = R(GETARG_B(i));
+    XrValue vr = R(GETARG_C(i));
+    if (XR_IS_INT(vl) && XR_IS_INT(vr)) {
+        R(dest) = xr_bool((uint64_t) XR_TO_INT(vl) < (uint64_t) XR_TO_INT(vr));
+        vmbreak;
+    }
+    VM_TRY_BINARY_OP_OVERLOAD(vl, vr, dest, XR_OP_LT_FLAG, SYMBOL_OP_LT, "<");
+    R(dest) = xr_bool(vm_numeric_less(vl, vr));
+    vmbreak;
+}
+
+vmcase(OP_CMP_LEU) {
+    int dest = GETARG_A(i);
+    XrValue vl = R(GETARG_B(i));
+    XrValue vr = R(GETARG_C(i));
+    if (XR_IS_INT(vl) && XR_IS_INT(vr)) {
+        R(dest) = xr_bool((uint64_t) XR_TO_INT(vl) <= (uint64_t) XR_TO_INT(vr));
+        vmbreak;
+    }
+    VM_TRY_BINARY_OP_OVERLOAD(vl, vr, dest, XR_OP_LE_FLAG, SYMBOL_OP_LE, "<=");
+    R(dest) = xr_bool(vm_numeric_less_equal(vl, vr));
+    vmbreak;
+}
+
 #undef XVM_TEMPLATE_COMPARE_ORDER_CASE
-#undef XVM_TEMPLATE_COMPARE_STRICT_CASE
 #undef XVM_TEMPLATE_COMPARE_DEEP_CASE
 #undef XVM_COMPARE_IS_PRIMITIVE
 

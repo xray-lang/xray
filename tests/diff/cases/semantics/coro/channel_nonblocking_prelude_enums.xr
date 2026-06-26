@@ -22,7 +22,7 @@ fn has_value(r: Recv<int>) -> bool {
     }
 }
 
-shared const ch: Channel<int> = new Channel(2)
+shared const ch: Channel<int> = Channel(2)
 
 let s1 = ch.trySend(7)
 let s2 = ch.trySend(9)

@@ -1,0 +1,1 @@
+Class 'EqOnlyImpl' implements Hashable but is missing hash() -> int

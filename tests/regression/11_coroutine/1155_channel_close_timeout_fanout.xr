@@ -16,9 +16,9 @@ fn recv_int(ch: Channel<int>) -> int {
 @test
 fn test_channel_close_wakes_timed_recv_fanout() {
     shared const waiter_count = 64
-    shared const ch = new Channel<int>(0)
-    shared const ready = new Channel<int>(0)
-    shared const done = new Channel<int>(waiter_count)
+    shared const ch = Channel<int>(0)
+    shared const ready = Channel<int>(0)
+    shared const done = Channel<int>(waiter_count)
 
     for (let i = 0; i < waiter_count; i++) {
         go recv_timeout_until_close(ch, ready, done, 2000)
@@ -29,7 +29,7 @@ fn test_channel_close_wakes_timed_recv_fanout() {
     }
 
     for (let i = 0; i < 16; i++) {
-        yield
+        Coro.yield()
     }
 
     ch.close()

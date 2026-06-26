@@ -21,8 +21,8 @@ fn drain_one(ch: Channel<int>) {
     let ignored = ch.recv()
 }
 
-shared const data: Channel<int> = new Channel(1)
-shared const out: Channel<int> = new Channel(1)
+shared const data: Channel<int> = Channel(1)
+shared const out: Channel<int> = Channel(1)
 
 assert_eq(sent(data.trySend(7)), true)
 

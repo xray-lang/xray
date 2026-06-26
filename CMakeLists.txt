@@ -583,6 +583,9 @@ file(GLOB VM_SRC "src/vm/*.c")
 file(GLOB IR_SRC "src/ir/*.c")
 file(GLOB MODULE_SRC "src/module/*.c")
 file(GLOB AOT_SRC "src/aot/*.c")
+list(REMOVE_ITEM AOT_SRC
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/aot/xrt_gen_iter.c"
+    "src/aot/xrt_gen_iter.c")
 file(GLOB API_SRC "src/api/*.c")
 file(GLOB NEW_CLI_SRC CONFIGURE_DEPENDS "src/app/cli/*.c")
 
@@ -773,7 +776,9 @@ set(XRAY_RT_CORO_SOURCES
     ${RUNTIME_SYMBOL_SRC}
     ${CORO_SRC}
     ${IO_SRC}
+    src/aot/xrt_gen_iter.c
 )
+list(REMOVE_DUPLICATES XRAY_RT_CORO_SOURCES)
 list(FILTER XRAY_RT_CORO_SOURCES EXCLUDE REGEX ".*/src/runtime/xisolate_api\\.c$")
 list(FILTER XRAY_RT_CORO_SOURCES EXCLUDE REGEX ".*/src/runtime/value/xchunk\\.c$")
 list(FILTER XRAY_RT_CORO_SOURCES EXCLUDE REGEX ".*/src/runtime/value/xopcode_info\\.c$")

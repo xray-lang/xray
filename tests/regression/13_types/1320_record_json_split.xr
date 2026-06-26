@@ -1,0 +1,47 @@
+// 1320_record_json_split.xr
+// Test: default object literals are sealed Records; Json is explicit opt-in.
+
+type User = { id: int, name: string }
+
+@test
+fn test_default_record() {
+    let user = { id: 1, name: "Ada" }
+    assert_eq(typeof(user), "Record")
+    assert_eq(user.id, 1)
+    assert_eq(user.name, "Ada")
+    user.name = "Grace"
+    assert_eq(user.name, "Grace")
+}
+
+@test
+fn test_record_alias_assignment() {
+    let user: User = { id: 7, name: "Lin" }
+    assert_eq(typeof(user), "Record")
+    assert_eq(user.id, 7)
+    assert_eq(user.name, "Lin")
+}
+
+@test
+fn test_json_opt_in_object() {
+    let payload: Json = { id: 1, name: "Ada" }
+    payload.extra = true
+    assert_eq(typeof(payload), "Json")
+    assert_eq(payload.extra, true)
+}
+
+@test
+fn test_json_array_literal_context() {
+    let payload: Json = [1, "two", true]
+    assert_eq(typeof(payload), "Array")
+}
+
+@test
+fn test_json_decode_record() {
+    let data = Json.parse("{\"id\": 9, \"name\": \"Ray\"}")
+    let user = Json.decode<User>(data)
+    assert(user != null)
+    assert_eq(typeof(user), "Record")
+    assert_eq(user.id, 9)
+    assert_eq(user.name, "Ray")
+}
+

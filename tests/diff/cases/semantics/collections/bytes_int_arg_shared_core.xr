@@ -6,8 +6,8 @@ let dyn: Json = {
     "badCount": null
 }
 
-let bytes = new Bytes(8, 1)
-let src = new Bytes(8, 2)
+let bytes = Bytes(8, 1)
+let src = Bytes(8, 2)
 
 fn show_load_u32() {
     try {

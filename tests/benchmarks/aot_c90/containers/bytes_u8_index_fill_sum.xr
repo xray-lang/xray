@@ -1,5 +1,5 @@
 fn run(n: int, rounds: int) -> int {
-    let bytes = new Bytes(n)
+    let bytes = Bytes(n)
 
     let i = 0
     while (i < bytes.length) {

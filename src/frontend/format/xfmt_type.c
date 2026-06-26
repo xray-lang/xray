@@ -17,6 +17,7 @@
 #include "xfmt_internal.h"
 #include "../../runtime/value/xtype.h"
 #include "../parser/xtype_ref.h"
+#include <string.h>
 
 // ----------------------------------------------------------------------------
 // Operator strings
@@ -48,10 +49,6 @@ const char *xfmt_binary_op(AstNodeType type) {
             return "==";
         case AST_BINARY_NE:
             return "!=";
-        case AST_BINARY_EQ_STRICT:
-            return "===";
-        case AST_BINARY_NE_STRICT:
-            return "!==";
         case AST_BINARY_LT:
             return "<";
         case AST_BINARY_LE:
@@ -196,7 +193,18 @@ void xfmt_emit_pattern(XrFmtContext *ctx, XrDestructurePattern *pattern) {
             for (int i = 0; i < pattern->as.object.field_count; i++) {
                 if (i > 0)
                     xfmt_write_str(ctx, ", ");
-                xfmt_emit_pattern(ctx, pattern->as.object.patterns[i]);
+                const char *field =
+                    pattern->as.object.field_names ? pattern->as.object.field_names[i] : NULL;
+                XrDestructurePattern *sub = pattern->as.object.patterns[i];
+                if (field && sub && sub->type == PATTERN_IDENTIFIER && sub->as.identifier.name &&
+                    strcmp(field, sub->as.identifier.name) == 0) {
+                    xfmt_write_str(ctx, field);
+                } else {
+                    if (field)
+                        xfmt_write_str(ctx, field);
+                    xfmt_write_str(ctx, ": ");
+                    xfmt_emit_pattern(ctx, sub);
+                }
             }
             xfmt_write_char(ctx, '}');
             break;

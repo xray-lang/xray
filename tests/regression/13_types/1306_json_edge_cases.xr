@@ -34,7 +34,7 @@ fn test_many_fields() {
 
 @test
 fn test_dynamic_add_many() {
-    let obj = {}
+    let obj: Json = {}
     for (i in 0..20) {
         obj["field_" + string(i)] = i
     }
@@ -46,7 +46,7 @@ fn test_dynamic_add_many() {
 // ===== 字段覆盖 =====
 @test
 fn test_field_overwrite() {
-    let obj = { "value": 1 }
+    let obj: Json = { "value": 1 }
     assert_eq(obj.value, 1)
     obj.value = 2
     assert_eq(obj.value, 2)
@@ -56,7 +56,7 @@ fn test_field_overwrite() {
 
 @test
 fn test_dynamic_overwrite() {
-    let obj = { "x": 1 }
+    let obj: Json = { "x": 1 }
     let key = "x"
     obj[key] = 100
     assert_eq(obj.x, 100)
@@ -71,14 +71,14 @@ fn test_null_field_value() {
 
 @test
 fn test_missing_field_returns_null() {
-    let obj = { "existing": 1 }
+    let obj: Json = { "existing": 1 }
     assert_eq(obj["nonexistent"], null)
 }
 
 // ===== 类型转换 =====
 @test
 fn test_field_type_change() {
-    let obj = { "value": 1 }
+    let obj: Json = { "value": 1 }
     assert_eq(obj.value, 1)
     obj.value = "string now"
     assert_eq(obj.value, "string now")
@@ -92,7 +92,7 @@ fn test_object_as_parameter() {
     fn getField(obj: Json, key: string) -> string | int {
         return obj[key]
     }
-    let data = { "name": "test", "value": 42 }
+    let data: Json = { "name": "test", "value": 42 }
     assert_eq(getField(data, "name"), "test")
     assert_eq(getField(data, "value"), 42)
 }
@@ -102,7 +102,7 @@ fn test_object_modification_in_function() {
     fn addField(obj: Json, key: string, val: int) {
         obj[key] = val
     }
-    let obj = {}
+    let obj: Json = {}
     addField(obj, "added", 123)
     assert_eq(obj.added, 123)
 }
@@ -110,7 +110,7 @@ fn test_object_modification_in_function() {
 // ===== 对象比较 =====
 @test
 fn test_object_identity() {
-    let obj1 = { "x": 1 }
+    let obj1: Json = { "x": 1 }
     let obj2 = obj1
     // 引用同一对象
     obj2.x = 2
@@ -119,7 +119,7 @@ fn test_object_identity() {
 
 @test
 fn test_nested_modification() {
-    let parent = { "child": { "value": 1 } }
+    let parent: Json = { "child": { "value": 1 } }
     let child_ref = parent.child
     child_ref.value = 100
     assert_eq(parent.child.value, 100)

@@ -21,7 +21,7 @@
 #include "../xshared.h"
 #include "../xisolate_api.h"
 #include "../xerror_codes.h"
-#include "xexception.h"
+#include "xpanic_info.h"
 #include "../value/xvalue_format.h"
 #include "../../base/xchecks.h"
 #include "../../base/xmalloc.h"
@@ -339,15 +339,15 @@ static XrValue xr_builtin_atomic_construct(XrVMRuntime *isolate, XrValue receive
         initial = XR_TO_BOOL(args[0]) ? 1 : 0;
     } else {
         /* Type error — Atomic only accepts int, float, bool */
-        XrValue exc = xr_exception_newf(isolate, XR_ERR_TYPE_MISMATCH,
-                                        "Atomic requires int, float, or bool initial value");
+        XrValue exc = xr_panic_info_newf(isolate, XR_ERR_TYPE_MISMATCH,
+                                         "Atomic requires int, float, or bool initial value");
         xr_vm_throw_exception(isolate, exc);
         return xr_null();
     }
 
     XrAtomic *a = xr_atomic_new(isolate, kind, initial);
     if (!a) {
-        XrValue exc = xr_exception_newf(isolate, XR_ERR_OUT_OF_MEMORY, "Atomic allocation failed");
+        XrValue exc = xr_panic_info_newf(isolate, XR_ERR_OUT_OF_MEMORY, "Atomic allocation failed");
         xr_vm_throw_exception(isolate, exc);
         return xr_null();
     }

@@ -79,7 +79,7 @@ fn test_object_as_param() {
     fn getX(p: Json) -> int {
         return p.x
     }
-    let point = { "x": 42, "y": 0 }
+    let point: Json = { "x": 42, "y": 0 }
     assert_eq(getX(point), 42)
 }
 

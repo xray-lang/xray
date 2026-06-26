@@ -9,7 +9,7 @@
 
 @test
 fn test_weakmap_weakset() {
-    let wm = new WeakMap()
+    let wm = WeakMap()
     let key1 = { name: "alice" }
     let key2 = { name: "bob" }
     wm.set(key1, "value1")
@@ -58,7 +58,7 @@ fn test_weakmap_weakset() {
     // ========== WeakSet tests ==========
 
     // Test 7: create and add/has
-    let ws = new WeakSet()
+    let ws = WeakSet()
     let obj1 = { id: 1 }
     let obj2 = { id: 2 }
     assert_eq(ws.has(obj1), false)
@@ -75,7 +75,7 @@ fn test_weakmap_weakset() {
     print("PASS: weakset delete")
 
     // Test 9: no duplicates
-    let ws2 = new WeakSet()
+    let ws2 = WeakSet()
     let obj3 = { unique: true }
     ws2.add(obj3)
     ws2.add(obj3)

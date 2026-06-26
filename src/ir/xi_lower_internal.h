@@ -21,6 +21,8 @@
 
 struct AstNode;
 struct XrType;
+typedef struct MethodDeclNode MethodDeclNode;
+typedef struct ClassDeclNode ClassDeclNode;
 
 /* Copy a string into the XiFunc arena so it survives AST destruction. */
 static inline const char *arena_strdup(XiFunc *f, const char *s) {
@@ -98,20 +100,29 @@ XR_FUNC void xi_lower_cleanup(XiLower *l);
 
 XR_FUNC XiFunc *xi_lower_func_impl(struct AstNode *func_node, struct XaAnalyzer *analyzer,
                                    struct XrVMRuntime *isolate, XiLower *parent_ctx);
+XR_FUNC void xi_lower_func_add_child(XiFunc *parent, XiFunc *child);
+
+/* Rewrite direct calls to generator functions into XI_GEN_CALL across the whole
+ * function tree. Call once on the program/function root after lowering. */
+XR_FUNC void xi_lower_rewrite_generator_calls(XiFunc *root);
 
 /* ========== AST Lowering Primitives ========== */
 
 XR_FUNC XiValue *xi_lower_expr(XiLower *l, struct AstNode *node);
+XR_FUNC bool xi_lower_boundary_transfer_arg(XiLower *l, struct AstNode *child, XiValue **out_value,
+                                            uint8_t *out_mode);
 XR_FUNC void xi_lower_stmt(XiLower *l, struct AstNode *node);
 XR_FUNC struct XrType *xi_lower_node_type(XiLower *l, struct AstNode *node);
-XR_FUNC XiValue *xi_lower_checktype_for_type(XiLower *l, struct AstNode *node, XiValue *val,
-                                             struct XrType *target_type);
 
 /* ========== Cross-boundary helpers (xi_lower_expr.c, called from stmt) ========== */
 
 XR_FUNC XiValue *xi_lower_function_decl(XiLower *l, struct AstNode *node);
 XR_FUNC void xi_lower_enum_decl(XiLower *l, struct AstNode *node);
 XR_FUNC void xi_lower_class_decl(XiLower *l, struct AstNode *node);
+XR_FUNC XiFunc *xi_lower_method_as_func(XiLower *l, MethodDeclNode *m, bool is_inst,
+                                        ClassDeclNode *cd, struct XrType *receiver_type);
+XR_FUNC const char *xi_lower_enum_method_hidden_name(XiFunc *arena, const char *enum_name,
+                                                     const char *method_name, bool is_static);
 
 /* ========== Method Symbol Resolution ========== */
 
@@ -119,6 +130,8 @@ XR_FUNC void xi_lower_class_decl(XiLower *l, struct AstNode *node);
  * table.  Runs during lowering (main thread), so the isolate is always
  * available.  Returns 0 on failure. */
 XR_FUNC int32_t xi_lower_method_symbol(XiLower *l, const char *method_name);
+
+XR_FUNC XiValue *xi_lower_bool_condition(XiLower *l, XiValue *cond);
 
 /* ========== Compound Statement Lowering (xi_lower_stmt.c) ========== */
 
@@ -128,10 +141,16 @@ XR_FUNC void xi_lower_for_in(XiLower *l, struct AstNode *node);
 XR_FUNC void xi_lower_try_catch(XiLower *l, struct AstNode *node);
 XR_FUNC XiValue *xi_lower_match(XiLower *l, struct AstNode *node);
 XR_FUNC XiValue *xi_lower_pattern_test(XiLower *l, XiValue *subject, struct AstNode *pattern);
+XR_FUNC void xi_lower_defer_scope_push(XiLower *l);
+XR_FUNC void xi_lower_defer_scope_pop_normal(XiLower *l, int line);
+XR_FUNC void xi_lower_defer_run_to_depth(XiLower *l, int target_depth, int line);
+XR_FUNC bool xi_lower_defer_has_active_mark(XiLower *l);
 
 /* Emit XI_IS test against the given XrTypeRef on a pre-lowered value. */
 struct XrTypeRef;
 XR_FUNC XiValue *xi_lower_is_test(XiLower *l, XiValue *val, struct XrTypeRef *tref, int line);
+XR_FUNC XiValue *xi_lower_checktype_for_type(XiLower *l, struct AstNode *node, XiValue *val,
+                                             struct XrType *target_type);
 
 /* ========== Error Propagation (xi_lower_misc.c) ========== */
 

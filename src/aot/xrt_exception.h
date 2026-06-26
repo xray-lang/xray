@@ -34,6 +34,7 @@
 #include "xrt_coll.h"
 #include "xrt_value.h"
 #include "../runtime/xerror_codes.h"
+#include "../runtime/value/xtype_names.h" /* XrTypeId + xr_typeid_name (shared with VM) */
 #include "../shared/xr_builtin_schema.h"
 #include "../shared/xr_error_core.h"
 #include <setjmp.h>
@@ -49,7 +50,8 @@ typedef struct XrtExcFrame {
     jmp_buf buf;               // setjmp/longjmp target
     XrValue exception;         // exception value (set before longjmp)
     struct XrtExcFrame *prev;  // previous frame in stack
-    void *defer_mark;          // xrt_defer_top at try entry (XrtDeferScope*); see xrt_defer.h
+    void *defer_scope_mark;    // xrt_defer_top at try entry (XrtDeferScope*); see xrt_defer.h
+    int defer_count_mark;      // pending count inside defer_scope_mark at try entry
 } XrtExcFrame;
 
 /* =========================================================================
@@ -74,7 +76,7 @@ static inline int xrt_has_pending_error(void) {
 /* Run pending defers above `mark` before a panic transfers control. Defined in
  * xrt_defer.h (included after this header); forward-declared here because
  * xrt_throw_exc must drain skipped frames' defers before longjmp. */
-static inline void xrt_defer_unwind_to(void *mark);
+static inline void xrt_defer_unwind_to_mark(void *scope_mark, int count_mark);
 
 static inline XrValue xrt_exception_message_value(const char *message, size_t len) {
     if (!message)
@@ -88,7 +90,7 @@ static inline XrValue xrt_exception_message_value(const char *message, size_t le
 static inline XrValue xrt_exception_new_value(int code, const char *message, size_t len) {
     XrValue exc = xrt_json_new_named(EXCEPTION_FIELD_COUNT, xr_exception_field_names());
     xrt_json_set_field(exc, EXCEPTION_FIELD_MESSAGE, xrt_exception_message_value(message, len));
-    xrt_json_set_field(exc, EXCEPTION_FIELD_STACK, xrt_array_new_len(0));
+    xrt_json_set_field(exc, EXCEPTION_FIELD_STACK, xrt_array_new(0));
     xrt_json_set_field(exc, EXCEPTION_FIELD_CAUSE, XR_NULL_VAL);
     xrt_json_set_field(exc, EXCEPTION_FIELD_CODE, XR_FROM_INT(code));
     xrt_json_set_field(exc, EXCEPTION_FIELD_DATA, XR_NULL_VAL);
@@ -129,6 +131,105 @@ static inline const char *xrt_exception_message_cstr(XrValue exc) {
     return XR_IS_STR(msg) ? xr_str_data(msg) : NULL;
 }
 
+XRT_COLD _Noreturn void xrt_throw_exc(XrValue exc);
+XRT_COLD _Noreturn void xrt_index_oob(int64_t idx, int64_t length);
+XRT_COLD _Noreturn void xrt_throw_type_mismatch(int64_t expected_tid, int64_t actual_tid);
+
+/* Header-only XrTypeId -> canonical name, mirroring the VM's xr_typeid_name with
+ * the same TYPE_NAME_* literals. Inlined into the generated program so standalone
+ * AOT (which does not link the runtime value layer) still produces identical
+ * user-visible type names. Ids are runtime XrTypeId values (see xrt_typeof_id). */
+static inline const char *xrt_type_name(int64_t tid) {
+    switch ((XrTypeId) tid) {
+        case XR_TID_NULL:
+            return TYPE_NAME_NULL;
+        case XR_TID_BOOL:
+            return TYPE_NAME_BOOL;
+        case XR_TID_INT8:
+            return TYPE_NAME_INT8;
+        case XR_TID_UINT8:
+            return TYPE_NAME_UINT8;
+        case XR_TID_INT16:
+            return TYPE_NAME_INT16;
+        case XR_TID_UINT16:
+            return TYPE_NAME_UINT16;
+        case XR_TID_INT32:
+            return TYPE_NAME_INT32;
+        case XR_TID_UINT32:
+            return TYPE_NAME_UINT32;
+        case XR_TID_INT:
+            return TYPE_NAME_INT;
+        case XR_TID_UINT64:
+            return TYPE_NAME_UINT64;
+        case XR_TID_FLOAT32:
+            return TYPE_NAME_FLOAT32;
+        case XR_TID_FLOAT:
+            return TYPE_NAME_FLOAT;
+        case XR_TID_STRING:
+            return TYPE_NAME_STRING;
+        case XR_TID_CHAR:
+            return TYPE_NAME_CHAR;
+        case XR_TID_FUNCTION:
+            return TYPE_NAME_FUNCTION;
+        case XR_TID_BOUND_METHOD:
+            return TYPE_NAME_BOUND_METHOD;
+        case XR_TID_ARRAY:
+            return TYPE_NAME_ARRAY;
+        case XR_TID_SET:
+            return TYPE_NAME_SET;
+        case XR_TID_MAP:
+            return TYPE_NAME_MAP;
+        case XR_TID_INSTANCE:
+            return TYPE_NAME_INSTANCE;
+        case XR_TID_JSON:
+            return TYPE_NAME_JSON;
+        case XR_TID_RECORD:
+            return TYPE_NAME_RECORD;
+        case XR_TID_BIGINT:
+            return TYPE_NAME_BIGINT;
+        case XR_TID_STRINGBUILDER:
+            return TYPE_NAME_STRINGBUILDER;
+        case XR_TID_CHANNEL:
+            return TYPE_NAME_CHANNEL;
+        case XR_TID_REGEX:
+            return TYPE_NAME_REGEX;
+        case XR_TID_DATETIME:
+            return TYPE_NAME_DATETIME;
+        case XR_TID_PANIC_INFO:
+            return TYPE_NAME_PANIC_INFO;
+        case XR_TID_ENUM_VALUE:
+            return TYPE_NAME_ENUM_VALUE;
+        case XR_TID_ENUM_TYPE:
+            return TYPE_NAME_ENUM_TYPE;
+        case XR_TID_ITERATOR:
+            return TYPE_NAME_ITERATOR;
+        case XR_TID_MODULE:
+            return TYPE_NAME_MODULE;
+        case XR_TID_COROUTINE:
+            return TYPE_NAME_COROUTINE;
+        case XR_TID_RANGE:
+            return TYPE_NAME_RANGE;
+        case XR_TID_TASK:
+            return TYPE_NAME_TASK;
+        case XR_TID_NETCONN:
+            return TYPE_NAME_NETCONN;
+        case XR_TID_NETLISTENER:
+            return TYPE_NAME_NETLISTENER;
+        case XR_TID_ATOMIC:
+            return TYPE_NAME_ATOMIC;
+        case XR_TID_WORKQUEUE:
+            return TYPE_NAME_WORKQUEUE;
+        case XR_TID_RESULTGROUP:
+            return TYPE_NAME_RESULTGROUP;
+        case XR_TID_WEAKMAP:
+            return TYPE_NAME_WEAKMAP;
+        case XR_TID_WEAKSET:
+            return TYPE_NAME_WEAKSET;
+        default:
+            return TYPE_NAME_UNKNOWN;
+    }
+}
+
 /* =========================================================================
  * xrt_throw - throw an exception value
  *
@@ -147,7 +248,7 @@ XRT_COLD _Noreturn void xrt_throw_exc(XrValue exc) {
         /* Caught panic: run the defers of every frame skipped on the way to the
          * handler (down to its recorded mark), then jump. An uncaught panic
          * aborts WITHOUT running defers, matching the VM. */
-        xrt_defer_unwind_to(xrt_exc_top->defer_mark);
+        xrt_defer_unwind_to_mark(xrt_exc_top->defer_scope_mark, xrt_exc_top->defer_count_mark);
         xrt_exc_top->exception = exc;
         longjmp(xrt_exc_top->buf, 1);
     }
@@ -171,6 +272,17 @@ XRT_COLD _Noreturn void xrt_index_oob(int64_t idx, int64_t length) {
     char buf[XR_ERROR_CORE_INDEX_OOB_BUFSZ];
     xr_error_core_format_array_index_oob(buf, sizeof(buf), idx, length);
     xrt_throw_exc(xrt_exception_new_value(XR_ERR_INDEX_OUT_OF_BOUNDS, buf, strlen(buf)));
+}
+
+/* Type mismatch (unsafe `as`, dynamic→concrete checktype) → E0404, identical
+ * message + code to the VM OP_CHECKTYPE path. Type ids are runtime XrTypeId
+ * values (as produced by xrt_typeof_id), so xr_typeid_name maps them exactly as
+ * the VM does. */
+XRT_COLD _Noreturn void xrt_throw_type_mismatch(int64_t expected_tid, int64_t actual_tid) {
+    char buf[XR_ERROR_CORE_TYPE_MISMATCH_BUFSZ];
+    xr_error_core_format_type_mismatch(buf, sizeof(buf), xrt_type_name(expected_tid),
+                                       xrt_type_name(actual_tid));
+    xrt_throw_exc(xrt_exception_new_value(XR_ERR_TYPE_MISMATCH, buf, strlen(buf)));
 }
 #endif
 

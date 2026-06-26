@@ -50,6 +50,7 @@
 #include "../frontend/parser/xtype_ref.h"
 #include <string.h>
 #include <inttypes.h>
+#include <math.h>
 /* ========== Representation Helpers ========== */
 /* Read the stored representation set by select_rep.
  * select_rep always runs in the AOT pipeline before code generation. */
@@ -147,8 +148,8 @@ static const char *local_ctype_str(const XiValue *v) {
 
 static const XiValue *cg_unwrap_identity_value(const XiValue *v) {
     while (v &&
-           (v->op == XI_BOX || v->op == XI_UNBOX ||
-            (v->op == XI_COPY && !xi_copy_is_value_clone(v)) || v->op == XI_MOVE) &&
+           (v->op == XI_BOX || v->op == XI_UNBOX || xi_copy_is_identity_alias(v) ||
+            v->op == XI_MOVE) &&
            v->nargs >= 1) {
         v = v->args[0];
     }
@@ -231,9 +232,7 @@ static bool cg_shared_slot_is_module_import(const XiFunc *f, int slot, const cha
 }
 
 static bool cg_value_is_module_import(const XiFunc *f, const XiValue *v, const char *module_name) {
-    while (v &&
-           (v->op == XI_BOX || v->op == XI_UNBOX ||
-            (v->op == XI_COPY && !xi_copy_is_value_clone(v))) &&
+    while (v && (v->op == XI_BOX || v->op == XI_UNBOX || xi_copy_is_identity_alias(v)) &&
            v->nargs >= 1)
         v = v->args[0];
     if (cg_import_ref_is_module(v, module_name))
@@ -2635,8 +2634,21 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
 
 /* Emit phi assignments for all phis in `target` whose predecessor
  * at index `pred_idx` is `pred_blk`. Called before the jump/branch. */
+static bool cg_block_has_defer_run_to(const XiBlock *blk) {
+    if (!blk)
+        return false;
+    for (uint32_t i = 0; i < blk->nvalues; i++) {
+        const XiValue *v = blk->values[i];
+        if (v && v->op == XI_DEFER_RUN_TO)
+            return true;
+    }
+    return false;
+}
+
 static void emit_phi_copies(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiBlock *target,
                             uint16_t pred_idx) {
+    const XiBlock *pred = (target && pred_idx < target->npreds) ? target->preds[pred_idx] : NULL;
+    bool pred_ran_defer = cg_block_has_defer_run_to(pred);
     for (const XiPhi *phi = target->phis; phi; phi = phi->next) {
         if (!cg_phi_has_storage(phi))
             continue;
@@ -2649,8 +2661,14 @@ static void emit_phi_copies(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
             fprintf(out, "    ");
             emit_phi_ref(ctx, out, phi);
             fprintf(out, " = ");
-            emit_value_as_rep_ctx(ctx, out, phi->value.args[pred_idx],
-                                  cg_value_plan_storage_rep(ctx, &phi->value));
+            if (pred_ran_defer && cg_value_has_cell(ctx, &phi->value)) {
+                char cell_expr[64];
+                snprintf(cell_expr, sizeof(cell_expr), "cell_%u", (unsigned) phi->value.var_id);
+                emit_cell_get_for_rep(out, &phi->value, cell_expr);
+            } else {
+                emit_value_as_rep_ctx(ctx, out, phi->value.args[pred_idx],
+                                      cg_value_plan_storage_rep(ctx, &phi->value));
+            }
             fprintf(out, ";\n");
             emit_debug_source_var_sync(ctx, out, f, &phi->value);
         }
@@ -2978,11 +2996,70 @@ static void cg_build_phi_coalesce(XiCgenCtx *ctx, XiFunc *f) {
     }
 }
 
+static int cg_block_emit_index(const XiFunc *f, const XiBlock *needle) {
+    if (!f || !needle)
+        return -1;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        if (f->blocks[bi] == needle)
+            return (int) bi;
+    }
+    return -1;
+}
+
+static bool cg_value_defined_after_use_block(const XiFunc *f, const XiValue *value,
+                                             const XiBlock *use_block) {
+    if (!f || !value || !use_block || !value->block)
+        return false;
+    if (value->op == XI_PHI)
+        return false;
+    int def_idx = cg_block_emit_index(f, value->block);
+    int use_idx = cg_block_emit_index(f, use_block);
+    return def_idx >= 0 && use_idx >= 0 && def_idx > use_idx;
+}
+
+static bool cg_value_args_have_forward_c_use(const XiFunc *f, const XiBlock *use_block,
+                                             const XiValue *user) {
+    if (!f || !use_block || !user)
+        return false;
+    for (uint16_t ai = 0; ai < user->nargs; ai++) {
+        if (cg_value_defined_after_use_block(f, user->args[ai], use_block))
+            return true;
+    }
+    return false;
+}
+
+static bool cg_has_forward_c_value_use(const XiFunc *f) {
+    if (!f)
+        return false;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *blk = f->blocks[bi];
+        if (!blk)
+            continue;
+        if (cg_value_defined_after_use_block(f, blk->control, blk))
+            return true;
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            if (cg_value_args_have_forward_c_use(f, blk, blk->values[vi]))
+                return true;
+        }
+        for (const XiPhi *phi = blk->phis; phi; phi = phi->next) {
+            for (uint16_t ai = 0; ai < phi->value.nargs && ai < blk->npreds; ai++) {
+                if (cg_value_defined_after_use_block(f, phi->value.args[ai], blk->preds[ai]))
+                    return true;
+            }
+        }
+    }
+    return false;
+}
+
+static bool cg_needs_predecl_all(const XiFunc *f) {
+    return cg_has_exception_handling(f) || cg_has_forward_c_value_use(f);
+}
+
 /* Collect all values and phis to declare at function top.
- * When the function contains exception handling (setjmp/goto),
- * ALL SSA values are pre-declared to avoid jumping over decls. */
+ * Functions with exception handling or CFG emission-order forward uses
+ * pre-declare SSA values to avoid jumping over C declarations. */
 static void emit_declarations(XiCgenCtx *ctx, FILE *out, const XiFunc *f) {
-    bool pre_decl_all = cg_has_exception_handling(f);
+    bool pre_decl_all = ctx->pre_decl_all;
 
     for (uint32_t var_id = 0; var_id < ctx->cell_var_count; var_id++) {
         if (!ctx->cell_vars[var_id])
@@ -3558,6 +3635,7 @@ static void xi_cgen_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefi
     cg_prepare_cell_vars(ctx, f);
     cg_build_phi_coalesce(ctx, f);
     cg_class_field_cache_collect(ctx, f);
+    ctx->pre_decl_all = cg_needs_predecl_all(f);
     emit_declarations(ctx, out, f);
     emit_debug_source_var_declarations(ctx, out, f);
     emit_class_field_cache_decls(ctx, out);

@@ -13,6 +13,7 @@
 #include "coro/xcoro_tuning.h"
 #include "coro/xscheduler_policy.h"
 #include "coro/xcoro_abi.h"
+#include "coro/xaot_coro.h"
 #include "coro/xtask.h"
 #include "coro/xworker_internal.h"
 #include "runtime/mem/xsystem_heap.h"
@@ -432,6 +433,87 @@ TEST(single_worker_ensure_skips_sysmon_thread) {
     scheduler_fixture_cleanup(&f);
 }
 
+TEST(sysmon_forced_cancel_defaults_to_warn_only) {
+    char *old_cancel = dup_env_value(getenv("XRAY_SYSMON_CANCEL_MS"));
+    set_test_env("XRAY_SYSMON_CANCEL_MS", NULL);
+
+    XrVMRuntime isolate;
+    XrRuntimeCore core;
+    XrSystemHeap sys_heap;
+    memset(&isolate, 0, sizeof(isolate));
+    memset(&core, 0, sizeof(core));
+    ASSERT_TRUE(xr_sysheap_init(&sys_heap, NULL));
+    core.sys_heap = &sys_heap;
+    isolate.core_rt = &core;
+    core.vm_owner = &isolate;
+
+    XrRuntime *runtime = xr_scheduler_runtime_new(&core, 0);
+    ASSERT_NOT_NULL(runtime);
+    ASSERT_EQ_INT((int) runtime->sysmon_cancel_us, 0);
+
+    xr_scheduler_runtime_delete(runtime);
+    xr_sysheap_destroy(&sys_heap);
+    restore_test_env("XRAY_SYSMON_CANCEL_MS", old_cancel);
+}
+
+TEST(sysmon_forced_cancel_env_opt_in) {
+    char *old_cancel = dup_env_value(getenv("XRAY_SYSMON_CANCEL_MS"));
+    set_test_env("XRAY_SYSMON_CANCEL_MS", "7");
+
+    XrVMRuntime isolate;
+    XrRuntimeCore core;
+    XrSystemHeap sys_heap;
+    memset(&isolate, 0, sizeof(isolate));
+    memset(&core, 0, sizeof(core));
+    ASSERT_TRUE(xr_sysheap_init(&sys_heap, NULL));
+    core.sys_heap = &sys_heap;
+    isolate.core_rt = &core;
+    core.vm_owner = &isolate;
+
+    XrRuntime *runtime = xr_scheduler_runtime_new(&core, 0);
+    ASSERT_NOT_NULL(runtime);
+    ASSERT_EQ_INT((int) runtime->sysmon_cancel_us, 7000);
+
+    xr_scheduler_runtime_delete(runtime);
+    xr_sysheap_destroy(&sys_heap);
+    restore_test_env("XRAY_SYSMON_CANCEL_MS", old_cancel);
+}
+
+TEST(worker_heartbeat_bump_advances_sysmon_signal) {
+    SchedulerFixture f;
+    ASSERT_TRUE(scheduler_fixture_init(&f));
+
+    uint64_t before = atomic_load_explicit(&f.machine.heartbeat, memory_order_relaxed);
+    xr_worker_bump_heartbeat(&f.worker);
+    uint64_t after = atomic_load_explicit(&f.machine.heartbeat, memory_order_relaxed);
+    ASSERT(after == before + 1);
+
+    scheduler_fixture_cleanup(&f);
+}
+
+TEST(aot_poll_yield_bumps_backedge_heartbeat) {
+    SchedulerFixture f;
+    ASSERT_TRUE(scheduler_fixture_init(&f));
+
+    XrCoroutine coro;
+    memset(&coro, 0, sizeof(coro));
+    xr_coro_set_reds(&coro, XR_CORO_REDUCTIONS);
+
+    XrAotContext ctx = {
+        .coro = &coro,
+        .worker = &f.worker,
+    };
+    uint64_t before = atomic_load_explicit(&f.machine.heartbeat, memory_order_relaxed);
+    XrAotResult result = xr_aot_poll_yield(&ctx);
+    uint64_t after = atomic_load_explicit(&f.machine.heartbeat, memory_order_relaxed);
+
+    ASSERT_EQ_INT((int) result.kind, (int) XR_AOT_RUN_DONE);
+    ASSERT(after == before + 1);
+    ASSERT_EQ_INT(xr_coro_reds(&coro), XR_CORO_REDUCTIONS - 1);
+
+    scheduler_fixture_cleanup(&f);
+}
+
 TEST(deterministic_runtime_forces_single_worker_and_virtual_clock) {
     char *old_det = dup_env_value(getenv("XRAY_CORO_DETERMINISTIC"));
     char *old_workers = dup_env_value(getenv("XRAY_WORKERS"));
@@ -662,6 +744,10 @@ RUN_TEST(global_inject_spill_preserves_all_work);
 RUN_TEST(global_coro_pool_get_pops_bounded_batches);
 RUN_TEST(coro_ext_init_sets_timer_and_owner_sentinels);
 RUN_TEST(single_worker_ensure_skips_sysmon_thread);
+RUN_TEST(sysmon_forced_cancel_defaults_to_warn_only);
+RUN_TEST(sysmon_forced_cancel_env_opt_in);
+RUN_TEST(worker_heartbeat_bump_advances_sysmon_signal);
+RUN_TEST(aot_poll_yield_bumps_backedge_heartbeat);
 RUN_TEST(deterministic_runtime_forces_single_worker_and_virtual_clock);
 RUN_TEST(current_monotonic_uses_virtual_time_in_deterministic_runtime);
 RUN_TEST(work_stealing_moves_batch_and_returns_direct_item);

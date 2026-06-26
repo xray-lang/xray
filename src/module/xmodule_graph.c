@@ -364,31 +364,102 @@ static void graph_tarjan_strongconnect(GraphTarjanCtx *tc, int v) {
     }
 }
 
-/* Build a human-readable cycle description from the first SCC with size > 1. */
+static const char *cycle_display_name(const XrModuleSpec *spec) {
+    const char *name = (spec && spec->canonical) ? spec->canonical : "?";
+    const char *slash = strrchr(name, '/');
+    return slash ? slash + 1 : name;
+}
+
+static char *format_cycle_desc(XrModuleGraph *g, const int *path, int path_len) {
+    size_t len = strlen("E0504: circular dependency: ") + 1;
+    for (int i = 0; i < path_len; i++) {
+        len += strlen(cycle_display_name(&g->specs[path[i]]));
+        if (i + 1 < path_len)
+            len += strlen(" -> ");
+    }
+
+    char *buf = xr_malloc(len);
+    if (!buf)
+        return NULL;
+
+    size_t pos = 0;
+    pos += (size_t) snprintf(buf + pos, len - pos, "E0504: circular dependency: ");
+    for (int i = 0; i < path_len; i++) {
+        if (i > 0)
+            pos += (size_t) snprintf(buf + pos, len - pos, " -> ");
+        pos +=
+            (size_t) snprintf(buf + pos, len - pos, "%s", cycle_display_name(&g->specs[path[i]]));
+    }
+    return buf;
+}
+
+static bool find_cycle_path_dfs(XrModuleGraph *g, int scc_id, int start, int cur, bool *seen,
+                                int *path, int depth, int *out_len) {
+    seen[cur] = true;
+    path[depth] = cur;
+
+    XrModuleSpec *spec = &g->specs[cur];
+    for (int i = 0; i < spec->dep_count; i++) {
+        int next = spec->dep_indices[i];
+        if (next < 0 || next >= g->spec_count || g->specs[next].scc_id != scc_id)
+            continue;
+        if (next == start && depth >= 1) {
+            path[depth + 1] = start;
+            *out_len = depth + 2;
+            return true;
+        }
+        if (!seen[next] &&
+            find_cycle_path_dfs(g, scc_id, start, next, seen, path, depth + 1, out_len)) {
+            return true;
+        }
+    }
+
+    seen[cur] = false;
+    return false;
+}
+
+/* Build a human-readable cycle description from the first cyclic SCC or self-loop. */
 static char *build_cycle_desc(XrModuleGraph *g, int *scc_sizes, int nscc) {
     for (int s = 0; s < nscc; s++) {
         if (scc_sizes[s] <= 1)
             continue;
 
-        /* Collect module names in this SCC */
-        char buf[1024];
-        int pos = 0;
-        pos += snprintf(buf + pos, sizeof(buf) - (size_t) pos, "circular dependency: ");
-        bool first = true;
-        for (int i = 0; i < g->spec_count && pos < (int) sizeof(buf) - 64; i++) {
-            if (g->specs[i].scc_id == s) {
-                if (!first)
-                    pos += snprintf(buf + pos, sizeof(buf) - (size_t) pos, " -> ");
-                const char *name = g->specs[i].canonical;
-                /* Use basename for readability */
-                const char *slash = strrchr(name, '/');
-                const char *display = slash ? slash + 1 : name;
-                pos += snprintf(buf + pos, sizeof(buf) - (size_t) pos, "%s", display);
-                first = false;
+        int n = g->spec_count;
+        bool *seen = xr_calloc((size_t) n, sizeof(bool));
+        int *path = xr_calloc((size_t) (n + 1), sizeof(int));
+        if (!seen || !path) {
+            xr_free(seen);
+            xr_free(path);
+            return xr_strdup("E0504: circular dependency detected");
+        }
+
+        for (int i = 0; i < n; i++) {
+            if (g->specs[i].scc_id != s)
+                continue;
+            memset(seen, 0, (size_t) n * sizeof(bool));
+            int path_len = 0;
+            if (find_cycle_path_dfs(g, s, i, i, seen, path, 0, &path_len)) {
+                char *desc = format_cycle_desc(g, path, path_len);
+                xr_free(seen);
+                xr_free(path);
+                return desc;
             }
         }
-        return xr_strdup(buf);
+
+        xr_free(seen);
+        xr_free(path);
     }
+
+    for (int i = 0; i < g->spec_count; i++) {
+        XrModuleSpec *spec = &g->specs[i];
+        for (int d = 0; d < spec->dep_count; d++) {
+            if (spec->dep_indices[d] == i) {
+                int path[2] = {i, i};
+                return format_cycle_desc(g, path, 2);
+            }
+        }
+    }
+
     return NULL;
 }
 

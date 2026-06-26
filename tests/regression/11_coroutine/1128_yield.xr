@@ -5,13 +5,13 @@
 // 所有断言基于返回值，不依赖多协程 print 交织顺序
 
 fn task_with_yield() -> string {
-    yield
-    yield
+    Coro.yield()
+    Coro.yield()
     return "yielded"
 }
 
 fn worker(id: int) -> int {
-    yield
+    Coro.yield()
     return id * 10
 }
 
@@ -20,7 +20,7 @@ fn loop_yield(n: int) -> int {
     for (let i = 0; i < n; i++) {
         sum = sum + i
         if (i % 2 == 0) {
-            yield
+            Coro.yield()
         }
     }
     return sum
@@ -30,7 +30,7 @@ fn intensive_yield(count: int) -> int {
     let sum = 0
     for (let i = 0; i < count; i++) {
         sum = sum + i
-        yield
+        Coro.yield()
     }
     return sum
 }
@@ -39,7 +39,7 @@ fn intensive_yield(count: int) -> int {
 fn test_yield() {
     // Test 1: yield in main (no-op, should not crash)
     print("test1: main yield")
-    yield
+    Coro.yield()
     print("test1: after yield")
 
     // Test 2: yield in single coroutine

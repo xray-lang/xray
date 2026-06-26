@@ -4,7 +4,7 @@
 // ===== Channel<(T, U)>: tuple payload through coroutine channel =====
 @test
 fn test_channel_tuple_send_recv() {
-    shared const ch: Channel<(int, string)> = new Channel(2)
+    shared const ch: Channel<(int, string)> = Channel(2)
     ch.send((1, "hello"))
     ch.send((2, "world"))
     let t1 = match (ch.recv()) {
@@ -78,7 +78,7 @@ fn test_user_generic_tuple_fn() {
 // ===== Map<K, (V1, V2)>: value is a tuple =====
 @test
 fn test_map_with_tuple_values() {
-    let m: Map<string, (int, bool)> = new Map()
+    let m: Map<string, (int, bool)> = Map()
     m.set("a", (1, true))
     m.set("b", (2, false))
     assert_eq(m.length, 2)

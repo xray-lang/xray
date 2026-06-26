@@ -1,0 +1,61 @@
+enum DiffScopeErr { Msg(string) }
+
+fn ok() -> int {
+    return 11
+}
+
+fn fail() -> int {
+    throw DiffScopeErr.Msg("diff_fail")
+    return 0
+}
+
+fn count_success(outcomes: Array<TaskOutcome>) -> int {
+    let count = 0
+    for (let i = 0; i < outcomes.length; i++) {
+        match (outcomes[i]) {
+            TaskOutcome.Success(_) -> { count = count + 1 }
+            _ -> {}
+        }
+    }
+    return count
+}
+
+fn count_failed(outcomes: Array<TaskOutcome>) -> int {
+    let count = 0
+    for (let i = 0; i < outcomes.length; i++) {
+        match (outcomes[i]) {
+            TaskOutcome.Failed(_) -> { count = count + 1 }
+            _ -> {}
+        }
+    }
+    return count
+}
+
+fn has_error(outcomes: Array<TaskOutcome>) -> bool {
+    for (let i = 0; i < outcomes.length; i++) {
+        match (outcomes[i]) {
+            TaskOutcome.Failed(err) -> {
+                match (err) {
+                    DiffScopeErr.Msg(msg) -> {
+                        if (msg == "diff_fail") {
+                            return true
+                        }
+                    }
+                    _ -> {}
+                }
+            }
+            _ -> {}
+        }
+    }
+    return false
+}
+
+let outcomes = supervisor scope {
+    go ok()
+    go fail()
+}
+
+print(outcomes.length)
+print(count_success(outcomes))
+print(count_failed(outcomes))
+print(has_error(outcomes))

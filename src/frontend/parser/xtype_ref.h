@@ -35,6 +35,7 @@ typedef enum {
     XR_TREF_FLOAT,   /* float                            */
     XR_TREF_STRING,  /* string                           */
     XR_TREF_BOOL,    /* bool                             */
+    XR_TREF_CHAR,    /* char (Unicode scalar value)      */
     XR_TREF_UNIT,    /* unit `()` - the 0-arity tuple    */
     XR_TREF_NULL,    /* null                             */
     XR_TREF_UNKNOWN, /* error recovery / unresolved      */
@@ -103,6 +104,7 @@ XR_FUNC XrTypeRef *xr_tref_int(struct XrCompilerSession *session);
 XR_FUNC XrTypeRef *xr_tref_float(struct XrCompilerSession *session);
 XR_FUNC XrTypeRef *xr_tref_string(struct XrCompilerSession *session);
 XR_FUNC XrTypeRef *xr_tref_bool(struct XrCompilerSession *session);
+XR_FUNC XrTypeRef *xr_tref_char(struct XrCompilerSession *session);
 XR_FUNC XrTypeRef *xr_tref_unit(struct XrCompilerSession *session);
 XR_FUNC XrTypeRef *xr_tref_null(struct XrCompilerSession *session);
 XR_FUNC XrTypeRef *xr_tref_unknown(struct XrCompilerSession *session);

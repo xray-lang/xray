@@ -17,7 +17,7 @@ xray 在开发过程中借鉴了现有语言的许多优秀设计，但还是有
 | 静态类型 | TS 可选 | **强制**（除 `Json` 是动态） |
 | 数值 | 仅 `number`（双精度） | `int` `float` `BigInt` 严格区分 |
 | 真值转换 | truthy / falsy | truthy / falsy（与 JS 相近）但 `bool` 类型本身不接受 int/null 隐式赋值 |
-| `===` 与 `==` | `===` 强、`==` 弱（string↔number 自动转） | `==`/`!=` 为值相等（仅数值 int↔float 提升）；`===`/`!==` 为类型和值都严格相等 |
+| 相等比较 | `===` 强、`==` 弱（string↔number 自动转） | 仅 `==`/`!=`；值相等只做数值 int↔float 提升，不提供 `===`/`!==` |
 | 闭包捕获 | 引用 | 引用（默认）；`go` 闭包严格受限 |
 | 对象 | 动态字段 | 默认动态；带 `type T = {...}` 注解后 sealed |
 | import | ES Module | 自有 import 语法（含 stdlib 无引号形式） |
@@ -85,7 +85,7 @@ Xray draws inspiration from many existing languages but has notable differences 
 | Static typing | Optional in TS | **Mandatory** (`Json` is the only dynamic type) |
 | Numerics | Single `number` (double) | `int`, `float`, `BigInt` strictly distinguished |
 | Truthiness | truthy / falsy | truthy / falsy (similar to JS), but `bool` itself rejects implicit assignment from int/null |
-| `===` vs `==` | `===` strict, `==` weak (string↔number coercion) | `==`/`!=` is value equality (only int↔float promotion); `===`/`!==` requires both type and value to be strictly equal |
+| Equality | `===` is strict, `==` is weak (string↔number coercion) | Only `==`/`!=`; value equality only promotes numeric int↔float, and `===`/`!==` are not operators |
 | Closure capture | by reference | by reference (default); `go` closures are strictly restricted |
 | Objects | dynamic fields | dynamic by default; sealed once annotated `type T = {...}` |
 | import | ES Modules | xray-specific syntax (stdlib uses unquoted form) |

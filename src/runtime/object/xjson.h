@@ -62,6 +62,12 @@ XR_FUNC bool xr_json_set(XrVMRuntime *X, XrJson *json, SymbolId symbol, XrValue 
 XR_FUNC XrValue xr_json_get_by_key(XrVMRuntime *X, XrJson *json, const char *key);
 XR_FUNC bool xr_json_set_by_key(XrVMRuntime *X, XrJson *json, const char *key, XrValue value);
 
+// Copy every field of `src` into `dst` (object spread `{...src}`). Each value
+// is retained (src keeps its own reference); existing fields are overwritten so
+// later spread parts override earlier ones. Returns false only if `dst` is
+// sealed and a new field cannot be added.
+XR_FUNC bool xr_json_merge(XrVMRuntime *X, XrJson *dst, XrJson *src);
+
 /* ========== Query API ========== */
 
 static inline uint16_t xr_json_field_count(XrVMRuntime *X, XrJson *json) {
@@ -91,6 +97,21 @@ static inline bool xr_value_is_json(XrValue v) {
         return false;
     XrInstance *inst = (XrInstance *) XR_TO_PTR(v);
     return inst->klass && inst->klass->builtin_kind == XR_BK_JSON;
+}
+
+static inline bool xr_value_is_record(XrValue v) {
+    if (!XR_IS_INSTANCE(v))
+        return false;
+    XrInstance *inst = (XrInstance *) XR_TO_PTR(v);
+    return inst->klass && inst->klass->builtin_kind == XR_BK_RECORD;
+}
+
+static inline bool xr_value_has_object_shape(XrValue v) {
+    if (!XR_IS_INSTANCE(v))
+        return false;
+    XrInstance *inst = (XrInstance *) XR_TO_PTR(v);
+    return inst->klass &&
+           (inst->klass->builtin_kind == XR_BK_JSON || inst->klass->builtin_kind == XR_BK_RECORD);
 }
 
 static inline XrJson *xr_value_to_json(XrValue v) {

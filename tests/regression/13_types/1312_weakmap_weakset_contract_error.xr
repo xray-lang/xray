@@ -15,7 +15,7 @@
 
 @test
 fn test_weakmap_weakset_contract_error() {
-    let wm = new WeakMap()
+    let wm = WeakMap()
 
     let caught_int = false
     try { wm.set(42, "value") } catch panic (e) { caught_int = true }
@@ -39,7 +39,7 @@ fn test_weakmap_weakset_contract_error() {
     assert_eq(wm.get(key), "ok")
 
     // ----- WeakSet with value-type element must throw -----
-    let ws = new WeakSet()
+    let ws = WeakSet()
 
     let caught_set_int = false
     try { ws.add(7) } catch panic (e) { caught_set_int = true }

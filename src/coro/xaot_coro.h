@@ -24,6 +24,7 @@
 #ifndef XRT_VALUE_H
 #include "../runtime/value/xvalue.h"
 #endif
+#include "../runtime/value/xtransfer_mode.h"
 
 struct XrCoroutine;
 struct XrCoroHeap;
@@ -69,8 +70,15 @@ typedef enum {
     XR_AOT_RUN_YIELD,
     XR_AOT_RUN_SPAWN_CHILD,
     XR_AOT_RUN_ERROR,
-    XR_AOT_RUN_CANCELLED
+    XR_AOT_RUN_CANCELLED,
+    XR_AOT_RUN_GEN_YIELD  // generator `yield expr`: .value carries the yielded element
 } XrAotRunKind;
+
+typedef enum {
+    XR_AOT_GEN_DRIVE_DONE = 0,
+    XR_AOT_GEN_DRIVE_YIELD,
+    XR_AOT_GEN_DRIVE_ERROR
+} XrAotGenDriveKind;
 
 typedef struct XrAotResult {
     XrAotRunKind kind;
@@ -158,6 +166,15 @@ static inline XrAotResult xr_aot_yielded(void) {
     return xr_aot_result(XR_AOT_RUN_YIELD);
 }
 
+// Generator value yield: hand `value` to the driving iterator and suspend the
+// producer. Distinct from xr_aot_yielded() (cooperative scheduling) so the
+// generator drive can read the element and never re-enqueues on a worker.
+static inline XrAotResult xr_aot_gen_yielded(XrValue value) {
+    XrAotResult result = xr_aot_result(XR_AOT_RUN_GEN_YIELD);
+    result.value = value;
+    return result;
+}
+
 static inline XrAotResult xr_aot_spawn_child(struct XrCoroutine *child) {
     XrAotResult result = xr_aot_result(XR_AOT_RUN_SPAWN_CHILD);
     result.child = child;
@@ -181,6 +198,7 @@ XR_FUNC struct XrRuntimeCore *xr_aot_runtime_core(XrAotRuntime *runtime);
 XR_FUNC struct XrRuntime *xr_aot_runtime_scheduler(XrAotRuntime *runtime);
 XR_FUNC void xr_aot_runtime_enable_transfer(XrAotRuntime *runtime);
 XR_FUNC XrValue xr_aot_runtime_builtin(const XrAotRuntime *runtime, int32_t index);
+XR_FUNC XrValue xr_aot_runtime_builtin_lazy(XrAotRuntime *runtime, int32_t index);
 XR_FUNC void xr_aot_runtime_set_builtin(XrAotRuntime *runtime, int32_t index, XrValue value);
 XR_FUNC void xr_aot_trace_frame_value(void *visitor, XrValue value);
 XR_FUNC void xr_aot_release_frame_value(struct XrCoroHeap *heap, XrValue value);
@@ -204,12 +222,24 @@ XR_FUNC XrValue xr_aot_coro_op(const XrAotContext *ctx, int32_t sub_op, const Xr
 
 XR_FUNC struct XrCoroutine *xr_coro_create_aot(XrAotRuntime *runtime, const XrAotCoroDesc *desc,
                                                void *frame, const char *name);
+XR_FUNC void xr_coro_destroy(struct XrCoroutine *coro);
+
+// Pull a generator coroutine to its next yielded value without exposing the
+// scheduler/backend ABI to AOT collection helpers.
+XR_FUNC XrAotGenDriveKind xr_aot_gen_drive(struct XrCoroutine *coro, XrValue *out,
+                                           bool *out_error_is_value);
 
 XR_FUNC XrValue xr_aot_run_main(XrAotRuntime *runtime, const XrAotCoroDesc *desc, void *frame);
 
 XR_FUNC XrAotSpawnResult xr_aot_spawn(const XrAotContext *ctx, const XrAotCoroDesc *desc,
                                       void *frame, int link_mode, bool fire_and_forget,
                                       const char *name);
+
+// Construct a coroutine-backed iterator over a generator function. The producer
+// coroutine is created from desc+frame but NOT scheduled; it is pull-driven by
+// the returned iterator's hasNext()/next(). Returns the iterator as an XrValue.
+XR_FUNC XrValue xr_aot_gen_iterator_new(const XrAotContext *ctx, const XrAotCoroDesc *desc,
+                                        void *frame);
 
 XR_FUNC XrAotResult xr_aot_sleep(const XrAotContext *ctx, int64_t milliseconds);
 XR_FUNC XrAotResult xr_aot_scope_enter(const XrAotContext *ctx, uint8_t scope_mode);
@@ -229,8 +259,12 @@ XR_FUNC XrAotResult xr_aot_await_task_resume(const XrAotContext *ctx, XrSlotRef 
 XR_FUNC XrValue xr_aot_channel_new(const XrAotContext *ctx, int64_t buffer_size);
 XR_FUNC XrValue xr_aot_chan_try_send(const XrAotContext *ctx, XrValue channel_value,
                                      XrValue send_value);
+XR_FUNC XrValue xr_aot_chan_try_send_transfer(const XrAotContext *ctx, XrValue channel_value,
+                                              XrValue send_value, uint8_t transfer_mode);
 XR_FUNC XrValue xr_aot_chan_try_send_ready(const XrAotContext *ctx, XrValue channel_value,
                                            XrValue send_value);
+XR_FUNC XrValue xr_aot_chan_try_send_ready_transfer(const XrAotContext *ctx, XrValue channel_value,
+                                                    XrValue send_value, uint8_t transfer_mode);
 XR_FUNC XrValue xr_aot_chan_try_send_sync(XrValue channel_value, XrValue send_value);
 
 static inline XrValue xr_aot_chan_try_send_i64(const XrAotContext *ctx, XrValue channel_value,
@@ -313,6 +347,9 @@ XR_FUNC XrValue xr_aot_result_group_is_closed_sync(XrValue group_value);
 XR_FUNC XrValue xr_aot_tuple_get(const XrAotContext *ctx, XrValue tuple_value, uint16_t index);
 XR_FUNC XrAotResult xr_aot_chan_send(const XrAotContext *ctx, XrValue channel_value,
                                      XrValue send_value, XrSlotRef result_slot, int64_t timeout_ms);
+XR_FUNC XrAotResult xr_aot_chan_send_transfer(const XrAotContext *ctx, XrValue channel_value,
+                                              XrValue send_value, XrSlotRef result_slot,
+                                              int64_t timeout_ms, uint8_t transfer_mode);
 XR_FUNC XrAotResult xr_aot_chan_send_i64(const XrAotContext *ctx, XrValue channel_value,
                                          int64_t send_value);
 XR_FUNC XrAotResult xr_aot_chan_send_f64(const XrAotContext *ctx, XrValue channel_value,
@@ -322,6 +359,15 @@ static inline XrAotResult xr_aot_chan_send_timeout(const XrAotContext *ctx, XrVa
                                                    XrValue send_value, int64_t timeout_ms,
                                                    XrSlotRef result_slot) {
     return xr_aot_chan_send(ctx, channel_value, send_value, result_slot, timeout_ms);
+}
+
+static inline XrAotResult xr_aot_chan_send_timeout_transfer(const XrAotContext *ctx,
+                                                            XrValue channel_value,
+                                                            XrValue send_value, int64_t timeout_ms,
+                                                            XrSlotRef result_slot,
+                                                            uint8_t transfer_mode) {
+    return xr_aot_chan_send_transfer(ctx, channel_value, send_value, result_slot, timeout_ms,
+                                     transfer_mode);
 }
 
 static inline XrAotResult xr_aot_chan_send_timeout_i64(const XrAotContext *ctx,
@@ -342,6 +388,9 @@ XR_FUNC XrAotResult xr_aot_chan_recv_slot(const XrAotContext *ctx, XrValue chann
                                           XrSlotRef out_slot, int64_t timeout_ms);
 XR_FUNC XrAotResult xr_aot_chan_recv_slot_resume(const XrAotContext *ctx, XrSlotRef out_slot,
                                                  bool result_value);
+XR_FUNC XrAotResult xr_aot_chan_recv_or_slot(const XrAotContext *ctx, XrValue channel_value,
+                                             XrSlotRef out_slot, XrValue default_value);
+XR_FUNC XrAotResult xr_aot_chan_recv_or_slot_resume(const XrAotContext *ctx, XrSlotRef out_slot);
 XR_FUNC XrAotResult xr_aot_chan_recv_pair(const XrAotContext *ctx, XrValue channel_value,
                                           XrSlotRef value_slot, XrSlotRef ok_slot,
                                           int64_t timeout_ms);

@@ -137,7 +137,6 @@ void xfmt_snapshot(XrFmtContext *ctx, XfmtSnapshot *snap) {
     snap->column = ctx->column;
     snap->line_start = ctx->line_start;
     snap->indent_level = ctx->indent_level;
-    snap->in_template_expr = ctx->in_template_expr;
 }
 
 void xfmt_rollback(XrFmtContext *ctx, const XfmtSnapshot *snap) {
@@ -146,7 +145,6 @@ void xfmt_rollback(XrFmtContext *ctx, const XfmtSnapshot *snap) {
     ctx->column = snap->column;
     ctx->line_start = snap->line_start;
     ctx->indent_level = snap->indent_level;
-    ctx->in_template_expr = snap->in_template_expr;
 }
 
 bool xfmt_fits_on_line(XrFmtContext *ctx, const XfmtSnapshot *snap) {
@@ -171,7 +169,6 @@ void xfmt_init(XrFmtContext *ctx, XrFmtConfig *config, XrVMRuntime *X) {
     ctx->indent_level = 0;
     ctx->line_start = 1;
     ctx->column = 0;
-    ctx->in_template_expr = 0;
     ctx->config = config ? config : &xfmt_default_config;
     ctx->X = X;
 }

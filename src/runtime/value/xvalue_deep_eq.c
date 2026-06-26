@@ -75,7 +75,8 @@ deep_compare: {
     }
     if (XR_OBJ_GET_TYPE(gc_a) == XR_TINSTANCE) {
         XrInstance *ia = (XrInstance *) gc_a;
-        if (ia->klass && ia->klass->builtin_kind == XR_BK_JSON)
+        if (ia->klass &&
+            (ia->klass->builtin_kind == XR_BK_JSON || ia->klass->builtin_kind == XR_BK_RECORD))
             return xr_json_equals_deep(a, b);
     }
     if (XR_OBJ_GET_TYPE(gc_a) == XR_TARRAY)

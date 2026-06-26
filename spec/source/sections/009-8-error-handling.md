@@ -16,12 +16,12 @@ Xray 的错误处理分为两个严格分离的通道：
 
 | 通道 | 语法 | 适用场景 | 运行时开销 |
 |--|--|--|--|
-| **值返回通道**（`throw <enum>` / `try` / `catch`） | 业务错误、可恢复失败 | **零开销**（正常路径无额外指令） |
+| **值返回通道**（`throw <enum>` / `try` / `catch`） | 业务错误、可恢复失败 | **低开销**（不分配 `PanicInfo`、不 unwind；需传播/捕获错误的调用边界只有可预测分支） |
 | **panic 通道**（`catch panic`） | 运行时故障（越界、除零、不完整 match） | 有限栈展开 |
 
 设计原则：
 
-- **错误是值**：`throw <enum>` 把枚举值写入返回通道，不展开栈、不分配 Exception 对象。
+- **错误是值**：`throw <enum>` 把枚举值写入返回通道，不展开栈、不分配 PanicInfo 对象。
 - **panic 不是错误**：panic 表示程序 bug 或运行时不变量违背，不应用于业务逻辑。
 - **函数签名不标 `throws`**：xray 不引入 Java/Swift 的受检异常语义。错误通过 throw/catch 值返回通道处理。
 - **`defer` 替代 `finally`**：xray 没有 `finally` 关键字，资源清理统一用函数作用域的 `defer`（Go 模型）。
@@ -46,7 +46,7 @@ throw AppErr.InvalidInput("bad format")     // ✅ 带载荷的 ADT 枚举变体
 ```
 
 - 不展开栈帧（不同于传统异常的 unwind）
-- 正常路径零开销，仅在错误路径有条件跳转成本
+- 正常路径不分配对象、不展开栈；在需传播或捕获错误的调用边界只经过可预测的错误标志分支
 - 未捕获的顶层错误打印 `[Uncaught Error] <enum value>`，退出码 = 1
 
 #### 8.1.2 `try` / `catch`
@@ -192,7 +192,7 @@ panic 表示**程序 bug 或运行时不变量违背**，不应用于业务逻�
 - 空引用解引用
 - 运行时类型断言失败
 
-panic 通过有限的栈展开传播，生成 `Exception` 对象携带堆栈信息。
+panic 通过有限的栈展开传播，生成 `PanicInfo` 对象携带堆栈信息。
 
 #### 8.2.2 `catch panic`
 
@@ -227,29 +227,29 @@ try {
 }
 ```
 
-#### 8.2.3 `Exception` 类
+#### 8.2.3 `PanicInfo` 类
 
-`Exception` 现在**仅用于 panic 通道**。运行时故障发生时，VM 自动构造 `Exception` 对象：
+`PanicInfo` 现在**仅用于 panic 通道**。运行时故障发生时，VM 自动构造 `PanicInfo` 对象：
 
 ```xray
 @native
-class Exception {
+class PanicInfo {
     message: string             // 人类可读消息（如 "index out of bounds"）
     stack: Array<string>        // 自动捕获的调用栈
-    cause: Exception?           // 链式 cause
+    cause: PanicInfo?           // 链式 cause
     code: int                   // 错误码
-    data: Json?                 // 附加数据
+    data: Json                  // 附加数据；无数据时为 JSON null
 
-    constructor(message: string = "", cause: Exception? = null)
+    constructor(message: string = "", cause: PanicInfo? = null)
     fn toString() -> string
 }
 ```
 
-用户代码一般不直接构造 `Exception`——业务错误用 `throw <enum>`。
+用户代码一般不直接构造 `PanicInfo`——业务错误用 `throw <enum>`。
 
 ### 8.3 `defer` — 资源清理
 
-`defer` 是函数作用域的清理语句，在函数退出时**保证执行**（无论正常返回、`throw`、还是 panic）。语法见 §4.9。
+`defer` 是块作用域的清理语句，在所属块退出时**保证执行**（无论正常结束、`break` / `continue`、`return`、`throw`、还是 panic）。语法见 §4.9。
 
 ```xray
 fn fetch(url: string) -> string {
@@ -265,9 +265,10 @@ fn fetch(url: string) -> string {
 ```
 
 **规则**：
-- `defer` 是函数作用域（Go 模型），在函数退出时按 **LIFO** 顺序执行
-- 单个函数可有多个 `defer`，按逆序执行
-- `defer` 在 `throw`、`return`、panic 时均执行
+- `defer` 绑定最近的真实 `{}` 块；函数体顶层 `defer` 仍在函数退出时执行
+- 同一块可有多个 `defer`，按 **LIFO** 顺序执行
+- `defer` 在块正常结束、`break`、`continue`、`return`、`throw`、panic 展开时均执行
+- 循环体中的 `defer` 每轮迭代退出时执行
 - `defer` 块内不应抛出错误（行为未定义）
 
 ### 8.4 Optional 与错误处理
@@ -291,7 +292,7 @@ fn fetch(url: string) -> string {
 │
 ├─ 需要，且失败有结构化错因
 │   ↓
-│   throw <enum>，catch 处理（零开销值返回通道）
+│   throw <enum>，catch 处理（低开销值返回通道）
 │
 ├─ 需要，但失败只表示"没值"，无错因意义
 │   ↓
@@ -407,12 +408,12 @@ Xray's error handling is split into two strictly separated channels:
 
 | Channel | Syntax | Use case | Runtime cost |
 |--|--|--|--|
-| **Value-return channel** (`throw <enum>` / `try` / `catch`) | Business errors, recoverable failures | **Zero overhead** (no extra instructions on the happy path) |
+| **Value-return channel** (`throw <enum>` / `try` / `catch`) | Business errors, recoverable failures | **Low overhead** (no `PanicInfo` allocation and no unwind; only a predictable branch at call boundaries that may propagate or catch errors) |
 | **Panic channel** (`catch panic`) | Runtime faults (OOB, division by zero, non-exhaustive match) | Limited stack unwinding |
 
 Design principles:
 
-- **Errors are values**: `throw <enum>` writes an enum value into the return channel — no stack unwinding, no Exception allocation.
+- **Errors are values**: `throw <enum>` writes an enum value into the return channel — no stack unwinding, no PanicInfo allocation.
 - **Panics are not errors**: a panic signals a program bug or runtime invariant violation, not business logic.
 - **No `throws` in function signatures**: xray does not adopt Java/Swift-style checked exceptions. Errors are handled via the throw/catch value-return channel.
 - **`defer` replaces `finally`**: xray has no `finally` keyword; resource cleanup uses function-scoped `defer` (Go model).
@@ -437,7 +438,7 @@ throw point → write to pending_error → return up the call stack → run defe
 ```
 
 - No stack frame unwinding (unlike traditional exception unwinding)
-- Zero overhead on the happy path; only a conditional branch on the error path
+- No object allocation and no stack unwinding on the happy path; call boundaries that may propagate or catch errors go through only a predictable error-flag branch
 - Unhandled top-level errors print `[Uncaught Error] <enum value>`, exit code = 1
 
 #### 8.1.2 `try` / `catch`
@@ -583,7 +584,7 @@ A panic represents a **program bug or runtime invariant violation**, not busines
 - Null reference dereference
 - Runtime type assertion failure
 
-Panics propagate via limited stack unwinding and generate `Exception` objects with stack traces.
+Panics propagate via limited stack unwinding and generate `PanicInfo` objects with stack traces.
 
 #### 8.2.2 `catch panic`
 
@@ -618,29 +619,29 @@ try {
 }
 ```
 
-#### 8.2.3 The `Exception` class
+#### 8.2.3 The `PanicInfo` class
 
-`Exception` is now **used only by the panic channel**. The VM constructs `Exception` objects automatically on runtime faults:
+`PanicInfo` is now **used only by the panic channel**. The VM constructs `PanicInfo` objects automatically on runtime faults:
 
 ```xray
 @native
-class Exception {
+class PanicInfo {
     message: string             // human-readable message (e.g. "index out of bounds")
     stack: Array<string>        // automatically captured call stack
-    cause: Exception?           // chained cause
+    cause: PanicInfo?           // chained cause
     code: int                   // error code
-    data: Json?                 // additional data
+    data: Json                  // additional data; JSON null when absent
 
-    constructor(message: string = "", cause: Exception? = null)
+    constructor(message: string = "", cause: PanicInfo? = null)
     fn toString() -> string
 }
 ```
 
-User code generally does not construct `Exception` directly — use `throw <enum>` for business errors.
+User code generally does not construct `PanicInfo` directly — use `throw <enum>` for business errors.
 
 ### 8.3 `defer` — resource cleanup
 
-`defer` is a function-scoped cleanup statement guaranteed to run when the function exits (whether by normal return, `throw`, or panic). Syntax: see §4.9.
+`defer` is a block-scoped cleanup statement guaranteed to run when the owning block exits (whether by fallthrough, `break` / `continue`, `return`, `throw`, or panic). Syntax: see §4.9.
 
 ```xray
 fn fetch(url: string) -> string {
@@ -656,9 +657,10 @@ fn fetch(url: string) -> string {
 ```
 
 **Rules**:
-- `defer` is function-scoped (Go model), runs when the function exits in **LIFO** order
-- Multiple `defer`s in the same function run in reverse order
-- `defer` executes on `throw`, `return`, and panic
+- `defer` belongs to the nearest real `{}` block; a top-level function-body `defer` still runs when the function exits
+- Multiple `defer`s in the same block run in **LIFO** order
+- `defer` executes on block fallthrough, `break`, `continue`, `return`, `throw`, and panic unwinding
+- A `defer` in a loop body runs as each iteration exits
 - `defer` blocks should not throw errors (behaviour is undefined)
 
 ### 8.4 Optional and error handling
@@ -682,7 +684,7 @@ Does the caller need to handle the failure?
 │
 ├─ Yes, with structured causes
 │   ↓
-│   throw <enum>, catch to handle (zero-overhead value-return channel)
+│   throw <enum>, catch to handle (low-overhead value-return channel)
 │
 ├─ Yes, but the failure simply means "no value"
 │   ↓

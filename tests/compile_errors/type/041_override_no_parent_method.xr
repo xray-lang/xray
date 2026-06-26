@@ -1,0 +1,6 @@
+class Solo {
+    override run() -> int {
+        return 1
+    }
+}
+

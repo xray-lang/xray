@@ -47,7 +47,8 @@ static ParseRule rules[] = {
     [TK_RBRACKET] = {NULL, NULL, PREC_NONE},
     [TK_COMMA] = {NULL, NULL, PREC_NONE},
     [TK_DOT] = {NULL, xr_parse_member_access, PREC_CALL},
-    [TK_RANGE] = {NULL, xr_parse_range, PREC_FACTOR},  // .. (range operator)
+    [TK_RANGE] = {NULL, xr_parse_range, PREC_FACTOR},            // .. (range operator)
+    [TK_RANGE_INCLUSIVE] = {NULL, xr_parse_range, PREC_FACTOR},  // ..= (inclusive range)
     [TK_COLON] = {NULL, NULL, PREC_NONE},
     [TK_SEMICOLON] = {NULL, NULL, PREC_NONE},
 
@@ -76,8 +77,6 @@ static ParseRule rules[] = {
     // Comparison operators
     [TK_EQ] = {NULL, xr_parse_binary, PREC_EQUALITY},
     [TK_NE] = {NULL, xr_parse_binary, PREC_EQUALITY},
-    [TK_EQ_STRICT] = {NULL, xr_parse_binary, PREC_EQUALITY},
-    [TK_NE_STRICT] = {NULL, xr_parse_binary, PREC_EQUALITY},
     [TK_LT] = {NULL, xr_parse_lt_or_generic, PREC_COMPARISON},
     [TK_LE] = {NULL, xr_parse_binary, PREC_COMPARISON},
     [TK_GT] = {NULL, xr_parse_binary, PREC_COMPARISON},
@@ -134,7 +133,6 @@ static ParseRule rules[] = {
     [TK_CONSTRUCTOR] = {NULL, NULL, PREC_NONE},
     [TK_STATIC] = {NULL, NULL, PREC_NONE},
     [TK_PRIVATE] = {NULL, NULL, PREC_NONE},
-    [TK_PUBLIC] = {NULL, NULL, PREC_NONE},
     [TK_MATCH] = {xr_parse_match_expr, NULL, PREC_NONE},  // match expression
     [TK_TRY] = {NULL, NULL, PREC_NONE},
     [TK_CATCH] = {NULL, NULL, PREC_NONE},
@@ -156,6 +154,7 @@ static ParseRule rules[] = {
     [TK_LITERAL_FLOAT] = {xr_parse_literal, NULL, PREC_NONE},
     [TK_LITERAL_BIGINT] = {xr_parse_literal, NULL, PREC_NONE},
     [TK_LITERAL_STRING] = {xr_parse_literal, NULL, PREC_NONE},
+    [TK_LITERAL_CHAR] = {xr_parse_literal, NULL, PREC_NONE},
     [TK_LITERAL_REGEX] = {xr_parse_regex_literal, NULL, PREC_NONE},
     [TK_TEMPLATE_STRING] = {xr_parse_template_string, NULL, PREC_NONE},
     [TK_RAW_STRING] = {xr_parse_literal, NULL, PREC_NONE},
@@ -167,6 +166,7 @@ static ParseRule rules[] = {
     [TK_FLOAT] = {xr_parse_type_cast, NULL, PREC_NONE},
     [TK_STRING] = {xr_parse_type_cast, NULL, PREC_NONE},
     [TK_BOOL] = {xr_parse_type_cast, NULL, PREC_NONE},
+    [TK_CHAR] = {xr_parse_type_cast, NULL, PREC_NONE},
 
     // Container constructors. Array / Map / Set are no longer keywords;
     // a call like `Array(1, 2, 3)` reaches xr_compile_call_builtin via
@@ -618,8 +618,9 @@ AstNode *xr_parse_expression(Parser *parser) {
 // destructure-assignment `(a, b) = (b, a)` is the canonical form and
 // is handled by xr_parse_assignment via the AST_TUPLE_LITERAL branch.
 AstNode *xr_parse_expr_statement(Parser *parser) {
-    int line = parser->current.line;
-    (void) line;
+    AstNode *inc_dec = xr_parse_standalone_inc_dec(parser, false);
+    if (inc_dec)
+        return inc_dec;
 
     // Use PREC_TERNARY to avoid parsing assignment
     AstNode *first_expr = xr_parse_precedence(parser, PREC_TERNARY);
@@ -656,6 +657,62 @@ AstNode *xr_parse_expr_statement(Parser *parser) {
     return xr_ast_expr_stmt(parser->compiler_session, first_expr, parser->previous.line);
 }
 
+AstNode *xr_parse_standalone_inc_dec(Parser *parser, bool for_step) {
+    if (!xr_parser_check(parser, TK_NAME))
+        return NULL;
+
+    Parser checkpoint = *parser;
+    xr_parser_advance(parser);
+    Token name = parser->previous;
+    if (!xr_parser_check(parser, TK_INC) && !xr_parser_check(parser, TK_DEC)) {
+        *parser = checkpoint;
+        return NULL;
+    }
+
+    XrTokenType op = parser->current.type;
+    Token op_token = parser->current;
+    char *var_name = (char *) ast_alloc(parser->compiler_session, (size_t) name.length + 1);
+    memcpy(var_name, name.start, (size_t) name.length);
+    var_name[name.length] = '\0';
+
+    xr_parser_advance(parser);
+
+    if (for_step) {
+        if (!xr_parser_check(parser, TK_RPAREN)) {
+            xr_parser_error_at_current(parser,
+                                       "postfix ++/-- for-step must be the entire step expression");
+        }
+    } else if (!xr_parser_check(parser, TK_SEMICOLON) && !xr_parser_check(parser, TK_RBRACE) &&
+               !xr_parser_check(parser, TK_EOF) && parser->current.line == op_token.line &&
+               !xr_parser_check_asi_hint(parser)) {
+        xr_parser_error_at_current(parser, "postfix ++/-- must be a complete standalone statement");
+    }
+
+    return op == TK_INC ? xr_ast_inc(parser->compiler_session, var_name, name.line)
+                        : xr_ast_dec(parser->compiler_session, var_name, name.line);
+}
+
+bool xr_lbrace_starts_destructure_assignment(Parser *parser) {
+    Parser probe = *parser;
+    int depth = 0;
+
+    while (!xr_parser_check(&probe, TK_EOF)) {
+        if (xr_parser_check(&probe, TK_LBRACE)) {
+            depth++;
+        } else if (xr_parser_check(&probe, TK_RBRACE)) {
+            depth--;
+            xr_parser_advance(&probe);
+            if (depth == 0)
+                return xr_parser_check(&probe, TK_ASSIGN);
+            continue;
+        }
+
+        xr_parser_advance(&probe);
+    }
+
+    return false;
+}
+
 // Parse print statement: print(expr1, expr2, ...)
 AstNode *xr_parse_print_statement(Parser *parser) {
     int line = parser->previous.line;
@@ -682,6 +739,45 @@ AstNode *xr_parse_print_statement(Parser *parser) {
 
 // Parse statement
 AstNode *xr_parse_statement(Parser *parser) {
+    if (parser->current.type == TK_NAME) {
+        Parser checkpoint = *parser;
+        Token label_tok = parser->current;
+        xr_parser_advance(parser);
+        if (xr_parser_match(parser, TK_COLON)) {
+            if (parser->current.type == TK_FOR || parser->current.type == TK_WHILE) {
+                char *label =
+                    (char *) ast_alloc(parser->compiler_session, (size_t) label_tok.length + 1);
+                memcpy(label, label_tok.start, (size_t) label_tok.length);
+                label[label_tok.length] = '\0';
+
+                AstNode *stmt = xr_parse_statement(parser);
+                if (!stmt)
+                    return NULL;
+                switch (stmt->type) {
+                    case AST_WHILE_STMT:
+                        stmt->as.while_stmt.label = label;
+                        return stmt;
+                    case AST_FOR_STMT:
+                        stmt->as.for_stmt.label = label;
+                        return stmt;
+                    case AST_FOR_IN_STMT:
+                        stmt->as.for_in_stmt.label = label;
+                        return stmt;
+                    default:
+                        xr_parser_error_at_current(parser, "loop labels can only annotate loops");
+                        return NULL;
+                }
+            }
+            if (parser->current.type != TK_ASSIGN) {
+                *parser = checkpoint;
+                xr_parser_error_at_current(parser,
+                                           "loop labels can only annotate 'for' or 'while'");
+                return NULL;
+            }
+        }
+        *parser = checkpoint;
+    }
+
     // Control flow
     if (parser->current.type == TK_IF) {
         return xr_parse_if_statement(parser);
@@ -785,6 +881,8 @@ AstNode *xr_parse_statement(Parser *parser) {
 
     // Block
     if (parser->current.type == TK_LBRACE) {
+        if (xr_lbrace_starts_destructure_assignment(parser))
+            return xr_parse_expr_statement(parser);
         return xr_parse_block(parser);
     }
 
@@ -825,6 +923,8 @@ void xr_parser_init(Parser *parser, XrCompilerSession *session, const char *sour
 static void xr_parser_init_internal(Parser *parser, XrCompilerSession *session, const char *source,
                                     const char *source_file, XrArena *arena, bool collect_trivia) {
     XR_CHECK(session != NULL, "xr_parser_init: NULL compiler session");
+    XR_CHECK(xr_compiler_session_vm_host(session) != NULL,
+             "xr_parser_init: compiler session has no VM host");
     parser->compiler_session = session;
     if (parser->compiler_session && arena) {
         xr_compiler_session_set_current_arena(parser->compiler_session, arena);
@@ -895,6 +995,8 @@ AstNode *xr_parse(XrCompilerSession *session, const char *source) {
 AstNode *xr_parse_with_source(XrCompilerSession *session, const char *source,
                               const char *source_file) {
     XR_DCHECK(session != NULL, "xr_parse_with_source: NULL compiler session");
+    XR_DCHECK(xr_compiler_session_vm_host(session) != NULL,
+              "xr_parse_with_source: compiler session has no VM host");
     XR_DCHECK(source != NULL, "xr_parse_with_source: NULL source");
 
     XrCompilerSessionScope parse_scope;
@@ -970,6 +1072,8 @@ AstNode *xr_parse_with_source(XrCompilerSession *session, const char *source,
 AstNode *xr_parse_with_trivia(XrCompilerSession *session, const char *source,
                               const char *source_file) {
     XR_DCHECK(session != NULL, "xr_parse_with_trivia: NULL compiler session");
+    XR_DCHECK(xr_compiler_session_vm_host(session) != NULL,
+              "xr_parse_with_trivia: compiler session has no VM host");
     XrCompilerSessionScope parse_scope;
     XrArena *arena = xr_parse_setup_arena(session, source_file, &parse_scope);
 
@@ -1072,6 +1176,8 @@ AstNode *xr_parse_with_trivia(XrCompilerSession *session, const char *source,
 AstNode *xr_parse_expression_string(XrCompilerSession *session, const char *source,
                                     const char *source_file) {
     XR_DCHECK(session != NULL, "xr_parse_expression_string: NULL compiler session");
+    XR_DCHECK(xr_compiler_session_vm_host(session) != NULL,
+              "xr_parse_expression_string: compiler session has no VM host");
     XR_DCHECK(source != NULL, "xr_parse_expression_string: NULL source");
 
     XrCompilerSessionScope parse_scope;
@@ -1388,6 +1494,13 @@ AstNode *xr_parse_variable(Parser *parser) {
 
         xr_parser_consume(parser, TK_RPAREN, "expected ')' after argument list");
 
+        // `Map<K,V>()` / `Array<T>()` / `Channel<T>(n)` construct built-in heap
+        // types directly (no `new`); route to the construction node.
+        if (xr_is_construct_only_type_name(name)) {
+            return xr_ast_new_expr(parser->compiler_session, NULL, name, arguments, arg_count,
+                                   (XrTypeRef **) type_args, type_arg_count, line);
+        }
+
         return xr_ast_call_expr_generic(parser->compiler_session, callee, arguments, arg_count,
                                         type_args, type_arg_count, line);
     }
@@ -1595,63 +1708,22 @@ AstNode *xr_parse_inc_dec(Parser *parser) {
     return NULL;
 }
 
-// Check if token is binary operator (for detecting x++ embedded in expression)
-static bool is_binary_operator(XrTokenType type) {
-    switch (type) {
-        case TK_PLUS:
-        case TK_MINUS:
-        case TK_STAR:
-        case TK_SLASH:
-        case TK_PERCENT:
-        case TK_EQ:
-        case TK_NE:
-        case TK_LT:
-        case TK_LE:
-        case TK_GT:
-        case TK_GE:
-        case TK_AND:
-        case TK_OR:
-        case TK_ASSIGN:
-        case TK_PLUS_ASSIGN:
-        case TK_MINUS_ASSIGN:
-        case TK_MUL_ASSIGN:
-        case TK_DIV_ASSIGN:
-        case TK_MOD_ASSIGN:
-        case TK_QUESTION:
-        case TK_COMMA:
-            return true;
-        default:
-            return false;
-    }
-}
-
 // Parse postfix increment/decrement: x++, x--
-// Only postfix form supported; must be standalone statement
+// Only postfix form is supported, and only through the statement-only parser
+// entrypoints. Expression parsing reaches this function only for illegal
+// embedded uses such as `let y = x++`, `f(x++)`, or `a[i++]`.
 AstNode *xr_parse_postfix_inc_dec(Parser *parser, AstNode *left) {
-    XrTokenType op_token = parser->previous.type;
     int line = left->line;
+    (void) line;
 
     if (left->type != AST_VARIABLE) {
         xr_parser_error(parser, "++/-- only for variables");
         return NULL;
     }
 
-    // Check if embedded in expression
-    if (is_binary_operator(parser->current.type)) {
-        xr_parser_error(parser, "++/-- must be standalone statement, cannot be in expression (e.g. "
-                                "y = x++ or a + x++)");
-        return NULL;
-    }
-
-    char *var_name = ast_strdup(parser->compiler_session, left->as.variable.name);
-    AstNode *node;
-    if (op_token == TK_INC) {
-        node = xr_ast_inc(parser->compiler_session, var_name, line);
-    } else {
-        node = xr_ast_dec(parser->compiler_session, var_name, line);
-    }
-
-    return node;
+    xr_parser_error_at_previous(
+        parser, "postfix ++/-- can only be used as a standalone statement or for-step");
+    return NULL;
 }
 
 // Parse single variable declaration: let x = 10 or const PI = 3.14

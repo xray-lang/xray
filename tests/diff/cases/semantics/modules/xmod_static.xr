@@ -5,4 +5,4 @@ import { Shape } from "./_shapes"
 
 print(Shape.unit().area())
 print(Shape.square(5).area())
-print(new Shape(3).area())
+print(Shape(3).area())

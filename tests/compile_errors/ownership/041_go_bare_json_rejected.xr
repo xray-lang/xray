@@ -1,0 +1,7 @@
+fn read(cfg: Json) -> int {
+    return int(cfg.value)
+}
+
+let cfg: Json = { value: 42 }
+let task = go read(cfg)
+print(await task)

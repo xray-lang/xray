@@ -20,6 +20,7 @@ void xr_float_register_native_type(XrVMRuntime *isolate) {
         {"round", xr_float_round_method, 0},
         {"abs", xr_float_abs_method, 0},
         {"sqrt", xr_float_sqrt_method, 0},
+        {"isNaN", xr_float_is_nan_method, 0},
         {"toInt", xr_float_to_int_method, 0},
         {"pow", xr_float_pow_method, 0},
         {NULL, NULL, 0},

@@ -13,6 +13,12 @@
 #include "../runtime/value/xtype.h"
 #include <stdio.h>
 
+static void emit_channel_transfer_annotation(EmitCtx *ctx, uint8_t mode) {
+    if (mode == XR_TRANSFER_SHARE)
+        return;
+    emit_inst(ctx, CREATE_ABx(OP_NOP, 6, (uint32_t) mode));
+}
+
 /* ========== Exception Handling ========== */
 
 /* Throw */
@@ -174,6 +180,23 @@ XR_FUNC void xi_emit_defer(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     emit_inst(ctx, CREATE_ABC(OP_DEFER, dst, nargs, 0));
 }
 
+XR_FUNC void xi_emit_defer_mark(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    (void) v;
+    emit_inst(ctx, CREATE_ABC(OP_DEFER_MARK, dst, 0, 0));
+}
+
+XR_FUNC void xi_emit_defer_run_to(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    (void) dst;
+    if (v->nargs < 1) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+    XiEmitReg mark = reg_of(ctx, v->args[0]);
+    if (ctx->status != XI_EMIT_OK)
+        return;
+    emit_inst(ctx, CREATE_ABC(OP_DEFER_RUN_TO, mark, 0, 0));
+}
+
 /* ========== Coroutine ========== */
 
 /* Go: spawn coroutine, return Task handle for await.
@@ -213,6 +236,25 @@ XR_FUNC void xi_emit_go(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         c_field |= 0x80;
     emit_inst(ctx, CREATE_ABC(OP_GO, dst, dst, c_field));
 
+    bool has_transfer_modes = false;
+    for (uint16_t i = 0; i < nargs; i++) {
+        if (xi_go_arg_transfer_mode(v, i) != XR_TRANSFER_SHARE) {
+            has_transfer_modes = true;
+            break;
+        }
+    }
+    if (has_transfer_modes) {
+        for (uint16_t base = 0; base < nargs; base += XR_TRANSFER_MODES_PER_U32) {
+            uint32_t packed = 0;
+            for (uint16_t slot = 0; slot < XR_TRANSFER_MODES_PER_U32 && base + slot < nargs;
+                 slot++) {
+                packed =
+                    xr_transfer_pack_mode(packed, slot, xi_go_arg_transfer_mode(v, base + slot));
+            }
+            emit_inst(ctx, CREATE_ABx(OP_NOP, 5, packed));
+        }
+    }
+
     /* NOP A=3: link_mode annotation (read by vm_go) */
     int link_mode = (int) v->aux_int & XI_GO_AUX_LINK_MASK;
     if (link_mode != 0) {
@@ -221,6 +263,41 @@ XR_FUNC void xi_emit_go(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     if (v->aux_int & XI_GO_AUX_ONE_SHOT_AWAIT) {
         emit_inst(ctx, CREATE_ABx(OP_NOP, 4, 1));
     }
+}
+
+/* Generator call: build a coroutine-backed iterator from a generator closure.
+ * Same register-packing convention as OP_GO (closure at dst, args at
+ * dst+1..dst+nargs), but the coroutine is pull-driven (never scheduled) and the
+ * result is an Iterator instance rather than a Task. */
+XR_FUNC void xi_emit_gen_call(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    if (v->nargs < 1) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+    uint16_t nargs = (uint16_t) (v->nargs - 1);
+
+    {
+        uint32_t call_top = (dst + nargs + 1);
+        if (call_top > ctx->max_reg)
+            ctx->max_reg = call_top;
+    }
+
+    XiEmitReg callee = reg_of(ctx, v->args[0]);
+    if (ctx->status != XI_EMIT_OK)
+        return;
+    if (callee != dst)
+        emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, callee, 0));
+
+    for (uint16_t a = 1; a < v->nargs; a++) {
+        XiEmitReg arg_reg = reg_of(ctx, v->args[a]);
+        if (ctx->status != XI_EMIT_OK)
+            return;
+        XiEmitReg target = (XiEmitReg) (dst + a);
+        if (arg_reg != target)
+            emit_inst(ctx, CREATE_ABC(OP_MOVE, target, arg_reg, 0));
+    }
+
+    emit_inst(ctx, CREATE_ABC(OP_GEN_START, dst, dst, (uint8_t) nargs));
 }
 
 /* Await */
@@ -265,6 +342,20 @@ XR_FUNC void xi_emit_yield(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     emit_inst(ctx, CREATE_ABC(OP_YIELD, (int) hint, 0, 0));
 }
 
+/* Generator value yield: `yield expr`. A = register holding the value to hand
+ * to the driving iterator; the generator coroutine suspends. */
+XR_FUNC void xi_emit_gen_yield(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    (void) dst;
+    if (!v || v->nargs < 1) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+    XiEmitReg src = reg_of(ctx, v->args[0]);
+    if (ctx->status != XI_EMIT_OK)
+        return;
+    emit_inst(ctx, CREATE_ABC(OP_GEN_YIELD, src, 0, 0));
+}
+
 /* Channel new */
 XR_FUNC void xi_emit_chan_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     uint8_t elem_tid = (uint8_t) v->aux_int;
@@ -296,6 +387,7 @@ XR_FUNC void xi_emit_chan_send(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     XiEmitReg val = reg_of(ctx, v->args[1]);
     if (ctx->status != XI_EMIT_OK)
         return;
+    emit_channel_transfer_annotation(ctx, xi_chan_send_transfer_mode(v));
     emit_inst(ctx, CREATE_ABC(OP_CHAN_SEND, dst, ch, val));
 }
 
@@ -365,6 +457,7 @@ XR_FUNC void xi_emit_chan_try_send(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     XiEmitReg val = reg_of(ctx, v->args[1]);
     if (ctx->status != XI_EMIT_OK)
         return;
+    emit_channel_transfer_annotation(ctx, xi_chan_send_transfer_mode(v));
     emit_inst(ctx, CREATE_ABC(OP_CHAN_TRY_SEND, dst, ch, val));
 }
 

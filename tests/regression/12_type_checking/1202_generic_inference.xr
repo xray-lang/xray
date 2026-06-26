@@ -70,7 +70,7 @@ fn test_set_infer_from_literal() {
 // ===== Channel Generic Inference =====
 @test
 fn test_channel_basic() {
-    shared const ch = new Channel(1)
+    shared const ch = Channel(1)
     ch.send(42)
     let val = recvInt(ch)
     assert_eq(val, 42)

@@ -14,6 +14,7 @@ order: 025
 | **AST** | Abstract Syntax Tree：源码解析后的中间表示 |
 | **Arena** | 批量分配器：所有分配同时释放 |
 | **Bytes** | 字节缓冲类型（见 §2.4.5） |
+| **char** | 单个 Unicode scalar value 的原始类型；不是数值类型，也不是 `uint32` 别名（见 §2.3.5） |
 | **Channel** | 类型化的协程通信管道（见 §10.5） |
 | **closure** | 闭包：捕获外层变量的函数 |
 | **coroutine** | 协程：用户态可暂停/恢复的执行流 |
@@ -27,9 +28,8 @@ order: 025
 | **interface** | 接口（见 §5.5） |
 | **JIT** | Just-In-Time 编译：运行时编译热路径 |
 | **lvalue / rvalue** | 左值（可赋值）/ 右值（仅值） |
-| **monomorphization** | 单态化：泛型实例化为多个具体类型版本（xray 不做） |
+| **monomorphization** | 单态化：泛型在构建期按具体类型/表示生成专门版本；函数泛型可按 I64 / F64 / PTR / BOOL 表示共享，class / struct 泛型按具体类型完整单态化 |
 | **move** | 所有权转移：跨协程时强制（见 §7.3） |
-| **NaN-boxing** | 用 IEEE-754 NaN 的位空间存放标记值 |
 | **nullable** | 可空类型 `T?`：值可以为 null |
 | **pattern** | 模式：用于 `match` 与解构（见 §6） |
 | **scope** | 作用域 |
@@ -38,9 +38,10 @@ order: 025
 | **struct** | 值类型类（见 §5.4） |
 | **TCO** | Tail-Call Optimization：尾调用优化 |
 | **trait** | Rust 术语；xray 用 `interface` |
-| **truthy** | 真值：控制流中非 `false` / `null` / `0` / `""` / 空集合的值视为真（见 §2.3.3） |
-| **monomorphization** | 单态化：泛型类型参数在编译期特化为具体类型，运行时保留类型信息 |
+| **condition expression** | 控制流条件：必须是 `bool` 或 `T?` 存在性（`T != bool`）；见 §2.3.3 |
+| **grapheme cluster** | 用户感知字符，可能由多个 Unicode scalar 组成；当前 `string.length` / 索引 / 迭代按 Unicode scalar，不按 grapheme cluster |
 | **union** | 联合类型 `A \| B` |
+| **Unicode scalar value** | 合法 Unicode 码位，范围 `U+0000..U+10FFFF` 且不包含 surrogate 区间 `U+D800..U+DFFF` |
 | **upvalue** | 闭包捕获的外层变量 |
 | **VM** | Virtual Machine：xray 字节码虚拟机 |
 | **write barrier** | 写屏障：GC 在指针更新时插入的钩子 |
@@ -57,6 +58,7 @@ order: 025
 | **AST** | Abstract Syntax Tree: intermediate representation produced by the parser |
 | **Arena** | Bulk allocator: every allocation is freed together |
 | **Bytes** | Byte buffer type (see §2.4.5) |
+| **char** | Primitive type for one Unicode scalar value; not numeric and not an alias of `uint32` (see §2.3.5) |
 | **Channel** | Typed inter-coroutine communication pipe (see §10.5) |
 | **closure** | Function value that captures outer variables |
 | **coroutine** | User-space, suspendable/resumable execution flow |
@@ -70,9 +72,8 @@ order: 025
 | **interface** | Interface type (see §5.5) |
 | **JIT** | Just-In-Time compilation: compiles hot paths at runtime |
 | **lvalue / rvalue** | Assignable left-hand-side value vs. value-only right-hand-side |
-| **monomorphization** | Specializing generics into concrete-type versions (xray does not do this) |
+| **monomorphization** | Build-time specialization of generics into concrete type/representation versions; generic functions may share I64 / F64 / PTR / BOOL representation versions, while generic classes / structs are fully specialized by concrete type |
 | **move** | Ownership transfer: enforced when crossing coroutine boundaries (see §7.3) |
-| **NaN-boxing** | Storing tagged values inside the unused bits of an IEEE-754 NaN |
 | **nullable** | A nullable type `T?` whose value may be `null` |
 | **pattern** | A pattern used in `match` and destructuring (see §6) |
 | **scope** | Lexical scope |
@@ -81,9 +82,10 @@ order: 025
 | **struct** | Value-type class (see §5.4) |
 | **TCO** | Tail-Call Optimization |
 | **trait** | Rust terminology; xray uses `interface` |
-| **truthy** | A value treated as true in control flow when it is not `false` / `null` / `0` / `""` / an empty collection (see §2.3.3) |
-| **monomorphization** | Specializing generic type parameters at compile time into concrete versions while retaining runtime type information |
+| **condition expression** | Control-flow condition: must be `bool` or nullable presence `T?` (`T != bool`); see §2.3.3 |
+| **grapheme cluster** | User-perceived character that may contain multiple Unicode scalars; current `string.length` / indexing / iteration operate on Unicode scalars, not grapheme clusters |
 | **union** | Union type `A \| B` |
+| **Unicode scalar value** | Legal Unicode code point in `U+0000..U+10FFFF`, excluding the surrogate range `U+D800..U+DFFF` |
 | **upvalue** | Outer variable captured by a closure |
 | **VM** | Virtual Machine: xray bytecode VM |
 | **write barrier** | Hook inserted by the GC on pointer updates |

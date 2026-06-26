@@ -38,7 +38,7 @@
 #include <math.h>
 #include "../../base/xdefs.h"
 #include "../../base/xchecks.h"
-#include "../../shared/xr_numeric_core.h"
+#include "../../shared/xr_int_arith.h"
 
 // Internal base types
 typedef int64_t xr_Integer;
@@ -65,6 +65,7 @@ typedef double xr_Number;
 typedef enum {
     XR_TAG_NULL = 0,        // null singleton
     XR_TAG_BOOL = 1,        // bool: payload 0=false, 1=true
+    XR_TAG_CHAR = 2,        // char: Unicode scalar value in .i (0..0x10FFFF, no surrogates)
     XR_TAG_I64 = 3,         // integer (stored in .i as int64)
     XR_TAG_F64 = 4,         // float (stored in .f as double)
     XR_TAG_PTR = 5,         // GC heap object pointer (stored in .ptr)
@@ -133,6 +134,7 @@ static inline XrValue xr_make_ptr_val(void *p) {
 // Singletons
 #define XR_IS_NULL(v) ((v).tag == XR_TAG_NULL)
 #define XR_IS_BOOL(v) ((v).tag == XR_TAG_BOOL)
+#define XR_IS_CHAR(v) ((v).tag == XR_TAG_CHAR)
 #define XR_IS_NOTFOUND(v) ((v).tag == XR_TAG_NOTFOUND)
 #define XR_IS_TRUE(v) (XR_IS_BOOL(v) && (v).i != 0)
 #define XR_IS_FALSE(v) (XR_IS_BOOL(v) && (v).i == 0)
@@ -183,8 +185,8 @@ XR_FUNC bool xr_value_is_bigint(XrValue v);
 #define XR_IS_STRUCT_REF(v) ((v).tag == XR_TAG_STRUCT_REF)
 /* DateTime is no longer a dedicated GC type; use xr_value_is_datetime(iso, v)
  * from datetime.h which walks the class super-chain. */
-/* Exception is no longer a dedicated GC type; use xr_value_is_exception(iso, v)
- * from xexception.h which walks the class super-chain. The historical
+/* Exception is no longer a dedicated GC type; use xr_value_is_panic_info(iso, v)
+ * from xpanic_info.h which walks the class super-chain. The historical
  * XR_IS_EXCEPTION macro and XR_TEXCEPTION enumerator are gone. */
 #define XR_IS_ERROR(v) (XR_IS_PTR(v) && XR_HEAP_TYPE(v) == XR_TERROR)
 /* Tuple is no longer a dedicated GC type; use xr_value_is_tuple(v)
@@ -230,6 +232,9 @@ static inline uint16_t xr_struct_layout_id(XrValue v) {
 #define XR_FROM_INT(x) xr_make_int_val((int64_t) (x), XR_TAG_I64)
 #define XR_FROM_FLOAT(x) xr_make_float_val((double) (x), XR_TAG_F64)
 #define XR_FROM_BOOL(x) xr_make_int_val((x) ? 1 : 0, XR_TAG_BOOL)
+/* char: Unicode scalar value held in the int64 payload; caller must have
+ * validated the scalar (0..0x10FFFF, excluding U+D800..U+DFFF). */
+#define XR_FROM_CHAR(cp) xr_make_int_val((int64_t) (uint32_t) (cp), XR_TAG_CHAR)
 #define XR_FROM_PTR(p) xr_make_ptr_val((void *) (p))
 #define XR_FROM_STR(s) xr_make_ptr_val((void *) (s))
 
@@ -239,6 +244,7 @@ static inline uint16_t xr_struct_layout_id(XrValue v) {
 #define XR_TO_FLOAT(v) ((v).f)
 #define XR_TO_PTR(v) ((v).ptr)
 #define XR_TO_BOOL(v) ((int) (v).i)
+#define XR_TO_CHAR(v) ((uint32_t) (v).i)
 
 /* ========== Value Set Macros ========== */
 
@@ -352,6 +358,9 @@ static inline XrValue xr_null(void) {
 static inline XrValue xr_bool(int b) {
     return b ? XR_TRUE_VAL : XR_FALSE_VAL;
 }
+static inline XrValue xr_char(uint32_t cp) {
+    return XR_FROM_CHAR(cp);
+}
 XR_FUNC bool xr_value_is_truthy(XrValue value);
 static inline XrValue xr_int(xr_Integer i) {
     return XR_FROM_INT(i);
@@ -360,18 +369,18 @@ static inline XrValue xr_float(xr_Number n) {
     return XR_FROM_FLOAT(n);
 }
 
-/* Integer wrap helpers used by VM dispatch.
+/* Integer wrap helpers shared by VM and AOT runtime.
  * INT64_MIN / -1 and INT64_MIN % -1 are signed-overflow UB in C; both
- * crash IDIV on x86-64. Delegate to shared numeric core so the VM, AOT and
- * xi_opt fold agree:
+ * crash IDIV on x86-64. Define them as wrap on every backend so the VM,
+ * AOT and xi_opt fold agree:
  *   INT64_MIN / -1 = INT64_MIN  (unsigned negate is well-defined)
  *   INT64_MIN % -1 = 0
  * Caller must have rejected divisor == 0 before calling these. */
 static inline xr_Integer xr_int_div_wrap(xr_Integer a, xr_Integer b) {
-    return xr_numeric_core_i64_div_wrap(a, b);
+    return xr_i64_div_wrap(a, b);
 }
 static inline xr_Integer xr_int_mod_wrap(xr_Integer a, xr_Integer b) {
-    return xr_numeric_core_i64_mod_wrap(a, b);
+    return xr_i64_mod_wrap(a, b);
 }
 
 /* Shift helpers: the language defines the shift count as taken mod 64
@@ -383,10 +392,10 @@ static inline xr_Integer xr_int_mod_wrap(xr_Integer a, xr_Integer b) {
  * in C; right shift is arithmetic (sign-extending — implementation-defined
  * in C but guaranteed on every compiler xray supports). */
 static inline xr_Integer xr_int_shl_wrap(xr_Integer a, xr_Integer b) {
-    return xr_numeric_core_i64_shl_wrap(a, b);
+    return xr_i64_shl_wrap(a, b);
 }
 static inline xr_Integer xr_int_shr_wrap(xr_Integer a, xr_Integer b) {
-    return xr_numeric_core_i64_shr_wrap(a, b);
+    return xr_i64_shr_wrap(a, b);
 }
 
 /* ========== Type Query ========== */

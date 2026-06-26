@@ -22,7 +22,7 @@ class Animal {
     }
 }
 
-let cat = new Animal("Cat", "meow")
+let cat = Animal("Cat", "meow")
 print(cat.speak())
 
 // === Inheritance ===
@@ -43,7 +43,7 @@ class Dog extends Animal {
     }
 }
 
-let dog = new Dog("Rex", "Labrador")
+let dog = Dog("Rex", "Labrador")
 print(dog.speak())
 print(dog.fetch("ball"))
 
@@ -57,7 +57,7 @@ class Counter {
     getCount() -> int { return this.count }
 
     static create() -> Counter {
-        return new Counter()
+        return Counter()
     }
 }
 
@@ -68,7 +68,7 @@ c.increment()
 print("count: ${c.getCount()}")
 
 // === Polymorphism via method override ===
-let animals = [new Animal("Parrot", "squawk"), new Dog("Buddy", "Golden")]
+let animals = [Animal("Parrot", "squawk"), Dog("Buddy", "Golden")]
 for (a in animals) {
     print("  ${a.speak()}")
 }

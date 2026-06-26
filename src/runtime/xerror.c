@@ -9,5 +9,5 @@
  *
  * All XrResult/XrError functions were dead code (zero external callers).
  * Error codes live in xerror.h (enum) and xerror_codes.h (#define).
- * Runtime errors use xexception.h / VM_RUNTIME_ERROR macros.
+ * Runtime errors use xpanic_info.h / VM_RUNTIME_ERROR macros.
  */

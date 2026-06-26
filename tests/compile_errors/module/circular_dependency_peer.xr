@@ -1,0 +1,7 @@
+// Expected: E0504 circular dependency across source modules
+
+import "./circular_dependency" as root
+
+let value = root.value + 1
+
+export { value }

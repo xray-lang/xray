@@ -65,6 +65,7 @@ XR_FUNC void xr_array_init_inplace(struct XrArray *arr, int capacity, uint8_t el
  *   XR_ELEM_U8   -> data is uint8_t[], no object references (replaces Bytes)
  *   XR_ELEM_I64  -> data is int64_t[], no object references (Array<int>)
  *   XR_ELEM_F64  -> data is double[], no object references (Array<float>)
+ *   XR_ELEM_CHAR -> data is uint32_t[], no object references (Array<char>)
  *   etc.
  */
 struct XrArray {
@@ -111,9 +112,9 @@ XR_FUNC int xr_array_index_of(XrArray *arr, XrValue value);
 XR_FUNC bool xr_array_has(XrArray *arr, XrValue value);
 XR_FUNC bool xr_array_is_empty(XrArray *arr);
 
-XR_FUNC void xr_array_fill(XrArray *arr, XrValue value, int64_t start, int64_t end);
-XR_FUNC bool xr_array_reserve(XrArray *arr, int64_t capacity);
-XR_FUNC bool xr_array_resize(XrArray *arr, int64_t length, XrValue fill);
+XR_FUNC void xr_array_fill(XrArray *arr, XrValue value, int start, int end);
+XR_FUNC bool xr_array_reserve(XrArray *arr, int32_t capacity);
+XR_FUNC bool xr_array_resize(XrArray *arr, int32_t length, XrValue fill);
 
 /* ====== Utility Methods ====== */
 
@@ -122,9 +123,26 @@ XR_FUNC XrArray *xr_array_copy(struct XrCoroutine *coro, XrArray *arr);
 /* ====== Internal Functions ====== */
 
 XR_FUNC void xr_array_grow(XrArray *arr);
-XR_FUNC void xr_array_ensure_capacity(XrArray *arr, int64_t min_capacity);
+XR_FUNC void xr_array_ensure_capacity(XrArray *arr, int min_capacity);
 
 /* ====== Slice Operations (zero-copy) ====== */
+
+static inline void xr_array_normalize_slice(int64_t len, int64_t *start, int64_t *end) {
+    if (*start < 0)
+        *start += len;
+    if (*end < 0)
+        *end += len;
+    if (*start < 0)
+        *start = 0;
+    if (*end < 0)
+        *end = 0;
+    if (*start > len)
+        *start = len;
+    if (*end > len)
+        *end = len;
+    if (*start > *end)
+        *start = *end;
+}
 
 XR_FUNC XrArray *xr_array_slice(struct XrCoroutine *coro, XrArray *arr, int64_t start, int64_t end);
 
@@ -179,11 +197,11 @@ static inline uint8_t *xr_array_raw_u8(XrArray *arr) {
 XR_FUNC void xr_array_append_data(XrArray *arr, const uint8_t *data, int32_t len);
 XR_FUNC uint32_t xr_array_load_u32_le(XrArray *arr, int64_t offset, bool *ok);
 XR_FUNC uint64_t xr_array_load_u64_le(XrArray *arr, int64_t offset, bool *ok);
-XR_FUNC bool xr_array_bytes_copy_within(XrArray *arr, int64_t dst_offset, int64_t src_offset,
-                                        int64_t count);
-XR_FUNC bool xr_array_bytes_copy_from(XrArray *dst, XrArray *src, int64_t src_offset,
-                                      int64_t dst_offset, int64_t count);
-XR_FUNC bool xr_array_bytes_repeat_from(XrArray *arr, int64_t dst_offset, int64_t distance,
-                                        int64_t count);
+XR_FUNC bool xr_array_bytes_copy_within(XrArray *arr, int32_t dst_offset, int32_t src_offset,
+                                        int32_t count);
+XR_FUNC bool xr_array_bytes_copy_from(XrArray *dst, XrArray *src, int32_t src_offset,
+                                      int32_t dst_offset, int32_t count);
+XR_FUNC bool xr_array_bytes_repeat_from(XrArray *arr, int32_t dst_offset, int32_t distance,
+                                        int32_t count);
 
 #endif  // XARRAY_H

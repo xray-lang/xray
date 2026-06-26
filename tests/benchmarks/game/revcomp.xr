@@ -29,7 +29,7 @@ fn processFasta(input: string) {
     let lines = input.split("
 ")
     let header = ""
-    let seqBuilder = new StringBuilder()
+    let seqBuilder = StringBuilder()
     let i = 0
     while (i < lines.length) {
         let line = lines[i]
@@ -41,7 +41,7 @@ fn processFasta(input: string) {
                     printFormatted(reverseComplement(seqBuilder.toString()))
                 }
                 header = line
-                seqBuilder = new StringBuilder()
+                seqBuilder = StringBuilder()
             } else {
                 seqBuilder.append(line)
             }
@@ -60,7 +60,7 @@ fn processFasta(input: string) {
 // 详见文档: docs/192_StringBuilder_长字符串循环Bug.md
 fn generateFasta(n: int): string {
     let alu = "GGCCGGGCGCGGTGGCTCACGCCTGTAATCCCAGCACTTTGGGAGGCCGAGGCGGGCGGATCACCTGAGGTCAGGAGTTCGAGACCAGCCTGGCCAACATGGTGAAACCCCGTCTCTACTAAAAATACAAAAATTAGCCGGGCGTGGTGGCGCGCGCCTGTAATCCCAGCTACTCGGGAGGCTGAGGCAGGAGAATCGCTTGAACCCGGGAGGCGGAGGTTGCAGTGAGCCGAGATCGCGCCACTGCACTCCAGCCTGGGCGACAGAGCGAGACTCCGTCTCAAAAA"
-    let sb = new StringBuilder()
+    let sb = StringBuilder()
     sb.append(">ONE Homo sapiens alu
 ")
     let i = 0

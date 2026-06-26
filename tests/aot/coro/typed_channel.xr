@@ -2,7 +2,7 @@ fn send_int(ch: Channel<int>) {
     ch.send(41)
 }
 
-let buffered = new Channel<int>(1)
+let buffered = Channel<int>(1)
 buffered.send(9)
 let buffered_value = buffered.recv()
 print(match (buffered_value) {
@@ -11,7 +11,7 @@ print(match (buffered_value) {
 })
 buffered.close()
 
-let rendezvous = new Channel<int>(0)
+let rendezvous = Channel<int>(0)
 let task = go send_int(rendezvous)
 let direct_value = rendezvous.recv()
 await task

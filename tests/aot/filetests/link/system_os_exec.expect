@@ -8,5 +8,5 @@ contains="defines": ["XRT_IMPL"]
 not_contains="runtime_objects": ["xray_core"]
 not_contains="stdlib_objects": ["os"]
 c_contains=xrt_os_exec(
-c_contains=xrt_json_get_name(
+c_contains=xrt_json_get_name_owned(
 c_not_contains=xrt_method_

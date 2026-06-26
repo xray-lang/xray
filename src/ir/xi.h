@@ -41,6 +41,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include "../base/xdefs.h"
+#include "../runtime/value/xtransfer_mode.h"
 
 /* Forward declarations for types defined in other modules */
 struct XrType;
@@ -158,7 +159,7 @@ static inline XiInvariantMask xi_stage_invariants(XiStage s) {
  *
  *  Op               aux                  aux_int
  *  ──────────────── ──────────────────── ────────────────────────────
- *  XI_CONST         string: char*        int/bool/null literal value
+ *  XI_CONST         string: char*        int/bool/char/null literal value
  *                   (other: unused)
  *  XI_PARAM         —                    parameter index
  *  XI_LOAD_FIELD    field name or NULL   symbol id or field index
@@ -196,7 +197,7 @@ static inline XiInvariantMask xi_stage_invariants(XiStage s) {
 
 typedef enum {
     /* Constants */
-    XI_CONST = 0, /* constant value (int/float/bool/null/string in aux) */
+    XI_CONST = 0, /* constant value (int/float/bool/char/null/string in aux) */
     XI_PARAM,     /* function parameter (aux_int = param index) */
 
     /* Arithmetic (polymorphic: type determines int vs float) */
@@ -222,8 +223,6 @@ typedef enum {
     XI_LE,
     XI_GT,
     XI_GE,
-    XI_EQ_STRICT, /* === identity/reference equality */
-    XI_NE_STRICT, /* !== identity/reference inequality */
 
     /* Logical */
     XI_NOT, /* ! (unary) */
@@ -293,16 +292,21 @@ typedef enum {
                       aux=XrStructLayout* */
 
     /* Json / Allocation */
-    XI_JSON_NEW,    /* Create Json object: aux=field_count, aux_ptr=field_names[] */
-    XI_JSON_INIT_F, /* Init field by index: args[0]=json, args[1]=val, aux_int=field_idx */
-    XI_JSON_GET_F,  /* Read field by index: args[0]=json, aux_int=field_idx */
-    XI_JSON_SET_F,  /* Write field by index: args[0]=json, args[1]=val, aux_int=field_idx */
-    XI_JSON_DECODE, /* Typed decode: args[0]=string, aux=field_names[], aux_int=field_count
-                     * result: T? (sealed Json or null on validation failure) */
-    XI_ARRAY_NEW,   /* new array: args[0]=capacity */
-    XI_MAP_NEW,     /* new map: args[0]=capacity */
-    XI_TUPLE_NEW,   /* new tuple: args[0..n-1]=elements, aux_int=n (arity) */
-    XI_TUPLE_GET,   /* read tuple field: args[0]=tuple, aux_int=field_index (zero-based) */
+    XI_JSON_NEW,     /* Create Json object: aux=field_count, aux_ptr=field_names[] */
+    XI_JSON_INIT_F,  /* Init field by index: args[0]=json, args[1]=val, aux_int=field_idx */
+    XI_JSON_GET_F,   /* Read field by index: args[0]=json, aux_int=field_idx */
+    XI_JSON_SET_F,   /* Write field by index: args[0]=json, args[1]=val, aux_int=field_idx */
+    XI_JSON_MERGE,   /* Merge all fields of src into dst: args[0]=dst, args[1]=src
+                      * (object spread `{...base}`; later fields override earlier) */
+    XI_JSON_DECODE,  /* Typed decode: args[0]=string, aux=field_names[], aux_int=field_count
+                      * result: T? (sealed Json or null on validation failure) */
+    XI_ARRAY_NEW,    /* new array: args[0]=capacity */
+    XI_ARRAY_PUSH,   /* append one element: args[0]=array, args[1]=value (in-place, void) */
+    XI_ARRAY_EXTEND, /* splice all elements of src array into dst: args[0]=dst, args[1]=src
+                      * (in-place, void; retains each copied element) — array spread `[...a]` */
+    XI_MAP_NEW,      /* new map: args[0]=capacity */
+    XI_TUPLE_NEW,    /* new tuple: args[0..n-1]=elements, aux_int=n (arity) */
+    XI_TUPLE_GET,    /* read tuple field: args[0]=tuple, aux_int=field_index (zero-based) */
 
     /* Function calls */
     XI_CALL,        /* function call: args[0]=callee, args[1..n]=params
@@ -350,7 +354,9 @@ typedef enum {
     XI_TIME_AFTER,         /* time.after(ms): args[0]=timeout_ms, returns timer channel */
     XI_CHAN_TIMER_DISPOSE, /* dispose select-owned timer channel: args[0]=timer chan */
     XI_SELECT_BLOCK,       /* blocking select wait: args[0..n]=channels */
-    XI_YIELD,              /* yield execution */
+    XI_YIELD,              /* cooperative yield (Coro.yield / Gosched) */
+    XI_GEN_YIELD,          /* generator `yield expr`: args[0]=value, suspend */
+    XI_GEN_CALL, /* call generator fn: args[0]=callee, args[1..n]=params; result=Iterator */
     /* Exception handling (legacy, retained for panic) */
     XI_THROW, /* throw exception: args[0]=value */
 
@@ -366,7 +372,9 @@ typedef enum {
     XI_ITER_VALID, /* test not-done: args[0]=iterator, returns bool */
 
     /* Defer */
-    XI_DEFER, /* defer expr: args[0]=callee (executed at scope exit) */
+    XI_DEFER,        /* defer expr: args[0]=callee (executed at scope exit) */
+    XI_DEFER_MARK,   /* returns current per-frame defer stack count */
+    XI_DEFER_RUN_TO, /* args[0]=mark; run defers registered after mark */
 
     /* Channel creation */
     XI_CHAN_NEW, /* create channel: args[0]=buffer_size (optional) */
@@ -398,7 +406,9 @@ typedef enum {
 
     /* Identity / type narrowing.  Most XI_COPY values are optimizer-inserted
      * aliases.  Lowering marks semantic value-struct copies with
-     * XI_COPY_KIND_VALUE_CLONE in aux_int so VM/AOT emit an independent clone. */
+     * XI_COPY_KIND_VALUE_CLONE in aux_int so VM/AOT emit an independent clone,
+     * and mutable-capture reads with XI_COPY_KIND_CELL_READ so optimizers do
+     * not fold them through stale SSA values before backend cell loads. */
     XI_COPY, /* identity by default: dst = args[0], may carry narrowed type */
 
     /* OOP: class creation */
@@ -626,6 +636,8 @@ typedef struct XiValue {
     uint8_t flags;         /* XI_FLAG_* */
     uint8_t rep;           /* XrRep: machine representation (set by select_rep,
                             * default XR_REP_TAGGED until STAGE_REPPED) */
+    uint8_t transfer_mode; /* XrTransferMode for single-value coroutine boundaries.
+                            * Default 0 = SHARE. GO uses its per-arg aux table. */
     uint8_t escape;        /* XiEscapeLevel (2-bit): escape analysis result
                             * (set by xi_escape_analyze, default 0 = NO_ESCAPE) */
     uint8_t mem_group;     /* XiMemGroup (TBAA): memory group for alias analysis
@@ -640,11 +652,66 @@ typedef struct XiValue {
     struct XiBlock *block; /* containing block */
 } XiValue;
 
+static inline uint8_t xi_go_arg_transfer_mode(const XiValue *go, uint16_t arg_index) {
+    if (!go || go->op != XI_GO || arg_index + 1 >= go->nargs)
+        return XR_TRANSFER_SHARE;
+    const uint8_t *modes = (const uint8_t *) go->aux;
+    return modes ? modes[arg_index] : XR_TRANSFER_SHARE;
+}
+
+static inline uint8_t xi_chan_send_transfer_mode(const XiValue *v) {
+    if (!v)
+        return XR_TRANSFER_SHARE;
+    switch (v->op) {
+        case XI_CHAN_SEND:
+        case XI_CHAN_TRY_SEND:
+        case XI_CALL_METHOD:
+            return v->transfer_mode;
+        default:
+            return XR_TRANSFER_SHARE;
+    }
+}
+
+static inline void xi_chan_send_set_transfer_mode(XiValue *v, uint8_t mode) {
+    if (v)
+        v->transfer_mode = mode;
+}
+
+#define XI_JSON_AUX_STORAGE_SHIFT 32
+#define XI_JSON_AUX_FIELD_MASK INT64_C(0xffffffff)
+
+static inline int32_t xi_json_field_count(const XiValue *v) {
+    return v ? (int32_t) (v->aux_int & XI_JSON_AUX_FIELD_MASK) : 0;
+}
+
+static inline uint8_t xi_json_storage_mode(const XiValue *v) {
+    return v ? (uint8_t) ((uint64_t) v->aux_int >> XI_JSON_AUX_STORAGE_SHIFT) : 0;
+}
+
+static inline int64_t xi_json_pack_aux(int32_t field_count, uint8_t storage_mode) {
+    return ((int64_t) storage_mode << XI_JSON_AUX_STORAGE_SHIFT) |
+           ((int64_t) field_count & XI_JSON_AUX_FIELD_MASK);
+}
+
+static inline void xi_json_set_storage_mode(XiValue *v, uint8_t storage_mode) {
+    if (v && v->op == XI_JSON_NEW)
+        v->aux_int = xi_json_pack_aux(xi_json_field_count(v), storage_mode);
+}
+
 #define XI_COPY_KIND_IDENTITY 0
 #define XI_COPY_KIND_VALUE_CLONE INT64_C(0x58434F5059434C4E)
+#define XI_COPY_KIND_CELL_READ INT64_C(0x5843454C4C524541)
 
 static inline bool xi_copy_is_value_clone(const XiValue *v) {
     return v && v->op == XI_COPY && v->aux_int == XI_COPY_KIND_VALUE_CLONE;
+}
+
+static inline bool xi_copy_is_cell_read(const XiValue *v) {
+    return v && v->op == XI_COPY && v->aux_int == XI_COPY_KIND_CELL_READ;
+}
+
+static inline bool xi_copy_is_identity_alias(const XiValue *v) {
+    return v && v->op == XI_COPY && v->aux_int == XI_COPY_KIND_IDENTITY;
 }
 
 /*

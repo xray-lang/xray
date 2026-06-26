@@ -1,0 +1,7 @@
+class HashOnly {
+    hash() -> int {
+        return 1
+    }
+}
+
+let s: Set<HashOnly> = #[]

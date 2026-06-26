@@ -200,7 +200,7 @@ TEST(class_field_access_has_selection) {
                                "        this.y = y\n"
                                "    }\n"
                                "}\n"
-                               "let p = new Point(1, 2)\n"
+                               "let p = Point(1, 2)\n"
                                "print(p.x)\n");
     if (!r.program)
         return false;
@@ -234,7 +234,7 @@ TEST(method_call_has_selection) {
                                "        return \"hello\"\n"
                                "    }\n"
                                "}\n"
-                               "let g = new Greeter(\"world\")\n"
+                               "let g = Greeter(\"world\")\n"
                                "print(g.greet())\n");
     if (!r.program)
         return false;
@@ -313,7 +313,7 @@ TEST(selection_table_has_entries_after_analysis) {
                                "        return this.value\n"
                                "    }\n"
                                "}\n"
-                               "let b = new Box(42)\n"
+                               "let b = Box(42)\n"
                                "let v = b.get()\n"
                                "let w = b.value\n"
                                "print(v, w)\n");

@@ -8,7 +8,7 @@ fn wait_recv(ch: Channel<int>) -> int {
     return result
 }
 
-let ch = new Channel<int>(1)
+let ch = Channel<int>(1)
 ch.send(41)
 let task = go wait_recv(ch)
 

@@ -287,7 +287,9 @@ TEST(string_escape_roundtrip) {
 TEST(template_string_roundtrip) {
     setup();
     /* Modern syntax uses double quotes with ${} interpolation. */
-    const char *src = "let name = \"world\"\nlet s = \"hello ${name}\"\n";
+    const char *src = "let name = \"world\"\n"
+                      "let m = #{\"k\": \"value\"}\n"
+                      "let s = \"hello ${name} ${\"literal\"} ${m[\"k\"]}\"\n";
     char *fmt1 = parse_and_format(src, "<test>");
     ASSERT_NOT_NULL(fmt1);
     char *fmt2 = parse_and_format(fmt1, "<test>");
@@ -339,6 +341,22 @@ TEST(arrow_return_type_emitted) {
     ASSERT_TRUE(contains(out, "-> int"));
     ASSERT_FALSE(contains(out, "): int"));
     free(out);
+    teardown();
+}
+
+TEST(object_destructure_rename_roundtrip) {
+    setup();
+    const char *src = "let { name: localName, age } = user\n"
+                      "{ name: otherName, age } = user\n";
+    char *fmt1 = parse_and_format(src, "<test>");
+    ASSERT_NOT_NULL(fmt1);
+    ASSERT_TRUE(contains(fmt1, "let {name: localName, age} = user"));
+    ASSERT_TRUE(contains(fmt1, "{name: otherName, age} = user"));
+    char *fmt2 = parse_and_format(fmt1, "<test>");
+    ASSERT_NOT_NULL(fmt2);
+    ASSERT_STR_EQ(fmt1, fmt2);
+    free(fmt1);
+    free(fmt2);
     teardown();
 }
 
@@ -430,8 +448,8 @@ TEST(branch_arrows_aligned_idempotent) {
 TEST(select_branch_arrows_default_aligned) {
     setup();
     const char *src = "fn main() {\n"
-                      "    let ch1 = new Channel<int>(1)\n"
-                      "    let ch2 = new Channel<int>(1)\n"
+                      "    let ch1 = Channel<int>(1)\n"
+                      "    let ch2 = Channel<int>(1)\n"
                       "    select {\n"
                       "        v from ch1 -> { print(v) }\n"
                       "        100 to ch2 -> { print(\"sent\") }\n"
@@ -719,6 +737,7 @@ RUN_TEST(unicode_string_roundtrip);
 RUN_TEST(empty_string_roundtrip);
 
 RUN_TEST(arrow_return_type_emitted);
+RUN_TEST(object_destructure_rename_roundtrip);
 
 RUN_TEST(branch_arrows_default_aligned);
 RUN_TEST(branch_arrows_can_disable_alignment);

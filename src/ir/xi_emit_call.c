@@ -25,7 +25,7 @@ static bool emit_shared_slot_is_function(EmitCtx *ctx, int64_t slot) {
 }
 
 static bool emit_callee_is_plain_closure(EmitCtx *ctx, XiValue *callee) {
-    while (callee && callee->op == XI_COPY && !xi_copy_is_value_clone(callee) && callee->nargs >= 1)
+    while (callee && xi_copy_is_identity_alias(callee) && callee->nargs >= 1)
         callee = callee->args[0];
     if (!callee)
         return false;
@@ -34,6 +34,24 @@ static bool emit_callee_is_plain_closure(EmitCtx *ctx, XiValue *callee) {
     if (callee->op == XI_GET_SHARED)
         return emit_shared_slot_is_function(ctx, callee->aux_int);
     return false;
+}
+
+static bool emit_call_is_channel_send_boundary(const XiValue *v) {
+    if (!v || v->op != XI_CALL_METHOD || v->nargs < 2 || !v->args[0] || !v->args[0]->type ||
+        v->args[0]->type->kind != XR_KIND_CHANNEL)
+        return false;
+    const char *method = (const char *) v->aux;
+    return method && (strcmp(method, "send") == 0 || strcmp(method, "trySend") == 0 ||
+                      strcmp(method, "sendTimeout") == 0);
+}
+
+static void emit_channel_method_transfer_annotation(EmitCtx *ctx, const XiValue *v) {
+    if (!emit_call_is_channel_send_boundary(v))
+        return;
+    uint8_t mode = xi_chan_send_transfer_mode(v);
+    if (mode == XR_TRANSFER_SHARE)
+        return;
+    emit_inst(ctx, CREATE_ABx(OP_NOP, 6, (uint32_t) mode));
 }
 
 /* Function call: args[0]=callee, args[1..n]=params
@@ -214,6 +232,7 @@ XR_FUNC void xi_emit_call_method(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         if (!xi_emit_symbol_index_to_arg(ctx, sym, &sym_arg))
             return;
         OpCode invoke_op = (v->flags & XI_FLAG_TAIL) ? OP_INVOKE_TAIL : OP_INVOKE;
+        emit_channel_method_transfer_annotation(ctx, v);
         emit_inst(ctx, CREATE_ABC(invoke_op, dst, sym_arg, nargs));
     }
 }
@@ -581,6 +600,26 @@ XR_FUNC void xi_emit_str_concat(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
             emit_inst(ctx, CREATE_ABC(OP_MOVE, tmp, dst, 0));
             parts[a] = tmp;
         }
+    }
+
+    /* Static uint values share the raw i64 slot representation with signed
+     * integers. Convert them before dynamic StringBuilder append loses the
+     * unsigned type view. */
+    for (uint16_t a = 0; a < n; a++) {
+        int hint = xi_emit_tostring_hint_for_type(v->args[a] ? v->args[a]->type : NULL);
+        if (hint != 3)
+            continue;
+        if (ctx->next_reg >= MAX_REGS) {
+            emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
+            if (parts != stack_parts)
+                xr_free(parts);
+            return;
+        }
+        XiEmitReg tmp = (XiEmitReg) ctx->next_reg++;
+        if (ctx->next_reg > ctx->max_reg)
+            ctx->max_reg = ctx->next_reg;
+        emit_inst(ctx, CREATE_ABC(OP_TOSTRING, tmp, parts[a], hint));
+        parts[a] = tmp;
     }
 
     emit_inst(ctx, CREATE_ABC(OP_STRBUF_NEW, dst, 0, 0));

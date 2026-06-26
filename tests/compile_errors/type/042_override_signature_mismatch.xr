@@ -1,0 +1,12 @@
+class Base {
+    run(value: int) -> int {
+        return value + 1
+    }
+}
+
+class Child extends Base {
+    override run(value: string) -> int {
+        return value.length
+    }
+}
+

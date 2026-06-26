@@ -365,6 +365,34 @@ XR_FUNC void xi_emit_array_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     emit_inst(ctx, CREATE_ABC(OP_ARRAY_NEW_CAP, dst, cap, c_field));
 }
 
+/* Array spread append: R[A]:Array.push(R[B]).  In-place store, no dst. */
+XR_FUNC void xi_emit_array_push(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    (void) dst;
+    if (v->nargs < 2) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+    XiEmitReg arr = reg_of(ctx, v->args[0]);
+    XiEmitReg val = reg_of(ctx, v->args[1]);
+    if (ctx->status != XI_EMIT_OK)
+        return;
+    emit_inst(ctx, CREATE_ABC(OP_ARRAY_PUSH, arr, val, 0));
+}
+
+/* Array spread splice: R[A]:Array.extend(R[B]:Array).  In-place store, no dst. */
+XR_FUNC void xi_emit_array_extend(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    (void) dst;
+    if (v->nargs < 2) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+    XiEmitReg arr = reg_of(ctx, v->args[0]);
+    XiEmitReg src = reg_of(ctx, v->args[1]);
+    if (ctx->status != XI_EMIT_OK)
+        return;
+    emit_inst(ctx, CREATE_ABC(OP_ARRAY_EXTEND, arr, src, 0));
+}
+
 /* Tuple creation: N elements in args[0..N-1].  OP_NEWTUPLE scoops
  * elements from R[base+1..base+N] in order, so we materialize the
  * window in a fresh scratch range above every source register.
@@ -431,7 +459,8 @@ XR_FUNC void xi_emit_set_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
 
 /* Json object creation: build Shape, store in constant pool, emit OP_NEWJSON */
 XR_FUNC void xi_emit_json_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
-    int field_count = (int) v->aux_int;
+    int field_count = xi_json_field_count(v);
+    uint8_t storage_mode = xi_json_storage_mode(v);
     const char **field_names = (const char **) v->aux;
     if (field_count < 0 || field_count > UINT16_MAX) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
@@ -443,11 +472,13 @@ XR_FUNC void xi_emit_json_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         emit_inst(ctx, CREATE_ABC(OP_NEWMAP, dst, 0, 0));
         return;
     }
-    /* Build dynamic-layout class chain (jsonRoot -> field1 -> ... -> fieldN).
-     * Empty {} just uses the root. The leaf class becomes the constant the
-     * VM uses to allocate the Json instance. */
+    /* Build dynamic-layout class chain. Record and Json share the fixed-index
+     * field storage machinery but use separate roots and builtin kinds. */
     int n = field_count > 0 ? field_count : 0;
-    XrClass *cls = xr_class_build_json_chain(ctx->isolate, field_names, n, false);
+    bool is_record = v->type && v->type->kind == XR_KIND_RECORD;
+    bool sealed = is_record ? v->type->object.is_sealed : false;
+    XrClass *cls = is_record ? xr_class_build_record_chain(ctx->isolate, field_names, n, sealed)
+                             : xr_class_build_json_chain(ctx->isolate, field_names, n, false);
     if (!cls) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;
@@ -462,7 +493,7 @@ XR_FUNC void xi_emit_json_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     if (!xi_emit_const_index_to_c(ctx, kidx, &karg))
         return;
 
-    emit_inst(ctx, CREATE_ABC(OP_NEWJSON, dst, karg, 0));
+    emit_inst(ctx, CREATE_ABC(OP_NEWJSON, dst, karg, storage_mode));
 }
 
 /* Json field init by index: OP_JSON_INIT A B C (A=json, B=field_idx, C=val) */
@@ -517,6 +548,20 @@ XR_FUNC void xi_emit_json_set_f(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     emit_inst(ctx, CREATE_ABC(OP_JSON_SET, json_reg, field_arg, val_reg));
 }
 
+/* Json merge: OP_JSON_MERGE A B (A=dst Json, B=src Json).  In-place store. */
+XR_FUNC void xi_emit_json_merge(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    (void) dst;
+    if (v->nargs < 2) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+    XiEmitReg dst_reg = reg_of(ctx, v->args[0]);
+    XiEmitReg src_reg = reg_of(ctx, v->args[1]);
+    if (ctx->status != XI_EMIT_OK)
+        return;
+    emit_inst(ctx, CREATE_ABC(OP_JSON_MERGE, dst_reg, src_reg, 0));
+}
+
 /* Typed JSON decode: OP_JSON_DECODE A B C
  * A=dst (result: T? sealed Json or null)
  * B=data register (string to parse)
@@ -541,10 +586,9 @@ XR_FUNC void xi_emit_json_decode(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     if (ctx->status != XI_EMIT_OK)
         return;
 
-    /* Build sealed class chain: typed JSON decode produces a fixed-shape
-     * sealed Json with exactly the declared fields. */
-    bool sealed = (v->type && v->type->kind == XR_KIND_JSON && v->type->object.is_sealed);
-    XrClass *cls = xr_class_build_json_chain(ctx->isolate, field_names, n, sealed);
+    /* Build sealed Record class chain for typed Json.decode<T>. */
+    bool sealed = (v->type && v->type->kind == XR_KIND_RECORD && v->type->object.is_sealed);
+    XrClass *cls = xr_class_build_record_chain(ctx->isolate, field_names, n, sealed);
     if (!cls) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;
@@ -571,7 +615,7 @@ XR_FUNC void xi_emit_range(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     XiEmitReg end = reg_of(ctx, v->args[1]);
     if (ctx->status != XI_EMIT_OK)
         return;
-    emit_inst(ctx, CREATE_ABC(OP_NEWRANGE, dst, start, end));
+    emit_inst(ctx, CREATE_ABC(v->aux_int ? OP_NEWRANGE_INCLUSIVE : OP_NEWRANGE, dst, start, end));
 }
 
 /* Slice: OP_SLICE expects start at R[C], end at R[C+1] (consecutive) */
@@ -934,6 +978,8 @@ static XrValue ast_field_default_to_value(EmitCtx *ctx, AstNode *init) {
         return xr_bool(true);
     if (init->type == AST_LITERAL_FALSE)
         return xr_bool(false);
+    if (init->type == AST_LITERAL_CHAR)
+        return xr_char(init->as.literal.raw_value.char_val);
     if (init->type == AST_LITERAL_STRING && ctx->isolate) {
         const char *s = init->as.literal.raw_value.string_val;
         if (s) {

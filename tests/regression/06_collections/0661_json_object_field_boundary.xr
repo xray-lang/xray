@@ -1,9 +1,9 @@
-// 0661_json_object_field_boundary.xr
-// Test: Json object field boundary consistency.
-// Verifies that dynamic Json fields can be read through explicit concrete
-// boundaries, and that mixed-type field stores remain stable across VM/AOT.
+// 0661_jit_cross_boundary.xr
+// Test: interpreter/JIT boundary consistency
+// Verifies that objects created by interpreter are correctly read by JIT,
+// and that OSR with mixed-type accumulation works correctly.
 
-// ===== Json tree field reads through concrete boundaries =====
+// ===== Interpreter creates object, JIT reads fields =====
 fn make_tree(depth: int) -> Json {
     if (depth <= 0) {
         return { "left": null, "right": null, "val": 1 }
@@ -15,12 +15,9 @@ fn make_tree(depth: int) -> Json {
     }
 }
 
-fn checksum(node: Json) -> int {
+fn checksum(node: Json) -> float {
     if (node == null) { return 0 }
-    let val: int = node.val
-    let left: Json = node.left
-    let right: Json = node.right
-    return val + checksum(left) + checksum(right)
+    return float(node.val) + checksum(node.left) + checksum(node.right)
 }
 
 @test
@@ -54,7 +51,7 @@ fn test_tree_checksum_depth5() {
 fn test_mixed_type_accumulation() {
     let obj = { "count": 0, "last": null, "flag": false }
     for (let i = 0; i < 50; i++) {
-        obj.count = obj.count + 1
+        obj.count = int(obj.count) + 1
         if (i % 3 == 0) {
             obj.last = null
         } else if (i % 3 == 1) {
@@ -91,7 +88,7 @@ fn test_null_overwrites_int() {
 fn test_bool_toggle_loop() {
     let state = { "on": false }
     for (let i = 0; i < 100; i++) {
-        state.on = !state.on
+        state.on = !(state.on == true)
     }
     // 100 toggles, even number, back to false
     assert_eq(state.on, false)
@@ -111,7 +108,7 @@ fn test_object_field_chain() {
     let depth_sum = 0
     while (node.child != null) {
         node = node.child!
-        depth_sum = depth_sum + node.depth
+        depth_sum = depth_sum + int(node.depth)
     }
     // depths: 0+1+2+3+4+5+6+7+8+9 = 45
     assert_eq(depth_sum, 45)
@@ -122,10 +119,10 @@ fn test_object_field_chain() {
 fn test_float_accumulation() {
     let obj = { "total": 0.0 }
     for (let i = 0; i < 100; i++) {
-        obj.total = obj.total + 0.1
+        obj.total = float(obj.total) + 0.1
     }
     // Approximate check due to float precision
-    let diff = obj.total - 10.0
+    let diff = float(obj.total) - 10.0
     if (diff < 0) { diff = -diff }
     assert(diff < 0.001)
 }

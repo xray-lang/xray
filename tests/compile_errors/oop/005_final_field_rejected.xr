@@ -1,0 +1,4 @@
+class Config {
+    final maxRetries: int = 3
+}
+let c = Config()

@@ -2,10 +2,16 @@
 
 enum TaskResult<T> {
     Success(T)
-    Failed(Exception)
+    Failed(unknown)
     Cancelled
     Timeout
     Pending
+}
+
+enum TaskOutcome {
+    Success(unknown)
+    Failed(unknown)
+    Cancelled
 }
 
 enum TaskStatus {

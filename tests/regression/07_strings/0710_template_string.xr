@@ -51,8 +51,42 @@ fn test_multi_variable() {
 @test
 fn test_nested_quotes() {
     let name = "test"
-    let s = 'He said "Hello, ${name}"'
+    let s = "He said \"Hello, ${name}\""
     assert_eq(s.includes("Hello"), true)
+}
+
+@test
+fn test_same_quote_in_interpolation() {
+    let s = "${"x"}"
+    assert_eq(s, "x")
+}
+
+@test
+fn test_same_quote_with_inner_brace() {
+    let s = "value=${"a}b"}"
+    assert_eq(s, "value=a}b")
+}
+
+@test
+fn test_same_quote_map_index() {
+    let m = #{"k": "value"}
+    let s = "${m["k"]}"
+    assert_eq(s, "value")
+}
+
+@test
+fn test_nested_template_in_interpolation() {
+    let name = "Ada"
+    let s = "outer ${"inner ${name}"}"
+    assert_eq(s, "outer inner Ada")
+}
+
+@test
+fn test_single_quote_literal_in_interpolation() {
+    let close = "${'}'}"
+    let quote = "${'"'}"
+    assert_eq(close, "}")
+    assert_eq(quote, "\"")
 }
 
 // ===== 空插值 =====
@@ -94,4 +128,3 @@ fn test_multiline() {
 ${name}!"
     assert_eq(s.includes("Alice"), true)
 }
-

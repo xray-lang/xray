@@ -26,8 +26,8 @@
 // Variable declaration node
 //
 // Storage mode (storage_mode):
-//   0 = normal variable (deep copy across coroutines)
-//   1 = shared variable (stored in global heap, passed by reference)
+//   0 = normal variable (must use explicit copy/move at coroutine boundaries)
+//   1 = shared variable (stored in global heap, passed by reference when const)
 //
 // shared variable features:
 //   - shared const: can be directly read concurrently by coroutine closures
@@ -61,11 +61,13 @@ typedef struct IfStmtNode {
 } IfStmtNode;
 
 typedef struct WhileStmtNode {
+    char *label;
     AstNode *condition;
     AstNode *body;
 } WhileStmtNode;
 
 typedef struct ForStmtNode {
+    char *label;
     AstNode *initializer;
     AstNode *condition;
     AstNode *increment;
@@ -73,6 +75,7 @@ typedef struct ForStmtNode {
 } ForStmtNode;
 
 typedef struct ForInStmtNode {
+    char *label;
     char *item_name;
     char *value_name;
     bool is_keyvalue;
@@ -84,15 +87,15 @@ typedef struct ForInStmtNode {
 } ForInStmtNode;
 
 typedef struct BreakStmtNode {
-    int placeholder;
+    char *label;
 } BreakStmtNode;
 typedef struct ContinueStmtNode {
-    int placeholder;
+    char *label;
 } ContinueStmtNode;
 
 /* ========== Exception Handling ========== */
 
-// A single catch clause: catch (e), catch (e: HttpError), or catch panic (p)
+// A single catch clause: catch (e), catch (e: NetErr), or catch panic (p)
 typedef struct XrCatchClause {
     char *var_name;
     int var_line;     // Line of catch variable (1-indexed)
@@ -141,6 +144,7 @@ typedef struct PatternLiteralNode {
 typedef struct PatternRangeNode {
     AstNode *start;
     AstNode *end;
+    bool inclusive_end;
 } PatternRangeNode;
 
 typedef struct PatternWildcardNode {
@@ -167,6 +171,27 @@ typedef struct PatternTupleNode {
  * variant is the AST_MEMBER_ACCESS / AST_ENUM_ACCESS node for the
  * variant name; sub-patterns are AST_PATTERN_* nodes for each payload
  * slot (bindings, wildcards, or literals). */
+// Object/record match pattern: `{ x, y }` or `{ x: sub }`. field_names[i] is the
+// source field; patterns[i] is the sub-pattern bound to that field value (a
+// bare-name binding for shorthand `{ x }`, or a nested/renamed sub-pattern for
+// `{ x: sub }`). Matches any object/Json carrying those fields.
+typedef struct PatternObjectNode {
+    char **field_names;
+    AstNode **patterns;
+    int count;
+} PatternObjectNode;
+
+// Array match pattern: `[a, b, ..rest]`. patterns[i] are positional element
+// sub-patterns. has_rest enables a trailing rest binding capturing the tail as a
+// new array; rest_name is the binding (NULL for a bare `..` that drops the tail).
+typedef struct PatternArrayNode {
+    AstNode **patterns;
+    int count;
+    bool has_rest;
+    char *rest_name;
+    uint32_t rest_symbol_id;  // analyzer-assigned id for the rest binding (0 if none)
+} PatternArrayNode;
+
 typedef struct PatternAdtNode {
     AstNode *variant;    // e.g. AST_MEMBER_ACCESS(Shape, Circle)
     AstNode **patterns;  // payload sub-patterns
@@ -224,6 +249,15 @@ typedef struct SelectStmtNode {
     AstNode **cases;
     int case_count;
 } SelectStmtNode;
+
+// yield statement:
+//   `yield expr`     — generator value production (the enclosing function is a
+//                      generator returning Iterator<T>).
+//   value == NULL is invalid at parse time (bare `yield` is rejected; use
+//   `Coro.yield()` for cooperative scheduling).
+typedef struct YieldStmtNode {
+    AstNode *value;
+} YieldStmtNode;
 
 typedef struct DeferStmtNode {
     AstNode *expr;

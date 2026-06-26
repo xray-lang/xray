@@ -27,7 +27,7 @@ scope {
 
 // === Rule 2: Channel (inter-coroutine communication) ===
 // Channels are declared `shared const` and deep-copy pointer values on send.
-shared const ch = new Channel<int>(1)
+shared const ch = Channel<int>(1)
 
 fn sender(ch: Channel<int>) {
     ch.send(42)
@@ -60,7 +60,7 @@ print("parent still has: ${myData}")
 // let x = [1, 2, 3]
 // go fn() { print(x) }()              // ERROR: cannot capture 'x' in go closure
 //
-// let ch2 = new Channel<int>(1)        // ERROR: Channel must be `shared const`
+// let ch2 = Channel<int>(1)            // ERROR: Channel must be `shared const`
 //
 // shared let data = [1,2,3]
 // go fn() { data.push(4) }()           // ERROR: cannot capture `shared let`

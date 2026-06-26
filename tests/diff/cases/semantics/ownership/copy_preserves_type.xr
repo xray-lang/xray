@@ -13,7 +13,7 @@ fn readValue(b: Box) -> int {
     return b.value
 }
 
-let original = new Box(42)
+let original = Box(42)
 let duplicate = copy(original)
 print(readValue(duplicate))
 

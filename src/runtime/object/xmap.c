@@ -33,7 +33,9 @@
 #include "xtuple.h"
 #include "../class/xclass_system.h"
 #include "../class/xclass.h"
+#include "../core/xr_runtime_core.h"
 #include "../mem/xcoro_heap.h"
+#include "../xisolate_api.h"
 #include "../../coro/xcoroutine.h"
 #include <string.h>
 #include <stdio.h>
@@ -63,7 +65,10 @@ static inline uint8_t get_key_tt(XrValue key) {
 static inline uint32_t string_hash_fast(XrString *str) {
     if (str->hash == 0) {
         uint32_t h = xr_string_hash(str->data, str->length);
-        str->hash = (h == 0) ? 1 : h;
+        h = (h == 0) ? 1 : h;
+        if (!XR_OBJ_IS_SHARED(&str->hdr))
+            str->hash = h;
+        return h;
     }
     return str->hash;
 }
@@ -140,6 +145,24 @@ static void xr_map_prepare_weak_key(XrMap *map, XrValue key, XrCoroHeap *heap) {
     XrObjHeader *target = XR_VALUE_GCPTR(key);
     XR_OBJ_SET_FLAG(target, XR_OBJ_WEAKABLE);
     xr_weak_registry_register_map(map_owning_isolate(heap), map);
+}
+
+static XrValue map_canonicalize_key(XrMap *map, XrValue key, XrCoroHeap *heap) {
+    if (map_is_weak(map) || !XR_IS_STRING(key))
+        return key;
+    XrVMRuntime *iso = map_owning_isolate(heap);
+    XrRuntimeCore *core = iso ? xr_isolate_get_runtime_core(iso) : NULL;
+    if (!core)
+        return key;
+    XrString *src = XR_TO_STRING(key);
+    if (XR_STR_IS_INTERNED(src) || (src->length > XR_SHORT_STR_MAX && XR_OBJ_IS_SHARED(&src->hdr) &&
+                                    !XR_OBJ_GET_FLAG(&src->hdr, XR_OBJ_TRANSIT)))
+        return key;
+    XrString *canonical = xr_string_intern_core(core, src->data, src->length, src->hash);
+    if (!canonical || canonical == src)
+        return key;
+    xr_rc_release_value(heap, key);
+    return xr_string_value(canonical);
 }
 
 /* ========== Swiss Index Lookup ========== */
@@ -372,9 +395,10 @@ void xr_map_set(XrMap *map, XrValue key, XrValue value) {
     XR_DCHECK(XR_OBJ_GET_TYPE(&map->hdr) == XR_TMAP, "map_set: object is not a map");
     XR_DCHECK(!XR_IS_NULL(key), "map_set: NULL key");
 
+    XrCoroHeap *heap = map_current_or_owner_heap(map);
+    key = map_canonicalize_key(map, key, heap);
     uint8_t key_tt = get_key_tt(key);
     uint32_t hash = hash_value(key);
-    XrCoroHeap *heap = map_current_or_owner_heap(map);
 
     int32_t ix = map_lookup(map, key, hash, key_tt);
     if (ix >= 0) {

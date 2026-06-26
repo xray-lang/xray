@@ -72,6 +72,9 @@ typedef enum XrTypeKind {
     XR_KIND_FIXED_ARRAY,  // Fixed-length array: [N]T (compile-time length, runtime Array<T>)
     XR_KIND_POINTER,      // FFI raw pointer: RawPtr<T> (const) / RawMut<T> (mut). Address-
                           // width integer at the value level, invisible to the GC.
+    XR_KIND_CHAR,         // Unicode scalar value. Immediate value (tag XR_TAG_CHAR), not
+                          // a uint32; appended last to keep existing kind values stable.
+    XR_KIND_RECORD,       // Sealed/open structural record; shares ObjectShape metadata with Json.
     XR_KIND_COUNT
 } XrTypeKind;
 
@@ -80,7 +83,8 @@ static inline bool xr_kind_is_numeric(XrTypeKind k) {
     return k == XR_KIND_INT || k == XR_KIND_FLOAT;
 }
 static inline bool xr_kind_is_primitive(XrTypeKind k) {
-    return k == XR_KIND_INT || k == XR_KIND_FLOAT || k == XR_KIND_STRING || k == XR_KIND_BOOL;
+    return k == XR_KIND_INT || k == XR_KIND_FLOAT || k == XR_KIND_STRING || k == XR_KIND_BOOL ||
+           k == XR_KIND_CHAR;
 }
 static inline bool xr_kind_is_container(XrTypeKind k) {
     return k == XR_KIND_ARRAY || k == XR_KIND_MAP || k == XR_KIND_SET;
@@ -88,8 +92,11 @@ static inline bool xr_kind_is_container(XrTypeKind k) {
 static inline bool xr_kind_is_builtin_iterable(XrTypeKind k) {
     return k == XR_KIND_ARRAY || k == XR_KIND_MAP || k == XR_KIND_SET || k == XR_KIND_STRING;
 }
+static inline bool xr_kind_has_object_shape(XrTypeKind k) {
+    return k == XR_KIND_RECORD || k == XR_KIND_JSON;
+}
 static inline bool xr_kind_is_object_like(XrTypeKind k) {
-    return k == XR_KIND_JSON || k == XR_KIND_INSTANCE || k == XR_KIND_MAP;
+    return xr_kind_has_object_shape(k) || k == XR_KIND_INSTANCE || k == XR_KIND_MAP;
 }
 
 // Function parameter passing modes (used by XrType.function.param_passing_modes)
@@ -103,7 +110,7 @@ static inline bool xr_kind_is_object_like(XrTypeKind k) {
 typedef struct XrType XrType;
 typedef struct XrClassInfo XrClassInfo;
 
-// Object type: unified Json with optional compile-time field info.
+// ObjectShape metadata shared by Record and Json object values.
 // is_sealed=true means fixed fields (no runtime extension).
 typedef struct XrObjectType {
     const char **field_names;  // Field names array
@@ -251,6 +258,7 @@ static inline bool xr_type_is_runtime_managed(const XrType *t) {
 #define XR_TYPE_IS_FLOAT(t) ((t)->kind == XR_KIND_FLOAT)
 #define XR_TYPE_IS_STRING(t) ((t)->kind == XR_KIND_STRING)
 #define XR_TYPE_IS_BOOL(t) ((t)->kind == XR_KIND_BOOL)
+#define XR_TYPE_IS_CHAR(t) ((t)->kind == XR_KIND_CHAR)
 #define XR_TYPE_IS_NULL(t) ((t)->kind == XR_KIND_NULL)
 #define XR_TYPE_IS_NUMERIC(t) (xr_kind_is_numeric((t)->kind))
 #define XR_TYPE_IS_PRIMITIVE(t) (xr_kind_is_primitive((t)->kind))
@@ -266,6 +274,8 @@ static inline bool xr_type_is_runtime_managed(const XrType *t) {
 #define XR_TYPE_IS_INTERFACE(t) ((t)->kind == XR_KIND_INTERFACE)
 #define XR_TYPE_IS_NULLABLE(t) ((t)->is_nullable || ((t)->kind == XR_KIND_NULL))
 #define XR_TYPE_IS_JSON(t) ((t)->kind == XR_KIND_JSON)
+#define XR_TYPE_IS_RECORD(t) ((t)->kind == XR_KIND_RECORD)
+#define XR_TYPE_HAS_OBJECT_SHAPE(t) ((t) && xr_kind_has_object_shape((t)->kind))
 #define XR_TYPE_IS_TYPE_PARAM(t) ((t)->kind == XR_KIND_TYPE_PARAM)
 #define XR_TYPE_IS_TUPLE(t) ((t)->kind == XR_KIND_TUPLE)
 // Unit type is the canonical "no meaningful value" type for functions
@@ -294,12 +304,16 @@ static inline XrRep xr_type_base_rep(const XrType *t) {
             return XR_REP_F64;
         case XR_KIND_UNIT:
             return XR_REP_VOID;
+        /* char keeps the tagged representation so the XR_TAG_CHAR identity
+         * survives across slots, print and typeof. A raw u32 rep is a future
+         * AOT optimization, not needed for correctness. */
         case XR_KIND_STRING:
         case XR_KIND_ARRAY:
         case XR_KIND_MAP:
         case XR_KIND_SET:
         case XR_KIND_TUPLE:
         case XR_KIND_JSON:
+        case XR_KIND_RECORD:
         case XR_KIND_INSTANCE:
         case XR_KIND_CHANNEL:
         case XR_KIND_INTERFACE:
@@ -350,6 +364,7 @@ XR_FUNC XrType *xr_type_new_int(XrVMRuntime *X);
 XR_FUNC XrType *xr_type_new_float(XrVMRuntime *X);
 XR_FUNC XrType *xr_type_new_string(XrVMRuntime *X);
 XR_FUNC XrType *xr_type_new_bool(XrVMRuntime *X);
+XR_FUNC XrType *xr_type_new_char(XrVMRuntime *X);
 XR_FUNC XrType *xr_type_new_null(XrVMRuntime *X);
 XR_FUNC XrType *xr_type_new_unknown(XrVMRuntime *X);
 XR_FUNC XrType *xr_type_new_never(XrVMRuntime *X);
@@ -397,6 +412,7 @@ static inline uint8_t xr_type_to_slot_type(XrType *type) {
         case XR_KIND_SET:
         case XR_KIND_TUPLE:
         case XR_KIND_JSON:
+        case XR_KIND_RECORD:
         case XR_KIND_INSTANCE:
         case XR_KIND_CHANNEL:
         case XR_KIND_INTERFACE:
@@ -449,6 +465,7 @@ static inline uint8_t xr_type_to_xr_tag(const XrType *t) {
         case XR_KIND_MAP:
         case XR_KIND_SET:
         case XR_KIND_JSON:
+        case XR_KIND_RECORD:
         case XR_KIND_INSTANCE:
         case XR_KIND_CHANNEL:
         case XR_KIND_INTERFACE:
@@ -511,8 +528,13 @@ XR_FUNC XrType *xr_type_new_task(XrVMRuntime *X, XrType *result_type);
 
 // API: Object types
 XR_FUNC XrType *xr_type_new_json(XrVMRuntime *X);
+XR_FUNC XrType *xr_type_new_record_with_fields(XrVMRuntime *X, const char **names, XrType **types,
+                                               int count, bool is_sealed);
 XR_FUNC XrType *xr_type_new_json_with_fields(XrVMRuntime *X, const char **names, XrType **types,
                                              int count, bool is_sealed);
+XR_FUNC void xr_type_set_object_field_readonly(XrVMRuntime *X, XrType *type, const bool *readonly,
+                                               int count);
+XR_FUNC void xr_type_set_object_type_name(XrVMRuntime *X, XrType *type, const char *name);
 XR_FUNC void xr_type_set_json_field_readonly(XrVMRuntime *X, XrType *type, const bool *readonly,
                                              int count);
 XR_FUNC void xr_type_set_json_type_name(XrVMRuntime *X, XrType *type, const char *name);
@@ -593,69 +615,34 @@ static inline bool xr_type_intrinsically_includes_null(const XrType *t) {
     return t && t->kind == XR_KIND_JSON;
 }
 
-// Check if a coercion through Json is allowed at compile time. Returns
-// true when the type checker should treat `target = source` as legal,
-// possibly with a runtime OP_CHECKTYPE inserted by the codegen.
-//
-// Two directions are recognised — both routine in xray:
-//
-//   1. Json -> X. A `Json` source flows into a more specific target
-//      (primitive, container, instance, or a union of the above).
-//      Codegen inserts OP_CHECKTYPE so a wrong runtime shape becomes
-//      a clean exception instead of silent UB.
-//
-//   2. X -> Json. A typed value is fed into a Json sink. The runtime
-//      already stores every kind of value inside the same XrValue
-//      tagged union, so this is a label-only coercion with zero work.
-//
-// The coercion is intentionally permissive at compile time. Anything
-// that survives this check still goes through xa_typecheck_assignable
-// downstream when the constraints are tighter.
+// Json is a closed data-exchange value domain. External Xray heap values do
+// not flow into it implicitly; use Json.encode at that boundary. Json literal
+// contexts are handled by the analyzer by typing nested array/object literals
+// as Json directly.
 static inline bool xr_is_json_coercion(XrType *target, XrType *source) {
     if (!target || !source)
         return false;
 
-    // Direction 2: any structured value flows into a Json sink. The
-    // sink is a dynamic object, so accepting an instance / array / map
-    // / set / channel / unknown / null here does not lose
-    // information. Json self-contains null, so `null` and the
-    // analyzer's `unknown` placeholder are deliberately accepted —
-    // forcing a manual `Json?` annotation would be redundant noise.
-    // Exception: sealed Json targets require exact shape — no coercion bypass.
     if (target->kind == XR_KIND_JSON && !target->object.is_sealed) {
         switch (source->kind) {
-            case XR_KIND_INSTANCE:
-            case XR_KIND_ARRAY:
-            case XR_KIND_MAP:
-            case XR_KIND_SET:
-            case XR_KIND_CHANNEL:
             case XR_KIND_JSON:
             case XR_KIND_UNKNOWN:
             case XR_KIND_NULL:
+            case XR_KIND_INT:
+            case XR_KIND_FLOAT:
+            case XR_KIND_STRING:
+            case XR_KIND_BOOL:
                 return true;
             default:
-                break;
+                return false;
         }
-        if (xr_kind_is_primitive(source->kind))
-            return true;
     }
 
-    // Direction 1: Json or unknown source flowing into a more specific target.
-    // Unknown typically arises from Json field chains (e.g. node.val + ...)
-    // where the analyzer cannot determine a precise type. Codegen inserts
-    // runtime OP_CHECKTYPE, so this is safe.
     if (source->kind != XR_KIND_JSON && source->kind != XR_KIND_UNKNOWN)
         return false;
     if (xr_kind_is_primitive(target->kind))
         return true;
     if (target->kind == XR_KIND_JSON && !target->object.is_sealed)
-        return true;
-    if (target->kind == XR_KIND_ARRAY)
-        return true;
-    // Json -> Instance: a Json source feeding a typed instance
-    // target, e.g. `let v: SomeClass = json_obj["key"]`. Codegen
-    // inserts a runtime type check just like for primitives.
-    if (target->kind == XR_KIND_INSTANCE)
         return true;
     // Union of Json-compatible types.
     if (target->kind == XR_KIND_UNION) {
@@ -663,8 +650,7 @@ static inline bool xr_is_json_coercion(XrType *target, XrType *source) {
             XrType *m = target->union_type.members[i];
             if (!m)
                 return false;
-            if (!xr_kind_is_primitive(m->kind) && m->kind != XR_KIND_JSON &&
-                m->kind != XR_KIND_ARRAY && m->kind != XR_KIND_INSTANCE)
+            if (!xr_kind_is_primitive(m->kind) && m->kind != XR_KIND_JSON)
                 return false;
         }
         return target->union_type.member_count > 0;
@@ -672,26 +658,21 @@ static inline bool xr_is_json_coercion(XrType *target, XrType *source) {
     return false;
 }
 
-// Check if a type is valid as a Json field value.
-// Rejects types that clearly don't belong in JSON: function, class, channel, interface.
-// Allows: primitives, null, Json, Array, Map, Enum, DateTime, unknown, etc.
-// Enum serializes as its member name string; DateTime as ISO 8601 string.
+// Check if a type is valid as an already-typed Json literal field value.
+// External Record/Array/Map/Set/class values must cross through Json.encode.
 static inline bool xr_type_is_json_field_compatible(XrType *type) {
     if (!type)
         return true;
     switch (type->kind) {
-        case XR_KIND_FUNCTION:
-        case XR_KIND_CLASS:
-        case XR_KIND_CHANNEL:
-        case XR_KIND_INTERFACE:
-            return false;
-        case XR_KIND_ENUM:
+        case XR_KIND_UNKNOWN:
+        case XR_KIND_NULL:
+        case XR_KIND_JSON:
+        case XR_KIND_INT:
+        case XR_KIND_FLOAT:
+        case XR_KIND_STRING:
+        case XR_KIND_BOOL:
+        case XR_KIND_CHAR:
             return true;
-        case XR_KIND_INSTANCE:
-            // DateTime is serializable (ISO 8601 string)
-            if (type->instance.class_name && strcmp(type->instance.class_name, "DateTime") == 0)
-                return true;
-            return false;
         case XR_KIND_UNION:
             for (int i = 0; i < type->union_type.member_count; i++) {
                 if (!xr_type_is_json_field_compatible(type->union_type.members[i]))
@@ -699,7 +680,7 @@ static inline bool xr_type_is_json_field_compatible(XrType *type) {
             }
             return true;
         default:
-            return true;
+            return false;
     }
 }
 

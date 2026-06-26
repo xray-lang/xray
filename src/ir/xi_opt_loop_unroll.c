@@ -118,6 +118,76 @@ static uint32_t count_body_values(const XiLoop *loop) {
     return total;
 }
 
+/* Full unroll clones loop body values into a straight-line chain.  That is
+ * only correct when the loop body CFG is itself a single plain path from the
+ * header's true edge to the latch back-edge.  Internal branches, early exits,
+ * or non-local break/continue edges must stay in the normal CFG. */
+static bool collect_linear_body_order(XiFunc *f, const XiLoop *loop, XiBlock ***out_blocks,
+                                      uint32_t *out_count, uint32_t *out_value_count) {
+    if (!f || !loop || !loop->header || !loop->latch)
+        return false;
+
+    XiBlock *header = loop->header;
+    if (header->kind != XI_BLOCK_IF || !header->succs[0] || !header->succs[1])
+        return false;
+    if (!xi_loop_contains_block(loop, header->succs[0]))
+        return false;
+    if (xi_loop_contains_block(loop, header->succs[1]))
+        return false;
+
+    uint32_t max_blocks = (loop->nbody > 0) ? loop->nbody - 1 : 0;
+    if (max_blocks == 0)
+        return false;
+
+    XiBlock **ordered = NULL;
+    if (out_blocks) {
+        ordered = (XiBlock **) xi_func_arena_alloc(f, max_blocks * sizeof(XiBlock *));
+        if (!ordered)
+            return false;
+    }
+
+    XiBlock *expected_pred = header;
+    XiBlock *cur = header->succs[0];
+    uint32_t count = 0;
+    uint32_t values = 0;
+    while (cur && cur != header) {
+        if (!xi_loop_contains_block(loop, cur))
+            return false;
+        if (cur == header || cur->kind != XI_BLOCK_PLAIN || !cur->succs[0])
+            return false;
+        if (cur->phis)
+            return false;
+        if (cur->npreds != 1 || cur->preds[0] != expected_pred)
+            return false;
+        if (count >= max_blocks)
+            return false;
+
+        if (ordered)
+            ordered[count] = cur;
+        count++;
+        values += cur->nvalues;
+
+        XiBlock *next = cur->succs[0];
+        if (next != header && !xi_loop_contains_block(loop, next))
+            return false;
+        expected_pred = cur;
+        cur = next;
+    }
+
+    if (count != max_blocks)
+        return false;
+    if (!ordered || count == 0 || ordered[count - 1] != loop->latch)
+        return false;
+
+    if (out_blocks)
+        *out_blocks = ordered;
+    if (out_count)
+        *out_count = count;
+    if (out_value_count)
+        *out_value_count = values;
+    return true;
+}
+
 /* Check if a value has side effects that prevent unrolling. */
 static bool has_unrollable_side_effects(const XiLoop *loop) {
     for (uint32_t i = 0; i < loop->nbody; i++) {
@@ -185,8 +255,9 @@ static XiValue *resolve_arg(const UnrollMap *map, XiValue *arg) {
 
 /* Emit one unrolled iteration into `dst_blk`. The IV is replaced by
  * a constant for this iteration. */
-static bool emit_unrolled_body(XiFunc *f, const XiLoop *loop, XiBlock *dst_blk,
-                               const XiBasicIV *biv, int64_t iv_val, UnrollMap *map) {
+static bool emit_unrolled_body(XiFunc *f, XiBlock **body_order, uint32_t body_count,
+                               XiBlock *dst_blk, const XiBasicIV *biv, int64_t iv_val,
+                               UnrollMap *map) {
     XrType *int_type = biv->phi->type;
 
     /* Map the IV phi to its concrete constant value. */
@@ -196,11 +267,11 @@ static bool emit_unrolled_body(XiFunc *f, const XiLoop *loop, XiBlock *dst_blk,
     if (!umap_add(map, biv->phi, iv_const))
         return false;
 
-    /* Clone body block values (skip header). */
-    for (uint32_t bi = 0; bi < loop->nbody; bi++) {
-        XiBlock *src = loop->body[bi];
-        if (!src || src == loop->header)
-            continue;
+    /* Clone body block values in CFG order. */
+    for (uint32_t bi = 0; bi < body_count; bi++) {
+        XiBlock *src = body_order[bi];
+        if (!src)
+            return false;
         for (uint32_t vi = 0; vi < src->nvalues; vi++) {
             XiValue *orig = src->values[vi];
             XiValue *clone = xi_value_new(f, dst_blk, orig->op, orig->type, orig->nargs);
@@ -290,7 +361,11 @@ static bool full_unroll(XiFunc *f, XiLoop *loop, uint32_t trip_count) {
     if (exit_uses_header_directly(loop, exit_blk))
         return false;
 
-    uint32_t body_values = count_body_values(loop);
+    XiBlock **body_order = NULL;
+    uint32_t body_block_count = 0;
+    uint32_t body_values = 0;
+    if (!collect_linear_body_order(f, loop, &body_order, &body_block_count, &body_values))
+        return false;
 
     /* Create one unroll block per iteration, chained linearly. */
     XiBlock **iter_blocks = (XiBlock **) xi_func_arena_alloc(f, trip_count * sizeof(XiBlock *));
@@ -345,7 +420,8 @@ static bool full_unroll(XiFunc *f, XiLoop *loop, uint32_t trip_count) {
                 return false;
         }
 
-        if (!emit_unrolled_body(f, loop, iter_blocks[iter], biv, iv_val, &iter_map))
+        if (!emit_unrolled_body(f, body_order, body_block_count, iter_blocks[iter], biv, iv_val,
+                                &iter_map))
             return false;
 
         /* Chain iteration blocks. */

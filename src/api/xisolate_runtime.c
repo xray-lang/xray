@@ -18,15 +18,24 @@
 #include "../runtime/class/xclass.h"
 #include "../runtime/class/xclass_system.h"
 #include "../runtime/class/xenum.h"
+#include "../runtime/core/xr_runtime_core.h"
 #include "../runtime/mem/xobj_destroy_ops.h"
 #include "../base/xconfig.h"
 #include "../runtime/class/xreflect_registry.h"
 #include "../runtime/symbol/xsymbol_table.h"
 #include "../runtime/value/xtype.h"
 #include "../runtime/value/xvalue.h"
+#include "../runtime/xisolate_api.h"
 #include "../coro/xscope_transfer.h"
 #include "../base/xglobal_indices.h"
 #include "../../include/xray_vm.h"
+
+static void isolate_bind_builtin(XrVMRuntime *isolate, int32_t index, XrValue value) {
+    if (!isolate || index < 0 || index >= XR_USER_GLOBALS_START)
+        return;
+    isolate->vm.builtins[index] = value;
+    xr_runtime_core_set_builtin(xr_isolate_get_runtime_core(isolate), index, value);
+}
 
 static XrEnumType *runtime_register_prelude_enum(XrVMRuntime *isolate, const char *name,
                                                  char **members, int member_count,
@@ -71,9 +80,11 @@ static void isolate_register_runtime_prelude_enums(XrVMRuntime *isolate) {
     char *recv_members[] = {"Value", "Empty", "Timeout", "Closed"};
     char *send_result_members[] = {"Sent", "Full", "Timeout", "Closed"};
     char *task_result_members[] = {"Success", "Failed", "Cancelled", "Timeout", "Pending"};
+    char *task_outcome_members[] = {"Success", "Failed", "Cancelled"};
     char *task_status_members[] = {"Pending", "Running", "Success", "Failed", "Cancelled"};
     const int recv_payloads[] = {1, 0, 0, 0};
     const int task_result_payloads[] = {1, 1, 0, 0, 0};
+    const int task_outcome_payloads[] = {1, 1, 0};
 
     XrEnumType *ordering =
         runtime_register_prelude_enum(isolate, "Ordering", ordering_members, 5, NULL);
@@ -83,44 +94,54 @@ static void isolate_register_runtime_prelude_enums(XrVMRuntime *isolate) {
         runtime_register_prelude_enum(isolate, "SendResult", send_result_members, 4, NULL);
     XrEnumType *task_result = runtime_register_prelude_enum(
         isolate, "TaskResult", task_result_members, 5, task_result_payloads);
+    XrEnumType *task_outcome = runtime_register_prelude_enum(
+        isolate, "TaskOutcome", task_outcome_members, 3, task_outcome_payloads);
     XrEnumType *task_status =
         runtime_register_prelude_enum(isolate, "TaskStatus", task_status_members, 5, NULL);
 
     if (ordering)
-        isolate->vm.builtins[XR_GLOBAL_VAR_ORDERING] = XR_FROM_PTR(ordering);
+        isolate_bind_builtin(isolate, XR_GLOBAL_VAR_ORDERING, XR_FROM_PTR(ordering));
     if (recv)
-        isolate->vm.builtins[XR_GLOBAL_VAR_RECV] = XR_FROM_PTR(recv);
+        isolate_bind_builtin(isolate, XR_GLOBAL_VAR_RECV, XR_FROM_PTR(recv));
     if (send_result)
-        isolate->vm.builtins[XR_GLOBAL_VAR_SEND_RESULT] = XR_FROM_PTR(send_result);
+        isolate_bind_builtin(isolate, XR_GLOBAL_VAR_SEND_RESULT, XR_FROM_PTR(send_result));
     if (task_result)
-        isolate->vm.builtins[XR_GLOBAL_VAR_TASK_RESULT] = XR_FROM_PTR(task_result);
+        isolate_bind_builtin(isolate, XR_GLOBAL_VAR_TASK_RESULT, XR_FROM_PTR(task_result));
+    if (task_outcome)
+        isolate_bind_builtin(isolate, XR_GLOBAL_VAR_TASK_OUTCOME, XR_FROM_PTR(task_outcome));
     if (task_status)
-        isolate->vm.builtins[XR_GLOBAL_VAR_TASK_STATUS] = XR_FROM_PTR(task_status);
+        isolate_bind_builtin(isolate, XR_GLOBAL_VAR_TASK_STATUS, XR_FROM_PTR(task_status));
 }
 
 static void isolate_register_vm_builtins(XrVMRuntime *isolate) {
     if (!isolate || !isolate->core)
         return;
     if (isolate->core->reflectClass)
-        isolate->vm.builtins[XR_GLOBAL_VAR_REFLECT] =
-            xr_value_from_class(isolate->core->reflectClass);
+        isolate_bind_builtin(isolate, XR_GLOBAL_VAR_REFLECT,
+                             xr_value_from_class(isolate->core->reflectClass));
     if (isolate->core->arrayClass)
-        isolate->vm.builtins[XR_GLOBAL_VAR_ARRAY] = xr_value_from_class(isolate->core->arrayClass);
+        isolate_bind_builtin(isolate, XR_GLOBAL_VAR_ARRAY,
+                             xr_value_from_class(isolate->core->arrayClass));
     if (isolate->core->setClass)
-        isolate->vm.builtins[XR_GLOBAL_VAR_SET] = xr_value_from_class(isolate->core->setClass);
+        isolate_bind_builtin(isolate, XR_GLOBAL_VAR_SET,
+                             xr_value_from_class(isolate->core->setClass));
     if (isolate->core->mapClass)
-        isolate->vm.builtins[XR_GLOBAL_VAR_MAP] = xr_value_from_class(isolate->core->mapClass);
+        isolate_bind_builtin(isolate, XR_GLOBAL_VAR_MAP,
+                             xr_value_from_class(isolate->core->mapClass));
     if (isolate->core->stringClass)
-        isolate->vm.builtins[XR_GLOBAL_VAR_STRING] =
-            xr_value_from_class(isolate->core->stringClass);
+        isolate_bind_builtin(isolate, XR_GLOBAL_VAR_STRING,
+                             xr_value_from_class(isolate->core->stringClass));
     if (isolate->core->jsonClass)
-        isolate->vm.builtins[XR_GLOBAL_VAR_JSON] = xr_value_from_class(isolate->core->jsonClass);
+        isolate_bind_builtin(isolate, XR_GLOBAL_VAR_JSON,
+                             xr_value_from_class(isolate->core->jsonClass));
     if (isolate->core_rt->native_type_classes[XR_TWORKQUEUE])
-        isolate->vm.builtins[XR_GLOBAL_VAR_WORKQUEUE] =
-            xr_value_from_class(isolate->core_rt->native_type_classes[XR_TWORKQUEUE]);
+        isolate_bind_builtin(
+            isolate, XR_GLOBAL_VAR_WORKQUEUE,
+            xr_value_from_class(isolate->core_rt->native_type_classes[XR_TWORKQUEUE]));
     if (isolate->core_rt->native_type_classes[XR_TRESULTGROUP])
-        isolate->vm.builtins[XR_GLOBAL_VAR_RESULTGROUP] =
-            xr_value_from_class(isolate->core_rt->native_type_classes[XR_TRESULTGROUP]);
+        isolate_bind_builtin(
+            isolate, XR_GLOBAL_VAR_RESULTGROUP,
+            xr_value_from_class(isolate->core_rt->native_type_classes[XR_TRESULTGROUP]));
     isolate_register_runtime_prelude_enums(isolate);
     if (isolate->vm.builtin_count < XR_USER_GLOBALS_START)
         isolate->vm.builtin_count = XR_USER_GLOBALS_START;

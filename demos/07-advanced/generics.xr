@@ -14,7 +14,7 @@ class Box<T> {
     get() -> T { return this.value }
 
     map(f: (T) -> T) -> Box<T> {
-        return new Box(f(this.value))
+        return Box(f(this.value))
     }
 
     toString() -> string {
@@ -22,8 +22,8 @@ class Box<T> {
     }
 }
 
-let intBox = new Box(42)
-let strBox = new Box("hello")
+let intBox = Box(42)
+let strBox = Box("hello")
 print("intBox: ${intBox.toString()}, get: ${intBox.get()}")
 print("strBox: ${strBox.toString()}, get: ${strBox.get()}")
 
@@ -46,7 +46,7 @@ class Pair<A, B> {
     }
 }
 
-let p = new Pair("age", 25)
+let p = Pair("age", 25)
 print("pair: ${p.toString()}")
 print("first: ${p.first}, second: ${p.second}")
 
@@ -72,7 +72,7 @@ class Stack<T> {
     isEmpty() -> bool { return this.items.length == 0 }
 }
 
-let stack = new Stack<int>()
+let stack = Stack<int>()
 stack.push(10)
 stack.push(20)
 stack.push(30)

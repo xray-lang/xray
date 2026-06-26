@@ -39,6 +39,8 @@ static XrTypeKind type_member_to_kind(const char *name) {
         return XR_KIND_STRING;
     if (strcmp(name, "bool") == 0)
         return XR_KIND_BOOL;
+    if (strcmp(name, "char") == 0)
+        return XR_KIND_CHAR;
     if (strcmp(name, "null") == 0)
         return XR_KIND_NULL;
     if (strcmp(name, "Array") == 0)
@@ -73,6 +75,8 @@ static const char *kind_to_type_member(XrTypeKind kind) {
             return "Type.string";
         case XR_KIND_BOOL:
             return "Type.bool";
+        case XR_KIND_CHAR:
+            return "Type.char";
         case XR_KIND_NULL:
             return "Type.null";
         case XR_KIND_ARRAY:
@@ -190,10 +194,108 @@ static bool pattern_has_binding(AstNode *pattern) {
                 return true;
         }
     }
+    if (pattern->type == AST_PATTERN_OBJECT) {
+        PatternObjectNode *op = &pattern->as.pattern_object;
+        for (int i = 0; i < op->count; i++) {
+            if (pattern_has_binding(op->patterns[i]))
+                return true;
+        }
+    }
+    if (pattern->type == AST_PATTERN_ARRAY) {
+        PatternArrayNode *ap = &pattern->as.pattern_array;
+        if (ap->rest_name)
+            return true;
+        for (int i = 0; i < ap->count; i++) {
+            if (pattern_has_binding(ap->patterns[i]))
+                return true;
+        }
+    }
     if (pattern->type == AST_PATTERN_TYPE) {
         return pattern->as.pattern_type.binding_name != NULL;
     }
     return false;
+}
+
+// An array match pattern is matched only by its length (element reads trap out
+// of bounds, so refutable per-element tests are not run). Element sub-patterns
+// must therefore be irrefutable (bindings, wildcards, or nested irrefutable
+// destructure). Returns true for an irrefutable sub-pattern.
+static bool pattern_is_irrefutable(AstNode *pattern) {
+    if (!pattern)
+        return true;
+    switch (pattern->type) {
+        case AST_PATTERN_WILDCARD:
+            return true;
+        case AST_PATTERN_LITERAL: {
+            AstNode *pval = pattern->as.pattern_literal.value;
+            return pval && pval->type == AST_VARIABLE;  // bare-name binding
+        }
+        case AST_PATTERN_TUPLE: {
+            PatternTupleNode *tp = &pattern->as.pattern_tuple;
+            for (int i = 0; i < tp->count; i++) {
+                if (!pattern_is_irrefutable(tp->patterns[i]))
+                    return false;
+            }
+            return true;
+        }
+        case AST_PATTERN_OBJECT: {
+            PatternObjectNode *op = &pattern->as.pattern_object;
+            for (int i = 0; i < op->count; i++) {
+                if (!pattern_is_irrefutable(op->patterns[i]))
+                    return false;
+            }
+            return true;
+        }
+        case AST_PATTERN_ARRAY: {
+            PatternArrayNode *ap = &pattern->as.pattern_array;
+            for (int i = 0; i < ap->count; i++) {
+                if (!pattern_is_irrefutable(ap->patterns[i]))
+                    return false;
+            }
+            return true;
+        }
+        default:
+            return false;  // literals, ranges, ADT, type tests are refutable
+    }
+}
+
+// Reject refutable element sub-patterns inside array patterns (recursively).
+static void xa_check_array_pattern_elements(XaInferContext *ctx, AstNode *pattern) {
+    if (!ctx || !pattern)
+        return;
+    switch (pattern->type) {
+        case AST_PATTERN_TUPLE: {
+            PatternTupleNode *tp = &pattern->as.pattern_tuple;
+            for (int i = 0; i < tp->count; i++)
+                xa_check_array_pattern_elements(ctx, tp->patterns[i]);
+            break;
+        }
+        case AST_PATTERN_OBJECT: {
+            PatternObjectNode *op = &pattern->as.pattern_object;
+            for (int i = 0; i < op->count; i++)
+                xa_check_array_pattern_elements(ctx, op->patterns[i]);
+            break;
+        }
+        case AST_PATTERN_ARRAY: {
+            PatternArrayNode *ap = &pattern->as.pattern_array;
+            for (int i = 0; i < ap->count; i++) {
+                AstNode *sub = ap->patterns[i];
+                if (sub && !pattern_is_irrefutable(sub)) {
+                    XrLocation loc = {
+                        .file = ctx->file_path, .line = sub->line, .column = sub->column};
+                    xa_analyzer_add_diagnostic(
+                        ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
+                        "array pattern elements must be bindings or wildcards; use an `if` guard "
+                        "to test element values",
+                        &loc);
+                }
+                xa_check_array_pattern_elements(ctx, sub);
+            }
+            break;
+        }
+        default:
+            break;
+    }
 }
 
 // Recursively register binding symbols introduced by `pattern` into the
@@ -245,6 +347,61 @@ static void register_pattern_bindings(XaInferContext *ctx, AstNode *pattern, XrT
             XrType *payload_type =
                 xa_analyzer_resolve_adt_payload_type(ctx->analyzer, slot_type, ap->variant, i);
             register_pattern_bindings(ctx, sub, payload_type);
+        }
+    }
+
+    /* Object pattern: bind each field's sub-pattern. Field slot type is drawn
+     * from the subject's static fields when known (Json carries nullable field
+     * types); otherwise unknown. */
+    if (pattern->type == AST_PATTERN_OBJECT) {
+        PatternObjectNode *op = &pattern->as.pattern_object;
+        for (int i = 0; i < op->count; i++) {
+            AstNode *sub = op->patterns[i];
+            if (!sub)
+                continue;
+            XrType *field_type = NULL;
+            if (slot_type && XR_TYPE_HAS_OBJECT_SHAPE(slot_type) &&
+                slot_type->object.field_count > 0 && slot_type->object.field_names &&
+                slot_type->object.field_types) {
+                for (int f = 0; f < slot_type->object.field_count; f++) {
+                    if (slot_type->object.field_names[f] && op->field_names[i] &&
+                        strcmp(slot_type->object.field_names[f], op->field_names[i]) == 0) {
+                        XrType *ft = slot_type->object.field_types[f];
+                        field_type = ft && XR_TYPE_IS_JSON(slot_type)
+                                         ? xr_type_make_nullable(ctx->analyzer->isolate, ft)
+                                         : ft;
+                        break;
+                    }
+                }
+            }
+            register_pattern_bindings(ctx, sub, field_type);
+        }
+    }
+
+    /* Array pattern: bind positional element sub-patterns with the array's
+     * element type, and the optional rest binding as Array<element>. */
+    if (pattern->type == AST_PATTERN_ARRAY) {
+        PatternArrayNode *ap = &pattern->as.pattern_array;
+        XrType *elem_type = NULL;
+        if (slot_type && XR_TYPE_IS_ARRAY(slot_type))
+            elem_type = slot_type->container.element_type;
+        for (int i = 0; i < ap->count; i++) {
+            if (ap->patterns[i])
+                register_pattern_bindings(ctx, ap->patterns[i], elem_type);
+        }
+        if (ap->rest_name) {
+            XaSymbol *rest_sym = xa_symbol_new(ap->rest_name, XA_SYM_VARIABLE);
+            rest_sym->location.line = pattern->line;
+            xa_visit_add_symbol_checked(ctx, rest_sym, 0);
+            ap->rest_symbol_id = rest_sym->id;
+            XaSymbolLinks *rest_links = xa_analyzer_get_links(ctx->analyzer, rest_sym);
+            if (rest_links) {
+                rest_links->type = elem_type ? xr_type_new_array(ctx->analyzer->isolate, elem_type)
+                                             : (slot_type && XR_TYPE_IS_ARRAY(slot_type)
+                                                    ? slot_type
+                                                    : xr_type_new_unknown(NULL));
+                rest_links->is_definitely_assigned = true;
+            }
         }
     }
 
@@ -301,6 +458,8 @@ XrType *xa_visit_match_expr(XaInferContext *ctx, AstNode *node) {
         // bare-name patterns (`n if (n < 0) => ...`) and identifiers
         // captured by a tuple destructure (`(x, _) => x + 1`) need
         // fresh scoped symbols typed from the matching subject slot.
+        xa_check_array_pattern_elements(ctx, arm_node->pattern);
+
         bool has_binding = pattern_has_binding(arm_node->pattern);
         if (has_binding) {
             xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, arm);
@@ -309,7 +468,8 @@ XrType *xa_visit_match_expr(XaInferContext *ctx, AstNode *node) {
 
         // Infer guard if present
         if (arm_node->guard) {
-            xa_visit_infer_expr(ctx, arm_node->guard);
+            XrType *guard_type = xa_visit_infer_expr(ctx, arm_node->guard);
+            xa_check_condition_type(ctx, arm_node->guard, guard_type);
         }
 
         // Infer body type

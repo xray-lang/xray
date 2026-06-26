@@ -11,6 +11,10 @@
 #ifndef XRT_COLL_H
 #define XRT_COLL_H
 
+#ifndef XR_FUNC
+#define XR_FUNC extern
+#endif
+
 #include "xrt_value.h"
 #include "xrt_arc.h"  // xrt_str_alloc used by xrt_strbuf_finish
 #include "xrt_range.h"
@@ -23,15 +27,8 @@
 #include "../shared/xr_error_core.h"
 #include "../shared/xr_float_fmt.h"
 #include "../shared/xr_map_set_abi.h"
-#include "../shared/xr_numeric_core.h"
-#include "../shared/xr_strbuf_core.h"
-#include "../shared/xr_string_core.h"
-#include "../shared/xr_truthy_core.h"
 #include "../shared/xr_typed_ops.h"
 #include <string.h>
-
-XRT_COLD _Noreturn void xrt_throw_exc(XrValue exc);
-XRT_COLD _Noreturn void xrt_throw_error(int code, const char *message);
 
 /* =========================================================================
  * Array runtime
@@ -54,8 +51,6 @@ typedef struct {
     XrObjHeader hdr; /* embedded-at-0 header: same placement as the VM XrArray so
                       * the two layouts line up (C0 object-header unification) */
     XR_ARRAY_ABI_FIELDS;
-    const char *adt_enum_name;
-    const char *adt_member_name;
 } xrt_array_t;
 
 static inline size_t xrt_array_data_bytes_or_abort(int64_t cap, uint8_t elem_size,
@@ -76,6 +71,7 @@ static inline size_t xrt_array_data_bytes_or_abort(int64_t cap, uint8_t elem_siz
  * policy, heap containers become normal RC objects; under XRAY_AOT_ARENA=1 they
  * keep bump lifetime and release at process exit. */
 static inline void xrt_coll_make_deterministic(XrObjHeader *h) {
+    h->extra |= XR_OBJ_AOT_NATIVE;
     if (xrt_bump_enabled)
         return;
     h->extra &= (uint16_t) ~(uint16_t) XR_OBJ_STORAGE_BUMP;
@@ -95,6 +91,14 @@ static inline void xrt_array_init_header(xrt_array_t *a, int64_t cap, uint8_t et
     a->data_storage = XR_ARRAY_DATA_INLINE;
     a->adt_enum_name = NULL;
     a->adt_member_name = NULL;
+}
+
+static inline void xrt_array_check_store_or_abort(const xrt_array_t *a, XrValue val,
+                                                  const char *where) {
+    if (XR_UNLIKELY(a && a->elem_type == XR_ELEM_CHAR && val.tag != XR_TAG_CHAR)) {
+        fprintf(stderr, "%s: Array<char> element must be char\n", where);
+        abort();
+    }
 }
 
 static inline xrt_array_t *xrt_array_alloc_inline(int64_t cap, uint8_t etype, int zeroed,
@@ -180,14 +184,6 @@ static inline XrValue xrt_array_new(int64_t cap) {
     return xr_mkptr(a, XR_TAG_ARRAY);
 }
 
-static inline XrValue xrt_array_new_len(int64_t len) {
-    if (len < 0)
-        len = 0;
-    XrValue arr = xrt_array_new(len);
-    ((xrt_array_t *) arr.ptr)->length = len;
-    return arr;
-}
-
 static inline xrt_array_t *xrt_array_new_typed_ptr(int64_t cap, uint8_t etype) {
     if (cap < 4)
         cap = 4;
@@ -196,14 +192,6 @@ static inline xrt_array_t *xrt_array_new_typed_ptr(int64_t cap, uint8_t etype) {
 
 static inline XrValue xrt_array_new_typed(int64_t cap, uint8_t etype) {
     return xr_mkptr(xrt_array_new_typed_ptr(cap, etype), XR_TAG_ARRAY);
-}
-
-static inline XrValue xrt_array_new_typed_len(int64_t len, uint8_t etype) {
-    if (len < 0)
-        len = 0;
-    XrValue arr = xrt_array_new_typed(len, etype);
-    ((xrt_array_t *) arr.ptr)->length = len;
-    return arr;
 }
 
 static inline xrt_array_t *xrt_array_new_typed_uninit_ptr(int64_t cap, uint8_t etype) {
@@ -215,29 +203,49 @@ static inline xrt_array_t *xrt_array_new_typed_uninit_ptr(int64_t cap, uint8_t e
 static inline XrValue xrt_array_new_typed_uninit(int64_t cap, uint8_t etype) {
     return xr_mkptr(xrt_array_new_typed_uninit_ptr(cap, etype), XR_TAG_ARRAY);
 }
+static inline XrValue xrt_json_new_named(int64_t field_count, const char *const *field_names);
+static inline void xrt_json_set_field(XrValue obj, int field_idx, XrValue val);
+XRT_COLD _Noreturn void xrt_throw_exc(XrValue exc);
+
+static inline XrValue xrt_error_message_value(const char *message) {
+    if (!message)
+        return XR_NULL_VAL;
+    size_t len = strlen(message);
+    XrValue s = xrt_str_alloc(len);
+    if (len > 0)
+        memcpy(xr_str_buf(s), message, len);
+    return s;
+}
+
+static inline XrValue xrt_structured_error_value(int code, const char *message) {
+    XrValue exc = xrt_json_new_named(EXCEPTION_FIELD_COUNT, xr_exception_field_names());
+    xrt_json_set_field(exc, EXCEPTION_FIELD_MESSAGE, xrt_error_message_value(message));
+    xrt_json_set_field(exc, EXCEPTION_FIELD_STACK, xrt_array_new(0));
+    xrt_json_set_field(exc, EXCEPTION_FIELD_CAUSE, XR_NULL_VAL);
+    xrt_json_set_field(exc, EXCEPTION_FIELD_CODE, XR_FROM_INT(code));
+    xrt_json_set_field(exc, EXCEPTION_FIELD_DATA, XR_NULL_VAL);
+    return exc;
+}
+
+static inline void xrt_throw_error(int code, const char *message) {
+    xrt_throw_exc(xrt_structured_error_value(code, message));
+}
+
 static inline XrValue xrt_bytes_new_len(int64_t len) {
-    len = xr_array_core_nonnegative_length(len);
+    if (len < 0)
+        len = 0;
     XrValue arr = xrt_array_new_typed(len, XR_ELEM_U8);
     ((xrt_array_t *) arr.ptr)->length = len;
     return arr;
 }
 
-static inline int64_t xrt_array_required_int_arg_or_panic(XrValue value, const char *message) {
-    int64_t out = 0;
-    bool has_int = XR_IS_INT(value);
-    if (!xr_array_core_required_int_arg(has_int, has_int ? XR_TO_INT(value) : 0, &out))
-        xrt_throw_error(XR_ERR_TYPE_MISMATCH, message);
-    return out;
-}
-
 static inline XrValue xrt_bytes_new_fill(XrValue len_value, XrValue fill_value) {
-    if (!XR_IS_INT(len_value) || !XR_IS_INT(fill_value))
-        xrt_throw_error(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTES_CONSTRUCTOR_FILL_EXPECTS_MSG);
-    int64_t len = xr_array_core_nonnegative_length(XR_TO_INT(len_value));
+    int64_t len = xr_value_to_int64_coerce(len_value);
     XrValue arr = xrt_bytes_new_len(len);
     xrt_array_t *a = (xrt_array_t *) arr.ptr;
-    if (!xr_array_core_bytes_fill_value(a->data, a->length, fill_value))
-        return XR_NULL_VAL;
+    uint8_t fill = (uint8_t) (xr_value_to_int64_coerce(fill_value) & 0xFF);
+    if (a->length > 0)
+        memset(a->data, fill, (size_t) a->length);
     return arr;
 }
 
@@ -247,23 +255,29 @@ static inline XrValue xrt_bytes_new_copy(XrValue src_value) {
     xrt_array_t *src = (xrt_array_t *) src_value.ptr;
     XrValue arr = xrt_bytes_new_len(src->length);
     xrt_array_t *dst = (xrt_array_t *) arr.ptr;
-    if (!xr_array_core_bytes_copy_from_typed(dst->data, dst->length, src->data, src->length,
-                                             src->elem_type))
-        return XR_NULL_VAL;
+    if (src->elem_type == XR_ELEM_U8) {
+        memcpy(dst->data, src->data, (size_t) src->length);
+        return arr;
+    }
+    for (int64_t i = 0; i < src->length; i++) {
+        XrValue item = xr_typed_get(src->data, (int32_t) i, src->elem_type);
+        xr_typed_set(dst->data, (int32_t) i, item, dst->elem_type);
+    }
     return arr;
 }
 
 static inline XrValue xrt_bytes_new_1(XrValue arg) {
     if (XR_IS_ARRAY(arg))
         return xrt_bytes_new_copy(arg);
-    return xrt_bytes_new_len(
-        xrt_array_required_int_arg_or_panic(arg, XR_ERROR_CORE_BYTES_CONSTRUCTOR_EXPECTS_MSG));
+    return xrt_bytes_new_len(xr_value_to_int64_coerce(arg));
 }
 
 static inline void xrt_array_push(XrValue arr, XrValue val) {
     xrt_array_t *a = (xrt_array_t *) arr.ptr;
+    xrt_array_check_store_or_abort(a, val, "xrt_array_push");
     if (XR_UNLIKELY(a->data_storage == XR_ARRAY_DATA_BORROWED)) {
-        xrt_throw_error(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_ARRAY_SLICE_PUSH_MSG);
+        fprintf(stderr, "xrt_array_push: cannot push to array slice\n");
+        abort();
     }
     if (XR_UNLIKELY(a->length >= a->capacity))
         xrt_array_data_grow(a, a->capacity == 0 ? 4 : a->capacity * 2);
@@ -271,33 +285,87 @@ static inline void xrt_array_push(XrValue arr, XrValue val) {
     a->length++;
 }
 
+/* Splice every element of `src_val` onto the end of `dst_val` (array spread
+ * `[...a]`).  Borrowed source: each copied element is retained because the
+ * source array keeps its own references.  Typed primitive arrays bulk-copy
+ * (no per-element refcount), boxed (ANY) arrays retain each value. */
+static inline void xrt_array_extend(XrValue dst_val, XrValue src_val) {
+    xrt_array_t *dst = (xrt_array_t *) dst_val.ptr;
+    xrt_array_t *src = (xrt_array_t *) src_val.ptr;
+    int64_t n = src->length;
+    if (n <= 0)
+        return;
+    if (XR_UNLIKELY(dst->data_storage == XR_ARRAY_DATA_BORROWED)) {
+        fprintf(stderr, "xrt_array_extend: cannot extend array slice\n");
+        abort();
+    }
+    if (dst->elem_type == src->elem_type && dst->elem_type != XR_ELEM_ANY) {
+        /* Packed primitive storage: bulk memcpy, no refcount work. */
+        int64_t need = dst->length + n;
+        if (need > dst->capacity) {
+            int64_t ncap = dst->capacity == 0 ? 4 : dst->capacity;
+            while (ncap < need)
+                ncap *= 2;
+            xrt_array_data_grow(dst, ncap);
+        }
+        memcpy((uint8_t *) dst->data + (size_t) dst->length * dst->elem_size, src->data,
+               (size_t) n * src->elem_size);
+        dst->length = need;
+        return;
+    }
+    for (int64_t j = 0; j < n; j++) {
+        XrValue elem = xr_typed_get(src->data, (int32_t) j, src->elem_type);
+        xrt_retain(elem);
+        xrt_array_push(dst_val, elem);
+    }
+}
+
 static inline int64_t xrt_array_len(XrValue arr) {
     return ((xrt_array_t *) arr.ptr)->length;
 }
 
+static inline void xrt_array_normalize_slice(int64_t len, int64_t *start, int64_t *end) {
+    if (*start < 0)
+        *start += len;
+    if (*end < 0)
+        *end += len;
+    if (*start < 0)
+        *start = 0;
+    if (*end < 0)
+        *end = 0;
+    if (*start > len)
+        *start = len;
+    if (*end > len)
+        *end = len;
+    if (*start > *end)
+        *start = *end;
+}
+
+/* `.slice()` / `[a:b]` return an independent copy (value semantics), matching the VM.
+ * A borrowed view would alias the source on write; copying keeps slices safe. */
 static inline XrValue xrt_array_slice_view(XrValue arr, int64_t start, int64_t end) {
     if (!XR_IS_ARRAY(arr) || !arr.ptr)
         return XR_NULL_VAL;
     xrt_array_t *src = (xrt_array_t *) arr.ptr;
-    XrArrayCoreRange range = xr_array_core_slice_range(src->length, start, end);
+    xrt_array_normalize_slice(src->length, &start, &end);
+    int64_t count = end - start;
+    if (count < 0)
+        count = 0;
 
-    xrt_array_t *slice = (xrt_array_t *) XRT_MALLOC(sizeof(xrt_array_t));
-    if (XR_UNLIKELY(!slice)) {
-        fprintf(stderr, "xrt_array_slice_view: out of memory\n");
-        abort();
-    }
-    xrt_bump_header_init(&slice->hdr, XR_TARRAY);
-    slice->length = range.count;
-    slice->capacity = range.count;
-    slice->source = NULL;
-    slice->elem_type = src->elem_type;
-    slice->elem_size = src->elem_size;
+    xrt_array_t *slice = xrt_array_new_typed_uninit_ptr(count, src->elem_type);
+    slice->length = count;
     slice->elem_tid = src->elem_tid;
     slice->contains_refs = src->contains_refs;
-    slice->data_storage = XR_ARRAY_DATA_BORROWED;
-    slice->adt_enum_name = NULL;
-    slice->adt_member_name = NULL;
-    slice->data = (uint8_t *) src->data + (size_t) range.start * (size_t) src->elem_size;
+    slice->adt_enum_name = src->adt_enum_name;
+    slice->adt_member_name = src->adt_member_name;
+    if (count > 0)
+        memcpy(slice->data, (uint8_t *) src->data + (size_t) start * (size_t) src->elem_size,
+               (size_t) count * (size_t) src->elem_size);
+    if (src->contains_refs) {
+        XrValue *data = (XrValue *) slice->data;
+        for (int64_t i = 0; i < count; i++)
+            xrt_retain(data[i]);
+    }
     return xr_mkptr(slice, XR_TAG_ARRAY);
 }
 
@@ -340,24 +408,34 @@ static inline XrValue xrt_tuple_get(XrValue tuple, int64_t index) {
     return t->items[index];
 }
 
-static inline XrValue xrt_slice_string_from_core(XrStringCoreSlice slice) {
-    XrValue sv = xrt_str_alloc(slice.len);
-    if (slice.len != 0)
-        memcpy(xr_str_buf(sv), slice.data, slice.len);
-    return sv;
-}
-
 static inline XrValue xrt_slice(XrValue source, XrValue start_value, XrValue end_value) {
-    if (!XR_IS_INT(start_value) || !XR_IS_INT(end_value))
-        xrt_throw_error(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_SLICE_BOUNDS_EXPECTS_MSG);
-    int64_t start = XR_TO_INT(start_value);
-    int64_t end = XR_TO_INT(end_value);
+    int64_t start = xr_value_to_int64_coerce(start_value);
+    int64_t end = xr_value_to_int64_coerce(end_value);
     if (XR_IS_ARRAY(source))
         return xrt_array_slice_view(source, start, end);
     if (XR_IS_STR(source)) {
         const char *s = xr_str_data(source);
-        size_t len = (size_t) xr_str_len(source);
-        return xrt_slice_string_from_core(xr_string_core_range_slice(s, len, start, end));
+        int64_t len = xr_str_len(source);
+        if (start < 0) {
+            start += len;
+            if (start < 0)
+                start = 0;
+        }
+        if (end < 0) {
+            end += len;
+            if (end < 0)
+                end = 0;
+        }
+        if (start > len)
+            start = len;
+        if (end > len)
+            end = len;
+        if (start >= end)
+            return xrt_str_alloc(0);
+        int64_t rlen = end - start;
+        XrValue sv = xrt_str_alloc((size_t) rlen);
+        memcpy(xr_str_buf(sv), s + start, (size_t) rlen);
+        return sv;
     }
     return XR_NULL_VAL;
 }
@@ -434,50 +512,49 @@ static inline void xrt_strbuf_grow(xrt_strbuf_t *sb, int64_t need) {
     sb->buf = tmp;
 }
 
-static inline void xrt_strbuf_append_bytes(xrt_strbuf_t *sb, const char *data, size_t len) {
-    if (!data || len == 0)
-        return;
-    if (XR_UNLIKELY(len > (size_t) INT64_MAX)) {
-        fprintf(stderr, "xrt_strbuf_append: string too long\n");
-        abort();
-    }
-    xrt_strbuf_grow(sb, (int64_t) len);
-    memcpy(sb->buf + sb->len, data, len);
-    sb->len += (int64_t) len;
-    sb->buf[sb->len] = 0;
-}
-
 static inline void xrt_strbuf_append(XrValue sbv, XrValue val) {
     xrt_strbuf_t *sb = (xrt_strbuf_t *) sbv.ptr;
     if (val.tag == XR_TAG_STR || val.tag == XR_TAG_STR_ARC) {
         const char *s = xr_str_data(val);
         int64_t slen = xr_str_len(val);
-        xrt_strbuf_append_bytes(sb, s, (size_t) slen);
+        xrt_strbuf_grow(sb, slen);
+        memcpy(sb->buf + sb->len, s, (size_t) slen);
+        sb->len += slen;
+        sb->buf[sb->len] = 0;
     } else if (val.tag == XR_TAG_I64) {
         char tmp[24];
-        int n = xr_numeric_core_format_i64(tmp, sizeof(tmp), val.i);
-        if (XR_UNLIKELY(n < 0)) {
-            fprintf(stderr, "xrt_strbuf_append: integer formatting failed\n");
-            abort();
-        }
-        xrt_strbuf_append_bytes(sb, tmp, (size_t) n);
+        int n = snprintf(tmp, sizeof(tmp), "%lld", (long long) val.i);
+        xrt_strbuf_grow(sb, n);
+        memcpy(sb->buf + sb->len, tmp, (size_t) n);
+        sb->len += n;
+        sb->buf[sb->len] = 0;
     } else if (val.tag == XR_TAG_F64) {
         char tmp[64];
         int n = xr_format_float(tmp, sizeof(tmp), val.f);
-        if (XR_UNLIKELY(n < 0)) {
-            fprintf(stderr, "xrt_strbuf_append: float formatting failed\n");
-            abort();
-        }
-        xrt_strbuf_append_bytes(sb, tmp, (size_t) n);
+        xrt_strbuf_grow(sb, n);
+        memcpy(sb->buf + sb->len, tmp, (size_t) n);
+        sb->len += n;
+        sb->buf[sb->len] = 0;
     } else if (val.tag == XR_TAG_BOOL) {
-        XrStrbufCoreSlice s = xr_strbuf_core_literal_slice(XR_STRBUF_CORE_LITERAL_BOOL, val.i != 0);
-        xrt_strbuf_append_bytes(sb, s.data, s.len);
+        const char *bs = val.i ? "true" : "false";
+        int blen = val.i ? 4 : 5;
+        xrt_strbuf_grow(sb, blen);
+        memcpy(sb->buf + sb->len, bs, (size_t) blen);
+        sb->len += blen;
+        sb->buf[sb->len] = 0;
     } else if (val.tag == XR_TAG_NULL) {
-        XrStrbufCoreSlice s = xr_strbuf_core_literal_slice(XR_STRBUF_CORE_LITERAL_NULL, false);
-        xrt_strbuf_append_bytes(sb, s.data, s.len);
+        xrt_strbuf_grow(sb, 4);
+        memcpy(sb->buf + sb->len, "null", 4);
+        sb->len += 4;
+        sb->buf[sb->len] = 0;
     } else {
-        XrStrbufCoreSlice s = xr_strbuf_core_literal_slice(XR_STRBUF_CORE_LITERAL_OBJECT, false);
-        xrt_strbuf_append_bytes(sb, s.data, s.len);
+        char tmp[64];
+        const char *s = xr_to_cstr(val, tmp, sizeof(tmp));
+        int64_t slen = (int64_t) strlen(s);
+        xrt_strbuf_grow(sb, slen);
+        memcpy(sb->buf + sb->len, s, (size_t) slen);
+        sb->len += slen;
+        sb->buf[sb->len] = 0;
     }
 }
 
@@ -488,34 +565,237 @@ static inline XrValue xrt_strbuf_finish(XrValue sbv) {
     return v;
 }
 
-/* Swiss-table probing lives in src/shared/xr_swiss_index.h.  The AOT side keeps
- * only allocation and packed typed-storage policy here. */
+typedef struct {
+    const char *a;
+    const char *b;
+    size_t alen;
+    size_t blen;
+    char scratch[64];
+    uint8_t kind;
+} xrt_strpart_t;
+
+#define XRT_STRPART_SINGLE 0u
+#define XRT_STRPART_ENUM 1u
+
+static inline size_t xrt_format_uint64(char *buf, size_t cap, uint64_t value) {
+    int n = snprintf(buf, cap, "%llu", (unsigned long long) value);
+    if (n < 0)
+        return 0;
+    if ((size_t) n >= cap)
+        return cap ? cap - 1u : 0u;
+    return (size_t) n;
+}
+
+static inline XrValue xrt_uint64_to_string(uint64_t value) {
+    char scratch[32];
+    size_t len = xrt_format_uint64(scratch, sizeof(scratch), value);
+    XrValue out = xrt_str_alloc(len);
+    memcpy(xr_str_buf(out), scratch, len);
+    return out;
+}
+
+static inline void xrt_strpart_init_u64(xrt_strpart_t *part, uint64_t value) {
+    part->a = "";
+    part->b = NULL;
+    part->alen = 0;
+    part->blen = 0;
+    part->kind = XRT_STRPART_SINGLE;
+    part->alen = xrt_format_uint64(part->scratch, sizeof(part->scratch), value);
+    part->a = part->scratch;
+}
+
+static inline void xrt_strpart_init(xrt_strpart_t *part, XrValue val) {
+    part->a = "";
+    part->b = NULL;
+    part->alen = 0;
+    part->blen = 0;
+    part->kind = XRT_STRPART_SINGLE;
+
+    if (val.tag == XR_TAG_STR || val.tag == XR_TAG_STR_ARC) {
+        part->a = xr_str_data(val);
+        part->alen = (size_t) xr_str_len(val);
+    } else if (val.tag == XR_TAG_I64) {
+        int n = snprintf(part->scratch, sizeof(part->scratch), "%lld", (long long) val.i);
+        part->a = part->scratch;
+        part->alen = (size_t) (n < 0 ? 0 : n);
+    } else if (val.tag == XR_TAG_F64) {
+        int n = xr_format_float(part->scratch, sizeof(part->scratch), val.f);
+        part->a = part->scratch;
+        part->alen = (size_t) (n < 0 ? 0 : n);
+    } else if (val.tag == XR_TAG_BOOL) {
+        part->a = val.i ? "true" : "false";
+        part->alen = val.i ? 4u : 5u;
+    } else if (val.tag == XR_TAG_CHAR) {
+        uint32_t cp = XR_TO_CHAR(val);
+        int n = 0;
+        if (cp <= 0x7Fu) {
+            part->scratch[n++] = (char) cp;
+        } else if (cp <= 0x7FFu) {
+            part->scratch[n++] = (char) (0xC0u | (cp >> 6));
+            part->scratch[n++] = (char) (0x80u | (cp & 0x3Fu));
+        } else if (cp <= 0xFFFFu && !(cp >= 0xD800u && cp <= 0xDFFFu)) {
+            part->scratch[n++] = (char) (0xE0u | (cp >> 12));
+            part->scratch[n++] = (char) (0x80u | ((cp >> 6) & 0x3Fu));
+            part->scratch[n++] = (char) (0x80u | (cp & 0x3Fu));
+        } else if (cp <= 0x10FFFFu) {
+            part->scratch[n++] = (char) (0xF0u | (cp >> 18));
+            part->scratch[n++] = (char) (0x80u | ((cp >> 12) & 0x3Fu));
+            part->scratch[n++] = (char) (0x80u | ((cp >> 6) & 0x3Fu));
+            part->scratch[n++] = (char) (0x80u | (cp & 0x3Fu));
+        }
+        part->a = part->scratch;
+        part->alen = (size_t) n;
+    } else if (val.tag == XR_TAG_NULL) {
+        part->a = "null";
+        part->alen = 4u;
+    } else if (val.tag == XR_TAG_ENUM) {
+        const XrAotEnumValueView *ev = (const XrAotEnumValueView *) val.ptr;
+        if (ev && ev->enum_name && ev->member_name) {
+            part->a = ev->enum_name;
+            part->b = ev->member_name;
+            part->alen = strlen(ev->enum_name);
+            part->blen = strlen(ev->member_name);
+            part->kind = XRT_STRPART_ENUM;
+        } else {
+            int n = snprintf(part->scratch, sizeof(part->scratch), "<enum@%p>", val.ptr);
+            part->a = part->scratch;
+            part->alen = (size_t) (n < 0 ? 0 : n);
+        }
+    } else {
+        const char *s = xr_to_cstr(val, part->scratch, sizeof(part->scratch));
+        part->a = s;
+        part->alen = strlen(s);
+    }
+}
+
+static inline size_t xrt_strpart_len(const xrt_strpart_t *part) {
+    return part->kind == XRT_STRPART_ENUM ? part->alen + 1u + part->blen : part->alen;
+}
+
+static inline char *xrt_strpart_copy(char *dst, const xrt_strpart_t *part) {
+    memcpy(dst, part->a, part->alen);
+    dst += part->alen;
+    if (part->kind == XRT_STRPART_ENUM) {
+        *dst++ = '.';
+        memcpy(dst, part->b, part->blen);
+        dst += part->blen;
+    }
+    return dst;
+}
+
+static inline XrValue xrt_str_concat_parts(size_t count, xrt_strpart_t *parts) {
+    size_t total = 0;
+    for (size_t i = 0; i < count; i++) {
+        size_t len = xrt_strpart_len(&parts[i]);
+        if (XR_UNLIKELY(len > SIZE_MAX - total)) {
+            fprintf(stderr, "xrt_str_concat_parts: string length overflow\n");
+            abort();
+        }
+        total += len;
+    }
+    XrValue out = xrt_str_alloc(total);
+    char *dst = xr_str_buf(out);
+    for (size_t i = 0; i < count; i++)
+        dst = xrt_strpart_copy(dst, &parts[i]);
+    *dst = 0;
+    return out;
+}
+
+static inline XrValue xrt_enum_value_new(const char *enum_name, const char *member_name,
+                                         XrValue raw_value, uint32_t member_index) {
+    XrAotEnumValueView *ev = (XrAotEnumValueView *) XRT_CALLOC(1, sizeof(*ev));
+    if (XR_UNLIKELY(!ev)) {
+        fprintf(stderr, "xrt_enum_value_new: out of memory\n");
+        abort();
+    }
+    ev->enum_name = enum_name;
+    ev->member_name = member_name;
+    ev->raw_value = raw_value;
+    ev->member_index = member_index;
+
+    XrValue v = {0};
+    v.tag = XR_TAG_ENUM;
+    v.ext = member_index;
+    v.ptr = ev;
+    return v;
+}
+
+static inline const XrAotEnumValueView *xrt_enum_value_view(XrValue obj) {
+    return obj.tag == XR_TAG_ENUM ? (const XrAotEnumValueView *) obj.ptr : NULL;
+}
+
+static inline XrValue xrt_enum_value_name(XrValue obj) {
+    const XrAotEnumValueView *ev = xrt_enum_value_view(obj);
+    return (ev && ev->member_name) ? xr_box_str(ev->member_name) : XR_NULL_VAL;
+}
+
+static inline XrValue xrt_enum_value_raw(XrValue obj) {
+    const XrAotEnumValueView *ev = xrt_enum_value_view(obj);
+    return ev ? ev->raw_value : XR_NULL_VAL;
+}
+
+static inline XrValue xrt_enum_value_ordinal(XrValue obj) {
+    const XrAotEnumValueView *ev = xrt_enum_value_view(obj);
+    return ev ? XR_FROM_INT(ev->member_index) : XR_NULL_VAL;
+}
+
+/* =========================================================================
+ * Swiss-table core — group-probed open addressing shared by Map and Set.
+ *
+ * Control bytes:  EMPTY=0xFF  DELETED=0x80  FULL=h2 (top bit clear, 7 hash
+ * bits).  Slot count is a power of two; the ctrl array carries XRT_GROUP
+ * mirrored tail bytes so an unaligned group load never reads out of bounds.
+ * Probing is triangular by whole groups, which visits every group exactly
+ * once for power-of-two capacities.  Group matching uses portable 8-byte
+ * SWAR; a byte match may be a false positive, so callers always confirm
+ * with a key comparison (empty detection is exact).
+ * ========================================================================= */
+
+#define XRT_GROUP 8
+#define XRT_CTRL_EMPTY 0xFFu
+#define XRT_CTRL_DELETED 0x80u
+#define XRT_SWAR_LOW 0x0101010101010101ull
+#define XRT_SWAR_HIGH 0x8080808080808080ull
+
+static inline uint64_t xrt_group_load(const uint8_t *p) {
+    uint64_t g;
+    memcpy(&g, p, sizeof(g));
+    return g;
+}
+
+/* High bit set in each byte that may equal b (false positives possible). */
+static inline uint64_t xrt_group_match(uint64_t g, uint8_t b) {
+    uint64_t x = g ^ (XRT_SWAR_LOW * (uint64_t) b);
+    return (x - XRT_SWAR_LOW) & ~x & XRT_SWAR_HIGH;
+}
+
+/* Exact: EMPTY (0xFF) has bits 7 and 6 set; DELETED only bit 7; FULL neither. */
+static inline uint64_t xrt_group_match_empty(uint64_t g) {
+    return g & (g << 1) & XRT_SWAR_HIGH;
+}
+
+static inline uint64_t xrt_group_match_free(uint64_t g) {
+    return g & XRT_SWAR_HIGH; /* EMPTY or DELETED */
+}
+
+static inline int xrt_swar_first(uint64_t bits) {
+    int n = 0;
+    while (!(bits & 0xFFu)) {
+        bits >>= 8;
+        n++;
+    }
+    return n;
+}
+
+/* xrt_hash_mix_u64 / xrt_hash_bytes live in xrt_value.h (shared with the
+ * compile-time literal hashing in the C backend). */
 
 static inline uint64_t xrt_hash_f64(double d) {
-    uint64_t bits = 0;
-    if (!xr_typed_scalar_bits_f64(d, XR_ELEM_F64, &bits))
-        abort();
+    uint64_t bits;
+    if (d == 0.0)
+        d = 0.0; /* canonicalize -0.0: IEEE == treats them equal */
+    memcpy(&bits, &d, sizeof(bits));
     return xr_hash_core_mix_u64(bits);
-}
-
-static inline uint64_t xrt_typed_scalar_bits_i64_or_abort(int64_t value, uint8_t elem_type,
-                                                          const char *who) {
-    uint64_t bits = 0;
-    if (xr_typed_scalar_bits_i64(value, elem_type, &bits))
-        return bits;
-    fprintf(stderr, "%s: unsupported integer element type %u\n",
-            who ? who : "xrt_typed_scalar_bits_i64", (unsigned) elem_type);
-    abort();
-}
-
-static inline uint64_t xrt_typed_scalar_bits_f64_or_abort(double value, uint8_t elem_type,
-                                                          const char *who) {
-    uint64_t bits = 0;
-    if (xr_typed_scalar_bits_f64(value, elem_type, &bits))
-        return bits;
-    fprintf(stderr, "%s: unsupported float element type %u\n",
-            who ? who : "xrt_typed_scalar_bits_f64", (unsigned) elem_type);
-    abort();
 }
 
 /* Hash for tagged values, consistent with xrt_eq: strings hash content
@@ -537,14 +817,94 @@ static inline uint64_t xrt_hash_value(XrValue v) {
     }
 }
 
+static inline int64_t xrt_swiss_slots_for(int64_t want) {
+    /* Smallest power of two whose 7/8 usable share covers `want` entries. */
+    int64_t slots = XRT_GROUP;
+    if (want < 0)
+        want = 0;
+    while (slots - slots / 8 < want)
+        slots <<= 1;
+    return slots;
+}
+
 static inline uint8_t *xrt_swiss_ctrl_alloc(int64_t slots) {
-    uint8_t *ctrl = (uint8_t *) XRT_MALLOC((size_t) slots + XR_SWISS_GROUP);
+    uint8_t *ctrl = (uint8_t *) XRT_MALLOC((size_t) slots + XRT_GROUP);
     if (!ctrl) {
         fprintf(stderr, "xrt swiss: out of memory\n");
         abort();
     }
-    memset(ctrl, (int) XR_SWISS_CTRL_EMPTY, (size_t) slots + XR_SWISS_GROUP);
+    memset(ctrl, (int) XRT_CTRL_EMPTY, (size_t) slots + XRT_GROUP);
     return ctrl;
+}
+
+static inline void xrt_swiss_ctrl_set(uint8_t *ctrl, int64_t slots, int64_t slot, uint8_t b) {
+    ctrl[slot] = b;
+    if (slot < XRT_GROUP)
+        ctrl[slots + slot] = b; /* mirrored tail keeps group loads in bounds */
+}
+
+/* Find the slot holding `h2`-tagged keys; `eq_slot(ctx, slot)` confirms.
+ * Returns the slot index or -1. */
+typedef int (*xrt_swiss_eq_fn)(void *ctx, int64_t slot);
+
+static inline int64_t xrt_swiss_find(const uint8_t *ctrl, int64_t slots, uint64_t hash,
+                                     xrt_swiss_eq_fn eq, void *ctx) {
+    uint64_t mask = (uint64_t) slots - 1;
+    uint8_t h2 = (uint8_t) (hash & 0x7F);
+    uint64_t pos = (hash >> 7) & mask;
+    uint64_t stride = 0;
+    for (;;) {
+        uint64_t g = xrt_group_load(ctrl + pos);
+        uint64_t m = xrt_group_match(g, h2);
+        while (m) {
+            int off = xrt_swar_first(m);
+            int64_t slot = (int64_t) ((pos + (uint64_t) off) & mask);
+            if (eq(ctx, slot))
+                return slot;
+            m &= ~(0xFFull << ((unsigned) off * 8u)); /* clear matched byte */
+        }
+        if (xrt_group_match_empty(g))
+            return -1;
+        stride += XRT_GROUP;
+        pos = (pos + stride) & mask;
+    }
+}
+
+/* First free (EMPTY or DELETED) slot along the probe sequence. */
+static inline int64_t xrt_swiss_find_free(const uint8_t *ctrl, int64_t slots, uint64_t hash) {
+    uint64_t mask = (uint64_t) slots - 1;
+    uint64_t pos = (hash >> 7) & mask;
+    uint64_t stride = 0;
+    for (;;) {
+        uint64_t g = xrt_group_load(ctrl + pos);
+        uint64_t m = xrt_group_match_free(g);
+        if (m) {
+            int off = xrt_swar_first(m);
+            return (int64_t) ((pos + (uint64_t) off) & mask);
+        }
+        stride += XRT_GROUP;
+        pos = (pos + stride) & mask;
+    }
+}
+
+/* First EMPTY (never DELETED) slot along the probe sequence. Insertion uses this
+ * so a tombstoned slot is never reused while a stale order[] entry still points
+ * at it; tombstones are reclaimed only by rehash compaction. The caller must
+ * ensure a free slot exists (growth_left > 0). */
+static inline int64_t xrt_swiss_find_empty(const uint8_t *ctrl, int64_t slots, uint64_t hash) {
+    uint64_t mask = (uint64_t) slots - 1;
+    uint64_t pos = (hash >> 7) & mask;
+    uint64_t stride = 0;
+    for (;;) {
+        uint64_t g = xrt_group_load(ctrl + pos);
+        uint64_t m = xrt_group_match_empty(g);
+        if (m) {
+            int off = xrt_swar_first(m);
+            return (int64_t) ((pos + (uint64_t) off) & mask);
+        }
+        stride += XRT_GROUP;
+        pos = (pos + stride) & mask;
+    }
 }
 
 /* =========================================================================
@@ -581,6 +941,16 @@ static inline uint8_t xrt_value_type_tag(XrValue v) {
 
 static inline uint32_t xrt_hash32_value(XrValue v) {
     return (uint32_t) xrt_hash_value(v);
+}
+
+static inline uint32_t xrt_ordered_indices_size_for(uint32_t needed, uint32_t max_hbits) {
+    uint32_t size = XR_SWISS_GROUP;
+    while ((uint64_t) size * 2 / 3 < needed) {
+        if (size >= (1u << max_hbits))
+            return 1u << max_hbits;
+        size <<= 1;
+    }
+    return size;
 }
 
 static inline void xrt_map_init_header(xrt_map_t *m) {
@@ -645,8 +1015,10 @@ static inline void xrt_map_resize_tagged(xrt_map_t *m, uint32_t min_needed) {
     uint32_t needed = m->count > min_needed ? m->count : min_needed;
     if (needed < 1)
         needed = 1;
-    uint32_t indices_size = xr_map_indices_size_for(needed);
-    uint32_t entries_cap = xr_map_set_entries_cap_for(indices_size, needed);
+    uint32_t indices_size = xrt_ordered_indices_size_for(needed, XR_MAP_MAXHBITS);
+    uint32_t entries_cap = (uint32_t) ((uint64_t) indices_size * 2 / 3);
+    if (entries_cap < needed)
+        entries_cap = needed;
 
     size_t cbytes = (size_t) indices_size + XR_SWISS_GROUP;
     size_t ibytes = sizeof(int32_t) * (size_t) indices_size;
@@ -697,9 +1069,13 @@ static inline void xrt_map_order_append(xrt_map_t *m, int64_t slot) {
     m->order[m->order_len++] = slot;
 }
 
+static inline int64_t xrt_map_growth_budget(int64_t slots) {
+    return slots - slots / 8; /* 7/8 max load factor */
+}
+
 static inline void xrt_map_alloc_slots(xrt_map_t *m, int64_t slots) {
     m->cap = slots;
-    m->growth_left = xr_swiss_capacity_budget_i64(slots);
+    m->growth_left = xrt_map_growth_budget(slots);
     m->ctrl = xrt_swiss_ctrl_alloc(slots);
     m->keys = XRT_CALLOC((size_t) slots, (size_t) m->key_size);
     m->values = XRT_CALLOC((size_t) slots, (size_t) m->value_size);
@@ -734,8 +1110,10 @@ static inline XrValue xrt_map_new(int64_t cap) {
         if (_need64 < 1)                                                                           \
             _need64 = 1;                                                                           \
         uint32_t _need = (uint32_t) _need64;                                                       \
-        uint32_t _slots = xr_map_indices_size_for(_need);                                          \
-        uint32_t _ecap = xr_map_set_entries_cap_for(_slots, _need);                                \
+        uint32_t _slots = xrt_ordered_indices_size_for(_need, XR_MAP_MAXHBITS);                    \
+        uint32_t _ecap = (uint32_t) ((uint64_t) _slots * 2u / 3u);                                 \
+        if (_ecap < _need)                                                                         \
+            _ecap = _need;                                                                         \
         xrt_map_t *_m = (xrt_map_t *) __builtin_alloca(sizeof(xrt_map_t));                         \
         uint8_t *_ctrl = (uint8_t *) __builtin_alloca((size_t) _slots + XR_SWISS_GROUP);           \
         int32_t *_indices = (int32_t *) __builtin_alloca(sizeof(int32_t) * (size_t) _slots);       \
@@ -783,6 +1161,10 @@ static inline XrValue xrt_map_get(xrt_map_t *m, XrValue key) {
     return eidx >= 0 ? m->entries[eidx].value : XR_NULL_VAL;
 }
 
+static inline XrValue xrt_map_get_owned(xrt_map_t *m, XrValue key) {
+    return xrt_value_to_owned(xrt_map_get(m, key));
+}
+
 static inline int xrt_map_has(xrt_map_t *m, XrValue key) {
     if (xrt_map_is_boolmap(m))
         return xrt_boolmap_has_v((xrt_boolmap_t *) m, key);
@@ -803,6 +1185,10 @@ static inline int xrt_map_delete(xrt_map_t *m, XrValue key) {
     if (slot == UINT32_MAX)
         return 0;
     m->entries[eidx].key_tt = XR_MAP_ENTRY_NIL_KEY;
+    if (!(m->flags & XR_MAP_FLAG_WEAK)) {
+        xrt_release(m->entries[eidx].key);
+        xrt_release(m->entries[eidx].value);
+    }
     m->entries[eidx].key = XR_NULL_VAL;
     m->entries[eidx].value = XR_NULL_VAL;
     m->indices[slot] = XR_MAP_IX_EMPTY;
@@ -824,6 +1210,10 @@ static inline void xrt_map_set(xrt_map_t *m, XrValue key, XrValue val) {
     uint32_t hash = xrt_hash32_value(key);
     int32_t eidx = xrt_map_find_entry(m, key, hash, key_tt);
     if (eidx >= 0) {
+        if (!(m->flags & XR_MAP_FLAG_WEAK)) {
+            xrt_release(key);
+            xrt_release(m->entries[eidx].value);
+        }
         m->entries[eidx].value = val;
         return;
     }
@@ -910,8 +1300,10 @@ static inline void xrt_set_resize_tagged(xrt_set_t *s, uint32_t min_needed) {
     uint32_t needed = s->count > min_needed ? s->count : min_needed;
     if (needed < 1)
         needed = 1;
-    uint32_t indices_size = xr_set_indices_size_for(needed);
-    uint32_t entries_cap = xr_map_set_entries_cap_for(indices_size, needed);
+    uint32_t indices_size = xrt_ordered_indices_size_for(needed, XR_SET_MAXHBITS);
+    uint32_t entries_cap = (uint32_t) ((uint64_t) indices_size * 2 / 3);
+    if (entries_cap < needed)
+        entries_cap = needed;
 
     size_t cbytes = (size_t) indices_size + XR_SWISS_GROUP;
     size_t ibytes = sizeof(int32_t) * (size_t) indices_size;
@@ -964,7 +1356,7 @@ static inline void xrt_set_order_append(xrt_set_t *s, int64_t slot) {
 
 static inline void xrt_set_alloc_slots(xrt_set_t *s, int64_t slots) {
     s->cap = slots;
-    s->growth_left = xr_swiss_capacity_budget_i64(slots);
+    s->growth_left = slots - slots / 8;
     s->ctrl = xrt_swiss_ctrl_alloc(slots);
     s->items = XRT_CALLOC((size_t) slots, (size_t) s->elem_size);
     if (XR_UNLIKELY(!s->items)) {
@@ -987,7 +1379,7 @@ static inline XrValue xrt_set_new_typed(int64_t cap, uint8_t elem_type) {
         if (cap > 0)
             xrt_set_resize_tagged(s, (uint32_t) cap);
     } else {
-        xrt_set_alloc_slots(s, xr_swiss_slots_for_i64(cap));
+        xrt_set_alloc_slots(s, xrt_swiss_slots_for(cap));
     }
     return xr_mkptr(s, XR_TAG_SET);
 }
@@ -1099,8 +1491,10 @@ static inline XrValue xrt_set_new(int64_t cap) {
         if (_need64 < 1)                                                                           \
             _need64 = 1;                                                                           \
         uint32_t _need = (uint32_t) _need64;                                                       \
-        uint32_t _slots = xr_set_indices_size_for(_need);                                          \
-        uint32_t _ecap = xr_map_set_entries_cap_for(_slots, _need);                                \
+        uint32_t _slots = xrt_ordered_indices_size_for(_need, XR_SET_MAXHBITS);                    \
+        uint32_t _ecap = (uint32_t) ((uint64_t) _slots * 2u / 3u);                                 \
+        if (_ecap < _need)                                                                         \
+            _ecap = _need;                                                                         \
         xrt_set_t *_s = (xrt_set_t *) __builtin_alloca(sizeof(xrt_set_t));                         \
         uint8_t *_ctrl = (uint8_t *) __builtin_alloca((size_t) _slots + XR_SWISS_GROUP);           \
         int32_t *_indices = (int32_t *) __builtin_alloca(sizeof(int32_t) * (size_t) _slots);       \
@@ -1129,35 +1523,6 @@ static inline int64_t xrt_set_len(const xrt_set_t *s) {
     return xrt_set_is_typed(s) ? s->len : (int64_t) s->count;
 }
 
-/* Truthiness mirrors the VM: null, false, numeric zero and empty
- * string/Array/Map/Set are falsy; all other objects are truthy. */
-static inline int xr_truthy(XrValue v) {
-    switch (xrt_value_kind(v)) {
-        case XR_TAG_NULL:
-            return xr_truthy_core_eval(XR_TRUTHY_CORE_NULL, 0, 0.0, 0);
-        case XR_TAG_BOOL:
-            return xr_truthy_core_eval(XR_TRUTHY_CORE_BOOL, v.i, 0.0, 0);
-        case XR_TAG_I64:
-            return xr_truthy_core_eval(XR_TRUTHY_CORE_INT, v.i, 0.0, 0);
-        case XR_TAG_F64:
-            return xr_truthy_core_eval(XR_TRUTHY_CORE_FLOAT, 0, v.f, 0);
-        case XR_TAG_STR:
-        case XR_TAG_STR_ARC:
-            return xr_truthy_core_eval(XR_TRUTHY_CORE_SIZED, 0, 0.0, xr_str_len(v));
-        case XR_TAG_ARRAY:
-            return xr_truthy_core_eval(XR_TRUTHY_CORE_SIZED, 0, 0.0,
-                                       ((const xrt_array_t *) v.ptr)->length);
-        case XR_TAG_MAP:
-            return xr_truthy_core_eval(XR_TRUTHY_CORE_SIZED, 0, 0.0,
-                                       xrt_map_len((const xrt_map_t *) v.ptr));
-        case XR_TAG_SET:
-            return xr_truthy_core_eval(XR_TRUTHY_CORE_SIZED, 0, 0.0,
-                                       xrt_set_len((const xrt_set_t *) v.ptr));
-        default:
-            return xr_truthy_core_eval(XR_TRUTHY_CORE_OBJECT, 0, 0.0, 0);
-    }
-}
-
 static inline int xrt_set_slot_is_full(const xrt_set_t *s, int64_t slot) {
     if (xrt_set_is_typed(s))
         return (s->ctrl[slot] & 0x80u) == 0;
@@ -1183,8 +1548,11 @@ static inline int xrt_set_has(xrt_set_t *s, XrValue value) {
 static inline int xrt_set_add(xrt_set_t *s, XrValue value) {
     if (!xrt_set_is_typed(s)) {
         uint32_t hash = xrt_hash32_value(value);
-        if (xrt_set_find_entry(s, value, hash) >= 0)
+        if (xrt_set_find_entry(s, value, hash) >= 0) {
+            if (!(s->flags & XR_SET_FLAG_WEAK))
+                xrt_release(value);
             return 0;
+        }
         if (s->nentries >= s->entries_cap)
             xrt_set_resize_tagged(s, s->count + 1);
         int32_t eidx = (int32_t) s->nentries++;
@@ -1210,6 +1578,8 @@ static inline int xrt_set_delete(xrt_set_t *s, XrValue value) {
         uint32_t slot = xrt_set_find_entry_slot(s, value, hash, &eidx);
         if (slot == UINT32_MAX)
             return 0;
+        if (!(s->flags & XR_SET_FLAG_WEAK))
+            xrt_release(s->entries[eidx].value);
         s->entries[eidx].value = XR_NULL_VAL;
         s->entries[eidx].val_tt = XR_SET_ENTRY_NIL;
         s->indices[slot] = XR_SET_IX_EMPTY;
@@ -1253,8 +1623,8 @@ static inline void xrt_set_clear(xrt_set_t *s) {
         s->count = 0;
         return;
     }
-    memset(s->ctrl, (int) XR_SWISS_CTRL_EMPTY, (size_t) s->cap + XR_SWISS_GROUP);
-    s->growth_left = xr_swiss_capacity_budget_i64(s->cap);
+    memset(s->ctrl, (int) XRT_CTRL_EMPTY, (size_t) s->cap + XRT_GROUP);
+    s->growth_left = s->cap - s->cap / 8;
     s->len = 0;
     s->order_len = 0;
 }
@@ -1315,6 +1685,34 @@ static inline XrValue xrt_map_values(xrt_map_t *m) {
     return arr;
 }
 
+/* Value at the given insertion-order index. Used by enum `for-in` lowering
+ * (getMember) since a user enum is materialized as an insertion-ordered map. */
+static inline XrValue xrt_map_value_at(xrt_map_t *m, int64_t index) {
+    if (!m || index < 0)
+        return XR_NULL_VAL;
+    if (!xrt_map_is_typed(m)) {
+        int64_t out = 0;
+        for (uint32_t i = 0; i < m->nentries; i++) {
+            if (m->entries[i].key_tt != XR_MAP_ENTRY_NIL_KEY) {
+                if (out == index)
+                    return m->entries[i].value;
+                out++;
+            }
+        }
+        return XR_NULL_VAL;
+    }
+    int64_t out = 0;
+    for (int64_t oi = 0; oi < m->order_len; oi++) {
+        int64_t slot = m->order[oi];
+        if (xrt_map_slot_is_full(m, slot)) {
+            if (out == index)
+                return xrt_map_slot_value(m, slot);
+            out++;
+        }
+    }
+    return XR_NULL_VAL;
+}
+
 static inline XrValue xrt_set_value_at(xrt_set_t *s, int64_t index) {
     if (index < 0)
         return XR_NULL_VAL;
@@ -1343,21 +1741,39 @@ static inline XrValue xrt_set_value_at(xrt_set_t *s, int64_t index) {
     return XR_NULL_VAL;
 }
 
+static inline XrValue xrt_set_value_at_owned(xrt_set_t *s, int64_t index) {
+    return xrt_value_to_owned(xrt_set_value_at(s, index));
+}
+
 /* =========================================================================
- * Iterator runtime — backs the for-in iterator protocol over Map / Set.
+ * Iterator runtime — backs the for-in iterator protocol over Map / Set / string.
  * The iterator borrows its source by value (no extra RC: AOT collections are
- * not individually reclaimed) and walks dense entries or typed order[].
+ * not individually reclaimed) and walks dense entries, typed order[], or UTF-8
+ * scalar boundaries.
  * ========================================================================= */
 
-#define XRT_ITER_KEYS 0   /* map: yield key */
-#define XRT_ITER_VALUES 1 /* set: yield value; map: yield value */
-#define XRT_ITER_PAIRS 2  /* map: yield (key, value) tuple */
+#define XRT_ITER_KEYS 0      /* map: yield key */
+#define XRT_ITER_VALUES 1    /* set: yield value; map: yield value */
+#define XRT_ITER_PAIRS 2     /* map/string: yield (key, value) tuple */
+#define XRT_ITER_GENERATOR 3 /* coroutine-backed generator: pull-driven via gen_drive */
+
+typedef struct XrCoroutine XrCoroutine;
 
 typedef struct {
-    XrValue coll;   /* XR_TAG_MAP or XR_TAG_SET being iterated */
-    int64_t cursor; /* next dense entry index or typed order[] cursor */
-    uint8_t kind;   /* XRT_ITER_* projection */
+    XrValue coll;     /* XR_TAG_MAP, XR_TAG_SET, or string being iterated */
+    int64_t cursor;   /* collection cursor, or generator phase: 0=idle 1=buffered 2=done */
+    int64_t index;    /* logical iteration index; used by string pair iteration */
+    uint8_t kind;     /* XRT_ITER_* projection */
+    XrCoroutine *gen; /* XRT_ITER_GENERATOR only; owns the producer coroutine */
 } xrt_iterator_t;
+
+/* Generator iterator pull helpers live in xray_rt_coro. Freestanding AOT
+ * collection users must not reference them or they would pull in the coroutine
+ * runtime for plain Map/Set/String iteration. */
+#ifdef XRT_ENABLE_GENERATORS
+XR_FUNC int xrt_gen_iter_has_next(xrt_iterator_t *it);
+XR_FUNC XrValue xrt_gen_iter_next(xrt_iterator_t *it);
+#endif
 
 static inline XrValue xrt_iterator_new(XrValue coll, uint8_t kind) {
     xrt_iterator_t *it = (xrt_iterator_t *) XRT_MALLOC(sizeof(xrt_iterator_t));
@@ -1367,12 +1783,70 @@ static inline XrValue xrt_iterator_new(XrValue coll, uint8_t kind) {
     }
     it->coll = coll;
     it->cursor = 0;
+    it->index = 0;
     it->kind = kind;
+    it->gen = NULL;
     return xr_mkptr(it, XR_TAG_ITERATOR);
+}
+
+static inline int xrt_iter_utf8_decode_scalar(const char *s, int64_t slen, int64_t *cursor,
+                                              uint32_t *out_cp) {
+    if (!s || !cursor || !out_cp || *cursor < 0 || *cursor >= slen)
+        return 0;
+    const unsigned char *p = (const unsigned char *) s + *cursor;
+    const unsigned char *end = (const unsigned char *) s + slen;
+    unsigned char b0 = p[0];
+    uint32_t cp = 0;
+    int size = 0;
+    if (b0 < 0x80u) {
+        cp = b0;
+        size = 1;
+    } else if ((b0 & 0xE0u) == 0xC0u) {
+        if (p + 2 > end || (p[1] & 0xC0u) != 0x80u)
+            goto invalid;
+        cp = ((uint32_t) (b0 & 0x1Fu) << 6) | (uint32_t) (p[1] & 0x3Fu);
+        if (cp < 0x80u)
+            goto invalid;
+        size = 2;
+    } else if ((b0 & 0xF0u) == 0xE0u) {
+        if (p + 3 > end || (p[1] & 0xC0u) != 0x80u || (p[2] & 0xC0u) != 0x80u)
+            goto invalid;
+        cp = ((uint32_t) (b0 & 0x0Fu) << 12) | ((uint32_t) (p[1] & 0x3Fu) << 6) |
+             (uint32_t) (p[2] & 0x3Fu);
+        if (cp < 0x800u || (cp >= 0xD800u && cp <= 0xDFFFu))
+            goto invalid;
+        size = 3;
+    } else if ((b0 & 0xF8u) == 0xF0u) {
+        if (p + 4 > end || (p[1] & 0xC0u) != 0x80u || (p[2] & 0xC0u) != 0x80u ||
+            (p[3] & 0xC0u) != 0x80u)
+            goto invalid;
+        cp = ((uint32_t) (b0 & 0x07u) << 18) | ((uint32_t) (p[1] & 0x3Fu) << 12) |
+             ((uint32_t) (p[2] & 0x3Fu) << 6) | (uint32_t) (p[3] & 0x3Fu);
+        if (cp < 0x10000u || cp > 0x10FFFFu)
+            goto invalid;
+        size = 4;
+    } else {
+        goto invalid;
+    }
+    *cursor += size;
+    *out_cp = cp;
+    return 1;
+
+invalid:
+    (*cursor)++;
+    *out_cp = 0;
+    return 0;
 }
 
 // Park cursor at the next live entry/order[] slot; return 1 if one exists.
 static inline int xrt_iterator_has_next(xrt_iterator_t *it) {
+    if (it->kind == XRT_ITER_GENERATOR) {
+#ifdef XRT_ENABLE_GENERATORS
+        return xrt_gen_iter_has_next(it);
+#else
+        return 0;
+#endif
+    }
     if (XR_IS_MAP(it->coll)) {
         xrt_map_t *m = (xrt_map_t *) it->coll.ptr;
         if (xrt_map_is_boolmap(m))
@@ -1409,10 +1883,19 @@ static inline int xrt_iterator_has_next(xrt_iterator_t *it) {
         }
         return 0;
     }
+    if (XR_IS_STR(it->coll))
+        return it->cursor < xr_str_len(it->coll);
     return 0;
 }
 
 static inline XrValue xrt_iterator_next(xrt_iterator_t *it) {
+    if (it->kind == XRT_ITER_GENERATOR) {
+#ifdef XRT_ENABLE_GENERATORS
+        return xrt_gen_iter_next(it);
+#else
+        return XR_NULL_VAL;
+#endif
+    }
     if (!xrt_iterator_has_next(it))
         return XR_NULL_VAL;
     if (XR_IS_MAP(it->coll)) {
@@ -1443,6 +1926,20 @@ static inline XrValue xrt_iterator_next(xrt_iterator_t *it) {
         int64_t slot = xrt_set_is_typed(s) ? s->order[it->cursor++] : it->cursor++;
         return xrt_set_slot_item(s, slot);
     }
+    if (XR_IS_STR(it->coll)) {
+        int64_t char_index = it->index++;
+        uint32_t cp = 0;
+        int ok = xrt_iter_utf8_decode_scalar(xr_str_data(it->coll), xr_str_len(it->coll),
+                                             &it->cursor, &cp);
+        XrValue ch = ok ? XR_FROM_CHAR(cp) : XR_NULL_VAL;
+        if (it->kind == XRT_ITER_KEYS)
+            return XR_FROM_INT(char_index);
+        if (it->kind == XRT_ITER_PAIRS) {
+            XrValue kv[2] = {XR_FROM_INT(char_index), ch};
+            return xrt_tuple_make(2, kv);
+        }
+        return ch;
+    }
     return XR_NULL_VAL;
 }
 
@@ -1453,13 +1950,11 @@ static inline XrValue xrt_process_new(const char *file, int argc, char **argv, c
     for (int i = 0; argv && i < argc; i++)
         xrt_array_push(args, xr_box_str(argv[i] ? argv[i] : ""));
 
-    XrValue process = xrt_map_new(PROCESS_FIELD_COUNT + 1);
+    XrValue process = xrt_map_new(4);
     xrt_map_t *m = (xrt_map_t *) process.ptr;
-    xrt_map_set(m, xr_box_str(xr_process_field_name(PROCESS_FIELD_FILE)),
-                file ? xr_box_str(file) : XR_NULL_VAL);
-    xrt_map_set(m, xr_box_str(xr_process_field_name(PROCESS_FIELD_ARGS)), args);
-    xrt_map_set(m, xr_box_str(xr_process_field_name(PROCESS_FIELD_DIR)),
-                dir ? xr_box_str(dir) : XR_NULL_VAL);
+    xrt_map_set(m, xr_box_str("file"), file ? xr_box_str(file) : XR_NULL_VAL);
+    xrt_map_set(m, xr_box_str("args"), args);
+    xrt_map_set(m, xr_box_str("dir"), dir ? xr_box_str(dir) : XR_NULL_VAL);
     return process;
 }
 
@@ -1467,8 +1962,14 @@ static inline XrValue xrt_process_new(const char *file, int argc, char **argv, c
  * Json object runtime (flat field array, O(1) indexed access)
  * ========================================================================= */
 
+enum {
+    XRT_OBJECT_JSON = 0,
+    XRT_OBJECT_RECORD = 1,
+};
+
 typedef struct {
     int64_t field_count;
+    uint8_t object_kind;
     const char **field_names;
     xrt_map_t *dynamic_fields;
     XrValue fields[]; /* flexible array of field values */
@@ -1476,14 +1977,15 @@ typedef struct {
 
 static inline XrValue xrt_value_clone_for_coro(XrValue val);
 
-static inline XrValue xrt_json_new(int64_t field_count) {
+static inline XrValue xrt_object_new_kind(int64_t field_count, uint8_t object_kind) {
     xrt_json_t *j =
         (xrt_json_t *) XRT_MALLOC(sizeof(xrt_json_t) + (size_t) field_count * sizeof(XrValue));
     if (XR_UNLIKELY(!j)) {
-        fprintf(stderr, "xrt_json_new: out of memory\n");
+        fprintf(stderr, "xrt_object_new: out of memory\n");
         abort();
     }
     j->field_count = field_count;
+    j->object_kind = object_kind;
     j->field_names = NULL;
     j->dynamic_fields = NULL;
     for (int64_t i = 0; i < field_count; i++)
@@ -1491,8 +1993,9 @@ static inline XrValue xrt_json_new(int64_t field_count) {
     return xr_mkptr(j, XR_TAG_PTR);
 }
 
-static inline XrValue xrt_json_new_named(int64_t field_count, const char *const *field_names) {
-    XrValue obj = xrt_json_new(field_count);
+static inline XrValue xrt_object_new_named_kind(int64_t field_count, const char *const *field_names,
+                                                uint8_t object_kind) {
+    XrValue obj = xrt_object_new_kind(field_count, object_kind);
     xrt_json_t *j = (xrt_json_t *) obj.ptr;
     if (field_count <= 0 || !field_names)
         return obj;
@@ -1504,6 +2007,22 @@ static inline XrValue xrt_json_new_named(int64_t field_count, const char *const 
     for (int64_t i = 0; i < field_count; i++)
         j->field_names[i] = field_names[i] ? field_names[i] : "?";
     return obj;
+}
+
+static inline XrValue xrt_json_new(int64_t field_count) {
+    return xrt_object_new_kind(field_count, XRT_OBJECT_JSON);
+}
+
+static inline XrValue xrt_json_new_named(int64_t field_count, const char *const *field_names) {
+    return xrt_object_new_named_kind(field_count, field_names, XRT_OBJECT_JSON);
+}
+
+static inline XrValue xrt_record_new(int64_t field_count) {
+    return xrt_object_new_kind(field_count, XRT_OBJECT_RECORD);
+}
+
+static inline XrValue xrt_record_new_named(int64_t field_count, const char *const *field_names) {
+    return xrt_object_new_named_kind(field_count, field_names, XRT_OBJECT_RECORD);
 }
 
 static inline int64_t xrt_json_find_field(xrt_json_t *j, const char *name) {
@@ -1529,22 +2048,6 @@ static inline void xrt_json_set_field(XrValue obj, int field_idx, XrValue val) {
         j->fields[field_idx] = val;
 }
 
-#ifdef XRT_IMPL
-XRT_COLD _Noreturn void xrt_throw_error(int code, const char *message) {
-    size_t len = message ? strlen(message) : 0;
-    XrValue exc = xrt_json_new_named(EXCEPTION_FIELD_COUNT, xr_exception_field_names());
-    XrValue msg = xrt_str_alloc(len);
-    if (len > 0)
-        memcpy(xr_str_buf(msg), message, len);
-    xrt_json_set_field(exc, EXCEPTION_FIELD_MESSAGE, msg);
-    xrt_json_set_field(exc, EXCEPTION_FIELD_STACK, xrt_array_new_len(0));
-    xrt_json_set_field(exc, EXCEPTION_FIELD_CAUSE, XR_NULL_VAL);
-    xrt_json_set_field(exc, EXCEPTION_FIELD_CODE, XR_FROM_INT(code));
-    xrt_json_set_field(exc, EXCEPTION_FIELD_DATA, XR_NULL_VAL);
-    xrt_throw_exc(exc);
-}
-#endif
-
 static inline XrValue xrt_json_get_name(XrValue obj, const char *name) {
     if (obj.tag != XR_TAG_PTR || !obj.ptr || !name)
         return XR_NULL_VAL;
@@ -1553,6 +2056,10 @@ static inline XrValue xrt_json_get_name(XrValue obj, const char *name) {
     if (idx >= 0)
         return j->fields[idx];
     return j->dynamic_fields ? xrt_map_get(j->dynamic_fields, xr_box_str(name)) : XR_NULL_VAL;
+}
+
+static inline XrValue xrt_json_get_name_owned(XrValue obj, const char *name) {
+    return xrt_value_to_owned(xrt_json_get_name(obj, name));
 }
 
 static inline XrValue xrt_json_set_name(XrValue obj, const char *name, XrValue val) {
@@ -1572,29 +2079,182 @@ static inline XrValue xrt_json_set_name(XrValue obj, const char *name, XrValue v
     return val;
 }
 
-static inline XrValue xrt_getprop_name(XrValue obj, const char *name) {
-    if (XR_IS_MAP(obj)) {
-        xrt_map_t *map = (xrt_map_t *) obj.ptr;
-        if (name && strcmp(name, "memberCount") == 0 && (map->flags & XR_MAP_FLAG_ENUM_TYPE))
-            return XR_FROM_INT(xrt_map_len(map));
-        return xrt_map_get(map, xr_box_str(name));
+static inline XrValue xrt_json_encode_value(XrValue val, int depth);
+
+#define XRT_JSON_ENCODE_MAX_DEPTH 512
+
+static inline void xrt_json_encode_abort(const char *msg, XrValue val) {
+    fprintf(stderr, "Json.encode: %s (tag=%u, heap_type=%u)\n", msg ? msg : "unsupported value",
+            (unsigned) val.tag, (unsigned) val.heap_type);
+    abort();
+}
+
+static inline void xrt_json_put_string_key(XrValue obj, XrValue key, XrValue val) {
+    if (!XR_IS_STR(key))
+        xrt_json_encode_abort("object key must be string", key);
+    xrt_json_t *j = (xrt_json_t *) obj.ptr;
+    const char *name = xr_str_data(key);
+    int64_t idx = xrt_json_find_field(j, name);
+    if (idx >= 0) {
+        j->fields[idx] = val;
+        return;
     }
-    if (obj.tag == XR_TAG_ENUM) {
-        const XrAotEnumValueView *ev = (const XrAotEnumValueView *) obj.ptr;
-        if (!ev || !name)
-            return XR_NULL_VAL;
-        if (strcmp(name, "name") == 0)
-            return ev->member_name ? xr_box_str(ev->member_name) : XR_NULL_VAL;
-        if (strcmp(name, "ordinal") == 0)
-            return XR_FROM_INT((int64_t) obj.ext);
-        if (strcmp(name, "value") == 0) {
-            if (ev->value_kind == XR_AOT_ENUM_LITERAL_STRING)
-                return ev->string_value ? xr_box_str(ev->string_value) : XR_NULL_VAL;
-            return ev->value;
+    if (!j->dynamic_fields) {
+        XrValue dyn = xrt_map_new(8);
+        j->dynamic_fields = (xrt_map_t *) dyn.ptr;
+    }
+    xrt_map_set(j->dynamic_fields, key, val);
+}
+
+static inline XrValue xrt_json_encode_map_key(XrValue key) {
+    if (XR_IS_STR(key))
+        return key;
+    if (XR_IS_INT(key)) {
+        char buf[32];
+        snprintf(buf, sizeof(buf), "%lld", (long long) XR_TO_INT(key));
+        return xrt_str_from_cstr(buf);
+    }
+    xrt_json_encode_abort("Map keys must be string or int", key);
+    return XR_NULL_VAL;
+}
+
+static inline XrValue xrt_json_encode_array_value(xrt_array_t *src, int depth) {
+    XrValue dst = xrt_array_new(src ? src->length : 0);
+    if (!src)
+        return dst;
+    for (int64_t i = 0; i < src->length; i++) {
+        XrValue item = xr_typed_get(src->data, (int32_t) i, src->elem_type);
+        xrt_array_push(dst, xrt_json_encode_value(item, depth + 1));
+    }
+    return dst;
+}
+
+static inline XrValue xrt_json_encode_object_value(xrt_json_t *src, int depth) {
+    if (!src)
+        return xrt_json_new(0);
+    XrValue dstv = xrt_json_new_named(src->field_count, src->field_names);
+    xrt_json_t *dst = (xrt_json_t *) dstv.ptr;
+    for (int64_t i = 0; i < src->field_count; i++)
+        dst->fields[i] = xrt_json_encode_value(src->fields[i], depth + 1);
+    if (src->dynamic_fields) {
+        xrt_map_t *m = src->dynamic_fields;
+        for (uint32_t i = 0; i < m->nentries; i++) {
+            XrMapEntry *entry = &m->entries[i];
+            if (entry->key_tt == XR_MAP_ENTRY_NIL_KEY)
+                continue;
+            xrt_json_put_string_key(dstv, entry->key,
+                                    xrt_json_encode_value(entry->value, depth + 1));
         }
     }
+    return dstv;
+}
+
+static inline XrValue xrt_json_encode_map_value(xrt_map_t *src, int depth) {
+    XrValue dst = xrt_json_new(0);
+    if (!src)
+        return dst;
+    if (xrt_map_is_boolmap(src))
+        xrt_json_encode_abort("Map keys must be string or int", XR_FROM_BOOL(1));
+    if (!xrt_map_is_typed(src)) {
+        for (uint32_t i = 0; i < src->nentries; i++) {
+            XrMapEntry *entry = &src->entries[i];
+            if (entry->key_tt == XR_MAP_ENTRY_NIL_KEY)
+                continue;
+            XrValue key = xrt_json_encode_map_key(entry->key);
+            xrt_json_put_string_key(dst, key, xrt_json_encode_value(entry->value, depth + 1));
+        }
+        return dst;
+    }
+    for (int64_t oi = 0; oi < src->order_len; oi++) {
+        int64_t slot = src->order[oi];
+        if (!xrt_map_slot_is_full(src, slot))
+            continue;
+        XrValue key = xrt_json_encode_map_key(xrt_map_slot_key(src, slot));
+        xrt_json_put_string_key(dst, key,
+                                xrt_json_encode_value(xrt_map_slot_value(src, slot), depth + 1));
+    }
+    return dst;
+}
+
+static inline XrValue xrt_json_encode_set_value(xrt_set_t *src, int depth) {
+    XrValue dst = xrt_array_new(src ? xrt_set_len(src) : 0);
+    if (!src)
+        return dst;
+    if (!xrt_set_is_typed(src)) {
+        for (uint32_t i = 0; i < src->nentries; i++) {
+            if (src->entries[i].val_tt == XR_SET_ENTRY_NIL)
+                continue;
+            xrt_array_push(dst, xrt_json_encode_value(src->entries[i].value, depth + 1));
+        }
+        return dst;
+    }
+    for (int64_t oi = 0; oi < src->order_len; oi++) {
+        int64_t slot = src->order[oi];
+        if (xrt_set_slot_is_full(src, slot))
+            xrt_array_push(dst, xrt_json_encode_value(xrt_set_slot_item(src, slot), depth + 1));
+    }
+    return dst;
+}
+
+static inline XrValue xrt_json_encode_value(XrValue val, int depth) {
+    if (depth > XRT_JSON_ENCODE_MAX_DEPTH)
+        xrt_json_encode_abort("value is too deeply nested", val);
+    switch (xrt_value_kind(val)) {
+        case XR_TAG_NULL:
+        case XR_TAG_BOOL:
+        case XR_TAG_I64:
+        case XR_TAG_STR:
+        case XR_TAG_STR_ARC:
+            return val;
+        case XR_TAG_F64:
+            return isfinite(val.f) ? val : XR_NULL_VAL;
+        case XR_TAG_CHAR: {
+            char buf[4];
+            int n = xrt_char_utf8_encode(XR_TO_CHAR(val), buf);
+            if (n <= 0)
+                return XR_NULL_VAL;
+            XrValue out = xrt_str_alloc((size_t) n);
+            memcpy(xr_str_buf(out), buf, (size_t) n);
+            return out;
+        }
+        case XR_TAG_ENUM:
+            return xrt_enum_value_name(val);
+        case XR_TAG_ARRAY:
+            return xrt_json_encode_array_value((xrt_array_t *) val.ptr, depth);
+        case XR_TAG_MAP:
+            return xrt_json_encode_map_value((xrt_map_t *) val.ptr, depth);
+        case XR_TAG_SET:
+            return xrt_json_encode_set_value((xrt_set_t *) val.ptr, depth);
+        case XR_TAG_PTR:
+            if (val.ptr && val.heap_type == 0)
+                return xrt_json_encode_object_value((xrt_json_t *) val.ptr, depth);
+            break;
+        default:
+            break;
+    }
+    xrt_json_encode_abort("cannot encode value to JSON", val);
+    return XR_NULL_VAL;
+}
+
+static inline XrValue xrt_json_encode(XrValue val) {
+    return xrt_json_encode_value(val, 0);
+}
+
+static inline XrValue xrt_getprop_name(XrValue obj, const char *name) {
+    if (obj.tag == XR_TAG_ENUM) {
+        if (!name)
+            return XR_NULL_VAL;
+        if (strcmp(name, "name") == 0)
+            return xrt_enum_value_name(obj);
+        if (strcmp(name, "value") == 0)
+            return xrt_enum_value_raw(obj);
+        if (strcmp(name, "ordinal") == 0)
+            return xrt_enum_value_ordinal(obj);
+    }
+    if (XR_IS_MAP(obj))
+        return xrt_map_get_owned((xrt_map_t *) obj.ptr, xr_box_str(name));
     if (obj.tag == XR_TAG_PTR && obj.ptr && obj.heap_type == 0)
-        return xrt_json_get_name(obj, name);
+        return xrt_json_get_name_owned(obj, name);
     return XR_NULL_VAL;
 }
 
@@ -1612,7 +2272,7 @@ static inline XrValue xrt_json_clone_for_coro(XrValue val) {
     if (val.tag != XR_TAG_PTR || !val.ptr)
         return val;
     xrt_json_t *src = (xrt_json_t *) val.ptr;
-    XrValue dstv = xrt_json_new_named(src->field_count, src->field_names);
+    XrValue dstv = xrt_object_new_named_kind(src->field_count, src->field_names, src->object_kind);
     xrt_json_t *dst = (xrt_json_t *) dstv.ptr;
     for (int64_t i = 0; i < src->field_count; i++)
         dst->fields[i] = xrt_value_clone_for_coro(src->fields[i]);
@@ -1629,6 +2289,34 @@ static inline XrValue xrt_json_clone_for_coro(XrValue val) {
         dst->dynamic_fields = dst_map;
     }
     return dstv;
+}
+
+/* Object spread `{...src}`: copy every field of `src` into `dst`, overwriting
+ * existing keys so later spread parts / literal fields win.  AOT json fields
+ * are kept alive by escape analysis (the spread source is HEAP_ESCAPE), so no
+ * per-value retain is needed — this mirrors how object-literal fields are
+ * stored without an explicit dup. */
+static inline void xrt_json_merge(XrValue dst_val, XrValue src_val) {
+    if (dst_val.tag != XR_TAG_PTR || !dst_val.ptr)
+        return;
+    if (src_val.tag != XR_TAG_PTR || !src_val.ptr)
+        return;
+    xrt_json_t *src = (xrt_json_t *) src_val.ptr;
+    for (int64_t i = 0; i < src->field_count; i++) {
+        const char *name = src->field_names ? src->field_names[i] : NULL;
+        if (name)
+            xrt_json_set_name(dst_val, name, src->fields[i]);
+    }
+    if (src->dynamic_fields) {
+        xrt_map_t *m = src->dynamic_fields;
+        for (uint32_t i = 0; i < m->nentries; i++) {
+            XrMapEntry *entry = &m->entries[i];
+            if (entry->key_tt == XR_MAP_ENTRY_NIL_KEY)
+                continue;
+            if (XR_IS_STR(entry->key))
+                xrt_json_set_name(dst_val, xr_str_data(entry->key), entry->value);
+        }
+    }
 }
 
 #include "xrt_index_helpers.inc.c"
@@ -1752,6 +2440,18 @@ static inline void xrt_dispatch_builtin_destructor(uint32_t kind, void *obj) {
 
 static inline XrValue xrt_value_clone_for_coro(XrValue val) {
     switch (xrt_value_kind(val)) {
+        case XR_TAG_STR:
+            return val;
+        case XR_TAG_STR_ARC: {
+            xrt_str_t *src = (xrt_str_t *) val.ptr;
+            if (!src)
+                return val;
+            XrValue dstv = xrt_str_alloc((size_t) src->len);
+            xrt_str_t *dst = (xrt_str_t *) dstv.ptr;
+            dst->hash = src->hash;
+            memcpy(xr_str_buf(dstv), src->data, (size_t) src->len);
+            return dstv;
+        }
         case XR_TAG_ARRAY: {
             xrt_array_t *src = (xrt_array_t *) val.ptr;
             if (!src)
@@ -1788,7 +2488,7 @@ static inline XrValue xrt_value_clone_for_coro(XrValue val) {
                 /* Same geometry: clone the slot arrays and control bytes. */
                 dst->len = src->len;
                 dst->growth_left = src->growth_left;
-                memcpy(dst->ctrl, src->ctrl, (size_t) src->cap + XR_SWISS_GROUP);
+                memcpy(dst->ctrl, src->ctrl, (size_t) src->cap + XRT_GROUP);
                 memcpy(dst->keys, src->keys, (size_t) src->cap * (size_t) src->key_size);
                 memcpy(dst->values, src->values, (size_t) src->cap * (size_t) src->value_size);
                 xrt_map_order_reserve(dst, src->order_len);
@@ -1826,7 +2526,7 @@ static inline XrValue xrt_value_clone_for_coro(XrValue val) {
             if (src->elem_type != XR_ELEM_ANY && dst->cap == src->cap) {
                 dst->len = src->len;
                 dst->growth_left = src->growth_left;
-                memcpy(dst->ctrl, src->ctrl, (size_t) src->cap + XR_SWISS_GROUP);
+                memcpy(dst->ctrl, src->ctrl, (size_t) src->cap + XRT_GROUP);
                 memcpy(dst->items, src->items, (size_t) src->cap * (size_t) src->elem_size);
                 xrt_set_order_reserve(dst, src->order_len);
                 memcpy(dst->order, src->order, (size_t) src->order_len * sizeof(int64_t));
@@ -1863,7 +2563,7 @@ static inline XrValue xrt_value_clone_for_coro(XrValue val) {
             if (XR_IS_ARRAY_REF(val)) {
                 uint8_t elem_type = XR_ARRAY_REF_ELEM_TYPE(val);
                 uint16_t elem_count = XR_ARRAY_REF_ELEM_COUNT(val);
-                size_t size = (size_t) xr_native_type_size(elem_type) * (size_t) elem_count;
+                size_t size = xrt_native_type_size(elem_type) * (size_t) elem_count;
                 void *dst = xrt_arc_alloc(size);
                 if (XR_UNLIKELY(!dst)) {
                     fprintf(stderr, "xrt_value_clone_for_coro: out of memory\n");
@@ -1882,7 +2582,6 @@ static inline XrValue xrt_value_clone_for_coro(XrValue val) {
                                 : xr_mkptr(dst, XR_TAG_STRUCT_REF);
         }
         case XR_TAG_REGEX:
-        case XR_TAG_DATETIME:
             xrt_retain(val);
             return val;
         default:

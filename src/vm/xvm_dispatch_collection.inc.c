@@ -39,19 +39,26 @@
 ** Container Creation Instructions
 ** ======================================================== */
 
+#define VM_ARRAY_CHECK_STORABLE(arr, val)                                                          \
+    do {                                                                                           \
+        if ((arr)->elem_type == XR_ELEM_CHAR && !XR_IS_CHAR(val)) {                                \
+            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Array<char> element must be char");            \
+        }                                                                                          \
+    } while (0)
+
 vmcase(OP_NEWARRAY) {
     /* OP_NEWARRAY: create array
     ** A = destination register
     ** B = capacity/initial element count
     ** C = (elem_tid << 2) | storage_mode
     **     storage_mode: bits 0-1 (0=normal, 1=shared)
-    **     elem_tid:     bits 2-6 (XrTypeId, 0=any)
+    **     elem_tid:     bits 2-7 (XrTypeId, 0=any)
     */
     int a = GETARG_A(i);
     int b = GETARG_B(i);
     int c_field = GETARG_C(i);
     int storage_mode = c_field & 0x03;
-    uint8_t elem_tid = (uint8_t) ((c_field >> 2) & 0x1F);
+    uint8_t elem_tid = (uint8_t) (c_field >> 2);
     uint8_t elem_type = xr_tid_to_elem_type(elem_tid);
 
     XrArray *array;
@@ -84,13 +91,13 @@ vmcase(OP_NEWARRAY) {
              * Caller populates via OP_INDEX_SET / OP_ARRAY_INIT afterward.
              * Pushing from registers would crash on non-numeric garbage. */
             array->length = b;
-        } else if (b > 0 && array->data) {
-            /* ANY array literals are also born at their final length so that
-             * user-facing INDEX_SET never doubles as append. Initialize slots
-             * before the post-allocation GC check can scan them. */
-            memset(array->data, 0, (size_t) b * sizeof(XrValue));
-            array->length = b;
         }
+        /* ANY arrays: b is capacity hint only. length stays 0.
+         * lower_array_literal emits OP_INDEX_SET arr[i]=v for i=0..n-1,
+         * which append-grows via the idx == length branch of OP_INDEX_SET.
+         * This mirrors the OP_INDEX_SET append-grow path and avoids reading
+         * uninitialized register slots that would only be immediately
+         * overwritten by the subsequent OP_INDEX_SET. */
     }
     R(a) = xr_value_from_array(array);
     if (storage_mode == 0)
@@ -104,14 +111,14 @@ vmcase(OP_ARRAY_NEW_CAP) {
     int c_field = GETARG_C(i);
     XrValue cap_value = R(b);
     if (!XR_IS_INT(cap_value)) {
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_ARRAY_CAPACITY_EXPECTS_MSG);
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Array capacity must be an integer");
     }
     int32_t cap = (int32_t) XR_TO_INT(cap_value);
     if (cap < 0)
         cap = 0;
 
     int storage_mode = c_field & 0x03;
-    uint8_t elem_tid = (uint8_t) ((c_field >> 2) & 0x1F);
+    uint8_t elem_tid = (uint8_t) (c_field >> 2);
     uint8_t elem_type = xr_tid_to_elem_type(elem_tid);
 
     XrArray *array;
@@ -303,7 +310,21 @@ vmcase(OP_NEWRANGE) {
     int c = GETARG_C(i);
     int64_t start_val = XR_TO_INT(R(b));
     int64_t end_val = XR_TO_INT(R(c));
-    R(a) = xr_range_new(isolate, start_val, end_val);
+    R(a) = xr_range_new(isolate, start_val, end_val, false);
+    checkGC(base + a + 1);
+    vmbreak;
+}
+
+vmcase(OP_NEWRANGE_INCLUSIVE) {
+    /* OP_NEWRANGE_INCLUSIVE: create lazy inclusive Range object
+    ** R[A] = Range inclusive(R[B], R[C])
+    */
+    int a = GETARG_A(i);
+    int b = GETARG_B(i);
+    int c = GETARG_C(i);
+    int64_t start_val = XR_TO_INT(R(b));
+    int64_t end_val = XR_TO_INT(R(c));
+    R(a) = xr_range_new(isolate, start_val, end_val, true);
     checkGC(base + a + 1);
     vmbreak;
 }
@@ -416,7 +437,9 @@ vmcase(OP_ARRAY_GET) {
                     break;
             }
         } else {
-            VM_ARRAY_INDEX_OOB(idx, ecount);
+            VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS,
+                             "fixed array index out of range: %d (length %u)", idx,
+                             (unsigned) ecount);
         }
         vmbreak;
     }
@@ -506,15 +529,20 @@ vmcase(OP_ARRAY_GETC) {
                     break;
             }
         } else {
-            VM_ARRAY_INDEX_OOB(c, ecount);
+            VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS,
+                             "fixed array index out of range: %d (length %u)", c,
+                             (unsigned) ecount);
         }
         vmbreak;
     }
     // String indexing support
     if (XR_IS_STRING(obj_val)) {
         XrString *str = XR_TO_STRING(obj_val);
-        XrString *ch = xr_string_char_at_unicode(isolate, str, (size_t) c);
-        R(a) = ch ? xr_string_value(ch) : xr_null();
+        uint32_t cp = 0;
+        R(a) = (c >= 0 && xr_utf8_char_at(str->data, str->length, (size_t) c, &cp, NULL) &&
+                xr_unicode_is_scalar(cp))
+                   ? xr_char(cp)
+                   : xr_null();
         vmbreak;
     }
     // Array indexing (includes slices — capacity==0 && source!=NULL)
@@ -532,9 +560,12 @@ vmcase(OP_ARRAY_GETC) {
     {
         XrRange *rng = xr_value_get_range_body(isolate, obj_val);
         if (rng) {
-            bool ok = false;
-            int64_t value = xr_range_index(rng, c, &ok);
-            R(a) = ok ? xr_int(value) : xr_null();
+            int64_t len = xr_range_length(rng);
+            if (c >= 0 && c < len) {
+                R(a) = xr_int(rng->start + (int64_t) c * rng->step);
+            } else {
+                R(a) = xr_null();
+            }
             vmbreak;
         }
     }
@@ -615,25 +646,24 @@ vmcase(OP_ARRAY_SET) {
                     break;
             }
         } else {
-            VM_ARRAY_INDEX_OOB(idx, ecount);
+            VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS,
+                             "fixed array index out of range: %d (length %u)", idx,
+                             (unsigned) ecount);
         }
         vmbreak;
     }
     if (XR_IS_ARRAY(obj_val)) {
         XrArray *arr = XR_TO_ARRAY(obj_val);
-        int64_t raw_idx = XR_TO_INT(R(b));
+        int idx = (int) XR_TO_INT(R(b));
         XrValue _av = R(c);
-        XrArrayCoreIndexSetPlan plan = xr_array_core_index_set_plan(arr->length, raw_idx);
-        if (plan.kind == XR_ARRAY_CORE_INDEX_SET_WRITE) {
-            int idx = (int) plan.index;
+        if ((unsigned) idx < (unsigned) arr->length) {
             if (arr->elem_type == XR_ELEM_ANY) {
                 ((XrValue *) arr->data)[idx] = _av;
                 XR_ARRAY_MARK_REFS(arr, _av);
             } else {
+                VM_ARRAY_CHECK_STORABLE(arr, _av);
                 xr_array_set_element(arr, idx, _av);
             }
-        } else {
-            VM_ARRAY_INDEX_OOB(raw_idx, arr->length);
         }
         vmbreak;
     }
@@ -714,24 +744,23 @@ vmcase(OP_ARRAY_SETC) {
                     break;
             }
         } else {
-            VM_ARRAY_INDEX_OOB(b, ecount);
+            VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS,
+                             "fixed array index out of range: %d (length %u)", b,
+                             (unsigned) ecount);
         }
         vmbreak;
     }
     if (XR_IS_ARRAY(obj_val)) {
         XrArray *arr = XR_TO_ARRAY(obj_val);
         XrValue _acv = R(c);
-        XrArrayCoreIndexSetPlan plan = xr_array_core_index_set_plan(arr->length, b);
-        if (plan.kind == XR_ARRAY_CORE_INDEX_SET_WRITE) {
-            int idx = (int) plan.index;
+        if (b < arr->length) {
             if (arr->elem_type == XR_ELEM_ANY) {
-                ((XrValue *) arr->data)[idx] = _acv;
+                ((XrValue *) arr->data)[b] = _acv;
                 XR_ARRAY_MARK_REFS(arr, _acv);
             } else {
-                xr_array_set_element(arr, idx, _acv);
+                VM_ARRAY_CHECK_STORABLE(arr, _acv);
+                xr_array_set_element(arr, b, _acv);
             }
-        } else {
-            VM_ARRAY_INDEX_OOB(b, arr->length);
         }
         vmbreak;
     }
@@ -775,7 +804,30 @@ vmcase(OP_ARRAY_PUSH) {
         ((XrValue *) arr->data)[arr->length++] = val;
         XR_ARRAY_MARK_REFS(arr, val);
     } else {
+        VM_ARRAY_CHECK_STORABLE(arr, val);
         xr_array_set_element(arr, arr->length++, val);
+    }
+    vmbreak;
+}
+
+vmcase(OP_ARRAY_EXTEND) {
+    // OP_ARRAY_EXTEND: splice every element of R[B]:Array into R[A]:Array.
+    // Elements are borrowed from the source, so each is retained as it is
+    // copied (the source array keeps its own references). Mirrors the
+    // retain-per-element contract of Array.concat.
+    int a = GETARG_A(i);
+    int b = GETARG_B(i);
+    if (!XR_IS_ARRAY(R(b))) {
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "array spread source must be an array");
+    }
+    XrArray *dst = XR_TO_ARRAY(R(a));
+    XrArray *src = XR_TO_ARRAY(R(b));
+    int32_t n = src->length;
+    for (int32_t j = 0; j < n; j++) {
+        XrValue elem = xr_array_get_element(src, j);
+        VM_ARRAY_CHECK_STORABLE(dst, elem);
+        xr_rc_retain_value(elem);
+        xr_array_push(dst, elem);
     }
     vmbreak;
 }
@@ -793,10 +845,10 @@ vmcase(OP_ARRAY_RESERVE) {
     int a = GETARG_A(i);
     int b = GETARG_B(i);
     if (!XR_IS_ARRAY(R(a)) || !XR_IS_INT(R(b))) {
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_ARRAY_RESERVE_EXPECTS_MSG);
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Array.reserve(capacity) expects an integer");
     }
-    if (!xr_array_reserve(XR_TO_ARRAY(R(a)), XR_TO_INT(R(b)))) {
-        VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, XR_ERROR_CORE_ARRAY_RESERVE_FAILED_MSG);
+    if (!xr_array_reserve(XR_TO_ARRAY(R(a)), (int32_t) XR_TO_INT(R(b)))) {
+        VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, "Array.reserve failed");
     }
     vmbreak;
 }
@@ -806,10 +858,12 @@ vmcase(OP_ARRAY_RESIZE) {
     int b = GETARG_B(i);
     int c = GETARG_C(i);
     if (!XR_IS_ARRAY(R(a)) || !XR_IS_INT(R(b))) {
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_ARRAY_RESIZE_EXPECTS_MSG);
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Array.resize(length, fill) expects integer length");
     }
-    if (!xr_array_resize(XR_TO_ARRAY(R(a)), XR_TO_INT(R(b)), R(c))) {
-        VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, XR_ERROR_CORE_ARRAY_RESIZE_FAILED_MSG);
+    XrArray *_resize_arr = XR_TO_ARRAY(R(a));
+    VM_ARRAY_CHECK_STORABLE(_resize_arr, R(c));
+    if (!xr_array_resize(_resize_arr, (int32_t) XR_TO_INT(R(b)), R(c))) {
+        VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, "Array.resize failed");
     }
     vmbreak;
 }
@@ -819,15 +873,15 @@ vmcase(OP_BYTES_LOAD_U32_LE) {
     int b = GETARG_B(i);
     int c = GETARG_C(i);
     if (!XR_IS_ARRAY(R(b)) || !XR_IS_INT(R(c))) {
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTES_LOAD_U32_EXPECTS_MSG);
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Bytes.loadU32LE(offset) expects Bytes and integer");
     }
     XrArray *arr = XR_TO_ARRAY(R(b));
     if (arr->elem_type != XR_ELEM_U8)
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTES_LOAD_U32_RECEIVER_MSG);
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Bytes.loadU32LE receiver must be Bytes");
     bool ok = false;
     uint32_t value = xr_array_load_u32_le(arr, XR_TO_INT(R(c)), &ok);
     if (!ok)
-        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTES_LOAD_U32_OOB_MSG);
+        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "Bytes.loadU32LE offset out of bounds");
     R(a) = xr_int((xr_Integer) value);
     vmbreak;
 }
@@ -837,15 +891,15 @@ vmcase(OP_BYTES_LOAD_U64_LE) {
     int b = GETARG_B(i);
     int c = GETARG_C(i);
     if (!XR_IS_ARRAY(R(b)) || !XR_IS_INT(R(c))) {
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTES_LOAD_U64_EXPECTS_MSG);
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Bytes.loadU64LE(offset) expects Bytes and integer");
     }
     XrArray *arr = XR_TO_ARRAY(R(b));
     if (arr->elem_type != XR_ELEM_U8)
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTES_LOAD_U64_RECEIVER_MSG);
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Bytes.loadU64LE receiver must be Bytes");
     bool ok = false;
     uint64_t value = xr_array_load_u64_le(arr, XR_TO_INT(R(c)), &ok);
     if (!ok)
-        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTES_LOAD_U64_OOB_MSG);
+        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "Bytes.loadU64LE offset out of bounds");
     R(a) = xr_int((xr_Integer) value);
     vmbreak;
 }
@@ -872,14 +926,15 @@ vmcase(OP_BYTES_COPY_WITHIN) {
     int a = GETARG_A(i);
     if (!XR_IS_ARRAY(R(a)) || !XR_IS_INT(R(a + 1)) || !XR_IS_INT(R(a + 2)) ||
         !XR_IS_INT(R(a + 3))) {
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTES_COPY_WITHIN_EXPECTS_MSG);
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
+                         "Bytes.copyWithin expects integer offsets and count");
     }
     XrArray *arr = XR_TO_ARRAY(R(a));
     if (arr->elem_type != XR_ELEM_U8)
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTES_COPY_WITHIN_RECEIVER_MSG);
-    if (!xr_array_bytes_copy_within(arr, XR_TO_INT(R(a + 1)), XR_TO_INT(R(a + 2)),
-                                    XR_TO_INT(R(a + 3)))) {
-        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTES_COPY_WITHIN_OOB_MSG);
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Bytes.copyWithin receiver must be Bytes");
+    if (!xr_array_bytes_copy_within(arr, (int32_t) XR_TO_INT(R(a + 1)),
+                                    (int32_t) XR_TO_INT(R(a + 2)), (int32_t) XR_TO_INT(R(a + 3)))) {
+        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "Bytes.copyWithin range out of bounds");
     }
     vmbreak;
 }
@@ -888,15 +943,15 @@ vmcase(OP_BYTES_COPY_FROM) {
     int a = GETARG_A(i);
     if (!XR_IS_ARRAY(R(a)) || !XR_IS_ARRAY(R(a + 1)) || !XR_IS_INT(R(a + 2)) ||
         !XR_IS_INT(R(a + 3)) || !XR_IS_INT(R(a + 4))) {
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTES_COPY_FROM_EXPECTS_MSG);
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Bytes.copyFrom expects Bytes and integer ranges");
     }
     XrArray *dst = XR_TO_ARRAY(R(a));
     XrArray *src = XR_TO_ARRAY(R(a + 1));
     if (dst->elem_type != XR_ELEM_U8 || src->elem_type != XR_ELEM_U8)
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTES_COPY_FROM_OPERANDS_MSG);
-    if (!xr_array_bytes_copy_from(dst, src, XR_TO_INT(R(a + 2)), XR_TO_INT(R(a + 3)),
-                                  XR_TO_INT(R(a + 4)))) {
-        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTES_COPY_FROM_OOB_MSG);
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Bytes.copyFrom operands must be Bytes");
+    if (!xr_array_bytes_copy_from(dst, src, (int32_t) XR_TO_INT(R(a + 2)),
+                                  (int32_t) XR_TO_INT(R(a + 3)), (int32_t) XR_TO_INT(R(a + 4)))) {
+        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "Bytes.copyFrom range out of bounds");
     }
     vmbreak;
 }
@@ -905,14 +960,15 @@ vmcase(OP_BYTES_REPEAT_FROM) {
     int a = GETARG_A(i);
     if (!XR_IS_ARRAY(R(a)) || !XR_IS_INT(R(a + 1)) || !XR_IS_INT(R(a + 2)) ||
         !XR_IS_INT(R(a + 3))) {
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTES_REPEAT_FROM_EXPECTS_MSG);
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
+                         "Bytes.repeatFrom expects integer offsets and count");
     }
     XrArray *arr = XR_TO_ARRAY(R(a));
     if (arr->elem_type != XR_ELEM_U8)
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTES_REPEAT_FROM_RECEIVER_MSG);
-    if (!xr_array_bytes_repeat_from(arr, XR_TO_INT(R(a + 1)), XR_TO_INT(R(a + 2)),
-                                    XR_TO_INT(R(a + 3)))) {
-        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTES_REPEAT_FROM_OOB_MSG);
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Bytes.repeatFrom receiver must be Bytes");
+    if (!xr_array_bytes_repeat_from(arr, (int32_t) XR_TO_INT(R(a + 1)),
+                                    (int32_t) XR_TO_INT(R(a + 2)), (int32_t) XR_TO_INT(R(a + 3)))) {
+        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "Bytes.repeatFrom range out of bounds");
     }
     vmbreak;
 }
@@ -941,6 +997,7 @@ vmcase(OP_ARRAY_INIT) {
     } else {
         // Slow path: typed arrays need per-element unboxing
         for (int j = 1; j <= b; j++) {
+            VM_ARRAY_CHECK_STORABLE(arr, R(a + j));
             xr_array_set(arr, j - 1, R(a + j));
         }
     }
@@ -1172,16 +1229,21 @@ vmcase(OP_INDEX_GET) {
                     break;
             }
         } else {
-            VM_ARRAY_INDEX_OOB(idx, ecount);
+            VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS,
+                             "fixed array index out of range: %d (length %u)", idx,
+                             (unsigned) ecount);
         }
         vmbreak;
     }
     // Fast path: String (Unicode character index)
     if (XR_IS_STRING(obj_val) && XR_IS_INT(key_val)) {
         XrString *str = XR_TO_STRING(obj_val);
-        size_t idx = (size_t) XR_TO_INT(key_val);
-        XrString *ch = xr_string_char_at_unicode(isolate, str, idx);
-        R(a) = ch ? xr_string_value(ch) : xr_null();
+        int64_t idx = XR_TO_INT(key_val);
+        uint32_t cp = 0;
+        R(a) = (idx >= 0 && xr_utf8_char_at(str->data, str->length, (size_t) idx, &cp, NULL) &&
+                xr_unicode_is_scalar(cp))
+                   ? xr_char(cp)
+                   : xr_null();
         vmbreak;
     }
     // Fast path: Array (includes slices — capacity==0 && source!=NULL)
@@ -1194,7 +1256,8 @@ vmcase(OP_INDEX_GET) {
             R(a) = (arr->elem_type == XR_ELEM_ANY) ? ((XrValue *) arr->data)[idx]
                                                    : xr_array_get_element(arr, idx);
         } else {
-            VM_ARRAY_INDEX_OOB(idx, arr->length);
+            VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "array index out of range: %d (length %d)",
+                             idx, (int) arr->length);
         }
         vmbreak;
     }
@@ -1203,9 +1266,12 @@ vmcase(OP_INDEX_GET) {
         XrRange *rng = xr_value_get_range_body(isolate, obj_val);
         if (rng) {
             int64_t idx = XR_TO_INT(key_val);
-            bool ok = false;
-            int64_t value = xr_range_index(rng, idx, &ok);
-            R(a) = ok ? xr_int(value) : xr_null();
+            int64_t len = xr_range_length(rng);
+            if (idx >= 0 && idx < len) {
+                R(a) = xr_int(rng->start + idx * rng->step);
+            } else {
+                R(a) = xr_null();
+            }
             vmbreak;
         }
     }
@@ -1322,25 +1388,30 @@ vmcase(OP_INDEX_SET) {
                     break;
             }
         } else {
-            VM_ARRAY_INDEX_OOB(idx, ecount);
+            VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS,
+                             "fixed array index out of range: %d (length %u)", idx,
+                             (unsigned) ecount);
         }
         vmbreak;
     }
     // Fast path: Array (includes slices — capacity==0 && source!=NULL)
     if (XR_IS_ARRAY(obj_val)) {
         XrArray *arr = XR_TO_ARRAY(obj_val);
-        int64_t raw_idx = XR_TO_INT(key_val);
-        XrArrayCoreIndexSetPlan plan = xr_array_core_index_set_plan(arr->length, raw_idx);
-        if (plan.kind == XR_ARRAY_CORE_INDEX_SET_WRITE) {
-            int idx = (int) plan.index;
+        int idx = (int) XR_TO_INT(key_val);
+        if ((unsigned) idx < (unsigned) arr->length) {
             if (arr->elem_type == XR_ELEM_ANY) {
                 ((XrValue *) arr->data)[idx] = val;
                 XR_ARRAY_MARK_REFS(arr, val);
             } else {
+                VM_ARRAY_CHECK_STORABLE(arr, val);
                 xr_array_set_element(arr, idx, val);
             }
-        } else {
-            VM_ARRAY_INDEX_OOB(raw_idx, arr->length);
+        } else if (idx == arr->length && arr->elem_type == XR_ELEM_ANY && !xr_array_is_slice(arr)) {
+            /* Append: ANY-array append-grow. Used by lower_array_literal
+             * which emits OP_NEWARRAY (length=0) followed by OP_INDEX_SET
+             * arr[i]=v for i=0..n-1. Only valid for ANY arrays; typed
+             * and slice arrays use explicit OP_ARRAY_PUSH or grow. */
+            xr_array_push(arr, val);
         }
         vmbreak;
     }
@@ -1402,9 +1473,6 @@ vmcase(OP_SLICE) {
     int b = GETARG_B(i);
     int c = GETARG_C(i);
     XrValue source = R(b);
-    if (!XR_IS_INT(R(c)) || !XR_IS_INT(R(c + 1))) {
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_SLICE_BOUNDS_EXPECTS_MSG);
-    }
     int64_t start = XR_TO_INT(R(c));
     int64_t end = XR_TO_INT(R(c + 1));
 

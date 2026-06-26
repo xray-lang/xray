@@ -30,11 +30,13 @@
 #include "../runtime/object/xstringbuilder.h"
 
 #include "../runtime/object/xjson.h"
-#include "../runtime/object/xexception.h"
+#include "../runtime/object/xiterator.h"
+#include "../runtime/object/xpanic_info.h"
 #include "../runtime/class/xclass_descriptor.h"
 #include "../runtime/object/xrange.h"
 #include "../base/xutf8.h"
 #include "../runtime/value/xslot_type.h"
+#include "../runtime/value/xtransfer_mode.h"
 #include "../runtime/value/xtype.h"
 #include "../coro/xcoro_pool.h"
 #include "../coro/xdeep_copy.h"
@@ -604,6 +606,54 @@ XR_FUNC XrDispatchAction vm_coro_ctrl(XrVMRuntime *isolate, XrVMContext *vm_ctx,
 // props / chan-ops TUs can call it without an owning .c
 // file having to re-export it.
 
+/* OP_GEN_START: construct a coroutine-backed iterator over a generator function.
+ * Unlike `go`, the producer coroutine is NOT scheduled — it is pull-driven by the
+ * returned iterator. R[A]=dst iterator, R[B]=generator closure, C=arg count with
+ * args at R[B+1..B+C]. Generator args are passed by SHARE: the consumer is blocked
+ * while the producer runs, so there is no concurrent mutation to guard against. */
+XR_FUNC XrDispatchAction vm_gen_start(XrVMRuntime *isolate, XrVMContext *vm_ctx,
+                                      XrInstruction instr, XrValue *base, XrBcCallFrame *frame) {
+    int a = GETARG_A(instr);
+    int b = GETARG_B(instr);
+    int c = GETARG_C(instr);  // argument count
+    XrInstruction *pc = frame->pc;
+
+    XrValue fn_val = base[b];
+    if (!xr_value_is_closure(fn_val)) {
+        VM_THROW(frame, pc, XR_ERR_TYPE_MISMATCH, "generator: expected closure");
+    }
+    struct XrClosure *closure = xr_value_to_closure(fn_val);
+    XrProto *proto = closure->proto;
+    if (c != proto->numparams) {
+        VM_THROW(frame, pc, XR_ERR_WRONG_ARG_COUNT,
+                 "generator: argument count mismatch (expected %d, got %d)", proto->numparams, c);
+    }
+
+    XrValue *args = (c > 0) ? &base[b + 1] : NULL;
+    uint8_t arg_modes[128];
+    for (int i = 0; i < c && i < 128; i++)
+        arg_modes[i] = XR_TRANSFER_SHARE;
+
+    XrCoroutine *gen = xr_coro_create_vm_closure(isolate, closure, args, c > 0 ? arg_modes : NULL,
+                                                 c, NULL, NULL, 0);
+    if (!gen) {
+        VM_THROW(frame, pc, XR_ERR_CORO_DEAD, "generator: failed to create coroutine");
+    }
+
+    XrCoroutine *owner = (XrCoroutine *) vm_ctx->current_coro;
+    if (!owner)
+        owner = gen; /* top-level (main) drives generators on the gen's own heap */
+    XrIterator *iter = xr_iterator_new_from_generator(owner, gen);
+    if (!iter) {
+        xr_coro_destroy(gen);
+        VM_THROW(frame, pc, XR_ERR_CORO_DEAD, "generator: failed to allocate iterator");
+    }
+
+    base[a] = xr_value_from_iterator(iter);
+    frame->pc = pc;
+    return XR_DISP_NEXT;
+}
+
 XR_FUNC XrDispatchAction vm_go(XrVMRuntime *isolate, XrVMContext *vm_ctx, XrInstruction instr,
                                XrValue *base, XrBcCallFrame *frame) {
     int a = GETARG_A(instr);
@@ -636,29 +686,40 @@ XR_FUNC XrDispatchAction vm_go(XrVMRuntime *isolate, XrVMContext *vm_ctx, XrInst
     XrInstruction next_inst = *pc;
     int link_mode = 0;
     bool one_shot_await = false;
+    uint8_t arg_modes[128];
+    for (int i = 0; i < c; i++)
+        arg_modes[i] = XR_TRANSFER_SHARE;
+    int mode_base = 0;
 
-    if (GET_OPCODE(next_inst) == OP_NOP && GETARG_A(next_inst) == 1) {
-        int name_idx = GETARG_Bx(next_inst);
-        XrValue name_val = PROTO_CONSTANT(frame->closure->proto, name_idx);
-        if (XR_IS_STRING(name_val))
-            coro_name = xr_value_to_string(isolate, name_val)->data;
-        pc++;
-        next_inst = *pc;
-    }
-    if (GET_OPCODE(next_inst) == OP_NOP && GETARG_A(next_inst) == 3) {
-        link_mode = GETARG_Bx(next_inst);
-        pc++;
-        next_inst = *pc;
-    }
-    if (GET_OPCODE(next_inst) == OP_NOP && GETARG_A(next_inst) == 4) {
-        one_shot_await = GETARG_Bx(next_inst) != 0;
+    while (GET_OPCODE(next_inst) == OP_NOP) {
+        int ann = GETARG_A(next_inst);
+        if (ann == 1) {
+            int name_idx = GETARG_Bx(next_inst);
+            XrValue name_val = PROTO_CONSTANT(frame->closure->proto, name_idx);
+            if (XR_IS_STRING(name_val))
+                coro_name = xr_value_to_string(isolate, name_val)->data;
+        } else if (ann == 3) {
+            link_mode = GETARG_Bx(next_inst);
+        } else if (ann == 4) {
+            one_shot_await = GETARG_Bx(next_inst) != 0;
+        } else if (ann == 5) {
+            uint32_t packed = GETARG_Bx(next_inst);
+            for (uint32_t slot = 0; slot < XR_TRANSFER_MODES_PER_U32 && mode_base + (int) slot < c;
+                 slot++) {
+                arg_modes[mode_base + (int) slot] = xr_transfer_unpack_mode(packed, slot);
+            }
+            mode_base += (int) XR_TRANSFER_MODES_PER_U32;
+        } else {
+            break;
+        }
         pc++;
         next_inst = *pc;
     }
     XrValue *args = (c > 0) ? &base[b + 1] : NULL;
 
     // Debug source metadata is populated lazily for named coroutines.
-    XrCoroutine *coro = xr_coro_create_vm_closure(isolate, closure, args, c, coro_name, NULL, 0);
+    XrCoroutine *coro = xr_coro_create_vm_closure(isolate, closure, args, c > 0 ? arg_modes : NULL,
+                                                  c, coro_name, NULL, 0);
     if (!coro) {
         VM_THROW(frame, pc, XR_ERR_CORO_DEAD, "go: failed to create coroutine");
     }
@@ -773,12 +834,12 @@ static XrDispatchAction vm_task_raise_await_terminal(XrVMRuntime *isolate, XrTas
     XrValue exc;
     if (tstate == XR_TASK_FAILED && task && !XR_IS_NULL(task->error)) {
         exc = task->error;
-        if (!xr_value_is_exception(isolate, exc))
-            exc = xr_exception_from_value(isolate, exc);
+        if (!xr_value_is_panic_info(isolate, exc))
+            exc = xr_panic_info_from_value(isolate, exc);
     } else if (tstate == XR_TASK_FAILED) {
-        exc = xr_exception_new(isolate, XR_ERR_RUNTIME, "Task failed");
+        exc = xr_panic_info_new(isolate, XR_ERR_RUNTIME, "Task failed");
     } else {
-        exc = xr_exception_new(isolate, XR_ERR_CORO_CANCELLED, "Task cancelled");
+        exc = xr_panic_info_new(isolate, XR_ERR_CORO_CANCELLED, "Task cancelled");
     }
     if (frame)
         frame->pc = pc;

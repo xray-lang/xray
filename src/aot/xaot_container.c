@@ -69,7 +69,8 @@ static bool elem_plan_make(const XrType *type, XaotRep rep, const char *elem_nam
     return true;
 }
 
-XR_FUNC bool xaot_container_elem_plan_for_type(const XrType *type, XaotContainerElemPlan *out) {
+static bool container_elem_plan_for_type(const XrType *type, XaotContainerElemPlan *out,
+                                         bool allow_char) {
     XaotRep rep;
     const char *elem_name;
 
@@ -88,7 +89,13 @@ XR_FUNC bool xaot_container_elem_plan_for_type(const XrType *type, XaotContainer
         return elem_plan_make(type, XAOT_REP_F64, "XR_ELEM_F64", out);
     if (type->kind == XR_KIND_BOOL)
         return elem_plan_make(type, XAOT_REP_BOOL, "XR_ELEM_BOOL", out);
+    if (allow_char && type->kind == XR_KIND_CHAR)
+        return elem_plan_make(type, XAOT_REP_CHAR, "XR_ELEM_CHAR", out);
     return false;
+}
+
+XR_FUNC bool xaot_container_elem_plan_for_type(const XrType *type, XaotContainerElemPlan *out) {
+    return container_elem_plan_for_type(type, out, false);
 }
 
 static const XrType *array_elem_type_from_type(const XrType *type) {
@@ -115,7 +122,7 @@ XR_FUNC bool xaot_container_plan_for_type(const XrType *type, XaotContainerPlan 
 
     elem = array_elem_type_from_type(type);
     if (elem) {
-        if (!xaot_container_elem_plan_for_type(elem, &out->elem))
+        if (!container_elem_plan_for_type(elem, &out->elem, true))
             return false;
         out->kind = XAOT_CONTAINER_ARRAY;
         out->flags = XAOT_CONTAINER_TYPED_STORAGE | XAOT_CONTAINER_RAW_DATA;

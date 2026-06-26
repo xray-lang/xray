@@ -64,8 +64,6 @@ typedef enum {
     // Multi-character tokens (start from 256 to avoid ASCII collision)
     TK_EQ = 256,       // ==
     TK_NE,             // !=
-    TK_EQ_STRICT,      // ===
-    TK_NE_STRICT,      // !==
     TK_LT,             // <
     TK_LE,             // <=
     TK_GT,             // >
@@ -119,7 +117,7 @@ typedef enum {
     TK_CONSTRUCTOR,  // constructor
     TK_STATIC,       // static
     TK_PRIVATE,      // private
-    TK_PUBLIC,       // public
+    TK_PROTECTED,    // protected
     TK_OPERATOR,     // operator
     TK_ABSTRACT,     // abstract
     TK_OVERRIDE,     // override
@@ -151,6 +149,7 @@ typedef enum {
     TK_FLOAT,    // float (= float64)
     TK_STRING,   // string
     TK_BOOL,     // bool
+    TK_CHAR,     // char (Unicode scalar value)
     TK_INT8,     // int8
     TK_INT16,    // int16
     TK_INT32,    // int32
@@ -168,8 +167,7 @@ typedef enum {
     // stdlib/prelude/prelude.h. Channel additionally gets a contextual
     // intercept in xr_parse_variable so that `Channel(...)` still
     // produces a dedicated AST_CHANNEL_NEW node.
-    TK_UNKNOWN,  // unknown
-    TK_LAST_KEYWORD = TK_UNKNOWN,
+    TK_LAST_KEYWORD = TK_FLOAT64,
 
     // Contextual keywords (NOT in keyword range — can be used as identifiers)
     // These are recognized by the parser via string comparison, not by the lexer.
@@ -188,6 +186,7 @@ typedef enum {
     TK_ARROW,              // -> (unified arrow: fn return, fn type, closure body, match/select arm)
     TK_DOT_DOT_DOT,        // ... (rest/spread operator)
     TK_RANGE,              // .. (range operator)
+    TK_RANGE_INCLUSIVE,    // ..= (inclusive range operator)
     TK_NULLISH_COALESCE,   // ?? (nullish coalescing operator)
     TK_UNDERSCORE,         // _ (wildcard pattern, for match expression)
 
@@ -201,6 +200,7 @@ typedef enum {
     TK_LITERAL_FLOAT,   // float literal
     TK_LITERAL_BIGINT,  // bigint literal 123n
     TK_LITERAL_STRING,  // string literal
+    TK_LITERAL_CHAR,    // char literal: 'a', '\n', '\u{1F600}'
     TK_LITERAL_REGEX,   // regex literal /pattern/flags
     TK_NAME,            // identifier
 
@@ -208,7 +208,7 @@ typedef enum {
     TK_TEMPLATE_STRING,  // template string `hello ${name}`
 
     // Raw string (r prefix, no escape processing)
-    TK_RAW_STRING,           // r"..." or r'...' - raw string, no escapes
+    TK_RAW_STRING,           // r"..." - raw string, no escapes
     TK_RAW_TEMPLATE_STRING,  // r`...` - raw template string, no escapes but ${} interpolation
 
     // Special

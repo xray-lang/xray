@@ -1,7 +1,7 @@
 // Built-in Map<K, V> type — implementation in src/runtime/object/xmap_methods.c
 
 @native
-class Map<K, V> {
+class Map<K: Hashable, V> {
     length: int
     size: int
     get(key: K) -> V?

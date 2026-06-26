@@ -134,6 +134,27 @@ static XiValue *func_tree_find_op(XiFunc *f, uint16_t op) {
     return NULL;
 }
 
+static XiValue *func_tree_find_method(XiFunc *f, const char *name) {
+    if (!f || !name)
+        return NULL;
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        XiBlock *blk = f->blocks[b];
+        if (!blk)
+            continue;
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            XiValue *v = blk->values[i];
+            if (v && v->op == XI_CALL_METHOD && v->aux && strcmp((const char *) v->aux, name) == 0)
+                return v;
+        }
+    }
+    for (uint16_t i = 0; i < f->nchildren; i++) {
+        XiValue *v = func_tree_find_method(f->children[i], name);
+        if (v)
+            return v;
+    }
+    return NULL;
+}
+
 static int func_tree_has_builtin_name(XiFunc *f, const char *name) {
     if (!f || !name)
         return 0;
@@ -414,7 +435,7 @@ TEST(member_access) {
 
 TEST(member_access_field_symbols_are_distinct) {
     XiFunc *f = lower_source("fn worker() -> int {\n"
-                             "    yield\n"
+                             "    Coro.yield()\n"
                              "    return 1\n"
                              "}\n"
                              "let task = go worker()\n"
@@ -445,8 +466,8 @@ TEST(member_access_field_symbols_are_distinct) {
 }
 
 TEST(bytes_methods_lower_to_semantic_ops) {
-    XiFunc *f = lower_source("let src = new Bytes(8)\n"
-                             "let dst = new Bytes(8)\n"
+    XiFunc *f = lower_source("let src = Bytes(8)\n"
+                             "let dst = Bytes(8)\n"
                              "let a = src.loadU32LE(0)\n"
                              "let b = src.loadU64LE(0)\n"
                              "src.copyWithin(1, 0, 2)\n"
@@ -470,9 +491,10 @@ TEST(bytes_methods_lower_to_semantic_ops) {
 }
 
 TEST(throw_stmt) {
-    XiFunc *f = lower_source("let x = 1\n"
+    XiFunc *f = lower_source("enum LowerErr { Error }\n"
+                             "let x = 1\n"
                              "if (x == 0) {\n"
-                             "    throw new Exception(\"error\")\n"
+                             "    throw LowerErr.Error\n"
                              "}\n"
                              "print(x)\n");
     assert(f != NULL);
@@ -735,6 +757,92 @@ TEST(direct_await_go_one_shot) {
     xi_func_free(f);
 }
 
+TEST(go_arg_transfer_modes) {
+    XiFunc *copy_ir = lower_source("fn worker(xs: Array<int>) -> int { return xs.length }\n"
+                                   "let xs = [1, 2]\n"
+                                   "let task = go worker(copy(xs))\n"
+                                   "print(await task)\n");
+    assert(copy_ir != NULL);
+    XiValue *copy_go = func_tree_find_op(copy_ir, XI_GO);
+    assert(copy_go != NULL && "copy case should lower a GO op");
+    assert(copy_go->nargs == 2 && "go worker(copy(xs)) should keep callee plus one arg");
+    assert(xi_go_arg_transfer_mode(copy_go, 0) == XR_TRANSFER_COPY &&
+           "copy(...) at a go boundary must be encoded as COPY transfer");
+    assert(!func_tree_has_op(copy_ir, XI_COPY) &&
+           "go boundary copy(...) must not lower to a separate copy op before GO");
+    xi_func_free(copy_ir);
+
+    XiFunc *move_ir = lower_source("fn worker(xs: Array<int>) -> int { return xs.length }\n"
+                                   "shared let xs: Array<int> = [1, 2]\n"
+                                   "let task = go worker(move xs)\n"
+                                   "print(await task)\n");
+    assert(move_ir != NULL);
+    XiValue *move_go = func_tree_find_op(move_ir, XI_GO);
+    assert(move_go != NULL && "move case should lower a GO op");
+    assert(xi_go_arg_transfer_mode(move_go, 0) == XR_TRANSFER_MOVE &&
+           "move at a go boundary must be encoded as MOVE transfer");
+    assert(func_tree_has_op(move_ir, XI_MOVE) &&
+           "move transfer should still consume source ownership");
+    xi_func_free(move_ir);
+
+    XiFunc *share_ir = lower_source("fn worker(xs: Array<int>) -> int { return xs.length }\n"
+                                    "shared const xs: Array<int> = [1, 2]\n"
+                                    "let task = go worker(xs)\n"
+                                    "print(await task)\n");
+    assert(share_ir != NULL);
+    XiValue *share_go = func_tree_find_op(share_ir, XI_GO);
+    assert(share_go != NULL && "shared const case should lower a GO op");
+    assert(xi_go_arg_transfer_mode(share_go, 0) == XR_TRANSFER_SHARE &&
+           "shared const go arguments should be encoded as zero-copy SHARE transfer");
+    xi_func_free(share_ir);
+}
+
+TEST(channel_send_transfer_modes) {
+    XiFunc *copy_ir = lower_source("let ch: Channel<Array<int>> = Channel(1)\n"
+                                   "let xs = [1, 2]\n"
+                                   "ch.send(copy(xs))\n");
+    assert(copy_ir != NULL);
+    XiValue *copy_send = func_tree_find_op(copy_ir, XI_CHAN_SEND);
+    assert(copy_send != NULL && "copy case should lower to CHAN_SEND");
+    assert(xi_chan_send_transfer_mode(copy_send) == XR_TRANSFER_COPY &&
+           "copy(...) at a channel send boundary must be encoded as COPY transfer");
+    assert(!func_tree_has_op(copy_ir, XI_COPY) &&
+           "channel boundary copy(...) must not lower to a separate copy op before send");
+    xi_func_free(copy_ir);
+
+    XiFunc *move_ir = lower_source("let ch: Channel<Array<int>> = Channel(1)\n"
+                                   "let xs = [1, 2]\n"
+                                   "ch.send(move xs)\n");
+    assert(move_ir != NULL);
+    XiValue *move_send = func_tree_find_op(move_ir, XI_CHAN_SEND);
+    assert(move_send != NULL && "move case should lower to CHAN_SEND");
+    assert(xi_chan_send_transfer_mode(move_send) == XR_TRANSFER_MOVE &&
+           "move at a channel send boundary must be encoded as MOVE transfer");
+    assert(func_tree_has_op(move_ir, XI_MOVE) &&
+           "move transfer should still consume source ownership");
+    xi_func_free(move_ir);
+
+    XiFunc *try_ir = lower_source("let ch: Channel<Array<int>> = Channel(1)\n"
+                                  "let xs = [1, 2]\n"
+                                  "print(ch.trySend(copy(xs)))\n");
+    assert(try_ir != NULL);
+    XiValue *try_send = func_tree_find_method(try_ir, "trySend");
+    assert(try_send != NULL && "copy trySend should lower to CALL_METHOD");
+    assert(xi_chan_send_transfer_mode(try_send) == XR_TRANSFER_COPY &&
+           "copy(...) at trySend boundary must be encoded as COPY transfer");
+    xi_func_free(try_ir);
+
+    XiFunc *timeout_ir = lower_source("let ch: Channel<Array<int>> = Channel(1)\n"
+                                      "let xs = [1, 2]\n"
+                                      "print(ch.sendTimeout(copy(xs), 0))\n");
+    assert(timeout_ir != NULL);
+    XiValue *timeout_send = func_tree_find_method(timeout_ir, "sendTimeout");
+    assert(timeout_send != NULL && "copy sendTimeout should lower to CALL_METHOD");
+    assert(xi_chan_send_transfer_mode(timeout_send) == XR_TRANSFER_COPY &&
+           "copy(...) at sendTimeout boundary must be encoded as COPY transfer");
+    xi_func_free(timeout_ir);
+}
+
 TEST(defer_stmt) {
     XiFunc *f = lower_source("fn cleanup() { print(0) }\n"
                              "defer cleanup()\n"
@@ -824,12 +932,19 @@ TEST(range_expr) {
     XiFunc *f = lower_source("let r = 1..10\n"
                              "print(r)\n");
     assert(f != NULL);
-    int found_range = 0;
-    for (uint32_t i = 0; i < f->entry->nvalues; i++) {
-        if (f->entry->values[i]->op == XI_RANGE)
-            found_range = 1;
-    }
-    assert(found_range && "should have RANGE op");
+    XiValue *range = func_tree_find_op(f, XI_RANGE);
+    assert(range && "should have RANGE op");
+    assert(range->aux_int == 0 && "half-open range should clear inclusive flag");
+    xi_func_free(f);
+}
+
+TEST(range_inclusive_expr) {
+    XiFunc *f = lower_source("let r = 1..=10\n"
+                             "print(r)\n");
+    assert(f != NULL);
+    XiValue *range = func_tree_find_op(f, XI_RANGE);
+    assert(range && "should have RANGE op");
+    assert(range->aux_int == 1 && "inclusive range should set inclusive flag");
     xi_func_free(f);
 }
 
@@ -849,6 +964,18 @@ TEST(optional_chain) {
     }
     assert(found_isnull && "should have ISNULL for optional chain");
     assert(f->nblocks >= 3 && "should have branch blocks for optional chain");
+    xi_func_free(f);
+}
+
+TEST(optional_call) {
+    XiFunc *f = lower_source("type IntFn = (int) -> int\n"
+                             "fn bump(x: int) -> int { return x + 1 }\n"
+                             "let fnv: IntFn? = bump\n"
+                             "let n = fnv?.(41)\n"
+                             "print(n)\n");
+    assert(f != NULL);
+    assert(func_tree_has_op(f, XI_ISNULL) && "optional call should null-check callee");
+    assert(func_tree_has_op(f, XI_CALL) && "optional call should call only on non-null path");
     xi_func_free(f);
 }
 
@@ -1006,7 +1133,7 @@ TEST(class_decl_skip) {
 }
 
 TEST(yield_stmt) {
-    XiFunc *f = lower_source("yield\n"
+    XiFunc *f = lower_source("Coro.yield()\n"
                              "print(1)\n");
     assert(f != NULL);
     int found_yield = 0;
@@ -1060,13 +1187,17 @@ int main(void) {
     run_template_string();
     run_go_await();
     run_direct_await_go_one_shot();
+    run_go_arg_transfer_modes();
+    run_channel_send_transfer_modes();
     run_defer_stmt();
     run_defer_args_lower_before_defer();
     run_set_literal();
     run_is_expr();
     run_slice_expr();
     run_range_expr();
+    run_range_inclusive_expr();
     run_optional_chain();
+    run_optional_call();
     run_struct_literal();
     run_struct_literal_inside_function();
     run_struct_field_store_narrows_native_width();

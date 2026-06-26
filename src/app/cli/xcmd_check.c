@@ -229,7 +229,7 @@ XR_FUNC int cmd_check(const XrCliInvocation *inv) {
     XrCompilerSession *session = xr_compiler_session_current_for_isolate(X);
 
     /* Default: run the analyzer so semantic errors (e.g. throw on a
-     * non-Exception value, type mismatches) are caught alongside syntax
+     * non-enum error value, type mismatches) are caught alongside syntax
      * errors. --syntax-only opts out for fast pre-flight checks; --strict
      * additionally enables stricter analyzer modes. */
     XaAnalyzer *analyzer = NULL;

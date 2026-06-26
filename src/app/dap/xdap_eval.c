@@ -277,10 +277,8 @@ static XrValue eval_binary(XrEvalContext *ctx, AstNodeType op, XrValue left, XrV
             case AST_BINARY_GE:
                 return xr_bool(l >= r);
             case AST_BINARY_EQ:
-            case AST_BINARY_EQ_STRICT:
                 return xr_bool(l == r);
             case AST_BINARY_NE:
-            case AST_BINARY_NE_STRICT:
                 return xr_bool(l != r);
             default:
                 break;
@@ -433,8 +431,6 @@ static XrValue eval_ast(XrEvalContext *ctx, AstNode *node) {
         case AST_BINARY_GE:
         case AST_BINARY_EQ:
         case AST_BINARY_NE:
-        case AST_BINARY_EQ_STRICT:
-        case AST_BINARY_NE_STRICT:
         case AST_BINARY_AND:
         case AST_BINARY_OR: {
             XrValue left = eval_ast(ctx, node->as.binary.left);

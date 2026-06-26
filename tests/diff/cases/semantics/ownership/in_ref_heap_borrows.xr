@@ -48,7 +48,7 @@ put(table, "x", 7)
 print(hasKey(table, "x"))
 print(table["x"])
 
-let box = new Box(3)
+let box = Box(3)
 print(readBox(box))
 setBox(box, 8)
 print(readBox(box))

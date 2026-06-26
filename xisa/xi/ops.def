@@ -223,24 +223,6 @@
   :observable ()
   :targets (vm-bytecode aot-c aot-verify))
 
-(define-xi-op xi.eq.strict
-  :class comparison
-  :arity 2
-  :own-use borrow
-  :effects ()
-  :requires ()
-  :observable ()
-  :targets (vm-bytecode aot-c aot-verify))
-
-(define-xi-op xi.ne.strict
-  :class comparison
-  :arity 2
-  :own-use borrow
-  :effects ()
-  :requires ()
-  :observable ()
-  :targets (vm-bytecode aot-c aot-verify))
-
 (define-xi-op xi.not
   :class type
   :arity 1
@@ -645,6 +627,22 @@
   :observable ()
   :targets (vm-bytecode aot-c aot-verify))
 
+; Object spread `{...base, x: 1}`: copy every field of the source object into
+; the destination (later fields override earlier ones). Source is borrowed; the
+; destination escapes to the heap.
+(define-xi-op xi.json.merge
+  :class memory-write
+  :arity 2
+  :result-kind void
+  :result-ownership none
+  :tbaa-group json
+  :escape-use heap
+  :own-use borrow
+  :effects (side-effect memory-read memory-write)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode aot-c aot-verify))
+
 (define-xi-op xi.json.decode
   :class allocation
   :arity 1
@@ -658,6 +656,38 @@
   :arity variadic
   :escape-alloc heap
   :effects (side-effect memory-write allocates)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode aot-c aot-verify))
+
+; Array spread builders. `xi.array.push` appends one element (arg1 consumed,
+; like index.set's stored value); `xi.array.extend` splices every element of
+; the source array into the destination (both args borrowed — the runtime
+; retains each copied element internally, so the source keeps its references).
+; Both grow the destination, so the destination escapes to the heap (no
+; special arg0 carve-out): a spread array can never be stack-allocated.
+(define-xi-op xi.array.push
+  :class memory-write
+  :arity 2
+  :result-kind void
+  :result-ownership none
+  :tbaa-group array
+  :escape-use heap
+  :own-use stored-value
+  :effects (side-effect memory-write)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode aot-c aot-verify))
+
+(define-xi-op xi.array.extend
+  :class memory-write
+  :arity 2
+  :result-kind void
+  :result-ownership none
+  :tbaa-group array
+  :escape-use heap
+  :own-use borrow
+  :effects (side-effect memory-read memory-write)
   :requires ()
   :observable ()
   :targets (vm-bytecode aot-c aot-verify))
@@ -863,6 +893,22 @@
   :observable ()
   :targets (vm-bytecode aot-verify))
 
+; Synchronous: constructs a coroutine-backed iterator over a generator function.
+; It does NOT suspend the caller (the producer is pull-driven by the iterator),
+; so it is a `call`, not a `coroutine` op — callers stay non-coroutine. Args are
+; captured into the producer frame, hence escape-use global.
+(define-xi-op xi.gen.call
+  :class call
+  :arity variadic
+  :result-ownership call-result
+  :tbaa-group top
+  :own-use borrow
+  :escape-use global
+  :effects (side-effect memory-write)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode aot-c aot-verify))
+
 (define-xi-op xi.await
   :class coroutine
   :arity variadic
@@ -996,6 +1042,17 @@
   :observable ()
   :targets (vm-bytecode aot-verify))
 
+(define-xi-op xi.gen.yield
+  :class coroutine
+  :arity 1
+  :result-kind void
+  :result-ownership none
+  :escape-use arg
+  :effects (side-effect may-suspend)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode aot-verify))
+
 (define-xi-op xi.throw
   :class exception
   :arity 1
@@ -1074,6 +1131,26 @@
   :arity variadic
   :result-ownership none
   :effects (side-effect)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode aot-c aot-verify))
+
+(define-xi-op xi.defer.mark
+  :class side-effect
+  :arity 0
+  :result-ownership none
+  :effects (side-effect memory-read)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode aot-c aot-verify))
+
+(define-xi-op xi.defer.run.to
+  :class side-effect
+  :arity 1
+  :result-kind void
+  :result-ownership none
+  :own-use borrow
+  :effects (side-effect memory-read memory-write)
   :requires ()
   :observable ()
   :targets (vm-bytecode aot-c aot-verify))

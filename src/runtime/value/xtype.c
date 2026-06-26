@@ -32,6 +32,7 @@ static XrType g_type_int;
 static XrType g_type_float;
 static XrType g_type_string;
 static XrType g_type_bool;
+static XrType g_type_char;
 static XrType g_type_null;
 static XrType g_type_unknown;
 static XrType g_type_never;
@@ -43,7 +44,7 @@ static XrType g_type_int_nullable;
 static XrType g_type_float_nullable;
 static XrType g_type_string_nullable;
 static XrType g_type_bool_nullable;
-static XrType g_type_json_nullable;
+static XrType g_type_char_nullable;
 
 static XR_THREAD_LOCAL XrTypePool *g_current_type_pool = NULL;
 
@@ -67,6 +68,7 @@ void xr_type_global_init(void) {
     init_singleton(&g_type_float, XR_KIND_FLOAT, id++, false, 0);
     init_singleton(&g_type_string, XR_KIND_STRING, id++, false, 0);
     init_singleton(&g_type_bool, XR_KIND_BOOL, id++, false, 0);
+    init_singleton(&g_type_char, XR_KIND_CHAR, id++, false, 0);
     init_singleton(&g_type_null, XR_KIND_NULL, id++, false, 0);
     init_singleton(&g_type_unknown, XR_KIND_UNKNOWN, id++, false, 0);
     init_singleton(&g_type_never, XR_KIND_NEVER, id++, false, 0);
@@ -80,7 +82,7 @@ void xr_type_global_init(void) {
     init_singleton(&g_type_float_nullable, XR_KIND_FLOAT, id++, true, 0);
     init_singleton(&g_type_string_nullable, XR_KIND_STRING, id++, true, 0);
     init_singleton(&g_type_bool_nullable, XR_KIND_BOOL, id++, true, 0);
-    init_singleton(&g_type_json_nullable, XR_KIND_JSON, id++, true, 0);
+    init_singleton(&g_type_char_nullable, XR_KIND_CHAR, id++, true, 0);
 }
 
 // Set the analyzer/current type pool for no-isolate type helpers.
@@ -145,6 +147,10 @@ XrType *xr_type_new_string(XrVMRuntime *X) {
 XrType *xr_type_new_bool(XrVMRuntime *X) {
     (void) X;
     return &g_type_bool;
+}
+XrType *xr_type_new_char(XrVMRuntime *X) {
+    (void) X;
+    return &g_type_char;
 }
 XrType *xr_type_new_null(XrVMRuntime *X) {
     (void) X;
@@ -252,14 +258,16 @@ XrType *xr_type_new_json(XrVMRuntime *X) {
     return &g_type_json;  // Process-level singleton (plain Json without fields)
 }
 
-XrType *xr_type_new_json_with_fields(XrVMRuntime *X, const char **names, XrType **types, int count,
-                                     bool is_sealed) {
+static XrType *xr_type_new_object_shape(XrVMRuntime *X, XrTypeKind kind, const char **names,
+                                        XrType **types, int count, bool is_sealed) {
     if (count < 0)
         return NULL;
     if (count > 0 && (!names || !types))
         return NULL;
+    if (!xr_kind_has_object_shape(kind))
+        return NULL;
     X = resolve_isolate(X);
-    XrType *type = type_alloc(X, XR_KIND_JSON);
+    XrType *type = type_alloc(X, kind);
     if (!type)
         return NULL;
     XrTypePool *pool = resolve_type_pool(X);
@@ -281,9 +289,19 @@ XrType *xr_type_new_json_with_fields(XrVMRuntime *X, const char **names, XrType 
     return type;
 }
 
-XR_FUNC void xr_type_set_json_field_readonly(XrVMRuntime *X, XrType *type, const bool *readonly,
-                                             int count) {
-    if (!type || type->kind != XR_KIND_JSON || !readonly || count <= 0 ||
+XrType *xr_type_new_record_with_fields(XrVMRuntime *X, const char **names, XrType **types,
+                                       int count, bool is_sealed) {
+    return xr_type_new_object_shape(X, XR_KIND_RECORD, names, types, count, is_sealed);
+}
+
+XrType *xr_type_new_json_with_fields(XrVMRuntime *X, const char **names, XrType **types, int count,
+                                     bool is_sealed) {
+    return xr_type_new_object_shape(X, XR_KIND_JSON, names, types, count, is_sealed);
+}
+
+XR_FUNC void xr_type_set_object_field_readonly(XrVMRuntime *X, XrType *type, const bool *readonly,
+                                               int count) {
+    if (!XR_TYPE_HAS_OBJECT_SHAPE(type) || !readonly || count <= 0 ||
         count != type->object.field_count)
         return;
     X = resolve_isolate(X);
@@ -296,14 +314,23 @@ XR_FUNC void xr_type_set_json_field_readonly(XrVMRuntime *X, XrType *type, const
     memcpy(type->object.field_readonly, readonly, sizeof(bool) * (size_t) count);
 }
 
-XR_FUNC void xr_type_set_json_type_name(XrVMRuntime *X, XrType *type, const char *name) {
-    if (!type || type->kind != XR_KIND_JSON || !name)
+XR_FUNC void xr_type_set_object_type_name(XrVMRuntime *X, XrType *type, const char *name) {
+    if (!XR_TYPE_HAS_OBJECT_SHAPE(type) || !name)
         return;
     X = resolve_isolate(X);
     XrTypePool *pool = resolve_type_pool(X);
     if (!pool)
         return;
     type->object.type_name = xr_pool_strdup(pool, name);
+}
+
+XR_FUNC void xr_type_set_json_field_readonly(XrVMRuntime *X, XrType *type, const bool *readonly,
+                                             int count) {
+    xr_type_set_object_field_readonly(X, type, readonly, count);
+}
+
+XR_FUNC void xr_type_set_json_type_name(XrVMRuntime *X, XrType *type, const char *name) {
+    xr_type_set_object_type_name(X, type, name);
 }
 
 // Optional type (T?) - unified: uses is_nullable on the base type itself
@@ -971,6 +998,7 @@ XrType *xr_type_copy(XrVMRuntime *X, XrType *type) {
                     type->function.type_param_constraint_counts, type->function.type_param_count);
             }
             break;
+        case XR_KIND_RECORD:
         case XR_KIND_JSON:
             if (type->object.field_count < 0)
                 return NULL;
@@ -1063,6 +1091,8 @@ XrType *xr_type_copy(XrVMRuntime *X, XrType *type) {
 XrType *xr_type_make_nullable(XrVMRuntime *X, XrType *type) {
     if (!type)
         return NULL;
+    if (xr_type_intrinsically_includes_null(type))
+        return type;
     if (type->is_nullable)
         return type;
     X = resolve_isolate(X);
@@ -1076,8 +1106,8 @@ XrType *xr_type_make_nullable(XrVMRuntime *X, XrType *type) {
         return &g_type_string_nullable;
     if (type == &g_type_bool)
         return &g_type_bool_nullable;
-    if (type == &g_type_json)
-        return &g_type_json_nullable;
+    if (type == &g_type_char)
+        return &g_type_char_nullable;
 
     // Also handle pool singletons (frozen types from type pool)
     if (type->frozen && resolve_type_pool(X)) {
@@ -1090,10 +1120,8 @@ XrType *xr_type_make_nullable(XrVMRuntime *X, XrType *type) {
                 return &g_type_string_nullable;
             case XR_KIND_BOOL:
                 return &g_type_bool_nullable;
-            case XR_KIND_JSON:
-                if (type->object.field_count == 0)
-                    return &g_type_json_nullable;
-                break;
+            case XR_KIND_CHAR:
+                return &g_type_char_nullable;
             default:
                 break;
         }
@@ -1168,6 +1196,14 @@ bool xr_type_assignable(XrType *target, XrType *source) {
     if (xr_type_equals(target, source))
         return true;
 
+    // Integer storage assignment: native-width integer types are distinct
+    // static views, but values can move between integer slots. Lowering
+    // inserts explicit truncation or type-view copies at typed write points.
+    if (XR_TYPE_IS_INT(target) && XR_TYPE_IS_INT(source))
+        return true;
+    if (XR_TYPE_IS_FLOAT(target) && XR_TYPE_IS_FLOAT(source))
+        return true;
+
     // Enum / class-name alias: the parser cannot distinguish an enum
     // type annotation `Color` from a class annotation, so it produces
     // XR_KIND_CLASS (or XR_KIND_INSTANCE for generic forms like
@@ -1197,6 +1233,8 @@ bool xr_type_assignable(XrType *target, XrType *source) {
     // null is compatible with nullable type (T?)
     if (XR_TYPE_IS_NULL(source) && target->is_nullable)
         return true;
+    if (XR_TYPE_IS_NULL(source) && xr_type_intrinsically_includes_null(target))
+        return true;
 
     // Nullable target: compare base types (T assignable to T?, T? assignable to T?)
     if (target->is_nullable) {
@@ -1216,25 +1254,30 @@ bool xr_type_assignable(XrType *target, XrType *source) {
     if (XR_TYPE_IS_FLOAT(target) && XR_TYPE_IS_INT(source))
         return true;
 
-    // Json compatibility - Map, string, int, float, bool → Json (Array is NOT Json)
-    if (XR_TYPE_IS_JSON(target) && !XR_TYPE_IS_JSON(source)) {
-        if (XR_TYPE_IS_MAP(source) || XR_TYPE_IS_STRING(source) || XR_TYPE_IS_INT(source) ||
-            XR_TYPE_IS_FLOAT(source) || XR_TYPE_IS_BOOL(source)) {
-            return true;
+    // Json value-domain compatibility. External heap/container values do not
+    // implicitly cross into Json; literal contexts must type them as Json.
+    if (XR_TYPE_IS_JSON(target) && !target->object.is_sealed) {
+        switch (source->kind) {
+            case XR_KIND_JSON:
+            case XR_KIND_NULL:
+            case XR_KIND_INT:
+            case XR_KIND_FLOAT:
+            case XR_KIND_STRING:
+            case XR_KIND_BOOL:
+                return true;
+            default:
+                break;
         }
     }
 
-    // Structural object subtyping
-    bool target_is_struct = XR_TYPE_IS_JSON(target);
-    bool source_is_struct = XR_TYPE_IS_JSON(source);
-    if (target_is_struct && source_is_struct) {
-        // Plain Json (no fields) accepts any object-like source
-        if (target->object.field_count == 0 && XR_TYPE_IS_JSON(target))
+    // Structural object subtyping. Record and Json object shapes are distinct
+    // semantic domains, so this branch never bridges between them.
+    bool target_is_struct = XR_TYPE_HAS_OBJECT_SHAPE(target);
+    bool source_is_struct = XR_TYPE_HAS_OBJECT_SHAPE(source);
+    if (target_is_struct && source_is_struct && target->kind == source->kind) {
+        if (XR_TYPE_IS_JSON(target) && target->object.field_count == 0)
             return true;
-
-        // Plain Json source assigned to structured target: codegen inserts
-        // runtime validation for downstream coercions.
-        if (source->object.field_count == 0 && XR_TYPE_IS_JSON(source))
+        if (XR_TYPE_IS_JSON(source) && source->object.field_count == 0)
             return true;
 
         // Check structural compatibility (source has all target fields)
@@ -1262,14 +1305,10 @@ bool xr_type_assignable(XrType *target, XrType *source) {
                     break;
                 }
             }
-            // Sealed Json: missing non-optional field is an error
-            // Open Json: missing fields allowed (extensible at runtime)
             if (!found && !is_optional && target->object.is_sealed) {
                 return false;
             }
         }
-        // Sealed Json: extra fields not declared on target are rejected.
-        // This enforces exact-shape semantics for `type T = {...}` aliases.
         if (target->object.is_sealed) {
             for (int j = 0; j < source->object.field_count; j++) {
                 if (!source->object.field_names || !source->object.field_names[j])
@@ -1538,6 +1577,8 @@ bool xr_type_equals(XrType *a, XrType *b) {
         return false;
     if (a->is_nullable != b->is_nullable)
         return false;
+    if ((a->kind == XR_KIND_INT || a->kind == XR_KIND_FLOAT) && a->native_width != b->native_width)
+        return false;
 
     // Check type-specific data
     if (a->kind == XR_KIND_ARRAY || a->kind == XR_KIND_SET || a->kind == XR_KIND_CHANNEL) {
@@ -1603,11 +1644,14 @@ bool xr_type_equals(XrType *a, XrType *b) {
                 return false;
             }
         }
-        if (!xr_error_set_equals(a->function.error_set, b->function.error_set))
-            return false;
+        /* error_set is advisory metadata (IDE / optimization), not part of the
+         * function type identity: two functions with the same signature but
+         * different inferred error sets are the same type and interchangeable.
+         * It is intentionally excluded from equality, assignability, and the
+         * monomorphization key (errors are unchecked). */
         return true;
     }
-    if (a->kind == XR_KIND_JSON) {
+    if (XR_TYPE_HAS_OBJECT_SHAPE(a)) {
         if (a->object.field_count != b->object.field_count)
             return false;
         if (a->object.is_sealed != b->object.is_sealed)
@@ -1710,7 +1754,7 @@ XrType *xr_type_non_nullable(XrVMRuntime *X, XrType *type) {
             case XR_KIND_BOOL:
                 return xr_type_new_bool(X);
             case XR_KIND_JSON:
-                if (type == &g_type_json_nullable || type->object.field_count == 0)
+                if (type->object.field_count == 0)
                     return &g_type_json;
                 break;
             default:

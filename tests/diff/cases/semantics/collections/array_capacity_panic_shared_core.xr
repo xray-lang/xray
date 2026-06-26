@@ -4,7 +4,7 @@ let dyn: Json = {
 }
 
 try {
-    let xs = new Array<int>(dyn.bad, 1)
+    let xs = Array<int>(dyn.bad, 1)
     print(xs.length)
 } catch panic (p) {
     print(p.message)

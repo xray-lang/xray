@@ -31,7 +31,7 @@ class CatBench extends AnimalBench {
 }
 
 fn run(rounds: int) -> int {
-    let animals = [new DogBench(5), new CatBench(7)]
+    let animals = [DogBench(5), CatBench(7)]
     let total = 0
     for (let i = 0; i < rounds; i++) {
         let a = animals[i % animals.length]

@@ -495,7 +495,7 @@ TEST(repl_function_mutates_array_cross_input) {
     ASSERT_NOT_NULL(iso);
 
     XrProto *p1 = xr_repl_compile(xr_compiler_session_current_for_isolate(iso), iso,
-                                  "let arr: array<int> = []\n");
+                                  "let arr: Array<int> = []\n");
     ASSERT_NOT_NULL(p1);
     xr_execute(iso, p1);
 

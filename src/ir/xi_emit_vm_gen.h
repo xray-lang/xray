@@ -61,8 +61,6 @@
     X(SHR, xi_emit_arith) \
     X(EQ, xi_emit_cmp) \
     X(NE, xi_emit_cmp) \
-    X(EQ_STRICT, xi_emit_cmp) \
-    X(NE_STRICT, xi_emit_cmp) \
     X(LT, xi_emit_cmp) \
     X(LE, xi_emit_cmp) \
     X(GT, xi_emit_cmp) \
@@ -91,6 +89,8 @@
     X(INDEX_GET, xi_emit_index_get) \
     X(INDEX_SET, xi_emit_index_set) \
     X(ARRAY_NEW, xi_emit_array_new) \
+    X(ARRAY_PUSH, xi_emit_array_push) \
+    X(ARRAY_EXTEND, xi_emit_array_extend) \
     X(MAP_NEW, xi_emit_map_new) \
     X(SET_NEW, xi_emit_set_new) \
     X(STR_CONCAT, xi_emit_str_concat) \
@@ -102,6 +102,7 @@
     X(ITER_NEXT, xi_emit_iter) \
     X(ITER_VALID, xi_emit_iter) \
     X(GO, xi_emit_go) \
+    X(GEN_CALL, xi_emit_gen_call) \
     X(AWAIT, xi_emit_await) \
     X(CHAN_SEND, xi_emit_chan_send) \
     X(CHAN_RECV, xi_emit_chan_recv) \
@@ -113,13 +114,17 @@
     X(CHAN_TIMER_DISPOSE, xi_emit_chan_timer_dispose) \
     X(SELECT_BLOCK, xi_emit_select_block) \
     X(YIELD, xi_emit_yield) \
+    X(GEN_YIELD, xi_emit_gen_yield) \
     X(CORO_OP, xi_emit_coro_op) \
     X(CHAN_NEW, xi_emit_chan_new) \
     X(DEFER, xi_emit_defer) \
+    X(DEFER_MARK, xi_emit_defer_mark) \
+    X(DEFER_RUN_TO, xi_emit_defer_run_to) \
     X(JSON_NEW, xi_emit_json_new) \
     X(JSON_INIT_F, xi_emit_json_init_f) \
     X(JSON_GET_F, xi_emit_json_get_f) \
     X(JSON_SET_F, xi_emit_json_set_f) \
+    X(JSON_MERGE, xi_emit_json_merge) \
     X(JSON_DECODE, xi_emit_json_decode) \
     X(STRUCT_NEW, xi_emit_struct_new) \
     X(STRUCT_GET, xi_emit_struct_get) \
@@ -155,8 +160,6 @@ static inline OpCode xi_emit_vm_template_opcode(uint16_t op) {
         case XI_SHR: return OP_SHR;
         case XI_EQ: return OP_CMP_EQ;
         case XI_NE: return OP_CMP_NE;
-        case XI_EQ_STRICT: return OP_CMP_EQ_STRICT;
-        case XI_NE_STRICT: return OP_CMP_NE_STRICT;
         case XI_LT: return OP_CMP_LT;
         case XI_LE: return OP_CMP_LE;
         case XI_GT: return OP_CMP_LT;
@@ -197,6 +200,7 @@ static inline bool xi_emit_vm_requires_fresh_dst(uint16_t op) {
         case XI_CALL_METHOD: return true;
         case XI_CALL_METHOD_DIRECT: return true;
         case XI_GO: return true;
+        case XI_GEN_CALL: return true;
         case XI_CHAN_RECV: return true;
         case XI_CHAN_TRY_RECV: return true;
         case XI_SELECT_BLOCK: return true;

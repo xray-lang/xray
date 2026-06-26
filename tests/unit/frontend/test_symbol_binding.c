@@ -186,8 +186,6 @@ static int count_unresolved_vars(AstNode *node) {
         case AST_BINARY_BXOR:
         case AST_BINARY_LSHIFT:
         case AST_BINARY_RSHIFT:
-        case AST_BINARY_EQ_STRICT:
-        case AST_BINARY_NE_STRICT:
             count += count_unresolved_vars(node->as.binary.left);
             count += count_unresolved_vars(node->as.binary.right);
             break;

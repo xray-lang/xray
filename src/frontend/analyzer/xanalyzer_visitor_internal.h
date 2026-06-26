@@ -54,6 +54,16 @@ XR_FUNC XrType *resolve_class_to_type_param(XrVMRuntime *X, XrType *type, const 
                                             int tp_count);
 XR_FUNC void xa_set_function_type_params_from_ast(XaInferContext *ctx, XrType *fn_type,
                                                   XrGenericParam **type_params, int count);
+XR_FUNC void xa_loop_scope_push(XaInferContext *ctx, XaLoopScope *scope, const char *label,
+                                AstNode *node);
+XR_FUNC void xa_loop_scope_pop(XaInferContext *ctx, XaLoopScope *scope);
+XR_FUNC void xa_validate_loop_control(XaInferContext *ctx, AstNode *node, const char *label,
+                                      bool is_continue);
+XR_FUNC void xa_validate_hashable_key_type(XaInferContext *ctx, XrType *type,
+                                           XaSymbolLinks *generic_links, const char *context,
+                                           XrLocation *loc);
+XR_FUNC void xa_validate_hashable_contract_for_class(XaInferContext *ctx, AstNode *node,
+                                                     XrClassInfo *info);
 
 // Expression visitors (defined in xanalyzer_visitor_expr.c)
 XR_FUNC XrType *xa_visit_struct_literal(XaInferContext *ctx, AstNode *node);
@@ -64,6 +74,12 @@ XR_FUNC XrType *xa_visit_force_unwrap(XaInferContext *ctx, AstNode *node);
 XR_FUNC XrType *xa_visit_as_expr(XaInferContext *ctx, AstNode *node);
 XR_FUNC void check_closure_capture(XaInferContext *ctx, AstNode *node, int line);
 XR_FUNC void check_coro_capture(XaInferContext *ctx, AstNode *node, int line);
+XR_FUNC bool xa_boundary_transfer_type_needs_explicit(const XrType *type);
+XR_FUNC bool xa_boundary_arg_is_explicit_copy(AstNode *arg_node);
+XR_FUNC bool xa_boundary_arg_is_shared_const(XaInferContext *ctx, AstNode *arg_node);
+XR_FUNC void xa_check_boundary_transfer_arg(XaInferContext *ctx, AstNode *boundary_node,
+                                            AstNode *arg_node, XrType *arg_type,
+                                            const char *boundary_label);
 
 // Unified function body visitor (collect + direct traversal)
 XR_FUNC void xa_visit_function_body_unified(XaInferContext *ctx, AstNode *body);
@@ -77,6 +93,14 @@ XR_FUNC XaSymbol *xa_in_param_symbol_for_expr(XaInferContext *ctx, AstNode *expr
 XR_FUNC bool xa_type_needs_borrow_escape_guard(XrType *type);
 XR_FUNC XaSymbol *xa_borrowed_param_root_symbol(XaInferContext *ctx, AstNode *expr);
 XR_FUNC bool xa_method_name_mutates_receiver(const char *name);
+XR_FUNC bool xa_type_contains_float(XrType *type);
+XR_FUNC void xa_report_float_modulo_error(XaInferContext *ctx, AstNode *node, XrType *left,
+                                          XrType *right);
+XR_FUNC void xa_check_condition_type(XaInferContext *ctx, AstNode *node, XrType *cond_type);
+XR_FUNC void xa_check_logical_operand_type(XaInferContext *ctx, AstNode *node, XrType *type);
+struct XrClassInfo;
+XR_FUNC void xa_check_member_visibility(XaInferContext *ctx, AstNode *node, XaSymbol *member,
+                                        struct XrClassInfo *owner);
 
 // Module graph exports lookup (defined in xanalyzer_visitor.c).
 // Resolves an import specifier to the target module's exports hashmap.

@@ -18,6 +18,7 @@ order: 021
 | `bool` | §2.3.3 |
 | `break` | §4.6 |
 | `catch` | §8 |
+| `char` | §2.3.5 |
 | `class` | §5.3 |
 | `const` | §5.1 |
 | `constructor` | §5.3 |
@@ -46,7 +47,8 @@ order: 021
 | `null` | §1.6.4 |
 | `operator` | §5.3 |
 | `override` | §5.3 |
-| `private` `public` | §5.3 |
+| `private` | §5.3 |
+| `protected` | §5.3 |
 | `return` | §4.7 |
 | `scope` | §10.7 |
 | `select` | §10.6 |
@@ -61,9 +63,9 @@ order: 021
 | `try` | §8 |
 | `type` | §5.7 |
 | `uint8`..`uint64` | §2.3.1 |
-| `unknown` | §2.2（编译器内部）|
+| `unsafe` | §3.2 |
 | `while` | §4.3 |
-| `yield` | §3.16 / §10.10 |
+| `yield` | §3.16 |
 <!-- /xr-spec:cn -->
 
 <!-- xr-spec:en -->
@@ -81,6 +83,7 @@ The full set of 63 reserved keywords sorted alphabetically; see [§1.5](#15-keyw
 | `bool` | §2.3.3 |
 | `break` | §4.6 |
 | `catch` | §8 |
+| `char` | §2.3.5 |
 | `class` | §5.3 |
 | `const` | §5.1 |
 | `constructor` | §5.3 |
@@ -109,7 +112,8 @@ The full set of 63 reserved keywords sorted alphabetically; see [§1.5](#15-keyw
 | `null` | §1.6.4 |
 | `operator` | §5.3 |
 | `override` | §5.3 |
-| `private` `public` | §5.3 |
+| `private` | §5.3 |
+| `protected` | §5.3 |
 | `return` | §4.7 |
 | `scope` | §10.7 |
 | `select` | §10.6 |
@@ -124,7 +128,7 @@ The full set of 63 reserved keywords sorted alphabetically; see [§1.5](#15-keyw
 | `try` | §8 |
 | `type` | §5.7 |
 | `uint8`..`uint64` | §2.3.1 |
-| `unknown` | §2.2 (compiler-internal) |
+| `unsafe` | §3.2 |
 | `while` | §4.3 |
-| `yield` | §3.16 / §10.10 |
+| `yield` | §3.16 |
 <!-- /xr-spec:en -->

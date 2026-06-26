@@ -79,7 +79,7 @@ fn test_field_default_init() {
 
     /* 测试1：简单字面量默认值 */
 
-    let s = new Simple()
+    let s = Simple()
 
     print("Simple.a = ${s.a}")       // expect: 0
     print("Simple.b = ${s.b}")       // expect: 3.14
@@ -88,7 +88,7 @@ fn test_field_default_init() {
 
     /* 测试2：复合类型默认值 */
 
-    let c = new Complex()
+    let c = Complex()
 
 
     print("初始 map size: ${c.getMapSize()}")  // expect: 0
@@ -102,15 +102,15 @@ fn test_field_default_init() {
 
     /* 测试3：构造函数参数覆盖默认值 */
 
-    let o2 = new Override("custom", 42)
+    let o2 = Override("custom", 42)
 
     print("Override 覆盖 name: ${o2.getName()}")   // expect: custom
     print("Override 覆盖 count: ${o2.getCount()}") // expect: 42
 
     /* 测试4：多实例独立性 */
 
-    let c1 = new Counter()
-    let c2 = new Counter()
+    let c1 = Counter()
+    let c2 = Counter()
 
     c1.add("a")
     c1.add("b")
@@ -122,8 +122,8 @@ fn test_field_default_init() {
 
 @test
 fn test_field_default_init_without_constructor() {
-    let a = new NoCtorDefaults()
-    let b = new NoCtorDefaults()
+    let a = NoCtorDefaults()
+    let b = NoCtorDefaults()
 
     assert_eq(a.nums.length, 2)
     assert_eq(a.settings["port"], 8080)

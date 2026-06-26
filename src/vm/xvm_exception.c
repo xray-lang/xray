@@ -45,7 +45,7 @@
 
 #include "xvm_internal.h"
 #include "../base/xchecks.h"
-#include "../runtime/object/xexception.h"
+#include "../runtime/object/xpanic_info.h"
 #include "../runtime/value/xchunk.h"
 
 /* ========== Stack-trace recording ========== */
@@ -56,13 +56,13 @@
  *
  * The trace is recorded in source-language order: the function that
  * actually executed the throw is appended first, then its caller,
- * then the caller's caller, and so on. xr_exception_print walks the
+ * then the caller's caller, and so on. xr_panic_info_print walks the
  * array in that same order, so the user sees the throw site first
  * and the outermost frame last — matching the convention of every
  * mainstream runtime (Python, Java, JavaScript).
  */
 static void record_full_trace(XrVMRuntime *isolate, XrValue exception) {
-    if (!xr_value_is_exception(isolate, exception))
+    if (!xr_value_is_panic_info(isolate, exception))
         return;
 
     XrVMContext *ctx = xr_vm_current_ctx(isolate);
@@ -76,7 +76,7 @@ static void record_full_trace(XrVMRuntime *isolate, XrValue exception) {
      * recording by checking the existing trace length: any non-zero
      * trace means a previous unwind already populated it for the
      * outer frames, and rerecording would duplicate the entries. */
-    XrValue stack_val = xr_exception_get_stacktrace(isolate, exception);
+    XrValue stack_val = xr_panic_info_get_stacktrace(isolate, exception);
     if (XR_IS_ARRAY(stack_val)) {
         XrArray *stack = (XrArray *) XR_TO_PTR(stack_val);
         if (stack->length > 0)
@@ -106,7 +106,7 @@ static void record_full_trace(XrVMRuntime *isolate, XrValue exception) {
                 line = PROTO_LINE(proto, pc_offset);
             }
         }
-        xr_exception_add_frame(isolate, exception, func_name, line);
+        xr_panic_info_add_frame(isolate, exception, func_name, line);
     }
 }
 

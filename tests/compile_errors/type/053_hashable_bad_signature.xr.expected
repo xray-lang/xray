@@ -1,0 +1,1 @@
+Class 'BadSig' implements Hashable but is missing operator==(other: BadSig) -> bool and hash() -> int

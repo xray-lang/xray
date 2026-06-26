@@ -1,7 +1,7 @@
-// 0941_scope_expr_return.xr
-// Regression: supervisor scope used as expression must return errors array.
-// Bug: xi_lower_scope_block returned NULL instead of the exit value,
-// so `let errors = supervisor scope { ... }` got null instead of Array.
+// Regression: supervisor scope used as expression must return Array<TaskOutcome>.
+// Bug: xi_lower_scope_block returned NULL instead of the exit value.
+
+import time
 
 enum ScopeErr { Msg(string) }
 
@@ -14,41 +14,116 @@ fn child_fail(msg: string) -> int {
     return 0
 }
 
-@test
-fn test_supervisor_scope_returns_errors() {
-    let errors = supervisor scope {
-        go child_fail("err_a")
-        go child_fail("err_b")
+fn child_slow() -> int {
+    time.sleep(1000)
+    return 7
+}
+
+fn count_success(outcomes: Array<TaskOutcome>) -> int {
+    let count = 0
+    for (let i = 0; i < outcomes.length; i++) {
+        match (outcomes[i]) {
+            TaskOutcome.Success(_) -> { count = count + 1 }
+            _ -> {}
+        }
     }
-    assert_eq(errors.length > 0, true)
+    return count
+}
+
+fn count_failed(outcomes: Array<TaskOutcome>) -> int {
+    let count = 0
+    for (let i = 0; i < outcomes.length; i++) {
+        match (outcomes[i]) {
+            TaskOutcome.Failed(_) -> { count = count + 1 }
+            _ -> {}
+        }
+    }
+    return count
+}
+
+fn count_cancelled(outcomes: Array<TaskOutcome>) -> int {
+    let count = 0
+    for (let i = 0; i < outcomes.length; i++) {
+        match (outcomes[i]) {
+            TaskOutcome.Cancelled -> { count = count + 1 }
+            _ -> {}
+        }
+    }
+    return count
+}
+
+fn has_scope_error(outcomes: Array<TaskOutcome>, expected: string) -> bool {
+    for (let i = 0; i < outcomes.length; i++) {
+        match (outcomes[i]) {
+            TaskOutcome.Failed(err) -> {
+                match (err) {
+                    ScopeErr.Msg(msg) -> {
+                        if (msg == expected) {
+                            return true
+                        }
+                    }
+                    _ -> {}
+                }
+            }
+            _ -> {}
+        }
+    }
+    return false
 }
 
 @test
-fn test_supervisor_scope_no_errors() {
-    let errors = supervisor scope {
+fn test_supervisor_scope_returns_outcomes() {
+    let outcomes = supervisor scope {
+        go child_fail("err_a")
+        go child_fail("err_b")
+    }
+    assert_eq(outcomes.length, 2)
+    assert_eq(count_failed(outcomes), 2)
+    assert(has_scope_error(outcomes, "err_a"), "failed outcome should preserve err_a")
+    assert(has_scope_error(outcomes, "err_b"), "failed outcome should preserve err_b")
+}
+
+@test
+fn test_supervisor_scope_all_success() {
+    let outcomes = supervisor scope {
         go child_ok()
         go child_ok()
     }
-    assert_eq(errors.length, 0)
+    assert_eq(outcomes.length, 2)
+    assert_eq(count_success(outcomes), 2)
 }
 
 @test
 fn test_supervisor_scope_mixed() {
-    let errors = supervisor scope {
+    let outcomes = supervisor scope {
         go child_ok()
         go child_fail("mixed_err")
         go child_ok()
     }
-    assert_eq(errors.length, 1)
+    assert_eq(outcomes.length, 3)
+    assert_eq(count_success(outcomes), 2)
+    assert_eq(count_failed(outcomes), 1)
+    assert(has_scope_error(outcomes, "mixed_err"), "mixed failure should keep enum payload")
 }
 
 @test
 fn test_supervisor_scope_single_failure() {
-    let errors = supervisor scope {
+    let outcomes = supervisor scope {
         go child_fail("single")
     }
-    assert_eq(errors.length, 1)
-    assert(string(errors[0]).includes("single"), "error should contain 'single'")
+    assert_eq(outcomes.length, 1)
+    assert_eq(count_failed(outcomes), 1)
+    assert(has_scope_error(outcomes, "single"), "single failure should keep enum payload")
+}
+
+@test
+fn test_supervisor_scope_cancelled() {
+    let outcomes = supervisor scope {
+        let task = go child_slow()
+        task.cancel()
+    }
+    assert_eq(outcomes.length, 1)
+    assert_eq(count_cancelled(outcomes), 1)
 }
 
 @test

@@ -1,0 +1,3 @@
+fn make<K, V>() -> Map<K, V> {
+    return #{}
+}

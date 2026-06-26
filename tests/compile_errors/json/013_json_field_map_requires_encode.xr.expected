@@ -1,0 +1,2 @@
+Json field 'headers' has type 'Map<string, string>'; use Json.encode(...) for external Xray values
+

@@ -1,8 +1,8 @@
-let wm = new WeakMap()
+let wm = WeakMap()
 let r = 1..4
 wm.set(r, "range")
 print(wm.get(r))
 
-let ws = new WeakSet()
+let ws = WeakSet()
 ws.add(r)
 print(ws.has(r))

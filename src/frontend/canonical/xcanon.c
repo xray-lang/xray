@@ -65,6 +65,7 @@ static bool is_simple_expr(const AstNode *node) {
         case AST_LITERAL_INT:
         case AST_LITERAL_FLOAT:
         case AST_LITERAL_STRING:
+        case AST_LITERAL_CHAR:
         case AST_LITERAL_TRUE:
         case AST_LITERAL_FALSE:
         case AST_LITERAL_NULL:
@@ -597,6 +598,10 @@ static void canon_node(XrCanonCtx *ctx, AstNode *node) {
                 canon_node(ctx, node->as.array_literal.elements[i]);
             break;
 
+        case AST_SPREAD_EXPR:
+            canon_node(ctx, node->as.spread_expr.expr);
+            break;
+
         case AST_TUPLE_LITERAL:
             for (int i = 0; i < node->as.tuple_literal.count; i++)
                 canon_node(ctx, node->as.tuple_literal.elements[i]);
@@ -794,12 +799,14 @@ static void canon_node(XrCanonCtx *ctx, AstNode *node) {
         case AST_BINARY_BXOR:
         case AST_BINARY_LSHIFT:
         case AST_BINARY_RSHIFT:
-        case AST_BINARY_EQ_STRICT:
-        case AST_BINARY_NE_STRICT:
         case AST_NULLISH_COALESCE:
-        case AST_RANGE:
             canon_node(ctx, node->as.binary.left);
             canon_node(ctx, node->as.binary.right);
+            break;
+
+        case AST_RANGE:
+            canon_node(ctx, node->as.range.start);
+            canon_node(ctx, node->as.range.end);
             break;
 
         case AST_UNARY_NEG:
@@ -813,6 +820,7 @@ static void canon_node(XrCanonCtx *ctx, AstNode *node) {
         case AST_LITERAL_INT:
         case AST_LITERAL_FLOAT:
         case AST_LITERAL_STRING:
+        case AST_LITERAL_CHAR:
         case AST_LITERAL_TRUE:
         case AST_LITERAL_FALSE:
         case AST_LITERAL_NULL:
@@ -827,11 +835,18 @@ static void canon_node(XrCanonCtx *ctx, AstNode *node) {
         case AST_IMPORT_STMT:
         case AST_TYPE_ALIAS:
         case AST_INTERFACE_DECL:
-        case AST_YIELD_STMT:
         case AST_PATTERN_LITERAL:
-        case AST_PATTERN_RANGE:
         case AST_PATTERN_WILDCARD:
         case AST_PATTERN_MULTI:
+            break;
+
+        case AST_YIELD_STMT:
+            canon_node(ctx, node->as.yield_stmt.value);
+            break;
+
+        case AST_PATTERN_RANGE:
+            canon_node(ctx, node->as.pattern_range.start);
+            canon_node(ctx, node->as.pattern_range.end);
             break;
 
         default:

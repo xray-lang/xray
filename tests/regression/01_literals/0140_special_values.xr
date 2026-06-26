@@ -105,7 +105,7 @@ fn test_empty_set() {
 fn test_zero_int() {
     let x = 0
     assert_eq(x == 0, true)
-    assert_eq(!x, true)
+    assert_eq(!(x != 0), true)
 }
 
 @test

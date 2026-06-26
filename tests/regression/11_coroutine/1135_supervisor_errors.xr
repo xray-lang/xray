@@ -1,4 +1,6 @@
-// Test supervisor scope errors[] collection
+// Test supervisor scope TaskOutcome collection.
+
+import time
 
 enum SvErr { Msg(string) }
 
@@ -6,59 +8,126 @@ fn failing1() -> int {
     throw SvErr.Msg("error1")
     return 0
 }
+
 fn failing2() -> int {
     throw SvErr.Msg("error2")
     return 0
 }
+
 fn ok() -> int {
     return 42
 }
-fn test_errors_collected() {
-    let errors = supervisor scope {
+
+fn slow() -> int {
+    time.sleep(1000)
+    return 7
+}
+
+fn count_success(outcomes: Array<TaskOutcome>) -> int {
+    let count = 0
+    for (let i = 0; i < outcomes.length; i++) {
+        match (outcomes[i]) {
+            TaskOutcome.Success(_) -> { count = count + 1 }
+            _ -> {}
+        }
+    }
+    return count
+}
+
+fn count_failed(outcomes: Array<TaskOutcome>) -> int {
+    let count = 0
+    for (let i = 0; i < outcomes.length; i++) {
+        match (outcomes[i]) {
+            TaskOutcome.Failed(_) -> { count = count + 1 }
+            _ -> {}
+        }
+    }
+    return count
+}
+
+fn count_cancelled(outcomes: Array<TaskOutcome>) -> int {
+    let count = 0
+    for (let i = 0; i < outcomes.length; i++) {
+        match (outcomes[i]) {
+            TaskOutcome.Cancelled -> { count = count + 1 }
+            _ -> {}
+        }
+    }
+    return count
+}
+
+fn has_failed_msg(outcomes: Array<TaskOutcome>, expected: string) -> bool {
+    for (let i = 0; i < outcomes.length; i++) {
+        match (outcomes[i]) {
+            TaskOutcome.Failed(err) -> {
+                match (err) {
+                    SvErr.Msg(msg) -> {
+                        if (msg == expected) {
+                            return true
+                        }
+                    }
+                    _ -> {}
+                }
+            }
+            _ -> {}
+        }
+    }
+    return false
+}
+
+fn test_outcomes_collected() {
+    let outcomes = supervisor scope {
         go ok()
         go failing1()
         go failing2()
     }
-    assert(errors.length > 0, "should have collected errors")
+    assert_eq(outcomes.length, 3)
+    assert_eq(count_success(outcomes), 1)
+    assert_eq(count_failed(outcomes), 2)
+    assert(has_failed_msg(outcomes, "error1"), "Failed payload should preserve error1 enum")
+    assert(has_failed_msg(outcomes, "error2"), "Failed payload should preserve error2 enum")
 }
-fn test_no_errors() {
-    let errors = supervisor scope {
+
+fn test_all_success() {
+    let outcomes = supervisor scope {
         go ok()
         go ok()
     }
-    assert(errors.length == 0, "all success should return empty array")
+    assert_eq(outcomes.length, 2)
+    assert_eq(count_success(outcomes), 2)
+    assert_eq(count_failed(outcomes), 0)
 }
+
 fn test_single_error() {
-    let errors = supervisor scope {
+    let outcomes = supervisor scope {
         go failing1()
     }
-    assert(errors.length == 1)
-    assert(errors[0] != null, "single error should be non-null")
+    assert_eq(outcomes.length, 1)
+    assert_eq(count_failed(outcomes), 1)
+    assert(has_failed_msg(outcomes, "error1"), "single failure should keep enum payload")
 }
+
+fn test_cancelled_child() {
+    let outcomes = supervisor scope {
+        let task = go slow()
+        task.cancel()
+    }
+    assert_eq(outcomes.length, 1)
+    assert_eq(count_cancelled(outcomes), 1)
+}
+
 fn test_as_statement() {
     supervisor scope {
         go ok()
         go failing1()
     }
-    // No crash — errors silently collected and discarded
 }
 
 @test
-fn test_supervisor_errors() {
-
-
-
-    // Test 1: supervisor scope collects all child errors
-
-    // Test 2: supervisor scope all success returns empty array
-
-    // Test 3: supervisor scope single failure
-
-    // Test 4: supervisor scope as statement (errors discarded)
-
-    test_errors_collected()
-    test_no_errors()
+fn test_supervisor_outcomes() {
+    test_outcomes_collected()
+    test_all_success()
     test_single_error()
+    test_cancelled_child()
     test_as_statement()
 }
-

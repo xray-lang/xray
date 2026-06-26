@@ -1,8 +1,9 @@
-// anchor: defer-loop-function-scope
-// spec §4.9: `defer` is function-scoped (NOT block-scoped). A defer registered
-// inside a loop body accumulates one deferred call per iteration; all run at
-// FUNCTION exit in LIFO order. Regression: AOT previously modeled defers
-// statically and ran a loop's defer only once; it now runs each registration.
+// anchor: defer-loop-block-scope
+// D22: `defer` is owned by the nearest real `{}` block. A defer registered in a
+// loop body runs at that iteration's block exit instead of accumulating until
+// function return. Both block-form and call-form defer must use the loop body as
+// the owner; the parser's synthetic capture block for `defer f(args)` is not a
+// semantic defer scope.
 fn loop_block() {
     for (i in 0..4) {
         defer { print("blk " + string(i)) }
@@ -14,6 +15,7 @@ fn loop_block() {
 fn loop_call() {
     for (i in 0..3) {
         defer log(i)
+        print("call-iter " + string(i))
     }
     print("loop-call-end")
 }

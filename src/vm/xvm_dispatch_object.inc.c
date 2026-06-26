@@ -339,6 +339,24 @@ vmcase(OP_JSON_SETK) {
     vmbreak;
 }
 
+vmcase(OP_JSON_MERGE) {
+    // OP_JSON_MERGE: copy every field of R[B]:Json into R[A]:Json (object
+    // spread). Source fields are borrowed, so each value is retained as it is
+    // copied; later writes override earlier ones (xr_json_set releases the old
+    // value). Source must be a Json object.
+    int a = GETARG_A(i);
+    int b = GETARG_B(i);
+    if (!xr_value_has_object_shape(R(b))) {
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "object spread source must be an object");
+    }
+    XrJson *dst = xr_value_to_json(R(a));
+    XrJson *src = xr_value_to_json(R(b));
+    if (!xr_json_merge(isolate, dst, src)) {
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_PROPERTY, "cannot add property to sealed Json object");
+    }
+    vmbreak;
+}
+
 vmcase(OP_JSON_INIT) {
     // OP_JSON_INIT: direct index write during initialization
     int a = GETARG_A(i);

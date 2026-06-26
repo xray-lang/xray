@@ -25,7 +25,7 @@ fn run(cell: Cell, rounds: int) -> int {
 }
 
 fn main() {
-    let cell = new Cell(37)
+    let cell = Cell(37)
     let result = run(cell, 160000)
     print("mem_field_load_in_call=${result}")
 }

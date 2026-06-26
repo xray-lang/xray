@@ -19,7 +19,7 @@ fn tryRecvValue(ch) {
 
 // 测试1：协程状态查询
 fn test_coro_status_query() {
-    let ch = new Channel(1)
+    let ch = Channel(1)
     fn task() {
         ch.recv()
         // 等待信号
@@ -139,7 +139,7 @@ fn test_coro_error_capture() {
 
 // 测试6：命名协程批量完成
 fn test_coro_named_batch() {
-    let results = new Channel(10)
+    let results = Channel(10)
     fn task(id, label) {
         // 模拟工作
         let sum = 0
@@ -193,15 +193,15 @@ fn test_coro_chain() {
 
 // 测试8：并发调试模式 - 追踪执行顺序
 fn test_execution_trace() {
-    let trace = new Channel(20)
+    let trace = Channel(20)
     fn traced_task(id) {
-        trace.send({ "event" => "start", "id" => id })
+        trace.send(copy({ "event" => "start", "id" => id }))
         // 模拟工作
         let sum = 0
         for (let i = 0; i < 100; i++) {
             sum = sum + i
         }
-        trace.send({ "event" => "end", "id" => id })
+        trace.send(copy({ "event" => "end", "id" => id }))
         return sum
     }
     let t1 = go traced_task(1)

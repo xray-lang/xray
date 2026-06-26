@@ -1,0 +1,67 @@
+// 0451_labeled_break_continue.xr
+// Test labeled break/continue on nested loops.
+
+@test
+fn test_labeled_break_exits_named_for_in() {
+    let trace = ""
+    outer: for (i in 0..4) {
+        for (j in 0..4) {
+            if (i == 2 && j == 1) {
+                break outer
+            }
+            trace += string(i) + string(j) + ","
+        }
+    }
+    assert_eq(trace, "00,01,02,03,10,11,12,13,20,")
+}
+
+@test
+fn test_labeled_continue_targets_named_for_in() {
+    let trace = ""
+    outer: for (i in 0..3) {
+        for (j in 0..4) {
+            if (j == 1) {
+                continue outer
+            }
+            trace += string(i) + string(j) + ","
+        }
+        trace += "unreachable,"
+    }
+    assert_eq(trace, "00,10,20,")
+}
+
+@test
+fn test_labeled_continue_targets_traditional_for_increment() {
+    let total = 0
+    outer: for (let i = 0; i < 4; i++) {
+        for (let j = 0; j < 4; j++) {
+            if (j == 2) {
+                continue outer
+            }
+            total += 1
+        }
+        total += 1000
+    }
+    assert_eq(total, 8)
+}
+
+@test
+fn test_labeled_while_break_and_continue() {
+    let i = 0
+    let count = 0
+    outer: while (i < 5) {
+        let j = 0
+        i += 1
+        while (j < 5) {
+            j += 1
+            if (i == 3) {
+                break outer
+            }
+            if (j == 2) {
+                continue outer
+            }
+            count += 1
+        }
+    }
+    assert_eq(count, 2)
+}

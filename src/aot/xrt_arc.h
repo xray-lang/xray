@@ -319,6 +319,11 @@ static inline void xrt_release(XrValue v) {
     }
 }
 
+static inline XrValue xrt_value_to_owned(XrValue v) {
+    xrt_retain(v);
+    return v;
+}
+
 static inline void xrt_arc_init(void) {
     const char *arena = getenv("XRAY_AOT_ARENA");
     xrt_bump_enabled = (arena && arena[0] == '1' && arena[1] == '\0') ? 1 : 0;

@@ -84,13 +84,13 @@ static void test_mem_ops(void) {
 
 static void test_optimization_traits(void) {
     ASSERT_TRUE(xi_op_is_comparison(XI_EQ), "EQ is a comparison op");
-    ASSERT_TRUE(xi_op_is_comparison(XI_EQ_STRICT), "EQ_STRICT is a comparison op");
+    ASSERT_TRUE(xi_op_is_comparison(XI_LT), "LT is a comparison op");
     ASSERT_TRUE(!xi_op_is_comparison(XI_ADD), "ADD is not a comparison op");
     ASSERT_TRUE(xi_op_value_numbering_kind(XI_ADD) == XI_GEN_VN_PURE, "ADD is VN-pure");
     ASSERT_TRUE(xi_op_value_numbering_kind(XI_LOAD_FIELD) == XI_GEN_VN_MEMORY_READ,
                 "LOAD_FIELD is VN memory-read");
     ASSERT_TRUE(!xi_op_value_numberable(XI_CONST), "CONST is not value-numbered by GVN");
-    ASSERT_TRUE(!xi_op_value_numberable(XI_EQ_STRICT), "EQ_STRICT is not value-numbered by GVN");
+    ASSERT_TRUE(!xi_op_value_numberable(XI_IS), "IS is not value-numbered by GVN");
     ASSERT_TRUE(xi_op_is_commutative(XI_ADD), "ADD is commutative");
     ASSERT_TRUE(xi_op_is_commutative(XI_EQ), "EQ is commutative");
     ASSERT_TRUE(!xi_op_is_commutative(XI_SUB), "SUB is not commutative");
@@ -124,7 +124,7 @@ static void test_result_ownership_traits(void) {
 static void test_speculation_traits(void) {
     ASSERT_TRUE(xi_op_can_speculate(XI_SELECT), "SELECT is safe to speculate");
     ASSERT_TRUE(xi_op_can_speculate(XI_COPY), "COPY is safe to speculate");
-    ASSERT_TRUE(!xi_op_can_speculate(XI_EQ_STRICT), "EQ_STRICT is not safe to speculate");
+    ASSERT_TRUE(!xi_op_can_speculate(XI_IS), "IS is not safe to speculate");
     ASSERT_TRUE(!xi_op_can_speculate(XI_LOAD_FIELD), "LOAD_FIELD is not safe to speculate");
 }
 

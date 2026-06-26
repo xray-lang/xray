@@ -100,20 +100,22 @@ static inline void scope_lock_release(XrScopeContext *scope) {
     atomic_store_explicit(&scope->child_lock, false, memory_order_release);
 }
 
-/* Record this child's error and update scope->first_error / scope->errors
- * per policy mode. Caller must hold scope->child_lock. */
-static bool wake_waiter_record_child_error_locked(XrCoroutine *coro, XrScopeContext *scope) {
+/* Record this child's terminal state and update scope->first_error /
+ * scope->outcomes per policy mode.  Returns true when the child failed, so
+ * linked scope can cancel siblings. Caller must hold scope->child_lock. */
+static bool wake_waiter_record_child_completion_locked(XrCoroutine *coro, XrScopeContext *scope) {
     if (scope->mode == XR_SCOPE_WAIT)
         return false;
+
+    const XrScopeTransferOps *ops = xr_runtime_core_scope_transfer_ops(coro->core);
+    if (ops && ops->record_child_completion_locked)
+        return ops->record_child_completion_locked(coro, scope);
+
     XrValue err = coro->error;
     if (XR_IS_NULL(err) && coro->task)
         err = coro->task->error;
     if (XR_IS_NULL(err))
         return false;
-
-    const XrScopeTransferOps *ops = xr_runtime_core_scope_transfer_ops(coro->core);
-    if (ops && ops->record_child_error_locked)
-        return ops->record_child_error_locked(coro, scope);
 
     if (scope->mode == XR_SCOPE_LINKED && XR_IS_NULL(scope->first_error)) {
         scope->first_error = err;
@@ -177,7 +179,7 @@ static void wake_waiter_finish_scope_completion(XrCoroutine *coro, XrScopeContex
 
 static void wake_waiter_handle_scope_completion(XrCoroutine *coro, XrScopeContext *scope) {
     scope_lock_acquire(scope);
-    bool child_failed = wake_waiter_record_child_error_locked(coro, scope);
+    bool child_failed = wake_waiter_record_child_completion_locked(coro, scope);
     wake_waiter_unlink_from_scope_locked(coro, scope);
     if (child_failed && scope->mode == XR_SCOPE_LINKED &&
         !atomic_exchange(&scope->cancel_requested, true)) {

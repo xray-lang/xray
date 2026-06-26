@@ -14,7 +14,7 @@
       "fences": [
         "expr-string-interpolation"
       ],
-      "after_text": "Note: avoid unescaped quotes inside `${...}`; use a variable or escape the inner string."
+      "after_text": "Note: `${...}` is scanned as an expression, so nested strings may use the same quote as the outer template."
     },
     {
       "heading": "Slicing",

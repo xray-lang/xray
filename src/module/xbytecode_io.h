@@ -42,7 +42,7 @@ struct XrCompilerSession;
 struct XrProto;
 
 #define XR_BC_MAGIC 0x59415258  // "XRAY" (little-endian)
-#define XR_BC_VERSION 6         // v6: FFI CFn callback signatures
+#define XR_BC_VERSION 9         // v9: adds block-scoped defer mark opcodes
 
 // Serialization flags
 #define XR_BC_STRIP_DEBUG (1 << 0)   // Remove debug info (line numbers, var names)

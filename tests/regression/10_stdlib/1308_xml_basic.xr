@@ -7,14 +7,14 @@ import xml
 @test
 fn test_parse_basic() {
     let data = "<root><item>Hello</item></root>"
-    let doc = xml.parse(data) ?? {}
+    let doc: Json = xml.parse(data) ?? {}
     assert_eq(doc["tag"], "root")
 }
 
 @test
 fn test_parse_children() {
     let data = "<root><item>Hello</item></root>"
-    let doc = xml.parse(data) ?? {}
+    let doc: Json = xml.parse(data) ?? {}
     let children = doc["children"]
     assert_eq(children.length, 1)
     assert_eq(children[0]["tag"], "item")
@@ -23,7 +23,7 @@ fn test_parse_children() {
 @test
 fn test_parse_text() {
     let data = "<root><item>Hello</item></root>"
-    let doc = xml.parse(data) ?? {}
+    let doc: Json = xml.parse(data) ?? {}
     let textNode = doc["children"][0]["children"][0]
     assert_eq(textNode["text"], "Hello")
 }
@@ -33,7 +33,7 @@ fn test_parse_text() {
 @test
 fn test_parse_attrs() {
     let data = "<user id=\"123\" name=\"Alice\"/>"
-    let doc = xml.parse(data) ?? {}
+    let doc: Json = xml.parse(data) ?? {}
     let attrs = doc["attrs"]
     assert_eq(attrs["id"], "123")
     assert_eq(attrs["name"], "Alice")
@@ -44,7 +44,7 @@ fn test_parse_attrs() {
 @test
 fn test_parse_deep_nesting() {
     let data = "<root><a><b><c>deep</c></b></a></root>"
-    let doc = xml.parse(data) ?? {}
+    let doc: Json = xml.parse(data) ?? {}
     let cNode = doc["children"][0]["children"][0]["children"][0]
     assert_eq(cNode["tag"], "c")
 }
@@ -54,7 +54,7 @@ fn test_parse_deep_nesting() {
 @test
 fn test_parse_multiple_children() {
     let data = "<list><item>1</item><item>2</item><item>3</item></list>"
-    let doc = xml.parse(data) ?? {}
+    let doc: Json = xml.parse(data) ?? {}
     assert_eq(doc["children"].length, 3)
 }
 
@@ -71,7 +71,7 @@ fn test_create_element() {
 @test
 fn test_parse_empty_element() {
     let data = "<empty/>"
-    let doc = xml.parse(data) ?? {}
+    let doc: Json = xml.parse(data) ?? {}
     assert_eq(doc["tag"], "empty")
     assert_eq(doc["children"].length, 0)
 }
@@ -81,7 +81,7 @@ fn test_parse_empty_element() {
 @test
 fn test_parse_preserve_comments() {
     let data = "<root><!-- comment --><item/></root>"
-    let doc = xml.parse(data, { preserveComments: true }) ?? {}
+    let doc: Json = xml.parse(data, { preserveComments: true }) ?? {}
     assert_eq(doc["children"].length, 2)
 }
 
@@ -90,7 +90,7 @@ fn test_parse_preserve_comments() {
 @test
 fn test_stringify_compact() {
     let data = "<msg>Hi</msg>"
-    let doc = xml.parse(data) ?? {}
+    let doc: Json = xml.parse(data) ?? {}
     let str = xml.stringify(doc, { indent: 0, declaration: false })
     assert_eq(str, "<msg>Hi</msg>")
 }

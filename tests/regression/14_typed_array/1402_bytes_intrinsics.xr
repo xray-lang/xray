@@ -2,7 +2,7 @@
 
 @test
 fn test_bytes_intrinsics_and_capacity() {
-    let b = new Bytes(16)
+    let b = Bytes(16)
     b[0] = 1
     b[1] = 2
     b[2] = 3
@@ -26,7 +26,7 @@ fn test_bytes_intrinsics_and_capacity() {
     assert_eq(dst[3], 3)
     assert_eq(dst[4], 4)
 
-    let move = new Bytes(6)
+    let move = Bytes(6)
     move[0] = 10
     move[1] = 20
     move[2] = 30
@@ -37,7 +37,7 @@ fn test_bytes_intrinsics_and_capacity() {
     assert_eq(move[4], 30)
     assert_eq(move[5], 40)
 
-    let rep = new Bytes(9)
+    let rep = Bytes(9)
     rep[0] = 65
     rep[1] = 66
     rep[2] = 67
@@ -52,7 +52,7 @@ fn test_bytes_intrinsics_and_capacity() {
     assert_eq(rep[7], 66)
     assert_eq(rep[8], 67)
 
-    let fill = new Bytes(6)
+    let fill = Bytes(6)
     fill.fill(1)
     fill.fill(255, 1, 4)
     assert_eq(fill[0], 1)
@@ -72,7 +72,7 @@ fn test_bytes_intrinsics_and_capacity() {
 
 @test
 fn test_array_filled_constructor_and_integer_wrap() {
-    let xs = new Array<int>(4, 9)
+    let xs = Array<int>(4, 9)
     assert_eq(xs.length, 4)
     assert_eq(xs[0], 9)
     assert_eq(xs[3], 9)
@@ -81,8 +81,8 @@ fn test_array_filled_constructor_and_integer_wrap() {
     let wrapped = u + 1
     assert_eq(wrapped, 0)
 
-    let assigned: uint32 = 4294967296
-    assert_eq(assigned, 0)
+    let assigned_expr: uint32 = 4294967295 + 1
+    assert_eq(assigned_expr, 0)
 
     let byte: uint8 = 255
     let byte_wrapped = byte + 1

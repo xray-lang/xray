@@ -124,6 +124,55 @@ static int match(Scanner *scanner, char expected) {
     return 1;
 }
 
+static bool scan_nested_block_comment(Scanner *scanner, const char **content_start,
+                                      const char **content_end, int *comment_line,
+                                      bool *spans_newline) {
+    if (!scanner || scanner->current + 1 >= scanner->end || scanner->current[0] != '/' ||
+        scanner->current[1] != '*')
+        return false;
+
+    if (comment_line)
+        *comment_line = scanner->line;
+    if (spans_newline)
+        *spans_newline = false;
+
+    scanner->current += 2;  // /*
+    const char *body_start = scanner->current;
+    int depth = 1;
+
+    while (scanner->current < scanner->end) {
+        if (scanner->current + 1 < scanner->end && scanner->current[0] == '/' &&
+            scanner->current[1] == '*') {
+            depth++;
+            scanner->current += 2;
+            continue;
+        }
+        if (scanner->current + 1 < scanner->end && scanner->current[0] == '*' &&
+            scanner->current[1] == '/') {
+            depth--;
+            if (depth == 0) {
+                if (content_start)
+                    *content_start = body_start;
+                if (content_end)
+                    *content_end = scanner->current;
+                scanner->current += 2;  // */
+                return true;
+            }
+            scanner->current += 2;
+            continue;
+        }
+        if (*scanner->current == '\n') {
+            scanner->line++;
+            scanner->line_start = scanner->current + 1;
+            if (spans_newline)
+                *spans_newline = true;
+        }
+        scanner->current++;
+    }
+
+    return false;
+}
+
 // L-06: After producing a token, scan ahead for an inline same-line
 // comment and return it as that token's trailing trivia. The caller
 // MUST attach the returned chain (or NULL) to token.trailing_trivia.
@@ -176,31 +225,20 @@ static XrTrivia *scan_inline_trailing_trivia(Scanner *scanner) {
     }
 
     if (c == '/' && n == '*') {
-        // Look ahead: only attach if `*/` appears before the next '\n'.
-        const char *p = scanner->current + 2;
-        bool same_line_terminator = false;
-        while (p + 1 < scanner->end) {
-            if (*p == '\n')
-                break;
-            if (p[0] == '*' && p[1] == '/') {
-                same_line_terminator = true;
-                break;
-            }
-            p++;
-        }
-        if (!same_line_terminator) {
+        Scanner probe = *scanner;
+        const char *cs = NULL;
+        const char *ce = NULL;
+        int comment_line = probe.line;
+        bool spans_newline = false;
+        if (!scan_nested_block_comment(&probe, &cs, &ce, &comment_line, &spans_newline) ||
+            spans_newline) {
             scanner->current = save_current;
             return NULL;
         }
-        int comment_line = scanner->line;
-        scanner->current += 2;  // /*
-        const char *cs = scanner->current;
-        while (scanner->current + 1 < scanner->end &&
-               !(scanner->current[0] == '*' && scanner->current[1] == '/')) {
-            scanner->current++;
-        }
-        int len = (int) (scanner->current - cs);
-        scanner->current += 2;  // */
+        scanner->current = probe.current;
+        scanner->line = probe.line;
+        scanner->line_start = probe.line_start;
+        int len = (int) (ce - cs);
         return xr_trivia_new(TRIVIA_BLOCK_COMMENT, cs, len, comment_line);
     }
 
@@ -309,37 +347,20 @@ static bool skip_whitespace(Scanner *scanner) {
                         trivia_append(scanner, trivia);
                     }
                 } else if (peek_next(scanner) == '*') {
-                    // Multi-line comment
                     skipped = true;
+                    const char *comment_start = NULL;
+                    const char *comment_end = NULL;
                     int comment_line = scanner->line;
-                    advance(scanner);  // /
-                    advance(scanner);  // *
-                    const char *comment_start = scanner->current;
-                    while (!is_at_end(scanner)) {
-                        if (peek(scanner) == '*' && peek_next(scanner) == '/') {
-                            // Collect trivia before consuming */
-                            if (scanner->collect_trivia) {
-                                int comment_len = (int) (scanner->current - comment_start);
-                                XrTrivia *trivia = xr_trivia_new(
-                                    TRIVIA_BLOCK_COMMENT, comment_start, comment_len, comment_line);
-                                trivia_append(scanner, trivia);
-                            }
-                            advance(scanner);  // *
-                            advance(scanner);  // /
-                            break;
-                        }
-                        if (peek(scanner) == '\n') {
-                            scanner->line++;
-                            scanner->line_start = scanner->current + 1;
-                        }
-                        advance(scanner);
-                    }
-                    // Unterminated block comment
-                    if (is_at_end(scanner) &&
-                        !(scanner->current >= comment_start + 2 && scanner->current[-2] == '*' &&
-                          scanner->current[-1] == '/')) {
+                    if (!scan_nested_block_comment(scanner, &comment_start, &comment_end,
+                                                   &comment_line, NULL)) {
                         scanner->pending_error = "unterminated block comment";
                         return skipped;
+                    }
+                    if (scanner->collect_trivia) {
+                        int comment_len = (int) (comment_end - comment_start);
+                        XrTrivia *trivia = xr_trivia_new(TRIVIA_BLOCK_COMMENT, comment_start,
+                                                         comment_len, comment_line);
+                        trivia_append(scanner, trivia);
                     }
                 } else {
                     return skipped;
@@ -417,13 +438,17 @@ static Token identifier(Scanner *scanner) {
     while (XR_IS_IDENT(peek(scanner))) {
         advance(scanner);
     }
-    // Detect raw string prefix: single 'r' followed by quote
+    // Detect raw string prefix: single 'r' followed by double quote.
     int len = (int) (scanner->current - scanner->start);
     if (len == 1 && scanner->start[0] == 'r') {
         char next = peek(scanner);
-        if (next == '"' || next == '\'') {
+        if (next == '"') {
             advance(scanner);
             return raw_string_with_quote(scanner, next);
+        }
+        if (next == '\'') {
+            advance(scanner);
+            return error_token(scanner, "single-quoted raw strings were removed; use r\"...\"");
         }
     }
     return make_token(scanner, identifier_type(scanner));
@@ -552,84 +577,193 @@ static Token number(Scanner *scanner) {
     return make_token(scanner, type);
 }
 
-// String scanning with SIMD optimization
-// Detects ${} interpolation: returns TK_TEMPLATE_STRING when found
-static Token string_with_quote(Scanner *scanner, char quote) {
-    bool has_interpolation = false;
+static void note_scanned_newline(Scanner *scanner) {
+    scanner->line++;
+    scanner->line_start = scanner->current + 1;
+}
+
+static bool scan_interpolation_expr(Scanner *scanner);
+
+static bool scan_string_body(Scanner *scanner, char quote, bool is_raw, bool *has_interpolation) {
     while (!is_at_end(scanner)) {
-        size_t remaining = (size_t) (scanner->end - scanner->current);
-        const char *found = xr_simd_find_string_end_quote(scanner->current, remaining, quote);
-
-        while (scanner->current < found) {
-            // Detect ${} in SIMD-skipped region ($ is not a SIMD stop char)
-            if (*scanner->current == '$' && (scanner->current + 1) < scanner->end &&
-                *(scanner->current + 1) == '{') {
-                has_interpolation = true;
-            }
-            if (*scanner->current == '\n') {
-                scanner->line++;
-                scanner->line_start = scanner->current + 1;
-            }
-            scanner->current++;
-        }
-
-        if (is_at_end(scanner))
-            break;
-
         char c = peek(scanner);
         if (c == quote) {
             advance(scanner);
-            return make_token(scanner, has_interpolation ? TK_TEMPLATE_STRING : TK_LITERAL_STRING);
-        } else if (c == '\\') {
+            return true;
+        }
+        if (!is_raw && c == '\\') {
             advance(scanner);
             if (!is_at_end(scanner)) {
                 if (peek(scanner) == '\n') {
-                    scanner->line++;
-                    scanner->line_start = scanner->current + 1;
+                    note_scanned_newline(scanner);
                 }
                 advance(scanner);
             }
-        } else {
-            // Detect ${} interpolation
-            if (c == '$' && peek_next(scanner) == '{') {
-                has_interpolation = true;
-            }
-            if (c == '\n') {
-                scanner->line++;
-                scanner->line_start = scanner->current + 1;
+            continue;
+        }
+        if (c == '$' && peek_next(scanner) == '{') {
+            if (has_interpolation) {
+                *has_interpolation = true;
             }
             advance(scanner);
+            advance(scanner);
+            if (!scan_interpolation_expr(scanner)) {
+                return false;
+            }
+            continue;
         }
+        if (c == '\n') {
+            note_scanned_newline(scanner);
+        }
+        advance(scanner);
     }
+    return false;
+}
 
-    return error_token(scanner, "Unterminated string");
+static bool scan_line_comment_in_template_expr(Scanner *scanner) {
+    while (!is_at_end(scanner) && peek(scanner) != '\n') {
+        advance(scanner);
+    }
+    return true;
+}
+
+static bool scan_block_comment_in_template_expr(Scanner *scanner) {
+    advance(scanner);
+    advance(scanner);
+    int depth = 1;
+    while (!is_at_end(scanner) && depth > 0) {
+        if (peek(scanner) == '/' && peek_next(scanner) == '*') {
+            advance(scanner);
+            advance(scanner);
+            depth++;
+            continue;
+        }
+        if (peek(scanner) == '*' && peek_next(scanner) == '/') {
+            advance(scanner);
+            advance(scanner);
+            depth--;
+            continue;
+        }
+        if (peek(scanner) == '\n') {
+            note_scanned_newline(scanner);
+        }
+        advance(scanner);
+    }
+    return depth == 0;
+}
+
+static bool scan_interpolation_expr(Scanner *scanner) {
+    int brace_depth = 1;
+    while (!is_at_end(scanner)) {
+        char c = peek(scanner);
+        if (c == '"') {
+            advance(scanner);
+            if (!scan_string_body(scanner, c, false, NULL)) {
+                return false;
+            }
+            continue;
+        }
+        if (c == '\'') {
+            advance(scanner);
+            while (!is_at_end(scanner)) {
+                char q = peek(scanner);
+                if (q == '\'') {
+                    advance(scanner);
+                    break;
+                }
+                if (q == '\\') {
+                    advance(scanner);
+                    if (!is_at_end(scanner))
+                        advance(scanner);
+                    continue;
+                }
+                if (q == '\n') {
+                    note_scanned_newline(scanner);
+                }
+                advance(scanner);
+            }
+            continue;
+        }
+        if (c == 'r' && peek_next(scanner) == '"') {
+            advance(scanner);
+            char raw_quote = advance(scanner);
+            if (!scan_string_body(scanner, raw_quote, true, NULL)) {
+                return false;
+            }
+            continue;
+        }
+        if (c == '/' && peek_next(scanner) == '/') {
+            scan_line_comment_in_template_expr(scanner);
+            continue;
+        }
+        if (c == '/' && peek_next(scanner) == '*') {
+            if (!scan_block_comment_in_template_expr(scanner)) {
+                return false;
+            }
+            continue;
+        }
+        if (c == '{') {
+            brace_depth++;
+            advance(scanner);
+            continue;
+        }
+        if (c == '}') {
+            advance(scanner);
+            brace_depth--;
+            if (brace_depth == 0) {
+                return true;
+            }
+            continue;
+        }
+        if (c == '\n') {
+            note_scanned_newline(scanner);
+        }
+        advance(scanner);
+    }
+    return false;
+}
+
+// Detects ${} interpolation: returns TK_TEMPLATE_STRING when found.
+static Token string_with_quote(Scanner *scanner, char quote) {
+    bool has_interpolation = false;
+    if (!scan_string_body(scanner, quote, false, &has_interpolation)) {
+        return error_token(scanner, "Unterminated string");
+    }
+    return make_token(scanner, has_interpolation ? TK_TEMPLATE_STRING : TK_LITERAL_STRING);
 }
 
 static Token string(Scanner *scanner) {
     return string_with_quote(scanner, '"');
 }
 
-static Token single_quote_string(Scanner *scanner) {
-    return string_with_quote(scanner, '\'');
-}
-
-// Raw string: r"..." or r'...' (no escape processing, but ${} interpolation)
-static Token raw_string_with_quote(Scanner *scanner, char quote) {
-    bool has_interpolation = false;
-    while (!is_at_end(scanner) && peek(scanner) != quote) {
-        if (peek(scanner) == '$' && peek_next(scanner) == '{') {
-            has_interpolation = true;
+static Token char_literal(Scanner *scanner) {
+    while (!is_at_end(scanner)) {
+        char c = peek(scanner);
+        if (c == '\'') {
+            advance(scanner);
+            return make_token(scanner, TK_LITERAL_CHAR);
         }
-        if (peek(scanner) == '\n') {
-            scanner->line++;
-            scanner->line_start = scanner->current + 1;
+        if (c == '\n') {
+            return error_token(scanner, "Unterminated char literal");
+        }
+        if (c == '\\') {
+            advance(scanner);
+            if (is_at_end(scanner) || peek(scanner) == '\n')
+                return error_token(scanner, "Unterminated char literal");
+            advance(scanner);
+            continue;
         }
         advance(scanner);
     }
-    if (is_at_end(scanner)) {
+    return error_token(scanner, "Unterminated char literal");
+}
+
+// Raw string: r"..." (no escape processing, but ${} interpolation)
+static Token raw_string_with_quote(Scanner *scanner, char quote) {
+    bool has_interpolation = false;
+    if (!scan_string_body(scanner, quote, true, &has_interpolation)) {
         return error_token(scanner, "Unterminated raw string");
     }
-    advance(scanner);
     return make_token(scanner, has_interpolation ? TK_RAW_TEMPLATE_STRING : TK_RAW_STRING);
 }
 
@@ -764,6 +898,9 @@ Token xr_scanner_scan(Scanner *scanner) {
             return make_token(scanner, TK_COMMA);
         case '.':
             if (match(scanner, '.')) {
+                if (match(scanner, '=')) {
+                    return make_token(scanner, TK_RANGE_INCLUSIVE);
+                }
                 if (match(scanner, '.')) {
                     return make_token(scanner, TK_DOT_DOT_DOT);
                 }
@@ -813,12 +950,20 @@ Token xr_scanner_scan(Scanner *scanner) {
             return make_token(scanner, TK_HASH);
         case '!':
             if (match(scanner, '=')) {
-                return make_token(scanner, match(scanner, '=') ? TK_NE_STRICT : TK_NE);
+                if (match(scanner, '=')) {
+                    return error_token(scanner,
+                                       "strict inequality operator '!==' was removed; use '!='");
+                }
+                return make_token(scanner, TK_NE);
             }
             return make_token(scanner, TK_NOT);
         case '=':
             if (match(scanner, '=')) {
-                return make_token(scanner, match(scanner, '=') ? TK_EQ_STRICT : TK_EQ);
+                if (match(scanner, '=')) {
+                    return error_token(scanner,
+                                       "strict equality operator '===' was removed; use '=='");
+                }
+                return make_token(scanner, TK_EQ);
             }
             return make_token(scanner, TK_ASSIGN);
             // Note: `=>` is no longer a token; the unified arrow is `->`. Parser
@@ -863,7 +1008,7 @@ Token xr_scanner_scan(Scanner *scanner) {
         case '"':
             return string(scanner);
         case '\'':
-            return single_quote_string(scanner);
+            return char_literal(scanner);
         case '`':
             return error_token(
                 scanner, "Backtick strings are deprecated, use \"\" or '' with ${} interpolation");
@@ -898,8 +1043,6 @@ static const char *token_names[] = {
     // Multi-character tokens (>= 256)
     [TK_EQ] = "==",
     [TK_NE] = "!=",
-    [TK_EQ_STRICT] = "===",
-    [TK_NE_STRICT] = "!==",
     [TK_LT] = "<",
     [TK_LE] = "<=",
     [TK_GT] = ">",
@@ -952,7 +1095,7 @@ static const char *token_names[] = {
     [TK_CONSTRUCTOR] = "constructor",
     [TK_STATIC] = "static",
     [TK_PRIVATE] = "private",
-    [TK_PUBLIC] = "public",
+    [TK_PROTECTED] = "protected",
     [TK_OPERATOR] = "operator",
     [TK_ABSTRACT] = "abstract",
     [TK_OVERRIDE] = "override",
@@ -1001,7 +1144,6 @@ static const char *token_names[] = {
     [TK_UINT64] = "uint64",
     [TK_FLOAT32] = "float32",
     [TK_FLOAT64] = "float64",
-    [TK_UNKNOWN] = "unknown",
 
     // Type operators / special
     [TK_QUESTION] = "?",
@@ -1011,6 +1153,7 @@ static const char *token_names[] = {
     [TK_ARROW] = "->",
     [TK_DOT_DOT_DOT] = "...",
     [TK_RANGE] = "..",
+    [TK_RANGE_INCLUSIVE] = "..=",
     [TK_NULLISH_COALESCE] = "??",
     [TK_UNDERSCORE] = "_",
 
@@ -1024,6 +1167,7 @@ static const char *token_names[] = {
     [TK_LITERAL_FLOAT] = "LITERAL_FLOAT",
     [TK_LITERAL_BIGINT] = "LITERAL_BIGINT",
     [TK_LITERAL_STRING] = "LITERAL_STRING",
+    [TK_LITERAL_CHAR] = "LITERAL_CHAR",
     [TK_LITERAL_REGEX] = "LITERAL_REGEX",
     [TK_NAME] = "NAME",
     [TK_TEMPLATE_STRING] = "TEMPLATE_STRING",

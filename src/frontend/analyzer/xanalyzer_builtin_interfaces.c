@@ -119,11 +119,9 @@ static XaInterfaceMethod comparable_methods[] = {
  * Equivalent xray code for Hashable:
  *
  *   interface Hashable {
- *       // Returns a hash code for this object.
- *       // Contract:
- *       //   - Equal objects must have equal hash codes
- *       //   - Hash code should be stable during object lifetime
- *       hashCode(): int
+ *       // Equal objects must have equal stable hashes.
+ *       operator ==(other: Self) -> bool
+ *       hash() -> int
  *   }
  *
  * Built-in types that implement Hashable:
@@ -142,17 +140,18 @@ static XaInterfaceMethod comparable_methods[] = {
  *       x: int
  *       y: int
  *
- *       hashCode(): int {
- *           // Combine x and y into a single hash
+ *       operator ==(other: Point) -> bool {
+ *           return this.x == other.x && this.y == other.y
+ *       }
+ *
+ *       hash() -> int {
  *           return this.x * 31 + this.y
  *       }
  *   }
- *
- * Note: Objects used as Map keys should also implement equals() for
- * correct behavior, but xray uses === by default for reference equality.
  */
 static XaInterfaceMethod hashable_methods[] = {
-    {"hashCode", NULL, NULL, 0}  // return: int
+    {"==", NULL, NULL, 1},   // param: other: Self, return: bool
+    {"hash", NULL, NULL, 0}  // return: int
 };
 
 /*
@@ -380,7 +379,7 @@ static XaInterfaceDefinition builtin_interfaces[XA_IFACE_COUNT] = {
     [XA_IFACE_ITERABLE] = {"Iterable", iterable_methods, 1},
     [XA_IFACE_ITERATOR] = {"Iterator", iterator_methods, 2},
     [XA_IFACE_COMPARABLE] = {"Comparable", comparable_methods, 1},
-    [XA_IFACE_HASHABLE] = {"Hashable", hashable_methods, 1},
+    [XA_IFACE_HASHABLE] = {"Hashable", hashable_methods, 2},
     [XA_IFACE_STRINGABLE] = {"Stringable", stringable_methods, 1},
     [XA_IFACE_INDEXABLE] = {"Indexable", indexable_methods, 2},
     [XA_IFACE_EQUATABLE] = {"Equatable", equatable_methods, 1},

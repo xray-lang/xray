@@ -1,8 +1,9 @@
-// anchor: float-div-by-zero
-// Division by zero throws E0420 (xray has no IEEE inf/NaN). An uncaught
-// exception must exit with status 1 on every backend: the AOT runtime reports
-// and exits cleanly rather than aborting with SIGABRT (134), so VM and AOT
-// agree on the observable exit code and (empty) stdout.
-let z = 0.0
-print(1.0 / z)
+// anchor: int-div-by-zero
+// Integer division by zero throws E0420. An uncaught exception must exit with
+// status 1 on every backend: the AOT runtime reports and exits cleanly rather
+// than aborting with SIGABRT (134), so VM and AOT agree on the observable exit
+// code and (empty) stdout. Float-result division follows IEEE; see
+// float_fmt/ieee_arithmetic.
+let z = 0
+print(1 / z)
 print("unreachable")

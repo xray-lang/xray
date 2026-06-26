@@ -1,0 +1,16 @@
+// anchor: default-params-per-call
+// C1: default expressions are evaluated at the call site, once per omitted
+// call, and never when the argument is supplied. VM and AOT must agree.
+
+let counter = 0
+fn next() -> int {
+    counter = counter + 1
+    return counter
+}
+fn tag(id: int = next()) -> int { return id }
+
+print(tag())     // next() -> 1
+print(tag())     // next() -> 2
+print(tag(99))   // supplied -> 99, next() not called
+print(tag())     // next() -> 3
+print(counter)   // next() ran exactly 3 times

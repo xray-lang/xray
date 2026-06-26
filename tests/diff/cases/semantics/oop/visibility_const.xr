@@ -1,0 +1,24 @@
+// anchor: visibility-const
+// private accessible within the class (including another instance of the same
+// class), protected accessible within the class, const set in the constructor.
+class Account {
+    private balance: int
+    protected owner: string
+    const id: int
+    constructor(b: int, o: string, i: int) {
+        this.balance = b
+        this.owner = o
+        this.id = i
+    }
+    getBalance() -> int { return this.balance }
+    ownerName() -> string { return this.owner }
+    richerThan(other: Account) -> bool { return this.balance > other.balance }
+}
+
+let a = Account(100, "alice", 1)
+let b = Account(50, "bob", 2)
+print(a.getBalance())
+print(a.ownerName())
+print(a.id)
+print(a.richerThan(b))
+print(b.richerThan(a))

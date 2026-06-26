@@ -1,0 +1,6 @@
+c_contains=printf("%llu", (unsigned long long)(uint64_t)
+c_contains=xrt_uint64_to_string((uint64_t)
+c_contains=xrt_strpart_init_u64(
+c_contains=(uint64_t)
+c_not_contains=xrt_lt(
+contains=stats functions=

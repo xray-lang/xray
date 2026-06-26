@@ -1,0 +1,9 @@
+let m = #{"k": "value"}
+let name = "Ada"
+
+print("${"x"}")
+print("value=${"a}b"}")
+print("${m["k"]}")
+print("outer ${"inner ${name}"}")
+print("${'}'}")
+print("${'"'}")

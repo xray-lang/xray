@@ -21,8 +21,8 @@
 #include "xrt_array_hof.h"
 #include "xrt_range.h"
 #include "xrt_datetime.h"
-#include "../shared/xr_array_core.h"
-#include "../shared/xr_numeric_core.h"
+#include "../shared/xr_int_arith.h"
+#include "../shared/xr_range_core.h"
 #include "../shared/xr_string_core.h"
 
 /* Builtin method symbol IDs. */
@@ -46,11 +46,10 @@ static inline int xrt_weak_value_is_heap_object(XrValue v) {
         case XR_TAG_TUPLE:
         case XR_TAG_SET:
         case XR_TAG_STRUCT_REF:
+        case XR_TAG_REGEX:
         case XR_TAG_RANGE:
         case XR_TAG_ENUM:
         case XR_TAG_ITERATOR:
-        case XR_TAG_REGEX:
-        case XR_TAG_DATETIME:
             return 1;
         default:
             return 0;
@@ -59,10 +58,84 @@ static inline int xrt_weak_value_is_heap_object(XrValue v) {
 
 /* toString helper. */
 
+static inline int xrt_char_encode(uint32_t cp, char *tmp) {
+    if (cp <= 0x7Fu) {
+        tmp[0] = (char) cp;
+        return 1;
+    }
+    if (cp <= 0x7FFu) {
+        tmp[0] = (char) (0xC0u | (cp >> 6));
+        tmp[1] = (char) (0x80u | (cp & 0x3Fu));
+        return 2;
+    }
+    if (cp <= 0xFFFFu) {
+        if (cp >= 0xD800u && cp <= 0xDFFFu)
+            return 0;
+        tmp[0] = (char) (0xE0u | (cp >> 12));
+        tmp[1] = (char) (0x80u | ((cp >> 6) & 0x3Fu));
+        tmp[2] = (char) (0x80u | (cp & 0x3Fu));
+        return 3;
+    }
+    if (cp <= 0x10FFFFu) {
+        tmp[0] = (char) (0xF0u | (cp >> 18));
+        tmp[1] = (char) (0x80u | ((cp >> 12) & 0x3Fu));
+        tmp[2] = (char) (0x80u | ((cp >> 6) & 0x3Fu));
+        tmp[3] = (char) (0x80u | (cp & 0x3Fu));
+        return 4;
+    }
+    return 0;
+}
+
+static inline XrValue xrt_char_to_string(uint32_t cp) {
+    char tmp[4];
+    int n = xrt_char_encode(cp, tmp);
+    XrValue out = xrt_str_alloc((size_t) (n > 0 ? n : 0));
+    if (n > 0)
+        memcpy(xr_str_buf(out), tmp, (size_t) n);
+    xr_str_buf(out)[n > 0 ? n : 0] = 0;
+    return out;
+}
+
+static inline int xrt_char_is_letter(uint32_t cp) {
+    return (cp >= 'A' && cp <= 'Z') || (cp >= 'a' && cp <= 'z');
+}
+
+static inline int xrt_char_is_number(uint32_t cp) {
+    return cp >= '0' && cp <= '9';
+}
+
+static inline int xrt_char_is_alnum(uint32_t cp) {
+    return xrt_char_is_letter(cp) || xrt_char_is_number(cp);
+}
+
+static inline int xrt_char_is_whitespace(uint32_t cp) {
+    return cp == ' ' || cp == '\t' || cp == '\n' || cp == '\r' || cp == '\f' || cp == '\v';
+}
+
 static XrValue xrt_tostring(XrValue val, int slot_hint) {
+    if (slot_hint == 3)
+        return xrt_uint64_to_string((uint64_t) val.i);
     if (slot_hint == 1 || val.tag == XR_TAG_I64) {
         char tmp[32];
-        (void) xr_numeric_core_format_i64(tmp, sizeof(tmp), val.i);
+        int n = 0;
+        int64_t v = val.i;
+        uint64_t t = xr_i64_abs_magnitude(v);
+        if (v < 0) {
+            tmp[n++] = '-';
+        }
+        if (t == 0) {
+            tmp[n++] = '0';
+        } else {
+            char rev[20];
+            int r = 0;
+            while (t > 0) {
+                rev[r++] = '0' + (char) (t % 10u);
+                t /= 10;
+            }
+            while (r > 0)
+                tmp[n++] = rev[--r];
+        }
+        tmp[n] = 0;
         return xrt_str_from_cstr(tmp);
     }
     if (slot_hint == 2 || val.tag == XR_TAG_F64) {
@@ -74,12 +147,13 @@ static XrValue xrt_tostring(XrValue val, int slot_hint) {
         return val;
     if (val.tag == XR_TAG_RANGE)
         return xrt_range_to_string(val);
-    if (val.tag == XR_TAG_DATETIME)
-        return xrt_datetime_method_0(val, XRT_SYM_TOSTRING);
     if (val.tag == XR_TAG_NULL)
         return xr_box_str("null");
     if (val.tag == XR_TAG_BOOL)
         return xr_box_str(val.i ? "true" : "false");
+    if (val.tag == XR_TAG_CHAR) {
+        return xrt_char_to_string(XR_TO_CHAR(val));
+    }
     if (val.tag == XR_TAG_ENUM) {
         char tmp[256];
         return xrt_str_from_cstr(xr_to_cstr(val, tmp, sizeof(tmp)));
@@ -87,9 +161,24 @@ static XrValue xrt_tostring(XrValue val, int slot_hint) {
     return xr_box_str("[object]");
 }
 
+/* char(x): construct a Unicode scalar char (tagged XR_TAG_CHAR).
+ * Validates range and excludes UTF-16 surrogates; invalid yields null. */
+static XrValue xrt_to_char(XrValue val) {
+    if (XR_IS_CHAR(val))
+        return val;
+    if (XR_IS_INT(val)) {
+        int64_t cp = XR_TO_INT(val);
+        if (cp >= 0 && cp <= 0x10FFFF && !(cp >= 0xD800 && cp <= 0xDFFF))
+            return XR_FROM_CHAR((uint32_t) cp);
+    }
+    return XR_NULL_VAL;
+}
+
 static XrValue xrt_to_int(XrValue val) {
     if (XR_IS_INT(val))
         return val;
+    if (XR_IS_CHAR(val))
+        return XR_FROM_INT((int64_t) XR_TO_CHAR(val));
     if (XR_IS_FLOAT(val))
         return XR_FROM_INT((int64_t) XR_TO_FLOAT(val));
     if (XR_IS_STR(val)) {
@@ -122,115 +211,110 @@ static XrValue xrt_to_string(XrValue val) {
 }
 
 static XrValue xrt_to_bool(XrValue val) {
-    return XR_FROM_BOOL(xr_truthy(val));
-}
-
-typedef struct XrtArrayJoinCtx {
-    xrt_array_t *array;
-} XrtArrayJoinCtx;
-
-static inline bool xrt_array_join_part(XrValue val, char *dst, size_t *len) {
-    const char *data = NULL;
-    size_t n = 0;
-    char tmp[256];
-    XrValue tmp_str = XR_NULL_VAL;
-
-    if (val.tag == XR_TAG_STR || val.tag == XR_TAG_STR_ARC) {
-        data = xr_str_data(val);
-        n = (size_t) xr_str_len(val);
-    } else if (val.tag == XR_TAG_I64) {
-        int written = xr_numeric_core_format_i64(tmp, sizeof(tmp), val.i);
-        if (written < 0 || (size_t) written >= sizeof(tmp))
-            return false;
-        data = tmp;
-        n = (size_t) written;
-    } else if (val.tag == XR_TAG_F64) {
-        int written = xrt_format_float(tmp, sizeof(tmp), val.f);
-        if (written < 0 || (size_t) written >= sizeof(tmp))
-            return false;
-        data = tmp;
-        n = (size_t) written;
-    } else if (val.tag == XR_TAG_BOOL) {
-        data = val.i ? "true" : "false";
-        n = val.i ? 4 : 5;
-    } else if (val.tag == XR_TAG_NULL) {
-        data = "null";
-        n = 4;
-    } else if (val.tag == XR_TAG_RANGE || val.tag == XR_TAG_DATETIME || val.tag == XR_TAG_ENUM) {
-        tmp_str = xrt_tostring(val, 0);
-        data = xr_str_data(tmp_str);
-        n = (size_t) xr_str_len(tmp_str);
-    } else {
-        data = "[object]";
-        n = 8;
-    }
-
-    if (dst && n > 0)
-        memcpy(dst, data, n);
-    if (len)
-        *len = n;
-    return true;
-}
-
-static inline bool xrt_array_join_element(void *ctx, int64_t index, char *dst, size_t *len) {
-    XrtArrayJoinCtx *join_ctx = (XrtArrayJoinCtx *) ctx;
-    if (!join_ctx || !join_ctx->array || index < 0 || index > INT32_MAX)
-        return false;
-    xrt_array_t *a = join_ctx->array;
-    return xrt_array_join_part(xr_typed_get(a->data, (int32_t) index, a->elem_type), dst, len);
-}
-
-static inline XrValue xrt_array_join_value(xrt_array_t *a, XrValue sep_value) {
-    if (!a || !XR_IS_STR(sep_value))
-        return XR_NULL_VAL;
-    const char *sep = xr_str_data(sep_value);
-    size_t sep_len = (size_t) xr_str_len(sep_value);
-    XrtArrayJoinCtx ctx = {a};
-    size_t total = 0;
-    if (!xr_array_core_join_total(a->length, sep_len, xrt_array_join_element, &ctx, &total))
-        return XR_NULL_VAL;
-    if (total == SIZE_MAX)
-        return XR_NULL_VAL;
-    XrValue result = xrt_str_alloc(total);
-    size_t written = 0;
-    if (!xr_array_core_join_write(xr_str_buf(result), total + 1, a->length, sep, sep_len,
-                                  xrt_array_join_element, &ctx, &written))
-        return XR_NULL_VAL;
-    return result;
+    if (XR_IS_BOOL(val))
+        return val;
+    if (XR_IS_NULL(val))
+        return XR_FALSE_VAL;
+    if (XR_IS_INT(val))
+        return XR_FROM_BOOL(XR_TO_INT(val) != 0);
+    if (XR_IS_FLOAT(val))
+        return XR_FROM_BOOL(XR_TO_FLOAT(val) != 0.0);
+    if (XR_IS_STR(val))
+        return XR_FROM_BOOL(xr_str_len(val) > 0);
+    if (XR_IS_ARRAY(val))
+        return XR_FROM_BOOL(((xrt_array_t *) val.ptr)->length > 0);
+    if (XR_IS_MAP(val))
+        return XR_FROM_BOOL(xrt_map_len((xrt_map_t *) val.ptr) > 0);
+    if (XR_IS_SET(val))
+        return XR_FROM_BOOL(xrt_set_len((xrt_set_t *) val.ptr) > 0);
+    return XR_TRUE_VAL;
 }
 
 /* Fixed-arity method dispatch is intentionally inlineable by the C compiler. */
 
+static inline int64_t xrt_utf8_scalar_count(const char *s, int64_t slen) {
+    if (!s || slen <= 0)
+        return 0;
+    const unsigned char *p = (const unsigned char *) s;
+    const unsigned char *end = p + slen;
+    int64_t count = 0;
+    while (p < end) {
+        unsigned char b = *p;
+        int size = 1;
+        if ((b & 0x80u) == 0)
+            size = 1;
+        else if ((b & 0xE0u) == 0xC0u)
+            size = 2;
+        else if ((b & 0xF0u) == 0xE0u)
+            size = 3;
+        else if ((b & 0xF8u) == 0xF0u)
+            size = 4;
+        if (p + size > end)
+            size = 1;
+        p += size;
+        count++;
+    }
+    return count;
+}
+
+static inline XrValue xrt_string_entries(XrValue recv) {
+    int64_t n = xrt_utf8_scalar_count(xr_str_data(recv), xr_str_len(recv));
+    XrValue arr = xrt_array_new(n);
+    xrt_iterator_t iter = {
+        .coll = recv,
+        .cursor = 0,
+        .index = 0,
+        .kind = XRT_ITER_PAIRS,
+    };
+    while (xrt_iterator_has_next(&iter))
+        xrt_array_push(arr, xrt_iterator_next(&iter));
+    return arr;
+}
+
 /* String 0-arg method dispatch. */
 static inline XrValue xrt_str_method_0(const char *s, int64_t slen, XrValue recv, int sym) {
     if (sym == XRT_SYM_LENGTH || sym == XRT_SYM_SIZE)
-        return XR_FROM_INT(slen);
+        return XR_FROM_INT(xrt_utf8_scalar_count(s, slen));
     if (sym == XRT_SYM_IS_EMPTY)
         return XR_FROM_BOOL(slen == 0);
     if (sym == XRT_SYM_TOSTRING)
         return recv;
+    if (sym == XRT_SYM_ITERATOR)
+        return xrt_iterator_new(recv, XRT_ITER_VALUES);
+    if (sym == XRT_SYM_ENTRIES_ITERATOR)
+        return xrt_iterator_new(recv, XRT_ITER_PAIRS);
+    if (sym == XRT_SYM_ENTRIES)
+        return xrt_string_entries(recv);
     if (sym == XRT_SYM_TRIM || sym == XRT_SYM_TRIM_START || sym == XRT_SYM_TRIM_END) {
-        XrStringCoreTrimMode mode = XR_STRING_CORE_TRIM_BOTH;
-        if (sym == XRT_SYM_TRIM_START)
-            mode = XR_STRING_CORE_TRIM_START;
-        else if (sym == XRT_SYM_TRIM_END)
-            mode = XR_STRING_CORE_TRIM_END;
-        XrStringCoreSlice slice = xr_string_core_trim_slice(s, (size_t) slen, mode);
-        XrValue sv = xrt_str_alloc(slice.len);
-        memcpy(xr_str_buf(sv), slice.data, slice.len);
-        xr_str_buf(sv)[slice.len] = 0;
+        const char *start = s, *end = s + slen;
+        if (sym != XRT_SYM_TRIM_END)
+            while (start < end &&
+                   (*start == ' ' || *start == '\t' || *start == '\n' || *start == '\r'))
+                start++;
+        if (sym != XRT_SYM_TRIM_START)
+            while (end > start &&
+                   (end[-1] == ' ' || end[-1] == '\t' || end[-1] == '\n' || end[-1] == '\r'))
+                end--;
+        int64_t rlen = (int64_t) (end - start);
+        XrValue sv = xrt_str_alloc((size_t) rlen);
+        memcpy(xr_str_buf(sv), start, (size_t) rlen);
+        xr_str_buf(sv)[rlen] = 0;
         return sv;
     }
     if (sym == XRT_SYM_TOLOWER) {
         XrValue sv = xrt_str_alloc((size_t) slen);
         char *r = xr_str_buf(sv);
-        xr_string_core_ascii_lower_write(r, s, (size_t) slen);
+        for (int64_t i = 0; i < slen; i++)
+            r[i] = (s[i] >= 'A' && s[i] <= 'Z') ? (char) (s[i] + 32) : s[i];
+        r[slen] = 0;
         return sv;
     }
     if (sym == XRT_SYM_TOUPPER) {
         XrValue sv = xrt_str_alloc((size_t) slen);
         char *r = xr_str_buf(sv);
-        xr_string_core_ascii_upper_write(r, s, (size_t) slen);
+        for (int64_t i = 0; i < slen; i++)
+            r[i] = (s[i] >= 'a' && s[i] <= 'z') ? (char) (s[i] - 32) : s[i];
+        r[slen] = 0;
         return sv;
     }
     if (sym == XRT_SYM_TOINT) {
@@ -245,8 +329,7 @@ static inline XrValue xrt_str_method_0(const char *s, int64_t slen, XrValue recv
         return XR_FROM_INT(slen > 0 ? (int64_t) (unsigned char) s[0] : 0);
     if (sym == XRT_SYM_REVERSE) {
         XrValue sv = xrt_str_alloc((size_t) slen);
-        char *r = xr_str_buf(sv);
-        xr_string_core_reverse_utf8_write(r, s, (size_t) slen);
+        xr_string_core_reverse_utf8_write(xr_str_buf(sv), s, (size_t) slen);
         return sv;
     }
     return (XrValue) {.i = 0, .tag = XR_TAG_NULL};
@@ -270,12 +353,20 @@ static inline XrValue xrt_method_0(XrValue recv, int sym) {
         }
         if (sym == XRT_SYM_SHIFT && a->length > 0) {
             XrValue first = xr_typed_get(a->data, 0, a->elem_type);
-            (void) xr_array_core_shift_left_one(a->data, a->length, a->elem_size);
+            for (int64_t i = 0; i < a->length - 1; i++) {
+                XrValue next = xr_typed_get(a->data, (int32_t) (i + 1), a->elem_type);
+                xr_typed_set(a->data, (int32_t) i, next, a->elem_type);
+            }
             a->length--;
             return first;
         }
         if (sym == XRT_SYM_REVERSE) {
-            (void) xr_array_core_reverse(a->data, a->length, a->elem_size);
+            for (int64_t i = 0, j = a->length - 1; i < j; i++, j--) {
+                XrValue vi = xr_typed_get(a->data, (int32_t) i, a->elem_type);
+                XrValue vj = xr_typed_get(a->data, (int32_t) j, a->elem_type);
+                xr_typed_set(a->data, (int32_t) i, vj, a->elem_type);
+                xr_typed_set(a->data, (int32_t) j, vi, a->elem_type);
+            }
             return recv;
         }
         if (sym == XRT_SYM_SORT)
@@ -317,6 +408,8 @@ static inline XrValue xrt_method_0(XrValue recv, int sym) {
     }
     if (recv.tag == XR_TAG_ITERATOR) {
         xrt_iterator_t *it = (xrt_iterator_t *) recv.ptr;
+        if (sym == XRT_SYM_ITERATOR)
+            return recv;
         if (sym == XRT_SYM_HAS_NEXT)
             return XR_FROM_BOOL(xrt_iterator_has_next(it));
         if (sym == XRT_SYM_NEXT)
@@ -339,18 +432,17 @@ static inline XrValue xrt_method_0(XrValue recv, int sym) {
     }
     if (recv.tag == XR_TAG_RANGE)
         return xrt_range_method_0(recv, sym);
-    if (recv.tag == XR_TAG_DATETIME)
-        return xrt_datetime_method_0(recv, sym);
-    if (recv.tag == XR_TAG_ENUM && sym == XRT_SYM_TOSTRING)
-        return xrt_tostring(recv, 0);
     if (recv.tag == XR_TAG_I64) {
         if (sym == XRT_SYM_ABS)
-            return XR_FROM_INT(xr_numeric_core_i64_abs_wrap(recv.i));
+            return XR_FROM_INT(xr_i64_abs_wrap(recv.i));
         if (sym == XRT_SYM_TOSTRING)
             return xrt_tostring(recv, 1);
         if (sym == XRT_SYM_TOHEX) {
             char buf[32];
-            (void) xr_numeric_core_format_i64_hex(buf, sizeof(buf), recv.i);
+            if (recv.i < 0)
+                snprintf(buf, sizeof(buf), "-0x%" PRIX64, xr_i64_abs_magnitude(recv.i));
+            else
+                snprintf(buf, sizeof(buf), "0x%" PRIX64, (uint64_t) recv.i);
             return xrt_str_from_cstr(buf);
         }
     }
@@ -359,17 +451,36 @@ static inline XrValue xrt_method_0(XrValue recv, int sym) {
         if (sym == XRT_SYM_TOSTRING)
             return xrt_tostring(recv, 2);
         if (sym == XRT_SYM_FLOOR)
-            return XR_FROM_INT((int64_t) floor(v));
+            return XR_FROM_FLOAT(floor(v));
         if (sym == XRT_SYM_CEIL)
-            return XR_FROM_INT((int64_t) ceil(v));
+            return XR_FROM_FLOAT(ceil(v));
         if (sym == XRT_SYM_ROUND)
-            return XR_FROM_INT((int64_t) round(v));
+            return XR_FROM_FLOAT(round(v));
         if (sym == XRT_SYM_ABS)
             return XR_FROM_FLOAT(fabs(v));
         if (sym == XRT_SYM_SQRT)
             return XR_FROM_FLOAT(sqrt(v));
+        if (sym == XRT_SYM_ISNAN)
+            return XR_FROM_BOOL(isnan(v));
     }
     if (recv.tag == XR_TAG_BOOL && sym == XRT_SYM_TOSTRING)
+        return xrt_tostring(recv, 0);
+    if (recv.tag == XR_TAG_CHAR) {
+        uint32_t cp = XR_TO_CHAR(recv);
+        if (sym == XRT_SYM_TOSTRING)
+            return xrt_char_to_string(cp);
+        if (sym == XRT_SYM_ORD)
+            return XR_FROM_INT((int64_t) cp);
+        if (sym == XRT_SYM_IS_LETTER)
+            return XR_FROM_BOOL(xrt_char_is_letter(cp));
+        if (sym == XRT_SYM_IS_NUMBER)
+            return XR_FROM_BOOL(xrt_char_is_number(cp));
+        if (sym == XRT_SYM_IS_ALNUM)
+            return XR_FROM_BOOL(xrt_char_is_alnum(cp));
+        if (sym == XRT_SYM_IS_WHITESPACE)
+            return XR_FROM_BOOL(xrt_char_is_whitespace(cp));
+    }
+    if (recv.tag == XR_TAG_ENUM && sym == XRT_SYM_TOSTRING)
         return xrt_tostring(recv, 0);
     return (XrValue) {.i = 0, .tag = XR_TAG_NULL};
 }
@@ -446,8 +557,15 @@ static inline XrValue xrt_str_method_1(const char *s, int64_t slen, XrValue recv
         return sv;
     }
     if (sym == XRT_SYM_LASTINDEXOF && XR_IS_STR(arg0)) {
-        return XR_FROM_INT((int64_t) xr_string_core_last_index_of(
-            s, (size_t) slen, xr_str_data(arg0), (size_t) xr_str_len(arg0)));
+        const char *needle = xr_str_data(arg0);
+        size_t nlen = (size_t) xr_str_len(arg0);
+        if (nlen == 0)
+            return XR_FROM_INT(slen);
+        for (int64_t i = slen - (int64_t) nlen; i >= 0; i--) {
+            if (memcmp(s + i, needle, nlen) == 0)
+                return XR_FROM_INT(i);
+        }
+        return XR_FROM_INT(-1);
     }
     if (sym == XRT_SYM_SPLIT && XR_IS_STR(arg0)) {
         const char *sep = xr_str_data(arg0);
@@ -466,6 +584,22 @@ static inline XrValue xrt_str_method_1(const char *s, int64_t slen, XrValue recv
         xr_string_core_repeat_write(xr_str_buf(sv), s, (size_t) slen, arg0.i);
         return sv;
     }
+    if (sym == XRT_SYM_REPLACE && XR_IS_STR(arg0)) {
+        /* replace(old) with empty string — 1-arg form */
+        const char *old_s = xr_str_data(arg0);
+        const char *found = strstr(s, old_s);
+        if (!found)
+            return recv;
+        size_t olen = (size_t) xr_str_len(arg0);
+        size_t rlen = (size_t) slen - olen;
+        XrValue sv = xrt_str_alloc(rlen);
+        char *r = xr_str_buf(sv);
+        size_t pre = (size_t) (found - s);
+        memcpy(r, s, pre);
+        memcpy(r + pre, found + olen, (size_t) slen - pre - olen);
+        r[rlen] = 0;
+        return sv;
+    }
     if ((sym == XRT_SYM_PAD_START || sym == XRT_SYM_PAD_END) && arg0.tag == XR_TAG_I64) {
         XrStringCorePadPlan plan = xr_string_core_pad_plan(s, (size_t) slen, arg0.i, NULL, 0);
         if (plan.kind == XR_STRING_CORE_PAD_INVALID || plan.kind == XR_STRING_CORE_PAD_ORIGINAL)
@@ -481,9 +615,38 @@ static inline XrValue xrt_str_method_1(const char *s, int64_t slen, XrValue recv
         return slice.len == 0 ? XR_NULL_VAL : xrt_str_from_core_slice(slice);
     }
     if (sym == XRT_SYM_CODEPOINT_AT && arg0.tag == XR_TAG_I64) {
-        uint32_t cp = 0;
-        return xr_string_core_codepoint_at(s, (size_t) slen, arg0.i, &cp) ? XR_FROM_INT(cp)
-                                                                          : XR_FROM_INT(-1);
+        int64_t target = arg0.i;
+        if (target < 0)
+            return XR_FROM_INT(-1);
+        const unsigned char *p = (const unsigned char *) s;
+        const unsigned char *end = p + slen;
+        for (int64_t char_index = 0; p < end; char_index++) {
+            int64_t remaining = (int64_t) (end - p);
+            uint32_t cp = p[0];
+            int advance = 1;
+            if ((p[0] & 0x80u) == 0) {
+                cp = p[0];
+            } else if ((p[0] & 0xE0u) == 0xC0u && remaining >= 2 && (p[1] & 0xC0u) == 0x80u) {
+                cp = ((uint32_t) (p[0] & 0x1Fu) << 6) | (uint32_t) (p[1] & 0x3Fu);
+                advance = 2;
+            } else if ((p[0] & 0xF0u) == 0xE0u && remaining >= 3 && (p[1] & 0xC0u) == 0x80u &&
+                       (p[2] & 0xC0u) == 0x80u) {
+                cp = ((uint32_t) (p[0] & 0x0Fu) << 12) | ((uint32_t) (p[1] & 0x3Fu) << 6) |
+                     (uint32_t) (p[2] & 0x3Fu);
+                advance = 3;
+            } else if ((p[0] & 0xF8u) == 0xF0u && remaining >= 4 && (p[1] & 0xC0u) == 0x80u &&
+                       (p[2] & 0xC0u) == 0x80u && (p[3] & 0xC0u) == 0x80u) {
+                cp = ((uint32_t) (p[0] & 0x07u) << 18) | ((uint32_t) (p[1] & 0x3Fu) << 12) |
+                     ((uint32_t) (p[2] & 0x3Fu) << 6) | (uint32_t) (p[3] & 0x3Fu);
+                advance = 4;
+            } else {
+                cp = 0xFFFD;
+            }
+            if (char_index == target)
+                return XR_FROM_INT(cp);
+            p += advance;
+        }
+        return XR_FROM_INT(-1);
     }
     return (XrValue) {.i = 0, .tag = XR_TAG_NULL};
 }
@@ -501,20 +664,28 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
         if (sym == XRT_SYM_RESERVE)
             return xrt_array_reserve_value(recv, arg0);
         if (sym == XRT_SYM_RESIZE)
-            return xrt_array_resize_value(recv, arg0, XR_FROM_INT(0));
+            return xrt_array_resize_value(
+                recv, arg0, a->elem_type == XR_ELEM_CHAR ? XR_FROM_CHAR(0) : XR_FROM_INT(0));
         if (sym == XRT_SYM_LOADU32LE)
             return xrt_bytes_load_u32_le(recv, arg0);
         if (sym == XRT_SYM_LOADU64LE)
             return xrt_bytes_load_u64_le(recv, arg0);
         if (sym == XRT_SYM_UNSHIFT) {
-            xrt_array_push(recv, XR_NULL_VAL);
-            a = (xrt_array_t *) recv.ptr;
-            (void) xr_array_core_shift_right_one(a->data, a->length - 1, a->elem_size);
+            xrt_array_check_store_or_abort(a, arg0, "Array.unshift");
+            if (XR_UNLIKELY(a->data_storage == XR_ARRAY_DATA_BORROWED)) {
+                fprintf(stderr, "xrt_array_unshift: cannot unshift array slice\n");
+                abort();
+            }
+            if (XR_UNLIKELY(a->length >= a->capacity))
+                xrt_array_data_grow(a, a->capacity == 0 ? 4 : a->capacity * 2);
+            memmove((uint8_t *) a->data + a->elem_size, a->data,
+                    (size_t) a->length * (size_t) a->elem_size);
+            a->length++;
             xr_typed_set(a->data, 0, arg0, a->elem_type);
             return XR_NULL_VAL;
         }
         if (sym == XRT_SYM_FILL) {
-            return xrt_array_fill_range_value(recv, arg0, 0, a->length);
+            return xrt_array_fill_value(recv, arg0, XR_FROM_INT(0), XR_FROM_INT(a->length));
         }
         if (sym == XRT_SYM_INDEXOF) {
             int handled;
@@ -540,14 +711,41 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
             }
             return XR_FROM_BOOL(0);
         }
-        if (sym == XRT_SYM_JOIN && XR_IS_STR(arg0))
-            return xrt_array_join_value(a, arg0);
+        if (sym == XRT_SYM_JOIN && XR_IS_STR(arg0)) {
+            const char *sep = xr_str_data(arg0);
+            size_t seplen = (size_t) xr_str_len(arg0);
+            size_t total = 0;
+            for (int64_t i = 0; i < a->length; i++) {
+                XrValue sv = xrt_tostring(xr_typed_get(a->data, (int32_t) i, a->elem_type), 0);
+                total += (size_t) xr_str_len(sv);
+                if (i < a->length - 1)
+                    total += seplen;
+            }
+            XrValue result = xrt_str_alloc(total);
+            char *r = xr_str_buf(result);
+            size_t pos = 0;
+            for (int64_t i = 0; i < a->length; i++) {
+                XrValue sv = xrt_tostring(xr_typed_get(a->data, (int32_t) i, a->elem_type), 0);
+                const char *p = xr_str_data(sv);
+                size_t plen = (size_t) xr_str_len(sv);
+                memcpy(r + pos, p, plen);
+                pos += plen;
+                if (i < a->length - 1) {
+                    memcpy(r + pos, sep, seplen);
+                    pos += seplen;
+                }
+            }
+            r[total] = 0;
+            return result;
+        }
         if (sym == XRT_SYM_SLICE && arg0.tag == XR_TAG_I64) {
             return xrt_array_slice_view(recv, arg0.i, a->length);
         }
         /* Higher-order callbacks are AOT closures. */
         if (arg0.tag == XR_TAG_CLOSURE) {
             xrt_closure_t *cl = (xrt_closure_t *) arg0.ptr;
+            typedef XrValue (*xrt_fn1_t)(xrt_closure_t *, XrValue);
+            xrt_fn1_t fn = (xrt_fn1_t) cl->fn;
             if (sym == XRT_SYM_SORT)
                 return xrt_array_sort(recv, cl);
             if (sym == XRT_SYM_MAP) {
@@ -556,22 +754,17 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
             if (sym == XRT_SYM_FILTER) {
                 return xrt_array_filter_typed(recv, arg0);
             }
-            if (sym == XRT_SYM_FOREACH)
-                return xrt_array_for_each_typed(recv, arg0);
-            if (sym == XRT_SYM_FIND)
-                return xrt_array_find_typed(recv, arg0);
-            if (sym == XRT_SYM_FINDINDEX)
-                return xrt_array_find_index_typed(recv, arg0);
-            if (sym == XRT_SYM_EVERY)
-                return xrt_array_every_typed(recv, arg0);
-            if (sym == XRT_SYM_SOME)
-                return xrt_array_some_typed(recv, arg0);
+            if (sym == XRT_SYM_FOREACH) {
+                for (int64_t i = 0; i < a->length; i++)
+                    fn(cl, xr_typed_get(a->data, (int32_t) i, a->elem_type));
+                return XR_NULL_VAL;
+            }
         }
     }
     if (XR_IS_MAP(recv)) {
         xrt_map_t *m = (xrt_map_t *) recv.ptr;
         if (sym == XRT_SYM_GET)
-            return xrt_map_get(m, arg0);
+            return xrt_map_get_owned(m, arg0);
         if (sym == XRT_SYM_HAS)
             return XR_FROM_BOOL(xrt_map_has(m, arg0));
         if (sym == XRT_SYM_DELETE)
@@ -579,7 +772,7 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
     }
     if (XR_IS_SET(recv)) {
         xrt_set_t *s = (xrt_set_t *) recv.ptr;
-        if (sym == XRT_SYM_ADD || sym == XRT_SYM_SET) {
+        if (sym == XRT_SYM_ADD) {
             if ((s->flags & XR_SET_FLAG_WEAK) && !xrt_weak_value_is_heap_object(arg0))
                 return XR_NULL_VAL;
             (void) xrt_set_add(s, arg0);
@@ -592,8 +785,6 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
     }
     if (recv.tag == XR_TAG_RANGE)
         return xrt_range_method_1(recv, sym, arg0);
-    if (recv.tag == XR_TAG_DATETIME)
-        return xrt_datetime_method_1(recv, sym, arg0);
     if (recv.tag == XR_TAG_F64 && sym == XRT_SYM_POW) {
         double exp = (arg0.tag == XR_TAG_F64) ? arg0.f : (double) arg0.i;
         return XR_FROM_FLOAT(pow(recv.f, exp));
@@ -601,8 +792,29 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
     /* toFixed(digits). */
     if (recv.tag == XR_TAG_F64 && sym == XRT_SYM_TOFIXED && arg0.tag == XR_TAG_I64) {
         char buf[64];
-        (void) xr_numeric_core_format_fixed(buf, sizeof(buf), recv.f, arg0.i);
+        snprintf(buf, sizeof(buf), "%.*f", (int) arg0.i, recv.f);
         return xrt_str_from_cstr(buf);
+    }
+    if (recv.tag == XR_TAG_I64 && arg0.tag == XR_TAG_I64) {
+        int64_t out;
+        if (sym == XRT_SYM_CHECKED_ADD)
+            return xr_i64_checked_add(recv.i, arg0.i, &out) ? XR_FROM_INT(out) : XR_NULL_VAL;
+        if (sym == XRT_SYM_CHECKED_SUB)
+            return xr_i64_checked_sub(recv.i, arg0.i, &out) ? XR_FROM_INT(out) : XR_NULL_VAL;
+        if (sym == XRT_SYM_CHECKED_MUL)
+            return xr_i64_checked_mul(recv.i, arg0.i, &out) ? XR_FROM_INT(out) : XR_NULL_VAL;
+        if (sym == XRT_SYM_SATURATING_ADD)
+            return XR_FROM_INT(xr_i64_saturating_add(recv.i, arg0.i));
+        if (sym == XRT_SYM_SATURATING_SUB)
+            return XR_FROM_INT(xr_i64_saturating_sub(recv.i, arg0.i));
+        if (sym == XRT_SYM_SATURATING_MUL)
+            return XR_FROM_INT(xr_i64_saturating_mul(recv.i, arg0.i));
+        if (sym == XRT_SYM_WRAPPING_ADD)
+            return XR_FROM_INT(xr_i64_add_wrap(recv.i, arg0.i));
+        if (sym == XRT_SYM_WRAPPING_SUB)
+            return XR_FROM_INT(xr_i64_sub_wrap(recv.i, arg0.i));
+        if (sym == XRT_SYM_WRAPPING_MUL)
+            return XR_FROM_INT(xr_i64_mul_wrap(recv.i, arg0.i));
     }
     /* max/min accept int or float operands. */
     if (sym == XRT_SYM_MAX) {
@@ -623,8 +835,6 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
 }
 
 static inline XrValue xrt_method_2(XrValue recv, int sym, XrValue arg0, XrValue arg1) {
-    if (recv.tag == XR_TAG_DATETIME)
-        return xrt_datetime_method_2(recv, sym, arg0, arg1);
     if (XR_IS_STR(recv) && (sym == XRT_SYM_SLICE || sym == XRT_SYM_SUBSTRING)) {
         const char *s = xr_str_data(recv);
         size_t slen = (size_t) xr_str_len(recv);
@@ -688,15 +898,14 @@ static inline XrValue xrt_method_2(XrValue recv, int sym, XrValue arg0, XrValue 
         int64_t end = (arg1.tag == XR_TAG_I64) ? arg1.i : a->length;
         return xrt_array_slice_view(recv, start, end);
     }
-    if (XR_IS_ARRAY(recv) && sym == XRT_SYM_FILL) {
-        xrt_array_t *a = (xrt_array_t *) recv.ptr;
-        int64_t start = (arg1.tag == XR_TAG_I64) ? arg1.i : 0;
-        return xrt_array_fill_range_value(recv, arg0, start, a->length);
-    }
     if (XR_IS_ARRAY(recv) && sym == XRT_SYM_REDUCE && arg0.tag == XR_TAG_CLOSURE)
         return xrt_array_reduce_typed(recv, arg0, arg1);
     if (XR_IS_ARRAY(recv) && sym == XRT_SYM_RESIZE)
         return xrt_array_resize_value(recv, arg0, arg1);
+    if (XR_IS_ARRAY(recv) && sym == XRT_SYM_FILL) {
+        xrt_array_t *a = (xrt_array_t *) recv.ptr;
+        return xrt_array_fill_value(recv, arg0, arg1, XR_FROM_INT(a->length));
+    }
     if (XR_IS_MAP(recv) && sym == XRT_SYM_SET) {
         xrt_map_t *m = (xrt_map_t *) recv.ptr;
         if ((m->flags & XR_MAP_FLAG_WEAK) && !xrt_weak_value_is_heap_object(arg0))
@@ -709,13 +918,9 @@ static inline XrValue xrt_method_2(XrValue recv, int sym, XrValue arg0, XrValue 
 
 static inline XrValue xrt_method_3(XrValue recv, int sym, XrValue arg0, XrValue arg1,
                                    XrValue arg2) {
-    if (XR_IS_ARRAY(recv) && sym == XRT_SYM_FILL) {
-        xrt_array_t *a = (xrt_array_t *) recv.ptr;
-        int64_t start = (arg1.tag == XR_TAG_I64) ? arg1.i : 0;
-        int64_t end = (arg2.tag == XR_TAG_I64) ? arg2.i : a->length;
-        return xrt_array_fill_range_value(recv, arg0, start, end);
-    }
-    return XR_NULL_VAL;
+    if (XR_IS_ARRAY(recv) && sym == XRT_SYM_FILL)
+        return xrt_array_fill_value(recv, arg0, arg1, arg2);
+    return (XrValue) {.i = 0, .tag = XR_TAG_NULL};
 }
 
 #include "xrt_getprop.inc.c"

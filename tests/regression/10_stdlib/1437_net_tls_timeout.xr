@@ -18,7 +18,9 @@ fn test_dial_tls_handshake_timeout() {
         return
     }
 
-    let lst = net.listen(0, 8)!
+    let maybeLst = net.listen(0, 8)
+    if (maybeLst == null) { return }
+    let lst = maybeLst!
     let port = lst.port()
     go acceptHold(lst)
 
@@ -38,7 +40,9 @@ fn test_upgrade_tls_handshake_timeout() {
         return
     }
 
-    let lst = net.listen(0, 8)!
+    let maybeLst = net.listen(0, 8)
+    if (maybeLst == null) { return }
+    let lst = maybeLst!
     let port = lst.port()
     go acceptHold(lst)
 

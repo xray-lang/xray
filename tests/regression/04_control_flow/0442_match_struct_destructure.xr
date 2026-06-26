@@ -1,0 +1,100 @@
+// 0442_match_struct_destructure.xr
+// 测试：match 中的对象/数组结构解构（D44）
+// 覆盖：对象字段簡寫/重命名、可反驳字段子模式、数组按长度匹配、..rest、通配元素位、guard
+
+// ===== 对象字段解构（簡寫） =====
+@test
+fn test_match_object_shorthand() {
+    let p = {x: 3, y: 4}
+    let r = match (p) {
+        { x, y } -> x + y
+        _ -> 0
+    }
+    assert_eq(r, 7)
+}
+
+// ===== 对象字段重命名 + 簡寫混用 =====
+@test
+fn test_match_object_rename() {
+    let user = {name: "Bob", age: 5}
+    let r = match (user) {
+        { name: n, age } -> n + ":" + string(age)
+        _ -> "none"
+    }
+    assert_eq(r, "Bob:5")
+}
+
+// ===== 对象可反驳字段子模式 =====
+@test
+fn test_match_object_refutable_field() {
+    let cfg = {mode: 2, label: "go"}
+    let r = match (cfg) {
+        { mode: 1 } -> "one"
+        { mode: 2, label } -> "two:" + label
+        _ -> "other"
+    }
+    assert_eq(r, "two:go")
+}
+
+// ===== 数组解构 + ..rest =====
+@test
+fn test_match_array_rest() {
+    let a = [10, 20, 30]
+    match (a) {
+        [first, ..rest] -> {
+            assert_eq(first, 10)
+            assert_eq(rest.length, 2)
+            assert_eq(rest[0], 20)
+            assert_eq(rest[1], 30)
+        }
+        _ -> { assert(false) }
+    }
+}
+
+// ===== 数组按长度选择分支 =====
+@test
+fn test_match_array_length_select() {
+    let pair = [1, 2]
+    let r = match (pair) {
+        [x] -> x
+        [x, y] -> x * 10 + y
+        _ -> 0
+    }
+    assert_eq(r, 12)
+}
+
+// ===== 空 rest =====
+@test
+fn test_match_array_empty_rest() {
+    let single = [99]
+    match (single) {
+        [head, ..tail] -> {
+            assert_eq(head, 99)
+            assert_eq(tail.length, 0)
+        }
+        _ -> { assert(false) }
+    }
+}
+
+// ===== 元素位通配 =====
+@test
+fn test_match_array_wildcards() {
+    let triple = [7, 8, 9]
+    let r = match (triple) {
+        [_, mid, _] -> mid
+        _ -> 0
+    }
+    assert_eq(r, 8)
+}
+
+// ===== 数组元素 guard（按值判断走守卫） =====
+@test
+fn test_match_array_guard() {
+    let a = [5, 6]
+    let r = match (a) {
+        [x, y] if (x > 10) -> "big"
+        [x, y] -> "small:" + string(x + y)
+        _ -> "none"
+    }
+    assert_eq(r, "small:11")
+}

@@ -60,14 +60,14 @@ class Builder {
 
 @test
 fn test_builder_chain() {
-    let b = new Builder()
+    let b = Builder()
     let result = b.add("Hello").add(" ").add("World").build()
     assert_eq(result, "Hello World")
 }
 
 @test
 fn test_multiple_chain() {
-    let b = new Builder()
+    let b = Builder()
     b.add("a")
     b.add("b")
     b.add("c")

@@ -132,12 +132,14 @@
     _(LTI, FMT_AsB_C, KOP_AB_TEST_S, "if (R[A] < sB) != k then PC++")                              \
     _(LE, FMT_AB_IMM, KOP_AB_TEST, "if (R[A] <= R[B]) != k then PC++")                             \
     _(LEI, FMT_AsB_C, KOP_AB_TEST_S, "if (R[A] <= sB) != k then PC++")                             \
+    _(LTU, FMT_AB_IMM, KOP_AB_TEST, "if ((uint64)R[A] < (uint64)R[B]) != k then PC++")             \
+    _(LEU, FMT_AB_IMM, KOP_AB_TEST, "if ((uint64)R[A] <= (uint64)R[B]) != k then PC++")            \
     _(CMP_EQ, FMT_ABC, KOP_ABC_BIN, "R[A] = (R[B] == R[C])")                                       \
     _(CMP_NE, FMT_ABC, KOP_ABC_BIN, "R[A] = (R[B] != R[C])")                                       \
-    _(CMP_EQ_STRICT, FMT_ABC, KOP_ABC_BIN, "R[A] = (R[B] === R[C])")                               \
-    _(CMP_NE_STRICT, FMT_ABC, KOP_ABC_BIN, "R[A] = (R[B] !== R[C])")                               \
     _(CMP_LT, FMT_ABC, KOP_ABC_BIN, "R[A] = (R[B] < R[C])")                                        \
     _(CMP_LE, FMT_ABC, KOP_ABC_BIN, "R[A] = (R[B] <= R[C])")                                       \
+    _(CMP_LTU, FMT_ABC, KOP_ABC_BIN, "R[A] = ((uint64)R[B] < (uint64)R[C])")                       \
+    _(CMP_LEU, FMT_ABC, KOP_ABC_BIN, "R[A] = ((uint64)R[B] <= (uint64)R[C])")                      \
     _(IS, FMT_ABC, KOP_ABC_BIN, "R[A] = (R[B] is R[C])")                                           \
     _(CHECKTYPE, FMT_AB, KOP_AB_K, "assert R[A] is Type[K(B)]")                                    \
     _(ISNULL, FMT_AB_IMM, KOP_AB_FLAG, "if (R[A]==null) != k then PC++")                           \
@@ -161,6 +163,7 @@
     _(NEWSET, FMT_AB, KOP_AB_NEW_LIT, "R[A] = #[], B=storage")                                     \
     _(NEWSTRINGBUILDER, FMT_AB, KOP_AB_NEW_LIT, "R[A] = new StringBuilder(), B=storage")           \
     _(NEWRANGE, FMT_ABC, KOP_ABC_BIN, "R[A] = Range(R[B], R[C])")                                  \
+    _(NEWRANGE_INCLUSIVE, FMT_ABC, KOP_ABC_BIN, "R[A] = Range inclusive(R[B], R[C])")              \
     _(RANGE_UNPACK, FMT_AB, KOP_AB_RECV, "R[A]=start, R[A+1]=end, R[A+2]=step from Range R[B]")    \
     _(ARRAY_GET, FMT_ABC, KOP_ABC_BIN, "R[A] = R[B]:Array[R[C]]")                                  \
     _(ARRAY_GETC, FMT_ABC, KOP_ABC_BIN_LIT, "R[A] = R[B]:Array[C]")                                \
@@ -292,6 +295,8 @@
     _(CHAN_CLOSE, FMT_A, KOP_A_USE, "R[A].close()")                                                \
     _(CHAN_IS_CLOSED, FMT_AB, KOP_AB_UNARY, "R[A] = R[B].isClosed()")                              \
     _(DEFER, FMT_AB, KOP_AB_BASE_LIT, "defer R[A](args R[A+1..A+B-1])")                            \
+    _(DEFER_MARK, FMT_A, KOP_A_LOAD, "R[A] = defer mark")                                          \
+    _(DEFER_RUN_TO, FMT_A, KOP_A_USE, "run defers down to mark R[A]")                              \
     _(BYTES_NEW, FMT_AB, KOP_AB_NEW_LIT, "R[A] = Bytes(B args)")                                   \
     _(SCOPE_ENTER, FMT_A, KOP_A_LIT, "enter scope, A=mode(0=wait,1=linked,2=supervisor)")          \
     _(SCOPE_EXIT, FMT_AB, KOP_AB_NEW_LIT, "exit scope, A=mode, B=result_reg")                      \
@@ -320,6 +325,16 @@
     _(STRUCT_COPY, FMT_ABC, KOP_ABC_BIN_LIT, "R[A] = memcpy struct R[B] into struct_area slot C")  \
     _(PTR_LOAD, FMT_ABC, KOP_ABC_BIN_LIT, "R[A] = *(T*)R[B], C = XrFFIType width of T")            \
     _(PTR_STORE, FMT_ABC, KOP_ABC_STORE_LIT, "*(T*)R[A] = R[B], C = XrFFIType width of T")         \
+    /* Inserted just before NOP: NUM_OPCODES is (OP_NOP + 1), so NOP must stay                     \
+     * the last entry. Placing these here keeps every pre-NOP opcode value stable                  \
+     * (the embedded bytecode smoke blob uses only those), while NOP — unused by                 \
+     * the blob — simply shifts up by two. */                                                    \
+    _(ARRAY_EXTEND, FMT_AB, KOP_AB_INPLACE, "R[A]:Array.extend(R[B]:Array) — splice + retain")     \
+    _(JSON_MERGE, FMT_AB, KOP_AB_INPLACE, "R[A]:Json.merge(R[B]:Json) — object spread")            \
+    _(TOCHAR, FMT_AB, KOP_AB_UNARY, "R[A] = char(R[B]) — int codepoint to Unicode scalar")         \
+    _(GEN_YIELD, FMT_A, KOP_A_USE, "generator yield: hand R[A] to the driver, suspend")            \
+    _(GEN_START, FMT_ABC, KOP_ABC_BIN_LIT,                                                         \
+      "R[A] = generator iterator over closure R[B] with C args at R[B+1..B+C]")                    \
     _(NOP, FMT_SPECIAL, KOP_SPECIAL, "no-op / spawn metadata")
 
 #endif  // XOPCODE_DEF_H

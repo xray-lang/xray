@@ -1,0 +1,6 @@
+let ch = Channel<int>(1)
+
+for (i, msg in ch) {
+    print(i)
+    print(msg)
+}
