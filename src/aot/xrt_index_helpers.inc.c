@@ -260,15 +260,15 @@ static inline void xrt_index_set(XrValue obj, XrValue key, XrValue val) {
         if ((uint64_t) idx < (uint64_t) a->length) {
             xrt_array_check_store_or_abort(a, val, "xrt_index_set");
             xr_typed_set(a->data, (int32_t) idx, val, a->elem_type);
-        } else if (idx == a->length && a->elem_type == XR_ELEM_ANY &&
-                   a->data_storage != XR_ARRAY_DATA_BORROWED) {
-            /* Append-grow only at idx == length for ANY non-slice arrays
-             * (matches the VM array-literal lowering path). */
+        } else if (idx == a->length && a->data_storage != XR_ARRAY_DATA_BORROWED) {
+            /* Append-grow only at exactly idx == length on non-slice arrays,
+             * matching the VM's index-assignment append path. */
+            xrt_array_check_store_or_abort(a, val, "xrt_index_set");
             xrt_array_push(obj, val);
         }
-        /* Out-of-bounds assignment (negative or > length) is a silent no-op,
-         * matching the VM: no from-end negative wrap and no sparse gap growth.
-         * A later read of the slot raises the OOB panic. */
+        /* Other out-of-bounds assignments (negative or > length) are a silent
+         * no-op, matching the VM: no from-end negative wrap and no sparse gap
+         * growth. A later read of the slot raises the OOB panic. */
     } else if (XR_IS_MAP(obj)) {
         xrt_map_set((xrt_map_t *) obj.ptr, key, val);
     } else if (obj.tag == XR_TAG_PTR && obj.ptr && obj.heap_type == 0 && XR_IS_STR(key)) {
