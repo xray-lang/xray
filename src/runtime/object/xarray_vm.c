@@ -10,36 +10,90 @@
 
 #include "xarray_vm.h"
 
+#include "xrange.h"
 #include "xstring.h"
 #include "../../base/xchecks.h"
 #include "../../base/xmalloc.h"
 #include "../../coro/xcoroutine.h"
 #include "../closure/xclosure.h"
 #include "../mem/xalloc_unified.h"
+#include "../value/xvalue_format.h"
 #include "../value/xtype_names.h"
+#include "../xstdlib_bridge.h"
 #include "../xisolate_api.h"
-#include "../../vm/xvm_string.h"
+#include "../../shared/xr_array_core.h"
+#include "../../shared/xr_float_fmt.h"
+#include "../../shared/xr_numeric_core.h"
+#include "../../shared/xr_sort_core.h"
 #include "../xvm_call.h"
+#include <stdio.h>
 #include <string.h>
 
 XrArray *xr_array_new_shared(struct XrVMRuntime *X, int capacity) {
     return xr_array_new_shared_core(xr_isolate_get_runtime_core(X), capacity);
 }
 
-void xr_array_foreach(struct XrVMRuntime *iso, XrArray *arr, struct XrClosure *callback) {
-    XR_DCHECK(arr != NULL, "xr_array_foreach: NULL arr");
-    XR_DCHECK(callback != NULL, "xr_array_foreach: NULL callback");
-    for (int i = 0; i < arr->length; i++) {
-        XrValue args[1];
-        args[0] = xr_array_get_element(arr, i);
-        xr_vm_call_closure(iso, callback, args, 1);
-    }
-}
-
 static uint8_t array_map_result_tid(struct XrClosure *callback) {
     if (!callback || !callback->proto || !callback->proto->return_type_info)
         return 0;
     return xr_type_to_tid(callback->proto->return_type_info);
+}
+
+typedef struct XrArrayHofVMCtx {
+    struct XrVMRuntime *iso;
+    XrArray *input;
+    XrArray *output;
+    struct XrClosure *callback;
+} XrArrayHofVMCtx;
+
+static XrValue xr_array_hof_vm_read(void *ctx_ptr, int64_t index) {
+    XrArrayHofVMCtx *ctx = (XrArrayHofVMCtx *) ctx_ptr;
+    if (!ctx || !ctx->input || index < 0 || index > INT32_MAX)
+        return xr_null();
+    return xr_array_get_element(ctx->input, (int32_t) index);
+}
+
+static XrValue xr_array_hof_vm_map(void *ctx_ptr, XrValue value) {
+    XrArrayHofVMCtx *ctx = (XrArrayHofVMCtx *) ctx_ptr;
+    XrValue args[1] = {value};
+    return xr_vm_call_closure(ctx->iso, ctx->callback, args, 1);
+}
+
+static bool xr_array_hof_vm_each(void *ctx_ptr, XrValue value) {
+    XrArrayHofVMCtx *ctx = (XrArrayHofVMCtx *) ctx_ptr;
+    XrValue args[1] = {value};
+    (void) xr_vm_call_closure(ctx->iso, ctx->callback, args, 1);
+    return true;
+}
+
+static bool xr_array_hof_vm_write(void *ctx_ptr, int64_t index, XrValue value) {
+    XrArrayHofVMCtx *ctx = (XrArrayHofVMCtx *) ctx_ptr;
+    if (!ctx || !ctx->output || index < 0 || index > INT32_MAX)
+        return false;
+    xr_array_set_element(ctx->output, (int32_t) index, value);
+    return true;
+}
+
+static bool xr_array_hof_vm_filter_predicate(void *ctx_ptr, XrValue value) {
+    XrArrayHofVMCtx *ctx = (XrArrayHofVMCtx *) ctx_ptr;
+    XrValue args[1] = {value};
+    return xr_value_is_truthy(xr_vm_call_closure(ctx->iso, ctx->callback, args, 1));
+}
+
+static bool xr_array_hof_vm_filter_write(void *ctx_ptr, int64_t index, XrValue value) {
+    (void) index;
+    XrArrayHofVMCtx *ctx = (XrArrayHofVMCtx *) ctx_ptr;
+    if (!ctx || !ctx->output)
+        return false;
+    xr_rc_retain_value(value);
+    xr_array_push(ctx->output, value);
+    return true;
+}
+
+static XrValue xr_array_hof_vm_reduce(void *ctx_ptr, XrValue acc, XrValue value) {
+    XrArrayHofVMCtx *ctx = (XrArrayHofVMCtx *) ctx_ptr;
+    XrValue args[2] = {acc, value};
+    return xr_vm_call_closure(ctx->iso, ctx->callback, args, 2);
 }
 
 XrArray *xr_array_map(struct XrVMRuntime *iso, XrArray *arr, struct XrClosure *callback) {
@@ -52,14 +106,21 @@ XrArray *xr_array_map(struct XrVMRuntime *iso, XrArray *arr, struct XrClosure *c
         return xr_array_new(xr_current_coro(iso));
     result->elem_tid = elem_tid;
 
-    for (int i = 0; i < arr->length; i++) {
-        XrValue args[1];
-        args[0] = xr_array_get_element(arr, i);
-        xr_array_set_element(result, i, xr_vm_call_closure(iso, callback, args, 1));
-    }
-    result->length = arr->length;
+    XrArrayHofVMCtx ctx = {iso, arr, result, callback};
+    int64_t mapped = 0;
+    (void) xr_array_core_hof_map(arr->length, xr_array_hof_vm_read, xr_array_hof_vm_map,
+                                 xr_array_hof_vm_write, &ctx, &mapped);
+    result->length = (int32_t) mapped;
 
     return result;
+}
+
+void xr_array_foreach(struct XrVMRuntime *iso, XrArray *arr, struct XrClosure *callback) {
+    XR_DCHECK(arr != NULL, "xr_array_foreach: NULL arr");
+    XR_DCHECK(callback != NULL, "xr_array_foreach: NULL callback");
+    XrArrayHofVMCtx ctx = {iso, arr, NULL, callback};
+    (void) xr_array_core_hof_for_each(arr->length, xr_array_hof_vm_read, xr_array_hof_vm_each, &ctx,
+                                      NULL);
 }
 
 XrArray *xr_array_filter(struct XrVMRuntime *iso, XrArray *arr, struct XrClosure *callback) {
@@ -68,17 +129,10 @@ XrArray *xr_array_filter(struct XrVMRuntime *iso, XrArray *arr, struct XrClosure
     XrArray *result = xr_array_with_capacity_typed(xr_current_coro(iso), arr->length,
                                                    (XrArrayElemType) arr->elem_type);
 
-    for (int i = 0; i < arr->length; i++) {
-        XrValue elem = xr_array_get_element(arr, i);
-        XrValue args[1];
-        args[0] = elem;
-        XrValue test_result = xr_vm_call_closure(iso, callback, args, 1);
-
-        if (xr_value_is_truthy(test_result)) {
-            xr_rc_retain_value(elem);
-            xr_array_push(result, elem);
-        }
-    }
+    XrArrayHofVMCtx ctx = {iso, arr, result, callback};
+    (void) xr_array_core_hof_filter(arr->length, xr_array_hof_vm_read,
+                                    xr_array_hof_vm_filter_predicate, xr_array_hof_vm_filter_write,
+                                    &ctx, NULL);
 
     return result;
 }
@@ -87,100 +141,42 @@ XrValue xr_array_reduce(struct XrVMRuntime *iso, XrArray *arr, struct XrClosure 
                         XrValue initial) {
     XR_DCHECK(arr != NULL, "xr_array_reduce: NULL arr");
     XR_DCHECK(callback != NULL, "xr_array_reduce: NULL callback");
-    XrValue accumulator = initial;
-
-    for (int i = 0; i < arr->length; i++) {
-        XrValue args[2];
-        args[0] = accumulator;
-        args[1] = xr_array_get_element(arr, i);
-        accumulator = xr_vm_call_closure(iso, callback, args, 2);
-    }
-
-    return accumulator;
+    XrArrayHofVMCtx ctx = {iso, arr, NULL, callback};
+    return xr_array_core_hof_reduce(arr->length, xr_array_hof_vm_read, xr_array_hof_vm_reduce, &ctx,
+                                    initial);
 }
 
 XrValue xr_array_find(struct XrVMRuntime *iso, XrArray *arr, struct XrClosure *callback) {
     XR_DCHECK(arr != NULL, "xr_array_find: NULL arr");
     XR_DCHECK(callback != NULL, "xr_array_find: NULL callback");
-    for (int i = 0; i < arr->length; i++) {
-        XrValue elem = xr_array_get_element(arr, i);
-        XrValue args[1];
-        args[0] = elem;
-        XrValue result = xr_vm_call_closure(iso, callback, args, 1);
-        if (xr_value_is_truthy(result))
-            return elem;
-    }
-    return xr_null();
+    XrArrayHofVMCtx ctx = {iso, arr, NULL, callback};
+    XrArrayCoreFindResult result = xr_array_core_hof_find(arr->length, xr_array_hof_vm_read,
+                                                          xr_array_hof_vm_filter_predicate, &ctx);
+    return result.found ? result.value : xr_null();
 }
 
 int xr_array_find_index(struct XrVMRuntime *iso, XrArray *arr, struct XrClosure *callback) {
     XR_DCHECK(arr != NULL, "xr_array_find_index: NULL arr");
     XR_DCHECK(callback != NULL, "xr_array_find_index: NULL callback");
-    for (int i = 0; i < arr->length; i++) {
-        XrValue args[1];
-        args[0] = xr_array_get_element(arr, i);
-        XrValue result = xr_vm_call_closure(iso, callback, args, 1);
-        if (xr_value_is_truthy(result))
-            return i;
-    }
-    return -1;
+    XrArrayHofVMCtx ctx = {iso, arr, NULL, callback};
+    return (int) xr_array_core_hof_find_index(arr->length, xr_array_hof_vm_read,
+                                              xr_array_hof_vm_filter_predicate, &ctx);
 }
 
 bool xr_array_every(struct XrVMRuntime *iso, XrArray *arr, struct XrClosure *callback) {
     XR_DCHECK(arr != NULL, "xr_array_every: NULL arr");
     XR_DCHECK(callback != NULL, "xr_array_every: NULL callback");
-    for (int i = 0; i < arr->length; i++) {
-        XrValue args[1];
-        args[0] = xr_array_get_element(arr, i);
-        XrValue result = xr_vm_call_closure(iso, callback, args, 1);
-        if (!xr_value_is_truthy(result))
-            return false;
-    }
-    return true;
+    XrArrayHofVMCtx ctx = {iso, arr, NULL, callback};
+    return xr_array_core_hof_every(arr->length, xr_array_hof_vm_read,
+                                   xr_array_hof_vm_filter_predicate, &ctx);
 }
 
 bool xr_array_some(struct XrVMRuntime *iso, XrArray *arr, struct XrClosure *callback) {
     XR_DCHECK(arr != NULL, "xr_array_some: NULL arr");
     XR_DCHECK(callback != NULL, "xr_array_some: NULL callback");
-    for (int i = 0; i < arr->length; i++) {
-        XrValue args[1];
-        args[0] = xr_array_get_element(arr, i);
-        XrValue result = xr_vm_call_closure(iso, callback, args, 1);
-        if (xr_value_is_truthy(result))
-            return true;
-    }
-    return false;
-}
-
-static int xr_value_compare_default(XrValue a, XrValue b) {
-    if (XR_IS_INT(a) && XR_IS_INT(b)) {
-        int64_t ia = XR_TO_INT(a), ib = XR_TO_INT(b);
-        return (ia > ib) - (ia < ib);
-    }
-    if (XR_IS_FLOAT(a) && XR_IS_FLOAT(b)) {
-        double fa = XR_TO_FLOAT(a), fb = XR_TO_FLOAT(b);
-        return (fa > fb) - (fa < fb);
-    }
-    if (XR_IS_INT(a) && XR_IS_FLOAT(b)) {
-        double fa = (double) XR_TO_INT(a), fb = XR_TO_FLOAT(b);
-        return (fa > fb) - (fa < fb);
-    }
-    if (XR_IS_FLOAT(a) && XR_IS_INT(b)) {
-        double fa = XR_TO_FLOAT(a), fb = (double) XR_TO_INT(b);
-        return (fa > fb) - (fa < fb);
-    }
-    if (XR_IS_STRING(a) && XR_IS_STRING(b)) {
-        const char *da = xr_value_str_data(&a);
-        uint32_t la = xr_value_str_len(&a);
-        const char *db = xr_value_str_data(&b);
-        uint32_t lb = xr_value_str_len(&b);
-        int minlen = la < lb ? la : lb;
-        int cmp = memcmp(da, db, (size_t) minlen);
-        if (cmp != 0)
-            return cmp;
-        return (la > lb) - (la < lb);
-    }
-    return 0;
+    XrArrayHofVMCtx ctx = {iso, arr, NULL, callback};
+    return xr_array_core_hof_some(arr->length, xr_array_hof_vm_read,
+                                  xr_array_hof_vm_filter_predicate, &ctx);
 }
 
 typedef struct {
@@ -188,148 +184,25 @@ typedef struct {
     struct XrClosure *comparator;
 } XrSortCtx;
 
-static int xr_sort_with_comparator(const void *a, const void *b, void *ctx_ptr) {
+static int xr_array_sort_default_cmp(XrValue a, XrValue b) {
+    if (XR_IS_STRING(a) && XR_IS_STRING(b)) {
+        const char *a_data = xr_value_str_data(&a);
+        int64_t a_len = (int64_t) xr_value_str_len(&a);
+        const char *b_data = xr_value_str_data(&b);
+        int64_t b_len = (int64_t) xr_value_str_len(&b);
+        return xr_sort_core_compare_default(a, b, a_data, a_len, b_data, b_len);
+    }
+    return xr_sort_core_compare_default(a, b, NULL, 0, NULL, 0);
+}
+
+static int xr_sort_with_comparator(void *ctx_ptr, XrValue va, XrValue vb) {
     XrSortCtx *ctx = (XrSortCtx *) ctx_ptr;
-    XrValue va = *(const XrValue *) a;
-    XrValue vb = *(const XrValue *) b;
     if (ctx->comparator) {
         XrValue args[2] = {va, vb};
-        XrValue result = xr_vm_call_closure(ctx->iso, ctx->comparator, args, 2);
-        if (XR_IS_INT(result))
-            return (int) XR_TO_INT(result);
-        if (XR_IS_FLOAT(result)) {
-            double d = XR_TO_FLOAT(result);
-            return (d > 0) - (d < 0);
-        }
-        return 0;
+        return xr_sort_core_compare_result(xr_vm_call_closure(ctx->iso, ctx->comparator, args, 2));
     }
-    return xr_value_compare_default(va, vb);
+    return xr_array_sort_default_cmp(va, vb);
 }
-
-#define XR_SORT_INSERTION_THRESHOLD 32
-
-static void xr_sort_insertion(XrValue *data, int lo, int hi, XrSortCtx *ctx) {
-    for (int i = lo + 1; i <= hi; i++) {
-        XrValue key = data[i];
-        int j = i - 1;
-        while (j >= lo && xr_sort_with_comparator(&data[j], &key, ctx) > 0) {
-            data[j + 1] = data[j];
-            j--;
-        }
-        data[j + 1] = key;
-    }
-}
-
-static void xr_sort_merge(XrValue *data, XrValue *tmp, int lo, int mid, int hi, XrSortCtx *ctx) {
-    memcpy(tmp + lo, data + lo, (size_t) (hi - lo + 1) * sizeof(XrValue));
-    int i = lo, j = mid + 1, k = lo;
-    while (i <= mid && j <= hi) {
-        if (xr_sort_with_comparator(&tmp[i], &tmp[j], ctx) <= 0)
-            data[k++] = tmp[i++];
-        else
-            data[k++] = tmp[j++];
-    }
-    while (i <= mid)
-        data[k++] = tmp[i++];
-    while (j <= hi)
-        data[k++] = tmp[j++];
-}
-
-static void xr_array_hybrid_sort(XrValue *data, int n, XrSortCtx *ctx) {
-    if (n <= XR_SORT_INSERTION_THRESHOLD) {
-        xr_sort_insertion(data, 0, n - 1, ctx);
-        return;
-    }
-
-    XrValue *tmp = (XrValue *) xr_malloc((size_t) n * sizeof(XrValue));
-    if (!tmp) {
-        xr_sort_insertion(data, 0, n - 1, ctx);
-        return;
-    }
-
-    for (int i = 0; i < n; i += XR_SORT_INSERTION_THRESHOLD) {
-        int hi = i + XR_SORT_INSERTION_THRESHOLD - 1;
-        if (hi >= n)
-            hi = n - 1;
-        xr_sort_insertion(data, i, hi, ctx);
-    }
-
-    for (int width = XR_SORT_INSERTION_THRESHOLD; width < n; width *= 2) {
-        for (int lo = 0; lo < n; lo += width * 2) {
-            int mid = lo + width - 1;
-            int hi = lo + width * 2 - 1;
-            if (mid >= n)
-                break;
-            if (hi >= n)
-                hi = n - 1;
-            xr_sort_merge(data, tmp, lo, mid, hi, ctx);
-        }
-    }
-
-    xr_free(tmp);
-}
-
-#define TYPED_INSERTION(type, d, lo, hi)                                                           \
-    do {                                                                                           \
-        for (int _i = (lo) + 1; _i <= (hi); _i++) {                                                \
-            type _key = (d)[_i];                                                                   \
-            int _j = _i - 1;                                                                       \
-            while (_j >= (lo) && (d)[_j] > _key) {                                                 \
-                (d)[_j + 1] = (d)[_j];                                                             \
-                _j--;                                                                              \
-            }                                                                                      \
-            (d)[_j + 1] = _key;                                                                    \
-        }                                                                                          \
-    } while (0)
-
-#define TYPED_MERGE(type, d, tmp, lo, mid, hi)                                                     \
-    do {                                                                                           \
-        memcpy((tmp) + (lo), (d) + (lo), (size_t) ((hi) - (lo) + 1) * sizeof(type));               \
-        int _i = (lo), _j = (mid) + 1, _k = (lo);                                                  \
-        while (_i <= (mid) && _j <= (hi)) {                                                        \
-            if ((tmp)[_i] <= (tmp)[_j])                                                            \
-                (d)[_k++] = (tmp)[_i++];                                                           \
-            else                                                                                   \
-                (d)[_k++] = (tmp)[_j++];                                                           \
-        }                                                                                          \
-        while (_i <= (mid))                                                                        \
-            (d)[_k++] = (tmp)[_i++];                                                               \
-        while (_j <= (hi))                                                                         \
-            (d)[_k++] = (tmp)[_j++];                                                               \
-    } while (0)
-
-#define TYPED_SORT(type, arr, n)                                                                   \
-    do {                                                                                           \
-        type *_d = (type *) (arr)->data;                                                           \
-        int _n = (n);                                                                              \
-        if (_n <= XR_SORT_INSERTION_THRESHOLD) {                                                   \
-            TYPED_INSERTION(type, _d, 0, _n - 1);                                                  \
-        } else {                                                                                   \
-            type *_tmp = (type *) xr_malloc((size_t) _n * sizeof(type));                           \
-            if (!_tmp) {                                                                           \
-                TYPED_INSERTION(type, _d, 0, _n - 1);                                              \
-                break;                                                                             \
-            }                                                                                      \
-            for (int _r = 0; _r < _n; _r += XR_SORT_INSERTION_THRESHOLD) {                         \
-                int _hi = _r + XR_SORT_INSERTION_THRESHOLD - 1;                                    \
-                if (_hi >= _n)                                                                     \
-                    _hi = _n - 1;                                                                  \
-                TYPED_INSERTION(type, _d, _r, _hi);                                                \
-            }                                                                                      \
-            for (int _w = XR_SORT_INSERTION_THRESHOLD; _w < _n; _w *= 2) {                         \
-                for (int _lo = 0; _lo < _n; _lo += _w * 2) {                                       \
-                    int _mid = _lo + _w - 1;                                                       \
-                    int _hi2 = _lo + _w * 2 - 1;                                                   \
-                    if (_mid >= _n)                                                                \
-                        break;                                                                     \
-                    if (_hi2 >= _n)                                                                \
-                        _hi2 = _n - 1;                                                             \
-                    TYPED_MERGE(type, _d, _tmp, _lo, _mid, _hi2);                                  \
-                }                                                                                  \
-            }                                                                                      \
-            xr_free(_tmp);                                                                         \
-        }                                                                                          \
-    } while (0)
 
 static void xr_array_typed_sort_with_comparator(struct XrVMRuntime *iso, XrArray *arr,
                                                 struct XrClosure *cmp) {
@@ -340,7 +213,7 @@ static void xr_array_typed_sort_with_comparator(struct XrVMRuntime *iso, XrArray
     for (int i = 0; i < n; i++)
         boxed[i] = xr_array_get_element(arr, i);
     XrSortCtx ctx = {iso, cmp};
-    xr_array_hybrid_sort(boxed, n, &ctx);
+    xr_sort_core_values(boxed, n, xr_sort_with_comparator, &ctx);
     for (int i = 0; i < n; i++)
         xr_array_set_element(arr, i, boxed[i]);
     xr_free(boxed);
@@ -352,7 +225,7 @@ void xr_array_sort(struct XrVMRuntime *iso, XrArray *arr, struct XrClosure *comp
 
     if (arr->elem_type == XR_ELEM_ANY) {
         XrSortCtx ctx = {iso, comparator};
-        xr_array_hybrid_sort((XrValue *) arr->data, (int) arr->length, &ctx);
+        xr_sort_core_values((XrValue *) arr->data, arr->length, xr_sort_with_comparator, &ctx);
         return;
     }
 
@@ -361,72 +234,94 @@ void xr_array_sort(struct XrVMRuntime *iso, XrArray *arr, struct XrClosure *comp
         return;
     }
 
-    int n = arr->length;
-    switch (arr->elem_type) {
-        case XR_ELEM_I8:
-            TYPED_SORT(int8_t, arr, n);
-            break;
-        case XR_ELEM_U8:
-            TYPED_SORT(uint8_t, arr, n);
-            break;
-        case XR_ELEM_I16:
-            TYPED_SORT(int16_t, arr, n);
-            break;
-        case XR_ELEM_U16:
-            TYPED_SORT(uint16_t, arr, n);
-            break;
-        case XR_ELEM_I32:
-            TYPED_SORT(int32_t, arr, n);
-            break;
-        case XR_ELEM_U32:
-            TYPED_SORT(uint32_t, arr, n);
-            break;
-        case XR_ELEM_I64:
-            TYPED_SORT(int64_t, arr, n);
-            break;
-        case XR_ELEM_U64:
-            TYPED_SORT(uint64_t, arr, n);
-            break;
-        case XR_ELEM_F32:
-            TYPED_SORT(float, arr, n);
-            break;
-        case XR_ELEM_F64:
-            TYPED_SORT(double, arr, n);
-            break;
-        default:
-            break;
+    (void) xr_sort_core_typed(arr->data, arr->length, arr->elem_type);
+}
+
+typedef struct XrArrayJoinVMCtx {
+    XrVMRuntime *iso;
+    XrArray *arr;
+} XrArrayJoinVMCtx;
+
+static bool xr_array_join_vm_part(XrArrayJoinVMCtx *join_ctx, XrValue val, char *dst, size_t *len) {
+    const char *data = NULL;
+    size_t n = 0;
+    char tmp[64];
+
+    if (XR_IS_STRING(val)) {
+        data = xr_value_str_data(&val);
+        n = xr_value_str_len(&val);
+    } else if (XR_IS_INT(val)) {
+        int written = xr_numeric_core_format_i64(tmp, sizeof(tmp), XR_TO_INT(val));
+        if (written < 0 || (size_t) written >= sizeof(tmp))
+            return false;
+        data = tmp;
+        n = (size_t) written;
+    } else if (XR_IS_FLOAT(val)) {
+        int written = xr_format_float(tmp, sizeof(tmp), XR_TO_FLOAT(val));
+        if (written < 0 || (size_t) written >= sizeof(tmp))
+            return false;
+        data = tmp;
+        n = (size_t) written;
+    } else if (XR_IS_BOOL(val)) {
+        data = XR_TO_BOOL(val) ? "true" : "false";
+        n = XR_TO_BOOL(val) ? 4 : 5;
+    } else if (XR_IS_NULL(val)) {
+        data = "null";
+        n = 4;
+    } else if (join_ctx && join_ctx->iso &&
+               (xr_value_is_range(join_ctx->iso, val) || xr_value_is_datetime(join_ctx->iso, val) ||
+                xr_value_is_enum_value(val))) {
+        XrString *s = xr_value_to_string(join_ctx->iso, val);
+        if (!s)
+            return false;
+        data = s->data;
+        n = (size_t) s->length;
+    } else {
+        data = "[object]";
+        n = 8;
     }
+
+    if (dst && n > 0)
+        memcpy(dst, data, n);
+    if (len)
+        *len = n;
+    return true;
+}
+
+static bool xr_array_join_vm_element(void *ctx, int64_t index, char *dst, size_t *len) {
+    XrArrayJoinVMCtx *join_ctx = (XrArrayJoinVMCtx *) ctx;
+    if (!join_ctx || !join_ctx->arr || index < 0 || index > INT32_MAX)
+        return false;
+    return xr_array_join_vm_part(join_ctx, xr_array_get_element(join_ctx->arr, (int32_t) index),
+                                 dst, len);
 }
 
 struct XrString *xr_array_join(struct XrVMRuntime *iso, XrArray *arr, struct XrString *delimiter) {
     if (arr == NULL || arr->length == 0)
         return xr_string_intern(iso, "", 0, 0);
 
-    XrStrBuf *sb = xr_strbuf_tmp(iso);
+    const char *sep = delimiter ? delimiter->data : NULL;
+    size_t sep_len = delimiter ? delimiter->length : 0;
+    XrArrayJoinVMCtx ctx = {iso, arr};
+    size_t total = 0;
+    if (!xr_array_core_join_total(arr->length, sep_len, xr_array_join_vm_element, &ctx, &total))
+        return NULL;
 
-    for (int i = 0; i < arr->length; i++) {
-        if (i > 0 && delimiter != NULL)
-            xr_strbuf_append_str(sb, delimiter);
+    if (total == 0)
+        return xr_string_intern(iso, "", 0, 0);
 
-        XrValue val = xr_array_get_element(arr, i);
+    char stack_buf[256];
+    char *buf = total < sizeof(stack_buf) ? stack_buf : (char *) xr_malloc(total + 1);
+    if (!buf)
+        return NULL;
 
-        if (XR_IS_STRING(val)) {
-            xr_strbuf_append_cstr(sb, xr_value_str_data(&val), xr_value_str_len(&val));
-        } else if (XR_IS_INT(val)) {
-            xr_strbuf_append_int(sb, XR_TO_INT(val));
-        } else if (XR_IS_FLOAT(val)) {
-            xr_strbuf_append_float(sb, XR_TO_FLOAT(val));
-        } else if (XR_IS_BOOL(val)) {
-            const char *s = XR_TO_BOOL(val) ? "true" : "false";
-            xr_strbuf_append_cstr(sb, s, strlen(s));
-        } else if (XR_IS_NULL(val)) {
-            xr_strbuf_append_cstr(sb, "null", 4);
-        } else {
-            xr_strbuf_append_cstr(sb, "[object]", 8);
-        }
-    }
-
-    return xr_strbuf_to_string(sb);
+    size_t written = 0;
+    bool ok = xr_array_core_join_write(buf, total + 1, arr->length, sep, sep_len,
+                                       xr_array_join_vm_element, &ctx, &written);
+    XrString *result = ok ? xr_string_intern(iso, buf, written, 0) : NULL;
+    if (buf != stack_buf)
+        xr_free(buf);
+    return result;
 }
 
 struct XrString *xr_array_to_string(struct XrVMRuntime *iso, XrArray *arr) {

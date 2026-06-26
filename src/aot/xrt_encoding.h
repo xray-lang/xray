@@ -77,12 +77,13 @@ static inline XrValue xrt_encoding_utf8_count(const char *data, int64_t len) {
 }
 
 static inline XrValue xrt_encoding_utf8_byte_length(const char *data, int64_t len) {
-    return XR_FROM_INT(len < 0 ? 0 : len);
+    return XR_FROM_INT(
+        (int64_t) xr_encoding_core_utf8_byte_length(data, len < 0 ? 0 : (size_t) len));
 }
 
 static inline int xrt_encoding_utf16_endian_from_value(XrValue value) {
-    return XR_IS_INT(value) && XR_TO_INT(value) == XR_ENCODING_UTF16_BE ? XR_ENCODING_UTF16_BE
-                                                                        : XR_ENCODING_UTF16_LE;
+    bool has_endian = XR_IS_INT(value);
+    return xr_encoding_core_utf16_endian_arg(has_endian, has_endian ? XR_TO_INT(value) : 0);
 }
 
 static inline XrValue xrt_encoding_utf16_encode_impl(const char *data, int64_t len, int endian) {
@@ -138,19 +139,11 @@ static inline XrValue xrt_encoding_utf16_decode_impl(XrValue input, int endian, 
     if (!xrt_encoding_value_bytes_view(input, &data, &len))
         return XR_NULL_VAL;
 
-    if (strip_bom && len >= 2) {
-        if (data[0] == 0xFF && data[1] == 0xFE) {
-            if (!endian_explicit)
-                endian = XR_ENCODING_UTF16_LE;
-            data += 2;
-            len -= 2;
-        } else if (data[0] == 0xFE && data[1] == 0xFF) {
-            if (!endian_explicit)
-                endian = XR_ENCODING_UTF16_BE;
-            data += 2;
-            len -= 2;
-        }
-    }
+    XrEncodingCoreUtf16DecodeView view =
+        xr_encoding_core_utf16_decode_view(data, len, endian, endian_explicit != 0, strip_bom != 0);
+    data = view.data;
+    len = view.len;
+    endian = view.endian;
 
     size_t out_len = 0;
     if (!xr_encoding_core_utf16_to_utf8_len(data, len, endian, &out_len) ||
@@ -176,7 +169,9 @@ static inline XrValue xrt_encoding_utf16_decode_endian(XrValue input, XrValue en
 
 static inline XrValue xrt_encoding_utf16_decode_endian_strip(XrValue input, XrValue endian,
                                                              XrValue strip_bom) {
-    int strip = !XR_IS_BOOL(strip_bom) || strip_bom.i != 0;
+    bool has_strip_bom = XR_IS_BOOL(strip_bom);
+    bool strip =
+        xr_encoding_core_bool_arg_or(has_strip_bom, has_strip_bom ? strip_bom.i != 0 : false, true);
     return xrt_encoding_utf16_decode_impl(input, xrt_encoding_utf16_endian_from_value(endian), 1,
                                           strip);
 }

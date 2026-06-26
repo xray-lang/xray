@@ -311,12 +311,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_encoding[] = {
     {
         .name = "BE",
         .signature = ": int",
-        .summary = "",
+        .summary = "Big-endian UTF-16 byte order",
     },
     {
         .name = "LE",
         .signature = ": int",
-        .summary = "",
+        .summary = "Little-endian UTF-16 byte order",
     },
     {
         .name = "hexDecode",
@@ -373,7 +373,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     },
     {
         .name = "DownloadResult.completed",
-        .signature = "bool",
+        .signature = "const bool",
         .summary = "Handle field",
     },
     {
@@ -412,6 +412,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "Handle field",
     },
     {
+        .name = "HttpRequest.headers",
+        .signature = "const Json",
+        .summary = "Handle field",
+    },
+    {
         .name = "HttpRequest.method",
         .signature = "const string",
         .summary = "Handle field",
@@ -443,7 +448,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     },
     {
         .name = "HttpResponse.body",
-        .signature = "string",
+        .signature = "const string",
         .summary = "Handle field",
     },
     {
@@ -472,43 +477,58 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "Handle field",
     },
     {
+        .name = "__getConnHandler",
+        .signature = "(): fn",
+        .summary = "Return the current low-level HTTP connection handler",
+    },
+    {
         .name = "clearProxy",
         .signature = "(): ()",
         .summary = "Clear HTTP proxy",
     },
     {
+        .name = "closeStream",
+        .signature = "(resp: Json): ()",
+        .summary = "Close a streaming HTTP response",
+    },
+    {
+        .name = "config",
+        .signature = "(opts: Json): ()",
+        .summary = "Configure HTTP server limits and timeouts",
+    },
+    {
         .name = "delete",
-        .signature = "(url: string, options?: Json): HttpResponse",
+        .signature = "(url: string): HttpResponse",
         .summary = "HTTP DELETE request",
     },
     {
         .name = "download",
-        .signature = "(url: string, path: string, options?: Json): DownloadResult",
+        .signature = "(url: string, path: string): DownloadResult",
         .summary = "Download file from URL",
     },
     {
         .name = "formDataAppend",
-        .signature = "(form: Json, name: string, value: string): ()",
-        .summary = "Append field to form data",
+        .signature = "(name: string, value: string): ()",
+        .summary = "Append field to current form data",
     },
     {
         .name = "formDataAppendFile",
-        .signature = "(form: Json, name: string, path: string, filename?: string): ()",
-        .summary = "Append file to form data",
+        .signature = "(name: string, path: string): bool",
+        .summary = "Append file to current form data",
     },
     {
         .name = "formDataNew",
-        .signature = "(): Json",
-        .summary = "Create new multipart form data",
+        .signature = "(maxTotalSize?: int, maxFileSize?: int): bool",
+        .summary = "Create new multipart form data context",
     },
     {
         .name = "formDataPost",
-        .signature = "(url: string, form: Json, options?: Json): HttpResponse",
-        .summary = "POST multipart form data",
+        .signature = "(url: string): Json",
+        .summary = "POST current multipart form data",
     },
     {
         .name = "get",
-        .signature = "(url: string, options?: Json): HttpResponse",
+        .signature = "(url: string): HttpResponse",
         .summary = "HTTP GET request",
     },
     {
@@ -517,19 +537,44 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "Get content length of URL",
     },
     {
+        .name = "h2CreateServer",
+        .signature = "(options?: Json): bool",
+        .summary = "Create HTTP/2 server",
+    },
+    {
         .name = "h2Get",
-        .signature = "(url: string, options?: Json): HttpResponse",
+        .signature = "(url: string, options?: Json): Json",
         .summary = "HTTP/2 GET request",
     },
     {
+        .name = "h2Listen",
+        .signature = "(): bool",
+        .summary = "Start HTTP/2 server",
+    },
+    {
         .name = "h2Post",
-        .signature = "(url: string, body?: string, options?: Json): HttpResponse",
+        .signature = "(url: string, body: string, contentType?: string): Json",
         .summary = "HTTP/2 POST request",
     },
     {
+        .name = "h2Push",
+        .signature = "(path: string, contentType: string, data: string): bool",
+        .summary = "Push HTTP/2 response data",
+    },
+    {
         .name = "h2Request",
-        .signature = "(method: string, url: string, options?: Json): HttpResponse",
+        .signature = "(options: Json): Json",
         .summary = "Generic HTTP/2 request",
+    },
+    {
+        .name = "h2Stop",
+        .signature = "(): ()",
+        .summary = "Stop HTTP/2 server",
+    },
+    {
+        .name = "listen",
+        .signature = "(port: int): bool",
+        .summary = "Start HTTP server accept loop",
     },
     {
         .name = "parseRequest",
@@ -538,28 +583,48 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     },
     {
         .name = "post",
-        .signature = "(url: string, body?: string, options?: Json): HttpResponse",
+        .signature = "(url: string, body?: string, contentType?: string): HttpResponse",
         .summary = "HTTP POST request",
     },
     {
         .name = "put",
-        .signature = "(url: string, body?: string, options?: Json): HttpResponse",
+        .signature = "(url: string, body?: string, contentType?: string): HttpResponse",
         .summary = "HTTP PUT request",
     },
     {
+        .name = "readChunk",
+        .signature = "(resp: Json, maxBytes?: int): string?",
+        .summary = "Read the next chunk from a streaming HTTP response",
+    },
+    {
         .name = "request",
-        .signature = "(method: string, url: string, options?: Json): HttpResponse",
+        .signature = "(options: Json): HttpResponse",
         .summary = "Generic HTTP request",
     },
     {
+        .name = "response",
+        .signature = "(status: int, body?: string | Json): string",
+        .summary = "Format an HTTP response string",
+    },
+    {
         .name = "route",
-        .signature = "(method: string, path: string, handler: fn): ()",
-        .summary = "Register a route handler",
+        .signature = "(method: string, path: string, handler: fn | string | Json): ()",
+        .summary = "Register a route handler or static response",
     },
     {
         .name = "sendResponse",
         .signature = "(fd: int, body: string, status?: int): bool",
         .summary = "Send HTTP response on fd",
+    },
+    {
+        .name = "serverStats",
+        .signature = "(): Json",
+        .summary = "Return HTTP server counters",
+    },
+    {
+        .name = "setConnHandler",
+        .signature = "(handler: fn(fd: int): ()): ()",
+        .summary = "Set low-level HTTP connection handler",
     },
     {
         .name = "setProxy",
@@ -568,8 +633,8 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     },
     {
         .name = "static",
-        .signature = "(prefix: string, dir: string): ()",
-        .summary = "Serve static files from directory",
+        .signature = "(method: string, path: string, content: string): ()",
+        .summary = "Register a prebuilt static route response",
     },
     {
         .name = "stopServer",
@@ -586,6 +651,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .signature = "(s: string): string",
         .summary = "URL-encode a string",
     },
+    {
+        .name = "ws",
+        .signature = "(path: string, handler: fn(conn: WsConn): ()): ()",
+        .summary = "Register WebSocket upgrade route on HTTP server",
+    },
 };
 
 static const XmcpGeneratedStdlibSymbol _symbols_io[] = {
@@ -601,7 +671,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_io[] = {
     },
     {
         .name = "FileStat.ctime",
-        .signature = "int",
+        .signature = "const int",
         .summary = "Handle field",
     },
     {
@@ -621,7 +691,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_io[] = {
     },
     {
         .name = "FileStat.isSymlink",
-        .signature = "bool",
+        .signature = "const bool",
         .summary = "Handle field",
     },
     {
@@ -800,27 +870,27 @@ static const XmcpGeneratedStdlibSymbol _symbols_log[] = {
     {
         .name = "DEBUG",
         .signature = ": int",
-        .summary = "",
+        .summary = "Debug log level",
     },
     {
         .name = "ERROR",
         .signature = ": int",
-        .summary = "",
+        .summary = "Error log level",
     },
     {
         .name = "FATAL",
         .signature = ": int",
-        .summary = "",
+        .summary = "Fatal log level",
     },
     {
         .name = "INFO",
         .signature = ": int",
-        .summary = "",
+        .summary = "Info log level",
     },
     {
         .name = "WARN",
         .signature = ": int",
-        .summary = "",
+        .summary = "Warning log level",
     },
     {
         .name = "child",
@@ -893,72 +963,72 @@ static const XmcpGeneratedStdlibSymbol _symbols_math[] = {
     {
         .name = "E",
         .signature = ": float",
-        .summary = "",
+        .summary = "Euler's number",
     },
     {
         .name = "EPSILON",
         .signature = ": float",
-        .summary = "",
+        .summary = "Smallest representable difference above 1.0",
     },
     {
         .name = "INF",
         .signature = ": float",
-        .summary = "",
+        .summary = "Positive infinity",
     },
     {
         .name = "LN10",
         .signature = ": float",
-        .summary = "",
+        .summary = "Natural logarithm of 10",
     },
     {
         .name = "LN2",
         .signature = ": float",
-        .summary = "",
+        .summary = "Natural logarithm of 2",
     },
     {
         .name = "LOG10E",
         .signature = ": float",
-        .summary = "",
+        .summary = "Base-10 logarithm of e",
     },
     {
         .name = "LOG2E",
         .signature = ": float",
-        .summary = "",
+        .summary = "Base-2 logarithm of e",
     },
     {
         .name = "MAX_FLOAT",
         .signature = ": float",
-        .summary = "",
+        .summary = "Largest finite IEEE-754 double",
     },
     {
         .name = "MAX_INT",
         .signature = ": int",
-        .summary = "",
+        .summary = "Largest signed 64-bit integer",
     },
     {
         .name = "MIN_INT",
         .signature = ": int",
-        .summary = "",
+        .summary = "Smallest signed 64-bit integer",
     },
     {
         .name = "NAN",
         .signature = ": float",
-        .summary = "",
+        .summary = "Quiet NaN value",
     },
     {
         .name = "PI",
         .signature = ": float",
-        .summary = "",
+        .summary = "Ratio of a circle's circumference to its diameter",
     },
     {
         .name = "SQRT2",
         .signature = ": float",
-        .summary = "",
+        .summary = "Square root of 2",
     },
     {
         .name = "TAU",
         .signature = ": float",
-        .summary = "",
+        .summary = "Full-circle radians, 2 * PI",
     },
     {
         .name = "abs",
@@ -1367,7 +1437,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_os[] = {
     {
         .name = "arch",
         .signature = ": string",
-        .summary = "",
+        .summary = "Current CPU architecture name",
     },
     {
         .name = "chdir",
@@ -1392,7 +1462,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_os[] = {
     {
         .name = "eol",
         .signature = ": string",
-        .summary = "",
+        .summary = "Platform end-of-line string",
     },
     {
         .name = "exec",
@@ -1452,7 +1522,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_os[] = {
     {
         .name = "platform",
         .signature = ": string",
-        .summary = "",
+        .summary = "Current operating system name",
     },
     {
         .name = "ppid",
@@ -1462,7 +1532,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_os[] = {
     {
         .name = "sep",
         .signature = ": string",
-        .summary = "",
+        .summary = "Platform path separator",
     },
     {
         .name = "setenv",
@@ -1545,7 +1615,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_path[] = {
     {
         .name = "delimiter",
         .signature = ": string",
-        .summary = "",
+        .summary = "Platform path-list delimiter",
     },
     {
         .name = "dirname",
@@ -1595,7 +1665,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_path[] = {
     {
         .name = "sep",
         .signature = ": string",
-        .summary = "",
+        .summary = "Platform path separator",
     },
 };
 
@@ -1765,6 +1835,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_url[] = {
         .summary = "Handle field",
     },
     {
+        .name = "URL.pathname",
+        .signature = "const string",
+        .summary = "Handle field",
+    },
+    {
         .name = "URL.port",
         .signature = "const string",
         .summary = "Handle field",
@@ -1879,7 +1954,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
     },
     {
         .name = "close",
-        .signature = "(conn: WsConn, code?: int, reason?: string?): bool",
+        .signature = "(conn: WsConn, code?: int?, reason?: string?): bool",
         .summary = "Close a WebSocket connection",
     },
     {
@@ -1890,12 +1965,17 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
     {
         .name = "echoServe",
         .signature = "(port: int): bool",
-        .summary = "Pure C echo server with zero VM/GC overhead per message",
+        .summary = "Pure C echo server with zero VM allocation overhead per message",
     },
     {
         .name = "isOpen",
         .signature = "(conn: WsConn): bool",
         .summary = "Check if connection is open",
+    },
+    {
+        .name = "isServerRunning",
+        .signature = "(): bool",
+        .summary = "Check if the WebSocket server is running",
     },
     {
         .name = "ping",
@@ -1904,23 +1984,38 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
     },
     {
         .name = "recv",
-        .signature = "(conn: WsConn, timeout?: int): WsMessage?",
+        .signature = "(conn: WsConn, timeout?: int?): WsMessage?",
         .summary = "Receive data from WebSocket connection",
     },
     {
         .name = "recvData",
-        .signature = "(conn: WsConn, timeout?: int): string?",
+        .signature = "(conn: WsConn, timeout?: int?): string?",
         .summary = "High-performance recv returning data string directly (no Json wrapper)",
     },
     {
         .name = "send",
-        .signature = "(conn: WsConn, data: string, binary?: bool): bool",
+        .signature = "(conn: WsConn, data: string, binary?: bool?): bool",
         .summary = "Send data over WebSocket connection",
+    },
+    {
+        .name = "sendData",
+        .signature = "(conn: WsConn, data: string, binary?: bool?): bool",
+        .summary = "Send data over WebSocket connection",
+    },
+    {
+        .name = "serve",
+        .signature = "(port: int, handler: fn(conn: WsConn): ()): bool",
+        .summary = "Start WebSocket server",
     },
     {
         .name = "state",
         .signature = "(conn: WsConn): string",
         .summary = "Get connection state",
+    },
+    {
+        .name = "stopServer",
+        .signature = "(): ()",
+        .summary = "Stop the WebSocket server",
     },
 };
 
@@ -3520,8 +3615,8 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
-            "| `encoding.BE` | `: int` |  |\n"
-            "| `encoding.LE` | `: int` |  |\n"
+            "| `encoding.BE` | `: int` | Big-endian UTF-16 byte order |\n"
+            "| `encoding.LE` | `: int` | Little-endian UTF-16 byte order |\n"
             "| `encoding.hexDecode` | `(hex: string): Array<uint8>?` | Hex decode to bytes |\n"
             "| `encoding.hexDecodeString` | `(hex: string): string?` | Hex decode to string |\n"
             "| `encoding.hexEncode` | `(data: string): string` | Hex encode string to hex |\n"
@@ -3550,7 +3645,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
             "| `http.DownloadResult` | `DownloadResult` | Handle type |\n"
-            "| `DownloadResult.completed` | `bool` | Handle field |\n"
+            "| `DownloadResult.completed` | `const bool` | Handle field |\n"
             "| `DownloadResult.downloaded` | `const int` | Handle field |\n"
             "| `DownloadResult.error` | `const string` | Handle field |\n"
             "| `DownloadResult.status` | `const int` | Handle field |\n"
@@ -3558,41 +3653,55 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `http.HttpRequest` | `HttpRequest` | Handle type |\n"
             "| `HttpRequest.body` | `const string` | Handle field |\n"
             "| `HttpRequest.contentLength` | `const int` | Handle field |\n"
+            "| `HttpRequest.headers` | `const Json` | Handle field |\n"
             "| `HttpRequest.method` | `const string` | Handle field |\n"
             "| `HttpRequest.params` | `const Json` | Handle field |\n"
             "| `HttpRequest.path` | `const string` | Handle field |\n"
             "| `HttpRequest.query` | `const Json` | Handle field |\n"
             "| `HttpRequest.streaming` | `const bool` | Handle field |\n"
             "| `http.HttpResponse` | `HttpResponse` | Handle type |\n"
-            "| `HttpResponse.body` | `string` | Handle field |\n"
+            "| `HttpResponse.body` | `const string` | Handle field |\n"
             "| `HttpResponse.error` | `const string` | Handle field |\n"
             "| `HttpResponse.headers` | `const Json` | Handle field |\n"
             "| `HttpResponse.ok` | `const bool` | Handle field |\n"
             "| `HttpResponse.status` | `const int` | Handle field |\n"
             "| `HttpResponse.statusText` | `const string` | Handle field |\n"
+            "| `http.__getConnHandler` | `(): fn` | Return the current low-level HTTP connection handler |\n"
             "| `http.clearProxy` | `(): ()` | Clear HTTP proxy |\n"
-            "| `http.delete` | `(url: string, options?: Json): HttpResponse` | HTTP DELETE request |\n"
-            "| `http.download` | `(url: string, path: string, options?: Json): DownloadResult` | Download file from URL |\n"
-            "| `http.formDataAppend` | `(form: Json, name: string, value: string): ()` | Append field to form data |\n"
-            "| `http.formDataAppendFile` | `(form: Json, name: string, path: string, filename?: string): ()` | Append file to form data |\n"
-            "| `http.formDataNew` | `(): Json` | Create new multipart form data |\n"
-            "| `http.formDataPost` | `(url: string, form: Json, options?: Json): HttpResponse` | POST multipart form data |\n"
-            "| `http.get` | `(url: string, options?: Json): HttpResponse` | HTTP GET request |\n"
+            "| `http.closeStream` | `(resp: Json): ()` | Close a streaming HTTP response |\n"
+            "| `http.config` | `(opts: Json): ()` | Configure HTTP server limits and timeouts |\n"
+            "| `http.delete` | `(url: string): HttpResponse` | HTTP DELETE request |\n"
+            "| `http.download` | `(url: string, path: string): DownloadResult` | Download file from URL |\n"
+            "| `http.formDataAppend` | `(name: string, value: string): ()` | Append field to current form data |\n"
+            "| `http.formDataAppendFile` | `(name: string, path: string): bool` | Append file to current form data |\n"
+            "| `http.formDataNew` | `(maxTotalSize?: int, maxFileSize?: int): bool` | Create new multipart form data context |\n"
+            "| `http.formDataPost` | `(url: string): Json` | POST current multipart form data |\n"
+            "| `http.get` | `(url: string): HttpResponse` | HTTP GET request |\n"
             "| `http.getContentLength` | `(url: string): int` | Get content length of URL |\n"
-            "| `http.h2Get` | `(url: string, options?: Json): HttpResponse` | HTTP/2 GET request |\n"
-            "| `http.h2Post` | `(url: string, body?: string, options?: Json): HttpResponse` | HTTP/2 POST request |\n"
-            "| `http.h2Request` | `(method: string, url: string, options?: Json): HttpResponse` | Generic HTTP/2 request |\n"
+            "| `http.h2CreateServer` | `(options?: Json): bool` | Create HTTP/2 server |\n"
+            "| `http.h2Get` | `(url: string, options?: Json): Json` | HTTP/2 GET request |\n"
+            "| `http.h2Listen` | `(): bool` | Start HTTP/2 server |\n"
+            "| `http.h2Post` | `(url: string, body: string, contentType?: string): Json` | HTTP/2 POST request |\n"
+            "| `http.h2Push` | `(path: string, contentType: string, data: string): bool` | Push HTTP/2 response data |\n"
+            "| `http.h2Request` | `(options: Json): Json` | Generic HTTP/2 request |\n"
+            "| `http.h2Stop` | `(): ()` | Stop HTTP/2 server |\n"
+            "| `http.listen` | `(port: int): bool` | Start HTTP server accept loop |\n"
             "| `http.parseRequest` | `(fd: int): Array<unknown>?` | Parse raw HTTP request data |\n"
-            "| `http.post` | `(url: string, body?: string, options?: Json): HttpResponse` | HTTP POST request |\n"
-            "| `http.put` | `(url: string, body?: string, options?: Json): HttpResponse` | HTTP PUT request |\n"
-            "| `http.request` | `(method: string, url: string, options?: Json): HttpResponse` | Generic HTTP request |\n"
-            "| `http.route` | `(method: string, path: string, handler: fn): ()` | Register a route handler |\n"
+            "| `http.post` | `(url: string, body?: string, contentType?: string): HttpResponse` | HTTP POST request |\n"
+            "| `http.put` | `(url: string, body?: string, contentType?: string): HttpResponse` | HTTP PUT request |\n"
+            "| `http.readChunk` | `(resp: Json, maxBytes?: int): string?` | Read the next chunk from a streaming HTTP response |\n"
+            "| `http.request` | `(options: Json): HttpResponse` | Generic HTTP request |\n"
+            "| `http.response` | `(status: int, body?: string \\| Json): string` | Format an HTTP response string |\n"
+            "| `http.route` | `(method: string, path: string, handler: fn \\| string \\| Json): ()` | Register a route handler or static response |\n"
             "| `http.sendResponse` | `(fd: int, body: string, status?: int): bool` | Send HTTP response on fd |\n"
+            "| `http.serverStats` | `(): Json` | Return HTTP server counters |\n"
+            "| `http.setConnHandler` | `(handler: fn(fd: int): ()): ()` | Set low-level HTTP connection handler |\n"
             "| `http.setProxy` | `(url: string): ()` | Set HTTP proxy |\n"
-            "| `http.static` | `(prefix: string, dir: string): ()` | Serve static files from directory |\n"
+            "| `http.static` | `(method: string, path: string, content: string): ()` | Register a prebuilt static route response |\n"
             "| `http.stopServer` | `(): ()` | Stop the HTTP server |\n"
             "| `http.urlDecode` | `(s: string): string` | URL-decode a string |\n"
             "| `http.urlEncode` | `(s: string): string` | URL-encode a string |\n"
+            "| `http.ws` | `(path: string, handler: fn(conn: WsConn): ()): ()` | Register WebSocket upgrade route on HTTP server |\n"
             "",
         .symbols = _symbols_http,
         .symbol_count = (int)(sizeof(_symbols_http) / sizeof(_symbols_http[0])),
@@ -3613,11 +3722,11 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "|--|--|--|\n"
             "| `io.FileStat` | `FileStat` | Handle type |\n"
             "| `FileStat.atime` | `const int` | Handle field |\n"
-            "| `FileStat.ctime` | `int` | Handle field |\n"
+            "| `FileStat.ctime` | `const int` | Handle field |\n"
             "| `FileStat.gid` | `const int` | Handle field |\n"
             "| `FileStat.isDir` | `const bool` | Handle field |\n"
             "| `FileStat.isFile` | `const bool` | Handle field |\n"
-            "| `FileStat.isSymlink` | `bool` | Handle field |\n"
+            "| `FileStat.isSymlink` | `const bool` | Handle field |\n"
             "| `FileStat.mode` | `const int` | Handle field |\n"
             "| `FileStat.mtime` | `const int` | Handle field |\n"
             "| `FileStat.size` | `const int` | Handle field |\n"
@@ -3691,11 +3800,11 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
-            "| `log.DEBUG` | `: int` |  |\n"
-            "| `log.ERROR` | `: int` |  |\n"
-            "| `log.FATAL` | `: int` |  |\n"
-            "| `log.INFO` | `: int` |  |\n"
-            "| `log.WARN` | `: int` |  |\n"
+            "| `log.DEBUG` | `: int` | Debug log level |\n"
+            "| `log.ERROR` | `: int` | Error log level |\n"
+            "| `log.FATAL` | `: int` | Fatal log level |\n"
+            "| `log.INFO` | `: int` | Info log level |\n"
+            "| `log.WARN` | `: int` | Warning log level |\n"
             "| `log.child` | `(...fields: unknown): Logger` | Create child logger |\n"
             "| `log.debug` | `(...args: unknown): ()` | Log debug message |\n"
             "| `log.enableAsync` | `(enabled: bool): ()` | Enable async logging |\n"
@@ -3727,20 +3836,20 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
-            "| `math.E` | `: float` |  |\n"
-            "| `math.EPSILON` | `: float` |  |\n"
-            "| `math.INF` | `: float` |  |\n"
-            "| `math.LN10` | `: float` |  |\n"
-            "| `math.LN2` | `: float` |  |\n"
-            "| `math.LOG10E` | `: float` |  |\n"
-            "| `math.LOG2E` | `: float` |  |\n"
-            "| `math.MAX_FLOAT` | `: float` |  |\n"
-            "| `math.MAX_INT` | `: int` |  |\n"
-            "| `math.MIN_INT` | `: int` |  |\n"
-            "| `math.NAN` | `: float` |  |\n"
-            "| `math.PI` | `: float` |  |\n"
-            "| `math.SQRT2` | `: float` |  |\n"
-            "| `math.TAU` | `: float` |  |\n"
+            "| `math.E` | `: float` | Euler's number |\n"
+            "| `math.EPSILON` | `: float` | Smallest representable difference above 1.0 |\n"
+            "| `math.INF` | `: float` | Positive infinity |\n"
+            "| `math.LN10` | `: float` | Natural logarithm of 10 |\n"
+            "| `math.LN2` | `: float` | Natural logarithm of 2 |\n"
+            "| `math.LOG10E` | `: float` | Base-10 logarithm of e |\n"
+            "| `math.LOG2E` | `: float` | Base-2 logarithm of e |\n"
+            "| `math.MAX_FLOAT` | `: float` | Largest finite IEEE-754 double |\n"
+            "| `math.MAX_INT` | `: int` | Largest signed 64-bit integer |\n"
+            "| `math.MIN_INT` | `: int` | Smallest signed 64-bit integer |\n"
+            "| `math.NAN` | `: float` | Quiet NaN value |\n"
+            "| `math.PI` | `: float` | Ratio of a circle's circumference to its diameter |\n"
+            "| `math.SQRT2` | `: float` | Square root of 2 |\n"
+            "| `math.TAU` | `: float` | Full-circle radians, 2 * PI |\n"
             "| `math.abs` | `(x: float): float` | Absolute value (preserves int) |\n"
             "| `math.acos` | `(x: float): float` | Arc cosine |\n"
             "| `math.asin` | `(x: float): float` | Arc sine |\n"
@@ -3907,12 +4016,12 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `ExecResult.exitCode` | `const int` | Handle field |\n"
             "| `ExecResult.stderr` | `const string` | Handle field |\n"
             "| `ExecResult.stdout` | `const string` | Handle field |\n"
-            "| `os.arch` | `: string` |  |\n"
+            "| `os.arch` | `: string` | Current CPU architecture name |\n"
             "| `os.chdir` | `(path: string): bool` | Change working directory |\n"
             "| `os.clock` | `(): float` | Get process CPU time in seconds |\n"
             "| `os.cpuCount` | `(): int` | Get number of CPU cores |\n"
             "| `os.environ` | `(): Map<string, string>` | Get all environment variables |\n"
-            "| `os.eol` | `: string` |  |\n"
+            "| `os.eol` | `: string` | Platform end-of-line string |\n"
             "| `os.exec` | `(cmd: string): ExecResult?` | Execute shell command |\n"
             "| `os.exit` | `(code?: int): ()` | Exit process |\n"
             "| `os.freeMemory` | `(): int` | Get available system memory in bytes |\n"
@@ -3924,9 +4033,9 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `os.hostname` | `(): string` | Get hostname |\n"
             "| `os.kill` | `(pid: int, signal?: int): bool` | Send signal to process |\n"
             "| `os.loadavg` | `(): Array<float>` | Get system load averages (1, 5, 15 min) |\n"
-            "| `os.platform` | `: string` |  |\n"
+            "| `os.platform` | `: string` | Current operating system name |\n"
             "| `os.ppid` | `(): int` | Get parent process ID |\n"
-            "| `os.sep` | `: string` |  |\n"
+            "| `os.sep` | `: string` | Platform path separator |\n"
             "| `os.setenv` | `(name: string, value: string): bool` | Set environment variable |\n"
             "| `os.sleep` | `(ms: int): ()` | Sleep for milliseconds |\n"
             "| `os.tmpdir` | `(): string` | Get temporary directory path |\n"
@@ -3960,7 +4069,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `PathInfo.name` | `const string` | Handle field |\n"
             "| `PathInfo.root` | `const string` | Handle field |\n"
             "| `path.basename` | `(path: string): string` | Get base name |\n"
-            "| `path.delimiter` | `: string` |  |\n"
+            "| `path.delimiter` | `: string` | Platform path-list delimiter |\n"
             "| `path.dirname` | `(path: string): string` | Get directory name |\n"
             "| `path.extname` | `(path: string): string` | Get file extension |\n"
             "| `path.format` | `(obj: PathInfo): string` | Format path from components |\n"
@@ -3970,7 +4079,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `path.parse` | `(path: string): PathInfo` | Parse path into components |\n"
             "| `path.relative` | `(from: string, to: string): string` | Get relative path |\n"
             "| `path.resolve` | `(...parts: string): string` | Resolve to absolute path |\n"
-            "| `path.sep` | `: string` |  |\n"
+            "| `path.sep` | `: string` | Platform path separator |\n"
             "",
         .symbols = _symbols_path,
         .symbol_count = (int)(sizeof(_symbols_path) / sizeof(_symbols_path[0])),
@@ -4074,6 +4183,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `URL.href` | `const string` | Handle field |\n"
             "| `URL.origin` | `const string` | Handle field |\n"
             "| `URL.password` | `const string` | Handle field |\n"
+            "| `URL.pathname` | `const string` | Handle field |\n"
             "| `URL.port` | `const string` | Handle field |\n"
             "| `URL.protocol` | `const string` | Handle field |\n"
             "| `URL.search` | `const string` | Handle field |\n"
@@ -4114,15 +4224,19 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `WsMessage.binary` | `const bool` | Handle field |\n"
             "| `WsMessage.data` | `const string` | Handle field |\n"
             "| `WsMessage.error` | `const string` | Handle field |\n"
-            "| `ws.close` | `(conn: WsConn, code?: int, reason?: string?): bool` | Close a WebSocket connection |\n"
+            "| `ws.close` | `(conn: WsConn, code?: int?, reason?: string?): bool` | Close a WebSocket connection |\n"
             "| `ws.connect` | `(url: string, options?: Json): WsConn?` | Connect to a WebSocket server |\n"
-            "| `ws.echoServe` | `(port: int): bool` | Pure C echo server with zero VM/GC overhead per message |\n"
+            "| `ws.echoServe` | `(port: int): bool` | Pure C echo server with zero VM allocation overhead per message |\n"
             "| `ws.isOpen` | `(conn: WsConn): bool` | Check if connection is open |\n"
+            "| `ws.isServerRunning` | `(): bool` | Check if the WebSocket server is running |\n"
             "| `ws.ping` | `(conn: WsConn): bool` | Send a ping frame |\n"
-            "| `ws.recv` | `(conn: WsConn, timeout?: int): WsMessage?` | Receive data from WebSocket connection |\n"
-            "| `ws.recvData` | `(conn: WsConn, timeout?: int): string?` | High-performance recv returning data string directly (no Json wrapper) |\n"
-            "| `ws.send` | `(conn: WsConn, data: string, binary?: bool): bool` | Send data over WebSocket connection |\n"
+            "| `ws.recv` | `(conn: WsConn, timeout?: int?): WsMessage?` | Receive data from WebSocket connection |\n"
+            "| `ws.recvData` | `(conn: WsConn, timeout?: int?): string?` | High-performance recv returning data string directly (no Json wrapper) |\n"
+            "| `ws.send` | `(conn: WsConn, data: string, binary?: bool?): bool` | Send data over WebSocket connection |\n"
+            "| `ws.sendData` | `(conn: WsConn, data: string, binary?: bool?): bool` | Send data over WebSocket connection |\n"
+            "| `ws.serve` | `(port: int, handler: fn(conn: WsConn): ()): bool` | Start WebSocket server |\n"
             "| `ws.state` | `(conn: WsConn): string` | Get connection state |\n"
+            "| `ws.stopServer` | `(): ()` | Stop the WebSocket server |\n"
             "",
         .symbols = _symbols_ws,
         .symbol_count = (int)(sizeof(_symbols_ws) / sizeof(_symbols_ws[0])),

@@ -22,11 +22,15 @@
 #include "../../src/runtime/xisolate_api.h"
 #include "../../src/runtime/object/xarray.h"
 #include "../../src/runtime/object/xstring.h"
+#include "../../src/runtime/mem/xcoro_heap.h"
+#include "../../src/runtime/mem/xalloc_unified.h"
 #include "../../src/base/xmalloc.h"
 #include "../../src/base/xchecks.h"
 #include "../../src/coro/xyieldable.h"
 #include "../../src/coro/xnetpoll.h"
 #include "../../src/coro/xworker.h"
+#include "../../src/shared/xr_io_core.h"
+#include "../../src/shared/xr_os_core.h"
 #include "../../src/vm/xvm.h"  // xr_vm_yieldable_cfunction_new (XRS_EXPORT_YIELDABLE)
 #include "../../src/runtime/xisolate_internal.h"
 #include <stdio.h>
@@ -45,11 +49,11 @@
 #include <sys/utime.h>
 #include <windows.h>
 #else
+#include <dirent.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <utime.h>
-#include <ftw.h>
 #ifdef XR_OS_MACOS
 #include <copyfile.h>
 #elif defined(XR_OS_LINUX)
@@ -70,53 +74,78 @@ extern struct XrCoroutine *xr_current_coro(XrVMRuntime *X);
 // bytes. Callers needing >2 GiB inputs must stream the file manually.
 #define IO_MAX_READ_BYTES ((long) INT32_MAX)
 
+static char *io_read_file_buffer_sync(const char *path, size_t *out_len);
+
+static void *io_core_alloc(void *ctx, size_t size) {
+    (void) ctx;
+    return xr_malloc(size);
+}
+
+static void *io_core_realloc(void *ctx, void *ptr, size_t size) {
+    (void) ctx;
+    return xr_realloc(ptr, size);
+}
+
+static void io_core_free(void *ctx, void *ptr) {
+    (void) ctx;
+    xr_free(ptr);
+}
+
+static bool io_file_seek_end(void *ctx) {
+    return fseek((FILE *) ctx, 0, SEEK_END) == 0;
+}
+
+static long io_file_tell(void *ctx) {
+    return ftell((FILE *) ctx);
+}
+
+static bool io_file_seek_start(void *ctx) {
+    return fseek((FILE *) ctx, 0, SEEK_SET) == 0;
+}
+
+static size_t io_file_read(void *ctx, void *buf, size_t cap) {
+    return fread(buf, 1, cap, (FILE *) ctx);
+}
+
+static size_t io_file_write(void *ctx, const void *buf, size_t len) {
+    return fwrite(buf, 1, len, (FILE *) ctx);
+}
+
+static bool io_file_error(void *ctx) {
+    return ferror((FILE *) ctx) != 0;
+}
+
 XR_FUNC char *xr_io_read_stdin_all(size_t *out_len) {
     if (out_len)
         *out_len = 0;
 
     clearerr(stdin);
-
-    size_t cap = 4096;
-    size_t len = 0;
-    char *buf = (char *) xr_malloc(cap + 1);
-    if (!buf)
-        return NULL;
-
-    for (;;) {
-        size_t avail = cap - len;
-        size_t nread = fread(buf + len, 1, avail, stdin);
-        len += nread;
-
-        if (nread < avail) {
-            if (ferror(stdin)) {
-                xr_free(buf);
-                return NULL;
-            }
-            break;
-        }
-
-        if (cap >= (size_t) IO_MAX_READ_BYTES) {
-            xr_free(buf);
-            return NULL;
-        }
-
-        size_t new_cap = cap * 2;
-        if (new_cap > (size_t) IO_MAX_READ_BYTES)
-            new_cap = (size_t) IO_MAX_READ_BYTES;
-        char *new_buf = (char *) xr_realloc(buf, new_cap + 1);
-        if (!new_buf) {
-            xr_free(buf);
-            return NULL;
-        }
-        buf = new_buf;
-        cap = new_cap;
-    }
-
-    buf[len] = '\0';
-    if (out_len)
-        *out_len = len;
-    return buf;
+    return xr_io_core_read_all_stream_alloc(stdin, io_file_read, io_file_error, io_core_alloc,
+                                            io_core_realloc, io_core_free, NULL, 4096,
+                                            IO_MAX_READ_BYTES, out_len);
 }
+
+#if !defined(XR_OS_WINDOWS) && !defined(XR_OS_MACOS) && !defined(XR_OS_LINUX)
+typedef struct IoCopyFileCtx {
+    FILE *src;
+    FILE *dst;
+} IoCopyFileCtx;
+
+static size_t io_copy_file_read(void *ctx, void *buf, size_t cap) {
+    IoCopyFileCtx *copy_ctx = (IoCopyFileCtx *) ctx;
+    return fread(buf, 1, cap, copy_ctx->src);
+}
+
+static size_t io_copy_file_write(void *ctx, const void *buf, size_t len) {
+    IoCopyFileCtx *copy_ctx = (IoCopyFileCtx *) ctx;
+    return fwrite(buf, 1, len, copy_ctx->dst);
+}
+
+static bool io_copy_file_error(void *ctx) {
+    IoCopyFileCtx *copy_ctx = (IoCopyFileCtx *) ctx;
+    return ferror(copy_ctx->src) != 0;
+}
+#endif
 
 static XrValue io_readStdin(XrVMRuntime *X, XrValue *args, int argc) {
     (void) args;
@@ -299,24 +328,10 @@ static XrCFuncResult io_readFile(XrVMRuntime *X, XrValue *args, int argc, XrValu
     }
 #endif
 
-    FILE *f = fopen(path, "rb");
-    if (!f)
+    size_t read_size = 0;
+    char *buf = io_read_file_buffer_sync(path, &read_size);
+    if (!buf)
         return XR_CFUNC_DONE;
-    fseek(f, 0, SEEK_END);
-    long size = ftell(f);
-    if (size < 0 || size > IO_MAX_READ_BYTES) {
-        fclose(f);
-        return XR_CFUNC_DONE;
-    }
-    fseek(f, 0, SEEK_SET);
-    char *buf = (char *) xr_malloc((size_t) size + 1);
-    if (!buf) {
-        fclose(f);
-        return XR_CFUNC_DONE;
-    }
-    size_t read_size = fread(buf, 1, (size_t) size, f);
-    buf[read_size] = '\0';
-    fclose(f);
     *result = xr_string_value(xr_string_intern(X, buf, read_size, 0));
     xr_free(buf);
     return XR_CFUNC_DONE;
@@ -352,30 +367,26 @@ static XrCFuncResult io_readFileBytes(XrVMRuntime *X, XrValue *args, int argc, X
     }
 #endif
 
-    FILE *f = fopen(path, "rb");
-    if (!f)
+    size_t read_size = 0;
+    char *buf = io_read_file_buffer_sync(path, &read_size);
+    if (!buf)
         return XR_CFUNC_DONE;
-    fseek(f, 0, SEEK_END);
-    long size = ftell(f);
-    if (size < 0 || size > IO_MAX_READ_BYTES) {
-        fclose(f);
-        return XR_CFUNC_DONE;
-    }
-    fseek(f, 0, SEEK_SET);
-    XrArray *arr = xr_array_bytes_new(xr_current_coro(X), (int32_t) size);
+    XrArray *arr = xr_array_bytes_new(xr_current_coro(X), (int32_t) read_size);
     if (!arr) {
-        fclose(f);
+        xr_free(buf);
         return XR_CFUNC_DONE;
     }
-    size_t read_size = fread(arr->data, 1, (size_t) size, f);
-    fclose(f);
+    if (read_size > 0)
+        memcpy(arr->data, buf, read_size);
     arr->length = (int32_t) read_size;
+    xr_free(buf);
     *result = xr_value_from_array(arr);
     return XR_CFUNC_DONE;
 }
 
 // writeFileBytes(path, bytes) - Write byte array (yieldable; io_uring async when available)
 static XrCFuncResult io_writeFileBytes(XrVMRuntime *X, XrValue *args, int argc, XrValue *result) {
+    (void) X;
     *result = xr_bool(false);
     if (argc < 2)
         return XR_CFUNC_DONE;
@@ -404,14 +415,16 @@ static XrCFuncResult io_writeFileBytes(XrVMRuntime *X, XrValue *args, int argc, 
     FILE *f = fopen(path, "wb");
     if (!f)
         return XR_CFUNC_DONE;
-    size_t written = fwrite(arr->data, 1, arr->length, f);
-    fclose(f);
-    *result = xr_bool(written == (size_t) arr->length);
+    bool ok =
+        xr_io_core_write_all(f, io_file_write, io_file_error, arr->data, (size_t) arr->length);
+    bool close_ok = fclose(f) == 0;
+    *result = xr_bool(ok && close_ok);
     return XR_CFUNC_DONE;
 }
 
 // writeFile(path, content) - Write string (yieldable; io_uring async when available)
 static XrCFuncResult io_writeFile(XrVMRuntime *X, XrValue *args, int argc, XrValue *result) {
+    (void) X;
     *result = xr_bool(false);
     if (argc < 2)
         return XR_CFUNC_DONE;
@@ -435,9 +448,9 @@ static XrCFuncResult io_writeFile(XrVMRuntime *X, XrValue *args, int argc, XrVal
     FILE *f = fopen(path, "wb");
     if (!f)
         return XR_CFUNC_DONE;
-    size_t written = fwrite(str->data, 1, str->length, f);
-    fclose(f);
-    *result = xr_bool(written == str->length);
+    bool ok = xr_io_core_write_all(f, io_file_write, io_file_error, str->data, str->length);
+    bool close_ok = fclose(f) == 0;
+    *result = xr_bool(ok && close_ok);
     return XR_CFUNC_DONE;
 }
 
@@ -456,10 +469,9 @@ static XrValue io_appendFile(XrVMRuntime *X, XrValue *args, int argc) {
     if (!f)
         return xr_bool(false);
 
-    size_t written = fwrite(str->data, 1, str->length, f);
-    fclose(f);
-
-    return xr_bool(written == str->length);
+    bool ok = xr_io_core_write_all(f, io_file_write, io_file_error, str->data, str->length);
+    bool close_ok = fclose(f) == 0;
+    return xr_bool(ok && close_ok);
 }
 
 /* ========== File Checks ========== */
@@ -555,6 +567,61 @@ static XrValue io_mkdir(XrVMRuntime *X, XrValue *args, int argc) {
     return xr_bool(xr_fs_mkdir(path, 0755) == 0);
 }
 
+static bool io_dir_for_each_entry(void *ctx, const char *path, XrIoCoreDirEntryFn visit,
+                                  void *visit_ctx) {
+    (void) ctx;
+    if (!path || !visit)
+        return false;
+    XrDirIter *it = xr_dir_open(path);
+    if (!it)
+        return false;
+
+    XrDirEntry e;
+    bool ok = true;
+    while (xr_dir_next(it, &e)) {
+        if (!visit(visit_ctx, e.name)) {
+            ok = false;
+            break;
+        }
+    }
+
+    xr_dir_close(it);
+    return ok;
+}
+
+static XrIoCorePathKind io_path_kind(void *ctx, const char *path) {
+    (void) ctx;
+#ifdef XR_OS_WINDOWS
+    DWORD attrs = GetFileAttributesA(path);
+    if (attrs == INVALID_FILE_ATTRIBUTES)
+        return XR_IO_CORE_PATH_MISSING;
+    if ((attrs & FILE_ATTRIBUTE_DIRECTORY) && !(attrs & FILE_ATTRIBUTE_REPARSE_POINT))
+        return XR_IO_CORE_PATH_DIR;
+    return XR_IO_CORE_PATH_LEAF;
+#else
+    struct stat st;
+    if (lstat(path, &st) != 0)
+        return XR_IO_CORE_PATH_MISSING;
+    return S_ISDIR(st.st_mode) ? XR_IO_CORE_PATH_DIR : XR_IO_CORE_PATH_LEAF;
+#endif
+}
+
+typedef struct IoReadDirEmitCtx {
+    XrVMRuntime *X;
+    XrArray *arr;
+} IoReadDirEmitCtx;
+
+static bool io_read_dir_emit(void *ctx, const char *path) {
+    IoReadDirEmitCtx *emit = (IoReadDirEmitCtx *) ctx;
+    xr_array_push(emit->arr, xrs_string_value_c(emit->X, path));
+    return true;
+}
+
+static void io_release_array(XrArray *arr) {
+    if (arr)
+        xr_rc_release_value(xr_current_coro_heap(), xr_value_from_array(arr));
+}
+
 // readDir(path) - Read directory contents
 static XrValue io_readDir(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1)
@@ -563,23 +630,16 @@ static XrValue io_readDir(XrVMRuntime *X, XrValue *args, int argc) {
     if (!path)
         return xr_null();
 
-    XrDirIter *it = xr_dir_open(path);
-    if (!it)
-        return xr_null();
-
     XrArray *arr = xr_array_new(xr_current_coro(X));
-    if (!arr) {
-        xr_dir_close(it);
+    if (!arr)
+        return xr_null();
+
+    IoReadDirEmitCtx emit = {.X = X, .arr = arr};
+    if (!xr_io_core_read_dir(path, io_dir_for_each_entry, NULL, io_read_dir_emit, &emit)) {
+        io_release_array(arr);
         return xr_null();
     }
 
-    XrDirEntry e;
-    while (xr_dir_next(it, &e)) {
-        XrValue name = xrs_string_value_c(X, e.name);
-        xr_array_push(arr, name);
-    }
-
-    xr_dir_close(it);
     return xr_value_from_array(arr);
 }
 
@@ -682,20 +742,45 @@ static XrValue io_copyFile(XrVMRuntime *X, XrValue *args, int argc) {
         return xr_bool(false);
     }
 
-    char buf[65536];
-    size_t n;
-    while ((n = fread(buf, 1, sizeof(buf), fsrc)) > 0) {
-        if (fwrite(buf, 1, n, fdst) != n) {
-            fclose(fsrc);
-            fclose(fdst);
-            return xr_bool(false);
-        }
-    }
-
+    char buf[XR_IO_CORE_COPY_BUFFER_SIZE];
+    IoCopyFileCtx copy_ctx = {.src = fsrc, .dst = fdst};
+    bool ok = xr_io_core_copy_stream(&copy_ctx, io_copy_file_read, io_copy_file_write,
+                                     io_copy_file_error, buf, sizeof(buf));
     fclose(fsrc);
-    fclose(fdst);
-    return xr_bool(true);
+    if (fclose(fdst) != 0)
+        ok = false;
+    return xr_bool(ok);
 #endif
+}
+
+static char *io_read_file_buffer_sync(const char *path, size_t *out_len) {
+    if (out_len)
+        *out_len = 0;
+    if (!path || path[0] == '\0')
+        return NULL;
+
+    FILE *f = fopen(path, "rb");
+    if (!f)
+        return NULL;
+    char *buf = xr_io_core_read_sized_stream_alloc(
+        f, io_file_seek_end, io_file_tell, io_file_seek_start, io_file_read, io_file_error,
+        io_core_alloc, io_core_free, NULL, IO_MAX_READ_BYTES, out_len);
+    fclose(f);
+    return buf;
+}
+
+typedef struct IoReadLinesCtx {
+    XrVMRuntime *X;
+    XrArray *arr;
+} IoReadLinesCtx;
+
+static bool io_read_lines_push(void *ctx, const char *data, size_t len) {
+    IoReadLinesCtx *read_ctx = (IoReadLinesCtx *) ctx;
+    XrString *str = xr_string_intern(read_ctx->X, data, len, 0);
+    if (!str)
+        return false;
+    xr_array_push(read_ctx->arr, xr_string_value(str));
+    return true;
 }
 
 // readLines(path) - Read file by lines
@@ -706,33 +791,24 @@ static XrValue io_readLines(XrVMRuntime *X, XrValue *args, int argc) {
     if (!path)
         return xr_null();
 
-    FILE *f = fopen(path, "r");
-    if (!f)
+    size_t len = 0;
+    char *buf = io_read_file_buffer_sync(path, &len);
+    if (!buf)
         return xr_null();
 
     XrArray *arr = xr_array_new(xr_current_coro(X));
     if (!arr) {
-        fclose(f);
+        xr_free(buf);
         return xr_null();
     }
 
-    // getline() allocates via the libc allocator; we must release with free()
-    // (the matching deallocator), not xr_free. This is the single documented
-    // exception to the xr_malloc/xr_free symmetry rule.
-    char *line = NULL;
-    size_t cap = 0;
-    ssize_t len;
-    while ((len = getline(&line, &cap, f)) != -1) {
-        // Remove trailing newline
-        while (len > 0 && (line[len - 1] == '\n' || line[len - 1] == '\r')) {
-            len--;
-        }
-        XrString *str = xr_string_intern(X, line, (size_t) len, 0);
-        xr_array_push(arr, xr_string_value(str));
+    IoReadLinesCtx read_ctx = {X, arr};
+    if (!xr_io_core_read_lines_each(buf, len, io_read_lines_push, &read_ctx)) {
+        xr_free(buf);
+        return xr_null();
     }
-    free(line);  // libc-owned buffer, see comment above
 
-    fclose(f);
+    xr_free(buf);
     return xr_value_from_array(arr);
 }
 
@@ -758,24 +834,6 @@ static XrValue io_isSymlink(XrVMRuntime *X, XrValue *args, int argc) {
 #endif
 }
 
-// Dynamic-layout class for stat() result. SymbolIds are allocated
-// per-isolate, so the class must live on the isolate's stdlib cache
-// rather than on process-global state. Building it lazily means the
-// cost is paid exactly once per isolate and the class is reused by
-// every subsequent io.stat() call in that isolate.
-enum {
-    STAT_SIZE_IDX = 0,
-    STAT_MODE_IDX,
-    STAT_MTIME_IDX,
-    STAT_ATIME_IDX,
-    STAT_CTIME_IDX,
-    STAT_UID_IDX,
-    STAT_GID_IDX,
-    STAT_ISFILE_IDX,
-    STAT_ISDIR_IDX,
-    STAT_ISSYMLINK_IDX
-};
-
 // Lazily construct the stat() result class chain for the given isolate
 // and stash it in the per-isolate stdlib cache. Returns NULL on OOM.
 static XrClass *io_get_stat_class(XrVMRuntime *X) {
@@ -785,9 +843,8 @@ static XrClass *io_get_stat_class(XrVMRuntime *X) {
     if (cache->io_stat_class)
         return cache->io_stat_class;
 
-    static const char *const names[] = {"size", "mode", "mtime",  "atime", "ctime",
-                                        "uid",  "gid",  "isFile", "isDir", "isSymlink"};
-    XrClass *cls = xr_class_build_json_chain(X, names, 10, false);
+    XrClass *cls = xr_class_build_json_chain(X, XR_IO_CORE_STAT_FIELD_NAMES,
+                                             XR_IO_CORE_STAT_FIELD_COUNT, false);
     if (!cls)
         return NULL;
     cache->io_stat_class = cls;
@@ -816,6 +873,18 @@ static XrValue io_stat(XrVMRuntime *X, XrValue *args, int argc) {
     bool is_symlink = (lstat(path, &lst) == 0) && S_ISLNK(lst.st_mode);
 #endif
 
+#ifdef XR_OS_WINDOWS
+    XrIoCoreStatFields fields = xr_io_core_stat_fields(
+        (int64_t) st.st_size, (int64_t) st.st_mode, (int64_t) st.st_mtime, (int64_t) st.st_atime,
+        (int64_t) st.st_ctime, 0, 0, (st.st_mode & _S_IFREG) != 0, (st.st_mode & _S_IFDIR) != 0,
+        is_symlink);
+#else
+    XrIoCoreStatFields fields = xr_io_core_stat_fields(
+        (int64_t) st.st_size, (int64_t) st.st_mode, (int64_t) st.st_mtime, (int64_t) st.st_atime,
+        (int64_t) st.st_ctime, (int64_t) st.st_uid, (int64_t) st.st_gid, S_ISREG(st.st_mode),
+        S_ISDIR(st.st_mode), is_symlink);
+#endif
+
     extern XrValue xr_json_value(XrJson * json);
 
     XrClass *stat_cls = io_get_stat_class(X);
@@ -825,25 +894,28 @@ static XrValue io_stat(XrVMRuntime *X, XrValue *args, int argc) {
     if (!obj)
         return xr_null();
 
-    xr_instance_set_dynamic_field(X, obj, STAT_SIZE_IDX, xr_int((int64_t) st.st_size));
-    xr_instance_set_dynamic_field(X, obj, STAT_MODE_IDX, xr_int((int64_t) (st.st_mode & 0777)));
-    xr_instance_set_dynamic_field(X, obj, STAT_MTIME_IDX, xr_int((int64_t) st.st_mtime));
-    xr_instance_set_dynamic_field(X, obj, STAT_ATIME_IDX, xr_int((int64_t) st.st_atime));
-    xr_instance_set_dynamic_field(X, obj, STAT_CTIME_IDX, xr_int((int64_t) st.st_ctime));
-#ifdef XR_OS_WINDOWS
-    xr_instance_set_dynamic_field(X, obj, STAT_UID_IDX, xr_int(0));
-    xr_instance_set_dynamic_field(X, obj, STAT_GID_IDX, xr_int(0));
-    xr_instance_set_dynamic_field(X, obj, STAT_ISFILE_IDX, xr_bool((st.st_mode & _S_IFREG) != 0));
-    xr_instance_set_dynamic_field(X, obj, STAT_ISDIR_IDX, xr_bool((st.st_mode & _S_IFDIR) != 0));
-#else
-    xr_instance_set_dynamic_field(X, obj, STAT_UID_IDX, xr_int((int64_t) st.st_uid));
-    xr_instance_set_dynamic_field(X, obj, STAT_GID_IDX, xr_int((int64_t) st.st_gid));
-    xr_instance_set_dynamic_field(X, obj, STAT_ISFILE_IDX, xr_bool(S_ISREG(st.st_mode)));
-    xr_instance_set_dynamic_field(X, obj, STAT_ISDIR_IDX, xr_bool(S_ISDIR(st.st_mode)));
-#endif
-    xr_instance_set_dynamic_field(X, obj, STAT_ISSYMLINK_IDX, xr_bool(is_symlink));
+    xr_instance_set_dynamic_field(X, obj, XR_IO_CORE_STAT_SIZE, xr_int(fields.size));
+    xr_instance_set_dynamic_field(X, obj, XR_IO_CORE_STAT_MODE, xr_int(fields.mode));
+    xr_instance_set_dynamic_field(X, obj, XR_IO_CORE_STAT_MTIME, xr_int(fields.mtime));
+    xr_instance_set_dynamic_field(X, obj, XR_IO_CORE_STAT_ATIME, xr_int(fields.atime));
+    xr_instance_set_dynamic_field(X, obj, XR_IO_CORE_STAT_CTIME, xr_int(fields.ctime));
+    xr_instance_set_dynamic_field(X, obj, XR_IO_CORE_STAT_UID, xr_int(fields.uid));
+    xr_instance_set_dynamic_field(X, obj, XR_IO_CORE_STAT_GID, xr_int(fields.gid));
+    xr_instance_set_dynamic_field(X, obj, XR_IO_CORE_STAT_IS_FILE, xr_bool(fields.is_file));
+    xr_instance_set_dynamic_field(X, obj, XR_IO_CORE_STAT_IS_DIR, xr_bool(fields.is_dir));
+    xr_instance_set_dynamic_field(X, obj, XR_IO_CORE_STAT_IS_SYMLINK, xr_bool(fields.is_symlink));
 
     return xr_json_value(obj);
+}
+
+static int io_mkdirp_mkdir(void *ctx, const char *path) {
+    (void) ctx;
+    return xr_fs_mkdir(path, 0755);
+}
+
+static bool io_mkdirp_is_dir(void *ctx, const char *path) {
+    (void) ctx;
+    return xr_fs_is_dir(path);
 }
 
 // mkdirp(path) - Recursively create directory.
@@ -866,66 +938,50 @@ static XrValue io_mkdirp(XrVMRuntime *X, XrValue *args, int argc) {
         return xr_bool(false);
     memcpy(tmp, path, len);
     tmp[len] = '\0';
-    if (tmp[len - 1] == '/')
-        tmp[len - 1] = '\0';
 
-    for (char *p = tmp + 1; *p; p++) {
-        if (*p == '/' || *p == '\\') {
-            char saved = *p;
-            *p = '\0';
-            xr_fs_mkdir(tmp, 0755);
-            *p = saved;
-        }
-    }
+    return xr_bool(xr_io_core_mkdirp(tmp, io_mkdirp_mkdir, io_mkdirp_is_dir, NULL));
+}
 
-    return xr_bool(xr_fs_mkdir(tmp, 0755) == 0);
+static bool io_touch_update(void *ctx, const char *path) {
+    (void) ctx;
+#ifdef XR_OS_WINDOWS
+    return _utime(path, NULL) == 0;
+#else
+    return utime(path, NULL) == 0;
+#endif
+}
+
+static bool io_touch_create(void *ctx, const char *path) {
+    (void) ctx;
+    FILE *f = fopen(path, "a");
+    if (!f)
+        return false;
+    return fclose(f) == 0;
 }
 
 #ifdef XR_OS_WINDOWS
-// Windows recursive removal using FindFirstFile/FindNextFile
-static bool remove_all_impl(const char *dir) {
-    char pattern[XR_PATH_MAX];
-    int n = snprintf(pattern, sizeof(pattern), "%s\\*", dir);
-    if (n <= 0 || n >= (int) sizeof(pattern))
-        return false;
+static bool io_remove_all_leaf(void *ctx, const char *path) {
+    (void) ctx;
+    DWORD attrs = GetFileAttributesA(path);
+    if (attrs != INVALID_FILE_ATTRIBUTES && (attrs & FILE_ATTRIBUTE_DIRECTORY))
+        return RemoveDirectoryA(path) != 0;
+    SetFileAttributesA(path, FILE_ATTRIBUTE_NORMAL);
+    return DeleteFileA(path) != 0;
+}
 
-    WIN32_FIND_DATAA fd;
-    HANDLE h = FindFirstFileA(pattern, &fd);
-    if (h == INVALID_HANDLE_VALUE)
-        return RemoveDirectoryA(dir) || DeleteFileA(dir);
-
-    bool ok = true;
-    do {
-        if (strcmp(fd.cFileName, ".") == 0 || strcmp(fd.cFileName, "..") == 0)
-            continue;
-        char child[XR_PATH_MAX];
-        snprintf(child, sizeof(child), "%s\\%s", dir, fd.cFileName);
-        if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
-            if (!remove_all_impl(child))
-                ok = false;
-        } else {
-            SetFileAttributesA(child, FILE_ATTRIBUTE_NORMAL);
-            if (!DeleteFileA(child))
-                ok = false;
-        }
-    } while (FindNextFileA(h, &fd));
-    FindClose(h);
-    if (!RemoveDirectoryA(dir))
-        ok = false;
-    return ok;
+static bool io_remove_all_dir(void *ctx, const char *path) {
+    (void) ctx;
+    return RemoveDirectoryA(path) != 0;
 }
 #else
-// POSIX removeAll helper callback.
-// FTW_PHYS is passed to nftw so that symlinks are *not* followed — the
-// callback therefore only observes entries inside the originally supplied
-// subtree, and remove() here will unlink the link itself instead of
-// traversing out of tree.
-static int remove_callback(const char *fpath, const struct stat *sb, int typeflag,
-                           struct FTW *ftwbuf) {
-    (void) sb;
-    (void) typeflag;
-    (void) ftwbuf;
-    return remove(fpath);
+static bool io_remove_all_leaf(void *ctx, const char *path) {
+    (void) ctx;
+    return remove(path) == 0;
+}
+
+static bool io_remove_all_dir(void *ctx, const char *path) {
+    (void) ctx;
+    return rmdir(path) == 0;
 }
 #endif
 
@@ -938,12 +994,21 @@ static XrValue io_removeAll(XrVMRuntime *X, XrValue *args, int argc) {
     if (!path)
         return xr_bool(false);
 
+    XrIoCoreRemoveAllOps ops = {
+        .kind = io_path_kind,
+        .for_each_entry = io_dir_for_each_entry,
+        .remove_leaf = io_remove_all_leaf,
+        .remove_dir = io_remove_all_dir,
+        .alloc = io_core_alloc,
+        .free = io_core_free,
+        .sep =
 #ifdef XR_OS_WINDOWS
-    return xr_bool(remove_all_impl(path));
+            '\\',
 #else
-    int ret = nftw(path, remove_callback, 64, FTW_DEPTH | FTW_PHYS);
-    return xr_bool(ret == 0);
+            '/',
 #endif
+    };
+    return xr_bool(xr_io_core_remove_all(path, &ops, NULL));
 }
 
 // chmod(path, mode) - Change file permissions
@@ -957,7 +1022,9 @@ static XrValue io_chmod(XrVMRuntime *X, XrValue *args, int argc) {
     if (!XR_IS_INT(args[1]))
         return xr_bool(false);
 
-    int mode = (int) XR_TO_INT(args[1]);
+    int mode = 0;
+    if (!xr_io_core_chmod_mode(XR_TO_INT(args[1]), &mode))
+        return xr_bool(false);
 #ifdef XR_OS_WINDOWS
     return xr_bool(_chmod(path, mode) == 0);
 #else
@@ -973,21 +1040,7 @@ static XrValue io_touch(XrVMRuntime *X, XrValue *args, int argc) {
     const char *path = xrs_string_arg(args[0], NULL);
     if (!path)
         return xr_bool(false);
-
-    // Try to update timestamp
-#ifdef XR_OS_WINDOWS
-    if (_utime(path, NULL) == 0)
-#else
-    if (utime(path, NULL) == 0)
-#endif
-        return xr_bool(true);
-
-    // File doesn't exist, create empty file
-    FILE *f = fopen(path, "a");
-    if (!f)
-        return xr_bool(false);
-    fclose(f);
-    return xr_bool(true);
+    return xr_bool(xr_io_core_touch(path, io_touch_update, io_touch_create, NULL));
 }
 
 // symlink(target, path) - Create symbolic link
@@ -1030,17 +1083,18 @@ static XrValue io_readlink(XrVMRuntime *X, XrValue *args, int argc) {
     CloseHandle(h);
     if (len == 0 || len >= sizeof(buf))
         return xr_null();
-    // Strip \\?\ prefix if present
-    const char *result = buf;
-    if (len >= 4 && buf[0] == '\\' && buf[1] == '\\' && buf[2] == '?' && buf[3] == '\\')
-        result = buf + 4;
-    return xrs_string_value_c(X, result);
+    XrIoCorePathView view;
+    if (!xr_io_core_path_result_view(buf, (size_t) len, &view))
+        return xr_null();
+    return xrs_string_value_n(X, view.data, view.len);
 #else
     ssize_t len = readlink(path, buf, sizeof(buf) - 1);
     if (len < 0)
         return xr_null();
-    buf[len] = '\0';
-    return xrs_string_value_c(X, buf);
+    XrIoCorePathView view;
+    if (!xr_io_core_path_result_view(buf, (size_t) len, &view))
+        return xr_null();
+    return xrs_string_value_n(X, view.data, view.len);
 #endif
 }
 
@@ -1055,25 +1109,16 @@ static XrValue io_realpath(XrVMRuntime *X, XrValue *args, int argc) {
     char resolved[XR_PATH_MAX];
     if (xr_fs_realpath(path, resolved, sizeof(resolved)) == NULL)
         return xr_null();
-    return xrs_string_value_c(X, resolved);
+    XrIoCorePathView view;
+    if (!xr_io_core_path_result_cstr_view(resolved, &view))
+        return xr_null();
+    return xrs_string_value_n(X, view.data, view.len);
 }
 
-// Determine the directory used for xray-generated temporary entries. Honours
-// TMPDIR / TMP / TEMP before falling back to /tmp or the Windows temp path.
-static const char *io_tempdir_root(void) {
-    const char *d = getenv("TMPDIR");
-    if (!d || !d[0])
-        d = getenv("TMP");
-    if (!d || !d[0])
-        d = getenv("TEMP");
-    if (!d || !d[0]) {
-#ifdef XR_OS_WINDOWS
-        d = "C:\\Windows\\Temp";
-#else
-        d = "/tmp";
-#endif
-    }
-    return d;
+// Adapter for xr_os_core_tmpdir(); fallback ordering lives in shared core.
+static const char *io_core_getenv(void *ctx, const char *name) {
+    (void) ctx;
+    return getenv(name);
 }
 
 // tempFile() - Create temporary file, return path
@@ -1083,16 +1128,16 @@ static XrValue io_tempFile(XrVMRuntime *X, XrValue *args, int argc) {
 
     char tpl[XR_PATH_MAX];
 #ifdef XR_OS_WINDOWS
-    char tmpdir[MAX_PATH];
+    char tmpdir[XR_PATH_MAX];
     if (GetTempPathA(sizeof(tmpdir), tmpdir) == 0)
         return xr_null();
-    char tmpfile[MAX_PATH];
+    char tmpfile[XR_PATH_MAX];
     if (GetTempFileNameA(tmpdir, "xr_", 0, tmpfile) == 0)
         return xr_null();
     snprintf(tpl, sizeof(tpl), "%s", tmpfile);
 #else
-    int n = snprintf(tpl, sizeof(tpl), "%s/xray_XXXXXX", io_tempdir_root());
-    if (n <= 0 || n >= (int) sizeof(tpl))
+    const char *root = xr_os_core_tmpdir(io_core_getenv, NULL);
+    if (!xr_io_core_temp_template(root, '/', "xray_XXXXXX", tpl, sizeof(tpl)))
         return xr_null();
     int fd = mkstemp(tpl);
     if (fd < 0)
@@ -1109,10 +1154,10 @@ static XrValue io_tempDir(XrVMRuntime *X, XrValue *args, int argc) {
 
     char tpl[XR_PATH_MAX];
 #ifdef XR_OS_WINDOWS
-    char tmpdir[MAX_PATH];
+    char tmpdir[XR_PATH_MAX];
     if (GetTempPathA(sizeof(tmpdir), tmpdir) == 0)
         return xr_null();
-    char tmpfile[MAX_PATH];
+    char tmpfile[XR_PATH_MAX];
     if (GetTempFileNameA(tmpdir, "xr_", 0, tmpfile) == 0)
         return xr_null();
     // GetTempFileName creates a file; remove it and create dir instead
@@ -1121,8 +1166,8 @@ static XrValue io_tempDir(XrVMRuntime *X, XrValue *args, int argc) {
         return xr_null();
     snprintf(tpl, sizeof(tpl), "%s", tmpfile);
 #else
-    int n = snprintf(tpl, sizeof(tpl), "%s/xray_XXXXXX", io_tempdir_root());
-    if (n <= 0 || n >= (int) sizeof(tpl))
+    const char *root = xr_os_core_tmpdir(io_core_getenv, NULL);
+    if (!xr_io_core_temp_template(root, '/', "xray_XXXXXX", tpl, sizeof(tpl)))
         return xr_null();
     if (mkdtemp(tpl) == NULL)
         return xr_null();
@@ -1131,62 +1176,6 @@ static XrValue io_tempDir(XrVMRuntime *X, XrValue *args, int argc) {
 }
 
 // readDirRecursive helper struct
-#define READ_DIR_MAX_DEPTH 64
-
-typedef struct {
-    XrVMRuntime *X;
-    XrArray *arr;
-    const char *base;
-    size_t base_len;
-} ReadDirCtx;
-
-// readDirRecursive helper function.
-// Skips entries whose composed full path does not fit into XR_PATH_MAX instead
-// of silently truncating, and descends only into real directories (symlinks
-// are intentionally not followed, mirroring POSIX `find -xdev` semantics).
-static void read_dir_recursive_impl(ReadDirCtx *ctx, const char *path, int depth) {
-    if (depth >= READ_DIR_MAX_DEPTH)
-        return;
-    XrDirIter *it = xr_dir_open(path);
-    if (!it)
-        return;
-
-    XrDirEntry e;
-    while (xr_dir_next(it, &e)) {
-        char fullpath[XR_PATH_MAX];
-        int wrote = snprintf(fullpath, sizeof(fullpath), "%s/%s", path, e.name);
-        if (wrote <= 0 || wrote >= (int) sizeof(fullpath)) {
-            // Entry would overflow XR_PATH_MAX; skip rather than report a
-            // truncated path to the caller.
-            continue;
-        }
-
-        // Add relative path
-        const char *relpath = fullpath + ctx->base_len;
-        if (*relpath == '/')
-            relpath++;
-        XrValue name = xrs_string_value_c(ctx->X, relpath);
-        xr_array_push(ctx->arr, name);
-
-        // Recursively enter real subdirectories only, without following
-        // symlinks (prevents escape via bind mounts or malicious links).
-#ifdef XR_OS_WINDOWS
-        DWORD attrs = GetFileAttributesA(fullpath);
-        if (attrs != INVALID_FILE_ATTRIBUTES && (attrs & FILE_ATTRIBUTE_DIRECTORY) &&
-            !(attrs & FILE_ATTRIBUTE_REPARSE_POINT)) {
-            read_dir_recursive_impl(ctx, fullpath, depth + 1);
-        }
-#else
-        struct stat st;
-        if (lstat(fullpath, &st) == 0 && S_ISDIR(st.st_mode)) {
-            read_dir_recursive_impl(ctx, fullpath, depth + 1);
-        }
-#endif
-    }
-
-    xr_dir_close(it);
-}
-
 // readDirRecursive(path) - Recursively read directory
 static XrValue io_readDirRecursive(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1)
@@ -1194,65 +1183,33 @@ static XrValue io_readDirRecursive(XrVMRuntime *X, XrValue *args, int argc) {
     const char *path = xrs_string_arg(args[0], NULL);
     if (!path)
         return xr_null();
-    XR_DCHECK(strlen(path) < XR_PATH_MAX, "io_readDirRecursive: path within bounds");
 
     XrArray *arr = xr_array_new(xr_current_coro(X));
     if (!arr)
         return xr_null();
 
-    ReadDirCtx ctx = {.X = X, .arr = arr, .base = path, .base_len = strlen(path)};
-
-    read_dir_recursive_impl(&ctx, path, 0);
+    IoReadDirEmitCtx emit = {.X = X, .arr = arr};
+    XrIoCoreReadDirOps ops = {
+        .for_each_entry = io_dir_for_each_entry,
+        .kind = io_path_kind,
+        .alloc = io_core_alloc,
+        .free = io_core_free,
+        .alloc_ctx = NULL,
+        .sep = '/',
+        .max_depth = XR_IO_CORE_READ_DIR_MAX_DEPTH,
+    };
+    if (!xr_io_core_read_dir_recursive(path, &ops, NULL, io_read_dir_emit, &emit)) {
+        io_release_array(arr);
+        return xr_null();
+    }
     return xr_value_from_array(arr);
 }
 
 /* ========== Module Loading ========== */
 
-// ========== Type Declarations (parsed by gen_stdlib_types.py) ==========
-
-#include "../../src/module/xbuiltin_decl.h"
-
-// @module io
-// @handle FileStat { const size: int, const mode: int, const mtime: int, const atime: int, const
-// ctime: int, const uid: int, const gid: int, const isFile: bool, const isDir: bool, const
-// isSymlink: bool }
-
-XR_DEFINE_BUILTIN(io_readFile, "readFile", "(path: string): string?", "Read entire file as string")
-XR_DEFINE_BUILTIN(io_readFileBytes, "readFileBytes", "(path: string): Array<uint8>?",
-                  "Read entire file as byte array")
-XR_DEFINE_BUILTIN(io_readStdin, "readStdin", "(): string?", "Read all data from standard input")
-XR_DEFINE_BUILTIN(io_writeFile, "writeFile", "(path: string, data: string): bool",
-                  "Write string to file")
-XR_DEFINE_BUILTIN(io_writeFileBytes, "writeFileBytes", "(path: string, data: Array<uint8>): bool",
-                  "Write byte array to file")
-XR_DEFINE_BUILTIN(io_appendFile, "appendFile", "(path: string, data: string): bool",
-                  "Append string to file")
-XR_DEFINE_BUILTIN(io_exists, "exists", "(path: string): bool", "Check if path exists")
-XR_DEFINE_BUILTIN(io_isFile, "isFile", "(path: string): bool", "Check if path is a file")
-XR_DEFINE_BUILTIN(io_isDir, "isDir", "(path: string): bool", "Check if path is a directory")
-XR_DEFINE_BUILTIN(io_fileSize, "fileSize", "(path: string): int", "Get file size in bytes")
-XR_DEFINE_BUILTIN(io_remove, "remove", "(path: string): bool", "Remove a file")
-XR_DEFINE_BUILTIN(io_rename, "rename", "(old: string, new: string): bool", "Rename a file")
-XR_DEFINE_BUILTIN(io_mkdir, "mkdir", "(path: string): bool", "Create directory")
-XR_DEFINE_BUILTIN(io_readDir, "readDir", "(path: string): Array<string>", "List directory entries")
-XR_DEFINE_BUILTIN(io_cwd, "cwd", "(): string", "Get current working directory")
-XR_DEFINE_BUILTIN(io_chdir, "chdir", "(path: string): bool", "Change working directory")
-XR_DEFINE_BUILTIN(io_copyFile, "copyFile", "(src: string, dst: string): bool", "Copy a file")
-XR_DEFINE_BUILTIN(io_readLines, "readLines", "(path: string): Array<string>", "Read file as lines")
-XR_DEFINE_BUILTIN(io_isSymlink, "isSymlink", "(path: string): bool", "Check if path is a symlink")
-XR_DEFINE_BUILTIN(io_stat, "stat", "(path: string): FileStat?", "Get file stat info")
-XR_DEFINE_BUILTIN(io_mkdirp, "mkdirp", "(path: string): bool", "Create directory recursively")
-XR_DEFINE_BUILTIN(io_removeAll, "removeAll", "(path: string): bool", "Remove directory recursively")
-XR_DEFINE_BUILTIN(io_chmod, "chmod", "(path: string, mode: int): bool", "Change file permissions")
-XR_DEFINE_BUILTIN(io_touch, "touch", "(path: string): bool", "Create or update file timestamp")
-XR_DEFINE_BUILTIN(io_symlink, "symlink", "(target: string, link: string): bool",
-                  "Create symbolic link")
-XR_DEFINE_BUILTIN(io_readlink, "readlink", "(path: string): string?", "Read symlink target")
-XR_DEFINE_BUILTIN(io_realpath, "realpath", "(path: string): string?", "Resolve to absolute path")
-XR_DEFINE_BUILTIN(io_tempFile, "tempFile", "(): string?", "Create temporary file")
-XR_DEFINE_BUILTIN(io_tempDir, "tempDir", "(): string?", "Create temporary directory")
-XR_DEFINE_BUILTIN(io_readDirRecursive, "readDirRecursive", "(path: string): Array<string>",
-                  "List directory entries recursively")
+#define XR_STDLIB_VM_BIND_MODULE_IO 1
+#include "../../src/stdlib/xstdlib_vm_bindings_generated.inc.c"
+#undef XR_STDLIB_VM_BIND_MODULE_IO
 
 XR_FUNC XrModule *xr_load_module_io(XrVMRuntime *isolate) {
     XR_DCHECK(isolate != NULL, "xr_load_module_io: NULL isolate");
@@ -1265,43 +1222,7 @@ XR_FUNC XrModule *xr_load_module_io(XrVMRuntime *isolate) {
     // io_get_stat_class() on first call, so no explicit pre-init is
     // needed at module-load time.
 
-    // File read/write
-    XRS_EXPORT_YIELDABLE(mod, isolate, "readFile", io_readFile);
-    XRS_EXPORT_YIELDABLE(mod, isolate, "readFileBytes", io_readFileBytes);
-    XRS_EXPORT(mod, isolate, "readStdin", io_readStdin);
-    XRS_EXPORT_YIELDABLE(mod, isolate, "writeFile", io_writeFile);
-    XRS_EXPORT_YIELDABLE(mod, isolate, "writeFileBytes", io_writeFileBytes);
-    XRS_EXPORT(mod, isolate, "appendFile", io_appendFile);
-
-    // File checks
-    XRS_EXPORT(mod, isolate, "exists", io_exists);
-    XRS_EXPORT(mod, isolate, "isFile", io_isFile);
-    XRS_EXPORT(mod, isolate, "isDir", io_isDir);
-    XRS_EXPORT(mod, isolate, "fileSize", io_fileSize);
-
-    // File operations
-    XRS_EXPORT(mod, isolate, "remove", io_remove);
-    XRS_EXPORT(mod, isolate, "rename", io_rename);
-    XRS_EXPORT(mod, isolate, "mkdir", io_mkdir);
-    XRS_EXPORT(mod, isolate, "readDir", io_readDir);
-    XRS_EXPORT(mod, isolate, "cwd", io_cwd);
-
-    // Extended functions
-    XRS_EXPORT(mod, isolate, "chdir", io_chdir);
-    XRS_EXPORT(mod, isolate, "copyFile", io_copyFile);
-    XRS_EXPORT(mod, isolate, "readLines", io_readLines);
-    XRS_EXPORT(mod, isolate, "isSymlink", io_isSymlink);
-    XRS_EXPORT(mod, isolate, "stat", io_stat);
-    XRS_EXPORT(mod, isolate, "mkdirp", io_mkdirp);
-    XRS_EXPORT(mod, isolate, "removeAll", io_removeAll);
-    XRS_EXPORT(mod, isolate, "chmod", io_chmod);
-    XRS_EXPORT(mod, isolate, "touch", io_touch);
-    XRS_EXPORT(mod, isolate, "symlink", io_symlink);
-    XRS_EXPORT(mod, isolate, "readlink", io_readlink);
-    XRS_EXPORT(mod, isolate, "realpath", io_realpath);
-    XRS_EXPORT(mod, isolate, "tempFile", io_tempFile);
-    XRS_EXPORT(mod, isolate, "tempDir", io_tempDir);
-    XRS_EXPORT(mod, isolate, "readDirRecursive", io_readDirRecursive);
+    xr_stdlib_vm_bind_io_generated(isolate, mod);
 
     // Mark as loaded
     mod->loaded = true;

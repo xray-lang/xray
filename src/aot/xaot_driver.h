@@ -38,8 +38,8 @@
 #define XAOT_EXTERN_DYLIB_NAME_MAX 512
 
 /* Bitfield of stdlib modules referenced by the compiled bundle.
- * Runtime-backed modules become stdlib_objects in the link manifest; direct-call
- * core modules such as math are tracked through stdlib_symbols instead. */
+ * Stdlib calls are recorded at symbol/object granularity; coroutine/runtime
+ * dependencies are represented separately as runtime_caps/runtime_objects. */
 typedef uint32_t XaotStdlibSet;
 
 enum {

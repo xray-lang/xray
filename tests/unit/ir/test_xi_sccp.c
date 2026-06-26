@@ -145,6 +145,88 @@ TEST(folds_constant_compare) {
     xi_func_free(f);
 }
 
+/* ========== Test: shared loads remain unknown across shared stores ========== */
+
+TEST(shared_load_branch_remains_unknown) {
+    XiFunc *f = make_func();
+    XiBlock *entry = f->entry;
+    XiBlock *test_b = xi_block_new(f);
+    XiBlock *then_b = xi_block_new(f);
+    XiBlock *else_b = xi_block_new(f);
+
+    XiValue *two = xi_value_new(f, entry, XI_CONST, &stub_int, 0);
+    two->aux_int = 2;
+    XiValue *store = xi_value_new(f, entry, XI_SET_SHARED, &stub_int, 1);
+    store->args[0] = two;
+    store->aux_int = 0;
+    xi_block_set_jump(entry, test_b);
+
+    XiValue *load = xi_value_new(f, test_b, XI_GET_SHARED, &stub_int, 0);
+    load->aux_int = 0;
+    XiValue *one = xi_value_new(f, test_b, XI_CONST, &stub_int, 0);
+    one->aux_int = 1;
+    XiValue *cmp = xi_value_new(f, test_b, XI_EQ, &stub_bool, 2);
+    cmp->args[0] = load;
+    cmp->args[1] = one;
+    xi_block_set_if(test_b, cmp, then_b, else_b);
+
+    xi_block_set_return(then_b, one);
+    xi_block_set_return(else_b, two);
+    test_b->sealed = true;
+    then_b->sealed = true;
+    else_b->sealed = true;
+
+    XiPassChange chg = xi_opt_sccp(f);
+    (void) chg;
+
+    ASSERT(test_b->kind == XI_BLOCK_IF);
+    ASSERT(test_b->succs[0] == then_b);
+    ASSERT(test_b->succs[1] == else_b);
+    ASSERT(load->op == XI_GET_SHARED);
+    ASSERT(cmp->op == XI_EQ);
+
+    xi_func_free(f);
+}
+
+/* ========== Test: reachable no-return successors are not dead blocks ========== */
+
+TEST(reachable_unreachable_successor_is_preserved) {
+    XiFunc *f = make_func();
+    XiBlock *entry = f->entry;
+    XiBlock *test_b = xi_block_new(f);
+    XiBlock *then_b = xi_block_new(f);
+    XiBlock *throw_b = xi_block_new(f);
+
+    xi_block_set_jump(entry, test_b);
+
+    XiValue *load = xi_value_new(f, test_b, XI_GET_SHARED, &stub_int, 0);
+    load->aux_int = 0;
+    XiValue *one = xi_value_new(f, test_b, XI_CONST, &stub_int, 0);
+    one->aux_int = 1;
+    XiValue *cmp = xi_value_new(f, test_b, XI_EQ, &stub_bool, 2);
+    cmp->args[0] = load;
+    cmp->args[1] = one;
+    xi_block_set_if(test_b, cmp, then_b, throw_b);
+
+    xi_block_set_return(then_b, one);
+    throw_b->kind = XI_BLOCK_UNREACHABLE;
+
+    test_b->sealed = true;
+    then_b->sealed = true;
+    throw_b->sealed = true;
+
+    XiPassChange chg = xi_opt_sccp(f);
+    (void) chg;
+
+    ASSERT(test_b->kind == XI_BLOCK_IF);
+    ASSERT(test_b->succs[0] == then_b);
+    ASSERT(test_b->succs[1] == throw_b);
+    ASSERT(throw_b->kind == XI_BLOCK_UNREACHABLE);
+    ASSERT(throw_b->npreds == 1);
+
+    xi_func_free(f);
+}
+
 /* ========== Test: a function with no constants reports no_change ========== */
 
 TEST(no_const_no_change) {
@@ -172,6 +254,8 @@ int main(void) {
     run_folds_constant_add();
     run_simplifies_constant_branch();
     run_folds_constant_compare();
+    run_shared_load_branch_remains_unknown();
+    run_reachable_unreachable_successor_is_preserved();
     run_no_const_no_change();
 
     printf("\n=== Results: %d passed, %d failed ===\n", tests_passed, tests_failed);

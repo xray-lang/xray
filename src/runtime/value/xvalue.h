@@ -38,6 +38,7 @@
 #include <math.h>
 #include "../../base/xdefs.h"
 #include "../../base/xchecks.h"
+#include "../../shared/xr_numeric_core.h"
 
 // Internal base types
 typedef int64_t xr_Integer;
@@ -359,22 +360,18 @@ static inline XrValue xr_float(xr_Number n) {
     return XR_FROM_FLOAT(n);
 }
 
-/* Integer wrap helpers shared by VM and AOT runtime.
+/* Integer wrap helpers used by VM dispatch.
  * INT64_MIN / -1 and INT64_MIN % -1 are signed-overflow UB in C; both
- * crash IDIV on x86-64. Define them as wrap on every backend so the VM,
- * AOT and xi_opt fold agree:
+ * crash IDIV on x86-64. Delegate to shared numeric core so the VM, AOT and
+ * xi_opt fold agree:
  *   INT64_MIN / -1 = INT64_MIN  (unsigned negate is well-defined)
  *   INT64_MIN % -1 = 0
  * Caller must have rejected divisor == 0 before calling these. */
 static inline xr_Integer xr_int_div_wrap(xr_Integer a, xr_Integer b) {
-    if (b == -1)
-        return (xr_Integer) (-(uint64_t) a);
-    return a / b;
+    return xr_numeric_core_i64_div_wrap(a, b);
 }
 static inline xr_Integer xr_int_mod_wrap(xr_Integer a, xr_Integer b) {
-    if (b == -1)
-        return 0;
-    return a % b;
+    return xr_numeric_core_i64_mod_wrap(a, b);
 }
 
 /* Shift helpers: the language defines the shift count as taken mod 64
@@ -386,10 +383,10 @@ static inline xr_Integer xr_int_mod_wrap(xr_Integer a, xr_Integer b) {
  * in C; right shift is arithmetic (sign-extending — implementation-defined
  * in C but guaranteed on every compiler xray supports). */
 static inline xr_Integer xr_int_shl_wrap(xr_Integer a, xr_Integer b) {
-    return (xr_Integer) ((uint64_t) a << ((uint64_t) b & 63));
+    return xr_numeric_core_i64_shl_wrap(a, b);
 }
 static inline xr_Integer xr_int_shr_wrap(xr_Integer a, xr_Integer b) {
-    return a >> ((uint64_t) b & 63);
+    return xr_numeric_core_i64_shr_wrap(a, b);
 }
 
 /* ========== Type Query ========== */

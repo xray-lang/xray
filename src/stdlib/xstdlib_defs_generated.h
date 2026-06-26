@@ -11,6 +11,7 @@
 #define XSTDLIB_DEFS_GENERATED_H
 
 #include <stdbool.h>
+#include <math.h>
 #include <stdint.h>
 
 typedef struct XrStdlibDefEntry {
@@ -19,84 +20,660 @@ typedef struct XrStdlibDefEntry {
     const char *signature;
     const char *doc;
     const char *vm;
+    const char *vm_binding;
+    const char *vm_ifdef;
     const char *aot;
     const char *arg_spec;
     const char *ret;
     const char *link_object;
     const char *define;
     const char *layer;
+    const char *aot_kind;
     uint16_t argc;
     bool aot_direct;
 } XrStdlibDefEntry;
 
+typedef struct XrStdlibConstDefEntry {
+    const char *module;
+    const char *name;
+    const char *signature;
+    const char *doc;
+    const char *vm;
+    const char *vm_value;
+    const char *aot;
+    const char *aot_const_kind;
+    const char *link_object;
+    const char *define;
+    const char *layer;
+    int64_t value;
+    double f64_value;
+} XrStdlibConstDefEntry;
+
+typedef struct XrStdlibHandleFieldDefEntry {
+    const char *module;
+    const char *handle;
+    const char *name;
+    const char *type;
+    bool is_const;
+} XrStdlibHandleFieldDefEntry;
+
+typedef struct XrStdlibHandleDefEntry {
+    const char *module;
+    const char *name;
+    const char *doc;
+    const XrStdlibHandleFieldDefEntry *fields;
+    uint16_t field_count;
+} XrStdlibHandleDefEntry;
+
+typedef struct XrStdlibTypeMethodDefEntry {
+    const char *module;
+    const char *type_name;
+    const char *name;
+    const char *signature;
+    const char *doc;
+} XrStdlibTypeMethodDefEntry;
+
+typedef struct XrStdlibNativeClassDefEntry {
+    const char *module;
+    const char *name;
+    const char *super_slot;
+    const char *core_slot;
+    const char *native_body_expr;
+    const char *flags;
+    const char *builtin_kind;
+} XrStdlibNativeClassDefEntry;
+
+typedef struct XrStdlibClassDefEntry {
+    const char *module;
+    const char *name;
+    const char *super_slot;
+    const char *core_slot;
+    const char *flags;
+    const char *builtin_kind;
+} XrStdlibClassDefEntry;
+
+typedef struct XrStdlibClassMethodDefEntry {
+    const char *module;
+    const char *class_name;
+    const char *name;
+    const char *vm;
+    int16_t argc;
+    const char *flags;
+} XrStdlibClassMethodDefEntry;
+
+typedef struct XrStdlibClassFieldDefEntry {
+    const char *module;
+    const char *class_name;
+    const char *name;
+    const char *flags;
+} XrStdlibClassFieldDefEntry;
+
 static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
-    {"time", "now", "(): int", "Current time in milliseconds since epoch", "xr_time_now", "xrt_time_now", "", "value", "time.now", "", "system", 0, false},
-    {"time", "clock", "(): int", "CPU clock time in milliseconds", "xr_time_clock", "xrt_time_clock", "", "value", "time.clock", "", "system", 0, false},
-    {"time", "monotonic", "(): int", "Monotonic time in milliseconds", "xr_time_monotonic", "xrt_time_monotonic", "", "value", "time.monotonic", "", "system", 0, false},
-    {"time", "nanos", "(): int", "Monotonic time in nanoseconds", "xr_time_nanos", "xrt_time_nanos", "", "value", "time.nanos", "", "system", 0, false},
-    {"time", "micros", "(): int", "Monotonic time in microseconds", "xr_time_micros", "xrt_time_micros", "", "value", "time.micros", "", "system", 0, false},
-    {"time", "sleep", "(ms: int): ()", "Sleep for milliseconds", "xr_time_sleep", "", "v", "value", "time", "", "runtime", 1, false},
-    {"math", "random", "(): float", "Random float in [0, 1)", "math_random", "xrt_math_random", "", "value", "math.random", "", "system", 0, true},
-    {"math", "randomInt", "(min: int, max: int): int", "Random integer in [min, max]", "math_randomInt", "xrt_math_random_int", "vv", "value", "math.randomInt", "", "system", 2, true},
-    {"path", "join", "(...parts: string): string", "Join path segments", "path_join", "xrt_path_join", "*", "value", "", "", "core", UINT16_MAX, true},
-    {"path", "isAbsolute", "(path: string): bool", "Check if path is absolute", "path_isAbsolute", "xrt_path_is_absolute", "s", "value", "", "", "core", 1, true},
-    {"path", "dirname", "(path: string): string", "Get directory name", "path_dirname", "xrt_path_dirname", "s", "str_borrowed", "", "", "core", 1, true},
-    {"path", "basename", "(path: string): string", "Get base name", "path_basename", "xrt_path_basename", "s", "str_borrowed", "", "", "core", 1, true},
-    {"path", "extname", "(path: string): string", "Get file extension", "path_extname", "xrt_path_extname", "s", "str_borrowed", "", "", "core", 1, true},
-    {"path", "normalize", "(path: string): string", "Normalize path", "path_normalize", "xrt_path_normalize", "s", "value", "", "", "core", 1, true},
-    {"path", "relative", "(from: string, to: string): string", "Get relative path", "path_relative", "xrt_path_relative", "ss", "value", "", "", "core", 2, true},
-    {"path", "resolve", "(...parts: string): string", "Resolve to absolute path", "path_resolve", "xrt_path_resolve", "*", "value", "", "", "core", UINT16_MAX, true},
-    {"path", "parse", "(path: string): PathInfo", "Parse path into components", "path_parse", "xrt_path_parse", "s", "value", "", "", "core", 1, true},
-    {"path", "format", "(obj: PathInfo): string", "Format path from components", "path_format", "xrt_path_format", "v", "value", "", "", "core", 1, true},
-    {"base64", "encode", "(data: string): string", "Base64 encode", "base64_encode", "xrt_base64_encode", "s", "value", "", "", "alloc", 1, true},
-    {"base64", "decode", "(data: string): string?", "Base64 decode", "base64_decode", "xrt_base64_decode", "s", "value", "", "", "alloc", 1, true},
-    {"base64", "encodeUrl", "(data: string): string", "URL-safe base64 encode", "base64_encodeUrl", "xrt_base64_encode_url", "s", "value", "", "", "alloc", 1, true},
-    {"base64", "decodeUrl", "(data: string): string?", "URL-safe base64 decode", "base64_decodeUrl", "xrt_base64_decode_url", "s", "value", "", "", "alloc", 1, true},
-    {"base64", "encodeBytes", "(data: Array<uint8>): string", "Base64 encode bytes", "base64_encodeBytes", "xrt_base64_encode_bytes", "v", "value", "", "", "alloc", 1, true},
-    {"base64", "decodeToBytes", "(data: string): Array<uint8>?", "Base64 decode to bytes", "base64_decodeToBytes", "xrt_base64_decode_to_bytes", "s", "value", "", "", "alloc", 1, true},
-    {"base64", "isValid", "(data: string): bool", "Check if valid base64", "base64_isValid", "xrt_base64_is_valid", "s", "value", "", "", "core", 1, true},
-    {"encoding", "hexEncode", "(data: string): string", "Hex encode string to hex", "encoding_hex_encode", "xrt_encoding_hex_encode", "s", "value", "", "", "alloc", 1, true},
-    {"encoding", "hexDecode", "(hex: string): Array<uint8>?", "Hex decode to bytes", "encoding_hex_decode", "xrt_encoding_hex_decode", "s", "value", "", "", "alloc", 1, true},
-    {"encoding", "hexDecodeString", "(hex: string): string?", "Hex decode to string", "encoding_hex_decode_string", "xrt_encoding_hex_decode_string", "s", "value", "", "", "alloc", 1, true},
-    {"encoding", "hexValid", "(hex: string): bool", "Check if valid hex string", "encoding_hex_valid", "xrt_encoding_hex_valid", "s", "value", "", "", "core", 1, true},
-    {"encoding", "utf8Valid", "(data: string): bool", "Check if valid UTF-8", "encoding_utf8_valid", "xrt_encoding_utf8_valid", "s", "value", "", "", "core", 1, true},
-    {"encoding", "utf8Count", "(data: string): int", "Count UTF-8 characters", "encoding_utf8_count", "xrt_encoding_utf8_count", "s", "value", "", "", "core", 1, true},
-    {"encoding", "utf8ByteLength", "(data: string): int", "Get UTF-8 byte length", "encoding_utf8_byte_length", "xrt_encoding_utf8_byte_length", "s", "value", "", "", "core", 1, true},
-    {"encoding", "utf16Encode", "(data: string, endian?: int): Array<uint8>", "UTF-16 encode to bytes", "encoding_utf16_encode", "xrt_encoding_utf16_encode", "s", "value", "", "", "alloc", 1, true},
-    {"encoding", "utf16Encode", "(data: string, endian?: int): Array<uint8>", "UTF-16 encode to bytes", "encoding_utf16_encode", "xrt_encoding_utf16_encode_endian", "sv", "value", "", "", "alloc", 2, true},
-    {"encoding", "utf16Decode", "(data: string | Array<uint8>, endian?: int, stripBom?: bool): string?", "UTF-16 decode to string (auto-detects BOM)", "encoding_utf16_decode", "xrt_encoding_utf16_decode", "v", "value", "", "", "alloc", 1, true},
-    {"encoding", "utf16Decode", "(data: string | Array<uint8>, endian?: int, stripBom?: bool): string?", "UTF-16 decode to string (auto-detects BOM)", "encoding_utf16_decode", "xrt_encoding_utf16_decode_endian", "vv", "value", "", "", "alloc", 2, true},
-    {"encoding", "utf16Decode", "(data: string | Array<uint8>, endian?: int, stripBom?: bool): string?", "UTF-16 decode to string (auto-detects BOM)", "encoding_utf16_decode", "xrt_encoding_utf16_decode_endian_strip", "vvv", "value", "", "", "alloc", 3, true},
-    {"crypto", "md5", "(data: string): string", "Compute MD5 hash", "crypto_md5", "xrt_crypto_md5", "s", "value", "crypto.md5", "", "core", 1, true},
-    {"crypto", "sha1", "(data: string): string", "Compute SHA-1 hash", "crypto_sha1", "xrt_crypto_sha1", "s", "value", "crypto.sha1", "", "core", 1, true},
-    {"crypto", "sha256", "(data: string): string", "Compute SHA-256 hash", "crypto_sha256", "xrt_crypto_sha256", "s", "value", "crypto.sha256", "", "core", 1, true},
-    {"crypto", "sha512", "(data: string): string", "Compute SHA-512 hash", "crypto_sha512", "xrt_crypto_sha512", "s", "value", "crypto.sha512", "", "core", 1, true},
-    {"crypto", "hmac", "(algo: string, key: string, data: string): string?", "Compute HMAC", "crypto_hmac", "xrt_crypto_hmac", "sss", "value", "crypto.hmac", "", "core", 3, true},
-    {"crypto", "randomBytes", "(n: int): string", "Generate random bytes", "crypto_random_bytes", "xrt_crypto_random_bytes", "v", "value", "crypto.randomBytes", "", "system", 1, true},
-    {"crypto", "uuid", "(): string", "Generate UUID v4", "crypto_uuid", "xrt_crypto_uuid", "", "value", "crypto.uuid", "", "system", 0, true},
-    {"crypto", "encrypt", "(key: string, plaintext: string): string", "AES-256-CBC encrypt", "crypto_encrypt", "xrt_crypto_encrypt", "ss", "value", "crypto.encrypt", "", "core", 2, true},
-    {"crypto", "decrypt", "(key: string, ciphertext: string): string?", "AES-256-CBC decrypt", "crypto_decrypt", "xrt_crypto_decrypt", "ss", "value", "crypto.decrypt", "", "core", 2, true},
-    {"crypto", "timingSafeEqual", "(a: string, b: string): bool", "Constant-time string comparison", "crypto_timing_safe_equal", "xrt_crypto_timing_safe_equal", "ss", "value", "", "", "core", 2, true},
-    {"regex", "compile", "(pattern: string, flags?: string): Regex", "Compile regex pattern", "regex_compile", "xrt_regex_compile_default", "s", "value", "regex.compile", "XRT_ENABLE_REGEX", "alloc", 1, true},
-    {"regex", "compile", "(pattern: string, flags?: string): Regex", "Compile regex pattern", "regex_compile", "xrt_regex_compile_with_flags", "ss", "value", "regex.compile", "XRT_ENABLE_REGEX", "alloc", 2, true},
-    {"regex", "test", "(pattern: Regex, s: string): bool", "Test if regex matches", "regex_test", "xrt_regex_test", "vs", "value", "regex.test", "XRT_ENABLE_REGEX", "alloc", 2, true},
-    {"regex", "count", "(pattern: Regex, s: string): int", "Count matches", "regex_count", "xrt_regex_count", "vs", "value", "regex.count", "XRT_ENABLE_REGEX", "alloc", 2, true},
-    {"regex", "findText", "(pattern: Regex, s: string): string?", "Find first matching text", "regex_find_text", "xrt_regex_find_text", "vs", "value", "regex.findText", "XRT_ENABLE_REGEX", "alloc", 2, true},
-    {"regex", "findGroup", "(pattern: Regex, s: string, index: int): string?", "Find capture group", "regex_find_group", "xrt_regex_find_group", "vsv", "value", "regex.findGroup", "XRT_ENABLE_REGEX", "alloc", 3, true},
-    {"regex", "find", "(pattern: Regex, s: string, offset?: int): RegexMatch?", "Find first match", "regex_find", "xrt_regex_find", "vs", "value", "regex.find", "XRT_ENABLE_REGEX", "alloc", 2, true},
-    {"regex", "find", "(pattern: Regex, s: string, offset?: int): RegexMatch?", "Find first match", "regex_find", "xrt_regex_find_offset", "vsv", "value", "regex.find", "XRT_ENABLE_REGEX", "alloc", 3, true},
-    {"regex", "fullFind", "(pattern: Regex, s: string): RegexMatch?", "Find full match", "regex_full_match", "xrt_regex_full_find", "vs", "value", "regex.fullFind", "XRT_ENABLE_REGEX", "alloc", 2, true},
-    {"regex", "findAll", "(pattern: Regex, s: string, limit?: int): Array<RegexMatch>", "Find all matches", "regex_find_all", "xrt_regex_find_all", "vs", "value", "regex.findAll", "XRT_ENABLE_REGEX", "alloc", 2, true},
-    {"regex", "findAll", "(pattern: Regex, s: string, limit?: int): Array<RegexMatch>", "Find all matches", "regex_find_all", "xrt_regex_find_all_limit", "vsv", "value", "regex.findAll", "XRT_ENABLE_REGEX", "alloc", 3, true},
-    {"regex", "replace", "(pattern: Regex, s: string, repl: string): string", "Replace first match", "regex_replace", "xrt_regex_replace", "vss", "value", "regex.replace", "XRT_ENABLE_REGEX", "alloc", 3, true},
-    {"regex", "replaceAll", "(pattern: Regex, s: string, repl: string): string", "Replace all matches", "regex_replace_all", "xrt_regex_replace_all", "vss", "value", "regex.replaceAll", "XRT_ENABLE_REGEX", "alloc", 3, true},
-    {"regex", "split", "(pattern: Regex, s: string, limit?: int): Array<string>", "Split string by regex", "regex_split", "xrt_regex_split", "vs", "value", "regex.split", "XRT_ENABLE_REGEX", "alloc", 2, true},
-    {"regex", "split", "(pattern: Regex, s: string, limit?: int): Array<string>", "Split string by regex", "regex_split", "xrt_regex_split_limit", "vsv", "value", "regex.split", "XRT_ENABLE_REGEX", "alloc", 3, true},
-    {"regex", "escape", "(s: string): string", "Escape regex special chars", "regex_escape", "xrt_regex_escape", "s", "value", "", "", "core", 1, true},
-    {"regex", "isValid", "(pattern: string): bool", "Check if pattern is valid", "regex_is_valid", "xrt_regex_is_valid", "s", "value", "regex.isValid", "", "core", 1, true},
-    {"datetime", "offset", "(): int", "Get UTC offset in minutes", "dt_offset", "xrt_datetime_offset", "", "value", "", "", "system", 0, true},
+    {"time", "now", "(): int", "Current time in milliseconds since epoch", "xr_time_now", "normal", "", "xrt_time_now", "", "value", "time.now", "", "system", "", 0, false},
+    {"time", "clock", "(): int", "CPU clock time in milliseconds", "xr_time_clock", "normal", "", "xrt_time_clock", "", "value", "time.clock", "", "system", "", 0, false},
+    {"time", "monotonic", "(): int", "Monotonic time in milliseconds", "xr_time_monotonic", "normal", "", "xrt_time_monotonic", "", "value", "time.monotonic", "", "system", "", 0, false},
+    {"time", "nanos", "(): int", "Monotonic time in nanoseconds", "xr_time_nanos", "normal", "", "xrt_time_nanos", "", "value", "time.nanos", "", "system", "", 0, false},
+    {"time", "micros", "(): int", "Monotonic time in microseconds", "xr_time_micros", "normal", "", "xrt_time_micros", "", "value", "time.micros", "", "system", "", 0, false},
+    {"time", "sleep", "(ms: int): ()", "Sleep for milliseconds", "xr_time_sleep", "yieldable", "", "", "v", "value", "", "", "runtime", "", 1, false},
+    {"math", "abs", "(x: float): float", "Absolute value (preserves int)", "math_abs", "normal", "", "builtin", "", "value", "", "", "core", "builtin", 1, true},
+    {"math", "floor", "(x: float): int", "Floor to integer", "math_floor", "normal", "", "builtin", "", "value", "", "", "core", "builtin", 1, true},
+    {"math", "ceil", "(x: float): int", "Ceiling to integer", "math_ceil", "normal", "", "builtin", "", "value", "", "", "core", "builtin", 1, true},
+    {"math", "round", "(x: float): int", "Round to nearest integer", "math_round", "normal", "", "builtin", "", "value", "", "", "core", "builtin", 1, true},
+    {"math", "sqrt", "(x: float): float", "Square root", "math_sqrt", "normal", "", "builtin", "", "value", "", "", "core", "builtin", 1, true},
+    {"math", "pow", "(base: float, exp: float): float", "Power", "math_pow", "normal", "", "builtin", "", "value", "", "", "core", "builtin", 2, true},
+    {"math", "sin", "(x: float): float", "Sine", "math_sin", "normal", "", "builtin", "", "value", "", "", "core", "builtin", 1, true},
+    {"math", "cos", "(x: float): float", "Cosine", "math_cos", "normal", "", "builtin", "", "value", "", "", "core", "builtin", 1, true},
+    {"math", "tan", "(x: float): float", "Tangent", "math_tan", "normal", "", "builtin", "", "value", "", "", "core", "builtin", 1, true},
+    {"math", "asin", "(x: float): float", "Arc sine", "math_asin", "normal", "", "builtin", "", "value", "", "", "core", "builtin", 1, true},
+    {"math", "acos", "(x: float): float", "Arc cosine", "math_acos", "normal", "", "builtin", "", "value", "", "", "core", "builtin", 1, true},
+    {"math", "atan", "(x: float): float", "Arc tangent", "math_atan", "normal", "", "builtin", "", "value", "", "", "core", "builtin", 1, true},
+    {"math", "atan2", "(y: float, x: float): float", "Arc tangent of y/x", "math_atan2", "normal", "", "builtin", "", "value", "", "", "core", "builtin", 2, true},
+    {"math", "log", "(x: float): float", "Natural logarithm", "math_log", "normal", "", "builtin", "", "value", "", "", "core", "builtin", 1, true},
+    {"math", "log10", "(x: float): float", "Base-10 logarithm", "math_log10", "normal", "", "builtin", "", "value", "", "", "core", "builtin", 1, true},
+    {"math", "log2", "(x: float): float", "Base-2 logarithm", "math_log2", "normal", "", "builtin", "", "value", "", "", "core", "builtin", 1, true},
+    {"math", "exp", "(x: float): float", "Exponential e^x", "math_exp", "normal", "", "builtin", "", "value", "", "", "core", "builtin", 1, true},
+    {"math", "min", "(...args: float): float", "Minimum (preserves int)", "math_min", "normal", "", "builtin", "", "value", "", "", "core", "builtin", UINT16_MAX, true},
+    {"math", "max", "(...args: float): float", "Maximum (preserves int)", "math_max", "normal", "", "builtin", "", "value", "", "", "core", "builtin", UINT16_MAX, true},
+    {"math", "clamp", "(x: float, min: float, max: float): float", "Clamp (preserves int)", "math_clamp", "normal", "", "builtin", "", "value", "", "", "core", "builtin", 3, true},
+    {"math", "random", "(): float", "Random float in [0, 1)", "math_random", "normal", "", "xrt_math_random", "", "value", "math.random", "", "system", "method", 0, true},
+    {"math", "randomInt", "(min: int, max: int): int", "Random integer in [min, max]", "math_randomInt", "normal", "", "xrt_math_random_int", "vv", "value", "math.randomInt", "", "system", "method", 2, true},
+    {"math", "sign", "(x: float): int", "Sign of value (-1, 0, 1)", "math_sign", "normal", "", "builtin", "", "value", "", "", "core", "builtin", 1, true},
+    {"math", "sinh", "(x: float): float", "Hyperbolic sine", "math_sinh", "normal", "", "builtin", "", "value", "", "", "core", "builtin", 1, true},
+    {"math", "cosh", "(x: float): float", "Hyperbolic cosine", "math_cosh", "normal", "", "builtin", "", "value", "", "", "core", "builtin", 1, true},
+    {"math", "tanh", "(x: float): float", "Hyperbolic tangent", "math_tanh", "normal", "", "builtin", "", "value", "", "", "core", "builtin", 1, true},
+    {"math", "hypot", "(x: float, y: float): float", "Hypotenuse sqrt(x*x+y*y)", "math_hypot", "normal", "", "builtin", "", "value", "", "", "core", "builtin", 2, true},
+    {"math", "cbrt", "(x: float): float", "Cube root", "math_cbrt", "normal", "", "builtin", "", "value", "", "", "core", "builtin", 1, true},
+    {"math", "trunc", "(x: float): int", "Truncate toward zero", "math_trunc", "normal", "", "builtin", "", "value", "", "", "core", "builtin", 1, true},
+    {"math", "fmod", "(x: float, y: float): float", "Floating-point remainder", "math_fmod", "normal", "", "builtin", "", "value", "", "", "core", "builtin", 2, true},
+    {"math", "log1p", "(x: float): float", "log(1+x) accurate for small x", "math_log1p", "normal", "", "builtin", "", "value", "", "", "core", "builtin", 1, true},
+    {"math", "expm1", "(x: float): float", "exp(x)-1 accurate for small x", "math_expm1", "normal", "", "builtin", "", "value", "", "", "core", "builtin", 1, true},
+    {"math", "lerp", "(a: float, b: float, t: float): float", "Linear interpolation", "math_lerp", "normal", "", "builtin", "", "value", "", "", "core", "builtin", 3, true},
+    {"math", "degToRad", "(deg: float): float", "Degrees to radians", "math_degToRad", "normal", "", "builtin", "", "value", "", "", "core", "builtin", 1, true},
+    {"math", "radToDeg", "(rad: float): float", "Radians to degrees", "math_radToDeg", "normal", "", "builtin", "", "value", "", "", "core", "builtin", 1, true},
+    {"math", "isNaN", "(x: float): bool", "Check if NaN", "math_isNaN", "normal", "", "builtin", "", "value", "", "", "core", "builtin", 1, true},
+    {"math", "isFinite", "(x: float): bool", "Check if finite", "math_isFinite", "normal", "", "builtin", "", "value", "", "", "core", "builtin", 1, true},
+    {"path", "join", "(...parts: string): string", "Join path segments", "path_join", "normal", "", "xrt_path_join", "*", "value", "", "", "core", "method", UINT16_MAX, true},
+    {"path", "isAbsolute", "(path: string): bool", "Check if path is absolute", "path_isAbsolute", "normal", "", "xrt_path_is_absolute", "s", "value", "", "", "core", "method", 1, true},
+    {"path", "dirname", "(path: string): string", "Get directory name", "path_dirname", "normal", "", "xrt_path_dirname", "s", "str_borrowed", "", "", "core", "method", 1, true},
+    {"path", "basename", "(path: string): string", "Get base name", "path_basename", "normal", "", "xrt_path_basename", "s", "str_borrowed", "", "", "core", "method", 1, true},
+    {"path", "extname", "(path: string): string", "Get file extension", "path_extname", "normal", "", "xrt_path_extname", "s", "str_borrowed", "", "", "core", "method", 1, true},
+    {"path", "normalize", "(path: string): string", "Normalize path", "path_normalize", "normal", "", "xrt_path_normalize", "s", "value", "", "", "core", "method", 1, true},
+    {"path", "relative", "(from: string, to: string): string", "Get relative path", "path_relative", "normal", "", "xrt_path_relative", "ss", "value", "", "", "core", "method", 2, true},
+    {"path", "resolve", "(...parts: string): string", "Resolve to absolute path", "path_resolve", "normal", "", "xrt_path_resolve", "*", "value", "", "", "core", "method", UINT16_MAX, true},
+    {"path", "parse", "(path: string): PathInfo", "Parse path into components", "path_parse", "normal", "", "xrt_path_parse", "s", "value", "", "", "core", "method", 1, true},
+    {"path", "format", "(obj: PathInfo): string", "Format path from components", "path_format", "normal", "", "xrt_path_format", "v", "value", "", "", "core", "method", 1, true},
+    {"base64", "encode", "(data: string): string", "Base64 encode", "base64_encode", "normal", "", "xrt_base64_encode", "s", "value", "", "", "alloc", "method", 1, true},
+    {"base64", "decode", "(data: string): string?", "Base64 decode", "base64_decode", "normal", "", "xrt_base64_decode", "s", "value", "", "", "alloc", "method", 1, true},
+    {"base64", "encodeUrl", "(data: string): string", "URL-safe base64 encode", "base64_encodeUrl", "normal", "", "xrt_base64_encode_url", "s", "value", "", "", "alloc", "method", 1, true},
+    {"base64", "decodeUrl", "(data: string): string?", "URL-safe base64 decode", "base64_decodeUrl", "normal", "", "xrt_base64_decode_url", "s", "value", "", "", "alloc", "method", 1, true},
+    {"base64", "encodeBytes", "(data: Array<uint8>): string", "Base64 encode bytes", "base64_encodeBytes", "normal", "", "xrt_base64_encode_bytes", "v", "value", "", "", "alloc", "method", 1, true},
+    {"base64", "decodeToBytes", "(data: string): Array<uint8>?", "Base64 decode to bytes", "base64_decodeToBytes", "normal", "", "xrt_base64_decode_to_bytes", "s", "value", "", "", "alloc", "method", 1, true},
+    {"base64", "isValid", "(data: string): bool", "Check if valid base64", "base64_isValid", "normal", "", "xrt_base64_is_valid", "s", "value", "", "", "core", "method", 1, true},
+    {"url", "encode", "(s: string): string", "RFC 3986 percent-encode", "url_encode_fn", "normal", "", "xrt_url_encode", "s", "value", "", "", "core", "method", 1, true},
+    {"url", "decode", "(s: string): string", "RFC 3986 percent-decode", "url_decode_fn", "normal", "", "xrt_url_decode", "s", "value", "", "", "core", "method", 1, true},
+    {"url", "encodeForm", "(s: string): string", "Form URL encode (space as +)", "url_encode_form_fn", "normal", "", "xrt_url_encode_form", "s", "value", "", "", "core", "method", 1, true},
+    {"url", "decodeForm", "(s: string): string", "Form URL decode (+ as space)", "url_decode_form_fn", "normal", "", "xrt_url_decode_form", "s", "value", "", "", "core", "method", 1, true},
+    {"url", "parse", "(url: string): URL", "Parse URL into a URL handle (protocol, hostname, port, pathname, search, hash, username, password, host, origin, href)", "url_parse_fn", "normal", "", "xrt_url_parse", "s", "value", "", "", "alloc", "method", 1, true},
+    {"url", "format", "(obj: URL): string", "Build URL string from URL components", "url_format_fn", "normal", "", "xrt_url_format", "v", "value", "", "", "alloc", "method", 1, true},
+    {"url", "parseQuery", "(qs: string): Json", "Parse query string to Json", "url_parse_query_fn", "normal", "", "xrt_url_parse_query", "s", "value", "", "", "alloc", "method", 1, true},
+    {"url", "buildQuery", "(obj: Json): string", "Build query string from Json", "url_build_query_fn", "normal", "", "xrt_url_build_query", "v", "value", "", "", "alloc", "method", 1, true},
+    {"url", "resolve", "(base: string, relative: string): string", "Resolve relative URL", "url_resolve_fn", "normal", "", "xrt_url_resolve", "ss", "value", "", "", "core", "method", 2, true},
+    {"url", "join", "(...parts: string): string", "Join URL path segments", "url_join_fn", "normal", "", "xrt_url_join", "*", "value", "", "", "core", "method", UINT16_MAX, true},
+    {"compress", "crc32", "(data: string): int", "Compute CRC-32 checksum", "compress_crc32", "normal", "", "xrt_compress_crc32", "s", "value", "", "", "core", "method", 1, true},
+    {"compress", "adler32", "(data: string): int", "Compute Adler-32 checksum", "compress_adler32", "normal", "", "xrt_compress_adler32", "s", "value", "", "", "core", "method", 1, true},
+    {"compress", "gzip", "(data: string, level?: int): string?", "Gzip compress", "compress_gzip", "normal", "", "xrt_compress_gzip_default", "s", "value", "compress.gzip", "", "alloc", "method", 1, true},
+    {"compress", "gzip", "(data: string, level?: int): string?", "Gzip compress", "compress_gzip", "normal", "", "xrt_compress_gzip", "sv", "value", "compress.gzip", "", "alloc", "method", 2, true},
+    {"compress", "gunzip", "(data: string): string?", "Gzip decompress", "compress_gunzip", "normal", "", "xrt_compress_gunzip", "s", "value", "compress.gunzip", "", "alloc", "method", 1, true},
+    {"compress", "deflate", "(data: string, level?: int): string?", "Deflate compress", "compress_deflate", "normal", "", "xrt_compress_deflate_default", "s", "value", "compress.deflate", "", "alloc", "method", 1, true},
+    {"compress", "deflate", "(data: string, level?: int): string?", "Deflate compress", "compress_deflate", "normal", "", "xrt_compress_deflate", "sv", "value", "compress.deflate", "", "alloc", "method", 2, true},
+    {"compress", "inflate", "(data: string): string?", "Inflate decompress", "compress_inflate", "normal", "", "xrt_compress_inflate", "s", "value", "compress.inflate", "", "alloc", "method", 1, true},
+    {"compress", "zlibCompress", "(data: string, level?: int): string?", "Zlib compress", "compress_zlib_compress", "normal", "", "xrt_compress_zlib_compress_default", "s", "value", "compress.zlibCompress", "", "alloc", "method", 1, true},
+    {"compress", "zlibCompress", "(data: string, level?: int): string?", "Zlib compress", "compress_zlib_compress", "normal", "", "xrt_compress_zlib_compress", "sv", "value", "compress.zlibCompress", "", "alloc", "method", 2, true},
+    {"compress", "zlibDecompress", "(data: string): string?", "Zlib decompress", "compress_zlib_decompress", "normal", "", "xrt_compress_zlib_decompress", "s", "value", "compress.zlibDecompress", "", "alloc", "method", 1, true},
+    {"compress", "isGzip", "(data: string): bool", "Check if gzip data", "compress_is_gzip", "normal", "", "xrt_compress_is_gzip", "s", "value", "compress.isGzip", "", "alloc", "method", 1, true},
+    {"compress", "isZlib", "(data: string): bool", "Check if zlib data", "compress_is_zlib", "normal", "", "xrt_compress_is_zlib", "s", "value", "compress.isZlib", "", "alloc", "method", 1, true},
+    {"encoding", "hexEncode", "(data: string): string", "Hex encode string to hex", "encoding_hex_encode", "normal", "", "xrt_encoding_hex_encode", "s", "value", "", "", "alloc", "method", 1, true},
+    {"encoding", "hexDecode", "(hex: string): Array<uint8>?", "Hex decode to bytes", "encoding_hex_decode", "normal", "", "xrt_encoding_hex_decode", "s", "value", "", "", "alloc", "method", 1, true},
+    {"encoding", "hexDecodeString", "(hex: string): string?", "Hex decode to string", "encoding_hex_decode_string", "normal", "", "xrt_encoding_hex_decode_string", "s", "value", "", "", "alloc", "method", 1, true},
+    {"encoding", "hexValid", "(hex: string): bool", "Check if valid hex string", "encoding_hex_valid", "normal", "", "xrt_encoding_hex_valid", "s", "value", "", "", "core", "method", 1, true},
+    {"encoding", "utf8Valid", "(data: string): bool", "Check if valid UTF-8", "encoding_utf8_valid", "normal", "", "xrt_encoding_utf8_valid", "s", "value", "", "", "core", "method", 1, true},
+    {"encoding", "utf8Count", "(data: string): int", "Count UTF-8 characters", "encoding_utf8_count", "normal", "", "xrt_encoding_utf8_count", "s", "value", "", "", "core", "method", 1, true},
+    {"encoding", "utf8ByteLength", "(data: string): int", "Get UTF-8 byte length", "encoding_utf8_byte_length", "normal", "", "xrt_encoding_utf8_byte_length", "s", "value", "", "", "core", "method", 1, true},
+    {"encoding", "utf16Encode", "(data: string, endian?: int): Array<uint8>", "UTF-16 encode to bytes", "encoding_utf16_encode", "normal", "", "xrt_encoding_utf16_encode", "s", "value", "", "", "alloc", "method", 1, true},
+    {"encoding", "utf16Encode", "(data: string, endian?: int): Array<uint8>", "UTF-16 encode to bytes", "encoding_utf16_encode", "normal", "", "xrt_encoding_utf16_encode_endian", "sv", "value", "", "", "alloc", "method", 2, true},
+    {"encoding", "utf16Decode", "(data: string | Array<uint8>, endian?: int, stripBom?: bool): string?", "UTF-16 decode to string (auto-detects BOM)", "encoding_utf16_decode", "normal", "", "xrt_encoding_utf16_decode", "v", "value", "", "", "alloc", "method", 1, true},
+    {"encoding", "utf16Decode", "(data: string | Array<uint8>, endian?: int, stripBom?: bool): string?", "UTF-16 decode to string (auto-detects BOM)", "encoding_utf16_decode", "normal", "", "xrt_encoding_utf16_decode_endian", "vv", "value", "", "", "alloc", "method", 2, true},
+    {"encoding", "utf16Decode", "(data: string | Array<uint8>, endian?: int, stripBom?: bool): string?", "UTF-16 decode to string (auto-detects BOM)", "encoding_utf16_decode", "normal", "", "xrt_encoding_utf16_decode_endian_strip", "vvv", "value", "", "", "alloc", "method", 3, true},
+    {"crypto", "md5", "(data: string): string", "Compute MD5 hash", "crypto_md5", "normal", "", "xrt_crypto_md5", "s", "value", "crypto.md5", "", "core", "method", 1, true},
+    {"crypto", "sha1", "(data: string): string", "Compute SHA-1 hash", "crypto_sha1", "normal", "", "xrt_crypto_sha1", "s", "value", "crypto.sha1", "", "core", "method", 1, true},
+    {"crypto", "sha256", "(data: string): string", "Compute SHA-256 hash", "crypto_sha256", "normal", "", "xrt_crypto_sha256", "s", "value", "crypto.sha256", "", "core", "method", 1, true},
+    {"crypto", "sha512", "(data: string): string", "Compute SHA-512 hash", "crypto_sha512", "normal", "", "xrt_crypto_sha512", "s", "value", "crypto.sha512", "", "core", "method", 1, true},
+    {"crypto", "hmac", "(algo: string, key: string, data: string): string?", "Compute HMAC", "crypto_hmac", "normal", "", "xrt_crypto_hmac", "sss", "value", "crypto.hmac", "", "core", "method", 3, true},
+    {"crypto", "randomBytes", "(n: int): string", "Generate random bytes", "crypto_random_bytes", "normal", "", "xrt_crypto_random_bytes", "v", "value", "crypto.randomBytes", "", "system", "method", 1, true},
+    {"crypto", "uuid", "(): string", "Generate UUID v4", "crypto_uuid", "normal", "", "xrt_crypto_uuid", "", "value", "crypto.uuid", "", "system", "method", 0, true},
+    {"crypto", "encrypt", "(key: string, plaintext: string): string", "AES-256-CBC encrypt", "crypto_encrypt", "normal", "", "xrt_crypto_encrypt", "ss", "value", "crypto.encrypt", "", "core", "method", 2, true},
+    {"crypto", "decrypt", "(key: string, ciphertext: string): string?", "AES-256-CBC decrypt", "crypto_decrypt", "normal", "", "xrt_crypto_decrypt", "ss", "value", "crypto.decrypt", "", "core", "method", 2, true},
+    {"crypto", "timingSafeEqual", "(a: string, b: string): bool", "Constant-time string comparison", "crypto_timing_safe_equal", "normal", "", "xrt_crypto_timing_safe_equal", "ss", "value", "", "", "core", "method", 2, true},
+    {"regex", "compile", "(pattern: string, flags?: string): Regex", "Compile regex pattern", "regex_compile", "normal", "", "xrt_regex_compile_default", "s", "value", "regex.compile", "XRT_ENABLE_REGEX", "alloc", "method", 1, true},
+    {"regex", "compile", "(pattern: string, flags?: string): Regex", "Compile regex pattern", "regex_compile", "normal", "", "xrt_regex_compile_with_flags", "ss", "value", "regex.compile", "XRT_ENABLE_REGEX", "alloc", "method", 2, true},
+    {"regex", "test", "(pattern: Regex, s: string): bool", "Test if regex matches", "regex_test", "normal", "", "xrt_regex_test", "vs", "value", "regex.test", "XRT_ENABLE_REGEX", "alloc", "method", 2, true},
+    {"regex", "count", "(pattern: Regex, s: string): int", "Count matches", "regex_count", "normal", "", "xrt_regex_count", "vs", "value", "regex.count", "XRT_ENABLE_REGEX", "alloc", "method", 2, true},
+    {"regex", "findText", "(pattern: Regex, s: string): string?", "Find first matching text", "regex_find_text", "normal", "", "xrt_regex_find_text", "vs", "value", "regex.findText", "XRT_ENABLE_REGEX", "alloc", "method", 2, true},
+    {"regex", "findGroup", "(pattern: Regex, s: string, index: int): string?", "Find capture group", "regex_find_group", "normal", "", "xrt_regex_find_group", "vsv", "value", "regex.findGroup", "XRT_ENABLE_REGEX", "alloc", "method", 3, true},
+    {"regex", "find", "(pattern: Regex, s: string, offset?: int): RegexMatch?", "Find first match", "regex_find", "normal", "", "xrt_regex_find", "vs", "value", "regex.find", "XRT_ENABLE_REGEX", "alloc", "method", 2, true},
+    {"regex", "find", "(pattern: Regex, s: string, offset?: int): RegexMatch?", "Find first match", "regex_find", "normal", "", "xrt_regex_find_offset", "vsv", "value", "regex.find", "XRT_ENABLE_REGEX", "alloc", "method", 3, true},
+    {"regex", "fullFind", "(pattern: Regex, s: string): RegexMatch?", "Find full match", "regex_full_match", "normal", "", "xrt_regex_full_find", "vs", "value", "regex.fullFind", "XRT_ENABLE_REGEX", "alloc", "method", 2, true},
+    {"regex", "findAll", "(pattern: Regex, s: string, limit?: int): Array<RegexMatch>", "Find all matches", "regex_find_all", "normal", "", "xrt_regex_find_all", "vs", "value", "regex.findAll", "XRT_ENABLE_REGEX", "alloc", "method", 2, true},
+    {"regex", "findAll", "(pattern: Regex, s: string, limit?: int): Array<RegexMatch>", "Find all matches", "regex_find_all", "normal", "", "xrt_regex_find_all_limit", "vsv", "value", "regex.findAll", "XRT_ENABLE_REGEX", "alloc", "method", 3, true},
+    {"regex", "replace", "(pattern: Regex, s: string, repl: string): string", "Replace first match", "regex_replace", "normal", "", "xrt_regex_replace", "vss", "value", "regex.replace", "XRT_ENABLE_REGEX", "alloc", "method", 3, true},
+    {"regex", "replaceAll", "(pattern: Regex, s: string, repl: string): string", "Replace all matches", "regex_replace_all", "normal", "", "xrt_regex_replace_all", "vss", "value", "regex.replaceAll", "XRT_ENABLE_REGEX", "alloc", "method", 3, true},
+    {"regex", "split", "(pattern: Regex, s: string, limit?: int): Array<string>", "Split string by regex", "regex_split", "normal", "", "xrt_regex_split", "vs", "value", "regex.split", "XRT_ENABLE_REGEX", "alloc", "method", 2, true},
+    {"regex", "split", "(pattern: Regex, s: string, limit?: int): Array<string>", "Split string by regex", "regex_split", "normal", "", "xrt_regex_split_limit", "vsv", "value", "regex.split", "XRT_ENABLE_REGEX", "alloc", "method", 3, true},
+    {"regex", "escape", "(s: string): string", "Escape regex special chars", "regex_escape", "normal", "", "xrt_regex_escape", "s", "value", "", "", "core", "method", 1, true},
+    {"regex", "isValid", "(pattern: string): bool", "Check if pattern is valid", "regex_is_valid", "normal", "", "xrt_regex_is_valid", "s", "value", "regex.isValid", "", "core", "method", 1, true},
+    {"os", "getenv", "(name: string): string?", "Get environment variable", "os_getenv", "normal", "", "xrt_os_getenv", "s", "value", "", "", "system", "method", 1, true},
+    {"os", "setenv", "(name: string, value: string): bool", "Set environment variable", "os_setenv", "normal", "", "xrt_os_setenv", "ss", "value", "", "", "system", "method", 2, true},
+    {"os", "unsetenv", "(name: string): bool", "Unset environment variable", "os_unsetenv", "normal", "", "xrt_os_unsetenv", "s", "value", "", "", "system", "method", 1, true},
+    {"os", "environ", "(): Map<string, string>", "Get all environment variables", "os_environ", "normal", "", "xrt_os_environ", "", "value", "", "", "system", "method", 0, true},
+    {"os", "exit", "(code?: int): ()", "Exit process", "os_exit", "normal", "", "", "v", "value", "", "", "system", "", 1, false},
+    {"os", "getpid", "(): int", "Get process ID", "os_getpid", "normal", "", "xrt_os_getpid", "", "value", "", "", "system", "method", 0, true},
+    {"os", "getcwd", "(): string", "Get current working directory", "os_getcwd", "normal", "", "xrt_os_getcwd", "", "value", "", "", "system", "method", 0, true},
+    {"os", "chdir", "(path: string): bool", "Change working directory", "os_chdir", "normal", "", "xrt_os_chdir", "s", "value", "", "", "system", "method", 1, true},
+    {"os", "hostname", "(): string", "Get hostname", "os_hostname", "normal", "", "xrt_os_hostname", "", "value", "", "", "system", "method", 0, true},
+    {"os", "tmpdir", "(): string", "Get temporary directory path", "os_tmpdir", "normal", "", "xrt_os_tmpdir", "", "value", "", "", "system", "method", 0, true},
+    {"os", "username", "(): string?", "Get current user name", "os_username", "normal", "", "xrt_os_username", "", "value", "", "", "system", "method", 0, true},
+    {"os", "homedir", "(): string?", "Get user home directory", "os_homedir", "normal", "", "xrt_os_homedir", "", "value", "", "", "system", "method", 0, true},
+    {"os", "uid", "(): int", "Get user ID", "os_uid", "normal", "", "xrt_os_uid", "", "value", "", "", "system", "method", 0, true},
+    {"os", "gid", "(): int", "Get group ID", "os_gid", "normal", "", "xrt_os_gid", "", "value", "", "", "system", "method", 0, true},
+    {"os", "cpuCount", "(): int", "Get number of CPU cores", "os_cpuCount", "normal", "", "xrt_os_cpu_count", "", "value", "", "", "system", "method", 0, true},
+    {"os", "ppid", "(): int", "Get parent process ID", "os_ppid", "normal", "", "xrt_os_ppid", "", "value", "", "", "system", "method", 0, true},
+    {"os", "kill", "(pid: int, signal?: int): bool", "Send signal to process", "os_kill", "normal", "", "xrt_os_kill", "v", "value", "", "", "system", "method", 1, true},
+    {"os", "kill", "(pid: int, signal?: int): bool", "Send signal to process", "os_kill", "normal", "", "xrt_os_kill_signal", "vv", "value", "", "", "system", "method", 2, true},
+    {"os", "totalMemory", "(): int", "Get total system memory in bytes", "os_totalMemory", "normal", "", "xrt_os_total_memory", "", "value", "", "", "system", "method", 0, true},
+    {"os", "freeMemory", "(): int", "Get available system memory in bytes", "os_freeMemory", "normal", "", "xrt_os_free_memory", "", "value", "", "", "system", "method", 0, true},
+    {"os", "uptime", "(): float", "Get system uptime in seconds", "os_uptime", "normal", "", "xrt_os_uptime", "", "value", "", "", "system", "method", 0, true},
+    {"os", "loadavg", "(): Array<float>", "Get system load averages (1, 5, 15 min)", "os_loadavg", "normal", "", "xrt_os_loadavg", "", "value", "", "", "system", "method", 0, true},
+    {"os", "clock", "(): float", "Get process CPU time in seconds", "os_clock", "normal", "", "xrt_os_clock", "", "value", "", "", "system", "method", 0, true},
+    {"os", "sleep", "(ms: int): ()", "Sleep for milliseconds", "os_sleep", "yieldable", "", "xrt_os_sleep", "v", "value", "", "", "system", "method", 1, true},
+    {"os", "exec", "(cmd: string): ExecResult?", "Execute shell command", "os_exec", "normal", "", "xrt_os_exec", "s", "value", "", "", "system", "method", 1, true},
+    {"io", "appendFile", "(path: string, data: string): bool", "Append string to file", "io_appendFile", "normal", "", "xrt_io_append_file", "ss", "value", "", "", "system", "method", 2, true},
+    {"io", "chmod", "(path: string, mode: int): bool", "Change file permissions", "io_chmod", "normal", "", "xrt_io_chmod_value", "sv", "value", "", "", "system", "method", 2, true},
+    {"io", "chdir", "(path: string): bool", "Change working directory", "io_chdir", "normal", "", "xrt_io_chdir", "s", "value", "", "", "system", "method", 1, true},
+    {"io", "copyFile", "(src: string, dst: string): bool", "Copy a file", "io_copyFile", "normal", "", "xrt_io_copy_file", "ss", "value", "", "", "system", "method", 2, true},
+    {"io", "cwd", "(): string", "Get current working directory", "io_cwd", "normal", "", "xrt_io_cwd", "", "value", "", "", "system", "method", 0, true},
+    {"io", "exists", "(path: string): bool", "Check if path exists", "io_exists", "normal", "", "xrt_io_exists", "s", "value", "", "", "system", "method", 1, true},
+    {"io", "fileSize", "(path: string): int", "Get file size in bytes", "io_fileSize", "normal", "", "xrt_io_file_size", "s", "value", "", "", "system", "method", 1, true},
+    {"io", "isDir", "(path: string): bool", "Check if path is a directory", "io_isDir", "normal", "", "xrt_io_is_dir", "s", "value", "", "", "system", "method", 1, true},
+    {"io", "isFile", "(path: string): bool", "Check if path is a file", "io_isFile", "normal", "", "xrt_io_is_file", "s", "value", "", "", "system", "method", 1, true},
+    {"io", "isSymlink", "(path: string): bool", "Check if path is a symlink", "io_isSymlink", "normal", "", "xrt_io_is_symlink", "s", "value", "", "", "system", "method", 1, true},
+    {"io", "mkdir", "(path: string): bool", "Create directory", "io_mkdir", "normal", "", "xrt_io_mkdir", "s", "value", "", "", "system", "method", 1, true},
+    {"io", "mkdirp", "(path: string): bool", "Create directory recursively", "io_mkdirp", "normal", "", "xrt_io_mkdirp", "s", "value", "", "", "system", "method", 1, true},
+    {"io", "readDir", "(path: string): Array<string>", "List directory entries", "io_readDir", "normal", "", "xrt_io_read_dir", "s", "value", "", "", "system", "method", 1, true},
+    {"io", "readDirRecursive", "(path: string): Array<string>", "List directory entries recursively", "io_readDirRecursive", "normal", "", "xrt_io_read_dir_recursive", "s", "value", "", "", "system", "method", 1, true},
+    {"io", "readFile", "(path: string): string?", "Read entire file as string", "io_readFile", "yieldable", "", "xrt_io_read_file", "s", "value", "", "", "system", "method", 1, true},
+    {"io", "readFileBytes", "(path: string): Array<uint8>?", "Read entire file as byte array", "io_readFileBytes", "yieldable", "", "xrt_io_read_file_bytes", "s", "value", "", "", "system", "method", 1, true},
+    {"io", "readLines", "(path: string): Array<string>", "Read file as lines", "io_readLines", "normal", "", "xrt_io_read_lines", "s", "value", "", "", "system", "method", 1, true},
+    {"io", "readStdin", "(): string?", "Read all data from standard input", "io_readStdin", "normal", "", "xrt_io_read_stdin", "", "value", "", "", "system", "method", 0, true},
+    {"io", "readlink", "(path: string): string?", "Read symlink target", "io_readlink", "normal", "", "xrt_io_readlink", "s", "value", "", "", "system", "method", 1, true},
+    {"io", "realpath", "(path: string): string?", "Resolve to absolute path", "io_realpath", "normal", "", "xrt_io_realpath", "s", "value", "", "", "system", "method", 1, true},
+    {"io", "remove", "(path: string): bool", "Remove a file", "io_remove", "normal", "", "xrt_io_remove", "s", "value", "", "", "system", "method", 1, true},
+    {"io", "removeAll", "(path: string): bool", "Remove directory recursively", "io_removeAll", "normal", "", "xrt_io_remove_all", "s", "value", "", "", "system", "method", 1, true},
+    {"io", "rename", "(old: string, new: string): bool", "Rename a file", "io_rename", "normal", "", "xrt_io_rename", "ss", "value", "", "", "system", "method", 2, true},
+    {"io", "stat", "(path: string): FileStat?", "Get file stat info", "io_stat", "normal", "", "xrt_io_stat", "s", "value", "", "", "system", "method", 1, true},
+    {"io", "symlink", "(target: string, link: string): bool", "Create symbolic link", "io_symlink", "normal", "", "xrt_io_symlink", "ss", "value", "", "", "system", "method", 2, true},
+    {"io", "tempDir", "(): string?", "Create temporary directory", "io_tempDir", "normal", "", "xrt_io_temp_dir", "", "value", "", "", "system", "method", 0, true},
+    {"io", "tempFile", "(): string?", "Create temporary file", "io_tempFile", "normal", "", "xrt_io_temp_file", "", "value", "", "", "system", "method", 0, true},
+    {"io", "touch", "(path: string): bool", "Create or update file timestamp", "io_touch", "normal", "", "xrt_io_touch", "s", "value", "", "", "system", "method", 1, true},
+    {"io", "writeFile", "(path: string, data: string): bool", "Write string to file", "io_writeFile", "yieldable", "", "xrt_io_write_file", "ss", "value", "", "", "system", "method", 2, true},
+    {"io", "writeFileBytes", "(path: string, data: Array<uint8>): bool", "Write byte array to file", "io_writeFileBytes", "yieldable", "", "xrt_io_write_file_bytes", "sv", "value", "", "", "system", "method", 2, true},
+    {"log", "debug", "(...args: unknown): ()", "Log debug message", "xr_log_debug", "normal", "", "", "", "value", "", "", "system", "", UINT16_MAX, false},
+    {"log", "info", "(...args: unknown): ()", "Log info message", "xr_log_info", "normal", "", "", "", "value", "", "", "system", "", UINT16_MAX, false},
+    {"log", "warn", "(...args: unknown): ()", "Log warning message", "xr_log_warn", "normal", "", "", "", "value", "", "", "system", "", UINT16_MAX, false},
+    {"log", "error", "(...args: unknown): ()", "Log error message", "xr_log_error", "normal", "", "", "", "value", "", "", "system", "", UINT16_MAX, false},
+    {"log", "fatal", "(...args: unknown): ()", "Log fatal message", "xr_log_fatal", "normal", "", "", "", "value", "", "", "system", "", UINT16_MAX, false},
+    {"log", "setLevel", "(level: int): ()", "Set log level", "xr_log_set_level", "normal", "", "", "", "value", "", "", "system", "", 1, false},
+    {"log", "setFormat", "(format: string): ()", "Set log format", "xr_log_set_format", "normal", "", "", "", "value", "", "", "system", "", 1, false},
+    {"log", "setOutput", "(path: string): ()", "Set log output file", "xr_log_set_output", "normal", "", "", "", "value", "", "", "system", "", 1, false},
+    {"log", "isEnabled", "(level: int): bool", "Check if log level enabled", "xr_log_is_enabled", "normal", "", "", "", "value", "", "", "system", "", 1, false},
+    {"log", "enableSource", "(enabled: bool): ()", "Enable source location in logs", "xr_log_enable_source", "normal", "", "", "", "value", "", "", "system", "", 1, false},
+    {"log", "enableAsync", "(enabled: bool): ()", "Enable async logging", "xr_log_enable_async", "normal", "", "", "", "value", "", "", "system", "", 1, false},
+    {"log", "flush", "(): ()", "Flush log buffer", "xr_log_flush", "normal", "", "", "", "value", "", "", "system", "", 0, false},
+    {"log", "child", "(...fields: unknown): Logger", "Create child logger", "xr_log_child", "normal", "", "", "", "value", "", "", "system", "", UINT16_MAX, false},
+    {"mem", "collectCycles", "(): int", "Run cycle collection + whole-block reclaim, return cycle collection count", "mem_collect_cycles", "normal", "", "", "", "value", "", "", "runtime", "", 0, false},
+    {"mem", "disableCycleCollection", "(): ()", "Pause the automatic cycle collector", "mem_disable_cycle_collection", "normal", "", "", "", "value", "", "", "runtime", "", 0, false},
+    {"mem", "enableCycleCollection", "(): ()", "Resume the automatic cycle collector", "mem_enable_cycle_collection", "normal", "", "", "", "value", "", "", "runtime", "", 0, false},
+    {"mem", "isCycleCollectionEnabled", "(): bool", "Check if automatic cycle collection is enabled", "mem_is_cycle_collection_enabled", "normal", "", "", "", "value", "", "", "runtime", "", 0, false},
+    {"mem", "liveBytes", "(): int", "Get live memory usage in bytes", "mem_live_bytes", "normal", "", "", "", "value", "", "", "runtime", "", 0, false},
+    {"mem", "liveObjects", "(): int", "Get live object count", "mem_live_objects", "normal", "", "", "", "value", "", "", "runtime", "", 0, false},
+    {"mem", "info", "(): Map", "Get memory-model runtime info as Map", "mem_info", "normal", "", "", "", "value", "", "", "runtime", "", 0, false},
+    {"net", "dial", "(host: string, port: int, timeout?: int): NetConn?", "Dial a TCP connection", "net_dial_yieldable", "yieldable", "", "", "", "value", "", "", "runtime", "", 3, false},
+    {"net", "listen", "(port: int, backlog?: int): NetListener?", "Start listening on a port", "net_listen_handle", "normal", "", "", "", "value", "", "", "runtime", "", 2, false},
+    {"net", "accept", "(listener: NetListener): NetConn?", "Accept a new connection", "net_accept_handle_yieldable", "yieldable", "", "", "", "value", "", "", "runtime", "", 1, false},
+    {"net", "read", "(conn: NetConn, maxlen?: int): string?", "Read data from connection", "net_read_handle_yieldable", "yieldable", "", "", "", "value", "", "", "runtime", "", 2, false},
+    {"net", "readInto", "(conn: NetConn, buffer: Bytes, maxlen?: int): int", "Read data into a reusable Bytes buffer", "net_read_into_yieldable", "yieldable", "", "", "", "value", "", "", "runtime", "", 3, false},
+    {"net", "write", "(conn: NetConn, data: string): int", "Write data to connection", "net_write_handle_yieldable", "yieldable", "", "", "", "value", "", "", "runtime", "", 2, false},
+    {"net", "writeBytes", "(conn: NetConn, data: Bytes): int", "Write Bytes data to connection", "net_write_bytes_yieldable", "yieldable", "", "", "", "value", "", "", "runtime", "", 2, false},
+    {"net", "copy", "(src: NetConn, dst: NetConn, bufferSize?: int): int", "Copy a TCP/TLS stream using a reusable native buffer", "net_copy_yieldable", "yieldable", "", "", "", "value", "", "", "runtime", "", 3, false},
+    {"net", "copyBidirectional", "(a: NetConn, b: NetConn): Json", "Copy two TCP/TLS streams in both directions", "net_copy_bidirectional_yieldable", "yieldable", "", "", "", "value", "", "", "runtime", "", 2, false},
+    {"net", "shutdownRead", "(conn: NetConn): bool", "Shut down the read side of a TCP connection", "net_shutdown_read", "normal", "", "", "", "value", "", "", "runtime", "", 1, false},
+    {"net", "shutdownWrite", "(conn: NetConn): bool", "Shut down the write side of a TCP connection", "net_shutdown_write", "normal", "", "", "", "value", "", "", "runtime", "", 1, false},
+    {"net", "shutdown", "(conn: NetConn): bool", "Shut down both sides of a TCP connection", "net_shutdown_conn", "normal", "", "", "", "value", "", "", "runtime", "", 1, false},
+    {"net", "close", "(handle: NetConn | NetListener): ()", "Close a connection or listener", "net_close_handle", "normal", "", "", "", "value", "", "", "runtime", "", 1, false},
+    {"net", "fd", "(handle: NetConn | NetListener): int", "Get fd from handle", "net_fd_handle", "normal", "", "", "", "value", "", "", "runtime", "", 1, false},
+    {"net", "setReadDeadline", "(conn: NetConn, deadline: int): bool", "Set read deadline in monotonic ms", "net_set_read_deadline", "normal", "", "", "", "value", "", "", "runtime", "", 2, false},
+    {"net", "setWriteDeadline", "(conn: NetConn, deadline: int): bool", "Set write deadline in monotonic ms", "net_set_write_deadline", "normal", "", "", "", "value", "", "", "runtime", "", 2, false},
+    {"net", "setDeadline", "(conn: NetConn, deadline: int): bool", "Set read and write deadlines in monotonic ms", "net_set_deadline", "normal", "", "", "", "value", "", "", "runtime", "", 2, false},
+    {"net", "setAcceptDeadline", "(listener: NetListener, deadline: int): bool", "Set accept deadline in monotonic ms", "net_set_accept_deadline", "normal", "", "", "", "value", "", "", "runtime", "", 2, false},
+    {"net", "lastError", "(handle: NetConn | NetListener): string?", "Return the last network error name", "net_last_error", "normal", "", "", "", "value", "", "", "runtime", "", 1, false},
+    {"net", "lastErrno", "(handle: NetConn | NetListener): int", "Return the last system errno", "net_last_errno", "normal", "", "", "", "value", "", "", "runtime", "", 1, false},
+    {"net", "lookup", "(hostname: string): string?", "DNS lookup", "net_dns_lookup", "normal", "", "", "", "value", "", "", "runtime", "", 1, false},
+    {"net", "hasTLS", "(): bool", "Check if TLS support is available", "net_has_tls", "normal", "", "", "", "value", "", "", "runtime", "", 0, false},
+    {"net", "dialTLS", "(host: string, port: int, timeout?: int): NetConn?", "Dial a TLS connection", "net_dial_tls_yieldable", "yieldable", "XR_ENABLE_TLS", "", "", "value", "", "", "runtime", "", 3, false},
+    {"net", "upgradeTLS", "(conn: NetConn, hostname: string, timeout?: int): NetConn?", "Upgrade connection to TLS", "net_upgrade_tls_yieldable", "yieldable", "XR_ENABLE_TLS", "", "", "value", "", "", "runtime", "", 3, false},
+    {"net", "udpBind", "(port: int, addr?: string): NetConn?", "Bind a UDP socket", "net_udp_bind_handle", "normal", "", "", "", "value", "", "", "runtime", "", 2, false},
+    {"net", "sendTo", "(handle: NetConn, data: string, host: string, port: int): int", "Send UDP datagram", "net_send_to_yieldable", "yieldable", "", "", "", "value", "", "", "runtime", "", 4, false},
+    {"net", "recvFrom", "(handle: NetConn, maxlen?: int): UdpPacket?", "Receive UDP datagram (returns flat handle: data, host, port)", "net_recv_from_yieldable", "yieldable", "", "", "", "value", "", "", "runtime", "", 2, false},
+    {"http", "get", "(url: string): HttpResponse", "HTTP GET request", "http_get", "slow", "", "", "", "value", "", "", "runtime", "", 1, false},
+    {"http", "post", "(url: string, body?: string, contentType?: string): HttpResponse", "HTTP POST request", "http_post", "slow", "", "", "", "value", "", "", "runtime", "", 3, false},
+    {"http", "put", "(url: string, body?: string, contentType?: string): HttpResponse", "HTTP PUT request", "http_put", "slow", "", "", "", "value", "", "", "runtime", "", 3, false},
+    {"http", "delete", "(url: string): HttpResponse", "HTTP DELETE request", "http_delete", "slow", "", "", "", "value", "", "", "runtime", "", 1, false},
+    {"http", "request", "(options: Json): HttpResponse", "Generic HTTP request", "http_request", "slow", "", "", "", "value", "", "", "runtime", "", 1, false},
+    {"http", "urlEncode", "(s: string): string", "URL-encode a string", "http_url_encode", "normal", "", "", "", "value", "", "", "runtime", "", 1, false},
+    {"http", "urlDecode", "(s: string): string", "URL-decode a string", "http_url_decode", "normal", "", "", "", "value", "", "", "runtime", "", 1, false},
+    {"http", "route", "(method: string, path: string, handler: fn | string | Json): ()", "Register a route handler or static response", "http_route", "normal", "", "", "", "value", "", "", "runtime", "", 3, false},
+    {"http", "static", "(method: string, path: string, content: string): ()", "Register a prebuilt static route response", "http_static", "normal", "", "", "", "value", "", "", "runtime", "", 3, false},
+    {"http", "setConnHandler", "(handler: fn(fd: int): ()): ()", "Set low-level HTTP connection handler", "http_set_conn_handler", "normal", "", "", "", "value", "", "", "runtime", "", 1, false},
+    {"http", "__getConnHandler", "(): fn", "Return the current low-level HTTP connection handler", "http_get_conn_handler", "normal", "", "", "", "value", "", "", "runtime", "", 0, false},
+    {"http", "listen", "(port: int): bool", "Start HTTP server accept loop", "xr_http_listen_impl", "yieldable", "", "", "", "value", "", "", "runtime", "", 1, false},
+    {"http", "config", "(opts: Json): ()", "Configure HTTP server limits and timeouts", "xr_http_config_impl", "normal", "", "", "", "value", "", "", "runtime", "", 1, false},
+    {"http", "response", "(status: int, body?: string | Json): string", "Format an HTTP response string", "xr_http_response_impl", "normal", "", "", "", "value", "", "", "runtime", "", 2, false},
+    {"http", "serverStats", "(): Json", "Return HTTP server counters", "xr_http_server_stats", "normal", "", "", "", "value", "", "", "runtime", "", 0, false},
+    {"http", "ws", "(path: string, handler: fn(conn: WsConn): ()): ()", "Register WebSocket upgrade route on HTTP server", "http_ws_route", "normal", "", "", "", "value", "", "", "runtime", "", 2, false},
+    {"http", "readChunk", "(resp: Json, maxBytes?: int): string?", "Read the next chunk from a streaming HTTP response", "http_read_chunk", "slow", "", "", "", "value", "", "", "runtime", "", 2, false},
+    {"http", "closeStream", "(resp: Json): ()", "Close a streaming HTTP response", "http_close_stream", "normal", "", "", "", "value", "", "", "runtime", "", 1, false},
+    {"http", "stopServer", "(): ()", "Stop the HTTP server", "http_stop_server", "normal", "", "", "", "value", "", "", "runtime", "", 0, false},
+    {"http", "parseRequest", "(fd: int): Array<unknown>?", "Parse raw HTTP request data", "http_parse_request_fast", "normal", "", "", "", "value", "", "", "runtime", "", 1, false},
+    {"http", "sendResponse", "(fd: int, body: string, status?: int): bool", "Send HTTP response on fd", "http_send_response_fast", "normal", "", "", "", "value", "", "", "runtime", "", 3, false},
+    {"http", "download", "(url: string, path: string): DownloadResult", "Download file from URL", "http_download", "slow", "", "", "", "value", "", "", "runtime", "", 2, false},
+    {"http", "getContentLength", "(url: string): int", "Get content length of URL", "http_get_content_length", "normal", "", "", "", "value", "", "", "runtime", "", 1, false},
+    {"http", "formDataNew", "(maxTotalSize?: int, maxFileSize?: int): bool", "Create new multipart form data context", "http_form_data_new", "normal", "", "", "", "value", "", "", "runtime", "", 2, false},
+    {"http", "formDataAppend", "(name: string, value: string): ()", "Append field to current form data", "http_form_data_append", "normal", "", "", "", "value", "", "", "runtime", "", 2, false},
+    {"http", "formDataAppendFile", "(name: string, path: string): bool", "Append file to current form data", "http_form_data_append_file", "normal", "", "", "", "value", "", "", "runtime", "", 2, false},
+    {"http", "formDataPost", "(url: string): Json", "POST current multipart form data", "http_form_data_post", "normal", "", "", "", "value", "", "", "runtime", "", 1, false},
+    {"http", "setProxy", "(url: string): ()", "Set HTTP proxy", "http_set_proxy", "normal", "", "", "", "value", "", "", "runtime", "", 1, false},
+    {"http", "clearProxy", "(): ()", "Clear HTTP proxy", "http_clear_proxy", "normal", "", "", "", "value", "", "", "runtime", "", 0, false},
+    {"http", "h2Get", "(url: string, options?: Json): Json", "HTTP/2 GET request", "h2_get", "normal", "", "", "", "value", "", "", "runtime", "", 2, false},
+    {"http", "h2Post", "(url: string, body: string, contentType?: string): Json", "HTTP/2 POST request", "h2_post", "normal", "", "", "", "value", "", "", "runtime", "", 3, false},
+    {"http", "h2Request", "(options: Json): Json", "Generic HTTP/2 request", "h2_request", "normal", "", "", "", "value", "", "", "runtime", "", 1, false},
+    {"http", "h2CreateServer", "(options?: Json): bool", "Create HTTP/2 server", "h2_create_server", "normal", "", "", "", "value", "", "", "runtime", "", 1, false},
+    {"http", "h2Listen", "(): bool", "Start HTTP/2 server", "h2_server_listen", "normal", "", "", "", "value", "", "", "runtime", "", 0, false},
+    {"http", "h2Stop", "(): ()", "Stop HTTP/2 server", "h2_server_stop", "normal", "", "", "", "value", "", "", "runtime", "", 0, false},
+    {"http", "h2Push", "(path: string, contentType: string, data: string): bool", "Push HTTP/2 response data", "h2_push", "normal", "", "", "", "value", "", "", "runtime", "", 3, false},
+    {"cluster", "start", "(config: Json): ()", "Start cluster node", "cluster_start", "normal", "", "", "", "value", "", "", "runtime", "", 1, false},
+    {"cluster", "join", "(addr: string): bool", "Join cluster by address", "cluster_join", "normal", "", "", "", "value", "", "", "runtime", "", 1, false},
+    {"cluster", "self", "(): string", "Get own node name", "cluster_self", "normal", "", "", "", "value", "", "", "runtime", "", 0, false},
+    {"cluster", "nodes", "(): Array<string>", "List cluster node names", "cluster_nodes", "normal", "", "", "", "value", "", "", "runtime", "", 0, false},
+    {"cluster", "channel", "(name: string, size?: int): Channel", "Create or get named distributed channel", "cluster_channel_fn", "normal", "", "", "", "value", "", "", "runtime", "", 2, false},
+    {"cluster", "serve", "(name: string): Channel", "Register service and return request channel", "cluster_serve_fn", "normal", "", "", "", "value", "", "", "runtime", "", 1, false},
+    {"cluster", "reply", "(req: Json, result: Json): bool", "Reply to service request", "cluster_reply_fn", "normal", "", "", "", "value", "", "", "runtime", "", 2, false},
+    {"cluster", "call", "(service: string, args: Json, timeout?: int): Json", "Call remote service", "cluster_call_fn", "normal", "", "", "", "value", "", "", "runtime", "", 3, false},
+    {"cluster", "monitor", "(name: string, coro_name?: string): Channel", "Monitor node or remote coroutine", "cluster_monitor_coro_fn", "normal", "", "", "", "value", "", "", "runtime", "", 2, false},
+    {"cluster", "discover", "(): ()", "Start LAN auto-discovery", "cluster_discover_fn", "normal", "", "", "", "value", "", "", "runtime", "", 0, false},
+    {"cluster", "stop", "(): ()", "Stop cluster node", "cluster_stop_fn", "normal", "", "", "", "value", "", "", "runtime", "", 0, false},
+    {"cluster", "info", "(): Json", "Get cluster status info", "cluster_info_fn", "normal", "", "", "", "value", "", "", "runtime", "", 0, false},
+    {"cluster", "publish", "(topic: string, value: Json): bool", "Publish to topic", "cluster_publish_fn", "normal", "", "", "", "value", "", "", "runtime", "", 2, false},
+    {"cluster", "subscribe", "(pattern: string): Channel", "Subscribe to topic pattern", "cluster_subscribe_fn", "normal", "", "", "", "value", "", "", "runtime", "", 1, false},
+    {"ws", "connect", "(url: string, options?: Json): WsConn?", "Connect to a WebSocket server", "ws_connect_yieldable", "yieldable", "", "", "", "value", "", "", "runtime", "", 2, false},
+    {"ws", "send", "(conn: WsConn, data: string, binary?: bool?): bool", "Send data over WebSocket connection", "ws_send_yieldable", "yieldable", "", "", "", "value", "", "", "runtime", "", 3, false},
+    {"ws", "recv", "(conn: WsConn, timeout?: int?): WsMessage?", "Receive data from WebSocket connection", "ws_recv_yieldable", "yieldable", "", "", "", "value", "", "", "runtime", "", 2, false},
+    {"ws", "close", "(conn: WsConn, code?: int?, reason?: string?): bool", "Close a WebSocket connection", "ws_close", "normal", "", "", "", "value", "", "", "runtime", "", 3, false},
+    {"ws", "ping", "(conn: WsConn): bool", "Send a ping frame", "ws_ping", "normal", "", "", "", "value", "", "", "runtime", "", 1, false},
+    {"ws", "state", "(conn: WsConn): string", "Get connection state", "ws_state", "normal", "", "", "", "value", "", "", "runtime", "", 1, false},
+    {"ws", "isOpen", "(conn: WsConn): bool", "Check if connection is open", "ws_is_open", "normal", "", "", "", "value", "", "", "runtime", "", 1, false},
+    {"ws", "recvData", "(conn: WsConn, timeout?: int?): string?", "High-performance recv returning data string directly (no Json wrapper)", "ws_recvdata", "yieldable", "", "", "", "value", "", "", "runtime", "", 2, false},
+    {"ws", "sendData", "(conn: WsConn, data: string, binary?: bool?): bool", "Send data over WebSocket connection", "ws_send_yieldable", "yieldable", "", "", "", "value", "", "", "runtime", "", 3, false},
+    {"ws", "serve", "(port: int, handler: fn(conn: WsConn): ()): bool", "Start WebSocket server", "ws_serve_yieldable", "yieldable", "", "", "", "value", "", "", "runtime", "", 2, false},
+    {"ws", "echoServe", "(port: int): bool", "Pure C echo server with zero VM allocation overhead per message", "ws_echo_serve_yieldable", "yieldable", "", "", "", "value", "", "", "runtime", "", 1, false},
+    {"ws", "stopServer", "(): ()", "Stop the WebSocket server", "ws_stop_server", "normal", "", "", "", "value", "", "", "runtime", "", 0, false},
+    {"ws", "isServerRunning", "(): bool", "Check if the WebSocket server is running", "ws_is_server_running", "normal", "", "", "", "value", "", "", "runtime", "", 0, false},
+    {"csv", "parse", "(data: string, options?: Json): Array<Array<string>> | Array<Json>", "Parse CSV string", "csv_parse", "normal", "", "", "", "value", "", "", "alloc", "", 2, false},
+    {"csv", "parseDetailed", "(data: string, options?: Json): Json", "Parse CSV with headers", "csv_parse_detailed", "normal", "", "", "", "value", "", "", "alloc", "", 2, false},
+    {"csv", "parseTsv", "(data: string): Array<Array<string>>", "Parse TSV string", "csv_parse_tsv", "normal", "", "", "", "value", "", "", "alloc", "", 1, false},
+    {"csv", "parseAuto", "(data: string): Array<Array<string>>", "Auto-detect delimiter and parse", "csv_parse_auto", "normal", "", "", "", "value", "", "", "alloc", "", 1, false},
+    {"csv", "stringify", "(data: Array<Array<string>>, options?: Json): string", "Convert to CSV string", "csv_stringify", "normal", "", "", "", "value", "", "", "alloc", "", 2, false},
+    {"csv", "parseFile", "(path: string, options?: Json): Array<Array<string>>", "Parse CSV file", "csv_parse_file", "normal", "", "", "", "value", "", "", "system", "", 2, false},
+    {"csv", "writeFile", "(path: string, data: Array<Array<string>>, options?: Json): bool", "Write CSV file", "csv_write_file", "normal", "", "", "", "value", "", "", "system", "", 3, false},
+    {"toml", "parse", "(data: string): Json", "Parse TOML string", "toml_parse", "normal", "", "", "", "value", "", "", "alloc", "", 1, false},
+    {"toml", "parseStrict", "(data: string): Json", "Parse TOML strictly", "toml_parse_strict", "normal", "", "", "", "value", "", "", "alloc", "", 1, false},
+    {"toml", "stringify", "(value: Json): string", "Convert to TOML string", "toml_stringify", "normal", "", "", "", "value", "", "", "alloc", "", 1, false},
+    {"toml", "parseFile", "(path: string): Json", "Parse TOML file", "toml_parse_file", "normal", "", "", "", "value", "", "", "system", "", 1, false},
+    {"toml", "writeFile", "(path: string, value: Json): bool", "Write TOML file", "toml_write_file", "normal", "", "", "", "value", "", "", "system", "", 2, false},
+    {"yaml", "parse", "(data: string): Json", "Parse YAML string", "yaml_parse", "normal", "", "", "", "value", "", "", "alloc", "", 1, false},
+    {"yaml", "parseStrict", "(data: string): Json", "Parse YAML strictly", "yaml_parse_strict", "normal", "", "", "", "value", "", "", "alloc", "", 1, false},
+    {"yaml", "parseAll", "(data: string): Array<Json>", "Parse all YAML documents", "yaml_parse_all", "normal", "", "", "", "value", "", "", "alloc", "", 1, false},
+    {"yaml", "stringify", "(value: Json): string", "Convert to YAML string", "yaml_stringify", "normal", "", "", "", "value", "", "", "alloc", "", 1, false},
+    {"yaml", "parseFile", "(path: string): Json", "Parse YAML file", "yaml_parse_file", "normal", "", "", "", "value", "", "", "system", "", 1, false},
+    {"yaml", "writeFile", "(path: string, value: Json): bool", "Write YAML file", "yaml_write_file", "normal", "", "", "", "value", "", "", "system", "", 2, false},
+    {"xml", "parse", "(data: string, options?: Json): Json", "Parse XML string", "xml_parse_fn", "normal", "", "", "", "value", "", "", "alloc", "", 2, false},
+    {"xml", "parseDetailed", "(data: string): Json", "Parse XML with details", "xml_parse_detailed", "normal", "", "", "", "value", "", "", "alloc", "", 1, false},
+    {"xml", "parseFile", "(path: string): Json", "Parse XML file", "xml_parse_file", "normal", "", "", "", "value", "", "", "system", "", 1, false},
+    {"xml", "stringify", "(node: Json, options?: Json): string", "Convert to XML string", "xml_stringify_fn", "normal", "", "", "", "value", "", "", "alloc", "", 2, false},
+    {"xml", "writeFile", "(path: string, node: Json): bool", "Write XML file", "xml_write_file", "normal", "", "", "", "value", "", "", "system", "", 2, false},
+    {"xml", "document", "(): Json", "Create XML document node", "xml_document_fn", "normal", "", "", "", "value", "", "", "alloc", "", 0, false},
+    {"xml", "element", "(name: string, attrs?: Json): Json", "Create XML element node", "xml_element_fn", "normal", "", "", "", "value", "", "", "alloc", "", 2, false},
+    {"xml", "text", "(content: string): Json", "Create XML text node", "xml_text_fn", "normal", "", "", "", "value", "", "", "alloc", "", 1, false},
+    {"xml", "comment", "(content: string): Json", "Create XML comment node", "xml_comment_fn", "normal", "", "", "", "value", "", "", "alloc", "", 1, false},
+    {"xml", "cdata", "(content: string): Json", "Create XML CDATA node", "xml_cdata_fn", "normal", "", "", "", "value", "", "", "alloc", "", 1, false},
+    {"datetime", "now", "(): DateTime", "Get current local datetime", "dt_now", "normal", "", "xrt_datetime_now", "", "value", "", "", "alloc", "method", 0, true},
+    {"datetime", "utc", "(): DateTime", "Get current UTC datetime", "dt_utc", "normal", "", "xrt_datetime_utc", "", "value", "", "", "alloc", "method", 0, true},
+    {"datetime", "create", "(year: int, month?: int, day?: int, hour?: int, minute?: int, second?: int): DateTime", "Create local datetime", "dt_create", "normal", "", "xrt_datetime_create_1", "v", "value", "", "", "alloc", "method", 1, true},
+    {"datetime", "create", "(year: int, month?: int, day?: int, hour?: int, minute?: int, second?: int): DateTime", "Create local datetime", "dt_create", "normal", "", "xrt_datetime_create_2", "vv", "value", "", "", "alloc", "method", 2, true},
+    {"datetime", "create", "(year: int, month?: int, day?: int, hour?: int, minute?: int, second?: int): DateTime", "Create local datetime", "dt_create", "normal", "", "xrt_datetime_create_3", "vvv", "value", "", "", "alloc", "method", 3, true},
+    {"datetime", "create", "(year: int, month?: int, day?: int, hour?: int, minute?: int, second?: int): DateTime", "Create local datetime", "dt_create", "normal", "", "xrt_datetime_create_4", "vvvv", "value", "", "", "alloc", "method", 4, true},
+    {"datetime", "create", "(year: int, month?: int, day?: int, hour?: int, minute?: int, second?: int): DateTime", "Create local datetime", "dt_create", "normal", "", "xrt_datetime_create_5", "vvvvv", "value", "", "", "alloc", "method", 5, true},
+    {"datetime", "create", "(year: int, month?: int, day?: int, hour?: int, minute?: int, second?: int): DateTime", "Create local datetime", "dt_create", "normal", "", "xrt_datetime_create_6", "vvvvvv", "value", "", "", "alloc", "method", 6, true},
+    {"datetime", "createUTC", "(year: int, month?: int, day?: int, hour?: int, minute?: int, second?: int): DateTime", "Create UTC datetime", "dt_create_utc", "normal", "", "xrt_datetime_create_utc_1", "v", "value", "", "", "alloc", "method", 1, true},
+    {"datetime", "createUTC", "(year: int, month?: int, day?: int, hour?: int, minute?: int, second?: int): DateTime", "Create UTC datetime", "dt_create_utc", "normal", "", "xrt_datetime_create_utc_2", "vv", "value", "", "", "alloc", "method", 2, true},
+    {"datetime", "createUTC", "(year: int, month?: int, day?: int, hour?: int, minute?: int, second?: int): DateTime", "Create UTC datetime", "dt_create_utc", "normal", "", "xrt_datetime_create_utc_3", "vvv", "value", "", "", "alloc", "method", 3, true},
+    {"datetime", "createUTC", "(year: int, month?: int, day?: int, hour?: int, minute?: int, second?: int): DateTime", "Create UTC datetime", "dt_create_utc", "normal", "", "xrt_datetime_create_utc_4", "vvvv", "value", "", "", "alloc", "method", 4, true},
+    {"datetime", "createUTC", "(year: int, month?: int, day?: int, hour?: int, minute?: int, second?: int): DateTime", "Create UTC datetime", "dt_create_utc", "normal", "", "xrt_datetime_create_utc_5", "vvvvv", "value", "", "", "alloc", "method", 5, true},
+    {"datetime", "createUTC", "(year: int, month?: int, day?: int, hour?: int, minute?: int, second?: int): DateTime", "Create UTC datetime", "dt_create_utc", "normal", "", "xrt_datetime_create_utc_6", "vvvvvv", "value", "", "", "alloc", "method", 6, true},
+    {"datetime", "fromTimestamp", "(ts: int): DateTime", "Create datetime from Unix timestamp (seconds)", "dt_from_timestamp", "normal", "", "xrt_datetime_from_timestamp", "v", "value", "", "", "alloc", "method", 1, true},
+    {"datetime", "fromTimestampMs", "(ts: int): DateTime", "Create datetime from Unix timestamp (milliseconds)", "dt_from_timestamp_ms", "normal", "", "xrt_datetime_from_timestamp_ms", "v", "value", "", "", "alloc", "method", 1, true},
+    {"datetime", "parse", "(s: string, format?: string): DateTime?", "Parse datetime string", "dt_parse", "normal", "", "xrt_datetime_parse_default", "s", "value", "", "", "alloc", "method", 1, true},
+    {"datetime", "parse", "(s: string, format?: string): DateTime?", "Parse datetime string", "dt_parse", "normal", "", "xrt_datetime_parse_format", "ss", "value", "", "", "alloc", "method", 2, true},
+    {"datetime", "offset", "(): int", "Get UTC offset in minutes", "dt_offset", "normal", "", "xrt_datetime_offset", "", "value", "", "", "system", "method", 0, true},
 };
 #define XR_STDLIB_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_def_entries) / sizeof(xr_stdlib_def_entries[0])))
+
+static const XrStdlibConstDefEntry xr_stdlib_const_def_entries[] = {
+    {"math", "PI", ": float", "Ratio of a circle's circumference to its diameter", "math.PI", "xr_float(M_PI)", "", "float64", "", "", "core", INT64_C(0), 3.14159265358979323846},
+    {"math", "E", ": float", "Euler's number", "math.E", "xr_float(M_E)", "", "float64", "", "", "core", INT64_C(0), 2.71828182845904523536},
+    {"math", "TAU", ": float", "Full-circle radians, 2 * PI", "math.TAU", "xr_float(2.0 * M_PI)", "", "float64", "", "", "core", INT64_C(0), 6.28318530717958647692},
+    {"math", "SQRT2", ": float", "Square root of 2", "math.SQRT2", "xr_float(M_SQRT2)", "", "float64", "", "", "core", INT64_C(0), 1.41421356237309504880},
+    {"math", "LN2", ": float", "Natural logarithm of 2", "math.LN2", "xr_float(M_LN2)", "", "float64", "", "", "core", INT64_C(0), 0.69314718055994530942},
+    {"math", "LN10", ": float", "Natural logarithm of 10", "math.LN10", "xr_float(M_LN10)", "", "float64", "", "", "core", INT64_C(0), 2.30258509299404568402},
+    {"math", "LOG2E", ": float", "Base-2 logarithm of e", "math.LOG2E", "xr_float(M_LOG2E)", "", "float64", "", "", "core", INT64_C(0), 1.44269504088896340736},
+    {"math", "LOG10E", ": float", "Base-10 logarithm of e", "math.LOG10E", "xr_float(M_LOG10E)", "", "float64", "", "", "core", INT64_C(0), 0.43429448190325182765},
+    {"math", "EPSILON", ": float", "Smallest representable difference above 1.0", "math.EPSILON", "xr_float(DBL_EPSILON)", "", "float64", "", "", "core", INT64_C(0), 2.22044604925031308085e-16},
+    {"math", "MAX_INT", ": int", "Largest signed 64-bit integer", "math.MAX_INT", "xr_int(INT64_MAX)", "", "int64", "", "", "core", INT64_MAX, 0.0},
+    {"math", "MIN_INT", ": int", "Smallest signed 64-bit integer", "math.MIN_INT", "xr_int(INT64_MIN)", "", "int64", "", "", "core", INT64_MIN, 0.0},
+    {"math", "MAX_FLOAT", ": float", "Largest finite IEEE-754 double", "math.MAX_FLOAT", "xr_float(DBL_MAX)", "", "float64", "", "", "core", INT64_C(0), 1.79769313486231570815e+308},
+    {"math", "INF", ": float", "Positive infinity", "math.INF", "xr_float(INFINITY)", "", "float64", "", "", "core", INT64_C(0), INFINITY},
+    {"math", "NAN", ": float", "Quiet NaN value", "math.NAN", "xr_float(NAN)", "", "float64", "", "", "core", INT64_C(0), NAN},
+    {"path", "sep", ": string", "Platform path separator", "path.sep", "xrs_string_value_c(isolate, xr_path_core_sep_str())", "xrt_path_sep", "helper_value", "", "", "core", INT64_C(0), 0.0},
+    {"path", "delimiter", ": string", "Platform path-list delimiter", "path.delimiter", "xrs_string_value_c(isolate, xr_path_core_delimiter_str())", "xrt_path_delimiter", "helper_value", "", "", "core", INT64_C(0), 0.0},
+    {"encoding", "LE", ": int", "Little-endian UTF-16 byte order", "XR_UTF16_LE", "xr_int(XR_UTF16_LE)", "", "int64", "", "", "core", INT64_C(0), 0.0},
+    {"encoding", "BE", ": int", "Big-endian UTF-16 byte order", "XR_UTF16_BE", "xr_int(XR_UTF16_BE)", "", "int64", "", "", "core", INT64_C(1), 0.0},
+    {"os", "platform", ": string", "Current operating system name", "os.platform", "xrs_string_value_c(isolate, get_platform())", "xrt_os_platform", "helper_value", "", "", "system", INT64_C(0), 0.0},
+    {"os", "arch", ": string", "Current CPU architecture name", "os.arch", "xrs_string_value_c(isolate, get_arch())", "xrt_os_arch", "helper_value", "", "", "system", INT64_C(0), 0.0},
+    {"os", "sep", ": string", "Platform path separator", "os.sep", "xrs_string_value_c(isolate, get_sep())", "xrt_os_sep", "helper_value", "", "", "system", INT64_C(0), 0.0},
+    {"os", "eol", ": string", "Platform end-of-line string", "os.eol", "xrs_string_value_c(isolate, get_eol())", "xrt_os_eol", "helper_value", "", "", "system", INT64_C(0), 0.0},
+    {"log", "DEBUG", ": int", "Debug log level", "XR_LOG_DEBUG", "xr_int(XR_LOG_DEBUG)", "", "int64", "", "", "core", INT64_C(10), 0.0},
+    {"log", "INFO", ": int", "Info log level", "XR_LOG_INFO", "xr_int(XR_LOG_INFO)", "", "int64", "", "", "core", INT64_C(20), 0.0},
+    {"log", "WARN", ": int", "Warning log level", "XR_LOG_WARN", "xr_int(XR_LOG_WARN)", "", "int64", "", "", "core", INT64_C(30), 0.0},
+    {"log", "ERROR", ": int", "Error log level", "XR_LOG_ERROR", "xr_int(XR_LOG_ERROR)", "", "int64", "", "", "core", INT64_C(40), 0.0},
+    {"log", "FATAL", ": int", "Fatal log level", "XR_LOG_FATAL", "xr_int(XR_LOG_FATAL)", "", "int64", "", "", "core", INT64_C(50), 0.0},
+};
+#define XR_STDLIB_CONST_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_const_def_entries) / sizeof(xr_stdlib_const_def_entries[0])))
+
+static const XrStdlibHandleFieldDefEntry xr_stdlib_handle_fields_path_PathInfo[] = {
+    {"path", "PathInfo", "root", "string", true},
+    {"path", "PathInfo", "dir", "string", true},
+    {"path", "PathInfo", "base", "string", true},
+    {"path", "PathInfo", "name", "string", true},
+    {"path", "PathInfo", "ext", "string", true},
+};
+
+static const XrStdlibHandleFieldDefEntry xr_stdlib_handle_fields_url_URL[] = {
+    {"url", "URL", "protocol", "string", true},
+    {"url", "URL", "hostname", "string", true},
+    {"url", "URL", "port", "string", true},
+    {"url", "URL", "pathname", "string", true},
+    {"url", "URL", "search", "string", true},
+    {"url", "URL", "hash", "string", true},
+    {"url", "URL", "username", "string", true},
+    {"url", "URL", "password", "string", true},
+    {"url", "URL", "host", "string", true},
+    {"url", "URL", "origin", "string", true},
+    {"url", "URL", "href", "string", true},
+};
+
+static const XrStdlibHandleFieldDefEntry xr_stdlib_handle_fields_os_ExecResult[] = {
+    {"os", "ExecResult", "stdout", "string", true},
+    {"os", "ExecResult", "stderr", "string", true},
+    {"os", "ExecResult", "exitCode", "int", true},
+};
+
+static const XrStdlibHandleFieldDefEntry xr_stdlib_handle_fields_io_FileStat[] = {
+    {"io", "FileStat", "size", "int", true},
+    {"io", "FileStat", "mode", "int", true},
+    {"io", "FileStat", "mtime", "int", true},
+    {"io", "FileStat", "atime", "int", true},
+    {"io", "FileStat", "ctime", "int", true},
+    {"io", "FileStat", "uid", "int", true},
+    {"io", "FileStat", "gid", "int", true},
+    {"io", "FileStat", "isFile", "bool", true},
+    {"io", "FileStat", "isDir", "bool", true},
+    {"io", "FileStat", "isSymlink", "bool", true},
+};
+
+static const XrStdlibHandleFieldDefEntry xr_stdlib_handle_fields_net_UdpPacket[] = {
+    {"net", "UdpPacket", "data", "string", true},
+    {"net", "UdpPacket", "host", "string", true},
+    {"net", "UdpPacket", "port", "int", true},
+};
+
+static const XrStdlibHandleFieldDefEntry xr_stdlib_handle_fields_http_HttpResponse[] = {
+    {"http", "HttpResponse", "status", "int", true},
+    {"http", "HttpResponse", "statusText", "string", true},
+    {"http", "HttpResponse", "headers", "Json", true},
+    {"http", "HttpResponse", "body", "string", true},
+    {"http", "HttpResponse", "error", "string", true},
+    {"http", "HttpResponse", "ok", "bool", true},
+};
+
+static const XrStdlibHandleFieldDefEntry xr_stdlib_handle_fields_http_HttpRequest[] = {
+    {"http", "HttpRequest", "method", "string", true},
+    {"http", "HttpRequest", "path", "string", true},
+    {"http", "HttpRequest", "query", "Json", true},
+    {"http", "HttpRequest", "headers", "Json", true},
+    {"http", "HttpRequest", "body", "string", true},
+    {"http", "HttpRequest", "contentLength", "int", true},
+    {"http", "HttpRequest", "params", "Json", true},
+    {"http", "HttpRequest", "streaming", "bool", true},
+};
+
+static const XrStdlibHandleFieldDefEntry xr_stdlib_handle_fields_http_DownloadResult[] = {
+    {"http", "DownloadResult", "status", "int", true},
+    {"http", "DownloadResult", "downloaded", "int", true},
+    {"http", "DownloadResult", "total", "int", true},
+    {"http", "DownloadResult", "completed", "bool", true},
+    {"http", "DownloadResult", "error", "string", true},
+};
+
+static const XrStdlibHandleFieldDefEntry xr_stdlib_handle_fields_ws_WsConn[] = {
+    {"ws", "WsConn", "wsid", "int", true},
+    {"ws", "WsConn", "url", "string", false},
+    {"ws", "WsConn", "state", "string", false},
+};
+
+static const XrStdlibHandleFieldDefEntry xr_stdlib_handle_fields_ws_WsMessage[] = {
+    {"ws", "WsMessage", "data", "string", true},
+    {"ws", "WsMessage", "binary", "bool", true},
+    {"ws", "WsMessage", "error", "string", true},
+};
+
+static const XrStdlibHandleDefEntry xr_stdlib_handle_def_entries[] = {
+    {"path", "PathInfo", "Native handle type", xr_stdlib_handle_fields_path_PathInfo, 5},
+    {"url", "URL", "Native handle type", xr_stdlib_handle_fields_url_URL, 11},
+    {"os", "ExecResult", "Native handle type", xr_stdlib_handle_fields_os_ExecResult, 3},
+    {"io", "FileStat", "Native handle type", xr_stdlib_handle_fields_io_FileStat, 10},
+    {"net", "UdpPacket", "Native handle type", xr_stdlib_handle_fields_net_UdpPacket, 3},
+    {"http", "HttpResponse", "Native handle type", xr_stdlib_handle_fields_http_HttpResponse, 6},
+    {"http", "HttpRequest", "Native handle type", xr_stdlib_handle_fields_http_HttpRequest, 8},
+    {"http", "DownloadResult", "Native handle type", xr_stdlib_handle_fields_http_DownloadResult, 5},
+    {"ws", "WsConn", "Native handle type", xr_stdlib_handle_fields_ws_WsConn, 3},
+    {"ws", "WsMessage", "Native handle type", xr_stdlib_handle_fields_ws_WsMessage, 3},
+};
+#define XR_STDLIB_HANDLE_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_handle_def_entries) / sizeof(xr_stdlib_handle_def_entries[0])))
+
+static const XrStdlibTypeMethodDefEntry xr_stdlib_type_method_def_entries[] = {
+    {"datetime", "DateTime", "format", "(pattern?: string): string", "Format datetime to string"},
+    {"datetime", "DateTime", "toISOString", "(): string", "Convert to ISO 8601 string"},
+    {"datetime", "DateTime", "year", "(): int", "Get year"},
+    {"datetime", "DateTime", "month", "(): int", "Get month (1-12)"},
+    {"datetime", "DateTime", "day", "(): int", "Get day (1-31)"},
+    {"datetime", "DateTime", "hour", "(): int", "Get hour (0-23)"},
+    {"datetime", "DateTime", "minute", "(): int", "Get minute (0-59)"},
+    {"datetime", "DateTime", "second", "(): int", "Get second (0-59)"},
+    {"datetime", "DateTime", "millisecond", "(): int", "Get millisecond (0-999)"},
+    {"datetime", "DateTime", "weekday", "(): int", "Get weekday (0=Sunday)"},
+    {"datetime", "DateTime", "yearday", "(): int", "Get day of year (1-366)"},
+    {"datetime", "DateTime", "timestamp", "(): int", "Get Unix timestamp (seconds)"},
+    {"datetime", "DateTime", "add", "(amount: int, unit: string): DateTime", "Add duration to datetime"},
+    {"datetime", "DateTime", "diff", "(other: DateTime, unit?: string): int", "Difference between datetimes"},
+    {"datetime", "DateTime", "toUTC", "(): DateTime", "Convert to UTC"},
+    {"datetime", "DateTime", "toLocal", "(): DateTime", "Convert to local time"},
+    {"datetime", "DateTime", "isBefore", "(other: DateTime): bool", "Check if before other datetime"},
+    {"datetime", "DateTime", "isAfter", "(other: DateTime): bool", "Check if after other datetime"},
+    {"datetime", "DateTime", "equals", "(other: DateTime): bool", "Check if equal to other datetime"},
+    {"datetime", "DateTime", "isLeapYear", "(): bool", "Check if leap year"},
+    {"datetime", "DateTime", "daysInMonth", "(): int", "Get days in current month"},
+};
+#define XR_STDLIB_TYPE_METHOD_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_type_method_def_entries) / sizeof(xr_stdlib_type_method_def_entries[0])))
+
+static const XrStdlibNativeClassDefEntry xr_stdlib_native_class_def_entries[] = {
+    {"regex", "Regex", "objectClass", "regexClass", "&g_regex_body_desc", "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY", "XR_BK_REGEX"},
+    {"log", "Logger", "objectClass", "loggerClass", "&g_logger_body_desc", "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY", ""},
+    {"net", "NetConn", "", "netConnClass", "xr_netconn_body_desc()", "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY", "XR_BK_NETCONN"},
+    {"net", "NetListener", "", "netListenerClass", "xr_netlistener_body_desc()", "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY", "XR_BK_NETLISTENER"},
+    {"datetime", "DateTime", "objectClass", "dateTimeClass", "&g_datetime_body_desc", "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY", "XR_BK_DATETIME"},
+};
+#define XR_STDLIB_NATIVE_CLASS_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_native_class_def_entries) / sizeof(xr_stdlib_native_class_def_entries[0])))
+
+static const XrStdlibClassDefEntry xr_stdlib_class_def_entries[] = {
+    {"regex", "RegexMatch", "objectClass", "regexMatchClass", "XR_CLASS_BUILTIN | XR_CLASS_FINAL", "XR_BK_REGEX_MATCH"},
+};
+#define XR_STDLIB_CLASS_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_class_def_entries) / sizeof(xr_stdlib_class_def_entries[0])))
+
+static const XrStdlibClassMethodDefEntry xr_stdlib_class_method_def_entries[] = {
+    {"regex", "Regex", "test", "re_m_test", 1, "0"},
+    {"regex", "Regex", "find", "re_m_find", 2, "0"},
+    {"regex", "Regex", "findText", "re_m_find_text", 1, "0"},
+    {"regex", "Regex", "findGroup", "re_m_find_group", 2, "0"},
+    {"regex", "Regex", "findAll", "re_m_find_all", 2, "0"},
+    {"regex", "Regex", "replace", "re_m_replace", 2, "0"},
+    {"regex", "Regex", "replaceAll", "re_m_replace_all", 2, "0"},
+    {"regex", "Regex", "split", "re_m_split", 2, "0"},
+    {"regex", "Regex", "pattern", "re_method_pattern", 0, "0"},
+    {"regex", "Regex", "toString", "re_m_to_string", 0, "0"},
+    {"log", "Logger", "debug", "xr_logger_debug", -1, "0"},
+    {"log", "Logger", "info", "xr_logger_info", -1, "0"},
+    {"log", "Logger", "warn", "xr_logger_warn", -1, "0"},
+    {"log", "Logger", "error", "xr_logger_error", -1, "0"},
+    {"log", "Logger", "fatal", "xr_logger_fatal", -1, "0"},
+    {"log", "Logger", "child", "xr_logger_child", -1, "0"},
+    {"net", "NetConn", "fd", "conn_method_fd", 0, "0"},
+    {"net", "NetConn", "close", "conn_method_close", 0, "0"},
+    {"net", "NetConn", "isClosed", "conn_method_is_closed", 0, "0"},
+    {"net", "NetConn", "isTLS", "conn_method_is_tls", 0, "0"},
+    {"net", "NetListener", "fd", "listener_method_fd", 0, "0"},
+    {"net", "NetListener", "port", "listener_method_port", 0, "0"},
+    {"net", "NetListener", "close", "listener_method_close", 0, "0"},
+    {"net", "NetListener", "isClosed", "listener_method_is_closed", 0, "0"},
+    {"datetime", "DateTime", "toString", "dt_to_string", 1, "0"},
+    {"datetime", "DateTime", "format", "dt_format", 2, "0"},
+    {"datetime", "DateTime", "toISOString", "dt_to_iso", 1, "0"},
+    {"datetime", "DateTime", "add", "dt_add", 3, "0"},
+    {"datetime", "DateTime", "diff", "dt_diff", 3, "0"},
+    {"datetime", "DateTime", "toUTC", "dt_to_utc", 1, "0"},
+    {"datetime", "DateTime", "toLocal", "dt_to_local", 1, "0"},
+    {"datetime", "DateTime", "isBefore", "dt_is_before", 2, "0"},
+    {"datetime", "DateTime", "isAfter", "dt_is_after", 2, "0"},
+    {"datetime", "DateTime", "equals", "dt_equals", 2, "0"},
+    {"datetime", "DateTime", "isLeapYear", "dt_is_leap_year", 1, "0"},
+    {"datetime", "DateTime", "daysInMonth", "dt_days_in_month", 1, "0"},
+    {"datetime", "DateTime", "get:year", "dt_year", 1, "0"},
+    {"datetime", "DateTime", "get:month", "dt_month", 1, "0"},
+    {"datetime", "DateTime", "get:day", "dt_day", 1, "0"},
+    {"datetime", "DateTime", "get:hour", "dt_hour", 1, "0"},
+    {"datetime", "DateTime", "get:minute", "dt_minute", 1, "0"},
+    {"datetime", "DateTime", "get:second", "dt_second", 1, "0"},
+    {"datetime", "DateTime", "get:millisecond", "dt_millisecond", 1, "0"},
+    {"datetime", "DateTime", "get:weekday", "dt_weekday", 1, "0"},
+    {"datetime", "DateTime", "get:yearday", "dt_yearday", 1, "0"},
+    {"datetime", "DateTime", "get:timestamp", "dt_timestamp", 1, "0"},
+};
+#define XR_STDLIB_CLASS_METHOD_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_class_method_def_entries) / sizeof(xr_stdlib_class_method_def_entries[0])))
+
+static const XrStdlibClassFieldDefEntry xr_stdlib_class_field_def_entries[] = {
+    {"regex", "RegexMatch", "start", "0"},
+    {"regex", "RegexMatch", "end", "0"},
+    {"regex", "RegexMatch", "text", "0"},
+    {"regex", "RegexMatch", "groups", "0"},
+};
+#define XR_STDLIB_CLASS_FIELD_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_class_field_def_entries) / sizeof(xr_stdlib_class_field_def_entries[0])))
 
 #endif  /* XSTDLIB_DEFS_GENERATED_H */
 

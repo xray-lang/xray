@@ -10,8 +10,7 @@
  * Exception is a regular class registered into core->exceptionClass
  * (built by xr_register_exception_class below; called from
  * xr_core_init). All field access here is direct indexing into
- * XrInstance.fields[] using the EXCEPTION_FIELD_* indices fixed in
- * xclass_system.h.
+ * XrInstance.fields[] using the shared builtin schema indices.
  */
 
 #include "xexception.h"
@@ -19,6 +18,7 @@
 #include "../xerror_impl.h"
 #include "../xisolate_api.h"
 #include "../../base/xmalloc.h"
+#include "../../shared/xr_error_core.h"
 #include "xstring.h"
 #include "xarray.h"
 #include "../class/xclass.h"
@@ -251,16 +251,10 @@ static XrValue exception_primitive_constructor(XrVMRuntime *X, XrValue self, XrV
 
     // code: int — auto-detect from "E0xxx: ..." message prefix, else 0.
     int code = 0;
-    if (msg_str && msg_str->length >= 5 && msg_str->data[0] == 'E' && msg_str->data[1] == '0') {
-        char buf[8];
-        int n = 0;
-        for (int i = 1; i < (int) msg_str->length && i < 6 && msg_str->data[i] >= '0' &&
-                        msg_str->data[i] <= '9';
-             i++)
-            buf[n++] = msg_str->data[i];
-        buf[n] = '\0';
-        if (n >= 3)
-            code = atoi(buf);
+    if (msg_str) {
+        XrErrorCoreMessageView view = xr_error_core_parse_prefixed(msg_str->data, msg_str->length);
+        if (view.has_code)
+            code = view.code;
     }
     inst->fields[EXCEPTION_FIELD_CODE] = xr_int(code);
 
@@ -298,9 +292,9 @@ static XrValue exception_primitive_to_string(XrVMRuntime *X, XrValue self, XrVal
 /* ========== Class Registration ==========
  *
  * Called from xr_core_init after Object is ready. Builds the Exception
- * class with 5 fields and 2 primitive methods, then asserts that field
- * indices match the EXCEPTION_FIELD_* constants — any drift between
- * builder ordering and the constants would silently corrupt every throw.
+ * class with its shared-schema fields and primitive methods, then asserts
+ * that builder field indices match the schema — any drift would silently
+ * corrupt every throw.
  */
 
 void xr_register_exception_class(XrVMRuntime *X) {
@@ -313,12 +307,8 @@ void xr_register_exception_class(XrVMRuntime *X) {
     XrClassBuilder *builder = xr_class_builder_new(X, TYPE_NAME_EXCEPTION, core->objectClass);
     XR_CHECK(builder != NULL, "register_exception_class: builder alloc failed");
 
-    /* Field order MUST match EXCEPTION_FIELD_* in xclass_system.h. */
-    xr_class_builder_add_field(builder, "message", 0);
-    xr_class_builder_add_field(builder, "stack", 0);
-    xr_class_builder_add_field(builder, "cause", 0);
-    xr_class_builder_add_field(builder, "code", 0);
-    xr_class_builder_add_field(builder, "data", 0);
+    for (int i = 0; i < EXCEPTION_FIELD_COUNT; i++)
+        xr_class_builder_add_field(builder, xr_exception_field_name(i), 0);
 
     xr_class_builder_add_method(builder, XR_KEYWORD_CONSTRUCTOR, exception_primitive_constructor,
                                 /* param_count */ -1, XMETHOD_FLAG_CONSTRUCTOR);
@@ -333,16 +323,9 @@ void xr_register_exception_class(XrVMRuntime *X) {
     /* Sanity-check that builder layout matches the indices the entire VM
      * relies on. If finalize ever reorders fields these asserts trip
      * immediately at init, not at the first throw. */
-    XR_DCHECK(xr_class_lookup_field_by_name(X, cls, "message") == EXCEPTION_FIELD_MESSAGE,
-              "Exception field 'message' index drift");
-    XR_DCHECK(xr_class_lookup_field_by_name(X, cls, "stack") == EXCEPTION_FIELD_STACK,
-              "Exception field 'stack' index drift");
-    XR_DCHECK(xr_class_lookup_field_by_name(X, cls, "cause") == EXCEPTION_FIELD_CAUSE,
-              "Exception field 'cause' index drift");
-    XR_DCHECK(xr_class_lookup_field_by_name(X, cls, "code") == EXCEPTION_FIELD_CODE,
-              "Exception field 'code' index drift");
-    XR_DCHECK(xr_class_lookup_field_by_name(X, cls, "data") == EXCEPTION_FIELD_DATA,
-              "Exception field 'data' index drift");
+    for (int i = 0; i < EXCEPTION_FIELD_COUNT; i++)
+        XR_DCHECK(xr_class_lookup_field_by_name(X, cls, xr_exception_field_name(i)) == i,
+                  "Exception field index drift");
 
     core->exceptionClass = cls;
 }

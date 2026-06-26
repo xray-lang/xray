@@ -14,6 +14,7 @@
  */
 
 #include "../test_framework.h"
+#include "../../../src/shared/xr_regex_core.h"
 #include "../../../stdlib/regex/xregex.h"
 #include "../../../stdlib/regex/xregex_internal.h"
 #include <string.h>
@@ -66,6 +67,48 @@ TEST(compile_flags) {
     XrRegex *re = RE_COMPILE_FLAGS("hello", XR_RE_IGNORECASE | XR_RE_MULTILINE);
     ASSERT_NOT_NULL(re);
     xr_regex_free(re);
+}
+
+TEST(core_parse_flags_matches_regex_engine_flags) {
+    ASSERT_EQ_INT(xr_regex_core_parse_flags("ims", 3),
+                  XR_RE_IGNORECASE | XR_RE_MULTILINE | XR_RE_DOTALL);
+    ASSERT_EQ_INT(xr_regex_core_parse_flags("ziz", 3), XR_RE_IGNORECASE);
+    ASSERT_EQ_INT(xr_regex_core_parse_flags(NULL, 0), XR_RE_NONE);
+}
+
+TEST(core_match_field_schema_matches_regex_match_class) {
+    ASSERT_EQ_INT(XR_REGEX_CORE_MATCH_START, 0);
+    ASSERT_EQ_INT(XR_REGEX_CORE_MATCH_END, 1);
+    ASSERT_EQ_INT(XR_REGEX_CORE_MATCH_TEXT, 2);
+    ASSERT_EQ_INT(XR_REGEX_CORE_MATCH_GROUPS, 3);
+    ASSERT_EQ_INT(XR_REGEX_CORE_MATCH_FIELD_COUNT, 4);
+    ASSERT_STR_EQ(XR_REGEX_CORE_MATCH_FIELD_NAMES[XR_REGEX_CORE_MATCH_START], "start");
+    ASSERT_STR_EQ(XR_REGEX_CORE_MATCH_FIELD_NAMES[XR_REGEX_CORE_MATCH_END], "end");
+    ASSERT_STR_EQ(XR_REGEX_CORE_MATCH_FIELD_NAMES[XR_REGEX_CORE_MATCH_TEXT], "text");
+    ASSERT_STR_EQ(XR_REGEX_CORE_MATCH_FIELD_NAMES[XR_REGEX_CORE_MATCH_GROUPS], "groups");
+}
+
+TEST(core_int_argument_rules_match_adapters) {
+    int value = 0;
+    ASSERT_TRUE(xr_regex_core_int_arg(42, &value));
+    ASSERT_EQ_INT(value, 42);
+    ASSERT_TRUE(xr_regex_core_int_arg((int64_t) INT_MIN, &value));
+    ASSERT_EQ_INT(value, INT_MIN);
+    ASSERT_TRUE(xr_regex_core_int_arg((int64_t) INT_MAX, &value));
+    ASSERT_EQ_INT(value, INT_MAX);
+    ASSERT_FALSE(xr_regex_core_int_arg((int64_t) INT_MAX + 1, &value));
+    ASSERT_FALSE(xr_regex_core_int_arg((int64_t) INT_MIN - 1, &value));
+
+    ASSERT_EQ_INT(xr_regex_core_limit_arg(false, 99), -1);
+    ASSERT_EQ_INT(xr_regex_core_limit_arg(true, 7), 7);
+    ASSERT_EQ_INT(xr_regex_core_limit_arg(true, (int64_t) INT_MAX + 1), INT_MAX);
+    ASSERT_EQ_INT(xr_regex_core_limit_arg(true, (int64_t) INT_MIN - 1), INT_MIN);
+
+    ASSERT_EQ_INT(xr_regex_core_split_max_parts(-1), XR_REGEX_CORE_SPLIT_MAX_PARTS);
+    ASSERT_EQ_INT(xr_regex_core_split_max_parts(0), XR_REGEX_CORE_SPLIT_MAX_PARTS);
+    ASSERT_EQ_INT(xr_regex_core_split_max_parts(3), 3);
+    ASSERT_EQ_INT(xr_regex_core_split_max_parts(XR_REGEX_CORE_SPLIT_MAX_PARTS),
+                  XR_REGEX_CORE_SPLIT_MAX_PARTS);
 }
 
 TEST(compile_is_valid) {
@@ -854,6 +897,9 @@ RUN_TEST(compile_invalid_unmatched_paren);
 RUN_TEST(compile_invalid_unmatched_bracket);
 RUN_TEST(compile_invalid_bad_repeat);
 RUN_TEST(compile_flags);
+RUN_TEST(core_parse_flags_matches_regex_engine_flags);
+RUN_TEST(core_match_field_schema_matches_regex_match_class);
+RUN_TEST(core_int_argument_rules_match_adapters);
 RUN_TEST(compile_is_valid);
 RUN_TEST(compile_rejects_too_many_capture_groups);
 

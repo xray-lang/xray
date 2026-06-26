@@ -12,6 +12,7 @@
 #define XRT_RANGE_H
 
 #include "xrt_arc.h"
+#include "../shared/xr_range_core.h"
 #include <inttypes.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -25,49 +26,30 @@ typedef struct {
 } xrt_range_t;
 
 static inline int64_t xrt_range_length_ptr(const xrt_range_t *r) {
-    if (!r || r->step == 0)
+    if (!r)
         return 0;
-    if (r->step > 0) {
-        if (r->end <= r->start)
-            return 0;
-        return (r->end - r->start + r->step - 1) / r->step;
-    }
-    if (r->end >= r->start)
-        return 0;
-    int64_t neg_step = -r->step;
-    return (r->start - r->end + neg_step - 1) / neg_step;
+    return xr_range_core_length(xr_range_core_make(r->start, r->end, r->step));
 }
 
 static inline bool xrt_range_contains_ptr(const xrt_range_t *r, int64_t value) {
-    if (!r || r->step == 0)
+    if (!r)
         return false;
-    if (r->step > 0) {
-        if (value < r->start || value >= r->end)
-            return false;
-        return (value - r->start) % r->step == 0;
-    }
-    if (value > r->start || value <= r->end)
-        return false;
-    return (r->start - value) % (-r->step) == 0;
+    return xr_range_core_contains(xr_range_core_make(r->start, r->end, r->step), value);
 }
 
 static inline int64_t xrt_range_index_ptr(const xrt_range_t *r, int64_t index, bool *ok) {
-    int64_t len = xrt_range_length_ptr(r);
-    if (index < 0)
-        index += len;
-    if (ok)
-        *ok = index >= 0 && index < len;
-    if (index < 0 || index >= len)
+    if (!r) {
+        if (ok)
+            *ok = false;
         return 0;
-    return r->start + index * r->step;
+    }
+    return xr_range_core_index(xr_range_core_make(r->start, r->end, r->step), index, ok);
 }
 
 static inline int xrt_range_format_buf(const xrt_range_t *r, char *buf, size_t cap) {
     if (!r)
         return snprintf(buf, cap, "<Range>");
-    if (r->step == 1)
-        return snprintf(buf, cap, "%" PRId64 "..%" PRId64, r->start, r->end);
-    return snprintf(buf, cap, "%" PRId64 "..%" PRId64 ":%" PRId64, r->start, r->end, r->step);
+    return xr_range_core_format_buf(xr_range_core_make(r->start, r->end, r->step), buf, cap);
 }
 
 static inline XrValue xrt_range_new_raw(int64_t start, int64_t end, int64_t step) {

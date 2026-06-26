@@ -20,6 +20,14 @@
 #define XR_ENCODING_UTF16_LE 0
 #define XR_ENCODING_UTF16_BE 1
 
+static inline int xr_encoding_core_utf16_endian_arg(bool has_int, int64_t value) {
+    return has_int && value == XR_ENCODING_UTF16_BE ? XR_ENCODING_UTF16_BE : XR_ENCODING_UTF16_LE;
+}
+
+static inline bool xr_encoding_core_bool_arg_or(bool has_bool, bool value, bool fallback) {
+    return has_bool ? value : fallback;
+}
+
 static inline uint8_t xr_encoding_core_hex_value(unsigned char c) {
     if (c >= '0' && c <= '9')
         return (uint8_t) (c - '0');
@@ -198,6 +206,12 @@ static inline size_t xr_encoding_core_utf8_count(const char *str, size_t len) {
     return count;
 }
 
+static inline size_t xr_encoding_core_utf8_byte_length(const char *str, size_t len) {
+    if (!str && len != 0)
+        return 0;
+    return len;
+}
+
 static inline int xr_encoding_core_utf8_encode_size(uint32_t cp) {
     if (cp <= 0x7F)
         return 1;
@@ -309,6 +323,37 @@ static inline uint16_t xr_encoding_core_utf16_read_unit(const uint8_t *data, int
     if (endian == XR_ENCODING_UTF16_BE)
         return (uint16_t) (((uint16_t) data[0] << 8) | (uint16_t) data[1]);
     return (uint16_t) ((uint16_t) data[0] | ((uint16_t) data[1] << 8));
+}
+
+typedef struct XrEncodingCoreUtf16DecodeView {
+    const uint8_t *data;
+    size_t len;
+    int endian;
+} XrEncodingCoreUtf16DecodeView;
+
+static inline XrEncodingCoreUtf16DecodeView
+xr_encoding_core_utf16_decode_view(const uint8_t *data, size_t len, int endian,
+                                   bool endian_explicit, bool strip_bom) {
+    XrEncodingCoreUtf16DecodeView view = {
+        .data = data,
+        .len = len,
+        .endian = endian,
+    };
+    if (!strip_bom || !data || len < 2)
+        return view;
+
+    if (data[0] == 0xFF && data[1] == 0xFE) {
+        if (!endian_explicit)
+            view.endian = XR_ENCODING_UTF16_LE;
+        view.data = data + 2;
+        view.len = len - 2;
+    } else if (data[0] == 0xFE && data[1] == 0xFF) {
+        if (!endian_explicit)
+            view.endian = XR_ENCODING_UTF16_BE;
+        view.data = data + 2;
+        view.len = len - 2;
+    }
+    return view;
 }
 
 static inline bool xr_encoding_core_utf16_to_utf8_len(const uint8_t *utf16, size_t utf16_len,

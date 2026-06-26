@@ -1246,7 +1246,7 @@ XI_VM_TEMPLATE_ARITH_BINARY = {
                '"division requires numeric types"'),
     'xi.mod': ('XVM_TEMPLATE_ARITH_MOD_CASE', 'xr_bigint_mod',
                'XR_OP_MOD_FLAG', 'SYMBOL_OP_MOD', '"%%"',
-               '"modulo requires integer types"'),
+               'XR_ERROR_CORE_MODULO_REQUIRES_INTEGER_MSG'),
 }
 
 XI_VM_TEMPLATE_SHIFT = {

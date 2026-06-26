@@ -1,0 +1,19 @@
+import io
+
+let root = io.tempDir() ?? ""
+print(root.length > 0)
+
+let nested = root + "/x/y"
+let file = nested + "/a.txt"
+let top = root + "/top.txt"
+print(io.mkdirp(nested))
+print(io.writeFile(file, "a"))
+print(io.writeFile(top, "b"))
+
+print(io.removeAll(file))
+print(!io.exists(file))
+print(io.writeFile(file, "again"))
+
+print(io.removeAll(root))
+print(!io.exists(root))
+print(!io.removeAll(root))

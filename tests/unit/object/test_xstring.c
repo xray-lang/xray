@@ -297,6 +297,42 @@ TEST(string_trim_end) {
     teardown();
 }
 
+TEST(string_pad_start_end) {
+    setup();
+    XrString *s = xr_string_intern(X, "42", 2, xr_string_hash("42", 2));
+    XrString *zero = xr_string_intern(X, "0", 1, xr_string_hash("0", 1));
+    XrString *result = xr_string_pad_start(X, s, 5, zero);
+    ASSERT_NOT_NULL(result);
+    ASSERT_STR_EQ(result->data, "00042");
+
+    XrString *hi = xr_string_intern(X, "hi", 2, xr_string_hash("hi", 2));
+    XrString *bang = xr_string_intern(X, "!", 1, xr_string_hash("!", 1));
+    result = xr_string_pad_end(X, hi, 5, bang);
+    ASSERT_NOT_NULL(result);
+    ASSERT_STR_EQ(result->data, "hi!!!");
+    teardown();
+}
+
+TEST(string_pad_default_empty_and_negative) {
+    setup();
+    XrString *s = xr_string_intern(X, "x", 1, xr_string_hash("x", 1));
+    XrString *result = xr_string_pad_start(X, s, 3, NULL);
+    ASSERT_NOT_NULL(result);
+    ASSERT_STR_EQ(result->data, "  x");
+
+    result = xr_string_pad_end(X, s, 3, NULL);
+    ASSERT_NOT_NULL(result);
+    ASSERT_STR_EQ(result->data, "x  ");
+
+    XrString *empty = xr_string_intern(X, "", 0, xr_string_hash("", 0));
+    result = xr_string_pad_start(X, s, 5, empty);
+    ASSERT_EQ_PTR(result, s);
+
+    result = xr_string_pad_end(X, s, -1, NULL);
+    ASSERT_EQ_PTR(result, s);
+    teardown();
+}
+
 /* ========== Substring Tests ========== */
 
 TEST(string_substring) {
@@ -317,6 +353,34 @@ TEST(string_substring_middle) {
     teardown();
 }
 
+TEST(string_substring_bounds) {
+    setup();
+    XrString *s = xr_string_intern(X, "abcdef", 6, xr_string_hash("abcdef", 6));
+
+    XrString *sub = xr_string_substring(X, s, -3, 3);
+    ASSERT_NOT_NULL(sub);
+    ASSERT_STR_EQ(sub->data, "abc");
+
+    sub = xr_string_substring(X, s, 2, -1);
+    ASSERT_NOT_NULL(sub);
+    ASSERT_STR_EQ(sub->data, "cdef");
+    teardown();
+}
+
+TEST(string_slice_bounds) {
+    setup();
+    XrString *s = xr_string_intern(X, "abcdef", 6, xr_string_hash("abcdef", 6));
+
+    XrString *slice = xr_string_slice(X, s, -3, -1);
+    ASSERT_NOT_NULL(slice);
+    ASSERT_STR_EQ(slice->data, "de");
+
+    slice = xr_string_slice(X, s, 2, -1);
+    ASSERT_NOT_NULL(slice);
+    ASSERT_STR_EQ(slice->data, "cde");
+    teardown();
+}
+
 TEST(string_char_at) {
     setup();
     XrString *s = xr_string_intern(X, "hello", 5, xr_string_hash("hello", 5));
@@ -327,6 +391,70 @@ TEST(string_char_at) {
     c = xr_string_char_at(X, s, 4);
     ASSERT_NOT_NULL(c);
     ASSERT_STR_EQ(c->data, "o");
+    teardown();
+}
+
+TEST(string_unicode_char_and_byte_at) {
+    setup();
+    const char *text = "A你🌍";
+    XrString *s = xr_string_intern(X, text, strlen(text), xr_string_hash(text, strlen(text)));
+
+    XrString *ch = xr_string_char_at_unicode(X, s, 1);
+    ASSERT_NOT_NULL(ch);
+    ASSERT_STR_EQ(ch->data, "你");
+
+    ch = xr_string_char_at_unicode(X, s, 2);
+    ASSERT_NOT_NULL(ch);
+    ASSERT_STR_EQ(ch->data, "🌍");
+
+    ASSERT_NULL(xr_string_char_at_unicode(X, s, 3));
+    ASSERT_EQ_INT(xr_string_char_code_at(s, 2), 127757);
+    ASSERT_EQ_INT(xr_string_char_code_at(s, 9), -1);
+
+    XrString *byte = xr_string_byte_at(X, s, -1);
+    ASSERT_NOT_NULL(byte);
+    ASSERT_EQ_UINT(byte->length, 1);
+    ASSERT_EQ_UINT((unsigned char) byte->data[0], 0x8D);
+    ASSERT_NULL(xr_string_byte_at(X, s, -99));
+    teardown();
+}
+
+TEST(string_split_edges) {
+    setup();
+    XrString *s = xr_string_intern(X, "a,,b,", 5, xr_string_hash("a,,b,", 5));
+    XrString *comma = xr_string_intern(X, ",", 1, xr_string_hash(",", 1));
+    XrArray *parts = xr_string_split(X, s, comma);
+    ASSERT_NOT_NULL(parts);
+    ASSERT_EQ_INT(parts->length, 4);
+    ASSERT_STR_EQ(XR_TO_STRING(xr_array_get(parts, 0))->data, "a");
+    ASSERT_EQ_UINT(XR_TO_STRING(xr_array_get(parts, 1))->length, 0);
+    ASSERT_STR_EQ(XR_TO_STRING(xr_array_get(parts, 2))->data, "b");
+    ASSERT_EQ_UINT(XR_TO_STRING(xr_array_get(parts, 3))->length, 0);
+
+    XrString *empty = xr_string_intern(X, "", 0, 0);
+    XrString *ab = xr_string_intern(X, "ab", 2, xr_string_hash("ab", 2));
+    parts = xr_string_split(X, ab, empty);
+    ASSERT_NOT_NULL(parts);
+    ASSERT_EQ_INT(parts->length, 2);
+    ASSERT_STR_EQ(XR_TO_STRING(xr_array_get(parts, 0))->data, "a");
+    ASSERT_STR_EQ(XR_TO_STRING(xr_array_get(parts, 1))->data, "b");
+
+    parts = xr_string_split(X, empty, empty);
+    ASSERT_NOT_NULL(parts);
+    ASSERT_EQ_INT(parts->length, 0);
+
+    const char embedded[] = {'a', '\0', 'b', '\0', 'c'};
+    const char nul_sep[] = {'\0'};
+    XrString *embedded_str =
+        xr_string_intern(X, embedded, sizeof(embedded), xr_string_hash(embedded, sizeof(embedded)));
+    XrString *sep_str =
+        xr_string_intern(X, nul_sep, sizeof(nul_sep), xr_string_hash(nul_sep, sizeof(nul_sep)));
+    parts = xr_string_split(X, embedded_str, sep_str);
+    ASSERT_NOT_NULL(parts);
+    ASSERT_EQ_INT(parts->length, 3);
+    ASSERT_STR_EQ(XR_TO_STRING(xr_array_get(parts, 0))->data, "a");
+    ASSERT_STR_EQ(XR_TO_STRING(xr_array_get(parts, 1))->data, "b");
+    ASSERT_STR_EQ(XR_TO_STRING(xr_array_get(parts, 2))->data, "c");
     teardown();
 }
 
@@ -351,6 +479,35 @@ TEST(string_replace_all) {
     XrString *result = xr_string_replace_all(X, s, old, new_str);
     ASSERT_NOT_NULL(result);
     ASSERT_STR_EQ(result->data, "bbbbbb");
+    teardown();
+}
+
+TEST(string_replace_edges) {
+    setup();
+    XrString *s = xr_string_intern(X, "aaaa", 4, xr_string_hash("aaaa", 4));
+    XrString *old = xr_string_intern(X, "aa", 2, xr_string_hash("aa", 2));
+    XrString *new_str = xr_string_intern(X, "X", 1, xr_string_hash("X", 1));
+
+    XrString *result = xr_string_replace(X, s, old, new_str);
+    ASSERT_NOT_NULL(result);
+    ASSERT_STR_EQ(result->data, "Xaa");
+
+    result = xr_string_replace_all(X, s, old, new_str);
+    ASSERT_NOT_NULL(result);
+    ASSERT_STR_EQ(result->data, "XX");
+
+    XrString *empty = xr_string_intern(X, "", 0, 0);
+    result = xr_string_replace(X, s, empty, new_str);
+    ASSERT_EQ_PTR(result, s);
+    result = xr_string_replace_all(X, s, empty, new_str);
+    ASSERT_EQ_PTR(result, s);
+
+    XrString *abc = xr_string_intern(X, "abc", 3, xr_string_hash("abc", 3));
+    XrString *b = xr_string_intern(X, "b", 1, xr_string_hash("b", 1));
+    result = xr_string_replace_all(X, abc, b, empty);
+    ASSERT_NOT_NULL(result);
+    ASSERT_EQ_UINT(result->length, 2);
+    ASSERT(memcmp(result->data, "ac", 2) == 0);
     teardown();
 }
 
@@ -452,15 +609,24 @@ static void run_all_tests(void) {
     RUN_TEST(string_trim);
     RUN_TEST(string_trim_start);
     RUN_TEST(string_trim_end);
+    RUN_TEST(string_pad_start_end);
+    RUN_TEST(string_pad_default_empty_and_negative);
 
     RUN_TEST_SUITE("Substring");
     RUN_TEST(string_substring);
     RUN_TEST(string_substring_middle);
+    RUN_TEST(string_substring_bounds);
+    RUN_TEST(string_slice_bounds);
     RUN_TEST(string_char_at);
+    RUN_TEST(string_unicode_char_and_byte_at);
+
+    RUN_TEST_SUITE("String Split");
+    RUN_TEST(string_split_edges);
 
     RUN_TEST_SUITE("String Replace");
     RUN_TEST(string_replace);
     RUN_TEST(string_replace_all);
+    RUN_TEST(string_replace_edges);
 
     RUN_TEST_SUITE("String Repeat");
     RUN_TEST(string_repeat);

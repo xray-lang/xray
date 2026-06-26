@@ -1,0 +1,27 @@
+let ints: Array<int> = [1, 2, 3, 4]
+print(ints.shift())
+for (v in ints) {
+    print(v)
+}
+
+let flags: Array<bool> = [true, false, true, false]
+print(flags.shift())
+for (flag in flags) {
+    print(flag)
+}
+
+let words: Array<string> = ["left", "middle", "right"]
+print(words.shift())
+for (w in words) {
+    print(w)
+}
+
+let bytes = new Bytes(4)
+bytes[0] = 10
+bytes[1] = 20
+bytes[2] = 30
+bytes[3] = 40
+print(bytes.shift())
+for (b in bytes) {
+    print(b)
+}

@@ -122,9 +122,8 @@ void xr_core_init(XrVMRuntime *X) {
     // Process class with fields
     {
         XrClassBuilder *builder = xr_class_builder_new(X, "Process", X->core->objectClass);
-        xr_class_builder_add_field(builder, "file", PROCESS_FIELD_FILE);
-        xr_class_builder_add_field(builder, "args", PROCESS_FIELD_ARGS);
-        xr_class_builder_add_field(builder, "dir", PROCESS_FIELD_DIR);
+        for (int i = 0; i < PROCESS_FIELD_COUNT; i++)
+            xr_class_builder_add_field(builder, xr_process_field_name(i), 0);
         X->core->processClass = xr_class_builder_finalize(builder);
     }
 

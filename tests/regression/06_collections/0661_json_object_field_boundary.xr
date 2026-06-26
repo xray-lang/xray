@@ -1,9 +1,9 @@
-// 0661_jit_cross_boundary.xr
-// Test: interpreter/JIT boundary consistency
-// Verifies that objects created by interpreter are correctly read by JIT,
-// and that OSR with mixed-type accumulation works correctly.
+// 0661_json_object_field_boundary.xr
+// Test: Json object field boundary consistency.
+// Verifies that dynamic Json fields can be read through explicit concrete
+// boundaries, and that mixed-type field stores remain stable across VM/AOT.
 
-// ===== Interpreter creates object, JIT reads fields =====
+// ===== Json tree field reads through concrete boundaries =====
 fn make_tree(depth: int) -> Json {
     if (depth <= 0) {
         return { "left": null, "right": null, "val": 1 }
@@ -15,9 +15,12 @@ fn make_tree(depth: int) -> Json {
     }
 }
 
-fn checksum(node: Json) -> float {
+fn checksum(node: Json) -> int {
     if (node == null) { return 0 }
-    return node.val + checksum(node.left) + checksum(node.right)
+    let val: int = node.val
+    let left: Json = node.left
+    let right: Json = node.right
+    return val + checksum(left) + checksum(right)
 }
 
 @test

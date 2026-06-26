@@ -230,8 +230,8 @@ void xlsp_handle_ws_apply_configuration(XrLspServer *server, XrJsonValue *settin
         if (xjson_get(format, "insertSpaces")) {
             server->config.format_insert_spaces = xjson_get_bool(format, "insertSpaces");
         }
-        if (xjson_get(format, "alignMatchArms")) {
-            server->config.format_align_match_arms = xjson_get_bool(format, "alignMatchArms");
+        if (xjson_get(format, "alignBranchArrows")) {
+            server->config.format_align_branch_arrows = xjson_get_bool(format, "alignBranchArrows");
         }
         if (xjson_get(format, "maxLineLength")) {
             server->config.format_max_line_length = (int) xjson_get_int(format, "maxLineLength");

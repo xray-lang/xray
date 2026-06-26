@@ -225,14 +225,13 @@ static XrValue encoding_utf8_byte_length(XrVMRuntime *X, XrValue *args, int narg
     if (!str)
         return xr_int(0);
 
-    return xr_int((int64_t) len);
+    return xr_int((int64_t) xr_encoding_core_utf8_byte_length(str, len));
 }
 
 static XrUtf16Endian parse_endian_arg(XrValue *args, int nargs) {
-    if (nargs >= 2 && XR_IS_INT(args[1])) {
-        return XR_TO_INT(args[1]) == XR_UTF16_BE ? XR_UTF16_BE : XR_UTF16_LE;
-    }
-    return XR_UTF16_LE;
+    bool has_endian = nargs >= 2 && XR_IS_INT(args[1]);
+    int endian = xr_encoding_core_utf16_endian_arg(has_endian, has_endian ? XR_TO_INT(args[1]) : 0);
+    return endian == XR_ENCODING_UTF16_BE ? XR_UTF16_BE : XR_UTF16_LE;
 }
 
 // encoding.utf16Encode(str, endian?) -> Array<uint8>
@@ -301,24 +300,16 @@ static XrValue encoding_utf16_decode(XrVMRuntime *X, XrValue *args, int nargs) {
     // Auto-detect endian from BOM when the caller did not supply one.
     bool endian_explicit = (nargs >= 2 && XR_IS_INT(args[1]));
     XrUtf16Endian endian = parse_endian_arg(args, nargs);
-    bool strip_bom = true;
-    if (nargs >= 3 && XR_IS_BOOL(args[2])) {
-        strip_bom = XR_TO_BOOL(args[2]);
-    }
+    bool has_strip_bom = nargs >= 3 && XR_IS_BOOL(args[2]);
+    bool strip_bom = xr_encoding_core_bool_arg_or(
+        has_strip_bom, has_strip_bom ? XR_TO_BOOL(args[2]) != 0 : false, true);
 
-    if (strip_bom && len >= 2) {
-        if (bytes[0] == 0xFF && bytes[1] == 0xFE) {
-            if (!endian_explicit)
-                endian = XR_UTF16_LE;
-            bytes += 2;
-            len -= 2;
-        } else if (bytes[0] == 0xFE && bytes[1] == 0xFF) {
-            if (!endian_explicit)
-                endian = XR_UTF16_BE;
-            bytes += 2;
-            len -= 2;
-        }
-    }
+    XrEncodingCoreUtf16DecodeView view = xr_encoding_core_utf16_decode_view(
+        bytes, len, endian == XR_UTF16_BE ? XR_ENCODING_UTF16_BE : XR_ENCODING_UTF16_LE,
+        endian_explicit, strip_bom);
+    bytes = view.data;
+    len = view.len;
+    endian = view.endian == XR_ENCODING_UTF16_BE ? XR_UTF16_BE : XR_UTF16_LE;
     if (len == 0)
         return xrs_string_value_n(X, "", 0);
 
@@ -343,29 +334,9 @@ static XrValue encoding_utf16_decode(XrVMRuntime *X, XrValue *args, int nargs) {
 
 /* ========== Module Loading ========== */
 
-// ========== Type Declarations (parsed by gen_stdlib_types.py) ==========
-
-#include "../../src/module/xbuiltin_decl.h"
-
-// @module encoding
-
-XR_DEFINE_BUILTIN(encoding_hex_encode, "hexEncode", "(data: string): string",
-                  "Hex encode string to hex")
-XR_DEFINE_BUILTIN(encoding_hex_decode, "hexDecode", "(hex: string): Array<uint8>?",
-                  "Hex decode to bytes")
-XR_DEFINE_BUILTIN(encoding_hex_decode_string, "hexDecodeString", "(hex: string): string?",
-                  "Hex decode to string")
-XR_DEFINE_BUILTIN(encoding_hex_valid, "hexValid", "(hex: string): bool",
-                  "Check if valid hex string")
-XR_DEFINE_BUILTIN(encoding_utf8_valid, "utf8Valid", "(data: string): bool", "Check if valid UTF-8")
-XR_DEFINE_BUILTIN(encoding_utf8_count, "utf8Count", "(data: string): int", "Count UTF-8 characters")
-XR_DEFINE_BUILTIN(encoding_utf8_byte_length, "utf8ByteLength", "(data: string): int",
-                  "Get UTF-8 byte length")
-XR_DEFINE_BUILTIN(encoding_utf16_encode, "utf16Encode",
-                  "(data: string, endian?: int): Array<uint8>", "UTF-16 encode to bytes")
-XR_DEFINE_BUILTIN(encoding_utf16_decode, "utf16Decode",
-                  "(data: string | Array<uint8>, endian?: int, stripBom?: bool): string?",
-                  "UTF-16 decode to string (auto-detects BOM)")
+#define XR_STDLIB_VM_BIND_MODULE_ENCODING 1
+#include "../../src/stdlib/xstdlib_vm_bindings_generated.inc.c"
+#undef XR_STDLIB_VM_BIND_MODULE_ENCODING
 
 XR_FUNC XrModule *xr_load_module_encoding(XrVMRuntime *isolate) {
     XR_DCHECK(isolate != NULL, "xr_load_module_encoding: NULL isolate");
@@ -374,24 +345,7 @@ XR_FUNC XrModule *xr_load_module_encoding(XrVMRuntime *isolate) {
     if (!module)
         return NULL;
 
-    // Hex encoding
-    XRS_EXPORT(module, isolate, "hexEncode", encoding_hex_encode);
-    XRS_EXPORT(module, isolate, "hexDecode", encoding_hex_decode);
-    XRS_EXPORT(module, isolate, "hexDecodeString", encoding_hex_decode_string);
-    XRS_EXPORT(module, isolate, "hexValid", encoding_hex_valid);
-
-    // UTF-8 operations
-    XRS_EXPORT(module, isolate, "utf8Valid", encoding_utf8_valid);
-    XRS_EXPORT(module, isolate, "utf8Count", encoding_utf8_count);
-    XRS_EXPORT(module, isolate, "utf8ByteLength", encoding_utf8_byte_length);
-
-    // UTF-16 encoding
-    XRS_EXPORT(module, isolate, "utf16Encode", encoding_utf16_encode);
-    XRS_EXPORT(module, isolate, "utf16Decode", encoding_utf16_decode);
-
-    // Endian constants
-    xr_module_add_export(isolate, module, "LE", xr_int(XR_UTF16_LE));
-    xr_module_add_export(isolate, module, "BE", xr_int(XR_UTF16_BE));
+    xr_stdlib_vm_bind_encoding_generated(isolate, module);
 
     module->loaded = true;
     return module;

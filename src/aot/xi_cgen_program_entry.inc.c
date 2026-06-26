@@ -7,13 +7,13 @@ XR_FUNC void xi_cgen_emit_str_literal_defs(XiCgenCtx *ctx, FILE *out) {
         return;
     for (int i = 0; i < ctx->nstrlit; i++) {
         const CgStrLit *lit = ctx->strlit_list[i];
-        /* Hash precomputed with the runtime's own primitive (xrt_hash.h):
+        /* Hash precomputed with the runtime's shared primitive:
          * literal strings never pay a lazy hash at runtime. */
         fprintf(
             out,
             "static const xrt_str_t _xstr_%d = {INT64_C(%zu), 0x%08xu, XRT_STR_LITERAL, (char *) ",
-            lit->id, lit->len, xrt_str_hash_bytes(lit->str, lit->len));
-        emit_c_string_literal(out, lit->str);
+            lit->id, lit->len, xr_hash_core_str_hash_bytes(lit->str, lit->len));
+        emit_c_string_literal_bytes(out, lit->str, lit->len);
         fprintf(out, "};\n");
     }
     fprintf(out, "\n");
@@ -55,23 +55,7 @@ static const char *cg_source_dir_bounds(const char *file, size_t *out_len) {
 }
 
 static void emit_c_string_literal_n(FILE *out, const char *s, size_t len) {
-    fputc('"', out);
-    if (s) {
-        for (size_t i = 0; i < len; i++) {
-            char ch = s[i];
-            if (ch == '"')
-                fprintf(out, "\\\"");
-            else if (ch == '\\')
-                fprintf(out, "\\\\");
-            else if (ch == '\n')
-                fprintf(out, "\\n");
-            else if (ch == '\t')
-                fprintf(out, "\\t");
-            else
-                fputc(ch, out);
-        }
-    }
-    fputc('"', out);
+    emit_c_string_literal_bytes(out, s, len);
 }
 
 static void emit_optional_c_string_literal(FILE *out, const char *s) {

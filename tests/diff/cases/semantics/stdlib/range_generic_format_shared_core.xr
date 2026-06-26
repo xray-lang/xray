@@ -1,0 +1,7 @@
+let r = 2..9
+print(string(r))
+print("left=" + r)
+print(r + "=right")
+
+let empty = 5..5
+print("empty=" + empty)

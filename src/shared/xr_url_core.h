@@ -35,6 +35,20 @@ typedef struct {
     size_t hash_len;
 } XrUrlCoreParts;
 
+typedef struct {
+    void *ctx;
+    bool (*append)(void *ctx, const char *data, size_t len);
+    bool (*putc)(void *ctx, char c);
+    char *(*data)(void *ctx);
+    size_t (*len)(void *ctx);
+    void (*set_len)(void *ctx, size_t len);
+} XrUrlCoreWriter;
+
+typedef bool (*XrUrlCoreJoinPartFn)(void *ctx, size_t index, const char **data, size_t *len);
+typedef bool (*XrUrlCoreFieldFn)(void *ctx, const char *name, const char **data, size_t *len);
+typedef bool (*XrUrlCoreQueryPairFn)(void *ctx, const char *key, size_t key_len, const char *value,
+                                     size_t value_len, bool has_value);
+
 static inline uint8_t xr_url_core_hex_value(unsigned char c) {
     if (c >= '0' && c <= '9')
         return (uint8_t) (c - '0');
@@ -323,6 +337,349 @@ static inline bool xr_url_core_port_is_valid(const XrUrlCoreParts *parts) {
         port_val = port_val * 10u + (uint32_t) (c - '0');
     }
     return port_val <= 65535u;
+}
+
+static inline bool xr_url_core_writer_append(XrUrlCoreWriter *w, const char *data, size_t len) {
+    if (len == 0)
+        return true;
+    return w && w->append && w->append(w->ctx, data, len);
+}
+
+static inline bool xr_url_core_writer_putc(XrUrlCoreWriter *w, char c) {
+    return w && w->putc && w->putc(w->ctx, c);
+}
+
+static inline char *xr_url_core_writer_data(XrUrlCoreWriter *w) {
+    return (w && w->data) ? w->data(w->ctx) : NULL;
+}
+
+static inline size_t xr_url_core_writer_len(XrUrlCoreWriter *w) {
+    return (w && w->len) ? w->len(w->ctx) : 0;
+}
+
+static inline void xr_url_core_writer_set_len(XrUrlCoreWriter *w, size_t len) {
+    if (w && w->set_len)
+        w->set_len(w->ctx, len);
+}
+
+static inline bool xr_url_core_emit_base_authority(XrUrlCoreWriter *out,
+                                                   const XrUrlCoreParts *parts) {
+    if (!out || !parts)
+        return false;
+    if (parts->protocol && parts->protocol_len > 0) {
+        if (!xr_url_core_writer_append(out, parts->protocol, parts->protocol_len) ||
+            !xr_url_core_writer_append(out, "//", 2))
+            return false;
+    }
+    if (parts->hostname && parts->hostname_len > 0) {
+        if (!xr_url_core_writer_append(out, parts->hostname, parts->hostname_len))
+            return false;
+    }
+    if (parts->port && parts->port_len > 0) {
+        if (!xr_url_core_writer_putc(out, ':') ||
+            !xr_url_core_writer_append(out, parts->port, parts->port_len))
+            return false;
+    }
+    return true;
+}
+
+static inline bool xr_url_core_get_field(XrUrlCoreFieldFn field, void *field_ctx, const char *name,
+                                         const char **data, size_t *len) {
+    if (data)
+        *data = NULL;
+    if (len)
+        *len = 0;
+    return field && data && len && field(field_ctx, name, data, len);
+}
+
+static inline bool xr_url_core_append_field(XrUrlCoreWriter *out, const char *data, size_t len) {
+    return (!data || len == 0) ? true : xr_url_core_writer_append(out, data, len);
+}
+
+static inline bool xr_url_core_format_write(XrUrlCoreFieldFn field, void *field_ctx,
+                                            XrUrlCoreWriter *out) {
+    if (!field || !out)
+        return false;
+
+    const char *protocol = NULL;
+    const char *hostname = NULL;
+    const char *port = NULL;
+    const char *pathname = NULL;
+    const char *search = NULL;
+    const char *hash = NULL;
+    const char *username = NULL;
+    const char *password = NULL;
+    size_t protocol_len = 0;
+    size_t hostname_len = 0;
+    size_t port_len = 0;
+    size_t pathname_len = 0;
+    size_t search_len = 0;
+    size_t hash_len = 0;
+    size_t username_len = 0;
+    size_t password_len = 0;
+
+    if (!xr_url_core_get_field(field, field_ctx, "protocol", &protocol, &protocol_len) ||
+        !xr_url_core_get_field(field, field_ctx, "hostname", &hostname, &hostname_len) ||
+        !xr_url_core_get_field(field, field_ctx, "port", &port, &port_len) ||
+        !xr_url_core_get_field(field, field_ctx, "pathname", &pathname, &pathname_len) ||
+        !xr_url_core_get_field(field, field_ctx, "search", &search, &search_len) ||
+        !xr_url_core_get_field(field, field_ctx, "hash", &hash, &hash_len) ||
+        !xr_url_core_get_field(field, field_ctx, "username", &username, &username_len) ||
+        !xr_url_core_get_field(field, field_ctx, "password", &password, &password_len))
+        return false;
+
+    if (protocol && protocol_len > 0) {
+        if (!xr_url_core_writer_append(out, protocol, protocol_len) ||
+            !xr_url_core_writer_append(out, "//", 2))
+            return false;
+    }
+
+    if (username && username_len > 0) {
+        if (!xr_url_core_writer_append(out, username, username_len))
+            return false;
+        if (password && password_len > 0) {
+            if (!xr_url_core_writer_putc(out, ':') ||
+                !xr_url_core_writer_append(out, password, password_len))
+                return false;
+        }
+        if (!xr_url_core_writer_putc(out, '@'))
+            return false;
+    }
+
+    if (!xr_url_core_append_field(out, hostname, hostname_len))
+        return false;
+    if (port && port_len > 0) {
+        if (!xr_url_core_writer_putc(out, ':') || !xr_url_core_writer_append(out, port, port_len))
+            return false;
+    }
+    return xr_url_core_append_field(out, pathname, pathname_len) &&
+           xr_url_core_append_field(out, search, search_len) &&
+           xr_url_core_append_field(out, hash, hash_len);
+}
+
+static inline bool xr_url_core_parse_query_each(const char *data, size_t len,
+                                                XrUrlCoreQueryPairFn pair, void *pair_ctx) {
+    if ((!data && len != 0) || !pair)
+        return false;
+    if (len > 0 && data[0] == '?') {
+        data++;
+        len--;
+    }
+
+    const char *p = data;
+    const char *end = data + len;
+    while (p < end) {
+        const char *amp = memchr(p, '&', (size_t) (end - p));
+        const char *pair_end = amp ? amp : end;
+        const char *eq = memchr(p, '=', (size_t) (pair_end - p));
+        const char *key = p;
+        size_t key_len = eq ? (size_t) (eq - key) : (size_t) (pair_end - key);
+        const char *value = eq ? eq + 1 : NULL;
+        size_t value_len = eq ? (size_t) (pair_end - value) : 0;
+
+        if (key_len > 0 && !pair(pair_ctx, key, key_len, value, value_len, eq != NULL))
+            return false;
+        p = amp ? amp + 1 : end;
+    }
+    return true;
+}
+
+static inline bool xr_url_core_write_form_encoded(XrUrlCoreWriter *out, const char *data,
+                                                  size_t len) {
+    static const char hex_chars[] = "0123456789ABCDEF";
+    if ((!data && len != 0) || !out)
+        return false;
+
+    for (size_t i = 0; i < len; i++) {
+        unsigned char c = (unsigned char) data[i];
+        if (c == ' ') {
+            if (!xr_url_core_writer_putc(out, '+'))
+                return false;
+        } else if (xr_url_core_is_unreserved(c)) {
+            if (!xr_url_core_writer_putc(out, (char) c))
+                return false;
+        } else {
+            if (!xr_url_core_writer_putc(out, '%') ||
+                !xr_url_core_writer_putc(out, hex_chars[(c >> 4) & 0x0F]) ||
+                !xr_url_core_writer_putc(out, hex_chars[c & 0x0F]))
+                return false;
+        }
+    }
+    return true;
+}
+
+static inline bool xr_url_core_build_query_pair_write(XrUrlCoreWriter *out, bool *has_pairs,
+                                                      const char *key, size_t key_len,
+                                                      const char *value, size_t value_len,
+                                                      bool has_value) {
+    if (!out || !has_pairs || (!key && key_len != 0) || (!value && value_len != 0))
+        return false;
+
+    if (*has_pairs && !xr_url_core_writer_putc(out, '&'))
+        return false;
+    size_t before = xr_url_core_writer_len(out);
+    if (!xr_url_core_write_form_encoded(out, key, key_len))
+        return false;
+    if (has_value) {
+        if (!xr_url_core_writer_putc(out, '=') ||
+            !xr_url_core_write_form_encoded(out, value, value_len))
+            return false;
+    }
+    if (xr_url_core_writer_len(out) > before)
+        *has_pairs = true;
+    return true;
+}
+
+static inline size_t xr_url_core_remove_dot_segments(char *path, size_t len);
+
+static inline bool xr_url_core_resolve_write(const char *base, size_t base_len, const char *rel,
+                                             size_t rel_len, XrUrlCoreWriter *out) {
+    if ((!base && base_len != 0) || (!rel && rel_len != 0) || !out)
+        return false;
+
+    const char *colon = memchr(rel, ':', rel_len);
+    if (colon && colon + 2 < rel + rel_len && colon[1] == '/' && colon[2] == '/')
+        return xr_url_core_writer_append(out, rel, rel_len);
+
+    XrUrlCoreParts bp;
+    xr_url_core_parse(base, base_len, &bp);
+
+    const char *rel_hash = memchr(rel, '#', rel_len);
+    size_t rel_hash_len = rel_hash ? (size_t) ((rel + rel_len) - rel_hash) : 0;
+    size_t rel_no_hash_len = rel_hash ? (size_t) (rel_hash - rel) : rel_len;
+
+    const char *rel_query = memchr(rel, '?', rel_no_hash_len);
+    size_t rel_query_len = 0;
+    size_t rel_path_len = rel_no_hash_len;
+    if (rel_query) {
+        rel_query_len = (size_t) ((rel + rel_no_hash_len) - rel_query);
+        rel_path_len = (size_t) (rel_query - rel);
+    }
+
+    size_t path_start = 0;
+    size_t path_end = 0;
+
+    if (rel_len > 1 && rel[0] == '/' && rel[1] == '/') {
+        if (bp.protocol && bp.protocol_len > 0) {
+            if (!xr_url_core_writer_append(out, bp.protocol, bp.protocol_len))
+                return false;
+        }
+        if (!xr_url_core_writer_append(out, rel, 2))
+            return false;
+        size_t authority_end = 2;
+        while (authority_end < rel_no_hash_len && rel[authority_end] != '/' &&
+               rel[authority_end] != '?')
+            authority_end++;
+        if (!xr_url_core_writer_append(out, rel + 2, authority_end - 2))
+            return false;
+        path_start = xr_url_core_writer_len(out);
+        if (rel_path_len > authority_end &&
+            !xr_url_core_writer_append(out, rel + authority_end, rel_path_len - authority_end))
+            return false;
+        path_end = xr_url_core_writer_len(out);
+    } else if (rel_path_len > 0 && rel[0] == '/') {
+        if (!xr_url_core_emit_base_authority(out, &bp))
+            return false;
+        path_start = xr_url_core_writer_len(out);
+        if (!xr_url_core_writer_append(out, rel, rel_path_len))
+            return false;
+        path_end = xr_url_core_writer_len(out);
+    } else if (rel_path_len == 0) {
+        if (!xr_url_core_emit_base_authority(out, &bp))
+            return false;
+        path_start = xr_url_core_writer_len(out);
+        if (bp.pathname && bp.pathname_len > 0 &&
+            !xr_url_core_writer_append(out, bp.pathname, bp.pathname_len))
+            return false;
+        path_end = xr_url_core_writer_len(out);
+        if (!rel_query && bp.search && bp.search_len > 0 &&
+            !xr_url_core_writer_append(out, bp.search, bp.search_len))
+            return false;
+    } else {
+        if (!xr_url_core_emit_base_authority(out, &bp))
+            return false;
+        path_start = xr_url_core_writer_len(out);
+        if (bp.pathname && bp.pathname_len > 0) {
+            const char *last_slash = NULL;
+            for (size_t i = bp.pathname_len; i > 0; i--) {
+                if (bp.pathname[i - 1] == '/') {
+                    last_slash = &bp.pathname[i - 1];
+                    break;
+                }
+            }
+            if (last_slash) {
+                size_t prefix = (size_t) (last_slash - bp.pathname + 1);
+                if (!xr_url_core_writer_append(out, bp.pathname, prefix))
+                    return false;
+            } else if (!xr_url_core_writer_putc(out, '/')) {
+                return false;
+            }
+        } else if (!xr_url_core_writer_putc(out, '/')) {
+            return false;
+        }
+        if (!xr_url_core_writer_append(out, rel, rel_path_len))
+            return false;
+        path_end = xr_url_core_writer_len(out);
+    }
+
+    if (rel_query && !xr_url_core_writer_append(out, rel_query, rel_query_len))
+        return false;
+    if (rel_hash && !xr_url_core_writer_append(out, rel_hash, rel_hash_len))
+        return false;
+
+    if (path_end > path_start) {
+        char *data = xr_url_core_writer_data(out);
+        if (!data)
+            return false;
+        size_t old_path_len = path_end - path_start;
+        size_t total_len = xr_url_core_writer_len(out);
+        size_t tail_len = total_len - path_end;
+        char tail_first = tail_len > 0 ? data[path_end] : '\0';
+        size_t new_path_len = xr_url_core_remove_dot_segments(data + path_start, old_path_len);
+        size_t shrink = old_path_len - new_path_len;
+        if (shrink > 0) {
+            if (tail_len > 0)
+                memmove(data + path_start + new_path_len, data + path_end, tail_len);
+            xr_url_core_writer_set_len(out, total_len - shrink);
+        } else if (tail_len > 0) {
+            data[path_end] = tail_first;
+        }
+    }
+
+    return true;
+}
+
+static inline bool xr_url_core_join_write(size_t count, XrUrlCoreJoinPartFn part, void *part_ctx,
+                                          XrUrlCoreWriter *out) {
+    if (!out || (count > 0 && !part))
+        return false;
+
+    for (size_t i = 0; i < count; i++) {
+        const char *seg = NULL;
+        size_t seg_len = 0;
+        if (!part(part_ctx, i, &seg, &seg_len))
+            return false;
+        if (!seg || seg_len == 0)
+            continue;
+
+        size_t out_len = xr_url_core_writer_len(out);
+        if (out_len > 0) {
+            char *data = xr_url_core_writer_data(out);
+            if (!data)
+                return false;
+            if (data[out_len - 1] == '/') {
+                xr_url_core_writer_set_len(out, out_len - 1);
+                out_len--;
+            }
+        }
+
+        if (out_len > 0 && seg[0] != '/' && !xr_url_core_writer_putc(out, '/'))
+            return false;
+        if (!xr_url_core_writer_append(out, seg, seg_len))
+            return false;
+    }
+
+    return true;
 }
 
 static inline size_t xr_url_core_remove_dot_segments(char *path, size_t len) {

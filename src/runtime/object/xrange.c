@@ -10,6 +10,7 @@
 
 #include "xrange.h"
 #include "xarray.h"
+#include "xexception.h"
 #include "../mem/xheap.h"
 #include "../class/xclass.h"
 #include "../class/xclass_builder.h"
@@ -18,6 +19,8 @@
 #include "../xisolate_api.h"
 #include "../../base/xchecks.h"
 #include "../../coro/xcoroutine.h"
+#include "../../shared/xr_error_core.h"
+#include "../../vm/xvm.h"
 
 /* ========== Internal helpers ========== */
 
@@ -74,31 +77,34 @@ XrValue xr_range_new_with_step(XrVMRuntime *X, int64_t start, int64_t end, int64
 
 /* ========== Conversion ========== */
 
-XrValue xr_range_to_array(struct XrCoroutine *coro, XrRange *r) {
-    XR_DCHECK(coro != NULL, "xr_range_to_array: coro must not be NULL");
+XrValue xr_range_to_array(XrVMRuntime *iso, XrRange *r) {
+    XR_DCHECK(iso != NULL, "xr_range_to_array: iso must not be NULL");
     if (!r)
         return xr_null();
 
-    int64_t len = xr_range_length(r);
-    if (len <= 0) {
-        XrArray *arr = xr_array_with_capacity(coro, 0);
+    XrRangeCore core = xr_range_core_from_body(r);
+    XrRangeCoreMaterializePlan plan = xr_range_core_materialize_plan(core);
+    if (plan.kind == XR_RANGE_CORE_MATERIALIZE_EMPTY) {
+        XrArray *arr = xr_array_with_capacity(xr_current_coro(iso), 0);
         return xr_value_from_array(arr);
     }
 
-    // Safety cap to prevent OOM (10M elements ~= 160MB for XrValue array)
-    XR_CHECK(len <= 10000000, "range_to_array: range too large");
+    if (plan.kind == XR_RANGE_CORE_MATERIALIZE_TOO_LARGE) {
+        XrValue exc =
+            xr_exception_new(iso, XR_ERR_OUT_OF_MEMORY, XR_ERROR_CORE_RANGE_TO_ARRAY_TOO_LARGE_MSG);
+        xr_vm_throw_exception(iso, exc);
+        return xr_null();
+    }
 
-    XrArray *arr = xr_array_with_capacity(coro, (int32_t) len);
+    XrCoroutine *coro = xr_current_coro(iso);
+    XrArray *arr = xr_array_with_capacity(coro, (int32_t) plan.length);
     if (!arr)
         return xr_null();
 
     XrValue *data = (XrValue *) arr->data;
-    int64_t val = r->start;
-    for (int64_t i = 0; i < len; i++) {
-        data[i] = xr_int(val);
-        val += r->step;
-    }
-    arr->length = (int32_t) len;
+    for (int64_t i = 0; i < plan.length; i++)
+        data[i] = xr_int(xr_range_core_value_at(core, i));
+    arr->length = (int32_t) plan.length;
 
     return xr_value_from_array(arr);
 }
@@ -115,12 +121,14 @@ static XrValue m_range_to_string(XrVMRuntime *iso, XrValue self, XrValue *args, 
     XrRange *rng = xr_value_get_range_body(iso, self);
     if (!rng)
         return xr_null();
-    char buf[80];
-    int n = (rng->step == 1)
-                ? snprintf(buf, sizeof(buf), "%" PRId64 "..%" PRId64, rng->start, rng->end)
-                : snprintf(buf, sizeof(buf), "%" PRId64 "..%" PRId64 ":%" PRId64, rng->start,
-                           rng->end, rng->step);
-    XrString *s = xr_string_intern(iso, buf, (size_t) n, 0);
+    char buf[96];
+    int n = xr_range_format_buf(rng, buf, sizeof(buf));
+    if (n < 0)
+        return xr_null();
+    size_t len = (size_t) n;
+    if (len >= sizeof(buf))
+        len = sizeof(buf) - 1;
+    XrString *s = xr_string_intern(iso, buf, len, 0);
     return xr_string_value(s);
 }
 
@@ -130,7 +138,7 @@ static XrValue m_range_to_array(XrVMRuntime *iso, XrValue self, XrValue *args, i
     XrRange *rng = xr_value_get_range_body(iso, self);
     if (!rng)
         return xr_null();
-    return xr_range_to_array(xr_current_coro(iso), rng);
+    return xr_range_to_array(iso, rng);
 }
 
 static XrValue m_range_contains(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {

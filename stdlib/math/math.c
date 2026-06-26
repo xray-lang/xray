@@ -9,7 +9,8 @@
  *
  * KEY CONCEPT:
  *   Thin wrappers over C math.h functions, exposed to xray scripts.
- *   All numeric functions accept both int and float arguments.
+ *   Floating math functions accept both int and float arguments; int-signed
+ *   APIs such as randomInt keep their declared int boundary.
  */
 
 #include "math.h"
@@ -19,6 +20,8 @@
 #include <stdbool.h>
 #include <float.h>
 #include "../../src/os/os_random.h"
+#include "../../src/shared/xr_math_core.h"
+#include "../../src/shared/xr_numeric_core.h"
 #include "../../src/base/xchecks.h"
 
 // Portability: MSVC/<math.h> does not define M_PI/M_E unless _USE_MATH_DEFINES
@@ -68,11 +71,8 @@ static XrValue math_abs(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1)
         return xr_int(0);
     if (XR_IS_INT(args[0])) {
-        int64_t v = XR_TO_INT(args[0]);
-        // INT64_MIN overflow: |INT64_MIN| = 2^63, exceeds INT64_MAX
-        if (v == INT64_MIN)
-            return xr_float((double) INT64_MAX + 1.0);
-        return xr_int(v < 0 ? -v : v);
+        XrNumericCoreI64AbsResult result = xr_numeric_core_i64_math_abs(XR_TO_INT(args[0]));
+        return result.is_float ? xr_float(result.float_value) : xr_int(result.int_value);
     }
     return xr_float(fabs(get_number(args[0])));
 }
@@ -427,14 +427,16 @@ static XrValue math_clamp(XrVMRuntime *X, XrValue *args, int argc) {
 
 /* ========== Random ========== */
 
+static void math_random_bytes(void *ctx, unsigned char *buf, size_t len) {
+    (void) ctx;
+    xr_random_bytes(buf, len);
+}
+
 static XrValue math_random(XrVMRuntime *X, XrValue *args, int argc) {
     (void) X;
     (void) args;
     (void) argc;
-    uint64_t r;
-    xr_random_bytes((unsigned char *) &r, sizeof(r));
-    // Top 53 bits → full double mantissa precision, result in [0, 1)
-    return xr_float((r >> 11) * (1.0 / ((uint64_t) 1 << 53)));
+    return xr_float(xr_math_core_random_f64(math_random_bytes, NULL));
 }
 
 static XrValue math_randomInt(XrVMRuntime *X, XrValue *args, int argc) {
@@ -442,36 +444,12 @@ static XrValue math_randomInt(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 2)
         return xr_int(0);
 
-    int64_t min_val = XR_IS_INT(args[0]) ? XR_TO_INT(args[0]) : (int64_t) get_number(args[0]);
-    int64_t max_val = XR_IS_INT(args[1]) ? XR_TO_INT(args[1]) : (int64_t) get_number(args[1]);
+    int64_t min_val =
+        xr_math_core_int_arg_or(XR_IS_INT(args[0]), XR_IS_INT(args[0]) ? XR_TO_INT(args[0]) : 0, 0);
+    int64_t max_val =
+        xr_math_core_int_arg_or(XR_IS_INT(args[1]), XR_IS_INT(args[1]) ? XR_TO_INT(args[1]) : 0, 0);
 
-    if (min_val > max_val) {
-        int64_t tmp = min_val;
-        min_val = max_val;
-        max_val = tmp;
-    }
-    if (min_val == max_val)
-        return xr_int(min_val);
-
-    /* Pure unsigned arithmetic avoids signed overflow UB when the
-     * range spans a large portion of int64 (e.g. INT64_MIN..INT64_MAX). */
-    uint64_t range = (uint64_t) max_val - (uint64_t) min_val + 1;
-    uint64_t r;
-
-    if (range == 0) {
-        // Full 2^64 range (min=INT64_MIN, max=INT64_MAX)
-        xr_random_bytes((unsigned char *) &r, sizeof(r));
-    } else {
-        // Rejection sampling to eliminate modulo bias
-        uint64_t threshold = (-range) % range;
-        do {
-            xr_random_bytes((unsigned char *) &r, sizeof(r));
-        } while (r < threshold);
-        r = r % range;
-    }
-    /* Cast through unsigned so the addition wraps predictably on
-     * 2's-complement (mandated by C23, universal in practice). */
-    return xr_int((int64_t) ((uint64_t) min_val + r));
+    return xr_int(xr_math_core_random_i64(math_random_bytes, NULL, min_val, max_val));
 }
 
 /* ========== Utilities ========== */
@@ -510,52 +488,9 @@ static XrValue math_isFinite(XrVMRuntime *X, XrValue *args, int argc) {
     return xr_bool(isfinite(v));
 }
 
-/* ========== Type Declarations (parsed by gen_stdlib_types.py) ========== */
-
-#include "../../src/module/xbuiltin_decl.h"
-
-// @module math
-
-XR_DEFINE_BUILTIN(math_abs, "abs", "(x: float): float", "Absolute value (preserves int)")
-XR_DEFINE_BUILTIN(math_floor, "floor", "(x: float): int", "Floor to integer")
-XR_DEFINE_BUILTIN(math_ceil, "ceil", "(x: float): int", "Ceiling to integer")
-XR_DEFINE_BUILTIN(math_round, "round", "(x: float): int", "Round to nearest integer")
-XR_DEFINE_BUILTIN(math_sqrt, "sqrt", "(x: float): float", "Square root")
-XR_DEFINE_BUILTIN(math_pow, "pow", "(base: float, exp: float): float", "Power")
-XR_DEFINE_BUILTIN(math_sin, "sin", "(x: float): float", "Sine")
-XR_DEFINE_BUILTIN(math_cos, "cos", "(x: float): float", "Cosine")
-XR_DEFINE_BUILTIN(math_tan, "tan", "(x: float): float", "Tangent")
-XR_DEFINE_BUILTIN(math_asin, "asin", "(x: float): float", "Arc sine")
-XR_DEFINE_BUILTIN(math_acos, "acos", "(x: float): float", "Arc cosine")
-XR_DEFINE_BUILTIN(math_atan, "atan", "(x: float): float", "Arc tangent")
-XR_DEFINE_BUILTIN(math_atan2, "atan2", "(y: float, x: float): float", "Arc tangent of y/x")
-XR_DEFINE_BUILTIN(math_log, "log", "(x: float): float", "Natural logarithm")
-XR_DEFINE_BUILTIN(math_log10, "log10", "(x: float): float", "Base-10 logarithm")
-XR_DEFINE_BUILTIN(math_log2, "log2", "(x: float): float", "Base-2 logarithm")
-XR_DEFINE_BUILTIN(math_exp, "exp", "(x: float): float", "Exponential e^x")
-XR_DEFINE_BUILTIN(math_min, "min", "(...args: float): float", "Minimum (preserves int)")
-XR_DEFINE_BUILTIN(math_max, "max", "(...args: float): float", "Maximum (preserves int)")
-XR_DEFINE_BUILTIN(math_clamp, "clamp", "(x: float, min: float, max: float): float",
-                  "Clamp (preserves int)")
-XR_DEFINE_BUILTIN(math_random, "random", "(): float", "Random float in [0, 1)")
-XR_DEFINE_BUILTIN(math_randomInt, "randomInt", "(min: int, max: int): int",
-                  "Random integer in [min, max]")
-XR_DEFINE_BUILTIN(math_sign, "sign", "(x: float): int", "Sign of value (-1, 0, 1)")
-XR_DEFINE_BUILTIN(math_sinh, "sinh", "(x: float): float", "Hyperbolic sine")
-XR_DEFINE_BUILTIN(math_cosh, "cosh", "(x: float): float", "Hyperbolic cosine")
-XR_DEFINE_BUILTIN(math_tanh, "tanh", "(x: float): float", "Hyperbolic tangent")
-XR_DEFINE_BUILTIN(math_hypot, "hypot", "(x: float, y: float): float", "Hypotenuse sqrt(x*x+y*y)")
-XR_DEFINE_BUILTIN(math_cbrt, "cbrt", "(x: float): float", "Cube root")
-XR_DEFINE_BUILTIN(math_trunc, "trunc", "(x: float): int", "Truncate toward zero")
-XR_DEFINE_BUILTIN(math_fmod, "fmod", "(x: float, y: float): float", "Floating-point remainder")
-XR_DEFINE_BUILTIN(math_log1p, "log1p", "(x: float): float", "log(1+x) accurate for small x")
-XR_DEFINE_BUILTIN(math_expm1, "expm1", "(x: float): float", "exp(x)-1 accurate for small x")
-XR_DEFINE_BUILTIN(math_lerp, "lerp", "(a: float, b: float, t: float): float",
-                  "Linear interpolation")
-XR_DEFINE_BUILTIN(math_degToRad, "degToRad", "(deg: float): float", "Degrees to radians")
-XR_DEFINE_BUILTIN(math_radToDeg, "radToDeg", "(rad: float): float", "Radians to degrees")
-XR_DEFINE_BUILTIN(math_isNaN, "isNaN", "(x: float): bool", "Check if NaN")
-XR_DEFINE_BUILTIN(math_isFinite, "isFinite", "(x: float): bool", "Check if finite")
+#define XR_STDLIB_VM_BIND_MODULE_MATH 1
+#include "../../src/stdlib/xstdlib_vm_bindings_generated.inc.c"
+#undef XR_STDLIB_VM_BIND_MODULE_MATH
 
 /* ========== Module Loading ========== */
 
@@ -566,59 +501,7 @@ XR_FUNC XrModule *xr_load_module_math(XrVMRuntime *isolate) {
     if (!mod)
         return NULL;
 
-    XRS_EXPORT(mod, isolate, "abs", math_abs);
-    XRS_EXPORT(mod, isolate, "floor", math_floor);
-    XRS_EXPORT(mod, isolate, "ceil", math_ceil);
-    XRS_EXPORT(mod, isolate, "round", math_round);
-    XRS_EXPORT(mod, isolate, "sqrt", math_sqrt);
-    XRS_EXPORT(mod, isolate, "pow", math_pow);
-    XRS_EXPORT(mod, isolate, "sin", math_sin);
-    XRS_EXPORT(mod, isolate, "cos", math_cos);
-    XRS_EXPORT(mod, isolate, "tan", math_tan);
-    XRS_EXPORT(mod, isolate, "asin", math_asin);
-    XRS_EXPORT(mod, isolate, "acos", math_acos);
-    XRS_EXPORT(mod, isolate, "atan", math_atan);
-    XRS_EXPORT(mod, isolate, "atan2", math_atan2);
-    XRS_EXPORT(mod, isolate, "log", math_log);
-    XRS_EXPORT(mod, isolate, "log10", math_log10);
-    XRS_EXPORT(mod, isolate, "log2", math_log2);
-    XRS_EXPORT(mod, isolate, "exp", math_exp);
-    XRS_EXPORT(mod, isolate, "min", math_min);
-    XRS_EXPORT(mod, isolate, "max", math_max);
-    XRS_EXPORT(mod, isolate, "clamp", math_clamp);
-    XRS_EXPORT(mod, isolate, "random", math_random);
-    XRS_EXPORT(mod, isolate, "randomInt", math_randomInt);
-    XRS_EXPORT(mod, isolate, "sign", math_sign);
-    XRS_EXPORT(mod, isolate, "sinh", math_sinh);
-    XRS_EXPORT(mod, isolate, "cosh", math_cosh);
-    XRS_EXPORT(mod, isolate, "tanh", math_tanh);
-    XRS_EXPORT(mod, isolate, "hypot", math_hypot);
-    XRS_EXPORT(mod, isolate, "cbrt", math_cbrt);
-    XRS_EXPORT(mod, isolate, "trunc", math_trunc);
-    XRS_EXPORT(mod, isolate, "fmod", math_fmod);
-    XRS_EXPORT(mod, isolate, "log1p", math_log1p);
-    XRS_EXPORT(mod, isolate, "expm1", math_expm1);
-    XRS_EXPORT(mod, isolate, "lerp", math_lerp);
-    XRS_EXPORT(mod, isolate, "degToRad", math_degToRad);
-    XRS_EXPORT(mod, isolate, "radToDeg", math_radToDeg);
-    XRS_EXPORT(mod, isolate, "isNaN", math_isNaN);
-    XRS_EXPORT(mod, isolate, "isFinite", math_isFinite);
-
-    // Constants
-    xr_module_add_export(isolate, mod, "PI", xr_float(M_PI));
-    xr_module_add_export(isolate, mod, "E", xr_float(M_E));
-    xr_module_add_export(isolate, mod, "TAU", xr_float(2.0 * M_PI));
-    xr_module_add_export(isolate, mod, "SQRT2", xr_float(M_SQRT2));
-    xr_module_add_export(isolate, mod, "LN2", xr_float(M_LN2));
-    xr_module_add_export(isolate, mod, "LN10", xr_float(M_LN10));
-    xr_module_add_export(isolate, mod, "LOG2E", xr_float(M_LOG2E));
-    xr_module_add_export(isolate, mod, "LOG10E", xr_float(M_LOG10E));
-    xr_module_add_export(isolate, mod, "EPSILON", xr_float(DBL_EPSILON));
-    xr_module_add_export(isolate, mod, "MAX_INT", xr_int(INT64_MAX));
-    xr_module_add_export(isolate, mod, "MIN_INT", xr_int(INT64_MIN));
-    xr_module_add_export(isolate, mod, "MAX_FLOAT", xr_float(DBL_MAX));
-    xr_module_add_export(isolate, mod, "INF", xr_float(INFINITY));
-    xr_module_add_export(isolate, mod, "NAN", xr_float(NAN));
+    xr_stdlib_vm_bind_math_generated(isolate, mod);
 
     mod->loaded = true;
     return mod;

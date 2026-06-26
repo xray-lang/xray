@@ -63,16 +63,397 @@ module time {
     signature: "(ms: int): ()"
     doc: "Sleep for milliseconds"
     vm: "xr_time_sleep"
+    vm_binding: "yieldable"
     argc: 1
     arg_spec: "v"
     aot_direct: false
-    link_object: "time"
+    link_object: false
     layer: "runtime"
     caps: "coro,timer"
   }
 }
 
 module math {
+  const PI {
+    signature: ": float"
+    doc: "Ratio of a circle's circumference to its diameter"
+    vm: "math.PI"
+    vm_value: "xr_float(M_PI)"
+    aot_const: "float64"
+    value: 3.14159265358979323846
+    layer: "core"
+  }
+
+  const E {
+    signature: ": float"
+    doc: "Euler's number"
+    vm: "math.E"
+    vm_value: "xr_float(M_E)"
+    aot_const: "float64"
+    value: 2.71828182845904523536
+    layer: "core"
+  }
+
+  const TAU {
+    signature: ": float"
+    doc: "Full-circle radians, 2 * PI"
+    vm: "math.TAU"
+    vm_value: "xr_float(2.0 * M_PI)"
+    aot_const: "float64"
+    value: 6.28318530717958647692
+    layer: "core"
+  }
+
+  const SQRT2 {
+    signature: ": float"
+    doc: "Square root of 2"
+    vm: "math.SQRT2"
+    vm_value: "xr_float(M_SQRT2)"
+    aot_const: "float64"
+    value: 1.41421356237309504880
+    layer: "core"
+  }
+
+  const LN2 {
+    signature: ": float"
+    doc: "Natural logarithm of 2"
+    vm: "math.LN2"
+    vm_value: "xr_float(M_LN2)"
+    aot_const: "float64"
+    value: 0.69314718055994530942
+    layer: "core"
+  }
+
+  const LN10 {
+    signature: ": float"
+    doc: "Natural logarithm of 10"
+    vm: "math.LN10"
+    vm_value: "xr_float(M_LN10)"
+    aot_const: "float64"
+    value: 2.30258509299404568402
+    layer: "core"
+  }
+
+  const LOG2E {
+    signature: ": float"
+    doc: "Base-2 logarithm of e"
+    vm: "math.LOG2E"
+    vm_value: "xr_float(M_LOG2E)"
+    aot_const: "float64"
+    value: 1.44269504088896340736
+    layer: "core"
+  }
+
+  const LOG10E {
+    signature: ": float"
+    doc: "Base-10 logarithm of e"
+    vm: "math.LOG10E"
+    vm_value: "xr_float(M_LOG10E)"
+    aot_const: "float64"
+    value: 0.43429448190325182765
+    layer: "core"
+  }
+
+  const EPSILON {
+    signature: ": float"
+    doc: "Smallest representable difference above 1.0"
+    vm: "math.EPSILON"
+    vm_value: "xr_float(DBL_EPSILON)"
+    aot_const: "float64"
+    value: 2.22044604925031308085e-16
+    layer: "core"
+  }
+
+  const MAX_INT {
+    signature: ": int"
+    doc: "Largest signed 64-bit integer"
+    vm: "math.MAX_INT"
+    vm_value: "xr_int(INT64_MAX)"
+    aot_const: "int64"
+    value: 9223372036854775807
+    layer: "core"
+  }
+
+  const MIN_INT {
+    signature: ": int"
+    doc: "Smallest signed 64-bit integer"
+    vm: "math.MIN_INT"
+    vm_value: "xr_int(INT64_MIN)"
+    aot_const: "int64"
+    value: -9223372036854775808
+    layer: "core"
+  }
+
+  const MAX_FLOAT {
+    signature: ": float"
+    doc: "Largest finite IEEE-754 double"
+    vm: "math.MAX_FLOAT"
+    vm_value: "xr_float(DBL_MAX)"
+    aot_const: "float64"
+    value: 1.79769313486231570815e+308
+    layer: "core"
+  }
+
+  const INF {
+    signature: ": float"
+    doc: "Positive infinity"
+    vm: "math.INF"
+    vm_value: "xr_float(INFINITY)"
+    aot_const: "float64"
+    value: INFINITY
+    layer: "core"
+  }
+
+  const NAN {
+    signature: ": float"
+    doc: "Quiet NaN value"
+    vm: "math.NAN"
+    vm_value: "xr_float(NAN)"
+    aot_const: "float64"
+    value: NAN
+    layer: "core"
+  }
+
+  fn abs {
+    signature: "(x: float): float"
+    doc: "Absolute value (preserves int)"
+    vm: "math_abs"
+    aot: "builtin"
+    argc: 1
+    aot_direct: true
+    aot_kind: "builtin"
+    link_object: false
+    layer: "core"
+  }
+
+  fn floor {
+    signature: "(x: float): int"
+    doc: "Floor to integer"
+    vm: "math_floor"
+    aot: "builtin"
+    argc: 1
+    aot_direct: true
+    aot_kind: "builtin"
+    link_object: false
+    layer: "core"
+  }
+
+  fn ceil {
+    signature: "(x: float): int"
+    doc: "Ceiling to integer"
+    vm: "math_ceil"
+    aot: "builtin"
+    argc: 1
+    aot_direct: true
+    aot_kind: "builtin"
+    link_object: false
+    layer: "core"
+  }
+
+  fn round {
+    signature: "(x: float): int"
+    doc: "Round to nearest integer"
+    vm: "math_round"
+    aot: "builtin"
+    argc: 1
+    aot_direct: true
+    aot_kind: "builtin"
+    link_object: false
+    layer: "core"
+  }
+
+  fn sqrt {
+    signature: "(x: float): float"
+    doc: "Square root"
+    vm: "math_sqrt"
+    aot: "builtin"
+    argc: 1
+    aot_direct: true
+    aot_kind: "builtin"
+    link_object: false
+    layer: "core"
+  }
+
+  fn pow {
+    signature: "(base: float, exp: float): float"
+    doc: "Power"
+    vm: "math_pow"
+    aot: "builtin"
+    argc: 2
+    aot_direct: true
+    aot_kind: "builtin"
+    link_object: false
+    layer: "core"
+  }
+
+  fn sin {
+    signature: "(x: float): float"
+    doc: "Sine"
+    vm: "math_sin"
+    aot: "builtin"
+    argc: 1
+    aot_direct: true
+    aot_kind: "builtin"
+    link_object: false
+    layer: "core"
+  }
+
+  fn cos {
+    signature: "(x: float): float"
+    doc: "Cosine"
+    vm: "math_cos"
+    aot: "builtin"
+    argc: 1
+    aot_direct: true
+    aot_kind: "builtin"
+    link_object: false
+    layer: "core"
+  }
+
+  fn tan {
+    signature: "(x: float): float"
+    doc: "Tangent"
+    vm: "math_tan"
+    aot: "builtin"
+    argc: 1
+    aot_direct: true
+    aot_kind: "builtin"
+    link_object: false
+    layer: "core"
+  }
+
+  fn asin {
+    signature: "(x: float): float"
+    doc: "Arc sine"
+    vm: "math_asin"
+    aot: "builtin"
+    argc: 1
+    aot_direct: true
+    aot_kind: "builtin"
+    link_object: false
+    layer: "core"
+  }
+
+  fn acos {
+    signature: "(x: float): float"
+    doc: "Arc cosine"
+    vm: "math_acos"
+    aot: "builtin"
+    argc: 1
+    aot_direct: true
+    aot_kind: "builtin"
+    link_object: false
+    layer: "core"
+  }
+
+  fn atan {
+    signature: "(x: float): float"
+    doc: "Arc tangent"
+    vm: "math_atan"
+    aot: "builtin"
+    argc: 1
+    aot_direct: true
+    aot_kind: "builtin"
+    link_object: false
+    layer: "core"
+  }
+
+  fn atan2 {
+    signature: "(y: float, x: float): float"
+    doc: "Arc tangent of y/x"
+    vm: "math_atan2"
+    aot: "builtin"
+    argc: 2
+    aot_direct: true
+    aot_kind: "builtin"
+    link_object: false
+    layer: "core"
+  }
+
+  fn log {
+    signature: "(x: float): float"
+    doc: "Natural logarithm"
+    vm: "math_log"
+    aot: "builtin"
+    argc: 1
+    aot_direct: true
+    aot_kind: "builtin"
+    link_object: false
+    layer: "core"
+  }
+
+  fn log10 {
+    signature: "(x: float): float"
+    doc: "Base-10 logarithm"
+    vm: "math_log10"
+    aot: "builtin"
+    argc: 1
+    aot_direct: true
+    aot_kind: "builtin"
+    link_object: false
+    layer: "core"
+  }
+
+  fn log2 {
+    signature: "(x: float): float"
+    doc: "Base-2 logarithm"
+    vm: "math_log2"
+    aot: "builtin"
+    argc: 1
+    aot_direct: true
+    aot_kind: "builtin"
+    link_object: false
+    layer: "core"
+  }
+
+  fn exp {
+    signature: "(x: float): float"
+    doc: "Exponential e^x"
+    vm: "math_exp"
+    aot: "builtin"
+    argc: 1
+    aot_direct: true
+    aot_kind: "builtin"
+    link_object: false
+    layer: "core"
+  }
+
+  fn min {
+    signature: "(...args: float): float"
+    doc: "Minimum (preserves int)"
+    vm: "math_min"
+    aot: "builtin"
+    argc: variadic
+    aot_direct: true
+    aot_kind: "builtin"
+    link_object: false
+    layer: "core"
+  }
+
+  fn max {
+    signature: "(...args: float): float"
+    doc: "Maximum (preserves int)"
+    vm: "math_max"
+    aot: "builtin"
+    argc: variadic
+    aot_direct: true
+    aot_kind: "builtin"
+    link_object: false
+    layer: "core"
+  }
+
+  fn clamp {
+    signature: "(x: float, min: float, max: float): float"
+    doc: "Clamp (preserves int)"
+    vm: "math_clamp"
+    aot: "builtin"
+    argc: 3
+    aot_direct: true
+    aot_kind: "builtin"
+    link_object: false
+    layer: "core"
+  }
+
   fn random {
     signature: "(): float"
     doc: "Random float in [0, 1)"
@@ -96,9 +477,213 @@ module math {
     link_object: true
     layer: "system"
   }
+
+  fn sign {
+    signature: "(x: float): int"
+    doc: "Sign of value (-1, 0, 1)"
+    vm: "math_sign"
+    aot: "builtin"
+    argc: 1
+    aot_direct: true
+    aot_kind: "builtin"
+    link_object: false
+    layer: "core"
+  }
+
+  fn sinh {
+    signature: "(x: float): float"
+    doc: "Hyperbolic sine"
+    vm: "math_sinh"
+    aot: "builtin"
+    argc: 1
+    aot_direct: true
+    aot_kind: "builtin"
+    link_object: false
+    layer: "core"
+  }
+
+  fn cosh {
+    signature: "(x: float): float"
+    doc: "Hyperbolic cosine"
+    vm: "math_cosh"
+    aot: "builtin"
+    argc: 1
+    aot_direct: true
+    aot_kind: "builtin"
+    link_object: false
+    layer: "core"
+  }
+
+  fn tanh {
+    signature: "(x: float): float"
+    doc: "Hyperbolic tangent"
+    vm: "math_tanh"
+    aot: "builtin"
+    argc: 1
+    aot_direct: true
+    aot_kind: "builtin"
+    link_object: false
+    layer: "core"
+  }
+
+  fn hypot {
+    signature: "(x: float, y: float): float"
+    doc: "Hypotenuse sqrt(x*x+y*y)"
+    vm: "math_hypot"
+    aot: "builtin"
+    argc: 2
+    aot_direct: true
+    aot_kind: "builtin"
+    link_object: false
+    layer: "core"
+  }
+
+  fn cbrt {
+    signature: "(x: float): float"
+    doc: "Cube root"
+    vm: "math_cbrt"
+    aot: "builtin"
+    argc: 1
+    aot_direct: true
+    aot_kind: "builtin"
+    link_object: false
+    layer: "core"
+  }
+
+  fn trunc {
+    signature: "(x: float): int"
+    doc: "Truncate toward zero"
+    vm: "math_trunc"
+    aot: "builtin"
+    argc: 1
+    aot_direct: true
+    aot_kind: "builtin"
+    link_object: false
+    layer: "core"
+  }
+
+  fn fmod {
+    signature: "(x: float, y: float): float"
+    doc: "Floating-point remainder"
+    vm: "math_fmod"
+    aot: "builtin"
+    argc: 2
+    aot_direct: true
+    aot_kind: "builtin"
+    link_object: false
+    layer: "core"
+  }
+
+  fn log1p {
+    signature: "(x: float): float"
+    doc: "log(1+x) accurate for small x"
+    vm: "math_log1p"
+    aot: "builtin"
+    argc: 1
+    aot_direct: true
+    aot_kind: "builtin"
+    link_object: false
+    layer: "core"
+  }
+
+  fn expm1 {
+    signature: "(x: float): float"
+    doc: "exp(x)-1 accurate for small x"
+    vm: "math_expm1"
+    aot: "builtin"
+    argc: 1
+    aot_direct: true
+    aot_kind: "builtin"
+    link_object: false
+    layer: "core"
+  }
+
+  fn lerp {
+    signature: "(a: float, b: float, t: float): float"
+    doc: "Linear interpolation"
+    vm: "math_lerp"
+    aot: "builtin"
+    argc: 3
+    aot_direct: true
+    aot_kind: "builtin"
+    link_object: false
+    layer: "core"
+  }
+
+  fn degToRad {
+    signature: "(deg: float): float"
+    doc: "Degrees to radians"
+    vm: "math_degToRad"
+    aot: "builtin"
+    argc: 1
+    aot_direct: true
+    aot_kind: "builtin"
+    link_object: false
+    layer: "core"
+  }
+
+  fn radToDeg {
+    signature: "(rad: float): float"
+    doc: "Radians to degrees"
+    vm: "math_radToDeg"
+    aot: "builtin"
+    argc: 1
+    aot_direct: true
+    aot_kind: "builtin"
+    link_object: false
+    layer: "core"
+  }
+
+  fn isNaN {
+    signature: "(x: float): bool"
+    doc: "Check if NaN"
+    vm: "math_isNaN"
+    aot: "builtin"
+    argc: 1
+    aot_direct: true
+    aot_kind: "builtin"
+    link_object: false
+    layer: "core"
+  }
+
+  fn isFinite {
+    signature: "(x: float): bool"
+    doc: "Check if finite"
+    vm: "math_isFinite"
+    aot: "builtin"
+    argc: 1
+    aot_direct: true
+    aot_kind: "builtin"
+    link_object: false
+    layer: "core"
+  }
 }
 
 module path {
+  handle PathInfo {
+    fields: "const root: string, const dir: string, const base: string, const name: string, const ext: string"
+  }
+
+  const sep {
+    signature: ": string"
+    doc: "Platform path separator"
+    vm: "path.sep"
+    vm_value: "xrs_string_value_c(isolate, xr_path_core_sep_str())"
+    aot_const: "helper_value"
+    aot: "xrt_path_sep"
+    layer: "core"
+  }
+
+  const delimiter {
+    signature: ": string"
+    doc: "Platform path-list delimiter"
+    vm: "path.delimiter"
+    vm_value: "xrs_string_value_c(isolate, xr_path_core_delimiter_str())"
+    aot_const: "helper_value"
+    aot: "xrt_path_delimiter"
+    layer: "core"
+  }
+
   fn join {
     signature: "(...parts: string): string"
     doc: "Join path segments"
@@ -309,7 +894,311 @@ module base64 {
   }
 }
 
+module url {
+  handle URL {
+    fields: "const protocol: string, const hostname: string, const port: string, const pathname: string, const search: string, const hash: string, const username: string, const password: string, const host: string, const origin: string, const href: string"
+  }
+
+  fn encode {
+    signature: "(s: string): string"
+    doc: "RFC 3986 percent-encode"
+    vm: "url_encode_fn"
+    aot: "xrt_url_encode"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: false
+    layer: "core"
+  }
+
+  fn decode {
+    signature: "(s: string): string"
+    doc: "RFC 3986 percent-decode"
+    vm: "url_decode_fn"
+    aot: "xrt_url_decode"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: false
+    layer: "core"
+  }
+
+  fn encodeForm {
+    signature: "(s: string): string"
+    doc: "Form URL encode (space as +)"
+    vm: "url_encode_form_fn"
+    aot: "xrt_url_encode_form"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: false
+    layer: "core"
+  }
+
+  fn decodeForm {
+    signature: "(s: string): string"
+    doc: "Form URL decode (+ as space)"
+    vm: "url_decode_form_fn"
+    aot: "xrt_url_decode_form"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: false
+    layer: "core"
+  }
+
+  fn parse {
+    signature: "(url: string): URL"
+    doc: "Parse URL into a URL handle (protocol, hostname, port, pathname, search, hash, username, password, host, origin, href)"
+    vm: "url_parse_fn"
+    aot: "xrt_url_parse"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn format {
+    signature: "(obj: URL): string"
+    doc: "Build URL string from URL components"
+    vm: "url_format_fn"
+    aot: "xrt_url_format"
+    argc: 1
+    arg_spec: "v"
+    aot_direct: true
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn parseQuery {
+    signature: "(qs: string): Json"
+    doc: "Parse query string to Json"
+    vm: "url_parse_query_fn"
+    aot: "xrt_url_parse_query"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn buildQuery {
+    signature: "(obj: Json): string"
+    doc: "Build query string from Json"
+    vm: "url_build_query_fn"
+    aot: "xrt_url_build_query"
+    argc: 1
+    arg_spec: "v"
+    aot_direct: true
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn resolve {
+    signature: "(base: string, relative: string): string"
+    doc: "Resolve relative URL"
+    vm: "url_resolve_fn"
+    aot: "xrt_url_resolve"
+    argc: 2
+    arg_spec: "ss"
+    aot_direct: true
+    link_object: false
+    layer: "core"
+  }
+
+  fn join {
+    signature: "(...parts: string): string"
+    doc: "Join URL path segments"
+    vm: "url_join_fn"
+    aot: "xrt_url_join"
+    argc: variadic
+    arg_spec: "*"
+    aot_direct: true
+    link_object: false
+    layer: "core"
+  }
+}
+
+module compress {
+  fn crc32 {
+    signature: "(data: string): int"
+    doc: "Compute CRC-32 checksum"
+    vm: "compress_crc32"
+    aot: "xrt_compress_crc32"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: false
+    layer: "core"
+  }
+
+  fn adler32 {
+    signature: "(data: string): int"
+    doc: "Compute Adler-32 checksum"
+    vm: "compress_adler32"
+    aot: "xrt_compress_adler32"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: false
+    layer: "core"
+  }
+
+  fn gzip {
+    signature: "(data: string, level?: int): string?"
+    doc: "Gzip compress"
+    vm: "compress_gzip"
+    aot: "xrt_compress_gzip_default"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: true
+    layer: "alloc"
+  }
+
+  fn gzip {
+    signature: "(data: string, level?: int): string?"
+    doc: "Gzip compress"
+    vm: "compress_gzip"
+    aot: "xrt_compress_gzip"
+    argc: 2
+    arg_spec: "sv"
+    aot_direct: true
+    link_object: true
+    layer: "alloc"
+  }
+
+  fn gunzip {
+    signature: "(data: string): string?"
+    doc: "Gzip decompress"
+    vm: "compress_gunzip"
+    aot: "xrt_compress_gunzip"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: true
+    layer: "alloc"
+  }
+
+  fn deflate {
+    signature: "(data: string, level?: int): string?"
+    doc: "Deflate compress"
+    vm: "compress_deflate"
+    aot: "xrt_compress_deflate_default"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: true
+    layer: "alloc"
+  }
+
+  fn deflate {
+    signature: "(data: string, level?: int): string?"
+    doc: "Deflate compress"
+    vm: "compress_deflate"
+    aot: "xrt_compress_deflate"
+    argc: 2
+    arg_spec: "sv"
+    aot_direct: true
+    link_object: true
+    layer: "alloc"
+  }
+
+  fn inflate {
+    signature: "(data: string): string?"
+    doc: "Inflate decompress"
+    vm: "compress_inflate"
+    aot: "xrt_compress_inflate"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: true
+    layer: "alloc"
+  }
+
+  fn zlibCompress {
+    signature: "(data: string, level?: int): string?"
+    doc: "Zlib compress"
+    vm: "compress_zlib_compress"
+    aot: "xrt_compress_zlib_compress_default"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: true
+    layer: "alloc"
+  }
+
+  fn zlibCompress {
+    signature: "(data: string, level?: int): string?"
+    doc: "Zlib compress"
+    vm: "compress_zlib_compress"
+    aot: "xrt_compress_zlib_compress"
+    argc: 2
+    arg_spec: "sv"
+    aot_direct: true
+    link_object: true
+    layer: "alloc"
+  }
+
+  fn zlibDecompress {
+    signature: "(data: string): string?"
+    doc: "Zlib decompress"
+    vm: "compress_zlib_decompress"
+    aot: "xrt_compress_zlib_decompress"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: true
+    layer: "alloc"
+  }
+
+  fn isGzip {
+    signature: "(data: string): bool"
+    doc: "Check if gzip data"
+    vm: "compress_is_gzip"
+    aot: "xrt_compress_is_gzip"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: true
+    layer: "alloc"
+  }
+
+  fn isZlib {
+    signature: "(data: string): bool"
+    doc: "Check if zlib data"
+    vm: "compress_is_zlib"
+    aot: "xrt_compress_is_zlib"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: true
+    layer: "alloc"
+  }
+}
+
 module encoding {
+  const LE {
+    signature: ": int"
+    doc: "Little-endian UTF-16 byte order"
+    vm: "XR_UTF16_LE"
+    vm_value: "xr_int(XR_UTF16_LE)"
+    aot_const: "int64"
+    value: 0
+    layer: "core"
+  }
+
+  const BE {
+    signature: ": int"
+    doc: "Big-endian UTF-16 byte order"
+    vm: "XR_UTF16_BE"
+    vm_value: "xr_int(XR_UTF16_BE)"
+    aot_const: "int64"
+    value: 1
+    layer: "core"
+  }
+
   fn hexEncode {
     signature: "(data: string): string"
     doc: "Hex encode string to hex"
@@ -578,6 +1467,83 @@ module crypto {
 }
 
 module regex {
+  native_class Regex {
+    super_slot: objectClass
+    core_slot: regexClass
+    native_body: g_regex_body_desc
+    flags: "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY"
+    builtin_kind: XR_BK_REGEX
+  }
+
+  class RegexMatch {
+    super_slot: objectClass
+    core_slot: regexMatchClass
+    flags: "XR_CLASS_BUILTIN | XR_CLASS_FINAL"
+    builtin_kind: XR_BK_REGEX_MATCH
+  }
+
+  class_method Regex.test {
+    vm: "re_m_test"
+    argc: 1
+  }
+
+  class_method Regex.find {
+    vm: "re_m_find"
+    argc: 2
+  }
+
+  class_method Regex.findText {
+    vm: "re_m_find_text"
+    argc: 1
+  }
+
+  class_method Regex.findGroup {
+    vm: "re_m_find_group"
+    argc: 2
+  }
+
+  class_method Regex.findAll {
+    vm: "re_m_find_all"
+    argc: 2
+  }
+
+  class_method Regex.replace {
+    vm: "re_m_replace"
+    argc: 2
+  }
+
+  class_method Regex.replaceAll {
+    vm: "re_m_replace_all"
+    argc: 2
+  }
+
+  class_method Regex.split {
+    vm: "re_m_split"
+    argc: 2
+  }
+
+  class_method Regex.pattern {
+    vm: "re_method_pattern"
+    argc: 0
+  }
+
+  class_method Regex.toString {
+    vm: "re_m_to_string"
+    argc: 0
+  }
+
+  class_field RegexMatch.start {
+  }
+
+  class_field RegexMatch.end {
+  }
+
+  class_field RegexMatch.text {
+  }
+
+  class_field RegexMatch.groups {
+  }
+
   fn compile {
     signature: "(pattern: string, flags?: string): Regex"
     doc: "Compile regex pattern"
@@ -798,7 +1764,2670 @@ module regex {
   }
 }
 
+module os {
+  handle ExecResult {
+    fields: "const stdout: string, const stderr: string, const exitCode: int"
+  }
+
+  const platform {
+    signature: ": string"
+    doc: "Current operating system name"
+    vm: "os.platform"
+    vm_value: "xrs_string_value_c(isolate, get_platform())"
+    aot_const: "helper_value"
+    aot: "xrt_os_platform"
+    layer: "system"
+  }
+
+  const arch {
+    signature: ": string"
+    doc: "Current CPU architecture name"
+    vm: "os.arch"
+    vm_value: "xrs_string_value_c(isolate, get_arch())"
+    aot_const: "helper_value"
+    aot: "xrt_os_arch"
+    layer: "system"
+  }
+
+  const sep {
+    signature: ": string"
+    doc: "Platform path separator"
+    vm: "os.sep"
+    vm_value: "xrs_string_value_c(isolate, get_sep())"
+    aot_const: "helper_value"
+    aot: "xrt_os_sep"
+    layer: "system"
+  }
+
+  const eol {
+    signature: ": string"
+    doc: "Platform end-of-line string"
+    vm: "os.eol"
+    vm_value: "xrs_string_value_c(isolate, get_eol())"
+    aot_const: "helper_value"
+    aot: "xrt_os_eol"
+    layer: "system"
+  }
+
+  fn getenv {
+    signature: "(name: string): string?"
+    doc: "Get environment variable"
+    vm: "os_getenv"
+    aot: "xrt_os_getenv"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn setenv {
+    signature: "(name: string, value: string): bool"
+    doc: "Set environment variable"
+    vm: "os_setenv"
+    aot: "xrt_os_setenv"
+    argc: 2
+    arg_spec: "ss"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn unsetenv {
+    signature: "(name: string): bool"
+    doc: "Unset environment variable"
+    vm: "os_unsetenv"
+    aot: "xrt_os_unsetenv"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn environ {
+    signature: "(): Map<string, string>"
+    doc: "Get all environment variables"
+    vm: "os_environ"
+    aot: "xrt_os_environ"
+    argc: 0
+    arg_spec: ""
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn exit {
+    signature: "(code?: int): ()"
+    doc: "Exit process"
+    vm: "os_exit"
+    argc: 1
+    arg_spec: "v"
+    aot_direct: false
+    layer: "system"
+  }
+
+  fn getpid {
+    signature: "(): int"
+    doc: "Get process ID"
+    vm: "os_getpid"
+    aot: "xrt_os_getpid"
+    argc: 0
+    arg_spec: ""
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn getcwd {
+    signature: "(): string"
+    doc: "Get current working directory"
+    vm: "os_getcwd"
+    aot: "xrt_os_getcwd"
+    argc: 0
+    arg_spec: ""
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn chdir {
+    signature: "(path: string): bool"
+    doc: "Change working directory"
+    vm: "os_chdir"
+    aot: "xrt_os_chdir"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn hostname {
+    signature: "(): string"
+    doc: "Get hostname"
+    vm: "os_hostname"
+    aot: "xrt_os_hostname"
+    argc: 0
+    arg_spec: ""
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn tmpdir {
+    signature: "(): string"
+    doc: "Get temporary directory path"
+    vm: "os_tmpdir"
+    aot: "xrt_os_tmpdir"
+    argc: 0
+    arg_spec: ""
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn username {
+    signature: "(): string?"
+    doc: "Get current user name"
+    vm: "os_username"
+    aot: "xrt_os_username"
+    argc: 0
+    arg_spec: ""
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn homedir {
+    signature: "(): string?"
+    doc: "Get user home directory"
+    vm: "os_homedir"
+    aot: "xrt_os_homedir"
+    argc: 0
+    arg_spec: ""
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn uid {
+    signature: "(): int"
+    doc: "Get user ID"
+    vm: "os_uid"
+    aot: "xrt_os_uid"
+    argc: 0
+    arg_spec: ""
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn gid {
+    signature: "(): int"
+    doc: "Get group ID"
+    vm: "os_gid"
+    aot: "xrt_os_gid"
+    argc: 0
+    arg_spec: ""
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn cpuCount {
+    signature: "(): int"
+    doc: "Get number of CPU cores"
+    vm: "os_cpuCount"
+    aot: "xrt_os_cpu_count"
+    argc: 0
+    arg_spec: ""
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn ppid {
+    signature: "(): int"
+    doc: "Get parent process ID"
+    vm: "os_ppid"
+    aot: "xrt_os_ppid"
+    argc: 0
+    arg_spec: ""
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn kill {
+    signature: "(pid: int, signal?: int): bool"
+    doc: "Send signal to process"
+    vm: "os_kill"
+    aot: "xrt_os_kill"
+    argc: 1
+    arg_spec: "v"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn kill {
+    signature: "(pid: int, signal?: int): bool"
+    doc: "Send signal to process"
+    vm: "os_kill"
+    aot: "xrt_os_kill_signal"
+    argc: 2
+    arg_spec: "vv"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn totalMemory {
+    signature: "(): int"
+    doc: "Get total system memory in bytes"
+    vm: "os_totalMemory"
+    aot: "xrt_os_total_memory"
+    argc: 0
+    arg_spec: ""
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn freeMemory {
+    signature: "(): int"
+    doc: "Get available system memory in bytes"
+    vm: "os_freeMemory"
+    aot: "xrt_os_free_memory"
+    argc: 0
+    arg_spec: ""
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn uptime {
+    signature: "(): float"
+    doc: "Get system uptime in seconds"
+    vm: "os_uptime"
+    aot: "xrt_os_uptime"
+    argc: 0
+    arg_spec: ""
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn loadavg {
+    signature: "(): Array<float>"
+    doc: "Get system load averages (1, 5, 15 min)"
+    vm: "os_loadavg"
+    aot: "xrt_os_loadavg"
+    argc: 0
+    arg_spec: ""
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn clock {
+    signature: "(): float"
+    doc: "Get process CPU time in seconds"
+    vm: "os_clock"
+    aot: "xrt_os_clock"
+    argc: 0
+    arg_spec: ""
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn sleep {
+    signature: "(ms: int): ()"
+    doc: "Sleep for milliseconds"
+    vm: "os_sleep"
+    vm_binding: "yieldable"
+    aot: "xrt_os_sleep"
+    argc: 1
+    arg_spec: "v"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn exec {
+    signature: "(cmd: string): ExecResult?"
+    doc: "Execute shell command"
+    vm: "os_exec"
+    aot: "xrt_os_exec"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+}
+
+module io {
+  handle FileStat {
+    fields: "const size: int, const mode: int, const mtime: int, const atime: int, const ctime: int, const uid: int, const gid: int, const isFile: bool, const isDir: bool, const isSymlink: bool"
+  }
+
+  fn appendFile {
+    signature: "(path: string, data: string): bool"
+    doc: "Append string to file"
+    vm: "io_appendFile"
+    aot: "xrt_io_append_file"
+    argc: 2
+    arg_spec: "ss"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn chmod {
+    signature: "(path: string, mode: int): bool"
+    doc: "Change file permissions"
+    vm: "io_chmod"
+    aot: "xrt_io_chmod_value"
+    argc: 2
+    arg_spec: "sv"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn chdir {
+    signature: "(path: string): bool"
+    doc: "Change working directory"
+    vm: "io_chdir"
+    aot: "xrt_io_chdir"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn copyFile {
+    signature: "(src: string, dst: string): bool"
+    doc: "Copy a file"
+    vm: "io_copyFile"
+    aot: "xrt_io_copy_file"
+    argc: 2
+    arg_spec: "ss"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn cwd {
+    signature: "(): string"
+    doc: "Get current working directory"
+    vm: "io_cwd"
+    aot: "xrt_io_cwd"
+    argc: 0
+    arg_spec: ""
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn exists {
+    signature: "(path: string): bool"
+    doc: "Check if path exists"
+    vm: "io_exists"
+    aot: "xrt_io_exists"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn fileSize {
+    signature: "(path: string): int"
+    doc: "Get file size in bytes"
+    vm: "io_fileSize"
+    aot: "xrt_io_file_size"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn isDir {
+    signature: "(path: string): bool"
+    doc: "Check if path is a directory"
+    vm: "io_isDir"
+    aot: "xrt_io_is_dir"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn isFile {
+    signature: "(path: string): bool"
+    doc: "Check if path is a file"
+    vm: "io_isFile"
+    aot: "xrt_io_is_file"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn isSymlink {
+    signature: "(path: string): bool"
+    doc: "Check if path is a symlink"
+    vm: "io_isSymlink"
+    aot: "xrt_io_is_symlink"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn mkdir {
+    signature: "(path: string): bool"
+    doc: "Create directory"
+    vm: "io_mkdir"
+    aot: "xrt_io_mkdir"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn mkdirp {
+    signature: "(path: string): bool"
+    doc: "Create directory recursively"
+    vm: "io_mkdirp"
+    aot: "xrt_io_mkdirp"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn readDir {
+    signature: "(path: string): Array<string>"
+    doc: "List directory entries"
+    vm: "io_readDir"
+    aot: "xrt_io_read_dir"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn readDirRecursive {
+    signature: "(path: string): Array<string>"
+    doc: "List directory entries recursively"
+    vm: "io_readDirRecursive"
+    aot: "xrt_io_read_dir_recursive"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn readFile {
+    signature: "(path: string): string?"
+    doc: "Read entire file as string"
+    vm: "io_readFile"
+    vm_binding: "yieldable"
+    aot: "xrt_io_read_file"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn readFileBytes {
+    signature: "(path: string): Array<uint8>?"
+    doc: "Read entire file as byte array"
+    vm: "io_readFileBytes"
+    vm_binding: "yieldable"
+    aot: "xrt_io_read_file_bytes"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn readLines {
+    signature: "(path: string): Array<string>"
+    doc: "Read file as lines"
+    vm: "io_readLines"
+    aot: "xrt_io_read_lines"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn readStdin {
+    signature: "(): string?"
+    doc: "Read all data from standard input"
+    vm: "io_readStdin"
+    aot: "xrt_io_read_stdin"
+    argc: 0
+    arg_spec: ""
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn readlink {
+    signature: "(path: string): string?"
+    doc: "Read symlink target"
+    vm: "io_readlink"
+    aot: "xrt_io_readlink"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn realpath {
+    signature: "(path: string): string?"
+    doc: "Resolve to absolute path"
+    vm: "io_realpath"
+    aot: "xrt_io_realpath"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn remove {
+    signature: "(path: string): bool"
+    doc: "Remove a file"
+    vm: "io_remove"
+    aot: "xrt_io_remove"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn removeAll {
+    signature: "(path: string): bool"
+    doc: "Remove directory recursively"
+    vm: "io_removeAll"
+    aot: "xrt_io_remove_all"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn rename {
+    signature: "(old: string, new: string): bool"
+    doc: "Rename a file"
+    vm: "io_rename"
+    aot: "xrt_io_rename"
+    argc: 2
+    arg_spec: "ss"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn stat {
+    signature: "(path: string): FileStat?"
+    doc: "Get file stat info"
+    vm: "io_stat"
+    aot: "xrt_io_stat"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn symlink {
+    signature: "(target: string, link: string): bool"
+    doc: "Create symbolic link"
+    vm: "io_symlink"
+    aot: "xrt_io_symlink"
+    argc: 2
+    arg_spec: "ss"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn tempDir {
+    signature: "(): string?"
+    doc: "Create temporary directory"
+    vm: "io_tempDir"
+    aot: "xrt_io_temp_dir"
+    argc: 0
+    arg_spec: ""
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn tempFile {
+    signature: "(): string?"
+    doc: "Create temporary file"
+    vm: "io_tempFile"
+    aot: "xrt_io_temp_file"
+    argc: 0
+    arg_spec: ""
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn touch {
+    signature: "(path: string): bool"
+    doc: "Create or update file timestamp"
+    vm: "io_touch"
+    aot: "xrt_io_touch"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn writeFile {
+    signature: "(path: string, data: string): bool"
+    doc: "Write string to file"
+    vm: "io_writeFile"
+    vm_binding: "yieldable"
+    aot: "xrt_io_write_file"
+    argc: 2
+    arg_spec: "ss"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+
+  fn writeFileBytes {
+    signature: "(path: string, data: Array<uint8>): bool"
+    doc: "Write byte array to file"
+    vm: "io_writeFileBytes"
+    vm_binding: "yieldable"
+    aot: "xrt_io_write_file_bytes"
+    argc: 2
+    arg_spec: "sv"
+    aot_direct: true
+    link_object: false
+    layer: "system"
+  }
+}
+
+module log {
+  fn debug {
+    signature: "(...args: unknown): ()"
+    doc: "Log debug message"
+    vm: "xr_log_debug"
+    argc: variadic
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "system"
+  }
+
+  fn info {
+    signature: "(...args: unknown): ()"
+    doc: "Log info message"
+    vm: "xr_log_info"
+    argc: variadic
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "system"
+  }
+
+  fn warn {
+    signature: "(...args: unknown): ()"
+    doc: "Log warning message"
+    vm: "xr_log_warn"
+    argc: variadic
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "system"
+  }
+
+  fn error {
+    signature: "(...args: unknown): ()"
+    doc: "Log error message"
+    vm: "xr_log_error"
+    argc: variadic
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "system"
+  }
+
+  fn fatal {
+    signature: "(...args: unknown): ()"
+    doc: "Log fatal message"
+    vm: "xr_log_fatal"
+    argc: variadic
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "system"
+  }
+
+  fn setLevel {
+    signature: "(level: int): ()"
+    doc: "Set log level"
+    vm: "xr_log_set_level"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "system"
+  }
+
+  fn setFormat {
+    signature: "(format: string): ()"
+    doc: "Set log format"
+    vm: "xr_log_set_format"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "system"
+  }
+
+  fn setOutput {
+    signature: "(path: string): ()"
+    doc: "Set log output file"
+    vm: "xr_log_set_output"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "system"
+  }
+
+  fn isEnabled {
+    signature: "(level: int): bool"
+    doc: "Check if log level enabled"
+    vm: "xr_log_is_enabled"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "system"
+  }
+
+  fn enableSource {
+    signature: "(enabled: bool): ()"
+    doc: "Enable source location in logs"
+    vm: "xr_log_enable_source"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "system"
+  }
+
+  fn enableAsync {
+    signature: "(enabled: bool): ()"
+    doc: "Enable async logging"
+    vm: "xr_log_enable_async"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "system"
+  }
+
+  fn flush {
+    signature: "(): ()"
+    doc: "Flush log buffer"
+    vm: "xr_log_flush"
+    argc: 0
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "system"
+  }
+
+  fn child {
+    signature: "(...fields: unknown): Logger"
+    doc: "Create child logger"
+    vm: "xr_log_child"
+    argc: variadic
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "system"
+  }
+
+  native_class Logger {
+    super_slot: "objectClass"
+    core_slot: "loggerClass"
+    native_body: "g_logger_body_desc"
+    flags: "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY"
+  }
+
+  class_method Logger.debug {
+    vm: "xr_logger_debug"
+    argc: -1
+  }
+
+  class_method Logger.info {
+    vm: "xr_logger_info"
+    argc: -1
+  }
+
+  class_method Logger.warn {
+    vm: "xr_logger_warn"
+    argc: -1
+  }
+
+  class_method Logger.error {
+    vm: "xr_logger_error"
+    argc: -1
+  }
+
+  class_method Logger.fatal {
+    vm: "xr_logger_fatal"
+    argc: -1
+  }
+
+  class_method Logger.child {
+    vm: "xr_logger_child"
+    argc: -1
+  }
+
+  const DEBUG {
+    signature: ": int"
+    doc: "Debug log level"
+    vm: "XR_LOG_DEBUG"
+    vm_value: "xr_int(XR_LOG_DEBUG)"
+    aot_const: "int64"
+    value: 10
+    layer: "core"
+  }
+
+  const INFO {
+    signature: ": int"
+    doc: "Info log level"
+    vm: "XR_LOG_INFO"
+    vm_value: "xr_int(XR_LOG_INFO)"
+    aot_const: "int64"
+    value: 20
+    layer: "core"
+  }
+
+  const WARN {
+    signature: ": int"
+    doc: "Warning log level"
+    vm: "XR_LOG_WARN"
+    vm_value: "xr_int(XR_LOG_WARN)"
+    aot_const: "int64"
+    value: 30
+    layer: "core"
+  }
+
+  const ERROR {
+    signature: ": int"
+    doc: "Error log level"
+    vm: "XR_LOG_ERROR"
+    vm_value: "xr_int(XR_LOG_ERROR)"
+    aot_const: "int64"
+    value: 40
+    layer: "core"
+  }
+
+  const FATAL {
+    signature: ": int"
+    doc: "Fatal log level"
+    vm: "XR_LOG_FATAL"
+    vm_value: "xr_int(XR_LOG_FATAL)"
+    aot_const: "int64"
+    value: 50
+    layer: "core"
+  }
+}
+
+module mem {
+  fn collectCycles {
+    signature: "(): int"
+    doc: "Run cycle collection + whole-block reclaim, return cycle collection count"
+    vm: "mem_collect_cycles"
+    argc: 0
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn disableCycleCollection {
+    signature: "(): ()"
+    doc: "Pause the automatic cycle collector"
+    vm: "mem_disable_cycle_collection"
+    argc: 0
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn enableCycleCollection {
+    signature: "(): ()"
+    doc: "Resume the automatic cycle collector"
+    vm: "mem_enable_cycle_collection"
+    argc: 0
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn isCycleCollectionEnabled {
+    signature: "(): bool"
+    doc: "Check if automatic cycle collection is enabled"
+    vm: "mem_is_cycle_collection_enabled"
+    argc: 0
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn liveBytes {
+    signature: "(): int"
+    doc: "Get live memory usage in bytes"
+    vm: "mem_live_bytes"
+    argc: 0
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn liveObjects {
+    signature: "(): int"
+    doc: "Get live object count"
+    vm: "mem_live_objects"
+    argc: 0
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn info {
+    signature: "(): Map"
+    doc: "Get memory-model runtime info as Map"
+    vm: "mem_info"
+    argc: 0
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+}
+
+module net {
+  handle UdpPacket {
+    fields: "const data: string, const host: string, const port: int"
+  }
+
+  native_class NetConn {
+    core_slot: "netConnClass"
+    native_body_expr: "xr_netconn_body_desc()"
+    flags: "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY"
+    builtin_kind: "XR_BK_NETCONN"
+  }
+
+  native_class NetListener {
+    core_slot: "netListenerClass"
+    native_body_expr: "xr_netlistener_body_desc()"
+    flags: "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY"
+    builtin_kind: "XR_BK_NETLISTENER"
+  }
+
+  class_method NetConn.fd {
+    vm: "conn_method_fd"
+    argc: 0
+  }
+
+  class_method NetConn.close {
+    vm: "conn_method_close"
+    argc: 0
+  }
+
+  class_method NetConn.isClosed {
+    vm: "conn_method_is_closed"
+    argc: 0
+  }
+
+  class_method NetConn.isTLS {
+    vm: "conn_method_is_tls"
+    argc: 0
+  }
+
+  class_method NetListener.fd {
+    vm: "listener_method_fd"
+    argc: 0
+  }
+
+  class_method NetListener.port {
+    vm: "listener_method_port"
+    argc: 0
+  }
+
+  class_method NetListener.close {
+    vm: "listener_method_close"
+    argc: 0
+  }
+
+  class_method NetListener.isClosed {
+    vm: "listener_method_is_closed"
+    argc: 0
+  }
+
+  fn dial {
+    signature: "(host: string, port: int, timeout?: int): NetConn?"
+    doc: "Dial a TCP connection"
+    vm: "net_dial_yieldable"
+    vm_binding: "yieldable"
+    argc: 3
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn listen {
+    signature: "(port: int, backlog?: int): NetListener?"
+    doc: "Start listening on a port"
+    vm: "net_listen_handle"
+    argc: 2
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn accept {
+    signature: "(listener: NetListener): NetConn?"
+    doc: "Accept a new connection"
+    vm: "net_accept_handle_yieldable"
+    vm_binding: "yieldable"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn read {
+    signature: "(conn: NetConn, maxlen?: int): string?"
+    doc: "Read data from connection"
+    vm: "net_read_handle_yieldable"
+    vm_binding: "yieldable"
+    argc: 2
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn readInto {
+    signature: "(conn: NetConn, buffer: Bytes, maxlen?: int): int"
+    doc: "Read data into a reusable Bytes buffer"
+    vm: "net_read_into_yieldable"
+    vm_binding: "yieldable"
+    argc: 3
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn write {
+    signature: "(conn: NetConn, data: string): int"
+    doc: "Write data to connection"
+    vm: "net_write_handle_yieldable"
+    vm_binding: "yieldable"
+    argc: 2
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn writeBytes {
+    signature: "(conn: NetConn, data: Bytes): int"
+    doc: "Write Bytes data to connection"
+    vm: "net_write_bytes_yieldable"
+    vm_binding: "yieldable"
+    argc: 2
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn copy {
+    signature: "(src: NetConn, dst: NetConn, bufferSize?: int): int"
+    doc: "Copy a TCP/TLS stream using a reusable native buffer"
+    vm: "net_copy_yieldable"
+    vm_binding: "yieldable"
+    argc: 3
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn copyBidirectional {
+    signature: "(a: NetConn, b: NetConn): Json"
+    doc: "Copy two TCP/TLS streams in both directions"
+    vm: "net_copy_bidirectional_yieldable"
+    vm_binding: "yieldable"
+    argc: 2
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn shutdownRead {
+    signature: "(conn: NetConn): bool"
+    doc: "Shut down the read side of a TCP connection"
+    vm: "net_shutdown_read"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn shutdownWrite {
+    signature: "(conn: NetConn): bool"
+    doc: "Shut down the write side of a TCP connection"
+    vm: "net_shutdown_write"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn shutdown {
+    signature: "(conn: NetConn): bool"
+    doc: "Shut down both sides of a TCP connection"
+    vm: "net_shutdown_conn"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn close {
+    signature: "(handle: NetConn | NetListener): ()"
+    doc: "Close a connection or listener"
+    vm: "net_close_handle"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn fd {
+    signature: "(handle: NetConn | NetListener): int"
+    doc: "Get fd from handle"
+    vm: "net_fd_handle"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn setReadDeadline {
+    signature: "(conn: NetConn, deadline: int): bool"
+    doc: "Set read deadline in monotonic ms"
+    vm: "net_set_read_deadline"
+    argc: 2
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn setWriteDeadline {
+    signature: "(conn: NetConn, deadline: int): bool"
+    doc: "Set write deadline in monotonic ms"
+    vm: "net_set_write_deadline"
+    argc: 2
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn setDeadline {
+    signature: "(conn: NetConn, deadline: int): bool"
+    doc: "Set read and write deadlines in monotonic ms"
+    vm: "net_set_deadline"
+    argc: 2
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn setAcceptDeadline {
+    signature: "(listener: NetListener, deadline: int): bool"
+    doc: "Set accept deadline in monotonic ms"
+    vm: "net_set_accept_deadline"
+    argc: 2
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn lastError {
+    signature: "(handle: NetConn | NetListener): string?"
+    doc: "Return the last network error name"
+    vm: "net_last_error"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn lastErrno {
+    signature: "(handle: NetConn | NetListener): int"
+    doc: "Return the last system errno"
+    vm: "net_last_errno"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn lookup {
+    signature: "(hostname: string): string?"
+    doc: "DNS lookup"
+    vm: "net_dns_lookup"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn hasTLS {
+    signature: "(): bool"
+    doc: "Check if TLS support is available"
+    vm: "net_has_tls"
+    argc: 0
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn dialTLS {
+    signature: "(host: string, port: int, timeout?: int): NetConn?"
+    doc: "Dial a TLS connection"
+    vm: "net_dial_tls_yieldable"
+    vm_binding: "yieldable"
+    vm_ifdef: "XR_ENABLE_TLS"
+    argc: 3
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn upgradeTLS {
+    signature: "(conn: NetConn, hostname: string, timeout?: int): NetConn?"
+    doc: "Upgrade connection to TLS"
+    vm: "net_upgrade_tls_yieldable"
+    vm_binding: "yieldable"
+    vm_ifdef: "XR_ENABLE_TLS"
+    argc: 3
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn udpBind {
+    signature: "(port: int, addr?: string): NetConn?"
+    doc: "Bind a UDP socket"
+    vm: "net_udp_bind_handle"
+    argc: 2
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn sendTo {
+    signature: "(handle: NetConn, data: string, host: string, port: int): int"
+    doc: "Send UDP datagram"
+    vm: "net_send_to_yieldable"
+    vm_binding: "yieldable"
+    argc: 4
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn recvFrom {
+    signature: "(handle: NetConn, maxlen?: int): UdpPacket?"
+    doc: "Receive UDP datagram (returns flat handle: data, host, port)"
+    vm: "net_recv_from_yieldable"
+    vm_binding: "yieldable"
+    argc: 2
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+}
+
+module http {
+  handle HttpResponse {
+    fields: "const status: int, const statusText: string, const headers: Json, const body: string, const error: string, const ok: bool"
+  }
+
+  handle HttpRequest {
+    fields: "const method: string, const path: string, const query: Json, const headers: Json, const body: string, const contentLength: int, const params: Json, const streaming: bool"
+  }
+
+  handle DownloadResult {
+    fields: "const status: int, const downloaded: int, const total: int, const completed: bool, const error: string"
+  }
+
+  fn get {
+    signature: "(url: string): HttpResponse"
+    doc: "HTTP GET request"
+    vm: "http_get"
+    vm_binding: "slow"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn post {
+    signature: "(url: string, body?: string, contentType?: string): HttpResponse"
+    doc: "HTTP POST request"
+    vm: "http_post"
+    vm_binding: "slow"
+    argc: 3
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn put {
+    signature: "(url: string, body?: string, contentType?: string): HttpResponse"
+    doc: "HTTP PUT request"
+    vm: "http_put"
+    vm_binding: "slow"
+    argc: 3
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn delete {
+    signature: "(url: string): HttpResponse"
+    doc: "HTTP DELETE request"
+    vm: "http_delete"
+    vm_binding: "slow"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn request {
+    signature: "(options: Json): HttpResponse"
+    doc: "Generic HTTP request"
+    vm: "http_request"
+    vm_binding: "slow"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn urlEncode {
+    signature: "(s: string): string"
+    doc: "URL-encode a string"
+    vm: "http_url_encode"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn urlDecode {
+    signature: "(s: string): string"
+    doc: "URL-decode a string"
+    vm: "http_url_decode"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn route {
+    signature: "(method: string, path: string, handler: fn | string | Json): ()"
+    doc: "Register a route handler or static response"
+    vm: "http_route"
+    argc: 3
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn static {
+    signature: "(method: string, path: string, content: string): ()"
+    doc: "Register a prebuilt static route response"
+    vm: "http_static"
+    argc: 3
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn setConnHandler {
+    signature: "(handler: fn(fd: int): ()): ()"
+    doc: "Set low-level HTTP connection handler"
+    vm: "http_set_conn_handler"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn __getConnHandler {
+    signature: "(): fn"
+    doc: "Return the current low-level HTTP connection handler"
+    vm: "http_get_conn_handler"
+    argc: 0
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn listen {
+    signature: "(port: int): bool"
+    doc: "Start HTTP server accept loop"
+    vm: "xr_http_listen_impl"
+    vm_binding: "yieldable"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn config {
+    signature: "(opts: Json): ()"
+    doc: "Configure HTTP server limits and timeouts"
+    vm: "xr_http_config_impl"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn response {
+    signature: "(status: int, body?: string | Json): string"
+    doc: "Format an HTTP response string"
+    vm: "xr_http_response_impl"
+    argc: 2
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn serverStats {
+    signature: "(): Json"
+    doc: "Return HTTP server counters"
+    vm: "xr_http_server_stats"
+    argc: 0
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn ws {
+    signature: "(path: string, handler: fn(conn: WsConn): ()): ()"
+    doc: "Register WebSocket upgrade route on HTTP server"
+    vm: "http_ws_route"
+    argc: 2
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn readChunk {
+    signature: "(resp: Json, maxBytes?: int): string?"
+    doc: "Read the next chunk from a streaming HTTP response"
+    vm: "http_read_chunk"
+    vm_binding: "slow"
+    argc: 2
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn closeStream {
+    signature: "(resp: Json): ()"
+    doc: "Close a streaming HTTP response"
+    vm: "http_close_stream"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn stopServer {
+    signature: "(): ()"
+    doc: "Stop the HTTP server"
+    vm: "http_stop_server"
+    argc: 0
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn parseRequest {
+    signature: "(fd: int): Array<unknown>?"
+    doc: "Parse raw HTTP request data"
+    vm: "http_parse_request_fast"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn sendResponse {
+    signature: "(fd: int, body: string, status?: int): bool"
+    doc: "Send HTTP response on fd"
+    vm: "http_send_response_fast"
+    argc: 3
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn download {
+    signature: "(url: string, path: string): DownloadResult"
+    doc: "Download file from URL"
+    vm: "http_download"
+    vm_binding: "slow"
+    argc: 2
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn getContentLength {
+    signature: "(url: string): int"
+    doc: "Get content length of URL"
+    vm: "http_get_content_length"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn formDataNew {
+    signature: "(maxTotalSize?: int, maxFileSize?: int): bool"
+    doc: "Create new multipart form data context"
+    vm: "http_form_data_new"
+    argc: 2
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn formDataAppend {
+    signature: "(name: string, value: string): ()"
+    doc: "Append field to current form data"
+    vm: "http_form_data_append"
+    argc: 2
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn formDataAppendFile {
+    signature: "(name: string, path: string): bool"
+    doc: "Append file to current form data"
+    vm: "http_form_data_append_file"
+    argc: 2
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn formDataPost {
+    signature: "(url: string): Json"
+    doc: "POST current multipart form data"
+    vm: "http_form_data_post"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn setProxy {
+    signature: "(url: string): ()"
+    doc: "Set HTTP proxy"
+    vm: "http_set_proxy"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn clearProxy {
+    signature: "(): ()"
+    doc: "Clear HTTP proxy"
+    vm: "http_clear_proxy"
+    argc: 0
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn h2Get {
+    signature: "(url: string, options?: Json): Json"
+    doc: "HTTP/2 GET request"
+    vm: "h2_get"
+    argc: 2
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn h2Post {
+    signature: "(url: string, body: string, contentType?: string): Json"
+    doc: "HTTP/2 POST request"
+    vm: "h2_post"
+    argc: 3
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn h2Request {
+    signature: "(options: Json): Json"
+    doc: "Generic HTTP/2 request"
+    vm: "h2_request"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn h2CreateServer {
+    signature: "(options?: Json): bool"
+    doc: "Create HTTP/2 server"
+    vm: "h2_create_server"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn h2Listen {
+    signature: "(): bool"
+    doc: "Start HTTP/2 server"
+    vm: "h2_server_listen"
+    argc: 0
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn h2Stop {
+    signature: "(): ()"
+    doc: "Stop HTTP/2 server"
+    vm: "h2_server_stop"
+    argc: 0
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn h2Push {
+    signature: "(path: string, contentType: string, data: string): bool"
+    doc: "Push HTTP/2 response data"
+    vm: "h2_push"
+    argc: 3
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+}
+
+module cluster {
+  fn start {
+    signature: "(config: Json): ()"
+    doc: "Start cluster node"
+    vm: "cluster_start"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn join {
+    signature: "(addr: string): bool"
+    doc: "Join cluster by address"
+    vm: "cluster_join"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn self {
+    signature: "(): string"
+    doc: "Get own node name"
+    vm: "cluster_self"
+    argc: 0
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn nodes {
+    signature: "(): Array<string>"
+    doc: "List cluster node names"
+    vm: "cluster_nodes"
+    argc: 0
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn channel {
+    signature: "(name: string, size?: int): Channel"
+    doc: "Create or get named distributed channel"
+    vm: "cluster_channel_fn"
+    argc: 2
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn serve {
+    signature: "(name: string): Channel"
+    doc: "Register service and return request channel"
+    vm: "cluster_serve_fn"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn reply {
+    signature: "(req: Json, result: Json): bool"
+    doc: "Reply to service request"
+    vm: "cluster_reply_fn"
+    argc: 2
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn call {
+    signature: "(service: string, args: Json, timeout?: int): Json"
+    doc: "Call remote service"
+    vm: "cluster_call_fn"
+    argc: 3
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn monitor {
+    signature: "(name: string, coro_name?: string): Channel"
+    doc: "Monitor node or remote coroutine"
+    vm: "cluster_monitor_coro_fn"
+    argc: 2
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn discover {
+    signature: "(): ()"
+    doc: "Start LAN auto-discovery"
+    vm: "cluster_discover_fn"
+    argc: 0
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn stop {
+    signature: "(): ()"
+    doc: "Stop cluster node"
+    vm: "cluster_stop_fn"
+    argc: 0
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn info {
+    signature: "(): Json"
+    doc: "Get cluster status info"
+    vm: "cluster_info_fn"
+    argc: 0
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn publish {
+    signature: "(topic: string, value: Json): bool"
+    doc: "Publish to topic"
+    vm: "cluster_publish_fn"
+    argc: 2
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn subscribe {
+    signature: "(pattern: string): Channel"
+    doc: "Subscribe to topic pattern"
+    vm: "cluster_subscribe_fn"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+}
+
+module ws {
+  handle WsConn {
+    fields: "const wsid: int, url: string, state: string"
+  }
+
+  handle WsMessage {
+    fields: "const data: string, const binary: bool, const error: string"
+  }
+
+  fn connect {
+    signature: "(url: string, options?: Json): WsConn?"
+    doc: "Connect to a WebSocket server"
+    vm: "ws_connect_yieldable"
+    vm_binding: "yieldable"
+    argc: 2
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn send {
+    signature: "(conn: WsConn, data: string, binary?: bool?): bool"
+    doc: "Send data over WebSocket connection"
+    vm: "ws_send_yieldable"
+    vm_binding: "yieldable"
+    argc: 3
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn recv {
+    signature: "(conn: WsConn, timeout?: int?): WsMessage?"
+    doc: "Receive data from WebSocket connection"
+    vm: "ws_recv_yieldable"
+    vm_binding: "yieldable"
+    argc: 2
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn close {
+    signature: "(conn: WsConn, code?: int?, reason?: string?): bool"
+    doc: "Close a WebSocket connection"
+    vm: "ws_close"
+    argc: 3
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn ping {
+    signature: "(conn: WsConn): bool"
+    doc: "Send a ping frame"
+    vm: "ws_ping"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn state {
+    signature: "(conn: WsConn): string"
+    doc: "Get connection state"
+    vm: "ws_state"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn isOpen {
+    signature: "(conn: WsConn): bool"
+    doc: "Check if connection is open"
+    vm: "ws_is_open"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn recvData {
+    signature: "(conn: WsConn, timeout?: int?): string?"
+    doc: "High-performance recv returning data string directly (no Json wrapper)"
+    vm: "ws_recvdata"
+    vm_binding: "yieldable"
+    argc: 2
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn sendData {
+    signature: "(conn: WsConn, data: string, binary?: bool?): bool"
+    doc: "Send data over WebSocket connection"
+    vm: "ws_send_yieldable"
+    vm_binding: "yieldable"
+    argc: 3
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn serve {
+    signature: "(port: int, handler: fn(conn: WsConn): ()): bool"
+    doc: "Start WebSocket server"
+    vm: "ws_serve_yieldable"
+    vm_binding: "yieldable"
+    argc: 2
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn echoServe {
+    signature: "(port: int): bool"
+    doc: "Pure C echo server with zero VM allocation overhead per message"
+    vm: "ws_echo_serve_yieldable"
+    vm_binding: "yieldable"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn stopServer {
+    signature: "(): ()"
+    doc: "Stop the WebSocket server"
+    vm: "ws_stop_server"
+    argc: 0
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+
+  fn isServerRunning {
+    signature: "(): bool"
+    doc: "Check if the WebSocket server is running"
+    vm: "ws_is_server_running"
+    argc: 0
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "runtime"
+  }
+}
+
+module csv {
+  fn parse {
+    signature: "(data: string, options?: Json): Array<Array<string>> | Array<Json>"
+    doc: "Parse CSV string"
+    vm: "csv_parse"
+    argc: 2
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn parseDetailed {
+    signature: "(data: string, options?: Json): Json"
+    doc: "Parse CSV with headers"
+    vm: "csv_parse_detailed"
+    argc: 2
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn parseTsv {
+    signature: "(data: string): Array<Array<string>>"
+    doc: "Parse TSV string"
+    vm: "csv_parse_tsv"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn parseAuto {
+    signature: "(data: string): Array<Array<string>>"
+    doc: "Auto-detect delimiter and parse"
+    vm: "csv_parse_auto"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn stringify {
+    signature: "(data: Array<Array<string>>, options?: Json): string"
+    doc: "Convert to CSV string"
+    vm: "csv_stringify"
+    argc: 2
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn parseFile {
+    signature: "(path: string, options?: Json): Array<Array<string>>"
+    doc: "Parse CSV file"
+    vm: "csv_parse_file"
+    argc: 2
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "system"
+  }
+
+  fn writeFile {
+    signature: "(path: string, data: Array<Array<string>>, options?: Json): bool"
+    doc: "Write CSV file"
+    vm: "csv_write_file"
+    argc: 3
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "system"
+  }
+}
+
+module toml {
+  fn parse {
+    signature: "(data: string): Json"
+    doc: "Parse TOML string"
+    vm: "toml_parse"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn parseStrict {
+    signature: "(data: string): Json"
+    doc: "Parse TOML strictly"
+    vm: "toml_parse_strict"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn stringify {
+    signature: "(value: Json): string"
+    doc: "Convert to TOML string"
+    vm: "toml_stringify"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn parseFile {
+    signature: "(path: string): Json"
+    doc: "Parse TOML file"
+    vm: "toml_parse_file"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "system"
+  }
+
+  fn writeFile {
+    signature: "(path: string, value: Json): bool"
+    doc: "Write TOML file"
+    vm: "toml_write_file"
+    argc: 2
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "system"
+  }
+}
+
+module yaml {
+  fn parse {
+    signature: "(data: string): Json"
+    doc: "Parse YAML string"
+    vm: "yaml_parse"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn parseStrict {
+    signature: "(data: string): Json"
+    doc: "Parse YAML strictly"
+    vm: "yaml_parse_strict"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn parseAll {
+    signature: "(data: string): Array<Json>"
+    doc: "Parse all YAML documents"
+    vm: "yaml_parse_all"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn stringify {
+    signature: "(value: Json): string"
+    doc: "Convert to YAML string"
+    vm: "yaml_stringify"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn parseFile {
+    signature: "(path: string): Json"
+    doc: "Parse YAML file"
+    vm: "yaml_parse_file"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "system"
+  }
+
+  fn writeFile {
+    signature: "(path: string, value: Json): bool"
+    doc: "Write YAML file"
+    vm: "yaml_write_file"
+    argc: 2
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "system"
+  }
+}
+
+module xml {
+  fn parse {
+    signature: "(data: string, options?: Json): Json"
+    doc: "Parse XML string"
+    vm: "xml_parse_fn"
+    argc: 2
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn parseDetailed {
+    signature: "(data: string): Json"
+    doc: "Parse XML with details"
+    vm: "xml_parse_detailed"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn parseFile {
+    signature: "(path: string): Json"
+    doc: "Parse XML file"
+    vm: "xml_parse_file"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "system"
+  }
+
+  fn stringify {
+    signature: "(node: Json, options?: Json): string"
+    doc: "Convert to XML string"
+    vm: "xml_stringify_fn"
+    argc: 2
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn writeFile {
+    signature: "(path: string, node: Json): bool"
+    doc: "Write XML file"
+    vm: "xml_write_file"
+    argc: 2
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "system"
+  }
+
+  fn document {
+    signature: "(): Json"
+    doc: "Create XML document node"
+    vm: "xml_document_fn"
+    argc: 0
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn element {
+    signature: "(name: string, attrs?: Json): Json"
+    doc: "Create XML element node"
+    vm: "xml_element_fn"
+    argc: 2
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn text {
+    signature: "(content: string): Json"
+    doc: "Create XML text node"
+    vm: "xml_text_fn"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn comment {
+    signature: "(content: string): Json"
+    doc: "Create XML comment node"
+    vm: "xml_comment_fn"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn cdata {
+    signature: "(content: string): Json"
+    doc: "Create XML CDATA node"
+    vm: "xml_cdata_fn"
+    argc: 1
+    arg_spec: ""
+    aot_direct: false
+    link_object: false
+    layer: "alloc"
+  }
+}
+
 module datetime {
+  fn now {
+    signature: "(): DateTime"
+    doc: "Get current local datetime"
+    vm: "dt_now"
+    aot: "xrt_datetime_now"
+    argc: 0
+    arg_spec: ""
+    aot_direct: true
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn utc {
+    signature: "(): DateTime"
+    doc: "Get current UTC datetime"
+    vm: "dt_utc"
+    aot: "xrt_datetime_utc"
+    argc: 0
+    arg_spec: ""
+    aot_direct: true
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn create {
+    signature: "(year: int, month?: int, day?: int, hour?: int, minute?: int, second?: int): DateTime"
+    doc: "Create local datetime"
+    vm: "dt_create"
+    aot: "xrt_datetime_create_1"
+    argc: 1
+    arg_spec: "v"
+    aot_direct: true
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn create {
+    signature: "(year: int, month?: int, day?: int, hour?: int, minute?: int, second?: int): DateTime"
+    doc: "Create local datetime"
+    vm: "dt_create"
+    aot: "xrt_datetime_create_2"
+    argc: 2
+    arg_spec: "vv"
+    aot_direct: true
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn create {
+    signature: "(year: int, month?: int, day?: int, hour?: int, minute?: int, second?: int): DateTime"
+    doc: "Create local datetime"
+    vm: "dt_create"
+    aot: "xrt_datetime_create_3"
+    argc: 3
+    arg_spec: "vvv"
+    aot_direct: true
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn create {
+    signature: "(year: int, month?: int, day?: int, hour?: int, minute?: int, second?: int): DateTime"
+    doc: "Create local datetime"
+    vm: "dt_create"
+    aot: "xrt_datetime_create_4"
+    argc: 4
+    arg_spec: "vvvv"
+    aot_direct: true
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn create {
+    signature: "(year: int, month?: int, day?: int, hour?: int, minute?: int, second?: int): DateTime"
+    doc: "Create local datetime"
+    vm: "dt_create"
+    aot: "xrt_datetime_create_5"
+    argc: 5
+    arg_spec: "vvvvv"
+    aot_direct: true
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn create {
+    signature: "(year: int, month?: int, day?: int, hour?: int, minute?: int, second?: int): DateTime"
+    doc: "Create local datetime"
+    vm: "dt_create"
+    aot: "xrt_datetime_create_6"
+    argc: 6
+    arg_spec: "vvvvvv"
+    aot_direct: true
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn createUTC {
+    signature: "(year: int, month?: int, day?: int, hour?: int, minute?: int, second?: int): DateTime"
+    doc: "Create UTC datetime"
+    vm: "dt_create_utc"
+    aot: "xrt_datetime_create_utc_1"
+    argc: 1
+    arg_spec: "v"
+    aot_direct: true
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn createUTC {
+    signature: "(year: int, month?: int, day?: int, hour?: int, minute?: int, second?: int): DateTime"
+    doc: "Create UTC datetime"
+    vm: "dt_create_utc"
+    aot: "xrt_datetime_create_utc_2"
+    argc: 2
+    arg_spec: "vv"
+    aot_direct: true
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn createUTC {
+    signature: "(year: int, month?: int, day?: int, hour?: int, minute?: int, second?: int): DateTime"
+    doc: "Create UTC datetime"
+    vm: "dt_create_utc"
+    aot: "xrt_datetime_create_utc_3"
+    argc: 3
+    arg_spec: "vvv"
+    aot_direct: true
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn createUTC {
+    signature: "(year: int, month?: int, day?: int, hour?: int, minute?: int, second?: int): DateTime"
+    doc: "Create UTC datetime"
+    vm: "dt_create_utc"
+    aot: "xrt_datetime_create_utc_4"
+    argc: 4
+    arg_spec: "vvvv"
+    aot_direct: true
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn createUTC {
+    signature: "(year: int, month?: int, day?: int, hour?: int, minute?: int, second?: int): DateTime"
+    doc: "Create UTC datetime"
+    vm: "dt_create_utc"
+    aot: "xrt_datetime_create_utc_5"
+    argc: 5
+    arg_spec: "vvvvv"
+    aot_direct: true
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn createUTC {
+    signature: "(year: int, month?: int, day?: int, hour?: int, minute?: int, second?: int): DateTime"
+    doc: "Create UTC datetime"
+    vm: "dt_create_utc"
+    aot: "xrt_datetime_create_utc_6"
+    argc: 6
+    arg_spec: "vvvvvv"
+    aot_direct: true
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn fromTimestamp {
+    signature: "(ts: int): DateTime"
+    doc: "Create datetime from Unix timestamp (seconds)"
+    vm: "dt_from_timestamp"
+    aot: "xrt_datetime_from_timestamp"
+    argc: 1
+    arg_spec: "v"
+    aot_direct: true
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn fromTimestampMs {
+    signature: "(ts: int): DateTime"
+    doc: "Create datetime from Unix timestamp (milliseconds)"
+    vm: "dt_from_timestamp_ms"
+    aot: "xrt_datetime_from_timestamp_ms"
+    argc: 1
+    arg_spec: "v"
+    aot_direct: true
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn parse {
+    signature: "(s: string, format?: string): DateTime?"
+    doc: "Parse datetime string"
+    vm: "dt_parse"
+    aot: "xrt_datetime_parse_default"
+    argc: 1
+    arg_spec: "s"
+    aot_direct: true
+    link_object: false
+    layer: "alloc"
+  }
+
+  fn parse {
+    signature: "(s: string, format?: string): DateTime?"
+    doc: "Parse datetime string"
+    vm: "dt_parse"
+    aot: "xrt_datetime_parse_format"
+    argc: 2
+    arg_spec: "ss"
+    aot_direct: true
+    link_object: false
+    layer: "alloc"
+  }
+
   fn offset {
     signature: "(): int"
     doc: "Get UTC offset in minutes"
@@ -809,5 +4438,228 @@ module datetime {
     aot_direct: true
     link_object: false
     layer: "system"
+  }
+
+  native_class DateTime {
+    super_slot: "objectClass"
+    core_slot: "dateTimeClass"
+    native_body: "g_datetime_body_desc"
+    flags: "XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY"
+    builtin_kind: "XR_BK_DATETIME"
+  }
+
+  class_method DateTime.toString {
+    vm: "dt_to_string"
+    argc: 1
+  }
+
+  class_method DateTime.format {
+    vm: "dt_format"
+    argc: 2
+  }
+
+  class_method DateTime.toISOString {
+    vm: "dt_to_iso"
+    argc: 1
+  }
+
+  class_method DateTime.add {
+    vm: "dt_add"
+    argc: 3
+  }
+
+  class_method DateTime.diff {
+    vm: "dt_diff"
+    argc: 3
+  }
+
+  class_method DateTime.toUTC {
+    vm: "dt_to_utc"
+    argc: 1
+  }
+
+  class_method DateTime.toLocal {
+    vm: "dt_to_local"
+    argc: 1
+  }
+
+  class_method DateTime.isBefore {
+    vm: "dt_is_before"
+    argc: 2
+  }
+
+  class_method DateTime.isAfter {
+    vm: "dt_is_after"
+    argc: 2
+  }
+
+  class_method DateTime.equals {
+    vm: "dt_equals"
+    argc: 2
+  }
+
+  class_method DateTime.isLeapYear {
+    vm: "dt_is_leap_year"
+    argc: 1
+  }
+
+  class_method DateTime.daysInMonth {
+    vm: "dt_days_in_month"
+    argc: 1
+  }
+
+  class_method DateTime.get:year {
+    vm: "dt_year"
+    argc: 1
+  }
+
+  class_method DateTime.get:month {
+    vm: "dt_month"
+    argc: 1
+  }
+
+  class_method DateTime.get:day {
+    vm: "dt_day"
+    argc: 1
+  }
+
+  class_method DateTime.get:hour {
+    vm: "dt_hour"
+    argc: 1
+  }
+
+  class_method DateTime.get:minute {
+    vm: "dt_minute"
+    argc: 1
+  }
+
+  class_method DateTime.get:second {
+    vm: "dt_second"
+    argc: 1
+  }
+
+  class_method DateTime.get:millisecond {
+    vm: "dt_millisecond"
+    argc: 1
+  }
+
+  class_method DateTime.get:weekday {
+    vm: "dt_weekday"
+    argc: 1
+  }
+
+  class_method DateTime.get:yearday {
+    vm: "dt_yearday"
+    argc: 1
+  }
+
+  class_method DateTime.get:timestamp {
+    vm: "dt_timestamp"
+    argc: 1
+  }
+
+  type_method DateTime.format {
+    signature: "(pattern?: string): string"
+    doc: "Format datetime to string"
+  }
+
+  type_method DateTime.toISOString {
+    signature: "(): string"
+    doc: "Convert to ISO 8601 string"
+  }
+
+  type_method DateTime.year {
+    signature: "(): int"
+    doc: "Get year"
+  }
+
+  type_method DateTime.month {
+    signature: "(): int"
+    doc: "Get month (1-12)"
+  }
+
+  type_method DateTime.day {
+    signature: "(): int"
+    doc: "Get day (1-31)"
+  }
+
+  type_method DateTime.hour {
+    signature: "(): int"
+    doc: "Get hour (0-23)"
+  }
+
+  type_method DateTime.minute {
+    signature: "(): int"
+    doc: "Get minute (0-59)"
+  }
+
+  type_method DateTime.second {
+    signature: "(): int"
+    doc: "Get second (0-59)"
+  }
+
+  type_method DateTime.millisecond {
+    signature: "(): int"
+    doc: "Get millisecond (0-999)"
+  }
+
+  type_method DateTime.weekday {
+    signature: "(): int"
+    doc: "Get weekday (0=Sunday)"
+  }
+
+  type_method DateTime.yearday {
+    signature: "(): int"
+    doc: "Get day of year (1-366)"
+  }
+
+  type_method DateTime.timestamp {
+    signature: "(): int"
+    doc: "Get Unix timestamp (seconds)"
+  }
+
+  type_method DateTime.add {
+    signature: "(amount: int, unit: string): DateTime"
+    doc: "Add duration to datetime"
+  }
+
+  type_method DateTime.diff {
+    signature: "(other: DateTime, unit?: string): int"
+    doc: "Difference between datetimes"
+  }
+
+  type_method DateTime.toUTC {
+    signature: "(): DateTime"
+    doc: "Convert to UTC"
+  }
+
+  type_method DateTime.toLocal {
+    signature: "(): DateTime"
+    doc: "Convert to local time"
+  }
+
+  type_method DateTime.isBefore {
+    signature: "(other: DateTime): bool"
+    doc: "Check if before other datetime"
+  }
+
+  type_method DateTime.isAfter {
+    signature: "(other: DateTime): bool"
+    doc: "Check if after other datetime"
+  }
+
+  type_method DateTime.equals {
+    signature: "(other: DateTime): bool"
+    doc: "Check if equal to other datetime"
+  }
+
+  type_method DateTime.isLeapYear {
+    signature: "(): bool"
+    doc: "Check if leap year"
+  }
+
+  type_method DateTime.daysInMonth {
+    signature: "(): int"
+    doc: "Get days in current month"
   }
 }

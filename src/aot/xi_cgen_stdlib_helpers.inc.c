@@ -45,111 +45,18 @@ typedef struct CgAotStdlibMethod {
 
 #include "xstdlib_aot_methods_generated.inc.c"
 
-static const CgAotStdlibMethod g_aot_stdlib_manual_methods[] = {
-    {"url", "encode", 1, "xrt_url_encode", "s", CG_AOT_RET_VALUE, NULL},
-    {"url", "decode", 1, "xrt_url_decode", "s", CG_AOT_RET_VALUE, NULL},
-    {"url", "encodeForm", 1, "xrt_url_encode_form", "s", CG_AOT_RET_VALUE, NULL},
-    {"url", "decodeForm", 1, "xrt_url_decode_form", "s", CG_AOT_RET_VALUE, NULL},
-    {"url", "parse", 1, "xrt_url_parse", "s", CG_AOT_RET_VALUE, NULL},
-    {"url", "format", 1, "xrt_url_format", "v", CG_AOT_RET_VALUE, NULL},
-    {"url", "parseQuery", 1, "xrt_url_parse_query", "s", CG_AOT_RET_VALUE, NULL},
-    {"url", "buildQuery", 1, "xrt_url_build_query", "v", CG_AOT_RET_VALUE, NULL},
-    {"url", "resolve", 2, "xrt_url_resolve", "ss", CG_AOT_RET_VALUE, NULL},
-    {"url", "join", CG_AOT_STDLIB_VARIADIC, "xrt_url_join", "*", CG_AOT_RET_VALUE, NULL},
-    {"os", "getenv", 1, "xrt_os_getenv", "s", CG_AOT_RET_VALUE, NULL},
-    {"os", "setenv", 2, "xrt_os_setenv", "ss", CG_AOT_RET_VALUE, NULL},
-    {"os", "unsetenv", 1, "xrt_os_unsetenv", "s", CG_AOT_RET_VALUE, NULL},
-    {"os", "environ", 0, "xrt_os_environ", "", CG_AOT_RET_VALUE, NULL},
-    {"os", "getpid", 0, "xrt_os_getpid", "", CG_AOT_RET_VALUE, NULL},
-    {"os", "getcwd", 0, "xrt_os_getcwd", "", CG_AOT_RET_VALUE, NULL},
-    {"os", "chdir", 1, "xrt_os_chdir", "s", CG_AOT_RET_VALUE, NULL},
-    {"os", "hostname", 0, "xrt_os_hostname", "", CG_AOT_RET_VALUE, NULL},
-    {"os", "tmpdir", 0, "xrt_os_tmpdir", "", CG_AOT_RET_VALUE, NULL},
-    {"os", "username", 0, "xrt_os_username", "", CG_AOT_RET_VALUE, NULL},
-    {"os", "homedir", 0, "xrt_os_homedir", "", CG_AOT_RET_VALUE, NULL},
-    {"os", "uid", 0, "xrt_os_uid", "", CG_AOT_RET_VALUE, NULL},
-    {"os", "gid", 0, "xrt_os_gid", "", CG_AOT_RET_VALUE, NULL},
-    {"os", "cpuCount", 0, "xrt_os_cpu_count", "", CG_AOT_RET_VALUE, NULL},
-    {"os", "ppid", 0, "xrt_os_ppid", "", CG_AOT_RET_VALUE, NULL},
-    {"os", "kill", 1, "xrt_os_kill", "v", CG_AOT_RET_VALUE, NULL},
-    {"os", "kill", 2, "xrt_os_kill_signal", "vv", CG_AOT_RET_VALUE, NULL},
-    {"os", "totalMemory", 0, "xrt_os_total_memory", "", CG_AOT_RET_VALUE, NULL},
-    {"os", "freeMemory", 0, "xrt_os_free_memory", "", CG_AOT_RET_VALUE, NULL},
-    {"os", "uptime", 0, "xrt_os_uptime", "", CG_AOT_RET_VALUE, NULL},
-    {"os", "loadavg", 0, "xrt_os_loadavg", "", CG_AOT_RET_VALUE, NULL},
-    {"os", "clock", 0, "xrt_os_clock", "", CG_AOT_RET_VALUE, NULL},
-    {"os", "sleep", 1, "xrt_os_sleep", "v", CG_AOT_RET_VALUE, NULL},
-    {"os", "exec", 1, "xrt_os_exec", "s", CG_AOT_RET_VALUE, NULL},
-    {"compress", "crc32", 1, "xrt_compress_crc32", "s", CG_AOT_RET_VALUE, NULL},
-    {"compress", "adler32", 1, "xrt_compress_adler32", "s", CG_AOT_RET_VALUE, NULL},
-    {"compress", "gzip", 1, "xrt_compress_gzip_default", "s", CG_AOT_RET_VALUE, NULL},
-    {"compress", "gzip", 2, "xrt_compress_gzip", "sv", CG_AOT_RET_VALUE, NULL},
-    {"compress", "gunzip", 1, "xrt_compress_gunzip", "s", CG_AOT_RET_VALUE, NULL},
-    {"compress", "deflate", 1, "xrt_compress_deflate_default", "s", CG_AOT_RET_VALUE, NULL},
-    {"compress", "deflate", 2, "xrt_compress_deflate", "sv", CG_AOT_RET_VALUE, NULL},
-    {"compress", "inflate", 1, "xrt_compress_inflate", "s", CG_AOT_RET_VALUE, NULL},
-    {"compress", "zlibCompress", 1, "xrt_compress_zlib_compress_default", "s", CG_AOT_RET_VALUE,
-     NULL},
-    {"compress", "zlibCompress", 2, "xrt_compress_zlib_compress", "sv", CG_AOT_RET_VALUE, NULL},
-    {"compress", "zlibDecompress", 1, "xrt_compress_zlib_decompress", "s", CG_AOT_RET_VALUE, NULL},
-    {"compress", "isGzip", 1, "xrt_compress_is_gzip", "s", CG_AOT_RET_VALUE, NULL},
-    {"compress", "isZlib", 1, "xrt_compress_is_zlib", "s", CG_AOT_RET_VALUE, NULL},
-    {"io", "appendFile", 2, "xrt_io_append_file", "ss", CG_AOT_RET_VALUE, NULL},
-    {"io", "chmod", 2, "xrt_io_chmod_value", "sv", CG_AOT_RET_VALUE, NULL},
-    {"io", "chdir", 1, "xrt_io_chdir", "s", CG_AOT_RET_VALUE, NULL},
-    {"io", "copyFile", 2, "xrt_io_copy_file", "ss", CG_AOT_RET_VALUE, NULL},
-    {"io", "cwd", 0, "xrt_io_cwd", "", CG_AOT_RET_VALUE, NULL},
-    {"io", "exists", 1, "xrt_io_exists", "s", CG_AOT_RET_VALUE, NULL},
-    {"io", "fileSize", 1, "xrt_io_file_size", "s", CG_AOT_RET_VALUE, NULL},
-    {"io", "isDir", 1, "xrt_io_is_dir", "s", CG_AOT_RET_VALUE, NULL},
-    {"io", "isFile", 1, "xrt_io_is_file", "s", CG_AOT_RET_VALUE, NULL},
-    {"io", "isSymlink", 1, "xrt_io_is_symlink", "s", CG_AOT_RET_VALUE, NULL},
-    {"io", "mkdir", 1, "xrt_io_mkdir", "s", CG_AOT_RET_VALUE, NULL},
-    {"io", "mkdirp", 1, "xrt_io_mkdirp", "s", CG_AOT_RET_VALUE, NULL},
-    {"io", "readDir", 1, "xrt_io_read_dir", "s", CG_AOT_RET_VALUE, NULL},
-    {"io", "readDirRecursive", 1, "xrt_io_read_dir_recursive", "s", CG_AOT_RET_VALUE, NULL},
-    {"io", "readFile", 1, "xrt_io_read_file", "s", CG_AOT_RET_VALUE, NULL},
-    {"io", "readFileBytes", 1, "xrt_io_read_file_bytes", "s", CG_AOT_RET_VALUE, NULL},
-    {"io", "readLines", 1, "xrt_io_read_lines", "s", CG_AOT_RET_VALUE, NULL},
-    {"io", "readStdin", 0, "xrt_io_read_stdin", "", CG_AOT_RET_VALUE, NULL},
-    {"io", "readlink", 1, "xrt_io_readlink", "s", CG_AOT_RET_VALUE, NULL},
-    {"io", "realpath", 1, "xrt_io_realpath", "s", CG_AOT_RET_VALUE, NULL},
-    {"io", "remove", 1, "xrt_io_remove", "s", CG_AOT_RET_VALUE, NULL},
-    {"io", "removeAll", 1, "xrt_io_remove_all", "s", CG_AOT_RET_VALUE, NULL},
-    {"io", "rename", 2, "xrt_io_rename", "ss", CG_AOT_RET_VALUE, NULL},
-    {"io", "stat", 1, "xrt_io_stat", "s", CG_AOT_RET_VALUE, NULL},
-    {"io", "symlink", 2, "xrt_io_symlink", "ss", CG_AOT_RET_VALUE, NULL},
-    {"io", "tempDir", 0, "xrt_io_temp_dir", "", CG_AOT_RET_VALUE, NULL},
-    {"io", "tempFile", 0, "xrt_io_temp_file", "", CG_AOT_RET_VALUE, NULL},
-    {"io", "touch", 1, "xrt_io_touch", "s", CG_AOT_RET_VALUE, NULL},
-    {"io", "writeFile", 2, "xrt_io_write_file", "ss", CG_AOT_RET_VALUE, NULL},
-    {"io", "writeFileBytes", 2, "xrt_io_write_file_bytes", "sv", CG_AOT_RET_VALUE, NULL},
-};
-
-#define CG_AOT_STDLIB_MANUAL_METHOD_COUNT                                                          \
-    ((int) (sizeof(g_aot_stdlib_manual_methods) / sizeof(g_aot_stdlib_manual_methods[0])))
-
 static const CgAotStdlibMethod *cg_aot_stdlib_generated_method_at(int index) {
     if (index < 0 || index >= CG_AOT_STDLIB_GENERATED_METHOD_COUNT)
         return NULL;
     return &g_aot_stdlib_generated_methods[index];
 }
 
-static const CgAotStdlibMethod *cg_aot_stdlib_manual_method_at(int index) {
-    if (index < 0 || index >= CG_AOT_STDLIB_MANUAL_METHOD_COUNT)
-        return NULL;
-    return &g_aot_stdlib_manual_methods[index];
-}
-
 static const CgAotStdlibMethod *cg_aot_stdlib_method_at(int index) {
-    const CgAotStdlibMethod *m = cg_aot_stdlib_generated_method_at(index);
-    if (m)
-        return m;
-    return cg_aot_stdlib_manual_method_at(index - CG_AOT_STDLIB_GENERATED_METHOD_COUNT);
+    return cg_aot_stdlib_generated_method_at(index);
 }
 
 static int cg_aot_stdlib_method_count(void) {
-    return CG_AOT_STDLIB_GENERATED_METHOD_COUNT + CG_AOT_STDLIB_MANUAL_METHOD_COUNT;
+    return CG_AOT_STDLIB_GENERATED_METHOD_COUNT;
 }
 
 /* Whether `module` is a stdlib module with AOT direct-call support. The
@@ -162,6 +69,68 @@ static bool cg_module_has_aot_direct_calls(const char *module) {
         const CgAotStdlibMethod *m = cg_aot_stdlib_method_at(i);
         if (m && strcmp(module, m->module) == 0)
             return true;
+    }
+    return false;
+}
+
+static bool cg_module_has_aot_generated_constants(const char *module) {
+    return cg_aot_stdlib_generated_module_has_constants(module);
+}
+
+static bool cg_emit_aot_stdlib_generated_constant_value(XiCgenCtx *ctx, FILE *out, const XiValue *v,
+                                                        const CgAotStdlibConst *c) {
+    if (!ctx || !out || !v || !c)
+        return false;
+
+    if (c->kind == CG_AOT_STDLIB_CONST_I64) {
+        const char *conv_suffix =
+            emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
+        if (c->i64_value == INT64_MIN)
+            fprintf(out, "INT64_MIN");
+        else
+            fprintf(out, "INT64_C(%" PRId64 ")", c->i64_value);
+        emit_conversion_suffix(out, conv_suffix);
+        return true;
+    }
+    if (c->kind == CG_AOT_STDLIB_CONST_F64 && c->f64_expr && c->f64_expr[0]) {
+        const char *conv_suffix =
+            emit_conversion_prefix(out, v->type, XR_REP_F64, cg_value_plan_storage_rep(ctx, v));
+        fprintf(out, "%s", c->f64_expr);
+        emit_conversion_suffix(out, conv_suffix);
+        return true;
+    }
+    if (c->kind == CG_AOT_STDLIB_CONST_HELPER_VALUE && c->helper && c->helper[0]) {
+        const char *conv_suffix =
+            emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
+        fprintf(out, "%s()", c->helper);
+        emit_conversion_suffix(out, conv_suffix);
+        return true;
+    }
+    return false;
+}
+
+static bool cg_emit_aot_stdlib_generated_constant_import_ref(XiCgenCtx *ctx, FILE *out,
+                                                             const XiValue *v,
+                                                             const XiImportRef *ref) {
+    if (!ctx || !out || !v || !ref || !ref->module_path || !ref->member_name)
+        return false;
+    const CgAotStdlibConst *c =
+        cg_aot_stdlib_generated_const_for_member(ref->module_path, ref->member_name);
+    return cg_emit_aot_stdlib_generated_constant_value(ctx, out, v, c);
+}
+
+static bool cg_emit_aot_stdlib_generated_constant_field(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                                        const XiValue *v) {
+    if (!ctx || !out || !f || !v || v->nargs < 1 || !v->aux)
+        return false;
+
+    const char *field = (const char *) v->aux;
+    for (int i = 0; i < CG_AOT_STDLIB_GENERATED_CONST_COUNT; i++) {
+        const CgAotStdlibConst *c = cg_aot_stdlib_generated_const_at(i);
+        if (!c || strcmp(field, c->name) != 0 ||
+            !cg_value_is_module_import_ctx(ctx, f, v->args[0], c->module))
+            continue;
+        return cg_emit_aot_stdlib_generated_constant_value(ctx, out, v, c);
     }
     return false;
 }

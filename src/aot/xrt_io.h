@@ -11,6 +11,10 @@
 #ifndef XRT_IO_H
 #define XRT_IO_H
 
+#include "../shared/xr_cstr_core.h"
+#include "../shared/xr_io_core.h"
+#include "../shared/xr_os_core.h"
+#include "../shared/xr_path_core.h"
 #include "xrt_arc.h"
 #include "xrt_coll.h"
 #include "xrt_value.h"
@@ -49,36 +53,50 @@
 #define xrt_io_platform_utime utime
 #endif
 
-#ifndef XRT_IO_PATH_MAX
-#if defined(XR_OS_WINDOWS)
-#define XRT_IO_PATH_MAX 4096
-#elif defined(PATH_MAX)
-#define XRT_IO_PATH_MAX PATH_MAX
-#else
-#define XRT_IO_PATH_MAX 4096
-#endif
-#endif
-
 #define XRT_IO_MAX_READ_BYTES ((long) INT32_MAX)
+
+static inline void *xrt_io_core_alloc(void *ctx, size_t size) {
+    (void) ctx;
+    return XRT_MALLOC(size);
+}
+
+static inline void *xrt_io_core_realloc(void *ctx, void *ptr, size_t size) {
+    (void) ctx;
+    return XRT_REALLOC(ptr, size);
+}
+
+static inline void xrt_io_core_free(void *ctx, void *ptr) {
+    (void) ctx;
+    XRT_FREE(ptr);
+}
+
+static inline bool xrt_io_file_seek_end(void *ctx) {
+    return fseek((FILE *) ctx, 0, SEEK_END) == 0;
+}
+
+static inline long xrt_io_file_tell(void *ctx) {
+    return ftell((FILE *) ctx);
+}
+
+static inline bool xrt_io_file_seek_start(void *ctx) {
+    return fseek((FILE *) ctx, 0, SEEK_SET) == 0;
+}
+
+static inline size_t xrt_io_file_read(void *ctx, void *buf, size_t cap) {
+    return fread(buf, 1, cap, (FILE *) ctx);
+}
+
+static inline size_t xrt_io_file_write(void *ctx, const void *buf, size_t len) {
+    return fwrite(buf, 1, len, (FILE *) ctx);
+}
+
+static inline bool xrt_io_file_error(void *ctx) {
+    return ferror((FILE *) ctx) != 0;
+}
 
 static inline char *xrt_io_copy_cstr_arg(const char *data, int64_t len, char *stack,
                                          size_t stack_cap, char **owned) {
-    if (owned)
-        *owned = NULL;
-    if (!data || len < 0)
-        return NULL;
-    size_t n = (size_t) len;
-    char *out = stack;
-    if (n + 1 > stack_cap) {
-        out = (char *) XRT_MALLOC(n + 1);
-        if (!out)
-            return NULL;
-        if (owned)
-            *owned = out;
-    }
-    memcpy(out, data, n);
-    out[n] = '\0';
-    return out;
+    return xr_cstr_core_copy_arg(data, len, stack, stack_cap, xrt_io_core_alloc, NULL, owned);
 }
 
 static inline XrValue xrt_io_str_slice(const char *data, size_t len) {
@@ -158,34 +176,11 @@ static inline char *xrt_io_read_file_buffer(const char *path, size_t *out_len) {
     FILE *f = fopen(path, "rb");
     if (!f)
         return NULL;
-    if (fseek(f, 0, SEEK_END) != 0) {
-        fclose(f);
-        return NULL;
-    }
-    long size = ftell(f);
-    if (size < 0 || size > XRT_IO_MAX_READ_BYTES) {
-        fclose(f);
-        return NULL;
-    }
-    if (fseek(f, 0, SEEK_SET) != 0) {
-        fclose(f);
-        return NULL;
-    }
-    char *buf = (char *) XRT_MALLOC((size_t) size + 1);
-    if (!buf) {
-        fclose(f);
-        return NULL;
-    }
-    size_t n = fread(buf, 1, (size_t) size, f);
-    bool failed = ferror(f) != 0;
+    char *buf = xr_io_core_read_sized_stream_alloc(
+        f, xrt_io_file_seek_end, xrt_io_file_tell, xrt_io_file_seek_start, xrt_io_file_read,
+        xrt_io_file_error, xrt_io_core_alloc, xrt_io_core_free, NULL, XRT_IO_MAX_READ_BYTES,
+        out_len);
     fclose(f);
-    if (failed) {
-        XRT_FREE(buf);
-        return NULL;
-    }
-    buf[n] = '\0';
-    if (out_len)
-        *out_len = n;
     return buf;
 }
 
@@ -228,8 +223,9 @@ static inline XrValue xrt_io_write_buffer(const char *path, const char *data, si
     FILE *f = fopen(path, mode);
     if (!f)
         return XR_FROM_BOOL(false);
-    size_t written = len == 0 ? 0 : fwrite(data, 1, len, f);
-    bool ok = (written == len) && (fclose(f) == 0);
+    bool ok = xr_io_core_write_all(f, xrt_io_file_write, xrt_io_file_error, data, len);
+    bool close_ok = fclose(f) == 0;
+    ok = ok && close_ok;
     return XR_FROM_BOOL(ok);
 }
 
@@ -313,41 +309,34 @@ static inline XrValue xrt_io_mkdir(const char *path_data, int64_t path_len) {
     return XR_FROM_BOOL(ok);
 }
 
+static inline int xrt_io_mkdirp_mkdir(void *ctx, const char *path) {
+    (void) ctx;
+    return xrt_io_platform_mkdir(path);
+}
+
+static inline bool xrt_io_mkdirp_is_dir(void *ctx, const char *path) {
+    (void) ctx;
+    struct stat st;
+    if (!path || stat(path, &st) != 0)
+        return false;
+#if defined(XR_OS_WINDOWS)
+    return (st.st_mode & _S_IFDIR) != 0;
+#else
+    return S_ISDIR(st.st_mode);
+#endif
+}
+
 static inline XrValue xrt_io_mkdirp(const char *path_data, int64_t path_len) {
-    char stack_path[XRT_IO_PATH_MAX];
+    char stack_path[XR_PATH_CORE_MAX_PATH];
     char *owned = NULL;
     char *path = xrt_io_copy_cstr_arg(path_data, path_len, stack_path, sizeof(stack_path), &owned);
-    if (!path || path[0] == '\0') {
-        XRT_FREE(owned);
-        return XR_FROM_BOOL(false);
-    }
-    size_t len = strlen(path);
-    while (len > 1 && (path[len - 1] == '/' || path[len - 1] == '\\'))
-        path[--len] = '\0';
-    for (char *p = path + 1; *p; p++) {
-        if (*p == '/' || *p == '\\') {
-            char saved = *p;
-            *p = '\0';
-            (void) xrt_io_platform_mkdir(path);
-            *p = saved;
-        }
-    }
-    bool ok = xrt_io_platform_mkdir(path) == 0;
-    if (!ok) {
-        struct stat st;
-        ok = stat(path, &st) == 0 &&
-#if defined(XR_OS_WINDOWS)
-             ((st.st_mode & _S_IFDIR) != 0);
-#else
-             S_ISDIR(st.st_mode);
-#endif
-    }
+    bool ok = path && xr_io_core_mkdirp(path, xrt_io_mkdirp_mkdir, xrt_io_mkdirp_is_dir, NULL);
     XRT_FREE(owned);
     return XR_FROM_BOOL(ok);
 }
 
 static inline XrValue xrt_io_cwd(void) {
-    char buf[XRT_IO_PATH_MAX];
+    char buf[XR_PATH_CORE_MAX_PATH];
     if (!xrt_io_platform_getcwd(buf, sizeof(buf)))
         return XR_NULL_VAL;
     return xrt_str_from_cstr(buf);
@@ -360,6 +349,26 @@ static inline XrValue xrt_io_chdir(const char *path_data, int64_t path_len) {
     bool ok = path && xrt_io_platform_chdir(path) == 0;
     XRT_FREE(owned);
     return XR_FROM_BOOL(ok);
+}
+
+typedef struct XrtIoCopyFileCtx {
+    FILE *src;
+    FILE *dst;
+} XrtIoCopyFileCtx;
+
+static inline size_t xrt_io_copy_file_read(void *ctx, void *buf, size_t cap) {
+    XrtIoCopyFileCtx *copy_ctx = (XrtIoCopyFileCtx *) ctx;
+    return fread(buf, 1, cap, copy_ctx->src);
+}
+
+static inline size_t xrt_io_copy_file_write(void *ctx, const void *buf, size_t len) {
+    XrtIoCopyFileCtx *copy_ctx = (XrtIoCopyFileCtx *) ctx;
+    return fwrite(buf, 1, len, copy_ctx->dst);
+}
+
+static inline bool xrt_io_copy_file_error(void *ctx) {
+    XrtIoCopyFileCtx *copy_ctx = (XrtIoCopyFileCtx *) ctx;
+    return ferror(copy_ctx->src) != 0;
 }
 
 static inline XrValue xrt_io_copy_file(const char *src_data, int64_t src_len, const char *dst_data,
@@ -376,20 +385,11 @@ static inline XrValue xrt_io_copy_file(const char *src_data, int64_t src_len, co
         if (in) {
             FILE *out = fopen(dst, "wb");
             if (out) {
-                char buf[65536];
-                ok = true;
-                for (;;) {
-                    size_t n = fread(buf, 1, sizeof(buf), in);
-                    if (n > 0 && fwrite(buf, 1, n, out) != n) {
-                        ok = false;
-                        break;
-                    }
-                    if (n < sizeof(buf)) {
-                        if (ferror(in))
-                            ok = false;
-                        break;
-                    }
-                }
+                char buf[XR_IO_CORE_COPY_BUFFER_SIZE];
+                XrtIoCopyFileCtx copy_ctx = {.src = in, .dst = out};
+                ok =
+                    xr_io_core_copy_stream(&copy_ctx, xrt_io_copy_file_read, xrt_io_copy_file_write,
+                                           xrt_io_copy_file_error, buf, sizeof(buf));
                 if (fclose(out) != 0)
                     ok = false;
             }
@@ -399,6 +399,16 @@ static inline XrValue xrt_io_copy_file(const char *src_data, int64_t src_len, co
     XRT_FREE(src_owned);
     XRT_FREE(dst_owned);
     return XR_FROM_BOOL(ok);
+}
+
+typedef struct XrtIoReadLinesCtx {
+    XrValue arr;
+} XrtIoReadLinesCtx;
+
+static inline bool xrt_io_read_lines_push(void *ctx, const char *data, size_t len) {
+    XrtIoReadLinesCtx *read_ctx = (XrtIoReadLinesCtx *) ctx;
+    xrt_array_push(read_ctx->arr, xrt_io_str_slice(data, len));
+    return true;
 }
 
 static inline XrValue xrt_io_read_lines(const char *path_data, int64_t path_len) {
@@ -411,16 +421,8 @@ static inline XrValue xrt_io_read_lines(const char *path_data, int64_t path_len)
     if (!buf)
         return XR_NULL_VAL;
     XrValue arr = xrt_array_new(8);
-    size_t start = 0;
-    for (size_t i = 0; i <= len; i++) {
-        if (i == len || buf[i] == '\n') {
-            size_t end = i;
-            if (end > start && buf[end - 1] == '\r')
-                end--;
-            xrt_array_push(arr, xrt_io_str_slice(buf + start, end - start));
-            start = i + 1;
-        }
-    }
+    XrtIoReadLinesCtx read_ctx = {arr};
+    xr_io_core_read_lines_each(buf, len, xrt_io_read_lines_push, &read_ctx);
     XRT_FREE(buf);
     return arr;
 }
@@ -453,30 +455,29 @@ static inline XrValue xrt_io_stat(const char *path_data, int64_t path_len) {
 #if defined(XR_OS_WINDOWS)
     DWORD attrs = GetFileAttributesA(path);
     bool is_symlink = attrs != INVALID_FILE_ATTRIBUTES && (attrs & FILE_ATTRIBUTE_REPARSE_POINT);
+    XrIoCoreStatFields fields = xr_io_core_stat_fields(
+        (int64_t) st.st_size, (int64_t) st.st_mode, (int64_t) st.st_mtime, (int64_t) st.st_atime,
+        (int64_t) st.st_ctime, 0, 0, (st.st_mode & _S_IFREG) != 0, (st.st_mode & _S_IFDIR) != 0,
+        is_symlink);
 #else
     struct stat lst;
     bool is_symlink = lstat(path, &lst) == 0 && S_ISLNK(lst.st_mode);
+    XrIoCoreStatFields fields = xr_io_core_stat_fields(
+        (int64_t) st.st_size, (int64_t) st.st_mode, (int64_t) st.st_mtime, (int64_t) st.st_atime,
+        (int64_t) st.st_ctime, (int64_t) st.st_uid, (int64_t) st.st_gid, S_ISREG(st.st_mode),
+        S_ISDIR(st.st_mode), is_symlink);
 #endif
-    static const char *const fields[] = {"size", "mode", "mtime",  "atime", "ctime",
-                                         "uid",  "gid",  "isFile", "isDir", "isSymlink"};
-    XrValue obj = xrt_json_new_named(10, fields);
-    xrt_json_set_field(obj, 0, XR_FROM_INT((int64_t) st.st_size));
-    xrt_json_set_field(obj, 1, XR_FROM_INT((int64_t) (st.st_mode & 0777)));
-    xrt_json_set_field(obj, 2, XR_FROM_INT((int64_t) st.st_mtime));
-    xrt_json_set_field(obj, 3, XR_FROM_INT((int64_t) st.st_atime));
-    xrt_json_set_field(obj, 4, XR_FROM_INT((int64_t) st.st_ctime));
-#if defined(XR_OS_WINDOWS)
-    xrt_json_set_field(obj, 5, XR_FROM_INT(0));
-    xrt_json_set_field(obj, 6, XR_FROM_INT(0));
-    xrt_json_set_field(obj, 7, XR_FROM_BOOL((st.st_mode & _S_IFREG) != 0));
-    xrt_json_set_field(obj, 8, XR_FROM_BOOL((st.st_mode & _S_IFDIR) != 0));
-#else
-    xrt_json_set_field(obj, 5, XR_FROM_INT((int64_t) st.st_uid));
-    xrt_json_set_field(obj, 6, XR_FROM_INT((int64_t) st.st_gid));
-    xrt_json_set_field(obj, 7, XR_FROM_BOOL(S_ISREG(st.st_mode)));
-    xrt_json_set_field(obj, 8, XR_FROM_BOOL(S_ISDIR(st.st_mode)));
-#endif
-    xrt_json_set_field(obj, 9, XR_FROM_BOOL(is_symlink));
+    XrValue obj = xrt_json_new_named(XR_IO_CORE_STAT_FIELD_COUNT, XR_IO_CORE_STAT_FIELD_NAMES);
+    xrt_json_set_field(obj, XR_IO_CORE_STAT_SIZE, XR_FROM_INT(fields.size));
+    xrt_json_set_field(obj, XR_IO_CORE_STAT_MODE, XR_FROM_INT(fields.mode));
+    xrt_json_set_field(obj, XR_IO_CORE_STAT_MTIME, XR_FROM_INT(fields.mtime));
+    xrt_json_set_field(obj, XR_IO_CORE_STAT_ATIME, XR_FROM_INT(fields.atime));
+    xrt_json_set_field(obj, XR_IO_CORE_STAT_CTIME, XR_FROM_INT(fields.ctime));
+    xrt_json_set_field(obj, XR_IO_CORE_STAT_UID, XR_FROM_INT(fields.uid));
+    xrt_json_set_field(obj, XR_IO_CORE_STAT_GID, XR_FROM_INT(fields.gid));
+    xrt_json_set_field(obj, XR_IO_CORE_STAT_IS_FILE, XR_FROM_BOOL(fields.is_file));
+    xrt_json_set_field(obj, XR_IO_CORE_STAT_IS_DIR, XR_FROM_BOOL(fields.is_dir));
+    xrt_json_set_field(obj, XR_IO_CORE_STAT_IS_SYMLINK, XR_FROM_BOOL(fields.is_symlink));
     XRT_FREE(owned);
     return obj;
 }
@@ -486,26 +487,32 @@ static inline XrValue xrt_io_chmod_value(const char *path_data, int64_t path_len
     char stack_path[512];
     char *owned = NULL;
     char *path = xrt_io_copy_cstr_arg(path_data, path_len, stack_path, sizeof(stack_path), &owned);
-    int mode = (int) xr_value_to_int64_coerce(mode_value);
-    bool ok = path && xrt_io_platform_chmod(path, mode) == 0;
+    int mode = 0;
+    bool ok = path && XR_IS_INT(mode_value) &&
+              xr_io_core_chmod_mode(XR_TO_INT(mode_value), &mode) &&
+              xrt_io_platform_chmod(path, mode) == 0;
     XRT_FREE(owned);
     return XR_FROM_BOOL(ok);
+}
+
+static inline bool xrt_io_touch_update(void *ctx, const char *path) {
+    (void) ctx;
+    return xrt_io_platform_utime(path, NULL) == 0;
+}
+
+static inline bool xrt_io_touch_create(void *ctx, const char *path) {
+    (void) ctx;
+    FILE *f = fopen(path, "a");
+    if (!f)
+        return false;
+    return fclose(f) == 0;
 }
 
 static inline XrValue xrt_io_touch(const char *path_data, int64_t path_len) {
     char stack_path[512];
     char *owned = NULL;
     char *path = xrt_io_copy_cstr_arg(path_data, path_len, stack_path, sizeof(stack_path), &owned);
-    bool ok = false;
-    if (path) {
-        ok = xrt_io_platform_utime(path, NULL) == 0;
-        if (!ok) {
-            FILE *f = fopen(path, "a");
-            if (f) {
-                ok = fclose(f) == 0;
-            }
-        }
-    }
+    bool ok = xr_io_core_touch(path, xrt_io_touch_update, xrt_io_touch_create, NULL);
     XRT_FREE(owned);
     return XR_FROM_BOOL(ok);
 }
@@ -514,7 +521,7 @@ static inline XrValue xrt_io_realpath(const char *path_data, int64_t path_len) {
     char stack_path[512];
     char *owned = NULL;
     char *path = xrt_io_copy_cstr_arg(path_data, path_len, stack_path, sizeof(stack_path), &owned);
-    char resolved[XRT_IO_PATH_MAX];
+    char resolved[XR_PATH_CORE_MAX_PATH];
     char *ok = NULL;
     if (path) {
 #if defined(XR_OS_WINDOWS)
@@ -524,17 +531,26 @@ static inline XrValue xrt_io_realpath(const char *path_data, int64_t path_len) {
 #endif
     }
     XRT_FREE(owned);
-    return ok ? xrt_str_from_cstr(resolved) : XR_NULL_VAL;
+    XrIoCorePathView view;
+    return ok && xr_io_core_path_result_cstr_view(resolved, &view)
+               ? xrt_io_str_slice(view.data, view.len)
+               : XR_NULL_VAL;
 }
 
 #if defined(XR_OS_WINDOWS)
-static inline bool xrt_io_remove_all_impl(const char *path) {
+static inline XrIoCorePathKind xrt_io_path_kind(void *ctx, const char *path) {
+    (void) ctx;
     DWORD attrs = GetFileAttributesA(path);
     if (attrs == INVALID_FILE_ATTRIBUTES)
-        return false;
-    if (!(attrs & FILE_ATTRIBUTE_DIRECTORY) || (attrs & FILE_ATTRIBUTE_REPARSE_POINT))
-        return DeleteFileA(path) != 0;
+        return XR_IO_CORE_PATH_MISSING;
+    if ((attrs & FILE_ATTRIBUTE_DIRECTORY) && !(attrs & FILE_ATTRIBUTE_REPARSE_POINT))
+        return XR_IO_CORE_PATH_DIR;
+    return XR_IO_CORE_PATH_LEAF;
+}
 
+static inline bool xrt_io_dir_for_each_entry(void *ctx, const char *path, XrIoCoreDirEntryFn visit,
+                                             void *visit_ctx) {
+    (void) ctx;
     size_t len = strlen(path);
     char *pattern = (char *) XRT_MALLOC(len + 4);
     if (!pattern)
@@ -547,34 +563,47 @@ static inline bool xrt_io_remove_all_impl(const char *path) {
     WIN32_FIND_DATAA fd;
     HANDLE h = FindFirstFileA(pattern, &fd);
     XRT_FREE(pattern);
+    if (h == INVALID_HANDLE_VALUE)
+        return GetLastError() == ERROR_FILE_NOT_FOUND;
+
     bool ok = true;
-    if (h != INVALID_HANDLE_VALUE) {
-        do {
-            const char *name = fd.cFileName;
-            if (strcmp(name, ".") == 0 || strcmp(name, "..") == 0)
-                continue;
-            size_t child_len = strlen(path) + 1 + strlen(name);
-            char *child = (char *) XRT_MALLOC(child_len + 1);
-            if (!child) {
-                ok = false;
-                continue;
-            }
-            snprintf(child, child_len + 1, "%s\\%s", path, name);
-            if (!xrt_io_remove_all_impl(child))
-                ok = false;
-            XRT_FREE(child);
-        } while (FindNextFileA(h, &fd));
-        FindClose(h);
-    }
-    return RemoveDirectoryA(path) != 0 && ok;
+    do {
+        if (!visit(visit_ctx, fd.cFileName)) {
+            ok = false;
+            break;
+        }
+    } while (FindNextFileA(h, &fd));
+    FindClose(h);
+    return ok;
+}
+
+static inline bool xrt_io_remove_all_leaf(void *ctx, const char *path) {
+    (void) ctx;
+    DWORD attrs = GetFileAttributesA(path);
+    if (attrs != INVALID_FILE_ATTRIBUTES && (attrs & FILE_ATTRIBUTE_DIRECTORY))
+        return RemoveDirectoryA(path) != 0;
+    SetFileAttributesA(path, FILE_ATTRIBUTE_NORMAL);
+    return DeleteFileA(path) != 0;
+}
+
+static inline bool xrt_io_remove_all_dir(void *ctx, const char *path) {
+    (void) ctx;
+    return RemoveDirectoryA(path) != 0;
 }
 #else
-static inline bool xrt_io_remove_all_impl(const char *path) {
+static inline XrIoCorePathKind xrt_io_path_kind(void *ctx, const char *path) {
+    (void) ctx;
     struct stat st;
     if (lstat(path, &st) != 0)
-        return false;
+        return XR_IO_CORE_PATH_MISSING;
     if (!S_ISDIR(st.st_mode) || S_ISLNK(st.st_mode))
-        return remove(path) == 0;
+        return XR_IO_CORE_PATH_LEAF;
+    return XR_IO_CORE_PATH_DIR;
+}
+
+static inline bool xrt_io_dir_for_each_entry(void *ctx, const char *path, XrIoCoreDirEntryFn visit,
+                                             void *visit_ctx) {
+    (void) ctx;
     DIR *dir = opendir(path);
     if (!dir)
         return false;
@@ -583,25 +612,23 @@ static inline bool xrt_io_remove_all_impl(const char *path) {
         struct dirent *e = readdir(dir);
         if (!e)
             break;
-        const char *name = e->d_name;
-        if (strcmp(name, ".") == 0 || strcmp(name, "..") == 0)
-            continue;
-        size_t path_len = strlen(path);
-        size_t name_len = strlen(name);
-        char *child = (char *) XRT_MALLOC(path_len + 1 + name_len + 1);
-        if (!child) {
+        if (!visit(visit_ctx, e->d_name)) {
             ok = false;
-            continue;
+            break;
         }
-        memcpy(child, path, path_len);
-        child[path_len] = '/';
-        memcpy(child + path_len + 1, name, name_len + 1);
-        if (!xrt_io_remove_all_impl(child))
-            ok = false;
-        XRT_FREE(child);
     }
     closedir(dir);
-    return rmdir(path) == 0 && ok;
+    return ok;
+}
+
+static inline bool xrt_io_remove_all_leaf(void *ctx, const char *path) {
+    (void) ctx;
+    return remove(path) == 0;
+}
+
+static inline bool xrt_io_remove_all_dir(void *ctx, const char *path) {
+    (void) ctx;
+    return rmdir(path) == 0;
 }
 #endif
 
@@ -609,7 +636,21 @@ static inline XrValue xrt_io_remove_all(const char *path_data, int64_t path_len)
     char stack_path[512];
     char *owned = NULL;
     char *path = xrt_io_copy_cstr_arg(path_data, path_len, stack_path, sizeof(stack_path), &owned);
-    bool ok = path && xrt_io_remove_all_impl(path);
+    XrIoCoreRemoveAllOps ops = {
+        .kind = xrt_io_path_kind,
+        .for_each_entry = xrt_io_dir_for_each_entry,
+        .remove_leaf = xrt_io_remove_all_leaf,
+        .remove_dir = xrt_io_remove_all_dir,
+        .alloc = xrt_io_core_alloc,
+        .free = xrt_io_core_free,
+        .sep =
+#if defined(XR_OS_WINDOWS)
+            '\\',
+#else
+            '/',
+#endif
+    };
+    bool ok = path && xr_io_core_remove_all(path, &ops, NULL);
     XRT_FREE(owned);
     return XR_FROM_BOOL(ok);
 }
@@ -646,7 +687,7 @@ static inline XrValue xrt_io_readlink(const char *path_data, int64_t path_len) {
     char stack_path[512];
     char *owned = NULL;
     char *path = xrt_io_copy_cstr_arg(path_data, path_len, stack_path, sizeof(stack_path), &owned);
-    char buf[XRT_IO_PATH_MAX];
+    char buf[XR_PATH_CORE_MAX_PATH];
     XrValue result = XR_NULL_VAL;
     if (path) {
 #if defined(XR_OS_WINDOWS)
@@ -656,17 +697,17 @@ static inline XrValue xrt_io_readlink(const char *path_data, int64_t path_len) {
             DWORD len = GetFinalPathNameByHandleA(h, buf, sizeof(buf), FILE_NAME_NORMALIZED);
             CloseHandle(h);
             if (len > 0 && len < sizeof(buf)) {
-                const char *s = buf;
-                if (len >= 4 && buf[0] == '\\' && buf[1] == '\\' && buf[2] == '?' && buf[3] == '\\')
-                    s = buf + 4;
-                result = xrt_str_from_cstr(s);
+                XrIoCorePathView view;
+                if (xr_io_core_path_result_view(buf, (size_t) len, &view))
+                    result = xrt_io_str_slice(view.data, view.len);
             }
         }
 #else
         ssize_t len = readlink(path, buf, sizeof(buf) - 1);
         if (len >= 0) {
-            buf[len] = '\0';
-            result = xrt_io_str_slice(buf, (size_t) len);
+            XrIoCorePathView view;
+            if (xr_io_core_path_result_view(buf, (size_t) len, &view))
+                result = xrt_io_str_slice(view.data, view.len);
         }
 #endif
     }
@@ -674,35 +715,24 @@ static inline XrValue xrt_io_readlink(const char *path_data, int64_t path_len) {
     return result;
 }
 
-static inline const char *xrt_io_tempdir_root(void) {
-    const char *d = getenv("TMPDIR");
-    if (!d || !d[0])
-        d = getenv("TMP");
-    if (!d || !d[0])
-        d = getenv("TEMP");
-    if (!d || !d[0]) {
-#if defined(XR_OS_WINDOWS)
-        d = "C:\\Windows\\Temp";
-#else
-        d = "/tmp";
-#endif
-    }
-    return d;
+static inline const char *xrt_io_core_getenv(void *ctx, const char *name) {
+    (void) ctx;
+    return getenv(name);
 }
 
 static inline XrValue xrt_io_temp_file(void) {
-    char tpl[XRT_IO_PATH_MAX];
+    char tpl[XR_PATH_CORE_MAX_PATH];
 #if defined(XR_OS_WINDOWS)
-    char tmpdir[MAX_PATH];
+    char tmpdir[XR_PATH_CORE_MAX_PATH];
     if (GetTempPathA(sizeof(tmpdir), tmpdir) == 0)
         return XR_NULL_VAL;
-    char tmpfile[MAX_PATH];
+    char tmpfile[XR_PATH_CORE_MAX_PATH];
     if (GetTempFileNameA(tmpdir, "xr_", 0, tmpfile) == 0)
         return XR_NULL_VAL;
     snprintf(tpl, sizeof(tpl), "%s", tmpfile);
 #else
-    int n = snprintf(tpl, sizeof(tpl), "%s/xray_XXXXXX", xrt_io_tempdir_root());
-    if (n <= 0 || n >= (int) sizeof(tpl))
+    const char *root = xr_os_core_tmpdir(xrt_io_core_getenv, NULL);
+    if (!xr_io_core_temp_template(root, '/', "xray_XXXXXX", tpl, sizeof(tpl)))
         return XR_NULL_VAL;
     int fd = mkstemp(tpl);
     if (fd < 0)
@@ -713,12 +743,12 @@ static inline XrValue xrt_io_temp_file(void) {
 }
 
 static inline XrValue xrt_io_temp_dir(void) {
-    char tpl[XRT_IO_PATH_MAX];
+    char tpl[XR_PATH_CORE_MAX_PATH];
 #if defined(XR_OS_WINDOWS)
-    char tmpdir[MAX_PATH];
+    char tmpdir[XR_PATH_CORE_MAX_PATH];
     if (GetTempPathA(sizeof(tmpdir), tmpdir) == 0)
         return XR_NULL_VAL;
-    char tmpfile[MAX_PATH];
+    char tmpfile[XR_PATH_CORE_MAX_PATH];
     if (GetTempFileNameA(tmpdir, "xr_", 0, tmpfile) == 0)
         return XR_NULL_VAL;
     DeleteFileA(tmpfile);
@@ -726,13 +756,23 @@ static inline XrValue xrt_io_temp_dir(void) {
         return XR_NULL_VAL;
     snprintf(tpl, sizeof(tpl), "%s", tmpfile);
 #else
-    int n = snprintf(tpl, sizeof(tpl), "%s/xray_XXXXXX", xrt_io_tempdir_root());
-    if (n <= 0 || n >= (int) sizeof(tpl))
+    const char *root = xr_os_core_tmpdir(xrt_io_core_getenv, NULL);
+    if (!xr_io_core_temp_template(root, '/', "xray_XXXXXX", tpl, sizeof(tpl)))
         return XR_NULL_VAL;
     if (!mkdtemp(tpl))
         return XR_NULL_VAL;
 #endif
     return xrt_str_from_cstr(tpl);
+}
+
+typedef struct XrtIoReadDirEmitCtx {
+    XrValue arr;
+} XrtIoReadDirEmitCtx;
+
+static inline bool xrt_io_read_dir_emit(void *ctx, const char *path) {
+    XrtIoReadDirEmitCtx *emit = (XrtIoReadDirEmitCtx *) ctx;
+    xrt_array_push(emit->arr, xrt_str_from_cstr(path));
+    return true;
 }
 
 static inline XrValue xrt_io_read_dir(const char *path_data, int64_t path_len) {
@@ -743,111 +783,19 @@ static inline XrValue xrt_io_read_dir(const char *path_data, int64_t path_len) {
         XRT_FREE(owned);
         return XR_NULL_VAL;
     }
+    if (xrt_io_path_kind(NULL, path) != XR_IO_CORE_PATH_DIR) {
+        XRT_FREE(owned);
+        return XR_NULL_VAL;
+    }
     XrValue arr = xrt_array_new(8);
-#if defined(XR_OS_WINDOWS)
-    size_t plen = strlen(path);
-    char *pattern = (char *) XRT_MALLOC(plen + 4);
-    if (!pattern) {
+    XrtIoReadDirEmitCtx emit = {.arr = arr};
+    if (!xr_io_core_read_dir(path, xrt_io_dir_for_each_entry, NULL, xrt_io_read_dir_emit, &emit)) {
+        xrt_release(arr);
         XRT_FREE(owned);
         return XR_NULL_VAL;
     }
-    snprintf(pattern, plen + 4, "%s\\*", path);
-    WIN32_FIND_DATAA fd;
-    HANDLE h = FindFirstFileA(pattern, &fd);
-    XRT_FREE(pattern);
-    if (h == INVALID_HANDLE_VALUE) {
-        XRT_FREE(owned);
-        return XR_NULL_VAL;
-    }
-    do {
-        const char *name = fd.cFileName;
-        if (strcmp(name, ".") != 0 && strcmp(name, "..") != 0)
-            xrt_array_push(arr, xrt_str_from_cstr(name));
-    } while (FindNextFileA(h, &fd));
-    FindClose(h);
-#else
-    DIR *dir = opendir(path);
-    if (!dir) {
-        XRT_FREE(owned);
-        return XR_NULL_VAL;
-    }
-    for (;;) {
-        struct dirent *e = readdir(dir);
-        if (!e)
-            break;
-        const char *name = e->d_name;
-        if (strcmp(name, ".") == 0 || strcmp(name, "..") == 0)
-            continue;
-        xrt_array_push(arr, xrt_str_from_cstr(name));
-    }
-    closedir(dir);
-#endif
     XRT_FREE(owned);
     return arr;
-}
-
-static inline void xrt_io_read_dir_recursive_impl(XrValue arr, const char *base, const char *path,
-                                                  int depth) {
-    if (!base || !path || depth >= 64)
-        return;
-    size_t base_len = strlen(base);
-#if defined(XR_OS_WINDOWS)
-    size_t plen = strlen(path);
-    char *pattern = (char *) XRT_MALLOC(plen + 4);
-    if (!pattern)
-        return;
-    snprintf(pattern, plen + 4, "%s\\*", path);
-    WIN32_FIND_DATAA fd;
-    HANDLE h = FindFirstFileA(pattern, &fd);
-    XRT_FREE(pattern);
-    if (h == INVALID_HANDLE_VALUE)
-        return;
-    do {
-        const char *name = fd.cFileName;
-        if (strcmp(name, ".") == 0 || strcmp(name, "..") == 0)
-            continue;
-        size_t child_len = strlen(path) + 1 + strlen(name);
-        char *child = (char *) XRT_MALLOC(child_len + 1);
-        if (!child)
-            continue;
-        snprintf(child, child_len + 1, "%s\\%s", path, name);
-        const char *rel = child + base_len;
-        if (*rel == '\\' || *rel == '/')
-            rel++;
-        xrt_array_push(arr, xrt_str_from_cstr(rel));
-        if ((fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) &&
-            !(fd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT))
-            xrt_io_read_dir_recursive_impl(arr, base, child, depth + 1);
-        XRT_FREE(child);
-    } while (FindNextFileA(h, &fd));
-    FindClose(h);
-#else
-    DIR *dir = opendir(path);
-    if (!dir)
-        return;
-    for (;;) {
-        struct dirent *e = readdir(dir);
-        if (!e)
-            break;
-        const char *name = e->d_name;
-        if (strcmp(name, ".") == 0 || strcmp(name, "..") == 0)
-            continue;
-        size_t child_len = strlen(path) + 1 + strlen(name);
-        char *child = (char *) XRT_MALLOC(child_len + 1);
-        if (!child)
-            continue;
-        snprintf(child, child_len + 1, "%s/%s", path, name);
-        const char *rel = child + base_len;
-        if (*rel == '/' || *rel == '\\')
-            rel++;
-        xrt_array_push(arr, xrt_str_from_cstr(rel));
-        struct stat st;
-        if (lstat(child, &st) == 0 && S_ISDIR(st.st_mode))
-            xrt_io_read_dir_recursive_impl(arr, base, child, depth + 1);
-        XRT_FREE(child);
-    }
-    closedir(dir);
-#endif
 }
 
 static inline XrValue xrt_io_read_dir_recursive(const char *path_data, int64_t path_len) {
@@ -859,44 +807,38 @@ static inline XrValue xrt_io_read_dir_recursive(const char *path_data, int64_t p
         return XR_NULL_VAL;
     }
     XrValue arr = xrt_array_new(8);
-    xrt_io_read_dir_recursive_impl(arr, path, path, 0);
+    XrtIoReadDirEmitCtx emit = {.arr = arr};
+    XrIoCoreReadDirOps ops = {
+        .for_each_entry = xrt_io_dir_for_each_entry,
+        .kind = xrt_io_path_kind,
+        .alloc = xrt_io_core_alloc,
+        .free = xrt_io_core_free,
+        .alloc_ctx = NULL,
+        .sep =
+#if defined(XR_OS_WINDOWS)
+            '\\',
+#else
+            '/',
+#endif
+        .max_depth = XR_IO_CORE_READ_DIR_MAX_DEPTH,
+    };
+    if (!xr_io_core_read_dir_recursive(path, &ops, NULL, xrt_io_read_dir_emit, &emit)) {
+        xrt_release(arr);
+        XRT_FREE(owned);
+        return XR_NULL_VAL;
+    }
     XRT_FREE(owned);
     return arr;
 }
 
 static inline XrValue xrt_io_read_stdin(void) {
-    size_t cap = 4096;
+    clearerr(stdin);
     size_t len = 0;
-    char *buf = (char *) XRT_MALLOC(cap + 1);
+    char *buf = xr_io_core_read_all_stream_alloc(
+        stdin, xrt_io_file_read, xrt_io_file_error, xrt_io_core_alloc, xrt_io_core_realloc,
+        xrt_io_core_free, NULL, 4096, XRT_IO_MAX_READ_BYTES, &len);
     if (!buf)
         return XR_NULL_VAL;
-    for (;;) {
-        size_t avail = cap - len;
-        size_t n = fread(buf + len, 1, avail, stdin);
-        len += n;
-        if (n < avail) {
-            if (ferror(stdin)) {
-                XRT_FREE(buf);
-                return XR_NULL_VAL;
-            }
-            break;
-        }
-        if (cap >= (size_t) XRT_IO_MAX_READ_BYTES) {
-            XRT_FREE(buf);
-            return XR_NULL_VAL;
-        }
-        size_t new_cap = cap * 2;
-        if (new_cap > (size_t) XRT_IO_MAX_READ_BYTES)
-            new_cap = (size_t) XRT_IO_MAX_READ_BYTES;
-        char *next = (char *) XRT_REALLOC(buf, new_cap + 1);
-        if (!next) {
-            XRT_FREE(buf);
-            return XR_NULL_VAL;
-        }
-        buf = next;
-        cap = new_cap;
-    }
-    buf[len] = '\0';
     XrValue out = xrt_io_str_slice(buf, len);
     XRT_FREE(buf);
     return out;

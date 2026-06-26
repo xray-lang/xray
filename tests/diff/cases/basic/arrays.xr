@@ -14,3 +14,71 @@ print(evens.length)
 
 let total = a.reduce((acc, x) -> acc + x, 0)
 print(total)
+
+let tail = a.slice(-4, -1)
+print(tail.length)
+print(tail[0])
+tail[1] = 33
+print(a[3])
+
+let syntax_tail = a[-4:-1]
+print(syntax_tail.length)
+print(syntax_tail[1])
+
+let fill_range = [1, 2, 3, 4, 5, 6]
+fill_range.fill(9, 2, 5)
+print(fill_range[2])
+print(fill_range[5])
+fill_range.fill(7, -3, -1)
+print(fill_range[3])
+print(fill_range[4])
+fill_range.fill(4, 4)
+print(fill_range[4])
+print(fill_range[5])
+
+let bytes = new Bytes(6)
+bytes.fill(1)
+bytes.fill(255, 1, 4)
+print(bytes[0])
+print(bytes[1])
+print(bytes[3])
+print(bytes[4])
+print(bytes.indexOf(255))
+print(bytes.indexOf(42))
+print(bytes.includes(255))
+print(bytes.includes(42))
+
+let packet = new Bytes(8)
+packet[0] = 1
+packet[1] = 2
+packet[2] = 3
+packet[3] = 4
+packet[4] = 5
+packet[5] = 6
+packet[6] = 7
+packet[7] = 8
+print(packet.loadU32LE(0))
+print(packet.loadU64LE(0))
+
+let moved = new Bytes(6)
+moved[0] = 10
+moved[1] = 20
+moved[2] = 30
+moved[3] = 40
+moved.copyWithin(2, 0, 4)
+print(moved[2])
+print(moved[5])
+
+let copied = new Bytes(6)
+copied.resize(6)
+copied.copyFrom(packet, 1, 2, 3)
+print(copied[2])
+print(copied[4])
+
+let repeated = new Bytes(9)
+repeated[0] = 65
+repeated[1] = 66
+repeated[2] = 67
+repeated.repeatFrom(3, 3, 6)
+print(repeated[3])
+print(repeated[8])

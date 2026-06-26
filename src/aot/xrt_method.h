@@ -20,6 +20,10 @@
 #include "xrt_coll.h"  // xrt_array_t, xrt_map_t, xrt_strbuf_finish, xrt_array_push
 #include "xrt_array_hof.h"
 #include "xrt_range.h"
+#include "xrt_datetime.h"
+#include "../shared/xr_array_core.h"
+#include "../shared/xr_numeric_core.h"
+#include "../shared/xr_string_core.h"
 
 /* Builtin method symbol IDs. */
 #include "xrt_method_symbols.h"
@@ -42,7 +46,11 @@ static inline int xrt_weak_value_is_heap_object(XrValue v) {
         case XR_TAG_TUPLE:
         case XR_TAG_SET:
         case XR_TAG_STRUCT_REF:
+        case XR_TAG_RANGE:
+        case XR_TAG_ENUM:
+        case XR_TAG_ITERATOR:
         case XR_TAG_REGEX:
+        case XR_TAG_DATETIME:
             return 1;
         default:
             return 0;
@@ -54,26 +62,7 @@ static inline int xrt_weak_value_is_heap_object(XrValue v) {
 static XrValue xrt_tostring(XrValue val, int slot_hint) {
     if (slot_hint == 1 || val.tag == XR_TAG_I64) {
         char tmp[32];
-        int n = 0;
-        int64_t v = val.i;
-        int64_t t = v;
-        if (t < 0) {
-            tmp[n++] = '-';
-            t = -t;
-        }
-        if (t == 0) {
-            tmp[n++] = '0';
-        } else {
-            char rev[20];
-            int r = 0;
-            while (t > 0) {
-                rev[r++] = '0' + (char) (t % 10);
-                t /= 10;
-            }
-            while (r > 0)
-                tmp[n++] = rev[--r];
-        }
-        tmp[n] = 0;
+        (void) xr_numeric_core_format_i64(tmp, sizeof(tmp), val.i);
         return xrt_str_from_cstr(tmp);
     }
     if (slot_hint == 2 || val.tag == XR_TAG_F64) {
@@ -85,6 +74,8 @@ static XrValue xrt_tostring(XrValue val, int slot_hint) {
         return val;
     if (val.tag == XR_TAG_RANGE)
         return xrt_range_to_string(val);
+    if (val.tag == XR_TAG_DATETIME)
+        return xrt_datetime_method_0(val, XRT_SYM_TOSTRING);
     if (val.tag == XR_TAG_NULL)
         return xr_box_str("null");
     if (val.tag == XR_TAG_BOOL)
@@ -102,12 +93,9 @@ static XrValue xrt_to_int(XrValue val) {
     if (XR_IS_FLOAT(val))
         return XR_FROM_INT((int64_t) XR_TO_FLOAT(val));
     if (XR_IS_STR(val)) {
-        const char *p = xr_str_data(val);
-        while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r')
-            p++;
-        char *end = NULL;
-        long long n = strtoll(p, &end, 10);
-        return end == p ? XR_NULL_VAL : XR_FROM_INT((int64_t) n);
+        XrStringCoreParseIntResult parsed =
+            xr_string_core_parse_int64(xr_str_data(val), (size_t) xr_str_len(val));
+        return parsed.ok ? XR_FROM_INT(parsed.value) : XR_NULL_VAL;
     }
     if (XR_IS_BOOL(val))
         return XR_FROM_INT(val.i != 0 ? 1 : 0);
@@ -120,12 +108,9 @@ static XrValue xrt_to_float(XrValue val) {
     if (XR_IS_INT(val))
         return XR_FROM_FLOAT((double) XR_TO_INT(val));
     if (XR_IS_STR(val)) {
-        const char *p = xr_str_data(val);
-        while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r')
-            p++;
-        char *end = NULL;
-        double n = strtod(p, &end);
-        return end == p ? XR_NULL_VAL : XR_FROM_FLOAT(n);
+        XrStringCoreParseFloatResult parsed =
+            xr_string_core_parse_float64(xr_str_data(val), (size_t) xr_str_len(val));
+        return parsed.ok ? XR_FROM_FLOAT(parsed.value) : XR_NULL_VAL;
     }
     if (XR_IS_BOOL(val))
         return XR_FROM_FLOAT(val.i != 0 ? 1.0 : 0.0);
@@ -137,23 +122,81 @@ static XrValue xrt_to_string(XrValue val) {
 }
 
 static XrValue xrt_to_bool(XrValue val) {
-    if (XR_IS_BOOL(val))
-        return val;
-    if (XR_IS_NULL(val))
-        return XR_FALSE_VAL;
-    if (XR_IS_INT(val))
-        return XR_FROM_BOOL(XR_TO_INT(val) != 0);
-    if (XR_IS_FLOAT(val))
-        return XR_FROM_BOOL(XR_TO_FLOAT(val) != 0.0);
-    if (XR_IS_STR(val))
-        return XR_FROM_BOOL((xr_str_data(val))[0] != '\0');
-    if (XR_IS_ARRAY(val))
-        return XR_FROM_BOOL(((xrt_array_t *) val.ptr)->length > 0);
-    if (XR_IS_MAP(val))
-        return XR_FROM_BOOL(xrt_map_len((xrt_map_t *) val.ptr) > 0);
-    if (XR_IS_SET(val))
-        return XR_FROM_BOOL(((xrt_set_t *) val.ptr)->len > 0);
-    return XR_TRUE_VAL;
+    return XR_FROM_BOOL(xr_truthy(val));
+}
+
+typedef struct XrtArrayJoinCtx {
+    xrt_array_t *array;
+} XrtArrayJoinCtx;
+
+static inline bool xrt_array_join_part(XrValue val, char *dst, size_t *len) {
+    const char *data = NULL;
+    size_t n = 0;
+    char tmp[256];
+    XrValue tmp_str = XR_NULL_VAL;
+
+    if (val.tag == XR_TAG_STR || val.tag == XR_TAG_STR_ARC) {
+        data = xr_str_data(val);
+        n = (size_t) xr_str_len(val);
+    } else if (val.tag == XR_TAG_I64) {
+        int written = xr_numeric_core_format_i64(tmp, sizeof(tmp), val.i);
+        if (written < 0 || (size_t) written >= sizeof(tmp))
+            return false;
+        data = tmp;
+        n = (size_t) written;
+    } else if (val.tag == XR_TAG_F64) {
+        int written = xrt_format_float(tmp, sizeof(tmp), val.f);
+        if (written < 0 || (size_t) written >= sizeof(tmp))
+            return false;
+        data = tmp;
+        n = (size_t) written;
+    } else if (val.tag == XR_TAG_BOOL) {
+        data = val.i ? "true" : "false";
+        n = val.i ? 4 : 5;
+    } else if (val.tag == XR_TAG_NULL) {
+        data = "null";
+        n = 4;
+    } else if (val.tag == XR_TAG_RANGE || val.tag == XR_TAG_DATETIME || val.tag == XR_TAG_ENUM) {
+        tmp_str = xrt_tostring(val, 0);
+        data = xr_str_data(tmp_str);
+        n = (size_t) xr_str_len(tmp_str);
+    } else {
+        data = "[object]";
+        n = 8;
+    }
+
+    if (dst && n > 0)
+        memcpy(dst, data, n);
+    if (len)
+        *len = n;
+    return true;
+}
+
+static inline bool xrt_array_join_element(void *ctx, int64_t index, char *dst, size_t *len) {
+    XrtArrayJoinCtx *join_ctx = (XrtArrayJoinCtx *) ctx;
+    if (!join_ctx || !join_ctx->array || index < 0 || index > INT32_MAX)
+        return false;
+    xrt_array_t *a = join_ctx->array;
+    return xrt_array_join_part(xr_typed_get(a->data, (int32_t) index, a->elem_type), dst, len);
+}
+
+static inline XrValue xrt_array_join_value(xrt_array_t *a, XrValue sep_value) {
+    if (!a || !XR_IS_STR(sep_value))
+        return XR_NULL_VAL;
+    const char *sep = xr_str_data(sep_value);
+    size_t sep_len = (size_t) xr_str_len(sep_value);
+    XrtArrayJoinCtx ctx = {a};
+    size_t total = 0;
+    if (!xr_array_core_join_total(a->length, sep_len, xrt_array_join_element, &ctx, &total))
+        return XR_NULL_VAL;
+    if (total == SIZE_MAX)
+        return XR_NULL_VAL;
+    XrValue result = xrt_str_alloc(total);
+    size_t written = 0;
+    if (!xr_array_core_join_write(xr_str_buf(result), total + 1, a->length, sep, sep_len,
+                                  xrt_array_join_element, &ctx, &written))
+        return XR_NULL_VAL;
+    return result;
 }
 
 /* Fixed-arity method dispatch is intentionally inlineable by the C compiler. */
@@ -167,64 +210,43 @@ static inline XrValue xrt_str_method_0(const char *s, int64_t slen, XrValue recv
     if (sym == XRT_SYM_TOSTRING)
         return recv;
     if (sym == XRT_SYM_TRIM || sym == XRT_SYM_TRIM_START || sym == XRT_SYM_TRIM_END) {
-        const char *start = s, *end = s + slen;
-        if (sym != XRT_SYM_TRIM_END)
-            while (start < end &&
-                   (*start == ' ' || *start == '\t' || *start == '\n' || *start == '\r'))
-                start++;
-        if (sym != XRT_SYM_TRIM_START)
-            while (end > start &&
-                   (end[-1] == ' ' || end[-1] == '\t' || end[-1] == '\n' || end[-1] == '\r'))
-                end--;
-        int64_t rlen = (int64_t) (end - start);
-        XrValue sv = xrt_str_alloc((size_t) rlen);
-        memcpy(xr_str_buf(sv), start, (size_t) rlen);
-        xr_str_buf(sv)[rlen] = 0;
+        XrStringCoreTrimMode mode = XR_STRING_CORE_TRIM_BOTH;
+        if (sym == XRT_SYM_TRIM_START)
+            mode = XR_STRING_CORE_TRIM_START;
+        else if (sym == XRT_SYM_TRIM_END)
+            mode = XR_STRING_CORE_TRIM_END;
+        XrStringCoreSlice slice = xr_string_core_trim_slice(s, (size_t) slen, mode);
+        XrValue sv = xrt_str_alloc(slice.len);
+        memcpy(xr_str_buf(sv), slice.data, slice.len);
+        xr_str_buf(sv)[slice.len] = 0;
         return sv;
     }
     if (sym == XRT_SYM_TOLOWER) {
         XrValue sv = xrt_str_alloc((size_t) slen);
         char *r = xr_str_buf(sv);
-        for (int64_t i = 0; i < slen; i++)
-            r[i] = (s[i] >= 'A' && s[i] <= 'Z') ? (char) (s[i] + 32) : s[i];
-        r[slen] = 0;
+        xr_string_core_ascii_lower_write(r, s, (size_t) slen);
         return sv;
     }
     if (sym == XRT_SYM_TOUPPER) {
         XrValue sv = xrt_str_alloc((size_t) slen);
         char *r = xr_str_buf(sv);
-        for (int64_t i = 0; i < slen; i++)
-            r[i] = (s[i] >= 'a' && s[i] <= 'z') ? (char) (s[i] - 32) : s[i];
-        r[slen] = 0;
+        xr_string_core_ascii_upper_write(r, s, (size_t) slen);
         return sv;
     }
     if (sym == XRT_SYM_TOINT) {
-        int64_t v = 0;
-        int neg = 0;
-        const char *p = s;
-        while (*p == ' ')
-            p++;
-        if (*p == '-') {
-            neg = 1;
-            p++;
-        } else if (*p == '+')
-            p++;
-        while (*p >= '0' && *p <= '9') {
-            v = v * 10 + (*p - '0');
-            p++;
-        }
-        return XR_FROM_INT(neg ? -v : v);
+        XrStringCoreParseIntResult parsed = xr_string_core_parse_int64(s, (size_t) slen);
+        return parsed.ok ? XR_FROM_INT(parsed.value) : XR_NULL_VAL;
     }
-    if (sym == XRT_SYM_TOFLOAT)
-        return XR_FROM_FLOAT(atof(s));
+    if (sym == XRT_SYM_TOFLOAT) {
+        XrStringCoreParseFloatResult parsed = xr_string_core_parse_float64(s, (size_t) slen);
+        return parsed.ok ? XR_FROM_FLOAT(parsed.value) : XR_NULL_VAL;
+    }
     if (sym == XRT_SYM_ORD)
         return XR_FROM_INT(slen > 0 ? (int64_t) (unsigned char) s[0] : 0);
     if (sym == XRT_SYM_REVERSE) {
         XrValue sv = xrt_str_alloc((size_t) slen);
         char *r = xr_str_buf(sv);
-        for (int64_t i = 0; i < slen; i++)
-            r[i] = s[slen - 1 - i];
-        r[slen] = 0;
+        xr_string_core_reverse_utf8_write(r, s, (size_t) slen);
         return sv;
     }
     return (XrValue) {.i = 0, .tag = XR_TAG_NULL};
@@ -248,20 +270,12 @@ static inline XrValue xrt_method_0(XrValue recv, int sym) {
         }
         if (sym == XRT_SYM_SHIFT && a->length > 0) {
             XrValue first = xr_typed_get(a->data, 0, a->elem_type);
-            for (int64_t i = 0; i < a->length - 1; i++) {
-                XrValue next = xr_typed_get(a->data, (int32_t) (i + 1), a->elem_type);
-                xr_typed_set(a->data, (int32_t) i, next, a->elem_type);
-            }
+            (void) xr_array_core_shift_left_one(a->data, a->length, a->elem_size);
             a->length--;
             return first;
         }
         if (sym == XRT_SYM_REVERSE) {
-            for (int64_t i = 0, j = a->length - 1; i < j; i++, j--) {
-                XrValue vi = xr_typed_get(a->data, (int32_t) i, a->elem_type);
-                XrValue vj = xr_typed_get(a->data, (int32_t) j, a->elem_type);
-                xr_typed_set(a->data, (int32_t) i, vj, a->elem_type);
-                xr_typed_set(a->data, (int32_t) j, vi, a->elem_type);
-            }
+            (void) xr_array_core_reverse(a->data, a->length, a->elem_size);
             return recv;
         }
         if (sym == XRT_SYM_SORT)
@@ -325,14 +339,18 @@ static inline XrValue xrt_method_0(XrValue recv, int sym) {
     }
     if (recv.tag == XR_TAG_RANGE)
         return xrt_range_method_0(recv, sym);
+    if (recv.tag == XR_TAG_DATETIME)
+        return xrt_datetime_method_0(recv, sym);
+    if (recv.tag == XR_TAG_ENUM && sym == XRT_SYM_TOSTRING)
+        return xrt_tostring(recv, 0);
     if (recv.tag == XR_TAG_I64) {
         if (sym == XRT_SYM_ABS)
-            return XR_FROM_INT(recv.i < 0 ? -recv.i : recv.i);
+            return XR_FROM_INT(xr_numeric_core_i64_abs_wrap(recv.i));
         if (sym == XRT_SYM_TOSTRING)
             return xrt_tostring(recv, 1);
         if (sym == XRT_SYM_TOHEX) {
             char buf[32];
-            snprintf(buf, sizeof(buf), "0x%02" PRIX64, (uint64_t) recv.i);
+            (void) xr_numeric_core_format_i64_hex(buf, sizeof(buf), recv.i);
             return xrt_str_from_cstr(buf);
         }
     }
@@ -341,11 +359,11 @@ static inline XrValue xrt_method_0(XrValue recv, int sym) {
         if (sym == XRT_SYM_TOSTRING)
             return xrt_tostring(recv, 2);
         if (sym == XRT_SYM_FLOOR)
-            return XR_FROM_FLOAT(floor(v));
+            return XR_FROM_INT((int64_t) floor(v));
         if (sym == XRT_SYM_CEIL)
-            return XR_FROM_FLOAT(ceil(v));
+            return XR_FROM_INT((int64_t) ceil(v));
         if (sym == XRT_SYM_ROUND)
-            return XR_FROM_FLOAT(round(v));
+            return XR_FROM_INT((int64_t) round(v));
         if (sym == XRT_SYM_ABS)
             return XR_FROM_FLOAT(fabs(v));
         if (sym == XRT_SYM_SQRT)
@@ -356,47 +374,66 @@ static inline XrValue xrt_method_0(XrValue recv, int sym) {
     return (XrValue) {.i = 0, .tag = XR_TAG_NULL};
 }
 
+static inline XrValue xrt_str_from_core_slice(XrStringCoreSlice slice) {
+    XrValue sv = xrt_str_alloc(slice.len);
+    if (slice.len != 0)
+        memcpy(xr_str_buf(sv), slice.data, slice.len);
+    xr_str_buf(sv)[slice.len] = 0;
+    return sv;
+}
+
+typedef struct XrtStringSplitCtx {
+    XrValue array;
+} XrtStringSplitCtx;
+
+static inline bool xrt_str_split_emit(XrStringCoreSlice slice, void *user) {
+    XrtStringSplitCtx *ctx = (XrtStringSplitCtx *) user;
+    xrt_array_push(ctx->array, xrt_str_from_core_slice(slice));
+    return true;
+}
+
+static inline XrValue xrt_str_split(const char *s, int64_t slen, const char *sep, size_t sep_len) {
+    if (slen < 0)
+        return XR_NULL_VAL;
+    size_t len = (size_t) slen;
+    XrStringCoreSplitPlan plan = xr_string_core_split_plan(s, len, sep, sep_len);
+    if (plan.kind == XR_STRING_CORE_SPLIT_INVALID || plan.count > (size_t) INT64_MAX)
+        return XR_NULL_VAL;
+
+    XrValue arr = xrt_array_new((int64_t) plan.count);
+    XrtStringSplitCtx ctx = {arr};
+    size_t emitted = xr_string_core_split_each(s, len, sep, sep_len, xrt_str_split_emit, &ctx);
+    return emitted == plan.count ? arr : XR_NULL_VAL;
+}
+
 /* String 1-arg method dispatch. */
 static inline XrValue xrt_str_method_1(const char *s, int64_t slen, XrValue recv, int sym,
                                        XrValue arg0) {
-    if ((sym == XRT_SYM_CONTAINS || sym == XRT_SYM_INCLUDES) && XR_IS_STR(arg0))
-        return XR_FROM_BOOL(strstr(s, xr_str_data(arg0)) ? 1 : 0);
+    if ((sym == XRT_SYM_CONTAINS || sym == XRT_SYM_INCLUDES) && XR_IS_STR(arg0)) {
+        return XR_FROM_BOOL(xr_string_core_contains(s, (size_t) slen, xr_str_data(arg0),
+                                                    (size_t) xr_str_len(arg0)));
+    }
     if (sym == XRT_SYM_INDEXOF && XR_IS_STR(arg0)) {
-        const char *p = strstr(s, xr_str_data(arg0));
-        return XR_FROM_INT(p ? (int64_t) (p - s) : -1);
+        return XR_FROM_INT((int64_t) xr_string_core_index_of(s, (size_t) slen, xr_str_data(arg0),
+                                                             (size_t) xr_str_len(arg0)));
     }
     if (sym == XRT_SYM_SLICE && arg0.tag == XR_TAG_I64) {
-        int64_t start = arg0.i;
-        if (start < 0)
-            start += slen;
-        if (start < 0)
-            start = 0;
-        if (start >= slen)
-            return xrt_str_alloc(0);
-        int64_t rlen = slen - start;
-        XrValue sv = xrt_str_alloc((size_t) rlen);
-        memcpy(xr_str_buf(sv), s + start, (size_t) rlen);
-        xr_str_buf(sv)[rlen] = 0;
-        return sv;
+        XrStringCoreSlice slice = xr_string_core_range_slice(s, (size_t) slen, arg0.i, slen);
+        return xrt_str_from_core_slice(slice);
     }
     if (sym == XRT_SYM_STARTSWITH && XR_IS_STR(arg0)) {
         const char *p = xr_str_data(arg0);
         size_t plen = (size_t) xr_str_len(arg0);
-        return XR_FROM_BOOL((size_t) slen >= plen && memcmp(s, p, plen) == 0);
+        return XR_FROM_BOOL(xr_string_core_starts_with(s, (size_t) slen, p, plen));
     }
     if (sym == XRT_SYM_ENDSWITH && XR_IS_STR(arg0)) {
         const char *p = xr_str_data(arg0);
         size_t plen = (size_t) xr_str_len(arg0);
-        return XR_FROM_BOOL((size_t) slen >= plen && memcmp(s + slen - plen, p, plen) == 0);
+        return XR_FROM_BOOL(xr_string_core_ends_with(s, (size_t) slen, p, plen));
     }
     if (sym == XRT_SYM_CHARAT && arg0.tag == XR_TAG_I64) {
-        int64_t idx = arg0.i;
-        if (idx < 0 || idx >= slen)
-            return xrt_str_alloc(0);
-        XrValue sv = xrt_str_alloc(1);
-        xr_str_buf(sv)[0] = s[idx];
-        xr_str_buf(sv)[1] = 0;
-        return sv;
+        XrStringCoreSlice slice = xr_string_core_utf8_char_slice_at(s, (size_t) slen, arg0.i);
+        return slice.len == 0 ? XR_NULL_VAL : xrt_str_from_core_slice(slice);
     }
     if (sym == XRT_SYM_CONCAT && XR_IS_STR(arg0)) {
         const char *s2 = xr_str_data(arg0);
@@ -409,119 +446,44 @@ static inline XrValue xrt_str_method_1(const char *s, int64_t slen, XrValue recv
         return sv;
     }
     if (sym == XRT_SYM_LASTINDEXOF && XR_IS_STR(arg0)) {
-        const char *needle = xr_str_data(arg0);
-        size_t nlen = (size_t) xr_str_len(arg0);
-        if (nlen == 0)
-            return XR_FROM_INT(slen);
-        for (int64_t i = slen - (int64_t) nlen; i >= 0; i--) {
-            if (memcmp(s + i, needle, nlen) == 0)
-                return XR_FROM_INT(i);
-        }
-        return XR_FROM_INT(-1);
+        return XR_FROM_INT((int64_t) xr_string_core_last_index_of(
+            s, (size_t) slen, xr_str_data(arg0), (size_t) xr_str_len(arg0)));
     }
     if (sym == XRT_SYM_SPLIT && XR_IS_STR(arg0)) {
         const char *sep = xr_str_data(arg0);
         size_t seplen = (size_t) xr_str_len(arg0);
-        XrValue arr = xrt_array_new(4);
-        if (seplen == 0) {
-            /* split by char */
-            for (int64_t i = 0; i < slen; i++) {
-                XrValue ch = xrt_str_alloc(1);
-                xr_str_buf(ch)[0] = s[i];
-                xr_str_buf(ch)[1] = 0;
-                xrt_array_push(arr, ch);
-            }
-        } else {
-            const char *cur = s;
-            while (1) {
-                const char *found = strstr(cur, sep);
-                if (!found) {
-                    size_t tail = (size_t) (s + slen - cur);
-                    XrValue sv = xrt_str_alloc(tail);
-                    memcpy(xr_str_buf(sv), cur, tail);
-                    xrt_array_push(arr, sv);
-                    break;
-                }
-                size_t part = (size_t) (found - cur);
-                XrValue sv = xrt_str_alloc(part);
-                memcpy(xr_str_buf(sv), cur, part);
-                xr_str_buf(sv)[part] = 0;
-                xrt_array_push(arr, sv);
-                cur = found + seplen;
-            }
-        }
-        return arr;
+        return xrt_str_split(s, slen, sep, seplen);
     }
     if (sym == XRT_SYM_REPEAT && arg0.tag == XR_TAG_I64) {
-        int64_t n = arg0.i;
-        if (n <= 0)
+        XrStringCoreRepeatPlan plan = xr_string_core_repeat_plan(s, (size_t) slen, arg0.i);
+        if (plan.kind == XR_STRING_CORE_REPEAT_INVALID)
+            return XR_NULL_VAL;
+        if (plan.kind == XR_STRING_CORE_REPEAT_EMPTY)
             return xrt_str_alloc(0);
-        size_t rlen = (size_t) (slen * n);
-        XrValue sv = xrt_str_alloc(rlen);
-        char *r = xr_str_buf(sv);
-        for (int64_t i = 0; i < n; i++)
-            memcpy(r + i * slen, s, (size_t) slen);
-        r[rlen] = 0;
+        if (plan.kind == XR_STRING_CORE_REPEAT_ORIGINAL)
+            return recv;
+        XrValue sv = xrt_str_alloc(plan.len);
+        xr_string_core_repeat_write(xr_str_buf(sv), s, (size_t) slen, arg0.i);
         return sv;
     }
-    if (sym == XRT_SYM_REPLACE && XR_IS_STR(arg0)) {
-        /* replace(old) with empty string — 1-arg form */
-        const char *old_s = xr_str_data(arg0);
-        const char *found = strstr(s, old_s);
-        if (!found)
+    if ((sym == XRT_SYM_PAD_START || sym == XRT_SYM_PAD_END) && arg0.tag == XR_TAG_I64) {
+        XrStringCorePadPlan plan = xr_string_core_pad_plan(s, (size_t) slen, arg0.i, NULL, 0);
+        if (plan.kind == XR_STRING_CORE_PAD_INVALID || plan.kind == XR_STRING_CORE_PAD_ORIGINAL)
             return recv;
-        size_t olen = (size_t) xr_str_len(arg0);
-        size_t rlen = (size_t) slen - olen;
-        XrValue sv = xrt_str_alloc(rlen);
-        char *r = xr_str_buf(sv);
-        size_t pre = (size_t) (found - s);
-        memcpy(r, s, pre);
-        memcpy(r + pre, found + olen, (size_t) slen - pre - olen);
-        r[rlen] = 0;
+        XrValue sv = xrt_str_alloc(plan.len);
+        xr_string_core_pad_write(xr_str_buf(sv), s, (size_t) slen, plan,
+                                 sym == XRT_SYM_PAD_START ? XR_STRING_CORE_PAD_START
+                                                          : XR_STRING_CORE_PAD_END);
         return sv;
     }
     if (sym == XRT_SYM_BYTE_AT && arg0.tag == XR_TAG_I64) {
-        int64_t idx = arg0.i;
-        if (idx < 0 || idx >= slen)
-            return XR_NULL_VAL;
-        XrValue sv = xrt_str_alloc(1);
-        xr_str_buf(sv)[0] = s[idx];
-        xr_str_buf(sv)[1] = 0;
-        return sv;
+        XrStringCoreSlice slice = xr_string_core_byte_slice_at(s, (size_t) slen, arg0.i);
+        return slice.len == 0 ? XR_NULL_VAL : xrt_str_from_core_slice(slice);
     }
     if (sym == XRT_SYM_CODEPOINT_AT && arg0.tag == XR_TAG_I64) {
-        int64_t target = arg0.i;
-        if (target < 0)
-            return XR_FROM_INT(-1);
-        const unsigned char *p = (const unsigned char *) s;
-        const unsigned char *end = p + slen;
-        for (int64_t char_index = 0; p < end; char_index++) {
-            int64_t remaining = (int64_t) (end - p);
-            uint32_t cp = p[0];
-            int advance = 1;
-            if ((p[0] & 0x80u) == 0) {
-                cp = p[0];
-            } else if ((p[0] & 0xE0u) == 0xC0u && remaining >= 2 && (p[1] & 0xC0u) == 0x80u) {
-                cp = ((uint32_t) (p[0] & 0x1Fu) << 6) | (uint32_t) (p[1] & 0x3Fu);
-                advance = 2;
-            } else if ((p[0] & 0xF0u) == 0xE0u && remaining >= 3 && (p[1] & 0xC0u) == 0x80u &&
-                       (p[2] & 0xC0u) == 0x80u) {
-                cp = ((uint32_t) (p[0] & 0x0Fu) << 12) | ((uint32_t) (p[1] & 0x3Fu) << 6) |
-                     (uint32_t) (p[2] & 0x3Fu);
-                advance = 3;
-            } else if ((p[0] & 0xF8u) == 0xF0u && remaining >= 4 && (p[1] & 0xC0u) == 0x80u &&
-                       (p[2] & 0xC0u) == 0x80u && (p[3] & 0xC0u) == 0x80u) {
-                cp = ((uint32_t) (p[0] & 0x07u) << 18) | ((uint32_t) (p[1] & 0x3Fu) << 12) |
-                     ((uint32_t) (p[2] & 0x3Fu) << 6) | (uint32_t) (p[3] & 0x3Fu);
-                advance = 4;
-            } else {
-                cp = 0xFFFD;
-            }
-            if (char_index == target)
-                return XR_FROM_INT(cp);
-            p += advance;
-        }
-        return XR_FROM_INT(-1);
+        uint32_t cp = 0;
+        return xr_string_core_codepoint_at(s, (size_t) slen, arg0.i, &cp) ? XR_FROM_INT(cp)
+                                                                          : XR_FROM_INT(-1);
     }
     return (XrValue) {.i = 0, .tag = XR_TAG_NULL};
 }
@@ -547,19 +509,12 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
         if (sym == XRT_SYM_UNSHIFT) {
             xrt_array_push(recv, XR_NULL_VAL);
             a = (xrt_array_t *) recv.ptr;
-            for (int64_t i = a->length - 1; i > 0; i--) {
-                XrValue prev = xr_typed_get(a->data, (int32_t) (i - 1), a->elem_type);
-                xr_typed_set(a->data, (int32_t) i, prev, a->elem_type);
-            }
+            (void) xr_array_core_shift_right_one(a->data, a->length - 1, a->elem_size);
             xr_typed_set(a->data, 0, arg0, a->elem_type);
             return XR_NULL_VAL;
         }
         if (sym == XRT_SYM_FILL) {
-            if (xrt_array_fill_typed_fast(a, arg0))
-                return recv;
-            for (int64_t i = 0; i < a->length; i++)
-                xr_typed_set(a->data, (int32_t) i, arg0, a->elem_type);
-            return recv;
+            return xrt_array_fill_range_value(recv, arg0, 0, a->length);
         }
         if (sym == XRT_SYM_INDEXOF) {
             int handled;
@@ -585,46 +540,14 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
             }
             return XR_FROM_BOOL(0);
         }
-        if (sym == XRT_SYM_JOIN && XR_IS_STR(arg0)) {
-            const char *sep = xr_str_data(arg0);
-            size_t seplen = (size_t) xr_str_len(arg0);
-            size_t total = 0;
-            for (int64_t i = 0; i < a->length; i++) {
-                XrValue sv = xrt_tostring(xr_typed_get(a->data, (int32_t) i, a->elem_type), 0);
-                total += (size_t) xr_str_len(sv);
-                if (i < a->length - 1)
-                    total += seplen;
-            }
-            XrValue result = xrt_str_alloc(total);
-            char *r = xr_str_buf(result);
-            size_t pos = 0;
-            for (int64_t i = 0; i < a->length; i++) {
-                XrValue sv = xrt_tostring(xr_typed_get(a->data, (int32_t) i, a->elem_type), 0);
-                const char *p = xr_str_data(sv);
-                size_t plen = (size_t) xr_str_len(sv);
-                memcpy(r + pos, p, plen);
-                pos += plen;
-                if (i < a->length - 1) {
-                    memcpy(r + pos, sep, seplen);
-                    pos += seplen;
-                }
-            }
-            r[total] = 0;
-            return result;
-        }
+        if (sym == XRT_SYM_JOIN && XR_IS_STR(arg0))
+            return xrt_array_join_value(a, arg0);
         if (sym == XRT_SYM_SLICE && arg0.tag == XR_TAG_I64) {
-            int64_t start = arg0.i;
-            if (start < 0)
-                start += a->length;
-            if (start < 0)
-                start = 0;
-            return xrt_array_slice_view(recv, start, a->length);
+            return xrt_array_slice_view(recv, arg0.i, a->length);
         }
         /* Higher-order callbacks are AOT closures. */
         if (arg0.tag == XR_TAG_CLOSURE) {
             xrt_closure_t *cl = (xrt_closure_t *) arg0.ptr;
-            typedef XrValue (*xrt_fn1_t)(xrt_closure_t *, XrValue);
-            xrt_fn1_t fn = (xrt_fn1_t) cl->fn;
             if (sym == XRT_SYM_SORT)
                 return xrt_array_sort(recv, cl);
             if (sym == XRT_SYM_MAP) {
@@ -633,11 +556,16 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
             if (sym == XRT_SYM_FILTER) {
                 return xrt_array_filter_typed(recv, arg0);
             }
-            if (sym == XRT_SYM_FOREACH) {
-                for (int64_t i = 0; i < a->length; i++)
-                    fn(cl, xr_typed_get(a->data, (int32_t) i, a->elem_type));
-                return XR_NULL_VAL;
-            }
+            if (sym == XRT_SYM_FOREACH)
+                return xrt_array_for_each_typed(recv, arg0);
+            if (sym == XRT_SYM_FIND)
+                return xrt_array_find_typed(recv, arg0);
+            if (sym == XRT_SYM_FINDINDEX)
+                return xrt_array_find_index_typed(recv, arg0);
+            if (sym == XRT_SYM_EVERY)
+                return xrt_array_every_typed(recv, arg0);
+            if (sym == XRT_SYM_SOME)
+                return xrt_array_some_typed(recv, arg0);
         }
     }
     if (XR_IS_MAP(recv)) {
@@ -651,7 +579,7 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
     }
     if (XR_IS_SET(recv)) {
         xrt_set_t *s = (xrt_set_t *) recv.ptr;
-        if (sym == XRT_SYM_SET) {
+        if (sym == XRT_SYM_ADD || sym == XRT_SYM_SET) {
             if ((s->flags & XR_SET_FLAG_WEAK) && !xrt_weak_value_is_heap_object(arg0))
                 return XR_NULL_VAL;
             (void) xrt_set_add(s, arg0);
@@ -664,6 +592,8 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
     }
     if (recv.tag == XR_TAG_RANGE)
         return xrt_range_method_1(recv, sym, arg0);
+    if (recv.tag == XR_TAG_DATETIME)
+        return xrt_datetime_method_1(recv, sym, arg0);
     if (recv.tag == XR_TAG_F64 && sym == XRT_SYM_POW) {
         double exp = (arg0.tag == XR_TAG_F64) ? arg0.f : (double) arg0.i;
         return XR_FROM_FLOAT(pow(recv.f, exp));
@@ -671,7 +601,7 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
     /* toFixed(digits). */
     if (recv.tag == XR_TAG_F64 && sym == XRT_SYM_TOFIXED && arg0.tag == XR_TAG_I64) {
         char buf[64];
-        snprintf(buf, sizeof(buf), "%.*f", (int) arg0.i, recv.f);
+        (void) xr_numeric_core_format_fixed(buf, sizeof(buf), recv.f, arg0.i);
         return xrt_str_from_cstr(buf);
     }
     /* max/min accept int or float operands. */
@@ -693,119 +623,75 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
 }
 
 static inline XrValue xrt_method_2(XrValue recv, int sym, XrValue arg0, XrValue arg1) {
+    if (recv.tag == XR_TAG_DATETIME)
+        return xrt_datetime_method_2(recv, sym, arg0, arg1);
     if (XR_IS_STR(recv) && (sym == XRT_SYM_SLICE || sym == XRT_SYM_SUBSTRING)) {
         const char *s = xr_str_data(recv);
-        int64_t slen = xr_str_len(recv);
+        size_t slen = (size_t) xr_str_len(recv);
         int64_t start = (arg0.tag == XR_TAG_I64) ? arg0.i : 0;
-        int64_t end = (arg1.tag == XR_TAG_I64) ? arg1.i : slen;
-        if (start < 0)
-            start += slen;
-        if (end < 0)
-            end += slen;
-        if (start < 0)
-            start = 0;
-        if (end > slen)
-            end = slen;
-        if (start >= end)
-            return xrt_str_alloc(0);
-        int64_t rlen = end - start;
-        XrValue sv = xrt_str_alloc((size_t) rlen);
-        memcpy(xr_str_buf(sv), s + start, (size_t) rlen);
-        xr_str_buf(sv)[rlen] = 0;
-        return sv;
+        int64_t end = (arg1.tag == XR_TAG_I64) ? arg1.i : xr_string_core_len_i64(slen);
+        XrStringCoreSlice slice = (sym == XRT_SYM_SUBSTRING)
+                                      ? xr_string_core_substring_slice(s, slen, start, end)
+                                      : xr_string_core_range_slice(s, slen, start, end);
+        return xrt_str_from_core_slice(slice);
     }
     if (XR_IS_STR(recv) && sym == XRT_SYM_REPLACEALL && XR_IS_STR(arg0) && XR_IS_STR(arg1)) {
         const char *s = xr_str_data(recv);
-        int64_t slen = xr_str_len(recv);
         const char *old_s = xr_str_data(arg0);
         const char *new_s = xr_str_data(arg1);
+        size_t slen = (size_t) xr_str_len(recv);
         size_t olen = (size_t) xr_str_len(arg0), nlen = (size_t) xr_str_len(arg1);
-        if (olen == 0)
+        XrStringCoreReplacePlan plan =
+            xr_string_core_replace_plan(s, slen, old_s, olen, new_s, nlen, true);
+        if (plan.kind == XR_STRING_CORE_REPLACE_INVALID)
+            return XR_NULL_VAL;
+        if (plan.kind == XR_STRING_CORE_REPLACE_ORIGINAL)
             return recv;
-        /* Count occurrences before allocating the result. */
-        int count = 0;
-        const char *p = s;
-        while ((p = strstr(p, old_s)) != NULL) {
-            count++;
-            p += olen;
-        }
-        if (count == 0)
-            return recv;
-        size_t rlen = (size_t) slen + count * (nlen - olen);
-        XrValue sv = xrt_str_alloc(rlen);
-        char *r = xr_str_buf(sv);
-        const char *cur = s;
-        size_t pos = 0;
-        while ((p = strstr(cur, old_s)) != NULL) {
-            size_t pre = (size_t) (p - cur);
-            memcpy(r + pos, cur, pre);
-            pos += pre;
-            memcpy(r + pos, new_s, nlen);
-            pos += nlen;
-            cur = p + olen;
-        }
-        memcpy(r + pos, cur, (size_t) (s + slen - cur));
-        r[rlen] = 0;
+        XrValue sv = xrt_str_alloc(plan.len);
+        xr_string_core_replace_write(xr_str_buf(sv), s, slen, old_s, olen, new_s, nlen, plan, true);
         return sv;
     }
     if (XR_IS_STR(recv) && (sym == XRT_SYM_PAD_START || sym == XRT_SYM_PAD_END) &&
         arg0.tag == XR_TAG_I64 && XR_IS_STR(arg1)) {
         const char *s = xr_str_data(recv);
-        int64_t slen = xr_str_len(recv);
-        int64_t target = arg0.i;
-        if (target <= slen)
-            return recv;
         const char *pad = xr_str_data(arg1);
-        size_t plen = (size_t) xr_str_len(arg1);
-        if (plen == 0)
+        XrStringCorePadPlan plan = xr_string_core_pad_plan(s, (size_t) xr_str_len(recv), arg0.i,
+                                                           pad, (size_t) xr_str_len(arg1));
+        if (plan.kind == XR_STRING_CORE_PAD_INVALID || plan.kind == XR_STRING_CORE_PAD_ORIGINAL)
             return recv;
-        int64_t fill = target - slen;
-        XrValue sv = xrt_str_alloc((size_t) target);
-        char *r = xr_str_buf(sv);
-        if (sym == XRT_SYM_PAD_START) {
-            for (int64_t i = 0; i < fill; i++)
-                r[i] = pad[i % plen];
-            memcpy(r + fill, s, (size_t) slen);
-        } else {
-            memcpy(r, s, (size_t) slen);
-            for (int64_t i = 0; i < fill; i++)
-                r[slen + i] = pad[i % plen];
-        }
-        r[target] = 0;
+        XrValue sv = xrt_str_alloc(plan.len);
+        xr_string_core_pad_write(xr_str_buf(sv), s, (size_t) xr_str_len(recv), plan,
+                                 sym == XRT_SYM_PAD_START ? XR_STRING_CORE_PAD_START
+                                                          : XR_STRING_CORE_PAD_END);
         return sv;
     }
     if (XR_IS_STR(recv) && sym == XRT_SYM_REPLACE && XR_IS_STR(arg0) && XR_IS_STR(arg1)) {
         const char *s = xr_str_data(recv);
-        int64_t slen = xr_str_len(recv);
         const char *old_s = xr_str_data(arg0);
         const char *new_s = xr_str_data(arg1);
-        const char *found = strstr(s, old_s);
-        if (!found)
-            return recv;
+        size_t slen = (size_t) xr_str_len(recv);
         size_t olen = (size_t) xr_str_len(arg0), nlen = (size_t) xr_str_len(arg1);
-        size_t rlen = (size_t) slen - olen + nlen;
-        XrValue sv = xrt_str_alloc(rlen);
-        char *r = xr_str_buf(sv);
-        size_t pre = (size_t) (found - s);
-        memcpy(r, s, pre);
-        memcpy(r + pre, new_s, nlen);
-        memcpy(r + pre + nlen, found + olen, (size_t) slen - pre - olen);
-        r[rlen] = 0;
+        XrStringCoreReplacePlan plan =
+            xr_string_core_replace_plan(s, slen, old_s, olen, new_s, nlen, false);
+        if (plan.kind == XR_STRING_CORE_REPLACE_INVALID)
+            return XR_NULL_VAL;
+        if (plan.kind == XR_STRING_CORE_REPLACE_ORIGINAL)
+            return recv;
+        XrValue sv = xrt_str_alloc(plan.len);
+        xr_string_core_replace_write(xr_str_buf(sv), s, slen, old_s, olen, new_s, nlen, plan,
+                                     false);
         return sv;
     }
     if (XR_IS_ARRAY(recv) && sym == XRT_SYM_SLICE) {
         xrt_array_t *a = (xrt_array_t *) recv.ptr;
         int64_t start = (arg0.tag == XR_TAG_I64) ? arg0.i : 0;
         int64_t end = (arg1.tag == XR_TAG_I64) ? arg1.i : a->length;
-        if (start < 0)
-            start += a->length;
-        if (end < 0)
-            end += a->length;
-        if (start < 0)
-            start = 0;
-        if (end > a->length)
-            end = a->length;
         return xrt_array_slice_view(recv, start, end);
+    }
+    if (XR_IS_ARRAY(recv) && sym == XRT_SYM_FILL) {
+        xrt_array_t *a = (xrt_array_t *) recv.ptr;
+        int64_t start = (arg1.tag == XR_TAG_I64) ? arg1.i : 0;
+        return xrt_array_fill_range_value(recv, arg0, start, a->length);
     }
     if (XR_IS_ARRAY(recv) && sym == XRT_SYM_REDUCE && arg0.tag == XR_TAG_CLOSURE)
         return xrt_array_reduce_typed(recv, arg0, arg1);
@@ -819,6 +705,17 @@ static inline XrValue xrt_method_2(XrValue recv, int sym, XrValue arg0, XrValue 
         return (XrValue) {.i = 0, .tag = XR_TAG_NULL};
     }
     return (XrValue) {.i = 0, .tag = XR_TAG_NULL};
+}
+
+static inline XrValue xrt_method_3(XrValue recv, int sym, XrValue arg0, XrValue arg1,
+                                   XrValue arg2) {
+    if (XR_IS_ARRAY(recv) && sym == XRT_SYM_FILL) {
+        xrt_array_t *a = (xrt_array_t *) recv.ptr;
+        int64_t start = (arg1.tag == XR_TAG_I64) ? arg1.i : 0;
+        int64_t end = (arg2.tag == XR_TAG_I64) ? arg2.i : a->length;
+        return xrt_array_fill_range_value(recv, arg0, start, end);
+    }
+    return XR_NULL_VAL;
 }
 
 #include "xrt_getprop.inc.c"

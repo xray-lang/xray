@@ -15,6 +15,9 @@
 #include "xrt_coll.h"
 #include "xrt_value.h"
 #include "../base/xplatform.h"
+#include "../shared/xr_cstr_core.h"
+#include "../shared/xr_os_core.h"
+#include "../shared/xr_path_core.h"
 #ifndef _WIN32
 #include <errno.h>
 #endif
@@ -43,40 +46,16 @@ extern char **environ;
 #include <sys/sysinfo.h>
 #endif
 
-#ifndef XRT_OS_PATH_MAX
-#define XRT_OS_PATH_MAX 4096
-#endif
-
 static inline XrValue xrt_os_cstr_value(const char *s) {
     return s ? xrt_str_from_cstr(s) : XR_NULL_VAL;
 }
 
 static inline const char *xrt_os_platform_cstr(void) {
-#if defined(XR_OS_WINDOWS) || defined(_WIN64)
-    return "windows";
-#elif defined(XR_OS_MACOS) && defined(__MACH__)
-    return "darwin";
-#elif defined(XR_OS_LINUX)
-    return "linux";
-#elif defined(XR_OS_BSD)
-    return "freebsd";
-#else
-    return "unknown";
-#endif
+    return xr_os_core_platform();
 }
 
 static inline const char *xrt_os_arch_cstr(void) {
-#if defined(XR_ARCH_ARM64) || defined(_M_ARM64)
-    return "arm64";
-#elif defined(XR_ARCH_X86_64) || defined(_M_X64)
-    return "x64";
-#elif defined(XR_ARCH_X86) || defined(_M_IX86)
-    return "x86";
-#elif defined(XR_ARCH_ARM) || defined(_M_ARM)
-    return "arm";
-#else
-    return "unknown";
-#endif
+    return xr_os_core_arch();
 }
 
 static inline XrValue xrt_os_platform(void) {
@@ -88,19 +67,11 @@ static inline XrValue xrt_os_arch(void) {
 }
 
 static inline XrValue xrt_os_sep(void) {
-#ifdef XR_OS_WINDOWS
-    return xrt_str_from_cstr("\\");
-#else
-    return xrt_str_from_cstr("/");
-#endif
+    return xrt_str_from_cstr(xr_os_core_sep());
 }
 
 static inline XrValue xrt_os_eol(void) {
-#ifdef XR_OS_WINDOWS
-    return xrt_str_from_cstr("\r\n");
-#else
-    return xrt_str_from_cstr("\n");
-#endif
+    return xrt_str_from_cstr(xr_os_core_eol());
 }
 
 static inline XrValue xrt_os_str_slice_value(const char *s, size_t len) {
@@ -112,21 +83,14 @@ static inline XrValue xrt_os_str_slice_value(const char *s, size_t len) {
     return v;
 }
 
+static inline void *xrt_os_cstr_alloc(void *ctx, size_t size) {
+    (void) ctx;
+    return XRT_MALLOC(size);
+}
+
 static inline char *xrt_os_copy_cstr_arg(const char *data, int64_t len, char *stack,
                                          size_t stack_cap, char **owned_out) {
-    *owned_out = NULL;
-    if (!data || len < 0 || stack_cap == 0)
-        return NULL;
-    char *out = stack;
-    if ((size_t) len >= stack_cap) {
-        *owned_out = (char *) XRT_MALLOC((size_t) len + 1);
-        if (!*owned_out)
-            return NULL;
-        out = *owned_out;
-    }
-    memcpy(out, data, (size_t) len);
-    out[len] = '\0';
-    return out;
+    return xr_cstr_core_copy_arg(data, len, stack, stack_cap, xrt_os_cstr_alloc, NULL, owned_out);
 }
 
 static inline XrValue xrt_os_getenv(const char *name, int64_t len) {
@@ -182,28 +146,32 @@ static inline XrValue xrt_os_unsetenv(const char *name, int64_t len) {
     return XR_FROM_BOOL(ok);
 }
 
-static inline void xrt_os_environ_set_entry(xrt_map_t *map, const char *entry) {
-    const char *eq = entry ? strchr(entry, '=') : NULL;
-    if (!eq || eq == entry)
-        return;
-    XrValue key = xrt_os_str_slice_value(entry, (size_t) (eq - entry));
-    const char *value = eq + 1;
-    xrt_map_set(map, key, xrt_os_str_slice_value(value, strlen(value)));
+typedef struct XrtOsEnvironCtx {
+    xrt_map_t *map;
+} XrtOsEnvironCtx;
+
+static inline bool xrt_os_environ_add_entry(void *ctx, const char *key, size_t key_len,
+                                            const char *value, size_t value_len) {
+    XrtOsEnvironCtx *env = (XrtOsEnvironCtx *) ctx;
+    xrt_map_set(env->map, xrt_os_str_slice_value(key, key_len),
+                xrt_os_str_slice_value(value, value_len));
+    return true;
 }
 
 static inline XrValue xrt_os_environ(void) {
     XrValue map_value = xrt_map_new(64);
     xrt_map_t *map = (xrt_map_t *) map_value.ptr;
+    XrtOsEnvironCtx env_ctx = {map};
 #ifdef _WIN32
     LPCH env_block = GetEnvironmentStringsA();
     if (!env_block)
         return map_value;
     for (const char *p = env_block; *p; p += strlen(p) + 1)
-        xrt_os_environ_set_entry(map, p);
+        xr_os_core_environ_entry(p, xrt_os_environ_add_entry, &env_ctx);
     FreeEnvironmentStringsA(env_block);
 #else
     for (char **env = environ; env && *env; env++)
-        xrt_os_environ_set_entry(map, *env);
+        xr_os_core_environ_entry(*env, xrt_os_environ_add_entry, &env_ctx);
 #endif
     return map_value;
 }
@@ -236,15 +204,15 @@ static inline XrValue xrt_os_cpu_count(void) {
 #ifdef _WIN32
     SYSTEM_INFO si;
     GetSystemInfo(&si);
-    return XR_FROM_INT((int64_t) si.dwNumberOfProcessors);
+    return XR_FROM_INT(xr_os_core_cpu_count((long) si.dwNumberOfProcessors));
 #else
     long n = sysconf(_SC_NPROCESSORS_ONLN);
-    return XR_FROM_INT((int64_t) (n > 0 ? n : 1));
+    return XR_FROM_INT(xr_os_core_cpu_count(n));
 #endif
 }
 
 static inline XrValue xrt_os_getcwd(void) {
-    char buf[XRT_OS_PATH_MAX];
+    char buf[XR_PATH_CORE_MAX_PATH];
 #ifdef _WIN32
     DWORD n = GetCurrentDirectoryA((DWORD) sizeof(buf), buf);
     if (n == 0 || n >= (DWORD) sizeof(buf))
@@ -257,7 +225,7 @@ static inline XrValue xrt_os_getcwd(void) {
 }
 
 static inline XrValue xrt_os_chdir(const char *path, int64_t len) {
-    char stack_path[XRT_OS_PATH_MAX];
+    char stack_path[XR_PATH_CORE_MAX_PATH];
     char *owned = NULL;
     char *dir = xrt_os_copy_cstr_arg(path, len, stack_path, sizeof(stack_path), &owned);
     bool ok = false;
@@ -288,53 +256,43 @@ static inline XrValue xrt_os_hostname(void) {
     return xrt_os_cstr_value(buf);
 }
 
+static inline const char *xrt_os_core_getenv(void *ctx, const char *name) {
+    (void) ctx;
+    return getenv(name);
+}
+
 static inline XrValue xrt_os_tmpdir(void) {
-    const char *tmpdir = getenv("TMPDIR");
-    if (!tmpdir)
-        tmpdir = getenv("TMP");
-    if (!tmpdir)
-        tmpdir = getenv("TEMP");
-    if (!tmpdir) {
+    return xrt_os_cstr_value(xr_os_core_tmpdir(xrt_os_core_getenv, NULL));
+}
+
+static inline const char *xrt_os_system_username(void *ctx) {
+    (void) ctx;
 #ifdef _WIN32
-        tmpdir = "C:\\Windows\\Temp";
+    return NULL;
 #else
-        tmpdir = "/tmp";
+    struct passwd *pw = getpwuid(getuid());
+    return (pw && pw->pw_name) ? pw->pw_name : NULL;
 #endif
-    }
-    return xrt_os_cstr_value(tmpdir);
+}
+
+static inline const char *xrt_os_system_homedir(void *ctx) {
+    (void) ctx;
+#ifdef _WIN32
+    return NULL;
+#else
+    struct passwd *pw = getpwuid(getuid());
+    return (pw && pw->pw_dir) ? pw->pw_dir : NULL;
+#endif
 }
 
 static inline XrValue xrt_os_username(void) {
-#ifdef _WIN32
-    const char *user = getenv("USERNAME");
-    if (!user)
-        user = getenv("USER");
-    if (!user)
-        user = getenv("LOGNAME");
-    return xrt_os_cstr_value(user);
-#else
-    struct passwd *pw = getpwuid(getuid());
-    if (pw && pw->pw_name)
-        return xrt_os_cstr_value(pw->pw_name);
-    const char *user = getenv("USER");
-    if (!user)
-        user = getenv("LOGNAME");
-    return xrt_os_cstr_value(user);
-#endif
+    return xrt_os_cstr_value(
+        xr_os_core_username(xrt_os_system_username, NULL, xrt_os_core_getenv, NULL));
 }
 
 static inline XrValue xrt_os_homedir(void) {
-    const char *home = getenv("HOME");
-#ifdef _WIN32
-    if (!home)
-        home = getenv("USERPROFILE");
-    return xrt_os_cstr_value(home);
-#else
-    if (home)
-        return xrt_os_cstr_value(home);
-    struct passwd *pw = getpwuid(getuid());
-    return pw ? xrt_os_cstr_value(pw->pw_dir) : XR_NULL_VAL;
-#endif
+    return xrt_os_cstr_value(
+        xr_os_core_homedir(xrt_os_core_getenv, NULL, xrt_os_system_homedir, NULL));
 }
 
 static inline XrValue xrt_os_ppid(void) {
@@ -380,18 +338,18 @@ static inline XrValue xrt_os_total_memory(void) {
     MEMORYSTATUSEX statex;
     statex.dwLength = sizeof(statex);
     if (GlobalMemoryStatusEx(&statex))
-        return XR_FROM_INT((int64_t) statex.ullTotalPhys);
+        return XR_FROM_INT(xr_os_core_memory_bytes((uint64_t) statex.ullTotalPhys, 1));
     return XR_FROM_INT(0);
 #elif defined(__APPLE__)
     int64_t memsize = 0;
     size_t len = sizeof(memsize);
     if (sysctlbyname("hw.memsize", &memsize, &len, NULL, 0) == 0)
-        return XR_FROM_INT(memsize);
+        return XR_FROM_INT(memsize > 0 ? xr_os_core_memory_bytes((uint64_t) memsize, 1) : 0);
     return XR_FROM_INT(0);
 #elif defined(__linux__)
     struct sysinfo si;
     if (sysinfo(&si) == 0)
-        return XR_FROM_INT((int64_t) si.totalram * (int64_t) si.mem_unit);
+        return XR_FROM_INT(xr_os_core_memory_bytes((uint64_t) si.totalram, (uint64_t) si.mem_unit));
     return XR_FROM_INT(0);
 #else
     return XR_FROM_INT(0);
@@ -403,24 +361,34 @@ static inline XrValue xrt_os_free_memory(void) {
     MEMORYSTATUSEX statex;
     statex.dwLength = sizeof(statex);
     if (GlobalMemoryStatusEx(&statex))
-        return XR_FROM_INT((int64_t) statex.ullAvailPhys);
+        return XR_FROM_INT(xr_os_core_memory_bytes((uint64_t) statex.ullAvailPhys, 1));
     return XR_FROM_INT(0);
 #elif defined(__APPLE__)
     vm_statistics64_data_t vm_stat;
     mach_msg_type_number_t count = HOST_VM_INFO64_COUNT;
     if (host_statistics64(mach_host_self(), HOST_VM_INFO64, (host_info64_t) &vm_stat, &count) ==
         KERN_SUCCESS)
-        return XR_FROM_INT((int64_t) (vm_stat.free_count + vm_stat.inactive_count) *
-                           (int64_t) vm_page_size);
+        return XR_FROM_INT(xr_os_core_memory_bytes((uint64_t) vm_stat.free_count +
+                                                       (uint64_t) vm_stat.inactive_count,
+                                                   (uint64_t) vm_page_size));
     return XR_FROM_INT(0);
 #elif defined(__linux__)
     struct sysinfo si;
     if (sysinfo(&si) == 0)
-        return XR_FROM_INT((int64_t) si.freeram * (int64_t) si.mem_unit);
+        return XR_FROM_INT(xr_os_core_memory_bytes((uint64_t) si.freeram, (uint64_t) si.mem_unit));
     return XR_FROM_INT(0);
 #else
     return XR_FROM_INT(0);
 #endif
+}
+
+static inline double xrt_os_monotonic_uptime_seconds(void) {
+#if defined(XR_OS_POSIX)
+    struct timespec ts;
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) == 0)
+        return xr_os_core_seconds_from_nsec((int64_t) ts.tv_sec, (int64_t) ts.tv_nsec);
+#endif
+    return 0.0;
 }
 
 static inline XrValue xrt_os_uptime(void) {
@@ -431,36 +399,36 @@ static inline XrValue xrt_os_uptime(void) {
     size_t len = sizeof(boottime);
     if (sysctlbyname("kern.boottime", &boottime, &len, NULL, 0) == 0) {
         time_t now = time(NULL);
-        return XR_FROM_FLOAT((double) (now - boottime.tv_sec));
+        return XR_FROM_FLOAT(
+            xr_os_core_uptime_from_boot_seconds((int64_t) now, (int64_t) boottime.tv_sec));
     }
-    return XR_FROM_FLOAT(0.0);
+    return XR_FROM_FLOAT(xrt_os_monotonic_uptime_seconds());
 #elif defined(__linux__)
     struct sysinfo si;
     if (sysinfo(&si) == 0)
         return XR_FROM_FLOAT((double) si.uptime);
-    return XR_FROM_FLOAT(0.0);
+    return XR_FROM_FLOAT(xrt_os_monotonic_uptime_seconds());
 #else
     return XR_FROM_FLOAT(0.0);
 #endif
 }
 
 static inline XrValue xrt_os_loadavg(void) {
-    double avg[3] = {0.0, 0.0, 0.0};
+    double avg[3];
+    xr_os_core_loadavg_zero(avg);
 #ifdef _WIN32
     /* Windows has no load average equivalent in the VM stdlib today. */
 #elif defined(__linux__)
     struct sysinfo si;
     if (sysinfo(&si) == 0) {
-        avg[0] = (double) si.loads[0] / 65536.0;
-        avg[1] = (double) si.loads[1] / 65536.0;
-        avg[2] = (double) si.loads[2] / 65536.0;
+        xr_os_core_loadavg_set(avg, xr_os_core_loadavg_from_fixed((uint64_t) si.loads[0]),
+                               xr_os_core_loadavg_from_fixed((uint64_t) si.loads[1]),
+                               xr_os_core_loadavg_from_fixed((uint64_t) si.loads[2]));
     }
 #else
-    if (getloadavg(avg, 3) < 0) {
-        avg[0] = 0.0;
-        avg[1] = 0.0;
-        avg[2] = 0.0;
-    }
+    double probed[3];
+    if (getloadavg(probed, 3) == 3)
+        xr_os_core_loadavg_set(avg, probed[0], probed[1], probed[2]);
 #endif
     XrValue arr = xrt_array_new(3);
     xrt_array_push(arr, XR_FROM_FLOAT(avg[0]));
@@ -501,7 +469,7 @@ static inline XrValue xrt_os_sleep(XrValue ms_value) {
 
 static inline bool xrt_os_exec_buffer_init(char **buf, size_t *len, size_t *cap) {
     *len = 0;
-    *cap = 4096;
+    *cap = XR_OS_CORE_EXEC_INITIAL_CAP;
     *buf = (char *) XRT_MALLOC(*cap);
     if (!*buf) {
         *cap = 0;
@@ -513,35 +481,29 @@ static inline bool xrt_os_exec_buffer_init(char **buf, size_t *len, size_t *cap)
 
 static inline bool xrt_os_exec_buffer_append(char **buf, size_t *len, size_t *cap, const char *data,
                                              size_t n) {
-    if (!buf || !len || !cap || !data)
+    if (!buf || !*buf || !len || !cap || (!data && n > 0))
         return false;
-    if (*len + n + 1 > *cap) {
-        size_t new_cap = *cap ? *cap : 4096;
-        while (*len + n + 1 > new_cap) {
-            size_t next = new_cap * 2;
-            if (next <= new_cap)
-                return false;
-            new_cap = next;
-        }
+    size_t new_cap = 0;
+    if (!xr_os_core_exec_buffer_next_cap(*len, *cap, n, &new_cap))
+        return false;
+    if (new_cap > *cap) {
         char *grown = (char *) XRT_REALLOC(*buf, new_cap);
         if (!grown)
             return false;
         *buf = grown;
         *cap = new_cap;
     }
-    memcpy(*buf + *len, data, n);
-    *len += n;
-    (*buf)[*len] = '\0';
-    return true;
+    return xr_os_core_exec_buffer_append_raw(*buf, len, *cap, data, n);
 }
 
 static inline XrValue xrt_os_exec_result(const char *stdout_buf, const char *stderr_buf,
                                          int64_t exit_code) {
-    static const char *const fields[] = {"stdout", "stderr", "exitCode"};
-    XrValue obj = xrt_json_new_named(3, fields);
-    xrt_json_set_field(obj, 0, xrt_os_cstr_value(stdout_buf ? stdout_buf : ""));
-    xrt_json_set_field(obj, 1, xrt_os_cstr_value(stderr_buf ? stderr_buf : ""));
-    xrt_json_set_field(obj, 2, XR_FROM_INT(exit_code));
+    XrValue obj = xrt_json_new_named(XR_OS_CORE_EXEC_FIELD_COUNT, XR_OS_CORE_EXEC_FIELD_NAMES);
+    xrt_json_set_field(obj, XR_OS_CORE_EXEC_STDOUT,
+                       xrt_os_cstr_value(stdout_buf ? stdout_buf : ""));
+    xrt_json_set_field(obj, XR_OS_CORE_EXEC_STDERR,
+                       xrt_os_cstr_value(stderr_buf ? stderr_buf : ""));
+    xrt_json_set_field(obj, XR_OS_CORE_EXEC_EXIT_CODE, XR_FROM_INT(exit_code));
     return obj;
 }
 
@@ -704,7 +666,7 @@ static inline XrValue xrt_os_exec(const char *cmd_data, int64_t cmd_len) {
         XRT_FREE(output);
         return XR_NULL_VAL;
     }
-    int64_t exit_code = raw_status < 0 ? -1 : (raw_status & 0xFF);
+    int64_t exit_code = xr_os_core_exec_windows_exit_code(raw_status);
     XrValue result = xrt_os_exec_result(output, "", exit_code);
     XRT_FREE(output);
     return result;

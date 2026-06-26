@@ -104,6 +104,8 @@ XR_FUNC XiFunc *xi_lower_func_impl(struct AstNode *func_node, struct XaAnalyzer 
 XR_FUNC XiValue *xi_lower_expr(XiLower *l, struct AstNode *node);
 XR_FUNC void xi_lower_stmt(XiLower *l, struct AstNode *node);
 XR_FUNC struct XrType *xi_lower_node_type(XiLower *l, struct AstNode *node);
+XR_FUNC XiValue *xi_lower_checktype_for_type(XiLower *l, struct AstNode *node, XiValue *val,
+                                             struct XrType *target_type);
 
 /* ========== Cross-boundary helpers (xi_lower_expr.c, called from stmt) ========== */
 

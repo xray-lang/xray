@@ -9,6 +9,8 @@ fn test_byte_at() {
     assert_eq(s.byteAt(1), "C")
     assert_eq(s.byteAt(2), "G")
     assert_eq(s.byteAt(3), "T")
+    assert_eq(s.byteAt(-1), "T")
+    assert_eq(s.byteAt(-4), "A")
 }
 
 @test
@@ -16,6 +18,7 @@ fn test_byte_at_out_of_bounds() {
     let s = "ACGT"
     assert_eq(s.byteAt(4), null)
     assert_eq(s.byteAt(100), null)
+    assert_eq(s.byteAt(-5), null)
 }
 
 // ===== byteAt + ord on raw octets (binary I/O) =====

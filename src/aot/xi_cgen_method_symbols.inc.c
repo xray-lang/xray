@@ -19,7 +19,6 @@ static int cg_method_sym(const char *name) {
 #include "../ir/xi_method_sym.def"
 #undef XI_METHOD_SYM
         {"size", XRT_SYM_SIZE},
-        {"add", XRT_SYM_SET},
     };
     for (size_t i = 0; i < sizeof(map) / sizeof(map[0]); i++) {
         if (strcmp(name, map[i].name) == 0)

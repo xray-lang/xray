@@ -29,10 +29,17 @@
 #include "../../src/runtime/class/xclass.h"
 #include "../../src/runtime/class/xclass_builder.h"
 #include "../../src/runtime/class/xclass_system.h"
+#include "../../src/shared/xr_regex_core.h"
 #include "../../src/runtime/xisolate_internal.h"
 #include "../../src/runtime/xisolate_api.h"
 #include "../../src/coro/xcoroutine.h"
 #include "../../src/runtime/mem/xcoro_heap.h"
+
+_Static_assert((int) XR_RE_IGNORECASE == (int) XR_REGEX_CORE_FLAG_IGNORECASE,
+               "regex ignorecase flag drift");
+_Static_assert((int) XR_RE_MULTILINE == (int) XR_REGEX_CORE_FLAG_MULTILINE,
+               "regex multiline flag drift");
+_Static_assert((int) XR_RE_DOTALL == (int) XR_REGEX_CORE_FLAG_DOTALL, "regex dotall flag drift");
 
 /* ========================================================================
  * Helper Functions
@@ -56,33 +63,13 @@ static const char *value_to_cstring(XrValue v, int *len) {
  * "m" = multiline mode
  * "s" = dot matches newline
  */
-static XrRegexFlags parse_flags(const char *flags_str) {
-    XrRegexFlags flags = XR_RE_NONE;
+static XrRegexFlags parse_flags(const char *flags_str, int flags_len) {
     if (!flags_str)
-        return flags;
-
-    for (const char *p = flags_str; *p; p++) {
-        switch (*p) {
-            case 'i':
-                flags |= XR_RE_IGNORECASE;
-                break;
-            case 'm':
-                flags |= XR_RE_MULTILINE;
-                break;
-            case 's':
-                flags |= XR_RE_DOTALL;
-                break;
-        }
-    }
-    return flags;
+        return XR_RE_NONE;
+    if (flags_len < 0)
+        flags_len = (int) strlen(flags_str);
+    return (XrRegexFlags) xr_regex_core_parse_flags(flags_str, (size_t) flags_len);
 }
-
-/* RegexMatch field slot indices — must match the order in
- * xr_regex_register_match_class() and stdlib/types/regex.xr. */
-#define REGEX_MATCH_FIELD_START 0
-#define REGEX_MATCH_FIELD_END 1
-#define REGEX_MATCH_FIELD_TEXT 2
-#define REGEX_MATCH_FIELD_GROUPS 3
 
 /*
  * Create a RegexMatch instance (typed XrInstance, not Json).
@@ -110,16 +97,16 @@ XrValue xr_regex_make_match_object(XrVMRuntime *isolate, const char *text, XrMat
     /* start / end */
     int start_offset = match->groups[0].start ? (int) (match->groups[0].start - text) : 0;
     int end_offset = match->groups[0].end ? (int) (match->groups[0].end - text) : 0;
-    xr_instance_set_field_fast(inst, REGEX_MATCH_FIELD_START, xr_int(start_offset));
-    xr_instance_set_field_fast(inst, REGEX_MATCH_FIELD_END, xr_int(end_offset));
+    xr_instance_set_field_fast(inst, XR_REGEX_CORE_MATCH_START, xr_int(start_offset));
+    xr_instance_set_field_fast(inst, XR_REGEX_CORE_MATCH_END, xr_int(end_offset));
 
     /* text */
     if (match->groups[0].start && match->groups[0].end) {
         int len = (int) (match->groups[0].end - match->groups[0].start);
         XrString *matched_text = xr_string_intern(isolate, match->groups[0].start, len, 0);
-        xr_instance_set_field_fast(inst, REGEX_MATCH_FIELD_TEXT, xr_string_value(matched_text));
+        xr_instance_set_field_fast(inst, XR_REGEX_CORE_MATCH_TEXT, xr_string_value(matched_text));
     } else {
-        xr_instance_set_field_fast(inst, REGEX_MATCH_FIELD_TEXT, xr_null());
+        xr_instance_set_field_fast(inst, XR_REGEX_CORE_MATCH_TEXT, xr_null());
     }
 
     /* groups */
@@ -133,7 +120,7 @@ XrValue xr_regex_make_match_object(XrVMRuntime *isolate, const char *text, XrMat
             xr_array_push(groups, xr_null());
         }
     }
-    xr_instance_set_field_fast(inst, REGEX_MATCH_FIELD_GROUPS, xr_value_from_array(groups));
+    xr_instance_set_field_fast(inst, XR_REGEX_CORE_MATCH_GROUPS, xr_value_from_array(groups));
 
     if (heap)
         heap->cycle_collection_disabled--;
@@ -210,21 +197,7 @@ XrValue xr_regex_compile_literal(XrVMRuntime *isolate, XrValue pattern_val, XrVa
     }
 
     XrRegexFlags regex_flags = XR_RE_NONE;
-    for (const char *p = flags_str->data; *p; p++) {
-        switch (*p) {
-            case 'i':
-                regex_flags |= XR_RE_IGNORECASE;
-                break;
-            case 'm':
-                regex_flags |= XR_RE_MULTILINE;
-                break;
-            case 's':
-                regex_flags |= XR_RE_DOTALL;
-                break;
-            default:
-                break; /* unknown flag chars are silently ignored */
-        }
-    }
+    regex_flags = parse_flags(flags_str->data, (int) flags_str->length);
 
     XrRegexError error;
     XrRegex *re = xr_regex_compile(pattern_str->data, regex_flags, &error);
@@ -260,8 +233,9 @@ static XrValue regex_compile(XrVMRuntime *isolate, XrValue *args, int argc) {
 
     XrRegexFlags flags = XR_RE_NONE;
     if (argc >= 2) {
-        const char *flags_str = value_to_cstring(args[1], NULL);
-        flags = parse_flags(flags_str);
+        int flags_len;
+        const char *flags_str = value_to_cstring(args[1], &flags_len);
+        flags = parse_flags(flags_str, flags_len);
     }
 
     XrRegexError error;
@@ -373,7 +347,9 @@ static XrValue regex_find_group(XrVMRuntime *isolate, XrValue *args, int argc) {
 
     if (!XR_IS_INT(args[2]))
         return xr_null();
-    int group_idx = (int) XR_TO_INT(args[2]);
+    int group_idx = 0;
+    if (!xr_regex_core_int_arg(XR_TO_INT(args[2]), &group_idx))
+        return xr_null();
 
     XrMatch match;
     if (!xr_regex_match(re, text, text_len, &match))
@@ -404,7 +380,8 @@ static XrValue regex_find(XrVMRuntime *isolate, XrValue *args, int argc) {
 
     int offset = 0;
     if (argc >= 3 && XR_IS_INT(args[2])) {
-        offset = (int) XR_TO_INT(args[2]);
+        if (!xr_regex_core_int_arg(XR_TO_INT(args[2]), &offset))
+            return xr_null();
     }
 
     XrMatch match;
@@ -429,10 +406,8 @@ static XrValue regex_find_all(XrVMRuntime *isolate, XrValue *args, int argc) {
     if (!text)
         return xr_value_from_array(xr_array_new(xr_current_coro(isolate)));
 
-    int limit = -1;
-    if (argc >= 3 && XR_IS_INT(args[2])) {
-        limit = (int) XR_TO_INT(args[2]);
-    }
+    int limit = xr_regex_core_limit_arg(argc >= 3 && XR_IS_INT(args[2]),
+                                        (argc >= 3 && XR_IS_INT(args[2])) ? XR_TO_INT(args[2]) : 0);
 
     int count = 0;
     XrMatch *matches = xr_regex_find_all(re, text, text_len, limit, &count);
@@ -521,13 +496,11 @@ static XrValue regex_split(XrVMRuntime *isolate, XrValue *args, int argc) {
     if (!text)
         return xr_value_from_array(xr_array_new(xr_current_coro(isolate)));
 
-    int limit = -1;
-    if (argc >= 3 && XR_IS_INT(args[2])) {
-        limit = (int) XR_TO_INT(args[2]);
-    }
+    int limit = xr_regex_core_limit_arg(argc >= 3 && XR_IS_INT(args[2]),
+                                        (argc >= 3 && XR_IS_INT(args[2])) ? XR_TO_INT(args[2]) : 0);
 
     // Dynamic allocation to avoid stack overflow on large inputs
-    int max_parts = (limit > 0 && limit < 256) ? limit : 256;
+    int max_parts = xr_regex_core_split_max_parts(limit);
     XrSplitPart *parts = (XrSplitPart *) xr_malloc(max_parts * sizeof(XrSplitPart));
     int count = xr_regex_split(re, text, text_len, parts, max_parts, limit);
 
@@ -720,87 +693,24 @@ static XrValue re_m_to_string(XrVMRuntime *iso, XrValue self, XrValue *args, int
     return xr_string_value(xr_value_to_string(iso, self));
 }
 
+#define XR_STDLIB_VM_BIND_CLASS_REGEX 1
+#define XR_STDLIB_VM_BIND_CLASS_REGEX_MATCH 1
+#include "../../src/stdlib/xstdlib_class_bindings_generated.inc.c"
+#undef XR_STDLIB_VM_BIND_CLASS_REGEX_MATCH
+#undef XR_STDLIB_VM_BIND_CLASS_REGEX
+
 void xr_regex_register_class(XrVMRuntime *isolate) {
-    XR_DCHECK(isolate != NULL, "regex_register_class: NULL isolate");
-    XrayCoreClasses *core = xr_isolate_get_core_classes(isolate);
-    XR_DCHECK(core != NULL, "regex_register_class: core not initialised");
-    XR_DCHECK(core->regexClass == NULL, "regex_register_class: already registered");
-
-    XrClassBuilder *b = xr_class_builder_new(isolate, "Regex", core->objectClass);
-    XR_CHECK(b != NULL, "regex_register_class: builder alloc failed");
-
-    xr_class_builder_set_native_body(b, &g_regex_body_desc);
-
-    /* Instance methods */
-    xr_class_builder_add_method(b, "test", re_m_test, 0, 1);
-    xr_class_builder_add_method(b, "find", re_m_find, 0, 2);
-    xr_class_builder_add_method(b, "findText", re_m_find_text, 0, 1);
-    xr_class_builder_add_method(b, "findGroup", re_m_find_group, 0, 2);
-    xr_class_builder_add_method(b, "findAll", re_m_find_all, 0, 2);
-    xr_class_builder_add_method(b, "replace", re_m_replace, 0, 2);
-    xr_class_builder_add_method(b, "replaceAll", re_m_replace_all, 0, 2);
-    xr_class_builder_add_method(b, "split", re_m_split, 0, 2);
-    xr_class_builder_add_method(b, "pattern", re_method_pattern, 0, 0);
-    xr_class_builder_add_method(b, "toString", re_m_to_string, 0, 0);
-
-    XrClass *cls = xr_class_builder_finalize(b);
-    XR_CHECK(cls != NULL, "regex_register_class: finalize failed");
-    cls->flags |= XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY;
-    cls->builtin_kind = XR_BK_REGEX;
-    core->regexClass = cls;
-
-    /* ---- RegexMatch (plain fields, no native body) ---- */
-    XR_DCHECK(core->regexMatchClass == NULL,
-              "regex_register_class: regexMatchClass already registered");
-    XrClassBuilder *mb = xr_class_builder_new(isolate, "RegexMatch", core->objectClass);
-    XR_CHECK(mb != NULL, "regex_register_class: match builder alloc failed");
-
-    /* Field order MUST match REGEX_MATCH_FIELD_* constants. */
-    xr_class_builder_add_field(mb, "start", 0);
-    xr_class_builder_add_field(mb, "end", 0);
-    xr_class_builder_add_field(mb, "text", 0);
-    xr_class_builder_add_field(mb, "groups", 0);
-
-    XrClass *mcls = xr_class_builder_finalize(mb);
-    XR_CHECK(mcls != NULL, "regex_register_class: match finalize failed");
-    mcls->flags |= XR_CLASS_BUILTIN | XR_CLASS_FINAL;
-    mcls->builtin_kind = XR_BK_REGEX_MATCH;
-    core->regexMatchClass = mcls;
+    xr_stdlib_vm_register_regex_class_generated(isolate);
+    xr_stdlib_vm_register_regex_match_class_generated(isolate);
 }
 
 /* ========================================================================
  * Module Loading
  * ======================================================================== */
 
-// ========== Type Declarations (parsed by gen_stdlib_types.py) ==========
-
-#include "../../src/module/xbuiltin_decl.h"
-
-// @module regex
-
-XR_DEFINE_BUILTIN(regex_compile, "compile", "(pattern: string, flags?: string): Regex",
-                  "Compile a regex pattern")
-XR_DEFINE_BUILTIN(regex_test, "test", "(pattern: Regex, s: string): bool",
-                  "Test if pattern matches string")
-XR_DEFINE_BUILTIN(regex_find, "find", "(pattern: Regex, s: string, offset?: int): RegexMatch?",
-                  "Find first match")
-XR_DEFINE_BUILTIN(regex_find_text, "findText", "(pattern: Regex, s: string): string?",
-                  "Find first match, return matched text only (zero-alloc)")
-XR_DEFINE_BUILTIN(regex_find_group, "findGroup", "(pattern: Regex, s: string, index: int): string?",
-                  "Find first match, return single capture group (zero-alloc)")
-XR_DEFINE_BUILTIN(regex_full_match, "fullFind", "(pattern: Regex, s: string): RegexMatch?",
-                  "Full match with captures")
-XR_DEFINE_BUILTIN(regex_count, "count", "(pattern: Regex, s: string): int", "Count matches")
-XR_DEFINE_BUILTIN(regex_find_all, "findAll",
-                  "(pattern: Regex, s: string, limit?: int): Array<RegexMatch>", "Find all matches")
-XR_DEFINE_BUILTIN(regex_replace, "replace",
-                  "(pattern: Regex, s: string, replacement: string): string", "Replace first match")
-XR_DEFINE_BUILTIN(regex_replace_all, "replaceAll",
-                  "(pattern: Regex, s: string, replacement: string): string", "Replace all matches")
-XR_DEFINE_BUILTIN(regex_split, "split", "(pattern: Regex, s: string, limit?: int): Array<string>",
-                  "Split by pattern")
-XR_DEFINE_BUILTIN(regex_escape, "escape", "(s: string): string", "Escape regex special chars")
-XR_DEFINE_BUILTIN(regex_is_valid, "isValid", "(pattern: string): bool", "Check if pattern is valid")
+#define XR_STDLIB_VM_BIND_MODULE_REGEX 1
+#include "../../src/stdlib/xstdlib_vm_bindings_generated.inc.c"
+#undef XR_STDLIB_VM_BIND_MODULE_REGEX
 
 XR_FUNC XrModule *xr_load_module_regex(XrVMRuntime *isolate) {
     // 1. Create native module
@@ -808,19 +718,7 @@ XR_FUNC XrModule *xr_load_module_regex(XrVMRuntime *isolate) {
     if (!mod)
         return NULL;
 
-    XRS_EXPORT(mod, isolate, "compile", regex_compile);
-    XRS_EXPORT(mod, isolate, "test", regex_test);
-    XRS_EXPORT(mod, isolate, "find", regex_find);
-    XRS_EXPORT(mod, isolate, "findText", regex_find_text);
-    XRS_EXPORT(mod, isolate, "findGroup", regex_find_group);
-    XRS_EXPORT(mod, isolate, "fullFind", regex_full_match);
-    XRS_EXPORT(mod, isolate, "count", regex_count);
-    XRS_EXPORT(mod, isolate, "findAll", regex_find_all);
-    XRS_EXPORT(mod, isolate, "replace", regex_replace);
-    XRS_EXPORT(mod, isolate, "replaceAll", regex_replace_all);
-    XRS_EXPORT(mod, isolate, "split", regex_split);
-    XRS_EXPORT(mod, isolate, "escape", regex_escape);
-    XRS_EXPORT(mod, isolate, "isValid", regex_is_valid);
+    xr_stdlib_vm_bind_regex_generated(isolate, mod);
 
     // The Regex XrClass itself is registered up front by the prelude
     // module — no need to do it again here.

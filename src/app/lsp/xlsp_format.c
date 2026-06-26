@@ -51,7 +51,7 @@ XrJsonValue *xlsp_analyze_format(XrLspDocument *doc) {
         config.indent_size = sc->format_tab_size;
         config.max_line_length = sc->format_max_line_length;
         config.use_tabs = sc->format_insert_spaces ? 0 : 1;
-        config.align_match_arms = sc->format_align_match_arms ? 1 : 0;
+        config.align_branch_arrows = sc->format_align_branch_arrows ? 1 : 0;
         config.align_enum_values = sc->format_align_enum_values ? 1 : 0;
         config.align_struct_fields = sc->format_align_struct_fields ? 1 : 0;
         config.align_trailing_comments = sc->format_align_trailing_comments ? 1 : 0;

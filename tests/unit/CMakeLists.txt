@@ -168,6 +168,8 @@ add_xray_unit_test(test_xi_call_specialize ir/test_xi_call_specialize.c)
 add_xray_unit_test(test_xi_comptime ir/test_xi_comptime.c)
 add_xray_unit_test(test_xi_lto aot/test_xi_lto.c)
 add_xray_unit_test(test_xrt_array aot/test_xrt_array.c)
+add_xray_unit_test(test_xrt_boolmap aot/test_xrt_boolmap.c)
+add_xray_unit_test(test_xrt_method_truthy aot/test_xrt_method_truthy.c)
 add_xray_unit_test(test_xi_licm ir/test_xi_licm.c)
 add_xray_unit_test(test_xi_ifconv ir/test_xi_ifconv.c)
 add_xray_unit_test(test_xi_sccp ir/test_xi_sccp.c)
@@ -187,6 +189,15 @@ add_xray_unit_test(test_xi_shuffle ir/test_xi_shuffle.c)
 add_xray_unit_test(test_config base/test_config.c)
 add_xray_unit_test(test_log base/test_log.c)
 add_xray_unit_test(test_swar base/test_swar.c)
+add_xray_unit_test(test_hash_core base/test_hash_core.c)
+add_xray_unit_test(test_cstr_core base/test_cstr_core.c)
+add_xray_unit_test(test_error_core base/test_error_core.c)
+add_xray_unit_test(test_builtin_schema base/test_builtin_schema.c)
+add_xray_unit_test(test_map_set_abi base/test_map_set_abi.c)
+add_xray_unit_test(test_native_type_core base/test_native_type_core.c)
+add_xray_unit_test(test_value_format_core base/test_value_format_core.c)
+add_xray_unit_test(test_swiss_index base/test_swiss_index.c)
+add_xray_unit_test(test_typed_ops base/test_typed_ops.c)
 add_xray_unit_test(test_simd base/test_simd.c)
 add_xray_unit_test(test_mutex base/test_mutex.c)
 add_xray_unit_test(test_intmap base/test_intmap.c)
@@ -243,7 +254,18 @@ add_xray_unit_test(test_http2_huffman http/test_http2_huffman.c)
 # stdlib/ — DateTime, crypto, compress, XML, buffer pool
 # ============================================================================
 
+add_xray_unit_test(test_array_core stdlib/test_array_core.c)
+add_xray_unit_test(test_datetime_core stdlib/test_datetime_core.c)
 add_xray_unit_test(test_datetime stdlib/test_datetime.c)
+add_xray_unit_test(test_math_core stdlib/test_math_core.c)
+add_xray_unit_test(test_numeric_core stdlib/test_numeric_core.c)
+add_xray_unit_test(test_path_core stdlib/test_path_core.c)
+add_xray_unit_test(test_range_core stdlib/test_range_core.c)
+add_xray_unit_test(test_string_core stdlib/test_string_core.c)
+add_xray_unit_test(test_strbuf_core stdlib/test_strbuf_core.c)
+add_xray_unit_test(test_truthy_core stdlib/test_truthy_core.c)
+add_xray_unit_test(test_io_core stdlib/test_io_core.c)
+add_xray_unit_test(test_os_core stdlib/test_os_core.c)
 add_xray_unit_test(test_crypto stdlib/test_crypto.c)
 if(XR_STDLIB_COMPRESS)
     add_xray_unit_test(test_compress stdlib/test_compress.c)
@@ -297,6 +319,16 @@ if(XR_BUILD_LSP)
         ${CMAKE_SOURCE_DIR}/src/runtime/object
     )
     add_test(NAME test_lsp_json COMMAND test_lsp_json)
+
+    add_executable(test_lsp_stdlib
+        lsp/test_lsp_stdlib.c
+        ${CMAKE_SOURCE_DIR}/src/app/lsp/xlsp_stdlib.c
+    )
+    target_include_directories(test_lsp_stdlib PRIVATE
+        ${XRAY_COMMON_INCLUDES}
+        ${CMAKE_SOURCE_DIR}/src/app/lsp
+    )
+    add_test(NAME test_lsp_stdlib COMMAND test_lsp_stdlib)
 
     file(GLOB LSP_SOURCES ${CMAKE_SOURCE_DIR}/src/app/lsp/*.c)
     list(REMOVE_ITEM LSP_SOURCES ${CMAKE_SOURCE_DIR}/src/app/lsp/xlsp_main.c)

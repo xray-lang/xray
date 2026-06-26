@@ -78,6 +78,19 @@ fn test_read_dir_recursive() {
     io.removeAll(tmpDir)
 }
 
+// ===== mkdirp existing directory and trailing slashes =====
+
+@test
+fn test_mkdirp_existing_and_trailing_slashes() {
+    let tmpDir = io.tempDir() ?? ""
+    let nested = tmpDir + "/a/b"
+    assert_eq(io.mkdirp(nested), true)
+    assert_eq(io.mkdirp(nested), true)
+    assert_eq(io.mkdirp(nested + "///"), true)
+    assert_eq(io.isDir(nested), true)
+    io.removeAll(tmpDir)
+}
+
 // ===== Remove non-existent =====
 
 @test
@@ -93,8 +106,7 @@ fn test_read_lines_empty() {
     let tmp = io.tempFile() ?? ""
     io.writeFile(tmp, "")
     let lines = io.readLines(tmp)
-    // Empty file may return empty array or array with one empty string
-    assert(lines.length >= 0)
+    assert_eq(lines.length, 0)
     io.remove(tmp)
 }
 
@@ -105,7 +117,33 @@ fn test_read_lines_single() {
     let tmp = io.tempFile() ?? ""
     io.writeFile(tmp, "single line")
     let lines = io.readLines(tmp)
-    assert(lines.length >= 1)
+    assert_eq(lines.length, 1)
     assert_eq(lines[0], "single line")
+    io.remove(tmp)
+}
+
+// ===== readLines trailing newline does not add final empty line =====
+
+@test
+fn test_read_lines_trailing_newline() {
+    let tmp = io.tempFile() ?? ""
+    io.writeFile(tmp, "alpha\n")
+    let lines = io.readLines(tmp)
+    assert_eq(lines.length, 1)
+    assert_eq(lines[0], "alpha")
+    io.remove(tmp)
+}
+
+// ===== readLines middle empty lines and CRLF =====
+
+@test
+fn test_read_lines_middle_empty_and_crlf() {
+    let tmp = io.tempFile() ?? ""
+    io.writeFile(tmp, "a\r\n\r\nb\r\n")
+    let lines = io.readLines(tmp)
+    assert_eq(lines.length, 3)
+    assert_eq(lines[0], "a")
+    assert_eq(lines[1], "")
+    assert_eq(lines[2], "b")
     io.remove(tmp)
 }

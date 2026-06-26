@@ -12,10 +12,22 @@
 #define XR_PATH_CORE_H
 
 #include <stdbool.h>
+#include <limits.h>
 #include <stddef.h>
+#include <stdint.h>
 #include <string.h>
 
 #include "../base/xplatform.h"
+
+#ifndef XR_PATH_CORE_MAX_PATH
+#if defined(XR_OS_WINDOWS)
+#define XR_PATH_CORE_MAX_PATH 4096
+#elif defined(PATH_MAX)
+#define XR_PATH_CORE_MAX_PATH PATH_MAX
+#else
+#define XR_PATH_CORE_MAX_PATH 4096
+#endif
+#endif
 
 static inline bool xr_path_core_is_sep(char c) {
 #ifdef XR_OS_WINDOWS
@@ -29,6 +41,14 @@ static inline const char *xr_path_core_sep_str(void) {
     return "/";
 }
 
+static inline const char *xr_path_core_delimiter_str(void) {
+#ifdef XR_OS_WINDOWS
+    return ";";
+#else
+    return ":";
+#endif
+}
+
 static inline bool xr_path_core_is_absolute(const char *path, size_t len);
 
 static inline bool xr_path_core_join_has_absolute(const char **parts, const size_t *lens,
@@ -40,6 +60,49 @@ static inline bool xr_path_core_join_has_absolute(const char **parts, const size
             return true;
     }
     return false;
+}
+
+static inline bool xr_path_core_resolve_needs_cwd(const char **parts, const size_t *lens,
+                                                  size_t count) {
+    return !xr_path_core_join_has_absolute(parts, lens, count);
+}
+
+static inline void xr_path_core_resolve_fallback_cwd(char *cwd, size_t cap) {
+    if (!cwd || cap == 0)
+        return;
+    if (cap == 1) {
+        cwd[0] = '\0';
+        return;
+    }
+    cwd[0] = '/';
+    cwd[1] = '\0';
+}
+
+static inline bool xr_path_core_resolve_parts(const char **input_parts, const size_t *input_lens,
+                                              size_t input_count, const char *cwd, size_t cwd_len,
+                                              const char **out_parts, size_t *out_lens,
+                                              size_t out_cap, size_t *out_count) {
+    if (!out_parts || !out_lens || !out_count)
+        return false;
+
+    bool needs_cwd = xr_path_core_resolve_needs_cwd(input_parts, input_lens, input_count);
+    size_t total = input_count + (needs_cwd ? 1 : 0);
+    if (total > out_cap)
+        return false;
+
+    size_t pos = 0;
+    if (needs_cwd) {
+        out_parts[pos] = cwd;
+        out_lens[pos] = cwd ? cwd_len : 0;
+        pos++;
+    }
+    for (size_t i = 0; i < input_count; i++) {
+        out_parts[pos] = input_parts ? input_parts[i] : NULL;
+        out_lens[pos] = input_lens ? input_lens[i] : 0;
+        pos++;
+    }
+    *out_count = total;
+    return true;
 }
 
 static inline size_t xr_path_core_join_start_index(const char **parts, const size_t *lens,
@@ -182,6 +245,15 @@ typedef struct XrPathCoreSlice {
     size_t len;
 } XrPathCoreSlice;
 
+typedef enum XrPathCoreParseField {
+    XR_PATH_CORE_PARSE_FIELD_ROOT = 0,
+    XR_PATH_CORE_PARSE_FIELD_DIR = 1,
+    XR_PATH_CORE_PARSE_FIELD_BASE = 2,
+    XR_PATH_CORE_PARSE_FIELD_NAME = 3,
+    XR_PATH_CORE_PARSE_FIELD_EXT = 4,
+    XR_PATH_CORE_PARSE_FIELD_COUNT = 5
+} XrPathCoreParseField;
+
 typedef struct XrPathCoreParsePlan {
     XrPathCoreSlice root;
     XrPathCoreSlice dir;
@@ -195,6 +267,40 @@ static inline XrPathCoreSlice xr_path_core_slice(const char *data, size_t len) {
     s.data = data;
     s.len = len;
     return s;
+}
+
+static inline const char *const *xr_path_core_parse_field_names(void) {
+    static const char *const names[XR_PATH_CORE_PARSE_FIELD_COUNT] = {
+        "root", "dir", "base", "name", "ext",
+    };
+    return names;
+}
+
+static inline const char *xr_path_core_parse_field_name(XrPathCoreParseField field) {
+    if ((int) field < 0 || field >= XR_PATH_CORE_PARSE_FIELD_COUNT)
+        return NULL;
+    return xr_path_core_parse_field_names()[field];
+}
+
+static inline XrPathCoreSlice xr_path_core_parse_plan_field(const XrPathCoreParsePlan *plan,
+                                                            XrPathCoreParseField field) {
+    if (!plan)
+        return xr_path_core_slice(NULL, 0);
+    switch (field) {
+        case XR_PATH_CORE_PARSE_FIELD_ROOT:
+            return plan->root;
+        case XR_PATH_CORE_PARSE_FIELD_DIR:
+            return plan->dir;
+        case XR_PATH_CORE_PARSE_FIELD_BASE:
+            return plan->base;
+        case XR_PATH_CORE_PARSE_FIELD_NAME:
+            return plan->name;
+        case XR_PATH_CORE_PARSE_FIELD_EXT:
+            return plan->ext;
+        case XR_PATH_CORE_PARSE_FIELD_COUNT:
+            break;
+    }
+    return xr_path_core_slice(NULL, 0);
 }
 
 static inline bool xr_path_core_parse_plan(const char *path, size_t len,
@@ -225,6 +331,70 @@ static inline bool xr_path_core_parse_plan(const char *path, size_t len,
     plan->name = xr_path_core_slice(base, name_len);
     plan->ext = xr_path_core_slice(ext, ext_len);
     return true;
+}
+
+typedef struct XrPathCoreFormatPlan {
+    XrPathCoreSlice dir;
+    XrPathCoreSlice base_a;
+    XrPathCoreSlice base_b;
+    bool need_sep;
+    size_t out_len;
+} XrPathCoreFormatPlan;
+
+static inline XrPathCoreSlice xr_path_core_sanitize_slice(XrPathCoreSlice slice) {
+    if (!slice.data)
+        slice.len = 0;
+    return slice;
+}
+
+static inline bool xr_path_core_format_plan(XrPathCoreSlice dir, XrPathCoreSlice base,
+                                            XrPathCoreSlice name, XrPathCoreSlice ext,
+                                            XrPathCoreFormatPlan *plan) {
+    if (!plan)
+        return false;
+    dir = xr_path_core_sanitize_slice(dir);
+    base = xr_path_core_sanitize_slice(base);
+    name = xr_path_core_sanitize_slice(name);
+    ext = xr_path_core_sanitize_slice(ext);
+
+    XrPathCoreSlice base_a = base;
+    XrPathCoreSlice base_b = xr_path_core_slice(NULL, 0);
+    if (base.len == 0 && name.len > 0) {
+        base_a = name;
+        base_b = ext;
+    }
+
+    size_t base_len = base_a.len + base_b.len;
+    bool need_sep = dir.len > 0 && !xr_path_core_is_sep(dir.data[dir.len - 1]);
+    size_t out_len = base_len;
+    if (dir.len > 0)
+        out_len += dir.len + (need_sep ? 1 : 0);
+
+    plan->dir = dir;
+    plan->base_a = base_a;
+    plan->base_b = base_b;
+    plan->need_sep = need_sep;
+    plan->out_len = out_len;
+    return true;
+}
+
+static inline void xr_path_core_copy_slice(char *out, size_t *pos, XrPathCoreSlice slice) {
+    if (slice.len > 0 && slice.data) {
+        memcpy(out + *pos, slice.data, slice.len);
+        *pos += slice.len;
+    }
+}
+
+static inline void xr_path_core_format_write(const XrPathCoreFormatPlan *plan, char *out) {
+    size_t pos = 0;
+    if (plan->dir.len > 0) {
+        xr_path_core_copy_slice(out, &pos, plan->dir);
+        if (plan->need_sep)
+            out[pos++] = '/';
+    }
+    xr_path_core_copy_slice(out, &pos, plan->base_a);
+    xr_path_core_copy_slice(out, &pos, plan->base_b);
+    out[pos] = '\0';
 }
 
 static inline bool xr_path_core_is_absolute(const char *path, size_t len) {
@@ -332,6 +502,50 @@ static inline void xr_path_core_normalize_write(const char *path, const size_t *
     if (pos == 0)
         out[pos++] = '.';
     out[pos] = '\0';
+}
+
+typedef void *(*XrPathCoreAllocFn)(void *ctx, size_t size);
+typedef void (*XrPathCoreFreeFn)(void *ctx, void *ptr);
+
+static inline bool xr_path_core_normalize_alloc(const char *path, size_t len,
+                                                XrPathCoreAllocFn alloc_fn,
+                                                XrPathCoreFreeFn free_fn, void *ctx, char **out,
+                                                size_t *out_len) {
+    if (!out || !out_len || !alloc_fn || !free_fn)
+        return false;
+    *out = NULL;
+    *out_len = 0;
+    if (!path)
+        len = 0;
+
+    size_t max_segs = xr_path_core_normalize_segment_cap(len);
+    if (max_segs > (SIZE_MAX / sizeof(size_t)) / 2)
+        return false;
+    size_t seg_bytes = sizeof(size_t) * max_segs * 2;
+    size_t *seg_buf = (size_t *) alloc_fn(ctx, seg_bytes);
+    if (!seg_buf)
+        return false;
+
+    size_t *seg_starts = seg_buf;
+    size_t *seg_lens = seg_buf + max_segs;
+    size_t seg_count = 0;
+    bool is_absolute = false;
+    bool ok = xr_path_core_normalize_plan(path, len, seg_starts, seg_lens, max_segs, &seg_count,
+                                          &is_absolute, out_len);
+    if (!ok || *out_len == SIZE_MAX) {
+        free_fn(ctx, seg_buf);
+        return false;
+    }
+
+    char *result = (char *) alloc_fn(ctx, *out_len + 1);
+    if (!result) {
+        free_fn(ctx, seg_buf);
+        return false;
+    }
+    xr_path_core_normalize_write(path, seg_starts, seg_lens, seg_count, is_absolute, result);
+    free_fn(ctx, seg_buf);
+    *out = result;
+    return true;
 }
 
 typedef struct XrPathCoreRelativePlan {

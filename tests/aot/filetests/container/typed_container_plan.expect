@@ -18,8 +18,8 @@ regex=array-cache [0-9]+ func=bytes_index value=v[0-9]+ storage=v[0-9]+ flags=0x
 contains=container-stats array=2 map=1 set=1 direct=2
 contains=array-storage-stats total=12 read=12 mutable=11
 contains=array-cache-stats total=7 read=7 mutable=5
-c_contains=xrt_array_new_typed(0, XR_ELEM_U8)
-c_contains=xrt_array_new_typed(0, XR_ELEM_I64)
+c_contains=xrt_array_new_typed_len(0, XR_ELEM_U8)
+c_contains=xrt_array_new_typed_len(0, XR_ELEM_I64)
 c_contains=xrt_array_new_typed_uninit_ptr
 c_regex=\(p0\)->f0 = \(xrt_array_t\*\)xrt_array_new_typed_uninit
 c_contains=xrt_array_new_typed_ptr(_n, XR_ELEM_U8)

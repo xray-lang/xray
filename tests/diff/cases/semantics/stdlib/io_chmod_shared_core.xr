@@ -1,0 +1,27 @@
+import io
+import os
+
+let root = io.tempDir() ?? ""
+print(root.length > 0)
+
+let file = root + "/mode.txt"
+print(io.writeFile(file, "mode"))
+
+print(io.chmod(file, 420))
+let st = io.stat(file)
+if (os.platform == "windows") {
+    print(st != null)
+} else {
+    print(st != null && st.mode == 420)
+}
+
+print(io.chmod(file, 0))
+let st2 = io.stat(file)
+if (os.platform == "windows") {
+    print(st2 != null)
+} else {
+    print(st2 != null && st2.mode == 0)
+}
+
+print(io.removeAll(root))
+print(!io.exists(root))

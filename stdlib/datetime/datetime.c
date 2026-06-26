@@ -25,6 +25,7 @@
 #include "../../src/runtime/class/xclass_system.h"
 #include "../../src/runtime/class/xinstance.h"
 #include "../../src/base/xchecks.h"
+#include "../../src/shared/xr_datetime_core.h"
 #include "../../src/os/os_time.h"
 #include <string.h>
 #include <stdio.h>
@@ -33,6 +34,16 @@
 #define XR_INT(n) XR_FROM_INT(n)
 
 /* ========== Internal Helpers ========== */
+
+static int64_t dt_int_arg_or(XrValue *args, int nargs, int index, int64_t fallback) {
+    bool has_int = index < nargs && XR_IS_INT(args[index]);
+    return xr_datetime_core_int_arg_or(has_int, has_int ? XR_TO_INT(args[index]) : 0, fallback);
+}
+
+static bool dt_required_int_arg(XrValue *args, int nargs, int index, int64_t *out) {
+    bool has_int = index < nargs && XR_IS_INT(args[index]);
+    return xr_datetime_core_required_int_arg(has_int, has_int ? XR_TO_INT(args[index]) : 0, out);
+}
 
 /* Cached body offset for DateTime class instances (set in
  * xr_register_datetime_class). Since the class has 0 fields and a
@@ -91,153 +102,25 @@ static int64_t get_current_millis(void) {
     return (int64_t) (xr_time_realtime_ns() / 1000000ULL);
 }
 
-static int days_in_month_table(int year, int mon) {
-    static const int days[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
-    XR_DCHECK(year >= -9999 && year <= 9999, "days_in_month: year in sane range");
-    if (mon < 1 || mon > 12)
-        return 30;
-    int d = days[mon - 1];
-    if (mon == 2 && (year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)))
-        d = 29;
-    return d;
-}
-
-/* ========== Portable Date Math ==========
- *
- * Calendar <-> days-since-epoch conversions implemented without any libc
- * time function. The platform CRT, especially MSVC, refuses any time_t
- * value outside [0, 32503679999] (1970-01-01 .. 3000-12-31 UTC):
- *   - mktime / _mkgmtime return (time_t)-1 for years before 1970,
- *   - localtime_s / gmtime_s leave the output struct tm in an unspecified
- *     state for negative time_t.
- * Local wall-clock times near the epoch in non-UTC timezones (e.g.
- * 1970-01-01 00:00:00 local in Asia/Shanghai = UTC -28800) hit exactly this
- * limit and were silently corrupted before this code path existed.
- *
- * Algorithms are due to Howard Hinnant (http://howardhinnant.github.io/
- * date_algorithms.html) and are valid for any year representable in int.
- * They form the basis of std::chrono's calendar support in C++20.
- */
-
-static int64_t portable_days_from_civil(int y, unsigned m, unsigned d) {
-    y -= (m <= 2);
-    const int64_t era = (y >= 0 ? y : y - 399) / 400;
-    const unsigned yoe = (unsigned) (y - (int) (era * 400));
-    const unsigned doy = (153u * (m > 2 ? m - 3 : m + 9) + 2) / 5 + d - 1;
-    const unsigned doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
-    return era * 146097 + (int64_t) doe - 719468;
-}
-
-static void portable_civil_from_days(int64_t z, int *y_out, unsigned *m_out, unsigned *d_out) {
-    z += 719468;
-    const int64_t era = (z >= 0 ? z : z - 146096) / 146097;
-    const unsigned doe = (unsigned) (z - era * 146097);
-    const unsigned yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
-    int y = (int) ((int64_t) yoe + era * 400);
-    const unsigned doy = doe - (365u * yoe + yoe / 4 - yoe / 100);
-    const unsigned mp = (5u * doy + 2) / 153;
-    const unsigned d = doy - (153u * mp + 2) / 5 + 1;
-    const unsigned m = mp < 10 ? mp + 3 : mp - 9;
-    *y_out = y + (m <= 2 ? 1 : 0);
-    *m_out = m;
-    *d_out = d;
-}
-
-/* Treat the fields of `tm` as UTC and produce the corresponding time_t.
- * Independent of any CRT call, so negative results (pre-1970 instants) are
- * fully supported. */
-static time_t portable_timegm(const struct tm *tm) {
-    XR_DCHECK(tm != NULL, "portable_timegm: tm must not be NULL");
-    int64_t days = portable_days_from_civil(tm->tm_year + 1900, (unsigned) (tm->tm_mon + 1),
-                                            (unsigned) tm->tm_mday);
-    int64_t secs = days * 86400 + (int64_t) tm->tm_hour * 3600 + (int64_t) tm->tm_min * 60 +
-                   (int64_t) tm->tm_sec;
-    return (time_t) secs;
-}
-
-/* Decompose a UTC time_t into a struct tm. Sets tm_wday, tm_yday and
- * forces tm_isdst = 0. Valid for any time_t value. */
-static void portable_gmtime(time_t t, struct tm *tm) {
-    XR_DCHECK(tm != NULL, "portable_gmtime: tm must not be NULL");
-    int64_t s = (int64_t) t;
-    int64_t days = s / 86400;
-    int64_t secs_of_day = s % 86400;
-    if (secs_of_day < 0) {
-        secs_of_day += 86400;
-        days -= 1;
-    }
-
-    int year;
-    unsigned mon, mday;
-    portable_civil_from_days(days, &year, &mon, &mday);
-
-    tm->tm_year = year - 1900;
-    tm->tm_mon = (int) mon - 1;
-    tm->tm_mday = (int) mday;
-    tm->tm_hour = (int) (secs_of_day / 3600);
-    tm->tm_min = (int) ((secs_of_day % 3600) / 60);
-    tm->tm_sec = (int) (secs_of_day % 60);
-
-    /* 1970-01-01 was Thursday (tm_wday = 4). */
-    int64_t w = (days + 4) % 7;
-    if (w < 0)
-        w += 7;
-    tm->tm_wday = (int) w;
-
-    int64_t jan1 = portable_days_from_civil(year, 1, 1);
-    tm->tm_yday = (int) (days - jan1);
-
-    tm->tm_isdst = 0;
-}
-
-/* ========== Timezone ========== */
-
-/* Compute local UTC offset in minutes for a specific point in time.
- * Uses libc localtime/gmtime to honour the host timezone database and DST.
- * When the requested instant is outside the CRT-safe range (in practice
- * MSVC localtime_s/gmtime_s for t < 0), probe with a date one day past the
- * epoch instead: that yields the standard offset for the zone, which is
- * the correct value for any timestamp near the epoch boundary in zones
- * without pre-1970 DST history (which excludes essentially nothing useful
- * for current calendar arithmetic). */
-static int local_offset_at(time_t t) {
-    struct tm local_tm, utc_tm;
-    time_t probe = t;
-#ifdef XR_OS_WINDOWS
-    if (probe < 86400)
-        probe = 86400; /* 1970-01-02 00:00:00 UTC */
-    localtime_s(&local_tm, &probe);
-    gmtime_s(&utc_tm, &probe);
-#else
-    localtime_r(&probe, &local_tm);
-    gmtime_r(&probe, &utc_tm);
-#endif
-    local_tm.tm_isdst = 0;
-    utc_tm.tm_isdst = 0;
-    /* mktime here interprets both struct tm values as local time. Since we
-     * just fed them with the same probe instant, the difference equals the
-     * zone's UTC offset (negated for the gmtime branch). Both arguments
-     * are post-epoch by construction, so MSVC mktime is happy. */
-    double diff_sec = difftime(mktime(&local_tm), mktime(&utc_tm));
-    return (int) (diff_sec / 60.0);
-}
-
-/* Convert a struct tm to time_t. is_utc=1 treats the fields as UTC,
- * is_utc=0 treats them as local wall-clock and adjusts by the host's
- * effective offset at that instant. Replaces the previous CRT-dependent
- * implementation, which used mktime() for local time and inherited the
- * MSVC 1970+ range limitation. */
-static inline time_t datetime_mktime(struct tm *tm, int is_utc) {
-    XR_DCHECK(tm != NULL, "datetime_mktime: tm must not be NULL");
-    time_t wall_t = portable_timegm(tm);
-    if (is_utc)
-        return wall_t;
-    int off_min = local_offset_at(wall_t);
-    return wall_t - (time_t) off_min * 60;
-}
-
 int xr_datetime_local_offset(void) {
-    return local_offset_at(time(NULL));
+    return xr_datetime_core_local_offset_at(time(NULL));
+}
+
+static XrDateTimeCoreFields datetime_core_fields(const XrDateTime *dt) {
+    return (XrDateTimeCoreFields) {
+        .timestamp = dt ? dt->timestamp : 0,
+        .milliseconds = dt ? dt->milliseconds : 0,
+        .tz_offset = dt ? dt->tz_offset : 0,
+        .is_utc = dt ? dt->is_utc : 0,
+    };
+}
+
+static void datetime_apply_core_fields(XrDateTime *dt, const XrDateTimeCoreFields *fields) {
+    XR_DCHECK(dt != NULL && fields != NULL, "datetime_apply_core_fields: args must not be NULL");
+    dt->timestamp = fields->timestamp;
+    dt->milliseconds = fields->milliseconds;
+    dt->tz_offset = fields->tz_offset;
+    dt->is_utc = fields->is_utc;
 }
 
 /* ========== Creation API ========== */
@@ -273,177 +156,67 @@ XrDateTime *xr_datetime_create(XrVMRuntime *isolate, int year, int month, int da
     tm.tm_sec = second;
     tm.tm_isdst = -1;
 
-    time_t t = datetime_mktime(&tm, is_utc);
+    time_t t = xr_datetime_core_mktime(&tm, is_utc);
     XrDateTime *dt = datetime_alloc(isolate);
     dt->timestamp = (int64_t) t;
     dt->milliseconds = 0;
-    dt->tz_offset = is_utc ? 0 : local_offset_at(t);
+    dt->tz_offset = is_utc ? 0 : xr_datetime_core_local_offset_at(t);
     dt->is_utc = (uint8_t) is_utc;
     return dt;
 }
 
 XrDateTime *xr_datetime_from_timestamp(XrVMRuntime *isolate, int64_t timestamp) {
     XrDateTime *dt = datetime_alloc(isolate);
-    dt->timestamp = timestamp;
-    dt->milliseconds = 0;
-    dt->tz_offset = 0;
-    dt->is_utc = 1;
+    XrDateTimeCoreFields fields = xr_datetime_core_from_timestamp(timestamp);
+    datetime_apply_core_fields(dt, &fields);
     return dt;
 }
 
 XrDateTime *xr_datetime_from_timestamp_ms(XrVMRuntime *isolate, int64_t timestamp_ms) {
     XrDateTime *dt = datetime_alloc(isolate);
-    // Floor division: milliseconds must be in [0, 999].
-    // C truncation toward zero gives negative remainder for negative inputs.
-    int64_t sec = timestamp_ms / 1000;
-    int32_t ms = (int32_t) (timestamp_ms % 1000);
-    if (ms < 0) {
-        sec -= 1;
-        ms += 1000;
-    }
-    dt->timestamp = sec;
-    dt->milliseconds = ms;
-    dt->tz_offset = 0;
-    dt->is_utc = 1;
+    XrDateTimeCoreFields fields = xr_datetime_core_from_timestamp_ms(timestamp_ms);
+    datetime_apply_core_fields(dt, &fields);
     return dt;
 }
 
 /* ========== Parse API ========== */
 
 XrDateTime *xr_datetime_parse(XrVMRuntime *isolate, const char *str, const char *format) {
-    if (!str)
+    XrDateTimeCoreFields fields;
+    if (!xr_datetime_core_parse_fields(str, format, &fields))
         return NULL;
-
-    int year = 0, month = 1, day = 1, hour = 0, minute = 0, second = 0, ms = 0;
-
-    // Split the input into (date, time, tz) by anchoring on 'T' or ' '
-    // first. The previous implementation looked backwards for '+' or '-'
-    // and could mis-interpret the '-' used as a date separator in short
-    // strings such as "2024-01-15".
-    const char *date_end = str;
-    while (*date_end && *date_end != 'T' && *date_end != ' ')
-        date_end++;
-    const char *time_part = NULL;
-    if (*date_end == 'T' || *date_end == ' ') {
-        time_part = date_end + 1;
-    }
-
-    if (!format || strcmp(format, "ISO8601") == 0 || strcmp(format, "iso") == 0) {
-        int parsed = sscanf(str, "%d-%d-%dT%d:%d:%d", &year, &month, &day, &hour, &minute, &second);
-        // Fall through to space-separated format when the T-format
-        // only matched the date part (parsed < 6), e.g. "1979-05-27 07:32:00".
-        if (parsed < 6)
-            parsed = sscanf(str, "%d-%d-%d %d:%d:%d", &year, &month, &day, &hour, &minute, &second);
-        if (parsed < 3)
-            parsed = sscanf(str, "%d/%d/%d %d:%d:%d", &year, &month, &day, &hour, &minute, &second);
-        if (parsed < 3)
-            return NULL;
-
-        // Parse milliseconds (.123) but only when the fractional part
-        // follows the time-of-day, never the date. Without this scoping a
-        // pattern like "1.2.3" could accidentally contribute to ms.
-        const char *dot = time_part ? strchr(time_part, '.') : NULL;
-        if (dot && dot[1] >= '0' && dot[1] <= '9') {
-            int digits = 0;
-            ms = 0;
-            const char *p = dot + 1;
-            while (*p >= '0' && *p <= '9' && digits < 3) {
-                ms = ms * 10 + (*p - '0');
-                p++;
-                digits++;
-            }
-            while (digits < 3) {
-                ms *= 10;
-                digits++;
-            }
-        }
-    } else if (strcmp(format, "date") == 0) {
-        if (sscanf(str, "%d-%d-%d", &year, &month, &day) < 3 &&
-            sscanf(str, "%d/%d/%d", &year, &month, &day) < 3) {
-            return NULL;
-        }
-    } else if (strcmp(format, "time") == 0) {
-        if (sscanf(str, "%d:%d:%d", &hour, &minute, &second) < 2) {
-            return NULL;
-        }
-        year = 1970;
-        month = 1;
-        day = 1;
-    } else {
-        if (sscanf(str, "%d-%d-%d %d:%d:%d", &year, &month, &day, &hour, &minute, &second) < 3) {
-            return NULL;
-        }
-    }
-
-    // Parse timezone offset: Z, +HH:MM, -HH:MM. Look only inside the time
-    // portion so date separators can never masquerade as the offset sign.
-    int is_utc = 0;
-    int tz_offset_min = 0;
-    if (time_part) {
-        const char *scan = time_part;
-        const char *tz_marker = NULL;
-        while (*scan) {
-            if (*scan == 'Z') {
-                is_utc = 1;
-                break;
-            }
-            if (*scan == '+' || *scan == '-') {
-                tz_marker = scan;
-                break;
-            }
-            scan++;
-        }
-        if (tz_marker) {
-            int tz_h = 0, tz_m = 0;
-            if (sscanf(tz_marker + 1, "%d:%d", &tz_h, &tz_m) >= 1) {
-                tz_offset_min = tz_h * 60 + tz_m;
-                if (*tz_marker == '-')
-                    tz_offset_min = -tz_offset_min;
-                is_utc = 1;
-            }
-        }
-    }
-
-    struct tm tm = {0};
-    tm.tm_year = year - 1900;
-    tm.tm_mon = month - 1;
-    tm.tm_mday = day;
-    tm.tm_hour = hour;
-    tm.tm_min = minute;
-    tm.tm_sec = second;
-    tm.tm_isdst = -1;
-
-    time_t t;
-    if (is_utc) {
-        t = datetime_mktime(&tm, 1);
-        /* Adjust for the timezone offset carried by the parsed string. */
-        t -= tz_offset_min * 60;
-    } else {
-        t = datetime_mktime(&tm, 0);
-    }
 
     XrDateTime *dt = datetime_alloc(isolate);
     if (!dt)
         return NULL;
-    dt->timestamp = (int64_t) t;
-    dt->milliseconds = ms;
-    dt->tz_offset = is_utc ? 0 : local_offset_at(t);
-    dt->is_utc = is_utc;
+    dt->timestamp = fields.timestamp;
+    dt->milliseconds = fields.milliseconds;
+    dt->tz_offset = fields.tz_offset;
+    dt->is_utc = fields.is_utc;
     return dt;
 }
 
 /* ========== Format API ========== */
 
+static int datetime_ctxbuf_write(void *ctx, const char *data, size_t len) {
+    xr_ctxbuf_append((XrCtxBuf *) ctx, data, len);
+    return 0;
+}
+
+static int datetime_copy_ctxbuf_to_cstr(const XrCtxBuf *out, char *buf, size_t buf_size) {
+    if (!out || !buf || buf_size == 0)
+        return 0;
+    size_t len = out->len < buf_size - 1 ? out->len : buf_size - 1;
+    if (out->data)
+        memcpy(buf, out->data, len);
+    buf[len] = '\0';
+    return (int) len;
+}
+
 void xr_datetime_to_tm(XrDateTime *dt, struct tm *tm) {
     XR_DCHECK(dt != NULL && tm != NULL, "xr_datetime_to_tm: args must not be NULL");
-    time_t t = (time_t) dt->timestamp;
-    if (!dt->is_utc) {
-        /* Shift to the local wall-clock instant by adding the stored UTC
-         * offset, then decompose as if UTC. This sidesteps MSVC
-         * localtime_s/gmtime_s rejecting negative time_t values. */
-        t += (time_t) dt->tz_offset * 60;
-    }
-    portable_gmtime(t, tm);
+    XrDateTimeCoreFields fields = datetime_core_fields(dt);
+    xr_datetime_core_to_tm_fields(&fields, tm);
 }
 
 int xr_datetime_format(XrDateTime *dt, const char *pattern, char *buf, size_t buf_size) {
@@ -455,62 +228,23 @@ int xr_datetime_format(XrDateTime *dt, const char *pattern, char *buf, size_t bu
     // caller-provided fixed-size slot, keeping the legacy API contract.
     XrCtxBuf out;
     xr_ctxbuf_init(&out, 64);
-    const char *p = pattern;
-
-    while (*p) {
-        if (strncmp(p, "YYYY", 4) == 0) {
-            xr_ctxbuf_appendf(&out, "%04d", tm.tm_year + 1900);
-            p += 4;
-        } else if (strncmp(p, "MM", 2) == 0 && p[2] != 'M') {
-            xr_ctxbuf_appendf(&out, "%02d", tm.tm_mon + 1);
-            p += 2;
-        } else if (strncmp(p, "DD", 2) == 0) {
-            xr_ctxbuf_appendf(&out, "%02d", tm.tm_mday);
-            p += 2;
-        } else if (strncmp(p, "HH", 2) == 0) {
-            xr_ctxbuf_appendf(&out, "%02d", tm.tm_hour);
-            p += 2;
-        } else if (strncmp(p, "mm", 2) == 0) {
-            xr_ctxbuf_appendf(&out, "%02d", tm.tm_min);
-            p += 2;
-        } else if (strncmp(p, "ss", 2) == 0) {
-            xr_ctxbuf_appendf(&out, "%02d", tm.tm_sec);
-            p += 2;
-        } else if (strncmp(p, "SSS", 3) == 0) {
-            xr_ctxbuf_appendf(&out, "%03d", dt->milliseconds);
-            p += 3;
-        } else {
-            xr_ctxbuf_putc(&out, *p++);
-        }
-    }
-
-    size_t len = out.len < buf_size - 1 ? out.len : buf_size - 1;
-    if (buf_size > 0) {
-        if (out.data)
-            memcpy(buf, out.data, len);
-        buf[len] = '\0';
-    }
+    XrDateTimeCoreWriter writer = {.ctx = &out, .write = datetime_ctxbuf_write};
+    (void) xr_datetime_core_format_tm(&writer, &tm, dt->milliseconds, pattern, -1);
+    int len = datetime_copy_ctxbuf_to_cstr(&out, buf, buf_size);
     xr_ctxbuf_free(&out);
-    return (int) len;
+    return len;
 }
 
 int xr_datetime_to_iso_string(XrDateTime *dt, char *buf, size_t buf_size) {
     struct tm tm;
     xr_datetime_to_tm(dt, &tm);
-    int n;
-    if (dt->is_utc) {
-        n = snprintf(buf, buf_size, "%04d-%02d-%02dT%02d:%02d:%02d.%03dZ", tm.tm_year + 1900,
-                     tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec, dt->milliseconds);
-    } else {
-        int off = dt->tz_offset;
-        char sign = off >= 0 ? '+' : '-';
-        if (off < 0)
-            off = -off;
-        n = snprintf(buf, buf_size, "%04d-%02d-%02dT%02d:%02d:%02d.%03d%c%02d:%02d",
-                     tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec,
-                     dt->milliseconds, sign, off / 60, off % 60);
-    }
-    return n < (int) buf_size ? n : (int) buf_size - 1;
+    XrCtxBuf out;
+    xr_ctxbuf_init(&out, 64);
+    XrDateTimeCoreWriter writer = {.ctx = &out, .write = datetime_ctxbuf_write};
+    (void) xr_datetime_core_iso_write(&writer, &tm, dt->milliseconds, dt->is_utc, dt->tz_offset);
+    int len = datetime_copy_ctxbuf_to_cstr(&out, buf, buf_size);
+    xr_ctxbuf_free(&out);
+    return len;
 }
 
 /* ========== Component Access API ========== */
@@ -570,158 +304,64 @@ int xr_datetime_yearday(XrDateTime *dt) {
 /* ========== Comparison API ========== */
 
 int xr_datetime_is_before(XrDateTime *dt1, XrDateTime *dt2) {
-    if (dt1->timestamp != dt2->timestamp)
-        return dt1->timestamp < dt2->timestamp;
-    return dt1->milliseconds < dt2->milliseconds;
+    XrDateTimeCoreFields a = datetime_core_fields(dt1);
+    XrDateTimeCoreFields b = datetime_core_fields(dt2);
+    return xr_datetime_core_compare_fields(&a, &b) < 0;
 }
 
 int xr_datetime_is_after(XrDateTime *dt1, XrDateTime *dt2) {
-    if (dt1->timestamp != dt2->timestamp)
-        return dt1->timestamp > dt2->timestamp;
-    return dt1->milliseconds > dt2->milliseconds;
+    XrDateTimeCoreFields a = datetime_core_fields(dt1);
+    XrDateTimeCoreFields b = datetime_core_fields(dt2);
+    return xr_datetime_core_compare_fields(&a, &b) > 0;
 }
 
 int xr_datetime_equals(XrDateTime *dt1, XrDateTime *dt2) {
-    return dt1->timestamp == dt2->timestamp && dt1->milliseconds == dt2->milliseconds;
+    XrDateTimeCoreFields a = datetime_core_fields(dt1);
+    XrDateTimeCoreFields b = datetime_core_fields(dt2);
+    return xr_datetime_core_compare_fields(&a, &b) == 0;
 }
 
 /* ========== Utility API ========== */
 
 int xr_datetime_is_leap_year(XrDateTime *dt) {
-    int y = xr_datetime_year(dt);
-    return (y % 4 == 0 && (y % 100 != 0 || y % 400 == 0));
+    return xr_datetime_core_is_leap_year(xr_datetime_year(dt));
 }
 
 int xr_datetime_days_in_month(XrDateTime *dt) {
-    return days_in_month_table(xr_datetime_year(dt), xr_datetime_month(dt));
+    return xr_datetime_core_days_in_month(xr_datetime_year(dt), xr_datetime_month(dt));
 }
 
 /* ========== Date Arithmetic API ========== */
 
 XrDateTime *xr_datetime_add(XrVMRuntime *isolate, XrDateTime *dt, int64_t amount,
                             const char *unit) {
-    int64_t seconds = 0;
-
-    if (strcmp(unit, "millisecond") == 0 || strcmp(unit, "milliseconds") == 0) {
-        XrDateTime *result = datetime_alloc(isolate);
-        int64_t total_ms = dt->timestamp * 1000 + dt->milliseconds + amount;
-        result->timestamp = total_ms / 1000;
-        result->milliseconds = (int32_t) (total_ms % 1000);
-        if (result->milliseconds < 0) {
-            result->timestamp--;
-            result->milliseconds += 1000;
-        }
-        result->tz_offset = dt->tz_offset;
-        result->is_utc = dt->is_utc;
-        return result;
-    } else if (strcmp(unit, "second") == 0 || strcmp(unit, "seconds") == 0) {
-        seconds = amount;
-    } else if (strcmp(unit, "minute") == 0 || strcmp(unit, "minutes") == 0) {
-        seconds = amount * 60;
-    } else if (strcmp(unit, "hour") == 0 || strcmp(unit, "hours") == 0) {
-        seconds = amount * 3600;
-    } else if (strcmp(unit, "day") == 0 || strcmp(unit, "days") == 0) {
-        seconds = amount * 86400;
-    } else if (strcmp(unit, "week") == 0 || strcmp(unit, "weeks") == 0) {
-        seconds = amount * 604800;
-    } else if (strcmp(unit, "month") == 0 || strcmp(unit, "months") == 0) {
-        struct tm tm;
-        xr_datetime_to_tm(dt, &tm);
-        int total_months = (tm.tm_year + 1900) * 12 + tm.tm_mon + (int) amount;
-        tm.tm_year = total_months / 12 - 1900;
-        tm.tm_mon = total_months % 12;
-        if (tm.tm_mon < 0) {
-            tm.tm_mon += 12;
-            tm.tm_year--;
-        }
-        // Clamp day to target month's max
-        int max_day = days_in_month_table(tm.tm_year + 1900, tm.tm_mon + 1);
-        if (tm.tm_mday > max_day)
-            tm.tm_mday = max_day;
-        tm.tm_isdst = -1;
-        time_t t = datetime_mktime(&tm, dt->is_utc);
-        XrDateTime *result = datetime_alloc(isolate);
-        result->timestamp = (int64_t) t;
-        result->milliseconds = dt->milliseconds;
-        result->tz_offset = dt->tz_offset;
-        result->is_utc = dt->is_utc;
-        return result;
-    } else if (strcmp(unit, "year") == 0 || strcmp(unit, "years") == 0) {
-        struct tm tm;
-        xr_datetime_to_tm(dt, &tm);
-        tm.tm_year += (int) amount;
-        // Clamp day for Feb 29 → non-leap year
-        int max_day = days_in_month_table(tm.tm_year + 1900, tm.tm_mon + 1);
-        if (tm.tm_mday > max_day)
-            tm.tm_mday = max_day;
-        tm.tm_isdst = -1;
-        time_t t = datetime_mktime(&tm, dt->is_utc);
-        XrDateTime *result = datetime_alloc(isolate);
-        result->timestamp = (int64_t) t;
-        result->milliseconds = dt->milliseconds;
-        result->tz_offset = dt->tz_offset;
-        result->is_utc = dt->is_utc;
-        return result;
-    } else {
-        // Unknown unit — report error and default to seconds
+    XrDateTimeCoreFields input = datetime_core_fields(dt);
+    XrDateTimeCoreFields output;
+    if (!xr_datetime_core_add_fields(&input, amount, unit, &output)) {
         fprintf(stderr, "datetime.add(): unknown unit '%s'\n", unit);
-        seconds = amount;
     }
 
     XrDateTime *result = datetime_alloc(isolate);
-    result->timestamp = dt->timestamp + seconds;
-    result->milliseconds = dt->milliseconds;
-    result->tz_offset = dt->tz_offset;
-    result->is_utc = dt->is_utc;
+    datetime_apply_core_fields(result, &output);
     return result;
 }
 
 int64_t xr_datetime_diff(XrDateTime *dt1, XrDateTime *dt2, const char *unit) {
-    int64_t diff_ms =
-        (dt1->timestamp - dt2->timestamp) * 1000 + (dt1->milliseconds - dt2->milliseconds);
-
-    if (strcmp(unit, "millisecond") == 0 || strcmp(unit, "milliseconds") == 0) {
-        return diff_ms;
-    } else if (strcmp(unit, "second") == 0 || strcmp(unit, "seconds") == 0) {
-        return diff_ms / 1000;
-    } else if (strcmp(unit, "minute") == 0 || strcmp(unit, "minutes") == 0) {
-        return diff_ms / 60000;
-    } else if (strcmp(unit, "hour") == 0 || strcmp(unit, "hours") == 0) {
-        return diff_ms / 3600000;
-    } else if (strcmp(unit, "day") == 0 || strcmp(unit, "days") == 0) {
-        return diff_ms / 86400000;
-    } else if (strcmp(unit, "week") == 0 || strcmp(unit, "weeks") == 0) {
-        return diff_ms / 604800000;
-    }
-    // Default: seconds
-    return diff_ms / 1000;
+    XrDateTimeCoreFields a = datetime_core_fields(dt1);
+    XrDateTimeCoreFields b = datetime_core_fields(dt2);
+    return xr_datetime_core_diff_fields(&a, &b, unit);
 }
 
 /* ========== Timezone API ========== */
-
-// Copy every user-visible field explicitly instead of doing a raw memcpy
-// past the object header: the old byte-level copy silently broke every time
-// XrObjHeader changed layout, and produced subtle aliasing issues when header
-// metadata grew.
-static void datetime_copy_fields(XrDateTime *dst, const XrDateTime *src) {
-    dst->timestamp = src->timestamp;
-    dst->milliseconds = src->milliseconds;
-    dst->tz_offset = src->tz_offset;
-    dst->is_utc = src->is_utc;
-}
 
 XrDateTime *xr_datetime_to_utc(XrVMRuntime *isolate, XrDateTime *dt) {
     XrDateTime *result = datetime_alloc(isolate);
     if (!result)
         return NULL;
-    if (dt->is_utc) {
-        datetime_copy_fields(result, dt);
-    } else {
-        result->timestamp = dt->timestamp;
-        result->milliseconds = dt->milliseconds;
-        result->tz_offset = 0;
-        result->is_utc = 1;
-    }
+    XrDateTimeCoreFields input = datetime_core_fields(dt);
+    XrDateTimeCoreFields output;
+    xr_datetime_core_to_utc_fields(&input, &output);
+    datetime_apply_core_fields(result, &output);
     return result;
 }
 
@@ -729,14 +369,10 @@ XrDateTime *xr_datetime_to_local(XrVMRuntime *isolate, XrDateTime *dt) {
     XrDateTime *result = datetime_alloc(isolate);
     if (!result)
         return NULL;
-    if (!dt->is_utc) {
-        datetime_copy_fields(result, dt);
-    } else {
-        result->timestamp = dt->timestamp;
-        result->milliseconds = dt->milliseconds;
-        result->tz_offset = local_offset_at((time_t) dt->timestamp);
-        result->is_utc = 0;
-    }
+    XrDateTimeCoreFields input = datetime_core_fields(dt);
+    XrDateTimeCoreFields output;
+    xr_datetime_core_to_local_fields(&input, &output);
+    datetime_apply_core_fields(result, &output);
     return result;
 }
 
@@ -758,49 +394,37 @@ static XrValue dt_utc(XrVMRuntime *isolate, XrValue *args, int nargs) {
 }
 
 static XrValue dt_create(XrVMRuntime *isolate, XrValue *args, int nargs) {
-    int year = nargs > 0 && XR_IS_INT(args[0]) ? (int) XR_TO_INT(args[0]) : 1970;
-    int month = nargs > 1 && XR_IS_INT(args[1]) ? (int) XR_TO_INT(args[1]) : 1;
-    int day = nargs > 2 && XR_IS_INT(args[2]) ? (int) XR_TO_INT(args[2]) : 1;
-    int hour = nargs > 3 && XR_IS_INT(args[3]) ? (int) XR_TO_INT(args[3]) : 0;
-    int minute = nargs > 4 && XR_IS_INT(args[4]) ? (int) XR_TO_INT(args[4]) : 0;
-    int second = nargs > 5 && XR_IS_INT(args[5]) ? (int) XR_TO_INT(args[5]) : 0;
+    int year = (int) dt_int_arg_or(args, nargs, 0, 1970);
+    int month = (int) dt_int_arg_or(args, nargs, 1, 1);
+    int day = (int) dt_int_arg_or(args, nargs, 2, 1);
+    int hour = (int) dt_int_arg_or(args, nargs, 3, 0);
+    int minute = (int) dt_int_arg_or(args, nargs, 4, 0);
+    int second = (int) dt_int_arg_or(args, nargs, 5, 0);
     return xr_datetime_value(
         xr_datetime_create(isolate, year, month, day, hour, minute, second, 0));
 }
 
 static XrValue dt_create_utc(XrVMRuntime *isolate, XrValue *args, int nargs) {
-    int year = nargs > 0 && XR_IS_INT(args[0]) ? (int) XR_TO_INT(args[0]) : 1970;
-    int month = nargs > 1 && XR_IS_INT(args[1]) ? (int) XR_TO_INT(args[1]) : 1;
-    int day = nargs > 2 && XR_IS_INT(args[2]) ? (int) XR_TO_INT(args[2]) : 1;
-    int hour = nargs > 3 && XR_IS_INT(args[3]) ? (int) XR_TO_INT(args[3]) : 0;
-    int minute = nargs > 4 && XR_IS_INT(args[4]) ? (int) XR_TO_INT(args[4]) : 0;
-    int second = nargs > 5 && XR_IS_INT(args[5]) ? (int) XR_TO_INT(args[5]) : 0;
+    int year = (int) dt_int_arg_or(args, nargs, 0, 1970);
+    int month = (int) dt_int_arg_or(args, nargs, 1, 1);
+    int day = (int) dt_int_arg_or(args, nargs, 2, 1);
+    int hour = (int) dt_int_arg_or(args, nargs, 3, 0);
+    int minute = (int) dt_int_arg_or(args, nargs, 4, 0);
+    int second = (int) dt_int_arg_or(args, nargs, 5, 0);
     return xr_datetime_value(
         xr_datetime_create(isolate, year, month, day, hour, minute, second, 1));
 }
 
 static XrValue dt_from_timestamp(XrVMRuntime *isolate, XrValue *args, int nargs) {
-    if (nargs < 1)
-        return XR_NULL_VAL;
     int64_t ts = 0;
-    if (XR_IS_INT(args[0]))
-        ts = XR_TO_INT(args[0]);
-    else if (XR_IS_FLOAT(args[0]))
-        ts = (int64_t) XR_TO_FLOAT(args[0]);
-    else
+    if (!dt_required_int_arg(args, nargs, 0, &ts))
         return XR_NULL_VAL;
     return xr_datetime_value(xr_datetime_from_timestamp(isolate, ts));
 }
 
 static XrValue dt_from_timestamp_ms(XrVMRuntime *isolate, XrValue *args, int nargs) {
-    if (nargs < 1)
-        return XR_NULL_VAL;
     int64_t ts = 0;
-    if (XR_IS_INT(args[0]))
-        ts = XR_TO_INT(args[0]);
-    else if (XR_IS_FLOAT(args[0]))
-        ts = (int64_t) XR_TO_FLOAT(args[0]);
-    else
+    if (!dt_required_int_arg(args, nargs, 0, &ts))
         return XR_NULL_VAL;
     return xr_datetime_value(xr_datetime_from_timestamp_ms(isolate, ts));
 }
@@ -854,32 +478,8 @@ static XrValue dt_format(XrVMRuntime *isolate, XrValue self, XrValue *args, int 
     xr_ctxbuf_init(&out, 64);
     struct tm tm;
     xr_datetime_to_tm(dt, &tm);
-    for (const char *p = pattern; *p;) {
-        if (strncmp(p, "YYYY", 4) == 0) {
-            xr_ctxbuf_appendf(&out, "%04d", tm.tm_year + 1900);
-            p += 4;
-        } else if (strncmp(p, "MM", 2) == 0 && p[2] != 'M') {
-            xr_ctxbuf_appendf(&out, "%02d", tm.tm_mon + 1);
-            p += 2;
-        } else if (strncmp(p, "DD", 2) == 0) {
-            xr_ctxbuf_appendf(&out, "%02d", tm.tm_mday);
-            p += 2;
-        } else if (strncmp(p, "HH", 2) == 0) {
-            xr_ctxbuf_appendf(&out, "%02d", tm.tm_hour);
-            p += 2;
-        } else if (strncmp(p, "mm", 2) == 0) {
-            xr_ctxbuf_appendf(&out, "%02d", tm.tm_min);
-            p += 2;
-        } else if (strncmp(p, "ss", 2) == 0) {
-            xr_ctxbuf_appendf(&out, "%02d", tm.tm_sec);
-            p += 2;
-        } else if (strncmp(p, "SSS", 3) == 0) {
-            xr_ctxbuf_appendf(&out, "%03d", dt->milliseconds);
-            p += 3;
-        } else {
-            xr_ctxbuf_putc(&out, *p++);
-        }
-    }
+    XrDateTimeCoreWriter writer = {.ctx = &out, .write = datetime_ctxbuf_write};
+    (void) xr_datetime_core_format_tm(&writer, &tm, dt->milliseconds, pattern, -1);
     XrValue v = xr_string_value(xr_string_new(isolate, out.data ? out.data : "", out.len));
     xr_ctxbuf_free(&out);
     return v;
@@ -990,7 +590,7 @@ static XrValue dt_add(XrVMRuntime *isolate, XrValue self, XrValue *args, int nar
     if (!xr_value_is_datetime(isolate, self) || nargs < 2 || !XR_IS_STRING(args[1]))
         return XR_NULL_VAL;
     XrDateTime *dt = xr_value_get_datetime_body(isolate, self);
-    int64_t amount = XR_IS_INT(args[0]) ? XR_TO_INT(args[0]) : 0;
+    int64_t amount = dt_int_arg_or(args, nargs, 0, 0);
     const char *unit = XR_STRING_CHARS(XR_TO_STRING(args[1]));
     return xr_datetime_value(xr_datetime_add(isolate, dt, amount, unit));
 }
@@ -1079,87 +679,9 @@ static XrValue dt_days_in_month(XrVMRuntime *isolate, XrValue self, XrValue *arg
     return XR_INT(xr_datetime_days_in_month(xr_value_get_datetime_body(isolate, self)));
 }
 
-#include "../../src/runtime/object/xnative_type.h"
-
-/* ========== DateTime Native Type Method Table ========== */
-
-static XrNativeMethod datetime_methods[] = {{"toString", dt_to_string, 1},
-                                            {"format", dt_format, 2},
-                                            {"toISOString", dt_to_iso, 1},
-                                            {"add", dt_add, 3},
-                                            {"diff", dt_diff, 3},
-                                            {"toUTC", dt_to_utc, 1},
-                                            {"toLocal", dt_to_local, 1},
-                                            {"isBefore", dt_is_before, 2},
-                                            {"isAfter", dt_is_after, 2},
-                                            {"equals", dt_equals, 2},
-                                            {"isLeapYear", dt_is_leap_year, 1},
-                                            {"daysInMonth", dt_days_in_month, 1},
-                                            {NULL, NULL, 0}};
-
-static XrNativeMethod datetime_getters[] = {{"year", dt_year, 1},
-                                            {"month", dt_month, 1},
-                                            {"day", dt_day, 1},
-                                            {"hour", dt_hour, 1},
-                                            {"minute", dt_minute, 1},
-                                            {"second", dt_second, 1},
-                                            {"millisecond", dt_millisecond, 1},
-                                            {"weekday", dt_weekday, 1},
-                                            {"yearday", dt_yearday, 1},
-                                            {"timestamp", dt_timestamp, 1},
-                                            {NULL, NULL, 0}};
-
-// ========== Type Declarations (parsed by gen_stdlib_types.py) ==========
-
-#include "../../src/module/xbuiltin_decl.h"
-
-// @module datetime
-
-XR_DEFINE_BUILTIN(dt_now, "now", "(): DateTime", "Get current local datetime")
-XR_DEFINE_BUILTIN(dt_utc, "utc", "(): DateTime", "Get current UTC datetime")
-XR_DEFINE_BUILTIN(
-    dt_create, "create",
-    "(year: int, month?: int, day?: int, hour?: int, minute?: int, second?: int): DateTime",
-    "Create local datetime")
-XR_DEFINE_BUILTIN(
-    dt_create_utc, "createUTC",
-    "(year: int, month?: int, day?: int, hour?: int, minute?: int, second?: int): DateTime",
-    "Create UTC datetime")
-XR_DEFINE_BUILTIN(dt_from_timestamp, "fromTimestamp", "(ts: int): DateTime",
-                  "Create datetime from Unix timestamp (seconds)")
-XR_DEFINE_BUILTIN(dt_from_timestamp_ms, "fromTimestampMs", "(ts: int): DateTime",
-                  "Create datetime from Unix timestamp (milliseconds)")
-XR_DEFINE_BUILTIN(dt_parse, "parse", "(s: string, format?: string): DateTime?",
-                  "Parse datetime string")
-XR_DEFINE_BUILTIN(dt_offset, "offset", "(): int", "Get UTC offset in minutes")
-
-// @type DateTime
-XR_DEFINE_BUILTIN(dt_format, "format", "(pattern?: string): string", "Format datetime to string")
-XR_DEFINE_BUILTIN(dt_to_iso, "toISOString", "(): string", "Convert to ISO 8601 string")
-XR_DEFINE_BUILTIN(dt_year, "year", "(): int", "Get year")
-XR_DEFINE_BUILTIN(dt_month, "month", "(): int", "Get month (1-12)")
-XR_DEFINE_BUILTIN(dt_day, "day", "(): int", "Get day (1-31)")
-XR_DEFINE_BUILTIN(dt_hour, "hour", "(): int", "Get hour (0-23)")
-XR_DEFINE_BUILTIN(dt_minute, "minute", "(): int", "Get minute (0-59)")
-XR_DEFINE_BUILTIN(dt_second, "second", "(): int", "Get second (0-59)")
-XR_DEFINE_BUILTIN(dt_millisecond, "millisecond", "(): int", "Get millisecond (0-999)")
-XR_DEFINE_BUILTIN(dt_weekday, "weekday", "(): int", "Get weekday (0=Sunday)")
-XR_DEFINE_BUILTIN(dt_yearday, "yearday", "(): int", "Get day of year (1-366)")
-XR_DEFINE_BUILTIN(dt_timestamp, "timestamp", "(): int", "Get Unix timestamp (seconds)")
-XR_DEFINE_BUILTIN(dt_add, "add", "(amount: int, unit: string): DateTime",
-                  "Add duration to datetime")
-XR_DEFINE_BUILTIN(dt_diff, "diff", "(other: DateTime, unit?: string): int",
-                  "Difference between datetimes")
-XR_DEFINE_BUILTIN(dt_to_utc, "toUTC", "(): DateTime", "Convert to UTC")
-XR_DEFINE_BUILTIN(dt_to_local, "toLocal", "(): DateTime", "Convert to local time")
-XR_DEFINE_BUILTIN(dt_is_before, "isBefore", "(other: DateTime): bool",
-                  "Check if before other datetime")
-XR_DEFINE_BUILTIN(dt_is_after, "isAfter", "(other: DateTime): bool",
-                  "Check if after other datetime")
-XR_DEFINE_BUILTIN(dt_equals, "equals", "(other: DateTime): bool",
-                  "Check if equal to other datetime")
-XR_DEFINE_BUILTIN(dt_is_leap_year, "isLeapYear", "(): bool", "Check if leap year")
-XR_DEFINE_BUILTIN(dt_days_in_month, "daysInMonth", "(): int", "Get days in current month")
+#define XR_STDLIB_VM_BIND_MODULE_DATETIME 1
+#include "../../src/stdlib/xstdlib_vm_bindings_generated.inc.c"
+#undef XR_STDLIB_VM_BIND_MODULE_DATETIME
 
 /* ========== Native Body Descriptor ========== */
 
@@ -1186,44 +708,19 @@ static XrNativeBodyDesc g_datetime_body_desc = {
     .to_shared = NULL,
 };
 
+#define XR_STDLIB_VM_BIND_CLASS_DATE_TIME 1
+#include "../../src/stdlib/xstdlib_class_bindings_generated.inc.c"
+#undef XR_STDLIB_VM_BIND_CLASS_DATE_TIME
+
 /* DateTime class registration is invoked unconditionally during isolate
  * init by xr_prelude_register_all_native_types, so the XrClass is
  * available even when user code never `import datetime`. */
 void xr_register_datetime_class(XrVMRuntime *isolate) {
-    XR_DCHECK(isolate != NULL, "register_datetime_class: NULL isolate");
+    xr_stdlib_vm_register_date_time_class_generated(isolate);
     XrayCoreClasses *core = xr_isolate_get_core_classes(isolate);
-    XR_DCHECK(core != NULL, "register_datetime_class: core not initialised");
-    XR_DCHECK(core->objectClass != NULL, "register_datetime_class: Object not registered");
-    XR_DCHECK(core->dateTimeClass == NULL, "register_datetime_class: already registered");
-
-    XrClassBuilder *builder = xr_class_builder_new(isolate, "DateTime", core->objectClass);
-    XR_CHECK(builder != NULL, "register_datetime_class: builder alloc failed");
-
-    xr_class_builder_set_native_body(builder, &g_datetime_body_desc);
-
-    /* Instance methods (with self) */
-    for (int i = 0; datetime_methods[i].name != NULL; i++) {
-        const XrNativeMethod *m = &datetime_methods[i];
-        xr_class_builder_add_method(builder, m->name, m->func, m->arity, 0);
-    }
-    /* Property getters: register as `get:<name>` so OP_GETPROP resolves
-     * them through the standard getter lookup path (no parens at call site). */
-    {
-        char buf[64];
-        for (int i = 0; datetime_getters[i].name != NULL; i++) {
-            const XrNativeMethod *g = &datetime_getters[i];
-            snprintf(buf, sizeof(buf), "get:%s", g->name);
-            xr_class_builder_add_method(builder, buf, g->func, g->arity, 0);
-        }
-    }
-
-    XrClass *cls = xr_class_builder_finalize(builder);
-    XR_CHECK(cls != NULL, "register_datetime_class: finalize failed");
-    cls->flags |= XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY;
-    cls->builtin_kind = XR_BK_DATETIME;
-
-    core->dateTimeClass = cls;
-    g_datetime_body_offset = xr_instance_body_offset(cls);
+    XR_DCHECK(core != NULL && core->dateTimeClass != NULL,
+              "register_datetime_class: DateTime not registered");
+    g_datetime_body_offset = xr_instance_body_offset(core->dateTimeClass);
 }
 
 XrModule *xr_load_module_datetime(XrVMRuntime *isolate) {
@@ -1235,14 +732,7 @@ XrModule *xr_load_module_datetime(XrVMRuntime *isolate) {
     if (!mod)
         return NULL;
 
-    XRS_EXPORT(mod, isolate, "now", dt_now);
-    XRS_EXPORT(mod, isolate, "utc", dt_utc);
-    XRS_EXPORT(mod, isolate, "create", dt_create);
-    XRS_EXPORT(mod, isolate, "createUTC", dt_create_utc);
-    XRS_EXPORT(mod, isolate, "fromTimestamp", dt_from_timestamp);
-    XRS_EXPORT(mod, isolate, "fromTimestampMs", dt_from_timestamp_ms);
-    XRS_EXPORT(mod, isolate, "parse", dt_parse);
-    XRS_EXPORT(mod, isolate, "offset", dt_offset);
+    xr_stdlib_vm_bind_datetime_generated(isolate, mod);
 
     mod->loaded = true;
     return mod;

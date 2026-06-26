@@ -150,25 +150,39 @@ static inline XrValue xrt_boolmap_box_value(const xrt_boolmap_t *b, int i) {
 
 /* ---- interop entry points (tagged XrValue keys/values) ----------------- */
 
+static inline int xrt_boolmap_key_index_v(XrValue key, int *out_index) {
+    if (!XR_IS_BOOL(key))
+        return 0;
+    if (out_index)
+        *out_index = key.i != 0 ? 1 : 0;
+    return 1;
+}
+
 static inline XrValue xrt_boolmap_get_v(xrt_boolmap_t *b, XrValue key) {
-    int i = xrt_boolmap_index(xr_value_to_int64_coerce(key));
+    int i = 0;
+    if (!xrt_boolmap_key_index_v(key, &i))
+        return XR_NULL_VAL;
     return ((b->present >> i) & 1) ? xrt_boolmap_box_value(b, i) : XR_NULL_VAL;
 }
 
 static inline int xrt_boolmap_has_v(xrt_boolmap_t *b, XrValue key) {
-    return (b->present >> xrt_boolmap_index(xr_value_to_int64_coerce(key))) & 1;
+    int i = 0;
+    return xrt_boolmap_key_index_v(key, &i) ? ((b->present >> i) & 1) : 0;
 }
 
 static inline int xrt_boolmap_delete_v(xrt_boolmap_t *b, XrValue key) {
-    return xrt_boolmap_delete(b, xr_value_to_int64_coerce(key));
+    int i = 0;
+    return xrt_boolmap_key_index_v(key, &i) ? xrt_boolmap_delete(b, i) : 0;
 }
 
 static inline void xrt_boolmap_set_v(xrt_boolmap_t *b, XrValue key, XrValue val) {
-    int64_t k = xr_value_to_int64_coerce(key);
+    int i = 0;
+    if (!xrt_boolmap_key_index_v(key, &i))
+        return;
     if (b->value_type == XR_ELEM_F32)
-        xrt_boolmap_set_f32(b, k, xr_value_to_f64_coerce(val));
+        xrt_boolmap_set_f32(b, i, xr_value_to_f64_coerce(val));
     else
-        xrt_boolmap_set_i64(b, k, xr_value_to_int64_coerce(val));
+        xrt_boolmap_set_i64(b, i, xr_value_to_int64_coerce(val));
 }
 
 static inline XrValue xrt_boolmap_keys(xrt_boolmap_t *b) {

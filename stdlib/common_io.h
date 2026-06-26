@@ -15,7 +15,7 @@
  *   trade-off: full `XrAsyncPool` integration would require turning
  *   every parseFile / writeFile binding into a yieldable C function
  *   with XrAsyncJob continuations and rewriting the per-coro IO state
- *   in `src/coro/*`.
+ *   in the coroutine runtime.
  *
  *   By funnelling all four modules through this single helper we
  *   guarantee:

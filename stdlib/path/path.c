@@ -14,7 +14,6 @@
 
 #include "path.h"
 #include "../common.h"
-#include "../ctxbuf.h"
 #include "../../src/runtime/object/xmap.h"
 #include "../../src/runtime/object/xjson.h"
 #include "../../src/base/xplatform.h"
@@ -28,14 +27,6 @@
 
 /* Output always uses '/' for portability; input parsing accepts both on Windows. */
 #define PATH_SEP '/'
-#define PATH_SEP_STR "/"
-#ifdef XR_OS_WINDOWS
-#define PATH_DELIMITER ";"
-#define IS_SEP(c) ((c) == '/' || (c) == '\\')
-#else
-#define PATH_DELIMITER ":"
-#define IS_SEP(c) ((c) == '/')
-#endif
 
 /* ========== Helper Functions ========== */
 
@@ -48,6 +39,16 @@ static inline XrValue make_string_n(XrVMRuntime *X, const char *s, size_t len) {
 
 static inline XrValue make_string_slice(XrVMRuntime *X, XrPathCoreSlice slice) {
     return make_string_n(X, slice.data, slice.len);
+}
+
+static void *path_core_alloc(void *ctx, size_t size) {
+    (void) ctx;
+    return xr_malloc(size);
+}
+
+static void path_core_free(void *ctx, void *ptr) {
+    (void) ctx;
+    xr_free(ptr);
 }
 
 /* ========== Path Operations ========== */
@@ -175,33 +176,8 @@ static XrValue path_isAbsolute(XrVMRuntime *X, XrValue *args, int argc) {
 }
 
 static bool path_normalize_alloc(const char *path, size_t len, char **out, size_t *out_len) {
-    if (!out || !out_len)
-        return false;
-    *out = NULL;
-    *out_len = 0;
-    size_t max_segs = xr_path_core_normalize_segment_cap(len);
-    size_t *seg_buf = (size_t *) xr_malloc(sizeof(size_t) * max_segs * 2);
-    if (!seg_buf)
-        return false;
-    size_t *seg_starts = seg_buf;
-    size_t *seg_lens = seg_buf + max_segs;
-    size_t seg_count = 0;
-    bool is_absolute = false;
-    if (!xr_path_core_normalize_plan(path, len, seg_starts, seg_lens, max_segs, &seg_count,
-                                     &is_absolute, out_len)) {
-        xr_free(seg_buf);
-        return false;
-    }
-
-    char *result = (char *) xr_malloc(*out_len + 1);
-    if (!result) {
-        xr_free(seg_buf);
-        return false;
-    }
-    xr_path_core_normalize_write(path, seg_starts, seg_lens, seg_count, is_absolute, result);
-    xr_free(seg_buf);
-    *out = result;
-    return true;
+    return xr_path_core_normalize_alloc(path, len, path_core_alloc, path_core_free, NULL, out,
+                                        out_len);
 }
 
 // normalize(path) - Normalize path (resolve . and ..)
@@ -270,21 +246,21 @@ static XrValue path_resolve(XrVMRuntime *X, XrValue *args, int argc) {
         lens[i + 1] = parts[i + 1] ? len : 0;
     }
 
-    if (xr_path_core_join_has_absolute(parts + 1, lens + 1, (size_t) argc)) {
-        XrValue ret = path_resolve_join_normalized(X, parts + 1, lens + 1, (size_t) argc);
-        xr_free(heap_buf);
-        return ret;
-    }
-
     char cwd[XR_PATH_MAX];
-    if (xr_fs_getcwd(cwd, sizeof(cwd)) == NULL) {
-        cwd[0] = PATH_SEP;
-        cwd[1] = '\0';
+    size_t cwd_len = 0;
+    if (xr_path_core_resolve_needs_cwd(parts + 1, lens + 1, (size_t) argc)) {
+        if (xr_fs_getcwd(cwd, sizeof(cwd)) == NULL)
+            xr_path_core_resolve_fallback_cwd(cwd, sizeof(cwd));
+        cwd_len = strlen(cwd);
     }
 
-    parts[0] = cwd;
-    lens[0] = strlen(cwd);
-    XrValue ret = path_resolve_join_normalized(X, parts, lens, total);
+    size_t resolve_count = 0;
+    if (!xr_path_core_resolve_parts(parts + 1, lens + 1, (size_t) argc, cwd, cwd_len, parts, lens,
+                                    total, &resolve_count)) {
+        xr_free(heap_buf);
+        return xr_null();
+    }
+    XrValue ret = path_resolve_join_normalized(X, parts, lens, resolve_count);
     xr_free(heap_buf);
     return ret;
 }
@@ -347,11 +323,9 @@ static XrValue path_parse(XrVMRuntime *X, XrValue *args, int argc) {
 
     if (argc < 1 || !XR_IS_STRING(args[0])) {
         XrValue empty = xrs_string_value_c(X, "");
-        xr_json_set_by_key(X, json, "root", empty);
-        xr_json_set_by_key(X, json, "dir", empty);
-        xr_json_set_by_key(X, json, "base", empty);
-        xr_json_set_by_key(X, json, "name", empty);
-        xr_json_set_by_key(X, json, "ext", empty);
+        for (int i = 0; i < XR_PATH_CORE_PARSE_FIELD_COUNT; i++)
+            xr_json_set_by_key(X, json, xr_path_core_parse_field_name((XrPathCoreParseField) i),
+                               empty);
         return xr_json_value(json);
     }
 
@@ -364,20 +338,19 @@ static XrValue path_parse(XrVMRuntime *X, XrValue *args, int argc) {
     if (!xr_path_core_parse_plan(path, plen, &plan))
         return xr_null();
 
-    xr_json_set_by_key(X, json, "root", make_string_slice(X, plan.root));
-    xr_json_set_by_key(X, json, "dir", make_string_slice(X, plan.dir));
-    xr_json_set_by_key(X, json, "base", make_string_slice(X, plan.base));
-    xr_json_set_by_key(X, json, "name", make_string_slice(X, plan.name));
-    xr_json_set_by_key(X, json, "ext", make_string_slice(X, plan.ext));
+    for (int i = 0; i < XR_PATH_CORE_PARSE_FIELD_COUNT; i++) {
+        XrPathCoreParseField field = (XrPathCoreParseField) i;
+        xr_json_set_by_key(X, json, xr_path_core_parse_field_name(field),
+                           make_string_slice(X, xr_path_core_parse_plan_field(&plan, field)));
+    }
 
     return xr_json_value(json);
 }
 
 // format(obj) - Build path from a PathInfo Json.
 //
-// Uses a dynamic buffer so arbitrarily long paths are preserved, and honours
-// PATH_SEP rather than hard-coding '/'. That avoids mixed-separator output
-// on Windows, e.g. `C:\foo/bar`.
+// The layout rule is shared with AOT: base wins over name/ext; otherwise
+// name+ext forms the basename, and a single '/' joins non-empty dir/base.
 static XrValue path_format(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 1)
         return xrs_string_value_c(X, "");
@@ -391,68 +364,33 @@ static XrValue path_format(XrVMRuntime *X, XrValue *args, int argc) {
     XrValue name = xr_json_get_by_key(X, json, "name");
     XrValue ext = xr_json_get_by_key(X, json, "ext");
 
-    // Derive `base` from name+ext when only those are present.
-    XrCtxBuf base_buf;
-    xr_ctxbuf_init(&base_buf, 64);
-    const char *base_str = xrs_string_arg(base, NULL);
-    if (!base_str || base_str[0] == '\0') {
-        const char *name_str = xrs_string_arg(name, NULL);
-        const char *ext_str = xrs_string_arg(ext, NULL);
-        if (name_str && name_str[0] != '\0') {
-            xr_ctxbuf_append_cstr(&base_buf, name_str);
-            if (ext_str)
-                xr_ctxbuf_append_cstr(&base_buf, ext_str);
-            base_str = base_buf.data;
-        }
+    size_t dir_len = 0;
+    size_t base_len = 0;
+    size_t name_len = 0;
+    size_t ext_len = 0;
+    XrPathCoreFormatPlan plan;
+    if (!xr_path_core_format_plan(xr_path_core_slice(xrs_string_arg(dir, &dir_len), dir_len),
+                                  xr_path_core_slice(xrs_string_arg(base, &base_len), base_len),
+                                  xr_path_core_slice(xrs_string_arg(name, &name_len), name_len),
+                                  xr_path_core_slice(xrs_string_arg(ext, &ext_len), ext_len),
+                                  &plan)) {
+        return xr_null();
     }
 
-    const char *dir_str = xrs_string_arg(dir, NULL);
-    if (dir_str && dir_str[0] != '\0') {
-        XrCtxBuf out;
-        xr_ctxbuf_init(&out, 128);
-        xr_ctxbuf_append_cstr(&out, dir_str);
-        // Avoid duplicating the separator if `dir` already ends with one.
-        if (out.len > 0 && !IS_SEP(out.data[out.len - 1])) {
-            xr_ctxbuf_putc(&out, PATH_SEP);
-        }
-        if (base_str)
-            xr_ctxbuf_append_cstr(&out, base_str);
-        xr_ctxbuf_free(&base_buf);
-        XrValue v = xrs_string_value_n(X, out.data ? out.data : "", out.len);
-        xr_ctxbuf_free(&out);
-        return v;
-    }
-
-    XrValue v =
-        (base_str && base_str[0]) ? xrs_string_value_c(X, base_str) : xrs_string_value_c(X, "");
-    xr_ctxbuf_free(&base_buf);
-    return v;
+    char *result = (char *) xr_malloc(plan.out_len + 1);
+    if (!result)
+        return xr_null();
+    xr_path_core_format_write(&plan, result);
+    XrValue ret = xrs_string_value_n(X, result, plan.out_len);
+    xr_free(result);
+    return ret;
 }
 
 /* ========== Module Loading ========== */
 
-// ========== Type Declarations (parsed by gen_stdlib_types.py) ==========
-
-#include "../../src/module/xbuiltin_decl.h"
-
-// @module path
-// @handle PathInfo { const root: string, const dir: string, const base: string, const name: string,
-// const ext: string }
-
-XR_DEFINE_BUILTIN(path_join, "join", "(...parts: string): string", "Join path segments")
-XR_DEFINE_BUILTIN(path_dirname, "dirname", "(path: string): string", "Get directory name")
-XR_DEFINE_BUILTIN(path_basename, "basename", "(path: string): string", "Get base name")
-XR_DEFINE_BUILTIN(path_extname, "extname", "(path: string): string", "Get file extension")
-XR_DEFINE_BUILTIN(path_normalize, "normalize", "(path: string): string",
-                  "Normalize path separators")
-XR_DEFINE_BUILTIN(path_isAbsolute, "isAbsolute", "(path: string): bool",
-                  "Check if path is absolute")
-XR_DEFINE_BUILTIN(path_resolve, "resolve", "(...parts: string): string", "Resolve to absolute path")
-XR_DEFINE_BUILTIN(path_relative, "relative", "(from: string, to: string): string",
-                  "Get relative path")
-XR_DEFINE_BUILTIN(path_parse, "parse", "(path: string): PathInfo",
-                  "Parse path into components (root, dir, base, name, ext)")
-XR_DEFINE_BUILTIN(path_format, "format", "(obj: PathInfo): string", "Format path from components")
+#define XR_STDLIB_VM_BIND_MODULE_PATH 1
+#include "../../src/stdlib/xstdlib_vm_bindings_generated.inc.c"
+#undef XR_STDLIB_VM_BIND_MODULE_PATH
 
 XR_FUNC XrModule *xr_load_module_path(XrVMRuntime *isolate) {
     XR_DCHECK(isolate != NULL, "xr_load_module_path: NULL isolate");
@@ -461,22 +399,8 @@ XR_FUNC XrModule *xr_load_module_path(XrVMRuntime *isolate) {
     if (!mod)
         return NULL;
 
-    XRS_EXPORT(mod, isolate, "join", path_join);
-    XRS_EXPORT(mod, isolate, "dirname", path_dirname);
-    XRS_EXPORT(mod, isolate, "basename", path_basename);
-    XRS_EXPORT(mod, isolate, "extname", path_extname);
-    XRS_EXPORT(mod, isolate, "normalize", path_normalize);
-    XRS_EXPORT(mod, isolate, "isAbsolute", path_isAbsolute);
-    XRS_EXPORT(mod, isolate, "resolve", path_resolve);
-    XRS_EXPORT(mod, isolate, "relative", path_relative);
-    XRS_EXPORT(mod, isolate, "parse", path_parse);
-    XRS_EXPORT(mod, isolate, "format", path_format);
+    xr_stdlib_vm_bind_path_generated(isolate, mod);
 
-    // Add constants
-    xr_module_add_export(isolate, mod, "sep", xrs_string_value_c(isolate, PATH_SEP_STR));
-    xr_module_add_export(isolate, mod, "delimiter", xrs_string_value_c(isolate, PATH_DELIMITER));
-
-    // Mark as loaded
     mod->loaded = true;
     return mod;
 }

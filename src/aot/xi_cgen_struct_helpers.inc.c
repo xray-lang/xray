@@ -1150,10 +1150,7 @@ static bool emit_struct_fixed_array_index_set_expr(XiCgenCtx *ctx, FILE *out, co
     } else {
         fprintf(out, "({ int64_t _idx = ");
         emit_value_as_rep(out, v->args[1], XR_REP_I64);
-        fprintf(out,
-                "; if (_idx < 0 || _idx >= %u) { fprintf(stderr, "
-                "\"fixed array index out of range: %%lld (length %u)\\n\", "
-                "(long long)_idx); abort(); } ",
+        fprintf(out, "; if (XR_UNLIKELY(_idx < 0 || _idx >= %u)) xrt_index_oob(_idx, %u); ",
                 (unsigned) field->elem_count, (unsigned) field->elem_count);
     }
     emit_struct_heap_field_lvalue(ctx, out, f, sl, ref->aux_int, ref->args[0], prefix);

@@ -17,17 +17,9 @@
 #include <stdbool.h>
 #include <string.h>
 
-// Forward declare C-level API from stdlib/compress
-typedef enum {
-    XR_COMPRESS_OK = 0,
-    XR_COMPRESS_ERR_MEMORY,
-    XR_COMPRESS_ERR_DATA,
-    XR_COMPRESS_ERR_BUFFER,
-    XR_COMPRESS_ERR_STREAM,
-    XR_COMPRESS_ERR_HEADER,
-    XR_COMPRESS_ERR_CHECKSUM
-} XrCompressError;
+#include "shared/xr_compress_core.h"
 
+// Forward declare C-level API from stdlib/compress
 uint32_t xr_crc32(const uint8_t *data, size_t len);
 uint32_t xr_crc32_update(uint32_t crc, const uint8_t *data, size_t len);
 uint32_t xr_adler32(const uint8_t *data, size_t len);
@@ -47,6 +39,50 @@ const char *xr_compress_error_str(XrCompressError err);
 
 // Need xr_free for heap-allocated versions
 #include "base/xmalloc.h"
+
+static size_t compress_fake_compress_cap;
+static int compress_fake_decompress_calls;
+static size_t compress_fake_decompress_required;
+static size_t compress_fake_decompress_caps[8];
+
+static void *compress_test_alloc(void *ctx, size_t size) {
+    (void) ctx;
+    return xr_malloc(size);
+}
+
+static void compress_test_free(void *ctx, void *ptr) {
+    (void) ctx;
+    xr_free(ptr);
+}
+
+static XrCompressError compress_fake_compress(const uint8_t *input, size_t in_len, uint8_t *output,
+                                              size_t out_cap, size_t *out_len, int level) {
+    (void) input;
+    (void) in_len;
+    (void) level;
+    compress_fake_compress_cap = out_cap;
+    if (!output || out_cap < 4 || !out_len)
+        return XR_COMPRESS_ERR_BUFFER;
+    memcpy(output, "done", 4);
+    *out_len = 4;
+    return XR_COMPRESS_OK;
+}
+
+static XrCompressError compress_fake_decompress(const uint8_t *input, size_t in_len,
+                                                uint8_t *output, size_t out_cap, size_t *out_len) {
+    (void) input;
+    (void) in_len;
+    if (compress_fake_decompress_calls < 8)
+        compress_fake_decompress_caps[compress_fake_decompress_calls] = out_cap;
+    compress_fake_decompress_calls++;
+    if (out_cap < compress_fake_decompress_required)
+        return XR_COMPRESS_ERR_BUFFER;
+    if (!output || !out_len)
+        return XR_COMPRESS_ERR_DATA;
+    memcpy(output, "ok", 2);
+    *out_len = 2;
+    return XR_COMPRESS_OK;
+}
 
 /* ========== CRC32 ========== */
 
@@ -173,6 +209,94 @@ TEST(compress_deflate_bound) {
     ASSERT_GT(xr_deflate_bound(1024), 1024);
 }
 
+/* ========== Shared Core Rules ========== */
+
+TEST(compress_core_level_or_default) {
+    ASSERT_EQ_INT(xr_compress_core_level_or_default(false, 99), XR_COMPRESS_DEFAULT_COMPRESSION);
+    ASSERT_EQ_INT(xr_compress_core_level_or_default(true, -7), XR_COMPRESS_NO_COMPRESSION);
+    ASSERT_EQ_INT(xr_compress_core_level_or_default(true, 0), XR_COMPRESS_NO_COMPRESSION);
+    ASSERT_EQ_INT(xr_compress_core_level_or_default(true, 5), 5);
+    ASSERT_EQ_INT(xr_compress_core_level_or_default(true, 42), XR_COMPRESS_BEST_COMPRESSION);
+}
+
+TEST(compress_core_input_view) {
+    XrCompressCoreInputView view;
+    ASSERT_TRUE(xr_compress_core_input_view("abc", 3, &view));
+    ASSERT_EQ_UINT(view.len, 3);
+    ASSERT_TRUE(memcmp(view.data, "abc", 3) == 0);
+
+    ASSERT_TRUE(xr_compress_core_input_view(NULL, 0, &view));
+    ASSERT_EQ_UINT(view.len, 0);
+    ASSERT_NOT_NULL(view.data);
+
+    ASSERT_FALSE(xr_compress_core_input_view(NULL, 1, &view));
+    ASSERT_FALSE(xr_compress_core_input_view("abc", -1, &view));
+    ASSERT_FALSE(xr_compress_core_input_view("abc", 3, NULL));
+}
+
+TEST(compress_core_compress_bound_plans) {
+    size_t cap = 0;
+    ASSERT_TRUE(xr_compress_core_compress_bound(10, 0, &cap));
+    ASSERT_EQ_UINT(cap, xr_deflate_bound(10));
+
+    ASSERT_TRUE(xr_compress_core_compress_bound(10, XR_COMPRESS_CORE_GZIP_WRAPPER_BYTES, &cap));
+    ASSERT_EQ_UINT(cap, xr_deflate_bound(10) + XR_COMPRESS_CORE_GZIP_WRAPPER_BYTES);
+
+    ASSERT_TRUE(xr_compress_core_compress_bound(10, XR_COMPRESS_CORE_ZLIB_WRAPPER_BYTES, &cap));
+    ASSERT_EQ_UINT(cap, xr_deflate_bound(10) + XR_COMPRESS_CORE_ZLIB_WRAPPER_BYTES);
+}
+
+TEST(compress_core_decompress_initial_caps) {
+    size_t cap = 0;
+    ASSERT_TRUE(xr_compress_core_gunzip_initial_cap(100, 0, &cap));
+    ASSERT_EQ_UINT(cap, 100u * XR_COMPRESS_CORE_GUNZIP_FALLBACK_MULTIPLIER +
+                            XR_COMPRESS_CORE_GUNZIP_PAD);
+
+    ASSERT_TRUE(xr_compress_core_gunzip_initial_cap(100, 123, &cap));
+    ASSERT_EQ_UINT(cap, 123u + XR_COMPRESS_CORE_GUNZIP_PAD);
+
+    ASSERT_TRUE(xr_compress_core_inflate_initial_cap(20, &cap));
+    ASSERT_EQ_UINT(cap, 20u * XR_COMPRESS_CORE_INFLATE_FALLBACK_MULTIPLIER +
+                            XR_COMPRESS_CORE_INFLATE_PAD);
+
+    ASSERT_TRUE(xr_compress_core_next_cap(32, &cap));
+    ASSERT_EQ_UINT(cap, 64);
+}
+
+TEST(compress_core_compress_alloc_uses_bound) {
+    size_t out_len = 0;
+    compress_fake_compress_cap = 0;
+    uint8_t *out =
+        xr_compress_core_compress_alloc((const uint8_t *) "abc", 3, XR_COMPRESS_DEFAULT_COMPRESSION,
+                                        XR_COMPRESS_CORE_GZIP_WRAPPER_BYTES, compress_fake_compress,
+                                        compress_test_alloc, compress_test_free, NULL, &out_len);
+    ASSERT_NOT_NULL(out);
+    ASSERT_EQ_UINT(compress_fake_compress_cap,
+                   xr_deflate_bound(3) + XR_COMPRESS_CORE_GZIP_WRAPPER_BYTES);
+    ASSERT_EQ_UINT(out_len, 4);
+    ASSERT_TRUE(memcmp(out, "done", 4) == 0);
+    xr_free(out);
+}
+
+TEST(compress_core_decompress_alloc_retries_on_buffer) {
+    size_t out_len = 0;
+    compress_fake_decompress_calls = 0;
+    compress_fake_decompress_required = 40;
+    memset(compress_fake_decompress_caps, 0, sizeof(compress_fake_decompress_caps));
+
+    uint8_t *out = xr_compress_core_decompress_alloc((const uint8_t *) "abc", 3, 10, 4,
+                                                     compress_fake_decompress, compress_test_alloc,
+                                                     compress_test_free, NULL, &out_len);
+    ASSERT_NOT_NULL(out);
+    ASSERT_EQ_INT(compress_fake_decompress_calls, 3);
+    ASSERT_EQ_UINT(compress_fake_decompress_caps[0], 10);
+    ASSERT_EQ_UINT(compress_fake_decompress_caps[1], 20);
+    ASSERT_EQ_UINT(compress_fake_decompress_caps[2], 40);
+    ASSERT_EQ_UINT(out_len, 2);
+    ASSERT_TRUE(memcmp(out, "ok", 2) == 0);
+    xr_free(out);
+}
+
 /* ========== Main ========== */
 
 TEST_MAIN_BEGIN()
@@ -198,5 +322,11 @@ RUN_TEST(compress_is_gzip_invalid);
 RUN_TEST_SUITE("Compress - Utilities");
 RUN_TEST(compress_error_str);
 RUN_TEST(compress_deflate_bound);
+RUN_TEST(compress_core_level_or_default);
+RUN_TEST(compress_core_input_view);
+RUN_TEST(compress_core_compress_bound_plans);
+RUN_TEST(compress_core_decompress_initial_caps);
+RUN_TEST(compress_core_compress_alloc_uses_bound);
+RUN_TEST(compress_core_decompress_alloc_retries_on_buffer);
 
 TEST_MAIN_END()

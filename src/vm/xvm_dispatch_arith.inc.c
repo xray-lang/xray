@@ -150,7 +150,7 @@
         if (XR_IS_BIGINT(vb) || XR_IS_BIGINT(vc)) {                                                \
             R(a) = vm_bigint_divop(VM_CURRENT_CORO, vb, vc, bigint_fn);                            \
             if (XR_UNLIKELY(XR_IS_NOTFOUND(R(a)))) {                                               \
-                VM_RUNTIME_ERROR(XR_ERR_DIV_BY_ZERO, "division by zero");                          \
+                VM_RUNTIME_ERROR(XR_ERR_DIV_BY_ZERO, XR_ERROR_CORE_DIVISION_BY_ZERO_MSG);          \
             }                                                                                      \
             vmbreak;                                                                               \
         }                                                                                          \
@@ -158,7 +158,7 @@
             xr_Integer nb = XR_TO_INT(vb);                                                         \
             xr_Integer nc = XR_TO_INT(vc);                                                         \
             if (nc == 0) {                                                                         \
-                VM_RUNTIME_ERROR(XR_ERR_DIV_BY_ZERO, "division by zero");                          \
+                VM_RUNTIME_ERROR(XR_ERR_DIV_BY_ZERO, XR_ERROR_CORE_DIVISION_BY_ZERO_MSG);          \
             }                                                                                      \
             R(a) = xr_int(xr_int_div_wrap(nb, nc));                                                \
             vmbreak;                                                                               \
@@ -167,7 +167,7 @@
             double nb = XR_IS_INT(vb) ? (double) XR_TO_INT(vb) : XR_TO_FLOAT(vb);                  \
             double nc = XR_IS_INT(vc) ? (double) XR_TO_INT(vc) : XR_TO_FLOAT(vc);                  \
             if (nc == 0.0) {                                                                       \
-                VM_RUNTIME_ERROR(XR_ERR_DIV_BY_ZERO, "division by zero");                          \
+                VM_RUNTIME_ERROR(XR_ERR_DIV_BY_ZERO, XR_ERROR_CORE_DIVISION_BY_ZERO_MSG);          \
             }                                                                                      \
             R(a) = xr_float(nb / nc);                                                              \
             vmbreak;                                                                               \
@@ -186,7 +186,7 @@
         if (XR_IS_INT(vb) && XR_IS_INT(vc)) {                                                      \
             xr_Integer divisor = XR_TO_INT(vc);                                                    \
             if (divisor == 0) {                                                                    \
-                VM_RUNTIME_ERROR(XR_ERR_MOD_BY_ZERO, "modulo by zero");                            \
+                VM_RUNTIME_ERROR(XR_ERR_MOD_BY_ZERO, XR_ERROR_CORE_MODULO_BY_ZERO_MSG);            \
             }                                                                                      \
             R(a) = xr_int(xr_int_mod_wrap(XR_TO_INT(vb), divisor));                                \
             vmbreak;                                                                               \
@@ -194,7 +194,7 @@
         if (XR_IS_BIGINT(vb) || XR_IS_BIGINT(vc)) {                                                \
             R(a) = vm_bigint_divop(VM_CURRENT_CORO, vb, vc, bigint_fn);                            \
             if (XR_UNLIKELY(XR_IS_NOTFOUND(R(a)))) {                                               \
-                VM_RUNTIME_ERROR(XR_ERR_MOD_BY_ZERO, "modulo by zero");                            \
+                VM_RUNTIME_ERROR(XR_ERR_MOD_BY_ZERO, XR_ERROR_CORE_MODULO_BY_ZERO_MSG);            \
             }                                                                                      \
             vmbreak;                                                                               \
         }                                                                                          \
@@ -244,7 +244,7 @@ vmcase(OP_DIV_F32) {
     double nb = (double) (float) XR_TO_FLOAT(R(b));
     double nc = (double) (float) XR_TO_FLOAT(R(c));
     if (nc == 0.0) {
-        VM_RUNTIME_ERROR(XR_ERR_DIV_BY_ZERO, "division by zero");
+        VM_RUNTIME_ERROR(XR_ERR_DIV_BY_ZERO, XR_ERROR_CORE_DIVISION_BY_ZERO_MSG);
     }
     XR_SET_FLOAT(R(a), (double) (float) (nb / nc));
     vmbreak;
@@ -422,7 +422,7 @@ vmcase(OP_DIVK) {
     if (XR_IS_BIGINT(vb) || XR_IS_BIGINT(vc)) {
         R(a) = vm_bigint_divop(VM_CURRENT_CORO, vb, vc, xr_bigint_div);
         if (XR_UNLIKELY(XR_IS_NOTFOUND(R(a)))) {
-            VM_RUNTIME_ERROR(XR_ERR_DIV_BY_ZERO, "division by zero");
+            VM_RUNTIME_ERROR(XR_ERR_DIV_BY_ZERO, XR_ERROR_CORE_DIVISION_BY_ZERO_MSG);
         }
         vmbreak;
     }
@@ -432,7 +432,7 @@ vmcase(OP_DIVK) {
         xr_Integer nb = XR_TO_INT(vb);
         xr_Integer nc = XR_TO_INT(vc);
         if (nc == 0) {
-            VM_RUNTIME_ERROR(XR_ERR_DIV_BY_ZERO, "division by zero");
+            VM_RUNTIME_ERROR(XR_ERR_DIV_BY_ZERO, XR_ERROR_CORE_DIVISION_BY_ZERO_MSG);
         }
         R(a) = xr_int(xr_int_div_wrap(nb, nc));
     } else if ((XR_IS_INT(vb) || XR_IS_FLOAT(vb)) && (XR_IS_INT(vc) || XR_IS_FLOAT(vc))) {
@@ -440,7 +440,7 @@ vmcase(OP_DIVK) {
         double nb = XR_IS_INT(vb) ? (double) XR_TO_INT(vb) : XR_TO_FLOAT(vb);
         double nc = XR_IS_INT(vc) ? (double) XR_TO_INT(vc) : XR_TO_FLOAT(vc);
         if (nc == 0.0) {
-            VM_RUNTIME_ERROR(XR_ERR_DIV_BY_ZERO, "division by zero");
+            VM_RUNTIME_ERROR(XR_ERR_DIV_BY_ZERO, XR_ERROR_CORE_DIVISION_BY_ZERO_MSG);
         }
         R(a) = xr_float(nb / nc);
     } else {
@@ -461,11 +461,11 @@ vmcase(OP_MODK) {
     if (XR_IS_INT(vb) && XR_IS_INT(vc)) {
         xr_Integer divisor = XR_TO_INT(vc);
         if (divisor == 0) {
-            VM_RUNTIME_ERROR(XR_ERR_MOD_BY_ZERO, "modulo by zero");
+            VM_RUNTIME_ERROR(XR_ERR_MOD_BY_ZERO, XR_ERROR_CORE_MODULO_BY_ZERO_MSG);
         }
         R(a) = xr_int(xr_int_mod_wrap(XR_TO_INT(vb), divisor));
     } else {
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "modulo requires integer types");
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_MODULO_REQUIRES_INTEGER_MSG);
     }
     vmbreak;
 }

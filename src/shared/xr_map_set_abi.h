@@ -78,10 +78,33 @@ typedef struct XrMapCore {
 #define XR_MAP_FLAG_NODES_ON_GC 0x04     /* ctrl/indices/entries live on Region GC heap */
 #define XR_MAP_FLAG_WEAK_REGISTERED 0x08 /* Registered in the runtime weak registry */
 #define XR_MAP_FLAG_NODES_ON_STACK 0x10  /* AOT stack Map nodes; never free or resize */
+#define XR_MAP_FLAG_ENUM_TYPE 0x20       /* AOT lightweight enum type map */
 
 #define xr_map_isdummy(m) ((m)->flags & XR_MAP_FLAG_DUMMY)
 
 #define XR_MAP_MAXHBITS 30
+
+/* Smallest power-of-two Swiss index table whose 2/3 usable capacity covers
+ * `needed`. Map/Set keep one EMPTY slot so probing always terminates. */
+static inline uint32_t xr_map_set_indices_size_for(uint32_t needed, uint32_t max_hbits) {
+    uint32_t size = XR_SWISS_GROUP;
+    uint32_t max_size = 1u << max_hbits;
+    while ((uint64_t) size * 2 / 3 < needed) {
+        if (size >= max_size)
+            return max_size;
+        size <<= 1;
+    }
+    return size;
+}
+
+static inline uint32_t xr_map_set_entries_cap_for(uint32_t indices_size, uint32_t needed) {
+    uint32_t entries_cap = (uint32_t) ((uint64_t) indices_size * 2 / 3);
+    return entries_cap < needed ? needed : entries_cap;
+}
+
+static inline uint32_t xr_map_indices_size_for(uint32_t needed) {
+    return xr_map_set_indices_size_for(needed, XR_MAP_MAXHBITS);
+}
 
 /* Compact the live entries of a Map into freshly allocated tables, preserving
  * insertion order, dropping tombstones, and rebuilding the index table. Returns
@@ -193,6 +216,10 @@ typedef struct XrSetCore {
 #define xr_set_isdummy(s) ((s)->flags & XR_SET_FLAG_DUMMY)
 
 #define XR_SET_MAXHBITS 30
+
+static inline uint32_t xr_set_indices_size_for(uint32_t needed) {
+    return xr_map_set_indices_size_for(needed, XR_SET_MAXHBITS);
+}
 
 /* Compact the live entries of a Set into freshly allocated tables, preserving
  * insertion order, dropping tombstones, and rebuilding the index table. Returns

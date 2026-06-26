@@ -111,19 +111,6 @@ static inline int entry_key_equal(const XrMapEntry *e, XrValue key, uint8_t key_
     return XR_TO_PTR(e->key) == XR_TO_PTR(key);
 }
 
-// Smallest power-of-two index size whose usable capacity (2/3) covers `needed`.
-static uint32_t calc_indices_size(uint32_t needed) {
-    uint32_t size = 8;
-    while ((uint64_t) size * 2 / 3 < needed) {
-        if (size >= (1u << XR_MAP_MAXHBITS)) {
-            size = 1u << XR_MAP_MAXHBITS;
-            break;
-        }
-        size <<= 1;
-    }
-    return size;
-}
-
 static inline bool map_is_weak(const XrMap *map) {
     return (map->flags & XR_MAP_FLAG_WEAK) != 0;
 }
@@ -190,10 +177,8 @@ static bool map_resize(XrMap *map, uint32_t min_needed) {
     uint32_t needed = map->count > min_needed ? map->count : min_needed;
     if (needed < 1)
         needed = 1;
-    uint32_t new_isize = calc_indices_size(needed);
-    uint32_t new_ecap = (uint32_t) ((uint64_t) new_isize * 2 / 3);
-    if (new_ecap < needed)
-        new_ecap = needed;
+    uint32_t new_isize = xr_map_indices_size_for(needed);
+    uint32_t new_ecap = xr_map_set_entries_cap_for(new_isize, needed);
 
     // First allocation from dummy may use the Region GC blob heap; subsequent
     // resizes force malloc (region recycling could overlap the old blob while
@@ -286,10 +271,8 @@ bool xr_map_reserve_external(XrMap *map, uint32_t count, struct XrCoroHeap *heap
     if (count == 0)
         return true;  // Stays dummy; first insert will allocate.
 
-    uint32_t isize = calc_indices_size(count);
-    uint32_t ecap = (uint32_t) ((uint64_t) isize * 2 / 3);
-    if (ecap < count)
-        ecap = count;
+    uint32_t isize = xr_map_indices_size_for(count);
+    uint32_t ecap = xr_map_set_entries_cap_for(isize, count);
 
     size_t cbytes = (size_t) isize + XR_SWISS_GROUP;
     size_t ibytes = sizeof(int32_t) * (size_t) isize;

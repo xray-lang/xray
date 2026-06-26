@@ -1,0 +1,26 @@
+import io
+
+let root = io.tempDir() ?? ""
+print(root.length > 0)
+
+let nested = root + "/a/b"
+print(io.mkdirp(nested))
+print(io.writeFile(root + "/top.txt", "top"))
+print(io.writeFile(nested + "/deep.txt", "deep"))
+
+let entries = io.readDir(root) ?? []
+print(entries.includes("top.txt"))
+print(entries.includes("a"))
+print(!entries.includes("."))
+print(!entries.includes(".."))
+
+let recursive = io.readDirRecursive(root) ?? []
+print(recursive.includes("top.txt"))
+print(recursive.includes("a"))
+print(recursive.includes("a/b"))
+print(recursive.includes("a/b/deep.txt"))
+
+let missing = io.readDirRecursive(root + "/missing") ?? []
+print(missing.length)
+
+print(io.removeAll(root))

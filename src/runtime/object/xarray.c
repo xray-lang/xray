@@ -17,6 +17,7 @@
 
 #include "xarray.h"
 #include "../core/xr_runtime_core.h"
+#include "../../shared/xr_array_core.h"
 #include "../../base/xchecks.h"
 #include "../mem/xalloc_unified.h"
 #include "../mem/xheap.h"
@@ -56,10 +57,10 @@ static bool xr_array_same_gc_object(XrValue a, XrValue b) {
     return XR_IS_PTR(a) && XR_IS_PTR(b) && XR_TO_PTR(a) == XR_TO_PTR(b);
 }
 
-static void xr_array_retain_extra_fill_refs(XrValue value, int32_t changed_slots) {
+static void xr_array_retain_extra_fill_refs(XrValue value, int64_t changed_slots) {
     if (!XR_VALUE_NEEDS_GC(value))
         return;
-    for (int32_t i = 0; i < changed_slots; i++)
+    for (int64_t i = 0; i < changed_slots; i++)
         xr_rc_retain_value(value);
 }
 
@@ -304,9 +305,7 @@ void xr_array_unshift(XrArray *arr, XrValue value) {
         xr_array_grow(arr);
     }
 
-    // Shift all elements right by one (use memmove for typed arrays)
-    memmove((uint8_t *) arr->data + arr->elem_size, arr->data,
-            (size_t) arr->length * arr->elem_size);
+    (void) xr_array_core_shift_right_one(arr->data, arr->length, arr->elem_size);
 
     xr_array_set_element(arr, 0, value);
     arr->length++;
@@ -325,11 +324,7 @@ XrValue xr_array_shift(XrArray *arr) {
 
     XrValue first = xr_array_get_element(arr, 0);
 
-    // Shift all elements left by one (use memmove for typed arrays)
-    if (arr->length > 1) {
-        memmove(arr->data, (uint8_t *) arr->data + arr->elem_size,
-                (size_t) (arr->length - 1) * arr->elem_size);
-    }
+    (void) xr_array_core_shift_left_one(arr->data, arr->length, arr->elem_size);
 
     arr->length--;
     return first;
@@ -343,8 +338,24 @@ void xr_array_clear(XrArray *arr) {
 
 /* ====== Query Methods ====== */
 
+static inline XrArrayCoreNeedle xr_array_core_needle_from_value(XrValue value) {
+    if (XR_IS_INT(value))
+        return xr_array_core_needle_int(XR_TO_INT(value));
+    if (XR_IS_FLOAT(value))
+        return xr_array_core_needle_float(XR_TO_FLOAT(value));
+    if (XR_IS_BOOL(value))
+        return xr_array_core_needle_bool(XR_TO_BOOL(value));
+    return xr_array_core_needle_other();
+}
+
 int xr_array_index_of(XrArray *arr, XrValue value) {
     XR_DCHECK(arr != NULL, "array_index_of: NULL array");
+    int handled = 0;
+    int64_t typed_idx = xr_array_core_typed_index_of(
+        arr->data, arr->length, arr->elem_type, xr_array_core_needle_from_value(value), &handled);
+    if (handled)
+        return (int) typed_idx;
+
     for (int i = 0; i < arr->length; i++) {
         if (xr_value_eq(xr_array_get_element(arr, i), value)) {
             return i;
@@ -362,39 +373,25 @@ bool xr_array_is_empty(XrArray *arr) {
     return arr->length == 0;
 }
 
-// Typed fill macro: write native value directly without switch dispatch
-#define TYPED_FILL(type, arr, val, start, end)                                                     \
-    do {                                                                                           \
-        type *d = (type *) (arr)->data;                                                            \
-        type v = (val);                                                                            \
-        for (int _i = (start); _i < (end); _i++)                                                   \
-            d[_i] = v;                                                                             \
-    } while (0)
-
-void xr_array_fill(XrArray *arr, XrValue value, int start, int end) {
+void xr_array_fill(XrArray *arr, XrValue value, int64_t start, int64_t end) {
     if (!arr)
         return;
-    if (start < 0)
-        start = 0;
-    if (end > (int) arr->length)
-        end = (int) arr->length;
-    if (start >= end)
+    XrArrayCoreRange range = xr_array_core_fill_range(arr->length, start, end);
+    if (range.count <= 0)
         return;
-
-    int count = end - start;
 
     if (arr->elem_type == XR_ELEM_ANY) {
         XrValue *data = (XrValue *) arr->data;
         int32_t changed_slots = 0;
         if (XR_VALUE_NEEDS_GC(value)) {
-            for (int i = start; i < end; i++) {
+            for (int64_t i = range.start; i < range.end; i++) {
                 if (!xr_array_same_gc_object(data[i], value))
                     changed_slots++;
             }
             xr_array_retain_extra_fill_refs(value, changed_slots);
         }
         XrCoroHeap *heap = xr_current_coro_heap();
-        for (int i = start; i < end; i++) {
+        for (int64_t i = range.start; i < range.end; i++) {
             XrValue old = data[i];
             if (xr_array_same_gc_object(old, value))
                 continue;
@@ -405,117 +402,60 @@ void xr_array_fill(XrArray *arr, XrValue value, int start, int end) {
         return;
     }
 
-    // Typed arrays: extract native value and fill directly
-    switch (arr->elem_type) {
-        case XR_ELEM_I8:
-            TYPED_FILL(
-                int8_t, arr,
-                (int8_t) (XR_IS_INT(value) ? XR_TO_INT(value) : (int64_t) XR_TO_FLOAT(value)),
-                start, end);
-            break;
-        case XR_ELEM_U8: {
-            // Special case: memset for byte arrays
-            uint8_t v =
-                (uint8_t) (XR_IS_INT(value) ? XR_TO_INT(value) : (int64_t) XR_TO_FLOAT(value));
-            memset((uint8_t *) arr->data + start, v, (size_t) count);
-            break;
-        }
-        case XR_ELEM_I16:
-            TYPED_FILL(
-                int16_t, arr,
-                (int16_t) (XR_IS_INT(value) ? XR_TO_INT(value) : (int64_t) XR_TO_FLOAT(value)),
-                start, end);
-            break;
-        case XR_ELEM_U16:
-            TYPED_FILL(
-                uint16_t, arr,
-                (uint16_t) (XR_IS_INT(value) ? XR_TO_INT(value) : (int64_t) XR_TO_FLOAT(value)),
-                start, end);
-            break;
-        case XR_ELEM_I32:
-            TYPED_FILL(
-                int32_t, arr,
-                (int32_t) (XR_IS_INT(value) ? XR_TO_INT(value) : (int64_t) XR_TO_FLOAT(value)),
-                start, end);
-            break;
-        case XR_ELEM_U32:
-            TYPED_FILL(
-                uint32_t, arr,
-                (uint32_t) (XR_IS_INT(value) ? XR_TO_INT(value) : (int64_t) XR_TO_FLOAT(value)),
-                start, end);
-            break;
-        case XR_ELEM_I64:
-            TYPED_FILL(
-                int64_t, arr,
-                (int64_t) (XR_IS_INT(value) ? XR_TO_INT(value) : (int64_t) XR_TO_FLOAT(value)),
-                start, end);
-            break;
-        case XR_ELEM_U64:
-            TYPED_FILL(
-                uint64_t, arr,
-                (uint64_t) (XR_IS_INT(value) ? XR_TO_INT(value) : (int64_t) XR_TO_FLOAT(value)),
-                start, end);
-            break;
-        case XR_ELEM_F32:
-            TYPED_FILL(
-                float, arr,
-                (float) (XR_IS_FLOAT(value) ? XR_TO_FLOAT(value) : (double) XR_TO_INT(value)),
-                start, end);
-            break;
-        case XR_ELEM_F64:
-            TYPED_FILL(
-                double, arr,
-                (double) (XR_IS_FLOAT(value) ? XR_TO_FLOAT(value) : (double) XR_TO_INT(value)),
-                start, end);
-            break;
-        case XR_ELEM_BOOL: {
-            uint8_t v = xr_value_is_truthy(value) ? 1 : 0;
-            memset((uint8_t *) arr->data + start, v, (size_t) count);
-            break;
-        }
-        default:
-            break;
-    }
+    (void) xr_array_core_fill_typed_storage(arr->data, range.start, range.count, arr->elem_type,
+                                            value);
 }
 
-bool xr_array_reserve(XrArray *arr, int32_t capacity) {
-    if (!arr || capacity < 0 || xr_array_is_slice(arr))
+bool xr_array_reserve(XrArray *arr, int64_t capacity) {
+    if (!arr)
         return false;
-    if (arr->capacity >= capacity)
+    XrArrayCoreCapacityPlan plan =
+        xr_array_core_reserve_plan(arr->capacity, capacity, !xr_array_is_slice(arr));
+    if (plan.kind == XR_ARRAY_CORE_CAPACITY_INVALID)
+        return false;
+    if (plan.kind == XR_ARRAY_CORE_CAPACITY_KEEP)
         return true;
-    xr_array_ensure_capacity(arr, capacity);
-    return arr->capacity >= capacity;
+    xr_array_ensure_capacity(arr, plan.target_capacity);
+    return arr->capacity >= plan.target_capacity;
 }
 
-bool xr_array_resize(XrArray *arr, int32_t length, XrValue fill) {
-    if (!arr || length < 0 || xr_array_is_slice(arr))
+bool xr_array_resize(XrArray *arr, int64_t length, XrValue fill) {
+    if (!arr)
         return false;
-    int32_t old_length = arr->length;
-    if (length < old_length) {
+    XrArrayCoreResizePlan plan =
+        xr_array_core_resize_plan(arr->length, arr->capacity, length, !xr_array_is_slice(arr));
+    if (plan.kind == XR_ARRAY_CORE_RESIZE_INVALID)
+        return false;
+    if (plan.kind == XR_ARRAY_CORE_RESIZE_KEEP)
+        return true;
+
+    int64_t old_length = arr->length;
+    if (plan.kind == XR_ARRAY_CORE_RESIZE_SHRINK) {
         if (arr->elem_type == XR_ELEM_ANY) {
             XrValue *data = (XrValue *) arr->data;
             XrCoroHeap *heap = xr_current_coro_heap();
-            for (int32_t i = length; i < old_length; i++) {
+            for (int64_t i = plan.length; i < old_length; i++) {
                 xr_rc_release_value(heap, data[i]);
                 data[i] = xr_null();
             }
         }
-        arr->length = length;
+        arr->length = plan.length;
         return true;
     }
-    if (length == old_length)
-        return true;
 
-    xr_array_ensure_capacity(arr, length);
-    if (arr->capacity < length || !arr->data)
+    xr_array_ensure_capacity(arr, plan.reserve_capacity);
+    if (arr->capacity < plan.reserve_capacity || !arr->data)
         return false;
 
-    int32_t added = length - old_length;
-    if (arr->elem_type == XR_ELEM_ANY)
-        xr_array_retain_extra_fill_refs(fill, added);
-    for (int32_t i = old_length; i < length; i++)
-        xr_array_set_element(arr, i, fill);
-    arr->length = length;
+    if (arr->elem_type == XR_ELEM_ANY) {
+        xr_array_retain_extra_fill_refs(fill, plan.fill_count);
+        for (int64_t i = plan.fill_start; i < plan.length; i++)
+            xr_array_set_element(arr, (int32_t) i, fill);
+    } else if (!xr_array_core_fill_typed_storage(arr->data, plan.fill_start, plan.fill_count,
+                                                 arr->elem_type, fill)) {
+        return false;
+    }
+    arr->length = plan.length;
     if (XR_ARRAY_MAY_CONTAIN_REFS(arr)) {
         XR_ARRAY_MARK_REFS(arr, fill);
     }
@@ -527,21 +467,7 @@ bool xr_array_resize(XrArray *arr, int32_t length, XrValue fill) {
 void xr_array_reverse(XrArray *arr) {
     if (!arr || arr->length <= 1)
         return;
-
-    int left = 0;
-    int right = arr->length - 1;
-    uint8_t esz = arr->elem_size;
-    uint8_t tmp[16];  // max elem_size is 16 (XrValue Tagged Union)
-
-    while (left < right) {
-        uint8_t *lp = (uint8_t *) arr->data + (size_t) left * esz;
-        uint8_t *rp = (uint8_t *) arr->data + (size_t) right * esz;
-        memcpy(tmp, lp, esz);
-        memcpy(lp, rp, esz);
-        memcpy(rp, tmp, esz);
-        left++;
-        right--;
-    }
+    (void) xr_array_core_reverse(arr->data, arr->length, arr->elem_size);
 }
 
 XrArray *xr_array_copy(struct XrCoroutine *coro, XrArray *arr) {
@@ -613,7 +539,7 @@ void xr_array_grow(XrArray *arr) {
     }
 }
 
-void xr_array_ensure_capacity(XrArray *arr, int min_capacity) {
+void xr_array_ensure_capacity(XrArray *arr, int64_t min_capacity) {
     XR_DCHECK(arr != NULL, "ensure_capacity: NULL array");
     XR_DCHECK(min_capacity >= 0, "ensure_capacity: negative min_capacity");
     // Slices cannot grow
@@ -672,19 +598,11 @@ void xr_array_ensure_capacity(XrArray *arr, int min_capacity) {
 
 // Create array slice with direct data pointer offset
 // data_storage == XR_ARRAY_DATA_BORROWED marks the slice as non-resizable
-XrArray *xr_array_slice(struct XrCoroutine *coro, XrArray *arr, int32_t start, int32_t end) {
+XrArray *xr_array_slice(struct XrCoroutine *coro, XrArray *arr, int64_t start, int64_t end) {
     if (!coro || !arr)
         return NULL;
 
-    int64_t len = arr->length;
-
-    // Normalize indices
-    if (start < 0)
-        start = 0;
-    if (end < 0 || end > len)
-        end = (int32_t) len;
-    if (start > end)
-        start = end;
+    XrArrayCoreRange range = xr_array_core_slice_range(arr->length, start, end);
 
     // Allocate slice as XR_TARRAY — slices share Array layout, distinguished by
     // data_storage == XR_ARRAY_DATA_BORROWED.
@@ -693,9 +611,9 @@ XrArray *xr_array_slice(struct XrCoroutine *coro, XrArray *arr, int32_t start, i
         return NULL;
 
     // Direct pointer offset (zero-copy, using elem_size)
-    slice->data = (uint8_t *) arr->data + (size_t) start * arr->elem_size;
-    slice->length = end - start;
-    slice->capacity = end - start;  // Pure capacity; growth is gated by data_storage
+    slice->data = (uint8_t *) arr->data + (size_t) range.start * arr->elem_size;
+    slice->length = range.count;
+    slice->capacity = range.count;  // Pure capacity; growth is gated by data_storage
     slice->data_storage = XR_ARRAY_DATA_BORROWED;
 
     // Track source for GC (chase to original if source is also a slice)
@@ -762,78 +680,35 @@ void xr_obj_destroy_array(XrObjHeader *obj, struct XrCoroHeap *owner_heap) {
 
 /* ====== Bytes Convenience Functions ====== */
 
-static bool xr_array_bytes_range_ok(XrArray *arr, int32_t offset, int32_t count) {
-    if (!arr || arr->elem_type != XR_ELEM_U8)
-        return false;
-    if (offset < 0 || count < 0)
-        return false;
-    return (int64_t) offset + (int64_t) count <= (int64_t) arr->length;
+uint32_t xr_array_load_u32_le(XrArray *arr, int64_t offset, bool *ok) {
+    return xr_array_core_bytes_load_u32_le(arr ? arr->data : NULL, arr ? arr->length : 0,
+                                           arr ? arr->elem_type : XR_ELEM_ANY, offset, ok);
 }
 
-uint32_t xr_array_load_u32_le(XrArray *arr, int32_t offset, bool *ok) {
-    bool valid = xr_array_bytes_range_ok(arr, offset, 4);
-    if (ok)
-        *ok = valid;
-    if (!valid)
-        return 0;
-    const uint8_t *p = (const uint8_t *) arr->data + offset;
-    return (uint32_t) p[0] | ((uint32_t) p[1] << 8) | ((uint32_t) p[2] << 16) |
-           ((uint32_t) p[3] << 24);
+uint64_t xr_array_load_u64_le(XrArray *arr, int64_t offset, bool *ok) {
+    return xr_array_core_bytes_load_u64_le(arr ? arr->data : NULL, arr ? arr->length : 0,
+                                           arr ? arr->elem_type : XR_ELEM_ANY, offset, ok);
 }
 
-uint64_t xr_array_load_u64_le(XrArray *arr, int32_t offset, bool *ok) {
-    bool valid = xr_array_bytes_range_ok(arr, offset, 8);
-    if (ok)
-        *ok = valid;
-    if (!valid)
-        return 0;
-    const uint8_t *p = (const uint8_t *) arr->data + offset;
-    uint64_t lo = (uint64_t) xr_array_load_u32_le(arr, offset, NULL);
-    uint64_t hi = (uint64_t) p[4] | ((uint64_t) p[5] << 8) | ((uint64_t) p[6] << 16) |
-                  ((uint64_t) p[7] << 24);
-    return lo | (hi << 32);
+bool xr_array_bytes_copy_within(XrArray *arr, int64_t dst_offset, int64_t src_offset,
+                                int64_t count) {
+    return xr_array_core_bytes_copy_within(arr ? arr->data : NULL, arr ? arr->length : 0,
+                                           arr ? arr->elem_type : XR_ELEM_ANY, dst_offset,
+                                           src_offset, count);
 }
 
-bool xr_array_bytes_copy_within(XrArray *arr, int32_t dst_offset, int32_t src_offset,
-                                int32_t count) {
-    if (!xr_array_bytes_range_ok(arr, src_offset, count) ||
-        !xr_array_bytes_range_ok(arr, dst_offset, count))
-        return false;
-    if (count > 0) {
-        uint8_t *data = (uint8_t *) arr->data;
-        memmove(data + dst_offset, data + src_offset, (size_t) count);
-    }
-    return true;
+bool xr_array_bytes_copy_from(XrArray *dst, XrArray *src, int64_t src_offset, int64_t dst_offset,
+                              int64_t count) {
+    return xr_array_core_bytes_copy_from(dst ? dst->data : NULL, dst ? dst->length : 0,
+                                         dst ? dst->elem_type : XR_ELEM_ANY, src ? src->data : NULL,
+                                         src ? src->length : 0, src ? src->elem_type : XR_ELEM_ANY,
+                                         src_offset, dst_offset, count, dst == src);
 }
 
-bool xr_array_bytes_copy_from(XrArray *dst, XrArray *src, int32_t src_offset, int32_t dst_offset,
-                              int32_t count) {
-    if (!xr_array_bytes_range_ok(src, src_offset, count) ||
-        !xr_array_bytes_range_ok(dst, dst_offset, count))
-        return false;
-    if (count > 0) {
-        uint8_t *dst_data = (uint8_t *) dst->data + dst_offset;
-        uint8_t *src_data = (uint8_t *) src->data + src_offset;
-        if (dst == src)
-            memmove(dst_data, src_data, (size_t) count);
-        else
-            memcpy(dst_data, src_data, (size_t) count);
-    }
-    return true;
-}
-
-bool xr_array_bytes_repeat_from(XrArray *arr, int32_t dst_offset, int32_t distance, int32_t count) {
-    if (!arr || arr->elem_type != XR_ELEM_U8 || distance <= 0 || count < 0 || dst_offset < 0)
-        return false;
-    int64_t src_offset = (int64_t) dst_offset - (int64_t) distance;
-    if (src_offset < 0)
-        return false;
-    if ((int64_t) dst_offset + (int64_t) count > (int64_t) arr->length)
-        return false;
-    uint8_t *data = (uint8_t *) arr->data;
-    for (int32_t i = 0; i < count; i++)
-        data[dst_offset + i] = data[dst_offset - distance + i];
-    return true;
+bool xr_array_bytes_repeat_from(XrArray *arr, int64_t dst_offset, int64_t distance, int64_t count) {
+    return xr_array_core_bytes_repeat_from(arr ? arr->data : NULL, arr ? arr->length : 0,
+                                           arr ? arr->elem_type : XR_ELEM_ANY, dst_offset, distance,
+                                           count);
 }
 
 void xr_array_append_data(XrArray *arr, const uint8_t *src_data, int32_t len) {

@@ -208,4 +208,8 @@ static inline bool xr_base64_core_decode(const char *data, size_t len, unsigned 
     return j == decoded_len;
 }
 
+static inline unsigned char xr_base64_core_byte_from_array_lane(bool is_int, int64_t value) {
+    return is_int ? (unsigned char) value : 0;
+}
+
 #endif  // XR_BASE64_CORE_H

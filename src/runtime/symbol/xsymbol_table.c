@@ -239,6 +239,8 @@ static const char *xr_builtin_symbol_names[] = {
     "isObject",
     // Collection property aliases
     "size",
+    // DateTime append-only method aliases
+    "diff",
 };
 
 #define BUILTIN_NAME_COUNT                                                                         \

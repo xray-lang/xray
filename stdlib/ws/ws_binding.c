@@ -517,6 +517,7 @@ static XrCFuncResult ws_send_step(XrVMRuntime *X, WsSendState *state, XrValue *r
 // Continuation for send
 static XrCFuncResult ws_send_continue(XrVMRuntime *X, int status, XrValue resume_value, void *ctx,
                                       XrValue *result) {
+    (void) resume_value;
     WsSendState *state = (WsSendState *) ctx;
 
     // Handle timeout/cancel
@@ -675,14 +676,15 @@ typedef XrCFuncResult (*XrYieldableCFunctionPtr)(XrVMRuntime *, XrValue *, int, 
 
 // State for yieldable recv operation
 // Following the same pattern as NetReadState in net.c
-// IMPORTANT: Do NOT store XrValue across yield points - GC may invalidate them!
+// IMPORTANT: Do NOT store XrValue across yield points; retain primitive ids and
+// reconstruct RC handles after resume.
 typedef struct WsRecvState {
-    int ws_id;           // WebSocket connection ID (primitive, GC-safe)
+    int ws_id;           // WebSocket connection ID (primitive, resume-safe)
     int64_t timeout_ms;  // Timeout in milliseconds (-1 = infinite)
 } WsRecvState;
 
 // Helper to create result JSON from message
-// NOTE: No XrValue parameters - all values must be reconstructed to be GC-safe
+// NOTE: No XrValue parameters; values are reconstructed after resume.
 static XrValue make_recv_result(XrVMRuntime *X, XrWsContext *ctx, XrWebSocket *ws,
                                 XrWsMessage *msg) {
     XrCoroutine *coro = xr_current_coro(X);
@@ -734,6 +736,7 @@ static XrCFuncResult ws_recv_step(XrVMRuntime *X, WsRecvState *state, XrValue *r
 // Continuation function for ws.recv (matches XrContinuation signature)
 static XrCFuncResult ws_recv_continue(XrVMRuntime *X, int status, XrValue resume_value,
                                       void *cont_ctx, XrValue *result) {
+    (void) resume_value;
     WsRecvState *state = (WsRecvState *) cont_ctx;
 
     if (status == XR_RESUME_TIMEOUT || status == XR_RESUME_CANCELLED) {
@@ -888,6 +891,7 @@ static XrCFuncResult ws_recv_yieldable(XrVMRuntime *X, XrValue *args, int argc, 
  */
 static XrCFuncResult ws_recvdata_continue(XrVMRuntime *X, int status, XrValue resume_value,
                                           void *cont_ctx, XrValue *result) {
+    (void) resume_value;
     WsRecvState *state = (WsRecvState *) cont_ctx;
 
     if (status == XR_RESUME_TIMEOUT || status == XR_RESUME_CANCELLED || status == XR_RESUME_ERROR) {
@@ -1220,7 +1224,7 @@ typedef struct {
  * Echo connection entry — cfunc coroutine entry point.
  *
  * Stackless replacement for ws_echo_conn_stackful.
- * Zero VM dispatch, zero GC allocation in hot path.
+ * Zero VM dispatch, zero VM heap allocation in hot path.
  * args[0] = client fd (int).
  */
 static XrCFuncResult ws_echo_conn_init(XrVMRuntime *X, XrValue *args, int argc, XrValue *result) {
@@ -1257,6 +1261,7 @@ static XrCFuncResult ws_echo_conn_init(XrVMRuntime *X, XrValue *args, int argc, 
  */
 static XrCFuncResult ws_echo_conn_upgrade_cont(XrVMRuntime *X, int status, XrValue resume_value,
                                                void *user_ctx, XrValue *result) {
+    (void) resume_value;
     WsEchoConnCtx *ctx = (WsEchoConnCtx *) user_ctx;
     if (status != XR_RESUME_IO_READY)
         goto fail;
@@ -1333,6 +1338,7 @@ cleanup: {
  */
 static XrCFuncResult ws_echo_conn_loop(XrVMRuntime *X, int status, XrValue resume_value,
                                        void *user_ctx, XrValue *result) {
+    (void) resume_value;
     WsEchoConnCtx *ctx = (WsEchoConnCtx *) user_ctx;
     if (status != XR_RESUME_IO_READY)
         goto cleanup;
@@ -1474,6 +1480,7 @@ static XrCFuncResult ws_conn_init(XrVMRuntime *X, XrValue *args, int argc, XrVal
  */
 static XrCFuncResult ws_conn_upgrade_cont(XrVMRuntime *X, int status, XrValue resume_value,
                                           void *user_ctx, XrValue *result) {
+    (void) resume_value;
     WsConnCtx *ctx = (WsConnCtx *) user_ctx;
     if (status != XR_RESUME_IO_READY)
         goto fail;
@@ -1564,6 +1571,7 @@ cleanup: {
 static XrCFuncResult ws_conn_handler_done(XrVMRuntime *X, int status, XrValue resume_value,
                                           void *user_ctx, XrValue *result) {
     (void) status;
+    (void) resume_value;
     (void) result;
     WsConnCtx *ctx = (WsConnCtx *) user_ctx;
 
@@ -1629,6 +1637,7 @@ static XrCFuncResult ws_serve_listen_init(XrVMRuntime *X, XrValue *args, int arg
  */
 static XrCFuncResult ws_serve_listen_cont(XrVMRuntime *X, int status, XrValue resume_value,
                                           void *user_ctx, XrValue *result) {
+    (void) resume_value;
     WsServeListenCtx *ctx = (WsServeListenCtx *) user_ctx;
 
     XrWsContext *ws_ctx = get_ws_context(X);
@@ -1676,6 +1685,7 @@ static XrCFuncResult ws_serve_listen_cont(XrVMRuntime *X, int status, XrValue re
 static XrCFuncResult ws_serve_wait_cont(XrVMRuntime *X, int status, XrValue resume_value,
                                         void *cont_ctx, XrValue *result) {
     (void) status;
+    (void) resume_value;
     XrWsContext *ctx = (XrWsContext *) cont_ctx;
     if (!ctx || !ctx->server_running) {
         *result = xr_bool(true);
@@ -1718,6 +1728,7 @@ static XrCFuncResult ws_echo_listen_init(XrVMRuntime *X, XrValue *args, int argc
  */
 static XrCFuncResult ws_echo_listen_cont(XrVMRuntime *X, int status, XrValue resume_value,
                                          void *user_ctx, XrValue *result) {
+    (void) resume_value;
     WsEchoListenCtx *ctx = (WsEchoListenCtx *) user_ctx;
 
     XrWsContext *ws_ctx = get_ws_context(X);
@@ -1764,7 +1775,7 @@ static XrCFuncResult ws_echo_listen_cont(XrVMRuntime *X, int status, XrValue res
 /*
  * ws.echoServe(port: int) -> bool
  *
- * Pure C echo server: zero VM dispatch, zero GC allocation per message.
+ * Pure C echo server: zero VM dispatch, zero VM heap allocation per message.
  * Architecturally equivalent to HTTP's prebuilt route fast path.
  */
 static XrCFuncResult ws_echo_serve_yieldable(XrVMRuntime *X, XrValue *args, int argc,
@@ -1952,29 +1963,9 @@ XrValue xr_ws_upgrade_and_wrap(XrVMRuntime *X, int fd, const char *request_heade
 
 /* ========== Module Registration ========== */
 
-// ========== Type Declarations (parsed by gen_stdlib_types.py) ==========
-
-#include "../../src/module/xbuiltin_decl.h"
-
-// @module ws
-// @handle WsConn { const wsid: int, url: string, state: string }
-// @handle WsMessage { const data: string, const binary: bool, const error: string }
-
-XR_DEFINE_BUILTIN(ws_connect_yieldable, "connect", "(url: string, options?: Json): WsConn?",
-                  "Connect to a WebSocket server")
-XR_DEFINE_BUILTIN(ws_send_yieldable, "send", "(conn: WsConn, data: string, binary?: bool): bool",
-                  "Send data over WebSocket connection")
-XR_DEFINE_BUILTIN(ws_recv_yieldable, "recv", "(conn: WsConn, timeout?: int): WsMessage?",
-                  "Receive data from WebSocket connection")
-XR_DEFINE_BUILTIN(ws_close, "close", "(conn: WsConn, code?: int, reason?: string?): bool",
-                  "Close a WebSocket connection")
-XR_DEFINE_BUILTIN(ws_ping, "ping", "(conn: WsConn): bool", "Send a ping frame")
-XR_DEFINE_BUILTIN(ws_state, "state", "(conn: WsConn): string", "Get connection state")
-XR_DEFINE_BUILTIN(ws_is_open, "isOpen", "(conn: WsConn): bool", "Check if connection is open")
-XR_DEFINE_BUILTIN(ws_recvdata, "recvData", "(conn: WsConn, timeout?: int): string?",
-                  "High-performance recv returning data string directly (no Json wrapper)")
-XR_DEFINE_BUILTIN(ws_echo_serve_yieldable, "echoServe", "(port: int): bool",
-                  "Pure C echo server with zero VM/GC overhead per message")
+#define XR_STDLIB_VM_BIND_MODULE_WS 1
+#include "../../src/stdlib/xstdlib_vm_bindings_generated.inc.c"
+#undef XR_STDLIB_VM_BIND_MODULE_WS
 
 XR_FUNC XrModule *xr_load_module_ws(XrVMRuntime *isolate) {
     // 1. Create Native module
@@ -1989,24 +1980,7 @@ XR_FUNC XrModule *xr_load_module_ws(XrVMRuntime *isolate) {
     }
 #endif
 
-    // WebSocket client functions (directly exported, no script wrapper needed)
-    XRS_EXPORT_YIELDABLE(mod, isolate, "connect", ws_connect_yieldable);
-    XRS_EXPORT_YIELDABLE(mod, isolate, "send", ws_send_yieldable);
-    XRS_EXPORT_YIELDABLE(mod, isolate, "recv", ws_recv_yieldable);
-    XRS_EXPORT(mod, isolate, "close", ws_close);
-    XRS_EXPORT(mod, isolate, "ping", ws_ping);
-    XRS_EXPORT(mod, isolate, "state", ws_state);
-    XRS_EXPORT(mod, isolate, "isOpen", ws_is_open);
-
-    // High-performance variants (recvData returns string directly, no Json wrapper)
-    XRS_EXPORT_YIELDABLE(mod, isolate, "recvData", ws_recvdata);
-    XRS_EXPORT_YIELDABLE(mod, isolate, "sendData", ws_send_yieldable);
-
-    // WebSocket server (pure C, no script layer needed)
-    XRS_EXPORT_YIELDABLE(mod, isolate, "serve", ws_serve_yieldable);
-    XRS_EXPORT_YIELDABLE(mod, isolate, "echoServe", ws_echo_serve_yieldable);
-    XRS_EXPORT(mod, isolate, "stopServer", ws_stop_server);
-    XRS_EXPORT(mod, isolate, "isServerRunning", ws_is_server_running);
+    xr_stdlib_vm_bind_ws_generated(isolate, mod);
 
     return mod;
 }

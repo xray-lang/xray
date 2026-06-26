@@ -1,0 +1,6 @@
+let sb = new StringBuilder()
+sb.append("count=")
+sb.append(42)
+sb.append(", ok=")
+sb.append(true)
+print(sb.toString())

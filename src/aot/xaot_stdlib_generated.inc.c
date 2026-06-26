@@ -37,12 +37,26 @@ static const char *xaot_stdlib_generated_object_for_symbol(const char *symbol) {
         return "time.nanos";
     if (strcmp(symbol, "time.micros") == 0)
         return "time.micros";
-    if (strcmp(symbol, "time.sleep") == 0)
-        return "time";
     if (strcmp(symbol, "math.random") == 0)
         return "math.random";
     if (strcmp(symbol, "math.randomInt") == 0)
         return "math.randomInt";
+    if (strcmp(symbol, "compress.gzip") == 0)
+        return "compress.gzip";
+    if (strcmp(symbol, "compress.gunzip") == 0)
+        return "compress.gunzip";
+    if (strcmp(symbol, "compress.deflate") == 0)
+        return "compress.deflate";
+    if (strcmp(symbol, "compress.inflate") == 0)
+        return "compress.inflate";
+    if (strcmp(symbol, "compress.zlibCompress") == 0)
+        return "compress.zlibCompress";
+    if (strcmp(symbol, "compress.zlibDecompress") == 0)
+        return "compress.zlibDecompress";
+    if (strcmp(symbol, "compress.isGzip") == 0)
+        return "compress.isGzip";
+    if (strcmp(symbol, "compress.isZlib") == 0)
+        return "compress.isZlib";
     if (strcmp(symbol, "crypto.md5") == 0)
         return "crypto.md5";
     if (strcmp(symbol, "crypto.sha1") == 0)
@@ -122,6 +136,142 @@ static uint32_t xaot_stdlib_generated_caps_for_symbol(const char *symbol) {
     if (strcmp(symbol, "time.sleep") == 0)
         return XAOT_STDLIB_CAP_CORO | XAOT_STDLIB_CAP_TIMER;
     return 0;
+}
+
+static bool xaot_stdlib_generated_symbol_is_builtin_direct(const char *symbol) {
+    if (!symbol)
+        return false;
+    if (strcmp(symbol, "math.abs") == 0)
+        return true;
+    if (strcmp(symbol, "math.floor") == 0)
+        return true;
+    if (strcmp(symbol, "math.ceil") == 0)
+        return true;
+    if (strcmp(symbol, "math.round") == 0)
+        return true;
+    if (strcmp(symbol, "math.sqrt") == 0)
+        return true;
+    if (strcmp(symbol, "math.pow") == 0)
+        return true;
+    if (strcmp(symbol, "math.sin") == 0)
+        return true;
+    if (strcmp(symbol, "math.cos") == 0)
+        return true;
+    if (strcmp(symbol, "math.tan") == 0)
+        return true;
+    if (strcmp(symbol, "math.asin") == 0)
+        return true;
+    if (strcmp(symbol, "math.acos") == 0)
+        return true;
+    if (strcmp(symbol, "math.atan") == 0)
+        return true;
+    if (strcmp(symbol, "math.atan2") == 0)
+        return true;
+    if (strcmp(symbol, "math.log") == 0)
+        return true;
+    if (strcmp(symbol, "math.log10") == 0)
+        return true;
+    if (strcmp(symbol, "math.log2") == 0)
+        return true;
+    if (strcmp(symbol, "math.exp") == 0)
+        return true;
+    if (strcmp(symbol, "math.min") == 0)
+        return true;
+    if (strcmp(symbol, "math.max") == 0)
+        return true;
+    if (strcmp(symbol, "math.clamp") == 0)
+        return true;
+    if (strcmp(symbol, "math.sign") == 0)
+        return true;
+    if (strcmp(symbol, "math.sinh") == 0)
+        return true;
+    if (strcmp(symbol, "math.cosh") == 0)
+        return true;
+    if (strcmp(symbol, "math.tanh") == 0)
+        return true;
+    if (strcmp(symbol, "math.hypot") == 0)
+        return true;
+    if (strcmp(symbol, "math.cbrt") == 0)
+        return true;
+    if (strcmp(symbol, "math.trunc") == 0)
+        return true;
+    if (strcmp(symbol, "math.fmod") == 0)
+        return true;
+    if (strcmp(symbol, "math.log1p") == 0)
+        return true;
+    if (strcmp(symbol, "math.expm1") == 0)
+        return true;
+    if (strcmp(symbol, "math.lerp") == 0)
+        return true;
+    if (strcmp(symbol, "math.degToRad") == 0)
+        return true;
+    if (strcmp(symbol, "math.radToDeg") == 0)
+        return true;
+    if (strcmp(symbol, "math.isNaN") == 0)
+        return true;
+    if (strcmp(symbol, "math.isFinite") == 0)
+        return true;
+    return false;
+}
+
+static bool xaot_stdlib_generated_symbol_is_constant(const char *symbol) {
+    if (!symbol)
+        return false;
+    if (strcmp(symbol, "math.PI") == 0)
+        return true;
+    if (strcmp(symbol, "math.E") == 0)
+        return true;
+    if (strcmp(symbol, "math.TAU") == 0)
+        return true;
+    if (strcmp(symbol, "math.SQRT2") == 0)
+        return true;
+    if (strcmp(symbol, "math.LN2") == 0)
+        return true;
+    if (strcmp(symbol, "math.LN10") == 0)
+        return true;
+    if (strcmp(symbol, "math.LOG2E") == 0)
+        return true;
+    if (strcmp(symbol, "math.LOG10E") == 0)
+        return true;
+    if (strcmp(symbol, "math.EPSILON") == 0)
+        return true;
+    if (strcmp(symbol, "math.MAX_INT") == 0)
+        return true;
+    if (strcmp(symbol, "math.MIN_INT") == 0)
+        return true;
+    if (strcmp(symbol, "math.MAX_FLOAT") == 0)
+        return true;
+    if (strcmp(symbol, "math.INF") == 0)
+        return true;
+    if (strcmp(symbol, "math.NAN") == 0)
+        return true;
+    if (strcmp(symbol, "path.sep") == 0)
+        return true;
+    if (strcmp(symbol, "path.delimiter") == 0)
+        return true;
+    if (strcmp(symbol, "encoding.LE") == 0)
+        return true;
+    if (strcmp(symbol, "encoding.BE") == 0)
+        return true;
+    if (strcmp(symbol, "os.platform") == 0)
+        return true;
+    if (strcmp(symbol, "os.arch") == 0)
+        return true;
+    if (strcmp(symbol, "os.sep") == 0)
+        return true;
+    if (strcmp(symbol, "os.eol") == 0)
+        return true;
+    if (strcmp(symbol, "log.DEBUG") == 0)
+        return true;
+    if (strcmp(symbol, "log.INFO") == 0)
+        return true;
+    if (strcmp(symbol, "log.WARN") == 0)
+        return true;
+    if (strcmp(symbol, "log.ERROR") == 0)
+        return true;
+    if (strcmp(symbol, "log.FATAL") == 0)
+        return true;
+    return false;
 }
 
 /* clang-format on */

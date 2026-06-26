@@ -163,7 +163,8 @@ static XrValue aot_runtime_process_field(const XrAotContext *ctx, const char *fi
         return XR_NULL_VAL;
 
     XrScriptInfo *info = &core->script_info;
-    if (strcmp(field, "args") == 0) {
+    int field_index = xr_process_field_index(field);
+    if (field_index == PROCESS_FIELD_ARGS) {
         int argc = info->argc > 0 ? info->argc : 0;
         XrArray *args = xr_array_new_shared_core(core, argc);
         if (!args)
@@ -178,10 +179,10 @@ static XrValue aot_runtime_process_field(const XrAotContext *ctx, const char *fi
 
     const char *text = NULL;
     size_t text_len = 0;
-    if (strcmp(field, "file") == 0) {
+    if (field_index == PROCESS_FIELD_FILE) {
         text = info->file;
         text_len = text ? strlen(text) : 0;
-    } else if (strcmp(field, "dir") == 0) {
+    } else if (field_index == PROCESS_FIELD_DIR) {
         text = aot_script_dir_bounds(info->file, &text_len);
     } else {
         return XR_NULL_VAL;
@@ -272,14 +273,7 @@ XrValue xr_aot_load_builtin_field(const XrAotContext *ctx, int32_t index, const 
     if (!XR_IS_INSTANCE(process))
         return XR_NULL_VAL;
 
-    int field_index = -1;
-    if (strcmp(field, "file") == 0) {
-        field_index = PROCESS_FIELD_FILE;
-    } else if (strcmp(field, "args") == 0) {
-        field_index = PROCESS_FIELD_ARGS;
-    } else if (strcmp(field, "dir") == 0) {
-        field_index = PROCESS_FIELD_DIR;
-    }
+    int field_index = xr_process_field_index(field);
     if (field_index < 0)
         return XR_NULL_VAL;
     return xr_instance_get_field_by_index((XrInstance *) process.ptr, field_index);

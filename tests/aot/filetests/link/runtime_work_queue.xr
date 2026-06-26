@@ -1,0 +1,7 @@
+shared const queue: WorkQueue<int> = WorkQueue<int>(4, 2)
+
+assert_true(queue.push(1, 0))
+let (value, ok) = queue.tryPop(0)
+print(ok)
+print(value)
+queue.close()

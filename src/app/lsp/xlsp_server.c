@@ -376,7 +376,7 @@ XrLspServer *xlsp_server_new(void) {
     server->config.format_tab_size = 4;
     server->config.format_max_line_length = 100;
     server->config.format_insert_spaces = true;
-    server->config.format_align_match_arms = false;
+    server->config.format_align_branch_arrows = true;
     server->config.format_align_enum_values = false;
     server->config.format_align_struct_fields = false;
     server->config.format_align_trailing_comments = false;

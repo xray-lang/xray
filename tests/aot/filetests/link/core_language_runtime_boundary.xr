@@ -1,0 +1,13 @@
+enum LangErr {
+    Msg(s: string)
+}
+
+let xs = [1, 2, 3]
+let ys = copy(xs)
+print(ys.length)
+
+try {
+    throw LangErr.Msg("boom")
+} catch (e) {
+    print(typeof(ys))
+}
