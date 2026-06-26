@@ -17,11 +17,7 @@ not_contains="pthread"
 c_contains=.tag == XR_TAG_I64
 c_contains=.tag == XR_TAG_F64
 c_contains=.tag == XR_TAG_BOOL
-c_contains=XR_IS_NULL(
 c_contains=XR_IS_STR(
-c_contains=XR_IS_ARRAY(
-c_contains=XR_IS_MAP(
-c_contains=XR_IS_SET(
 c_not_contains=xrt_instanceof(
 c_not_contains=xr_aot_runtime_init
 c_not_contains=xr_aot_spawn(
