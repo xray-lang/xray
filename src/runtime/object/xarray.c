@@ -489,9 +489,14 @@ void xr_array_fill(XrArray *arr, XrValue value, int start, int end) {
 }
 
 bool xr_array_reserve(XrArray *arr, int32_t capacity) {
-    if (!arr || capacity < 0 || xr_array_is_slice(arr))
+    if (!arr)
         return false;
-    if (arr->capacity >= capacity)
+    /* Match the shared array core / AOT: a negative request clamps to 0 and a
+     * non-growable (slice) array is a no-op, both succeeding rather than raising
+     * "Array.reserve failed". */
+    if (capacity < 0)
+        capacity = 0;
+    if (xr_array_is_slice(arr) || arr->capacity >= capacity)
         return true;
     xr_array_ensure_capacity(arr, capacity);
     return arr->capacity >= capacity;
