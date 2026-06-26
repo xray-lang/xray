@@ -148,48 +148,71 @@ static inline int64_t xrt_le(XrValue a, XrValue b) {
 #define XRT_FORMAT_MAX_DEPTH 3
 #define XRT_FORMAT_MAX_ELEMENTS 32
 
-static void xrt_print_value(XrValue v, int depth) {
+/* Format sink: a NULL strbuf writes to stdout, otherwise text is appended to the
+ * builder. The print path and value.toString() share xrt_format_value so they
+ * render scalars and containers identically (single source of truth). */
+static inline void xrt_fmt_puts(xrt_strbuf_t *sb, const char *s, size_t n) {
+    if (sb) {
+        xrt_strbuf_grow(sb, (int64_t) n);
+        memcpy(sb->buf + sb->len, s, n);
+        sb->len += (int64_t) n;
+        sb->buf[sb->len] = 0;
+    } else if (n > 0) {
+        fwrite(s, 1, n, stdout);
+    }
+}
+static inline void xrt_fmt_cstr(xrt_strbuf_t *sb, const char *s) {
+    xrt_fmt_puts(sb, s, strlen(s));
+}
+static inline void xrt_fmt_char(xrt_strbuf_t *sb, char c) {
+    xrt_fmt_puts(sb, &c, 1);
+}
+
+static void xrt_format_value(XrValue v, xrt_strbuf_t *sb, int depth) {
     switch (v.tag) {
         case XR_TAG_STR:
         case XR_TAG_STR_ARC:
             /* Nested strings are quoted, matching the VM formatter. */
             if (depth > 0)
-                putchar('"');
-            fwrite(xr_str_data(v), 1, (size_t) xr_str_len(v), stdout);
+                xrt_fmt_char(sb, '"');
+            xrt_fmt_puts(sb, xr_str_data(v), (size_t) xr_str_len(v));
             if (depth > 0)
-                putchar('"');
+                xrt_fmt_char(sb, '"');
             return;
-        case XR_TAG_I64:
-            printf("%lld", (long long) v.i);
+        case XR_TAG_I64: {
+            char buf[24];
+            int n = snprintf(buf, sizeof(buf), "%lld", (long long) v.i);
+            xrt_fmt_puts(sb, buf, (size_t) n);
             return;
+        }
         case XR_TAG_F64: {
             char buf[64];
             xrt_format_float(buf, sizeof(buf), v.f);
-            fputs(buf, stdout);
+            xrt_fmt_cstr(sb, buf);
             return;
         }
         case XR_TAG_BOOL:
-            printf("%s", v.i ? "true" : "false");
+            xrt_fmt_cstr(sb, v.i ? "true" : "false");
             return;
         case XR_TAG_CHAR: {
             char buf[4];
             int n = xrt_char_utf8_encode(XR_TO_CHAR(v), buf);
             if (n > 0)
-                fwrite(buf, 1, (size_t) n, stdout);
+                xrt_fmt_puts(sb, buf, (size_t) n);
             return;
         }
         case XR_TAG_NULL:
-            printf("null");
+            xrt_fmt_cstr(sb, "null");
             return;
         case XR_TAG_ENUM: {
             char buf[256];
-            fputs(xr_to_cstr(v, buf, sizeof(buf)), stdout);
+            xrt_fmt_cstr(sb, xr_to_cstr(v, buf, sizeof(buf)));
             return;
         }
         case XR_TAG_RANGE: {
             char buf[96];
             xrt_range_format_buf((const xrt_range_t *) v.ptr, buf, sizeof(buf));
-            fputs(buf, stdout);
+            xrt_fmt_cstr(sb, buf);
             return;
         }
         default:
@@ -197,7 +220,7 @@ static void xrt_print_value(XrValue v, int depth) {
     }
 
     if (depth > XRT_FORMAT_MAX_DEPTH) {
-        fputs("...", stdout);
+        xrt_fmt_cstr(sb, "...");
         return;
     }
 
@@ -205,47 +228,55 @@ static void xrt_print_value(XrValue v, int depth) {
         case XR_TAG_ARRAY: {
             xrt_array_t *a = (xrt_array_t *) v.ptr;
             if (a && a->adt_enum_name && a->adt_member_name) {
-                printf("%s.%s", a->adt_enum_name, a->adt_member_name);
+                char hdr[256];
+                int n = snprintf(hdr, sizeof(hdr), "%s.%s", a->adt_enum_name, a->adt_member_name);
+                xrt_fmt_puts(sb, hdr, (size_t) n);
                 if (a->length > 1) {
-                    printf("(");
+                    xrt_fmt_char(sb, '(');
                     for (int64_t i = 1; i < a->length; i++) {
                         if (i > 1)
-                            printf(", ");
-                        xrt_print_value(xr_typed_get(a->data, (int32_t) i, a->elem_type),
-                                        depth + 1);
+                            xrt_fmt_cstr(sb, ", ");
+                        xrt_format_value(xr_typed_get(a->data, (int32_t) i, a->elem_type), sb,
+                                         depth + 1);
                     }
-                    printf(")");
+                    xrt_fmt_char(sb, ')');
                 }
                 return;
             }
             int64_t len = a ? a->length : 0;
             int64_t limit = len > XRT_FORMAT_MAX_ELEMENTS ? XRT_FORMAT_MAX_ELEMENTS : len;
-            putchar('[');
+            xrt_fmt_char(sb, '[');
             for (int64_t i = 0; i < limit; i++) {
                 if (i > 0)
-                    fputs(", ", stdout);
-                xrt_print_value(xr_typed_get(a->data, (int32_t) i, a->elem_type), depth + 1);
+                    xrt_fmt_cstr(sb, ", ");
+                xrt_format_value(xr_typed_get(a->data, (int32_t) i, a->elem_type), sb, depth + 1);
             }
-            if (len > limit)
-                printf(", ...(%lld more)", (long long) (len - limit));
-            putchar(']');
+            if (len > limit) {
+                char more[48];
+                int n = snprintf(more, sizeof(more), ", ...(%lld more)", (long long) (len - limit));
+                xrt_fmt_puts(sb, more, (size_t) n);
+            }
+            xrt_fmt_char(sb, ']');
             return;
         }
         case XR_TAG_TUPLE: {
             xrt_tuple_t *t = (xrt_tuple_t *) v.ptr;
             int64_t len = t ? t->len : 0;
             int64_t limit = len > XRT_FORMAT_MAX_ELEMENTS ? XRT_FORMAT_MAX_ELEMENTS : len;
-            putchar('(');
+            xrt_fmt_char(sb, '(');
             for (int64_t i = 0; i < limit; i++) {
                 if (i > 0)
-                    fputs(", ", stdout);
-                xrt_print_value(t->items[i], depth + 1);
+                    xrt_fmt_cstr(sb, ", ");
+                xrt_format_value(t->items[i], sb, depth + 1);
             }
-            if (len > limit)
-                printf(", ...(%lld more)", (long long) (len - limit));
+            if (len > limit) {
+                char more[48];
+                int n = snprintf(more, sizeof(more), ", ...(%lld more)", (long long) (len - limit));
+                xrt_fmt_puts(sb, more, (size_t) n);
+            }
             if (len == 1)
-                putchar(',');
-            putchar(')');
+                xrt_fmt_char(sb, ',');
+            xrt_fmt_char(sb, ')');
             return;
         }
         case XR_TAG_MAP: {
@@ -253,21 +284,25 @@ static void xrt_print_value(XrValue v, int depth) {
             int64_t total = m ? xrt_map_len(m) : 0;
             int64_t n_slots = !m ? 0 : (xrt_map_is_typed(m) ? m->order_len : (int64_t) m->nentries);
             int64_t count = 0;
-            fputs("#{", stdout);
+            xrt_fmt_cstr(sb, "#{");
             for (int64_t i = 0; i < n_slots && count < XRT_FORMAT_MAX_ELEMENTS; i++) {
                 int64_t slot = xrt_map_is_typed(m) ? m->order[i] : i;
                 if (!xrt_map_slot_is_full(m, slot))
                     continue;
                 if (count > 0)
-                    fputs(", ", stdout);
-                xrt_print_value(xrt_map_slot_key(m, slot), depth + 1);
-                fputs(": ", stdout);
-                xrt_print_value(xrt_map_slot_value(m, slot), depth + 1);
+                    xrt_fmt_cstr(sb, ", ");
+                xrt_format_value(xrt_map_slot_key(m, slot), sb, depth + 1);
+                xrt_fmt_cstr(sb, ": ");
+                xrt_format_value(xrt_map_slot_value(m, slot), sb, depth + 1);
                 count++;
             }
-            if (total > count)
-                printf(", ...(%lld more)", (long long) (total - count));
-            putchar('}');
+            if (total > count) {
+                char more[48];
+                int n =
+                    snprintf(more, sizeof(more), ", ...(%lld more)", (long long) (total - count));
+                xrt_fmt_puts(sb, more, (size_t) n);
+            }
+            xrt_fmt_char(sb, '}');
             return;
         }
         case XR_TAG_SET: {
@@ -275,25 +310,46 @@ static void xrt_print_value(XrValue v, int depth) {
             int64_t total = s ? xrt_set_len(s) : 0;
             int64_t n_slots = !s ? 0 : (xrt_set_is_typed(s) ? s->order_len : (int64_t) s->nentries);
             int64_t count = 0;
-            fputs("#[", stdout);
+            xrt_fmt_cstr(sb, "#[");
             for (int64_t i = 0; i < n_slots && count < XRT_FORMAT_MAX_ELEMENTS; i++) {
                 int64_t slot = xrt_set_is_typed(s) ? s->order[i] : i;
                 if (!xrt_set_slot_is_full(s, slot))
                     continue;
                 if (count > 0)
-                    fputs(", ", stdout);
-                xrt_print_value(xrt_set_slot_item(s, slot), depth + 1);
+                    xrt_fmt_cstr(sb, ", ");
+                xrt_format_value(xrt_set_slot_item(s, slot), sb, depth + 1);
                 count++;
             }
-            if (total > count)
-                printf(", ...(%lld more)", (long long) (total - count));
-            putchar(']');
+            if (total > count) {
+                char more[48];
+                int n =
+                    snprintf(more, sizeof(more), ", ...(%lld more)", (long long) (total - count));
+                xrt_fmt_puts(sb, more, (size_t) n);
+            }
+            xrt_fmt_char(sb, ']');
             return;
         }
-        default:
-            printf("<object@%p>", v.ptr);
+        default: {
+            char buf[32];
+            int n = snprintf(buf, sizeof(buf), "<object@%p>", v.ptr);
+            xrt_fmt_puts(sb, buf, (size_t) n);
             return;
+        }
     }
+}
+
+static void xrt_print_value(XrValue v, int depth) {
+    xrt_format_value(v, NULL, depth);
+}
+
+/* value.toString() for containers and other non-scalars: render via the shared
+ * formatter into a string (matches the VM's xr_value_to_string output). */
+static inline XrValue xrt_value_to_string(XrValue v) {
+    if (XR_IS_STR(v))
+        return v;
+    XrValue sbv = xrt_strbuf_new();
+    xrt_format_value(v, (xrt_strbuf_t *) sbv.ptr, 0);
+    return xrt_strbuf_finish(sbv);
 }
 
 static inline void xrt_print(XrValue v) {

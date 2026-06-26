@@ -336,6 +336,14 @@ static inline XrValue xrt_str_method_0(const char *s, int64_t slen, XrValue recv
 }
 
 static inline XrValue xrt_method_0(XrValue recv, int sym) {
+    /* Container/tuple toString renders via the shared value formatter so AOT
+     * matches the VM ("[1, 2, 3]", "#{...}", "#[...]"). Simple enums are
+     * XR_TAG_ENUM and handled by their own toString case below. */
+    if (sym == XRT_SYM_TOSTRING) {
+        int rk = xrt_value_kind(recv);
+        if (rk == XR_TAG_ARRAY || rk == XR_TAG_MAP || rk == XR_TAG_SET || rk == XR_TAG_TUPLE)
+            return xrt_value_to_string(recv);
+    }
     if (XR_IS_STR(recv)) {
         return xrt_str_method_0(xr_str_data(recv), xr_str_len(recv), recv, sym);
     }
