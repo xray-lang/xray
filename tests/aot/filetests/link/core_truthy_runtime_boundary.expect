@@ -13,7 +13,6 @@ not_contains="runtime_caps": ["stdlib_runtime"]
 not_contains="runtime_objects": ["xray_core"]
 not_contains="runtime_objects": ["xray_rt_coro"]
 not_contains="pthread"
-c_contains=xr_truthy(
 c_contains=xrt_to_bool(
 c_not_contains=xrt_value_clone_for_coro(
 c_not_contains=xr_aot_runtime_init
