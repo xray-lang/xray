@@ -1,0 +1,17 @@
+contains=xaot-plan v0
+contains="generated_c_files": ["<aot-generated-c>"]
+contains="runtime_objects": []
+contains="stdlib_objects": []
+not_contains="stdlib_objects": ["math"]
+contains="stdlib_symbols": ["math.PI", "math.MIN_INT", "math.INF", "math.NAN", "math.TAU", "math.EPSILON", "math.MAX_FLOAT"]
+contains="system_libs": ["m"]
+contains="defines": ["XRT_IMPL"]
+not_contains="runtime_objects": ["xray_core"]
+c_contains=XR_FROM_FLOAT(3.14159265358979323846)
+c_contains=XR_FROM_FLOAT(6.28318530717958647692)
+c_contains=XR_FROM_FLOAT(2.22044604925031308085e-16)
+c_contains=XR_FROM_INT(INT64_MIN)
+c_contains=XR_FROM_FLOAT(INFINITY)
+c_contains=XR_FROM_FLOAT(NAN)
+c_not_contains=xrt_getprop_name
+c_not_contains=xrt_method_

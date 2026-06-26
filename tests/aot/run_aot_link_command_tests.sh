@@ -379,6 +379,22 @@ else
     sed 's/^/      /' "$DATETIME_OFFSET_LOG" | sed -n '1,120p'
 fi
 
+CORE_DATETIME_SRC="$PROJECT_DIR/tests/aot/filetests/link/core_datetime.xr"
+CORE_DATETIME_BIN="$WORK/core_datetime"
+CORE_DATETIME_LOG="$WORK/core_datetime.log"
+if build_native "$CORE_DATETIME_SRC" "$CORE_DATETIME_BIN" "$CORE_DATETIME_LOG"; then
+    expect_log_contains "$CORE_DATETIME_LOG" "Link command:" "core-datetime: emitted link command"
+    expect_log_not_contains "$CORE_DATETIME_LOG" "-lxray_core" "core-datetime: does not link xray_core"
+    expect_log_not_contains "$CORE_DATETIME_LOG" "-lxray_aot_core" "core-datetime: does not link AOT core"
+    expect_log_not_contains "$CORE_DATETIME_LOG" "-lpthread" "core-datetime: does not link pthread"
+    expect_log_not_contains "$CORE_DATETIME_LOG" "-lz" "core-datetime: does not link zlib"
+    expect_log_contains "$CORE_DATETIME_LOG" "-lm" "core-datetime: links math lib only"
+    expect_output "$CORE_DATETIME_BIN" $'2024\n2024-02-29T23:45:06.000Z\n2024/02/29 23:45:06\n1\n-24\n1970-01-01T00:00:00.000Z\n999\n123' "core-datetime: binary output"
+else
+    record_fail "core-datetime: build failed"
+    sed 's/^/      /' "$CORE_DATETIME_LOG" | sed -n '1,120p'
+fi
+
 OS_QUERY_SRC="$PROJECT_DIR/tests/aot/filetests/link/system_os_queries.xr"
 OS_QUERY_BIN="$WORK/system_os_queries"
 OS_QUERY_LOG="$WORK/system_os_queries.log"

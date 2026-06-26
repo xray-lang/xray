@@ -54,6 +54,8 @@
 #include "../runtime/xshared.h"
 #include "../runtime/xglobal_dict.h"
 #include "../runtime/mem/xsystem_heap.h"
+#include "../shared/xr_array_core.h"
+#include "../shared/xr_error_core.h"
 
 #include "../runtime/mem/xcoro_heap.h"
 #include "../runtime/mem/xalloc_unified.h"
@@ -78,6 +80,7 @@
 #include "../base/xutf8.h"  // XR_UNICODE_MAX
 #include "../runtime/value/xslot_type.h"
 #include "../runtime/value/xtype.h"
+#include "../shared/xr_string_core.h"
 #include "../runtime/value/xstruct_layout.h"
 
 #include "../runtime/xray_debug.h"
@@ -333,6 +336,14 @@ XrVMResult run(XrVMRuntime *isolate, XrVMContext *vm_ctx) {
         if (!xr_vm_is_catch_reachable(isolate))                                                    \
             return XR_VM_RUNTIME_ERROR;                                                            \
         goto startfunc;                                                                            \
+    } while (0)
+
+#define VM_ARRAY_INDEX_OOB(raw_idx, raw_length)                                                    \
+    do {                                                                                           \
+        char _xr_index_oob_msg[XR_ERROR_CORE_INDEX_OOB_BUFSZ];                                     \
+        xr_error_core_format_array_index_oob(_xr_index_oob_msg, sizeof(_xr_index_oob_msg),         \
+                                             (int64_t) (raw_idx), (int64_t) (raw_length));         \
+        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "%s", _xr_index_oob_msg);                     \
     } while (0)
 
 // Warning-only: prints to stderr but does NOT change control flow or VM state.

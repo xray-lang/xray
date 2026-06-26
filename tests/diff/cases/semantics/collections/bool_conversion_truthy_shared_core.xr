@@ -1,0 +1,38 @@
+fn show(label: string, value: bool) {
+    print(label + "=" + value.toString())
+}
+
+show("null", bool(null))
+show("false", bool(false))
+show("true", bool(true))
+show("zero-int", bool(0))
+show("nonzero-int", bool(-1))
+show("zero-float", bool(0.0))
+show("nonzero-float", bool(0.25))
+show("empty-string", bool(""))
+show("nonempty-string", bool("x"))
+
+let emptyArray: Array<int> = []
+let fullArray: Array<int> = [1]
+show("empty-array", bool(emptyArray))
+show("full-array", bool(fullArray))
+
+let emptyMap: Map<string, int> = #{}
+let fullMap: Map<string, int> = #{"x": 1}
+show("empty-map", bool(emptyMap))
+show("full-map", bool(fullMap))
+
+let emptyBoolMap: Map<bool, int> = #{}
+let fullBoolMap: Map<bool, int> = #{true: 1}
+show("empty-boolmap", bool(emptyBoolMap))
+show("full-boolmap", bool(fullBoolMap))
+
+let emptySet: Set<string> = #[]
+let fullSet: Set<string> = #["x"]
+show("empty-set", bool(emptySet))
+show("full-set", bool(fullSet))
+
+let emptyTypedSet: Set<uint8> = #[]
+let fullTypedSet: Set<uint8> = #[7]
+show("empty-typed-set", bool(emptyTypedSet))
+show("full-typed-set", bool(fullTypedSet))

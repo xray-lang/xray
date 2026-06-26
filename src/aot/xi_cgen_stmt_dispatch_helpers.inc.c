@@ -2,7 +2,13 @@
  * xi_cgen_stmt_dispatch_helpers.inc.c - Generated Xi statement lowering drivers for AOT C
  */
 
-static uint32_t xicgen_stmt_find_try_id(const XiFunc *f) {
+static uint32_t xicgen_stmt_bound_try_id(const XiFunc *f, const XiValue *v) {
+    if (v && v->aux) {
+        const XiValue *try_op = (const XiValue *) v->aux;
+        if (try_op->op == XI_TRY)
+            return try_op->id;
+    }
+
     uint32_t try_id = 0;
     for (uint32_t bi = 0; bi < f->nblocks; bi++) {
         const XiBlock *blk = f->blocks[bi];
@@ -48,7 +54,7 @@ static bool xicgen_stmt_end_try(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
     (void) ctx;
     (void) v;
     (void) prefix;
-    fprintf(out, "    xrt_exc_top = _ef%u.prev;\n", xicgen_stmt_find_try_id(f));
+    fprintf(out, "    xrt_exc_top = _ef%u.prev;\n", xicgen_stmt_bound_try_id(f, v));
     return true;
 }
 
@@ -64,7 +70,7 @@ static bool xicgen_stmt_catch(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
         emit_vref(out, v);
         fprintf(out, " = ");
     }
-    fprintf(out, "_ef%u.exception;\n", xicgen_stmt_find_try_id(f));
+    fprintf(out, "_ef%u.exception;\n", xicgen_stmt_bound_try_id(f, v));
     return true;
 }
 

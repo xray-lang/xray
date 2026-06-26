@@ -12,7 +12,7 @@
  *   Supports both synchronous calls and coroutine-based async I/O.
  *
  * WHY THIS DESIGN:
- *   - Request object pool reduces GC pressure for high-throughput servers
+ *   - Request object pool reduces allocation pressure for high-throughput servers
  *   - TLS buffers avoid malloc/free per request
  *   - Yieldable C functions enable non-blocking I/O in coroutines
  */
@@ -57,6 +57,13 @@ extern struct XrCoroutine *xr_current_coro(XrVMRuntime *X);
 extern XrArray *xr_array_new(struct XrCoroutine *coro);
 extern void xr_array_push(XrArray *arr, XrValue value);
 extern XrValue xr_value_from_array(XrArray *arr);
+extern XrValue h2_get(XrVMRuntime *X, XrValue *args, int argc);
+extern XrValue h2_post(XrVMRuntime *X, XrValue *args, int argc);
+extern XrValue h2_request(XrVMRuntime *X, XrValue *args, int argc);
+extern XrValue h2_create_server(XrVMRuntime *X, XrValue *args, int argc);
+extern XrValue h2_server_listen(XrVMRuntime *X, XrValue *args, int argc);
+extern XrValue h2_server_stop(XrVMRuntime *X, XrValue *args, int argc);
+extern XrValue h2_push(XrVMRuntime *X, XrValue *args, int argc);
 
 /* ========== Server Config and Connection Limits ========== */
 
@@ -1357,65 +1364,9 @@ static XrValue http_clear_proxy(XrVMRuntime *X, XrValue *args, int argc) {
     return xr_null();
 }
 
-/* ========== Type Declarations (parsed by gen_stdlib_types.py) ========== */
-
-#include "../../src/module/xbuiltin_decl.h"
-
-// @module http
-// @handle HttpResponse { const status: int, const statusText: string, const headers: Json, const
-// body: string, const error: string, const ok: bool }
-// @handle HttpRequest { const method: string, const path: string, const query: Json, const headers:
-// Json, const body: string, const contentLength: int, const params: Json, const streaming: bool }
-// @handle DownloadResult { const status: int, const downloaded: int, const total: int, const
-// completed: bool, const error: string }
-
-XR_DEFINE_BUILTIN(http_get, "get", "(url: string, options?: Json): HttpResponse",
-                  "HTTP GET request")
-XR_DEFINE_BUILTIN(http_post, "post", "(url: string, body?: string, options?: Json): HttpResponse",
-                  "HTTP POST request")
-XR_DEFINE_BUILTIN(http_put, "put", "(url: string, body?: string, options?: Json): HttpResponse",
-                  "HTTP PUT request")
-XR_DEFINE_BUILTIN(http_delete, "delete", "(url: string, options?: Json): HttpResponse",
-                  "HTTP DELETE request")
-XR_DEFINE_BUILTIN(http_request, "request",
-                  "(method: string, url: string, options?: Json): HttpResponse",
-                  "Generic HTTP request")
-XR_DEFINE_BUILTIN(http_url_encode, "urlEncode", "(s: string): string", "URL-encode a string")
-XR_DEFINE_BUILTIN(http_url_decode, "urlDecode", "(s: string): string", "URL-decode a string")
-XR_DEFINE_BUILTIN(http_route, "route", "(method: string, path: string, handler: fn): ()",
-                  "Register a route handler")
-XR_DEFINE_BUILTIN(http_static, "static", "(prefix: string, dir: string): ()",
-                  "Serve static files from directory")
-XR_DEFINE_BUILTIN(http_stop_server, "stopServer", "(): ()", "Stop the HTTP server")
-XR_DEFINE_BUILTIN(http_parse_request_fast, "parseRequest", "(fd: int): Array<unknown>?",
-                  "Parse raw HTTP request data")
-XR_DEFINE_BUILTIN(http_send_response_fast, "sendResponse",
-                  "(fd: int, body: string, status?: int): bool", "Send HTTP response on fd")
-XR_DEFINE_BUILTIN(http_download, "download",
-                  "(url: string, path: string, options?: Json): DownloadResult",
-                  "Download file from URL")
-XR_DEFINE_BUILTIN(http_get_content_length, "getContentLength", "(url: string): int",
-                  "Get content length of URL")
-XR_DEFINE_BUILTIN(http_form_data_new, "formDataNew", "(): Json", "Create new multipart form data")
-XR_DEFINE_BUILTIN(http_form_data_append, "formDataAppend",
-                  "(form: Json, name: string, value: string): ()", "Append field to form data")
-XR_DEFINE_BUILTIN(http_form_data_append_file, "formDataAppendFile",
-                  "(form: Json, name: string, path: string, filename?: string): ()",
-                  "Append file to form data")
-XR_DEFINE_BUILTIN(http_form_data_post, "formDataPost",
-                  "(url: string, form: Json, options?: Json): HttpResponse",
-                  "POST multipart form data")
-XR_DEFINE_BUILTIN(http_set_proxy, "setProxy", "(url: string): ()", "Set HTTP proxy")
-XR_DEFINE_BUILTIN(http_clear_proxy, "clearProxy", "(): ()", "Clear HTTP proxy")
-XR_DEFINE_BUILTIN(h2_get, "h2Get", "(url: string, options?: Json): HttpResponse",
-                  "HTTP/2 GET request")
-XR_DEFINE_BUILTIN(h2_post, "h2Post", "(url: string, body?: string, options?: Json): HttpResponse",
-                  "HTTP/2 POST request")
-XR_DEFINE_BUILTIN(h2_request, "h2Request",
-                  "(method: string, url: string, options?: Json): HttpResponse",
-                  "Generic HTTP/2 request")
-
-/* ========== Module Loading ========== */
+#define XR_STDLIB_VM_BIND_MODULE_HTTP 1
+#include "../../src/stdlib/xstdlib_vm_bindings_generated.inc.c"
+#undef XR_STDLIB_VM_BIND_MODULE_HTTP
 
 XR_FUNC XrModule *xr_load_module_http(XrVMRuntime *isolate) {
     // 1. Create Native module
@@ -1423,68 +1374,7 @@ XR_FUNC XrModule *xr_load_module_http(XrVMRuntime *isolate) {
     if (!mod)
         return NULL;
 
-    // HTTP client methods (blocking I/O, mark SLOW for immediate P/M handoff)
-    XRS_EXPORT_SLOW(mod, isolate, "get", http_get);
-    XRS_EXPORT_SLOW(mod, isolate, "post", http_post);
-    XRS_EXPORT_SLOW(mod, isolate, "put", http_put);
-    XRS_EXPORT_SLOW(mod, isolate, "delete", http_delete);
-    XRS_EXPORT_SLOW(mod, isolate, "request", http_request);
-
-    // Utility functions
-    XRS_EXPORT(mod, isolate, "urlEncode", http_url_encode);
-    XRS_EXPORT(mod, isolate, "urlDecode", http_url_decode);
-
-    // Server functions (per-connection coroutine, singleton mode)
-    XRS_EXPORT(mod, isolate, "route", http_route);
-    XRS_EXPORT(mod, isolate, "static", http_static);
-    XRS_EXPORT(mod, isolate, "setConnHandler", http_set_conn_handler);
-    XRS_EXPORT(mod, isolate, "__getConnHandler", http_get_conn_handler);
-    XRS_EXPORT_YIELDABLE(mod, isolate, "listen", xr_http_listen_impl);
-    XRS_EXPORT(mod, isolate, "config", xr_http_config_impl);
-    XRS_EXPORT(mod, isolate, "response", xr_http_response_impl);
-    XRS_EXPORT(mod, isolate, "serverStats", xr_http_server_stats);
-    XRS_EXPORT(mod, isolate, "ws", http_ws_route);
-    XRS_EXPORT_SLOW(mod, isolate, "readChunk", http_read_chunk);
-    XRS_EXPORT(mod, isolate, "closeStream", http_close_stream);
-    XRS_EXPORT(mod, isolate, "stopServer", http_stop_server);
-
-    // Modular high-performance API (public)
-    XRS_EXPORT(mod, isolate, "parseRequest", http_parse_request_fast);
-    XRS_EXPORT(mod, isolate, "sendResponse", http_send_response_fast);
-
-    // Streaming download (blocking I/O)
-    XRS_EXPORT_SLOW(mod, isolate, "download", http_download);
-    XRS_EXPORT(mod, isolate, "getContentLength", http_get_content_length);
-
-    // Multipart form
-    XRS_EXPORT(mod, isolate, "formDataNew", http_form_data_new);
-    XRS_EXPORT(mod, isolate, "formDataAppend", http_form_data_append);
-    XRS_EXPORT(mod, isolate, "formDataAppendFile", http_form_data_append_file);
-    XRS_EXPORT(mod, isolate, "formDataPost", http_form_data_post);
-
-    // Proxy settings
-    XRS_EXPORT(mod, isolate, "setProxy", http_set_proxy);
-    XRS_EXPORT(mod, isolate, "clearProxy", http_clear_proxy);
-
-    // NOTE: WebSocket functions moved to separate 'ws' module
-
-    // HTTP/2 client functions
-    extern XrValue h2_get(XrVMRuntime * X, XrValue * args, int argc);
-    extern XrValue h2_post(XrVMRuntime * X, XrValue * args, int argc);
-    extern XrValue h2_request(XrVMRuntime * X, XrValue * args, int argc);
-    XRS_EXPORT(mod, isolate, "h2Get", h2_get);
-    XRS_EXPORT(mod, isolate, "h2Post", h2_post);
-    XRS_EXPORT(mod, isolate, "h2Request", h2_request);
-
-    // HTTP/2 server functions
-    extern XrValue h2_create_server(XrVMRuntime * X, XrValue * args, int argc);
-    extern XrValue h2_server_listen(XrVMRuntime * X, XrValue * args, int argc);
-    extern XrValue h2_server_stop(XrVMRuntime * X, XrValue * args, int argc);
-    extern XrValue h2_push(XrVMRuntime * X, XrValue * args, int argc);
-    XRS_EXPORT(mod, isolate, "h2CreateServer", h2_create_server);
-    XRS_EXPORT(mod, isolate, "h2Listen", h2_server_listen);
-    XRS_EXPORT(mod, isolate, "h2Stop", h2_server_stop);
-    XRS_EXPORT(mod, isolate, "h2Push", h2_push);
+    xr_stdlib_vm_bind_http_generated(isolate, mod);
 
     // 3. Mark as loaded
     mod->loaded = true;

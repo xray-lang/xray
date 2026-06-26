@@ -1,0 +1,11 @@
+let value = 2
+
+try {
+    let result = match (value) {
+        1 -> "one"
+    }
+    print(result)
+} catch panic (p) {
+    print(p.message)
+    print(p.code)
+}

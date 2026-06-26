@@ -25,6 +25,35 @@
 #define XR_COMPRESS_DEFAULT_COMPRESSION 6
 #endif
 
+typedef struct {
+    const uint8_t *data;
+    size_t len;
+} XrCompressCoreInputView;
+
+static inline int xr_compress_core_level_or_default(bool has_level, int64_t raw_level) {
+    if (!has_level)
+        return XR_COMPRESS_DEFAULT_COMPRESSION;
+    if (raw_level < XR_COMPRESS_NO_COMPRESSION)
+        return XR_COMPRESS_NO_COMPRESSION;
+    if (raw_level > XR_COMPRESS_BEST_COMPRESSION)
+        return XR_COMPRESS_BEST_COMPRESSION;
+    return (int) raw_level;
+}
+
+static inline bool xr_compress_core_input_view(const char *data, int64_t len,
+                                               XrCompressCoreInputView *out) {
+    if (!out)
+        return false;
+    if (len < 0)
+        return false;
+    if (!data && len != 0)
+        return false;
+
+    out->data = (const uint8_t *) (data ? data : "");
+    out->len = (size_t) len;
+    return true;
+}
+
 #ifndef XR_COMPRESS_ERROR_DEFINED
 #define XR_COMPRESS_ERROR_DEFINED
 typedef enum {
@@ -37,6 +66,15 @@ typedef enum {
     XR_COMPRESS_ERR_CHECKSUM
 } XrCompressError;
 #endif
+
+#define XR_COMPRESS_CORE_GZIP_WRAPPER_BYTES 18u
+#define XR_COMPRESS_CORE_ZLIB_WRAPPER_BYTES 6u
+#define XR_COMPRESS_CORE_GUNZIP_FALLBACK_MULTIPLIER 4u
+#define XR_COMPRESS_CORE_GUNZIP_PAD 256u
+#define XR_COMPRESS_CORE_GUNZIP_MAX_TRIES 4
+#define XR_COMPRESS_CORE_INFLATE_FALLBACK_MULTIPLIER 8u
+#define XR_COMPRESS_CORE_INFLATE_PAD 1024u
+#define XR_COMPRESS_CORE_INFLATE_MAX_TRIES 8
 
 static const uint32_t XR_COMPRESS_CORE_CRC32_TABLE[256] = {
     0x00000000, 0x77073096, 0xEE0E612C, 0x990951BA, 0x076DC419, 0x706AF48F, 0xE963A535, 0x9E6495A3,
@@ -128,5 +166,168 @@ XR_FUNC XrCompressError xr_zlib_compress(const uint8_t *input, size_t in_len, ui
 XR_FUNC XrCompressError xr_zlib_decompress(const uint8_t *input, size_t in_len, uint8_t *output,
                                            size_t out_cap, size_t *out_len);
 XR_FUNC bool xr_is_zlib(const uint8_t *data, size_t len);
+
+typedef void *(*XrCompressCoreAllocFn)(void *ctx, size_t size);
+typedef void (*XrCompressCoreFreeFn)(void *ctx, void *ptr);
+typedef XrCompressError (*XrCompressCoreCompressFn)(const uint8_t *input, size_t in_len,
+                                                    uint8_t *output, size_t out_cap,
+                                                    size_t *out_len, int level);
+typedef XrCompressError (*XrCompressCoreDecompressFn)(const uint8_t *input, size_t in_len,
+                                                      uint8_t *output, size_t out_cap,
+                                                      size_t *out_len);
+
+static inline bool xr_compress_core_checked_add(size_t a, size_t b, size_t *out) {
+    if (!out || a > SIZE_MAX - b)
+        return false;
+    *out = a + b;
+    return true;
+}
+
+static inline bool xr_compress_core_checked_mul(size_t a, size_t b, size_t *out) {
+    if (!out || (b != 0 && a > SIZE_MAX / b))
+        return false;
+    *out = a * b;
+    return true;
+}
+
+static inline bool xr_compress_core_compress_bound(size_t in_len, size_t wrapper_bytes,
+                                                   size_t *out_cap) {
+    return xr_compress_core_checked_add(xr_deflate_bound(in_len), wrapper_bytes, out_cap);
+}
+
+static inline bool xr_compress_core_gunzip_initial_cap(size_t in_len, uint32_t original_size,
+                                                       size_t *out_cap) {
+    size_t base = (size_t) original_size;
+    if (base == 0 &&
+        !xr_compress_core_checked_mul(in_len, XR_COMPRESS_CORE_GUNZIP_FALLBACK_MULTIPLIER, &base))
+        return false;
+    return xr_compress_core_checked_add(base, XR_COMPRESS_CORE_GUNZIP_PAD, out_cap);
+}
+
+static inline bool xr_compress_core_inflate_initial_cap(size_t in_len, size_t *out_cap) {
+    size_t base = 0;
+    if (!xr_compress_core_checked_mul(in_len, XR_COMPRESS_CORE_INFLATE_FALLBACK_MULTIPLIER, &base))
+        return false;
+    return xr_compress_core_checked_add(base, XR_COMPRESS_CORE_INFLATE_PAD, out_cap);
+}
+
+static inline bool xr_compress_core_next_cap(size_t cap, size_t *next_cap) {
+    return xr_compress_core_checked_mul(cap, 2u, next_cap);
+}
+
+static inline uint8_t *xr_compress_core_compress_alloc(const uint8_t *input, size_t in_len,
+                                                       int level, size_t wrapper_bytes,
+                                                       XrCompressCoreCompressFn fn,
+                                                       XrCompressCoreAllocFn alloc_fn,
+                                                       XrCompressCoreFreeFn free_fn,
+                                                       void *alloc_ctx, size_t *out_len) {
+    if (!fn || !alloc_fn || !free_fn || !out_len)
+        return NULL;
+    *out_len = 0;
+    size_t bound = 0;
+    if (!xr_compress_core_compress_bound(in_len, wrapper_bytes, &bound))
+        return NULL;
+    uint8_t *output = (uint8_t *) alloc_fn(alloc_ctx, bound);
+    if (!output)
+        return NULL;
+    XrCompressError err = fn(input, in_len, output, bound, out_len, level);
+    if (err != XR_COMPRESS_OK) {
+        free_fn(alloc_ctx, output);
+        return NULL;
+    }
+    return output;
+}
+
+static inline uint8_t *xr_compress_core_decompress_alloc(const uint8_t *input, size_t in_len,
+                                                         size_t initial_cap, int max_tries,
+                                                         XrCompressCoreDecompressFn fn,
+                                                         XrCompressCoreAllocFn alloc_fn,
+                                                         XrCompressCoreFreeFn free_fn,
+                                                         void *alloc_ctx, size_t *out_len) {
+    if (!fn || !alloc_fn || !free_fn || !out_len || initial_cap == 0 || max_tries <= 0)
+        return NULL;
+    *out_len = 0;
+    size_t cap = initial_cap;
+    for (int tries = 0; tries < max_tries; tries++) {
+        uint8_t *output = (uint8_t *) alloc_fn(alloc_ctx, cap);
+        if (!output)
+            return NULL;
+
+        XrCompressError err = fn(input, in_len, output, cap, out_len);
+        if (err == XR_COMPRESS_OK)
+            return output;
+        free_fn(alloc_ctx, output);
+        if (err != XR_COMPRESS_ERR_BUFFER)
+            return NULL;
+        if (!xr_compress_core_next_cap(cap, &cap))
+            return NULL;
+    }
+    return NULL;
+}
+
+static inline uint8_t *xr_compress_core_gzip_alloc(const uint8_t *input, size_t in_len,
+                                                   size_t *out_len, int level,
+                                                   XrCompressCoreAllocFn alloc_fn,
+                                                   XrCompressCoreFreeFn free_fn, void *alloc_ctx) {
+    return xr_compress_core_compress_alloc(input, in_len, level,
+                                           XR_COMPRESS_CORE_GZIP_WRAPPER_BYTES, xr_gzip, alloc_fn,
+                                           free_fn, alloc_ctx, out_len);
+}
+
+static inline uint8_t *xr_compress_core_deflate_alloc(const uint8_t *input, size_t in_len,
+                                                      size_t *out_len, int level,
+                                                      XrCompressCoreAllocFn alloc_fn,
+                                                      XrCompressCoreFreeFn free_fn,
+                                                      void *alloc_ctx) {
+    return xr_compress_core_compress_alloc(input, in_len, level, 0, xr_deflate, alloc_fn, free_fn,
+                                           alloc_ctx, out_len);
+}
+
+static inline uint8_t *xr_compress_core_zlib_compress_alloc(const uint8_t *input, size_t in_len,
+                                                            size_t *out_len, int level,
+                                                            XrCompressCoreAllocFn alloc_fn,
+                                                            XrCompressCoreFreeFn free_fn,
+                                                            void *alloc_ctx) {
+    return xr_compress_core_compress_alloc(input, in_len, level,
+                                           XR_COMPRESS_CORE_ZLIB_WRAPPER_BYTES, xr_zlib_compress,
+                                           alloc_fn, free_fn, alloc_ctx, out_len);
+}
+
+static inline uint8_t *xr_compress_core_gunzip_alloc(const uint8_t *input, size_t in_len,
+                                                     uint32_t original_size, size_t *out_len,
+                                                     XrCompressCoreAllocFn alloc_fn,
+                                                     XrCompressCoreFreeFn free_fn,
+                                                     void *alloc_ctx) {
+    size_t cap = 0;
+    if (!xr_compress_core_gunzip_initial_cap(in_len, original_size, &cap))
+        return NULL;
+    return xr_compress_core_decompress_alloc(input, in_len, cap, XR_COMPRESS_CORE_GUNZIP_MAX_TRIES,
+                                             xr_gunzip, alloc_fn, free_fn, alloc_ctx, out_len);
+}
+
+static inline uint8_t *xr_compress_core_inflate_alloc(const uint8_t *input, size_t in_len,
+                                                      size_t *out_len,
+                                                      XrCompressCoreAllocFn alloc_fn,
+                                                      XrCompressCoreFreeFn free_fn,
+                                                      void *alloc_ctx) {
+    size_t cap = 0;
+    if (!xr_compress_core_inflate_initial_cap(in_len, &cap))
+        return NULL;
+    return xr_compress_core_decompress_alloc(input, in_len, cap, XR_COMPRESS_CORE_INFLATE_MAX_TRIES,
+                                             xr_inflate, alloc_fn, free_fn, alloc_ctx, out_len);
+}
+
+static inline uint8_t *xr_compress_core_zlib_decompress_alloc(const uint8_t *input, size_t in_len,
+                                                              size_t *out_len,
+                                                              XrCompressCoreAllocFn alloc_fn,
+                                                              XrCompressCoreFreeFn free_fn,
+                                                              void *alloc_ctx) {
+    size_t cap = 0;
+    if (!xr_compress_core_inflate_initial_cap(in_len, &cap))
+        return NULL;
+    return xr_compress_core_decompress_alloc(input, in_len, cap, XR_COMPRESS_CORE_INFLATE_MAX_TRIES,
+                                             xr_zlib_decompress, alloc_fn, free_fn, alloc_ctx,
+                                             out_len);
+}
 
 #endif  // XR_COMPRESS_CORE_H

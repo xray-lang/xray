@@ -184,32 +184,16 @@ static XrValue yaml_write_file(XrVMRuntime *X, XrValue *args, int argc) {
 
 // ========== Module Loading ===========
 
-// ========== Type Declarations (parsed by gen_stdlib_types.py) ==========
-
-#include "../../src/module/xbuiltin_decl.h"
-
-// @module yaml
-
-XR_DEFINE_BUILTIN(yaml_parse, "parse", "(data: string): Json", "Parse YAML string")
-XR_DEFINE_BUILTIN(yaml_parse_strict, "parseStrict", "(data: string): Json", "Parse YAML strictly")
-XR_DEFINE_BUILTIN(yaml_parse_all, "parseAll", "(data: string): Array<Json>",
-                  "Parse all YAML documents")
-XR_DEFINE_BUILTIN(yaml_stringify, "stringify", "(value: Json): string", "Convert to YAML string")
-XR_DEFINE_BUILTIN(yaml_parse_file, "parseFile", "(path: string): Json", "Parse YAML file")
-XR_DEFINE_BUILTIN(yaml_write_file, "writeFile", "(path: string, value: Json): bool",
-                  "Write YAML file")
+#define XR_STDLIB_VM_BIND_MODULE_YAML 1
+#include "../../src/stdlib/xstdlib_vm_bindings_generated.inc.c"
+#undef XR_STDLIB_VM_BIND_MODULE_YAML
 
 XR_FUNC XrModule *xr_load_module_yaml(XrVMRuntime *isolate) {
     XrModule *mod = xr_module_create_native(isolate, "yaml");
     if (!mod)
         return NULL;
 
-    XRS_EXPORT(mod, isolate, "parse", yaml_parse);
-    XRS_EXPORT(mod, isolate, "parseStrict", yaml_parse_strict);
-    XRS_EXPORT(mod, isolate, "parseAll", yaml_parse_all);
-    XRS_EXPORT(mod, isolate, "stringify", yaml_stringify);
-    XRS_EXPORT(mod, isolate, "parseFile", yaml_parse_file);
-    XRS_EXPORT(mod, isolate, "writeFile", yaml_write_file);
+    xr_stdlib_vm_bind_yaml_generated(isolate, mod);
 
     mod->loaded = true;
     return mod;

@@ -1,0 +1,3 @@
+scope {
+    go { print(1) }
+}

@@ -22,4 +22,4 @@ XVM_TEMPLATE_ARITH_ADD_CASE(OP_ADD, +, +, xr_bigint_add, XR_OP_ADD_FLAG, SYMBOL_
 XVM_TEMPLATE_ARITH_NUMERIC_CASE(OP_SUB, -, -, xr_bigint_sub, XR_OP_SUB_FLAG, SYMBOL_OP_SUB, "-", "subtraction requires numeric types")
 XVM_TEMPLATE_ARITH_MUL_CASE(OP_MUL, *, *, xr_bigint_mul, XR_OP_MUL_FLAG, SYMBOL_OP_MUL, "*", "multiplication requires numeric types")
 XVM_TEMPLATE_ARITH_DIV_CASE(OP_DIV, xr_bigint_div, XR_OP_DIV_FLAG, SYMBOL_OP_DIV, "/", "division requires numeric types")
-XVM_TEMPLATE_ARITH_MOD_CASE(OP_MOD, xr_bigint_mod, XR_OP_MOD_FLAG, SYMBOL_OP_MOD, "%%", "modulo requires integer types")
+XVM_TEMPLATE_ARITH_MOD_CASE(OP_MOD, xr_bigint_mod, XR_OP_MOD_FLAG, SYMBOL_OP_MOD, "%%", XR_ERROR_CORE_MODULO_REQUIRES_INTEGER_MSG)

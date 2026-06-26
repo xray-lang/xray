@@ -16,6 +16,8 @@ print(os.uptime() >= 0.0)
 let load = os.loadavg()
 print(load.length == 3)
 print(load[0] >= 0.0)
+print(load[1] >= 0.0)
+print(load[2] >= 0.0)
 print(os.clock() >= 0.0)
 print(os.getenv("XRAY_TEST_NONEXISTENT_VAR_12345") == null)
 print(os.setenv("XRAY_AOT_OS_QUERY_TMP", "hello-aot"))
@@ -26,11 +28,47 @@ print(os.setenv("XRAY_AOT_OS_QUERY_ENV", "map-aot"))
 let env = os.environ()
 print(env["XRAY_AOT_OS_QUERY_ENV"] == "map-aot")
 print(os.unsetenv("XRAY_AOT_OS_QUERY_ENV"))
+print(os.setenv("XRAY_AOT_OS_QUERY_EMPTY", ""))
+let envEmpty = os.environ()
+print(envEmpty["XRAY_AOT_OS_QUERY_EMPTY"] == "")
+print(os.unsetenv("XRAY_AOT_OS_QUERY_EMPTY"))
 let cwd = os.getcwd()
 print(cwd.length > 0)
 print(os.chdir(cwd))
 print(os.getcwd() == cwd)
 print(os.hostname().length > 0)
 print(os.tmpdir().length > 0)
+let oldTmpdir = os.getenv("TMPDIR")
+let oldTmp = os.getenv("TMP")
+let oldTemp = os.getenv("TEMP")
+os.setenv("TMPDIR", "")
+os.setenv("TMP", "/tmp/xray_diff_tmpdir_fallback")
+os.setenv("TEMP", "/tmp/xray_diff_tmpdir_wrong")
+print(os.tmpdir() == "/tmp/xray_diff_tmpdir_fallback")
+if (oldTmpdir != null) {
+    os.setenv("TMPDIR", oldTmpdir ?? "")
+} else {
+    os.unsetenv("TMPDIR")
+}
+if (oldTmp != null) {
+    os.setenv("TMP", oldTmp ?? "")
+} else {
+    os.unsetenv("TMP")
+}
+if (oldTemp != null) {
+    os.setenv("TEMP", oldTemp ?? "")
+} else {
+    os.unsetenv("TEMP")
+}
 print(os.username() != null)
 print(os.homedir() != null)
+let oldHome = os.getenv("HOME")
+os.setenv("HOME", "")
+let fallbackHome = os.homedir()
+print(fallbackHome != null)
+print((fallbackHome ?? "").length > 0)
+if (oldHome != null) {
+    os.setenv("HOME", oldHome ?? "")
+} else {
+    os.unsetenv("HOME")
+}

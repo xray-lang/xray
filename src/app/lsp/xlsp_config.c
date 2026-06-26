@@ -218,9 +218,9 @@ bool xlsp_config_load_from_toml(XlspConfig *config, const char *root_path) {
     v = xtoml_get(lsp, "format_insert_spaces");
     if (v && xtoml_is_bool(v))
         config->format_insert_spaces = v->as.boolean;
-    v = xtoml_get(lsp, "format_align_match_arms");
+    v = xtoml_get(lsp, "format_align_branch_arrows");
     if (v && xtoml_is_bool(v))
-        config->format_align_match_arms = v->as.boolean;
+        config->format_align_branch_arrows = v->as.boolean;
     v = xtoml_get(lsp, "format_max_line_length");
     if (v && xtoml_is_integer(v))
         config->format_max_line_length = (int) v->as.integer;

@@ -47,6 +47,7 @@
 #include "../os/os_time.h"
 #include "../runtime/symbol/xsymbol_table.h"
 #include "../runtime/value/xtype.h"
+#include "../shared/xr_numeric_core.h"
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -114,40 +115,31 @@ static void block_remove_value(XiBlock *blk, uint32_t idx) {
 /* Try to fold a binary op on two integer constants.
  *
  * xray integer semantics: signed 64-bit, wrap-on-overflow (Go/Rust/Java).
- * C signed overflow is UB, so wrap arithmetic is performed via uint64_t and
- * cast back to int64_t (implementation-defined but well-defined on every
- * two's-complement target xray supports: x64, arm64, riscv64).
+ * C signed overflow is UB, so wrap arithmetic is performed through the
+ * runtime-neutral numeric core helpers shared by VM/AOT.
  * INT64_MIN / -1 and INT64_MIN %% -1 are special-cased to match the
  * runtime VM and AOT, which also produce INT64_MIN / 0 respectively.
  */
 static bool fold_int_binary(uint16_t op, int64_t a, int64_t b, int64_t *result) {
     switch (op) {
         case XI_ADD:
-            *result = (int64_t) ((uint64_t) a + (uint64_t) b);
+            *result = xr_numeric_core_i64_add_wrap(a, b);
             return true;
         case XI_SUB:
-            *result = (int64_t) ((uint64_t) a - (uint64_t) b);
+            *result = xr_numeric_core_i64_sub_wrap(a, b);
             return true;
         case XI_MUL:
-            *result = (int64_t) ((uint64_t) a * (uint64_t) b);
+            *result = xr_numeric_core_i64_mul_wrap(a, b);
             return true;
         case XI_DIV:
             if (b == 0)
                 return false;
-            if (a == INT64_MIN && b == -1) {
-                *result = INT64_MIN;
-                return true;
-            }
-            *result = a / b;
+            *result = xr_numeric_core_i64_div_wrap(a, b);
             return true;
         case XI_MOD:
             if (b == 0)
                 return false;
-            if (a == INT64_MIN && b == -1) {
-                *result = 0;
-                return true;
-            }
-            *result = a % b;
+            *result = xr_numeric_core_i64_mod_wrap(a, b);
             return true;
         case XI_BAND:
             *result = a & b;
@@ -323,7 +315,7 @@ XR_FUNC XiPassChange xi_opt_const_fold(XiFunc *f) {
              * -INT64_MIN is UB on signed; negate on uint64_t then cast back
              * to preserve wrap-on-overflow semantics (matches VM and AOT). */
             if (v->op == XI_NEG && v->nargs == 1 && is_const_int(v->args[0])) {
-                rewrite_to_const_int(v, (int64_t) (0u - (uint64_t) v->args[0]->aux_int));
+                rewrite_to_const_int(v, xr_numeric_core_i64_neg_wrap(v->args[0]->aux_int));
                 chg.values_changed = true;
                 continue;
             }

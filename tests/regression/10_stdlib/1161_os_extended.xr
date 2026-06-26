@@ -19,6 +19,22 @@ fn test_homedir() {
 }
 
 @test
+fn test_homedir_skips_empty_home_env() {
+    let oldHome = os.getenv("HOME")
+    os.setenv("HOME", "")
+
+    let home = os.homedir()
+    assert(home != null)
+    assert(home.length > 0)
+
+    if (oldHome != null) {
+        os.setenv("HOME", oldHome ?? "")
+    } else {
+        os.unsetenv("HOME")
+    }
+}
+
+@test
 fn test_uid() {
     let id = os.uid()
     assert(id >= 0)

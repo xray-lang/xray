@@ -228,6 +228,7 @@ XR_FUNC void xi_emit_widen(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
 XR_FUNC void xi_emit_isnull(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
 XR_FUNC void xi_emit_is(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
 XR_FUNC void xi_emit_as(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
+XR_FUNC void xi_emit_checktype(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
 XR_FUNC void xi_emit_typeof(EmitCtx *ctx, XiValue *v, XiEmitReg dst);
 
 /* ========== Handler Declarations (xi_emit_call.c) ========== */

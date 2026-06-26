@@ -110,12 +110,14 @@ fn test_charAt_ascii() {
 fn test_charAt_chinese() {
     assert_eq("你好世界".charAt(0), "你")
     assert_eq("你好世界".charAt(1), "好")
+    assert_eq("你好世界".charAt(-1), "界")
 }
 
 @test
 fn test_charAt_emoji() {
     assert_eq("🎉🎊".charAt(0), "🎉")
     assert_eq("🎉🎊".charAt(1), "🎊")
+    assert_eq("🎉🎊".charAt(-1), "🎊")
 }
 
 // ===== codePointAt 方法 =====
@@ -139,6 +141,8 @@ fn test_codePointAt_chinese() {
 fn test_codePointAt_emoji() {
     assert_eq("🎉".codePointAt(0), 127881)  // U+1F389
     assert_eq("🌍".codePointAt(0), 127757)  // U+1F30D
+    assert_eq("🌍".codePointAt(-1), -1)
+    assert_eq("🌍".codePointAt(9), -1)
 }
 
 // ===== 字符遍历 =====
@@ -185,6 +189,14 @@ fn test_concat_emoji() {
     let s = "🎉" + "开始"
     assert_eq(s, "🎉开始")
     assert_eq(s.length, 3)
+}
+
+// ===== reverse 方法 =====
+
+@test
+fn test_reverse_unicode() {
+    assert_eq("你好🌍".reverse(), "🌍好你")
+    assert_eq("a你b".reverse(), "b你a")
 }
 
 // ===== charLength 属性 =====

@@ -1,0 +1,27 @@
+// anchor: type-cast-panic-shape
+// Non-primitive unsafe `as` casts must raise the same structured type-mismatch
+// panic on VM and AOT; safe casts still return null.
+
+let dyn: Json = { "bad": 3.5, "items": [1, 2, 3] }
+
+try {
+    let value = dyn.bad as Array
+    print(value.length)
+} catch panic (p) {
+    print(p.message)
+    print(p.code)
+}
+
+let maybeItems = dyn.items as Array?
+if (maybeItems == null) {
+    print("missing")
+} else {
+    print(maybeItems.length)
+}
+
+let maybeBad = dyn.bad as Array?
+if (maybeBad == null) {
+    print("safe-null")
+} else {
+    print(maybeBad.length)
+}

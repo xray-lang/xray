@@ -1,0 +1,10 @@
+// anchor: slice-int-arg-shared-core
+let dyn: Json = {
+    "badStart": true,
+    "end": 2
+}
+
+let arr = [10, 20, 30]
+print("before-slice")
+print(arr[dyn.badStart:dyn.end].length)
+print("unreachable")

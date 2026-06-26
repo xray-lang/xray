@@ -1,0 +1,9 @@
+let min: int = -9223372036854775807 - 1
+let sb = new StringBuilder()
+sb.append("min=")
+sb.append(min)
+sb.append("; abs=")
+sb.append(min.abs())
+sb.append("; next=")
+sb.append(-42)
+print(sb.toString())

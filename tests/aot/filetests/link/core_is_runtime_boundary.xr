@@ -1,0 +1,14 @@
+let xs: Array<int> = [1, 2]
+let scores: Map<string, int> = #{"a": 1}
+let seen: Set<string> = #["x"]
+
+print(42 is int)
+print(3.5 is float)
+print("hello" is string)
+print(true is bool)
+print(null is null)
+print(42 is string)
+print("hello" is int)
+print(xs is Array<int>)
+print(scores is Map<string, int>)
+print(seen is Set<string>)

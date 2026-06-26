@@ -27,6 +27,29 @@ static const CgAotStdlibMethod g_aot_stdlib_generated_methods[] = {
     {"base64", "encodeBytes", 1, "xrt_base64_encode_bytes", "v", CG_AOT_RET_VALUE, NULL},
     {"base64", "decodeToBytes", 1, "xrt_base64_decode_to_bytes", "s", CG_AOT_RET_VALUE, NULL},
     {"base64", "isValid", 1, "xrt_base64_is_valid", "s", CG_AOT_RET_VALUE, NULL},
+    {"url", "encode", 1, "xrt_url_encode", "s", CG_AOT_RET_VALUE, NULL},
+    {"url", "decode", 1, "xrt_url_decode", "s", CG_AOT_RET_VALUE, NULL},
+    {"url", "encodeForm", 1, "xrt_url_encode_form", "s", CG_AOT_RET_VALUE, NULL},
+    {"url", "decodeForm", 1, "xrt_url_decode_form", "s", CG_AOT_RET_VALUE, NULL},
+    {"url", "parse", 1, "xrt_url_parse", "s", CG_AOT_RET_VALUE, NULL},
+    {"url", "format", 1, "xrt_url_format", "v", CG_AOT_RET_VALUE, NULL},
+    {"url", "parseQuery", 1, "xrt_url_parse_query", "s", CG_AOT_RET_VALUE, NULL},
+    {"url", "buildQuery", 1, "xrt_url_build_query", "v", CG_AOT_RET_VALUE, NULL},
+    {"url", "resolve", 2, "xrt_url_resolve", "ss", CG_AOT_RET_VALUE, NULL},
+    {"url", "join", CG_AOT_STDLIB_VARIADIC, "xrt_url_join", "*", CG_AOT_RET_VALUE, NULL},
+    {"compress", "crc32", 1, "xrt_compress_crc32", "s", CG_AOT_RET_VALUE, NULL},
+    {"compress", "adler32", 1, "xrt_compress_adler32", "s", CG_AOT_RET_VALUE, NULL},
+    {"compress", "gzip", 1, "xrt_compress_gzip_default", "s", CG_AOT_RET_VALUE, NULL},
+    {"compress", "gzip", 2, "xrt_compress_gzip", "sv", CG_AOT_RET_VALUE, NULL},
+    {"compress", "gunzip", 1, "xrt_compress_gunzip", "s", CG_AOT_RET_VALUE, NULL},
+    {"compress", "deflate", 1, "xrt_compress_deflate_default", "s", CG_AOT_RET_VALUE, NULL},
+    {"compress", "deflate", 2, "xrt_compress_deflate", "sv", CG_AOT_RET_VALUE, NULL},
+    {"compress", "inflate", 1, "xrt_compress_inflate", "s", CG_AOT_RET_VALUE, NULL},
+    {"compress", "zlibCompress", 1, "xrt_compress_zlib_compress_default", "s", CG_AOT_RET_VALUE, NULL},
+    {"compress", "zlibCompress", 2, "xrt_compress_zlib_compress", "sv", CG_AOT_RET_VALUE, NULL},
+    {"compress", "zlibDecompress", 1, "xrt_compress_zlib_decompress", "s", CG_AOT_RET_VALUE, NULL},
+    {"compress", "isGzip", 1, "xrt_compress_is_gzip", "s", CG_AOT_RET_VALUE, NULL},
+    {"compress", "isZlib", 1, "xrt_compress_is_zlib", "s", CG_AOT_RET_VALUE, NULL},
     {"encoding", "hexEncode", 1, "xrt_encoding_hex_encode", "s", CG_AOT_RET_VALUE, NULL},
     {"encoding", "hexDecode", 1, "xrt_encoding_hex_decode", "s", CG_AOT_RET_VALUE, NULL},
     {"encoding", "hexDecodeString", 1, "xrt_encoding_hex_decode_string", "s", CG_AOT_RET_VALUE, NULL},
@@ -66,8 +89,230 @@ static const CgAotStdlibMethod g_aot_stdlib_generated_methods[] = {
     {"regex", "split", 3, "xrt_regex_split_limit", "vsv", CG_AOT_RET_VALUE, NULL},
     {"regex", "escape", 1, "xrt_regex_escape", "s", CG_AOT_RET_VALUE, NULL},
     {"regex", "isValid", 1, "xrt_regex_is_valid", "s", CG_AOT_RET_VALUE, NULL},
+    {"os", "getenv", 1, "xrt_os_getenv", "s", CG_AOT_RET_VALUE, NULL},
+    {"os", "setenv", 2, "xrt_os_setenv", "ss", CG_AOT_RET_VALUE, NULL},
+    {"os", "unsetenv", 1, "xrt_os_unsetenv", "s", CG_AOT_RET_VALUE, NULL},
+    {"os", "environ", 0, "xrt_os_environ", "", CG_AOT_RET_VALUE, NULL},
+    {"os", "getpid", 0, "xrt_os_getpid", "", CG_AOT_RET_VALUE, NULL},
+    {"os", "getcwd", 0, "xrt_os_getcwd", "", CG_AOT_RET_VALUE, NULL},
+    {"os", "chdir", 1, "xrt_os_chdir", "s", CG_AOT_RET_VALUE, NULL},
+    {"os", "hostname", 0, "xrt_os_hostname", "", CG_AOT_RET_VALUE, NULL},
+    {"os", "tmpdir", 0, "xrt_os_tmpdir", "", CG_AOT_RET_VALUE, NULL},
+    {"os", "username", 0, "xrt_os_username", "", CG_AOT_RET_VALUE, NULL},
+    {"os", "homedir", 0, "xrt_os_homedir", "", CG_AOT_RET_VALUE, NULL},
+    {"os", "uid", 0, "xrt_os_uid", "", CG_AOT_RET_VALUE, NULL},
+    {"os", "gid", 0, "xrt_os_gid", "", CG_AOT_RET_VALUE, NULL},
+    {"os", "cpuCount", 0, "xrt_os_cpu_count", "", CG_AOT_RET_VALUE, NULL},
+    {"os", "ppid", 0, "xrt_os_ppid", "", CG_AOT_RET_VALUE, NULL},
+    {"os", "kill", 1, "xrt_os_kill", "v", CG_AOT_RET_VALUE, NULL},
+    {"os", "kill", 2, "xrt_os_kill_signal", "vv", CG_AOT_RET_VALUE, NULL},
+    {"os", "totalMemory", 0, "xrt_os_total_memory", "", CG_AOT_RET_VALUE, NULL},
+    {"os", "freeMemory", 0, "xrt_os_free_memory", "", CG_AOT_RET_VALUE, NULL},
+    {"os", "uptime", 0, "xrt_os_uptime", "", CG_AOT_RET_VALUE, NULL},
+    {"os", "loadavg", 0, "xrt_os_loadavg", "", CG_AOT_RET_VALUE, NULL},
+    {"os", "clock", 0, "xrt_os_clock", "", CG_AOT_RET_VALUE, NULL},
+    {"os", "sleep", 1, "xrt_os_sleep", "v", CG_AOT_RET_VALUE, NULL},
+    {"os", "exec", 1, "xrt_os_exec", "s", CG_AOT_RET_VALUE, NULL},
+    {"io", "appendFile", 2, "xrt_io_append_file", "ss", CG_AOT_RET_VALUE, NULL},
+    {"io", "chmod", 2, "xrt_io_chmod_value", "sv", CG_AOT_RET_VALUE, NULL},
+    {"io", "chdir", 1, "xrt_io_chdir", "s", CG_AOT_RET_VALUE, NULL},
+    {"io", "copyFile", 2, "xrt_io_copy_file", "ss", CG_AOT_RET_VALUE, NULL},
+    {"io", "cwd", 0, "xrt_io_cwd", "", CG_AOT_RET_VALUE, NULL},
+    {"io", "exists", 1, "xrt_io_exists", "s", CG_AOT_RET_VALUE, NULL},
+    {"io", "fileSize", 1, "xrt_io_file_size", "s", CG_AOT_RET_VALUE, NULL},
+    {"io", "isDir", 1, "xrt_io_is_dir", "s", CG_AOT_RET_VALUE, NULL},
+    {"io", "isFile", 1, "xrt_io_is_file", "s", CG_AOT_RET_VALUE, NULL},
+    {"io", "isSymlink", 1, "xrt_io_is_symlink", "s", CG_AOT_RET_VALUE, NULL},
+    {"io", "mkdir", 1, "xrt_io_mkdir", "s", CG_AOT_RET_VALUE, NULL},
+    {"io", "mkdirp", 1, "xrt_io_mkdirp", "s", CG_AOT_RET_VALUE, NULL},
+    {"io", "readDir", 1, "xrt_io_read_dir", "s", CG_AOT_RET_VALUE, NULL},
+    {"io", "readDirRecursive", 1, "xrt_io_read_dir_recursive", "s", CG_AOT_RET_VALUE, NULL},
+    {"io", "readFile", 1, "xrt_io_read_file", "s", CG_AOT_RET_VALUE, NULL},
+    {"io", "readFileBytes", 1, "xrt_io_read_file_bytes", "s", CG_AOT_RET_VALUE, NULL},
+    {"io", "readLines", 1, "xrt_io_read_lines", "s", CG_AOT_RET_VALUE, NULL},
+    {"io", "readStdin", 0, "xrt_io_read_stdin", "", CG_AOT_RET_VALUE, NULL},
+    {"io", "readlink", 1, "xrt_io_readlink", "s", CG_AOT_RET_VALUE, NULL},
+    {"io", "realpath", 1, "xrt_io_realpath", "s", CG_AOT_RET_VALUE, NULL},
+    {"io", "remove", 1, "xrt_io_remove", "s", CG_AOT_RET_VALUE, NULL},
+    {"io", "removeAll", 1, "xrt_io_remove_all", "s", CG_AOT_RET_VALUE, NULL},
+    {"io", "rename", 2, "xrt_io_rename", "ss", CG_AOT_RET_VALUE, NULL},
+    {"io", "stat", 1, "xrt_io_stat", "s", CG_AOT_RET_VALUE, NULL},
+    {"io", "symlink", 2, "xrt_io_symlink", "ss", CG_AOT_RET_VALUE, NULL},
+    {"io", "tempDir", 0, "xrt_io_temp_dir", "", CG_AOT_RET_VALUE, NULL},
+    {"io", "tempFile", 0, "xrt_io_temp_file", "", CG_AOT_RET_VALUE, NULL},
+    {"io", "touch", 1, "xrt_io_touch", "s", CG_AOT_RET_VALUE, NULL},
+    {"io", "writeFile", 2, "xrt_io_write_file", "ss", CG_AOT_RET_VALUE, NULL},
+    {"io", "writeFileBytes", 2, "xrt_io_write_file_bytes", "sv", CG_AOT_RET_VALUE, NULL},
+    {"datetime", "now", 0, "xrt_datetime_now", "", CG_AOT_RET_VALUE, NULL},
+    {"datetime", "utc", 0, "xrt_datetime_utc", "", CG_AOT_RET_VALUE, NULL},
+    {"datetime", "create", 1, "xrt_datetime_create_1", "v", CG_AOT_RET_VALUE, NULL},
+    {"datetime", "create", 2, "xrt_datetime_create_2", "vv", CG_AOT_RET_VALUE, NULL},
+    {"datetime", "create", 3, "xrt_datetime_create_3", "vvv", CG_AOT_RET_VALUE, NULL},
+    {"datetime", "create", 4, "xrt_datetime_create_4", "vvvv", CG_AOT_RET_VALUE, NULL},
+    {"datetime", "create", 5, "xrt_datetime_create_5", "vvvvv", CG_AOT_RET_VALUE, NULL},
+    {"datetime", "create", 6, "xrt_datetime_create_6", "vvvvvv", CG_AOT_RET_VALUE, NULL},
+    {"datetime", "createUTC", 1, "xrt_datetime_create_utc_1", "v", CG_AOT_RET_VALUE, NULL},
+    {"datetime", "createUTC", 2, "xrt_datetime_create_utc_2", "vv", CG_AOT_RET_VALUE, NULL},
+    {"datetime", "createUTC", 3, "xrt_datetime_create_utc_3", "vvv", CG_AOT_RET_VALUE, NULL},
+    {"datetime", "createUTC", 4, "xrt_datetime_create_utc_4", "vvvv", CG_AOT_RET_VALUE, NULL},
+    {"datetime", "createUTC", 5, "xrt_datetime_create_utc_5", "vvvvv", CG_AOT_RET_VALUE, NULL},
+    {"datetime", "createUTC", 6, "xrt_datetime_create_utc_6", "vvvvvv", CG_AOT_RET_VALUE, NULL},
+    {"datetime", "fromTimestamp", 1, "xrt_datetime_from_timestamp", "v", CG_AOT_RET_VALUE, NULL},
+    {"datetime", "fromTimestampMs", 1, "xrt_datetime_from_timestamp_ms", "v", CG_AOT_RET_VALUE, NULL},
+    {"datetime", "parse", 1, "xrt_datetime_parse_default", "s", CG_AOT_RET_VALUE, NULL},
+    {"datetime", "parse", 2, "xrt_datetime_parse_format", "ss", CG_AOT_RET_VALUE, NULL},
     {"datetime", "offset", 0, "xrt_datetime_offset", "", CG_AOT_RET_VALUE, NULL},
 };
 #define CG_AOT_STDLIB_GENERATED_METHOD_COUNT ((int) (sizeof(g_aot_stdlib_generated_methods) / sizeof(g_aot_stdlib_generated_methods[0])))
+
+typedef enum CgAotStdlibConstKind {
+    CG_AOT_STDLIB_CONST_I64,
+    CG_AOT_STDLIB_CONST_F64,
+    CG_AOT_STDLIB_CONST_HELPER_VALUE,
+} CgAotStdlibConstKind;
+
+typedef struct CgAotStdlibConst {
+    const char *module;
+    const char *name;
+    CgAotStdlibConstKind kind;
+    const char *helper;
+    const char *f64_expr;
+    int64_t i64_value;
+} CgAotStdlibConst;
+
+static const CgAotStdlibConst g_aot_stdlib_generated_consts[] = {
+    {"math", "PI", CG_AOT_STDLIB_CONST_F64, "", "3.14159265358979323846", INT64_C(0)},
+    {"math", "E", CG_AOT_STDLIB_CONST_F64, "", "2.71828182845904523536", INT64_C(0)},
+    {"math", "TAU", CG_AOT_STDLIB_CONST_F64, "", "6.28318530717958647692", INT64_C(0)},
+    {"math", "SQRT2", CG_AOT_STDLIB_CONST_F64, "", "1.41421356237309504880", INT64_C(0)},
+    {"math", "LN2", CG_AOT_STDLIB_CONST_F64, "", "0.69314718055994530942", INT64_C(0)},
+    {"math", "LN10", CG_AOT_STDLIB_CONST_F64, "", "2.30258509299404568402", INT64_C(0)},
+    {"math", "LOG2E", CG_AOT_STDLIB_CONST_F64, "", "1.44269504088896340736", INT64_C(0)},
+    {"math", "LOG10E", CG_AOT_STDLIB_CONST_F64, "", "0.43429448190325182765", INT64_C(0)},
+    {"math", "EPSILON", CG_AOT_STDLIB_CONST_F64, "", "2.22044604925031308085e-16", INT64_C(0)},
+    {"math", "MAX_INT", CG_AOT_STDLIB_CONST_I64, "", "0.0", INT64_MAX},
+    {"math", "MIN_INT", CG_AOT_STDLIB_CONST_I64, "", "0.0", INT64_MIN},
+    {"math", "MAX_FLOAT", CG_AOT_STDLIB_CONST_F64, "", "1.79769313486231570815e+308", INT64_C(0)},
+    {"math", "INF", CG_AOT_STDLIB_CONST_F64, "", "INFINITY", INT64_C(0)},
+    {"math", "NAN", CG_AOT_STDLIB_CONST_F64, "", "NAN", INT64_C(0)},
+    {"path", "sep", CG_AOT_STDLIB_CONST_HELPER_VALUE, "xrt_path_sep", "0.0", INT64_C(0)},
+    {"path", "delimiter", CG_AOT_STDLIB_CONST_HELPER_VALUE, "xrt_path_delimiter", "0.0", INT64_C(0)},
+    {"encoding", "LE", CG_AOT_STDLIB_CONST_I64, "", "0.0", INT64_C(0)},
+    {"encoding", "BE", CG_AOT_STDLIB_CONST_I64, "", "0.0", INT64_C(1)},
+    {"os", "platform", CG_AOT_STDLIB_CONST_HELPER_VALUE, "xrt_os_platform", "0.0", INT64_C(0)},
+    {"os", "arch", CG_AOT_STDLIB_CONST_HELPER_VALUE, "xrt_os_arch", "0.0", INT64_C(0)},
+    {"os", "sep", CG_AOT_STDLIB_CONST_HELPER_VALUE, "xrt_os_sep", "0.0", INT64_C(0)},
+    {"os", "eol", CG_AOT_STDLIB_CONST_HELPER_VALUE, "xrt_os_eol", "0.0", INT64_C(0)},
+    {"log", "DEBUG", CG_AOT_STDLIB_CONST_I64, "", "0.0", INT64_C(10)},
+    {"log", "INFO", CG_AOT_STDLIB_CONST_I64, "", "0.0", INT64_C(20)},
+    {"log", "WARN", CG_AOT_STDLIB_CONST_I64, "", "0.0", INT64_C(30)},
+    {"log", "ERROR", CG_AOT_STDLIB_CONST_I64, "", "0.0", INT64_C(40)},
+    {"log", "FATAL", CG_AOT_STDLIB_CONST_I64, "", "0.0", INT64_C(50)},
+};
+#define CG_AOT_STDLIB_GENERATED_CONST_COUNT ((int) (sizeof(g_aot_stdlib_generated_consts) / sizeof(g_aot_stdlib_generated_consts[0])))
+
+static const CgAotStdlibConst *cg_aot_stdlib_generated_const_at(int index) {
+    if (index < 0 || index >= CG_AOT_STDLIB_GENERATED_CONST_COUNT)
+        return NULL;
+    return &g_aot_stdlib_generated_consts[index];
+}
+
+static bool cg_aot_stdlib_generated_module_has_constants(const char *module) {
+    if (!module)
+        return false;
+    for (int i = 0; i < CG_AOT_STDLIB_GENERATED_CONST_COUNT; i++) {
+        const CgAotStdlibConst *c = &g_aot_stdlib_generated_consts[i];
+        if (strcmp(module, c->module) == 0)
+            return true;
+    }
+    return false;
+}
+
+static const CgAotStdlibConst *cg_aot_stdlib_generated_const_for_member(const char *module, const char *name) {
+    if (!module || !name)
+        return NULL;
+    for (int i = 0; i < CG_AOT_STDLIB_GENERATED_CONST_COUNT; i++) {
+        const CgAotStdlibConst *c = &g_aot_stdlib_generated_consts[i];
+        if (strcmp(module, c->module) == 0 && strcmp(name, c->name) == 0)
+            return c;
+    }
+    return NULL;
+}
+
+static bool cg_aot_stdlib_generated_has_builtin_direct_call(const char *module, const char *name) {
+    if (!module || !name)
+        return false;
+    if (strcmp(module, "math") == 0 && strcmp(name, "abs") == 0)
+        return true;
+    if (strcmp(module, "math") == 0 && strcmp(name, "floor") == 0)
+        return true;
+    if (strcmp(module, "math") == 0 && strcmp(name, "ceil") == 0)
+        return true;
+    if (strcmp(module, "math") == 0 && strcmp(name, "round") == 0)
+        return true;
+    if (strcmp(module, "math") == 0 && strcmp(name, "sqrt") == 0)
+        return true;
+    if (strcmp(module, "math") == 0 && strcmp(name, "pow") == 0)
+        return true;
+    if (strcmp(module, "math") == 0 && strcmp(name, "sin") == 0)
+        return true;
+    if (strcmp(module, "math") == 0 && strcmp(name, "cos") == 0)
+        return true;
+    if (strcmp(module, "math") == 0 && strcmp(name, "tan") == 0)
+        return true;
+    if (strcmp(module, "math") == 0 && strcmp(name, "asin") == 0)
+        return true;
+    if (strcmp(module, "math") == 0 && strcmp(name, "acos") == 0)
+        return true;
+    if (strcmp(module, "math") == 0 && strcmp(name, "atan") == 0)
+        return true;
+    if (strcmp(module, "math") == 0 && strcmp(name, "atan2") == 0)
+        return true;
+    if (strcmp(module, "math") == 0 && strcmp(name, "log") == 0)
+        return true;
+    if (strcmp(module, "math") == 0 && strcmp(name, "log10") == 0)
+        return true;
+    if (strcmp(module, "math") == 0 && strcmp(name, "log2") == 0)
+        return true;
+    if (strcmp(module, "math") == 0 && strcmp(name, "exp") == 0)
+        return true;
+    if (strcmp(module, "math") == 0 && strcmp(name, "min") == 0)
+        return true;
+    if (strcmp(module, "math") == 0 && strcmp(name, "max") == 0)
+        return true;
+    if (strcmp(module, "math") == 0 && strcmp(name, "clamp") == 0)
+        return true;
+    if (strcmp(module, "math") == 0 && strcmp(name, "sign") == 0)
+        return true;
+    if (strcmp(module, "math") == 0 && strcmp(name, "sinh") == 0)
+        return true;
+    if (strcmp(module, "math") == 0 && strcmp(name, "cosh") == 0)
+        return true;
+    if (strcmp(module, "math") == 0 && strcmp(name, "tanh") == 0)
+        return true;
+    if (strcmp(module, "math") == 0 && strcmp(name, "hypot") == 0)
+        return true;
+    if (strcmp(module, "math") == 0 && strcmp(name, "cbrt") == 0)
+        return true;
+    if (strcmp(module, "math") == 0 && strcmp(name, "trunc") == 0)
+        return true;
+    if (strcmp(module, "math") == 0 && strcmp(name, "fmod") == 0)
+        return true;
+    if (strcmp(module, "math") == 0 && strcmp(name, "log1p") == 0)
+        return true;
+    if (strcmp(module, "math") == 0 && strcmp(name, "expm1") == 0)
+        return true;
+    if (strcmp(module, "math") == 0 && strcmp(name, "lerp") == 0)
+        return true;
+    if (strcmp(module, "math") == 0 && strcmp(name, "degToRad") == 0)
+        return true;
+    if (strcmp(module, "math") == 0 && strcmp(name, "radToDeg") == 0)
+        return true;
+    if (strcmp(module, "math") == 0 && strcmp(name, "isNaN") == 0)
+        return true;
+    if (strcmp(module, "math") == 0 && strcmp(name, "isFinite") == 0)
+        return true;
+    return false;
+}
 
 /* clang-format on */

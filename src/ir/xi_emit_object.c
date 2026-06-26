@@ -346,9 +346,9 @@ XR_FUNC void xi_emit_index_set(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
 XR_FUNC void xi_emit_array_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     /* C = (elem_tid << 2) | storage_mode.
      * elem_tid is only set when the lowerer explicitly encodes it in
-     * aux_int (e.g. new Array<T>()).  Array literals like [1,2,3] always
-     * create XR_ELEM_ANY arrays because OP_NEWARRAY pushes B elements
-     * from registers and typed storage crashes on uninitialized slots. */
+     * aux_int (e.g. new Array<T>()).  OP_NEWARRAY creates an array whose
+     * initial length is B; lower_array_literal then overwrites each slot
+     * through OP_INDEX_SET. */
     uint8_t c_field = (uint8_t) (v->aux_int & 0xFF);
     if (v->nargs >= 1 && v->args[0]->op == XI_CONST && v->args[0]->aux_int >= 0 &&
         (uint64_t) v->args[0]->aux_int <= MAXARG_B) {

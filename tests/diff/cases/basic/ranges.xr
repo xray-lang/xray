@@ -1,0 +1,21 @@
+// anchor: basic-ranges
+let r = 2..9
+print(r.length)
+print(r.includes(2))
+print(r.includes(8))
+print(r.includes(9))
+print(r[0])
+print(r[-1])
+print(r[-7])
+print(r[-8])
+print(r.toString())
+let values = r.toArray()
+print(values.length)
+print(values[0])
+print(values[6])
+
+let total = 0
+for (i in 2..9) {
+    total = total + i
+}
+print(total)

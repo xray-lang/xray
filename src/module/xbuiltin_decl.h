@@ -5,13 +5,13 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xbuiltin_decl.h - Type declaration macros for gen_stdlib_types.py
+ * xbuiltin_decl.h - Declaration macros for third-party xrd generation
  *
  * KEY CONCEPT:
- *   These macros are no-ops at compile time. They serve as structured
- *   annotations that gen_stdlib_types.py parses to generate:
- *   - xanalyzer_builtins_generated.h (--embed mode, for stdlib)
- *   - .xrd declaration files (--xrd mode, for third-party modules)
+ *   XR_DEFINE_BUILTIN is a no-op at compile time. It serves as structured
+ *   annotation input for gen_stdlib_types.py --xrd, where third-party C
+ *   modules can generate .xrd declaration files. In-tree stdlib declarations
+ *   live in the stdlib definition files and are not scanned from C source.
  *
  * USAGE:
  *   // @module net
@@ -27,8 +27,8 @@
 /*
  * XR_DEFINE_BUILTIN(cfunc, name, signature, doc)
  *
- * Declares a function's type signature for the analyzer/LSP.
- * Expands to nothing at compile time - parsed only by gen_stdlib_types.py.
+ * Declares a function's type signature for generated .xrd files.
+ * Expands to nothing at compile time.
  *
  * @param cfunc     C function name (unused at compile time)
  * @param name      Exported function name as seen by xray scripts

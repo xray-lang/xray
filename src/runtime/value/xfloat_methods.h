@@ -24,6 +24,7 @@
 #include "../symbol/xsymbol_table.h"
 #include "../../base/xconstants.h"
 #include "../../shared/xr_float_fmt.h"
+#include "../../shared/xr_numeric_core.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -49,13 +50,9 @@ static inline XrValue xr_float_to_string_method(XrVMRuntime *iso, XrValue self, 
 static inline XrValue xr_float_to_fixed_method(XrVMRuntime *iso, XrValue self, XrValue *args,
                                                int argc) {
     XR_DCHECK(iso != NULL, "xr_float_to_fixed_method: NULL isolate");
-    int decimals = (argc >= 1 && XR_IS_INT(args[0])) ? (int) XR_TO_INT(args[0]) : 0;
-    if (decimals < 0)
-        decimals = 0;
-    if (decimals > XR_TOFIXED_MAX_DECIMALS)
-        decimals = XR_TOFIXED_MAX_DECIMALS;
+    int64_t decimals = (argc >= 1 && XR_IS_INT(args[0])) ? XR_TO_INT(args[0]) : 0;
     char buffer[64];
-    int len = snprintf(buffer, sizeof(buffer), "%.*f", decimals, XR_TO_FLOAT(self));
+    int len = xr_numeric_core_format_fixed(buffer, sizeof(buffer), XR_TO_FLOAT(self), decimals);
     XrString *str = xr_string_intern(iso, buffer, (size_t) len, 0);
     return xr_string_value(str);
 }

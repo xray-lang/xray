@@ -78,7 +78,8 @@ static inline XrValue xrt_base64_encode_bytes(XrValue bytes) {
         return XR_NULL_VAL;
     for (int64_t i = 0; i < arr->length; i++) {
         XrValue item = xr_typed_get(arr->data, (int32_t) i, arr->elem_type);
-        tmp[i] = (unsigned char) xr_value_to_int64_coerce(item);
+        tmp[i] = xr_base64_core_byte_from_array_lane(XR_IS_INT(item),
+                                                     XR_IS_INT(item) ? XR_TO_INT(item) : 0);
     }
     XrValue result = xrt_base64_encode_impl((const char *) tmp, (int64_t) len, false);
     XRT_FREE(tmp);

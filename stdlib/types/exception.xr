@@ -1,7 +1,7 @@
 // Built-in Exception class.
 //
-// Field layout matches xclass_system.h EXCEPTION_FIELD_* indices and the
-// XrClass built by xr_register_exception_class in xclass_system.c. The
+// Field layout matches src/shared/xr_builtin_schema.h and the XrClass built
+// by xr_register_exception_class in xexception.c. The
 // constructor and toString bodies are PRIMITIVE on the C side; this
 // declaration exists for analyzer / LSP awareness so user code can write
 // `class HttpError extends Exception { ... }` and reference fields by

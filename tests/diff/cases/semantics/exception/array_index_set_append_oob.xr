@@ -1,0 +1,5 @@
+// anchor: array-index-set-append-oob
+// Array index assignment at exactly length is out-of-bounds; push() is the append API.
+let xs = [1, 2, 3]
+xs[3] = 9
+print(xs.length)

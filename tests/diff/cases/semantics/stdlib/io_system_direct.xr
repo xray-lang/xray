@@ -8,6 +8,9 @@ print(root.length > 0)
 let dir = root + "/a/b"
 print(io.mkdirp(dir))
 print(io.isDir(dir))
+print(io.mkdirp(dir))
+print(io.mkdirp(dir + "///"))
+print(io.isDir(dir))
 
 let file = dir + "/sample.txt"
 print(io.writeFile(file, "hello"))
@@ -22,6 +25,20 @@ let lines = io.readLines(file)
 print(lines.length)
 print(lines[0])
 print(lines[1])
+
+let trailingFile = dir + "/trailing.txt"
+print(io.writeFile(trailingFile, "alpha\n"))
+let trailingLines = io.readLines(trailingFile)
+print(trailingLines.length)
+print(trailingLines[0])
+
+let crlfFile = dir + "/crlf.txt"
+print(io.writeFile(crlfFile, "a\r\n\r\nb\r\n"))
+let crlfLines = io.readLines(crlfFile)
+print(crlfLines.length)
+print(crlfLines[0])
+print(crlfLines[1] == "")
+print(crlfLines[2])
 
 let bytesFile = dir + "/bytes.bin"
 let bytes = new Bytes(3)
@@ -53,8 +70,15 @@ print(io.exists(moved))
 let stat = io.stat(file)
 print(stat != null)
 print(stat.size == 11)
+print(stat.mode >= 0)
+print(stat.mtime >= 0)
+print(stat.atime >= 0)
+print(stat.ctime >= 0)
+print(stat.uid >= 0)
+print(stat.gid >= 0)
 print(stat.isFile)
 print(!stat.isDir)
+print(!stat.isSymlink)
 
 let touched = root + "/touched.txt"
 print(io.touch(touched))

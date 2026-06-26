@@ -270,6 +270,9 @@ enum {
     // Collection property aliases
     SYMBOL_SIZE,
 
+    // DateTime method kept append-only to avoid renumbering existing symbols
+    SYMBOL_DIFF,
+
     SYMBOL_BUILTIN_COUNT  // sentinel
 };
 

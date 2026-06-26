@@ -228,7 +228,7 @@ static void fmt_match_expr(XrFmtContext *ctx, AstNode *node) {
     // destructure) report width=-1 and are not aligned individually.
     int *widths = NULL;
     int max_width = 0;
-    bool align = ctx->config && ctx->config->align_match_arms && arm_count > 1;
+    bool align = ctx->config && ctx->config->align_branch_arrows && arm_count > 1;
     if (align) {
         widths = (int *) xr_malloc(sizeof(int) * (size_t) arm_count);
         if (!widths)

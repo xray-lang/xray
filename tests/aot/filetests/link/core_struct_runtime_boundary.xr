@@ -1,0 +1,41 @@
+struct Sample {
+    x: int
+    y: float
+    ok: bool
+    byte: uint8
+}
+
+@repr(C)
+struct CPoint {
+    x: int32
+    y: int32
+}
+
+@repr(C)
+struct CBox {
+    p: CPoint
+    tag: uint8
+}
+
+fn sample_score() -> int {
+    let s = Sample{x: 41, y: 2.5, ok: true, byte: 300}
+    s.x = s.x + 1
+    s.byte = s.byte + 1
+    if (s.ok) {
+        return s.x + s.byte
+    }
+    return 0
+}
+
+fn c_repr_score() -> int {
+    let p = CPoint{x: 10, y: 20}
+    p.x = p.x + 2
+
+    let b = CBox{p: CPoint{x: 1, y: 2}, tag: 3}
+    b.p.x = b.p.x + b.tag
+
+    return p.x + p.y + b.p.x + b.p.y + b.tag
+}
+
+print(sample_score())
+print(c_repr_score())

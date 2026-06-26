@@ -24,51 +24,14 @@ static inline void xrt_set_direct_unsupported(uint8_t elem_type, const char *who
     abort();
 }
 
-/* ---- canonical bit patterns (shared with the map key logic) ------------- */
+/* ---- canonical bit patterns --------------------------------------------- */
 
 static inline uint64_t xrt_set_item_bits_i64(int64_t value, uint8_t elem_type) {
-    switch (elem_type) {
-        case XR_ELEM_I8:
-            return (uint64_t) (int8_t) value;
-        case XR_ELEM_U8:
-            return (uint64_t) (uint8_t) value;
-        case XR_ELEM_I16:
-            return (uint64_t) (int16_t) value;
-        case XR_ELEM_U16:
-            return (uint64_t) (uint16_t) value;
-        case XR_ELEM_I32:
-            return (uint64_t) (int32_t) value;
-        case XR_ELEM_U32:
-            return (uint64_t) (uint32_t) value;
-        case XR_ELEM_I64:
-        case XR_ELEM_U64:
-            return (uint64_t) value;
-        case XR_ELEM_BOOL:
-            return value != 0 ? 1u : 0u;
-        default:
-            xrt_set_direct_unsupported(elem_type, "xrt_set_item_bits_i64");
-    }
-    return 0;
+    return xrt_typed_scalar_bits_i64_or_abort(value, elem_type, "xrt_set_item_bits_i64");
 }
 
 static inline uint64_t xrt_set_item_bits_f64(double value, uint8_t elem_type) {
-    if (elem_type == XR_ELEM_F32) {
-        float f = (float) value;
-        uint32_t b32;
-        if (f == 0.0f)
-            f = 0.0f;
-        memcpy(&b32, &f, sizeof(b32));
-        return b32;
-    }
-    if (elem_type == XR_ELEM_F64) {
-        uint64_t b64;
-        if (value == 0.0)
-            value = 0.0;
-        memcpy(&b64, &value, sizeof(b64));
-        return b64;
-    }
-    xrt_set_direct_unsupported(elem_type, "xrt_set_item_bits_f64");
-    return 0;
+    return xrt_typed_scalar_bits_f64_or_abort(value, elem_type, "xrt_set_item_bits_f64");
 }
 
 static inline int64_t xrt_set_slot_raw_i64(const xrt_set_t *s, int64_t slot) {
@@ -181,10 +144,10 @@ static inline uint64_t xrt_set_hash_value(xrt_set_t *s, XrValue value) {
         return xrt_hash_value(value);
     if (s->elem_type == XR_ELEM_F32 || s->elem_type == XR_ELEM_F64) {
         double d = value.tag == XR_TAG_F64 ? value.f : (double) value.i;
-        return xrt_hash_mix_u64(xrt_set_item_bits_f64(d, s->elem_type));
+        return xr_hash_core_mix_u64(xrt_set_item_bits_f64(d, s->elem_type));
     }
     int64_t i = value.tag == XR_TAG_F64 ? (int64_t) value.f : value.i;
-    return xrt_hash_mix_u64(xrt_set_item_bits_i64(i, s->elem_type));
+    return xr_hash_core_mix_u64(xrt_set_item_bits_i64(i, s->elem_type));
 }
 
 static inline int64_t xrt_set_find_i64_typed_slot(xrt_set_t *s, int64_t value, uint8_t elem_type) {
@@ -192,16 +155,17 @@ static inline int64_t xrt_set_find_i64_typed_slot(xrt_set_t *s, int64_t value, u
     xrt_set_probe_i64_ctx ctx;
     ctx.set = s;
     ctx.bits = bits;
-    return xrt_swiss_find(s->ctrl, s->cap, xrt_hash_mix_u64(bits), xrt_set_probe_i64_eq, &ctx);
+    return xr_swiss_find_match_i64(s->ctrl, s->cap, xr_hash_core_mix_u64(bits),
+                                   xrt_set_probe_i64_eq, &ctx);
 }
 
 static inline int64_t xrt_set_find_f64_typed_slot(xrt_set_t *s, double value, uint8_t elem_type) {
     xrt_set_probe_f64_ctx ctx;
     ctx.set = s;
     ctx.value = value;
-    return xrt_swiss_find(s->ctrl, s->cap,
-                          xrt_hash_mix_u64(xrt_set_item_bits_f64(value, elem_type)),
-                          xrt_set_probe_f64_eq, &ctx);
+    return xr_swiss_find_match_i64(s->ctrl, s->cap,
+                                   xr_hash_core_mix_u64(xrt_set_item_bits_f64(value, elem_type)),
+                                   xrt_set_probe_f64_eq, &ctx);
 }
 
 static inline int64_t xrt_set_find_value(xrt_set_t *s, XrValue value) {
@@ -209,7 +173,8 @@ static inline int64_t xrt_set_find_value(xrt_set_t *s, XrValue value) {
         xrt_set_probe_tag_ctx ctx;
         ctx.set = s;
         ctx.value = value;
-        return xrt_swiss_find(s->ctrl, s->cap, xrt_hash_value(value), xrt_set_probe_tag_eq, &ctx);
+        return xr_swiss_find_match_i64(s->ctrl, s->cap, xrt_hash_value(value), xrt_set_probe_tag_eq,
+                                       &ctx);
     }
     if (s->elem_type == XR_ELEM_F32 || s->elem_type == XR_ELEM_F64) {
         double d = value.tag == XR_TAG_F64 ? value.f : (double) value.i;
@@ -238,8 +203,8 @@ static inline void xrt_set_rehash(xrt_set_t *s, int64_t new_slots) {
         uint64_t hash = s->elem_type == XR_ELEM_ANY
                             ? xrt_hash_value(((const XrValue *) old_items)[slot])
                             : xrt_map_stored_key_hash(old_items, slot, s->elem_type);
-        int64_t dst = xrt_swiss_find_free(s->ctrl, s->cap, hash);
-        xrt_swiss_ctrl_set(s->ctrl, s->cap, dst, (uint8_t) (hash & 0x7F));
+        int64_t dst = xr_swiss_find_free_i64(s->ctrl, s->cap, hash);
+        xr_swiss_ctrl_set_i64(s->ctrl, s->cap, dst, (uint8_t) (hash & 0x7F));
         memcpy((uint8_t *) s->items + (size_t) dst * s->elem_size,
                (const uint8_t *) old_items + (size_t) slot * s->elem_size, s->elem_size);
         s->order[w++] = dst;
@@ -252,12 +217,12 @@ static inline void xrt_set_rehash(xrt_set_t *s, int64_t new_slots) {
 
 static inline int64_t xrt_set_insert_slot(xrt_set_t *s, uint64_t hash) {
     if (s->growth_left <= 0)
-        xrt_set_rehash(s, s->len >= (s->cap - s->cap / 8) / 2 ? s->cap * 2 : s->cap);
+        xrt_set_rehash(s, s->len >= xr_swiss_capacity_budget_i64(s->cap) / 2 ? s->cap * 2 : s->cap);
     /* EMPTY-only: never reuse a tombstoned slot while a stale order[] entry may
      * still reference it; the reserve above guarantees an EMPTY slot exists. */
-    int64_t slot = xrt_swiss_find_empty(s->ctrl, s->cap, hash);
+    int64_t slot = xr_swiss_find_empty_i64(s->ctrl, s->cap, hash);
     s->growth_left--;
-    xrt_swiss_ctrl_set(s->ctrl, s->cap, slot, (uint8_t) (hash & 0x7F));
+    xr_swiss_ctrl_set_i64(s->ctrl, s->cap, slot, (uint8_t) (hash & 0x7F));
     s->len++;
     xrt_set_order_append(s, slot);
     return slot;
@@ -267,7 +232,7 @@ static inline void xrt_set_erase_slot(xrt_set_t *s, int64_t slot) {
     /* O(1) delete: tombstone the ctrl byte only; the order[] entry is skipped by
      * slot_is_full on iteration and dropped by rehash compaction, avoiding the old
      * O(n) order[] scan + memmove that made delete-heavy churn O(n^2)). */
-    xrt_swiss_ctrl_set(s->ctrl, s->cap, slot, (uint8_t) XRT_CTRL_DELETED);
+    xr_swiss_ctrl_set_i64(s->ctrl, s->cap, slot, (uint8_t) XR_SWISS_CTRL_DELETED);
     s->len--;
 }
 
@@ -286,8 +251,8 @@ static inline int xrt_set_add_i64_typed(xrt_set_t *s, int64_t value, uint8_t ele
     xrt_set_probe_i64_ctx ctx;
     ctx.set = s;
     ctx.bits = bits;
-    uint64_t hash = xrt_hash_mix_u64(bits);
-    if (xrt_swiss_find(s->ctrl, s->cap, hash, xrt_set_probe_i64_eq, &ctx) >= 0)
+    uint64_t hash = xr_hash_core_mix_u64(bits);
+    if (xr_swiss_find_match_i64(s->ctrl, s->cap, hash, xrt_set_probe_i64_eq, &ctx) >= 0)
         return 0;
     int64_t slot = xrt_set_insert_slot(s, hash);
     xrt_set_slot_store_i64(s, slot, value);
@@ -313,11 +278,11 @@ static inline int xrt_set_has_f64_typed(xrt_set_t *s, double value, uint8_t elem
 static inline int xrt_set_add_f64_typed(xrt_set_t *s, double value, uint8_t elem_type) {
     if (s->elem_type != elem_type)
         xrt_set_direct_type_mismatch(elem_type, s->elem_type, "xrt_set_add_f64_typed");
-    uint64_t hash = xrt_hash_mix_u64(xrt_set_item_bits_f64(value, elem_type));
+    uint64_t hash = xr_hash_core_mix_u64(xrt_set_item_bits_f64(value, elem_type));
     xrt_set_probe_f64_ctx ctx;
     ctx.set = s;
     ctx.value = value;
-    if (xrt_swiss_find(s->ctrl, s->cap, hash, xrt_set_probe_f64_eq, &ctx) >= 0)
+    if (xr_swiss_find_match_i64(s->ctrl, s->cap, hash, xrt_set_probe_f64_eq, &ctx) >= 0)
         return 0;
     int64_t slot = xrt_set_insert_slot(s, hash);
     xrt_set_slot_store_f64(s, slot, value);

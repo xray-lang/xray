@@ -158,12 +158,29 @@ fn test_parse_query_encoded() {
 }
 
 @test
+fn test_parse_query_empty_flag_and_empty_pairs() {
+    let q = url.parseQuery("?empty=&flag&msg=hello+world&&=skip")
+    assert_eq(q.empty, "")
+    assert_eq(q.flag, "")
+    assert_eq(q.msg, "hello world")
+}
+
+@test
 fn test_build_query() {
     let q = url.parseQuery("a=1&b=2")
     let qs = url.buildQuery(q)
     // Order may vary in hash map, just check both pairs exist
     assert_true(qs.includes("a=1"))
     assert_true(qs.includes("b=2"))
+}
+
+@test
+fn test_build_query_encodes_form_values() {
+    let q = url.parseQuery("msg=hello+world&key=a%26b&flag")
+    let qs = url.buildQuery(q)
+    assert_true(qs.includes("msg=hello+world"))
+    assert_true(qs.includes("key=a%26b"))
+    assert_true(qs.includes("flag="))
 }
 
 // ============================================================
@@ -210,6 +227,30 @@ fn test_resolve_absolute_url() {
     assert_eq(result, "http://other.com/b")
 }
 
+@test
+fn test_resolve_query_only_replaces_base_query() {
+    let result = url.resolve("https://example.com/a/b/c?old=1#top", "?new=2")
+    assert_eq(result, "https://example.com/a/b/c?new=2")
+}
+
+@test
+fn test_resolve_fragment_only_preserves_base_query() {
+    let result = url.resolve("https://example.com/a/b/c?old=1", "#frag")
+    assert_eq(result, "https://example.com/a/b/c?old=1#frag")
+}
+
+@test
+fn test_resolve_network_path_keeps_base_scheme() {
+    let result = url.resolve("https://example.com/a/b/c", "//cdn.example.com/lib.js")
+    assert_eq(result, "https://cdn.example.com/lib.js")
+}
+
+@test
+fn test_resolve_dot_segments() {
+    let result = url.resolve("https://example.com/a/b/c", "../d/./e")
+    assert_eq(result, "https://example.com/a/d/e")
+}
+
 // ============================================================
 // Part 8: join
 // ============================================================
@@ -223,6 +264,12 @@ fn test_join_paths() {
 @test
 fn test_join_trailing_slash() {
     let result = url.join("/api/", "/v1/", "/users")
+    assert_eq(result, "/api/v1/users")
+}
+
+@test
+fn test_join_skips_empty_segments() {
+    let result = url.join("", "/api/", "", "v1", "/users")
     assert_eq(result, "/api/v1/users")
 }
 

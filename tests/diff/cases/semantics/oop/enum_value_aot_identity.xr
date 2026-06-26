@@ -1,0 +1,40 @@
+// anchor: enum-value-aot-identity
+
+enum Color {
+    Red,
+    Green,
+    Blue,
+}
+
+enum Direction {
+    North = "N",
+    East = "E",
+}
+
+enum HttpStatus {
+    OK = 200,
+    NotFound = 404,
+}
+
+let colors = [Color.Red, Color.Green, Color.Blue]
+print(colors.join("|"))
+
+print(Color.Red.name)
+print(Color.Green.value)
+print(Color.Blue.ordinal)
+print(Color.Red.toString())
+print(Color.memberCount)
+
+let middle = Color.getMember(1)
+print(middle == Color.Green)
+print(middle.name + ":" + string(middle.value) + ":" + string(middle.ordinal))
+
+print(Direction.North.value)
+print(Direction.North.toString())
+print(HttpStatus.NotFound.value)
+
+let names: Array<string> = []
+for (c in Color) {
+    names.push(c.name)
+}
+print(names.join(","))

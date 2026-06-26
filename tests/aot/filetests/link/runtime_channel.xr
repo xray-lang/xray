@@ -1,0 +1,8 @@
+let ch = new Channel<int>(2)
+
+select {
+    1 to ch -> { print("sent") }
+    _ -> { print("full") }
+}
+
+ch.close()

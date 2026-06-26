@@ -14,51 +14,11 @@
  */
 
 #include "../test_framework.h"
+#include "shared/xr_crypto_core.h"
 #include <stdint.h>
 #include <string.h>
 
-// Forward declare C-level API from stdlib/crypto
-typedef struct {
-    uint32_t state[4];
-    uint32_t count[2];
-    uint8_t buffer[64];
-} XrMD5Context;
-typedef struct {
-    uint32_t state[5];
-    uint32_t count[2];
-    uint8_t buffer[64];
-} XrSHA1Context;
-typedef struct {
-    uint32_t state[8];
-    uint64_t count;
-    uint8_t buffer[64];
-} XrSHA256Context;
-typedef struct {
-    uint64_t state[8];
-    uint64_t count[2];
-    uint8_t buffer[128];
-} XrSHA512Context;
-typedef struct {
-    uint32_t round_key[60];
-    int rounds;
-} XrAESContext;
-
-void xr_md5(const uint8_t *data, size_t len, uint8_t digest[16]);
-void xr_sha1(const uint8_t *data, size_t len, uint8_t digest[20]);
-void xr_sha256(const uint8_t *data, size_t len, uint8_t digest[32]);
-void xr_sha512(const uint8_t *data, size_t len, uint8_t digest[64]);
-
-void xr_hmac_sha256(const uint8_t *key, size_t key_len, const uint8_t *data, size_t data_len,
-                    uint8_t digest[32]);
-
-void xr_aes_init(XrAESContext *ctx, const uint8_t *key, int key_bits);
-void xr_aes_cbc_encrypt(XrAESContext *ctx, const uint8_t *iv, const uint8_t *input, uint8_t *output,
-                        size_t len);
-void xr_aes_cbc_decrypt(XrAESContext *ctx, const uint8_t *iv, const uint8_t *input, uint8_t *output,
-                        size_t len);
-
 void xr_random_bytes(uint8_t *buffer, size_t len);
-void xr_bytes_to_hex(const uint8_t *bytes, size_t len, char *output);
 
 // Helper: compare digest with expected hex string
 static int digest_matches_hex(const uint8_t *digest, size_t digest_len, const char *expected_hex) {
@@ -202,6 +162,62 @@ TEST(crypto_aes_cbc_single_block) {
     ASSERT_TRUE(memcmp(plain, recovered, 16) == 0);
 }
 
+TEST(crypto_core_aes_hex_roundtrip) {
+    const uint8_t key[] = "secret";
+    const uint8_t plain_text[] = "hello world";
+    uint8_t iv[16];
+    for (int i = 0; i < 16; i++)
+        iv[i] = (uint8_t) i;
+
+    size_t padded_len = 0;
+    size_t hex_len = 0;
+    ASSERT_TRUE(xr_crypto_core_aes_encrypt_plan(11, &padded_len, &hex_len));
+    ASSERT_EQ_INT((int) padded_len, 16);
+    ASSERT_EQ_INT((int) hex_len, 64);
+
+    uint8_t padded[16];
+    uint8_t cipher[16];
+    char hex[65];
+    ASSERT_TRUE(xr_crypto_core_aes_encrypt_hex(key, 6, plain_text, 11, iv, padded, sizeof(padded),
+                                               cipher, sizeof(cipher), hex, sizeof(hex)));
+    ASSERT_EQ_INT((int) strlen(hex), 64);
+    ASSERT_TRUE(strncmp(hex, "000102030405060708090a0b0c0d0e0f", 32) == 0);
+
+    uint8_t raw[32];
+    uint8_t plain[16];
+    size_t plain_len = 0;
+    ASSERT_TRUE(xr_crypto_core_aes_decrypt_hex(key, 6, hex, strlen(hex), raw, sizeof(raw), plain,
+                                               sizeof(plain), &plain_len));
+    ASSERT_EQ_INT((int) plain_len, 11);
+    ASSERT_TRUE(memcmp(plain, plain_text, plain_len) == 0);
+
+    ASSERT_TRUE(!xr_crypto_core_aes_decrypt_hex(key, 6, "xyz", 3, raw, sizeof(raw), plain,
+                                                sizeof(plain), &plain_len));
+}
+
+TEST(crypto_core_aes_empty_plaintext) {
+    const uint8_t key[] = "";
+    uint8_t iv[16] = {0};
+    uint8_t padded[16];
+    uint8_t cipher[16];
+    char hex[65];
+
+    size_t padded_len = 0;
+    size_t hex_len = 0;
+    ASSERT_TRUE(xr_crypto_core_aes_encrypt_plan(0, &padded_len, &hex_len));
+    ASSERT_EQ_INT((int) padded_len, 16);
+    ASSERT_EQ_INT((int) hex_len, 64);
+    ASSERT_TRUE(xr_crypto_core_aes_encrypt_hex(key, 0, NULL, 0, iv, padded, sizeof(padded), cipher,
+                                               sizeof(cipher), hex, sizeof(hex)));
+
+    uint8_t raw[32];
+    uint8_t plain[16];
+    size_t plain_len = 99;
+    ASSERT_TRUE(xr_crypto_core_aes_decrypt_hex(key, 0, hex, strlen(hex), raw, sizeof(raw), plain,
+                                               sizeof(plain), &plain_len));
+    ASSERT_EQ_INT((int) plain_len, 0);
+}
+
 /* ========== Random Bytes ========== */
 
 TEST(crypto_random_bytes) {
@@ -232,6 +248,80 @@ TEST(crypto_bytes_to_hex) {
     ASSERT_STR_EQ(hex, "deadbeef");
 }
 
+TEST(crypto_core_bytes_hex) {
+    uint8_t data[] = {0x00, 0x0F, 0xA5};
+    char hex[7];
+    ASSERT_TRUE(xr_crypto_core_bytes_hex(data, 3, hex, sizeof(hex)));
+    ASSERT_STR_EQ(hex, "000fa5");
+    ASSERT_TRUE(!xr_crypto_core_bytes_hex(data, 3, hex, 6));
+}
+
+TEST(crypto_core_uuid_v4_write) {
+    uint8_t bytes[16];
+    for (int i = 0; i < 16; i++)
+        bytes[i] = (uint8_t) i;
+
+    char uuid[37];
+    ASSERT_TRUE(xr_crypto_core_uuid_v4_write(bytes, uuid, sizeof(uuid)));
+    ASSERT_STR_EQ(uuid, "00010203-0405-4607-8809-0a0b0c0d0e0f");
+    ASSERT_EQ_INT(bytes[6] >> 4, 4);
+    ASSERT_EQ_INT(bytes[8] >> 6, 2);
+    ASSERT_TRUE(!xr_crypto_core_uuid_v4_write(bytes, uuid, 36));
+}
+
+TEST(crypto_core_hash_selector) {
+    uint8_t digest[64];
+    size_t len = 0;
+    char hex[129];
+
+    XrCryptoCoreHashAlg alg = xr_crypto_core_hash_alg_from_name("md5", 3);
+    ASSERT_EQ_INT(alg, XR_CRYPTO_CORE_HASH_MD5);
+    ASSERT_TRUE(xr_crypto_core_hash(alg, (const uint8_t *) "abc", 3, digest, &len));
+    ASSERT_EQ_INT(len, 16);
+    ASSERT_TRUE(xr_crypto_core_digest_hex(digest, len, hex, sizeof(hex)));
+    ASSERT_STR_EQ(hex, "900150983cd24fb0d6963f7d28e17f72");
+
+    alg = xr_crypto_core_hash_alg_from_name("sha1", 4);
+    ASSERT_EQ_INT(xr_crypto_core_hash_digest_len(alg), 20);
+    ASSERT_TRUE(xr_crypto_core_hash(alg, (const uint8_t *) "abc", 3, digest, &len));
+    ASSERT_TRUE(xr_crypto_core_digest_hex(digest, len, hex, sizeof(hex)));
+    ASSERT_STR_EQ(hex, "a9993e364706816aba3e25717850c26c9cd0d89d");
+
+    alg = xr_crypto_core_hash_alg_from_name("sha256", 6);
+    ASSERT_EQ_INT(xr_crypto_core_hash_digest_len(alg), 32);
+    ASSERT_TRUE(xr_crypto_core_hash(alg, (const uint8_t *) "abc", 3, digest, &len));
+    ASSERT_TRUE(xr_crypto_core_digest_hex(digest, len, hex, sizeof(hex)));
+    ASSERT_STR_EQ(hex, "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+
+    alg = xr_crypto_core_hash_alg_from_name("sha512", 6);
+    ASSERT_EQ_INT(xr_crypto_core_hash_digest_len(alg), 64);
+    ASSERT_TRUE(xr_crypto_core_hash(alg, (const uint8_t *) "abc", 3, digest, &len));
+    ASSERT_TRUE(xr_crypto_core_digest_hex(digest, len, hex, sizeof(hex)));
+    ASSERT_STR_EQ(hex, "ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a"
+                       "2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f");
+
+    alg = xr_crypto_core_hash_alg_from_name("sha224", 6);
+    ASSERT_EQ_INT(alg, XR_CRYPTO_CORE_HASH_NONE);
+    ASSERT_TRUE(!xr_crypto_core_hash(alg, (const uint8_t *) "abc", 3, digest, &len));
+}
+
+TEST(crypto_core_hmac_selector) {
+    uint8_t digest[64];
+    size_t len = 0;
+    char hex[129];
+
+    XrCryptoCoreHashAlg alg = xr_crypto_core_hash_alg_from_name("sha256", 6);
+    ASSERT_TRUE(xr_crypto_core_hmac(alg, (const uint8_t *) "Jefe", 4,
+                                    (const uint8_t *) "what do ya want for nothing?", 28, digest,
+                                    &len));
+    ASSERT_EQ_INT(len, 32);
+    ASSERT_TRUE(xr_crypto_core_digest_hex(digest, len, hex, sizeof(hex)));
+    ASSERT_STR_EQ(hex, "5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843");
+
+    ASSERT_TRUE(!xr_crypto_core_hmac(XR_CRYPTO_CORE_HASH_NONE, (const uint8_t *) "key", 3,
+                                     (const uint8_t *) "data", 4, digest, &len));
+}
+
 /* ========== Main ========== */
 
 TEST_MAIN_BEGIN()
@@ -260,6 +350,8 @@ RUN_TEST(crypto_hmac_sha256_basic);
 RUN_TEST_SUITE("Crypto - AES-256-CBC");
 RUN_TEST(crypto_aes_cbc_roundtrip);
 RUN_TEST(crypto_aes_cbc_single_block);
+RUN_TEST(crypto_core_aes_hex_roundtrip);
+RUN_TEST(crypto_core_aes_empty_plaintext);
 
 RUN_TEST_SUITE("Crypto - Random");
 RUN_TEST(crypto_random_bytes);
@@ -267,5 +359,9 @@ RUN_TEST(crypto_random_bytes_zero);
 
 RUN_TEST_SUITE("Crypto - Utility");
 RUN_TEST(crypto_bytes_to_hex);
+RUN_TEST(crypto_core_bytes_hex);
+RUN_TEST(crypto_core_uuid_v4_write);
+RUN_TEST(crypto_core_hash_selector);
+RUN_TEST(crypto_core_hmac_selector);
 
 TEST_MAIN_END()

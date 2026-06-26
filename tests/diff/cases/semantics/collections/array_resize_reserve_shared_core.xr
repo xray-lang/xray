@@ -1,0 +1,31 @@
+let xs = [1, 2, 3]
+xs.reserve(-4)
+print(xs.length)
+xs.resize(5, 9)
+print(xs.length)
+print(xs[3])
+print(xs[4])
+xs.resize(-2, 7)
+print(xs.length)
+
+let ints = new Array<int>(2, 4)
+ints.reserve(8)
+print(ints.length)
+print(ints.capacity >= 8)
+ints.resize(4, 11)
+print(ints[0])
+print(ints[2])
+print(ints[3])
+
+let source = [10, 20, 30, 40, 50]
+let view = source.slice(1, 4)
+view.reserve(20)
+view.resize(1, 99)
+print(view.length)
+print(view[0])
+print(view[2])
+print(source.length)
+
+let bytes = new Bytes(3, 5)
+bytes.resize(-9)
+print(bytes.length)

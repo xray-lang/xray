@@ -1,0 +1,13 @@
+contains=xaot-plan v0
+contains="runtime_caps": ["coro", "netpoll", "task", "objects"]
+contains="runtime_objects": ["xray_rt_coro"]
+contains="stdlib_objects": []
+contains="stdlib_symbols": []
+regex="system_libs": \[[^]]*"m"
+regex="system_libs": \[[^]]*"pthread"
+contains="defines": ["XRT_IMPL"]
+not_contains=xray_core
+not_contains=channel
+not_contains=timer
+not_contains=work_queue
+not_contains=result_group

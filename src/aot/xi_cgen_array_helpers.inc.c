@@ -1121,7 +1121,7 @@ static bool emit_typed_array_new_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f
         emit_value_as_rep(out, fill.cap_value, XR_REP_I64);
         fprintf(out, ", %s)", info.elem_name);
     } else {
-        fprintf(out, "xrt_array_new_typed(%" PRId64 ", %s)", cap, info.elem_name);
+        fprintf(out, "xrt_array_new_typed_len(%" PRId64 ", %s)", cap, info.elem_name);
     }
     return true;
 }
@@ -1137,7 +1137,10 @@ static bool emit_typed_array_new_ptr_expr(XiCgenCtx *ctx, FILE *out, const XiFun
         emit_value_as_rep(out, fill.cap_value, XR_REP_I64);
         fprintf(out, ", %s)", info.elem_name);
     } else {
-        fprintf(out, "xrt_array_new_typed_ptr(%" PRId64 ", %s)", cap, info.elem_name);
+        fprintf(out,
+                "({ xrt_array_t *_a = xrt_array_new_typed_ptr(%" PRId64 ", %s); "
+                "_a->length = %" PRId64 "; _a; })",
+                cap, info.elem_name, cap < 0 ? 0 : cap);
     }
     return true;
 }
@@ -1153,7 +1156,7 @@ static bool emit_bytes_new_native_local_expr(FILE *out, const XiValue *v) {
     if (v->nargs == 1 && v->args[0] && v->args[0]->type && v->args[0]->type->kind == XR_KIND_INT) {
         fprintf(out, "({ int64_t _n = ");
         emit_value_as_rep(out, v->args[0], XR_REP_I64);
-        fprintf(out, "; if (_n < 0) _n = 0; ");
+        fprintf(out, "; _n = xr_array_core_nonnegative_length(_n); ");
         fprintf(out, "xrt_array_t *_b = xrt_array_new_typed_ptr(_n, XR_ELEM_U8); ");
         fprintf(out, "_b->length = _n; _b; })");
         return true;
@@ -1261,7 +1264,7 @@ static bool emit_class_native_array_method_call_expr(XiCgenCtx *ctx, FILE *out, 
     if (sym < 0)
         return false;
     uint16_t nargs = (uint16_t) (v->nargs - 1);
-    if (nargs > 2)
+    if (nargs > 3 || (nargs == 3 && sym != XRT_SYM_FILL))
         return false;
     const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
     if (nargs == 0) {
@@ -1281,6 +1284,16 @@ static bool emit_class_native_array_method_call_expr(XiCgenCtx *ctx, FILE *out, 
         emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
         fprintf(out, ", ");
         emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_TAGGED);
+        fprintf(out, ")");
+    } else if (nargs == 3) {
+        fprintf(out, "xrt_method_3(");
+        emit_class_native_array_field_box(ctx, out, f, &info, v->args[0], idx);
+        fprintf(out, ", %d, ", sym);
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
+        fprintf(out, ", ");
+        emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_TAGGED);
+        fprintf(out, ", ");
+        emit_value_as_rep_ctx(ctx, out, v->args[3], XR_REP_TAGGED);
         fprintf(out, ")");
     }
     emit_conversion_suffix(out, conv_suffix);
@@ -1305,7 +1318,8 @@ static bool emit_class_native_array_method_call_stmt(XiCgenCtx *ctx, FILE *out, 
         fprintf(out, ");\n");
         return true;
     }
-    if (nargs > 2 || cg_method_sym(method) < 0)
+    int sym = cg_method_sym(method);
+    if (sym < 0 || nargs > 3 || (nargs == 3 && sym != XRT_SYM_FILL))
         return false;
     fprintf(out, "    ");
     if (!emit_class_native_array_method_call_expr(ctx, out, f, v))
@@ -1321,7 +1335,8 @@ static bool cg_class_native_array_method_call_value_is_elided(XiCgenCtx *ctx, co
     if (!cg_class_native_array_receiver_ref_field(ctx, f, v->args[0], NULL, NULL))
         return false;
     uint16_t nargs = (uint16_t) (v->nargs - 1);
-    return nargs <= 2 && cg_method_sym((const char *) v->aux) >= 0;
+    int sym = cg_method_sym((const char *) v->aux);
+    return sym >= 0 && (nargs <= 2 || (nargs == 3 && sym == XRT_SYM_FILL));
 }
 
 static bool emit_typed_array_index_get_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
@@ -1421,20 +1436,13 @@ static bool emit_typed_array_index_set_expr(XiCgenCtx *ctx, FILE *out, const XiF
     emit_typed_array_ptr_expr(ctx, out, f, v->args[0], prefix);
     fprintf(out, "; int64_t _idx = ");
     emit_value_as_rep(out, v->args[1], XR_REP_I64);
-    fprintf(out, "; if (_idx < 0) _idx += _a->length; ");
-    fprintf(
-        out,
-        "if (_idx >= 0) { if (XR_UNLIKELY(_idx >= _a->capacity)) { if (_a->data_storage == "
-        "XR_ARRAY_DATA_BORROWED) { "
-        "fprintf(stderr, \"xrt_array_set: cannot grow array slice\\n\"); abort(); } "
-        "int64_t _ncap = _a->capacity == 0 ? 4 : _a->capacity; while (_idx >= _ncap) _ncap *= 2; "
-        "xrt_array_data_grow(_a, _ncap); } "
-        "if (_idx > _a->length) { memset((uint8_t*)_a->data + (size_t)_a->length * "
-        "sizeof(%s), 0, (size_t)(_idx - _a->length) * sizeof(%s)); "
-        "_a->length = _idx; } ((%s*)_a->data)[_idx] = ",
-        info.ctype, info.ctype, info.ctype);
+    fprintf(out,
+            "; XrArrayCoreIndexSetPlan _plan = "
+            "xr_array_core_index_set_plan(_a->length, _idx); "
+            "if (_plan.kind == XR_ARRAY_CORE_INDEX_SET_WRITE) { ((%s*)_a->data)[_plan.index] = ",
+            info.ctype);
     emit_typed_array_store_value(out, &info, v->args[2]);
-    fprintf(out, "; if (_idx == _a->length) _a->length++; } XR_NULL_VAL; })");
+    fprintf(out, "; } else { xrt_index_oob(_idx, _a->length); } XR_NULL_VAL; })");
     return true;
 }
 
@@ -1495,8 +1503,8 @@ static bool emit_typed_array_push_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *
     emit_typed_array_ptr_expr(ctx, out, f, recv, prefix);
     {
         fprintf(out,
-                "; if (_a->data_storage == XR_ARRAY_DATA_BORROWED) { fprintf(stderr, "
-                "\"xrt_array_push: cannot push to array slice\\n\"); abort(); } "
+                "; if (_a->data_storage == XR_ARRAY_DATA_BORROWED) { "
+                "xrt_throw_error(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_ARRAY_SLICE_PUSH_MSG); } "
                 "if (XR_UNLIKELY(_a->length >= _a->capacity)) { "
                 "xrt_array_data_grow(_a, _a->capacity == 0 ? 4 : _a->capacity * 2); } "
                 "((%s*)_a->data)[_a->length++] = ",

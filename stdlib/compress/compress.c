@@ -998,47 +998,24 @@ XR_FUNC XrCompressError xr_zlib_decompress(const uint8_t *input, size_t in_len, 
 
 /* ========== Heap-Allocated Versions ========== */
 
+static void *compress_core_alloc(void *ctx, size_t size) {
+    (void) ctx;
+    return xr_malloc(size);
+}
+
+static void compress_core_free(void *ctx, void *ptr) {
+    (void) ctx;
+    xr_free(ptr);
+}
+
 XR_FUNC uint8_t *xr_gzip_alloc(const uint8_t *input, size_t in_len, size_t *out_len, int level) {
-    size_t bound = xr_deflate_bound(in_len) + 18;
-    uint8_t *output = (uint8_t *) xr_malloc(bound);
-    if (!output)
-        return NULL;
-
-    XrCompressError err = xr_gzip(input, in_len, output, bound, out_len, level);
-    if (err != XR_COMPRESS_OK) {
-        xr_free(output);
-        return NULL;
-    }
-
-    return output;
+    return xr_compress_core_gzip_alloc(input, in_len, out_len, level, compress_core_alloc,
+                                       compress_core_free, NULL);
 }
 
 XR_FUNC uint8_t *xr_gunzip_alloc(const uint8_t *input, size_t in_len, size_t *out_len) {
-    // Try to get original size from gzip trailer
-    uint32_t orig_size = xr_gzip_original_size(input, in_len);
-    if (orig_size == 0)
-        orig_size = in_len * 4;  // Estimate
-
-    // Try to decompress, expand buffer if needed
-    size_t cap = orig_size + 256;
-    for (int tries = 0; tries < 4; tries++) {
-        uint8_t *output = (uint8_t *) xr_malloc(cap);
-        if (!output)
-            return NULL;
-
-        XrCompressError err = xr_gunzip(input, in_len, output, cap, out_len);
-        if (err == XR_COMPRESS_OK) {
-            return output;
-        } else if (err == XR_COMPRESS_ERR_BUFFER) {
-            xr_free(output);
-            cap *= 2;
-        } else {
-            xr_free(output);
-            return NULL;
-        }
-    }
-
-    return NULL;
+    return xr_compress_core_gunzip_alloc(input, in_len, xr_gzip_original_size(input, in_len),
+                                         out_len, compress_core_alloc, compress_core_free, NULL);
 }
 
 /* ========== Error Messages ========== */
@@ -1074,6 +1051,11 @@ static XrValue make_string_n(XrVMRuntime *X, const char *s, size_t len) {
     return xrs_string_value_n(X, s, len);
 }
 
+static int compress_level_arg(XrValue *args, int nargs) {
+    bool has_level = nargs >= 2 && XR_IS_INT(args[1]);
+    return xr_compress_core_level_or_default(has_level, has_level ? XR_TO_INT(args[1]) : 0);
+}
+
 /* ========== xray Binding Functions ========== */
 
 // compress.gzip(data, level?) -> string
@@ -1086,14 +1068,7 @@ static XrValue compress_gzip(XrVMRuntime *X, XrValue *args, int nargs) {
     if (!data)
         return xr_null();
 
-    int level = XR_COMPRESS_DEFAULT_COMPRESSION;
-    if (nargs >= 2 && XR_IS_INT(args[1])) {
-        level = (int) XR_TO_INT(args[1]);
-        if (level < 0)
-            level = 0;
-        if (level > 9)
-            level = 9;
-    }
+    int level = compress_level_arg(args, nargs);
 
     size_t out_len;
     uint8_t *output = xr_gzip_alloc((const uint8_t *) data, len, &out_len, level);
@@ -1135,26 +1110,13 @@ static XrValue compress_deflate(XrVMRuntime *X, XrValue *args, int nargs) {
     if (!data)
         return xr_null();
 
-    int level = XR_COMPRESS_DEFAULT_COMPRESSION;
-    if (nargs >= 2 && XR_IS_INT(args[1])) {
-        level = (int) XR_TO_INT(args[1]);
-        if (level < 0)
-            level = 0;
-        if (level > 9)
-            level = 9;
-    }
-
-    size_t bound = xr_deflate_bound(len);
-    uint8_t *output = (uint8_t *) xr_malloc(bound);
-    if (!output)
-        return xr_null();
+    int level = compress_level_arg(args, nargs);
 
     size_t out_len;
-    XrCompressError err = xr_deflate((const uint8_t *) data, len, output, bound, &out_len, level);
-    if (err != XR_COMPRESS_OK) {
-        xr_free(output);
+    uint8_t *output = xr_compress_core_deflate_alloc((const uint8_t *) data, len, &out_len, level,
+                                                     compress_core_alloc, compress_core_free, NULL);
+    if (!output)
         return xr_null();
-    }
 
     XrValue result = make_string_n(X, (char *) output, out_len);
     xr_free(output);
@@ -1171,29 +1133,15 @@ static XrValue compress_inflate(XrVMRuntime *X, XrValue *args, int nargs) {
     if (!data)
         return xr_null();
 
-    // Estimate output size (generous to handle high compression ratios)
-    size_t cap = len * 8 + 1024;
-    for (int tries = 0; tries < 8; tries++) {
-        uint8_t *output = (uint8_t *) xr_malloc(cap);
-        if (!output)
-            return xr_null();
+    size_t out_len;
+    uint8_t *output = xr_compress_core_inflate_alloc((const uint8_t *) data, len, &out_len,
+                                                     compress_core_alloc, compress_core_free, NULL);
+    if (!output)
+        return xr_null();
 
-        size_t out_len;
-        XrCompressError err = xr_inflate((const uint8_t *) data, len, output, cap, &out_len);
-        if (err == XR_COMPRESS_OK) {
-            XrValue result = make_string_n(X, (char *) output, out_len);
-            xr_free(output);
-            return result;
-        } else if (err == XR_COMPRESS_ERR_BUFFER) {
-            xr_free(output);
-            cap *= 2;
-        } else {
-            xr_free(output);
-            return xr_null();
-        }
-    }
-
-    return xr_null();
+    XrValue result = make_string_n(X, (char *) output, out_len);
+    xr_free(output);
+    return result;
 }
 
 // compress.zlibCompress(data, level?) -> string
@@ -1206,27 +1154,14 @@ static XrValue compress_zlib_compress(XrVMRuntime *X, XrValue *args, int nargs) 
     if (!data)
         return xr_null();
 
-    int level = XR_COMPRESS_DEFAULT_COMPRESSION;
-    if (nargs >= 2 && XR_IS_INT(args[1])) {
-        level = (int) XR_TO_INT(args[1]);
-        if (level < 0)
-            level = 0;
-        if (level > 9)
-            level = 9;
-    }
-
-    size_t bound = xr_deflate_bound(len) + 6;
-    uint8_t *output = (uint8_t *) xr_malloc(bound);
-    if (!output)
-        return xr_null();
+    int level = compress_level_arg(args, nargs);
 
     size_t out_len;
-    XrCompressError err =
-        xr_zlib_compress((const uint8_t *) data, len, output, bound, &out_len, level);
-    if (err != XR_COMPRESS_OK) {
-        xr_free(output);
+    uint8_t *output =
+        xr_compress_core_zlib_compress_alloc((const uint8_t *) data, len, &out_len, level,
+                                             compress_core_alloc, compress_core_free, NULL);
+    if (!output)
         return xr_null();
-    }
 
     XrValue result = make_string_n(X, (char *) output, out_len);
     xr_free(output);
@@ -1243,29 +1178,15 @@ static XrValue compress_zlib_decompress(XrVMRuntime *X, XrValue *args, int nargs
     if (!data)
         return xr_null();
 
-    size_t cap = len * 8 + 1024;
-    for (int tries = 0; tries < 8; tries++) {
-        uint8_t *output = (uint8_t *) xr_malloc(cap);
-        if (!output)
-            return xr_null();
+    size_t out_len;
+    uint8_t *output = xr_compress_core_zlib_decompress_alloc(
+        (const uint8_t *) data, len, &out_len, compress_core_alloc, compress_core_free, NULL);
+    if (!output)
+        return xr_null();
 
-        size_t out_len;
-        XrCompressError err =
-            xr_zlib_decompress((const uint8_t *) data, len, output, cap, &out_len);
-        if (err == XR_COMPRESS_OK) {
-            XrValue result = make_string_n(X, (char *) output, out_len);
-            xr_free(output);
-            return result;
-        } else if (err == XR_COMPRESS_ERR_BUFFER) {
-            xr_free(output);
-            cap *= 2;
-        } else {
-            xr_free(output);
-            return xr_null();
-        }
-    }
-
-    return xr_null();
+    XrValue result = make_string_n(X, (char *) output, out_len);
+    xr_free(output);
+    return result;
 }
 
 // compress.isGzip(data) -> bool
@@ -1326,48 +1247,16 @@ static XrValue compress_adler32(XrVMRuntime *X, XrValue *args, int nargs) {
 
 /* ========== Module Loading ========== */
 
-// ========== Type Declarations (parsed by gen_stdlib_types.py) ==========
-
-#include "../../src/module/xbuiltin_decl.h"
-
-// @module compress
-
-XR_DEFINE_BUILTIN(compress_gzip, "gzip", "(data: string, level?: int): string?", "Gzip compress")
-XR_DEFINE_BUILTIN(compress_gunzip, "gunzip", "(data: string): string?", "Gzip decompress")
-XR_DEFINE_BUILTIN(compress_is_gzip, "isGzip", "(data: string): bool", "Check if gzip data")
-XR_DEFINE_BUILTIN(compress_deflate, "deflate", "(data: string, level?: int): string?",
-                  "Deflate compress")
-XR_DEFINE_BUILTIN(compress_inflate, "inflate", "(data: string): string?", "Inflate decompress")
-XR_DEFINE_BUILTIN(compress_zlib_compress, "zlibCompress", "(data: string, level?: int): string?",
-                  "Zlib compress")
-XR_DEFINE_BUILTIN(compress_zlib_decompress, "zlibDecompress", "(data: string): string?",
-                  "Zlib decompress")
-XR_DEFINE_BUILTIN(compress_is_zlib, "isZlib", "(data: string): bool", "Check if zlib data")
-XR_DEFINE_BUILTIN(compress_crc32, "crc32", "(data: string): int", "Compute CRC-32 checksum")
-XR_DEFINE_BUILTIN(compress_adler32, "adler32", "(data: string): int", "Compute Adler-32 checksum")
+#define XR_STDLIB_VM_BIND_MODULE_COMPRESS 1
+#include "../../src/stdlib/xstdlib_vm_bindings_generated.inc.c"
+#undef XR_STDLIB_VM_BIND_MODULE_COMPRESS
 
 XR_FUNC XrModule *xr_load_module_compress(XrVMRuntime *isolate) {
     XrModule *module = xr_module_create_native(isolate, "compress");
     if (!module)
         return NULL;
 
-    // Gzip
-    XRS_EXPORT(module, isolate, "gzip", compress_gzip);
-    XRS_EXPORT(module, isolate, "gunzip", compress_gunzip);
-    XRS_EXPORT(module, isolate, "isGzip", compress_is_gzip);
-
-    // Deflate/Inflate
-    XRS_EXPORT(module, isolate, "deflate", compress_deflate);
-    XRS_EXPORT(module, isolate, "inflate", compress_inflate);
-
-    // Zlib
-    XRS_EXPORT(module, isolate, "zlibCompress", compress_zlib_compress);
-    XRS_EXPORT(module, isolate, "zlibDecompress", compress_zlib_decompress);
-    XRS_EXPORT(module, isolate, "isZlib", compress_is_zlib);
-
-    // Checksums
-    XRS_EXPORT(module, isolate, "crc32", compress_crc32);
-    XRS_EXPORT(module, isolate, "adler32", compress_adler32);
+    xr_stdlib_vm_bind_compress_generated(isolate, module);
 
     module->loaded = true;
     return module;

@@ -18,6 +18,7 @@
 #include "../../src/base/xmalloc.h"
 #include "../../src/base/xchecks.h"
 #include "../../src/runtime/object/xjson.h"
+#include "../../src/shared/xr_os_core.h"
 #include "../../src/coro/xyieldable.h"  // xr_yield_for_timeout
 #include "../../src/vm/xvm.h"           // xr_vm_yieldable_cfunction_new
 #include <stdio.h>
@@ -67,6 +68,20 @@ extern XrValue xr_value_from_map(XrMap *map);
 extern XrArray *xr_array_new(struct XrCoroutine *coro);
 extern void xr_array_push(XrArray *arr, XrValue value);
 extern XrValue xr_value_from_array(XrArray *arr);
+
+typedef struct OsEnvironCtx {
+    XrVMRuntime *X;
+    XrMap *map;
+} OsEnvironCtx;
+
+static bool os_environ_add_entry(void *ctx, const char *key, size_t key_len, const char *value,
+                                 size_t value_len) {
+    OsEnvironCtx *env = (OsEnvironCtx *) ctx;
+    XrValue key_value = xrs_string_value_n(env->X, key, key_len);
+    XrValue val_value = xrs_string_value_n(env->X, value, value_len);
+    xr_map_set(env->map, key_value, val_value);
+    return true;
+}
 
 /* ========== Windows Compatibility ========== */
 
@@ -134,38 +149,18 @@ static XrValue os_environ(XrVMRuntime *X, XrValue *args, int argc) {
     XrMap *map = xr_map_new(xr_current_coro(X));
     if (!map)
         return xr_null();
+    OsEnvironCtx env_ctx = {X, map};
 
 #ifdef XR_OS_WINDOWS
     LPCH env_block = GetEnvironmentStringsA();
     if (!env_block)
         return xr_value_from_map(map);
-    for (const char *p = env_block; *p; p += strlen(p) + 1) {
-        const char *eq = strchr(p, '=');
-        if (!eq || eq == p)
-            continue;
-        size_t name_len = eq - p;
-        const char *value = eq + 1;
-        XrString *key_str = xr_string_intern(X, p, name_len, 0);
-        XrValue key = xr_string_value(key_str);
-        XrValue val = xrs_string_value_c(X, value);
-        xr_map_set(map, key, val);
-    }
+    for (const char *p = env_block; *p; p += strlen(p) + 1)
+        xr_os_core_environ_entry(p, os_environ_add_entry, &env_ctx);
     FreeEnvironmentStringsA(env_block);
 #else
-    for (char **env = environ; *env != NULL; env++) {
-        char *eq = strchr(*env, '=');
-        if (!eq)
-            continue;
-
-        size_t name_len = eq - *env;
-        const char *value = eq + 1;
-
-        // Directly intern with length — no temporary allocation needed
-        XrString *key_str = xr_string_intern(X, *env, name_len, 0);
-        XrValue key = xr_string_value(key_str);
-        XrValue val = xrs_string_value_c(X, value);
-        xr_map_set(map, key, val);
-    }
+    for (char **env = environ; *env != NULL; env++)
+        xr_os_core_environ_entry(*env, os_environ_add_entry, &env_ctx);
 #endif
 
     return xr_value_from_map(map);
@@ -246,28 +241,47 @@ static XrValue os_hostname(XrVMRuntime *X, XrValue *args, int argc) {
 }
 
 // tmpdir() - Get temporary directory
+static const char *os_core_getenv(void *ctx, const char *name) {
+    (void) ctx;
+    return getenv(name);
+}
+
 static XrValue os_tmpdir(XrVMRuntime *X, XrValue *args, int argc) {
     (void) args;
     (void) argc;
 
-    // Try to get from environment variables
-    const char *tmpdir = getenv("TMPDIR");
-    if (!tmpdir)
-        tmpdir = getenv("TMP");
-    if (!tmpdir)
-        tmpdir = getenv("TEMP");
-    if (!tmpdir) {
-#ifdef XR_OS_WINDOWS
-        tmpdir = "C:\\Windows\\Temp";
-#else
-        tmpdir = "/tmp";
-#endif
-    }
-
-    return xrs_string_value_c(X, tmpdir);
+    return xrs_string_value_c(X, xr_os_core_tmpdir(os_core_getenv, NULL));
 }
 
 /* ========== User Information (P1) ========== */
+
+#ifdef XR_OS_WINDOWS
+typedef struct OsUsernameCtx {
+    char buf[256];
+} OsUsernameCtx;
+#endif
+
+static const char *os_system_username(void *ctx) {
+#ifdef XR_OS_WINDOWS
+    OsUsernameCtx *user_ctx = (OsUsernameCtx *) ctx;
+    DWORD size = sizeof(user_ctx->buf);
+    return GetUserNameA(user_ctx->buf, &size) ? user_ctx->buf : NULL;
+#else
+    (void) ctx;
+    struct passwd *pw = getpwuid(getuid());
+    return (pw && pw->pw_name) ? pw->pw_name : NULL;
+#endif
+}
+
+static const char *os_system_homedir(void *ctx) {
+    (void) ctx;
+#ifdef XR_OS_WINDOWS
+    return NULL;
+#else
+    struct passwd *pw = getpwuid(getuid());
+    return (pw && pw->pw_dir) ? pw->pw_dir : NULL;
+#endif
+}
 
 // username() - Get current user name
 static XrValue os_username(XrVMRuntime *X, XrValue *args, int argc) {
@@ -275,16 +289,12 @@ static XrValue os_username(XrVMRuntime *X, XrValue *args, int argc) {
     (void) argc;
 
 #ifdef XR_OS_WINDOWS
-    char buf[256];
-    DWORD size = sizeof(buf);
-    if (GetUserNameA(buf, &size))
-        return xrs_string_value_c(X, buf);
-    return xr_null();
+    OsUsernameCtx user_ctx;
+    return xrs_string_value_c(
+        X, xr_os_core_username(os_system_username, &user_ctx, os_core_getenv, NULL));
 #else
-    struct passwd *pw = getpwuid(getuid());
-    if (!pw)
-        return xr_null();
-    return xrs_string_value_c(X, pw->pw_name);
+    return xrs_string_value_c(X,
+                              xr_os_core_username(os_system_username, NULL, os_core_getenv, NULL));
 #endif
 }
 
@@ -293,21 +303,7 @@ static XrValue os_homedir(XrVMRuntime *X, XrValue *args, int argc) {
     (void) args;
     (void) argc;
 
-    const char *home = getenv("HOME");
-#ifdef XR_OS_WINDOWS
-    if (!home)
-        home = getenv("USERPROFILE");
-    if (home)
-        return xrs_string_value_c(X, home);
-    return xr_null();
-#else
-    if (home)
-        return xrs_string_value_c(X, home);
-    struct passwd *pw = getpwuid(getuid());
-    if (!pw)
-        return xr_null();
-    return xrs_string_value_c(X, pw->pw_dir);
-#endif
+    return xrs_string_value_c(X, xr_os_core_homedir(os_core_getenv, NULL, os_system_homedir, NULL));
 }
 
 // uid() - Get user ID
@@ -345,10 +341,10 @@ static XrValue os_cpuCount(XrVMRuntime *X, XrValue *args, int argc) {
 #ifdef XR_OS_WINDOWS
     SYSTEM_INFO si;
     GetSystemInfo(&si);
-    return xr_int(si.dwNumberOfProcessors);
+    return xr_int(xr_os_core_cpu_count((long) si.dwNumberOfProcessors));
 #else
     long n = sysconf(_SC_NPROCESSORS_ONLN);
-    return xr_int(n > 0 ? n : 1);
+    return xr_int(xr_os_core_cpu_count(n));
 #endif
 }
 
@@ -362,17 +358,18 @@ static XrValue os_totalMemory(XrVMRuntime *X, XrValue *args, int argc) {
     MEMORYSTATUSEX statex;
     statex.dwLength = sizeof(statex);
     if (GlobalMemoryStatusEx(&statex))
-        return xr_int((int64_t) statex.ullTotalPhys);
+        return xr_int(xr_os_core_memory_bytes((uint64_t) statex.ullTotalPhys, 1));
     return xr_int(0);
 #elif defined(XR_OS_MACOS)
     int64_t memsize = 0;
     size_t len = sizeof(memsize);
-    sysctlbyname("hw.memsize", &memsize, &len, NULL, 0);
-    return xr_int(memsize);
+    if (sysctlbyname("hw.memsize", &memsize, &len, NULL, 0) == 0 && memsize > 0)
+        return xr_int(xr_os_core_memory_bytes((uint64_t) memsize, 1));
+    return xr_int(0);
 #elif defined(XR_OS_LINUX)
     struct sysinfo si;
     if (sysinfo(&si) == 0)
-        return xr_int((int64_t) si.totalram * si.mem_unit);
+        return xr_int(xr_os_core_memory_bytes((uint64_t) si.totalram, (uint64_t) si.mem_unit));
     return xr_int(0);
 #else
     return xr_int(0);
@@ -389,25 +386,34 @@ static XrValue os_freeMemory(XrVMRuntime *X, XrValue *args, int argc) {
     MEMORYSTATUSEX statex;
     statex.dwLength = sizeof(statex);
     if (GlobalMemoryStatusEx(&statex))
-        return xr_int((int64_t) statex.ullAvailPhys);
+        return xr_int(xr_os_core_memory_bytes((uint64_t) statex.ullAvailPhys, 1));
     return xr_int(0);
 #elif defined(XR_OS_MACOS)
     vm_statistics64_data_t vm_stat;
     mach_msg_type_number_t count = HOST_VM_INFO64_COUNT;
     if (host_statistics64(mach_host_self(), HOST_VM_INFO64, (host_info64_t) &vm_stat, &count) ==
         KERN_SUCCESS) {
-        int64_t free_bytes = (int64_t) (vm_stat.free_count + vm_stat.inactive_count) * vm_page_size;
-        return xr_int(free_bytes);
+        uint64_t pages = (uint64_t) vm_stat.free_count + (uint64_t) vm_stat.inactive_count;
+        return xr_int(xr_os_core_memory_bytes(pages, (uint64_t) vm_page_size));
     }
     return xr_int(0);
 #elif defined(XR_OS_LINUX)
     struct sysinfo si;
     if (sysinfo(&si) == 0)
-        return xr_int((int64_t) si.freeram * si.mem_unit);
+        return xr_int(xr_os_core_memory_bytes((uint64_t) si.freeram, (uint64_t) si.mem_unit));
     return xr_int(0);
 #else
     return xr_int(0);
 #endif
+}
+
+static double os_monotonic_uptime_seconds(void) {
+#ifdef XR_OS_POSIX
+    struct timespec ts;
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) == 0)
+        return xr_os_core_seconds_from_nsec((int64_t) ts.tv_sec, (int64_t) ts.tv_nsec);
+#endif
+    return 0.0;
 }
 
 // uptime() - Get system uptime in seconds
@@ -423,14 +429,15 @@ static XrValue os_uptime(XrVMRuntime *X, XrValue *args, int argc) {
     size_t len = sizeof(boottime);
     if (sysctlbyname("kern.boottime", &boottime, &len, NULL, 0) == 0) {
         time_t now = time(NULL);
-        return xr_float((double) (now - boottime.tv_sec));
+        return xr_float(
+            xr_os_core_uptime_from_boot_seconds((int64_t) now, (int64_t) boottime.tv_sec));
     }
-    return xr_float(0.0);
+    return xr_float(os_monotonic_uptime_seconds());
 #elif defined(XR_OS_LINUX)
     struct sysinfo si;
     if (sysinfo(&si) == 0)
         return xr_float((double) si.uptime);
-    return xr_float(0.0);
+    return xr_float(os_monotonic_uptime_seconds());
 #else
     return xr_float(0.0);
 #endif
@@ -445,17 +452,25 @@ static XrValue os_loadavg(XrVMRuntime *X, XrValue *args, int argc) {
     if (!arr)
         return xr_null();
 
-#ifndef XR_OS_WINDOWS
-    double avg[3] = {0};
-    getloadavg(avg, 3);
+    double avg[3];
+    xr_os_core_loadavg_zero(avg);
+#if defined(XR_OS_WINDOWS)
+    /* Windows has no load average equivalent in the VM stdlib today. */
+#elif defined(XR_OS_LINUX)
+    struct sysinfo si;
+    if (sysinfo(&si) == 0) {
+        xr_os_core_loadavg_set(avg, xr_os_core_loadavg_from_fixed((uint64_t) si.loads[0]),
+                               xr_os_core_loadavg_from_fixed((uint64_t) si.loads[1]),
+                               xr_os_core_loadavg_from_fixed((uint64_t) si.loads[2]));
+    }
+#else
+    double probed[3];
+    if (getloadavg(probed, 3) == 3)
+        xr_os_core_loadavg_set(avg, probed[0], probed[1], probed[2]);
+#endif
     xr_array_push(arr, xr_float(avg[0]));
     xr_array_push(arr, xr_float(avg[1]));
     xr_array_push(arr, xr_float(avg[2]));
-#else
-    xr_array_push(arr, xr_float(0.0));
-    xr_array_push(arr, xr_float(0.0));
-    xr_array_push(arr, xr_float(0.0));
-#endif
 
     return xr_value_from_array(arr);
 }
@@ -516,6 +531,7 @@ static XrCFuncResult os_sleep_done(XrVMRuntime *X, int status, XrValue resume_va
                                    XrValue *result) {
     (void) X;
     (void) status;
+    (void) resume_value;
     (void) ctx;
     *result = xr_null();
     return XR_CFUNC_DONE;
@@ -549,6 +565,37 @@ static XrValue os_clock(XrVMRuntime *X, XrValue *args, int argc) {
 
 /* ========== Process Execution (P0) ========== */
 
+static bool os_exec_buffer_init(char **buf, size_t *len, size_t *cap) {
+    if (!buf || !len || !cap)
+        return false;
+    *len = 0;
+    *cap = XR_OS_CORE_EXEC_INITIAL_CAP;
+    *buf = (char *) xr_malloc(*cap);
+    if (!*buf) {
+        *cap = 0;
+        return false;
+    }
+    (*buf)[0] = '\0';
+    return true;
+}
+
+static bool os_exec_buffer_append(char **buf, size_t *len, size_t *cap, const char *data,
+                                  size_t data_len) {
+    if (!buf || !*buf || !len || !cap || (!data && data_len > 0))
+        return false;
+    size_t new_cap = 0;
+    if (!xr_os_core_exec_buffer_next_cap(*len, *cap, data_len, &new_cap))
+        return false;
+    if (new_cap > *cap) {
+        char *grown = (char *) xr_realloc(*buf, new_cap);
+        if (!grown)
+            return false;
+        *buf = grown;
+        *cap = new_cap;
+    }
+    return xr_os_core_exec_buffer_append_raw(*buf, len, *cap, data, data_len);
+}
+
 #ifndef XR_OS_WINDOWS
 typedef struct {
     int fd;
@@ -560,13 +607,12 @@ typedef struct {
 
 static bool exec_pipe_init(XrExecPipe *pipe, int fd) {
     pipe->fd = fd;
+    pipe->buf = NULL;
     pipe->len = 0;
-    pipe->cap = 4096;
+    pipe->cap = 0;
     pipe->open = true;
-    pipe->buf = (char *) xr_malloc(pipe->cap);
-    if (!pipe->buf)
+    if (!os_exec_buffer_init(&pipe->buf, &pipe->len, &pipe->cap))
         return false;
-    pipe->buf[0] = '\0';
 
     int flags = fcntl(fd, F_GETFL, 0);
     if (flags >= 0) {
@@ -591,18 +637,7 @@ static void exec_pipe_free(XrExecPipe *pipe) {
 }
 
 static bool exec_pipe_append(XrExecPipe *pipe, const char *data, size_t n) {
-    if (pipe->len + n + 1 > pipe->cap) {
-        size_t new_cap = pipe->cap;
-        while (pipe->len + n + 1 > new_cap)
-            new_cap *= 2;
-        if (!XR_REALLOC(pipe->buf, new_cap))
-            return false;
-        pipe->cap = new_cap;
-    }
-    memcpy(pipe->buf + pipe->len, data, n);
-    pipe->len += n;
-    pipe->buf[pipe->len] = '\0';
-    return true;
+    return os_exec_buffer_append(&pipe->buf, &pipe->len, &pipe->cap, data, n);
 }
 
 static bool exec_pipe_drain(XrExecPipe *pipe) {
@@ -695,46 +730,36 @@ static XrValue os_exec(XrVMRuntime *X, XrValue *args, int argc) {
         return xr_null();
 
     char buf[4096];
-    size_t len = 0, cap = 4096;
-    char *output = (char *) xr_malloc(cap);
-    if (!output) {
+    size_t len = 0;
+    size_t cap = 0;
+    char *output = NULL;
+    if (!os_exec_buffer_init(&output, &len, &cap)) {
         _pclose(fp);
         return xr_null();
     }
 
     size_t n;
     while ((n = fread(buf, 1, sizeof(buf), fp)) > 0) {
-        if (len + n + 1 >= cap) {
-            size_t new_cap = cap * 2;
-            while (len + n + 1 >= new_cap)
-                new_cap *= 2;
-            if (!XR_REALLOC(output, new_cap)) {
-                xr_free(output);
-                _pclose(fp);
-                return xr_null();
-            }
-            cap = new_cap;
+        if (!os_exec_buffer_append(&output, &len, &cap, buf, n)) {
+            xr_free(output);
+            _pclose(fp);
+            return xr_null();
         }
-        memcpy(output + len, buf, n);
-        len += n;
     }
-    output[len] = '\0';
     // _pclose returns the same wait-style encoding as _cwait/_spawn, so the
     // exit code lives in the low-order byte only when the child terminated
     // normally. Treat negative values (close itself failed) as -1.
     int raw_status = _pclose(fp);
-    int exit_code = raw_status;
-    if (raw_status < 0) {
-        exit_code = -1;
-    } else {
-        exit_code = raw_status & 0xFF;
-    }
+    int64_t exit_code = xr_os_core_exec_windows_exit_code(raw_status);
 
     XrJson *json = xr_json_new(xr_current_coro(X));
     XR_CHECK(json != NULL, "os_exec: json alloc failed");
-    xr_json_set_by_key(X, json, "stdout", xrs_string_value_c(X, output));
-    xr_json_set_by_key(X, json, "stderr", xrs_string_value_c(X, ""));
-    xr_json_set_by_key(X, json, "exitCode", xr_int(exit_code));
+    xr_json_set_by_key(X, json, XR_OS_CORE_EXEC_FIELD_NAMES[XR_OS_CORE_EXEC_STDOUT],
+                       xrs_string_value_c(X, output));
+    xr_json_set_by_key(X, json, XR_OS_CORE_EXEC_FIELD_NAMES[XR_OS_CORE_EXEC_STDERR],
+                       xrs_string_value_c(X, ""));
+    xr_json_set_by_key(X, json, XR_OS_CORE_EXEC_FIELD_NAMES[XR_OS_CORE_EXEC_EXIT_CODE],
+                       xr_int(exit_code));
     xr_free(output);
     return xr_json_value(json);
 #else
@@ -794,9 +819,12 @@ static XrValue os_exec(XrVMRuntime *X, XrValue *args, int argc) {
 
     XrJson *json = xr_json_new(xr_current_coro(X));
     XR_CHECK(json != NULL, "os_exec: json alloc failed");
-    xr_json_set_by_key(X, json, "stdout", xrs_string_value_c(X, stdout_buf ? stdout_buf : ""));
-    xr_json_set_by_key(X, json, "stderr", xrs_string_value_c(X, stderr_buf ? stderr_buf : ""));
-    xr_json_set_by_key(X, json, "exitCode", xr_int(exit_code));
+    xr_json_set_by_key(X, json, XR_OS_CORE_EXEC_FIELD_NAMES[XR_OS_CORE_EXEC_STDOUT],
+                       xrs_string_value_c(X, stdout_buf ? stdout_buf : ""));
+    xr_json_set_by_key(X, json, XR_OS_CORE_EXEC_FIELD_NAMES[XR_OS_CORE_EXEC_STDERR],
+                       xrs_string_value_c(X, stderr_buf ? stderr_buf : ""));
+    xr_json_set_by_key(X, json, XR_OS_CORE_EXEC_FIELD_NAMES[XR_OS_CORE_EXEC_EXIT_CODE],
+                       xr_int(exit_code));
 
     xr_free(stdout_buf);
     xr_free(stderr_buf);
@@ -808,79 +836,27 @@ static XrValue os_exec(XrVMRuntime *X, XrValue *args, int argc) {
 
 // Get operating system name
 static const char *get_platform(void) {
-#if defined(XR_OS_WINDOWS) || defined(_WIN64)
-    return "windows";
-#elif defined(XR_OS_MACOS) && defined(__MACH__)
-    return "darwin";
-#elif defined(XR_OS_LINUX)
-    return "linux";
-#elif defined(XR_OS_BSD)
-    return "freebsd";
-#elif defined(XR_OS_BSD)
-    return "openbsd";
-#else
-    return "unknown";
-#endif
+    return xr_os_core_platform();
 }
 
 // Get processor architecture
 static const char *get_arch(void) {
-#if defined(__aarch64__) || defined(_M_ARM64)
-    return "arm64";
-#elif defined(__x86_64__) || defined(_M_X64)
-    return "x64";
-#elif defined(__i386__) || defined(_M_IX86)
-    return "x86";
-#elif defined(__arm__) || defined(_M_ARM)
-    return "arm";
-#else
-    return "unknown";
-#endif
+    return xr_os_core_arch();
+}
+
+static const char *get_sep(void) {
+    return xr_os_core_sep();
+}
+
+static const char *get_eol(void) {
+    return xr_os_core_eol();
 }
 
 /* ========== Module Loading ========== */
 
-// ========== Type Declarations (parsed by gen_stdlib_types.py) ==========
-
-#include "../../src/module/xbuiltin_decl.h"
-
-// @module os
-// @handle ExecResult { const stdout: string, const stderr: string, const exitCode: int }
-
-XR_DEFINE_BUILTIN(os_getenv, "getenv", "(name: string): string?", "Get environment variable")
-XR_DEFINE_BUILTIN(os_setenv, "setenv", "(name: string, value: string): bool",
-                  "Set environment variable")
-XR_DEFINE_BUILTIN(os_unsetenv, "unsetenv", "(name: string): bool", "Unset environment variable")
-XR_DEFINE_BUILTIN(os_environ, "environ", "(): Map<string, string>", "Get all environment variables")
-XR_DEFINE_BUILTIN(os_exit, "exit", "(code?: int): ()", "Exit process")
-XR_DEFINE_BUILTIN(os_getpid, "getpid", "(): int", "Get process ID")
-XR_DEFINE_BUILTIN(os_getcwd, "getcwd", "(): string", "Get current working directory")
-XR_DEFINE_BUILTIN(os_chdir, "chdir", "(path: string): bool", "Change working directory")
-XR_DEFINE_BUILTIN(os_hostname, "hostname", "(): string", "Get hostname")
-XR_DEFINE_BUILTIN(os_tmpdir, "tmpdir", "(): string", "Get temporary directory path")
-
-// User information
-XR_DEFINE_BUILTIN(os_username, "username", "(): string?", "Get current user name")
-XR_DEFINE_BUILTIN(os_homedir, "homedir", "(): string?", "Get user home directory")
-XR_DEFINE_BUILTIN(os_uid, "uid", "(): int", "Get user ID")
-XR_DEFINE_BUILTIN(os_gid, "gid", "(): int", "Get group ID")
-
-// System information
-XR_DEFINE_BUILTIN(os_cpuCount, "cpuCount", "(): int", "Get number of CPU cores")
-XR_DEFINE_BUILTIN(os_totalMemory, "totalMemory", "(): int", "Get total system memory in bytes")
-XR_DEFINE_BUILTIN(os_freeMemory, "freeMemory", "(): int", "Get available system memory in bytes")
-XR_DEFINE_BUILTIN(os_uptime, "uptime", "(): float", "Get system uptime in seconds")
-XR_DEFINE_BUILTIN(os_loadavg, "loadavg", "(): Array<float>",
-                  "Get system load averages (1, 5, 15 min)")
-
-// Process & signal
-XR_DEFINE_BUILTIN(os_ppid, "ppid", "(): int", "Get parent process ID")
-XR_DEFINE_BUILTIN(os_kill, "kill", "(pid: int, signal?: int): bool", "Send signal to process")
-XR_DEFINE_BUILTIN(os_sleep, "sleep", "(ms: int): ()", "Sleep for milliseconds")
-XR_DEFINE_BUILTIN(os_clock, "clock", "(): float", "Get process CPU time in seconds")
-
-// Process execution
-XR_DEFINE_BUILTIN(os_exec, "exec", "(cmd: string): ExecResult?", "Execute shell command")
+#define XR_STDLIB_VM_BIND_MODULE_OS 1
+#include "../../src/stdlib/xstdlib_vm_bindings_generated.inc.c"
+#undef XR_STDLIB_VM_BIND_MODULE_OS
 
 XR_FUNC XrModule *xr_load_module_os(XrVMRuntime *isolate) {
     XR_DCHECK(isolate != NULL, "xr_load_module_os: NULL isolate");
@@ -890,55 +866,8 @@ XR_FUNC XrModule *xr_load_module_os(XrVMRuntime *isolate) {
     if (!mod)
         return NULL;
 
-    // 2. Add exported functions
-    XRS_EXPORT(mod, isolate, "getenv", os_getenv);
-    XRS_EXPORT(mod, isolate, "setenv", os_setenv);
-    XRS_EXPORT(mod, isolate, "unsetenv", os_unsetenv);
-    XRS_EXPORT(mod, isolate, "environ", os_environ);
+    xr_stdlib_vm_bind_os_generated(isolate, mod);
 
-    // Process control
-    XRS_EXPORT(mod, isolate, "exit", os_exit);
-    XRS_EXPORT(mod, isolate, "getpid", os_getpid);
-    XRS_EXPORT(mod, isolate, "getcwd", os_getcwd);
-    XRS_EXPORT(mod, isolate, "chdir", os_chdir);
-    XRS_EXPORT(mod, isolate, "hostname", os_hostname);
-    XRS_EXPORT(mod, isolate, "tmpdir", os_tmpdir);
-
-    // User information
-    XRS_EXPORT(mod, isolate, "username", os_username);
-    XRS_EXPORT(mod, isolate, "homedir", os_homedir);
-    XRS_EXPORT(mod, isolate, "uid", os_uid);
-    XRS_EXPORT(mod, isolate, "gid", os_gid);
-
-    // System information
-    XRS_EXPORT(mod, isolate, "cpuCount", os_cpuCount);
-    XRS_EXPORT(mod, isolate, "totalMemory", os_totalMemory);
-    XRS_EXPORT(mod, isolate, "freeMemory", os_freeMemory);
-    XRS_EXPORT(mod, isolate, "uptime", os_uptime);
-    XRS_EXPORT(mod, isolate, "loadavg", os_loadavg);
-
-    // Process & signal
-    XRS_EXPORT(mod, isolate, "ppid", os_ppid);
-    XRS_EXPORT(mod, isolate, "kill", os_kill);
-    XRS_EXPORT_YIELDABLE(mod, isolate, "sleep", os_sleep);
-    XRS_EXPORT(mod, isolate, "clock", os_clock);
-
-    // Process execution
-    XRS_EXPORT(mod, isolate, "exec", os_exec);
-
-    // 3. Add constants
-    xr_module_add_export(isolate, mod, "platform", xrs_string_value_c(isolate, get_platform()));
-    xr_module_add_export(isolate, mod, "arch", xrs_string_value_c(isolate, get_arch()));
-
-#ifdef XR_OS_WINDOWS
-    xr_module_add_export(isolate, mod, "sep", xrs_string_value_c(isolate, "\\"));
-    xr_module_add_export(isolate, mod, "eol", xrs_string_value_c(isolate, "\r\n"));
-#else
-    xr_module_add_export(isolate, mod, "sep", xrs_string_value_c(isolate, "/"));
-    xr_module_add_export(isolate, mod, "eol", xrs_string_value_c(isolate, "\n"));
-#endif
-
-    // 4. Mark as loaded
     mod->loaded = true;
     return mod;
 }

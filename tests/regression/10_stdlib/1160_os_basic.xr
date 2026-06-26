@@ -68,6 +68,7 @@ fn test_setenv_overwrite() {
 
 @test
 fn test_environ() {
+    os.setenv("XRAY_TEST_ENV_EMPTY", "")
     let env = os.environ()
     // PATH should exist; Windows may store it as "Path"
     let path = env.get("PATH")
@@ -75,6 +76,8 @@ fn test_environ() {
         path = env.get("Path")
     }
     assert(path != null)
+    assert_eq(env.get("XRAY_TEST_ENV_EMPTY"), "")
+    os.unsetenv("XRAY_TEST_ENV_EMPTY")
 }
 
 // ===== Process Info =====
@@ -101,6 +104,35 @@ fn test_hostname() {
 fn test_tmpdir() {
     let tmp = os.tmpdir()
     assert(tmp.length > 0)
+}
+
+@test
+fn test_tmpdir_skips_empty_env_candidate() {
+    let oldTmpdir = os.getenv("TMPDIR")
+    let oldTmp = os.getenv("TMP")
+    let oldTemp = os.getenv("TEMP")
+
+    os.setenv("TMPDIR", "")
+    os.setenv("TMP", "/tmp/xray_tmpdir_fallback")
+    os.setenv("TEMP", "/tmp/xray_tmpdir_wrong")
+
+    assert_eq(os.tmpdir(), "/tmp/xray_tmpdir_fallback")
+
+    if (oldTmpdir != null) {
+        os.setenv("TMPDIR", oldTmpdir ?? "")
+    } else {
+        os.unsetenv("TMPDIR")
+    }
+    if (oldTmp != null) {
+        os.setenv("TMP", oldTmp ?? "")
+    } else {
+        os.unsetenv("TMP")
+    }
+    if (oldTemp != null) {
+        os.setenv("TEMP", oldTemp ?? "")
+    } else {
+        os.unsetenv("TEMP")
+    }
 }
 
 // ===== chdir =====

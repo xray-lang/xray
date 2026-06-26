@@ -4,40 +4,13 @@
  * the VM's XR_ERR_INDEX_OUT_OF_BOUNDS. An `int` index outside [0, length) —
  * including any negative index — is a fault: there is no from-end wraparound.
  * Defined in xrt_exception.h (pulled in ahead of this header via xrt_arith.h in
- * the full runtime); forward-declared here so the index helpers still parse in
- * standalone TUs that include xrt_coll.h alone (those never reach the throwing
- * path, so the static-inline callers are elided). */
-static XRT_COLD _Noreturn void xrt_index_oob(int64_t idx, int64_t length);
-
-static inline size_t xrt_native_type_size(uint8_t native_type) {
-    switch (native_type) {
-        case XR_NATIVE_I64:
-        case XR_NATIVE_U64:
-        case XR_NATIVE_F64:
-        case XR_NATIVE_STRING:
-            return 8;
-        case XR_NATIVE_ARRAY_REF:
-        case XR_NATIVE_MAP_REF:
-        case XR_NATIVE_SET_REF:
-            return sizeof(XrValue);
-        case XR_NATIVE_I32:
-        case XR_NATIVE_U32:
-        case XR_NATIVE_F32:
-            return 4;
-        case XR_NATIVE_I16:
-        case XR_NATIVE_U16:
-            return 2;
-        case XR_NATIVE_I8:
-        case XR_NATIVE_U8:
-        case XR_NATIVE_BOOL:
-            return 1;
-        default:
-            return 8;
-    }
-}
+ * the full runtime); forward-declared here so core-library TUs can link against
+ * the generated program's XRT_IMPL exception entry when a throwing path is
+ * reachable. */
+XRT_COLD _Noreturn void xrt_index_oob(int64_t idx, int64_t length);
 
 static inline XrValue xrt_fixed_array_get(void *base, uint8_t native_type, int64_t idx) {
-    uint8_t *p = (uint8_t *) base + (size_t) idx * xrt_native_type_size(native_type);
+    uint8_t *p = (uint8_t *) base + (size_t) idx * xr_native_type_size(native_type);
     switch (native_type) {
         case XR_NATIVE_F32:
             return XR_FROM_FLOAT((double) *(float *) p);
@@ -66,7 +39,7 @@ static inline XrValue xrt_fixed_array_get(void *base, uint8_t native_type, int64
 
 static inline void xrt_fixed_array_set(void *base, uint8_t native_type, int64_t idx,
                                        XrValue value) {
-    uint8_t *p = (uint8_t *) base + (size_t) idx * xrt_native_type_size(native_type);
+    uint8_t *p = (uint8_t *) base + (size_t) idx * xr_native_type_size(native_type);
     switch (native_type) {
         case XR_NATIVE_F32:
             *(float *) p = (float) xr_value_to_f64_coerce(value);
@@ -106,7 +79,7 @@ static inline void xrt_fixed_array_set(void *base, uint8_t native_type, int64_t 
 
 static inline void xrt_fixed_array_copy(void *dst, XrValue src, uint8_t native_type,
                                         uint16_t elem_count) {
-    size_t elem_size = xrt_native_type_size(native_type);
+    size_t elem_size = xr_native_type_size(native_type);
     int64_t count = 0;
     if (XR_IS_ARRAY_REF(src)) {
         uint16_t src_count = XR_ARRAY_REF_ELEM_COUNT(src);
@@ -130,37 +103,16 @@ static inline void xrt_fixed_array_copy(void *dst, XrValue src, uint8_t native_t
                (size_t) (elem_count - count) * elem_size);
 }
 
-static inline int xrt_utf8_char_size(unsigned char lead) {
-    if ((lead & 0x80u) == 0)
-        return 1;
-    if ((lead & 0xE0u) == 0xC0u)
-        return 2;
-    if ((lead & 0xF0u) == 0xE0u)
-        return 3;
-    if ((lead & 0xF8u) == 0xF0u)
-        return 4;
-    return 1;
-}
-
 static inline XrValue xrt_string_index_get(XrValue obj, int64_t target) {
-    if (!XR_IS_STR(obj) || target < 0)
+    if (!XR_IS_STR(obj))
         return XR_NULL_VAL;
-    const char *s = xr_str_data(obj);
-    size_t slen = (size_t) xr_str_len(obj);
-    const unsigned char *p = (const unsigned char *) s;
-    const unsigned char *end = p + slen;
-    for (int64_t char_index = 0; p < end; char_index++) {
-        int size = xrt_utf8_char_size(*p);
-        if (p + size > end)
-            size = 1;
-        if (char_index == target) {
-            XrValue sv = xrt_str_alloc((size_t) size);
-            memcpy(xr_str_buf(sv), p, (size_t) size);
-            return sv;
-        }
-        p += size;
-    }
-    return XR_NULL_VAL;
+    XrStringCoreSlice slice =
+        xr_string_core_utf8_index_slice_at(xr_str_data(obj), (size_t) xr_str_len(obj), target);
+    if (slice.len == 0)
+        return XR_NULL_VAL;
+    XrValue sv = xrt_str_alloc(slice.len);
+    memcpy(xr_str_buf(sv), slice.data, slice.len);
+    return sv;
 }
 
 static inline XrValue xrt_index_get(XrValue obj, XrValue key) {
@@ -201,21 +153,15 @@ static inline void xrt_index_set(XrValue obj, XrValue key, XrValue val) {
             xrt_fixed_array_set(obj.ptr, XR_ARRAY_REF_ELEM_TYPE(obj), idx, val);
             return;
         }
-        fprintf(stderr, "fixed array index out of range: %lld (length %u)\n", (long long) idx,
-                (unsigned) count);
-        abort();
+        xrt_index_oob(idx, count);
     }
     if (XR_IS_ARRAY(obj) && key.tag == XR_TAG_I64) {
         xrt_array_t *a = (xrt_array_t *) obj.ptr;
-        int64_t idx = key.i;
-        if (idx < 0)
-            idx += a->length;
-        if (XR_LIKELY(idx >= 0 && idx < a->length)) {
-            xr_typed_set(a->data, (int32_t) idx, val, a->elem_type);
-        } else if (idx >= 0) {
-            while (a->length < idx)
-                xrt_array_push(obj, XR_NULL_VAL);
-            xrt_array_push(obj, val);
+        XrArrayCoreIndexSetPlan plan = xr_array_core_index_set_plan(a->length, key.i);
+        if (XR_LIKELY(plan.kind == XR_ARRAY_CORE_INDEX_SET_WRITE)) {
+            xr_typed_set(a->data, (int32_t) plan.index, val, a->elem_type);
+        } else {
+            xrt_index_oob(key.i, a->length);
         }
     } else if (XR_IS_MAP(obj)) {
         xrt_map_set((xrt_map_t *) obj.ptr, key, val);

@@ -77,8 +77,8 @@ vmcase(OP_BYTES_NEW) {
     int nargs = GETARG_B(i);
     int storage_mode = GETARG_C(i);
 
-    int32_t len = 0;
-    uint8_t fill_val = 0;
+    int64_t len = 0;
+    XrValue fill_value = XR_NULL_VAL;
     bool has_fill = false;
     XrArray *src_arr = NULL;
 
@@ -87,57 +87,53 @@ vmcase(OP_BYTES_NEW) {
     } else if (nargs == 1) {
         XrValue arg = R(a + 1);
         if (XR_IS_INT(arg)) {
-            len = (int32_t) XR_TO_INT(arg);
-            if (len < 0)
-                len = 0;
+            len = xr_array_core_nonnegative_length(XR_TO_INT(arg));
             has_fill = true;
-            fill_val = 0;
+            fill_value = XR_FROM_INT(0);
         } else if (XR_IS_ARRAY(arg)) {
             src_arr = XR_TO_ARRAY(arg);
             len = src_arr->length;
         } else {
-            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Bytes(n): n must be integer or array");
+            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTES_CONSTRUCTOR_EXPECTS_MSG);
         }
     } else if (nargs == 2) {
         XrValue arg1 = R(a + 1);
         XrValue arg2 = R(a + 2);
         if (!XR_IS_INT(arg1) || !XR_IS_INT(arg2)) {
-            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Bytes(n, value): both args must be integers");
+            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
+                             XR_ERROR_CORE_BYTES_CONSTRUCTOR_FILL_EXPECTS_MSG);
         }
-        len = (int32_t) XR_TO_INT(arg1);
-        if (len < 0)
-            len = 0;
-        fill_val = (uint8_t) (XR_TO_INT(arg2) & 0xFF);
+        len = xr_array_core_nonnegative_length(XR_TO_INT(arg1));
+        fill_value = arg2;
         has_fill = true;
     } else {
         VM_RUNTIME_ERROR(XR_ERR_WRONG_ARG_COUNT, "Bytes() requires 0, 1 or 2 arguments");
     }
 
     XrArray *arr = NULL;
+    if (len > INT32_MAX) {
+        VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, "Bytes length exceeds VM allocation limit");
+    }
     if (storage_mode != 0 && xr_isolate_get_sys_heap(isolate)) {
         // Shared: allocate on system heap
         arr = (XrArray *) xr_sysheap_alloc_shared(xr_isolate_get_sys_heap(isolate), sizeof(XrArray),
                                                   XR_TARRAY);
         if (arr) {
-            xr_array_init_inplace(arr, len > 0 ? len : 4, XR_ELEM_U8);
+            xr_array_init_inplace(arr, len > 0 ? (int) len : 4, XR_ELEM_U8);
             XR_OBJ_SET_STORAGE(&arr->hdr, XR_OBJ_STORAGE_SHARED);
             xr_shared_set_refc(&arr->hdr, 1);
         }
     } else {
-        arr = xr_array_with_capacity_typed(VM_CURRENT_CORO, len > 0 ? len : 0, XR_ELEM_U8);
+        arr = xr_array_with_capacity_typed(VM_CURRENT_CORO, len > 0 ? (int) len : 0, XR_ELEM_U8);
     }
 
     if (arr) {
         if (src_arr) {
-            // Copy from source array
-            uint8_t *dst = (uint8_t *) arr->data;
-            for (int32_t j = 0; j < len; j++) {
-                XrValue elem = ((XrValue *) src_arr->data)[j];
-                dst[j] = XR_IS_INT(elem) ? (uint8_t) (XR_TO_INT(elem) & 0xFF) : 0;
-            }
+            (void) xr_array_core_bytes_copy_from_typed(arr->data, len, src_arr->data,
+                                                       src_arr->length, src_arr->elem_type);
             arr->length = len;
         } else if (has_fill && len > 0) {
-            memset(arr->data, fill_val, len);
+            (void) xr_array_core_bytes_fill_value(arr->data, len, fill_value);
             arr->length = len;
         }
     }

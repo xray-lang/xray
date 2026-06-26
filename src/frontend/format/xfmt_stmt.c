@@ -16,6 +16,7 @@
  */
 
 #include "xfmt_internal.h"
+#include "../../base/xmalloc.h"
 #include <string.h>
 
 // ----------------------------------------------------------------------------
@@ -136,6 +137,35 @@ static void fmt_try_catch(XrFmtContext *ctx, AstNode *node) {
     xfmt_write_newline(ctx);
 }
 
+static int fmt_select_case_head(XrFmtContext *ctx, SelectCaseNode *sc) {
+    size_t saved_len = ctx->length;
+    int indent_chars =
+        ctx->config->use_tabs ? ctx->indent_level : ctx->indent_level * ctx->config->indent_size;
+
+    xfmt_write_indent(ctx);
+    if (sc->is_default) {
+        xfmt_write_char(ctx, '_');
+    } else if (sc->is_timeout) {
+        xfmt_write_str(ctx, "after ");
+        xfmt_emit_expression(ctx, sc->value);
+    } else if (sc->is_send) {
+        xfmt_emit_expression(ctx, sc->value);
+        xfmt_write_str(ctx, " to ");
+        xfmt_emit_expression(ctx, sc->channel);
+    } else {
+        xfmt_write_str(ctx, sc->var_name);
+        xfmt_write_str(ctx, " from ");
+        xfmt_emit_expression(ctx, sc->channel);
+    }
+
+    for (size_t k = saved_len; k < ctx->length; k++) {
+        if (ctx->output[k] == '\n')
+            return -1;
+    }
+    int width = (int) (ctx->length - saved_len) - indent_chars;
+    return width < 0 ? 0 : width;
+}
+
 static void fmt_select_stmt(XrFmtContext *ctx, AstNode *node) {
     xfmt_write_indent(ctx);
     xfmt_write_str(ctx, "select {");
@@ -143,24 +173,43 @@ static void fmt_select_stmt(XrFmtContext *ctx, AstNode *node) {
     ctx->indent_level++;
 
     SelectStmtNode *sel = &node->as.select_stmt;
+    int *widths = NULL;
+    int max_width = 0;
+    bool align = ctx->config && ctx->config->align_branch_arrows && sel->case_count > 1;
+    if (align) {
+        widths = (int *) xr_malloc(sizeof(int) * (size_t) sel->case_count);
+        if (!widths)
+            align = false;
+    }
+    if (align) {
+        for (int i = 0; i < sel->case_count; i++) {
+            AstNode *c = sel->cases[i];
+            SelectCaseNode *sc = &c->as.select_case;
+            size_t saved_len = ctx->length;
+            int saved_col = ctx->column;
+            int saved_line_start = ctx->line_start;
+
+            int w = fmt_select_case_head(ctx, sc);
+            widths[i] = w;
+            if (w > max_width)
+                max_width = w;
+
+            ctx->length = saved_len;
+            ctx->output[ctx->length] = '\0';
+            ctx->column = saved_col;
+            ctx->line_start = saved_line_start;
+        }
+    }
+
     for (int i = 0; i < sel->case_count; i++) {
         AstNode *c = sel->cases[i];
         SelectCaseNode *sc = &c->as.select_case;
 
-        xfmt_write_indent(ctx);
-        if (sc->is_default) {
-            xfmt_write_char(ctx, '_');
-        } else if (sc->is_timeout) {
-            xfmt_write_str(ctx, "after ");
-            xfmt_emit_expression(ctx, sc->value);
-        } else if (sc->is_send) {
-            xfmt_emit_expression(ctx, sc->value);
-            xfmt_write_str(ctx, " to ");
-            xfmt_emit_expression(ctx, sc->channel);
-        } else {
-            xfmt_write_str(ctx, sc->var_name);
-            xfmt_write_str(ctx, " from ");
-            xfmt_emit_expression(ctx, sc->channel);
+        int w = fmt_select_case_head(ctx, sc);
+        if (align && widths && widths[i] >= 0 && w >= 0) {
+            int pad = max_width - w;
+            for (int j = 0; j < pad; j++)
+                xfmt_write_char(ctx, ' ');
         }
         xfmt_write_str(ctx, " -> ");
 
@@ -176,6 +225,8 @@ static void fmt_select_stmt(XrFmtContext *ctx, AstNode *node) {
     xfmt_write_indent(ctx);
     xfmt_write_char(ctx, '}');
     xfmt_write_newline(ctx);
+    if (widths)
+        xr_free(widths);
 }
 
 // ----------------------------------------------------------------------------

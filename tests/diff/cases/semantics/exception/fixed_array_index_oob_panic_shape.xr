@@ -1,0 +1,44 @@
+// anchor: fixed-array-index-oob-panic-shape
+struct Buf {
+    data: [4]int
+}
+
+fn show_direct_read(i: int) {
+    let buf = Buf{data: [1, 2, 3, 4]}
+    try {
+        print(buf.data[i])
+    } catch panic (p) {
+        print(p.message)
+        print(p.code)
+    }
+}
+
+fn show_direct_write(i: int) {
+    let buf = Buf{data: [1, 2, 3, 4]}
+    try {
+        buf.data[i] = 9
+        print(buf.data[0])
+    } catch panic (p) {
+        print(p.message)
+        print(p.code)
+    }
+}
+
+fn write_view(view: [4]int, i: int) {
+    view[i] = 9
+}
+
+fn show_view_write(i: int) {
+    let buf = Buf{data: [1, 2, 3, 4]}
+    try {
+        write_view(buf.data, i)
+        print(buf.data[0])
+    } catch panic (p) {
+        print(p.message)
+        print(p.code)
+    }
+}
+
+show_direct_read(-1)
+show_direct_write(4)
+show_view_write(5)

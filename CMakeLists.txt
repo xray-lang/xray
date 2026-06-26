@@ -78,6 +78,8 @@ set(XRAY_GEN_AOT_METADATA_DEPS
 set(XRAY_GEN_STDLIB_METADATA_DEPS
     ${CMAKE_SOURCE_DIR}/src/aot/xstdlib_aot_methods_generated.inc.c
     ${CMAKE_SOURCE_DIR}/src/aot/xaot_stdlib_generated.inc.c
+    ${CMAKE_SOURCE_DIR}/src/stdlib/xstdlib_vm_bindings_generated.inc.c
+    ${CMAKE_SOURCE_DIR}/src/stdlib/xstdlib_class_bindings_generated.inc.c
     ${CMAKE_SOURCE_DIR}/src/stdlib/xstdlib_defs_generated.h
 )
 
@@ -1188,6 +1190,30 @@ if(BUILD_TESTS)
     )
 
     add_test(
+        NAME stdlib_lsp_stdlib_sync
+        COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/gen_stdlib_types.py
+                --check
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(stdlib_lsp_stdlib_sync PROPERTIES
+        LABELS "stdlib;metadata;generated;lsp"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
+        NAME stdlib_def_source_gate
+        COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_stdlib_def_source.py
+                --root ${CMAKE_CURRENT_SOURCE_DIR}
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(stdlib_def_source_gate PROPERTIES
+        LABELS "stdlib;metadata;generated"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
         NAME aot_filetests
         COMMAND ${CMAKE_COMMAND} -E env
                 XRAY_AOT_FILETEST_JOBS=${XRAY_CTEST_AOT_FILETEST_JOBS}
@@ -1283,6 +1309,21 @@ if(BUILD_TESTS)
         LABELS "aot;link;stdlib;smoke"
         PROCESSORS 2
         TIMEOUT 120
+    )
+
+    # Broad AOT manifest sweep: non-runtime diff cases must remain freestanding
+    # and must not accidentally pull xray_rt_coro/xray_core.
+    add_test(
+        NAME aot_manifest_sweep
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_aot_manifest_sweep_tests.py
+                --xray $<TARGET_FILE:xray>
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(aot_manifest_sweep PROPERTIES
+        LABELS "aot;link;manifest;smoke"
+        PROCESSORS 1
+        TIMEOUT 180
     )
 
     # Isolate/runtime split guard (132/M0 + 133/I0/I4): AOT binaries must stay
@@ -1411,6 +1452,7 @@ if(BUILD_TESTS)
         NAME backend_diff
         COMMAND ${CMAKE_COMMAND} -E env
                 XRAY_DIFF_MAX_AUTO_JOBS=${XRAY_CTEST_DIFF_JOBS}
+                XRAY_DIFF_COLD_MAX_AUTO_JOBS=4
                 XRAY_DIFF_HOT_MAX_AUTO_JOBS=8
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/diff/run_backend_diff.sh
                 $<TARGET_FILE:xray>

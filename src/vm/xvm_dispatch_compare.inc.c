@@ -293,8 +293,10 @@ vmcase(OP_CHECKTYPE) {
                 pos += nl;
             }
             expect_buf[pos] = '\0';
-            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "TypeError: expected '%s', got '%s'", expect_buf,
-                             xr_typeid_name(actual_tid));
+            char err_buf[XR_ERROR_CORE_TYPE_MISMATCH_BUFSZ];
+            xr_error_core_format_type_mismatch(err_buf, sizeof(err_buf), expect_buf,
+                                               xr_typeid_name(actual_tid));
+            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "%s", err_buf);
         }
     }
     vmbreak;

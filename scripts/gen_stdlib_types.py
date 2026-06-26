@@ -9,9 +9,10 @@ Licensed under the MIT License
 gen_stdlib_types.py - Generate analyzer builtin type declarations
 
 KEY CONCEPT:
-  Uses stdlib/defs/*.def as the primary declaration source for migrated module
-  functions, then falls back to C annotations for handles, constants, builtin
-  types, and modules not yet migrated to declarative metadata.
+  Uses stdlib/defs/*.def as the declaration source for in-tree stdlib module
+  functions, constants, handles, and type methods. C annotations are kept only
+  for --xrd mode, where third-party native modules can generate declarations
+  from their own C source.
 
   Supports two output modes:
     --embed (default): Generate xanalyzer_builtins_generated.h (for stdlib)
@@ -27,7 +28,6 @@ This ensures type declarations stay in sync with runtime implementations.
 
 import argparse
 import difflib
-import os
 import re
 import sys
 from pathlib import Path
@@ -35,14 +35,9 @@ from pathlib import Path
 # Project root
 PROJECT_ROOT = Path(__file__).parent.parent
 
-# Source directories to scan (embed mode)
-STDLIB_DIRS = [
-    PROJECT_ROOT / "stdlib",
-    PROJECT_ROOT / "src" / "module",
-]
-
-# Output file (embed mode)
+# Output files (embed mode)
 OUTPUT_FILE = PROJECT_ROOT / "src" / "frontend" / "analyzer" / "xanalyzer_builtins_generated.h"
+LSP_OUTPUT_FILE = PROJECT_ROOT / "src" / "app" / "lsp" / "xlsp_stdlib_generated.inc"
 STDLIBGEN_TOOL_DIR = PROJECT_ROOT / "tools" / "stdlibgen"
 
 # Pattern to match method/function definitions in C
@@ -107,7 +102,8 @@ HANDLE_PATTERN = re.compile(
 
 # Pattern to parse individual handle fields
 HANDLE_FIELD_PATTERN = re.compile(
-    r'(const\s+)?(\w+)\s*:\s*(\w+)'
+    r'(const\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*:\s*'
+    r'([A-Za-z_][A-Za-z0-9_]*(?:<[^,{}]+>)?\??)'
 )
 
 
@@ -254,13 +250,83 @@ def load_def_module_methods():
     return modules
 
 
-def merge_def_module_methods(module_results, def_methods):
-    """Overlay .def methods onto C-scanned module declarations.
+def load_def_module_constants():
+    """Load migrated module constants from stdlib/defs/*.def."""
+    sys.path.insert(0, str(STDLIBGEN_TOOL_DIR))
+    try:
+        from stdlibgen import parse_constants
+    except Exception as e:
+        raise SystemExit(f"Error: cannot import stdlibgen parser: {e}") from e
+    finally:
+        try:
+            sys.path.remove(str(STDLIBGEN_TOOL_DIR))
+        except ValueError:
+            pass
 
-    C annotations still own handles, constants, and modules not yet migrated.
-    For migrated functions, .def metadata is the primary source of signature
-    and documentation used by analyzer/LSP/MCP-facing builtin tables.
-    """
+    modules = {}
+    for entry in parse_constants(PROJECT_ROOT):
+        modules.setdefault(entry.module, []).append({
+            'name': entry.name,
+            'signature': entry.signature,
+            'doc': entry.doc,
+        })
+    return modules
+
+
+def load_def_module_handles():
+    """Load migrated handle declarations from stdlib/defs/*.def."""
+    sys.path.insert(0, str(STDLIBGEN_TOOL_DIR))
+    try:
+        from stdlibgen import parse_handles
+    except Exception as e:
+        raise SystemExit(f"Error: cannot import stdlibgen parser: {e}") from e
+    finally:
+        try:
+            sys.path.remove(str(STDLIBGEN_TOOL_DIR))
+        except ValueError:
+            pass
+
+    modules = {}
+    for entry in parse_handles(PROJECT_ROOT):
+        modules.setdefault(entry.module, []).append({
+            'name': entry.name,
+            'fields': [
+                {
+                    'name': field.name,
+                    'type': field.type,
+                    'is_const': field.is_const,
+                }
+                for field in entry.fields
+            ],
+        })
+    return modules
+
+
+def load_def_type_methods():
+    """Load migrated builtin type methods from stdlib/defs/*.def."""
+    sys.path.insert(0, str(STDLIBGEN_TOOL_DIR))
+    try:
+        from stdlibgen import parse_type_methods
+    except Exception as e:
+        raise SystemExit(f"Error: cannot import stdlibgen parser: {e}") from e
+    finally:
+        try:
+            sys.path.remove(str(STDLIBGEN_TOOL_DIR))
+        except ValueError:
+            pass
+
+    types = {}
+    for entry in parse_type_methods(PROJECT_ROOT):
+        types.setdefault(entry.type_name, []).append({
+            'name': entry.name,
+            'signature': entry.signature,
+            'doc': entry.doc,
+        })
+    return types
+
+
+def merge_def_module_methods(module_results, def_methods):
+    """Merge .def methods into module declarations."""
     replaced = 0
     added = 0
     for mod_name, methods in sorted(def_methods.items()):
@@ -285,13 +351,133 @@ def merge_def_module_methods(module_results, def_methods):
     return replaced, added
 
 
+def merge_def_module_constants(module_results, def_constants):
+    """Overlay .def constants onto C-scanned module declarations."""
+    replaced = 0
+    added = 0
+    for mod_name, constants in sorted(def_constants.items()):
+        mod_data = module_results.setdefault(mod_name, {
+            'handles': [],
+            'methods': [],
+            'handle_methods': {},
+            'constants': [],
+        })
+        by_name = {}
+        for idx, const in enumerate(mod_data.get('constants', [])):
+            by_name.setdefault(const['name'], idx)
+        for const in constants:
+            idx = by_name.get(const['name'])
+            if idx is None:
+                mod_data.setdefault('constants', []).append(const)
+                by_name[const['name']] = len(mod_data['constants']) - 1
+                added += 1
+            else:
+                mod_data['constants'][idx] = const
+                replaced += 1
+    return replaced, added
+
+
+def merge_def_module_handles(module_results, def_handles):
+    """Overlay .def handles onto C-scanned module declarations."""
+    replaced = 0
+    added = 0
+    for mod_name, handles in sorted(def_handles.items()):
+        mod_data = module_results.setdefault(mod_name, {
+            'handles': [],
+            'methods': [],
+            'handle_methods': {},
+            'constants': [],
+        })
+        by_name = {}
+        for idx, handle in enumerate(mod_data.get('handles', [])):
+            by_name.setdefault(handle['name'], idx)
+        for handle in handles:
+            idx = by_name.get(handle['name'])
+            if idx is None:
+                mod_data.setdefault('handles', []).append(handle)
+                by_name[handle['name']] = len(mod_data['handles']) - 1
+                added += 1
+            else:
+                mod_data['handles'][idx] = handle
+                replaced += 1
+    return replaced, added
+
+
+def merge_def_type_methods(type_results, def_type_methods):
+    """Overlay .def type methods onto C-scanned builtin type declarations."""
+    replaced = 0
+    added = 0
+    for type_name, methods in sorted(def_type_methods.items()):
+        current = type_results.setdefault(type_name, [])
+        by_name = {}
+        for idx, method in enumerate(current):
+            by_name.setdefault(method['name'], idx)
+        for method in methods:
+            idx = by_name.get(method['name'])
+            if idx is None:
+                current.append(method)
+                by_name[method['name']] = len(current) - 1
+                added += 1
+            else:
+                current[idx] = method
+                replaced += 1
+    return replaced, added
+
+
+def c_string(value):
+    """Escape a Python string as a C string literal body."""
+    if value is None:
+        value = ""
+    return (str(value)
+            .replace('\\', '\\\\')
+            .replace('"', '\\"')
+            .replace('\n', '\\n')
+            .replace('\r', '\\r')
+            .replace('\t', '\\t'))
+
+
+def c_ident(value):
+    """Return a stable C identifier fragment for generated symbol names."""
+    ident = re.sub(r'[^0-9A-Za-z_]', '_', value).lower()
+    if not ident:
+        return "unnamed"
+    if ident[0].isdigit():
+        ident = "_" + ident
+    return ident
+
+
+def lsp_signature(signature):
+    """Convert analyzer/member signatures to the display form LSP expects."""
+    sig = (signature or "").strip()
+    if not sig:
+        return ""
+    if sig.startswith(":"):
+        return sig[1:].strip()
+    if sig.startswith("fn"):
+        return sig
+    if sig.startswith("("):
+        return "fn" + sig
+    return sig
+
+
+def lsp_kind_for_member(member):
+    signature = (member.get('signature') or "").strip()
+    if member.get('is_method'):
+        return "XLSP_SYM_FUNCTION"
+    if signature.startswith(":"):
+        return "XLSP_SYM_CONSTANT"
+    if '(' in signature:
+        return "XLSP_SYM_FUNCTION"
+    return "XLSP_SYM_PROPERTY"
+
+
 def generate_header(type_results, module_results):
     """Generate the embedded header file content."""
     lines = [
         "/*",
         " * AUTO-GENERATED FILE - DO NOT EDIT",
         " * Generated by scripts/gen_stdlib_types.py",
-        " * Sources: stdlib definition files + C annotations fallback",
+        " * Sources: stdlib definition files",
         " *",
         " * xanalyzer_builtins_generated.h - Generated builtin type declarations",
         " */",
@@ -398,6 +584,75 @@ def generate_header(type_results, module_results):
     return "\n".join(lines)
 
 
+def generate_lsp_include(module_results):
+    """Generate LSP stdlib module declarations from the same module metadata."""
+    lines = [
+        "/*",
+        " * AUTO-GENERATED FILE - DO NOT EDIT",
+        " * Generated by scripts/gen_stdlib_types.py",
+        " * Sources: stdlib definition files",
+        " *",
+        " * xlsp_stdlib_generated.inc - Generated LSP stdlib declarations",
+        " */",
+        "",
+        "/* clang-format off */",
+        "",
+    ]
+
+    emitted_modules = []
+    for mod_name, mod_data in sorted(module_results.items()):
+        symbols = []
+        for m in mod_data.get('methods', []):
+            entry = dict(m)
+            entry['is_method'] = True
+            symbols.append(entry)
+        for c in mod_data.get('constants', []):
+            entry = dict(c)
+            entry['is_method'] = False
+            symbols.append(entry)
+        for handle in mod_data.get('handles', []):
+            symbols.append({
+                'name': handle['name'],
+                'signature': f"type {handle['name']}",
+                'doc': "Native handle type",
+                'lsp_kind': "XLSP_SYM_CLASS",
+            })
+
+        if not symbols:
+            continue
+
+        mod_ident = c_ident(mod_name)
+        array_name = f"g_xlsp_stdlib_{mod_ident}_symbols"
+        count_name = f"GEN_XLSP_STDLIB_{mod_ident.upper()}_SYMBOL_COUNT"
+        lines.append(f"// {mod_name} module symbols")
+        lines.append(f"static const XlspSymbolInfo {array_name}[] = {{")
+        for sym in symbols:
+            kind = sym.get('lsp_kind') or lsp_kind_for_member(sym)
+            sig = lsp_signature(sym.get('signature'))
+            doc = sym.get('doc') or ""
+            lines.append(
+                f'    {{"{c_string(sym["name"])}", {kind}, "{c_string(sig)}", '
+                f'"{c_string(doc)}", NULL, 0}},')
+        lines.append("};")
+        lines.append(f"#define {count_name} {len(symbols)}")
+        lines.append("")
+        emitted_modules.append((mod_name, array_name, count_name))
+
+    lines.append("static const XlspModuleInfo g_xlsp_stdlib_modules[] = {")
+    for mod_name, array_name, count_name in emitted_modules:
+        module_doc = f"{mod_name} standard library module"
+        lines.append(
+            f'    {{"{c_string(mod_name)}", "{c_string(module_doc)}", '
+            f'{array_name}, {count_name}}},')
+    lines.append("};")
+    lines.append("static const int g_xlsp_stdlib_module_count =")
+    lines.append("    sizeof(g_xlsp_stdlib_modules) / sizeof(g_xlsp_stdlib_modules[0]);")
+    lines.append("")
+    lines.append("/* clang-format on */")
+    lines.append("")
+    return "\n".join(lines)
+
+
 def generate_xrd(mod_data):
     """Generate .xrd declaration file content."""
     lines = []
@@ -441,24 +696,31 @@ def generate_xrd(mod_data):
     return "\n".join(lines)
 
 
-def check_output(content):
-    if not OUTPUT_FILE.exists():
-        print(f"missing generated analyzer builtins: {OUTPUT_FILE}", file=sys.stderr)
+def check_file(path, content, label):
+    if not path.exists():
+        print(f"missing generated {label}: {path}", file=sys.stderr)
         return 1
-    current = OUTPUT_FILE.read_text(encoding='utf-8')
+    current = path.read_text(encoding='utf-8')
     if current == content:
         return 0
-    print(f"stale generated analyzer builtins: {OUTPUT_FILE}", file=sys.stderr)
+    print(f"stale generated {label}: {path}", file=sys.stderr)
     diff = difflib.unified_diff(
         current.splitlines(),
         content.splitlines(),
-        fromfile=str(OUTPUT_FILE),
-        tofile=f"{OUTPUT_FILE} (regenerated)",
+        fromfile=str(path),
+        tofile=f"{path} (regenerated)",
         lineterm="",
     )
     for line in list(diff)[:160]:
         print(line, file=sys.stderr)
     return 1
+
+
+def check_outputs(analyzer_content, lsp_content):
+    status = 0
+    status |= check_file(OUTPUT_FILE, analyzer_content, "analyzer builtins")
+    status |= check_file(LSP_OUTPUT_FILE, lsp_content, "LSP stdlib table")
+    return status
 
 
 def main():
@@ -493,58 +755,22 @@ def main():
         print(generate_xrd(mod_data))
         return 0
 
-    # --embed mode (default): scan all stdlib sources and generate header
-    print("Scanning stdlib sources for builtin definitions...", file=sys.stderr)
+    # --embed mode (default): generate in-tree stdlib metadata from .def.
+    print("Loading stdlib definitions from stdlib/defs/*.def...", file=sys.stderr)
 
     type_results = {}    # type_name -> [methods]
     module_results = {}  # module_name -> {handles, methods}
 
-    for dir_path in STDLIB_DIRS:
-        if not dir_path.exists():
-            continue
-
-        for filepath in dir_path.rglob("*.c"):
-            result = scan_file(filepath)
-            if not result:
-                continue
-
-            if result['module']:
-                # C module (net, ws, http, etc.)
-                mod_name = result['module']
-                module_results[mod_name] = {
-                    'handles': result['handles'],
-                    'methods': result['methods'],
-                    'handle_methods': result['handle_methods'],
-                    'constants': result['constants'],
-                }
-                hm_count = sum(len(v) for v in result['handle_methods'].values())
-                print(f"  Module '{mod_name}': {len(result['methods'])} functions, "
-                      f"{hm_count} handle methods, "
-                      f"{len(result['constants'])} constants, "
-                      f"{len(result['handles'])} handles in {filepath.name}", file=sys.stderr)
-
-            # When a file has both @module and @type, instance methods
-            # (after @type) are split into type_results separately.
-            if result['type'] and result['type_methods']:
-                type_name = result['type']
-                if type_name not in type_results:
-                    type_results[type_name] = []
-                type_results[type_name].extend(result['type_methods'])
-                print(f"  Type '{type_name}': {len(result['type_methods'])} methods in "
-                      f"{filepath.name}", file=sys.stderr)
-
-            if result['type'] and not result['module']:
-                # Pure type file (Array, String, etc.) — no @module
-                type_name = result['type']
-                if type_name not in type_results:
-                    type_results[type_name] = []
-                type_results[type_name].extend(result['methods'])
-                if result['methods']:
-                    print(f"  Type '{type_name}': {len(result['methods'])} methods in "
-                          f"{filepath.name}", file=sys.stderr)
-
     def_methods = load_def_module_methods()
     replaced, added = merge_def_module_methods(module_results, def_methods)
+    def_constants = load_def_module_constants()
+    const_replaced, const_added = merge_def_module_constants(module_results, def_constants)
+    def_handles = load_def_module_handles()
+    handle_replaced, handle_added = merge_def_module_handles(module_results, def_handles)
+    def_type_methods = load_def_type_methods()
+    type_method_replaced, type_method_added = merge_def_type_methods(
+        type_results, def_type_methods
+    )
 
     total_types = len(type_results)
     total_modules = len(module_results)
@@ -555,21 +781,32 @@ def main():
     print(f"\nTotal: {total_methods} type methods across {total_types} types, "
           f"{total_functions} module functions and {total_constants} constants "
           f"across {total_modules} modules", file=sys.stderr)
-    print(f"Def overlay: {replaced} functions replaced, {added} functions added "
-          f"from stdlib/defs/*.def", file=sys.stderr)
+    print(f"Def module methods: {added} public functions loaded "
+          f"({replaced} overload rows folded) from stdlib/defs/*.def", file=sys.stderr)
+    print(f"Def constants: {const_added} constants loaded "
+          f"({const_replaced} replaced) from stdlib/defs/*.def", file=sys.stderr)
+    print(f"Def handles: {handle_added} handles loaded "
+          f"({handle_replaced} replaced) from stdlib/defs/*.def", file=sys.stderr)
+    print(f"Def type methods: {type_method_added} methods loaded "
+          f"({type_method_replaced} replaced) from stdlib/defs/*.def", file=sys.stderr)
 
-    # Generate header
-    content = generate_header(type_results, module_results)
+    # Generate embed outputs
+    analyzer_content = generate_header(type_results, module_results)
+    lsp_content = generate_lsp_include(module_results)
 
     if args.check:
-        return check_output(content)
+        return check_outputs(analyzer_content, lsp_content)
 
-    # Write output
+    # Write outputs
     OUTPUT_FILE.parent.mkdir(parents=True, exist_ok=True)
     with open(OUTPUT_FILE, 'w', encoding='utf-8') as f:
-        f.write(content)
+        f.write(analyzer_content)
+    LSP_OUTPUT_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with open(LSP_OUTPUT_FILE, 'w', encoding='utf-8') as f:
+        f.write(lsp_content)
 
     print(f"\nGenerated: {OUTPUT_FILE}", file=sys.stderr)
+    print(f"Generated: {LSP_OUTPUT_FILE}", file=sys.stderr)
     return 0
 
 

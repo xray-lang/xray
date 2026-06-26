@@ -1123,58 +1123,22 @@ static XrNativeBodyDesc g_logger_body_desc = {
     .to_shared = NULL,
 };
 
-/* ========== Module Loader ========== */
-
-// ========== Type Declarations (parsed by gen_stdlib_types.py) ==========
-
-#include "../../src/module/xbuiltin_decl.h"
-
-// @module log
-
-XR_DEFINE_BUILTIN(xr_log_debug, "debug", "(...args: unknown): ()", "Log debug message")
-XR_DEFINE_BUILTIN(xr_log_info, "info", "(...args: unknown): ()", "Log info message")
-XR_DEFINE_BUILTIN(xr_log_warn, "warn", "(...args: unknown): ()", "Log warning message")
-XR_DEFINE_BUILTIN(xr_log_error, "error", "(...args: unknown): ()", "Log error message")
-XR_DEFINE_BUILTIN(xr_log_fatal, "fatal", "(...args: unknown): ()", "Log fatal message")
-XR_DEFINE_BUILTIN(xr_log_set_level, "setLevel", "(level: int): ()", "Set log level")
-XR_DEFINE_BUILTIN(xr_log_set_format, "setFormat", "(format: string): ()", "Set log format")
-XR_DEFINE_BUILTIN(xr_log_set_output, "setOutput", "(path: string): ()", "Set log output file")
-XR_DEFINE_BUILTIN(xr_log_is_enabled, "isEnabled", "(level: int): bool",
-                  "Check if log level enabled")
-XR_DEFINE_BUILTIN(xr_log_enable_source, "enableSource", "(enabled: bool): ()",
-                  "Enable source location in logs")
-XR_DEFINE_BUILTIN(xr_log_enable_async, "enableAsync", "(enabled: bool): ()", "Enable async logging")
-XR_DEFINE_BUILTIN(xr_log_flush, "flush", "(): ()", "Flush log buffer")
-XR_DEFINE_BUILTIN(xr_log_child, "child", "(...fields: unknown): Logger", "Create child logger")
+#define XR_STDLIB_VM_BIND_CLASS_LOGGER 1
+#include "../../src/stdlib/xstdlib_class_bindings_generated.inc.c"
+#undef XR_STDLIB_VM_BIND_CLASS_LOGGER
 
 /* Class registration is invoked unconditionally during isolate init by
  * xr_prelude_register_all_native_types, so core->loggerClass is
- * available even when user code never `import log`. */
+ * available even when user code never imports log. */
 void xr_register_logger_class(XrVMRuntime *X) {
-    XR_DCHECK(X != NULL, "register_logger_class: NULL isolate");
-    XrayCoreClasses *core = xr_isolate_get_core_classes(X);
-    XR_DCHECK(core != NULL, "register_logger_class: core not initialised");
-    XR_DCHECK(core->objectClass != NULL, "register_logger_class: Object not registered");
-    XR_DCHECK(core->loggerClass == NULL, "register_logger_class: already registered");
-
-    XrClassBuilder *builder = xr_class_builder_new(X, "Logger", core->objectClass);
-    XR_CHECK(builder != NULL, "register_logger_class: builder alloc failed");
-
-    xr_class_builder_set_native_body(builder, &g_logger_body_desc);
-
-    xr_class_builder_add_method(builder, "debug", xr_logger_debug, -1, 0);
-    xr_class_builder_add_method(builder, "info", xr_logger_info, -1, 0);
-    xr_class_builder_add_method(builder, "warn", xr_logger_warn, -1, 0);
-    xr_class_builder_add_method(builder, "error", xr_logger_error, -1, 0);
-    xr_class_builder_add_method(builder, "fatal", xr_logger_fatal, -1, 0);
-    xr_class_builder_add_method(builder, "child", xr_logger_child, -1, 0);
-
-    XrClass *cls = xr_class_builder_finalize(builder);
-    XR_CHECK(cls != NULL, "register_logger_class: finalize failed");
-    cls->flags |= XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY;
-
-    core->loggerClass = cls;
+    xr_stdlib_vm_register_logger_class_generated(X);
 }
+
+/* ========== Module Loader ========== */
+
+#define XR_STDLIB_VM_BIND_MODULE_LOG 1
+#include "../../src/stdlib/xstdlib_vm_bindings_generated.inc.c"
+#undef XR_STDLIB_VM_BIND_MODULE_LOG
 
 XR_FUNC XrModule *xr_load_module_log(XrVMRuntime *isolate) {
     XR_DCHECK(isolate != NULL, "xr_load_module_log: NULL isolate");
@@ -1183,31 +1147,7 @@ XR_FUNC XrModule *xr_load_module_log(XrVMRuntime *isolate) {
     if (!module)
         return NULL;
 
-    // Log functions
-    XRS_EXPORT(module, isolate, "debug", xr_log_debug);
-    XRS_EXPORT(module, isolate, "info", xr_log_info);
-    XRS_EXPORT(module, isolate, "warn", xr_log_warn);
-    XRS_EXPORT(module, isolate, "error", xr_log_error);
-    XRS_EXPORT(module, isolate, "fatal", xr_log_fatal);
-
-    // Config functions
-    XRS_EXPORT(module, isolate, "setLevel", xr_log_set_level);
-    XRS_EXPORT(module, isolate, "setFormat", xr_log_set_format);
-    XRS_EXPORT(module, isolate, "setOutput", xr_log_set_output);
-    XRS_EXPORT(module, isolate, "isEnabled", xr_log_is_enabled);
-    XRS_EXPORT(module, isolate, "enableSource", xr_log_enable_source);
-    XRS_EXPORT(module, isolate, "enableAsync", xr_log_enable_async);
-    XRS_EXPORT(module, isolate, "flush", xr_log_flush);
-
-    // Child logger
-    XRS_EXPORT(module, isolate, "child", xr_log_child);
-
-    // Export constants
-    xr_module_add_export(isolate, module, "DEBUG", xr_int(XR_LOG_DEBUG));
-    xr_module_add_export(isolate, module, "INFO", xr_int(XR_LOG_INFO));
-    xr_module_add_export(isolate, module, "WARN", xr_int(XR_LOG_WARN));
-    xr_module_add_export(isolate, module, "ERROR", xr_int(XR_LOG_ERROR));
-    xr_module_add_export(isolate, module, "FATAL", xr_int(XR_LOG_FATAL));
+    xr_stdlib_vm_bind_log_generated(isolate, module);
 
     module->loaded = true;
     return module;

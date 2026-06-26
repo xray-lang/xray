@@ -1,0 +1,20 @@
+print(typeof(0))
+print(typeof(1.5))
+print(typeof(true))
+print(typeof(null))
+print(typeof("x"))
+
+let xs = [1, 2, 3]
+print(typeof(xs))
+
+let m: Map<string, int> = #{"a": 1}
+print(typeof(m))
+
+let s = #[1, 2, 3]
+print(typeof(s))
+
+let r = 2..6
+print(typeof(r))
+
+let sb = new StringBuilder()
+print(typeof(sb))

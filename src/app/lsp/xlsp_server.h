@@ -183,7 +183,7 @@ typedef struct XlspConfig {
     int format_tab_size;
     int format_max_line_length;
     bool format_insert_spaces;
-    bool format_align_match_arms;
+    bool format_align_branch_arrows;
     bool format_align_enum_values;
     bool format_align_struct_fields;
     bool format_align_trailing_comments;

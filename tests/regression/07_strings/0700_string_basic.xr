@@ -34,6 +34,8 @@ fn test_charAt() {
     let s = "hello"
     assert_eq(s.charAt(0), "h")
     assert_eq(s.charAt(4), "o")
+    assert_eq(s.charAt(-1), "o")
+    assert_eq(s.charAt(-5), "h")
 }
 
 @test
@@ -46,6 +48,7 @@ fn test_charAt_empty() {
 fn test_charAt_out_of_bounds() {
     let s = "abc"
     assert_eq(s.charAt(10), null)
+    assert_eq(s.charAt(-4), null)
 }
 
 // ===== substring =====
@@ -69,6 +72,16 @@ fn test_substring_empty() {
     let s = "test"
     assert_eq(s.substring(0, 0), "")
     assert_eq(s.substring(2, 2), "")
+}
+
+@test
+fn test_substring_bounds() {
+    let s = "abcdef"
+    assert_eq(s.substring(-3, 3), "abc")
+    assert_eq(s.substring(2, -1), "cdef")
+    assert_eq(s.substring(0, 99), "abcdef")
+    assert_eq(s.substring(9, 12), "")
+    assert_eq(s.substring(4, 2), "")
 }
 
 // ===== indexOf =====
@@ -131,6 +144,39 @@ fn test_trim_tabs_newlines() {
     assert_eq("\t hello \n".trim(), "hello")
 }
 
+// ===== padStart/padEnd =====
+
+@test
+fn test_pad() {
+    assert_eq("42".padStart(5, "0"), "00042")
+    assert_eq("hi".padEnd(5, "!"), "hi!!!")
+    assert_eq("x".padStart(3), "  x")
+    assert_eq("x".padEnd(3), "x  ")
+    assert_eq("abc".padStart(2, "0"), "abc")
+    assert_eq("abc".padEnd(5, ""), "abc")
+    assert_eq("好".padStart(6, "."), "...好")
+}
+
+// ===== conversion =====
+
+@test
+fn test_toInt() {
+    assert_eq("123".toInt(), 123)
+    assert_eq(" \t\r\n-17tail".toInt(), -17)
+    assert_eq("+42".toInt(), 42)
+    assert_eq("abc".toInt(), null)
+    assert_eq("   ".toInt(), null)
+}
+
+@test
+fn test_toFloat() {
+    assert_eq("3.5".toFloat(), 3.5)
+    assert_eq(" \n-3.5e2tail".toFloat(), -350.0)
+    assert_eq("+0.25".toFloat(), 0.25)
+    assert_eq("abc".toFloat(), null)
+    assert_eq("\t".toFloat(), null)
+}
+
 // ===== split =====
 
 @test
@@ -140,6 +186,21 @@ fn test_split() {
     assert_eq(parts.length, 4)
     assert_eq(parts[0], "a")
     assert_eq(parts[3], "d")
+
+    let edges = "a,,b,".split(",")
+    assert_eq(edges.length, 4)
+    assert_eq(edges[0], "a")
+    assert_eq(edges[1], "")
+    assert_eq(edges[2], "b")
+    assert_eq(edges[3], "")
+
+    let chars = "ab".split("")
+    assert_eq(chars.length, 2)
+    assert_eq(chars[0], "a")
+    assert_eq(chars[1], "b")
+
+    let empty = "".split("")
+    assert_eq(empty.length, 0)
 }
 
 @test
@@ -163,6 +224,7 @@ fn test_split_no_delimiter() {
 fn test_toUpperCase() {
     assert_eq("hello".toUpperCase(), "HELLO")
     assert_eq("Hello World".toUpperCase(), "HELLO WORLD")
+    assert_eq("Hello 世界🌍".toUpperCase(), "HELLO 世界🌍")
     assert_eq("".toUpperCase(), "")
 }
 
@@ -170,6 +232,7 @@ fn test_toUpperCase() {
 fn test_toLowerCase() {
     assert_eq("HELLO".toLowerCase(), "hello")
     assert_eq("Hello World".toLowerCase(), "hello world")
+    assert_eq("Hello 世界🌍".toLowerCase(), "hello 世界🌍")
     assert_eq("".toLowerCase(), "")
 }
 
@@ -180,12 +243,18 @@ fn test_replace() {
     let s = "hello world"
     assert_eq(s.replace("world", "xray"), "hello xray")
     assert_eq(s.replace("xyz", "abc"), "hello world")
+    assert_eq(s.replace("", "x"), "hello world")
+    assert_eq("hello".replace("l", "L"), "heLlo")
+    assert_eq("hello".replace("l", ""), "helo")
 }
 
 @test
 fn test_replace_all() {
     let s = "a-b-c-d"
     assert_eq(s.replaceAll("-", "_"), "a_b_c_d")
+    assert_eq("aaaa".replaceAll("aa", "X"), "XX")
+    assert_eq("abc".replaceAll("b", ""), "ac")
+    assert_eq("abc".replaceAll("", "x"), "abc")
 }
 
 // ===== repeat =====
@@ -195,6 +264,9 @@ fn test_repeat() {
     assert_eq("ab".repeat(3), "ababab")
     assert_eq("x".repeat(5), "xxxxx")
     assert_eq("test".repeat(0), "")
+    assert_eq("xy".repeat(-2), "")
+    assert_eq("".repeat(10), "")
+    assert_eq("好".repeat(2), "好好")
     assert_eq("a".repeat(1), "a")
 }
 
@@ -226,4 +298,3 @@ fn test_long_string() {
     assert_eq(s.length, 1000)
     assert_eq(s.charAt(500), "a")
 }
-

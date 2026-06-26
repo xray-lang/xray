@@ -18,9 +18,6 @@
 #include "../common.h"
 #include "../../src/runtime/xisolate_internal.h"
 #include "../../src/runtime/object/xarray.h"
-
-// Forward declaration (defined in xjson.c)
-extern struct XrArray *xr_json_keys(XrVMRuntime *X, struct XrJson *json);
 #include "../../src/runtime/object/xmap.h"
 #include "../../src/runtime/object/xstring.h"
 #include "../../src/runtime/object/xjson.h"
@@ -34,6 +31,7 @@ extern struct XrArray *xr_json_keys(XrVMRuntime *X, struct XrJson *json);
 
 // ========== External declarations ==========
 
+extern XrArray *xr_json_keys(XrVMRuntime *X, XrJson *json);
 extern XrValue xr_string_value(XrString *str);
 extern XrValue xr_value_from_array(XrArray *arr);
 extern XrValue xr_value_from_map(XrMap *map);
@@ -621,41 +619,16 @@ static XrValue xml_cdata_fn(XrVMRuntime *X, XrValue *args, int argc) {
 
 // ========== Module loading ===========
 
-// ========== Type Declarations (parsed by gen_stdlib_types.py) ==========
-
-#include "../../src/module/xbuiltin_decl.h"
-
-// @module xml
-
-XR_DEFINE_BUILTIN(xml_parse_fn, "parse", "(data: string, options?: Json): Json", "Parse XML string")
-XR_DEFINE_BUILTIN(xml_parse_detailed, "parseDetailed", "(data: string): Json",
-                  "Parse XML with details")
-XR_DEFINE_BUILTIN(xml_parse_file, "parseFile", "(path: string): Json", "Parse XML file")
-XR_DEFINE_BUILTIN(xml_stringify_fn, "stringify", "(node: Json, options?: Json): string",
-                  "Convert to XML string")
-XR_DEFINE_BUILTIN(xml_write_file, "writeFile", "(path: string, node: Json): bool", "Write XML file")
-XR_DEFINE_BUILTIN(xml_document_fn, "document", "(): Json", "Create XML document node")
-XR_DEFINE_BUILTIN(xml_element_fn, "element", "(name: string, attrs?: Json): Json",
-                  "Create XML element node")
-XR_DEFINE_BUILTIN(xml_text_fn, "text", "(content: string): Json", "Create XML text node")
-XR_DEFINE_BUILTIN(xml_comment_fn, "comment", "(content: string): Json", "Create XML comment node")
-XR_DEFINE_BUILTIN(xml_cdata_fn, "cdata", "(content: string): Json", "Create XML CDATA node")
+#define XR_STDLIB_VM_BIND_MODULE_XML 1
+#include "../../src/stdlib/xstdlib_vm_bindings_generated.inc.c"
+#undef XR_STDLIB_VM_BIND_MODULE_XML
 
 XR_FUNC XrModule *xr_load_module_xml(XrVMRuntime *isolate) {
     XrModule *mod = xr_module_create_native(isolate, "xml");
     if (!mod)
         return NULL;
 
-    XRS_EXPORT(mod, isolate, "parse", xml_parse_fn);
-    XRS_EXPORT(mod, isolate, "parseDetailed", xml_parse_detailed);
-    XRS_EXPORT(mod, isolate, "parseFile", xml_parse_file);
-    XRS_EXPORT(mod, isolate, "stringify", xml_stringify_fn);
-    XRS_EXPORT(mod, isolate, "writeFile", xml_write_file);
-    XRS_EXPORT(mod, isolate, "document", xml_document_fn);
-    XRS_EXPORT(mod, isolate, "element", xml_element_fn);
-    XRS_EXPORT(mod, isolate, "text", xml_text_fn);
-    XRS_EXPORT(mod, isolate, "comment", xml_comment_fn);
-    XRS_EXPORT(mod, isolate, "cdata", xml_cdata_fn);
+    xr_stdlib_vm_bind_xml_generated(isolate, mod);
 
     mod->loaded = true;
     return mod;

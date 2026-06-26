@@ -1,0 +1,47 @@
+fn takes_bool(x: bool) {
+    print("fn=" + x.toString())
+}
+
+fn return_int(x: Json) -> int {
+    return x
+}
+
+let dyn: Json = { "goodBool": true, "badBool": 1, "goodInt": 7, "badInt": 3.5 }
+let m: Map<bool, int> = #{}
+m.set(dyn.goodBool, dyn.goodInt)
+print("map=" + m.get(true).toString())
+
+try {
+    print(m.has(dyn.badBool).toString())
+    print("bad-map-key")
+} catch panic(e) {
+    print("caught-map-key")
+}
+
+try {
+    m.set(dyn.goodBool, dyn.badInt)
+    print("bad-map-value")
+} catch panic(e) {
+    print("caught-map-value")
+}
+
+try {
+    takes_bool(dyn.badBool)
+    print("bad-fn")
+} catch panic(e) {
+    print("caught-fn")
+}
+
+try {
+    let x: int = dyn.badInt
+    print("bad-var=" + x.toString())
+} catch panic(e) {
+    print("caught-var")
+}
+
+try {
+    print(return_int(dyn.badInt).toString())
+    print("bad-return")
+} catch panic(e) {
+    print("caught-return")
+}

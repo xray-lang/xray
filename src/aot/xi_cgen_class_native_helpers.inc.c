@@ -66,9 +66,7 @@ static bool cg_class_native_field_is_ref(const XrStructFieldLayout *field) {
 }
 
 static bool cg_class_native_field_is_arc_managed_ref(const XrStructFieldLayout *field) {
-    if (!cg_class_native_field_is_ref(field))
-        return false;
-    return field->native_type == XR_NATIVE_STRING;
+    return cg_class_native_field_is_ref(field);
 }
 
 static bool cg_class_native_layout_has_ref_fields(const XrStructLayout *layout) {
@@ -118,6 +116,29 @@ static void emit_class_native_ref_field_value(XiCgenCtx *ctx, FILE *out, const X
     fprintf(out, "XR_NULL_VAL");
 }
 
+static void emit_class_native_receiver_ref_field_value(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                                       const XiClassData *cd,
+                                                       const XrStructLayout *layout, uint16_t idx,
+                                                       const XiValue *recv) {
+    const XrStructFieldLayout *field = cg_struct_field(layout, idx);
+    if (!field) {
+        fprintf(out, "XR_NULL_VAL");
+        return;
+    }
+    if (field->native_type == XR_NATIVE_STRING) {
+        emit_class_native_receiver_field_ref(ctx, out, f, cd, recv, idx);
+        return;
+    }
+    const char *tag_name = cg_class_native_ref_field_tag_name(field->native_type);
+    if (tag_name) {
+        fprintf(out, "xr_mkptr(");
+        emit_class_native_receiver_field_ref(ctx, out, f, cd, recv, idx);
+        fprintf(out, ", %s)", tag_name);
+        return;
+    }
+    fprintf(out, "XR_NULL_VAL");
+}
+
 static bool emit_class_native_ref_field_store_expr(XiCgenCtx *ctx, FILE *out, const XiClassData *cd,
                                                    const XrStructLayout *layout, uint16_t idx,
                                                    const char *object_expr, const XiValue *value) {
@@ -157,7 +178,7 @@ static bool emit_class_native_receiver_ref_field_store_expr(XiCgenCtx *ctx, FILE
     emit_value_as_rep_ctx(ctx, out, value, XR_REP_TAGGED);
     if (cg_class_native_field_is_arc_managed_ref(field)) {
         fprintf(out, "; xrt_retain(_new); xrt_release(");
-        emit_class_native_receiver_field_ref(ctx, out, f, cd, recv, idx);
+        emit_class_native_receiver_ref_field_value(ctx, out, f, cd, layout, idx, recv);
         fprintf(out, "); ");
     } else {
         fprintf(out, "; ");

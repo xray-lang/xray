@@ -1,4 +1,5 @@
 import log
+import { DEBUG as directDebug, FATAL as directFatal } from "log"
 
 print(log.DEBUG)
 print(log.INFO)
@@ -7,3 +8,5 @@ print(log.ERROR)
 print(log.FATAL)
 print(log.DEBUG < log.INFO)
 print(log.FATAL > log.ERROR)
+print(directDebug)
+print(directFatal)

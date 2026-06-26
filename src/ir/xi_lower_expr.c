@@ -36,12 +36,9 @@
 #include "../base/xconstants.h"
 #include "../runtime/value/xstruct_layout.h"
 #include "../runtime/value/xffi_sig.h"
-#include "../shared/xr_encoding_core.h"
 
 #include <string.h>
 #include <stdio.h>
-#include <float.h>
-#include <math.h>
 
 /* ========== Forward Declarations ========== */
 
@@ -139,6 +136,44 @@ static bool xi_lower_value_is_fresh_value_struct(XiValue *v) {
 static void xi_lower_mark_value_clone_copy(XiValue *v) {
     if (v && v->op == XI_COPY)
         v->aux_int = XI_COPY_KIND_VALUE_CLONE;
+}
+
+static uint8_t xi_lower_checktype_tid_for_type(const XrType *type) {
+    if (!type)
+        return 0;
+    if (type->kind == XR_KIND_UNION || type->kind == XR_KIND_INSTANCE ||
+        type->kind == XR_KIND_CLASS || type->kind == XR_KIND_FUNCTION)
+        return 0;
+    uint8_t tid = xr_type_to_tid(type);
+    if (XR_TID_IS_INT(tid))
+        return XR_TID_INT;
+    if (XR_TID_IS_FLOAT(tid))
+        return XR_TID_FLOAT;
+    return tid;
+}
+
+XR_FUNC XiValue *xi_lower_checktype_for_type(XiLower *l, AstNode *node, XiValue *val,
+                                             struct XrType *target_type) {
+    if (!l || !val || !target_type || !val->type)
+        return val;
+    if (!xr_is_json_coercion(target_type, val->type))
+        return val;
+    if (target_type->kind == XR_KIND_JSON && !target_type->object.is_sealed)
+        return val;
+
+    uint8_t tid = xi_lower_checktype_tid_for_type(target_type);
+    if (tid == 0 && target_type->kind != XR_KIND_NULL)
+        return val;
+
+    XiValue *chk = xi_value_new(l->func, l->cur_block, XI_CHECKTYPE, target_type, 1);
+    if (!chk)
+        return val;
+    chk->args[0] = val;
+    chk->aux_int = ((int64_t) tid << 1) | (target_type->is_nullable ? 1 : 0);
+    chk->aux = (void *) arena_strdup(l->func, xr_typeid_name((XrTypeId) tid));
+    chk->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
+    chk->line = (uint32_t) (node && node->line > 0 ? node->line : val->line);
+    return chk;
 }
 
 static XiFunc *lower_resolve_static_callee_func_in_scope(XiFunc *scope, XiValue *callee) {
@@ -678,6 +713,7 @@ static XiValue *lower_assignment(XiLower *l, AstNode *node) {
                 val = conv;
             }
         }
+        val = xi_lower_checktype_for_type(l, node, val, var_type);
         if (var_type && var_type->kind == XR_KIND_INT && var_type->native_width != 0 && val->type &&
             XR_TYPE_IS_INT(val->type)) {
             uint16_t narrow_op = xi_narrow_op_for_native_type(var_type->native_width);
@@ -840,65 +876,6 @@ static bool lower_value_is_whole_module_import(XiLower *l, const XiValue *v,
            ref->member_name == NULL;
 }
 
-static bool lower_math_constant(XiLower *l, const char *name, XiValue **out) {
-    if (!out)
-        return false;
-    if (out)
-        *out = NULL;
-    if (!name)
-        return false;
-
-    if (strcmp(name, "PI") == 0)
-        *out = xi_const_float(l->func, l->cur_block, 3.14159265358979323846, l->type_float);
-    else if (strcmp(name, "E") == 0)
-        *out = xi_const_float(l->func, l->cur_block, 2.71828182845904523536, l->type_float);
-    else if (strcmp(name, "TAU") == 0)
-        *out = xi_const_float(l->func, l->cur_block, 6.28318530717958647692, l->type_float);
-    else if (strcmp(name, "SQRT2") == 0)
-        *out = xi_const_float(l->func, l->cur_block, 1.41421356237309504880, l->type_float);
-    else if (strcmp(name, "LN2") == 0)
-        *out = xi_const_float(l->func, l->cur_block, 0.69314718055994530942, l->type_float);
-    else if (strcmp(name, "LN10") == 0)
-        *out = xi_const_float(l->func, l->cur_block, 2.30258509299404568402, l->type_float);
-    else if (strcmp(name, "LOG2E") == 0)
-        *out = xi_const_float(l->func, l->cur_block, 1.44269504088896340736, l->type_float);
-    else if (strcmp(name, "LOG10E") == 0)
-        *out = xi_const_float(l->func, l->cur_block, 0.43429448190325182765, l->type_float);
-    else if (strcmp(name, "EPSILON") == 0)
-        *out = xi_const_float(l->func, l->cur_block, DBL_EPSILON, l->type_float);
-    else if (strcmp(name, "MAX_INT") == 0)
-        *out = xi_const_int(l->func, l->cur_block, INT64_MAX, l->type_int);
-    else if (strcmp(name, "MIN_INT") == 0)
-        *out = xi_const_int(l->func, l->cur_block, INT64_MIN, l->type_int);
-    else if (strcmp(name, "MAX_FLOAT") == 0)
-        *out = xi_const_float(l->func, l->cur_block, DBL_MAX, l->type_float);
-    else if (strcmp(name, "INF") == 0)
-        *out = xi_const_float(l->func, l->cur_block, INFINITY, l->type_float);
-    else if (strcmp(name, "NAN") == 0)
-        *out = xi_const_float(l->func, l->cur_block, NAN, l->type_float);
-    else
-        return false;
-
-    return *out != NULL;
-}
-
-static bool lower_encoding_constant(XiLower *l, const char *name, XiValue **out) {
-    if (!out)
-        return false;
-    *out = NULL;
-    if (!name)
-        return false;
-
-    if (strcmp(name, "LE") == 0)
-        *out = xi_const_int(l->func, l->cur_block, XR_ENCODING_UTF16_LE, l->type_int);
-    else if (strcmp(name, "BE") == 0)
-        *out = xi_const_int(l->func, l->cur_block, XR_ENCODING_UTF16_BE, l->type_int);
-    else
-        return false;
-
-    return *out != NULL;
-}
-
 static bool lower_math_call_arity_ok(const char *name, int nargs) {
     if (!name || nargs < 0)
         return false;
@@ -963,17 +940,6 @@ static XiValue *lower_member_access(XiLower *l, AstNode *node) {
     XiValue *obj = xi_lower_expr(l, ma->object);
     if (!obj)
         return NULL;
-
-    if (lower_value_is_whole_module_import(l, obj, "math")) {
-        XiValue *constant = NULL;
-        if (lower_math_constant(l, ma->name, &constant))
-            return constant;
-    }
-    if (lower_value_is_whole_module_import(l, obj, "encoding")) {
-        XiValue *constant = NULL;
-        if (lower_encoding_constant(l, ma->name, &constant))
-            return constant;
-    }
 
     struct XrType *result_type = xi_lower_node_type(l, node);
 
@@ -1285,8 +1251,10 @@ static XiValue *lower_index_get(XiLower *l, AstNode *node) {
     }
 
     struct XrType *result_type = xi_lower_node_type(l, node);
-    if (obj->type && XR_TYPE_IS_MAP(obj->type))
+    if (obj->type && XR_TYPE_IS_MAP(obj->type)) {
+        idx = xi_lower_checktype_for_type(l, node, idx, obj->type->map.key_type);
         idx = xi_lower_narrow_for_static_type(l, node, idx, obj->type->map.key_type);
+    }
     struct XrType *elem_type = xi_get_container_elem_type(obj->type);
     struct XrType *index_type =
         xi_lower_type_is_unknown(result_type) && elem_type ? elem_type : result_type;
@@ -1338,9 +1306,12 @@ static XiValue *lower_index_set(XiLower *l, AstNode *node) {
     }
 
     if (obj->type && XR_TYPE_IS_MAP(obj->type)) {
+        idx = xi_lower_checktype_for_type(l, node, idx, obj->type->map.key_type);
+        val = xi_lower_checktype_for_type(l, node, val, obj->type->map.value_type);
         idx = xi_lower_narrow_for_static_type(l, node, idx, obj->type->map.key_type);
         val = xi_lower_narrow_for_static_type(l, node, val, obj->type->map.value_type);
     } else {
+        val = xi_lower_checktype_for_type(l, node, val, xi_get_container_elem_type(obj->type));
         /* Insert XI_NARROW before writing to a sub-width typed array */
         struct XrType *elem_type = xi_get_container_elem_type(obj->type);
         uint16_t narrow_op = xi_narrow_op_for_elem(elem_type);
@@ -1888,6 +1859,42 @@ static bool lower_call_args_expand_spread(XiLower *l, CallExprNode *call, XiLowe
     return true;
 }
 
+static struct XrType *lower_resolve_call_param_type(XiLower *l, CallExprNode *call,
+                                                    struct XrType *callee_type, int index) {
+    if (!l || !call || !callee_type || callee_type->kind != XR_KIND_FUNCTION ||
+        !callee_type->function.param_types || index < 0 ||
+        index >= callee_type->function.param_count)
+        return NULL;
+
+    struct XrType *pt = callee_type->function.param_types[index];
+    if (pt && pt->kind == XR_KIND_TYPE_PARAM && call->type_arg_count > 0 &&
+        callee_type->function.type_param_names) {
+        const char *tp_name = pt->type_param.name;
+        for (int ti = 0; ti < callee_type->function.type_param_count; ti++) {
+            if (callee_type->function.type_param_names[ti] && tp_name &&
+                strcmp(callee_type->function.type_param_names[ti], tp_name) == 0 &&
+                ti < call->type_arg_count && call->type_args[ti]) {
+                pt = xr_tref_resolve(l->isolate, call->type_args[ti]);
+                break;
+            }
+        }
+    }
+    return pt;
+}
+
+static void lower_check_call_args_for_param_types(XiLower *l, AstNode *node, CallExprNode *call,
+                                                  XiValue **arg_vals, int n,
+                                                  struct XrType *callee_type) {
+    if (!callee_type || callee_type->kind != XR_KIND_FUNCTION || !callee_type->function.param_types)
+        return;
+    for (int i = 0; i < n && i < callee_type->function.param_count; i++) {
+        struct XrType *pt = lower_resolve_call_param_type(l, call, callee_type, i);
+        if (!pt || !arg_vals[i])
+            continue;
+        arg_vals[i] = xi_lower_checktype_for_type(l, node, arg_vals[i], pt);
+    }
+}
+
 static XiValue *lower_call(XiLower *l, AstNode *node) {
     CallExprNode *call = &node->as.call_expr;
 
@@ -1979,6 +1986,8 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
         int n = args.count;
 
         struct XrType *result_type = xi_lower_node_type(l, node);
+        struct XrType *method_type = xi_lower_node_type(l, call->callee);
+        lower_check_call_args_for_param_types(l, node, call, arg_vals, n, method_type);
 
         if (lower_value_is_whole_module_import(l, recv, "math") &&
             lower_math_call_arity_ok(ma->name, n))
@@ -2077,6 +2086,8 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
             }
         }
 
+        xi_lower_check_map_method_args(l, node, ma->name, recv, arg_vals, n);
+        xi_lower_check_set_method_args(l, node, ma->name, recv, arg_vals, n);
         xi_lower_narrow_map_method_args(l, node, ma->name, recv, arg_vals, n);
         xi_lower_narrow_set_method_args(l, node, ma->name, recv, arg_vals, n);
 
@@ -2150,6 +2161,10 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
         XiValue **arg_vals = args.items;
         int n = args.count;
 
+        struct XrType *method_type = xi_lower_node_type(l, call->callee);
+        lower_check_call_args_for_param_types(l, node, call, arg_vals, n, method_type);
+        xi_lower_check_map_method_args(l, node, oc->name, obj, arg_vals, n);
+        xi_lower_check_set_method_args(l, node, oc->name, obj, arg_vals, n);
         xi_lower_narrow_map_method_args(l, node, oc->name, obj, arg_vals, n);
         xi_lower_narrow_set_method_args(l, node, oc->name, obj, arg_vals, n);
 
@@ -2232,6 +2247,9 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
         return NULL;
     XiValue **arg_vals = args.items;
     int n = args.count;
+
+    if (callee_type && callee_type->kind == XR_KIND_FUNCTION && callee_type->function.param_types)
+        lower_check_call_args_for_param_types(l, node, call, arg_vals, n, callee_type);
 
     const XiImportRef *callee_import = lower_import_ref_from_value(l, callee_val);
     const char *math_callee_member =

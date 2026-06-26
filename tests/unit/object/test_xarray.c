@@ -247,6 +247,88 @@ TEST(array_has) {
     teardown();
 }
 
+TEST(array_typed_index_of_uses_shared_tag_rules) {
+    setup();
+    XrArray *bytes = xr_array_with_capacity_typed(main_coro, 0, XR_ELEM_U8);
+    xr_array_push(bytes, xr_int(1));
+    xr_array_push(bytes, xr_int(255));
+    xr_array_push(bytes, xr_int(3));
+    ASSERT_EQ_INT(xr_array_index_of(bytes, xr_int(255)), 1);
+    ASSERT_EQ_INT(xr_array_index_of(bytes, xr_int(-1)), -1);
+    ASSERT_EQ_INT(xr_array_index_of(bytes, xr_bool(true)), -1);
+    ASSERT_TRUE(xr_array_has(bytes, xr_int(3)));
+    ASSERT_FALSE(xr_array_has(bytes, xr_bool(true)));
+
+    XrArray *bools = xr_array_with_capacity_typed(main_coro, 0, XR_ELEM_BOOL);
+    xr_array_push(bools, xr_bool(false));
+    xr_array_push(bools, xr_bool(true));
+    ASSERT_EQ_INT(xr_array_index_of(bools, xr_bool(true)), 1);
+    ASSERT_EQ_INT(xr_array_index_of(bools, xr_int(1)), -1);
+    teardown();
+}
+
+TEST(array_fill_negative_bounds) {
+    setup();
+    XrArray *arr = xr_array_new(main_coro);
+    for (int i = 0; i < 6; i++)
+        xr_array_push(arr, xr_int(i + 1));
+
+    xr_array_fill(arr, xr_int(9), -4, -1);
+    ASSERT_EQ_INT(xr_as_int(xr_array_get(arr, 0)), 1);
+    ASSERT_EQ_INT(xr_as_int(xr_array_get(arr, 1)), 2);
+    ASSERT_EQ_INT(xr_as_int(xr_array_get(arr, 2)), 9);
+    ASSERT_EQ_INT(xr_as_int(xr_array_get(arr, 3)), 9);
+    ASSERT_EQ_INT(xr_as_int(xr_array_get(arr, 4)), 9);
+    ASSERT_EQ_INT(xr_as_int(xr_array_get(arr, 5)), 6);
+
+    xr_array_fill(arr, xr_int(7), 5, 2);
+    ASSERT_EQ_INT(xr_as_int(xr_array_get(arr, 2)), 9);
+    ASSERT_EQ_INT(xr_as_int(xr_array_get(arr, 5)), 6);
+    teardown();
+}
+
+TEST(array_bytes_helpers_use_shared_bounds_and_copy_rules) {
+    setup();
+    XrArray *bytes = xr_array_with_capacity_typed(main_coro, 0, XR_ELEM_U8);
+    for (int i = 1; i <= 8; i++)
+        xr_array_push(bytes, xr_int(i));
+
+    bool ok = false;
+    ASSERT_EQ_UINT(xr_array_load_u32_le(bytes, 0, &ok), 67305985u);
+    ASSERT_TRUE(ok);
+    ASSERT_EQ_UINT(xr_array_load_u64_le(bytes, 0, &ok), UINT64_C(578437695752307201));
+    ASSERT_TRUE(ok);
+    ASSERT_EQ_UINT(xr_array_load_u32_le(bytes, 5, &ok), 0u);
+    ASSERT_FALSE(ok);
+
+    ASSERT_FALSE(xr_array_bytes_copy_within(bytes, 6, 0, 4));
+    ASSERT_TRUE(xr_array_bytes_copy_within(bytes, 2, 0, 4));
+    ASSERT_EQ_INT(xr_as_int(xr_array_get(bytes, 2)), 1);
+    ASSERT_EQ_INT(xr_as_int(xr_array_get(bytes, 3)), 2);
+    ASSERT_EQ_INT(xr_as_int(xr_array_get(bytes, 5)), 4);
+
+    XrArray *dst = xr_array_with_capacity_typed(main_coro, 0, XR_ELEM_U8);
+    for (int i = 0; i < 6; i++)
+        xr_array_push(dst, xr_int(0));
+    ASSERT_TRUE(xr_array_bytes_copy_from(dst, bytes, 1, 2, 3));
+    ASSERT_EQ_INT(xr_as_int(xr_array_get(dst, 2)), 2);
+    ASSERT_EQ_INT(xr_as_int(xr_array_get(dst, 3)), 1);
+    ASSERT_EQ_INT(xr_as_int(xr_array_get(dst, 4)), 2);
+    ASSERT_FALSE(xr_array_bytes_copy_from(dst, bytes, 7, 0, 3));
+
+    XrArray *rep = xr_array_with_capacity_typed(main_coro, 0, XR_ELEM_U8);
+    int seed[] = {65, 66, 67, 0, 0, 0, 0, 0, 0};
+    for (int i = 0; i < 9; i++)
+        xr_array_push(rep, xr_int(seed[i]));
+    ASSERT_TRUE(xr_array_bytes_repeat_from(rep, 3, 3, 6));
+    ASSERT_EQ_INT(xr_as_int(xr_array_get(rep, 3)), 65);
+    ASSERT_EQ_INT(xr_as_int(xr_array_get(rep, 4)), 66);
+    ASSERT_EQ_INT(xr_as_int(xr_array_get(rep, 5)), 67);
+    ASSERT_EQ_INT(xr_as_int(xr_array_get(rep, 8)), 67);
+    ASSERT_FALSE(xr_array_bytes_repeat_from(rep, 0, 1, 1));
+    teardown();
+}
+
 /* ========== Clear Tests ========== */
 
 TEST(array_clear) {
@@ -378,6 +460,42 @@ TEST(array_slice_empty) {
     teardown();
 }
 
+TEST(array_slice_negative_bounds) {
+    setup();
+    XrArray *arr = xr_array_new(main_coro);
+    for (int i = 0; i < 5; i++) {
+        xr_array_push(arr, xr_int(i));
+    }
+
+    XrArray *slice = xr_array_slice(main_coro, arr, -4, -1);
+    ASSERT_NOT_NULL(slice);
+    ASSERT_EQ_INT(xr_array_size(slice), 3);
+    ASSERT_EQ_INT(xr_as_int(xr_array_get(slice, 0)), 1);
+    ASSERT_EQ_INT(xr_as_int(xr_array_get(slice, 2)), 3);
+    ASSERT_EQ_PTR(slice->data, (uint8_t *) arr->data + arr->elem_size);
+    teardown();
+}
+
+TEST(array_slice_is_zero_copy_view) {
+    setup();
+    XrArray *arr = xr_array_new(main_coro);
+    for (int i = 0; i < 4; i++) {
+        xr_array_push(arr, xr_int(i + 10));
+    }
+
+    XrArray *slice = xr_array_slice(main_coro, arr, 1, 3);
+    ASSERT_NOT_NULL(slice);
+    ASSERT_TRUE(xr_array_is_slice(slice));
+    ASSERT_EQ_PTR(slice->source, arr);
+    ASSERT_EQ_PTR(slice->data, (uint8_t *) arr->data + arr->elem_size);
+
+    xr_array_set(arr, 1, xr_int(77));
+    ASSERT_EQ_INT(xr_as_int(xr_array_get(slice, 0)), 77);
+    xr_array_set(slice, 1, xr_int(88));
+    ASSERT_EQ_INT(xr_as_int(xr_array_get(arr, 2)), 88);
+    teardown();
+}
+
 /* ========== Mixed Types Tests ========== */
 
 TEST(array_mixed_types) {
@@ -443,6 +561,9 @@ static void run_all_tests(void) {
     RUN_TEST(array_index_of_found);
     RUN_TEST(array_index_of_not_found);
     RUN_TEST(array_has);
+    RUN_TEST(array_typed_index_of_uses_shared_tag_rules);
+    RUN_TEST(array_fill_negative_bounds);
+    RUN_TEST(array_bytes_helpers_use_shared_bounds_and_copy_rules);
 
     RUN_TEST_SUITE("Array Clear");
     RUN_TEST(array_clear);
@@ -460,6 +581,8 @@ static void run_all_tests(void) {
     RUN_TEST(array_slice_basic);
     RUN_TEST(array_slice_full);
     RUN_TEST(array_slice_empty);
+    RUN_TEST(array_slice_negative_bounds);
+    RUN_TEST(array_slice_is_zero_copy_view);
 
     RUN_TEST_SUITE("Array Mixed Types");
     RUN_TEST(array_mixed_types);

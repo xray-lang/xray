@@ -59,6 +59,45 @@ static XrValue ctxbuf_to_value(XrVMRuntime *X, XrCtxBuf *b) {
     return v;
 }
 
+static bool url_core_writer_append(void *ctx, const char *data, size_t len) {
+    xr_ctxbuf_append((XrCtxBuf *) ctx, data, len);
+    return true;
+}
+
+static bool url_core_writer_putc(void *ctx, char c) {
+    xr_ctxbuf_putc((XrCtxBuf *) ctx, c);
+    return true;
+}
+
+static char *url_core_writer_data(void *ctx) {
+    XrCtxBuf *buf = (XrCtxBuf *) ctx;
+    return buf ? buf->data : NULL;
+}
+
+static size_t url_core_writer_len(void *ctx) {
+    XrCtxBuf *buf = (XrCtxBuf *) ctx;
+    return buf ? buf->len : 0;
+}
+
+static void url_core_writer_set_len(void *ctx, size_t len) {
+    XrCtxBuf *buf = (XrCtxBuf *) ctx;
+    if (!buf)
+        return;
+    buf->len = len;
+    buf->data[buf->len] = '\0';
+}
+
+static XrUrlCoreWriter url_core_writer(XrCtxBuf *buf) {
+    XrUrlCoreWriter writer;
+    writer.ctx = buf;
+    writer.append = url_core_writer_append;
+    writer.putc = url_core_writer_putc;
+    writer.data = url_core_writer_data;
+    writer.len = url_core_writer_len;
+    writer.set_len = url_core_writer_set_len;
+    return writer;
+}
+
 /* ========== RFC 3986 Encoding/Decoding ========== */
 
 int xr_url_encode(const char *str, size_t len, char *buf, size_t buf_size) {
@@ -224,167 +263,126 @@ static XrValue url_parse_fn(XrVMRuntime *X, XrValue *args, int nargs) {
     return xr_json_value(json);
 }
 
+typedef struct {
+    XrVMRuntime *X;
+    XrJson *json;
+} UrlFormatFields;
+
+static bool url_format_field(void *ctx, const char *name, const char **data, size_t *len) {
+    UrlFormatFields *fields = (UrlFormatFields *) ctx;
+    if (!fields || !fields->X || !fields->json || !data || !len)
+        return false;
+    XrValue value = xr_json_get_by_key(fields->X, fields->json, name);
+    if (XR_IS_STRING(value)) {
+        XrString *s = XR_TO_STRING(value);
+        *data = XR_STRING_CHARS(s);
+        *len = s->length;
+    } else {
+        *data = NULL;
+        *len = 0;
+    }
+    return true;
+}
+
 static XrValue url_format_fn(XrVMRuntime *X, XrValue *args, int nargs) {
     if (nargs < 1 || !xr_value_is_json(args[0]))
         return XR_NULL_VAL;
-    XrJson *json = xr_value_to_json(args[0]);
-
-    XrValue protocol = xr_json_get_by_key(X, json, "protocol");
-    XrValue hostname = xr_json_get_by_key(X, json, "hostname");
-    XrValue port = xr_json_get_by_key(X, json, "port");
-    XrValue pathname = xr_json_get_by_key(X, json, "pathname");
-    XrValue search = xr_json_get_by_key(X, json, "search");
-    XrValue hash = xr_json_get_by_key(X, json, "hash");
-    XrValue username = xr_json_get_by_key(X, json, "username");
-    XrValue password = xr_json_get_by_key(X, json, "password");
 
     XrCtxBuf buf;
     xr_ctxbuf_init(&buf, 128);
-
-    // protocol
-    if (XR_IS_STRING(protocol) && XR_TO_STRING(protocol)->length > 0) {
-        xr_ctxbuf_appendf(&buf, "%s//", XR_TO_STRING(protocol)->data);
+    XrUrlCoreWriter writer = url_core_writer(&buf);
+    UrlFormatFields fields;
+    fields.X = X;
+    fields.json = xr_value_to_json(args[0]);
+    if (!xr_url_core_format_write(url_format_field, &fields, &writer)) {
+        xr_ctxbuf_free(&buf);
+        return XR_NULL_VAL;
     }
-
-    // userinfo
-    if (XR_IS_STRING(username) && XR_TO_STRING(username)->length > 0) {
-        xr_ctxbuf_append_cstr(&buf, XR_TO_STRING(username)->data);
-        if (XR_IS_STRING(password) && XR_TO_STRING(password)->length > 0) {
-            xr_ctxbuf_appendf(&buf, ":%s", XR_TO_STRING(password)->data);
-        }
-        xr_ctxbuf_putc(&buf, '@');
-    }
-
-    // hostname
-    if (XR_IS_STRING(hostname) && XR_TO_STRING(hostname)->length > 0) {
-        xr_ctxbuf_append_cstr(&buf, XR_TO_STRING(hostname)->data);
-    }
-
-    // port
-    if (XR_IS_STRING(port) && XR_TO_STRING(port)->length > 0) {
-        xr_ctxbuf_appendf(&buf, ":%s", XR_TO_STRING(port)->data);
-    }
-
-    // pathname
-    if (XR_IS_STRING(pathname) && XR_TO_STRING(pathname)->length > 0) {
-        xr_ctxbuf_append_cstr(&buf, XR_TO_STRING(pathname)->data);
-    }
-
-    // search
-    if (XR_IS_STRING(search) && XR_TO_STRING(search)->length > 0) {
-        xr_ctxbuf_append_cstr(&buf, XR_TO_STRING(search)->data);
-    }
-
-    // hash
-    if (XR_IS_STRING(hash) && XR_TO_STRING(hash)->length > 0) {
-        xr_ctxbuf_append_cstr(&buf, XR_TO_STRING(hash)->data);
-    }
-
     return ctxbuf_to_value(X, &buf);
+}
+
+typedef struct {
+    XrVMRuntime *X;
+    XrJson *json;
+} UrlParseQueryCtx;
+
+static bool url_parse_query_pair(void *ctx, const char *key, size_t key_len, const char *value,
+                                 size_t value_len, bool has_value) {
+    UrlParseQueryCtx *parse_ctx = (UrlParseQueryCtx *) ctx;
+    XrVMRuntime *X = parse_ctx->X;
+
+    size_t decoded_key_len = 0;
+    if (!xr_url_core_decoded_len(key, key_len, &decoded_key_len))
+        return false;
+
+    char key_small[256];
+    char *key_copy = key_small;
+    bool key_heap = false;
+    if (decoded_key_len + 1 > sizeof(key_small)) {
+        key_copy = xr_malloc(decoded_key_len + 1);
+        XR_CHECK(key_copy != NULL, "url.parseQuery: OOM allocating key buffer");
+        key_heap = true;
+    }
+
+    if (!xr_url_core_decode(key, key_len, true, key_copy, &decoded_key_len)) {
+        if (key_heap)
+            xr_free(key_copy);
+        return false;
+    }
+
+    XrValue val;
+    if (has_value) {
+        size_t decoded_value_len = 0;
+        if (!xr_url_core_decoded_len(value, value_len, &decoded_value_len)) {
+            if (key_heap)
+                xr_free(key_copy);
+            return false;
+        }
+
+        char value_small[256];
+        char *value_copy = value_small;
+        bool value_heap = false;
+        if (decoded_value_len + 1 > sizeof(value_small)) {
+            value_copy = xr_malloc(decoded_value_len + 1);
+            XR_CHECK(value_copy != NULL, "url.parseQuery: OOM allocating value buffer");
+            value_heap = true;
+        }
+
+        if (!xr_url_core_decode(value, value_len, true, value_copy, &decoded_value_len)) {
+            if (value_heap)
+                xr_free(value_copy);
+            if (key_heap)
+                xr_free(key_copy);
+            return false;
+        }
+
+        val = make_str(X, value_copy, decoded_value_len);
+        if (value_heap)
+            xr_free(value_copy);
+    } else {
+        val = make_cstr(X, "");
+    }
+
+    xr_json_set_by_key(X, parse_ctx->json, key_copy, val);
+    if (key_heap)
+        xr_free(key_copy);
+    return true;
 }
 
 static XrValue url_parse_query_fn(XrVMRuntime *X, XrValue *args, int nargs) {
     if (nargs < 1 || !XR_IS_STRING(args[0]))
         return XR_NULL_VAL;
     XrString *qs = XR_TO_STRING(args[0]);
-    const char *str = XR_STRING_CHARS(qs);
-    size_t len = qs->length;
-
-    // Skip leading '?'
-    if (len > 0 && str[0] == '?') {
-        str++;
-        len--;
-    }
-
     XrJson *json = xr_json_new(xr_current_coro(X));
     if (!json)
         return XR_NULL_VAL;
-    if (len == 0)
-        return xr_json_value(json);
 
-    // Temp buffer for decoding
-    char *dec_buf = xr_malloc(len + 1);
-    if (!dec_buf)
-        return xr_json_value(json);
-
-    const char *p = str;
-    const char *end = str + len;
-
-    while (p < end) {
-        // Find next '&'
-        const char *amp = memchr(p, '&', end - p);
-        const char *pair_end = amp ? amp : end;
-
-        // Find '=' in pair
-        const char *eq = memchr(p, '=', pair_end - p);
-
-        const char *key_start = p;
-        size_t key_len;
-        const char *val_start;
-        size_t val_len;
-
-        if (eq) {
-            key_len = eq - key_start;
-            val_start = eq + 1;
-            val_len = pair_end - val_start;
-        } else {
-            key_len = pair_end - key_start;
-            val_start = NULL;
-            val_len = 0;
-        }
-
-        if (key_len > 0) {
-            // Decode key. Almost all query-string keys fit comfortably in a
-            // small stack buffer; only fall back to xr_malloc for oversize
-            // keys, and abort loudly on OOM so the caller does not silently
-            // receive a partial map. (Previously the entry was dropped.)
-            int dk = xr_url_decode_form(key_start, key_len, dec_buf, len + 1);
-            char key_small[256];
-            char *key_copy = NULL;
-            bool key_heap = false;
-            if (dk + 1 <= (int) sizeof(key_small)) {
-                memcpy(key_small, dec_buf, dk);
-                key_small[dk] = '\0';
-                key_copy = key_small;
-            } else {
-                key_copy = xr_malloc((size_t) dk + 1);
-                XR_CHECK(key_copy != NULL, "url.parseQuery: OOM allocating key buffer");
-                memcpy(key_copy, dec_buf, dk);
-                key_copy[dk] = '\0';
-                key_heap = true;
-            }
-
-            XrValue val;
-            if (val_start) {
-                int dv = xr_url_decode_form(val_start, val_len, dec_buf, len + 1);
-                val = make_str(X, dec_buf, dv);
-            } else {
-                val = make_cstr(X, "");
-            }
-
-            xr_json_set_by_key(X, json, key_copy, val);
-            if (key_heap)
-                xr_free(key_copy);
-        }
-
-        p = amp ? amp + 1 : end;
-    }
-
-    xr_free(dec_buf);
+    UrlParseQueryCtx ctx;
+    ctx.X = X;
+    ctx.json = json;
+    if (!xr_url_core_parse_query_each(XR_STRING_CHARS(qs), qs->length, url_parse_query_pair, &ctx))
+        return XR_NULL_VAL;
     return xr_json_value(json);
-}
-
-// Percent-encode `src` into `buf`, growing it as needed. The worst-case
-// expansion for form-encoding is 3x (each byte becomes "%HH") so the
-// reservation headroom below is exact.
-static void ctxbuf_append_url_form(XrCtxBuf *buf, const char *src, size_t src_len) {
-    if (src_len == 0)
-        return;
-    xr_ctxbuf_reserve(buf, src_len * 3);
-    int written = xr_url_encode_form(src, src_len, buf->data + buf->len, buf->cap - buf->len);
-    if (written > 0)
-        buf->len += (size_t) written;
-    buf->data[buf->len] = '\0';
 }
 
 static XrValue url_build_query_fn(XrVMRuntime *X, XrValue *args, int nargs) {
@@ -398,195 +396,82 @@ static XrValue url_build_query_fn(XrVMRuntime *X, XrValue *args, int nargs) {
 
     XrCtxBuf buf;
     xr_ctxbuf_init(&buf, 128);
+    XrUrlCoreWriter writer = url_core_writer(&buf);
+    bool has_pairs = false;
 
     for (uint16_t i = 0; i < cls->field_count; i++) {
         const char *key_name = cls->fields[i].name;
         if (!key_name)
             continue;
 
-        if (buf.len > 0)
-            xr_ctxbuf_putc(&buf, '&');
-
-        ctxbuf_append_url_form(&buf, key_name, strlen(key_name));
-
         XrValue val = xr_instance_get_dynamic_field(json, i);
         if (XR_IS_STRING(val)) {
             XrString *vs = XR_TO_STRING(val);
-            xr_ctxbuf_putc(&buf, '=');
-            ctxbuf_append_url_form(&buf, XR_STRING_CHARS(vs), vs->length);
+            if (!xr_url_core_build_query_pair_write(&writer, &has_pairs, key_name, strlen(key_name),
+                                                    XR_STRING_CHARS(vs), vs->length, true)) {
+                xr_ctxbuf_free(&buf);
+                return XR_NULL_VAL;
+            }
         } else if (!XR_IS_NULL(val)) {
             // Stringify non-string primitives (int, float, bool) so
             // buildQuery({page: 1}) produces "page=1" not "page=".
             XrString *vs = xr_value_to_string(X, val);
-            xr_ctxbuf_putc(&buf, '=');
-            if (vs)
-                ctxbuf_append_url_form(&buf, XR_STRING_CHARS(vs), vs->length);
+            const char *value_data = vs ? XR_STRING_CHARS(vs) : "";
+            size_t value_len = vs ? vs->length : 0;
+            if (!xr_url_core_build_query_pair_write(&writer, &has_pairs, key_name, strlen(key_name),
+                                                    value_data, value_len, true)) {
+                xr_ctxbuf_free(&buf);
+                return XR_NULL_VAL;
+            }
+        } else if (!xr_url_core_build_query_pair_write(&writer, &has_pairs, key_name,
+                                                       strlen(key_name), NULL, 0, false)) {
+            xr_ctxbuf_free(&buf);
+            return XR_NULL_VAL;
         }
     }
 
     return ctxbuf_to_value(X, &buf);
 }
 
-// Emit `scheme://authority` prefix from the parsed base URL into `out`.
-// Used to share the header-construction logic across every branch of the
-// RFC 3986 §5.3 reference-resolution algorithm implemented below.
-static void url_emit_base_authority(XrCtxBuf *out, const XrUrlCoreParts *bp) {
-    if (bp->protocol && bp->protocol_len > 0) {
-        xr_ctxbuf_appendf(out, "%.*s//", (int) bp->protocol_len, bp->protocol);
-    }
-    if (bp->hostname && bp->hostname_len > 0) {
-        xr_ctxbuf_append(out, bp->hostname, bp->hostname_len);
-    }
-    if (bp->port && bp->port_len > 0) {
-        xr_ctxbuf_appendf(out, ":%.*s", (int) bp->port_len, bp->port);
-    }
-}
-
-// Faithful implementation of RFC 3986 §5.3 "Reference Resolution". Handles
-// the reference-transforming rules from §5.2.2 including fragment-only
-// references, empty paths, and the query-retention corner cases that the
-// previous ad-hoc implementation silently mishandled.
+// Faithful implementation of RFC 3986 §5.3 "Reference Resolution".
+// The algorithm lives in shared core; this function only adapts VM strings.
 static XrValue url_resolve_fn(XrVMRuntime *X, XrValue *args, int nargs) {
     if (nargs < 2 || !XR_IS_STRING(args[0]) || !XR_IS_STRING(args[1]))
         return XR_NULL_VAL;
 
     XrString *base_str = XR_TO_STRING(args[0]);
     XrString *rel_str = XR_TO_STRING(args[1]);
-    const char *base = XR_STRING_CHARS(base_str);
-    const char *rel = XR_STRING_CHARS(rel_str);
-    size_t rel_len = rel_str->length;
-
-    // If the reference already has a scheme (scheme://...), it is treated
-    // as an absolute URI per §5.2.2 step 1 and returned unchanged.
-    const char *colon = memchr(rel, ':', rel_len);
-    if (colon && colon + 2 < rel + rel_len && colon[1] == '/' && colon[2] == '/') {
-        return args[1];
-    }
-
-    XrUrlCoreParts bp;
-    xr_url_core_parse(base, base_str->length, &bp);
-
-    // Split the reference into path / ?query / #fragment segments so each
-    // component can be assembled independently.
-    const char *rel_hash = memchr(rel, '#', rel_len);
-    size_t rel_hash_len = rel_hash ? (size_t) ((rel + rel_len) - rel_hash) : 0;
-    size_t rel_no_hash_len = rel_hash ? (size_t) (rel_hash - rel) : rel_len;
-
-    const char *rel_query = memchr(rel, '?', rel_no_hash_len);
-    size_t rel_query_len = 0;
-    size_t rel_path_len = rel_no_hash_len;
-    if (rel_query) {
-        rel_query_len = (size_t) ((rel + rel_no_hash_len) - rel_query);
-        rel_path_len = (size_t) (rel_query - rel);
-    }
 
     XrCtxBuf result;
     xr_ctxbuf_init(&result, 128);
-
-    // Track where the path portion lives in the result buffer so
-    // remove_dot_segments operates only on the path, never on
-    // the scheme, authority, query, or fragment.
-    size_t path_start = 0, path_end = 0;
-
-    if (rel_len > 1 && rel[0] == '/' && rel[1] == '/') {
-        // Network-path reference: "//host/...": keep base scheme only.
-        if (bp.protocol && bp.protocol_len > 0) {
-            xr_ctxbuf_appendf(&result, "%.*s", (int) bp.protocol_len, bp.protocol);
-        }
-        // Append reference authority: skip "//" then find path start.
-        xr_ctxbuf_append(&result, rel, 2);  // "//"
-        size_t a = 2;
-        while (a < rel_no_hash_len && rel[a] != '/' && rel[a] != '?')
-            a++;
-        xr_ctxbuf_append(&result, rel + 2, a - 2);  // authority
-        path_start = result.len;
-        xr_ctxbuf_append(&result, rel + a, rel_path_len > a ? rel_path_len - a : 0);
-        path_end = result.len;
-        if (rel_query)
-            xr_ctxbuf_append(&result, rel_query, rel_query_len);
-        if (rel_hash)
-            xr_ctxbuf_append(&result, rel_hash, rel_hash_len);
-    } else if (rel_path_len > 0 && rel[0] == '/') {
-        // Absolute-path reference: keep base authority, take reference path.
-        url_emit_base_authority(&result, &bp);
-        path_start = result.len;
-        xr_ctxbuf_append(&result, rel, rel_path_len);
-        path_end = result.len;
-        if (rel_query)
-            xr_ctxbuf_append(&result, rel_query, rel_query_len);
-        if (rel_hash)
-            xr_ctxbuf_append(&result, rel_hash, rel_hash_len);
-    } else if (rel_path_len == 0) {
-        // Empty-path reference (query-only and/or fragment-only).
-        url_emit_base_authority(&result, &bp);
-        path_start = result.len;
-        if (bp.pathname && bp.pathname_len > 0) {
-            xr_ctxbuf_append(&result, bp.pathname, bp.pathname_len);
-        }
-        path_end = result.len;
-        if (rel_query) {
-            xr_ctxbuf_append(&result, rel_query, rel_query_len);
-        } else if (bp.search && bp.search_len > 0) {
-            // Preserve base query when the reference has none. (§5.2.2: if
-            // reference.query is defined, use it; otherwise use base.query.)
-            xr_ctxbuf_append(&result, bp.search, bp.search_len);
-        }
-        if (rel_hash)
-            xr_ctxbuf_append(&result, rel_hash, rel_hash_len);
-    } else {
-        // Relative-path reference: merge base path with reference path.
-        url_emit_base_authority(&result, &bp);
-        path_start = result.len;
-
-        size_t merge_prefix = 0;
-        if (bp.pathname && bp.pathname_len > 0) {
-            // Merge rule from §5.2.3: retain everything in base.path up to
-            // and including the last '/'. If base has no path separators
-            // we start from scratch with a single leading '/'.
-            const char *last_slash = NULL;
-            for (size_t i = bp.pathname_len; i > 0; i--) {
-                if (bp.pathname[i - 1] == '/') {
-                    last_slash = &bp.pathname[i - 1];
-                    break;
-                }
-            }
-            if (last_slash) {
-                merge_prefix = (size_t) (last_slash - bp.pathname + 1);
-                xr_ctxbuf_append(&result, bp.pathname, merge_prefix);
-            } else {
-                xr_ctxbuf_putc(&result, '/');
-            }
-        } else {
-            xr_ctxbuf_putc(&result, '/');
-        }
-        (void) merge_prefix;
-        xr_ctxbuf_append(&result, rel, rel_path_len);
-        path_end = result.len;
-        if (rel_query)
-            xr_ctxbuf_append(&result, rel_query, rel_query_len);
-        if (rel_hash)
-            xr_ctxbuf_append(&result, rel_hash, rel_hash_len);
+    XrUrlCoreWriter writer = url_core_writer(&result);
+    if (!xr_url_core_resolve_write(XR_STRING_CHARS(base_str), base_str->length,
+                                   XR_STRING_CHARS(rel_str), rel_str->length, &writer)) {
+        xr_ctxbuf_free(&result);
+        return XR_NULL_VAL;
     }
-
-    // Apply remove_dot_segments only to the path portion.
-    // The helper works in-place and never grows, so operating directly
-    // on the buffer storage is safe. Shift the query+fragment tail
-    // leftward by the number of bytes the path shrank.
-    if (path_end > path_start) {
-        size_t old_path_len = path_end - path_start;
-        size_t new_path_len =
-            xr_url_core_remove_dot_segments(result.data + path_start, old_path_len);
-        size_t shrink = old_path_len - new_path_len;
-        if (shrink > 0) {
-            size_t tail_len = result.len - path_end;
-            if (tail_len > 0)
-                memmove(result.data + path_start + new_path_len, result.data + path_end, tail_len);
-            result.len -= shrink;
-        }
-    }
-    if (result.data)
-        result.data[result.len] = '\0';
     return ctxbuf_to_value(X, &result);
+}
+
+typedef struct {
+    XrValue *args;
+    int nargs;
+} UrlJoinParts;
+
+static bool url_join_part(void *ctx, size_t index, const char **data, size_t *len) {
+    UrlJoinParts *parts = (UrlJoinParts *) ctx;
+    if (!parts || !data || !len || index >= (size_t) parts->nargs)
+        return false;
+    XrValue value = parts->args[index];
+    if (!XR_IS_STRING(value)) {
+        *data = NULL;
+        *len = 0;
+        return true;
+    }
+    XrString *s = XR_TO_STRING(value);
+    *data = XR_STRING_CHARS(s);
+    *len = s->length;
+    return true;
 }
 
 static XrValue url_join_fn(XrVMRuntime *X, XrValue *args, int nargs) {
@@ -595,60 +480,20 @@ static XrValue url_join_fn(XrVMRuntime *X, XrValue *args, int nargs) {
 
     XrCtxBuf buf;
     xr_ctxbuf_init(&buf, 128);
-
-    for (int i = 0; i < nargs; i++) {
-        if (!XR_IS_STRING(args[i]))
-            continue;
-        XrString *s = XR_TO_STRING(args[i]);
-        const char *seg = XR_STRING_CHARS(s);
-        size_t seg_len = s->length;
-        if (seg_len == 0)
-            continue;
-
-        // Remove trailing slash from current result
-        if (buf.len > 0 && buf.data[buf.len - 1] == '/')
-            buf.len--;
-
-        // Add separator if needed
-        if (buf.len > 0 && seg[0] != '/') {
-            xr_ctxbuf_putc(&buf, '/');
-        }
-
-        xr_ctxbuf_append(&buf, seg, seg_len);
+    XrUrlCoreWriter writer = url_core_writer(&buf);
+    UrlJoinParts parts;
+    parts.args = args;
+    parts.nargs = nargs;
+    if (!xr_url_core_join_write((size_t) nargs, url_join_part, &parts, &writer)) {
+        xr_ctxbuf_free(&buf);
+        return XR_NULL_VAL;
     }
-
-    if (buf.data)
-        buf.data[buf.len] = '\0';
     return ctxbuf_to_value(X, &buf);
 }
 
-/* ========== Type Declarations (parsed by gen_stdlib_types.py) ========== */
-
-#include "../../src/module/xbuiltin_decl.h"
-
-// @module url
-// @handle URL { const protocol: string, const hostname: string, const port: string, const pathname:
-// string, const search: string, const hash: string, const username: string, const password: string,
-// const host: string, const origin: string, const href: string }
-
-XR_DEFINE_BUILTIN(url_encode_fn, "encode", "(s: string): string", "RFC 3986 percent-encode")
-XR_DEFINE_BUILTIN(url_decode_fn, "decode", "(s: string): string", "RFC 3986 percent-decode")
-XR_DEFINE_BUILTIN(url_encode_form_fn, "encodeForm", "(s: string): string",
-                  "Form URL encode (space as +)")
-XR_DEFINE_BUILTIN(url_decode_form_fn, "decodeForm", "(s: string): string",
-                  "Form URL decode (+ as space)")
-XR_DEFINE_BUILTIN(url_parse_fn, "parse", "(url: string): URL",
-                  "Parse URL into a URL handle (protocol, hostname, port, pathname, search, hash, "
-                  "username, password, host, origin, href)")
-XR_DEFINE_BUILTIN(url_format_fn, "format", "(obj: URL): string",
-                  "Build URL string from URL components")
-XR_DEFINE_BUILTIN(url_parse_query_fn, "parseQuery", "(qs: string): Json",
-                  "Parse query string to Json")
-XR_DEFINE_BUILTIN(url_build_query_fn, "buildQuery", "(obj: Json): string",
-                  "Build query string from Json")
-XR_DEFINE_BUILTIN(url_resolve_fn, "resolve", "(base: string, relative: string): string",
-                  "Resolve relative URL")
-XR_DEFINE_BUILTIN(url_join_fn, "join", "(...parts: string): string", "Join URL path segments")
+#define XR_STDLIB_VM_BIND_MODULE_URL 1
+#include "../../src/stdlib/xstdlib_vm_bindings_generated.inc.c"
+#undef XR_STDLIB_VM_BIND_MODULE_URL
 
 /* ========== Module Registration ========== */
 
@@ -659,16 +504,7 @@ XR_FUNC XrModule *xr_load_module_url(XrVMRuntime *X) {
     if (!mod)
         return NULL;
 
-    XRS_EXPORT(mod, X, "encode", url_encode_fn);
-    XRS_EXPORT(mod, X, "decode", url_decode_fn);
-    XRS_EXPORT(mod, X, "encodeForm", url_encode_form_fn);
-    XRS_EXPORT(mod, X, "decodeForm", url_decode_form_fn);
-    XRS_EXPORT(mod, X, "parse", url_parse_fn);
-    XRS_EXPORT(mod, X, "format", url_format_fn);
-    XRS_EXPORT(mod, X, "parseQuery", url_parse_query_fn);
-    XRS_EXPORT(mod, X, "buildQuery", url_build_query_fn);
-    XRS_EXPORT(mod, X, "resolve", url_resolve_fn);
-    XRS_EXPORT(mod, X, "join", url_join_fn);
+    xr_stdlib_vm_bind_url_generated(X, mod);
 
     mod->loaded = true;
     return mod;
