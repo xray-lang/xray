@@ -1865,10 +1865,17 @@ static bool xicgen_emit_stringbuilder_append(FILE *out, const XiValue *v, const 
                                  strcmp(recv_type->instance.class_name, "StringBuilder") == 0;
     if (!recv_is_stringbuilder || !method || strcmp(method, "append") != 0 || nargs != 1)
         return false;
+    /* StringBuilder.append takes Json (tagged): render the argument as a tagged
+     * value. If the rep planner inserted a lossy tagged->i64 UNBOX for the arg
+     * (e.g. a null literal), see through it to the original tagged source so the
+     * builder appends the real value ("null") instead of its unboxed int (0). */
+    const XiValue *append_arg = v->args[1];
+    while (append_arg && append_arg->op == XI_UNBOX && append_arg->nargs >= 1)
+        append_arg = append_arg->args[0];
     fprintf(out, "(xrt_strbuf_append(");
     emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
     fprintf(out, ", ");
-    emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
+    emit_value_as_rep(out, append_arg, XR_REP_TAGGED);
     fprintf(out, "), ");
     emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
     fprintf(out, ")");
