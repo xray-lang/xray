@@ -63,6 +63,12 @@ static inline int xr_error_core_format_array_index_oob(char *buf, size_t cap, in
                     length);
 }
 
+static inline int xr_error_core_format_fixed_array_index_oob(char *buf, size_t cap, int64_t index,
+                                                             int64_t length) {
+    return snprintf(buf, cap, "fixed array index out of range: %" PRId64 " (length %" PRId64 ")",
+                    index, length);
+}
+
 static inline int xr_error_core_format_type_mismatch(char *buf, size_t cap, const char *expected,
                                                      const char *actual) {
     return snprintf(buf, cap, "TypeError: expected '%s', got '%s'", expected ? expected : "unknown",

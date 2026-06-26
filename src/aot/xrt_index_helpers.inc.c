@@ -8,6 +8,7 @@
  * standalone TUs that include xrt_coll.h alone (those never reach the throwing
  * path, so the static-inline callers are elided). */
 XRT_COLD _Noreturn void xrt_index_oob(int64_t idx, int64_t length);
+XRT_COLD _Noreturn void xrt_fixed_index_oob(int64_t idx, int64_t length);
 
 static inline size_t xrt_native_type_size(uint8_t native_type) {
     switch (native_type) {
@@ -216,7 +217,7 @@ static inline XrValue xrt_index_get(XrValue obj, XrValue key) {
         uint16_t count = XR_ARRAY_REF_ELEM_COUNT(obj);
         if (XR_LIKELY(idx >= 0 && idx < count))
             return xrt_fixed_array_get(obj.ptr, XR_ARRAY_REF_ELEM_TYPE(obj), idx);
-        xrt_index_oob(idx, count);
+        xrt_fixed_index_oob(idx, count);
     }
     if (XR_IS_ARRAY(obj) && key.tag == XR_TAG_I64) {
         xrt_array_t *a = (xrt_array_t *) obj.ptr;
@@ -251,9 +252,7 @@ static inline void xrt_index_set(XrValue obj, XrValue key, XrValue val) {
             xrt_fixed_array_set(obj.ptr, XR_ARRAY_REF_ELEM_TYPE(obj), idx, val);
             return;
         }
-        fprintf(stderr, "fixed array index out of range: %lld (length %u)\n", (long long) idx,
-                (unsigned) count);
-        abort();
+        xrt_fixed_index_oob(idx, count);
     }
     if (XR_IS_ARRAY(obj) && key.tag == XR_TAG_I64) {
         xrt_array_t *a = (xrt_array_t *) obj.ptr;
