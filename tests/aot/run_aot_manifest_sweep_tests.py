@@ -22,6 +22,9 @@ DIFF_CASE_DIR = PROJECT_DIR / "tests" / "diff" / "cases"
 
 ALLOWED_RUNTIME_PREFIXES = (
     "tests/diff/cases/semantics/coro/",
+    # Generators lower to stackless coroutines, so they legitimately pull the
+    # coroutine runtime archive.
+    "tests/diff/cases/semantics/generator/",
 )
 
 ALLOWED_RUNTIME_CASES = {
